@@ -4,8 +4,8 @@
     "sha256": "23a149d84da73aeb490f080effc9c12f0aea4e803f7a79fd4574e17077ff9fc7"
   },
   {
-    "path": ".hvigor/outputs/build-logs/build.log",
-    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "path": ".npmrc",
+    "sha256": "14e943242ce04c18d82fa7257b533b906086c3d49916ac0066d3edaa7d14f058"
   },
   {
     "path": "AppScope/app.json5",
@@ -20,10 +20,6 @@
     "sha256": "bfb3da1d1a4e44707bef0c7dd1b6946ecce6807e1adebc76c1cc8859af805d22"
   },
   {
-    "path": "build-profile.json5",
-    "sha256": "c8265aa388c2374e68550264e0438f79feaa60b102923fe93bf368509bc9a67b"
-  },
-  {
     "path": "CHANGELOG.md",
     "sha256": "18cd1941f1f9b290f7abd0b763dabdadb9808ca6ff89738add743ad42eb77f71"
   },
@@ -32,8 +28,36 @@
     "sha256": "242ae3a37cc55bfdd7cdd83bc55d447ce2eea4f2f8c35426bb6dbf24d8804edc"
   },
   {
+    "path": "LICENSE",
+    "sha256": "a7c8433a57dbf0bc953a1b74d6b2f723f14251fc54bb85f83715889675b373ed"
+  },
+  {
+    "path": "NOTICE.md",
+    "sha256": "43d61e306ddacc182ba3ccb5114de91ff18c5e77d66a8572386e3a1287872819"
+  },
+  {
+    "path": "PRIVACY.md",
+    "sha256": "8ff14b6ac06e168fbebd29048c94347ebabeef3bcba3a2f2e55091f8a69ae681"
+  },
+  {
+    "path": "README.md",
+    "sha256": "043bd2102f00d231eea582e8c0c45b7ee456723599c75443cc8f2d43178b6180"
+  },
+  {
+    "path": "SECURITY.md",
+    "sha256": "c5765b4a7f77efb0a6419c19edabfcfa5b0d3efea76bbc597502f97da0089b53"
+  },
+  {
+    "path": "TERMS.md",
+    "sha256": "6a22b8c6c4ff58308f14c55433b947c3d88d7a8700f90e65d6a41e5dbc7cfe1c"
+  },
+  {
+    "path": "build-profile.json5",
+    "sha256": "c8265aa388c2374e68550264e0438f79feaa60b102923fe93bf368509bc9a67b"
+  },
+  {
     "path": "docs/BUILDING.md",
-    "sha256": "68ffe8048452affe494543bb8504a17d92af2e05ca85a55fd2b1e22f58c2985b"
+    "sha256": "2e4874d4a6f9fe1cc23cab088fc1e17cb9b5467432ba6a5cc8001949dc080d2a"
   },
   {
     "path": "docs/RESOURCE-LICENSES.md",
@@ -41,7 +65,7 @@
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "f9e0db08c6c19c3b4938c845cf7228d4a9dd414204701b098e87d52848b917f8"
+    "sha256": "b7102b08fb206d3280bb9c9e906ed70729657dfd2b99d8db14584ac8a766a7b9"
   },
   {
     "path": "entry/build-profile.json5",
@@ -720,35 +744,11 @@
     "sha256": "561d3af07f6c82dbb7bb20bc1b6f719d0d83d0ca6b0131657b8fab55e255b7b4"
   },
   {
-    "path": "LICENSE",
-    "sha256": "a7c8433a57dbf0bc953a1b74d6b2f723f14251fc54bb85f83715889675b373ed"
-  },
-  {
     "path": "licenses/Apache-2.0.txt",
     "sha256": "a22a0c495566ce9b09b25aa3feab8d54a5b12c6a26eb3dcb5324ead9a586da66"
   },
   {
-    "path": "NOTICE.md",
-    "sha256": "43d61e306ddacc182ba3ccb5114de91ff18c5e77d66a8572386e3a1287872819"
-  },
-  {
     "path": "oh-package.json5",
     "sha256": "9811ff8dcaea25c4d9c2a4142df7fad342603c2f834603f900c95c6080cc9f1c"
-  },
-  {
-    "path": "PRIVACY.md",
-    "sha256": "8ff14b6ac06e168fbebd29048c94347ebabeef3bcba3a2f2e55091f8a69ae681"
-  },
-  {
-    "path": "README.md",
-    "sha256": "043bd2102f00d231eea582e8c0c45b7ee456723599c75443cc8f2d43178b6180"
-  },
-  {
-    "path": "SECURITY.md",
-    "sha256": "c5765b4a7f77efb0a6419c19edabfcfa5b0d3efea76bbc597502f97da0089b53"
-  },
-  {
-    "path": "TERMS.md",
-    "sha256": "6a22b8c6c4ff58308f14c55433b947c3d88d7a8700f90e65d6a41e5dbc7cfe1c"
   }
-]\n
+]

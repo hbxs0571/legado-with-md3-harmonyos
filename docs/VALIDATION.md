@@ -18,8 +18,12 @@
 - P1 阅读器整页 UI 与逐项视觉验收未完成；TXT/EPUB 阅读、Android ZIP 恢复有既有记录，但发布快照仍需后续回归。
 - 资源当前 109 SVG / 4 PNG，旧资源清单已废弃。路径比对报告为 48 个 SVG 与 Android drawable 精确一致；这不是所有资源的完整授权证明，详见 RESOURCE-LICENSES.md。
 
-## 本次构建尝试
+## 本次构建验证
 
-在独立导出目录运行 `hvigorw.bat --no-daemon --mode module -p product=default -p module=entry@default assembleHap`，构建在安装工具依赖阶段停止，尚未进入源码编译：当前 pnpm 镜像 `registry.npmmirror.com` 对 `@ohos/hvigor-ohos-plugin` 返回 HTTP 404。故本次没有当前快照构建通过结论，也没有可供发行的 HAP。上面的历史成功记录不可替代这次验证。
+- 通过 `.npmrc` 配置 `https://repo.huaweicloud.com/repository/npm/` 与 `https://repo.harmonyos.com/npm/`；查询确认 `@ohos/hvigor-ohos-plugin@6.26.8` 可解析。
+- 在独立公开源码副本运行 `hvigorw.bat --no-daemon --mode module -p product=default -p module=entry@default assembleHap`，`BUILD SUCCESSFUL`，34 项任务全部执行。Hvigor 自动安装了 `@ohos/hvigor-ohos-plugin@6.26.8`。
+- 编译有既有 ArkTS 警告，包括 FileIO 异常处理提示、弃用 API 和 API 12 粘贴板权限提示；本次构建没有编译错误。P1 UI/功能与权限场景仍需后续审查。
+- Hvigor 提示 `No signingConfig found for product default`。构建成功只证明生成开发用未签名 HAP，不提供发行签名包，也不是 API 12 真机验收。
+- 最初失败是因为 npm 指向 `registry.npmmirror.com` 且构建进程启用了离线模式。切换官方源并在线运行后，依赖解析与干净构建均成功。用户级 `.npmrc` 已更新为官方源；若启动 DevEco Studio 的 shell 设置了 `NPM_CONFIG_OFFLINE=true`，需解除该变量或从未设置离线模式的桌面会话启动 DevEco。
 
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**
