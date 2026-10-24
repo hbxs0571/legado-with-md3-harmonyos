@@ -1,0 +1,24 @@
+# 本机工具与构建产物
+.hvigor/
+.idea/
+oh_modules/
+node_modules/
+**/build/
+local.properties
+# 签名材料和本机配置
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.pem
+*.key
+*.cer
+*.p7b
+.env*
+# 安装包、用户书籍和备份
+*.hap
+*.app
+*.hsp
+*.har
+*.epub
+*.zip

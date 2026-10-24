@@ -1,0 +1,7 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Legado HarmonyOS NEXT entry module",
+  "modelVersion": "26.0.0",
+  "dependencies": {}
+}

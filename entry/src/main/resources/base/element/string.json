@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "entry_name",
+      "value": "阅读"
+    },
+    {
+      "name": "module_desc",
+      "value": "Legado HarmonyOS NEXT 原生阅读应用"
+    },
+    {
+      "name": "entry_desc",
+      "value": "书架与阅读体验"
+    }
+  ]
+}
