@@ -4,6 +4,8 @@ import { AppGlyph } from '../components/AppGlyph';
 export struct OtherSettingsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @Prop replaceEnableDefault: boolean = true;
+  onReplaceEnableDefaultChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
   @State language: string = '简体中文';
   @State variant: string = '正式版';
@@ -12,7 +14,6 @@ export struct OtherSettingsPage {
   @State autoRefresh: boolean = false;
   @State defaultToRead: boolean = false;
   @State antiAlias: boolean = false;
-  @State replaceEnableDefault: boolean = true;
   @State mediaButtonOnExit: boolean = true;
   @State readAloudByMediaButton: boolean = false;
   @State ignoreAudioFocus: boolean = false;
@@ -89,7 +90,7 @@ export struct OtherSettingsPage {
           OtherSettingsSection({ title: '阅读' }) {
             OtherSettingsAction({ title: '书籍保存位置', detail: '', onSelect: () => this.activeSheet = 'folderPicker' })
             OtherSettingsSwitch({ title: '抗锯齿', detail: '绘制图片时抗锯齿', value: this.antiAlias, onChange: (value: boolean) => this.antiAlias = value })
-            OtherSettingsSwitch({ title: '默认启用替换净化', detail: '新加入书架的书是否启用替换净化', value: this.replaceEnableDefault, onChange: (value: boolean) => this.replaceEnableDefault = value })
+            OtherSettingsSwitch({ title: '默认启用替换净化', detail: '新加入书架的书是否启用替换净化', value: this.replaceEnableDefault, onChange: (value: boolean) => this.onReplaceEnableDefaultChange(value) })
             OtherSettingsSwitch({ title: '全程响应耳机按键', detail: '即使退出软件也响应耳机按键', value: this.mediaButtonOnExit, onChange: (value: boolean) => this.mediaButtonOnExit = value })
             OtherSettingsSwitch({ title: '耳机按键启动朗读', detail: '通过耳机按键来启动朗读', value: this.readAloudByMediaButton, onChange: (value: boolean) => this.readAloudByMediaButton = value })
             OtherSettingsSwitch({ title: '忽略音频焦点', detail: '允许与其他应用同时播放音频', value: this.ignoreAudioFocus, onChange: (value: boolean) => this.ignoreAudioFocus = value })

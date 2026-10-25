@@ -1,30 +1,71 @@
 import { Book } from '../model/Book';
+import { ReplaceRule } from '../model/ReplaceRule';
+import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
+import { BookRepository } from '../data/BookRepository';
+import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
+import { BookContentProcess } from '../model/BookContentProcess';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
+import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import image from '@ohos.multimedia.image';
 import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator } from './LocalReaderPaginator';
 import {
-  ReaderBottomActionConfig, READER_LOCAL_BOTTOM_ACTION_DEFAULTS, READER_LOCAL_TOP_ACTION_DEFAULTS
+  ReaderBottomActionConfig, ReaderControlKind, READER_ACTION_OPTIONS, READER_LOCAL_BOTTOM_ACTION_DEFAULTS,
+  READER_LOCAL_TOP_ACTION_DEFAULTS, ReaderActionOption, isReaderActionApplicable
 } from '../data/ReaderSettingsRepository';
+import {
+  ReaderMoreActionConfig, READER_MORE_ACTION_DEFAULTS
+} from '../data/ReaderMoreActionsRepository';
 
-type ReaderControlKind = 'search' | 'autoPage' | 'catalog' | 'voice' | 'settings';
 interface ReaderMoreAction {
   id: string;
   label: string;
   glyph: AppGlyphName;
+  scopeLabel: string;
+  migrated: boolean;
 }
 
-const READER_LOCAL_MORE_ACTIONS: ReaderMoreAction[] = [
-  { id: 'audioDownload', label: '听书下载', glyph: 'download' },
-  { id: 'editContent', label: '编辑内容', glyph: 'edit' },
-  { id: 'bookmark', label: '添加书签', glyph: 'bookmark' },
-  { id: 'textProcessing', label: '文本处理', glyph: 'profileFindReplace' },
-  { id: 'reverse', label: '反转内容', glyph: 'swap' },
-  { id: 'reSegment', label: '重新分段', glyph: 'list' },
-  { id: 'deleteRuby', label: '删除ruby标签', glyph: 'delete' },
-  { id: 'deleteHeading', label: '删除h标签', glyph: 'delete' }
+interface ReaderImageStyleOption {
+  id: string;
+  label: string;
+}
+
+const READER_IMAGE_STYLE_OPTIONS: ReaderImageStyleOption[] = [
+  { id: 'DEFAULT', label: '默认' },
+  { id: 'FULL', label: '全屏' },
+  { id: 'TEXT', label: '文字嵌入' },
+  { id: 'SINGLE', label: '单页' }
 ];
+
+const READER_MORE_ACTIONS: ReaderMoreAction[] = [
+  { id: 'source_custom_button', label: '书源自定义按钮', glyph: 'profileSource', scopeLabel: '仅支持该按钮的网络书', migrated: false },
+  { id: 'change_source', label: '换源', glyph: 'swap', scopeLabel: '仅网络书', migrated: false },
+  { id: 'refresh', label: '刷新', glyph: 'profileRefresh', scopeLabel: '仅网络书', migrated: false },
+  { id: 'download', label: '离线缓存', glyph: 'cloudDownload', scopeLabel: '仅网络书', migrated: false },
+  { id: 'audio_download', label: '听书下载', glyph: 'download', scopeLabel: '', migrated: false },
+  { id: 'edit_content', label: '编辑内容', glyph: 'edit', scopeLabel: '', migrated: true },
+  { id: 'add_bookmark', label: '添加书签', glyph: 'bookmark', scopeLabel: '', migrated: true },
+  { id: 'text_processing', label: '文本处理', glyph: 'profileFindReplace', scopeLabel: '', migrated: true },
+  { id: 'reverse_content', label: '反转内容', glyph: 'swap', scopeLabel: '', migrated: true },
+  { id: 're_segment', label: '重新分段', glyph: 'list', scopeLabel: '', migrated: true },
+  { id: 'del_ruby', label: '删除ruby标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: false },
+  { id: 'del_h', label: '删除h标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: false },
+  { id: 'toc_rule', label: 'TXT目录规则', glyph: 'profileRule', scopeLabel: '仅本地TXT', migrated: true },
+  { id: 'charset', label: '设置编码', glyph: 'info', scopeLabel: '仅本地书', migrated: true },
+  { id: 'image_style', label: '图片样式', glyph: 'book', scopeLabel: '', migrated: true },
+  { id: 'page_anim', label: '翻页动画', glyph: 'profileSettings', scopeLabel: '', migrated: false },
+  { id: 'simulated_reading', label: '模拟阅读', glyph: 'book', scopeLabel: '', migrated: false },
+  { id: 'get_progress', label: '获取阅读进度', glyph: 'profileHistory', scopeLabel: '需配置阅读进度同步', migrated: false },
+  { id: 'cover_progress', label: '覆盖阅读进度', glyph: 'profileHistory', scopeLabel: '需配置阅读进度同步', migrated: false },
+  { id: 'highlight_rule', label: '高亮规则', glyph: 'profileRule', scopeLabel: '', migrated: true },
+  { id: 'read_style', label: '阅读设置', glyph: 'profileSettings', scopeLabel: '', migrated: true },
+  { id: 'bottom_button_config', label: '底栏按钮配置', glyph: 'profileSettings', scopeLabel: '', migrated: false },
+  { id: 'log', label: '日志', glyph: 'info', scopeLabel: '', migrated: false }
+];
+const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
+  id: 'configure_more_actions', label: '配置更多操作', glyph: 'settings', scopeLabel: '', migrated: true
+};
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
 interface ReaderContentSegment {
@@ -39,15 +80,23 @@ interface ReaderIntrinsicImageSize {
 
 @Component
 export struct ReaderPage {
-  @Prop book: Book = {
+  @Prop @Watch('onBookChanged') book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
     coverColor: '#000000', coverMark: '书', isLocal: true
   };
   @Prop @Watch('onChapterTitleChanged') chapterTitle: string = '';
+  @State @Watch('onDisplayChapterTitleChanged') displayChapterTitle: string = '';
+  @Prop @Watch('onReplaceRulesChanged') replaceRules: ReplaceRule[] = [];
   @Prop @Watch('onReaderContentChanged') content: string = '';
   @Prop @Watch('onPaginationInputsChanged') fontSize: number = 19;
   @Prop @Watch('onProgressBehaviorChanged') progressBehavior: string = 'page';
   @Prop @Watch('onImageStyleChanged') imageStyle: string = 'DEFAULT';
+  @Prop replaceEnabled: boolean = true;
+  @Prop replaceUsesDefault: boolean = true;
+  @State contentProcesses: BookContentProcess[] = [];
+  @State effectiveReplaceRuleIds: number[] = [];
+  @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetPosition: number = -1;
+  @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetRevision: number = 0;
   @Prop paperColor: string = '#000000';
   @Prop showQuickActions: boolean = false;
   @Prop showBottomActionText: boolean = true;
@@ -56,9 +105,14 @@ export struct ReaderPage {
   @Prop bottomRowCount: number = 1;
   @Prop bottomActions: ReaderBottomActionConfig[] = READER_LOCAL_BOTTOM_ACTION_DEFAULTS;
   @Prop topActions: ReaderBottomActionConfig[] = READER_LOCAL_TOP_ACTION_DEFAULTS;
+  @Prop moreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS;
   @State controlsVisible: boolean = false;
   @State overflowVisible: boolean = false;
   @State imageStyleMenuVisible: boolean = false;
+  @State moreActionConfigVisible: boolean = false;
+  @State draftMoreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS.map(
+    (item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({ id: item.id, enabled: item.enabled })
+  );
   @State charsetDialogVisible: boolean = false;
   @State charsetOptionsExpanded: boolean = false;
   @State charsetInput: string = 'UTF-8';
@@ -77,13 +131,19 @@ export struct ReaderPage {
   @State localReaderPages: LocalReaderPage[] = [];
   @State localSemanticContent: string = '';
   @State currentPageIndex: number = 0;
+  @State pendingBookmarkTargetPosition: number = -1;
   @State autoPageActive: boolean = false;
   @State autoPageSettingsVisible: boolean = false;
   @State autoPageSecondsRemaining: number = 10;
   @State autoPageWaitingForChapter: boolean = false;
+  @State contentEditVisible: boolean = false;
+  @State contentEditTitle: string = '';
+  @State contentEditBody: string = '';
+  @State textProcessingVisible: boolean = false;
   @State currentBottomActionPage: number = 0;
   @Prop autoReadSpeedSeconds: number = 10;
   private autoPageTimer: number = -1;
+  private titleGeneration: number = 0;
   private readerScroller: Scroller = new Scroller();
   onBack: () => void = () => {};
   onOpenCatalog: () => void = () => {};
@@ -91,9 +151,24 @@ export struct ReaderPage {
   onCharsetChange: (charset: string) => void = (_charset: string) => {};
   onOpenSearchContent: () => void = () => {};
   onOpenReadAloud: () => void = () => {};
+  onOpenTocRule: () => void = () => {};
+  onToggleNightMode: () => void = () => {};
+  onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => void = (_actions: ReaderMoreActionConfig[]) => {};
+  onOpenHighlightRules: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onImageStyleChange: (imageStyle: string) => void = (_imageStyle: string) => {};
   onProgressChange: (progress: number, chapterPosition: number) => void = () => {};
+  onAddBookmark: (chapterPosition: number, pageText: string) => void = (_position: number, _pageText: string) => {};
+  onSaveChapterContent: (chapterIndex: number, title: string, body: string) => void =
+    (_chapterIndex: number, _title: string, _body: string) => {};
+  onToggleReSegment: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onOpenReplaceRules: () => void = () => {};
+  onReplaceRulesRefresh: () => void = () => {};
+  onReplaceEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReplaceResetToDefault: () => void = () => {};
+  onRuleEnabledChange: (id: number, enabled: boolean) => void = (_id: number, _enabled: boolean) => {};
+  onContentProcessToggle: (id: string, enabled: boolean) => void = (_id: string, _enabled: boolean) => {};
+  onContentProcessDelete: (id: string) => void = (_id: string) => {};
   onSelectChapterIndex: (chapterIndex: number) => void = () => {};
   onTurnChapterBoundary: (delta: number) => void = (_delta: number) => {};
   onAutoReadSpeedChange: (seconds: number) => void = (_seconds: number) => {};
@@ -105,6 +180,8 @@ export struct ReaderPage {
     this.sliderProgressIndex = this.getChapterIndex();
     this.loadContentImageSizes();
     this.autoPageSecondsRemaining = this.autoReadSpeedSeconds;
+    this.refreshDisplayChapterTitle();
+    this.refreshContentProcesses();
   }
 
   aboutToDisappear(): void {
@@ -150,6 +227,12 @@ export struct ReaderPage {
     this.onAutoReadSpeedChange(value);
   }
 
+  onBookmarkTargetChanged(): void {
+    if (this.bookmarkTargetPosition < 0) { return; }
+    this.pendingBookmarkTargetPosition = this.bookmarkTargetPosition;
+    this.rebuildReaderPages();
+  }
+
   onChapterTitleChanged(): void {
     this.autoPageWaitingForChapter = false;
     this.readerProgress = this.book.chapterProgress ?? 0;
@@ -164,9 +247,46 @@ export struct ReaderPage {
     } catch (_) {
     }
     this.rebuildReaderPages();
+    this.refreshDisplayChapterTitle();
+    this.refreshContentProcesses();
+  }
+
+  onBookChanged(): void {
+    this.refreshDisplayChapterTitle();
+    this.refreshContentProcesses();
+  }
+
+  onReplaceRulesChanged(): void {
+    this.refreshDisplayChapterTitle();
+    this.refreshContentProcesses();
+  }
+
+  private async refreshDisplayChapterTitle(): Promise<void> {
+    const generation = ++this.titleGeneration;
+    const title = this.chapterTitle;
+    const bookId = this.book.id;
+    const displayTitle = await ReplaceRuleRepository.applyTitle(this.book, title);
+    this.onReplaceRulesRefresh();
+    if (generation === this.titleGeneration && bookId === this.book.id && title === this.chapterTitle) {
+      this.displayChapterTitle = displayTitle;
+    }
+  }
+
+  private async refreshContentProcesses(): Promise<void> {
+    const bookId = this.book.id;
+    const chapterIndex = this.getChapterIndex();
+    await BookContentProcessRepository.waitUntilLoaded();
+    if (bookId === this.book.id && chapterIndex === this.getChapterIndex()) {
+      this.contentProcesses = BookContentProcessRepository.getForChapter(bookId, chapterIndex);
+      this.effectiveReplaceRuleIds = BookRepository.getEffectiveReplaceRuleIds(bookId, chapterIndex);
+    }
+  }
+  onDisplayChapterTitleChanged(): void {
+    this.rebuildReaderPages();
   }
 
   onReaderContentChanged(): void {
+    this.refreshContentProcesses();
     this.readerContentRevision++;
     this.imageSizes = new Map<string, ReaderIntrinsicImageSize>();
     this.contentHeight = 0;
@@ -205,6 +325,27 @@ export struct ReaderPage {
     if (style === 'TEXT') { return '文字嵌入'; }
     if (style === 'SINGLE') { return '单页'; }
     return '默认';
+  }
+
+  private reverseContentByCodePoint(content: string): string {
+    const characters: string[] = [];
+    for (let index = 0; index < content.length; index++) {
+      const firstUnit = content.charCodeAt(index);
+      if (firstUnit >= 0xD800 && firstUnit <= 0xDBFF && index + 1 < content.length) {
+        const secondUnit = content.charCodeAt(index + 1);
+        if (secondUnit >= 0xDC00 && secondUnit <= 0xDFFF) {
+          characters.push(content.substring(index, index + 2));
+          index++;
+          continue;
+        }
+      }
+      characters.push(content.charAt(index));
+    }
+    let reversed: string = '';
+    for (let index = characters.length - 1; index >= 0; index--) {
+      reversed += characters[index] ?? '';
+    }
+    return reversed;
   }
 
   private chooseImageStyle(style: string): void {
@@ -256,11 +397,11 @@ export struct ReaderPage {
       }
     }
     const titleMetrics = measureUtils.measureTextSize({
-      textContent: this.chapterTitle,
+      textContent: this.displayChapterTitle,
       fontSize: this.fontSize + 4
     });
     const titleWidth = context.px2vp(this.toDimension(titleMetrics.width ?? 0));
-    const titleLines = this.chapterTitle.length > 0 ? Math.max(1, Math.ceil(titleWidth / width)) : 0;
+    const titleLines = this.displayChapterTitle.length > 0 ? Math.max(1, Math.ceil(titleWidth / width)) : 0;
     const titleReservedLines = Math.ceil((titleLines * (this.fontSize + 4) * 1.25 + 12) / lineHeight);
     const paginatedPages = LocalReaderPaginator.paginate(
       document,
@@ -278,21 +419,31 @@ export struct ReaderPage {
       context.px2vp(this.toDimension(measureUtils.measureTextSize({ textContent: '袮', fontSize: fontSize }).width ?? 0)),
       this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines
     );
-    this.localReaderPages = [];
-    const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.chapterTitle.length > 0;
+    const nextPages: LocalReaderPage[] = [];
+    const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.displayChapterTitle.length > 0;
     if (titlePageInserted) {
-      this.localReaderPages.push({ lines: [], startPosition: 0, endPosition: 0, titleOnly: true });
+      nextPages.push({ lines: [], startPosition: 0, endPosition: 0, titleOnly: true });
     }
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {
       const page = paginatedPages[pageIndex];
-      if (page !== undefined) { this.localReaderPages.push(page); }
+      if (page !== undefined) { nextPages.push(page); }
     }
-    const savedPosition = Math.max(0, this.book.androidCharacterPosition ?? 0);
+    const savedPosition = Math.max(0, this.pendingBookmarkTargetPosition >= 0
+      ? this.pendingBookmarkTargetPosition : this.book.androidCharacterPosition ?? 0);
     const percentPosition = Math.round(this.localSemanticContent.length * (this.book.chapterProgress ?? 0) / 100);
     const targetPosition = savedPosition > 0 ? savedPosition : percentPosition;
-    const pageIndex = titlePageInserted && targetPosition === 0 ? 0 : this.localReaderPages.findIndex((page: LocalReaderPage) =>
-      targetPosition >= page.startPosition && targetPosition < page.endPosition);
-    this.currentPageIndex = pageIndex >= 0 ? pageIndex : Math.max(0, this.localReaderPages.length - 1);
+    let pageIndex = 0;
+    if (!(titlePageInserted && targetPosition === 0)) {
+      for (let index = 0; index < nextPages.length; index++) {
+        const page = nextPages[index];
+        if (page === undefined || page.titleOnly) { continue; }
+        if (page.startPosition > targetPosition) { break; }
+        pageIndex = index;
+      }
+    }
+    this.localReaderPages = nextPages;
+    this.currentPageIndex = pageIndex;
+    this.pendingBookmarkTargetPosition = -1;
     this.reportReaderPageProgress();
   }
 
@@ -367,9 +518,14 @@ export struct ReaderPage {
   }
 
   private getBottomActionPages(): ReaderControlKind[][][] {
-    const actions = this.bottomActions
-      .filter((item: ReaderBottomActionConfig) => item.enabled)
-      .map((item: ReaderBottomActionConfig) => item.id as ReaderControlKind);
+    const actions: ReaderControlKind[] = [];
+    this.bottomActions.forEach((item: ReaderBottomActionConfig) => {
+      const option = READER_ACTION_OPTIONS.find((action: ReaderActionOption) => action.id === item.id);
+      if (item.enabled && option !== undefined &&
+        isReaderActionApplicable(option.id, this.book.isLocal, this.book.format)) {
+        actions.push(option.id);
+      }
+    });
     if (actions.length === 0) { return []; }
     const itemsPerRow = Math.max(2, Math.min(8, this.bottomItemsPerRow));
     const rowCount = Math.max(1, Math.min(2, this.bottomRowCount));
@@ -387,26 +543,39 @@ export struct ReaderPage {
   }
 
   private getVisibleTopActions(): ReaderBottomActionConfig[] {
-    const actions = this.topActions.filter((item: ReaderBottomActionConfig) => item.enabled);
+    const actions: ReaderBottomActionConfig[] = this.topActions.filter((item: ReaderBottomActionConfig) => {
+      const option = READER_ACTION_OPTIONS.find((candidate: ReaderActionOption) => candidate.id === item.id);
+      return item.enabled && option !== undefined &&
+        isReaderActionApplicable(option.id, this.book.isLocal, this.book.format);
+    });
     if (actions.length > 0) {
       // ArkUI 顶栏 Row 中后插入的配置项靠左，因此反转数据以保持视觉顺序与配置列表一致。
       return actions.reverse();
     }
-    return [{ id: 'moreActions', enabled: true }];
+    return [{ id: 'more_actions', enabled: true }];
+  }
+
+  private getTopActionKind(id: string): ReaderControlKind {
+    const option = READER_ACTION_OPTIONS.find((candidate: ReaderActionOption) => candidate.id === id);
+    return option?.id ?? 'more_actions';
+  }
+
+  @Builder
+  private TopActionOverflowMenu() {
+    Menu() {
+      ForEach(this.getVisibleTopActions().slice(2), (action: ReaderBottomActionConfig) => {
+        MenuItem({ content: this.getBottomActionLabel(action.id) })
+          .onClick(() => this.selectBottomAction(this.getTopActionKind(action.id)))
+      }, (action: ReaderBottomActionConfig) => action.id)
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(18)
   }
 
   @Builder
   private topActionButton(action: ReaderBottomActionConfig) {
     Stack({ alignContent: Alignment.Center }) {
-      Image(action.id === 'charset' ? $r('app.media.reader_translate') : $r('app.media.reader_more'))
-        .width(20).height(20).fillColor('#D5C2C6')
+      ReaderControlGlyph({ kind: this.getTopActionKind(action.id), glyphSize: 20 })
     }.width(40).height(40).margin({ left: 6 }).onClick(() => {
-      if (action.id === 'charset') {
-        this.openCharsetDialog();
-      } else {
-        this.overflowVisible = !this.overflowVisible;
-        this.imageStyleMenuVisible = false;
-      }
+      this.selectBottomAction(this.getTopActionKind(action.id));
     })
   }
 
@@ -414,12 +583,9 @@ export struct ReaderPage {
     return Math.max(0, Math.min(this.currentBottomActionPage, this.getBottomActionPages().length - 1));
   }
 
-  private getBottomActionLabel(kind: ReaderControlKind): string {
-    if (kind === 'catalog') { return '目录'; }
-    if (kind === 'search') { return '全文搜索'; }
-    if (kind === 'autoPage') { return '自动翻页'; }
-    if (kind === 'voice') { return '朗读'; }
-    return '设置';
+  private getBottomActionLabel(kind: string): string {
+    const option = READER_ACTION_OPTIONS.find((item: ReaderActionOption) => item.id === kind);
+    return option?.label ?? kind;
   }
 
   private selectBottomAction(kind: ReaderControlKind): void {
@@ -427,11 +593,189 @@ export struct ReaderPage {
     else if (kind === 'search') { this.onOpenSearchContent(); }
     else if (kind === 'autoPage') { this.toggleAutoPage(); }
     else if (kind === 'voice') { this.onUnavailableAction('朗读播放尚未迁移'); }
-    else { this.onOpenSettings(); }
+    else if (kind === 'settings') { this.onOpenSettings(); }
+    else if (kind === 'addBookmark') { this.addCurrentPageBookmark(); }
+    else if (kind === 'theme') { this.onToggleNightMode(); }
+    else if (kind === 'prev_chapter') { this.onTurnChapterBoundary(-1); }
+    else if (kind === 'next_chapter') { this.onTurnChapterBoundary(1); }
+    else if (kind === 'replace') { this.textProcessingVisible = true; }
+    else if (kind === 'more_actions') { this.overflowVisible = true; }
+    else if (kind === 'charset') { this.openCharsetDialog(); }
+    else if (kind === 'toc_rule') { this.onOpenTocRule(); }
+    else { this.onUnavailableAction(this.getBottomActionLabel(kind) + '功能尚未迁移'); }
+  }
+
+  private addCurrentPageBookmark(): void {
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined) {
+      this.onUnavailableAction('当前页尚未完成分页，暂时无法添加书签');
+      return;
+    }
+    const start = Math.max(0, Math.min(this.localSemanticContent.length, page.startPosition));
+    const end = Math.max(start, Math.min(this.localSemanticContent.length, page.endPosition));
+    this.onAddBookmark(start, this.localSemanticContent.substring(start, end).trim());
   }
 
   private longSelectBottomAction(kind: ReaderControlKind): void {
     if (kind === 'voice') { this.onOpenReadAloud(); }
+  }
+
+  private isMoreActionApplicable(id: string): boolean {
+    if (id === 'source_custom_button') { return false; }
+    if (id === 'change_source' || id === 'refresh' || id === 'download') { return !this.book.isLocal; }
+    if (id === 'toc_rule') { return this.book.isLocal && this.book.format === 'txt'; }
+    if (id === 'charset') { return this.book.isLocal; }
+    if (id === 'del_ruby' || id === 'del_h') { return this.book.isLocal && this.book.format === 'epub'; }
+    if (id === 'get_progress' || id === 'cover_progress') { return false; }
+    return true;
+  }
+
+  private getVisibleMoreActions(): ReaderMoreAction[] {
+    const actions: ReaderMoreAction[] = [];
+    this.moreActions.forEach((config: ReaderMoreActionConfig) => {
+      const action = READER_MORE_ACTIONS.find((item: ReaderMoreAction) => item.id === config.id);
+      if (config.enabled && action !== undefined && this.isMoreActionApplicable(action.id)) {
+        actions.push(action);
+      }
+    });
+    return [...actions, MORE_ACTION_CONFIG_ENTRY];
+  }
+
+  private getMoreAction(id: string): ReaderMoreAction | undefined {
+    return READER_MORE_ACTIONS.find((item: ReaderMoreAction) => item.id === id);
+  }
+
+  private openMoreActionConfig(): void {
+    this.draftMoreActions = this.moreActions.map((item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({
+      id: item.id,
+      enabled: item.enabled
+    }));
+    this.moreActionConfigVisible = true;
+  }
+
+  private toggleMoreAction(id: string): void {
+    this.draftMoreActions = this.draftMoreActions.map((item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({
+      id: item.id,
+      enabled: item.id === id ? !item.enabled : item.enabled
+    }));
+  }
+
+  private moveMoreAction(index: number, delta: number): void {
+    const target = index + delta;
+    if (target < 0 || target >= this.draftMoreActions.length) { return; }
+    const updated = this.draftMoreActions.map((item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({
+      id: item.id,
+      enabled: item.enabled
+    }));
+    const current = updated[index];
+    const neighbor = updated[target];
+    if (current === undefined || neighbor === undefined) { return; }
+    updated[index] = neighbor;
+    updated[target] = current;
+    this.draftMoreActions = updated;
+  }
+
+  @Builder
+  private moreActionConfigRow(config: ReaderMoreActionConfig, index: number) {
+    Row() {
+      AppGlyph({ name: this.getMoreAction(config.id)?.glyph ?? 'more', glyphSize: 20,
+        tint: config.enabled ? '#D5C2C6' : '#777984' }).margin({ right: 12 })
+      Column() {
+        Text(this.getMoreAction(config.id)?.label ?? config.id).fontSize(14)
+          .fontColor(config.enabled ? '#E5E6EB' : '#777984')
+        if ((this.getMoreAction(config.id)?.scopeLabel ?? '').length > 0) {
+          Text(this.getMoreAction(config.id)?.scopeLabel ?? '')
+            .fontSize(10).fontColor('#92949E').margin({ top: 2 })
+        }
+        if (this.getMoreAction(config.id)?.migrated === false) {
+          Text('未迁移').fontSize(10).fontColor('#92949E').margin({ top: 2 })
+        }
+      }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+      Stack({ alignContent: Alignment.Center }) {
+        Image(config.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
+          .width(20).height(20).fillColor(config.enabled ? '#D5C2C6' : '#777984')
+      }.width(36).height(36).borderRadius(18).backgroundColor('#292A31')
+        .onClick(() => this.toggleMoreAction(config.id))
+      Column() {
+        Image($r('app.media.reader_reorder_up')).width(16).height(16)
+          .fillColor(index === 0 ? '#555761' : '#B9BBC4')
+          .onClick(() => this.moveMoreAction(index, -1))
+        Image($r('app.media.reader_reorder_down')).width(16).height(16)
+          .fillColor(index === this.draftMoreActions.length - 1 ? '#555761' : '#B9BBC4')
+          .onClick(() => this.moveMoreAction(index, 1))
+      }.width(24).height(36).justifyContent(FlexAlign.SpaceBetween).margin({ left: 4 })
+      Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
+        .width(32).height(36)
+    }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 8 })
+      .backgroundColor('#202127').borderRadius(12).margin({ bottom: 8 })
+  }
+
+  private selectMoreAction(action: ReaderMoreAction): void {
+    this.overflowVisible = false;
+    if (action.id === 'configure_more_actions') {
+      this.openMoreActionConfig();
+    } else if (action.id === 'add_bookmark') {
+      this.addCurrentPageBookmark();
+    } else if (action.id === 'edit_content') {
+      this.contentEditTitle = this.chapterTitle;
+      this.contentEditBody = this.content;
+      this.contentEditVisible = true;
+    } else if (action.id === 'reverse_content') {
+      const page = this.localReaderPages[this.currentPageIndex];
+      this.pendingBookmarkTargetPosition = page?.startPosition ?? 0;
+      this.onSaveChapterContent(this.getChapterIndex(), this.chapterTitle,
+        this.reverseContentByCodePoint(this.content));
+    } else if (action.id === 're_segment') {
+      const page = this.localReaderPages[this.currentPageIndex];
+      this.pendingBookmarkTargetPosition = page?.startPosition ?? 0;
+      this.onToggleReSegment(this.book.reSegment !== true);
+    } else if (action.id === 'text_processing') {
+      this.textProcessingVisible = true;
+    } else if (action.id === 'charset') {
+      this.openCharsetDialog();
+    } else if (action.id === 'toc_rule') {
+      this.onOpenTocRule();
+    } else if (action.id === 'image_style') {
+      this.imageStyleMenuVisible = true;
+    } else if (action.id === 'read_style') {
+      this.onOpenSettings();
+    } else if (action.id === 'highlight_rule') {
+      this.onOpenHighlightRules();
+    } else {
+      const option = this.getMoreAction(action.id);
+      this.onUnavailableAction((option?.label ?? action.label) + '功能尚未迁移');
+    }
+  }
+
+  @Builder
+  private moreActionConfigurationSheet() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column().width('100%').height('100%').backgroundColor('#99000000')
+        .onClick(() => this.moreActionConfigVisible = false)
+      Column() {
+        Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4).margin({ top: 10, bottom: 14 })
+        Row() {
+          Text('更多操作配置').fontSize(17).fontColor('#E5E6EB').layoutWeight(1)
+          Text('取消').fontSize(13).fontColor('#C7C9D1').margin({ right: 18 })
+            .onClick(() => this.moreActionConfigVisible = false)
+          Text('保存').fontSize(13).fontColor('#C6D3FF')
+            .onClick(() => {
+              this.onMoreActionsChange(this.draftMoreActions.map(
+                (item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({ id: item.id, enabled: item.enabled })
+              ));
+              this.moreActionConfigVisible = false;
+            })
+        }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
+        Scroll() {
+          Column() {
+            ForEach(this.draftMoreActions, (config: ReaderMoreActionConfig, index: number) => {
+              this.moreActionConfigRow(config, index)
+            }, (config: ReaderMoreActionConfig) => config.id)
+          }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
+        }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      }.width('100%').height('62%').backgroundColor('#D91A1B21')
+        .borderRadius({ topLeft: 24, topRight: 24 })
+    }.width('100%').height('100%')
   }
 
   private getWholeBookProgress(): number {
@@ -500,6 +844,7 @@ export struct ReaderPage {
   }
 
   private updateProgress(): void {
+    if (this.localReaderPages.length > 0) { return; }
     if (this.estimatedContentHeight <= 0) {
       this.refreshEstimatedContentHeight();
     }
@@ -524,6 +869,7 @@ export struct ReaderPage {
   }
 
   private restoreProgressPosition(): void {
+    if (this.localReaderPages.length > 0) { return; }
     if (this.estimatedContentHeight <= 0) {
       this.refreshEstimatedContentHeight();
     }
@@ -701,6 +1047,7 @@ export struct ReaderPage {
   private onReaderContentAreaChanged(oldArea: Area, newArea: Area): void {
     this.contentHeight = this.toDimension(newArea.height);
     this.rebuildReaderPages();
+    if (this.localReaderPages.length > 0) { return; }
     this.refreshEstimatedContentHeight();
     this.restoreProgressPosition();
     this.updateProgress();
@@ -718,7 +1065,7 @@ export struct ReaderPage {
           Column() {
             if (this.localReaderPages[this.currentPageIndex]?.titleOnly === true) {
               Blank().layoutWeight(1)
-              Text(this.chapterTitle)
+              Text(this.displayChapterTitle)
                 .fontSize(this.fontSize + 4)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.getReadingTextColor())
@@ -726,7 +1073,7 @@ export struct ReaderPage {
                 .textAlign(TextAlign.Center)
               Blank().layoutWeight(1)
             } else if (this.currentPageIndex === 0) {
-              Text(this.chapterTitle)
+              Text(this.displayChapterTitle)
                 .fontSize(this.fontSize + 4)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.getReadingTextColor())
@@ -798,7 +1145,7 @@ export struct ReaderPage {
       } else {
       Scroll(this.readerScroller) {
         Column() {
-          Text(this.chapterTitle)
+          Text(this.displayChapterTitle)
             .fontSize(this.fontSize + 4)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.getReadingTextColor())
@@ -839,12 +1186,14 @@ export struct ReaderPage {
       .backgroundColor(this.paperColor)
       .scrollBar(BarState.Off)
       .onDidScroll((xOffset: number, yOffset: number, scrollState: ScrollState) => {
+        if (this.localReaderPages.length > 0) { return; }
         this.scrollOffset = Math.max(0, this.scrollOffset + yOffset);
         this.updateProgress();
       })
       .onAreaChange((oldArea: Area, newArea: Area) => {
         this.viewportHeight = this.toDimension(newArea.height);
         this.rebuildReaderPages();
+        if (this.localReaderPages.length > 0) { return; }
         this.restoreProgressPosition();
         this.updateProgress();
       })
@@ -876,10 +1225,16 @@ export struct ReaderPage {
               if (this.getVisibleTopActions().length > 1) {
                 this.topActionButton(this.getVisibleTopActions()[1] as ReaderBottomActionConfig)
               }
+              if (this.getVisibleTopActions().length > 2) {
+                Stack({ alignContent: Alignment.Center }) {
+                  AppGlyph({ name: 'more', glyphSize: 18, tint: '#D5C2C6' })
+                }.width(40).height(40).margin({ left: 6 })
+                  .bindMenu(this.TopActionOverflowMenu, { placement: Placement.Bottom })
+              }
             }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
             Text(this.book.title).fontSize(16).fontColor('#D5C2C6').maxLines(1)
               .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 4 })
-            Text(this.chapterTitle).fontSize(12).fontColor('#D5C2C6').maxLines(1)
+            Text(this.displayChapterTitle).fontSize(12).fontColor('#D5C2C6').maxLines(1)
               .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 8 })
           }.width('100%').backgroundColor('#D931282A')
 
@@ -917,13 +1272,11 @@ export struct ReaderPage {
                     const maximum = this.getProgressSliderMaximum();
                     const index = Math.max(0, Math.min(maximum, Math.round(value)));
                     this.sliderProgressIndex = index;
-                    if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                      if (this.isPageProgressMode()) {
-                        this.currentPageIndex = index;
-                        this.reportReaderPageProgress();
-                      } else {
-                        this.onSelectChapterIndex(index);
-                      }
+                    if (this.isPageProgressMode()) {
+                      this.currentPageIndex = index;
+                      this.reportReaderPageProgress();
+                    } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+                      this.onSelectChapterIndex(index);
                     }
                   })
                 Row() {
@@ -1029,7 +1382,7 @@ export struct ReaderPage {
               Column() {
                 Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
                   .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                Text(this.chapterTitle).fontSize(11).fontColor('#B7B8C1').maxLines(1)
+                Text(this.displayChapterTitle).fontSize(11).fontColor('#B7B8C1').maxLines(1)
                   .margin({ top: 4 })
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Text(`${this.getChapterIndex() + 1} / ${this.getChapterCount()}`)
@@ -1037,28 +1390,121 @@ export struct ReaderPage {
                 .backgroundColor('#111217').borderRadius(16)
             }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
             Grid() {
-              ForEach(READER_LOCAL_MORE_ACTIONS, (action: ReaderMoreAction) => {
+              ForEach(this.getVisibleMoreActions(), (action: ReaderMoreAction) => {
                 GridItem() {
                   Column() {
-                    AppGlyph({ name: action.glyph, tint: '#D5C2C6', glyphSize: 22 }).margin({ bottom: 8 })
-                    Text(action.label).fontSize(11).fontColor('#E1DADD').textAlign(TextAlign.Center)
+                    AppGlyph({ name: action.glyph,
+                      tint: action.id === 're_segment' && this.book.reSegment === true ? '#FFB1C8' : '#D5C2C6',
+                      glyphSize: 22 }).margin({ bottom: 8 })
+                    Text(action.id === 're_segment' && this.book.reSegment === true
+                      ? '重新分段（已启用）' : action.label)
+                      .fontSize(11).fontColor('#E1DADD').textAlign(TextAlign.Center)
                       .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  }.width('100%').height(92).justifyContent(FlexAlign.Center)
+                    if (!action.migrated) {
+                      Text('未迁移').fontSize(9).fontColor('#92949E').margin({ top: 2 })
+                    }
+                  }.width('100%').height(100).justifyContent(FlexAlign.Center)
                     .backgroundColor('#202127').borderRadius(16)
-                    .onClick(() => {
-                      this.overflowVisible = false;
-                      this.onUnavailableAction(`${action.label}功能尚未迁移`);
-                    })
+                    .onClick(() => this.selectMoreAction(action))
                 }
               }, (action: ReaderMoreAction) => action.id)
             }.columnsTemplate('1fr 1fr 1fr 1fr').rowsGap(8).columnsGap(8)
               .width('100%').padding({ left: 16, right: 16, bottom: 16 }).layoutWeight(1)
+              .scrollBar(BarState.Off)
           }
           .width('100%').height('52%').backgroundColor('#1A1B21')
           .borderRadius({ topLeft: 26, topRight: 26 })
         }
         .width('100%')
         .height('100%')
+      }
+
+      if (this.imageStyleMenuVisible) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column().width('100%').height('100%').backgroundColor('#88000000')
+            .onClick(() => this.imageStyleMenuVisible = false)
+          Column() {
+            Row() {
+              Text('图片样式').fontSize(17).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
+              Blank()
+              Text('关闭').fontSize(13).fontColor('#C7C9D1').onClick(() => this.imageStyleMenuVisible = false)
+            }.width('100%').padding({ bottom: 12 })
+            ForEach(READER_IMAGE_STYLE_OPTIONS, (style: ReaderImageStyleOption) => {
+              Row() {
+                Text(style.label).fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
+                if (this.activeImageStyle === style.id) {
+                  AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
+                }
+              }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
+                .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+                .onClick(() => this.chooseImageStyle(style.id))
+            }, (style: ReaderImageStyleOption) => style.id)
+          }.width('86%').padding(16).backgroundColor('#1A1B21').borderRadius(20)
+        }.width('100%').height('100%')
+      }
+
+      if (this.moreActionConfigVisible) {
+        this.moreActionConfigurationSheet()
+      }
+
+      if (this.contentEditVisible) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column().width('100%').height('100%').backgroundColor('#99000000')
+            .onClick(() => this.contentEditVisible = false)
+          Column() {
+            Row() {
+              Text('编辑内容').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+              Blank()
+              Text('取消').fontSize(14).fontColor('#C8C9D0').onClick(() => this.contentEditVisible = false)
+            }.width('100%').padding({ bottom: 14 })
+            TextInput({ text: this.contentEditTitle, placeholder: '章节名称' })
+              .width('100%').height(48).fontSize(15).fontColor('#ECEEF2')
+              .backgroundColor('#292A31').borderRadius(10).padding({ left: 12, right: 12 })
+              .onChange((value: string) => this.contentEditTitle = value)
+            TextArea({ text: this.contentEditBody, placeholder: '章节正文' })
+              .width('100%').layoutWeight(1).margin({ top: 10 })
+              .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31')
+              .borderRadius(10).padding(12)
+              .onChange((value: string) => this.contentEditBody = value)
+            Row() {
+              Text('还原').fontSize(14).fontColor('#D8D9E0').layoutWeight(1).textAlign(TextAlign.Center)
+                .onClick(() => {
+                  this.contentEditTitle = this.chapterTitle;
+                  this.contentEditBody = this.content;
+                })
+              Text('保存').fontSize(14).fontColor('#101116').textAlign(TextAlign.Center)
+                .width(84).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(18)
+                .onClick(() => {
+                  const currentPage = this.localReaderPages[this.currentPageIndex];
+                  this.pendingBookmarkTargetPosition = currentPage?.startPosition ?? 0;
+                  this.onSaveChapterContent(this.getChapterIndex(), this.contentEditTitle, this.contentEditBody);
+                  this.contentEditVisible = false;
+                })
+            }.width('100%').padding({ top: 14 })
+          }
+          .width('92%').height('76%').padding(18).backgroundColor('#1A1B21').borderRadius(22)
+          .onClick(() => {})
+        }.width('100%').height('100%')
+      }
+
+      if (this.textProcessingVisible) {
+        ReaderTextProcessingSheet({
+          book: this.book,
+          chapterTitle: this.displayChapterTitle,
+          replaceEnabled: this.replaceEnabled,
+          replaceUsesDefault: this.replaceUsesDefault,
+          rules: this.replaceRules,
+          contentProcesses: this.contentProcesses,
+          effectiveRuleIds: this.effectiveReplaceRuleIds,
+          onReplaceEnabledChange: (enabled: boolean) => this.onReplaceEnabledChange(enabled),
+          onReplaceResetToDefault: () => this.onReplaceResetToDefault(),
+          onRuleEnabledChange: (id: number, enabled: boolean) => this.onRuleEnabledChange(id, enabled),
+          onContentProcessToggle: (id: string, enabled: boolean) => this.onContentProcessToggle(id, enabled),
+          onContentProcessDelete: (id: string) => this.onContentProcessDelete(id),
+          onClose: () => this.textProcessingVisible = false,
+          onOpenReplaceRules: () => this.onOpenReplaceRules(),
+          onUnavailableAction: (message: string) => this.onUnavailableAction(message)
+        })
       }
 
       if (this.charsetDialogVisible) {
@@ -1180,6 +1626,38 @@ struct ReaderControlGlyph {
     } else if (this.kind === 'autoPage') {
       Image(this.active ? $r('app.media.reader_pause') : $r('app.media.reader_play'))
         .width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? '#FFB1C8' : '#D5C2C6')
+    } else if (this.kind === 'addBookmark') {
+      Image($r('app.media.app_bookmark')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'theme') {
+      Image($r('app.media.app_daynight')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'prev_chapter') {
+      Image($r('app.media.app_previous')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'next_chapter') {
+      Image($r('app.media.reader_arrow_forward')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'replace' || this.kind === 'replace_badge') {
+      Image($r('app.media.profile_find_replace')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'charset' || this.kind === 'translate') {
+      Image($r('app.media.reader_translate')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'more_actions' || this.kind === 'source_custom_button') {
+      Image($r('app.media.reader_more')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'download' || this.kind === 'audio_download') {
+      Image($r('app.media.app_download')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'refresh' || this.kind === 'refresh_current') {
+      Image($r('app.media.app_refresh')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'change_source') {
+      Image($r('app.media.app_swap')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'toc_rule') {
+      Image($r('app.media.profile_rule')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'ai_summary' || this.kind === 'ai_cast') {
+      Image($r('app.media.profile_auto_awesome')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'ai_rewrite') {
+      Image($r('app.media.app_edit')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'multi_role_read' || this.kind === 'multi_role_cast') {
+      Image($r('app.media.app_group')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'cast_table') {
+      Image($r('app.media.app_list')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+    } else if (this.kind === 'eye_protection') {
+      Image($r('app.media.app_visibility')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
     } else {
       Image($r('app.media.reader_voice')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? '#FFB1C8' : '#D5C2C6')
     }

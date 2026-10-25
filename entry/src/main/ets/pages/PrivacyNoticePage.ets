@@ -24,6 +24,10 @@ export struct PrivacyNoticePage {
             body: '应用使用 HarmonyOS 系统文件选择器读取你选中的文件，不申请访问整个设备存储的权限。移出书架会清理应用沙箱副本，保留原始文件。'
           })
           PrivacyNoticeSection({
+            title: '剪贴板',
+            body: '仅当你在规则编辑页主动使用“粘贴”并确认系统授权后，应用才会读取剪贴板当前的第一条文本，尝试识别为规则并填入编辑表单。应用不会在后台持续读取剪贴板或将其发送到网络。“复制规则”会把当前规则文本写入系统剪贴板。'
+          })
+          PrivacyNoticeSection({
             title: '网络请求',
             body: '当前 HarmonyOS 模块不声明 INTERNET 权限，也没有应用发起的网络请求。Android 书源、规则与 WebDAV 尚未接入；若后续加入网络能力，会先更新权限用途和隐私说明。'
           })

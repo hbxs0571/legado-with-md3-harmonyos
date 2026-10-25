@@ -10,6 +10,7 @@ import {
   PROFILE_ROW_VERTICAL_PADDING
 } from '../components/ProfileUiMetrics';
 import { ProfileRoute } from '../model/Book';
+import { ReplaceRule } from '../model/ReplaceRule';
 
 @Component
 export struct BookSourceManagePage {
@@ -79,6 +80,9 @@ export struct BookSourceManagePage {
 export struct ReplaceRulesPage {
   onBack: () => void = () => {};
   onOpenEditor: () => void = () => {};
+  onToggleRule: (id: number, enabled: boolean) => void = (_id: number, _enabled: boolean) => {};
+  onRemoveRule: (id: number) => void = (_id: number) => {};
+  @Prop rules: ReplaceRule[] = [];
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
   @State selectedGroup: string = '';
@@ -152,7 +156,30 @@ export struct ReplaceRulesPage {
         }.scrollBar(BarState.Off)
       }
 
-      Blank().layoutWeight(1)
+      if (this.rules.length === 0) {
+        ModuleEmpty({ icon: 'profileFindReplace', title: '暂无替换净化规则', detail: '添加规则后会按顺序应用到本地书籍正文' })
+          .layoutWeight(1)
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.rules, (rule: ReplaceRule) => {
+              Row() {
+                Column() {
+                  Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(15).fontColor('#E3E4E8')
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(`${rule.group} · ${rule.scopeContent ? '正文' : ''}${rule.scopeTitle ? ' 标题' : ''}`)
+                    .fontSize(12).fontColor('#92949E').margin({ top: 4 })
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
+                  .onChange((enabled: boolean) => this.onToggleRule(rule.id, enabled))
+                Text('删除').fontSize(12).fontColor('#D99AA5').padding({ left: 10, right: 4 })
+                  .onClick(() => this.onRemoveRule(rule.id))
+              }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
+                .backgroundColor('#1B1C22').borderRadius(14).margin({ bottom: 8 })
+            }, (rule: ReplaceRule) => `${rule.id}`)
+          }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 80 })
+        }.layoutWeight(1).scrollBar(BarState.Off)
+      }
       Stack({ alignContent: Alignment.Center }) {
         AppGlyph({ name: 'add', glyphSize: 22, tint: '#B9C8FF' })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
@@ -166,12 +193,13 @@ export struct ReplaceRulesPage {
 export struct ReplaceRuleEditPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  onSaveRule: (rule: ReplaceRule) => void = (_rule: ReplaceRule) => {};
   @State name: string = '';
   @State group: string = '默认';
   @State pattern: string = '';
   @State replacement: string = '';
   @State scopeTitle: boolean = false;
-  @State scopeContent: boolean = false;
+  @State scopeContent: boolean = true;
   @State isRegex: boolean = false;
   @State scope: string = '';
   @State excludeScope: string = '';
@@ -279,7 +307,13 @@ export struct ReplaceRuleEditPage {
         return;
       }
     }
-    this.onUnavailableAction('替换规则存储尚未接入，规则未保存');
+    const rule: ReplaceRule = {
+      id: Date.now(), name: this.name.trim(), group: this.group, pattern: this.pattern,
+      replacement: this.replacement, scope: this.scope, scopeTitle: this.scopeTitle,
+      scopeContent: this.scopeContent, excludeScope: this.excludeScope, isEnabled: true,
+      isRegex: this.isRegex, timeoutMillisecond: Math.max(1, Number(this.timeout) || 3000), order: 0
+    };
+    this.onSaveRule(rule);
   }
 
   @Builder
@@ -1155,6 +1189,7 @@ const BOOKMARK_EMPTY_FACES: string[] = [
 @Component
 export struct AllBookmarksPage {
   onBack: () => void = () => {};
+  onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop books: BookmarkBookSummary[] = [];
   @Prop entries: BookmarkEntrySummary[] = [];
@@ -1270,7 +1305,7 @@ export struct AllBookmarksPage {
           Scroll() {
             Column() {
               ForEach(this.getVisibleEntries(this.selectedBookKey), (entry: BookmarkEntrySummary) => {
-                BookmarkEntryCard({ entry: entry, onSelect: () => this.onUnavailableAction('书签定位与编辑将在本地书签功能接入后提供') })
+                BookmarkEntryCard({ entry: entry, onSelect: () => this.onOpenBookmark(entry.id) })
               }, (entry: BookmarkEntrySummary) => entry.id)
             }.padding({ left: 16, right: 16, top: 4, bottom: 20 })
           }.layoutWeight(1).scrollBar(BarState.Off)

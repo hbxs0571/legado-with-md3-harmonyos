@@ -1,6 +1,12 @@
 import { Book } from '../model/Book';
+import { ReaderBookmark } from '../model/ReaderBookmark';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
+
+interface CatalogChapter {
+  title: string;
+  index: number;
+}
 
 @Component
 export struct CatalogPage {
@@ -9,11 +15,14 @@ export struct CatalogPage {
     coverColor: '#343845', coverMark: '书', isLocal: true
   };
   @Prop selectedChapter: string = '';
+  @Prop bookmarks: ReaderBookmark[] = [];
   @State ascending: boolean = true;
   @State selectedTab: number = 1;
   @State query: string = '';
   onBack: () => void = () => {};
-  onSelectChapter: (chapterTitle: string) => void = () => {};
+  onSelectChapter: (chapterIndex: number) => void = () => {};
+  onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
+  onEditBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
 
   private getAllChapters(): string[] {
     if (this.book.chapterTitles !== undefined && this.book.chapterTitles.length > 0) {
@@ -22,17 +31,29 @@ export struct CatalogPage {
     return [];
   }
 
-  private getChapters(): string[] {
+  private getChapters(): CatalogChapter[] {
     const keyword = this.query.trim();
-    const chapters = this.getAllChapters().filter((title: string) => title.includes(keyword));
+    const allChapters = this.getAllChapters();
+    const chapters: CatalogChapter[] = [];
+    for (let index = 0; index < allChapters.length; index++) {
+      const title = allChapters[index];
+      if (title.includes(keyword)) {
+        chapters.push({ title: title, index: index });
+      }
+    }
     if (this.ascending) {
       return chapters;
     }
-    const reversed: string[] = [];
+    const reversed: CatalogChapter[] = [];
     for (let index = chapters.length - 1; index >= 0; index--) {
       reversed.push(chapters[index]);
     }
     return reversed;
+  }
+
+  private isChapterSelected(chapterIndex: number): boolean {
+    const selectedIndex = this.book.chapterIndex ?? this.getAllChapters().indexOf(this.selectedChapter);
+    return chapterIndex === selectedIndex;
   }
 
   private getTabLabel(index: number): string {
@@ -92,23 +113,61 @@ export struct CatalogPage {
           }.padding({ left: 16, right: 16, bottom: 7 })
           Scroll() {
             Column() {
-              ForEach(this.getChapters(), (chapterTitle: string) => {
+              ForEach(this.getChapters(), (chapter: CatalogChapter) => {
                 Row() {
-                  Text(chapterTitle).fontSize(12).fontColor(chapterTitle === this.selectedChapter ? '#F0F1F5' : '#D4D5DB')
+                  Text(chapter.title).fontSize(12)
+                    .fontColor(this.isChapterSelected(chapter.index) ? '#F0F1F5' : '#D4D5DB')
                     .layoutWeight(1).maxLines(1)
-                  if (chapterTitle === this.selectedChapter) {
+                  if (this.isChapterSelected(chapter.index)) {
                     Image($r('app.media.app_locate')).width(16).height(16).fillColor('#C4D1FF')
                   }
                 }.width('100%').padding({ left: 12, right: 12, top: 11, bottom: 11 })
-                  .backgroundColor(chapterTitle === this.selectedChapter ? '#454B62' : '#1A1B21')
-                  .borderRadius(10).onClick(() => this.onSelectChapter(chapterTitle))
-              }, (chapterTitle: string) => chapterTitle)
+                  .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : '#1A1B21')
+                  .borderRadius(10).onClick(() => this.onSelectChapter(chapter.index))
+              }, (chapter: CatalogChapter) => chapter.index.toString())
             }.padding({ left: 12, right: 12, bottom: 14 })
           }.layoutWeight(1).scrollBar(BarState.Off)
+        } else if (this.selectedTab === 2) {
+          if (this.bookmarks.length === 0) {
+            Column() {
+              AppGlyph({ name: 'bookmark', glyphSize: 30, tint: '#AFC2FF' })
+              Text('暂无书签').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
+            }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
+          } else {
+            Scroll() {
+              Column() {
+                ForEach(this.bookmarks, (bookmark: ReaderBookmark) => {
+                  Column() {
+                    Row() {
+                      Text(bookmark.chapterName).fontSize(13).fontColor('#AFC2FF')
+                        .layoutWeight(1).maxLines(1)
+                      Text('跳转').fontSize(11).fontColor('#D7DFFB')
+                        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                        .backgroundColor('#454B62').borderRadius(14)
+                        .onClick(() => this.onOpenBookmark(bookmark.id))
+                      Text('编辑').fontSize(11).fontColor('#C5C7D0')
+                        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                        .margin({ left: 6 }).backgroundColor('#292A31').borderRadius(14)
+                        .onClick(() => this.onEditBookmark(bookmark.id))
+                    }
+                    if (bookmark.bookText.length > 0) {
+                      Text(bookmark.bookText).fontSize(12).fontColor('#D4D5DB')
+                        .maxLines(3).margin({ top: 7 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    }
+                    if (bookmark.content.length > 0) {
+                      Text(bookmark.content).fontSize(11).fontColor('#AEB0B9')
+                        .maxLines(2).margin({ top: 5 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    }
+                  }.width('100%').padding(12).backgroundColor('#1A1B21').borderRadius(10)
+                    .margin({ bottom: 6 })
+                }, (bookmark: ReaderBookmark) => bookmark.id)
+              }.padding({ left: 12, right: 12, bottom: 14 })
+            }.layoutWeight(1).scrollBar(BarState.Off)
+          }
         } else {
           Column() {
             Text(this.getTabLabel(this.selectedTab)).fontSize(17).fontColor('#E4E5EA')
-            Text(this.selectedTab === 0 ? `${this.book.author} · ${this.book.category}` : '暂无内容')
+            Text(this.selectedTab === 0 ? this.book.author + ' · ' + this.book.category : '笔记尚未迁移')
               .fontSize(11).fontColor('#9A9CA6').margin({ top: 8 })
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         }

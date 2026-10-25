@@ -293,11 +293,24 @@ export class EpubRepository {
     return '';
   }
 
-  private static removeDuplicateHeading(text: string, title: string): string {
-    const firstLineEnd = text.indexOf('\n');
-    if (firstLineEnd < 0) { return text.trim(); }
-    const firstLine = text.substring(0, firstLineEnd).trim();
-    return firstLine === title ? text.substring(firstLineEnd + 1).trim() : text.trim();
+  static removeDuplicateHeading(text: string, title: string): string {
+    const body = text.trim();
+    const normalizedTitle = title.replace(/\s+/g, '');
+    if (normalizedTitle.length === 0) { return body; }
+    const lines = body.split('\n');
+    let heading = '';
+    // EPUB 标题可能由 h2 内的 br 拆成两行，须按完整标题去重。
+    for (let index = 0; index < Math.min(3, lines.length); index++) {
+      const line = (lines[index] ?? '').trim();
+      if (line.length === 0) { continue; }
+      if (line.includes('[[EPUB_IMAGE:')) { break; }
+      heading += line.replace(/\s+/g, '');
+      if (heading === normalizedTitle) {
+        return lines.slice(index + 1).join('\n').trim();
+      }
+      if (!normalizedTitle.startsWith(heading)) { break; }
+    }
+    return body;
   }
 
   private static htmlToReaderText(markup: string, chapterDirectory: string, extractedDirectory: string, context: Context, bookId: string, coverResourcePath: string, coverUri: string | undefined, startImageIndex: number): EpubMarkupConversion {

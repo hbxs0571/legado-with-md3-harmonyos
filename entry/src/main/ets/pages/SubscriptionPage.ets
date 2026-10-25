@@ -5,6 +5,7 @@ export struct SubscriptionPage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onOpenRules: () => void = () => {};
   onOpenFavorites: () => void = () => {};
+  onOpenSourceManage: () => void = () => {};
   private readonly items: string[] = [];
   private subscriptionScroller: Scroller = new Scroller();
   @State touchStartY: number = 0;
@@ -16,7 +17,7 @@ export struct SubscriptionPage {
   private MoreMenu() {
     Menu() {
       MenuItem({ content: '订阅源管理' })
-        .onClick(() => this.onUnavailableAction('订阅源管理页面尚未迁移'))
+        .onClick(() => this.onOpenSourceManage())
       MenuItem({ content: '全部' })
         .onClick(() => this.onUnavailableAction('当前已显示全部订阅源'))
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(18)

@@ -20,6 +20,8 @@ export interface Book {
   fileSizeBytes?: number;
   /** 与 Android Book.imageStyle 同值：DEFAULT / FULL / TEXT / SINGLE。 */
   imageStyle?: string;
+  /** 与 Android Book.config.reSegment 对应，按书启用正文重分段。 */
+  reSegment?: boolean;
   /** 本地 TXT 当前使用的字符集；为空时按文件 BOM/内容自动识别。 */
   charset?: string;
   description?: string;
@@ -36,6 +38,7 @@ export enum AppRoute {
   SUBSCRIPTIONS = 'subscriptions',
   SUBSCRIPTION_RULES = 'subscriptionRules',
   SUBSCRIPTION_FAVORITES = 'subscriptionFavorites',
+  SUBSCRIPTION_SOURCE_MANAGE = 'subscriptionSourceManage',
   PROFILE = 'profile',
   READER = 'reader',
   CATALOG = 'catalog',

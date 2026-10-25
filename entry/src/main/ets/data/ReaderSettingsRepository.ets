@@ -23,18 +23,90 @@ export interface ReaderBottomActionConfig {
   enabled: boolean;
 }
 
-export const READER_LOCAL_BOTTOM_ACTION_DEFAULTS: ReaderBottomActionConfig[] = [
-  { id: 'search', enabled: true },
-  { id: 'autoPage', enabled: true },
-  { id: 'catalog', enabled: true },
-  { id: 'voice', enabled: true },
-  { id: 'settings', enabled: true }
+export type ReaderControlKind = 'download' | 'refresh' | 'change_source' | 'audio_download' |
+  'source_custom_button' | 'toc_rule' | 'charset' | 'ai_summary' | 'ai_rewrite' | 'more_actions' |
+  'search' | 'autoPage' | 'catalog' | 'voice' | 'eye_protection' | 'settings' | 'addBookmark' |
+  'theme' | 'prev_chapter' | 'next_chapter' | 'replace' | 'replace_badge' | 'translate' |
+  'refresh_current' | 'multi_role_read' | 'multi_role_cast' | 'cast_table' | 'ai_cast';
+
+export interface ReaderActionOption {
+  id: ReaderControlKind;
+  label: string;
+  scopeLabel: string;
+  migrated: boolean;
+}
+
+// 按 Android ReadMenuActionIds 顺序保留完整配置池；执行状态由 ReaderPage 如实处理。
+export const READER_ACTION_OPTIONS: ReaderActionOption[] = [
+  { id: 'download', label: '离线缓存', scopeLabel: '仅网络书', migrated: false },
+  { id: 'refresh', label: '刷新', scopeLabel: '仅网络书', migrated: false },
+  { id: 'change_source', label: '换源', scopeLabel: '仅网络书', migrated: false },
+  { id: 'audio_download', label: '听书下载', scopeLabel: '', migrated: false },
+  { id: 'source_custom_button', label: '书源自定义按钮', scopeLabel: '仅支持该按钮的网络书', migrated: false },
+  { id: 'toc_rule', label: 'TXT目录规则', scopeLabel: '仅本地TXT', migrated: false },
+  { id: 'charset', label: '设置编码', scopeLabel: '仅本地书', migrated: true },
+  { id: 'ai_summary', label: '章节总结', scopeLabel: '', migrated: false },
+  { id: 'ai_rewrite', label: '文本改写', scopeLabel: '', migrated: false },
+  { id: 'more_actions', label: '更多操作', scopeLabel: '', migrated: true },
+  { id: 'search', label: '全文搜索', scopeLabel: '', migrated: true },
+  { id: 'autoPage', label: '自动翻页', scopeLabel: '', migrated: true },
+  { id: 'catalog', label: '目录', scopeLabel: '', migrated: true },
+  { id: 'voice', label: '朗读', scopeLabel: '', migrated: false },
+  { id: 'eye_protection', label: '护眼模式', scopeLabel: '', migrated: false },
+  { id: 'settings', label: '设置', scopeLabel: '', migrated: true },
+  { id: 'addBookmark', label: '添加书签', scopeLabel: '', migrated: true },
+  { id: 'theme', label: '日夜切换', scopeLabel: '', migrated: true },
+  { id: 'prev_chapter', label: '上一章', scopeLabel: '', migrated: true },
+  { id: 'next_chapter', label: '下一章', scopeLabel: '', migrated: true },
+  { id: 'replace', label: '文本处理', scopeLabel: '', migrated: true },
+  { id: 'replace_badge', label: '文本处理标记', scopeLabel: '', migrated: false },
+  { id: 'translate', label: '翻译', scopeLabel: '', migrated: false },
+  { id: 'refresh_current', label: '刷新当前章节', scopeLabel: '', migrated: false },
+  { id: 'multi_role_read', label: '多人朗读', scopeLabel: '', migrated: false },
+  { id: 'multi_role_cast', label: '多人配音', scopeLabel: '', migrated: false },
+  { id: 'cast_table', label: '配音表', scopeLabel: '', migrated: false },
+  { id: 'ai_cast', label: 'AI角色配音', scopeLabel: '', migrated: false }
 ];
 
-export const READER_LOCAL_TOP_ACTION_DEFAULTS: ReaderBottomActionConfig[] = [
-  { id: 'charset', enabled: true },
-  { id: 'moreActions', enabled: true }
+const DEFAULT_ENABLED_READER_ACTIONS: string[] = ['search', 'autoPage', 'catalog', 'voice', 'settings'];
+
+export const READER_LOCAL_BOTTOM_ACTION_DEFAULTS: ReaderBottomActionConfig[] = READER_ACTION_OPTIONS.map(
+  (option: ReaderActionOption): ReaderBottomActionConfig => ({
+    id: option.id,
+    enabled: DEFAULT_ENABLED_READER_ACTIONS.includes(option.id)
+  })
+);
+
+const DEFAULT_ENABLED_READER_TOP_ACTIONS: string[] = [
+  'download', 'refresh', 'change_source', 'toc_rule', 'charset', 'more_actions'
 ];
+
+export function isReaderActionApplicable(id: ReaderControlKind, isLocalBook: boolean, format?: string): boolean {
+  if (id === 'source_custom_button') { return false; }
+  if (id === 'change_source' || id === 'refresh' || id === 'download') {
+    return !isLocalBook;
+  }
+  if (id === 'toc_rule') { return isLocalBook && format === 'txt'; }
+  if (id === 'charset') { return isLocalBook; }
+  return true;
+}
+
+export function getReaderActionScopeLabel(id: ReaderControlKind): string {
+  const option = READER_ACTION_OPTIONS.find((item: ReaderActionOption) => item.id === id);
+  return option?.scopeLabel ?? '';
+}
+
+export function isReaderActionMigrated(id: ReaderControlKind): boolean {
+  const option = READER_ACTION_OPTIONS.find((item: ReaderActionOption) => item.id === id);
+  return option?.migrated ?? false;
+}
+
+export const READER_LOCAL_TOP_ACTION_DEFAULTS: ReaderBottomActionConfig[] = READER_ACTION_OPTIONS.map(
+  (option: ReaderActionOption): ReaderBottomActionConfig => ({
+    id: option.id,
+    enabled: DEFAULT_ENABLED_READER_TOP_ACTIONS.includes(option.id)
+  })
+);
 
 export interface ReaderBackgroundStyle {
   name: string;
@@ -213,7 +285,8 @@ export class ReaderSettingsRepository {
     const result: ReaderBottomActionConfig[] = [];
     value.split(';').forEach((entry: string) => {
       const parts = entry.split(',');
-      const id = parts[0] ?? '';
+      const storedId = parts[0] ?? '';
+      const id = storedId === 'moreActions' ? 'more_actions' : storedId;
       if (allowed.includes(id) && !result.some((saved: ReaderBottomActionConfig) => saved.id === id)) {
         result.push({ id: id, enabled: parts[1] === 'true' });
       }

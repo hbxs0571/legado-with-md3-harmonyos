@@ -112,3 +112,68 @@ struct SubscriptionListPage {
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }
+
+
+@Component
+export struct SubscriptionSourceManagePage {
+  onBack: () => void = () => {};
+  onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @State searchVisible: boolean = false;
+  @State searchText: string = '';
+
+  @Builder
+  private MoreMenu() {
+    Menu() {
+      MenuItem({ content: '分组管理' }).onClick(() => this.onUnavailableAction('订阅源分组管理尚未迁移'))
+      MenuItem({ content: '导入订阅源' }).onClick(() => this.onUnavailableAction('订阅源导入尚未迁移'))
+      MenuItem({ content: '全部' }).onClick(() => this.onUnavailableAction('当前已显示全部订阅源'))
+      MenuItem({ content: '已启用' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
+      MenuItem({ content: '已禁用' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
+      MenuItem({ content: '需登录' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
+      MenuItem({ content: '未分组' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  build() {
+    Column() {
+      Row() {
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
+        }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18).onClick(() => this.onBack())
+        Blank().layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'search', glyphSize: 18, tint: '#D8D9E0' })
+        }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18)
+          .onClick(() => this.searchVisible = !this.searchVisible)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
+        }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+          .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+      }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 2 })
+
+      Column() {
+        Text('订阅源').fontSize(24).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
+      }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 5, bottom: 12 })
+
+      if (this.searchVisible) {
+        Row() {
+          AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
+          TextInput({ placeholder: '搜索订阅源…', text: this.searchText })
+            .fontSize(14).fontColor('#D8D9E0').placeholderColor('#92949E')
+            .backgroundColor(Color.Transparent).layoutWeight(1)
+            .onChange((value: string) => this.searchText = value)
+        }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
+          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor('#1C1D23').borderRadius(22)
+      }
+
+      Blank().layoutWeight(1)
+      Row() {
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'add', glyphSize: 24, tint: '#DDE3FF' })
+        }.width(50).height(50).backgroundColor('#4D5C8D').borderRadius(16)
+          .onClick(() => this.onUnavailableAction('订阅源编辑页尚未迁移'))
+      }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, bottom: 16 })
+    }.width('100%').height('100%').backgroundColor('#111217')
+  }
+}
