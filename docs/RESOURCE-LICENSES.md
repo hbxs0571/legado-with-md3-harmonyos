@@ -2,7 +2,7 @@
 
 核查日期：2026-10-26。核查对象为公开源码快照中实际随 Entry 模块打包的资源；不包含上游 Android 工程或私人素材。
 
-当前包含 **133 个 SVG** 和 **4 个 PNG**。逐项将 SVG 的 `d` 路径与 Android drawable XML 的 `android:pathData` 归一化（忽略空白、逗号）比较，**48 个**存在精确匹配；精确匹配只能证明图形路径一致，不单独判定版权归属。本轮新增 13 个阅读菜单图标及 2 个搜索精度图标，均有 AndroidX Compose Material Icons 1.7.8 的原始来源记录，按 Apache-2.0 管理。
+当前包含 **133 个 SVG** 和 **4 个 PNG**。逐项将 SVG 的 `d` 路径与 Android drawable XML 的 `android:pathData` 归一化（忽略空白、逗号）比较，**48 个**存在精确匹配；精确匹配只能证明图形路径一致，不单独判定版权归属。原清单中 13 个阅读菜单图标和 2 个搜索精度图标有 AndroidX Compose Material Icons 1.7.8 的原始来源记录。本轮对剩余 26 个新增 SVG 逐个与该版本源代码包中的矢量路径做归一化比较，16 个精确匹配 AndroidX 图标，按 Apache-2.0 记录；10 个仍未能定位可靠上游来源。
 
 旧资源清单称 91 个 SVG，不能作为当前统计。以下保留每个文件的状态；旧清单条目来源于迁移工程文档，未精确匹配的行不视为新做的权利证明。
 
@@ -22,9 +22,9 @@
 | `app_check.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_check.xml |
 | `app_clock.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_history.xml; app/src/main/res/drawable/ic_restore.xml; app/src/main/res/drawable/ic_shortcut_recent.xml |
 | `app_cloud.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_outline_cloud_24.xml |
-| `app_cloud_download.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `app_cloud_sync.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `app_cloud_upload.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
+| `app_cloud_download.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.CloudDownload`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `app_cloud_sync.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.CloudSync`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `app_cloud_upload.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.CloudUpload`，与上游矢量路径精确匹配；Apache-2.0 | — |
 | `app_code.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_code.xml |
 | `app_daynight.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_daytime.xml |
 | `app_discover.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_book_last.xml; app/src/main/res/drawable/ic_bottom_explore_e.xml |
@@ -44,7 +44,7 @@
 | `app_moon.svg` | 原工程资源清单记为 AndroidX Material Icons / Apache-2.0；未能精确匹配 Android pathData | — |
 | `app_more.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_more.xml; app/src/main/res/drawable/ic_more_vert.xml |
 | `app_padding.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_padding.xml |
-| `app_pencil.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
+| `app_pencil.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.Edit`，与上游矢量路径精确匹配；Apache-2.0 | — |
 | `app_previous.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_previous.xml; app/src/main/res/drawable/ic_skip_previous.xml |
 | `app_profile.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_author.xml; app/src/main/res/drawable/ic_bottom_person_e.xml |
 | `app_reduce.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_reduce.xml |
@@ -66,10 +66,10 @@
 | `menu_bookmarks.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
 | `menu_carousel.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
 | `menu_grid.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `menu_link.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
+| `menu_link.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.Link`，与上游矢量路径精确匹配；Apache-2.0 | — |
 | `menu_save.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
 | `menu_upload_file.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `menu_wifi.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
+| `menu_wifi.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.Wifi`，与上游矢量路径精确匹配；Apache-2.0 | — |
 | `nav_bookshelf_filled.svg` | 原工程资源清单记为 AndroidX Material Icons / Apache-2.0；未能精确匹配 Android pathData | — |
 | `nav_bookshelf_outlined.svg` | 原工程资源清单记为 AndroidX Material Icons / Apache-2.0；未能精确匹配 Android pathData | — |
 | `nav_explore_filled.svg` | 原工程资源清单记为 AndroidX Material Icons / Apache-2.0；未能精确匹配 Android pathData | — |
@@ -102,18 +102,18 @@
 | `profile_source.svg` | 原工程资源清单记为 AndroidX Material Icons / Apache-2.0；未能精确匹配 Android pathData | — |
 | `profile_timeline.svg` | 原工程资源清单记为 AndroidX Material Icons / Apache-2.0；未能精确匹配 Android pathData | — |
 | `profile_web.svg` | 原工程资源清单记为 AndroidX Material Icons / Apache-2.0；未能精确匹配 Android pathData | — |
-| `reader_arrow_forward.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
+| `reader_arrow_forward.svg` | AndroidX Compose Material Icons 1.7.8 `AutoMirrored.Filled.ArrowForward`，与上游矢量路径精确匹配；Apache-2.0 | — |
 | `reader_back.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_arrow_back.xml |
-| `reader_drag_handle.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_align_center.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_align_left.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_align_right.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_color_text.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_format_size.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_heading.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_minimize.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
+| `reader_drag_handle.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.Menu`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `reader_info_align_center.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.AlignHorizontalCenter`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `reader_info_align_left.svg` | AndroidX Compose Material Icons 1.7.8 `AutoMirrored.Filled.AlignHorizontalLeft`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `reader_info_align_right.svg` | AndroidX Compose Material Icons 1.7.8 `AutoMirrored.Filled.AlignHorizontalRight`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `reader_info_color_text.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.FormatColorText`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `reader_info_format_size.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.FormatSize`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `reader_info_heading.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.ViewHeadline`，与上游矢量路径精确匹配；Apache-2.0 | — |
+| `reader_info_minimize.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.Minimize`，与上游矢量路径精确匹配；Apache-2.0 | — |
 | `reader_info_palette.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
-| `reader_info_text_fields.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
+| `reader_info_text_fields.svg` | AndroidX Compose Material Icons 1.7.8 `Filled.TextFields`，与上游矢量路径精确匹配；Apache-2.0 | — |
 | `reader_more.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_more.xml; app/src/main/res/drawable/ic_more_vert.xml |
 | `reader_next.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_arrow_right.xml |
 | `reader_pause.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_pause.xml |
@@ -141,21 +141,10 @@
 | `reader_menu_volume_up.svg` | AndroidX Compose Material Icons `AutoMirrored.Outlined.VolumeUp` 原始路径；Apache-2.0 | — |
 | `search_precision_off.svg` | AndroidX Compose Material Icons `Filled.LocationSearching` 原始路径；Apache-2.0 | — |
 | `search_precision_on.svg` | AndroidX Compose Material Icons `Filled.MyLocation` 原始路径；Apache-2.0 | — |
-| `reader_menu_book.svg` | AndroidX Compose Material Icons `AutoMirrored.Outlined.MenuBook` 原始路径；Apache-2.0 | — |
-| `reader_menu_bookmark.svg` | AndroidX Compose Material Icons `Outlined.Bookmark` 原始路径；Apache-2.0 | — |
-| `reader_menu_border_color.svg` | AndroidX Compose Material Icons `Outlined.BorderColor` 原始路径；Apache-2.0 | — |
-| `reader_menu_copy.svg` | AndroidX Compose Material Icons `Outlined.ContentCopy` 原始路径；Apache-2.0 | — |
-| `reader_menu_edit.svg` | AndroidX Compose Material Icons `Outlined.Edit` 原始路径；Apache-2.0 | — |
-| `reader_menu_find_replace.svg` | AndroidX Compose Material Icons `Outlined.FindReplace` 原始路径；Apache-2.0 | — |
-| `reader_menu_language.svg` | AndroidX Compose Material Icons `Outlined.Language` 原始路径；Apache-2.0 | — |
-| `reader_menu_playlist_add.svg` | AndroidX Compose Material Icons `Outlined.PlaylistAdd` 原始路径；Apache-2.0 | — |
-| `reader_menu_queue_music.svg` | AndroidX Compose Material Icons `Outlined.QueueMusic` 原始路径；Apache-2.0 | — |
-| `reader_menu_search.svg` | AndroidX Compose Material Icons `Outlined.Search` 原始路径；Apache-2.0 | — |
-| `reader_menu_share.svg` | AndroidX Compose Material Icons `Outlined.Share` 原始路径；Apache-2.0 | — |
-| `reader_menu_smart_toy.svg` | AndroidX Compose Material Icons `Outlined.SmartToy` 原始路径；Apache-2.0 | — |
-| `reader_menu_volume_up.svg` | AndroidX Compose Material Icons `AutoMirrored.Outlined.VolumeUp` 原始路径；Apache-2.0 | — |
-| `search_precision_off.svg` | AndroidX Compose Material Icons `Filled.LocationSearching` 原始路径；Apache-2.0 | — |
-| `search_precision_on.svg` | AndroidX Compose Material Icons `Filled.MyLocation` 原始路径；Apache-2.0 | — |
+
+## 本轮核验方法与证据
+
+将待核 SVG 的路径转换为绝对几何命令，并与本机 Gradle 缓存中 `androidx.compose.material:material-icons-core-android:1.7.8` 及 `androidx.compose.material:material-icons-extended-android:1.7.8` 的 sources JAR 内 Material 图标源文件逐一比较（[core sources JAR](https://dl.google.com/dl/android/maven2/androidx/compose/material/material-icons-core-android/1.7.8/material-icons-core-android-1.7.8-sources.jar)、[extended sources JAR](https://dl.google.com/dl/android/maven2/androidx/compose/material/material-icons-extended-android/1.7.8/material-icons-extended-android-1.7.8-sources.jar)）；仅将几何路径完全一致的 16 项记为已匹配。版本发布记录可在 [AndroidX Compose Material 1.7.8](https://developer.android.com/jetpack/androidx/releases/compose-material#1.7.8) 核验；Android 官方文档说明 Material 图标名称及可从 Compose 图标源代码复用图标（[Compose resources](https://developer.android.com/develop/ui/compose/resources)）。上游 AndroidX/Compose 许可依据随项目保留的 Apache-2.0 全文及对应源文件版权头。路径相同是来源匹配证据，不构成法律意见，也不替代各文件的版权核查。
 
 ## PNG 与第三方许可
 
@@ -163,7 +152,7 @@
 
 ## 待核资源与不包含素材
 
-**26 个新增 SVG** 尚未能从旧清单或 Android drawable 路径定位来源，表内逐项列出。在维护者确认来源和许可前，不应将资源审核称为完成；不能确认时应替换为授权明确的图标。
+本轮对 26 个新增 SVG 核验后，16 个与 AndroidX Compose Material Icons 1.7.8 源代码包中的矢量路径精确匹配；其余 **10 个新增 SVG** 尚未能定位可靠上游来源，表内逐项列出。在维护者确认来源和许可前，不应将资源审核称为完成；不能确认时应替换为授权明确的图标。
 
 `assets/original-project/` 中的参考素材（字体、背景、封面和品牌图）不在本仓库公开树，也不随 HAP 打包。运行时 imports 来自 HarmonyOS SDK；oh-package 未声明第三方 NPM 运行时包。仓库不包含 DevEco SDK / Hvigor 的二进制。
 

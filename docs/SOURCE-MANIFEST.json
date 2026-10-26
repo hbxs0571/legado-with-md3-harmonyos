@@ -21,7 +21,7 @@
   },
   {
     "path": "CHANGELOG.md",
-    "sha256": "10018ae0c1a2e7cc65973fb933a05239ec0f1e2934c565533d9fd37726f2c073"
+    "sha256": "ba9b203cc45eb98dd6de5a3e7998c12f4337551590e310fe758ad9be5ae58211"
   },
   {
     "path": "DISCLAIMER.md",
@@ -41,7 +41,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "69553c5f467f66c19aa49b873e7694cb8ee9189dda5b0d2d2dfa1d4f67ea62df"
+    "sha256": "b01b313b4c191edd9aeb58bb0d8f7f4bf3ae90d051649a8f5d9701e404c07058"
   },
   {
     "path": "SECURITY.md",
@@ -61,15 +61,15 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "11d009528160359a2bfaaf9c1770a8ca841be65752736d6185cf5db565e07f0c"
+    "sha256": "c558430bb316d686cf3c446bc3c3c2021b80150bf5e90461b6e23e265ba1ba26"
   },
   {
     "path": "docs/RESOURCE-LICENSES.md",
-    "sha256": "c3d28f34ad7cb3648fce830da07389f71099372f96489c06cc8553b53ed871cc"
+    "sha256": "cf0564ddb3a16b78d3dac24f50bf34931303fd9ec27bc5de0b654a84ec9d71a6"
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "55046c6bfd537a03455e0e7f6dec534338e4d8fb76aa50da36fe6b9ce9559c04"
+    "sha256": "34c2d57d90586b09d68ab9e2cb8a3300fb2b02aafdbf43fd10d59df875c06668"
   },
   {
     "path": "entry/build-profile.json5",
