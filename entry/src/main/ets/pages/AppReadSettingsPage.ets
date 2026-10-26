@@ -1,20 +1,25 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+
 @Component
 export struct AppReadSettingsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @State collapsedHeader: boolean = false;
+  private settingsScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(40).height(40).onClick(() => this.onBack())
-        Column() {
-          Text('阅读设置').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text('阅读器行为与翻页控制').fontSize(15).fontColor('#92949E').margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      }.padding({ left: 12, right: 16, top: 8, bottom: 10 })
+      CollapsingSettingsHeader({ title: '阅读设置', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
-      Scroll() {
+      Scroll(this.settingsScroller) {
         Column() {
           ReadSettingsSection({ title: '屏幕设置' }) {
             ReadSettingsChoice({ title: '屏幕方向', options: ['跟随系统', '竖屏', '横屏', '传感器', '反向竖屏', '反向横屏'] })
@@ -68,7 +73,7 @@ export struct AppReadSettingsPage {
           Text('此页控件目前用于界面预览；设置保存和护眼/按键子面板尚未接入。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }

@@ -1,20 +1,25 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+
 @Component
 export struct AppDownloadCacheSettingsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @State collapsedHeader: boolean = false;
+  private settingsScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(40).height(40).onClick(() => this.onBack())
-        Column() {
-          Text('下载与缓存').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text('下载并发、预加载与缓存管理').fontSize(15).fontColor('#92949E').margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      }.padding({ left: 12, right: 16, top: 8, bottom: 10 })
+      CollapsingSettingsHeader({ title: '下载与缓存', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
-      Scroll() {
+      Scroll(this.settingsScroller) {
         Column() {
           CacheSettingsSection({ title: 'HTTP 缓存' }) {
             CacheSettingsAction({ title: '封面缓存', detail: '0 MB', onSelect: () => this.onUnavailableAction('封面缓存清理尚未迁移') })
@@ -41,7 +46,7 @@ export struct AppDownloadCacheSettingsPage {
           Text('此页数值目前仅用于界面预览；偏好保存、缓存统计和清理操作尚未接入。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }

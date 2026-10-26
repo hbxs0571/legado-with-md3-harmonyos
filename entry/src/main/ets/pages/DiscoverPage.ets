@@ -64,8 +64,8 @@ export struct DiscoverPage {
         Blank()
         if (!this.showExploreContent) {
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'search', glyphSize: 19 })
-          }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18)
+            AppGlyph({ name: 'search', glyphSize: 20 })
+          }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18)
             .onClick(() => {
               this.showSearch = !this.showSearch;
               if (!this.showSearch) {
@@ -74,8 +74,8 @@ export struct DiscoverPage {
             })
         }
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'swap', glyphSize: 19 })
-        }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+          AppGlyph({ name: 'swap', glyphSize: 20 })
+        }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
           .onClick(() => {
             this.showExploreContent = !this.showExploreContent;
             this.expandedSourceName = '';
@@ -83,13 +83,13 @@ export struct DiscoverPage {
             this.searchQuery = '';
           })
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'more', glyphSize: 18 })
-        }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+          AppGlyph({ name: 'more', glyphSize: 20 })
+        }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
           .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
-      }.width('100%').height(40).padding({ left: 18, right: 18 })
+      }.width('100%').height(48).padding({ left: 18, right: 18 })
 
       Column() {
-        Text('发现').fontSize(24).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        Text('发现').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
         if (!this.showExploreContent) {
           Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
         }
@@ -137,12 +137,15 @@ export struct DiscoverPage {
                 Row() {
                   Text(source.name).fontSize(16).fontColor('#D8D9E0').maxLines(2)
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-                  Image($r('app.media.reader_next')).width(16).height(16).fillColor('#C5C7D0')
+                  Image($r('app.media.reader_next')).width(20).height(20).fillColor(this.expandedSourceName === source.name ? '#AFC2FF' : '#C5C7D0')
                     .rotate({ angle: this.expandedSourceName === source.name ? 90 : 0 })
+                    .animation({ duration: 200, curve: Curve.EaseInOut })
                 }.width('100%').padding({ left: 14, right: 12, top: 14, bottom: 14 })
                   .onClick(() => {
-                    this.expandedSourceName = this.expandedSourceName === source.name ? '' : source.name;
-                    this.showSearch = false;
+                    animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
+                      this.expandedSourceName = this.expandedSourceName === source.name ? '' : source.name;
+                      this.showSearch = false;
+                    });
                   })
                 if (this.expandedSourceName === source.name) {
                   Row() {
@@ -150,8 +153,11 @@ export struct DiscoverPage {
                     Text('来源分类由书源规则提供，尚未接入')
                       .fontSize(14).fontColor('#92949E').layoutWeight(1)
                   }.width('100%').padding({ left: 14, right: 14, top: 11, bottom: 13 })
+                    .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseInOut }))
                 }
-              }.width('100%').backgroundColor('#1C1D23').borderRadius(13).margin({ bottom: 8 })
+              }.width('100%').backgroundColor(this.expandedSourceName === source.name ? '#383D50' : '#1C1D23')
+                .borderRadius(13).margin({ bottom: 8 })
+                .animation({ duration: 200, curve: Curve.EaseInOut })
             }, (source: DiscoverSourceDemo) => source.name)
             if (this.getVisibleSources().length === 0) {
               Column() {

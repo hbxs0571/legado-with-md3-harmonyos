@@ -1,8 +1,8 @@
 # HarmonyOS 资源来源与许可清单
 
-核查日期：2026-10-25。核查对象为公开源码快照中实际随 Entry 模块打包的资源；不包含上游 Android 工程或私人素材。
+核查日期：2026-10-26。核查对象为公开源码快照中实际随 Entry 模块打包的资源；不包含上游 Android 工程或私人素材。
 
-当前包含 **118 个 SVG** 和 **4 个 PNG**。逐项将 SVG 的 `d` 路径与 Android drawable XML 的 `android:pathData` 归一化（忽略空白、逗号）比较，**48 个**存在精确匹配；精确匹配只能证明图形路径一致，不单独判定版权归属。
+当前包含 **133 个 SVG** 和 **4 个 PNG**。逐项将 SVG 的 `d` 路径与 Android drawable XML 的 `android:pathData` 归一化（忽略空白、逗号）比较，**48 个**存在精确匹配；精确匹配只能证明图形路径一致，不单独判定版权归属。本轮新增 13 个阅读菜单图标及 2 个搜索精度图标，均有 AndroidX Compose Material Icons 1.7.8 的原始来源记录，按 Apache-2.0 管理。
 
 旧资源清单称 91 个 SVG，不能作为当前统计。以下保留每个文件的状态；旧清单条目来源于迁移工程文档，未精确匹配的行不视为新做的权利证明。
 
@@ -126,6 +126,36 @@
 | `reader_translate.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_translate.xml |
 | `reader_visibility_off.svg` | 新增资源未能定位上游来源；需维护者人工确认 | — |
 | `reader_voice.svg` | 与 Android GPL-3.0 drawable 路径精确匹配 | app/src/main/res/drawable/ic_volume_up.xml |
+| `reader_menu_book.svg` | AndroidX Compose Material Icons `AutoMirrored.Outlined.MenuBook` 原始路径；Apache-2.0 | — |
+| `reader_menu_bookmark.svg` | AndroidX Compose Material Icons `Outlined.Bookmark` 原始路径；Apache-2.0 | — |
+| `reader_menu_border_color.svg` | AndroidX Compose Material Icons `Outlined.BorderColor` 原始路径；Apache-2.0 | — |
+| `reader_menu_copy.svg` | AndroidX Compose Material Icons `Outlined.ContentCopy` 原始路径；Apache-2.0 | — |
+| `reader_menu_edit.svg` | AndroidX Compose Material Icons `Outlined.Edit` 原始路径；Apache-2.0 | — |
+| `reader_menu_find_replace.svg` | AndroidX Compose Material Icons `Outlined.FindReplace` 原始路径；Apache-2.0 | — |
+| `reader_menu_language.svg` | AndroidX Compose Material Icons `Outlined.Language` 原始路径；Apache-2.0 | — |
+| `reader_menu_playlist_add.svg` | AndroidX Compose Material Icons `Outlined.PlaylistAdd` 原始路径；Apache-2.0 | — |
+| `reader_menu_queue_music.svg` | AndroidX Compose Material Icons `Outlined.QueueMusic` 原始路径；Apache-2.0 | — |
+| `reader_menu_search.svg` | AndroidX Compose Material Icons `Outlined.Search` 原始路径；Apache-2.0 | — |
+| `reader_menu_share.svg` | AndroidX Compose Material Icons `Outlined.Share` 原始路径；Apache-2.0 | — |
+| `reader_menu_smart_toy.svg` | AndroidX Compose Material Icons `Outlined.SmartToy` 原始路径；Apache-2.0 | — |
+| `reader_menu_volume_up.svg` | AndroidX Compose Material Icons `AutoMirrored.Outlined.VolumeUp` 原始路径；Apache-2.0 | — |
+| `search_precision_off.svg` | AndroidX Compose Material Icons `Filled.LocationSearching` 原始路径；Apache-2.0 | — |
+| `search_precision_on.svg` | AndroidX Compose Material Icons `Filled.MyLocation` 原始路径；Apache-2.0 | — |
+| `reader_menu_book.svg` | AndroidX Compose Material Icons `AutoMirrored.Outlined.MenuBook` 原始路径；Apache-2.0 | — |
+| `reader_menu_bookmark.svg` | AndroidX Compose Material Icons `Outlined.Bookmark` 原始路径；Apache-2.0 | — |
+| `reader_menu_border_color.svg` | AndroidX Compose Material Icons `Outlined.BorderColor` 原始路径；Apache-2.0 | — |
+| `reader_menu_copy.svg` | AndroidX Compose Material Icons `Outlined.ContentCopy` 原始路径；Apache-2.0 | — |
+| `reader_menu_edit.svg` | AndroidX Compose Material Icons `Outlined.Edit` 原始路径；Apache-2.0 | — |
+| `reader_menu_find_replace.svg` | AndroidX Compose Material Icons `Outlined.FindReplace` 原始路径；Apache-2.0 | — |
+| `reader_menu_language.svg` | AndroidX Compose Material Icons `Outlined.Language` 原始路径；Apache-2.0 | — |
+| `reader_menu_playlist_add.svg` | AndroidX Compose Material Icons `Outlined.PlaylistAdd` 原始路径；Apache-2.0 | — |
+| `reader_menu_queue_music.svg` | AndroidX Compose Material Icons `Outlined.QueueMusic` 原始路径；Apache-2.0 | — |
+| `reader_menu_search.svg` | AndroidX Compose Material Icons `Outlined.Search` 原始路径；Apache-2.0 | — |
+| `reader_menu_share.svg` | AndroidX Compose Material Icons `Outlined.Share` 原始路径；Apache-2.0 | — |
+| `reader_menu_smart_toy.svg` | AndroidX Compose Material Icons `Outlined.SmartToy` 原始路径；Apache-2.0 | — |
+| `reader_menu_volume_up.svg` | AndroidX Compose Material Icons `AutoMirrored.Outlined.VolumeUp` 原始路径；Apache-2.0 | — |
+| `search_precision_off.svg` | AndroidX Compose Material Icons `Filled.LocationSearching` 原始路径；Apache-2.0 | — |
+| `search_precision_on.svg` | AndroidX Compose Material Icons `Filled.MyLocation` 原始路径；Apache-2.0 | — |
 
 ## PNG 与第三方许可
 

@@ -7,7 +7,7 @@ export struct OtherSettingsPage {
   @Prop replaceEnableDefault: boolean = true;
   onReplaceEnableDefaultChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
-  @State language: string = '简体中文';
+  @State language: string = '跟随系统';
   @State variant: string = '正式版';
   @State autoCheckUpdate: boolean = false;
   @State webAutoStart: boolean = false;
@@ -70,7 +70,7 @@ export struct OtherSettingsPage {
           OtherSettingsSection() {
             OtherSettingsDropdown({
               title: '语言', option: this.language,
-              options: ['自动', '简体中文', '繁體中文', 'English'],
+              options: ['跟随系统', '简体中文', '繁体中文', '英文'],
               onSelect: (value: string) => this.language = value
             })
             OtherSettingsDropdown({

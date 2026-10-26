@@ -19,56 +19,99 @@ export struct AppBackupSettingsPage {
   onCancelRestore: () => void = () => {};
   onToggleBackupIgnore: (key: string, ignored: boolean) => void = (_key: string, _ignored: boolean) => {};
   onToggleRestoreIgnore: (key: string, ignored: boolean) => void = (_key: string, _ignored: boolean) => {};
-  @State showBackupIgnore: boolean = false;
-  @State showRestoreIgnore: boolean = false;
+  onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @State activeSheet: string = '';
+  @State inputTitle: string = '';
+  @State inputDraft: string = '';
+  @State collapsedHeader: boolean = false;
+  @State syncBookProgress: boolean = false;
+  @State syncBookProgressPlus: boolean = false;
+  @State autoCheckBackup: boolean = false;
+  @State onlyLatestBackup: boolean = false;
+  private backupScroller: Scroller = new Scroller();
+
+  private openInput(title: string): void {
+    this.inputTitle = title;
+    this.inputDraft = '';
+    this.activeSheet = 'input';
+  }
+
+  private updateHeader(): void {
+    const offset = this.backupScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   build() {
     Column() {
-      BackupHeader({ onBack: () => this.onBack() })
-      Scroll() {
+      BackupHeader({ collapsed: this.collapsedHeader, onBack: () => this.onBack() })
+      Scroll(this.backupScroller) {
         Column() {
-          Text('本地备份').fontSize(14).fontColor('#AFC2FF')
+          Text('WebDAV 设置').fontSize(14).fontColor('#AFC2FF')
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
+            BackupActionRow({ icon: 'cloud', title: 'WebDAV 服务器地址', detail: '未配置 · 尚未迁移',
+              onSelect: () => this.openInput('WebDAV 服务器地址') })
+            BackupActionRow({ icon: 'profileSource', title: 'WebDAV 账号', detail: '账号与密码尚未配置',
+              onSelect: () => this.openInput('WebDAV 账号') })
+            BackupActionRow({ icon: 'folder', title: '子目录', detail: 'legado',
+              onSelect: () => this.openInput('子目录') })
+            BackupActionRow({ icon: 'profileSource', title: '设备名称', detail: '未设置',
+              onSelect: () => this.openInput('设备名称') })
+            BackupActionRow({ icon: 'cloudSync', title: '测试同步', detail: '检查 WebDAV 连接',
+              onSelect: () => this.onUnavailableAction('WebDAV 连接尚未迁移，未发起测试') })
+            BackupPreviewSwitchRow({ title: '同步书籍进度', detail: '在设备之间同步阅读位置',
+              checked: this.syncBookProgress, onChange: (value: boolean) => {
+                this.syncBookProgress = value;
+                this.onUnavailableAction('仅界面预览，WebDAV 同步设置未保存');
+              } })
+            if (this.syncBookProgress) {
+              BackupPreviewSwitchRow({ title: '增强进度同步', detail: '同步更多阅读状态',
+                checked: this.syncBookProgressPlus, onChange: (value: boolean) => {
+                  this.syncBookProgressPlus = value;
+                  this.onUnavailableAction('仅界面预览，WebDAV 同步设置未保存');
+                } }).transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+            }
+            BackupPreviewSwitchRow({ title: '自动检查新备份', detail: '打开时检查 WebDAV 备份',
+              checked: this.autoCheckBackup, onChange: (value: boolean) => {
+                this.autoCheckBackup = value;
+                this.onUnavailableAction('仅界面预览，WebDAV 设置未保存');
+              } })
+            BackupActionRow({ icon: 'settings', title: '备份同步模式', detail: '未迁移', last: true,
+              onSelect: () => this.activeSheet = 'syncMode' })
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor('#1A1B21').borderRadius(16)
+
+          Text('备份与恢复').fontSize(14).fontColor('#AFC2FF')
+            .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
+          Column() {
+            BackupActionRow({ icon: 'folder', title: '备份路径', detail: '选择本地备份目录',
+              onSelect: () => this.activeSheet = 'path', disabled: this.busy })
             BackupActionRow({
-              icon: 'cloud', title: '创建本地备份',
+              icon: 'cloud', title: '备份',
               detail: `导出 Android 兼容 ZIP；当前书架 ${this.localBookCount} 本`,
-              onSelect: () => this.onCreateBackup(), disabled: this.busy
+              onSelect: () => this.activeSheet = 'backup', disabled: this.busy
             })
             BackupActionRow({
-              icon: 'download', title: '从本地备份恢复',
-              detail: '选择 Android 阅读 ZIP，预览后导入可映射内容', last: true,
-              onSelect: () => this.onSelectRestore(), disabled: this.busy
+              icon: 'download', title: '恢复',
+              detail: '选择 Android 阅读 ZIP，预览后导入可映射内容',
+              onSelect: () => this.activeSheet = 'restore', disabled: this.busy
             })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor('#1A1B21').borderRadius(14)
-
-          BackupActionRow({
-            icon: 'settings', title: '备份排除项',
-            detail: `当前排除 ${this.backupIgnoreKeys.length} 个数据类别`,
-            onSelect: () => this.showBackupIgnore = !this.showBackupIgnore,
-            disabled: this.busy
-          }).width('100%').margin({ top: 12 }).backgroundColor('#1A1B21').borderRadius(14)
-          if (this.showBackupIgnore) {
-            BackupIgnoreList({
-              options: this.categoryOptions,
-              ignoredKeys: this.backupIgnoreKeys,
-              onToggle: (key: string, ignored: boolean) => this.onToggleBackupIgnore(key, ignored)
-            })
-          }
-
-          BackupActionRow({
-            icon: 'settings', title: '恢复排除项',
-            detail: `当前跳过 ${this.restoreIgnoreKeys.length} 个数据类别`,
-            onSelect: () => this.showRestoreIgnore = !this.showRestoreIgnore,
-            disabled: this.busy
-          }).width('100%').margin({ top: 8 }).backgroundColor('#1A1B21').borderRadius(14)
-          if (this.showRestoreIgnore) {
-            BackupIgnoreList({
-              options: this.categoryOptions,
-              ignoredKeys: this.restoreIgnoreKeys,
-              onToggle: (key: string, ignored: boolean) => this.onToggleRestoreIgnore(key, ignored)
-            })
-          }
+            BackupActionRow({ icon: 'settings', title: '恢复排除项',
+              detail: `当前跳过 ${this.restoreIgnoreKeys.length} 个数据类别`,
+              onSelect: () => this.activeSheet = 'ignoreRestore', disabled: this.busy })
+            BackupActionRow({ icon: 'settings', title: '备份排除项',
+              detail: `当前排除 ${this.backupIgnoreKeys.length} 个数据类别`,
+              onSelect: () => this.activeSheet = 'ignoreBackup', disabled: this.busy })
+            BackupActionRow({ icon: 'download', title: '导入旧版数据', detail: '从旧版本文件迁移',
+              onSelect: () => this.onUnavailableAction('旧版数据导入尚未迁移') })
+            BackupPreviewSwitchRow({ title: '只保留最新备份', detail: '自动清理较早的备份文件',
+              checked: this.onlyLatestBackup, onChange: (value: boolean) => {
+                this.onlyLatestBackup = value;
+                this.onUnavailableAction('仅界面预览，此设置未保存');
+              } })
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor('#1A1B21').borderRadius(16)
 
           if (this.busy) {
             Row() {
@@ -129,23 +172,126 @@ export struct AppBackupSettingsPage {
             .fontSize(14).fontColor('#D8D9E0').lineHeight(20)
             .width('100%').padding(15).backgroundColor('#1A1B21').borderRadius(14)
         }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
+      .bindSheet(this.activeSheet.length > 0, this.backupSheetContent(), {
+        height: 520,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#1A1B21',
+        onDisappear: () => this.activeSheet = ''
+      })
+  }
+
+  @Builder
+  private backupSheetContent() {
+    Column() {
+      Row() {
+        Text(this.activeSheet === 'backup' ? '备份' : this.activeSheet === 'restore' ? '恢复' :
+          this.activeSheet === 'ignoreBackup' ? '备份排除项' : this.activeSheet === 'ignoreRestore' ?
+          '恢复排除项' : this.activeSheet === 'path' ? '备份路径' : this.activeSheet === 'syncMode' ?
+          '备份同步模式' : this.inputTitle)
+          .fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text('关闭').fontSize(14).fontColor('#AFC2FF').onClick(() => this.activeSheet = '')
+      }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
+      if (this.activeSheet === 'backup') {
+        BackupSheetOption({ title: '备份到本地', detail: '创建 Android 兼容 ZIP',
+          onSelect: () => { this.activeSheet = ''; this.onCreateBackup(); } })
+        BackupSheetOption({ title: '备份到 WebDAV', detail: 'WebDAV 连接尚未迁移',
+          onSelect: () => this.onUnavailableAction('WebDAV 备份尚未迁移，未执行') })
+        BackupSheetOption({ title: '同时备份到本地和 WebDAV', detail: 'WebDAV 连接尚未迁移',
+          onSelect: () => this.onUnavailableAction('WebDAV 备份尚未迁移，未执行') })
+      } else if (this.activeSheet === 'restore') {
+        BackupSheetOption({ title: '从本地恢复', detail: '选择 Android 阅读 ZIP 并预览',
+          onSelect: () => { this.activeSheet = ''; this.onSelectRestore(); } })
+        BackupSheetOption({ title: '从 WebDAV 恢复', detail: 'WebDAV 连接尚未迁移',
+          onSelect: () => this.onUnavailableAction('WebDAV 恢复尚未迁移，未执行') })
+      } else if (this.activeSheet === 'ignoreBackup' || this.activeSheet === 'ignoreRestore') {
+        Scroll() {
+          BackupIgnoreList({
+            options: this.categoryOptions,
+            ignoredKeys: this.activeSheet === 'ignoreBackup' ? this.backupIgnoreKeys : this.restoreIgnoreKeys,
+            onToggle: (key: string, ignored: boolean) => {
+              if (this.activeSheet === 'ignoreBackup') { this.onToggleBackupIgnore(key, ignored); }
+              else { this.onToggleRestoreIgnore(key, ignored); }
+            }
+          })
+        }.height(420).scrollBar(BarState.Off)
+      } else if (this.activeSheet === 'input') {
+        TextInput({ placeholder: this.inputTitle, text: this.inputDraft })
+          .fontSize(16).fontColor('#E3E4E8').backgroundColor('#292B33').borderRadius(12)
+          .margin({ left: 18, right: 18, bottom: 16 })
+          .onChange((value: string) => this.inputDraft = value)
+        Text('WebDAV 尚未迁移，此页不会保存或发送输入。').fontSize(13).fontColor('#92949E')
+          .margin({ left: 18, right: 18 })
+        Button('完成').margin({ top: 18 }).onClick(() => {
+          this.inputDraft = '';
+          this.activeSheet = '';
+          this.onUnavailableAction('WebDAV 尚未迁移，输入未保存');
+        })
+      } else if (this.activeSheet === 'path') {
+        BackupSheetOption({ title: '选择系统目录', detail: '本地备份目录选择尚未迁移',
+          onSelect: () => this.onUnavailableAction('备份目录选择尚未迁移') })
+      } else if (this.activeSheet === 'syncMode') {
+        BackupSheetOption({ title: '仅本地', detail: 'WebDAV 同步模式尚未迁移',
+          onSelect: () => this.onUnavailableAction('同步模式尚未迁移，未保存') })
+        BackupSheetOption({ title: '本地与 WebDAV', detail: 'WebDAV 同步模式尚未迁移',
+          onSelect: () => this.onUnavailableAction('同步模式尚未迁移，未保存') })
+      }
+    }.width('100%').padding({ bottom: 24 })
   }
 }
 
 @Component
 struct BackupHeader {
+  @Prop collapsed: boolean = false;
   onBack: () => void = () => {};
   build() {
+    Column() {
+      Row() {
+        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
+          .width(40).height(40).onClick(() => this.onBack())
+        Text('备份与恢复').fontSize(22).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          .opacity(this.collapsed ? 1 : 0)
+        Blank()
+      }.width('100%').height(64).padding({ left: 12, right: 16 })
+      Text('备份与恢复').fontSize(28).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        .width('100%').height(72).padding({ left: 16, bottom: 14 })
+        .opacity(this.collapsed ? 0 : 1)
+    }.width('100%').height(this.collapsed ? 64 : 136).clip(true)
+  }
+}
+
+@Component
+struct BackupSheetOption {
+  @Prop title: string = '';
+  @Prop detail: string = '';
+  onSelect: () => void = () => {};
+  build() {
+    Column() {
+      Text(this.title).fontSize(16).fontColor('#D8D9E0')
+      Text(this.detail).fontSize(13).fontColor('#92949E').margin({ top: 4 })
+    }.width('calc(100% - 32vp)').padding(16).alignItems(HorizontalAlign.Start)
+      .backgroundColor('#292B33').borderRadius(14).margin({ left: 16, right: 16, bottom: 8 })
+      .onClick(() => this.onSelect())
+  }
+}
+
+@Component
+struct BackupPreviewSwitchRow {
+  @Prop title: string = '';
+  @Prop detail: string = '';
+  @Prop checked: boolean = false;
+  onChange: (checked: boolean) => void = (_checked: boolean) => {};
+  build() {
     Row() {
-      Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-        .width(36).onClick(() => this.onBack())
       Column() {
-        Text('备份与恢复').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-        Text('Android 兼容 ZIP').fontSize(15).fontColor('#92949E').margin({ top: 3 })
+        Text(this.title).fontSize(16).fontColor('#D8D9E0')
+        Text(this.detail).fontSize(13).fontColor('#92949E').margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-    }.width('100%').padding({ left: 12, right: 10, top: 11, bottom: 9 })
+      Toggle({ type: ToggleType.Switch, isOn: this.checked })
+        .onChange((checked: boolean) => this.onChange(checked))
+    }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
   }
 }
 

@@ -6,6 +6,7 @@ import { HomeDashboardSection, HOME_DASHBOARD_SECTIONS } from '../data/HomeDashb
 @Component
 export struct HomePage {
   @Prop books: Book[] = [];
+  @Prop totalReadTimeMs: number = 0;
   onOpenBook: (book: Book) => void = () => {};
   onOpenBookInfo: (book: Book) => void = () => {};
   onOpenBookshelf: () => void = () => {};
@@ -16,6 +17,8 @@ export struct HomePage {
   onSectionVisibilityChange: (section: HomeDashboardSection, visible: boolean) => void = (_section: HomeDashboardSection, _visible: boolean) => {};
   @State showHomeOptions: boolean = false;
   @State refreshing: boolean = false;
+  @State collapsedHeader: boolean = false;
+  private homeScroller: Scroller = new Scroller();
 
   private handlePullToRefresh(): void {
     this.refreshing = true;
@@ -84,6 +87,11 @@ export struct HomePage {
     return this.getLocalBooks().length;
   }
 
+  private getReadTimeLabel(): string {
+    const totalHours = this.totalReadTimeMs / 3600000;
+    return totalHours.toFixed(1);
+  }
+
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private goalContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
 
@@ -111,121 +119,141 @@ export struct HomePage {
 
   build() {
     Column() {
-      Row() {
-        Blank()
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'settings', glyphSize: 16 }) }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(22).onClick(() => this.showHomeOptions = !this.showHomeOptions)
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 16 }) }
-          .width(32).height(32).backgroundColor('#1C1D23').borderRadius(22).margin({ left: 8 })
-          .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-      }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 0 })
+      Column() {
+        Row() {
+          Text('首页').fontSize(22).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+            .opacity(this.collapsedHeader ? 1 : 0)
+          Blank()
+          Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'settings', glyphSize: 20 }) }
+            .width(36).height(36).backgroundColor('#1C1D23').borderRadius(22)
+            .onClick(() => this.showHomeOptions = !this.showHomeOptions)
+          Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
+            .width(36).height(36).backgroundColor('#1C1D23').borderRadius(22).margin({ left: 8 })
+            .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+        }.width('100%').height(64).padding({ left: 16, right: 12 })
+        Text('首页').fontSize(28).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          .width('100%').height(72).padding({ left: 16, bottom: 14 })
+          .opacity(this.collapsedHeader ? 0 : 1)
+      }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
       Refresh({ refreshing: this.refreshing }) {
-        Scroll() {
+        Scroll(this.homeScroller) {
         Column() {
-          Text('首页').fontSize(22).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-            .width('100%').alignSelf(ItemAlign.Start).padding({ bottom: 8 })
           if (this.visibleSections.includes('recentBook') && this.getLocalBooks().length > 0) {
+            Stack({ alignContent: Alignment.Bottom }) {
             Column() {
               Row() {
-                AppGlyph({ name: 'book', tint: '#AFC2FF', glyphSize: 18 })
+                AppGlyph({ name: 'book', tint: '#AFC2FF', glyphSize: 20 })
                 Text(this.getRecentBook().bodyMissing === true ? '已恢复书目 · 缺少正文' : '最近阅读')
-                  .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 9 })
+                  .fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 10 })
               }.margin({ bottom: 10 })
               Row() {
-                BookCover({ book: this.getRecentBook(), mini: true })
+                BookCover({ book: this.getRecentBook(), mini: true, displayWidth: 56, displayHeight: 78 })
                 Column() {
-                  Text(this.getRecentBook().title).fontSize(11).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Text(this.getRecentBook().format === 'epub' ? this.getRecentBook().author : '本地 TXT').fontSize(12).fontColor('#B6B8C2').margin({ top: 7 })
-                  Text(this.getRecentBook().lastChapter).fontSize(11).fontColor('#B6B8C2').margin({ top: 12 })
-                  Progress({ value: this.getRecentBookProgress(this.getRecentBook()), total: 100, type: ProgressType.Linear }).height(4).color('#AFC2FF').backgroundColor('#3A3B43').margin({ top: 9 })
-                }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 12 })
+                  Text(this.getRecentBook().title).fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(this.getRecentBook().format === 'epub' ? this.getRecentBook().author : '本地 TXT').fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
+                  Text(this.getRecentBook().lastChapter).fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
                 Text(`${Math.round(this.getRecentBookProgress(this.getRecentBook()))}%`).fontSize(11).fontColor('#D7DFFB').padding({ left: 9, right: 9, top: 6, bottom: 6 }).backgroundColor('#383D50').borderRadius(8)
               }.width('100%')
-            }.width('100%').padding(14).backgroundColor('#1C1D23').borderRadius(17)
+            }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 14 })
+            Progress({ value: this.getRecentBookProgress(this.getRecentBook()), total: 100, type: ProgressType.Linear })
+              .width('100%').height(3).color('#AFC2FF').backgroundColor('#3A3B43')
+              .animation({ duration: 300, curve: Curve.EaseInOut })
+            }.width('100%').backgroundColor('#1C1D23').borderRadius(17)
               .onClick(() => this.openBook(this.getRecentBook()))
           } else if (this.visibleSections.includes('recentBook')) {
             Column() {
               Row() {
-                AppGlyph({ name: 'book', tint: '#AFC2FF', glyphSize: 18 })
-                Text('最近阅读').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 8 })
+                AppGlyph({ name: 'book', tint: '#AFC2FF', glyphSize: 20 })
+                Text('最近阅读').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 10 })
               }.alignSelf(ItemAlign.Start)
               Blank().layoutWeight(1)
               Text('暂无阅读记录').fontSize(14).fontColor('#AEB0BA').alignSelf(ItemAlign.Center)
               Blank().layoutWeight(1)
-            }.width('100%').height(142).padding(14).justifyContent(FlexAlign.Center)
+            }.width('100%').height(160).padding({ left: 16, right: 16, top: 16, bottom: 14 }).justifyContent(FlexAlign.Center)
               .backgroundColor('#1C1D23').borderRadius(17).alignItems(HorizontalAlign.Center)
           }
           if (this.visibleSections.includes('totalBooks') || this.visibleSections.includes('totalTime')) {
             Row() {
               if (this.visibleSections.includes('totalBooks')) {
-                SummaryCard({ icon: 'chart', title: '累计阅读', value: `${this.getLocalBookCount()} 本`, onSelect: () => this.onOpenBookshelf() }).layoutWeight(1)
+                SummaryCard({ icon: 'chart', title: '累计阅读', value: `${this.getLocalBookCount()}`, unit: '本', onSelect: () => this.onOpenBookshelf() }).layoutWeight(1)
               }
               if (this.visibleSections.includes('totalTime')) {
-                SummaryCard({ icon: 'accessTime', title: '阅读时长', value: '0.0 小时', onSelect: () => this.onOpenReadRecords() }).layoutWeight(1)
-                  .margin({ left: this.visibleSections.includes('totalBooks') ? 10 : 0 })
+                SummaryCard({ icon: 'accessTime', title: '阅读时长', value: this.getReadTimeLabel(), unit: '小时', onSelect: () => this.onOpenReadRecords() }).layoutWeight(1)
+                  .margin({ left: this.visibleSections.includes('totalBooks') ? 12 : 0 })
               }
-            }.margin({ top: 10 })
+            }.margin({ top: 12 })
           }
           if (this.visibleSections.includes('recentBooks') && this.getRecentBooks().length > 0) {
-            Row() {
-              ForEach(this.getRecentBooks(), (book: Book) => {
-                BookCover({ book: book, mini: true }).margin({ right: 6 }).onClick(() => this.openBook(book))
-              }, (book: Book) => book.id)
-            }.width('100%').margin({ top: 10 })
+            Scroll() {
+              Row() {
+                ForEach(this.getRecentBooks(), (book: Book) => {
+                  BookCover({ book: book, mini: true, displayWidth: 60, displayHeight: 84, cornerRadius: 12 })
+                    .margin({ right: 8 }).onClick(() => this.openBook(book))
+                }, (book: Book) => book.id)
+              }
+            }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ top: 12 })
           }
           if (this.visibleSections.includes('dailyGoal')) {
           Column() {
             Row() {
               AppGlyph({ name: 'goal', tint: '#AFC2FF', glyphSize: 20 })
-              Text('今日阅读目标').fontSize(14).fontColor('#D8D9E0').margin({ left: 8 })
+              Text('今日阅读目标').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 10 })
               Blank()
-              Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'pencil', glyphSize: 18 }) }.width(38).height(38).backgroundColor('#24252C').borderRadius(22)
+              Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'pencil', glyphSize: 18 }) }.width(36).height(36).backgroundColor('#24252C').borderRadius(22)
                 .onClick(() => this.onUnavailableAction('阅读目标设置尚未迁移'))
             }.width('100%')
             Stack({ alignContent: Alignment.Bottom }) {
               Canvas(this.goalContext).width(240).height(120).onReady(() => this.drawGoalArc())
               Column() {
-                Text('0 / 30').fontSize(22).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+                Text('0 / 30').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
                 Text('分钟').fontSize(12).fontColor('#B6B8C2').margin({ top: 3 })
               }.width('100%').alignItems(HorizontalAlign.Center).margin({ bottom: 20 })
           }.width('100%').height(136)
-          }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 0 }).backgroundColor('#1C1D23').borderRadius(16).margin({ top: 10 })
+          }.width('100%').padding(16).backgroundColor('#1C1D23').borderRadius(16).margin({ top: 12 })
           }
           if (this.visibleSections.includes('backup')) {
           Column() {
             Row() {
               AppGlyph({ name: 'cloudSync', tint: '#AFC2FF', glyphSize: 20 })
               Column() {
-                Text('WebDAV 备份').fontSize(14).fontColor('#D8D9E0')
-                Text('暂无 WebDAV 备份').fontSize(10).fontColor('#AEB0BA').margin({ top: 4 })
+                Text('WebDAV 备份').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0')
+                Text('暂无 WebDAV 备份').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
               }.alignItems(HorizontalAlign.Start).margin({ left: 10 })
             }.width('100%')
             Row() {
               Row() {
                 AppGlyph({ name: 'cloudUpload', glyphSize: 15 })
-                Text('备份').fontSize(11).fontColor('#C5C7D0').margin({ left: 5 })
+                Text('备份').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14)
                 .onClick(() => this.onUnavailableAction('WebDAV 备份尚未迁移'))
               Row() {
                 AppGlyph({ name: 'cloudDownload', glyphSize: 15 })
-                Text('恢复').fontSize(11).fontColor('#C5C7D0').margin({ left: 5 })
-              }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 6 })
+                Text('恢复').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
+              }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onUnavailableAction('WebDAV 恢复尚未迁移'))
               Row() {
                 AppGlyph({ name: 'settings', glyphSize: 15 })
-                Text('设置').fontSize(11).fontColor('#C5C7D0').margin({ left: 5 })
-              }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 6 })
+                Text('设置').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
+              }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onUnavailableAction('WebDAV 设置尚未迁移'))
-            }.margin({ top: 16 })
-          }.width('100%').padding(10).backgroundColor('#1C1D23').borderRadius(16).margin({ top: 12, bottom: 18 })
+            }.margin({ top: 12 })
+          }.width('100%').padding(16).backgroundColor('#1C1D23').borderRadius(16).margin({ top: 12, bottom: 18 })
           }
           Column() {
             Text('未选择任何书源集').fontSize(14).fontColor('#AEB0BA').textAlign(TextAlign.Center)
           }.width('100%').height('100%').justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
         }.width('100%').alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Start)
-          .padding({ left: 16, right: 16, top: 12, bottom: 14 })
+          .padding({ left: 16, right: 16, top: 8, bottom: 14 })
           .constraintSize({ minHeight: '100%' })
-        }.width('100%').height('100%').scrollBar(BarState.Off)
+        }.width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
+          const offset = this.homeScroller.currentOffset().yOffset;
+          const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+          if (shouldCollapse !== this.collapsedHeader) {
+            animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+          }
+        })
       }.layoutWeight(1).refreshOffset(64).onRefreshing(() => this.handlePullToRefresh())
     }.width('100%').height('100%').backgroundColor('#111217')
       .bindSheet(this.showHomeOptions, this.homeOptionsSheetContent(), {
@@ -240,19 +268,14 @@ export struct HomePage {
   @Builder
   private homeOptionsSheetContent() {
     Column() {
-      Row() {
-        Text('首页组件').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
-        Text('完成').fontSize(14).fontColor('#AFC2FF').padding({ left: 12, right: 4, top: 6, bottom: 6 })
-          .onClick(() => this.showHomeOptions = false)
-      }.width('100%').padding({ left: 18, right: 18, top: 6, bottom: 8 })
       ForEach(HOME_DASHBOARD_SECTIONS, (section: HomeDashboardSection) => {
         Row() {
-          Text(this.sectionTitle(section)).fontSize(15).fontColor('#D8D9E0').layoutWeight(1)
+          Text(this.sectionTitle(section)).fontSize(16).fontColor('#D8D9E0').layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.visibleSections.includes(section) })
             .onChange((visible: boolean) => this.onSectionVisibilityChange(section, visible))
-        }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
+        }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
       }, (section: HomeDashboardSection) => section)
-    }.width('100%').padding({ top: 4, bottom: 16 })
+    }.width('100%').padding({ top: 8, bottom: 8 })
   }
 }
 
@@ -261,15 +284,20 @@ struct SummaryCard {
   @Prop icon: AppGlyphName = 'chart';
   @Prop title: string = '';
   @Prop value: string = '';
+  @Prop unit: string = '';
   onSelect: () => void = () => {};
   build() {
     Row() {
-      AppGlyph({ name: this.icon, tint: '#AFC2FF', glyphSize: 18 }).margin({ right: 9 })
+      AppGlyph({ name: this.icon, tint: '#AFC2FF', glyphSize: 20 }).margin({ right: 12 })
       Column() {
-        Text(this.title).fontSize(11).fontColor('#B6B8C2')
-        Text(this.value).fontSize(13).fontColor('#D8D9E0').margin({ top: 4 })
+        Text(this.title).fontSize(12).fontColor('#B6B8C2')
+        Row() {
+          Text(this.value).fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0')
+          Text(this.unit).fontSize(12).fontColor('#B6B8C2').margin({ left: 2 })
+        }
       }.alignItems(HorizontalAlign.Start)
-    }.width('100%').padding(12).backgroundColor('#1C1D23').borderRadius(14).onClick(() => this.onSelect())
+    }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 8 })
+      .backgroundColor('#1C1D23').borderRadius(14).onClick(() => this.onSelect())
   }
 }
 

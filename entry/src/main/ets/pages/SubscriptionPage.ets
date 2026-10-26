@@ -12,6 +12,7 @@ export struct SubscriptionPage {
   @State collapsedHeader: boolean = false;
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
+  @State gridColumnCount: number = 5;
 
   @Builder
   private MoreMenu() {
@@ -29,15 +30,19 @@ export struct SubscriptionPage {
     return this.items.filter((item: string) => item.toLocaleLowerCase().includes(query));
   }
 
-  private getItemRows(): string[][] {
-    const visibleItems = this.getVisibleItems();
-    const rows: string[][] = [];
-    for (let index = 0; index < visibleItems.length; index += 5) {
-      const row: string[] = visibleItems.slice(index, index + 5);
-      while (row.length < 5) { row.push(''); }
-      rows.push(row);
+  private getGridColumnsTemplate(): string {
+    let columns = '';
+    for (let index = 0; index < this.gridColumnCount; index++) {
+      columns += index === 0 ? '1fr' : ' 1fr';
     }
-    return rows;
+    return columns;
+  }
+
+  private setCollapsedHeader(collapsed: boolean): void {
+    if (this.collapsedHeader === collapsed) { return; }
+    animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+      this.collapsedHeader = collapsed;
+    });
   }
 
   build() {
@@ -48,41 +53,43 @@ export struct SubscriptionPage {
             Text('订阅').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
             Blank().layoutWeight(1)
             Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'search', glyphSize: 19 })
-            }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18)
+              AppGlyph({ name: 'search', glyphSize: 20 })
+            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18)
               .onClick(() => {
                 this.showSearch = !this.showSearch;
                 if (!this.showSearch) { this.searchQuery = ''; }
               })
             Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'more', glyphSize: 18 })
-            }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+              AppGlyph({ name: 'more', glyphSize: 20 })
+            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
               .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-          }.width('100%').height(38).alignItems(VerticalAlign.Top)
+          }.width('100%').height(48).alignItems(VerticalAlign.Top)
             .padding({ left: 18, right: 18 })
         }.width('100%').padding({ top: 20 }).backgroundColor('#111217')
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       } else {
         Column() {
           Row() {
             Blank()
             Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'search', glyphSize: 19 })
-            }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18)
+              AppGlyph({ name: 'search', glyphSize: 20 })
+            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18)
               .onClick(() => {
                 this.showSearch = !this.showSearch;
                 if (!this.showSearch) { this.searchQuery = ''; }
               })
             Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'more', glyphSize: 18 })
-            }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+              AppGlyph({ name: 'more', glyphSize: 20 })
+            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
               .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-          }.width('100%').height(40).padding({ left: 18, right: 18 })
+          }.width('100%').height(48).padding({ left: 18, right: 18 })
           Column() {
-            Text('订阅').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+            Text('订阅').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
             Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
           }.width('100%').alignItems(HorizontalAlign.Start)
             .padding({ left: 18, right: 18, top: 12, bottom: 18 }).offset({ y: -5 })
         }.width('100%').padding({ top: 20 }).backgroundColor('#111217')
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
       if (this.showSearch) {
@@ -114,24 +121,22 @@ export struct SubscriptionPage {
           }.width('100%').padding({ left: 16, right: 16, top: this.collapsedHeader ? 16 : 1, bottom: 14 })
 
           if (this.getVisibleItems().length > 0) {
-            ForEach(this.getItemRows(), (row: string[], rowIndex: number) => {
-              Row() {
-                ForEach(row, (item: string, itemIndex: number) => {
-                  if (item.length > 0) {
-                    Column() {
-                      Stack({ alignContent: Alignment.Center }) {
-                        AppGlyph({ name: 'subscription', tint: '#AFC2FF', glyphSize: 25 })
-                      }.width(42).height(42).backgroundColor('#1C1D23').borderRadius(14)
-                      Text(item).fontSize(12).fontColor('#C5C7D0').textAlign(TextAlign.Center)
-                        .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).height(36).margin({ top: 6 })
-                    }.width('100%').padding({ top: 8, bottom: 8 })
-                      .onClick(() => this.onUnavailableAction('订阅源数据尚未接入'))
-                  } else {
-                    Blank()
-                  }
-                }, (item: string, itemIndex: number) => `subscription-cell-${rowIndex}-${itemIndex}`)
-              }.width('100%')
-            }, (row: string[], rowIndex: number) => `subscription-row-${rowIndex}`)
+            Grid() {
+              ForEach(this.getVisibleItems(), (item: string, index: number) => {
+                GridItem() {
+                  Column() {
+                    Stack({ alignContent: Alignment.Center }) {
+                      AppGlyph({ name: 'subscription', tint: '#AFC2FF', glyphSize: 28 })
+                    }.width(48).height(48).backgroundColor('#1C1D23').borderRadius(14)
+                    Text(item).fontSize(12).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+                      .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).height(36).margin({ top: 8 })
+                  }.width('100%').padding({ top: 8, bottom: 8 })
+                    .onClick(() => this.onUnavailableAction('订阅源数据尚未接入'))
+                }
+              }, (item: string, index: number) => `subscription-cell-${index}-${item}`)
+            }.columnsTemplate(this.getGridColumnsTemplate()).columnsGap(12).rowsGap(12)
+              .width('100%').height(Math.ceil(this.getVisibleItems().length / this.gridColumnCount) * 112)
+              .scrollBar(BarState.Off)
           } else if (this.showSearch && this.searchQuery.trim().length > 0) {
             Column() {
               AppGlyph({ name: 'search', glyphSize: 32, tint: '#AFC2FF' }).margin({ bottom: 14 })
@@ -141,12 +146,20 @@ export struct SubscriptionPage {
           }
         }.width('100%').padding({ bottom: 120 }).constraintSize({ minHeight: '100%' })
           .alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Start)
+          .onAreaChange((_oldArea: Area, newArea: Area) => {
+            const width = parseFloat(String(newArea.width));
+            if (Number.isFinite(width)) {
+              const availableWidth = width - 32;
+              const nextCount = Math.max(1, Math.floor((availableWidth + 12) / 84));
+              if (this.gridColumnCount !== nextCount) { this.gridColumnCount = nextCount; }
+            }
+          })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const scrollOffset = this.subscriptionScroller.currentOffset().yOffset;
         if (scrollOffset > 20 && !this.collapsedHeader) {
-          this.collapsedHeader = true;
+          this.setCollapsedHeader(true);
         } else if (scrollOffset < -20 && this.collapsedHeader) {
-          this.collapsedHeader = false;
+          this.setCollapsedHeader(false);
         }
       })
     }.width('100%').height('100%').backgroundColor('#111217')
@@ -155,8 +168,8 @@ export struct SubscriptionPage {
           this.touchStartY = event.touches[0].screenY;
         } else if (event.type === TouchType.Up && event.changedTouches.length > 0 && this.items.length === 0) {
           const touchEndY = event.changedTouches[0].screenY;
-          if (touchEndY < this.touchStartY - 40 && !this.collapsedHeader) { this.collapsedHeader = true; }
-          if (touchEndY > this.touchStartY + 40 && this.collapsedHeader) { this.collapsedHeader = false; }
+          if (touchEndY < this.touchStartY - 40 && !this.collapsedHeader) { this.setCollapsedHeader(true); }
+          if (touchEndY > this.touchStartY + 40 && this.collapsedHeader) { this.setCollapsedHeader(false); }
         }
       })
   }

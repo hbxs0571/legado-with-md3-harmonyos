@@ -23,6 +23,17 @@ export struct ThemeSettingsPage {
   @State overrideCardCorner: boolean = false;
   @State overrideCardBorder: boolean = false;
   @State dividerEnabled: boolean = false;
+  @State collapsedHeader: boolean = false;
+  @State fontScalePreview: number = 10;
+  private themeScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.themeScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   private paletteColor(index: number): string {
     if (index === 0) { return '#B9C8FF'; }
@@ -46,14 +57,17 @@ export struct ThemeSettingsPage {
         Row() {
           Stack({ alignContent: Alignment.Center }) {
             Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(16).onClick(() => this.onBack())
+          }.width(40).height(40).onClick(() => this.onBack())
+          Text('外观').fontSize(22).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+            .opacity(this.collapsedHeader ? 1 : 0)
           Blank()
-        }.width('100%')
-        Text('外观').fontSize(24).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
-          .alignSelf(ItemAlign.Start).margin({ top: 7 })
-      }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 6 })
+        }.width('100%').height(64).padding({ left: 12, right: 16 })
+        Text('外观').fontSize(28).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          .width('100%').height(72).padding({ left: 16, bottom: 14 })
+          .opacity(this.collapsedHeader ? 0 : 1)
+      }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
 
-      Scroll() {
+      Scroll(this.themeScroller) {
         Column() {
           Column() {
             Column() {
@@ -84,6 +98,7 @@ export struct ThemeSettingsPage {
                 .onClick(() => this.showRefactorTip = false)
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
               .backgroundColor('#1C1D23').borderRadius(16)
+              .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
           ThemeSectionTitle({ title: '主题模式' })
@@ -124,7 +139,14 @@ export struct ThemeSettingsPage {
             ThemeSettingsOption({ title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
             ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => { this.predictiveBack = value; this.onUnavailableAction('预见性返回设置暂未保存') } })
             ThemeSwitchRow({ title: '阅读界面共享元素动画', detail: '进入阅读界面时从封面展开，关闭后使用渐变过渡', checked: this.sharedElement, onChange: (value: boolean) => { this.sharedElement = value; this.onUnavailableAction('共享元素动画设置暂未保存') } })
-            ThemeSettingsOption({ title: '字体大小', detail: '1.0x', onSelect: () => this.onUnavailableAction('字体缩放尚未迁移') })
+            Column() {
+              Row() {
+                Text('字体大小').fontSize(16).fontColor('#D8D9E0').layoutWeight(1)
+                Text(`${(this.fontScalePreview / 10).toFixed(1)}x`).fontSize(14).fontColor('#92949E')
+              }.width('100%')
+              Slider({ value: this.fontScalePreview, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
+                .width('100%').onChange((value: number) => this.fontScalePreview = value)
+            }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 8 })
             ThemeSettingsOption({ title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onUnavailableAction('主题包管理尚未迁移') })
             ThemeSettingsOption({ title: '背景图片', detail: '日间/夜间背景图与背景虚化', onSelect: () => this.onUnavailableAction('背景图片设置尚未迁移') })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor('#1A1B21').borderRadius(16)
@@ -152,10 +174,14 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换', checked: this.eyeProtectionAutoNight, onChange: (value: boolean) => { this.eyeProtectionAutoNight = value; this.onUnavailableAction('护眼模式设置暂未保存') } })
             if (this.eyeProtectionEnabled) {
               ThemeSettingsOption({ title: '色温', detail: '', onSelect: () => this.onUnavailableAction('色温调节尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               ThemeSwitchRow({ title: '定时开启', detail: '仅在设定的时间段内生效', checked: this.eyeProtectionSchedule, onChange: (value: boolean) => { this.eyeProtectionSchedule = value; this.onUnavailableAction('护眼定时尚未保存') } })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               if (this.eyeProtectionSchedule) {
                 ThemeSettingsOption({ title: '开始时间', detail: '', onSelect: () => this.onUnavailableAction('时间选择尚未迁移') })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
                 ThemeSettingsOption({ title: '结束时间', detail: '', onSelect: () => this.onUnavailableAction('时间选择尚未迁移') })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               }
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor('#1A1B21').borderRadius(16)
@@ -165,6 +191,7 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '启用控件模糊', checked: this.blurEnabled, onChange: (value: boolean) => { this.blurEnabled = value; this.onUnavailableAction('模糊效果设置暂未保存') } })
             if (this.blurEnabled) {
               ThemeSwitchRow({ title: '启用渐变模糊', checked: this.progressiveBlurEnabled, onChange: (value: boolean) => { this.progressiveBlurEnabled = value; this.onUnavailableAction('渐变模糊设置暂未保存') } })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor('#1A1B21').borderRadius(16)
 
@@ -173,30 +200,41 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '容器背景图', detail: '大容器和项目分别使用独立的日间/夜间图片', checked: this.containerBackgroundEnabled, onChange: (value: boolean) => { this.containerBackgroundEnabled = value; this.onUnavailableAction('容器背景图片设置暂未保存') } })
             if (this.containerBackgroundEnabled) {
               ThemeSettingsOption({ title: '大容器背景图片', detail: '', onSelect: () => this.onUnavailableAction('背景图片选择尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               ThemeSettingsOption({ title: '项目背景图片', detail: '', onSelect: () => this.onUnavailableAction('背景图片选择尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
             ThemeSettingsOption({ title: '容器背景不透明度', detail: '', onSelect: () => this.onUnavailableAction('容器不透明度尚未迁移') })
             ThemeSwitchRow({ title: '关闭设置分组圆角', detail: '让设置分组使用直角外轮廓', checked: this.disableGroupCorner, onChange: (value: boolean) => { this.disableGroupCorner = value; this.onUnavailableAction('设置分组圆角暂未保存') } })
             ThemeSwitchRow({ title: '覆盖卡片圆角', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardCorner, onChange: (value: boolean) => { this.overrideCardCorner = value; this.onUnavailableAction('卡片圆角设置暂未保存') } })
-            if (this.overrideCardCorner) { ThemeSettingsOption({ title: '卡片圆角', detail: '', onSelect: () => this.onUnavailableAction('卡片圆角调节尚未迁移') }) }
+            if (this.overrideCardCorner) {
+              ThemeSettingsOption({ title: '卡片圆角', detail: '', onSelect: () => this.onUnavailableAction('卡片圆角调节尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+            }
             ThemeSwitchRow({ title: '覆盖卡片边框', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardBorder, onChange: (value: boolean) => { this.overrideCardBorder = value; this.onUnavailableAction('卡片边框设置暂未保存') } })
             if (this.overrideCardBorder) {
               ThemeSettingsOption({ title: '边框宽度', detail: '', onSelect: () => this.onUnavailableAction('边框宽度设置尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               ThemeSettingsOption({ title: '日间边框颜色', detail: '', onSelect: () => this.onUnavailableAction('边框颜色选择尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               ThemeSettingsOption({ title: '夜间边框颜色', detail: '', onSelect: () => this.onUnavailableAction('边框颜色选择尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
             ThemeSwitchRow({ title: '显示分隔线', checked: this.dividerEnabled, onChange: (value: boolean) => { this.dividerEnabled = value; this.onUnavailableAction('分隔线设置暂未保存') } })
             if (this.dividerEnabled) {
               ThemeSettingsOption({ title: '分隔线宽度', detail: '', onSelect: () => this.onUnavailableAction('分隔线宽度设置尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               ThemeSettingsOption({ title: '分隔线长度', detail: '', onSelect: () => this.onUnavailableAction('分隔线长度设置尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               ThemeSettingsOption({ title: '分隔线颜色', detail: '', onSelect: () => this.onUnavailableAction('分隔线颜色选择尚未迁移') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor('#1A1B21').borderRadius(16)
           Column() {
             ThemeSettingsOption({ title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.onUnavailableAction('恢复默认配置尚未迁移') })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor('#1A1B21').borderRadius(16)
         }.width('100%').padding({ top: 4, bottom: 18 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }
@@ -244,8 +282,9 @@ struct ThemePaletteItem {
         }.width(42).height(42).borderRadius(21)
         Column().width(20).height(20).backgroundColor(this.lightColor).borderRadius(10)
         if (this.selected) {
-          Text('✓').fontSize(17).fontWeight(FontWeight.Bold).fontColor('#20212A')
-            .width(34).height(34).textAlign(TextAlign.Center).backgroundColor('#AFC2FF').borderRadius(17)
+          Stack({ alignContent: Alignment.Center }) {
+            AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#20212A' })
+          }.width(34).height(34).backgroundColor('#AFC2FF').borderRadius(17)
         }
       }.width(56).height(56).backgroundColor('#1A1B21').borderRadius(14)
         .border({ width: this.selected ? 2 : 0, color: '#AFC2FF' }).onClick(() => this.onSelect())

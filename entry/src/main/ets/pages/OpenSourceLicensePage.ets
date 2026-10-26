@@ -1,4 +1,5 @@
 import { util } from '@kit.ArkTS';
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 
 @Component
 export struct OpenSourceLicensePage {
@@ -6,6 +7,16 @@ export struct OpenSourceLicensePage {
   @State selectedLicense: string = 'GPL-3.0';
   @State licenseText: string = '';
   @State loadError: string = '';
+  @State collapsedHeader: boolean = false;
+  private licenseScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.licenseScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   aboutToAppear(): void {
     this.loadLicense(this.selectedLicense);
@@ -35,14 +46,7 @@ export struct OpenSourceLicensePage {
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(36).onClick(() => this.onBack())
-        Column() {
-          Text('开源许可证').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text('完整文本随应用提供').fontSize(14).fontColor('#92949E').margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start)
-      }.width('100%').padding({ left: 12, right: 10, top: 11, bottom: 9 })
+      CollapsingSettingsHeader({ title: '开源许可证', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
       Text('应用主体遵循 GPL-3.0；app_home、app_moon、app_share 图标遵循 Apache-2.0。')
         .fontSize(13).lineHeight(19).fontColor('#C6C8D2')
@@ -59,10 +63,10 @@ export struct OpenSourceLicensePage {
       if (this.loadError.length > 0) {
         Text(this.loadError).fontSize(14).fontColor('#F0B2A8').padding(16)
       } else {
-        Scroll() {
+        Scroll(this.licenseScroller) {
           Text(this.licenseText).fontSize(12).lineHeight(17).fontColor('#D8D9E0')
             .width('100%').padding(16).textAlign(TextAlign.Start)
-        }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+        }.layoutWeight(1).width('100%').scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }
     }.width('100%').height('100%').backgroundColor('#111217')
   }

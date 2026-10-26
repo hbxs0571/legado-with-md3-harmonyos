@@ -1,6 +1,102 @@
 import { preferences } from '@kit.ArkData';
 
-export interface ReaderSettingsSnapshot {
+export interface ReaderInfoSettings {
+  headerMode: number;
+  footerMode: number;
+  showHeaderLine: boolean;
+  showFooterLine: boolean;
+  tipHeaderLeft: number;
+  tipHeaderMiddle: number;
+  tipHeaderRight: number;
+  tipFooterLeft: number;
+  tipFooterMiddle: number;
+  tipFooterRight: number;
+  customTipHeaderLeft: string;
+  customTipHeaderMiddle: string;
+  customTipHeaderRight: string;
+  customTipFooterLeft: string;
+  customTipFooterMiddle: string;
+  customTipFooterRight: string;
+  headerFont: string;
+  footerFont: string;
+  headerFontSize: number;
+  footerFontSize: number;
+  applyHeaderStyle: boolean;
+  tipHeaderColor: number;
+  tipHeaderColorNight: number;
+  tipFooterColor: number;
+  tipFooterColorNight: number;
+  tipDividerColor: number;
+}
+
+export interface ReaderInfoSettingsUpdate {
+  headerMode?: number;
+  footerMode?: number;
+  showHeaderLine?: boolean;
+  showFooterLine?: boolean;
+  tipHeaderLeft?: number;
+  tipHeaderMiddle?: number;
+  tipHeaderRight?: number;
+  tipFooterLeft?: number;
+  tipFooterMiddle?: number;
+  tipFooterRight?: number;
+  customTipHeaderLeft?: string;
+  customTipHeaderMiddle?: string;
+  customTipHeaderRight?: string;
+  customTipFooterLeft?: string;
+  customTipFooterMiddle?: string;
+  customTipFooterRight?: string;
+  headerFont?: string;
+  footerFont?: string;
+  headerFontSize?: number;
+  footerFontSize?: number;
+  applyHeaderStyle?: boolean;
+  tipHeaderColor?: number;
+  tipHeaderColorNight?: number;
+  tipFooterColor?: number;
+  tipFooterColorNight?: number;
+  tipDividerColor?: number;
+}
+
+export function updateReaderInfoSettings(
+  current: ReaderInfoSettings,
+  update: ReaderInfoSettingsUpdate
+): ReaderInfoSettings {
+  return {
+    headerMode: update.headerMode ?? current.headerMode,
+    footerMode: update.footerMode ?? current.footerMode,
+    showHeaderLine: update.showHeaderLine ?? current.showHeaderLine,
+    showFooterLine: update.showFooterLine ?? current.showFooterLine,
+    tipHeaderLeft: update.tipHeaderLeft ?? current.tipHeaderLeft,
+    tipHeaderMiddle: update.tipHeaderMiddle ?? current.tipHeaderMiddle,
+    tipHeaderRight: update.tipHeaderRight ?? current.tipHeaderRight,
+    tipFooterLeft: update.tipFooterLeft ?? current.tipFooterLeft,
+    tipFooterMiddle: update.tipFooterMiddle ?? current.tipFooterMiddle,
+    tipFooterRight: update.tipFooterRight ?? current.tipFooterRight,
+    customTipHeaderLeft: update.customTipHeaderLeft ?? current.customTipHeaderLeft,
+    customTipHeaderMiddle: update.customTipHeaderMiddle ?? current.customTipHeaderMiddle,
+    customTipHeaderRight: update.customTipHeaderRight ?? current.customTipHeaderRight,
+    customTipFooterLeft: update.customTipFooterLeft ?? current.customTipFooterLeft,
+    customTipFooterMiddle: update.customTipFooterMiddle ?? current.customTipFooterMiddle,
+    customTipFooterRight: update.customTipFooterRight ?? current.customTipFooterRight,
+    headerFont: update.headerFont ?? current.headerFont,
+    footerFont: update.footerFont ?? current.footerFont,
+    headerFontSize: update.headerFontSize ?? current.headerFontSize,
+    footerFontSize: update.footerFontSize ?? current.footerFontSize,
+    applyHeaderStyle: update.applyHeaderStyle ?? current.applyHeaderStyle,
+    tipHeaderColor: update.tipHeaderColor ?? current.tipHeaderColor,
+    tipHeaderColorNight: update.tipHeaderColorNight ?? current.tipHeaderColorNight,
+    tipFooterColor: update.tipFooterColor ?? current.tipFooterColor,
+    tipFooterColorNight: update.tipFooterColorNight ?? current.tipFooterColorNight,
+    tipDividerColor: update.tipDividerColor ?? current.tipDividerColor
+  };
+}
+
+export function copyReaderInfoSettings(current: ReaderInfoSettings): ReaderInfoSettings {
+  return updateReaderInfoSettings(current, {});
+}
+
+export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   fontSize: number;
   paperIndex: number;
   dayPaperIndex: number;
@@ -14,14 +110,48 @@ export interface ReaderSettingsSnapshot {
   bottomActions: ReaderBottomActionConfig[];
   topActions: ReaderBottomActionConfig[];
   progressBehavior: string;
+  tocUseReplace: boolean;
+  tocShowWordCount: boolean;
+  clickImageBehavior: string;
   showQuickActions: boolean;
   autoReadSpeed: number;
+  pageAnimation: number;
+  animationSpeed: number;
 }
 
 export interface ReaderBottomActionConfig {
   id: string;
   enabled: boolean;
 }
+
+export const DEFAULT_READER_INFO_SETTINGS: ReaderInfoSettings = {
+  headerMode: 0,
+  footerMode: 0,
+  showHeaderLine: false,
+  showFooterLine: true,
+  tipHeaderLeft: 2,
+  tipHeaderMiddle: 0,
+  tipHeaderRight: 3,
+  tipFooterLeft: 1,
+  tipFooterMiddle: 0,
+  tipFooterRight: 6,
+  customTipHeaderLeft: '',
+  customTipHeaderMiddle: '',
+  customTipHeaderRight: '',
+  customTipFooterLeft: '',
+  customTipFooterMiddle: '',
+  customTipFooterRight: '',
+  headerFont: '',
+  footerFont: '',
+  headerFontSize: 12,
+  footerFontSize: 12,
+  applyHeaderStyle: true,
+  tipHeaderColor: 0,
+  tipHeaderColorNight: 0,
+  tipFooterColor: 0,
+  tipFooterColorNight: 0,
+  tipDividerColor: -1
+};
 
 export type ReaderControlKind = 'download' | 'refresh' | 'change_source' | 'audio_download' |
   'source_custom_button' | 'toc_rule' | 'charset' | 'ai_summary' | 'ai_rewrite' | 'more_actions' |
@@ -130,6 +260,32 @@ export class ReaderSettingsRepository {
 
   static async load(context: Context): Promise<ReaderSettingsSnapshot> {
     const defaults: ReaderSettingsSnapshot = {
+      headerMode: DEFAULT_READER_INFO_SETTINGS.headerMode,
+      footerMode: DEFAULT_READER_INFO_SETTINGS.footerMode,
+      showHeaderLine: DEFAULT_READER_INFO_SETTINGS.showHeaderLine,
+      showFooterLine: DEFAULT_READER_INFO_SETTINGS.showFooterLine,
+      tipHeaderLeft: DEFAULT_READER_INFO_SETTINGS.tipHeaderLeft,
+      tipHeaderMiddle: DEFAULT_READER_INFO_SETTINGS.tipHeaderMiddle,
+      tipHeaderRight: DEFAULT_READER_INFO_SETTINGS.tipHeaderRight,
+      tipFooterLeft: DEFAULT_READER_INFO_SETTINGS.tipFooterLeft,
+      tipFooterMiddle: DEFAULT_READER_INFO_SETTINGS.tipFooterMiddle,
+      tipFooterRight: DEFAULT_READER_INFO_SETTINGS.tipFooterRight,
+      customTipHeaderLeft: DEFAULT_READER_INFO_SETTINGS.customTipHeaderLeft,
+      customTipHeaderMiddle: DEFAULT_READER_INFO_SETTINGS.customTipHeaderMiddle,
+      customTipHeaderRight: DEFAULT_READER_INFO_SETTINGS.customTipHeaderRight,
+      customTipFooterLeft: DEFAULT_READER_INFO_SETTINGS.customTipFooterLeft,
+      customTipFooterMiddle: DEFAULT_READER_INFO_SETTINGS.customTipFooterMiddle,
+      customTipFooterRight: DEFAULT_READER_INFO_SETTINGS.customTipFooterRight,
+      headerFont: DEFAULT_READER_INFO_SETTINGS.headerFont,
+      footerFont: DEFAULT_READER_INFO_SETTINGS.footerFont,
+      headerFontSize: DEFAULT_READER_INFO_SETTINGS.headerFontSize,
+      footerFontSize: DEFAULT_READER_INFO_SETTINGS.footerFontSize,
+      applyHeaderStyle: DEFAULT_READER_INFO_SETTINGS.applyHeaderStyle,
+      tipHeaderColor: DEFAULT_READER_INFO_SETTINGS.tipHeaderColor,
+      tipHeaderColorNight: DEFAULT_READER_INFO_SETTINGS.tipHeaderColorNight,
+      tipFooterColor: DEFAULT_READER_INFO_SETTINGS.tipFooterColor,
+      tipFooterColorNight: DEFAULT_READER_INFO_SETTINGS.tipFooterColorNight,
+      tipDividerColor: DEFAULT_READER_INFO_SETTINGS.tipDividerColor,
       fontSize: 20,
       paperIndex: 2,
       dayPaperIndex: 0,
@@ -147,8 +303,13 @@ export class ReaderSettingsRepository {
         (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
       ),
       progressBehavior: 'page',
+      tocUseReplace: false,
+      tocShowWordCount: true,
+      clickImageBehavior: '2',
       showQuickActions: false,
-      autoReadSpeed: 10
+      autoReadSpeed: 10,
+      pageAnimation: 0,
+      animationSpeed: 2
     };
     try {
       const store = await preferences.getPreferences(context, ReaderSettingsRepository.preferenceName);
@@ -166,10 +327,41 @@ export class ReaderSettingsRepository {
       const bottomActionsValue = await store.get('bottomActions', ReaderSettingsRepository.encodeBottomActions(defaults.bottomActions));
       const topActionsValue = await store.get('topActions', ReaderSettingsRepository.encodeTopActions(defaults.topActions));
       const progressBehaviorValue = await store.get('progressBehavior', defaults.progressBehavior);
+      const tocUseReplaceValue = await store.get('tocUiUseReplace', defaults.tocUseReplace);
+      const tocShowWordCountValue = await store.get('tocCountWords', defaults.tocShowWordCount);
+      const clickImageBehaviorValue = await store.get('clickImgWay', defaults.clickImageBehavior);
       const quickActionsValue = await store.get('showQuickActions', defaults.showQuickActions);
       const autoReadSpeedValue = await store.get('autoReadSpeed', defaults.autoReadSpeed);
+      const pageAnimationValue = await store.get('pageAnimation', defaults.pageAnimation);
+      const animationSpeedValue = await store.get('animationSpeed', defaults.animationSpeed);
+      const headerModeValue = await store.get('headerMode', defaults.headerMode);
+      const footerModeValue = await store.get('footerMode', defaults.footerMode);
+      const showHeaderLineValue = await store.get('showHeaderLine', defaults.showHeaderLine);
+      const showFooterLineValue = await store.get('showFooterLine', defaults.showFooterLine);
+      const tipHeaderLeftValue = await store.get('tipHeaderLeft', defaults.tipHeaderLeft);
+      const tipHeaderMiddleValue = await store.get('tipHeaderMiddle', defaults.tipHeaderMiddle);
+      const tipHeaderRightValue = await store.get('tipHeaderRight', defaults.tipHeaderRight);
+      const tipFooterLeftValue = await store.get('tipFooterLeft', defaults.tipFooterLeft);
+      const tipFooterMiddleValue = await store.get('tipFooterMiddle', defaults.tipFooterMiddle);
+      const tipFooterRightValue = await store.get('tipFooterRight', defaults.tipFooterRight);
+      const customTipHeaderLeftValue = await store.get('customTipHeaderLeft', defaults.customTipHeaderLeft);
+      const customTipHeaderMiddleValue = await store.get('customTipHeaderMiddle', defaults.customTipHeaderMiddle);
+      const customTipHeaderRightValue = await store.get('customTipHeaderRight', defaults.customTipHeaderRight);
+      const customTipFooterLeftValue = await store.get('customTipFooterLeft', defaults.customTipFooterLeft);
+      const customTipFooterMiddleValue = await store.get('customTipFooterMiddle', defaults.customTipFooterMiddle);
+      const customTipFooterRightValue = await store.get('customTipFooterRight', defaults.customTipFooterRight);
+      const headerFontValue = await store.get('headerFont', defaults.headerFont);
+      const footerFontValue = await store.get('footerFont', defaults.footerFont);
+      const headerFontSizeValue = await store.get('headerFontSize', defaults.headerFontSize);
+      const footerFontSizeValue = await store.get('footerFontSize', defaults.footerFontSize);
+      const applyHeaderStyleValue = await store.get('applyHeaderStyle', defaults.applyHeaderStyle);
+      const tipHeaderColorValue = await store.get('tipHeaderColor', defaults.tipHeaderColor);
+      const tipHeaderColorNightValue = await store.get('tipHeaderColorNight', defaults.tipHeaderColorNight);
+      const tipFooterColorValue = await store.get('tipFooterColor', defaults.tipFooterColor);
+      const tipFooterColorNightValue = await store.get('tipFooterColorNight', defaults.tipFooterColorNight);
+      const tipDividerColorValue = await store.get('tipDividerColor', defaults.tipDividerColor);
       const fontSize = typeof fontSizeValue === 'number' && Number.isInteger(fontSizeValue)
-        ? Math.max(15, Math.min(30, fontSizeValue)) : defaults.fontSize;
+        ? Math.max(5, Math.min(50, fontSizeValue)) : defaults.fontSize;
       const storedPaperIndex = typeof paperIndexValue === 'number' && Number.isInteger(paperIndexValue)
         ? Math.max(0, Math.min(5, paperIndexValue)) : defaults.paperIndex;
       const styleVersion = typeof styleVersionValue === 'number' ? styleVersionValue : 0;
@@ -194,6 +386,34 @@ export class ReaderSettingsRepository {
         await store.flush();
       }
       return {
+        headerMode: typeof headerModeValue === 'number' && Number.isInteger(headerModeValue)
+          ? Math.max(0, Math.min(2, headerModeValue)) : defaults.headerMode,
+        footerMode: typeof footerModeValue === 'number' && Number.isInteger(footerModeValue)
+          ? Math.max(0, Math.min(1, footerModeValue)) : defaults.footerMode,
+        showHeaderLine: typeof showHeaderLineValue === 'boolean' ? showHeaderLineValue : defaults.showHeaderLine,
+        showFooterLine: typeof showFooterLineValue === 'boolean' ? showFooterLineValue : defaults.showFooterLine,
+        tipHeaderLeft: ReaderSettingsRepository.normalizeTipValue(tipHeaderLeftValue, defaults.tipHeaderLeft),
+        tipHeaderMiddle: ReaderSettingsRepository.normalizeTipValue(tipHeaderMiddleValue, defaults.tipHeaderMiddle),
+        tipHeaderRight: ReaderSettingsRepository.normalizeTipValue(tipHeaderRightValue, defaults.tipHeaderRight),
+        tipFooterLeft: ReaderSettingsRepository.normalizeTipValue(tipFooterLeftValue, defaults.tipFooterLeft),
+        tipFooterMiddle: ReaderSettingsRepository.normalizeTipValue(tipFooterMiddleValue, defaults.tipFooterMiddle),
+        tipFooterRight: ReaderSettingsRepository.normalizeTipValue(tipFooterRightValue, defaults.tipFooterRight),
+        customTipHeaderLeft: typeof customTipHeaderLeftValue === 'string' ? customTipHeaderLeftValue : defaults.customTipHeaderLeft,
+        customTipHeaderMiddle: typeof customTipHeaderMiddleValue === 'string' ? customTipHeaderMiddleValue : defaults.customTipHeaderMiddle,
+        customTipHeaderRight: typeof customTipHeaderRightValue === 'string' ? customTipHeaderRightValue : defaults.customTipHeaderRight,
+        customTipFooterLeft: typeof customTipFooterLeftValue === 'string' ? customTipFooterLeftValue : defaults.customTipFooterLeft,
+        customTipFooterMiddle: typeof customTipFooterMiddleValue === 'string' ? customTipFooterMiddleValue : defaults.customTipFooterMiddle,
+        customTipFooterRight: typeof customTipFooterRightValue === 'string' ? customTipFooterRightValue : defaults.customTipFooterRight,
+        headerFont: typeof headerFontValue === 'string' ? headerFontValue : defaults.headerFont,
+        footerFont: typeof footerFontValue === 'string' ? footerFontValue : defaults.footerFont,
+        headerFontSize: ReaderSettingsRepository.normalizeInteger(headerFontSizeValue, 0, 100, defaults.headerFontSize),
+        footerFontSize: ReaderSettingsRepository.normalizeInteger(footerFontSizeValue, 0, 100, defaults.footerFontSize),
+        applyHeaderStyle: typeof applyHeaderStyleValue === 'boolean' ? applyHeaderStyleValue : defaults.applyHeaderStyle,
+        tipHeaderColor: ReaderSettingsRepository.normalizeColor(tipHeaderColorValue, defaults.tipHeaderColor),
+        tipHeaderColorNight: ReaderSettingsRepository.normalizeColor(tipHeaderColorNightValue, defaults.tipHeaderColorNight),
+        tipFooterColor: ReaderSettingsRepository.normalizeColor(tipFooterColorValue, defaults.tipFooterColor),
+        tipFooterColorNight: ReaderSettingsRepository.normalizeColor(tipFooterColorNightValue, defaults.tipFooterColorNight),
+        tipDividerColor: ReaderSettingsRepository.normalizeColor(tipDividerColorValue, defaults.tipDividerColor),
         fontSize: fontSize,
         paperIndex: paperIndex,
         dayPaperIndex: dayPaperIndex,
@@ -215,9 +435,19 @@ export class ReaderSettingsRepository {
           typeof topActionsValue === 'string' ? topActionsValue : ''
         ),
         progressBehavior: progressBehaviorValue === 'chapter' ? 'chapter' : 'page',
+        tocUseReplace: typeof tocUseReplaceValue === 'boolean' ? tocUseReplaceValue : defaults.tocUseReplace,
+        tocShowWordCount: typeof tocShowWordCountValue === 'boolean'
+          ? tocShowWordCountValue : defaults.tocShowWordCount,
+        clickImageBehavior: typeof clickImageBehaviorValue === 'string' &&
+          ['0', '1', '2', '3', '4'].includes(clickImageBehaviorValue)
+          ? clickImageBehaviorValue : defaults.clickImageBehavior,
         showQuickActions: typeof quickActionsValue === 'boolean' ? quickActionsValue : defaults.showQuickActions,
         autoReadSpeed: typeof autoReadSpeedValue === 'number' && Number.isInteger(autoReadSpeedValue)
-          ? Math.max(1, Math.min(120, autoReadSpeedValue)) : defaults.autoReadSpeed
+          ? Math.max(1, Math.min(120, autoReadSpeedValue)) : defaults.autoReadSpeed,
+        pageAnimation: typeof pageAnimationValue === 'number' && Number.isInteger(pageAnimationValue)
+          ? Math.max(0, Math.min(5, pageAnimationValue)) : defaults.pageAnimation,
+        animationSpeed: typeof animationSpeedValue === 'number' && Number.isInteger(animationSpeedValue)
+          ? Math.max(0, Math.min(3, animationSpeedValue)) : defaults.animationSpeed
       };
     } catch (_) {
       return defaults;
@@ -227,7 +457,7 @@ export class ReaderSettingsRepository {
   static save(context: Context, settings: ReaderSettingsSnapshot): Promise<void> {
     const operation = ReaderSettingsRepository.saveQueue.then(async (): Promise<void> => {
       const store = await preferences.getPreferences(context, ReaderSettingsRepository.preferenceName);
-      await store.put('fontSize', Math.max(15, Math.min(30, Math.round(settings.fontSize))));
+      await store.put('fontSize', Math.max(5, Math.min(50, Math.round(settings.fontSize))));
       await store.put('paperIndex', Math.max(0, Math.min(5, Math.round(settings.paperIndex))));
       await store.put('dayPaperIndex', Math.max(0, Math.min(5, Math.round(settings.dayPaperIndex))));
       await store.put('nightPaperIndex', Math.max(0, Math.min(5, Math.round(settings.nightPaperIndex))));
@@ -240,9 +470,41 @@ export class ReaderSettingsRepository {
       await store.put('bottomActions', ReaderSettingsRepository.encodeBottomActions(settings.bottomActions));
       await store.put('topActions', ReaderSettingsRepository.encodeTopActions(settings.topActions));
       await store.put('progressBehavior', settings.progressBehavior === 'chapter' ? 'chapter' : 'page');
+      await store.put('tocUiUseReplace', settings.tocUseReplace);
+      await store.put('tocCountWords', settings.tocShowWordCount);
+      await store.put('clickImgWay', ['0', '1', '2', '3', '4'].includes(settings.clickImageBehavior)
+        ? settings.clickImageBehavior : '2');
       await store.put('paperStyleVersion', 1);
       await store.put('showQuickActions', settings.showQuickActions);
       await store.put('autoReadSpeed', Math.max(1, Math.min(120, Math.round(settings.autoReadSpeed))));
+      await store.put('pageAnimation', Math.max(0, Math.min(5, Math.round(settings.pageAnimation))));
+      await store.put('animationSpeed', Math.max(0, Math.min(3, Math.round(settings.animationSpeed))));
+      await store.put('headerMode', Math.max(0, Math.min(2, Math.round(settings.headerMode))));
+      await store.put('footerMode', Math.max(0, Math.min(1, Math.round(settings.footerMode))));
+      await store.put('showHeaderLine', settings.showHeaderLine);
+      await store.put('showFooterLine', settings.showFooterLine);
+      await store.put('tipHeaderLeft', settings.tipHeaderLeft);
+      await store.put('tipHeaderMiddle', settings.tipHeaderMiddle);
+      await store.put('tipHeaderRight', settings.tipHeaderRight);
+      await store.put('tipFooterLeft', settings.tipFooterLeft);
+      await store.put('tipFooterMiddle', settings.tipFooterMiddle);
+      await store.put('tipFooterRight', settings.tipFooterRight);
+      await store.put('customTipHeaderLeft', settings.customTipHeaderLeft);
+      await store.put('customTipHeaderMiddle', settings.customTipHeaderMiddle);
+      await store.put('customTipHeaderRight', settings.customTipHeaderRight);
+      await store.put('customTipFooterLeft', settings.customTipFooterLeft);
+      await store.put('customTipFooterMiddle', settings.customTipFooterMiddle);
+      await store.put('customTipFooterRight', settings.customTipFooterRight);
+      await store.put('headerFont', settings.headerFont);
+      await store.put('footerFont', settings.footerFont);
+      await store.put('headerFontSize', Math.max(0, Math.min(100, Math.round(settings.headerFontSize))));
+      await store.put('footerFontSize', Math.max(0, Math.min(100, Math.round(settings.footerFontSize))));
+      await store.put('applyHeaderStyle', settings.applyHeaderStyle);
+      await store.put('tipHeaderColor', settings.tipHeaderColor);
+      await store.put('tipHeaderColorNight', settings.tipHeaderColorNight);
+      await store.put('tipFooterColor', settings.tipFooterColor);
+      await store.put('tipFooterColorNight', settings.tipFooterColorNight);
+      await store.put('tipDividerColor', settings.tipDividerColor);
       await store.flush();
     });
     ReaderSettingsRepository.saveQueue = operation.then((): void => {}, (_error: Error): void => {});
@@ -254,6 +516,19 @@ export class ReaderSettingsRepository {
     if (index === 1) { return 3; }
     if (index === 2) { return 0; }
     return 2;
+  }
+
+  private static normalizeTipValue(value: number | boolean | string | bigint | Uint8Array | object, fallback: number): number {
+    return typeof value === 'number' && Number.isInteger(value) ? Math.max(0, Math.min(20, value)) : fallback;
+  }
+
+  private static normalizeInteger(value: number | boolean | string | bigint | Uint8Array | object, minimum: number, maximum: number, fallback: number): number {
+    return typeof value === 'number' && Number.isInteger(value)
+      ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+  }
+
+  private static normalizeColor(value: number | boolean | string | bigint | Uint8Array | object, fallback: number): number {
+    return typeof value === 'number' && Number.isInteger(value) ? value : fallback;
   }
 
   private static clampStyleIndex(value: number, fallback: number): number {

@@ -150,6 +150,7 @@ export class EpubRepository {
         contentPath: contentPath,
         format: 'epub',
         fileSizeBytes: compressedBytes,
+        readerPositionVersion: 1,
         isLocal: true
       };
     } catch (error) {

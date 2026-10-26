@@ -9,6 +9,9 @@ export struct BookCover {
   };
   @Prop compact: boolean = false;
   @Prop mini: boolean = false;
+  @Prop displayWidth: number = 0;
+  @Prop displayHeight: number = 0;
+  @Prop cornerRadius: number = 7;
   @Prop showChapterBadge: boolean = false;
   @State imageFailed: boolean = false;
 
@@ -23,7 +26,7 @@ export struct BookCover {
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Cover)
-          .borderRadius(7)
+          .borderRadius(this.cornerRadius)
           .onError(() => this.imageFailed = true)
       }
       Column() {
@@ -69,9 +72,9 @@ export struct BookCover {
       .alignItems(HorizontalAlign.Center)
       .justifyContent(FlexAlign.SpaceBetween)
     }
-    .width(this.mini ? 48 : this.compact ? 70 : 92)
-    .height(this.mini ? 68 : this.compact ? 100 : 128)
+    .width(this.displayWidth > 0 ? this.displayWidth : this.mini ? 48 : this.compact ? 70 : 92)
+    .height(this.displayHeight > 0 ? this.displayHeight : this.mini ? 68 : this.compact ? 100 : 128)
     .backgroundColor(this.book.coverColor)
-    .borderRadius(7)
+    .borderRadius(this.cornerRadius)
   }
 }

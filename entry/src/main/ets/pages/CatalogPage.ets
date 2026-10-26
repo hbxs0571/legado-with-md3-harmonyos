@@ -2,6 +2,8 @@ import { Book } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
+import { BookRepository } from '../data/BookRepository';
+import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 
 interface CatalogChapter {
   title: string;
@@ -16,13 +18,31 @@ export struct CatalogPage {
   };
   @Prop selectedChapter: string = '';
   @Prop bookmarks: ReaderBookmark[] = [];
+  @Prop useTitleReplacement: boolean = false;
+  @Prop showWordCount: boolean = true;
   @State ascending: boolean = true;
   @State selectedTab: number = 1;
   @State query: string = '';
+  @State chapterWordCounts: Map<number, string> = new Map<number, string>();
+  @State wordCountsLoading: boolean = false;
+  private chapterScroller: Scroller = new Scroller();
+  private hasAutoScrolledCurrentChapter: boolean = false;
+  private wordCountGeneration: number = 0;
   onBack: () => void = () => {};
   onSelectChapter: (chapterIndex: number) => void = () => {};
   onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
   onEditBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
+  onTitleReplacementChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onShowWordCountChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onUnavailableAction: (message: string) => void = (_message: string) => {};
+
+  aboutToAppear(): void {
+    if (this.showWordCount) { this.loadChapterWordCounts(); }
+  }
+
+  aboutToDisappear(): void {
+    this.wordCountGeneration++;
+  }
 
   private getAllChapters(): string[] {
     if (this.book.chapterTitles !== undefined && this.book.chapterTitles.length > 0) {
@@ -37,16 +57,18 @@ export struct CatalogPage {
     const chapters: CatalogChapter[] = [];
     for (let index = 0; index < allChapters.length; index++) {
       const title = allChapters[index];
-      if (title.includes(keyword)) {
-        chapters.push({ title: title, index: index });
+      if (title !== undefined) {
+        const displayTitle = this.useTitleReplacement ? ReplaceRuleRepository.applyTitle(this.book, title) : title;
+        if (displayTitle.includes(keyword)) {
+          chapters.push({ title: displayTitle, index: index });
+        }
       }
     }
-    if (this.ascending) {
-      return chapters;
-    }
+    if (this.ascending) { return chapters; }
     const reversed: CatalogChapter[] = [];
     for (let index = chapters.length - 1; index >= 0; index--) {
-      reversed.push(chapters[index]);
+      const chapter = chapters[index];
+      if (chapter !== undefined) { reversed.push(chapter); }
     }
     return reversed;
   }
@@ -63,121 +85,319 @@ export struct CatalogPage {
     return '笔记';
   }
 
+  private getSourceLabel(): string {
+    if (!this.book.isLocal) { return '--'; }
+    if (this.book.format === 'epub') { return '本地 EPUB'; }
+    return '本地 TXT';
+  }
+
+  private getCurrentChapterNumber(): number {
+    const index = this.book.chapterIndex ?? this.getAllChapters().indexOf(this.selectedChapter);
+    return index >= 0 ? index + 1 : 0;
+  }
+
+  private scrollToCurrentChapter(): void {
+    if (this.selectedTab !== 1 || this.hasAutoScrolledCurrentChapter) { return; }
+    const currentChapterIndex = this.book.chapterIndex ?? this.getAllChapters().indexOf(this.selectedChapter);
+    const visibleIndex = this.getChapters().findIndex((chapter: CatalogChapter) =>
+      chapter.index === currentChapterIndex);
+    if (visibleIndex < 0) { return; }
+    this.hasAutoScrolledCurrentChapter = true;
+    setTimeout((): void => {
+      this.chapterScroller.scrollToIndex(visibleIndex, false);
+    }, 100);
+  }
+
+  private formatWordCount(wordCount: number): string {
+    if (wordCount <= 0) { return ''; }
+    if (wordCount > 10000) {
+      return Number((wordCount / 10000).toFixed(1)).toString() + '万字';
+    }
+    return wordCount.toString() + '字';
+  }
+
+  private async loadChapterWordCounts(): Promise<void> {
+    if (this.book.contentPath === undefined || this.book.bodyMissing === true || this.wordCountsLoading) { return; }
+    const generation = ++this.wordCountGeneration;
+    this.wordCountsLoading = true;
+    const counts = new Map<number, string>();
+    try {
+      await BookRepository.forEachChapter(
+        this.book,
+        async (content: string, chapterIndex: number): Promise<boolean> => {
+          if (generation !== this.wordCountGeneration) { return false; }
+          counts.set(chapterIndex, this.formatWordCount(content.length));
+          return true;
+        },
+        false
+      );
+      if (generation === this.wordCountGeneration) { this.chapterWordCounts = counts; }
+    } catch (_) {
+      if (generation === this.wordCountGeneration) { this.onUnavailableAction('无法读取本地章节字数'); }
+    } finally {
+      if (generation === this.wordCountGeneration) { this.wordCountsLoading = false; }
+    }
+  }
+
+  private toggleShowWordCount(): void {
+    const enabled = !this.showWordCount;
+    this.onShowWordCountChange(enabled);
+    if (enabled && this.chapterWordCounts.size === 0) { this.loadChapterWordCounts(); }
+    else if (!enabled) {
+      this.wordCountGeneration++;
+      this.wordCountsLoading = false;
+    }
+  }
+
+  @Builder
+  private CatalogTabPage(tab: number) {
+    if (tab === 0) {
+      Scroll() {
+        Column() {
+          CatalogInformationRow({ label: '作者', value: this.book.author })
+          CatalogInformationRow({ label: '书源', value: this.getSourceLabel() })
+          if ((this.book.description ?? '').trim().length > 0) {
+            CatalogInformationRow({ label: '简介', value: this.book.description ?? '' })
+          }
+        }
+        .width('100%')
+        .padding({ top: 8, bottom: 14 })
+      }
+      .width('100%')
+      .height('100%')
+      .scrollBar(BarState.Off)
+    } else if (tab === 1) {
+      Column() {
+        Row() {
+          TextInput({ placeholder: '搜索章节…', text: this.query })
+            .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
+            .backgroundColor('#1A1B21').layoutWeight(1).borderRadius(12)
+            .onChange((value: string) => this.query = value)
+          if (this.query.length > 0) {
+            AppGlyph({ name: 'profileClose', glyphSize: 16, tint: '#C5C7D0' })
+              .width(32).onClick(() => this.query = '')
+          }
+          AppGlyph({ name: 'profileFindReplace', glyphSize: 17,
+            tint: this.useTitleReplacement ? '#AFC2FF' : '#D8D9E0' })
+            .width(32)
+            .onClick(() => this.onTitleReplacementChange(!this.useTitleReplacement))
+          AppGlyph({ name: 'profileTimeline', glyphSize: 17,
+            tint: this.showWordCount ? '#AFC2FF' : '#D8D9E0' })
+            .width(32)
+            .onClick(() => this.toggleShowWordCount())
+          AppGlyph({ name: 'swap', glyphSize: 18, tint: this.ascending ? '#D8D9E0' : '#AFC2FF' })
+            .width(32).onClick(() => this.ascending = !this.ascending)
+          AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
+            .width(28)
+            .onClick(() => this.onUnavailableAction('目录更多操作尚未迁移'))
+        }
+        .padding({ left: 12, right: 12, bottom: 8 })
+
+        Row() {
+          Text(this.wordCountsLoading ? '正在统计章节字数' : this.ascending ? '正序' : '倒序')
+            .fontSize(10).fontColor('#AEB0B9')
+          Blank()
+          Text('共 ' + this.getAllChapters().length.toString() + ' 章')
+            .fontSize(10).fontColor('#AEB0B9')
+        }.padding({ left: 16, right: 16, bottom: 7 })
+
+        if (this.getChapters().length === 0) {
+          Column() {
+            Text(this.query.trim().length > 0 ? '没有找到相关章节' : '暂无目录')
+              .fontSize(13).fontColor('#AEB0B9')
+          }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
+        } else {
+          List({ scroller: this.chapterScroller }) {
+            ForEach(this.getChapters(), (chapter: CatalogChapter) => {
+              ListItem() {
+                Row() {
+                  Text(chapter.title).fontSize(12)
+                    .fontColor(this.isChapterSelected(chapter.index) ? '#F0F1F5' : '#D4D5DB')
+                    .layoutWeight(1).maxLines(1)
+                  if (this.showWordCount && this.chapterWordCounts.has(chapter.index)) {
+                    Text(this.chapterWordCounts.get(chapter.index) ?? '')
+                      .fontSize(10).fontColor('#AEB0B9').margin({ right: 8 })
+                  }
+                  if (this.isChapterSelected(chapter.index)) {
+                    Image($r('app.media.app_locate')).width(16).height(16).fillColor('#C4D1FF')
+                  }
+                }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 11, bottom: 11 })
+                .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : '#1A1B21')
+                .borderRadius(10)
+                .onClick(() => this.onSelectChapter(chapter.index))
+              }.margin({ left: 12, right: 12, bottom: 6 })
+            }, (chapter: CatalogChapter) => chapter.index.toString())
+          }
+          .layoutWeight(1)
+          .scrollBar(BarState.Off)
+          .onAreaChange(() => this.scrollToCurrentChapter())
+        }
+      }
+      .width('100%')
+      .height('100%')
+    } else if (tab === 2) {
+      if (this.bookmarks.length === 0) {
+        Column() {
+          AppGlyph({ name: 'bookmark', glyphSize: 30, tint: '#AFC2FF' })
+          Text('暂无书签').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.bookmarks, (bookmark: ReaderBookmark) => {
+              Column() {
+                Row() {
+                  Text(bookmark.chapterName).fontSize(13).fontColor('#AFC2FF')
+                    .layoutWeight(1).maxLines(1)
+                  Text('跳转').fontSize(11).fontColor('#D7DFFB')
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .backgroundColor('#454B62').borderRadius(14)
+                    .onClick(() => this.onOpenBookmark(bookmark.id))
+                  Text('编辑').fontSize(11).fontColor('#C5C7D0')
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .margin({ left: 6 }).backgroundColor('#292A31').borderRadius(14)
+                    .onClick(() => this.onEditBookmark(bookmark.id))
+                }
+                if (bookmark.bookText.length > 0) {
+                  Text(bookmark.bookText).fontSize(12).fontColor('#D4D5DB')
+                    .maxLines(3).margin({ top: 7 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                if (bookmark.content.length > 0) {
+                  Text(bookmark.content).fontSize(11).fontColor('#AEB0B9')
+                    .maxLines(2).margin({ top: 5 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+              }
+              .width('100%')
+              .padding(12)
+              .backgroundColor('#1A1B21')
+              .borderRadius(10)
+              .margin({ bottom: 6 })
+            }, (bookmark: ReaderBookmark) => bookmark.id)
+          }
+          .padding({ left: 12, right: 12, bottom: 14 })
+        }
+        .width('100%')
+        .height('100%')
+        .scrollBar(BarState.Off)
+      }
+    } else {
+      Column() {
+        AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: '#AFC2FF' })
+        Text('暂无笔记').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
+        Text('本书笔记暂未迁移').fontSize(11).fontColor('#858791').margin({ top: 5 })
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.onBack())
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#99000000')
+        .onClick(() => this.onBack())
+
       Column() {
-        Row().width(32).height(4).backgroundColor('#C6C7CE').borderRadius(4).margin({ top: 9, bottom: 16 })
+        Row()
+          .width(32)
+          .height(4)
+          .backgroundColor('#C6C7CE')
+          .borderRadius(4)
+          .margin({ top: 9, bottom: 16 })
           .onClick(() => this.onBack())
+
         Row() {
           BookCover({ book: this.book, mini: true })
           Column() {
             Text(this.book.title).fontSize(13).fontColor('#ECEEF2').maxLines(1)
             Text(this.book.lastChapter).fontSize(10).fontColor('#AEB0B9').margin({ top: 4 }).maxLines(1)
-          }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 12 })
-          Text(`${this.getAllChapters().indexOf(this.selectedChapter) + 1} / ${this.getAllChapters().length}`)
-            .fontSize(10).fontColor('#ECEEF2').padding({ left: 9, right: 9, top: 6, bottom: 6 })
-            .backgroundColor('#101116').borderRadius(14)
-        }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          .margin({ left: 12 })
+          Text(this.getCurrentChapterNumber().toString() + ' / ' + this.getAllChapters().length.toString())
+            .fontSize(10)
+            .fontColor('#ECEEF2')
+            .padding({ left: 9, right: 9, top: 6, bottom: 6 })
+            .backgroundColor('#101116')
+            .borderRadius(14)
+        }
+        .width('100%')
+        .padding({ left: 14, right: 14, bottom: 12 })
 
         Row() {
           ForEach([0, 1, 2, 3], (index: number) => {
             Text(this.getTabLabel(index))
-              .fontSize(11).fontColor(this.selectedTab === index ? '#F0F1F5' : '#B0B2BC')
-              .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 8, bottom: 8 })
-              .backgroundColor(this.selectedTab === index ? '#454B62' : '#1C1D23').borderRadius(12)
+              .fontSize(11)
+              .fontColor(this.selectedTab === index ? '#F0F1F5' : '#B0B2BC')
+              .textAlign(TextAlign.Center)
+              .layoutWeight(1)
+              .padding({ top: 8, bottom: 8 })
+              .backgroundColor(this.selectedTab === index ? '#454B62' : '#1C1D23')
+              .borderRadius(12)
               .margin({ left: index === 0 ? 12 : 4, right: index === 3 ? 12 : 4 })
-              .onClick(() => this.selectedTab = index)
+              .onClick(() => {
+                this.selectedTab = index;
+                if (index === 1) { this.scrollToCurrentChapter(); }
+              })
           }, (index: number) => index.toString())
-        }.width('100%').margin({ bottom: 10 })
-
-        if (this.selectedTab === 1) {
-          Row() {
-            TextInput({ placeholder: '⌕ 搜索章节…', text: this.query })
-              .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
-              .backgroundColor('#1A1B21').layoutWeight(1).borderRadius(12)
-              .onChange((value: string) => this.query = value)
-            Image($r('app.media.app_refresh')).width(17).height(17).fillColor('#D8D9E0').width(35)
-              .onClick(() => this.query = '')
-            Text('#').fontSize(15).fontColor('#ECEEF2').width(35).textAlign(TextAlign.Center)
-              .backgroundColor('#454B62').borderRadius(10).onClick(() => this.ascending = !this.ascending)
-            Image($r('app.media.app_sort')).width(17).height(17).fillColor('#D8D9E0').width(32)
-              .onClick(() => this.ascending = !this.ascending)
-            AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' }).width(26)
-              .onClick(() => this.ascending = !this.ascending)
-          }.padding({ left: 12, right: 12, bottom: 8 })
-          Row() {
-            Text(this.ascending ? '正序' : '倒序').fontSize(10).fontColor('#AEB0B9')
-            Blank()
-            Text(`共 ${this.getAllChapters().length} 章`).fontSize(10).fontColor('#AEB0B9')
-          }.padding({ left: 16, right: 16, bottom: 7 })
-          Scroll() {
-            Column() {
-              ForEach(this.getChapters(), (chapter: CatalogChapter) => {
-                Row() {
-                  Text(chapter.title).fontSize(12)
-                    .fontColor(this.isChapterSelected(chapter.index) ? '#F0F1F5' : '#D4D5DB')
-                    .layoutWeight(1).maxLines(1)
-                  if (this.isChapterSelected(chapter.index)) {
-                    Image($r('app.media.app_locate')).width(16).height(16).fillColor('#C4D1FF')
-                  }
-                }.width('100%').padding({ left: 12, right: 12, top: 11, bottom: 11 })
-                  .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : '#1A1B21')
-                  .borderRadius(10).onClick(() => this.onSelectChapter(chapter.index))
-              }, (chapter: CatalogChapter) => chapter.index.toString())
-            }.padding({ left: 12, right: 12, bottom: 14 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
-        } else if (this.selectedTab === 2) {
-          if (this.bookmarks.length === 0) {
-            Column() {
-              AppGlyph({ name: 'bookmark', glyphSize: 30, tint: '#AFC2FF' })
-              Text('暂无书签').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
-            }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
-          } else {
-            Scroll() {
-              Column() {
-                ForEach(this.bookmarks, (bookmark: ReaderBookmark) => {
-                  Column() {
-                    Row() {
-                      Text(bookmark.chapterName).fontSize(13).fontColor('#AFC2FF')
-                        .layoutWeight(1).maxLines(1)
-                      Text('跳转').fontSize(11).fontColor('#D7DFFB')
-                        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                        .backgroundColor('#454B62').borderRadius(14)
-                        .onClick(() => this.onOpenBookmark(bookmark.id))
-                      Text('编辑').fontSize(11).fontColor('#C5C7D0')
-                        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                        .margin({ left: 6 }).backgroundColor('#292A31').borderRadius(14)
-                        .onClick(() => this.onEditBookmark(bookmark.id))
-                    }
-                    if (bookmark.bookText.length > 0) {
-                      Text(bookmark.bookText).fontSize(12).fontColor('#D4D5DB')
-                        .maxLines(3).margin({ top: 7 }).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    }
-                    if (bookmark.content.length > 0) {
-                      Text(bookmark.content).fontSize(11).fontColor('#AEB0B9')
-                        .maxLines(2).margin({ top: 5 }).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    }
-                  }.width('100%').padding(12).backgroundColor('#1A1B21').borderRadius(10)
-                    .margin({ bottom: 6 })
-                }, (bookmark: ReaderBookmark) => bookmark.id)
-              }.padding({ left: 12, right: 12, bottom: 14 })
-            }.layoutWeight(1).scrollBar(BarState.Off)
-          }
-        } else {
-          Column() {
-            Text(this.getTabLabel(this.selectedTab)).fontSize(17).fontColor('#E4E5EA')
-            Text(this.selectedTab === 0 ? this.book.author + ' · ' + this.book.category : '笔记尚未迁移')
-              .fontSize(11).fontColor('#9A9CA6').margin({ top: 8 })
-          }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         }
+        .width('100%')
+        .margin({ bottom: 10 })
+
+        Swiper() {
+          ForEach([0, 1, 2, 3], (index: number) => {
+            this.CatalogTabPage(index)
+          }, (index: number) => index.toString())
+        }
+        .index(this.selectedTab)
+        .loop(false)
+        .indicator(false)
+        .onChange((index: number) => {
+          this.selectedTab = index;
+          if (index === 1) { this.scrollToCurrentChapter(); }
+        })
+        .layoutWeight(1)
+        .width('100%')
       }
       .width('100%')
-      .height('84%')
+      .height('72%')
       .backgroundColor('#17181E')
-      .borderRadius(22)
+      .borderRadius({ topLeft: 22, topRight: 22 })
     }
     .width('100%')
     .height('100%')
+  }
+}
+
+@Component
+struct CatalogInformationRow {
+  @Prop label: string = '';
+  @Prop value: string = '';
+
+  build() {
+    Column() {
+      Text(this.label)
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#AFC2FF')
+      Text(this.value.trim().length > 0 ? this.value : '--')
+        .fontSize(13)
+        .fontColor('#D4D5DB')
+        .lineHeight(19)
+        .margin({ top: 3 })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+    .backgroundColor('#1A1B21')
+    .borderRadius(14)
   }
 }

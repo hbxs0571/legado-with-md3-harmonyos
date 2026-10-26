@@ -1,20 +1,25 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+
 @Component
 export struct AppCoverSettingsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @State collapsedHeader: boolean = false;
+  private settingsScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(40).height(40).onClick(() => this.onBack())
-        Column() {
-          Text('封面设置').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text('通用规则与默认封面样式').fontSize(15).fontColor('#92949E').margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      }.padding({ left: 12, right: 16, top: 8, bottom: 10 })
+      CollapsingSettingsHeader({ title: '封面设置', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
-      Scroll() {
+      Scroll(this.settingsScroller) {
         Column() {
           CoverSettingsSection({ title: '通用' }) {
             CoverSettingsSwitch({ title: '仅在 Wi-Fi 下加载网络封面', detail: '仅在 Wi-Fi 下加载网络封面' })
@@ -47,7 +52,7 @@ export struct AppCoverSettingsPage {
           Text('此页控件目前用于界面预览；封面规则、相册选择和偏好保存尚未接入。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }

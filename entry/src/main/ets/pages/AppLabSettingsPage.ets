@@ -1,22 +1,27 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+
 @Component
 export struct AppLabSettingsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State labEnabled: boolean = false;
   @State eInkEnabled: boolean = false;
+  @State collapsedHeader: boolean = false;
+  private settingsScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(40).height(40).onClick(() => this.onBack())
-        Column() {
-          Text('实验室').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text('实验性功能与诊断').fontSize(15).fontColor('#92949E').margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      }.padding({ left: 12, right: 16, top: 8, bottom: 10 })
+      CollapsingSettingsHeader({ title: '实验室', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
-      Scroll() {
+      Scroll(this.settingsScroller) {
         Column() {
           Column() {
             LabSettingsSwitch({ title: '启用实验室', detail: '开启后显示实验性功能，可能不稳定', value: this.labEnabled, onChange: (value: boolean) => this.labEnabled = value })
@@ -32,6 +37,7 @@ export struct AppLabSettingsPage {
                   .fontSize(12).fontColor('#AFC2FF').padding({ left: 14, right: 14, bottom: 12 })
               }
             }.margin({ left: 16, right: 16 }).backgroundColor('#1A1B21').borderRadius(16)
+              .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
           Text('诊断').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#AFC2FF')
@@ -51,7 +57,7 @@ export struct AppLabSettingsPage {
           Text('实验室开关仅作页面预览，不会启用实验功能或导出诊断数据。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 10, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }

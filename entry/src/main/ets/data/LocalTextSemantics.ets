@@ -15,6 +15,10 @@ export interface LocalSemanticParagraph {
 export interface LocalSemanticDocument {
   paragraphs: LocalSemanticParagraph[];
   content: string;
+  /** 不含 HOS 为显示缩进补入的字符，和 Android 正文章内位置同源。 */
+  sourceLength: number;
+  /** 渲染坐标到原文坐标的映射，虚拟缩进映射到同一个原文位置。 */
+  sourcePositionMap: number[];
 }
 
 /** 按 Android 默认章节正文管线生成段落、图片占位和字符坐标。 */
@@ -23,12 +27,46 @@ export class LocalTextSemantics {
     return LocalTextSemantics.parse(rawBody).content;
   }
 
+  static toSourcePosition(document: LocalSemanticDocument, renderPosition: number): number {
+    const index = Math.max(0, Math.min(document.content.length, Math.trunc(renderPosition)));
+    return document.sourcePositionMap[index] ?? document.sourceLength;
+  }
+
+  static toRenderPosition(document: LocalSemanticDocument, sourcePosition: number): number {
+    const target = Math.max(0, Math.min(document.sourceLength, Math.trunc(sourcePosition)));
+    for (let index = 0; index < document.sourcePositionMap.length; index++) {
+      if ((document.sourcePositionMap[index] ?? 0) >= target) { return index; }
+    }
+    return document.content.length;
+  }
+
   static parse(rawBody: string): LocalSemanticDocument {
     const paragraphs: LocalSemanticParagraph[] = [];
     const semanticContent: string[] = [];
+    const sourcePositionMap: number[] = [0];
     const imagePattern: RegExp = /\[\[EPUB_IMAGE:([^;\]\r\n]+)(?:;[^\]\r\n]*)?\]\]/g;
-    const lines = rawBody.split(/\n/);
+    const lines = rawBody.length === 0 ? [] : rawBody.split(/\r\n|\n|\r/);
     let position = 0;
+    let sourcePosition = 0;
+    const appendRenderOnly = (value: string): void => {
+      semanticContent.push(value);
+      for (let unit = 0; unit < value.length; unit++) {
+        sourcePositionMap.push(sourcePosition);
+        position++;
+      }
+    };
+    const appendBoth = (value: string): void => {
+      semanticContent.push(value);
+      for (let unit = 0; unit < value.length; unit++) {
+        position++;
+        sourcePosition++;
+        sourcePositionMap.push(sourcePosition);
+      }
+    };
+    const appendSourceOnly = (value: string): void => {
+      sourcePosition += value.length;
+      sourcePositionMap[sourcePositionMap.length - 1] = sourcePosition;
+    };
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index] ?? '';
       let start = 0;
@@ -44,10 +82,10 @@ export class LocalTextSemantics {
         const parts: LocalSemanticPart[] = [];
         const paragraphStart = position;
         const imageOnlyParagraph = /^\s*(?:\[\[EPUB_IMAGE:[^;\]\r\n]+(?:;[^\]\r\n]*)?\]\]\s*)+$/.test(paragraphText);
+        appendSourceOnly(line.substring(0, start));
         if (!imageOnlyParagraph) {
           parts.push({ kind: 'text', value: '　　', startPosition: position, endPosition: position + 2, leadingIndent: true });
-          semanticContent.push('　　');
-          position += 2;
+          appendRenderOnly('　　');
         }
         let cursor = 0;
         let match: RegExpExecArray | null = imagePattern.exec(paragraphText);
@@ -55,14 +93,12 @@ export class LocalTextSemantics {
           if (match.index > cursor) {
             const text = paragraphText.substring(cursor, match.index);
             parts.push({ kind: 'text', value: text, startPosition: position, endPosition: position + text.length, leadingIndent: false });
-            semanticContent.push(text);
-            position += text.length;
+            appendBoth(text);
           }
           const imageUri = match[1] ?? '';
           if (imageUri.length > 0) {
             parts.push({ kind: 'image', value: imageUri, startPosition: position, endPosition: position + 1, leadingIndent: false });
-            semanticContent.push('\uFFFC');
-            position++;
+            appendBoth('\uFFFC');
           }
           cursor = match.index + match[0].length;
           match = imagePattern.exec(paragraphText);
@@ -71,14 +107,22 @@ export class LocalTextSemantics {
         if (cursor < paragraphText.length) {
           const text = paragraphText.substring(cursor);
           parts.push({ kind: 'text', value: text, startPosition: position, endPosition: position + text.length, leadingIndent: false });
-          semanticContent.push(text);
-          position += text.length;
+          appendBoth(text);
         }
-        semanticContent.push('\n');
-        position++;
+        appendSourceOnly(line.substring(end));
+        appendBoth('\n');
         paragraphs.push({ parts: parts, startPosition: paragraphStart, endPosition: position });
+      } else {
+        // 空段落不绘制，但原文换行仍占 Android 正文字符坐标。
+        appendSourceOnly(line);
+        appendSourceOnly('\n');
       }
     }
-    return { paragraphs: paragraphs, content: semanticContent.join('') };
+    return {
+      paragraphs: paragraphs,
+      content: semanticContent.join(''),
+      sourceLength: sourcePosition,
+      sourcePositionMap: sourcePositionMap
+    };
   }
 }

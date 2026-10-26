@@ -167,8 +167,8 @@ export struct FileManagerPage {
                     .margin({ left: 5, right: 5 })
                 }
               })
-            }.padding({ left: 16, right: 16, top: 12, bottom: 12 })
-          }.scrollBar(BarState.Off)
+            }.height(24).padding({ left: 10, right: 10 })
+          }.height(24).scrollBar(BarState.Off)
 
           if (this.isLoading) {
             FileManagerEmpty({ icon: 'folder', title: '正在读取目录', detail: '' }).layoutWeight(1)

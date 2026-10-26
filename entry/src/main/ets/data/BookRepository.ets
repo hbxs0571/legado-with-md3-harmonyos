@@ -100,10 +100,11 @@ export class BookRepository {
     try {
       const store = await preferences.getPreferences(context, BookRepository.preferenceName);
       const value = await store.get('books', '');
-      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n'))) {
+      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n'))) {
         return [];
       }
-      const isVersion8 = value.startsWith('v8\n');
+      const isVersion9 = value.startsWith('v9\n');
+      const isVersion8 = isVersion9 || value.startsWith('v8\n');
       const isVersion7 = isVersion8 || value.startsWith('v7\n');
       const isVersion6 = isVersion7 || value.startsWith('v6\n');
       const isVersion5 = isVersion6 || value.startsWith('v5\n');
@@ -114,7 +115,7 @@ export class BookRepository {
       const records = value.substring(3).split('\n');
       for (let index = 0; index < records.length; index++) {
         const fields = records[index].split('|');
-        const maximumFields = isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
+        const maximumFields = isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
         if (fields.length < 2 || fields.length > maximumFields) {
           continue;
         }
@@ -164,6 +165,7 @@ export class BookRepository {
             bodyMissing: true,
             androidOriginalPath: originalPath,
             androidCharacterPosition: Number.isInteger(savedPosition) && savedPosition >= 0 ? savedPosition : 0,
+            readerPositionVersion: isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 2,
             format: fields[4] === 'epub' ? 'epub' : 'txt',
             imageStyle: isVersion6 ? decodeURIComponent(fields[18] ?? 'DEFAULT') : undefined,
             charset: isVersion7 ? decodeURIComponent(fields[19] ?? '') || undefined : undefined,
@@ -214,6 +216,7 @@ export class BookRepository {
               reSegment: isVersion8 && fields[20] === '1',
               androidCharacterPosition: isVersion5 && Number.isInteger(savedPosition) && savedPosition >= 0
                 ? savedPosition : 0,
+              readerPositionVersion: isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 0,
               fileSizeBytes: savedSize > 0 ? savedSize : undefined,
               isLocal: true
             });
@@ -227,6 +230,7 @@ export class BookRepository {
               .filter((item: number) => Number.isInteger(item) && item >= 0);
             const localBook = BookRepository.createLocalBook(id, title, path, chapterIndex, chapterProgress,
               undefined, savedCharset.length > 0 ? savedCharset : undefined);
+            localBook.readerPositionVersion = isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 0;
             localBook.reSegment = isVersion8 && fields[20] === '1';
             if (savedTitles.length > 0 && savedOffsets.length === savedTitles.length) {
               const safeIndex = Math.max(0, Math.min(savedTitles.length - 1, chapterIndex));
@@ -253,7 +257,7 @@ export class BookRepository {
     const operation = BookRepository.saveQueue.then(async (): Promise<void> => {
       try {
         const store = await preferences.getPreferences(context, BookRepository.preferenceName);
-        const records: string[] = ['v8'];
+        const records: string[] = ['v9'];
         for (let index = 0; index < books.length; index++) {
           const book = books[index];
           if (!BookRepository.isPersistableBook(book)) { continue; }
@@ -269,7 +273,8 @@ export class BookRepository {
             encodeURIComponent(book.category), encodeURIComponent(book.groupName ?? ''),
             encodeURIComponent(book.lastChapter), (book.progress ?? 0).toString(),
             encodeURIComponent(book.imageStyle ?? 'DEFAULT'), encodeURIComponent(book.charset ?? ''),
-            book.reSegment === true ? '1' : '0'
+            book.reSegment === true ? '1' : '0',
+            (book.readerPositionVersion === 2 ? '2' : book.readerPositionVersion === 0 ? '0' : '1')
           ].join('|'));
         }
         await store.put('books', records.join('\n'));
@@ -314,6 +319,7 @@ export class BookRepository {
         bodyMissing: book.bodyMissing,
         androidOriginalPath: book.androidOriginalPath,
         androidCharacterPosition: book.androidCharacterPosition,
+        readerPositionVersion: book.readerPositionVersion,
         isLocal: book.isLocal
       };
     }
@@ -349,6 +355,7 @@ export class BookRepository {
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: 0,
+      readerPositionVersion: 1,
       isLocal: book.isLocal
     };
   }
@@ -380,6 +387,7 @@ export class BookRepository {
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: book.androidCharacterPosition,
+      readerPositionVersion: book.readerPositionVersion,
       isLocal: book.isLocal
     };
   }
@@ -435,16 +443,38 @@ export class BookRepository {
     return await BookRepository.applyChapterContentAsync(book, chapterTitle, body, chapterIndex);
   }
 
-  static async readAllChapters(book: Book): Promise<string[]> {
+  static async readAllChapters(book: Book, useReplaceRules: boolean = true): Promise<string[]> {
+    const chapters: string[] = [];
+    await BookRepository.forEachChapter(book, (chapterContent: string, _chapterIndex: number): Promise<boolean> => {
+      chapters.push(chapterContent);
+      return Promise.resolve(true);
+    }, useReplaceRules);
+    return chapters;
+  }
+
+  /** 逐章处理本地正文，交付一章后让出事件循环，避免整本书占住界面线程。 */
+  static async forEachChapter(
+    book: Book,
+    onChapter: (chapterContent: string, chapterIndex: number) => Promise<boolean>,
+    useReplaceRules: boolean = true
+  ): Promise<void> {
     if (book.contentPath === undefined) {
       throw new Error('本地书籍路径无效');
     }
-    const content = BookRepository.readTextFile(book.contentPath, book.format === 'txt' ? book.charset : undefined);
+    const content = await BookRepository.readTextFileAsync(
+      book.contentPath, book.format === 'txt' ? book.charset : undefined
+    );
     const titles = book.chapterTitles ?? [];
     if (titles.length === 0) {
-      return [await BookRepository.applyChapterContentAsync(book, book.lastChapter, content.substring(0, 50000), book.chapterIndex ?? 0)];
+      const chapter = await BookRepository.applyChapterContentAsync(
+        book, book.lastChapter, content.substring(0, 50000), book.chapterIndex ?? 0, useReplaceRules
+      );
+      await onChapter(chapter, book.chapterIndex ?? 0);
+      return;
     }
-    const chapters: string[] = [];
+    const yieldAfterChapter = async (): Promise<void> => {
+      await new Promise<void>((resolve: () => void) => setTimeout(resolve, 0));
+    };
     if (book.chapterOffsets !== undefined && book.chapterOffsets.length > 0) {
       for (let index = 0; index < titles.length; index++) {
         const start = book.chapterOffsets[index] ?? 0;
@@ -454,9 +484,11 @@ export class BookRepository {
         const body = headingEnd >= 0 ? section.substring(headingEnd + 1).trim() : section.trim();
         const chapterTitle = titles[index] ?? '';
         const displayBody = book.format === 'epub' ? EpubRepository.removeDuplicateHeading(body, chapterTitle) : body;
-        chapters.push(await BookRepository.applyChapterContentAsync(book, chapterTitle, displayBody, index));
+        const chapter = await BookRepository.applyChapterContentAsync(book, chapterTitle, displayBody, index, useReplaceRules);
+        if (!(await onChapter(chapter, index))) { return; }
+        await yieldAfterChapter();
       }
-      return chapters;
+      return;
     }
     const starts = BookRepository.findChapterStarts(content);
     if (starts.length === titles.length) {
@@ -467,15 +499,18 @@ export class BookRepository {
         const nextStart = starts[index + 1] ?? content.length;
         const title = titles[index] ?? '';
         const body = content.substring(displayStart, Math.min(nextStart, displayStart + 50000));
-        chapters.push(await BookRepository.applyChapterContentAsync(book, title, body, index));
+        const chapter = await BookRepository.applyChapterContentAsync(book, title, body, index, useReplaceRules);
+        if (!(await onChapter(chapter, index))) { return; }
+        await yieldAfterChapter();
       }
-      return chapters;
+      return;
     }
     for (let index = 0; index < titles.length; index++) {
       const title = titles[index] ?? '';
       const chapterStart = content.indexOf(title);
       if (chapterStart < 0) {
-        chapters.push('');
+        if (!(await onChapter('', index))) { return; }
+        await yieldAfterChapter();
         continue;
       }
       const titleLineEnd = content.indexOf('\n', chapterStart);
@@ -485,9 +520,10 @@ export class BookRepository {
       const nextStart = nextTitle === undefined ? -1 : content.indexOf(nextTitle, chapterStart + title.length);
       const displayEnd = nextStart >= 0 ? Math.min(nextStart, displayStart + 50000) : displayStart + 50000;
       const body = content.substring(displayStart, displayEnd);
-      chapters.push(await BookRepository.applyChapterContentAsync(book, title, body, index));
+      const chapter = await BookRepository.applyChapterContentAsync(book, title, body, index, useReplaceRules);
+      if (!(await onChapter(chapter, index))) { return; }
+      await yieldAfterChapter();
     }
-    return chapters;
   }
 
   /** 将章节编辑保存到应用导入副本，并同步更新章节索引；不会写回用户选择的原文件。 */
@@ -598,6 +634,7 @@ export class BookRepository {
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: 0,
+      readerPositionVersion: 1,
       isLocal: book.isLocal
     };
     return nextBook;
@@ -612,6 +649,9 @@ export class BookRepository {
       const chapterIndex = Math.max(0, Math.min(Math.max(0, titleCount - 1), book.chapterIndex ?? 0));
       const progress = Math.max(0, Math.min(100, book.chapterProgress ?? 0));
       const chapterLength = BookRepository.getChapterSemanticLength(book, content, chapterIndex);
+      if (book.readerPositionVersion === 2 && book.androidCharacterPosition !== undefined) {
+        return Math.max(0, Math.min(chapterLength, Math.trunc(book.androidCharacterPosition)));
+      }
       return Math.round(chapterLength * progress / 100);
     } catch (_) {
       return 0;
@@ -661,6 +701,7 @@ export class BookRepository {
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: Math.max(0, Math.trunc(characterPosition)),
+      readerPositionVersion: 2,
       isLocal: book.isLocal
     };
   }
@@ -699,7 +740,13 @@ export class BookRepository {
     const replaced = ReplaceRuleRepository.applyContentForLength(book, segmented);
     const records = BookContentProcessRepository.getForChapter(book.id, chapterIndex);
     const processed = BookContentProcessEngine.apply(replaced, records).text;
-    return LocalTextSemantics.fromRawBody(processed).length;
+    return LocalTextSemantics.parse(processed).sourceLength;
+  }
+
+  private static readPositionVersion(value: string | undefined): number {
+    const version = Number(value ?? '1');
+    if (version === 2) { return 2; }
+    return version === 0 ? 0 : 1;
   }
 
   private static applyChapterReSegment(book: Book, chapterTitle: string, body: string): string {
@@ -710,16 +757,21 @@ export class BookRepository {
     book: Book,
     chapterTitle: string,
     body: string,
-    requestedChapterIndex?: number
+    requestedChapterIndex?: number,
+    useReplaceRules: boolean = true
   ): Promise<string> {
     const segmented = BookRepository.applyChapterReSegment(book, chapterTitle, body);
-    const ruleResult = ReplaceRuleRepository.applyContentWithResult(book, chapterTitle, segmented);
+    const ruleResult = useReplaceRules
+      ? ReplaceRuleRepository.applyContentWithResult(book, chapterTitle, segmented)
+      : undefined;
     const titleIndex = book.chapterTitles?.indexOf(chapterTitle) ?? -1;
     const chapterIndex = requestedChapterIndex ?? (titleIndex >= 0 ? titleIndex : book.chapterIndex ?? 0);
-    BookRepository.rememberEffectiveReplaceRules(book.id, chapterIndex, ruleResult.effectiveRuleIds);
+    if (ruleResult !== undefined) {
+      BookRepository.rememberEffectiveReplaceRules(book.id, chapterIndex, ruleResult.effectiveRuleIds);
+    }
     await BookContentProcessRepository.waitUntilLoaded();
     const records = BookContentProcessRepository.getForChapter(book.id, chapterIndex);
-    return BookContentProcessEngine.apply(ruleResult.text, records).text;
+    return BookContentProcessEngine.apply(ruleResult?.text ?? segmented, records).text;
   }
   private static createLocalBook(
     id: string,
@@ -784,6 +836,37 @@ export class BookRepository {
       return decoded.replace(/^\uFEFF/, '');
     } finally {
       fileIo.closeSync(sourceFile);
+    }
+  }
+
+  private static async readTextFileAsync(path: string, encoding?: string): Promise<string> {
+    const sourceFile = await fileIo.open(path, fileIo.OpenMode.READ_ONLY);
+    try {
+      const fileSize = (await fileIo.stat(path)).size;
+      if (fileSize <= 0) { return ''; }
+      const chunks: Uint8Array[] = [];
+      let offset = 0;
+      const chunkSize = 512 * 1024;
+      while (offset < fileSize) {
+        const length = Math.min(chunkSize, fileSize - offset);
+        const chunkBuffer = new ArrayBuffer(length);
+        const bytesRead = await fileIo.read(sourceFile.fd, chunkBuffer, { length: length });
+        if (bytesRead <= 0) { break; }
+        chunks.push(new Uint8Array(chunkBuffer, 0, bytesRead));
+        offset += bytesRead;
+      }
+      if (offset !== fileSize) { throw new Error('本地书籍文件读取不完整'); }
+      const bytes = new Uint8Array(offset);
+      let cursor = 0;
+      for (let index = 0; index < chunks.length; index++) {
+        const chunk = chunks[index];
+        if (chunk === undefined) { continue; }
+        bytes.set(chunk, cursor);
+        cursor += chunk.length;
+      }
+      return BookRepository.decodeTextBytes(bytes, encoding).replace(/^\uFEFF/, '');
+    } finally {
+      await fileIo.close(sourceFile);
     }
   }
 
@@ -900,3 +983,5 @@ export class BookRepository {
     return starts;
   }
 }
+
+

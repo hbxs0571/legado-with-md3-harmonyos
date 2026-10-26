@@ -2,6 +2,14 @@ import { UIAbility } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 
 export default class EntryAbility extends UIAbility {
+  onBackground(): void {
+    this.context.eventHub.emit('pauseReadSession');
+  }
+
+  onForeground(): void {
+    this.context.eventHub.emit('resumeReadSession');
+  }
+
   onWindowStageCreate(windowStage: window.WindowStage): void {
     this.context.eventHub.on('exitApplication', () => {
       this.context.terminateSelf().catch(() => {});

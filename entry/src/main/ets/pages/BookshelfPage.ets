@@ -8,7 +8,9 @@ export struct BookshelfPage {
   @State selectedFilter: number = 0;
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
+  @State collapsedHeader: boolean = false;
   @State emptyFace: string = '(；′⌒`)';
+  private readonly bookshelfScroller: Scroller = new Scroller();
   private readonly emptyFaces: string[] = ['(；′⌒`)', '(つ﹏⊂)', '(•̀ᴗ•́)و', '(๑•́ ₃ •̀๑)', '(눈‸눈)', '(ಥ﹏ಥ)', '(｡•́︿•̀｡)'];
   private readonly defaultGroupNames: string[] = ['本地未分组', '未观', '静候', '完结', '已阅'];
   onOpenBook: (book: Book) => void = () => {};
@@ -68,18 +70,25 @@ export struct BookshelfPage {
   build() {
     Column() {
       Row() {
+        if (this.collapsedHeader) {
+          Text('书架').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        }
         Blank()
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 16 }) }.width(32).height(32).backgroundColor('#1C1D23').borderRadius(20)
+        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 20 }) }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(20)
           .onClick(() => {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 16 }) }
-          .width(32).height(32).backgroundColor('#1C1D23').borderRadius(20).margin({ left: 8 })
+        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
+          .width(36).height(36).backgroundColor('#1C1D23').borderRadius(20).margin({ left: 8 })
           .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-      }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 0 })
-      Text('书架').fontSize(22).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-        .width('100%').padding({ left: 16, right: 16, top: 0, bottom: 18 })
+      }.width('100%').height(56).padding({ left: 16, right: 16, top: 10, bottom: 0 })
+      Row() {
+        Text('书架').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+      }.width('100%').height(this.collapsedHeader ? 0 : 58)
+        .padding({ left: 16, right: 16, bottom: this.collapsedHeader ? 0 : 18 })
+        .opacity(this.collapsedHeader ? 0 : 1)
+        .animation({ duration: 220, curve: Curve.EaseInOut })
 
       if (this.showSearch) {
         Row() {
@@ -99,7 +108,7 @@ export struct BookshelfPage {
         }, (groupName: string) => groupName)
       }.width('100%').padding({ left: 12, right: 12, bottom: 14 })
       if (this.getVisibleBooks().length > 0) {
-        Grid() {
+        Grid(this.bookshelfScroller) {
           ForEach(this.getVisibleBooks(), (book: Book) => {
             GridItem() {
               Column() {
@@ -119,6 +128,14 @@ export struct BookshelfPage {
             }
           }, (book: Book) => book.id)
         }.columnsTemplate('1fr 1fr 1fr').rowsGap(16).columnsGap(10).width('100%').padding({ left: 14, right: 14 }).layoutWeight(1).scrollBar(BarState.Off)
+          .onScroll(() => {
+            const shouldCollapse = Math.abs(this.bookshelfScroller.currentOffset().yOffset) > 60;
+            if (this.collapsedHeader !== shouldCollapse) {
+              animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+                this.collapsedHeader = shouldCollapse;
+              });
+            }
+          })
       } else {
         Column() {
           Text(this.emptyFace).fontSize(32).fontColor('#D8D9E0').margin({ bottom: 14 })
@@ -142,7 +159,9 @@ struct ShelfFilter {
   build() {
     Column() {
       Text(this.label).fontSize(12).fontColor(this.selected ? '#C4D1FF' : '#B6B8C2').padding({ left: 7, right: 7, top: 7, bottom: 7 })
-      if (this.selected) { Row().width(42).height(2).backgroundColor('#AFC2FF').borderRadius(1) }
+      Row().width(42).height(2).backgroundColor('#AFC2FF').borderRadius(1)
+        .opacity(this.selected ? 1 : 0)
+        .animation({ duration: 180, curve: Curve.EaseInOut })
     }.layoutWeight(1).alignItems(HorizontalAlign.Center)
   }
 }

@@ -28,6 +28,8 @@ export interface Book {
   bodyMissing?: boolean;
   androidOriginalPath?: string;
   androidCharacterPosition?: number;
+  /** 0 按百分比恢复，1 为旧版 HOS 渲染坐标，2 为 Android 正文章内字符坐标。 */
+  readerPositionVersion?: number;
   isLocal: boolean;
 }
 

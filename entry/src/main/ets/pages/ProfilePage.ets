@@ -14,6 +14,7 @@ export struct ProfilePage {
   onExit: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State collapsedHeader: boolean = false;
+  @State showWebPreview: boolean = false;
   private profileScroller: Scroller = new Scroller();
 
   build() {
@@ -23,21 +24,46 @@ export struct ProfilePage {
           Text('我的').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
         }.width('100%').height(56).alignItems(VerticalAlign.Center).padding({ left: 16, right: 16 })
           .backgroundColor('#111217')
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       } else {
-        Text('我的').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+        Text('我的').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
           .alignSelf(ItemAlign.Start).padding({ left: 16, right: 16, top: 50, bottom: 38 })
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
       Scroll(this.profileScroller) {
         Column() {
-          Row() {
-            Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'profileWeb', tint: '#C5C7D0', glyphSize: 20 }) }.width(26).height(26)
+          Column() {
+            Row() {
+              Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'profileWeb', tint: '#C5C7D0', glyphSize: 20 }) }.width(26).height(26)
+              Column() {
+                Text('Web 服务').fontSize(PROFILE_ROW_TITLE_SIZE).fontColor('#D8D9E0')
+                Text('用浏览器看书源与书籍').fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor('#AEB0BA').margin({ top: 4 })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              Text(this.showWebPreview ? '收起' : '预览').fontSize(12).fontColor('#AFC2FF')
+                .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+                .onClick(() => this.showWebPreview = !this.showWebPreview)
+              Toggle({ type: ToggleType.Switch, isOn: false })
+                .onChange((_enabled: boolean) => this.onUnavailableAction('Web 服务尚未迁移'))
+            }.width('100%').padding(10)
             Column() {
-              Text('Web 服务').fontSize(PROFILE_ROW_TITLE_SIZE).fontColor('#D8D9E0')
-              Text('用浏览器看书源与书籍').fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor('#AEB0BA').margin({ top: 4 })
-            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: false })
-              .onChange((_enabled: boolean) => this.onUnavailableAction('Web 服务尚未迁移'))
-          }.width('100%').padding(10).backgroundColor('#1C1D23').borderRadius(14).margin({ bottom: 13 })
+              Text('Web 服务尚未迁移 · 以下为界面预览').fontSize(12).fontColor('#AEB0BA')
+                .width('100%').textAlign(TextAlign.End)
+              Row() {
+                Row() {
+                  AppGlyph({ name: 'profileContentPaste', glyphSize: 16, tint: '#C5C7D0' })
+                  Text('复制网址').fontSize(12).fontColor('#C5C7D0').margin({ left: 6 })
+                }.padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .onClick(() => this.onUnavailableAction('Web 服务尚未迁移'))
+                Row() {
+                  AppGlyph({ name: 'web', glyphSize: 16, tint: '#C5C7D0' })
+                  Text('浏览器打开').fontSize(12).fontColor('#C5C7D0').margin({ left: 6 })
+                }.padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .onClick(() => this.onUnavailableAction('Web 服务尚未迁移'))
+              }.width('100%').justifyContent(FlexAlign.End)
+            }.width('100%').padding({ left: 10, right: 10, bottom: 8 })
+              .height(this.showWebPreview ? 70 : 0).opacity(this.showWebPreview ? 1 : 0)
+              .clip(true).animation({ duration: 220, curve: Curve.EaseInOut })
+          }.width('100%').backgroundColor('#1C1D23').borderRadius(14).margin({ bottom: 13 })
           Text('规则').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor('#AFC2FF').alignSelf(ItemAlign.Start).margin({ left: 12, bottom: 8 })
           Column() {
             ProfileRow({ title: '书源管理', detail: '新建 · 导入 · 编辑或管理书源', onSelect: () => this.onOpenDetail(ProfileRoute.BOOK_SOURCE_MANAGE) })
@@ -60,7 +86,11 @@ export struct ProfilePage {
         }.padding({ left: 16, right: 16, bottom: 120 }).constraintSize({ minHeight: '100%' })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.profileScroller.currentOffset().yOffset) > 70;
-        if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
+        if (this.collapsedHeader !== shouldCollapse) {
+          animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+            this.collapsedHeader = shouldCollapse;
+          });
+        }
       })
     }.width('100%').height('100%').backgroundColor('#111217')
   }

@@ -21,7 +21,7 @@
   },
   {
     "path": "CHANGELOG.md",
-    "sha256": "2622806d9f9a005d42bb6e453f6275c350a04548b406f25a009ef10a00ff61d5"
+    "sha256": "10018ae0c1a2e7cc65973fb933a05239ec0f1e2934c565533d9fd37726f2c073"
   },
   {
     "path": "DISCLAIMER.md",
@@ -41,7 +41,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "6e69aa4ad3bc8ffa65fefba9cd836b5e14f44272909169bd8516eac2fde31cfd"
+    "sha256": "69553c5f467f66c19aa49b873e7694cb8ee9189dda5b0d2d2dfa1d4f67ea62df"
   },
   {
     "path": "SECURITY.md",
@@ -61,15 +61,15 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "9e5906649e4cdf1c2cdf492698ec40cc504141ce92d00900062d2b3012147949"
+    "sha256": "11d009528160359a2bfaaf9c1770a8ca841be65752736d6185cf5db565e07f0c"
   },
   {
     "path": "docs/RESOURCE-LICENSES.md",
-    "sha256": "3751f9c96074420d7608955d71964c50beac43a54126de0be8739baf38ea5d4a"
+    "sha256": "c3d28f34ad7cb3648fce830da07389f71099372f96489c06cc8553b53ed871cc"
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "1649f57bd9789c32a3b7cc44ca19740c3500d41ce0658d89711aee8df63839cd"
+    "sha256": "55046c6bfd537a03455e0e7f6dec534338e4d8fb76aa50da36fe6b9ce9559c04"
   },
   {
     "path": "entry/build-profile.json5",
@@ -85,7 +85,7 @@
   },
   {
     "path": "entry/src/main/ets/components/AppGlyph.ets",
-    "sha256": "d7a089164e753183e4b3d983bfc383d4b83f1ea2a868252953c40797c4d54f00"
+    "sha256": "a44e58f11ac8465d7cba65c51ce0c53f45d6b6a2be73f5801f231458fb1ba42c"
   },
   {
     "path": "entry/src/main/ets/components/BookCard.ets",
@@ -93,7 +93,11 @@
   },
   {
     "path": "entry/src/main/ets/components/BookCover.ets",
-    "sha256": "ab7b934768c0ceead6bb4aa02aaf699ba38ba270392fcb00f972ccccb672f372"
+    "sha256": "32e8f33bba964eca64d23878a1444bc9f571a42bc43ff42b2f950b4e6cc7b883"
+  },
+  {
+    "path": "entry/src/main/ets/components/CollapsingSettingsHeader.ets",
+    "sha256": "df9906a48f483def0c43243dfeceb4e441aa8d43269fc77a30acd857b7231c9a"
   },
   {
     "path": "entry/src/main/ets/components/PageHeader.ets",
@@ -105,7 +109,7 @@
   },
   {
     "path": "entry/src/main/ets/data/BackupRepository.ets",
-    "sha256": "e34649bf48c07a559f0da53888ec8ffdaaa831a3b521bfb5a4bfa7c7554b3786"
+    "sha256": "05774743d0a76b1dbd988246775328b8af392d4f27ce8a3ff7bc9b19d85bba2a"
   },
   {
     "path": "entry/src/main/ets/data/BookContentProcessEngine.ets",
@@ -117,11 +121,11 @@
   },
   {
     "path": "entry/src/main/ets/data/BookRepository.ets",
-    "sha256": "b5aeabc531dd3f5a1df85186707834a9467b88a461895d9aa3f45b8565696488"
+    "sha256": "98f6173c077ba4d65c7c232bb178bb352ec52facfec45427e0f58dcc142c785b"
   },
   {
     "path": "entry/src/main/ets/data/EpubRepository.ets",
-    "sha256": "16f64957d52ec7d93d2e16495ea475d83f241a570941ea51ef88ca781e657ebb"
+    "sha256": "2ff22ccb35bfda8b102376a0adf596a0e131408c91013c63beac39ec00d9f432"
   },
   {
     "path": "entry/src/main/ets/data/HomeDashboardSettingsRepository.ets",
@@ -133,11 +137,15 @@
   },
   {
     "path": "entry/src/main/ets/data/LocalTextSemantics.ets",
-    "sha256": "586840372ccf5f58f5975502932332d1316da39585fabc7d5aa051b90d80a6f9"
+    "sha256": "49980cdb8fce7fc7c83e687ce181a4d381b62fbe83cbace4f593deda28bf1bc9"
   },
   {
     "path": "entry/src/main/ets/data/OnboardingRepository.ets",
     "sha256": "3b12c3ddca5a9104142ed7d8e5440f22bae57e8a4a96c095ab02bc20029db9a6"
+  },
+  {
+    "path": "entry/src/main/ets/data/ReadTimeRepository.ets",
+    "sha256": "f51ef63eca148a355ee5748987a864585baa5b585119c48c7818fe3d952989e7"
   },
   {
     "path": "entry/src/main/ets/data/ReaderBookmarkRepository.ets",
@@ -148,8 +156,12 @@
     "sha256": "20e88d2e9b2142f383d4f52e8a6d621aabe3501fdf738ebd67d43d0480656f04"
   },
   {
+    "path": "entry/src/main/ets/data/ReaderSearchHistoryRepository.ets",
+    "sha256": "5f3e0744c2698818a3f0e5c18b0c548e754d6c0f92af63b2603d2e7eec34386e"
+  },
+  {
     "path": "entry/src/main/ets/data/ReaderSettingsRepository.ets",
-    "sha256": "56df511a5166db24a4c942910036b8c25b64b4764d802ee83c21e02d85b27ef0"
+    "sha256": "7734a5c19d47be8d680ebca262694b116bf0b27c08aa25988465ba6489e3e914"
   },
   {
     "path": "entry/src/main/ets/data/ReplaceRuleRepository.ets",
@@ -157,11 +169,11 @@
   },
   {
     "path": "entry/src/main/ets/entryability/EntryAbility.ets",
-    "sha256": "ffecf2b7d790fb8477c69bf53d466b2a3772671eccbf830805f64e9a936bf2b1"
+    "sha256": "a4e52ce1f2539db284429ebce7db84c35f7fc313a404beaf5a52603318ea6b41"
   },
   {
     "path": "entry/src/main/ets/model/Book.ets",
-    "sha256": "0c8c2b64de3248e07dba74d419084938f8a217bd30622aa2c937ba45ef976eb7"
+    "sha256": "5c916cb93664a742eb79c2f1825798b3a2bd1f62ec1659bab4e04d314ed4cd7e"
   },
   {
     "path": "entry/src/main/ets/model/BookContentProcess.ets",
@@ -172,104 +184,108 @@
     "sha256": "ee6dabe24c7d1ea47fdc8bce8dcc6424bfc6879e5905c1b8bc2a51aabafefb20"
   },
   {
+    "path": "entry/src/main/ets/model/ReaderSearchHistory.ets",
+    "sha256": "29ae037b161dfc88fbbe37c769c0b9db1c23b5e50052719aef6e89888c9d4113"
+  },
+  {
     "path": "entry/src/main/ets/model/ReplaceRule.ets",
     "sha256": "9fff78b42e7886f41a5e107a48c66376a5899a37665cbaefbb7c57551cde80d7"
   },
   {
     "path": "entry/src/main/ets/pages/AppAiSettingsPage.ets",
-    "sha256": "67a51ff7f4384935f60fd61fcebc28f0263bf2de1f034c1320a97a0da0efe6ec"
+    "sha256": "a6dd4a6c092904aa2109a0f09745219e716c3ba291377b463c267fd5c4169fc2"
   },
   {
     "path": "entry/src/main/ets/pages/AppBackupSettingsPage.ets",
-    "sha256": "14d65c328c72c87db196328b5f6c997ad20366037edcd0dd07de4b1e0e4b9fb2"
+    "sha256": "2a8f3ea011deee421e924a429680c90e252cc178d8309f4d369d5d77dff8491a"
   },
   {
     "path": "entry/src/main/ets/pages/AppCoverSettingsPage.ets",
-    "sha256": "70c8ea6d5c7fb5caac00cc953c4c5050050d961b429ad14cddbc9afe59fff14c"
+    "sha256": "3864148624d40fec7fe4bad48b9b10e18ae5db648e134449ab4e3fe1b101e141"
   },
   {
     "path": "entry/src/main/ets/pages/AppDownloadCacheSettingsPage.ets",
-    "sha256": "00b1ebd4c56d43cf201ffbe30c59f3dbbf8b3ce0ba84f3075fa6b2867e10a2f6"
+    "sha256": "c921f6ce7babada47e9e6540d4e3b3af68726432b7b94e4b3fc741a08b781757"
   },
   {
     "path": "entry/src/main/ets/pages/AppLabSettingsPage.ets",
-    "sha256": "b8576b82d6b73662ecd05dd482c5f36fbd9a3a6346c355d755d742c450d6f64d"
+    "sha256": "eb1f0bb632287632ef491e2d69dc5eecae881ba56d35ab94fcd60fe041bcbe1e"
   },
   {
     "path": "entry/src/main/ets/pages/AppPrivacySettingsPage.ets",
-    "sha256": "29c2001dedff4d87585e0d1ae6fb73d9e7f99894178a5cea9fd40b0d5582973e"
+    "sha256": "1813a5faa34d7bd8260dbde5845acd67fdb4043a36645281aa6d07896c8825fd"
   },
   {
     "path": "entry/src/main/ets/pages/AppReadAloudSettingsPage.ets",
-    "sha256": "19f2545c9cbbe6b9a829df0483510ae57b316d4b21608420e17f1120366e1990"
+    "sha256": "26f91e1a7d8691673627b8ad3f38095fa4cb6aa00c457d373725b6c5a753f10c"
   },
   {
     "path": "entry/src/main/ets/pages/AppReadSettingsPage.ets",
-    "sha256": "13e1a1ecdcf804d5280983463d389f79191bdb13e00204f01c78e0bce272e415"
+    "sha256": "596e1edd428abcb162667ec288cd072c05d78210e7ac922e8e52e60fc35382ce"
   },
   {
     "path": "entry/src/main/ets/pages/AppTranslationSettingsPage.ets",
-    "sha256": "90bf4653da94cfdbfdc2b4e39a63f43e38515276a341913fc559b0d2a28b817b"
+    "sha256": "17ce6f4c6a7f1d28873a493048af52190d49446641b1804872f3a226c2d122e3"
   },
   {
     "path": "entry/src/main/ets/pages/BookInfoPage.ets",
-    "sha256": "3a67cd84fecf3554711e3251aa3dc0e67fd5bac589e689c789dc744f8adbbadf"
+    "sha256": "d07c1f0fa9e40f11ed991450a0df84ac0862893832bc75d5a26d1c59c7c94fd3"
   },
   {
     "path": "entry/src/main/ets/pages/BookshelfPage.ets",
-    "sha256": "feb12f7f289e4a3b246218ab4888de164f6bc263c6c2e4cd576606f332f31cd2"
+    "sha256": "0629a7761f913efd33e04946ee7151a8103767105d0f04a9915ff0f4622e9d93"
   },
   {
     "path": "entry/src/main/ets/pages/CatalogPage.ets",
-    "sha256": "94a22e65aa21849dd61b9909c52f26eb65241f1e93674aa1c7bc3155912364c4"
+    "sha256": "e6042426a9a044832a3b5a60a5add674bc720159562783e9f87fc588b94b77bd"
   },
   {
     "path": "entry/src/main/ets/pages/DiscoverPage.ets",
-    "sha256": "2080352d4fdc9c884a243394ebc21b42b4353e9b4d7283ff59bebcfe3662dd8c"
+    "sha256": "1f22420d133563ca9071ed1d912f2e27b82845136831a41cff1ec08c7a2c9c66"
   },
   {
     "path": "entry/src/main/ets/pages/FileManagerPage.ets",
-    "sha256": "acd6baaf1a44251fb26dde2e28d94f77cd24f8c4d5ca582623917685ec426365"
+    "sha256": "d873d32ac602e874c5e19d88f89ee20065edcbc6cd402d062b7591531d5051b4"
   },
   {
     "path": "entry/src/main/ets/pages/HomePage.ets",
-    "sha256": "48db6997a61f41977a955f1c691f3c5db84e739a47bdc536c5bfd1231b05deca"
+    "sha256": "684dc9564afe5c0e9a85d190ed1c9aad1d1e0b538d6eed65509fca63bc7f9988"
   },
   {
     "path": "entry/src/main/ets/pages/Index.ets",
-    "sha256": "27eb4dcdfeab99dda7ea0caea42858f7bbf5d31a35c008a465db20126b844b3d"
+    "sha256": "e8dcedc041fc66c76181c6890dfac6defb51f7f6dc82fdd72707fb782189e233"
   },
   {
     "path": "entry/src/main/ets/pages/LocalReaderPaginator.ets",
-    "sha256": "115cb1c67ccdc9fa304dd18dd0860b39282131e9e1d36e8eceae428080244215"
+    "sha256": "2117ffeeec45682e34a041a5979dc939e61f92d0e27797e7e89542ed33f51925"
   },
   {
     "path": "entry/src/main/ets/pages/OnboardingPage.ets",
-    "sha256": "7955fab82133a0769966a17f097fc535e67a3bcea8579081a578f778704e1ee7"
+    "sha256": "8510ada86637ed2f8c9043d1ae0afcc632513737110673e20f08f19d18d5a5de"
   },
   {
     "path": "entry/src/main/ets/pages/OpenSourceLicensePage.ets",
-    "sha256": "19f8dbce1980a29d05a9342cd4c37d611cace303be8994a32c5519005010a2d1"
+    "sha256": "9a1c7a0a55603ddb719e40a9281f7153fdbe0de8e4a9f08cf405fbd05bb61996"
   },
   {
     "path": "entry/src/main/ets/pages/OtherSettingsPage.ets",
-    "sha256": "3ea9afdc9b5db7d7e8d949e064b52b3659f35568aa838b222c0aa8c1298b6f19"
+    "sha256": "1f175bc8d15d843efb9459d8057a63be5bbebe0ea9eeeaf1ff5198cbba7d68d5"
   },
   {
     "path": "entry/src/main/ets/pages/PrivacyNoticePage.ets",
-    "sha256": "05aeba2d5845da29caa47df759cfd1a2f40fc6090bff7c2dc6f1df49def5df54"
+    "sha256": "a81844c02e0e6a1d492542aa6d885c942295dbe4386819a9e90fafc74e19b668"
   },
   {
     "path": "entry/src/main/ets/pages/ProfilePage.ets",
-    "sha256": "2c49e90f2cb8d79236383ac2b1f004906d16d12c4fda07199bac083b3d2854c6"
+    "sha256": "049845e1a358b114d1206136ff48fd5c6db2790bc9d5f743c56f04d8f3319782"
   },
   {
     "path": "entry/src/main/ets/pages/ProfileSubPages.ets",
-    "sha256": "17d0367eb038733bc17fd46c98f312e45f728ecfb8ec8fe14d28fd30f2eb6dcc"
+    "sha256": "47ba0d331b5bf5c390bbd3c0ef0d9d8861b6e6ca983153f12330daf164ba6b84"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderAloudSettingsPage.ets",
-    "sha256": "5bd14b68717167cb85eb2fefdbe55184ecc60c20769a05e334813c35925056c0"
+    "sha256": "291b9e79666b4641306057125c8b52d285c7cd85a21e20692e435708ec06772a"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderBookmarkEditor.ets",
@@ -277,15 +293,15 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderPage.ets",
-    "sha256": "299823f5e66346ed2637738fedabeb2638c616f571cfd0d9f5f2ba5005a43bda"
+    "sha256": "3cfc6279a1f32401dea40af7ced26e61fff30ac91c1be3b02cafb2bca29a60fc"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSearchPage.ets",
-    "sha256": "7c79dad81d0b7a36155d06ccaeeb6d3389d0b71ff3d03a8b7fa33cedd58f1629"
+    "sha256": "fd2b45bb4e7ce4bc6fa287d7d3b16fb2b1cc7c03f3206840a564ce2abf276844"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSettingsPage.ets",
-    "sha256": "358fe0de815581fdc820eae0d0051f3c229e4812876c73835076eda71978262b"
+    "sha256": "d066257b5979ba8759d4b97c29580b19e4b6ec7ecc3da62ea8186af3fd65c049"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderTextProcessingSheet.ets",
@@ -293,19 +309,19 @@
   },
   {
     "path": "entry/src/main/ets/pages/SearchPage.ets",
-    "sha256": "a4e07034845f91b52cc41bf2339be58a0adfce1cc2ccc916709c68b394181e91"
+    "sha256": "3dbc8675acc3a889c19ffd25b825e6fa101adc27472dfbb8833636554bfbe390"
   },
   {
     "path": "entry/src/main/ets/pages/SubscriptionPage.ets",
-    "sha256": "7f6cb95b0d4a6ecef6c1c0f1badbeec663c2f9776bec9c3341748ed863179ea6"
+    "sha256": "c603642963cee137a7b613ca9603380ad25c91bccb060b1eca96037118d204a9"
   },
   {
     "path": "entry/src/main/ets/pages/SubscriptionSubPages.ets",
-    "sha256": "967bf80bfcbde798119bbdf678a430eab7c575818a17a6da5bc8854c1f9a14ec"
+    "sha256": "832777253dcfd72675d432334b48605039c1843aac6e306c1304b9d2c5f71e13"
   },
   {
     "path": "entry/src/main/ets/pages/ThemeSettingsPage.ets",
-    "sha256": "8953034fa66dd53d8440353e27b397d7b58f4a612368695d2c0f15b7719c39ac"
+    "sha256": "ffdedde05ed2f76ccd0c7cccee1d5a33f9e14f1d6722de962778cc09bf56bb24"
   },
   {
     "path": "entry/src/main/module.json5",
@@ -760,6 +776,58 @@
     "sha256": "803e8ea7ba0f2f4311fc47e7c9eca89f50e72ca22360e1c94208c8476306470e"
   },
   {
+    "path": "entry/src/main/resources/base/media/reader_menu_book.svg",
+    "sha256": "1d452451639634f1ef80fe0340e1150ba03f464f0a80dded0afcd4f39a4a53f1"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_bookmark.svg",
+    "sha256": "340d11d9f6c915f250d4a204d8a2cfcebd0c5e6352aa3da0fa59c464ea019405"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_border_color.svg",
+    "sha256": "43b9a4f8f5d8e50c950caabdd16a7ad1cb45d11365a2062d2e813e273ba09e82"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_copy.svg",
+    "sha256": "0e830ebe720f1a783fa53842acfe2f98788ea9399816683610b6917a3b334619"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_edit.svg",
+    "sha256": "c90fef548e07b48459f6b5ce035f41119da79be6af87ee0a6e640cc690cf5d8a"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_find_replace.svg",
+    "sha256": "399daca60b42b27d8196872418ae5f5b3d9d7be949d4bb04f735b374253feaa4"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_language.svg",
+    "sha256": "900d93203f1e6956b651da97de46b1605ee673bae8c724f9130ad41e4a1bd7ba"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_playlist_add.svg",
+    "sha256": "1090f4ccf03994f61bf5e39a2b3587325e18888539fdf02e63bbd2c3d73164ef"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_queue_music.svg",
+    "sha256": "f7505bc7524ddb95cd2dee16075bf86bf3b05b2b5227b7e5d319ccca2a3ef26f"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_search.svg",
+    "sha256": "a13f28d9fa64c260d8e11791e3426a98dfa66f48cac5836968c38f5bdd39f06d"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_share.svg",
+    "sha256": "3829d78c62664f36d088dd58042d6ed61932ece2cd5bd3de787bfbf68580ef3f"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_smart_toy.svg",
+    "sha256": "1db38d10ee83ec5ac20ab019e43c6c9271883ee9bb1fe543f7d400c9d54d8f73"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/reader_menu_volume_up.svg",
+    "sha256": "27bda217f45788e002b86e5a188e27451da9967ad038cac89c9099b848a9963b"
+  },
+  {
     "path": "entry/src/main/resources/base/media/reader_more.svg",
     "sha256": "d7c274afcc3b8068bead0bd0a11b227de80379f5edea8d8da2b5ea7a673a5dbf"
   },
@@ -806,6 +874,14 @@
   {
     "path": "entry/src/main/resources/base/media/reader_voice.svg",
     "sha256": "cc710b55213163f8d70e31ecf82f46bf8e4ddcb38ea6b3abf18a30495edf8e1d"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/search_precision_off.svg",
+    "sha256": "38da60aeeff90c5af5578b6cc3b0fc9f7824bbd32a1fb5b7d78165d100bd5884"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/search_precision_on.svg",
+    "sha256": "0842d6e755714875fac20736ae37f1e12939d899077172243ae9335574be7ab4"
   },
   {
     "path": "entry/src/main/resources/base/profile/main_pages.json",

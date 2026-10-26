@@ -10,6 +10,9 @@ export struct SearchPage {
   @Prop sourceScope: boolean = false;
   @Prop exactMatch: boolean = false;
   @State showScopePanel: boolean = false;
+  @State collapsedHeader: boolean = false;
+  private suggestionScroller: Scroller = new Scroller();
+  private resultsScroller: Scroller = new Scroller();
   onBack: () => void = () => {};
   onOpenBook: (book: Book) => void = (_book: Book) => {};
   onOpenSourceManage: () => void = () => {};
@@ -58,23 +61,49 @@ export struct SearchPage {
     this.onUnavailableAction('在线书源搜索将在 P5 接入；当前仅搜索已导入的本地书籍');
   }
 
+  private updateHeader(offset: number): void {
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
+
   build() {
     Stack() {
       Column() {
-        Row() {
-          Image($r('app.media.reader_back')).width(22).height(22).fillColor('#E3E4E8')
-            .width(42).height(42).onClick(() => this.onBack())
-          Text('搜索').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8').layoutWeight(1)
-          AppGlyph({ name: 'settings', glyphSize: 19, tint: '#D8D9E0' }).padding(10)
-            .onClick(() => this.onUnavailableAction('搜索设置将在在线书源搜索接入后提供'))
-        }.width('100%').padding({ left: 14, right: 12, top: 10, bottom: 6 })
+        Column() {
+          Row() {
+            Image($r('app.media.reader_back')).width(20).height(20).fillColor('#E3E4E8')
+              .width(40).height(40).onClick(() => this.onBack())
+            Text('搜索').fontSize(22).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+              .opacity(this.collapsedHeader ? 1 : 0)
+            Blank()
+            Stack({ alignContent: Alignment.Center }) {
+              AppGlyph({ name: 'settings', glyphSize: 20, tint: '#D8D9E0' })
+            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18)
+              .onClick(() => this.onUnavailableAction('搜索设置将在在线书源搜索接入后提供'))
+            Stack({ alignContent: Alignment.Center }) {
+              AppGlyph({ name: this.exactMatch ? 'searchPrecisionOn' : 'searchPrecisionOff', glyphSize: 20,
+                tint: this.exactMatch ? '#AFC2FF' : '#D8D9E0' })
+            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+              .onClick(() => this.onExactMatchChange(!this.exactMatch))
+            Stack({ alignContent: Alignment.Center }) {
+              AppGlyph({ name: 'profileFilterAlt', glyphSize: 20,
+                tint: this.sourceScope || this.selectedGroup !== '全部书籍' ? '#AFC2FF' : '#D8D9E0' })
+            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+              .onClick(() => this.showScopePanel = true)
+          }.width('100%').height(64).padding({ left: 12, right: 12 })
+          Text('搜索').fontSize(28).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+            .width('100%').height(72).padding({ left: 16, bottom: 14 })
+            .opacity(this.collapsedHeader ? 0 : 1)
+        }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
 
         Row() {
           AppGlyph({ name: 'search', glyphSize: 19, tint: '#C5C7D0' }).margin({ right: 9 })
           TextInput({ placeholder: '搜索书名、作者或书源…', text: this.query })
             .fontSize(17).fontColor('#E3E4E8').placeholderColor('#92949E')
             .backgroundColor(Color.Transparent).layoutWeight(1)
-            .onChange((value: string) => this.onQueryChange(value))
+            .onChange((value: string) => { this.collapsedHeader = false; this.onQueryChange(value); })
           if (this.query.length > 0) {
             Text('清除').fontSize(14).fontColor('#AFC2FF').margin({ left: 8 })
               .onClick(() => this.onQueryChange(''))
@@ -83,26 +112,8 @@ export struct SearchPage {
           .margin({ left: 16, right: 16, top: 7, bottom: 8 })
           .backgroundColor('#1B1C22').borderRadius(24)
 
-        Row() {
-          SearchActionChip({
-            title: this.sourceScope ? '范围：书源' : `范围：${this.selectedGroup}`,
-            selected: this.sourceScope || this.selectedGroup !== '全部书籍',
-            onSelect: () => this.showScopePanel = true
-          })
-          SearchActionChip({
-            title: this.exactMatch ? '精准匹配' : '模糊匹配',
-            selected: this.exactMatch,
-            onSelect: () => this.onExactMatchChange(!this.exactMatch)
-          })
-          SearchActionChip({
-            title: '管理书源',
-            selected: false,
-            onSelect: () => this.onOpenSourceManage()
-          })
-        }.width('100%').padding({ left: 16, right: 10, bottom: 8 })
-
         if (this.query.trim().length === 0) {
-          Scroll() {
+          Scroll(this.suggestionScroller) {
             Column() {
               Row() {
                 Text('书架').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').layoutWeight(1)
@@ -121,6 +132,7 @@ export struct SearchPage {
               SearchEmptyState({ title: '暂无搜索历史', detail: '在线搜索记录将在搜索能力接入后显示。' })
             }.padding({ bottom: 18 })
           }.layoutWeight(1).scrollBar(BarState.Off)
+            .onScroll(() => this.updateHeader(this.suggestionScroller.currentOffset().yOffset))
         } else if (this.sourceScope) {
           Column() {
             SearchEmptyState({ title: '在线书源搜索尚未接入', detail: '搜索范围、书源选择和在线结果将在 P5 接入。当前没有伪造搜索结果。' })
@@ -147,13 +159,14 @@ export struct SearchPage {
                 Blank()
                 Text('点按继续阅读').fontSize(13).fontColor('#92949E')
               }.width('100%').padding({ left: 18, right: 18, top: 7, bottom: 8 })
-              Scroll() {
+              Scroll(this.resultsScroller) {
                 Column() {
                   ForEach(this.getResults(), (book: Book) => {
                     SearchBookRow({ book: book, onSelect: () => this.onOpenBook(book) })
                   }, (book: Book) => book.id)
                 }.padding({ bottom: 12 })
               }.layoutWeight(1).scrollBar(BarState.Off)
+                .onScroll(() => this.updateHeader(this.resultsScroller.currentOffset().yOffset))
               Row() {
                 Text('搜索在线书源').fontSize(16).fontColor('#151720').fontWeight(FontWeight.Medium)
               }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 13, bottom: 13 })
@@ -183,22 +196,9 @@ export struct SearchPage {
             this.showScopePanel = false;
             this.onOpenSourceManage();
           }
-        })
+        }).transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
     }.width('100%').height('100%').backgroundColor('#111217')
-  }
-}
-
-@Component
-struct SearchActionChip {
-  @Prop title: string = '';
-  @Prop selected: boolean = false;
-  onSelect: () => void = () => {};
-  build() {
-    Text(this.title).fontSize(13).fontColor(this.selected ? '#E3E4E8' : '#BEC0C8')
-      .padding({ left: 12, right: 12, top: 9, bottom: 9 })
-      .backgroundColor(this.selected ? '#41485D' : '#1B1C22').borderRadius(20).margin({ right: 7 })
-      .onClick(() => this.onSelect())
   }
 }
 
@@ -270,7 +270,7 @@ struct SearchScopePanel {
                 Row() {
                   Text(group).fontSize(17).fontColor('#D8D9E0').layoutWeight(1)
                   if (group === this.selectedGroup && !this.sourceScope) {
-                    Text('✓').fontSize(18).fontColor('#AFC2FF')
+                    AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#AFC2FF' })
                   }
                 }.width('100%').padding({ left: 18, right: 18, top: 15, bottom: 15 })
                   .backgroundColor('#1A1B21').borderRadius(12).margin({ left: 14, right: 14, bottom: 6 })

@@ -30,7 +30,7 @@ export struct OnboardingPage {
 
   private next(): void {
     if (this.page < 3) {
-      this.page += 1;
+      animateTo({ duration: 300, curve: Curve.EaseInOut }, () => this.page += 1);
     } else {
       this.onComplete(this.themeMode, this.paletteIndex);
     }
@@ -53,6 +53,7 @@ export struct OnboardingPage {
             .fontSize(13).fontColor('#626675').lineHeight(19).width('100%').margin({ top: 18 })
         }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
       }.scrollBar(BarState.Off)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else if (this.page === 1) {
       Column() {
         Text('本地 Android 兼容备份').fontSize(16).fontColor('#444650')
@@ -68,6 +69,7 @@ export struct OnboardingPage {
         Text('WebDAV 云同步和本地备份密码尚未接入；这些字段仅说明 Android 原版设置位置，不会保存或发送凭据。')
           .fontSize(12).fontColor('#626675').lineHeight(18).width('100%').margin({ top: 14 })
       }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else if (this.page === 2) {
       Column() {
         Text('本地书籍保存位置').fontSize(16).fontColor('#444650')
@@ -82,6 +84,7 @@ export struct OnboardingPage {
         Text('目录选择会在后续适配系统文件授权后开放。')
           .fontSize(12).fontColor('#626675').margin({ top: 12 }).alignSelf(ItemAlign.Start)
       }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else {
       Column() {
         Row() {
@@ -112,6 +115,7 @@ export struct OnboardingPage {
         Text('外观选择会保存用于向导偏好；全局换肤仍在迁移中。')
           .fontSize(12).fontColor('#626675').lineHeight(18).margin({ top: 14 })
       }.width('100%').padding(16)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     }
   }
 
@@ -125,13 +129,14 @@ export struct OnboardingPage {
 
   build() {
     Column() {
-      Image($r('app.media.app_icon')).width(62).height(62).margin({ top: 25, bottom: 12 })
-      Text(this.pageTitle()).fontSize(30).fontWeight(FontWeight.Bold).fontColor('#30323A')
-      Text(this.pageSummary()).fontSize(15).fontColor('#565965').margin({ top: 6, bottom: 16 })
-      Row() {
-        Row().layoutWeight(this.page + 1).height(3).backgroundColor('#52638F').borderRadius(2)
-        Row().layoutWeight(3 - this.page).height(3).backgroundColor('#D9DBEA').borderRadius(2).margin({ left: 5 })
-      }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
+      Image($r('app.media.app_icon')).width(128).height(96).objectFit(ImageFit.Cover)
+        .margin({ top: 16, bottom: 8 })
+      Text(this.pageTitle()).fontSize(32).fontWeight(FontWeight.Bold).fontColor('#30323A')
+      Text(this.pageSummary()).fontSize(16).fontColor('#565965').margin({ top: 4, bottom: 12 })
+      Progress({ value: this.page, total: 4, type: ProgressType.Linear })
+        .width('calc(100% - 32vp)').height(4).color('#52638F').backgroundColor('#D9DBEA')
+        .margin({ left: 16, right: 16, bottom: 10 })
+        .animation({ duration: 300, curve: Curve.EaseInOut })
       Column() {
         this.pageContent()
       }.width('100%').layoutWeight(1).margin({ left: 16, right: 16 })

@@ -88,6 +88,34 @@ interface AndroidBookBackupRecord {
 interface AndroidReadConfigBackupRecord {
   name: string;
   textSize: number;
+  pageAnim: number;
+  pageAnimSpeed: number;
+  headerMode: number;
+  footerMode: number;
+  showHeaderLine: boolean;
+  showFooterLine: boolean;
+  tipHeaderLeft: number;
+  tipHeaderMiddle: number;
+  tipHeaderRight: number;
+  tipFooterLeft: number;
+  tipFooterMiddle: number;
+  tipFooterRight: number;
+  customTipHeaderLeft: string;
+  customTipHeaderMiddle: string;
+  customTipHeaderRight: string;
+  customTipFooterLeft: string;
+  customTipFooterMiddle: string;
+  customTipFooterRight: string;
+  headerFont: string;
+  footerFont: string;
+  headerFontSize: number;
+  footerFontSize: number;
+  applyHeaderStyle: boolean;
+  tipHeaderColor: number;
+  tipHeaderColorNight: number;
+  tipFooterColor: number;
+  tipFooterColorNight: number;
+  tipDividerColor: number;
   bgType: number;
   bgStr: string;
   bgTypeNight: number;
@@ -134,7 +162,9 @@ export class BackupRepository {
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
     readConfig: [
       'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar',
-      'autoReadSpeed', 'progressBarBehavior', 'readBrightnessMode', 'readBrightnessControlPosition', 'clickActionTopLeft',
+      'autoReadSpeed', 'progressBarBehavior', 'tocUiUseReplace', 'tocCountWords', 'clickImgWay',
+      'readBrightnessMode',
+      'readBrightnessControlPosition', 'clickActionTopLeft',
       'clickActionTopCenter', 'clickActionTopRight', 'clickActionMiddleLeft', 'clickActionMiddleCenter',
       'clickActionMiddleRight', 'clickActionBottomLeft', 'clickActionBottomCenter', 'clickActionBottomRight',
       'readBarStyle', 'readBarStyleFollowPage', 'readMenuBgColor', 'readMenuAccentColor',
@@ -354,7 +384,10 @@ export class BackupRepository {
           `  <int name="readMenuIconStyle" value="${settings.bottomIconStyle}" />\n` +
           `  <int name="readMenuIconItemsPerRow" value="${settings.bottomItemsPerRow}" />\n` +
           `  <int name="readMenuIconRowCount" value="${settings.bottomRowCount}" />\n` +
-          `  <string name="progressBarBehavior">${settings.progressBehavior}</string>\n</map>`);
+          `  <string name="progressBarBehavior">${settings.progressBehavior}</string>\n` +
+          `  <boolean name="tocUiUseReplace" value="${settings.tocUseReplace}" />\n` +
+          `  <boolean name="tocCountWords" value="${settings.tocShowWordCount}" />\n` +
+          `  <string name="clickImgWay">${settings.clickImageBehavior}</string>\n</map>`);
       }
       const files = fileIo.listFileSync(stagingDirectory)
         .filter((name: string) => BackupRepository.isSafeRootEntry(name))
@@ -576,7 +609,8 @@ export class BackupRepository {
       totalChapterNum: totalChapterCount,
       durChapterTitle: book.lastChapter,
       durChapterIndex: chapterIndex,
-      durChapterPos: book.androidCharacterPosition ?? BookRepository.estimateAndroidChapterPosition(book),
+      durChapterPos: book.contentPath !== undefined
+        ? BookRepository.estimateAndroidChapterPosition(book) : book.androidCharacterPosition ?? 0,
       durChapterTime: 0,
       wordCount: null,
       canUpdate: false,
@@ -598,6 +632,34 @@ export class BackupRepository {
     return {
       name: dayStyle.name,
       textSize: Math.max(15, Math.min(30, Math.round(settings.fontSize))),
+      pageAnim: Math.max(0, Math.min(5, Math.round(settings.pageAnimation))),
+      pageAnimSpeed: Math.max(0, Math.min(3, Math.round(settings.animationSpeed))),
+      headerMode: settings.headerMode,
+      footerMode: settings.footerMode,
+      showHeaderLine: settings.showHeaderLine,
+      showFooterLine: settings.showFooterLine,
+      tipHeaderLeft: settings.tipHeaderLeft,
+      tipHeaderMiddle: settings.tipHeaderMiddle,
+      tipHeaderRight: settings.tipHeaderRight,
+      tipFooterLeft: settings.tipFooterLeft,
+      tipFooterMiddle: settings.tipFooterMiddle,
+      tipFooterRight: settings.tipFooterRight,
+      customTipHeaderLeft: settings.customTipHeaderLeft,
+      customTipHeaderMiddle: settings.customTipHeaderMiddle,
+      customTipHeaderRight: settings.customTipHeaderRight,
+      customTipFooterLeft: settings.customTipFooterLeft,
+      customTipFooterMiddle: settings.customTipFooterMiddle,
+      customTipFooterRight: settings.customTipFooterRight,
+      headerFont: settings.headerFont,
+      footerFont: settings.footerFont,
+      headerFontSize: settings.headerFontSize,
+      footerFontSize: settings.footerFontSize,
+      applyHeaderStyle: settings.applyHeaderStyle,
+      tipHeaderColor: settings.tipHeaderColor,
+      tipHeaderColorNight: settings.tipHeaderColorNight,
+      tipFooterColor: settings.tipFooterColor,
+      tipFooterColorNight: settings.tipFooterColorNight,
+      tipDividerColor: settings.tipDividerColor,
       bgType: 0,
       bgStr: dayStyle.dayColor,
       bgTypeNight: 0,
@@ -649,8 +711,46 @@ export class BackupRepository {
       topActions: current.topActions,
       progressBehavior: BackupRepository.readXmlString(`${directory}/config.xml`, 'progressBarBehavior') === 'chapter'
         ? 'chapter' : 'page',
+      tocUseReplace: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'tocUiUseReplace') ??
+        current.tocUseReplace,
+      tocShowWordCount: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'tocCountWords') ??
+        current.tocShowWordCount,
+      clickImageBehavior: BackupRepository.readXmlString(`${directory}/config.xml`, 'clickImgWay') ??
+        current.clickImageBehavior,
       showQuickActions: current.showQuickActions,
-      autoReadSpeed: current.autoReadSpeed
+      autoReadSpeed: current.autoReadSpeed,
+      pageAnimation: Math.max(0, Math.min(5,
+        BackupRepository.readJsonNumber(selected, 'pageAnim') ?? current.pageAnimation)),
+      animationSpeed: Math.max(0, Math.min(3,
+        BackupRepository.readJsonNumber(selected, 'pageAnimSpeed') ?? current.animationSpeed)),
+      headerMode: Math.max(0, Math.min(2,
+        BackupRepository.readJsonNumber(selected, 'headerMode') ?? current.headerMode)),
+      footerMode: Math.max(0, Math.min(1,
+        BackupRepository.readJsonNumber(selected, 'footerMode') ?? current.footerMode)),
+      showHeaderLine: BackupRepository.readJsonBoolean(selected, 'showHeaderLine') ?? current.showHeaderLine,
+      showFooterLine: BackupRepository.readJsonBoolean(selected, 'showFooterLine') ?? current.showFooterLine,
+      tipHeaderLeft: BackupRepository.readJsonNumber(selected, 'tipHeaderLeft') ?? current.tipHeaderLeft,
+      tipHeaderMiddle: BackupRepository.readJsonNumber(selected, 'tipHeaderMiddle') ?? current.tipHeaderMiddle,
+      tipHeaderRight: BackupRepository.readJsonNumber(selected, 'tipHeaderRight') ?? current.tipHeaderRight,
+      tipFooterLeft: BackupRepository.readJsonNumber(selected, 'tipFooterLeft') ?? current.tipFooterLeft,
+      tipFooterMiddle: BackupRepository.readJsonNumber(selected, 'tipFooterMiddle') ?? current.tipFooterMiddle,
+      tipFooterRight: BackupRepository.readJsonNumber(selected, 'tipFooterRight') ?? current.tipFooterRight,
+      customTipHeaderLeft: BackupRepository.readJsonString(selected, 'customTipHeaderLeft') ?? current.customTipHeaderLeft,
+      customTipHeaderMiddle: BackupRepository.readJsonString(selected, 'customTipHeaderMiddle') ?? current.customTipHeaderMiddle,
+      customTipHeaderRight: BackupRepository.readJsonString(selected, 'customTipHeaderRight') ?? current.customTipHeaderRight,
+      customTipFooterLeft: BackupRepository.readJsonString(selected, 'customTipFooterLeft') ?? current.customTipFooterLeft,
+      customTipFooterMiddle: BackupRepository.readJsonString(selected, 'customTipFooterMiddle') ?? current.customTipFooterMiddle,
+      customTipFooterRight: BackupRepository.readJsonString(selected, 'customTipFooterRight') ?? current.customTipFooterRight,
+      headerFont: BackupRepository.readJsonString(selected, 'headerFont') ?? current.headerFont,
+      footerFont: BackupRepository.readJsonString(selected, 'footerFont') ?? current.footerFont,
+      headerFontSize: BackupRepository.readJsonNumber(selected, 'headerFontSize') ?? current.headerFontSize,
+      footerFontSize: BackupRepository.readJsonNumber(selected, 'footerFontSize') ?? current.footerFontSize,
+      applyHeaderStyle: BackupRepository.readJsonBoolean(selected, 'applyHeaderStyle') ?? current.applyHeaderStyle,
+      tipHeaderColor: BackupRepository.readJsonNumber(selected, 'tipHeaderColor') ?? current.tipHeaderColor,
+      tipHeaderColorNight: BackupRepository.readJsonNumber(selected, 'tipHeaderColorNight') ?? current.tipHeaderColorNight,
+      tipFooterColor: BackupRepository.readJsonNumber(selected, 'tipFooterColor') ?? current.tipFooterColor,
+      tipFooterColorNight: BackupRepository.readJsonNumber(selected, 'tipFooterColorNight') ?? current.tipFooterColorNight,
+      tipDividerColor: BackupRepository.readJsonNumber(selected, 'tipDividerColor') ?? current.tipDividerColor
     };
   }
 
@@ -741,6 +841,7 @@ export class BackupRepository {
       bodyMissing: true,
       androidOriginalPath: originalPath,
       androidCharacterPosition: Math.max(0, Math.trunc(characterPosition)),
+      readerPositionVersion: 2,
       format: originalPath.toLowerCase().endsWith('.epub') ? 'epub' : 'txt',
       charset: BackupRepository.readJsonString(record, 'charset') ?? undefined,
       isLocal: true
@@ -1042,6 +1143,13 @@ export class BackupRepository {
     if (value === undefined) { return undefined; }
     const number = Number(value);
     return Number.isFinite(number) ? number : undefined;
+  }
+
+  private static readJsonBoolean(json: string, field: string): boolean | undefined {
+    const value = new RegExp(`"${field}"\\s*:\\s*(true|false)`).exec(json)?.[1];
+    if (value === 'true') { return true; }
+    if (value === 'false') { return false; }
+    return undefined;
   }
 
   private static decodeJsonStringToken(token: string): string {

@@ -1,19 +1,24 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+
 @Component
 export struct PrivacyNoticePage {
   onBack: () => void = () => {};
+  @State collapsedHeader: boolean = false;
+  private noticeScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.noticeScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(40).height(40).onClick(() => this.onBack())
-        Column() {
-          Text('隐私声明').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text('当前版本的数据与网络行为').fontSize(15).fontColor('#92949E').margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 10 })
-      }.padding({ left: 12, right: 16, top: 8, bottom: 12 })
+      CollapsingSettingsHeader({ title: '隐私声明', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
-      Scroll() {
+      Scroll(this.noticeScroller) {
         Column() {
           PrivacyNoticeSection({
             title: '本地书籍与阅读进度',
@@ -38,7 +43,7 @@ export struct PrivacyNoticePage {
           Text('本说明根据当前源码整理，属于开发阶段披露，不替代目标发布渠道要求的正式隐私政策。正式发布前需完成资源授权、网络请求和隐私政策审核。')
             .fontSize(13).fontColor('#D9A6A0').lineHeight(20).padding({ left: 18, right: 18, top: 8, bottom: 22 })
         }.width('100%').padding({ top: 4 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }

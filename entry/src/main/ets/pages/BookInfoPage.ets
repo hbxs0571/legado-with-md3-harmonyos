@@ -16,6 +16,9 @@ export struct BookInfoPage {
   onRemoveFromShelf: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State fileSizeLabel: string = '';
+  @State collapsedHeader: boolean = false;
+  @State backdropOpacity: number = 0;
+  private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadFileSize();
@@ -73,26 +76,22 @@ export struct BookInfoPage {
 
   build() {
     Column() {
-      Scroll() {
+      Stack({ alignContent: Alignment.TopStart }) {
+      if (this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
+        Image(this.book.coverUri).width('100%').height(480).objectFit(ImageFit.Cover).blur(24)
+          .opacity(this.backdropOpacity).onAppear(() => {
+            this.backdropOpacity = 0;
+            animateTo({ duration: 800, curve: Curve.EaseInOut }, () => this.backdropOpacity = 0.45);
+          })
+      }
+      Scroll(this.infoScroller) {
         Column() {
           Stack() {
-            if (this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
-              Image(this.book.coverUri).width('100%').height(320).objectFit(ImageFit.Cover).blur(36).opacity(0.45)
-            }
             Column() {
-            Row() {
-              Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.reader_back')).width(20).height(20).fillColor('#F1F2F6')
-              }.width(40).height(40).backgroundColor('#171820').borderRadius(20)
-                .onClick(() => this.onBack())
-              Blank()
-              BookInfoIconButton({ icon: 'edit', onSelect: () => this.onUnavailableAction('本地书籍信息编辑尚未迁移') })
-              BookInfoIconButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
-              BookInfoIconButton({ icon: 'more', onSelect: () => this.onUnavailableAction('书籍更多操作尚未迁移') })
-            }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 18 })
+            Blank().height(66)
 
             Row() {
-              BookCover({ book: this.book })
+              BookCover({ book: this.book, displayWidth: 112, displayHeight: 157 })
               Column() {
                 Text(this.book.title).fontSize(23).fontWeight(FontWeight.Bold).fontColor('#F1F2F6')
                   .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -110,7 +109,9 @@ export struct BookInfoPage {
               if (this.fileSizeLabel.length > 0) { BookInfoTag({ label: this.fileSizeLabel }) }
             }.width('100%').padding({ left: 18, right: 18, bottom: 20 })
             }.width('100%').backgroundColor('#55343845')
-          }.width('100%').backgroundColor(this.book.coverColor)
+          }.width('100%')
+
+          Column() {
 
           Row() {
             BookInfoAction({
@@ -172,8 +173,26 @@ export struct BookInfoPage {
             }
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
             .backgroundColor('#1B1C22').borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
+          }.width('100%').backgroundColor('#111217')
         }.width('100%').padding({ bottom: 12 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
+        const shouldCollapse = Math.abs(this.infoScroller.currentOffset().yOffset) > 70;
+        if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
+      })
+
+      Row() {
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor('#F1F2F6')
+        }.width(40).height(40).backgroundColor('#171820').borderRadius(20)
+          .onClick(() => this.onBack())
+        Blank().layoutWeight(1)
+        BookInfoIconButton({ icon: 'edit', onSelect: () => this.onUnavailableAction('本地书籍信息编辑尚未迁移') })
+        BookInfoIconButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
+        BookInfoIconButton({ icon: 'more', onSelect: () => this.onUnavailableAction('书籍更多操作尚未迁移') })
+      }.width('100%').height(56).padding({ left: 16, right: 16, top: 8, bottom: 8 })
+        .backgroundColor(this.collapsedHeader ? '#111217' : '#00000000')
+        .animation({ duration: 220, curve: Curve.EaseInOut })
+      }.layoutWeight(1).width('100%').backgroundColor(this.book.coverColor)
 
       Row() {
         Blank()

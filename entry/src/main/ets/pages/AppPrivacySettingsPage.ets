@@ -1,21 +1,26 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+
 @Component
 export struct AppPrivacySettingsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State unlockScopeIndex: number = 0;
+  @State collapsedHeader: boolean = false;
+  private settingsScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(40).height(40).onClick(() => this.onBack())
-        Column() {
-          Text('隐私设置').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text('本地密码、验证时机与权限').fontSize(15).fontColor('#92949E').margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      }.padding({ left: 12, right: 16, top: 8, bottom: 10 })
+      CollapsingSettingsHeader({ title: '隐私设置', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
-      Scroll() {
+      Scroll(this.settingsScroller) {
         Column() {
           PrivacySettingsSection({ title: '私密凭据' }) {
             PrivacySettingsSwitch({ title: '启用私密功能', detail: '关闭后不验证、不脱敏；已有密码和标记会保留' })
@@ -30,6 +35,7 @@ export struct AppPrivacySettingsPage {
             PrivacySettingsChoice({ title: '解锁有效期', options: ['每次都验证', '应用会话内有效', '离开应用前有效'], selected: this.unlockScopeIndex, onSelect: (index: number) => this.unlockScopeIndex = index })
             if (this.unlockScopeIndex === 2) {
               PrivacySettingsChoice({ title: '切到后台后的宽限期', options: ['立即失效', '30 秒', '2 分钟', '3 分钟', '5 分钟'], selected: 0, onSelect: (_index: number) => this.onUnavailableAction('宽限期暂为界面预览') })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
             }
           }
 
@@ -41,7 +47,7 @@ export struct AppPrivacySettingsPage {
           Text('安全提醒：本页面只是原版隐私设置的 UI 预览。没有密码加密、生物识别或权限写入；请勿在此输入真实密码。')
             .fontSize(12).fontColor('#D9A6A0').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }

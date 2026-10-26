@@ -2,6 +2,7 @@
 import { bundleManager } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import {
   PROFILE_PAGE_SUBTITLE_SIZE,
   PROFILE_PAGE_TITLE_SIZE,
@@ -11,6 +12,7 @@ import {
 } from '../components/ProfileUiMetrics';
 import { ProfileRoute } from '../model/Book';
 import { ReplaceRule } from '../model/ReplaceRule';
+import { ReadTimeRecord } from '../data/ReadTimeRepository';
 
 @Component
 export struct BookSourceManagePage {
@@ -20,29 +22,113 @@ export struct BookSourceManagePage {
   @State selectedGroup: string = '';
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
+  @State showGroupFilter: boolean = false;
+  @State groupFilterQuery: string = '';
+  @State groupByDomain: boolean = false;
+  @State sortMode: string = '手动排序';
+  @State sortDescending: boolean = false;
+
+  private groupFilterOptions(): string[] {
+    const options: string[] = ['全部', '启用', '禁用', '需要登录', '未分组', '发现已启用', '发现未启用'];
+    this.groups.forEach((group: string) => options.push(group));
+    return options.filter((option: string) => this.groupFilterQuery.length === 0 ||
+      option.toLowerCase().includes(this.groupFilterQuery.toLowerCase()));
+  }
+
+  @Builder
+  private MoreMenu() {
+    Menu() {
+      MenuItem({ content: '分组管理' }).onClick(() =>
+        this.onUnavailableAction('书源分组管理尚未迁移，未修改分组'))
+      MenuItem({ content: '本地导入' }).onClick(() =>
+        this.onUnavailableAction('书源本地导入尚未迁移，未导入数据'))
+      MenuItem({ content: '二维码导入' }).onClick(() =>
+        this.onUnavailableAction('书源二维码导入尚未迁移，未导入数据'))
+      MenuItem({ content: '在线导入' }).onClick(() =>
+        this.onUnavailableAction('书源在线导入尚未迁移，未导入数据'))
+      MenuItem({ content: this.groupByDomain ? '取消按域名分组' : '按域名分组' })
+        .onClick(() => this.groupByDomain = !this.groupByDomain)
+      MenuItem({ content: '手动排序' }).onClick(() => this.sortMode = '手动排序')
+      MenuItem({ content: '权重排序' }).onClick(() => this.sortMode = '权重排序')
+      MenuItem({ content: '名称排序' }).onClick(() => this.sortMode = '名称排序')
+      MenuItem({ content: 'URL 排序' }).onClick(() => this.sortMode = 'URL 排序')
+      MenuItem({ content: '按更新时间排序' }).onClick(() => this.sortMode = '按更新时间排序')
+      MenuItem({ content: '按响应时间排序' }).onClick(() => this.sortMode = '按响应时间排序')
+      MenuItem({ content: '按启用状态排序' }).onClick(() => this.sortMode = '按启用状态排序')
+      MenuItem({ content: this.sortDescending ? '切换为升序' : '切换为降序' })
+        .onClick(() => this.sortDescending = !this.sortDescending)
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  @Builder
+  private GroupFilterSheet() {
+    Column() {
+      Row() {
+        Text('分组筛选').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text('清除').fontSize(14).fontColor('#B9C8FF').padding({ left: 12, right: 8, top: 8, bottom: 8 })
+          .onClick(() => { this.selectedGroup = ''; this.groupFilterQuery = ''; this.showGroupFilter = false; })
+      }.width('100%').padding({ left: 20, right: 16, top: 20, bottom: 12 })
+      Row() {
+        AppGlyph({ name: 'search', glyphSize: 18, tint: '#C5C7D0' }).margin({ right: 9 })
+        TextInput({ placeholder: '搜索分组', text: this.groupFilterQuery })
+          .fontSize(15).fontColor('#E3E4E8').placeholderColor('#858792')
+          .backgroundColor(Color.Transparent).layoutWeight(1)
+          .onChange((value: string) => this.groupFilterQuery = value)
+      }.margin({ left: 16, right: 16, bottom: 10 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
+        .backgroundColor('#25262D').borderRadius(22)
+      Scroll() {
+        Column() {
+          ForEach(this.groupFilterOptions(), (option: string) => {
+            Row() {
+              Text(option).fontSize(15).fontColor(this.selectedGroup === option ? '#DCE3FF' : '#D8D9E0')
+                .layoutWeight(1)
+              if (this.selectedGroup === option) {
+                AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C8FF' })
+              }
+            }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
+              .backgroundColor(this.selectedGroup === option ? '#41485D' : '#1B1C22').borderRadius(12)
+              .margin({ left: 16, right: 16, bottom: 7 })
+              .onClick(() => {
+                this.selectedGroup = option === '全部' ? '' : option;
+                this.showGroupFilter = false;
+              })
+          }, (option: string) => option)
+        }.width('100%').padding({ top: 4, bottom: 22 })
+      }.layoutWeight(1).scrollBar(BarState.Off)
+    }.width('100%').height('100%').backgroundColor('#17181E')
+  }
 
   build() {
     Column() {
       Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          .width(36).onClick(() => this.onBack())
+        Stack({ alignContent: Alignment.Center }) {
+          Row().width(36).height(36).backgroundColor('#1B1C22').borderRadius(18)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
+        }.width(40).height(40).onClick(() => this.onBack())
         Column() {
-          Text('书源管理').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          Text(this.selectedGroup.length === 0 ? '全部书源' : this.selectedGroup)
+          Text('书源').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+          Text(this.selectedGroup.length === 0 ? '全部' : this.selectedGroup)
             .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor('#92949E').margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        AppGlyph({ name: 'list', glyphSize: 19, tint: '#D8D9E0' }).padding({ left: 8, right: 8 })
-          .onClick(() => this.onUnavailableAction('书源分组管理将在书源数据接入后提供'))
-        AppGlyph({ name: 'search', glyphSize: 19, tint: '#D8D9E0' }).padding({ left: 8, right: 8 })
+        Stack({ alignContent: Alignment.Center }) {
+          Row().width(36).height(36).backgroundColor('#1B1C22').borderRadius(18)
+          AppGlyph({ name: 'profileFilterAlt', glyphSize: 19, tint: '#D8D9E0' })
+        }.width(40).height(40).onClick(() => { this.groupFilterQuery = ''; this.showGroupFilter = true; })
+        Stack({ alignContent: Alignment.Center }) {
+          Row().width(36).height(36).backgroundColor('#1B1C22').borderRadius(18)
+          AppGlyph({ name: 'search', glyphSize: 19, tint: '#D8D9E0' })
+        }.width(40).height(40)
           .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
-        AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' }).padding({ left: 6, right: 8 })
-          .onClick(() => this.onUnavailableAction('书源导入、排序和批量管理将在书源数据接入后提供'))
-      }.width('100%').padding({ left: 12, right: 10, top: 11, bottom: 9 })
+        Stack({ alignContent: Alignment.Center }) {
+          Row().width(36).height(36).backgroundColor('#1B1C22').borderRadius(18)
+          AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
+        }.width(40).height(40).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+      }.width('100%').padding({ left: 12, right: 12, top: 11, bottom: 9 })
 
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
-          TextInput({ placeholder: '搜索书源名称或 URL…', text: this.searchQuery })
+          TextInput({ placeholder: '搜索书源…', text: this.searchQuery })
             .fontSize(14).fontColor('#D8D9E0').placeholderColor('#92949E')
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
@@ -50,29 +136,37 @@ export struct BookSourceManagePage {
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor('#1B1C22').borderRadius(22)
       }
 
-      if (this.groups.length > 0) {
-        Scroll() {
-          Row() {
-            ModuleTab({ label: '全部', selected: this.selectedGroup.length === 0, onSelect: () => this.selectedGroup = '' })
-            ForEach(this.groups, (group: string) => {
-              ModuleTab({ label: group, selected: this.selectedGroup === group, onSelect: () => this.selectedGroup = group })
-            })
-          }.width('100%').padding({ left: 16, right: 9, top: 8, bottom: 12 })
-        }.scrollBar(BarState.Off)
+      if (this.selectedGroup.length > 0 || this.searchQuery.length > 0 || this.sortMode !== '手动排序' || this.groupByDomain) {
+        Row() {
+          Text(this.selectedGroup.length > 0 ? this.selectedGroup : '全部')
+            .fontSize(12).fontColor('#DCE3FF').padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .backgroundColor('#41485D').borderRadius(14)
+          Text(this.sortMode).fontSize(12).fontColor('#92949E').margin({ left: 8 })
+          if (this.groupByDomain) {
+            Text('按域名分组').fontSize(12).fontColor('#92949E').margin({ left: 8 })
+          }
+        }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 5 })
       }
 
       ModuleEmpty({
         icon: 'web',
         title: this.searchQuery.length > 0 ? '没有匹配的书源' : '暂无书源',
-        detail: '书源条目会显示名称、URL、分组、启用状态和发现能力'
+        detail: this.searchQuery.length > 0 ? '调整关键词或筛选条件后重试' : '添加或导入书源后，会在这里显示书源名称、分组和启用状态'
       }).layoutWeight(1)
       Row() {
         Image($r('app.media.app_add')).width(18).height(18).fillColor('#151720')
         Text('添加书源').fontSize(15).fontColor('#151720').margin({ left: 7 })
       }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
         .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 }).alignSelf(ItemAlign.End)
-        .onClick(() => this.onUnavailableAction('书源编辑与保存将在书源阶段接入'))
+        .onClick(() => this.onUnavailableAction('书源编辑和保存尚未迁移，未创建书源'))
     }.width('100%').height('100%').backgroundColor('#111217')
+      .bindSheet(this.showGroupFilter, this.GroupFilterSheet(), {
+        height: SheetSize.MEDIUM,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => this.showGroupFilter = false
+      })
   }
 }
 
@@ -89,14 +183,15 @@ export struct ReplaceRulesPage {
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State sortMode: string = 'asc';
+  @State ruleActionSheet: string = '';
 
   @Builder
   private ReplaceRuleMenu() {
     Menu() {
       MenuItem({ content: '导入' })
-        .onClick(() => this.onUnavailableAction('替换规则导入尚未接入，未导入任何数据'))
+        .onClick(() => this.ruleActionSheet = 'import')
       MenuItem({ content: '分组管理' })
-        .onClick(() => this.onUnavailableAction('替换规则分组数据尚未接入'))
+        .onClick(() => this.ruleActionSheet = 'groups')
       MenuItem({ content: '旧的在前' })
         .onClick(() => { this.sortMode = 'asc'; this.onUnavailableAction('排序已切换：旧的在前') })
       MenuItem({ content: '新的在前' })
@@ -106,6 +201,86 @@ export struct ReplaceRulesPage {
       MenuItem({ content: '名称降序' })
         .onClick(() => { this.sortMode = 'name_desc'; this.onUnavailableAction('排序已切换：名称降序') })
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  @Builder
+  private RuleActionSheet() {
+    Column() {
+      Row() {
+        Text(this.ruleActionSheet === 'groups' ? '分组管理' : '导入替换规则')
+          .fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
+        }.width(40).height(40).onClick(() => this.ruleActionSheet = '')
+      }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
+      if (this.ruleActionSheet === 'groups') {
+        Scroll() {
+          Column() {
+            ForEach(this.groups.filter((group: string) => group !== '默认'), (group: string) => {
+              Row() {
+                Text(group).fontSize(15).fontColor('#E3E4E8').layoutWeight(1)
+                AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
+                  .onClick(() => this.onUnavailableAction('分组重命名尚未迁移，未修改分组'))
+                AppGlyph({ name: 'delete', glyphSize: 18, tint: '#D99AA5' })
+                  .onClick(() => this.onUnavailableAction('分组删除尚未迁移，未删除分组'))
+              }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
+                .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
+            }, (group: string) => group)
+            if (this.groups.filter((group: string) => group !== '默认').length === 0) {
+              Text('暂无其他分组').fontSize(15).fontColor('#92949E').width('100%').textAlign(TextAlign.Center)
+                .padding({ top: 24, bottom: 24 })
+            }
+            Row() {
+              AppGlyph({ name: 'add', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 8 })
+              Text('添加分组').fontSize(15).fontColor('#D8D9E0')
+            }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
+              .backgroundColor('#22232A').borderRadius(12).margin({ top: 5, bottom: 20 })
+              .onClick(() => this.onUnavailableAction('分组新增尚未迁移，未创建分组'))
+          }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
+        }.layoutWeight(1).scrollBar(BarState.Off)
+      } else {
+        Column() {
+          Row() {
+            AppGlyph({ name: 'folder', glyphSize: 20, tint: '#AFC2FF' }).margin({ right: 12 })
+            Column() {
+              Text('选择本地文件').fontSize(15).fontColor('#E3E4E8')
+              Text('支持 JSON、TXT 规则文件').fontSize(12).fontColor('#92949E').margin({ top: 3 })
+            }.alignItems(HorizontalAlign.Start)
+          }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+            .backgroundColor('#22232A').borderRadius(12)
+            .onClick(() => this.onUnavailableAction('替换规则文件导入尚未迁移，未读取文件'))
+          Row() {
+            AppGlyph({ name: 'edit', glyphSize: 20, tint: '#AFC2FF' }).margin({ right: 12 })
+            Column() {
+              Text('手动输入').fontSize(15).fontColor('#E3E4E8')
+              Text('粘贴规则文本或链接').fontSize(12).fontColor('#92949E').margin({ top: 3 })
+            }.alignItems(HorizontalAlign.Start)
+          }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+            .backgroundColor('#22232A').borderRadius(12).margin({ top: 8, bottom: 18 })
+            .onClick(() => this.onUnavailableAction('替换规则手动导入尚未迁移，未导入数据'))
+        }.width('100%').padding({ left: 16, right: 16 })
+      }
+    }.width('100%').height('100%').backgroundColor('#17181E')
+  }
+
+  private filteredReplaceRules(): ReplaceRule[] {
+    const query = this.searchQuery.trim().toLowerCase();
+    const filtered = this.rules.filter((rule: ReplaceRule) => {
+      const matchesGroup = this.selectedGroup.length === 0 || rule.group === this.selectedGroup;
+      const matchesQuery = query.length === 0 || rule.name.toLowerCase().includes(query) ||
+        rule.pattern.toLowerCase().includes(query) || rule.replacement.toLowerCase().includes(query);
+      return matchesGroup && matchesQuery;
+    });
+    filtered.sort((left: ReplaceRule, right: ReplaceRule) => {
+      if (this.sortMode === 'name_asc') {
+        return left.name.localeCompare(right.name);
+      }
+      if (this.sortMode === 'name_desc') {
+        return right.name.localeCompare(left.name);
+      }
+      return this.sortMode === 'desc' ? right.order - left.order : left.order - right.order;
+    });
+    return filtered;
   }
 
   build() {
@@ -143,6 +318,7 @@ export struct ReplaceRulesPage {
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor('#1B1C22').borderRadius(24)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
       if (this.groups.length > 0) {
@@ -156,13 +332,17 @@ export struct ReplaceRulesPage {
         }.scrollBar(BarState.Off)
       }
 
-      if (this.rules.length === 0) {
-        ModuleEmpty({ icon: 'profileFindReplace', title: '暂无替换净化规则', detail: '添加规则后会按顺序应用到本地书籍正文' })
+      if (this.filteredReplaceRules().length === 0) {
+        ModuleEmpty({
+          icon: 'profileFindReplace',
+          title: this.rules.length === 0 ? '暂无替换净化规则' : '没有匹配的替换净化规则',
+          detail: this.rules.length === 0 ? '添加规则后会按顺序应用到本地书籍正文' : '调整搜索词或分组筛选后重试'
+        })
           .layoutWeight(1)
       } else {
         Scroll() {
           Column() {
-            ForEach(this.rules, (rule: ReplaceRule) => {
+            ForEach(this.filteredReplaceRules(), (rule: ReplaceRule) => {
               Row() {
                 Column() {
                   Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(15).fontColor('#E3E4E8')
@@ -186,6 +366,13 @@ export struct ReplaceRulesPage {
         .onClick(() => this.onOpenEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor('#111217')
+      .bindSheet(this.ruleActionSheet.length > 0, this.RuleActionSheet(), {
+        height: SheetSize.MEDIUM,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => this.ruleActionSheet = ''
+      })
   }
 }
 
@@ -194,19 +381,30 @@ export struct ReplaceRuleEditPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onSaveRule: (rule: ReplaceRule) => void = (_rule: ReplaceRule) => {};
+  @Prop groups: string[] = [];
   @State name: string = '';
   @State group: string = '默认';
   @State pattern: string = '';
   @State replacement: string = '';
   @State scopeTitle: boolean = false;
-  @State scopeContent: boolean = true;
+  @State scopeContent: boolean = false;
   @State isRegex: boolean = false;
   @State scope: string = '';
   @State excludeScope: string = '';
   @State timeout: string = '3000';
   @State keyboardVisible: boolean = false;
   @State showPasteAuthorization: boolean = false;
+  @State showGroupManager: boolean = false;
+  @State selectedGroups: string[] = [];
   @State activeField: string = 'pattern';
+
+  private availableGroups(): string[] {
+    const options: string[] = ['默认'];
+    this.groups.forEach((group: string) => {
+      if (group.length > 0 && group !== '默认' && !options.includes(group)) { options.push(group); }
+    });
+    return options;
+  }
 
   @Builder
   private RuleActionsMenu() {
@@ -222,8 +420,11 @@ export struct ReplaceRuleEditPage {
   private GroupMenu() {
     Menu() {
       MenuItem({ content: '默认' }).onClick(() => this.group = '默认')
-      MenuItem({ content: '分组管理' })
-        .onClick(() => this.onUnavailableAction('替换规则分组数据尚未接入'))
+      ForEach(this.availableGroups(), (group: string) => {
+        if (group !== '默认') {
+          MenuItem({ content: group }).onClick(() => this.group = group)
+        }
+      }, (group: string) => group)
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
   }
 
@@ -317,11 +518,12 @@ export struct ReplaceRuleEditPage {
   }
 
   @Builder
-  private RuleField(label: string, value: string, field: string) {
+  private RuleField(label: string, value: string, field: string, placeholder: string) {
     Column() {
-      TextInput({ placeholder: label, text: value })
-        .fontSize(16).fontColor('#E3E4E8').placeholderColor('#C3C5CD')
-        .height(50).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
+      Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      TextInput({ placeholder: placeholder, text: value })
+        .fontSize(16).fontColor('#E3E4E8').placeholderColor('#92949E')
+        .height(52).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
         .width('100%')
         .onFocus(() => { this.activeField = field; this.keyboardVisible = true; })
         .onBlur(() => this.keyboardVisible = false)
@@ -333,8 +535,51 @@ export struct ReplaceRuleEditPage {
           else if (field === 'excludeScope') { this.excludeScope = text; }
           else if (field === 'timeout') { this.timeout = text; }
         })
-      Row().width('100%').height(1).backgroundColor('#898B94')
-    }.width('100%').alignItems(HorizontalAlign.Start).margin({ bottom: 12 })
+    }.width('100%').alignItems(HorizontalAlign.Start).margin({ bottom: 4 })
+  }
+
+  @Builder
+  private GroupManagerSheet() {
+    Column() {
+      Text('分组管理').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        .width('100%').padding({ left: 20, right: 20, top: 20, bottom: 14 })
+      if (this.availableGroups().filter((group: string) => group !== '默认').length === 0) {
+        Text('暂无其他分组').fontSize(15).fontColor('#92949E').width('100%').textAlign(TextAlign.Center)
+          .padding({ top: 24, bottom: 24 })
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.availableGroups().filter((group: string) => group !== '默认'), (group: string) => {
+              Row() {
+                Text(group).fontSize(15).fontColor('#D8D9E0').layoutWeight(1)
+                AppGlyph({ name: this.selectedGroups.includes(group) ? 'profileCheck' : 'profileBookmark',
+                  glyphSize: 20, tint: this.selectedGroups.includes(group) ? '#B9C8FF' : '#92949E' })
+              }.width('100%').padding({ left: 18, right: 18, top: 13, bottom: 13 })
+                .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
+                .onClick(() => {
+                  this.selectedGroups = this.selectedGroups.includes(group)
+                    ? this.selectedGroups.filter((item: string) => item !== group)
+                    : [...this.selectedGroups, group];
+                })
+            }, (group: string) => group)
+          }.width('100%').padding({ left: 16, right: 16, bottom: 8 })
+        }.layoutWeight(1).scrollBar(BarState.Off)
+      }
+      Row() {
+        Text('关闭').fontSize(15).fontColor('#B9C8FF').padding({ left: 18, right: 18, top: 11, bottom: 11 })
+          .onClick(() => { this.showGroupManager = false; this.selectedGroups = []; })
+        Blank()
+        Text('删除选中').fontSize(15).fontColor(this.selectedGroups.length > 0 ? '#F0A6AF' : '#737581')
+          .padding({ left: 18, right: 18, top: 11, bottom: 11 })
+          .onClick(() => {
+            if (this.selectedGroups.length > 0) {
+              this.onUnavailableAction('分组删除尚未迁移，未删除任何分组');
+            }
+            this.showGroupManager = false;
+            this.selectedGroups = [];
+          })
+      }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 20 })
+    }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
   build() {
@@ -363,7 +608,7 @@ export struct ReplaceRuleEditPage {
         .width('100%').padding({ left: 14, right: 0, top: 12, bottom: 0 })
       Scroll() {
         Column() {
-          this.RuleField('规则名称', this.name, 'name')
+          this.RuleField('规则名称', this.name, 'name', '')
           Row() {
             Column() {
               Row() {
@@ -382,11 +627,11 @@ export struct ReplaceRuleEditPage {
               .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileSettings', glyphSize: 20, tint: '#D8D9E0' })
-            }.width(48).height(56).onClick(() => this.onUnavailableAction('替换规则分组数据尚未接入'))
+            }.width(48).height(56).onClick(() => { this.selectedGroups = []; this.showGroupManager = true; })
           }.width('100%')
           Blank().height(12)
-          this.RuleField('匹配规则', this.pattern, 'pattern')
-          this.RuleField('替换为', this.replacement, 'replacement')
+          this.RuleField('匹配规则', this.pattern, 'pattern', '输入正则表达式或关键字')
+          this.RuleField('替换为', this.replacement, 'replacement', '输入替换内容或捕获组')
           Row() {
             ReplaceScopeChip({ label: '标题', selected: this.scopeTitle,
               onSelect: () => this.scopeTitle = !this.scopeTitle })
@@ -396,8 +641,8 @@ export struct ReplaceRuleEditPage {
             ReplaceScopeChip({ label: '正则', selected: this.isRegex,
               onSelect: () => this.isRegex = !this.isRegex })
           }.width('100%').margin({ top: 12, bottom: 15 })
-          this.RuleField('特定范围', this.scope, 'scope')
-          this.RuleField('排除范围', this.excludeScope, 'excludeScope')
+          this.RuleField('特定范围', this.scope, 'scope', '指定规则适用的范围')
+          this.RuleField('排除范围', this.excludeScope, 'excludeScope', '指定规则不适用的范围')
           Column() {
             Text('超时 (ms)').fontSize(14).fontColor('#C3C5CD').width('100%').textAlign(TextAlign.Start)
             TextInput({ text: this.timeout, placeholder: '3000' })
@@ -436,6 +681,13 @@ export struct ReplaceRuleEditPage {
           .onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor('#111217')
+      .bindSheet(this.showGroupManager, this.GroupManagerSheet(), {
+        height: SheetSize.MEDIUM,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => this.showGroupManager = false
+      })
   }
 }
 
@@ -469,12 +721,82 @@ interface ReplaceRuleClipboardData {
   timeoutMillisecond?: number;
 }
 
+export interface RuleListEntry {
+  id: string;
+  title: string;
+  detail: string;
+  enabled: boolean;
+}
+
+@Component
+struct RuleListBody {
+  @Prop rules: RuleListEntry[] = [];
+  @Prop query: string = '';
+  @Prop selectedIds: string[] = [];
+  @Prop selectionMode: boolean = false;
+  @Prop sortMode: boolean = false;
+  @Prop emptyMessage: string = '暂无规则';
+  onOpen: (id: string) => void = (_id: string) => {};
+  onToggle: (id: string) => void = (_id: string) => {};
+  onLongSelect: (id: string) => void = (_id: string) => {};
+  onMove: (id: string, direction: number) => void = (_id: string, _direction: number) => {};
+
+  private visibleRules(): RuleListEntry[] {
+    const query = this.query.trim().toLocaleLowerCase();
+    return query.length === 0 ? this.rules : this.rules.filter((rule: RuleListEntry) =>
+      rule.title.toLocaleLowerCase().includes(query) || rule.detail.toLocaleLowerCase().includes(query));
+  }
+
+  build() {
+    if (this.visibleRules().length === 0) {
+      Column() {
+        Text('(；′⌒`)').fontSize(32).fontColor('#E3E4E8')
+        Text(this.query.length > 0 ? '没有匹配的规则' : this.emptyMessage)
+          .fontSize(14).fontColor('#D8D9E0').margin({ top: 8 })
+      }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+    } else {
+      Scroll() {
+        Column() {
+          ForEach(this.visibleRules(), (rule: RuleListEntry) => {
+            Row() {
+              if (this.selectionMode) {
+                AppGlyph({ name: this.selectedIds.includes(rule.id) ? 'profileCheck' : 'profileClose',
+                  glyphSize: 20, tint: this.selectedIds.includes(rule.id) ? '#AFC2FF' : '#92949E' })
+                  .margin({ right: 12 })
+              }
+              Column() {
+                Text(rule.title).fontSize(16).fontColor(rule.enabled ? '#E3E4E8' : '#92949E')
+                Text(rule.detail).fontSize(13).fontColor('#92949E').margin({ top: 4 }).maxLines(2)
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              if (this.sortMode) {
+                Image($r('app.media.reader_reorder_up')).width(18).height(18).fillColor('#AFC2FF')
+                  .margin({ right: 12 }).onClick(() => this.onMove(rule.id, -1))
+                Image($r('app.media.reader_reorder_down')).width(18).height(18).fillColor('#AFC2FF')
+                  .onClick(() => this.onMove(rule.id, 1))
+              } else if (!this.selectionMode) {
+                AppGlyph({ name: 'edit', glyphSize: 18, tint: '#AFC2FF' })
+              }
+            }.width('100%').padding(16).backgroundColor('#1A1B21').borderRadius(14)
+              .margin({ left: 16, right: 16, bottom: 8 })
+              .onClick(() => this.selectionMode ? this.onToggle(rule.id) : this.onOpen(rule.id))
+              .priorityGesture(LongPressGesture({ duration: 500 }).onAction(() => this.onLongSelect(rule.id)))
+          }, (rule: RuleListEntry) => rule.id)
+        }.padding({ top: 8, bottom: 120 })
+      }.width('100%').height('100%').scrollBar(BarState.Off)
+    }
+  }
+}
+
 @Component
 export struct TxtTocRulesPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @Prop rules: RuleListEntry[] = [];
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
+  @State selectionMode: boolean = false;
+  @State selectedRuleIds: string[] = [];
+  @State sortMode: boolean = false;
   @State showAddRule: boolean = false;
   @State showPasteAuthorization: boolean = false;
   @State ruleName: string = '';
@@ -597,11 +919,21 @@ export struct TxtTocRulesPage {
   @Builder
   private ImportMenu() {
     Menu() {
+      MenuItem({ content: '排序' }).onClick(() => this.sortMode = !this.sortMode)
+      MenuItem({ content: '选择模式' }).onClick(() => {
+        this.selectionMode = !this.selectionMode;
+        this.selectedRuleIds = [];
+      })
       MenuItem({ content: '导入' })
         .onClick(() => this.onUnavailableAction('TXT 目录规则导入存储尚未接入，未导入任何数据'))
       MenuItem({ content: '导入内置规则' })
         .onClick(() => this.onUnavailableAction('内置 TXT 目录规则库尚未接入，未导入任何数据'))
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  private toggleSelectedRule(id: string): void {
+    this.selectedRuleIds = this.selectedRuleIds.includes(id) ?
+      this.selectedRuleIds.filter((selectedId: string) => selectedId !== id) : [...this.selectedRuleIds, id];
   }
 
   @Builder
@@ -709,7 +1041,8 @@ export struct TxtTocRulesPage {
           .bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 18, right: 18 })
       Row() {
-        Text('TXT 目录规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+        Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : 'TXT 目录规则')
+          .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
       }.width('100%').padding({ left: 18, right: 18, top: 12 })
 
       if (this.showSearch) {
@@ -725,7 +1058,22 @@ export struct TxtTocRulesPage {
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor('#1B1C22').borderRadius(24)
       }
 
-      Blank().layoutWeight(1)
+      if (this.selectionMode && this.selectedRuleIds.length > 0) {
+        Row() {
+          Text('全选').fontSize(14).fontColor('#AFC2FF').onClick(() =>
+            this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
+          Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
+            .onClick(() => this.onUnavailableAction('TXT 目录规则删除尚未迁移，未更改数据'))
+        }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
+      }
+      RuleListBody({
+        rules: this.rules, query: this.searchQuery, selectedIds: this.selectedRuleIds,
+        selectionMode: this.selectionMode, sortMode: this.sortMode, emptyMessage: '暂无 TXT 目录规则',
+        onOpen: (_id: string) => this.onUnavailableAction('现有 TXT 规则编辑尚未接入'),
+        onToggle: (id: string) => this.toggleSelectedRule(id),
+        onLongSelect: (id: string) => { this.selectionMode = true; this.selectedRuleIds = [id]; },
+        onMove: (_id: string, _direction: number) => this.onUnavailableAction('TXT 规则排序尚未迁移')
+      }).layoutWeight(1)
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'add', glyphSize: 24, tint: '#151720' })
@@ -781,15 +1129,148 @@ export struct DictionaryRulesPage {
   onBack: () => void = () => {};
   onOpenEditor: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @Prop rules: RuleListEntry[] = [];
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
+  @State selectionMode: boolean = false;
+  @State selectedRuleIds: string[] = [];
+  @State sortMode: boolean = false;
+  @State showRuleEditor: boolean = false;
+  @State ruleName: string = '';
+  @State urlRule: string = '';
+  @State showRule: string = '';
+  @State showPasteAuthorization: boolean = false;
+
+  @Builder
+  private RuleEditorMenu() {
+    Menu() {
+      MenuItem({ content: '复制规则' }).onClick(() => this.copyDictionaryRule())
+      MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  private async copyDictionaryRule(): Promise<void> {
+    try {
+      const value = JSON.stringify({ name: this.ruleName, urlRule: this.urlRule,
+        showRule: this.showRule, enabled: true, sortNumber: 0 });
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, value);
+      await pasteboard.getSystemPasteboard().setData(data);
+      this.onUnavailableAction('规则已复制到剪贴板');
+    } catch (_error) {
+      this.onUnavailableAction('复制规则失败');
+    }
+  }
+
+  private async pasteDictionaryRule(result: PasteButtonOnClickResult): Promise<void> {
+    this.showPasteAuthorization = false;
+    if (result !== PasteButtonOnClickResult.SUCCESS) {
+      this.onUnavailableAction('未获得读取剪贴板授权');
+      return;
+    }
+    try {
+      const data = await pasteboard.getSystemPasteboard().getData();
+      if (data.getRecordCount() === 0) {
+        this.onUnavailableAction('剪贴板为空');
+        return;
+      }
+      const parsed: DictionaryRuleClipboardData = JSON.parse(data.getRecord(0).toPlainText());
+      if (typeof parsed.name !== 'string' || typeof parsed.urlRule !== 'string' ||
+        typeof parsed.showRule !== 'string') {
+        this.onUnavailableAction('剪贴板规则格式无效');
+        return;
+      }
+      this.ruleName = parsed.name;
+      this.urlRule = parsed.urlRule;
+      this.showRule = parsed.showRule;
+      this.onUnavailableAction('规则已从剪贴板填入');
+    } catch (_error) {
+      this.onUnavailableAction('剪贴板规则格式无效');
+    }
+  }
+
+  @Builder
+  private DictionaryEditorField(label: string, value: string, field: string, multiline: boolean = false) {
+    Column() {
+      Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      if (multiline) {
+        TextArea({ placeholder: '', text: value }).fontSize(16).fontColor('#E3E4E8')
+          .height(120).backgroundColor('#24252C').borderRadius(8)
+          .padding({ left: 14, right: 14, top: 14 }).width('100%')
+          .onChange((text: string) => this.updateDictionaryField(field, text))
+      } else {
+        TextInput({ placeholder: '', text: value }).fontSize(16).fontColor('#E3E4E8')
+          .height(54).backgroundColor('#24252C').borderRadius(8)
+          .padding({ left: 14, right: 14 }).width('100%')
+          .onChange((text: string) => this.updateDictionaryField(field, text))
+      }
+    }.width('100%').alignItems(HorizontalAlign.Start).margin({ bottom: 10 })
+  }
+
+  private updateDictionaryField(field: string, value: string): void {
+    if (field === 'name') { this.ruleName = value; }
+    else if (field === 'urlRule') { this.urlRule = value; }
+    else { this.showRule = value; }
+  }
+
+  private openRuleEditor(): void {
+    this.ruleName = '';
+    this.urlRule = '';
+    this.showRule = '';
+    this.showPasteAuthorization = false;
+    this.showRuleEditor = true;
+  }
+
+  @Builder
+  private DictionaryRuleSheet() {
+    Column() {
+      Row() {
+        Text('字典规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
+        }.width(40).height(40).onClick(() => this.showRuleEditor = false)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'more', glyphSize: 19, tint: '#D8D9E0' })
+        }.width(40).height(40).bindMenu(this.RuleEditorMenu, { placement: Placement.BottomRight })
+      }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
+      Scroll() {
+        Column() {
+          this.DictionaryEditorField('名称', this.ruleName, 'name')
+          this.DictionaryEditorField('Url规则 (urlRule)', this.urlRule, 'urlRule')
+          this.DictionaryEditorField('显示规则 (showRule)', this.showRule, 'showRule', true)
+        }.width('100%').alignItems(HorizontalAlign.Start)
+          .padding({ left: 16, right: 16, top: 4, bottom: 120 })
+      }.layoutWeight(1).scrollBar(BarState.Off)
+      Row() {
+        if (this.showPasteAuthorization) {
+          PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
+            .onClick(async (_event: ClickEvent, result: PasteButtonOnClickResult) =>
+              await this.pasteDictionaryRule(result))
+        }
+        Blank()
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
+        }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
+          .onClick(() => this.onUnavailableAction('字典规则存储尚未接入，规则未保存'))
+      }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 14 })
+    }.width('100%').height('100%').backgroundColor('#17181E')
+  }
 
   @Builder
   private ImportMenu() {
     Menu() {
+      MenuItem({ content: '排序' }).onClick(() => this.sortMode = !this.sortMode)
+      MenuItem({ content: '选择模式' }).onClick(() => {
+        this.selectionMode = !this.selectionMode;
+        this.selectedRuleIds = [];
+      })
       MenuItem({ content: '导入' })
         .onClick(() => this.onUnavailableAction('字典规则导入尚未接入，未导入任何数据'))
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  private toggleSelectedRule(id: string): void {
+    this.selectedRuleIds = this.selectedRuleIds.includes(id) ?
+      this.selectedRuleIds.filter((selectedId: string) => selectedId !== id) : [...this.selectedRuleIds, id];
   }
 
   build() {
@@ -816,7 +1297,8 @@ export struct DictionaryRulesPage {
       }.width('100%').height(40).padding({ left: 11, right: 12 })
         .margin({ top: -8 })
 
-      Text('字典规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
+      Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '字典规则')
+        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
       if (this.showSearch) {
@@ -832,13 +1314,35 @@ export struct DictionaryRulesPage {
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor('#1B1C22').borderRadius(24)
       }
 
-      Blank().layoutWeight(1)
+      if (this.selectionMode && this.selectedRuleIds.length > 0) {
+        Row() {
+          Text('全选').fontSize(14).fontColor('#AFC2FF').onClick(() =>
+            this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
+          Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
+            .onClick(() => this.onUnavailableAction('字典规则删除尚未迁移，未更改数据'))
+        }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
+      }
+      RuleListBody({
+        rules: this.rules, query: this.searchQuery, selectedIds: this.selectedRuleIds,
+        selectionMode: this.selectionMode, sortMode: this.sortMode, emptyMessage: '暂无字典规则',
+        onOpen: (_id: string) => this.onUnavailableAction('现有字典规则编辑尚未接入'),
+        onToggle: (id: string) => this.toggleSelectedRule(id),
+        onLongSelect: (id: string) => { this.selectionMode = true; this.selectedRuleIds = [id]; },
+        onMove: (_id: string, _direction: number) => this.onUnavailableAction('字典规则排序尚未迁移')
+      }).layoutWeight(1)
       Stack({ alignContent: Alignment.Center }) {
         AppGlyph({ name: 'add', glyphSize: 22, tint: '#B9C8FF' })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
-        .onClick(() => this.onOpenEditor())
+        .onClick(() => this.openRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor('#111217')
+      .bindSheet(this.showRuleEditor, this.DictionaryRuleSheet(), {
+        height: SheetSize.LARGE,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => { this.showRuleEditor = false; this.showPasteAuthorization = false; }
+      })
   }
 }
 
@@ -917,14 +1421,15 @@ export struct DictionaryRuleEditPage {
   @Builder
   private RuleField(label: string, value: string, field: string, multiline: boolean = false) {
     Column() {
+      Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       if (multiline) {
-        TextArea({ placeholder: label, text: value })
-          .fontSize(16).fontColor('#E3E4E8').placeholderColor('#C3C5CD')
+        TextArea({ placeholder: '', text: value })
+          .fontSize(16).fontColor('#E3E4E8').placeholderColor('#92949E')
           .height(120).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14, top: 14 })
           .width('100%').onChange((text: string) => this.updateField(field, text))
       } else {
-        TextInput({ placeholder: label, text: value })
-          .fontSize(16).fontColor('#E3E4E8').placeholderColor('#C3C5CD')
+        TextInput({ placeholder: '', text: value })
+          .fontSize(16).fontColor('#E3E4E8').placeholderColor('#92949E')
           .height(58).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
           .width('100%').onChange((text: string) => this.updateField(field, text))
       }
@@ -988,15 +1493,135 @@ export struct HighlightTagRulesPage {
   onBack: () => void = () => {};
   onOpenEditor: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @Prop rules: RuleListEntry[] = [];
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
+  @State selectionMode: boolean = false;
+  @State selectedRuleIds: string[] = [];
+  @State sortMode: boolean = false;
+  @State showRuleEditor: boolean = false;
+  @State draftTitle: string = '';
+  @State draftPattern: string = '';
+  @State draftEnabled: boolean = true;
+  @State showPasteAuthorization: boolean = false;
 
   @Builder
   private ImportMenu() {
     Menu() {
+      MenuItem({ content: '排序' }).onClick(() => this.sortMode = !this.sortMode)
+      MenuItem({ content: '选择模式' }).onClick(() => {
+        this.selectionMode = !this.selectionMode;
+        this.selectedRuleIds = [];
+      })
       MenuItem({ content: '导入' })
         .onClick(() => this.onUnavailableAction('标签规则导入尚未接入，未导入任何数据'))
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  private toggleSelectedRule(id: string): void {
+    this.selectedRuleIds = this.selectedRuleIds.includes(id) ?
+      this.selectedRuleIds.filter((selectedId: string) => selectedId !== id) : [...this.selectedRuleIds, id];
+  }
+
+  @Builder
+  private TagEditorMenu() {
+    Menu() {
+      MenuItem({ content: '复制规则' }).onClick(() => this.copyTagRule())
+      MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  private async copyTagRule(): Promise<void> {
+    try {
+      const value = JSON.stringify({ id: Date.now(), title: this.draftTitle,
+        pattern: this.draftPattern, enabled: this.draftEnabled, order: 0 });
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, value);
+      await pasteboard.getSystemPasteboard().setData(data);
+      this.onUnavailableAction('规则已复制到剪贴板');
+    } catch (_error) {
+      this.onUnavailableAction('复制规则失败');
+    }
+  }
+
+  private async pasteTagRule(result: PasteButtonOnClickResult): Promise<void> {
+    this.showPasteAuthorization = false;
+    if (result !== PasteButtonOnClickResult.SUCCESS) {
+      this.onUnavailableAction('未获得读取剪贴板授权');
+      return;
+    }
+    try {
+      const data = await pasteboard.getSystemPasteboard().getData();
+      if (data.getRecordCount() === 0) {
+        this.onUnavailableAction('剪贴板没有内容');
+        return;
+      }
+      const parsed: HighlightTagRuleClipboardData = JSON.parse(data.getRecord(0).toPlainText());
+      if (typeof parsed.title !== 'string' || typeof parsed.pattern !== 'string' ||
+        (parsed.enabled !== undefined && typeof parsed.enabled !== 'boolean')) {
+        this.onUnavailableAction('剪贴板规则格式无效');
+        return;
+      }
+      this.draftTitle = parsed.title;
+      this.draftPattern = parsed.pattern;
+      this.draftEnabled = parsed.enabled !== false;
+      this.onUnavailableAction('规则已从剪贴板填入');
+    } catch (_error) {
+      this.onUnavailableAction('剪贴板规则格式无效');
+    }
+  }
+
+  private openTagRuleEditor(): void {
+    this.draftTitle = '';
+    this.draftPattern = '';
+    this.draftEnabled = true;
+    this.showPasteAuthorization = false;
+    this.showRuleEditor = true;
+  }
+
+  @Builder
+  private TagRuleEditorSheet() {
+    Column() {
+      Row() {
+        Text('添加规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
+        }.width(40).height(40).onClick(() => this.showRuleEditor = false)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'more', glyphSize: 19, tint: '#D8D9E0' })
+        }.width(40).height(40).bindMenu(this.TagEditorMenu, { placement: Placement.BottomRight })
+      }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
+      Scroll() {
+        Column() {
+          Text('标题（可选）').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          TextInput({ placeholder: '', text: this.draftTitle }).fontSize(16).fontColor('#E3E4E8')
+            .height(54).backgroundColor('#24252C').borderRadius(8)
+            .padding({ left: 14, right: 14 }).width('100%')
+            .onChange((value: string) => this.draftTitle = value)
+          Text('匹配规则').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3, top: 8 })
+          TextArea({ placeholder: '', text: this.draftPattern }).fontSize(16).fontColor('#E3E4E8')
+            .height(120).backgroundColor('#24252C').borderRadius(8)
+            .padding({ left: 14, right: 14, top: 14 }).width('100%')
+            .onChange((value: string) => this.draftPattern = value)
+          Row() {
+            Text('已启用').fontSize(16).fontColor('#E3E4E8').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.draftEnabled })
+              .onChange((value: boolean) => this.draftEnabled = value)
+          }.width('100%').padding({ top: 12, bottom: 12 })
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 120 })
+      }.layoutWeight(1).scrollBar(BarState.Off)
+      Row() {
+        if (this.showPasteAuthorization) {
+          PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
+            .onClick(async (_event: ClickEvent, result: PasteButtonOnClickResult) =>
+              await this.pasteTagRule(result))
+        }
+        Blank()
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
+        }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
+          .onClick(() => this.onUnavailableAction('标签规则存储尚未接入，规则未保存'))
+      }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 14 })
+    }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
   build() {
@@ -1021,7 +1646,8 @@ export struct HighlightTagRulesPage {
         }.width(40).height(40).bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
-      Text('标签规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
+      Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '标签规则')
+        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
       if (this.showSearch) {
@@ -1037,13 +1663,35 @@ export struct HighlightTagRulesPage {
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor('#1B1C22').borderRadius(24)
       }
 
-      Blank().layoutWeight(1)
+      if (this.selectionMode && this.selectedRuleIds.length > 0) {
+        Row() {
+          Text('全选').fontSize(14).fontColor('#AFC2FF').onClick(() =>
+            this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
+          Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
+            .onClick(() => this.onUnavailableAction('标签规则删除尚未迁移，未更改数据'))
+        }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
+      }
+      RuleListBody({
+        rules: this.rules, query: this.searchQuery, selectedIds: this.selectedRuleIds,
+        selectionMode: this.selectionMode, sortMode: this.sortMode, emptyMessage: '暂无标签规则',
+        onOpen: (_id: string) => this.onUnavailableAction('现有标签规则编辑尚未接入'),
+        onToggle: (id: string) => this.toggleSelectedRule(id),
+        onLongSelect: (id: string) => { this.selectionMode = true; this.selectedRuleIds = [id]; },
+        onMove: (_id: string, _direction: number) => this.onUnavailableAction('标签规则排序尚未迁移')
+      }).layoutWeight(1)
       Stack({ alignContent: Alignment.Center }) {
         AppGlyph({ name: 'add', glyphSize: 22, tint: '#B9C8FF' })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
-        .onClick(() => this.onOpenEditor())
+        .onClick(() => this.openTagRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor('#111217')
+      .bindSheet(this.showRuleEditor, this.TagRuleEditorSheet(), {
+        height: SheetSize.LARGE,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => { this.showRuleEditor = false; this.showPasteAuthorization = false; }
+      })
   }
 }
 
@@ -1134,13 +1782,15 @@ export struct HighlightTagRuleEditPage {
         .width('100%').padding({ left: 14, right: 0, top: 12 })
       Scroll() {
         Column() {
-          TextInput({ placeholder: '标题（可选）', text: this.title })
-            .fontSize(16).fontColor('#E3E4E8').placeholderColor('#C3C5CD')
+          Text('标题（可选）').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          TextInput({ placeholder: '', text: this.title })
+            .fontSize(16).fontColor('#E3E4E8').placeholderColor('#92949E')
             .height(58).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 }).width('100%')
             .onChange((value: string) => this.title = value)
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
-          TextArea({ placeholder: '匹配规则', text: this.pattern })
-            .fontSize(16).fontColor('#E3E4E8').placeholderColor('#C3C5CD')
+          Text('匹配规则').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          TextArea({ placeholder: '', text: this.pattern })
+            .fontSize(16).fontColor('#E3E4E8').placeholderColor('#92949E')
             .height(120).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14, top: 14 }).width('100%')
             .onChange((value: string) => this.pattern = value)
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
@@ -1213,11 +1863,11 @@ export struct AllBookmarksPage {
     });
   }
 
-  private getVisibleEntries(bookKey: string): BookmarkEntrySummary[] {
+  private getVisibleEntries(bookKey: string, tabIndex: number): BookmarkEntrySummary[] {
     const query = this.searchQuery.trim().toLocaleLowerCase();
     return this.entries.filter((entry: BookmarkEntrySummary) => {
-      if (entry.bookKey !== bookKey || (this.selectedTab === 0 && entry.kind !== 'bookmark') ||
-        (this.selectedTab === 1 && entry.kind !== 'note')) { return false; }
+      if (entry.bookKey !== bookKey || (tabIndex === 0 && entry.kind !== 'bookmark') ||
+        (tabIndex === 1 && entry.kind !== 'note')) { return false; }
       return query.length === 0 || entry.chapterName.toLocaleLowerCase().includes(query) ||
         entry.excerpt.toLocaleLowerCase().includes(query) || entry.note.toLocaleLowerCase().includes(query);
     });
@@ -1299,17 +1949,25 @@ export struct AllBookmarksPage {
           ModuleTab({ label: `书签 ${this.selectedBookmarkCount}`, selected: this.selectedTab === 0, onSelect: () => { this.selectedTab = 0; this.searchQuery = ''; } })
           ModuleTab({ label: `笔记 ${this.selectedNoteCount}`, selected: this.selectedTab === 1, onSelect: () => { this.selectedTab = 1; this.searchQuery = ''; } })
         }.margin({ left: 16, right: 16, top: 8, bottom: 12 })
-        if (this.getVisibleEntries(this.selectedBookKey).length === 0) {
-          this.BookmarkEmptyMessage(this.searchQuery.length > 0 ? '没有找到相关笔记' : (this.selectedTab === 0 ? '暂无书签' : '暂无笔记'))
-        } else {
-          Scroll() {
+        Swiper() {
+          ForEach([0, 1], (tabIndex: number) => {
             Column() {
-              ForEach(this.getVisibleEntries(this.selectedBookKey), (entry: BookmarkEntrySummary) => {
-                BookmarkEntryCard({ entry: entry, onSelect: () => this.onOpenBookmark(entry.id) })
-              }, (entry: BookmarkEntrySummary) => entry.id)
-            }.padding({ left: 16, right: 16, top: 4, bottom: 20 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
-        }
+              if (this.getVisibleEntries(this.selectedBookKey, tabIndex).length === 0) {
+                this.BookmarkEmptyMessage(this.searchQuery.length > 0 ? '没有找到相关笔记' :
+                  (tabIndex === 0 ? '暂无书签' : '暂无笔记'))
+              } else {
+                Scroll() {
+                  Column() {
+                    ForEach(this.getVisibleEntries(this.selectedBookKey, tabIndex), (entry: BookmarkEntrySummary) => {
+                      BookmarkEntryCard({ entry: entry, onSelect: () => this.onOpenBookmark(entry.id) })
+                    }, (entry: BookmarkEntrySummary) => entry.id)
+                  }.padding({ left: 16, right: 16, top: 4, bottom: 20 })
+                }.layoutWeight(1).scrollBar(BarState.Off)
+              }
+            }.width('100%').height('100%')
+          }, (tabIndex: number) => tabIndex.toString())
+        }.layoutWeight(1).width('100%').index(this.selectedTab).loop(false).indicator(false)
+          .onChange((index: number) => { this.selectedTab = index; this.searchQuery = ''; })
       } else if (this.getVisibleBooks().length === 0) {
         this.BookmarkEmptyMessage(this.searchQuery.length > 0 ? '没有找到相关笔记' : '暂无书签')
       } else {
@@ -1371,11 +2029,14 @@ struct BookmarkEntryCard {
 export struct ReadRecordsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @Prop records: ReadTimeRecord[] = [];
   @State displayMode: number = 0;
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State emptyFaceIndex: number = Math.floor(Math.random() * BOOKMARK_EMPTY_FACES.length);
   @State showActionsSheet: boolean = false;
+  @State showCalendarSheet: boolean = false;
+  @State selectedCalendarDay: number = 0;
 
   private getModeLabel(): string {
     if (this.displayMode === 1) { return '时间线视图'; }
@@ -1385,6 +2046,91 @@ export struct ReadRecordsPage {
 
   private cycleDisplayMode(): void {
     this.displayMode = (this.displayMode + 1) % 3;
+  }
+
+  private getVisibleRecords(): ReadTimeRecord[] {
+    const query = this.searchQuery.trim().toLocaleLowerCase();
+    if (query.length === 0) { return this.records; }
+    return this.records.filter((record: ReadTimeRecord) =>
+      record.bookName.toLocaleLowerCase().includes(query) || record.bookAuthor.toLocaleLowerCase().includes(query));
+  }
+
+  private getDateKey(timestamp: number): string {
+    return this.formatRecordDate(timestamp).substring(0, 10);
+  }
+
+  private getDateKeys(): string[] {
+    const keys: string[] = [];
+    for (const record of this.getVisibleRecords()) {
+      const key = this.getDateKey(record.startTime);
+      if (!keys.includes(key)) { keys.push(key); }
+    }
+    return keys.sort((left: string, right: string) => right.localeCompare(left));
+  }
+
+  private getRecordsForDate(dateKey: string): ReadTimeRecord[] {
+    return this.getVisibleRecords().filter((record: ReadTimeRecord) => this.getDateKey(record.startTime) === dateKey);
+  }
+
+  private getDistinctBooks(records: ReadTimeRecord[]): ReadTimeRecord[] {
+    const result: ReadTimeRecord[] = [];
+    for (const record of records) {
+      if (!result.some((item: ReadTimeRecord) => item.bookId === record.bookId)) { result.push(record); }
+    }
+    return result;
+  }
+
+  private getLatestRecords(): ReadTimeRecord[] {
+    const ordered = [...this.getVisibleRecords()].sort((left: ReadTimeRecord, right: ReadTimeRecord) =>
+      right.endTime - left.endTime);
+    return this.getDistinctBooks(ordered);
+  }
+
+  private getTotalDuration(records: ReadTimeRecord[]): number {
+    return records.reduce((total: number, record: ReadTimeRecord) => total + record.durationMs, 0);
+  }
+
+  private getBookDuration(bookId: string, records: ReadTimeRecord[]): number {
+    return this.getTotalDuration(records.filter((record: ReadTimeRecord) => record.bookId === bookId));
+  }
+
+  private getCalendarCells(): number[] {
+    const today = new Date();
+    const firstWeekday = new Date(today.getFullYear(), today.getMonth(), 1).getDay();
+    const dayCount = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const days: number[] = [];
+    for (let index = 0; index < 42; index++) {
+      const day = index - firstWeekday + 1;
+      days.push(day > 0 && day <= dayCount ? day : 0);
+    }
+    return days;
+  }
+
+  private getCalendarDayDuration(day: number): number {
+    if (day <= 0) { return 0; }
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const date = day.toString().padStart(2, '0');
+    return this.getTotalDuration(this.records.filter((record: ReadTimeRecord) =>
+      this.getDateKey(record.startTime) === `${year}-${month}-${date}`));
+  }
+
+  private formatRecordDuration(durationMs: number): string {
+    const minutes = Math.floor(durationMs / 60000);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) { return `${hours} 小时 ${minutes % 60} 分钟`; }
+    if (minutes > 0) { return `${minutes} 分钟`; }
+    return `${Math.max(1, Math.floor(durationMs / 1000))} 秒`;
+  }
+
+  private formatRecordDate(timestamp: number): string {
+    const date = new Date(timestamp);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const hour = date.getHours().toString().padStart(2, '0');
+    const minute = date.getMinutes().toString().padStart(2, '0');
+    return `${date.getFullYear()}-${month}-${day} ${hour}:${minute}`;
   }
 
   @Builder
@@ -1438,17 +2184,137 @@ export struct ReadRecordsPage {
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor('#1B1C22').borderRadius(24)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
-      this.ReadRecordEmptyMessage('没有阅读记录')
+      if (this.getVisibleRecords().length === 0) {
+        this.ReadRecordEmptyMessage(this.records.length === 0 ? '没有阅读记录' : '没有匹配的阅读记录')
+      } else {
+        Scroll() {
+          Column() {
+            Column() {
+              Text('阅读总成就').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+              Row() {
+                Text(`${this.getDistinctBooks(this.records).length} 本书`).fontSize(20).fontColor('#AFC2FF')
+                Blank()
+                Text(this.formatRecordDuration(this.getTotalDuration(this.records)))
+                  .fontSize(16).fontColor('#D8D9E0')
+              }.width('100%').margin({ top: 12 })
+            }.width('calc(100% - 32vp)').padding(16).backgroundColor('#1B1C22').borderRadius(16)
+              .margin({ left: 16, right: 16, bottom: 10 }).onClick(() => this.showCalendarSheet = true)
+            if (this.displayMode === 0) {
+              ForEach(this.getDateKeys(), (dateKey: string) => {
+                Column() {
+                  Row() {
+                    Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor('#D8D9E0')
+                    Blank()
+                    Text(this.formatRecordDuration(this.getTotalDuration(this.getRecordsForDate(dateKey))))
+                      .fontSize(13).fontColor('#AFC2FF')
+                  }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+                  ForEach(this.getDistinctBooks(this.getRecordsForDate(dateKey)), (record: ReadTimeRecord) => {
+                    Row() {
+                      Column() {
+                        Text(record.bookName).fontSize(16).fontColor('#E3E4E8')
+                        Text(record.bookAuthor).fontSize(12).fontColor('#92949E').margin({ top: 3 })
+                      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                      Text(this.formatRecordDuration(this.getBookDuration(record.bookId, this.getRecordsForDate(dateKey))))
+                        .fontSize(13).fontColor('#AFC2FF')
+                    }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                      .border({ width: { top: 1 }, color: '#111217' })
+                  }, (record: ReadTimeRecord) => `${dateKey}-${record.bookId}`)
+                }.width('calc(100% - 32vp)').backgroundColor('#1B1C22').borderRadius(12)
+                  .margin({ left: 16, right: 16, bottom: 8 })
+              }, (dateKey: string) => dateKey)
+            } else if (this.displayMode === 1) {
+              ForEach(this.getDateKeys(), (dateKey: string) => {
+                Column() {
+                  Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor('#D8D9E0')
+                    .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+                  ForEach(this.getRecordsForDate(dateKey), (record: ReadTimeRecord) => {
+                    Row() {
+                      Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor('#AFC2FF')
+                        .width(56)
+                      Column() {
+                        Text(record.bookName).fontSize(16).fontColor('#E3E4E8')
+                        Text(record.bookAuthor).fontSize(12).fontColor('#92949E').margin({ top: 3 })
+                      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                      Text(this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor('#D8D9E0')
+                    }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                      .border({ width: { top: 1 }, color: '#111217' })
+                  }, (record: ReadTimeRecord) => record.id)
+                }.width('calc(100% - 32vp)').backgroundColor('#1B1C22').borderRadius(12)
+                  .margin({ left: 16, right: 16, bottom: 8 })
+              }, (dateKey: string) => dateKey)
+            } else {
+              ForEach(this.getLatestRecords(), (record: ReadTimeRecord) => {
+                Column() {
+                  Row() {
+                    Column() {
+                      Text(record.bookName).fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+                      Text(record.bookAuthor).fontSize(12).fontColor('#92949E').margin({ top: 4 })
+                    }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                    Text(this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
+                      .fontSize(13).fontColor('#AFC2FF')
+                  }.width('100%')
+                  Text(`最后阅读 ${this.formatRecordDate(record.endTime)}`)
+                    .fontSize(12).fontColor('#92949E').width('100%').margin({ top: 10 })
+                }.width('calc(100% - 32vp)').padding(16).backgroundColor('#1B1C22').borderRadius(14)
+                  .margin({ left: 16, right: 16, bottom: 8 })
+              }, (record: ReadTimeRecord) => record.bookId)
+            }
+          }.width('100%').padding({ top: 8, bottom: 16 })
+        }.layoutWeight(1).scrollBar(BarState.Off)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+      }
     }.width('100%').height('100%').backgroundColor('#111217')
-      .bindSheet(this.showActionsSheet, this.ReadRecordOptionsSheet(), {
-        height: 500,
+      .bindSheet(this.showActionsSheet || this.showCalendarSheet, this.ReadRecordSheetContent(), {
+        height: this.showCalendarSheet ? 570 : 500,
         dragBar: true,
         showClose: false,
         backgroundColor: '#1C1D23',
-        onDisappear: () => this.showActionsSheet = false
+        onDisappear: () => { this.showActionsSheet = false; this.showCalendarSheet = false; }
       })
+  }
+
+  @Builder
+  private ReadRecordSheetContent() {
+    if (this.showCalendarSheet) { this.ReadRecordCalendarSheet() }
+    else { this.ReadRecordOptionsSheet() }
+  }
+
+  @Builder
+  private ReadRecordCalendarSheet() {
+    Column() {
+      Row() {
+        Text('阅读日历').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text('关闭').fontSize(14).fontColor('#AFC2FF').onClick(() => this.showCalendarSheet = false)
+      }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
+      Text(`${new Date().getFullYear()} 年 ${new Date().getMonth() + 1} 月`)
+        .fontSize(16).fontColor('#D8D9E0').width('100%').textAlign(TextAlign.Center).margin({ bottom: 18 })
+      Row() {
+        ForEach(['日', '一', '二', '三', '四', '五', '六'], (weekday: string) => {
+          Text(weekday).fontSize(12).fontColor('#92949E').layoutWeight(1).textAlign(TextAlign.Center)
+        }, (weekday: string) => weekday)
+      }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
+      Grid() {
+        ForEach(this.getCalendarCells(), (day: number, index: number) => {
+          GridItem() {
+            if (day > 0) {
+              Text(day.toString()).fontSize(13).fontColor(this.selectedCalendarDay === day ? '#111217' : '#D8D9E0')
+                .width(36).height(36).textAlign(TextAlign.Center)
+                .backgroundColor(this.selectedCalendarDay === day ? '#AFC2FF' :
+                  this.getCalendarDayDuration(day) > 0 ? '#48577D' : '#292B33')
+                .borderRadius(8).onClick(() => this.selectedCalendarDay = day)
+            }
+          }.height(42)
+        }, (_day: number, index: number) => index.toString())
+      }.columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr').rowsGap(4).width('100%')
+        .padding({ left: 16, right: 16 })
+      Text(this.selectedCalendarDay > 0 ?
+        `${this.selectedCalendarDay} 日 · ${this.formatRecordDuration(this.getCalendarDayDuration(this.selectedCalendarDay))}` :
+        '选择日期查看当天阅读时长')
+        .fontSize(13).fontColor('#AFC2FF').width('100%').textAlign(TextAlign.Center).margin({ top: 16 })
+    }.width('100%').padding({ bottom: 20 })
   }
 
   @Builder
@@ -1456,11 +2322,14 @@ export struct ReadRecordsPage {
     Column() {
       Text('阅读记录选项').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
         .width('100%').padding({ left: 18, right: 16, top: 12, bottom: 14 })
-      ReadRecordOptionRow({ icon: 'clock', title: '显示阅读日历', detail: '按日期查看阅读记录', onSelect: () => this.onUnavailableAction('阅读日历尚未迁移，未更改设置') })
+      ReadRecordOptionRow({ icon: 'clock', title: '显示阅读日历', detail: '按日期查看阅读记录', onSelect: () => {
+        this.showActionsSheet = false;
+        this.showCalendarSheet = true;
+      } })
       ReadRecordOptionRow({ icon: 'clock', title: '启用阅读记录', detail: '记录书籍阅读时长', onSelect: () => this.onUnavailableAction('阅读记录设置尚未迁移，未更改设置') })
       ReadRecordOptionRow({ icon: 'search', title: '扫描阅读记录问题', detail: '检查重复或异常记录', onSelect: () => this.onUnavailableAction('记录扫描尚未迁移，未检查数据') })
       ReadRecordOptionRow({ icon: 'swap', title: '修复阅读记录', detail: '修复重复记录和阅读时段', onSelect: () => this.onUnavailableAction('记录修复尚未迁移，未修改数据') })
-      ReadRecordOptionRow({ icon: 'delete', title: '清空阅读记录', detail: '删除本地阅读历史', onSelect: () => this.onUnavailableAction('当前没有可清空的阅读记录') })
+      ReadRecordOptionRow({ icon: 'delete', title: '清空阅读记录', detail: '删除本地阅读历史', onSelect: () => this.onUnavailableAction(this.records.length === 0 ? '当前没有可清空的阅读记录' : '清空记录功能尚未迁移，记录未更改') })
     }.width('100%').padding({ bottom: 16 })
   }
 }
@@ -1469,17 +2338,28 @@ export struct ReadRecordsPage {
 export struct CacheManagementPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @Prop groups: string[] = [];
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State selectedCacheGroup: string = '全部';
 
+  private cacheGroupOptions(): string[] {
+    const options: string[] = ['全部', '无分组'];
+    this.groups.forEach((group: string) => {
+      if (group.length > 0 && group !== '全部' && group !== '无分组' && !options.includes(group)) {
+        options.push(group);
+      }
+    });
+    return options;
+  }
+
   @Builder
   private CacheGroupMenu() {
     Menu() {
-      MenuItem({ content: '全部', labelInfo: this.selectedCacheGroup === '全部' ? '✓' : '' })
-        .onClick(() => this.selectedCacheGroup = '全部')
-      MenuItem({ content: '无分组', labelInfo: this.selectedCacheGroup === '无分组' ? '✓' : '' })
-        .onClick(() => this.selectedCacheGroup = '无分组')
+      ForEach(this.cacheGroupOptions(), (group: string) => {
+        MenuItem({ content: group, labelInfo: this.selectedCacheGroup === group ? '✓' : '' })
+          .onClick(() => this.selectedCacheGroup = group)
+      }, (group: string) => group)
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
   }
 
@@ -1529,10 +2409,12 @@ export struct CacheManagementPage {
           title: '书架书籍',
           message: '没有书架内书籍缓存或下载任务'
         })
-        CacheEmptySection({
-          title: '未在书架',
-          message: '没有未在书架的书籍下载状态'
-        })
+        if (this.selectedCacheGroup === '全部') {
+          CacheEmptySection({
+            title: '未在书架',
+            message: '没有未在书架的书籍下载状态'
+          })
+        }
       }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 8, bottom: 18 })
         .layoutWeight(1)
     }.width('100%').height('100%').backgroundColor('#111217')
@@ -1580,6 +2462,16 @@ export struct AboutAppPage {
   onOpenLicense: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State versionName: string = '';
+  @State collapsedHeader: boolean = false;
+  private aboutScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.aboutScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
 
   aboutToAppear(): void {
     this.loadVersionName();
@@ -1598,17 +2490,8 @@ export struct AboutAppPage {
 
   build() {
     Column() {
-      Column() {
-        Row() {
-          Stack({ alignContent: Alignment.Center }) {
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-          }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).onClick(() => this.onBack())
-          Blank()
-        }.width('100%')
-        Text('关于').fontSize(PROFILE_PAGE_TITLE_SIZE + 4).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-          .alignSelf(ItemAlign.Start).margin({ top: 2 })
-      }.width('100%').padding({ left: 16, right: 16, top: 2, bottom: 4 })
-      Scroll() {
+      CollapsingSettingsHeader({ title: '关于', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
+      Scroll(this.aboutScroller) {
         Column() {
           Column() {
             Image($r('app.media.about_cat')).width(72).height(72)
@@ -1638,7 +2521,7 @@ export struct AboutAppPage {
             AboutActionRow({ title: '创建堆转储', last: true, onSelect: () => this.onUnavailableAction('堆转储尚未迁移') })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor('#1A1B21').borderRadius(14)
         }.padding({ left: 16, right: 16, top: 4, bottom: 18 })
-      }.layoutWeight(1).scrollBar(BarState.Off).offset({ y: -10 })
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }
@@ -1679,11 +2562,22 @@ export struct AppSettingsHomePage {
   onBack: () => void = () => {};
   onOpenCategory: (destination: ProfileRoute) => void = (_destination: ProfileRoute) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  @State collapsedHeader: boolean = false;
+  private settingsScroller: Scroller = new Scroller();
+
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+    }
+  }
   build() {
     Column() {
-      SettingsPageHeader({ title: '设置', onBack: () => this.onBack() })
-      Scroll() {
+      SettingsPageHeader({ title: '设置', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
+      Scroll(this.settingsScroller) {
         Column() {
+          Column() {
           SettingsCategoryRow({ title: '外观', onSelect: () => this.onOpenCategory(ProfileRoute.APP_THEME_SETTINGS) })
           SettingsCategoryRow({ title: '高级', onSelect: () => this.onOpenCategory(ProfileRoute.APP_OTHER_SETTINGS) })
           SettingsCategoryRow({ title: '阅读界面', onSelect: () => this.onOpenCategory(ProfileRoute.APP_READ_SETTINGS) })
@@ -1695,8 +2589,9 @@ export struct AppSettingsHomePage {
           SettingsCategoryRow({ title: '翻译设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_TRANSLATION_SETTINGS) })
           SettingsCategoryRow({ title: '隐私', onSelect: () => this.onOpenCategory(ProfileRoute.APP_PRIVACY_SETTINGS) })
           SettingsCategoryRow({ title: '实验室', last: true, onSelect: () => this.onOpenCategory(ProfileRoute.APP_LAB_SETTINGS) })
+          }.width('100%').backgroundColor('#1A1B21').borderRadius(16)
         }.padding({ left: 16, right: 16, top: 8, bottom: 16 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor('#111217')
   }
 }
@@ -1704,18 +2599,22 @@ export struct AppSettingsHomePage {
 @Component
 struct SettingsPageHeader {
   @Prop title: string = '';
+  @Prop collapsed: boolean = false;
   onBack: () => void = () => {};
   build() {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
-        }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).onClick(() => this.onBack())
+        }.width(40).height(40).onClick(() => this.onBack())
+        Text(this.title).fontSize(22).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          .opacity(this.collapsed ? 1 : 0)
         Blank()
-      }.width('100%')
-      Text(this.title).fontSize(PROFILE_PAGE_TITLE_SIZE + 4).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
-        .alignSelf(ItemAlign.Start).margin({ top: 2 })
-    }.width('100%').padding({ left: 16, right: 16, top: 2, bottom: 4 })
+      }.width('100%').height(64).padding({ left: 12, right: 16 })
+      Text(this.title).fontSize(28).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        .width('100%').height(72).padding({ left: 16, bottom: 14 })
+        .opacity(this.collapsed ? 0 : 1)
+    }.width('100%').height(this.collapsed ? 64 : 136).clip(true)
   }
 }
 
@@ -1726,17 +2625,19 @@ struct SettingsCategoryRow {
   @Prop last: boolean = false;
   onSelect: () => void = () => {};
   build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor('#D8D9E0')
-        if (this.summary.length > 0) {
-          Text(this.summary).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor('#92949E').margin({ top: 4 })
-        }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(18).height(18).fillColor('#92949E')
-    }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
-      .backgroundColor('#1A1B21').borderRadius(14).margin({ bottom: this.last ? 0 : 3 })
-      .onClick(() => this.onSelect())
+    Column() {
+      Row() {
+        Column() {
+          Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor('#D8D9E0')
+          if (this.summary.length > 0) {
+            Text(this.summary).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor('#92949E').margin({ top: 4 })
+          }
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        Image($r('app.media.reader_next')).width(18).height(18).fillColor('#92949E')
+      }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
+        .onClick(() => this.onSelect())
+      if (!this.last) { Row().width('100%').height(2).backgroundColor('#111217') }
+    }.width('100%')
   }
 }
 
@@ -1746,6 +2647,8 @@ export struct AiChatPage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State historyVisible: boolean = false;
   @State draft: string = '';
+  @State reasoningIndex: number = 1;
+  @State showReasoningSheet: boolean = false;
 
   private handleBack(): void {
     if (this.historyVisible) {
@@ -1758,6 +2661,33 @@ export struct AiChatPage {
   private sendDraft(): void {
     if (this.draft.trim().length === 0) { return; }
     this.onUnavailableAction('AI服务商未配置，消息未发送');
+  }
+
+  private reasoningLabel(): string {
+    if (this.reasoningIndex <= 0) { return '关闭'; }
+    if (this.reasoningIndex === 1) { return '自动'; }
+    if (this.reasoningIndex === 2) { return '轻度'; }
+    if (this.reasoningIndex === 3) { return '中'; }
+    if (this.reasoningIndex === 4) { return '高'; }
+    if (this.reasoningIndex === 5) { return '极高'; }
+    return '最高';
+  }
+
+  @Builder
+  private ReasoningSheet() {
+    Column() {
+      Text('思考模式').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        .width('100%').padding({ left: 20, right: 20, top: 20, bottom: 10 })
+      Text(this.reasoningLabel()).fontSize(24).fontColor('#E3E4E8')
+        .width('100%').textAlign(TextAlign.Center).padding({ top: 20, bottom: 20 })
+      Slider({ value: this.reasoningIndex, min: 0, max: 6, step: 1, style: SliderStyle.OutSet })
+        .blockColor('#B9C8FF').trackColor('#41485D').selectedColor('#B9C8FF')
+        .showSteps(true).showTips(false).margin({ left: 22, right: 22 })
+        .onChange((value: number) => this.reasoningIndex = Math.round(value))
+      Text('此选项仅为本页预览；AI 服务未连接时不会用于生成。')
+        .fontSize(13).fontColor('#92949E').textAlign(TextAlign.Center)
+        .width('100%').padding({ left: 20, right: 20, top: 18, bottom: 24 })
+    }.width('100%').backgroundColor('#17181E')
   }
 
   build() {
@@ -1794,16 +2724,17 @@ export struct AiChatPage {
 
         Column() {
           Row() {
-            TextInput({ placeholder: '输入消息…', text: this.draft })
+            TextInput({ placeholder: '输入问题…', text: this.draft })
               .fontSize(15).fontColor('#D8D9E0').placeholderColor('#92949E')
               .backgroundColor(Color.Transparent).layoutWeight(1).maxLines(4)
               .onChange((value: string) => this.draft = value)
-            Image(('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? '#151720' : '#92949E')
+            Image($r('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? '#151720' : '#92949E')
               .width(40).height(40).backgroundColor(this.draft.trim().length > 0 ? '#B9C8FF' : '#303139')
               .borderRadius(20).onClick(() => this.sendDraft())
           }.padding({ left: 14, right: 8, top: 7, bottom: 7 }).backgroundColor('#1A1B21').borderRadius(24)
           Row() {
-            Text('推理模式：AUTO').fontSize(12).fontColor('#92949E')
+            Text(`思考模式：${this.reasoningLabel()}`).fontSize(12).fontColor('#92949E')
+              .onClick(() => this.showReasoningSheet = true)
             Blank()
             Text('AI 服务未配置').fontSize(12).fontColor('#858792')
           }.padding({ left: 6, right: 6, top: 7, bottom: 5 })
@@ -1838,6 +2769,13 @@ export struct AiChatPage {
         }.width('100%').height('100%')
       }
     }.width('100%').height('100%').backgroundColor('#111217')
+      .bindSheet(this.showReasoningSheet, this.ReasoningSheet(), {
+        height: SheetSize.MEDIUM,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => this.showReasoningSheet = false
+      })
   }
 }
 
@@ -1940,3 +2878,4 @@ struct FileCategoryRow {
       .backgroundColor('#1A1B21').onClick(() => this.onSelect())
   }
 }
+

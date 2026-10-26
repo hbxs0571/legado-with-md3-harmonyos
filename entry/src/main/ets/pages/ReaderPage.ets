@@ -4,15 +4,17 @@ import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { BookRepository } from '../data/BookRepository';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { BookContentProcess } from '../model/BookContentProcess';
-import { LocalTextSemantics } from '../data/LocalTextSemantics';
+import { LocalSemanticDocument, LocalTextSemantics } from '../data/LocalTextSemantics';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import image from '@ohos.multimedia.image';
+import { batteryInfo } from '@kit.BasicServicesKit';
 import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator } from './LocalReaderPaginator';
 import {
   ReaderBottomActionConfig, ReaderControlKind, READER_ACTION_OPTIONS, READER_LOCAL_BOTTOM_ACTION_DEFAULTS,
-  READER_LOCAL_TOP_ACTION_DEFAULTS, ReaderActionOption, isReaderActionApplicable
+  READER_LOCAL_TOP_ACTION_DEFAULTS, ReaderActionOption, isReaderActionApplicable,
+  ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS
 } from '../data/ReaderSettingsRepository';
 import {
   ReaderMoreActionConfig, READER_MORE_ACTION_DEFAULTS
@@ -60,7 +62,7 @@ const READER_MORE_ACTIONS: ReaderMoreAction[] = [
   { id: 'cover_progress', label: '覆盖阅读进度', glyph: 'profileHistory', scopeLabel: '需配置阅读进度同步', migrated: false },
   { id: 'highlight_rule', label: '高亮规则', glyph: 'profileRule', scopeLabel: '', migrated: true },
   { id: 'read_style', label: '阅读设置', glyph: 'profileSettings', scopeLabel: '', migrated: true },
-  { id: 'bottom_button_config', label: '底栏按钮配置', glyph: 'profileSettings', scopeLabel: '', migrated: false },
+  { id: 'bottom_button_config', label: '底栏按钮配置', glyph: 'profileSettings', scopeLabel: '', migrated: true },
   { id: 'log', label: '日志', glyph: 'info', scopeLabel: '', migrated: false }
 ];
 const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
@@ -90,6 +92,11 @@ export struct ReaderPage {
   @Prop @Watch('onReaderContentChanged') content: string = '';
   @Prop @Watch('onPaginationInputsChanged') fontSize: number = 19;
   @Prop @Watch('onProgressBehaviorChanged') progressBehavior: string = 'page';
+  @Prop clickImageBehavior: string = '2';
+  @Prop @Watch('onImagePreviewCloseRevisionChanged') imagePreviewCloseRevision: number = 0;
+  @Prop @Watch('onPageAnimationChanged') pageAnimation: number = 0;
+  @Prop animationSpeed: number = 2;
+  @Prop @Watch('onPaginationInputsChanged') infoSettings: ReaderInfoSettings = DEFAULT_READER_INFO_SETTINGS;
   @Prop @Watch('onImageStyleChanged') imageStyle: string = 'DEFAULT';
   @Prop replaceEnabled: boolean = true;
   @Prop replaceUsesDefault: boolean = true;
@@ -99,6 +106,7 @@ export struct ReaderPage {
   @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetRevision: number = 0;
   @Prop paperColor: string = '#000000';
   @Prop showQuickActions: boolean = false;
+  @Prop showControlsOnAppear: boolean = false;
   @Prop showBottomActionText: boolean = true;
   @Prop bottomIconStyle: number = 1;
   @Prop bottomItemsPerRow: number = 5;
@@ -107,9 +115,13 @@ export struct ReaderPage {
   @Prop topActions: ReaderBottomActionConfig[] = READER_LOCAL_TOP_ACTION_DEFAULTS;
   @Prop moreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS;
   @State controlsVisible: boolean = false;
+  @State imagePreviewVisible: boolean = false;
+  @State imagePreviewUri: string = '';
   @State overflowVisible: boolean = false;
   @State imageStyleMenuVisible: boolean = false;
   @State moreActionConfigVisible: boolean = false;
+  @State moreActionShellVisible: boolean = false;
+  @State moreActionShellTitle: string = '';
   @State draftMoreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS.map(
     (item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({ id: item.id, enabled: item.enabled })
   );
@@ -129,8 +141,20 @@ export struct ReaderPage {
   @State lastReportedProgress: number = -1;
   @State restoredProgressPosition: boolean = false;
   @State localReaderPages: LocalReaderPage[] = [];
+  @State fullBookPageCounts: number[] = [];
+  @State fullBookPaginationReady: boolean = false;
   @State localSemanticContent: string = '';
+  private localSemanticDocument: LocalSemanticDocument = {
+    paragraphs: [], content: '', sourceLength: 0, sourcePositionMap: [0]
+  };
   @State currentPageIndex: number = 0;
+  @State pageTurnOffsetX: number = 0;
+  @State pageTurnOffsetY: number = 0;
+  @State pageTurnOpacity: number = 1;
+  @State pageTurnAnimating: boolean = false;
+  private pageTurnTimer: number = -1;
+  private fullBookPaginationGeneration: number = 0;
+  private fullBookPaginationKey: string = '';
   @State pendingBookmarkTargetPosition: number = -1;
   @State autoPageActive: boolean = false;
   @State autoPageSettingsVisible: boolean = false;
@@ -151,13 +175,17 @@ export struct ReaderPage {
   onCharsetChange: (charset: string) => void = (_charset: string) => {};
   onOpenSearchContent: () => void = () => {};
   onOpenReadAloud: () => void = () => {};
+  onOpenImagePreview: (uri: string) => void = (_uri: string) => {};
+  onCloseImagePreview: () => void = () => {};
+  onControlsShown: () => void = () => {};
   onOpenTocRule: () => void = () => {};
   onToggleNightMode: () => void = () => {};
   onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => void = (_actions: ReaderMoreActionConfig[]) => {};
   onOpenHighlightRules: () => void = () => {};
+  onOpenBottomActionConfig: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onImageStyleChange: (imageStyle: string) => void = (_imageStyle: string) => {};
-  onProgressChange: (progress: number, chapterPosition: number) => void = () => {};
+  onProgressChange: (progress: number, chapterPosition: number, androidCoordinate: boolean) => void = () => {};
   onAddBookmark: (chapterPosition: number, pageText: string) => void = (_position: number, _pageText: string) => {};
   onSaveChapterContent: (chapterIndex: number, title: string, body: string) => void =
     (_chapterIndex: number, _title: string, _body: string) => {};
@@ -172,8 +200,18 @@ export struct ReaderPage {
   onSelectChapterIndex: (chapterIndex: number) => void = () => {};
   onTurnChapterBoundary: (delta: number) => void = (_delta: number) => {};
   onAutoReadSpeedChange: (seconds: number) => void = (_seconds: number) => {};
+  onReadSessionStart: () => void = () => {};
+  onReadSessionPulse: () => void = () => {};
+  onReadSessionStop: () => void = () => {};
+  private readSessionTimer: number = -1;
 
   aboutToAppear(): void {
+    if (this.showControlsOnAppear) {
+      this.controlsVisible = true;
+      this.onControlsShown();
+    }
+    this.onReadSessionStart();
+    this.readSessionTimer = setInterval(() => this.onReadSessionPulse(), 30000);
     this.activeImageStyle = this.imageStyle;
     this.readerProgress = this.book.chapterProgress ?? 0;
     this.lastReportedProgress = this.readerProgress;
@@ -185,7 +223,17 @@ export struct ReaderPage {
   }
 
   aboutToDisappear(): void {
+    this.fullBookPaginationGeneration++;
     this.stopAutoPageTimer();
+    if (this.pageTurnTimer >= 0) {
+      clearTimeout(this.pageTurnTimer);
+      this.pageTurnTimer = -1;
+    }
+    if (this.readSessionTimer >= 0) {
+      clearInterval(this.readSessionTimer);
+      this.readSessionTimer = -1;
+    }
+    this.onReadSessionStop();
   }
 
   private stopAutoPageTimer(): void {
@@ -230,7 +278,7 @@ export struct ReaderPage {
   onBookmarkTargetChanged(): void {
     if (this.bookmarkTargetPosition < 0) { return; }
     this.pendingBookmarkTargetPosition = this.bookmarkTargetPosition;
-    this.rebuildReaderPages();
+    this.rebuildReaderPages(true);
   }
 
   onChapterTitleChanged(): void {
@@ -246,12 +294,13 @@ export struct ReaderPage {
       this.readerScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
     } catch (_) {
     }
-    this.rebuildReaderPages();
+    this.rebuildReaderPages(true);
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
   }
 
   onBookChanged(): void {
+    this.onReadSessionStart();
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
   }
@@ -296,9 +345,10 @@ export struct ReaderPage {
     this.currentPageIndex = 0;
     this.localReaderPages = [];
     this.localSemanticContent = '';
+    this.localSemanticDocument = { paragraphs: [], content: '', sourceLength: 0, sourcePositionMap: [0] };
     this.refreshEstimatedContentHeight();
     this.loadContentImageSizes();
-    this.rebuildReaderPages();
+    this.rebuildReaderPages(true);
     try {
       this.readerScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
     } catch (_) {
@@ -310,8 +360,43 @@ export struct ReaderPage {
   }
 
   onProgressBehaviorChanged(): void {
-    this.sliderProgressIndex = this.progressBehavior === 'page' && this.localReaderPages.length > 0
-      ? this.currentPageIndex : this.getChapterIndex();
+    this.sliderProgressIndex = this.pageAnimation === 3
+      ? this.readerProgress
+      : (this.progressBehavior === 'page' && this.localReaderPages.length > 0
+        ? this.currentPageIndex : this.getChapterIndex());
+  }
+
+  private openReaderImage(uri: string): void {
+    if (this.clickImageBehavior !== '1' || uri.length === 0) { return; }
+    this.imagePreviewUri = uri;
+    this.imagePreviewVisible = true;
+    this.onOpenImagePreview(uri);
+  }
+
+  private closeReaderImagePreview(): void {
+    if (!this.imagePreviewVisible) { return; }
+    this.imagePreviewVisible = false;
+    this.imagePreviewUri = '';
+    this.onCloseImagePreview();
+  }
+
+  onImagePreviewCloseRevisionChanged(): void {
+    this.closeReaderImagePreview();
+  }
+
+  onPageAnimationChanged(): void {
+    this.pageTurnOffsetX = 0;
+    this.pageTurnOffsetY = 0;
+    this.pageTurnOpacity = 1;
+    this.pageTurnAnimating = false;
+    this.restoredProgressPosition = false;
+    if (this.pageAnimation === 3) {
+      this.scrollOffset = 0;
+      this.contentHeight = 0;
+      this.estimatedContentHeight = 0;
+    } else {
+      this.rebuildReaderPages();
+    }
   }
 
   onImageStyleChanged(): void {
@@ -369,7 +454,8 @@ export struct ReaderPage {
     this.onCharsetChange(this.charsetInput);
   }
 
-  private rebuildReaderPages(): void {
+  private rebuildReaderPages(forceProgressCommit: boolean = false): void {
+    const hadReaderPages = this.localReaderPages.length > 0;
     if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
       this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
       this.localReaderPages = [];
@@ -380,11 +466,14 @@ export struct ReaderPage {
     const fontSize = this.fontSize * 1.05;
     const width = Math.max(1, this.readerContentWidth - 40);
     const lineHeight = this.fontSize * 1.25;
-    const pageHeight = Math.max(lineHeight, this.viewportHeight - 11);
+    const infoHeaderReserve = this.isReaderHeaderVisible() ? 22 : 0;
+    const infoFooterReserve = this.isReaderFooterVisible() ? 22 : 0;
+    const pageHeight = Math.max(lineHeight, this.viewportHeight - 11 - infoHeaderReserve - infoFooterReserve);
     // 当前 Android 书籍配置 paragraphSpacing=6，原版按行高的十分之六计算段距。
     const paragraphSpacing = lineHeight * 0.6;
     const document = LocalTextSemantics.parse(this.content);
     this.localSemanticContent = document.content;
+    this.localSemanticDocument = document;
     for (let paragraphIndex = 0; paragraphIndex < document.paragraphs.length; paragraphIndex++) {
       const paragraph = document.paragraphs[paragraphIndex];
       if (paragraph === undefined) { continue; }
@@ -428,10 +517,19 @@ export struct ReaderPage {
       const page = paginatedPages[pageIndex];
       if (page !== undefined) { nextPages.push(page); }
     }
-    const savedPosition = Math.max(0, this.pendingBookmarkTargetPosition >= 0
-      ? this.pendingBookmarkTargetPosition : this.book.androidCharacterPosition ?? 0);
     const percentPosition = Math.round(this.localSemanticContent.length * (this.book.chapterProgress ?? 0) / 100);
-    const targetPosition = savedPosition > 0 ? savedPosition : percentPosition;
+    let targetPosition = percentPosition;
+    if (this.pendingBookmarkTargetPosition >= 0) {
+      targetPosition = this.pendingBookmarkTargetPosition;
+    } else {
+      const savedPosition = Math.max(0, this.book.androidCharacterPosition ?? 0);
+      if (this.book.readerPositionVersion === 2 && savedPosition > 0) {
+        targetPosition = LocalTextSemantics.toRenderPosition(this.localSemanticDocument, savedPosition);
+      } else if (this.book.readerPositionVersion === 1 && savedPosition > 0) {
+        // 旧 HOS 版本保存的是包含显示缩进的渲染坐标，按原值恢复以保住已有进度。
+        targetPosition = savedPosition;
+      }
+    }
     let pageIndex = 0;
     if (!(titlePageInserted && targetPosition === 0)) {
       for (let index = 0; index < nextPages.length; index++) {
@@ -444,7 +542,13 @@ export struct ReaderPage {
     this.localReaderPages = nextPages;
     this.currentPageIndex = pageIndex;
     this.pendingBookmarkTargetPosition = -1;
-    this.reportReaderPageProgress();
+    if (this.pageAnimation !== 3 && (forceProgressCommit || !hadReaderPages)) {
+      this.reportReaderPageProgress();
+    } else if (this.pageAnimation !== 3) {
+      this.sliderProgressIndex = this.progressBehavior === 'page'
+        ? this.currentPageIndex : this.getChapterIndex();
+    }
+    this.requestFullBookPagination();
   }
 
   private reportReaderPageProgress(): void {
@@ -452,38 +556,88 @@ export struct ReaderPage {
     if (page === undefined) { return; }
     this.sliderProgressIndex = this.progressBehavior === 'page'
       ? this.currentPageIndex : this.getChapterIndex();
-    const position = Math.max(0, Math.min(this.localSemanticContent.length, page.startPosition));
-    const progress = this.localSemanticContent.length > 0 ? position / this.localSemanticContent.length * 100 : 0;
+    const renderPosition = Math.max(0, Math.min(this.localSemanticContent.length, page.startPosition));
+    const position = LocalTextSemantics.toSourcePosition(this.localSemanticDocument, renderPosition);
+    const progress = this.localSemanticDocument.sourceLength > 0
+      ? position / this.localSemanticDocument.sourceLength * 100 : 0;
     this.readerProgress = progress;
     this.lastReportedProgress = Math.round(progress);
-    this.onProgressChange(progress, position);
+    this.onProgressChange(progress, position, true);
   }
 
   private turnReaderPage(delta: number): void {
-    const nextPageIndex = this.currentPageIndex + delta;
-    if (nextPageIndex < 0 || nextPageIndex >= this.localReaderPages.length) {
-      const targetChapter = this.getChapterIndex() + delta;
-      if (targetChapter >= 0 && targetChapter < this.getChapterCount()) {
-        this.onTurnChapterBoundary(delta);
+    if (this.pageAnimation === 3) {
+      let totalScrollHeight = Math.max(0, this.contentHeight - this.viewportHeight);
+      try {
+        totalScrollHeight = Math.max(totalScrollHeight,
+          this.toDimension(this.readerScroller.contentSize().height) - this.viewportHeight);
+      } catch (_) {
       }
+      if ((delta < 0 && this.scrollOffset <= 1) || (delta > 0 && this.scrollOffset >= totalScrollHeight - 1)) {
+        this.onTurnChapterBoundary(delta);
+        return;
+      }
+      this.scrollOffset = Math.max(0, Math.min(totalScrollHeight, this.scrollOffset + delta * this.viewportHeight));
+      try {
+        this.readerScroller.scrollTo({ xOffset: 0, yOffset: this.scrollOffset, animation: true });
+      } catch (_) {
+      }
+      this.updateProgress();
       return;
     }
-    this.currentPageIndex = nextPageIndex;
-    this.reportReaderPageProgress();
+    const nextPageIndex = this.currentPageIndex + delta;
+    if (nextPageIndex < 0 || nextPageIndex >= this.localReaderPages.length) {
+      this.onTurnChapterBoundary(delta);
+      return;
+    }
+    if (this.pageTurnAnimating || this.pageAnimation === 5) {
+      this.currentPageIndex = nextPageIndex;
+      this.reportReaderPageProgress();
+      return;
+    }
+    const durationBySpeed: number[] = [240, 300, 360, 540];
+    const duration = durationBySpeed[this.animationSpeed] ?? 360;
+    const direction: number = delta > 0 ? -1 : 1;
+    const reverseDirection: number = delta > 0 ? 1 : -1;
+    const pageWidth = Math.max(1, this.readerContentWidth);
+    const pageHeight = Math.max(1, this.viewportHeight);
+    const horizontalTravel = this.pageAnimation === 0 ? pageWidth :
+      this.pageAnimation === 1 ? Math.min(140, pageWidth * 0.18) :
+      this.pageAnimation === 2 ? Math.min(72, pageWidth * 0.07) : 0;
+    const verticalTravel = this.pageAnimation === 3 ? Math.min(180, pageHeight * 0.18) : 0;
+    const fade = this.pageAnimation === 2 || this.pageAnimation === 4;
+    this.pageTurnAnimating = true;
+    animateTo({ duration: duration / 2, curve: Curve.EaseIn }, () => {
+      this.pageTurnOffsetX = direction * horizontalTravel;
+      this.pageTurnOffsetY = direction * verticalTravel;
+      this.pageTurnOpacity = fade ? 0 : 1;
+    });
+    this.pageTurnTimer = setTimeout(() => {
+      this.currentPageIndex = nextPageIndex;
+      this.reportReaderPageProgress();
+      this.pageTurnOffsetX = reverseDirection * horizontalTravel;
+      this.pageTurnOffsetY = reverseDirection * verticalTravel;
+      this.pageTurnOpacity = fade ? 0 : 1;
+      animateTo({ duration: duration / 2, curve: Curve.EaseOut }, () => {
+        this.pageTurnOffsetX = 0;
+        this.pageTurnOffsetY = 0;
+        this.pageTurnOpacity = 1;
+      });
+      this.pageTurnAnimating = false;
+      this.pageTurnTimer = -1;
+    }, duration / 2);
   }
 
   private turnReaderChapter(delta: number): void {
-    const targetChapter = this.getChapterIndex() + delta;
-    if (targetChapter >= 0 && targetChapter < this.getChapterCount()) {
-      this.onSelectChapterIndex(targetChapter);
-    }
+    this.onSelectChapterIndex(this.getChapterIndex() + delta);
   }
 
   private isPageProgressMode(): boolean {
-    return this.progressBehavior === 'page' && this.localReaderPages.length > 0;
+    return this.pageAnimation !== 3 && this.progressBehavior === 'page' && this.localReaderPages.length > 0;
   }
 
   private getProgressSliderMaximum(): number {
+    if (this.pageAnimation === 3) { return 100; }
     return this.isPageProgressMode() ? this.localReaderPages.length - 1 : this.getChapterCount() - 1;
   }
 
@@ -741,10 +895,36 @@ export struct ReaderPage {
       this.onOpenSettings();
     } else if (action.id === 'highlight_rule') {
       this.onOpenHighlightRules();
+    } else if (action.id === 'bottom_button_config') {
+      this.onOpenBottomActionConfig();
     } else {
       const option = this.getMoreAction(action.id);
-      this.onUnavailableAction((option?.label ?? action.label) + '功能尚未迁移');
+      this.moreActionShellTitle = option?.label ?? action.label;
+      this.moreActionShellVisible = true;
     }
+  }
+
+  @Builder
+  private moreActionUnavailableSheet() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column().width('100%').height('100%').backgroundColor('#99000000')
+        .onClick(() => this.moreActionShellVisible = false)
+      Column() {
+        Row() {
+          Text(this.moreActionShellTitle).fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
+            .layoutWeight(1)
+          Text('关闭').fontSize(13).fontColor('#C7C9D1').onClick(() => this.moreActionShellVisible = false)
+        }.width('100%').padding({ bottom: 14 })
+        Text('此操作尚未迁移，当前不会执行。')
+          .fontSize(14).fontColor('#B7B8C1').width('100%')
+        Row() {
+          Text('知道了').fontSize(14).fontColor('#101116')
+            .padding({ left: 22, right: 22, top: 10, bottom: 10 })
+            .backgroundColor('#B9C6FF').borderRadius(18)
+            .onClick(() => this.moreActionShellVisible = false)
+        }.width('100%').justifyContent(FlexAlign.End).margin({ top: 20 })
+      }.width('86%').padding(18).backgroundColor('#1A1B21').borderRadius(20)
+    }.width('100%').height('100%')
   }
 
   @Builder
@@ -780,8 +960,260 @@ export struct ReaderPage {
 
   private getWholeBookProgress(): number {
     const chapterCount = this.getChapterCount();
+    const chapterIndex = this.getChapterIndex();
+    if (this.pageAnimation !== 3) {
+      const pageCount = this.localReaderPages.length;
+      if (pageCount === 0 && chapterIndex === 0) { return 0; }
+      const chapterProgress = pageCount > 0 ? (this.currentPageIndex + 1) / pageCount : 1;
+      let progress = (chapterIndex + chapterProgress) / chapterCount * 100;
+      if (progress >= 100 && (chapterIndex + 1 !== chapterCount || this.currentPageIndex + 1 !== pageCount)) {
+        progress = 99.9;
+      }
+      return Math.max(0, Math.min(100, progress));
+    }
     return Math.max(0, Math.min(100,
-      (this.getChapterIndex() + this.readerProgress / 100) / chapterCount * 100));
+      (chapterIndex + this.readerProgress / 100) / chapterCount * 100));
+  }
+
+  private needsFullBookPageData(): boolean {
+    const values: number[] = [
+      this.infoSettings.tipHeaderLeft, this.infoSettings.tipHeaderMiddle, this.infoSettings.tipHeaderRight,
+      this.infoSettings.tipFooterLeft, this.infoSettings.tipFooterMiddle, this.infoSettings.tipFooterRight
+    ];
+    const templates: string[] = [
+      this.infoSettings.customTipHeaderLeft, this.infoSettings.customTipHeaderMiddle,
+      this.infoSettings.customTipHeaderRight, this.infoSettings.customTipFooterLeft,
+      this.infoSettings.customTipFooterMiddle, this.infoSettings.customTipFooterRight
+    ];
+    for (let index = 0; index < values.length; index++) {
+      const value = values[index] ?? 0;
+      const template = templates[index] ?? '';
+      if (value === 19 || value === 20 || (value === 18 &&
+        (template.includes('{FullPageIndex}') || template.includes('{FullPageSize}')))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private getFullBookPaginationLayoutKey(): string {
+    const replaceKey = JSON.stringify([
+      ReplaceRuleRepository.isBookEnabled(this.book),
+      this.replaceRules.map((rule: ReplaceRule) => [
+        rule.id, rule.name, rule.pattern, rule.replacement, rule.scope,
+        rule.scopeTitle, rule.scopeContent, rule.excludeScope, rule.isEnabled,
+        rule.isRegex, rule.timeoutMillisecond, rule.order
+      ])
+    ]);
+    const processKey = JSON.stringify(BookContentProcessRepository.getAll()
+      .filter((process: BookContentProcess) => process.bookUrl === this.book.id)
+      .sort((left: BookContentProcess, right: BookContentProcess) =>
+        left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+      .map((process: BookContentProcess) => [
+        process.id, process.chapterIndex, process.kind, process.stage, process.target,
+        process.anchorJson, process.actionJson, process.styleJson, process.sourceContentHash,
+        process.enabled, process.sortOrder, process.status, process.schemaVersion, process.updatedAt
+      ]));
+    const chapterKey = JSON.stringify([
+      this.book.chapterTitles ?? [],
+      this.book.chapterOffsets ?? []
+    ]);
+    return [
+      this.book.id, this.book.contentPath ?? '', this.readerContentRevision, this.fontSize,
+      this.readerContentWidth, this.viewportHeight, this.activeImageStyle,
+      this.infoSettings.headerMode, this.infoSettings.footerMode,
+      this.infoSettings.headerFontSize, this.infoSettings.footerFontSize, this.infoSettings.applyHeaderStyle,
+      chapterKey, replaceKey, processKey
+    ].join('|');
+  }
+
+  private requestFullBookPagination(): void {
+    if (!this.needsFullBookPageData() || !this.book.isLocal || this.book.contentPath === undefined) {
+      if (this.fullBookPaginationKey !== '' || this.fullBookPageCounts.length > 0) {
+        this.fullBookPaginationGeneration++;
+        this.fullBookPaginationKey = '';
+        this.fullBookPageCounts = [];
+        this.fullBookPaginationReady = false;
+      }
+      return;
+    }
+    if (this.readerContentWidth <= 0 || this.viewportHeight <= 0) { return; }
+    const key = this.getFullBookPaginationLayoutKey();
+    if (this.fullBookPaginationKey === key) { return; }
+    this.fullBookPaginationKey = key;
+    this.fullBookPaginationReady = false;
+    this.fullBookPageCounts = [];
+    const generation = ++this.fullBookPaginationGeneration;
+    this.paginateFullBookPages(key, generation).catch(() => {
+      if (generation === this.fullBookPaginationGeneration) {
+        this.fullBookPaginationKey = '';
+        this.fullBookPageCounts = [];
+        this.fullBookPaginationReady = false;
+      }
+    });
+  }
+
+  private async paginateFullBookPages(key: string, generation: number): Promise<void> {
+    const context = this.getUIContext();
+    const measureUtils = context.getMeasureUtils();
+    const fontSize = this.fontSize * 1.05;
+    const width = Math.max(1, this.readerContentWidth - 40);
+    const lineHeight = this.fontSize * 1.25;
+    const infoHeaderReserve = this.isReaderHeaderVisible() ? 22 : 0;
+    const infoFooterReserve = this.isReaderFooterVisible() ? 22 : 0;
+    const pageHeight = Math.max(lineHeight, this.viewportHeight - 11 - infoHeaderReserve - infoFooterReserve);
+    const paragraphSpacing = lineHeight * 0.6;
+    const imageSizes = new Map<string, ReaderIntrinsicImageSize>(this.imageSizes);
+    const glyphWidths = new Map<string, number>();
+    let scannedGlyphCount = 0;
+    let measuredGlyphCount = 0;
+    const yieldToUi = async (): Promise<void> => {
+      await new Promise<void>((resolve: () => void) => setTimeout(resolve, 0));
+    };
+    const cacheGlyphWidths = async (text: string): Promise<void> => {
+      let cursor = 0;
+      while (cursor < text.length) {
+        const codePoint = text.codePointAt(cursor);
+        const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
+        const glyph = text.substring(cursor, nextCursor);
+        if (!glyphWidths.has(glyph)) {
+          const metrics = measureUtils.measureTextSize({ textContent: glyph, fontSize: fontSize });
+          glyphWidths.set(glyph, context.px2vp(this.toDimension(metrics.width ?? 0)));
+          measuredGlyphCount++;
+          if (measuredGlyphCount % 8 === 0) { await yieldToUi(); }
+        }
+        cursor = nextCursor;
+        scannedGlyphCount++;
+        if (scannedGlyphCount % 512 === 0) { await yieldToUi(); }
+      }
+    };
+    const cacheDocumentGlyphWidths = async (document: LocalSemanticDocument): Promise<void> => {
+      for (let paragraphIndex = 0; paragraphIndex < document.paragraphs.length; paragraphIndex++) {
+        const paragraph = document.paragraphs[paragraphIndex];
+        if (paragraph === undefined) { continue; }
+        for (let partIndex = 0; partIndex < paragraph.parts.length; partIndex++) {
+          const part = paragraph.parts[partIndex];
+          if (part?.kind === 'text') { await cacheGlyphWidths(part.value); }
+        }
+        if (paragraphIndex % 8 === 7) { await yieldToUi(); }
+      }
+    };
+    const measureFromGlyphCache = (text: string): number => {
+      let totalWidth = 0;
+      let cursor = 0;
+      while (cursor < text.length) {
+        const codePoint = text.codePointAt(cursor);
+        const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
+        totalWidth += glyphWidths.get(text.substring(cursor, nextCursor)) ?? 0;
+        cursor = nextCursor;
+      }
+      return totalWidth;
+    };
+    const inlineImageWidth = context.px2vp(this.toDimension(
+      measureUtils.measureTextSize({ textContent: '袮', fontSize: fontSize }).width ?? 0
+    ));
+    const pageCounts: number[] = [];
+    await BookRepository.forEachChapter(this.book, async (
+      chapterContent: string,
+      chapterIndex: number
+    ): Promise<boolean> => {
+      if (generation !== this.fullBookPaginationGeneration || key !== this.getFullBookPaginationLayoutKey()) {
+        return false;
+      }
+      const rawTitle = this.book.chapterTitles?.[chapterIndex] ??
+        (chapterIndex === this.getChapterIndex() ? this.chapterTitle : '');
+      const displayTitle = await ReplaceRuleRepository.applyTitle(this.book, rawTitle);
+      const document = LocalTextSemantics.parse(chapterContent);
+      await cacheGlyphWidths(displayTitle);
+      await cacheDocumentGlyphWidths(document);
+      await this.loadImageSizesForDocument(document, imageSizes);
+      const titleWidth = measureFromGlyphCache(displayTitle) * (this.fontSize + 4) / fontSize;
+      const titleLines = displayTitle.length > 0 ? Math.max(1, Math.ceil(titleWidth / width)) : 0;
+      const titleReservedLines = Math.ceil((titleLines * (this.fontSize + 4) * 1.25 + 12) / lineHeight);
+      const pageCount = chapterIndex === this.getChapterIndex() && this.localReaderPages.length > 0
+        ? this.localReaderPages.length
+        : await LocalReaderPaginator.countPagesIncrementally(
+          document,
+          width,
+          pageHeight,
+          lineHeight,
+          paragraphSpacing,
+          (text: string): number => measureFromGlyphCache(text),
+          imageSizes,
+          this.activeImageStyle,
+          context.px2vp(80),
+          inlineImageWidth,
+          this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines
+        );
+      const titlePageCount = this.activeImageStyle === 'SINGLE' && displayTitle.length > 0 ? 1 : 0;
+      pageCounts.push(pageCount + titlePageCount);
+      return true;
+    });
+    const expectedChapterCount = this.book.chapterTitles !== undefined && this.book.chapterTitles.length > 0
+      ? this.book.chapterTitles.length : 1;
+    if (generation === this.fullBookPaginationGeneration && key === this.getFullBookPaginationLayoutKey() &&
+      pageCounts.length === expectedChapterCount) {
+      this.fullBookPageCounts = pageCounts;
+      this.fullBookPaginationReady = true;
+    }
+  }
+
+  private async loadImageSizesForDocument(
+    document: LocalSemanticDocument,
+    sizes: Map<string, ReaderIntrinsicImageSize>
+  ): Promise<void> {
+    for (let paragraphIndex = 0; paragraphIndex < document.paragraphs.length; paragraphIndex++) {
+      const paragraph = document.paragraphs[paragraphIndex];
+      if (paragraph === undefined) { continue; }
+      for (let partIndex = 0; partIndex < paragraph.parts.length; partIndex++) {
+        const part = paragraph.parts[partIndex];
+        if (part?.kind !== 'image' || sizes.has(part.value)) { continue; }
+        let source: image.ImageSource | undefined = undefined;
+        try {
+          source = image.createImageSource(part.value);
+          const info = await source.getImageInfo();
+          if (info.size.width > 0 && info.size.height > 0) {
+            const density = info.density > 0 ? info.density / 160 : 1;
+            const context = this.getUIContext();
+            sizes.set(part.value, {
+              width: context.px2vp(info.size.width / density),
+              height: context.px2vp(info.size.height / density)
+            });
+          }
+        } catch (_) {
+        } finally {
+          if (source !== undefined) {
+            try { await source.release(); } catch (_) {}
+          }
+        }
+      }
+    }
+  }
+
+  private getWholeBookPageIndex(): number {
+    if (!this.fullBookPaginationReady || this.pageAnimation === 3) { return -1; }
+    const chapterIndex = this.getChapterIndex();
+    if (chapterIndex < 0 || chapterIndex >= this.fullBookPageCounts.length) { return -1; }
+    let pageIndex = this.currentPageIndex + 1;
+    for (let index = 0; index < chapterIndex; index++) {
+      pageIndex += this.fullBookPageCounts[index] ?? 0;
+    }
+    return pageIndex;
+  }
+
+  private getWholeBookPageCount(): number {
+    if (!this.fullBookPaginationReady || this.pageAnimation === 3) { return -1; }
+    let total = 0;
+    for (let index = 0; index < this.fullBookPageCounts.length; index++) {
+      total += this.fullBookPageCounts[index] ?? 0;
+    }
+    return total;
+  }
+
+  private getWholeBookPageText(): string {
+    const index = this.getWholeBookPageIndex();
+    const count = this.getWholeBookPageCount();
+    return index < 0 || count < 0 ? '全文 - / -' : `${index}/${count}`;
   }
 
   private getReaderFooterProgress(): string {
@@ -844,7 +1276,7 @@ export struct ReaderPage {
   }
 
   private updateProgress(): void {
-    if (this.localReaderPages.length > 0) { return; }
+    if (this.localReaderPages.length > 0 && this.pageAnimation !== 3) { return; }
     if (this.estimatedContentHeight <= 0) {
       this.refreshEstimatedContentHeight();
     }
@@ -862,14 +1294,15 @@ export struct ReaderPage {
     }
     const progress = Math.max(0, Math.min(100, Math.round(this.scrollOffset / totalScrollHeight * 100)));
     this.readerProgress = progress;
+    if (this.pageAnimation === 3) { this.sliderProgressIndex = progress; }
     if (progress !== this.lastReportedProgress) {
       this.lastReportedProgress = progress;
-      this.onProgressChange(progress, Math.round(this.content.length * progress / 100));
+      this.onProgressChange(progress, Math.round(this.content.length * progress / 100), false);
     }
   }
 
   private restoreProgressPosition(): void {
-    if (this.localReaderPages.length > 0) { return; }
+    if (this.localReaderPages.length > 0 && this.pageAnimation !== 3) { return; }
     if (this.estimatedContentHeight <= 0) {
       this.refreshEstimatedContentHeight();
     }
@@ -882,6 +1315,7 @@ export struct ReaderPage {
     this.scrollOffset = totalScrollHeight * chapterProgress / 100;
     this.readerProgress = chapterProgress;
     this.lastReportedProgress = chapterProgress;
+    this.sliderProgressIndex = chapterProgress;
     if (chapterProgress > 0) {
       try {
         this.readerScroller.scrollTo({
@@ -907,7 +1341,7 @@ export struct ReaderPage {
       this.readerScroller.scrollTo({ xOffset: 0, yOffset: this.scrollOffset, animation: false });
     } catch (_) {
     }
-    this.onProgressChange(nextProgress, Math.round(this.content.length * nextProgress / 100));
+    this.onProgressChange(nextProgress, Math.round(this.content.length * nextProgress / 100), false);
   }
 
   private getDisplayContent(content: string): string {
@@ -1047,7 +1481,7 @@ export struct ReaderPage {
   private onReaderContentAreaChanged(oldArea: Area, newArea: Area): void {
     this.contentHeight = this.toDimension(newArea.height);
     this.rebuildReaderPages();
-    if (this.localReaderPages.length > 0) { return; }
+    if (this.localReaderPages.length > 0 && this.pageAnimation !== 3) { return; }
     this.refreshEstimatedContentHeight();
     this.restoreProgressPosition();
     this.updateProgress();
@@ -1058,11 +1492,143 @@ export struct ReaderPage {
       ? '#D8D8DC' : '#38383B';
   }
 
+  private isReaderHeaderVisible(): boolean {
+    // HOS 目前保留系统状态栏；Android 模式0在状态栏显示时隐藏页眉。
+    return this.infoSettings.headerMode === 1;
+  }
+
+  private isReaderFooterVisible(): boolean {
+    return this.infoSettings.footerMode !== 1;
+  }
+
+  private getReaderInfoFontSize(isHeader: boolean): number {
+    const size = isHeader || this.infoSettings.applyHeaderStyle
+      ? this.infoSettings.headerFontSize : this.infoSettings.footerFontSize;
+    return size > 0 ? size : 12;
+  }
+
+  private getReaderInfoColor(isHeader: boolean): string {
+    const useHeaderStyle = isHeader || this.infoSettings.applyHeaderStyle;
+    const isNightPaper = this.paperColor === '#000000' || this.paperColor === '#343832' || this.paperColor === '#3C3F43';
+    const configuredColor = useHeaderStyle
+      ? (isNightPaper ? this.infoSettings.tipHeaderColorNight : this.infoSettings.tipHeaderColor)
+      : (isNightPaper ? this.infoSettings.tipFooterColorNight : this.infoSettings.tipFooterColor);
+    if (configuredColor === 0) { return this.getReadingTextColor(); }
+    const unsignedColor = configuredColor < 0 ? configuredColor + 4294967296 : configuredColor;
+    const hexColor = unsignedColor.toString(16).padStart(8, '0');
+    return `#${hexColor.substring(2)}`;
+  }
+
+  private getReaderInfoDividerColor(): string {
+    if (this.infoSettings.tipDividerColor === -1) { return '#66666A'; }
+    if (this.infoSettings.tipDividerColor === 0) { return this.getReadingTextColor(); }
+    const unsignedColor = this.infoSettings.tipDividerColor < 0
+      ? this.infoSettings.tipDividerColor + 4294967296 : this.infoSettings.tipDividerColor;
+    const hexColor = unsignedColor.toString(16).padStart(8, '0');
+    return `#${hexColor.substring(2)}`;
+  }
+
+  private getReaderInfoValue(type: number, customTemplate: string): string {
+    const currentPage = this.localReaderPages[this.currentPageIndex];
+    const chapterCount = this.getChapterCount();
+    const pageCount = this.localReaderPages.length;
+    const chapterTitle = this.displayChapterTitle;
+    const time = new Date();
+    const timeText = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    const batteryPercent = Math.max(0, Math.min(100, batteryInfo.batterySOC));
+    const progressText = `${this.getWholeBookProgress().toFixed(1)}%`;
+    const fullPageIndex = this.getWholeBookPageIndex();
+    const fullPageCount = this.getWholeBookPageCount();
+    // Android 的自定义占位符在整本页数暂不可用时回退到本章页码和页数。
+    const customFullPageIndex = fullPageIndex > 0 ? `${fullPageIndex}` : `${this.currentPageIndex + 1}`;
+    const customFullPageCount = fullPageCount > 0 ? `${fullPageCount}` : `${Math.max(1, pageCount)}`;
+    let value = '';
+    if (type === 1) { value = chapterTitle; }
+    else if (type === 2) { value = timeText; }
+    else if (type === 3 || type === 10 || type === 13 || type === 14 || type === 15) { value = `${batteryPercent}%`; }
+    else if (type === 4) { value = `${this.currentPageIndex + 1}/${pageCount > 0 ? pageCount : '-'}`; }
+    else if (type === 5) { value = progressText; }
+    else if (type === 6) { value = `${this.currentPageIndex + 1}/${pageCount > 0 ? pageCount : '-' }  ${progressText}`; }
+    else if (type === 7) { value = this.book.title; }
+    else if (type === 8 || type === 9 || type === 16) { value = `${timeText} ${batteryPercent}%`; }
+    else if (type === 11) { value = `${this.getChapterIndex() + 1}/${chapterCount}`; }
+    else if (type === 12 || type === 17) { value = `${chapterTitle} ›`; }
+    else if (type === 18) {
+      value = customTemplate
+        .replaceAll('{BookName}', this.book.title)
+        .replaceAll('{ChapterTitle}', chapterTitle)
+        .replaceAll('{Time}', timeText)
+        .replaceAll('{BatteryPercent}', `${batteryPercent}%`)
+        .replaceAll('{ChapterIndex}', `${this.getChapterIndex() + 1}`)
+        .replaceAll('{ChapterSize}', `${chapterCount}`)
+        .replaceAll('{PageIndex}', `${this.currentPageIndex + 1}`)
+        .replaceAll('{PageSize}', `${pageCount > 0 ? pageCount : '-'}`)
+        .replaceAll('{PageRemaining}', `${pageCount > 0 ? Math.max(0, pageCount - this.currentPageIndex - 1) : '-'}`)
+        .replaceAll('{ReadProgress}', progressText)
+        .replaceAll('{FullPageIndex}', customFullPageIndex)
+        .replaceAll('{FullPageSize}', customFullPageCount);
+    } else if (type === 19) { value = this.getWholeBookPageText(); }
+    else if (type === 20) { value = `${this.getWholeBookPageText()}  ${progressText}`; }
+    if (currentPage === undefined && type === 4) { return '-'; }
+    return value;
+  }
+
+  private getReaderInfoType(isHeader: boolean, position: number): number {
+    if (isHeader) {
+      if (position === 0) { return this.infoSettings.tipHeaderLeft; }
+      if (position === 1) { return this.infoSettings.tipHeaderMiddle; }
+      return this.infoSettings.tipHeaderRight;
+    }
+    if (position === 0) { return this.infoSettings.tipFooterLeft; }
+    if (position === 1) { return this.infoSettings.tipFooterMiddle; }
+    return this.infoSettings.tipFooterRight;
+  }
+
+  private getReaderInfoTemplate(isHeader: boolean, position: number): string {
+    if (isHeader) {
+      if (position === 0) { return this.infoSettings.customTipHeaderLeft; }
+      if (position === 1) { return this.infoSettings.customTipHeaderMiddle; }
+      return this.infoSettings.customTipHeaderRight;
+    }
+    if (position === 0) { return this.infoSettings.customTipFooterLeft; }
+    if (position === 1) { return this.infoSettings.customTipFooterMiddle; }
+    return this.infoSettings.customTipFooterRight;
+  }
+
+  @Builder
+  private ReaderInfoRow(isHeader: boolean) {
+    Column() {
+      Row() {
+        Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 0), this.getReaderInfoTemplate(isHeader, 0)))
+          .fontSize(this.getReaderInfoFontSize(isHeader)).fontColor(this.getReaderInfoColor(isHeader))
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+        Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 1), this.getReaderInfoTemplate(isHeader, 1)))
+          .fontSize(this.getReaderInfoFontSize(isHeader)).fontColor(this.getReaderInfoColor(isHeader))
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Center).layoutWeight(1)
+        Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 2), this.getReaderInfoTemplate(isHeader, 2)))
+          .fontSize(this.getReaderInfoFontSize(isHeader)).fontColor(this.getReaderInfoColor(isHeader))
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.End).layoutWeight(1)
+      }.width('100%').height(18)
+      if ((isHeader && this.infoSettings.showHeaderLine) || (!isHeader && this.infoSettings.showFooterLine)) {
+        Column().width('100%').height(1).backgroundColor(this.getReaderInfoDividerColor())
+      }
+    }.width('100%').padding({ left: 20, right: 20, top: 2, bottom: 2 })
+  }
+
   build() {
     Stack() {
-      if ((this.book.format === 'txt' || this.book.format === 'epub') && this.localReaderPages.length > 0) {
+      if ((this.book.format === 'txt' || this.book.format === 'epub') && this.localReaderPages.length > 0 && this.pageAnimation !== 3) {
         Stack() {
+          Row() {
+            Blank().layoutWeight(1).onClick(() => this.turnReaderPage(-1))
+            Blank().layoutWeight(1).onClick(() => this.controlsVisible = !this.controlsVisible)
+            Blank().layoutWeight(1).onClick(() => this.turnReaderPage(1))
+          }.width('100%').height('100%')
+
           Column() {
+            if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
             if (this.localReaderPages[this.currentPageIndex]?.titleOnly === true) {
               Blank().layoutWeight(1)
               Text(this.displayChapterTitle)
@@ -1091,6 +1657,7 @@ export struct ReaderPage {
                         .objectFit(ImageFit.Contain)
                         .alignSelf(ItemAlign.Center)
                         .margin({ right: this.getReaderLineGapAfter(line, itemIndex, item) })
+                        .onClick(() => this.openReaderImage(item.value))
                     } else if (item.leadingIndent) {
                       Text(item.value)
                         .fontSize(this.fontSize * 1.05)
@@ -1118,16 +1685,15 @@ export struct ReaderPage {
                 .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
               }, (line: LocalReaderLine, lineIndex: number) =>
                 `${this.readerContentRevision}-${this.currentPageIndex}-${lineIndex}`)
+            Blank().layoutWeight(1)
+            if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
           }
           .width('100%')
           .height('100%')
           .padding({ left: 20, right: 20, top: 7, bottom: 4 })
-
-          Row() {
-            Blank().layoutWeight(1).onClick(() => this.turnReaderPage(-1))
-            Blank().layoutWeight(1).onClick(() => this.controlsVisible = !this.controlsVisible)
-            Blank().layoutWeight(1).onClick(() => this.turnReaderPage(1))
-          }.width('100%').height('100%')
+          .translate({ x: this.pageTurnOffsetX, y: this.pageTurnOffsetY })
+          .opacity(this.pageTurnOpacity)
+          .hitTestBehavior(HitTestMode.Transparent)
         }
         .width('100%')
         .height('100%')
@@ -1145,6 +1711,7 @@ export struct ReaderPage {
       } else {
       Scroll(this.readerScroller) {
         Column() {
+          if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
           Text(this.displayChapterTitle)
             .fontSize(this.fontSize + 4)
             .fontWeight(FontWeight.Medium)
@@ -1160,6 +1727,7 @@ export struct ReaderPage {
                   .objectFit(ImageFit.Contain)
                   .alignSelf(ItemAlign.Center)
                   .margin({ top: 8, bottom: 8 })
+                  .onClick(() => this.openReaderImage(segment.value))
               }
             } else {
               Text(this.getDisplayContent(segment.value))
@@ -1171,6 +1739,7 @@ export struct ReaderPage {
                 .margin({ bottom: this.fontSize })
             }
           }, (segment: ReaderContentSegment, index: number) => `${this.readerContentRevision}-${segment.kind}-${index}`)
+          if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
         }
         .width('100%')
         .constraintSize({ minHeight: '100%' })
@@ -1186,35 +1755,33 @@ export struct ReaderPage {
       .backgroundColor(this.paperColor)
       .scrollBar(BarState.Off)
       .onDidScroll((xOffset: number, yOffset: number, scrollState: ScrollState) => {
-        if (this.localReaderPages.length > 0) { return; }
+        if (this.localReaderPages.length > 0 && this.pageAnimation !== 3) { return; }
         this.scrollOffset = Math.max(0, this.scrollOffset + yOffset);
         this.updateProgress();
       })
       .onAreaChange((oldArea: Area, newArea: Area) => {
         this.viewportHeight = this.toDimension(newArea.height);
         this.rebuildReaderPages();
-        if (this.localReaderPages.length > 0) { return; }
+          if (this.localReaderPages.length > 0 && this.pageAnimation !== 3) { return; }
         this.restoreProgressPosition();
         this.updateProgress();
       })
       }
 
-      if (!this.controlsVisible) {
-        Column() {
-          Blank().layoutWeight(1)
-          Row() {
-            Text(this.book.title).fontSize(10).fontColor('#989AA4').maxLines(1)
-            Blank()
-            Text(this.getReaderFooterProgress()).fontSize(10).fontColor('#989AA4')
-          }.width('100%').padding({ left: 16, right: 16, bottom: 8 })
-        }.width('100%').height('100%')
-          .hitTestBehavior(HitTestMode.Transparent)
-      }
-
       if (this.controlsVisible) {
-        Column() {
+        Stack() {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('#01000000')
+            .onClick(() => {
+              this.controlsVisible = false;
+              this.overflowVisible = false;
+              this.imageStyleMenuVisible = false;
+            })
           Column() {
-            Row() {
+            Column() {
+              Row() {
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D5C2C6')
               }.width(40).height(40).onClick(() => this.onBack())
@@ -1272,7 +1839,11 @@ export struct ReaderPage {
                     const maximum = this.getProgressSliderMaximum();
                     const index = Math.max(0, Math.min(maximum, Math.round(value)));
                     this.sliderProgressIndex = index;
-                    if (this.isPageProgressMode()) {
+                    if (this.pageAnimation === 3) {
+                      if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+                        this.seekToProgress(index);
+                      }
+                    } else if (this.isPageProgressMode()) {
                       this.currentPageIndex = index;
                       this.reportReaderPageProgress();
                     } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
@@ -1327,9 +1898,12 @@ export struct ReaderPage {
             .margin({ bottom: 16 })
 
         }
+          .width('100%')
+          .height('100%')
+          .hitTestBehavior(HitTestMode.Transparent)
+        }
         .width('100%')
         .height('100%')
-        .hitTestBehavior(HitTestMode.Transparent)
       }
 
       if (this.autoPageSettingsVisible) {
@@ -1447,6 +2021,10 @@ export struct ReaderPage {
         this.moreActionConfigurationSheet()
       }
 
+      if (this.moreActionShellVisible) {
+        this.moreActionUnavailableSheet()
+      }
+
       if (this.contentEditVisible) {
         Stack({ alignContent: Alignment.Center }) {
           Column().width('100%').height('100%').backgroundColor('#99000000')
@@ -1560,6 +2138,24 @@ export struct ReaderPage {
         }
         .width('100%').height('100%')
       }
+
+      if (this.imagePreviewVisible) {
+        Column() {
+          Row() {
+            Text('图片预览').fontSize(16).fontColor('#ECEEF2').layoutWeight(1)
+            Image($r('app.media.profile_close')).width(22).height(22).fillColor('#ECEEF2')
+              .padding(8).onClick(() => this.closeReaderImagePreview())
+          }.width('100%').height(48).padding({ left: 16, right: 16 })
+          Image(this.imagePreviewUri)
+            .width('100%').layoutWeight(1).objectFit(ImageFit.Contain)
+            .onClick(() => {})
+        }
+        .width('100%').height('100%')
+        .padding({ top: 28, bottom: 20 })
+        .backgroundColor('#FF000000')
+        .onClick(() => {})
+        .zIndex(1000)
+      }
     }
     .width('100%')
     .height('100%')
@@ -1663,3 +2259,7 @@ struct ReaderControlGlyph {
     }
   }
 }
+
+
+
+
