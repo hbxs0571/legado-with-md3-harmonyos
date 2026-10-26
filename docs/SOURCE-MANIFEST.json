@@ -21,7 +21,7 @@
   },
   {
     "path": "CHANGELOG.md",
-    "sha256": "ba9b203cc45eb98dd6de5a3e7998c12f4337551590e310fe758ad9be5ae58211"
+    "sha256": "a06b3b766e68de62ad67351733b95defb42486e7cde240650b09c09cb40754e0"
   },
   {
     "path": "DISCLAIMER.md",
@@ -41,7 +41,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "b01b313b4c191edd9aeb58bb0d8f7f4bf3ae90d051649a8f5d9701e404c07058"
+    "sha256": "66e75d4e0d1e01fcc3d5f6c534a760c871b466bd25eff2cbca19b128483fbb82"
   },
   {
     "path": "SECURITY.md",
@@ -61,15 +61,19 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "c558430bb316d686cf3c446bc3c3c2021b80150bf5e90461b6e23e265ba1ba26"
+    "sha256": "e55bad502b5f138444a15754cef4520f997ad8157801d3d02659cb7ea861c55f"
   },
   {
     "path": "docs/RESOURCE-LICENSES.md",
-    "sha256": "cf0564ddb3a16b78d3dac24f50bf34931303fd9ec27bc5de0b654a84ec9d71a6"
+    "sha256": "d29772918ceead5b73f698ef11a110533620dc1bf362f4af2e0fb490176bda94"
+  },
+  {
+    "path": "docs/RESOURCE-SOURCES-SHA256-2026-10-26.csv",
+    "sha256": "0010b55d051178b52d9d122d07ce362beb959115af7fb0d910ef0fc96f8915e2"
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "34c2d57d90586b09d68ab9e2cb8a3300fb2b02aafdbf43fd10d59df875c06668"
+    "sha256": "7c1f28c7e7644d281a666306853820a9cc4b061c4e3b688746f3289d1aaef056"
   },
   {
     "path": "entry/build-profile.json5",
@@ -353,7 +357,7 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_access_time.svg",
-    "sha256": "764e31c6451f7a223acb4b32419da3057526eaf05fda8cf8ffaf11a73957dd39"
+    "sha256": "b17d2dc2d36ff272916fac2bfa4899ab2c60d28dd8b4da4d6213537113f8e66f"
   },
   {
     "path": "entry/src/main/resources/base/media/app_add.svg",
@@ -573,15 +577,15 @@
   },
   {
     "path": "entry/src/main/resources/base/media/menu_bookmarks.svg",
-    "sha256": "31be2c355ce61721c7bf84928938bfe420e31bd8c8f078af76ed23e0dbad49f4"
+    "sha256": "44f5b374cd5ffe4155524378549de9fabe4e8a2e392ce75490e526151d82193a"
   },
   {
     "path": "entry/src/main/resources/base/media/menu_carousel.svg",
-    "sha256": "d6cb1dc19527405e3b906bd2b80b41bb2d66d75f455bd17dce77f1b8bbafbec8"
+    "sha256": "288ab61500f9ec116cabdb15e8a7970c40079d7f6638f8786c05e8ac6e43cd6d"
   },
   {
     "path": "entry/src/main/resources/base/media/menu_grid.svg",
-    "sha256": "ba8e56ad0751e14138c85d4c2bbe3ff1d4f4655fdee83113656811420131c79f"
+    "sha256": "274c5032b73adbaea2421e5af006c8799a2a3e0b463c0a6240aa7e18051b60fe"
   },
   {
     "path": "entry/src/main/resources/base/media/menu_link.svg",
@@ -589,11 +593,11 @@
   },
   {
     "path": "entry/src/main/resources/base/media/menu_save.svg",
-    "sha256": "baa955c5cb04c08ce4fe379070aafe0708d9670a5a1ec1c90668a8f815fc3aa8"
+    "sha256": "96e58d06e8588a2506df491a0b890caab205cf91c7471969273ab850d6e39147"
   },
   {
     "path": "entry/src/main/resources/base/media/menu_upload_file.svg",
-    "sha256": "d6364a5ba4bc27ec0a825a7988657ff9d9be3895f66382c6c2f0246e910635ff"
+    "sha256": "73f047700ce0f0c46dd2b9c5f8cf129c5201f3e00f18e0f28c5e4566c3aa09d4"
   },
   {
     "path": "entry/src/main/resources/base/media/menu_wifi.svg",
@@ -769,7 +773,7 @@
   },
   {
     "path": "entry/src/main/resources/base/media/reader_info_palette.svg",
-    "sha256": "146889e84a97c6634b8df5999344f997fbefe2bfda6a503ce3f58f51f523e6ee"
+    "sha256": "686554273cb49a705dacf6d67861b440ed96a840ffe66ce75fe22f1a61cf942a"
   },
   {
     "path": "entry/src/main/resources/base/media/reader_info_text_fields.svg",
@@ -845,11 +849,11 @@
   },
   {
     "path": "entry/src/main/resources/base/media/reader_reorder_down.svg",
-    "sha256": "d52c210741c27b276629b4f860aa75411500c779a93af6c37aab40ffd924bec1"
+    "sha256": "abd98fbb0ab81c1d206f9931ebb73dc43d0a69b78ad419e54036affa6bf84b55"
   },
   {
     "path": "entry/src/main/resources/base/media/reader_reorder_up.svg",
-    "sha256": "79da25a856491cf0d3c0b3705349791c8c4fc9163210271afbd4f5522d24b135"
+    "sha256": "3d6754c6284657421d8b581632d7356d8dd45f3a006ebb3427cc4dbe0fc9df2b"
   },
   {
     "path": "entry/src/main/resources/base/media/reader_search.svg",
@@ -869,7 +873,7 @@
   },
   {
     "path": "entry/src/main/resources/base/media/reader_visibility_off.svg",
-    "sha256": "911a56dd080431cee5d5225efc941c31b7386575557fcf4fb749720b615b5bb7"
+    "sha256": "67dbe84611dfc82611f10a442f773dc62a5934c806f8224636459ed3348e50ca"
   },
   {
     "path": "entry/src/main/resources/base/media/reader_voice.svg",

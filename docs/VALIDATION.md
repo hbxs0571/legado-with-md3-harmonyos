@@ -16,7 +16,7 @@
 - `signingConfigs` 未配置；仓库不含签名材料。
 - 模块配置未声明 INTERNET 权限；源码没有应用网络客户端/请求代码的初步检索记录。若新版本加入在线服务，须重新审核权限与隐私说明。
 - P1 阅读器整页 UI 与逐项视觉验收未完成；五个阅读相关路由仍为实现中，10 月 26 日增量有模拟器记录但需要继续验收。
-- 资源当前 133 SVG / 4 PNG。路径比对报告为 48 个 SVG 与 Android drawable 精确一致；31 个 SVG 有 AndroidX Material / Apache-2.0 来源记录；另有 10 个新增 SVG 来源待核，详见 RESOURCE-LICENSES.md。
+- 资源当前 133 SVG / 4 PNG。路径比对报告为 50 个 SVG 与 Android drawable 精确一致；39 个 SVG 有 AndroidX Material / Apache-2.0 来源记录；此前待核的 10 个 SVG 已完成来源映射，其中 2 个箭头是 GPL-3.0 近似 UI 映射，详见 RESOURCE-LICENSES.md。
 
 ## 本次构建验证
 

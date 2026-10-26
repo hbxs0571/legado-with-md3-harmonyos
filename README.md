@@ -16,7 +16,7 @@
 
 备份 ZIP 不包含书籍正文；请另行保管原始 TXT/EPUB。备份可能带有原 Android 数据中的账号信息、Cookie、请求头或令牌，**不要把个人备份上传到 Issues 或公开仓库**。
 
-截至当前快照，资源清单核对了 133 个 SVG，其中 48 个与 Android drawable 路径精确一致，31 个 SVG 有 AndroidX Material / Apache-2.0 来源记录；另有 10 个 SVG 尚未找到可独立核实的来源。详见[资源清单](docs/RESOURCE-LICENSES.md)。
+截至当前快照，资源清单核对了 133 个 SVG，其中 50 个与 Android drawable 路径精确一致，39 个 SVG 有 AndroidX Material / Apache-2.0 来源记录；此前待核的 10 个新增图标现已追溯到原 AndroidX 调用或原有箭头资源。详见[资源清单](docs/RESOURCE-LICENSES.md)。
 
 10 月 26 日的增量记录和未完成事项见[当前进度](docs/PROGRESS.md)。进度摘要不包含本机备份路径、书名、截图或设备数据。
 
