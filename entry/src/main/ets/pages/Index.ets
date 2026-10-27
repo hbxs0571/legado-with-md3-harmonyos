@@ -96,6 +96,10 @@ struct Index {
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readerBookmarks: ReaderBookmark[] = [];
   @State replaceRules: ReplaceRule[] = [];
+  /** 当前正在编辑的替换规则；为空表示新建。 */
+  @State editingReplaceRule: ReplaceRule | undefined = undefined;
+  /** 替换规则列表的排序模式，与 Repository 中的持久化值保持同步。 */
+  @State replaceRuleSortMode: string = 'asc';
   @State replaceEnableDefault: boolean = true;
   @State readerReplaceEnabled: boolean = true;
   @State readerReplaceUsesDefault: boolean = true;
@@ -233,6 +237,7 @@ struct Index {
 
   private async restoreReplaceRules(context: Context): Promise<void> {
     this.replaceRules = await ReplaceRuleRepository.load(context);
+    this.replaceRuleSortMode = ReplaceRuleRepository.getSortMode();
     this.replaceEnableDefault = ReplaceRuleRepository.getDefaultEnabled();
     this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(this.selectedBook);
     this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(this.selectedBook);
@@ -317,12 +322,94 @@ struct Index {
   }
 
   private replaceRuleGroups(): string[] {
-    const groups: string[] = ['默认'];
-    this.replaceRules.forEach((rule: ReplaceRule) => {
-      const group = rule.group.trim();
-      if (group.length > 0 && group !== '默认' && !groups.includes(group)) { groups.push(group); }
-    });
-    return groups;
+    return ReplaceRuleRepository.getGroups();
+  }
+
+  /** 打开已有规则的编辑页。 */
+  private openReplaceRuleEditor(id: number): void {
+    const rule = this.replaceRules.find((item: ReplaceRule) => item.id === id);
+    if (rule === undefined) {
+      this.showUnavailableAction('规则不存在，可能已被删除');
+      return;
+    }
+    this.editingReplaceRule = rule;
+    this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT;
+  }
+
+  private async moveReplaceRule(id: number, toTop: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      if (toTop) {
+        await ReplaceRuleRepository.moveToTop(context, id);
+      } else {
+        await ReplaceRuleRepository.moveToBottom(context, id);
+      }
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      if (this.route === AppRoute.READER) {
+        await this.reloadSelectedChapter();
+      }
+    } catch (_) {
+      this.showUnavailableAction('调整规则顺序失败');
+    }
+  }
+
+  private async addReplaceRuleGroup(name: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.addGroup(context, name);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('新增分组失败');
+    }
+  }
+
+  private async renameReplaceRuleGroup(oldName: string, newName: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.renameGroup(context, oldName, newName);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '重命名分组失败');
+    }
+  }
+
+  private async removeReplaceRuleGroup(name: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.removeGroup(context, name);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('删除分组失败');
+    }
+  }
+
+  private async setReplaceRuleSortMode(mode: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.setSortMode(context, mode);
+      this.replaceRuleSortMode = ReplaceRuleRepository.getSortMode();
+    } catch (_) {
+      this.showUnavailableAction('排序方式保存失败');
+    }
   }
 
   private cacheManagementGroups(): string[] {
@@ -2265,17 +2352,31 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULES) {
           ReplaceRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
-            onOpenEditor: () => this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT,
+            onOpenEditor: () => {
+              this.editingReplaceRule = undefined;
+              this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT;
+            },
             rules: this.replaceRules,
             groups: this.replaceRuleGroups(),
+            sortMode: this.replaceRuleSortMode,
             onToggleRule: (id: number, enabled: boolean) => this.setReplaceRuleEnabled(id, enabled),
             onRemoveRule: (id: number) => this.removeReplaceRule(id),
+            onEditRule: (id: number) => this.openReplaceRuleEditor(id),
+            onMoveRule: (id: number, toTop: boolean) => this.moveReplaceRule(id, toTop),
+            onAddGroup: (name: string) => this.addReplaceRuleGroup(name),
+            onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
+            onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
+            onSortModeChange: (mode: string) => this.setReplaceRuleSortMode(mode),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULE_EDIT) {
           ReplaceRuleEditPage({
-            onBack: () => this.profileSubpage = ProfileRoute.REPLACE_RULES,
+            onBack: () => {
+              this.editingReplaceRule = undefined;
+              this.profileSubpage = ProfileRoute.REPLACE_RULES;
+            },
             onSaveRule: (rule: ReplaceRule) => this.saveReplaceRule(rule),
+            editingRule: this.editingReplaceRule,
             groups: this.replaceRuleGroups(),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })

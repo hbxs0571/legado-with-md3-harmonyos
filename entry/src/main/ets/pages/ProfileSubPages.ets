@@ -176,14 +176,27 @@ export struct ReplaceRulesPage {
   onOpenEditor: () => void = () => {};
   onToggleRule: (id: number, enabled: boolean) => void = (_id: number, _enabled: boolean) => {};
   onRemoveRule: (id: number) => void = (_id: number) => {};
+  /** 点击规则条目进入编辑。 */
+  onEditRule: (id: number) => void = (_id: number) => {};
+  /** 长按菜单里的置顶/置底。 */
+  onMoveRule: (id: number, toTop: boolean) => void = (_id: number, _toTop: boolean) => {};
+  /** 分组管理：新增 / 重命名 / 删除。 */
+  onAddGroup: (name: string) => void = (_name: string) => {};
+  onRenameGroup: (oldName: string, newName: string) => void = (_o: string, _n: string) => {};
+  onRemoveGroup: (name: string) => void = (_name: string) => {};
+  /** 排序模式持久化。 */
+  onSortModeChange: (mode: string) => void = (_mode: string) => {};
   @Prop rules: ReplaceRule[] = [];
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
+  /** 由外部传入的持久化排序模式，切换时同步回写。 */
+  @Prop sortMode: string = 'asc';
   @State selectedGroup: string = '';
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
-  @State sortMode: string = 'asc';
   @State ruleActionSheet: string = '';
+  @State groupInput: string = '';
+  @State groupEditing: string = '';
 
   @Builder
   private ReplaceRuleMenu() {
@@ -193,13 +206,24 @@ export struct ReplaceRulesPage {
       MenuItem({ content: '分组管理' })
         .onClick(() => this.ruleActionSheet = 'groups')
       MenuItem({ content: '旧的在前' })
-        .onClick(() => { this.sortMode = 'asc'; this.onUnavailableAction('排序已切换：旧的在前') })
+        .onClick(() => this.onSortModeChange('asc'))
       MenuItem({ content: '新的在前' })
-        .onClick(() => { this.sortMode = 'desc'; this.onUnavailableAction('排序已切换：新的在前') })
+        .onClick(() => this.onSortModeChange('desc'))
       MenuItem({ content: '名称升序' })
-        .onClick(() => { this.sortMode = 'name_asc'; this.onUnavailableAction('排序已切换：名称升序') })
+        .onClick(() => this.onSortModeChange('name_asc'))
       MenuItem({ content: '名称降序' })
-        .onClick(() => { this.sortMode = 'name_desc'; this.onUnavailableAction('排序已切换：名称降序') })
+        .onClick(() => this.onSortModeChange('name_desc'))
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  /** 规则条目长按菜单：置顶、置底。 */
+  @Builder
+  private RuleRowMenu(rule: ReplaceRule) {
+    Menu() {
+      MenuItem({ content: '置顶' })
+        .onClick(() => this.onMoveRule(rule.id, true))
+      MenuItem({ content: '置底' })
+        .onClick(() => this.onMoveRule(rule.id, false))
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
   }
 
@@ -220,9 +244,9 @@ export struct ReplaceRulesPage {
               Row() {
                 Text(group).fontSize(15).fontColor('#E3E4E8').layoutWeight(1)
                 AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
-                  .onClick(() => this.onUnavailableAction('分组重命名尚未迁移，未修改分组'))
+                  .onClick(() => { this.groupEditing = group; this.groupInput = group; })
                 AppGlyph({ name: 'delete', glyphSize: 18, tint: '#D99AA5' })
-                  .onClick(() => this.onUnavailableAction('分组删除尚未迁移，未删除分组'))
+                  .onClick(() => this.onRemoveGroup(group))
               }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
                 .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
             }, (group: string) => group)
@@ -231,11 +255,21 @@ export struct ReplaceRulesPage {
                 .padding({ top: 24, bottom: 24 })
             }
             Row() {
-              AppGlyph({ name: 'add', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 8 })
-              Text('添加分组').fontSize(15).fontColor('#D8D9E0')
-            }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
+              TextInput({ placeholder: this.groupEditing.length > 0 ? '输入新的分组名称' : '输入分组名称',
+                text: this.groupInput })
+                .fontSize(15).fontColor('#E3E4E8').placeholderColor('#92949E')
+                .backgroundColor(Color.Transparent).layoutWeight(1).height(44)
+                .onChange((value: string) => this.groupInput = value)
+              if (this.groupEditing.length > 0) {
+                Text('取消').fontSize(13).fontColor('#92949E').padding({ left: 8, right: 8 })
+                  .onClick(() => { this.groupEditing = ''; this.groupInput = ''; })
+              }
+              Text(this.groupEditing.length > 0 ? '保存' : '添加')
+                .fontSize(13).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+                .padding({ left: 8 })
+                .onClick(() => this.submitGroup())
+            }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
               .backgroundColor('#22232A').borderRadius(12).margin({ top: 5, bottom: 20 })
-              .onClick(() => this.onUnavailableAction('分组新增尚未迁移，未创建分组'))
           }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
         }.layoutWeight(1).scrollBar(BarState.Off)
       } else {
@@ -261,6 +295,27 @@ export struct ReplaceRulesPage {
         }.width('100%').padding({ left: 16, right: 16 })
       }
     }.width('100%').height('100%').backgroundColor('#17181E')
+  }
+
+  /** 提交分组输入：编辑态调用重命名，新建态调用新增，完成后清空输入。 */
+  private submitGroup(): void {
+    const name = this.groupInput.trim();
+    if (name.length === 0) {
+      this.onUnavailableAction('分组名称不能为空');
+      return;
+    }
+    if (this.groupEditing.length > 0) {
+      if (name === this.groupEditing) {
+        this.groupEditing = '';
+        this.groupInput = '';
+        return;
+      }
+      this.onRenameGroup(this.groupEditing, name);
+    } else {
+      this.onAddGroup(name);
+    }
+    this.groupEditing = '';
+    this.groupInput = '';
   }
 
   private filteredReplaceRules(): ReplaceRule[] {
@@ -356,6 +411,8 @@ export struct ReplaceRulesPage {
                   .onClick(() => this.onRemoveRule(rule.id))
               }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
                 .backgroundColor('#1B1C22').borderRadius(14).margin({ bottom: 8 })
+                .onClick(() => this.onEditRule(rule.id))
+                .bindContextMenu(this.RuleRowMenu(rule), ResponseType.LongPress)
             }, (rule: ReplaceRule) => `${rule.id}`)
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 80 })
         }.layoutWeight(1).scrollBar(BarState.Off)
@@ -381,6 +438,8 @@ export struct ReplaceRuleEditPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onSaveRule: (rule: ReplaceRule) => void = (_rule: ReplaceRule) => {};
+  /** 传入已有规则时进入编辑模式；为空表示新建。 */
+  @Prop editingRule: ReplaceRule | undefined = undefined;
   @Prop groups: string[] = [];
   @State name: string = '';
   @State group: string = '默认';
@@ -397,6 +456,44 @@ export struct ReplaceRuleEditPage {
   @State showGroupManager: boolean = false;
   @State selectedGroups: string[] = [];
   @State activeField: string = 'pattern';
+  @State isEnabled: boolean = true;
+  /** 记录被编辑规则的 id 与 order，保存时原样带回，避免新建语义覆盖。 */
+  @State editingId: number = 0;
+  @State editingOrder: number = 0;
+  @State initialized: boolean = false;
+
+  aboutToAppear(): void {
+    this.applyEditingRule();
+  }
+
+  /** @Prop 变化时（切换编辑目标）重新回填。 */
+  onDidBuild(): void {
+    if (!this.initialized) {
+      this.applyEditingRule();
+    }
+  }
+
+  private applyEditingRule(): void {
+    const rule = this.editingRule;
+    if (rule === undefined || rule === null) {
+      this.initialized = true;
+      return;
+    }
+    this.name = rule.name;
+    this.group = typeof rule.group === 'string' && rule.group.length > 0 ? rule.group : '默认';
+    this.pattern = rule.pattern;
+    this.replacement = rule.replacement;
+    this.scope = rule.scope;
+    this.scopeTitle = rule.scopeTitle;
+    this.scopeContent = rule.scopeContent;
+    this.excludeScope = rule.excludeScope;
+    this.isRegex = rule.isRegex;
+    this.isEnabled = rule.isEnabled;
+    this.timeout = `${rule.timeoutMillisecond}`;
+    this.editingId = rule.id;
+    this.editingOrder = rule.order;
+    this.initialized = true;
+  }
 
   private availableGroups(): string[] {
     const options: string[] = ['默认'];
@@ -509,10 +606,11 @@ export struct ReplaceRuleEditPage {
       }
     }
     const rule: ReplaceRule = {
-      id: Date.now(), name: this.name.trim(), group: this.group, pattern: this.pattern,
-      replacement: this.replacement, scope: this.scope, scopeTitle: this.scopeTitle,
-      scopeContent: this.scopeContent, excludeScope: this.excludeScope, isEnabled: true,
-      isRegex: this.isRegex, timeoutMillisecond: Math.max(1, Number(this.timeout) || 3000), order: 0
+      id: this.editingId > 0 ? this.editingId : Date.now(), name: this.name.trim(), group: this.group,
+      pattern: this.pattern, replacement: this.replacement, scope: this.scope, scopeTitle: this.scopeTitle,
+      scopeContent: this.scopeContent, excludeScope: this.excludeScope, isEnabled: this.isEnabled,
+      isRegex: this.isRegex, timeoutMillisecond: Math.max(1, Number(this.timeout) || 3000),
+      order: this.editingId > 0 ? this.editingOrder : 0
     };
     this.onSaveRule(rule);
   }
@@ -604,7 +702,7 @@ export struct ReplaceRuleEditPage {
           .bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 })
         .margin({ top: -8 })
-      Text('新建替换').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
+      Text(this.editingId > 0 ? '编辑替换' : '新建替换').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
         .width('100%').padding({ left: 14, right: 0, top: 12, bottom: 0 })
       Scroll() {
         Column() {
