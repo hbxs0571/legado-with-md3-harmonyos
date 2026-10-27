@@ -41,7 +41,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "02a03db9e59ceac36356be8b2e8da7a8e1bcd38d7da08d5370d391db3c26795a"
+    "sha256": "cc417e16a989446c579bb91bedf954f183a70134efb76cfb8072fcbb72feee12"
   },
   {
     "path": "SECURITY.md",
@@ -89,7 +89,7 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "5c5ad2c45f9388f5a28dfd9150ee532be95fc413504ba3d95fbec47942a0a897"
+    "sha256": "9b401b251892e41f839acdc75ca551fc2b0923b15f8afac6bec25ba1898fcb58"
   },
   {
     "path": "docs/PROJECT.md",
@@ -117,7 +117,7 @@
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "1da0cc761047db46d3645f7acdc112918fe02e4b89881e6f416b4977f39e6bad"
+    "sha256": "21e3cb83320f0d6426cd0947f9586b1ee624cbb572564022595d2a3f751cda83"
   },
   {
     "path": "entry/build-profile.json5",
