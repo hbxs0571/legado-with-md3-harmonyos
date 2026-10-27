@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-28 TXT 目录规则接入与 CRLF 识别修复
+
+- 新增 `TxtTocRuleRepository`（preferences `legado_txt_toc_rules`）与内置规则库 `rawfile/txttoc/builtin-rules.json`（27 条，与上游 `assets/defaultData/txtTocRule.json` 逐条一致），TXT 目录规则页的导入内置、新建、编辑回填、删除、开关、置顶置底全部接上真实存储。
+- `Book` 新增 `tocRule` 字段，书架协议从 v12 升到 v13（`tocRule` 占第 28 字段），导入 TXT 时把选中的章节正则固定写入书籍，避免规则变更影响已导入的书。
+- 修复 CRLF 文本上所有内置目录规则 0 命中的缺陷：ArkTS 正则多行模式只把 `\n` 当行终止符，`$` 不匹配 `\r` 之前，而 Windows 文本每行以 `\r\n` 结尾。`TxtTocRuleRepository.selectForSample()` 现在先归一行尾再匹配。
+- 设备实测：CRLF 样本导入后正确切出 3 章（进度显示 1/3 11.1%），旧书重新打开同样按规则切分。
+
 ## 2026-10-28 替换净化整合源码同步
 
 - 以 E 端整合源码同步规则导入器、仓储、备份映射、阅读页面与规则管理 UI；同时保留书架 v12 元数据、眼保设置和阅读进度改动。

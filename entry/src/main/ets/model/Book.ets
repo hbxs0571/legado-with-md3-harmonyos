@@ -42,6 +42,12 @@ export interface Book {
   androidCharacterPosition?: number;
   /** 0 按百分比恢复，1 为旧版 HOS 渲染坐标，2 为 Android 正文章内字符坐标。 */
   readerPositionVersion?: number;
+  /**
+   * 这本书识别目录时采用的正则，对应上游 Book.tocUrl。
+   * 导入或刷新时确定一次并固定下来，之后启用/停用规则不会改动已有书籍的目录；
+   * 为空表示该书没有匹配到规则，按字数分章。
+   */
+  tocRule?: string;
   isLocal: boolean;
 }
 

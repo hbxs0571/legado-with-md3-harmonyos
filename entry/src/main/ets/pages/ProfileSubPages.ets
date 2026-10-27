@@ -14,6 +14,7 @@ import { ProfileRoute } from '../model/Book';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { ReplaceRulePreviewLine, ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReadTimeRecord } from '../data/ReadTimeRepository';
+import { TxtTocRule } from '../model/TxtTocRule';
 
 @Component
 export struct BookSourceManagePage {
@@ -1233,6 +1234,8 @@ struct RuleListBody {
   onToggle: (id: string) => void = (_id: string) => {};
   onLongSelect: (id: string) => void = (_id: string) => {};
   onMove: (id: string, direction: number) => void = (_id: string, _direction: number) => {};
+  /** 条目右侧开关；不传时按不可用处理，避免点了没反应。 */
+  onEnabledChange: (id: string, enabled: boolean) => void = (_id: string, _enabled: boolean) => {};
 
   private visibleRules(): RuleListEntry[] {
     const query = this.query.trim().toLocaleLowerCase();
@@ -1267,13 +1270,16 @@ struct RuleListBody {
                 Image($r('app.media.reader_reorder_down')).width(18).height(18).fillColor('#AFC2FF')
                   .onClick(() => this.onMove(rule.id, 1))
               } else if (!this.selectionMode) {
-                AppGlyph({ name: 'edit', glyphSize: 18, tint: '#AFC2FF' })
+                // 开关与编辑图标并排；key 里带上 enabled，避免 ArkUI 复用节点导致开关不刷新。
+                Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
+                  .onChange((enabled: boolean) => this.onEnabledChange(rule.id, enabled))
+                AppGlyph({ name: 'edit', glyphSize: 18, tint: '#AFC2FF' }).margin({ left: 8 })
               }
             }.width('100%').padding(16).backgroundColor('#1A1B21').borderRadius(14)
               .margin({ left: 16, right: 16, bottom: 8 })
               .onClick(() => this.selectionMode ? this.onToggle(rule.id) : this.onOpen(rule.id))
               .priorityGesture(LongPressGesture({ duration: 500 }).onAction(() => this.onLongSelect(rule.id)))
-          }, (rule: RuleListEntry) => rule.id)
+          }, (rule: RuleListEntry) => `${rule.id}_${rule.enabled ? 1 : 0}`)
         }.padding({ top: 8, bottom: 120 })
       }.width('100%').height('100%').scrollBar(BarState.Off)
     }
@@ -1284,13 +1290,23 @@ struct RuleListBody {
 export struct TxtTocRulesPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 当前规则列表，由 Index 持有并随仓储刷新。 */
   @Prop rules: RuleListEntry[] = [];
+  /** 当前规则原始数据，供编辑时回填正则；与 rules 一一对应。 */
+  @Prop sourceRules: TxtTocRule[] = [];
+  onSaveRule: (rule: TxtTocRule) => Promise<void> = async (_rule: TxtTocRule) => {};
+  onRemoveRule: (id: number) => Promise<void> = async (_id: number) => {};
+  onRemoveBatch: (ids: number[]) => Promise<void> = async (_ids: number[]) => {};
+  onToggleRule: (id: number, enabled: boolean) => Promise<void> = async (_id: number, _enabled: boolean) => {};
+  onMoveRule: (id: number, direction: number) => Promise<void> = async (_id: number, _direction: number) => {};
+  onImportBuiltin: () => Promise<void> = async () => {};
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State selectionMode: boolean = false;
   @State selectedRuleIds: string[] = [];
   @State sortMode: boolean = false;
   @State showAddRule: boolean = false;
+  /** 是否显示粘贴按钮；剪贴板读取需要 PasteButton 授权，不能直接调用。 */
   @State showPasteAuthorization: boolean = false;
   @State ruleName: string = '';
   @State chapterRegex: string = '';
@@ -1299,6 +1315,14 @@ export struct TxtTocRulesPage {
   @State testError: string = '';
   @State testResults: TxtRuleTestLine[] = [];
   @State testHasRun: boolean = false;
+  /** 正在编辑的规则 id；为空表示新建。 */
+  @State editingRuleId: number = -1;
+  /**
+   * 是否处于编辑态。
+   * 不能用 editingRuleId >= 0 判断：内置规则的 id 是负数（-1、-2…），
+   * 用数值范围判断会把内置规则误认成新建。
+   */
+  @State editingExisting: boolean = false;
 
   private buildClipboardRule(): string {
     return JSON.stringify({
@@ -1418,9 +1442,11 @@ export struct TxtTocRulesPage {
         this.selectedRuleIds = [];
       })
       MenuItem({ content: '导入' })
-        .onClick(() => this.onUnavailableAction('TXT 目录规则导入存储尚未接入，未导入任何数据'))
+        .onClick(() => this.onUnavailableAction('TXT 目录规则文件导入尚未迁移，可用「粘贴规则」逐条导入'))
       MenuItem({ content: '导入内置规则' })
-        .onClick(() => this.onUnavailableAction('内置 TXT 目录规则库尚未接入，未导入任何数据'))
+        .onClick(async () => {
+          await this.onImportBuiltin();
+        })
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
   }
 
@@ -1445,7 +1471,7 @@ export struct TxtTocRulesPage {
       Row() {
         AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' }).padding({ right: 12 })
           .onClick(() => this.showAddRule = false)
-        Text('TXT 目录规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text(this.editingExisting ? '编辑目录规则' : 'TXT 目录规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
         AppGlyph({ name: 'more', glyphSize: 20, tint: '#D8D9E0' })
           .bindMenu(this.EditMoreMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 18, right: 16, top: 8, bottom: 12 })
@@ -1505,17 +1531,62 @@ export struct TxtTocRulesPage {
         Row() {
           AppGlyph({ name: 'profileSave', glyphSize: 18, tint: '#151720' })
         }.width(44).height(44).justifyContent(FlexAlign.Center).backgroundColor('#B9C8FF').borderRadius(22)
-          .onClick(() => {
+          .onClick(async () => {
             if (this.ruleName.trim().length === 0 || this.chapterRegex.trim().length === 0) {
-              this.onUnavailableAction('名称和章节正则不能为空')
+              this.onUnavailableAction('名称和章节正则不能为空');
             } else if (!this.isValidRegex(this.chapterRegex)) {
-              this.onUnavailableAction('正则格式无效，规则未保存')
+              this.onUnavailableAction('正则格式无效，规则未保存');
+            } else if (this.volumeRegex.trim().length > 0 && !this.isValidRegex(this.volumeRegex)) {
+              this.onUnavailableAction('分卷正则格式无效，规则未保存');
             } else {
-              this.onUnavailableAction('TXT 目录规则存储尚未接入，规则未保存')
+              const existing: TxtTocRule | undefined = this.editingExisting
+                ? this.sourceRules.find((rule: TxtTocRule) => rule.id === this.editingRuleId) : undefined;
+              await this.onSaveRule({
+                id: this.editingExisting ? this.editingRuleId : Date.now(),
+                name: this.ruleName.trim(),
+                chapterRule: this.chapterRegex.trim(),
+                volumeRule: this.volumeRegex.trim(),
+                example: this.exampleText.length > 0 ? this.exampleText : undefined,
+                // 编辑已有规则时沿用原序号，新建的排在末尾由仓储重排。
+                serialNumber: existing?.serialNumber ?? -1,
+                enable: existing?.enable ?? true
+              });
+              this.showAddRule = false;
             }
           })
       }.width('100%').justifyContent(FlexAlign.End).padding({ left: 16, right: 16, top: 10, bottom: 18 })
     }.width('100%').height('100%')
+  }
+
+  /** 打开编辑面板并回填已有规则；id 无效时按新建处理。 */
+  private openEditor(id: string): void {
+    const numericId = Number(id);
+    const rule: TxtTocRule | undefined = Number.isInteger(numericId)
+      ? this.sourceRules.find((item: TxtTocRule) => item.id === numericId) : undefined;
+    if (rule === undefined) {
+      this.onUnavailableAction('该规则已不存在');
+      return;
+    }
+    this.editingRuleId = rule.id;
+    this.editingExisting = true;
+    this.ruleName = rule.name;
+    this.chapterRegex = rule.chapterRule;
+    this.exampleText = rule.example ?? '';
+    this.volumeRegex = rule.volumeRule;
+    this.clearRuleTest();
+    this.showAddRule = true;
+  }
+
+  /** 打开新建面板，清空编辑态。 */
+  private openCreator(): void {
+    this.editingRuleId = -1;
+    this.editingExisting = false;
+    this.ruleName = '';
+    this.chapterRegex = '';
+    this.exampleText = '';
+    this.volumeRegex = '';
+    this.clearRuleTest();
+    this.showAddRule = true;
   }
 
   build() {
@@ -1556,28 +1627,43 @@ export struct TxtTocRulesPage {
           Text('全选').fontSize(14).fontColor('#AFC2FF').onClick(() =>
             this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
           Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
-            .onClick(() => this.onUnavailableAction('TXT 目录规则删除尚未迁移，未更改数据'))
+            .onClick(async () => {
+              const ids = this.selectedRuleIds.map((id: string) => Number(id))
+                .filter((id: number) => Number.isInteger(id));
+              if (ids.length === 0) {
+                this.onUnavailableAction('所选规则已不存在');
+                return;
+              }
+              await this.onRemoveBatch(ids);
+              this.selectionMode = false;
+              this.selectedRuleIds = [];
+            })
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
       }
       RuleListBody({
         rules: this.rules, query: this.searchQuery, selectedIds: this.selectedRuleIds,
         selectionMode: this.selectionMode, sortMode: this.sortMode, emptyMessage: '暂无 TXT 目录规则',
-        onOpen: (_id: string) => this.onUnavailableAction('现有 TXT 规则编辑尚未接入'),
+        onOpen: (id: string) => this.openEditor(id),
         onToggle: (id: string) => this.toggleSelectedRule(id),
         onLongSelect: (id: string) => { this.selectionMode = true; this.selectedRuleIds = [id]; },
-        onMove: (_id: string, _direction: number) => this.onUnavailableAction('TXT 规则排序尚未迁移')
+        onMove: (id: string, direction: number) => {
+          const numericId = Number(id);
+          if (Number.isInteger(numericId)) {
+            this.onMoveRule(numericId, direction);
+          }
+        },
+        onEnabledChange: (id: string, enabled: boolean) => {
+          const numericId = Number(id);
+          if (Number.isInteger(numericId)) {
+            this.onToggleRule(numericId, enabled);
+          }
+        }
       }).layoutWeight(1)
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'add', glyphSize: 24, tint: '#151720' })
         }.width(56).height(56).backgroundColor('#B9C8FF').borderRadius(28)
-          .onClick(() => {
-            this.ruleName = '';
-            this.chapterRegex = '';
-            this.exampleText = '';
-            this.volumeRegex = '';
-            this.showAddRule = true;
-          })
+          .onClick(() => this.openCreator())
       }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor('#111217')
       .bindSheet(this.showAddRule, this.ruleEditorSheet(), {

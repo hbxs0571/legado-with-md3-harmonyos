@@ -13,7 +13,7 @@ import {
   BookSourceManagePage, ReplaceRulesPage, ReplaceRuleEditPage, TxtTocRulesPage, DictionaryRulesPage,
   DictionaryRuleEditPage, HighlightTagRulesPage, HighlightTagRuleEditPage,
   AllBookmarksPage, ReadRecordsPage, CacheManagementPage,
-  AboutAppPage, AiChatPage, AppSettingsHomePage, BookmarkBookSummary, BookmarkEntrySummary
+  AboutAppPage, AiChatPage, AppSettingsHomePage, BookmarkBookSummary, BookmarkEntrySummary, RuleListEntry
 } from './ProfileSubPages';
 import { ReaderSearchPage } from './ReaderSearchPage';
 import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
@@ -53,6 +53,8 @@ import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
+import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
+import { TxtTocRule } from '../model/TxtTocRule';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
@@ -97,6 +99,8 @@ struct Index {
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readerBookmarks: ReaderBookmark[] = [];
   @State replaceRules: ReplaceRule[] = [];
+  /** TXT 目录规则，与仓储保持同步。 */
+  @State txtTocRules: TxtTocRule[] = [];
   /** 当前正在编辑的替换规则；为空表示新建。 */
   @State editingReplaceRule: ReplaceRule | undefined = undefined;
   /** 替换规则列表的排序模式，与 Repository 中的持久化值保持同步。 */
@@ -201,6 +205,7 @@ struct Index {
       this.restoreReaderSettings(context);
       this.restoreReaderMoreActions(context);
       this.restoreReplaceRules(context);
+      this.restoreTxtTocRules(context);
       this.restoreBookContentProcesses(context);
       this.restoreBackupIgnoreLists(context);
       this.loadRestoredAndroidEntries(context);
@@ -260,6 +265,10 @@ struct Index {
     this.replaceEnableDefault = ReplaceRuleRepository.getDefaultEnabled();
     this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(this.selectedBook);
     this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(this.selectedBook);
+  }
+
+  private async restoreTxtTocRules(context: Context): Promise<void> {
+    this.txtTocRules = await TxtTocRuleRepository.load(context);
   }
 
 
@@ -557,6 +566,118 @@ struct Index {
   }
 
   /**
+   * 保存一条 TXT 目录规则（新建或编辑）。
+   * 保存后刷新列表；已导入书籍的目录不受影响，因为切章用的正则已固定在 Book.tocRule 上。
+   */
+  private async saveTxtTocRule(rule: TxtTocRule): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.save(context, rule);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction('规则已保存');
+    } catch (_) {
+      this.showUnavailableAction('保存目录规则失败');
+    }
+  }
+
+  /** 启用/停用一条 TXT 目录规则。 */
+  private async setTxtTocRuleEnabled(id: number, enabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.setEnabled(context, id, enabled);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('切换目录规则状态失败');
+    }
+  }
+
+  /** 删除一条 TXT 目录规则。 */
+  private async removeTxtTocRule(id: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    const exists = this.txtTocRules.some((rule: TxtTocRule) => rule.id === id);
+    if (!exists) {
+      this.showUnavailableAction('该规则已不存在');
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.remove(context, id);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction('规则已删除');
+    } catch (_) {
+      this.showUnavailableAction('删除目录规则失败');
+    }
+  }
+
+  /** 批量删除 TXT 目录规则。 */
+  private async removeTxtTocRuleBatch(ids: number[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const removed = await TxtTocRuleRepository.removeBatch(context, ids);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction(removed === 0 ? '所选规则已不存在' : `已删除 ${removed} 条规则`);
+    } catch (_) {
+      this.showUnavailableAction('批量删除目录规则失败');
+    }
+  }
+
+  /** 调整一条 TXT 目录规则的顺序；direction 为 -1 上移、1 下移。 */
+  private async moveTxtTocRule(id: number, direction: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    const fromIndex = this.txtTocRules.findIndex((rule: TxtTocRule) => rule.id === id);
+    if (fromIndex < 0) {
+      this.showUnavailableAction('该规则已不存在');
+      return;
+    }
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= this.txtTocRules.length) {
+      this.showUnavailableAction('已经在最' + (direction < 0 ? '前' : '后') + '面了');
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.moveRule(context, id, toIndex);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('调整目录规则顺序失败');
+    }
+  }
+
+  /** 导入内置目录规则库，跳过已存在的同名规则。 */
+  private async importBuiltinTxtTocRules(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const builtin = TxtTocRuleRepository.loadBuiltinRules(context);
+      if (builtin.length === 0) {
+        this.showUnavailableAction('内置规则库为空');
+        return;
+      }
+      const outcome = await TxtTocRuleRepository.importRules(context, builtin);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction(outcome.added === 0 && outcome.updated === 0
+        ? '内置规则已全部存在' : `已导入 ${outcome.added} 条、更新 ${outcome.updated} 条内置规则`);
+    } catch (_) {
+      this.showUnavailableAction('导入内置目录规则失败');
+    }
+  }
+
+  /**
    * 导入替换规则。
    * source 为 'file' 时弹出文件选择器读取文本；其余情况直接解析传入的 text。
    * 解析失败与部分跳过都如实反馈，不把未导入的条目算作成功。
@@ -837,6 +958,7 @@ struct Index {
       androidOriginalPath: targetBook.androidOriginalPath,
       androidCharacterPosition: position,
       readerPositionVersion: 1,
+      tocRule: targetBook.tocRule,
       isLocal: targetBook.isLocal
     };
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
@@ -921,6 +1043,7 @@ struct Index {
       androidOriginalPath: targetBook.androidOriginalPath,
       androidCharacterPosition: androidPosition,
       readerPositionVersion: 2,
+      tocRule: targetBook.tocRule,
       isLocal: targetBook.isLocal
     };
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
@@ -1991,6 +2114,7 @@ struct Index {
       androidCharacterPosition: Math.max(0, Math.trunc(chapterPosition)),
       readerPositionVersion: this.selectedBook.isLocal && (this.selectedBook.format === 'txt' ||
         this.selectedBook.format === 'epub') ? (androidCoordinate ? 2 : 0) : this.selectedBook.readerPositionVersion,
+      tocRule: this.selectedBook.tocRule,
       isLocal: this.selectedBook.isLocal
     };
     this.selectedBook = updatedBook;
@@ -2043,6 +2167,7 @@ struct Index {
       androidOriginalPath: this.selectedBook.androidOriginalPath,
       androidCharacterPosition: this.selectedBook.androidCharacterPosition,
       readerPositionVersion: this.selectedBook.readerPositionVersion,
+      tocRule: this.selectedBook.tocRule,
       isLocal: this.selectedBook.isLocal
     };
     this.selectedBook = updatedBook;
@@ -2232,6 +2357,7 @@ struct Index {
       androidOriginalPath: this.selectedBook.androidOriginalPath,
       androidCharacterPosition: 0,
       readerPositionVersion: 1,
+      tocRule: this.selectedBook.tocRule,
       isLocal: this.selectedBook.isLocal
     };
     let content: string = '';
@@ -2801,7 +2927,26 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULES) {
-          TxtTocRulesPage({ onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
+          TxtTocRulesPage({
+            onBack: () => this.route = this.profileDetailReturnRoute,
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            rules: this.txtTocRules.map((rule: TxtTocRule) => {
+              const entry: RuleListEntry = {
+                id: `${rule.id}`,
+                title: rule.name,
+                detail: rule.chapterRule,
+                enabled: rule.enable
+              };
+              return entry;
+            }),
+            sourceRules: this.txtTocRules,
+            onSaveRule: (rule: TxtTocRule) => this.saveTxtTocRule(rule),
+            onRemoveRule: (id: number) => this.removeTxtTocRule(id),
+            onRemoveBatch: (ids: number[]) => this.removeTxtTocRuleBatch(ids),
+            onToggleRule: (id: number, enabled: boolean) => this.setTxtTocRuleEnabled(id, enabled),
+            onMoveRule: (id: number, direction: number) => this.moveTxtTocRule(id, direction),
+            onImportBuiltin: () => this.importBuiltinTxtTocRules()
+          })
         } else if (this.profileSubpage === ProfileRoute.DICTIONARY_RULES) {
           DictionaryRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
