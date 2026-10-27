@@ -12,8 +12,11 @@
 6. **在线 URL 导入未接入。** 规则可通过本地文件或用户粘贴文本导入；应用没有通过 URL 获取规则的网络能力。
 7. **TXT 目录规则的文件导入与 ZIP 往返只在模拟器验过。** 导入/导出已接通（`TxtTocRuleRepository.pickImportFile` / `saveExportFile` + `TxtTocRuleImporter`），但只在 OpenHarmony API 26 模拟器上实测通过，API 12 真机未验证。
 9. **TXT 目录规则的「更新目录」只在模拟器验过。** 书架「更多 → 更新目录」已接通，会对全部本地 TXT 重新识别目录并保留阅读进度；但只在 OpenHarmony API 26 模拟器上实测通过，API 12 真机未验证。
+10. **分卷识别只在模拟器验过，且与上游有已知差异。** 分卷正则已接通（见「已修复」），但只在 OpenHarmony API 26 模拟器上实测；上游还会按「卷标题后无正文」兜底判定分卷（`TextFile.kt:262-266`），本地只按分卷正则判定，暂未实现该兜底。书架协议 v14 为本端新增字段，E 端合并时注意字段序冲突。
 
 ## 已修复
+
+- **分卷规则接通，目录页支持可折叠卷头**（2026-10-28）。`volumeRule` 原来只存不用。现按上游做法：`TxtTocRuleRepository.resolveVolumeRule()` 按章节正则在全部规则（含已禁用）里反查分卷正则，`markVolumeTitles()` 逐标题打标记；`Book` 新增 `chapterVolumes`，书架协议 v13 → v14（第 29 字段）；`CatalogPage.ets` 卷头带折叠箭头、卷内章节缩进一级，搜索时忽略折叠状态。设备实测：带「第一卷/第二卷」的 TXT 切出 6 章，卷头折叠/展开正常。
 
 - **书架「更新目录」接通，且重算后角标不刷新**（2026-10-28）。`BookRepository.refreshToc()` 逐本重算章节并保留当前章位置；`BookshelfPage` 的菜单项原来调 `onUnavailableAction('批量更新目录尚未迁移')`，现改为 `onRefreshToc()`。同一轮修掉一个连带缺陷：书架卡片 `ForEach` 行键原来只用 `book.id`，章节数变化后 id 不变，ArkUI 复用旧节点导致封面角标停在旧值；新增 `bookCardKey()` 把 `chapterCount`/`chapterIndex`/`chapterProgress`/`coverMark`/`bodyMissing` 拼进键里。设备实测：把一本 3 章的书手动回退成 1 章 + 空 `tocRule` 的旧书状态，点「更新目录」后提示「更新目录完成：已更新 1 本」，存储 `chapterCount` 从 1 变 3、`tocRule` 回填 143 字符，书架角标同步从 1 变 3。
 

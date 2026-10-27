@@ -318,6 +318,70 @@ export class TxtTocRuleRepository {
   }
 
   /**
+   * 按章节正则反查这本书该用哪条分卷正则，对应上游 TextFile.getVolumePattern()。
+   *
+   * 上游在全部规则里找 chapterRule 完全相同的那条（含已禁用的）：分卷正则跟着章节正则走，
+   * 书里只缓存章节正则，所以每次都要反查回来。找不到或正则非法时返回空串，表示不分卷。
+   */
+  static resolveVolumeRule(chapterRule: string): string {
+    const pattern = chapterRule.trim();
+    if (pattern.length === 0) {
+      return '';
+    }
+    const rules = TxtTocRuleRepository.getAll();
+    for (let index = 0; index < rules.length; index++) {
+      const rule = rules[index];
+      if (rule.chapterRule.trim() !== pattern) {
+        continue;
+      }
+      const volumeRule = rule.volumeRule.trim();
+      if (volumeRule.length === 0) {
+        return '';
+      }
+      try {
+        new RegExp(volumeRule, 'm');
+      } catch (_) {
+        // 分卷正则语法错误只影响分卷，不该让整条目录规则失效。
+        return '';
+      }
+      return volumeRule;
+    }
+    return '';
+  }
+
+  /**
+   * 判断一组章节标题里哪些是分卷标题。
+   *
+   * 与上游 analyze() 一致：分卷正则命中的章节标题额外带上 isVolume 标记，
+   * 它本身仍是章节（有起点、有正文），只是目录页把它当作卷头渲染。
+   * 没有分卷正则时全部返回 false。
+   */
+  static markVolumeTitles(titles: string[], volumeRule: string): boolean[] {
+    const flags: boolean[] = [];
+    const pattern = volumeRule.trim();
+    if (pattern.length === 0) {
+      for (let index = 0; index < titles.length; index++) {
+        flags.push(false);
+      }
+      return flags;
+    }
+    let regex: RegExp;
+    try {
+      regex = new RegExp(pattern, 'm');
+    } catch (_) {
+      for (let index = 0; index < titles.length; index++) {
+        flags.push(false);
+      }
+      return flags;
+    }
+    for (let index = 0; index < titles.length; index++) {
+      regex.lastIndex = 0;
+      flags.push(regex.test(titles[index] ?? ''));
+    }
+    return flags;
+  }
+
+  /**
    * 从启用的规则里挑一条最贴合样本文本的规则。
    * 实现对齐上游 selectTxtTocRule：倒序遍历（低序号优先），命中数严格大于当前最大值才替换，
    * 因此命中数相等时先参与的高序号被后到的低序号覆盖。

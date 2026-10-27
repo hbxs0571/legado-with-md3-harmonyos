@@ -1,5 +1,13 @@
 # 修改记录
 
+## 2026-10-28 分卷规则接通：目录页支持可折叠卷头
+
+- `volumeRule` 原来只存不用，现按上游做法完整接通：`entry/src/main/ets/data/TxtTocRuleRepository.ets` 新增 `resolveVolumeRule()`（按章节正则在全部规则里反查分卷正则，含已禁用规则）与 `markVolumeTitles()`（逐标题打分卷标记）。
+- `Book` 新增 `chapterVolumes?: boolean[]`，书架协议从 v13 升到 v14（第 29 字段，全 false 或缺失时写空串以省空间）。
+- `BookRepository.splitChapters()` 在切章后对标题打分卷标记，`refreshToc`/`withCharset`/`createLocalBook` 三条链路都把分卷写入书籍。
+- `entry/src/main/ets/pages/CatalogPage.ets` 目录页渲染分卷：卷头显示折叠箭头（点击折叠/展开卷内章节）、卷内章节缩进一级；搜索时忽略折叠状态（与上游一致），倒序时同样生效。
+- 设备实测（OpenHarmony API 26 模拟器）：导入带「第一卷/第二卷」的 TXT 后正确切出 6 章，目录页两个卷头带箭头、卷内章节缩进，点卷头后第一/二章隐藏且总章数不变。
+
 ## 2026-10-28 书架「更新目录」接通并修复重算后角标不刷新
 
 - 书架「更多 → 更新目录」原来是占位提示「批量更新目录尚未迁移」，现改为真正重算：`entry/src/main/ets/data/BookRepository.ets` 新增 `refreshToc()`，逐本重读本地 TXT、按书籍固定的 `tocRule` 重新切分章节，并保留当前章的位置。

@@ -8,6 +8,10 @@ import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 interface CatalogChapter {
   title: string;
   index: number;
+  /** 这一条是不是分卷标题（对应上游 BookChapter.isVolume），渲染成可折叠的卷头。 */
+  isVolume: boolean;
+  /** 这一条是否落在某个卷内，落在卷内要向右缩进一级。 */
+  isInVolume: boolean;
 }
 
 @Component
@@ -25,6 +29,8 @@ export struct CatalogPage {
   @State query: string = '';
   @State chapterWordCounts: Map<number, string> = new Map<number, string>();
   @State wordCountsLoading: boolean = false;
+  /** 已折叠的卷头章节下标；删除即展开，Set 变动后需整体重新赋值才会刷新。 */
+  @State collapsedVolumes: Set<number> = new Set<number>();
   private chapterScroller: Scroller = new Scroller();
   private hasAutoScrolledCurrentChapter: boolean = false;
   private wordCountGeneration: number = 0;
@@ -54,14 +60,32 @@ export struct CatalogPage {
   private getChapters(): CatalogChapter[] {
     const keyword = this.query.trim();
     const allChapters = this.getAllChapters();
+    const volumeFlags = this.book.chapterVolumes;
     const chapters: CatalogChapter[] = [];
+    // 搜索时不折叠卷，否则搜到的章节可能因为所属卷被收起而看不见。
+    const searching = keyword.length > 0;
+    let insideCollapsedVolume = false;
     for (let index = 0; index < allChapters.length; index++) {
       const title = allChapters[index];
-      if (title !== undefined) {
-        const displayTitle = this.useTitleReplacement ? ReplaceRuleRepository.applyTitle(this.book, title) : title;
-        if (displayTitle.includes(keyword)) {
-          chapters.push({ title: displayTitle, index: index });
+      if (title === undefined) { continue; }
+      const isVolume = volumeFlags?.[index] === true;
+      if (!searching) {
+        if (isVolume) {
+          // 卷头自己始终显示，收起与否只影响它后面的章节。
+          insideCollapsedVolume = this.collapsedVolumes.has(index);
+        } else if (insideCollapsedVolume) {
+          continue;
         }
+      }
+      const displayTitle = this.useTitleReplacement ? ReplaceRuleRepository.applyTitle(this.book, title) : title;
+      if (displayTitle.includes(keyword)) {
+        // 卷头本身不缩进；卷内的普通章节才缩进一级。
+        chapters.push({
+          title: displayTitle,
+          index: index,
+          isVolume: isVolume,
+          isInVolume: !isVolume && this.isInsideAnyVolume(index, volumeFlags)
+        });
       }
     }
     if (this.ascending) { return chapters; }
@@ -71,6 +95,26 @@ export struct CatalogPage {
       if (chapter !== undefined) { reversed.push(chapter); }
     }
     return reversed;
+  }
+
+  /** 判断某一章前面是否已经有卷头，用于决定目录里的缩进。 */
+  private isInsideAnyVolume(chapterIndex: number, volumeFlags: boolean[] | undefined): boolean {
+    if (volumeFlags === undefined) { return false; }
+    for (let index = chapterIndex - 1; index >= 0; index--) {
+      if (volumeFlags[index] === true) { return true; }
+    }
+    return false;
+  }
+
+  /** 切换某个卷的折叠状态，卷内的章节跟着显示或隐藏。 */
+  private toggleVolume(chapterIndex: number): void {
+    if (this.collapsedVolumes.has(chapterIndex)) {
+      this.collapsedVolumes.delete(chapterIndex);
+    } else {
+      this.collapsedVolumes.add(chapterIndex);
+    }
+    // Set 的增删不会触发 @State 刷新，重新赋值一次让 ForEach 重算。
+    this.collapsedVolumes = new Set<number>(this.collapsedVolumes);
   }
 
   private isChapterSelected(chapterIndex: number): boolean {
@@ -211,8 +255,17 @@ export struct CatalogPage {
             ForEach(this.getChapters(), (chapter: CatalogChapter) => {
               ListItem() {
                 Row() {
-                  Text(chapter.title).fontSize(12)
-                    .fontColor(this.isChapterSelected(chapter.index) ? '#F0F1F5' : '#D4D5DB')
+                  if (chapter.isVolume) {
+                    // profile_expand_more 是向下的箭头：展开时朝下，收起时旋转 -90° 变成向右。
+                    Image($r('app.media.profile_expand_more'))
+                      .width(14).height(14)
+                      .fillColor('#AEB0B9')
+                      .rotate({ angle: this.collapsedVolumes.has(chapter.index) ? -90 : 0 })
+                      .margin({ right: 4 })
+                  }
+                  Text(chapter.title).fontSize(chapter.isVolume ? 13 : 12)
+                    .fontWeight(chapter.isVolume ? FontWeight.Medium : FontWeight.Normal)
+                    .fontColor(this.isChapterSelected(chapter.index) ? '#F0F1F5' : (chapter.isVolume ? '#DCDDE4' : '#D4D5DB'))
                     .layoutWeight(1).maxLines(1)
                   if (this.showWordCount && this.chapterWordCounts.has(chapter.index)) {
                     Text(this.chapterWordCounts.get(chapter.index) ?? '')
@@ -223,12 +276,22 @@ export struct CatalogPage {
                   }
                 }
                 .width('100%')
-                .padding({ left: 12, right: 12, top: 11, bottom: 11 })
+                .padding({
+                  left: chapter.isInVolume ? 26 : 12, right: 12, top: 11, bottom: 11
+                })
                 .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : '#1A1B21')
                 .borderRadius(10)
-                .onClick(() => this.onSelectChapter(chapter.index))
+                .onClick(() => {
+                  // 卷头点击只折叠/展开，不跳章；卷的正文本身仍可从卷内第一章进入。
+                  if (chapter.isVolume) {
+                    this.toggleVolume(chapter.index);
+                  } else {
+                    this.onSelectChapter(chapter.index);
+                  }
+                })
               }.margin({ left: 12, right: 12, bottom: 6 })
-            }, (chapter: CatalogChapter) => chapter.index.toString())
+            }, (chapter: CatalogChapter) =>
+              `${chapter.index}_${chapter.isVolume ? 1 : 0}_${chapter.isInVolume ? 1 : 0}_${this.collapsedVolumes.has(chapter.index) ? 1 : 0}`)
           }
           .layoutWeight(1)
           .scrollBar(BarState.Off)

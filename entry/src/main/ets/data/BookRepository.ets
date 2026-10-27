@@ -24,6 +24,8 @@ interface NoTocChapterLayout {
 interface ChapterSplit {
   titles: string[];
   offsets: number[];
+  /** 每一章是否为分卷标题，与 titles 等长；对应上游 BookChapter.isVolume。 */
+  volumes: boolean[];
 }
 
 export interface NoTocBookRefreshResult {
@@ -132,6 +134,45 @@ export class BookRepository {
     return 'text';
   }
 
+  /** 把分卷标记序列化成 0/1 串；全为 false 时返回空串，避免无分卷书籍多存冗余字节。 */
+  private static encodeVolumeFlags(volumes: boolean[] | undefined, count: number): string {
+    if (volumes === undefined || volumes.length !== count || count === 0) {
+      return '';
+    }
+    let hasVolume = false;
+    for (let index = 0; index < volumes.length; index++) {
+      if (volumes[index] === true) { hasVolume = true; break; }
+    }
+    if (!hasVolume) {
+      return '';
+    }
+    let encoded = '';
+    for (let index = 0; index < volumes.length; index++) {
+      encoded += volumes[index] === true ? '1' : '0';
+    }
+    return encoded;
+  }
+
+  /**
+   * 还原分卷标记。长度与章节数对不上时整体丢弃，
+   * 宁可当这本书没有分卷，也不能让目录页按错位的标记缩进。
+   */
+  private static decodeVolumeFlags(value: string | undefined, count: number): boolean[] | undefined {
+    const text = value ?? '';
+    if (text.length === 0 || text.length !== count || count === 0) {
+      return undefined;
+    }
+    const volumes: boolean[] = [];
+    for (let index = 0; index < text.length; index++) {
+      const flag = text.charAt(index);
+      if (flag !== '0' && flag !== '1') {
+        return undefined;
+      }
+      volumes.push(flag === '1');
+    }
+    return volumes;
+  }
+
   private static resolveCoverUri(context: Context, bookId: string, customCoverPath: string): string | undefined {
     if (customCoverPath.length > 0 && fileIo.accessSync(customCoverPath)) {
       return `file://${customCoverPath}`;
@@ -188,6 +229,7 @@ export class BookRepository {
       groupName: book.groupName,
       chapterTitles: book.chapterTitles,
       chapterOffsets: book.chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
       chapterIndex: book.chapterIndex,
       chapterProgress: book.chapterProgress,
       lastChapter: book.lastChapter,
@@ -225,10 +267,11 @@ export class BookRepository {
     try {
       const store = await preferences.getPreferences(context, BookRepository.preferenceName);
       const value = await store.get('books', '');
-      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n') && !value.startsWith('v10\n') && !value.startsWith('v11\n') && !value.startsWith('v12\n') && !value.startsWith('v13\n'))) {
+      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n') && !value.startsWith('v10\n') && !value.startsWith('v11\n') && !value.startsWith('v12\n') && !value.startsWith('v13\n') && !value.startsWith('v14\n'))) {
         return [];
       }
-      const isVersion13 = value.startsWith('v13\n');
+      const isVersion14 = value.startsWith('v14\n');
+      const isVersion13 = isVersion14 || value.startsWith('v13\n');
       const isVersion12 = isVersion13 || value.startsWith('v12\n');
       const isVersion11 = isVersion12 || value.startsWith('v11\n');
       const isVersion10 = isVersion11 || value.startsWith('v10\n');
@@ -244,7 +287,7 @@ export class BookRepository {
       const records = value.substring(3).split('\n');
       for (let index = 0; index < records.length; index++) {
         const fields = records[index].split('|');
-        const maximumFields = isVersion13 ? 28 : isVersion12 ? 27 : isVersion11 ? 25 : isVersion10 ? 24 : isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
+        const maximumFields = isVersion14 ? 29 : isVersion13 ? 28 : isVersion12 ? 27 : isVersion11 ? 25 : isVersion10 ? 24 : isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
         if (fields.length < 2 || fields.length > maximumFields) {
           continue;
         }
@@ -302,6 +345,8 @@ export class BookRepository {
             androidCharacterPosition: Number.isInteger(savedPosition) && savedPosition >= 0 ? savedPosition : 0,
             readerPositionVersion: isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 2,
             tocRule: isVersion13 ? (decodeURIComponent(fields[27] ?? '') || undefined) : undefined,
+            // 缺正文的书书目来自备份，分卷标记随字段一起保留；没有章节标题时对齐不上，直接忽略。
+            chapterVolumes: isVersion14 ? BookRepository.decodeVolumeFlags(fields[28], savedChapterCount.length > 0 ? Number(savedChapterCount) : 0) : undefined,
             format: fields[4] === 'epub' ? 'epub' : 'txt',
             imageStyle: isVersion6 ? decodeURIComponent(fields[18] ?? 'DEFAULT') : undefined,
             charset: isVersion7 ? decodeURIComponent(fields[19] ?? '') || undefined : undefined,
@@ -360,6 +405,7 @@ export class BookRepository {
               readerPositionVersion: isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 0,
               fileSizeBytes: savedSize > 0 ? savedSize : undefined,
               tocRule: isVersion13 ? (decodeURIComponent(fields[27] ?? '') || undefined) : undefined,
+              chapterVolumes: isVersion14 ? BookRepository.decodeVolumeFlags(fields[28], chapterTitles.length) : undefined,
               isLocal: true
             });
           } else {
@@ -395,6 +441,9 @@ export class BookRepository {
               const safeIndex = Math.max(0, Math.min(savedTitles.length - 1, chapterIndex));
               localBook.chapterTitles = savedTitles;
               localBook.chapterOffsets = savedOffsets;
+              // 分卷标记必须先还原 chapterTitles 再对齐，长度对不上时 decodeVolumeFlags 会返回 undefined。
+              localBook.chapterVolumes = isVersion14
+                ? BookRepository.decodeVolumeFlags(fields[28], savedTitles.length) : undefined;
               localBook.chapterIndex = safeIndex;
               localBook.lastChapter = savedTitles[safeIndex] ?? localBook.lastChapter;
               localBook.chapterCount = savedTitles.length.toString();
@@ -416,7 +465,7 @@ export class BookRepository {
     const operation = BookRepository.saveQueue.then(async (): Promise<void> => {
       try {
         const store = await preferences.getPreferences(context, BookRepository.preferenceName);
-        const records: string[] = ['v13'];
+        const records: string[] = ['v14'];
         for (let index = 0; index < books.length; index++) {
           const book = books[index];
           if (!BookRepository.isPersistableBook(book)) { continue; }
@@ -437,7 +486,10 @@ export class BookRepository {
             encodeURIComponent(book.remark ?? ''), encodeURIComponent(book.customTag ?? ''),
             encodeURIComponent(book.customCoverUri ?? ''), encodeURIComponent(book.bookType ?? 'text'),
             book.fixedType === true ? '1' : '0',
-            encodeURIComponent(book.tocRule ?? '')
+            encodeURIComponent(book.tocRule ?? ''),
+            // 分卷标记按位存成 0/1 串，与 chapterTitles 一一对应。
+            // 全为 false 时存空串，省掉绝大多数无分卷书籍的冗余字节。
+            BookRepository.encodeVolumeFlags(book.chapterVolumes, (book.chapterTitles ?? []).length)
           ].join('|'));
         }
         await store.put('books', records.join('\n'));
@@ -473,22 +525,27 @@ export class BookRepository {
     const chapterRule = BookRepository.resolveChapterRule(undefined, content);
     let chapterTitles: string[] = [];
     let chapterOffsets: number[] = [];
+    let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
       const split = BookRepository.splitChapters(content, chapterRule);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
+      chapterVolumes = split.volumes;
     }
     if (chapterOffsets.length === 0 && content.length > 0) {
       const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, book.charset);
       chapterTitles = layout.titles;
       chapterOffsets = layout.offsets;
+      chapterVolumes = [];
     }
     const currentTitles = book.chapterTitles ?? [];
+    const currentVolumes = book.chapterVolumes ?? [];
     const nextRule = chapterRule.length > 0 ? chapterRule : undefined;
     let changed = nextRule !== book.tocRule || currentTitles.length !== chapterTitles.length;
     for (let index = 0; !changed && index < chapterTitles.length; index++) {
       if (currentTitles[index] !== chapterTitles[index] ||
-        (book.chapterOffsets?.[index] ?? -1) !== (chapterOffsets[index] ?? -2)) {
+        (book.chapterOffsets?.[index] ?? -1) !== (chapterOffsets[index] ?? -2) ||
+        (currentVolumes[index] === true) !== (chapterVolumes[index] === true)) {
         changed = true;
       }
     }
@@ -526,6 +583,7 @@ export class BookRepository {
       groupName: book.groupName,
       chapterTitles: chapterTitles,
       chapterOffsets: chapterOffsets,
+      chapterVolumes: chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: chapterTitles[chapterIndex] ?? book.lastChapter,
@@ -573,6 +631,7 @@ export class BookRepository {
         groupName: book.groupName,
         chapterTitles: book.chapterTitles,
         chapterOffsets: book.chapterOffsets,
+        chapterVolumes: book.chapterVolumes,
         chapterIndex: book.chapterIndex,
         chapterProgress: book.chapterProgress,
         lastChapter: book.lastChapter,
@@ -605,16 +664,19 @@ export class BookRepository {
     const chapterRule = BookRepository.resolveChapterRule(book.tocRule, content);
     let chapterTitles: string[] = [];
     let chapterOffsets: number[] = [];
+    let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
       const split = BookRepository.splitChapters(content, chapterRule);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
+      chapterVolumes = split.volumes;
     }
     if (chapterOffsets.length === 0 && content.length > 0) {
       // 没有任何规则命中，或规则一条都没切出来，退回按字数分章，正文照样能读。
       const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, normalizedCharset.length > 0 ? normalizedCharset : undefined);
       chapterTitles = layout.titles;
       chapterOffsets = layout.offsets;
+      chapterVolumes = [];
     }
     const chapterIndex = Math.max(0, Math.min(Math.max(0, chapterTitles.length - 1), book.chapterIndex ?? 0));
     const chapterProgress = Math.max(0, Math.min(100, book.chapterProgress ?? 0));
@@ -627,6 +689,7 @@ export class BookRepository {
       groupName: book.groupName,
       chapterTitles: chapterTitles,
       chapterOffsets: chapterOffsets,
+      chapterVolumes: chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: chapterTitles[chapterIndex] ?? book.lastChapter,
@@ -666,6 +729,7 @@ export class BookRepository {
       groupName: book.groupName,
       chapterTitles: book.chapterTitles,
       chapterOffsets: book.chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
       chapterIndex: book.chapterIndex,
       chapterProgress: book.chapterProgress,
       lastChapter: book.lastChapter,
@@ -992,6 +1056,7 @@ export class BookRepository {
       groupName: book.groupName,
       chapterTitles: book.chapterTitles,
       chapterOffsets: book.chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: titles[chapterIndex] ?? book.lastChapter,
@@ -1191,6 +1256,8 @@ export class BookRepository {
       groupName: book.groupName,
       chapterTitles: layout.titles,
       chapterOffsets: layout.offsets,
+      // 按字数分章生成的是伪目录，没有分卷概念，显式清空避免残留旧标记。
+      chapterVolumes: undefined,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: layout.titles[chapterIndex] ?? book.lastChapter,
@@ -1256,12 +1323,14 @@ export class BookRepository {
     }
     let chapterTitles: string[] = [];
     let chapterOffsets: number[] = [];
+    let chapterVolumes: boolean[] = [];
     // 导入时对正文做一次规则识别，选中的正则写进 book.tocRule 固定下来。
     const chapterRule = BookRepository.resolveChapterRule(undefined, content);
     if (chapterRule.length > 0) {
       const split = BookRepository.splitChapters(content, chapterRule);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
+      chapterVolumes = split.volumes;
     }
     if (chapterOffsets.length === 0 && content.length > 0) {
       const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, charset);
@@ -1286,6 +1355,7 @@ export class BookRepository {
       groupName: '本地未分组',
       chapterTitles: chapterTitles,
       chapterOffsets: chapterOffsets.length === chapterTitles.length ? chapterOffsets : undefined,
+      chapterVolumes: chapterVolumes.length === chapterTitles.length ? chapterVolumes : undefined,
       lastChapter: chapterTitles[safeChapterIndex],
       chapterIndex: safeChapterIndex,
       chapterProgress: safeChapterProgress,
@@ -1465,7 +1535,13 @@ export class BookRepository {
       const rawLine = lineEnd >= 0 ? content.substring(start, lineEnd) : content.substring(start);
       titles.push(rawLine.replace(/\r$/, '').trim().substring(0, 80));
     });
-    return { titles: titles, offsets: starts };
+    // 分卷正则跟着章节正则走（上游 getVolumePattern 的同一逻辑），书里只缓存章节正则。
+    const volumeRule = TxtTocRuleRepository.resolveVolumeRule(chapterRule);
+    return {
+      titles: titles,
+      offsets: starts,
+      volumes: TxtTocRuleRepository.markVolumeTitles(titles, volumeRule)
+    };
   }
 }
 

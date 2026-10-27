@@ -8,6 +8,13 @@ export interface Book {
   groupName?: string;
   chapterTitles?: string[];
   chapterOffsets?: number[];
+  /**
+   * 每一章是否为分卷标题，长度与 chapterTitles 一致，对应上游 BookChapter.isVolume。
+   *
+   * 分卷标题本身也是一个章节（有自己的起点与正文），只是目录页把它渲染成可折叠的卷头，
+   * 卷内章节按它缩进一级。undefined 表示这本书没识别过分卷，全部按普通章节处理。
+   */
+  chapterVolumes?: boolean[];
   chapterIndex?: number;
   chapterProgress?: number;
   lastChapter: string;
