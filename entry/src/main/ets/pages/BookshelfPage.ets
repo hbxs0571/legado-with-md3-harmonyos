@@ -17,10 +17,23 @@ export struct BookshelfPage {
   onOpenBookInfo: (book: Book) => void = () => {};
   onSearch: () => void = () => {};
   onImportBook: () => Promise<Book | undefined> = async () => undefined;
+  /** 重新识别全部本地 TXT 的目录，对应上游书架的「更新目录」。 */
+  onRefreshToc: () => Promise<void> = async () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
 
   private getGroupNames(): string[] {
     return this.books.length === 0 ? ['全部'] : this.defaultGroupNames;
+  }
+
+  /**
+   * 书架卡片的 ForEach 行键。
+   *
+   * 只用 book.id 的话，目录重算（章节数、当前章、封面标记都变了）后 id 不变，
+   * ArkUI 会复用旧节点，BookCover 的 @Prop 不重算，角标和章节标题就停在旧值。
+   * 把渲染用到的字段拼进键里，数据一变键就变，节点重建。
+   */
+  private bookCardKey(book: Book): string {
+    return `${book.id}_${book.chapterCount ?? ''}_${book.chapterIndex ?? 0}_${book.chapterProgress ?? 0}_${book.coverMark ?? ''}_${book.bodyMissing === true ? 1 : 0}`;
   }
 
   private getVisibleBooks(): Book[] {
@@ -47,7 +60,9 @@ export struct BookshelfPage {
           if (imported !== undefined) { this.selectedFilter = 0; }
         })
       MenuItem({ startIcon: $r('app.media.app_refresh'), content: '更新目录' }).height(48)
-        .onClick(() => this.onUnavailableAction('批量更新目录尚未迁移'))
+        .onClick(async () => {
+          await this.onRefreshToc();
+        })
       MenuItem({ startIcon: $r('app.media.menu_grid'), content: '布局设置' }).height(48)
         .onClick(() => this.onUnavailableAction('书架布局设置尚未迁移'))
       MenuItem({ startIcon: $r('app.media.menu_carousel'), content: '分组管理' }).height(48)
@@ -126,7 +141,7 @@ export struct BookshelfPage {
                   this.onOpenBookInfo(book);
                 }))
             }
-          }, (book: Book) => book.id)
+          }, (book: Book) => this.bookCardKey(book))
         }.columnsTemplate('1fr 1fr 1fr').rowsGap(16).columnsGap(10).width('100%').padding({ left: 14, right: 14 }).layoutWeight(1).scrollBar(BarState.Off)
           .onScroll(() => {
             const shouldCollapse = Math.abs(this.bookshelfScroller.currentOffset().yOffset) > 60;

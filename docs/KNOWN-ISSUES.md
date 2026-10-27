@@ -11,9 +11,11 @@
 5. **API 12 真机兼容未验证。** 当前构建和有限设备检查不能替代 API 12 真机验收。
 6. **在线 URL 导入未接入。** 规则可通过本地文件或用户粘贴文本导入；应用没有通过 URL 获取规则的网络能力。
 7. **TXT 目录规则的文件导入与 ZIP 往返只在模拟器验过。** 导入/导出已接通（`TxtTocRuleRepository.pickImportFile` / `saveExportFile` + `TxtTocRuleImporter`），但只在 OpenHarmony API 26 模拟器上实测通过，API 12 真机未验证。
-9. **已导入的 TXT 不会因规则变更而重新识别目录。** 导入时选中的章节正则会固定在 `Book.tocRule` 上，这是有意设计（规则调整不应打乱已有书的目录）；但书架的「更新目录」目前是占位，用户没有主动重算目录的入口。
+9. **TXT 目录规则的「更新目录」只在模拟器验过。** 书架「更多 → 更新目录」已接通，会对全部本地 TXT 重新识别目录并保留阅读进度；但只在 OpenHarmony API 26 模拟器上实测通过，API 12 真机未验证。
 
 ## 已修复
+
+- **书架「更新目录」接通，且重算后角标不刷新**（2026-10-28）。`BookRepository.refreshToc()` 逐本重算章节并保留当前章位置；`BookshelfPage` 的菜单项原来调 `onUnavailableAction('批量更新目录尚未迁移')`，现改为 `onRefreshToc()`。同一轮修掉一个连带缺陷：书架卡片 `ForEach` 行键原来只用 `book.id`，章节数变化后 id 不变，ArkUI 复用旧节点导致封面角标停在旧值；新增 `bookCardKey()` 把 `chapterCount`/`chapterIndex`/`chapterProgress`/`coverMark`/`bodyMissing` 拼进键里。设备实测：把一本 3 章的书手动回退成 1 章 + 空 `tocRule` 的旧书状态，点「更新目录」后提示「更新目录完成：已更新 1 本」，存储 `chapterCount` 从 1 变 3、`tocRule` 回填 143 字符，书架角标同步从 1 变 3。
 
 - **TXT 目录规则页补齐选择模式与条目菜单**（2026-10-28）。对照上游 `TxtRuleScreen.kt` 补了四项：选择栏加「反选」（在当前筛选结果内取差集）、「启用」「停用」「导出」；条目右侧加「更多」菜单（置顶/置底/删除）；批量删除与单条删除统一走确认面板（与 `RuleListScaffold.kt:75-86` 的 `AppAlertDialog` 语义一致）。实现位置 `entry/src/main/ets/pages/ProfileSubPages.ets` 的 `TxtTocRulesPage`，置顶/置底落在 `entry/src/main/ets/data/TxtTocRuleRepository.ets` 的 `moveToEdge()`。设备实测：反选 0→27→0、批量停用 27 条全变 `enable:false`、批量启用恢复、取消删除后规则数不变、置底后「目录(去空白)」从第 0 位移到第 26 位、置顶后回第 0 位、单条删除 27→26、批量导出 26 条且 `serialNumber` 连续。
 - **CRLF 文本上所有内置 TXT 目录规则 0 命中**（2026-10-28 修复）。ArkTS 的正则在多行模式下只把 `\n` 当作行终止符，`$` 不会匹配到 `\r` 之前；Windows 文本每行以 `\r\n` 结尾，因此所有以 `.{0,30}$` 收尾的内置规则在 CRLF 文本上都不命中，书被误判成「没有可用目录规则」而退回按字数分章，读起来只有一章。修复位置 `entry/src/main/ets/data/TxtTocRuleRepository.ets` 的 `selectForSample()`：匹配前先把样本行尾归一为 `\n`。章节切分不受影响，`splitChapterStarts()` 逐行处理时本来就已去掉行尾 `\r`。

@@ -34,6 +34,15 @@ export interface NoTocBookRefreshResult {
   newBodyOffsets: number[];
 }
 
+/** 重新识别目录的结果；oldBodyOffsets/newBodyOffsets 供调用方重映射书签。 */
+export interface TocRefreshResult {
+  book: Book;
+  content: string;
+  changed: boolean;
+  oldBodyOffsets: number[];
+  newBodyOffsets: number[];
+}
+
 export class BookRepository {
   private static readonly preferenceName: string = 'legado_local_books';
   /**
@@ -442,6 +451,115 @@ export class BookRepository {
     });
     BookRepository.saveQueue = operation.then((): void => {}, (_error: Error): void => {});
     return operation;
+  }
+
+  /**
+   * 清掉缓存的目录规则后重新识别目录，对应上游书架的「更新目录」。
+   *
+   * 上游是 `TextFile.getChapterList()` 里 `book.tocUrl.isBlank()` 时重新跑
+   * `getTocRule(blockContent)`，再由 `TocViewModel.updateToc()` 写回章节列表。
+   * 本地导入时选中的规则会固定在 `book.tocRule` 上（规则调整不该打乱已有书的目录），
+   * 所以这个入口是用户唯一能让已导入的书用上新规则的方式。
+   *
+   * 阅读位置按章内字符偏移跨章节迁移，与 `refreshNoTocBook()` 的换算方式一致；
+   * 目录没变化时直接返回 changed=false，不写库。
+   */
+  static refreshToc(book: Book, maxLengthWithNoToc: number = 3000): TocRefreshResult {
+    if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
+      return { book: book, content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const content = BookRepository.readTextFile(book.contentPath, book.charset);
+    // 传 undefined 让 resolveChapterRule 走一次规则库匹配，而不是沿用缓存。
+    const chapterRule = BookRepository.resolveChapterRule(undefined, content);
+    let chapterTitles: string[] = [];
+    let chapterOffsets: number[] = [];
+    if (chapterRule.length > 0) {
+      const split = BookRepository.splitChapters(content, chapterRule);
+      chapterTitles = split.titles;
+      chapterOffsets = split.offsets;
+    }
+    if (chapterOffsets.length === 0 && content.length > 0) {
+      const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, book.charset);
+      chapterTitles = layout.titles;
+      chapterOffsets = layout.offsets;
+    }
+    const currentTitles = book.chapterTitles ?? [];
+    const nextRule = chapterRule.length > 0 ? chapterRule : undefined;
+    let changed = nextRule !== book.tocRule || currentTitles.length !== chapterTitles.length;
+    for (let index = 0; !changed && index < chapterTitles.length; index++) {
+      if (currentTitles[index] !== chapterTitles[index] ||
+        (book.chapterOffsets?.[index] ?? -1) !== (chapterOffsets[index] ?? -2)) {
+        changed = true;
+      }
+    }
+    if (!changed) {
+      return { book: book, content: content, changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const oldOffsets = book.chapterOffsets ?? [0];
+    const oldBodyOffsets = BookRepository.getNoTocBodyOffsets(content, oldOffsets, currentTitles.length);
+    const newBodyOffsets = BookRepository.getNoTocBodyOffsets(content, chapterOffsets, chapterTitles.length);
+    const oldIndex = Math.max(0, Math.min(currentTitles.length - 1, book.chapterIndex ?? 0));
+    const oldStart = oldBodyOffsets[oldIndex] ?? 0;
+    const oldEnd = oldOffsets[oldIndex + 1] ?? content.length;
+    const oldBodyLength = Math.max(0, oldEnd - oldStart);
+    const savedPosition = Math.max(0, Math.trunc(book.androidCharacterPosition ?? 0));
+    const localPosition = book.readerPositionVersion === 2 || book.readerPositionVersion === 1
+      ? savedPosition
+      : Math.round(oldBodyLength * Math.max(0, Math.min(100, book.chapterProgress ?? 0)) / 100);
+    const absolutePosition = Math.max(0, Math.min(content.length, oldStart + localPosition));
+    let chapterIndex = 0;
+    for (let index = 0; index < newBodyOffsets.length; index++) {
+      if ((newBodyOffsets[index] ?? 0) > absolutePosition) { break; }
+      chapterIndex = index;
+    }
+    chapterIndex = Math.min(chapterIndex, Math.max(0, chapterTitles.length - 1));
+    const chapterStart = newBodyOffsets[chapterIndex] ?? 0;
+    const chapterEnd = chapterOffsets[chapterIndex + 1] ?? content.length;
+    const chapterPosition = Math.max(0, Math.min(chapterEnd - chapterStart, absolutePosition - chapterStart));
+    const chapterProgress = chapterEnd > chapterStart ? chapterPosition / (chapterEnd - chapterStart) * 100 : 0;
+    const chapterCount = Math.max(1, chapterTitles.length);
+    const refreshedBook: Book = {
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      category: book.category,
+      groupName: book.groupName,
+      chapterTitles: chapterTitles,
+      chapterOffsets: chapterOffsets,
+      chapterIndex: chapterIndex,
+      chapterProgress: chapterProgress,
+      lastChapter: chapterTitles[chapterIndex] ?? book.lastChapter,
+      progress: (chapterIndex + chapterProgress / 100) / chapterCount * 100,
+      coverColor: book.coverColor,
+      coverMark: book.coverMark,
+      coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri,
+      bookType: book.bookType,
+      fixedType: book.fixedType,
+      contentPath: book.contentPath,
+      format: book.format,
+      chapterCount: chapterTitles.length.toString(),
+      fileSizeBytes: book.fileSizeBytes,
+      imageStyle: book.imageStyle,
+      reSegment: book.reSegment,
+      charset: book.charset,
+      description: book.description,
+      remark: book.remark,
+      customTag: book.customTag,
+      bodyMissing: book.bodyMissing,
+      androidOriginalPath: book.androidOriginalPath,
+      androidCharacterPosition: chapterPosition,
+      readerPositionVersion: 2,
+      tocRule: nextRule,
+      isLocal: book.isLocal
+    };
+    return {
+      book: refreshedBook,
+      content: content,
+      changed: true,
+      oldBodyOffsets: oldBodyOffsets,
+      newBodyOffsets: newBodyOffsets
+    };
   }
 
   static withCharset(book: Book, charset: string, maxLengthWithNoToc: number = 3000): Book {

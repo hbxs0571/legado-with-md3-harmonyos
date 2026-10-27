@@ -1886,6 +1886,77 @@ struct Index {
     return importedBook;
   }
 
+  /**
+   * 重新识别书架里所有本地 TXT 的目录，对应上游书架的「更新目录」。
+   *
+   * 导入时选中的章节正则会固定在 Book.tocRule 上，规则调整后已有书的目录不会变，
+   * 这里给用户一个主动重算的入口：清掉缓存规则、重新匹配、按字符偏移迁移阅读位置，
+   * 同时重映射这本书的书签，避免书签落到别的章节。
+   */
+  private async refreshAllToc(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，未更新目录');
+      return;
+    }
+    const localBooks = this.books.filter((book: Book) =>
+      book.isLocal && book.format === 'txt' && book.contentPath !== undefined);
+    if (localBooks.length === 0) {
+      this.showUnavailableAction('书架里没有可更新目录的本地 TXT');
+      return;
+    }
+    let updatedCount = 0;
+    let failedCount = 0;
+    let nextBookmarks = this.readerBookmarks;
+    const updatedBooks: Book[] = [];
+    for (let index = 0; index < this.books.length; index++) {
+      const book = this.books[index];
+      if (book === undefined) { continue; }
+      if (!book.isLocal || book.format !== 'txt' || book.contentPath === undefined) {
+        updatedBooks.push(book);
+        continue;
+      }
+      try {
+        const result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
+        if (!result.changed) {
+          updatedBooks.push(book);
+          continue;
+        }
+        updatedBooks.push(result.book);
+        updatedCount += 1;
+        nextBookmarks = this.remapNoTocBookmarks(book, result.book,
+          result.oldBodyOffsets, result.newBodyOffsets, result.content.length);
+        if (this.selectedBook.id === result.book.id) {
+          this.selectedBook = result.book;
+        }
+      } catch (_) {
+        // 单本书读不出来不该让整批失败，其余书照常更新。
+        failedCount += 1;
+        updatedBooks.push(book);
+      }
+    }
+    if (updatedCount === 0 && failedCount === 0) {
+      this.showUnavailableAction('所有本地 TXT 的目录都没有变化');
+      return;
+    }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      if (nextBookmarks !== this.readerBookmarks) {
+        await ReaderBookmarkRepository.save(context, nextBookmarks);
+      }
+    } catch (_) {
+      this.showUnavailableAction('目录已更新，但保存失败，重新打开后可能回到旧目录');
+      return;
+    }
+    this.books = updatedBooks;
+    this.readerBookmarks = nextBookmarks;
+    const parts: string[] = [];
+    if (updatedCount > 0) { parts.push(`已更新 ${updatedCount} 本`); }
+    if (failedCount > 0) { parts.push(`${failedCount} 本读取失败已跳过`); }
+    this.showUnavailableAction(`更新目录完成：${parts.join('，')}`);
+  }
+
   private getPaperColor(): string {
     const style = READER_BACKGROUND_STYLES[Math.max(0, Math.min(5, this.paperIndex))];
     return style === undefined ? '#000000' : (this.readerNightMode ? style.nightColor : style.dayColor);
@@ -2690,6 +2761,7 @@ struct Index {
           onOpenBookInfo: (book: Book) => this.openBookInfo(book),
           onSearch: () => this.openSearch(),
           onImportBook: () => this.importLocalBook(),
+          onRefreshToc: () => this.refreshAllToc(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         DiscoverPage({ onUnavailableAction: (message: string) => this.showUnavailableAction(message) })

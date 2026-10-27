@@ -1,5 +1,11 @@
 # 修改记录
 
+## 2026-10-28 书架「更新目录」接通并修复重算后角标不刷新
+
+- 书架「更多 → 更新目录」原来是占位提示「批量更新目录尚未迁移」，现改为真正重算：`entry/src/main/ets/data/BookRepository.ets` 新增 `refreshToc()`，逐本重读本地 TXT、按书籍固定的 `tocRule` 重新切分章节，并保留当前章的位置。
+- 修掉一个连带缺陷：书架卡片 `ForEach` 的行键原来只用 `book.id`，章节数变化后 id 不变，ArkUI 复用旧节点，`BookCover` 的 `@Prop` 不重算，封面角标和章节标题停在旧值。`entry/src/main/ets/pages/BookshelfPage.ets` 新增 `bookCardKey()`，把 `chapterCount`、`chapterIndex`、`chapterProgress`、`coverMark`、`bodyMissing` 拼进键里。
+- 设备实测（OpenHarmony API 26 模拟器）：把一本 3 章的书手动回退成 1 章 + 空 `tocRule` 的旧书状态，点「更新目录」后提示「更新目录完成：已更新 1 本」，存储 `chapterCount` 从 1 变 3、`tocRule` 回填 143 字符，书架角标同步从 1 变 3。
+
 ## 2026-10-28 TXT 目录规则页对齐上游：反选、批量启停、导出、条目菜单、删除确认
 
 - 对照上游 `app/src/main/java/io/legado/app/ui/book/toc/rule/TxtRuleScreen.kt` 补齐四项交互。
