@@ -1696,13 +1696,20 @@ struct Index {
       this.readerSettingsRevision += 1;
       // 恢复可能写入了替换净化规则，重新读一次让规则页和阅读页都看到最新结果。
       this.replaceRules = ReplaceRuleRepository.getAll();
+      this.txtTocRules = TxtTocRuleRepository.getAll();
       const restoreSummary = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目`;
+      // 各分类都只在备份里真有对应文件时才拼进提示，避免句尾多出空分号。
+      const detailSummaries: string[] = [];
       const replaceRuleSummary = this.describeReplaceRuleRestore(
         result.replaceRuleAdded, result.replaceRuleUpdated, result.replaceRuleSkipped
       );
-      // 没有 replaceRule.json 时不拼这一段，避免句尾多出一个空分号。
-      this.backupStatusMessage = replaceRuleSummary.length > 0
-        ? `${restoreSummary}；${replaceRuleSummary}`
+      if (replaceRuleSummary.length > 0) { detailSummaries.push(replaceRuleSummary); }
+      const txtTocRuleSummary = this.describeTxtTocRuleRestore(
+        result.txtTocRuleAdded, result.txtTocRuleUpdated, result.txtTocRuleSkipped
+      );
+      if (txtTocRuleSummary.length > 0) { detailSummaries.push(txtTocRuleSummary); }
+      this.backupStatusMessage = detailSummaries.length > 0
+        ? `${restoreSummary}；${detailSummaries.join('')}`
         : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
       await BackupRepository.discardSelection(selection);
@@ -1727,6 +1734,19 @@ struct Index {
     if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
     if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
     return `替换净化规则${parts.join('、')}。`;
+  }
+
+  /**
+   * 生成 TXT 目录规则的恢复结果说明。
+   * 三项都为 0 时返回空串，表示这份备份里没有 txtTocRule.json。
+   */
+  private describeTxtTocRuleRestore(added: number, updated: number, skipped: number): string {
+    if (added === 0 && updated === 0 && skipped === 0) { return ''; }
+    const parts: string[] = [];
+    if (added > 0) { parts.push(`新增 ${added} 条`); }
+    if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
+    if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
+    return `TXT 目录规则${parts.join('、')}。`;
   }
 
   private cancelLocalBackupRestore(): void {

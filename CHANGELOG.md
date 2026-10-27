@@ -8,6 +8,8 @@
 - 设备实测：CRLF 样本导入后正确切出 3 章（进度显示 1/3 11.1%），旧书重新打开同样按规则切分。
 - TXT 目录规则页的「导入」「导出」接上真实文件读写：新增 `TxtTocRuleImporter`（支持本项目 JSON 数组、单对象、旧版 `rule` 字段）、`TxtTocRuleRepository.pickImportFile` 与 `saveExportFile`。
 - 修复规则文件导出写出 0 字节空文件：原来先 `encodeInto` 成 `Uint8Array` 再 `writeSync` 会抛 `13900020`（EINVAL），改为直接写字符串。`ReplaceRuleRepository.saveExportFile` 同源缺陷一并修复。
+- TXT 目录规则接入 Android ZIP 备份与恢复：备份未排除该类别时生成根级 `txtTocRule.json`（格式与上游一致，可被 Android 读回）；恢复时逐条导入，同 ID 或同章节正则更新并保留本地 ID 与顺序，非法正则计入跳过，原文件同时留在兼容归档目录。
+- 设备实测：备份 ZIP 解包含 `txtTocRule.json`（9190 B / 25 条）；用含 2 条有效规则 + 1 条非法正则的 ZIP 恢复后规则 25 → 27 条，提示「TXT 目录规则新增 2 条、跳过 1 条无效规则」。
 
 ## 2026-10-28 替换净化整合源码同步
 

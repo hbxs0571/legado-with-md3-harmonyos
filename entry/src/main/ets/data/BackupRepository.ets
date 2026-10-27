@@ -7,6 +7,8 @@ import { BookRepository } from './BookRepository';
 import { READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot } from './ReaderSettingsRepository';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { ReplaceRuleImporter } from './ReplaceRuleImporter';
+import { TxtTocRuleRepository } from './TxtTocRuleRepository';
+import { TxtTocRuleImporter } from './TxtTocRuleImporter';
 
 export interface BackupEntryPreview {
   name: string;
@@ -53,6 +55,12 @@ export interface RestoreResult {
   replaceRuleUpdated: number;
   /** 解析失败或正则非法而被跳过的规则条数。 */
   replaceRuleSkipped: number;
+  /** 恢复 TXT 目录规则的新增条数；没有 txtTocRule.json 时为 0。 */
+  txtTocRuleAdded: number;
+  /** 恢复 TXT 目录规则的覆盖条数（同 id 或同章节正则视为同一条）。 */
+  txtTocRuleUpdated: number;
+  /** 解析失败或正则非法而被跳过的 TXT 目录规则条数。 */
+  txtTocRuleSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -405,6 +413,14 @@ export class BackupRepository {
           ReplaceRuleRepository.exportRules(rules));
       }
 
+      // TXT 目录规则同理：本地存在 preferences 里，归档目录里不会有，
+      // 未忽略该分类时生成 txtTocRule.json，格式与上游一致，可被 Android 直接读回。
+      if (!ignoredCategories.includes('txtTocRule')) {
+        const tocRules = TxtTocRuleRepository.getAll();
+        BackupRepository.writeTextFile(`${stagingDirectory}/txtTocRule.json`,
+          TxtTocRuleRepository.exportRules(tocRules));
+      }
+
       const configPath = `${stagingDirectory}/config.xml`;
       if (!fileIo.accessSync(configPath)) {
         BackupRepository.writeTextFile(configPath,
@@ -570,6 +586,9 @@ export class BackupRepository {
     let replaceRuleAdded: number = 0;
     let replaceRuleUpdated: number = 0;
     let replaceRuleSkipped: number = 0;
+    let txtTocRuleAdded: number = 0;
+    let txtTocRuleUpdated: number = 0;
+    let txtTocRuleSkipped: number = 0;
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
       if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
@@ -622,6 +641,22 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'txtTocRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复 TXT 目录规则`);
+        }
+        // 与 replaceRule.json 同样逐条导入：非法正则由 TxtTocRuleImporter 计入 skipped 后跳过，
+        // 一条坏规则不影响整份备份，对齐上游 Restore 逐条 insert 的语义。
+        const parsed = TxtTocRuleImporter.parse(text);
+        const outcome = await TxtTocRuleRepository.importRules(context, parsed.rules);
+        txtTocRuleAdded += outcome.added;
+        txtTocRuleUpdated += outcome.updated;
+        txtTocRuleSkipped += parsed.skipped;
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
     }
@@ -651,7 +686,10 @@ export class BackupRepository {
       restoredEntries: restoredEntries,
       replaceRuleAdded: replaceRuleAdded,
       replaceRuleUpdated: replaceRuleUpdated,
-      replaceRuleSkipped: replaceRuleSkipped
+      replaceRuleSkipped: replaceRuleSkipped,
+      txtTocRuleAdded: txtTocRuleAdded,
+      txtTocRuleUpdated: txtTocRuleUpdated,
+      txtTocRuleSkipped: txtTocRuleSkipped
     };
   }
 
