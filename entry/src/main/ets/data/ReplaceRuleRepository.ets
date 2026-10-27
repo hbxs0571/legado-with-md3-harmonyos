@@ -1,4 +1,6 @@
 import { preferences } from '@kit.ArkData';
+import { fileIo, picker } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { Book } from '../model/Book';
 import { ReplaceRule } from '../model/ReplaceRule';
 
@@ -9,6 +11,11 @@ interface ReplaceRuleApplyResult {
 interface BookReplaceOverride {
   bookId: string;
   enabled: boolean;
+}
+/** 批量导入结果，供界面如实反馈新增与覆盖的数量。 */
+export interface ReplaceRuleImportOutcome {
+  added: number;
+  updated: number;
 }
 
 /** 持久化替换规则并提供与本地章节读取共用的有序执行入口。 */
@@ -21,6 +28,8 @@ export class ReplaceRuleRepository {
   private static readonly sortModeKey: string = 'sort_mode_v1';
   /** 默认分组名，与 Android 的「默认」保持一致。 */
   static readonly defaultGroup: string = '默认';
+  /** 导入文件大小上限，防止误选大文件占满内存。 */
+  private static readonly maximumImportBytes: number = 8 * 1024 * 1024;
   private static cachedRules: ReplaceRule[] = [];
   private static defaultEnabled: boolean = true;
   private static bookOverrides: BookReplaceOverride[] = [];
@@ -244,6 +253,121 @@ export class ReplaceRuleRepository {
       next.push(moved);
     }
     await ReplaceRuleRepository.persist(context, next);
+  }
+
+  /**
+   * 批量导入规则。
+   *
+   * 去重口径：同 id 或同 pattern 视为同一条规则，命中时保留已有规则的 id 与 order，
+   * 用导入内容覆盖其余字段。这样重复导入同一份文件不会产生副本，
+   * 也符合 Android 以 pattern 判断「是否同一条规则」的 hasChanged 语义。
+   *
+   * @returns 新增条数与更新条数，供界面如实反馈。
+   */
+  static async importRules(context: Context, incoming: ReplaceRule[]): Promise<ReplaceRuleImportOutcome> {
+    if (incoming.length === 0) {
+      return { added: 0, updated: 0 };
+    }
+    const next = [...ReplaceRuleRepository.cachedRules];
+    let added: number = 0;
+    let updated: number = 0;
+    incoming.forEach((rule: ReplaceRule) => {
+      const index = next.findIndex((item: ReplaceRule) => item.id === rule.id || item.pattern === rule.pattern);
+      if (index >= 0) {
+        const existing = next[index];
+        const merged = ReplaceRuleRepository.copyRule(rule);
+        merged.id = existing.id;
+        merged.order = existing.order;
+        next[index] = merged;
+        updated += 1;
+      } else {
+        const created = ReplaceRuleRepository.copyRule(rule);
+        created.order = next.length;
+        next.push(created);
+        added += 1;
+      }
+    });
+    // 导入过程中可能出现分组，落盘时一并登记，避免空分组丢失。
+    const groups = [...ReplaceRuleRepository.explicitGroups];
+    incoming.forEach((rule: ReplaceRule) => {
+      const group = rule.group.trim();
+      if (group.length > 0 && group !== ReplaceRuleRepository.defaultGroup && !groups.includes(group)) {
+        groups.push(group);
+      }
+    });
+    await ReplaceRuleRepository.persist(context, next);
+    if (groups.length !== ReplaceRuleRepository.explicitGroups.length) {
+      await ReplaceRuleRepository.persistGroups(context, groups);
+    }
+    return { added: added, updated: updated };
+  }
+
+  /** 导出为与本项目导入格式一致的 JSON 文本；只导出给定规则。 */
+  static exportRules(rules: ReplaceRule[]): string {
+    const ordered = rules.map((rule: ReplaceRule, index: number) => {
+      const copy = ReplaceRuleRepository.copyRule(rule);
+      copy.order = index;
+      return copy;
+    });
+    return JSON.stringify(ordered, null, 2);
+  }
+
+  /**
+   * 弹出文件选择器读取规则文件文本。
+   * 用户取消时返回空字符串，由调用方区分「取消」与「读取失败」。
+   * 文件上限 8 MB：规则文本通常只有几十 KB，超限说明选错了文件。
+   * 注意：选择器返回的是 docs:// 授权 URI，必须先 openSync 拿到 fd 再读，
+   * 直接对 URI 调 readTextSync 在部分设备上会失败。
+   */
+  static async pickImportFile(context: Context): Promise<string> {
+    const options = new picker.DocumentSelectOptions();
+    options.fileSuffixFilters = ['替换规则|.json', '文本规则|.txt'];
+    options.maxSelectNumber = 1;
+    const uris = await new picker.DocumentViewPicker(context).select(options);
+    const uri = uris[0];
+    if (uri === undefined) {
+      return '';
+    }
+    const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    try {
+      const size = fileIo.statSync(source.fd).size;
+      if (size <= 0) {
+        throw new Error('规则文件为空');
+      }
+      if (size > ReplaceRuleRepository.maximumImportBytes) {
+        throw new Error('规则文件超过 8 MB');
+      }
+      const buffer = new ArrayBuffer(size);
+      const read = fileIo.readSync(source.fd, buffer);
+      const decoder = util.TextDecoder.create('utf-8');
+      return decoder.decodeToString(new Uint8Array(buffer.slice(0, read)));
+    } finally {
+      fileIo.closeSync(source);
+    }
+  }
+
+  /**
+   * 弹出保存对话框写入导出文本。
+   * @returns 是否真的写入了文件；用户取消返回 false。
+   */
+  static async saveExportFile(context: Context, content: string): Promise<boolean> {
+    const options = new picker.DocumentSaveOptions();
+    options.newFileNames = [`replaceRules-${Date.now()}.json`];
+    options.fileSuffixChoices = ['JSON 规则|.json'];
+    const uris = await new picker.DocumentViewPicker(context).save(options);
+    const uri = uris[0];
+    if (uri === undefined) {
+      return false;
+    }
+    const encoder = new util.TextEncoder();
+    const bytes = encoder.encodeInto(content);
+    const target = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(target.fd, bytes.buffer as ArrayBuffer);
+    } finally {
+      fileIo.closeSync(target);
+    }
+    return true;
   }
 
   static applyContent(book: Book, chapterTitle: string, content: string): string {

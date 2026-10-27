@@ -186,6 +186,10 @@ export struct ReplaceRulesPage {
   onRemoveGroup: (name: string) => void = (_name: string) => {};
   /** 排序模式持久化。 */
   onSortModeChange: (mode: string) => void = (_mode: string) => {};
+  /** 从文件或剪贴板文本导入；返回是否成功，供面板关闭。 */
+  onImportRules: (text: string, source: string) => void = (_text: string, _source: string) => {};
+  /** 导出当前筛选结果；空数组表示没有可导出内容。 */
+  onExportRules: (rules: ReplaceRule[]) => void = (_rules: ReplaceRule[]) => {};
   @Prop rules: ReplaceRule[] = [];
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
@@ -197,12 +201,16 @@ export struct ReplaceRulesPage {
   @State ruleActionSheet: string = '';
   @State groupInput: string = '';
   @State groupEditing: string = '';
+  /** 手动输入面板里的规则文本。 */
+  @State manualInput: string = '';
 
   @Builder
   private ReplaceRuleMenu() {
     Menu() {
       MenuItem({ content: '导入' })
         .onClick(() => this.ruleActionSheet = 'import')
+      MenuItem({ content: '导出' })
+        .onClick(() => this.onExportRules(this.filteredReplaceRules()))
       MenuItem({ content: '分组管理' })
         .onClick(() => this.ruleActionSheet = 'groups')
       MenuItem({ content: '旧的在前' })
@@ -231,7 +239,8 @@ export struct ReplaceRulesPage {
   private RuleActionSheet() {
     Column() {
       Row() {
-        Text(this.ruleActionSheet === 'groups' ? '分组管理' : '导入替换规则')
+        Text(this.ruleActionSheet === 'groups' ? '分组管理'
+          : (this.ruleActionSheet === 'manual' ? '手动输入规则' : '导入替换规则'))
           .fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
@@ -272,6 +281,23 @@ export struct ReplaceRulesPage {
               .backgroundColor('#22232A').borderRadius(12).margin({ top: 5, bottom: 20 })
           }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
         }.layoutWeight(1).scrollBar(BarState.Off)
+      } else if (this.ruleActionSheet === 'manual') {
+        Column() {
+          Text('粘贴规则文本').fontSize(13).fontColor('#92949E').margin({ bottom: 8 })
+          TextArea({ placeholder: '粘贴 JSON 规则数组或单条规则对象', text: this.manualInput })
+            .fontSize(14).fontColor('#E3E4E8').placeholderColor('#92949E')
+            .backgroundColor('#22232A').borderRadius(12)
+            .width('100%').height(220).padding(12)
+            .onChange((value: string) => this.manualInput = value)
+          Row() {
+            Text('清空').fontSize(15).fontColor('#92949E').layoutWeight(1)
+              .onClick(() => this.manualInput = '')
+            Text('取消').fontSize(15).fontColor('#92949E').layoutWeight(1)
+              .onClick(() => { this.manualInput = ''; this.ruleActionSheet = 'import'; })
+            Text('导入').fontSize(15).fontColor(this.manualInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+              .onClick(() => this.submitManualImport())
+          }.width('100%').margin({ top: 12 })
+        }.width('100%').padding({ left: 16, right: 16, bottom: 20 })
       } else {
         Column() {
           Row() {
@@ -282,7 +308,7 @@ export struct ReplaceRulesPage {
             }.alignItems(HorizontalAlign.Start)
           }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
             .backgroundColor('#22232A').borderRadius(12)
-            .onClick(() => this.onUnavailableAction('替换规则文件导入尚未迁移，未读取文件'))
+            .onClick(() => this.onImportRules('', 'file'))
           Row() {
             AppGlyph({ name: 'edit', glyphSize: 20, tint: '#AFC2FF' }).margin({ right: 12 })
             Column() {
@@ -291,10 +317,22 @@ export struct ReplaceRulesPage {
             }.alignItems(HorizontalAlign.Start)
           }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
             .backgroundColor('#22232A').borderRadius(12).margin({ top: 8, bottom: 18 })
-            .onClick(() => this.onUnavailableAction('替换规则手动导入尚未迁移，未导入数据'))
+            .onClick(() => { this.ruleActionSheet = 'manual'; })
         }.width('100%').padding({ left: 16, right: 16 })
       }
     }.width('100%').height('100%').backgroundColor('#17181E')
+  }
+
+  /** 提交手动输入的规则文本。 */
+  private submitManualImport(): void {
+    const text = this.manualInput.trim();
+    if (text.length === 0) {
+      this.onUnavailableAction('规则文本为空');
+      return;
+    }
+    this.onImportRules(text, 'manual');
+    this.manualInput = '';
+    this.ruleActionSheet = '';
   }
 
   /** 提交分组输入：编辑态调用重命名，新建态调用新增，完成后清空输入。 */

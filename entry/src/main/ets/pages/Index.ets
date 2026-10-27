@@ -52,6 +52,7 @@ import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
+import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
@@ -463,6 +464,61 @@ struct Index {
       this.replaceRules = ReplaceRuleRepository.getAll();
     } catch (_) {
       this.showUnavailableAction('替换规则删除失败');
+    }
+  }
+
+  /**
+   * 导入替换规则。
+   * source 为 'file' 时弹出文件选择器读取文本；其余情况直接解析传入的 text。
+   * 解析失败与部分跳过都如实反馈，不把未导入的条目算作成功。
+   */
+  private async importReplaceRules(text: string, source: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    let content = text;
+    if (source === 'file') {
+      try {
+        content = await ReplaceRuleRepository.pickImportFile(context);
+      } catch (_) {
+        this.showUnavailableAction('读取规则文件失败');
+        return;
+      }
+      if (content.length === 0) {
+        return;
+      }
+    }
+    const parsed = ReplaceRuleImporter.parse(content);
+    if (parsed.rules.length === 0) {
+      this.showUnavailableAction(parsed.skipped > 0 ? '规则格式不正确，未导入任何数据' : '没有可导入的规则');
+      return;
+    }
+    try {
+      const outcome = await ReplaceRuleRepository.importRules(context, parsed.rules);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      const skipped = parsed.skipped > 0 ? `，跳过 ${parsed.skipped} 条` : '';
+      this.showUnavailableAction(`新增 ${outcome.added} 条，更新 ${outcome.updated} 条${skipped}`);
+    } catch (_) {
+      this.showUnavailableAction('替换规则导入失败');
+    }
+  }
+
+  /** 导出替换规则到用户选择的文件。 */
+  private async exportReplaceRules(rules: ReplaceRule[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    if (rules.length === 0) {
+      this.showUnavailableAction('没有可导出的替换规则');
+      return;
+    }
+    try {
+      const saved = await ReplaceRuleRepository.saveExportFile(context, ReplaceRuleRepository.exportRules(rules));
+      this.showUnavailableAction(saved ? `已导出 ${rules.length} 条规则` : '未选择保存位置');
+    } catch (_) {
+      this.showUnavailableAction('替换规则导出失败');
     }
   }
 
@@ -2367,6 +2423,8 @@ struct Index {
             onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
             onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
             onSortModeChange: (mode: string) => this.setReplaceRuleSortMode(mode),
+            onImportRules: (text: string, source: string) => this.importReplaceRules(text, source),
+            onExportRules: (rules: ReplaceRule[]) => this.exportReplaceRules(rules),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULE_EDIT) {
