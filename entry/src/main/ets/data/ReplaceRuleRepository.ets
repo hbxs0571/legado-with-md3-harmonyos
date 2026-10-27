@@ -17,6 +17,17 @@ export interface ReplaceRuleImportOutcome {
   added: number;
   updated: number;
 }
+/** 规则试跑结果：单条规则是否改变了样例文本。 */
+export interface ReplaceRulePreviewLine {
+  ruleId: number;
+  name: string;
+  changed: boolean;
+}
+/** 规则试跑的完整结果：最终文本 + 每条规则的生效情况。 */
+export interface ReplaceRulePreviewResult {
+  text: string;
+  lines: ReplaceRulePreviewLine[];
+}
 
 /** 持久化替换规则并提供与本地章节读取共用的有序执行入口。 */
 export class ReplaceRuleRepository {
@@ -173,6 +184,76 @@ export class ReplaceRuleRepository {
   static async setEnabled(context: Context, id: number, enabled: boolean): Promise<void> {
     await ReplaceRuleRepository.persist(context, ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) =>
       rule.id === id ? ReplaceRuleRepository.withEnabled(rule, enabled) : rule));
+  }
+
+  /**
+   * 批量启用/停用。
+   * 只统计状态真正发生变化的条目，界面据此如实反馈，
+   * 避免把「本来就已经启用」的规则算作本次操作的结果。
+   * @returns 实际改变的条数。
+   */
+  static async setEnabledBatch(context: Context, ids: number[], enabled: boolean): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    let changed = 0;
+    const next = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) => {
+      if (ids.includes(rule.id) && rule.isEnabled !== enabled) {
+        changed += 1;
+        return ReplaceRuleRepository.withEnabled(rule, enabled);
+      }
+      return rule;
+    });
+    if (changed === 0) {
+      return 0;
+    }
+    await ReplaceRuleRepository.persist(context, next);
+    return changed;
+  }
+
+  /**
+   * 批量删除。
+   * @returns 实际删除的条数，用于区分「没选中」与「选中项已不存在」。
+   */
+  static async removeBatch(context: Context, ids: number[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const next = ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) => !ids.includes(rule.id));
+    const removed = ReplaceRuleRepository.cachedRules.length - next.length;
+    if (removed === 0) {
+      return 0;
+    }
+    await ReplaceRuleRepository.persist(context, next);
+    return removed;
+  }
+
+  /** 批量移到当前排序下的最前或最后，方向规则同 moveToTop。 */
+  static async moveBatchToTop(context: Context, ids: number[]): Promise<number> {
+    return ReplaceRuleRepository.moveBatchToEdge(context, ids, true);
+  }
+
+  /** 批量移到当前排序下的最后，方向规则同 moveToTop。 */
+  static async moveBatchToBottom(context: Context, ids: number[]): Promise<number> {
+    return ReplaceRuleRepository.moveBatchToEdge(context, ids, false);
+  }
+
+  /**
+   * 把选中规则整体移到数组一端，选中项之间的相对顺序保持不变。
+   * 与单条 moveToEdge 一致：desc 模式下数组尾部对应视觉顶部，故取反。
+   */
+  static async moveBatchToEdge(context: Context, ids: number[], toTop: boolean): Promise<number> {    if (ids.length === 0) {
+      return 0;
+    }
+    const selected = ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) => ids.includes(rule.id));
+    if (selected.length === 0) {
+      return 0;
+    }
+    const rest = ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) => !ids.includes(rule.id));
+    const toArrayHead = ReplaceRuleRepository.sortMode === 'desc' ? !toTop : toTop;
+    const next = toArrayHead ? selected.concat(rest) : rest.concat(selected);
+    await ReplaceRuleRepository.persist(context, next);
+    return selected.length;
   }
 
   static async remove(context: Context, id: number): Promise<void> {
@@ -372,6 +453,42 @@ export class ReplaceRuleRepository {
 
   static applyContent(book: Book, chapterTitle: string, content: string): string {
     return ReplaceRuleRepository.applyContentWithResult(book, chapterTitle, content).text;
+  }
+
+  /**
+   * 对样例文本试跑当前启用的规则，用于编辑页的「测试」按钮。
+   * 与 applyContentWithResult 保持同一执行口径：先按行 trim 归一化，再按 order 顺序逐条应用。
+   * 这里刻意不传 Book：测试时用户关心的是规则本身的效果，
+   * 用书籍作用域过滤会让「为什么这条没生效」变得难以解释。
+   * @returns 每条规则是否真的改变了文本，以及最终的文本。
+   */
+  static previewContent(source: string): ReplaceRulePreviewResult {
+    let result = ReplaceRuleRepository.normalizeLines(source);
+    const lines: ReplaceRulePreviewLine[] = [];
+    ReplaceRuleRepository.cachedRules
+      .filter((rule: ReplaceRule) => rule.isEnabled && rule.scopeContent && rule.pattern.length > 0)
+      .forEach((rule: ReplaceRule) => {
+        const before = result;
+        try {
+          const replaced = rule.isRegex
+            ? result.replace(new RegExp(rule.pattern, 'g'), rule.replacement)
+            : result.split(rule.pattern).join(rule.replacement);
+          result = replaced;
+        } catch (_) {
+          // 无效正则不改变文本，在结果里标为未生效，让用户看到是规则本身有问题。
+        }
+        lines.push({
+          ruleId: rule.id,
+          name: rule.name.length > 0 ? rule.name : rule.pattern,
+          changed: result !== before
+        });
+      });
+    return { text: result, lines: lines };
+  }
+
+  /** 与 applyContent 相同的行归一化：逐行 trim 后用 \n 连接。 */
+  static normalizeLines(source: string): string {
+    return source.split(/\r?\n/).map((line: string) => line.trim()).join('\n');
   }
 
   static applyContentWithResult(book: Book, chapterTitle: string, content: string): ReplaceRuleApplyResult {

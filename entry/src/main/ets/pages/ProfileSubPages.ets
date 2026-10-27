@@ -12,6 +12,7 @@ import {
 } from '../components/ProfileUiMetrics';
 import { ProfileRoute } from '../model/Book';
 import { ReplaceRule } from '../model/ReplaceRule';
+import { ReplaceRulePreviewLine, ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReadTimeRecord } from '../data/ReadTimeRepository';
 
 @Component
@@ -190,6 +191,12 @@ export struct ReplaceRulesPage {
   onImportRules: (text: string, source: string) => void = (_text: string, _source: string) => {};
   /** 导出当前筛选结果；空数组表示没有可导出内容。 */
   onExportRules: (rules: ReplaceRule[]) => void = (_rules: ReplaceRule[]) => {};
+  /** 选择模式下的批量启用/停用。 */
+  onSetEnabledBatch: (ids: number[], enabled: boolean) => void = (_ids: number[], _enabled: boolean) => {};
+  /** 选择模式下的批量删除。 */
+  onRemoveBatch: (ids: number[]) => void = (_ids: number[]) => {};
+  /** 选择模式下的批量置顶/置底。 */
+  onMoveBatch: (ids: number[], toTop: boolean) => void = (_ids: number[], _toTop: boolean) => {};
   @Prop rules: ReplaceRule[] = [];
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
@@ -203,6 +210,36 @@ export struct ReplaceRulesPage {
   @State groupEditing: string = '';
   /** 手动输入面板里的规则文本。 */
   @State manualInput: string = '';
+  /** 选择模式：进入后点击条目变为切换选中，底部出现批量操作条。 */
+  @State selectionMode: boolean = false;
+  @State selectedRuleIds: number[] = [];
+
+  /** 切换单条规则的选中状态。 */
+  private toggleSelectedRule(id: number): void {
+    this.selectedRuleIds = this.selectedRuleIds.includes(id)
+      ? this.selectedRuleIds.filter((selectedId: number) => selectedId !== id)
+      : [...this.selectedRuleIds, id];
+  }
+
+  /** 全选当前筛选结果，而不是全部规则：筛选态下「全选」应符合用户看到的列表。 */
+  private selectAllVisible(): void {
+    this.selectedRuleIds = this.filteredReplaceRules().map((rule: ReplaceRule) => rule.id);
+  }
+
+  /** 退出选择模式并清空选中，避免下次进入时残留上一次的选择。 */
+  private exitSelection(): void {
+    this.selectionMode = false;
+    this.selectedRuleIds = [];
+  }
+
+  /**
+   * 列表项的 ForEach key。
+   * 只写 rule.id 会让 ArkUI 在规则内容变化时复用旧节点，Toggle 停在旧状态；
+   * 把影响行内容展示的字段并入 key，内容一变就重建该行。
+   */
+  private ruleRowKey(rule: ReplaceRule): string {
+    return `${rule.id}_${rule.isEnabled ? 1 : 0}_${rule.name}_${rule.group}_${rule.scopeContent ? 1 : 0}${rule.scopeTitle ? 1 : 0}`;
+  }
 
   @Builder
   private ReplaceRuleMenu() {
@@ -213,6 +250,15 @@ export struct ReplaceRulesPage {
         .onClick(() => this.onExportRules(this.filteredReplaceRules()))
       MenuItem({ content: '分组管理' })
         .onClick(() => this.ruleActionSheet = 'groups')
+      MenuItem({ content: '选择模式' })
+        .onClick(() => {
+          if (this.selectionMode) {
+            this.exitSelection();
+          } else {
+            this.selectionMode = true;
+            this.selectedRuleIds = [];
+          }
+        })
       MenuItem({ content: '旧的在前' })
         .onClick(() => this.onSortModeChange('asc'))
       MenuItem({ content: '新的在前' })
@@ -356,6 +402,35 @@ export struct ReplaceRulesPage {
     this.groupInput = '';
   }
 
+  /** 批量启用/停用：未选中时提示而不是静默无反应。 */
+  private submitBatchEnabled(enabled: boolean): void {
+    if (this.selectedRuleIds.length === 0) {
+      this.onUnavailableAction('请先选择规则');
+      return;
+    }
+    this.onSetEnabledBatch(this.selectedRuleIds, enabled);
+  }
+
+  /** 批量置顶/置底：与单条一致，退出选择模式，让用户看到移动结果。 */
+  private submitBatchMove(toTop: boolean): void {
+    if (this.selectedRuleIds.length === 0) {
+      this.onUnavailableAction('请先选择规则');
+      return;
+    }
+    this.onMoveBatch(this.selectedRuleIds, toTop);
+    this.exitSelection();
+  }
+
+  /** 批量删除：这里不做二次确认，删除后仍可通过导入恢复。 */
+  private submitBatchRemove(): void {
+    if (this.selectedRuleIds.length === 0) {
+      this.onUnavailableAction('请先选择规则');
+      return;
+    }
+    this.onRemoveBatch(this.selectedRuleIds);
+    this.exitSelection();
+  }
+
   private filteredReplaceRules(): ReplaceRule[] {
     const query = this.searchQuery.trim().toLowerCase();
     const filtered = this.rules.filter((rule: ReplaceRule) => {
@@ -397,7 +472,8 @@ export struct ReplaceRulesPage {
       }.width('100%').height(40).padding({ left: 11, right: 12 })
         .margin({ top: -8 })
 
-      Text('替换净化').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
+      Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '替换净化')
+        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor('#E3E4E8')
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
       if (this.showSearch) {
@@ -437,27 +513,63 @@ export struct ReplaceRulesPage {
           Column() {
             ForEach(this.filteredReplaceRules(), (rule: ReplaceRule) => {
               Row() {
+                if (this.selectionMode) {
+                  AppGlyph({
+                    name: this.selectedRuleIds.includes(rule.id) ? 'profileCheck' : 'profileClose',
+                    glyphSize: 20, tint: this.selectedRuleIds.includes(rule.id) ? '#AFC2FF' : '#92949E'
+                  }).margin({ right: 12 })
+                }
                 Column() {
                   Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(15).fontColor('#E3E4E8')
                     .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(`${rule.group} · ${rule.scopeContent ? '正文' : ''}${rule.scopeTitle ? ' 标题' : ''}`)
                     .fontSize(12).fontColor('#92949E').margin({ top: 4 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
-                  .onChange((enabled: boolean) => this.onToggleRule(rule.id, enabled))
-                Text('删除').fontSize(12).fontColor('#D99AA5').padding({ left: 10, right: 4 })
-                  .onClick(() => this.onRemoveRule(rule.id))
+                if (!this.selectionMode) {
+                  Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
+                    .onChange((enabled: boolean) => this.onToggleRule(rule.id, enabled))
+                  Text('删除').fontSize(12).fontColor('#D99AA5').padding({ left: 10, right: 4 })
+                    .onClick(() => this.onRemoveRule(rule.id))
+                }
               }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
                 .backgroundColor('#1B1C22').borderRadius(14).margin({ bottom: 8 })
-                .onClick(() => this.onEditRule(rule.id))
+                .onClick(() => this.selectionMode ? this.toggleSelectedRule(rule.id) : this.onEditRule(rule.id))
                 .bindContextMenu(this.RuleRowMenu(rule), ResponseType.LongPress)
-            }, (rule: ReplaceRule) => `${rule.id}`)
+            }, (rule: ReplaceRule) => this.ruleRowKey(rule))
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 80 })
         }.layoutWeight(1).scrollBar(BarState.Off)
+      }
+      if (this.selectionMode) {
+        Row() {
+          Text(this.selectedRuleIds.length === 0 ? '取消' : `已选择 ${this.selectedRuleIds.length} 项`)
+            .fontSize(14).fontColor('#D8D9E0').layoutWeight(1)
+            .onClick(() => this.exitSelection())
+          Text('全选').fontSize(14).fontColor('#AFC2FF').padding({ left: 10, right: 10 })
+            .onClick(() => this.selectAllVisible())
+        }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 4 })
+        Row() {
+          Text('启用').fontSize(14)
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchEnabled(true))
+          Text('停用').fontSize(14).margin({ left: 18 })
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchEnabled(false))
+          Text('置顶').fontSize(14).margin({ left: 18 })
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchMove(true))
+          Text('置底').fontSize(14).margin({ left: 18 })
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchMove(false))
+          Blank().layoutWeight(1)
+          Text('删除').fontSize(14)
+            .fontColor(this.selectedRuleIds.length > 0 ? '#D99AA5' : '#5C5E68')
+            .onClick(() => this.submitBatchRemove())
+        }.width('100%').padding({ left: 16, right: 16, top: 2, bottom: 10 })
       }
       Stack({ alignContent: Alignment.Center }) {
         AppGlyph({ name: 'add', glyphSize: 22, tint: '#B9C8FF' })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
+        .visibility(this.selectionMode ? Visibility.None : Visibility.Visible)
         .onClick(() => this.onOpenEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor('#111217')
@@ -484,7 +596,9 @@ export struct ReplaceRuleEditPage {
   @State pattern: string = '';
   @State replacement: string = '';
   @State scopeTitle: boolean = false;
-  @State scopeContent: boolean = false;
+  // 与上游 ReplaceRule 保持一致：新建规则默认作用于正文，
+  // 否则保存后既不参与正文替换也不会出现在试跑结果里。
+  @State scopeContent: boolean = true;
   @State isRegex: boolean = false;
   @State scope: string = '';
   @State excludeScope: string = '';
@@ -495,6 +609,12 @@ export struct ReplaceRuleEditPage {
   @State selectedGroups: string[] = [];
   @State activeField: string = 'pattern';
   @State isEnabled: boolean = true;
+  /** 规则试跑：样例文本、结果与是否已跑过。 */
+  @State testSource: string = '';
+  @State testOutput: string = '';
+  @State testError: string = '';
+  @State testHasRun: boolean = false;
+  @State showTestPanel: boolean = false;
   /** 记录被编辑规则的 id 与 order，保存时原样带回，避免新建语义覆盖。 */
   @State editingId: number = 0;
   @State editingOrder: number = 0;
@@ -548,7 +668,74 @@ export struct ReplaceRuleEditPage {
         .onClick(() => this.copyRule())
       MenuItem({ content: '粘贴规则' })
         .onClick(() => this.showPasteAuthorization = true)
+      MenuItem({ content: '测试规则' })
+        .onClick(() => this.showTestPanel = true)
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  /**
+   * 用样例文本试跑已保存并启用的规则，展示每条规则是否真的改动了文本。
+   * 只跑已保存的规则：编辑页里尚未保存的改动不在仓库缓存中，
+   * 这里如实说明，避免用户以为改动已生效。
+   */
+  private runRuleTest(): void {
+    if (this.testSource.trim().length === 0) {
+      this.testError = '样例文本不能为空';
+      this.testOutput = '';
+      this.testHasRun = true;
+      return;
+    }
+    const result = ReplaceRuleRepository.previewContent(this.testSource);
+    this.testOutput = result.text;
+    const changed = result.lines.filter((line: ReplaceRulePreviewLine) => line.changed).length;
+    this.testError = result.lines.length === 0 ? '当前没有启用中的正文规则，样例文本未被改动'
+      : `共 ${result.lines.length} 条正文规则，其中 ${changed} 条改动了样例文本`;
+    this.testHasRun = true;
+  }
+
+  private clearRuleTest(): void {
+    this.testOutput = '';
+    this.testError = '';
+    this.testHasRun = false;
+  }
+
+  @Builder
+  private RuleTestSheet() {
+    Column() {
+      Row() {
+        Text('测试规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
+        }.width(40).height(40).onClick(() => this.showTestPanel = false)
+      }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 8 })
+      Text('只对已保存并启用的正文规则试跑，编辑中的改动需要先保存')
+        .fontSize(12).fontColor('#92949E').width('100%').padding({ left: 18, right: 18, bottom: 10 })
+      Scroll() {
+        Column() {
+          TextArea({ placeholder: '粘贴一段正文用于试跑', text: this.testSource })
+            .fontSize(14).fontColor('#E3E4E8').placeholderColor('#92949E')
+            .backgroundColor('#22232A').borderRadius(12)
+            .width('100%').height(140).padding(12)
+            .onChange((value: string) => { this.testSource = value; this.clearRuleTest(); })
+          Row() {
+            Text('清空').fontSize(15).fontColor('#92949E').layoutWeight(1)
+              .onClick(() => { this.testSource = ''; this.clearRuleTest(); })
+            Text('试跑').fontSize(15).fontColor(this.testSource.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+              .onClick(() => this.runRuleTest())
+          }.width('100%').margin({ top: 12 })
+          if (this.testHasRun) {
+            Text(this.testError).fontSize(13)
+              .fontColor(this.testError.startsWith('当前没有') ? '#92949E' : '#D8D9E0')
+              .width('100%').textAlign(TextAlign.Start).margin({ top: 16 })
+            if (this.testOutput.length > 0) {
+              Text(this.testOutput).fontSize(14).fontColor('#E3E4E8')
+                .width('100%').textAlign(TextAlign.Start).padding(12).margin({ top: 10 })
+                .backgroundColor('#22232A').borderRadius(12)
+            }
+          }
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 20 })
+      }.layoutWeight(1).scrollBar(BarState.Off)
+    }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
   @Builder
@@ -823,6 +1010,13 @@ export struct ReplaceRuleEditPage {
         showClose: false,
         backgroundColor: '#17181E',
         onDisappear: () => this.showGroupManager = false
+      })
+      .bindSheet(this.showTestPanel, this.RuleTestSheet(), {
+        height: SheetSize.MEDIUM,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => this.showTestPanel = false
       })
   }
 }

@@ -467,6 +467,56 @@ struct Index {
     }
   }
 
+  /** 批量启用/停用；只反馈真正改变的条数，避免把未变化的算作成功。 */
+  private async setReplaceRuleEnabledBatch(ids: number[], enabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const changed = await ReplaceRuleRepository.setEnabledBatch(context, ids, enabled);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      this.showUnavailableAction(changed === 0
+        ? `所选规则已经是${enabled ? '启用' : '停用'}状态`
+        : `已${enabled ? '启用' : '停用'} ${changed} 条规则`);
+      if (this.route === AppRoute.READER) {
+        await this.reloadSelectedChapter();
+      }
+    } catch (_) {
+      this.showUnavailableAction('批量修改替换规则状态失败');
+    }
+  }
+
+  /** 批量删除。 */
+  private async removeReplaceRuleBatch(ids: number[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const removed = await ReplaceRuleRepository.removeBatch(context, ids);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      this.showUnavailableAction(removed === 0 ? '所选规则已不存在' : `已删除 ${removed} 条规则`);
+    } catch (_) {
+      this.showUnavailableAction('批量删除替换规则失败');
+    }
+  }
+
+  /** 批量置顶/置底。 */
+  private async moveReplaceRuleBatch(ids: number[], toTop: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const moved = await ReplaceRuleRepository.moveBatchToEdge(context, ids, toTop);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      this.showUnavailableAction(moved === 0 ? '所选规则已不存在' : `已${toTop ? '置顶' : '置底'} ${moved} 条规则`);
+    } catch (_) {
+      this.showUnavailableAction('批量调整替换规则顺序失败');
+    }
+  }
+
   /**
    * 导入替换规则。
    * source 为 'file' 时弹出文件选择器读取文本；其余情况直接解析传入的 text。
@@ -2425,6 +2475,9 @@ struct Index {
             onSortModeChange: (mode: string) => this.setReplaceRuleSortMode(mode),
             onImportRules: (text: string, source: string) => this.importReplaceRules(text, source),
             onExportRules: (rules: ReplaceRule[]) => this.exportReplaceRules(rules),
+            onSetEnabledBatch: (ids: number[], enabled: boolean) => this.setReplaceRuleEnabledBatch(ids, enabled),
+            onRemoveBatch: (ids: number[]) => this.removeReplaceRuleBatch(ids),
+            onMoveBatch: (ids: number[], toTop: boolean) => this.moveReplaceRuleBatch(ids, toTop),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULE_EDIT) {
