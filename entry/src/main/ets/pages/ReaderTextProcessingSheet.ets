@@ -1,7 +1,7 @@
 import { Book } from '../model/Book';
 import { AppGlyph } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
-import { ReplaceRule } from '../model/ReplaceRule';
+import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { BookContentProcess, ContentProcessDisplayItem, toContentProcessDisplayItem } from '../model/BookContentProcess';
 
 const READER_REPLACE_FILTERS: string[] = ['全部', '已启用', '已停用', '当前有效'];
@@ -158,7 +158,7 @@ export struct ReaderTextProcessingSheet {
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileFindReplace', glyphSize: 18, tint: '#A9ABB4' })
             }.width(38).height(42).backgroundColor('#202127').borderRadius(12)
-              .onClick(() => this.onUnavailableAction('替换规则执行尚未迁移'))
+              .onClick(() => this.onReplaceEnabledChange(!this.replaceEnabled))
             Text(this.replaceFilter).fontSize(12).fontColor('#D8D9E0')
               .padding({ left: 12, right: 12, top: 12, bottom: 12 })
               .backgroundColor('#292A31').borderRadius(12)
@@ -190,7 +190,7 @@ export struct ReaderTextProcessingSheet {
                       .onChange((enabled: boolean) => this.onRuleEnabledChange(rule.id, enabled))
                   }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
                     .backgroundColor('#202127').borderRadius(10).margin({ bottom: 7 })
-                }, (rule: ReplaceRule) => `${rule.id}`)
+                }, (rule: ReplaceRule) => replaceRuleRowKey(rule))
               }
             }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
           }.layoutWeight(1).width('100%').scrollBar(BarState.Off)

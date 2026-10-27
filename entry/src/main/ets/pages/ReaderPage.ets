@@ -198,6 +198,9 @@ export struct ReaderPage {
   private titleGeneration: number = 0;
   private readerScroller: Scroller = new Scroller();
   private readerSystemBarRequestId: number = 0;
+  private readerOrientationRequestId: number = 0;
+  private originalReaderOrientation: window.Orientation = window.Orientation.UNSPECIFIED;
+  private originalReaderOrientationCaptured: boolean = false;
   private keepLightTimer: number = -1;
   private keepLightRequestId: number = 0;
   private readerWindowActive: boolean = false;
@@ -225,6 +228,8 @@ export struct ReaderPage {
   onControlsShown: () => void = () => {};
   onOpenTocRule: () => void = () => {};
   onToggleNightMode: () => void = () => {};
+  @Prop eyeProtectionActive: boolean = false;
+  onToggleEyeProtection: () => void = () => {};
   onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => void = (_actions: ReaderMoreActionConfig[]) => {};
   onOpenHighlightRules: () => void = () => {};
   onOpenBottomActionConfig: () => void = () => {};
@@ -281,7 +286,7 @@ export struct ReaderPage {
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
     this.syncReaderSystemBars();
-    this.applyReaderOrientation(this.screenOrientation);
+    this.applyReaderOrientation(this.screenOrientation, true);
     this.applyKeepLight();
     this.syncVolumeKeyPage();
   }
@@ -291,7 +296,7 @@ export struct ReaderPage {
     this.clearKeepLight();
     this.releaseVolumeKeys();
     this.syncReaderSystemBars(true);
-    this.applyReaderOrientation('0');
+    this.restoreReaderOrientation();
     this.fullBookPaginationGeneration++;
     this.stopAutoPageTimer();
     this.resetPageTurnTransition();
@@ -387,6 +392,10 @@ export struct ReaderPage {
     }).catch(() => {});
   }
 
+  private renewKeepLightTimeout(): void {
+    if (this.readerWindowActive) { this.applyKeepLight(); }
+  }
+
   private applyKeepLight(): void {
     if (this.keepLightTimer >= 0) {
       clearTimeout(this.keepLightTimer);
@@ -410,9 +419,10 @@ export struct ReaderPage {
     }
   }
 
-  private applyReaderOrientation(value: string): void {
+  private applyReaderOrientation(value: string, captureOriginal: boolean = false): void {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
+    const requestId = ++this.readerOrientationRequestId;
     let orientation: window.Orientation = window.Orientation.UNSPECIFIED;
     if (value === '1') { orientation = window.Orientation.PORTRAIT; }
     else if (value === '2') { orientation = window.Orientation.LANDSCAPE; }
@@ -420,6 +430,24 @@ export struct ReaderPage {
     else if (value === '4') { orientation = window.Orientation.PORTRAIT_INVERTED; }
     else if (value === '5') { orientation = window.Orientation.LANDSCAPE_INVERTED; }
     window.getLastWindow(context).then((targetWindow: window.Window) => {
+      if (requestId !== this.readerOrientationRequestId) { return; }
+      if (captureOriginal && !this.originalReaderOrientationCaptured) {
+        this.originalReaderOrientation = targetWindow.getPreferredOrientation();
+        this.originalReaderOrientationCaptured = true;
+      }
+      targetWindow.setPreferredOrientation(orientation).catch(() => {});
+    }).catch(() => {});
+  }
+
+  private restoreReaderOrientation(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const requestId = ++this.readerOrientationRequestId;
+    const orientation = this.originalReaderOrientationCaptured
+      ? this.originalReaderOrientation : window.Orientation.UNSPECIFIED;
+    this.originalReaderOrientationCaptured = false;
+    window.getLastWindow(context).then((targetWindow: window.Window) => {
+      if (requestId !== this.readerOrientationRequestId) { return; }
       targetWindow.setPreferredOrientation(orientation).catch(() => {});
     }).catch(() => {});
   }
@@ -1063,6 +1091,7 @@ export struct ReaderPage {
     else if (kind === 'settings') { this.onOpenSettings(); }
     else if (kind === 'addBookmark') { this.addCurrentPageBookmark(); }
     else if (kind === 'theme') { this.onToggleNightMode(); }
+    else if (kind === 'eye_protection') { this.onToggleEyeProtection(); }
     else if (kind === 'prev_chapter') { this.onTurnChapterBoundary(-1); }
     else if (kind === 'next_chapter') { this.onTurnChapterBoundary(1); }
     else if (kind === 'replace') { this.textProcessingVisible = true; }
@@ -2251,7 +2280,8 @@ export struct ReaderPage {
                           kind: kind,
                           label: this.getBottomActionLabel(kind),
                           showLabel: this.showBottomActionText,
-                          active: kind === 'autoPage' && this.autoPageActive,
+                          active: (kind === 'autoPage' && this.autoPageActive) ||
+                            (kind === 'eye_protection' && this.eyeProtectionActive),
                           iconStyle: this.bottomIconStyle,
                           onSelect: () => this.selectBottomAction(kind),
                           onLongSelect: () => this.longSelectBottomAction(kind)
@@ -2561,6 +2591,9 @@ export struct ReaderPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.paperColor)
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) { this.renewKeepLightTimeout(); }
+    })
   }
 }
 

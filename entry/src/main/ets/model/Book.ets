@@ -1,3 +1,5 @@
+export type BookMediaType = 'text' | 'audio' | 'image';
+
 export interface Book {
   id: string;
   title: string;
@@ -14,6 +16,12 @@ export interface Book {
   coverColor: string;
   coverMark: string;
   coverUri?: string;
+  /** 用户自定义封面的应用内副本路径。 */
+  customCoverUri?: string;
+  /** 对齐 Android 的文本、音频、图片书籍类型。 */
+  bookType?: BookMediaType;
+  /** 对齐 Android 固定书籍类型设置。 */
+  fixedType?: boolean;
   contentPath?: string;
   format?: 'txt' | 'epub';
   chapterCount?: string;
@@ -25,6 +33,10 @@ export interface Book {
   /** 本地 TXT 当前使用的字符集；为空时按文件 BOM/内容自动识别。 */
   charset?: string;
   description?: string;
+  /** 用户为书目添加的备注。 */
+  remark?: string;
+  /** 用户自定义标签，沿用 Android 逗号分隔存储。 */
+  customTag?: string;
   bodyMissing?: boolean;
   androidOriginalPath?: string;
   androidCharacterPosition?: number;

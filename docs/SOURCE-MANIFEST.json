@@ -21,7 +21,7 @@
   },
   {
     "path": "CHANGELOG.md",
-    "sha256": "5c40dd71b8943af9c0cd99206515d04634048d0ae05eafb4c675ecc6c1547808"
+    "sha256": "4d88022c12bdb36bfcea76fd116949089f7d7a1c7a3756ee1da3060653eb6c9c"
   },
   {
     "path": "DISCLAIMER.md",
@@ -41,7 +41,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "a75578eaeda83c71930f7d9273319cba32016cbf1491298ae6331fe27ae1ab79"
+    "sha256": "02a03db9e59ceac36356be8b2e8da7a8e1bcd38d7da08d5370d391db3c26795a"
   },
   {
     "path": "SECURITY.md",
@@ -61,7 +61,7 @@
   },
   {
     "path": "docs/BACKUP-RESTORE.md",
-    "sha256": "12dbdf0e0efb838c4e2604732086b85fe946fc4870eb1d8680208518502e09f9"
+    "sha256": "3ba8a2675b8926876c248e5075584a65580d0704d9e4e414d3ba2346ec467507"
   },
   {
     "path": "docs/BUILDING.md",
@@ -69,15 +69,19 @@
   },
   {
     "path": "docs/GLOSSARY.md",
-    "sha256": "e02f2ac2ec07111311a423a5acc1b09cddded85f420c383a8b71231c1dbaaf49"
+    "sha256": "e62f8d5d98b1a1554814f5c1caf7a24824dc0a21fb5a1413b923d7a22735aeda"
   },
   {
     "path": "docs/INDEX.md",
-    "sha256": "2b2ce5a53e1200d93c16a7208d14e208267c26e286f4e2a80ea768cca6d40b41"
+    "sha256": "8570d764a8989f22cf71783334ee017fc71533e80a9301f30f026f6f3ea5927f"
+  },
+  {
+    "path": "docs/KNOWN-ISSUES.md",
+    "sha256": "16b7a9f3a772d0f671056490e43021194f5e5485fd5ca639e186cc0ea9598ead"
   },
   {
     "path": "docs/MODULE-STATUS.md",
-    "sha256": "3ddc27261c558c44df50d32b773721f5d224862586339607da49c2320e58c0f1"
+    "sha256": "07a6f82f5708afe5d21abec1a8983ebb7cd0ee4192c8ab602fe0068edb9ab8f0"
   },
   {
     "path": "docs/MODULES.md",
@@ -85,7 +89,7 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "f845705dab361bae7950b1f528732321d3f999b7973cd4f5401c3b0ddeaa6f68"
+    "sha256": "5c5ad2c45f9388f5a28dfd9150ee532be95fc413504ba3d95fbec47942a0a897"
   },
   {
     "path": "docs/PROJECT.md",
@@ -109,11 +113,11 @@
   },
   {
     "path": "docs/UI-PARITY.md",
-    "sha256": "d0c8ef47e75932d4ef3580a3f6f4adbbcbc9171b7cf3a418be0c0c4a44846e19"
+    "sha256": "d826472ee702793b5b8d80cffd17f9bb4b4abef2fa3fb4d3cf218ca4873b85d2"
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "659ffa43aaa9d436b4dc691cd59f1363239ed32aee558709f35156a79852c4a5"
+    "sha256": "1da0cc761047db46d3645f7acdc112918fe02e4b89881e6f416b4977f39e6bad"
   },
   {
     "path": "entry/build-profile.json5",
@@ -153,7 +157,7 @@
   },
   {
     "path": "entry/src/main/ets/data/BackupRepository.ets",
-    "sha256": "55a6a5906b73aedd5d3fde42b41ac5fd2cb844f97b4c7729b8f20311ae770b18"
+    "sha256": "f698fb545236d2fa259dca59bfe4c87d9bcf314345a4c9c8497587c0d22ad5eb"
   },
   {
     "path": "entry/src/main/ets/data/BookContentProcessEngine.ets",
@@ -165,7 +169,7 @@
   },
   {
     "path": "entry/src/main/ets/data/BookRepository.ets",
-    "sha256": "75a6e2e8deb54b51bf577280c06e5e0b41a93a2c2ec203d03d882b505e7f5ce2"
+    "sha256": "8a0895a4092e9ec5b8d4889534a2885464f18efc7e5219b7f27add4f46a24c9b"
   },
   {
     "path": "entry/src/main/ets/data/EpubRepository.ets",
@@ -205,11 +209,15 @@
   },
   {
     "path": "entry/src/main/ets/data/ReaderSettingsRepository.ets",
-    "sha256": "a594ad1fa82c5683c6485d35835d2ca1cf152aae7830a0acd8d8acba0378db0f"
+    "sha256": "ceb3c40e0d1db5efddf77d94e479ec46de90098d07f73abcd70e220be907aece"
+  },
+  {
+    "path": "entry/src/main/ets/data/ReplaceRuleImporter.ets",
+    "sha256": "40712f287e5c971866e65c63d6f080b442c924e6aabe9c20106b7c9b1244f7a1"
   },
   {
     "path": "entry/src/main/ets/data/ReplaceRuleRepository.ets",
-    "sha256": "8f301771bed7337ac65b4f4f9cb50217452ca8823820a73a9df20e248f8be0a4"
+    "sha256": "854a52fb04496c127510d5d093b9f7cce232fecd07da2bc2910f32dc6ee48ffc"
   },
   {
     "path": "entry/src/main/ets/entryability/EntryAbility.ets",
@@ -217,7 +225,7 @@
   },
   {
     "path": "entry/src/main/ets/model/Book.ets",
-    "sha256": "5c916cb93664a742eb79c2f1825798b3a2bd1f62ec1659bab4e04d314ed4cd7e"
+    "sha256": "4e30108564d7d15b90d845d69395258cbdbcbfa84806b639d634075105ad6fe4"
   },
   {
     "path": "entry/src/main/ets/model/BookContentProcess.ets",
@@ -233,7 +241,7 @@
   },
   {
     "path": "entry/src/main/ets/model/ReplaceRule.ets",
-    "sha256": "9fff78b42e7886f41a5e107a48c66376a5899a37665cbaefbb7c57551cde80d7"
+    "sha256": "ddcb8ac29a1b71b140f212115087702cd6c6590906f90f2c6aecb2b115cd2e7f"
   },
   {
     "path": "entry/src/main/ets/pages/AppAiSettingsPage.ets",
@@ -273,7 +281,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/BookInfoPage.ets",
-    "sha256": "d07c1f0fa9e40f11ed991450a0df84ac0862893832bc75d5a26d1c59c7c94fd3"
+    "sha256": "a5153025ac77525fb322d34214de36005f98f7510466bd0715bdf5e7c7098fe6"
   },
   {
     "path": "entry/src/main/ets/pages/BookshelfPage.ets",
@@ -297,7 +305,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/Index.ets",
-    "sha256": "0b99b3c47ff6c187ab43216ff6cb8fb35c9816cdd89d4629e302741d8f9de2dc"
+    "sha256": "a0406da610bdf7853f387611e080489847db99735c4e72ca907033102b7f36ba"
   },
   {
     "path": "entry/src/main/ets/pages/LocalReaderPaginator.ets",
@@ -325,7 +333,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/ProfileSubPages.ets",
-    "sha256": "47ba0d331b5bf5c390bbd3c0ef0d9d8861b6e6ca983153f12330daf164ba6b84"
+    "sha256": "729fe86e8321dbe573552abbe347b8eb937463debe02324f7325ce6fb32eae66"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderAloudSettingsPage.ets",
@@ -337,7 +345,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderPage.ets",
-    "sha256": "477a51b0e3ff2fd39c0a6980cc0c527fed3a0c18415376386eaeb03b7b76539d"
+    "sha256": "3fa12950f7763316d72527c3841672d8b27eb696b520bb818f16e6921efafe68"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSearchPage.ets",
@@ -345,11 +353,11 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSettingsPage.ets",
-    "sha256": "273ca99ae411bfa98ce8f643c48c4dcb1c3583173e6441bf1bac22f5463e20e4"
+    "sha256": "90829d167012ce003e99c191bcda7a3ca5c78d3aff0eb482f1e27ad79e5031ae"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderTextProcessingSheet.ets",
-    "sha256": "bd88c7830bb3481976f7e252e311e35b7b998b83d90116effcc6c48936d3000b"
+    "sha256": "9f8bdbb7054b275d76f006d2f188758c4072431f0f39f1baa57c24072a9d8dde"
   },
   {
     "path": "entry/src/main/ets/pages/SearchPage.ets",

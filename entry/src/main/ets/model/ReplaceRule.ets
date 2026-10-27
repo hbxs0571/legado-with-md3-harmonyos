@@ -14,3 +14,8 @@ export interface ReplaceRule {
   timeoutMillisecond: number;
   order: number;
 }
+
+/** 为规则列表提供稳定键；展示字段变化时让 ArkUI 重建对应行。 */
+export function replaceRuleRowKey(rule: ReplaceRule): string {
+  return `${rule.id}_${rule.isEnabled ? 1 : 0}_${rule.name}_${rule.group}_${rule.pattern}_${rule.replacement}_${rule.scope}_${rule.excludeScope}_${rule.scopeContent ? 1 : 0}${rule.scopeTitle ? 1 : 0}_${rule.isRegex ? 1 : 0}`;
+}

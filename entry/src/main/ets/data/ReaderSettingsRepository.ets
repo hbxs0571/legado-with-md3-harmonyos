@@ -167,6 +167,12 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   maxLengthWithNoToc: number;
+  eyeProtectionEnabled: boolean;
+  eyeProtectionAutoNight: boolean;
+  eyeProtectionSchedule: boolean;
+  eyeProtectionIntensity: number;
+  eyeProtectionStartTime: string;
+  eyeProtectionEndTime: string;
 }
 
 export interface ReaderBottomActionConfig {
@@ -379,7 +385,13 @@ export class ReaderSettingsRepository {
       noAnimScrollPage: false,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
-      maxLengthWithNoToc: 3000
+      maxLengthWithNoToc: 3000,
+      eyeProtectionEnabled: false,
+      eyeProtectionAutoNight: false,
+      eyeProtectionSchedule: false,
+      eyeProtectionIntensity: 50,
+      eyeProtectionStartTime: '22:00',
+      eyeProtectionEndTime: '07:00'
     };
     try {
       const store = await preferences.getPreferences(context, ReaderSettingsRepository.preferenceName);
@@ -415,6 +427,12 @@ export class ReaderSettingsRepository {
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
+      const eyeProtectionEnabledValue = await store.get('eyeProtectionEnabled', defaults.eyeProtectionEnabled);
+      const eyeProtectionAutoNightValue = await store.get('eyeProtectionAutoNight', defaults.eyeProtectionAutoNight);
+      const eyeProtectionScheduleValue = await store.get('eyeProtectionSchedule', defaults.eyeProtectionSchedule);
+      const eyeProtectionIntensityValue = await store.get('eyeProtectionIntensity', defaults.eyeProtectionIntensity);
+      const eyeProtectionStartTimeValue = await store.get('eyeProtectionStartTime', defaults.eyeProtectionStartTime);
+      const eyeProtectionEndTimeValue = await store.get('eyeProtectionEndTime', defaults.eyeProtectionEndTime);
       const paddingTopValue = await store.get('paddingTop', defaults.paddingSettings.paddingTop);
       const paddingBottomValue = await store.get('paddingBottom', defaults.paddingSettings.paddingBottom);
       const paddingLeftValue = await store.get('paddingLeft', defaults.paddingSettings.paddingLeft);
@@ -573,7 +591,19 @@ export class ReaderSettingsRepository {
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
               ? swipeToAddBookmarkValue : defaults.swipeToAddBookmark,
           maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
-            ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc
+            ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc,
+          eyeProtectionEnabled: typeof eyeProtectionEnabledValue === 'boolean'
+            ? eyeProtectionEnabledValue : defaults.eyeProtectionEnabled,
+          eyeProtectionAutoNight: typeof eyeProtectionAutoNightValue === 'boolean'
+            ? eyeProtectionAutoNightValue : defaults.eyeProtectionAutoNight,
+          eyeProtectionSchedule: typeof eyeProtectionScheduleValue === 'boolean'
+            ? eyeProtectionScheduleValue : defaults.eyeProtectionSchedule,
+          eyeProtectionIntensity: ReaderSettingsRepository.normalizeInteger(
+            eyeProtectionIntensityValue, 0, 100, defaults.eyeProtectionIntensity),
+          eyeProtectionStartTime: ReaderSettingsRepository.normalizeTime(
+            eyeProtectionStartTimeValue, defaults.eyeProtectionStartTime),
+          eyeProtectionEndTime: ReaderSettingsRepository.normalizeTime(
+            eyeProtectionEndTimeValue, defaults.eyeProtectionEndTime)
       };
     } catch (_) {
       return defaults;
@@ -631,6 +661,14 @@ export class ReaderSettingsRepository {
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
+      await store.put('eyeProtectionEnabled', settings.eyeProtectionEnabled);
+      await store.put('eyeProtectionAutoNight', settings.eyeProtectionAutoNight);
+      await store.put('eyeProtectionSchedule', settings.eyeProtectionSchedule);
+      await store.put('eyeProtectionIntensity', Math.max(0, Math.min(100, Math.round(settings.eyeProtectionIntensity))));
+      await store.put('eyeProtectionStartTime', ReaderSettingsRepository.normalizeTime(
+        settings.eyeProtectionStartTime, '22:00'));
+      await store.put('eyeProtectionEndTime', ReaderSettingsRepository.normalizeTime(
+        settings.eyeProtectionEndTime, '07:00'));
       await store.put('headerMode', Math.max(0, Math.min(2, Math.round(settings.headerMode))));
       await store.put('footerMode', Math.max(0, Math.min(1, Math.round(settings.footerMode))));
       await store.put('showHeaderLine', settings.showHeaderLine);
@@ -693,6 +731,14 @@ export class ReaderSettingsRepository {
   private static normalizeInteger(value: number | boolean | string | bigint | Uint8Array | object, minimum: number, maximum: number, fallback: number): number {
     return typeof value === 'number' && Number.isInteger(value)
       ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+  }
+
+  private static normalizeTime(value: number | boolean | string | bigint | Uint8Array | object, fallback: string): string {
+    if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) { return fallback; }
+    const parts: string[] = value.split(':');
+    const hour: number = Number(parts[0]);
+    const minute: number = Number(parts[1]);
+    return hour >= 0 && hour < 24 && minute >= 0 && minute < 60 ? value : fallback;
   }
 
   private static normalizeColor(value: number | boolean | string | bigint | Uint8Array | object, fallback: number): number {

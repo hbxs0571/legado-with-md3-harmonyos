@@ -1,4 +1,4 @@
-import { AppRoute, Book, ProfileRoute } from '../model/Book';
+import { AppRoute, Book, BookMediaType, ProfileRoute } from '../model/Book';
 import { HomePage } from './HomePage';
 import { BookshelfPage } from './BookshelfPage';
 import { DiscoverPage } from './DiscoverPage';
@@ -52,6 +52,7 @@ import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
+import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
@@ -96,6 +97,10 @@ struct Index {
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readerBookmarks: ReaderBookmark[] = [];
   @State replaceRules: ReplaceRule[] = [];
+  /** 当前正在编辑的替换规则；为空表示新建。 */
+  @State editingReplaceRule: ReplaceRule | undefined = undefined;
+  /** 替换规则列表的排序模式，与 Repository 中的持久化值保持同步。 */
+  @State replaceRuleSortMode: string = 'asc';
   @State replaceEnableDefault: boolean = true;
   @State readerReplaceEnabled: boolean = true;
   @State readerReplaceUsesDefault: boolean = true;
@@ -133,6 +138,13 @@ struct Index {
   @State readerReadingAnchorEnabled: boolean = true;
   @State readerSwipeToAddBookmark: boolean = false;
   @State readerMaxLengthWithNoToc: number = 3000;
+  @State eyeProtectionEnabled: boolean = false;
+  @State eyeProtectionAutoNight: boolean = false;
+  @State eyeProtectionSchedule: boolean = false;
+  @State eyeProtectionIntensity: number = 50;
+  @State eyeProtectionStartTime: string = '22:00';
+  @State eyeProtectionEndTime: string = '07:00';
+  @State eyeProtectionMinute: number = Math.floor(Date.now() / 60000);
   @State readerAnchorOriginBook: Book | undefined = undefined;
   @State readerAnchorOriginChapter: string = '';
   @State readerAnchorJumpCount: number = 0;
@@ -166,6 +178,7 @@ struct Index {
   private readerSessionLastSaveTime: number = 0;
   private readerLifecycleEventsRegistered: boolean = false;
   private readerSessionPaused: boolean = false;
+  private eyeProtectionTimerId: number = -1;
 
   aboutToAppear(): void {
     const context = this.getUIContext().getHostContext();
@@ -191,6 +204,16 @@ struct Index {
       this.restoreBookContentProcesses(context);
       this.restoreBackupIgnoreLists(context);
       this.loadRestoredAndroidEntries(context);
+    }
+    this.eyeProtectionTimerId = setInterval(() => {
+      this.eyeProtectionMinute = Math.floor(Date.now() / 60000);
+    }, 60000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.eyeProtectionTimerId >= 0) {
+      clearInterval(this.eyeProtectionTimerId);
+      this.eyeProtectionTimerId = -1;
     }
   }
 
@@ -233,6 +256,7 @@ struct Index {
 
   private async restoreReplaceRules(context: Context): Promise<void> {
     this.replaceRules = await ReplaceRuleRepository.load(context);
+    this.replaceRuleSortMode = ReplaceRuleRepository.getSortMode();
     this.replaceEnableDefault = ReplaceRuleRepository.getDefaultEnabled();
     this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(this.selectedBook);
     this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(this.selectedBook);
@@ -317,12 +341,94 @@ struct Index {
   }
 
   private replaceRuleGroups(): string[] {
-    const groups: string[] = ['默认'];
-    this.replaceRules.forEach((rule: ReplaceRule) => {
-      const group = rule.group.trim();
-      if (group.length > 0 && group !== '默认' && !groups.includes(group)) { groups.push(group); }
-    });
-    return groups;
+    return ReplaceRuleRepository.getGroups();
+  }
+
+  /** 打开已有规则的编辑页。 */
+  private openReplaceRuleEditor(id: number): void {
+    const rule = this.replaceRules.find((item: ReplaceRule) => item.id === id);
+    if (rule === undefined) {
+      this.showUnavailableAction('规则不存在，可能已被删除');
+      return;
+    }
+    this.editingReplaceRule = rule;
+    this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT;
+  }
+
+  private async moveReplaceRule(id: number, toTop: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      if (toTop) {
+        await ReplaceRuleRepository.moveToTop(context, id);
+      } else {
+        await ReplaceRuleRepository.moveToBottom(context, id);
+      }
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      if (this.route === AppRoute.READER) {
+        await this.reloadSelectedChapter();
+      }
+    } catch (_) {
+      this.showUnavailableAction('调整规则顺序失败');
+    }
+  }
+
+  private async addReplaceRuleGroup(name: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.addGroup(context, name);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('新增分组失败');
+    }
+  }
+
+  private async renameReplaceRuleGroup(oldName: string, newName: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.renameGroup(context, oldName, newName);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '重命名分组失败');
+    }
+  }
+
+  private async removeReplaceRuleGroup(name: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地规则存储');
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.removeGroup(context, name);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('删除分组失败');
+    }
+  }
+
+  private async setReplaceRuleSortMode(mode: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await ReplaceRuleRepository.setSortMode(context, mode);
+      this.replaceRuleSortMode = ReplaceRuleRepository.getSortMode();
+    } catch (_) {
+      this.showUnavailableAction('排序方式保存失败');
+    }
   }
 
   private cacheManagementGroups(): string[] {
@@ -376,6 +482,132 @@ struct Index {
       this.replaceRules = ReplaceRuleRepository.getAll();
     } catch (_) {
       this.showUnavailableAction('替换规则删除失败');
+    }
+  }
+
+  /** 批量启用/停用；只反馈真正改变的条数，避免把未变化的算作成功。 */
+  private async setReplaceRuleEnabledBatch(ids: number[], enabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const changed = await ReplaceRuleRepository.setEnabledBatch(context, ids, enabled);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      this.showUnavailableAction(changed === 0
+        ? `所选规则已经是${enabled ? '启用' : '停用'}状态`
+        : `已${enabled ? '启用' : '停用'} ${changed} 条规则`);
+      if (this.route === AppRoute.READER) {
+        await this.reloadSelectedChapter();
+      }
+    } catch (_) {
+      this.showUnavailableAction('批量修改替换规则状态失败');
+    }
+  }
+
+  /** 批量删除。 */
+  private async removeReplaceRuleBatch(ids: number[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const removed = await ReplaceRuleRepository.removeBatch(context, ids);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      this.showUnavailableAction(removed === 0 ? '所选规则已不存在' : `已删除 ${removed} 条规则`);
+    } catch (_) {
+      this.showUnavailableAction('批量删除替换规则失败');
+    }
+  }
+
+  /** 批量置顶/置底。 */
+  private async moveReplaceRuleBatch(ids: number[], toTop: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const moved = await ReplaceRuleRepository.moveBatchToEdge(context, ids, toTop);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      this.showUnavailableAction(moved === 0 ? '所选规则已不存在' : `已${toTop ? '置顶' : '置底'} ${moved} 条规则`);
+    } catch (_) {
+      this.showUnavailableAction('批量调整替换规则顺序失败');
+    }
+  }
+
+  /**
+   * 拖拽排序：把一条规则挪到另一条的位置。
+   * 失败时只提示不刷新，避免界面与存储不一致。
+   */
+  private async reorderReplaceRule(fromId: number, toId: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const moved = await ReplaceRuleRepository.moveRule(context, fromId, toId);
+      if (!moved) {
+        this.showUnavailableAction('规则顺序未变化');
+        return;
+      }
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('调整替换规则顺序失败');
+    }
+  }
+
+  /**
+   * 导入替换规则。
+   * source 为 'file' 时弹出文件选择器读取文本；其余情况直接解析传入的 text。
+   * 解析失败与部分跳过都如实反馈，不把未导入的条目算作成功。
+   */
+  private async importReplaceRules(text: string, source: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    let content = text;
+    if (source === 'file') {
+      try {
+        content = await ReplaceRuleRepository.pickImportFile(context);
+      } catch (_) {
+        this.showUnavailableAction('读取规则文件失败');
+        return;
+      }
+      if (content.length === 0) {
+        return;
+      }
+    }
+    const parsed = ReplaceRuleImporter.parse(content);
+    if (parsed.rules.length === 0) {
+      this.showUnavailableAction(parsed.skipped > 0 ? '规则格式不正确，未导入任何数据' : '没有可导入的规则');
+      return;
+    }
+    try {
+      const outcome = await ReplaceRuleRepository.importRules(context, parsed.rules);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      const skipped = parsed.skipped > 0 ? `，跳过 ${parsed.skipped} 条` : '';
+      this.showUnavailableAction(`新增 ${outcome.added} 条，更新 ${outcome.updated} 条${skipped}`);
+    } catch (_) {
+      this.showUnavailableAction('替换规则导入失败');
+    }
+  }
+
+  /** 导出替换规则到用户选择的文件。 */
+  private async exportReplaceRules(rules: ReplaceRule[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    if (rules.length === 0) {
+      this.showUnavailableAction('没有可导出的替换规则');
+      return;
+    }
+    try {
+      const saved = await ReplaceRuleRepository.saveExportFile(context, ReplaceRuleRepository.exportRules(rules));
+      this.showUnavailableAction(saved ? `已导出 ${rules.length} 条规则` : '未选择保存位置');
+    } catch (_) {
+      this.showUnavailableAction('替换规则导出失败');
     }
   }
 
@@ -588,6 +820,9 @@ struct Index {
       coverColor: targetBook.coverColor,
       coverMark: targetBook.coverMark,
       coverUri: targetBook.coverUri,
+      customCoverUri: targetBook.customCoverUri,
+      bookType: targetBook.bookType,
+      fixedType: targetBook.fixedType,
       contentPath: targetBook.contentPath,
       format: targetBook.format,
       chapterCount: targetBook.chapterCount,
@@ -596,6 +831,8 @@ struct Index {
       reSegment: targetBook.reSegment,
       charset: targetBook.charset,
       description: targetBook.description,
+      remark: targetBook.remark,
+      customTag: targetBook.customTag,
       bodyMissing: targetBook.bodyMissing,
       androidOriginalPath: targetBook.androidOriginalPath,
       androidCharacterPosition: position,
@@ -667,6 +904,9 @@ struct Index {
       coverColor: targetBook.coverColor,
       coverMark: targetBook.coverMark,
       coverUri: targetBook.coverUri,
+      customCoverUri: targetBook.customCoverUri,
+      bookType: targetBook.bookType,
+      fixedType: targetBook.fixedType,
       contentPath: targetBook.contentPath,
       format: targetBook.format,
       chapterCount: targetBook.chapterCount,
@@ -675,6 +915,8 @@ struct Index {
       reSegment: targetBook.reSegment,
       charset: targetBook.charset,
       description: targetBook.description,
+      remark: targetBook.remark,
+      customTag: targetBook.customTag,
       bodyMissing: targetBook.bodyMissing,
       androidOriginalPath: targetBook.androidOriginalPath,
       androidCharacterPosition: androidPosition,
@@ -790,6 +1032,12 @@ struct Index {
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerMaxLengthWithNoToc = settings.maxLengthWithNoToc;
+      this.eyeProtectionEnabled = settings.eyeProtectionEnabled;
+      this.eyeProtectionAutoNight = settings.eyeProtectionAutoNight;
+      this.eyeProtectionSchedule = settings.eyeProtectionSchedule;
+      this.eyeProtectionIntensity = settings.eyeProtectionIntensity;
+      this.eyeProtectionStartTime = settings.eyeProtectionStartTime;
+      this.eyeProtectionEndTime = settings.eyeProtectionEndTime;
       this.readerTocUseReplace = settings.tocUseReplace;
       this.readerTocShowWordCount = settings.tocShowWordCount;
       this.readerClickImageBehavior = settings.clickImageBehavior;
@@ -866,6 +1114,12 @@ struct Index {
         readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
+        eyeProtectionEnabled: this.eyeProtectionEnabled,
+        eyeProtectionAutoNight: this.eyeProtectionAutoNight,
+        eyeProtectionSchedule: this.eyeProtectionSchedule,
+        eyeProtectionIntensity: this.eyeProtectionIntensity,
+        eyeProtectionStartTime: this.eyeProtectionStartTime,
+        eyeProtectionEndTime: this.eyeProtectionEndTime,
         tocUseReplace: this.readerTocUseReplace,
         tocShowWordCount: this.readerTocShowWordCount,
         clickImageBehavior: this.readerClickImageBehavior,
@@ -967,6 +1221,73 @@ struct Index {
     this.paperIndex = this.readerNightMode ? this.nightPaperIndex : this.dayPaperIndex;
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private isEyeProtectionActive(): boolean {
+    if (!(this.eyeProtectionEnabled || (this.eyeProtectionAutoNight && this.readerNightMode))) { return false; }
+    if (!this.eyeProtectionSchedule) { return true; }
+    const start = this.parseEyeProtectionMinutes(this.eyeProtectionStartTime);
+    const end = this.parseEyeProtectionMinutes(this.eyeProtectionEndTime);
+    if (start < 0 || end < 0) { return true; }
+    if (start === end) { return true; }
+    const now = new Date(this.eyeProtectionMinute * 60000);
+    const current = now.getHours() * 60 + now.getMinutes();
+    return start < end ? current >= start && current < end : current >= start || current < end;
+  }
+
+  private parseEyeProtectionMinutes(value: string): number {
+    const parts = value.trim().split(':');
+    if (parts.length !== 2) { return -1; }
+    const hour = Number(parts[0]);
+    const minute = Number(parts[1]);
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour >= 24 || minute < 0 || minute >= 60) {
+      return -1;
+    }
+    return hour * 60 + minute;
+  }
+
+  private commitEyeProtectionChange(): void {
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setEyeProtectionEnabled(enabled: boolean): void {
+    this.eyeProtectionEnabled = enabled;
+    this.commitEyeProtectionChange();
+  }
+
+  private setEyeProtectionAutoNight(enabled: boolean): void {
+    this.eyeProtectionAutoNight = enabled;
+    this.commitEyeProtectionChange();
+  }
+
+  private setEyeProtectionSchedule(enabled: boolean): void {
+    this.eyeProtectionSchedule = enabled;
+    this.commitEyeProtectionChange();
+  }
+
+  private setEyeProtectionIntensity(intensity: number): void {
+    this.eyeProtectionIntensity = Math.max(0, Math.min(100, Math.round(intensity)));
+    this.commitEyeProtectionChange();
+  }
+
+  private setEyeProtectionStartTime(time: string): void {
+    this.eyeProtectionStartTime = time;
+    this.commitEyeProtectionChange();
+  }
+
+  private setEyeProtectionEndTime(time: string): void {
+    this.eyeProtectionEndTime = time;
+    this.commitEyeProtectionChange();
+  }
+
+  private toggleEyeProtection(): void {
+    if (this.eyeProtectionEnabled || this.eyeProtectionAutoNight) {
+      this.setEyeProtectionEnabled(false);
+      this.setEyeProtectionAutoNight(false);
+    } else {
+      this.setEyeProtectionEnabled(true);
+    }
   }
 
   private setReaderBottomActionText(enabled: boolean): void {
@@ -1176,6 +1497,12 @@ struct Index {
       this.dayPaperIndex = result.settings.dayPaperIndex;
       this.nightPaperIndex = result.settings.nightPaperIndex;
       this.readerNightMode = result.settings.readerNightMode;
+      this.eyeProtectionEnabled = result.settings.eyeProtectionEnabled;
+      this.eyeProtectionAutoNight = result.settings.eyeProtectionAutoNight;
+      this.eyeProtectionSchedule = result.settings.eyeProtectionSchedule;
+      this.eyeProtectionIntensity = result.settings.eyeProtectionIntensity;
+      this.eyeProtectionStartTime = result.settings.eyeProtectionStartTime;
+      this.eyeProtectionEndTime = result.settings.eyeProtectionEndTime;
       this.shareReaderStyleLayout = result.settings.shareLayout;
       this.showReaderBottomActionText = result.settings.showBottomActionText;
       this.readerBottomIconStyle = result.settings.bottomIconStyle;
@@ -1191,7 +1518,16 @@ struct Index {
       this.readerInfoSettings = this.getReaderInfoSettingsFromSnapshot(result.settings);
       this.readerSettingsLoaded = true;
       this.readerSettingsRevision += 1;
-      this.backupStatusMessage = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目。`;
+      // 恢复可能写入了替换净化规则，重新读一次让规则页和阅读页都看到最新结果。
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      const restoreSummary = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目`;
+      const replaceRuleSummary = this.describeReplaceRuleRestore(
+        result.replaceRuleAdded, result.replaceRuleUpdated, result.replaceRuleSkipped
+      );
+      // 没有 replaceRule.json 时不拼这一段，避免句尾多出一个空分号。
+      this.backupStatusMessage = replaceRuleSummary.length > 0
+        ? `${restoreSummary}；${replaceRuleSummary}`
+        : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
       await BackupRepository.discardSelection(selection);
       this.pendingBackup = undefined;
@@ -1201,6 +1537,20 @@ struct Index {
     } finally {
       this.backupBusy = false;
     }
+  }
+
+  /**
+   * 生成替换净化规则的恢复结果说明。
+   * 三项都为 0 时返回空串，表示这份备份里没有 replaceRule.json，
+   * 不在提示里加一句没有信息量的话；返回值不带句号，由调用方决定句尾。
+   */
+  private describeReplaceRuleRestore(added: number, updated: number, skipped: number): string {
+    if (added === 0 && updated === 0 && skipped === 0) { return ''; }
+    const parts: string[] = [];
+    if (added > 0) { parts.push(`新增 ${added} 条`); }
+    if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
+    if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
+    return `替换净化规则${parts.join('、')}。`;
   }
 
   private cancelLocalBackupRestore(): void {
@@ -1410,6 +1760,118 @@ struct Index {
     this.route = AppRoute.BOOK_INFO;
   }
 
+  private async saveBookMetadata(title: string, author: string, category: string,
+    description: string, remark: string, customTag: string, bookType: BookMediaType, fixedType: boolean): Promise<boolean> {
+    const currentBook = this.books.find((book: Book) => book.id === this.selectedBook.id);
+    if (currentBook === undefined || !currentBook.isLocal) {
+      this.showUnavailableAction('当前书籍不在本地书架，未保存书籍信息');
+      return false;
+    }
+    const updatedBook: Book = {
+      id: currentBook.id,
+      title: title,
+      author: author,
+      category: category,
+      groupName: currentBook.groupName,
+      chapterTitles: currentBook.chapterTitles,
+      chapterOffsets: currentBook.chapterOffsets,
+      chapterIndex: currentBook.chapterIndex,
+      chapterProgress: currentBook.chapterProgress,
+      lastChapter: currentBook.lastChapter,
+      progress: currentBook.progress,
+      coverColor: currentBook.coverColor,
+      coverMark: currentBook.coverUri === undefined || currentBook.coverUri.length === 0
+        ? (title.substring(0, 1) || '书') : currentBook.coverMark,
+      coverUri: currentBook.coverUri,
+      customCoverUri: currentBook.customCoverUri,
+      bookType: bookType,
+      fixedType: fixedType,
+      contentPath: currentBook.contentPath,
+      format: currentBook.format,
+      chapterCount: currentBook.chapterCount,
+      fileSizeBytes: currentBook.fileSizeBytes,
+      imageStyle: currentBook.imageStyle,
+      reSegment: currentBook.reSegment,
+      charset: currentBook.charset,
+      description: description,
+      remark: remark,
+      customTag: customTag,
+      bodyMissing: currentBook.bodyMissing,
+      androidOriginalPath: currentBook.androidOriginalPath,
+      androidCharacterPosition: currentBook.androidCharacterPosition,
+      readerPositionVersion: currentBook.readerPositionVersion,
+      isLocal: currentBook.isLocal
+    };
+    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，书籍信息未保存');
+      return false;
+    }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      this.books = updatedBooks;
+      this.selectedBook = updatedBook;
+      return true;
+    } catch (_) {
+      this.showUnavailableAction('书籍信息保存失败，未更改原有信息');
+      return false;
+    }
+  }
+
+  private async persistCoverUpdate(updatedBook: Book, oldCoverPath: string | undefined): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      BookRepository.removeCustomCover(updatedBook.customCoverUri);
+      this.showUnavailableAction('无法访问本地书架，封面未保存');
+      return;
+    }
+    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      this.books = updatedBooks;
+      this.selectedBook = updatedBook;
+      if (oldCoverPath !== updatedBook.customCoverUri) {
+        BookRepository.removeCustomCover(oldCoverPath);
+      }
+    } catch (error) {
+      if (oldCoverPath !== updatedBook.customCoverUri) {
+        BookRepository.removeCustomCover(updatedBook.customCoverUri);
+      }
+      this.showUnavailableAction(error instanceof Error ? error.message : '封面保存失败，原封面已保留');
+    }
+  }
+
+  private async chooseBookCover(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地文件，未更换封面');
+      return;
+    }
+    const oldCoverPath = this.selectedBook.customCoverUri;
+    try {
+      const updatedBook = await BookRepository.chooseCustomCover(context, this.selectedBook);
+      if (updatedBook !== undefined) {
+        await this.persistCoverUpdate(updatedBook, oldCoverPath);
+      }
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '选择封面失败');
+    }
+  }
+
+  private async restoreBookCover(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，未还原封面');
+      return;
+    }
+    const oldCoverPath = this.selectedBook.customCoverUri;
+    const updatedBook = BookRepository.restoreEmbeddedCover(context, this.selectedBook);
+    await this.persistCoverUpdate(updatedBook, oldCoverPath);
+  }
+
   private async removeLocalBookFromShelf(book: Book): Promise<void> {
     if (book.contentPath === undefined && book.bodyMissing !== true) {
       this.showUnavailableAction('这本书没有可清理的本地导入副本');
@@ -1511,6 +1973,9 @@ struct Index {
       coverColor: this.selectedBook.coverColor,
       coverMark: this.selectedBook.coverMark,
       coverUri: this.selectedBook.coverUri,
+      customCoverUri: this.selectedBook.customCoverUri,
+      bookType: this.selectedBook.bookType,
+      fixedType: this.selectedBook.fixedType,
       contentPath: this.selectedBook.contentPath,
       format: this.selectedBook.format,
       chapterCount: this.selectedBook.chapterCount,
@@ -1519,6 +1984,8 @@ struct Index {
       reSegment: this.selectedBook.reSegment,
       charset: this.selectedBook.charset,
       description: this.selectedBook.description,
+      remark: this.selectedBook.remark,
+      customTag: this.selectedBook.customTag,
       bodyMissing: this.selectedBook.bodyMissing,
       androidOriginalPath: this.selectedBook.androidOriginalPath,
       androidCharacterPosition: Math.max(0, Math.trunc(chapterPosition)),
@@ -1559,6 +2026,9 @@ struct Index {
       coverColor: this.selectedBook.coverColor,
       coverMark: this.selectedBook.coverMark,
       coverUri: this.selectedBook.coverUri,
+      customCoverUri: this.selectedBook.customCoverUri,
+      bookType: this.selectedBook.bookType,
+      fixedType: this.selectedBook.fixedType,
       contentPath: this.selectedBook.contentPath,
       format: this.selectedBook.format,
       chapterCount: this.selectedBook.chapterCount,
@@ -1567,6 +2037,8 @@ struct Index {
       reSegment: this.selectedBook.reSegment,
       charset: this.selectedBook.charset,
       description: this.selectedBook.description,
+      remark: this.selectedBook.remark,
+      customTag: this.selectedBook.customTag,
       bodyMissing: this.selectedBook.bodyMissing,
       androidOriginalPath: this.selectedBook.androidOriginalPath,
       androidCharacterPosition: this.selectedBook.androidCharacterPosition,
@@ -1743,6 +2215,9 @@ struct Index {
       coverColor: this.selectedBook.coverColor,
       coverMark: this.selectedBook.coverMark,
       coverUri: this.selectedBook.coverUri,
+      customCoverUri: this.selectedBook.customCoverUri,
+      bookType: this.selectedBook.bookType,
+      fixedType: this.selectedBook.fixedType,
       contentPath: this.selectedBook.contentPath,
       format: this.selectedBook.format,
       chapterCount: this.selectedBook.chapterCount,
@@ -1751,6 +2226,8 @@ struct Index {
       reSegment: this.selectedBook.reSegment,
       charset: this.selectedBook.charset,
       description: this.selectedBook.description,
+      remark: this.selectedBook.remark,
+      customTag: this.selectedBook.customTag,
       bodyMissing: this.selectedBook.bodyMissing,
       androidOriginalPath: this.selectedBook.androidOriginalPath,
       androidCharacterPosition: 0,
@@ -1995,6 +2472,11 @@ struct Index {
           onOpenCatalog: () => this.openCatalogFromBookInfo(),
           onOpenReadRecords: () => this.openProfileDetail(ProfileRoute.READ_RECORDS),
           onRemoveFromShelf: () => this.removeLocalBookFromShelf(this.selectedBook),
+          onChooseCover: () => this.chooseBookCover(),
+          onRestoreCover: () => this.restoreBookCover(),
+          onSaveMetadata: (title: string, author: string, category: string, description: string,
+            remark: string, customTag: string, bookType: BookMediaType, fixedType: boolean) =>
+            this.saveBookMetadata(title, author, category, description, remark, customTag, bookType, fixedType),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         } else if (this.route === AppRoute.SUBSCRIPTION_RULES) {
@@ -2026,6 +2508,7 @@ struct Index {
             fontSize: this.readerFontSize,
             imageStyle: this.selectedBook.imageStyle ?? 'DEFAULT',
             paperColor: this.getPaperColor(),
+            eyeProtectionActive: this.isEyeProtectionActive(),
             showQuickActions: this.showReaderQuickActions,
             showControlsOnAppear: this.readerControlsOpenOnReturn,
             onControlsShown: (): void => { this.readerControlsOpenOnReturn = false; },
@@ -2077,6 +2560,7 @@ struct Index {
             onOpenReadAloud: () => this.openReadAloudSettings(),
             onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULES),
             onToggleNightMode: () => this.toggleReaderNightMode(),
+            onToggleEyeProtection: () => this.toggleEyeProtection(),
             onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => this.setReaderMoreActions(actions),
             onOpenHighlightRules: () => this.openProfileDetail(ProfileRoute.HIGHLIGHT_TAG_RULES),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
@@ -2161,6 +2645,13 @@ struct Index {
               paperIndex: this.paperIndex,
               shareLayout: this.shareReaderStyleLayout,
               readerNightMode: this.readerNightMode,
+              eyeProtectionActive: this.isEyeProtectionActive(),
+              eyeProtectionEnabled: this.eyeProtectionEnabled,
+              eyeProtectionAutoNight: this.eyeProtectionAutoNight,
+              eyeProtectionSchedule: this.eyeProtectionSchedule,
+              eyeProtectionIntensity: this.eyeProtectionIntensity,
+              eyeProtectionStartTime: this.eyeProtectionStartTime,
+              eyeProtectionEndTime: this.eyeProtectionEndTime,
               showBottomActionText: this.showReaderBottomActionText,
               bottomIconStyle: this.readerBottomIconStyle,
               bottomItemsPerRow: this.readerBottomItemsPerRow,
@@ -2209,6 +2700,13 @@ struct Index {
               onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
               onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
               onToggleNightMode: () => this.toggleReaderNightMode(),
+              onEyeProtectionToggle: () => this.toggleEyeProtection(),
+              onEyeProtectionEnabledChange: (enabled: boolean) => this.setEyeProtectionEnabled(enabled),
+              onEyeProtectionAutoNightChange: (enabled: boolean) => this.setEyeProtectionAutoNight(enabled),
+              onEyeProtectionScheduleChange: (enabled: boolean) => this.setEyeProtectionSchedule(enabled),
+              onEyeProtectionIntensityChange: (value: number) => this.setEyeProtectionIntensity(value),
+              onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
+              onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
               showQuickActions: this.showReaderQuickActions,
               asSheet: true,
@@ -2265,18 +2763,41 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULES) {
           ReplaceRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
-            onOpenEditor: () => this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT,
+            onOpenEditor: () => {
+              this.editingReplaceRule = undefined;
+              this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT;
+            },
             rules: this.replaceRules,
             groups: this.replaceRuleGroups(),
+            sortMode: this.replaceRuleSortMode,
             onToggleRule: (id: number, enabled: boolean) => this.setReplaceRuleEnabled(id, enabled),
             onRemoveRule: (id: number) => this.removeReplaceRule(id),
+            onEditRule: (id: number) => this.openReplaceRuleEditor(id),
+            onMoveRule: (id: number, toTop: boolean) => this.moveReplaceRule(id, toTop),
+            onAddGroup: (name: string) => this.addReplaceRuleGroup(name),
+            onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
+            onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
+            onSortModeChange: (mode: string) => this.setReplaceRuleSortMode(mode),
+            onImportRules: (text: string, source: string) => this.importReplaceRules(text, source),
+            onExportRules: (rules: ReplaceRule[]) => this.exportReplaceRules(rules),
+            onSetEnabledBatch: (ids: number[], enabled: boolean) => this.setReplaceRuleEnabledBatch(ids, enabled),
+            onRemoveBatch: (ids: number[]) => this.removeReplaceRuleBatch(ids),
+            onMoveBatch: (ids: number[], toTop: boolean) => this.moveReplaceRuleBatch(ids, toTop),
+            onReorderRule: (fromId: number, toId: number) => this.reorderReplaceRule(fromId, toId),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULE_EDIT) {
           ReplaceRuleEditPage({
-            onBack: () => this.profileSubpage = ProfileRoute.REPLACE_RULES,
+            onBack: () => {
+              this.editingReplaceRule = undefined;
+              this.profileSubpage = ProfileRoute.REPLACE_RULES;
+            },
             onSaveRule: (rule: ReplaceRule) => this.saveReplaceRule(rule),
+            editingRule: this.editingReplaceRule,
             groups: this.replaceRuleGroups(),
+            onAddGroup: (name: string) => this.addReplaceRuleGroup(name),
+            onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
+            onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULES) {
@@ -2358,6 +2879,13 @@ struct Index {
             paperIndex: this.paperIndex,
             shareLayout: this.shareReaderStyleLayout,
             readerNightMode: this.readerNightMode,
+            eyeProtectionActive: this.isEyeProtectionActive(),
+            eyeProtectionEnabled: this.eyeProtectionEnabled,
+            eyeProtectionAutoNight: this.eyeProtectionAutoNight,
+            eyeProtectionSchedule: this.eyeProtectionSchedule,
+            eyeProtectionIntensity: this.eyeProtectionIntensity,
+            eyeProtectionStartTime: this.eyeProtectionStartTime,
+            eyeProtectionEndTime: this.eyeProtectionEndTime,
             showBottomActionText: this.showReaderBottomActionText,
             bottomIconStyle: this.readerBottomIconStyle,
             bottomItemsPerRow: this.readerBottomItemsPerRow,
@@ -2406,6 +2934,13 @@ struct Index {
             onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
             onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
             onToggleNightMode: () => this.toggleReaderNightMode(),
+            onEyeProtectionToggle: () => this.toggleEyeProtection(),
+            onEyeProtectionEnabledChange: (enabled: boolean) => this.setEyeProtectionEnabled(enabled),
+            onEyeProtectionAutoNightChange: (enabled: boolean) => this.setEyeProtectionAutoNight(enabled),
+            onEyeProtectionScheduleChange: (enabled: boolean) => this.setEyeProtectionSchedule(enabled),
+            onEyeProtectionIntensityChange: (value: number) => this.setEyeProtectionIntensity(value),
+            onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
+            onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             showQuickActions: this.showReaderQuickActions,
             asSheet: false,
@@ -2474,6 +3009,13 @@ struct Index {
             paperIndex: this.paperIndex,
             shareLayout: this.shareReaderStyleLayout,
             readerNightMode: this.readerNightMode,
+            eyeProtectionActive: this.isEyeProtectionActive(),
+            eyeProtectionEnabled: this.eyeProtectionEnabled,
+            eyeProtectionAutoNight: this.eyeProtectionAutoNight,
+            eyeProtectionSchedule: this.eyeProtectionSchedule,
+            eyeProtectionIntensity: this.eyeProtectionIntensity,
+            eyeProtectionStartTime: this.eyeProtectionStartTime,
+            eyeProtectionEndTime: this.eyeProtectionEndTime,
             showBottomActionText: this.showReaderBottomActionText,
             progressBehavior: this.readerProgressBehavior,
             paddingSettings: this.readerPaddingSettings,
@@ -2512,6 +3054,13 @@ struct Index {
             onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
             onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
             onToggleNightMode: () => this.toggleReaderNightMode(),
+            onEyeProtectionToggle: () => this.toggleEyeProtection(),
+            onEyeProtectionEnabledChange: (enabled: boolean) => this.setEyeProtectionEnabled(enabled),
+            onEyeProtectionAutoNightChange: (enabled: boolean) => this.setEyeProtectionAutoNight(enabled),
+            onEyeProtectionScheduleChange: (enabled: boolean) => this.setEyeProtectionSchedule(enabled),
+            onEyeProtectionIntensityChange: (value: number) => this.setEyeProtectionIntensity(value),
+            onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
+            onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             showQuickActions: this.showReaderQuickActions,
             asSheet: false,
@@ -2527,6 +3076,13 @@ struct Index {
           paperIndex: this.paperIndex,
           shareLayout: this.shareReaderStyleLayout,
           readerNightMode: this.readerNightMode,
+          eyeProtectionActive: this.isEyeProtectionActive(),
+          eyeProtectionEnabled: this.eyeProtectionEnabled,
+          eyeProtectionAutoNight: this.eyeProtectionAutoNight,
+          eyeProtectionSchedule: this.eyeProtectionSchedule,
+          eyeProtectionIntensity: this.eyeProtectionIntensity,
+          eyeProtectionStartTime: this.eyeProtectionStartTime,
+          eyeProtectionEndTime: this.eyeProtectionEndTime,
           showBottomActionText: this.showReaderBottomActionText,
           progressBehavior: this.readerProgressBehavior,
           paddingSettings: this.readerPaddingSettings,
@@ -2561,6 +3117,13 @@ struct Index {
           onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
           onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
           onToggleNightMode: () => this.toggleReaderNightMode(),
+          onEyeProtectionToggle: () => this.toggleEyeProtection(),
+          onEyeProtectionEnabledChange: (enabled: boolean) => this.setEyeProtectionEnabled(enabled),
+          onEyeProtectionAutoNightChange: (enabled: boolean) => this.setEyeProtectionAutoNight(enabled),
+          onEyeProtectionScheduleChange: (enabled: boolean) => this.setEyeProtectionSchedule(enabled),
+          onEyeProtectionIntensityChange: (value: number) => this.setEyeProtectionIntensity(value),
+          onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
+          onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),
           showQuickActions: this.showReaderQuickActions,
           asSheet: false,
@@ -2584,6 +3147,7 @@ struct Index {
       }
     }.width('100%').height('100%').backgroundColor('#111217')
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+      .sepia(this.isEyeProtectionActive() ? this.eyeProtectionIntensity / 100 : 0)
   }
 }
 

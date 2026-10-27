@@ -1,7 +1,7 @@
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { preferences } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
-import { Book } from '../model/Book';
+import { Book, BookMediaType } from '../model/Book';
 import { EpubRepository } from './EpubRepository';
 import { LocalTextSemantics } from './LocalTextSemantics';
 import { LocalTextReSegmenter } from './LocalTextReSegmenter';
@@ -105,6 +105,95 @@ export class BookRepository {
     }
   }
 
+  private static parseBookType(value: string): BookMediaType {
+    if (value === 'audio' || value === 'image') { return value; }
+    return 'text';
+  }
+
+  private static resolveCoverUri(context: Context, bookId: string, customCoverPath: string): string | undefined {
+    if (customCoverPath.length > 0 && fileIo.accessSync(customCoverPath)) {
+      return `file://${customCoverPath}`;
+    }
+    const embeddedCoverPath = `${context.filesDir}/covers/${bookId}.img`;
+    return fileIo.accessSync(embeddedCoverPath) ? `file://${embeddedCoverPath}` : undefined;
+  }
+
+  static async chooseCustomCover(context: Context, book: Book): Promise<Book | undefined> {
+    const options = new picker.DocumentSelectOptions();
+    options.fileSuffixFilters = ['图片|.png', '图片|.jpg', '图片|.jpeg', '图片|.webp', '图片|.bmp'];
+    options.maxSelectNumber = 1;
+    const uris = await new picker.DocumentViewPicker(context).select(options);
+    const uri = uris[0];
+    if (uri === undefined) { return undefined; }
+
+    const coversDirectory = `${context.filesDir}/covers`;
+    BookRepository.ensureDirectory(coversDirectory);
+    const customPath = `${coversDirectory}/custom-${book.id}-${Date.now()}.img`;
+    const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    try {
+      fileIo.copyFileSync(source.fd, customPath);
+      if (fileIo.statSync(customPath).size <= 0) {
+        throw new Error('所选封面文件为空');
+      }
+    } catch (error) {
+      if (fileIo.accessSync(customPath)) { fileIo.unlinkSync(customPath); }
+      if (error instanceof Error) { throw error; }
+      throw new Error('保存封面副本失败');
+    } finally {
+      fileIo.closeSync(source);
+    }
+    return BookRepository.copyWithCover(book, `file://${customPath}`, customPath);
+  }
+
+  static restoreEmbeddedCover(context: Context, book: Book): Book {
+    const embeddedPath = `${context.filesDir}/covers/${book.id}.img`;
+    const embeddedUri = fileIo.accessSync(embeddedPath) ? `file://${embeddedPath}` : undefined;
+    return BookRepository.copyWithCover(book, embeddedUri, undefined);
+  }
+
+  static removeCustomCover(path: string | undefined): void {
+    if (path !== undefined && path.length > 0 && fileIo.accessSync(path)) {
+      fileIo.unlinkSync(path);
+    }
+  }
+
+  private static copyWithCover(book: Book, coverUri: string | undefined, customCoverUri: string | undefined): Book {
+    return {
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      category: book.category,
+      groupName: book.groupName,
+      chapterTitles: book.chapterTitles,
+      chapterOffsets: book.chapterOffsets,
+      chapterIndex: book.chapterIndex,
+      chapterProgress: book.chapterProgress,
+      lastChapter: book.lastChapter,
+      progress: book.progress,
+      coverColor: book.coverColor,
+      coverMark: book.coverMark,
+      coverUri: coverUri,
+      customCoverUri: customCoverUri,
+      bookType: book.bookType,
+      fixedType: book.fixedType,
+      contentPath: book.contentPath,
+      format: book.format,
+      chapterCount: book.chapterCount,
+      fileSizeBytes: book.fileSizeBytes,
+      imageStyle: book.imageStyle,
+      reSegment: book.reSegment,
+      charset: book.charset,
+      description: book.description,
+      remark: book.remark,
+      customTag: book.customTag,
+      bodyMissing: book.bodyMissing,
+      androidOriginalPath: book.androidOriginalPath,
+      androidCharacterPosition: book.androidCharacterPosition,
+      readerPositionVersion: book.readerPositionVersion,
+      isLocal: book.isLocal
+    };
+  }
+
   static isPersistableBook(book: Book): boolean {
     return book.contentPath !== undefined || book.bodyMissing === true;
   }
@@ -113,10 +202,13 @@ export class BookRepository {
     try {
       const store = await preferences.getPreferences(context, BookRepository.preferenceName);
       const value = await store.get('books', '');
-      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n'))) {
+      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n') && !value.startsWith('v10\n') && !value.startsWith('v11\n') && !value.startsWith('v12\n'))) {
         return [];
       }
-      const isVersion9 = value.startsWith('v9\n');
+      const isVersion12 = value.startsWith('v12\n');
+      const isVersion11 = isVersion12 || value.startsWith('v11\n');
+      const isVersion10 = isVersion11 || value.startsWith('v10\n');
+      const isVersion9 = isVersion10 || value.startsWith('v9\n');
       const isVersion8 = isVersion9 || value.startsWith('v8\n');
       const isVersion7 = isVersion8 || value.startsWith('v7\n');
       const isVersion6 = isVersion7 || value.startsWith('v6\n');
@@ -128,7 +220,7 @@ export class BookRepository {
       const records = value.substring(3).split('\n');
       for (let index = 0; index < records.length; index++) {
         const fields = records[index].split('|');
-        const maximumFields = isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
+        const maximumFields = isVersion12 ? 27 : isVersion11 ? 25 : isVersion10 ? 24 : isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
         if (fields.length < 2 || fields.length > maximumFields) {
           continue;
         }
@@ -173,8 +265,14 @@ export class BookRepository {
             progress: Number.isFinite(savedProgress) ? Math.max(0, Math.min(100, savedProgress)) : 0,
             coverColor: '#39424B',
             coverMark: title.substring(0, 1) || '书',
+            coverUri: BookRepository.resolveCoverUri(context, id, isVersion11 ? decodeURIComponent(fields[24] ?? '') : ''),
+            customCoverUri: isVersion11 ? decodeURIComponent(fields[24] ?? '') || undefined : undefined,
+            bookType: isVersion12 ? BookRepository.parseBookType(decodeURIComponent(fields[25] ?? 'text')) : 'text',
+            fixedType: isVersion12 && fields[26] === '1',
             chapterCount: savedChapterCount,
             description: decodeURIComponent(fields[12] ?? ''),
+            remark: isVersion10 ? decodeURIComponent(fields[22] ?? '') : undefined,
+            customTag: isVersion10 ? decodeURIComponent(fields[23] ?? '') : undefined,
             bodyMissing: true,
             androidOriginalPath: originalPath,
             androidCharacterPosition: Number.isInteger(savedPosition) && savedPosition >= 0 ? savedPosition : 0,
@@ -219,8 +317,13 @@ export class BookRepository {
                 : chapterTitles.length > 0 ? (safeIndex + safeProgress / 100) / chapterTitles.length * 100 : 0,
               coverColor: '#39424B',
               coverMark: title.substring(0, 1) || '书',
-              coverUri: fileIo.accessSync(context.filesDir + '/covers/' + id + '.img') ? 'file://' + context.filesDir + '/covers/' + id + '.img' : undefined,
+              coverUri: BookRepository.resolveCoverUri(context, id, isVersion11 ? decodeURIComponent(fields[24] ?? '') : ''),
+              customCoverUri: isVersion11 ? decodeURIComponent(fields[24] ?? '') || undefined : undefined,
+              bookType: isVersion12 ? BookRepository.parseBookType(decodeURIComponent(fields[25] ?? 'text')) : 'text',
+              fixedType: isVersion12 && fields[26] === '1',
               description: decodeURIComponent(fields[12] ?? ''),
+              remark: isVersion10 ? decodeURIComponent(fields[22] ?? '') : undefined,
+              customTag: isVersion10 ? decodeURIComponent(fields[23] ?? '') : undefined,
               chapterCount: chapterTitles.length.toString(),
               contentPath: path,
               format: 'epub',
@@ -243,6 +346,10 @@ export class BookRepository {
               .filter((item: number) => Number.isInteger(item) && item >= 0);
             const localBook = BookRepository.createLocalBook(id, title, path, chapterIndex, chapterProgress,
               undefined, savedCharset.length > 0 ? savedCharset : undefined);
+            localBook.customCoverUri = isVersion11 ? decodeURIComponent(fields[24] ?? '') || undefined : undefined;
+            localBook.bookType = isVersion12 ? BookRepository.parseBookType(decodeURIComponent(fields[25] ?? 'text')) : 'text';
+            localBook.fixedType = isVersion12 && fields[26] === '1';
+            localBook.coverUri = BookRepository.resolveCoverUri(context, id, localBook.customCoverUri ?? '');
             localBook.readerPositionVersion = isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 0;
             const savedPosition = Number(fields[11] ?? '0');
             localBook.androidCharacterPosition = isVersion5 && Number.isInteger(savedPosition) && savedPosition >= 0
@@ -252,6 +359,8 @@ export class BookRepository {
               localBook.progress = Math.max(0, Math.min(100, savedWholeProgress));
             }
             localBook.reSegment = isVersion8 && fields[20] === '1';
+            localBook.remark = isVersion10 ? decodeURIComponent(fields[22] ?? '') : undefined;
+            localBook.customTag = isVersion10 ? decodeURIComponent(fields[23] ?? '') : undefined;
             if (savedTitles.length > 0 && savedOffsets.length === savedTitles.length) {
               const safeIndex = Math.max(0, Math.min(savedTitles.length - 1, chapterIndex));
               localBook.chapterTitles = savedTitles;
@@ -277,7 +386,7 @@ export class BookRepository {
     const operation = BookRepository.saveQueue.then(async (): Promise<void> => {
       try {
         const store = await preferences.getPreferences(context, BookRepository.preferenceName);
-        const records: string[] = ['v9'];
+        const records: string[] = ['v12'];
         for (let index = 0; index < books.length; index++) {
           const book = books[index];
           if (!BookRepository.isPersistableBook(book)) { continue; }
@@ -294,7 +403,10 @@ export class BookRepository {
             encodeURIComponent(book.lastChapter), (book.progress ?? 0).toString(),
             encodeURIComponent(book.imageStyle ?? 'DEFAULT'), encodeURIComponent(book.charset ?? ''),
             book.reSegment === true ? '1' : '0',
-            (book.readerPositionVersion === 2 ? '2' : book.readerPositionVersion === 0 ? '0' : '1')
+            (book.readerPositionVersion === 2 ? '2' : book.readerPositionVersion === 0 ? '0' : '1'),
+            encodeURIComponent(book.remark ?? ''), encodeURIComponent(book.customTag ?? ''),
+            encodeURIComponent(book.customCoverUri ?? ''), encodeURIComponent(book.bookType ?? 'text'),
+            book.fixedType === true ? '1' : '0'
           ].join('|'));
         }
         await store.put('books', records.join('\n'));
@@ -328,6 +440,9 @@ export class BookRepository {
         coverColor: book.coverColor,
         coverMark: book.coverMark,
         coverUri: book.coverUri,
+        customCoverUri: book.customCoverUri,
+        bookType: book.bookType,
+        fixedType: book.fixedType,
         contentPath: book.contentPath,
         format: book.format,
         chapterCount: book.chapterCount,
@@ -336,6 +451,8 @@ export class BookRepository {
         reSegment: book.reSegment,
         charset: normalizedCharset.length > 0 ? normalizedCharset : undefined,
         description: book.description,
+        remark: book.remark,
+        customTag: book.customTag,
         bodyMissing: book.bodyMissing,
         androidOriginalPath: book.androidOriginalPath,
         androidCharacterPosition: book.androidCharacterPosition,
@@ -370,6 +487,9 @@ export class BookRepository {
       coverColor: book.coverColor,
       coverMark: book.coverMark,
       coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri,
+      bookType: book.bookType,
+      fixedType: book.fixedType,
       contentPath: book.contentPath,
       format: book.format,
       chapterCount: chapterTitles.length.toString(),
@@ -378,6 +498,8 @@ export class BookRepository {
       reSegment: book.reSegment,
       charset: normalizedCharset.length > 0 ? normalizedCharset : undefined,
       description: book.description,
+      remark: book.remark,
+      customTag: book.customTag,
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: 0,
@@ -402,6 +524,9 @@ export class BookRepository {
       coverColor: book.coverColor,
       coverMark: book.coverMark,
       coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri,
+      bookType: book.bookType,
+      fixedType: book.fixedType,
       contentPath: book.contentPath,
       format: book.format,
       chapterCount: book.chapterCount,
@@ -410,6 +535,8 @@ export class BookRepository {
       reSegment: enabled,
       charset: book.charset,
       description: book.description,
+      remark: book.remark,
+      customTag: book.customTag,
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: book.androidCharacterPosition,
@@ -650,6 +777,9 @@ export class BookRepository {
       coverColor: book.coverColor,
       coverMark: book.coverMark,
       coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri,
+      bookType: book.bookType,
+      fixedType: book.fixedType,
       contentPath: book.contentPath,
       format: book.format,
       charset: book.format === 'txt' ? 'UTF-8' : book.charset,
@@ -657,6 +787,8 @@ export class BookRepository {
       imageStyle: book.imageStyle,
       reSegment: book.reSegment,
       description: book.description,
+      remark: book.remark,
+      customTag: book.customTag,
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: 0,
@@ -717,12 +849,17 @@ export class BookRepository {
       coverColor: book.coverColor,
       coverMark: book.coverMark,
       coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri,
+      bookType: book.bookType,
+      fixedType: book.fixedType,
       contentPath: book.contentPath,
       format: book.format,
       chapterCount: book.chapterCount,
       fileSizeBytes: book.fileSizeBytes,
       charset: book.charset,
       description: book.description,
+      remark: book.remark,
+      customTag: book.customTag,
       reSegment: book.reSegment,
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
@@ -909,6 +1046,9 @@ export class BookRepository {
       coverColor: book.coverColor,
       coverMark: book.coverMark,
       coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri,
+      bookType: book.bookType,
+      fixedType: book.fixedType,
       contentPath: book.contentPath,
       format: book.format,
       chapterCount: layout.titles.length.toString(),
@@ -917,6 +1057,8 @@ export class BookRepository {
       reSegment: book.reSegment,
       charset: book.charset,
       description: book.description,
+      remark: book.remark,
+      customTag: book.customTag,
       bodyMissing: book.bodyMissing,
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: chapterPosition,

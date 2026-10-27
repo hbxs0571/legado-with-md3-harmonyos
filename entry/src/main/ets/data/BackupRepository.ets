@@ -5,6 +5,8 @@ import { Book } from '../model/Book';
 import { EpubRepository } from './EpubRepository';
 import { BookRepository } from './BookRepository';
 import { READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot } from './ReaderSettingsRepository';
+import { ReplaceRuleRepository } from './ReplaceRuleRepository';
+import { ReplaceRuleImporter } from './ReplaceRuleImporter';
 
 export interface BackupEntryPreview {
   name: string;
@@ -45,6 +47,12 @@ export interface RestoreResult {
   createdMissingBodyBookCount: number;
   localBooksWithoutBody: number;
   restoredEntries: BackupEntryPreview[];
+  /** 恢复替换净化规则的新增条数；没有 replaceRule.json 时为 0。 */
+  replaceRuleAdded: number;
+  /** 恢复替换净化规则的覆盖条数（同 id 或同 pattern 视为同一条）。 */
+  replaceRuleUpdated: number;
+  /** 解析失败或正则非法而被跳过的规则条数。 */
+  replaceRuleSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -388,6 +396,15 @@ export class BackupRepository {
         }
       }
 
+      // 替换净化规则是本地权威数据（存在 preferences 里），归档目录里不会有，
+      // 所以未忽略该分类时由这里生成，格式与上游 replaceRule.json 一致，可被 Android 直接读回。
+      // 始终写出当前规则快照，包括空数组，避免旧归档残留已删除规则。
+      if (!ignoredCategories.includes('replaceRule')) {
+        const rules = ReplaceRuleRepository.getAll();
+        BackupRepository.writeTextFile(`${stagingDirectory}/replaceRule.json`,
+          ReplaceRuleRepository.exportRules(rules));
+      }
+
       const configPath = `${stagingDirectory}/config.xml`;
       if (!fileIo.accessSync(configPath)) {
         BackupRepository.writeTextFile(configPath,
@@ -416,6 +433,22 @@ export class BackupRepository {
           `  <int name="clickActionBottomLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[6] ?? '')}" />\n` +
           `  <int name="clickActionBottomCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[7] ?? '')}" />\n` +
           `  <int name="clickActionBottomRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[8] ?? '')}" />\n</map>`);
+      }
+      if (!ignoredCategories.includes('readConfig')) {
+        let configText = fileIo.readTextSync(configPath);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'eyeProtectionEnabled', `${settings.eyeProtectionEnabled}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'eyeProtectionAutoNight', `${settings.eyeProtectionAutoNight}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'eyeProtectionSchedule', `${settings.eyeProtectionSchedule}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'colorTemperature', `${Math.max(0, Math.min(100, Math.round(settings.eyeProtectionIntensity)))}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'eyeProtectionStartTime', settings.eyeProtectionStartTime);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'eyeProtectionEndTime', settings.eyeProtectionEndTime);
+        BackupRepository.writeTextFile(configPath, configText);
       }
       const files = fileIo.listFileSync(stagingDirectory)
         .filter((name: string) => BackupRepository.isSafeRootEntry(name))
@@ -534,6 +567,9 @@ export class BackupRepository {
     BackupRepository.ensureDirectory(targetDirectory);
     const entries = selection.preview.entries;
     let preservedEntryCount: number = 0;
+    let replaceRuleAdded: number = 0;
+    let replaceRuleUpdated: number = 0;
+    let replaceRuleSkipped: number = 0;
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
       if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
@@ -569,6 +605,23 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'replaceRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复替换净化规则`);
+        }
+        // 逐条解析并导入；非法正则的条目由 ReplaceRuleImporter 计入 skipped 后跳过，
+        // 不因为一条坏规则就丢掉整份备份，与上游 Restore 逐条 insert 的语义一致。
+        const parsed = ReplaceRuleImporter.parse(text);
+        const outcome = await ReplaceRuleRepository.importRules(context, parsed.rules);
+        replaceRuleAdded += outcome.added;
+        replaceRuleUpdated += outcome.updated;
+        replaceRuleSkipped += parsed.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
     }
@@ -595,7 +648,10 @@ export class BackupRepository {
       updatedLocalBookCount: updated.updatedCount,
       createdMissingBodyBookCount: updated.createdMissingBodyCount,
       localBooksWithoutBody: selection.preview.localBooksWithoutBody,
-      restoredEntries: restoredEntries
+      restoredEntries: restoredEntries,
+      replaceRuleAdded: replaceRuleAdded,
+      replaceRuleUpdated: replaceRuleUpdated,
+      replaceRuleSkipped: replaceRuleSkipped
     };
   }
 
@@ -789,6 +845,18 @@ export class BackupRepository {
       volumeKeyPage: current.volumeKeyPage,
       keyPageOnLongPress: current.keyPageOnLongPress,
       noAnimScrollPage: current.noAnimScrollPage,
+      eyeProtectionEnabled: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionEnabled') ??
+        current.eyeProtectionEnabled,
+      eyeProtectionAutoNight: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionAutoNight') ??
+        current.eyeProtectionAutoNight,
+      eyeProtectionSchedule: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionSchedule') ??
+        current.eyeProtectionSchedule,
+      eyeProtectionIntensity: Math.max(0, Math.min(100,
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'colorTemperature') ?? current.eyeProtectionIntensity)),
+      eyeProtectionStartTime: BackupRepository.readXmlString(`${directory}/config.xml`, 'eyeProtectionStartTime') ??
+        current.eyeProtectionStartTime,
+      eyeProtectionEndTime: BackupRepository.readXmlString(`${directory}/config.xml`, 'eyeProtectionEndTime') ??
+        current.eyeProtectionEndTime,
       readingAnchorEnabled: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'readingAnchorEnabled') ??
         current.readingAnchorEnabled,
       swipeToAddBookmark: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'swipeToAddBookmark') ??
@@ -1293,6 +1361,25 @@ export class BackupRepository {
     if (valueMatch === undefined) { return undefined; }
     const value = Number(valueMatch);
     return Number.isInteger(value) ? value : undefined;
+  }
+
+  private static upsertAndroidPreference(
+    xml: string,
+    type: 'boolean' | 'int' | 'string',
+    key: string,
+    value: string
+  ): string {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = type === 'string'
+      ? new RegExp(`<string\\b[^>]*name=["']${escapedKey}["'][^>]*>[\\s\\S]*?</string>`, 'i')
+      : new RegExp(`<${type}\\b[^>]*name=["']${escapedKey}["'][^>]*value=["'][^"']*["'][^>]*/>`, 'i');
+    const element = type === 'string'
+      ? `<string name="${key}">${value}</string>`
+      : `<${type} name="${key}" value="${value}" />`;
+    if (pattern.test(xml)) { return xml.replace(pattern, element); }
+    const mapEnd = xml.indexOf('</map>');
+    if (mapEnd < 0) { throw new Error('Android config.xml 缺少 map 根节点'); }
+    return `${xml.substring(0, mapEnd)}  ${element}\n${xml.substring(mapEnd)}`;
   }
 
   private static readXmlBoolean(path: string, key: string): boolean | undefined {

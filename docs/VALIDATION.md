@@ -1,6 +1,15 @@
 # 验证记录
 
-日期：2026-10-27。记录与公开导出对应的工程快照。
+日期：2026-10-28。记录与公开导出对应的工程快照。
+
+## 2026-10-28 E 端替换规则整合检查
+
+- E 端整合源码构建并覆盖安装到 HOS 后，通过 OCR/HDC 进入“我的→替换净化”空列表状态。
+- 本次 E 端检查仅确认入口和空状态可达；没有创建规则，也没有做规则文件导入/导出或 ZIP 规则恢复全往返。
+- 本地代码已实现规则 JSON 映射、冲突合并、无效正则跳过和空规则数组备份；这些实现不等同于 E 端全流程已验收。
+- E 端未验证恢复结果提示的标点细节；API 12 真机兼容仍未验证。
+
+本次公开副本 clean 构建结果另见下方公开基线构建条目；未签名 HAP 不作为发行文件。
 
 ## 2026-10-27 公开基线构建
 
@@ -28,11 +37,8 @@
 
 ## 本次构建验证
 
-- 通过 `.npmrc` 配置 `https://repo.huaweicloud.com/repository/npm/` 与 `https://repo.harmonyos.com/npm/`；查询确认 `@ohos/hvigor-ohos-plugin@6.26.8` 可解析。
-- 在同步当前源文件的独立公开副本中清除 Entry 旧构建目录，再运行 `hvigorw.bat --no-daemon --mode module -p product=default -p module=entry@default assembleHap`，`BUILD SUCCESSFUL`，33 项任务中 32 项执行、1 项为最新。Hvigor 自动安装 `@ohos/hvigor-ohos-plugin@6.26.8`。
-- 编译有既有 ArkTS 警告，包括 FileIO 异常处理提示、弃用 API 和 API 12 粘贴板读取授权提示；本次没有编译错误。剪贴板读取由用户主动粘贴并确认系统授权触发。
-- Hvigor 提示 `No signingConfig found for product default`。构建成功只证明生成开发用未签名 HAP，不提供发行签名包，也不是 API 12 真机验收。
-- 10 月 26 日最新 HAP 已安装至 HOS 模拟器；Android AVD 无 ADB 目标。图片预览验收只覆盖 EPUB 封面，章节内嵌图片没有可用样本。
-- 最初失败是因为 npm 指向 `registry.npmmirror.com` 且构建进程启用了离线模式。切换官方源并在线运行后，依赖解析与干净构建均成功。用户级 `.npmrc` 已更新为官方源；若启动 DevEco Studio 的 shell 设置了 `NPM_CONFIG_OFFLINE=true`，需解除该变量或从未设置离线模式的桌面会话启动 DevEco。
+- 在独立公开副本使用 DevEco Studio 26.0.0.851 附带的 Hvigor 入口执行 Entry clean 后的 `assembleHap`；33 项任务中 32 项执行、1 项为最新，`BUILD SUCCESSFUL`。
+- ArkTS 编译存在既有异常处理、弃用 API 与剪贴板授权提示；本次没有编译错误。Hvigor 提示 `No signingConfig found for product default`。
+- 生成的 HAP 未签名，仅留在 Git 忽略的本机构建目录；未作为安装包提交或发布。构建成功只证明源码可构建，不代表 API 12 真机兼容或完成整页功能验收。
 
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**

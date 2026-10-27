@@ -52,6 +52,13 @@ export struct ReaderSettingsPage {
   @Prop paperIndex: number = 2;
   @Prop shareLayout: boolean = false;
   @Prop readerNightMode: boolean = true;
+  @Prop eyeProtectionActive: boolean = false;
+  @Prop eyeProtectionEnabled: boolean = false;
+  @Prop eyeProtectionAutoNight: boolean = false;
+  @Prop eyeProtectionSchedule: boolean = false;
+  @Prop eyeProtectionIntensity: number = 50;
+  @Prop eyeProtectionStartTime: string = '22:00';
+  @Prop eyeProtectionEndTime: string = '07:00';
   @Prop showBottomActionText: boolean = true;
   @Prop bottomIconStyle: number = 1;
   @Prop bottomItemsPerRow: number = 5;
@@ -86,12 +93,6 @@ export struct ReaderSettingsPage {
   @State detailSheetDescription: string = '';
   @State detailSelectedOption: string = '';
   @State detailCustomText: string = '';
-  @State eyeProtectionEnabled: boolean = false;
-  @State eyeProtectionAutoNight: boolean = false;
-  @State eyeProtectionSchedule: boolean = false;
-  @State eyeProtectionIntensity: number = 50;
-  @State eyeProtectionStartTime: string = '22:00';
-  @State eyeProtectionEndTime: string = '07:00';
   @State selectedClickRegionIndex: number = 4;
   @State previousPageKeys: string = '';
   @State nextPageKeys: string = '';
@@ -141,6 +142,13 @@ export struct ReaderSettingsPage {
   onPaperChange: (paperIndex: number) => void = () => {};
   onShareLayoutChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onToggleNightMode: () => void = () => {};
+  onEyeProtectionToggle: () => void = () => {};
+  onEyeProtectionEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onEyeProtectionAutoNightChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onEyeProtectionScheduleChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onEyeProtectionIntensityChange: (value: number) => void = (_value: number) => {};
+  onEyeProtectionStartTimeChange: (value: string) => void = (_value: string) => {};
+  onEyeProtectionEndTimeChange: (value: string) => void = (_value: string) => {};
   onBottomActionTextChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onBottomIconStyleChange: (style: number) => void = (_style: number) => {};
   onBottomItemsPerRowChange: (count: number) => void = (_count: number) => {};
@@ -271,8 +279,12 @@ export struct ReaderSettingsPage {
           Text('背景').fontSize(14).fontColor('#D9DAE0').layoutWeight(1)
           Text('长按自定义').fontSize(10).fontColor('#8F929D')
             .onClick(() => this.openDetailSheet('自定义阅读背景', '背景图片、背景颜色与文字颜色设置'))
-          Image($r('app.media.app_visibility')).width(18).height(18).fillColor('#D9DAE0').margin({ left: 10 })
-            .onClick(() => this.openDetailSheet('护眼设置', '护眼模式与色温参数'))
+          Image($r('app.media.app_visibility')).width(18).height(18)
+            .fillColor(this.eyeProtectionActive ? '#C6D3FF' : '#D9DAE0').margin({ left: 10 })
+            .onClick(() => this.onEyeProtectionToggle())
+            .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+              this.openDetailSheet('护眼设置', '护眼模式与色温参数');
+            }))
           Image(this.readerNightMode ? $r('app.media.app_moon') : $r('app.media.app_daynight'))
             .width(18).height(18).fillColor('#D9DAE0').margin({ left: 9 })
             .onClick(() => this.onToggleNightMode())
@@ -760,7 +772,8 @@ export struct ReaderSettingsPage {
           MenuSettingSwitch({ title: '正文行高适配', detail: '修正特殊排版行距', checked: true }).onClick(() => this.showNotMigrated('正文行高适配'))
           MenuSettingSwitch({ title: '适配特殊样式', detail: '保留书籍正文样式', checked: true }).onClick(() => this.showNotMigrated('适配特殊样式'))
           MenuSettingSwitch({ title: '中文排版', detail: '优化中文标点与排版', checked: true }).onClick(() => this.showNotMigrated('中文排版'))
-          MenuSettingOption({ title: '护眼设置', detail: '护眼模式与色温' }).onClick(() => this.openDetailSheet('护眼设置', '配置护眼模式、色温与日夜参数'))
+          MenuSettingOption({ title: '护眼设置', detail: '护眼模式与色温', migrated: true })
+            .onClick(() => this.openDetailSheet('护眼设置', '配置护眼模式、色温与日夜参数'))
           Text('翻页控制').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingOption({ title: '横屏双页', detail: '关闭 / 左右双页' }).onClick(() => this.openDetailSheet('横屏双页', '单页或左右双页阅读'))
           MenuSettingOption({
@@ -923,6 +936,29 @@ export struct ReaderSettingsPage {
       this.detailSelectedOption = choices[0] ?? '';
     }
     this.detailSheetVisible = true;
+  }
+
+  private showEyeProtectionTimePicker(isStart: boolean): void {
+    const current = isStart ? this.eyeProtectionStartTime : this.eyeProtectionEndTime;
+    const parts: string[] = current.split(':');
+    const hour: number = Number(parts[0]);
+    const minute: number = Number(parts[1]);
+    const selected: Date = new Date();
+    selected.setHours(hour, minute, 0, 0);
+    this.getUIContext().showTimePickerDialog({
+      selected: selected,
+      useMilitaryTime: true,
+      onAccept: (value: TimePickerResult): void => {
+        const hourText = value.hour < 10 ? `0${value.hour}` : `${value.hour}`;
+        const minuteText = value.minute < 10 ? `0${value.minute}` : `${value.minute}`;
+        const time = `${hourText}:${minuteText}`;
+        if (isStart) {
+          this.onEyeProtectionStartTimeChange(time);
+        } else {
+          this.onEyeProtectionEndTimeChange(time);
+        }
+      }
+    });
   }
 
   private getPageAnimationLabel(): string {
@@ -1261,45 +1297,39 @@ export struct ReaderSettingsPage {
               MenuSettingSwitch({
                 title: '启用护眼模式', detail: '使用暖色调降低蓝光',
                 checked: this.eyeProtectionEnabled,
-                onChange: (enabled: boolean) => this.eyeProtectionEnabled = enabled
+                onChange: (enabled: boolean) => this.onEyeProtectionEnabledChange(enabled)
               })
               MenuSettingSwitch({
                 title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换',
                 checked: this.eyeProtectionAutoNight,
-                onChange: (enabled: boolean) => this.eyeProtectionAutoNight = enabled
+                onChange: (enabled: boolean) => this.onEyeProtectionAutoNightChange(enabled)
               })
               if (this.eyeProtectionEnabled || this.eyeProtectionAutoNight) {
                 MenuSettingSlider({
                   title: '护眼强度', value: this.eyeProtectionIntensity, minValue: 0, maxValue: 100,
-                  onChange: (value: number) => this.eyeProtectionIntensity = value
+                  onChange: (value: number) => this.onEyeProtectionIntensityChange(value)
                 })
                 MenuSettingSwitch({
                   title: '定时开启', detail: '仅在设定的时间段内生效',
                   checked: this.eyeProtectionSchedule,
-                  onChange: (enabled: boolean) => this.eyeProtectionSchedule = enabled
+                  onChange: (enabled: boolean) => this.onEyeProtectionScheduleChange(enabled)
                 })
                 if (this.eyeProtectionSchedule) {
-                  Text('开始时间').fontSize(12).fontColor('#D9DAE0').width('100%').padding({ top: 8, bottom: 4 })
                   Row() {
-                    ForEach(['18:00', '20:00', '22:00', '23:00'], (time: string) => {
-                      Text(time).fontSize(11).fontColor(this.eyeProtectionStartTime === time ? '#ECECF0' : '#B7B8C1')
-                        .layoutWeight(1).textAlign(TextAlign.Center).padding(9)
-                        .backgroundColor(this.eyeProtectionStartTime === time ? '#454B62' : '#202127')
-                        .borderRadius(10).onClick(() => this.eyeProtectionStartTime = time)
-                    }, (time: string) => `start-${time}`)
-                  }.width('100%')
-                  Text('结束时间').fontSize(12).fontColor('#D9DAE0').width('100%').padding({ top: 8, bottom: 4 })
+                    Text('开始时间').fontSize(12).fontColor('#D9DAE0')
+                    Blank()
+                    Text(this.eyeProtectionStartTime).fontSize(12).fontColor('#C6D3FF')
+                    Text('›').fontSize(20).fontColor('#92949E').margin({ left: 8 })
+                  }.width('100%').padding({ top: 10, bottom: 6 }).onClick(() => this.showEyeProtectionTimePicker(true))
                   Row() {
-                    ForEach(['05:00', '06:00', '07:00', '08:00'], (time: string) => {
-                      Text(time).fontSize(11).fontColor(this.eyeProtectionEndTime === time ? '#ECECF0' : '#B7B8C1')
-                        .layoutWeight(1).textAlign(TextAlign.Center).padding(9)
-                        .backgroundColor(this.eyeProtectionEndTime === time ? '#454B62' : '#202127')
-                        .borderRadius(10).onClick(() => this.eyeProtectionEndTime = time)
-                    }, (time: string) => `end-${time}`)
-                  }.width('100%')
+                    Text('结束时间').fontSize(12).fontColor('#D9DAE0')
+                    Blank()
+                    Text(this.eyeProtectionEndTime).fontSize(12).fontColor('#C6D3FF')
+                    Text('›').fontSize(20).fontColor('#92949E').margin({ left: 8 })
+                  }.width('100%').padding({ top: 6, bottom: 8 }).onClick(() => this.showEyeProtectionTimePicker(false))
                 }
               }
-              Text('当前为界面预览，设置尚未保存到阅读配置。')
+              Text('设置会立即保存并应用到阅读页面；定时支持跨越午夜。')
                 .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.layoutWeight(1).scrollBar(BarState.Off)

@@ -1,5 +1,5 @@
 import { fileIo } from '@kit.CoreFileKit';
-import { Book } from '../model/Book';
+import { Book, BookMediaType } from '../model/Book';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 
@@ -14,10 +14,24 @@ export struct BookInfoPage {
   onOpenCatalog: () => void = () => {};
   onOpenReadRecords: () => void = () => {};
   onRemoveFromShelf: () => void = () => {};
+  onChooseCover: () => void = () => {};
+  onRestoreCover: () => void = () => {};
+  onSaveMetadata: (title: string, author: string, category: string, description: string,
+    remark: string, customTag: string, bookType: BookMediaType, fixedType: boolean) => Promise<boolean> = async (_title: string, _author: string,
+    _category: string, _description: string, _remark: string, _customTag: string, _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
   @State backdropOpacity: number = 0;
+  @State metadataEditorVisible: boolean = false;
+  @State metadataTitle: string = '';
+  @State metadataAuthor: string = '';
+  @State metadataCategory: string = '';
+  @State metadataDescription: string = '';
+  @State metadataRemark: string = '';
+  @State metadataCustomTag: string = '';
+  @State metadataBookType: BookMediaType = 'text';
+  @State metadataFixedType: boolean = false;
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
@@ -49,6 +63,11 @@ export struct BookInfoPage {
     return this.book.category;
   }
 
+  private getCustomTags(): string[] {
+    return (this.book.customTag ?? '').split(/[\n,，]/)
+      .map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0);
+  }
+
   private getChapterTotal(): number {
     const savedCount = Number(this.book.chapterCount ?? '0');
     return savedCount > 0 ? savedCount : (this.book.chapterTitles?.length ?? 0);
@@ -72,6 +91,37 @@ export struct BookInfoPage {
         action: () => this.onRemoveFromShelf()
       }
     });
+  }
+
+  private openMetadataEditor(): void {
+    this.metadataTitle = this.book.title;
+    this.metadataAuthor = this.book.author;
+    this.metadataCategory = this.book.category;
+    this.metadataDescription = this.book.description ?? '';
+    this.metadataRemark = this.book.remark ?? '';
+    this.metadataCustomTag = this.book.customTag ?? '';
+    this.metadataBookType = this.book.bookType ?? 'text';
+    this.metadataFixedType = this.book.fixedType === true;
+    this.metadataEditorVisible = true;
+  }
+
+  private async saveMetadata(): Promise<void> {
+    const title = this.metadataTitle.trim();
+    if (title.length === 0) {
+      this.onUnavailableAction('书名不能为空，未保存书籍信息');
+      return;
+    }
+    const saved = await this.onSaveMetadata(
+      title,
+      this.metadataAuthor.trim(),
+      this.metadataCategory.trim(),
+      this.metadataDescription.trim(),
+      this.metadataRemark.trim(),
+      this.metadataCustomTag.trim(),
+      this.metadataBookType,
+      this.metadataFixedType
+    );
+    if (saved) { this.metadataEditorVisible = false; }
   }
 
   build() {
@@ -107,6 +157,9 @@ export struct BookInfoPage {
               BookInfoTag({ label: this.book.groupName ?? (this.book.isLocal ? '本地未分组' : '书架') })
               BookInfoTag({ label: this.getFormatLabel() })
               if (this.fileSizeLabel.length > 0) { BookInfoTag({ label: this.fileSizeLabel }) }
+              ForEach(this.getCustomTags(), (tag: string) => {
+                BookInfoTag({ label: tag })
+              }, (tag: string) => tag)
             }.width('100%').padding({ left: 18, right: 18, bottom: 20 })
             }.width('100%').backgroundColor('#55343845')
           }.width('100%')
@@ -171,6 +224,12 @@ export struct BookInfoPage {
                 .fontSize(14).lineHeight(21).fontColor('#858792').alignSelf(ItemAlign.Start)
                 .margin({ top: 6 })
             }
+            if ((this.book.remark ?? '').trim().length > 0) {
+              Text('备注').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+                .alignSelf(ItemAlign.Start).margin({ top: 16 })
+              Text(this.book.remark ?? '').fontSize(14).lineHeight(21).fontColor('#BFC1CB')
+                .alignSelf(ItemAlign.Start).margin({ top: 6 })
+            }
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
             .backgroundColor('#1B1C22').borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
           }.width('100%').backgroundColor('#111217')
@@ -186,7 +245,7 @@ export struct BookInfoPage {
         }.width(40).height(40).backgroundColor('#171820').borderRadius(20)
           .onClick(() => this.onBack())
         Blank().layoutWeight(1)
-        BookInfoIconButton({ icon: 'edit', onSelect: () => this.onUnavailableAction('本地书籍信息编辑尚未迁移') })
+        BookInfoIconButton({ icon: 'edit', onSelect: () => this.openMetadataEditor() })
         BookInfoIconButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
         BookInfoIconButton({ icon: 'more', onSelect: () => this.onUnavailableAction('书籍更多操作尚未迁移') })
       }.width('100%').height(56).padding({ left: 16, right: 16, top: 8, bottom: 8 })
@@ -203,7 +262,97 @@ export struct BookInfoPage {
         }.justifyContent(FlexAlign.Center).width(104).padding({ top: 13, bottom: 13 })
           .backgroundColor('#46476B').borderRadius(26).onClick(() => this.onRead())
       }.width('100%').justifyContent(FlexAlign.End).padding({ left: 20, right: 20, top: 8, bottom: 12 })
+
+      if (this.metadataEditorVisible) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column().width('100%').height('100%').backgroundColor('#99000000')
+            .onClick(() => this.metadataEditorVisible = false)
+          Column() {
+            Row() {
+              Text('编辑书籍信息').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
+              Text('取消').fontSize(14).fontColor('#C5C7D0').padding(8)
+                .onClick(() => this.metadataEditorVisible = false)
+            }.width('100%').padding({ bottom: 12 })
+            Scroll() {
+              Column() {
+                Row() {
+                  BookCover({ book: this.book, displayWidth: 58, displayHeight: 82, cornerRadius: 7 })
+                    .width(58).height(82)
+                  Column() {
+                    Text('封面').fontSize(15).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+                    Text('仅更改应用内封面副本，原始小说文件保持不变')
+                      .fontSize(12).fontColor('#AEB0BA').margin({ top: 4, bottom: 8 })
+                    Row() {
+                      Text('选择图片').fontSize(13).fontColor('#B9C6FF').padding({ right: 16 })
+                        .onClick(() => this.onChooseCover())
+                      Text('还原封面').fontSize(13).fontColor('#BFC1CB')
+                        .onClick(() => this.onRestoreCover())
+                    }
+                  }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
+                }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(12)
+                Column() {
+                  Text('书籍类型').fontSize(14).fontColor('#ECEEF2').margin({ bottom: 8 })
+                  Row() {
+                    BookTypeChoice({ label: '文本', selected: this.metadataBookType === 'text', onSelect: () => this.metadataBookType = 'text' })
+                    BookTypeChoice({ label: '音频', selected: this.metadataBookType === 'audio', onSelect: () => this.metadataBookType = 'audio' })
+                    BookTypeChoice({ label: '图片', selected: this.metadataBookType === 'image', onSelect: () => this.metadataBookType = 'image' })
+                  }.width('100%')
+                  Row() {
+                    Text('固定书籍类型').fontSize(13).fontColor('#C5C7D0').layoutWeight(1)
+                    Toggle({ type: ToggleType.Switch, isOn: this.metadataFixedType })
+                      .onChange((value: boolean) => this.metadataFixedType = value)
+                  }.width('100%').margin({ top: 8 })
+                }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(12).margin({ bottom: 10 })
+                TextInput({ text: this.metadataTitle, placeholder: '书名' }).width('100%').height(48)
+                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
+                  .padding({ left: 12, right: 12 }).onChange((value: string) => this.metadataTitle = value)
+                TextInput({ text: this.metadataAuthor, placeholder: '作者' }).width('100%').height(48)
+                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
+                  .padding({ left: 12, right: 12 }).margin({ top: 10 })
+                  .onChange((value: string) => this.metadataAuthor = value)
+                TextInput({ text: this.metadataCategory, placeholder: '分类' }).width('100%').height(48)
+                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
+                  .padding({ left: 12, right: 12 }).margin({ top: 10 })
+                  .onChange((value: string) => this.metadataCategory = value)
+                TextInput({ text: this.metadataCustomTag, placeholder: '自定义标签（用逗号分隔）' }).width('100%').height(48)
+                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
+                  .padding({ left: 12, right: 12 }).margin({ top: 10 })
+                  .onChange((value: string) => this.metadataCustomTag = value)
+                TextArea({ text: this.metadataDescription, placeholder: '小说简介' }).width('100%').height(180)
+                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
+                  .padding(12).margin({ top: 10 })
+                  .onChange((value: string) => this.metadataDescription = value)
+                TextArea({ text: this.metadataRemark, placeholder: '备注' }).width('100%').height(120)
+                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
+                  .padding(12).margin({ top: 10 })
+                  .onChange((value: string) => this.metadataRemark = value)
+              }.width('100%')
+            }.layoutWeight(1).scrollBar(BarState.Off)
+            Row() {
+              Blank().layoutWeight(1)
+              Text('保存').fontSize(14).fontColor('#101116').textAlign(TextAlign.Center)
+                .width(84).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(18)
+                .onClick(() => this.saveMetadata())
+            }.width('100%').padding({ top: 12 })
+          }
+          .width('90%').height('78%').padding(18).backgroundColor('#1A1B21').borderRadius(22)
+          .onClick(() => {})
+        }.width('100%').height('100%').zIndex(1000)
+      }
     }.width('100%').height('100%').backgroundColor('#111217')
+  }
+}
+
+@Component
+struct BookTypeChoice {
+  @Prop label: string = '';
+  @Prop selected: boolean = false;
+  onSelect: () => void = () => {};
+  build() {
+    Text(this.label).fontSize(13).fontColor(this.selected ? '#F1F2F6' : '#C5C7D0')
+      .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 9, bottom: 9 })
+      .backgroundColor(this.selected ? '#46476B' : '#1C1D23').borderRadius(10)
+      .margin({ right: 6 }).onClick(() => this.onSelect())
   }
 }
 
