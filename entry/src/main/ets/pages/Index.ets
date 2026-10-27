@@ -1405,7 +1405,16 @@ struct Index {
       this.readerInfoSettings = this.getReaderInfoSettingsFromSnapshot(result.settings);
       this.readerSettingsLoaded = true;
       this.readerSettingsRevision += 1;
-      this.backupStatusMessage = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目。`;
+      // 恢复可能写入了替换净化规则，重新读一次让规则页和阅读页都看到最新结果。
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      const restoreSummary = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目`;
+      const replaceRuleSummary = this.describeReplaceRuleRestore(
+        result.replaceRuleAdded, result.replaceRuleUpdated, result.replaceRuleSkipped
+      );
+      // 没有 replaceRule.json 时不拼这一段，避免句尾多出一个空分号。
+      this.backupStatusMessage = replaceRuleSummary.length > 0
+        ? `${restoreSummary}；${replaceRuleSummary}`
+        : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
       await BackupRepository.discardSelection(selection);
       this.pendingBackup = undefined;
@@ -1415,6 +1424,20 @@ struct Index {
     } finally {
       this.backupBusy = false;
     }
+  }
+
+  /**
+   * 生成替换净化规则的恢复结果说明。
+   * 三项都为 0 时返回空串，表示这份备份里没有 replaceRule.json，
+   * 不在提示里加一句没有信息量的话；返回值不带句号，由调用方决定句尾。
+   */
+  private describeReplaceRuleRestore(added: number, updated: number, skipped: number): string {
+    if (added === 0 && updated === 0 && skipped === 0) { return ''; }
+    const parts: string[] = [];
+    if (added > 0) { parts.push(`新增 ${added} 条`); }
+    if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
+    if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
+    return `替换净化规则${parts.join('、')}。`;
   }
 
   private cancelLocalBackupRestore(): void {

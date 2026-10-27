@@ -168,6 +168,22 @@ ArkUI 一个组件只能绑定一个半模态页面，后绑定的会覆盖先�
 
 **验证**：键盘弹出状态下直接点「试跑」，结果区正常出现；输入 `abc` 试跑输出 `XYZ`，提示「共 2 条正文规则，其中 1 条改动了样例文本」。
 
+### 12. 备份/恢复的「替换净化规则」分类原是空壳
+
+**现象**：备份分类表里声明了「替换净化规则」（`entry/src/main/ets/data/BackupRepository.ets` 的 `categoryOptions`），但备份从不生成 `replaceRule.json`，恢复遇到该文件也只是原样归档，本地规则完全不受影响——分类形同虚设。
+
+**成因**：本地规则存于 preferences（`legado_replace_rules`），而 `createBackup()` 只写 `bookshelf.json`/`readConfig.json`/`config.xml`，`restore()` 只对 `bookshelf.json` 与 `config.xml` 专项处理；`replaceRule.json` 落进兜底的 `copyFile`。上游是真接的：`Backup.kt:172-174` 写 `replaceRule.json`，`Restore.kt:205-212` 逐条 insert。
+
+**修复**：
+
+- 备份侧：`createBackup()` 在未忽略该分类且规则非空时，用 `ReplaceRuleRepository.exportRules()` 生成根级 `replaceRule.json`（字段名与上游一致，可被 Android 直接读回）；规则为空时不写，避免覆盖 `copyPreservedEntries` 从旧归档带来的同名文件。
+- 恢复侧：`restore()` 对 `replaceRule.json` 走 `ReplaceRuleImporter.parse()` + `ReplaceRuleRepository.importRules()`，同 id 或同 pattern 覆盖、非法正则跳过（与上游逐条 insert 容错语义一致），文件仍原样归档；超过 32 MB 上限直接报错。`RestoreResult` 新增 `replaceRuleAdded/replaceRuleUpdated/replaceRuleSkipped` 三个字段。
+- UI 侧：恢复完成后重读 `this.replaceRules`，提示由 `Index.ets` 的 `describeReplaceRuleRestore()` 拼接（无 replaceRule.json 时不追加）。
+
+**验证**（OpenHarmony API 26 模拟器 127.0.0.1:5555，基线 2 条规则）：
+
+- 备份：设置 → 备份与恢复 → 备份 → 备份到本地，保存的 ZIP 含 `replaceRule.json`，内容与本地 2 条规则逐字段一致。
+- 恢复：构造含 3 条规则的 ZIP（2 条有效 id=101/102、1 条非法正则 pattern=`[`），预览显示「replaceRule.json 3 条」，导入后提示「…；替换净化规则新增 2 条、跳过 1 条无效规则。」，存储出现 id=101/102 且分组「备份组」自动登记，非法正则未入库。
 
 ## 遗留风险（待决策）
 

@@ -15,6 +15,8 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 
 阅读配置的 Android `config.xml` 映射包含 `tocUiUseReplace` 与 `tocCountWords` 两个目录偏好键；导入时仅恢复到本地阅读设置，不执行归档中的脚本或规则。该映射尚待实际 ZIP 往返验收。
 
+替换净化规则（`replaceRule.json`）已完成双向映射并实测：备份时把本地规则按上游字段名导出为根级 `replaceRule.json`（规则为空时不写，避免覆盖旧归档里的同名条目）；恢复时用 `ReplaceRuleImporter` 逐条解析导入，同 id 或同 pattern 视为同一条覆盖，非法正则条目计入跳过而不影响其余条目，同时该文件仍原样归档到保留目录。实现见 `entry/src/main/ets/data/BackupRepository.ets` 的 `createBackup()` 与 `restore()`，结果说明由 `Index.ets` 的 `describeReplaceRuleRestore()` 拼接。
+
 ## 兼容队列
 
 优先核验书架和阅读位置、阅读配置、书签与笔记、通用偏好、主题、阅读记录、规则和搜索历史。随后处理当前没有原生业务的类别；每类分别说明是映射、保留、忽略还是未支持。合并/覆盖、冲突、异常归档、资源限制与重启后状态需要独立验收。

@@ -5,6 +5,8 @@ import { Book } from '../model/Book';
 import { EpubRepository } from './EpubRepository';
 import { BookRepository } from './BookRepository';
 import { READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot } from './ReaderSettingsRepository';
+import { ReplaceRuleRepository } from './ReplaceRuleRepository';
+import { ReplaceRuleImporter } from './ReplaceRuleImporter';
 
 export interface BackupEntryPreview {
   name: string;
@@ -45,6 +47,12 @@ export interface RestoreResult {
   createdMissingBodyBookCount: number;
   localBooksWithoutBody: number;
   restoredEntries: BackupEntryPreview[];
+  /** 恢复替换净化规则的新增条数；没有 replaceRule.json 时为 0。 */
+  replaceRuleAdded: number;
+  /** 恢复替换净化规则的覆盖条数（同 id 或同 pattern 视为同一条）。 */
+  replaceRuleUpdated: number;
+  /** 解析失败或正则非法而被跳过的规则条数。 */
+  replaceRuleSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -388,6 +396,17 @@ export class BackupRepository {
         }
       }
 
+      // 替换净化规则是本地权威数据（存在 preferences 里），归档目录里不会有，
+      // 所以未忽略该分类时由这里生成，格式与上游 replaceRule.json 一致，可被 Android 直接读回。
+      // 规则为空时不写，避免覆盖 copyPreservedEntries 从旧归档带过来的同名文件。
+      if (!ignoredCategories.includes('replaceRule')) {
+        const rules = ReplaceRuleRepository.getAll();
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/replaceRule.json`,
+            ReplaceRuleRepository.exportRules(rules));
+        }
+      }
+
       const configPath = `${stagingDirectory}/config.xml`;
       if (!fileIo.accessSync(configPath)) {
         BackupRepository.writeTextFile(configPath,
@@ -534,6 +553,9 @@ export class BackupRepository {
     BackupRepository.ensureDirectory(targetDirectory);
     const entries = selection.preview.entries;
     let preservedEntryCount: number = 0;
+    let replaceRuleAdded: number = 0;
+    let replaceRuleUpdated: number = 0;
+    let replaceRuleSkipped: number = 0;
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
       if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
@@ -569,6 +591,23 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'replaceRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复替换净化规则`);
+        }
+        // 逐条解析并导入；非法正则的条目由 ReplaceRuleImporter 计入 skipped 后跳过，
+        // 不因为一条坏规则就丢掉整份备份，与上游 Restore 逐条 insert 的语义一致。
+        const parsed = ReplaceRuleImporter.parse(text);
+        const outcome = await ReplaceRuleRepository.importRules(context, parsed.rules);
+        replaceRuleAdded += outcome.added;
+        replaceRuleUpdated += outcome.updated;
+        replaceRuleSkipped += parsed.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
     }
@@ -595,7 +634,10 @@ export class BackupRepository {
       updatedLocalBookCount: updated.updatedCount,
       createdMissingBodyBookCount: updated.createdMissingBodyCount,
       localBooksWithoutBody: selection.preview.localBooksWithoutBody,
-      restoredEntries: restoredEntries
+      restoredEntries: restoredEntries,
+      replaceRuleAdded: replaceRuleAdded,
+      replaceRuleUpdated: replaceRuleUpdated,
+      replaceRuleSkipped: replaceRuleSkipped
     };
   }
 

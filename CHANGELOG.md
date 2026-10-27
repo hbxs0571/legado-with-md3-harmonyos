@@ -1,5 +1,13 @@
 # 修改记录
 
+## 2026-10-27 备份/恢复接通替换净化规则
+
+- 备份：`createBackup()` 在未忽略「替换净化规则」分类且规则非空时，按上游字段名生成根级 `replaceRule.json`，Android 端可直接读回；规则为空时不写，避免覆盖旧归档里的同名条目。
+- 恢复：`restore()` 对 `replaceRule.json` 逐条解析导入（同 id 或同 pattern 覆盖、非法正则跳过，与上游 `Restore.kt` 逐条 insert 的容错语义一致），文件同时原样归档；`RestoreResult` 新增 `replaceRuleAdded/replaceRuleUpdated/replaceRuleSkipped` 三个计数。
+- 恢复完成后重读规则列表并拼接结果提示（`Index.ets` 的 `describeReplaceRuleRestore()`），没有 `replaceRule.json` 的备份不追加这段说明。
+- 实测（API 26 模拟器）：备份 ZIP 内 `replaceRule.json` 与本地规则逐字段一致；恢复含 3 条规则（2 有效 1 非法正则）的 ZIP，提示「新增 2 条、跳过 1 条无效规则」，新分组自动登记，非法正则未入库。
+- [已知问题](docs/KNOWN-ISSUES.md) 新增第 12 项；[备份兼容说明](docs/BACKUP-RESTORE.md) 更新该分类的映射状态。
+
 ## 2026-10-27 修复试跑面板按钮被键盘遮挡
 
 - 「清空」「试跑」移进试跑面板的标题栏，与标题、关闭按钮同一行。键盘弹出时半模态面板被压缩（实测从 `[0,164][1280,2832]` 压到 `[0,880][1280,1733]`），按钮行放在滚动区内或固定在底部都会被裁到可视区外，只有标题栏稳定可见。
