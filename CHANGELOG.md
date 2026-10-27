@@ -6,6 +6,8 @@
 - `Book` 新增 `tocRule` 字段，书架协议从 v12 升到 v13（`tocRule` 占第 28 字段），导入 TXT 时把选中的章节正则固定写入书籍，避免规则变更影响已导入的书。
 - 修复 CRLF 文本上所有内置目录规则 0 命中的缺陷：ArkTS 正则多行模式只把 `\n` 当行终止符，`$` 不匹配 `\r` 之前，而 Windows 文本每行以 `\r\n` 结尾。`TxtTocRuleRepository.selectForSample()` 现在先归一行尾再匹配。
 - 设备实测：CRLF 样本导入后正确切出 3 章（进度显示 1/3 11.1%），旧书重新打开同样按规则切分。
+- TXT 目录规则页的「导入」「导出」接上真实文件读写：新增 `TxtTocRuleImporter`（支持本项目 JSON 数组、单对象、旧版 `rule` 字段）、`TxtTocRuleRepository.pickImportFile` 与 `saveExportFile`。
+- 修复规则文件导出写出 0 字节空文件：原来先 `encodeInto` 成 `Uint8Array` 再 `writeSync` 会抛 `13900020`（EINVAL），改为直接写字符串。`ReplaceRuleRepository.saveExportFile` 同源缺陷一并修复。
 
 ## 2026-10-28 替换净化整合源码同步
 

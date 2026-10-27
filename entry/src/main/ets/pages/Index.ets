@@ -54,6 +54,7 @@ import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
+import { TxtTocRuleImporter } from '../data/TxtTocRuleImporter';
 import { TxtTocRule } from '../model/TxtTocRule';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { ReplaceRule } from '../model/ReplaceRule';
@@ -674,6 +675,58 @@ struct Index {
         ? '内置规则已全部存在' : `已导入 ${outcome.added} 条、更新 ${outcome.updated} 条内置规则`);
     } catch (_) {
       this.showUnavailableAction('导入内置目录规则失败');
+    }
+  }
+
+  /**
+   * 从用户选择的文件导入 TXT 目录规则。
+   * 用户取消选择时不提示，与替换规则的导入口径一致。
+   */
+  private async importTxtTocRules(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    let content: string;
+    try {
+      content = await TxtTocRuleRepository.pickImportFile(context);
+    } catch (_) {
+      this.showUnavailableAction('读取规则文件失败');
+      return;
+    }
+    if (content.length === 0) {
+      return;
+    }
+    const parsed = TxtTocRuleImporter.parse(content);
+    if (parsed.rules.length === 0) {
+      this.showUnavailableAction(parsed.skipped > 0 ? '规则格式不正确，未导入任何数据' : '没有可导入的规则');
+      return;
+    }
+    try {
+      const outcome = await TxtTocRuleRepository.importRules(context, parsed.rules);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      const skipped = parsed.skipped > 0 ? `，跳过 ${parsed.skipped} 条无效规则` : '';
+      this.showUnavailableAction(`新增 ${outcome.added} 条，更新 ${outcome.updated} 条${skipped}`);
+    } catch (_) {
+      this.showUnavailableAction('TXT 目录规则导入失败');
+    }
+  }
+
+  /** 导出 TXT 目录规则到用户选择的文件。 */
+  private async exportTxtTocRules(rules: TxtTocRule[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    if (rules.length === 0) {
+      this.showUnavailableAction('没有可导出的目录规则');
+      return;
+    }
+    try {
+      const saved = await TxtTocRuleRepository.saveExportFile(context, TxtTocRuleRepository.exportRules(rules));
+      this.showUnavailableAction(saved ? `已导出 ${rules.length} 条目录规则` : '未选择保存位置');
+    } catch (_) {
+      this.showUnavailableAction('导出目录规则失败');
     }
   }
 
@@ -2945,7 +2998,9 @@ struct Index {
             onRemoveBatch: (ids: number[]) => this.removeTxtTocRuleBatch(ids),
             onToggleRule: (id: number, enabled: boolean) => this.setTxtTocRuleEnabled(id, enabled),
             onMoveRule: (id: number, direction: number) => this.moveTxtTocRule(id, direction),
-            onImportBuiltin: () => this.importBuiltinTxtTocRules()
+            onImportBuiltin: () => this.importBuiltinTxtTocRules(),
+            onImportRules: () => this.importTxtTocRules(),
+            onExportRules: (rules: TxtTocRule[]) => this.exportTxtTocRules(rules)
           })
         } else if (this.profileSubpage === ProfileRoute.DICTIONARY_RULES) {
           DictionaryRulesPage({

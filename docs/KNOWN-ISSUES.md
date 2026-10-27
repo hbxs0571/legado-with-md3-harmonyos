@@ -10,13 +10,14 @@
 4. **恢复结果提示仍需二次 UI 核验。** 当前源码已加入新增、更新、跳过计数提示；提示文案的标点与完整显示状态尚未在 E 端设备再次确认。
 5. **API 12 真机兼容未验证。** 当前构建和有限设备检查不能替代 API 12 真机验收。
 6. **在线 URL 导入未接入。** 规则可通过本地文件或用户粘贴文本导入；应用没有通过 URL 获取规则的网络能力。
-7. **TXT 目录规则的文件导入未接入。** 目录规则页的「导入」仍是占位提示，当前可用的是「导入内置规则」与「粘贴规则」两条路径。替换净化规则的同类导入已可用，可参照其 `ReplaceRuleRepository.pickImportFile` 补上。
-8. **TXT 目录规则尚未接入备份/恢复。** 上游 `Backup.kt` 会把 `txtTocRule.json` 一并归档，本地备份分类表没有这一项，恢复也不会映射回 `legado_txt_toc_rules`。
+7. **TXT 目录规则尚未接入备份/恢复。** 上游 `Backup.kt` 会把 `txtTocRule.json` 一并归档，本地备份分类表没有这一项，恢复也不会映射回 `legado_txt_toc_rules`。
+8. **TXT 目录规则的文件导入只在模拟器验过。** 导入/导出已接通（`TxtTocRuleRepository.pickImportFile` / `saveExportFile` + `TxtTocRuleImporter`），但只在 OpenHarmony API 26 模拟器上实测通过，API 12 真机未验证。
 9. **已导入的 TXT 不会因规则变更而重新识别目录。** 导入时选中的章节正则会固定在 `Book.tocRule` 上，这是有意设计（规则调整不应打乱已有书的目录）；但书架的「更新目录」目前是占位，用户没有主动重算目录的入口。
 
 ## 已修复
 
 - **CRLF 文本上所有内置 TXT 目录规则 0 命中**（2026-10-28 修复）。ArkTS 的正则在多行模式下只把 `\n` 当作行终止符，`$` 不会匹配到 `\r` 之前；Windows 文本每行以 `\r\n` 结尾，因此所有以 `.{0,30}$` 收尾的内置规则在 CRLF 文本上都不命中，书被误判成「没有可用目录规则」而退回按字数分章，读起来只有一章。修复位置 `entry/src/main/ets/data/TxtTocRuleRepository.ets` 的 `selectForSample()`：匹配前先把样本行尾归一为 `\n`。章节切分不受影响，`splitChapterStarts()` 逐行处理时本来就已去掉行尾 `\r`。
+- **规则文件导出写出 0 字节空文件**（2026-10-28 修复）。`saveExportFile()` 原来先用 `util.TextEncoder.encodeInto(content)` 转成 `Uint8Array` 再 `fileIo.writeSync(fd, bytes)`，在模拟器上抛 `{ code: 13900020 }`（EINVAL），文件被创建出来但内容为空，界面提示「导出目录规则失败」。修复方式是把字符串直接传给 `writeSync`，由底层按 UTF-8 编码。`TxtTocRuleRepository.ets` 与 `ReplaceRuleRepository.ets` 两处同源实现都已改，实测导出 `txtTocRule-*.json`（9190 B / 25 条）与 `replaceRules-*.json`（607 B / 2 条）内容正确。
 
 ## 已纳入源码、但不等同于完整验收的行为
 

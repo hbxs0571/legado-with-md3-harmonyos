@@ -491,11 +491,12 @@ export class ReplaceRuleRepository {
     if (uri === undefined) {
       return false;
     }
-    const encoder = new util.TextEncoder();
-    const bytes = encoder.encodeInto(content);
+    // 内容直接传字符串，由底层按 UTF-8 编码。
+    // 之前先 encodeInto 成 Uint8Array 再 writeSync，规则条数多时会报 13900020（EINVAL），
+    // 文件被创建出来但大小为 0。TXT 目录规则导出踩过同一个坑。
     const target = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
     try {
-      fileIo.writeSync(target.fd, bytes);
+      fileIo.writeSync(target.fd, content);
     } finally {
       fileIo.closeSync(target);
     }

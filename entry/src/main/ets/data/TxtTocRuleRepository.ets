@@ -1,4 +1,5 @@
 import { preferences } from '@kit.ArkData';
+import { fileIo, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { TxtTocRule } from '../model/TxtTocRule';
 
@@ -235,6 +236,65 @@ export class TxtTocRuleRepository {
       return copy;
     });
     return JSON.stringify(ordered, null, 2);
+  }
+
+  /**
+   * 弹出文件选择器读取规则文件文本。
+   * 用户取消时返回空字符串，由调用方区分「取消」与「读取失败」。
+   * 文件上限 8 MB：规则文本通常只有几十 KB，超限说明选错了文件。
+   * 注意：选择器返回的是 docs:// 授权 URI，必须先 openSync 拿到 fd 再读，
+   * 直接对 URI 调 readTextSync 在部分设备上会失败。
+   */
+  static async pickImportFile(context: Context): Promise<string> {
+    const options = new picker.DocumentSelectOptions();
+    options.fileSuffixFilters = ['TXT 目录规则|.json', '文本规则|.txt'];
+    options.maxSelectNumber = 1;
+    const uris = await new picker.DocumentViewPicker(context).select(options);
+    const uri = uris[0];
+    if (uri === undefined) {
+      return '';
+    }
+    const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    try {
+      const size = fileIo.statSync(source.fd).size;
+      if (size <= 0) {
+        throw new Error('规则文件为空');
+      }
+      if (size > TxtTocRuleRepository.maximumImportBytes) {
+        throw new Error('规则文件超过 8 MB');
+      }
+      const buffer = new ArrayBuffer(size);
+      const read = fileIo.readSync(source.fd, buffer);
+      const decoder = util.TextDecoder.create('utf-8');
+      return decoder.decodeToString(new Uint8Array(buffer.slice(0, read)));
+    } finally {
+      fileIo.closeSync(source);
+    }
+  }
+
+  /**
+   * 弹出保存对话框写入导出文本。
+   * @returns 是否真的写入了文件；用户取消返回 false。
+   */
+  static async saveExportFile(context: Context, content: string): Promise<boolean> {
+    const options = new picker.DocumentSaveOptions();
+    options.newFileNames = [`txtTocRule-${Date.now()}.json`];
+    options.fileSuffixChoices = ['JSON 规则|.json'];
+    const uris = await new picker.DocumentViewPicker(context).save(options);
+    const uri = uris[0];
+    if (uri === undefined) {
+      return false;
+    }
+    // 内容直接传字符串，由底层按 UTF-8 编码。
+    // 之前先 encodeInto 成 Uint8Array 再 writeSync，在模拟器上报 13900020（EINVAL），
+    // 文件被创建出来但大小为 0。
+    const target = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(target.fd, content);
+    } finally {
+      fileIo.closeSync(target);
+    }
+    return true;
   }
 
   /**

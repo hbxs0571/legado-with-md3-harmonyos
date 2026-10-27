@@ -1300,6 +1300,10 @@ export struct TxtTocRulesPage {
   onToggleRule: (id: number, enabled: boolean) => Promise<void> = async (_id: number, _enabled: boolean) => {};
   onMoveRule: (id: number, direction: number) => Promise<void> = async (_id: number, _direction: number) => {};
   onImportBuiltin: () => Promise<void> = async () => {};
+  /** 从用户选择的规则文件导入。 */
+  onImportRules: () => Promise<void> = async () => {};
+  /** 导出给定的规则；空数组表示没有可导出内容。 */
+  onExportRules: (rules: TxtTocRule[]) => Promise<void> = async (_rules: TxtTocRule[]) => {};
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State selectionMode: boolean = false;
@@ -1442,7 +1446,9 @@ export struct TxtTocRulesPage {
         this.selectedRuleIds = [];
       })
       MenuItem({ content: '导入' })
-        .onClick(() => this.onUnavailableAction('TXT 目录规则文件导入尚未迁移，可用「粘贴规则」逐条导入'))
+        .onClick(() => this.onImportRules())
+      MenuItem({ content: '导出' })
+        .onClick(() => this.onExportRules(this.sourceRules))
       MenuItem({ content: '导入内置规则' })
         .onClick(async () => {
           await this.onImportBuiltin();
