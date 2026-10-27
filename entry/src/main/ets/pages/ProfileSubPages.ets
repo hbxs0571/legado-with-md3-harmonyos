@@ -785,8 +785,15 @@ export struct ReplaceRuleEditPage {
   @Builder
   private RuleTestSheet() {
     Column() {
+      // 「清空」「试跑」放在标题栏里：键盘弹出时半模态面板被压到很矮，
+      // 只有标题栏始终可见，放在底部或滚动区内都会被裁掉点不到。
       Row() {
         Text('测试规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text('清空').fontSize(15).fontColor('#92949E').margin({ right: 18 })
+          .onClick(() => { this.testSource = ''; this.clearRuleTest(); })
+        Text('试跑').fontSize(15).fontColor(this.testSource.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+          .margin({ right: 8 })
+          .onClick(() => this.runRuleTest())
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
         }.width(40).height(40).onClick(() => this.activeSheet = '')
@@ -800,12 +807,6 @@ export struct ReplaceRuleEditPage {
             .backgroundColor('#22232A').borderRadius(12)
             .width('100%').height(140).padding(12)
             .onChange((value: string) => { this.testSource = value; this.clearRuleTest(); })
-          Row() {
-            Text('清空').fontSize(15).fontColor('#92949E').layoutWeight(1)
-              .onClick(() => { this.testSource = ''; this.clearRuleTest(); })
-            Text('试跑').fontSize(15).fontColor(this.testSource.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
-              .onClick(() => this.runRuleTest())
-          }.width('100%').margin({ top: 12 })
           if (this.testHasRun) {
             Text(this.testError).fontSize(13)
               .fontColor(this.testError.startsWith('当前没有') ? '#92949E' : '#D8D9E0')
