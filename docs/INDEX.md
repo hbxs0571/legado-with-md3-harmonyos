@@ -8,6 +8,7 @@
 | 当前公开进度 | [进度摘要](PROGRESS.md) |
 | N 端文档交接 | [双机 N 端执行说明](DUAL-MACHINE-HANDOFF.md) |
 | 模块验收摘要 | [模块状态](MODULE-STATUS.md) |
+| 已知缺陷与遗留风险 | [已知问题](KNOWN-ISSUES.md) |
 | 模块入口与责任范围 | [模块概览](MODULES.md) |
 | 本地阅读行为 | [阅读模块](READER.md) |
 | Android ZIP 兼容范围 | [备份恢复](BACKUP-RESTORE.md) |
