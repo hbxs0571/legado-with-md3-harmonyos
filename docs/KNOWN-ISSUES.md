@@ -99,6 +99,46 @@ ArkUI 一个组件只能绑定一个半模态页面，后绑定的会覆盖先�
 
 **验证**：新增 GrpY 后立即出现在列表；删除 GrpY 后行立即消失；把 GrpX 重命名为 GrpXZ 后列表立即更新，输入框同时复位为「添加」态。
 
+## 对齐上游补齐的交互
+
+以下不是缺陷修复，是把本地实现补齐到上游 Android 的行为。上游依据均为 `app/src/main/java/io/legado/app/ui/replace/` 下的源码。
+
+### 6. 选择模式缺少「反选」
+
+**上游**：`ReplaceRuleScreen.kt:275` 的 `onSelectInvert` 调用 `ReplaceRuleViewModel.kt:390` 的 `invertSelection()`，实现为「当前列表全部 id 减去已选 id」。
+
+**本地实现**：`entry/src/main/ets/pages/ProfileSubPages.ets:236` 的 `invertSelection()`，同样在**当前筛选结果**内取差集，而不是全部规则——保证「反选」与用户眼前列表范围一致。
+
+**验证**：选中 0 项时点反选变成「已选择 2 项」；再点一次回到「已选择 0 项」。
+
+### 7. 批量删除没有二次确认
+
+**上游**：`RuleListScaffold.kt:75-86` 用 `AppAlertDialog` 弹确认框，标题 `R.string.delete`、正文 `R.string.sure_del`。
+
+**本地实现**：新增 `pendingDeleteIds` 状态与 `confirmDelete` / `cancelDelete` 方法（`entry/src/main/ets/pages/ProfileSubPages.ets:426-453`）。确认面板与长按菜单的单条删除**共用**同一个面板，避免两条删除路径行为不一致。批量删除确认后仍退出选择模式，单条删除则保留选择模式并从选中集合里摘掉该条。
+
+`bindSheet` 高度改为条件式：确认面板只有几行文字，用 `SheetSize.FIT_CONTENT` 避免半屏空白；其余面板保持 `SheetSize.MEDIUM`（`entry/src/main/ets/pages/ProfileSubPages.ets:618`）。
+
+**验证**：全选 2 条点删除 → 面板显示「确定删除选中的 2 条替换规则？删除后可通过导入恢复。」；点「取消」规则仍在、选中态保留；点「删除」存储写入 `rules_v1=[]`、列表显示「暂无替换净化规则」、选择模式退出。
+
+### 8. 长按菜单缺少「删除」
+
+**上游**：`ReplaceRuleScreen.kt:463-482` 的条目下拉是置顶 `R.string.move_to_top`、置底 `R.string.move_to_bottom`、删除 `R.string.delete` 三项。
+
+**本地实现**：`entry/src/main/ets/pages/ProfileSubPages.ets:288` 的 `RuleRowMenu()` 补上第三项「删除」，走同一个 `requestDelete([rule.id])`。
+
+**验证**：长按条目弹出三项；点删除 → 确认面板显示单条文案「确定删除这条替换规则？删除后可通过导入恢复。」；确认后存储只剩另一条规则，`order` 重排为 0。
+
+### 9. 选择模式缺少「导出选中」
+
+**上游**：`ReplaceRuleScreen.kt:322-325` 的 `ActionItem(text=导出)`。
+
+**本地实现**：`entry/src/main/ets/pages/ProfileSubPages.ets:456` 的 `submitBatchExport()`，从 `rules` 过滤出选中项后调 `onExportRules`，未选中时提示「请先选择规则」而不是静默无反应。
+
+**验证**：全选 2 条点导出 → 系统保存对话框默认文件名 `replaceRules-<时间戳>.json`；保存后设备 `Documents/replaceRules-1793109799610.json` 内容为只含这 2 条的格式化 JSON，字段与本地存储一致；导出前后 `rules_v1` 存储内容不变（导出是只读操作）。
+
+**未采纳**：上游的批量导入预览勾选对话框（`BatchImportDialog`）。本地导入是「解析后直接合并 + toast 报告新增/更新/跳过条数」（`entry/src/main/ets/pages/Index.ets:525` 的 `importReplaceRules`），路径不同但可用，重做会推翻已验证流程。
+
 ## 遗留风险（待决策）
 
 ### A. 规则试跑面板的键盘遮挡

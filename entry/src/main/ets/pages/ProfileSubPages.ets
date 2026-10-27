@@ -211,6 +211,11 @@ export struct ReplaceRulesPage {
   /** 选择模式：进入后点击条目变为切换选中，底部出现批量操作条。 */
   @State selectionMode: boolean = false;
   @State selectedRuleIds: number[] = [];
+  /**
+   * 待确认删除的规则 id。批量删除与长按菜单的单条删除共用同一个确认面板，
+   * 只在这里记下待删对象，确认后才真正回调删除。
+   */
+  @State pendingDeleteIds: number[] = [];
 
   /** 切换单条规则的选中状态。 */
   private toggleSelectedRule(id: number): void {
@@ -222,6 +227,16 @@ export struct ReplaceRulesPage {
   /** 全选当前筛选结果，而不是全部规则：筛选态下「全选」应符合用户看到的列表。 */
   private selectAllVisible(): void {
     this.selectedRuleIds = this.filteredReplaceRules().map((rule: ReplaceRule) => rule.id);
+  }
+
+  /**
+   * 反选：在当前筛选结果内取差集，与上游 invertSelection() 一致。
+   * 用筛选结果而不是全部规则，保证「反选」与用户眼前的列表范围一致。
+   */
+  private invertSelection(): void {
+    this.selectedRuleIds = this.filteredReplaceRules()
+      .map((rule: ReplaceRule) => rule.id)
+      .filter((id: number) => !this.selectedRuleIds.includes(id));
   }
 
   /** 退出选择模式并清空选中，避免下次进入时残留上一次的选择。 */
@@ -268,7 +283,7 @@ export struct ReplaceRulesPage {
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
   }
 
-  /** 规则条目长按菜单：置顶、置底。 */
+  /** 规则条目长按菜单：置顶、置底、删除（与上游条目下拉的三项一致）。 */
   @Builder
   private RuleRowMenu(rule: ReplaceRule) {
     Menu() {
@@ -276,6 +291,8 @@ export struct ReplaceRulesPage {
         .onClick(() => this.onMoveRule(rule.id, true))
       MenuItem({ content: '置底' })
         .onClick(() => this.onMoveRule(rule.id, false))
+      MenuItem({ content: '删除' })
+        .onClick(() => this.requestDelete([rule.id]))
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
   }
 
@@ -291,6 +308,25 @@ export struct ReplaceRulesPage {
         onClose: () => this.ruleActionSheet = '',
         onUnavailableAction: (message: string) => this.onUnavailableAction(message)
       })
+    } else if (this.ruleActionSheet === 'confirmDelete') {
+      // 删除确认：批量删除与长按菜单的单条删除共用，确认前不动数据。
+      Column() {
+        Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          .width('100%').padding({ left: 18, right: 18, top: 16, bottom: 10 })
+        Text(this.pendingDeleteIds.length > 1
+          ? `确定删除选中的 ${this.pendingDeleteIds.length} 条替换规则？删除后可通过导入恢复。`
+          : '确定删除这条替换规则？删除后可通过导入恢复。')
+          .fontSize(14).fontColor('#92949E')
+          .width('100%').padding({ left: 18, right: 18, bottom: 20 })
+        Row() {
+          Text('取消').fontSize(15).fontColor('#92949E').layoutWeight(1).textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => this.cancelDelete())
+          Text('删除').fontSize(15).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => this.confirmDelete())
+        }.width('100%').padding({ left: 8, right: 8, bottom: 12 })
+      }.width('100%').alignItems(HorizontalAlign.Start).backgroundColor('#17181E')
     } else {
       Column() {
         Row() {
@@ -374,14 +410,60 @@ export struct ReplaceRulesPage {
     this.exitSelection();
   }
 
-  /** 批量删除：这里不做二次确认，删除后仍可通过导入恢复。 */
+  /** 批量删除：先弹确认面板，确认后才真正删除。 */
   private submitBatchRemove(): void {
     if (this.selectedRuleIds.length === 0) {
       this.onUnavailableAction('请先选择规则');
       return;
     }
-    this.onRemoveBatch(this.selectedRuleIds);
+    this.requestDelete(this.selectedRuleIds);
+  }
+
+  /**
+   * 请求删除：只记录待删对象并打开确认面板，不直接删。
+   * 批量删除与长按菜单的单条删除都走这里，保证两条路径行为一致。
+   */
+  private requestDelete(ids: number[]): void {
+    if (ids.length === 0) {
+      return;
+    }
+    this.pendingDeleteIds = ids;
+    this.ruleActionSheet = 'confirmDelete';
+  }
+
+  /** 确认面板里点「删除」：单条走单条回调，多条走批量回调，然后关闭面板。 */
+  private confirmDelete(): void {
+    const ids = this.pendingDeleteIds;
+    this.pendingDeleteIds = [];
+    this.ruleActionSheet = '';
+    if (ids.length === 1) {
+      this.onRemoveRule(ids[0]);
+      // 单条删除后若仍在选择模式，把该条从选中集合里摘掉，避免底部条计数虚高。
+      this.selectedRuleIds = this.selectedRuleIds.filter((id: number) => id !== ids[0]);
+      return;
+    }
+    this.onRemoveBatch(ids);
     this.exitSelection();
+  }
+
+  /** 取消删除：只清空待删对象，不动选择模式。 */
+  private cancelDelete(): void {
+    this.pendingDeleteIds = [];
+    this.ruleActionSheet = '';
+  }
+
+  /** 选择模式下导出：导出的应是选中的规则，而不是当前筛选结果的全部。 */
+  private submitBatchExport(): void {
+    if (this.selectedRuleIds.length === 0) {
+      this.onUnavailableAction('请先选择规则');
+      return;
+    }
+    const selected = this.rules.filter((rule: ReplaceRule) => this.selectedRuleIds.includes(rule.id));
+    if (selected.length === 0) {
+      this.onUnavailableAction('所选规则已不存在');
+      return;
+    }
+    this.onExportRules(selected);
   }
 
   private filteredReplaceRules(): ReplaceRule[] {
@@ -499,6 +581,8 @@ export struct ReplaceRulesPage {
             .onClick(() => this.exitSelection())
           Text('全选').fontSize(14).fontColor('#AFC2FF').padding({ left: 10, right: 10 })
             .onClick(() => this.selectAllVisible())
+          Text('反选').fontSize(14).fontColor('#AFC2FF').padding({ left: 0, right: 10 })
+            .onClick(() => this.invertSelection())
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 4 })
         Row() {
           Text('启用').fontSize(14)
@@ -513,6 +597,9 @@ export struct ReplaceRulesPage {
           Text('置底').fontSize(14).margin({ left: 18 })
             .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
             .onClick(() => this.submitBatchMove(false))
+          Text('导出').fontSize(14).margin({ left: 18 })
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchExport())
           Blank().layoutWeight(1)
           Text('删除').fontSize(14)
             .fontColor(this.selectedRuleIds.length > 0 ? '#D99AA5' : '#5C5E68')
@@ -527,7 +614,8 @@ export struct ReplaceRulesPage {
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor('#111217')
       .bindSheet(this.ruleActionSheet.length > 0, this.RuleActionSheet(), {
-        height: SheetSize.MEDIUM,
+        // 删除确认只有几行文字，用内容自适应高度，避免半屏空白。
+        height: this.ruleActionSheet === 'confirmDelete' ? SheetSize.FIT_CONTENT : SheetSize.MEDIUM,
         dragBar: true,
         showClose: false,
         backgroundColor: '#17181E',
