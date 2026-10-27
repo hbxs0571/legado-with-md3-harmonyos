@@ -53,6 +53,7 @@ export class ReplaceRuleRepository {
   }
 
   static async load(context: Context): Promise<ReplaceRule[]> {
+    let needsMigrate = false;
     try {
       const store = await preferences.getPreferences(context, ReplaceRuleRepository.preferenceName);
       const raw = await store.get(ReplaceRuleRepository.preferenceKey, '[]');
@@ -71,14 +72,40 @@ export class ReplaceRuleRepository {
         ReplaceRuleRepository.cachedRules = [];
       } else {
         const parsed: ReplaceRule[] = JSON.parse(raw);
-        ReplaceRuleRepository.cachedRules = parsed
+        const loaded = parsed
           .filter((item: ReplaceRule) => ReplaceRuleRepository.isRule(item))
           .sort((left: ReplaceRule, right: ReplaceRule) => left.order - right.order || left.id - right.id);
+        ReplaceRuleRepository.cachedRules = loaded.map((rule: ReplaceRule) => {
+          if (ReplaceRuleRepository.needsScopeMigration(rule)) {
+            needsMigrate = true;
+            return ReplaceRuleRepository.withScopeContent(rule, true);
+          }
+          return rule;
+        });
       }
     } catch (_) {
       ReplaceRuleRepository.cachedRules = [];
+      needsMigrate = false;
+    }
+    // 迁移结果写回存储，避免每次启动重复判断，也让其他读取路径看到一致的数据。
+    if (needsMigrate) {
+      try {
+        await ReplaceRuleRepository.persist(context, ReplaceRuleRepository.cachedRules);
+      } catch (_) {
+        // 写回失败不影响本次已加载的规则，下次启动会再次尝试。
+      }
     }
     return ReplaceRuleRepository.getAll();
+  }
+
+  /**
+   * 旧版本新建规则时 scopeContent 初始值为 false，且不会随保存纠正，
+   * 导致这些规则既不作用于正文也不出现在试跑结果里，实际等于无效规则。
+   * 上游 ReplaceRule 的 scopeContent 默认为 true，因此标题与正文都不生效的规则
+   * 视为上述历史缺陷遗留，加载时补成正文规则。
+   */
+  private static needsScopeMigration(rule: ReplaceRule): boolean {
+    return rule.scopeTitle === false && rule.scopeContent === false;
   }
 
   /**
@@ -674,6 +701,25 @@ export class ReplaceRuleRepository {
       scope: rule.scope,
       scopeTitle: rule.scopeTitle,
       scopeContent: rule.scopeContent,
+      excludeScope: rule.excludeScope,
+      isEnabled: rule.isEnabled,
+      isRegex: rule.isRegex,
+      timeoutMillisecond: rule.timeoutMillisecond,
+      order: rule.order
+    };
+  }
+
+  /** 复制规则并改写作用范围标志，供历史数据迁移使用。 */
+  private static withScopeContent(rule: ReplaceRule, scopeContent: boolean): ReplaceRule {
+    return {
+      id: rule.id,
+      name: rule.name,
+      group: rule.group,
+      pattern: rule.pattern,
+      replacement: rule.replacement,
+      scope: rule.scope,
+      scopeTitle: rule.scopeTitle,
+      scopeContent: scopeContent,
       excludeScope: rule.excludeScope,
       isEnabled: rule.isEnabled,
       isRegex: rule.isRegex,

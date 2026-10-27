@@ -2489,6 +2489,9 @@ struct Index {
             onSaveRule: (rule: ReplaceRule) => this.saveReplaceRule(rule),
             editingRule: this.editingReplaceRule,
             groups: this.replaceRuleGroups(),
+            onAddGroup: (name: string) => this.addReplaceRuleGroup(name),
+            onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
+            onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULES) {

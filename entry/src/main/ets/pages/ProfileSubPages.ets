@@ -181,10 +181,10 @@ export struct ReplaceRulesPage {
   onEditRule: (id: number) => void = (_id: number) => {};
   /** 长按菜单里的置顶/置底。 */
   onMoveRule: (id: number, toTop: boolean) => void = (_id: number, _toTop: boolean) => {};
-  /** 分组管理：新增 / 重命名 / 删除。 */
-  onAddGroup: (name: string) => void = (_name: string) => {};
-  onRenameGroup: (oldName: string, newName: string) => void = (_o: string, _n: string) => {};
-  onRemoveGroup: (name: string) => void = (_name: string) => {};
+  /** 分组管理：新增 / 重命名 / 删除。返回 Promise 便于面板等落盘后刷新。 */
+  onAddGroup: (name: string) => Promise<void> = async (_name: string) => {};
+  onRenameGroup: (oldName: string, newName: string) => Promise<void> = async (_o: string, _n: string) => {};
+  onRemoveGroup: (name: string) => Promise<void> = async (_name: string) => {};
   /** 排序模式持久化。 */
   onSortModeChange: (mode: string) => void = (_mode: string) => {};
   /** 从文件或剪贴板文本导入；返回是否成功，供面板关闭。 */
@@ -206,8 +206,6 @@ export struct ReplaceRulesPage {
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State ruleActionSheet: string = '';
-  @State groupInput: string = '';
-  @State groupEditing: string = '';
   /** 手动输入面板里的规则文本。 */
   @State manualInput: string = '';
   /** 选择模式：进入后点击条目变为切换选中，底部出现批量操作条。 */
@@ -283,90 +281,66 @@ export struct ReplaceRulesPage {
 
   @Builder
   private RuleActionSheet() {
-    Column() {
-      Row() {
-        Text(this.ruleActionSheet === 'groups' ? '分组管理'
-          : (this.ruleActionSheet === 'manual' ? '手动输入规则' : '导入替换规则'))
-          .fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
-        Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
-        }.width(40).height(40).onClick(() => this.ruleActionSheet = '')
-      }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
-      if (this.ruleActionSheet === 'groups') {
-        Scroll() {
+    if (this.ruleActionSheet === 'groups') {
+      // 分组面板与编辑页共用同一份实现，避免同一功能出现两种行为。
+      ReplaceRuleGroupSheet({
+        groups: this.groups,
+        onAddGroup: (name: string) => this.onAddGroup(name),
+        onRenameGroup: (oldName: string, newName: string) => this.onRenameGroup(oldName, newName),
+        onRemoveGroup: (name: string) => this.onRemoveGroup(name),
+        onClose: () => this.ruleActionSheet = '',
+        onUnavailableAction: (message: string) => this.onUnavailableAction(message)
+      })
+    } else {
+      Column() {
+        Row() {
+          Text(this.ruleActionSheet === 'manual' ? '手动输入规则' : '导入替换规则')
+            .fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+          Stack({ alignContent: Alignment.Center }) {
+            AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
+          }.width(40).height(40).onClick(() => this.ruleActionSheet = '')
+        }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
+        if (this.ruleActionSheet === 'manual') {
           Column() {
-            ForEach(this.groups.filter((group: string) => group !== '默认'), (group: string) => {
-              Row() {
-                Text(group).fontSize(15).fontColor('#E3E4E8').layoutWeight(1)
-                AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
-                  .onClick(() => { this.groupEditing = group; this.groupInput = group; })
-                AppGlyph({ name: 'delete', glyphSize: 18, tint: '#D99AA5' })
-                  .onClick(() => this.onRemoveGroup(group))
-              }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
-                .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
-            }, (group: string) => group)
-            if (this.groups.filter((group: string) => group !== '默认').length === 0) {
-              Text('暂无其他分组').fontSize(15).fontColor('#92949E').width('100%').textAlign(TextAlign.Center)
-                .padding({ top: 24, bottom: 24 })
-            }
+            Text('粘贴规则文本').fontSize(13).fontColor('#92949E').margin({ bottom: 8 })
+            TextArea({ placeholder: '粘贴 JSON 规则数组或单条规则对象', text: this.manualInput })
+              .fontSize(14).fontColor('#E3E4E8').placeholderColor('#92949E')
+              .backgroundColor('#22232A').borderRadius(12)
+              .width('100%').height(220).padding(12)
+              .onChange((value: string) => this.manualInput = value)
             Row() {
-              TextInput({ placeholder: this.groupEditing.length > 0 ? '输入新的分组名称' : '输入分组名称',
-                text: this.groupInput })
-                .fontSize(15).fontColor('#E3E4E8').placeholderColor('#92949E')
-                .backgroundColor(Color.Transparent).layoutWeight(1).height(44)
-                .onChange((value: string) => this.groupInput = value)
-              if (this.groupEditing.length > 0) {
-                Text('取消').fontSize(13).fontColor('#92949E').padding({ left: 8, right: 8 })
-                  .onClick(() => { this.groupEditing = ''; this.groupInput = ''; })
-              }
-              Text(this.groupEditing.length > 0 ? '保存' : '添加')
-                .fontSize(13).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
-                .padding({ left: 8 })
-                .onClick(() => this.submitGroup())
-            }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
-              .backgroundColor('#22232A').borderRadius(12).margin({ top: 5, bottom: 20 })
-          }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
-        }.layoutWeight(1).scrollBar(BarState.Off)
-      } else if (this.ruleActionSheet === 'manual') {
-        Column() {
-          Text('粘贴规则文本').fontSize(13).fontColor('#92949E').margin({ bottom: 8 })
-          TextArea({ placeholder: '粘贴 JSON 规则数组或单条规则对象', text: this.manualInput })
-            .fontSize(14).fontColor('#E3E4E8').placeholderColor('#92949E')
-            .backgroundColor('#22232A').borderRadius(12)
-            .width('100%').height(220).padding(12)
-            .onChange((value: string) => this.manualInput = value)
-          Row() {
-            Text('清空').fontSize(15).fontColor('#92949E').layoutWeight(1)
-              .onClick(() => this.manualInput = '')
-            Text('取消').fontSize(15).fontColor('#92949E').layoutWeight(1)
-              .onClick(() => { this.manualInput = ''; this.ruleActionSheet = 'import'; })
-            Text('导入').fontSize(15).fontColor(this.manualInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
-              .onClick(() => this.submitManualImport())
-          }.width('100%').margin({ top: 12 })
-        }.width('100%').padding({ left: 16, right: 16, bottom: 20 })
-      } else {
-        Column() {
-          Row() {
-            AppGlyph({ name: 'folder', glyphSize: 20, tint: '#AFC2FF' }).margin({ right: 12 })
-            Column() {
-              Text('选择本地文件').fontSize(15).fontColor('#E3E4E8')
-              Text('支持 JSON、TXT 规则文件').fontSize(12).fontColor('#92949E').margin({ top: 3 })
-            }.alignItems(HorizontalAlign.Start)
-          }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
-            .backgroundColor('#22232A').borderRadius(12)
-            .onClick(() => this.onImportRules('', 'file'))
-          Row() {
-            AppGlyph({ name: 'edit', glyphSize: 20, tint: '#AFC2FF' }).margin({ right: 12 })
-            Column() {
-              Text('手动输入').fontSize(15).fontColor('#E3E4E8')
-              Text('粘贴规则文本或链接').fontSize(12).fontColor('#92949E').margin({ top: 3 })
-            }.alignItems(HorizontalAlign.Start)
-          }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
-            .backgroundColor('#22232A').borderRadius(12).margin({ top: 8, bottom: 18 })
-            .onClick(() => { this.ruleActionSheet = 'manual'; })
-        }.width('100%').padding({ left: 16, right: 16 })
-      }
-    }.width('100%').height('100%').backgroundColor('#17181E')
+              Text('清空').fontSize(15).fontColor('#92949E').layoutWeight(1)
+                .onClick(() => this.manualInput = '')
+              Text('取消').fontSize(15).fontColor('#92949E').layoutWeight(1)
+                .onClick(() => { this.manualInput = ''; this.ruleActionSheet = 'import'; })
+              Text('导入').fontSize(15).fontColor(this.manualInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+                .onClick(() => this.submitManualImport())
+            }.width('100%').margin({ top: 12 })
+          }.width('100%').padding({ left: 16, right: 16, bottom: 20 })
+        } else {
+          Column() {
+            Row() {
+              AppGlyph({ name: 'folder', glyphSize: 20, tint: '#AFC2FF' }).margin({ right: 12 })
+              Column() {
+                Text('选择本地文件').fontSize(15).fontColor('#E3E4E8')
+                Text('支持 JSON、TXT 规则文件').fontSize(12).fontColor('#92949E').margin({ top: 3 })
+              }.alignItems(HorizontalAlign.Start)
+            }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+              .backgroundColor('#22232A').borderRadius(12)
+              .onClick(() => this.onImportRules('', 'file'))
+            Row() {
+              AppGlyph({ name: 'edit', glyphSize: 20, tint: '#AFC2FF' }).margin({ right: 12 })
+              Column() {
+                Text('手动输入').fontSize(15).fontColor('#E3E4E8')
+                Text('粘贴规则文本或链接').fontSize(12).fontColor('#92949E').margin({ top: 3 })
+              }.alignItems(HorizontalAlign.Start)
+            }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+              .backgroundColor('#22232A').borderRadius(12).margin({ top: 8, bottom: 18 })
+              .onClick(() => { this.ruleActionSheet = 'manual'; })
+          }.width('100%').padding({ left: 16, right: 16 })
+        }
+      }.width('100%').height('100%').backgroundColor('#17181E')
+    }
   }
 
   /** 提交手动输入的规则文本。 */
@@ -379,27 +353,6 @@ export struct ReplaceRulesPage {
     this.onImportRules(text, 'manual');
     this.manualInput = '';
     this.ruleActionSheet = '';
-  }
-
-  /** 提交分组输入：编辑态调用重命名，新建态调用新增，完成后清空输入。 */
-  private submitGroup(): void {
-    const name = this.groupInput.trim();
-    if (name.length === 0) {
-      this.onUnavailableAction('分组名称不能为空');
-      return;
-    }
-    if (this.groupEditing.length > 0) {
-      if (name === this.groupEditing) {
-        this.groupEditing = '';
-        this.groupInput = '';
-        return;
-      }
-      this.onRenameGroup(this.groupEditing, name);
-    } else {
-      this.onAddGroup(name);
-    }
-    this.groupEditing = '';
-    this.groupInput = '';
   }
 
   /** 批量启用/停用：未选中时提示而不是静默无反应。 */
@@ -591,6 +544,10 @@ export struct ReplaceRuleEditPage {
   /** 传入已有规则时进入编辑模式；为空表示新建。 */
   @Prop editingRule: ReplaceRule | undefined = undefined;
   @Prop groups: string[] = [];
+  /** 分组管理：与列表页共用同一个面板，这里接的是同一批仓储方法。 */
+  onAddGroup: (name: string) => Promise<void> = async (_name: string) => {};
+  onRenameGroup: (oldName: string, newName: string) => Promise<void> = async (_o: string, _n: string) => {};
+  onRemoveGroup: (name: string) => Promise<void> = async (_name: string) => {};
   @State name: string = '';
   @State group: string = '默认';
   @State pattern: string = '';
@@ -605,8 +562,12 @@ export struct ReplaceRuleEditPage {
   @State timeout: string = '3000';
   @State keyboardVisible: boolean = false;
   @State showPasteAuthorization: boolean = false;
-  @State showGroupManager: boolean = false;
-  @State selectedGroups: string[] = [];
+  /**
+   * 当前打开的半模态面板：'' 表示关闭，'group' 为分组管理，'test' 为规则试跑。
+   * ArkUI 一个组件只能绑定一个 bindSheet，后绑定的会覆盖先绑定的，
+   * 因此两个面板合并成一个 bindSheet，用本字段切换内容。
+   */
+  @State activeSheet: string = '';
   @State activeField: string = 'pattern';
   @State isEnabled: boolean = true;
   /** 规则试跑：样例文本、结果与是否已跑过。 */
@@ -614,7 +575,6 @@ export struct ReplaceRuleEditPage {
   @State testOutput: string = '';
   @State testError: string = '';
   @State testHasRun: boolean = false;
-  @State showTestPanel: boolean = false;
   /** 记录被编辑规则的 id 与 order，保存时原样带回，避免新建语义覆盖。 */
   @State editingId: number = 0;
   @State editingOrder: number = 0;
@@ -669,7 +629,7 @@ export struct ReplaceRuleEditPage {
       MenuItem({ content: '粘贴规则' })
         .onClick(() => this.showPasteAuthorization = true)
       MenuItem({ content: '测试规则' })
-        .onClick(() => this.showTestPanel = true)
+        .onClick(() => this.activeSheet = 'test')
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
   }
 
@@ -706,7 +666,7 @@ export struct ReplaceRuleEditPage {
         Text('测试规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
-        }.width(40).height(40).onClick(() => this.showTestPanel = false)
+        }.width(40).height(40).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 8 })
       Text('只对已保存并启用的正文规则试跑，编辑中的改动需要先保存')
         .fontSize(12).fontColor('#92949E').width('100%').padding({ left: 18, right: 18, bottom: 10 })
@@ -861,48 +821,30 @@ export struct ReplaceRuleEditPage {
     }.width('100%').alignItems(HorizontalAlign.Start).margin({ bottom: 4 })
   }
 
+  /**
+   * 半模态面板的统一入口。ArkUI 同一组件只能绑定一个 bindSheet，
+   * 所以按 activeSheet 分支渲染，而不是叠加多个 bindSheet。
+   */
+  @Builder
+  private EditPageSheet() {
+    if (this.activeSheet === 'group') {
+      this.GroupManagerSheet()
+    } else if (this.activeSheet === 'test') {
+      this.RuleTestSheet()
+    }
+  }
+
   @Builder
   private GroupManagerSheet() {
-    Column() {
-      Text('分组管理').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
-        .width('100%').padding({ left: 20, right: 20, top: 20, bottom: 14 })
-      if (this.availableGroups().filter((group: string) => group !== '默认').length === 0) {
-        Text('暂无其他分组').fontSize(15).fontColor('#92949E').width('100%').textAlign(TextAlign.Center)
-          .padding({ top: 24, bottom: 24 })
-      } else {
-        Scroll() {
-          Column() {
-            ForEach(this.availableGroups().filter((group: string) => group !== '默认'), (group: string) => {
-              Row() {
-                Text(group).fontSize(15).fontColor('#D8D9E0').layoutWeight(1)
-                AppGlyph({ name: this.selectedGroups.includes(group) ? 'profileCheck' : 'profileBookmark',
-                  glyphSize: 20, tint: this.selectedGroups.includes(group) ? '#B9C8FF' : '#92949E' })
-              }.width('100%').padding({ left: 18, right: 18, top: 13, bottom: 13 })
-                .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
-                .onClick(() => {
-                  this.selectedGroups = this.selectedGroups.includes(group)
-                    ? this.selectedGroups.filter((item: string) => item !== group)
-                    : [...this.selectedGroups, group];
-                })
-            }, (group: string) => group)
-          }.width('100%').padding({ left: 16, right: 16, bottom: 8 })
-        }.layoutWeight(1).scrollBar(BarState.Off)
-      }
-      Row() {
-        Text('关闭').fontSize(15).fontColor('#B9C8FF').padding({ left: 18, right: 18, top: 11, bottom: 11 })
-          .onClick(() => { this.showGroupManager = false; this.selectedGroups = []; })
-        Blank()
-        Text('删除选中').fontSize(15).fontColor(this.selectedGroups.length > 0 ? '#F0A6AF' : '#737581')
-          .padding({ left: 18, right: 18, top: 11, bottom: 11 })
-          .onClick(() => {
-            if (this.selectedGroups.length > 0) {
-              this.onUnavailableAction('分组删除尚未迁移，未删除任何分组');
-            }
-            this.showGroupManager = false;
-            this.selectedGroups = [];
-          })
-      }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 20 })
-    }.width('100%').height('100%').backgroundColor('#17181E')
+    // 与列表页共用同一份分组管理实现，这里只负责传回调。
+    ReplaceRuleGroupSheet({
+      groups: this.availableGroups(),
+      onAddGroup: (name: string) => this.onAddGroup(name),
+      onRenameGroup: (oldName: string, newName: string) => this.onRenameGroup(oldName, newName),
+      onRemoveGroup: (name: string) => this.onRemoveGroup(name),
+      onClose: () => this.activeSheet = '',
+      onUnavailableAction: (message: string) => this.onUnavailableAction(message)
+    })
   }
 
   build() {
@@ -950,7 +892,7 @@ export struct ReplaceRuleEditPage {
               .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileSettings', glyphSize: 20, tint: '#D8D9E0' })
-            }.width(48).height(56).onClick(() => { this.selectedGroups = []; this.showGroupManager = true; })
+            }.width(48).height(56).onClick(() => { this.activeSheet = 'group'; })
           }.width('100%')
           Blank().height(12)
           this.RuleField('匹配规则', this.pattern, 'pattern', '输入正则表达式或关键字')
@@ -1004,20 +946,125 @@ export struct ReplaceRuleEditPage {
           .onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor('#111217')
-      .bindSheet(this.showGroupManager, this.GroupManagerSheet(), {
+      .bindSheet(this.activeSheet.length > 0, this.EditPageSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
         showClose: false,
         backgroundColor: '#17181E',
-        onDisappear: () => this.showGroupManager = false
+        onDisappear: () => this.activeSheet = ''
       })
-      .bindSheet(this.showTestPanel, this.RuleTestSheet(), {
-        height: SheetSize.MEDIUM,
-        dragBar: true,
-        showClose: false,
-        backgroundColor: '#17181E',
-        onDisappear: () => this.showTestPanel = false
-      })
+  }
+}
+
+/**
+ * 替换规则的分组管理面板。
+ * 规则列表页与规则编辑页共用这一份实现：此前两处各写一套，
+ * 列表页能用而编辑页的「删除选中」仍是占位提示，同一功能出现两种行为。
+ */
+@Component
+export struct ReplaceRuleGroupSheet {
+  /**
+   * 初始分组清单。面板是 bindSheet 的 builder 内容，打开期间不会随父级重新构建，
+   * 因此不能只靠这个入参刷新，增删改之后由 reloadGroups() 从仓储重新取。
+   */
+  @Prop groups: string[] = [];
+  /** 回调返回 Promise，面板等它落盘后再刷新列表，避免用固定延时猜时机。 */
+  onAddGroup: (name: string) => Promise<void> = async (_name: string) => {};
+  onRenameGroup: (oldName: string, newName: string) => Promise<void> = async (_o: string, _n: string) => {};
+  onRemoveGroup: (name: string) => Promise<void> = async (_name: string) => {};
+  onClose: () => void = () => {};
+  onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 面板内实际渲染的分组，操作后自行刷新，不等父级重建。 */
+  @State localGroups: string[] = [];
+  @State groupInput: string = '';
+  /** 非空表示正在重命名该分组，为空表示新建。 */
+  @State groupEditing: string = '';
+
+  aboutToAppear(): void {
+    this.reloadGroups();
+  }
+
+  /** 从仓储读最新分组；仓储已是内存缓存，直接读不会产生额外 IO。 */
+  private reloadGroups(): void {
+    this.localGroups = ReplaceRuleRepository.getGroups();
+  }
+
+  /** 除「默认」之外的分组；默认分组不允许重命名或删除。 */
+  private customGroups(): string[] {
+    return this.localGroups.filter((group: string) => group.length > 0 && group !== '默认');
+  }
+
+  /** 提交输入：编辑态调用重命名，新建态调用新增，落盘后刷新列表。 */
+  private async submitGroup(): Promise<void> {
+    const name = this.groupInput.trim();
+    if (name.length === 0) {
+      this.onUnavailableAction('分组名称不能为空');
+      return;
+    }
+    if (this.groupEditing.length > 0) {
+      if (name === this.groupEditing) {
+        this.groupEditing = '';
+        this.groupInput = '';
+        return;
+      }
+      await this.onRenameGroup(this.groupEditing, name);
+    } else {
+      await this.onAddGroup(name);
+    }
+    this.groupEditing = '';
+    this.groupInput = '';
+    this.reloadGroups();
+  }
+
+  /** 删除分组：等落盘完成再刷新，保证列表与实际存储一致。 */
+  private async removeGroup(name: string): Promise<void> {
+    await this.onRemoveGroup(name);
+    this.reloadGroups();
+  }
+
+  build() {
+    Column() {
+      Row() {
+        Text('分组管理').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: '#D8D9E0' })
+        }.width(40).height(40).onClick(() => this.onClose())
+      }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
+      Scroll() {
+        Column() {
+          ForEach(this.customGroups(), (group: string) => {
+            Row() {
+              Text(group).fontSize(15).fontColor('#E3E4E8').layoutWeight(1)
+              AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
+                .onClick(() => { this.groupEditing = group; this.groupInput = group; })
+              AppGlyph({ name: 'delete', glyphSize: 18, tint: '#D99AA5' })
+                .onClick(() => this.removeGroup(group))
+            }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
+              .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
+          }, (group: string) => group)
+          if (this.customGroups().length === 0) {
+            Text('暂无其他分组').fontSize(15).fontColor('#92949E').width('100%').textAlign(TextAlign.Center)
+              .padding({ top: 24, bottom: 24 })
+          }
+          Row() {
+            TextInput({ placeholder: this.groupEditing.length > 0 ? '输入新的分组名称' : '输入分组名称',
+              text: this.groupInput })
+              .fontSize(15).fontColor('#E3E4E8').placeholderColor('#92949E')
+              .backgroundColor(Color.Transparent).layoutWeight(1).height(44)
+              .onChange((value: string) => this.groupInput = value)
+            if (this.groupEditing.length > 0) {
+              Text('取消').fontSize(13).fontColor('#92949E').padding({ left: 8, right: 8 })
+                .onClick(() => { this.groupEditing = ''; this.groupInput = ''; })
+            }
+            Text(this.groupEditing.length > 0 ? '保存' : '添加')
+              .fontSize(13).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+              .padding({ left: 8 })
+              .onClick(() => this.submitGroup())
+          }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
+            .backgroundColor('#22232A').borderRadius(12).margin({ top: 5, bottom: 20 })
+        }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
+      }.layoutWeight(1).scrollBar(BarState.Off)
+    }.width('100%').height('100%').backgroundColor('#17181E')
   }
 }
 
