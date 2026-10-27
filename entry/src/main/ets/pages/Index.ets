@@ -634,8 +634,7 @@ struct Index {
   }
 
   /** 调整一条 TXT 目录规则的顺序；direction 为 -1 上移、1 下移。 */
-  private async moveTxtTocRule(id: number, direction: number): Promise<void> {
-    const context = this.getUIContext().getHostContext();
+  private async moveTxtTocRule(id: number, direction: number): Promise<void> {    const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       return;
     }
@@ -651,6 +650,50 @@ struct Index {
     }
     try {
       await TxtTocRuleRepository.moveRule(context, id, toIndex);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('调整目录规则顺序失败');
+    }
+  }
+
+  /**
+   * 批量启用/停用 TXT 目录规则。
+   * 与单条一致走仓储，提示里报出真正改变的条数，避免「本来就是这状态」被算成本次结果。
+   */
+  private async setTxtTocRuleEnabledBatch(ids: number[], enabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    if (ids.length === 0) {
+      this.showUnavailableAction('请先选择规则');
+      return;
+    }
+    try {
+      const changed = await TxtTocRuleRepository.setEnabledBatch(context, ids, enabled);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      if (changed === 0) {
+        this.showUnavailableAction(`所选规则已经是${enabled ? '启用' : '停用'}状态`);
+      } else {
+        this.showUnavailableAction(`已${enabled ? '启用' : '停用'} ${changed} 条规则`);
+      }
+    } catch (_) {
+      this.showUnavailableAction('批量切换目录规则状态失败');
+    }
+  }
+
+  /** 把一条 TXT 目录规则移到最前或最后，对应条目菜单的置顶/置底。 */
+  private async moveTxtTocRuleToEdge(id: number, toTop: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const moved = await TxtTocRuleRepository.moveToEdge(context, id, toTop);
+      if (!moved) {
+        this.showUnavailableAction('该规则已不存在');
+        return;
+      }
       this.txtTocRules = TxtTocRuleRepository.getAll();
     } catch (_) {
       this.showUnavailableAction('调整目录规则顺序失败');
@@ -3018,6 +3061,8 @@ struct Index {
             onRemoveBatch: (ids: number[]) => this.removeTxtTocRuleBatch(ids),
             onToggleRule: (id: number, enabled: boolean) => this.setTxtTocRuleEnabled(id, enabled),
             onMoveRule: (id: number, direction: number) => this.moveTxtTocRule(id, direction),
+            onMoveRuleToEdge: (id: number, toTop: boolean) => this.moveTxtTocRuleToEdge(id, toTop),
+            onSetEnabledBatch: (ids: number[], enabled: boolean) => this.setTxtTocRuleEnabledBatch(ids, enabled),
             onImportBuiltin: () => this.importBuiltinTxtTocRules(),
             onImportRules: () => this.importTxtTocRules(),
             onExportRules: (rules: TxtTocRule[]) => this.exportTxtTocRules(rules)

@@ -186,6 +186,26 @@ export class TxtTocRuleRepository {
   }
 
   /**
+   * 把规则移到列表最前或最后，对应上游条目下拉的置顶/置底。
+   * 与 moveRule 一样走 persist，落位后重排 serialNumber。
+   */
+  static async moveToEdge(context: Context, id: number, toTop: boolean): Promise<boolean> {
+    const index = TxtTocRuleRepository.cachedRules.findIndex((rule: TxtTocRule) => rule.id === id);
+    if (index < 0) {
+      return false;
+    }
+    const next = [...TxtTocRuleRepository.cachedRules];
+    const moved = next.splice(index, 1)[0];
+    if (toTop) {
+      next.unshift(moved);
+    } else {
+      next.push(moved);
+    }
+    await TxtTocRuleRepository.persist(context, next);
+    return true;
+  }
+
+  /**
    * 批量导入：同 id 或同章节正则视为同一条，命中时保留已有 id 覆盖其余字段。
    * 非法正则条目计入 skipped 后跳过，不因为一条坏规则丢掉整份文件。
    */

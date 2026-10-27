@@ -1236,6 +1236,23 @@ struct RuleListBody {
   onMove: (id: string, direction: number) => void = (_id: string, _direction: number) => {};
   /** 条目右侧开关；不传时按不可用处理，避免点了没反应。 */
   onEnabledChange: (id: string, enabled: boolean) => void = (_id: string, _enabled: boolean) => {};
+  /** 条目菜单的置顶/置底。 */
+  onMoveToEdge: (id: string, toTop: boolean) => void = (_id: string, _toTop: boolean) => {};
+  /** 条目菜单的删除；由父组件弹确认面板，这里只上报意图。 */
+  onDelete: (id: string) => void = (_id: string) => {};
+
+  /** 条目右侧「更多」菜单：置顶、置底、删除，与上游条目下拉三项一致。 */
+  @Builder
+  private RowMenu(rule: RuleListEntry) {
+    Menu() {
+      MenuItem({ content: '置顶' })
+        .onClick(() => this.onMoveToEdge(rule.id, true))
+      MenuItem({ content: '置底' })
+        .onClick(() => this.onMoveToEdge(rule.id, false))
+      MenuItem({ content: '删除' })
+        .onClick(() => this.onDelete(rule.id))
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
 
   private visibleRules(): RuleListEntry[] {
     const query = this.query.trim().toLocaleLowerCase();
@@ -1270,10 +1287,14 @@ struct RuleListBody {
                 Image($r('app.media.reader_reorder_down')).width(18).height(18).fillColor('#AFC2FF')
                   .onClick(() => this.onMove(rule.id, 1))
               } else if (!this.selectionMode) {
-                // 开关与编辑图标并排；key 里带上 enabled，避免 ArkUI 复用节点导致开关不刷新。
+                // 开关、编辑与更多图标并排；key 里带上 enabled，避免 ArkUI 复用节点导致开关不刷新。
                 Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
                   .onChange((enabled: boolean) => this.onEnabledChange(rule.id, enabled))
                 AppGlyph({ name: 'edit', glyphSize: 18, tint: '#AFC2FF' }).margin({ left: 8 })
+                Stack({ alignContent: Alignment.Center }) {
+                  AppGlyph({ name: 'more', glyphSize: 18, tint: '#92949E' })
+                }.width(32).height(32).margin({ left: 4 })
+                  .bindMenu(this.RowMenu(rule), { placement: Placement.BottomRight })
               }
             }.width('100%').padding(16).backgroundColor('#1A1B21').borderRadius(14)
               .margin({ left: 16, right: 16, bottom: 8 })
@@ -1299,6 +1320,10 @@ export struct TxtTocRulesPage {
   onRemoveBatch: (ids: number[]) => Promise<void> = async (_ids: number[]) => {};
   onToggleRule: (id: number, enabled: boolean) => Promise<void> = async (_id: number, _enabled: boolean) => {};
   onMoveRule: (id: number, direction: number) => Promise<void> = async (_id: number, _direction: number) => {};
+  /** 条目菜单的置顶/置底：toTop 为 true 时移到最前。 */
+  onMoveRuleToEdge: (id: number, toTop: boolean) => Promise<void> = async (_id: number, _toTop: boolean) => {};
+  /** 选择模式下的批量启用/停用。 */
+  onSetEnabledBatch: (ids: number[], enabled: boolean) => Promise<void> = async (_ids: number[], _enabled: boolean) => {};
   onImportBuiltin: () => Promise<void> = async () => {};
   /** 从用户选择的规则文件导入。 */
   onImportRules: () => Promise<void> = async () => {};
@@ -1327,6 +1352,96 @@ export struct TxtTocRulesPage {
    * 用数值范围判断会把内置规则误认成新建。
    */
   @State editingExisting: boolean = false;
+  /** 待确认删除的规则 id；与替换净化页一致，确认前不动数据。 */
+  @State pendingDeleteIds: number[] = [];
+  /** 当前打开的确认/编辑面板标识，空串表示未打开。 */
+  @State confirmSheet: string = '';
+
+  /** 切换单条规则的选中状态。 */
+  private toggleSelectedRule(id: string): void {
+    this.selectedRuleIds = this.selectedRuleIds.includes(id) ?
+      this.selectedRuleIds.filter((selectedId: string) => selectedId !== id) : [...this.selectedRuleIds, id];
+  }
+
+  /** 全选当前筛选结果：筛选态下「全选」应与用户眼前的列表范围一致。 */
+  private selectAllVisible(): void {
+    this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id);
+  }
+
+  /**
+   * 反选：在当前筛选结果内取差集，与上游 invertSelection() 一致。
+   * 用筛选结果而不是全部规则，保证「反选」与用户眼前的列表范围一致。
+   */
+  private invertSelection(): void {
+    const visible = this.rules.map((rule: RuleListEntry) => rule.id);
+    this.selectedRuleIds = visible.filter((id: string) => !this.selectedRuleIds.includes(id));
+  }
+
+  /** 退出选择模式并清空选中，避免下次进入时残留上一次的选择。 */
+  private exitSelection(): void {
+    this.selectionMode = false;
+    this.selectedRuleIds = [];
+  }
+
+  /** 选中的 id 转成数字数组；非法 id 直接丢弃。 */
+  private selectedNumericIds(): number[] {
+    return this.selectedRuleIds.map((id: string) => Number(id))
+      .filter((id: number) => Number.isInteger(id));
+  }
+
+  /** 请求删除：只记录待删对象并打开确认面板，不直接删。 */
+  private requestDelete(ids: number[]): void {
+    if (ids.length === 0) {
+      return;
+    }
+    this.pendingDeleteIds = ids;
+    this.confirmSheet = 'confirmDelete';
+  }
+
+  /** 确认删除：单条走单条回调，多条走批量回调，然后退出选择模式。 */
+  private async confirmDelete(): Promise<void> {
+    const ids = this.pendingDeleteIds;
+    this.pendingDeleteIds = [];
+    this.confirmSheet = '';
+    if (ids.length === 1) {
+      await this.onRemoveRule(ids[0]);
+      this.selectedRuleIds = this.selectedRuleIds.filter((id: string) => Number(id) !== ids[0]);
+      return;
+    }
+    await this.onRemoveBatch(ids);
+    this.exitSelection();
+  }
+
+  /** 取消删除：只关面板，不动选择模式，用户可以继续操作已选规则。 */
+  private cancelDelete(): void {
+    this.pendingDeleteIds = [];
+    this.confirmSheet = '';
+  }
+
+  /** 批量启用/停用：未选中时提示而不是静默无反应。 */
+  private async submitBatchEnabled(enabled: boolean): Promise<void> {
+    const ids = this.selectedNumericIds();
+    if (ids.length === 0) {
+      this.onUnavailableAction('请先选择规则');
+      return;
+    }
+    await this.onSetEnabledBatch(ids, enabled);
+  }
+
+  /** 批量导出选中规则；空选中直接提示。 */
+  private submitBatchExport(): void {
+    const ids = this.selectedNumericIds();
+    if (ids.length === 0) {
+      this.onUnavailableAction('请先选择规则');
+      return;
+    }
+    const selected = this.sourceRules.filter((rule: TxtTocRule) => ids.includes(rule.id));
+    if (selected.length === 0) {
+      this.onUnavailableAction('所选规则已不存在');
+      return;
+    }
+    this.onExportRules(selected);
+  }
 
   private buildClipboardRule(): string {
     return JSON.stringify({
@@ -1454,11 +1569,6 @@ export struct TxtTocRulesPage {
           await this.onImportBuiltin();
         })
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
-  }
-
-  private toggleSelectedRule(id: string): void {
-    this.selectedRuleIds = this.selectedRuleIds.includes(id) ?
-      this.selectedRuleIds.filter((selectedId: string) => selectedId !== id) : [...this.selectedRuleIds, id];
   }
 
   @Builder
@@ -1628,23 +1738,31 @@ export struct TxtTocRulesPage {
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor('#1B1C22').borderRadius(24)
       }
 
-      if (this.selectionMode && this.selectedRuleIds.length > 0) {
+      if (this.selectionMode) {
         Row() {
-          Text('全选').fontSize(14).fontColor('#AFC2FF').onClick(() =>
-            this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
-          Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
-            .onClick(async () => {
-              const ids = this.selectedRuleIds.map((id: string) => Number(id))
-                .filter((id: number) => Number.isInteger(id));
-              if (ids.length === 0) {
-                this.onUnavailableAction('所选规则已不存在');
-                return;
-              }
-              await this.onRemoveBatch(ids);
-              this.selectionMode = false;
-              this.selectedRuleIds = [];
-            })
-        }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
+          Text(this.selectedRuleIds.length === 0 ? '取消' : `已选择 ${this.selectedRuleIds.length} 项`)
+            .fontSize(14).fontColor('#D8D9E0').layoutWeight(1)
+            .onClick(() => this.exitSelection())
+          Text('全选').fontSize(14).fontColor('#AFC2FF').padding({ left: 10, right: 10 })
+            .onClick(() => this.selectAllVisible())
+          Text('反选').fontSize(14).fontColor('#AFC2FF').padding({ left: 0, right: 10 })
+            .onClick(() => this.invertSelection())
+        }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 4 })
+        Row() {
+          Text('启用').fontSize(14)
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchEnabled(true))
+          Text('停用').fontSize(14).margin({ left: 18 })
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchEnabled(false))
+          Text('导出').fontSize(14).margin({ left: 18 })
+            .fontColor(this.selectedRuleIds.length > 0 ? '#AFC2FF' : '#5C5E68')
+            .onClick(() => this.submitBatchExport())
+          Blank().layoutWeight(1)
+          Text('删除').fontSize(14)
+            .fontColor(this.selectedRuleIds.length > 0 ? '#D99AA5' : '#5C5E68')
+            .onClick(() => this.requestDelete(this.selectedNumericIds()))
+        }.width('100%').padding({ left: 18, right: 18, top: 2, bottom: 10 })
       }
       RuleListBody({
         rules: this.rules, query: this.searchQuery, selectedIds: this.selectedRuleIds,
@@ -1663,6 +1781,18 @@ export struct TxtTocRulesPage {
           if (Number.isInteger(numericId)) {
             this.onToggleRule(numericId, enabled);
           }
+        },
+        onMoveToEdge: (id: string, toTop: boolean) => {
+          const numericId = Number(id);
+          if (Number.isInteger(numericId)) {
+            this.onMoveRuleToEdge(numericId, toTop);
+          }
+        },
+        onDelete: (id: string) => {
+          const numericId = Number(id);
+          if (Number.isInteger(numericId)) {
+            this.requestDelete([numericId]);
+          }
         }
       }).layoutWeight(1)
       Row() {
@@ -1679,6 +1809,39 @@ export struct TxtTocRulesPage {
         backgroundColor: '#1C1D23',
         onDisappear: () => this.showAddRule = false
       })
+      .bindSheet(this.confirmSheet === 'confirmDelete', this.DeleteConfirmSheet(), {
+        // 删除确认只有几行文字，用内容自适应高度，避免半屏空白。
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => this.confirmSheet = ''
+      })
+  }
+
+  /**
+   * 删除确认面板：批量删除与条目菜单的单条删除共用，确认前不动数据。
+   * 与上游 RuleListScaffold.kt:75-86 的 AppAlertDialog 语义一致。
+   */
+  @Builder
+  private DeleteConfirmSheet() {
+    Column() {
+      Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        .width('100%').padding({ left: 18, right: 18, top: 16, bottom: 10 })
+      Text(this.pendingDeleteIds.length > 1
+        ? `确定删除选中的 ${this.pendingDeleteIds.length} 条目录规则？删除后可通过导入恢复。`
+        : '确定删除这条目录规则？删除后可通过导入恢复。')
+        .fontSize(14).fontColor('#92949E')
+        .width('100%').padding({ left: 18, right: 18, bottom: 20 })
+      Row() {
+        Text('取消').fontSize(15).fontColor('#92949E').layoutWeight(1).textAlign(TextAlign.Center)
+          .padding({ top: 14, bottom: 14 })
+          .onClick(() => this.cancelDelete())
+        Text('删除').fontSize(15).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
+          .padding({ top: 14, bottom: 14 })
+          .onClick(() => this.confirmDelete())
+      }.width('100%').padding({ left: 8, right: 8, bottom: 12 })
+    }.width('100%').alignItems(HorizontalAlign.Start).backgroundColor('#17181E')
   }
 
   private isValidRegex(pattern: string): boolean {

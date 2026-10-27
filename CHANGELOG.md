@@ -1,5 +1,14 @@
 # 修改记录
 
+## 2026-10-28 TXT 目录规则页对齐上游：反选、批量启停、导出、条目菜单、删除确认
+
+- 对照上游 `app/src/main/java/io/legado/app/ui/book/toc/rule/TxtRuleScreen.kt` 补齐四项交互。
+- 选择栏：加「反选」（在当前筛选结果内取差集，与上游 `invertSelection()` 一致）、「启用」「停用」「导出」三项批量动作；未选中时文字变灰且点击提示「请先选择规则」。
+- 条目菜单：右侧加「更多」图标，下拉三项「置顶」「置底」「删除」，与上游条目下拉一致。置顶/置底由 `entry/src/main/ets/data/TxtTocRuleRepository.ets` 新增的 `moveToEdge()` 实现，落位后重排 `serialNumber`。
+- 删除确认：批量删除与单条删除统一走确认面板（`TxtTocRulesPage.DeleteConfirmSheet()`），标题「删除规则」、正文按条数区分，取消不清选中态。语义对齐上游 `RuleListScaffold.kt:75-86` 的 `AppAlertDialog`。
+- 回调接在 `entry/src/main/ets/pages/Index.ets` 的 `setTxtTocRuleEnabledBatch()` 与 `moveTxtTocRuleToEdge()`，批量启停会报出真正改变的条数，本来就同状态的条目不重复计数。
+- 设备实测（OpenHarmony API 26 模拟器）：反选 0 → 27 → 0；批量停用后 27 条全变 `enable:false`，批量启用全部恢复；取消删除后规则数不变；置底后「目录(去空白)」从第 0 位移到第 26 位，置顶后回第 0 位；单条删除 27 → 26；批量导出 26 条且 `serialNumber` 从 0 到 25 连续。
+
 ## 2026-10-28 TXT 目录规则接入与 CRLF 识别修复
 
 - 新增 `TxtTocRuleRepository`（preferences `legado_txt_toc_rules`）与内置规则库 `rawfile/txttoc/builtin-rules.json`（27 条，与上游 `assets/defaultData/txtTocRule.json` 逐条一致），TXT 目录规则页的导入内置、新建、编辑回填、删除、开关、置顶置底全部接上真实存储。
