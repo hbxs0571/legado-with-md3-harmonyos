@@ -35,6 +35,19 @@ export interface LocalReaderImageSize {
 
 /** 按设备字体度量分页，保留 Android 字符坐标，并对齐默认正文的非末行字距。 */
 export class LocalReaderPaginator {
+  private static findWordBreakIndex(
+    text: string,
+    nextCharacter: string,
+    measureTextWidth: (text: string) => number,
+    contentWidth: number
+  ): number {
+    if (!/^[\x21-\x7E]$/.test(nextCharacter)) { return -1; }
+    const boundary = Math.max(text.lastIndexOf(' '), text.lastIndexOf('\t'));
+    if (boundary <= 0) { return -1; }
+    const nextWord = text.substring(boundary + 1) + nextCharacter;
+    return measureTextWidth(nextWord) <= contentWidth ? boundary : -1;
+  }
+
   static paginate(
     document: LocalSemanticDocument,
     contentWidth: number,
@@ -151,6 +164,36 @@ export class LocalReaderPaginator {
             const candidateWidth = measureTextWidth(candidateText);
             const nextLineWidth = lineWidth - lastTextWidth + candidateWidth;
             if (lineItems.length > 0 && nextLineWidth > contentWidth) {
+              if (character === ' ' || character === '\t') {
+                appendLine(position + nextCursor - cursor, true);
+                cursor = nextCursor;
+                continue;
+              }
+              const wordBreak = mergePrevious
+                ? LocalReaderPaginator.findWordBreakIndex(lastText, character, measureTextWidth, contentWidth) : -1;
+              if (wordBreak >= 0 && lastItem !== undefined && lastItem.kind === 'text') {
+                const prefix = lastText.substring(0, wordBreak);
+                const prefixWidth = measureTextWidth(prefix);
+                const nextWord = lastText.substring(wordBreak + 1) + character;
+                const nextWordWidth = measureTextWidth(nextWord);
+                const nextWordStart = lastItem.startPosition + wordBreak + 1;
+                lineItems[lineItems.length - 1] = {
+                  kind: 'text', value: prefix, width: prefixWidth, height: lineHeight,
+                  startPosition: lastItem.startPosition, endPosition: nextWordStart,
+                  leadingIndent: lastItem.leadingIndent
+                };
+                lineWidth = lineWidth - lastTextWidth + prefixWidth;
+                appendLine(nextWordStart, true);
+                lineItems.push({
+                  kind: 'text', value: nextWord, width: nextWordWidth, height: lineHeight,
+                  startPosition: nextWordStart, endPosition: finalPosition,
+                  leadingIndent: part.leadingIndent
+                });
+                lineWidth = nextWordWidth;
+                lineLastTextPartIndex = partIndex;
+                cursor = nextCursor;
+                continue;
+              }
               appendLine(undefined, true);
               continue;
             }
@@ -314,6 +357,35 @@ export class LocalReaderPaginator {
             measuredCharacterCount++;
             const nextLineWidth = lineWidth - lastTextWidth + candidateWidth;
             if (lineItems.length > 0 && nextLineWidth > contentWidth) {
+              if (character === ' ' || character === '\t') {
+                appendLine(0, 0, false, false);
+                cursor = nextCursor;
+                continue;
+              }
+              const wordBreak = mergePrevious
+                ? LocalReaderPaginator.findWordBreakIndex(lastText, character, measureTextWidth, contentWidth) : -1;
+              if (wordBreak >= 0 && lastItem !== undefined && lastItem.kind === 'text') {
+                const prefix = lastText.substring(0, wordBreak);
+                const prefixWidth = measureTextWidth(prefix);
+                const nextWord = lastText.substring(wordBreak + 1) + character;
+                const nextWordWidth = measureTextWidth(nextWord);
+                const nextWordStart = lastItem.startPosition + wordBreak + 1;
+                lineItems[lineItems.length - 1] = {
+                  kind: 'text', value: prefix, width: prefixWidth, height: lineHeight,
+                  startPosition: lastItem.startPosition, endPosition: nextWordStart,
+                  leadingIndent: lastItem.leadingIndent
+                };
+                lineWidth = lineWidth - lastTextWidth + prefixWidth;
+                appendLine(0, 0, false, false);
+                lineItems.push({
+                  kind: 'text', value: nextWord, width: nextWordWidth, height: lineHeight,
+                  startPosition: nextWordStart, endPosition: finalPosition, leadingIndent: part.leadingIndent
+                });
+                lineWidth = nextWordWidth;
+                lineLastTextPartIndex = partIndex;
+                cursor = nextCursor;
+                continue;
+              }
               appendLine(0, 0, false, false);
               continue;
             }

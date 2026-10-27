@@ -24,6 +24,8 @@
 
 本仓库根目录就是 HarmonyOS 工程，不需要父目录 Android 工程即可构建。请阅读 [构建说明](docs/BUILDING.md) 和 [验证记录](docs/VALIDATION.md)。
 
+机器无关的功能队列、页面模块、阅读行为、Android ZIP 兼容、资源范围和验收口径见[开发文档索引](docs/INDEX.md)。本仓库不包含本机续接记录、历史诊断材料或用户测试数据。
+
 - 配置兼容/目标版本：`5.0.0(12)`；这不是 API 12 真机兼容性证明。
 - 历史开发环境：DevEco Studio 26.0.0.851 / SDK 26；历史设备记录为 OpenHarmony 7 / API 26 模拟器。
 - 应用内部版本：`0.1.0`，versionCode `1000000`，bundleName `io.legado.harmony`。内部名称与版本沿用开发工程，尚未作为稳定升级契约。

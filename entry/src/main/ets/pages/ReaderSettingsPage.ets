@@ -2,7 +2,9 @@ import { ReaderBackgroundStyle, READER_BACKGROUND_STYLES } from '../data/ReaderS
 import {
   ReaderActionOption, ReaderBottomActionConfig, READER_ACTION_OPTIONS,
   READER_LOCAL_BOTTOM_ACTION_DEFAULTS, READER_LOCAL_TOP_ACTION_DEFAULTS,
-  ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, updateReaderInfoSettings
+  ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, ReaderPaddingSettings, DEFAULT_READER_PADDING_SETTINGS,
+  copyReaderPaddingSettings, updateReaderInfoSettings,
+  READER_CLICK_REGION_ACTIONS, READER_CLICK_REGION_DEFAULTS
 } from '../data/ReaderSettingsRepository';
 
 type ReaderInfoSlot = 'headerLeft' | 'headerMiddle' | 'headerRight' | 'footerLeft' | 'footerMiddle' | 'footerRight';
@@ -11,10 +13,6 @@ const READ_INFO_TIP_VALUES: number[] = [0, 7, 1, 12, 17, 2, 3, 15, 13, 14, 10, 4
 const READER_INFO_COLOR_VALUES: number[] = [0, -1, -16777216, -8355712, -65536, -16711936, -16776961];
 const READER_INFO_COLOR_CHOICES: string[] = ['跟随正文', '白色', '黑色', '灰色', '红色', '绿色', '蓝色'];
 const CLICK_REGION_NAMES: string[] = ['左上', '上中', '右上', '左中', '中间', '右中', '左下', '下中', '右下'];
-const CLICK_REGION_ACTIONS: string[] = [
-  '无操作', '菜单', '下一页', '上一页', '下一章', '上一章', '朗读上一段', '朗读下一段',
-  '添加书签', '编辑内容', '替换(启用/禁用)', '目录', '全文搜索', '同步阅读进度', '朗读暂停/继续'
-];
 interface ReaderTextMenuEntry {
   id: string;
   title: string;
@@ -61,8 +59,20 @@ export struct ReaderSettingsPage {
   @Prop bottomActions: ReaderBottomActionConfig[] = READER_LOCAL_BOTTOM_ACTION_DEFAULTS;
   @Prop topActions: ReaderBottomActionConfig[] = READER_LOCAL_TOP_ACTION_DEFAULTS;
   @Prop progressBehavior: string = 'page';
+  @Prop screenOrientation: string = '0';
+  @Prop keepLight: string = '0';
+  @Prop volumeKeyPage: boolean = true;
+  @Prop keyPageOnLongPress: boolean = false;
+  @Prop noAnimScrollPage: boolean = false;
+  @Prop readingAnchorEnabled: boolean = true;
+  @Prop swipeToAddBookmark: boolean = false;
+  @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
+  @Prop clickRegionActions: string[] = READER_CLICK_REGION_DEFAULTS;
+  @Prop hideStatusBar: boolean = false;
+  @Prop hideNavigationBar: boolean = false;
   @Prop infoSettings: ReaderInfoSettings = DEFAULT_READER_INFO_SETTINGS;
+  @Prop paddingSettings: ReaderPaddingSettings = DEFAULT_READER_PADDING_SETTINGS;
   @Prop showQuickActions: boolean = false;
   @Prop asSheet: boolean = false;
   @Prop openBottomActionConfigOnAppear: boolean = false;
@@ -83,7 +93,6 @@ export struct ReaderSettingsPage {
   @State eyeProtectionStartTime: string = '22:00';
   @State eyeProtectionEndTime: string = '07:00';
   @State selectedClickRegionIndex: number = 4;
-  @State clickRegionActions: string[] = ['上一页', '上一页', '下一页', '上一页', '菜单', '下一页', '上一页', '下一页', '下一页'];
   @State previousPageKeys: string = '';
   @State nextPageKeys: string = '';
   @State bookmarkBadgeCustomPreview: boolean = false;
@@ -139,10 +148,22 @@ export struct ReaderSettingsPage {
   onBottomActionsChange: (actions: ReaderBottomActionConfig[]) => void = (_actions: ReaderBottomActionConfig[]) => {};
   onTopActionsChange: (actions: ReaderBottomActionConfig[]) => void = (_actions: ReaderBottomActionConfig[]) => {};
   onProgressBehaviorChange: (value: string) => void = (_value: string) => {};
+  onScreenOrientationChange: (value: string) => void = (_value: string) => {};
+  onKeepLightChange: (value: string) => void = (_value: string) => {};
+  onVolumeKeyPageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onKeyPageOnLongPressChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onNoAnimScrollPageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadingAnchorEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onSwipeToAddBookmarkChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onMaxLengthWithNoTocChange: (value: number) => void = (_value: number) => {};
   onClickImageBehaviorChange: (value: string) => void = (_value: string) => {};
+  onClickRegionActionsChange: (actions: string[]) => void = (_actions: string[]) => {};
+  onHideStatusBarChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onHideNavigationBarChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onPageAnimationChange: (animation: number) => void = (_animation: number) => {};
   onAnimationSpeedChange: (speed: number) => void = (_speed: number) => {};
   onInfoSettingsChange: (settings: ReaderInfoSettings) => void = (_settings: ReaderInfoSettings) => {};
+  onPaddingSettingsChange: (settings: ReaderPaddingSettings) => void = (_settings: ReaderPaddingSettings) => {};
   onQuickActionsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
 
@@ -506,6 +527,10 @@ export struct ReaderSettingsPage {
     if (this.detailSheetTitle === '显示亮度视图' && choiceIndex >= 0) { this.brightnessViewMode = choiceIndex; }
     if (this.detailSheetTitle === '翻页动画' && choiceIndex >= 0) { this.onPageAnimationChange(choiceIndex); }
     if (this.detailSheetTitle === '翻页动画速度' && choiceIndex >= 0) { this.onAnimationSpeedChange(choiceIndex); }
+    if (this.detailSheetTitle === '屏幕方向' && choiceIndex >= 0) { this.onScreenOrientationChange(choiceIndex.toString()); }
+    if (this.detailSheetTitle === '保持屏幕常亮' && choiceIndex >= 0) {
+      this.onKeepLightChange(['0', '60', '300', '600', '-1'][choiceIndex] ?? '0');
+    }
     if (this.detailSheetTitle === '进度条行为' && choiceIndex >= 0) {
       this.onProgressBehaviorChange(choiceIndex === 1 ? 'chapter' : 'page');
     }
@@ -725,10 +750,12 @@ export struct ReaderSettingsPage {
       Scroll() {
         Column() {
           Text('屏幕设置').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 6, bottom: 4 })
-          MenuSettingOption({ title: '屏幕方向', detail: '跟随系统 / 竖屏 / 横屏' }).onClick(() => this.openDetailSheet('屏幕方向', '选择系统、竖屏或横屏'))
-          MenuSettingOption({ title: '保持屏幕常亮', detail: '永不 / 5分钟 / 10分钟 / 跟随系统' }).onClick(() => this.openDetailSheet('保持屏幕常亮', '设置阅读期间的屏幕超时'))
-          MenuSettingSwitch({ title: '隐藏状态栏', detail: '沉浸式阅读', checked: false }).onClick(() => this.showNotMigrated('隐藏状态栏'))
-          MenuSettingSwitch({ title: '隐藏导航栏', detail: '沉浸式阅读', checked: false }).onClick(() => this.showNotMigrated('隐藏导航栏'))
+          MenuSettingOption({ title: '屏幕方向', detail: '跟随系统 / 竖屏 / 横屏', migrated: true }).onClick(() => this.openDetailSheet('屏幕方向', '选择系统、竖屏或横屏'))
+          MenuSettingOption({ title: '保持屏幕常亮', detail: this.getDetailChoices('保持屏幕常亮')[Math.max(0, ['0', '60', '300', '600', '-1'].indexOf(this.keepLight))] ?? '默认', migrated: true }).onClick(() => this.openDetailSheet('保持屏幕常亮', '设置阅读期间的屏幕超时'))
+          MenuSettingSwitch({ title: '隐藏状态栏', detail: '沉浸式阅读', checked: this.hideStatusBar,
+            onChange: (enabled: boolean) => this.onHideStatusBarChange(enabled) })
+          MenuSettingSwitch({ title: '隐藏导航栏', detail: '沉浸式阅读', checked: this.hideNavigationBar,
+            onChange: (enabled: boolean) => this.onHideNavigationBarChange(enabled) })
           MenuSettingSwitch({ title: '适配刘海屏', detail: '为显示缺口留出安全区域', checked: true }).onClick(() => this.showNotMigrated('适配刘海屏'))
           MenuSettingSwitch({ title: '正文行高适配', detail: '修正特殊排版行距', checked: true }).onClick(() => this.showNotMigrated('正文行高适配'))
           MenuSettingSwitch({ title: '适配特殊样式', detail: '保留书籍正文样式', checked: true }).onClick(() => this.showNotMigrated('适配特殊样式'))
@@ -737,13 +764,16 @@ export struct ReaderSettingsPage {
           Text('翻页控制').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingOption({ title: '横屏双页', detail: '关闭 / 左右双页' }).onClick(() => this.openDetailSheet('横屏双页', '单页或左右双页阅读'))
           MenuSettingOption({
-            title: '进度条行为', detail: this.progressBehavior === 'chapter' ? '章节进度' : '页码进度'
+            title: '进度条行为', detail: this.progressBehavior === 'chapter' ? '章节进度' : '页码进度', migrated: true
           }).onClick(() => this.openDetailSheet('进度条行为', '设置拖动进度条的定位方式'))
           MenuSettingSwitch({ title: '鼠标滚轮翻页', detail: '连接鼠标时用滚轮翻页', checked: false }).onClick(() => this.showNotMigrated('鼠标滚轮翻页'))
-          MenuSettingSwitch({ title: '音量键翻页', detail: '按音量键切换页面', checked: false }).onClick(() => this.showNotMigrated('音量键翻页'))
+          MenuSettingSwitch({ title: '音量键翻页', detail: '按音量键切换页面', checked: this.volumeKeyPage,
+            onChange: (enabled: boolean) => this.onVolumeKeyPageChange(enabled) })
           MenuSettingSwitch({ title: '朗读时允许音量键翻页', detail: '朗读期间使用音量键翻页', checked: false }).onClick(() => this.showNotMigrated('朗读时音量键翻页'))
-          MenuSettingSwitch({ title: '长按按键翻页', detail: '长按时连续翻页', checked: false }).onClick(() => this.showNotMigrated('长按按键翻页'))
-          MenuSettingSwitch({ title: '滑动添加书签', detail: '在页面边缘滑动添加书签', checked: false }).onClick(() => this.showNotMigrated('滑动添加书签'))
+          MenuSettingSwitch({ title: '长按按键翻页', detail: '长按音量键连续翻页', checked: this.keyPageOnLongPress,
+            onChange: (enabled: boolean) => this.onKeyPageOnLongPressChange(enabled) })
+          MenuSettingSwitch({ title: '下滑添加书签', detail: '下滑翻动当前页以添加或取消书签', checked: this.swipeToAddBookmark,
+            onChange: (enabled: boolean) => this.onSwipeToAddBookmarkChange(enabled) })
           MenuSettingOption({ title: '书签标记', detail: this.bookmarkBadgeCustomPreview ? '自定义图片' : '默认' })
             .onClick(() => this.openDetailSheet('书签标记', '选择书签标记图片或恢复默认'))
           MenuSettingSlider({
@@ -753,19 +783,23 @@ export struct ReaderSettingsPage {
           Text('其他').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSwitch({ title: '进度条触感反馈', detail: '拖动时提供触觉反馈', checked: false }).onClick(() => this.showNotMigrated('进度条触感反馈'))
           MenuSettingSwitch({ title: '使用新版目录', detail: '使用新的目录面板', checked: true }).onClick(() => this.showNotMigrated('使用新版目录'))
-          MenuSettingSlider({ title: '无目录书籍分段长度', value: 20000, minValue: 3000, maxValue: 100000 })
+          MenuSettingSlider({ title: '无目录书籍分段长度', value: this.maxLengthWithNoToc, minValue: 3000, maxValue: 100000, stepValue: 100,
+            onChange: (value: number) => this.onMaxLengthWithNoTocChange(value) })
           MenuSettingSwitch({ title: '文字选择触感反馈', detail: '选择正文时提供触觉反馈', checked: false }).onClick(() => this.showNotMigrated('文字选择触感反馈'))
           MenuSettingSwitch({ title: '自动切换书源', detail: '当前书源失效时尝试其它书源', checked: false }).onClick(() => this.showNotMigrated('自动切换书源'))
           MenuSettingSwitch({ title: '换源结果应用于全部书籍', detail: '同步更新其它书籍的书源', checked: false }).onClick(() => this.showNotMigrated('换源结果应用于全部书籍'))
           MenuSettingSwitch({ title: '自动切换日夜模式提醒', detail: '提示切换阅读背景', checked: false }).onClick(() => this.showNotMigrated('自动切换日夜模式提醒'))
-          MenuSettingSwitch({ title: '阅读位置锚点', detail: '保存与恢复阅读位置', checked: true }).onClick(() => this.showNotMigrated('阅读位置锚点'))
+          MenuSettingSwitch({ title: '阅读位置锚点', detail: '跳转章节两次及以上后可返回原阅读位置', checked: this.readingAnchorEnabled,
+            onChange: (enabled: boolean) => this.onReadingAnchorEnabledChange(enabled) })
           MenuSettingSwitch({ title: '朗读悬浮窗分离提醒', detail: '分离朗读控制时显示提醒', checked: true }).onClick(() => this.showNotMigrated('朗读悬浮窗分离提醒'))
           MenuSettingSwitch({ title: '允许选择正文', detail: '长按正文显示选择菜单', checked: true }).onClick(() => this.showNotMigrated('允许选择正文'))
-          MenuSettingSwitch({ title: '滚动翻页无动画', detail: '关闭滚动翻页过渡动画', checked: false }).onClick(() => this.showNotMigrated('滚动翻页无动画'))
+          MenuSettingSwitch({ title: '滚动翻页无动画', detail: '关闭滚动翻页过渡动画',
+            checked: this.noAnimScrollPage,
+            onChange: (enabled: boolean) => this.onNoAnimScrollPageChange(enabled) })
           MenuSettingSwitch({ title: '优化正文渲染', detail: '使用优化渲染方式', checked: true }).onClick(() => this.showNotMigrated('优化正文渲染'))
-          MenuSettingOption({ title: '点击图片行为', detail: this.getClickImageBehaviorLabel() })
+          MenuSettingOption({ title: '点击图片行为', detail: this.getClickImageBehaviorLabel(), migrated: true })
             .onClick(() => this.openDetailSheet('点击图片行为', '选择正文图片的点击行为'))
-          MenuSettingOption({ title: '点击区域配置', detail: '设置屏幕各区域的触摸动作' }).onClick(() => this.openDetailSheet('点击区域配置', '点击区域映射面板尚未迁移'))
+          MenuSettingOption({ title: '点击区域配置', detail: '设置屏幕各区域的触摸动作', migrated: true }).onClick(() => this.openDetailSheet('点击区域配置', '配置九宫格点按动作，并应用到阅读界面。'))
           MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: false }).onClick(() => this.showNotMigrated('禁用返回键'))
           MenuSettingOption({ title: '自定义翻页按键', detail: '配置键盘快捷键' }).onClick(() => this.openDetailSheet('自定义翻页按键', '按键映射面板尚未迁移'))
           MenuSettingOption({ title: '选中文字菜单', detail: '配置文本选择后的操作' }).onClick(() => this.openDetailSheet('选中文字菜单', '文本操作菜单配置尚未迁移'))
@@ -857,7 +891,9 @@ export struct ReaderSettingsPage {
     this.detailSheetDescription = description;
     this.detailInfoSlot = undefined;
     const choices = this.getDetailChoices(title);
-    if (title === '显示模式') {
+    if (title === '页边距') {
+      this.detailSelectedOption = '正文';
+    } else if (title === '显示模式') {
       this.detailSelectedOption = this.infoSubTab === 0
         ? (choices[this.infoSettings.headerMode] ?? choices[0] ?? '')
         : (this.infoSettings.footerMode === 1 ? choices[1] ?? '' : choices[0] ?? '');
@@ -868,6 +904,11 @@ export struct ReaderSettingsPage {
     } else if (title === '进度条行为') {
       this.detailSelectedOption = this.progressBehavior === 'chapter'
         ? (choices[1] ?? choices[0] ?? '') : (choices[0] ?? '');
+    } else if (title === '屏幕方向') {
+      const orientationIndex = Math.max(0, Math.min(5, Number.parseInt(this.screenOrientation, 10)));
+      this.detailSelectedOption = choices[orientationIndex] ?? choices[0] ?? '';
+    } else if (title === '保持屏幕常亮') {
+      this.detailSelectedOption = choices[Math.max(0, ['0', '60', '300', '600', '-1'].indexOf(this.keepLight))] ?? choices[0] ?? '';
     } else if (title === '点击图片行为') {
       const behaviorIndex = Math.max(0, ['0', '1', '2', '3', '4'].indexOf(this.clickImageBehavior));
       this.detailSelectedOption = choices[behaviorIndex] ?? choices[0] ?? '';
@@ -918,8 +959,8 @@ export struct ReaderSettingsPage {
     if (title === '左侧显示内容' || title === '中间显示内容' || title === '右侧显示内容') {
       return this.getInfoTipChoices();
     }
-    if (title === '屏幕方向') { return ['跟随系统', '竖屏', '横屏']; }
-    if (title === '保持屏幕常亮') { return ['跟随系统', '永不', '5分钟', '10分钟', '30分钟']; }
+    if (title === '屏幕方向') { return ['跟随系统', '竖屏', '横屏', '传感器自动', '反向竖屏', '反向横屏']; }
+    if (title === '保持屏幕常亮') { return ['默认', '1分钟', '5分钟', '10分钟', '常亮']; }
     if (title === '横屏双页') { return ['关闭', '左右双页']; }
     if (title === '进度条行为') { return ['页码进度', '章节进度']; }
     if (title === '点击图片行为') { return ['新版行为', '预览图片', '经典', '禁用点击', '双击']; }
@@ -943,6 +984,46 @@ export struct ReaderSettingsPage {
     if (title === '页脚日间文字颜色') { return this.infoSettings.tipFooterColor; }
     if (title === '页脚夜间文字颜色') { return this.infoSettings.tipFooterColorNight; }
     return this.infoSettings.tipDividerColor;
+  }
+
+  private getPaddingValue(side: string): number {
+    if (this.detailSelectedOption === '页眉') {
+      if (side === '上') { return this.paddingSettings.headerPaddingTop; }
+      if (side === '下') { return this.paddingSettings.headerPaddingBottom; }
+      if (side === '左') { return this.paddingSettings.headerPaddingLeft; }
+      return this.paddingSettings.headerPaddingRight;
+    }
+    if (this.detailSelectedOption === '页脚') {
+      if (side === '上') { return this.paddingSettings.footerPaddingTop; }
+      if (side === '下') { return this.paddingSettings.footerPaddingBottom; }
+      if (side === '左') { return this.paddingSettings.footerPaddingLeft; }
+      return this.paddingSettings.footerPaddingRight;
+    }
+    if (side === '上') { return this.paddingSettings.paddingTop; }
+    if (side === '下') { return this.paddingSettings.paddingBottom; }
+    if (side === '左') { return this.paddingSettings.paddingLeft; }
+    return this.paddingSettings.paddingRight;
+  }
+
+  private updatePadding(side: string, value: number): void {
+    const next: ReaderPaddingSettings = copyReaderPaddingSettings(this.paddingSettings);
+    if (this.detailSelectedOption === '页眉') {
+      if (side === '上') { next.headerPaddingTop = value; }
+      else if (side === '下') { next.headerPaddingBottom = value; }
+      else if (side === '左') { next.headerPaddingLeft = value; }
+      else { next.headerPaddingRight = value; }
+    } else if (this.detailSelectedOption === '页脚') {
+      if (side === '上') { next.footerPaddingTop = value; }
+      else if (side === '下') { next.footerPaddingBottom = value; }
+      else if (side === '左') { next.footerPaddingLeft = value; }
+      else { next.footerPaddingRight = value; }
+    } else {
+      if (side === '上') { next.paddingTop = value; }
+      else if (side === '下') { next.paddingBottom = value; }
+      else if (side === '左') { next.paddingLeft = value; }
+      else { next.paddingRight = value; }
+    }
+    this.onPaddingSettingsChange(next);
   }
 
   private getInfoTipChoices(): string[] {
@@ -1129,7 +1210,7 @@ export struct ReaderSettingsPage {
               }, (rowIndex: number) => `row-${rowIndex}`)
               Text(`设置${CLICK_REGION_NAMES[this.selectedClickRegionIndex] ?? ''}区域动作`)
                 .fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 8, bottom: 6 })
-              ForEach(CLICK_REGION_ACTIONS, (action: string) => {
+              ForEach(READER_CLICK_REGION_ACTIONS, (action: string) => {
                 Row() {
                   Text(action).fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
                   if ((this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action) {
@@ -1138,12 +1219,13 @@ export struct ReaderSettingsPage {
                 }.width('100%').padding(10).backgroundColor(
                   (this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action ? '#34394C' : '#202127'
                 ).borderRadius(9).margin({ bottom: 5 }).onClick(() => {
-                  this.clickRegionActions = this.clickRegionActions.map((current: string, index: number) =>
+                  const nextActions: string[] = this.clickRegionActions.map((current: string, index: number) =>
                     index === this.selectedClickRegionIndex ? action : current
                   );
+                  this.onClickRegionActionsChange(nextActions);
                 })
               }, (action: string) => action)
-              Text('当前只预览分区和动作选择，尚未保存或接入阅读点击行为。')
+              Text('动作会立即保存，并应用到阅读页对应分区。未迁移的动作会明确提示。')
                 .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.layoutWeight(1).scrollBar(BarState.Off)
@@ -1259,11 +1341,19 @@ export struct ReaderSettingsPage {
                   .onClick(() => this.detailSelectedOption = label)
               }, (label: string) => label)
             }.width('100%').padding({ bottom: 8 })
-            MenuSettingSlider({ title: '上边距', value: 16, minValue: 0, maxValue: 80 })
-            MenuSettingSlider({ title: '下边距', value: 16, minValue: 0, maxValue: 80 })
-            MenuSettingSlider({ title: '左边距', value: 16, minValue: 0, maxValue: 80 })
-            MenuSettingSlider({ title: '右边距', value: 16, minValue: 0, maxValue: 80 })
-            Text('边距预览不会保存到阅读样式。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
+            MenuSettingSlider({ title: '上边距', value: this.getPaddingValue('上'), minValue: 0,
+              maxValue: this.detailSelectedOption === '正文' ? 200 : 300,
+              onChange: (value: number) => this.updatePadding('上', value) })
+            MenuSettingSlider({ title: '下边距', value: this.getPaddingValue('下'), minValue: 0,
+              maxValue: this.detailSelectedOption === '正文' ? 200 : 300,
+              onChange: (value: number) => this.updatePadding('下', value) })
+            MenuSettingSlider({ title: '左边距', value: this.getPaddingValue('左'), minValue: 0,
+              maxValue: this.detailSelectedOption === '正文' ? 200 : 300,
+              onChange: (value: number) => this.updatePadding('左', value) })
+            MenuSettingSlider({ title: '右边距', value: this.getPaddingValue('右'), minValue: 0,
+              maxValue: this.detailSelectedOption === '正文' ? 200 : 300,
+              onChange: (value: number) => this.updatePadding('右', value) })
+            Text('边距会立即保存并应用到阅读页。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else {
           Scroll() {
@@ -1294,6 +1384,7 @@ export struct ReaderSettingsPage {
               }
               Text(this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '点击图片行为' ||
+                this.detailSheetTitle === '屏幕方向' ||
                 this.detailSheetTitle === '显示模式' ||
                 this.detailInfoSlot !== undefined
                 ? '选择后立即应用并保存；自定义内容需点击保存。' : '仅展示选择预览，不保存设置。')
@@ -1665,6 +1756,7 @@ struct MenuSettingSlider {
   @Prop value: number = 5;
   @Prop minValue: number = 1;
   @Prop maxValue: number = 8;
+  @Prop stepValue: number = 1;
   onChange: (value: number) => void = (_value: number) => {};
 
   build() {
@@ -1673,7 +1765,7 @@ struct MenuSettingSlider {
         Text(this.title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
         Text(`${this.value}`).fontSize(12).fontColor('#D3D4DC')
       }.width('100%')
-      Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: 1, style: SliderStyle.InSet })
+      Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: this.stepValue, style: SliderStyle.InSet })
         .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
         .showSteps(true).stepColor('#AFC2FF').stepSize(3)
         .onChange((value: number, mode: SliderChangeMode) => {

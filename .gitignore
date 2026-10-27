@@ -22,3 +22,14 @@ local.properties
 *.har
 *.epub
 *.zip
+
+# 仅供本机续接的进度和历史证据
+docs/CURRENT.md
+docs/history/
+**/*-local.md
+
+# 未审核的参考素材与本机证据目录
+assets/original-project/
+project-resources/
+backups/
+screenshots/

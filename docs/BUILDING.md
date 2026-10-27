@@ -8,8 +8,8 @@
 
 Windows PowerShell 示例（将工具安装路径替换为本机实际位置）：
 
-```powershell
-$devecoRoot = 'C:\Program Files\Huawei\DevEco Studio'
+$devecoRoot = $env:DEVECO_STUDIO_HOME
+if (-not $devecoRoot) { throw '请先设置 DEVECO_STUDIO_HOME' }
 $env:DEVECO_SDK_HOME = Join-Path $devecoRoot 'sdk'
 $env:JAVA_HOME = Join-Path $devecoRoot 'jbr'
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"

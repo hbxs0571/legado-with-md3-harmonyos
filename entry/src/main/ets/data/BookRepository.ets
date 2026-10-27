@@ -14,6 +14,19 @@ interface ChapterTextRange {
   end: number;
 }
 
+interface NoTocChapterLayout {
+  titles: string[];
+  offsets: number[];
+}
+
+export interface NoTocBookRefreshResult {
+  book: Book;
+  content: string;
+  changed: boolean;
+  oldBodyOffsets: number[];
+  newBodyOffsets: number[];
+}
+
 export class BookRepository {
   private static readonly preferenceName: string = 'legado_local_books';
   private static effectiveRuleIdsByChapter: Map<string, number[]> = new Map<string, number[]>();
@@ -39,7 +52,7 @@ export class BookRepository {
       }
     }
   }
-  static async importLocalBook(context: Context): Promise<Book | undefined> {
+  static async importLocalBook(context: Context, maxLengthWithNoToc: number = 3000): Promise<Book | undefined> {
     const options = new picker.DocumentSelectOptions();
     options.fileSuffixFilters = ['TXT 文本|.txt', 'EPUB 电子书|.epub'];
     options.maxSelectNumber = 1;
@@ -55,10 +68,10 @@ export class BookRepository {
       return await EpubRepository.importFromUri(context, uri, fileName, bookId);
     }
 
-    return await BookRepository.importTxtFromUri(context, uri, fileName, bookId);
+    return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
   }
 
-  static async importTxtFromUri(context: Context, uri: string, fileName: string, bookId: string): Promise<Book> {
+  static async importTxtFromUri(context: Context, uri: string, fileName: string, bookId: string, maxLengthWithNoToc: number = 3000): Promise<Book> {
     const title = BookRepository.getTitle(fileName);
     const booksDirectory = `${context.filesDir}/books`;
     const contentPath = `${booksDirectory}/${bookId}.txt`;
@@ -83,7 +96,7 @@ export class BookRepository {
       if (error instanceof Error) { throw error; }
       throw new Error('读取 TXT 文件失败');
     }
-    return BookRepository.createLocalBook(bookId, title, contentPath, 0, 0, content);
+    return BookRepository.createLocalBook(bookId, title, contentPath, 0, 0, content, undefined, maxLengthWithNoToc);
   }
 
   static discardImportedCopy(book: Book): void {
@@ -231,6 +244,13 @@ export class BookRepository {
             const localBook = BookRepository.createLocalBook(id, title, path, chapterIndex, chapterProgress,
               undefined, savedCharset.length > 0 ? savedCharset : undefined);
             localBook.readerPositionVersion = isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 0;
+            const savedPosition = Number(fields[11] ?? '0');
+            localBook.androidCharacterPosition = isVersion5 && Number.isInteger(savedPosition) && savedPosition >= 0
+              ? savedPosition : 0;
+            const savedWholeProgress = Number(fields[17] ?? '0');
+            if (isVersion5 && Number.isFinite(savedWholeProgress)) {
+              localBook.progress = Math.max(0, Math.min(100, savedWholeProgress));
+            }
             localBook.reSegment = isVersion8 && fields[20] === '1';
             if (savedTitles.length > 0 && savedOffsets.length === savedTitles.length) {
               const safeIndex = Math.max(0, Math.min(savedTitles.length - 1, chapterIndex));
@@ -290,7 +310,7 @@ export class BookRepository {
     return operation;
   }
 
-  static withCharset(book: Book, charset: string): Book {
+  static withCharset(book: Book, charset: string, maxLengthWithNoToc: number = 3000): Book {
     const normalizedCharset = charset.trim();
     if (book.contentPath === undefined || book.format !== 'txt') {
       return {
@@ -324,7 +344,13 @@ export class BookRepository {
       };
     }
     const content = BookRepository.readTextFile(book.contentPath, normalizedCharset.length > 0 ? normalizedCharset : undefined);
-    const chapterTitles = BookRepository.findChapterTitles(content);
+    let chapterTitles = BookRepository.findChapterTitles(content);
+    let chapterOffsets = BookRepository.findChapterStarts(content);
+    if (chapterOffsets.length === 0 && content.length > 0) {
+      const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, normalizedCharset.length > 0 ? normalizedCharset : undefined);
+      chapterTitles = layout.titles;
+      chapterOffsets = layout.offsets;
+    }
     const chapterIndex = Math.max(0, Math.min(Math.max(0, chapterTitles.length - 1), book.chapterIndex ?? 0));
     const chapterProgress = Math.max(0, Math.min(100, book.chapterProgress ?? 0));
     const chapterCount = Math.max(1, chapterTitles.length);
@@ -335,7 +361,7 @@ export class BookRepository {
       category: book.category,
       groupName: book.groupName,
       chapterTitles: chapterTitles,
-      chapterOffsets: undefined,
+      chapterOffsets: chapterOffsets,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: chapterTitles[chapterIndex] ?? book.lastChapter,
@@ -392,11 +418,11 @@ export class BookRepository {
     };
   }
 
-  static async readChapter(book: Book, chapterTitle: string, requestedChapterIndex?: number): Promise<string> {
+  static async readChapter(book: Book, chapterTitle: string, requestedChapterIndex?: number, contentOverride?: string): Promise<string> {
     if (book.contentPath === undefined) {
       throw new Error('本地书籍路径无效');
     }
-    const content = BookRepository.readTextFile(book.contentPath, book.format === 'txt' ? book.charset : undefined);
+    const content = contentOverride ?? BookRepository.readTextFile(book.contentPath, book.format === 'txt' ? book.charset : undefined);
     if (book.chapterOffsets !== undefined && book.chapterOffsets.length > 0) {
       const storedIndex = book.chapterIndex;
       const titleIndex = book.chapterTitles?.indexOf(chapterTitle) ?? -1;
@@ -406,9 +432,9 @@ export class BookRepository {
       const start = book.chapterOffsets[chapterIndex] ?? 0;
       const nextStart = book.chapterOffsets[chapterIndex + 1] ?? content.length;
       const section = content.substring(start, nextStart);
-      const headingEnd = section.indexOf('\n');
-      const body = headingEnd >= 0 ? section.substring(headingEnd + 1).trim() : section.trim();
       const title = book.chapterTitles?.[chapterIndex] ?? chapterTitle;
+      const bodyStart = BookRepository.chapterBodyStart(section, title);
+      const body = section.substring(bodyStart).trim();
       const displayBody = book.format === 'epub' ? EpubRepository.removeDuplicateHeading(body, title) : body;
       return await BookRepository.applyChapterContentAsync(book, title, displayBody, chapterIndex);
     }
@@ -480,9 +506,9 @@ export class BookRepository {
         const start = book.chapterOffsets[index] ?? 0;
         const nextStart = book.chapterOffsets[index + 1] ?? content.length;
         const section = content.substring(start, nextStart);
-        const headingEnd = section.indexOf('\n');
-        const body = headingEnd >= 0 ? section.substring(headingEnd + 1).trim() : section.trim();
         const chapterTitle = titles[index] ?? '';
+        const bodyStart = BookRepository.chapterBodyStart(section, chapterTitle);
+        const body = section.substring(bodyStart).trim();
         const displayBody = book.format === 'epub' ? EpubRepository.removeDuplicateHeading(body, chapterTitle) : body;
         const chapter = await BookRepository.applyChapterContentAsync(book, chapterTitle, displayBody, index, useReplaceRules);
         if (!(await onChapter(chapter, index))) { return; }
@@ -706,33 +732,35 @@ export class BookRepository {
     };
   }
 
+  private static chapterBodyStart(section: string, title: string): number {
+    const titleEnd = section.indexOf('\n');
+    if (titleEnd < 0 || title.trim().length === 0) { return 0; }
+    const actualTitle = section.substring(0, titleEnd).replace(/\r$/, '').trim();
+    return actualTitle.startsWith(title.trim()) ? titleEnd + 1 : 0;
+  }
   private static getChapterTextRange(book: Book, content: string, chapterIndex: number): ChapterTextRange {
     if (book.chapterOffsets !== undefined && book.chapterOffsets.length > 0) {
       const chapterStart = book.chapterOffsets[chapterIndex] ?? 0;
       const chapterEnd = book.chapterOffsets[chapterIndex + 1] ?? content.length;
-      const titleEnd = content.indexOf('\n', chapterStart);
-      return {
-        start: titleEnd >= chapterStart && titleEnd < chapterEnd ? titleEnd + 1 : chapterStart,
-        end: chapterEnd
-      };
+      const section = content.substring(chapterStart, chapterEnd);
+      const bodyStart = BookRepository.chapterBodyStart(section, book.chapterTitles?.[chapterIndex] ?? '');
+      return { start: chapterStart + bodyStart, end: chapterEnd };
     }
     const titles = book.chapterTitles ?? [];
     const starts = BookRepository.findChapterStarts(content);
     if (starts.length === titles.length && starts.length > 0) {
       const chapterStart = starts[chapterIndex] ?? 0;
       const chapterEnd = starts[chapterIndex + 1] ?? content.length;
-      const titleEnd = content.indexOf('\n', chapterStart);
-      return {
-        start: titleEnd >= chapterStart && titleEnd < chapterEnd ? titleEnd + 1 : chapterStart,
-        end: chapterEnd
-      };
+      const section = content.substring(chapterStart, chapterEnd);
+      const bodyStart = BookRepository.chapterBodyStart(section, titles[chapterIndex] ?? '');
+      return { start: chapterStart + bodyStart, end: chapterEnd };
     }
     return { start: 0, end: content.length };
   }
 
   private static getChapterSemanticLength(book: Book, content: string, chapterIndex: number): number {
     const range = BookRepository.getChapterTextRange(book, content, chapterIndex);
-    const rawBody = content.substring(range.start, range.end);
+    const rawBody = content.substring(range.start, range.end).trim();
     const title = book.chapterTitles?.[chapterIndex] ?? '';
     const body = book.format === 'epub'
       ? EpubRepository.removeDuplicateHeading(rawBody, title) : rawBody;
@@ -773,6 +801,149 @@ export class BookRepository {
     const records = BookContentProcessRepository.getForChapter(book.id, chapterIndex);
     return BookContentProcessEngine.apply(ruleResult?.text ?? segmented, records).text;
   }
+  private static buildNoTocChapterLayout(
+    content: string, maxLengthWithNoToc: number, charset?: string
+  ): NoTocChapterLayout {
+    const titles: string[] = [];
+    const offsets: number[] = [];
+    if (content.length === 0) { return { titles: ['全文'], offsets: [] }; }
+    const maxLength = Math.max(3000, Math.min(100000, Math.round(maxLengthWithNoToc)));
+    const normalizedCharset = (charset ?? 'UTF-8').toUpperCase();
+    const utf8 = normalizedCharset.includes('UTF-8');
+    const gb = normalizedCharset.startsWith('GB');
+    const utf16 = normalizedCharset.includes('UTF-16');
+    const thresholdBytes = maxLength * (utf8 ? 3 : gb || utf16 ? 2 : 1);
+    let start = 0;
+    let part = 1;
+    while (start < content.length) {
+      offsets.push(start);
+      titles.push('第' + part.toString() + '章(1)');
+      let end = content.length;
+      let cursor = start;
+      let scannedBytes = 0;
+      while (cursor < content.length) {
+        const code = content.charCodeAt(cursor);
+        const next = cursor + 1 < content.length ? content.charCodeAt(cursor + 1) : 0;
+        const surrogatePair = code >= 0xD800 && code <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF;
+        const width = utf8 ? (surrogatePair ? 4 : code < 0x80 ? 1 : code < 0x800 ? 2 : 3)
+          : gb ? (surrogatePair ? 4 : code < 0x80 ? 1 : 2) : utf16 ? 2 : 1;
+        if (scannedBytes + width > 512000) { end = cursor; break; }
+        if (scannedBytes >= thresholdBytes && code === 10) { end = cursor; break; }
+        scannedBytes += width;
+        cursor += surrogatePair ? 2 : 1;
+      }
+      if (end <= start) { end = Math.min(content.length, start + 1); }
+      if (end >= content.length) { break; }
+      start = end;
+      part += 1;
+    }
+    return { titles: titles, offsets: offsets };
+  }
+
+  static refreshNoTocBook(book: Book, maxLengthWithNoToc: number): NoTocBookRefreshResult {
+    if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
+      return { book: book, content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const currentTitles = book.chapterTitles ?? [];
+    const isLegacyNoToc = currentTitles.length === 1 && currentTitles[0] === '全文';
+    let isGeneratedNoToc = currentTitles.length > 0;
+    for (let index = 0; index < currentTitles.length; index++) {
+      if (!/^第\d+章\(1\)$/.test(currentTitles[index] ?? '')) {
+        isGeneratedNoToc = false;
+        break;
+      }
+    }
+    if (!isLegacyNoToc && !isGeneratedNoToc) {
+      return { book: book, content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const content = BookRepository.readTextFile(book.contentPath, book.charset);
+    if (BookRepository.findChapterStarts(content).length > 0) {
+      return { book: book, content: content, changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, book.charset);
+    let layoutChanged = currentTitles.length !== layout.titles.length;
+    for (let index = 0; !layoutChanged && index < layout.titles.length; index++) {
+      if (currentTitles[index] !== layout.titles[index] ||
+        (book.chapterOffsets?.[index] ?? -1) !== (layout.offsets[index] ?? -2)) {
+        layoutChanged = true;
+      }
+    }
+    if (!layoutChanged) {
+      return { book: book, content: content, changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const oldOffsets = book.chapterOffsets ?? [0];
+    const oldBodyOffsets = BookRepository.getNoTocBodyOffsets(content, oldOffsets, currentTitles.length);
+    const newBodyOffsets = BookRepository.getNoTocBodyOffsets(content, layout.offsets, layout.titles.length);
+    const oldIndex = Math.max(0, Math.min(currentTitles.length - 1, book.chapterIndex ?? 0));
+    const oldStart = oldBodyOffsets[oldIndex] ?? 0;
+    const oldEnd = oldOffsets[oldIndex + 1] ?? content.length;
+    const oldBodyLength = Math.max(0, oldEnd - oldStart);
+    const savedPosition = Math.max(0, Math.trunc(book.androidCharacterPosition ?? 0));
+    const localPosition = book.readerPositionVersion === 2 || book.readerPositionVersion === 1
+      ? savedPosition
+      : Math.round(oldBodyLength * Math.max(0, Math.min(100, book.chapterProgress ?? 0)) / 100);
+    const absolutePosition = Math.max(0, Math.min(content.length, oldStart + localPosition));
+    let chapterIndex = 0;
+    for (let index = 0; index < newBodyOffsets.length; index++) {
+      if ((newBodyOffsets[index] ?? 0) > absolutePosition) { break; }
+      chapterIndex = index;
+    }
+    chapterIndex = Math.min(chapterIndex, Math.max(0, layout.titles.length - 1));
+    const chapterStart = newBodyOffsets[chapterIndex] ?? 0;
+    const chapterEnd = layout.offsets[chapterIndex + 1] ?? content.length;
+    const chapterPosition = Math.max(0, Math.min(chapterEnd - chapterStart, absolutePosition - chapterStart));
+    const chapterProgress = chapterEnd > chapterStart ? chapterPosition / (chapterEnd - chapterStart) * 100 : 0;
+    const chapterCount = Math.max(1, layout.titles.length);
+    const refreshedBook: Book = {
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      category: book.category,
+      groupName: book.groupName,
+      chapterTitles: layout.titles,
+      chapterOffsets: layout.offsets,
+      chapterIndex: chapterIndex,
+      chapterProgress: chapterProgress,
+      lastChapter: layout.titles[chapterIndex] ?? book.lastChapter,
+      progress: (chapterIndex + chapterProgress / 100) / chapterCount * 100,
+      coverColor: book.coverColor,
+      coverMark: book.coverMark,
+      coverUri: book.coverUri,
+      contentPath: book.contentPath,
+      format: book.format,
+      chapterCount: layout.titles.length.toString(),
+      fileSizeBytes: book.fileSizeBytes,
+      imageStyle: book.imageStyle,
+      reSegment: book.reSegment,
+      charset: book.charset,
+      description: book.description,
+      bodyMissing: book.bodyMissing,
+      androidOriginalPath: book.androidOriginalPath,
+      androidCharacterPosition: chapterPosition,
+      readerPositionVersion: 2,
+      isLocal: book.isLocal
+    };
+    return {
+      book: refreshedBook,
+      content: content,
+      changed: true,
+      oldBodyOffsets: oldBodyOffsets,
+      newBodyOffsets: newBodyOffsets
+    };
+  }
+
+  private static getNoTocBodyOffsets(content: string, starts: number[], count: number): number[] {
+    const offsets: number[] = [];
+    for (let index = 0; index < count; index++) {
+      const start = starts[index] ?? 0;
+      const end = starts[index + 1] ?? content.length;
+      const section = content.substring(start, end);
+      let trimCount = 0;
+      while (trimCount < section.length && /\s/.test(section.charAt(trimCount))) { trimCount++; }
+      offsets.push(start + trimCount);
+    }
+    return offsets;
+  }
   private static createLocalBook(
     id: string,
     title: string,
@@ -780,15 +951,21 @@ export class BookRepository {
     chapterIndex: number,
     chapterProgress: number,
     importedContent?: string,
-    charset?: string
+    charset?: string,
+    maxLengthWithNoToc: number = 3000
   ): Book {
     let content: string = '';
     try {
       content = importedContent ?? BookRepository.readTextFile(contentPath, charset);
     } catch (_) {
     }
-    const chapterTitles = BookRepository.findChapterTitles(content);
-    const chapterOffsets = BookRepository.findChapterStarts(content);
+    let chapterTitles = BookRepository.findChapterTitles(content);
+    let chapterOffsets = BookRepository.findChapterStarts(content);
+    if (chapterOffsets.length === 0 && content.length > 0) {
+      const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, charset);
+      chapterTitles = layout.titles;
+      chapterOffsets = layout.offsets;
+    }
     const safeChapterIndex = Math.max(0, Math.min(chapterTitles.length - 1, chapterIndex));
     const safeChapterProgress = Math.max(0, Math.min(100, chapterProgress));
     const overallProgress = chapterTitles.length > 0

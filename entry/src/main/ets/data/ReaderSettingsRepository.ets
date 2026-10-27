@@ -96,7 +96,46 @@ export function copyReaderInfoSettings(current: ReaderInfoSettings): ReaderInfoS
   return updateReaderInfoSettings(current, {});
 }
 
+export interface ReaderPaddingSettings {
+  paddingTop: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
+  headerPaddingTop: number;
+  headerPaddingBottom: number;
+  headerPaddingLeft: number;
+  headerPaddingRight: number;
+  footerPaddingTop: number;
+  footerPaddingBottom: number;
+  footerPaddingLeft: number;
+  footerPaddingRight: number;
+}
+
+export const DEFAULT_READER_PADDING_SETTINGS: ReaderPaddingSettings = {
+  paddingTop: 6, paddingBottom: 6, paddingLeft: 16, paddingRight: 16,
+  headerPaddingTop: 0, headerPaddingBottom: 0, headerPaddingLeft: 16, headerPaddingRight: 16,
+  footerPaddingTop: 6, footerPaddingBottom: 6, footerPaddingLeft: 16, footerPaddingRight: 16
+};
+
+export function copyReaderPaddingSettings(settings: ReaderPaddingSettings): ReaderPaddingSettings {
+  return {
+    paddingTop: settings.paddingTop,
+    paddingBottom: settings.paddingBottom,
+    paddingLeft: settings.paddingLeft,
+    paddingRight: settings.paddingRight,
+    headerPaddingTop: settings.headerPaddingTop,
+    headerPaddingBottom: settings.headerPaddingBottom,
+    headerPaddingLeft: settings.headerPaddingLeft,
+    headerPaddingRight: settings.headerPaddingRight,
+    footerPaddingTop: settings.footerPaddingTop,
+    footerPaddingBottom: settings.footerPaddingBottom,
+    footerPaddingLeft: settings.footerPaddingLeft,
+    footerPaddingRight: settings.footerPaddingRight
+  };
+}
+
 export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
+  paddingSettings: ReaderPaddingSettings;
   fontSize: number;
   paperIndex: number;
   dayPaperIndex: number;
@@ -113,10 +152,21 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   tocUseReplace: boolean;
   tocShowWordCount: boolean;
   clickImageBehavior: string;
+  clickRegionActions: string[];
+  hideStatusBar: boolean;
+  hideNavigationBar: boolean;
   showQuickActions: boolean;
   autoReadSpeed: number;
   pageAnimation: number;
   animationSpeed: number;
+  screenOrientation: string;
+  keepLight: string;
+  volumeKeyPage: boolean;
+  keyPageOnLongPress: boolean;
+  noAnimScrollPage: boolean;
+  readingAnchorEnabled: boolean;
+  swipeToAddBookmark: boolean;
+  maxLengthWithNoToc: number;
 }
 
 export interface ReaderBottomActionConfig {
@@ -152,6 +202,14 @@ export const DEFAULT_READER_INFO_SETTINGS: ReaderInfoSettings = {
   tipFooterColorNight: 0,
   tipDividerColor: -1
 };
+
+export const READER_CLICK_REGION_ACTIONS: string[] = [
+  '无操作', '菜单', '下一页', '上一页', '下一章', '上一章', '朗读上一段', '朗读下一段',
+  '添加书签', '编辑内容', '替换(启用/禁用)', '目录', '全文搜索', '同步阅读进度', '朗读暂停/继续'
+];
+export const READER_CLICK_REGION_DEFAULTS: string[] = [
+  '上一页', '上一页', '下一页', '上一页', '菜单', '下一页', '上一页', '下一页', '下一页'
+];
 
 export type ReaderControlKind = 'download' | 'refresh' | 'change_source' | 'audio_download' |
   'source_custom_button' | 'toc_rule' | 'charset' | 'ai_summary' | 'ai_rewrite' | 'more_actions' |
@@ -260,6 +318,7 @@ export class ReaderSettingsRepository {
 
   static async load(context: Context): Promise<ReaderSettingsSnapshot> {
     const defaults: ReaderSettingsSnapshot = {
+      paddingSettings: copyReaderPaddingSettings(DEFAULT_READER_PADDING_SETTINGS),
       headerMode: DEFAULT_READER_INFO_SETTINGS.headerMode,
       footerMode: DEFAULT_READER_INFO_SETTINGS.footerMode,
       showHeaderLine: DEFAULT_READER_INFO_SETTINGS.showHeaderLine,
@@ -306,10 +365,21 @@ export class ReaderSettingsRepository {
       tocUseReplace: false,
       tocShowWordCount: true,
       clickImageBehavior: '2',
+      clickRegionActions: [...READER_CLICK_REGION_DEFAULTS],
+      hideStatusBar: false,
+      hideNavigationBar: false,
       showQuickActions: false,
       autoReadSpeed: 10,
       pageAnimation: 0,
-      animationSpeed: 2
+      animationSpeed: 2,
+      screenOrientation: '0',
+      keepLight: '0',
+      volumeKeyPage: true,
+      keyPageOnLongPress: false,
+      noAnimScrollPage: false,
+      readingAnchorEnabled: true,
+      swipeToAddBookmark: false,
+      maxLengthWithNoToc: 3000
     };
     try {
       const store = await preferences.getPreferences(context, ReaderSettingsRepository.preferenceName);
@@ -330,10 +400,33 @@ export class ReaderSettingsRepository {
       const tocUseReplaceValue = await store.get('tocUiUseReplace', defaults.tocUseReplace);
       const tocShowWordCountValue = await store.get('tocCountWords', defaults.tocShowWordCount);
       const clickImageBehaviorValue = await store.get('clickImgWay', defaults.clickImageBehavior);
+      const clickRegionActionsValue = await store.get('clickRegionActions', JSON.stringify(defaults.clickRegionActions));
+      const hideStatusBarValue = await store.get('hideStatusBar', defaults.hideStatusBar);
+      const hideNavigationBarValue = await store.get('hideNavigationBar', defaults.hideNavigationBar);
       const quickActionsValue = await store.get('showQuickActions', defaults.showQuickActions);
       const autoReadSpeedValue = await store.get('autoReadSpeed', defaults.autoReadSpeed);
       const pageAnimationValue = await store.get('pageAnimation', defaults.pageAnimation);
       const animationSpeedValue = await store.get('animationSpeed', defaults.animationSpeed);
+      const screenOrientationValue = await store.get('screenOrientation', defaults.screenOrientation);
+      const keepLightValue = await store.get('keep_light', defaults.keepLight);
+      const volumeKeyPageValue = await store.get('volumeKeyPage', defaults.volumeKeyPage);
+      const keyPageOnLongPressValue = await store.get('keyPageOnLongPress', defaults.keyPageOnLongPress);
+      const noAnimScrollPageValue = await store.get('noAnimScrollPage', defaults.noAnimScrollPage);
+      const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
+      const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
+      const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
+      const paddingTopValue = await store.get('paddingTop', defaults.paddingSettings.paddingTop);
+      const paddingBottomValue = await store.get('paddingBottom', defaults.paddingSettings.paddingBottom);
+      const paddingLeftValue = await store.get('paddingLeft', defaults.paddingSettings.paddingLeft);
+      const paddingRightValue = await store.get('paddingRight', defaults.paddingSettings.paddingRight);
+      const headerPaddingTopValue = await store.get('headerPaddingTop', defaults.paddingSettings.headerPaddingTop);
+      const headerPaddingBottomValue = await store.get('headerPaddingBottom', defaults.paddingSettings.headerPaddingBottom);
+      const headerPaddingLeftValue = await store.get('headerPaddingLeft', defaults.paddingSettings.headerPaddingLeft);
+      const headerPaddingRightValue = await store.get('headerPaddingRight', defaults.paddingSettings.headerPaddingRight);
+      const footerPaddingTopValue = await store.get('footerPaddingTop', defaults.paddingSettings.footerPaddingTop);
+      const footerPaddingBottomValue = await store.get('footerPaddingBottom', defaults.paddingSettings.footerPaddingBottom);
+      const footerPaddingLeftValue = await store.get('footerPaddingLeft', defaults.paddingSettings.footerPaddingLeft);
+      const footerPaddingRightValue = await store.get('footerPaddingRight', defaults.paddingSettings.footerPaddingRight);
       const headerModeValue = await store.get('headerMode', defaults.headerMode);
       const footerModeValue = await store.get('footerMode', defaults.footerMode);
       const showHeaderLineValue = await store.get('showHeaderLine', defaults.showHeaderLine);
@@ -386,6 +479,20 @@ export class ReaderSettingsRepository {
         await store.flush();
       }
       return {
+        paddingSettings: {
+          paddingTop: ReaderSettingsRepository.normalizeInteger(paddingTopValue, 0, 300, defaults.paddingSettings.paddingTop),
+          paddingBottom: ReaderSettingsRepository.normalizeInteger(paddingBottomValue, 0, 300, defaults.paddingSettings.paddingBottom),
+          paddingLeft: ReaderSettingsRepository.normalizeInteger(paddingLeftValue, 0, 300, defaults.paddingSettings.paddingLeft),
+          paddingRight: ReaderSettingsRepository.normalizeInteger(paddingRightValue, 0, 300, defaults.paddingSettings.paddingRight),
+          headerPaddingTop: ReaderSettingsRepository.normalizeInteger(headerPaddingTopValue, 0, 300, defaults.paddingSettings.headerPaddingTop),
+          headerPaddingBottom: ReaderSettingsRepository.normalizeInteger(headerPaddingBottomValue, 0, 300, defaults.paddingSettings.headerPaddingBottom),
+          headerPaddingLeft: ReaderSettingsRepository.normalizeInteger(headerPaddingLeftValue, 0, 300, defaults.paddingSettings.headerPaddingLeft),
+          headerPaddingRight: ReaderSettingsRepository.normalizeInteger(headerPaddingRightValue, 0, 300, defaults.paddingSettings.headerPaddingRight),
+          footerPaddingTop: ReaderSettingsRepository.normalizeInteger(footerPaddingTopValue, 0, 300, defaults.paddingSettings.footerPaddingTop),
+          footerPaddingBottom: ReaderSettingsRepository.normalizeInteger(footerPaddingBottomValue, 0, 300, defaults.paddingSettings.footerPaddingBottom),
+          footerPaddingLeft: ReaderSettingsRepository.normalizeInteger(footerPaddingLeftValue, 0, 300, defaults.paddingSettings.footerPaddingLeft),
+          footerPaddingRight: ReaderSettingsRepository.normalizeInteger(footerPaddingRightValue, 0, 300, defaults.paddingSettings.footerPaddingRight)
+        },
         headerMode: typeof headerModeValue === 'number' && Number.isInteger(headerModeValue)
           ? Math.max(0, Math.min(2, headerModeValue)) : defaults.headerMode,
         footerMode: typeof footerModeValue === 'number' && Number.isInteger(footerModeValue)
@@ -441,13 +548,32 @@ export class ReaderSettingsRepository {
         clickImageBehavior: typeof clickImageBehaviorValue === 'string' &&
           ['0', '1', '2', '3', '4'].includes(clickImageBehaviorValue)
           ? clickImageBehaviorValue : defaults.clickImageBehavior,
+        clickRegionActions: ReaderSettingsRepository.normalizeClickRegionActions(clickRegionActionsValue),
+        hideStatusBar: typeof hideStatusBarValue === 'boolean' ? hideStatusBarValue : defaults.hideStatusBar,
+        hideNavigationBar: typeof hideNavigationBarValue === 'boolean'
+          ? hideNavigationBarValue : defaults.hideNavigationBar,
         showQuickActions: typeof quickActionsValue === 'boolean' ? quickActionsValue : defaults.showQuickActions,
         autoReadSpeed: typeof autoReadSpeedValue === 'number' && Number.isInteger(autoReadSpeedValue)
           ? Math.max(1, Math.min(120, autoReadSpeedValue)) : defaults.autoReadSpeed,
         pageAnimation: typeof pageAnimationValue === 'number' && Number.isInteger(pageAnimationValue)
           ? Math.max(0, Math.min(5, pageAnimationValue)) : defaults.pageAnimation,
         animationSpeed: typeof animationSpeedValue === 'number' && Number.isInteger(animationSpeedValue)
-          ? Math.max(0, Math.min(3, animationSpeedValue)) : defaults.animationSpeed
+          ? Math.max(0, Math.min(3, animationSpeedValue)) : defaults.animationSpeed,
+        screenOrientation: typeof screenOrientationValue === 'string' && ['0', '1', '2', '3', '4', '5'].includes(screenOrientationValue)
+          ? screenOrientationValue : defaults.screenOrientation,
+        keepLight: typeof keepLightValue === 'string' && ['0', '60', '300', '600', '-1'].includes(keepLightValue)
+          ? keepLightValue : defaults.keepLight,
+        volumeKeyPage: typeof volumeKeyPageValue === 'boolean' ? volumeKeyPageValue : defaults.volumeKeyPage,
+        keyPageOnLongPress: typeof keyPageOnLongPressValue === 'boolean'
+          ? keyPageOnLongPressValue : defaults.keyPageOnLongPress,
+        noAnimScrollPage: typeof noAnimScrollPageValue === 'boolean'
+          ? noAnimScrollPageValue : defaults.noAnimScrollPage,
+          readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
+            ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
+            swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
+              ? swipeToAddBookmarkValue : defaults.swipeToAddBookmark,
+          maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
+            ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc
       };
     } catch (_) {
       return defaults;
@@ -458,6 +584,18 @@ export class ReaderSettingsRepository {
     const operation = ReaderSettingsRepository.saveQueue.then(async (): Promise<void> => {
       const store = await preferences.getPreferences(context, ReaderSettingsRepository.preferenceName);
       await store.put('fontSize', Math.max(5, Math.min(50, Math.round(settings.fontSize))));
+      await store.put('paddingTop', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingTop))));
+      await store.put('paddingBottom', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingBottom))));
+      await store.put('paddingLeft', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingLeft))));
+      await store.put('paddingRight', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingRight))));
+      await store.put('headerPaddingTop', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.headerPaddingTop))));
+      await store.put('headerPaddingBottom', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.headerPaddingBottom))));
+      await store.put('headerPaddingLeft', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.headerPaddingLeft))));
+      await store.put('headerPaddingRight', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.headerPaddingRight))));
+      await store.put('footerPaddingTop', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.footerPaddingTop))));
+      await store.put('footerPaddingBottom', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.footerPaddingBottom))));
+      await store.put('footerPaddingLeft', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.footerPaddingLeft))));
+      await store.put('footerPaddingRight', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.footerPaddingRight))));
       await store.put('paperIndex', Math.max(0, Math.min(5, Math.round(settings.paperIndex))));
       await store.put('dayPaperIndex', Math.max(0, Math.min(5, Math.round(settings.dayPaperIndex))));
       await store.put('nightPaperIndex', Math.max(0, Math.min(5, Math.round(settings.nightPaperIndex))));
@@ -474,11 +612,25 @@ export class ReaderSettingsRepository {
       await store.put('tocCountWords', settings.tocShowWordCount);
       await store.put('clickImgWay', ['0', '1', '2', '3', '4'].includes(settings.clickImageBehavior)
         ? settings.clickImageBehavior : '2');
+      await store.put('clickRegionActions', JSON.stringify(
+        ReaderSettingsRepository.normalizeClickRegionActions(JSON.stringify(settings.clickRegionActions))));
+      await store.put('hideStatusBar', settings.hideStatusBar);
+      await store.put('hideNavigationBar', settings.hideNavigationBar);
       await store.put('paperStyleVersion', 1);
       await store.put('showQuickActions', settings.showQuickActions);
       await store.put('autoReadSpeed', Math.max(1, Math.min(120, Math.round(settings.autoReadSpeed))));
       await store.put('pageAnimation', Math.max(0, Math.min(5, Math.round(settings.pageAnimation))));
       await store.put('animationSpeed', Math.max(0, Math.min(3, Math.round(settings.animationSpeed))));
+      await store.put('screenOrientation', ['0', '1', '2', '3', '4', '5'].includes(settings.screenOrientation)
+        ? settings.screenOrientation : '0');
+      await store.put('keep_light', ['0', '60', '300', '600', '-1'].includes(settings.keepLight)
+        ? settings.keepLight : '0');
+      await store.put('volumeKeyPage', settings.volumeKeyPage);
+      await store.put('keyPageOnLongPress', settings.keyPageOnLongPress);
+      await store.put('noAnimScrollPage', settings.noAnimScrollPage);
+      await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
+      await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
+      await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
       await store.put('headerMode', Math.max(0, Math.min(2, Math.round(settings.headerMode))));
       await store.put('footerMode', Math.max(0, Math.min(1, Math.round(settings.footerMode))));
       await store.put('showHeaderLine', settings.showHeaderLine);
@@ -520,6 +672,22 @@ export class ReaderSettingsRepository {
 
   private static normalizeTipValue(value: number | boolean | string | bigint | Uint8Array | object, fallback: number): number {
     return typeof value === 'number' && Number.isInteger(value) ? Math.max(0, Math.min(20, value)) : fallback;
+  }
+
+  private static normalizeClickRegionActions(value: number | boolean | string | bigint | Uint8Array | object): string[] {
+    let parsed: string[] = [];
+    if (typeof value === 'string') {
+      try {
+        const result: string[] = JSON.parse(value);
+        if (Array.isArray(result)) { parsed = result; }
+      } catch (_) {
+        parsed = [];
+      }
+    }
+    return READER_CLICK_REGION_DEFAULTS.map((fallback: string, index: number): string => {
+      const action = parsed[index];
+      return typeof action === 'string' && READER_CLICK_REGION_ACTIONS.includes(action) ? action : fallback;
+    });
   }
 
   private static normalizeInteger(value: number | boolean | string | bigint | Uint8Array | object, minimum: number, maximum: number, fallback: number): number {

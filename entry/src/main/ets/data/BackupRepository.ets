@@ -88,6 +88,20 @@ interface AndroidBookBackupRecord {
 interface AndroidReadConfigBackupRecord {
   name: string;
   textSize: number;
+  paddingTop: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
+  headerPaddingTop: number;
+  headerPaddingBottom: number;
+  headerPaddingLeft: number;
+  headerPaddingRight: number;
+  footerPaddingTop: number;
+  footerPaddingBottom: number;
+  footerPaddingLeft: number;
+  footerPaddingRight: number;
+  hideStatusBar: boolean;
+  hideNavigationBar: boolean;
   pageAnim: number;
   pageAnimSpeed: number;
   headerMode: number;
@@ -161,7 +175,7 @@ export class BackupRepository {
   ]);
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
     readConfig: [
-      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar',
+      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'maxLengthWithNoToc',
       'autoReadSpeed', 'progressBarBehavior', 'tocUiUseReplace', 'tocCountWords', 'clickImgWay',
       'readBrightnessMode',
       'readBrightnessControlPosition', 'clickActionTopLeft',
@@ -380,6 +394,11 @@ export class BackupRepository {
           `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n` +
           `  <int name="readStyleSelect" value="0" />\n` +
           `  <boolean name="shareLayout" value="${settings.shareLayout}" />\n` +
+          `  <boolean name="hideStatusBar" value="${settings.hideStatusBar}" />\n` +
+          `  <boolean name="hideNavigationBar" value="${settings.hideNavigationBar}" />\n` +
+          `  <boolean name="readingAnchorEnabled" value="${settings.readingAnchorEnabled}" />\n` +
+          `  <boolean name="swipeToAddBookmark" value="${settings.swipeToAddBookmark}" />\n` +
+          `  <int name="maxLengthWithNoToc" value="${settings.maxLengthWithNoToc}" />\n` +
           `  <boolean name="readMenuIconShowText" value="${settings.showBottomActionText}" />\n` +
           `  <int name="readMenuIconStyle" value="${settings.bottomIconStyle}" />\n` +
           `  <int name="readMenuIconItemsPerRow" value="${settings.bottomItemsPerRow}" />\n` +
@@ -387,7 +406,16 @@ export class BackupRepository {
           `  <string name="progressBarBehavior">${settings.progressBehavior}</string>\n` +
           `  <boolean name="tocUiUseReplace" value="${settings.tocUseReplace}" />\n` +
           `  <boolean name="tocCountWords" value="${settings.tocShowWordCount}" />\n` +
-          `  <string name="clickImgWay">${settings.clickImageBehavior}</string>\n</map>`);
+          `  <string name="clickImgWay">${settings.clickImageBehavior}</string>\n` +
+          `  <int name="clickActionTopLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[0] ?? '')}" />\n` +
+          `  <int name="clickActionTopCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[1] ?? '')}" />\n` +
+          `  <int name="clickActionTopRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[2] ?? '')}" />\n` +
+          `  <int name="clickActionMiddleLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[3] ?? '')}" />\n` +
+          `  <int name="clickActionMiddleCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[4] ?? '')}" />\n` +
+          `  <int name="clickActionMiddleRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[5] ?? '')}" />\n` +
+          `  <int name="clickActionBottomLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[6] ?? '')}" />\n` +
+          `  <int name="clickActionBottomCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[7] ?? '')}" />\n` +
+          `  <int name="clickActionBottomRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[8] ?? '')}" />\n</map>`);
       }
       const files = fileIo.listFileSync(stagingDirectory)
         .filter((name: string) => BackupRepository.isSafeRootEntry(name))
@@ -632,6 +660,20 @@ export class BackupRepository {
     return {
       name: dayStyle.name,
       textSize: Math.max(15, Math.min(30, Math.round(settings.fontSize))),
+      paddingTop: settings.paddingSettings.paddingTop,
+      paddingBottom: settings.paddingSettings.paddingBottom,
+      paddingLeft: settings.paddingSettings.paddingLeft,
+      paddingRight: settings.paddingSettings.paddingRight,
+      headerPaddingTop: settings.paddingSettings.headerPaddingTop,
+      headerPaddingBottom: settings.paddingSettings.headerPaddingBottom,
+      headerPaddingLeft: settings.paddingSettings.headerPaddingLeft,
+      headerPaddingRight: settings.paddingSettings.headerPaddingRight,
+      footerPaddingTop: settings.paddingSettings.footerPaddingTop,
+      footerPaddingBottom: settings.paddingSettings.footerPaddingBottom,
+      footerPaddingLeft: settings.paddingSettings.footerPaddingLeft,
+      footerPaddingRight: settings.paddingSettings.footerPaddingRight,
+      hideStatusBar: settings.hideStatusBar,
+      hideNavigationBar: settings.hideNavigationBar,
       pageAnim: Math.max(0, Math.min(5, Math.round(settings.pageAnimation))),
       pageAnimSpeed: Math.max(0, Math.min(3, Math.round(settings.animationSpeed))),
       headerMode: settings.headerMode,
@@ -693,6 +735,20 @@ export class BackupRepository {
       current.shareLayout;
     const paperIndex = current.readerNightMode ? nightPaperIndex : dayPaperIndex;
     return {
+      paddingSettings: {
+        paddingTop: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'paddingTop') ?? current.paddingSettings.paddingTop)),
+        paddingBottom: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'paddingBottom') ?? current.paddingSettings.paddingBottom)),
+        paddingLeft: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'paddingLeft') ?? current.paddingSettings.paddingLeft)),
+        paddingRight: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'paddingRight') ?? current.paddingSettings.paddingRight)),
+        headerPaddingTop: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'headerPaddingTop') ?? current.paddingSettings.headerPaddingTop)),
+        headerPaddingBottom: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'headerPaddingBottom') ?? current.paddingSettings.headerPaddingBottom)),
+        headerPaddingLeft: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'headerPaddingLeft') ?? current.paddingSettings.headerPaddingLeft)),
+        headerPaddingRight: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'headerPaddingRight') ?? current.paddingSettings.headerPaddingRight)),
+        footerPaddingTop: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'footerPaddingTop') ?? current.paddingSettings.footerPaddingTop)),
+        footerPaddingBottom: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'footerPaddingBottom') ?? current.paddingSettings.footerPaddingBottom)),
+        footerPaddingLeft: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'footerPaddingLeft') ?? current.paddingSettings.footerPaddingLeft)),
+        footerPaddingRight: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'footerPaddingRight') ?? current.paddingSettings.footerPaddingRight))
+      },
       fontSize: fontSizeValue === undefined ? current.fontSize : Math.max(15, Math.min(30, Math.round(fontSizeValue))),
       paperIndex: paperIndex,
       dayPaperIndex: dayPaperIndex,
@@ -717,6 +773,33 @@ export class BackupRepository {
         current.tocShowWordCount,
       clickImageBehavior: BackupRepository.readXmlString(`${directory}/config.xml`, 'clickImgWay') ??
         current.clickImageBehavior,
+      clickRegionActions: [
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionTopLeft'), current.clickRegionActions[0] ?? '上一页'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionTopCenter'), current.clickRegionActions[1] ?? '上一页'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionTopRight'), current.clickRegionActions[2] ?? '下一页'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionMiddleLeft'), current.clickRegionActions[3] ?? '上一页'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionMiddleCenter'), current.clickRegionActions[4] ?? '菜单'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionMiddleRight'), current.clickRegionActions[5] ?? '下一页'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionBottomLeft'), current.clickRegionActions[6] ?? '上一页'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionBottomCenter'), current.clickRegionActions[7] ?? '下一页'),
+        BackupRepository.androidClickActionLabel(BackupRepository.readXmlInteger(`${directory}/config.xml`, 'clickActionBottomRight'), current.clickRegionActions[8] ?? '下一页')
+      ],
+      screenOrientation: current.screenOrientation,
+      keepLight: current.keepLight,
+      volumeKeyPage: current.volumeKeyPage,
+      keyPageOnLongPress: current.keyPageOnLongPress,
+      noAnimScrollPage: current.noAnimScrollPage,
+      readingAnchorEnabled: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'readingAnchorEnabled') ??
+        current.readingAnchorEnabled,
+      swipeToAddBookmark: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'swipeToAddBookmark') ??
+        current.swipeToAddBookmark,
+      maxLengthWithNoToc: Math.max(3000, Math.min(100000,
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'maxLengthWithNoToc') ??
+          current.maxLengthWithNoToc)),
+      hideStatusBar: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'hideStatusBar') ??
+        current.hideStatusBar,
+      hideNavigationBar: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'hideNavigationBar') ??
+        current.hideNavigationBar,
       showQuickActions: current.showQuickActions,
       autoReadSpeed: current.autoReadSpeed,
       pageAnimation: Math.max(0, Math.min(5,
@@ -808,6 +891,34 @@ export class BackupRepository {
       updatedCount: updatedCount,
       createdMissingBodyCount: createdMissingBodyCount
     };
+  }
+
+  private static androidClickActionValue(action: string): number {
+    if (action === '菜单') { return 0; }
+    if (action === '下一页') { return 1; }
+    if (action === '上一页') { return 2; }
+    if (action === '下一章') { return 3; }
+    if (action === '上一章') { return 4; }
+    if (action === '朗读上一段') { return 5; }
+    if (action === '朗读下一段') { return 6; }
+    if (action === '添加书签') { return 7; }
+    if (action === '编辑内容') { return 8; }
+    if (action === '替换(启用/禁用)') { return 9; }
+    if (action === '目录') { return 10; }
+    if (action === '全文搜索') { return 11; }
+    if (action === '同步阅读进度') { return 12; }
+    if (action === '朗读暂停/继续') { return 13; }
+    return -1;
+  }
+
+  private static androidClickActionLabel(value: number | undefined, fallback: string): string {
+    if (value === undefined) { return fallback; }
+    if (value === -1) { return '无操作'; }
+    const actions: string[] = [
+      '菜单', '下一页', '上一页', '下一章', '上一章', '朗读上一段', '朗读下一段', '添加书签',
+      '编辑内容', '替换(启用/禁用)', '目录', '全文搜索', '同步阅读进度', '朗读暂停/继续'
+    ];
+    return actions[value] ?? fallback;
   }
 
   private static createMissingBodyBook(record: string, originalPath: string): Book {

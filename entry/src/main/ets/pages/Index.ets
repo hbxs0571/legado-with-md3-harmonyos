@@ -20,7 +20,6 @@ import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
 import { BookInfoPage } from './BookInfoPage';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
 import { OtherSettingsPage } from './OtherSettingsPage';
-import { AppReadSettingsPage } from './AppReadSettingsPage';
 import { AppReadAloudSettingsPage } from './AppReadAloudSettingsPage';
 import { AppCoverSettingsPage } from './AppCoverSettingsPage';
 import { AppDownloadCacheSettingsPage } from './AppDownloadCacheSettingsPage';
@@ -40,8 +39,10 @@ import {
 import { OnboardingRepository } from '../data/OnboardingRepository';
 import {
   ReaderBottomActionConfig, ReaderSettingsRepository, ReaderSettingsSnapshot, READER_BACKGROUND_STYLES,
+  READER_CLICK_REGION_DEFAULTS,
   READER_LOCAL_BOTTOM_ACTION_DEFAULTS, READER_LOCAL_TOP_ACTION_DEFAULTS,
-  ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, copyReaderInfoSettings, updateReaderInfoSettings
+  ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, copyReaderInfoSettings, updateReaderInfoSettings,
+  ReaderPaddingSettings, DEFAULT_READER_PADDING_SETTINGS, copyReaderPaddingSettings
 } from '../data/ReaderSettingsRepository';
 import { ReaderMoreActionConfig, ReaderMoreActionsRepository, READER_MORE_ACTION_DEFAULTS } from '../data/ReaderMoreActionsRepository';
 import {
@@ -89,6 +90,7 @@ struct Index {
   @State profileSettingsReturn: ProfileRoute = ProfileRoute.APP_SETTINGS;
   @State selectedTab: number = 0;
   @State selectedBook: Book = EMPTY_BOOK;
+  @State readerStartAtChapterBeginning: boolean = false;
   @State selectedChapter: string = '';
   @State books: Book[] = [];
   @State readTimeRecords: ReadTimeRecord[] = [];
@@ -122,9 +124,24 @@ struct Index {
     (item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({ id: item.id, enabled: item.enabled })
   );
   @State readerProgressBehavior: string = 'page';
+  @State readerPaddingSettings: ReaderPaddingSettings = copyReaderPaddingSettings(DEFAULT_READER_PADDING_SETTINGS);
+  @State readerScreenOrientation: string = '0';
+  @State readerKeepLight: string = '0';
+  @State readerVolumeKeyPage: boolean = true;
+  @State readerKeyPageOnLongPress: boolean = false;
+  @State readerNoAnimScrollPage: boolean = false;
+  @State readerReadingAnchorEnabled: boolean = true;
+  @State readerSwipeToAddBookmark: boolean = false;
+  @State readerMaxLengthWithNoToc: number = 3000;
+  @State readerAnchorOriginBook: Book | undefined = undefined;
+  @State readerAnchorOriginChapter: string = '';
+  @State readerAnchorJumpCount: number = 0;
   @State readerTocUseReplace: boolean = false;
   @State readerTocShowWordCount: boolean = true;
   @State readerClickImageBehavior: string = '2';
+  @State readerClickRegionActions: string[] = [...READER_CLICK_REGION_DEFAULTS];
+  @State readerHideStatusBar: boolean = false;
+  @State readerHideNavigationBar: boolean = false;
   @State readerImagePreviewOpen: boolean = false;
   @State readerImagePreviewCloseRevision: number = 0;
   @State showReaderQuickActions: boolean = false;
@@ -143,6 +160,7 @@ struct Index {
   @State onboardingComplete: boolean = false;
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
+  private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
   private readerSettingsLoaded: boolean = false;
   private readerSettingsRevision: number = 0;
   private readerSessionLastSaveTime: number = 0;
@@ -405,6 +423,64 @@ struct Index {
     this.bookmarkEditorIsNew = true;
   }
 
+  private toggleReaderBookmarkForPage(startPosition: number, endPosition: number, pageText: string): Promise<void> {
+    const operation = this.readerBookmarkToggleQueue.then(async (): Promise<void> => {
+      if (!this.selectedBook.isLocal || this.selectedBook.contentPath === undefined) { return; }
+      const chapterTitles = this.selectedBook.chapterTitles ?? [];
+      const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ??
+        chapterTitles.indexOf(this.selectedChapter));
+      const rangeEnd = Math.max(startPosition + 1, endPosition);
+      const existing: ReaderBookmark[] = this.readerBookmarks.filter((bookmark: ReaderBookmark) =>
+        bookmark.bookId === this.selectedBook.id && bookmark.chapterIndex === chapterIndex &&
+        bookmark.chapterPosition >= startPosition && bookmark.chapterPosition < rangeEnd);
+      let nearest: ReaderBookmark | undefined = undefined;
+      for (let index = 0; index < existing.length; index++) {
+        const candidate = existing[index];
+        if (candidate !== undefined && (nearest === undefined ||
+          Math.abs(candidate.chapterPosition - startPosition) <
+            Math.abs(nearest.chapterPosition - startPosition))) {
+          nearest = candidate;
+        }
+      }
+      let nextBookmarks: ReaderBookmark[];
+      let statusMessage: string;
+      if (nearest !== undefined) {
+        nextBookmarks = this.readerBookmarks.filter((bookmark: ReaderBookmark) => bookmark.id !== nearest?.id);
+        statusMessage = '已取消当前页书签';
+      } else {
+        const now = Date.now();
+        const record: ReaderBookmark = {
+          id: this.selectedBook.id + '-' + now.toString(),
+          bookId: this.selectedBook.id,
+          bookName: this.selectedBook.title,
+          bookAuthor: this.selectedBook.author,
+          bookUrl: this.selectedBook.androidOriginalPath ?? this.selectedBook.contentPath ?? this.selectedBook.id,
+          chapterIndex: chapterIndex,
+          chapterName: this.selectedChapter,
+          chapterPosition: Math.max(0, Math.trunc(startPosition)),
+          bookText: pageText,
+          content: '',
+          createdAt: now
+        };
+        nextBookmarks = [record, ...this.readerBookmarks];
+        statusMessage = '已添加当前页书签';
+      }
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) {
+        this.showUnavailableAction('无法访问书签存储');
+        return;
+      }
+      try {
+        await ReaderBookmarkRepository.save(context, nextBookmarks);
+        this.readerBookmarks = nextBookmarks;
+        this.showUnavailableAction(statusMessage);
+      } catch (_) {
+        this.showUnavailableAction('书签保存失败，请重试');
+      }
+    });
+    this.readerBookmarkToggleQueue = operation.catch(() => {});
+    return operation;
+  }
   private editReaderBookmark(bookmarkId: string): void {
     const record = this.readerBookmarks.find((bookmark: ReaderBookmark) => bookmark.id === bookmarkId);
     if (record === undefined) { return; }
@@ -526,12 +602,26 @@ struct Index {
       readerPositionVersion: 1,
       isLocal: targetBook.isLocal
     };
+    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，书签位置未保存');
+      return;
+    }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+    } catch (_) {
+      this.showUnavailableAction('书签位置保存失败，已保留原阅读位置');
+      return;
+    }
     this.selectedBook = updatedBook;
-    this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    this.books = updatedBooks;
     this.selectedChapter = chapterTitle;
     this.readerContent = content;
     this.readerBookmarkTargetPosition = position;
     this.readerBookmarkTargetRevision++;
+    this.readerStartAtChapterBeginning = false;
     this.bookmarkEditor = undefined;
     this.route = AppRoute.READER;
   }
@@ -556,9 +646,11 @@ struct Index {
       this.showUnavailableAction('无法读取搜索结果对应章节');
       return;
     }
-    const semanticLength = LocalTextSemantics.fromRawBody(content).length;
-    const position = Math.max(0, Math.min(semanticLength, chapterPosition));
-    const chapterProgress = semanticLength > 0 ? position / semanticLength * 100 : 0;
+    const semanticDocument = LocalTextSemantics.parse(content);
+    const position = Math.max(0, Math.min(semanticDocument.content.length, chapterPosition));
+    const androidPosition = LocalTextSemantics.toSourcePosition(semanticDocument, position);
+    const chapterProgress = semanticDocument.sourceLength > 0
+      ? androidPosition / semanticDocument.sourceLength * 100 : 0;
     const chapterCount = Math.max(1, chapterTitles.length);
     const updatedBook: Book = {
       id: targetBook.id,
@@ -585,16 +677,30 @@ struct Index {
       description: targetBook.description,
       bodyMissing: targetBook.bodyMissing,
       androidOriginalPath: targetBook.androidOriginalPath,
-      androidCharacterPosition: position,
-      readerPositionVersion: 1,
+      androidCharacterPosition: androidPosition,
+      readerPositionVersion: 2,
       isLocal: targetBook.isLocal
     };
+    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，搜索结果位置未保存');
+      return;
+    }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+    } catch (_) {
+      this.showUnavailableAction('搜索结果位置保存失败，已保留原阅读位置');
+      return;
+    }
     this.selectedBook = updatedBook;
-    this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    this.books = updatedBooks;
     this.selectedChapter = chapterTitle;
     this.readerContent = content;
     this.readerBookmarkTargetPosition = position;
     this.readerBookmarkTargetRevision++;
+    this.readerStartAtChapterBeginning = false;
     this.route = AppRoute.READER;
   }
 
@@ -675,9 +781,21 @@ struct Index {
       this.readerBottomActions = settings.bottomActions;
       this.readerTopActions = settings.topActions;
       this.readerProgressBehavior = settings.progressBehavior;
+      this.readerPaddingSettings = copyReaderPaddingSettings(settings.paddingSettings);
+      this.readerScreenOrientation = settings.screenOrientation;
+      this.readerKeepLight = settings.keepLight;
+      this.readerVolumeKeyPage = settings.volumeKeyPage;
+      this.readerKeyPageOnLongPress = settings.keyPageOnLongPress;
+      this.readerNoAnimScrollPage = settings.noAnimScrollPage;
+      this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
+      this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
+      this.readerMaxLengthWithNoToc = settings.maxLengthWithNoToc;
       this.readerTocUseReplace = settings.tocUseReplace;
       this.readerTocShowWordCount = settings.tocShowWordCount;
       this.readerClickImageBehavior = settings.clickImageBehavior;
+      this.readerClickRegionActions = settings.clickRegionActions;
+      this.readerHideStatusBar = settings.hideStatusBar;
+      this.readerHideNavigationBar = settings.hideNavigationBar;
       this.showReaderQuickActions = settings.showQuickActions;
       this.autoReadSpeed = settings.autoReadSpeed;
       this.readerPageAnimation = settings.pageAnimation;
@@ -739,9 +857,21 @@ struct Index {
         bottomActions: this.readerBottomActions,
         topActions: this.readerTopActions,
         progressBehavior: this.readerProgressBehavior,
+        paddingSettings: this.readerPaddingSettings,
+        screenOrientation: this.readerScreenOrientation,
+        keepLight: this.readerKeepLight,
+        volumeKeyPage: this.readerVolumeKeyPage,
+        keyPageOnLongPress: this.readerKeyPageOnLongPress,
+        noAnimScrollPage: this.readerNoAnimScrollPage,
+        readingAnchorEnabled: this.readerReadingAnchorEnabled,
+        swipeToAddBookmark: this.readerSwipeToAddBookmark,
+        maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
         tocUseReplace: this.readerTocUseReplace,
         tocShowWordCount: this.readerTocShowWordCount,
         clickImageBehavior: this.readerClickImageBehavior,
+        clickRegionActions: this.readerClickRegionActions,
+        hideStatusBar: this.readerHideStatusBar,
+        hideNavigationBar: this.readerHideNavigationBar,
         showQuickActions: this.showReaderQuickActions,
         autoReadSpeed: this.autoReadSpeed,
         pageAnimation: this.readerPageAnimation,
@@ -887,6 +1017,58 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
 
+  private setReaderPaddingSettings(settings: ReaderPaddingSettings): void {
+    this.readerPaddingSettings = copyReaderPaddingSettings(settings);
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderScreenOrientation(orientation: string): void {
+    this.readerScreenOrientation = ['0', '1', '2', '3', '4', '5'].includes(orientation) ? orientation : '0';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderKeepLight(value: string): void {
+    this.readerKeepLight = ['0', '60', '300', '600', '-1'].includes(value) ? value : '0';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderVolumeKeyPage(enabled: boolean): void {
+    this.readerVolumeKeyPage = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderKeyPageOnLongPress(enabled: boolean): void {
+    this.readerKeyPageOnLongPress = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderNoAnimScrollPage(enabled: boolean): void {
+    this.readerNoAnimScrollPage = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderReadingAnchorEnabled(enabled: boolean): void {
+    this.readerReadingAnchorEnabled = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderSwipeToAddBookmark(enabled: boolean): void {
+    this.readerSwipeToAddBookmark = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderMaxLengthWithNoToc(value: number): void {
+    this.readerMaxLengthWithNoToc = Math.max(3000, Math.min(100000, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
   private setReaderTocUseReplace(enabled: boolean): void {
     this.readerTocUseReplace = enabled;
     this.readerSettingsRevision += 1;
@@ -901,6 +1083,24 @@ struct Index {
 
   private setReaderClickImageBehavior(value: string): void {
     this.readerClickImageBehavior = ['0', '1', '2', '3', '4'].includes(value) ? value : '2';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderClickRegionActions(actions: string[]): void {
+    this.readerClickRegionActions = actions.slice(0, 9);
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderHideStatusBar(enabled: boolean): void {
+    this.readerHideStatusBar = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderHideNavigationBar(enabled: boolean): void {
+    this.readerHideNavigationBar = enabled;
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
@@ -1053,7 +1253,7 @@ struct Index {
     }
     let book: Book | undefined;
     try {
-      book = await BookRepository.importLocalBook(context);
+      book = await BookRepository.importLocalBook(context, this.readerMaxLengthWithNoToc);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：文件格式不受支持');
       return undefined;
@@ -1101,6 +1301,52 @@ struct Index {
     const style = READER_BACKGROUND_STYLES[Math.max(0, Math.min(5, this.paperIndex))];
     return style === undefined ? '#000000' : (this.readerNightMode ? style.nightColor : style.dayColor);
   }
+  private remapNoTocBookmarks(book: Book, nextBook: Book, oldBodyOffsets: number[],
+    newBodyOffsets: number[], contentLength: number): ReaderBookmark[] {
+    let changed = false;
+    const nextBookmarks: ReaderBookmark[] = [];
+    for (let index = 0; index < this.readerBookmarks.length; index++) {
+      const bookmark = this.readerBookmarks[index];
+      if (bookmark === undefined || bookmark.bookId !== book.id) {
+        if (bookmark !== undefined) { nextBookmarks.push(bookmark); }
+        continue;
+      }
+      const oldIndex = Math.max(0, Math.min(oldBodyOffsets.length - 1, bookmark.chapterIndex));
+      const absolutePosition = Math.max(0, Math.min(contentLength,
+        (oldBodyOffsets[oldIndex] ?? 0) + bookmark.chapterPosition));
+      let chapterIndex = 0;
+      for (let chapter = 0; chapter < newBodyOffsets.length; chapter++) {
+        if ((newBodyOffsets[chapter] ?? 0) > absolutePosition) { break; }
+        chapterIndex = chapter;
+      }
+      chapterIndex = Math.min(chapterIndex, Math.max(0, (nextBook.chapterTitles?.length ?? 1) - 1));
+      const chapterStart = newBodyOffsets[chapterIndex] ?? 0;
+      const chapterEnd = newBodyOffsets[chapterIndex + 1] ?? contentLength;
+      const chapterPosition = Math.max(0,
+        Math.min(chapterEnd - chapterStart, absolutePosition - chapterStart));
+      const chapterName = nextBook.chapterTitles?.[chapterIndex] ?? bookmark.chapterName;
+      if (chapterIndex === bookmark.chapterIndex && chapterPosition === bookmark.chapterPosition &&
+        chapterName === bookmark.chapterName) {
+        nextBookmarks.push(bookmark);
+        continue;
+      }
+      changed = true;
+      nextBookmarks.push({
+        id: bookmark.id,
+        bookId: bookmark.bookId,
+        bookName: bookmark.bookName,
+        bookAuthor: bookmark.bookAuthor,
+        bookUrl: bookmark.bookUrl,
+        chapterIndex: chapterIndex,
+        chapterName: chapterName,
+        chapterPosition: chapterPosition,
+        bookText: bookmark.bookText,
+        content: bookmark.content,
+        createdAt: bookmark.createdAt
+      });
+    }
+    return changed ? nextBookmarks : this.readerBookmarks;
+  }
   private async openBook(book: Book): Promise<void> {
     if (book.contentPath === undefined) {
       this.showUnavailableAction(book.bodyMissing === true
@@ -1108,24 +1354,57 @@ struct Index {
         : '此书暂时没有可用正文');
       return;
     }
+    let openedBook: Book = book;
     let content: string = '';
     try {
-      content = await BookRepository.readChapter(book, book.lastChapter);
+      const noTocRefresh = BookRepository.refreshNoTocBook(book, this.readerMaxLengthWithNoToc);
+      openedBook = noTocRefresh.book;
+      content = await BookRepository.readChapter(openedBook, openedBook.lastChapter,
+        openedBook.chapterIndex, noTocRefresh.content.length > 0 ? noTocRefresh.content : undefined);
       this.replaceRules = ReplaceRuleRepository.getAll();
+      if (noTocRefresh.changed) {
+        const context = this.getUIContext().getHostContext();
+        if (context === undefined) {
+          this.showUnavailableAction('无法访问本地书架，未应用新的无目录分段设置');
+          return;
+        }
+        const updatedBooks = this.books.map((item: Book) =>
+          item.id === openedBook.id ? openedBook : item);
+        const updatedBookmarks = this.remapNoTocBookmarks(book, openedBook,
+          noTocRefresh.oldBodyOffsets, noTocRefresh.newBodyOffsets, noTocRefresh.content.length);
+        let bookmarksSaved = false;
+        try {
+          if (updatedBookmarks !== this.readerBookmarks) {
+            await ReaderBookmarkRepository.save(context, updatedBookmarks);
+            bookmarksSaved = true;
+          }
+          await BookRepository.saveImportedBooks(context,
+            updatedBooks.filter((item: Book) => BookRepository.isPersistableBook(item)));
+        } catch (error) {
+          if (bookmarksSaved) {
+            try { await ReaderBookmarkRepository.save(context, this.readerBookmarks); } catch (_) {}
+          }
+          this.showUnavailableAction(error instanceof Error
+            ? '无目录分段设置保存失败：' + error.message : '无目录分段设置保存失败');
+          return;
+        }
+        this.books = updatedBooks;
+        this.readerBookmarks = updatedBookmarks;
+      }
     } catch (error) {
-      this.showUnavailableAction(error instanceof Error ? `打开失败：${error.message}` : '本地书籍文件无法读取');
+      this.showUnavailableAction(error instanceof Error ? '打开失败：' + error.message : '本地书籍文件无法读取');
       return;
     }
     this.readerReturnRoute = this.route;
-    this.selectedBook = book;
-    this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(book);
-    this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(book);
-    this.selectedChapter = book.lastChapter;
+    this.discardReaderAnchor();
+    this.readerStartAtChapterBeginning = true;
+    this.selectedBook = openedBook;
+    this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(openedBook);
+    this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(openedBook);
+    this.selectedChapter = openedBook.lastChapter;
     this.readerContent = content;
     this.route = AppRoute.READER;
-  }
-
-  private openBookInfo(book: Book): void {
+  }  private openBookInfo(book: Book): void {
     this.bookInfoReturnRoute = this.route;
     this.selectedBook = book;
     this.route = AppRoute.BOOK_INFO;
@@ -1350,7 +1629,7 @@ struct Index {
     let content: string;
     let chapterTitle: string;
     try {
-      updatedBook = BookRepository.withCharset(this.selectedBook, charset);
+      updatedBook = BookRepository.withCharset(this.selectedBook, charset, this.readerMaxLengthWithNoToc);
       const titles = updatedBook.chapterTitles ?? [];
       const chapterIndex = Math.max(0, Math.min(Math.max(0, titles.length - 1), updatedBook.chapterIndex ?? 0));
       chapterTitle = titles[chapterIndex] ?? updatedBook.lastChapter;
@@ -1379,6 +1658,63 @@ struct Index {
     this.readerContent = content;
   }
 
+  private saveReaderAnchorBeforeChapterJump(targetChapterIndex: number): void {
+    if (!this.readerReadingAnchorEnabled || !this.selectedBook.isLocal || this.selectedBook.contentPath === undefined) {
+      return;
+    }
+    const chapterTitles = this.selectedBook.chapterTitles ?? [this.selectedChapter];
+    const currentChapterIndex = this.selectedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter);
+    if (targetChapterIndex === currentChapterIndex) { return; }
+    if (this.readerAnchorOriginBook === undefined) {
+      this.readerAnchorOriginBook = this.selectedBook;
+      this.readerAnchorOriginChapter = this.selectedChapter;
+      this.readerAnchorJumpCount = 0;
+    }
+    this.readerAnchorJumpCount = Math.min(2, this.readerAnchorJumpCount + 1);
+  }
+
+  private discardReaderAnchor(): void {
+    this.readerAnchorOriginBook = undefined;
+    this.readerAnchorOriginChapter = '';
+    this.readerAnchorJumpCount = 0;
+  }
+
+  private async restoreReaderAnchor(): Promise<void> {
+    const originBook = this.readerAnchorOriginBook;
+    if (originBook === undefined) { return; }
+    const chapterTitles = originBook.chapterTitles ?? [];
+    const chapterIndex = Math.max(0, originBook.chapterIndex ??
+      chapterTitles.indexOf(this.readerAnchorOriginChapter));
+    const chapterTitle = chapterTitles[chapterIndex] ?? this.readerAnchorOriginChapter ?? originBook.lastChapter;
+    let content: string = '';
+    try {
+      content = await BookRepository.readChapter(originBook, chapterTitle, chapterIndex);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? '恢复阅读位置失败：' + error.message : '无法恢复原阅读位置');
+      return;
+    }
+    const restoredBook: Book = originBook;
+    const updatedBooks = this.books.map((book: Book) =>
+      book.id === restoredBook.id ? restoredBook : book);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，未恢复原阅读位置');
+      return;
+    }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+    } catch (_) {
+      this.showUnavailableAction('原阅读位置保存失败，请重试');
+      return;
+    }
+    this.selectedBook = restoredBook;
+    this.selectedChapter = chapterTitle;
+    this.readerContent = content;
+    this.books = updatedBooks;
+    this.discardReaderAnchor();
+    this.route = AppRoute.READER;
+  }
   private async selectChapter(title: string, requestedIndex?: number, initialProgress: number = 0): Promise<void> {
     const chapterTitles = this.selectedBook.chapterTitles ?? [title];
     const titleIndex = chapterTitles.indexOf(title);
@@ -1389,6 +1725,8 @@ struct Index {
       this.route = AppRoute.READER;
       return;
     }
+    this.readerStartAtChapterBeginning = false;
+    this.saveReaderAnchorBeforeChapterJump(chapterIndex);
     const chapterCount = Math.max(1, chapterTitles.length);
     const updatedBook: Book = {
       id: this.selectedBook.id,
@@ -1427,19 +1765,25 @@ struct Index {
       this.showUnavailableAction(error instanceof Error ? `读取章节失败：${error.message}` : '章节文件无法读取');
       return;
     }
-    this.selectedBook = updatedBook;
-    this.selectedChapter = title;
-    this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
-    this.readerContent = content;
+    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
     if (updatedBook.contentPath !== undefined) {
       const context = this.getUIContext().getHostContext();
-      if (context !== undefined) {
-        const importedBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
-        BookRepository.saveImportedBooks(context, importedBooks).catch(() => {
-          this.showUnavailableAction('章节进度保存失败，重新打开后可能回到上次位置');
-        });
+      if (context === undefined) {
+        this.showUnavailableAction('无法访问本地书架，章节位置未保存');
+        return;
+      }
+      try {
+        await BookRepository.saveImportedBooks(context,
+          updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      } catch (_) {
+        this.showUnavailableAction('章节进度保存失败，已保留原阅读位置');
+        return;
       }
     }
+    this.selectedBook = updatedBook;
+    this.selectedChapter = title;
+    this.books = updatedBooks;
+    this.readerContent = content;
     this.route = AppRoute.READER;
   }
   private async saveReaderChapterContent(chapterIndex: number, title: string, body: string): Promise<void> {
@@ -1586,18 +1930,12 @@ struct Index {
     return this.handleSystemBack();
   }
 
-  private createReaderProgressCallback(): (
-    chapterProgress: number, chapterPosition: number, androidCoordinate: boolean
-  ) => void {
-    const renderedChapterTitle = this.selectedChapter;
-    const renderedChapterIndex = this.selectedBook.chapterIndex ??
+  private acceptReaderProgress(bookId: string, chapterIndex: number, chapterProgress: number,
+    chapterPosition: number, androidCoordinate: boolean): void {
+    const currentChapterIndex = this.selectedBook.chapterIndex ??
       (this.selectedBook.chapterTitles ?? []).indexOf(this.selectedChapter);
-    return (chapterProgress: number, chapterPosition: number, androidCoordinate: boolean): void => {
-      const currentChapterIndex = this.selectedBook.chapterIndex ??
-        (this.selectedBook.chapterTitles ?? []).indexOf(this.selectedChapter);
-      if (this.selectedChapter !== renderedChapterTitle || currentChapterIndex !== renderedChapterIndex) { return; }
-      this.updateReadingProgress(chapterProgress, chapterPosition, androidCoordinate);
-    };
+    if (this.selectedBook.id !== bookId || currentChapterIndex !== chapterIndex) { return; }
+    this.updateReadingProgress(chapterProgress, chapterPosition, androidCoordinate);
   }
 
   build() {
@@ -1679,7 +2017,9 @@ struct Index {
         this.route === AppRoute.READ_ALOUD_SETTINGS) {
         Stack() {
           ReaderPage({
+            startAtChapterBeginning: this.readerStartAtChapterBeginning,
             book: this.selectedBook,
+            bookmarks: this.readerBookmarks,
             chapterTitle: this.selectedChapter,
             replaceRules: this.replaceRules,
             content: this.readerContent,
@@ -1697,7 +2037,19 @@ struct Index {
             topActions: this.readerTopActions,
             moreActions: this.readerMoreActions,
             progressBehavior: this.readerProgressBehavior,
+            paddingSettings: this.readerPaddingSettings,
+            screenOrientation: this.readerScreenOrientation,
+            keepLight: this.readerKeepLight,
+            volumeKeyPage: this.readerVolumeKeyPage,
+            keyPageOnLongPress: this.readerKeyPageOnLongPress,
+            noAnimScrollPage: this.readerNoAnimScrollPage,
+            readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
+            readingAnchorEnabled: this.readerReadingAnchorEnabled,
+        swipeToAddBookmark: this.readerSwipeToAddBookmark,
             clickImageBehavior: this.readerClickImageBehavior,
+            clickRegionActions: this.readerClickRegionActions,
+            hideStatusBar: this.readerHideStatusBar,
+            hideNavigationBar: this.readerHideNavigationBar,
             imagePreviewCloseRevision: this.readerImagePreviewCloseRevision,
             onOpenImagePreview: (_uri: string): void => { this.readerImagePreviewOpen = true; },
             onCloseImagePreview: (): void => this.closeReaderImagePreview(),
@@ -1709,7 +2061,10 @@ struct Index {
             onReadSessionStart: () => this.startReaderSession(),
             onReadSessionPulse: () => this.pulseReaderSession(),
             onReadSessionStop: () => this.stopReaderSession(),
+            onStartAtChapterBeginningResolved: () => this.readerStartAtChapterBeginning = false,
             onBack: () => this.route = this.readerReturnRoute,
+            onRestoreReadingAnchor: () => this.restoreReaderAnchor(),
+            onKeepReadingAnchor: () => this.discardReaderAnchor(),
             onOpenCatalog: () => {
               this.catalogReturnRoute = AppRoute.READER;
               this.route = AppRoute.CATALOG;
@@ -1725,8 +2080,13 @@ struct Index {
             onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => this.setReaderMoreActions(actions),
             onOpenHighlightRules: () => this.openProfileDetail(ProfileRoute.HIGHLIGHT_TAG_RULES),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-            onProgressChange: this.createReaderProgressCallback(),
+            onProgressChange: (bookId: string, chapterIndex: number, progress: number,
+              position: number, androidCoordinate: boolean) =>
+              this.acceptReaderProgress(bookId, chapterIndex, progress, position, androidCoordinate),
             onAddBookmark: (position: number, pageText: string) => this.requestAddReaderBookmark(position, pageText),
+            onToggleCurrentPageBookmark: (start: number, end: number, pageText: string) =>
+              this.toggleReaderBookmarkForPage(start, end, pageText),
+
             onSaveChapterContent: (chapterIndex: number, title: string, body: string) => {
               this.saveReaderChapterContent(chapterIndex, title, body);
             },
@@ -1742,6 +2102,7 @@ struct Index {
             onContentProcessDelete: (id: string) => this.deleteReaderContentProcess(id),
             bookmarkTargetPosition: this.readerBookmarkTargetPosition,
             bookmarkTargetRevision: this.readerBookmarkTargetRevision,
+            onBookmarkTargetConsumed: () => this.readerBookmarkTargetPosition = -1,
             onSelectChapterIndex: (chapterIndex: number) => {
               const chapters = this.selectedBook.chapterTitles ?? [];
               const title = chapters[chapterIndex];
@@ -1807,8 +2168,32 @@ struct Index {
               bottomActions: this.readerBottomActions,
               topActions: this.readerTopActions,
               progressBehavior: this.readerProgressBehavior,
+              paddingSettings: this.readerPaddingSettings,
+              onPaddingSettingsChange: (settings: ReaderPaddingSettings) => this.setReaderPaddingSettings(settings),
+              screenOrientation: this.readerScreenOrientation,
+              onScreenOrientationChange: (orientation: string) => this.setReaderScreenOrientation(orientation),
+              keepLight: this.readerKeepLight,
+              onKeepLightChange: (value: string) => this.setReaderKeepLight(value),
+              volumeKeyPage: this.readerVolumeKeyPage,
+              onVolumeKeyPageChange: (enabled: boolean) => this.setReaderVolumeKeyPage(enabled),
+              keyPageOnLongPress: this.readerKeyPageOnLongPress,
+              onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
+              noAnimScrollPage: this.readerNoAnimScrollPage,
+              readingAnchorEnabled: this.readerReadingAnchorEnabled,
+        swipeToAddBookmark: this.readerSwipeToAddBookmark,
+        maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
+              onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+              onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
+              onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
+              onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
+              clickRegionActions: this.readerClickRegionActions,
+              onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
               clickImageBehavior: this.readerClickImageBehavior,
               onClickImageBehaviorChange: (value: string) => this.setReaderClickImageBehavior(value),
+              hideStatusBar: this.readerHideStatusBar,
+              hideNavigationBar: this.readerHideNavigationBar,
+              onHideStatusBarChange: (enabled: boolean) => this.setReaderHideStatusBar(enabled),
+              onHideNavigationBarChange: (enabled: boolean) => this.setReaderHideNavigationBar(enabled),
               infoSettings: this.readerInfoSettings,
               onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
               pageAnimationIndex: this.readerPageAnimation,
@@ -1968,9 +2353,66 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_READ_SETTINGS) {
-          AppReadSettingsPage({
+          ReaderSettingsPage({
+            fontSize: this.readerFontSize,
+            paperIndex: this.paperIndex,
+            shareLayout: this.shareReaderStyleLayout,
+            readerNightMode: this.readerNightMode,
+            showBottomActionText: this.showReaderBottomActionText,
+            bottomIconStyle: this.readerBottomIconStyle,
+            bottomItemsPerRow: this.readerBottomItemsPerRow,
+            bottomRowCount: this.readerBottomRowCount,
+            bottomActions: this.readerBottomActions,
+            topActions: this.readerTopActions,
+            progressBehavior: this.readerProgressBehavior,
+            paddingSettings: this.readerPaddingSettings,
+            onPaddingSettingsChange: (settings: ReaderPaddingSettings) => this.setReaderPaddingSettings(settings),
+            screenOrientation: this.readerScreenOrientation,
+            onScreenOrientationChange: (orientation: string) => this.setReaderScreenOrientation(orientation),
+            keepLight: this.readerKeepLight,
+            onKeepLightChange: (value: string) => this.setReaderKeepLight(value),
+            volumeKeyPage: this.readerVolumeKeyPage,
+            onVolumeKeyPageChange: (enabled: boolean) => this.setReaderVolumeKeyPage(enabled),
+            keyPageOnLongPress: this.readerKeyPageOnLongPress,
+            onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
+            noAnimScrollPage: this.readerNoAnimScrollPage,
+            readingAnchorEnabled: this.readerReadingAnchorEnabled,
+        swipeToAddBookmark: this.readerSwipeToAddBookmark,
+        maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
+            onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+            onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
+              onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
+              onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
+            clickRegionActions: this.readerClickRegionActions,
+            onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
+            clickImageBehavior: this.readerClickImageBehavior,
+            onClickImageBehaviorChange: (value: string) => this.setReaderClickImageBehavior(value),
+            hideStatusBar: this.readerHideStatusBar,
+            hideNavigationBar: this.readerHideNavigationBar,
+            onHideStatusBarChange: (enabled: boolean) => this.setReaderHideStatusBar(enabled),
+            onHideNavigationBarChange: (enabled: boolean) => this.setReaderHideNavigationBar(enabled),
+            infoSettings: this.readerInfoSettings,
+            onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
+            pageAnimationIndex: this.readerPageAnimation,
+            animationSpeedIndex: this.readerAnimationSpeed,
+            onBottomIconStyleChange: (style: number) => this.setReaderBottomIconStyle(style),
+            onBottomItemsPerRowChange: (count: number) => this.setReaderBottomItemsPerRow(count),
+            onBottomRowCountChange: (count: number) => this.setReaderBottomRowCount(count),
+            onBottomActionsChange: (actions: ReaderBottomActionConfig[]) => this.setReaderBottomActions(actions),
+            onTopActionsChange: (actions: ReaderBottomActionConfig[]) => this.setReaderTopActions(actions),
+            onProgressBehaviorChange: (value: string) => this.setReaderProgressBehavior(value),
+            onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
+            onAnimationSpeedChange: (speed: number) => this.setReaderAnimationSpeed(speed),
+            onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
+            onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
+            onToggleNightMode: () => this.toggleReaderNightMode(),
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            showQuickActions: this.showReaderQuickActions,
+            asSheet: false,
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
-            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+            onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
+            onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
+            onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_ALOUD_SETTINGS) {
           AppReadAloudSettingsPage({
@@ -2034,7 +2476,33 @@ struct Index {
             readerNightMode: this.readerNightMode,
             showBottomActionText: this.showReaderBottomActionText,
             progressBehavior: this.readerProgressBehavior,
+            paddingSettings: this.readerPaddingSettings,
+            onPaddingSettingsChange: (settings: ReaderPaddingSettings) => this.setReaderPaddingSettings(settings),
+            screenOrientation: this.readerScreenOrientation,
+            onScreenOrientationChange: (orientation: string) => this.setReaderScreenOrientation(orientation),
+            keepLight: this.readerKeepLight,
+            onKeepLightChange: (value: string) => this.setReaderKeepLight(value),
+            volumeKeyPage: this.readerVolumeKeyPage,
+            onVolumeKeyPageChange: (enabled: boolean) => this.setReaderVolumeKeyPage(enabled),
+            keyPageOnLongPress: this.readerKeyPageOnLongPress,
+            onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
+            noAnimScrollPage: this.readerNoAnimScrollPage,
+            readingAnchorEnabled: this.readerReadingAnchorEnabled,
+        swipeToAddBookmark: this.readerSwipeToAddBookmark,
+        maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
+            onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+            onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
+              onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
+              onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
+            clickRegionActions: this.readerClickRegionActions,
+            onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
+            clickImageBehavior: this.readerClickImageBehavior,
+            onClickImageBehaviorChange: (value: string) => this.setReaderClickImageBehavior(value),
             infoSettings: this.readerInfoSettings,
+            hideStatusBar: this.readerHideStatusBar,
+            hideNavigationBar: this.readerHideNavigationBar,
+            onHideStatusBarChange: (enabled: boolean) => this.setReaderHideStatusBar(enabled),
+            onHideNavigationBarChange: (enabled: boolean) => this.setReaderHideNavigationBar(enabled),
             onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
             pageAnimationIndex: this.readerPageAnimation,
             animationSpeedIndex: this.readerAnimationSpeed,
@@ -2061,8 +2529,32 @@ struct Index {
           readerNightMode: this.readerNightMode,
           showBottomActionText: this.showReaderBottomActionText,
           progressBehavior: this.readerProgressBehavior,
+          paddingSettings: this.readerPaddingSettings,
+          onPaddingSettingsChange: (settings: ReaderPaddingSettings) => this.setReaderPaddingSettings(settings),
+          screenOrientation: this.readerScreenOrientation,
+          onScreenOrientationChange: (orientation: string) => this.setReaderScreenOrientation(orientation),
+          keepLight: this.readerKeepLight,
+          onKeepLightChange: (value: string) => this.setReaderKeepLight(value),
+          volumeKeyPage: this.readerVolumeKeyPage,
+          onVolumeKeyPageChange: (enabled: boolean) => this.setReaderVolumeKeyPage(enabled),
+          keyPageOnLongPress: this.readerKeyPageOnLongPress,
+          onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
+          noAnimScrollPage: this.readerNoAnimScrollPage,
+          readingAnchorEnabled: this.readerReadingAnchorEnabled,
+        swipeToAddBookmark: this.readerSwipeToAddBookmark,
+        maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
+          onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+          onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
+              onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
+              onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
+          clickRegionActions: this.readerClickRegionActions,
+          onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
           clickImageBehavior: this.readerClickImageBehavior,
           onClickImageBehaviorChange: (value: string) => this.setReaderClickImageBehavior(value),
+          hideStatusBar: this.readerHideStatusBar,
+          hideNavigationBar: this.readerHideNavigationBar,
+          onHideStatusBarChange: (enabled: boolean) => this.setReaderHideStatusBar(enabled),
+          onHideNavigationBarChange: (enabled: boolean) => this.setReaderHideNavigationBar(enabled),
           infoSettings: this.readerInfoSettings,
           onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
           onProgressBehaviorChange: (value: string) => this.setReaderProgressBehavior(value),
