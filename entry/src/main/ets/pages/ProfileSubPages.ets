@@ -197,6 +197,8 @@ export struct ReplaceRulesPage {
   onRemoveBatch: (ids: number[]) => void = (_ids: number[]) => {};
   /** 选择模式下的批量置顶/置底。 */
   onMoveBatch: (ids: number[], toTop: boolean) => void = (_ids: number[], _toTop: boolean) => {};
+  /** 拖拽排序：把 fromId 这条规则挪到 toId 的位置。 */
+  onReorderRule: (fromId: number, toId: number) => void = (_f: number, _t: number) => {};
   @Prop rules: ReplaceRule[] = [];
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
@@ -466,6 +468,33 @@ export struct ReplaceRulesPage {
     this.onExportRules(selected);
   }
 
+  /**
+   * 是否允许拖拽排序。
+   * 与上游 ReplaceRuleScreen.kt:143 的 canReorder 一致：只有按顺序排序（旧的在前 / 新的在前）
+   * 时拖拽才有意义；名称排序下顺序由名称决定，拖拽改了也不会体现在界面上。
+   */
+  private canReorder(): boolean {
+    return this.sortMode === 'asc' || this.sortMode === 'desc';
+  }
+
+  /**
+   * 处理拖拽换位。
+   *
+   * onMove 给的是「当前筛选列表」里的下标，而存储数组可能被搜索或分组筛选过，
+   * 所以这里先换算成规则 id 再回调，由仓储按 id 定位真实位置，避免筛选态下改错规则。
+   */
+  private handleReorder(from: number, to: number): void {
+    if (!this.canReorder()) {
+      this.onUnavailableAction('名称排序下不能拖拽排序，请先切换到按顺序排序');
+      return;
+    }
+    const visible = this.filteredReplaceRules();
+    if (from < 0 || to < 0 || from >= visible.length || to >= visible.length || from === to) {
+      return;
+    }
+    this.onReorderRule(visible[from].id, visible[to].id);
+  }
+
   private filteredReplaceRules(): ReplaceRule[] {
     const query = this.searchQuery.trim().toLowerCase();
     const filtered = this.rules.filter((rule: ReplaceRule) => {
@@ -544,9 +573,10 @@ export struct ReplaceRulesPage {
         })
           .layoutWeight(1)
       } else {
-        Scroll() {
-          Column() {
-            ForEach(this.filteredReplaceRules(), (rule: ReplaceRule) => {
+        // 用 List 而不是 Scroll+Column：拖拽排序（ForEach.onMove）只在 List 内生效。
+        List({ space: 8 }) {
+          ForEach(this.filteredReplaceRules(), (rule: ReplaceRule) => {
+            ListItem() {
               Row() {
                 if (this.selectionMode) {
                   AppGlyph({
@@ -563,16 +593,21 @@ export struct ReplaceRulesPage {
                 if (!this.selectionMode) {
                   Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
                     .onChange((enabled: boolean) => this.onToggleRule(rule.id, enabled))
-                  Text('删除').fontSize(12).fontColor('#D99AA5').padding({ left: 10, right: 4 })
-                    .onClick(() => this.onRemoveRule(rule.id))
+                  // 长按手势留给拖拽排序，条目操作改由「更多」图标触发，与上游条目右侧的更多按钮一致。
+                  Stack({ alignContent: Alignment.Center }) {
+                    AppGlyph({ name: 'more', glyphSize: 18, tint: '#92949E' })
+                  }.width(32).height(32).margin({ left: 4 })
+                    .bindMenu(this.RuleRowMenu(rule), { placement: Placement.BottomRight })
                 }
               }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
-                .backgroundColor('#1B1C22').borderRadius(14).margin({ bottom: 8 })
+                .backgroundColor('#1B1C22').borderRadius(14)
                 .onClick(() => this.selectionMode ? this.toggleSelectedRule(rule.id) : this.onEditRule(rule.id))
-                .bindContextMenu(this.RuleRowMenu(rule), ResponseType.LongPress)
-            }, (rule: ReplaceRule) => this.ruleRowKey(rule))
-          }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 80 })
-        }.layoutWeight(1).scrollBar(BarState.Off)
+            }
+          }, (rule: ReplaceRule) => this.ruleRowKey(rule))
+            // 长按条目进入拖拽排序。名称排序下顺序由名称决定，与上游 canReorder 一致不挂载拖拽。
+            .onMove(this.canReorder() ? (from: number, to: number) => this.handleReorder(from, to) : undefined)
+        }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+          .padding({ left: 16, right: 16, top: 10, bottom: 80 })
       }
       if (this.selectionMode) {
         Row() {

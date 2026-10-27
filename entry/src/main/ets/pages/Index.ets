@@ -518,6 +518,27 @@ struct Index {
   }
 
   /**
+   * 拖拽排序：把一条规则挪到另一条的位置。
+   * 失败时只提示不刷新，避免界面与存储不一致。
+   */
+  private async reorderReplaceRule(fromId: number, toId: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const moved = await ReplaceRuleRepository.moveRule(context, fromId, toId);
+      if (!moved) {
+        this.showUnavailableAction('规则顺序未变化');
+        return;
+      }
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('调整替换规则顺序失败');
+    }
+  }
+
+  /**
    * 导入替换规则。
    * source 为 'file' 时弹出文件选择器读取文本；其余情况直接解析传入的 text。
    * 解析失败与部分跳过都如实反馈，不把未导入的条目算作成功。
@@ -2478,6 +2499,7 @@ struct Index {
             onSetEnabledBatch: (ids: number[], enabled: boolean) => this.setReplaceRuleEnabledBatch(ids, enabled),
             onRemoveBatch: (ids: number[]) => this.removeReplaceRuleBatch(ids),
             onMoveBatch: (ids: number[], toTop: boolean) => this.moveReplaceRuleBatch(ids, toTop),
+            onReorderRule: (fromId: number, toId: number) => this.reorderReplaceRule(fromId, toId),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULE_EDIT) {

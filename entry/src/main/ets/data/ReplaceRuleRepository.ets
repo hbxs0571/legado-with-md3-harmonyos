@@ -348,6 +348,30 @@ export class ReplaceRuleRepository {
     await ReplaceRuleRepository.moveToEdge(context, id, false);
   }
 
+  /**
+   * 拖拽排序：把 from 位置的规则挪到 to 位置。
+   *
+   * 参数用「视觉下标」而不是数组下标：列表可能被搜索或分组筛选过，
+   * 界面拿到的是筛选结果里的位置，这里先按 id 换算回存储数组的真实位置，
+   * 避免筛选态下拖拽改错规则。
+   *
+   * 与上游 BaseRuleViewModel.moveItemInList() 语义一致：移除后插入，
+   * 返回 false 表示下标越界或规则已不存在，界面不必刷新。
+   */
+  static async moveRule(context: Context, fromId: number, toId: number): Promise<boolean> {
+    const rules = ReplaceRuleRepository.cachedRules;
+    const fromIndex = rules.findIndex((rule: ReplaceRule) => rule.id === fromId);
+    const toIndex = rules.findIndex((rule: ReplaceRule) => rule.id === toId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+      return false;
+    }
+    const next = [...rules];
+    const moved = next.splice(fromIndex, 1)[0];
+    next.splice(toIndex, 0, moved);
+    await ReplaceRuleRepository.persist(context, next);
+    return true;
+  }
+
   private static async moveToEdge(context: Context, id: number, toTop: boolean): Promise<void> {
     const index = ReplaceRuleRepository.cachedRules.findIndex((rule: ReplaceRule) => rule.id === id);
     if (index < 0) { return; }

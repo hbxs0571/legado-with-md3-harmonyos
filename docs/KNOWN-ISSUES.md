@@ -139,6 +139,26 @@ ArkUI 一个组件只能绑定一个半模态页面，后绑定的会覆盖先�
 
 **未采纳**：上游的批量导入预览勾选对话框（`BatchImportDialog`）。本地导入是「解析后直接合并 + toast 报告新增/更新/跳过条数」（`entry/src/main/ets/pages/Index.ets:525` 的 `importReplaceRules`），路径不同但可用，重做会推翻已验证流程。
 
+### 10. 缺少拖拽排序
+
+**上游**：`ReplaceRuleScreen.kt:137-145` 用 `rememberReorderableLazyListState` 实现长按拖拽换位，回调整体交给 `ReplaceRuleIntent.MoveItem(from, to)` → `BaseRuleViewModel.kt:133` 的 `moveItemInList()`（移除后插入）。上游还限制 `canReorder = sortMode == "asc" || sortMode == "desc"`：名称排序下顺序由名称决定，拖拽无意义，切到名称排序时会提示 `drag_disabled_in_sort_mode`。
+
+**本地实现**：
+
+- 列表容器由 `Scroll + Column` 换成 `List + ListItem`，因为 `ForEach.onMove`（`common.d.ts:25825`，@since 12）只在 `List` 内生效。
+- `entry/src/main/ets/pages/ProfileSubPages.ets:483` 的 `handleReorder()`：`onMove` 给的是**当前筛选列表**的下标，先换算成规则 id 再回调，由仓储按 id 定位存储数组里的真实位置。这样搜索或分组筛选后拖拽不会改错规则。
+- `entry/src/main/ets/data/ReplaceRuleRepository.ets:351` 的 `moveRule()`：按 id 找到真实下标，移除后插入，`persist()` 重排 `order`。
+- 名称排序下 `onMove` 传 `undefined`（`ProfileSubPages.ets:608`），拖拽手势不挂载，与上游 `canReorder` 一致。
+
+**长按手势的取舍**：原先条目长按弹出「置顶/置底/删除」菜单，与拖拽的长按手势冲突。现在长按用于拖拽，条目操作移到右侧「更多」图标（`bindMenu`，三项不变），与上游条目右侧的更多按钮位置一致。
+
+**验证**：
+
+- 拖拽换位：`[abc, 测试规则]` 把第一条拖到第二条位置 → 存储变为 `[测试规则(order=0), abc(order=1)]`，重启应用后顺序保持。
+- 筛选态拖拽：三条规则 `[abc, 测试规则, 中间规则]`，搜索「规则」筛成 `[测试规则, 中间规则]` 后拖拽换位 → 存储变为 `[abc, 中间规则, 测试规则]`，`abc` 未受影响。若直接用筛选下标操作存储数组，`abc` 会被换错位置。
+- 名称排序禁用：切到名称升序后拖拽，存储 `order` 不变。
+
+
 ## 遗留风险（待决策）
 
 ### A. 规则试跑面板的键盘遮挡
