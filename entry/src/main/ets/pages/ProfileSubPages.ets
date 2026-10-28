@@ -2815,6 +2815,48 @@ export struct ReadRecordsPage {
     return this.formatRecordDate(timestamp).substring(0, 10);
   }
 
+  /** 汇总视图按跨午夜拆分后的自然日明细分组；搜索仍匹配书名与作者。 */
+  private getSummaryDateKeys(): string[] {
+    const query = this.searchQuery.trim().toLocaleLowerCase();
+    const keys: string[] = [];
+    for (const detail of this.details) {
+      if (query.length > 0 && !detail.bookName.toLocaleLowerCase().includes(query) &&
+        !detail.bookAuthor.toLocaleLowerCase().includes(query)) { continue; }
+      if (!keys.includes(detail.date)) { keys.push(detail.date); }
+    }
+    return keys.sort((left: string, right: string) => right.localeCompare(left));
+  }
+
+  private getSummaryDetailsForDate(dateKey: string): ReadRecordDetail[] {
+    const query = this.searchQuery.trim().toLocaleLowerCase();
+    return this.details.filter((detail: ReadRecordDetail) => detail.date === dateKey &&
+      (query.length === 0 || detail.bookName.toLocaleLowerCase().includes(query) ||
+        detail.bookAuthor.toLocaleLowerCase().includes(query)));
+  }
+
+  private getDistinctSummaryBooksForDate(dateKey: string): ReadRecordDetail[] {
+    const result: ReadRecordDetail[] = [];
+    for (const detail of this.getSummaryDetailsForDate(dateKey)) {
+      if (!result.some((item: ReadRecordDetail) =>
+        item.bookName === detail.bookName && item.bookAuthor === detail.bookAuthor)) {
+        result.push(detail);
+      }
+    }
+    return result;
+  }
+
+  private getSummaryDurationForDate(dateKey: string): number {
+    return this.getSummaryDetailsForDate(dateKey)
+      .reduce((total: number, detail: ReadRecordDetail) => total + detail.readTime, 0);
+  }
+
+  private getSummaryBookDurationForDate(dateKey: string, bookName: string, bookAuthor: string): number {
+    return this.getSummaryDetailsForDate(dateKey)
+      .filter((detail: ReadRecordDetail) => detail.bookName === bookName && detail.bookAuthor === bookAuthor)
+      .reduce((total: number, detail: ReadRecordDetail) => total + detail.readTime, 0);
+  }
+
+  /** 时间线仍按会话开始时间分日，单条跨午夜会话保持完整时长。 */
   private getDateKeys(): string[] {
     const keys: string[] = [];
     for (const record of this.getVisibleRecords()) {
@@ -3037,25 +3079,25 @@ export struct ReadRecordsPage {
             }.width('calc(100% - 32vp)').padding(16).backgroundColor('#1B1C22').borderRadius(16)
               .margin({ left: 16, right: 16, bottom: 10 }).onClick(() => this.showCalendarSheet = true)
             if (this.displayMode === 0) {
-              ForEach(this.getDateKeys(), (dateKey: string) => {
+              ForEach(this.getSummaryDateKeys(), (dateKey: string) => {
                 Column() {
                   Row() {
                     Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor('#D8D9E0')
                     Blank()
-                    Text(this.formatRecordDuration(this.getTotalDuration(this.getRecordsForDate(dateKey))))
+                    Text(this.formatRecordDuration(this.getSummaryDurationForDate(dateKey)))
                       .fontSize(13).fontColor('#AFC2FF')
                   }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
-                  ForEach(this.getDistinctBooks(this.getRecordsForDate(dateKey)), (record: ReadTimeRecord) => {
+                  ForEach(this.getDistinctSummaryBooksForDate(dateKey), (detail: ReadRecordDetail) => {
                     Row() {
                       Column() {
-                        Text(record.bookName).fontSize(16).fontColor('#E3E4E8')
-                        Text(record.bookAuthor).fontSize(12).fontColor('#92949E').margin({ top: 3 })
+                        Text(detail.bookName).fontSize(16).fontColor('#E3E4E8')
+                        Text(detail.bookAuthor).fontSize(12).fontColor('#92949E').margin({ top: 3 })
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                      Text(this.formatRecordDuration(this.getBookDuration(record.bookId, this.getRecordsForDate(dateKey))))
+                      Text(this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
                         .fontSize(13).fontColor('#AFC2FF')
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                       .border({ width: { top: 1 }, color: '#111217' })
-                  }, (record: ReadTimeRecord) => `${dateKey}-${record.bookId}`)
+                  }, (detail: ReadRecordDetail) => `${dateKey}-${detail.bookName}-${detail.bookAuthor}`)
                 }.width('calc(100% - 32vp)').backgroundColor('#1B1C22').borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)

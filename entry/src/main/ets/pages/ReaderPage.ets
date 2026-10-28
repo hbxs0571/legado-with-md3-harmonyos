@@ -199,6 +199,7 @@ export struct ReaderPage {
   private pendingMarkingEnd: number = -1;
   private pendingMarkingText: string = '';
   private pendingMarkingRanges: Map<number, ReaderMarkingRange> = new Map<number, ReaderMarkingRange>();
+  private lastReaderTapTimestamp: number = 0;
   @State pendingBookmarkTargetPosition: number = -1;
   @State autoPageActive: boolean = false;
   @State autoPageSettingsVisible: boolean = false;
@@ -958,6 +959,9 @@ export struct ReaderPage {
   }
 
   private handleReaderTapAt(x: number, y: number): void {
+    const now = Date.now();
+    if (now - this.lastReaderTapTimestamp < 90) { return; }
+    this.lastReaderTapTimestamp = now;
     if (this.readerContentWidth <= 0 || this.viewportHeight <= 0) { return; }
     const column = Math.max(0, Math.min(2, Math.floor(x / this.readerContentWidth * 3)));
     const row = Math.max(0, Math.min(2, Math.floor(y / this.viewportHeight * 3)));
@@ -1654,6 +1658,11 @@ export struct ReaderPage {
   private getCurrentPageSelectionParts(): ReaderTextSelectionPart[] {
     const parts: ReaderTextSelectionPart[] = [];
     const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
+    if (!this.currentPageContainsImages()) {
+      const joinedPart = this.createJoinedPageSelectionPart();
+      if (joinedPart.value.length > 0) { parts.push(joinedPart); }
+      return parts;
+    }
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const line = lines[lineIndex];
       if (line === undefined) { continue; }
@@ -1669,6 +1678,39 @@ export struct ReaderPage {
       }
     }
     return parts;
+  }
+
+  private currentPageContainsImages(): boolean {
+    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      if (line !== undefined && this.readerLineContainsImage(line)) { return true; }
+    }
+    return false;
+  }
+
+  private createJoinedPageSelectionPart(): ReaderTextSelectionPart {
+    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
+    let value: string = '';
+    const positions: number[] = [];
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      if (line === undefined) { continue; }
+      const linePart = this.createReaderTextSelectionPart(line.items);
+      if (linePart.value.length === 0) { continue; }
+      if (positions.length === 0) {
+        positions.push(linePart.positions[0] ?? line.startPosition);
+      } else {
+        value += '\n';
+        positions.push(linePart.positions[0] ?? line.startPosition);
+      }
+      value += linePart.value;
+      for (let offset = 1; offset < linePart.positions.length; offset++) {
+        positions.push(linePart.positions[offset] ?? line.endPosition);
+      }
+    }
+    if (positions.length === 0) { positions.push(0); }
+    return { value: value, positions: positions };
   }
 
   private readerLineContainsImage(line: LocalReaderLine): boolean {
@@ -1696,6 +1738,7 @@ export struct ReaderPage {
   }
 
   private getReaderSelectionPartIndex(lineIndex: number, itemIndex: number = -1): number {
+    if (!this.currentPageContainsImages()) { return 0; }
     const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
     let partIndex: number = 0;
     for (let index = 0; index < Math.min(lineIndex, lines.length); index++) {
@@ -1852,6 +1895,50 @@ export struct ReaderPage {
   }
 
   @Builder
+  private ReaderPageTextJoined() {
+    Text() {
+      ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
+        (line: LocalReaderLine, lineIndex: number) => {
+          if (lineIndex > 0) {
+            Span('\n').fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
+          }
+          ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
+            if (item.kind === 'text') {
+              if (item.leadingIndent) {
+                Span(item.value).fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
+              } else {
+                ForEach(this.getReaderTextGlyphs(item.value), (glyph: string, glyphIndex: number) => {
+                  this.ReaderGlyphSpan(
+                    glyph,
+                    this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
+                    this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length,
+                    this.getReaderGlyphGapAfter(line, itemIndex, glyphIndex,
+                      this.getReaderTextGlyphCount(item.value), item)
+                  )
+                }, (glyph: string, glyphIndex: number) =>
+                  `${this.readerContentRevision}-joined-${lineIndex}-${itemIndex}-${glyphIndex}-${glyph}`)
+              }
+            }
+          }, (item: LocalReaderLineItem, itemIndex: number) =>
+            `${this.readerContentRevision}-joined-${lineIndex}-${itemIndex}`)
+        }, (line: LocalReaderLine, lineIndex: number) =>
+          `${this.readerContentRevision}-joined-${this.currentPageIndex}-${lineIndex}`)
+    }
+    .fontSize(this.fontSize * 1.05)
+    .lineHeight(this.fontSize * 1.25)
+    .width('100%')
+    .textAlign(TextAlign.Start)
+    .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
+    .copyOption(CopyOptions.InApp)
+    .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
+    .onTextSelectionChange((start: number, end: number) =>
+      this.updatePendingLineSelection(0, start, end))
+    .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
+      onMenuShow: (start: number, end: number) => this.updatePendingLineSelection(0, start, end)
+    })
+  }
+
+  @Builder
   private ReaderPageTextLines() {
     ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
       (line: LocalReaderLine, lineIndex: number) => this.ReaderPageTextLine(line, lineIndex),
@@ -1880,6 +1967,7 @@ export struct ReaderPage {
               .height(line.height)
               .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
               .copyOption(CopyOptions.InApp)
+              .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
               .onTextSelectionChange((start: number, end: number) =>
                 this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end))
               .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
@@ -1922,6 +2010,7 @@ export struct ReaderPage {
       .textAlign(line.justifyGap > 0 ? TextAlign.JUSTIFY : TextAlign.Start)
       .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
       .copyOption(CopyOptions.InApp)
+      .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
       .onTextSelectionChange((start: number, end: number) =>
         this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end))
       .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
@@ -2313,7 +2402,11 @@ export struct ReaderPage {
                 .width('100%')
                 .margin({ bottom: 24 })
             }
-            this.ReaderPageTextLines()
+            if (this.currentPageContainsImages()) {
+              this.ReaderPageTextLines()
+            } else {
+              this.ReaderPageTextJoined()
+            }
             Blank().layoutWeight(1)
             if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
           }
