@@ -53,6 +53,8 @@ import {
 import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
+import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
+import { ReaderMarkingRepository } from '../data/ReaderMarkingRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
@@ -62,7 +64,9 @@ import { BookContentProcessRepository } from '../data/BookContentProcessReposito
 import { ReplaceRule } from '../model/ReplaceRule';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
 import { ReaderBookmarkEditor } from './ReaderBookmarkEditor';
-import { ReadTimeRecord, ReadTimeRepository } from '../data/ReadTimeRepository';
+import { ReaderMarkingEditor } from './ReaderMarkingEditor';
+import { ReadRecordDetail, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
+import { ReadRecordRepository } from '../data/ReadRecordRepository';
 
 const EMPTY_BOOK: Book = {
   id: '',
@@ -101,7 +105,10 @@ struct Index {
   @State books: Book[] = [];
   @State bookGroups: BookGroup[] = [];
   @State readTimeRecords: ReadTimeRecord[] = [];
+  @State readRecordDetails: ReadRecordDetail[] = [];
+  @State readRecordSummaries: ReadRecordSummary[] = [];
   @State readerBookmarks: ReaderBookmark[] = [];
+  @State readerMarkings: ReaderMarking[] = [];
   @State replaceRules: ReplaceRule[] = [];
   /** TXT 目录规则列表，与仓储缓存同步。 */
   @State txtTocRules: TxtTocRule[] = [];
@@ -114,6 +121,8 @@ struct Index {
   @State readerReplaceUsesDefault: boolean = true;
   @State bookmarkEditor: ReaderBookmark | undefined = undefined;
   @State bookmarkEditorIsNew: boolean = true;
+  @State markingEditor: ReaderMarking | undefined = undefined;
+  @State markingEditorIsNew: boolean = true;
   @State readerBookmarkTargetPosition: number = -1;
   @State readerBookmarkTargetRevision: number = 0;
   @State readerContent: string = '';
@@ -206,6 +215,7 @@ struct Index {
       this.restoreHomeDashboardSettings(context);
       this.restoreImportedBooks(context);
       this.restoreReaderBookmarks(context);
+      this.restoreReaderMarkings(context);
       this.restoreReaderSettings(context);
       this.restoreReaderMoreActions(context);
       this.restoreReplaceRules(context);
@@ -227,7 +237,17 @@ struct Index {
   }
 
   private async restoreReadTimeRecords(context: Context): Promise<void> {
-    this.readTimeRecords = await ReadTimeRepository.load(context);
+    // 先迁移旧扁平数据，再从权威会话层构建时间线。
+    await ReadRecordRepository.migrateLegacy(context);
+    await ReadRecordRepository.loadEnabled(context);
+    await this.reloadReadRecordData(context);
+  }
+
+  private async reloadReadRecordData(context: Context): Promise<void> {
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
+    this.readRecordDetails = await ReadRecordRepository.loadDetails(context);
+    this.readRecordSummaries = await ReadRecordRepository.loadSummaries(context);
   }
 
   private getTotalReadTimeMs(): number {
@@ -237,30 +257,32 @@ struct Index {
   private async startReaderSession(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined || this.selectedBook.id.length === 0) { return; }
-    ReadTimeRepository.touch();
-    await ReadTimeRepository.start(context, this.selectedBook);
+    await ReadRecordRepository.start(context, this.selectedBook, this.selectedBook.chapterIndex ?? 0);
     this.readerSessionPaused = false;
     this.readerSessionLastSaveTime = Date.now();
   }
 
   private async pulseReaderSession(): Promise<void> {
     if (this.readerSessionPaused) { return; }
-    ReadTimeRepository.touch();
+    const chapterIndex = this.selectedBook.chapterIndex ?? 0;
+    ReadRecordRepository.touch(chapterIndex);
     const context = this.getUIContext().getHostContext();
-    if (context === undefined || Date.now() - this.readerSessionLastSaveTime < 120000) { return; }
-    await ReadTimeRepository.commit(context);
-    await ReadTimeRepository.start(context, this.selectedBook);
+    if (context === undefined ||
+      Date.now() - this.readerSessionLastSaveTime < ReadRecordRepository.autoSaveIntervalMs) { return; }
+    // 自动保存后立即开始下一段会话，避免计时空窗。
+    await ReadRecordRepository.commit(context);
+    await ReadRecordRepository.start(context, this.selectedBook, chapterIndex);
     this.readerSessionLastSaveTime = Date.now();
-    this.readTimeRecords = await ReadTimeRepository.load(context);
+    await this.reloadReadRecordData(context);
   }
 
   private async stopReaderSession(): Promise<void> {
     this.readerSessionPaused = true;
-    ReadTimeRepository.touch();
+    ReadRecordRepository.touch(this.selectedBook.chapterIndex ?? 0);
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
-    await ReadTimeRepository.commit(context);
-    this.readTimeRecords = await ReadTimeRepository.load(context);
+    await ReadRecordRepository.commit(context);
+    await this.reloadReadRecordData(context);
   }
 
   private async restoreReplaceRules(context: Context): Promise<void> {
@@ -857,6 +879,125 @@ struct Index {
     this.readerBookmarks = await ReaderBookmarkRepository.load(context);
   }
 
+  private async restoreReaderMarkings(context: Context): Promise<void> {
+    this.readerMarkings = await ReaderMarkingRepository.load(context);
+  }
+
+  private requestCreateReaderMarking(chapterPosition: number, endPosition: number, selectedText: string): void {
+    if (!this.selectedBook.isLocal || this.selectedBook.contentPath === undefined ||
+      this.selectedBook.bodyMissing === true) {
+      this.showUnavailableAction('划线与笔记仅支持已有本地正文的书籍');
+      return;
+    }
+    const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ??
+      (this.selectedBook.chapterTitles ?? []).indexOf(this.selectedChapter));
+    const semanticContent = LocalTextSemantics.fromRawBody(this.readerContent);
+    const start = Math.max(0, Math.min(semanticContent.length, Math.trunc(chapterPosition)));
+    const end = Math.max(start, Math.min(semanticContent.length, Math.trunc(endPosition)));
+    const text = selectedText.trim();
+    if (end <= start || text.length === 0) {
+      this.showUnavailableAction('选区为空，无法创建标记');
+      return;
+    }
+    const duplicate = this.readerMarkings.find((marking: ReaderMarking) =>
+      marking.bookId === this.selectedBook.id && marking.chapterIndex === chapterIndex &&
+      marking.chapterPosition === start && marking.selectedText === text);
+    if (duplicate !== undefined) {
+      this.markingEditor = duplicate;
+      this.markingEditorIsNew = false;
+      return;
+    }
+    const now = Date.now();
+    const contextRadius = 36;
+    this.markingEditor = {
+      id: `${this.selectedBook.id}-mark-${now.toString()}`,
+      bookId: this.selectedBook.id,
+      bookName: this.selectedBook.title,
+      bookAuthor: this.selectedBook.author,
+      bookUrl: this.selectedBook.androidOriginalPath ?? this.selectedBook.contentPath ?? this.selectedBook.id,
+      chapterIndex: chapterIndex,
+      chapterName: this.selectedChapter,
+      chapterPosition: start,
+      endPosition: end,
+      selectedText: text,
+      contextBefore: semanticContent.substring(Math.max(0, start - contextRadius), start),
+      contextAfter: semanticContent.substring(end, Math.min(semanticContent.length, end + contextRadius)),
+      effect: 'solid',
+      color: '#63C37D',
+      note: '',
+      enabled: true,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.markingEditorIsNew = true;
+  }
+
+  private editReaderMarking(markingId: string): void {
+    const record = this.readerMarkings.find((marking: ReaderMarking) => marking.id === markingId);
+    if (record === undefined) { return; }
+    this.markingEditor = record;
+    this.markingEditorIsNew = false;
+  }
+
+  private async saveReaderMarking(effect: ReaderMarkingEffect, color: string, note: string): Promise<void> {
+    const draft = this.markingEditor;
+    if (draft === undefined) { return; }
+    const saved: ReaderMarking = {
+      id: draft.id,
+      bookId: draft.bookId,
+      bookName: draft.bookName,
+      bookAuthor: draft.bookAuthor,
+      bookUrl: draft.bookUrl,
+      chapterIndex: draft.chapterIndex,
+      chapterName: draft.chapterName,
+      chapterPosition: draft.chapterPosition,
+      endPosition: draft.endPosition,
+      selectedText: draft.selectedText,
+      contextBefore: draft.contextBefore,
+      contextAfter: draft.contextAfter,
+      effect: effect,
+      color: color,
+      note: note,
+      enabled: true,
+      createdAt: draft.createdAt > 0 ? draft.createdAt : Date.now(),
+      updatedAt: Date.now()
+    };
+    const next = this.readerMarkings.filter((marking: ReaderMarking) => marking.id !== saved.id);
+    next.unshift(saved);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地标记存储');
+      return;
+    }
+    try {
+      await ReaderMarkingRepository.save(context, next);
+      this.readerMarkings = next;
+      this.markingEditor = undefined;
+      this.showUnavailableAction('标记已保存');
+    } catch (_) {
+      this.showUnavailableAction('标记保存失败，请重试');
+    }
+  }
+
+  private async deleteReaderMarking(): Promise<void> {
+    const draft = this.markingEditor;
+    if (draft === undefined) { return; }
+    const next = this.readerMarkings.filter((marking: ReaderMarking) => marking.id !== draft.id);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地标记存储');
+      return;
+    }
+    try {
+      await ReaderMarkingRepository.save(context, next);
+      this.readerMarkings = next;
+      this.markingEditor = undefined;
+      this.showUnavailableAction('标记已删除');
+    } catch (_) {
+      this.showUnavailableAction('标记删除失败，请重试');
+    }
+  }
+
   private requestAddReaderBookmark(chapterPosition: number, pageText: string): void {
     const chapterTitles = this.selectedBook.chapterTitles ?? [];
     const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter));
@@ -1085,6 +1226,102 @@ struct Index {
     this.readerBookmarkTargetRevision++;
     this.readerStartAtChapterBeginning = false;
     this.bookmarkEditor = undefined;
+    this.route = AppRoute.READER;
+  }
+
+  private async openReaderMarking(markingId: string): Promise<void> {
+    const marking = this.readerMarkings.find((record: ReaderMarking) => record.id === markingId);
+    if (marking === undefined) { return; }
+    const targetBook = this.books.find((book: Book) => book.id === marking.bookId);
+    if (targetBook === undefined || targetBook.contentPath === undefined || targetBook.bodyMissing === true) {
+      this.showUnavailableAction('这条笔记对应的本地正文不可用');
+      return;
+    }
+    const chapterTitles = targetBook.chapterTitles ?? [];
+    let chapterIndex = marking.chapterIndex;
+    if (chapterTitles[chapterIndex] !== marking.chapterName) {
+      const matchingIndex = chapterTitles.indexOf(marking.chapterName);
+      if (matchingIndex < 0) {
+        this.showUnavailableAction('笔记章节与当前目录不匹配，已取消跳转');
+        return;
+      }
+      chapterIndex = matchingIndex;
+    }
+    const chapterTitle = chapterTitles[chapterIndex];
+    if (chapterTitle === undefined) {
+      this.showUnavailableAction('笔记章节不在当前目录中');
+      return;
+    }
+    let content: string;
+    try {
+      content = await BookRepository.readChapter(targetBook, chapterTitle, chapterIndex);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('无法读取笔记对应章节');
+      return;
+    }
+    const semanticContent = LocalTextSemantics.fromRawBody(content);
+    const position = Math.max(0, Math.min(semanticContent.length, marking.chapterPosition));
+    const chapterProgress = semanticContent.length > 0 ? position / semanticContent.length * 100 : 0;
+    const chapterCount = Math.max(1, chapterTitles.length);
+    const updatedBook: Book = {
+      id: targetBook.id,
+      title: targetBook.title,
+      author: targetBook.author,
+      category: targetBook.category,
+      groupName: targetBook.groupName,
+      groupNames: targetBook.groupNames,
+      chapterTitles: targetBook.chapterTitles,
+      chapterOffsets: targetBook.chapterOffsets,
+      chapterVolumes: targetBook.chapterVolumes,
+      chapterIndex: chapterIndex,
+      chapterProgress: chapterProgress,
+      lastChapter: chapterTitle,
+      progress: (chapterIndex + chapterProgress / 100) / chapterCount * 100,
+      coverColor: targetBook.coverColor,
+      coverMark: targetBook.coverMark,
+      coverUri: targetBook.coverUri,
+      customCoverUri: targetBook.customCoverUri,
+      bookType: targetBook.bookType,
+      fixedType: targetBook.fixedType,
+      contentPath: targetBook.contentPath,
+      format: targetBook.format,
+      chapterCount: targetBook.chapterCount,
+      fileSizeBytes: targetBook.fileSizeBytes,
+      imageStyle: targetBook.imageStyle,
+      reSegment: targetBook.reSegment,
+      charset: targetBook.charset,
+      description: targetBook.description,
+      remark: targetBook.remark,
+      customTag: targetBook.customTag,
+      bodyMissing: targetBook.bodyMissing,
+      androidOriginalPath: targetBook.androidOriginalPath,
+      androidCharacterPosition: position,
+      readerPositionVersion: 1,
+      tocRule: targetBook.tocRule,
+      isLocal: targetBook.isLocal
+    };
+    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，笔记位置未保存');
+      return;
+    }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+    } catch (_) {
+      this.showUnavailableAction('笔记位置保存失败，已保留原阅读位置');
+      return;
+    }
+    this.selectedBook = updatedBook;
+    this.books = updatedBooks;
+    this.selectedChapter = chapterTitle;
+    this.readerContent = content;
+    this.readerBookmarkTargetPosition = position;
+    this.readerBookmarkTargetRevision++;
+    this.readerStartAtChapterBeginning = false;
+    this.markingEditor = undefined;
     this.route = AppRoute.READER;
   }
 
@@ -2923,6 +3160,9 @@ struct Index {
             startAtChapterBeginning: this.readerStartAtChapterBeginning,
             book: this.selectedBook,
             bookmarks: this.readerBookmarks,
+            markings: this.readerMarkings.filter((marking: ReaderMarking) =>
+              marking.bookId === this.selectedBook.id && marking.chapterIndex ===
+                Math.max(0, this.selectedBook.chapterIndex ?? (this.selectedBook.chapterTitles ?? []).indexOf(this.selectedChapter))),
             chapterTitle: this.selectedChapter,
             replaceRules: this.replaceRules,
             content: this.readerContent,
@@ -2989,6 +3229,8 @@ struct Index {
               position: number, androidCoordinate: boolean) =>
               this.acceptReaderProgress(bookId, chapterIndex, progress, position, androidCoordinate),
             onAddBookmark: (position: number, pageText: string) => this.requestAddReaderBookmark(position, pageText),
+            onCreateMarking: (position: number, endPosition: number, text: string) =>
+              this.requestCreateReaderMarking(position, endPosition, text),
             onToggleCurrentPageBookmark: (start: number, end: number, pageText: string) =>
               this.toggleReaderBookmarkForPage(start, end, pageText),
 
@@ -3035,11 +3277,14 @@ struct Index {
               book: this.selectedBook,
               selectedChapter: this.selectedChapter,
               bookmarks: this.readerBookmarks.filter((bookmark: ReaderBookmark) => bookmark.bookId === this.selectedBook.id),
+              markings: this.readerMarkings.filter((marking: ReaderMarking) => marking.bookId === this.selectedBook.id),
               useTitleReplacement: this.readerTocUseReplace,
               showWordCount: this.readerTocShowWordCount,
               onBack: () => this.route = this.catalogReturnRoute,
               onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId),
               onEditBookmark: (bookmarkId: string) => this.editReaderBookmark(bookmarkId),
+              onOpenMarking: (markingId: string) => this.openReaderMarking(markingId),
+              onEditMarking: (markingId: string) => this.editReaderMarking(markingId),
               onTitleReplacementChange: (enabled: boolean) => this.setReaderTocUseReplace(enabled),
               onShowWordCountChange: (enabled: boolean) => this.setReaderTocShowWordCount(enabled),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
@@ -3058,6 +3303,16 @@ struct Index {
               onSave: (note: string) => this.saveReaderBookmarkNote(note),
               onDelete: () => this.deleteReaderBookmark(),
               onClose: () => this.bookmarkEditor = undefined
+            })
+          }
+          if (this.markingEditor !== undefined) {
+            ReaderMarkingEditor({
+              marking: this.markingEditor,
+              isNew: this.markingEditorIsNew,
+              onSave: (effect: ReaderMarkingEffect, color: string, note: string) =>
+                this.saveReaderMarking(effect, color, note),
+              onDelete: () => this.deleteReaderMarking(),
+              onClose: () => this.markingEditor = undefined
             })
           }
           if (this.route === AppRoute.READER_SETTINGS) {
@@ -3266,7 +3521,17 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.ALL_BOOKMARKS) {
           AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId) })
         } else if (this.profileSubpage === ProfileRoute.READ_RECORDS) {
-          ReadRecordsPage({ records: this.readTimeRecords, onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
+          ReadRecordsPage({
+            records: this.readTimeRecords,
+            details: this.readRecordDetails,
+            summaries: this.readRecordSummaries,
+            onBack: () => this.route = this.profileDetailReturnRoute,
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            onRecordsChanged: async () => {
+              const context = this.getUIContext().getHostContext();
+              if (context !== undefined) { await this.reloadReadRecordData(context); }
+            }
+          })
         } else if (this.profileSubpage === ProfileRoute.CACHE_MANAGEMENT) {
           CacheManagementPage({
             groups: this.cacheManagementGroups(),

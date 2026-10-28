@@ -1,5 +1,6 @@
 import { Book } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
+import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { BookRepository } from '../data/BookRepository';
@@ -89,6 +90,16 @@ interface ReaderBookmarkPageRange {
   text: string;
 }
 
+interface ReaderTextSelectionPart {
+  value: string;
+  positions: number[];
+}
+
+interface ReaderMarkingRange {
+  start: number;
+  end: number;
+}
+
 @Component
 export struct ReaderPage {
   @Prop @Watch('onStartAtChapterBeginningChanged') startAtChapterBeginning: boolean = false;
@@ -110,6 +121,7 @@ export struct ReaderPage {
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
   @Prop bookmarks: ReaderBookmark[] = [];
+  @Prop markings: ReaderMarking[] = [];
   @Prop readingAnchorAvailable: boolean = false;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = [];
@@ -183,6 +195,10 @@ export struct ReaderPage {
   private pageTurnTimer: number = -1;
   private fullBookPaginationGeneration: number = 0;
   private fullBookPaginationKey: string = '';
+  private pendingMarkingStart: number = -1;
+  private pendingMarkingEnd: number = -1;
+  private pendingMarkingText: string = '';
+  private pendingMarkingRanges: Map<number, ReaderMarkingRange> = new Map<number, ReaderMarkingRange>();
   @State pendingBookmarkTargetPosition: number = -1;
   @State autoPageActive: boolean = false;
   @State autoPageSettingsVisible: boolean = false;
@@ -238,6 +254,8 @@ export struct ReaderPage {
   onProgressChange: (bookId: string, chapterIndex: number, progress: number,
     chapterPosition: number, androidCoordinate: boolean) => void = () => {};
   onAddBookmark: (chapterPosition: number, pageText: string) => void = (_position: number, _pageText: string) => {};
+  onCreateMarking: (chapterPosition: number, endPosition: number, selectedText: string) => void =
+    (_position: number, _endPosition: number, _selectedText: string) => {};
   onSaveChapterContent: (chapterIndex: number, title: string, body: string) => void =
     (_chapterIndex: number, _title: string, _body: string) => {};
   onToggleReSegment: (enabled: boolean) => void = (_enabled: boolean) => {};
@@ -1633,6 +1651,287 @@ export struct ReaderPage {
     return nextItem !== undefined && !nextItem.leadingIndent ? line.justifyGap : 0;
   }
 
+  private getCurrentPageSelectionParts(): ReaderTextSelectionPart[] {
+    const parts: ReaderTextSelectionPart[] = [];
+    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      if (line === undefined) { continue; }
+      if (this.readerLineContainsImage(line)) {
+        for (let itemIndex = 0; itemIndex < line.items.length; itemIndex++) {
+          const item = line.items[itemIndex];
+          if (item !== undefined && item.kind === 'text') {
+            parts.push(this.createReaderTextSelectionPart([item]));
+          }
+        }
+      } else {
+        parts.push(this.createReaderTextSelectionPart(line.items));
+      }
+    }
+    return parts;
+  }
+
+  private readerLineContainsImage(line: LocalReaderLine): boolean {
+    for (let index = 0; index < line.items.length; index++) {
+      if (line.items[index]?.kind === 'image') { return true; }
+    }
+    return false;
+  }
+
+  private createReaderTextSelectionPart(items: LocalReaderLineItem[]): ReaderTextSelectionPart {
+    let value: string = '';
+    const positions: number[] = [];
+    for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+      const item = items[itemIndex];
+      if (item === undefined || item.kind !== 'text') { continue; }
+      if (positions.length === 0) { positions.push(item.startPosition); }
+      else { positions[positions.length - 1] = item.startPosition; }
+      value += item.value;
+      for (let offset = 0; offset < item.value.length; offset++) {
+        positions.push(item.startPosition + offset + 1);
+      }
+    }
+    if (positions.length === 0) { positions.push(0); }
+    return { value: value, positions: positions };
+  }
+
+  private getReaderSelectionPartIndex(lineIndex: number, itemIndex: number = -1): number {
+    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
+    let partIndex: number = 0;
+    for (let index = 0; index < Math.min(lineIndex, lines.length); index++) {
+      const line = lines[index];
+      if (line === undefined) { continue; }
+      if (this.readerLineContainsImage(line)) {
+        for (let item = 0; item < line.items.length; item++) {
+          if (line.items[item]?.kind === 'text') { partIndex++; }
+        }
+      } else if (line.items.some((item: LocalReaderLineItem) => item.kind === 'text')) {
+        partIndex++;
+      }
+    }
+    const currentLine = lines[lineIndex];
+    if (currentLine !== undefined && this.readerLineContainsImage(currentLine)) {
+      for (let item = 0; item < Math.max(0, itemIndex); item++) {
+        if (currentLine.items[item]?.kind === 'text') { partIndex++; }
+      }
+    }
+    return partIndex;
+  }
+
+  private updatePendingLineSelection(partIndex: number, selectionStart: number, selectionEnd: number): void {
+    const parts = this.getCurrentPageSelectionParts();
+    const part = parts[partIndex];
+    if (part === undefined) { return; }
+    const start = Math.max(0, Math.min(part.value.length, Math.trunc(Math.min(selectionStart, selectionEnd))));
+    const end = Math.max(start, Math.min(part.value.length, Math.trunc(Math.max(selectionStart, selectionEnd))));
+    if (end <= start) {
+      this.pendingMarkingRanges.delete(partIndex);
+    } else {
+      const range: ReaderMarkingRange = { start: start, end: end };
+      this.pendingMarkingRanges.set(partIndex, range);
+    }
+    this.rebuildPendingMarkingRange();
+  }
+
+  private rebuildPendingMarkingRange(): void {
+    const parts = this.getCurrentPageSelectionParts();
+    const ranges = Array.from(this.pendingMarkingRanges.entries()).sort((first, second) => first[0] - second[0]);
+    if (ranges.length === 0) {
+      this.pendingMarkingStart = -1;
+      this.pendingMarkingEnd = -1;
+      this.pendingMarkingText = '';
+      return;
+    }
+    const firstPart = parts[ranges[0]?.[0] ?? -1];
+    const firstRange = ranges[0]?.[1];
+    const lastPair = ranges[ranges.length - 1];
+    const lastPart = parts[lastPair?.[0] ?? -1];
+    if (firstPart === undefined || firstRange === undefined || lastPart === undefined || lastPair === undefined) { return; }
+    const start = firstPart.positions[firstRange.start] ?? 0;
+    const end = lastPart.positions[lastPair[1].end] ?? start;
+    if (end <= start) {
+      this.pendingMarkingStart = -1;
+      this.pendingMarkingEnd = -1;
+      this.pendingMarkingText = '';
+      return;
+    }
+    const rawText = this.localSemanticContent.substring(start, end);
+    const leftTrim = rawText.length - rawText.trimStart().length;
+    const selectedText = rawText.trim();
+    this.pendingMarkingStart = start + leftTrim;
+    this.pendingMarkingEnd = this.pendingMarkingStart + selectedText.length;
+    this.pendingMarkingText = selectedText;
+  }
+
+  private createMarkingFromCurrentSelection(): void {
+    const start = this.pendingMarkingStart;
+    const end = this.pendingMarkingEnd;
+    const selectedText = this.pendingMarkingText;
+    this.pendingMarkingStart = -1;
+    this.pendingMarkingEnd = -1;
+    this.pendingMarkingText = '';
+    if (!this.book.isLocal || this.book.bodyMissing === true) {
+      this.onUnavailableAction('划线与笔记仅支持已有本地正文的书籍');
+      return;
+    }
+    if (start < 0 || end <= start || selectedText.length === 0) {
+      this.onUnavailableAction('没有取得有效的正文选区，请重新选择文字');
+      return;
+    }
+    this.onCreateMarking(start, end, selectedText);
+  }
+
+  private getMarkingForTextRange(start: number, end: number): ReaderMarking | undefined {
+    const chapterIndex = this.getChapterIndex();
+    for (let index = this.markings.length - 1; index >= 0; index--) {
+      const marking = this.markings[index];
+      if (marking !== undefined && marking.enabled && marking.chapterIndex === chapterIndex &&
+        marking.chapterPosition < end && marking.endPosition > start) {
+        return marking;
+      }
+    }
+    return undefined;
+  }
+
+  private getMarkingBackground(marking: ReaderMarking | undefined): string {
+    if (marking === undefined || (marking.effect !== 'highlight' && marking.effect !== 'background')) {
+      return 'transparent';
+    }
+    return marking.color.startsWith('#') && marking.color.length === 7
+      ? `#44${marking.color.substring(1)}` : marking.color;
+  }
+
+  private getMarkingDecorationType(marking: ReaderMarking | undefined): TextDecorationType {
+    if (marking === undefined) { return TextDecorationType.None; }
+    if (marking.effect === 'strike') { return TextDecorationType.LineThrough; }
+    if (marking.effect === 'solid' || marking.effect === 'double' || marking.effect === 'dashed' ||
+      marking.effect === 'wave') { return TextDecorationType.Underline; }
+    return TextDecorationType.None;
+  }
+
+  private getMarkingDecorationStyle(marking: ReaderMarking | undefined): TextDecorationStyle {
+    if (marking?.effect === 'double') { return TextDecorationStyle.DOUBLE; }
+    if (marking?.effect === 'dashed') { return TextDecorationStyle.DASHED; }
+    if (marking?.effect === 'wave') { return TextDecorationStyle.WAVY; }
+    return TextDecorationStyle.SOLID;
+  }
+
+  private getReaderGlyphStartPosition(value: string, basePosition: number, glyphIndex: number): number {
+    let position = basePosition;
+    const glyphs = this.getReaderTextGlyphs(value);
+    for (let index = 0; index < glyphIndex; index++) {
+      position += glyphs[index]?.length ?? 0;
+    }
+    return position;
+  }
+
+  @Builder
+  private readerMarkingSelectionMenu() {
+    Row() {
+      Text('划线 / 笔记').fontSize(14).fontColor('#E5E6EB')
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .onClick(() => this.createMarkingFromCurrentSelection())
+    }.backgroundColor('#242127').borderRadius(12)
+  }
+
+  @Builder
+  private ReaderGlyphSpan(glyph: string, start: number, end: number, gapAfter: number) {
+    Span(glyph)
+      .fontSize(this.fontSize * 1.05)
+      .fontColor(this.getMarkingForTextRange(start, end)?.effect === 'text'
+        ? this.getMarkingForTextRange(start, end)?.color ?? this.getReadingTextColor()
+        : this.getReadingTextColor())
+      .backgroundColor(this.getMarkingBackground(this.getMarkingForTextRange(start, end)))
+      .decoration({
+        type: this.getMarkingDecorationType(this.getMarkingForTextRange(start, end)),
+        color: this.getMarkingForTextRange(start, end)?.color ?? this.getReadingTextColor(),
+        style: this.getMarkingDecorationStyle(this.getMarkingForTextRange(start, end)),
+        thicknessScale: 1
+      })
+      .letterSpacing(gapAfter)
+  }
+
+  @Builder
+  private ReaderPageTextLines() {
+    ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
+      (line: LocalReaderLine, lineIndex: number) => this.ReaderPageTextLine(line, lineIndex),
+      (line: LocalReaderLine, lineIndex: number) =>
+        `${this.readerContentRevision}-${this.currentPageIndex}-${lineIndex}`)
+  }
+
+  @Builder
+  private ReaderPageTextLine(line: LocalReaderLine, lineIndex: number) {
+    if (this.readerLineContainsImage(line)) {
+      Row() {
+        ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
+          if (item.kind === 'image') {
+            Image(item.value)
+              .width(item.width)
+              .height(item.height)
+              .objectFit(ImageFit.Contain)
+              .alignSelf(ItemAlign.Center)
+              .margin({ right: this.getReaderLineGapAfter(line, itemIndex, item) })
+              .onClick(() => this.openReaderImage(item.value))
+          } else {
+            Text(item.value)
+              .fontSize(this.fontSize * 1.05)
+              .fontColor(this.getReadingTextColor())
+              .maxLines(1)
+              .height(line.height)
+              .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
+              .copyOption(CopyOptions.InApp)
+              .onTextSelectionChange((start: number, end: number) =>
+                this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end))
+              .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
+                onMenuShow: (start: number, end: number) =>
+                  this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end)
+              })
+          }
+        }, (item: LocalReaderLineItem, itemIndex: number) =>
+          `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${item.kind}`)
+      }
+      .width('100%')
+      .height(line.height)
+      .justifyContent(line.imageOnly ? FlexAlign.Center : FlexAlign.Start)
+      .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
+    } else {
+      Text() {
+        ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
+          if (item.leadingIndent) {
+            Span(item.value).fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
+          } else {
+            ForEach(this.getReaderTextGlyphs(item.value), (glyph: string, glyphIndex: number) => {
+              this.ReaderGlyphSpan(
+                glyph,
+                this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
+                this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length,
+                this.getReaderGlyphGapAfter(line, itemIndex, glyphIndex,
+                  this.getReaderTextGlyphCount(item.value), item)
+              )
+            }, (glyph: string, glyphIndex: number) =>
+              `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${glyphIndex}-${glyph}`)
+          }
+        }, (item: LocalReaderLineItem, itemIndex: number) =>
+          `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${item.kind}`)
+      }
+      .fontSize(this.fontSize * 1.05)
+      .lineHeight(line.height)
+      .width('100%')
+      .height(line.height)
+      .maxLines(1)
+      .textAlign(line.justifyGap > 0 ? TextAlign.JUSTIFY : TextAlign.Start)
+      .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
+      .copyOption(CopyOptions.InApp)
+      .onTextSelectionChange((start: number, end: number) =>
+        this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end))
+      .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
+        onMenuShow: (start: number, end: number) =>
+          this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end)
+      })
+      .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
+    }
+  }
+
   private usesLocalPagination(): boolean {
     return (this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation !== 3;
   }
@@ -2014,45 +2313,7 @@ export struct ReaderPage {
                 .width('100%')
                 .margin({ bottom: 24 })
             }
-            ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
-              (line: LocalReaderLine, lineIndex: number) => {
-                Row() {
-                  ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
-                    if (item.kind === 'image') {
-                      Image(item.value)
-                        .width(item.width)
-                        .height(item.height)
-                        .objectFit(ImageFit.Contain)
-                        .alignSelf(ItemAlign.Center)
-                        .margin({ right: this.getReaderLineGapAfter(line, itemIndex, item) })
-                        .onClick(() => this.openReaderImage(item.value))
-                    } else if (item.leadingIndent) {
-                      Text(item.value)
-                        .fontSize(this.fontSize * 1.05)
-                        .fontColor(this.getReadingTextColor())
-                        .maxLines(1)
-                        .height(line.height)
-                    } else {
-                      ForEach(this.getReaderTextGlyphs(item.value), (glyph: string, glyphIndex: number) => {
-                        Text(glyph)
-                          .fontSize(this.fontSize * 1.05)
-                          .fontColor(this.getReadingTextColor())
-                          .maxLines(1)
-                          .height(line.height)
-                          .margin({ right: this.getReaderGlyphGapAfter(
-                            line, itemIndex, glyphIndex, this.getReaderTextGlyphCount(item.value), item) })
-                      }, (glyph: string, glyphIndex: number) =>
-                        `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${glyphIndex}-${glyph}`)
-                    }
-                  }, (item: LocalReaderLineItem, itemIndex: number) =>
-                    `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${item.kind}`)
-                }
-                .width('100%')
-                .height(line.height)
-                .justifyContent(line.imageOnly ? FlexAlign.Center : FlexAlign.Start)
-                .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
-              }, (line: LocalReaderLine, lineIndex: number) =>
-                `${this.readerContentRevision}-${this.currentPageIndex}-${lineIndex}`)
+            this.ReaderPageTextLines()
             Blank().layoutWeight(1)
             if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
           }

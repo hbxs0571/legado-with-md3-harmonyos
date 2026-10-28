@@ -1,5 +1,6 @@
 import { Book } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
+import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
@@ -20,6 +21,7 @@ export struct CatalogPage {
   };
   @Prop selectedChapter: string = '';
   @Prop bookmarks: ReaderBookmark[] = [];
+  @Prop markings: ReaderMarking[] = [];
   @Prop useTitleReplacement: boolean = false;
   @Prop showWordCount: boolean = true;
   @State ascending: boolean = true;
@@ -36,6 +38,8 @@ export struct CatalogPage {
   onSelectChapter: (chapterIndex: number) => void = () => {};
   onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
   onEditBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
+  onOpenMarking: (markingId: string) => void = (_markingId: string) => {};
+  onEditMarking: (markingId: string) => void = (_markingId: string) => {};
   onTitleReplacementChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onShowWordCountChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -109,6 +113,17 @@ export struct CatalogPage {
     if (index === 1) { return '目录'; }
     if (index === 2) { return '书签'; }
     return '笔记';
+  }
+
+  private getMarkingEffectLabel(effect: ReaderMarkingEffect): string {
+    if (effect === 'solid') { return '下划线'; }
+    if (effect === 'double') { return '双下划线'; }
+    if (effect === 'dashed') { return '虚线'; }
+    if (effect === 'wave') { return '波浪线'; }
+    if (effect === 'strike') { return '删除线'; }
+    if (effect === 'highlight') { return '强调线'; }
+    if (effect === 'background') { return '背景高亮'; }
+    return '文字颜色';
   }
 
   private getSourceLabel(): string {
@@ -319,14 +334,54 @@ export struct CatalogPage {
         .scrollBar(BarState.Off)
       }
     } else {
-      Column() {
-        AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: '#AFC2FF' })
-        Text('暂无笔记').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
-        Text('本书笔记暂未迁移').fontSize(11).fontColor('#858791').margin({ top: 5 })
+      if (this.markings.length === 0) {
+        Column() {
+          AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: '#AFC2FF' })
+          Text('暂无笔记').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.markings, (marking: ReaderMarking) => {
+              Column() {
+                Row() {
+                  Text(marking.chapterName).fontSize(13).fontColor('#AFC2FF')
+                    .layoutWeight(1).maxLines(1)
+                  Text(this.getMarkingEffectLabel(marking.effect)).fontSize(10).fontColor(marking.color)
+                    .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+                    .backgroundColor('#292A31').borderRadius(12)
+                }
+                Text(marking.selectedText).fontSize(13).fontColor('#E0E1E6').lineHeight(19)
+                  .maxLines(4).width('100%').margin({ top: 7 })
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .onClick(() => this.onEditMarking(marking.id))
+                if (marking.note.trim().length > 0) {
+                  Text(marking.note).fontSize(12).fontColor('#AEB0B9').lineHeight(17)
+                    .maxLines(3).width('100%').margin({ top: 6 })
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                Row() {
+                  Blank()
+                  Text('定位').fontSize(11).fontColor('#D7DFFB')
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .backgroundColor('#454B62').borderRadius(14)
+                    .onClick(() => this.onOpenMarking(marking.id))
+                  Text('编辑').fontSize(11).fontColor('#C5C7D0')
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 }).margin({ left: 6 })
+                    .backgroundColor('#292A31').borderRadius(14)
+                    .onClick(() => this.onEditMarking(marking.id))
+                }.width('100%').margin({ top: 8 })
+              }
+              .width('100%').padding(12)
+              .backgroundColor(marking.chapterName === this.selectedChapter ? '#303442' : '#1A1B21')
+              .borderRadius(10).margin({ bottom: 6 })
+            }, (marking: ReaderMarking) => marking.id)
+          }.padding({ left: 12, right: 12, bottom: 14 })
+        }.width('100%').height('100%').scrollBar(BarState.Off)
       }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
     }
   }
 

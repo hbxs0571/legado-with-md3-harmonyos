@@ -13,7 +13,8 @@ import {
 import { ProfileRoute } from '../model/Book';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { ReplaceRulePreviewLine, ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
-import { ReadTimeRecord } from '../data/ReadTimeRepository';
+import { ReadRecordDetail, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
+import { ReadRecordRepository } from '../data/ReadRecordRepository';
 import { TxtTocRule } from '../model/TxtTocRule';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 
@@ -2774,14 +2775,24 @@ struct BookmarkEntryCard {
 export struct ReadRecordsPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 扫描/修复/清空改变了数据后通知 Index 重读会话，避免页面仍显示旧列表。 */
+  onRecordsChanged: () => void = () => {};
   @Prop records: ReadTimeRecord[] = [];
+  @Prop details: ReadRecordDetail[] = [];
+  @Prop summaries: ReadRecordSummary[] = [];
+  @State recordEnabled: boolean = true;
   @State displayMode: number = 0;
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State emptyFaceIndex: number = Math.floor(Math.random() * BOOKMARK_EMPTY_FACES.length);
   @State showActionsSheet: boolean = false;
   @State showCalendarSheet: boolean = false;
+  @State showClearConfirm: boolean = false;
   @State selectedCalendarDay: number = 0;
+
+  aboutToAppear(): void {
+    this.recordEnabled = ReadRecordRepository.isEnabled();
+  }
 
   private getModeLabel(): string {
     if (this.displayMode === 1) { return '时间线视图'; }
@@ -2857,8 +2868,21 @@ export struct ReadRecordsPage {
     const year = today.getFullYear();
     const month = (today.getMonth() + 1).toString().padStart(2, '0');
     const date = day.toString().padStart(2, '0');
-    return this.getTotalDuration(this.records.filter((record: ReadTimeRecord) =>
-      this.getDateKey(record.startTime) === `${year}-${month}-${date}`));
+    const dateKey = `${year}-${month}-${date}`;
+    const query = this.searchQuery.trim().toLocaleLowerCase();
+    return this.details
+      .filter((detail: ReadRecordDetail) => detail.date === dateKey &&
+        (query.length === 0 || detail.bookName.toLocaleLowerCase().includes(query) ||
+          detail.bookAuthor.toLocaleLowerCase().includes(query)))
+      .reduce((total: number, detail: ReadRecordDetail) => total + detail.readTime, 0);
+  }
+
+  private getSummaryBookCount(): number {
+    return this.summaries.length;
+  }
+
+  private getSummaryDuration(): number {
+    return this.summaries.reduce((total: number, summary: ReadRecordSummary) => total + summary.readTime, 0);
   }
 
   private formatRecordDuration(durationMs: number): string {
@@ -2876,6 +2900,71 @@ export struct ReadRecordsPage {
     const hour = date.getHours().toString().padStart(2, '0');
     const minute = date.getMinutes().toString().padStart(2, '0');
     return `${date.getFullYear()}-${month}-${day} ${hour}:${minute}`;
+  }
+
+  /** 取宿主 Ability 上下文，拿不到就提示并返回 undefined。 */
+  private hostContext(): Context | undefined {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('无法获取应用上下文，操作未执行');
+    }
+    return context;
+  }
+
+  /** 启用/停用阅读记录总开关，对应上游 localPreferences 的 readRecordEnabled。 */
+  private async toggleRecordEnabled(): Promise<void> {
+    const context = this.hostContext();
+    if (context === undefined) { return; }
+    const enabled = !ReadRecordRepository.isEnabled();
+    await ReadRecordRepository.setEnabled(context, enabled);
+    this.recordEnabled = enabled;
+    this.onUnavailableAction(enabled ? '已启用阅读记录，之后会继续记账' : '已停用阅读记录，期间不再记账');
+  }
+
+  /** 扫描重复/异常记录，只读不改数据。 */
+  private async runScanIssues(): Promise<void> {
+    const context = this.hostContext();
+    if (context === undefined) { return; }
+    const report = await ReadRecordRepository.scanIssues(context);
+    const parts: string[] = [];
+    if (report.duplicateSessionCount > 0) { parts.push(`重复时段 ${report.duplicateSessionCount} 条`); }
+    if (report.normalizedRecordCount > 0) { parts.push(`写法不规范 ${report.normalizedRecordCount} 条`); }
+    if (report.mergedCount > 0) { parts.push(`明细/汇总不一致 ${report.mergedCount} 组`); }
+    this.onUnavailableAction(parts.length > 0 ? `发现：${parts.join('，')}` : '未发现问题');
+  }
+
+  /** 修复重复记录与身份写法，并按会话重算明细与汇总。 */
+  private async runRepair(): Promise<void> {
+    const context = this.hostContext();
+    if (context === undefined) { return; }
+    const report = await ReadRecordRepository.repair(context);
+    const total = report.duplicateSessionCount + report.normalizedRecordCount + report.mergedCount;
+    this.onUnavailableAction(total > 0
+      ? `修复完成：重复 ${report.duplicateSessionCount} 条、写法 ${report.normalizedRecordCount} 条、派生数据 ${report.mergedCount} 组`
+      : '没有需要修复的问题');
+    if (total > 0) { this.onRecordsChanged(); }
+  }
+
+  /** 清空全部本地阅读记录（含当前未落库的会话），有确认面板。 */
+  private requestClearAll(): void {
+    if (this.records.length === 0 && !ReadRecordRepository.isEnabled()) {
+      this.onUnavailableAction('当前没有可清空的阅读记录');
+      return;
+    }
+    if (this.records.length === 0) {
+      this.onUnavailableAction('当前没有可清空的阅读记录');
+      return;
+    }
+    this.showClearConfirm = true;
+  }
+
+  private async confirmClearAll(): Promise<void> {
+    this.showClearConfirm = false;
+    const context = this.hostContext();
+    if (context === undefined) { return; }
+    await ReadRecordRepository.clearAll(context);
+    this.onRecordsChanged();
+    this.onUnavailableAction('阅读记录已清空');
   }
 
   @Builder
@@ -2940,9 +3029,9 @@ export struct ReadRecordsPage {
             Column() {
               Text('阅读总成就').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
               Row() {
-                Text(`${this.getDistinctBooks(this.records).length} 本书`).fontSize(20).fontColor('#AFC2FF')
+                Text(`${this.getSummaryBookCount()} 本书`).fontSize(20).fontColor('#AFC2FF')
                 Blank()
-                Text(this.formatRecordDuration(this.getTotalDuration(this.records)))
+                Text(this.formatRecordDuration(this.getSummaryDuration()))
                   .fontSize(16).fontColor('#D8D9E0')
               }.width('100%').margin({ top: 12 })
             }.width('calc(100% - 32vp)').padding(16).backgroundColor('#1B1C22').borderRadius(16)
@@ -3012,18 +3101,42 @@ export struct ReadRecordsPage {
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
     }.width('100%').height('100%').backgroundColor('#111217')
-      .bindSheet(this.showActionsSheet || this.showCalendarSheet, this.ReadRecordSheetContent(), {
-        height: this.showCalendarSheet ? 570 : 500,
-        dragBar: true,
+      // 三个半模态共用一个 bindSheet：同一节点链式挂多个 bindSheet 时，
+      // 任一状态变化都会让刚打开的 sheet 立即 onDisappear（实测 0.6s 内被顶掉），
+      // 所以用互斥条件 + 单一入口。
+      .bindSheet(this.showActionsSheet || this.showCalendarSheet || this.showClearConfirm, this.ReadRecordSheetContent(), {
+        height: this.showClearConfirm ? SheetSize.FIT_CONTENT : (this.showCalendarSheet ? 570 : 500),
+        dragBar: !this.showClearConfirm,
         showClose: false,
         backgroundColor: '#1C1D23',
-        onDisappear: () => { this.showActionsSheet = false; this.showCalendarSheet = false; }
+        onDisappear: () => { this.showActionsSheet = false; this.showCalendarSheet = false; this.showClearConfirm = false; }
       })
+  }
+
+  /** 清空确认面板，与替换净化的删除确认同款交互。 */
+  @Builder
+  private ReadRecordClearConfirmSheet() {
+    Column() {
+      Text('清空阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        .width('100%').textAlign(TextAlign.Center).padding({ top: 22 })
+      Text(`确定删除全部 ${this.records.length} 条阅读会话？删除后不可恢复。`)
+        .fontSize(14).fontColor('#D8D9E0').width('100%').textAlign(TextAlign.Center)
+        .padding({ left: 28, right: 28, top: 12, bottom: 20 })
+      Row() {
+        Text('取消').fontSize(16).fontColor('#D8D9E0').textAlign(TextAlign.Center)
+          .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
+          .onClick(() => this.showClearConfirm = false)
+        Text('清空').fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
+          .layoutWeight(1).height(48).backgroundColor('#D95656').borderRadius(24).margin({ left: 12 })
+          .onClick(() => { this.confirmClearAll(); })
+      }.width('100%').padding({ left: 28, right: 28, bottom: 24 })
+    }.backgroundColor('#1C1D23')
   }
 
   @Builder
   private ReadRecordSheetContent() {
-    if (this.showCalendarSheet) { this.ReadRecordCalendarSheet() }
+    if (this.showClearConfirm) { this.ReadRecordClearConfirmSheet() }
+    else if (this.showCalendarSheet) { this.ReadRecordCalendarSheet() }
     else { this.ReadRecordOptionsSheet() }
   }
 
@@ -3071,10 +3184,18 @@ export struct ReadRecordsPage {
         this.showActionsSheet = false;
         this.showCalendarSheet = true;
       } })
-      ReadRecordOptionRow({ icon: 'clock', title: '启用阅读记录', detail: '记录书籍阅读时长', onSelect: () => this.onUnavailableAction('阅读记录设置尚未迁移，未更改设置') })
-      ReadRecordOptionRow({ icon: 'search', title: '扫描阅读记录问题', detail: '检查重复或异常记录', onSelect: () => this.onUnavailableAction('记录扫描尚未迁移，未检查数据') })
-      ReadRecordOptionRow({ icon: 'swap', title: '修复阅读记录', detail: '修复重复记录和阅读时段', onSelect: () => this.onUnavailableAction('记录修复尚未迁移，未修改数据') })
-      ReadRecordOptionRow({ icon: 'delete', title: '清空阅读记录', detail: '删除本地阅读历史', onSelect: () => this.onUnavailableAction(this.records.length === 0 ? '当前没有可清空的阅读记录' : '清空记录功能尚未迁移，记录未更改') })
+      ReadRecordOptionRow({
+        icon: 'clock',
+        title: this.recordEnabled ? '停用阅读记录' : '启用阅读记录',
+        detail: this.recordEnabled ? '当前已启用' : '当前已停用，开启后继续记账',
+        onSelect: (): void => { this.toggleRecordEnabled(); }
+      })
+      ReadRecordOptionRow({ icon: 'search', title: '扫描阅读记录问题', detail: '检查重复或异常记录',
+        onSelect: (): void => { this.runScanIssues(); } })
+      ReadRecordOptionRow({ icon: 'swap', title: '修复阅读记录', detail: '修复重复记录和阅读时段',
+        onSelect: (): void => { this.runRepair(); } })
+      ReadRecordOptionRow({ icon: 'delete', title: '清空阅读记录', detail: '删除本地阅读历史',
+        onSelect: (): void => { this.showActionsSheet = false; this.requestClearAll(); } })
     }.width('100%').padding({ bottom: 16 })
   }
 }
