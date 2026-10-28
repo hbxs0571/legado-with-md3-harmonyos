@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-28 补齐 config.xml 缺失的 24 个阅读配置键
+
+- `config.xml` 骨架改成只写空 `<map>` 之后，骨架原先一次性写出的 24 个阅读配置键（`readStyleSelect`、`shareLayout`、`hideStatusBar`、`hideNavigationBar`、`readingAnchorEnabled`、`swipeToAddBookmark`、`maxLengthWithNoToc`、`readMenuIconShowText`、`readMenuIconStyle`、`readMenuIconItemsPerRow`、`readMenuIconRowCount`、`progressBarBehavior`、`tocUiUseReplace`、`tocCountWords`、`clickImgWay`、`clickActionTopLeft` 至 `clickActionBottomRight`）没有补写，备份出的 `config.xml` 缺这些键，Android 与 HOS 自身读回都会丢。
+- 在 `readConfig` 段按 `upsertAndroidPreference` 补齐，门控与其余阅读配置键一致：排除「阅读配置」时整段不写。
+- N 端 API 26 模拟器实测：不排除时 `config.xml` 共 55 键、24 键齐全且值正确；排除「阅读配置」后只剩护眼六键与书架布局九键，24 键全部消失。
+- 恢复侧无需改动：`readStyleSelect`、`shareLayout`、`clickAction*` 等键的读取逻辑本就在 `restoreReaderSettings()` 里按 `readConfig` 门控。
+
 ## 2026-10-28 Android ZIP 类别门控与书架筛选（r255–r257）
 
 - r255 从空 `config.xml` 创建兼容备份；阅读设置由 `readConfig` 类别单独控制，护眼六键由 `themeConfig` 类别单独控制。HOS 模拟器验证了两类设置分别包含或忽略的四种恢复组合。

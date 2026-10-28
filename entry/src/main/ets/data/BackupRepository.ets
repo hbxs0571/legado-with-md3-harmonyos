@@ -501,6 +501,50 @@ export class BackupRepository {
           configText, 'string', 'underlineColor', settings.underlineColor);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'underlineColorNight', settings.underlineColorNight);
+        // config.xml 骨架只写空 <map>，以下 24 个键原先由骨架一次性写出，
+        // 若这里不补，备份出的 config.xml 会缺少这些设置，Android 与 HOS 自身读回都会丢。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'readStyleSelect', '0');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'shareLayout', `${settings.shareLayout}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'hideStatusBar', `${settings.hideStatusBar}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'hideNavigationBar', `${settings.hideNavigationBar}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'readingAnchorEnabled', `${settings.readingAnchorEnabled}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'swipeToAddBookmark', `${settings.swipeToAddBookmark}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'maxLengthWithNoToc', `${settings.maxLengthWithNoToc}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'readMenuIconShowText', `${settings.showBottomActionText}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'readMenuIconStyle', `${settings.bottomIconStyle}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'readMenuIconItemsPerRow', `${settings.bottomItemsPerRow}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'readMenuIconRowCount', `${settings.bottomRowCount}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'progressBarBehavior', settings.progressBehavior);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'tocUiUseReplace', `${settings.tocUseReplace}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'tocCountWords', `${settings.tocShowWordCount}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'clickImgWay', settings.clickImageBehavior);
+        const clickActionKeys: string[] = [
+          'clickActionTopLeft', 'clickActionTopCenter', 'clickActionTopRight',
+          'clickActionMiddleLeft', 'clickActionMiddleCenter', 'clickActionMiddleRight',
+          'clickActionBottomLeft', 'clickActionBottomCenter', 'clickActionBottomRight'
+        ];
+        for (let clickIndex = 0; clickIndex < clickActionKeys.length; clickIndex++) {
+          const clickKey = clickActionKeys[clickIndex];
+          if (clickKey === undefined) { continue; }
+          configText = BackupRepository.upsertAndroidPreference(
+            configText, 'int', clickKey,
+            `${BackupRepository.androidClickActionValue(settings.clickRegionActions[clickIndex] ?? '')}`);
+        }
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {

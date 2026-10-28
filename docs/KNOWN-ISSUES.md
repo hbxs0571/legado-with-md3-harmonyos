@@ -25,6 +25,7 @@
 - TXT 目录规则完整 CRUD/批量组合和含非空规则的应用备份恢复仍需补测。
 - 替换规则的同步正则未受 `timeoutMillisecond` 限时；异步并发保存覆盖风险、完整恢复提示仍待验证。
 - 在线 URL 规则导入、在线书源抓取、RSS、TTS、AI、WebDAV、云同步和 Web 服务未接入。
+- `config.xml` 骨架只写空 `<map>` 后，曾有 24 个阅读配置键（`readStyleSelect`、`shareLayout`、`hideStatusBar`、`hideNavigationBar`、`readingAnchorEnabled`、`swipeToAddBookmark`、`maxLengthWithNoToc`、`readMenuIconShowText`、`readMenuIconStyle`、`readMenuIconItemsPerRow`、`readMenuIconRowCount`、`progressBarBehavior`、`tocUiUseReplace`、`tocCountWords`、`clickImgWay`、`clickActionTopLeft` 至 `clickActionBottomRight`）原先只由骨架写出，`readConfig` 段没有补写，备份出的 `config.xml` 会缺这些键。已在 `readConfig` 段补齐并在 N 端模拟器核对：不排除时 55 键齐全，「排除阅读配置」时整段消失、只剩护眼六键与书架布局九键。
 
 ## 设备范围
 
