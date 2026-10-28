@@ -1,10 +1,11 @@
 import { preferences } from '@kit.ArkData';
-import { fileIo } from '@kit.CoreFileKit';
-import { BookGroup } from '../model/BookGroup';
+import { fileIo, picker } from '@kit.CoreFileKit';
+import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 
 interface AndroidBookGroupRecord {
   groupId?: number;
   groupName?: string;
+  cover?: string;
   order?: number;
   show?: boolean;
   enableRefresh?: boolean;
@@ -70,7 +71,14 @@ export class BookGroupRepository {
   }
 
   static async add(context: Context, name: string): Promise<BookGroup> {
-    const normalized = name.trim();
+    return BookGroupRepository.addWithDraft(context, {
+      groupName: name, enableRefresh: true, bookSort: -1, isPrivate: false
+    });
+  }
+
+  /** 按完整草稿新建分组，对应上游 GroupViewModel.addGroup。 */
+  static async addWithDraft(context: Context, draft: BookGroupDraft): Promise<BookGroup> {
+    const normalized = draft.groupName.trim();
     if (normalized.length === 0) { throw new Error('分组名称不能为空'); }
     if (BookGroupRepository.groups.some((group: BookGroup) => group.groupId > 0 && group.groupName === normalized)) {
       throw new Error('分组名称已存在');
@@ -85,12 +93,123 @@ export class BookGroupRepository {
       groupName: normalized,
       order: BookGroupRepository.groups.filter((item: BookGroup) => item.groupId > 0).length,
       show: true,
-      enableRefresh: true,
-      bookSort: -1,
-      isPrivate: false
+      enableRefresh: draft.enableRefresh,
+      bookSort: Number.isInteger(draft.bookSort) ? draft.bookSort : -1,
+      isPrivate: draft.isPrivate,
+      cover: draft.cover
     };
     await BookGroupRepository.persist(context, [...BookGroupRepository.groups, group]);
     return BookGroupRepository.copyGroup(group);
+  }
+
+  /** 保存编辑后的分组属性，对应上游 GroupViewModel.saveGroup。 */
+  static async updateSettings(context: Context, groupId: number, draft: BookGroupDraft): Promise<void> {
+    const normalized = draft.groupName.trim();
+    if (normalized.length === 0) { throw new Error('分组名称不能为空'); }
+    const current = BookGroupRepository.groups.find((group: BookGroup) => group.groupId === groupId);
+    if (current === undefined || groupId <= 0) { throw new Error('只能编辑自定义分组'); }
+    if (BookGroupRepository.groups.some((group: BookGroup) =>
+      group.groupId > 0 && group.groupId !== groupId && group.groupName === normalized)) {
+      throw new Error('分组名称已存在');
+    }
+    const updated: BookGroup = {
+      groupId: current.groupId,
+      groupName: normalized,
+      order: current.order,
+      show: current.show,
+      enableRefresh: draft.enableRefresh,
+      bookSort: Number.isInteger(draft.bookSort) ? draft.bookSort : -1,
+      isPrivate: draft.isPrivate,
+      cover: draft.cover
+    };
+    await BookGroupRepository.persist(context, BookGroupRepository.groups.map((group: BookGroup) =>
+      group.groupId === groupId ? updated : BookGroupRepository.copyGroup(group)));
+  }
+
+  /** 记录分组封面路径；传 undefined 表示清空。 */
+  static async setCover(context: Context, groupId: number, cover: string | undefined): Promise<void> {
+    const current = BookGroupRepository.groups.find((group: BookGroup) => group.groupId === groupId);
+    if (current === undefined || groupId <= 0) { throw new Error('只能设置自定义分组的封面'); }
+    const updated: BookGroup = {
+      groupId: current.groupId,
+      groupName: current.groupName,
+      order: current.order,
+      show: current.show,
+      enableRefresh: current.enableRefresh,
+      bookSort: current.bookSort,
+      isPrivate: current.isPrivate,
+      cover: cover
+    };
+    await BookGroupRepository.persist(context, BookGroupRepository.groups.map((group: BookGroup) =>
+      group.groupId === groupId ? updated : BookGroupRepository.copyGroup(group)));
+  }
+
+  /**
+   * 弹出系统文件选择器挑一张图片，复制进应用私有目录后记录为分组封面。
+   *
+   * 复制副本而不是直接存 URI：系统选择器给的 URI 只是临时授权，
+   * 应用重启后通常失效，与 BookRepository.chooseCustomCover 的做法保持一致。
+   */
+  static async chooseCover(context: Context, groupId: number): Promise<BookGroup | undefined> {
+    const current = BookGroupRepository.groups.find((group: BookGroup) => group.groupId === groupId);
+    if (current === undefined || groupId <= 0) { throw new Error('只能设置自定义分组的封面'); }
+    const options = new picker.DocumentSelectOptions();
+    options.fileSuffixFilters = ['图片|.png', '图片|.jpg', '图片|.jpeg', '图片|.webp', '图片|.bmp'];
+    options.maxSelectNumber = 1;
+    const uris = await new picker.DocumentViewPicker(context).select(options);
+    const uri = uris[0];
+    if (uri === undefined) { return undefined; }
+    const coversDirectory = `${context.filesDir}/group-covers`;
+    BookGroupRepository.ensureDirectory(coversDirectory);
+    const targetPath = `${coversDirectory}/group-${groupId}-${Date.now()}.img`;
+    const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    try {
+      fileIo.copyFileSync(source.fd, targetPath);
+      if (fileIo.statSync(targetPath).size <= 0) { throw new Error('所选封面文件为空'); }
+    } catch (error) {
+      if (fileIo.accessSync(targetPath)) { fileIo.unlinkSync(targetPath); }
+      if (error instanceof Error) { throw error; }
+      throw new Error('保存分组封面失败');
+    } finally {
+      fileIo.closeSync(source);
+    }
+    await BookGroupRepository.setCover(context, groupId, `file://${targetPath}`);
+    return BookGroupRepository.groups.find((group: BookGroup) => group.groupId === groupId);
+  }
+
+  /** 删除封面副本并清空记录，对应上游 GroupResetCoverAction。 */
+  static async clearCover(context: Context, groupId: number): Promise<void> {
+    const current = BookGroupRepository.groups.find((group: BookGroup) => group.groupId === groupId);
+    if (current === undefined) { return; }
+    const previous = current.cover;
+    await BookGroupRepository.setCover(context, groupId, undefined);
+    if (previous !== undefined && previous.length > 0) {
+      const path = previous.startsWith('file://') ? previous.substring('file://'.length) : previous;
+      try {
+        if (fileIo.accessSync(path)) { fileIo.unlinkSync(path); }
+      } catch (_) {
+        // 副本可能已被系统清理，删不掉不影响已经清空的记录。
+      }
+    }
+  }
+
+  /**
+   * 把分组移动到指定位置，对应上游 GroupManageSheet 拖拽后 upGroup(order = index)。
+   *
+   * 只重排自定义分组（groupId > 0），内置分组不参与顺序。
+   */
+  static async move(context: Context, fromId: number, toId: number): Promise<void> {
+    const userGroups = BookGroupRepository.groups
+      .filter((group: BookGroup) => group.groupId > 0)
+      .sort((left: BookGroup, right: BookGroup) => left.order - right.order);
+    const fromIndex = userGroups.findIndex((group: BookGroup) => group.groupId === fromId);
+    const toIndex = userGroups.findIndex((group: BookGroup) => group.groupId === toId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) { return; }
+    const reordered = userGroups.slice();
+    const moved = reordered.splice(fromIndex, 1)[0];
+    reordered.splice(toIndex, 0, moved);
+    const others = BookGroupRepository.groups.filter((group: BookGroup) => group.groupId <= 0);
+    await BookGroupRepository.persist(context, others.concat(reordered));
   }
 
   static async rename(context: Context, groupId: number, name: string): Promise<void> {
@@ -146,10 +265,25 @@ export class BookGroupRepository {
     return JSON.stringify(ordered.map((group: BookGroup) => BookGroupRepository.toAndroidRecord(group)), null, 2);
   }
 
+  /** 递归创建目录；已存在时 mkdirSync 会抛错，用 lstat 兜底确认。 */
+  private static ensureDirectory(path: string): void {
+    try {
+      fileIo.mkdirSync(path, true);
+    } catch (error) {
+      try {
+        if (fileIo.lstatSync(path).isDirectory()) { return; }
+      } catch (_) {
+        // 目录不存在且创建失败，把原始错误抛给调用方。
+      }
+      throw error instanceof Error ? error : new Error('创建分组封面目录失败');
+    }
+  }
+
   private static copyGroup(group: BookGroup): BookGroup {
     const copy: BookGroup = {
       groupId: group.groupId, groupName: group.groupName, order: group.order, show: group.show,
-      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate
+      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate,
+      cover: group.cover
     };
     return copy;
   }
@@ -157,7 +291,8 @@ export class BookGroupRepository {
   private static withName(group: BookGroup, name: string): BookGroup {
     const copy: BookGroup = {
       groupId: group.groupId, groupName: name, order: group.order, show: group.show,
-      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate
+      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate,
+      cover: group.cover
     };
     return copy;
   }
@@ -165,7 +300,8 @@ export class BookGroupRepository {
   private static withVisibility(group: BookGroup, visible: boolean): BookGroup {
     const copy: BookGroup = {
       groupId: group.groupId, groupName: group.groupName, order: group.order, show: visible,
-      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate
+      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate,
+      cover: group.cover
     };
     return copy;
   }
@@ -173,7 +309,8 @@ export class BookGroupRepository {
   private static withOrder(group: BookGroup, order: number): BookGroup {
     const copy: BookGroup = {
       groupId: group.groupId, groupName: group.groupName, order: order, show: group.show,
-      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate
+      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate,
+      cover: group.cover
     };
     return copy;
   }
@@ -186,7 +323,8 @@ export class BookGroupRepository {
       show: record.show !== false,
       enableRefresh: record.enableRefresh !== false,
       bookSort: typeof record.bookSort === 'number' ? record.bookSort : -1,
-      isPrivate: record.isPrivate === true
+      isPrivate: record.isPrivate === true,
+      cover: typeof record.cover === 'string' && record.cover.length > 0 ? record.cover : undefined
     };
     return group;
   }
@@ -194,7 +332,8 @@ export class BookGroupRepository {
   private static toAndroidRecord(group: BookGroup): AndroidBookGroupRecord {
     const record: AndroidBookGroupRecord = {
       groupId: group.groupId, groupName: group.groupName, order: group.order, show: group.show,
-      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate
+      enableRefresh: group.enableRefresh, bookSort: group.bookSort, isPrivate: group.isPrivate,
+      cover: group.cover
     };
     return record;
   }
@@ -235,7 +374,10 @@ export class BookGroupRepository {
         show: group.show !== false,
         enableRefresh: group.enableRefresh !== false,
         bookSort: Number.isInteger(group.bookSort) ? group.bookSort : -1,
-        isPrivate: group.isPrivate === true
+        isPrivate: group.isPrivate === true,
+        // 封面必须在 normalize 里透传，否则 setCover 刚写入的路径
+        // 会在 persist → normalize 重建对象时被抹掉。
+        cover: group.cover
       });
     });
     return normalized.sort((left: BookGroup, right: BookGroup) => left.order - right.order);
