@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-28 阅读记录汇总视图按日明细分组
+
+- 汇总视图的日期分组从「会话起点日」改为「按日明细的 date」，对齐上游 `ReadRecordViewModel.kt:152` 的 `groupedRecords = filteredDetails.groupBy { it.date }` 与 `ReadRecordScreen.kt:956` 的渲染方式。
+- 修正跨午夜会话的时长归属：此前整段时长全挂在起始日，现在按午夜拆分后的两段分别落到两天。N 端 API 26 模拟器用 23:50→次日 00:20 的 30 分钟会话验证，显示为 28 日 10 分钟 + 29 日 20 分钟。
+- 时间线视图保持按会话起点日分组，与上游 `ReadRecordViewModel.kt:143` 的 `groupBy { it.startTime.toDateString() }` 一致，未改动。
+- 新增 `getDetailDateKeys()` / `getDetailsForDate()` / `getDetailBooksForDate()` / `getDetailDuration()`，同一本书当天多段明细合并为一行。
+
 ## 2026-10-28 阅读记录三层整合
 
 - 从 E 端 r241 稳定检查点同步阅读记录会话、按日明细、按书汇总及旧 v1 本地记录迁移；接入 `Index`、阅读记录页和阅读器会话生命周期。
