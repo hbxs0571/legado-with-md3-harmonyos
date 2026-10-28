@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-28 书架布局设置
+
+- 对照上游 `BookshelfConfigSheet` 接入书架布局设置：分组样式（页签/隐藏页签）、隐藏没有书籍的分组、排序方式与方向、列表/网格布局模式、网格列数 1..6、列表行数 1..5、书名行数 1..5、书封阴影。
+- 新增 `entry/src/main/ets/model/BookshelfLayout.ets`（设置模型、默认值、选项常量）与 `entry/src/main/ets/data/BookshelfLayoutRepository.ets`（每字段一个 preferences key，键名与 Android PreferKey 一致，串行化写队列避免连点覆盖，预留 `mergeFromAndroidValues`/`toAndroidValues` 供备份映射）。
+- `BookshelfPage` 改为接收整体 `layout` 设置：筛选栏按分组样式在页签与「切换分组」间切换，空分组页签随「隐藏没有书籍的分组」开关联动，书目排序由全局设置驱动（分组 `bookSort >= 0` 时仍覆盖），`BookCover` 新增阴影属性。
+- N 端 API 26 模拟器九项实测全部通过：面板渲染、网格列数、排序方向、布局模式、恢复默认、重启持久化、空分组页签联动、空分组删除两击确认、书封阴影开关。E 端尚未验收；上游延伸项（封面宽度、卡片颜色、显示更多信息、徽标、快速滚动条、文件夹模式）未迁移，详见 `docs/KNOWN-ISSUES.md`。
+
 ## 2026-10-28 书架排序生效
 
 - 新增 `entry/src/main/ets/data/BookshelfSort.ets`，逐档对齐上游 `BookshelfRepository.sortBooks()`：0 按最近列表 / 1 按更新时间 / 2 按书名 / 3 手动排序 / 4 综合排序 / 5 按作者；分组 `bookSort >= 0` 时覆盖书架全局排序，否则跟随全局。

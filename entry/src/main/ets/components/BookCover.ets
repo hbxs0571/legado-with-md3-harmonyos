@@ -13,6 +13,8 @@ export struct BookCover {
   @Prop displayHeight: number = 0;
   @Prop cornerRadius: number = 7;
   @Prop showChapterBadge: boolean = false;
+  /** 书封阴影，对应上游 bookshelfCoverShadow。 */
+  @Prop shadowEnabled: boolean = false;
   @State imageFailed: boolean = false;
 
   private hasCoverImage(): boolean {
@@ -76,5 +78,8 @@ export struct BookCover {
     .height(this.displayHeight > 0 ? this.displayHeight : this.mini ? 68 : this.compact ? 100 : 128)
     .backgroundColor(this.book.coverColor)
     .borderRadius(this.cornerRadius)
+    .shadow(this.shadowEnabled
+      ? { radius: 6, color: '#66000000', offsetX: 0, offsetY: 2 }
+      : { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 })
   }
 }

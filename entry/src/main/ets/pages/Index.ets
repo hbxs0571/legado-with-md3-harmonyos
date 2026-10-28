@@ -34,8 +34,11 @@ import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
-import { BookshelfSort } from '../data/BookshelfSort';
 import { BookGroupRepository } from '../data/BookGroupRepository';
+import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
+import {
+  BookshelfLayoutSettings, DEFAULT_BOOKSHELF_LAYOUT, copyBookshelfLayout
+} from '../model/BookshelfLayout';
 import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
@@ -105,6 +108,8 @@ struct Index {
   @State selectedChapter: string = '';
   @State books: Book[] = [];
   @State bookGroups: BookGroup[] = [];
+  /** 书架布局设置，与 BookshelfLayoutRepository 的持久化值保持同步。 */
+  @State bookshelfLayout: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readRecordDetails: ReadRecordDetail[] = [];
   @State readRecordSummaries: ReadRecordSummary[] = [];
@@ -216,6 +221,7 @@ struct Index {
       this.restoreReadTimeRecords(context);
       this.restoreHomeDashboardSettings(context);
       this.restoreImportedBooks(context);
+      this.restoreBookshelfLayout(context);
       this.restoreReaderBookmarks(context);
       this.restoreReaderMarkings(context);
       this.restoreReaderSettings(context);
@@ -236,6 +242,10 @@ struct Index {
       clearInterval(this.eyeProtectionTimerId);
       this.eyeProtectionTimerId = -1;
     }
+  }
+
+  private async restoreBookshelfLayout(context: Context): Promise<void> {
+    this.bookshelfLayout = await BookshelfLayoutRepository.load(context);
   }
 
   private async restoreReadTimeRecords(context: Context): Promise<void> {
@@ -2407,6 +2417,18 @@ struct Index {
     }
   }
 
+  /** 保存书架布局设置。 */
+  private async saveBookshelfLayout(settings: BookshelfLayoutSettings): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    this.bookshelfLayout = copyBookshelfLayout(settings);
+    if (context === undefined) { return; }
+    try {
+      await BookshelfLayoutRepository.save(context, settings);
+    } catch (_) {
+      this.showUnavailableAction('书架布局设置保存失败，重启后可能恢复旧值');
+    }
+  }
+
   /** 按完整草稿新建分组，供分组编辑面板提交。 */
   private async addBookshelfGroupDraft(draft: BookGroupDraft): Promise<void> {
     const context = this.getUIContext().getHostContext();
@@ -3190,8 +3212,8 @@ struct Index {
         BookshelfPage({
           books: this.books,
           groups: this.bookGroups,
-          shelfSort: BookshelfSort.defaultSort,
-          shelfSortOrder: BookshelfSort.defaultSortOrder,
+          layout: this.bookshelfLayout,
+          onSaveLayout: (settings: BookshelfLayoutSettings) => this.saveBookshelfLayout(settings),
           onAddGroup: (name: string) => this.addBookshelfGroup(name),
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
           onSetGroupVisible: (id: number, visible: boolean) => this.setBookshelfGroupVisible(id, visible),

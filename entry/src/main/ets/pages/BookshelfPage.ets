@@ -1,5 +1,10 @@
 import { Book } from '../model/Book';
 import { BookGroup, BookGroupDraft, BOOK_SORT_OPTIONS, BookSortOption, bookSortLabel } from '../model/BookGroup';
+import {
+  BookshelfLayoutSettings, BookshelfLayoutOption, DEFAULT_BOOKSHELF_LAYOUT,
+  BOOK_GROUP_STYLE_OPTIONS, BOOKSHELF_LAYOUT_MODE_OPTIONS, BOOKSHELF_SORT_ORDER_OPTIONS,
+  bookshelfLayoutOptionLabel, copyBookshelfLayout
+} from '../model/BookshelfLayout';
 import { BookshelfSort } from '../data/BookshelfSort';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
@@ -8,10 +13,11 @@ import { AppGlyph } from '../components/AppGlyph';
 export struct BookshelfPage {
   @Prop books: Book[] = [];
   @Prop groups: BookGroup[] = [];
-  /** 书架全局排序方式，来自设置；分组的 bookSort >= 0 时被分组覆盖。 */
-  @Prop shelfSort: number = BookshelfSort.defaultSort;
-  /** 书架全局排序方向，1 为倒序。 */
-  @Prop shelfSortOrder: number = BookshelfSort.defaultSortOrder;
+  /** 书架布局设置，来自 Index 的持久化状态。 */
+  @Prop layout: BookshelfLayoutSettings = DEFAULT_BOOKSHELF_LAYOUT;
+  @State showLayoutSheet: boolean = false;
+  /** 布局面板编辑中的草稿；打开面板时从 layout 复制，确认后整体提交。 */
+  @State layoutDraft: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
   @State selectedFilter: string = '全部';
   @State showGroupManager: boolean = false;
   @State showGroupEditor: boolean = false;
@@ -49,6 +55,9 @@ export struct BookshelfPage {
   onClearGroupCover: (id: number) => Promise<void> = async (_id: number) => {};
   /** 把分组拖到另一个分组的位置。 */
   onMoveGroup: (fromId: number, toId: number) => Promise<void> = async (_fromId: number, _toId: number) => {};
+  /** 保存书架布局设置。 */
+  onSaveLayout: (settings: BookshelfLayoutSettings) => Promise<void> =
+    async (_settings: BookshelfLayoutSettings) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
@@ -72,11 +81,32 @@ export struct BookshelfPage {
         if (name.length > 0 && definition === undefined && !names.includes(name)) { names.push(name); }
       });
     });
-    return names;
+    // 「隐藏没有书籍的分组」只过滤自定义分组，「全部」永远保留。
+    if (!this.layout.hideEmptyGroups) { return names; }
+    return names.filter((name: string) => name === '全部' || this.countBooksInGroup(name) > 0);
+  }
+
+  /** 某个分组下的书籍数量，供隐藏空分组使用。 */
+  private countBooksInGroup(name: string): number {
+    return this.books.filter((book: Book) => {
+      const names = book.groupNames ?? [];
+      return name === '本地未分组' ? names.length === 0 : names.includes(name);
+    }).length;
+  }
+
+  /**
+   * 实际生效的分组筛选。
+   *
+   * 打开「隐藏没有书籍的分组」后当前选中的分组可能被过滤掉，
+   * 此时回落到「全部」，避免出现页签消失但仍按旧分组过滤的空书架。
+   */
+  private activeFilter(): string {
+    const names = this.getGroupNames();
+    return names.includes(this.selectedFilter) ? this.selectedFilter : '全部';
   }
 
   private getVisibleBooks(): Book[] {
-    const selectedGroup = this.selectedFilter;
+    const selectedGroup = this.activeFilter();
     const query = this.searchQuery.trim().toLocaleLowerCase();
     const filtered = this.books.filter((book: Book) => {
       const names = book.groupNames ?? [];
@@ -89,7 +119,8 @@ export struct BookshelfPage {
     // 分组设了自己的排序方式就覆盖书架全局，与上游 sortBooks() 的取值优先级一致。
     const activeGroup = this.groups.find((group: BookGroup) =>
       group.groupId > 0 && group.groupName === selectedGroup);
-    return BookshelfSort.sortBooks(filtered, activeGroup, this.shelfSort, this.shelfSortOrder);
+    return BookshelfSort.sortBooks(filtered, activeGroup,
+      this.layout.bookshelfSort, this.layout.bookshelfSortOrder);
   }
 
   /** 只列自定义分组，按 order 升序，与上游 GroupManageSheet 一致。 */
@@ -338,6 +369,175 @@ export struct BookshelfPage {
     }
   }
 
+  /** 按布局设置生成 Grid 的列模板；列表模式固定单列。 */
+  private bookshelfColumnsTemplate(): string {
+    if (this.layout.bookshelfLayoutModePortrait !== 1) { return '1fr'; }
+    const columns = Math.max(1, Math.min(6, this.layout.bookshelfLayoutGridPortrait));
+    const template: string[] = [];
+    for (let index = 0; index < columns; index += 1) { template.push('1fr'); }
+    return template.join(' ');
+  }
+
+  /** 打开布局面板：从已生效设置复制一份草稿，面板内改动只落到草稿。 */
+  private openLayoutSheet(): void {
+    this.layoutDraft = copyBookshelfLayout(this.layout);
+    this.showLayoutSheet = true;
+  }
+
+  /** 提交布局草稿并关闭面板。 */
+  private async submitLayout(): Promise<void> {
+    this.showLayoutSheet = false;
+    await this.onSaveLayout(copyBookshelfLayout(this.layoutDraft));
+    // 隐藏空分组或隐藏当前分组后，选中页签可能已不存在，回落到「全部」。
+    if (!this.getGroupNames().includes(this.selectedFilter)) { this.selectedFilter = '全部'; }
+  }
+
+  /** 通用下拉：一个按钮 + 菜单，用于布局面板里的枚举项。 */
+  @Builder
+  private LayoutMenuRow(
+    title: string, description: string, options: BookshelfLayoutOption[],
+    current: number, onPick: (value: number) => void
+  ) {
+    Row() {
+      Column() {
+        Text(title).fontSize(14).fontColor('#D8D9E0')
+        if (description.length > 0) {
+          Text(description).fontSize(11).fontColor('#92949E').margin({ top: 3 })
+        }
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Text(bookshelfLayoutOptionLabel(options, current)).fontSize(14).fontColor('#AFC2FF')
+        .bindMenu(this.LayoutOptionsMenu(options, onPick))
+    }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+  }
+
+  /** 枚举项菜单；ArkTS 不允许 bindMenu 传对象字面量数组，统一用 Builder 生成。 */
+  @Builder
+  private LayoutOptionsMenu(options: BookshelfLayoutOption[], onPick: (value: number) => void) {
+    Menu() {
+      ForEach(options, (option: BookshelfLayoutOption) => {
+        MenuItem({ content: option.label }).height(44)
+          .onClick(() => onPick(option.value))
+      }, (option: BookshelfLayoutOption) => `${option.value}_${option.label}`)
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
+  /** 开关行。 */
+  @Builder
+  private LayoutSwitchRow(title: string, description: string, isOn: boolean, onToggle: (value: boolean) => void) {
+    Row() {
+      Column() {
+        Text(title).fontSize(14).fontColor('#D8D9E0')
+        if (description.length > 0) {
+          Text(description).fontSize(11).fontColor('#92949E').margin({ top: 3 })
+        }
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: isOn })
+        .onChange((value: boolean) => onToggle(value))
+    }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+  }
+
+  /** 数值行：用 -/+ 加减，避免滑块在小屏上难以精确点中。 */
+  @Builder
+  private LayoutStepperRow(
+    title: string, description: string, value: number,
+    minimum: number, maximum: number, onStep: (delta: number) => void
+  ) {
+    Row() {
+      Column() {
+        Text(title).fontSize(14).fontColor('#D8D9E0')
+        if (description.length > 0) {
+          Text(description).fontSize(11).fontColor('#92949E').margin({ top: 3 })
+        }
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Text('−').fontSize(18).fontColor(value > minimum ? '#AFC2FF' : '#4A4C55')
+        .width(36).height(32).textAlign(TextAlign.Center)
+        .onClick(() => { if (value > minimum) { onStep(-1); } })
+      Text(`${value}`).fontSize(14).fontColor('#E3E4E8').width(34).textAlign(TextAlign.Center)
+      Text('+').fontSize(18).fontColor(value < maximum ? '#AFC2FF' : '#4A4C55')
+        .width(36).height(32).textAlign(TextAlign.Center)
+        .onClick(() => { if (value < maximum) { onStep(1); } })
+    }.width('100%').padding({ left: 16, right: 12, top: 10, bottom: 10 })
+  }
+
+  /** 分区标题，对应上游 PillHeaderDivider。 */
+  @Builder
+  private LayoutSectionHeader(title: string) {
+    Row() {
+      Text(title).fontSize(12).fontColor('#92949E')
+    }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 6 })
+  }
+
+  /**
+   * 书架布局设置面板，对应上游 BookshelfConfigSheet。
+   *
+   * 只迁移当前项目已有数据模型能支撑的项；上游的封面尺寸、卡片颜色、
+   * 标签徽标等依赖书籍字段或网络状态，留待后续轮次。
+   */
+  @Builder
+  private LayoutSheetContent() {
+    Column() {
+      Row() {
+        Text('书架布局').fontSize(19).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8)
+          .onClick(async () => { await this.submitLayout(); })
+      }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 6 })
+
+      Scroll() {
+        Column() {
+          this.LayoutSectionHeader('分组')
+          this.LayoutMenuRow('分组样式', '页签显示在书架顶部；隐藏后仍可在「分组管理」里切换',
+            BOOK_GROUP_STYLE_OPTIONS, this.layoutDraft.bookGroupStyle,
+            (value: number) => this.layoutDraft.bookGroupStyle = value)
+          this.LayoutSwitchRow('隐藏没有书籍的分组', '页签只显示有书的分类',
+            this.layoutDraft.hideEmptyGroups,
+            (value: boolean) => this.layoutDraft.hideEmptyGroups = value)
+
+          this.LayoutSectionHeader('排序')
+          this.LayoutMenuRow('排序方式', '', BOOK_SORT_OPTIONS, this.layoutDraft.bookshelfSort,
+            (value: number) => this.layoutDraft.bookshelfSort = value)
+          this.LayoutMenuRow('排序方向', '', BOOKSHELF_SORT_ORDER_OPTIONS, this.layoutDraft.bookshelfSortOrder,
+            (value: number) => this.layoutDraft.bookshelfSortOrder = value)
+
+          this.LayoutSectionHeader('布局')
+          this.LayoutMenuRow('布局模式', '竖屏下的书架呈现方式',
+            BOOKSHELF_LAYOUT_MODE_OPTIONS, this.layoutDraft.bookshelfLayoutModePortrait,
+            (value: number) => this.layoutDraft.bookshelfLayoutModePortrait = value)
+          if (this.layoutDraft.bookshelfLayoutModePortrait === 1) {
+            this.LayoutStepperRow('网格列数', '每行显示的书封数量',
+              this.layoutDraft.bookshelfLayoutGridPortrait, 1, 6,
+              (delta: number) => this.layoutDraft.bookshelfLayoutGridPortrait += delta)
+          } else {
+            this.LayoutStepperRow('列表行数', '每屏显示的书封数量',
+              this.layoutDraft.bookshelfLayoutListPortrait, 1, 5,
+              (delta: number) => this.layoutDraft.bookshelfLayoutListPortrait += delta)
+          }
+          this.LayoutStepperRow('书名行数', '书封下方标题最多显示几行',
+            this.layoutDraft.bookshelfTitleMaxLines, 1, 5,
+            (delta: number) => this.layoutDraft.bookshelfTitleMaxLines += delta)
+
+          this.LayoutSectionHeader('外观')
+          this.LayoutSwitchRow('书封阴影', '', this.layoutDraft.bookshelfCoverShadow,
+            (value: boolean) => this.layoutDraft.bookshelfCoverShadow = value)
+        }.width('100%').padding({ bottom: 24 })
+      }.layoutWeight(1).scrollBar(BarState.Off)
+    }.width('100%').height('100%').backgroundColor('#17181E')
+  }
+
+  /**
+   * 书架上的半模态面板统一入口。
+   *
+   * 同一组件挂多个 bindSheet 只有最后一个生效（本项目已踩过的坑），
+   * 所以布局面板与分组面板共用同一个 sheet，按状态分发内容。
+   */
+  @Builder
+  private ShelfSheetContent() {
+    if (this.showLayoutSheet) {
+      this.LayoutSheetContent()
+    } else {
+      this.GroupManagerSheet()
+    }
+  }
+
   @Builder
   private MoreMenu() {
     Menu() {
@@ -351,7 +551,7 @@ export struct BookshelfPage {
       MenuItem({ startIcon: $r('app.media.app_refresh'), content: '更新目录' }).height(48)
         .onClick(async () => { await this.onRefreshToc(); })
       MenuItem({ startIcon: $r('app.media.menu_grid'), content: '布局设置' }).height(48)
-        .onClick(() => this.onUnavailableAction('书架布局设置尚未迁移'))
+        .onClick(() => this.openLayoutSheet())
       MenuItem({ startIcon: $r('app.media.menu_carousel'), content: '分组管理' }).height(48)
         .onClick(() => this.showGroupManager = true)
       MenuItem({ startIcon: $r('app.media.menu_link'), content: '添加网址' }).height(48)
@@ -403,19 +603,35 @@ export struct BookshelfPage {
           .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor('#1C1D23').borderRadius(22)
       }
 
-      Row() {
-        ForEach(this.getGroupNames(), (groupName: string) => {
-          ShelfFilter({ label: groupName, selected: this.selectedFilter === groupName })
-            .onClick(() => this.selectedFilter = groupName)
-        }, (groupName: string) => groupName)
-      }.width('100%').padding({ left: 12, right: 12, bottom: 14 })
+      // 分组样式为「隐藏页签」时不渲染顶部筛选栏，切换分组改由分组管理面板完成。
+      if (this.layout.bookGroupStyle === 0) {
+        Row() {
+          ForEach(this.getGroupNames(), (groupName: string) => {
+            ShelfFilter({ label: groupName, selected: this.activeFilter() === groupName })
+              .onClick(() => this.selectedFilter = groupName)
+          }, (groupName: string) => groupName)
+        }.width('100%').padding({ left: 12, right: 12, bottom: 14 })
+      } else {
+        Row() {
+          Text(`当前分组：${this.activeFilter()}`).fontSize(12).fontColor('#92949E').layoutWeight(1)
+          Text('切换分组').fontSize(12).fontColor('#AFC2FF').padding(6)
+            .onClick(() => { this.showGroupEditor = false; this.showGroupManager = true; })
+        }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
+      }
       if (this.getVisibleBooks().length > 0) {
         Grid(this.bookshelfScroller) {
           ForEach(this.getVisibleBooks(), (book: Book) => {
             GridItem() {
               Column() {
-                BookCover({ book: book, compact: true, showChapterBadge: true })
-                Text(book.title).fontSize(13).fontColor('#D8D9E0').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 7 })
+                BookCover({
+                  book: book,
+                  compact: true,
+                  showChapterBadge: true,
+                  shadowEnabled: this.layout.bookshelfCoverShadow
+                })
+                Text(book.title).fontSize(13).fontColor('#D8D9E0')
+                  .maxLines(this.layout.bookshelfTitleMaxLines)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 7 })
               }.width('100%').alignItems(HorizontalAlign.Start)
                 .onClick(() => {
                   if (book.bodyMissing === true) {
@@ -429,7 +645,10 @@ export struct BookshelfPage {
                 }))
             }
           }, (book: Book) => this.bookCardKey(book))
-        }.columnsTemplate('1fr 1fr 1fr').rowsGap(16).columnsGap(10).width('100%').padding({ left: 14, right: 14 }).layoutWeight(1).scrollBar(BarState.Off)
+        }
+        .columnsTemplate(this.bookshelfColumnsTemplate())
+        .rowsGap(16).columnsGap(10).width('100%').padding({ left: 14, right: 14 })
+        .layoutWeight(1).scrollBar(BarState.Off)
           .onScroll(() => {
             const shouldCollapse = Math.abs(this.bookshelfScroller.currentOffset().yOffset) > 60;
             if (this.collapsedHeader !== shouldCollapse) {
@@ -451,7 +670,7 @@ export struct BookshelfPage {
         }.layoutWeight(1).width('100%').padding({ bottom: 104 }).justifyContent(FlexAlign.Center)
       }
     }.width('100%').height('100%').backgroundColor('#111217')
-      .bindSheet(this.showGroupManager, this.GroupManagerSheet(), {
+      .bindSheet(this.showGroupManager || this.showLayoutSheet, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E'
       })
   }
