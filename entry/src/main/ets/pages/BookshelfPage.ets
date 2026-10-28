@@ -2,7 +2,7 @@ import { Book } from '../model/Book';
 import { BookGroup, BookGroupDraft, BOOK_SORT_OPTIONS, BookSortOption, bookSortLabel } from '../model/BookGroup';
 import {
   BookshelfLayoutSettings, BookshelfLayoutOption, DEFAULT_BOOKSHELF_LAYOUT,
-  BOOK_GROUP_STYLE_OPTIONS, BOOKSHELF_LAYOUT_MODE_OPTIONS, BOOKSHELF_SORT_ORDER_OPTIONS,
+  BOOKSHELF_LAYOUT_MODE_OPTIONS, BOOKSHELF_SORT_ORDER_OPTIONS,
   bookshelfLayoutOptionLabel, copyBookshelfLayout
 } from '../model/BookshelfLayout';
 import { BookshelfSort } from '../data/BookshelfSort';
@@ -200,6 +200,20 @@ export struct BookshelfPage {
     .width(thumbSize).height(thumbSize).backgroundColor('#22232A').borderRadius(10)
   }
 
+  /** 隐藏页签布局仍可从管理面板选择全部当前可用的分组筛选。 */
+  @Builder
+  private GroupFilterMenu() {
+    Menu() {
+      ForEach(this.getGroupNames(), (groupName: string) => {
+        MenuItem({ content: groupName === this.activeFilter() ? `✓ ${groupName}` : groupName }).height(44)
+          .onClick(() => {
+            this.selectedFilter = groupName;
+            this.showGroupManager = false;
+          })
+      }, (groupName: string) => groupName)
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
   /** 分组管理：自适应网格卡片，对应上游 LazyVerticalGrid(GridCells.Adaptive(160.dp))。 */
   @Builder
   private GroupManagerGrid() {
@@ -210,6 +224,10 @@ export struct BookshelfPage {
           .onClick(() => this.openGroupEditor(undefined))
         Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
+      Row() {
+        Text(`切换分组：${this.activeFilter()}`).fontSize(13).fontColor('#AFC2FF').layoutWeight(1)
+          .bindMenu(this.GroupFilterMenu())
+      }.width('100%').padding({ left: 18, right: 18, bottom: 10 })
 
       if (this.getUserGroups().length === 0) {
         Column() {
@@ -235,7 +253,7 @@ export struct BookshelfPage {
                 Text(group.groupName).fontSize(14).fontColor('#E3E4E8').maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 10 }).width('100%')
-                Text(`${bookSortLabel(group.bookSort)}${group.isPrivate ? ' · 私有' : ''}${group.enableRefresh ? '' : ' · 不刷新'}`)
+                Text(`${bookSortLabel(group.bookSort)}${group.isPrivate ? ' · 私有标记未生效' : ''} · 分组刷新未接入`)
                   .fontSize(11).fontColor('#92949E').maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 4 }).width('100%')
@@ -316,7 +334,7 @@ export struct BookshelfPage {
           Row() {
             Column() {
               Text('下拉刷新').fontSize(14).fontColor('#D8D9E0')
-              Text('允许该分组下拉刷新书籍').fontSize(11).fontColor('#92949E').margin({ top: 3 })
+              Text('仅保存 Android 兼容字段；当前不控制实际更新').fontSize(11).fontColor('#92949E').margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.draftRefresh })
               .onChange((enabled: boolean) => this.draftRefresh = enabled)
@@ -325,7 +343,7 @@ export struct BookshelfPage {
           Row() {
             Column() {
               Text('私有分组').fontSize(14).fontColor('#D8D9E0')
-              Text('私有分组的书籍不出现在其它分组').fontSize(11).fontColor('#92949E').margin({ top: 3 })
+              Text('仅保存兼容标记；当前不限制跨分组显示').fontSize(11).fontColor('#92949E').margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.draftPrivate })
               .onChange((enabled: boolean) => this.draftPrivate = enabled)
@@ -493,9 +511,9 @@ export struct BookshelfPage {
       Scroll() {
         Column() {
           this.LayoutSectionHeader('分组')
-          this.LayoutMenuRow('分组样式', '页签显示在书架顶部；隐藏后仍可在「分组管理」里切换',
-            BOOK_GROUP_STYLE_OPTIONS, this.layoutDraft.bookGroupStyle,
-            (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookGroupStyle = value; }); })
+          this.LayoutSwitchRow('隐藏分组页签', '开启后可在分组管理面板选择当前分组',
+            this.layoutDraft.bookGroupStyle === 1,
+            (hidden: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookGroupStyle = hidden ? 1 : 0; }); })
           this.LayoutSwitchRow('隐藏没有书籍的分组', '页签只显示有书的分类',
             this.layoutDraft.hideEmptyGroups,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.hideEmptyGroups = value; }); })

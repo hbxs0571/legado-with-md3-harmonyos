@@ -40,7 +40,7 @@ export class LocalTextSemantics {
     return document.content.length;
   }
 
-  static parse(rawBody: string): LocalSemanticDocument {
+  static parse(rawBody: string, paragraphIndent: string = '　　'): LocalSemanticDocument {
     const paragraphs: LocalSemanticParagraph[] = [];
     const semanticContent: string[] = [];
     const sourcePositionMap: number[] = [0];
@@ -83,9 +83,10 @@ export class LocalTextSemantics {
         const paragraphStart = position;
         const imageOnlyParagraph = /^\s*(?:\[\[EPUB_IMAGE:[^;\]\r\n]+(?:;[^\]\r\n]*)?\]\]\s*)+$/.test(paragraphText);
         appendSourceOnly(line.substring(0, start));
-        if (!imageOnlyParagraph) {
-          parts.push({ kind: 'text', value: '　　', startPosition: position, endPosition: position + 2, leadingIndent: true });
-          appendRenderOnly('　　');
+        if (!imageOnlyParagraph && paragraphIndent.length > 0) {
+          parts.push({ kind: 'text', value: paragraphIndent, startPosition: position,
+            endPosition: position + paragraphIndent.length, leadingIndent: true });
+          appendRenderOnly(paragraphIndent);
         }
         let cursor = 0;
         let match: RegExpExecArray | null = imagePattern.exec(paragraphText);

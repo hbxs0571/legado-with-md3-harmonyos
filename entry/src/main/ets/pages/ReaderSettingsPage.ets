@@ -1,4 +1,5 @@
 import { ReaderBackgroundStyle, READER_BACKGROUND_STYLES } from '../data/ReaderSettingsRepository';
+import { ReaderFontEntry, ReaderFontRepository } from '../data/ReaderFontRepository';
 import {
   ReaderActionOption, ReaderBottomActionConfig, READER_ACTION_OPTIONS,
   READER_LOCAL_BOTTOM_ACTION_DEFAULTS, READER_LOCAL_TOP_ACTION_DEFAULTS,
@@ -8,11 +9,16 @@ import {
 } from '../data/ReaderSettingsRepository';
 
 type ReaderInfoSlot = 'headerLeft' | 'headerMiddle' | 'headerRight' | 'footerLeft' | 'footerMiddle' | 'footerRight';
+type ReaderFontTarget = 'body' | 'title' | 'header' | 'footer';
 
 const READ_INFO_TIP_VALUES: number[] = [0, 7, 1, 12, 17, 2, 3, 15, 13, 14, 10, 4, 5, 11, 6, 8, 16, 9, 19, 20, 18];
 const READER_INFO_COLOR_VALUES: number[] = [0, -1, -16777216, -8355712, -65536, -16711936, -16776961];
 const READER_INFO_COLOR_CHOICES: string[] = ['跟随正文', '白色', '黑色', '灰色', '红色', '绿色', '蓝色'];
 const CLICK_REGION_NAMES: string[] = ['左上', '上中', '右上', '左中', '中间', '右中', '左下', '下中', '右下'];
+const READER_BODY_WEIGHT_VALUES: number[] = [300, 400, 500, 700, 900];
+const READER_EFFECT_COLORS: string[] = [
+  '#3E3D3B', '#ADADAD', '#FFFFFF', '#000000', '#FF8C00', '#5A8DEE', '#63C37D', '#DB4B4B'
+];
 interface ReaderTextMenuEntry {
   id: string;
   title: string;
@@ -49,6 +55,39 @@ interface ReaderUiSection {
 @Component
 export struct ReaderSettingsPage {
   @Prop fontSize: number = 19;
+  @Prop paragraphSpacing: number = 2;
+  @Prop lineSpacing: number = 12;
+  @Prop letterSpacing: number = 0.1;
+  @Prop paragraphIndent: string = '　　';
+  @Prop textFont: string = '';
+  @Prop titleFont: string = '';
+  @Prop systemTypefaces: number = 0;
+  @Prop textItalic: boolean = false;
+  @Prop textBold: number = 500;
+  @Prop textShadow: boolean = false;
+  @Prop shadowRadius: number = 16;
+  @Prop shadowDx: number = 1;
+  @Prop shadowDy: number = 1;
+  @Prop textShadowColor: string = '#3E3D3B';
+  @Prop textShadowColorN: string = '#3E3D3B';
+  @Prop underline: boolean = false;
+  @Prop dottedLine: boolean = false;
+  @Prop underlineColor: string = '#3E3D3B';
+  @Prop underlineColorNight: string = '#ADADAD';
+  @Prop underlineHeight: number = 1;
+  onTextItalicChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onTextBoldChange: (weight: number) => void = (_weight: number) => {};
+  onTextShadowChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onShadowRadiusChange: (value: number) => void = (_value: number) => {};
+  onShadowDxChange: (value: number) => void = (_value: number) => {};
+  onShadowDyChange: (value: number) => void = (_value: number) => {};
+  onTextShadowColorChange: (value: string, night: boolean) => void = (_value: string, _night: boolean) => {};
+  onUnderlineChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onDottedLineChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onUnderlineColorChange: (value: string, night: boolean) => void = (_value: string, _night: boolean) => {};
+  onUnderlineHeightChange: (value: number) => void = (_value: number) => {};
+  @Prop textFullJustify: boolean = true;
+  @Prop textBottomJustify: boolean = true;
   @Prop paperIndex: number = 2;
   @Prop shareLayout: boolean = false;
   @Prop readerNightMode: boolean = true;
@@ -93,6 +132,8 @@ export struct ReaderSettingsPage {
   @State detailSheetTitle: string = '';
   @State detailSheetDescription: string = '';
   @State detailSelectedOption: string = '';
+  @State fontTarget: ReaderFontTarget = 'body';
+  @State fontEntries: ReaderFontEntry[] = [];
   @State detailCustomText: string = '';
   @State selectedClickRegionIndex: number = 4;
   @State previousPageKeys: string = '';
@@ -128,6 +169,7 @@ export struct ReaderSettingsPage {
   @State brightnessViewMode: number = 0;
 
   aboutToAppear(): void {
+    this.loadReaderFontEntries();
     if (this.openBottomActionConfigOnAppear) {
       this.selectedSettingsTab = 1;
       this.selectedMenuSettingsTab = 1;
@@ -140,6 +182,15 @@ export struct ReaderSettingsPage {
 
   onBack: () => void = () => {};
   onFontSizeChange: (fontSize: number) => void = () => {};
+  onTextFontChange: (path: string) => void = (_path: string) => {};
+  onTitleFontChange: (path: string) => void = (_path: string) => {};
+  onSystemTypefacesChange: (index: number) => void = (_index: number) => {};
+  onTextFullJustifyChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onTextBottomJustifyChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onParagraphSpacingChange: (value: number) => void = (_value: number) => {};
+  onLineSpacingChange: (value: number) => void = (_value: number) => {};
+  onLetterSpacingChange: (value: number) => void = (_value: number) => {};
+  onParagraphIndentCountChange: (count: number) => void = (_count: number) => {};
   onPaperChange: (paperIndex: number) => void = () => {};
   onShareLayoutChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onToggleNightMode: () => void = () => {};
@@ -902,12 +953,116 @@ export struct ReaderSettingsPage {
     }
   }
 
+  private async loadReaderFontEntries(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    this.fontEntries = ReaderFontRepository.listFonts(context);
+  }
+
+  private openFontSelection(): void {
+    const target = this.detailSelectedOption;
+    if (target === '标题') { this.fontTarget = 'title'; }
+    else if (target === '页眉') { this.fontTarget = 'header'; }
+    else if (target === '页脚') { this.fontTarget = 'footer'; }
+    else { this.fontTarget = 'body'; }
+    const targetLabel = this.getFontTargetLabel();
+    this.openDetailSheet('选择字体', `为${targetLabel}选择字体`);
+  }
+
+  private getFontTargetLabel(): string {
+    if (this.fontTarget === 'title') { return '标题'; }
+    if (this.fontTarget === 'header') { return '页眉'; }
+    if (this.fontTarget === 'footer') { return '页脚'; }
+    return '正文';
+  }
+
+  private getFontTargetPath(): string {
+    if (this.fontTarget === 'title') { return this.titleFont; }
+    if (this.fontTarget === 'header') { return this.infoSettings.headerFont; }
+    if (this.fontTarget === 'footer') { return this.infoSettings.footerFont; }
+    return this.textFont;
+  }
+
+  private getCurrentFontDisplayName(): string {
+    const selectedPath = this.getFontTargetPath();
+    if (selectedPath.length === 0) {
+      return ['默认字体', '衬线字体', '等宽字体'][Math.max(0, Math.min(2, this.systemTypefaces))] ?? '默认字体';
+    }
+    const selected = this.fontEntries.find((entry: ReaderFontEntry) => entry.path === selectedPath);
+    return selected?.displayName ?? '字体文件不可用（点按“默认字体”清除）';
+  }
+
+  private setFontPathForCurrentTarget(path: string): void {
+    if (this.fontTarget === 'title') {
+      this.onTitleFontChange(path);
+    } else if (this.fontTarget === 'header') {
+      this.onInfoSettingsChange(updateReaderInfoSettings(this.infoSettings, { headerFont: path }));
+    } else if (this.fontTarget === 'footer') {
+      this.onInfoSettingsChange(updateReaderInfoSettings(this.infoSettings, { footerFont: path }));
+    } else {
+      this.onTextFontChange(path);
+    }
+  }
+
+  private returnToTypographyFromFontPicker(): void {
+    this.detailSheetTitle = '排版设置';
+    this.detailSheetDescription = '正文、标题、页眉页脚与边距设置';
+    this.detailSelectedOption = this.getFontTargetLabel();
+  }
+
+  private async importReaderFontFile(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.onUnavailableAction('无法访问本地字体文件'); return; }
+    try {
+      const imported = await ReaderFontRepository.importFont(context);
+      if (imported === undefined) { return; }
+      this.fontEntries = ReaderFontRepository.listFonts(context);
+      ReaderFontRepository.resolveFamily(context, imported.path, this.systemTypefaces);
+      this.onUnavailableAction(`已导入字体：${imported.displayName}`);
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? error.message : '导入字体失败');
+    }
+  }
+
+  private async importReaderFontFolder(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.onUnavailableAction('无法访问本地字体文件'); return; }
+    try {
+      const importedCount = await ReaderFontRepository.importFontFolder(context);
+      this.fontEntries = ReaderFontRepository.listFonts(context);
+      this.onUnavailableAction(importedCount > 0
+        ? `已导入 ${importedCount} 个字体文件`
+        : '所选目录没有 TTF 或 OTF 字体文件');
+    } catch (_) {
+      this.onUnavailableAction('此设备不能选择字体目录，请改用“导入字体文件”');
+    }
+  }
+
+  private chooseSystemTypeface(index: number): void {
+    this.onSystemTypefacesChange(index);
+    this.setFontPathForCurrentTarget('');
+    this.returnToTypographyFromFontPicker();
+  }
+
+  private chooseReaderFont(font: ReaderFontEntry): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || ReaderFontRepository.resolveFamily(context, font.path, this.systemTypefaces) ===
+      ReaderFontRepository.systemTypefaceFamily(this.systemTypefaces)) {
+      this.onUnavailableAction('字体文件无法加载，请重新导入');
+      return;
+    }
+    this.setFontPathForCurrentTarget(font.path);
+    this.returnToTypographyFromFontPicker();
+  }
+
   private openDetailSheet(title: string, description: string): void {
     this.detailSheetTitle = title;
     this.detailSheetDescription = description;
     this.detailInfoSlot = undefined;
     const choices = this.getDetailChoices(title);
-    if (title === '页边距') {
+    if (title === '排版设置') {
+      this.detailSelectedOption = '正文';
+    } else if (title === '页边距') {
       this.detailSelectedOption = '正文';
     } else if (title === '显示模式') {
       this.detailSelectedOption = this.infoSubTab === 0
@@ -1116,6 +1271,55 @@ export struct ReaderSettingsPage {
               Text('文件选择与样式保存尚未迁移。').fontSize(10).fontColor('#92949E').width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(360).scrollBar(BarState.Off)
+        } else if (this.detailSheetTitle === '选择字体') {
+          Scroll() {
+            Column() {
+              Text('当前字体').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 8, bottom: 6 })
+              Text(this.getCurrentFontDisplayName()).fontSize(14).fontColor('#E5E6EB').width('100%')
+                .padding(12).backgroundColor('#202127').borderRadius(10)
+              Text('系统字体').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 14, bottom: 6 })
+              Row() {
+                ForEach(['默认字体', '衬线字体', '等宽字体'], (label: string, index: number) => {
+                  Text(label).fontSize(11).fontColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
+                    ? '#ECEEF4' : '#B7B8C1')
+                    .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 10, bottom: 10 })
+                    .backgroundColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
+                      ? '#454B62' : '#202127').borderRadius(10).margin({ right: 5 })
+                    .onClick(() => this.chooseSystemTypeface(index))
+                }, (label: string) => label)
+              }.width('100%')
+              Row() {
+                Text('导入字体文件').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                Text('选择 TTF/OTF').fontSize(11).fontColor('#AFC2FF')
+              }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10)
+                .margin({ top: 12, bottom: 6 }).onClick(() => this.importReaderFontFile())
+              Row() {
+                Text('导入字体目录').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                Text('支持时可用').fontSize(11).fontColor('#92949E')
+              }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10)
+                .margin({ bottom: 8 }).onClick(() => this.importReaderFontFolder())
+              if (this.fontEntries.length === 0) {
+                Text('尚无导入字体。可选择单个字体文件；已选字体复制到应用私有目录。')
+                  .fontSize(11).fontColor('#92949E').width('100%').padding(12)
+              } else {
+                Text('已导入字体').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 10, bottom: 6 })
+                ForEach(this.fontEntries, (font: ReaderFontEntry) => {
+                  Row() {
+                    Column() {
+                      Text(font.displayName).fontSize(13).fontColor('#E5E6EB').maxLines(1)
+                      Text(font.familyName).fontSize(10).fontColor('#92949E').maxLines(1).margin({ top: 3 })
+                    }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                    if (this.getFontTargetPath() === font.path) {
+                      Image($r('app.media.app_check')).width(18).height(18).fillColor('#AFC2FF')
+                    } else {
+                      Text('选择').fontSize(11).fontColor('#AFC2FF')
+                    }
+                  }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10).margin({ bottom: 6 })
+                    .onClick(() => this.chooseReaderFont(font))
+                }, (font: ReaderFontEntry) => font.familyName)
+              }
+            }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+          }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '排版设置') {
           Column() {
             Row() {
@@ -1125,14 +1329,94 @@ export struct ReaderSettingsPage {
                   .onClick(() => this.detailSelectedOption = label)
               }, (label: string) => label)
             }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
-            MenuSettingOption({ title: '字体', detail: '选择字体' }).onClick(() => this.openDetailSheet('选择字体', '选择阅读文字字体'))
+            MenuSettingOption({ title: '字体', detail: this.getCurrentFontDisplayName(), migrated: true })
+              .onClick(() => this.openFontSelection())
             MenuSettingSlider({ title: '字号', value: this.fontSize, minValue: 5, maxValue: 50 })
             MenuSettingOption({ title: '颜色', detail: '日间 / 夜间' }).onClick(() => this.openDetailSheet('信息颜色', '选择文字颜色'))
-            MenuSettingOption({ title: '效果', detail: '阴影 / 下划线 / 高亮规则' }).onClick(() => this.openDetailSheet('文字效果', '配置文字效果'))
-            MenuSettingOption({ title: '间距', detail: '缩进 / 字距 / 行高 / 段距' }).onClick(() => this.openDetailSheet('正文间距', '配置正文间距'))
-            MenuSettingOption({ title: '文字对齐', detail: '两端对齐 / 底部对齐' }).onClick(() => this.openDetailSheet('文字对齐', '选择正文对齐方式'))
-            Text('除当前字号外，其余排版设置尚未接入。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
+            MenuSettingOption({ title: '效果', detail: '斜体 / 字重 / 阴影 / 下划线', migrated: true })
+              .onClick(() => this.openDetailSheet('文字效果', '配置文字效果'))
+            MenuSettingOption({ title: '缩进', detail: '全角空格数（0–4）', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+            MenuSettingOption({ title: '字距', detail: '字符间距设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+            MenuSettingOption({ title: '段距', detail: '按行高比例设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+            MenuSettingOption({ title: '行距', detail: '行高比例设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+            MenuSettingOption({ title: '文字对齐', detail: '两端对齐 / 底部对齐', migrated: true }).onClick(() => this.openDetailSheet('文字对齐', '选择正文对齐方式'))
+            Text('正文和标题支持系统字体及导入的 TTF/OTF；字体族会参与文字测量和分页。页眉页脚字体沿用各自选项。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
           }.width('100%').padding({ bottom: 16 })
+        } else if (this.detailSheetTitle === '文字效果') {
+          Scroll() {
+            Column() {
+              MenuSettingSwitch({
+                title: '斜体', detail: '正文使用斜体字形', checked: this.textItalic,
+                onChange: (enabled: boolean) => this.onTextItalicChange(enabled)
+              })
+              Column() {
+                Text('字重').fontSize(13).fontColor('#E2E3E8').width('100%').margin({ bottom: 8 })
+                Row() {
+                  ForEach(['纤细', '常规', '中等', '粗体', '特粗'], (label: string, index: number) => {
+                    Text(label).fontSize(11).fontColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? '#ECECF0' : '#B7B8C1')
+                      .layoutWeight(1).textAlign(TextAlign.Center).padding(8)
+                      .backgroundColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? '#454B62' : '#15161B').borderRadius(8)
+                      .margin({ right: 4 }).onClick(() => this.onTextBoldChange(READER_BODY_WEIGHT_VALUES[index] ?? 500))
+                  }, (label: string) => label)
+                }.width('100%')
+              }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+              MenuSettingSwitch({
+                title: '文字阴影', detail: '为正文绘制阴影', checked: this.textShadow,
+                onChange: (enabled: boolean) => this.onTextShadowChange(enabled)
+              })
+              if (this.textShadow) {
+                MenuSettingPalette({
+                  title: this.readerNightMode ? '夜间阴影颜色' : '日间阴影颜色',
+                  colors: READER_EFFECT_COLORS,
+                  selectedColor: this.readerNightMode ? this.textShadowColorN : this.textShadowColor,
+                  onChange: (color: string) => this.onTextShadowColorChange(color, this.readerNightMode)
+                })
+                MenuSettingSlider({ title: '阴影半径', value: this.shadowRadius, minValue: 0, maxValue: 100,
+                  onChange: (value: number) => this.onShadowRadiusChange(value) })
+                MenuSettingSlider({ title: '阴影横向偏移', value: this.shadowDx, minValue: -50, maxValue: 50,
+                  onChange: (value: number) => this.onShadowDxChange(value) })
+                MenuSettingSlider({ title: '阴影纵向偏移', value: this.shadowDy, minValue: -50, maxValue: 50,
+                  onChange: (value: number) => this.onShadowDyChange(value) })
+              }
+              MenuSettingSwitch({
+                title: '正文下划线', detail: '对每行正文添加下划线', checked: this.underline,
+                onChange: (enabled: boolean) => this.onUnderlineChange(enabled)
+              })
+              MenuSettingSwitch({
+                title: '虚线下划线', detail: '将正文下划线显示为虚线', checked: this.dottedLine,
+                onChange: (enabled: boolean) => this.onDottedLineChange(enabled)
+              })
+              if (this.underline) {
+                MenuSettingPalette({
+                  title: this.readerNightMode ? '夜间下划线颜色' : '日间下划线颜色',
+                  colors: READER_EFFECT_COLORS,
+                  selectedColor: this.readerNightMode ? this.underlineColorNight : this.underlineColor,
+                  onChange: (color: string) => this.onUnderlineColorChange(color, this.readerNightMode)
+                })
+                MenuSettingSlider({ title: '下划线粗细', value: this.underlineHeight, minValue: 0, maxValue: 10,
+                  onChange: (value: number) => this.onUnderlineHeightChange(value) })
+              }
+              Text('高亮规则依赖 Android 规则库；当前 HOS 尚无兼容规则仓储，本页不伪造规则列表。')
+                .fontSize(10).fontColor('#92949E').width('100%').padding(12)
+            }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+          }.height(440).scrollBar(BarState.Off)
+        } else if (this.detailSheetTitle === '文字对齐') {
+          Column() {
+            MenuSettingSwitch({
+              title: '两端对齐',
+              detail: '将换行行的文字间距拉伸至正文宽度',
+              checked: this.textFullJustify,
+              onChange: (enabled: boolean) => this.onTextFullJustifyChange(enabled)
+            })
+            MenuSettingSwitch({
+              title: '底部对齐',
+              detail: '将适量的页底留白分配到各行之间',
+              checked: this.textBottomJustify,
+              onChange: (enabled: boolean) => this.onTextBottomJustifyChange(enabled)
+            })
+            Text('设置会立即保存并应用。两端对齐改变行内间距；底部对齐只移动本页文字，不改章节位置。')
+              .fontSize(10).fontColor('#92949E').width('100%').padding(12)
+          }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '选中文字菜单') {
           Scroll() {
             Column() {
@@ -1388,6 +1672,55 @@ export struct ReaderSettingsPage {
               onChange: (value: number) => this.updatePadding('右', value) })
             Text('边距会立即保存并应用到阅读页。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+        } else if (this.detailSheetTitle === '正文排版') {
+          Column() {
+            Row() {
+              Text('缩进').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
+              Text(this.paragraphIndent.length.toString()).fontSize(12).fontColor('#D3D4DC')
+            }.width('100%')
+            Slider({ value: this.paragraphIndent.length, min: 0, max: 4, step: 1, style: SliderStyle.InSet })
+              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
+                  this.onParagraphIndentCountChange(Math.max(0, Math.min(4, Math.round(value))));
+                }
+              })
+            Row() {
+              Text('字距').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
+              Text(this.letterSpacing.toFixed(2)).fontSize(12).fontColor('#D3D4DC')
+            }.width('100%').margin({ top: 12 })
+            Slider({ value: this.letterSpacing * 100 + 50, min: 0, max: 100, step: 1, style: SliderStyle.InSet })
+              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
+                  this.onLetterSpacingChange((Math.round(value) - 50) / 100);
+                }
+              })
+            Row() {
+              Text('段距').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
+              Text((this.paragraphSpacing / 10).toFixed(1)).fontSize(12).fontColor('#D3D4DC')
+            }.width('100%').margin({ top: 12 })
+            Slider({ value: this.paragraphSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
+              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
+                  this.onParagraphSpacingChange(Math.max(0, Math.min(20, Math.round(value))));
+                }
+              })
+            Row() {
+              Text('行距').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
+              Text(((this.lineSpacing - 10) / 10).toFixed(1)).fontSize(12).fontColor('#D3D4DC')
+            }.width('100%').margin({ top: 12 })
+            Slider({ value: this.lineSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
+              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
+                  this.onLineSpacingChange(Math.max(0, Math.min(20, Math.round(value))));
+                }
+              })
+            Text('缩进为全角空格，范围0–4；字距按 em 比例调整（-0.50–0.50）。段距和行距遵循 Android 配置。更改后立即保存并应用。')
+              .fontSize(10).fontColor('#92949E').width('100%').padding({ top: 10, bottom: 12 })
+          }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else {
           Scroll() {
             Column() {
@@ -1419,6 +1752,7 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '点击图片行为' ||
                 this.detailSheetTitle === '屏幕方向' ||
                 this.detailSheetTitle === '显示模式' ||
+                this.detailSheetTitle === '正文排版' ||
                 this.detailInfoSlot !== undefined
                 ? '选择后立即应用并保存；自定义内容需点击保存。' : '仅展示选择预览，不保存设置。')
                 .fontSize(10).fontColor('#92949E')
@@ -1848,6 +2182,34 @@ struct MenuSettingSwitch {
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .onChange((enabled: boolean) => this.onChange(enabled))
+    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+  }
+}
+
+@Component
+struct MenuSettingPalette {
+  @Prop title: string = '';
+  @Prop colors: string[] = [];
+  @Prop selectedColor: string = '';
+  onChange: (color: string) => void = (_color: string) => {};
+
+  build() {
+    Column() {
+      Row() {
+        Text(this.title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
+        Text(this.selectedColor).fontSize(10).fontColor('#AEB0B9')
+      }.width('100%').margin({ bottom: 10 })
+      Row() {
+        ForEach(this.colors, (color: string) => {
+          Stack({ alignContent: Alignment.Center }) {
+            Circle().width(27).height(27).fill(color)
+            if (this.selectedColor.toUpperCase() === color.toUpperCase()) {
+              Circle().width(33).height(33).fill(Color.Transparent)
+                .stroke('#AFC2FF').strokeWidth(2)
+            }
+          }.width(38).height(38).onClick(() => this.onChange(color))
+        }, (color: string) => color)
+      }.width('100%').justifyContent(FlexAlign.SpaceBetween)
     }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
   }
 }

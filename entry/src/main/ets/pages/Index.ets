@@ -108,7 +108,7 @@ struct Index {
   @State selectedChapter: string = '';
   @State books: Book[] = [];
   @State bookGroups: BookGroup[] = [];
-  /** 书架布局设置，与本地偏好仓储保持同步。 */
+  /** 书架布局设置，与 BookshelfLayoutRepository 的持久化值保持同步。 */
   @State bookshelfLayout: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readRecordDetails: ReadRecordDetail[] = [];
@@ -133,6 +133,28 @@ struct Index {
   @State readerBookmarkTargetRevision: number = 0;
   @State readerContent: string = '';
   @State readerFontSize: number = 20;
+  @State readerParagraphSpacing: number = 2;
+  @State readerLineSpacing: number = 12;
+  @State readerLetterSpacing: number = 0.1;
+  @State readerParagraphIndent: string = '　　';
+  @State readerTextFont: string = '';
+  @State readerTitleFont: string = '';
+  @State readerSystemTypefaces: number = 0;
+  @State readerTextItalic: boolean = false;
+  @State readerTextBold: number = 500;
+  @State readerTextShadow: boolean = false;
+  @State readerShadowRadius: number = 16;
+  @State readerShadowDx: number = 1;
+  @State readerShadowDy: number = 1;
+  @State readerTextShadowColor: string = '#3E3D3B';
+  @State readerTextShadowColorN: string = '#3E3D3B';
+  @State readerUnderline: boolean = false;
+  @State readerDottedLine: boolean = false;
+  @State readerUnderlineColor: string = '#3E3D3B';
+  @State readerUnderlineColorNight: string = '#ADADAD';
+  @State readerUnderlineHeight: number = 1;
+  @State readerTextFullJustify: boolean = true;
+  @State readerTextBottomJustify: boolean = true;
   @State paperIndex: number = 0;
   @State dayPaperIndex: number = 0;
   @State nightPaperIndex: number = 0;
@@ -244,6 +266,10 @@ struct Index {
     }
   }
 
+  private async restoreBookshelfLayout(context: Context): Promise<void> {
+    this.bookshelfLayout = await BookshelfLayoutRepository.load(context);
+  }
+
   private async restoreReadTimeRecords(context: Context): Promise<void> {
     // 先迁移旧扁平数据，再从权威会话层构建时间线。
     await ReadRecordRepository.migrateLegacy(context);
@@ -256,10 +282,6 @@ struct Index {
     this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
     this.readRecordDetails = await ReadRecordRepository.loadDetails(context);
     this.readRecordSummaries = await ReadRecordRepository.loadSummaries(context);
-  }
-
-  private async restoreBookshelfLayout(context: Context): Promise<void> {
-    this.bookshelfLayout = await BookshelfLayoutRepository.load(context);
   }
 
   private getTotalReadTimeMs(): number {
@@ -1357,7 +1379,7 @@ struct Index {
       this.showUnavailableAction('无法读取搜索结果对应章节');
       return;
     }
-    const semanticDocument = LocalTextSemantics.parse(content);
+    const semanticDocument = LocalTextSemantics.parse(content, this.readerParagraphIndent);
     const position = Math.max(0, Math.min(semanticDocument.content.length, chapterPosition));
     const androidPosition = LocalTextSemantics.toSourcePosition(semanticDocument, position);
     const chapterProgress = semanticDocument.sourceLength > 0
@@ -1488,6 +1510,28 @@ struct Index {
     const infoSettings = this.getReaderInfoSettingsFromSnapshot(settings);
     if (initialRevision === this.readerSettingsRevision) {
       this.readerFontSize = settings.fontSize;
+      this.readerParagraphSpacing = settings.paragraphSpacing;
+      this.readerLineSpacing = settings.lineSpacing;
+      this.readerLetterSpacing = settings.letterSpacing;
+      this.readerParagraphIndent = settings.paragraphIndent;
+      this.readerTextFont = settings.textFont;
+      this.readerTitleFont = settings.titleFont;
+      this.readerSystemTypefaces = settings.systemTypefaces;
+      this.readerTextItalic = settings.textItalic;
+      this.readerTextBold = settings.textBold;
+      this.readerTextShadow = settings.textShadow;
+      this.readerShadowRadius = settings.shadowRadius;
+      this.readerShadowDx = settings.shadowDx;
+      this.readerShadowDy = settings.shadowDy;
+      this.readerTextShadowColor = settings.textShadowColor;
+      this.readerTextShadowColorN = settings.textShadowColorN;
+      this.readerUnderline = settings.underline;
+      this.readerDottedLine = settings.dottedLine;
+      this.readerUnderlineColor = settings.underlineColor;
+      this.readerUnderlineColorNight = settings.underlineColorNight;
+      this.readerUnderlineHeight = settings.underlineHeight;
+      this.readerTextFullJustify = settings.textFullJustify;
+      this.readerTextBottomJustify = settings.textBottomJustify;
       this.paperIndex = settings.paperIndex;
       this.dayPaperIndex = settings.dayPaperIndex;
       this.nightPaperIndex = settings.nightPaperIndex;
@@ -1571,6 +1615,28 @@ struct Index {
   private getCurrentReaderSettingsSnapshot(): ReaderSettingsSnapshot {
     return {
         fontSize: this.readerFontSize,
+        paragraphSpacing: this.readerParagraphSpacing,
+        lineSpacing: this.readerLineSpacing,
+        letterSpacing: this.readerLetterSpacing,
+        paragraphIndent: this.readerParagraphIndent,
+        textFont: this.readerTextFont,
+        titleFont: this.readerTitleFont,
+        systemTypefaces: this.readerSystemTypefaces,
+        textItalic: this.readerTextItalic,
+        textBold: this.readerTextBold,
+        textShadow: this.readerTextShadow,
+        shadowRadius: this.readerShadowRadius,
+        shadowDx: this.readerShadowDx,
+        shadowDy: this.readerShadowDy,
+        textShadowColor: this.readerTextShadowColor,
+        textShadowColorN: this.readerTextShadowColorN,
+        underline: this.readerUnderline,
+        dottedLine: this.readerDottedLine,
+        underlineColor: this.readerUnderlineColor,
+        underlineColorNight: this.readerUnderlineColorNight,
+        underlineHeight: this.readerUnderlineHeight,
+        textFullJustify: this.readerTextFullJustify,
+        textBottomJustify: this.readerTextBottomJustify,
         paperIndex: this.paperIndex,
         dayPaperIndex: this.dayPaperIndex,
         nightPaperIndex: this.nightPaperIndex,
@@ -1642,6 +1708,124 @@ struct Index {
     this.readerFontSize = Math.max(5, Math.min(50, Math.round(fontSize)));
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderParagraphSpacing(value: number): void {
+    this.readerParagraphSpacing = Math.max(0, Math.min(20, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderLineSpacing(value: number): void {
+    this.readerLineSpacing = Math.max(0, Math.min(20, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderLetterSpacing(value: number): void {
+    this.readerLetterSpacing = Math.round(Math.max(-0.5, Math.min(0.5, value)) * 100) / 100;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderParagraphIndentCount(count: number): void {
+    const indentCount = Math.max(0, Math.min(4, Math.round(count)));
+    this.readerParagraphIndent = '　'.repeat(indentCount);
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderTextFont(path: string): void {
+    this.readerTextFont = path;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderTitleFont(path: string): void {
+    this.readerTitleFont = path;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderSystemTypefaces(index: number): void {
+    this.readerSystemTypefaces = Math.max(0, Math.min(2, Math.round(index)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderTextFullJustify(enabled: boolean): void {
+    this.readerTextFullJustify = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderTextBottomJustify(enabled: boolean): void {
+    this.readerTextBottomJustify = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private saveReaderBodyEffect(): void {
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderTextItalic(enabled: boolean): void {
+    this.readerTextItalic = enabled;
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderTextBold(weight: number): void {
+    this.readerTextBold = Math.max(300, Math.min(900, Math.round(weight / 100) * 100));
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderTextShadow(enabled: boolean): void {
+    this.readerTextShadow = enabled;
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderShadowRadius(value: number): void {
+    this.readerShadowRadius = Math.max(0, Math.min(100, Math.round(value)));
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderShadowDx(value: number): void {
+    this.readerShadowDx = Math.max(-50, Math.min(50, Math.round(value)));
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderShadowDy(value: number): void {
+    this.readerShadowDy = Math.max(-50, Math.min(50, Math.round(value)));
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderTextShadowColor(value: string, night: boolean): void {
+    if (night) { this.readerTextShadowColorN = value; }
+    else { this.readerTextShadowColor = value; }
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderUnderline(enabled: boolean): void {
+    this.readerUnderline = enabled;
+    if (!enabled) { this.readerDottedLine = false; }
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderDottedLine(enabled: boolean): void {
+    this.readerDottedLine = enabled && this.readerUnderline;
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderUnderlineColor(value: string, night: boolean): void {
+    if (night) { this.readerUnderlineColorNight = value; }
+    else { this.readerUnderlineColor = value; }
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderUnderlineHeight(value: number): void {
+    this.readerUnderlineHeight = Math.max(0, Math.min(10, Math.round(value)));
+    this.saveReaderBodyEffect();
   }
 
   private setAutoReadSpeed(seconds: number): void {
@@ -1956,9 +2140,7 @@ struct Index {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const settings = await ReaderSettingsRepository.load(context);
       const bookshelfLayout = await BookshelfLayoutRepository.load(context);
-      const created = await BackupRepository.createBackup(
-        context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys
-      );
+      const created = await BackupRepository.createBackup(context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys);
       this.backupStatusMessage = created ? 'Android 兼容 ZIP 已保存到你选择的位置。' : '';
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `创建备份失败：${error.message}` : '创建备份失败';
@@ -2005,6 +2187,23 @@ struct Index {
       this.bookGroups = BookGroupRepository.getAll();
       this.bookshelfLayout = copyBookshelfLayout(result.bookshelfLayout);
       this.readerFontSize = result.settings.fontSize;
+      this.readerParagraphSpacing = result.settings.paragraphSpacing;
+      this.readerLineSpacing = result.settings.lineSpacing;
+      this.readerLetterSpacing = result.settings.letterSpacing;
+      this.readerParagraphIndent = result.settings.paragraphIndent;
+      this.readerTextItalic = result.settings.textItalic;
+      this.readerTextBold = result.settings.textBold;
+      this.readerTextShadow = result.settings.textShadow;
+      this.readerShadowRadius = result.settings.shadowRadius;
+      this.readerShadowDx = result.settings.shadowDx;
+      this.readerShadowDy = result.settings.shadowDy;
+      this.readerTextShadowColor = result.settings.textShadowColor;
+      this.readerTextShadowColorN = result.settings.textShadowColorN;
+      this.readerUnderline = result.settings.underline;
+      this.readerDottedLine = result.settings.dottedLine;
+      this.readerUnderlineColor = result.settings.underlineColor;
+      this.readerUnderlineColorNight = result.settings.underlineColorNight;
+      this.readerUnderlineHeight = result.settings.underlineHeight;
       this.paperIndex = result.settings.paperIndex;
       this.dayPaperIndex = result.settings.dayPaperIndex;
       this.nightPaperIndex = result.settings.nightPaperIndex;
@@ -2422,6 +2621,21 @@ struct Index {
     }
   }
 
+  /** 保存书架布局设置。 */
+  private async saveBookshelfLayout(settings: BookshelfLayoutSettings): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('书架布局设置保存失败');
+      return;
+    }
+    try {
+      await BookshelfLayoutRepository.save(context, settings);
+      this.bookshelfLayout = copyBookshelfLayout(settings);
+    } catch (_) {
+      this.showUnavailableAction('书架布局设置保存失败，当前值未更改');
+    }
+  }
+
   /** 按完整草稿新建分组，供分组编辑面板提交。 */
   private async addBookshelfGroupDraft(draft: BookGroupDraft): Promise<void> {
     const context = this.getUIContext().getHostContext();
@@ -2488,18 +2702,6 @@ struct Index {
       this.bookGroups = BookGroupRepository.getAll();
     } catch (_) {
       this.showUnavailableAction('清除分组封面失败');
-    }
-  }
-
-  /** 保存书架布局；写入偏好成功后再刷新界面状态。 */
-  private async saveBookshelfLayout(settings: BookshelfLayoutSettings): Promise<void> {
-    const context = this.getUIContext().getHostContext();
-    if (context === undefined) { return; }
-    try {
-      await BookshelfLayoutRepository.save(context, settings);
-      this.bookshelfLayout = copyBookshelfLayout(settings);
-    } catch (error) {
-      this.showUnavailableAction(error instanceof Error ? error.message : '书架布局保存失败');
     }
   }
 
@@ -2754,6 +2956,7 @@ struct Index {
         this.selectedBook.format === 'epub') ? (androidCoordinate ? 2 : 0) : this.selectedBook.readerPositionVersion,
       tocRule: this.selectedBook.tocRule,
       latestChapterTime: this.selectedBook.latestChapterTime,
+      // 保存阅读进度就是「刚读过」，用来驱动书架的按最近列表 / 综合排序。
       durChapterTime: Date.now(),
       order: this.selectedBook.order,
       isLocal: this.selectedBook.isLocal
@@ -3294,8 +3497,31 @@ struct Index {
             replaceRules: this.replaceRules,
             content: this.readerContent,
             fontSize: this.readerFontSize,
+        paragraphSpacing: this.readerParagraphSpacing,
+        lineSpacing: this.readerLineSpacing,
+        letterSpacing: this.readerLetterSpacing,
+        paragraphIndent: this.readerParagraphIndent,
+            textFontPath: this.readerTextFont,
+            titleFontPath: this.readerTitleFont,
+            systemTypefaces: this.readerSystemTypefaces,
+              textItalic: this.readerTextItalic,
+              textBold: this.readerTextBold,
+              textShadow: this.readerTextShadow,
+              shadowRadius: this.readerShadowRadius,
+              shadowDx: this.readerShadowDx,
+              shadowDy: this.readerShadowDy,
+              underline: this.readerUnderline,
+              dottedLine: this.readerDottedLine,
+              textShadowColor: this.readerTextShadowColor,
+              textShadowColorN: this.readerTextShadowColorN,
+              underlineColor: this.readerUnderlineColor,
+              underlineColorNight: this.readerUnderlineColorNight,
+              underlineHeight: this.readerUnderlineHeight,
+        textFullJustify: this.readerTextFullJustify,
+        textBottomJustify: this.readerTextBottomJustify,
             imageStyle: this.selectedBook.imageStyle ?? 'DEFAULT',
             paperColor: this.getPaperColor(),
+            readerNightMode: this.readerNightMode,
             eyeProtectionActive: this.isEyeProtectionActive(),
             showQuickActions: this.showReaderQuickActions,
             showControlsOnAppear: this.readerControlsOpenOnReturn,
@@ -3446,6 +3672,28 @@ struct Index {
           if (this.route === AppRoute.READER_SETTINGS) {
             ReaderSettingsPage({
               fontSize: this.readerFontSize,
+        paragraphSpacing: this.readerParagraphSpacing,
+        lineSpacing: this.readerLineSpacing,
+        letterSpacing: this.readerLetterSpacing,
+        paragraphIndent: this.readerParagraphIndent,
+              textFont: this.readerTextFont,
+              titleFont: this.readerTitleFont,
+              systemTypefaces: this.readerSystemTypefaces,
+              textItalic: this.readerTextItalic,
+              textBold: this.readerTextBold,
+              textShadow: this.readerTextShadow,
+              shadowRadius: this.readerShadowRadius,
+              shadowDx: this.readerShadowDx,
+              shadowDy: this.readerShadowDy,
+              underline: this.readerUnderline,
+              dottedLine: this.readerDottedLine,
+              textShadowColor: this.readerTextShadowColor,
+              textShadowColorN: this.readerTextShadowColorN,
+              underlineColor: this.readerUnderlineColor,
+              underlineColorNight: this.readerUnderlineColorNight,
+              underlineHeight: this.readerUnderlineHeight,
+        textFullJustify: this.readerTextFullJustify,
+        textBottomJustify: this.readerTextBottomJustify,
               paperIndex: this.paperIndex,
               shareLayout: this.shareReaderStyleLayout,
               readerNightMode: this.readerNightMode,
@@ -3522,6 +3770,26 @@ struct Index {
                 this.route = this.settingsReturnRoute;
               },
               onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
+              onTextItalicChange: (enabled: boolean) => this.setReaderTextItalic(enabled),
+              onTextBoldChange: (weight: number) => this.setReaderTextBold(weight),
+              onTextShadowChange: (enabled: boolean) => this.setReaderTextShadow(enabled),
+              onShadowRadiusChange: (value: number) => this.setReaderShadowRadius(value),
+              onShadowDxChange: (value: number) => this.setReaderShadowDx(value),
+              onShadowDyChange: (value: number) => this.setReaderShadowDy(value),
+              onUnderlineChange: (enabled: boolean) => this.setReaderUnderline(enabled),
+              onDottedLineChange: (enabled: boolean) => this.setReaderDottedLine(enabled),
+              onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
+              onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
+              onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
+              onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
+              onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),
+              onTextFullJustifyChange: (enabled: boolean) => this.setReaderTextFullJustify(enabled),
+              onTextBottomJustifyChange: (enabled: boolean) => this.setReaderTextBottomJustify(enabled),
+              onParagraphSpacingChange: (value: number) => this.setReaderParagraphSpacing(value),
+              onLineSpacingChange: (value: number) => this.setReaderLineSpacing(value),
+              onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
+              onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
               onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
               onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
             })
@@ -3710,6 +3978,28 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.APP_READ_SETTINGS) {
           ReaderSettingsPage({
             fontSize: this.readerFontSize,
+        paragraphSpacing: this.readerParagraphSpacing,
+        lineSpacing: this.readerLineSpacing,
+        letterSpacing: this.readerLetterSpacing,
+        paragraphIndent: this.readerParagraphIndent,
+              textFont: this.readerTextFont,
+              titleFont: this.readerTitleFont,
+              systemTypefaces: this.readerSystemTypefaces,
+              textItalic: this.readerTextItalic,
+              textBold: this.readerTextBold,
+              textShadow: this.readerTextShadow,
+              shadowRadius: this.readerShadowRadius,
+              shadowDx: this.readerShadowDx,
+              shadowDy: this.readerShadowDy,
+              underline: this.readerUnderline,
+              dottedLine: this.readerDottedLine,
+              textShadowColor: this.readerTextShadowColor,
+              textShadowColorN: this.readerTextShadowColorN,
+              underlineColor: this.readerUnderlineColor,
+              underlineColorNight: this.readerUnderlineColorNight,
+              underlineHeight: this.readerUnderlineHeight,
+        textFullJustify: this.readerTextFullJustify,
+        textBottomJustify: this.readerTextBottomJustify,
             paperIndex: this.paperIndex,
             shareLayout: this.shareReaderStyleLayout,
             readerNightMode: this.readerNightMode,
@@ -3782,6 +4072,26 @@ struct Index {
             asSheet: false,
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
+              onTextItalicChange: (enabled: boolean) => this.setReaderTextItalic(enabled),
+              onTextBoldChange: (weight: number) => this.setReaderTextBold(weight),
+              onTextShadowChange: (enabled: boolean) => this.setReaderTextShadow(enabled),
+              onShadowRadiusChange: (value: number) => this.setReaderShadowRadius(value),
+              onShadowDxChange: (value: number) => this.setReaderShadowDx(value),
+              onShadowDyChange: (value: number) => this.setReaderShadowDy(value),
+              onUnderlineChange: (enabled: boolean) => this.setReaderUnderline(enabled),
+              onDottedLineChange: (enabled: boolean) => this.setReaderDottedLine(enabled),
+              onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
+              onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
+              onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
+              onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
+              onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),
+              onTextFullJustifyChange: (enabled: boolean) => this.setReaderTextFullJustify(enabled),
+              onTextBottomJustifyChange: (enabled: boolean) => this.setReaderTextBottomJustify(enabled),
+            onParagraphSpacingChange: (value: number) => this.setReaderParagraphSpacing(value),
+            onLineSpacingChange: (value: number) => this.setReaderLineSpacing(value),
+            onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
+            onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
             onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
             onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
           })
@@ -3842,6 +4152,28 @@ struct Index {
         } else {
           ReaderSettingsPage({
             fontSize: this.readerFontSize,
+        paragraphSpacing: this.readerParagraphSpacing,
+        lineSpacing: this.readerLineSpacing,
+        letterSpacing: this.readerLetterSpacing,
+        paragraphIndent: this.readerParagraphIndent,
+              textFont: this.readerTextFont,
+              titleFont: this.readerTitleFont,
+              systemTypefaces: this.readerSystemTypefaces,
+              textItalic: this.readerTextItalic,
+              textBold: this.readerTextBold,
+              textShadow: this.readerTextShadow,
+              shadowRadius: this.readerShadowRadius,
+              shadowDx: this.readerShadowDx,
+              shadowDy: this.readerShadowDy,
+              underline: this.readerUnderline,
+              dottedLine: this.readerDottedLine,
+              textShadowColor: this.readerTextShadowColor,
+              textShadowColorN: this.readerTextShadowColorN,
+              underlineColor: this.readerUnderlineColor,
+              underlineColorNight: this.readerUnderlineColorNight,
+              underlineHeight: this.readerUnderlineHeight,
+        textFullJustify: this.readerTextFullJustify,
+        textBottomJustify: this.readerTextBottomJustify,
             paperIndex: this.paperIndex,
             shareLayout: this.shareReaderStyleLayout,
             readerNightMode: this.readerNightMode,
@@ -3904,6 +4236,26 @@ struct Index {
             asSheet: false,
             onBack: () => this.route = this.profileDetailReturnRoute,
             onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
+              onTextItalicChange: (enabled: boolean) => this.setReaderTextItalic(enabled),
+              onTextBoldChange: (weight: number) => this.setReaderTextBold(weight),
+              onTextShadowChange: (enabled: boolean) => this.setReaderTextShadow(enabled),
+              onShadowRadiusChange: (value: number) => this.setReaderShadowRadius(value),
+              onShadowDxChange: (value: number) => this.setReaderShadowDx(value),
+              onShadowDyChange: (value: number) => this.setReaderShadowDy(value),
+              onUnderlineChange: (enabled: boolean) => this.setReaderUnderline(enabled),
+              onDottedLineChange: (enabled: boolean) => this.setReaderDottedLine(enabled),
+              onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
+              onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
+              onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
+              onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
+              onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),
+              onTextFullJustifyChange: (enabled: boolean) => this.setReaderTextFullJustify(enabled),
+              onTextBottomJustifyChange: (enabled: boolean) => this.setReaderTextBottomJustify(enabled),
+            onParagraphSpacingChange: (value: number) => this.setReaderParagraphSpacing(value),
+            onLineSpacingChange: (value: number) => this.setReaderLineSpacing(value),
+            onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
+            onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
             onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
             onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
           })
@@ -3911,6 +4263,28 @@ struct Index {
         } else {
         ReaderSettingsPage({
           fontSize: this.readerFontSize,
+        paragraphSpacing: this.readerParagraphSpacing,
+        lineSpacing: this.readerLineSpacing,
+        letterSpacing: this.readerLetterSpacing,
+        paragraphIndent: this.readerParagraphIndent,
+              textFont: this.readerTextFont,
+              titleFont: this.readerTitleFont,
+              systemTypefaces: this.readerSystemTypefaces,
+              textItalic: this.readerTextItalic,
+              textBold: this.readerTextBold,
+              textShadow: this.readerTextShadow,
+              shadowRadius: this.readerShadowRadius,
+              shadowDx: this.readerShadowDx,
+              shadowDy: this.readerShadowDy,
+              underline: this.readerUnderline,
+              dottedLine: this.readerDottedLine,
+              textShadowColor: this.readerTextShadowColor,
+              textShadowColorN: this.readerTextShadowColorN,
+              underlineColor: this.readerUnderlineColor,
+              underlineColorNight: this.readerUnderlineColorNight,
+              underlineHeight: this.readerUnderlineHeight,
+        textFullJustify: this.readerTextFullJustify,
+        textBottomJustify: this.readerTextBottomJustify,
           paperIndex: this.paperIndex,
           shareLayout: this.shareReaderStyleLayout,
           readerNightMode: this.readerNightMode,
@@ -3969,6 +4343,26 @@ struct Index {
           asSheet: false,
           onBack: () => this.route = this.settingsReturnRoute,
           onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
+              onTextItalicChange: (enabled: boolean) => this.setReaderTextItalic(enabled),
+              onTextBoldChange: (weight: number) => this.setReaderTextBold(weight),
+              onTextShadowChange: (enabled: boolean) => this.setReaderTextShadow(enabled),
+              onShadowRadiusChange: (value: number) => this.setReaderShadowRadius(value),
+              onShadowDxChange: (value: number) => this.setReaderShadowDx(value),
+              onShadowDyChange: (value: number) => this.setReaderShadowDy(value),
+              onUnderlineChange: (enabled: boolean) => this.setReaderUnderline(enabled),
+              onDottedLineChange: (enabled: boolean) => this.setReaderDottedLine(enabled),
+              onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
+              onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
+              onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
+              onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
+              onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),
+              onTextFullJustifyChange: (enabled: boolean) => this.setReaderTextFullJustify(enabled),
+              onTextBottomJustifyChange: (enabled: boolean) => this.setReaderTextBottomJustify(enabled),
+          onParagraphSpacingChange: (value: number) => this.setReaderParagraphSpacing(value),
+          onLineSpacingChange: (value: number) => this.setReaderLineSpacing(value),
+          onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
+          onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
           onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
           onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
         })

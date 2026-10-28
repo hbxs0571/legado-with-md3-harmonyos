@@ -18,4 +18,4 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 
 产物通常位于 entry/build/default/outputs/default/entry-default-unsigned.hap。当前没有 signingConfigs，未签名包不是面向普通用户直接安装的正式发行物。自行安装须按自己的设备和开发者配置完成匹配签名；不要把私钥、密码或 Profile 提交到 Git。
 
-本仓库不依赖父目录 Android 工程；上游只作为来源参照。oh-package.json5 无直接运行时第三方包，SDK 和构建插件仍是必需依赖。干净构建的实际结果见 VALIDATION.md。
+本仓库不依赖父目录 Android 工程；上游只作为来源参照。entry 不声明直接运行时 NPM 依赖；根清单为 `ohosTest` 提供 Hypium 开发依赖并带有锁文件。HarmonyOS SDK 与 Hvigor 构建插件仍是必需依赖。干净构建的实际结果见 `VALIDATION.md`。

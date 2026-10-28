@@ -25,7 +25,7 @@
   },
   {
     "path": "CHANGELOG.md",
-    "sha256": "2e4c83b29567b49e6d0f35c4518eeee54972dc8ab76865d87d703127995f23ed"
+    "sha256": "918d986771fe9f361803e04875dcb64647e9e245edcd471d7c50d97d7b65576e"
   },
   {
     "path": "DISCLAIMER.md",
@@ -36,12 +36,16 @@
     "sha256": "3749a256dca5a899f26a68be686e5677d9cbb4399c456360b6564a7ba6cca025"
   },
   {
+    "path": "docs/BACKUP-RESTORE-r250.md",
+    "sha256": "b41d3509d98db0d7d0514d463ccaf93f6919d5f3ba30b407f1ce5479a22ee47f"
+  },
+  {
     "path": "docs/BACKUP-RESTORE.md",
-    "sha256": "29c8a21dc620d1a3309e6a756c944a85612dc3eab73e909c60e3d8680401e64c"
+    "sha256": "11d2df4396d8318ee168c0fe2d4d682e1a607f533b7b89833cff4600b58ea745"
   },
   {
     "path": "docs/BUILDING.md",
-    "sha256": "d6dd22d521e49c5a9e11337b81ea8cb0b2e65b15eba002da133be02aa82c5cc9"
+    "sha256": "a659fd113519e66a114e9000af04f374f0e52f0cbb7e5530131e724e9d2c30f9"
   },
   {
     "path": "docs/DUAL-MACHINE-HANDOFF.md",
@@ -52,16 +56,20 @@
     "sha256": "22935f904a8a5dc1e831385aa55048064741387cc0816c709d66dc784b02e3b3"
   },
   {
+    "path": "docs/HYPIUM-UI-TEST.md",
+    "sha256": "81b51e531646479bff5c46de103c484b7e7a3954ba66fe988c6d75f0e8e923f6"
+  },
+  {
     "path": "docs/INDEX.md",
-    "sha256": "8570d764a8989f22cf71783334ee017fc71533e80a9301f30f026f6f3ea5927f"
+    "sha256": "5a93990ac88b454893f0313178bf4b229401d0fb5a633169cc8d5c0a0530b3f9"
   },
   {
     "path": "docs/KNOWN-ISSUES.md",
-    "sha256": "3cfce68f6be63e63c12eb563b58e83f36ecd3937c9680bb80b5fdf172a5a92b1"
+    "sha256": "fe3d328bfe761a73660a4a377e6d66bcb1fe4dde5456eb6905ee01ff99987b1b"
   },
   {
     "path": "docs/MODULE-STATUS.md",
-    "sha256": "f7553523b2b5936056043915862c911e4167228d67aaebfd7f33d39e122bbd82"
+    "sha256": "cccfa63edc3bc0a7ee0d723115ea2996758af757b8f3e07888babdea9d2a7d47"
   },
   {
     "path": "docs/MODULES.md",
@@ -69,7 +77,7 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "883547a5ad22e35d0ae42a31f40c60fe5a4301351fae6f878b741c071d4c4cdb"
+    "sha256": "b42f3c3d22fc50d9b62171529353a2367e2fb4b6e7f64e4bc99b7a1f625070b3"
   },
   {
     "path": "docs/PROJECT.md",
@@ -77,7 +85,7 @@
   },
   {
     "path": "docs/READER.md",
-    "sha256": "f46a6b2140c2752e4d1d4a3d04f00319167777917d25344320fdfc23321046b7"
+    "sha256": "9559c30d807e731acbdcd52645e13ae404348c446c39815e75b7166a8a32d5b4"
   },
   {
     "path": "docs/RELEASE.md",
@@ -97,11 +105,11 @@
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "23c34dc191fcd115843e7b0c9ab1ab28cf294a6362a7e9f9c381973e52751d6e"
+    "sha256": "fdea9742c31693e58e4d3145aeb4ee024b5a77ab5b79d697fa7ce06cd2e33463"
   },
   {
     "path": "entry/build-profile.json5",
-    "sha256": "46d1b87a9913197745942b7aad13d81bf029e71fd07436ed5cf5bfbbb15d01eb"
+    "sha256": "a06f7e430293c22c626ed34c0f7c5d7baf0a9446cf5b1b70fec9333622c37842"
   },
   {
     "path": "entry/hvigorfile.ts",
@@ -137,7 +145,7 @@
   },
   {
     "path": "entry/src/main/ets/data/BackupRepository.ets",
-    "sha256": "6af7ffdf15e3bb4d949fb294cb64155cce37bf0af2c00bd23441edc679e1deee"
+    "sha256": "28f27668b6317870b7f502d431f0b73c812d41cabe42154c6a396b815c4218d8"
   },
   {
     "path": "entry/src/main/ets/data/BookContentProcessEngine.ets",
@@ -177,7 +185,7 @@
   },
   {
     "path": "entry/src/main/ets/data/LocalTextSemantics.ets",
-    "sha256": "49980cdb8fce7fc7c83e687ce181a4d381b62fbe83cbace4f593deda28bf1bc9"
+    "sha256": "21b4838b6faf5b9323d8f7aa9974f481eac84b180d388a012597f30eafb71f4e"
   },
   {
     "path": "entry/src/main/ets/data/OnboardingRepository.ets",
@@ -186,6 +194,10 @@
   {
     "path": "entry/src/main/ets/data/ReaderBookmarkRepository.ets",
     "sha256": "75c8381e96aed9fcbbead81d96985394987cfc40faf9b757a04d331d051eeff4"
+  },
+  {
+    "path": "entry/src/main/ets/data/ReaderFontRepository.ets",
+    "sha256": "82e9c8e34cfa2448402bedc29698a02447adcfeb14026bfdba445f0ae1a0771e"
   },
   {
     "path": "entry/src/main/ets/data/ReaderMarkingRepository.ets",
@@ -201,7 +213,7 @@
   },
   {
     "path": "entry/src/main/ets/data/ReaderSettingsRepository.ets",
-    "sha256": "299f8a77f9fed36f4d3439e0f63c19c965e5ab526add65c5f211f0451ca2054c"
+    "sha256": "8befee9dc38e845e7d8166a911ba34f46f8628b37369c5bdd988d0242dda9fe8"
   },
   {
     "path": "entry/src/main/ets/data/ReadRecordRepository.ets",
@@ -309,7 +321,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/BookshelfPage.ets",
-    "sha256": "17a39250ff91b7deb496e086ed298a8cdfa507009ada5f20426d639ccaac1c01"
+    "sha256": "ad3dcdbe75ee54516797d80194a728db43831fad871a7c65bf3cde85ab17e6e3"
   },
   {
     "path": "entry/src/main/ets/pages/CatalogPage.ets",
@@ -329,11 +341,11 @@
   },
   {
     "path": "entry/src/main/ets/pages/Index.ets",
-    "sha256": "295873f76755bd0f13487228578ae6d48f5fb1b4caf60699b9ad87a32a984672"
+    "sha256": "a5195889aa32549069a2b99c8508da216fe341d73bd8a9a6947ae75d57197edf"
   },
   {
     "path": "entry/src/main/ets/pages/LocalReaderPaginator.ets",
-    "sha256": "bdf6a7344dc096f6494775f703abec46ff1979ee0ab5679bd32ff9cbc74d07fe"
+    "sha256": "7866aae82dc7e87725660381ee76896615ab866aefc0f8a36b2026eaf71efb44"
   },
   {
     "path": "entry/src/main/ets/pages/OnboardingPage.ets",
@@ -373,7 +385,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderPage.ets",
-    "sha256": "5bd3499836cab9a5c1655f0b7877c0a2936c83a54501f3d531a7119df2aea943"
+    "sha256": "c6f80b2cafdd5a33f4718f3694395834f3c6eb0e4897dbabf085696674e9d4d8"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSearchPage.ets",
@@ -381,7 +393,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSettingsPage.ets",
-    "sha256": "dc3d1516493b2f6d02cf9a52e2a1f4c1bba6f909f02a9fdb71cb16eed57b9311"
+    "sha256": "5cf262503bb5adaecca9c0a395f438714c3cf8a5d36ab62fe988255acfe1d86c"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderTextProcessingSheet.ets",
@@ -980,6 +992,38 @@
     "sha256": "7af42b72fee4c44f8d213edd237e17710c916875037634bcc94ce19c41333a7c"
   },
   {
+    "path": "entry/src/ohosTest/ets/test/LaunchSmoke.test.ets",
+    "sha256": "5a5d3a6eec524e189594f4303128a1243a94ae5b184ab5e93938981778537e7c"
+  },
+  {
+    "path": "entry/src/ohosTest/ets/test/List.test.ets",
+    "sha256": "fdb94e33ad7373859aeb195b3b2932b0df5e87f9b449058107bcabbb88d7368e"
+  },
+  {
+    "path": "entry/src/ohosTest/ets/testability/pages/Index.ets",
+    "sha256": "feb438c89b9df40dad5f5f7aea58bf8fd3ac04eeb64815cb9707d55aa31bd83f"
+  },
+  {
+    "path": "entry/src/ohosTest/ets/testability/TestAbility.ets",
+    "sha256": "d73effa22a3c0efa9ae88b606271fa7c2ed66931c263431543a4f5a451155a73"
+  },
+  {
+    "path": "entry/src/ohosTest/module.json5",
+    "sha256": "0336e93f1f1571e8a7bd4a1bfd01905c3a1919c862c0ca15f9930954a6edbbe0"
+  },
+  {
+    "path": "entry/src/ohosTest/resources/base/element/color.json",
+    "sha256": "db0f15582c0aeffb4f850d23710c28a28793e9f2783da2f4a1ea5ffce5c10233"
+  },
+  {
+    "path": "entry/src/ohosTest/resources/base/element/string.json",
+    "sha256": "1b55fa3d96f50feb8887bdc4973a131eb2ccfc82c591be293891eda58fc37af7"
+  },
+  {
+    "path": "entry/src/ohosTest/resources/base/profile/test_pages.json",
+    "sha256": "6970ad4ff561e90f9a1ca9a86176284c6037add2641b7a09782176080c949500"
+  },
+  {
     "path": "hvigor/hvigor-config.json5",
     "sha256": "e2c6421878ef956aa72caca35500d7ab6a90434dafa0f61f7ea1d45472bb4014"
   },
@@ -1000,16 +1044,20 @@
     "sha256": "8c1958cf0ae652623127da0f3c3011a86a3f33f044f83d2c0899e44285cc6756"
   },
   {
+    "path": "oh-package-lock.json5",
+    "sha256": "baaa145259ffb979757b092bb7f9c7c4de63c3853c15b50177469be31af1b213"
+  },
+  {
     "path": "oh-package.json5",
-    "sha256": "9811ff8dcaea25c4d9c2a4142df7fad342603c2f834603f900c95c6080cc9f1c"
+    "sha256": "087ce609d0eb6d012c48ab742031852364e124c836cfc440570d439333e55793"
   },
   {
     "path": "PRIVACY.md",
-    "sha256": "50082825a96ecbb3a4147d1c75272ca193bbc0bd687d6209f2cdfb87811b071f"
+    "sha256": "6985839ec5fc63bc5aea3c938f5df34d1099725031519f3e3aa31a3fdad9ed35"
   },
   {
     "path": "README.md",
-    "sha256": "7c769179f1e0e7b4187c46b5b062ef6d0b5fe3d55fd29e106bebfe8658f9da12"
+    "sha256": "1270b2a91ef786386e43de8d595f73fc5f89585d68a5d62609932b02fa03095e"
   },
   {
     "path": "SECURITY.md",

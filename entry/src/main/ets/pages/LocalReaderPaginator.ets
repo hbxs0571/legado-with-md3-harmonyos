@@ -59,7 +59,8 @@ export class LocalReaderPaginator {
     imageStyle: string,
     standaloneImageThreshold: number,
     inlineImageWidth: number,
-    firstPageReservedLines: number
+    firstPageReservedLines: number,
+    fullJustify: boolean = true
   ): LocalReaderPage[] {
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) {
       return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false }];
@@ -117,7 +118,7 @@ export class LocalReaderPaginator {
       }
       // 对齐 Android 正文两端对齐：首行缩进间距不拉伸，段末行不走这条分支。
       const stretchableGaps = Math.max(0, itemCount - 1 - Math.max(0, leadingIndentCount));
-      const justifyGap = justify && stretchableGaps > 0
+      const justifyGap = justify && fullJustify && stretchableGaps > 0
         ? Math.max(0, (contentWidth - naturalWidth) / stretchableGaps) : 0;
       if (pageBreakBefore && pageLines.length > 0) { flushPage(); }
       if (pageLines.length > 0 &&

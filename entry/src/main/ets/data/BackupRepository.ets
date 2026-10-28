@@ -106,6 +106,23 @@ interface AndroidBookBackupRecord {
 interface AndroidReadConfigBackupRecord {
   name: string;
   textSize: number;
+  letterSpacing: number;
+  paragraphSpacing: number;
+  lineSpacingExtra: number;
+  paragraphIndent: string;
+  textBold: number;
+  textItalic: boolean;
+  textShadow: boolean;
+  shadowRadius: number;
+  shadowDx: number;
+  shadowDy: number;
+  shadowColor: string;
+  shadowColorN: string;
+  underline: boolean;
+  underlineHeight: number;
+  underlineColor: string;
+  underlineColorNight: string;
+  dottedLine: boolean;
   paddingTop: number;
   paddingBottom: number;
   paddingLeft: number;
@@ -193,8 +210,11 @@ export class BackupRepository {
   ]);
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
     readConfig: [
-      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'maxLengthWithNoToc',
+      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'maxLengthWithNoToc', 'system_typefaces',
       'autoReadSpeed', 'progressBarBehavior', 'tocUiUseReplace', 'tocCountWords', 'clickImgWay',
+      'textFullJustify', 'textBottomJustify', 'textItalic', 'textBold', 'textShadow', 'shadowRadius',
+      'shadowDx', 'shadowDy', 'shadowColor', 'shadowColorN', 'underline', 'underlineHeight',
+      'underlineColor', 'underlineColorNight', 'dottedLine',
       'readBrightnessMode',
       'readBrightnessControlPosition', 'clickActionTopLeft',
       'clickActionTopCenter', 'clickActionTopRight', 'clickActionMiddleLeft', 'clickActionMiddleCenter',
@@ -413,48 +433,10 @@ export class BackupRepository {
         }
       }
 
-      // 替换净化规则是本地权威数据（存在 preferences 里），归档目录里不会有，
-      // 所以未忽略该分类时由这里生成，格式与上游 replaceRule.json 一致，可被 Android 直接读回。
-      // 始终写出当前规则快照，包括空数组，避免旧归档残留已删除规则。
-      if (!ignoredCategories.includes('replaceRule')) {
-        const rules = ReplaceRuleRepository.getAll();
-        BackupRepository.writeTextFile(`${stagingDirectory}/replaceRule.json`,
-          ReplaceRuleRepository.exportRules(rules));
-      }
-      if (!ignoredCategories.includes('txtTocRule')) {
-        const rules = TxtTocRuleRepository.getAll();
-        BackupRepository.writeTextFile(`${stagingDirectory}/txtTocRule.json`,
-          TxtTocRuleRepository.exportRules(rules));
-      }
-
       const configPath = `${stagingDirectory}/config.xml`;
       if (!fileIo.accessSync(configPath)) {
         BackupRepository.writeTextFile(configPath,
-          `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n` +
-          `  <int name="readStyleSelect" value="0" />\n` +
-          `  <boolean name="shareLayout" value="${settings.shareLayout}" />\n` +
-          `  <boolean name="hideStatusBar" value="${settings.hideStatusBar}" />\n` +
-          `  <boolean name="hideNavigationBar" value="${settings.hideNavigationBar}" />\n` +
-          `  <boolean name="readingAnchorEnabled" value="${settings.readingAnchorEnabled}" />\n` +
-          `  <boolean name="swipeToAddBookmark" value="${settings.swipeToAddBookmark}" />\n` +
-          `  <int name="maxLengthWithNoToc" value="${settings.maxLengthWithNoToc}" />\n` +
-          `  <boolean name="readMenuIconShowText" value="${settings.showBottomActionText}" />\n` +
-          `  <int name="readMenuIconStyle" value="${settings.bottomIconStyle}" />\n` +
-          `  <int name="readMenuIconItemsPerRow" value="${settings.bottomItemsPerRow}" />\n` +
-          `  <int name="readMenuIconRowCount" value="${settings.bottomRowCount}" />\n` +
-          `  <string name="progressBarBehavior">${settings.progressBehavior}</string>\n` +
-          `  <boolean name="tocUiUseReplace" value="${settings.tocUseReplace}" />\n` +
-          `  <boolean name="tocCountWords" value="${settings.tocShowWordCount}" />\n` +
-          `  <string name="clickImgWay">${settings.clickImageBehavior}</string>\n` +
-          `  <int name="clickActionTopLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[0] ?? '')}" />\n` +
-          `  <int name="clickActionTopCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[1] ?? '')}" />\n` +
-          `  <int name="clickActionTopRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[2] ?? '')}" />\n` +
-          `  <int name="clickActionMiddleLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[3] ?? '')}" />\n` +
-          `  <int name="clickActionMiddleCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[4] ?? '')}" />\n` +
-          `  <int name="clickActionMiddleRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[5] ?? '')}" />\n` +
-          `  <int name="clickActionBottomLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[6] ?? '')}" />\n` +
-          `  <int name="clickActionBottomCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[7] ?? '')}" />\n` +
-          `  <int name="clickActionBottomRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[8] ?? '')}" />\n</map>`);
+          "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n</map>");
       }
 
       if (!ignoredCategories.includes('bookshelfLayout')) {
@@ -470,16 +452,68 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfCoverShadow', `${bookshelfLayout.bookshelfCoverShadow}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
+
+      // 替换净化规则是本地权威数据（存在 preferences 里），归档目录里不会有，
+      // 所以未忽略该分类时由这里生成，格式与上游 replaceRule.json 一致，可被 Android 直接读回。
+      // 始终写出当前规则快照，包括空数组，避免旧归档残留已删除规则。
+      if (!ignoredCategories.includes('replaceRule')) {
+        const rules = ReplaceRuleRepository.getAll();
+        BackupRepository.writeTextFile(`${stagingDirectory}/replaceRule.json`,
+          ReplaceRuleRepository.exportRules(rules));
+      }
+      if (!ignoredCategories.includes('txtTocRule')) {
+        const rules = TxtTocRuleRepository.getAll();
+        BackupRepository.writeTextFile(`${stagingDirectory}/txtTocRule.json`,
+          TxtTocRuleRepository.exportRules(rules));
+      }
+
       if (!ignoredCategories.includes('readConfig')) {
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(
-          configText, 'boolean', 'eyeProtectionEnabled', `${settings.eyeProtectionEnabled}`);
+          configText, 'int', 'system_typefaces', `${settings.systemTypefaces}`);
         configText = BackupRepository.upsertAndroidPreference(
-          configText, 'boolean', 'eyeProtectionAutoNight', `${settings.eyeProtectionAutoNight}`);
+          configText, 'boolean', 'textFullJustify', `${settings.textFullJustify}`);
         configText = BackupRepository.upsertAndroidPreference(
-          configText, 'boolean', 'eyeProtectionSchedule', `${settings.eyeProtectionSchedule}`);
+          configText, 'boolean', 'textBottomJustify', `${settings.textBottomJustify}`);
         configText = BackupRepository.upsertAndroidPreference(
-          configText, 'int', 'colorTemperature', `${Math.max(0, Math.min(100, Math.round(settings.eyeProtectionIntensity)))}`);
+          configText, 'boolean', 'textItalic', `${settings.textItalic}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'textBold', `${settings.textBold}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'textShadow', `${settings.textShadow}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'float', 'shadowRadius', `${settings.shadowRadius}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'float', 'shadowDx', `${settings.shadowDx}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'float', 'shadowDy', `${settings.shadowDy}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'underline', `${settings.underline}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'dottedLine', `${settings.dottedLine}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'shadowColor', settings.textShadowColor);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'shadowColorN', settings.textShadowColorN);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'underlineHeight', `${settings.underlineHeight}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'underlineColor', settings.underlineColor);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'underlineColorNight', settings.underlineColorNight);
+        BackupRepository.writeTextFile(configPath, configText);
+      }
+      if (!ignoredCategories.includes('themeConfig')) {
+        let configText = fileIo.readTextSync(configPath);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'eyeProtectionEnabled', String(settings.eyeProtectionEnabled));
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'eyeProtectionAutoNight', String(settings.eyeProtectionAutoNight));
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'eyeProtectionSchedule', String(settings.eyeProtectionSchedule));
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'colorTemperature',
+          String(Math.max(0, Math.min(100, Math.round(settings.eyeProtectionIntensity)))));
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'eyeProtectionStartTime', settings.eyeProtectionStartTime);
         configText = BackupRepository.upsertAndroidPreference(
@@ -690,10 +724,13 @@ export class BackupRepository {
       preservedEntryCount += 1;
     }
 
-    const settings = BackupRepository.restoreReaderSettings(
+    const restoredReadSettings = BackupRepository.restoreReaderSettings(
       selection.stagingDirectory,
       currentSettings,
       ignoredCategories
+    );
+    const settings = BackupRepository.applyEyeProtection(
+      selection.stagingDirectory, restoredReadSettings, ignoredCategories
     );
     await ReaderSettingsRepository.save(context, settings);
     const bookshelfLayout = BackupRepository.restoreBookshelfLayout(
@@ -788,6 +825,23 @@ export class BackupRepository {
     return {
       name: dayStyle.name,
       textSize: Math.max(15, Math.min(30, Math.round(settings.fontSize))),
+      letterSpacing: Math.round(Math.max(-0.5, Math.min(0.5, settings.letterSpacing)) * 100) / 100,
+      paragraphSpacing: Math.max(0, Math.min(20, Math.round(settings.paragraphSpacing))),
+      lineSpacingExtra: Math.max(0, Math.min(20, Math.round(settings.lineSpacing))),
+      paragraphIndent: settings.paragraphIndent,
+      textBold: settings.textBold,
+      textItalic: settings.textItalic,
+      textShadow: settings.textShadow,
+      shadowRadius: settings.shadowRadius,
+      shadowDx: settings.shadowDx,
+      shadowDy: settings.shadowDy,
+      shadowColor: settings.textShadowColor,
+      shadowColorN: settings.textShadowColorN,
+      underline: settings.underline,
+      underlineHeight: settings.underlineHeight,
+      underlineColor: settings.underlineColor,
+      underlineColorNight: settings.underlineColorNight,
+      dottedLine: settings.dottedLine,
       paddingTop: settings.paddingSettings.paddingTop,
       paddingBottom: settings.paddingSettings.paddingBottom,
       paddingLeft: settings.paddingSettings.paddingLeft,
@@ -864,6 +918,29 @@ export class BackupRepository {
     return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
   }
 
+  private static applyEyeProtection(
+    directory: string,
+    current: ReaderSettingsSnapshot,
+    ignoredCategories: string[]
+  ): ReaderSettingsSnapshot {
+    if (ignoredCategories.includes('themeConfig')) { return current; }
+    const path = directory + '/config.xml';
+    if (!fileIo.accessSync(path)) { return current; }
+    const updated: ReaderSettingsSnapshot = JSON.parse(JSON.stringify(current));
+    updated.eyeProtectionEnabled = BackupRepository.readXmlBoolean(path, 'eyeProtectionEnabled') ??
+      current.eyeProtectionEnabled;
+    updated.eyeProtectionAutoNight = BackupRepository.readXmlBoolean(path, 'eyeProtectionAutoNight') ??
+      current.eyeProtectionAutoNight;
+    updated.eyeProtectionSchedule = BackupRepository.readXmlBoolean(path, 'eyeProtectionSchedule') ??
+      current.eyeProtectionSchedule;
+    updated.eyeProtectionIntensity = Math.max(0, Math.min(100,
+      BackupRepository.readXmlInteger(path, 'colorTemperature') ?? current.eyeProtectionIntensity));
+    updated.eyeProtectionStartTime = BackupRepository.readXmlString(path, 'eyeProtectionStartTime') ??
+      current.eyeProtectionStartTime;
+    updated.eyeProtectionEndTime = BackupRepository.readXmlString(path, 'eyeProtectionEndTime') ??
+      current.eyeProtectionEndTime;
+    return updated;
+  }
   private static restoreReaderSettings(
     directory: string,
     current: ReaderSettingsSnapshot,
@@ -905,11 +982,46 @@ export class BackupRepository {
         footerPaddingRight: Math.max(0, Math.min(300, BackupRepository.readJsonNumber(selected, 'footerPaddingRight') ?? current.paddingSettings.footerPaddingRight))
       },
       fontSize: fontSizeValue === undefined ? current.fontSize : Math.max(15, Math.min(30, Math.round(fontSizeValue))),
+      letterSpacing: Math.round(Math.max(-0.5, Math.min(0.5, BackupRepository.readJsonNumber(selected, 'letterSpacing') ?? current.letterSpacing)) * 100) / 100,
+      paragraphIndent: BackupRepository.readJsonString(selected, 'paragraphIndent') ?? current.paragraphIndent,
       paperIndex: paperIndex,
       dayPaperIndex: dayPaperIndex,
       nightPaperIndex: nightPaperIndex,
       readerNightMode: current.readerNightMode,
       shareLayout: shareLayout,
+      systemTypefaces: Math.max(0, Math.min(2,
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'system_typefaces') ?? current.systemTypefaces)),
+      // Android 字体路径属于 Android 私有目录；没有随 ZIP 附带可验证字体文件时保留本机选择。
+      textFont: current.textFont,
+      titleFont: current.titleFont,
+      textFullJustify: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'textFullJustify') ?? current.textFullJustify,
+      textBottomJustify: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'textBottomJustify') ?? current.textBottomJustify,
+      textItalic: BackupRepository.readJsonBoolean(selected, 'textItalic') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'textItalic') ?? current.textItalic,
+      textBold: BackupRepository.readJsonNumber(selected, 'textBold') ??
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'textBold') ?? current.textBold,
+      textShadow: BackupRepository.readJsonBoolean(selected, 'textShadow') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'textShadow') ?? current.textShadow,
+      shadowRadius: BackupRepository.readJsonNumber(selected, 'shadowRadius') ??
+        BackupRepository.readXmlFloat(`${directory}/config.xml`, 'shadowRadius') ?? current.shadowRadius,
+      shadowDx: BackupRepository.readJsonNumber(selected, 'shadowDx') ??
+        BackupRepository.readXmlFloat(`${directory}/config.xml`, 'shadowDx') ?? current.shadowDx,
+      shadowDy: BackupRepository.readJsonNumber(selected, 'shadowDy') ??
+        BackupRepository.readXmlFloat(`${directory}/config.xml`, 'shadowDy') ?? current.shadowDy,
+      textShadowColor: BackupRepository.readJsonString(selected, 'shadowColor') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'shadowColor') ?? current.textShadowColor,
+      textShadowColorN: BackupRepository.readJsonString(selected, 'shadowColorN') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'shadowColorN') ?? current.textShadowColorN,
+      underline: BackupRepository.readJsonBoolean(selected, 'underline') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'underline') ?? current.underline,
+      dottedLine: BackupRepository.readJsonBoolean(selected, 'dottedLine') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'dottedLine') ?? current.dottedLine,
+      underlineHeight: BackupRepository.readJsonNumber(selected, 'underlineHeight') ??
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'underlineHeight') ?? current.underlineHeight,
+      underlineColor: BackupRepository.readJsonString(selected, 'underlineColor') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'underlineColor') ?? current.underlineColor,
+      underlineColorNight: BackupRepository.readJsonString(selected, 'underlineColorNight') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'underlineColorNight') ?? current.underlineColorNight,
       showBottomActionText: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'readMenuIconShowText') ??
         current.showBottomActionText,
       bottomIconStyle: Math.max(0, Math.min(2,
@@ -944,23 +1056,19 @@ export class BackupRepository {
       volumeKeyPage: current.volumeKeyPage,
       keyPageOnLongPress: current.keyPageOnLongPress,
       noAnimScrollPage: current.noAnimScrollPage,
-      eyeProtectionEnabled: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionEnabled') ??
-        current.eyeProtectionEnabled,
-      eyeProtectionAutoNight: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionAutoNight') ??
-        current.eyeProtectionAutoNight,
-      eyeProtectionSchedule: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionSchedule') ??
-        current.eyeProtectionSchedule,
-      eyeProtectionIntensity: Math.max(0, Math.min(100,
-        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'colorTemperature') ?? current.eyeProtectionIntensity)),
-      eyeProtectionStartTime: BackupRepository.readXmlString(`${directory}/config.xml`, 'eyeProtectionStartTime') ??
-        current.eyeProtectionStartTime,
-      eyeProtectionEndTime: BackupRepository.readXmlString(`${directory}/config.xml`, 'eyeProtectionEndTime') ??
-        current.eyeProtectionEndTime,
+      eyeProtectionEnabled: current.eyeProtectionEnabled,
+      eyeProtectionAutoNight: current.eyeProtectionAutoNight,
+      eyeProtectionSchedule: current.eyeProtectionSchedule,
+      eyeProtectionIntensity: current.eyeProtectionIntensity,
+      eyeProtectionStartTime: current.eyeProtectionStartTime,
+      eyeProtectionEndTime: current.eyeProtectionEndTime,
       readingAnchorEnabled: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'readingAnchorEnabled') ??
         current.readingAnchorEnabled,
       swipeToAddBookmark: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'swipeToAddBookmark') ??
         current.swipeToAddBookmark,
       selectText: current.selectText,
+      paragraphSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'paragraphSpacing') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'paragraphSpacing') ?? current.paragraphSpacing))),
+      lineSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'lineSpacingExtra') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'lineSpacingExtra') ?? current.lineSpacing))),
       maxLengthWithNoToc: Math.max(3000, Math.min(100000,
         BackupRepository.readXmlInteger(`${directory}/config.xml`, 'maxLengthWithNoToc') ??
           current.maxLengthWithNoToc)),
@@ -1043,10 +1151,8 @@ export class BackupRepository {
           restoredProgress.groupNames ?? [], restoredProgress.groupName ?? '', restoredProgress.customTag,
           restoredProgress.title, restoredProgress.author, restoredProgress.category,
           restoredProgress.description, restoredProgress.remark);
-        updated.latestChapterTime = Math.max(0, Math.trunc(
-          BackupRepository.readJsonNumber(record, 'latestChapterTime') ?? restoredProgress.latestChapterTime ?? 0));
-        updated.durChapterTime = Math.max(0, Math.trunc(
-          BackupRepository.readJsonNumber(record, 'durChapterTime') ?? restoredProgress.durChapterTime ?? 0));
+        updated.latestChapterTime = Math.max(0, Math.trunc(BackupRepository.readJsonNumber(record, 'latestChapterTime') ?? restoredProgress.latestChapterTime ?? 0));
+        updated.durChapterTime = Math.max(0, Math.trunc(BackupRepository.readJsonNumber(record, 'durChapterTime') ?? restoredProgress.durChapterTime ?? 0));
         updated.order = Math.trunc(BackupRepository.readJsonNumber(record, 'order') ?? restoredProgress.order ?? 0);
         if (!ignoredCategories.includes('bookGroup')) {
           const groupMask = BackupRepository.readJsonNumber(record, 'group') ?? 0;
@@ -1333,7 +1439,8 @@ export class BackupRepository {
       cursor = end;
       match = pattern.exec(text);
     }
-    return result + text.substring(cursor);
+    const filtered = result + text.substring(cursor);
+    return filtered.replace(/\r?\n[ \t]*\r?\n/g, '\n');
   }
 
 
@@ -1499,9 +1606,20 @@ export class BackupRepository {
     return Number.isInteger(value) ? value : undefined;
   }
 
+  private static readXmlFloat(path: string, key: string): number | undefined {
+    if (!fileIo.accessSync(path)) { return undefined; }
+    const text = fileIo.readTextSync(path);
+    const name = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const valueMatch = new RegExp(`<float\\b[^>]*name=["']${name}["'][^>]*value=["'](-?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)["']`, 'i')
+      .exec(text)?.[1];
+    if (valueMatch === undefined) { return undefined; }
+    const value = Number(valueMatch);
+    return Number.isFinite(value) ? value : undefined;
+  }
+
   private static upsertAndroidPreference(
     xml: string,
-    type: 'boolean' | 'int' | 'string',
+    type: 'boolean' | 'int' | 'float' | 'string',
     key: string,
     value: string
   ): string {

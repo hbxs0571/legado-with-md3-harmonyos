@@ -137,6 +137,28 @@ export function copyReaderPaddingSettings(settings: ReaderPaddingSettings): Read
 export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   paddingSettings: ReaderPaddingSettings;
   fontSize: number;
+  paragraphSpacing: number;
+  lineSpacing: number;
+  letterSpacing: number;
+  paragraphIndent: string;
+  textFont: string;
+  titleFont: string;
+  systemTypefaces: number;
+  textItalic: boolean;
+  textBold: number;
+  textShadow: boolean;
+  shadowRadius: number;
+  shadowDx: number;
+  shadowDy: number;
+  textShadowColor: string;
+  textShadowColorN: string;
+  underline: boolean;
+  dottedLine: boolean;
+  underlineColor: string;
+  underlineColorNight: string;
+  underlineHeight: number;
+  textFullJustify: boolean;
+  textBottomJustify: boolean;
   paperIndex: number;
   dayPaperIndex: number;
   nightPaperIndex: number;
@@ -353,6 +375,28 @@ export class ReaderSettingsRepository {
       tipFooterColorNight: DEFAULT_READER_INFO_SETTINGS.tipFooterColorNight,
       tipDividerColor: DEFAULT_READER_INFO_SETTINGS.tipDividerColor,
       fontSize: 20,
+      paragraphSpacing: 2,
+      lineSpacing: 12,
+      letterSpacing: 0.1,
+      paragraphIndent: '　　',
+      textFont: '',
+      titleFont: '',
+      systemTypefaces: 0,
+      textItalic: false,
+      textBold: 500,
+      textShadow: false,
+      shadowRadius: 16,
+      shadowDx: 1,
+      shadowDy: 1,
+      textShadowColor: '#3E3D3B',
+      textShadowColorN: '#3E3D3B',
+      underline: false,
+      dottedLine: false,
+      underlineColor: '#3E3D3B',
+      underlineColorNight: '#ADADAD',
+      underlineHeight: 1,
+      textFullJustify: true,
+      textBottomJustify: true,
       paperIndex: 2,
       dayPaperIndex: 0,
       nightPaperIndex: 0,
@@ -398,6 +442,28 @@ export class ReaderSettingsRepository {
     try {
       const store = await preferences.getPreferences(context, ReaderSettingsRepository.preferenceName);
       const fontSizeValue = await store.get('fontSize', defaults.fontSize);
+      const paragraphSpacingValue = await store.get('paragraphSpacing', defaults.paragraphSpacing);
+      const lineSpacingValue = await store.get('lineSpacingExtra', defaults.lineSpacing);
+      const letterSpacingValue = await store.get('letterSpacing', defaults.letterSpacing);
+      const paragraphIndentValue = await store.get('paragraphIndent', defaults.paragraphIndent);
+      const textFontValue = await store.get('textFont', defaults.textFont);
+      const titleFontValue = await store.get('titleFont', defaults.titleFont);
+      const systemTypefacesValue = await store.get('system_typefaces', defaults.systemTypefaces);
+      const textItalicValue = await store.get('textItalic', defaults.textItalic);
+      const textBoldValue = await store.get('textBold', defaults.textBold);
+      const textShadowValue = await store.get('textShadow', defaults.textShadow);
+      const shadowRadiusValue = await store.get('shadowRadius', defaults.shadowRadius);
+      const shadowDxValue = await store.get('shadowDx', defaults.shadowDx);
+      const shadowDyValue = await store.get('shadowDy', defaults.shadowDy);
+      const textShadowColorValue = await store.get('shadowColor', defaults.textShadowColor);
+      const textShadowColorNightValue = await store.get('shadowColorN', defaults.textShadowColorN);
+      const underlineValue = await store.get('underline', defaults.underline);
+      const dottedLineValue = await store.get('dottedLine', defaults.dottedLine);
+      const underlineColorValue = await store.get('underlineColor', defaults.underlineColor);
+      const underlineColorNightValue = await store.get('underlineColorNight', defaults.underlineColorNight);
+      const underlineHeightValue = await store.get('underlineHeight', defaults.underlineHeight);
+      const textFullJustifyValue = await store.get('textFullJustify', defaults.textFullJustify);
+      const textBottomJustifyValue = await store.get('textBottomJustify', defaults.textBottomJustify);
       const paperIndexValue = await store.get('paperIndex', defaults.paperIndex);
       const styleVersionValue = await store.get('paperStyleVersion', 0);
       const dayPaperIndexValue = await store.get('dayPaperIndex', paperIndexValue);
@@ -476,6 +542,40 @@ export class ReaderSettingsRepository {
       const tipDividerColorValue = await store.get('tipDividerColor', defaults.tipDividerColor);
       const fontSize = typeof fontSizeValue === 'number' && Number.isInteger(fontSizeValue)
         ? Math.max(5, Math.min(50, fontSizeValue)) : defaults.fontSize;
+      const paragraphSpacing = typeof paragraphSpacingValue === 'number' && Number.isInteger(paragraphSpacingValue) ? Math.max(0, Math.min(20, paragraphSpacingValue)) : defaults.paragraphSpacing;
+      const lineSpacing = typeof lineSpacingValue === 'number' && Number.isInteger(lineSpacingValue) ? Math.max(0, Math.min(20, lineSpacingValue)) : defaults.lineSpacing;
+      const letterSpacing = typeof letterSpacingValue === 'number' && Number.isFinite(letterSpacingValue)
+        ? Math.round(Math.max(-0.5, Math.min(0.5, letterSpacingValue)) * 100) / 100 : defaults.letterSpacing;
+      const paragraphIndent = typeof paragraphIndentValue === 'string' ? paragraphIndentValue : defaults.paragraphIndent;
+      const textFont = typeof textFontValue === 'string' ? textFontValue : defaults.textFont;
+      const titleFont = typeof titleFontValue === 'string' ? titleFontValue : defaults.titleFont;
+      const systemTypefaces = ReaderSettingsRepository.normalizeInteger(
+        systemTypefacesValue, 0, 2, defaults.systemTypefaces);
+      const textItalic = typeof textItalicValue === 'boolean' ? textItalicValue : defaults.textItalic;
+      const textBold = ReaderSettingsRepository.normalizeInteger(textBoldValue, 0, 1000, defaults.textBold);
+      const textShadow = typeof textShadowValue === 'boolean' ? textShadowValue : defaults.textShadow;
+      const shadowRadius = typeof shadowRadiusValue === 'number' && Number.isFinite(shadowRadiusValue)
+        ? Math.max(0, Math.min(100, shadowRadiusValue)) : defaults.shadowRadius;
+      const shadowDx = typeof shadowDxValue === 'number' && Number.isFinite(shadowDxValue)
+        ? Math.max(-50, Math.min(50, shadowDxValue)) : defaults.shadowDx;
+      const shadowDy = typeof shadowDyValue === 'number' && Number.isFinite(shadowDyValue)
+        ? Math.max(-50, Math.min(50, shadowDyValue)) : defaults.shadowDy;
+      const textShadowColor = ReaderSettingsRepository.normalizeHexColor(
+        textShadowColorValue, defaults.textShadowColor);
+      const textShadowColorN = ReaderSettingsRepository.normalizeHexColor(
+        textShadowColorNightValue, defaults.textShadowColorN);
+      const underline = typeof underlineValue === 'boolean' ? underlineValue : defaults.underline;
+      const dottedLine = typeof dottedLineValue === 'boolean' ? dottedLineValue : defaults.dottedLine;
+      const underlineColor = ReaderSettingsRepository.normalizeHexColor(
+        underlineColorValue, defaults.underlineColor);
+      const underlineColorNight = ReaderSettingsRepository.normalizeHexColor(
+        underlineColorNightValue, defaults.underlineColorNight);
+      const underlineHeight = ReaderSettingsRepository.normalizeInteger(
+        underlineHeightValue, 0, 10, defaults.underlineHeight);
+      const textFullJustify = typeof textFullJustifyValue === 'boolean'
+        ? textFullJustifyValue : defaults.textFullJustify;
+      const textBottomJustify = typeof textBottomJustifyValue === 'boolean'
+        ? textBottomJustifyValue : defaults.textBottomJustify;
       const storedPaperIndex = typeof paperIndexValue === 'number' && Number.isInteger(paperIndexValue)
         ? Math.max(0, Math.min(5, paperIndexValue)) : defaults.paperIndex;
       const styleVersion = typeof styleVersionValue === 'number' ? styleVersionValue : 0;
@@ -543,6 +643,28 @@ export class ReaderSettingsRepository {
         tipFooterColorNight: ReaderSettingsRepository.normalizeColor(tipFooterColorNightValue, defaults.tipFooterColorNight),
         tipDividerColor: ReaderSettingsRepository.normalizeColor(tipDividerColorValue, defaults.tipDividerColor),
         fontSize: fontSize,
+        paragraphSpacing: paragraphSpacing,
+        lineSpacing: lineSpacing,
+        letterSpacing: letterSpacing,
+        paragraphIndent: paragraphIndent,
+        textFont: textFont,
+        titleFont: titleFont,
+        systemTypefaces: systemTypefaces,
+        textItalic: textItalic,
+        textBold: textBold,
+        textShadow: textShadow,
+        shadowRadius: shadowRadius,
+        shadowDx: shadowDx,
+        shadowDy: shadowDy,
+        textShadowColor: textShadowColor,
+        textShadowColorN: textShadowColorN,
+        underline: underline,
+        dottedLine: underline && dottedLine,
+        underlineColor: underlineColor,
+        underlineColorNight: underlineColorNight,
+        underlineHeight: underlineHeight,
+        textFullJustify: textFullJustify,
+        textBottomJustify: textBottomJustify,
         paperIndex: paperIndex,
         dayPaperIndex: dayPaperIndex,
         nightPaperIndex: nightPaperIndex,
@@ -618,6 +740,32 @@ export class ReaderSettingsRepository {
     const operation = ReaderSettingsRepository.saveQueue.then(async (): Promise<void> => {
       const store = await preferences.getPreferences(context, ReaderSettingsRepository.preferenceName);
       await store.put('fontSize', Math.max(5, Math.min(50, Math.round(settings.fontSize))));
+      await store.put('paragraphSpacing', Math.max(0, Math.min(20, Math.round(settings.paragraphSpacing))));
+      await store.put('lineSpacingExtra', Math.max(0, Math.min(20, Math.round(settings.lineSpacing))));
+      await store.put('letterSpacing', Math.round(Math.max(-0.5, Math.min(0.5, settings.letterSpacing)) * 100) / 100);
+      await store.put('paragraphIndent', settings.paragraphIndent);
+      await store.put('textFont', settings.textFont);
+      await store.put('titleFont', settings.titleFont);
+      await store.put('system_typefaces', Math.max(0, Math.min(2, Math.round(settings.systemTypefaces))));
+      await store.put('textItalic', settings.textItalic);
+      await store.put('textBold', ReaderSettingsRepository.normalizeInteger(settings.textBold, 0, 1000, 500));
+      await store.put('textShadow', settings.textShadow);
+      await store.put('shadowRadius', Math.max(0, Math.min(100, settings.shadowRadius)));
+      await store.put('shadowDx', Math.max(-50, Math.min(50, settings.shadowDx)));
+      await store.put('shadowDy', Math.max(-50, Math.min(50, settings.shadowDy)));
+      await store.put('shadowColor', ReaderSettingsRepository.normalizeHexColor(
+        settings.textShadowColor, '#3E3D3B'));
+      await store.put('shadowColorN', ReaderSettingsRepository.normalizeHexColor(
+        settings.textShadowColorN, '#3E3D3B'));
+      await store.put('underline', settings.underline);
+      await store.put('dottedLine', settings.underline && settings.dottedLine);
+      await store.put('underlineColor', ReaderSettingsRepository.normalizeHexColor(
+        settings.underlineColor, '#3E3D3B'));
+      await store.put('underlineColorNight', ReaderSettingsRepository.normalizeHexColor(
+        settings.underlineColorNight, '#ADADAD'));
+      await store.put('underlineHeight', Math.max(0, Math.min(10, Math.round(settings.underlineHeight))));
+      await store.put('textFullJustify', settings.textFullJustify);
+      await store.put('textBottomJustify', settings.textBottomJustify);
       await store.put('paddingTop', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingTop))));
       await store.put('paddingBottom', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingBottom))));
       await store.put('paddingLeft', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingLeft))));
@@ -748,6 +896,13 @@ export class ReaderSettingsRepository {
 
   private static normalizeColor(value: number | boolean | string | bigint | Uint8Array | object, fallback: number): number {
     return typeof value === 'number' && Number.isInteger(value) ? value : fallback;
+  }
+
+  private static normalizeHexColor(value: number | boolean | string | bigint | Uint8Array | object, fallback: string): string {
+    if (typeof value !== 'string') { return fallback; }
+    const normalized = value.trim().toUpperCase();
+    return /^#[0-9A-F]{6}$/.test(normalized) || /^#[0-9A-F]{8}$/.test(normalized)
+      ? normalized : fallback;
   }
 
   private static clampStyleIndex(value: number, fallback: number): number {

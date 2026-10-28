@@ -6,6 +6,7 @@ import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { BookRepository } from '../data/BookRepository';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { BookContentProcess } from '../model/BookContentProcess';
+import { ReaderFontRepository } from '../data/ReaderFontRepository';
 import { LocalSemanticDocument, LocalTextSemantics } from '../data/LocalTextSemantics';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
@@ -112,6 +113,29 @@ export struct ReaderPage {
   @Prop @Watch('onReplaceRulesChanged') replaceRules: ReplaceRule[] = [];
   @Prop @Watch('onReaderContentChanged') content: string = '';
   @Prop @Watch('onPaginationInputsChanged') fontSize: number = 19;
+  @Prop @Watch('onPaginationInputsChanged') paragraphSpacing: number = 2;
+  @Prop @Watch('onPaginationInputsChanged') lineSpacing: number = 12;
+  @Prop @Watch('onPaginationInputsChanged') letterSpacing: number = 0.1;
+  @Prop @Watch('onPaginationInputsChanged') paragraphIndent: string = '　　';
+  @Prop @Watch('onPaginationInputsChanged') textFontPath: string = '';
+  @Prop @Watch('onPaginationInputsChanged') titleFontPath: string = '';
+  @Prop @Watch('onPaginationInputsChanged') systemTypefaces: number = 0;
+  @Prop @Watch('onPaginationInputsChanged') textItalic: boolean = false;
+  @Prop @Watch('onPaginationInputsChanged') textBold: number = 500;
+  @Prop textShadow: boolean = false;
+  @Prop shadowRadius: number = 16;
+  @Prop shadowDx: number = 1;
+  @Prop shadowDy: number = 1;
+  @Prop textShadowColor: string = '#3E3D3B';
+  @Prop textShadowColorN: string = '#3E3D3B';
+  @Prop underline: boolean = false;
+  @Prop dottedLine: boolean = false;
+  @Prop underlineColor: string = '#3E3D3B';
+  @Prop underlineColorNight: string = '#ADADAD';
+  @Prop underlineHeight: number = 1;
+  @Prop readerNightMode: boolean = true;
+  @Prop @Watch('onPaginationInputsChanged') textFullJustify: boolean = true;
+  @Prop @Watch('onPaginationInputsChanged') textBottomJustify: boolean = true;
   @Prop @Watch('onProgressBehaviorChanged') progressBehavior: string = 'page';
   @Prop @Watch('onScreenOrientationChanged') screenOrientation: string = '0';
   @Prop @Watch('onKeepLightChanged') keepLight: string = '0';
@@ -173,12 +197,15 @@ export struct ReaderPage {
   @State viewportHeight: number = 0;
   @State readerContentWidth: number = 0;
   @State readerContentRevision: number = 0;
+  @State readerBodyFontFamily: string = 'HarmonyOS Sans';
+  @State readerTitleFontFamily: string = 'HarmonyOS Sans';
   @State imageSizes: Map<string, ReaderIntrinsicImageSize> = new Map<string, ReaderIntrinsicImageSize>();
   @State scrollOffset: number = 0;
   @State lastReportedProgress: number = -1;
   @State restoredProgressPosition: boolean = false;
   @State startPositionPending: boolean = false;
   @State localReaderPages: LocalReaderPage[] = [];
+  @State readerBottomJustifyGap: number = 0;
   @State fullBookPageCounts: number[] = [];
   @State fullBookPaginationReady: boolean = false;
   @State localSemanticContent: string = '';
@@ -278,6 +305,7 @@ export struct ReaderPage {
   onStartAtChapterBeginningResolved: () => void = () => {};
 
   aboutToAppear(): void {
+    this.refreshReaderFontFamilies();
     this.readerWindowActive = true;
     this.startPositionPending = this.startAtChapterBeginning;
     if (this.bookmarkTargetPosition >= 0) { this.pendingBookmarkTargetPosition = this.bookmarkTargetPosition; }
@@ -611,7 +639,26 @@ export struct ReaderPage {
   }
 
   onPaginationInputsChanged(): void {
+    this.refreshReaderFontFamilies();
     this.rebuildReaderPages();
+  }
+
+  private refreshReaderFontFamilies(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.readerBodyFontFamily = ReaderFontRepository.systemTypefaceFamily(this.systemTypefaces);
+      this.readerTitleFontFamily = ReaderFontRepository.systemTypefaceFamily(this.systemTypefaces);
+      return;
+    }
+    this.readerBodyFontFamily = ReaderFontRepository.resolveFamily(context, this.textFontPath, this.systemTypefaces);
+    this.readerTitleFontFamily = ReaderFontRepository.resolveFamily(context, this.titleFontPath, this.systemTypefaces);
+  }
+
+  private readerInfoFontFamily(isHeader: boolean): string {
+    const context = this.getUIContext().getHostContext();
+    const path = isHeader ? this.infoSettings.headerFont : this.infoSettings.footerFont;
+    if (context === undefined) { return ReaderFontRepository.systemTypefaceFamily(this.systemTypefaces); }
+    return ReaderFontRepository.resolveFamily(context, path, this.systemTypefaces);
   }
 
   onProgressBehaviorChanged(): void {
@@ -710,19 +757,21 @@ export struct ReaderPage {
     if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
       this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
       this.localReaderPages = [];
+      this.readerBottomJustifyGap = 0;
       return;
     }
     const context = this.getUIContext();
     const measureUtils = context.getMeasureUtils();
     const fontSize = this.fontSize * 1.05;
     const width = this.getBodyContentWidth();
-    const lineHeight = this.fontSize * 1.25;
+    const baseLineHeight = ReaderFontRepository.measureLineHeight(context, this.readerBodyFontFamily, fontSize);
+    const lineHeight = Math.max(1, baseLineHeight * this.lineSpacing / 10);
     const infoHeaderReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
     const infoFooterReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
     const pageHeight = Math.max(lineHeight, this.getBodyContentHeight(infoHeaderReserve, infoFooterReserve));
-    // 当前 Android 书籍配置 paragraphSpacing=6，原版按行高的十分之六计算段距。
-    const paragraphSpacing = lineHeight * 0.6;
-    const document = LocalTextSemantics.parse(this.content);
+    // Android 段距范围为 0–20，每一档按行高的十分之一计算。
+    const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
+    const document = LocalTextSemantics.parse(this.content, this.paragraphIndent);
     this.localSemanticContent = document.content;
     this.localSemanticDocument = document;
     for (let paragraphIndex = 0; paragraphIndex < document.paragraphs.length; paragraphIndex++) {
@@ -736,13 +785,14 @@ export struct ReaderPage {
         }
       }
     }
-    const titleMetrics = measureUtils.measureTextSize({
-      textContent: this.displayChapterTitle,
-      fontSize: this.fontSize + 4
-    });
-    const titleWidth = context.px2vp(this.toDimension(titleMetrics.width ?? 0));
+    const titleSize = this.fontSize + 4;
+    const titleWidth = ReaderFontRepository.measureTextWidth(
+      context, this.displayChapterTitle, this.readerTitleFontFamily, titleSize) +
+      this.getReaderTextLetterSpacingWidth(this.displayChapterTitle, titleSize);
+    const titleLineHeight = ReaderFontRepository.measureLineHeight(
+      context, this.readerTitleFontFamily, titleSize);
     const titleLines = this.displayChapterTitle.length > 0 ? Math.max(1, Math.ceil(titleWidth / width)) : 0;
-    const titleReservedLines = Math.ceil((titleLines * (this.fontSize + 4) * 1.25 + 12) / lineHeight);
+    const titleReservedLines = Math.ceil((titleLines * titleLineHeight + 12) / lineHeight);
     const paginatedPages = LocalReaderPaginator.paginate(
       document,
       width,
@@ -750,14 +800,16 @@ export struct ReaderPage {
       lineHeight,
       paragraphSpacing,
       (text: string): number => {
-        const measured = measureUtils.measureTextSize({ textContent: text, fontSize: fontSize });
-        return context.px2vp(this.toDimension(measured.width ?? 0));
+        return ReaderFontRepository.measureTextWidthForPagination(context, text, this.readerBodyFontFamily, fontSize) +
+          this.getReaderTextLetterSpacingWidth(text, fontSize);
       },
       this.imageSizes,
       this.activeImageStyle,
       context.px2vp(80),
-      context.px2vp(this.toDimension(measureUtils.measureTextSize({ textContent: '袮', fontSize: fontSize }).width ?? 0)),
-      this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines
+      (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
+        this.getReaderLetterSpacingVp(fontSize)),
+      this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines,
+      this.textFullJustify
     );
     const nextPages: LocalReaderPage[] = [];
     const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.displayChapterTitle.length > 0;
@@ -794,6 +846,7 @@ export struct ReaderPage {
     }
     this.localReaderPages = nextPages;
     this.currentPageIndex = pageIndex;
+    this.readerBottomJustifyGap = this.calculateReaderBottomJustifyGap(pageHeight, lineHeight, titleReservedLines);
     const consumedBookmarkTarget = this.pendingBookmarkTargetPosition >= 0;
     this.pendingBookmarkTargetPosition = -1;
     if (this.pageAnimation !== 3 && forceProgressCommit) {
@@ -804,6 +857,27 @@ export struct ReaderPage {
     }
     this.requestFullBookPagination();
     if (consumedBookmarkTarget) { this.onBookmarkTargetConsumed(); }
+  }
+
+  private calculateReaderBottomJustifyGap(pageHeight: number, lineHeight: number, titleReservedLines: number): number {
+    if (!this.textBottomJustify) { return 0; }
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined || page.titleOnly || page.lines.length <= 1) { return 0; }
+    const lastLine = page.lines[page.lines.length - 1];
+    if (lastLine === undefined || lastLine.imageOnly) { return 0; }
+    let usedHeight = 0;
+    for (let index = 0; index < page.lines.length; index++) {
+      const line = page.lines[index];
+      if (line !== undefined) {
+        usedHeight += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+      }
+    }
+    if (this.currentPageIndex === 0 && this.activeImageStyle !== 'SINGLE') {
+      usedHeight += Math.max(0, titleReservedLines) * lineHeight;
+    }
+    const surplus = pageHeight - usedHeight;
+    if (surplus <= 0 || surplus >= lastLine.height + lineHeight) { return 0; }
+    return surplus / (page.lines.length - 1);
   }
 
   private reportReaderPageProgress(): void {
@@ -1385,9 +1459,12 @@ export struct ReaderPage {
     ]);
     return [
       this.book.id, this.book.contentPath ?? '', this.readerContentRevision, this.fontSize,
+      this.textFontPath, this.titleFontPath, this.systemTypefaces,
+      this.paragraphSpacing, this.lineSpacing, this.letterSpacing, this.paragraphIndent,
       this.readerContentWidth, this.viewportHeight, this.activeImageStyle,
       JSON.stringify(this.paddingSettings),
       this.infoSettings.headerMode, this.infoSettings.footerMode,
+      this.infoSettings.headerFont, this.infoSettings.footerFont,
       this.infoSettings.headerFontSize, this.infoSettings.footerFontSize, this.infoSettings.applyHeaderStyle,
       chapterKey, replaceKey, processKey
     ].join('|');
@@ -1424,11 +1501,12 @@ export struct ReaderPage {
     const measureUtils = context.getMeasureUtils();
     const fontSize = this.fontSize * 1.05;
     const width = this.getBodyContentWidth();
-    const lineHeight = this.fontSize * 1.25;
+    const baseLineHeight = ReaderFontRepository.measureLineHeight(context, this.readerBodyFontFamily, fontSize);
+    const lineHeight = Math.max(1, baseLineHeight * this.lineSpacing / 10);
     const infoHeaderReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
     const infoFooterReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
     const pageHeight = Math.max(lineHeight, this.getBodyContentHeight(infoHeaderReserve, infoFooterReserve));
-    const paragraphSpacing = lineHeight * 0.6;
+    const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
     const imageSizes = new Map<string, ReaderIntrinsicImageSize>(this.imageSizes);
     const glyphWidths = new Map<string, number>();
     let scannedGlyphCount = 0;
@@ -1443,8 +1521,9 @@ export struct ReaderPage {
         const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
         const glyph = text.substring(cursor, nextCursor);
         if (!glyphWidths.has(glyph)) {
-          const metrics = measureUtils.measureTextSize({ textContent: glyph, fontSize: fontSize });
-          glyphWidths.set(glyph, context.px2vp(this.toDimension(metrics.width ?? 0)));
+          const width = ReaderFontRepository.measureTextWidth(
+            context, glyph, this.readerBodyFontFamily, fontSize);
+          glyphWidths.set(glyph, width + this.getReaderLetterSpacingVp(fontSize));
           measuredGlyphCount++;
           if (measuredGlyphCount % 8 === 0) { await yieldToUi(); }
         }
@@ -1475,9 +1554,8 @@ export struct ReaderPage {
       }
       return totalWidth;
     };
-    const inlineImageWidth = context.px2vp(this.toDimension(
-      measureUtils.measureTextSize({ textContent: '袮', fontSize: fontSize }).width ?? 0
-    ));
+    const inlineImageWidth = ReaderFontRepository.measureTextWidth(
+      context, '袮', this.readerBodyFontFamily, fontSize) + this.getReaderLetterSpacingVp(fontSize);
     const pageCounts: number[] = [];
     await BookRepository.forEachChapter(this.book, async (
       chapterContent: string,
@@ -1489,11 +1567,13 @@ export struct ReaderPage {
       const rawTitle = this.book.chapterTitles?.[chapterIndex] ??
         (chapterIndex === this.getChapterIndex() ? this.chapterTitle : '');
       const displayTitle = await ReplaceRuleRepository.applyTitle(this.book, rawTitle);
-      const document = LocalTextSemantics.parse(chapterContent);
-      await cacheGlyphWidths(displayTitle);
+      const document = LocalTextSemantics.parse(chapterContent, this.paragraphIndent);
       await cacheDocumentGlyphWidths(document);
       await this.loadImageSizesForDocument(document, imageSizes);
-      const titleWidth = measureFromGlyphCache(displayTitle) * (this.fontSize + 4) / fontSize;
+      const titleSize = this.fontSize + 4;
+      const titleWidth = ReaderFontRepository.measureTextWidth(
+        context, displayTitle, this.readerTitleFontFamily, titleSize) +
+        this.getReaderTextLetterSpacingWidth(displayTitle, titleSize);
       const titleLines = displayTitle.length > 0 ? Math.max(1, Math.ceil(titleWidth / width)) : 0;
       const titleReservedLines = Math.ceil((titleLines * (this.fontSize + 4) * 1.25 + 12) / lineHeight);
       const pageCount = chapterIndex === this.getChapterIndex() && this.localReaderPages.length > 0
@@ -1618,6 +1698,19 @@ export struct ReaderPage {
   private getReaderLineGapAfter(line: LocalReaderLine, itemIndex: number, item: LocalReaderLineItem): number {
     const nextItem = line.items[itemIndex + 1];
     return !item.leadingIndent && nextItem !== undefined && !nextItem.leadingIndent ? line.justifyGap : 0;
+  }
+
+  private getReaderLetterSpacingFp(fontSize: number): number {
+    return this.letterSpacing * fontSize;
+  }
+
+  private getReaderLetterSpacingVp(fontSize: number): number {
+    const context = this.getUIContext();
+    return context.px2vp(context.fp2px(this.getReaderLetterSpacingFp(fontSize)));
+  }
+
+  private getReaderTextLetterSpacingWidth(value: string, fontSize: number): number {
+    return this.getReaderTextGlyphCount(value) * this.getReaderLetterSpacingVp(fontSize);
   }
 
   private getReaderTextGlyphs(value: string): string[] {
@@ -1860,6 +1953,21 @@ export struct ReaderPage {
     return TextDecorationStyle.SOLID;
   }
 
+  private getReaderFontWeight(): number {
+    if (this.textBold === 0) { return 400; }
+    if (this.textBold === 1) { return 900; }
+    if (this.textBold === 2) { return 300; }
+    return Math.max(100, Math.min(900, this.textBold));
+  }
+
+  private getReaderShadowColor(): string {
+    return this.readerNightMode ? this.textShadowColorN : this.textShadowColor;
+  }
+
+  private getReaderUnderlineColor(): string {
+    return this.readerNightMode ? this.underlineColorNight : this.underlineColor;
+  }
+
   private getReaderGlyphStartPosition(value: string, basePosition: number, glyphIndex: number): number {
     let position = basePosition;
     const glyphs = this.getReaderTextGlyphs(value);
@@ -1879,20 +1987,36 @@ export struct ReaderPage {
   }
 
   @Builder
-  private ReaderGlyphSpan(glyph: string, start: number, end: number, gapAfter: number) {
-    Span(glyph)
-      .fontSize(this.fontSize * 1.05)
-      .fontColor(this.getMarkingForTextRange(start, end)?.effect === 'text'
-        ? this.getMarkingForTextRange(start, end)?.color ?? this.getReadingTextColor()
-        : this.getReadingTextColor())
-      .backgroundColor(this.getMarkingBackground(this.getMarkingForTextRange(start, end)))
-      .decoration({
-        type: this.getMarkingDecorationType(this.getMarkingForTextRange(start, end)),
-        color: this.getMarkingForTextRange(start, end)?.color ?? this.getReadingTextColor(),
-        style: this.getMarkingDecorationStyle(this.getMarkingForTextRange(start, end)),
-        thicknessScale: 1
-      })
-      .letterSpacing(gapAfter)
+  private ReaderGlyphSpan(
+    glyph: string,
+    start: number,
+    end: number,
+    gapAfter: number,
+    marking: ReaderMarking | undefined
+  ) {
+    if (marking === undefined) {
+      Span(glyph)
+        .fontSize(this.fontSize * 1.05)
+        .fontColor(this.getReadingTextColor())
+        .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
+    } else {
+      Span(glyph)
+        .fontSize(this.fontSize * 1.05)
+        .fontColor(marking.effect === 'text' ? marking.color : this.getReadingTextColor())
+        .backgroundColor(this.getMarkingBackground(marking))
+        .decoration({
+          type: this.getMarkingDecorationType(marking) !== TextDecorationType.None
+            ? this.getMarkingDecorationType(marking)
+            : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+          color: marking.color.length > 0 ? marking.color : this.getReaderUnderlineColor(),
+          style: this.getMarkingDecorationType(marking) !== TextDecorationType.None
+            ? this.getMarkingDecorationStyle(marking)
+            : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+          thicknessScale: this.underline && this.getMarkingDecorationType(marking) === TextDecorationType.None
+            ? Math.max(0, this.underlineHeight) : 1
+        })
+        .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
+    }
   }
 
   @Builder
@@ -1907,6 +2031,7 @@ export struct ReaderPage {
             if (item.kind === 'text') {
               if (item.leadingIndent) {
                 Span(item.value).fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
+                  .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
               } else {
                 ForEach(this.getReaderTextGlyphs(item.value), (glyph: string, glyphIndex: number) => {
                   this.ReaderGlyphSpan(
@@ -1914,7 +2039,10 @@ export struct ReaderPage {
                     this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
                     this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length,
                     this.getReaderGlyphGapAfter(line, itemIndex, glyphIndex,
-                      this.getReaderTextGlyphCount(item.value), item)
+                      this.getReaderTextGlyphCount(item.value), item),
+                    this.getMarkingForTextRange(
+                      this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
+                      this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length)
                   )
                 }, (glyph: string, glyphIndex: number) =>
                   `${this.readerContentRevision}-joined-${lineIndex}-${itemIndex}-${glyphIndex}-${glyph}`)
@@ -1926,7 +2054,17 @@ export struct ReaderPage {
           `${this.readerContentRevision}-joined-${this.currentPageIndex}-${lineIndex}`)
     }
     .fontSize(this.fontSize * 1.05)
-    .lineHeight(this.fontSize * 1.25)
+    .fontFamily(this.readerBodyFontFamily)
+    .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
+    .fontWeight(this.getReaderFontWeight())
+    .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
+    .decoration({
+      type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+      color: this.getReaderUnderlineColor(),
+      style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+      thicknessScale: Math.max(0, this.underlineHeight)
+    })
+    .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
     .width('100%')
     .textAlign(TextAlign.Start)
     .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
@@ -1963,7 +2101,17 @@ export struct ReaderPage {
           } else {
             Text(item.value)
               .fontSize(this.fontSize * 1.05)
+              .fontFamily(this.readerBodyFontFamily)
+              .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
+              .fontWeight(this.getReaderFontWeight())
+              .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
               .fontColor(this.getReadingTextColor())
+              .decoration({
+                type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+                color: this.getReaderUnderlineColor(),
+                style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+                thicknessScale: Math.max(0, this.underlineHeight)
+              })
               .maxLines(1)
               .height(line.height)
               .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
@@ -1982,12 +2130,13 @@ export struct ReaderPage {
       .width('100%')
       .height(line.height)
       .justifyContent(line.imageOnly ? FlexAlign.Center : FlexAlign.Start)
-      .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
+      .margin({ top: line.verticalSpaceBefore + this.readerBottomJustifyGap * lineIndex, bottom: line.paragraphSpacingAfter })
     } else {
       Text() {
         ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
           if (item.leadingIndent) {
             Span(item.value).fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
+              .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
           } else {
             ForEach(this.getReaderTextGlyphs(item.value), (glyph: string, glyphIndex: number) => {
               this.ReaderGlyphSpan(
@@ -1995,7 +2144,10 @@ export struct ReaderPage {
                 this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
                 this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length,
                 this.getReaderGlyphGapAfter(line, itemIndex, glyphIndex,
-                  this.getReaderTextGlyphCount(item.value), item)
+                  this.getReaderTextGlyphCount(item.value), item),
+                this.getMarkingForTextRange(
+                  this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
+                  this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length)
               )
             }, (glyph: string, glyphIndex: number) =>
               `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${glyphIndex}-${glyph}`)
@@ -2004,6 +2156,16 @@ export struct ReaderPage {
           `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${item.kind}`)
       }
       .fontSize(this.fontSize * 1.05)
+      .fontFamily(this.readerBodyFontFamily)
+      .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
+      .fontWeight(this.getReaderFontWeight())
+      .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
+      .decoration({
+        type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+        color: this.getReaderUnderlineColor(),
+        style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+        thicknessScale: Math.max(0, this.underlineHeight)
+      })
       .lineHeight(line.height)
       .width('100%')
       .height(line.height)
@@ -2018,7 +2180,7 @@ export struct ReaderPage {
         onMenuShow: (start: number, end: number) =>
           this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end)
       })
-      .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
+      .margin({ top: line.verticalSpaceBefore + this.readerBottomJustifyGap * lineIndex, bottom: line.paragraphSpacingAfter })
     }
   }
 
@@ -2099,10 +2261,8 @@ export struct ReaderPage {
   }
 
   private getDisplayContent(content: string): string {
-    if (this.book.format === 'epub') {
-      return content;
-    }
-    return content.split(/\r?\n/).map((line: string) => line.trim().length > 0 ? '　　' + line : line).join('\n');
+    return content.split(/\r?\n/).map((line: string) => line.trim().length > 0
+      ? this.paragraphIndent + line.trimStart() : line).join('\n');
   }
 
   private getReaderContentSegments(): ReaderContentSegment[] {
@@ -2208,8 +2368,9 @@ export struct ReaderPage {
   private estimateContentHeight(): number {
     const availableWidth = this.getBodyContentWidth();
     const fontSize = this.fontSize * 1.05;
-    const lineHeight = this.fontSize * 1.25;
-    const charactersPerLine = Math.max(1, availableWidth / fontSize);
+    const baseLineHeight = this.fontSize * 1.25;
+    const lineHeight = Math.max(1, baseLineHeight * this.lineSpacing / 10);
+    const charactersPerLine = Math.max(1, availableWidth / Math.max(1, fontSize + this.getReaderLetterSpacingVp(fontSize)));
     let estimatedHeight = this.fontSize * 4 + 12;
     const segments = this.getReaderContentSegments();
     for (let index = 0; index < segments.length; index++) {
@@ -2222,10 +2383,10 @@ export struct ReaderPage {
         const lines = segment.value.split(/\r?\n/);
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
           const line = lines[lineIndex] ?? '';
-          const wrappedLines = Math.max(1, Math.ceil((line.length + 2) / charactersPerLine));
+          const wrappedLines = Math.max(1, Math.ceil((line.length + this.paragraphIndent.length) / charactersPerLine));
           estimatedHeight += wrappedLines * lineHeight;
         }
-        estimatedHeight += this.fontSize;
+        estimatedHeight += baseLineHeight * this.paragraphSpacing / 10;
       }
     }
     return estimatedHeight + 34;
@@ -2358,14 +2519,17 @@ export struct ReaderPage {
     Column() {
       Row() {
         Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 0), this.getReaderInfoTemplate(isHeader, 0)))
-          .fontSize(this.getReaderInfoFontSize(isHeader)).fontColor(this.getReaderInfoColor(isHeader))
+          .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
+          .fontColor(this.getReaderInfoColor(isHeader))
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
         Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 1), this.getReaderInfoTemplate(isHeader, 1)))
-          .fontSize(this.getReaderInfoFontSize(isHeader)).fontColor(this.getReaderInfoColor(isHeader))
+          .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
+          .fontColor(this.getReaderInfoColor(isHeader))
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .textAlign(TextAlign.Center).layoutWeight(1)
         Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 2), this.getReaderInfoTemplate(isHeader, 2)))
-          .fontSize(this.getReaderInfoFontSize(isHeader)).fontColor(this.getReaderInfoColor(isHeader))
+          .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
+          .fontColor(this.getReaderInfoColor(isHeader))
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .textAlign(TextAlign.End).layoutWeight(1)
       }.width('100%').height(18)
@@ -2390,6 +2554,8 @@ export struct ReaderPage {
               Blank().layoutWeight(1)
               Text(this.displayChapterTitle)
                 .fontSize(this.fontSize + 4)
+                .fontFamily(this.readerTitleFontFamily)
+                .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize + 4))
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.getReadingTextColor())
                 .width('100%')
@@ -2398,12 +2564,14 @@ export struct ReaderPage {
             } else if (this.currentPageIndex === 0) {
               Text(this.displayChapterTitle)
                 .fontSize(this.fontSize + 4)
+                .fontFamily(this.readerTitleFontFamily)
+                .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize + 4))
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.getReadingTextColor())
                 .width('100%')
                 .margin({ bottom: 24 })
             }
-            if (this.currentPageContainsImages()) {
+            if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
               this.ReaderPageTextLines()
             } else {
               this.ReaderPageTextJoined()
@@ -2456,6 +2624,8 @@ export struct ReaderPage {
           if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
           Text(this.displayChapterTitle)
             .fontSize(this.fontSize + 4)
+            .fontFamily(this.readerTitleFontFamily)
+            .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize + 4))
             .fontWeight(FontWeight.Medium)
             .fontColor(this.getReadingTextColor())
             .width('100%')
@@ -2474,11 +2644,20 @@ export struct ReaderPage {
             } else {
               Text(this.getDisplayContent(segment.value))
                 .fontSize(this.fontSize * 1.05)
+                .fontFamily(this.readerBodyFontFamily)
+                .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
+                .fontWeight(this.getReaderFontWeight())
+                .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
+                .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
                 .fontColor(this.getReadingTextColor())
-                .lineHeight(this.fontSize * 1.25)
-                .textAlign(TextAlign.JUSTIFY)
+                .decoration({ type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+                  color: this.getReaderUnderlineColor(),
+                  style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+                  thicknessScale: Math.max(0, this.underlineHeight) })
+                .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
+                .textAlign(this.textFullJustify ? TextAlign.JUSTIFY : TextAlign.Start)
                 .width('100%')
-                .margin({ bottom: this.fontSize })
+                .margin({ bottom: this.fontSize * 1.25 * this.paragraphSpacing / 10 })
             }
           }, (segment: ReaderContentSegment, index: number) => `${this.readerContentRevision}-${segment.kind}-${index}`)
           if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
