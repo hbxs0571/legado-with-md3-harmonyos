@@ -20,40 +20,16 @@
     "sha256": "bfb3da1d1a4e44707bef0c7dd1b6946ecce6807e1adebc76c1cc8859af805d22"
   },
   {
+    "path": "build-profile.json5",
+    "sha256": "c8265aa388c2374e68550264e0438f79feaa60b102923fe93bf368509bc9a67b"
+  },
+  {
     "path": "CHANGELOG.md",
-    "sha256": "5367c3cd35553ebf7ecf07ece2aaeca431cdc549f3e09504511b2a6d71c31eb7"
+    "sha256": "2e4c83b29567b49e6d0f35c4518eeee54972dc8ab76865d87d703127995f23ed"
   },
   {
     "path": "DISCLAIMER.md",
     "sha256": "a98bf74acea8bdd2db47a86fade2733909313054159e3dc1ac00421fd8aaf616"
-  },
-  {
-    "path": "LICENSE",
-    "sha256": "35d3f26265f7c262a524602f72efda71f69d390086d6d0b74c70c8b07251227c"
-  },
-  {
-    "path": "NOTICE.md",
-    "sha256": "8c1958cf0ae652623127da0f3c3011a86a3f33f044f83d2c0899e44285cc6756"
-  },
-  {
-    "path": "PRIVACY.md",
-    "sha256": "50082825a96ecbb3a4147d1c75272ca193bbc0bd687d6209f2cdfb87811b071f"
-  },
-  {
-    "path": "README.md",
-    "sha256": "1bb367e27720fcf5a83b937651751fa267c97f255232765915f3f75965da61bc"
-  },
-  {
-    "path": "SECURITY.md",
-    "sha256": "f10bb68d22cf055d88b38d5dc97dd999979e713cd622f661ea5ad99fdcc07091"
-  },
-  {
-    "path": "TERMS.md",
-    "sha256": "a7eae45f0166655bd45272cc3e83ada6539b359d4cbcf25319f9bac93a9faa3a"
-  },
-  {
-    "path": "build-profile.json5",
-    "sha256": "c8265aa388c2374e68550264e0438f79feaa60b102923fe93bf368509bc9a67b"
   },
   {
     "path": "docs/ASSETS.md",
@@ -68,6 +44,10 @@
     "sha256": "d6dd22d521e49c5a9e11337b81ea8cb0b2e65b15eba002da133be02aa82c5cc9"
   },
   {
+    "path": "docs/DUAL-MACHINE-HANDOFF.md",
+    "sha256": "cb748b7acc444fbb47ff0f95bcc2716704c3f76caba86da03474c69cd8f28114"
+  },
+  {
     "path": "docs/GLOSSARY.md",
     "sha256": "22935f904a8a5dc1e831385aa55048064741387cc0816c709d66dc784b02e3b3"
   },
@@ -77,11 +57,11 @@
   },
   {
     "path": "docs/KNOWN-ISSUES.md",
-    "sha256": "9789b3d468fddd98ea6de6bbcc1cff830c4da29b3d2f88872fe1dc05f86bfe74"
+    "sha256": "3cfce68f6be63e63c12eb563b58e83f36ecd3937c9680bb80b5fdf172a5a92b1"
   },
   {
     "path": "docs/MODULE-STATUS.md",
-    "sha256": "9d38e9e481d2757c4e8d7d5a8c3a91fc3a7b47a930f9604282bb8dafefbcbcbd"
+    "sha256": "f7553523b2b5936056043915862c911e4167228d67aaebfd7f33d39e122bbd82"
   },
   {
     "path": "docs/MODULES.md",
@@ -89,7 +69,7 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "ac44fe33ff329c396beac8961dca53b710099d58fa715bdaadaad379a3c05c74"
+    "sha256": "883547a5ad22e35d0ae42a31f40c60fe5a4301351fae6f878b741c071d4c4cdb"
   },
   {
     "path": "docs/PROJECT.md",
@@ -117,7 +97,7 @@
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "44965f3a7a06fb74e9524f46f92aaceca6d278381c4a2bb0758b2d0cd01e44cb"
+    "sha256": "23c34dc191fcd115843e7b0c9ab1ab28cf294a6362a7e9f9c381973e52751d6e"
   },
   {
     "path": "entry/build-profile.json5",
@@ -141,7 +121,7 @@
   },
   {
     "path": "entry/src/main/ets/components/BookCover.ets",
-    "sha256": "32e8f33bba964eca64d23878a1444bc9f571a42bc43ff42b2f950b4e6cc7b883"
+    "sha256": "9a62a7d020dd9a49f84a18f687d87298830859c0b8c13936c6854e50685fc1d0"
   },
   {
     "path": "entry/src/main/ets/components/CollapsingSettingsHeader.ets",
@@ -157,7 +137,7 @@
   },
   {
     "path": "entry/src/main/ets/data/BackupRepository.ets",
-    "sha256": "c8f6de611fd85ee07cd81f91e699ed24940f83f5c552c84cbf5684f020e57ee4"
+    "sha256": "6af7ffdf15e3bb4d949fb294cb64155cce37bf0af2c00bd23441edc679e1deee"
   },
   {
     "path": "entry/src/main/ets/data/BookContentProcessEngine.ets",
@@ -173,11 +153,19 @@
   },
   {
     "path": "entry/src/main/ets/data/BookRepository.ets",
-    "sha256": "a1ed564b6d30f6de7a994cd9d895960fb44a7ebb5a51b9d150e2f42f3091f544"
+    "sha256": "5055809a63ec1e3ab9b097e86574c9b4fc5508bab84166eb00d175d32332d0bd"
+  },
+  {
+    "path": "entry/src/main/ets/data/BookshelfLayoutRepository.ets",
+    "sha256": "b55df8bbefea43ef2e5f6caf940e3b8b08e57bbbd8d8606f1159548226c09e20"
+  },
+  {
+    "path": "entry/src/main/ets/data/BookshelfSort.ets",
+    "sha256": "3d0c952caa07b32ee3c72fc80bb54e1aa69812a7d1a2c46933e4a6e6f3b10fe1"
   },
   {
     "path": "entry/src/main/ets/data/EpubRepository.ets",
-    "sha256": "2c7947e2202d9b1bc8edb31408aee886cf47762dcbdb1a6ffbca1467cd620cb2"
+    "sha256": "bc64c3eeecaeb568aff8a8694a8120a4fa762c963b05890a72a9842c2884b8a6"
   },
   {
     "path": "entry/src/main/ets/data/HomeDashboardSettingsRepository.ets",
@@ -194,10 +182,6 @@
   {
     "path": "entry/src/main/ets/data/OnboardingRepository.ets",
     "sha256": "3b12c3ddca5a9104142ed7d8e5440f22bae57e8a4a96c095ab02bc20029db9a6"
-  },
-  {
-    "path": "entry/src/main/ets/data/ReadRecordRepository.ets",
-    "sha256": "40c5258d03eab2f196243cab1502de85e5839130b09a0fd0d67eec3c90c0333e"
   },
   {
     "path": "entry/src/main/ets/data/ReaderBookmarkRepository.ets",
@@ -218,6 +202,10 @@
   {
     "path": "entry/src/main/ets/data/ReaderSettingsRepository.ets",
     "sha256": "299f8a77f9fed36f4d3439e0f63c19c965e5ab526add65c5f211f0451ca2054c"
+  },
+  {
+    "path": "entry/src/main/ets/data/ReadRecordRepository.ets",
+    "sha256": "40c5258d03eab2f196243cab1502de85e5839130b09a0fd0d67eec3c90c0333e"
   },
   {
     "path": "entry/src/main/ets/data/ReplaceRuleImporter.ets",
@@ -241,7 +229,7 @@
   },
   {
     "path": "entry/src/main/ets/model/Book.ets",
-    "sha256": "a0720b8a819dc1f0d2d5b1db2d9f7956868e1b73589ca378a3f47fdab3e80b71"
+    "sha256": "3e536ef7fecec5121d1238db10c0c0a0e906be564073d6d51ac78fb8d4c3847b"
   },
   {
     "path": "entry/src/main/ets/model/BookContentProcess.ets",
@@ -252,8 +240,8 @@
     "sha256": "a7c16b1b41cf41defe87d976dc8afe145d9c829bf8b510940948c3b18a0c4871"
   },
   {
-    "path": "entry/src/main/ets/model/ReadRecord.ets",
-    "sha256": "6608050434643fe3f6020173ddf774b69fff33e03b96ac748be63070c6f43349"
+    "path": "entry/src/main/ets/model/BookshelfLayout.ets",
+    "sha256": "25c5606ff9cb5998b29de6758973e5155d5894af5edd28b5d4512f1851eb6f49"
   },
   {
     "path": "entry/src/main/ets/model/ReaderBookmark.ets",
@@ -266,6 +254,10 @@
   {
     "path": "entry/src/main/ets/model/ReaderSearchHistory.ets",
     "sha256": "29ae037b161dfc88fbbe37c769c0b9db1c23b5e50052719aef6e89888c9d4113"
+  },
+  {
+    "path": "entry/src/main/ets/model/ReadRecord.ets",
+    "sha256": "6608050434643fe3f6020173ddf774b69fff33e03b96ac748be63070c6f43349"
   },
   {
     "path": "entry/src/main/ets/model/ReplaceRule.ets",
@@ -317,7 +309,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/BookshelfPage.ets",
-    "sha256": "794dd92d2427239a313b05bc93b116ba594094e27bbfec1734465244a9973a7b"
+    "sha256": "17a39250ff91b7deb496e086ed298a8cdfa507009ada5f20426d639ccaac1c01"
   },
   {
     "path": "entry/src/main/ets/pages/CatalogPage.ets",
@@ -337,7 +329,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/Index.ets",
-    "sha256": "f2d2ef769254c974b3070c72485885e402fd9212ddbd1dcfc77f746a5df4ec5a"
+    "sha256": "295873f76755bd0f13487228578ae6d48f5fb1b4caf60699b9ad87a32a984672"
   },
   {
     "path": "entry/src/main/ets/pages/LocalReaderPaginator.ets",
@@ -476,10 +468,6 @@
     "sha256": "b7e9c1b895e1e446eaaac4951c7be5d3d3560ec5e2330293190c2846573e92c4"
   },
   {
-    "path": "entry/src/main/resources/base/media/app_cloud.svg",
-    "sha256": "d1e133fe27e753fda475f3429619f591b42cb4f25b9950564782f0b555187c1f"
-  },
-  {
     "path": "entry/src/main/resources/base/media/app_cloud_download.svg",
     "sha256": "526ae7bfca8bc45e5a90d90fe64b5db63cce7a9d9ff5b5ca71575dd7f4f18f61"
   },
@@ -490,6 +478,10 @@
   {
     "path": "entry/src/main/resources/base/media/app_cloud_upload.svg",
     "sha256": "9b1e50182cf3b862c9bb3b4ddf4d78c754146573cf580ec60b3f8b9114eb268f"
+  },
+  {
+    "path": "entry/src/main/resources/base/media/app_cloud.svg",
+    "sha256": "d1e133fe27e753fda475f3429619f591b42cb4f25b9950564782f0b555187c1f"
   },
   {
     "path": "entry/src/main/resources/base/media/app_code.svg",
@@ -645,19 +637,19 @@
   },
   {
     "path": "entry/src/main/resources/base/media/file_picker_arrow.png",
-    "sha256": "de662dcba3fd21e37cac5d6267c12f65c3a5f81b0a318111288af0f026329dc5"
+    "sha256": "4f0aa5cbf35f67aa59cecc4374e68908dba85a6ef822bcb9bb79238535a3b44a"
   },
   {
     "path": "entry/src/main/resources/base/media/file_picker_file.png",
-    "sha256": "5bf58533bd4f7ad45eaf7fff33d4193cb6e290c410cf5e1abacda3aaca060f3f"
+    "sha256": "df0b8b006b9ede4eefc170a338e5742ff79e9b97cde7822e0324295544e678db"
   },
   {
     "path": "entry/src/main/resources/base/media/file_picker_folder.png",
-    "sha256": "d75c019dec02b06e0877235d6be4ab66a6e6a0fa2fd1bccfa7d17dc0cf56d7f4"
+    "sha256": "b87f473af6269f70149c3b040ed27ef2f0cab3b1989e718289a1b21f4c2c71db"
   },
   {
     "path": "entry/src/main/resources/base/media/file_picker_updir.png",
-    "sha256": "deac63de8b2ddf53e471cb17d32ced74c99df903709aad45a7accf6bc3f274fd"
+    "sha256": "f58c1b2bca345ab6c462c5ff18f6862c0e6cb5307a7b7b2101fddb20e87766ff"
   },
   {
     "path": "entry/src/main/resources/base/media/menu_bookmarks.svg",
@@ -977,7 +969,7 @@
   },
   {
     "path": "entry/src/main/resources/rawfile/licenses/Apache-2.0.txt",
-    "sha256": "a22a0c495566ce9b09b25aa3feab8d54a5b12c6a26eb3dcb5324ead9a586da66"
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
   },
   {
     "path": "entry/src/main/resources/rawfile/licenses/GPL-3.0.txt",
@@ -996,11 +988,35 @@
     "sha256": "561d3af07f6c82dbb7bb20bc1b6f719d0d83d0ca6b0131657b8fab55e255b7b4"
   },
   {
+    "path": "LICENSE",
+    "sha256": "35d3f26265f7c262a524602f72efda71f69d390086d6d0b74c70c8b07251227c"
+  },
+  {
     "path": "licenses/Apache-2.0.txt",
-    "sha256": "a22a0c495566ce9b09b25aa3feab8d54a5b12c6a26eb3dcb5324ead9a586da66"
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "path": "NOTICE.md",
+    "sha256": "8c1958cf0ae652623127da0f3c3011a86a3f33f044f83d2c0899e44285cc6756"
   },
   {
     "path": "oh-package.json5",
     "sha256": "9811ff8dcaea25c4d9c2a4142df7fad342603c2f834603f900c95c6080cc9f1c"
+  },
+  {
+    "path": "PRIVACY.md",
+    "sha256": "50082825a96ecbb3a4147d1c75272ca193bbc0bd687d6209f2cdfb87811b071f"
+  },
+  {
+    "path": "README.md",
+    "sha256": "7c769179f1e0e7b4187c46b5b062ef6d0b5fe3d55fd29e106bebfe8658f9da12"
+  },
+  {
+    "path": "SECURITY.md",
+    "sha256": "f10bb68d22cf055d88b38d5dc97dd999979e713cd622f661ea5ad99fdcc07091"
+  },
+  {
+    "path": "TERMS.md",
+    "sha256": "a7eae45f0166655bd45272cc3e83ada6539b359d4cbcf25319f9bac93a9faa3a"
   }
 ]

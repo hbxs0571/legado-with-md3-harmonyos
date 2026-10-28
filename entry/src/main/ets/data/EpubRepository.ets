@@ -152,6 +152,7 @@ export class EpubRepository {
         format: 'epub',
         fileSizeBytes: compressedBytes,
         readerPositionVersion: 1,
+        latestChapterTime: Date.now(),
         isLocal: true
       };
     } catch (error) {

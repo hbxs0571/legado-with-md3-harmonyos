@@ -5,6 +5,8 @@ import { Book } from '../model/Book';
 import { EpubRepository } from './EpubRepository';
 import { BookRepository } from './BookRepository';
 import { BookGroupRepository } from './BookGroupRepository';
+import { BookshelfLayoutRepository } from './BookshelfLayoutRepository';
+import { BookshelfLayoutSettings, copyBookshelfLayout } from '../model/BookshelfLayout';
 import { READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot } from './ReaderSettingsRepository';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { ReplaceRuleImporter } from './ReplaceRuleImporter';
@@ -45,6 +47,7 @@ export interface BackupCategoryOption {
 export interface RestoreResult {
   books: Book[];
   settings: ReaderSettingsSnapshot;
+  bookshelfLayout: BookshelfLayoutSettings;
   preservedEntryCount: number;
   updatedLocalBookCount: number;
   createdMissingBodyBookCount: number;
@@ -226,6 +229,7 @@ export class BackupRepository {
       'eyeProtectionEndTime'
     ],
     bookshelfLayout: [
+      'bookGroupStyle', 'hideEmptyGroups',
       'bookshelfLayout', 'bookshelfLayoutPortrait', 'bookshelf_layout_landscape', 'bookshelfLayoutCompact',
       'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowDivider',
       'bookshelfGridLayout', 'bookshelfSort', 'bookshelfSortOrder', 'bookshelfLayoutGridLandscape',
@@ -370,6 +374,7 @@ export class BackupRepository {
     context: Context,
     books: Book[],
     settings: ReaderSettingsSnapshot,
+    bookshelfLayout: BookshelfLayoutSettings,
     ignoredCategories: string[]
   ): Promise<boolean> {
     const stagingDirectory = `${context.cacheDir}/legado-android-backup-${Date.now()}`;
@@ -450,6 +455,20 @@ export class BackupRepository {
           `  <int name="clickActionBottomLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[6] ?? '')}" />\n` +
           `  <int name="clickActionBottomCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[7] ?? '')}" />\n` +
           `  <int name="clickActionBottomRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[8] ?? '')}" />\n</map>`);
+      }
+
+      if (!ignoredCategories.includes('bookshelfLayout')) {
+        let configText = fileIo.readTextSync(configPath);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookGroupStyle', `${bookshelfLayout.bookGroupStyle}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'hideEmptyGroups', `${bookshelfLayout.hideEmptyGroups}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfSort', `${bookshelfLayout.bookshelfSort}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfSortOrder', `${bookshelfLayout.bookshelfSortOrder}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutPortrait', `${bookshelfLayout.bookshelfLayoutModePortrait}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutGridPortrait', `${bookshelfLayout.bookshelfLayoutGridPortrait}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutListPortrait', `${bookshelfLayout.bookshelfLayoutListPortrait}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfTitleMaxLines', `${bookshelfLayout.bookshelfTitleMaxLines}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfCoverShadow', `${bookshelfLayout.bookshelfCoverShadow}`);
+        BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('readConfig')) {
         let configText = fileIo.readTextSync(configPath);
@@ -578,6 +597,7 @@ export class BackupRepository {
     selection: BackupSelection,
     currentBooks: Book[],
     currentSettings: ReaderSettingsSnapshot,
+    currentBookshelfLayout: BookshelfLayoutSettings,
     ignoredCategories: string[]
   ): Promise<RestoreResult> {
     const targetDirectory = `${context.filesDir}/${BackupRepository.legacyDirectoryName}`;
@@ -676,6 +696,10 @@ export class BackupRepository {
       ignoredCategories
     );
     await ReaderSettingsRepository.save(context, settings);
+    const bookshelfLayout = BackupRepository.restoreBookshelfLayout(
+      selection.stagingDirectory, currentBookshelfLayout, ignoredCategories
+    );
+    await BookshelfLayoutRepository.save(context, bookshelfLayout);
     const updated = BackupRepository.restoreMatchingLocalProgress(
       selection.stagingDirectory,
       currentBooks,
@@ -688,6 +712,7 @@ export class BackupRepository {
     return {
       books: updated.books,
       settings: settings,
+      bookshelfLayout: bookshelfLayout,
       preservedEntryCount: preservedEntryCount,
       updatedLocalBookCount: updated.updatedCount,
       createdMissingBodyBookCount: updated.createdMissingBodyCount,
@@ -734,7 +759,7 @@ export class BackupRepository {
       group: BookGroupRepository.maskFromNames(book.groupNames ?? []),
       isPrivate: false,
       latestChapterTitle: book.lastChapter,
-      latestChapterTime: 0,
+      latestChapterTime: book.latestChapterTime ?? 0,
       lastCheckTime: 0,
       lastCheckCount: 0,
       totalChapterNum: totalChapterCount,
@@ -742,11 +767,11 @@ export class BackupRepository {
       durChapterIndex: chapterIndex,
       durChapterPos: book.contentPath !== undefined
         ? BookRepository.estimateAndroidChapterPosition(book) : book.androidCharacterPosition ?? 0,
-      durChapterTime: 0,
+      durChapterTime: book.durChapterTime ?? 0,
       wordCount: null,
       canUpdate: false,
       disableReadRecord: false,
-      order: order,
+      order: book.order ?? order,
       originOrder: 0,
       variable: null,
       readConfig: null,
@@ -810,6 +835,33 @@ export class BackupRepository {
       bgTypeNight: 0,
       bgStrNight: nightStyle.nightColor
     };
+  }
+
+  private static restoreBookshelfLayout(
+    directory: string,
+    current: BookshelfLayoutSettings,
+    ignoredCategories: string[]
+  ): BookshelfLayoutSettings {
+    if (ignoredCategories.includes('bookshelfLayout')) { return copyBookshelfLayout(current); }
+    const values = new Map<string, string>();
+    const integerKeys = [
+      'bookGroupStyle', 'bookshelfSort', 'bookshelfSortOrder', 'bookshelfLayoutPortrait',
+      'bookshelfLayoutGridPortrait', 'bookshelfLayoutListPortrait', 'bookshelfTitleMaxLines'
+    ];
+    for (let index = 0; index < integerKeys.length; index++) {
+      const key = integerKeys[index];
+      if (key === undefined) { continue; }
+      const value = BackupRepository.readXmlInteger(`${directory}/config.xml`, key);
+      if (value !== undefined) { values.set(key, value.toString()); }
+    }
+    const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow'];
+    for (let index = 0; index < booleanKeys.length; index++) {
+      const key = booleanKeys[index];
+      if (key === undefined) { continue; }
+      const value = BackupRepository.readXmlBoolean(`${directory}/config.xml`, key);
+      if (value !== undefined) { values.set(key, value.toString()); }
+    }
+    return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
   }
 
   private static restoreReaderSettings(
@@ -987,21 +1039,33 @@ export class BackupRepository {
         const restoredProgress = BookRepository.restoreAndroidProgress(bookWithCharset,
           index === undefined ? book.chapterIndex ?? 0 : index,
           position === undefined ? 0 : position);
-        let updated = restoredProgress;
+        let updated = BookRepository.withShelfMetadata(restoredProgress,
+          restoredProgress.groupNames ?? [], restoredProgress.groupName ?? '', restoredProgress.customTag,
+          restoredProgress.title, restoredProgress.author, restoredProgress.category,
+          restoredProgress.description, restoredProgress.remark);
+        updated.latestChapterTime = Math.max(0, Math.trunc(
+          BackupRepository.readJsonNumber(record, 'latestChapterTime') ?? restoredProgress.latestChapterTime ?? 0));
+        updated.durChapterTime = Math.max(0, Math.trunc(
+          BackupRepository.readJsonNumber(record, 'durChapterTime') ?? restoredProgress.durChapterTime ?? 0));
+        updated.order = Math.trunc(BackupRepository.readJsonNumber(record, 'order') ?? restoredProgress.order ?? 0);
         if (!ignoredCategories.includes('bookGroup')) {
           const groupMask = BackupRepository.readJsonNumber(record, 'group') ?? 0;
           const groupNames = BookGroupRepository.namesFromMask(groupMask);
           const backupIntro = BackupRepository.readJsonString(record, 'customIntro') ??
             BackupRepository.readJsonString(record, 'intro');
-          updated = BookRepository.withShelfMetadata(
-            restoredProgress, groupNames, groupNames.length > 0 ? groupNames.join('、') : '本地未分组',
+          const groupedBook = BookRepository.withShelfMetadata(
+            updated, groupNames, groupNames.length > 0 ? groupNames.join('、') : '本地未分组',
             BackupRepository.readJsonString(record, 'customTag') ?? restoredProgress.customTag,
             BackupRepository.readJsonString(record, 'name') ?? restoredProgress.title,
             BackupRepository.readJsonString(record, 'author') ?? restoredProgress.author,
             BackupRepository.readJsonString(record, 'kind') ?? restoredProgress.category,
             backupIntro ?? restoredProgress.description,
-            BackupRepository.readJsonString(record, 'remark') ?? restoredProgress.remark
+            BackupRepository.readJsonString(record, 'remark') ?? updated.remark
           );
+          groupedBook.latestChapterTime = updated.latestChapterTime;
+          groupedBook.durChapterTime = updated.durChapterTime;
+          groupedBook.order = updated.order;
+          updated = groupedBook;
         }
         result = result.map((item: Book) => item.id === updated.id ? updated : item);
         updatedCount += 1;
@@ -1079,6 +1143,9 @@ export class BackupRepository {
       chapterIndex: chapterIndex,
       chapterProgress: 0,
       lastChapter: latestChapter,
+      latestChapterTime: Math.max(0, Math.trunc(BackupRepository.readJsonNumber(record, 'latestChapterTime') ?? 0)),
+      durChapterTime: Math.max(0, Math.trunc(BackupRepository.readJsonNumber(record, 'durChapterTime') ?? 0)),
+      order: Math.trunc(BackupRepository.readJsonNumber(record, 'order') ?? 0),
       progress: progress,
       coverColor: '#39424B',
       coverMark: title.substring(0, 1) || '书',

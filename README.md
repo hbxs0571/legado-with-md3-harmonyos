@@ -1,51 +1,50 @@
 # Legado with MD3 for HarmonyOS
 
+简体中文
+
 ## 📖 介绍
 
-Legado with MD3 for HarmonyOS 是一个面向 HarmonyOS 的原生阅读器移植工程，界面和功能参考 [Legado with MD3](https://github.com/HapeLee/legado-with-MD3)，阅读能力和兼容格式参考 [Legado](https://github.com/gedoor/legado)。项目使用 ArkTS、ArkUI 与 Stage 模型开发。
+Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/HapeLee/legado-with-MD3) 与 [Legado（阅读）](https://github.com/gedoor/legado) 的 HarmonyOS 原生移植工程，使用 ArkTS、ArkUI 和 Stage 模型开发。
 
-本仓库由社区维护，与上游项目及华为、Google 无隶属关系，也不表示获得其官方认证或背书。代码依照 GPL-3.0 开源，版权和修改信息见 [NOTICE.md](NOTICE.md)。
+本项目处于开发预览阶段，持续迁移本地阅读与书架功能。它与上游项目及华为、Google 均无隶属关系，也未获其官方认证或背书。
 
-> **当前为开发预览。** 功能迁移和设备验收仍在进行中；仓库不提供正式签名、面向普通用户发行的安装包。
+## ✨ 分支特性
 
-## ✨ 当前实现
+- HarmonyOS 原生界面与书架，支持本地 TXT、EPUB、书架分组、列表/网格布局与排序设置。
+- 阅读器包含目录、阅读进度、书签、阅读设置、正文处理和文本选择等已接入能力；完整阅读体验仍在迁移。
+- 阅读记录、TXT 目录规则、标注与书签等模块已完成部分设备检查。具体验证范围和遗留问题见[当前进度](docs/PROGRESS.md)、[验证记录](docs/VALIDATION.md)及[已知问题](docs/KNOWN-ISSUES.md)。
+- 对部分 Android ZIP 书目、设置和规则数据提供兼容预览与字段映射，不代表完整 Android 数据库迁移。
 
-- **HarmonyOS 界面：** 已有首页、书架、发现、订阅、我的及部分设置页面。阅读器和多个阅读相关路由仍在完善，部分操作会明确提示尚未迁移。
-- **本地阅读：** 已接入 TXT、EPUB、本地书架、目录、阅读进度、书签、阅读设置、正文处理及“允许选择正文”设置。复杂 EPUB 排版与章节内嵌图片支持仍有限。
-- **书架分组：** 已接入分组管理、编辑、排序菜单、刷新设置、显示开关与私有标记保存。E 端已核验管理/编辑、菜单、刷新和设置读回；封面落盘、网格拖拽、排序对书目列表生效及私有访问控制仍未验证。
-- **阅读记录：** 已接通会话、按日明细和按书汇总三层，并迁移旧版记录。E 端 r242 核验了跨午夜隔离样例的按日显示、跨行选区、标注/备注操作及书签流程；跨午夜持久化、扫描修复、字数统计和别名合并仍有边界，见[已知问题](docs/KNOWN-ISSUES.md)。
-- **标注与书签：** E 端已核验指定的选区、样式/备注 CRUD、目录定位冷启及书签增改/冷启/定位/删除流程；不代表所有内容类型、设备版本和异常路径均已验收。
-- **TXT 目录规则：** 支持内置规则导入、JSON 导入导出、按规则导入 TXT、卷头识别与折叠。E 端已核验内置 27 条规则重启保留、JSON 导出再导入、TXT 分卷显示和阅读进度持久化；完整 CRUD/批量操作仍需补测。
-- **替换净化：** 源码包含规则管理、导入导出、按书启停、阅读时应用及 Android ZIP 规则映射。更细的设备验收范围见[当前进度](docs/PROGRESS.md)与[已知问题](docs/KNOWN-ISSUES.md)。
-- **Android ZIP：** 对部分书目、进度、设置和规则提供预览与字段映射；未映射的类别按兼容数据安全保留或忽略，不等同于完整 Android 数据库迁移。
-- **尚未接入：** 在线书源抓取、在线搜索、RSS、TTS、AI、WebDAV、云同步和 Web 服务。界面或备份中出现相关项目，不代表对应在线功能可用。
+## 🛠️ 核心功能
 
-各模块的最新范围、未完成项和验证边界见[当前进度](docs/PROGRESS.md)、[模块状态](docs/MODULE-STATUS.md)和[已知问题](docs/KNOWN-ISSUES.md)。功能实施队列见[项目队列](docs/PROJECT.md)。
+1. **本地阅读：** 支持本地 TXT、EPUB、目录和阅读进度管理。
+2. **书架管理：** 支持分组及部分布局、排序设置；设置项的设备验证范围以文档记录为准。
+3. **阅读辅助：** 包含书签、阅读记录、TXT 目录规则和正文处理等逐步迁移的模块。
+4. **HarmonyOS 工程：** 使用 ArkTS、ArkUI 与 Stage 模型，可按[构建说明](docs/BUILDING.md)在 DevEco Studio 中构建。
+5. **开源：** 项目采用 GPL-3.0，第三方资源来源和许可另见[资源清单](docs/RESOURCE-LICENSES.md)。
 
-## 🛠️ 获取与构建
-
-本仓库根目录即 HarmonyOS Stage 工程，无需 Android 父工程即可打开。请按[构建说明](docs/BUILDING.md)使用 DevEco Studio 构建，并查看[验证记录](docs/VALIDATION.md)了解已核验的工具和设备范围。
-
-当前兼容/目标版本配置为 `5.0.0(12)`，不代表已在 API 12 真机上验收。项目尚未配置发行签名；本仓库不提供可直接作为正式发行版安装的 HAP。
+在线书源抓取、在线搜索、RSS、TTS、AI、WebDAV、云同步和 Web 服务尚未接入。界面或备份中出现相关入口或数据类别，不代表对应服务可用。
 
 ## ⚠️ 注意事项
 
-- 书籍正文保存在用户设备中，备份 ZIP 不包含书籍正文，请另行保管原始 TXT/EPUB。
-- 备份可能包含账号信息、Cookie、请求头或令牌等敏感数据。请勿将个人备份、规则文件或含隐私的截图上传到公开仓库或 Issue。
-- 用户导入或配置的书源、规则及第三方内容由用户自行判断来源和使用权限；请遵守适用法律法规及相关服务条款。
+- 当前为开发预览，不是稳定发行版；仓库未配置正式签名，不提供正式发行安装包。
+- 已配置兼容/目标版本 `5.0.0(12)`，但尚无 API 12 真机兼容验收结论。
+- 书籍正文保存在设备本地，备份 ZIP 不包含正文；请另行保管原始 TXT/EPUB。
+- 备份可能含账号、Cookie、请求头或令牌等敏感信息。公开提交前请检查并清除个人数据。
+- 用户配置或导入的书源、规则及第三方内容由用户自行判断来源与使用权限，并遵守适用法律和服务条款。
 
-## 📄 隐私、协议与开源许可
+## 💬 交流
 
-- [隐私政策](PRIVACY.md)：应用处理的数据、备份风险及本地数据说明。
-- [使用协议](TERMS.md)：开发预览使用说明。
-- [免责声明](DISCLAIMER.md)：适用范围与责任边界。
-- [GPL-3.0 许可全文](LICENSE)、[版权与修改说明](NOTICE.md)。
-- [第三方资源来源与许可](docs/RESOURCE-LICENSES.md)。
-
-## 💬 反馈
-
-一般问题请通过 [GitHub Issues](https://github.com/hbxs0571/legado-with-md3-harmonyos/issues) 反馈，并先移除书名、账号、Cookie、令牌及其他个人信息。安全问题请参阅 [SECURITY.md](SECURITY.md)。
+请通过 [GitHub Issues](https://github.com/hbxs0571/legado-with-md3-harmonyos/issues) 反馈项目问题。提交前请移除书名、账号、Cookie、令牌及其他个人信息；安全问题请参阅 [SECURITY.md](SECURITY.md)。
 
 ## ❤️ 致谢
 
-感谢 [Legado with MD3](https://github.com/HapeLee/legado-with-MD3) 与 [Legado](https://github.com/gedoor/legado) 项目提供的上游代码、功能参考和社区积累。第三方图标及资源的具体来源和许可记录见[资源清单](docs/RESOURCE-LICENSES.md)。
+- [HapeLee/legado-with-MD3](https://github.com/HapeLee/legado-with-MD3)：上游界面与功能参考。
+- [gedoor/legado](https://github.com/gedoor/legado)：原始开源项目及阅读功能基础。
+- 第三方图标和资源来源见[资源许可清单](docs/RESOURCE-LICENSES.md)。
+
+## ⚠️ 用户协议与免责声明
+
+本项目为非官方社区移植工程。使用前请阅读[使用协议](TERMS.md)、[隐私政策](PRIVACY.md)和[免责声明](DISCLAIMER.md)。用户导入或配置的内容由用户自行负责其来源、合法性与使用方式。
+
+项目代码按 [GPL-3.0](LICENSE) 发布；版权归属及修改说明见 [NOTICE.md](NOTICE.md)。第三方依赖和资源可能适用各自的许可。

@@ -35,6 +35,10 @@ import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
+import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
+import {
+  BookshelfLayoutSettings, DEFAULT_BOOKSHELF_LAYOUT, copyBookshelfLayout
+} from '../model/BookshelfLayout';
 import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
@@ -104,6 +108,8 @@ struct Index {
   @State selectedChapter: string = '';
   @State books: Book[] = [];
   @State bookGroups: BookGroup[] = [];
+  /** 书架布局设置，与本地偏好仓储保持同步。 */
+  @State bookshelfLayout: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readRecordDetails: ReadRecordDetail[] = [];
   @State readRecordSummaries: ReadRecordSummary[] = [];
@@ -215,6 +221,7 @@ struct Index {
       this.restoreReadTimeRecords(context);
       this.restoreHomeDashboardSettings(context);
       this.restoreImportedBooks(context);
+      this.restoreBookshelfLayout(context);
       this.restoreReaderBookmarks(context);
       this.restoreReaderMarkings(context);
       this.restoreReaderSettings(context);
@@ -249,6 +256,10 @@ struct Index {
     this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
     this.readRecordDetails = await ReadRecordRepository.loadDetails(context);
     this.readRecordSummaries = await ReadRecordRepository.loadSummaries(context);
+  }
+
+  private async restoreBookshelfLayout(context: Context): Promise<void> {
+    this.bookshelfLayout = await BookshelfLayoutRepository.load(context);
   }
 
   private getTotalReadTimeMs(): number {
@@ -1944,7 +1955,10 @@ struct Index {
     try {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const settings = await ReaderSettingsRepository.load(context);
-      const created = await BackupRepository.createBackup(context, localBooks, settings, this.backupIgnoreKeys);
+      const bookshelfLayout = await BookshelfLayoutRepository.load(context);
+      const created = await BackupRepository.createBackup(
+        context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys
+      );
       this.backupStatusMessage = created ? 'Android 兼容 ZIP 已保存到你选择的位置。' : '';
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `创建备份失败：${error.message}` : '创建备份失败';
@@ -1983,11 +1997,13 @@ struct Index {
     try {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const currentSettings = this.getCurrentReaderSettingsSnapshot();
+      const currentBookshelfLayout = await BookshelfLayoutRepository.load(context);
       const result = await BackupRepository.restore(
-        context, selection, localBooks, currentSettings, this.restoreIgnoreKeys
+        context, selection, localBooks, currentSettings, currentBookshelfLayout, this.restoreIgnoreKeys
       );
       this.books = result.books;
       this.bookGroups = BookGroupRepository.getAll();
+      this.bookshelfLayout = copyBookshelfLayout(result.bookshelfLayout);
       this.readerFontSize = result.settings.fontSize;
       this.paperIndex = result.settings.paperIndex;
       this.dayPaperIndex = result.settings.dayPaperIndex;
@@ -2475,6 +2491,18 @@ struct Index {
     }
   }
 
+  /** 保存书架布局；写入偏好成功后再刷新界面状态。 */
+  private async saveBookshelfLayout(settings: BookshelfLayoutSettings): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      await BookshelfLayoutRepository.save(context, settings);
+      this.bookshelfLayout = copyBookshelfLayout(settings);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '书架布局保存失败');
+    }
+  }
+
   /** 拖拽后重排分组顺序。 */
   private async moveBookshelfGroup(fromId: number, toId: number): Promise<void> {
     const context = this.getUIContext().getHostContext();
@@ -2725,6 +2753,9 @@ struct Index {
       readerPositionVersion: this.selectedBook.isLocal && (this.selectedBook.format === 'txt' ||
         this.selectedBook.format === 'epub') ? (androidCoordinate ? 2 : 0) : this.selectedBook.readerPositionVersion,
       tocRule: this.selectedBook.tocRule,
+      latestChapterTime: this.selectedBook.latestChapterTime,
+      durChapterTime: Date.now(),
+      order: this.selectedBook.order,
       isLocal: this.selectedBook.isLocal
     };
     this.selectedBook = updatedBook;
@@ -3185,6 +3216,8 @@ struct Index {
         BookshelfPage({
           books: this.books,
           groups: this.bookGroups,
+          layout: this.bookshelfLayout,
+          onSaveLayout: (settings: BookshelfLayoutSettings) => this.saveBookshelfLayout(settings),
           onAddGroup: (name: string) => this.addBookshelfGroup(name),
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
           onSetGroupVisible: (id: number, visible: boolean) => this.setBookshelfGroupVisible(id, visible),

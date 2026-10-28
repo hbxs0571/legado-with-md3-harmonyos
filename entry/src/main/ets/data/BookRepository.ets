@@ -173,6 +173,18 @@ private static parseBookType(value: string): BookMediaType {
     return 'text';
   }
 
+  /** 解析书架排序用的时间戳字段；非正数或非整数一律视为未记录。 */
+  private static parseTimestampField(value: string | undefined): number | undefined {
+    const parsed = Number(value ?? '0');
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+  }
+
+  /** 解析手动排序序号；0 是合法值（排第一），所以只排除非整数。 */
+  private static parseOrderField(value: string | undefined): number | undefined {
+    const parsed = Number(value ?? '');
+    return Number.isSafeInteger(parsed) ? parsed : undefined;
+  }
+
 private static resolveCoverUri(context: Context, bookId: string, customCoverPath: string): string | undefined {
     if (customCoverPath.length > 0 && fileIo.accessSync(customCoverPath)) {
       return `file://${customCoverPath}`;
@@ -256,6 +268,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       androidCharacterPosition: book.androidCharacterPosition,
       readerPositionVersion: book.readerPositionVersion,
       tocRule: book.tocRule,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
       isLocal: book.isLocal
     };
   }
@@ -276,6 +291,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       bodyMissing: book.bodyMissing, androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: book.androidCharacterPosition, readerPositionVersion: book.readerPositionVersion,
       tocRule: book.tocRule,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
       isLocal: book.isLocal
     };
   }
@@ -289,10 +307,11 @@ static async loadImportedBooks(context: Context): Promise<Book[]> {
       const store = await preferences.getPreferences(context, BookRepository.preferenceName);
       await TxtTocRuleRepository.load(context);
       const value = await store.get('books', '');
-      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n') && !value.startsWith('v10\n') && !value.startsWith('v11\n') && !value.startsWith('v12\n') && !value.startsWith('v13\n') && !value.startsWith('v14\n'))) {
+      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n') && !value.startsWith('v10\n') && !value.startsWith('v11\n') && !value.startsWith('v12\n') && !value.startsWith('v13\n') && !value.startsWith('v14\n') && !value.startsWith('v15\n'))) {
         return [];
       }
-      const isVersion14 = value.startsWith('v14\n');
+      const isVersion15 = value.startsWith('v15\n');
+      const isVersion14 = isVersion15 || value.startsWith('v14\n');
       const isVersion13 = isVersion14 || value.startsWith('v13\n');
       const isVersion12 = isVersion13 || value.startsWith('v12\n');
       const isVersion11 = isVersion12 || value.startsWith('v11\n');
@@ -309,7 +328,7 @@ static async loadImportedBooks(context: Context): Promise<Book[]> {
       const records = value.substring(3).split('\n');
       for (let index = 0; index < records.length; index++) {
         const fields = records[index].split('|');
-        const maximumFields = isVersion14 ? 30 : isVersion13 ? 28 : isVersion12 ? 27 : isVersion11 ? 25 : isVersion10 ? 24 : isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
+        const maximumFields = isVersion15 ? 33 : isVersion14 ? 30 : isVersion13 ? 28 : isVersion12 ? 27 : isVersion11 ? 25 : isVersion10 ? 24 : isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
         if (fields.length < 2 || fields.length > maximumFields) {
           continue;
         }
@@ -386,6 +405,9 @@ static async loadImportedBooks(context: Context): Promise<Book[]> {
             imageStyle: isVersion6 ? decodeURIComponent(fields[18] ?? 'DEFAULT') : undefined,
             charset: isVersion7 ? decodeURIComponent(fields[19] ?? '') || undefined : undefined,
             reSegment: isVersion8 && fields[20] === '1',
+            latestChapterTime: isVersion15 ? BookRepository.parseTimestampField(fields[30]) : undefined,
+            durChapterTime: isVersion15 ? BookRepository.parseTimestampField(fields[31]) : undefined,
+            order: isVersion15 ? BookRepository.parseOrderField(fields[32]) : undefined,
             isLocal: true
           });
           continue;
@@ -442,6 +464,9 @@ static async loadImportedBooks(context: Context): Promise<Book[]> {
                 ? savedPosition : 0,
               readerPositionVersion: isVersion9 ? BookRepository.readPositionVersion(fields[21]) : 0,
               fileSizeBytes: savedSize > 0 ? savedSize : undefined,
+              latestChapterTime: isVersion15 ? BookRepository.parseTimestampField(fields[30]) : undefined,
+              durChapterTime: isVersion15 ? BookRepository.parseTimestampField(fields[31]) : undefined,
+              order: isVersion15 ? BookRepository.parseOrderField(fields[32]) : undefined,
               isLocal: true
             });
           } else {
@@ -492,6 +517,11 @@ static async loadImportedBooks(context: Context): Promise<Book[]> {
             const savedSize = Number(fields[8] ?? '0');
             if (savedSize > 0) { localBook.fileSizeBytes = savedSize; }
             if (isVersion6) { localBook.imageStyle = decodeURIComponent(fields[18] ?? 'DEFAULT'); }
+            if (isVersion15) {
+              localBook.latestChapterTime = BookRepository.parseTimestampField(fields[30]);
+              localBook.durChapterTime = BookRepository.parseTimestampField(fields[31]);
+              localBook.order = BookRepository.parseOrderField(fields[32]);
+            }
             books.push(localBook);
           }
         }
@@ -506,7 +536,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const operation = BookRepository.saveQueue.then(async (): Promise<void> => {
       try {
         const store = await preferences.getPreferences(context, BookRepository.preferenceName);
-        const records: string[] = ['v14'];
+        const records: string[] = ['v15'];
         for (let index = 0; index < books.length; index++) {
           const book = books[index];
           if (!BookRepository.isPersistableBook(book)) { continue; }
@@ -529,7 +559,10 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
             book.fixedType === true ? '1' : '0',
             encodeURIComponent(JSON.stringify(book.groupNames ?? [])),
             BookRepository.encodeVolumeFlags(book.chapterVolumes, (book.chapterTitles ?? []).length),
-            encodeURIComponent(book.tocRule ?? '')
+            encodeURIComponent(book.tocRule ?? ''),
+            (book.latestChapterTime ?? 0).toString(),
+            (book.durChapterTime ?? 0).toString(),
+            book.order === undefined ? '' : book.order.toString()
           ].join('|'));
         }
         await store.put('books', records.join('\n'));
@@ -583,6 +616,9 @@ static withCharset(book: Book, charset: string, maxLengthWithNoToc: number = 300
         androidCharacterPosition: book.androidCharacterPosition,
         readerPositionVersion: book.readerPositionVersion,
       tocRule: book.tocRule,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
         isLocal: book.isLocal
       };
     }
@@ -642,6 +678,9 @@ static withCharset(book: Book, charset: string, maxLengthWithNoToc: number = 300
       androidCharacterPosition: 0,
       readerPositionVersion: 1,
       tocRule: chapterRule.length > 0 ? chapterRule : undefined,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
       isLocal: book.isLocal
     };
   }
@@ -682,6 +721,9 @@ static withReSegment(book: Book, enabled: boolean): Book {
       androidCharacterPosition: book.androidCharacterPosition,
       readerPositionVersion: book.readerPositionVersion,
       tocRule: book.tocRule,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
       isLocal: book.isLocal
     };
   }
@@ -937,6 +979,9 @@ const nextBook: Book = {
       androidCharacterPosition: 0,
       readerPositionVersion: 1,
       tocRule: book.tocRule,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
       isLocal: book.isLocal
     };
     return nextBook;
@@ -1012,6 +1057,9 @@ const nextBook: Book = {
       androidCharacterPosition: Math.max(0, Math.trunc(characterPosition)),
       readerPositionVersion: 2,
       tocRule: book.tocRule,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
       isLocal: book.isLocal
     };
   }
@@ -1198,7 +1246,12 @@ private static async applyChapterContentAsync(
       charset: book.charset, description: book.description, remark: book.remark, customTag: book.customTag,
       bodyMissing: book.bodyMissing, androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: chapterPosition, readerPositionVersion: 2,
-      tocRule: chapterRule.length > 0 ? chapterRule : undefined, isLocal: book.isLocal
+      tocRule: chapterRule.length > 0 ? chapterRule : undefined,
+      // 更新目录会刷新 latestChapterTime，但阅读时间与手动序号必须原样带回。
+      latestChapterTime: Date.now(),
+      durChapterTime: book.durChapterTime,
+      order: book.order,
+      isLocal: book.isLocal
     };
     return { book: refreshedBook, content: content, changed: true,
       oldBodyOffsets: oldBodyOffsets, newBodyOffsets: newBodyOffsets };
@@ -1293,6 +1346,9 @@ static refreshNoTocBook(book: Book, maxLengthWithNoToc: number): NoTocBookRefres
       androidCharacterPosition: chapterPosition,
       readerPositionVersion: 2,
       tocRule: book.tocRule,
+      latestChapterTime: book.latestChapterTime,
+      durChapterTime: book.durChapterTime,
+      order: book.order,
       isLocal: book.isLocal
     };
     return {
@@ -1368,6 +1424,8 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
       chapterOffsets: chapterOffsets.length === chapterTitles.length ? chapterOffsets : undefined,
       chapterVolumes: chapterVolumes.length === chapterTitles.length ? chapterVolumes : undefined,
       tocRule: chapterRule.length > 0 ? chapterRule : undefined,
+      // 新导入的书以导入时刻作为「最近更新」，未读过所以没有阅读时间。
+      latestChapterTime: Date.now(),
       lastChapter: chapterTitles[safeChapterIndex],
       chapterIndex: safeChapterIndex,
       chapterProgress: safeChapterProgress,
