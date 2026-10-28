@@ -86,6 +86,11 @@ interface ReaderHighlightTextRun {
   backgroundColor: string;
   underlineMode: number;
   underlineColor: string;
+  // 划线/笔记的装饰属性也在 run 里算好：@Builder 里再查标记会读不到最新的 markings。
+  decorationType: TextDecorationType;
+  decorationStyle: TextDecorationStyle;
+  decorationColor: string;
+  decorationThickness: number;
 }
 interface ReaderContentSegment {
   kind: 'text' | 'image';
@@ -159,7 +164,8 @@ export struct ReaderPage {
   @Prop swipeToAddBookmark: boolean = false;
   @Prop selectText: boolean = true;
   @Prop bookmarks: ReaderBookmark[] = [];
-  @Prop markings: ReaderMarking[] = [];
+  // 标记变化必须递增 revision，否则滚动模式的 ForEach 复用旧 Span、划线渲染不出来。
+  @Prop @Watch('onMarkingsChanged') markings: ReaderMarking[] = [];
   @Prop readingAnchorAvailable: boolean = false;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = [];
@@ -606,6 +612,11 @@ export struct ReaderPage {
   onReplaceRulesChanged(): void {
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
+  }
+
+  /** 划线/笔记增删改后重建渲染：run 的分段与装饰都在 ForEach key 里，必须换 key。 */
+  onMarkingsChanged(): void {
+    this.readerContentRevision++;
   }
 
   private async refreshDisplayChapterTitle(): Promise<void> {
@@ -2007,6 +2018,10 @@ export struct ReaderPage {
     }.backgroundColor('#242127').borderRadius(12)
   }
 
+  /**
+   * 把一段文本按「高亮规则命中区间 + 用户划线/笔记区间」切成等样式的小段。
+   * 划线/笔记优先于全局高亮规则（与上游一致：用户手动标记不该被规则样式盖掉）。
+   */
   private getReaderHighlightTextRuns(value: string, basePosition: number): ReaderHighlightTextRun[] {
     if (value.length === 0) { return []; }
     const boundaries: number[] = [0, value.length];
@@ -2016,6 +2031,15 @@ export struct ReaderPage {
       if (range === undefined || range.start >= endPosition || range.endExclusive <= basePosition) { continue; }
       boundaries.push(Math.max(0, range.start - basePosition));
       boundaries.push(Math.min(value.length, range.endExclusive - basePosition));
+    }
+    // 划线/笔记的起止也要切段，否则整段会被当成同一段、标记范围渲染不出来。
+    for (let index = 0; index < this.markings.length; index++) {
+      const marking = this.markings[index];
+      if (marking === undefined || !marking.enabled) { continue; }
+      if (marking.chapterIndex !== this.getChapterIndex()) { continue; }
+      if (marking.chapterPosition >= endPosition || marking.endPosition <= basePosition) { continue; }
+      boundaries.push(Math.max(0, marking.chapterPosition - basePosition));
+      boundaries.push(Math.min(value.length, marking.endPosition - basePosition));
     }
     boundaries.sort((left: number, right: number) => left - right);
     const unique: number[] = [];
@@ -2030,41 +2054,65 @@ export struct ReaderPage {
       const start = unique[index];
       const end = unique[index + 1];
       if (start === undefined || end === undefined || end <= start) { continue; }
-      const style = this.getHighlightStyle(basePosition + start, basePosition + end);
+      const absoluteStart = basePosition + start;
+      const absoluteEnd = basePosition + end;
+      const marking = this.getMarkingForTextRange(absoluteStart, absoluteEnd);
+      if (marking !== undefined) {
+        // 有用户标记时整段按标记渲染，不再叠规则样式。
+        runs.push({
+          value: value.substring(start, end),
+          textColor: marking.effect === 'text' ? marking.color : this.getReadingTextColor(),
+          backgroundColor: this.getMarkingBackground(marking),
+          underlineMode: 0,
+          underlineColor: marking.color,
+          decorationType: this.getMarkingDecorationType(marking) !== TextDecorationType.None
+            ? this.getMarkingDecorationType(marking)
+            : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+          decorationStyle: this.getMarkingDecorationType(marking) !== TextDecorationType.None
+            ? this.getMarkingDecorationStyle(marking)
+            : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+          decorationColor: marking.color.length > 0 ? marking.color : this.getReaderUnderlineColor(),
+          decorationThickness: this.underline && this.getMarkingDecorationType(marking) === TextDecorationType.None
+            ? Math.max(0, this.underlineHeight) : 1
+        });
+        continue;
+      }
+      const style = this.getHighlightStyle(absoluteStart, absoluteEnd);
+      const ruleMode = style?.underlineMode ?? 0;
       runs.push({
         value: value.substring(start, end),
         textColor: ReaderHighlightRuleEngine.colorToCss(style?.textColor) ?? this.getReadingTextColor(),
         backgroundColor: ReaderHighlightRuleEngine.colorToCss(style?.bgColor) ?? 'transparent',
-        underlineMode: style?.underlineMode ?? 0,
+        underlineMode: ruleMode,
         underlineColor: ReaderHighlightRuleEngine.colorToCss(style?.underlineColor ?? style?.textColor)
-          ?? this.getReaderUnderlineColor()
+          ?? this.getReaderUnderlineColor(),
+        decorationType: this.getHighlightDecorationType(ruleMode) !== TextDecorationType.None
+          ? this.getHighlightDecorationType(ruleMode)
+          : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+        decorationStyle: this.getHighlightDecorationType(ruleMode) !== TextDecorationType.None
+          ? this.getHighlightDecorationStyle(ruleMode)
+          : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+        decorationColor: ReaderHighlightRuleEngine.colorToCss(style?.underlineColor ?? style?.textColor)
+          ?? this.getReaderUnderlineColor(),
+        decorationThickness: this.getHighlightDecorationType(ruleMode) !== TextDecorationType.None
+          ? 1 : Math.max(0, this.underlineHeight)
       });
     }
     return runs;
   }
 
   @Builder
-  private ReaderHighlightRunSpan(
-    value: string,
-    textColor: string,
-    backgroundColor: string,
-    underlineMode: number,
-    underlineColor: string
-  ) {
-    Span(value)
+  private ReaderHighlightRunSpan(run: ReaderHighlightTextRun) {
+    Span(run.value)
       .fontSize(this.fontSize * 1.05)
-      .fontColor(textColor)
-      .backgroundColor(backgroundColor)
+      .fontColor(run.textColor)
+      // Span 不支持 backgroundColor（CommonMethod 虽有该方法但不渲染），背景必须走 textBackgroundStyle。
+      .textBackgroundStyle({ color: run.backgroundColor })
       .decoration({
-        type: this.getHighlightDecorationType(underlineMode) !== TextDecorationType.None
-          ? this.getHighlightDecorationType(underlineMode)
-          : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
-        color: underlineColor,
-        style: this.getHighlightDecorationType(underlineMode) !== TextDecorationType.None
-          ? this.getHighlightDecorationStyle(underlineMode)
-          : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-        thicknessScale: this.getHighlightDecorationType(underlineMode) !== TextDecorationType.None
-          ? 1 : Math.max(0, this.underlineHeight)
+        type: run.decorationType,
+        color: run.decorationColor,
+        style: run.decorationStyle,
+        thicknessScale: run.decorationThickness
       })
       .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
   }
@@ -2129,7 +2177,8 @@ export struct ReaderPage {
       Span(glyph)
         .fontSize(this.fontSize * 1.05)
         .fontColor(ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.textColor) ?? this.getReadingTextColor())
-        .backgroundColor(ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.bgColor) ?? 'transparent')
+        // Span 的背景只认 textBackgroundStyle，用 backgroundColor 会静默不渲染。
+        .textBackgroundStyle({ color: ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.bgColor) ?? 'transparent' })
         .decoration({
           type: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
             ? this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0)
@@ -2148,7 +2197,8 @@ export struct ReaderPage {
       Span(glyph)
         .fontSize(this.fontSize * 1.05)
         .fontColor(marking.effect === 'text' ? marking.color : this.getReadingTextColor())
-        .backgroundColor(this.getMarkingBackground(marking))
+        // 荧光/背景高亮同样只能靠 textBackgroundStyle 才真正上色。
+        .textBackgroundStyle({ color: this.getMarkingBackground(marking) })
         .decoration({
           type: this.getMarkingDecorationType(marking) !== TextDecorationType.None
             ? this.getMarkingDecorationType(marking)
@@ -2806,11 +2856,9 @@ export struct ReaderPage {
             } else {
               Text() {
                 ForEach(this.getReaderHighlightTextRuns(this.getDisplayContent(segment.value), segment.startPosition),
+                  (run: ReaderHighlightTextRun, runIndex: number) => this.ReaderHighlightRunSpan(run),
                   (run: ReaderHighlightTextRun, runIndex: number) =>
-                    this.ReaderHighlightRunSpan(run.value, run.textColor, run.backgroundColor,
-                      run.underlineMode, run.underlineColor),
-                  (run: ReaderHighlightTextRun, runIndex: number) =>
-                    `${this.readerContentRevision}-scroll-${index}-${runIndex}-${run.textColor}-${run.backgroundColor}-${run.underlineMode}`)
+                    `${this.readerContentRevision}-scroll-${index}-${runIndex}-${run.textColor}-${run.backgroundColor}-${run.decorationType}-${run.decorationColor}-${run.decorationStyle}-${run.decorationThickness}`)
               }
                 .fontSize(this.fontSize * 1.05)
                 .fontFamily(this.readerBodyFontFamily)

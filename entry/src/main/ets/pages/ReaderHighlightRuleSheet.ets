@@ -1,5 +1,6 @@
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
+import { ReaderHighlightRulePresets } from '../data/ReaderHighlightRulePresets';
 
 @Component
 export struct ReaderHighlightRuleSheet {
@@ -17,6 +18,9 @@ export struct ReaderHighlightRuleSheet {
   @State errorMessage: string = '';
   @State pendingDeleteId: string = '';
   @State saving: boolean = false;
+  @State presetVisible: boolean = false;
+  /** 预设面板里已勾选的规则 id；用数组是因为 ArkTS 的 @State 不追踪 Set/Map 的内部变更。 */
+  @State presetSelectedIds: string[] = [];
   onDismiss: () => void = () => {};
   onSave: (rules: ReaderHighlightRule[]) => Promise<ReaderHighlightRule[]> =
     async (rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> => rules;
@@ -190,6 +194,84 @@ export struct ReaderHighlightRuleSheet {
     return `${rule.id}_${rule.enabled ? 1 : 0}_${rule.position}_${rule.name}_${rule.pattern}_${rule.underlineMode}`;
   }
 
+  /**
+   * 打开预设面板。默认勾选口径与上游一致：只勾「本地缺失」的预设，
+   * 已存在同 id 的标为「已有」且不勾，避免把用户改过样式的旧规则悄悄覆盖掉。
+   * 标题作用域的预设本地引擎不执行，默认不勾并在条目上如实标注。
+   */
+  private openPresets(): void {
+    const existingIds: string[] = this.draftRules.map((rule: ReaderHighlightRule) => rule.id);
+    const selected: string[] = [];
+    const presets = ReaderHighlightRulePresets.rules();
+    for (let index = 0; index < presets.length; index++) {
+      const preset = presets[index];
+      if (preset === undefined) { continue; }
+      if (existingIds.includes(preset.id)) { continue; }
+      // 本地只跑正文规则，标题预设勾了也不会生效，默认不勾。
+      if (preset.targetScope !== ReaderHighlightRulePresets.targetContent) { continue; }
+      selected.push(preset.id);
+    }
+    this.presetSelectedIds = selected;
+    this.errorMessage = '';
+    this.presetVisible = true;
+  }
+
+  private presetStatus(preset: ReaderHighlightRule): string {
+    if (this.draftRules.some((rule: ReaderHighlightRule) => rule.id === preset.id)) { return '已有'; }
+    if (preset.targetScope !== ReaderHighlightRulePresets.targetContent) { return '标题规则，本地暂不执行'; }
+    if (!ReaderHighlightRuleEngine.isSupported(preset.pattern)) { return '此正则在本机不受支持'; }
+    return '可添加';
+  }
+
+  private isPresetSelectable(preset: ReaderHighlightRule): boolean {
+    if (this.draftRules.some((rule: ReaderHighlightRule) => rule.id === preset.id)) { return false; }
+    return ReaderHighlightRuleEngine.isSupported(preset.pattern);
+  }
+
+  private togglePresetSelection(id: string): void {
+    if (this.presetSelectedIds.includes(id)) {
+      this.presetSelectedIds = this.presetSelectedIds.filter((item: string) => item !== id);
+    } else {
+      this.presetSelectedIds = [...this.presetSelectedIds, id];
+    }
+  }
+
+  /** 把勾选的预设追加到规则末尾；已有同 id 的直接跳过，绝不覆盖用户改过的样式。 */
+  private async applyPresets(): Promise<void> {
+    if (this.saving) { return; }
+    if (this.presetSelectedIds.length === 0) {
+      this.errorMessage = '请先勾选要添加的预设规则';
+      return;
+    }
+    const existingIds: string[] = this.draftRules.map((rule: ReaderHighlightRule) => rule.id);
+    const next = this.draftRules.map((rule: ReaderHighlightRule) => this.copyRule(rule));
+    let added = 0;
+    const presets = ReaderHighlightRulePresets.rules();
+    for (let index = 0; index < presets.length; index++) {
+      const preset = presets[index];
+      if (preset === undefined || !this.presetSelectedIds.includes(preset.id)) { continue; }
+      if (existingIds.includes(preset.id)) { continue; }
+      const rule = this.copyRule(preset);
+      rule.position = next.length;
+      next.push(rule);
+      added += 1;
+    }
+    if (added === 0) {
+      this.errorMessage = '所选预设已全部存在，未添加任何规则';
+      return;
+    }
+    await this.commit(next);
+    if (this.errorMessage.length === 0) {
+      this.presetVisible = false;
+      this.presetSelectedIds = [];
+    }
+  }
+
+  // 预设面板的 key 要覆盖勾选态，否则点击后勾选框不刷新（与 ruleItemKey 同一类问题）。
+  private presetItemKey(preset: ReaderHighlightRule): string {
+    return `${preset.id}_${this.presetSelectedIds.includes(preset.id) ? 1 : 0}`;
+  }
+
   private ruleStatus(rule: ReaderHighlightRule): string {
     if (!ReaderHighlightRuleEngine.isSupported(rule.pattern)) { return '此正则在本机不受支持'; }
     if ((rule.targetScope !== 0 && rule.targetScope !== 2) ||
@@ -262,10 +344,15 @@ export struct ReaderHighlightRuleSheet {
             }.layoutWeight(1).scrollBar(BarState.Off)
           }
           Row() {
+            Text('预设规则').fontSize(14).fontColor('#C7C9D1')
+              .padding({ left: 16, right: 16, top: 11, bottom: 11 })
+              .backgroundColor('#303139').borderRadius(22)
+              .onClick(() => this.openPresets())
+            Blank().layoutWeight(1)
             Text('＋ 新建规则').fontSize(14).fontColor('#101116')
               .padding({ left: 18, right: 18, top: 11, bottom: 11 })
               .backgroundColor('#B9C6FF').borderRadius(22).onClick(() => this.startCreate())
-          }.width('100%').justifyContent(FlexAlign.End).margin({ top: 12 })
+          }.width('100%').margin({ top: 12 })
         } else {
           Scroll() {
             Column() {
@@ -333,6 +420,54 @@ export struct ReaderHighlightRuleSheet {
               .onClick(() => this.confirmDelete())
           }.width('100%').justifyContent(FlexAlign.End).margin({ top: 12 })
         }.width('82%').padding(18).backgroundColor('#292A31').borderRadius(18).zIndex(2)
+      }
+      if (this.presetVisible) {
+        Column() {
+          Text('预设规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
+            .width('100%')
+          Text('勾选后追加到规则列表；已存在的同 id 规则不会被覆盖，只补缺失的。')
+            .fontSize(12).fontColor('#AEB0BA').width('100%').margin({ top: 6, bottom: 12 })
+          Scroll() {
+            Column() {
+              ForEach(ReaderHighlightRulePresets.rules(), (preset: ReaderHighlightRule) => {
+                Row() {
+                  Column() {
+                    Text(preset.name).fontSize(15).fontColor('#E5E6EB').maxLines(1)
+                    Text(preset.pattern).fontSize(11).fontColor('#AEB0BA').maxLines(2)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
+                    Text(this.presetStatus(preset)).fontSize(11)
+                      .fontColor(this.isPresetSelectable(preset) ? '#AEB0BA' : '#FFB4AB')
+                      .margin({ top: 4 })
+                  }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                  Checkbox()
+                    .select(this.presetSelectedIds.includes(preset.id))
+                    .enabled(this.isPresetSelectable(preset))
+                    .onChange(() => this.togglePresetSelection(preset.id))
+                }.width('100%').padding(12).backgroundColor('#24252C').borderRadius(14)
+                .margin({ bottom: 8 })
+                .onClick(() => {
+                  if (this.isPresetSelectable(preset)) { this.togglePresetSelection(preset.id); }
+                })
+              }, (preset: ReaderHighlightRule) => this.presetItemKey(preset))
+            }.width('100%')
+          }.layoutWeight(1).scrollBar(BarState.Off)
+          Row() {
+            Text('取消').fontSize(14).fontColor('#C7C9D1').padding(10)
+              .onClick(() => {
+                this.presetVisible = false;
+                this.presetSelectedIds = [];
+                this.errorMessage = '';
+              })
+            Blank().layoutWeight(1)
+            Text(this.saving ? '添加中' : `添加 ${this.presetSelectedIds.length} 条`)
+              .fontSize(14).fontColor('#101116')
+              .padding({ left: 18, right: 18, top: 10, bottom: 10 })
+              .backgroundColor('#B9C6FF').borderRadius(20)
+              .onClick(() => this.applyPresets())
+          }.width('100%').margin({ top: 10 })
+        }
+        .width('90%').height('72%').padding(18).backgroundColor('#1C1D23')
+        .borderRadius(20).zIndex(3)
       }
     }
     .width('100%').height('100%').zIndex(1200)

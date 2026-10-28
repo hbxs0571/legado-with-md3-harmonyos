@@ -115,6 +115,14 @@ export struct CatalogPage {
     return '笔记';
   }
 
+  /**
+   * 笔记条目的 key 必须覆盖会变的展示字段，否则改完样式/备注后
+   * ArkUI 复用旧节点，列表还显示「下划线」这类过期文案。
+   */
+  private markingItemKey(marking: ReaderMarking): string {
+    return `${marking.id}_${marking.effect}_${marking.color}_${marking.note}_${marking.enabled ? 1 : 0}`;
+  }
+
   private getMarkingEffectLabel(effect: ReaderMarkingEffect): string {
     if (effect === 'solid') { return '下划线'; }
     if (effect === 'double') { return '双下划线'; }
@@ -378,7 +386,7 @@ export struct CatalogPage {
               .width('100%').padding(12)
               .backgroundColor(marking.chapterName === this.selectedChapter ? '#303442' : '#1A1B21')
               .borderRadius(10).margin({ bottom: 6 })
-            }, (marking: ReaderMarking) => marking.id)
+            }, (marking: ReaderMarking) => this.markingItemKey(marking))
           }.padding({ left: 12, right: 12, bottom: 14 })
         }.width('100%').height('100%').scrollBar(BarState.Off)
       }

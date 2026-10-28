@@ -1,5 +1,14 @@
 # 修改记录
 
+## 2026-10-29 高亮规则预设导入与划线笔记渲染（r260）
+
+- 新增 `data/ReaderHighlightRulePresets.ets`：对齐上游 `HighlightRulePresets` 的 11 条内置规则，规则面板加「预设规则」入口，勾选后追加进规则列表。已存在的同 id 规则标「已有」且不勾选，不覆盖用户改过样式的规则；标题作用域预设如实标「标题规则，本地暂不执行」并默认不勾。
+- 与上游的三处差异逐条写在文件头注释里：`bracket_note_default` 的 `]` 补转义（上游正则在本机 `RegExp` 下编译失败）；`date_time_default` 裁到 179 字符（上游 314 超本地 256 上限，只裁纯中文数字年份与农历分支）；`title_emphasis_default` 本地不执行标题规则。
+- 修复滚动模式下划线/笔记完全不渲染：`ReaderPage.markings` 变化时未递增 `readerContentRevision`，内容 `ForEach` 复用旧节点。改为 `@Watch('onMarkingsChanged')` 递增，并把标记区间并入 `getReaderHighlightTextRuns()` 的切段边界，标记优先于全局高亮规则。
+- `ReaderHighlightTextRun` 增 `decorationType`/`decorationStyle`/`decorationColor`/`decorationThickness` 四个拍平字段，装饰在 run 里算好，避免 `@Builder` 内查不到最新标记。
+- 修复笔记列表改样式后文案不刷新：`CatalogPage` 的 `ForEach` key 由 `marking.id` 改为 `markingItemKey()`（覆盖 effect/color/note/enabled）。
+- N 端设备验证：滚动模式背景高亮 3848 绿色像素、波浪下划线渲染正常；改样式后列表文案由「背景高亮」即时变「波浪线」；删除标记后划线立即消失（491 → 0）；分页模式回归 491 像素通过。
+
 ## 2026-10-29 高亮规则接入 Android ZIP 备份与恢复（r259）
 
 - `highlightRule.json` 此前只在备份类别表里有名字，备份侧从不产出、恢复侧只原样拷贝，属于对用户的误导。现补齐双向映射：`BackupRepository.createBackup()` 写出根级 JSON，`restore()` 逐条解析后合并进 `ReaderHighlightRuleRepository`。
