@@ -2242,6 +2242,10 @@ struct Index {
         result.txtTocRuleAdded, result.txtTocRuleUpdated, result.txtTocRuleSkipped
       );
       if (tocRuleSummary.length > 0) { details.push(tocRuleSummary); }
+      const highlightRuleSummary = this.describeHighlightRuleRestore(
+        result.highlightRuleAdded, result.highlightRuleUpdated, result.highlightRuleSkipped
+      );
+      if (highlightRuleSummary.length > 0) { details.push(highlightRuleSummary); }
       this.backupStatusMessage = details.length > 0
         ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
@@ -2277,6 +2281,19 @@ struct Index {
     if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
     if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
     return `TXT 目录规则${parts.join('、')}。`;
+  }
+
+  /**
+   * 生成阅读正文高亮规则的恢复结果说明。
+   * 恢复采用合并语义：本地独有的规则保留，同 id 或同 pattern 的才覆盖。
+   */
+  private describeHighlightRuleRestore(added: number, updated: number, skipped: number): string {
+    if (added === 0 && updated === 0 && skipped === 0) { return ''; }
+    const parts: string[] = [];
+    if (added > 0) { parts.push(`新增 ${added} 条`); }
+    if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
+    if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
+    return `高亮规则${parts.join('、')}。`;
   }
 
   private cancelLocalBackupRestore(): void {

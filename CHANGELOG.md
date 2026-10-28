@@ -1,5 +1,13 @@
 # 修改记录
 
+## 2026-10-29 高亮规则接入 Android ZIP 备份与恢复（r259）
+
+- `highlightRule.json` 此前只在备份类别表里有名字，备份侧从不产出、恢复侧只原样拷贝，属于对用户的误导。现补齐双向映射：`BackupRepository.createBackup()` 写出根级 JSON，`restore()` 逐条解析后合并进 `ReaderHighlightRuleRepository`。
+- 恢复采用合并语义（同 id 或同 pattern 覆盖、其余新增、本地独有规则保留），与上游 `Restore.kt:270` 的 `replaceAll` 不同，理由是全量替换会无提示删除用户在 HarmonyOS 新建的规则。差异已在 `docs/BACKUP-RESTORE.md` 注明。
+- 新增 `ReaderHighlightRuleRepository.getAll()` / `exportRules()` / `importRules()`；`RestoreResult` 增 `highlightRuleAdded/Updated/Skipped`；`Index.ets` 增 `describeHighlightRuleRestore()` 拼入恢复摘要。
+- 备份写出前先 `await ReaderHighlightRuleRepository.load()`，避免缓存未填充时导出空数组。
+- N 端设备验证：2 条规则导出 1349 字节 JSON，字段与上游一致；导入合成 ZIP 后新增 1、覆盖 1、跳过 1（坏正则），冷读回一致。
+
 ## 2026-10-28 阅读正文高亮规则设备验收与两处缺陷修复（r258）
 
 - N 端在 HOS 模拟器完成 r258 高亮规则全部设备闭环：面板可达、创建、正文命中、停用、冷启读回、滚动模式连续滚动、删除，七项全部通过。E 端交接时「面板打不开」在 N 端未复现。

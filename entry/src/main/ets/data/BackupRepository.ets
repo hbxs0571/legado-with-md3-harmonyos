@@ -12,6 +12,14 @@ import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { ReplaceRuleImporter } from './ReplaceRuleImporter';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
 import { TxtTocRuleImporter } from './TxtTocRuleImporter';
+import { ReaderHighlightRuleRepository } from './ReaderHighlightRuleRepository';
+import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
+
+/** 解析 highlightRule.json 的结果：可用规则与因形态不符被跳过的条数。 */
+interface HighlightRuleParseOutcome {
+  rules: ReaderHighlightRule[];
+  skipped: number;
+}
 
 export interface BackupEntryPreview {
   name: string;
@@ -63,6 +71,10 @@ export interface RestoreResult {
   txtTocRuleAdded: number;
   txtTocRuleUpdated: number;
   txtTocRuleSkipped: number;
+  /** 恢复阅读正文高亮规则的新增、覆盖和跳过数量；采用合并语义，本地独有规则保留。 */
+  highlightRuleAdded: number;
+  highlightRuleUpdated: number;
+  highlightRuleSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -466,6 +478,13 @@ export class BackupRepository {
         BackupRepository.writeTextFile(`${stagingDirectory}/txtTocRule.json`,
           TxtTocRuleRepository.exportRules(rules));
       }
+      // 高亮规则同样只存在 preferences 里。缓存要先进过阅读页才会填充，
+      // 备份前必须 await load()，否则没读过书的用户会导出一份空数组。
+      if (!ignoredCategories.includes('highlightRule')) {
+        const highlightRules = await ReaderHighlightRuleRepository.load(context);
+        BackupRepository.writeTextFile(`${stagingDirectory}/highlightRule.json`,
+          ReaderHighlightRuleRepository.exportRules(highlightRules));
+      }
 
       if (!ignoredCategories.includes('readConfig')) {
         let configText = fileIo.readTextSync(configPath);
@@ -644,6 +663,9 @@ export class BackupRepository {
     let txtTocRuleAdded: number = 0;
     let txtTocRuleUpdated: number = 0;
     let txtTocRuleSkipped: number = 0;
+    let highlightRuleAdded: number = 0;
+    let highlightRuleUpdated: number = 0;
+    let highlightRuleSkipped: number = 0;
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
       if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
@@ -720,6 +742,20 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'highlightRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复高亮规则`);
+        }
+        const parsed = BackupRepository.parseHighlightRules(text);
+        const outcome = await ReaderHighlightRuleRepository.importRules(context, parsed.rules);
+        highlightRuleAdded += outcome.added;
+        highlightRuleUpdated += outcome.updated;
+        highlightRuleSkipped += parsed.skipped + outcome.skipped;
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
     }
@@ -760,7 +796,10 @@ export class BackupRepository {
       replaceRuleSkipped: replaceRuleSkipped,
       txtTocRuleAdded: txtTocRuleAdded,
       txtTocRuleUpdated: txtTocRuleUpdated,
-      txtTocRuleSkipped: txtTocRuleSkipped
+      txtTocRuleSkipped: txtTocRuleSkipped,
+      highlightRuleAdded: highlightRuleAdded,
+      highlightRuleUpdated: highlightRuleUpdated,
+      highlightRuleSkipped: highlightRuleSkipped
     };
   }
 
@@ -1684,6 +1723,113 @@ export class BackupRepository {
     } finally {
       fileIo.closeSync(file);
     }
+  }
+
+  /**
+   * 解析上游 highlightRule.json。
+   * 上游写的就是一个 JSON 数组；容忍单个对象与带 rules 包装两种变体，
+   * 其余形态按全部跳过处理，不抛异常——恢复流程里一条坏文件不该中断整包导入。
+   */
+  private static parseHighlightRules(text: string): HighlightRuleParseOutcome {
+    const rules: ReaderHighlightRule[] = [];
+    let skipped = 0;
+    let parsed: Object;
+    try {
+      parsed = JSON.parse(text) as Object;
+    } catch (_) {
+      return { rules: rules, skipped: skipped };
+    }
+    let candidates: Object[] = [];
+    if (Array.isArray(parsed)) {
+      candidates = parsed as Object[];
+    } else if (parsed !== null && typeof parsed === 'object') {
+      const wrapped = (parsed as Record<string, Object>)['rules'];
+      candidates = Array.isArray(wrapped) ? wrapped as Object[] : [parsed];
+    }
+    candidates.forEach((candidate: Object) => {
+      if (candidate === null || typeof candidate !== 'object') {
+        skipped += 1;
+        return;
+      }
+      const rule = BackupRepository.toHighlightRule(candidate as Record<string, Object>);
+      if (rule === undefined) {
+        skipped += 1;
+        return;
+      }
+      rules.push(rule);
+    });
+    return { rules: rules, skipped: skipped };
+  }
+
+  /**
+   * 把一条 JSON 记录按上游字段名转成 ReaderHighlightRule。
+   * 只用字段名对应取值，不整体强转，缺字段留空由仓储的 normalize 补默认值。
+   * pattern 为空的条目返回 undefined，由调用方计入跳过。
+   */
+  private static toHighlightRule(record: Record<string, Object>): ReaderHighlightRule | undefined {
+    const pattern = record['pattern'];
+    if (typeof pattern !== 'string' || pattern.trim().length === 0) { return undefined; }
+    const rule: ReaderHighlightRule = {
+      id: BackupRepository.readString(record, 'id'),
+      name: BackupRepository.readString(record, 'name'),
+      pattern: pattern,
+      sampleText: BackupRepository.readString(record, 'sampleText'),
+      targetScope: BackupRepository.readNumber(record, 'targetScope', 0),
+      enabled: BackupRepository.readBoolean(record, 'enabled', true),
+      position: BackupRepository.readNumber(record, 'position', 0),
+      textColor: BackupRepository.readNullableNumber(record, 'textColor'),
+      bgColor: BackupRepository.readNullableNumber(record, 'bgColor'),
+      underlineMode: BackupRepository.readNumber(record, 'underlineMode', 0),
+      underlineColor: BackupRepository.readNullableNumber(record, 'underlineColor'),
+      underlineWidth: BackupRepository.readNumber(record, 'underlineWidth', 1),
+      underlineOffset: BackupRepository.readNumber(record, 'underlineOffset', 2),
+      underlineSvgPath: BackupRepository.readNullableString(record, 'underlineSvgPath'),
+      bgImage: BackupRepository.readNullableString(record, 'bgImage'),
+      bgImageFit: BackupRepository.readNumber(record, 'bgImageFit', 0),
+      bgImageScale: BackupRepository.readNumber(record, 'bgImageScale', 1),
+      configName: BackupRepository.readNullableString(record, 'configName'),
+      fontPath: BackupRepository.readNullableString(record, 'fontPath'),
+      fontWeight: BackupRepository.readNumber(record, 'fontWeight', 400),
+      isItalic: BackupRepository.readBoolean(record, 'isItalic', false),
+      fontSizeOffset: BackupRepository.readNumber(record, 'fontSizeOffset', 0),
+      npLeft: BackupRepository.readNumber(record, 'npLeft', 0.1),
+      npRight: BackupRepository.readNumber(record, 'npRight', 0.1),
+      npTop: BackupRepository.readNumber(record, 'npTop', 0.1),
+      npBottom: BackupRepository.readNumber(record, 'npBottom', 0.1),
+      manualNineSlice: BackupRepository.readBoolean(record, 'manualNineSlice', true),
+      letterSpacingBefore: BackupRepository.readNumber(record, 'letterSpacingBefore', 0),
+      letterSpacingAfter: BackupRepository.readNumber(record, 'letterSpacingAfter', 0),
+      lineSpacingTop: BackupRepository.readNumber(record, 'lineSpacingTop', 0),
+      lineSpacingBottom: BackupRepository.readNumber(record, 'lineSpacingBottom', 0),
+      bgLengthOffsetLeft: BackupRepository.readNumber(record, 'bgLengthOffsetLeft', 0),
+      bgLengthOffsetRight: BackupRepository.readNumber(record, 'bgLengthOffsetRight', 0)
+    };
+    return rule;
+  }
+
+  private static readString(record: Record<string, Object>, key: string): string {
+    const value = record[key];
+    return typeof value === 'string' ? value : '';
+  }
+
+  private static readNullableString(record: Record<string, Object>, key: string): string | null {
+    const value = record[key];
+    return typeof value === 'string' ? value : null;
+  }
+
+  private static readNumber(record: Record<string, Object>, key: string, fallback: number): number {
+    const value = record[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  }
+
+  private static readNullableNumber(record: Record<string, Object>, key: string): number | null {
+    const value = record[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  private static readBoolean(record: Record<string, Object>, key: string, fallback: boolean): boolean {
+    const value = record[key];
+    return typeof value === 'boolean' ? value : fallback;
   }
 
   private static isSafeRootEntry(name: string): boolean {

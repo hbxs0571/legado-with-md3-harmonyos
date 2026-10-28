@@ -17,6 +17,14 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-10-29 N 端 r259 高亮规则 ZIP 备份与恢复（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`。预置两条规则（`hl_test_1` pattern=占位 textColor=-65536；`hl_test_2` pattern=测试 enabled=false bgColor=-16711936）写入 `legado_reader_highlight_rules` 后冷启。
+- **备份侧**：设置 → 备份与恢复 → 备份 → 备份到本地 → 保存 `backup2026-10-29.zip`。解压得 6 个根条目，其中 `highlightRule.json` 1349 字节，两条规则字段完整、与上游 `HighlightRule` 同名同义，`position` 按 0/1 重排。**结论：备份写出通过。**
+- **恢复侧**：构造 `restore-hl.zip`，内含 3 条规则——`hl_import_1` pattern=占位（与本地 `hl_test_1` 同 pattern）、`hl_import_2` pattern=新增关键字、`hl_import_3` pattern=`[`（坏正则）。预览显示「识别 1 个根条目；`highlightRule.json` 3 条」。点「导入此 ZIP」后提示「导入完成：保留 1 个 Android 条目；更新 0 本已有正文书籍的进度，并创建 0 本缺正文书目；高亮规则新增 1 条、覆盖 1 条、跳过 1 条无效规则。」
+- **恢复后存储校验**：`legado_reader_highlight_rules` 共 3 条——`hl_test_1` 保留原 id、name 被覆盖为「覆盖同名规则」、textColor 变为 -16776961（同 pattern 覆盖生效）；`hl_test_2` 原样保留（本地独有规则未被删除）；`hl_import_2` 新增，position=2。坏正则 `hl_import_3` 未进入存储。**结论：合并语义与跳过逻辑均通过。**
+- 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
+
 ## 2026-10-28 N 端 r258 阅读正文高亮规则设备验收（通过）
 
 - 在 HOS 模拟器 `127.0.0.1:5555`（API 26）完成面板可达、创建、正文命中、停用、冷启读回、滚动模式连续滚动与删除七项闭环，全部通过。详细步骤与像素数据见 `history/evidence/reader-highlight-rules-n-device-2026-10-28.md`。
