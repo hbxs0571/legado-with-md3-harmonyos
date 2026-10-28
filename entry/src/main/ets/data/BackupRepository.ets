@@ -1363,8 +1363,33 @@ export class BackupRepository {
     while (match !== null) {
       const start = match.index;
       const end = start + match[0].length;
+      if (excludedKeys.has(match[2] ?? '')) {
+        // 被排除的键独占一行时，连同该行的缩进与换行一起去掉，避免 config.xml 留下成片空白行
+        let lineStart = start;
+        while (lineStart > cursor && (text.charAt(lineStart - 1) === ' ' || text.charAt(lineStart - 1) === '\t')) {
+          lineStart--;
+        }
+        let lineEnd = end;
+        while (lineEnd < text.length && (text.charAt(lineEnd) === ' ' || text.charAt(lineEnd) === '\t')) {
+          lineEnd++;
+        }
+        const startsLine = lineStart === 0 || text.charAt(lineStart - 1) === '\n';
+        const endsLine = lineEnd === text.length || text.charAt(lineEnd) === '\n' || text.charAt(lineEnd) === '\r';
+        if (startsLine && endsLine) {
+          if (lineEnd < text.length && text.charAt(lineEnd) === '\r') { lineEnd++; }
+          if (lineEnd < text.length && text.charAt(lineEnd) === '\n') { lineEnd++; }
+          result += text.substring(cursor, lineStart);
+          cursor = lineEnd;
+          match = pattern.exec(text);
+          continue;
+        }
+        result += text.substring(cursor, start);
+        cursor = end;
+        match = pattern.exec(text);
+        continue;
+      }
       result += text.substring(cursor, start);
-      if (!excludedKeys.has(match[2] ?? '')) { result += match[0]; }
+      result += match[0];
       cursor = end;
       match = pattern.exec(text);
     }
