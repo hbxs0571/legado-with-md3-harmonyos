@@ -62,7 +62,8 @@ import { BookContentProcessRepository } from '../data/BookContentProcessReposito
 import { ReplaceRule } from '../model/ReplaceRule';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
 import { ReaderBookmarkEditor } from './ReaderBookmarkEditor';
-import { ReadTimeRecord, ReadTimeRepository } from '../data/ReadTimeRepository';
+import { ReadTimeRecord } from '../model/ReadRecord';
+import { ReadRecordRepository } from '../data/ReadRecordRepository';
 
 const EMPTY_BOOK: Book = {
   id: '',
@@ -227,7 +228,12 @@ struct Index {
   }
 
   private async restoreReadTimeRecords(context: Context): Promise<void> {
-    this.readTimeRecords = await ReadTimeRepository.load(context);
+    // 先把旧版扁平记录迁到会话层，再读会话渲染。
+    // 迁移是幂等的：旧存储迁移后会清空，重复调用不会产生重复记录。
+    await ReadRecordRepository.migrateLegacy(context);
+    await ReadRecordRepository.loadEnabled(context);
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
   }
 
   private getTotalReadTimeMs(): number {
@@ -237,30 +243,35 @@ struct Index {
   private async startReaderSession(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined || this.selectedBook.id.length === 0) { return; }
-    ReadTimeRepository.touch();
-    await ReadTimeRepository.start(context, this.selectedBook);
+    await ReadRecordRepository.start(context, this.selectedBook, this.selectedBook.chapterIndex ?? 0);
     this.readerSessionPaused = false;
     this.readerSessionLastSaveTime = Date.now();
   }
 
   private async pulseReaderSession(): Promise<void> {
     if (this.readerSessionPaused) { return; }
-    ReadTimeRepository.touch();
+    const chapterIndex = this.selectedBook.chapterIndex ?? 0;
+    ReadRecordRepository.touch(chapterIndex);
     const context = this.getUIContext().getHostContext();
-    if (context === undefined || Date.now() - this.readerSessionLastSaveTime < 120000) { return; }
-    await ReadTimeRepository.commit(context);
-    await ReadTimeRepository.start(context, this.selectedBook);
+    if (context === undefined || Date.now() - this.readerSessionLastSaveTime < ReadRecordRepository.autoSaveIntervalMs) {
+      return;
+    }
+    // 与上游 commitSessionInternal 一致：提交后立刻开新会话，避免自动保存的空窗期。
+    await ReadRecordRepository.commit(context);
+    await ReadRecordRepository.start(context, this.selectedBook, chapterIndex);
     this.readerSessionLastSaveTime = Date.now();
-    this.readTimeRecords = await ReadTimeRepository.load(context);
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
   }
 
   private async stopReaderSession(): Promise<void> {
     this.readerSessionPaused = true;
-    ReadTimeRepository.touch();
+    ReadRecordRepository.touch(this.selectedBook.chapterIndex ?? 0);
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
-    await ReadTimeRepository.commit(context);
-    this.readTimeRecords = await ReadTimeRepository.load(context);
+    await ReadRecordRepository.commit(context);
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
   }
 
   private async restoreReplaceRules(context: Context): Promise<void> {
@@ -3266,7 +3277,12 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.ALL_BOOKMARKS) {
           AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId) })
         } else if (this.profileSubpage === ProfileRoute.READ_RECORDS) {
-          ReadRecordsPage({ records: this.readTimeRecords, onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
+          ReadRecordsPage({ records: this.readTimeRecords, onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onRecordsChanged: async () => {
+            const context = this.getUIContext().getHostContext();
+            if (context === undefined) { return; }
+            const sessions = await ReadRecordRepository.loadSessions(context);
+            this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
+          } })
         } else if (this.profileSubpage === ProfileRoute.CACHE_MANAGEMENT) {
           CacheManagementPage({
             groups: this.cacheManagementGroups(),
