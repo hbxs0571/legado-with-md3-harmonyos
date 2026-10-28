@@ -1,5 +1,5 @@
 import { AppRoute, Book, BookMediaType, ProfileRoute } from '../model/Book';
-import { BookGroup } from '../model/BookGroup';
+import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { HomePage } from './HomePage';
 import { BookshelfPage } from './BookshelfPage';
 import { DiscoverPage } from './DiscoverPage';
@@ -2398,6 +2398,87 @@ struct Index {
     }
   }
 
+  /** 按完整草稿新建分组，供分组编辑面板提交。 */
+  private async addBookshelfGroupDraft(draft: BookGroupDraft): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.showUnavailableAction('无法访问书架分组存储'); return; }
+    try {
+      await BookGroupRepository.addWithDraft(context, draft);
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '新增分组失败');
+    }
+  }
+
+  /** 保存分组编辑面板的属性；名称变更需要同步改写书籍上的分组名。 */
+  private async updateBookshelfGroup(groupId: number, draft: BookGroupDraft): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    const group = this.bookGroups.find((item: BookGroup) => item.groupId === groupId);
+    if (context === undefined || group === undefined) { return; }
+    const oldName = group.groupName;
+    const nextName = draft.groupName.trim();
+    if (nextName !== oldName) {
+      const nextBooks = this.books.map((book: Book): Book => {
+        const names = book.groupNames ?? [];
+        if (!names.includes(oldName)) { return book; }
+        const updatedNames = names.map((name: string) => name === oldName ? nextName : name);
+        return BookRepository.withShelfMetadata(book, updatedNames, updatedNames.join('、'), book.customTag);
+      });
+      try {
+        await BookRepository.saveImportedBooks(context,
+          nextBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+        this.books = nextBooks;
+      } catch (error) {
+        this.showUnavailableAction(error instanceof Error ? error.message : '重命名分组失败');
+        return;
+      }
+    }
+    try {
+      await BookGroupRepository.updateSettings(context, groupId, draft);
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '保存分组设置失败');
+    }
+  }
+
+  /** 选择分组封面，返回新的封面路径；用户取消或失败时返回空串。 */
+  private async chooseBookshelfGroupCover(groupId: number): Promise<string> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return ''; }
+    try {
+      const group = await BookGroupRepository.chooseCover(context, groupId);
+      this.bookGroups = BookGroupRepository.getAll();
+      return group?.cover ?? '';
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '设置分组封面失败');
+      return '';
+    }
+  }
+
+  /** 清除分组封面。 */
+  private async clearBookshelfGroupCover(groupId: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      await BookGroupRepository.clearCover(context, groupId);
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('清除分组封面失败');
+    }
+  }
+
+  /** 拖拽后重排分组顺序。 */
+  private async moveBookshelfGroup(fromId: number, toId: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      await BookGroupRepository.move(context, fromId, toId);
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('分组排序保存失败');
+    }
+  }
+
   private async saveBookMetadata(title: string, author: string, category: string,
     description: string, remark: string, customTag: string, groupNames: string[],
     bookType: BookMediaType, fixedType: boolean): Promise<boolean> {
@@ -3100,6 +3181,11 @@ struct Index {
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
           onSetGroupVisible: (id: number, visible: boolean) => this.setBookshelfGroupVisible(id, visible),
           onRemoveGroup: (id: number) => this.removeBookshelfGroup(id),
+          onAddGroupDraft: (draft: BookGroupDraft) => this.addBookshelfGroupDraft(draft),
+          onUpdateGroup: (id: number, draft: BookGroupDraft) => this.updateBookshelfGroup(id, draft),
+          onChooseGroupCover: (id: number) => this.chooseBookshelfGroupCover(id),
+          onClearGroupCover: (id: number) => this.clearBookshelfGroupCover(id),
+          onMoveGroup: (fromId: number, toId: number) => this.moveBookshelfGroup(fromId, toId),
           onOpenBook: (book: Book) => this.openBook(book),
           onOpenBookInfo: (book: Book) => this.openBookInfo(book),
           onSearch: () => this.openSearch(),
