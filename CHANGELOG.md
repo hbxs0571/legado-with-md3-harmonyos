@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-28 护眼设置分类门控修复
+
+- 护眼六键归 `themeConfig` 分类，此前备份侧写入门控误用 `readConfig`、恢复侧又放在 `restoreReaderSettings()` 内被该函数的 `readConfig` 早退挡住。现改为备份按 `themeConfig` 门控，恢复由新增的 `applyEyeProtection()` 独立处理。
+- 修正 `config.xml` 骨架：骨架必须总写出（书架布局与主题配置要往同一文件 upsert），但其中约 25 个阅读配置键改为受 `readConfig` 门控。此前无条件写入，使「排除阅读配置」在归档目录没有 `config.xml` 时完全失效。
+- `filterAndroidConfigXml()` 删除被排除键时一并去掉其独占行，`config.xml` 不再留下成片空白行。
+- N 端模拟器按「归档目录有/无 `config.xml`」两种前置、排除项四种组合逐组核对 `config.xml` 键集合与恢复后护眼实际值，全部符合预期；E 端待真实设备复验。
+
 ## 2026-10-28 书架布局与排序（r250）
 
 - 书架增加列表/网格、列数、标题行数、封面阴影、分组页签样式、隐藏空分组及全局排序设置，并使用本地偏好保存。
