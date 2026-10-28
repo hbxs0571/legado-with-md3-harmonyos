@@ -3,7 +3,8 @@
 ## 已接入能力
 
 - 根工程通过开发依赖安装 `@ohos/hypium` 1.0.25；`entry` 模块新增 `ohosTest` 测试目标和 TestAbility。
-- UI 操作使用 HarmonyOS `@ohos.UiTest`，依据控件文本等语义属性查找、点击和断言，不经过截图 OCR。
+- UI 操作使用 HarmonyOS `@ohos.UiTest`，依据控件文本等语义属性查找、点击和断言，Hypium 用例的断言不依赖截图 OCR。
+- 人工导航与点击验证仍按 [验证记录](VALIDATION.md) 的 OCR 规范执行：先识别再点击、点击后重新识别确认到达。两者不冲突——Hypium 走控件语义，人工验收走 OCR 消歧。
 - 首个冒烟用例启动 `io.legado.harmony` 的 `EntryAbility`，等待后断言“首页”或首次启动向导“欢迎”至少有一个可见。
 - UI 测试 HAP 已用当前 DevEco SDK 成功构建；该构建没有运行测试用例，也没有安装测试 HAP。应用声明的 compatible/target API 仍为 12。
 

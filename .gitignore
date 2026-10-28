@@ -33,3 +33,6 @@ assets/original-project/
 project-resources/
 backups/
 screenshots/
+# 仅供本机对照的 E 端文档快照与开发计划，含设备地址、书名与 E 盘路径
+docs/e-reference/
+docs/dev/

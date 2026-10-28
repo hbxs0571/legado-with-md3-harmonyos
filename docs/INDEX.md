@@ -13,6 +13,7 @@
 | 本地阅读行为 | [阅读模块](READER.md) |
 | Android ZIP 兼容范围 | [备份恢复](BACKUP-RESTORE.md) |
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
+| 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
 | 构建和验证记录 | [构建说明](BUILDING.md)、[验证记录](VALIDATION.md) |
 | Hypium / UI 自动化测试 | [测试目标与运行说明](HYPIUM-UI-TEST.md) |
 | 资源许可与来源 | [资源许可清单](RESOURCE-LICENSES.md)、[来源哈希表](RESOURCE-SOURCES-SHA256-2026-10-26.csv) |
