@@ -1,7 +1,7 @@
 [
   {
     "path": ".gitignore",
-    "sha256": "08f925d6a78e0ff47941cc4fd9642316035f2f29a617cc002c0c32abd73c1cc0"
+    "sha256": "81e947dbb932cf135e0115215d3a88cd1c719ad73547b8759b362e29fe8980ed"
   },
   {
     "path": ".npmrc",
@@ -21,15 +21,15 @@
   },
   {
     "path": "CHANGELOG.md",
-    "sha256": "e61c8829d16725114d91e665ded625b067543edacf619d35a07c3ed3e64dadd5"
+    "sha256": "5367c3cd35553ebf7ecf07ece2aaeca431cdc549f3e09504511b2a6d71c31eb7"
   },
   {
     "path": "DISCLAIMER.md",
-    "sha256": "242ae3a37cc55bfdd7cdd83bc55d447ce2eea4f2f8c35426bb6dbf24d8804edc"
+    "sha256": "a98bf74acea8bdd2db47a86fade2733909313054159e3dc1ac00421fd8aaf616"
   },
   {
     "path": "LICENSE",
-    "sha256": "a7c8433a57dbf0bc953a1b74d6b2f723f14251fc54bb85f83715889675b373ed"
+    "sha256": "35d3f26265f7c262a524602f72efda71f69d390086d6d0b74c70c8b07251227c"
   },
   {
     "path": "NOTICE.md",
@@ -41,15 +41,15 @@
   },
   {
     "path": "README.md",
-    "sha256": "4d7da7b1e62b88beeeebed7786934b39e6a7ff4998c885cd5fedfeb9e80fd37b"
+    "sha256": "1bb367e27720fcf5a83b937651751fa267c97f255232765915f3f75965da61bc"
   },
   {
     "path": "SECURITY.md",
-    "sha256": "c5765b4a7f77efb0a6419c19edabfcfa5b0d3efea76bbc597502f97da0089b53"
+    "sha256": "f10bb68d22cf055d88b38d5dc97dd999979e713cd622f661ea5ad99fdcc07091"
   },
   {
     "path": "TERMS.md",
-    "sha256": "6a22b8c6c4ff58308f14c55433b947c3d88d7a8700f90e65d6a41e5dbc7cfe1c"
+    "sha256": "a7eae45f0166655bd45272cc3e83ada6539b359d4cbcf25319f9bac93a9faa3a"
   },
   {
     "path": "build-profile.json5",
@@ -65,11 +65,11 @@
   },
   {
     "path": "docs/BUILDING.md",
-    "sha256": "6445931c9b78057210c47548dd7107da30e339e7825a6f9a74706ae8ab0a1a30"
+    "sha256": "d6dd22d521e49c5a9e11337b81ea8cb0b2e65b15eba002da133be02aa82c5cc9"
   },
   {
     "path": "docs/GLOSSARY.md",
-    "sha256": "e62f8d5d98b1a1554814f5c1caf7a24824dc0a21fb5a1413b923d7a22735aeda"
+    "sha256": "22935f904a8a5dc1e831385aa55048064741387cc0816c709d66dc784b02e3b3"
   },
   {
     "path": "docs/INDEX.md",
@@ -77,11 +77,11 @@
   },
   {
     "path": "docs/KNOWN-ISSUES.md",
-    "sha256": "fd68cb6bcf1c1f014f8b4a262b0ec4b345c2d2c81d8e4bcf3fa41a327e074820"
+    "sha256": "9789b3d468fddd98ea6de6bbcc1cff830c4da29b3d2f88872fe1dc05f86bfe74"
   },
   {
     "path": "docs/MODULE-STATUS.md",
-    "sha256": "7954789c9f0547a7016e865e24b13d0981cf3b851989e8fa0efd474dceb3cc0e"
+    "sha256": "9d38e9e481d2757c4e8d7d5a8c3a91fc3a7b47a930f9604282bb8dafefbcbcbd"
   },
   {
     "path": "docs/MODULES.md",
@@ -89,7 +89,7 @@
   },
   {
     "path": "docs/PROGRESS.md",
-    "sha256": "fc72aeeefc96988a6d6912a3a4c251db72328e2b676624b1564776e4e5f129ba"
+    "sha256": "ac44fe33ff329c396beac8961dca53b710099d58fa715bdaadaad379a3c05c74"
   },
   {
     "path": "docs/PROJECT.md",
@@ -113,15 +113,15 @@
   },
   {
     "path": "docs/UI-PARITY.md",
-    "sha256": "d826472ee702793b5b8d80cffd17f9bb4b4abef2fa3fb4d3cf218ca4873b85d2"
+    "sha256": "6ea55ef834a6cf5a4b7cc43e09d7a2d4111556b7f9152c9529bc587f5d54f39c"
   },
   {
     "path": "docs/VALIDATION.md",
-    "sha256": "4357ddb1733715031548b30fff39cf980b86c845d17008c3957202b0a6ea7964"
+    "sha256": "44965f3a7a06fb74e9524f46f92aaceca6d278381c4a2bb0758b2d0cd01e44cb"
   },
   {
     "path": "entry/build-profile.json5",
-    "sha256": "610284e1783e32207be1092b64076982e1ed0ac45dc5b831805d86865feb1a37"
+    "sha256": "46d1b87a9913197745942b7aad13d81bf029e71fd07436ed5cf5bfbbb15d01eb"
   },
   {
     "path": "entry/hvigorfile.ts",
@@ -129,7 +129,7 @@
   },
   {
     "path": "entry/oh-package.json5",
-    "sha256": "6ada36ae31a5b9ccfd0d11bfa3df50969a604b5d0e3eda330068b6bbf8d6865e"
+    "sha256": "71933db9e24e798ad9f33feb678e301db6569e2e7eb6ec9f73f8db274a4379e2"
   },
   {
     "path": "entry/src/main/ets/components/AppGlyph.ets",
@@ -137,7 +137,7 @@
   },
   {
     "path": "entry/src/main/ets/components/BookCard.ets",
-    "sha256": "6e225d12d5f1262a99f74df09ccdf319c395776bd370707c3dc9cbd4043f185c"
+    "sha256": "c678f35860be7774ccf560bd858ab53af00fe3ac365c5724dae33935883f723e"
   },
   {
     "path": "entry/src/main/ets/components/BookCover.ets",
@@ -149,7 +149,7 @@
   },
   {
     "path": "entry/src/main/ets/components/PageHeader.ets",
-    "sha256": "17cba6a3ab0b9e2984d7d9e38d9d85ec793f28ef7114a7b78271ccb11f2d9927"
+    "sha256": "3201a1c3f0580dcb1465952386d7d503f67aac909596e7ee1ac6a15cdaa0d964"
   },
   {
     "path": "entry/src/main/ets/components/ProfileUiMetrics.ets",
@@ -157,11 +157,11 @@
   },
   {
     "path": "entry/src/main/ets/data/BackupRepository.ets",
-    "sha256": "e5c9349193bdb7f6551805459b82827828ae8c67b3e18d1d35dbfd5b7d281d8c"
+    "sha256": "c8f6de611fd85ee07cd81f91e699ed24940f83f5c552c84cbf5684f020e57ee4"
   },
   {
     "path": "entry/src/main/ets/data/BookContentProcessEngine.ets",
-    "sha256": "b88dd9fcd44b99ed923b3ac474a3426f4cd0b07d1b0227d638c363a35d6fe55d"
+    "sha256": "e8c758d9d7243d3ae043576ae391a4cb501c1152429119bb24a315d5380ce3c4"
   },
   {
     "path": "entry/src/main/ets/data/BookContentProcessRepository.ets",
@@ -169,15 +169,15 @@
   },
   {
     "path": "entry/src/main/ets/data/BookGroupRepository.ets",
-    "sha256": "7ac69fb8b780c2e8c4a92fb832ca95664d0509bcdd4496f174951f07bee7fcbf"
+    "sha256": "43bbd5922f7f77172095a90d20dc83af49070774f29ebd8f1c2592fadb470e7d"
   },
   {
     "path": "entry/src/main/ets/data/BookRepository.ets",
-    "sha256": "76359ef4bc8f12c30f59b1fd98028d3a1b676922a4170b471c0100d7a5ed8d4f"
+    "sha256": "a1ed564b6d30f6de7a994cd9d895960fb44a7ebb5a51b9d150e2f42f3091f544"
   },
   {
     "path": "entry/src/main/ets/data/EpubRepository.ets",
-    "sha256": "641fab7f1af9eccf7e337953ff5650a48b448a01cef0c7ba6a62d2e57f4bd6ae"
+    "sha256": "2c7947e2202d9b1bc8edb31408aee886cf47762dcbdb1a6ffbca1467cd620cb2"
   },
   {
     "path": "entry/src/main/ets/data/HomeDashboardSettingsRepository.ets",
@@ -201,7 +201,7 @@
   },
   {
     "path": "entry/src/main/ets/data/ReaderBookmarkRepository.ets",
-    "sha256": "ee03abdcd99b3044665a26930439a1f8b048a4712e0527900e93a96974be4f1f"
+    "sha256": "75c8381e96aed9fcbbead81d96985394987cfc40faf9b757a04d331d051eeff4"
   },
   {
     "path": "entry/src/main/ets/data/ReaderMarkingRepository.ets",
@@ -217,23 +217,23 @@
   },
   {
     "path": "entry/src/main/ets/data/ReaderSettingsRepository.ets",
-    "sha256": "ceb3c40e0d1db5efddf77d94e479ec46de90098d07f73abcd70e220be907aece"
+    "sha256": "299f8a77f9fed36f4d3439e0f63c19c965e5ab526add65c5f211f0451ca2054c"
   },
   {
     "path": "entry/src/main/ets/data/ReplaceRuleImporter.ets",
-    "sha256": "40712f287e5c971866e65c63d6f080b442c924e6aabe9c20106b7c9b1244f7a1"
+    "sha256": "c115c84018b8b7a15327a427951adf0275b6084dd67367155668abaf61b166d7"
   },
   {
     "path": "entry/src/main/ets/data/ReplaceRuleRepository.ets",
-    "sha256": "dd409da299f43113135052df1ab395f1da47079f327b0677f59de147c80280f9"
+    "sha256": "b34da10d84196a21262b7d7993b89dc518e5bbbde46623294cae4d490bc2002f"
   },
   {
     "path": "entry/src/main/ets/data/TxtTocRuleImporter.ets",
-    "sha256": "84d40b8e70acbf177445f6c5260c00a070a044dfb37ad3e8d83d825c40cbab73"
+    "sha256": "7ee4cbfbadbc18ab8fe0393ea11588609cd0835c4494c61bb720511a5dd22af7"
   },
   {
     "path": "entry/src/main/ets/data/TxtTocRuleRepository.ets",
-    "sha256": "da047a5fe4ed4948f2c12f7ffc19b5ac864608f3a6bb44069266959d89e9d328"
+    "sha256": "a54960abd11a9bb39c7d44c9aaffaeb9c9523f75d53ce1c85c0e505d2361965d"
   },
   {
     "path": "entry/src/main/ets/entryability/EntryAbility.ets",
@@ -241,15 +241,15 @@
   },
   {
     "path": "entry/src/main/ets/model/Book.ets",
-    "sha256": "3dbbb671a80d52a68bc59eddaaebee0c95135d5ee924bd7c325d8ba72de51a1f"
+    "sha256": "a0720b8a819dc1f0d2d5b1db2d9f7956868e1b73589ca378a3f47fdab3e80b71"
   },
   {
     "path": "entry/src/main/ets/model/BookContentProcess.ets",
-    "sha256": "d99a5c50bd5ef4fde861bdb8d974d761ec4d6e3b0a85e94fd5f5c9abefc59071"
+    "sha256": "f7f81388e80540c52ef02c950f394718c1d4daf5dd65741f3f4d787226c0fca6"
   },
   {
     "path": "entry/src/main/ets/model/BookGroup.ets",
-    "sha256": "9fd6c80a8b0f8227a227dee728a9b93739c08a151b632b891e764dbaf7564bca"
+    "sha256": "a7c16b1b41cf41defe87d976dc8afe145d9c829bf8b510940948c3b18a0c4871"
   },
   {
     "path": "entry/src/main/ets/model/ReadRecord.ets",
@@ -257,7 +257,7 @@
   },
   {
     "path": "entry/src/main/ets/model/ReaderBookmark.ets",
-    "sha256": "ee6dabe24c7d1ea47fdc8bce8dcc6424bfc6879e5905c1b8bc2a51aabafefb20"
+    "sha256": "a9fdebca45ac627ca710524e7897495b8c8b86a56069246910276f8494a4a57d"
   },
   {
     "path": "entry/src/main/ets/model/ReaderMarking.ets",
@@ -269,11 +269,11 @@
   },
   {
     "path": "entry/src/main/ets/model/ReplaceRule.ets",
-    "sha256": "ddcb8ac29a1b71b140f212115087702cd6c6590906f90f2c6aecb2b115cd2e7f"
+    "sha256": "71e6506fe9fc9dfe211411f0d55b651e7ff0332185d090e7b75a0de23605ec84"
   },
   {
     "path": "entry/src/main/ets/model/TxtTocRule.ets",
-    "sha256": "1f5c1ff44b5bece5b0e16e667b22f26e5ffec4c6a8074e52bdb200b2ffe36af2"
+    "sha256": "66cb63cb8df091907c9a1eda8b3686e4aaec858e23b3a2bad53c981545c161dc"
   },
   {
     "path": "entry/src/main/ets/pages/AppAiSettingsPage.ets",
@@ -313,15 +313,15 @@
   },
   {
     "path": "entry/src/main/ets/pages/BookInfoPage.ets",
-    "sha256": "6bcd8d6813c140266dc4ef20a32ca2f6e085e457feec624dd1d8c63c1ff2c24c"
+    "sha256": "c5fd7eddb12a600b15ae169af1cccdab93eb777d9624f91d1a1f837424c2d71d"
   },
   {
     "path": "entry/src/main/ets/pages/BookshelfPage.ets",
-    "sha256": "945c92689a2e4d0e637e18381a7548a6c48a6ffe0ce27696f8e9fbb383a33e37"
+    "sha256": "794dd92d2427239a313b05bc93b116ba594094e27bbfec1734465244a9973a7b"
   },
   {
     "path": "entry/src/main/ets/pages/CatalogPage.ets",
-    "sha256": "45068b1d3eea2d228f306201b2795a8135d6ad763d2f7d8fccd264742cae102b"
+    "sha256": "330e1ebc3c3d1429792d45fdb7c22e7a283666fa373192c27ecf3dcf9a95ab6e"
   },
   {
     "path": "entry/src/main/ets/pages/DiscoverPage.ets",
@@ -333,15 +333,15 @@
   },
   {
     "path": "entry/src/main/ets/pages/HomePage.ets",
-    "sha256": "684dc9564afe5c0e9a85d190ed1c9aad1d1e0b538d6eed65509fca63bc7f9988"
+    "sha256": "ecbbb9190e2eab4e73f3493c8c356dd302a35b0d93b7aff93056f60bc04afe05"
   },
   {
     "path": "entry/src/main/ets/pages/Index.ets",
-    "sha256": "4acda55c7ea73e1e46fd80e5983e7c26c9810f0c7c5073188d01c47add9d16f5"
+    "sha256": "f2d2ef769254c974b3070c72485885e402fd9212ddbd1dcfc77f746a5df4ec5a"
   },
   {
     "path": "entry/src/main/ets/pages/LocalReaderPaginator.ets",
-    "sha256": "db2ee67bb018204604c729c4a3539a3839fad4aa1f6fbfecf9c8cdc265ba6746"
+    "sha256": "bdf6a7344dc096f6494775f703abec46ff1979ee0ab5679bd32ff9cbc74d07fe"
   },
   {
     "path": "entry/src/main/ets/pages/OnboardingPage.ets",
@@ -361,7 +361,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/ProfilePage.ets",
-    "sha256": "049845e1a358b114d1206136ff48fd5c6db2790bc9d5f743c56f04d8f3319782"
+    "sha256": "3fe8ab3fff81985f21fe1f81d2ea448813f3c72b1edc02edee72329716f00736"
   },
   {
     "path": "entry/src/main/ets/pages/ProfileSubPages.ets",
@@ -373,7 +373,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderBookmarkEditor.ets",
-    "sha256": "b4b38130201dd9358dec61444479e5ca6d57d611ef602cab706703ab2b919661"
+    "sha256": "e2dff408350a3d008c09f72b4af462c8e19597ffaa14a15d1b4f508ce454aca7"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderMarkingEditor.ets",
@@ -381,7 +381,7 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderPage.ets",
-    "sha256": "3399d22398194ca4c8999feefbc0e544ee5f83a2efca87f34ad1b25e14aa5efe"
+    "sha256": "5bd3499836cab9a5c1655f0b7877c0a2936c83a54501f3d531a7119df2aea943"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSearchPage.ets",
@@ -389,23 +389,23 @@
   },
   {
     "path": "entry/src/main/ets/pages/ReaderSettingsPage.ets",
-    "sha256": "90829d167012ce003e99c191bcda7a3ca5c78d3aff0eb482f1e27ad79e5031ae"
+    "sha256": "dc3d1516493b2f6d02cf9a52e2a1f4c1bba6f909f02a9fdb71cb16eed57b9311"
   },
   {
     "path": "entry/src/main/ets/pages/ReaderTextProcessingSheet.ets",
-    "sha256": "9f8bdbb7054b275d76f006d2f188758c4072431f0f39f1baa57c24072a9d8dde"
+    "sha256": "4ef8f34984a352153a67b629fbd1e3e0b59774fd26012ac2fffff4aa18e6454b"
   },
   {
     "path": "entry/src/main/ets/pages/SearchPage.ets",
-    "sha256": "4775e889464d8d98dd2d45ce918ee9a90048e393ed08f1c80a3332e19e41dbb9"
+    "sha256": "26eea94dd16199e76a82d4d3fbe2818121e81b6dff981302f0e2971f3263fefa"
   },
   {
     "path": "entry/src/main/ets/pages/SubscriptionPage.ets",
-    "sha256": "c603642963cee137a7b613ca9603380ad25c91bccb060b1eca96037118d204a9"
+    "sha256": "76aca67ea7ee24372addd4ddca619a790caf5e8416e71d975b7f225ded2fe5bb"
   },
   {
     "path": "entry/src/main/ets/pages/SubscriptionSubPages.ets",
-    "sha256": "832777253dcfd72675d432334b48605039c1843aac6e306c1304b9d2c5f71e13"
+    "sha256": "c31eaa6f07e8ce6396dc7a5eac48412c03223b2fe619795cb672d76db1cea7cf"
   },
   {
     "path": "entry/src/main/ets/pages/ThemeSettingsPage.ets",
@@ -445,11 +445,11 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_add.svg",
-    "sha256": "9736dbb69de010d02da53c3b42f7644e1bd8279f8622d93e01e2bb99561483c5"
+    "sha256": "9bc61a0852fad766aba5b6fc3ee39f7986f07706e36723bc841dc45356e85cc2"
   },
   {
     "path": "entry/src/main/resources/base/media/app_anim_speed.svg",
-    "sha256": "fb68d4d1b76dd9278412c52c8a686a4d7417151c6dc0bf6683fa1c678c782630"
+    "sha256": "6b56c7f684fc40897ba369aebe6bded673b6c5ba544ca957eceec70b3b9cf57f"
   },
   {
     "path": "entry/src/main/resources/base/media/app_book.svg",
@@ -457,11 +457,11 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_bookmark.svg",
-    "sha256": "fad14f70bc5fec5d1b1c10a8897f4441ccb09df61024317af4df0d2d29b4900c"
+    "sha256": "9ec4167075ea9b452c1a2732e7cb78eecdfe0c3f860ecdddf3cfcf5688c30053"
   },
   {
     "path": "entry/src/main/resources/base/media/app_bookshelf.svg",
-    "sha256": "164f54b757891496897cc880be22745c9ca2dc04f5f63de599bcb456587504f1"
+    "sha256": "585b400c15b88a8a4ec4295b740ae445856ac18e3b79e748aa8bbba53c3743b9"
   },
   {
     "path": "entry/src/main/resources/base/media/app_chart.svg",
@@ -469,15 +469,15 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_check.svg",
-    "sha256": "6ee46b0979043d71bbe894c5f2beb8fa6f0fb0a3c98ed5155d8ef86826d10fc8"
+    "sha256": "1176341446168cbff0bbf0a647c02e3561a70bb5bb36c3f1191b6a641d0256fb"
   },
   {
     "path": "entry/src/main/resources/base/media/app_clock.svg",
-    "sha256": "0e99057921b47350066ca961ffc8c3c85e04026d5e945d0c933542cf5d7e8c10"
+    "sha256": "b7e9c1b895e1e446eaaac4951c7be5d3d3560ec5e2330293190c2846573e92c4"
   },
   {
     "path": "entry/src/main/resources/base/media/app_cloud.svg",
-    "sha256": "ec1f0ade8b14dab690db0eea0d556c859e4622a649cb13d71508048c3354e6de"
+    "sha256": "d1e133fe27e753fda475f3429619f591b42cb4f25b9950564782f0b555187c1f"
   },
   {
     "path": "entry/src/main/resources/base/media/app_cloud_download.svg",
@@ -493,23 +493,23 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_code.svg",
-    "sha256": "4deb340097489dd1d8236f57ae11fd4706889c4cf230848fdf227742f8d687c0"
+    "sha256": "86f07e5699151ad68b77c3de1b316c0cc05add9ef4133abf160d8968a648764f"
   },
   {
     "path": "entry/src/main/resources/base/media/app_daynight.svg",
-    "sha256": "bb3122eabdf1f3bf69ca8b21d788c59027c2a060c79b51ffcd26528b73b4844e"
+    "sha256": "d6a8ec8209010016ee4b3fcbf5535d0119649d4c15b719007307e36d1caa89cf"
   },
   {
     "path": "entry/src/main/resources/base/media/app_discover.svg",
-    "sha256": "b1023562fe11176da9ab0c061bd27fb4cfdf03919f55187d6d255a2a8fbf9f5d"
+    "sha256": "e6afb6ed36e775934408b43b989fa69a6d3cc9f856a122a6d9d680c4801a21c5"
   },
   {
     "path": "entry/src/main/resources/base/media/app_download.svg",
-    "sha256": "acd2c53f3fc99c9373be7cb618a729a5f689d0121375eb5e2bc0324d914c7005"
+    "sha256": "3d7a9f0f10d29e770c141038719b367ad252d4a96b09464fe2371404ff69a2a0"
   },
   {
     "path": "entry/src/main/resources/base/media/app_edit.svg",
-    "sha256": "906d16d0fce9f7e2ca87e44cba4aca8e1d8aaf030086ca57a898f4b43a2ee4a9"
+    "sha256": "444a7f578f45fbc13fb9876dfe80ff915806dba4c906844742606bcf5de69936"
   },
   {
     "path": "entry/src/main/resources/base/media/app_favorite_star.svg",
@@ -517,7 +517,7 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_folder.svg",
-    "sha256": "e8eaecf5efa39352a8a300fc774d5605fff0e275c39de2e51678f0b02d6ee465"
+    "sha256": "e6b74199f79cf7ddd1b97abc3da4d5c1743ebe6d48558e7ea5ef69d8ac34df66"
   },
   {
     "path": "entry/src/main/resources/base/media/app_goal.svg",
@@ -537,7 +537,7 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_info.svg",
-    "sha256": "c04331c23a0d499a479fcf57f785186437b4f5c37898e1f61a1b0f0e854d4d14"
+    "sha256": "cc61c7e55984c5f25879d64bbee5a000ff2e324913602a1382d1bd5fea14c357"
   },
   {
     "path": "entry/src/main/resources/base/media/app_label.svg",
@@ -545,15 +545,15 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_list.svg",
-    "sha256": "e5246f4d71ca579b031c460dfc6bacc6840327760f36e18f2d39bfb461efcd5c"
+    "sha256": "b0b992de0c00baa25ee4132096767e96b2569a516271d8813bf044aea2334a36"
   },
   {
     "path": "entry/src/main/resources/base/media/app_locate.svg",
-    "sha256": "ecaa7d5bff0e470edf3f81058e51102e0b80b536057d53e2be424f67d8a76a9c"
+    "sha256": "d86b6b9d08532f975158e421256e7d5e791d5c79522ec8b167bb35daeeaeddbf"
   },
   {
     "path": "entry/src/main/resources/base/media/app_logout.svg",
-    "sha256": "9cd97945b920b8dcb06856bdac40946dc1d27947cc9e05eed21d4e205676f50c"
+    "sha256": "46238041165f306cc1ca286fd86282337a4bc5b31a2d0bec1ab13ea646cf11fd"
   },
   {
     "path": "entry/src/main/resources/base/media/app_moon.svg",
@@ -561,11 +561,11 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_more.svg",
-    "sha256": "7fbc138dfa028b36f488f2a5abeb604a3afcafafb7664291f64b0538b16902bd"
+    "sha256": "0854b65bb18c6c22be9cbaa7d9ba4b10a1568ffc904178f5b5d002b91be7cc2f"
   },
   {
     "path": "entry/src/main/resources/base/media/app_padding.svg",
-    "sha256": "b291b5ac004198ceb714d571a3f87bde98cd8c3378dc21dd8c6df088bbb3a2e0"
+    "sha256": "ec8ed77f0c88f73e33f7b8c9f7370e381122eafb11e0e8c74532bdfff3ee0c10"
   },
   {
     "path": "entry/src/main/resources/base/media/app_pencil.svg",
@@ -573,19 +573,19 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_previous.svg",
-    "sha256": "2769558b66d88a0c986914624eed22b5748c9fbd0f985f2709cf32ccf4b87c2d"
+    "sha256": "9851a701f5a82dd6c485059127ce4d68abbf11d24125b352376475ab33260970"
   },
   {
     "path": "entry/src/main/resources/base/media/app_profile.svg",
-    "sha256": "9e8d8cfe32e58e283f8aa34fabe7d81d5c15bbb044f19fdc021d7e64b7e1281a"
+    "sha256": "acb878a3afdc6c467754ad6f256ad0dedecb1b92c7d49435926b1af764ec025a"
   },
   {
     "path": "entry/src/main/resources/base/media/app_reduce.svg",
-    "sha256": "c33fc5c2b31be799f9057070bbf213d1cff16c31501e2e31e1f605e5b2a8b7c4"
+    "sha256": "3ad439e2b8ab85086aa5410365c57b0e9be53fe4193d2f5cc29c6072d090a156"
   },
   {
     "path": "entry/src/main/resources/base/media/app_refresh.svg",
-    "sha256": "1ddba17264cfff1049930fc94b42107e399344d27439acb6a3c5cb4363586fa7"
+    "sha256": "33a5ff7d7462c05b16e38e8b7854fcb52256ffd4e246488a0285b7e5138ded4c"
   },
   {
     "path": "entry/src/main/resources/base/media/app_rule_subscription.svg",
@@ -593,15 +593,15 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_search.svg",
-    "sha256": "d5b8388c651b36a272f3d7f597f4b85664ce1ed402a08d83b83f5bb23e8318e2"
+    "sha256": "56d967bdc6a9b62a74e254a3d97e2400139ab1b93bc4334d8676077d48e576cc"
   },
   {
     "path": "entry/src/main/resources/base/media/app_send.svg",
-    "sha256": "a1253bf49bd6eae58dd6cf2a4471fc35bb1295399411a6892c5393953c02b8d7"
+    "sha256": "06f26becc2412181bf0eaa207964f3f8147d1115304959bf792d11de03306424"
   },
   {
     "path": "entry/src/main/resources/base/media/app_settings.svg",
-    "sha256": "3ed29c384de30ce510eb2334220b27313b7d4d60c81e2a299a804483f2e962c8"
+    "sha256": "beb5f881c4a4106ebb456e4d033003048385a337413f01e1aab37210f3b13c91"
   },
   {
     "path": "entry/src/main/resources/base/media/app_share.svg",
@@ -609,39 +609,39 @@
   },
   {
     "path": "entry/src/main/resources/base/media/app_sort.svg",
-    "sha256": "015fcb4a92c23a62e431305c7838992b765d1dd6e8dca99904f3c9fcc6277372"
+    "sha256": "00443bd730a12422afe36b8b05745142568e6236d96f8a171d8a5af85a4a5376"
   },
   {
     "path": "entry/src/main/resources/base/media/app_sparkles.svg",
-    "sha256": "3db6aa74f730497052b71e299391936d6dcb826e8921c1d13e269699382391f5"
+    "sha256": "85ef2a88d938268685034018d111e4a77e8cdb2618b6824c6043fb2d421769f1"
   },
   {
     "path": "entry/src/main/resources/base/media/app_star.svg",
-    "sha256": "6249104807a14f8dd69519dea1739c517db555af71bcd8e4714a017f3839ecfa"
+    "sha256": "aa6ab6dff7617c790bca59e97930ccf0bc0f9f466ea90c7ab208e8962ae1bb4e"
   },
   {
     "path": "entry/src/main/resources/base/media/app_stop_square.svg",
-    "sha256": "37ecaabb14b99c05b1fbf5828ad7891fc9835b9de34530e29c99db9ba79f6312"
+    "sha256": "fd6f07602e32bfdadb55cbb0236f724f379a071f4f122d85814e194a78bfd1a5"
   },
   {
     "path": "entry/src/main/resources/base/media/app_subscription.svg",
-    "sha256": "59117581ac97d292c1b49b2814adb382377805e1139d9a7b4b407163a747babb"
+    "sha256": "2cf0d68e68245a9f0aa809c698306803d0000a659cdfe716294973d2dabd20af"
   },
   {
     "path": "entry/src/main/resources/base/media/app_swap.svg",
-    "sha256": "52d03ff58741dbfefaf68c8f55a81cab98c3eb440235d0d5dc4109f132451277"
+    "sha256": "73241f986618cc6c626308fcd9a152281b8a0aa9e40e8312c03138774f167485"
   },
   {
     "path": "entry/src/main/resources/base/media/app_tag.svg",
-    "sha256": "b9c9ccab60e565f1d577536befffd06534ae23340c3d6b0c425e3e754aaaf92b"
+    "sha256": "cfe0e8bf32de2c2c91dcaa0227fa308490f5bb9c30815487a2be34366c566980"
   },
   {
     "path": "entry/src/main/resources/base/media/app_visibility.svg",
-    "sha256": "82eadecfba7e7f9a444d203540e6db0128c5823fd4534054b5dbf002583e5068"
+    "sha256": "6770066d2ff9de23fe06d49c17e0eee7aeed7825e699393080ecdcc14235bd9a"
   },
   {
     "path": "entry/src/main/resources/base/media/app_web.svg",
-    "sha256": "1215909dadeb3fa3fa63ba2dda3b24809175531a5ee9074380f2c3258ea772ef"
+    "sha256": "ab8296a7c43698ffb4d86786ea4b540857aacf33ef6d446a155f804e1c7dc378"
   },
   {
     "path": "entry/src/main/resources/base/media/file_picker_arrow.png",
@@ -981,11 +981,11 @@
   },
   {
     "path": "entry/src/main/resources/rawfile/licenses/GPL-3.0.txt",
-    "sha256": "a7c8433a57dbf0bc953a1b74d6b2f723f14251fc54bb85f83715889675b373ed"
+    "sha256": "35d3f26265f7c262a524602f72efda71f69d390086d6d0b74c70c8b07251227c"
   },
   {
     "path": "entry/src/main/resources/rawfile/txttoc/builtin-rules.json",
-    "sha256": "a9b612ea996485bb99f67b3e25792602a8354d4abbc4fa74537395dc38375394"
+    "sha256": "7af42b72fee4c44f8d213edd237e17710c916875037634bcc94ce19c41333a7c"
   },
   {
     "path": "hvigor/hvigor-config.json5",

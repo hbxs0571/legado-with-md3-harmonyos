@@ -908,6 +908,7 @@ export class BackupRepository {
         current.readingAnchorEnabled,
       swipeToAddBookmark: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'swipeToAddBookmark') ??
         current.swipeToAddBookmark,
+      selectText: current.selectText,
       maxLengthWithNoToc: Math.max(3000, Math.min(100000,
         BackupRepository.readXmlInteger(`${directory}/config.xml`, 'maxLengthWithNoToc') ??
           current.maxLengthWithNoToc)),

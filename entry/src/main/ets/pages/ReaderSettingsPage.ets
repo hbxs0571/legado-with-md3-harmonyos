@@ -73,6 +73,7 @@ export struct ReaderSettingsPage {
   @Prop noAnimScrollPage: boolean = false;
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
+  @Prop selectText: boolean = true;
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = READER_CLICK_REGION_DEFAULTS;
@@ -174,6 +175,7 @@ export struct ReaderSettingsPage {
   onPaddingSettingsChange: (settings: ReaderPaddingSettings) => void = (_settings: ReaderPaddingSettings) => {};
   onQuickActionsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  onSelectTextChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
   @Builder
   private settingsContent(showHandle: boolean) {
@@ -805,7 +807,8 @@ export struct ReaderSettingsPage {
           MenuSettingSwitch({ title: '阅读位置锚点', detail: '跳转章节两次及以上后可返回原阅读位置', checked: this.readingAnchorEnabled,
             onChange: (enabled: boolean) => this.onReadingAnchorEnabledChange(enabled) })
           MenuSettingSwitch({ title: '朗读悬浮窗分离提醒', detail: '分离朗读控制时显示提醒', checked: true }).onClick(() => this.showNotMigrated('朗读悬浮窗分离提醒'))
-          MenuSettingSwitch({ title: '允许选择正文', detail: '长按正文显示选择菜单', checked: true }).onClick(() => this.showNotMigrated('允许选择正文'))
+          MenuSettingSwitch({ title: '允许选择正文', detail: '长按正文显示选择菜单', checked: this.selectText,
+            onChange: (enabled: boolean) => this.onSelectTextChange(enabled) })
           MenuSettingSwitch({ title: '滚动翻页无动画', detail: '关闭滚动翻页过渡动画',
             checked: this.noAnimScrollPage,
             onChange: (enabled: boolean) => this.onNoAnimScrollPageChange(enabled) })

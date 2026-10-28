@@ -120,6 +120,7 @@ export struct ReaderPage {
   @Prop noAnimScrollPage: boolean = false;
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
+  @Prop selectText: boolean = true;
   @Prop bookmarks: ReaderBookmark[] = [];
   @Prop markings: ReaderMarking[] = [];
   @Prop readingAnchorAvailable: boolean = false;
@@ -1928,7 +1929,7 @@ export struct ReaderPage {
     .lineHeight(this.fontSize * 1.25)
     .width('100%')
     .textAlign(TextAlign.Start)
-    .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
+    .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
     .copyOption(CopyOptions.InApp)
     .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
     .onTextSelectionChange((start: number, end: number) =>
@@ -1965,7 +1966,7 @@ export struct ReaderPage {
               .fontColor(this.getReadingTextColor())
               .maxLines(1)
               .height(line.height)
-              .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
+              .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
               .copyOption(CopyOptions.InApp)
               .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
               .onTextSelectionChange((start: number, end: number) =>
@@ -2008,7 +2009,7 @@ export struct ReaderPage {
       .height(line.height)
       .maxLines(1)
       .textAlign(line.justifyGap > 0 ? TextAlign.JUSTIFY : TextAlign.Start)
-      .textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
+      .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
       .copyOption(CopyOptions.InApp)
       .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
       .onTextSelectionChange((start: number, end: number) =>

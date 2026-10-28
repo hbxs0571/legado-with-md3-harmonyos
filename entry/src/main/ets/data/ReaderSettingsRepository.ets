@@ -166,6 +166,7 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   noAnimScrollPage: boolean;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
+  selectText: boolean;
   maxLengthWithNoToc: number;
   eyeProtectionEnabled: boolean;
   eyeProtectionAutoNight: boolean;
@@ -385,6 +386,7 @@ export class ReaderSettingsRepository {
       noAnimScrollPage: false,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
+      selectText: true,
       maxLengthWithNoToc: 3000,
       eyeProtectionEnabled: false,
       eyeProtectionAutoNight: false,
@@ -426,6 +428,7 @@ export class ReaderSettingsRepository {
       const noAnimScrollPageValue = await store.get('noAnimScrollPage', defaults.noAnimScrollPage);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
+      const selectTextValue = await store.get('selectText', defaults.selectText);
       const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
       const eyeProtectionEnabledValue = await store.get('eyeProtectionEnabled', defaults.eyeProtectionEnabled);
       const eyeProtectionAutoNightValue = await store.get('eyeProtectionAutoNight', defaults.eyeProtectionAutoNight);
@@ -590,6 +593,7 @@ export class ReaderSettingsRepository {
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
               ? swipeToAddBookmarkValue : defaults.swipeToAddBookmark,
+            selectText: typeof selectTextValue === 'boolean' ? selectTextValue : defaults.selectText,
           maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
             ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc,
           eyeProtectionEnabled: typeof eyeProtectionEnabledValue === 'boolean'
@@ -660,6 +664,7 @@ export class ReaderSettingsRepository {
       await store.put('noAnimScrollPage', settings.noAnimScrollPage);
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
+      await store.put('selectText', settings.selectText);
       await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
       await store.put('eyeProtectionEnabled', settings.eyeProtectionEnabled);
       await store.put('eyeProtectionAutoNight', settings.eyeProtectionAutoNight);
