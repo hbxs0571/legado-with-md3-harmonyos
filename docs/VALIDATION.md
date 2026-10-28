@@ -1,8 +1,18 @@
 # 验证记录
 
+## 2026-10-28 E 端 TXT 目录规则验证
+
+- E 端整合源码构建并覆盖安装成功。导入内置 27 条规则后重启，规则仍保留；TXT 目录规则 JSON 导出后重新导入通过。
+- 用临时自定义规则导入 TXT，分卷识别、卷头折叠和阅读进度持久化通过；临时规则与测试数据已清理。
+- 合成 Android ZIP 的根级 `txtTocRule.json` 单条规则恢复后冷启动读回通过；规则为空时的应用备份也已读回。
+- 本轮结束后原有书架条目和阅读进度仍保留；不在公开文档中列出书名或本机记录。
+- 书架序列化保留 E 端 v13 分组/元数据；v14 将 `chapterVolumes`/`tocRule` 写入字段索引 28/29，解析器同时兼容 N 端旧 v13/v14 的索引 27 规则字段。
+- 检查使用 HDC 与本地 OCR。HMNextAuto `Driver.create` 返回 WinError 10054；Android ADB shell/截屏曾超时，故未用这些自动化方式作更广的 UI 验收。
+- 尚未在 E 端验证书架“更新目录”、完整 CRUD/批量操作、含非空规则的应用备份恢复；API 12 真机也未验。
+
 日期：2026-10-28。记录与公开导出对应的工程快照。
 
-## 2026-10-28 E 端替换规则整合检查
+## 2026-10-28 替换净化规则空状态检查
 
 - E 端整合源码构建并覆盖安装到 HOS 后，通过 OCR/HDC 进入“我的→替换净化”空列表状态。
 - 本次 E 端检查仅确认入口和空状态可达；没有创建规则，也没有做规则文件导入/导出或 ZIP 规则恢复全往返。
@@ -35,10 +45,10 @@
 - UI 与导航中，阅读器整页及逐项视觉验收未完成；五个阅读相关路由仍为实现中，10 月 26 日增量有模拟器记录但需要继续验收。
 - 资源当前 133 SVG / 4 PNG。路径比对报告为 50 个 SVG 与 Android drawable 精确一致；39 个 SVG 有 AndroidX Material / Apache-2.0 来源记录；此前待核的 10 个 SVG 已完成来源映射，其中 2 个箭头是 GPL-3.0 近似 UI 映射，详见 RESOURCE-LICENSES.md。
 
-## 本次构建验证
+## 本次公开副本 clean 构建
 
-- 在独立公开副本使用 DevEco Studio 26.0.0.851 附带的 Hvigor 入口执行 Entry clean 后的 `assembleHap`；33 项任务中 32 项执行、1 项为最新，`BUILD SUCCESSFUL`。
-- ArkTS 编译存在既有异常处理、弃用 API 与剪贴板授权提示；本次没有编译错误。Hvigor 提示 `No signingConfig found for product default`。
-- 生成的 HAP 未签名，仅留在 Git 忽略的本机构建目录；未作为安装包提交或发布。构建成功只证明源码可构建，不代表 API 12 真机兼容或完成整页功能验收。
+- 使用 DevEco Studio 26.0.0.851 附带的 Hvigor 入口，在本轮同步后的公开副本先执行 Entry clean，再执行 `assembleHap`；33 项任务全部执行，`BUILD SUCCESSFUL`。
+- ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
+- 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**

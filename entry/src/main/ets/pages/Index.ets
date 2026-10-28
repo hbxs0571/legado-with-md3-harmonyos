@@ -1,4 +1,5 @@
 import { AppRoute, Book, BookMediaType, ProfileRoute } from '../model/Book';
+import { BookGroup } from '../model/BookGroup';
 import { HomePage } from './HomePage';
 import { BookshelfPage } from './BookshelfPage';
 import { DiscoverPage } from './DiscoverPage';
@@ -13,7 +14,7 @@ import {
   BookSourceManagePage, ReplaceRulesPage, ReplaceRuleEditPage, TxtTocRulesPage, DictionaryRulesPage,
   DictionaryRuleEditPage, HighlightTagRulesPage, HighlightTagRuleEditPage,
   AllBookmarksPage, ReadRecordsPage, CacheManagementPage,
-  AboutAppPage, AiChatPage, AppSettingsHomePage, BookmarkBookSummary, BookmarkEntrySummary
+  AboutAppPage, AiChatPage, AppSettingsHomePage, BookmarkBookSummary, BookmarkEntrySummary, RuleListEntry
 } from './ProfileSubPages';
 import { ReaderSearchPage } from './ReaderSearchPage';
 import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
@@ -33,6 +34,7 @@ import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
+import { BookGroupRepository } from '../data/BookGroupRepository';
 import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
@@ -53,6 +55,9 @@ import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
+import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
+import { TxtTocRuleImporter } from '../data/TxtTocRuleImporter';
+import { TxtTocRule } from '../model/TxtTocRule';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
@@ -94,9 +99,12 @@ struct Index {
   @State readerStartAtChapterBeginning: boolean = false;
   @State selectedChapter: string = '';
   @State books: Book[] = [];
+  @State bookGroups: BookGroup[] = [];
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readerBookmarks: ReaderBookmark[] = [];
   @State replaceRules: ReplaceRule[] = [];
+  /** TXT 目录规则列表，与仓储缓存同步。 */
+  @State txtTocRules: TxtTocRule[] = [];
   /** 当前正在编辑的替换规则；为空表示新建。 */
   @State editingReplaceRule: ReplaceRule | undefined = undefined;
   /** 替换规则列表的排序模式，与 Repository 中的持久化值保持同步。 */
@@ -201,6 +209,7 @@ struct Index {
       this.restoreReaderSettings(context);
       this.restoreReaderMoreActions(context);
       this.restoreReplaceRules(context);
+      this.restoreTxtTocRules(context);
       this.restoreBookContentProcesses(context);
       this.restoreBackupIgnoreLists(context);
       this.loadRestoredAndroidEntries(context);
@@ -260,6 +269,11 @@ struct Index {
     this.replaceEnableDefault = ReplaceRuleRepository.getDefaultEnabled();
     this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(this.selectedBook);
     this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(this.selectedBook);
+  }
+
+
+  private async restoreTxtTocRules(context: Context): Promise<void> {
+    this.txtTocRules = await TxtTocRuleRepository.load(context);
   }
 
 
@@ -557,6 +571,214 @@ struct Index {
   }
 
   /**
+   * 保存一条 TXT 目录规则（新建或编辑）。
+   * 保存后刷新列表；已导入书籍的目录不受影响，因为切章用的正则已固定在 Book.tocRule 上。
+   */
+  private async saveTxtTocRule(rule: TxtTocRule): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.save(context, rule);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction('规则已保存');
+    } catch (_) {
+      this.showUnavailableAction('保存目录规则失败');
+    }
+  }
+
+  /** 启用/停用一条 TXT 目录规则。 */
+  private async setTxtTocRuleEnabled(id: number, enabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.setEnabled(context, id, enabled);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('切换目录规则状态失败');
+    }
+  }
+
+  /** 删除一条 TXT 目录规则。 */
+  private async removeTxtTocRule(id: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    const exists = this.txtTocRules.some((rule: TxtTocRule) => rule.id === id);
+    if (!exists) {
+      this.showUnavailableAction('该规则已不存在');
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.remove(context, id);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction('规则已删除');
+    } catch (_) {
+      this.showUnavailableAction('删除目录规则失败');
+    }
+  }
+
+  /** 批量删除 TXT 目录规则。 */
+  private async removeTxtTocRuleBatch(ids: number[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const removed = await TxtTocRuleRepository.removeBatch(context, ids);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction(removed === 0 ? '所选规则已不存在' : `已删除 ${removed} 条规则`);
+    } catch (_) {
+      this.showUnavailableAction('批量删除目录规则失败');
+    }
+  }
+
+  /** 调整一条 TXT 目录规则的顺序；direction 为 -1 上移、1 下移。 */
+  private async moveTxtTocRule(id: number, direction: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    const fromIndex = this.txtTocRules.findIndex((rule: TxtTocRule) => rule.id === id);
+    if (fromIndex < 0) {
+      this.showUnavailableAction('该规则已不存在');
+      return;
+    }
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= this.txtTocRules.length) {
+      this.showUnavailableAction('已经在最' + (direction < 0 ? '前' : '后') + '面了');
+      return;
+    }
+    try {
+      await TxtTocRuleRepository.moveRule(context, id, toIndex);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('调整目录规则顺序失败');
+    }
+  }
+
+  /**
+   * 批量启用/停用 TXT 目录规则。
+   * 与单条一致走仓储，提示里报出真正改变的条数，避免「本来就是这状态」被算成本次结果。
+   */
+  private async setTxtTocRuleEnabledBatch(ids: number[], enabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    if (ids.length === 0) {
+      this.showUnavailableAction('请先选择规则');
+      return;
+    }
+    try {
+      const changed = await TxtTocRuleRepository.setEnabledBatch(context, ids, enabled);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      if (changed === 0) {
+        this.showUnavailableAction(`所选规则已经是${enabled ? '启用' : '停用'}状态`);
+      } else {
+        this.showUnavailableAction(`已${enabled ? '启用' : '停用'} ${changed} 条规则`);
+      }
+    } catch (_) {
+      this.showUnavailableAction('批量切换目录规则状态失败');
+    }
+  }
+
+  /** 把一条 TXT 目录规则移到最前或最后，对应条目菜单的置顶/置底。 */
+  private async moveTxtTocRuleToEdge(id: number, toTop: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const moved = await TxtTocRuleRepository.moveToEdge(context, id, toTop);
+      if (!moved) {
+        this.showUnavailableAction('该规则已不存在');
+        return;
+      }
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('调整目录规则顺序失败');
+    }
+  }
+
+  /** 导入内置目录规则库，跳过已存在的同名规则。 */
+  private async importBuiltinTxtTocRules(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const builtin = TxtTocRuleRepository.loadBuiltinRules(context);
+      if (builtin.length === 0) {
+        this.showUnavailableAction('内置规则库为空');
+        return;
+      }
+      const outcome = await TxtTocRuleRepository.importRules(context, builtin);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      this.showUnavailableAction(outcome.added === 0 && outcome.updated === 0
+        ? '内置规则已全部存在' : `已导入 ${outcome.added} 条、更新 ${outcome.updated} 条内置规则`);
+    } catch (_) {
+      this.showUnavailableAction('导入内置目录规则失败');
+    }
+  }
+
+  /**
+   * 从用户选择的文件导入 TXT 目录规则。
+   * 用户取消选择时不提示，与替换规则的导入口径一致。
+   */
+  private async importTxtTocRules(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    let content: string;
+    try {
+      content = await TxtTocRuleRepository.pickImportFile(context);
+    } catch (_) {
+      this.showUnavailableAction('读取规则文件失败');
+      return;
+    }
+    if (content.length === 0) {
+      return;
+    }
+    const parsed = TxtTocRuleImporter.parse(content);
+    if (parsed.rules.length === 0) {
+      this.showUnavailableAction(parsed.skipped > 0 ? '规则格式不正确，未导入任何数据' : '没有可导入的规则');
+      return;
+    }
+    try {
+      const outcome = await TxtTocRuleRepository.importRules(context, parsed.rules);
+      this.txtTocRules = TxtTocRuleRepository.getAll();
+      const skipped = parsed.skipped > 0 ? `，跳过 ${parsed.skipped} 条无效规则` : '';
+      this.showUnavailableAction(`新增 ${outcome.added} 条，更新 ${outcome.updated} 条${skipped}`);
+    } catch (_) {
+      this.showUnavailableAction('TXT 目录规则导入失败');
+    }
+  }
+
+  /** 导出 TXT 目录规则到用户选择的文件。 */
+  private async exportTxtTocRules(rules: TxtTocRule[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    if (rules.length === 0) {
+      this.showUnavailableAction('没有可导出的目录规则');
+      return;
+    }
+    try {
+      const saved = await TxtTocRuleRepository.saveExportFile(context, TxtTocRuleRepository.exportRules(rules));
+      this.showUnavailableAction(saved ? `已导出 ${rules.length} 条目录规则` : '未选择保存位置');
+    } catch (_) {
+      this.showUnavailableAction('导出目录规则失败');
+    }
+  }
+
+  /**
    * 导入替换规则。
    * source 为 'file' 时弹出文件选择器读取文本；其余情况直接解析传入的 text。
    * 解析失败与部分跳过都如实反馈，不把未导入的条目算作成功。
@@ -811,8 +1033,10 @@ struct Index {
       author: targetBook.author,
       category: targetBook.category,
       groupName: targetBook.groupName,
+      groupNames: targetBook.groupNames,
       chapterTitles: targetBook.chapterTitles,
       chapterOffsets: targetBook.chapterOffsets,
+      chapterVolumes: targetBook.chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: chapterTitle,
@@ -837,6 +1061,7 @@ struct Index {
       androidOriginalPath: targetBook.androidOriginalPath,
       androidCharacterPosition: position,
       readerPositionVersion: 1,
+      tocRule: targetBook.tocRule,
       isLocal: targetBook.isLocal
     };
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
@@ -895,8 +1120,10 @@ struct Index {
       author: targetBook.author,
       category: targetBook.category,
       groupName: targetBook.groupName,
+      groupNames: targetBook.groupNames,
       chapterTitles: targetBook.chapterTitles,
       chapterOffsets: targetBook.chapterOffsets,
+      chapterVolumes: targetBook.chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: chapterTitle,
@@ -921,6 +1148,7 @@ struct Index {
       androidOriginalPath: targetBook.androidOriginalPath,
       androidCharacterPosition: androidPosition,
       readerPositionVersion: 2,
+      tocRule: targetBook.tocRule,
       isLocal: targetBook.isLocal
     };
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
@@ -1437,8 +1665,30 @@ struct Index {
   }
 
   private async restoreImportedBooks(context: Context): Promise<void> {
+    this.bookGroups = await BookGroupRepository.load(context);
     const importedBooks = await BookRepository.loadImportedBooks(context);
-    this.books = importedBooks;
+    let needsMigration = false;
+    const groupNames = this.bookGroups.filter((group: BookGroup) => group.groupId > 0)
+      .map((group: BookGroup) => group.groupName);
+    const migratedBooks = importedBooks.map((book: Book): Book => {
+      if (book.groupNames !== undefined) { return book; }
+      needsMigration = true;
+      const legacyName = book.groupName?.trim() ?? '';
+      const matched = groupNames.includes(legacyName) ? [legacyName] : [];
+      // v12 曾把 Android customTag 放在 groupName；未知名称迁回独立自定义标签。
+      const customTag = matched.length > 0 || legacyName.length === 0 || legacyName === '本地未分组'
+        ? book.customTag : (book.customTag?.trim().length ? book.customTag : legacyName);
+      return BookRepository.withShelfMetadata(book, matched,
+        matched.length > 0 ? matched.join('、') : '本地未分组', customTag);
+    });
+    this.books = migratedBooks;
+    if (needsMigration) {
+      try {
+        await BookRepository.saveImportedBooks(context, migratedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      } catch (_) {
+        this.showUnavailableAction('书架分组兼容字段迁移失败；现有书目仍已加载');
+      }
+    }
   }
 
   private async createLocalBackup(): Promise<void> {
@@ -1492,6 +1742,7 @@ struct Index {
         context, selection, localBooks, currentSettings, this.restoreIgnoreKeys
       );
       this.books = result.books;
+      this.bookGroups = BookGroupRepository.getAll();
       this.readerFontSize = result.settings.fontSize;
       this.paperIndex = result.settings.paperIndex;
       this.dayPaperIndex = result.settings.dayPaperIndex;
@@ -1520,14 +1771,19 @@ struct Index {
       this.readerSettingsRevision += 1;
       // 恢复可能写入了替换净化规则，重新读一次让规则页和阅读页都看到最新结果。
       this.replaceRules = ReplaceRuleRepository.getAll();
+      this.txtTocRules = TxtTocRuleRepository.getAll();
       const restoreSummary = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目`;
+      const details: string[] = [];
       const replaceRuleSummary = this.describeReplaceRuleRestore(
         result.replaceRuleAdded, result.replaceRuleUpdated, result.replaceRuleSkipped
       );
-      // 没有 replaceRule.json 时不拼这一段，避免句尾多出一个空分号。
-      this.backupStatusMessage = replaceRuleSummary.length > 0
-        ? `${restoreSummary}；${replaceRuleSummary}`
-        : `${restoreSummary}。`;
+      if (replaceRuleSummary.length > 0) { details.push(replaceRuleSummary); }
+      const tocRuleSummary = this.describeTxtTocRuleRestore(
+        result.txtTocRuleAdded, result.txtTocRuleUpdated, result.txtTocRuleSkipped
+      );
+      if (tocRuleSummary.length > 0) { details.push(tocRuleSummary); }
+      this.backupStatusMessage = details.length > 0
+        ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
       await BackupRepository.discardSelection(selection);
       this.pendingBackup = undefined;
@@ -1551,6 +1807,16 @@ struct Index {
     if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
     if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
     return `替换净化规则${parts.join('、')}。`;
+  }
+
+  /** 三类数量都为 0 表示备份中没有 TXT 目录规则文件。 */
+  private describeTxtTocRuleRestore(added: number, updated: number, skipped: number): string {
+    if (added === 0 && updated === 0 && skipped === 0) { return ''; }
+    const parts: string[] = [];
+    if (added > 0) { parts.push(`新增 ${added} 条`); }
+    if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
+    if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
+    return `TXT 目录规则${parts.join('、')}。`;
   }
 
   private cancelLocalBackupRestore(): void {
@@ -1645,6 +1911,77 @@ struct Index {
     }
     this.books = [...this.books, importedBook];
     return importedBook;
+  }
+
+  /**
+   * 重新识别书架里所有本地 TXT 的目录，对应上游书架的「更新目录」。
+   *
+   * 导入时选中的章节正则会固定在 Book.tocRule 上，规则调整后已有书的目录不会变，
+   * 这里给用户一个主动重算的入口：清掉缓存规则、重新匹配、按字符偏移迁移阅读位置，
+   * 同时重映射这本书的书签，避免书签落到别的章节。
+   */
+  private async refreshAllToc(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，未更新目录');
+      return;
+    }
+    const localBooks = this.books.filter((book: Book) =>
+      book.isLocal && book.format === 'txt' && book.contentPath !== undefined);
+    if (localBooks.length === 0) {
+      this.showUnavailableAction('书架里没有可更新目录的本地 TXT');
+      return;
+    }
+    let updatedCount = 0;
+    let failedCount = 0;
+    let nextBookmarks = this.readerBookmarks;
+    const updatedBooks: Book[] = [];
+    for (let index = 0; index < this.books.length; index++) {
+      const book = this.books[index];
+      if (book === undefined) { continue; }
+      if (!book.isLocal || book.format !== 'txt' || book.contentPath === undefined) {
+        updatedBooks.push(book);
+        continue;
+      }
+      try {
+        const result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
+        if (!result.changed) {
+          updatedBooks.push(book);
+          continue;
+        }
+        updatedBooks.push(result.book);
+        updatedCount += 1;
+        nextBookmarks = this.remapNoTocBookmarks(book, result.book,
+          result.oldBodyOffsets, result.newBodyOffsets, result.content.length);
+        if (this.selectedBook.id === result.book.id) {
+          this.selectedBook = result.book;
+        }
+      } catch (_) {
+        // 单本书读不出来不该让整批失败，其余书照常更新。
+        failedCount += 1;
+        updatedBooks.push(book);
+      }
+    }
+    if (updatedCount === 0 && failedCount === 0) {
+      this.showUnavailableAction('所有本地 TXT 的目录都没有变化');
+      return;
+    }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      if (nextBookmarks !== this.readerBookmarks) {
+        await ReaderBookmarkRepository.save(context, nextBookmarks);
+      }
+    } catch (_) {
+      this.showUnavailableAction('目录已更新，但保存失败，重新打开后可能回到旧目录');
+      return;
+    }
+    this.books = updatedBooks;
+    this.readerBookmarks = nextBookmarks;
+    const parts: string[] = [];
+    if (updatedCount > 0) { parts.push(`已更新 ${updatedCount} 本`); }
+    if (failedCount > 0) { parts.push(`${failedCount} 本读取失败已跳过`); }
+    this.showUnavailableAction(`更新目录完成：${parts.join('，')}`);
   }
 
   private getPaperColor(): string {
@@ -1760,8 +2097,73 @@ struct Index {
     this.route = AppRoute.BOOK_INFO;
   }
 
+  private async addBookshelfGroup(name: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.showUnavailableAction('无法访问书架分组存储'); return; }
+    try {
+      await BookGroupRepository.add(context, name);
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '新增分组失败');
+    }
+  }
+
+  private async renameBookshelfGroup(groupId: number, newName: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    const group = this.bookGroups.find((item: BookGroup) => item.groupId === groupId);
+    if (context === undefined || group === undefined) { return; }
+    const oldName = group.groupName;
+    const nextName = newName.trim();
+    if (nextName === oldName) { return; }
+    const nextBooks = this.books.map((book: Book): Book => {
+      const names = book.groupNames ?? [];
+      if (!names.includes(oldName)) { return book; }
+      const updatedNames = names.map((name: string) => name === oldName ? nextName : name);
+      return BookRepository.withShelfMetadata(book, updatedNames, updatedNames.join('、'), book.customTag);
+    });
+    try {
+      await BookRepository.saveImportedBooks(context, nextBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      await BookGroupRepository.rename(context, groupId, nextName);
+      this.books = nextBooks;
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '重命名分组失败');
+    }
+  }
+
+  private async setBookshelfGroupVisible(groupId: number, visible: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      await BookGroupRepository.setVisible(context, groupId, visible);
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('分组显示状态保存失败');
+    }
+  }
+
+  private async removeBookshelfGroup(groupId: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    const group = this.bookGroups.find((item: BookGroup) => item.groupId === groupId);
+    if (context === undefined || group === undefined) { return; }
+    const nextBooks = this.books.map((book: Book): Book => {
+      const names = (book.groupNames ?? []).filter((name: string) => name !== group.groupName);
+      return names.length === (book.groupNames ?? []).length ? book
+        : BookRepository.withShelfMetadata(book, names, names.join('、') || '本地未分组', book.customTag);
+    });
+    try {
+      await BookRepository.saveImportedBooks(context, nextBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      await BookGroupRepository.remove(context, groupId);
+      this.books = nextBooks;
+      this.bookGroups = BookGroupRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '删除分组失败');
+    }
+  }
+
   private async saveBookMetadata(title: string, author: string, category: string,
-    description: string, remark: string, customTag: string, bookType: BookMediaType, fixedType: boolean): Promise<boolean> {
+    description: string, remark: string, customTag: string, groupNames: string[],
+    bookType: BookMediaType, fixedType: boolean): Promise<boolean> {
     const currentBook = this.books.find((book: Book) => book.id === this.selectedBook.id);
     if (currentBook === undefined || !currentBook.isLocal) {
       this.showUnavailableAction('当前书籍不在本地书架，未保存书籍信息');
@@ -1772,9 +2174,11 @@ struct Index {
       title: title,
       author: author,
       category: category,
-      groupName: currentBook.groupName,
+      groupName: groupNames.length > 0 ? groupNames.join('、') : '本地未分组',
+      groupNames: groupNames,
       chapterTitles: currentBook.chapterTitles,
       chapterOffsets: currentBook.chapterOffsets,
+      chapterVolumes: currentBook.chapterVolumes,
       chapterIndex: currentBook.chapterIndex,
       chapterProgress: currentBook.chapterProgress,
       lastChapter: currentBook.lastChapter,
@@ -1800,6 +2204,7 @@ struct Index {
       androidOriginalPath: currentBook.androidOriginalPath,
       androidCharacterPosition: currentBook.androidCharacterPosition,
       readerPositionVersion: currentBook.readerPositionVersion,
+      tocRule: currentBook.tocRule,
       isLocal: currentBook.isLocal
     };
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
@@ -1964,8 +2369,10 @@ struct Index {
       author: this.selectedBook.author,
       category: this.selectedBook.category,
       groupName: this.selectedBook.groupName,
+      groupNames: this.selectedBook.groupNames,
       chapterTitles: this.selectedBook.chapterTitles,
       chapterOffsets: this.selectedBook.chapterOffsets,
+      chapterVolumes: this.selectedBook.chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: safeChapterProgress,
       lastChapter: this.selectedChapter,
@@ -1991,6 +2398,7 @@ struct Index {
       androidCharacterPosition: Math.max(0, Math.trunc(chapterPosition)),
       readerPositionVersion: this.selectedBook.isLocal && (this.selectedBook.format === 'txt' ||
         this.selectedBook.format === 'epub') ? (androidCoordinate ? 2 : 0) : this.selectedBook.readerPositionVersion,
+      tocRule: this.selectedBook.tocRule,
       isLocal: this.selectedBook.isLocal
     };
     this.selectedBook = updatedBook;
@@ -2017,8 +2425,10 @@ struct Index {
       author: this.selectedBook.author,
       category: this.selectedBook.category,
       groupName: this.selectedBook.groupName,
+      groupNames: this.selectedBook.groupNames,
       chapterTitles: this.selectedBook.chapterTitles,
       chapterOffsets: this.selectedBook.chapterOffsets,
+      chapterVolumes: this.selectedBook.chapterVolumes,
       chapterIndex: this.selectedBook.chapterIndex,
       chapterProgress: this.selectedBook.chapterProgress,
       lastChapter: this.selectedBook.lastChapter,
@@ -2043,6 +2453,7 @@ struct Index {
       androidOriginalPath: this.selectedBook.androidOriginalPath,
       androidCharacterPosition: this.selectedBook.androidCharacterPosition,
       readerPositionVersion: this.selectedBook.readerPositionVersion,
+      tocRule: this.selectedBook.tocRule,
       isLocal: this.selectedBook.isLocal
     };
     this.selectedBook = updatedBook;
@@ -2206,8 +2617,10 @@ struct Index {
       author: this.selectedBook.author,
       category: this.selectedBook.category,
       groupName: this.selectedBook.groupName,
+      groupNames: this.selectedBook.groupNames,
       chapterTitles: this.selectedBook.chapterTitles,
       chapterOffsets: this.selectedBook.chapterOffsets,
+      chapterVolumes: this.selectedBook.chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: Math.max(0, Math.min(100, initialProgress)),
       lastChapter: title,
@@ -2232,6 +2645,7 @@ struct Index {
       androidOriginalPath: this.selectedBook.androidOriginalPath,
       androidCharacterPosition: 0,
       readerPositionVersion: 1,
+      tocRule: this.selectedBook.tocRule,
       isLocal: this.selectedBook.isLocal
     };
     let content: string = '';
@@ -2444,10 +2858,16 @@ struct Index {
         })
         BookshelfPage({
           books: this.books,
+          groups: this.bookGroups,
+          onAddGroup: (name: string) => this.addBookshelfGroup(name),
+          onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
+          onSetGroupVisible: (id: number, visible: boolean) => this.setBookshelfGroupVisible(id, visible),
+          onRemoveGroup: (id: number) => this.removeBookshelfGroup(id),
           onOpenBook: (book: Book) => this.openBook(book),
           onOpenBookInfo: (book: Book) => this.openBookInfo(book),
           onSearch: () => this.openSearch(),
           onImportBook: () => this.importLocalBook(),
+          onRefreshToc: () => this.refreshAllToc(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         DiscoverPage({ onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
@@ -2467,6 +2887,7 @@ struct Index {
         } else if (this.route === AppRoute.BOOK_INFO) {
         BookInfoPage({
           book: this.selectedBook,
+          groups: this.bookGroups,
           onBack: () => this.route = this.bookInfoReturnRoute,
           onRead: () => this.openBook(this.selectedBook),
           onOpenCatalog: () => this.openCatalogFromBookInfo(),
@@ -2475,8 +2896,8 @@ struct Index {
           onChooseCover: () => this.chooseBookCover(),
           onRestoreCover: () => this.restoreBookCover(),
           onSaveMetadata: (title: string, author: string, category: string, description: string,
-            remark: string, customTag: string, bookType: BookMediaType, fixedType: boolean) =>
-            this.saveBookMetadata(title, author, category, description, remark, customTag, bookType, fixedType),
+            remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
+            this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         } else if (this.route === AppRoute.SUBSCRIPTION_RULES) {
@@ -2744,6 +3165,7 @@ struct Index {
         } else if (this.route === AppRoute.SEARCH) {
         SearchPage({
           books: this.books,
+          groups: this.bookGroups,
           query: this.searchPageQuery,
           selectedGroup: this.searchPageGroup,
           sourceScope: this.searchPageSourceScope,
@@ -2801,7 +3223,24 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULES) {
-          TxtTocRulesPage({ onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
+          TxtTocRulesPage({
+            onBack: () => this.route = this.profileDetailReturnRoute,
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            rules: this.txtTocRules.map((rule: TxtTocRule): RuleListEntry => ({
+              id: `${rule.id}`, title: rule.name, detail: rule.chapterRule, enabled: rule.enable
+            })),
+            sourceRules: this.txtTocRules,
+            onSaveRule: (rule: TxtTocRule) => this.saveTxtTocRule(rule),
+            onRemoveRule: (id: number) => this.removeTxtTocRule(id),
+            onRemoveBatch: (ids: number[]) => this.removeTxtTocRuleBatch(ids),
+            onToggleRule: (id: number, enabled: boolean) => this.setTxtTocRuleEnabled(id, enabled),
+            onMoveRule: (id: number, direction: number) => this.moveTxtTocRule(id, direction),
+            onMoveRuleToEdge: (id: number, toTop: boolean) => this.moveTxtTocRuleToEdge(id, toTop),
+            onSetEnabledBatch: (ids: number[], enabled: boolean) => this.setTxtTocRuleEnabledBatch(ids, enabled),
+            onImportBuiltin: () => this.importBuiltinTxtTocRules(),
+            onImportRules: () => this.importTxtTocRules(),
+            onExportRules: (rules: TxtTocRule[]) => this.exportTxtTocRules(rules)
+          })
         } else if (this.profileSubpage === ProfileRoute.DICTIONARY_RULES) {
           DictionaryRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,

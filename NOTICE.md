@@ -9,3 +9,5 @@ Android drawable 转换资源保留原项目来源。Material 图标来自 Andro
 文件管理器四个 PNG 来源为上游 FilePickerIcon.java 的字节数组，保留原作者署名：李玉江；原文件标注由 https://github.com/gzu-liyujiang/Image2ByteVar 生成。它们随上游项目的 GPL 来源记录分发；字节一致性在资源审计中核对。
 
 系统 SDK、DevEco、Hvigor 及相关开发工具按各自条款提供，不因本仓库 GPL 而重新许可；本仓库不附其二进制。原参考素材包中的未确认字体、背景和品牌图片不在此仓库中。项目许可不授予第三方商标权。
+
+HarmonyOS 包内置 TXT 目录规则 JSON 共 27 条，与上游 HapeLee/legado-with-MD3 的 `app/src/main/assets/defaultData/txtTocRule.json` 逐字节一致，按 GPL-3.0 随项目分发；来源与哈希见 `docs/RESOURCE-LICENSES.md`。

@@ -4,9 +4,12 @@ import zlib from '@ohos.zlib';
 import { Book } from '../model/Book';
 import { EpubRepository } from './EpubRepository';
 import { BookRepository } from './BookRepository';
+import { BookGroupRepository } from './BookGroupRepository';
 import { READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot } from './ReaderSettingsRepository';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { ReplaceRuleImporter } from './ReplaceRuleImporter';
+import { TxtTocRuleRepository } from './TxtTocRuleRepository';
+import { TxtTocRuleImporter } from './TxtTocRuleImporter';
 
 export interface BackupEntryPreview {
   name: string;
@@ -53,6 +56,10 @@ export interface RestoreResult {
   replaceRuleUpdated: number;
   /** 解析失败或正则非法而被跳过的规则条数。 */
   replaceRuleSkipped: number;
+  /** 恢复 TXT 目录规则的新增、覆盖和跳过数量。 */
+  txtTocRuleAdded: number;
+  txtTocRuleUpdated: number;
+  txtTocRuleSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -369,6 +376,7 @@ export class BackupRepository {
     const zipPath = `${context.cacheDir}/legado-android-backup-${Date.now()}.zip`;
     BackupRepository.ensureDirectory(stagingDirectory);
     try {
+      await BookGroupRepository.load(context);
       await BackupRepository.copyPreservedEntries(context, stagingDirectory, ignoredCategories);
       if (!ignoredCategories.includes('localBook')) {
         const localBooks = books.filter((book: Book) => BookRepository.isPersistableBook(book));
@@ -382,6 +390,10 @@ export class BackupRepository {
             : generated;
           BackupRepository.writeTextFile(oldPath, combined);
         }
+      }
+
+      if (!ignoredCategories.includes('bookGroup')) {
+        BackupRepository.writeTextFile(`${stagingDirectory}/bookGroup.json`, BookGroupRepository.exportAndroidGroups());
       }
 
       if (!ignoredCategories.includes('readConfig')) {
@@ -403,6 +415,11 @@ export class BackupRepository {
         const rules = ReplaceRuleRepository.getAll();
         BackupRepository.writeTextFile(`${stagingDirectory}/replaceRule.json`,
           ReplaceRuleRepository.exportRules(rules));
+      }
+      if (!ignoredCategories.includes('txtTocRule')) {
+        const rules = TxtTocRuleRepository.getAll();
+        BackupRepository.writeTextFile(`${stagingDirectory}/txtTocRule.json`,
+          TxtTocRuleRepository.exportRules(rules));
       }
 
       const configPath = `${stagingDirectory}/config.xml`;
@@ -570,6 +587,9 @@ export class BackupRepository {
     let replaceRuleAdded: number = 0;
     let replaceRuleUpdated: number = 0;
     let replaceRuleSkipped: number = 0;
+    let txtTocRuleAdded: number = 0;
+    let txtTocRuleUpdated: number = 0;
+    let txtTocRuleSkipped: number = 0;
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
       if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
@@ -605,6 +625,16 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'bookGroup.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复书架分组`);
+        }
+        await fileIo.copyFile(sourcePath, targetPath);
+        await BookGroupRepository.importAndroidFile(context, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       if (entry.name === 'replaceRule.json') {
         const text = fileIo.readTextSync(sourcePath);
         if (text.length > BackupRepository.maximumJsonTextBytes) {
@@ -618,6 +648,20 @@ export class BackupRepository {
         replaceRuleUpdated += outcome.updated;
         replaceRuleSkipped += parsed.skipped;
         // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'txtTocRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复 TXT 目录规则`);
+        }
+        const parsed = TxtTocRuleImporter.parse(text);
+        const outcome = await TxtTocRuleRepository.importRules(context, parsed.rules);
+        txtTocRuleAdded += outcome.added;
+        txtTocRuleUpdated += outcome.updated;
+        txtTocRuleSkipped += parsed.skipped;
         await fileIo.copyFile(sourcePath, targetPath);
         preservedEntryCount += 1;
         continue;
@@ -651,7 +695,10 @@ export class BackupRepository {
       restoredEntries: restoredEntries,
       replaceRuleAdded: replaceRuleAdded,
       replaceRuleUpdated: replaceRuleUpdated,
-      replaceRuleSkipped: replaceRuleSkipped
+      replaceRuleSkipped: replaceRuleSkipped,
+      txtTocRuleAdded: txtTocRuleAdded,
+      txtTocRuleUpdated: txtTocRuleUpdated,
+      txtTocRuleSkipped: txtTocRuleSkipped
     };
   }
 
@@ -676,15 +723,15 @@ export class BackupRepository {
       name: book.title,
       author: book.author,
       kind: book.category,
-      customTag: book.groupName ?? null,
+      customTag: book.customTag ?? null,
       coverUrl: undefined,
       customCoverUrl: null,
       intro: book.description ?? null,
       customIntro: null,
-      remark: null,
+      remark: book.remark ?? null,
       charset: book.charset ?? null,
       type: 264,
-      group: 0,
+      group: BookGroupRepository.maskFromNames(book.groupNames ?? []),
       isPrivate: false,
       latestChapterTitle: book.lastChapter,
       latestChapterTime: 0,
@@ -936,9 +983,25 @@ export class BackupRepository {
           } catch (_) {
           }
         }
-        const updated = BookRepository.restoreAndroidProgress(bookWithCharset,
+        const restoredProgress = BookRepository.restoreAndroidProgress(bookWithCharset,
           index === undefined ? book.chapterIndex ?? 0 : index,
           position === undefined ? 0 : position);
+        let updated = restoredProgress;
+        if (!ignoredCategories.includes('bookGroup')) {
+          const groupMask = BackupRepository.readJsonNumber(record, 'group') ?? 0;
+          const groupNames = BookGroupRepository.namesFromMask(groupMask);
+          const backupIntro = BackupRepository.readJsonString(record, 'customIntro') ??
+            BackupRepository.readJsonString(record, 'intro');
+          updated = BookRepository.withShelfMetadata(
+            restoredProgress, groupNames, groupNames.length > 0 ? groupNames.join('、') : '本地未分组',
+            BackupRepository.readJsonString(record, 'customTag') ?? restoredProgress.customTag,
+            BackupRepository.readJsonString(record, 'name') ?? restoredProgress.title,
+            BackupRepository.readJsonString(record, 'author') ?? restoredProgress.author,
+            BackupRepository.readJsonString(record, 'kind') ?? restoredProgress.category,
+            backupIntro ?? restoredProgress.description,
+            BackupRepository.readJsonString(record, 'remark') ?? restoredProgress.remark
+          );
+        }
         result = result.map((item: Book) => item.id === updated.id ? updated : item);
         updatedCount += 1;
         break;
@@ -1003,12 +1066,15 @@ export class BackupRepository {
     const customIntro = BackupRepository.readJsonString(record, 'customIntro') ?? '';
     const intro = BackupRepository.readJsonString(record, 'intro') ?? '';
     const customTag = BackupRepository.readJsonString(record, 'customTag') ?? '';
+    const groupMask = BackupRepository.readJsonNumber(record, 'group') ?? 0;
+    const groupNames = BookGroupRepository.namesFromMask(groupMask);
     return {
       id: BackupRepository.missingBodyBookId(originalPath),
       title: title,
       author: author,
       category: BackupRepository.readJsonString(record, 'kind') ?? '本地',
-      groupName: customTag.length > 0 ? customTag : '本地未分组',
+      groupName: groupNames.length > 0 ? groupNames.join('、') : '本地未分组',
+      groupNames: groupNames,
       chapterIndex: chapterIndex,
       chapterProgress: 0,
       lastChapter: latestChapter,
@@ -1017,6 +1083,8 @@ export class BackupRepository {
       coverMark: title.substring(0, 1) || '书',
       chapterCount: totalChapters.toString(),
       description: customIntro.length > 0 ? customIntro : intro,
+      remark: BackupRepository.readJsonString(record, 'remark') ?? undefined,
+      customTag: customTag.length > 0 ? customTag : undefined,
       bodyMissing: true,
       androidOriginalPath: originalPath,
       androidCharacterPosition: Math.max(0, Math.trunc(characterPosition)),

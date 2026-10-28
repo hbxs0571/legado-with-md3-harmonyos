@@ -1,10 +1,12 @@
 import { Book } from '../model/Book';
+import { BookGroup } from '../model/BookGroup';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct SearchPage {
   @Prop books: Book[] = [];
+  @Prop groups: BookGroup[] = [];
   @Prop query: string = '';
   @Prop selectedGroup: string = '全部书籍';
   @Prop sourceScope: boolean = false;
@@ -26,15 +28,26 @@ export struct SearchPage {
     return this.books.filter((book: Book) => book.contentPath !== undefined || book.bodyMissing === true);
   }
 
+  private getBookGroupNames(book: Book): string[] {
+    if ((book.groupNames ?? []).length > 0) { return book.groupNames ?? []; }
+    const legacyName = book.groupName?.trim() ?? '';
+    return legacyName.length > 0 && legacyName !== '本地未分组' ? [legacyName] : [];
+  }
+
   private getGroups(): string[] {
-    const groups: string[] = ['全部书籍'];
     const localBooks = this.getLocalBooks();
-    for (let index = 0; index < localBooks.length; index++) {
-      const book = localBooks[index];
-      if (book === undefined) { continue; }
-      const groupName = book.groupName ?? (book.isLocal ? '本地未分组' : '完结');
-      if (!groups.includes(groupName)) { groups.push(groupName); }
-    }
+    const groups: string[] = ['全部书籍'];
+    if (localBooks.some((book: Book) => this.getBookGroupNames(book).length === 0)) { groups.push('本地未分组'); }
+    const userGroups = this.groups.filter((group: BookGroup) => group.groupId > 0);
+    userGroups.filter((group: BookGroup) => group.show)
+      .sort((left: BookGroup, right: BookGroup) => left.order - right.order)
+      .forEach((group: BookGroup) => { if (!groups.includes(group.groupName)) { groups.push(group.groupName); } });
+    localBooks.forEach((book: Book) => {
+      this.getBookGroupNames(book).forEach((name: string) => {
+        const definition = userGroups.find((group: BookGroup) => group.groupName === name);
+        if (definition === undefined && !groups.includes(name)) { groups.push(name); }
+      });
+    });
     return groups;
   }
 
@@ -42,8 +55,9 @@ export struct SearchPage {
     const keyword = this.query.trim().toLocaleLowerCase();
     if (keyword.length === 0 || this.sourceScope) { return []; }
     return this.getLocalBooks().filter((book: Book) => {
-      const groupName = book.groupName ?? (book.isLocal ? '本地未分组' : '完结');
-      const matchesGroup = this.selectedGroup === '全部书籍' || groupName === this.selectedGroup;
+      const names = this.getBookGroupNames(book);
+      const matchesGroup = this.selectedGroup === '全部书籍' ||
+        (this.selectedGroup === '本地未分组' ? names.length === 0 : names.includes(this.selectedGroup));
       const title = book.title.toLocaleLowerCase();
       const author = book.author.toLocaleLowerCase();
       const matchesKeyword = this.exactMatch

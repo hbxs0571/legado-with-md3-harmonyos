@@ -1,6 +1,6 @@
 # HarmonyOS 资源来源与许可清单
 
-核查日期：2026-10-26。核查对象为公开源码快照中实际随 Entry 模块打包的资源；不包含上游 Android 工程或私人素材。
+核查日期：2026-10-28。核查对象为公开源码快照中实际随 Entry 模块打包的资源；不包含上游 Android 工程或私人素材。
 
 当前包含 **133 个 SVG** 和 **4 个 PNG**。逐项将 SVG 的 `d` 路径与 Android drawable XML 的 `android:pathData` 归一化（忽略空白、逗号）比较，**50 个**存在精确匹配；精确匹配只能证明图形路径一致，不单独判定版权归属。原清单中 15 个阅读菜单/搜索精度图标有 AndroidX Compose Material Icons 1.7.8 来源记录；此前核验的 16 个与该版本路径精确匹配。本轮指定的 10 个资源已追溯到原 Android 实际调用：8 个复用 AndroidX 原始矢量（Apache-2.0），2 个由原 Android 上下箭头 VectorDrawable 转换（GPL-3.0，作为重排方向近似图标）。
 
@@ -157,3 +157,8 @@
 `assets/original-project/` 中的参考素材（字体、背景、封面和品牌图）不在本仓库公开树，也不随 HAP 打包。运行时 imports 来自 HarmonyOS SDK；oh-package 未声明第三方 NPM 运行时包。仓库不包含 DevEco SDK / Hvigor 的二进制。
 
 新增图片、字体或其它第三方资源时，应在分发前记录来源、版本、许可和 HAP 使用情况。
+
+
+## 内置 TXT 目录规则数据
+
+`entry/src/main/resources/rawfile/txttoc/builtin-rules.json` 包含 27 条内置 TXT 目录规则。该文件与 [HapeLee/legado-with-MD3 的默认规则 JSON](https://github.com/HapeLee/legado-with-MD3/blob/main/app/src/main/assets/defaultData/txtTocRule.json) 逐字节一致；对应上游项目按 GPL-3.0 发布，本仓库随 GPL-3.0 许可分发。来源文件与本仓库文件的 SHA-256 均为 `a9b612ea996485bb99f67b3e25792602a8354d4abbc4fa74537395dc38375394`。

@@ -5,9 +5,14 @@ export interface Book {
   title: string;
   author: string;
   category: string;
+  /** 旧版单分组名称，用于兼容 v1-v12 书架记录。 */
   groupName?: string;
+  /** Android Book.group 的位掩码值对应的分组名称集合。 */
+  groupNames?: string[];
   chapterTitles?: string[];
   chapterOffsets?: number[];
+  /** 每一章是否为分卷标题，与 chapterTitles 一一对应。 */
+  chapterVolumes?: boolean[];
   chapterIndex?: number;
   chapterProgress?: number;
   lastChapter: string;
@@ -42,6 +47,8 @@ export interface Book {
   androidCharacterPosition?: number;
   /** 0 按百分比恢复，1 为旧版 HOS 渲染坐标，2 为 Android 正文章内字符坐标。 */
   readerPositionVersion?: number;
+  /** 导入时选中的 TXT 章节正则；留空表示沿用旧版默认识别。 */
+  tocRule?: string;
   isLocal: boolean;
 }
 

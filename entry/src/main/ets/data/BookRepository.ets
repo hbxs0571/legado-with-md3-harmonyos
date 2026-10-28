@@ -8,6 +8,7 @@ import { LocalTextReSegmenter } from './LocalTextReSegmenter';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { BookContentProcessRepository } from './BookContentProcessRepository';
 import { BookContentProcessEngine } from './BookContentProcessEngine';
+import { TxtTocRuleRepository } from './TxtTocRuleRepository';
 
 interface ChapterTextRange {
   start: number;
@@ -19,7 +20,23 @@ interface NoTocChapterLayout {
   offsets: number[];
 }
 
+/** 按目录规则切出的章节标题、偏移与卷标记。 */
+interface ChapterSplit {
+  titles: string[];
+  offsets: number[];
+  volumes: boolean[];
+}
+
 export interface NoTocBookRefreshResult {
+  book: Book;
+  content: string;
+  changed: boolean;
+  oldBodyOffsets: number[];
+  newBodyOffsets: number[];
+}
+
+/** 目录重算结果，偏移用于把书签映射到新的章节列表。 */
+export interface TocRefreshResult {
   book: Book;
   content: string;
   changed: boolean;
@@ -32,14 +49,16 @@ export class BookRepository {
   private static effectiveRuleIdsByChapter: Map<string, number[]> = new Map<string, number[]>();
   private static effectiveRuleCacheOrder: string[] = [];
   private static saveQueue: Promise<void> = Promise.resolve();
+  /** 规则匹配只扫描文件开头，与 Android 只读首个缓冲区识别目录的行为一致。 */
+  private static readonly tocSampleSize: number = 65536;
 
-  static getEffectiveReplaceRuleIds(bookId: string, chapterIndex: number): number[] {
+static getEffectiveReplaceRuleIds(bookId: string, chapterIndex: number): number[] {
     const key = `${bookId}|${chapterIndex}`;
     const ids = BookRepository.effectiveRuleIdsByChapter.get(key);
     return ids === undefined ? [] : ids.slice();
   }
 
-  private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: number, ids: number[]): void {
+private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: number, ids: number[]): void {
     const key = `${bookId}|${chapterIndex}`;
     if (!BookRepository.effectiveRuleIdsByChapter.has(key)) {
       BookRepository.effectiveRuleCacheOrder.push(key);
@@ -60,7 +79,7 @@ export class BookRepository {
     const uris = await documentPicker.select(options);
     if (uris.length === 0) { return undefined; }
 
-    const uri = uris[0];
+const uri = uris[0];
     if (uri === undefined) { return undefined; }
     const fileName = BookRepository.getFileName(uri);
     const bookId = `local-${Date.now()}`;
@@ -68,11 +87,12 @@ export class BookRepository {
       return await EpubRepository.importFromUri(context, uri, fileName, bookId);
     }
 
-    return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
+return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
   }
 
-  static async importTxtFromUri(context: Context, uri: string, fileName: string, bookId: string, maxLengthWithNoToc: number = 3000): Promise<Book> {
+static async importTxtFromUri(context: Context, uri: string, fileName: string, bookId: string, maxLengthWithNoToc: number = 3000): Promise<Book> {
     const title = BookRepository.getTitle(fileName);
+    await TxtTocRuleRepository.load(context);
     const booksDirectory = `${context.filesDir}/books`;
     const contentPath = `${booksDirectory}/${bookId}.txt`;
     let content: string = '';
@@ -99,18 +119,61 @@ export class BookRepository {
     return BookRepository.createLocalBook(bookId, title, contentPath, 0, 0, content, undefined, maxLengthWithNoToc);
   }
 
-  static discardImportedCopy(book: Book): void {
+static discardImportedCopy(book: Book): void {
     if (book.contentPath !== undefined && fileIo.accessSync(book.contentPath)) {
       fileIo.unlinkSync(book.contentPath);
     }
   }
 
-  private static parseBookType(value: string): BookMediaType {
+private static parseGroupNames(value: string): string[] {
+    try {
+      const parsed: string[] = JSON.parse(value);
+      return parsed.filter((name: string) => typeof name === 'string' && name.trim().length > 0)
+        .map((name: string) => name.trim());
+    } catch (_) {
+      return [];
+    }
+  }
+
+private static isGroupNamesField(value: string | undefined): boolean {
+    try {
+      const parsed: string[] = JSON.parse(decodeURIComponent(value ?? ''));
+      return Array.isArray(parsed) && parsed.every((name: string) => typeof name === 'string');
+    } catch (_) {
+      return false;
+    }
+  }
+
+/** 把分卷标记按位写入书目字段，全部为 false 时不写冗余数据。 */
+  private static encodeVolumeFlags(volumes: boolean[] | undefined, count: number): string {
+    if (volumes === undefined || volumes.length !== count || count === 0 ||
+      !volumes.some((value: boolean) => value === true)) {
+      return '';
+    }
+    return volumes.map((value: boolean) => value ? '1' : '0').join('');
+  }
+
+/** 分卷标记数量错位时整体丢弃，避免目录缩进错章。 */
+  private static decodeVolumeFlags(value: string | undefined, count: number): boolean[] | undefined {
+    const text = value ?? '';
+    if (text.length === 0 || text.length !== count || count === 0) {
+      return undefined;
+    }
+    const result: boolean[] = [];
+    for (let index = 0; index < text.length; index++) {
+      const flag = text.charAt(index);
+      if (flag !== '0' && flag !== '1') { return undefined; }
+      result.push(flag === '1');
+    }
+    return result;
+  }
+
+private static parseBookType(value: string): BookMediaType {
     if (value === 'audio' || value === 'image') { return value; }
     return 'text';
   }
 
-  private static resolveCoverUri(context: Context, bookId: string, customCoverPath: string): string | undefined {
+private static resolveCoverUri(context: Context, bookId: string, customCoverPath: string): string | undefined {
     if (customCoverPath.length > 0 && fileIo.accessSync(customCoverPath)) {
       return `file://${customCoverPath}`;
     }
@@ -118,7 +181,7 @@ export class BookRepository {
     return fileIo.accessSync(embeddedCoverPath) ? `file://${embeddedCoverPath}` : undefined;
   }
 
-  static async chooseCustomCover(context: Context, book: Book): Promise<Book | undefined> {
+static async chooseCustomCover(context: Context, book: Book): Promise<Book | undefined> {
     const options = new picker.DocumentSelectOptions();
     options.fileSuffixFilters = ['图片|.png', '图片|.jpg', '图片|.jpeg', '图片|.webp', '图片|.bmp'];
     options.maxSelectNumber = 1;
@@ -126,7 +189,7 @@ export class BookRepository {
     const uri = uris[0];
     if (uri === undefined) { return undefined; }
 
-    const coversDirectory = `${context.filesDir}/covers`;
+const coversDirectory = `${context.filesDir}/covers`;
     BookRepository.ensureDirectory(coversDirectory);
     const customPath = `${coversDirectory}/custom-${book.id}-${Date.now()}.img`;
     const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
@@ -145,27 +208,29 @@ export class BookRepository {
     return BookRepository.copyWithCover(book, `file://${customPath}`, customPath);
   }
 
-  static restoreEmbeddedCover(context: Context, book: Book): Book {
+static restoreEmbeddedCover(context: Context, book: Book): Book {
     const embeddedPath = `${context.filesDir}/covers/${book.id}.img`;
     const embeddedUri = fileIo.accessSync(embeddedPath) ? `file://${embeddedPath}` : undefined;
     return BookRepository.copyWithCover(book, embeddedUri, undefined);
   }
 
-  static removeCustomCover(path: string | undefined): void {
+static removeCustomCover(path: string | undefined): void {
     if (path !== undefined && path.length > 0 && fileIo.accessSync(path)) {
       fileIo.unlinkSync(path);
     }
   }
 
-  private static copyWithCover(book: Book, coverUri: string | undefined, customCoverUri: string | undefined): Book {
+private static copyWithCover(book: Book, coverUri: string | undefined, customCoverUri: string | undefined): Book {
     return {
       id: book.id,
       title: book.title,
       author: book.author,
       category: book.category,
       groupName: book.groupName,
+      groupNames: book.groupNames,
       chapterTitles: book.chapterTitles,
       chapterOffsets: book.chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
       chapterIndex: book.chapterIndex,
       chapterProgress: book.chapterProgress,
       lastChapter: book.lastChapter,
@@ -190,22 +255,46 @@ export class BookRepository {
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: book.androidCharacterPosition,
       readerPositionVersion: book.readerPositionVersion,
+      tocRule: book.tocRule,
       isLocal: book.isLocal
     };
   }
 
-  static isPersistableBook(book: Book): boolean {
+/** 复制书目并更新分组/用户元数据，避免 UI 写回时丢失进度和封面字段。 */
+  static withShelfMetadata(book: Book, groupNames: string[], groupName: string, customTag: string | undefined,
+    title: string = book.title, author: string = book.author, category: string = book.category,
+    description: string | undefined = book.description, remark: string | undefined = book.remark): Book {
+    return {
+      id: book.id, title: title, author: author, category: category, groupName: groupName, groupNames: groupNames,
+      chapterTitles: book.chapterTitles, chapterOffsets: book.chapterOffsets, chapterVolumes: book.chapterVolumes, chapterIndex: book.chapterIndex,
+      chapterProgress: book.chapterProgress, lastChapter: book.lastChapter, progress: book.progress,
+      coverColor: book.coverColor, coverMark: book.coverMark, coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri, bookType: book.bookType, fixedType: book.fixedType,
+      contentPath: book.contentPath, format: book.format, chapterCount: book.chapterCount,
+      fileSizeBytes: book.fileSizeBytes, imageStyle: book.imageStyle, reSegment: book.reSegment,
+      charset: book.charset, description: description, remark: remark, customTag: customTag,
+      bodyMissing: book.bodyMissing, androidOriginalPath: book.androidOriginalPath,
+      androidCharacterPosition: book.androidCharacterPosition, readerPositionVersion: book.readerPositionVersion,
+      tocRule: book.tocRule,
+      isLocal: book.isLocal
+    };
+  }
+
+static isPersistableBook(book: Book): boolean {
     return book.contentPath !== undefined || book.bodyMissing === true;
   }
 
-  static async loadImportedBooks(context: Context): Promise<Book[]> {
+static async loadImportedBooks(context: Context): Promise<Book[]> {
     try {
       const store = await preferences.getPreferences(context, BookRepository.preferenceName);
+      await TxtTocRuleRepository.load(context);
       const value = await store.get('books', '');
-      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n') && !value.startsWith('v10\n') && !value.startsWith('v11\n') && !value.startsWith('v12\n'))) {
+      if (typeof value !== 'string' || (!value.startsWith('v1\n') && !value.startsWith('v2\n') && !value.startsWith('v3\n') && !value.startsWith('v4\n') && !value.startsWith('v5\n') && !value.startsWith('v6\n') && !value.startsWith('v7\n') && !value.startsWith('v8\n') && !value.startsWith('v9\n') && !value.startsWith('v10\n') && !value.startsWith('v11\n') && !value.startsWith('v12\n') && !value.startsWith('v13\n') && !value.startsWith('v14\n'))) {
         return [];
       }
-      const isVersion12 = value.startsWith('v12\n');
+      const isVersion14 = value.startsWith('v14\n');
+      const isVersion13 = isVersion14 || value.startsWith('v13\n');
+      const isVersion12 = isVersion13 || value.startsWith('v12\n');
       const isVersion11 = isVersion12 || value.startsWith('v11\n');
       const isVersion10 = isVersion11 || value.startsWith('v10\n');
       const isVersion9 = isVersion10 || value.startsWith('v9\n');
@@ -220,10 +309,17 @@ export class BookRepository {
       const records = value.substring(3).split('\n');
       for (let index = 0; index < records.length; index++) {
         const fields = records[index].split('|');
-        const maximumFields = isVersion12 ? 27 : isVersion11 ? 25 : isVersion10 ? 24 : isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
+        const maximumFields = isVersion14 ? 30 : isVersion13 ? 28 : isVersion12 ? 27 : isVersion11 ? 25 : isVersion10 ? 24 : isVersion9 ? 22 : isVersion8 ? 21 : isVersion7 ? 20 : isVersion6 ? 19 : isVersion5 ? 18 : isVersion4 ? 9 : isVersion3 ? 8 : isVersion2 ? 4 : 3;
         if (fields.length < 2 || fields.length > maximumFields) {
           continue;
         }
+        const field27IsGroupNames = isVersion13 && BookRepository.isGroupNamesField(fields[27]);
+        const savedGroupNames = field27IsGroupNames
+          ? BookRepository.parseGroupNames(decodeURIComponent(fields[27] ?? '[]')) : undefined;
+        // 兼容 N 版旧 v13/v14（27 位为规则）与 E 版 v13/v14（27 位为分组）。
+        const savedTocRule = fields.length >= 30 ? decodeURIComponent(fields[29] ?? '')
+          : isVersion14 && !field27IsGroupNames ? decodeURIComponent(fields[27] ?? '')
+          : isVersion13 && !field27IsGroupNames ? decodeURIComponent(fields[27] ?? '') : '';
         const id = decodeURIComponent(fields[0]);
         const title = decodeURIComponent(fields[1]);
         let chapterIndex: number = 0;
@@ -253,12 +349,21 @@ export class BookRepository {
           const savedCategory = decodeURIComponent(fields[14] ?? '本地');
           const savedGroupName = decodeURIComponent(fields[15] ?? '本地未分组');
           const savedLastChapter = decodeURIComponent(fields[16] ?? '');
+          const savedTitles = (fields[6] ?? '').split(';').filter((item: string) => item.length > 0)
+            .map((item: string) => decodeURIComponent(item));
+          const savedOffsets = (fields[7] ?? '').split(',').map((item: string) => Number(item))
+            .filter((item: number) => Number.isInteger(item) && item >= 0);
           books.push({
             id: id,
             title: title,
             author: decodeURIComponent(fields[5] ?? '未知作者'),
             category: savedCategory,
             groupName: savedGroupName,
+            groupNames: savedGroupNames,
+            chapterTitles: savedTitles,
+            chapterOffsets: savedOffsets.length === savedTitles.length ? savedOffsets : undefined,
+            chapterVolumes: isVersion14 ? BookRepository.decodeVolumeFlags(fields[28], savedTitles.length) : undefined,
+            tocRule: savedTocRule.length > 0 ? savedTocRule : undefined,
             chapterIndex: Number.isInteger(savedIndex) && savedIndex >= 0 ? savedIndex : 0,
             chapterProgress: chapterProgress,
             lastChapter: savedLastChapter,
@@ -300,15 +405,18 @@ export class BookRepository {
             const savedWholeProgress = Number(fields[17] ?? '0');
             const savedCategory = isVersion5 ? decodeURIComponent(fields[14] ?? '本地') : '本地';
             const savedGroupName = isVersion5 ? decodeURIComponent(fields[15] ?? '本地未分组') : '本地未分组';
-            const savedLastChapter = isVersion5 ? decodeURIComponent(fields[16] ?? '') : '';
+              const savedLastChapter = isVersion5 ? decodeURIComponent(fields[16] ?? '') : '';
             books.push({
               id: id,
               title: title,
               author: decodeURIComponent(fields[5] ?? '本地 EPUB'),
               category: savedCategory,
               groupName: savedGroupName,
+            groupNames: savedGroupNames,
               chapterTitles: chapterTitles,
               chapterOffsets: chapterOffsets,
+              chapterVolumes: isVersion14 ? BookRepository.decodeVolumeFlags(fields[28], chapterTitles.length) : undefined,
+              tocRule: savedTocRule.length > 0 ? savedTocRule : undefined,
               chapterIndex: safeIndex,
               chapterProgress: safeProgress,
               lastChapter: chapterTitles[safeIndex] ?? (savedLastChapter.length > 0 ? savedLastChapter : '全文'),
@@ -346,7 +454,18 @@ export class BookRepository {
               .filter((item: number) => Number.isInteger(item) && item >= 0);
             const localBook = BookRepository.createLocalBook(id, title, path, chapterIndex, chapterProgress,
               undefined, savedCharset.length > 0 ? savedCharset : undefined);
+            // 从 v5 起恢复 TXT 书目的作者、分类、分组和简介，避免冷启动回到导入默认值。
+            if (fields.length > 5) {
+              localBook.author = decodeURIComponent(fields[5] ?? localBook.author);
+            }
+            if (isVersion5) {
+              localBook.category = decodeURIComponent(fields[14] ?? '本地');
+              localBook.groupName = decodeURIComponent(fields[15] ?? '本地未分组');
+              localBook.description = decodeURIComponent(fields[12] ?? '');
+            }
             localBook.customCoverUri = isVersion11 ? decodeURIComponent(fields[24] ?? '') || undefined : undefined;
+            localBook.groupNames = savedGroupNames;
+            localBook.tocRule = savedTocRule.length > 0 ? savedTocRule : undefined;
             localBook.bookType = isVersion12 ? BookRepository.parseBookType(decodeURIComponent(fields[25] ?? 'text')) : 'text';
             localBook.fixedType = isVersion12 && fields[26] === '1';
             localBook.coverUri = BookRepository.resolveCoverUri(context, id, localBook.customCoverUri ?? '');
@@ -365,6 +484,7 @@ export class BookRepository {
               const safeIndex = Math.max(0, Math.min(savedTitles.length - 1, chapterIndex));
               localBook.chapterTitles = savedTitles;
               localBook.chapterOffsets = savedOffsets;
+              localBook.chapterVolumes = isVersion14 ? BookRepository.decodeVolumeFlags(fields[28], savedTitles.length) : undefined;
               localBook.chapterIndex = safeIndex;
               localBook.lastChapter = savedTitles[safeIndex] ?? localBook.lastChapter;
               localBook.chapterCount = savedTitles.length.toString();
@@ -382,11 +502,11 @@ export class BookRepository {
     }
   }
 
-  static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
+static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const operation = BookRepository.saveQueue.then(async (): Promise<void> => {
       try {
         const store = await preferences.getPreferences(context, BookRepository.preferenceName);
-        const records: string[] = ['v12'];
+        const records: string[] = ['v14'];
         for (let index = 0; index < books.length; index++) {
           const book = books[index];
           if (!BookRepository.isPersistableBook(book)) { continue; }
@@ -406,7 +526,10 @@ export class BookRepository {
             (book.readerPositionVersion === 2 ? '2' : book.readerPositionVersion === 0 ? '0' : '1'),
             encodeURIComponent(book.remark ?? ''), encodeURIComponent(book.customTag ?? ''),
             encodeURIComponent(book.customCoverUri ?? ''), encodeURIComponent(book.bookType ?? 'text'),
-            book.fixedType === true ? '1' : '0'
+            book.fixedType === true ? '1' : '0',
+            encodeURIComponent(JSON.stringify(book.groupNames ?? [])),
+            BookRepository.encodeVolumeFlags(book.chapterVolumes, (book.chapterTitles ?? []).length),
+            encodeURIComponent(book.tocRule ?? '')
           ].join('|'));
         }
         await store.put('books', records.join('\n'));
@@ -422,7 +545,7 @@ export class BookRepository {
     return operation;
   }
 
-  static withCharset(book: Book, charset: string, maxLengthWithNoToc: number = 3000): Book {
+static withCharset(book: Book, charset: string, maxLengthWithNoToc: number = 3000): Book {
     const normalizedCharset = charset.trim();
     if (book.contentPath === undefined || book.format !== 'txt') {
       return {
@@ -431,8 +554,10 @@ export class BookRepository {
         author: book.author,
         category: book.category,
         groupName: book.groupName,
+        groupNames: book.groupNames,
         chapterTitles: book.chapterTitles,
         chapterOffsets: book.chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
         chapterIndex: book.chapterIndex,
         chapterProgress: book.chapterProgress,
         lastChapter: book.lastChapter,
@@ -457,16 +582,26 @@ export class BookRepository {
         androidOriginalPath: book.androidOriginalPath,
         androidCharacterPosition: book.androidCharacterPosition,
         readerPositionVersion: book.readerPositionVersion,
+      tocRule: book.tocRule,
         isLocal: book.isLocal
       };
     }
     const content = BookRepository.readTextFile(book.contentPath, normalizedCharset.length > 0 ? normalizedCharset : undefined);
-    let chapterTitles = BookRepository.findChapterTitles(content);
-    let chapterOffsets = BookRepository.findChapterStarts(content);
+    const chapterRule = BookRepository.resolveChapterRule(book.tocRule, content);
+    let chapterTitles: string[] = [];
+    let chapterOffsets: number[] = [];
+    let chapterVolumes: boolean[] = [];
+    if (chapterRule.length > 0) {
+      const split = BookRepository.splitChapters(content, chapterRule);
+      chapterTitles = split.titles;
+      chapterOffsets = split.offsets;
+      chapterVolumes = split.volumes;
+    }
     if (chapterOffsets.length === 0 && content.length > 0) {
       const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, normalizedCharset.length > 0 ? normalizedCharset : undefined);
       chapterTitles = layout.titles;
       chapterOffsets = layout.offsets;
+      chapterVolumes = [];
     }
     const chapterIndex = Math.max(0, Math.min(Math.max(0, chapterTitles.length - 1), book.chapterIndex ?? 0));
     const chapterProgress = Math.max(0, Math.min(100, book.chapterProgress ?? 0));
@@ -477,8 +612,10 @@ export class BookRepository {
       author: book.author,
       category: book.category,
       groupName: book.groupName,
+      groupNames: book.groupNames,
       chapterTitles: chapterTitles,
       chapterOffsets: chapterOffsets,
+      chapterVolumes: chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: chapterTitles[chapterIndex] ?? book.lastChapter,
@@ -504,19 +641,22 @@ export class BookRepository {
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: 0,
       readerPositionVersion: 1,
+      tocRule: chapterRule.length > 0 ? chapterRule : undefined,
       isLocal: book.isLocal
     };
   }
 
-  static withReSegment(book: Book, enabled: boolean): Book {
+static withReSegment(book: Book, enabled: boolean): Book {
     return {
       id: book.id,
       title: book.title,
       author: book.author,
       category: book.category,
       groupName: book.groupName,
+      groupNames: book.groupNames,
       chapterTitles: book.chapterTitles,
       chapterOffsets: book.chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
       chapterIndex: book.chapterIndex,
       chapterProgress: book.chapterProgress,
       lastChapter: book.lastChapter,
@@ -541,11 +681,12 @@ export class BookRepository {
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: book.androidCharacterPosition,
       readerPositionVersion: book.readerPositionVersion,
+      tocRule: book.tocRule,
       isLocal: book.isLocal
     };
   }
 
-  static async readChapter(book: Book, chapterTitle: string, requestedChapterIndex?: number, contentOverride?: string): Promise<string> {
+static async readChapter(book: Book, chapterTitle: string, requestedChapterIndex?: number, contentOverride?: string): Promise<string> {
     if (book.contentPath === undefined) {
       throw new Error('本地书籍路径无效');
     }
@@ -568,7 +709,7 @@ export class BookRepository {
     if (book.chapterTitles === undefined || book.chapterTitles.length === 0) {
       return await BookRepository.applyChapterContentAsync(book, chapterTitle, content.substring(0, 50000), book.chapterIndex ?? 0);
     }
-    const chapterStarts = BookRepository.findChapterStarts(content);
+    const chapterStarts = BookRepository.splitChapters(content, book.tocRule ?? '').offsets;
     const storedIndex = book.chapterIndex;
     const titleIndex = book.chapterTitles.indexOf(chapterTitle);
     const requestedIndex = requestedChapterIndex ?? (storedIndex !== undefined &&
@@ -596,7 +737,7 @@ export class BookRepository {
     return await BookRepository.applyChapterContentAsync(book, chapterTitle, body, chapterIndex);
   }
 
-  static async readAllChapters(book: Book, useReplaceRules: boolean = true): Promise<string[]> {
+static async readAllChapters(book: Book, useReplaceRules: boolean = true): Promise<string[]> {
     const chapters: string[] = [];
     await BookRepository.forEachChapter(book, (chapterContent: string, _chapterIndex: number): Promise<boolean> => {
       chapters.push(chapterContent);
@@ -605,7 +746,7 @@ export class BookRepository {
     return chapters;
   }
 
-  /** 逐章处理本地正文，交付一章后让出事件循环，避免整本书占住界面线程。 */
+/** 逐章处理本地正文，交付一章后让出事件循环，避免整本书占住界面线程。 */
   static async forEachChapter(
     book: Book,
     onChapter: (chapterContent: string, chapterIndex: number) => Promise<boolean>,
@@ -643,7 +784,7 @@ export class BookRepository {
       }
       return;
     }
-    const starts = BookRepository.findChapterStarts(content);
+    const starts = BookRepository.splitChapters(content, book.tocRule ?? '').offsets;
     if (starts.length === titles.length) {
       for (let index = 0; index < titles.length; index++) {
         const chapterStart = starts[index] ?? 0;
@@ -679,7 +820,7 @@ export class BookRepository {
     }
   }
 
-  /** 将章节编辑保存到应用导入副本，并同步更新章节索引；不会写回用户选择的原文件。 */
+/** 将章节编辑保存到应用导入副本，并同步更新章节索引；不会写回用户选择的原文件。 */
   static replaceLocalChapter(book: Book, chapterIndex: number, chapterTitle: string, chapterBody: string): Book {
     if (book.contentPath === undefined || book.chapterTitles === undefined || book.chapterTitles.length === 0) {
       throw new Error('当前书籍没有可编辑的本地章节');
@@ -696,7 +837,7 @@ export class BookRepository {
     const body = chapterBody;
     chapterTitles[safeIndex] = title;
 
-    if (book.chapterOffsets !== undefined && book.chapterOffsets.length > 0) {
+if (book.chapterOffsets !== undefined && book.chapterOffsets.length > 0) {
       const sections: string[] = [];
       chapterOffsets = [];
       let offset = 0;
@@ -712,7 +853,7 @@ export class BookRepository {
       updatedContent = sections.join('');
     } else {
       const starts = book.chapterOffsets !== undefined && book.chapterOffsets.length === book.chapterTitles.length
-        ? book.chapterOffsets : BookRepository.findChapterStarts(content);
+        ? book.chapterOffsets : BookRepository.splitChapters(content, book.tocRule ?? '').offsets;
       if (starts.length !== book.chapterTitles.length) {
         throw new Error('无法准确定位当前章节，未保存任何修改');
       }
@@ -729,7 +870,7 @@ export class BookRepository {
       chapterOffsets = recalculatedStarts;
     }
 
-    const temporaryPath = `${book.contentPath}.edit-tmp`;
+const temporaryPath = `${book.contentPath}.edit-tmp`;
     const temporaryFile = fileIo.openSync(temporaryPath,
       fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
     try {
@@ -761,14 +902,16 @@ export class BookRepository {
       throw new Error('章节内容保存失败');
     }
 
-    const nextBook: Book = {
+const nextBook: Book = {
       id: book.id,
       title: book.title,
       author: book.author,
       category: book.category,
       groupName: book.groupName,
+      groupNames: book.groupNames,
       chapterTitles: chapterTitles,
       chapterOffsets: chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
       chapterIndex: book.chapterIndex,
       chapterProgress: book.chapterProgress,
       chapterCount: chapterTitles.length.toString(),
@@ -793,12 +936,13 @@ export class BookRepository {
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: 0,
       readerPositionVersion: 1,
+      tocRule: book.tocRule,
       isLocal: book.isLocal
     };
     return nextBook;
   }
 
-  /** 把本地阅读进度转换成 Android 备份使用的章内字符位置。 */
+/** 把本地阅读进度转换成 Android 备份使用的章内字符位置。 */
   static estimateAndroidChapterPosition(book: Book): number {
     if (book.contentPath === undefined) { return 0; }
     try {
@@ -816,7 +960,7 @@ export class BookRepository {
     }
   }
 
-  /** 把 Android 备份中的章内字符位置转换成本地阅读百分比。 */
+/** 把 Android 备份中的章内字符位置转换成本地阅读百分比。 */
   static restoreAndroidProgress(book: Book, requestedIndex: number, characterPosition: number): Book {
     const titles = book.chapterTitles ?? [];
     const chapterIndex = Math.max(0,
@@ -839,8 +983,10 @@ export class BookRepository {
       author: book.author,
       category: book.category,
       groupName: book.groupName,
+      groupNames: book.groupNames,
       chapterTitles: book.chapterTitles,
       chapterOffsets: book.chapterOffsets,
+      chapterVolumes: book.chapterVolumes,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: titles[chapterIndex] ?? book.lastChapter,
@@ -865,11 +1011,12 @@ export class BookRepository {
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: Math.max(0, Math.trunc(characterPosition)),
       readerPositionVersion: 2,
+      tocRule: book.tocRule,
       isLocal: book.isLocal
     };
   }
 
-  private static chapterBodyStart(section: string, title: string): number {
+private static chapterBodyStart(section: string, title: string): number {
     const titleEnd = section.indexOf('\n');
     if (titleEnd < 0 || title.trim().length === 0) { return 0; }
     const actualTitle = section.substring(0, titleEnd).replace(/\r$/, '').trim();
@@ -884,7 +1031,7 @@ export class BookRepository {
       return { start: chapterStart + bodyStart, end: chapterEnd };
     }
     const titles = book.chapterTitles ?? [];
-    const starts = BookRepository.findChapterStarts(content);
+    const starts = BookRepository.splitChapters(content, book.tocRule ?? '').offsets;
     if (starts.length === titles.length && starts.length > 0) {
       const chapterStart = starts[chapterIndex] ?? 0;
       const chapterEnd = starts[chapterIndex + 1] ?? content.length;
@@ -895,7 +1042,7 @@ export class BookRepository {
     return { start: 0, end: content.length };
   }
 
-  private static getChapterSemanticLength(book: Book, content: string, chapterIndex: number): number {
+private static getChapterSemanticLength(book: Book, content: string, chapterIndex: number): number {
     const range = BookRepository.getChapterTextRange(book, content, chapterIndex);
     const rawBody = content.substring(range.start, range.end).trim();
     const title = book.chapterTitles?.[chapterIndex] ?? '';
@@ -908,17 +1055,17 @@ export class BookRepository {
     return LocalTextSemantics.parse(processed).sourceLength;
   }
 
-  private static readPositionVersion(value: string | undefined): number {
+private static readPositionVersion(value: string | undefined): number {
     const version = Number(value ?? '1');
     if (version === 2) { return 2; }
     return version === 0 ? 0 : 1;
   }
 
-  private static applyChapterReSegment(book: Book, chapterTitle: string, body: string): string {
+private static applyChapterReSegment(book: Book, chapterTitle: string, body: string): string {
     return book.reSegment === true ? LocalTextReSegmenter.reSegment(body, chapterTitle) : body;
   }
 
-  private static async applyChapterContentAsync(
+private static async applyChapterContentAsync(
     book: Book,
     chapterTitle: string,
     body: string,
@@ -977,7 +1124,87 @@ export class BookRepository {
     return { titles: titles, offsets: offsets };
   }
 
-  static refreshNoTocBook(book: Book, maxLengthWithNoToc: number): NoTocBookRefreshResult {
+  /** 重新匹配当前启用的 TXT 目录规则，并把阅读位置映射到新章节。 */
+  static refreshToc(book: Book, maxLengthWithNoToc: number = 3000): TocRefreshResult {
+    if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
+      return { book: book, content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const content = BookRepository.readTextFile(book.contentPath, book.charset);
+    const chapterRule = BookRepository.resolveChapterRule(undefined, content);
+    let chapterTitles: string[] = [];
+    let chapterOffsets: number[] = [];
+    let chapterVolumes: boolean[] = [];
+    if (chapterRule.length > 0) {
+      const split = BookRepository.splitChapters(content, chapterRule);
+      chapterTitles = split.titles;
+      chapterOffsets = split.offsets;
+      chapterVolumes = split.volumes;
+    }
+    if (chapterOffsets.length === 0 && content.length > 0) {
+      const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, book.charset);
+      chapterTitles = layout.titles;
+      chapterOffsets = layout.offsets;
+      chapterVolumes = [];
+    }
+    const oldTitles = book.chapterTitles ?? [];
+    let changed = (chapterRule.length > 0 ? chapterRule : undefined) !== book.tocRule ||
+      oldTitles.length !== chapterTitles.length;
+    for (let index = 0; !changed && index < chapterTitles.length; index++) {
+      if (oldTitles[index] !== chapterTitles[index] ||
+        (book.chapterOffsets?.[index] ?? -1) !== (chapterOffsets[index] ?? -2) ||
+        (book.chapterVolumes?.[index] === true) !== (chapterVolumes[index] === true)) {
+        changed = true;
+      }
+    }
+    if (!changed) {
+      return { book: book, content: content, changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
+    }
+    const oldOffsets = book.chapterOffsets ?? [0];
+    const oldBodyOffsets = BookRepository.getNoTocBodyOffsets(content, oldOffsets, oldTitles.length);
+    const newBodyOffsets = BookRepository.getNoTocBodyOffsets(content, chapterOffsets, chapterTitles.length);
+    const oldIndex = oldTitles.length > 0
+      ? Math.max(0, Math.min(oldTitles.length - 1, book.chapterIndex ?? 0)) : 0;
+    const oldStart = oldBodyOffsets[oldIndex] ?? 0;
+    const oldEnd = oldOffsets[oldIndex + 1] ?? content.length;
+    const oldBodyLength = Math.max(0, oldEnd - oldStart);
+    const savedPosition = Math.max(0, Math.trunc(book.androidCharacterPosition ?? 0));
+    const localPosition = book.readerPositionVersion === 2 || book.readerPositionVersion === 1
+      ? savedPosition
+      : Math.round(oldBodyLength * Math.max(0, Math.min(100, book.chapterProgress ?? 0)) / 100);
+    const absolutePosition = Math.max(0, Math.min(content.length, oldStart + localPosition));
+    let chapterIndex = 0;
+    for (let index = 0; index < newBodyOffsets.length; index++) {
+      if ((newBodyOffsets[index] ?? 0) > absolutePosition) { break; }
+      chapterIndex = index;
+    }
+    chapterIndex = Math.min(chapterIndex, Math.max(0, chapterTitles.length - 1));
+    const chapterStart = newBodyOffsets[chapterIndex] ?? 0;
+    const chapterEnd = chapterOffsets[chapterIndex + 1] ?? content.length;
+    const chapterPosition = Math.max(0, Math.min(chapterEnd - chapterStart, absolutePosition - chapterStart));
+    const chapterProgress = chapterEnd > chapterStart ? chapterPosition / (chapterEnd - chapterStart) * 100 : 0;
+    const chapterCount = Math.max(1, chapterTitles.length);
+    const refreshedBook: Book = {
+      id: book.id, title: book.title, author: book.author, category: book.category,
+      groupName: book.groupName, groupNames: book.groupNames,
+      chapterTitles: chapterTitles, chapterOffsets: chapterOffsets,
+      chapterVolumes: chapterVolumes.length === chapterTitles.length ? chapterVolumes : undefined,
+      chapterIndex: chapterIndex, chapterProgress: chapterProgress,
+      lastChapter: chapterTitles[chapterIndex] ?? book.lastChapter,
+      progress: chapterTitles.length > 0 ? (chapterIndex + chapterProgress / 100) / chapterCount * 100 : book.progress,
+      coverColor: book.coverColor, coverMark: book.coverMark, coverUri: book.coverUri,
+      customCoverUri: book.customCoverUri, bookType: book.bookType, fixedType: book.fixedType,
+      contentPath: book.contentPath, format: book.format, chapterCount: chapterTitles.length.toString(),
+      fileSizeBytes: book.fileSizeBytes, imageStyle: book.imageStyle, reSegment: book.reSegment,
+      charset: book.charset, description: book.description, remark: book.remark, customTag: book.customTag,
+      bodyMissing: book.bodyMissing, androidOriginalPath: book.androidOriginalPath,
+      androidCharacterPosition: chapterPosition, readerPositionVersion: 2,
+      tocRule: chapterRule.length > 0 ? chapterRule : undefined, isLocal: book.isLocal
+    };
+    return { book: refreshedBook, content: content, changed: true,
+      oldBodyOffsets: oldBodyOffsets, newBodyOffsets: newBodyOffsets };
+  }
+
+static refreshNoTocBook(book: Book, maxLengthWithNoToc: number): NoTocBookRefreshResult {
     if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
       return { book: book, content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
     }
@@ -994,7 +1221,7 @@ export class BookRepository {
       return { book: book, content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
     }
     const content = BookRepository.readTextFile(book.contentPath, book.charset);
-    if (BookRepository.findChapterStarts(content).length > 0) {
+    if (BookRepository.splitChapters(content, BookRepository.resolveChapterRule(undefined, content)).offsets.length > 0) {
       return { book: book, content: content, changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
     }
     const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, book.charset);
@@ -1037,8 +1264,10 @@ export class BookRepository {
       author: book.author,
       category: book.category,
       groupName: book.groupName,
+      groupNames: book.groupNames,
       chapterTitles: layout.titles,
       chapterOffsets: layout.offsets,
+      chapterVolumes: undefined,
       chapterIndex: chapterIndex,
       chapterProgress: chapterProgress,
       lastChapter: layout.titles[chapterIndex] ?? book.lastChapter,
@@ -1063,6 +1292,7 @@ export class BookRepository {
       androidOriginalPath: book.androidOriginalPath,
       androidCharacterPosition: chapterPosition,
       readerPositionVersion: 2,
+      tocRule: book.tocRule,
       isLocal: book.isLocal
     };
     return {
@@ -1074,7 +1304,7 @@ export class BookRepository {
     };
   }
 
-  private static getNoTocBodyOffsets(content: string, starts: number[], count: number): number[] {
+private static getNoTocBodyOffsets(content: string, starts: number[], count: number): number[] {
     const offsets: number[] = [];
     for (let index = 0; index < count; index++) {
       const start = starts[index] ?? 0;
@@ -1101,12 +1331,21 @@ export class BookRepository {
       content = importedContent ?? BookRepository.readTextFile(contentPath, charset);
     } catch (_) {
     }
-    let chapterTitles = BookRepository.findChapterTitles(content);
-    let chapterOffsets = BookRepository.findChapterStarts(content);
+    const chapterRule = BookRepository.resolveChapterRule(undefined, content);
+    let chapterTitles: string[] = [];
+    let chapterOffsets: number[] = [];
+    let chapterVolumes: boolean[] = [];
+    if (chapterRule.length > 0) {
+      const split = BookRepository.splitChapters(content, chapterRule);
+      chapterTitles = split.titles;
+      chapterOffsets = split.offsets;
+      chapterVolumes = split.volumes;
+    }
     if (chapterOffsets.length === 0 && content.length > 0) {
       const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, charset);
       chapterTitles = layout.titles;
       chapterOffsets = layout.offsets;
+      chapterVolumes = [];
     }
     const safeChapterIndex = Math.max(0, Math.min(chapterTitles.length - 1, chapterIndex));
     const safeChapterProgress = Math.max(0, Math.min(100, chapterProgress));
@@ -1124,8 +1363,11 @@ export class BookRepository {
       author: '本地 TXT',
       category: '本地',
       groupName: '本地未分组',
+      groupNames: [],
       chapterTitles: chapterTitles,
       chapterOffsets: chapterOffsets.length === chapterTitles.length ? chapterOffsets : undefined,
+      chapterVolumes: chapterVolumes.length === chapterTitles.length ? chapterVolumes : undefined,
+      tocRule: chapterRule.length > 0 ? chapterRule : undefined,
       lastChapter: chapterTitles[safeChapterIndex],
       chapterIndex: safeChapterIndex,
       chapterProgress: safeChapterProgress,
@@ -1142,7 +1384,7 @@ export class BookRepository {
     };
   }
 
-  private static readTextFile(path: string, encoding?: string): string {
+private static readTextFile(path: string, encoding?: string): string {
     const sourceFile = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY);
     try {
       const fileSize = fileIo.statSync(sourceFile.fd).size;
@@ -1158,7 +1400,7 @@ export class BookRepository {
     }
   }
 
-  private static async readTextFileAsync(path: string, encoding?: string): Promise<string> {
+private static async readTextFileAsync(path: string, encoding?: string): Promise<string> {
     const sourceFile = await fileIo.open(path, fileIo.OpenMode.READ_ONLY);
     try {
       const fileSize = (await fileIo.stat(path)).size;
@@ -1189,7 +1431,7 @@ export class BookRepository {
     }
   }
 
-  private static decodeTextBytes(bytes: Uint8Array, encoding?: string): string {
+private static decodeTextBytes(bytes: Uint8Array, encoding?: string): string {
     if (encoding !== undefined && encoding.trim().length > 0) {
       const normalizedEncoding = encoding.trim().toLowerCase();
       if (normalizedEncoding === 'unicode' || normalizedEncoding === 'utf-16') {
@@ -1222,7 +1464,7 @@ export class BookRepository {
     throw new Error('TXT 编码无法识别，请使用 UTF-8、GBK/GB18030 或 Big5 格式');
   }
 
-  private static decodeWithEncoding(bytes: Uint8Array, encoding: string): string {
+private static decodeWithEncoding(bytes: Uint8Array, encoding: string): string {
     const text = BookRepository.tryDecodeWithEncoding(bytes, encoding);
     if (text === undefined) {
       throw new Error(`TXT 文件不是有效的 ${encoding} 文本`);
@@ -1230,7 +1472,7 @@ export class BookRepository {
     return text;
   }
 
-  private static tryDecodeWithEncoding(bytes: Uint8Array, encoding: string): string | undefined {
+private static tryDecodeWithEncoding(bytes: Uint8Array, encoding: string): string | undefined {
     try {
       const decoder = util.TextDecoder.create(encoding, { fatal: true, ignoreBOM: true });
       return decoder.decodeToString(bytes);
@@ -1239,7 +1481,7 @@ export class BookRepository {
     }
   }
 
-  private static getFileName(uri: string): string {
+private static getFileName(uri: string): string {
     const separator = uri.lastIndexOf('/');
     const rawName = separator >= 0 ? uri.substring(separator + 1) : uri;
     try {
@@ -1249,7 +1491,7 @@ export class BookRepository {
     }
   }
 
-  private static ensureDirectory(path: string): void {
+private static ensureDirectory(path: string): void {
     try {
       fileIo.mkdirSync(path, true);
     } catch (error) {
@@ -1262,7 +1504,7 @@ export class BookRepository {
     }
   }
 
-  private static getTitle(fileName: string): string {
+private static getTitle(fileName: string): string {
     const lowerName = fileName.toLowerCase();
     if (lowerName.endsWith('.txt')) {
       return fileName.substring(0, fileName.length - 4);
@@ -1270,37 +1512,33 @@ export class BookRepository {
     return fileName.length > 0 ? fileName : '本地书籍';
   }
 
-  private static findChapterTitles(content: string): string[] {
-    const result: string[] = [];
-    const lines = content.replace(/\uFEFF/g, '').split(/\r?\n/);
-    const pattern: RegExp = /^(第.{1,18}[章节回卷篇]|序章|楔子|番外)/;
-    for (let index = 0; index < lines.length; index++) {
-      const title = lines[index].trim();
-      if (title.length > 0 && pattern.test(title)) {
-        result.push(title.substring(0, 80));
-      }
-    }
-    if (result.length === 0) {
-      result.push('全文');
-    }
-    return result;
+/** 选择 TXT 章节规则；无用户规则命中时保留旧版默认识别，避免升级后旧书突然变成整本一章。 */
+  private static resolveChapterRule(cachedRule: string | undefined, content: string): string {
+    if (cachedRule !== undefined && cachedRule.length > 0) { return cachedRule; }
+    const sample = content.length > BookRepository.tocSampleSize
+      ? content.substring(0, BookRepository.tocSampleSize) : content;
+    const selected = TxtTocRuleRepository.selectForSample(sample).rule;
+    return selected?.chapterRule ?? '^(第.{1,18}[章节回卷篇]|序章|楔子|番外)';
   }
 
-  private static findChapterStarts(content: string): number[] {
-    const starts: number[] = [];
-    const lines = content.split('\n');
-    const pattern: RegExp = /^(第.{1,18}[章节回卷篇]|序章|楔子|番外)/;
-    let offset: number = 0;
-    for (let index = 0; index < lines.length; index++) {
-      const rawLine = lines[index] ?? '';
-      const title = rawLine.replace(/\r$/, '').trim();
-      if (title.length > 0 && pattern.test(title)) {
-        starts.push(offset);
-      }
-      offset += rawLine.length + (index < lines.length - 1 ? 1 : 0);
-    }
-    return starts;
+  /** 标题、起点与卷标记来自同一次匹配，确保阅读偏移和目录显示对齐。 */
+  private static splitChapters(content: string, chapterRule: string): ChapterSplit {
+    const resolvedRule = chapterRule.trim().length > 0
+      ? chapterRule : BookRepository.resolveChapterRule(undefined, content);
+    const starts = TxtTocRuleRepository.splitChapterStarts(content, resolvedRule);
+    const titles: string[] = [];
+    starts.forEach((start: number) => {
+      const lineEnd = content.indexOf('\n', start);
+      const rawLine = lineEnd >= 0 ? content.substring(start, lineEnd) : content.substring(start);
+      titles.push(rawLine.replace(/\r$/, '').trim().substring(0, 80));
+    });
+    const volumeRule = TxtTocRuleRepository.resolveVolumeRule(resolvedRule);
+    return {
+      titles: titles,
+      offsets: starts,
+      volumes: TxtTocRuleRepository.markVolumeTitles(titles, volumeRule)
+    };
   }
+
 }
-
 

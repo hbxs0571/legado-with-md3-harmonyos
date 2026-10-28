@@ -1,5 +1,6 @@
 import { fileIo } from '@kit.CoreFileKit';
 import { Book, BookMediaType } from '../model/Book';
+import { BookGroup } from '../model/BookGroup';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 
@@ -9,6 +10,7 @@ export struct BookInfoPage {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
     coverColor: '#343845', coverMark: '书', isLocal: true
   };
+  @Prop groups: BookGroup[] = [];
   onBack: () => void = () => {};
   onRead: () => void = () => {};
   onOpenCatalog: () => void = () => {};
@@ -17,8 +19,9 @@ export struct BookInfoPage {
   onChooseCover: () => void = () => {};
   onRestoreCover: () => void = () => {};
   onSaveMetadata: (title: string, author: string, category: string, description: string,
-    remark: string, customTag: string, bookType: BookMediaType, fixedType: boolean) => Promise<boolean> = async (_title: string, _author: string,
-    _category: string, _description: string, _remark: string, _customTag: string, _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
+    remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) => Promise<boolean> = async (_title: string, _author: string,
+    _category: string, _description: string, _remark: string, _customTag: string, _groupNames: string[],
+    _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
@@ -30,6 +33,7 @@ export struct BookInfoPage {
   @State metadataDescription: string = '';
   @State metadataRemark: string = '';
   @State metadataCustomTag: string = '';
+  @State metadataGroupNames: string[] = [];
   @State metadataBookType: BookMediaType = 'text';
   @State metadataFixedType: boolean = false;
   private infoScroller: Scroller = new Scroller();
@@ -100,6 +104,7 @@ export struct BookInfoPage {
     this.metadataDescription = this.book.description ?? '';
     this.metadataRemark = this.book.remark ?? '';
     this.metadataCustomTag = this.book.customTag ?? '';
+    this.metadataGroupNames = [...(this.book.groupNames ?? [])];
     this.metadataBookType = this.book.bookType ?? 'text';
     this.metadataFixedType = this.book.fixedType === true;
     this.metadataEditorVisible = true;
@@ -118,10 +123,19 @@ export struct BookInfoPage {
       this.metadataDescription.trim(),
       this.metadataRemark.trim(),
       this.metadataCustomTag.trim(),
+      this.metadataGroupNames,
       this.metadataBookType,
       this.metadataFixedType
     );
     if (saved) { this.metadataEditorVisible = false; }
+  }
+
+  private toggleMetadataGroup(name: string, selected: boolean): void {
+    if (selected && !this.metadataGroupNames.includes(name)) {
+      this.metadataGroupNames = [...this.metadataGroupNames, name];
+    } else if (!selected) {
+      this.metadataGroupNames = this.metadataGroupNames.filter((item: string) => item !== name);
+    }
   }
 
   build() {
@@ -154,7 +168,13 @@ export struct BookInfoPage {
 
             Row() {
               if (this.book.category.length > 0) { BookInfoTag({ label: this.book.category }) }
-              BookInfoTag({ label: this.book.groupName ?? (this.book.isLocal ? '本地未分组' : '书架') })
+              if ((this.book.groupNames ?? []).length > 0) {
+                ForEach(this.book.groupNames ?? [], (groupName: string) => {
+                  BookInfoTag({ label: groupName })
+                }, (groupName: string) => groupName)
+              } else {
+                BookInfoTag({ label: this.book.groupName ?? (this.book.isLocal ? '本地未分组' : '书架') })
+              }
               BookInfoTag({ label: this.getFormatLabel() })
               if (this.fileSizeLabel.length > 0) { BookInfoTag({ label: this.fileSizeLabel }) }
               ForEach(this.getCustomTags(), (tag: string) => {
@@ -302,6 +322,21 @@ export struct BookInfoPage {
                     Toggle({ type: ToggleType.Switch, isOn: this.metadataFixedType })
                       .onChange((value: boolean) => this.metadataFixedType = value)
                   }.width('100%').margin({ top: 8 })
+                }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(12).margin({ bottom: 10 })
+                Column() {
+                  Text('书架分组（可多选）').fontSize(14).fontColor('#ECEEF2').margin({ bottom: 8 })
+                  if (this.groups.filter((group: BookGroup) => group.groupId > 0).length === 0) {
+                    Text('暂无自定义分组，可从书架右上角的分组管理中添加')
+                      .fontSize(12).fontColor('#92949E')
+                  } else {
+                    ForEach(this.groups.filter((group: BookGroup) => group.groupId > 0), (group: BookGroup) => {
+                      Row() {
+                        Text(group.groupName).fontSize(13).fontColor('#D8D9E0').layoutWeight(1)
+                        Toggle({ type: ToggleType.Checkbox, isOn: this.metadataGroupNames.includes(group.groupName) })
+                          .onChange((selected: boolean) => this.toggleMetadataGroup(group.groupName, selected))
+                      }.width('100%').padding({ top: 5, bottom: 5 })
+                    }, (group: BookGroup) => `${group.groupId}`)
+                  }
                 }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(12).margin({ bottom: 10 })
                 TextInput({ text: this.metadataTitle, placeholder: '书名' }).width('100%').height(48)
                   .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)

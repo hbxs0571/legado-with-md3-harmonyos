@@ -136,6 +136,7 @@ export class EpubRepository {
         author: author,
         category: '本地',
         groupName: '本地未分组',
+      groupNames: [],
         chapterTitles: chapterTitles,
         chapterOffsets: chapterOffsets,
         chapterIndex: 0,

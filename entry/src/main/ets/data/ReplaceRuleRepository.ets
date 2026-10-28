@@ -491,11 +491,10 @@ export class ReplaceRuleRepository {
     if (uri === undefined) {
       return false;
     }
-    const encoder = new util.TextEncoder();
-    const bytes = encoder.encodeInto(content);
+    // 内容直接传字符串，由底层按 UTF-8 编码，避免 Uint8Array 导出触发 13900020（EINVAL）。
     const target = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
     try {
-      fileIo.writeSync(target.fd, bytes);
+      fileIo.writeSync(target.fd, content);
     } finally {
       fileIo.closeSync(target);
     }
