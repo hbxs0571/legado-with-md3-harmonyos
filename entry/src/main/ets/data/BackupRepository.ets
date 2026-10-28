@@ -429,8 +429,12 @@ export class BackupRepository {
 
       const configPath = `${stagingDirectory}/config.xml`;
       if (!fileIo.accessSync(configPath)) {
-        BackupRepository.writeTextFile(configPath,
-          `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n` +
+        // config.xml 骨架必须总是写出（后面的书架布局与主题配置要往同一文件 upsert），
+        // 但阅读配置键受 readConfig 门控：排除阅读配置时不应写入这些键。
+        // 此前这里无条件写入，导致「排除阅读配置」在归档目录没有 config.xml 时完全失效。
+        let baseXml = `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n`;
+        if (!ignoredCategories.includes('readConfig')) {
+          baseXml +=
           `  <int name="readStyleSelect" value="0" />\n` +
           `  <boolean name="shareLayout" value="${settings.shareLayout}" />\n` +
           `  <boolean name="hideStatusBar" value="${settings.hideStatusBar}" />\n` +
@@ -454,7 +458,10 @@ export class BackupRepository {
           `  <int name="clickActionMiddleRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[5] ?? '')}" />\n` +
           `  <int name="clickActionBottomLeft" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[6] ?? '')}" />\n` +
           `  <int name="clickActionBottomCenter" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[7] ?? '')}" />\n` +
-          `  <int name="clickActionBottomRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[8] ?? '')}" />\n</map>`);
+          `  <int name="clickActionBottomRight" value="${BackupRepository.androidClickActionValue(settings.clickRegionActions[8] ?? '')}" />\n`;
+        }
+        baseXml += `</map>`;
+        BackupRepository.writeTextFile(configPath, baseXml);
       }
 
       if (!ignoredCategories.includes('bookshelfLayout')) {
@@ -470,7 +477,9 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfCoverShadow', `${bookshelfLayout.bookshelfCoverShadow}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
-      if (!ignoredCategories.includes('readConfig')) {
+      // 护眼六键在 preferenceKeysByCategory 里归 themeConfig，写入门控必须与分类归属保持一致：
+      // 否则「排除主题配置」对护眼设置不生效，「排除阅读配置」反而会连带丢掉护眼设置。
+      if (!ignoredCategories.includes('themeConfig')) {
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'eyeProtectionEnabled', `${settings.eyeProtectionEnabled}`);
@@ -690,9 +699,13 @@ export class BackupRepository {
       preservedEntryCount += 1;
     }
 
-    const settings = BackupRepository.restoreReaderSettings(
+    const settings = BackupRepository.applyEyeProtection(
       selection.stagingDirectory,
-      currentSettings,
+      BackupRepository.restoreReaderSettings(
+        selection.stagingDirectory,
+        currentSettings,
+        ignoredCategories
+      ),
       ignoredCategories
     );
     await ReaderSettingsRepository.save(context, settings);
@@ -864,6 +877,32 @@ export class BackupRepository {
     return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
   }
 
+  // 护眼六键独立于阅读配置恢复：它们归 themeConfig 分类，
+  // 只有「排除主题配置」才跳过，且不受 restoreReaderSettings 的 readConfig 早退影响。
+  private static applyEyeProtection(
+    directory: string,
+    settings: ReaderSettingsSnapshot,
+    ignoredCategories: string[]
+  ): ReaderSettingsSnapshot {
+    if (ignoredCategories.includes('themeConfig')) { return settings; }
+    const configPath = `${directory}/config.xml`;
+    const enabled = BackupRepository.readXmlBoolean(configPath, 'eyeProtectionEnabled');
+    if (enabled !== undefined) { settings.eyeProtectionEnabled = enabled; }
+    const autoNight = BackupRepository.readXmlBoolean(configPath, 'eyeProtectionAutoNight');
+    if (autoNight !== undefined) { settings.eyeProtectionAutoNight = autoNight; }
+    const schedule = BackupRepository.readXmlBoolean(configPath, 'eyeProtectionSchedule');
+    if (schedule !== undefined) { settings.eyeProtectionSchedule = schedule; }
+    const intensity = BackupRepository.readXmlInteger(configPath, 'colorTemperature');
+    if (intensity !== undefined) {
+      settings.eyeProtectionIntensity = Math.max(0, Math.min(100, intensity));
+    }
+    const startTime = BackupRepository.readXmlString(configPath, 'eyeProtectionStartTime');
+    if (startTime !== undefined) { settings.eyeProtectionStartTime = startTime; }
+    const endTime = BackupRepository.readXmlString(configPath, 'eyeProtectionEndTime');
+    if (endTime !== undefined) { settings.eyeProtectionEndTime = endTime; }
+    return settings;
+  }
+
   private static restoreReaderSettings(
     directory: string,
     current: ReaderSettingsSnapshot,
@@ -944,18 +983,14 @@ export class BackupRepository {
       volumeKeyPage: current.volumeKeyPage,
       keyPageOnLongPress: current.keyPageOnLongPress,
       noAnimScrollPage: current.noAnimScrollPage,
-      eyeProtectionEnabled: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionEnabled') ??
-        current.eyeProtectionEnabled,
-      eyeProtectionAutoNight: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionAutoNight') ??
-        current.eyeProtectionAutoNight,
-      eyeProtectionSchedule: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'eyeProtectionSchedule') ??
-        current.eyeProtectionSchedule,
-      eyeProtectionIntensity: Math.max(0, Math.min(100,
-        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'colorTemperature') ?? current.eyeProtectionIntensity)),
-      eyeProtectionStartTime: BackupRepository.readXmlString(`${directory}/config.xml`, 'eyeProtectionStartTime') ??
-        current.eyeProtectionStartTime,
-      eyeProtectionEndTime: BackupRepository.readXmlString(`${directory}/config.xml`, 'eyeProtectionEndTime') ??
-        current.eyeProtectionEndTime,
+      // 护眼六键属于 themeConfig 分类，由 applyEyeProtection() 独立恢复：
+      // 这里只透传当前值，避免被 readConfig 的早退挡住或被重复读取覆盖。
+      eyeProtectionEnabled: current.eyeProtectionEnabled,
+      eyeProtectionAutoNight: current.eyeProtectionAutoNight,
+      eyeProtectionSchedule: current.eyeProtectionSchedule,
+      eyeProtectionIntensity: current.eyeProtectionIntensity,
+      eyeProtectionStartTime: current.eyeProtectionStartTime,
+      eyeProtectionEndTime: current.eyeProtectionEndTime,
       readingAnchorEnabled: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'readingAnchorEnabled') ??
         current.readingAnchorEnabled,
       swipeToAddBookmark: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'swipeToAddBookmark') ??
