@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-28 书架排序生效
+
+- 新增 `entry/src/main/ets/data/BookshelfSort.ets`，逐档对齐上游 `BookshelfRepository.sortBooks()`：0 按最近列表 / 1 按更新时间 / 2 按书名 / 3 手动排序 / 4 综合排序 / 5 按作者；分组 `bookSort >= 0` 时覆盖书架全局排序，否则跟随全局。
+- 书籍协议升到 v15：新增索引 30 `latestChapterTime`、索引 31 `durChapterTime`、索引 32 手动序号 `order`；仍兼容 v1–v14 旧记录。保存阅读进度时写入 `durChapterTime`，作为「按最近列表」与「综合排序」的依据。
+- `BookshelfPage` 新增 `shelfSort`/`shelfSortOrder` 入参，筛选后在 `getVisibleBooks()` 里排序；中文按 `localeCompare('zh-Hans-CN')` 比较，locale 不可用时退回码位比较而不中断排序。
+- N 端 API 26 模拟器实测：「全部」下读过的书排到首位；「按书名」分组下顺序与全局顺序不同，确认分组覆盖生效。E 端尚未验收，详见 `docs/KNOWN-ISSUES.md`。
+
 ## 2026-10-28 书架分组网格管理
 
 - 对照上游 `GroupManageSheet`/`GroupEditSheet` 重做分组管理：自适应两列网格卡片（封面/名称/排序与私有副标题/显示开关）、卡片点入编辑表单（封面选图与清除、名称、排序方式 7 档、下拉刷新开关、私有分组开关、删除两击确认）、`ForEach.onMove` 拖拽排序与新建表单。

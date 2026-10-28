@@ -34,6 +34,7 @@ import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
+import { BookshelfSort } from '../data/BookshelfSort';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
@@ -2725,6 +2726,10 @@ struct Index {
       readerPositionVersion: this.selectedBook.isLocal && (this.selectedBook.format === 'txt' ||
         this.selectedBook.format === 'epub') ? (androidCoordinate ? 2 : 0) : this.selectedBook.readerPositionVersion,
       tocRule: this.selectedBook.tocRule,
+      latestChapterTime: this.selectedBook.latestChapterTime,
+      // 保存阅读进度就是「刚读过」，用来驱动书架的按最近列表 / 综合排序。
+      durChapterTime: Date.now(),
+      order: this.selectedBook.order,
       isLocal: this.selectedBook.isLocal
     };
     this.selectedBook = updatedBook;
@@ -3185,6 +3190,8 @@ struct Index {
         BookshelfPage({
           books: this.books,
           groups: this.bookGroups,
+          shelfSort: BookshelfSort.defaultSort,
+          shelfSortOrder: BookshelfSort.defaultSortOrder,
           onAddGroup: (name: string) => this.addBookshelfGroup(name),
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
           onSetGroupVisible: (id: number, visible: boolean) => this.setBookshelfGroupVisible(id, visible),

@@ -1,5 +1,6 @@
 import { Book } from '../model/Book';
 import { BookGroup, BookGroupDraft, BOOK_SORT_OPTIONS, BookSortOption, bookSortLabel } from '../model/BookGroup';
+import { BookshelfSort } from '../data/BookshelfSort';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
 
@@ -7,6 +8,10 @@ import { AppGlyph } from '../components/AppGlyph';
 export struct BookshelfPage {
   @Prop books: Book[] = [];
   @Prop groups: BookGroup[] = [];
+  /** 书架全局排序方式，来自设置；分组的 bookSort >= 0 时被分组覆盖。 */
+  @Prop shelfSort: number = BookshelfSort.defaultSort;
+  /** 书架全局排序方向，1 为倒序。 */
+  @Prop shelfSortOrder: number = BookshelfSort.defaultSortOrder;
   @State selectedFilter: string = '全部';
   @State showGroupManager: boolean = false;
   @State showGroupEditor: boolean = false;
@@ -73,7 +78,7 @@ export struct BookshelfPage {
   private getVisibleBooks(): Book[] {
     const selectedGroup = this.selectedFilter;
     const query = this.searchQuery.trim().toLocaleLowerCase();
-    return this.books.filter((book: Book) => {
+    const filtered = this.books.filter((book: Book) => {
       const names = book.groupNames ?? [];
       const matchesGroup = selectedGroup === '全部' ||
         (selectedGroup === '本地未分组' ? names.length === 0 : names.includes(selectedGroup));
@@ -81,6 +86,10 @@ export struct BookshelfPage {
         book.author.toLocaleLowerCase().includes(query);
       return matchesGroup && matchesQuery;
     });
+    // 分组设了自己的排序方式就覆盖书架全局，与上游 sortBooks() 的取值优先级一致。
+    const activeGroup = this.groups.find((group: BookGroup) =>
+      group.groupId > 0 && group.groupName === selectedGroup);
+    return BookshelfSort.sortBooks(filtered, activeGroup, this.shelfSort, this.shelfSortOrder);
   }
 
   /** 只列自定义分组，按 order 升序，与上游 GroupManageSheet 一致。 */

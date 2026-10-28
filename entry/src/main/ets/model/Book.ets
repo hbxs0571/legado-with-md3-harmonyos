@@ -49,6 +49,12 @@ export interface Book {
   readerPositionVersion?: number;
   /** 导入时选中的 TXT 章节正则；留空表示沿用旧版默认识别。 */
   tocRule?: string;
+  /** 最近一次更新目录的时间戳，对应上游 Book.latestChapterTime。 */
+  latestChapterTime?: number;
+  /** 最后阅读这本书的时间戳，对应上游 Book.durChapterTime。 */
+  durChapterTime?: number;
+  /** 手动排序序号，对应上游 Book.order；按「手动排序」时使用。 */
+  order?: number;
   isLocal: boolean;
 }
 
