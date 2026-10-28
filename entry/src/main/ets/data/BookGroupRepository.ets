@@ -374,7 +374,10 @@ export class BookGroupRepository {
         show: group.show !== false,
         enableRefresh: group.enableRefresh !== false,
         bookSort: Number.isInteger(group.bookSort) ? group.bookSort : -1,
-        isPrivate: group.isPrivate === true
+        isPrivate: group.isPrivate === true,
+        // 封面必须在 normalize 里透传，否则 setCover 刚写入的路径
+        // 会在 persist → normalize 重建对象时被抹掉。
+        cover: group.cover
       });
     });
     return normalized.sort((left: BookGroup, right: BookGroup) => left.order - right.order);
