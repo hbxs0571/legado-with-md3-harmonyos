@@ -1,6 +1,10 @@
 import { Book } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
+import { ReaderHighlightRule, ReaderHighlightRange, ReaderHighlightStyle } from '../model/ReaderHighlightRule';
+import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
+import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
+import { ReaderHighlightRuleSheet } from './ReaderHighlightRuleSheet';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { BookRepository } from '../data/BookRepository';
@@ -75,9 +79,18 @@ const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
 };
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
+interface ReaderHighlightTextRun {
+  value: string;
+  // 不用嵌套对象：ArkUI 的 @Builder 按值传参会丢失嵌套字段，这里全部拍平为基本类型。
+  textColor: string;
+  backgroundColor: string;
+  underlineMode: number;
+  underlineColor: string;
+}
 interface ReaderContentSegment {
   kind: 'text' | 'image';
   value: string;
+  startPosition: number;
 }
 
 interface ReaderIntrinsicImageSize {
@@ -161,6 +174,9 @@ export struct ReaderPage {
   @Prop replaceEnabled: boolean = true;
   @Prop replaceUsesDefault: boolean = true;
   @State contentProcesses: BookContentProcess[] = [];
+  @State readerHighlightRules: ReaderHighlightRule[] = [];
+  @State readerHighlightRanges: ReaderHighlightRange[] = [];
+  @State highlightRuleSheetVisible: boolean = false;
   @State effectiveReplaceRuleIds: number[] = [];
   @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetPosition: number = -1;
   @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetRevision: number = 0;
@@ -276,7 +292,6 @@ export struct ReaderPage {
   @Prop eyeProtectionActive: boolean = false;
   onToggleEyeProtection: () => void = () => {};
   onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => void = (_actions: ReaderMoreActionConfig[]) => {};
-  onOpenHighlightRules: () => void = () => {};
   onOpenBottomActionConfig: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onImageStyleChange: (imageStyle: string) => void = (_imageStyle: string) => {};
@@ -333,6 +348,7 @@ export struct ReaderPage {
     this.autoPageSecondsRemaining = this.autoReadSpeedSeconds;
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
+    this.loadReaderHighlightRules();
     this.syncReaderSystemBars();
     this.applyReaderOrientation(this.screenOrientation, true);
     this.applyKeepLight();
@@ -773,6 +789,11 @@ export struct ReaderPage {
     const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
     const document = LocalTextSemantics.parse(this.content, this.paragraphIndent);
     this.localSemanticContent = document.content;
+    const nextRanges = ReaderHighlightRuleEngine.findBodyRanges(document.content, this.readerHighlightRules);
+    if (nextRanges.length !== this.readerHighlightRanges.length) {
+      this.readerContentRevision++;
+    }
+    this.readerHighlightRanges = nextRanges;
     this.localSemanticDocument = document;
     for (let paragraphIndex = 0; paragraphIndex < document.paragraphs.length; paragraphIndex++) {
       const paragraph = document.paragraphs[paragraphIndex];
@@ -1333,7 +1354,7 @@ export struct ReaderPage {
     } else if (action.id === 'read_style') {
       this.onOpenSettings();
     } else if (action.id === 'highlight_rule') {
-      this.onOpenHighlightRules();
+      this.highlightRuleSheetVisible = true;
     } else if (action.id === 'bottom_button_config') {
       this.onOpenBottomActionConfig();
     } else {
@@ -1986,6 +2007,111 @@ export struct ReaderPage {
     }.backgroundColor('#242127').borderRadius(12)
   }
 
+  private getReaderHighlightTextRuns(value: string, basePosition: number): ReaderHighlightTextRun[] {
+    if (value.length === 0) { return []; }
+    const boundaries: number[] = [0, value.length];
+    const endPosition = basePosition + value.length;
+    for (let index = 0; index < this.readerHighlightRanges.length; index++) {
+      const range = this.readerHighlightRanges[index];
+      if (range === undefined || range.start >= endPosition || range.endExclusive <= basePosition) { continue; }
+      boundaries.push(Math.max(0, range.start - basePosition));
+      boundaries.push(Math.min(value.length, range.endExclusive - basePosition));
+    }
+    boundaries.sort((left: number, right: number) => left - right);
+    const unique: number[] = [];
+    for (let index = 0; index < boundaries.length; index++) {
+      const point = boundaries[index];
+      if (point !== undefined && (unique.length === 0 || unique[unique.length - 1] !== point)) {
+        unique.push(point);
+      }
+    }
+    const runs: ReaderHighlightTextRun[] = [];
+    for (let index = 0; index < unique.length - 1; index++) {
+      const start = unique[index];
+      const end = unique[index + 1];
+      if (start === undefined || end === undefined || end <= start) { continue; }
+      const style = this.getHighlightStyle(basePosition + start, basePosition + end);
+      runs.push({
+        value: value.substring(start, end),
+        textColor: ReaderHighlightRuleEngine.colorToCss(style?.textColor) ?? this.getReadingTextColor(),
+        backgroundColor: ReaderHighlightRuleEngine.colorToCss(style?.bgColor) ?? 'transparent',
+        underlineMode: style?.underlineMode ?? 0,
+        underlineColor: ReaderHighlightRuleEngine.colorToCss(style?.underlineColor ?? style?.textColor)
+          ?? this.getReaderUnderlineColor()
+      });
+    }
+    return runs;
+  }
+
+  @Builder
+  private ReaderHighlightRunSpan(
+    value: string,
+    textColor: string,
+    backgroundColor: string,
+    underlineMode: number,
+    underlineColor: string
+  ) {
+    Span(value)
+      .fontSize(this.fontSize * 1.05)
+      .fontColor(textColor)
+      .backgroundColor(backgroundColor)
+      .decoration({
+        type: this.getHighlightDecorationType(underlineMode) !== TextDecorationType.None
+          ? this.getHighlightDecorationType(underlineMode)
+          : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+        color: underlineColor,
+        style: this.getHighlightDecorationType(underlineMode) !== TextDecorationType.None
+          ? this.getHighlightDecorationStyle(underlineMode)
+          : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+        thicknessScale: this.getHighlightDecorationType(underlineMode) !== TextDecorationType.None
+          ? 1 : Math.max(0, this.underlineHeight)
+      })
+      .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
+  }
+
+  private getHighlightStyle(start: number, endExclusive: number): ReaderHighlightStyle | undefined {
+    return ReaderHighlightRuleEngine.resolve(this.readerHighlightRanges, start, endExclusive);
+  }
+
+  private getHighlightDecorationType(mode: number): TextDecorationType {
+    if (mode === 6) { return TextDecorationType.LineThrough; }
+    if (mode >= 1 && mode <= 4) { return TextDecorationType.Underline; }
+    return TextDecorationType.None;
+  }
+
+  private getHighlightDecorationStyle(mode: number): TextDecorationStyle {
+    if (mode === 2) { return TextDecorationStyle.DASHED; }
+    if (mode === 3) { return TextDecorationStyle.WAVY; }
+    if (mode === 4) { return TextDecorationStyle.DOUBLE; }
+    return TextDecorationStyle.SOLID;
+  }
+
+  private async loadReaderHighlightRules(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const rules = await ReaderHighlightRuleRepository.load(context);
+    this.readerHighlightRules = rules;
+    this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(this.localSemanticContent, rules);
+    // 滚动模式的内容 ForEach 以 readerContentRevision 为 key，规则变化必须递增才会重建 Span。
+    this.readerContentRevision++;
+    this.rebuildReaderPages();
+  }
+
+  private async saveReaderHighlightRules(rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { throw new Error('阅读页面上下文不可用'); }
+    const currentPage = this.localReaderPages[this.currentPageIndex];
+    if (currentPage !== undefined && !currentPage.titleOnly) {
+      this.pendingBookmarkTargetPosition = currentPage.startPosition;
+    }
+    const saved = await ReaderHighlightRuleRepository.save(context, rules);
+    this.readerHighlightRules = saved;
+    this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(this.localSemanticContent, saved);
+    this.readerContentRevision++;
+    this.rebuildReaderPages();
+    return saved;
+  }
+
   @Builder
   private ReaderGlyphSpan(
     glyph: string,
@@ -1994,10 +2120,29 @@ export struct ReaderPage {
     gapAfter: number,
     marking: ReaderMarking | undefined
   ) {
-    if (marking === undefined) {
+    if (marking === undefined && this.getHighlightStyle(start, end) === undefined) {
       Span(glyph)
         .fontSize(this.fontSize * 1.05)
         .fontColor(this.getReadingTextColor())
+        .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
+    } else if (marking === undefined) {
+      Span(glyph)
+        .fontSize(this.fontSize * 1.05)
+        .fontColor(ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.textColor) ?? this.getReadingTextColor())
+        .backgroundColor(ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.bgColor) ?? 'transparent')
+        .decoration({
+          type: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
+            ? this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0)
+            : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+          color: ReaderHighlightRuleEngine.colorToCss(
+            this.getHighlightStyle(start, end)?.underlineColor ?? this.getHighlightStyle(start, end)?.textColor
+          ) ?? this.getReaderUnderlineColor(),
+          style: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
+            ? this.getHighlightDecorationStyle(this.getHighlightStyle(start, end)?.underlineMode ?? 0)
+            : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+          thicknessScale: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
+            ? 1 : Math.max(0, this.underlineHeight)
+        })
         .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
     } else {
       Span(glyph)
@@ -2018,7 +2163,6 @@ export struct ReaderPage {
         .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
     }
   }
-
   @Builder
   private ReaderPageTextJoined() {
     Text() {
@@ -2277,7 +2421,7 @@ export struct ReaderPage {
       }
       const imageUri = match[1] ?? '';
       if (imageUri.length > 0) {
-        segments.push({ kind: 'image', value: imageUri });
+        segments.push({ kind: 'image', value: imageUri, startPosition: -1 });
       }
       cursor = match.index + match[0].length;
       match = imagePattern.exec(this.content);
@@ -2287,9 +2431,27 @@ export struct ReaderPage {
       this.appendParagraphSegments(segments, trailingText);
     }
     if (segments.length === 0) {
-      segments.push({ kind: 'text', value: this.content.length > 0 ? this.content : '选择一本书开始阅读。' });
+      segments.push({ kind: 'text', value: this.content.length > 0 ? this.content : '选择一本书开始阅读。', startPosition: 0 });
     }
-    return segments;
+    const positioned: ReaderContentSegment[] = [];
+    let searchFrom = 0;
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index];
+      if (segment === undefined) { continue; }
+      let startPosition = searchFrom;
+      if (segment.kind === 'image') {
+        const markerPosition = this.localSemanticContent.indexOf('\uFFFC', searchFrom);
+        if (markerPosition >= 0) { startPosition = markerPosition; }
+        searchFrom = startPosition + 1;
+      } else {
+        const displayText = this.getDisplayContent(segment.value);
+        const textPosition = this.localSemanticContent.indexOf(displayText, searchFrom);
+        if (textPosition >= 0) { startPosition = textPosition; }
+        searchFrom = startPosition + displayText.length;
+      }
+      positioned.push({ kind: segment.kind, value: segment.value, startPosition: startPosition });
+    }
+    return positioned;
   }
 
   private appendParagraphSegments(segments: ReaderContentSegment[], text: string): void {
@@ -2297,7 +2459,7 @@ export struct ReaderPage {
     for (let index = 0; index < paragraphs.length; index++) {
       const paragraph = paragraphs[index];
       if (paragraph !== undefined && paragraph.trim().length > 0) {
-        segments.push({ kind: 'text', value: paragraph });
+        segments.push({ kind: 'text', value: paragraph, startPosition: -1 });
       }
     }
   }
@@ -2642,7 +2804,14 @@ export struct ReaderPage {
                   .onClick(() => this.openReaderImage(segment.value))
               }
             } else {
-              Text(this.getDisplayContent(segment.value))
+              Text() {
+                ForEach(this.getReaderHighlightTextRuns(this.getDisplayContent(segment.value), segment.startPosition),
+                  (run: ReaderHighlightTextRun, runIndex: number) =>
+                    this.ReaderHighlightRunSpan(run.value, run.textColor, run.backgroundColor,
+                      run.underlineMode, run.underlineColor),
+                  (run: ReaderHighlightTextRun, runIndex: number) =>
+                    `${this.readerContentRevision}-scroll-${index}-${runIndex}-${run.textColor}-${run.backgroundColor}-${run.underlineMode}`)
+              }
                 .fontSize(this.fontSize * 1.05)
                 .fontFamily(this.readerBodyFontFamily)
                 .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
@@ -3102,6 +3271,15 @@ export struct ReaderPage {
           .width('86%').padding(18).backgroundColor('#1C1D23').borderRadius(20)
         }
         .width('100%').height('100%')
+      }
+
+      if (this.highlightRuleSheetVisible) {
+        ReaderHighlightRuleSheet({
+          rules: this.readerHighlightRules,
+          chapterLength: this.localSemanticContent.length,
+          onDismiss: () => this.highlightRuleSheetVisible = false,
+          onSave: (rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> => this.saveReaderHighlightRules(rules)
+        })
       }
 
       if (this.imagePreviewVisible) {

@@ -3577,7 +3577,6 @@ struct Index {
             onToggleNightMode: () => this.toggleReaderNightMode(),
             onToggleEyeProtection: () => this.toggleEyeProtection(),
             onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => this.setReaderMoreActions(actions),
-            onOpenHighlightRules: () => this.openProfileDetail(ProfileRoute.HIGHLIGHT_TAG_RULES),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             onProgressChange: (bookId: string, chapterIndex: number, progress: number,
               position: number, androidCoordinate: boolean) =>

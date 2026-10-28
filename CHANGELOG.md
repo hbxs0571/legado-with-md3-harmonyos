@@ -1,5 +1,13 @@
 # 修改记录
 
+## 2026-10-28 阅读正文高亮规则设备验收与两处缺陷修复（r258）
+
+- N 端在 HOS 模拟器完成 r258 高亮规则全部设备闭环：面板可达、创建、正文命中、停用、冷启读回、滚动模式连续滚动、删除，七项全部通过。E 端交接时「面板打不开」在 N 端未复现。
+- 修复滚动模式高亮完全不生效：规则变化后未递增 `readerContentRevision`，内容 `ForEach` 复用旧节点导致内层 Span 不重建。修复后滚动模式红色像素由 0 变为 6596。
+- 修复规则条目切换启停后文案不刷新：`ForEach` key 只用 `rule.id`，改为 `ruleItemKey()` 覆盖启停、顺序等可变字段。
+- `ReaderHighlightTextRun` 拍平为五个基本类型字段，`ReaderHighlightRunSpan` 改为接收五个基本类型参数，规避 `@Builder` 按值传参丢失嵌套字段。
+- N 端设备证据见 `docs/history/evidence/reader-highlight-rules-n-device-2026-10-28.md`，单独记录，不沿用 E 端验收结论。
+
 ## 2026-10-28 Android ZIP 类别门控与书架筛选（r255–r257）
 
 - r255 从空 `config.xml` 创建兼容备份；阅读设置由 `readConfig` 类别单独控制，护眼六键由 `themeConfig` 类别单独控制。HOS 模拟器验证了两类设置分别包含或忽略的四种恢复组合。
