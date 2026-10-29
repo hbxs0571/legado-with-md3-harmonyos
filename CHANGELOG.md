@@ -1,5 +1,16 @@
 # 修改记录
 
+## 2026-10-29「所有书签」页对齐上游条目口径（r274）
+
+- 对齐上游 `AllBookmarkScreen.kt` / `AllBookmarkViewModel.kt`，六处差异一起收口：搜索过滤口径、命中提示与定位、书籍卡片封面、章节名回退、条目点击与长按语义。
+- **搜索过滤口径**：此前搜索同时匹配书名与作者，命中即保留该书；上游 `AllBookmarkViewModel.kt:170-186` 是 `filter { selectedBook != null || query.isBlank() || matchedMarkingId != null }`，即搜索态下**只保留「有匹配笔记」的书**，书名作者命中不算。改成同口径，`getMatchedMarkingId()` 按上游 `BookMarking.matchesNoteQuery` 匹配备注 / 划线文本 / 章名。
+- **命中提示与定位**：搜索命中笔记的书籍卡片显示主色提示「包含匹配笔记，点击查看」（上游 `feature_bookmarks_match_hint`），点进去直接落在笔记 tab 并把那条笔记滚到可见处（上游 `targetMarkingId` + `LaunchedEffect ... noteListState.scrollToItem`）。本地笔记列表由 `Scroll` 改 `List` 并挂 `noteScroller`，否则无法按索引定位。
+- **书籍卡片补封面**：上游 `CoilBookCover` 宽 52.dp，本地原来只有一个书签图标。改用既有 `BookCover` 组件（`displayWidth: 52, displayHeight: 73`），封面取自定义封面优先的 `coverUri`，无封面时按 `coverColor` + `coverMark` 渲染占位。`BookmarkBookSummary` 增 `coverUri` / `coverColor` / `coverMark` 三个字段，`Index.ets` 的汇总函数按 `bookId` 从书架回填。
+- **章节名回退**：书签章名为空时显示「第 N 章」（上游 `feature_bookmarks_chapter_fallback`，用 `chapterIndex + 1`），此前显示空白。
+- **条目点击与长按语义对齐上游**：上游 `AllBookmarkScreen.kt:424-513` 的 `DetailList` 里，书签条目点击**与**长按都是打开编辑面板，笔记条目点击**没有任何行为**。本地此前是「书签点击=编辑、长按=跳转」+「笔记点击=跳转」，两处都比上游多。按上游改：书签点击与长按均进编辑面板，笔记条目点按与长按均无行为。
+- 计数文案由「N 条书签 · N 条笔记」改为上游口径「N 个书签 · N 个笔记」。
+- N 端设备验证（HOS 模拟器，OpenHarmony API 26）：书籍卡片出现 52vp 封面；搜「歧义」后只剩 `vol-test2` 且显示「包含匹配笔记，点击查看」，点进去直接落笔记 tab 且该条可见；点书签条目与长按书签条目都进「编辑书签」面板；点与长按笔记条目均无反应；把某条书签章名清空后列表显示「第 1 章」，验证后已恢复原始数据。
+
 ## 2026-10-29 划词菜单补「复制」与「书签」（r273）
 
 - 本地正文用 `bindSelectionMenu` 自绘选区菜单，而这个 API 一旦指定就**顶掉系统自带菜单**——此前菜单里只有一项「划线 / 笔记」，等于顺手把系统原本提供的「复制」也弄没了。现补回「复制」「书签」，与「划线 / 笔记」并排三项。

@@ -1605,14 +1605,16 @@ struct Index {
       if (existingIndex < 0) {
         summaries.push({
           key: bookmark.bookId, title: bookmark.bookName, author: bookmark.bookAuthor,
-          bookmarkCount: 1, noteCount: 0, sourceUrl: bookmark.bookUrl
+          bookmarkCount: 1, noteCount: 0, sourceUrl: bookmark.bookUrl,
+          coverUri: '', coverColor: '', coverMark: ''
         });
       } else {
         const current = summaries[existingIndex];
         if (current !== undefined) {
           summaries[existingIndex] = {
             key: current.key, title: current.title, author: current.author,
-            bookmarkCount: current.bookmarkCount + 1, noteCount: current.noteCount, sourceUrl: current.sourceUrl
+            bookmarkCount: current.bookmarkCount + 1, noteCount: current.noteCount, sourceUrl: current.sourceUrl,
+            coverUri: current.coverUri, coverColor: current.coverColor, coverMark: current.coverMark
           };
         }
       }
@@ -1624,21 +1626,36 @@ struct Index {
       if (existingIndex < 0) {
         summaries.push({
           key: marking.bookId, title: marking.bookName, author: marking.bookAuthor,
-          bookmarkCount: 0, noteCount: 1, sourceUrl: marking.bookUrl
+          bookmarkCount: 0, noteCount: 1, sourceUrl: marking.bookUrl,
+          coverUri: '', coverColor: '', coverMark: ''
         });
       } else {
         const current = summaries[existingIndex];
         if (current !== undefined) {
           summaries[existingIndex] = {
             key: current.key, title: current.title, author: current.author,
-            bookmarkCount: current.bookmarkCount, noteCount: current.noteCount + 1, sourceUrl: current.sourceUrl
+            bookmarkCount: current.bookmarkCount, noteCount: current.noteCount + 1, sourceUrl: current.sourceUrl,
+            coverUri: current.coverUri, coverColor: current.coverColor, coverMark: current.coverMark
           };
         }
       }
     }
+    // 上游 BookmarkBookUi.coverPath 取 bookRepository.getBook(key.name, key.author).getDisplayCover()，
+    // 本地按 bookId 找回书籍，取自定义封面优先的 coverUri，供卡片渲染 52dp 封面。
+    const withCover: BookmarkBookSummary[] = summaries.map((summary: BookmarkBookSummary): BookmarkBookSummary => {
+      const book = this.books.find((item: Book) => item.id === summary.key);
+      if (book === undefined) { return summary; }
+      const cover = book.customCoverUri !== undefined && book.customCoverUri.length > 0
+        ? book.customCoverUri : (book.coverUri ?? '');
+      return {
+        key: summary.key, title: summary.title, author: summary.author,
+        bookmarkCount: summary.bookmarkCount, noteCount: summary.noteCount, sourceUrl: summary.sourceUrl,
+        coverUri: cover, coverColor: book.coverColor, coverMark: book.coverMark
+      };
+    });
     // 上游 AllBookmarkViewModel 对书籍列表按书名排序（sortedBy { it.key.name }），
     // 本地原来按存储里第一次出现的顺序，书名多了会乱。
-    return summaries.sort((left: BookmarkBookSummary, right: BookmarkBookSummary) =>
+    return withCover.sort((left: BookmarkBookSummary, right: BookmarkBookSummary) =>
       left.title.localeCompare(right.title));
   }
 

@@ -2,6 +2,7 @@
 import { bundleManager } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { BookCover } from '../components/BookCover';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import {
   PROFILE_PAGE_SUBTITLE_SIZE,
@@ -2569,6 +2570,10 @@ export interface BookmarkBookSummary {
   noteCount: number;
   /** 本地书籍的书源地址；与条目自带的 sourceUrl 不一致即视为其他书源。 */
   sourceUrl: string;
+  /** 书籍封面的显示地址（自定义封面优先）；为空时按 coverColor + coverMark 渲染占位封面。 */
+  coverUri: string;
+  coverColor: string;
+  coverMark: string;
 }
 
 export interface BookmarkEntrySummary {
@@ -2613,16 +2618,31 @@ export struct AllBookmarksPage {
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State emptyFaceIndex: number = Math.floor(Math.random() * BOOKMARK_EMPTY_FACES.length);
+  /** 进入某本书后要滚到的笔记 id，对齐上游 targetMarkingId（定位完成即清空）。 */
+  @State targetMarkingId: string = '';
+  private bookmarkScroller: Scroller = new Scroller();
+  private noteScroller: Scroller = new Scroller();
+
+  /**
+   * 搜索命中的那条笔记 id，对齐上游 BookmarkBookUi.matchedMarkingId。
+   * 上游只在「未选中书 && 有搜索词」时计算，命中则卡片显示「包含匹配笔记，点击查看」；
+   * 匹配口径与上游 BookMarking.matchesNoteQuery 一致：备注 / 划线文本 / 章名。
+   */
+  private getMatchedMarkingId(bookKey: string): string {
+    const query = this.searchQuery.trim().toLocaleLowerCase();
+    if (query.length === 0) { return ''; }
+    const hit = this.entries.find((entry: BookmarkEntrySummary) => entry.bookKey === bookKey &&
+      entry.kind === 'note' && (entry.note.toLocaleLowerCase().includes(query) ||
+        entry.excerpt.toLocaleLowerCase().includes(query) || entry.chapterName.toLocaleLowerCase().includes(query)));
+    return hit === undefined ? '' : hit.id;
+  }
 
   private getVisibleBooks(): BookmarkBookSummary[] {
     const query = this.searchQuery.trim().toLocaleLowerCase();
-    return this.books.filter((book: BookmarkBookSummary) => {
-      if (query.length === 0) { return true; }
-      const basicMatch = book.title.toLocaleLowerCase().includes(query) || book.author.toLocaleLowerCase().includes(query);
-      const noteMatch = this.entries.some((entry: BookmarkEntrySummary) =>
-        entry.bookKey === book.key && (entry.excerpt.toLocaleLowerCase().includes(query) || entry.note.toLocaleLowerCase().includes(query)));
-      return basicMatch || noteMatch;
-    });
+    // 上游 AllBookmarkViewModel：`filter { selectedBook != null || query.isBlank() || matchedMarkingId != null }`
+    // 搜索态下只保留「有匹配笔记」的书（书名/作者命中不算），点进去直接跳到那条笔记。
+    if (query.length === 0) { return this.books; }
+    return this.books.filter((book: BookmarkBookSummary) => this.getMatchedMarkingId(book.key).length > 0);
   }
 
   private getVisibleEntries(bookKey: string, tabIndex: number): BookmarkEntrySummary[] {
@@ -2641,6 +2661,20 @@ export struct AllBookmarksPage {
     });
   }
 
+  /**
+   * 把 targetMarkingId 指向的笔记滚到可见处，对齐上游
+   * `LaunchedEffect(targetMarkingId, detailItems) { noteListState.scrollToItem(index) }`。
+   */
+  private scrollToTargetMarking(): void {
+    if (this.targetMarkingId.length === 0) { return; }
+    const notes = this.getVisibleEntries(this.selectedBookKey, 1);
+    const index = notes.findIndex((entry: BookmarkEntrySummary) => entry.id === this.targetMarkingId);
+    if (index >= 0) {
+      this.noteScroller.scrollToIndex(index, true);
+    }
+    this.targetMarkingId = '';
+  }
+
   private handleBack(): void {
     if (this.selectedBookKey.length > 0) {
       this.selectedBookKey = '';
@@ -2650,6 +2684,7 @@ export struct AllBookmarksPage {
       this.currentSourceUrl = '';
       this.searchQuery = '';
       this.selectedTab = 0;
+      this.targetMarkingId = '';
     } else {
       this.onBack();
     }
@@ -2736,23 +2771,25 @@ export struct AllBookmarksPage {
                 this.BookmarkEmptyMessage(this.searchQuery.length > 0 ? '没有找到相关笔记' :
                   (tabIndex === 0 ? '暂无书签' : '暂无笔记'))
               } else {
-                Scroll() {
-                  Column() {
-                    ForEach(this.getVisibleEntries(this.selectedBookKey, tabIndex), (entry: BookmarkEntrySummary) => {
+                List({ scroller: tabIndex === 1 ? this.noteScroller : this.bookmarkScroller }) {
+                  ForEach(this.getVisibleEntries(this.selectedBookKey, tabIndex), (entry: BookmarkEntrySummary) => {
+                    ListItem() {
                       BookmarkEntryCard({
                         entry: entry,
                         currentSourceUrl: this.currentSourceUrl,
+                        // 上游 DetailList：书签条目点击与长按都打开编辑面板；
+                        // 笔记（Marking）条目点击无任何行为。
                         onSelect: () => {
-                          // 上游：书签条目点击=编辑，长按=跳转正文；笔记条目点击=跳转划线
-                          if (entry.kind === 'note') { this.onOpenMarking(entry.id); } else { this.onEditBookmark(entry.id); }
+                          if (entry.kind === 'bookmark') { this.onEditBookmark(entry.id); }
                         },
                         onJump: () => {
-                          if (entry.kind === 'note') { this.onOpenMarking(entry.id); } else { this.onOpenBookmark(entry.id); }
+                          if (entry.kind === 'bookmark') { this.onEditBookmark(entry.id); }
                         }
                       })
-                    }, (entry: BookmarkEntrySummary) => entry.id)
-                  }.padding({ left: 16, right: 16, top: 4, bottom: 20 })
-                }.layoutWeight(1).scrollBar(BarState.Off)
+                    }
+                  }, (entry: BookmarkEntrySummary) => entry.id)
+                }.padding({ left: 16, right: 16, top: 4, bottom: 20 })
+                  .listDirection(Axis.Vertical).scrollBar(BarState.Off).layoutWeight(1)
               }
             }.width('100%').height('100%')
           }, (tabIndex: number) => tabIndex.toString())
@@ -2766,14 +2803,21 @@ export struct AllBookmarksPage {
             ForEach(this.getVisibleBooks(), (book: BookmarkBookSummary) => {
               BookmarkOverviewCard({
                 book: book,
+                matchedMarkingId: this.getMatchedMarkingId(book.key),
                 onSelect: () => {
                   this.selectedBookKey = book.key;
                   this.selectedBookTitle = book.title;
                   this.selectedBookmarkCount = book.bookmarkCount;
                   this.selectedNoteCount = book.noteCount;
                   this.currentSourceUrl = book.sourceUrl;
-                  this.selectedTab = 0;
+                  // 上游：带定位目标时直接落在笔记 tab，并把该条笔记滚到可见处
+                  const target = this.getMatchedMarkingId(book.key);
+                  this.targetMarkingId = target;
+                  this.selectedTab = target.length > 0 ? 1 : 0;
                   this.searchQuery = '';
+                  if (target.length > 0) {
+                    setTimeout((): void => this.scrollToTargetMarking(), 120);
+                  }
                 }
               })
             }, (book: BookmarkBookSummary) => book.key)
@@ -2786,19 +2830,35 @@ export struct AllBookmarksPage {
 
 @Component
 struct BookmarkOverviewCard {
-  @Prop book: BookmarkBookSummary =
-    { key: '', title: '', author: '', bookmarkCount: 0, noteCount: 0, sourceUrl: '' };
+  @Prop book: BookmarkBookSummary = {
+    key: '', title: '', author: '', bookmarkCount: 0, noteCount: 0, sourceUrl: '',
+    coverUri: '', coverColor: '', coverMark: ''
+  };
+  /** 搜索命中的笔记 id；非空时卡片显示「包含匹配笔记，点击查看」。 */
+  @Prop matchedMarkingId: string = '';
   onSelect: () => void = () => {};
   build() {
     Row() {
-      AppGlyph({ name: 'bookmark', glyphSize: 22, tint: '#AFC2FF' }).width(38)
       Column() {
         Text(this.book.title).fontSize(17).fontColor('#D8D9E0').maxLines(2)
         if (this.book.author.length > 0) { Text(this.book.author).fontSize(14).fontColor('#92949E').margin({ top: 3 }) }
-        Text(`${this.book.bookmarkCount} 条书签 · ${this.book.noteCount} 条笔记`).fontSize(12).fontColor('#92949E').margin({ top: 4 })
+        // 上游 feature_bookmarks_counts：「%1$d 个书签 · %2$d 个笔记」
+        Text(`${this.book.bookmarkCount} 个书签 · ${this.book.noteCount} 个笔记`).fontSize(12).fontColor('#92949E').margin({ top: 4 })
+        // 上游 feature_bookmarks_match_hint：搜索命中笔记时用主色提示「包含匹配笔记，点击查看」
+        if (this.matchedMarkingId.length > 0) {
+          Text('包含匹配笔记，点击查看').fontSize(12).fontColor('#AFC2FF').margin({ top: 2 })
+        }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(18).height(18).fillColor('#92949E')
-    }.width('100%').padding(14).backgroundColor('#1A1B21').borderRadius(14).margin({ bottom: 8 })
+      // 上游 CoilBookCover width(52.dp)：封面占位与宽度与书架一致
+      BookCover({
+        book: {
+          id: this.book.key, title: this.book.title, author: this.book.author, category: '',
+          lastChapter: '', progress: 0, coverColor: this.book.coverColor, coverMark: this.book.coverMark,
+          coverUri: this.book.coverUri.length > 0 ? this.book.coverUri : undefined, isLocal: true
+        },
+        displayWidth: 52, displayHeight: 73, cornerRadius: 8
+      }).margin({ left: 12 })
+    }.width('100%').padding(12).backgroundColor('#1A1B21').borderRadius(16).margin({ bottom: 8 })
       .onClick(() => this.onSelect())
   }
 }
@@ -2817,7 +2877,9 @@ struct BookmarkEntryCard {
   build() {
     Column() {
       Row() {
-        Text(this.entry.chapterName).fontSize(14).fontColor('#AFC2FF').maxLines(1).layoutWeight(1)
+        // 上游：章名为空时回退「第 N 章」（feature_bookmarks_chapter_fallback，用 chapterIndex + 1）
+        Text(this.entry.chapterName.length > 0 ? this.entry.chapterName : `第 ${this.entry.chapterIndex + 1} 章`)
+          .fontSize(14).fontColor('#AFC2FF').maxLines(1).layoutWeight(1)
         // 上游 marks_other_source：`bookUrl.isNotBlank() && bookUrl != book?.bookUrl`
         // 记录属于别的书源时标红提示，避免误以为当前书里找不到。
         if (this.entry.sourceUrl.length > 0 && this.entry.sourceUrl !== this.currentSourceUrl) {
