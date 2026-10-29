@@ -1,4 +1,6 @@
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
+import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
+import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
 
 const READER_MARKING_EFFECTS: ReaderMarkingEffect[] = [
   'solid', 'double', 'dashed', 'wave', 'strike', 'highlight', 'background', 'text'
@@ -80,6 +82,129 @@ function normalizeColorText(input: string): string {
   return `#${bare.toUpperCase()}`;
 }
 
+/** 高亮规则换算出的标记样式：只保留本地渲染侧认得的「效果 + 颜色」。 */
+interface ReaderMarkingRuleStyle {
+  effect: ReaderMarkingEffect;
+  color: string;
+}
+
+/** ARGB 整数转 #RRGGBB（丢 alpha），对齐上游 MarkingEffect.colorOf 的展示口径。 */
+function argbToHex(color: number | null | undefined): string | undefined {
+  if (color === null || color === undefined) {
+    return undefined;
+  }
+  const unsigned = color >>> 0;
+  const channel = (value: number): string => value.toString(16).padStart(2, '0');
+  return `#${channel((unsigned >>> 16) & 0xFF)}${channel((unsigned >>> 8) & 0xFF)}` +
+    `${channel(unsigned & 0xFF)}`.toUpperCase();
+}
+
+/**
+ * 下划线模式反推效果，对齐上游 MarkingEffect.fromStyle。
+ * 上游只认 1/3/2/6/7；本地多一个「双下划线」效果，所以把 4 也认成 double。
+ * 5（自定义 SVG）本地渲染层不支持路径绘制，回退实线下划线。
+ */
+function effectFromUnderlineMode(mode: number): ReaderMarkingEffect | undefined {
+  if (mode === 1) {
+    return 'solid';
+  }
+  if (mode === 2) {
+    return 'dashed';
+  }
+  if (mode === 3) {
+    return 'wave';
+  }
+  if (mode === 4) {
+    return 'double';
+  }
+  if (mode === 6) {
+    return 'strike';
+  }
+  if (mode === 7) {
+    return 'highlight';
+  }
+  return undefined;
+}
+
+/**
+ * 把一条高亮规则换算成本次标记的「效果 + 颜色」。
+ * 这是方案 A 的有损映射：规则里的下划线粗细/偏移/SVG 路径、背景图、字体类字段
+ * 本地渲染层本来就不支持，直接丢弃；颜色取下线色优先，其次背景色，再次字色。
+ */
+function ruleToMarkingStyle(rule: ReaderHighlightRule): ReaderMarkingRuleStyle {
+  const underlineEffect = effectFromUnderlineMode(rule.underlineMode);
+  let effect: ReaderMarkingEffect = underlineEffect !== undefined ? underlineEffect : 'solid';
+  let color = argbToHex(rule.underlineColor);
+  if (underlineEffect === undefined) {
+    const background = argbToHex(rule.bgColor);
+    const foreground = argbToHex(rule.textColor);
+    if (rule.underlineMode === 0 && background !== undefined) {
+      effect = 'background';
+      color = background;
+    } else if (rule.underlineMode === 0 && foreground !== undefined) {
+      effect = 'text';
+      color = foreground;
+    }
+  }
+  if (color === undefined) {
+    color = argbToHex(rule.textColor) ?? '#63C37D';
+  }
+  return { effect: effect, color: color };
+}
+
+/** 高亮规则的一行摘要，逐条对齐上游 HighlightRule.styleSummary()。 */
+function ruleStyleSummary(rule: ReaderHighlightRule): string {
+  const parts: string[] = [];
+  if (rule.targetScope === 1) {
+    parts.push('作用于标题');
+  } else if (rule.targetScope === 2) {
+    parts.push('作用于正文');
+  } else {
+    parts.push('作用于全部');
+  }
+  const foreground = argbToHex(rule.textColor);
+  if (foreground !== undefined) {
+    parts.push(`字色 ${foreground}`);
+  }
+  const background = argbToHex(rule.bgColor);
+  if (background !== undefined) {
+    parts.push(`背景色 ${background}`);
+  }
+  if (rule.underlineMode !== 0) {
+    let label = '下划线';
+    if (rule.underlineMode === 1) {
+      label = '实线下划线';
+    } else if (rule.underlineMode === 2) {
+      label = '虚线下划线';
+    } else if (rule.underlineMode === 3) {
+      label = '波浪下划线';
+    } else if (rule.underlineMode === 4) {
+      label = '双下划线';
+    } else if (rule.underlineMode === 5) {
+      label = '自定义SVG';
+    } else if (rule.underlineMode === 6) {
+      label = '删除线';
+    } else if (rule.underlineMode === 7) {
+      label = '荧光';
+    }
+    const underlineColor = argbToHex(rule.underlineColor);
+    parts.push(underlineColor !== undefined ? `${label} ${underlineColor}` : label);
+  }
+  if (rule.bgImage !== null && rule.bgImage !== undefined && rule.bgImage.length > 0) {
+    const fit = rule.bgImageFit ?? 0;
+    if (fit === 1) {
+      parts.push('背景图(拉伸)');
+    } else if (fit === 2) {
+      parts.push('背景图(裁剪)');
+    } else if (fit === 3) {
+      parts.push('背景图(九宫格)');
+    } else {
+      parts.push('背景图(平铺)');
+    }
+  }
+  return parts.join(' · ');
+}
+
 /** 编辑一次选区标记的样式与备注。 */
 @Component
 export struct ReaderMarkingEditor {
@@ -96,6 +221,15 @@ export struct ReaderMarkingEditor {
   @State colorPickerVisible: boolean = false;
   /** 取色面板里手输的色值，切换色板时同步。 */
   @State colorInput: string = '';
+  /**
+   * 样式来源。对齐上游 MarkingSheet.kt:96：新建默认「复用高亮规则」，
+   * 编辑已有标记时默认「自定义」，以便直接看到标记实际存的样式。
+   */
+  @State useRule: boolean = true;
+  /** 当前选中的规则 id，空串表示未选。 */
+  @State selectedRuleId: string = '';
+  /** 可选的高亮规则快照，打开面板时异步载入。 */
+  @State highlightRules: ReaderHighlightRule[] = [];
   onSave: (effect: ReaderMarkingEffect, color: string, note: string) => void =
     (_effect: ReaderMarkingEffect, _color: string, _note: string) => {};
   onDelete: () => void = () => {};
@@ -106,6 +240,54 @@ export struct ReaderMarkingEditor {
     this.color = this.marking.color;
     this.note = this.marking.note;
     this.colorInput = this.marking.color;
+    this.useRule = this.isNew;
+    this.loadHighlightRules();
+  }
+
+  /** 载入高亮规则供「复用规则」列出；失败时保持空列表，面板退化为只能自定义。 */
+  private async loadHighlightRules(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      this.highlightRules = await ReaderHighlightRuleRepository.load(context);
+    } catch (_) {
+      this.highlightRules = [];
+    }
+  }
+
+  /**
+   * 选中/取消选中一条规则。选中时立刻把规则换算成「效果 + 颜色」写进现有状态，
+   * 保存路径与自定义完全一致，不需要给 ReaderMarking 增加规则字段。
+   */
+  private pickRule(rule: ReaderHighlightRule): void {
+    if (this.selectedRuleId === rule.id) {
+      this.selectedRuleId = '';
+      return;
+    }
+    this.selectedRuleId = rule.id;
+    const style = ruleToMarkingStyle(rule);
+    this.effect = style.effect;
+    this.pickColor(style.color);
+  }
+
+  /** 规则列表里的一行：名称 + 摘要，停用与限定排版的规则额外标注，避免选了不生效还不知道。 */
+  private ruleLabel(rule: ReaderHighlightRule): string {
+    const name = rule.name.trim().length > 0 ? rule.name : (rule.pattern.trim().length > 0 ? rule.pattern : '.*');
+    const summary = ruleStyleSummary(rule);
+    return summary.length > 0 ? `${name}　${summary}` : name;
+  }
+
+  /** 规则在当前阅读环境下是否会真的生效，用于列表尾部提示。 */
+  private ruleHint(rule: ReaderHighlightRule): string {
+    if (!rule.enabled) {
+      return '已停用';
+    }
+    if (rule.configName !== null && rule.configName !== undefined && rule.configName.trim().length > 0) {
+      return '仅指定排版';
+    }
+    return '';
   }
 
   /** 当前颜色是否属于 15 个预设色之外（决定尾部按钮显示取色图标还是该色）。 */
@@ -165,6 +347,17 @@ export struct ReaderMarkingEditor {
     .margin({ top: 8 })
   }
 
+  /** 样式来源下拉；ArkTS 不允许 bindMenu 传对象字面量数组，统一用 Builder 生成。 */
+  @Builder
+  private StyleSourceMenu() {
+    Menu() {
+      MenuItem({ content: '复用已有规则' }).height(44)
+        .onClick(() => this.useRule = true)
+      MenuItem({ content: '自定义样式' }).height(44)
+        .onClick(() => this.useRule = false)
+    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.onClose())
@@ -185,6 +378,44 @@ export struct ReaderMarkingEditor {
               Text(this.marking.selectedText).fontSize(13).fontColor('#D8D9E0').lineHeight(20)
                 .width('100%')
             }.height(76).width('100%').padding(9).backgroundColor('#15161B').borderRadius(10)
+            // 样式来源：对齐上游 MarkingSheet.kt:175 的 TinyDropdownSettingItem。
+            Row() {
+              Text('样式来源').fontSize(13).fontColor('#D8D9E0').layoutWeight(1)
+              Text(this.useRule ? '复用已有规则' : '自定义样式')
+                .fontSize(13).fontColor('#AFC2FF')
+                .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+                .bindMenu(this.StyleSourceMenu())
+            }.width('100%').margin({ top: 10, bottom: 5 })
+            if (this.useRule) {
+              if (this.highlightRules.length === 0) {
+                Text('还没有高亮规则，可切到「自定义样式」直接设置')
+                  .fontSize(12).fontColor('#92949E').width('100%')
+                  .padding({ top: 10, bottom: 10 })
+              } else {
+                Column() {
+                  ForEach(this.highlightRules, (rule: ReaderHighlightRule) => {
+                    Row() {
+                      Text(this.selectedRuleId === rule.id ? '✓' : '')
+                        .fontSize(13).fontColor('#AFC2FF').width(18)
+                      Column() {
+                        Text(this.ruleLabel(rule)).fontSize(13)
+                          .fontColor(this.selectedRuleId === rule.id ? '#E7E9F5' : '#C5C7D0')
+                          .maxLines(2).width('100%')
+                        if (this.ruleHint(rule).length > 0) {
+                          Text(this.ruleHint(rule)).fontSize(11).fontColor('#92949E')
+                            .width('100%').margin({ top: 2 })
+                        }
+                      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                    }.width('100%')
+                      .padding({ left: 8, right: 8, top: 9, bottom: 9 })
+                      .backgroundColor(this.selectedRuleId === rule.id ? '#2C2F3C' : '#1D1E24')
+                      .borderRadius(10).margin({ bottom: 4 })
+                      .onClick(() => this.pickRule(rule))
+                  }, (rule: ReaderHighlightRule) => rule.id)
+                }.width('100%')
+              }
+            }
+            if (!this.useRule) {
             Text('样式').fontSize(13).fontColor('#D8D9E0').margin({ top: 10, bottom: 5 })
               .alignSelf(ItemAlign.Start)
             Flex({ wrap: FlexWrap.Wrap }) {
@@ -227,6 +458,7 @@ export struct ReaderMarkingEditor {
             }.width('100%')
             if (this.colorPickerVisible) {
               this.ColorPickerPanel()
+            }
             }
             Text('笔记').fontSize(13).fontColor('#D8D9E0').margin({ top: 8, bottom: 5 }).alignSelf(ItemAlign.Start)
             TextArea({ text: this.note, placeholder: '添加笔记（可选）' })
