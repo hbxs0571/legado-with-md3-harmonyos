@@ -27,8 +27,8 @@
 
 | 类别键名 | 条目 | 读 | 写 | 忽略项 | 明细表 |
 | --- | --- | --- | --- | --- | --- |
-| `localBook` | `bookshelf.json` | ✓ | ✓ | — | 待建 |
-| `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | ? | 待建 |
+| `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) |
+| `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | ? | [书签/划线/笔记对照](ZIP-BOOKMARK.md) |
 | `bookGroup` | `bookGroup.json` | ✓ | ✓ | ? | 待建 |
 | `bookSource` | `bookSource.json` | — | — | — | 待建 |
 | `rssSource` | `rssSources.json` | — | — | — | 待建 |
@@ -47,7 +47,7 @@
 | `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | ? | 待建 |
 | `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | 待建 |
 | `server` | `servers.json` | — | — | — | 待建 |
-| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | 待建 |
+| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ? | ? | 待建 |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | 待建 |
 | `themeMode` | `config.xml` | ? | ? | — | 待建 |

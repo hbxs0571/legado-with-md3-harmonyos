@@ -15,6 +15,9 @@
 | 本地阅读行为 | [阅读模块](READER.md) |
 | Android ZIP 兼容范围 | [备份恢复](BACKUP-RESTORE.md) |
 | ZIP 兼容度总账与盘点方法 | [ZIP 兼容总账](parity/STATUS.md)、[对照关键词](parity/KEYWORDS.md) |
+| 书架 / 元数据 / 进度对照 | [书架对照表](parity/BOOKSHELF.md) |
+| 书签 / 划线 / 笔记对照 | [书签对照表](parity/ZIP-BOOKMARK.md) |
+| 阅读配置字段对照 | [阅读配置总账](parity/READER-CONFIG.md) |
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
 | 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
 | 构建和验证记录 | [构建说明](BUILDING.md)、[验证记录](VALIDATION.md) |

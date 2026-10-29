@@ -1,5 +1,17 @@
 # 修改记录
 
+## 2026-10-29 登记书签与标注盘点遗留的 5 项缺口（只记不改，r277）
+
+- 按 [编码规约](docs/CODE-CONVENTIONS.md) 第四节「模块对照必须一次盘完」，为 ZIP 类别 `bookmark` 建了 [ZIP-BOOKMARK 对照表](docs/parity/ZIP-BOOKMARK.md)：79 条用户可感知操作，已接 71 / 未接 5 / 不适用 3，无 `待定`。上游接触面用 `scripts/upstream-surface.sh bookmark` 枚举（关键词 `Bookmark|BookMarking` 内容引用命中 63 个 `.kt`），按文件名找只有 20 个。
+- 5 条未接全部是用户可感知能力缺口，已登记到 [已知问题](docs/KNOWN-ISSUES.md) 新增的「书签与标注（r268–r276 盘点遗留）」一节：
+  1. 划线/笔记渲染不校验锚点文本：上游 `BookContentProcessEngine.kt:25-46` 锚点解析不到就不渲染、`:101-131` 三级退让重定位；本地 `ReaderPage.ets:1999 getMarkingForTextRange` 只判区间相交不看 `selectedText`，等价能力 `BookContentProcessEngine.ets:93 findTargetRange` 未接到标记渲染。**已设备取证**。
+  2. 划词菜单缺「行内快速标记」：上游按 `MarkingUiState.inlineMode` 在 `MarkingSelectionMenu` / `TextActionSelectionMenu` 间切换（`ReadBookContract.kt:870 OpenQuickMarking` 等四个意图）；本地只有 sheet 一条路径。
+  3. 目录页缺书签/笔记多选与批量操作：上游 `TocScreen.kt:325 selectionSecondaryActions`；本地 `CatalogPage.ets` 条目只有单击与长按。
+  4. 目录页缺反序：上游 `TocScreen.kt:447 reverse_toc`；本地恒按 `chapterIndex` 升序。
+  5. 书签无障碍播报：上游 `ReaderAccessibilityPolicy.kt:19 isBookmarked`；本地无阅读页无障碍策略层。
+- 3 条 `不适用`（Room DAO 层、AI 工具检索、标记随书删除清理）理由逐行写在对照表 E 块。目录页「拆分超长章节」与「新建替换规则预填作用域」两项虽与书签相关但不属本类别，前者一并记在已知问题的目录页那条。
+- 本轮**只改文档、不动 `.ets` 代码**。同时把 `docs/parity/STATUS.md` 总账里 `bookmark` 行的明细表指向新建对照表，`docs/INDEX.md` 补三张对照表入口，`docs/MODULE-STATUS.md` 的书签与标注行同步这 5 项。
+
 ## 2026-10-29 更新目录不再重映射书签与划线，对齐上游（r276）
 
 - 上游 `BookmarkRepository` / `BookMarkingRepository` 在更新目录时**完全不碰**书签与划线表，书签的 `chapterIndex`/`chapterPosition` 保持创建时的值。本地此前有一套 `remapNoTocBookmarks` / `remapNoTocMarkings`，在 `refreshAllToc`（书架批量更新目录）、`refreshCurrentToc`（目录页单本更新）、`openBook` 的 `refreshNoTocBook` 分支三处按新旧正文偏移重算章节号与章内位置，并带保存失败回滚逻辑，与上游行为不一致。
