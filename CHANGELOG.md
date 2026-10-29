@@ -1,5 +1,21 @@
 # 修改记录
 
+## 2026-10-29 书签/笔记跳转前的定位校验与笔记重定位（r270）
+
+- 此前点书签/笔记直接按存下来的 `chapterIndex` + 章内偏移跳，不校验目标是否还成立：换书源后章序完全不同、目录更新后章名变了，都会静默跳到错误位置。现对齐上游 `VerifyBookmarkTargetUseCase.kt`：跳转前比对两件事——记录里的 `bookUrl` 与当前书的源指纹是否一致、记录里的 `chapterName` 与目标章标题是否一致。源不同返回 `sourceChanged`，标题不同返回 `titleMismatch`，两种情况都弹「位置可能已偏移」让用户自己决定是否仍要跳转，取消则原地不动。
+- 新增 `entry/src/main/ets/data/ReaderBookmarkTarget.ets`：`BookmarkTargetVerdict = 'match' | 'sourceChanged' | 'titleMismatch'`，`verify()` 做上述两项比对，`locate()` / `scoreOf()` 承载笔记重定位。`PendingBookmarkTarget` 增 `bookId` 字段——本地跳转需要它把书从仓储里找回来（上游用的是已加载的 `Book` 对象）。
+- **笔记比书签多一层兜底**：标题对不上时不直接弹框，先按上游 `RelocateMarkingTargetUseCase` 用「选中文本 + 前后文」在候选章里重定位。候选章取 `chapterIndex` 指向的那章以及标题同名章；对 `selectedText` 的每次出现按前后文命中打分，唯一最高分才采用，同分视为歧义并退回确认框——绝不瞎猜（上游注释同此意）。
+- 提示文案两种 verdict 分开：`sourceChanged` 为「这条书签/笔记是在其他书源下创建的，位置可能已经偏移。仍要跳转吗？」，`titleMismatch` 为「目标章节标题已变化，位置可能已经偏移。仍要跳转吗？」，按钮「仍跳转」/「取消」。书签不做重定位，与上游一致（`navigateToBookmark` 校验失败一律交给用户确认）。
+- N 端设备验证（HOS 模拟器，OpenHarmony API 26）：构造 `chapterName` 为「不存在的章节名」的书签 → 弹出「目标章节标题已变化…」；点「仍跳转」落到 `chapterIndex=1` 对应的「第一章 出发」，位置正确；把 `bookUrl` 改成其他源 → 弹出「…是在其他书源下创建的…」；点「取消」停留在原页面不动。笔记重定位用 `chapterName='第二章 旧名'` + `selectedText='她轻声说：“今晚就出发。”'` + `contextAfter='他停了一下'` 构造：点击笔记后直接落到「第二章 相遇」，正文首段正是该句，位置换算正确，没有弹确认框——说明重定位命中走了自动跳转分支；把同一条笔记的两章改成内容相同后 `selectedText` 在两章都出现，判定为歧义并退回确认框。
+
+## 2026-10-29 标记编辑器补「样式来源」，可直接复用已有高亮规则（r269）
+
+- 划线/笔记编辑面板此前只能手挑一种下划线与一个颜色，想跟正文高亮规则保持一致得自己记住规则的样式再手抄一遍。现对齐上游 `MarkingSheet.kt:96` 在面板顶部加「样式来源」下拉：**复用已有规则** / **自定义样式**。新建标记默认「复用已有规则」（上游 `mutableStateOf(editing == null)`），编辑已有标记默认「自定义样式」，以便直接看到该标记实际存的样式。
+- 选中规则时按上游 `MarkingEffect.fromStyle` + `colorOf` 把规则换算成本次标记的「效果 + 颜色」：下划线模式 1/2/3/4/6/7 分别反推实线/虚线/波浪/双线/删除线/高亮；模式 0 时按背景色→「背景高亮」、字色→「文字上色」；颜色取线色优先，其次背景色，再次字色。上游 `fromStyle` 不认 4（双下划线），本地渲染层有这个效果所以补认。
+- **这是一次有损映射**，不是把规则整体挂到标记上：规则里的下划线粗细/偏移/自定义 SVG 路径、背景图（含拉伸/裁剪/九宫格）、字体类字段本地渲染层本来就不支持，换算时直接丢弃；标记落盘仍是 `effect + color` 两个字段，`ReaderMarking` 模型与序列化格式不变。取舍理由见 `docs/KNOWN-ISSUES.md`。
+- 规则列表展示 `styleSummary`（作用范围 + 字色/背景色/下划线/背景图），逐条对齐上游 `HighlightRule.styleSummary()`；已停用的规则照样列出并标注「已停用」，选中仍然可用（上游同样不过滤启用状态）。
+- N 端设备验证（HOS 模拟器）：打开一条已有笔记的标记编辑器 → 样式来源切到「复用已有规则」→ 选中一条背景色为 `#ffc107` 的规则 → 保存 → 笔记列表里该条标记的样式标签由「波浪线」变为「背景高亮」，说明规则的 effect 确实落到了标记上；切回「自定义样式」时前面的效果与颜色保持可见可改。
+
 ## 2026-10-29 「所有书签」页补齐排序与跨书源提示（r268）
 
 - 条目列表此前按存储顺序渲染，而新书签是前插写入（`nextBookmarks = [record, ...this.readerBookmarks]`），列表顺序与正文顺序无关。上游 `AllBookmarkViewModel.kt:214` 把书签与笔记混成 `detailItems` 后按 `compareBy({ it.chapterIndex }, { it.chapterPosition })` 排序。现 `BookmarkEntrySummary` 增加 `chapterIndex` / `chapterPosition` 两个字段（由 `Index.getBookmarkEntrySummaries()` 从 `ReaderBookmark` 与 `ReaderMarking` 带出），`AllBookmarksPage.getVisibleEntries()` 在筛选后按同一口径排序。排序只发生在渲染层，存储顺序保持不变。
