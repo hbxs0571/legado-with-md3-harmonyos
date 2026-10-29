@@ -14,6 +14,7 @@
 | 模块入口与责任范围 | [模块概览](MODULES.md) |
 | 本地阅读行为 | [阅读模块](READER.md) |
 | Android ZIP 兼容范围 | [备份恢复](BACKUP-RESTORE.md) |
+| ZIP 兼容度总账与盘点方法 | [ZIP 兼容总账](parity/STATUS.md)、[对照关键词](parity/KEYWORDS.md) |
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
 | 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
 | 构建和验证记录 | [构建说明](BUILDING.md)、[验证记录](VALIDATION.md) |

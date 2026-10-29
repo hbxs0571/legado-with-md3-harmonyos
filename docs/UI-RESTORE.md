@@ -9,6 +9,7 @@
 输入：当前模块对应的页面名、路由或入口。
 
 1. 先定位 Route / Screen / Contract / ViewModel 四件套，再向下读共用组件、主题、文案与导航。列出整页区域、全部标签与直接弹层的清单，写明源码路径与版本，再动代码。
+   若本次改动落在某个 ZIP 类别上，**清单粒度不得止于一页**：按[编码规约](CODE-CONVENTIONS.md)第四节先把该类别的上游接触面（`scripts/upstream-surface.sh <类别键名>`）整份盘完，出对照表再动手。按单页或单文件逐轮读改，会以「又发现一处」结束。
 2. 图标先查 `app/src/main/java/io/legado/app/ui/widget/components/icon/AppIcons.kt` 的 `ImageVector` 映射，再查 `androidx.compose.material.icons` 与 `top.yukonga.miuix.kmp.icon`，最后才查 `app/src/main/res/drawable` 的 `<vector>`。`res/drawable` 里大量条目是旧 View 体系遗留，直接扫目录会取到已废弃图标。
 3. 以源码为准，不以分析文档为准。示例：Android 侧 `CLAUDE.md` 称阅读页「ReadBookActivity — still View-based」，但仓库内不存在 `ReadBookActivity.kt`，实际为 Compose 的 `ReadBookScreen.kt`。
 
