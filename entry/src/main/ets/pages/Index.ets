@@ -34,6 +34,7 @@ import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
+import { TocRefreshResult } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import {
@@ -2581,6 +2582,7 @@ struct Index {
     let updatedCount = 0;
     let failedCount = 0;
     let nextBookmarks = this.readerBookmarks;
+    let nextMarkings = this.readerMarkings;
     const updatedBooks: Book[] = [];
     for (let index = 0; index < this.books.length; index++) {
       const book = this.books[index];
@@ -2598,6 +2600,9 @@ struct Index {
         updatedBooks.push(result.book);
         updatedCount += 1;
         nextBookmarks = this.remapNoTocBookmarks(book, result.book,
+          result.oldBodyOffsets, result.newBodyOffsets, result.content.length);
+        // 划线/笔记与书签共用同一套章内偏移，目录重算后必须一起迁移。
+        nextMarkings = this.remapNoTocMarkings(book, result.book,
           result.oldBodyOffsets, result.newBodyOffsets, result.content.length);
         if (this.selectedBook.id === result.book.id) {
           this.selectedBook = result.book;
@@ -2618,12 +2623,16 @@ struct Index {
       if (nextBookmarks !== this.readerBookmarks) {
         await ReaderBookmarkRepository.save(context, nextBookmarks);
       }
+      if (nextMarkings !== this.readerMarkings) {
+        await ReaderMarkingRepository.save(context, nextMarkings);
+      }
     } catch (_) {
       this.showUnavailableAction('目录已更新，但保存失败，重新打开后可能回到旧目录');
       return;
     }
     this.books = updatedBooks;
     this.readerBookmarks = nextBookmarks;
+    this.readerMarkings = nextMarkings;
     const parts: string[] = [];
     if (updatedCount > 0) { parts.push(`已更新 ${updatedCount} 本`); }
     if (failedCount > 0) { parts.push(`${failedCount} 本读取失败已跳过`); }
@@ -2680,6 +2689,146 @@ struct Index {
     }
     return changed ? nextBookmarks : this.readerBookmarks;
   }
+
+  /**
+   * 目录重算后把划线/笔记迁移到新的章节结构上。
+   *
+   * 划线记录的是章节内 UTF-16 起止偏移（chapterPosition/endPosition），
+   * 只重映射书签会让划线整体错位到别的章节或别的句子，所以这里按同一套
+   * 「章节起点 + 章内偏移 = 绝对位置」的算法把起止两点分别换算过去。
+   */
+  private remapNoTocMarkings(book: Book, nextBook: Book, oldBodyOffsets: number[],
+    newBodyOffsets: number[], contentLength: number): ReaderMarking[] {
+    let changed = false;
+    const nextMarkings: ReaderMarking[] = [];
+    /** 把绝对偏移换算成新的章号与章内偏移。 */
+    const relocate = (absolutePosition: number): number[] => {
+      let chapterIndex = 0;
+      for (let chapter = 0; chapter < newBodyOffsets.length; chapter++) {
+        if ((newBodyOffsets[chapter] ?? 0) > absolutePosition) { break; }
+        chapterIndex = chapter;
+      }
+      chapterIndex = Math.min(chapterIndex, Math.max(0, (nextBook.chapterTitles?.length ?? 1) - 1));
+      const chapterStart = newBodyOffsets[chapterIndex] ?? 0;
+      const chapterEnd = newBodyOffsets[chapterIndex + 1] ?? contentLength;
+      const offset = Math.max(0, Math.min(chapterEnd - chapterStart, absolutePosition - chapterStart));
+      return [chapterIndex, offset];
+    };
+    for (let index = 0; index < this.readerMarkings.length; index++) {
+      const marking = this.readerMarkings[index];
+      if (marking === undefined || marking.bookId !== book.id) {
+        if (marking !== undefined) { nextMarkings.push(marking); }
+        continue;
+      }
+      const oldIndex = Math.max(0, Math.min(oldBodyOffsets.length - 1, marking.chapterIndex));
+      const oldChapterStart = oldBodyOffsets[oldIndex] ?? 0;
+      const startAbsolute = Math.max(0, Math.min(contentLength, oldChapterStart + marking.chapterPosition));
+      const endAbsolute = Math.max(startAbsolute, Math.min(contentLength, oldChapterStart + marking.endPosition));
+      // 起止可能被新目录切到不同章节，此时以起点所在章节为准，把终点夹在该章末尾，
+      // 避免产生 endPosition 小于 chapterPosition 的非法记录。
+      const startPair = relocate(startAbsolute);
+      const chapterIndex = startPair[0] ?? 0;
+      const chapterPosition = startPair[1] ?? 0;
+      const chapterStart = newBodyOffsets[chapterIndex] ?? 0;
+      const chapterEnd = newBodyOffsets[chapterIndex + 1] ?? contentLength;
+      const endPosition = Math.max(chapterPosition,
+        Math.min(chapterEnd - chapterStart, endAbsolute - chapterStart));
+      const chapterName = nextBook.chapterTitles?.[chapterIndex] ?? marking.chapterName;
+      if (chapterIndex === marking.chapterIndex && chapterPosition === marking.chapterPosition &&
+        endPosition === marking.endPosition && chapterName === marking.chapterName) {
+        nextMarkings.push(marking);
+        continue;
+      }
+      changed = true;
+      nextMarkings.push({
+        id: marking.id,
+        bookId: marking.bookId,
+        bookName: marking.bookName,
+        bookAuthor: marking.bookAuthor,
+        bookUrl: marking.bookUrl,
+        chapterIndex: chapterIndex,
+        chapterName: chapterName,
+        chapterPosition: chapterPosition,
+        endPosition: endPosition,
+        selectedText: marking.selectedText,
+        contextBefore: marking.contextBefore,
+        contextAfter: marking.contextAfter,
+        effect: marking.effect,
+        color: marking.color,
+        note: marking.note,
+        enabled: marking.enabled,
+        createdAt: marking.createdAt,
+        updatedAt: marking.updatedAt
+      });
+    }
+    return changed ? nextMarkings : this.readerMarkings;
+  }
+
+  /**
+   * 重新识别当前这本书的目录，对应上游目录页「更新目录」菜单项。
+   *
+   * 与书架级批量更新共用 BookRepository.refreshToc，差别只在范围是一本书，
+   * 且同时重映射书签与划线/笔记。
+   */
+  private async refreshCurrentToc(): Promise<void> {
+    const book = this.selectedBook;
+    if (!book.isLocal || book.format !== 'txt' || book.contentPath === undefined) {
+      this.showUnavailableAction('仅本地 TXT 书籍支持更新目录');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，未更新目录');
+      return;
+    }
+    let result: TocRefreshResult;
+    try {
+      result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
+    } catch (_) {
+      this.showUnavailableAction('读取正文失败，目录未更新');
+      return;
+    }
+    if (!result.changed) {
+      this.showUnavailableAction('目录没有变化');
+      return;
+    }
+    const nextBook = result.book;
+    const nextBookmarks = this.remapNoTocBookmarks(book, nextBook,
+      result.oldBodyOffsets, result.newBodyOffsets, result.content.length);
+    const nextMarkings = this.remapNoTocMarkings(book, nextBook,
+      result.oldBodyOffsets, result.newBodyOffsets, result.content.length);
+    const updatedBooks = this.books.map((item: Book) => item.id === nextBook.id ? nextBook : item);
+    let bookmarksSaved = false;
+    let markingsSaved = false;
+    try {
+      if (nextBookmarks !== this.readerBookmarks) {
+        await ReaderBookmarkRepository.save(context, nextBookmarks);
+        bookmarksSaved = true;
+      }
+      if (nextMarkings !== this.readerMarkings) {
+        await ReaderMarkingRepository.save(context, nextMarkings);
+        markingsSaved = true;
+      }
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((item: Book) => BookRepository.isPersistableBook(item)));
+    } catch (_) {
+      // 中途失败时把已写入的部分回滚，避免书签/划线落在新旧两套目录上。
+      if (bookmarksSaved) {
+        try { await ReaderBookmarkRepository.save(context, this.readerBookmarks); } catch (_) {}
+      }
+      if (markingsSaved) {
+        try { await ReaderMarkingRepository.save(context, this.readerMarkings); } catch (_) {}
+      }
+      this.showUnavailableAction('目录已更新，但保存失败，重新打开后可能回到旧目录');
+      return;
+    }
+    this.books = updatedBooks;
+    this.readerBookmarks = nextBookmarks;
+    this.readerMarkings = nextMarkings;
+    this.selectedBook = nextBook;
+    const chapterCount = nextBook.chapterTitles?.length ?? 0;
+    this.showUnavailableAction(`更新目录完成：共 ${chapterCount} 章`);
+  }
   private async openBook(book: Book): Promise<void> {
     if (book.contentPath === undefined) {
       this.showUnavailableAction(book.bodyMissing === true
@@ -2705,11 +2854,18 @@ struct Index {
           item.id === openedBook.id ? openedBook : item);
         const updatedBookmarks = this.remapNoTocBookmarks(book, openedBook,
           noTocRefresh.oldBodyOffsets, noTocRefresh.newBodyOffsets, noTocRefresh.content.length);
+        const updatedMarkings = this.remapNoTocMarkings(book, openedBook,
+          noTocRefresh.oldBodyOffsets, noTocRefresh.newBodyOffsets, noTocRefresh.content.length);
         let bookmarksSaved = false;
+        let markingsSaved = false;
         try {
           if (updatedBookmarks !== this.readerBookmarks) {
             await ReaderBookmarkRepository.save(context, updatedBookmarks);
             bookmarksSaved = true;
+          }
+          if (updatedMarkings !== this.readerMarkings) {
+            await ReaderMarkingRepository.save(context, updatedMarkings);
+            markingsSaved = true;
           }
           await BookRepository.saveImportedBooks(context,
             updatedBooks.filter((item: Book) => BookRepository.isPersistableBook(item)));
@@ -2717,12 +2873,16 @@ struct Index {
           if (bookmarksSaved) {
             try { await ReaderBookmarkRepository.save(context, this.readerBookmarks); } catch (_) {}
           }
+          if (markingsSaved) {
+            try { await ReaderMarkingRepository.save(context, this.readerMarkings); } catch (_) {}
+          }
           this.showUnavailableAction(error instanceof Error
             ? '无目录分段设置保存失败：' + error.message : '无目录分段设置保存失败');
           return;
         }
         this.books = updatedBooks;
         this.readerBookmarks = updatedBookmarks;
+        this.readerMarkings = updatedMarkings;
       }
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? '打开失败：' + error.message : '本地书籍文件无法读取');
@@ -3829,6 +3989,9 @@ struct Index {
               onTitleReplacementChange: (enabled: boolean) => this.setReaderTocUseReplace(enabled),
               onShowWordCountChange: (enabled: boolean) => this.setReaderTocShowWordCount(enabled),
               onExportBookmarks: (isMarkdown: boolean) => this.exportReaderBookmarks(isMarkdown),
+              onRefreshToc: (): void => { this.refreshCurrentToc(); },
+              onOpenReplaceRules: (): void => this.openProfileDetail(ProfileRoute.REPLACE_RULES),
+              onOpenTxtTocRules: (): void => this.openProfileDetail(ProfileRoute.TXT_TOC_RULES),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
               onSelectChapter: (chapterIndex: number) => {
               const chapterTitle = this.selectedBook.chapterTitles?.[chapterIndex];

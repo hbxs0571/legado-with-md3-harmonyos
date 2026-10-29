@@ -1,5 +1,13 @@
 # 修改记录
 
+## 2026-10-29 目录页「更多」菜单接通三项，并修掉更新目录后划线错位（r267）
+
+- 目录页搜索栏右侧的「更多」图标此前是占位（`onUnavailableAction('目录更多操作尚未迁移')`）。现对齐上游 `TocScreen.kt:427-535` 接上三项：更新目录（当前书）、替换规则、本地 TXT 目录规则。上游同一菜单里还有 `use_replace_rule` / `show_word_count` / `reverse_toc` 与书签导出两项，本地早已用搜索栏内联图标（`profileFindReplace` / `profileTimeline` / `swap`）和独立的 `BookmarkExportMenu` 等价覆盖，所以菜单里不再重复。
+- 「替换规则」「本地 TXT 目录规则」走 `openProfileDetail(ProfileRoute.REPLACE_RULES / TXT_TOC_RULES)`，返回时由 `profileDetailReturnRoute` 回到目录页，不打断阅读位置。
+- 新增 `Index.refreshCurrentToc()`：只对本地 TXT 生效（`book.isLocal && format === 'txt' && contentPath !== undefined`），目录无变化时提示「目录没有变化」，有变化时提示「更新目录完成：共 N 章」，保存失败回滚书籍与划线/笔记两侧。
+- **同时修掉一个静默错位缺陷**：`refreshToc` 会返回 `oldBodyOffsets` / `newBodyOffsets`，但此前只有 `remapNoTocBookmarks` 会用它们迁移书签，划线/笔记完全没有对应的重映射。划线只存 `chapterIndex` + 章内偏移，目录一变就落到别的章节甚至别的句子上，界面上表现为划线跑到不相关的位置。现新增 `Index.remapNoTocMarkings()`，与书签那套同构：把 `oldBodyOffsets[旧章] + chapterPosition` 还原成绝对位置，再按 `newBodyOffsets` 找新章号与章内偏移，同时更新 `chapterName`；起止两点分属不同章节时以起点所在章为准，把终点夹在该章末尾，避免产生 `endPosition < chapterPosition` 的非法记录。三处调用点全部补齐：单书 `refreshCurrentToc`、书架级 `refreshAllToc`、`openBook` 的 `refreshNoTocBook` 分支，保存失败时书籍与划线/笔记一起回滚。
+- N 端设备验证（HOS 模拟器，OpenHarmony API 26）：菜单三项均可见可点；点「更新目录」在目录无变化时提示「目录没有变化」；把书籍置为 2 章假状态、划线置为 `chapterIndex=1 / chapterPosition=100` 后点「更新目录」，目录恢复 6 章，划线变为 `chapterIndex=3 / chapterPosition=100 / endPosition=120`，`chapterName` 同步改成新的章名，`selectedText` 不变——新目录第 4 项正是划线所在的「第二卷 云涌」，位置换算正确；点「替换规则」进入替换净化页、点「本地 TXT 目录规则」进入 TXT 目录规则页，返回键均回到目录页。
+
 ## 2026-10-29 划线颜色扩到上游 15 色并加自定义取色器（r266）
 
 - 划线/笔记编辑面板的预设色此前只有 6 个（`#63C37D` 等），上游 `MarkingSheet.kt:449-464` 的 `MarkingPresetColors` 是 15 个。现逐条对齐换成 15 色，`#63C37D` 仍是新建标记的默认色（与上游 `DEFAULT_COLOR` 一致），所以已有标记的默认外观不变。

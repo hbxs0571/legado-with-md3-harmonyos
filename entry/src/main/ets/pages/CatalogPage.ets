@@ -44,6 +44,12 @@ export struct CatalogPage {
   onShowWordCountChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   /** 导出本书书签；isMarkdown 为 true 时导出 Markdown，否则导出 JSON。 */
   onExportBookmarks: (isMarkdown: boolean) => void = (_isMarkdown: boolean) => {};
+  /** 重新识别当前书的目录，对应上游目录页「更新目录」。 */
+  onRefreshToc: () => void = () => {};
+  /** 打开替换净化规则管理，对应上游目录页「替换规则」。 */
+  onOpenReplaceRules: () => void = () => {};
+  /** 打开本地 TXT 目录规则，对应上游目录页「本地书籍选项 · 目录规则」。 */
+  onOpenTxtTocRules: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
 
   aboutToAppear(): void {
@@ -211,6 +217,28 @@ export struct CatalogPage {
     }
   }
 
+  /** 目录页「更多」菜单，对应上游 TocScreen 信息页那组菜单项。 */
+  @Builder
+  private CatalogMoreMenu() {
+    Menu() {
+      if (this.isLocalTxt()) {
+        MenuItem({ content: '更新目录' }).height(44)
+          .onClick(() => this.onRefreshToc())
+      }
+      MenuItem({ content: '替换规则' }).height(44)
+        .onClick(() => this.onOpenReplaceRules())
+      if (this.book.isLocal) {
+        MenuItem({ content: '本地 TXT 目录规则' }).height(44)
+          .onClick(() => this.onOpenTxtTocRules())
+      }
+    }
+  }
+
+  /** 当前书是否为可重新识别目录的本地 TXT。 */
+  private isLocalTxt(): boolean {
+    return this.book.isLocal && this.book.format === 'txt' && this.book.contentPath !== undefined;
+  }
+
   @Builder
   private CatalogTabPage(tab: number) {
     if (tab === 0) {
@@ -249,9 +277,12 @@ export struct CatalogPage {
             .onClick(() => this.toggleShowWordCount())
           AppGlyph({ name: 'swap', glyphSize: 18, tint: this.ascending ? '#D8D9E0' : '#AFC2FF' })
             .width(32).onClick(() => this.ascending = !this.ascending)
-          AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
-            .width(28)
-            .onClick(() => this.onUnavailableAction('目录更多操作尚未迁移'))
+          Stack({ alignContent: Alignment.Center }) {
+            AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
+          }
+          .width(28)
+          .height(32)
+          .bindMenu(this.CatalogMoreMenu, { placement: Placement.BottomRight })
         }
         .padding({ left: 12, right: 12, bottom: 8 })
 
