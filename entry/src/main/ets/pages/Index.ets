@@ -1177,7 +1177,7 @@ struct Index {
     this.bookmarkEditorIsNew = false;
   }
 
-  private async saveReaderBookmarkNote(note: string): Promise<void> {
+  private async saveReaderBookmarkNote(note: string, bookText: string): Promise<void> {
     const draft = this.bookmarkEditor;
     if (draft === undefined) { return; }
     const saved: ReaderBookmark = {
@@ -1189,7 +1189,7 @@ struct Index {
       chapterIndex: draft.chapterIndex,
       chapterName: draft.chapterName,
       chapterPosition: draft.chapterPosition,
-      bookText: draft.bookText,
+      bookText: bookText,
       content: note,
       createdAt: draft.createdAt
     };
@@ -3788,15 +3788,6 @@ struct Index {
             }
             })
           }
-          if (this.bookmarkEditor !== undefined) {
-            ReaderBookmarkEditor({
-              bookmark: this.bookmarkEditor,
-              isNew: this.bookmarkEditorIsNew,
-              onSave: (note: string) => this.saveReaderBookmarkNote(note),
-              onDelete: () => this.deleteReaderBookmark(),
-              onClose: () => this.bookmarkEditor = undefined
-            })
-          }
           if (this.markingEditor !== undefined) {
             ReaderMarkingEditor({
               marking: this.markingEditor,
@@ -4055,7 +4046,7 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.ALL_BOOKMARKS) {
-          AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId), onOpenMarking: (markingId: string) => this.openReaderMarking(markingId), onExportBookmarks: (bookKey: string, isMarkdown: boolean) => this.exportBookmarksByKey(bookKey, isMarkdown) })
+          AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId), onEditBookmark: (bookmarkId: string) => this.editReaderBookmark(bookmarkId), onOpenMarking: (markingId: string) => this.openReaderMarking(markingId), onExportBookmarks: (bookKey: string, isMarkdown: boolean) => this.exportBookmarksByKey(bookKey, isMarkdown) })
         } else if (this.profileSubpage === ProfileRoute.READ_RECORDS) {
           ReadRecordsPage({
             records: this.readTimeRecords,
@@ -4504,6 +4495,16 @@ struct Index {
           onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
           onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
         })
+        }
+        // 书签编辑面板挂在外层 Stack，阅读页与「所有书签」页都能唤起
+        if (this.bookmarkEditor !== undefined) {
+          ReaderBookmarkEditor({
+            bookmark: this.bookmarkEditor,
+            isNew: this.bookmarkEditorIsNew,
+            onSave: (note: string, bookText: string) => this.saveReaderBookmarkNote(note, bookText),
+            onDelete: () => this.deleteReaderBookmark(),
+            onClose: () => this.bookmarkEditor = undefined
+          })
         }
       }.width('100%').layoutWeight(1)
       if (this.route === AppRoute.HOME || this.route === AppRoute.BOOKSHELF || this.route === AppRoute.DISCOVER || this.route === AppRoute.SUBSCRIPTIONS || this.route === AppRoute.PROFILE) {

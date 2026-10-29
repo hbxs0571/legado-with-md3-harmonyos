@@ -2586,6 +2586,8 @@ const BOOKMARK_EMPTY_FACES: string[] = [
 export struct AllBookmarksPage {
   onBack: () => void = () => {};
   onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
+  /** 打开书签编辑面板；上游 AllBookmarkScreen 点击书签条目即进入编辑。 */
+  onEditBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
   /** 打开一条笔记（kind === 'note' 的条目），跳到划线所在位置。 */
   onOpenMarking: (markingId: string) => void = (_markingId: string) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -2724,7 +2726,10 @@ export struct AllBookmarksPage {
                       BookmarkEntryCard({
                         entry: entry,
                         onSelect: () => {
-                          // 笔记条目走划线跳转，书签条目走书签跳转；上游也是按类型分派
+                          // 上游：书签条目点击=编辑，长按=跳转正文；笔记条目点击=跳转划线
+                          if (entry.kind === 'note') { this.onOpenMarking(entry.id); } else { this.onEditBookmark(entry.id); }
+                        },
+                        onJump: () => {
                           if (entry.kind === 'note') { this.onOpenMarking(entry.id); } else { this.onOpenBookmark(entry.id); }
                         }
                       })
@@ -2783,6 +2788,8 @@ struct BookmarkOverviewCard {
 struct BookmarkEntryCard {
   @Prop entry: BookmarkEntrySummary = { id: '', bookKey: '', chapterName: '', excerpt: '', note: '', kind: 'bookmark' };
   onSelect: () => void = () => {};
+  /** 长按跳转到正文位置，保留原有的跳转能力。 */
+  onJump: () => void = () => {};
   build() {
     Column() {
       Text(this.entry.chapterName).fontSize(14).fontColor('#AFC2FF').maxLines(1)
@@ -2790,6 +2797,7 @@ struct BookmarkEntryCard {
       if (this.entry.note.length > 0) { Text(this.entry.note).fontSize(14).fontColor('#92949E').maxLines(3).margin({ top: 4 }) }
     }.width('100%').padding(16).backgroundColor('#1A1B21').borderRadius(14).margin({ bottom: 8 })
       .onClick(() => this.onSelect())
+      .gesture(LongPressGesture().onAction(() => this.onJump()))
   }
 }
 

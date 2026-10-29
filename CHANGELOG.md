@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-29 「所有书签」页补齐书签编辑，书签原文可改（r263）
+
+- 「所有书签」页的书签条目此前点不开编辑，只能跳转正文，写错备注必须绕回阅读页目录才能改。现对齐上游 `AllBookmarkScreen.kt:444-449`：书签条目**点击=编辑**、**长按=跳转正文**，笔记条目仍为点击跳转划线。`AllBookmarksPage` 增 `onEditBookmark` 回调，`BookmarkEntryCard` 增 `onJump` 并挂 `LongPressGesture`，挂载点接已有的 `editReaderBookmark()`。
+- 书签编辑面板的原文此前是只读 `Text`，只能改备注。对齐上游 `BookmarkEditSheet.kt:94-108` 的两个输入框：原文改为可编辑 `TextArea`，`onSave` 签名由 `(note)` 扩为 `(note, bookText)`，`saveReaderBookmarkNote()` 同步写回 `bookText`。
+- `ReaderBookmarkEditor` 浮层从阅读页分支的 `Stack` 提到外层 `Stack`。原先只在阅读页分支内渲染，从「所有书签」页唤起时不会出现。
+- N 端设备验证四条路径：从「所有书签」点书签条目 → 面板打开且原文带出；改原文追加 `EDITED` 保存 → `legado_reader_bookmarks` 落盘为 `这一段是占位正文EDITED`；长按条目 → 跳转阅读页正文；从阅读页目录「书签 → 编辑」→ 面板正常打开。删除后存储回 `v1\n` 空态。
+
 ## 2026-10-29 书签与笔记接入 Android ZIP 备份与恢复（r262）
 
 - `bookmark.json` 与 `bookMarking.json` 此前只在备份类别表里有名字，备份侧从不产出、恢复侧只原样拷贝。现补齐双向映射：`createBackup()` 写出根级 JSON，`restore()` 逐条解析后合并进 `ReaderBookmarkRepository` / `ReaderMarkingRepository`。
