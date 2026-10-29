@@ -62,6 +62,14 @@ import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
 import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository } from '../data/ReaderMarkingRepository';
+import {
+  BookmarkTargetVerdict,
+  MarkingRelocateAnchor,
+  MarkingRelocateCandidate,
+  MarkingRelocateTarget,
+  PendingBookmarkTarget,
+  ReaderBookmarkTarget
+} from '../data/ReaderBookmarkTarget';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
@@ -134,6 +142,8 @@ struct Index {
   @State markingEditorIsNew: boolean = true;
   @State readerBookmarkTargetPosition: number = -1;
   @State readerBookmarkTargetRevision: number = 0;
+  /** 跳转校验未通过时挂在这里，弹「仍要跳转吗」确认框。 */
+  @State pendingBookmarkTarget: PendingBookmarkTarget | undefined = undefined;
   @State readerContent: string = '';
   @State readerFontSize: number = 20;
   @State readerParagraphSpacing: number = 2;
@@ -1233,39 +1243,28 @@ struct Index {
     }
   }
 
-  private async openReaderBookmark(bookmarkId: string): Promise<void> {
-    const bookmark = this.readerBookmarks.find((record: ReaderBookmark) => record.id === bookmarkId);
-    if (bookmark === undefined) { return; }
-    const targetBook = this.books.find((book: Book) => book.id === bookmark.bookId);
-    if (targetBook === undefined || targetBook.contentPath === undefined) {
-      this.showUnavailableAction('这条书签对应的本地正文不可用');
-      return;
-    }
+  /**
+   * 书签/笔记跳转的公共主体：读章节、算位置、落盘阅读进度、切到阅读页。
+   * 中途失败已自行提示，返回 false；成功返回 true，由调用方清理各自的编辑态。
+   */
+  private async jumpToReaderTarget(
+    targetBook: Book,
+    chapterIndex: number,
+    chapterTitle: string,
+    chapterPosition: number,
+    errorPrefix: string
+  ): Promise<boolean> {
     const chapterTitles = targetBook.chapterTitles ?? [];
-    let chapterIndex = bookmark.chapterIndex;
-    if (chapterTitles[chapterIndex] !== bookmark.chapterName) {
-      const matchingIndex = chapterTitles.indexOf(bookmark.chapterName);
-      if (matchingIndex < 0) {
-        this.showUnavailableAction('书签章节与当前目录不匹配，已取消跳转');
-        return;
-      }
-      chapterIndex = matchingIndex;
-    }
-    const chapterTitle = chapterTitles[chapterIndex];
-    if (chapterTitle === undefined) {
-      this.showUnavailableAction('书签章节不在当前目录中');
-      return;
-    }
     let content: string;
     try {
       content = await BookRepository.readChapter(targetBook, chapterTitle, chapterIndex);
       this.replaceRules = ReplaceRuleRepository.getAll();
     } catch (_) {
-      this.showUnavailableAction('无法读取书签对应章节');
-      return;
+      this.showUnavailableAction(`无法读取${errorPrefix}对应章节`);
+      return false;
     }
     const semanticLength = LocalTextSemantics.fromRawBody(content).length;
-    const position = Math.max(0, Math.min(semanticLength, bookmark.chapterPosition));
+    const position = Math.max(0, Math.min(semanticLength, Math.trunc(chapterPosition)));
     const chapterProgress = semanticLength > 0 ? position / semanticLength * 100 : 0;
     const chapterCount = Math.max(1, chapterTitles.length);
     const updatedBook: Book = {
@@ -1308,15 +1307,15 @@ struct Index {
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
-      this.showUnavailableAction('无法访问本地书架，书签位置未保存');
-      return;
+      this.showUnavailableAction(`无法访问本地书架，${errorPrefix}位置未保存`);
+      return false;
     }
     try {
       await BookRepository.saveImportedBooks(context,
         updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
     } catch (_) {
-      this.showUnavailableAction('书签位置保存失败，已保留原阅读位置');
-      return;
+      this.showUnavailableAction(`${errorPrefix}位置保存失败，已保留原阅读位置`);
+      return false;
     }
     this.selectedBook = updatedBook;
     this.books = updatedBooks;
@@ -1325,8 +1324,135 @@ struct Index {
     this.readerBookmarkTargetPosition = position;
     this.readerBookmarkTargetRevision++;
     this.readerStartAtChapterBeginning = false;
-    this.bookmarkEditor = undefined;
+    return true;
+  }
+
+  /**
+   * 当前书的源指纹，与新建书签/标记时写入 `bookUrl` 的口径保持一致。
+   */
+  private bookmarkTargetFingerprint(book: Book): string {
+    return book.androidOriginalPath ?? book.contentPath ?? book.id;
+  }
+
+  /**
+   * 弹「位置可能已偏移」确认框，返回用户是否仍要跳转。
+   * 文案与按钮对齐上游 `bookmark_target_*` 字符串，取消时原地不动。
+   */
+  private askJumpAnyway(verdict: BookmarkTargetVerdict): Promise<boolean> {
+    const message = verdict === 'sourceChanged'
+      ? '这条书签/笔记是在其他书源下创建的，位置可能已经偏移。仍要跳转吗？'
+      : '目标章节标题已变化，位置可能已经偏移。仍要跳转吗？';
+    return new Promise<boolean>((resolve: (value: boolean) => void) => {
+      this.getUIContext().showAlertDialog({
+        title: '位置可能已偏移',
+        message: message,
+        autoCancel: false,
+        primaryButton: {
+          value: '取消',
+          action: () => resolve(false)
+        },
+        secondaryButton: {
+          value: '仍跳转',
+          action: () => resolve(true)
+        }
+      });
+    });
+  }
+
+  /** 跳转成功后收尾：关掉对应编辑面板并切到阅读页。 */
+  private finishTargetJump(isMarking: boolean): void {
+    if (isMarking) {
+      this.markingEditor = undefined;
+    } else {
+      this.bookmarkEditor = undefined;
+    }
     this.route = AppRoute.READER;
+  }
+
+  /**
+   * 校验没过时按原存储坐标弹框确认，确认后才跳。
+   * 与上游 `confirmJump` 一致：用的是创建时的 chapterIndex/chapterPosition，不做猜测。
+   */
+  private async offerStoredTargetJump(targetBook: Book, target: PendingBookmarkTarget): Promise<void> {
+    const kind = target.isMarking ? '笔记' : '书签';
+    const chapterTitle = (targetBook.chapterTitles ?? [])[target.chapterIndex];
+    if (chapterTitle === undefined) {
+      this.showUnavailableAction(`${kind}章节不在当前目录中`);
+      return;
+    }
+    const confirmed = await this.askJumpAnyway(target.verdict);
+    if (!confirmed) { return; }
+    const jumped = await this.jumpToReaderTarget(
+      targetBook, target.chapterIndex, chapterTitle, target.chapterPosition, kind);
+    if (!jumped) { return; }
+    this.finishTargetJump(target.isMarking);
+  }
+
+  private async openReaderBookmark(bookmarkId: string): Promise<void> {
+    const bookmark = this.readerBookmarks.find((record: ReaderBookmark) => record.id === bookmarkId);
+    if (bookmark === undefined) { return; }
+    const targetBook = this.books.find((book: Book) => book.id === bookmark.bookId);
+    if (targetBook === undefined || targetBook.contentPath === undefined) {
+      this.showUnavailableAction('这条书签对应的本地正文不可用');
+      return;
+    }
+    // 严格对齐上游 navigateToBookmark：先校验，通过直接跳；不通过一律交给用户确认（书签不做重定位）。
+    const verdict = ReaderBookmarkTarget.verify(
+      this.bookmarkTargetFingerprint(targetBook),
+      (targetBook.chapterTitles ?? [])[bookmark.chapterIndex],
+      bookmark.bookUrl,
+      bookmark.chapterName
+    );
+    const target: PendingBookmarkTarget = {
+      bookId: bookmark.bookId,
+      chapterIndex: bookmark.chapterIndex,
+      chapterPosition: bookmark.chapterPosition,
+      verdict: verdict,
+      isMarking: false
+    };
+    if (verdict !== 'match') {
+      await this.offerStoredTargetJump(targetBook, target);
+      return;
+    }
+    const chapterTitle = (targetBook.chapterTitles ?? [])[bookmark.chapterIndex];
+    if (chapterTitle === undefined) {
+      this.showUnavailableAction('书签章节不在当前目录中');
+      return;
+    }
+    const jumped = await this.jumpToReaderTarget(
+      targetBook, bookmark.chapterIndex, chapterTitle, bookmark.chapterPosition, '书签');
+    if (!jumped) { return; }
+    this.finishTargetJump(false);
+  }
+
+  /**
+   * 换源/目录重排后在当前目录里按锚点重新找位置，对齐上游 `relocateMarking`。
+   * 候选章节是「原索引这一章」和「标题同名的章」，只读本地正文，不联网。
+   * 返回 undefined 表示没有唯一最优匹配，交给用户确认。
+   */
+  private async relocateMarkingTarget(
+    targetBook: Book,
+    storedChapterName: string,
+    anchorChapterIndex: number,
+    anchor: MarkingRelocateAnchor
+  ): Promise<MarkingRelocateTarget | undefined> {
+    const chapterTitles = targetBook.chapterTitles ?? [];
+    const candidates: MarkingRelocateCandidate[] = [];
+    for (let index = 0; index < chapterTitles.length; index++) {
+      const title = chapterTitles[index];
+      if (title === undefined) { continue; }
+      if (index !== anchorChapterIndex && (storedChapterName.trim().length === 0 || title !== storedChapterName)) {
+        continue;
+      }
+      try {
+        const raw = await BookRepository.readChapter(targetBook, title, index);
+        candidates.push({ chapterIndex: index, content: LocalTextSemantics.fromRawBody(raw) });
+      } catch (_) {
+        // 单章读不出来就跳过，不因为候选缺失就放弃整次重定位。
+        continue;
+      }
+    }
+    return ReaderBookmarkTarget.locate(anchor, candidates);
   }
 
   private async openReaderMarking(markingId: string): Promise<void> {
@@ -1337,92 +1463,46 @@ struct Index {
       this.showUnavailableAction('这条笔记对应的本地正文不可用');
       return;
     }
-    const chapterTitles = targetBook.chapterTitles ?? [];
+    const anchor: MarkingRelocateAnchor = {
+      selectedText: marking.selectedText,
+      contextBefore: marking.contextBefore,
+      contextAfter: marking.contextAfter
+    };
+    // 严格对齐上游 navigateToMarking：校验通过直接跳，不通过先试重定位，再退到确认框。
+    const verdict = ReaderBookmarkTarget.verify(
+      this.bookmarkTargetFingerprint(targetBook),
+      (targetBook.chapterTitles ?? [])[marking.chapterIndex],
+      marking.bookUrl,
+      marking.chapterName
+    );
     let chapterIndex = marking.chapterIndex;
-    if (chapterTitles[chapterIndex] !== marking.chapterName) {
-      const matchingIndex = chapterTitles.indexOf(marking.chapterName);
-      if (matchingIndex < 0) {
-        this.showUnavailableAction('笔记章节与当前目录不匹配，已取消跳转');
+    let chapterPosition = marking.chapterPosition;
+    if (verdict !== 'match') {
+      const relocated = await this.relocateMarkingTarget(
+        targetBook, marking.chapterName, marking.chapterIndex, anchor);
+      if (relocated !== undefined) {
+        chapterIndex = relocated.chapterIndex;
+        chapterPosition = relocated.chapterPosition;
+      } else {
+        await this.offerStoredTargetJump(targetBook, {
+          bookId: marking.bookId,
+          chapterIndex: marking.chapterIndex,
+          chapterPosition: marking.chapterPosition,
+          verdict: verdict,
+          isMarking: true
+        });
         return;
       }
-      chapterIndex = matchingIndex;
     }
-    const chapterTitle = chapterTitles[chapterIndex];
+    const chapterTitle = (targetBook.chapterTitles ?? [])[chapterIndex];
     if (chapterTitle === undefined) {
       this.showUnavailableAction('笔记章节不在当前目录中');
       return;
     }
-    let content: string;
-    try {
-      content = await BookRepository.readChapter(targetBook, chapterTitle, chapterIndex);
-      this.replaceRules = ReplaceRuleRepository.getAll();
-    } catch (_) {
-      this.showUnavailableAction('无法读取笔记对应章节');
-      return;
-    }
-    const semanticContent = LocalTextSemantics.fromRawBody(content);
-    const position = Math.max(0, Math.min(semanticContent.length, marking.chapterPosition));
-    const chapterProgress = semanticContent.length > 0 ? position / semanticContent.length * 100 : 0;
-    const chapterCount = Math.max(1, chapterTitles.length);
-    const updatedBook: Book = {
-      id: targetBook.id,
-      title: targetBook.title,
-      author: targetBook.author,
-      category: targetBook.category,
-      groupName: targetBook.groupName,
-      groupNames: targetBook.groupNames,
-      chapterTitles: targetBook.chapterTitles,
-      chapterOffsets: targetBook.chapterOffsets,
-      chapterVolumes: targetBook.chapterVolumes,
-      chapterIndex: chapterIndex,
-      chapterProgress: chapterProgress,
-      lastChapter: chapterTitle,
-      progress: (chapterIndex + chapterProgress / 100) / chapterCount * 100,
-      coverColor: targetBook.coverColor,
-      coverMark: targetBook.coverMark,
-      coverUri: targetBook.coverUri,
-      customCoverUri: targetBook.customCoverUri,
-      bookType: targetBook.bookType,
-      fixedType: targetBook.fixedType,
-      contentPath: targetBook.contentPath,
-      format: targetBook.format,
-      chapterCount: targetBook.chapterCount,
-      fileSizeBytes: targetBook.fileSizeBytes,
-      imageStyle: targetBook.imageStyle,
-      reSegment: targetBook.reSegment,
-      charset: targetBook.charset,
-      description: targetBook.description,
-      remark: targetBook.remark,
-      customTag: targetBook.customTag,
-      bodyMissing: targetBook.bodyMissing,
-      androidOriginalPath: targetBook.androidOriginalPath,
-      androidCharacterPosition: position,
-      readerPositionVersion: 1,
-      tocRule: targetBook.tocRule,
-      isLocal: targetBook.isLocal
-    };
-    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
-    const context = this.getUIContext().getHostContext();
-    if (context === undefined) {
-      this.showUnavailableAction('无法访问本地书架，笔记位置未保存');
-      return;
-    }
-    try {
-      await BookRepository.saveImportedBooks(context,
-        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
-    } catch (_) {
-      this.showUnavailableAction('笔记位置保存失败，已保留原阅读位置');
-      return;
-    }
-    this.selectedBook = updatedBook;
-    this.books = updatedBooks;
-    this.selectedChapter = chapterTitle;
-    this.readerContent = content;
-    this.readerBookmarkTargetPosition = position;
-    this.readerBookmarkTargetRevision++;
-    this.readerStartAtChapterBeginning = false;
-    this.markingEditor = undefined;
-    this.route = AppRoute.READER;
+    const jumped = await this.jumpToReaderTarget(
+      targetBook, chapterIndex, chapterTitle, chapterPosition, '笔记');
+    if (!jumped) { return; }
+    this.finishTargetJump(true);
   }
 
   private async openReaderSearchResult(chapterIndex: number, chapterPosition: number): Promise<void> {
