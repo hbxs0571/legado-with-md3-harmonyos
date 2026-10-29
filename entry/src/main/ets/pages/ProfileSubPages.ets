@@ -2612,8 +2612,6 @@ export struct AllBookmarksPage {
     (_bookKey: string, _isMarkdown: boolean) => {};
   @State selectedBookKey: string = '';
   @State selectedBookTitle: string = '';
-  @State selectedBookmarkCount: number = 0;
-  @State selectedNoteCount: number = 0;
   @State selectedTab: number = 0;
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
@@ -2662,6 +2660,21 @@ export struct AllBookmarksPage {
   }
 
   /**
+   * 当前书在某一 tab 下的条目数。
+   * 不能沿用进入书籍时的 `book.bookmarkCount` 快照：删除/编辑书签后 entries 已更新，
+   * 快照不会重算，tab 标签会停在旧数字（上游 AllBookmarkViewModel 是从实时列表算的）。
+   */
+  private countEntriesForBook(bookKey: string, kind: 'bookmark' | 'note'): number {
+    let total = 0;
+    for (let index = 0; index < this.entries.length; index++) {
+      const entry = this.entries[index];
+      if (entry === undefined) { continue; }
+      if (entry.bookKey === bookKey && entry.kind === kind) { total++; }
+    }
+    return total;
+  }
+
+  /**
    * 把 targetMarkingId 指向的笔记滚到可见处，对齐上游
    * `LaunchedEffect(targetMarkingId, detailItems) { noteListState.scrollToItem(index) }`。
    */
@@ -2679,8 +2692,6 @@ export struct AllBookmarksPage {
     if (this.selectedBookKey.length > 0) {
       this.selectedBookKey = '';
       this.selectedBookTitle = '';
-      this.selectedBookmarkCount = 0;
-      this.selectedNoteCount = 0;
       this.currentSourceUrl = '';
       this.searchQuery = '';
       this.selectedTab = 0;
@@ -2761,8 +2772,8 @@ export struct AllBookmarksPage {
 
       if (this.selectedBookKey.length > 0) {
         Row() {
-          ModuleTab({ label: `书签 ${this.selectedBookmarkCount}`, selected: this.selectedTab === 0, onSelect: () => { this.selectedTab = 0; this.searchQuery = ''; } })
-          ModuleTab({ label: `笔记 ${this.selectedNoteCount}`, selected: this.selectedTab === 1, onSelect: () => { this.selectedTab = 1; this.searchQuery = ''; } })
+          ModuleTab({ label: `书签 ${this.countEntriesForBook(this.selectedBookKey, 'bookmark')}`, selected: this.selectedTab === 0, onSelect: () => { this.selectedTab = 0; this.searchQuery = ''; } })
+          ModuleTab({ label: `笔记 ${this.countEntriesForBook(this.selectedBookKey, 'note')}`, selected: this.selectedTab === 1, onSelect: () => { this.selectedTab = 1; this.searchQuery = ''; } })
         }.margin({ left: 16, right: 16, top: 8, bottom: 12 })
         Swiper() {
           ForEach([0, 1], (tabIndex: number) => {
@@ -2807,8 +2818,6 @@ export struct AllBookmarksPage {
                 onSelect: () => {
                   this.selectedBookKey = book.key;
                   this.selectedBookTitle = book.title;
-                  this.selectedBookmarkCount = book.bookmarkCount;
-                  this.selectedNoteCount = book.noteCount;
                   this.currentSourceUrl = book.sourceUrl;
                   // 上游：带定位目标时直接落在笔记 tab，并把该条笔记滚到可见处
                   const target = this.getMatchedMarkingId(book.key);

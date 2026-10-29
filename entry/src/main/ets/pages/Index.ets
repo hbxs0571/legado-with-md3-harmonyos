@@ -1225,6 +1225,28 @@ struct Index {
     }
   }
 
+  /**
+   * 删除书签前先弹二次确认，对齐上游 `BookmarkEditSheet.kt:77-85`：
+   * 标题「删除书签？」、正文「确定要删除这条书签吗？」，按钮「取消」/「删除」。
+   * 划线/笔记的删除上游没有确认框（`MarkingSheet.kt:129` 直接删除），故不在此列。
+   */
+  private confirmDeleteReaderBookmark(): void {
+    if (this.bookmarkEditor === undefined) { return; }
+    this.getUIContext().showAlertDialog({
+      title: '删除书签？',
+      message: '确定要删除这条书签吗？',
+      autoCancel: true,
+      primaryButton: {
+        value: '取消',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: '删除',
+        action: () => { this.deleteReaderBookmark(); }
+      }
+    });
+  }
+
   private async deleteReaderBookmark(): Promise<void> {
     const draft = this.bookmarkEditor;
     if (draft === undefined) { return; }
@@ -4841,7 +4863,7 @@ struct Index {
             bookmark: this.bookmarkEditor,
             isNew: this.bookmarkEditorIsNew,
             onSave: (note: string, bookText: string) => this.saveReaderBookmarkNote(note, bookText),
-            onDelete: () => this.deleteReaderBookmark(),
+            onDelete: () => this.confirmDeleteReaderBookmark(),
             onClose: () => this.bookmarkEditor = undefined
           })
         }

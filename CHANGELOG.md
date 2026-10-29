@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-29 书签删除补二次确认、两 tab 计数改为实时统计（r275）
+
+- **书签删除补二次确认**：上游 `BookmarkEditSheet.kt:77-85` 点删除先弹 `AppAlertDialog`，标题 `confirm_delete_bookmark`「删除书签？」、正文 `delete_bookmark_message`「确定要删除这条书签吗？」，按钮「取消」/「删除」。本地 `ReaderBookmarkEditor.ets:45` 的「删除」直接调 `onDelete()`，落到 `Index.ets` 里就删了，没有确认步骤。新增 `Index.ets confirmDeleteReaderBookmark()` 用 `getUIContext().showAlertDialog` 弹同文案确认框（写法沿用项目已有的 `askJumpAnyway` / `confirmRemoveFromShelf`），`ReaderBookmarkEditor` 的 `onDelete` 改为指向它。面板本身不改动。
+- 划线/笔记的删除**不加**确认框：上游 `MarkingSheet.kt:129-131` 的删除按钮也是直接 `onDelete`，本地 `ReaderMarkingEditor.ets:473` 与之一致，属正确行为，不做「顺手加确认」的偏离。
+- **两 tab 计数改为实时统计**：`ProfileSubPages.ets` 的 `selectedBookmarkCount` / `selectedNoteCount` 是进入书籍时从 `book.bookmarkCount` 复制的**快照**，删除书签后 `entries` 已更新而快照不重算，tab 标签停在旧数字（实测删掉一条后列表只剩 2 条、标签仍写「书签 3」）。新增 `countEntriesForBook(bookKey, kind)` 按当前 `entries` 统计，两个 `ModuleTab` 改用它的返回值；随后删掉两个已无人读取的 `@State` 快照字段及其三处赋值。上游 `AllBookmarkViewModel` 是从实时列表算的，改后与之同口径。
+- N 端设备验证（HOS 模拟器，OpenHarmony API 26）：编辑书签点「删除」→ 弹出「删除书签？」/「确定要删除这条书签吗？」+「取消」「删除」；点「取消」后确认框消失、编辑面板保留、书签仍 3 条；点「删除」后列表剩 2 条、preferences 记录由 5 行变 4 行（真删除）；装上新构建后 tab 显示「书签 2」，再删一条实时变「书签 1」。验证后已用备份还原为 3 条。
+
 ## 2026-10-29「所有书签」页对齐上游条目口径（r274）
 
 - 对齐上游 `AllBookmarkScreen.kt` / `AllBookmarkViewModel.kt`，六处差异一起收口：搜索过滤口径、命中提示与定位、书籍卡片封面、章节名回退、条目点击与长按语义。
