@@ -1,5 +1,11 @@
 # 修改记录
 
+## 2026-10-29 更新目录不再重映射书签与划线，对齐上游（r276）
+
+- 上游 `BookmarkRepository` / `BookMarkingRepository` 在更新目录时**完全不碰**书签与划线表，书签的 `chapterIndex`/`chapterPosition` 保持创建时的值。本地此前有一套 `remapNoTocBookmarks` / `remapNoTocMarkings`，在 `refreshAllToc`（书架批量更新目录）、`refreshCurrentToc`（目录页单本更新）、`openBook` 的 `refreshNoTocBook` 分支三处按新旧正文偏移重算章节号与章内位置，并带保存失败回滚逻辑，与上游行为不一致。
+- 按上游删掉这套重映射：`Index.ets` 三处调用点连同两个私有方法一并移除（4 insertions, 184 deletions）。书签与划线一律按原章节号保留；跳转前的位置校验（r268）在章节名变化时提示「位置可能已偏移」，不需要提前改写数据。这样也消除了「更新目录后书签位置被算法悄悄挪走」这一类难以察觉的数据损伤。
+- N 端设备验证（HOS 模拟器，OpenHarmony API 26）：把 `vol-test2` 的旧目录伪造成 12 章（`第1章(1)`…`第12章(1)`）、`bm-test-1` 书签挂在第 2 章，执行「更新目录」后目录回到真实 6 章、`test-toc` 由 1 章变 3 章；`legado_reader_bookmarks` 四条与 `legado_reader_markings` 一条逐字段完全未变（`bm-test-1` 仍是 `chIdx=1 name=第2章(1) pos=10`）；目录页书签 tab 三条正常渲染、当前章带定位图标，长按第 2 章书签弹出「位置可能已偏移」并成功跳到「第一章 出发」。
+
 ## 2026-10-29 书签删除补二次确认、两 tab 计数改为实时统计（r275）
 
 - **书签删除补二次确认**：上游 `BookmarkEditSheet.kt:77-85` 点删除先弹 `AppAlertDialog`，标题 `confirm_delete_bookmark`「删除书签？」、正文 `delete_bookmark_message`「确定要删除这条书签吗？」，按钮「取消」/「删除」。本地 `ReaderBookmarkEditor.ets:45` 的「删除」直接调 `onDelete()`，落到 `Index.ets` 里就删了，没有确认步骤。新增 `Index.ets confirmDeleteReaderBookmark()` 用 `getUIContext().showAlertDialog` 弹同文案确认框（写法沿用项目已有的 `askJumpAnyway` / `confirmRemoveFromShelf`），`ReaderBookmarkEditor` 的 `onDelete` 改为指向它。面板本身不改动。
