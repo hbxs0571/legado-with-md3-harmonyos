@@ -113,6 +113,8 @@ export struct ReaderSettingsPage {
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
   @Prop bookmarkBadgeSize: number = 10;
+  /** 自定义书签角标图片路径；空串表示默认丝带。 */
+  @Prop bookmarkBadgeImage: string = '';
   @Prop selectText: boolean = true;
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
@@ -139,7 +141,6 @@ export struct ReaderSettingsPage {
   @State selectedClickRegionIndex: number = 4;
   @State previousPageKeys: string = '';
   @State nextPageKeys: string = '';
-  @State bookmarkBadgeCustomPreview: boolean = false;
   @State expandTextMenuPreview: boolean = false;
   @State showTextMenuIconsPreview: boolean = true;
   @State primaryTextMenuExpanded: boolean = true;
@@ -217,6 +218,10 @@ export struct ReaderSettingsPage {
   onSwipeToAddBookmarkChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   /** 书签角标宽度（dp）；0 表示不显示角标。 */
   onBookmarkBadgeSizeChange: (value: number) => void = (_value: number) => {};
+  /** 选择自定义角标图片；成功后由上层写入 `bookmarkBadgeImage`。 */
+  onPickBookmarkBadgeImage: () => void = () => {};
+  /** 恢复默认角标（清空自定义图片）。 */
+  onResetBookmarkBadgeImage: () => void = () => {};
   onMaxLengthWithNoTocChange: (value: number) => void = (_value: number) => {};
   onClickImageBehaviorChange: (value: string) => void = (_value: string) => {};
   onClickRegionActionsChange: (actions: string[]) => void = (_actions: string[]) => {};
@@ -229,6 +234,12 @@ export struct ReaderSettingsPage {
   onQuickActionsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onSelectTextChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+
+  /** 把设置里存的沙箱绝对路径转成 `Image()` 能读的 `file://` URI（裸路径会渲染空白）。 */
+  private badgeImageSource(): string {
+    const path = this.bookmarkBadgeImage;
+    return path.startsWith('file://') ? path : `file://${path}`;
+  }
 
   @Builder
   private settingsContent(showHandle: boolean) {
@@ -842,7 +853,7 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onKeyPageOnLongPressChange(enabled) })
           MenuSettingSwitch({ title: '下滑添加书签', detail: '下滑翻动当前页以添加或取消书签', checked: this.swipeToAddBookmark,
             onChange: (enabled: boolean) => this.onSwipeToAddBookmarkChange(enabled) })
-          MenuSettingOption({ title: '书签标记', detail: this.bookmarkBadgeCustomPreview ? '自定义图片' : '默认' })
+          MenuSettingOption({ title: '书签标记', detail: this.bookmarkBadgeImage.length > 0 ? '自定义图片' : '默认', migrated: true })
             .onClick(() => this.openDetailSheet('书签标记', '选择书签标记图片或恢复默认'))
           MenuSettingSlider({
             title: '书签标记大小', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
@@ -1627,28 +1638,36 @@ export struct ReaderSettingsPage {
             Text('当前标记').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 4, bottom: 8 })
             Row() {
               Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.app_bookmark')).width(Math.max(8, this.bookmarkBadgeSize))
-                  .height(Math.max(8, this.bookmarkBadgeSize)).fillColor('#C6D3FF')
+                // 有自定义图片时预览真实图片，否则用内置书签图标示意默认丝带。
+                if (this.bookmarkBadgeImage.length > 0) {
+                  Image(this.badgeImageSource())
+                    .width(Math.max(12, Math.min(58, this.bookmarkBadgeSize * 2)))
+                    .height(Math.max(12, Math.min(58, this.bookmarkBadgeSize * 2)))
+                    .objectFit(ImageFit.Contain)
+                } else {
+                  Image($r('app.media.app_bookmark')).width(Math.max(8, this.bookmarkBadgeSize))
+                    .height(Math.max(8, this.bookmarkBadgeSize)).fillColor('#C6D3FF')
+                }
               }.width(62).height(62).backgroundColor('#292A31').borderRadius(12)
               Column() {
-                Text(this.bookmarkBadgeCustomPreview ? '自定义图片' : '默认')
+                Text(this.bookmarkBadgeImage.length > 0 ? '自定义图片' : '默认')
                   .fontSize(14).fontColor('#E5E6EB')
                 Text('角标大小：' + this.bookmarkBadgeSize.toString() + 'dp')
                   .fontSize(11).fontColor('#AEB0B9').margin({ top: 5 })
               }.alignItems(HorizontalAlign.Start).margin({ left: 12 })
               Blank()
             }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
-            MenuSettingOption({ title: '选择书签标记图片', detail: '使用本地图片作为阅读页角标' })
-              .onClick(() => this.onUnavailableAction('图片选择与角标保存尚未迁移'))
-            if (this.bookmarkBadgeCustomPreview) {
-              MenuSettingOption({ title: '恢复默认', detail: '移除自定义角标图片' })
-                .onClick(() => this.bookmarkBadgeCustomPreview = false)
+            MenuSettingOption({ title: '选择书签标记图片', detail: '使用本地图片作为阅读页角标', migrated: true })
+              .onClick(() => this.onPickBookmarkBadgeImage())
+            if (this.bookmarkBadgeImage.length > 0) {
+              MenuSettingOption({ title: '恢复默认', detail: '移除自定义角标图片', migrated: true })
+                .onClick(() => this.onResetBookmarkBadgeImage())
             }
             MenuSettingSlider({
               title: '角标大小（dp）', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
               onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
             })
-            Text('角标大小会立即保存并应用到阅读页右上角；0 表示不显示角标。图片选择尚未迁移。')
+            Text('角标大小会立即保存并应用到阅读页右上角；0 表示不显示角标。自定义图片保存在应用内，可随时恢复默认。')
               .fontSize(10).fontColor('#92949E').width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '页边距') {

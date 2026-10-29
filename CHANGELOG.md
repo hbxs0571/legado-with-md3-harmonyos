@@ -1,5 +1,17 @@
 # 修改记录
 
+## 2026-10-29 自定义书签角标图片（r265）
+
+- 上一轮遗留的「选择书签标记图片」此前是占位（`onUnavailableAction('图片选择与角标保存尚未迁移')`），「恢复默认」也只清一个私有预览状态。现对齐上游 `BookmarkBadgeDelegate.applyBadgeImage/clearBadgeImage` 补齐整条链路。
+- 新增 `entry/src/main/ets/data/ReaderBookmarkBadgeRepository.ets`：`chooseImage()` 走 `picker.DocumentSelectOptions`（图片后缀过滤、单选），把用户选中的图片复制进应用私有目录 `filesDir/bookmark-badge/`，复制后校验字节数与原始文件一致，失败回滚删除；`removeImage()` 删除副本。**目标文件名带时间戳与随机数，每次选图都换新名**——阅读页按路径字符串缓存图片，沿用同名旧文件会画回旧图。
+- `ReaderSettingsSnapshot` 增 `bookmarkBadgeImage`（默认空串，对齐上游 `ReadSettings.bookmarkBadgeImage`），load/save 同步；`Index.ets` 增 `@State readerBookmarkBadgeImage` 与 `pickReaderBookmarkBadgeImage()` / `resetReaderBookmarkBadgeImage()`，5 处挂载点全部透传。
+- `ReaderPage` 与 `ReaderSettingsPage` 的自定义图分支改用新增的 `badgeImageSource()` 补 `file://` 前缀。**踩坑记录**：`Image()` 只接受 `file://` URI，直接传沙箱绝对路径会渲染成完全空白——且因为走了自定义分支，默认丝带也不会兜底，表现为「两种角标都不显示」。这与 `BookGroupRepository`/`BookRepository` 存封面图的约定一致（设置里存裸路径、渲染时补前缀），所以修在渲染侧而不是存储侧。
+- `ReaderSettingsPage`「书签标记」行的 detail 由 `bookmarkBadgeImage.length > 0` 决定显示「自定义图片」或「默认」；面板预览区有自定义图时画真实图片，并新增「恢复默认」行；两处 `MenuSettingOption` 都补了 `migrated: true`（不加右侧会显示「尚未迁移」）。
+- 角标右边距由固定的 6 改为 `paddingSettings.paddingRight + 6`，对齐上游 `ReaderBookmarkBadge.kt:26-38` 的 `leftPx = pageWidthPx - contentRightPaddingPx - 6 * density - width`。
+- 备份侧一并补上 `readingAnchorEnabled` / `swipeToAddBookmark` / `bookmarkBadgeSize` / `bookmarkBadgeImage` 四项写 `config.xml`（前三项此前只有恢复侧读、备份侧不写，属半接通）；恢复侧读回 `bookmarkBadgeImage` 时先 `fileIo.accessSync` 校验，Android 私有目录路径在本机不存在则保留本机值。
+- N 端设备验证：默认丝带黄色像素 1145（bbox `1174,218`–`1196,346`）；选图后自动复制到 `files/bookmark-badge/badge-…png`，偏好落盘该路径；修好 `file://` 前缀后阅读页出现青色/洋红像素 637/543（测试图为青洋红棋盘），设置面板预览 1264/1168；点「恢复默认」后图片文件被删除、detail 回「默认」、偏好落盘为空串、阅读页回默认丝带。
+- 仍未迁移：`docs/KNOWN-ISSUES.md` 里目录页「更多」入口的占位。
+
 ## 2026-10-29 阅读页书签角标与「书签标记大小」设置（r264）
 
 - 阅读页右上角此前完全没有书签角标：`ReaderPage` 只有 `hasBookmarkOnCurrentPage()` 这个判断函数，没有任何渲染代码，而「书签标记大小」设置项只改一个 `@State bookmarkBadgeSizePreview`，既不落库也不影响阅读页，属于纯装饰控件。现按上游 `ReadSettings.bookmarkBadgeSize` 补齐为真正生效的设置。

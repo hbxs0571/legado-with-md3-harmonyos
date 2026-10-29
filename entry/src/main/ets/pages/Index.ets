@@ -58,6 +58,7 @@ import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
+import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository } from '../data/ReaderMarkingRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
@@ -185,6 +186,8 @@ struct Index {
   @State readerSwipeToAddBookmark: boolean = false;
   /** 阅读页书签角标宽度（dp），0 表示不显示；与上游 bookmarkBadgeSize 对齐。 */
   @State readerBookmarkBadgeSize: number = 10;
+  /** 自定义书签角标图片路径，空串表示用默认丝带；与上游 bookmarkBadgeImage 对齐。 */
+  @State readerBookmarkBadgeImage: string = '';
   @State readerSelectText: boolean = true;
   @State readerMaxLengthWithNoToc: number = 3000;
   @State eyeProtectionEnabled: boolean = false;
@@ -1655,6 +1658,7 @@ struct Index {
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
+      this.readerBookmarkBadgeImage = settings.bookmarkBadgeImage;
       this.readerSelectText = settings.selectText;
       this.readerMaxLengthWithNoToc = settings.maxLengthWithNoToc;
       this.eyeProtectionEnabled = settings.eyeProtectionEnabled;
@@ -1761,6 +1765,7 @@ struct Index {
         readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
+        bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
         eyeProtectionEnabled: this.eyeProtectionEnabled,
@@ -2157,6 +2162,39 @@ struct Index {
     this.readerBookmarkBadgeSize = Math.max(0, Math.min(50, Math.round(value)));
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  /**
+   * 选一张本地图片作为阅读页书签角标。
+   * 图片先复制进应用私有目录（系统选择器的授权是临时的），再把路径写进设置；
+   * 旧图片在切换成功后删除，避免私有目录累积。
+   */
+  private async pickReaderBookmarkBadgeImage(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    let picked: string | undefined = undefined;
+    try {
+      picked = await ReaderBookmarkBadgeRepository.chooseImage(context);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '选择书签角标图片失败';
+      this.showUnavailableAction(message);
+      return;
+    }
+    if (picked === undefined) { return; }
+    const previous = this.readerBookmarkBadgeImage;
+    this.readerBookmarkBadgeImage = picked;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+    if (previous.length > 0 && previous !== picked) {
+      ReaderBookmarkBadgeRepository.removeImage(previous);
+    }
+  }
+  /** 恢复默认书签角标：清空设置并删掉私有目录里的图片副本。 */
+  private resetReaderBookmarkBadgeImage(): void {
+    const previous = this.readerBookmarkBadgeImage;
+    this.readerBookmarkBadgeImage = '';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+    if (previous.length > 0) { ReaderBookmarkBadgeRepository.removeImage(previous); }
   }
   private setReaderSelectText(enabled: boolean): void {
     this.readerSelectText = enabled;
@@ -3692,6 +3730,7 @@ struct Index {
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
+        bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
             clickImageBehavior: this.readerClickImageBehavior,
             clickRegionActions: this.readerClickRegionActions,
@@ -3865,12 +3904,15 @@ struct Index {
               readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
+        bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
               onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
+              onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
+              onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
               clickRegionActions: this.readerClickRegionActions,
@@ -4173,12 +4215,15 @@ struct Index {
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
+        bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
+              onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
+              onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
@@ -4344,12 +4389,15 @@ struct Index {
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
+        bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
+              onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
+              onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
@@ -4457,12 +4505,15 @@ struct Index {
           readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
+        bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
           onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
+              onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
+              onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
           clickRegionActions: this.readerClickRegionActions,

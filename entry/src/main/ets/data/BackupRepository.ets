@@ -232,7 +232,7 @@ export class BackupRepository {
   ]);
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
     readConfig: [
-      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'bookmarkBadgeSize', 'maxLengthWithNoToc', 'system_typefaces',
+      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'bookmarkBadgeSize', 'bookmarkBadgeImage', 'maxLengthWithNoToc', 'system_typefaces',
       'autoReadSpeed', 'progressBarBehavior', 'tocUiUseReplace', 'tocCountWords', 'clickImgWay',
       'textFullJustify', 'textBottomJustify', 'textItalic', 'textBold', 'textShadow', 'shadowRadius',
       'shadowDx', 'shadowDy', 'shadowColor', 'shadowColorN', 'underline', 'underlineHeight',
@@ -541,6 +541,15 @@ export class BackupRepository {
           configText, 'string', 'underlineColor', settings.underlineColor);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'underlineColorNight', settings.underlineColorNight);
+        // 上游把书签角标的两项存在 AppConfigStore 偏好里，随 config.xml 一起备份。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'readingAnchorEnabled', `${settings.readingAnchorEnabled}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'swipeToAddBookmark', `${settings.swipeToAddBookmark}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'bookmarkBadgeSize', `${Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize)))}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'bookmarkBadgeImage', settings.bookmarkBadgeImage);
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1176,6 +1185,17 @@ export class BackupRepository {
       bookmarkBadgeSize: Math.max(0, Math.min(50,
         BackupRepository.readXmlInteger(`${directory}/config.xml`, 'bookmarkBadgeSize') ??
           current.bookmarkBadgeSize)),
+      // Android 记录的角标图片路径属 Android 私有目录，恢复过来指向不存在的文件；
+      // 只有当那个路径在本机沙箱里确实存在时才采用，否则保留本机选择。
+      bookmarkBadgeImage: ((): string => {
+        const restoredBadgeImage = BackupRepository.readXmlString(`${directory}/config.xml`, 'bookmarkBadgeImage');
+        if (restoredBadgeImage === undefined || restoredBadgeImage.length === 0) { return ''; }
+        try {
+          return fileIo.accessSync(restoredBadgeImage) ? restoredBadgeImage : current.bookmarkBadgeImage;
+        } catch (_) {
+          return current.bookmarkBadgeImage;
+        }
+      })(),
       selectText: current.selectText,
       paragraphSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'paragraphSpacing') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'paragraphSpacing') ?? current.paragraphSpacing))),
       lineSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'lineSpacingExtra') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'lineSpacingExtra') ?? current.lineSpacing))),

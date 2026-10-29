@@ -164,6 +164,8 @@ export struct ReaderPage {
   @Prop swipeToAddBookmark: boolean = false;
   /** 阅读页右上角书签角标宽度（dp），0 表示不显示；对齐上游 bookmarkBadgeSize。 */
   @Prop bookmarkBadgeSize: number = 10;
+  /** 自定义书签角标图片路径；空串表示用默认黄色丝带，对齐上游 bookmarkBadgeImage。 */
+  @Prop bookmarkBadgeImage: string = '';
   @Prop selectText: boolean = true;
   @Prop bookmarks: ReaderBookmark[] = [];
   // 标记变化必须递增 revision，否则滚动模式的 ForEach 复用旧 Span、划线渲染不出来。
@@ -957,13 +959,34 @@ export struct ReaderPage {
     return this.hasBookmarkOnCurrentPage();
   }
 
-  /** 默认角标：黄色书签丝带，宽度为 bookmarkBadgeSize，高度为宽度两倍（对齐上游 12x24 比例）。 */
+  /**
+   * 把设置里存的沙箱绝对路径转成 `Image()` 能读的 `file://` URI。
+   * `Image()` 不接受裸沙箱路径，直接传会渲染成空白；设置里存的是路径本身，
+   * 与 `BookGroupRepository`/`BookRepository` 存封面图的约定一致，前缀在渲染时补。
+   */
+  private badgeImageSource(): string {
+    const path = this.bookmarkBadgeImage;
+    return path.startsWith('file://') ? path : `file://${path}`;
+  }
+
+  /**
+   * 右上角角标：有自定义图片时铺满整块区域，否则画默认黄色丝带。
+   * 与上游 `ReaderBookmarkBadgeRenderer` 一致——自定义图片按 `ImageFit.Contain` 居中缩放，
+   * 不用铺满，避免变形。
+   */
   @Builder
   private BookmarkBadgeRibbon() {
-    Image($r('app.media.app_bookmark_badge'))
-      .width(this.bookmarkBadgeSize)
-      .height(this.bookmarkBadgeSize * 2)
-      .objectFit(ImageFit.Fill)
+    if (this.bookmarkBadgeImage.length > 0) {
+      Image(this.badgeImageSource())
+        .width(this.bookmarkBadgeSize)
+        .height(this.bookmarkBadgeSize * 2)
+        .objectFit(ImageFit.Contain)
+    } else {
+      Image($r('app.media.app_bookmark_badge'))
+        .width(this.bookmarkBadgeSize)
+        .height(this.bookmarkBadgeSize * 2)
+        .objectFit(ImageFit.Fill)
+    }
   }
 
   private hasBookmarkOnCurrentPage(): boolean {
@@ -2829,9 +2852,11 @@ export struct ReaderPage {
             Column() {
               this.BookmarkBadgeRibbon()
             }
+            // 上游 leftPx = 页宽 - 右内边距 - 6dp - 角标宽度，即右边距为「右内边距 + 6dp」；
+            // topPx = 正文视口顶边，与页眉不重叠。
             .margin({
               top: this.paddingSettings.paddingTop + (this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0),
-              right: 6
+              right: this.paddingSettings.paddingRight + 6
             })
             .translate({ x: this.pageTurnOffsetX, y: this.pageTurnOffsetY + this.bookmarkPullOffset })
             .opacity(this.pageTurnOpacity)

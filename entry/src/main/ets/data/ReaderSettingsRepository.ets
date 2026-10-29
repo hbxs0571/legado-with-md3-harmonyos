@@ -190,6 +190,8 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
   bookmarkBadgeSize: number;
+  /** 自定义书签角标图片在应用私有目录的路径；空串表示用默认黄色丝带，对齐上游 `bookmarkBadgeImage`。 */
+  bookmarkBadgeImage: string;
   selectText: boolean;
   maxLengthWithNoToc: number;
   eyeProtectionEnabled: boolean;
@@ -434,6 +436,8 @@ export class ReaderSettingsRepository {
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
       bookmarkBadgeSize: 10,
+      // 上游 ReadSettings.bookmarkBadgeImage 默认空串，即使用默认丝带。
+      bookmarkBadgeImage: '',
       selectText: true,
       maxLengthWithNoToc: 3000,
       eyeProtectionEnabled: false,
@@ -499,6 +503,7 @@ export class ReaderSettingsRepository {
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
+      const bookmarkBadgeImageValue = await store.get('bookmarkBadgeImage', defaults.bookmarkBadgeImage);
       const selectTextValue = await store.get('selectText', defaults.selectText);
       const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
       const eyeProtectionEnabledValue = await store.get('eyeProtectionEnabled', defaults.eyeProtectionEnabled);
@@ -722,6 +727,8 @@ export class ReaderSettingsRepository {
               ? swipeToAddBookmarkValue : defaults.swipeToAddBookmark,
             bookmarkBadgeSize: typeof bookmarkBadgeSizeValue === 'number' && Number.isInteger(bookmarkBadgeSizeValue)
               ? Math.max(0, Math.min(50, bookmarkBadgeSizeValue)) : defaults.bookmarkBadgeSize,
+            bookmarkBadgeImage: typeof bookmarkBadgeImageValue === 'string'
+              ? bookmarkBadgeImageValue : defaults.bookmarkBadgeImage,
             selectText: typeof selectTextValue === 'boolean' ? selectTextValue : defaults.selectText,
           maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
             ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc,
@@ -820,6 +827,7 @@ export class ReaderSettingsRepository {
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
+      await store.put('bookmarkBadgeImage', settings.bookmarkBadgeImage);
       await store.put('selectText', settings.selectText);
       await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
       await store.put('eyeProtectionEnabled', settings.eyeProtectionEnabled);
