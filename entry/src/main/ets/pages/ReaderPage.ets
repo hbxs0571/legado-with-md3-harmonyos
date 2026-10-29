@@ -162,6 +162,8 @@ export struct ReaderPage {
   @Prop noAnimScrollPage: boolean = false;
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
+  /** 阅读页右上角书签角标宽度（dp），0 表示不显示；对齐上游 bookmarkBadgeSize。 */
+  @Prop bookmarkBadgeSize: number = 10;
   @Prop selectText: boolean = true;
   @Prop bookmarks: ReaderBookmark[] = [];
   // 标记变化必须递增 revision，否则滚动模式的 ForEach 复用旧 Span、划线渲染不出来。
@@ -941,6 +943,27 @@ export struct ReaderPage {
     const end = LocalTextSemantics.toSourcePosition(this.localSemanticDocument, renderEnd);
     if (end <= start) { return undefined; }
     return { start: start, end: end, text: this.localSemanticContent.substring(renderStart, renderEnd).trim() };
+  }
+
+  /**
+   * 当前页是否已有书签，用于决定右上角角标是否显示。
+   * 与 `hasBookmarkOnCurrentPage()` 复用同一页码区间判断，但额外要求本书匹配。
+   */
+  private shouldShowBookmarkBadge(): boolean {
+    if (this.bookmarkBadgeSize <= 0) { return false; }
+    // 上游只在分页模式显示角标（滚动模式没有固定页面边界）。
+    if (this.pageAnimation === 3) { return false; }
+    if (!this.book.isLocal) { return false; }
+    return this.hasBookmarkOnCurrentPage();
+  }
+
+  /** 默认角标：黄色书签丝带，宽度为 bookmarkBadgeSize，高度为宽度两倍（对齐上游 12x24 比例）。 */
+  @Builder
+  private BookmarkBadgeRibbon() {
+    Image($r('app.media.app_bookmark_badge'))
+      .width(this.bookmarkBadgeSize)
+      .height(this.bookmarkBadgeSize * 2)
+      .objectFit(ImageFit.Fill)
   }
 
   private hasBookmarkOnCurrentPage(): boolean {
@@ -2759,7 +2782,7 @@ export struct ReaderPage {
   build() {
     Stack() {
       if ((this.book.format === 'txt' || this.book.format === 'epub') && this.localReaderPages.length > 0 && this.pageAnimation !== 3) {
-        Stack() {
+        Stack({ alignContent: Alignment.TopEnd }) {
           Column() {
             if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
             if (this.localReaderPages[this.currentPageIndex]?.titleOnly === true) {
@@ -2801,6 +2824,18 @@ export struct ReaderPage {
           })
           .translate({ x: this.pageTurnOffsetX, y: this.pageTurnOffsetY + this.bookmarkPullOffset })
           .opacity(this.pageTurnOpacity)
+          // 书签角标贴在正文区右上角；与正文同属这层 Stack，翻页动画和下拉偏移一并作用。
+          if (this.shouldShowBookmarkBadge()) {
+            Column() {
+              this.BookmarkBadgeRibbon()
+            }
+            .margin({
+              top: this.paddingSettings.paddingTop + (this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0),
+              right: 6
+            })
+            .translate({ x: this.pageTurnOffsetX, y: this.pageTurnOffsetY + this.bookmarkPullOffset })
+            .opacity(this.pageTurnOpacity)
+          }
         }
         .width('100%')
         .height('100%')

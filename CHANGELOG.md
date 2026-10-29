@@ -1,5 +1,15 @@
 # 修改记录
 
+## 2026-10-29 阅读页书签角标与「书签标记大小」设置（r264）
+
+- 阅读页右上角此前完全没有书签角标：`ReaderPage` 只有 `hasBookmarkOnCurrentPage()` 这个判断函数，没有任何渲染代码，而「书签标记大小」设置项只改一个 `@State bookmarkBadgeSizePreview`，既不落库也不影响阅读页，属于纯装饰控件。现按上游 `ReadSettings.bookmarkBadgeSize` 补齐为真正生效的设置。
+- 新增 `resources/base/media/app_bookmark_badge.svg`（12×24，`#FFFFC107` 黄色书签丝带，底部 V 形缺口）。上游用 `ic_bookmark_badge.xml` 的 VectorDrawable 直接画在正文画布上；ArkTS 侧无法在 `Canvas` 之外插绘制指令，改用等比例的 SVG 图片，宽度即 `bookmarkBadgeSize`、高度为其两倍。
+- `ReaderSettingsSnapshot` 增 `bookmarkBadgeSize`（默认 10，范围 0–50，0 表示不显示）。`ReaderSettingsRepository` 的 load/save 同步补齐；`BackupRepository` 的 `readConfig` 偏好键组加 `bookmarkBadgeSize`，恢复时从 `config.xml` 读回（上游就存在这里），缺失则保留当前值。
+- `ReaderPage` 增 `@Prop bookmarkBadgeSize` 与 `shouldShowBookmarkBadge()`：`<= 0` 不显示、滚动模式（`pageAnimation === 3`）不显示、非本地书籍不显示，其余走已有的 `hasBookmarkOnCurrentPage()` 页码区间判断。角标挂在正文层 `Stack({ alignContent: Alignment.TopEnd })` 内，与正文共用 `pageTurnOffsetX/Y` 与 `bookmarkPullOffset`，翻页动画和下拉偏移一并作用。
+- `ReaderSettingsPage` 的 `bookmarkBadgeSizePreview` 私有预览状态删除，两处滑块（「书签标记大小」与详情面板里的「角标大小（dp）」）改为读写真实的 `bookmarkBadgeSize`，并接 `onBookmarkBadgeSizeChange` 回调即时保存；`Index.ets` 增 `setReaderBookmarkBadgeSize()`，四处 `ReaderSettingsPage` 挂载点与一处 `ReaderPage` 挂载点全部透传。
+- N 端设备验证：默认 10dp 时第一页右上角出现 68×170 像素黄色区域（bbox `1172,176`–`1240,346`）；设 0 后黄色像素 0；设 30 后同一位置仍在；翻到第二页归 0、点回第一页恢复 2648 像素；冷启动读回仍为 2648；设置页拖滑块到 30 后 `legado_reader_settings` 落盘 `bookmarkBadgeSize=" value="30.000000"`。
+- 仍未迁移：自定义角标图片选择（「书签标记」详情面板的「选择图片」），上游存于 `bookmarkBadgeCustom` 偏好并在画布上绘制用户图片，本地只保留默认丝带。
+
 ## 2026-10-29 「所有书签」页补齐书签编辑，书签原文可改（r263）
 
 - 「所有书签」页的书签条目此前点不开编辑，只能跳转正文，写错备注必须绕回阅读页目录才能改。现对齐上游 `AllBookmarkScreen.kt:444-449`：书签条目**点击=编辑**、**长按=跳转正文**，笔记条目仍为点击跳转划线。`AllBookmarksPage` 增 `onEditBookmark` 回调，`BookmarkEntryCard` 增 `onJump` 并挂 `LongPressGesture`，挂载点接已有的 `editReaderBookmark()`。

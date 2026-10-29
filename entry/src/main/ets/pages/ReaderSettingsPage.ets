@@ -112,6 +112,7 @@ export struct ReaderSettingsPage {
   @Prop noAnimScrollPage: boolean = false;
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
+  @Prop bookmarkBadgeSize: number = 10;
   @Prop selectText: boolean = true;
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
@@ -139,7 +140,6 @@ export struct ReaderSettingsPage {
   @State previousPageKeys: string = '';
   @State nextPageKeys: string = '';
   @State bookmarkBadgeCustomPreview: boolean = false;
-  @State bookmarkBadgeSizePreview: number = 24;
   @State expandTextMenuPreview: boolean = false;
   @State showTextMenuIconsPreview: boolean = true;
   @State primaryTextMenuExpanded: boolean = true;
@@ -215,6 +215,8 @@ export struct ReaderSettingsPage {
   onNoAnimScrollPageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onReadingAnchorEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onSwipeToAddBookmarkChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 书签角标宽度（dp）；0 表示不显示角标。 */
+  onBookmarkBadgeSizeChange: (value: number) => void = (_value: number) => {};
   onMaxLengthWithNoTocChange: (value: number) => void = (_value: number) => {};
   onClickImageBehaviorChange: (value: string) => void = (_value: string) => {};
   onClickRegionActionsChange: (actions: string[]) => void = (_actions: string[]) => {};
@@ -843,8 +845,8 @@ export struct ReaderSettingsPage {
           MenuSettingOption({ title: '书签标记', detail: this.bookmarkBadgeCustomPreview ? '自定义图片' : '默认' })
             .onClick(() => this.openDetailSheet('书签标记', '选择书签标记图片或恢复默认'))
           MenuSettingSlider({
-            title: '书签标记大小', value: this.bookmarkBadgeSizePreview, minValue: 0, maxValue: 50,
-            onChange: (value: number) => this.bookmarkBadgeSizePreview = value
+            title: '书签标记大小', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
+            onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
           })
           Text('其他').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSwitch({ title: '进度条触感反馈', detail: '拖动时提供触觉反馈', checked: false }).onClick(() => this.showNotMigrated('进度条触感反馈'))
@@ -1625,13 +1627,13 @@ export struct ReaderSettingsPage {
             Text('当前标记').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 4, bottom: 8 })
             Row() {
               Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.app_bookmark')).width(Math.max(8, this.bookmarkBadgeSizePreview))
-                  .height(Math.max(8, this.bookmarkBadgeSizePreview)).fillColor('#C6D3FF')
+                Image($r('app.media.app_bookmark')).width(Math.max(8, this.bookmarkBadgeSize))
+                  .height(Math.max(8, this.bookmarkBadgeSize)).fillColor('#C6D3FF')
               }.width(62).height(62).backgroundColor('#292A31').borderRadius(12)
               Column() {
                 Text(this.bookmarkBadgeCustomPreview ? '自定义图片' : '默认')
                   .fontSize(14).fontColor('#E5E6EB')
-                Text('角标大小：' + this.bookmarkBadgeSizePreview.toString() + 'dp')
+                Text('角标大小：' + this.bookmarkBadgeSize.toString() + 'dp')
                   .fontSize(11).fontColor('#AEB0B9').margin({ top: 5 })
               }.alignItems(HorizontalAlign.Start).margin({ left: 12 })
               Blank()
@@ -1643,10 +1645,10 @@ export struct ReaderSettingsPage {
                 .onClick(() => this.bookmarkBadgeCustomPreview = false)
             }
             MenuSettingSlider({
-              title: '角标大小（dp）', value: this.bookmarkBadgeSizePreview, minValue: 0, maxValue: 50,
-              onChange: (value: number) => this.bookmarkBadgeSizePreview = value
+              title: '角标大小（dp）', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
+              onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
             })
-            Text('图片选择、恢复和角标大小保存尚未迁移；当前只预览默认标记及大小。')
+            Text('角标大小会立即保存并应用到阅读页右上角；0 表示不显示角标。图片选择尚未迁移。')
               .fontSize(10).fontColor('#92949E').width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '页边距') {

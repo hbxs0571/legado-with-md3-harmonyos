@@ -232,7 +232,7 @@ export class BackupRepository {
   ]);
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
     readConfig: [
-      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'maxLengthWithNoToc', 'system_typefaces',
+      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'bookmarkBadgeSize', 'maxLengthWithNoToc', 'system_typefaces',
       'autoReadSpeed', 'progressBarBehavior', 'tocUiUseReplace', 'tocCountWords', 'clickImgWay',
       'textFullJustify', 'textBottomJustify', 'textItalic', 'textBold', 'textShadow', 'shadowRadius',
       'shadowDx', 'shadowDy', 'shadowColor', 'shadowColorN', 'underline', 'underlineHeight',
@@ -1172,6 +1172,10 @@ export class BackupRepository {
         current.readingAnchorEnabled,
       swipeToAddBookmark: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'swipeToAddBookmark') ??
         current.swipeToAddBookmark,
+      // 上游把角标大小写在 config.xml 的 bookmarkBadgeSize 里，缺失时保留当前值。
+      bookmarkBadgeSize: Math.max(0, Math.min(50,
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'bookmarkBadgeSize') ??
+          current.bookmarkBadgeSize)),
       selectText: current.selectText,
       paragraphSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'paragraphSpacing') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'paragraphSpacing') ?? current.paragraphSpacing))),
       lineSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'lineSpacingExtra') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'lineSpacingExtra') ?? current.lineSpacing))),
