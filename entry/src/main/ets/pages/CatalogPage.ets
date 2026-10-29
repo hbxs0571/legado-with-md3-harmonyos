@@ -177,12 +177,26 @@ export struct CatalogPage {
       || marking.note.toLowerCase().includes(keyword);
   }
 
+  /**
+   * 上游 `BookmarkDao.flowByBook` 按 `chapterIndex` 排序；同章内再按章内偏移，
+   * 与「所有书签」页同一口径。本地存储顺序是新条目前插，与正文顺序无关，
+   * 不排序会让首屏定位与「最后一个 chapterIndex <= 当前章节」的判断一起落错。
+   */
   private getVisibleBookmarks(): ReaderBookmark[] {
-    return this.bookmarks.filter((bookmark: ReaderBookmark) => this.matchesBookmarkQuery(bookmark));
+    const matched = this.bookmarks.filter((bookmark: ReaderBookmark) => this.matchesBookmarkQuery(bookmark));
+    return matched.sort((left: ReaderBookmark, right: ReaderBookmark) => {
+      if (left.chapterIndex !== right.chapterIndex) { return left.chapterIndex - right.chapterIndex; }
+      return left.chapterPosition - right.chapterPosition;
+    });
   }
 
+  /** 上游 `BookMarkingDao.flowByBook`：`order by chapterIndex, createdAt`。 */
   private getVisibleMarkings(): ReaderMarking[] {
-    return this.markings.filter((marking: ReaderMarking) => this.matchesMarkingQuery(marking));
+    const matched = this.markings.filter((marking: ReaderMarking) => this.matchesMarkingQuery(marking));
+    return matched.sort((left: ReaderMarking, right: ReaderMarking) => {
+      if (left.chapterIndex !== right.chapterIndex) { return left.chapterIndex - right.chapterIndex; }
+      return left.createdAt - right.createdAt;
+    });
   }
 
   /**
