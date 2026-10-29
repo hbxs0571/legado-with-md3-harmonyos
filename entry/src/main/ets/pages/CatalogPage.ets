@@ -42,6 +42,8 @@ export struct CatalogPage {
   onEditMarking: (markingId: string) => void = (_markingId: string) => {};
   onTitleReplacementChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onShowWordCountChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 导出本书书签；isMarkdown 为 true 时导出 Markdown，否则导出 JSON。 */
+  onExportBookmarks: (isMarkdown: boolean) => void = (_isMarkdown: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
 
   aboutToAppear(): void {
@@ -198,6 +200,17 @@ export struct CatalogPage {
     }
   }
 
+  /** 书签页「更多」菜单，对应上游 TocScreen 的书签导出两项。 */
+  @Builder
+  private BookmarkExportMenu() {
+    Menu() {
+      MenuItem({ content: '导出为 JSON' }).height(44)
+        .onClick(() => this.onExportBookmarks(false))
+      MenuItem({ content: '导出为 Markdown' }).height(44)
+        .onClick(() => this.onExportBookmarks(true))
+    }
+  }
+
   @Builder
   private CatalogTabPage(tab: number) {
     if (tab === 0) {
@@ -294,53 +307,70 @@ export struct CatalogPage {
       .width('100%')
       .height('100%')
     } else if (tab === 2) {
-      if (this.bookmarks.length === 0) {
-        Column() {
-          AppGlyph({ name: 'bookmark', glyphSize: 30, tint: '#AFC2FF' })
-          Text('暂无书签').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-      } else {
-        Scroll() {
-          Column() {
-            ForEach(this.bookmarks, (bookmark: ReaderBookmark) => {
-              Column() {
-                Row() {
-                  Text(bookmark.chapterName).fontSize(13).fontColor('#AFC2FF')
-                    .layoutWeight(1).maxLines(1)
-                  Text('跳转').fontSize(11).fontColor('#D7DFFB')
-                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                    .backgroundColor('#454B62').borderRadius(14)
-                    .onClick(() => this.onOpenBookmark(bookmark.id))
-                  Text('编辑').fontSize(11).fontColor('#C5C7D0')
-                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                    .margin({ left: 6 }).backgroundColor('#292A31').borderRadius(14)
-                    .onClick(() => this.onEditBookmark(bookmark.id))
-                }
-                if (bookmark.bookText.length > 0) {
-                  Text(bookmark.bookText).fontSize(12).fontColor('#D4D5DB')
-                    .maxLines(3).margin({ top: 7 }).textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                if (bookmark.content.length > 0) {
-                  Text(bookmark.content).fontSize(11).fontColor('#AEB0B9')
-                    .maxLines(2).margin({ top: 5 }).textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-              }
-              .width('100%')
-              .padding(12)
-              .backgroundColor('#1A1B21')
-              .borderRadius(10)
-              .margin({ bottom: 6 })
-            }, (bookmark: ReaderBookmark) => bookmark.id)
+      Column() {
+        Row() {
+          Text('书签 ' + this.bookmarks.length.toString()).fontSize(11).fontColor('#AEB0B9')
+          Blank()
+          Stack({ alignContent: Alignment.Center }) {
+            AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
           }
-          .padding({ left: 12, right: 12, bottom: 14 })
+          .width(32)
+          .height(32)
+          .bindMenu(this.BookmarkExportMenu, { placement: Placement.BottomRight })
         }
         .width('100%')
-        .height('100%')
-        .scrollBar(BarState.Off)
+        .padding({ left: 16, right: 12, bottom: 6 })
+
+        if (this.bookmarks.length === 0) {
+          Column() {
+            AppGlyph({ name: 'bookmark', glyphSize: 30, tint: '#AFC2FF' })
+            Text('暂无书签').fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+        } else {
+          Scroll() {
+            Column() {
+              ForEach(this.bookmarks, (bookmark: ReaderBookmark) => {
+                Column() {
+                  Row() {
+                    Text(bookmark.chapterName).fontSize(13).fontColor('#AFC2FF')
+                      .layoutWeight(1).maxLines(1)
+                    Text('跳转').fontSize(11).fontColor('#D7DFFB')
+                      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                      .backgroundColor('#454B62').borderRadius(14)
+                      .onClick(() => this.onOpenBookmark(bookmark.id))
+                    Text('编辑').fontSize(11).fontColor('#C5C7D0')
+                      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                      .margin({ left: 6 }).backgroundColor('#292A31').borderRadius(14)
+                      .onClick(() => this.onEditBookmark(bookmark.id))
+                  }
+                  if (bookmark.bookText.length > 0) {
+                    Text(bookmark.bookText).fontSize(12).fontColor('#D4D5DB')
+                      .maxLines(3).margin({ top: 7 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                  if (bookmark.content.length > 0) {
+                    Text(bookmark.content).fontSize(11).fontColor('#AEB0B9')
+                      .maxLines(2).margin({ top: 5 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                }
+                .width('100%')
+                .padding(12)
+                .backgroundColor('#1A1B21')
+                .borderRadius(10)
+                .margin({ bottom: 6 })
+              }, (bookmark: ReaderBookmark) => bookmark.id)
+            }
+            .padding({ left: 12, right: 12, bottom: 14 })
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .scrollBar(BarState.Off)
+        }
       }
+      .width('100%')
+      .height('100%')
     } else {
       if (this.markings.length === 0) {
         Column() {

@@ -2586,9 +2586,14 @@ const BOOKMARK_EMPTY_FACES: string[] = [
 export struct AllBookmarksPage {
   onBack: () => void = () => {};
   onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
+  /** 打开一条笔记（kind === 'note' 的条目），跳到划线所在位置。 */
+  onOpenMarking: (markingId: string) => void = (_markingId: string) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop books: BookmarkBookSummary[] = [];
   @Prop entries: BookmarkEntrySummary[] = [];
+  /** 导出当前选中书的书签；isMarkdown 为 true 时导出 Markdown。 */
+  onExportBookmarks: (bookKey: string, isMarkdown: boolean) => void =
+    (_bookKey: string, _isMarkdown: boolean) => {};
   @State selectedBookKey: string = '';
   @State selectedBookTitle: string = '';
   @State selectedBookmarkCount: number = 0;
@@ -2636,6 +2641,17 @@ export struct AllBookmarksPage {
     this.emptyFaceIndex = Math.floor(Math.random() * BOOKMARK_EMPTY_FACES.length);
   }
 
+  /** 书签导出菜单，对应上游 AllBookmarkScreen 的两项导出。 */
+  @Builder
+  private BookmarkExportMenu() {
+    Menu() {
+      MenuItem({ content: '导出为 JSON' }).height(44)
+        .onClick(() => this.onExportBookmarks(this.selectedBookKey, false))
+      MenuItem({ content: '导出为 Markdown' }).height(44)
+        .onClick(() => this.onExportBookmarks(this.selectedBookKey, true))
+    }
+  }
+
   @Builder
   private BookmarkEmptyMessage(message: string) {
     Column() {
@@ -2666,7 +2682,7 @@ export struct AllBookmarksPage {
           Stack({ alignContent: Alignment.Center }) {
             Row().width(32).height(32).backgroundColor('#1B1C22').borderRadius(16)
             AppGlyph({ name: 'more', glyphSize: 20, tint: '#D8D9E0' })
-          }.width(40).height(40).onClick(() => this.onUnavailableAction('书签导出尚未接入，未导出数据'))
+          }.width(40).height(40).bindMenu(this.BookmarkExportMenu, { placement: Placement.BottomRight })
         }
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
@@ -2705,7 +2721,13 @@ export struct AllBookmarksPage {
                 Scroll() {
                   Column() {
                     ForEach(this.getVisibleEntries(this.selectedBookKey, tabIndex), (entry: BookmarkEntrySummary) => {
-                      BookmarkEntryCard({ entry: entry, onSelect: () => this.onOpenBookmark(entry.id) })
+                      BookmarkEntryCard({
+                        entry: entry,
+                        onSelect: () => {
+                          // 笔记条目走划线跳转，书签条目走书签跳转；上游也是按类型分派
+                          if (entry.kind === 'note') { this.onOpenMarking(entry.id); } else { this.onOpenBookmark(entry.id); }
+                        }
+                      })
                     }, (entry: BookmarkEntrySummary) => entry.id)
                   }.padding({ left: 16, right: 16, top: 4, bottom: 20 })
                 }.layoutWeight(1).scrollBar(BarState.Off)

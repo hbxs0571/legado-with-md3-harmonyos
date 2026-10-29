@@ -57,6 +57,7 @@ import {
 import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
+import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository } from '../data/ReaderMarkingRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
@@ -889,6 +890,65 @@ struct Index {
     }
   }
 
+  /**
+   * 导出当前书的书签。
+   * 与上游 exportCurrentBookBookmarks 同口径：无书签时明确提示不导出，
+   * 用户取消保存对话框时也不谎报成功。
+   */
+  private async exportReaderBookmarks(isMarkdown: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const bookmarks = this.readerBookmarks.filter((bookmark: ReaderBookmark) =>
+      bookmark.bookId === this.selectedBook.id);
+    if (bookmarks.length === 0) {
+      this.showUnavailableAction('没有可导出的书签');
+      return;
+    }
+    const fileName = ReaderBookmarkExporter.buildFileName(this.selectedBook.title, isMarkdown);
+    const content = isMarkdown
+      ? ReaderBookmarkExporter.toMarkdown(this.selectedBook.title, this.selectedBook.author, bookmarks)
+      : ReaderBookmarkExporter.toJson(bookmarks);
+    try {
+      const saved = await ReaderBookmarkExporter.saveToFile(context, content, fileName, isMarkdown);
+      this.showUnavailableAction(saved ? `已导出 ${bookmarks.length} 条书签` : '未选择保存位置');
+    } catch (_) {
+      this.showUnavailableAction('书签导出失败');
+    }
+  }
+
+  /**
+   * 从「所有书签」页按 bookKey 导出某一本书的书签与笔记。
+   * 上游 AllBookmarkViewModel.exportBook 与阅读页目录导出是两套格式：
+   * 这里走 { bookmarks, notes } 双数组与两小节 Markdown，文件名带 -notes- 前缀。
+   */
+  private async exportBookmarksByKey(bookKey: string, isMarkdown: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const bookmarks = this.readerBookmarks.filter((bookmark: ReaderBookmark) => bookmark.bookId === bookKey);
+    const markings = this.readerMarkings.filter((marking: ReaderMarking) => marking.bookId === bookKey);
+    if (bookmarks.length === 0 && markings.length === 0) {
+      this.showUnavailableAction('没有可导出的书签');
+      return;
+    }
+    const first = bookmarks[0];
+    const firstMarking = markings[0];
+    const bookName = first !== undefined ? first.bookName : (firstMarking !== undefined ? firstMarking.bookName : '');
+    const author = first !== undefined ? first.bookAuthor
+      : (firstMarking !== undefined ? firstMarking.bookAuthor : '');
+    const fileName = ReaderBookmarkExporter.buildAllBookmarksFileName(bookName, isMarkdown);
+    const content = isMarkdown
+      ? ReaderBookmarkExporter.toAllBookmarksMarkdown(bookName, author, bookmarks, markings)
+      : ReaderBookmarkExporter.toAllBookmarksJson(bookmarks, markings);
+    try {
+      const saved = await ReaderBookmarkExporter.saveToFile(context, content, fileName, isMarkdown);
+      this.showUnavailableAction(saved
+        ? `已导出 ${bookmarks.length} 条书签、${markings.length} 条笔记`
+        : '未选择保存位置');
+    } catch (_) {
+      this.showUnavailableAction('书签导出失败');
+    }
+  }
+
   private async restoreHomeDashboardSettings(context: Context): Promise<void> {
     this.homeDashboardSections = await HomeDashboardSettingsRepository.load(context);
   }
@@ -1445,6 +1505,11 @@ struct Index {
     this.route = AppRoute.READER;
   }
 
+  /**
+   * 「所有书签」页的书籍汇总。
+   * 上游 AllBookmarkViewModel 的 books 由书签与笔记共同聚合，两侧都计入；
+   * 本地按 bookId 归并，因此同一本书的书签数与笔记数分别累计。
+   */
   private getBookmarkBookSummaries(): BookmarkBookSummary[] {
     const summaries: BookmarkBookSummary[] = [];
     for (let index = 0; index < this.readerBookmarks.length; index++) {
@@ -1461,7 +1526,26 @@ struct Index {
         if (current !== undefined) {
           summaries[existingIndex] = {
             key: current.key, title: current.title, author: current.author,
-            bookmarkCount: current.bookmarkCount + 1, noteCount: 0
+            bookmarkCount: current.bookmarkCount + 1, noteCount: current.noteCount
+          };
+        }
+      }
+    }
+    for (let index = 0; index < this.readerMarkings.length; index++) {
+      const marking = this.readerMarkings[index];
+      if (marking === undefined) { continue; }
+      const existingIndex = summaries.findIndex((summary: BookmarkBookSummary) => summary.key === marking.bookId);
+      if (existingIndex < 0) {
+        summaries.push({
+          key: marking.bookId, title: marking.bookName, author: marking.bookAuthor,
+          bookmarkCount: 0, noteCount: 1
+        });
+      } else {
+        const current = summaries[existingIndex];
+        if (current !== undefined) {
+          summaries[existingIndex] = {
+            key: current.key, title: current.title, author: current.author,
+            bookmarkCount: current.bookmarkCount, noteCount: current.noteCount + 1
           };
         }
       }
@@ -1469,8 +1553,13 @@ struct Index {
     return summaries;
   }
 
+  /**
+   * 「所有书签」页的条目列表。
+   * 上游把 SavedBookmark 与 Marking 混在一个 detailItems 里按章节序排列，
+   * 本地用 kind 区分；笔记的 excerpt 取 selectedText、note 取用户备注。
+   */
   private getBookmarkEntrySummaries(): BookmarkEntrySummary[] {
-    return this.readerBookmarks.map((bookmark: ReaderBookmark): BookmarkEntrySummary => ({
+    const entries: BookmarkEntrySummary[] = this.readerBookmarks.map((bookmark: ReaderBookmark): BookmarkEntrySummary => ({
       id: bookmark.id,
       bookKey: bookmark.bookId,
       chapterName: bookmark.chapterName,
@@ -1478,6 +1567,17 @@ struct Index {
       note: bookmark.content,
       kind: 'bookmark'
     }));
+    this.readerMarkings.forEach((marking: ReaderMarking) => {
+      entries.push({
+        id: marking.id,
+        bookKey: marking.bookId,
+        chapterName: marking.chapterName,
+        excerpt: marking.selectedText,
+        note: marking.note,
+        kind: 'note'
+      });
+    });
+    return entries;
   }
 
   private async restoreOnboarding(context: Context): Promise<void> {
@@ -3657,6 +3757,7 @@ struct Index {
               onEditMarking: (markingId: string) => this.editReaderMarking(markingId),
               onTitleReplacementChange: (enabled: boolean) => this.setReaderTocUseReplace(enabled),
               onShowWordCountChange: (enabled: boolean) => this.setReaderTocShowWordCount(enabled),
+              onExportBookmarks: (isMarkdown: boolean) => this.exportReaderBookmarks(isMarkdown),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
               onSelectChapter: (chapterIndex: number) => {
               const chapterTitle = this.selectedBook.chapterTitles?.[chapterIndex];
@@ -3933,7 +4034,7 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.ALL_BOOKMARKS) {
-          AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId) })
+          AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId), onOpenMarking: (markingId: string) => this.openReaderMarking(markingId), onExportBookmarks: (bookKey: string, isMarkdown: boolean) => this.exportBookmarksByKey(bookKey, isMarkdown) })
         } else if (this.profileSubpage === ProfileRoute.READ_RECORDS) {
           ReadRecordsPage({
             records: this.readTimeRecords,
