@@ -2332,6 +2332,9 @@ struct Index {
       // 恢复可能写入了替换净化规则，重新读一次让规则页和阅读页都看到最新结果。
       this.replaceRules = ReplaceRuleRepository.getAll();
       this.txtTocRules = TxtTocRuleRepository.getAll();
+      // 恢复可能写入了书签与笔记，重新读一次让「所有书签」页与阅读页看到最新结果。
+      this.readerBookmarks = await ReaderBookmarkRepository.load(context);
+      this.readerMarkings = await ReaderMarkingRepository.load(context);
       const restoreSummary = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目`;
       const details: string[] = [];
       const replaceRuleSummary = this.describeReplaceRuleRestore(
@@ -2346,6 +2349,10 @@ struct Index {
         result.highlightRuleAdded, result.highlightRuleUpdated, result.highlightRuleSkipped
       );
       if (highlightRuleSummary.length > 0) { details.push(highlightRuleSummary); }
+      const bookmarkSummary = this.describeBookmarkRestore(
+        result.bookmarkAdded, result.bookmarkUpdated, result.bookmarkSkipped
+      );
+      if (bookmarkSummary.length > 0) { details.push(bookmarkSummary); }
       this.backupStatusMessage = details.length > 0
         ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
@@ -2394,6 +2401,20 @@ struct Index {
     if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
     if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
     return `高亮规则${parts.join('、')}。`;
+  }
+
+  /**
+   * 生成书签、划线与笔记的恢复结果说明。
+   * 两份文件（bookmark.json / bookMarking.json）的计数合并成一个总数，
+   * 用户关心的是「书签笔记恢复了多少」，不需要知道内部拆成了两个文件。
+   */
+  private describeBookmarkRestore(added: number, updated: number, skipped: number): string {
+    if (added === 0 && updated === 0 && skipped === 0) { return ''; }
+    const parts: string[] = [];
+    if (added > 0) { parts.push(`新增 ${added} 条`); }
+    if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
+    if (skipped > 0) { parts.push(`跳过 ${skipped} 条无对应书籍或无效`); }
+    return `书签与笔记${parts.join('、')}。`;
   }
 
   private cancelLocalBackupRestore(): void {

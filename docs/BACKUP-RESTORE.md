@@ -25,6 +25,8 @@ TXT 目录规则使用根级 `txtTocRule.json`，其字段为 `chapterRule`、`v
 
 阅读正文高亮规则使用根级 `highlightRule.json`，字段逐项对齐上游 `HighlightRule` 实体：本地 33 个字段与上游同名同义，上游多出的 `borderColor`、`borderRadius`、`borderWidth` 三个边框字段本地没有模型，导出时自然缺失，Android 读回时由 Kotlin 默认值兜底。备份类别未被排除时写出该文件；规则只存在 Preferences 里，写出前必须先 `await ReaderHighlightRuleRepository.load()`，否则没进过阅读页的用户会导出一份空数组。**恢复采用合并语义：同 id 或同 pattern 的条目覆盖本地规则并保留本地 id 与顺序，其余新增，本地独有的规则保留。** 这与上游 `Restore.kt:270` 的 `replaceAll`（全量替换）不同，选择合并的理由是 `replaceAll` 会在无提示的情况下删掉用户在 HarmonyOS 上新建的规则，属于数据丢失；而「用备份完全替换本地规则」的场景可以靠先全选删除再恢复达成，反向则不可挽回。空正则与无法编译的正则在导入时计入跳过，不计入新增或覆盖。N 端已在 HOS 模拟器完成备份写出（2 条规则生成 1349 字节 JSON）与恢复导入（新增 1、覆盖 1、跳过 1）双向验证。
 
+书签、划线与笔记分别使用根级 `bookmark.json` 与 `bookMarking.json`，两者都是纯 JSON 数组，字段逐项对齐上游 `Bookmark.kt` 与 `BookMarking.kt`：书签 9 个字段（`time`/`bookName`/`bookAuthor`/`bookUrl`/`chapterIndex`/`chapterPos`/`chapterName`/`bookText`/`content`），笔记在上游 12 个字段之外多出本地的 `id`、`enabled`、`createdAt`、`updatedAt`，其中 `anchorJson` 与 `styleJson` 保存的是序列化后的字符串（上游同为 `String?`），所以本地划线锚点与样式可以原样往返。备份类别未被排除时写出这两个文件，数据源分别是 `ReaderBookmarkRepository.load()` 与 `ReaderMarkingRepository.load()`，导出函数为 `ReaderBookmarkExporter.toAndroidBookmarkArray()` / `toAndroidMarkingArray()`。**恢复必须先合并再落盘**：两个条目在同一次恢复里先后出现，若先写书签时用旧笔记列表、后写笔记又覆盖回去，就会互相清除，因此 `restore()` 用 `pendingBookmarks` / `pendingMarkings` 暂存两份合并结果，等循环结束后各写一次。合并口径与替换净化规则一致：同 id 或同内容视为同一条，命中时保留本地 id 并覆盖其余字段，其余新增；书签与笔记都要能找到对应书籍才计入新增或覆盖，找不到的计入跳过。N 端已在 HOS 模拟器完成双向验证：备份侧在有 1 条书签与 1 条笔记时导出 `bookmark.json` 1123 字节、`bookMarking.json` 562 字节，UTF-8 中文正常；清空本地笔记后从该 ZIP 恢复，提示「书签与笔记新增 1 条、覆盖 1 条」，冷启动后「所有书签」页显示「1 条书签 · 1 条笔记」。
+
 ## 兼容队列
 
 优先核验书架和阅读位置、阅读配置、书签与笔记、通用偏好、主题、阅读记录、规则和搜索历史。随后处理当前没有原生业务的类别；每类分别说明是映射、保留、忽略还是未支持。合并/覆盖、冲突、异常归档、资源限制与重启后状态需要独立验收。
@@ -51,7 +53,7 @@ TTS、WebDAV 服务、在线书源抓取、RSS 抓取和查词业务均不随本
 | --- | --- | --- | --- | --- |
 | 书架、书籍元数据与进度 | `bookshelf.json`（数量未公开） | 已有原生书架、TXT/EPUB 阅读和进度保存 | **部分已接入**：本地书目、进度和缺正文标记可映射；不打包书籍正文，复杂冲突仍需验收 | 本地阅读保持可用；ZIP 映射 1 |
 | 阅读配置 | `readConfig.json`、`shareReadConfig.json`（数量未公开） | 阅读配置有原生模型与持久化 | **部分已接入**：部分阅读键映射到原生设置；分享配置未转为原生多套方案；r255 已验证其与 `themeConfig` 的类别门控相互独立 | 本地阅读核实；ZIP 映射 2 |
-| 书签、划线与笔记 | `bookmark.json`（数量未公开） | 原生书签与标注仓储、阅读入口已存在 | **未接入 Android 数据**：归档条目未导入原生仓储 | 本地功能 3；ZIP 映射 3 |
+| 书签、划线与笔记 | `bookmark.json`、`bookMarking.json`（数量未公开） | 原生书签与标注仓储、阅读入口已存在 | **已接入源码**：N 端设备验证备份写出与恢复导入双向通过（新增 1、覆盖 1），恢复为合并语义 | 本地功能 3；ZIP 映射 3 |
 | 通用偏好设置 | `config.xml`（键数量未公开） | 部分偏好已有原生等价项 | **部分已接入**：按类别映射已实现；其他设备/平台特有或未实现的值不会因此生效，未知项按兼容规则处理 | 对应本地模块核实；ZIP 映射 4 |
 | 主题配置 | `themeConfig.json`、`config.xml`（数量未公开） | 主题页和 HarmonyOS 主题模型已存在 | **部分已接入**：r255 验证了 `themeConfig` 对护眼六键的独立门控；Android 自定义配色/透明度等主题 JSON 未完整映射 | 对应本地模块核实；ZIP 映射 5 |
 | 书架分组 | `bookGroup.json`（数量未公开） | 已有原生分组模型、管理、编辑与筛选；私有访问保护和按组刷新未接通 | **已接入源码**：根级 `bookGroup.json` 可导出并导入原生分组；外部 Android ZIP 冲突合并与完整往返仍待验 | 本地功能已接入；外部 ZIP 往返待验 |

@@ -181,8 +181,26 @@ export class ReaderBookmarkExporter {
     return JSON.stringify(payload, null, 2);
   }
 
+  /**
+   * 备份用：全部书签转成 Android `bookmark.json` 的纯数组。
+   * 与 `toJson` 同一份字段映射，单独留名是为了让备份调用点读起来明确
+   * 「这是上游 Backup.kt 写出的 bookmark.json，不是书签页的导出文件」。
+   */
+  static toAndroidBookmarkArray(bookmarks: ReaderBookmark[]): string {
+    const items: AndroidBookmarkJson[] = bookmarks.map((bookmark: ReaderBookmark) =>
+      ReaderBookmarkExporter.toAndroidBookmark(bookmark));
+    return JSON.stringify(items);
+  }
+
+  /** 备份用：全部笔记转成 Android `bookMarking.json` 的纯数组。 */
+  static toAndroidMarkingArray(markings: ReaderMarking[]): string {
+    const items: AndroidMarkingJson[] = markings.map((marking: ReaderMarking) =>
+      ReaderBookmarkExporter.toAndroidMarking(marking));
+    return JSON.stringify(items);
+  }
+
   /** 单条书签转 Android 实体字段。 */
-  private static toAndroidBookmark(bookmark: ReaderBookmark): AndroidBookmarkJson {
+  static toAndroidBookmark(bookmark: ReaderBookmark): AndroidBookmarkJson {
     const item: AndroidBookmarkJson = {
       time: bookmark.createdAt,
       bookName: bookmark.bookName,

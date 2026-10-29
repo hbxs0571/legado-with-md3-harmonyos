@@ -28,6 +28,14 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - **分页模式回归**：`pageAnimation=0` 下划线仍正常渲染（491 绿色像素），预设规则底色也正常显示。
 - 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
 
+## 2026-10-29 N 端 r262 书签与笔记 ZIP 备份与恢复（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`。预置 1 条书签（`vol-test2` 第一章）与 1 条笔记（`mk-test-1`，effect=wave、color=#00FF00、note=笔记乙）。
+- **备份侧**：设置 → 备份与恢复 → 备份 → 备份到本地 → 保存 `backup2026-10-29.zip`（6276 字节）。解压得 8 个根条目，其中 `bookmark.json` 1123 字节、`bookMarking.json` 562 字节，UTF-8 中文正常，字段与上游 `Bookmark.kt` / `BookMarking.kt` 一致，`anchorJson` 与 `styleJson` 为序列化字符串。**结论：备份写出通过。**
+- **恢复侧**：清空 `legado_reader_markings` 后冷启确认「所有书签」页显示「1 条书签 · 0 条笔记」。走「备份与恢复 → 恢复 → 从本地恢复 → 选 backup2026-10-29.zip → 导入此 ZIP」，预览显示「识别 8 个根条目；书架 5 本」且 `bookmark.json 1 条`、`bookMarking.json 1 条`。导入后提示原文：`导入完成：保留 8 个 Android 条目；更新 5 本已有正文书籍的进度，并创建 0 本缺正文书目；替换净化规则覆盖 3 条。TXT 目录规则覆盖 27 条。高亮规则新增 9 条。书签与笔记新增 1 条、覆盖 1 条。`
+- **恢复后存储校验**：`legado_reader_markings` 写回 `records`（`mk-test-1|...`，`chapterPos` 由 20 变为 26，说明合并时按导入内容覆盖）；`legado_reader_bookmarks` 同样写回。冷启动后「所有书签」页显示「1 条书签 · 1 条笔记」。**结论：合并语义与双条目先合并后落盘均通过。**
+- 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
+
 ## 2026-10-29 N 端 r259 高亮规则 ZIP 备份与恢复（通过）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`。预置两条规则（`hl_test_1` pattern=占位 textColor=-65536；`hl_test_2` pattern=测试 enabled=false bgColor=-16711936）写入 `legado_reader_highlight_rules` 后冷启。

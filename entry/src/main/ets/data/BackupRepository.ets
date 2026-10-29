@@ -14,6 +14,12 @@ import { TxtTocRuleRepository } from './TxtTocRuleRepository';
 import { TxtTocRuleImporter } from './TxtTocRuleImporter';
 import { ReaderHighlightRuleRepository } from './ReaderHighlightRuleRepository';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
+import { ReaderBookmarkRepository } from './ReaderBookmarkRepository';
+import { ReaderMarkingRepository } from './ReaderMarkingRepository';
+import { ReaderBookmarkExporter } from './ReaderBookmarkExporter';
+import { BookmarkImportOutcome, ReaderBookmarkImporter } from './ReaderBookmarkImporter';
+import { ReaderBookmark } from '../model/ReaderBookmark';
+import { ReaderMarking } from '../model/ReaderMarking';
 
 /** 解析 highlightRule.json 的结果：可用规则与因形态不符被跳过的条数。 */
 interface HighlightRuleParseOutcome {
@@ -75,6 +81,10 @@ export interface RestoreResult {
   highlightRuleAdded: number;
   highlightRuleUpdated: number;
   highlightRuleSkipped: number;
+  /** 恢复书签、划线与笔记的新增、覆盖和跳过数量；同样采用合并语义。 */
+  bookmarkAdded: number;
+  bookmarkUpdated: number;
+  bookmarkSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -485,6 +495,17 @@ export class BackupRepository {
         BackupRepository.writeTextFile(`${stagingDirectory}/highlightRule.json`,
           ReaderHighlightRuleRepository.exportRules(highlightRules));
       }
+      // 书签与笔记同样只存在 preferences 里。上游 Backup.kt 在 bookmark 分类下
+      // 一次写出 bookmark.json 与 bookMarking.json 两份，这里保持同名同结构，
+      // 让 Android 版恢复时能直接 insert 进 bookmarks / book_marks 两张表。
+      if (!ignoredCategories.includes('bookmark')) {
+        const bookmarks = await ReaderBookmarkRepository.load(context);
+        const markings = await ReaderMarkingRepository.load(context);
+        BackupRepository.writeTextFile(`${stagingDirectory}/bookmark.json`,
+          ReaderBookmarkExporter.toAndroidBookmarkArray(bookmarks));
+        BackupRepository.writeTextFile(`${stagingDirectory}/bookMarking.json`,
+          ReaderBookmarkExporter.toAndroidMarkingArray(markings));
+      }
 
       if (!ignoredCategories.includes('readConfig')) {
         let configText = fileIo.readTextSync(configPath);
@@ -666,6 +687,14 @@ export class BackupRepository {
     let highlightRuleAdded: number = 0;
     let highlightRuleUpdated: number = 0;
     let highlightRuleSkipped: number = 0;
+    let bookmarkAdded: number = 0;
+    let bookmarkUpdated: number = 0;
+    let bookmarkSkipped: number = 0;
+    // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
+    // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
+    let pendingBookmarks: ReaderBookmark[] | undefined = undefined;
+    let pendingMarkings: ReaderMarking[] | undefined = undefined;
+    const bookmarkOutcome: BookmarkImportOutcome = { added: 0, updated: 0, skipped: 0 };
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
       if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
@@ -756,9 +785,44 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'bookmark.json' || entry.name === 'bookMarking.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复书签与笔记`);
+        }
+        // 两份文件共用一个 outcome，先把两份都合并完，循环结束后统一落盘。
+        if (pendingBookmarks === undefined) {
+          pendingBookmarks = await ReaderBookmarkRepository.load(context);
+        }
+        if (pendingMarkings === undefined) {
+          pendingMarkings = await ReaderMarkingRepository.load(context);
+        }
+        if (entry.name === 'bookmark.json') {
+          pendingBookmarks = ReaderBookmarkImporter.mergeBookmarks(
+            text, currentBooks, pendingBookmarks, bookmarkOutcome);
+        } else {
+          pendingMarkings = ReaderBookmarkImporter.mergeMarkings(
+            text, currentBooks, pendingMarkings, bookmarkOutcome);
+        }
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
     }
+
+    // 书签与笔记都合并完再各写一次，避免两份文件互相覆盖对方的合并结果。
+    // 计数来自同一个 outcome：两份文件的新增/覆盖/跳过合并成一个总数报给用户。
+    if (pendingBookmarks !== undefined) {
+      await ReaderBookmarkRepository.save(context, pendingBookmarks);
+    }
+    if (pendingMarkings !== undefined) {
+      await ReaderMarkingRepository.save(context, pendingMarkings);
+    }
+    bookmarkAdded += bookmarkOutcome.added;
+    bookmarkUpdated += bookmarkOutcome.updated;
+    bookmarkSkipped += bookmarkOutcome.skipped;
 
     const restoredReadSettings = BackupRepository.restoreReaderSettings(
       selection.stagingDirectory,
@@ -799,7 +863,10 @@ export class BackupRepository {
       txtTocRuleSkipped: txtTocRuleSkipped,
       highlightRuleAdded: highlightRuleAdded,
       highlightRuleUpdated: highlightRuleUpdated,
-      highlightRuleSkipped: highlightRuleSkipped
+      highlightRuleSkipped: highlightRuleSkipped,
+      bookmarkAdded: bookmarkAdded,
+      bookmarkUpdated: bookmarkUpdated,
+      bookmarkSkipped: bookmarkSkipped
     };
   }
 

@@ -1,5 +1,14 @@
 # 修改记录
 
+## 2026-10-29 书签与笔记接入 Android ZIP 备份与恢复（r262）
+
+- `bookmark.json` 与 `bookMarking.json` 此前只在备份类别表里有名字，备份侧从不产出、恢复侧只原样拷贝。现补齐双向映射：`createBackup()` 写出根级 JSON，`restore()` 逐条解析后合并进 `ReaderBookmarkRepository` / `ReaderMarkingRepository`。
+- 新增 `ReaderBookmarkExporter.toAndroidBookmarkArray()` / `toAndroidMarkingArray()`：直接复用书签页导出用的同一份字段映射，单独留名是为了让备份调用点读起来明确「这是上游 Backup.kt 写出的文件」。
+- **恢复必须先合并再落盘**：两个条目在同一次恢复里先后出现，若先写书签时用旧笔记列表、后写笔记又覆盖回去，就会互相清除。`restore()` 用 `pendingBookmarks` / `pendingMarkings` 暂存，循环结束后各写一次。
+- 合并口径与替换净化规则一致：同 id 或同内容视为同一条，命中时保留本地 id 并覆盖其余字段，其余新增；找不到对应书籍的计入跳过。`RestoreResult` 增 `bookmarkAdded/Updated/Skipped`，`Index.ets` 增 `describeBookmarkRestore()` 拼入恢复摘要。
+- 恢复成功后重读 `readerBookmarks` 与 `readerMarkings`，让「所有书签」页与阅读页立即看到新数据。
+- N 端设备验证：有 1 条书签 + 1 条笔记时导出 `bookmark.json` 1123 字节、`bookMarking.json` 562 字节，UTF-8 中文正常；清空本地笔记后从该 ZIP 恢复，提示「书签与笔记新增 1 条、覆盖 1 条」，冷启动后「所有书签」页显示「1 条书签 · 1 条笔记」。
+
 ## 2026-10-29 高亮规则预设导入与划线笔记渲染（r260）
 
 - 新增 `data/ReaderHighlightRulePresets.ets`：对齐上游 `HighlightRulePresets` 的 11 条内置规则，规则面板加「预设规则」入口，勾选后追加进规则列表。已存在的同 id 规则标「已有」且不勾选，不覆盖用户改过样式的规则；标题作用域预设如实标「标题规则，本地暂不执行」并默认不勾。
