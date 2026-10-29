@@ -1525,14 +1525,14 @@ struct Index {
       if (existingIndex < 0) {
         summaries.push({
           key: bookmark.bookId, title: bookmark.bookName, author: bookmark.bookAuthor,
-          bookmarkCount: 1, noteCount: 0
+          bookmarkCount: 1, noteCount: 0, sourceUrl: bookmark.bookUrl
         });
       } else {
         const current = summaries[existingIndex];
         if (current !== undefined) {
           summaries[existingIndex] = {
             key: current.key, title: current.title, author: current.author,
-            bookmarkCount: current.bookmarkCount + 1, noteCount: current.noteCount
+            bookmarkCount: current.bookmarkCount + 1, noteCount: current.noteCount, sourceUrl: current.sourceUrl
           };
         }
       }
@@ -1544,19 +1544,22 @@ struct Index {
       if (existingIndex < 0) {
         summaries.push({
           key: marking.bookId, title: marking.bookName, author: marking.bookAuthor,
-          bookmarkCount: 0, noteCount: 1
+          bookmarkCount: 0, noteCount: 1, sourceUrl: marking.bookUrl
         });
       } else {
         const current = summaries[existingIndex];
         if (current !== undefined) {
           summaries[existingIndex] = {
             key: current.key, title: current.title, author: current.author,
-            bookmarkCount: current.bookmarkCount, noteCount: current.noteCount + 1
+            bookmarkCount: current.bookmarkCount, noteCount: current.noteCount + 1, sourceUrl: current.sourceUrl
           };
         }
       }
     }
-    return summaries;
+    // 上游 AllBookmarkViewModel 对书籍列表按书名排序（sortedBy { it.key.name }），
+    // 本地原来按存储里第一次出现的顺序，书名多了会乱。
+    return summaries.sort((left: BookmarkBookSummary, right: BookmarkBookSummary) =>
+      left.title.localeCompare(right.title));
   }
 
   /**
@@ -1571,7 +1574,10 @@ struct Index {
       chapterName: bookmark.chapterName,
       excerpt: bookmark.bookText,
       note: bookmark.content,
-      kind: 'bookmark'
+      kind: 'bookmark',
+      chapterIndex: bookmark.chapterIndex,
+      chapterPosition: bookmark.chapterPosition,
+      sourceUrl: bookmark.bookUrl
     }));
     this.readerMarkings.forEach((marking: ReaderMarking) => {
       entries.push({
@@ -1580,7 +1586,10 @@ struct Index {
         chapterName: marking.chapterName,
         excerpt: marking.selectedText,
         note: marking.note,
-        kind: 'note'
+        kind: 'note',
+        chapterIndex: marking.chapterIndex,
+        chapterPosition: marking.chapterPosition,
+        sourceUrl: marking.bookUrl
       });
     });
     return entries;

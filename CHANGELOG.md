@@ -1,5 +1,12 @@
 # 修改记录
 
+## 2026-10-29 「所有书签」页补齐排序与跨书源提示（r268）
+
+- 条目列表此前按存储顺序渲染，而新书签是前插写入（`nextBookmarks = [record, ...this.readerBookmarks]`），列表顺序与正文顺序无关。上游 `AllBookmarkViewModel.kt:214` 把书签与笔记混成 `detailItems` 后按 `compareBy({ it.chapterIndex }, { it.chapterPosition })` 排序。现 `BookmarkEntrySummary` 增加 `chapterIndex` / `chapterPosition` 两个字段（由 `Index.getBookmarkEntrySummaries()` 从 `ReaderBookmark` 与 `ReaderMarking` 带出），`AllBookmarksPage.getVisibleEntries()` 在筛选后按同一口径排序。排序只发生在渲染层，存储顺序保持不变。
+- 书籍列表此前按存储里第一次出现的顺序，上游 `AllBookmarkViewModel.kt:186` 是 `.sortedBy { it.key.name }`（按书名）。现 `Index.getBookmarkBookSummaries()` 末尾按 `title.localeCompare()` 排序。
+- 新增跨书源提示，对齐上游 `marks_other_source`（`ReaderBookSheet.kt:1397-1406`、`TocScreen.kt:1135-1141`，判定条件 `bookUrl.isNotBlank() && bookUrl != book?.bookUrl`）：`BookmarkBookSummary` 与 `BookmarkEntrySummary` 各带 `sourceUrl`，进入某本书时记下 `currentSourceUrl`，条目记录的 `sourceUrl` 与之不同就在章名右侧标红显示「其他书源」。
+- N 端设备验证（HOS 模拟器，OpenHarmony API 26）：注入存储顺序为「第五章 → 第一卷 → 第二章」的三条书签，页面显示「第一卷 风起 → 第二章 相遇 → 第五章」，存储文件顺序未变；三本书分别命名为 `a开头书` / `vol-test2` / `z结尾书` 并让 `z结尾书` 在存储里最先出现，页面按 `a开头书 → vol-test2 → z结尾书` 展示；把其中一条书签的 `bookUrl` 改成 `http://other.source/book`，该条章名右侧出现「其他书源」，同书其他条目无此标记。
+
 ## 2026-10-29 目录页「更多」菜单接通三项，并修掉更新目录后划线错位（r267）
 
 - 目录页搜索栏右侧的「更多」图标此前是占位（`onUnavailableAction('目录更多操作尚未迁移')`）。现对齐上游 `TocScreen.kt:427-535` 接上三项：更新目录（当前书）、替换规则、本地 TXT 目录规则。上游同一菜单里还有 `use_replace_rule` / `show_word_count` / `reverse_toc` 与书签导出两项，本地早已用搜索栏内联图标（`profileFindReplace` / `profileTimeline` / `swap`）和独立的 `BookmarkExportMenu` 等价覆盖，所以菜单里不再重复。

@@ -2567,6 +2567,8 @@ export interface BookmarkBookSummary {
   author: string;
   bookmarkCount: number;
   noteCount: number;
+  /** 本地书籍的书源地址；与条目自带的 sourceUrl 不一致即视为其他书源。 */
+  sourceUrl: string;
 }
 
 export interface BookmarkEntrySummary {
@@ -2576,6 +2578,11 @@ export interface BookmarkEntrySummary {
   excerpt: string;
   note: string;
   kind: 'bookmark' | 'note';
+  /** 章节序号与章内偏移，用于按正文位置排序（对齐上游 detailItems 的章节序排列）。 */
+  chapterIndex: number;
+  chapterPosition: number;
+  /** 记录里带的书源地址；与当前书籍不一致时显示「其他书源」，对齐上游 marks_other_source。 */
+  sourceUrl: string;
 }
 
 const BOOKMARK_EMPTY_FACES: string[] = [
@@ -2593,6 +2600,8 @@ export struct AllBookmarksPage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop books: BookmarkBookSummary[] = [];
   @Prop entries: BookmarkEntrySummary[] = [];
+  /** 当前书籍的书源地址，用于判断条目是否来自其他书源。 */
+  @Prop currentSourceUrl: string = '';
   /** 导出当前选中书的书签；isMarkdown 为 true 时导出 Markdown。 */
   onExportBookmarks: (bookKey: string, isMarkdown: boolean) => void =
     (_bookKey: string, _isMarkdown: boolean) => {};
@@ -2618,11 +2627,17 @@ export struct AllBookmarksPage {
 
   private getVisibleEntries(bookKey: string, tabIndex: number): BookmarkEntrySummary[] {
     const query = this.searchQuery.trim().toLocaleLowerCase();
-    return this.entries.filter((entry: BookmarkEntrySummary) => {
+    const matched = this.entries.filter((entry: BookmarkEntrySummary) => {
       if (entry.bookKey !== bookKey || (tabIndex === 0 && entry.kind !== 'bookmark') ||
         (tabIndex === 1 && entry.kind !== 'note')) { return false; }
       return query.length === 0 || entry.chapterName.toLocaleLowerCase().includes(query) ||
         entry.excerpt.toLocaleLowerCase().includes(query) || entry.note.toLocaleLowerCase().includes(query);
+    });
+    // 上游 AllBookmarkViewModel 把书签与笔记混成 detailItems 后按 (章节序号, 章内偏移) 排序，
+    // 本地原来沿用存储顺序（新书签前插），列表和正文顺序对不上。
+    return matched.sort((left: BookmarkEntrySummary, right: BookmarkEntrySummary) => {
+      if (left.chapterIndex !== right.chapterIndex) { return left.chapterIndex - right.chapterIndex; }
+      return left.chapterPosition - right.chapterPosition;
     });
   }
 
@@ -2632,6 +2647,7 @@ export struct AllBookmarksPage {
       this.selectedBookTitle = '';
       this.selectedBookmarkCount = 0;
       this.selectedNoteCount = 0;
+      this.currentSourceUrl = '';
       this.searchQuery = '';
       this.selectedTab = 0;
     } else {
@@ -2725,6 +2741,7 @@ export struct AllBookmarksPage {
                     ForEach(this.getVisibleEntries(this.selectedBookKey, tabIndex), (entry: BookmarkEntrySummary) => {
                       BookmarkEntryCard({
                         entry: entry,
+                        currentSourceUrl: this.currentSourceUrl,
                         onSelect: () => {
                           // 上游：书签条目点击=编辑，长按=跳转正文；笔记条目点击=跳转划线
                           if (entry.kind === 'note') { this.onOpenMarking(entry.id); } else { this.onEditBookmark(entry.id); }
@@ -2754,6 +2771,7 @@ export struct AllBookmarksPage {
                   this.selectedBookTitle = book.title;
                   this.selectedBookmarkCount = book.bookmarkCount;
                   this.selectedNoteCount = book.noteCount;
+                  this.currentSourceUrl = book.sourceUrl;
                   this.selectedTab = 0;
                   this.searchQuery = '';
                 }
@@ -2768,7 +2786,8 @@ export struct AllBookmarksPage {
 
 @Component
 struct BookmarkOverviewCard {
-  @Prop book: BookmarkBookSummary = { key: '', title: '', author: '', bookmarkCount: 0, noteCount: 0 };
+  @Prop book: BookmarkBookSummary =
+    { key: '', title: '', author: '', bookmarkCount: 0, noteCount: 0, sourceUrl: '' };
   onSelect: () => void = () => {};
   build() {
     Row() {
@@ -2786,13 +2805,25 @@ struct BookmarkOverviewCard {
 
 @Component
 struct BookmarkEntryCard {
-  @Prop entry: BookmarkEntrySummary = { id: '', bookKey: '', chapterName: '', excerpt: '', note: '', kind: 'bookmark' };
+  @Prop entry: BookmarkEntrySummary = {
+    id: '', bookKey: '', chapterName: '', excerpt: '', note: '', kind: 'bookmark',
+    chapterIndex: 0, chapterPosition: 0, sourceUrl: ''
+  };
+  /** 当前书籍的书源地址；与条目记录里的 sourceUrl 不一致时显示「其他书源」。 */
+  @Prop currentSourceUrl: string = '';
   onSelect: () => void = () => {};
   /** 长按跳转到正文位置，保留原有的跳转能力。 */
   onJump: () => void = () => {};
   build() {
     Column() {
-      Text(this.entry.chapterName).fontSize(14).fontColor('#AFC2FF').maxLines(1)
+      Row() {
+        Text(this.entry.chapterName).fontSize(14).fontColor('#AFC2FF').maxLines(1).layoutWeight(1)
+        // 上游 marks_other_source：`bookUrl.isNotBlank() && bookUrl != book?.bookUrl`
+        // 记录属于别的书源时标红提示，避免误以为当前书里找不到。
+        if (this.entry.sourceUrl.length > 0 && this.entry.sourceUrl !== this.currentSourceUrl) {
+          Text('其他书源').fontSize(12).fontColor('#E57373').margin({ left: 6 })
+        }
+      }.width('100%')
       if (this.entry.excerpt.length > 0) { Text(this.entry.excerpt).fontSize(14).fontColor('#D8D9E0').maxLines(3).margin({ top: 6 }) }
       if (this.entry.note.length > 0) { Text(this.entry.note).fontSize(14).fontColor('#92949E').maxLines(3).margin({ top: 4 }) }
     }.width('100%').padding(16).backgroundColor('#1A1B21').borderRadius(14).margin({ bottom: 8 })
