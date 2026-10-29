@@ -1,5 +1,25 @@
 # 修改记录
 
+## 2026-10-29 划词菜单补「复制」与「书签」（r273）
+
+- 本地正文用 `bindSelectionMenu` 自绘选区菜单，而这个 API 一旦指定就**顶掉系统自带菜单**——此前菜单里只有一项「划线 / 笔记」，等于顺手把系统原本提供的「复制」也弄没了。现补回「复制」「书签」，与「划线 / 笔记」并排三项。
+- 上游 `ReadBookController.kt:2155-2169` 的选区菜单是一整排（复制 / 分享 / 浏览器 / 朗读 / 书签 / 笔记 / 词典 / 替换 / 编辑 / AI…）。本地只补了有能力实现的两项：复制走 `pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text)` + `getSystemPasteboard().setData(...)`（对齐 `R.id.menu_copy`）；书签以选区起点为 `chapterPos`、选区文字为 `bookText` 调 `onAddBookmark`，复用既有「添加书签」面板（对齐 `R.id.menu_bookmark` → `TextActionBookmark` → `openEditor`）。其余项本地无对应能力，按项目约定不塞占位按钮。
+- 无有效选区时不动作，走 toast 提示「没有取得有效的正文选区，请重新选择文字」；复制成功/失败同样走既有 `onUnavailableAction` 通道，未新增提示机制。
+- N 端设备验证（HOS 模拟器，OpenHarmony API 26）：长按正文出三项菜单；点「复制」后 `hidumper -s PasteboardService -a '--data'` 显示 `Owner: io.legado.harmony`、`Mime types: {text/plain,}`，`--copy-history` 同一时刻有应用自身的 `set` 记录；点「书签」弹出面板且原文已被选区预填，保存后设备 preferences 书签由 4 条变 5 条（`chapterPosition=27`、`bookText=章节`），验证后已删除该测试书签并恢复备份；同一菜单点「划线 / 笔记」面板正常打开、取消后 preferences 未变。
+
+## 2026-10-29 目录页书签/笔记两 tab 按章节序排序（r272）
+
+- 本地存储是「新条目前插」的纯文本行，读取顺序即写入顺序，与正文顺序无关；而 r271 给书签 tab 补的首次定位（滚到最后一个 `chapterIndex <= 当前章节` 的条目）只在列表本身按章节序排列时才成立。上游 `BookmarkDao.flowByBook` / `BookMarkingDao.flowByBook` 都是 `order by chapterIndex`，所以排序放在展示层补齐：书签按 `(chapterIndex, chapterPosition)`、笔记按 `(chapterIndex, createdAt)`，存储顺序不变。
+- N 端设备验证：构造「存储顺序与章节序相反」的书签/笔记各 4 条写入设备，两 tab 均按章节序重排，验证后恢复原始数据。
+
+## 2026-10-29 目录页「书签」「笔记」两 tab 对齐上游条目口径（r271）
+
+- 对齐上游 `ReaderBookSheet.kt:1179-1400`：两 tab 去掉行内「跳转/编辑」小按钮，改为**点按编辑、长按跳转**（与「所有书签」页 `BookmarkEntryCard` 同一口径，上游即 `NormalCard(onClick = onEditBookmark, onLongClick = onBookmarkNavigate)`）。
+- 书签 tab 补顶部搜索框（按 `bookmark.content` 过滤，对齐 `TocViewModel.kt:338`）、当前章节高亮底色 + 定位图标、`bookText` 2 行 / `content` 主色 2 行、打开时自动滚到当前章节；删掉上游本就没有的「书签 N」计数行。
+- 笔记 tab 第一行改为「创建时间 + 章名（空则「第 N 章」）+ 其他书源红字 + 定位图标」，去掉本地自造的样式标签行（上游笔记条目不显示样式）；当前章节判断由章名比对改为 `chapterIndex` 比对。
+- `AppGlyph` 新增 `locate`（复用既有 `app.media.app_locate`）。
+- N 端设备验证：搜索 `zzzzzzz` 后列表为空并显示空态、清空后恢复；点按书签进编辑面板、长按弹「位置可能已偏移」确认框后跳转；笔记 tab 首行为 `2026-10-31 06:40 | 第二章 旧名 | 其他书源`，长按弹框后落到「第二章 相遇」。
+
 ## 2026-10-29 书签/笔记跳转前的定位校验与笔记重定位（r270）
 
 - 此前点书签/笔记直接按存下来的 `chapterIndex` + 章内偏移跳，不校验目标是否还成立：换书源后章序完全不同、目录更新后章名变了，都会静默跳到错误位置。现对齐上游 `VerifyBookmarkTargetUseCase.kt`：跳转前比对两件事——记录里的 `bookUrl` 与当前书的源指纹是否一致、记录里的 `chapterName` 与目标章标题是否一致。源不同返回 `sourceChanged`，标题不同返回 `titleMismatch`，两种情况都弹「位置可能已偏移」让用户自己决定是否仍要跳转，取消则原地不动。

@@ -16,7 +16,7 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import image from '@ohos.multimedia.image';
-import { batteryInfo, settings } from '@kit.BasicServicesKit';
+import { batteryInfo, pasteboard, settings } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
 import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator } from './LocalReaderPaginator';
@@ -2055,13 +2055,56 @@ export struct ReaderPage {
     return position;
   }
 
+  /**
+   * 划词菜单。
+   * 上游 ReadBookController.kt:2155-2169 的选区菜单是一整排（复制/分享/浏览器/朗读/书签/笔记/词典/
+   * 替换/编辑/AI…），本地 bindSelectionMenu 一旦指定就会顶掉系统菜单，所以至少要保住最基础的
+   * 三个能力：复制、加书签、划线/笔记。其余项本地没有对应能力，不在这里塞占位。
+   */
   @Builder
   private readerMarkingSelectionMenu() {
     Row() {
+      Text('复制').fontSize(14).fontColor('#E5E6EB')
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .onClick(() => this.copyCurrentSelection())
+      Text('书签').fontSize(14).fontColor('#E5E6EB')
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .onClick(() => this.bookmarkCurrentSelection())
       Text('划线 / 笔记').fontSize(14).fontColor('#E5E6EB')
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .onClick(() => this.createMarkingFromCurrentSelection())
     }.backgroundColor('#242127').borderRadius(12)
+  }
+
+  /** 复制当前选区。对齐上游 R.id.menu_copy：直接写系统剪贴板。 */
+  private async copyCurrentSelection(): Promise<void> {
+    const text = this.pendingMarkingText;
+    if (text.length === 0) {
+      this.onUnavailableAction('没有取得有效的正文选区，请重新选择文字');
+      return;
+    }
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+      await pasteboard.getSystemPasteboard().setData(data);
+      this.onUnavailableAction('已复制');
+    } catch (_) {
+      this.onUnavailableAction('复制失败，请重试');
+    }
+  }
+
+  /**
+   * 用当前选区加书签。
+   * 对齐上游 ReadBookController.kt:2046-2051 R.id.menu_bookmark：以选区起点为 chapterPos、
+   * 选区文字为 bookText 新建书签，随后打开书签编辑面板（上游同样走 TextActionBookmark → openEditor）。
+   */
+  private bookmarkCurrentSelection(): void {
+    const start = this.pendingMarkingStart;
+    const text = this.pendingMarkingText;
+    if (start < 0 || text.length === 0) {
+      this.onUnavailableAction('没有取得有效的正文选区，请重新选择文字');
+      return;
+    }
+    this.onAddBookmark(start, text);
   }
 
   /**
