@@ -10,6 +10,7 @@
 - 模块完成编辑、必要验证并写完文档后，先判断上下文能否覆盖下一模块完整工作及返工余量；不足则先写好 CURRENT，再依靠运行时自动压缩或在交接点续接。UI 还原按 `docs/UI-RESTORE.md` 执行，历史流程细节见 `docs/history/project-records/WORKFLOW.md`。
 - 压缩不是重跑理由。已验项重开要写具体原因；旧“下一步”不覆盖 CURRENT，错误样本结论明确作废。
 - 每次只做一个明确模块。先读迁移计划和当前模块文件，用限定路径的符号搜索定位源码；不重复扫描整个 Android 项目。复用已有证据，按风险做最小充分验证。
+- 每次源码改动后必须执行一次 `assembleHap`，未跑构建不得交付。列表、存储、备份与序列化改动的必查项见 `docs/CODE-CONVENTIONS.md`；「上游没有某实现」这类断言必须附检索证据。
 - 模拟器交互先 OCR 识别当前界面和目标文字，点击后再 OCR 验证；Android 用 `adb-screen-detection`，HarmonyOS 用 HMNextAuto。中间截图不发给用户，失败时才展示并说明；设备选择、依赖与完整步骤见 `docs/VALIDATION.md`。
 - 候选模块不自动展开；保持真实业务与“未迁移”标记，保留现有本地数据能力。
 - 源码备份仅在危险修改之前、关键兼容里程碑完成或用户明确要求时创建；普通页面微调、构建和小修订不创建连续备份。资源、截图和样本只使用 `N:\HarmonyProjects\project-resources\legado-with-MD3`，不得再读取或写入旧开发目录。

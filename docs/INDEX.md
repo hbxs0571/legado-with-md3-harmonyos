@@ -6,8 +6,10 @@
 | --- | --- |
 | 功能优先顺序与边界 | [项目队列](PROJECT.md) |
 | 当前公开进度 | [进度摘要](PROGRESS.md) |
-| N 端文档交接 | [双机 N 端执行说明](DUAL-MACHINE-HANDOFF.md) |
+| 双机协作（历史，已失效） | [双机 N 端执行说明](DUAL-MACHINE-HANDOFF.md) |
 | 模块验收摘要 | [模块状态](MODULE-STATUS.md) |
+| 编码规约与已踩缺陷 | [编码规约](CODE-CONVENTIONS.md) |
+| 移交前协作教训 | [E 端会话教训](E-SESSION-LESSONS.md) |
 | 已知问题与验收边界 | [已知问题](KNOWN-ISSUES.md) |
 | 模块入口与责任范围 | [模块概览](MODULES.md) |
 | 本地阅读行为 | [阅读模块](READER.md) |
