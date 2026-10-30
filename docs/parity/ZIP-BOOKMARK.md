@@ -3,7 +3,7 @@
 本表按 [模块对照要求](../CODE-CONVENTIONS.md) 第四节点完一次，行粒度是一次用户可感知的操作。
 状态四值：`已接` / `未接` / `不适用` / `待定`；`不适用` 写理由，`待定` 写阻塞项。**本表无 `待定` 行。**
 
-- 盘点日期：2026-10-29
+- 盘点日期：2026-10-29，复核 2026-10-30（第二轮独立复核，新增 6 条、拆细划词菜单）
 - 上游基线：`legado-with-MD3`（Android，Compose）
 - 本地实现：`entry/src/main/ets`（HarmonyOS，ArkTS）
 - 对应 ZIP 类别：`bookmark`（`bookmark.json`、`bookMarking.json`），见 [ZIP 兼容总账](STATUS.md)
@@ -18,17 +18,21 @@
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A 阅读页书签 | 21 | 20 | 1 | 0 |
-| B 阅读页划线 / 笔记 | 17 | 15 | 2 | 0 |
-| C 目录页书签与笔记两 tab | 13 | 11 | 2 | 0 |
+| B 阅读页划线 / 笔记 | 21 | 15 | 5 | 1 |
+| C 目录页信息 / 书签 / 笔记三 tab | 15 | 12 | 3 | 0 |
 | D 所有书签页 | 13 | 13 | 0 | 0 |
 | E 数据、导出与备份 | 15 | 12 | 0 | 3 |
-| 合计 | 79 | 71 | 5 | 3 |
+| 合计 | 85 | 72 | 9 | 4 |
 
-> **5 条未接全部是用户可感知的能力缺口，已在 [已知问题](../KNOWN-ISSUES.md) 登记**：①划线/笔记渲染不校验锚点文本（已设备取证）；②划词菜单缺「行内快速标记」；③目录页缺书签/笔记多选与批量操作；④目录页缺书签/笔记反序；⑤书签无障碍播报。
+> **9 条未接全部是用户可感知的能力缺口，已在 [已知问题](../KNOWN-ISSUES.md) 登记**：①划线/笔记渲染不校验锚点文本（已设备取证）；②划词菜单缺「行内快速标记」；③目录页缺书签/笔记多选与批量操作；④目录页缺书签/笔记反序；⑤书签无障碍播报；⑥划词菜单「替换」缺预填规则入口；⑦划词菜单「搜索内容」缺预填关键词入口；⑧划词菜单另外 8 项本地确实无对应能力（分享 / 浏览器 / 朗读 / 词典 / 正文编辑 / AI 清洗 / AI 改写 / 插入 BGM）；⑨目录页信息 tab 缺「备注」行。
 >
-> 3 条 `不适用` 都是上游内部形态，理由逐行写在表内：无 Room 数据库、无 AI 助手、移出书架本就不清书签。
+> 其中 ⑥⑦ 属「底层能力已具备、只差一个入口」，与 ⑧ 的「本地完全没有这个能力」是两回事，2026-10-30 复核时拆开登记。
 >
-> 另有两项与书签相关但**不属于本类别**，故不设行：目录页「拆分超长章节」（属目录能力，`Book` 模型无 `splitLongChapter` 字段，已记在[已知问题](../KNOWN-ISSUES.md)目录页那条）与「新建替换规则并预填本书作用域」（属替换净化类别）。
+> 4 条 `不适用` 都是上游内部形态，理由逐行写在表内：无 Room 数据库、无 AI 助手、移出书架本就不清书签、Android 独有的 `ACTION_PROCESS_TEXT` 文本扩展。
+>
+> 另有两项与书签相关但**不属于本类别**，故不设行：目录页「拆分超长章节」（属目录能力，`Book` 模型无 `splitLongChapter` 字段，已记在[已知问题](../KNOWN-ISSUES.md)目录页那条）与目录页「更多」菜单里的「新建替换规则并预填本书作用域」（属替换净化类别，已记在[已知问题](../KNOWN-ISSUES.md)目录页那条）。
+>
+> 注意别把后者与 B 块新增的「划词菜单『替换』项（预填规则）」混为一谈：两者入口不同（目录页更多菜单 vs 阅读页划词菜单）、预填内容也不同（前者预填 `scope` 为本书，后者把选中文本当 `pattern` 并预填 `scope`），但**卡在同一处**——`ReplaceRuleEditor` 缺草稿通道。补一处即可同时解开两条。
 
 ## A 阅读页书签
 
@@ -67,6 +71,10 @@
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 划词菜单「笔记 / 划线」项 | `ReadBookController.kt:2158-2178`；`MarkingContract.kt:21-32` | `ReaderPage.ets:2073`、`:1989` | 已接 | 无本地正文时 toast「划线与笔记仅支持已有本地正文的书籍」 | 划词点「划线 / 笔记」出面板 | r273 把三项并排 |
+| 划词菜单「替换」项（预填规则） | `ReadBookController.kt:2065-2068`、`:2165`；`ReadBookRouteScreen.kt:426-433`（划词文本按行 `trim` 后当 `pattern` 新建规则，`bookName`/`bookSourceUrl` 拼成 `scope`） | `ProfileSubPages.ets:660-700 ReplaceRuleEditor` | 未接 | 规则编辑器本身完整，但只接受 `editingRule: ReplaceRule` 整条回填（`:706 applyEditingRule`），**没有「预填 pattern」的草稿通道**，`Index.ets` 也只暴露 `openReplaceRuleEditor(id)` | 划词点「替换」应带出预填正则的新建规则面板 | r280 复核；见 [已知问题](../KNOWN-ISSUES.md) |
+| 划词菜单「搜索内容」项（预填关键词） | `ReadBookController.kt:2096-2099`、`:2169`；`ReadBookViewModel.kt:1564-1569`（`searchContentQuery` + `OpenSearch(text, bookUrl)`） | `ReaderSearchPage.ets`、`Index.ets:4104-4112` | 未接 | 全书搜索页完整（历史/正则/替换开关都有），但 `aboutToAppear`（`ReaderSearchPage.ets:52`）只加载历史，**没有 `initialQuery` 入参**，`Index.ets` 打开时也未传关键词 | 划词点「搜索内容」应带出预填关键词的全书搜索页 | r280 复核；见 [已知问题](../KNOWN-ISSUES.md) |
+| 划词菜单其余 8 项（分享 / 浏览器 / 朗读 / 词典 / 正文编辑 / AI 清洗 / AI 改写 / 插入 BGM） | `ReadBookController.kt:2159-2183`（菜单项）、`:2036-2110`（处理）、`:2266-2287`（分享/浏览器） | — | 未接 | 本地确实无对应能力：分享全仓无 `systemShare`（`BookInfoPage.ets:269` 自己也是「书籍分享尚未迁移」）；浏览器全仓无 `startAbility`，`module.json5` 无 browser skill；朗读 `ReaderPage.ets:1265` 明确「朗读播放尚未迁移」；词典 / 正文编辑 / AI 清洗 / AI 改写 / BGM 全仓零命中 | — | 按项目约定不塞占位，`ReaderPage.ets:2062` 注释已说明 |
+| 第三方 `ACTION_PROCESS_TEXT` 菜单项 | `ReadBookController.kt:2190-2206`（`queryIntentActivities`）；`:2210-2216` 受 `showSelectMenuIcon` / `textSelectMenuConfig` 控制 | — | 不适用 | Android 独有的文本处理扩展机制，HarmonyOS 无对等物，无法映射成任何本地能力 | — | 架构差异 |
 | 标记面板（样式 + 颜色 + 笔记） | `MarkingSheet.kt:72` | `ReaderMarkingEditor.ets:210-490` | 已接 | 三块齐全，另有「样式来源」 | 面板见样式/颜色/笔记 | — |
 | 样式来源：套用高亮规则 | `MarkingSheet.kt:187-197`（`state.highlightRules` 下拉） | `ReaderMarkingEditor.ets:352-400` | 已接 | 选规则时把规则样式换算成 effect + color | 选一条规则后样式与颜色随之变 | r269 补齐；上游存 `styleJson`，本地拍平 |
 | 样式来源：自定义 | `MarkingSheet.kt:282 MarkingColorRow`、`:353 MarkingEffectGrid` | `ReaderMarkingEditor.ets:419`、`:430` | 已接 | 7 种 effect + 15 预设色 + 取色器 | 切「自定义」可任选样式与颜色 | r266 起 |
@@ -86,7 +94,7 @@
 
 > **不占独立行的上游文件**（属本块内部实现，无独立用户操作）：`MarkingDelegate.kt`、`ReadBookContract.kt`（意图枚举）、`SaveMarkingUseCase.kt:117 find`、`MarkingContract.kt`、`domain/gateway/BookMarkingGateway.kt`、`data/dao/BookMarkingDao.kt`、`di/appModule.kt`、`di/appDatabaseModule.kt`、`data/AppDatabase.kt`。
 
-## C 目录页书签与笔记两 tab
+## C 目录页信息 / 书签 / 笔记三 tab
 
 上游主体：`ui/book/read/sheet/ReaderBookSheet.kt`（`:1117 ReaderBookBookmarksPage`、`:1179`、`:1225`、`:1320`、`:1346`）、`ui/book/toc/TocScreen.kt`（`:666`、`:1005 BookmarkListContent`、`:1070 MarkingListContent`）、`ui/book/toc/TocViewModel.kt`（`:96 TocBookmarkItemUi`、`:108 TocMarkingItemUi`、`:338`、`:375`）。
 本地主体：`entry/src/main/ets/pages/CatalogPage.ets`（560 行）。
@@ -100,6 +108,8 @@
 | 当前章节条目高亮 + 定位图标 | `ReaderBookSheet.kt:1225`（`isDur` + `Icons.Default.LocationOn` 16dp） | `CatalogPage.ets:469-472`、`:485` | 已接 | 当前章节底色 `#303442`，右侧 `locate` 图标 | 停在第二章时第二章条目高亮 | r271 |
 | 打开时自动滚到当前章节 | `ReaderBookSheet.kt:1179`（`scrollToItem(currentPosition)`） | `CatalogPage.ets:206-224`、`:496` | 已接 | 只自动定位一次，之后由用户滚动 | 从第十章进目录页，书签列表停在第十章附近 | r271 |
 | 书签条目两行正文 + 主色备注 | `ReaderBookSheet.kt:1225`（`bookText` 2 行、`content` primary 2 行） | `CatalogPage.ets:474-482` | 已接 | `bookText` `#BFC1CA`、`content` `#AFC2FF` 均 2 行 | 长原文被截为两行 | r271 |
+| 信息页四行（作者 / 书源 / 备注 / 简介） | `ReaderBookSheet.kt:504-538 ReaderBookInformation`（`:524` 作者、`:526` 书源、`:531-533` 备注、`:534-536` 简介） | `CatalogPage.ets:330-346` | 未接 | 本地只有作者（`:334`）、书源（`:335`）、简介（`:336-338`）三行，**缺「备注」行**；本地 `model/Book.ets:46 remark?: string` 字段存在，只是界面没渲染。上游 `:531` 是 `remark.takeIf { it.isNotBlank() }` 条件显示，本地补时照抄条件即可 | 给书加备注后目录页信息 tab 应多一行「备注」 | r280 复核新发现；见 [已知问题](../KNOWN-ISSUES.md) |
+| 笔记条目点按进编辑 / 长按跳转 | `ReaderBookSheet.kt:1300-1304`（注释明写「与书签一致，点按进入编辑（MarkingSheet），长按跳转到标记位置」）、`:1330-1348` | `CatalogPage.ets:517-548` | 已接 | 本地与上游**实际在用的**阅读面板同口径。注意上游 `TocScreen.kt:1103` 是另一套（点按=跳转、无长按），但 `TocScreen` 全仓无调用点，属未接线代码，不作为基线 | 点笔记条目出编辑面板，长按跳回正文 | r280 复核确认不是缺口 |
 | 笔记页空态 | `ReaderBookSheet.kt:1320`（`marks_empty`） | `CatalogPage.ets:506` | 已接 | 「暂无笔记」/「没有找到相关笔记」 | 无笔记时见空态 | — |
 | 笔记条目第一行：创建时间 + 章名 | `ReaderBookSheet.kt:1346`（`yyyy-MM-dd HH:mm`） | `CatalogPage.ets:518` | 已接 | 同样式 `yyyy-MM-dd HH:mm` | 第一行左侧时间、右侧章名 | r271 |
 | 章名为空回退「第 N 章」 | `ReaderBookSheet.kt:1346`（`chapter_index_format`） | `CatalogPage.ets:151`、`:465`、`:521` | 已接 | 「第 N 章」，N = `chapterIndex + 1` | 章名为空的条目显示「第 3 章」 | — |
@@ -108,6 +118,8 @@
 | **书签/笔记反序** | `TocScreen.kt:447 reverse_toc` | — | 未接 | 本地无排序方向开关，恒按章节升序 | 点反序后列表倒排 | 见 [已知问题](../KNOWN-ISSUES.md) |
 
 > `TocScreen.kt` 的书签 tab 用 `BookmarkItem`（`ui/widget/components/bookmark/BookmarkItem.kt:31`），而阅读页内的 `ReaderBookSheet` 用 `ReaderSheetBookmarkItem`——上游自己就有两套条目组件，本地目录页只迁了后者（`ReaderBookSheet` 那套）。`TocScreen.kt:1050` 的点击/长按语义是「点按跳转、长按跳转」，与阅读页内那套「点按编辑、长按跳转」不同，属上游两处口径不一致，本表按阅读页内那套收口。
+>
+> **2026-10-30 复核更正**：`TocScreen.kt` 与 `TocRouteScreen` 在全仓**没有任何调用点**（grep 只命中自身），上游这套 3-tab 目录页是未接线代码。上游真正在用的阅读面板是 `ReaderBookSheet.kt:275` 的 4 tab（information / chapter_list / bookmark / marks）。因此 C 块以 `ReaderBookSheet` 为准，`TocScreen` 只作为「上游曾设计过什么」的参考——③多选、④反序两条仍按缺口登记，是因为它们属真实存在但未接线的上游设计，是否补由用户定调；而「tab 数差异」（本地 4 tab = 信息/目录/书签/笔记）**不是缺口**，是本地自有设计且比上游在用版本少一层入口。
 
 ## D 所有书签页
 
@@ -154,24 +166,31 @@
 
 1. **书签与划线的主干已经完整**：添加、编辑、删除（含二次确认）、角标、下滑手势、导出、备份往返、两个列表页（目录页内 + 所有书签页）全部通了，并且都上过设备。
 
-2. **5 条未接全部是用户能感知的能力缺口**：
+2. **9 条未接全部是用户能感知的能力缺口**，其中 2 条是「底层能力已具备、只差一个入口」：
    - 划线/笔记渲染不校验锚点文本（唯一已设备取证的缺陷，会造成「正文变了标记还画在原偏移」）；
    - 划词菜单缺「行内快速标记」inline 模式；
    - 目录页缺书签/笔记多选与批量操作；
    - 目录页缺书签/笔记反序；
-   - 书签无障碍播报（本地无阅读页无障碍策略层）。
+   - 书签无障碍播报（本地无阅读页无障碍策略层）；
+   - 划词菜单「替换」缺预填规则入口（`ReplaceRuleEditor` 完整，缺 pattern 草稿通道）；
+   - 划词菜单「搜索内容」缺预填关键词入口（`ReaderSearchPage` 完整，缺 `initialQuery`）；
+   - 划词菜单另外 8 项（分享/浏览器/朗读/词典/正文编辑/AI 清洗/AI 改写/插入 BGM）本地确实无对应能力；
+   - 目录页信息 tab 缺「备注」行（`Book.remark` 字段存在，只是没渲染）。
 
-3. **3 条 `不适用` 是架构差异**，不产生独立操作：Room DAO 层、AI 工具检索、标记随书删除清理。理由逐行写在 E 块表内。另有若干上游内部形态（意图总线、Gateway、DI、进程级单例、图标名命中）未单列成行，已在各块小结注明。
+3. **4 条 `不适用` 是架构差异**，不产生独立操作：Room DAO 层、AI 工具检索、标记随书删除清理、Android 独有的 `ACTION_PROCESS_TEXT`。理由逐行写在 E 块与 B 块表内。另有若干上游内部形态（意图总线、Gateway、DI、进程级单例、图标名命中）未单列成行，已在各块小结注明。
 
-4. **上游自身有两处口径不一致**，本表按阅读页内那套收口，并已在 C 块备注写明：目录页书签条目的点按/长按语义在 `ReaderBookSheet.kt` 与 `TocScreen.kt` 两处不同。
+4. **上游自身有两处口径不一致**，本表按阅读页内那套收口，并已在 C 块备注写明：目录页书签/笔记条目的点按/长按语义在 `ReaderBookSheet.kt` 与 `TocScreen.kt` 两处不同；且后者全仓无调用点，是未接线代码。
 
 ## 建议后续顺序
 
 1. 先补「标记渲染前校验锚点文本」——它是唯一会让用户看到错误结果的缺陷，且本地 `BookContentProcessEngine.ets:93 findTargetRange` 已具备等价能力，接线成本低。
 2. 再做目录页多选与反序——两者都是列表页交互，可一轮清完，且不依赖新数据字段。
-3. 然后是「行内快速标记」——需要新引入 `inlineMode`/`previewStyle`/`inlineDirty` 三个状态，属新面板形态，工作量最大。
-4. 书签无障碍播报要等阅读页无障碍策略层落地（上游在 `feature/reader/core/accessibility`，本地无对应模块），可随无障碍整体迁移一起做。
-5. 拆分超长章节属目录页能力（`Book` 需补 `splitLongChapter` 字段），与书签模块只有「第 N 章」回退这一处交集，可等目录页单独开一轮时一并处理——它不在本表行内。
+3. 然后是两个「只差入口」的划词项：「替换」预填 pattern、「搜索内容」预填关键词。底层面板都完整，各自只需加一个可选入参（`ReplaceRuleEditor` 加 `initialPattern`、`ReaderSearchPage` 加 `initialQuery`），是本表里成本最低的两条。
+4. 目录页信息 tab 补「备注」行——单行渲染，`Book.remark` 字段已在，`remark.takeIf { isNotBlank }` 条件照抄上游即可。
+5. 然后是「行内快速标记」——需要新引入 `inlineMode`/`previewStyle`/`inlineDirty` 三个状态，属新面板形态，工作量最大。
+6. 书签无障碍播报要等阅读页无障碍策略层落地（上游在 `feature/reader/core/accessibility`，本地无对应模块），可随无障碍整体迁移一起做。
+7. 划词菜单剩下 8 项（分享 / 浏览器 / 朗读 / 词典 / 正文编辑 / AI 清洗 / AI 改写 / BGM）**不建议单独立项**：它们各自依赖一整个未迁移的子系统（系统分享、外部浏览器、TTS、词典、正文编辑、AI、BGM 场景），应按所属子系统各自推进，补齐后在 `ReaderPage.ets:2067-2073` 的菜单里挂入口即可。
+8. 拆分超长章节属目录页能力（`Book` 需补 `splitLongChapter` 字段），与书签模块只有「第 N 章」回退这一处交集，可等目录页单独开一轮时一并处理——它不在本表行内。
 
 ## 维护
 
