@@ -1,11 +1,22 @@
 # 阅读配置对照表
 
-本表按 [模块对照要求](../CODE-CONVENTIONS.md) 第四节点完一次，行粒度是一次用户可感知的操作。
-状态四值：`已接` / `未接` / `不适用` / `待定`；`不适用` 写理由，`待定` 写阻塞项。**本表无 `待定` 行。**
+本表按 [模块对照要求](../CODE-CONVENTIONS.md) 第四节点完一次，行粒度是**一个界面上的一个可感知操作**（不是「与本功能相关的几个按钮」，见第四节「盘点单位是界面，不是按钮」）。
+状态三值：`已接` / `未接` / `不适用`；`不适用` 写理由。**本表无 `待定` 行。**
 
-- 盘点日期：2026-10-29
+> **r286 结构性重盘（2026-10-30）**
+>
+> **一、盘点方法换了两条**：行粒度改以「整个界面」为单位；完成判据改为**覆盖证明**（见文末「覆盖证明」节）。
+>
+> **二、A–G 七块共 189 行是迁移前证据，未逐行复核。** 这 189 行写于 2026-10-29，本轮只做了两件事：把已完成的关系型存储迁移带来的字段口径变化核过一遍（本表不涉及 `chapters` / `bookmarks` / `book_marks` 三张表，无失效引用），并把 `readConfig` 类的上游接触面补齐（原表只覆盖 6 个上游文件）。行内容本身未逐条重跑验收。
+>
+> **三、新增「覆盖证明」节**：`readConfig` 类的上游接触面由旧的错误关键词 `backupIgnoreReadConfig`（只命中 2 个文件，等于自证成功）改为 `ReadBookConfig|ReadSettings`（命中 **76** 个文件），逐个分配。
+>
+> **四、本表的口径基数未变**：上游配置来源两个文件 `help/config/ReadBookConfig.kt`（1054 行）与 `domain/model/settings/ReadSettings.kt`（122 行），合计声明 **267** 个名字。这 267 个是**字段级**基数；本表的 189 行是**界面级**基数。两者不可相加也不可相减，1.3 的 112 项差集属字段口径。
+
+- 盘点日期：2026-10-29（r286 结构性重盘：2026-10-30）
 - 上游基线：`legado-with-MD3`（Android，Compose）
 - 本地实现：`entry/src/main/ets`（HarmonyOS，ArkTS）
+- 对应 ZIP 类别：`readConfig`
 
 ## 口径说明
 
@@ -437,6 +448,96 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 98 行未接的多数。余下 34 行分布在 A 块 21 行、B 块 1 行、C 块 2 行、D 块 10 行，均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
+
+## 四、覆盖证明
+
+本表对应 ZIP 类别 `readConfig`。按 [KEYWORDS.md](KEYWORDS.md) 的检索词 `ReadBookConfig|ReadSettings` 命中 **76 个上游 `.kt` 文件**，本节把它们逐个分配：要么落到上面 A–G 某块的具体行，要么写明排除理由。判定可复跑：
+
+```bash
+bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG.md <上游根>
+```
+
+> **旧关键词的教训**：本表原先用 `backupIgnoreReadConfig` 检索，只命中 2 个文件（`help/storage/BackupConfig.kt`、`help/storage/Backup.kt`），等于「2 个文件全过 = 覆盖通过」，永远测不出缺口。已改用两个配置来源文件的名字作检索词。
+
+### 4.1 映射到 A–G 块的行（36 个）
+
+| 上游文件 | 命中内容 | 落到哪一行 |
+| --- | --- | --- |
+| `help/config/ReadBookConfig.kt` | 1054 行，单本书可覆盖的 `Config` | A–G 全部 189 行的「上游位置」列主体 |
+| `domain/model/settings/ReadSettings.kt` | 122 行，全书统一设置 114 字段 | A–G 中约 30 行的「上游位置」列（其余在 C 块与 1.3 差集） |
+| `ui/config/readConfig/ReadConfig.kt` | `:23` 已 `@Deprecated`，指向 `ReadSettingsGateway` | A 块阅读配置总入口 |
+| `ui/config/readConfig/ReadConfigViewModel.kt` | 225 行，配置总页状态 | A 块阅读配置总入口 |
+| `ui/book/read/sheet/TypographyTabs.kt` | 1250 行，五个 tab：`TypographyBodyTab`（`:265` 正文）、`TypographyTitleTab`（`:432` 标题）、`TypographyHeaderTab`（`:676` 页眉）、`TypographyFooterTab`（`:792` 页脚）、`TypographyMarginTab`（`:919` 页边距） | C 块正文排版（`TypographyBodyTab`）、C 块标题排版（`TypographyTitleTab`）、B 块页眉页脚（`TypographyHeaderTab`/`TypographyFooterTab`）、G 块页边距（`TypographyMarginTab`） |
+| `ui/book/read/sheet/TypographyTabs.kt` 内的 `TipPositionDropdown`（`:200`）与 `PaddingSliders`（`:219`） | 页眉页脚位置下拉与四向内边距滑块 | B 块「页眉/页脚位置」、G 块「四向内边距」 |
+| `constant/ReadTipType.kt` | `:6-10` 注释说明这批值是编译期常量、不是配置状态，真正的配置项是 `ReadBookConfig.tipHeaderLeft` 等六项 | B 块「页眉/页脚显示内容」六项 |
+| `ui/book/read/sheet/MoreConfigSheet.kt` | 466 行「更多设置」面板，含 `R.string.more_setting`、`progress_bar_behavior`、`click_regional_config`、`custom_page_key`、`bookmark_badge*`、`eye_protection` 等 | D 块全部 20 行（翻页行为、点击区域、自定义按键、鼠标滚轮、触摸灵敏度）+ F 块书签角标 9 行 |
+| `ui/book/read/sheet/ClickActionConfigSheet.kt` | 230 行，`ClickAreaCell` 九宫格动作选择，含 12 个动作字符串 | D 块「九宫格点击区域」 |
+| `ui/book/read/sheet/PageKeyConfigSheet.kt` | 147 行，`custom_page_key`/`prev_page_key`/`next_page_key`/`page_key_set_help`/`reset` | D 块「自定义翻页按键」 |
+| `ui/book/read/sheet/AutoReadSheet.kt` | 173 行，`auto_page_speed`/`chapter_list`/`setting`/`stop` | A 块「自动阅读」相关行 |
+| `ui/book/read/sheet/CustomTipTarget.kt` | 58 行，`ConfigUpdate` 派发到 `ReadBookConfig` | B 块页眉页脚自定义入口 |
+| `ui/book/read/sheet/HighlightRuleEditSheet.kt` | 1389 行，高亮规则编辑面板 | 1.4「独立仓储 1 项」`highlightRules` |
+| `ui/config/themeConfig/ThemeConfigViewModel.kt` | 618 行，主题配置状态 | E 块主题外观 42 行 |
+| `ui/replace/ReplaceRuleViewModel.kt` | 497 行，替换净化规则状态（`PreferKey.replaceSortMode` 在此） | E 块「替换净化」相关行 |
+| `ui/book/read/ReadBookViewModel.kt` | 2748 行，阅读页主状态 | A–G 全部行的「消费侧」主体 |
+| `ui/book/read/ReadBookController.kt` | 3327 行，阅读页控制器 | A–G 全部行的运行时行为 |
+| `ui/book/read/ReadBookContract.kt` | 2011 行，`Style config (reactive state for ReadBookConfig)`（`:337`）、`Menu config`（`:340`） | E 块菜单外观与主题的意图定义 |
+| `ui/book/read/ReadBookLoadDelegate.kt` | 444 行，加载时读取 `ReadSettingsRepository` | A 块阅读界面初始化 |
+| `ui/book/read/ReadStyleDelegate.kt` | 505 行，排版样式变更处理 | C 块正文排版 49 行 |
+| `ui/book/read/ReadConfigUpdateDelegate.kt` | 898 行，配置变更落盘管线 | A 块配置写入链路 |
+| `ui/book/read/ReadButtonConfigDelegate.kt` | 231 行，底栏/顶栏按钮配置 | E 块「底栏按钮配置」「标题栏操作按钮」两条已接 |
+| `ui/book/read/ReadContentEditDelegate.kt` | 267 行，正文编辑 | C 块「正文编辑」相关行 |
+| `ui/book/read/ReadHighlightRuleDelegate.kt` | 386 行，高亮规则应用（`:64` `ReadBookConfig.durConfig.name`） | 1.4「独立仓储 1 项」`highlightRules` |
+| `ui/book/read/ReadBookColorTheme.kt` | 350 行，`:76` `ReadStyleResolver.currentBackground(ReadBookConfig.durConfig, ...)` | E 块主题外观、C 块背景 6 行 |
+| `ui/book/read/MarkingDelegate.kt` | 286 行，`:99` 按 `durConfig.name` 加载高亮规则 | 1.4「独立仓储 1 项」`highlightRules` |
+| `ui/book/read/BookmarkBadgeDelegate.kt` | 91 行，书签角标图片与尺寸 | F 块书签角标 9 行 |
+| `ui/book/read/ReadAiDelegate.kt` | 1417 行，`:1372` `ReadBookConfig.paragraphIndent` | C 块「段首缩进」 |
+| `ui/book/toc/TocViewModel.kt` | 1141 行，目录页状态（读 `ReadSettingsRepository`） | G 块页边距之外的目录相关配置（`tocShowWordCount` 等） |
+| `help/config/ReadStyleResolver.kt` | 197 行，`:62-65` 按 `ReadBookConfig.Config` 解析最终样式 | C 块正文排版、E 块主题 |
+| `help/config/AppConfig.kt` | 125 行，`:31` `readGateway` 进程内快照 | A 块配置读取链路 |
+| `feature/reader/core/source/ReaderBodyOnlyFilter.kt` | `:56` 注释要求与 `ReadSettings.adaptSpecialStyle` 同源 | C 块「适配特殊样式」 |
+| `data/repository/ReadSettingsRepository.kt` | 742 行，配置仓储实现 | A–G 全部行的「写入侧」 |
+| `domain/gateway/ReadSettingsGateway.kt` | 18 行，`interface ReadSettingsGateway { val currentSettings: ReadSettings }` | A 块配置读取接口 |
+| `data/repository/ReadStyleConfigStore.kt` | 142 行，`:10-13` 写面收进 gateway 后 `ReadBookConfig` 只剩「选哪一份 + 怎么读」 | E 块主题存储链路 |
+| `data/repository/ReadStyleRepository.kt` | 291 行，`:29`/`:31` 配置文件路径（`ReadBookConfig.configFileName`/`shareConfigFileName`） | E 块主题导入导出 |
+| `data/repository/ReadBookStyleConfigRepository.kt` | 393 行，`:91-93` 预设复制到 `ReadBookConfig.durConfig` | E 块主题预设 14 项 |
+
+### 4.2 已排除：渲染与分页管线，无独立界面（8 个）
+
+`feature/reader/legacy/LegacyReaderChapterPaginator.kt`（403 行，`:132` `titleMode: Int = ReadBookConfig.titleMode`）、`LegacyReaderPageDecorationFactory.kt`（340 行）、`LegacyReaderPaginationStyleFactory.kt`（119 行）、`LegacyReaderStyleRangeMapper.kt`（421 行，`:337` 注释「即 `ReadBookConfig.textColor`，不是写死的主题绿」）、`model/FullBookPaginator.kt`（97 行，`:48` `tipHeaderLeft`）、`model/ReadSessionState.kt`（45 行，`:32` `durConfig.curBgDrawable`）、`domain/model/settings/ReadStyleState.kt`（29 行，`:10` 只投影排版底座）、`model/ReadBook.kt`（在 4.1 已分配，此处单列说明它是阅读页模型）。
+
+**排除理由**：这些是 Compose 自绘管线的分页与装饰实现，本地对应物是 `pages/ReaderPage.ets` 的 ArkUI 声明式渲染（无「分页器」「装饰工厂」这种中间层）。上游把配置读在管线内部，本地读在页面里，**同一批配置项在 A–G 块已有行**，此处不重复列行。
+
+### 4.3 已排除：数据层接线与初始化，界面由别处承载（10 个）
+
+`di/appModule.kt`（862 行，`:374` 把 `ReadBookConfig.titleMode` 注入 provider）、`domain/usecase/AddBookUseCase.kt`（80 行，`:17` 注入 gateway）、`domain/usecase/ChangeBookSourceUseCase.kt`（249 行，`:76` 注入 gateway）、`data/repository/SearchContentRepository.kt`（321 行，`:26` 注入 gateway）、`help/book/BookExtensions.kt`（747 行，`:54` `readGateway`）、`help/book/BookHelp.kt`（1116 行，`:75` `readGateway`）。
+
+**排除理由**：`ReadSettingsGateway` 的注入点，没有自己的界面。它们消费的配置项在 A–G 块已有行（换源相关在 A 块、搜索内容在 D 块）。
+
+另有 4 个同类，但各有额外分量，单列在这里：
+
+- `App.kt`（385 行，`:132` `ReadBookConfig.initialize(...)`）——**应用启动时初始化配置**。本地对应 `entryability/EntryAbility.ets` 里 `RdbMigration`/`RdbCleanup` 之后由 `pages/Index.ets` 载入 `ReaderSettingsRepository`，无独立界面。
+- `data/entities/Book.kt`（515 行，`:280`/`:282` 读 `ReadBookConfig.pageAnim` 作为按书翻页动画的回落）——**实体层的配置回落**。本地对应 `model/Book.ets` 的 `readConfig` JSON 字段，已在 [BOOKSHELF.md](BOOKSHELF.md) B 块「阅读配置覆盖」行记录。
+- `help/storage/Backup.kt`（406 行，`:94-95`/`:233`/`:237` 备份 `configFileName` 与 `shareConfigFileName`）与 `help/storage/Restore.kt`（609 行，`:347` 恢复 `configFileName`）——**配置文件的备份与恢复**。本地对应 `data/BackupRepository.ets` 的 `config.xml` 读写，归备份模块，不在本表。
+
+### 4.4 已排除：属别的 ZIP 类别（16 个）
+
+朗读 10 个：`ui/book/read/ReadAloudDelegate.kt`（676 行）、`model/AudioPlay.kt`（481 行）、`service/HttpReadAloudService.kt`（2149 行）、`service/readaloud/ReadAloudBookSession.kt`（279 行）、`help/readaloud/cast/CastRenderOptions.kt`（104 行，`:102` `bound.contains(ReadBookConfig.durConfig.name)`）、`ui/book/audio/AudioPlayViewModel.kt`（370 行）、`ui/book/readaloud/ReadAloudPlayerMorphHost.kt`（306 行）、`ui/book/readaloud/casting/CastBubbleSheet.kt`（80 行，`:61` `textSize = ReadBookConfig.textSize`）、`ui/book/readaloud/player/ReadAloudConfigIntentMapper.kt`（145 行）、`ui/book/readaloud/player/ReadAloudPlayerViewModel.kt`（335 行）。朗读在[范围之外](../PROJECT.md)，归 `httpTTS` 类别。
+
+漫画 3 个：`ui/book/manga/MangaReaderViewModel.kt`（1500 行）、`ui/book/manga/MangaSettingsPanel.kt`（862 行）、`data/repository/manga/MangaReaderActionRepository.kt`（259 行）。归 `mangaConfig` 类别。
+
+其余 3 个：`ui/main/MainNavGraph.kt`（2017 行，`:1063` `initReadBookConfig(initRequest)` 只是导航参数传递，归导航）；`model/webBook/BookChapterList.kt`、`model/webBook/BookContent.kt`（网络书内容加载，归 `bookSource`）。
+
+### 4.5 已排除：本地书与导出，界面由别的模块承载（6 个）
+
+`model/localBook/LocalBook.kt`（649 行）、`model/localBook/TextFile.kt`（519 行）、`help/book/ContentProcessor.kt`（297 行）、`service/ExportBookService.kt`（1010 行）、`help/DefaultData.kt`（130 行，`:55` `readConfigs` 默认配置预设）、`help/JsExtensions.kt`（1220 行，`:1191` `getReadBookConfig()` 是书源脚本接口）。
+
+**排除理由**：本地书导入/导出归 `localBook` 类别（见 [BOOKSHELF.md](BOOKSHELF.md)）；书源脚本接口归 `bookSource`；备份恢复归备份模块。它们读 `ReadBookConfig` 只是为了拿当前配置的副本，没有配置界面。
+
+### 4.6 未分配
+
+**0 个。** 76 个上游接触面文件全部分配完毕（映射到行 **36** 个 + 排除 **40** 个）。
+
+---
 
 ## 维护
 

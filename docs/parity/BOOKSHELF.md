@@ -1,11 +1,23 @@
 # 书架 / 书籍元数据 / 进度 对照表
 
-本表按 [模块对照要求](../CODE-CONVENTIONS.md) 第四节一次盘完，行粒度是一次用户可感知的操作。
+本表按 [模块对照要求](../CODE-CONVENTIONS.md) 第四节一次盘完，行粒度是**一个界面**（不是界面上与本功能相关的几个按钮），见第四节「盘点单位是界面，不是按钮」。
 状态三值：`已接` / `未接` / `不适用`；`不适用` 必写理由。**本表无 `待定` 行。**
 
+> **r286 结构性重盘（2026-10-30）**
+>
+> 一、**方法换了两条**：盘点单位由「一次操作」改为「整个界面」；完成判据改为 [覆盖证明](../GLOSSARY.md)——上游接触面里每个 `.kt` 必须落到「已映射到某行」或「已排除 + 理由」。
+>
+> 二、**A1–C 共 260 行是迁移前证据，未逐行复核**：这些行写于 r277–r280（关系型存储迁移之前）。本轮只修正了因迁移而失效的字段引用（`readerPositionVersion` / `androidCharacterPosition` 已删除、`progress` 改为派生、`chapterTitles`/`chapterOffsets`/`chapterVolumes` 三个数组拆进 `chapters` 表），其余行未逐条重核。
+>
+> 三、**新增「覆盖证明」节**：四类关键词（`localBook` 27 / `bookGroup` 40 / `readRecord` 63 / `bookshelfLayout` 10）并集 114 个上游文件逐个分配，未分配的写明排除理由。
+>
+> 四、**记住本表覆盖的是四类，不是全部书架相关代码**：`bookSource` 141、`replaceRule` 60、`homepageModules` 23、`showRss` 12 等类别归 [ZIP 兼容总账](STATUS.md) 的其他行，本表只在「交叉引用」里指向。
+
 - 盘点日期：2026-10-30（r279 重盘，作废 r277 的 96 行版；r280 二轮补漏）
+- 结构性重盘：2026-10-30（r286，加覆盖证明、修迁移后失效的字段引用）
 - 上游基线：`N:\HarmonyProjects\legado-with-MD3`（Android，Compose），路径均相对 `app/src/main/java/io/legado/app/`
 - 本地实现：`N:\HarmonyProjects\legado-with-md3-harmonyos`，路径均相对 `entry/src/main/ets/`
+- 对应 ZIP 类别：`localBook`、`bookGroup`、`readRecord`、`bookshelfLayout`，见 [ZIP 兼容总账](STATUS.md)
 
 ## 为什么重盘
 
@@ -32,8 +44,11 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | A2 书架设置面板 | 48 | 9 | 39 | 0 |
 | A3 分组管理 | 22 | 13 | 9 | 0 |
 | B 书籍详情页与元数据 | 80 | 22 | 57 | 1 |
-| C 阅读进度与记录 | 32 | 17 | 15 | 0 |
-| 合计 | 260 | 76 | 183 | 1 |
+| C 阅读进度与记录 | 35 | 17 | 18 | 0 |
+| D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
+| 合计 | 316 | 82 | 233 | 1 |
+
+A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的。全表状态三值，无 `待定`。
 
 ---
 
@@ -316,9 +331,9 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 阅读进度写入 | `Book.kt:45-138` | `model/Book.ets` | 已接 | 本地 `chapterIndex`/`chapterProgress`/`durChapterTime` | 读 3 章后退出，书架排序按最后阅读更新 | — |
+| 阅读进度写入 | `Book.kt:45-138` | `model/Book.ets:17-18`、`:57-58` | 已接 | 本地 `chapterIndex`（落 `durChapterIndex`）`chapterProgress`（落 `durChapterPos`）`durChapterTime`；进度百分比不落库，由 `BookRepository.readProgress` 现算（`data/BookRepository.ets:191-196`） | 读 3 章后退出，书架排序按最后阅读更新 | r284 起 `progress` 改为派生（上游 Book 表无此列） |
 | 进度恢复（打开即定位） | `ReadBookConfig.kt` | `pages/ReaderPage.ets` | 已接 | — | 关掉 App 重开，点该书回到上次章节与位置 | — |
-| 章节内位置记忆 | `Book.kt:45-138` | `model/Book.ets` | 已接 | 本地 `chapterProgress` + `readerPositionVersion` | 在同一章内滚动后退出再进，停在原位 | 见 `androidCharacterPosition` 兼容 |
+| 章节内位置记忆 | `Book.kt:45-138` | `model/Book.ets:18` | 已接 | 本地 `chapterProgress` 是章内百分比，直接落在上游 `durChapterPos` 列上（`data/BookRepository.ets:689-690`） | 在同一章内滚动后退出再进，停在原位 | r284 起 `readerPositionVersion` 与 `androidCharacterPosition` 两个字段已删除（上游没有这两列），搬迁时统一换算成百分比 |
 | 阅读记录开关 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3088-3096` | 已接 | — | 关掉后读书不再产生记录 | — |
 | 阅读记录三视图切换 | `ReadRecordScreen.kt:939` | `pages/ProfileSubPages.ets:2935` | 已接 | 本地 `cycleDisplayMode()` 轮换 0 汇总/1 时间线/2 最后阅读 | 点视图图标在三种视图间轮换 | 上游为图标按钮组 |
 | 阅读记录搜索 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:2940` | 已接 | 本地按书名与作者过滤 | 输入书名后列表只剩该书记录 | — |
@@ -336,6 +351,9 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | 「不再提醒」两档 | `ReadRecordScreen.kt` `do_not_remind_again_this_page`/`_long_term` | — | 未接 | 本地确认框无「不再提醒」选项 | 勾选「本页不再提醒」后下次不再弹 | 上游分本次与本机两档 |
 | 合并同名书籍 | `ReadRecordScreen.kt` `merge_read_records` | — | 未接 | 本地无合并入口 | 把「同名不同作者」的两组记录合并 | — |
 | 合并候选搜索 | `ReadRecordScreen.kt` `search_placeholder` | — | 未接 | 同上 | 合并时可搜索候选并提示无候选 | — |
+| 未知作者记录归属检查 | `ReadRecordAliasDelegate.kt:29-54` `check(book)` | — | 未接 | 本地无别名机制（`grep AliasDecision\|别名` 零命中）；上游在打开书籍时若「作者为空」的旧记录存在，弹窗询问合并还是保留 | 库里留一条作者为空的记录，再打开同名同作者的书，应弹冲突框 | 依赖 `getUnknownAuthorRecords` 与 `ReadRecordIdentity.author` |
+| 归属决定持久化 | `ReadRecordAliasDelegate.kt:56-85`、`LocalPreferencesKeys.READ_RECORD_ALIAS_DECISIONS` | — | 未接 | 本地无 | 勾「记住选择」后再打开同书，不再弹框而是按记忆执行 | 上游存 preferences，一行一条 `key + MERGE/KEEP` |
+| 清除归属决定 | `ReadRecordAliasDelegate.kt:87-94`、`ReadBookContract.kt:648-649` `ClearReadRecordAliasDecisions` | — | 未接 | 本地无 | 点「清除已记住的决定」后再打开同书，重新弹框 | 同书多副本时上游强制重新确认（`countShelfCopies > 1`） |
 | 选择模式批量删除 | `ReadRecordScreen.kt` `selected_count`/`delete_selected` | — | 未接 | 本地只能整体清空 | 选中 3 条记录删除后只剩其余 | — |
 | 单条记录删除 | `ReadRecordScreen.kt` `del_read_record` | — | 未接 | 同上 | 长按单条记录可删除 | — |
 | 阅读记录总览页 | `ReadRecordOverviewScreen.kt`（547 行） | — | 未接 | 本地无独立总览页 | 打开总览页看到跨书统计与趋势 | 下列五条是总览页内的分区 |
@@ -347,13 +365,98 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | 最短有效时长阈值 | `GetReadRecordOverviewUseCase.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `minimumReadDurationMs = 10000` | 停留 5 秒退出不产生记录，15 秒产生 | — |
 | 自动保存间隔 | `ReadRecordViewModel.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `autoSaveIntervalMs = 120000` | 连续阅读 2 分钟后记录落盘 | — |
 | 章节索引格式化 | `ReadRecordScreen.kt` `chapter_index_format` | — | 未接 | 本地无「第 N 章」格式化显示 | 记录条目显示「第 12 章」而非裸数字 | — |
-| 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:211-217` | 已接 | 本地按 `progress` 百分比渲染 | 读到 50% 时进度条半满 | — |
+| 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:211-217` | 已接 | 本地按 `BookRepository.readProgress(book)` 的百分比渲染（派生值，不落库） | 读到 50% 时进度条半满 | r284 起 `progress` 不再是存储字段 |
+
+---
+
+## D 缓存管理页（整界面）
+
+本块按 [编码规约](../CODE-CONVENTIONS.md) 第四节「盘点单位是界面，不是按钮」新增。此前本表只有一行「更多菜单·书架管理 → 未接」（现 `:76`），把整个页面当成了一个按钮；实际它是两个不同的页面，各有完整界面。
+
+**上游是两个页面，不是一个**：
+- **书架管理页**：`ui/book/manage/BookshelfManageScreen.kt`（**1777 行**）+ `BookshelfManageScreenViewModel.kt`（**1136 行**），导航键 `MainRouteCache(val groupId: Long)`（`ui/main/MainNavKey.kt:145`），入口是书架页更多菜单「书架管理」（`ui/main/bookshelf/BookshelfScreen.kt:747-754`）。
+- **缓存管理页**：`ui/book/cache/manage/BookCacheManageScreen.kt`（**685 行**）+ `BookCacheManageViewModel.kt`（**892 行**），导航键 `MainRouteBookCacheManage`（`ui/main/MainNavKey.kt:148`），入口是「我的」页「缓存管理」（`ui/main/my/MyScreen.kt:221-226` → `PrefClickEvent.OpenBookCacheManage` → `ui/main/MainScreen.kt:652`）。
+
+**本地现状**：只有一个页面 `pages/ProfileSubPages.ets:3383 CacheManagementPage`（通「我的」页 `pages/ProfilePage.ets:81` 进入，路由 `model/Book.ets:151 ProfileRoute.CACHE_MANAGEMENT`），形态与**上游缓存管理页**对得上，但正文是空态占位；**书架管理页本地完全不存在**（`pages/BookshelfPage.ets:594-595` 的菜单项直接 `onUnavailableAction('书架管理尚未迁移')`）。另有一个 `pages/AppDownloadCacheSettingsPage.ets`（141 行）是**设置页**，不是这两个页面中的任何一个。
+
+### D1 缓存管理页 · 框架（`BookCacheManageScreen.kt`）
+
+| 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 顶栏标题「缓存管理」 | `BookCacheManageScreen.kt:158` | `pages/ProfileSubPages.ets:3428` | 已接 | 本地大标题样式，无折叠 | 进入页面看到标题 | — |
+| 搜索开关 | `BookCacheManageScreen.kt:162` | `pages/ProfileSubPages.ets:3413-3417` | 已接 | 本地内联展开输入框 | 点搜索图标出现输入框 | — |
+| 搜索过滤书名/作者 | `BookCacheManageScreen.kt:118-126` | `pages/ProfileSubPages.ets:3434` | 未接 | 输入框绑了 `searchQuery` 但**没有任何过滤逻辑**，`@State searchQuery` 只在 `onChange` 里写自己 | 输入书名后列表只剩该书 | 本地过滤函数缺失 |
+| 分组筛选菜单 | `BookCacheManageScreen.kt:171-186` | `pages/ProfileSubPages.ets:3407-3412`、`:3490-3508` | 已接 | 本地 `CacheGroupMenu` 列出「全部/无分组 + 各分组」 | 点筛选图标弹出分组列表，选中项打勾 | — |
+| 分组过滤生效 | `BookCacheManageScreen.kt:118-127` | — | 未接 | 本地 `selectedCacheGroup` 只影响「未在书架」区的显隐（`:3452`），不影响书籍列表（因为列表是空态） | 选某分组后列表只剩该分组书 | — |
+| 刷新按钮 | `BookCacheManageScreen.kt:160` | `pages/ProfileSubPages.ets:3421-3423` | 未接 | 本地 `onUnavailableAction('缓存数据仓储尚未接入，未刷新缓存')` | 点刷新后缓存统计重算 | — |
+| 两个分区（书架内 / 未在书架） | `BookCacheManageScreen.kt:343-346`、`:355-358` | `pages/ProfileSubPages.ets:3449-3458` | 已接（仅空态） | 本地两个 `CacheEmptySection`，只画空态文案 | 有缓存时两区各自列出书籍 | 正文列表整体未接 |
+
+### D2 缓存管理页 · 书籍卡片与章节（`BookCacheManageScreen.kt`）
+
+| 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 书籍缓存卡片 | `BookCacheManageScreen.kt:392-530` `BookCacheBookCard` | — | 未接 | 本地无卡片 | 列出每本书的封面、书名、缓存进度 | — |
+| 卡片缓存进度文字 `n/total` | `BookCacheManageScreen.kt:474` | — | 未接 | 同上 | 卡片显示 `12/240` | — |
+| 卡片进度条 | `BookCacheManageScreen.kt:477-495` | — | 未接 | 同上 | 进度条按 `cachedCount/totalCount` 填充 | — |
+| 卡片状态摘要 | `BookCacheManageScreen.kt:406-420` `cache_download_status_summary` | — | 未接 | 同上 | 卡片显示「下载中 / 已暂停 / 等待重试」 | — |
+| 卡片展开/收起箭头 | `BookCacheManageScreen.kt:443-460` | — | 未接 | 同上 | 点卡片展开章节列表 | `a11y_collapsed`/`a11y_expanded` |
+| 卡片下载/停止按钮 | `BookCacheManageScreen.kt:499-518` | — | 未接 | 同上 | 点下载开始缓存全书，再点停止 | — |
+| 卡片删除缓存按钮 | `BookCacheManageScreen.kt:521-529` | — | 未接 | 同上 | 点删除弹确认框，确认后缓存清零 | — |
+| 章节行（下载状态） | `BookCacheManageScreen.kt:531-626` `BookCacheChapterRow` | — | 未接 | 本地无章节级缓存视图 | 展开书籍后逐章列出状态 | — |
+| 章节状态六档文字 | `BookCacheManageScreen.kt:627-650` `chapterStatusText` | — | 未接 | 上游六档：下载中/失败待重试/等待/暂停/失败/已缓存 | 不同状态的章节显示对应文字 | — |
+| 章节下载/暂停/删除 | `BookCacheManageScreen.kt:590-620` | — | 未接 | 同上 | 单章可下载、暂停、删除 | — |
+| 删除整书缓存确认框 | `BookCacheManageScreen.kt:652-668` `DeleteBookCacheDialog` | — | 未接 | 本地无 | 确认框写明书名，取消则不删 | — |
+| 删除章节缓存确认框 | `BookCacheManageScreen.kt:670-684` `DeleteChapterCacheDialog` | — | 未接 | 本地无 | 确认框写明章节名，取消则不删 | — |
+| 长按卡片进选择 | `BookCacheManageViewModel.kt` | — | 未接 | 本地无选择模式 | 长按选中后可批量删缓存 | — |
+
+### D3 书架管理页（`BookshelfManageScreen.kt`，本地整页缺失）
+
+| 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 整个页面 | `BookshelfManageScreen.kt`（1777 行）+ `BookshelfManageScreenViewModel.kt`（1136 行） | — | 未接 | 本地无此页，`pages/BookshelfPage.ets:594-595` 菜单项直接 `onUnavailableAction('书架管理尚未迁移')` | 从书架更多菜单进入书架管理页 | 下列各行是这一页内的能力 |
+| 顶栏标题随分组名变化 | `BookshelfManageScreen.kt:300` | — | 未接 | 同上 | 从某分组进入时标题显示该分组名 | 无分组时显示「离线缓存」 |
+| 分组筛选按钮 | `BookshelfManageScreen.kt:316-340` | — | 未接 | 同上 | 点筛选切分组 | `a11y_group_filter` |
+| 下载全部 | `BookshelfManageScreen.kt:341-346` | — | 未接 | 同上 | 点「下载全部」三本书依次缓存 | 二次确认框 |
+| 导出全部 | `BookshelfManageScreen.kt:352-357` | — | 未接 | 同上 | 点「导出全部」进入导出设置 | — |
+| 日志 | `BookshelfManageScreen.kt:357-360` | — | 未接 | 同上 | 点日志弹出导出日志列表 | — |
+| 书籍行（书名/作者/分组/本地标记） | `BookshelfManageScreen.kt:608-660` | — | 未接 | 同上 | 每行显示四段文字 | `R.string.local_book` 本地标记 |
+| 行内下载/停止 | `BookshelfManageScreen.kt:660-673` | — | 未接 | 同上 | 点下载缓存全书 | — |
+| 行内导出 | `BookshelfManageScreen.kt:679-694` | — | 未接 | 同上 | 点导出弹导出设置 | — |
+| 行内加分组 | `BookshelfManageScreen.kt:694-720` | — | 未接 | 同上 | 点分组图标把书移入某分组 | — |
+| 行内更多菜单 | `BookshelfManageScreen.kt:745-760` | — | 未接 | 同上 | 弹出改名/换源/删除等 | — |
+| 导出进度提示 | `BookshelfManageScreen.kt:635` `exportMsg` | — | 未接 | 同上 | 导出过程中行上显示进度文字 | — |
+| 选择模式·全选 | `BookshelfManageScreen.kt:236-245` | — | 未接 | 同上 | 点全选选中当前可见书 | — |
+| 选择模式·反选 | `BookshelfManageScreen.kt:226-232` | — | 未接 | 同上 | 点反选交换选中状态 | `revert_selection` |
+| 选择模式·批量下载 | `BookshelfManageScreen.kt:240-250` | — | 未接 | 同上 | 选中 3 本批量下载 | — |
+| 选择模式·批量换源 | `BookshelfManageScreen.kt:248-255` | — | 未接 | 同上 | 选中 3 本批量换源 | 依赖书源体系 |
+| 选择模式·移入分组 | `BookshelfManageScreen.kt:255-260` | — | 未接 | 同上 | 选中 3 本移入同一分组 | `move_to_group` |
+| 选择模式·清除缓存 | `BookshelfManageScreen.kt:271-280` | — | 未接 | 同上 | 选中 3 本清缓存 | `clear_cache` |
+| 选择模式·删除 | `BookshelfManageScreen.kt:278-290` | — | 未接 | 同上 | 选中 3 本删除并二次确认 | `delete_book_file` |
+| 选择模式·分段导出 | `BookshelfManageScreen.kt:736-743` `select_section_export` | — | 未接 | 同上 | 选一段章节范围导出 | — |
+| 导出设置面板 | `BookshelfManageScreen.kt:1496-1516` | — | 未接 | 同上 | 弹出导出类型/编码/文件名等 | — |
+| 导出文件名模板 | `BookshelfManageScreen.kt:53`、`:56`、`:59-60` | — | 未接 | 同上 | 填 `{{name}}-{{index}}` 后文件名按模板生成 | `export_file_name_template_hint`/`_help` |
+| 导出编码选择 | `BookshelfManageScreen.kt:15` `showCharsetDialog`、`set_charset` | — | 未接 | 同上 | 可选 UTF-8/GBK 等编码 | — |
+| 自定义 EPUB 导出 | `BookshelfManageScreen.kt:299-313` | — | 未接 | 同上 | 单选一本 EPUB 时弹自定义导出框 | — |
+| 文件选择器面板 | `BookshelfManageScreen.kt:9`、`:173` `showFilePickerSheet` | — | 未接 | 同上 | 首次导出弹出目录选择 | — |
+| 书源选择面板 | `BookshelfManageScreen.kt:1374-1495` `BookSourcePickerSheet` | — | 未接 | 同上 | 批量换源时列出可用书源 | 依赖书源体系 |
+| 换源预览面板 | `BookshelfManageScreen.kt:1517-1571` `BatchChangePreviewSheet` | — | 未接 | 同上 | 换源前逐本预览结果 | 依赖书源体系 |
+| 其它书源选项 | `BookshelfManageScreen.kt:1710-1755` `OtherSourceOptionsSheet` | — | 未接 | 同上 | 换源时可勾选保留项 | 依赖书源体系 |
+| 删除确认框 | `BookshelfManageScreen.kt:18` `showDeleteBookConfirmDialog` | — | 未接 | 同上 | 删除前列出将删的书 | — |
+
+### D4 全书架页（`MainRouteCache` 的另一半语义）
+
+| 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 从「我的」进缓存管理页 | `ui/main/my/MyScreen.kt:221-226`、`MyViewModel.kt:30` `OpenBookCacheManage` | `pages/ProfilePage.ets:81` | 已接 | 本地入口在「其它」组 | 点「缓存管理」进入 D1 页面 | — |
+| 从书架更多菜单进书架管理页 | `ui/main/bookshelf/BookshelfScreen.kt:747-754` | `pages/BookshelfPage.ets:594-595` | 未接 | 本地菜单项存在但点击提示未迁移 | 点「书架管理」进入 D3 页面 | — |
+| 书架页「分组管理」悬浮入口 | `ui/main/bookshelf/BookshelfScreen.kt:642` `Icons.Default.Bookmarks` | `pages/BookshelfPage.ets:339-355` | 已接 | 本地用下拉菜单而非独立页 | 点分组入口可切分组 | 与 A3 块重叠，此处只记入口 |
+| 下载与缓存设置页 | `ui/config/downloadCacheConfig/DownloadCacheConfigScreen.kt` | `pages/AppDownloadCacheSettingsPage.ets` | 未接 | 本地是**纯预览**：5 处 `onUnavailableAction`（封面缓存 / 漫画缓存 / 清理缓存 / 压缩数据库），页尾自写「此页数值目前仅用于界面预览；偏好保存、缓存统计和清理操作尚未接入」；6 个滑块与 1 个开关都只画不存 | 改任一项后重启仍保持 | **这是设置页，不是 D1/D3**；归 `readConfig` 类别，列在这里只为说清「缓存」三处不要混 |
 
 ---
 
 ## 小结
 
-**三块合计 260 条：已接 76、未接 183、不适用 1，无 `待定`。**
+**全表合计 316 条：已接 82、未接 233、不适用 1，无 `待定`。**（A1–C 260 条 + C 块 r286 新增 3 条别名行 + D 块 53 条）
 
 五处需要特别注意：
 
@@ -368,6 +471,102 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 5. **结构性缺口只有两处**，其余都是可增量补的项：一是 `bookGroupStyle` 缺第三档「文件夹」（牵动 A1 五条 + A2 六条），二是私密体系（分组私有、书籍私有、解锁、锁定页，牵动 A1 三条 + A3 两条 + B 两条）。
 
 建议顺序：先补 `model/Book.ets` 缺的七个字段 → 再落卡片展示 22 条与 A2 显示类开关 → 再补顶栏 8 条（不依赖数据，纯 UI）→ 再补 `bookGroupStyle` 第三档文件夹与分组预览计数 → 再选择模式七件套与拖拽 → 详情页头部可点元素 7 条 → 详情页菜单动作按依赖分批（不依赖书源的九个：刷新书籍信息、置顶、复制书籍链接、复制目录链接、允许更新、长按分章、删除确认、清除缓存、显示日志）→ 私密体系单独一轮 → 书源相关的换源、变量、登录、上传同步、回调按钮、简介脚本等随书源模块 → 阅读记录总览页与图表、合并同名单独一轮。
+
+---
+
+## 覆盖证明
+
+本表对应四类 ZIP 类别（`localBook` 27 / `bookGroup` 40 / `readRecord` 63 / `bookshelfLayout` 10）。四类关键词并集按 [KEYWORDS.md](KEYWORDS.md) 检索出 **114 个上游 `.kt` 文件**，本节把它们逐个分配：要么落到上面某个块的具体行，要么写明排除理由。判定可复跑：
+
+```bash
+bash scripts/upstream-surface.sh --coverage localBook docs/parity/BOOKSHELF.md <上游根>
+bash scripts/upstream-surface.sh --coverage bookGroup docs/parity/BOOKSHELF.md <上游根>
+bash scripts/upstream-surface.sh --coverage readRecord docs/parity/BOOKSHELF.md <上游根>
+bash scripts/upstream-surface.sh --coverage bookshelfLayout docs/parity/BOOKSHELF.md <上游根>
+```
+
+（脚本按「基名在表格中出现」判定已分配，所以本节既是记录也是判据。四类分别跑完，每条都不再留未分配。）
+
+### 一、映射到上面某个块的行（29 个）
+
+| 上游文件 | 命中内容 | 落到哪一行 |
+| --- | --- | --- |
+| `ui/book/cache/manage/BookCacheManageScreen.kt` | 685 行界面 | D1 全部 7 行、D2 全部 13 行 |
+| `ui/book/cache/manage/BookCacheManageViewModel.kt` | 状态与选择模式 | D2「长按卡片进选择」 |
+| `ui/book/manage/BookshelfManageScreenViewModel.kt` | 1136 行状态机 | D3「整个页面」及其后 24 行 |
+| `data/repository/BookCacheManageRepository.kt` | `flowSelectableGroups()`（`:22`） | D1「分组筛选菜单」；缓存数据源 |
+| `data/repository/BookCacheCleanupRepository.kt` | `:3`/`:8` 调 `bookDao` | D2「卡片删除缓存按钮」 |
+| `data/repository/CacheBookDownloadRepository.kt` | `:3`/`:12` 缓存下载 | D2「卡片下载/停止按钮」 |
+| `data/repository/BookshelfSettingsRepository.kt` | `:56-60` 五个 `bookshelfLayout*` 键 | A2 布局设置类各行 |
+| `ui/config/bookshelfConfig/BookshelfManageScreenConfig.kt` | 20 行布局配置 | A2 布局设置类各行 |
+| `help/config/AppConfig.kt` | `:89-90` `bookshelfLayoutModePortrait`/`Landscape` | A2「布局模式」 |
+| `constant/PreferKey.kt` | `:57-58` 两个 bookshelfLayout 键 | A2「布局模式」 |
+| `utils/ContextExtensions.kt` | `:465-467` `val Context.bookshelfLayoutMode` | A2「布局模式」 |
+| `ui/main/bookshelf/BookshelfUiState.kt` | 186 行主屏状态 | A1「书架主屏」整体 |
+| `ui/main/bookshelf/BookshelfCoverPreloader.kt` | 288 行封面预加载 | A1 封面加载（无独立可见控件，属 A1 的封面渲染） |
+| `ui/main/bookshelf/BookGroupUi.kt` | 27 行分组 UI 模型 | A3 分组列表渲染 |
+| `ui/book/group/GroupViewModel.kt` | 140 行分组状态 | A3 分组管理 |
+| `data/repository/BookGroupMutationRepository.kt` | 分组增删改 | A3（分组管理的写入侧） |
+| `BookshelfAutoGroupRepository.kt` | `:48` `map(BookGroup::groupName)` | A3「AI 自动分组」 |
+| `data/repository/PrivateContentRepository.kt` | `:3`/`:17` 私密内容 | A3 私密分组、B 私密书 |
+| `ui/book/info/BookInfoRouteScreen.kt` | `:87-90` 私密解锁闸门、`:265` `runSourceCallback`、`:318` `runIntroJs` | B 块私密体系行、B 块回调/简介脚本行 |
+| `help/storage/BackupConfig.kt` | `:77` `dbKeyBookGroup`、`:82` `dbKeyReadRecord` | 交叉引用的备份往返口径 |
+| `help/storage/Restore.kt` | 恢复写入各表 | 交叉引用的备份往返口径 |
+| `data/local/preferences/LocalPreferences.kt` | `:54` `ENABLE_READ_RECORD` | C 块阅读记录开关 |
+| `ui/book/read/ReadRecordAliasDelegate.kt` | 全文件 104 行 | C 块 r286 新增的三行别名 |
+| `ui/book/read/ReadBookLoadDelegate.kt` | `:94`/`:175` `checkReadRecordAlias` | C 块「未知作者记录归属检查」 |
+| `ui/book/read/ReadBookContract.kt` | `:647`/`:649` 别名事件 | C 块「清除归属决定」 |
+| `ui/book/read/ReadBookScreen.kt` | `:156-161` 别名弹窗 | C 块三行别名 |
+| `ui/book/read/ReadBookViewModel.kt` | `:24`/`:154` 别名状态 | C 块三行别名 |
+| `ui/book/readRecord/ReadRecordOverviewViewModel.kt` | 109 行总览页状态 | C 块「阅读记录总览页」 |
+| `ui/book/readRecord/ReadRecordFormatter.kt` | `:6` 时长格式化 | C 块阅读时长显示 |
+
+### 二、映射到导航与入口行（9 个）
+
+| 上游文件 | 命中内容 | 落到哪一行 |
+| --- | --- | --- |
+| `ui/main/MainNavKey.kt` | `:139` `MainRouteReadRecord`、`:142` `MainRouteReadRecordOverview`、`:145` `MainRouteCache`、`:148` `MainRouteBookCacheManage` | C 块阅读记录入口、D1/D3 入口 |
+| `ui/main/MainNavigator.kt` | `:332`/`:381` 导航注册 | 同上 |
+| `ui/main/MainNavGraph.kt` | `:103-104` 图定义 | 同上 |
+| `ui/main/MainScreen.kt` | `:169-170` 路由分发、`:652` `OpenBookCacheManage` | D4「从『我的』进缓存管理页」 |
+| `ui/main/MainViewModel.kt` | `:86` 事件转发 | 同上 |
+| `ui/main/MainContract.kt` | `:57` 事件定义 | 同上 |
+| `ui/main/my/MyScreen.kt` | `:217` 阅读记录入口、`:221-226` 缓存管理入口 | D4「从『我的』进缓存管理页」、C 块阅读记录入口 |
+| `ui/main/my/MyViewModel.kt` | `:29` `OpenReadRecord`、`:30` `OpenBookCacheManage` | 同上 |
+| `ui/main/home/HomeScreen.kt` | `:153-154` 首页阅读记录入口 | C 块阅读记录入口 |
+
+### 三、已排除：数据层接线，界面由上面各块承载（18 个）
+
+不是界面，只是把 DAO 注进 Repository 再往上抛，功能本身已在前面的块里盘过。
+
+`data/repository/BookRepository.kt`（`:6`/`:17` 纯 import）、`data/repository/LocalBookRepository.kt`、`data/repository/SearchRepository.kt`（`:123`/`:128` `searchBookDao`）、`data/repository/ExploreRepository.kt`（`:92`）、`data/repository/AiToolRepository.kt`、`data/repository/BookSourceCallbackRepository.kt`、`data/repository/BookDomainRepositoryImpl.kt`、`data/repository/HomeDashboardRepository.kt`（`:3`/`:13` `readRecordDao`）、`domain/repository/BookDomainRepository.kt`（`:10` `getBookGroupAssignments`）、`domain/gateway/BookGroupMutationGateway.kt`、`domain/usecase/BookMigration.kt`（`:66`）、`domain/usecase/ChangeBookSourceUseCase.kt`、`domain/usecase/ChangeSourceSearchUseCase.kt`（`:377`）、`domain/usecase/FindBookshelfConflictUseCase.kt`（`:17-18`）、`domain/usecase/RemoveBookGroupAssignmentUseCase.kt`（`:5`）、`domain/usecase/UpdateBooksGroupUseCase.kt`（`:15`/`:23`）、`di/appModule.kt`、`di/appDatabaseModule.kt`。
+
+**排除理由**：这些文件的 `BookGroup` / `ReadRecord` 命中全部出现在函数签名、import 或依赖注入点，没有自己的界面。它们的行为在对应界面块里有行（换源在 B 块菜单动作、分组变更在 A3、阅读记录写入在 C）。
+
+### 四、已排除：DAO 与数据库定义，无界面（8 个）
+
+`data/AppDatabase.kt`（`:21-22` 实体注册）、`data/dao/BookDao.kt`（`:12`/`:37` `interface BookDao`）、`data/dao/BookGroupDao.kt`（`:9`/`:13`）、`data/dao/ReadRecordDao.kt`（`:10-11`）、`data/dao/SearchBookDao.kt`（`:12`）、`data/dao/RssArticleDao.kt`（`:23` SQL 里出现 `rssReadRecords`）、`data/dao/RssReadRecordDao.kt`（`:4`/`:7`）、`service/readaloud/ReadAloudBookSession.kt`（朗读会话，属朗读模块，不是书架界面）。
+
+**排除理由**：Room DAO 只有方法签名与 SQL，本地对应物是 `data/*Repository.ets` 里的 relationalStore 调用，没有可以对盘的 UI。朗读会话属朗读功能，归 `httpTTS` 类别。
+
+### 五、已排除：实体与领域模型，只是数据形状（13 个）
+
+`data/entities/readRecord/ReadRecordAliasDecision.kt`（`:4-7` `enum class ReadRecordAliasAction { MERGE, KEEP }`）、`ReadRecordDetail.kt`、`ReadRecordSession.kt`、`ReadRecordIdentity.kt`、`ReadRecordTimeTotals.kt`、`ReadRecordTimelineDay.kt`、`ReadRecordRepairReport.kt`、`domain/model/BookGroupAssignment.kt`、`domain/model/BookGroupMutation.kt`（`NewBookGroup` / `BookGroupUpdate`）、`domain/model/BookMatchKey.kt`（`:3` 复用 `ReadRecordIdentity` 折叠空白）、`help/book/BookExtensions.kt`（`isEpub` / `isLocal` 之类的类型判断扩展）、`utils/RegexExtensions.kt`（`:36` 正则工具）、`feature/reader/core/navigation/ReaderPartialPagePolicy.kt`（`:7` 阅读器分页策略）。
+
+**排除理由**：`data class` / `enum` / 工具扩展，字段形状已在卷首「上游表结构」与各块「差异说明」里体现（本地 `model/ReadRecord.ets`、`model/Book.ets`、`model/BookGroup` 系列逐字段对齐过），单独列行只是把字段再抄一遍。
+
+### 六、已排除：关键词误命中，属别的类别（11 个）
+
+RSS 侧 7 个：`ui/rss/article/RssSortRouteScreen.kt`、`ui/rss/article/RssSortScreen.kt`、`ui/rss/article/RssSortViewModel.kt`、`ui/rss/read/RssJsExtensions.kt`（`:158`）、`data/repository/RssReadRecordRepository.kt`、`data/entities/RssArticle.kt`（`:66`）、`data/entities/RssReadRecord.kt`（`:8-9`）。
+另有 `data/entities/RssStar.kt`（`:58`）、`ui/association/AddToBookshelfDialog.kt`（182 行，网络书 URL 解析后加入书架，属书源/导入侧）、`data/repository/manga/MangaReaderDataRepository.kt`（`:8-9`，属漫画类别 `mangaConfig`）。
+
+**排除理由**：前 8 个是 RSS 的排序与阅读记录，与本地书架无关（`readRecord` 关键词把 RSS 的 `rssReadRecords` 表一起捞进来了）；`AddToBookshelfDialog` 是「粘贴网址加书架」的独立弹窗，本地无对应，但它属于 `bookSource` / 导入流程，不在本表四类里；`MangaReaderDataRepository` 属漫画。
+
+### 七、未分配
+
+**0 个。** 114 个上游接触面文件全部分配完毕（映射到行 38 个 + 排除 76 个）。
+
+---
 
 ## 交叉引用
 

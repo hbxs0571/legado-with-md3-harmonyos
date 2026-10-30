@@ -1,14 +1,21 @@
 # ZIP 兼容总账
 
-> **本目录已解冻（2026-10-30，r284）**
+> **本目录已解冻（2026-10-30，r284），三张表已完成结构性重盘（r286）**
 >
-> `STATUS.md`、`BOOKSHELF.md`、`ZIP-BOOKMARK.md`、`READER-CONFIG.md` 四份对照表恢复可编辑。
+> `STATUS.md`、`BOOKSHELF.md`、`ZIP-BOOKMARK.md`、`READER-CONFIG.md` 四份对照表可编辑。
 >
-> **解冻依据**：[关系型存储迁移计划](../RELATIONAL-STORE-MIGRATION.md) 五个阶段全部完工（基础设施与前三批仓储 r281–r283，preferences 清理 r284），字段结构已定稿。原先的冲突——`book_marks` 的 7 个平铺列（`chapterPosition`、`endPosition`、`selectedText`、`contextBefore`、`contextAfter`、`effect`、`color`）要被合并成 `anchorJson` 与 `styleJson`——已经落地，`ZIP-BOOKMARK.md` 里引用旧列名的 12 处现已知确定型，不再有「写完又要作废」的风险。
+> **解冻依据**：[关系型存储迁移计划](../RELATIONAL-STORE-MIGRATION.md) 五个阶段全部完工（基础设施与前三批仓储 r281–r283，preferences 清理 r284），字段结构已定稿。原先的冲突——`book_marks` 的 7 个平铺列（`chapterPosition`、`endPosition`、`selectedText`、`contextBefore`、`contextAfter`、`effect`、`color`）要被合并成 `anchorJson` 与 `styleJson`——已经落地。
 >
-> **但三张表的内容尚未重盘，不能当作当前事实读。** 解冻只解除了「禁止编辑」，没有重新核实：表里的行、状态、引用列名都还是迁移之前的版本。`ZIP-BOOKMARK.md` 引用 `chapterPosition` / `endPosition` / `selectedText` / `effect` / `color` 的地方，现在的真实存储是 `anchorJson` / `styleJson` 两个 JSON 列；`BOOKSHELF.md` 与 `READER-CONFIG.md` 也未按迁移后的字段结构复核。**重盘是独立的下一项工作**，届时按「按上游目录切 + 覆盖证明」的新方法一次做完，不返工。
+> **重盘范围与边界（r286，2026-10-30）**：三张表做的是**结构性重盘**，不是逐行重核。已做四件事：
 >
-> 解冻不影响 `KEYWORDS.md`（检索词表）——重盘时仍靠它生成接触面清单。
+> 1. **盘点单位改为「整个界面」**：只要涉及某界面就把它完整列进表，未迁移的显式标 `未接`。`ZIP-BOOKMARK.md` 因此新增 F 块（长按选词菜单 34 行），`BOOKSHELF.md` 因此新增 D 块（缓存管理页 + 书架管理页 53 行）。
+> 2. **修正迁移后失效的字段引用**：`progress` 改派生、`readerPositionVersion` / `androidCharacterPosition` / `bookId` / `endPosition` 已删、`styleJson` 不再拍平、`double` 已删除、`preferences` → SQLite 两张表。
+> 3. **三张表各补「覆盖证明」节**，逐个分配上游接触面文件，未分配为 0：`bookmark` 63/63、`readConfig` 76/76、`localBook` 27/27、`bookGroup` 40/40、`readRecord` 63/63、`bookshelfLayout` 10/10。
+> 4. **`KEYWORDS.md` 的 `readConfig` 关键词修正**：`backupIgnoreReadConfig` 只命中 2 个文件（等于自证成功），改为 `ReadBookConfig|ReadSettings`（76 个）。
+>
+> **未做的部分，读表时注意**：`BOOKSHELF.md` A1–C 的 263 行、`READER-CONFIG.md` A–G 的 189 行、`ZIP-BOOKMARK.md` A–E 的 83 行，都是 r277–r280 写下的**迁移前证据，未逐行复核**。表头已逐份写明这一边界。要当当前事实用，需按上游目录分派逐块重核——那时按 `scripts/upstream-surface.sh --coverage` 的未分配清单验收，不靠「表里没有 `待定`」结案。
+>
+> 解冻不影响 `KEYWORDS.md`（检索词表）——它是生成接触面清单的依据，改关键词等于改口径，改前先看该文件末尾的说明。
 
 本表按 ZIP 数据类别记录 Android 备份兼容度，共 28 类，键名与[备份恢复](../BACKUP-RESTORE.md)的忽略项一致，检索词见[对照关键词](KEYWORDS.md)。
 
@@ -117,3 +124,5 @@
 改本表时同步改[对照关键词](KEYWORDS.md)与 `BackupRepository.ets` 的 `categoryOptions`，三者用同一套键名。检索接触面用 `scripts/upstream-surface.sh <类别键名>`，它只打印清单，不生成表格。
 
 **盘点单位是界面，不是按钮**：盘某个功能时，只要涉及某个界面（进了这个页、开了这个弹层、这个界面被改动），就要把该界面的完整构成列进表，未迁移的显式标 `未接`，不只列与本功能相关的按钮。定义与反例见[术语表](../GLOSSARY.md)的 **界面清单**、[编码规约](../CODE-CONVENTIONS.md)第四节。
+
+**每轮盘点结束必须当轮落盘，并重跑覆盖证明**：明细表写完就跑 `scripts/upstream-surface.sh --coverage <类别> <表格路径>`，未分配不为 0 就是没盘完；「表里没有 `待定`」只证明表格自洽，不证明上游被覆盖。
