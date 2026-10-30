@@ -79,6 +79,25 @@ TTS、WebDAV 服务、在线书源抓取、RSS 抓取和查词业务均不随本
 
 本表对齐 `entry/src/main/ets/data/BackupRepository.ets` 的 `categoryOptions`，**28 类一一对应**，缺一类就是漏一类。核对方法：本表行数与代码里 `categoryOptions` 的项数必须相等，键名逐个相同。
 
+「上游中文名」列取自上游 `app/src/main/res/values-zh-rCN/strings.xml`，即 Android 备份设置界面上勾选项显示的原文，**不是我自拟的译名**。键名是代码里的 `categoryOptions` 键（必须用它对代码），中文名只用于辨认「这条数据到底是什么」。有一处容易认错：`themeMode` 在上游叫**深色模式**，不是「主题模式」——它只是夜间开关，主题配色在 `themeConfig`。
+
+**28 类分两段，看 `ZIP 条目` 列就能分辨**：
+
+- **前 9 类（`localBook` … `mangaConfig`）是配置忽略键**，对应上游 `BackupConfig.ignoreKeys`，作用对象是 `config.xml` 里的偏好键，备份时按类别决定要不要把这些键写进 `config.xml`。
+- **后 19 类（`bookmark` … `server`）是数据库忽略键**，对应上游 `BackupConfig.dbIgnoreKeys`，作用对象是各自独立的 JSON 文件。
+
+**一个类别可能对应多个文件**，别以为一类就是一个文件：
+
+| 类别键名 | 对应文件 | 上游依据 |
+| --- | --- | --- |
+| `bookmark` | `bookmark.json` + `bookMarking.json` | `Backup.kt:152-155`，注释原文「书签与划线/想法笔记（book_marks）视为一体，统一受既有 bookmark 忽略项控制」 |
+| `readRecord` | `readRecord.json` + `readRecordDetail.json` + `readRecordSession.json` | 一个类三个文件，所以样本条数是 575 / 313 / 39376 |
+| `readConfig` | `readConfig.json` + `shareReadConfig.json` + `config.xml` 中 85 个键 | 三个来源：单书配置、分享方案、全局偏好 |
+| `themeConfig` | `themeConfig.json` + `config.xml` 中 52 个键 | 同上 |
+| `httpTTS` | `httpTTS.json` + `httpTtsVoices.json` | 朗读源与音色分两个文件 |
+| `localBook` | `bookshelf.json` | 该类只对应这一个文件，但上游另有 `backupIgnoreLocalBook`（`BackupConfig.kt:455-475`）单独过滤 `isLocal` 的书 |
+| `coverConfig` | `coverRule.json` | 文件名是 `coverRule.json`，不叫 `coverConfig.json`，容易找错 |
+
 核对命令（在仓库根执行，两个数字必须都是 28）：
 
 ```bash
@@ -94,36 +113,36 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 恢复侧具名分支实测只有这 9 个 `entry.name ===` 判断：`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`，其余全部走 `copyPreservedEntries`。
 
-| # | 类别键名 | ZIP 条目 | 样本条数 | 本地原生功能 | ZIP 接入 | 队列位置 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | `localBook` | `bookshelf.json` | **658** | 书架、TXT/EPUB 阅读、进度保存 | **部分接入**：书目/进度/缺正文标记可映射；不打包正文；复杂冲突待验 | ZIP 映射 1 |
-| 2 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | 12 / 96 键 / 370 项 | 阅读配置有原生模型与持久化 | **部分接入**：读入 46 个 `config.xml` 键；`shareReadConfig` 未转多套方案 | ZIP 映射 2 |
-| 3 | `themeMode` | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`，333 行） | **未接入**：`themeMode` 键读写都未接 | 待接 |
-| 4 | `themeConfig` | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验；Android 配色/透明度 JSON 未映射 | ZIP 映射 5 |
-| 5 | `coverConfig` | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，149 行，3 处 `onUnavailableAction`） | **未接入**：14 个键读写均未接 | 待接 |
-| 6 | `bookshelfLayout` | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`） | **部分接入**：写出 9 键已接；读入侧未接 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A2 |
-| 7 | `showRss` | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **未接入**：`showRss` 键读写都未接 | 待接 |
-| 8 | `threadCount` | `config.xml` | 370 项内 1 键 | **无对应概念**（HOS 无并发线程数设置） | **未接入**：键读写都未接 | 安全兼容 |
-| 9 | `mangaConfig` | `config.xml` | 370 项内 32 键 | 仅设置页有漫画相关条目文字，无漫画阅读 | **未接入**：32 个键读写都未接 | 安全兼容；漫画业务候选 |
-| 10 | `bookmark` | `bookmark.json`、`bookMarking.json` | 344 / **样本缺 `bookMarking`** | 原生书签与标注仓储、阅读入口 | **已接入**：N 端双向验证通过（新增 1、覆盖 1），合并语义 | ZIP 映射 3 |
-| 11 | `bookGroup` | `bookGroup.json` | 28 | 原生分组模型、管理、编辑与筛选 | **已接入**：根级 JSON 可导出导入；外部 ZIP 冲突合并待验 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A3 |
-| 12 | `bookSource` | `bookSource.json` | 904 | 有页面壳，规则解释与抓取未迁移 | **仅归档**：不执行规则 | 安全兼容 11；抓取业务候选 |
-| 13 | `rssSource` | `rssSources.json` | 28 | 订阅页 UI 已有，抓取未迁移 | **仅归档** | 安全兼容 12；抓取业务候选 |
-| 14 | `rssStar` | `rssStar.json` | **样本缺** | **无**（`grep rssStar` 零命中） | **仅归档** | 安全兼容 |
-| 15 | `replaceRule` | `replaceRule.json` | 40 | 规则模型/仓储 + 阅读时替换链路 | **已接入**：写出根级 JSON、恢复逐条导入；非空应用备份往返待验 | ZIP 映射 7 |
-| 16 | `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | 575 / 313 / **39376** | 原生会话、日明细、按书汇总三层已接通 | **仅归档**：三个条目都不导入原生仓储 | ZIP 映射 6 |
-| 17 | `searchHistory` | `searchHistory.json` | 737 | 阅读器搜索历史有原生仓储（`search_content_history` 表） | **仅归档**：未导入 | ZIP 映射 8 |
-| 18 | `sourceSub` | `sourceSub.json` | **样本缺** | 有页面壳 | **仅归档** | 安全兼容 |
-| 19 | `txtTocRule` | `txtTocRule.json` | 40 | 规则仓储、管理页、切章、分卷、书架更新目录 | **已接入**：合成 ZIP 单条恢复与空规则备份有记录；非空应用备份往返待验 | ZIP 映射 9 |
-| 20 | `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | 1 / 1 | 朗读设置界面存在，TTS 服务未迁移 | **仅归档**：不调用服务 | 安全兼容；TTS 业务候选 |
-| 21 | `keyboardAssists` | `keyboardAssists.json` | 32 | **无**（`grep keyboardAssists` 零命中） | **仅归档** | 安全兼容；键位业务候选 |
-| 22 | `dictRule` | `dictRule.json` | 28 | 列表与编辑 UI 有壳（`pages/ProfileSubPages.ets`），存储与查词未迁移 | **仅归档** | 安全兼容 10；字典业务候选 |
-| 23 | `homepageModules` | `homepageModules.json` | **样本缺** | 首页基础组件已实现，模块管理未迁移 | **仅归档** | 安全兼容 |
-| 24 | `homepageCustomSets` | `homepageCustomSets.json` | 1 | 自定义集合管理未迁移 | **仅归档** | 安全兼容；自定义业务候选 |
-| 25 | `highlightRule` | `highlightRule.json` | **样本缺** | 规则模型、`highlightRules` 表、正则匹配、分页/滚动两渲染 | **已接入**：N 端双向验证通过；合并语义，与上游 `replaceAll` 不同 | ZIP 映射已验 |
-| 26 | `highlightTagRule` | `highlightTagRule.json` | **样本缺** | 有列表页与编辑页（`pages/ProfileSubPages.ets:2244` 起 207 行），**13 处 `onUnavailableAction`，无仓储** | **仅归档** | 安全兼容 |
-| 27 | `tagGroupRule` | `tagGroupRule.json` | **样本缺** | **无**（`grep tagGroup` 零命中） | **仅归档** | 安全兼容 |
-| 28 | `server` | `servers.json` | 空文件 | WebDAV/服务端同步未迁移 | **仅归档**：数据不透明，不尝试解密或连接 | 安全兼容；WebDAV 业务候选 |
+| # | 类别键名 | 上游中文名 | ZIP 条目 | 样本条数 | 本地原生功能 | ZIP 接入 | 队列位置 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `localBook` | 本地书籍 | `bookshelf.json` | **658** | 书架、TXT/EPUB 阅读、进度保存 | **部分接入**：书目/进度/缺正文标记可映射；不打包正文；复杂冲突待验 | ZIP 映射 1 |
+| 2 | `readConfig` | 阅读界面 | `readConfig.json`、`shareReadConfig.json`、`config.xml` | 12 / 96 键 / 370 项 | 阅读配置有原生模型与持久化 | **部分接入**：读入 46 个 `config.xml` 键；`shareReadConfig` 未转多套方案 | ZIP 映射 2 |
+| 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`，333 行） | **未接入**：`themeMode` 键读写都未接 | 待接 |
+| 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验；Android 配色/透明度 JSON 未映射 | ZIP 映射 5 |
+| 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，149 行，3 处 `onUnavailableAction`） | **未接入**：14 个键读写均未接 | 待接 |
+| 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`） | **部分接入**：写出 9 键已接；读入侧未接 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A2 |
+| 7 | `showRss` | 显示订阅 | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **未接入**：`showRss` 键读写都未接 | 待接 |
+| 8 | `threadCount` | 线程数 | `config.xml` | 370 项内 1 键 | **无对应概念**（HOS 无并发线程数设置） | **未接入**：键读写都未接 | 安全兼容 |
+| 9 | `mangaConfig` | 漫画设置 | `config.xml` | 370 项内 32 键 | 仅设置页有漫画相关条目文字，无漫画阅读 | **未接入**：32 个键读写都未接 | 安全兼容；漫画业务候选 |
+| 10 | `bookmark` | 书签 | `bookmark.json`、`bookMarking.json` | 344 / **样本缺 `bookMarking`** | 原生书签与标注仓储、阅读入口 | **已接入**：N 端双向验证通过（新增 1、覆盖 1），合并语义 | ZIP 映射 3 |
+| 11 | `bookGroup` | 书架分组 | `bookGroup.json` | 28 | 原生分组模型、管理、编辑与筛选 | **已接入**：根级 JSON 可导出导入；外部 ZIP 冲突合并待验 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A3 |
+| 12 | `bookSource` | 书源 | `bookSource.json` | 904 | 有页面壳，规则解释与抓取未迁移 | **仅归档**：不执行规则 | 安全兼容 11；抓取业务候选 |
+| 13 | `rssSource` | 订阅源 | `rssSources.json` | 28 | 订阅页 UI 已有，抓取未迁移 | **仅归档** | 安全兼容 12；抓取业务候选 |
+| 14 | `rssStar` | RSS 收藏 | `rssStar.json` | **样本缺** | **无**（`grep rssStar` 零命中） | **仅归档** | 安全兼容 |
+| 15 | `replaceRule` | 替换规则 | `replaceRule.json` | 40 | 规则模型/仓储 + 阅读时替换链路 | **已接入**：写出根级 JSON、恢复逐条导入；非空应用备份往返待验 | ZIP 映射 7 |
+| 16 | `readRecord` | 阅读记录 | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | 575 / 313 / **39376** | 原生会话、日明细、按书汇总三层已接通 | **仅归档**：三个条目都不导入原生仓储 | ZIP 映射 6 |
+| 17 | `searchHistory` | 搜索历史 | `searchHistory.json` | 737 | 阅读器搜索历史有原生仓储（`search_content_history` 表） | **仅归档**：未导入 | ZIP 映射 8 |
+| 18 | `sourceSub` | 书源订阅 | `sourceSub.json` | **样本缺** | 有页面壳 | **仅归档** | 安全兼容 |
+| 19 | `txtTocRule` | TXT 目录规则 | `txtTocRule.json` | 40 | 规则仓储、管理页、切章、分卷、书架更新目录 | **已接入**：合成 ZIP 单条恢复与空规则备份有记录；非空应用备份往返待验 | ZIP 映射 9 |
+| 20 | `httpTTS` | HTTP TTS | `httpTTS.json`、`httpTtsVoices.json` | 1 / 1 | 朗读设置界面存在，TTS 服务未迁移 | **仅归档**：不调用服务 | 安全兼容；TTS 业务候选 |
+| 21 | `keyboardAssists` | 键盘辅助 | `keyboardAssists.json` | 32 | **无**（`grep keyboardAssists` 零命中） | **仅归档** | 安全兼容；键位业务候选 |
+| 22 | `dictRule` | 字典规则 | `dictRule.json` | 28 | 列表与编辑 UI 有壳（`pages/ProfileSubPages.ets`），存储与查词未迁移 | **仅归档** | 安全兼容 10；字典业务候选 |
+| 23 | `homepageModules` | 首页模块 (JSON) | `homepageModules.json` | **样本缺** | 首页基础组件已实现，模块管理未迁移 | **仅归档** | 安全兼容 |
+| 24 | `homepageCustomSets` | 首页自定义 | `homepageCustomSets.json` | 1 | 自定义集合管理未迁移 | **仅归档** | 安全兼容；自定义业务候选 |
+| 25 | `highlightRule` | 高亮规则 | `highlightRule.json` | **样本缺** | 规则模型、`highlightRules` 表、正则匹配、分页/滚动两渲染 | **已接入**：N 端双向验证通过；合并语义，与上游 `replaceAll` 不同 | ZIP 映射已验 |
+| 26 | `highlightTagRule` | 标签规则 | `highlightTagRule.json` | **样本缺** | 有列表页与编辑页（`pages/ProfileSubPages.ets:2244` 起 207 行），**13 处 `onUnavailableAction`，无仓储** | **仅归档** | 安全兼容 |
+| 27 | `tagGroupRule` | 标签分组规则 | `tagGroupRule.json` | **样本缺** | **无**（`grep tagGroup` 零命中） | **仅归档** | 安全兼容 |
+| 28 | `server` | 服务器配置 | `servers.json` | 空文件 | WebDAV/服务端同步未迁移 | **仅归档**：数据不透明，不尝试解密或连接 | 安全兼容；WebDAV 业务候选 |
 
 **统计（四档，合计 28）**：
 
@@ -136,7 +155,33 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 「未接入」与「仅归档」的区别只在本地有没有那页 UI：前 5 类本地有设置页可改值，只是那些值既不写进 `config.xml`、也不从 `config.xml` 读回；后 14 类连页面都没有。两者对 Android 用户的实际结果一样——换到 HarmonyOS 后这些设置不生效。
 
-**与 r257 旧版的差异**：旧版 18 行，缺 `themeMode`、`coverConfig`、`bookshelfLayout`、`showRss`、`threadCount`、`mangaConfig`、`rssStar`、`sourceSub`、`homepageModules`、`highlightTagRule`、`tagGroupRule` 共 11 类；旧版「通用偏好设置」一行现拆成 6 类（`themeMode`/`coverConfig`/`bookshelfLayout`/`showRss`/`threadCount`/`mangaConfig`），因为它们在代码里是 6 个独立的 `categoryOptions` 项，各自可单独忽略。
+**与 r257 旧版的差异**：旧版 18 行用的全是中文功能名（「书架、书籍元数据与进度」「通用偏好设置」「替换净化规则」），新版改用代码键名。两版的数据没有丢，只是切法变了，对应关系如下：
+
+| 旧版功能名（18 行） | 新版类别（28 行） |
+| --- | --- |
+| 书架、书籍元数据与进度 | `localBook` 本地书籍 |
+| 阅读配置 | `readConfig` 阅读界面 |
+| 书签、划线与笔记 | `bookmark` 书签（含 `bookmark.json` 与 `bookMarking.json` 两个文件） |
+| **通用偏好设置** | **拆成 6 类**：`themeMode` 深色模式、`coverConfig` 封面设置、`bookshelfLayout` 书架布局、`showRss` 显示订阅、`threadCount` 线程数、`mangaConfig` 漫画设置 |
+| 主题配置 | `themeConfig` 主题配置 |
+| 书架分组 | `bookGroup` 书架分组 |
+| 首页自定义分组 | `homepageCustomSets` 首页自定义 |
+| 替换净化规则 | `replaceRule` 替换规则 |
+| 完整阅读记录与会话 | `readRecord` 阅读记录（三个文件） |
+| 搜索历史 | `searchHistory` 搜索历史 |
+| TXT 目录规则 | `txtTocRule` TXT 目录规则 |
+| 阅读正文高亮规则 | `highlightRule` 高亮规则 |
+| 字典规则 | `dictRule` 字典规则 |
+| 书源 | `bookSource` 书源 |
+| RSS 订阅源 | `rssSource` 订阅源 |
+| 在线朗读源与音色 | `httpTTS` HTTP TTS（两个文件） |
+| 键盘辅助映射 | `keyboardAssists` 键盘辅助 |
+| 服务端配置 | `server` 服务器配置 |
+| （旧版没有） | `rssStar` RSS 收藏、`sourceSub` 书源订阅、`homepageModules` 首页模块、`highlightTagRule` 标签规则、`tagGroupRule` 标签分组规则 |
+
+算术核对：旧版 18 行 −「通用偏好设置」1 行 + 拆出的 6 类 = 23 行，再加旧版没有的 5 类 = **28 行**，与代码 `categoryOptions` 项数一致。
+
+旧版之所以只有 18 行，是因为它把 `config.xml` 里的 6 类偏好合并成了一个「通用偏好设置」；新版拆开，是因为它们在代码里是 6 个独立的 `categoryOptions` 项，**各自可以单独勾选忽略**，合成一行就没法派活。
 
 状态修正：`bookGroup.json` 已列入原生分组映射，而不是“没有原生分组功能”；本地阅读记录三层仓储已接入，但 Android ZIP 历史仍未映射。r255 在 E 端验证 `readConfig × themeConfig` 四种包含/忽略组合；这不代表所有阅读/主题字段或外部 Android ZIP 已完整往返。
 
