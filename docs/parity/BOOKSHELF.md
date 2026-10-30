@@ -15,8 +15,8 @@
 
 - 盘点日期：2026-10-30（r279 重盘，作废 r277 的 96 行版；r280 二轮补漏）
 - 结构性重盘：2026-10-30（r286，加覆盖证明、修迁移后失效的字段引用）
-- 上游基线：`N:\HarmonyProjects\legado-with-MD3`（Android，Compose），路径均相对 `app/src/main/java/io/legado/app/`
-- 本地实现：`N:\HarmonyProjects\legado-with-md3-harmonyos`，路径均相对 `entry/src/main/ets/`
+- 上游基线：`<上游根>`（Android，Compose）——指法见 [KEYWORDS.md](KEYWORDS.md) 的用法节；路径均相对 `app/src/main/java/io/legado/app/`
+- 本地实现：本仓库根，路径均相对 `entry/src/main/ets/`
 - 对应 ZIP 类别：`localBook`、`bookGroup`、`readRecord`、`bookshelfLayout`，见 [ZIP 兼容总账](STATUS.md)
 
 ## 为什么重盘
@@ -485,7 +485,7 @@ bash scripts/upstream-surface.sh --coverage readRecord docs/parity/BOOKSHELF.md 
 bash scripts/upstream-surface.sh --coverage bookshelfLayout docs/parity/BOOKSHELF.md <上游根>
 ```
 
-（脚本按「基名在表格中出现」判定已分配，所以本节既是记录也是判据。四类分别跑完，每条都不再留未分配。）
+（`<上游根>` 指法见 [KEYWORDS.md](KEYWORDS.md) 的用法节。脚本按「基名在表格中出现」判定已分配，所以本节既是记录也是判据。四类分别跑完，每条都不再留未分配。）
 
 ### 一、映射到上面某个块的行（29 个）
 

@@ -6,7 +6,18 @@
 
 ## 用法
 
-在上游仓库根目录执行（`legado-with-MD3` 为 Android 源码根）：
+**`<上游根>` 的定义**（下文与本目录三张对照表的复现命令都用这个占位符）：本地 Android 源码根，即包含 `app/src/main/java` 的那一级目录，目录名 `legado-with-MD3`，**不含 `app/`**。
+
+```
+<上游根>/app/src/main/java      ← 检索起点
+```
+
+本机现有两份同源代码，任选其一，结果一致（2026-10-30 实测六类关键词命中数与命中行数完全相同）：
+
+- `legado-with-MD3`：本地 Git 仓库，HEAD `bba5c64`，比 r258 移交点（`67970a1`）新 26 个提交
+- `legado-n-transfer-2026-10-28-r258/unpacked/src01/legado-with-MD3`：r258 移交包里的工作树快照，不含 `.git`
+
+在 `<上游根>` 下执行：
 
 ```
 grep -rlE "<关键词>" app/src/main/java --include=*.kt

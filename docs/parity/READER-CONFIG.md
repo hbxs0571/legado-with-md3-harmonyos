@@ -457,6 +457,8 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG.md <上游根>
 ```
 
+（`<上游根>` 指法见 [KEYWORDS.md](KEYWORDS.md) 的用法节。）
+
 > **旧关键词的教训**：本表原先用 `backupIgnoreReadConfig` 检索，只命中 2 个文件（`help/storage/BackupConfig.kt`、`help/storage/Backup.kt`），等于「2 个文件全过 = 覆盖通过」，永远测不出缺口。已改用两个配置来源文件的名字作检索词。
 
 ### 4.1 映射到 A–G 块的行（36 个）

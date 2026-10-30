@@ -21,7 +21,7 @@
 
 ## 盘面
 
-上游接触面用 `scripts/upstream-surface.sh bookmark /n/HarmonyProjects/legado-with-MD3` 枚举：
+上游接触面用 `scripts/upstream-surface.sh bookmark <上游根>` 枚举（`<上游根>` 指法见[对照关键词](KEYWORDS.md)的用法节）：
 
 - 关键词 `Bookmark|BookMarking`（见[对照关键词](KEYWORDS.md)），**内容引用命中 63 个 .kt 文件**、646 行；
 - 若按类别键名当文件名去找只有 20 个，**差额 43 个只能靠内容引用找到**——这正是 [编码规约](../CODE-CONVENTIONS.md) 第四节强调「不按文件名划」的实例。
@@ -254,6 +254,8 @@
 ```bash
 bash scripts/upstream-surface.sh --coverage bookmark docs/parity/ZIP-BOOKMARK.md <上游根>
 ```
+
+（`<上游根>` 指法见[对照关键词](KEYWORDS.md)的用法节。）
 
 r286 实跑：上游接触面 **63 个 `.kt`**，已分配 **63**，未分配 **0**。下表是这份分配本身——不是行数统计，是逐文件的处置。
 
