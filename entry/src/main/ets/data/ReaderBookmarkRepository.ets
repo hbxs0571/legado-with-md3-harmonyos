@@ -33,9 +33,11 @@ export class ReaderBookmarkRepository {
       } finally {
         resultSet.close();
       }
-    } catch (_) {
-      // DB 打不开或表不存在：回退读 preferences，界面不会突然变空
-      return ReaderBookmarkRepository.loadFromPreferences(context);
+    } catch (error) {
+      // 不再回退读 preferences：老数据已由 RdbCleanup 清掉，回退只会读到空。
+      // 记日志并返回空表，调用方按「没有书签」处理，与上游 DAO 读到空表一致。
+      console.error(`书签读取失败：${error instanceof Error ? error.message : String(error)}`);
+      return [];
     }
   }
 

@@ -444,11 +444,44 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 - 任一步抛错 → `rollBack()`，**不写标记**，老 `preferences` 数据原样保留。
 - 下次启动重新尝试（标记不存在）。
-- 连续失败不阻塞应用启动：搬迁失败时仓储回退到读 `preferences`，界面提示一次「数据迁移未完成」。
+- 连续失败不阻塞应用启动：仓储读 DB 失败时记日志并返回空表（上游 DAO 读不到也是空表），界面不崩。
 
-### 老数据不删
+### 老数据清理（第 5 阶段）
 
-搬迁成功后**不删** `preferences` 里的老数据，保留至少一个大版本作为回滚保险。清理时机另议，不在本计划内。
+搬迁本身**只复制不剪切**，老数据由单独的清理步骤在三批标记全部写齐之后统一删掉。
+
+**上游依据**：上游 `SettingsRepository.kt:34-37` 用 `SharedPreferencesMigration(context, "${context.packageName}_preferences")`，其 `cleanUp()` 默认实现**删除源 SharedPreferences 文件**；只有 `LocalUiStatusMigration`（`SettingsRepository.kt:56`）显式写了 `override suspend fun cleanUp() = Unit` 才保留。所以「和上游保持一致」= 删掉已迁走的键，保留未迁的键。
+
+**实现**（`entry/src/main/ets/data/RdbCleanup.ets`）：
+
+- 标记键 `rdb_cleanup_v1_1`（preferenceName `legado_rdb_cleanup`），删完写标记，只删一次。
+- 前置检查：三个搬迁标记 `rdb_migrated_v1_1` / `v1_2` / `v1_3` 必须全部为真，否则直接返回，**不会误删未搬的数据**。
+- 失败只吞异常（`console.error`），不写标记、不阻塞启动，下个版本重试。
+
+删除清单：
+
+| 处理方式 | preferences 文件 | 说明 |
+| --- | --- | --- |
+| 整文件删 | `legado_reader_bookmarks` | → `bookmarks` |
+| 整文件删 | `legado_reader_markings` | → `book_marks` |
+| 整文件删 | `legado_reader_search_history` | → `search_content_history` |
+| 整文件删 | `legado_txt_toc_rules` | → `txtTocRules` |
+| 整文件删 | `book_group_store` | → `book_groups` |
+| 整文件删 | `legado_reader_highlight_rules` | → `highlightRules` |
+| 整文件删 | `legado_book_content_processes` | → `book_content_processes` |
+| 整文件删 | `legado_local_books` | → `books` + `chapters` |
+| 整文件删 | `legado_read_time_records` | → `readRecordSession`（更老的扁平格式） |
+| 按键删 | `legado_read_records` → 删 `sessions_v1` | 保留 `enabled`：上游 `ReadRecordRepository.kt:78-80` 也把它放偏好 |
+| 按键删 | `legado_replace_rules` → 删 `rules_v1`、`book_overrides_v1` | 保留 `default_enabled_v1`、`sort_mode_v1`：上游 `PreferKey.replaceEnableDefault` / `replaceSortMode` 都在偏好里 |
+
+不删的：`legado_rdb_migration`（搬迁标记）、`legado_rdb_cleanup`（清理标记）、`legado_android_backup_options`（备份选项）、以及「不迁的部分」表里那 6 个仓储自己的偏好文件。
+
+**连带改动**：
+
+1. `ReadRecordRepository.migrateLegacy` 由「`pages/Index.ets` 首屏调用」改为 `RdbMigration.migrateThirdBatch` 内的 `migrateLegacyInto(context, store)`——否则清理先跑就会把这批老格式记录连根删掉。它现在不开事务、不写标记、不清老键，全部交给 RdbMigration 与 RdbCleanup。
+2. `migrateThirdBatch` 内顺序固定为 `ReadRecordRepository.migrateFromPreferences` → `ReadRecordRepository.migrateLegacyInto` → `BookRepository.migrateFromPreferences`。**整表覆盖必须先于追加**：`BookRepository.migrateFromPreferences` 走的是整表重建，放后面会连带清掉前面的结果（实际影响是 books/chapters 与 readRecord 无关，但顺序写死以免将来改坏）。
+3. 八个仓储的 `load()` 删除「DB 失败回退 preferences」分支，改为记日志 + 返回空表。`loadFromPreferences` / `loadLegacy` 方法本身保留，搬迁路径还要用。
+4. `book_overrides_v1` 搬进 `books.readConfig.useReplaceRule`（上游存 `Book.config.useReplaceRule`，`Book.kt:482`）。`ReplaceRuleRepository.isBookEnabled(book)` 改为纯函数，照抄上游 `Book.getUseReplaceRule(defaultReplaceEnabled)`（`Book.kt:250-262`）：有显式值用它，没有则图片类与 epub 本地书返 false，其余跟随全局默认。写入口 `setBookEnabled` / `clearBookEnabledOverride` 只改内存对象，落库由调用方 `BookRepository.saveImportedBooks` 负责——`ReplaceRuleRepository` 不能 import `BookRepository`（后者已 import 前者，会循环）。
 
 ### 批次独立性
 
@@ -517,9 +550,9 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 | 2 | 第二批 5 个仓储 | ✅（已完成，r282） |
 | 3 | `ReadRecordRepository` | ✅（已完成，r283） |
 | 4 | `BookRepository` + 章节拆表 | ✅（已完成，r283） |
-| 5 | 清理 `preferences` 老数据（另议） | — |
+| 5 | 清理 `preferences` 老数据 | ✅（已完成，r284） |
 
-> 「构建验收」列的 ✅ 表示该阶段需要构建 + 设备验收；第 1–4 行已注明完成状态与轮次。第 5 行「清理 preferences 老数据」按计划另议，本批不动——搬迁完成后老 preferences 仍原样保留，作为回滚余地。
+> 「构建验收」列的 ✅ 表示该阶段需要构建 + 设备验收；第 1–5 行已注明完成状态与轮次。第 5 行的清理逻辑与清单见「老数据清理（第 5 阶段）」节。
 
 ## 待验证清单
 
@@ -540,7 +573,7 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 
 ## 与既有文档的关系
 
-- 本计划不改动 `docs/parity/` 下任何对照表的内容——那些表盘的是「功能是否与上游对齐」，本计划盘的是「存储层是否与上游对齐」。
+- 本计划不改动 `docs/parity/` 下任何对照表的内容——那些表盘的是「功能是否与上游对齐」，本计划盘的是「存储层是否与上游对齐」。**注意：这条被下面「与 parity 对照表的冲突」一节推翻了**，storage 迁移确实会让部分对照表条目作废。
 - 迁移过程中若发现新的功能缺口，登记到 `docs/KNOWN-ISSUES.md`，不在本计划内展开。
 - 每批完成后的验收结果写入 `docs/VALIDATION.md`。
 
@@ -562,7 +595,7 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 
 **已定处置（2026-10-30）**：storage 迁移先做，parity 三张表**冻结**到迁移完成后重盘。理由：迁移有明确终点（7 条待验证清单 + 三批验收），是两条线里唯一可验收的；盘点没有终点，先做它等于先做那件不会结束的事。迁移做完字段结构就定了，那时盘一遍就是最后一版。
 
-冻结的具体含义与解冻条件见 `docs/parity/STATUS.md` 顶部声明。
+**后续（2026-10-30，r284）**：五个阶段全部完工，四份对照表已**解冻**——但只解除了「禁止编辑」，内容尚未重盘，`ZIP-BOOKMARK.md` 引用旧列名的 12 处现已知确定型但仍待更新。解冻声明见 `docs/parity/STATUS.md` 顶部。
 
 ## BackupRepository：迁移的耦合点
 

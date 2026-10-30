@@ -16,11 +16,10 @@ import { ReadRecordRepository } from './ReadRecordRepository';
  * 存量数据搬迁骨架。
  *
  * 方案 a：首次启动时把 preferences 里的老数据搬进 DB，搬完写标记；
- * 之后每次启动只看标记，不重复搬。搬迁失败不写标记、不阻塞启动，
- * 仓储层会回退读 preferences，界面不会突然变空。
+ * 之后每次启动只看标记，不重复搬。搬迁失败不写标记、不阻塞启动。
  *
- * 搬迁完成后不删 preferences 老数据（计划要求至少保留一个大版本），
- * 所以这里是「复制」而不是「剪切」。
+ * 搬迁本身只「复制」不「剪切」：老数据由 RdbCleanup 在三批全部完成后
+ * 统一清掉，对齐上游 SharedPreferencesMigration 默认会删源文件的语义。
  *
  * 每一批各自一个事务、各自一个标记：三张表要么全搬成功，要么全回滚。
  * 半搬完的状态比完全没搬更难排查。三批分开是为了让后面批次能独立重试，
@@ -28,11 +27,11 @@ import { ReadRecordRepository } from './ReadRecordRepository';
  */
 export class RdbMigration {
   /** 第一批（书签、划线、搜索历史）的搬迁标记键，值存完成时间戳。 */
-  private static readonly markerKeyV1: string = 'rdb_migrated_v1_1';
+  static readonly markerKeyV1: string = 'rdb_migrated_v1_1';
   /** 第二批（分组、划线规则、正文处理、目录规则、替换规则）的搬迁标记键。 */
-  private static readonly markerKeyV2: string = 'rdb_migrated_v1_2';
+  static readonly markerKeyV2: string = 'rdb_migrated_v1_2';
   /** 第三批（书架与章节、阅读记录）的搬迁标记键。 */
-  private static readonly markerKeyV3: string = 'rdb_migrated_v1_3';
+  static readonly markerKeyV3: string = 'rdb_migrated_v1_3';
   private static readonly preferenceName: string = 'legado_rdb_migration';
 
   /** 指定批次的搬迁是否已完成。 */
@@ -124,6 +123,10 @@ export class RdbMigration {
    *
    * books 必须写在 chapters 之前：chapters 的外键指向 books。
    * 走一个事务、一个标记，因为章节离开书就没有意义，半搬完的状态最难排查。
+   *
+   * 阅读记录内部顺序也不能换：`migrateFromPreferences` 读 `sessions_v1` 时是
+   * 整表覆盖，`migrateLegacyInto` 读更老的 `legado_read_time_records` 是追加。
+   * 反过来先跑追加，整表覆盖会把刚追加的记录一起删掉。
    */
   private static async migrateThirdBatch(context: Context): Promise<boolean> {
     if (await RdbMigration.isDone(context, RdbMigration.markerKeyV3)) {
@@ -135,6 +138,7 @@ export class RdbMigration {
       store.beginTransaction();
       try {
         await ReadRecordRepository.migrateFromPreferences(context, store);
+        await ReadRecordRepository.migrateLegacyInto(context, store);
         await BookRepository.migrateFromPreferences(context, store);
         store.commit();
       } catch (error) {

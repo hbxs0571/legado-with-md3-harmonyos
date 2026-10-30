@@ -46,8 +46,8 @@ export class ReaderHighlightRuleRepository {
   /**
    * 从 DB 读全表进缓存。
    *
-   * 读取路径：DB 有数据就直接用；DB 读失败时回退 preferences 老键 rules_v1，
-   * 只读不写（写回由 RdbMigration 统一负责）。
+   * 读取路径：只读 DB。老 preferences 键 rules_v1 已由 RdbCleanup 清掉，
+   * 不再作为兜底来源。
    */
   static async load(context: Context): Promise<ReaderHighlightRule[]> {
     let rules: ReaderHighlightRule[] = [];
@@ -60,8 +60,9 @@ export class ReaderHighlightRuleRepository {
       } finally {
         resultSet.close();
       }
-    } catch (_) {
-      rules = await ReaderHighlightRuleRepository.loadFromPreferences(context);
+    } catch (error) {
+      console.error(`划线规则读取失败：${error instanceof Error ? error.message : String(error)}`);
+      rules = [];
     }
     ReaderHighlightRuleRepository.cachedRules =
       rules.map((rule: ReaderHighlightRule, index: number) => ReaderHighlightRuleRepository.normalize(rule, index));

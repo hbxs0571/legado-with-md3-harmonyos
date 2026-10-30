@@ -194,6 +194,19 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 旧的全量工程内含未签名 HAP 构建产物，本仓库导出已排除所有构建输出。本次未将这些历史产物作为发布包。
 - 以上设备记录来自原工程的历史工作；不代表 API 12 真机兼容，也不代表新功能全部回归。
 
+## 2026-10-30 关系型存储迁移第五批 preferences 清理（构建通过，设备验收未完成）
+
+- 构建：`assembleHap` 通过（`BUILD SUCCESSFUL in 31 s 260 ms`，33 项任务 17 执行 / 16 最新），无编译错误；WARN 全部是既有的「Function may throw exceptions」与弃用 API 提示。**未做设备验收**，故本节不写「通过」。
+- **范围**：`docs/RELATIONAL-STORE-MIGRATION.md` 第 5 阶段。搬迁此前只复制不剪切，老 `preferences` 全留；本批照上游 `SharedPreferencesMigration` 默认删源文件的语义把已迁走的键删掉。
+- **上游依据**：上游 `SettingsRepository.kt:34-37` 用 `SharedPreferencesMigration(context, "${context.packageName}_preferences")`，其 `cleanUp()` 默认实现删掉源 SharedPreferences 文件；只有 `LocalUiStatusMigration`（`SettingsRepository.kt:56`）显式写 `override suspend fun cleanUp() = Unit` 才保留。本地此前「13 个键全留 + 8 处兜底读 preferences」对应的正是那个特例写法。
+- **新增 `data/RdbCleanup.ets`**：标记键 `rdb_cleanup_v1_1`（preferenceName `legado_rdb_cleanup`），只删一次。前置检查要求三个搬迁标记 `rdb_migrated_v1_1` / `v1_2` / `v1_3` 全部为真，否则直接返回——**不会误删未搬的数据**。失败只 `console.error` 吞掉，不写标记、不阻塞启动，下个版本重试。
+- **删除清单**：整文件删 9 个（`legado_reader_bookmarks`、`legado_reader_markings`、`legado_reader_search_history`、`legado_txt_toc_rules`、`book_group_store`、`legado_reader_highlight_rules`、`legado_book_content_processes`、`legado_local_books`、`legado_read_time_records`）；按键删 2 组（`legado_read_records` 删 `sessions_v1` 保留 `enabled`、`legado_replace_rules` 删 `rules_v1` 与 `book_overrides_v1` 保留 `default_enabled_v1` 与 `sort_mode_v1`）。保留下来的三项都有上游依据：`ReadRecordRepository.kt:78-80` 的 `readRecordEnabled`、`PreferKey.replaceEnableDefault`、`PreferKey.replaceSortMode` 在上游也都放偏好而非表。
+- **连带改动一：老扁平记录搬迁挪位**。`ReadRecordRepository.migrateLegacy`（原先由 `pages/Index.ets` 的 `restoreReadTimeRecords` 在首屏调用）整体换成 `migrateLegacyInto(context, store)`，由 `RdbMigration.migrateThirdBatch` 调用。原因：清理会删掉 `legado_read_time_records`，搬迁必须排在清理之前。新版不开事务、不写标记、不清老键（这些原本也由 RdbMigration 与 RdbCleanup 统一管），并抽出 `rewriteDerived(store, sessions)` 供 `rebuildDetailsAndSummaries`、`migrateFromPreferences`、`migrateLegacyInto` 三处共用。
+- **连带改动二：八个仓储删「回退 preferences」兜底**。`ReaderBookmarkRepository`、`ReaderMarkingRepository`、`ReaderSearchHistoryRepository`、`TxtTocRuleRepository`、`BookGroupRepository`、`ReaderHighlightRuleRepository`、`BookContentProcessRepository`、`BookRepository` 的 `load()` 在 DB 读失败时不再回读 preferences，改为记日志 + 返回空表/空数组。理由：上游 DAO 读不到就是空表，抛异常会让界面崩。`loadFromPreferences` / `loadLegacy` 方法本身保留，搬迁路径仍要读老数据。
+- **连带改动三：`book_overrides_v1` 搬进 `books.readConfig.useReplaceRule`**（上游存 `Book.config.useReplaceRule`，`Book.kt:482`）。`Book` 模型加 `useReplaceRule?: boolean`，`StoredReadConfig` 加同名字段并在 `toBookArgs` / `readBookRow` 双向读写（`undefined` 被 `JSON.stringify` 丢掉，正好对应上游 `null` = 跟随默认）。`ReplaceRuleRepository.isBookEnabled(book)` 改为纯函数，照抄上游 `Book.getUseReplaceRule(defaultReplaceEnabled)`（`Book.kt:250-262`）：有显式值用它，没有则图片类与 epub 本地书返 false，其余跟随全局默认。`setBookEnabled` / `clearBookEnabledOverride` 去掉了 `context` 与 `async`，只改内存对象，落库交给 `BookRepository.saveImportedBooks` —— `ReplaceRuleRepository` 不能 import `BookRepository`（反向已存在，会循环依赖）。`pages/Index.ets` 两个入口同步改为「改对象 + 整表 upsert」，`resetReaderReplaceToDefault` 的取值由 `getDefaultEnabled()` 改为 `isBookEnabled(this.selectedBook)`，因为图片类与 epub 即使跟随默认也是关闭净化。
+- **未验项**：① 清理只在模拟器构建层面验过，**没有上机确认 preferences 文件真的消失**；② 老扁平记录改成搬迁阶段写入后，`readRecordSession` 的行数与会话去重是否仍与旧路径一致，未在设备上比对；③ 按书净化开关改成落 `books.readConfig` 后，「关掉一本书的净化 → 重启 → 仍关闭」这条闭环未上机走；④ 真机 `getRdbStore` 仍是第一批遗留未验项。
+- 本记录只代表构建结果，不替代设备结论。
+
 ## 2026-10-30 关系型存储迁移第三批（通过）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 26 s 511 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。

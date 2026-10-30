@@ -33,8 +33,10 @@ export class ReaderSearchHistoryRepository {
       } finally {
         resultSet.close();
       }
-    } catch (_) {
-      return ReaderSearchHistoryRepository.loadFromPreferences(context);
+    } catch (error) {
+      // 不再回退读 preferences：老数据已由 RdbCleanup 清掉，回退只会读到空
+      console.error(`搜索历史读取失败：${error instanceof Error ? error.message : String(error)}`);
+      return [];
     }
   }
 

@@ -1,16 +1,14 @@
 # ZIP 兼容总账
 
-> **本目录已冻结（2026-10-30）**
+> **本目录已解冻（2026-10-30，r284）**
 >
-> `STATUS.md`、`BOOKSHELF.md`、`ZIP-BOOKMARK.md`、`READER-CONFIG.md` 四份对照表暂停更新，原因见下。
+> `STATUS.md`、`BOOKSHELF.md`、`ZIP-BOOKMARK.md`、`READER-CONFIG.md` 四份对照表恢复可编辑。
 >
-> **冻结原因**：[关系型存储迁移计划](../RELATIONAL-STORE-MIGRATION.md) 要把 `book_marks` 的 7 个平铺列（`chapterPosition`、`endPosition`、`selectedText`、`contextBefore`、`contextAfter`、`effect`、`color`）合并成 `anchorJson` 与 `styleJson` 两个 JSON 列，而 `ZIP-BOOKMARK.md` 有 12 处引用这些列。迁移一实施，这些行即告作废。两条流水线在同一张表上冲突，必须先定存储结构再盘功能覆盖。
+> **解冻依据**：[关系型存储迁移计划](../RELATIONAL-STORE-MIGRATION.md) 五个阶段全部完工（基础设施与前三批仓储 r281–r283，preferences 清理 r284），字段结构已定稿。原先的冲突——`book_marks` 的 7 个平铺列（`chapterPosition`、`endPosition`、`selectedText`、`contextBefore`、`contextAfter`、`effect`、`color`）要被合并成 `anchorJson` 与 `styleJson`——已经落地，`ZIP-BOOKMARK.md` 里引用旧列名的 12 处现已知确定型，不再有「写完又要作废」的风险。
 >
-> **解冻条件**：迁移第三批（`BookRepository` + 章节拆表）验收通过，字段结构定稿。届时三张表一并重盘，采用「按上游目录切 + 覆盖证明」的新方法，不再返工。
+> **但三张表的内容尚未重盘，不能当作当前事实读。** 解冻只解除了「禁止编辑」，没有重新核实：表里的行、状态、引用列名都还是迁移之前的版本。`ZIP-BOOKMARK.md` 引用 `chapterPosition` / `endPosition` / `selectedText` / `effect` / `color` 的地方，现在的真实存储是 `anchorJson` / `styleJson` 两个 JSON 列；`BOOKSHELF.md` 与 `READER-CONFIG.md` 也未按迁移后的字段结构复核。**重盘是独立的下一项工作**，届时按「按上游目录切 + 覆盖证明」的新方法一次做完，不返工。
 >
-> **冻结期间可以做的**：登记新的已知问题到 [已知问题](../KNOWN-ISSUES.md)；记录迁移过程中发现的功能缺口。**不可以做的**：往四份对照表里增删行、改状态。
->
-> 冻结不影响 `KEYWORDS.md`（检索词表）——迁移期间仍需要它生成接触面清单。
+> 解冻不影响 `KEYWORDS.md`（检索词表）——重盘时仍靠它生成接触面清单。
 
 本表按 ZIP 数据类别记录 Android 备份兼容度，共 28 类，键名与[备份恢复](../BACKUP-RESTORE.md)的忽略项一致，检索词见[对照关键词](KEYWORDS.md)。
 

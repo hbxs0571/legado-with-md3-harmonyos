@@ -98,8 +98,8 @@ export class TxtTocRuleRepository {
 
   /**
    * 从 DB 读全表进缓存（按 serialNumber 升序），供同步 getter 使用。
-   * 失败态：DB 读不出来时回退 preferences 老键，界面不至于变空；只读不写，
-   * 写回由 RdbMigration 负责，否则用户把规则删光后重启，老数据会被再搬回来。
+   * DB 读失败时缓存留空并记日志，不再回退 preferences 老键
+   * （老数据已由 RdbCleanup 清掉，回退只会读到空）。
    */
   static async load(context: Context): Promise<TxtTocRule[]> {
     try {
@@ -111,8 +111,9 @@ export class TxtTocRuleRepository {
       } finally {
         resultSet.close();
       }
-    } catch (_) {
-      await TxtTocRuleRepository.loadFromPreferences(context);
+    } catch (error) {
+      console.error(`目录规则读取失败：${error instanceof Error ? error.message : String(error)}`);
+      TxtTocRuleRepository.cachedRules = [];
     }
     return TxtTocRuleRepository.getAll();
   }

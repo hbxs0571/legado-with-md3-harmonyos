@@ -36,6 +36,11 @@ export interface Book {
   imageStyle?: string;
   /** 与 Android Book.config.reSegment 对应，按书启用正文重分段。 */
   reSegment?: boolean;
+  /**
+   * 与 Android Book.config.useReplaceRule 对应，按书覆盖正文净化开关。
+   * 不在 readConfig 里存这个字段即为「跟随全局默认」（上游存 null 同理）。
+   */
+  useReplaceRule?: boolean;
   /** 本地 TXT 当前使用的字符集；为空时按文件 BOM/内容自动识别。 */
   charset?: string;
   description?: string;

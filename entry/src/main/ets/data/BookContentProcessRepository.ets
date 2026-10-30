@@ -33,7 +33,8 @@ export class BookContentProcessRepository {
 
   /**
    * 从 DB 读全表进缓存；幂等，同一轮启动只读一次。
-   * DB 读失败时回退 preferences 老键，只读不写（写回由 RdbMigration 负责）。
+   * DB 读失败时缓存留空并记日志，不再回退 preferences 老键
+   * （老数据已由 RdbCleanup 清掉，回退只会读到空）。
    */
   static async load(context: Context): Promise<void> {
     if (BookContentProcessRepository.loadTask !== undefined) {
@@ -54,8 +55,9 @@ export class BookContentProcessRepository {
       } finally {
         resultSet.close();
       }
-    } catch (_) {
-      await BookContentProcessRepository.loadFromPreferences(context);
+    } catch (error) {
+      console.error(`正文处理记录读取失败：${error instanceof Error ? error.message : String(error)}`);
+      BookContentProcessRepository.cachedRecords = [];
     }
   }
 

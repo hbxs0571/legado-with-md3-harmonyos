@@ -20,6 +20,8 @@ interface StoredReadConfig {
   imageStyle?: string;
   reSegment?: boolean;
   fixedType?: boolean;
+  /** 对应上游 Book.config.useReplaceRule；缺省表示跟随全局默认。 */
+  useReplaceRule?: boolean;
 }
 
 interface ChapterTextRange {
@@ -639,14 +641,16 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
 
   /**
    * 读取书架。上游用 Room，`bookDao.flowAll` 直接查 books 表；
-   * 这里同样以库为准，只有读库失败（首次启动表还没建好、或老版本刚升级上来）才回退 preferences。
+   * 这里同样只以库为准——老 preferences 数据已由 RdbCleanup 清掉，
+   * 回退只会读到空表，所以失败时记日志并返回空书架。
    * 章节不再随书返回，页面需要时调 getChapterList 查 chapters 表。
    */
   static async loadImportedBooks(context: Context): Promise<Book[]> {
     try {
       return await BookRepository.loadBooksFromDb(context);
-    } catch (_) {
-      return await BookRepository.loadFromPreferences(context, []);
+    } catch (error) {
+      console.error(`书架读取失败：${error instanceof Error ? error.message : String(error)}`);
+      return [];
     }
   }
 
@@ -695,6 +699,7 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       format: bookUrl.toLowerCase().endsWith('.epub') ? 'epub' : 'txt',
       imageStyle: config.imageStyle,
       reSegment: config.reSegment === true,
+      useReplaceRule: config.useReplaceRule,
       charset: RdbCodec.optionalText(resultSet, 14),
       description: RdbCodec.optionalText(resultSet, 11),
       remark: RdbCodec.optionalText(resultSet, 12),
@@ -1124,10 +1129,13 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
     const originName = book.androidOriginalPath ?? BookRepository.getFileName(bookUrl);
     const groupNames = book.groupNames ?? ((book.groupName ?? '').length > 0 ? [book.groupName as string] : []);
+    // useReplaceRule 为 undefined 时 JSON.stringify 会丢掉该键，
+    // 正好对应上游「ReadConfig.useReplaceRule = null 表示跟随全局默认」的语义
     const readConfig: StoredReadConfig = {
       imageStyle: book.imageStyle,
       reSegment: book.reSegment === true,
-      fixedType: book.fixedType === true
+      fixedType: book.fixedType === true,
+      useReplaceRule: book.useReplaceRule
     };
     const totalChapterNum = Number(book.chapterCount ?? '0');
     const lastChapter = book.lastChapter.length > 0 ? book.lastChapter : null;

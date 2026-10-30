@@ -286,8 +286,8 @@ struct Index {
   }
 
   private async restoreReadTimeRecords(context: Context): Promise<void> {
-    // 先迁移旧扁平数据，再从权威会话层构建时间线。
-    await ReadRecordRepository.migrateLegacy(context);
+    // 老格式记录（legado_read_time_records）的搬迁已挪到 RdbMigration 第三批，
+    // 必须在 RdbCleanup 删老键之前完成，所以这里只读权威会话层。
     await ReadRecordRepository.loadEnabled(context);
     await this.reloadReadRecordData(context);
   }
@@ -393,7 +393,11 @@ struct Index {
     const context = this.getUIContext().getHostContext();
     if (context === undefined || this.selectedBook.id.length === 0) { return; }
     try {
-      await ReplaceRuleRepository.setBookEnabled(context, this.selectedBook, enabled);
+      // 先改内存里的书对象，再整体 upsert 落库：
+      // 按书开关存在 books.readConfig.useReplaceRule 里（与上游 Book.config 一致），
+      // 而 BookRepository 只有整行 upsert，没有单列更新。
+      ReplaceRuleRepository.setBookEnabled(this.selectedBook, enabled);
+      await BookRepository.saveImportedBooks(context, this.books);
       this.readerReplaceEnabled = enabled;
       this.readerReplaceUsesDefault = false;
       await this.reloadSelectedChapter();
@@ -406,9 +410,11 @@ struct Index {
     const context = this.getUIContext().getHostContext();
     if (context === undefined || this.selectedBook.id.length === 0) { return; }
     try {
-      await ReplaceRuleRepository.clearBookEnabledOverride(context, this.selectedBook);
+      ReplaceRuleRepository.clearBookEnabledOverride(this.selectedBook);
+      await BookRepository.saveImportedBooks(context, this.books);
       this.readerReplaceUsesDefault = true;
-      this.readerReplaceEnabled = ReplaceRuleRepository.getDefaultEnabled();
+      // 图片类与 epub 本地书即使跟随默认也是关闭净化，取值要走同一个判定
+      this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(this.selectedBook);
       await this.reloadSelectedChapter();
     } catch (_) {
       this.showUnavailableAction('恢复默认替换净化设置失败');

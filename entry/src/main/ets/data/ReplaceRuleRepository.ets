@@ -11,10 +11,6 @@ interface ReplaceRuleApplyResult {
   text: string;
   effectiveRuleIds: number[];
 }
-interface BookReplaceOverride {
-  bookId: string;
-  enabled: boolean;
-}
 /** 批量导入结果，供界面如实反馈新增与覆盖的数量。 */
 export interface ReplaceRuleImportOutcome {
   added: number;
@@ -38,7 +34,6 @@ export class ReplaceRuleRepository {
   /** 老版本的规则 JSON 键，仅搬迁时读取。 */
   private static readonly preferenceKey: string = 'rules_v1';
   private static readonly defaultEnabledKey: string = 'default_enabled_v1';
-  private static readonly bookOverridesKey: string = 'book_overrides_v1';
   private static readonly sortModeKey: string = 'sort_mode_v1';
   /** 默认分组名，与 Android 的「默认」保持一致。 */
   static readonly defaultGroup: string = '默认';
@@ -50,7 +45,6 @@ export class ReplaceRuleRepository {
   private static readonly commaPattern: RegExp = /,/;
   private static cachedRules: ReplaceRule[] = [];
   private static defaultEnabled: boolean = true;
-  private static bookOverrides: BookReplaceOverride[] = [];
   private static sortMode: string = 'desc';
 
   /** 全量读取：sortOrder 升序，与上游 flowAllAsc 一致。 */
@@ -95,13 +89,11 @@ export class ReplaceRuleRepository {
   static async load(context: Context): Promise<ReplaceRule[]> {
     let needsMigrate = false;
     try {
-      // 只有三个纯设置项留在 preferences：它们不是表数据，上游也放在 PreferKey 里。
+      // 只有两个纯设置项留在 preferences：它们不是表数据，上游也放在 PreferKey 里。
+      // 按书覆盖开关已搬进 books.readConfig.useReplaceRule（上游存 Book.config），不在这里。
       const store = await preferences.getPreferences(context, ReplaceRuleRepository.preferenceName);
       const savedDefault = await store.get(ReplaceRuleRepository.defaultEnabledKey, true);
       ReplaceRuleRepository.defaultEnabled = typeof savedDefault === 'boolean' ? savedDefault : true;
-      const savedOverrides = await store.get(ReplaceRuleRepository.bookOverridesKey, '[]');
-      ReplaceRuleRepository.bookOverrides = typeof savedOverrides === 'string'
-        ? ReplaceRuleRepository.parseOverrides(savedOverrides) : [];
       const savedSortMode = await store.get(ReplaceRuleRepository.sortModeKey, 'desc');
       ReplaceRuleRepository.sortMode = typeof savedSortMode === 'string' &&
         ReplaceRuleRepository.isValidSortMode(savedSortMode) ? savedSortMode : 'desc';
@@ -351,13 +343,30 @@ export class ReplaceRuleRepository {
     return ReplaceRuleRepository.defaultEnabled;
   }
 
+  /**
+   * 按书判断正文是否走净化替换。
+   *
+   * 照抄上游 `Book.getUseReplaceRule(defaultReplaceEnabled)`（Book.kt:250-262）：
+   * 1. 书上有显式值就用它；
+   * 2. 没有显式值时，图片类与 epub 本地书默认关闭净化（上游注释原文
+   *    「图片类书源 epub本地 默认关闭净化」）；
+   * 3. 其余跟随全局默认。
+   *
+   * 值是纯函数算的，不缓存：书对象改了立刻生效，不会出现「开关点了没反应」。
+   */
   static isBookEnabled(book: Book): boolean {
-    const override = ReplaceRuleRepository.bookOverrides.find((item: BookReplaceOverride) => item.bookId === book.id);
-    return override === undefined ? ReplaceRuleRepository.defaultEnabled : override.enabled;
+    if (book.useReplaceRule !== undefined) {
+      return book.useReplaceRule;
+    }
+    if (book.bookType === 'image' || book.format === 'epub') {
+      return false;
+    }
+    return ReplaceRuleRepository.defaultEnabled;
   }
 
+  /** 该书是否跟随全局默认（没有显式覆盖）。 */
   static isBookUsingDefault(book: Book): boolean {
-    return !ReplaceRuleRepository.bookOverrides.some((item: BookReplaceOverride) => item.bookId === book.id);
+    return book.useReplaceRule === undefined;
   }
 
   static isRuleApplicableToBook(rule: ReplaceRule, book: Book): boolean {
@@ -371,22 +380,20 @@ export class ReplaceRuleRepository {
     ReplaceRuleRepository.defaultEnabled = enabled;
   }
 
-  static async setBookEnabled(context: Context, book: Book, enabled: boolean): Promise<void> {
-    const next = ReplaceRuleRepository.bookOverrides.filter((item: BookReplaceOverride) => item.bookId !== book.id);
-    next.push({ bookId: book.id, enabled: enabled });
-    await ReplaceRuleRepository.persistBookOverrides(context, next);
+  /**
+   * 设置按书净化开关。
+   *
+   * 只改内存里的书对象，落库由调用方负责（`BookRepository.saveImportedBooks`）——
+   * 本仓储不能 import BookRepository，那会形成循环依赖
+   * （BookRepository 已经 import 了本仓储，用于读分组与目录规则）。
+   */
+  static setBookEnabled(book: Book, enabled: boolean): void {
+    book.useReplaceRule = enabled;
   }
 
-  static async clearBookEnabledOverride(context: Context, book: Book): Promise<void> {
-    const next = ReplaceRuleRepository.bookOverrides.filter((item: BookReplaceOverride) => item.bookId !== book.id);
-    await ReplaceRuleRepository.persistBookOverrides(context, next);
-  }
-
-  private static async persistBookOverrides(context: Context, next: BookReplaceOverride[]): Promise<void> {
-    const store = await preferences.getPreferences(context, ReplaceRuleRepository.preferenceName);
-    await store.put(ReplaceRuleRepository.bookOverridesKey, JSON.stringify(next));
-    await store.flush();
-    ReplaceRuleRepository.bookOverrides = next;
+  /** 清除按书覆盖，回到跟随全局默认。落库同样由调用方负责。 */
+  static clearBookEnabledOverride(book: Book): void {
+    book.useReplaceRule = undefined;
   }
 
   static async save(context: Context, rule: ReplaceRule): Promise<void> {
@@ -1001,16 +1008,6 @@ export class ReplaceRuleRepository {
       typeof value.pattern === 'string' && typeof value.replacement === 'string' &&
       typeof value.scopeTitle === 'boolean' && typeof value.scopeContent === 'boolean' &&
       typeof value.isEnabled === 'boolean' && typeof value.isRegex === 'boolean';
-  }
-
-  private static parseOverrides(raw: string): BookReplaceOverride[] {
-    try {
-      const parsed: BookReplaceOverride[] = JSON.parse(raw);
-      return parsed.filter((item: BookReplaceOverride) =>
-        typeof item.bookId === 'string' && typeof item.enabled === 'boolean');
-    } catch (_) {
-      return [];
-    }
   }
 
   private static copyRule(rule: ReplaceRule): ReplaceRule {

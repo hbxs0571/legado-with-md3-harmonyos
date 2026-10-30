@@ -60,8 +60,10 @@ export class ReaderMarkingRepository {
       } finally {
         resultSet.close();
       }
-    } catch (_) {
-      return ReaderMarkingRepository.loadFromPreferences(context);
+    } catch (error) {
+      // 不再回退读 preferences：老数据已由 RdbCleanup 清掉，回退只会读到空
+      console.error(`划线读取失败：${error instanceof Error ? error.message : String(error)}`);
+      return [];
     }
   }
 

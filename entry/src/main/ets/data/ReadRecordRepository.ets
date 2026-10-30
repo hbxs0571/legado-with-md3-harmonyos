@@ -429,30 +429,42 @@ export class ReadRecordRepository {
 
   /** 按会话重算并写回明细与汇总两张派生表。 */
   private static async rebuildDetailsAndSummaries(context: Context, sessions: ReadRecordSession[]): Promise<void> {
-    const derived = ReadRecordRepository.computeDerived(sessions);
     const store = await RdbStore.getStore(context);
     await RdbSchema.ensure(store);
     // 明细与汇总都是派生数据，重算就是整表替换：一个事务内先清空再逐行写入，
     // 中途失败整体回滚，不会留下「会话已写、派生层还是旧的」的中间态。
     store.beginTransaction();
     try {
-      await store.executeSql(ReadRecordRepository.deleteDetails);
-      for (const detail of derived.details) {
-        await store.executeSql(ReadRecordRepository.insertDetail, [
-          detail.deviceId, detail.bookName, detail.bookAuthor, detail.date,
-          detail.readTime, detail.readWords, detail.firstReadTime, detail.lastReadTime
-        ]);
-      }
-      await store.executeSql(ReadRecordRepository.deleteSummaries);
-      for (const summary of derived.summaries) {
-        await store.executeSql(ReadRecordRepository.insertSummary, [
-          summary.deviceId, summary.bookName, summary.bookAuthor, summary.readTime, summary.lastRead
-        ]);
-      }
+      await ReadRecordRepository.rewriteDerived(store, sessions);
       store.commit();
     } catch (error) {
       store.rollBack();
       throw new Error(`阅读记录重算失败：${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 用给定会话重算并覆盖明细与汇总两张派生表。
+   *
+   * 不开事务：调用方负责（运行期路径自己开事务，搬迁路径由 RdbMigration 开）。
+   */
+  private static async rewriteDerived(
+    store: relationalStore.RdbStore,
+    sessions: ReadRecordSession[]
+  ): Promise<void> {
+    const derived = ReadRecordRepository.computeDerived(sessions);
+    await store.executeSql(ReadRecordRepository.deleteDetails);
+    for (const detail of derived.details) {
+      await store.executeSql(ReadRecordRepository.insertDetail, [
+        detail.deviceId, detail.bookName, detail.bookAuthor, detail.date,
+        detail.readTime, detail.readWords, detail.firstReadTime, detail.lastReadTime
+      ]);
+    }
+    await store.executeSql(ReadRecordRepository.deleteSummaries);
+    for (const summary of derived.summaries) {
+      await store.executeSql(ReadRecordRepository.insertSummary, [
+        summary.deviceId, summary.bookName, summary.bookAuthor, summary.readTime, summary.lastRead
+      ]);
     }
   }
 
@@ -719,64 +731,68 @@ export class ReadRecordRepository {
    *
    * 旧记录只有 id/bookId/bookName/bookAuthor/startTime/endTime/durationMs，
    * 正好能一一映射成会话（bookUrl 取 bookId，chapterIndex 未知记 0）。
-   * 迁移后把旧 key 清空，避免每次启动重复导入。
+   *
+   * 只在搬迁阶段调用（由 RdbMigration.migrateThirdBatch 统一驱动），
+   * 所以不开事务、不清老键：事务由调用方开，老键由 RdbCleanup 统一删。
+   * 必须排在 migrateFromPreferences 之后执行：那条路径是整表覆盖，
+   * 先跑会把这里追加进去的更老记录一起删掉。
+   *
+   * 返回本次新增的会话条数。
    */
-  static async migrateLegacy(context: Context): Promise<number> {
+  static async migrateLegacyInto(context: Context, store: relationalStore.RdbStore): Promise<number> {
+    // 当前库里已有的会话（含 migrateFromPreferences 刚写进去的），用于去重
+    const resultSet = await store.querySql(ReadRecordRepository.selectSessions);
+    let sessions: ReadRecordSession[] = [];
     try {
-      const legacy = await preferences.getPreferences(context, 'legado_read_time_records');
-      const value = await legacy.get('records', 'v1\n');
-      if (typeof value !== 'string' || !value.startsWith('v1\n')) { return 0; }
-      const rows = value.substring(3).split('\n');
-      const sessions = await ReadRecordRepository.loadSessions(context);
-      const existing: Set<string> = new Set<string>();
-      for (const item of sessions) {
-        existing.add(`${item.bookUrl}\u0000${item.startTime}\u0000${item.endTime}`);
-      }
-      let migrated = 0;
-      let hasMalformedRecord = false;
-      for (const row of rows) {
-        if (row === undefined || row.length === 0) { continue; }
-        try {
-          const fields = row.split('|');
-          if (fields.length !== 7) { hasMalformedRecord = true; continue; }
-          const startTime = Number(fields[4]);
-          const endTime = Number(fields[5]);
-          if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
-            hasMalformedRecord = true;
-            continue;
-          }
-          const bookId = decodeURIComponent(fields[1]);
-          const key = `${bookId}\u0000${startTime}\u0000${endTime}`;
-          if (existing.has(key)) { continue; }
-          existing.add(key);
-          sessions.push({
-            deviceId: '',
-            bookName: ReadRecordRepository.normalizeIdentity(decodeURIComponent(fields[2])),
-            bookAuthor: ReadRecordRepository.normalizeIdentity(decodeURIComponent(fields[3])),
-            bookUrl: bookId,
-            startTime: startTime,
-            endTime: endTime,
-            chapterIndex: 0
-          });
-          migrated += 1;
-        } catch (_) {
-          hasMalformedRecord = true;
-        }
-      }
-      sessions.sort((left: ReadRecordSession, right: ReadRecordSession) => left.startTime - right.startTime);
-      if (migrated > 0) {
-        await ReadRecordRepository.replaceSessions(context, sessions);
-      }
-      // 即使上次在写完会话后中断，也重建派生层后再清旧 key。
-      await ReadRecordRepository.rebuildDetailsAndSummaries(context, sessions);
-      if (!hasMalformedRecord) {
-        await legacy.put('records', 'v1\n');
-        await legacy.flush();
-      }
-      return migrated;
-    } catch (_) {
-      return 0;
+      sessions = ReadRecordRepository.readSessions(resultSet);
+    } finally {
+      resultSet.close();
     }
+    const existing: Set<string> = new Set<string>();
+    for (const item of sessions) {
+      existing.add(`${item.bookUrl}\u0000${item.startTime}\u0000${item.endTime}`);
+    }
+    const legacy = await preferences.getPreferences(context, 'legado_read_time_records');
+    const value = await legacy.get('records', 'v1\n');
+    if (typeof value !== 'string' || !value.startsWith('v1\n')) { return 0; }
+    const rows = value.substring(3).split('\n');
+    let migrated = 0;
+    for (const row of rows) {
+      if (row === undefined || row.length === 0) { continue; }
+      try {
+        const fields = row.split('|');
+        if (fields.length !== 7) { continue; }
+        const startTime = Number(fields[4]);
+        const endTime = Number(fields[5]);
+        if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) { continue; }
+        const bookId = decodeURIComponent(fields[1]);
+        const key = `${bookId}\u0000${startTime}\u0000${endTime}`;
+        if (existing.has(key)) { continue; }
+        existing.add(key);
+        const session: ReadRecordSession = {
+          deviceId: '',
+          bookName: ReadRecordRepository.normalizeIdentity(decodeURIComponent(fields[2])),
+          bookAuthor: ReadRecordRepository.normalizeIdentity(decodeURIComponent(fields[3])),
+          bookUrl: bookId,
+          startTime: startTime,
+          endTime: endTime,
+          chapterIndex: 0
+        };
+        sessions.push(session);
+        await store.executeSql(ReadRecordRepository.insertSession, [
+          session.deviceId, session.bookName, session.bookAuthor, session.bookUrl,
+          session.startTime, session.endTime, session.chapterIndex
+        ]);
+        migrated += 1;
+      } catch (_) {
+        continue;
+      }
+    }
+    // 派生层只要会话有变化就整体重算一次，搬完三张表就是自洽的
+    if (migrated > 0) {
+      await ReadRecordRepository.rewriteDerived(store, sessions);
+    }
+    return migrated;
   }
 
   /**
@@ -829,19 +845,6 @@ export class ReadRecordRepository {
       ]);
     }
     // 派生层跟着会话一起重建，搬完三张表就是自洽的。
-    const derived = ReadRecordRepository.computeDerived(sessions);
-    await store.executeSql(ReadRecordRepository.deleteDetails);
-    for (const detail of derived.details) {
-      await store.executeSql(ReadRecordRepository.insertDetail, [
-        detail.deviceId, detail.bookName, detail.bookAuthor, detail.date,
-        detail.readTime, detail.readWords, detail.firstReadTime, detail.lastReadTime
-      ]);
-    }
-    await store.executeSql(ReadRecordRepository.deleteSummaries);
-    for (const summary of derived.summaries) {
-      await store.executeSql(ReadRecordRepository.insertSummary, [
-        summary.deviceId, summary.bookName, summary.bookAuthor, summary.readTime, summary.lastRead
-      ]);
-    }
+    await ReadRecordRepository.rewriteDerived(store, sessions);
   }
 }

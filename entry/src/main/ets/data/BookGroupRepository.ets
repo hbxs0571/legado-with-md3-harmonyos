@@ -48,10 +48,9 @@ export class BookGroupRepository {
   /**
    * 从 DB 读全表进缓存。
    *
-   * 读取路径：DB 有数据就直接用；DB 为空时回退读 preferences 老键
-   * android_groups_v1，再回退读 Android 备份目录里的 bookGroup.json，
-   * 读到任何一份都写回 DB（搬迁完成后 preferences 不再被写）。
-   * 失败态：DB 读失败时整表当空处理并回退 preferences，不抛给界面。
+   * 读取路径：只读 DB。老 preferences 键 android_groups_v1 已由 RdbCleanup 清掉，
+   * 不再作为兜底来源（回退只会读到空表）。
+   * 失败态：DB 读失败时整表当空处理并记日志，不抛给界面。
    */
   static async load(context: Context): Promise<BookGroup[]> {
     if (BookGroupRepository.loaded) { return BookGroupRepository.getAll(); }
@@ -65,11 +64,9 @@ export class BookGroupRepository {
       } finally {
         resultSet.close();
       }
-    } catch (_) {
-      // DB 读不出来时回退 preferences 老数据，界面不至于变空。
-      // 这里只读不写：写回 DB 由 RdbMigration 统一负责，
-      // 否则用户把分组全删光后重启，老数据会被再次搬回来。
-      loadedGroups = await BookGroupRepository.loadLegacy(context);
+    } catch (error) {
+      console.error(`书籍分组读取失败：${error instanceof Error ? error.message : String(error)}`);
+      loadedGroups = [];
     }
     BookGroupRepository.groups = BookGroupRepository.normalize(loadedGroups);
     BookGroupRepository.loaded = true;
