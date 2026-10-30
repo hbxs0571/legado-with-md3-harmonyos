@@ -194,9 +194,10 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 旧的全量工程内含未签名 HAP 构建产物，本仓库导出已排除所有构建输出。本次未将这些历史产物作为发布包。
 - 以上设备记录来自原工程的历史工作；不代表 API 12 真机兼容，也不代表新功能全部回归。
 
-## 2026-10-30 关系型存储迁移第五批 preferences 清理（构建通过，设备验收未完成）
+## 2026-10-30 关系型存储迁移第五批 preferences 清理（设备验收部分完成）
 
-- 构建：`assembleHap` 通过（`BUILD SUCCESSFUL in 31 s 260 ms`，33 项任务 17 执行 / 16 最新），无编译错误；WARN 全部是既有的「Function may throw exceptions」与弃用 API 提示。**未做设备验收**，故本节不写「通过」。
+- 构建：`assembleHap` 通过（`BUILD SUCCESSFUL in 31 s 260 ms`，33 项任务 17 执行 / 16 最新），无编译错误；WARN 全部是既有的「Function may throw exceptions」与弃用 API 提示。
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`。**清理与结构两项已设备确认，书签/划线两项未验**（原因见本节末尾），故本节整体不写「通过」。
 - **范围**：`docs/RELATIONAL-STORE-MIGRATION.md` 第 5 阶段。搬迁此前只复制不剪切，老 `preferences` 全留；本批照上游 `SharedPreferencesMigration` 默认删源文件的语义把已迁走的键删掉。
 - **上游依据**：上游 `SettingsRepository.kt:34-37` 用 `SharedPreferencesMigration(context, "${context.packageName}_preferences")`，其 `cleanUp()` 默认实现删掉源 SharedPreferences 文件；只有 `LocalUiStatusMigration`（`SettingsRepository.kt:56`）显式写 `override suspend fun cleanUp() = Unit` 才保留。本地此前「13 个键全留 + 8 处兜底读 preferences」对应的正是那个特例写法。
 - **新增 `data/RdbCleanup.ets`**：标记键 `rdb_cleanup_v1_1`（preferenceName `legado_rdb_cleanup`），只删一次。前置检查要求三个搬迁标记 `rdb_migrated_v1_1` / `v1_2` / `v1_3` 全部为真，否则直接返回——**不会误删未搬的数据**。失败只 `console.error` 吞掉，不写标记、不阻塞启动，下个版本重试。
@@ -204,8 +205,13 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - **连带改动一：老扁平记录搬迁挪位**。`ReadRecordRepository.migrateLegacy`（原先由 `pages/Index.ets` 的 `restoreReadTimeRecords` 在首屏调用）整体换成 `migrateLegacyInto(context, store)`，由 `RdbMigration.migrateThirdBatch` 调用。原因：清理会删掉 `legado_read_time_records`，搬迁必须排在清理之前。新版不开事务、不写标记、不清老键（这些原本也由 RdbMigration 与 RdbCleanup 统一管），并抽出 `rewriteDerived(store, sessions)` 供 `rebuildDetailsAndSummaries`、`migrateFromPreferences`、`migrateLegacyInto` 三处共用。
 - **连带改动二：八个仓储删「回退 preferences」兜底**。`ReaderBookmarkRepository`、`ReaderMarkingRepository`、`ReaderSearchHistoryRepository`、`TxtTocRuleRepository`、`BookGroupRepository`、`ReaderHighlightRuleRepository`、`BookContentProcessRepository`、`BookRepository` 的 `load()` 在 DB 读失败时不再回读 preferences，改为记日志 + 返回空表/空数组。理由：上游 DAO 读不到就是空表，抛异常会让界面崩。`loadFromPreferences` / `loadLegacy` 方法本身保留，搬迁路径仍要读老数据。
 - **连带改动三：`book_overrides_v1` 搬进 `books.readConfig.useReplaceRule`**（上游存 `Book.config.useReplaceRule`，`Book.kt:482`）。`Book` 模型加 `useReplaceRule?: boolean`，`StoredReadConfig` 加同名字段并在 `toBookArgs` / `readBookRow` 双向读写（`undefined` 被 `JSON.stringify` 丢掉，正好对应上游 `null` = 跟随默认）。`ReplaceRuleRepository.isBookEnabled(book)` 改为纯函数，照抄上游 `Book.getUseReplaceRule(defaultReplaceEnabled)`（`Book.kt:250-262`）：有显式值用它，没有则图片类与 epub 本地书返 false，其余跟随全局默认。`setBookEnabled` / `clearBookEnabledOverride` 去掉了 `context` 与 `async`，只改内存对象，落库交给 `BookRepository.saveImportedBooks` —— `ReplaceRuleRepository` 不能 import `BookRepository`（反向已存在，会循环依赖）。`pages/Index.ets` 两个入口同步改为「改对象 + 整表 upsert」，`resetReaderReplaceToDefault` 的取值由 `getDefaultEnabled()` 改为 `isBookEnabled(this.selectedBook)`，因为图片类与 epub 即使跟随默认也是关闭净化。
-- **未验项**：① 清理只在模拟器构建层面验过，**没有上机确认 preferences 文件真的消失**；② 老扁平记录改成搬迁阶段写入后，`readRecordSession` 的行数与会话去重是否仍与旧路径一致，未在设备上比对；③ 按书净化开关改成落 `books.readConfig` 后，「关掉一本书的净化 → 重启 → 仍关闭」这条闭环未上机走；④ 真机 `getRdbStore` 仍是第一批遗留未验项。
-- 本记录只代表构建结果，不替代设备结论。
+- **设备实测：清理生效**。启动后读取设备 preferences 目录，文件数由 16 降到 7，与删除清单完全吻合。9 个整文件删除全部生效（`legado_reader_bookmarks`、`legado_reader_markings`、`legado_reader_search_history`、`legado_txt_toc_rules`、`book_group_store`、`legado_reader_highlight_rules`、`legado_book_content_processes`、`legado_local_books`、`legado_read_time_records` 均已消失）；按键删除同样正确——改动替换规则排序方式后 `legado_replace_rules` 重新出现，但只带回 `sort_mode_v1`，`rules_v1` 与 `book_overrides_v1` 没有被写回。`legado_rdb_cleanup` 里已写入标记 `rdb_cleanup_v1_1`（值 `1793354547247`），`legado_rdb_migration` 的三个搬迁标记 `v1_1` / `v1_2` / `v1_3` 也都在。
+- **设备实测：需要保留的键都留着**。留下的 7 个文件是 `legado_android_backup_options`、`legado_bookshelf_layout`、`legado_first_run`、`legado_rdb_cleanup`、`legado_rdb_migration`、`legado_read_records`、`legado_reader_settings`，与「不删的」清单一致。
+- **设备实测：库结构完好**。`legado.db` 拉回本地用 Python 注册 `LOCALES` collation 后查得 14 张表全部建出：`books` 2 行、`chapters` 6 行（`url` 为 16 位 MD5，`start` / `end` 为字节偏移 `0→3628→7256→10852→14480→18108→21736`，`wordCount` 全为 `1211字`）、`readRecord` 1 行、`readRecordDetail` 1 行、`readRecordSession` 10 行，其余业务表为 0。`books.readConfig` 内容为 `{"reSegment":false,"fixedType":false}`，**没有 `useReplaceRule` 键**——两本书都没设过按书开关，符合「`undefined` 被 `JSON.stringify` 丢掉 = 跟随全局默认」的设计。
+- **发现的写入遗漏**：`legado_read_records` 里仍留有 `details_v1` 与 `summaries_v1` 两个键（`RdbCleanup.ets:101` 只删了 `sessions_v1`）。这两个键存的是第三批之前的老格式按日明细与书籍汇总，第三批起已改存 `readRecordDetail` / `readRecord` 两表，全仓 `.ets` 已无任何读取点。修法：那行改为 `['sessions_v1', 'details_v1', 'summaries_v1']`，并把 `RdbCleanup.ets:25` 的 `markerKey` 提到 `rdb_cleanup_v1_2`——否则已跑过清理的设备不会重跑。已登记 [KNOWN-ISSUES.md](KNOWN-ISSUES.md)，本轮不改代码。
+- **未验项**：① **书签与划线的写入未验**——`bookmarks` 与 `book_marks` 至今 0 行，无法确认这两张表在新代码下的写入路径；原因是模拟器上长按选词手势不可触发（详见下条），不是应用缺陷。② 按书净化开关「关掉一本书 → 冷启 → 仍关闭」的闭环未上机走。③ 老扁平记录改成搬迁阶段写入后，`readRecordSession` 是否与旧路径逐行一致未做新旧比对（本轮只读到 10 行，未与旧版 HAP 的数据对照）。④ 真机 `getRdbStore` 仍是第一批遗留未验项。
+- **模拟器限制（影响走查手法，非应用缺陷）**：阅读页正文的长按选词在模拟器上不可触发。本轮唯一一次成功弹出选词菜单（复制 / 书签 / 划线·笔记）后，点「书签」也弹出了「添加书签」面板，但保存按钮点击落在面板外导致未入库；此后 12 次循环探测、5 个不同纵坐标、重启、双击、慢速拖拽、`uinput -T` 触摸轨迹、菜单开合状态下长按全部无法复现。`uitest uiInput longClick` 稳定返回 `No Error`，但**返回码不能当作手势被识别的证据**，必须 dump 层级或截图确认。这与第一批记录（`docs/VALIDATION.md` 的 r281 节）的结论一致：该页正文走滚动模式，长按划词在模拟器上一直不可靠。后续验书签/划线应改走「数据层直接构造 + 渲染像素比对」（r281 已用此法验证划线渲染），或改在真机上走 UI 闭环。
+- 本记录只代表模拟器结果，不替代真机结论。
 
 ## 2026-10-30 关系型存储迁移第三批（通过）
 

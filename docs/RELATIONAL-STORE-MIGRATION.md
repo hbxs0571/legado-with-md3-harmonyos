@@ -471,10 +471,12 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 | 整文件删 | `legado_book_content_processes` | → `book_content_processes` |
 | 整文件删 | `legado_local_books` | → `books` + `chapters` |
 | 整文件删 | `legado_read_time_records` | → `readRecordSession`（更老的扁平格式） |
-| 按键删 | `legado_read_records` → 删 `sessions_v1` | 保留 `enabled`：上游 `ReadRecordRepository.kt:78-80` 也把它放偏好 |
+| 按键删 | `legado_read_records` → 删 `sessions_v1`、`details_v1`、`summaries_v1` | 保留 `enabled`：上游 `ReadRecordRepository.kt:78-80` 也把它放偏好。`details_v1` / `summaries_v1` 是第三批之前的老格式按日明细与书籍汇总，第三批起改存 `readRecordDetail` / `readRecord`，代码里已无读取点 |
 | 按键删 | `legado_replace_rules` → 删 `rules_v1`、`book_overrides_v1` | 保留 `default_enabled_v1`、`sort_mode_v1`：上游 `PreferKey.replaceEnableDefault` / `replaceSortMode` 都在偏好里 |
 
 不删的：`legado_rdb_migration`（搬迁标记）、`legado_rdb_cleanup`（清理标记）、`legado_android_backup_options`（备份选项）、以及「不迁的部分」表里那 6 个仓储自己的偏好文件。
+
+**已知遗漏（r284 遗留，待修）**：`RdbCleanup.ets:101` 实际只删了 `sessions_v1`，`details_v1` 与 `summaries_v1` 没有删，设备实测这两个键仍在。修法须同时做两处——补上这两个键，并把 `RdbCleanup.ets:25` 的 `markerKey` 由 `rdb_cleanup_v1_1` 提到 `rdb_cleanup_v1_2`，否则标记已写的设备不会重跑。详见 [KNOWN-ISSUES.md](KNOWN-ISSUES.md) 的「关系型存储迁移第五批（r284）遗留」。
 
 **连带改动**：
 
