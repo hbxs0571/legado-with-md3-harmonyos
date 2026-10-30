@@ -1,8 +1,20 @@
 # ZIP 兼容总账
 
+> **本目录已冻结（2026-10-30）**
+>
+> `STATUS.md`、`BOOKSHELF.md`、`ZIP-BOOKMARK.md`、`READER-CONFIG.md` 四份对照表暂停更新，原因见下。
+>
+> **冻结原因**：[关系型存储迁移计划](../RELATIONAL-STORE-MIGRATION.md) 要把 `book_marks` 的 7 个平铺列（`chapterPosition`、`endPosition`、`selectedText`、`contextBefore`、`contextAfter`、`effect`、`color`）合并成 `anchorJson` 与 `styleJson` 两个 JSON 列，而 `ZIP-BOOKMARK.md` 有 12 处引用这些列。迁移一实施，这些行即告作废。两条流水线在同一张表上冲突，必须先定存储结构再盘功能覆盖。
+>
+> **解冻条件**：迁移第三批（`BookRepository` + 章节拆表）验收通过，字段结构定稿。届时三张表一并重盘，采用「按上游目录切 + 覆盖证明」的新方法，不再返工。
+>
+> **冻结期间可以做的**：登记新的已知问题到 [已知问题](../KNOWN-ISSUES.md)；记录迁移过程中发现的功能缺口。**不可以做的**：往四份对照表里增删行、改状态。
+>
+> 冻结不影响 `KEYWORDS.md`（检索词表）——迁移期间仍需要它生成接触面清单。
+
 本表按 ZIP 数据类别记录 Android 备份兼容度，共 28 类，键名与[备份恢复](../BACKUP-RESTORE.md)的忽略项一致，检索词见[对照关键词](KEYWORDS.md)。
 
-类别是兼容度的计量单位：做完一类就是前进一格，可以数得清。术语见[术语表](../GLOSSARY.md)的 **ZIP 类别**、**上游接触面**、**盘点**。盘点方法见[编码规约](../CODE-CONVENTIONS.md)第四节。
+类别是兼容度的计量单位：做完一类就是前进一格，可以数得清。术语见[术语表](../GLOSSARY.md)的 **ZIP 类别**、**上游接触面**、**盘点**、**覆盖证明**。盘点方法见[编码规约](../CODE-CONVENTIONS.md)第四节。
 
 ## 兼容度三级
 

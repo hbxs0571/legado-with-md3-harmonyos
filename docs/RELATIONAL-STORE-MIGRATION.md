@@ -15,27 +15,46 @@
 | 指标 | 数量 | 位置 |
 | --- | --- | --- |
 | 实体文件 | 58 | `app/src/main/java/io/legado/app/data/entities/` |
-| 表 | 68 | 见 `@Entity(tableName = ...)` |
+| 表 | 65 | 见 `@Entity(tableName = ...)` |
 | DAO 接口 | 48 | `app/src/main/java/io/legado/app/data/dao/` |
-| 数据库版本 | 133 | `AppDatabase.kt:139` |
+| 数据库版本 | 132 | `AppDatabase.kt:139` |
 
-注意 `BgmPoolEntities.kt`、`BookKnowledge.kt`、`ReadAloudSpeech.kt`、`VoicePoolEntities.kt` 各含多张表，所以表数（68）大于实体文件数（58）。
+注意 `BgmPoolEntities.kt`（4 张）、`BookKnowledge.kt`（5 张）、`ReadAloudSpeech.kt`（4 张）、`VoicePoolEntities.kt`（3 张）各含多张表，所以表数（65）大于实体文件数（58）。
+
+**数字口径**（2026-10-30 实测）：`@Entity` 注解共 65 处，去重后的 `tableName` 也是 65 个，两种算法一致，全部带显式 `tableName`，无靠类名兜底的实体。DAO 接口 48 个与 `data/dao/` 下文件数 48 相等。数据库版本取自 `AppDatabase.kt:139` 的 `version = 132,`。
 
 **上游并非全部数据都在 Room**：设置类走 DataStore Preferences（`help/config/AppConfigStore.kt:53`），与鸿蒙 `preferences` 同构，本地这块已经对齐，不迁。
 
 ## 本地现状
 
-`entry/src/main/ets/data/` 共 30 个文件，分三类：
+`entry/src/main/ets/data/` 共 30 个文件，分四类：
 
-| 类别 | 数量 | 处理 |
-| --- | --- | --- |
-| 业务数据 | 10 个，4587 行 | **要迁** |
-| 设置项 | 5 个 | 不迁（上游也是键值对） |
-| 文件读写 | 4 个 | 不迁（存文件不存表） |
+| 类别 | 数量 | 行数 | 处理 |
+| --- | --- | --- | --- |
+| 业务数据仓储 | 10 | 4587 | **要迁** |
+| 设置项仓储 | 5 | — | 不迁（上游也是键值对） |
+| 文件读写仓储 | 4 | — | 不迁（存文件不存表） |
+| 引擎 / 排序 / 导入器 / 备份 | 11 | 3737 | 不迁（不持有自己的表），但**备份是迁移的耦合点** |
 
 设置类：`ReaderSettingsRepository`（107 次 `store.put`）、`BookshelfLayoutRepository`（9 次）、`HomeDashboardSettingsRepository`（1 次）、`OnboardingRepository`（3 次）、`ReaderMoreActionsRepository`（1 次）。
 
 文件类：`EpubRepository`、`ReaderFontRepository`、`ReaderBookmarkBadgeRepository`、`ReaderBookmarkExporter`。
+
+第四类此前被漏在分类之外，逐个列明：
+
+| 文件 | 行数 | 说明 |
+| --- | --- | --- |
+| `BackupRepository.ets` | 1943 | 备份导出与恢复。**`data/` 目录第二大的文件，引用 10 个待迁仓储中的 7 个**，见下节 |
+| `LocalTextReSegmenter.ets` | 430 | 本地书重新分章 |
+| `ReaderBookmarkImporter.ets` | 252 | 书签导入解析（不写仓储） |
+| `BookContentProcessEngine.ets` | 192 | 正文处理规则执行 |
+| `ReaderHighlightRulePresets.ets` | 170 | 高亮规则预设 |
+| `ReplaceRuleImporter.ets` | 167 | 替换规则导入解析 |
+| `TxtTocRuleImporter.ets` | 131 | TXT 目录规则导入解析 |
+| `LocalTextSemantics.ets` | 129 | 本地书文本语义 |
+| `ReaderHighlightRuleEngine.ets` | 124 | 高亮规则执行 |
+| `ReaderBookmarkTarget.ets` | 114 | 书签跳转目标解析 |
+| `BookshelfSort.ets` | 85 | 书架排序 |
 
 ### 要迁的 10 个仓储
 
@@ -52,7 +71,23 @@
 | `ReaderSearchHistoryRepository.ets` | 83 | `legado_reader_search_history` | `records_v1` | `search_content_history` |
 | `ReaderBookmarkRepository.ets` | 72 | `legado_reader_bookmarks` | — | `bookmarks` |
 
-调用点合计 35 处：`ReplaceRuleRepository` 7、`BookRepository` 6、`TxtTocRuleRepository` 5、`BookGroupRepository` 3、`ReadRecordRepository` 3、`BookContentProcessRepository` 3、`ReaderHighlightRuleRepository` 3、`ReaderBookmarkRepository` 2、`ReaderMarkingRepository` 2、`ReaderSearchHistoryRepository` 1。
+外部引用实测（2026-10-30，`entry/src/main/ets` 下 `data/` 之外）：
+
+| 仓储 | 外部引用文件数 | 外部表达式数 |
+| --- | --- | --- |
+| `BookRepository` | 4 | 82 |
+| `ReplaceRuleRepository` | 4 | 62 |
+| `TxtTocRuleRepository` | 2 | 26 |
+| `ReadRecordRepository` | 3 | 22 |
+| `BookGroupRepository` | 1 | 20 |
+| `BookContentProcessRepository` | 2 | 6 |
+| `ReaderBookmarkRepository` | 1 | 5 |
+| `ReaderMarkingRepository` | 1 | 4 |
+| `ReaderSearchHistoryRepository` | 1 | 4 |
+| `ReaderHighlightRuleRepository` | 2 | 3 |
+| **合计** | **21** | **234** |
+
+**「调用点」的口径**：本文此前写作 35 处，用两种口径都无法复现——按文件数是 21，按 `仓储名.方法` 表达式是 234。上文统一取「外部引用表达式数」，因为接口签名变化时被牵连的是表达式而不是文件。
 
 ### 本地序列化格式（搬迁时必须复用现有解析）
 
@@ -79,7 +114,7 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 **结论：平台能力完全够，无阻塞。** 缺的只是 Room 那种注解代码生成（KSP），须手写建表 SQL 与结果集解析——这正是本计划的主要风险来源。
 
-项目目前**零处**使用 `relationalStore`，全部 16 个仓储都用 `preferences`。
+项目目前**零处**使用 `relationalStore`。`data/` 下共 19 个 `*Repository.ets`，其中 **16 个使用 `preferences`**（10 个待迁业务仓储 + 5 个设置仓储 + `BackupRepository`），另 3 个（`EpubRepository`、`ReaderFontRepository`、`ReaderBookmarkBadgeRepository`）只做文件读写。
 
 ## 目标表结构
 
@@ -269,7 +304,7 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 ## 分批顺序
 
-### 第一批：小仓储 + 基础设施（246 行，3 个仓储，5 个调用点）
+### 第一批：小仓储 + 基础设施（246 行，3 个仓储，13 处外部引用）
 
 `ReaderBookmarkRepository`（72）、`ReaderMarkingRepository`（91）、`ReaderSearchHistoryRepository`（83）。
 
@@ -280,11 +315,11 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 3. `data/RdbMigration.ets`：存量搬迁骨架（见下节）。
 4. `data/RdbCodec.ets`：结果集 → 模型的通用读取辅助（`getColumnIndex` + 类型转换），避免每个仓储重复写。
 
-选这三个的理由：数据量最小、字段最简单（`bookmarks` 只有 9 列、`book_marks` 除两个 JSON 外都是平铺列）、调用点只有 5 处。第一批的目的是**验证整条链路**——建库、建表、读写、搬迁、冷启动读回——而不是解决业务问题。
+选这三个的理由：数据量最小、字段最简单（`bookmarks` 只有 9 列、`book_marks` 除两个 JSON 外都是平铺列）、外部引用只有 13 处。第一批的目的是**验证整条链路**——建库、建表、读写、搬迁、冷启动读回——而不是解决业务问题。
 
 验收：书签新增/编辑/删除/跳转、划线新增/编辑/删除/呈现、搜索历史记录/删除/清空，全部走 DB；强停冷启后数据仍在；`preferences` 老数据仍在（未删）。
 
-### 第二批：中等仓储（2070 行，5 个仓储，21 个调用点）
+### 第二批：中等仓储（2070 行，5 个仓储，117 处外部引用）
 
 `BookContentProcessRepository`（149）、`ReaderHighlightRuleRepository`（184）、`BookGroupRepository`（400）、`TxtTocRuleRepository`（568）、`ReplaceRuleRepository`（769）。
 
@@ -292,7 +327,7 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 验收：替换规则增删改查/分组/试跑/导入导出、TXT 目录规则增删改查/试跑、分组增删改/排序/私密、高亮规则增删改/排序、正文处理记录增删改/启用禁用。
 
-### 第三批：大仓储 + 章节拆表（2271 行，2 个仓储，9 个调用点）
+### 第三批：大仓储 + 章节拆表（2271 行，2 个仓储，104 处外部引用）
 
 `ReadRecordRepository`（669）、`BookRepository`（1602）。
 
@@ -383,9 +418,9 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 
 ### 调用点回归
 
-35 个调用点分布在多个页面。仓储对外接口签名若变化（比如 `load(context)` 变成 `load()`），所有调用点都要改。
+234 处外部引用分布在多个页面。仓储对外接口签名若变化（比如 `load(context)` 变成 `load()`），所有引用处都要改。
 
-缓解：**对外接口签名保持不变**，只换内部实现。`load(context: Context)` 继续接受 `context`（内部忽略或用于取 RdbStore），返回值类型不变。这样 35 个调用点零改动。这是把风险锁在 `data/` 目录内的关键。
+缓解：**对外接口签名保持不变**，只换内部实现。`load(context: Context)` 继续接受 `context`（内部忽略或用于取 RdbStore），返回值类型不变。这样 234 处外部引用零改动。这是把风险锁在 `data/` 目录内的关键。
 
 ### 构建与验收成本
 
@@ -416,6 +451,50 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 
 ## 与既有文档的关系
 
-- 本计划不改动 `docs/parity/` 下任何对照表——那些表盘的是「功能是否与上游对齐」，本计划盘的是「存储层是否与上游对齐」，两者正交。
+- 本计划不改动 `docs/parity/` 下任何对照表的内容——那些表盘的是「功能是否与上游对齐」，本计划盘的是「存储层是否与上游对齐」。
 - 迁移过程中若发现新的功能缺口，登记到 `docs/KNOWN-ISSUES.md`，不在本计划内展开。
 - 每批完成后的验收结果写入 `docs/VALIDATION.md`。
+
+## 与 parity 对照表的冲突（本节推翻上一节的「正交」说法）
+
+上一节写「两者正交」，**这是错的**。`book_marks` 表的设计（见上文第 4 节）要把本地 7 个平铺列合并成 2 个 JSON 列：
+
+| 本地现列 | 迁移后 | `ZIP-BOOKMARK.md` 中的引用次数 |
+| --- | --- | --- |
+| `chapterPosition` | 并入 `anchorJson` | 3 |
+| `endPosition` | 并入 `anchorJson` | 1 |
+| `selectedText` | 并入 `anchorJson` | 2 |
+| `contextBefore` | 并入 `anchorJson` | 0 |
+| `contextAfter` | 并入 `anchorJson` | 0 |
+| `effect` | 并入 `styleJson` | 4 |
+| `color` | 并入 `styleJson` | 2 |
+
+**迁移一旦实施，书签对照表里描述这些字段的 12 处引用即告作废**，同时 `anchorJson`（现引用 2 次）、`styleJson`（现引用 4 次）的语义会变。两条流水线在同一张表上直接冲突。
+
+**已定处置（2026-10-30）**：storage 迁移先做，parity 三张表**冻结**到迁移完成后重盘。理由：迁移有明确终点（7 条待验证清单 + 三批验收），是两条线里唯一可验收的；盘点没有终点，先做它等于先做那件不会结束的事。迁移做完字段结构就定了，那时盘一遍就是最后一版。
+
+冻结的具体含义与解冻条件见 `docs/parity/STATUS.md` 顶部声明。
+
+## BackupRepository：迁移的耦合点
+
+`BackupRepository.ets`（1943 行）不在 10 个待迁仓储内，也不在设置类或文件类里——它此前被漏在分类之外。它不持有自己的表，但它**直接读写待迁仓储**：
+
+- 引用 10 个待迁仓储中的 7 个：`BookGroupRepository`、`BookRepository`、`ReaderBookmarkRepository`、`ReaderHighlightRuleRepository`、`ReaderMarkingRepository`、`ReplaceRuleRepository`、`TxtTocRuleRepository`
+- 导出时读：`BookGroupRepository.load`、`ReaderHighlightRuleRepository.load`、`ReaderBookmarkRepository.load`、`ReaderMarkingRepository.load`（`:426`、`:494`、`:502-503`）
+- **恢复时写**：`ReaderBookmarkRepository.save(context, pendingBookmarks)`（`:827`）、`ReaderMarkingRepository.save(context, pendingMarkings)`（`:830`）
+
+**第一批迁移就要改 `ReaderBookmarkRepository`，而 `BackupRepository` 是它最大的外部消费者。** 这个耦合在计划原先的版本里没有出现。
+
+**处置**：`BackupRepository` 不改（它不持有数据，只做搬运），但**每一批验收都必须走一遍完整的备份导出 / 导入**，并确认导入后书签与划线数据完整。理由：它坏起来是静默的——备份导入失败不会立刻报错，要等用户换机才发现。
+
+## 完成判据：三合一
+
+本计划引入第三条完成标准，与既有两条合并。**一个能力算完成，必须同时满足三项**：
+
+1. **功能对齐**：`docs/parity/` 对照表中该能力的行全部为「已接」
+2. **存储对齐**：该能力的数据落在本计划规定的表结构上，不再走 `preferences` 整表序列化
+3. **验收记录**：构建通过 + 设备走查结果写入 `docs/VALIDATION.md`
+
+任何一项缺失都算未完成。这条判据的作用是终结「盘完功能发现存储没对齐、盘完存储发现功能又变了」的循环——因为完成一个能力时，它的字段结构、页面行为、验收记录是同一时刻一起定下来的。
+
+术语定义见 `docs/GLOSSARY.md` 的 **完成（三合一）**。

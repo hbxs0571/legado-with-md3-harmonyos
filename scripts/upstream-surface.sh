@@ -6,6 +6,9 @@
 #   ./scripts/upstream-surface.sh <类别键名> [上游仓库根目录]
 #   ./scripts/upstream-surface.sh bookmark ~/legado-with-MD3
 #   ./scripts/upstream-surface.sh --list          # 列出全部类别与关键词
+#   ./scripts/upstream-surface.sh --coverage <类别> <表格路径> [上游仓库根目录]
+#       生成覆盖证明清单：每个上游 .kt 是「已映射到某行」还是「未分配」。
+#       未分配的文件必须补进表格，或显式写进「已排除」节并给出理由。
 #
 # 关键词来自 docs/parity/KEYWORDS.md，改那里即可，不用改本脚本。
 
@@ -34,6 +37,66 @@ if [ "${1:-}" = "--list" ] || [ $# -eq 0 ]; then
   echo
   echo "共 $(list_keywords | wc -l | tr -d ' ') 个类别。"
   exit 0
+fi
+
+# 覆盖证明模式：--coverage <类别> <表格路径> [上游仓库根目录]
+# 判据：上游接触面里每个 .kt，其基名（去掉 .kt）必须在表格文件中出现过。
+# 出现在映射行里 = 已映射；出现在「已排除」节里 = 已排除并给了理由。
+# 两者都没有 = 未分配，盘点不算完成。
+if [ "${1:-}" = "--coverage" ]; then
+  CATEGORY="${2:-}"
+  TABLE="${3:-}"
+  REPO_ROOT="${4:-.}"
+  SRC_DIR="$REPO_ROOT/app/src/main/java"
+
+  [ -n "$CATEGORY" ] || die "用法：--coverage <类别键名> <表格路径> [上游仓库根目录]"
+  [ -n "$TABLE" ] || die "用法：--coverage <类别键名> <表格路径> [上游仓库根目录]"
+  [ -f "$TABLE" ] || die "找不到表格文件 $TABLE"
+  [ -d "$SRC_DIR" ] || die "找不到上游源码目录 $SRC_DIR"
+
+  KEYWORD="$(list_keywords | awk -F '\t' -v c="$CATEGORY" '$1 == c { print $2 }')"
+  [ -n "$KEYWORD" ] || die "关键词表里没有类别 $CATEGORY"
+
+  # 上游接触面：按内容引用划定
+  SURFACE=$(grep -rlE "$KEYWORD" "$SRC_DIR" --include='*.kt' 2>/dev/null | sed "s|^$SRC_DIR/||" | sort)
+  TOTAL=$(printf '%s\n' "$SURFACE" | grep -c . )
+
+  MAPPED=0
+  UNASSIGNED=0
+  UNASSIGNED_LIST=""
+
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    base=$(basename "$f" .kt)
+    if grep -qF "$base" "$TABLE"; then
+      MAPPED=$((MAPPED + 1))
+    else
+      UNASSIGNED=$((UNASSIGNED + 1))
+      UNASSIGNED_LIST="$UNASSIGNED_LIST$f"$'\n'
+    fi
+  done <<EOF
+$SURFACE
+EOF
+
+  echo "类别：$CATEGORY"
+  echo "关键词：$KEYWORD"
+  echo "表格：$TABLE"
+  echo "上游接触面：$TOTAL 个 .kt 文件"
+  echo
+  echo "已分配（基名在表格中出现）：$MAPPED"
+  echo "未分配：$UNASSIGNED"
+  echo
+
+  if [ "$UNASSIGNED" -gt 0 ]; then
+    echo "=== 未分配清单（须补进映射行，或写进「已排除」节并给出理由）==="
+    printf '%s' "$UNASSIGNED_LIST"
+    echo
+    echo "结论：覆盖证明未通过（$UNASSIGNED / $TOTAL 未分配）。"
+    exit 1
+  else
+    echo "结论：覆盖证明通过（$MAPPED / $TOTAL 全部已分配）。"
+    exit 0
+  fi
 fi
 
 CATEGORY="$1"
