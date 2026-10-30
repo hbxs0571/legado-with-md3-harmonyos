@@ -404,6 +404,10 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 
 这是本计划唯一无法从文档确认的点，须在第一批实施时写一个最小验证：建一张表插「张」「李」「王」，`ORDER BY name COLLATE LOCALIZED` 看结果。若不支持，退回 `ORDER BY name` 并在 `KNOWN-ISSUES.md` 登记差异。
 
+> **r281 实测结论（2026-10-30，已定案）**：relationalStore 的排序规则名是 **`LOCALES`**，不是 `LOCALIZED`。写 `COLLATE LOCALIZED` 报 `errno 25 no such collation sequence: LOCALIZED`，DDL 报 `code=14800021`；写 `COLLATE LOCALES` 且**先调用 `store.setLocale('zh')`** 才得到拼音序（默认 BINARY 得 `A|b|安|张|李|王|赵|陈`，设 locale 后得 `安|陈|李|王|张|赵|A|b`）。
+> **必须 `setLocale` 是最危险的一点**：未设 locale 时 `COLLATE LOCALES` 不报错，而是静默返回空结果集——界面会显示「没有书签」，比报错更难排查。`setLocale` 是实例级设置，已写进 `data/RdbStore.ets` 的 `getStore()` 打开流程，每次开库后、任何查询前调用。
+> 因此本计划的排序方案不变（仍按上游用语言排序），只是规则名与前置调用不同；不退回码点序，也无需登记 `KNOWN-ISSUES.md`。表 DDL 的列定义也带 `COLLATE LOCALES`，实测建表与建索引均接受。
+
 ### 主键语义变化
 
 三张表的主键语义与本地不同，是搬迁的真实风险点：
@@ -431,11 +435,13 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 | 阶段 | 内容 | 构建验收 |
 | --- | --- | --- |
 | 0 | 本计划文档 | — |
-| 1 | 基础设施 + 第一批 3 个仓储 | ✅ |
-| 2 | 第二批 5 个仓储 | ✅ |
-| 3 | `ReadRecordRepository` | ✅ |
-| 4 | `BookRepository` + 章节拆表 | ✅ |
+| 1 | 基础设施 + 第一批 3 个仓储 | ✅（已完成，r281） |
+| 2 | 第二批 5 个仓储 | ✅（已完成，r282） |
+| 3 | `ReadRecordRepository` | 待开工 |
+| 4 | `BookRepository` + 章节拆表 | 待开工 |
 | 5 | 清理 `preferences` 老数据（另议） | — |
+
+> 「构建验收」列的 ✅ 表示该阶段需要构建 + 设备验收；第 1、2 行已注明完成状态与轮次，其余各行尚未开工。
 
 ## 待验证清单
 
@@ -448,6 +454,10 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 5. `querySql` 返回的 `ResultSet` 在 `rowCount` 为 0 时的行为。
 6. `insert` 返回的 rowId 在 `AUTOINCREMENT` 表上的取值。
 7. 库文件大小与 `preferences` 文本大小的对比（1000 本书的章节数据量）。
+
+> **r281 第一批实测结果（2026-10-30，模拟器 API 26）**：① 模拟器可打开，库落在 `/data/app/el2/100/database/io.legado.harmony/entry/rdb/legado.db`，**真机仍未验**；② 复合主键（`chapters` 未建）、UNIQUE 索引（`search_content_history`）、自增主键全部生效，外键 CASCADE 随第二批验证；③ 见「中文排序」节的结论——规则名是 `LOCALES` 且须先 `setLocale('zh')`；④ 通过（`before=4 after=4`，中途抛错后数据完好）；⑤ 正常返回空结果集，`rowCount` 为 0，遍历零次；⑥ 返回自增 rowId，读出转 string 后与旧 `id` 语义一致；⑦ 三表 40960 字节，远小于原 preferences 文本（后者含 `v1\n` 头与逐字段 `encodeURIComponent` 冗余）。
+
+> **r282 第二批补充（2026-10-30，模拟器 API 26）**：⑧ **外键 CASCADE 本批仍未验**——第二批五张表里没有任何外键（上游 `132.json` 也未定义），`chapters` 表尚未建，第 ② 条的外键部分要留到第三批。⑨ **REAL 列必须用 `getDouble`**：`highlightRules` 的 14 个 REAL 列（下划线宽/偏移、九宫格四边距、字距、行距等）若用 `getLong` 读，`0.1` 会被静默截成 `0`，界面表现为边距归零、下划线消失；`RdbCodec.real` / `optionalReal` 已固定走 `getDouble`。⑩ **`INSERT OR REPLACE` 是整行覆盖**，第二批五个仓储的 upsert 均按上游 `@Insert(onConflict = REPLACE)` 语义写全字段，不做部分更新。⑪ 8 张业务表在设备上的行数与 preferences 逐表比对一致（`replace_rules` 3、`txtTocRules` 27、`highlightRules` 9、`bookmarks` 3、`book_marks` 1，其余 0），两个迁移标记 `rdb_migrated_v1_1` / `rdb_migrated_v1_2` 均写入。
 
 ## 与既有文档的关系
 

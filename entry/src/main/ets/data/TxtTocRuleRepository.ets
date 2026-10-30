@@ -1,7 +1,10 @@
-import { preferences } from '@kit.ArkData';
+import { preferences, relationalStore } from '@kit.ArkData';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { TxtTocRule } from '../model/TxtTocRule';
+import { RdbCodec } from './RdbCodec';
+import { RdbStore } from './RdbStore';
+import { RdbSchema } from './RdbSchema';
 
 /** 批量导入结果，供界面如实反馈新增与覆盖的条数。 */
 export interface TxtTocRuleImportOutcome {
@@ -39,6 +42,16 @@ export class TxtTocRuleRepository {
   static readonly minimumMatchGap: number = 1000;
   /** 导入文件大小上限，防止误选大文件占满内存。 */
   private static readonly maximumImportBytes: number = 8 * 1024 * 1024;
+  private static readonly selectAll: string =
+    'SELECT `id`, `name`, `chapterRule`, `volumeRule`, `example`, `serialNumber`, `enable` ' +
+      'FROM `txtTocRules` ORDER BY `serialNumber`';
+  private static readonly upsertSql: string =
+    'INSERT OR REPLACE INTO `txtTocRules` ' +
+      '(`id`, `name`, `chapterRule`, `volumeRule`, `example`, `serialNumber`, `enable`) VALUES (?, ?, ?, ?, ?, ?, ?)';
+  private static readonly deleteSql: string = 'DELETE FROM `txtTocRules` WHERE `id` = ?';
+  private static readonly deleteAllSql: string = 'DELETE FROM `txtTocRules`';
+  private static readonly updateEnabledSql: string = 'UPDATE `txtTocRules` SET `enable` = ? WHERE `id` = ?';
+  private static readonly updateOrderSql: string = 'UPDATE `txtTocRules` SET `serialNumber` = ? WHERE `id` = ?';
   private static cachedRules: TxtTocRule[] = [];
 
   static getAll(): TxtTocRule[] {
@@ -83,7 +96,29 @@ export class TxtTocRuleRepository {
     }
   }
 
+  /**
+   * 从 DB 读全表进缓存（按 serialNumber 升序），供同步 getter 使用。
+   * 失败态：DB 读不出来时回退 preferences 老键，界面不至于变空；只读不写，
+   * 写回由 RdbMigration 负责，否则用户把规则删光后重启，老数据会被再搬回来。
+   */
   static async load(context: Context): Promise<TxtTocRule[]> {
+    try {
+      const store = await RdbStore.getStore(context);
+      await RdbSchema.ensure(store);
+      const resultSet = await store.querySql(TxtTocRuleRepository.selectAll);
+      try {
+        TxtTocRuleRepository.cachedRules = TxtTocRuleRepository.readAll(resultSet);
+      } finally {
+        resultSet.close();
+      }
+    } catch (_) {
+      await TxtTocRuleRepository.loadFromPreferences(context);
+    }
+    return TxtTocRuleRepository.getAll();
+  }
+
+  /** 从 preferences 老键读一次，只作为搬迁来源与 DB 读失败时的兜底。 */
+  private static async loadFromPreferences(context: Context): Promise<void> {
     try {
       const store = await preferences.getPreferences(context, TxtTocRuleRepository.preferenceName);
       const raw = await store.get(TxtTocRuleRepository.preferenceKey, '[]');
@@ -98,7 +133,67 @@ export class TxtTocRuleRepository {
     } catch (_) {
       TxtTocRuleRepository.cachedRules = [];
     }
-    return TxtTocRuleRepository.getAll();
+  }
+
+  /**
+   * 把 preferences 老数据搬进 DB，由 RdbMigration 在事务里调用。
+   * 搬迁是唯一会整批重排 serialNumber 的场景（对齐上游 updateAllOrders）。
+   * 不开事务、不写标记：事务与标记都由 RdbMigration 统一管。
+   */
+  static async migrateFromPreferences(context: Context, store: relationalStore.RdbStore): Promise<void> {
+    await TxtTocRuleRepository.loadFromPreferences(context);
+    const legacy = TxtTocRuleRepository.cachedRules;
+    if (legacy.length === 0) { return; }
+    await store.executeSql(TxtTocRuleRepository.deleteAllSql);
+    for (let index = 0; index < legacy.length; index++) {
+      const item = legacy[index];
+      if (item === undefined) { continue; }
+      const copy = TxtTocRuleRepository.copyRule(item);
+      copy.serialNumber = index;
+      await store.executeSql(TxtTocRuleRepository.upsertSql, TxtTocRuleRepository.toArgs(copy));
+    }
+    TxtTocRuleRepository.cachedRules = legacy.map((rule: TxtTocRule, index: number) => {
+      const copy = TxtTocRuleRepository.copyRule(rule);
+      copy.serialNumber = index;
+      return copy;
+    });
+  }
+
+  /** 把结果集读成规则数组；example 是可空列，缺失时折成 undefined。 */
+  private static readAll(resultSet: relationalStore.ResultSet): TxtTocRule[] {
+    const idIndex = RdbCodec.column(resultSet, 'id');
+    const nameIndex = RdbCodec.column(resultSet, 'name');
+    const chapterRuleIndex = RdbCodec.column(resultSet, 'chapterRule');
+    const volumeRuleIndex = RdbCodec.column(resultSet, 'volumeRule');
+    const exampleIndex = RdbCodec.column(resultSet, 'example');
+    const serialNumberIndex = RdbCodec.column(resultSet, 'serialNumber');
+    const enableIndex = RdbCodec.column(resultSet, 'enable');
+    const rules: TxtTocRule[] = [];
+    while (resultSet.goToNextRow()) {
+      rules.push({
+        id: RdbCodec.integer(resultSet, idIndex),
+        name: RdbCodec.text(resultSet, nameIndex),
+        chapterRule: RdbCodec.text(resultSet, chapterRuleIndex),
+        volumeRule: RdbCodec.text(resultSet, volumeRuleIndex),
+        example: RdbCodec.optionalText(resultSet, exampleIndex),
+        serialNumber: RdbCodec.integer(resultSet, serialNumberIndex, -1),
+        enable: RdbCodec.boolean(resultSet, enableIndex, true)
+      });
+    }
+    return rules;
+  }
+
+  /** 绑定参数，顺序与 upsertSql 的列顺序严格一致。 */
+  private static toArgs(rule: TxtTocRule): relationalStore.ValueType[] {
+    return [
+      rule.id,
+      rule.name,
+      rule.chapterRule,
+      rule.volumeRule,
+      rule.example === undefined ? null : rule.example,
+      rule.serialNumber,
+      rule.enable ? 1 : 0
+    ];
   }
 
   /**
@@ -124,18 +219,30 @@ export class TxtTocRuleRepository {
       }
     }
     const existingIndex = TxtTocRuleRepository.cachedRules.findIndex((item: TxtTocRule) => item.id === rule.id);
-    const next = [...TxtTocRuleRepository.cachedRules];
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
     if (existingIndex >= 0) {
-      next[existingIndex] = TxtTocRuleRepository.normalize(rule);
+      // 同 id 覆盖：只写这一行，serialNumber 沿用原有排序位置。
+      const merged = TxtTocRuleRepository.normalize(rule);
+      merged.serialNumber = TxtTocRuleRepository.cachedRules[existingIndex].serialNumber;
+      await store.executeSql(TxtTocRuleRepository.upsertSql, TxtTocRuleRepository.toArgs(merged));
+      const next = [...TxtTocRuleRepository.cachedRules];
+      next[existingIndex] = merged;
+      TxtTocRuleRepository.cachedRules = next;
     } else {
-      next.push(TxtTocRuleRepository.normalize(rule));
+      const added = TxtTocRuleRepository.normalize(rule);
+      added.serialNumber = TxtTocRuleRepository.cachedRules.length;
+      await store.executeSql(TxtTocRuleRepository.upsertSql, TxtTocRuleRepository.toArgs(added));
+      TxtTocRuleRepository.cachedRules = [...TxtTocRuleRepository.cachedRules, added];
     }
-    await TxtTocRuleRepository.persist(context, next);
   }
 
   static async remove(context: Context, id: number): Promise<void> {
-    await TxtTocRuleRepository.persist(context,
-      TxtTocRuleRepository.cachedRules.filter((rule: TxtTocRule) => rule.id !== id));
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.executeSql(TxtTocRuleRepository.deleteSql, [id]);
+    TxtTocRuleRepository.cachedRules =
+      TxtTocRuleRepository.cachedRules.filter((rule: TxtTocRule) => rule.id !== id);
   }
 
   /**
@@ -151,19 +258,34 @@ export class TxtTocRuleRepository {
     if (removed === 0) {
       return 0;
     }
-    await TxtTocRuleRepository.persist(context, next);
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.beginTransaction();
+    try {
+      for (let index = 0; index < ids.length; index++) {
+        await store.executeSql(TxtTocRuleRepository.deleteSql, [ids[index]]);
+      }
+      await store.commit();
+    } catch (error) {
+      await store.rollBack();
+      throw new Error(`TXT 目录规则删除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    TxtTocRuleRepository.cachedRules = next;
     return removed;
   }
 
   static async setEnabled(context: Context, id: number, enabled: boolean): Promise<void> {
-    await TxtTocRuleRepository.persist(context, TxtTocRuleRepository.cachedRules.map((rule: TxtTocRule) => {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.executeSql(TxtTocRuleRepository.updateEnabledSql, [enabled ? 1 : 0, id]);
+    TxtTocRuleRepository.cachedRules = TxtTocRuleRepository.cachedRules.map((rule: TxtTocRule) => {
       if (rule.id !== id) {
         return rule;
       }
       const copy = TxtTocRuleRepository.copyRule(rule);
       copy.enable = enabled;
       return copy;
-    }));
+    });
   }
 
   /**
@@ -174,21 +296,33 @@ export class TxtTocRuleRepository {
     if (ids.length === 0) {
       return 0;
     }
-    let changed = 0;
+    const changedIds: number[] = [];
     const next = TxtTocRuleRepository.cachedRules.map((rule: TxtTocRule) => {
       if (ids.includes(rule.id) && rule.enable !== enabled) {
-        changed += 1;
+        changedIds.push(rule.id);
         const copy = TxtTocRuleRepository.copyRule(rule);
         copy.enable = enabled;
         return copy;
       }
       return rule;
     });
-    if (changed === 0) {
+    if (changedIds.length === 0) {
       return 0;
     }
-    await TxtTocRuleRepository.persist(context, next);
-    return changed;
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.beginTransaction();
+    try {
+      for (let index = 0; index < changedIds.length; index++) {
+        await store.executeSql(TxtTocRuleRepository.updateEnabledSql, [enabled ? 1 : 0, changedIds[index]]);
+      }
+      await store.commit();
+    } catch (error) {
+      await store.rollBack();
+      throw new Error(`TXT 目录规则启停失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    TxtTocRuleRepository.cachedRules = next;
+    return changedIds.length;
   }
 
   /**
@@ -204,12 +338,12 @@ export class TxtTocRuleRepository {
     const moved = next.splice(fromIndex, 1)[0];
     const target = Math.max(0, Math.min(next.length, toIndex));
     next.splice(target, 0, moved);
-    await TxtTocRuleRepository.persist(context, next);
+    await TxtTocRuleRepository.writeOrders(context, next);
   }
 
   /**
    * 把规则移到列表最前或最后，对应上游条目下拉的置顶/置底。
-   * 与 moveRule 一样走 persist，落位后重排 serialNumber。
+   * 与 moveRule 一样重排 serialNumber。
    */
   static async moveToEdge(context: Context, id: number, toTop: boolean): Promise<boolean> {
     const index = TxtTocRuleRepository.cachedRules.findIndex((rule: TxtTocRule) => rule.id === id);
@@ -223,7 +357,7 @@ export class TxtTocRuleRepository {
     } else {
       next.push(moved);
     }
-    await TxtTocRuleRepository.persist(context, next);
+    await TxtTocRuleRepository.writeOrders(context, next);
     return true;
   }
 
@@ -254,6 +388,7 @@ export class TxtTocRuleRepository {
       if (existingIndex >= 0) {
         const merged = TxtTocRuleRepository.normalize(rule);
         merged.id = next[existingIndex].id;
+        merged.serialNumber = next[existingIndex].serialNumber;
         next[existingIndex] = merged;
         updated += 1;
       } else {
@@ -264,8 +399,60 @@ export class TxtTocRuleRepository {
     if (added === 0 && updated === 0) {
       return { added: added, updated: updated, skipped: skipped };
     }
-    await TxtTocRuleRepository.persist(context, next);
+    // 新增的规则排在末尾，序号接在现有最大序号之后，避免与已有行撞号。
+    let nextOrder = next.length - added;
+    for (let index = 0; index < next.length; index++) {
+      const item = next[index];
+      if (item.serialNumber < 0 || index >= next.length - added) {
+        item.serialNumber = nextOrder;
+        nextOrder += 1;
+      }
+    }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.beginTransaction();
+    try {
+      for (let index = 0; index < next.length; index++) {
+        const item = next[index];
+        await store.executeSql(TxtTocRuleRepository.upsertSql, TxtTocRuleRepository.toArgs(item));
+      }
+      await store.commit();
+    } catch (error) {
+      await store.rollBack();
+      throw new Error(`TXT 目录规则导入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    TxtTocRuleRepository.cachedRules = next;
     return { added: added, updated: updated, skipped: skipped };
+  }
+
+  /**
+   * 按数组顺序重写 serialNumber，只更新序号真的变了的行。
+   * 对齐上游 TxtTocRuleDao.updateAllOrders（逐条 updateOrder）。
+   */
+  private static async writeOrders(context: Context, rules: TxtTocRule[]): Promise<void> {
+    const ordered = rules.map((rule: TxtTocRule, index: number) => {
+      const copy = TxtTocRuleRepository.copyRule(rule);
+      copy.serialNumber = index;
+      return copy;
+    });
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.beginTransaction();
+    try {
+      for (let index = 0; index < ordered.length; index++) {
+        const item = ordered[index];
+        const previous = rules[index];
+        if (previous !== undefined && previous.serialNumber === item.serialNumber) {
+          continue;
+        }
+        await store.executeSql(TxtTocRuleRepository.updateOrderSql, [item.serialNumber, item.id]);
+      }
+      await store.commit();
+    } catch (error) {
+      await store.rollBack();
+      throw new Error(`TXT 目录规则排序失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    TxtTocRuleRepository.cachedRules = ordered;
   }
 
   /**
@@ -522,18 +709,6 @@ export class TxtTocRuleRepository {
     } catch (_) {
       return [];
     }
-  }
-
-  private static async persist(context: Context, rules: TxtTocRule[]): Promise<void> {
-    const ordered = rules.map((rule: TxtTocRule, index: number) => {
-      const copy = TxtTocRuleRepository.copyRule(rule);
-      copy.serialNumber = index;
-      return copy;
-    });
-    const store = await preferences.getPreferences(context, TxtTocRuleRepository.preferenceName);
-    await store.put(TxtTocRuleRepository.preferenceKey, JSON.stringify(ordered));
-    await store.flush();
-    TxtTocRuleRepository.cachedRules = ordered;
   }
 
   private static copyRule(rule: TxtTocRule): TxtTocRule {

@@ -194,6 +194,54 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 旧的全量工程内含未签名 HAP 构建产物，本仓库导出已排除所有构建输出。本次未将这些历史产物作为发布包。
 - 以上设备记录来自原工程的历史工作；不代表 API 12 真机兼容，也不代表新功能全部回归。
 
+## 2026-10-30 关系型存储迁移第二批（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`，书籍 `vol-test2`（本地 TXT，6 章）、`test-toc`。`assembleHap` 通过（`BUILD SUCCESSFUL in 30 s 13 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。
+- **范围**：`docs/RELATIONAL-STORE-MIGRATION.md:322` 的第二批五个仓储 `BookGroupRepository`、`ReaderHighlightRuleRepository`、`BookContentProcessRepository`、`TxtTocRuleRepository`、`ReplaceRuleRepository` 由 preferences 整表序列化改为 relationalStore。`RdbSchema.version` 由 1 升到 2，追加五张表 DDL（逐字照抄上游 `132.json`）与 6 条索引（`replace_rules.id`、`book_content_processes` 三条）。`RdbCodec` 新增 `real` / `optionalReal`。
+- **REAL 列必须走 `getDouble`**：`highlightRules` 有 14 个 REAL 列（下划线宽/偏移、九宫格边距、字距、行距等），用 `getLong` 读会把 `0.1` 静默变成 `0`，界面表现为边距归零、下划线消失。设备实测前 5 条规则 `underlineWidth=1.0 underlineOffset=2.0 npLeft=0.1 npTop=0.1`，无退化。
+- **存量搬迁**：`RdbMigration` 拆成两批，各一个事务、各一个标记（`rdb_migrated_v1_1` / `rdb_migrated_v1_2`）。第二批在 `migrateSecondBatch` 里依次调五个仓储的 `migrateFromPreferences`，失败 rollBack 且不写标记。设备上标记文件 `/data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_rdb_migration` 内容为两个 `<double>` 键，**两批都写入了**。搬迁后老 preferences 保留未删。
+- **迁移前后行数逐表比对（全部一致）**：`bookmarks` 3、`book_marks` 1、`highlightRules` 9、`replace_rules` 3、`txtTocRules` 27、`book_groups` 0、`book_content_processes` 0、`search_content_history` 0。对照 preferences：`legado_replace_rules` 的 `rules_v1` 3 条（id=1 abc/order=0、id=2 测试规则/order=1、id=8001 E端恢复验证/order=2，group 全 `默认`）、`legado_txt_toc_rules` 的 `rules_v1` 27 条、`legado_reader_highlight_rules` 的 `rules_v1` 9 条、`book_group_store` 的 `android_groups_v1` 0 条。`replace_rules.sortOrder` 落成 0/1/2，说明搬迁时按数组下标重排生效。`groups_v1`（`["GrpXZ"]`）与 `sort_mode_v1`（`asc`）按设计留在 preferences：分组改为从规则派生后 `groups_v1` 已废弃不再读，`sort_mode_v1` 是设置项不随迁移回填。
+- **UI 走查（截图证据在 `.tmp-dbcheck/`，未入库）**：
+
+| 页面 | 结果 |
+| --- | --- |
+| 替换净化列表 | 页签为「全部」「默认」各一个；3 条规则齐全，启用状态开/关/开与 DB 的 `isEnabled` 1/0/1 一致 |
+| 替换净化分组筛选 | 点「默认」后 3 条仍全显示，`groupContains` 的拆分包含判断正确 |
+| 编辑替换面板 | 规则名称 abc、分组 默认、匹配规则 abc、替换为 XYZ、内容勾选、正则勾选、超时 3000，逐字段与 DB 一致 |
+| 分组管理面板 | 自定义分组为空（3 条都属「默认」，上游同样过滤「默认」），符合预期 |
+| 更多菜单 | 导入 / 导出 / 分组管理 / 选择模式 / 旧的在前 / 新的在前 / 名称升序 / 名称降序 |
+| TXT 目录规则 | 27 条，顺序与 `serialNumber` 一致（目录(去空白)、目录、目录(匹配简介)、目录(古典、轻小说备用)…） |
+| 所有书签 | 3 个分组：test-toc「1 个书签 · 0 个笔记」、vol-test2「1 个书签 · 1 个笔记」、vol-test2「1 个书签 · 0 个笔记」，与 `bookmarks` 3 行、`book_marks` 1 行吻合 |
+| 书签/笔记双 tab | test-toc 书签 1 / 笔记 0，条目「第1章(1) · 章节」；vol-test2 书签 1 / 笔记 1，笔记条目「第二章 旧名 · 这一段是占位正文 · 歧义笔记」 |
+| 划线渲染 | 阅读页第二章正文「今晚就出发。」「(像是忽然想起了什么)」「《百年孤独》」三处按 `highlightRules` 渲染出黄褐底色，9 条规则从 DB 读取后生效 |
+
+- **本轮修掉的两个缺陷**：
+  1. **替换净化页显示「暂无替换净化规则」**。根因是竞态：`EntryAbility.onCreate` 里的 `RdbMigration.runIfNeeded` 故意不 await，而 `Index.ets` 的 `aboutToAppear` 同时调 `restoreReplaceRules`，首次启动时表刚建好、搬迁还没写完，`load()` 读到 0 条；搬迁随后完成但界面不刷新。修法照上游时序：把 `runIfNeeded` 移到 `onWindowStageCreate`，`loadContent('pages/Index')` 排到搬迁之后（上游用 Room，建表与迁移在打开库时同步完成，本不存在这个中间态）。`catch` 兜住搬迁失败，仓储层读 DB 失败会自动回退 preferences，界面不会打不开。
+  2. **页签出现两个「默认」**。根因是 `getGroups()` 先以 `['默认']` 打底、又从规则里收集到 `默认` 再 push，未去重。修法照上游 `ReplaceRuleDao.dealGroups`：只返回从规则拆出来的分组，不前置「默认」，由各界面自己拼（列表页拼「全部」、编辑页拼「默认」）。
+- **三处分组语义按上游改写**：`addGroup` 从「维护分组清单」改为「把无分组规则批量归入该组」（`WHERE group IS NULL OR group = ''` 的 UPDATE）；`renameGroup` / `removeGroup` 用 `WHERE group LIKE '%' || ? || '%'` 捞候选、按 `,` 拆分改写（上游 `upGroup`/`delGroup` 只用逗号，不用 `[,;，；]`）；`getGroups()` 改从规则派生。据此删掉 `explicitGroups` / `persistGroups` / `parseGroups` / `groupsKey` / `persist`（整表 JSON 重写）。
+- **`moveToTop`/`moveToBottom` 改上游 min/max 算术**：不再数组重排，而是 `targetOrder = 置顶 ? minOrder - 1 : maxOrder + 1`，其他规则的 order 不动。`sortMode` 默认值由 `'asc'` 改为 `'desc'`（与上游 `PreferKey.replaceSortMode` 默认一致）。
+- **未验项**：① 真机上 `getRdbStore` 仍未验（第一批遗留，本批未变）；② 「编辑替换 → 改名 → 保存」这条路径在模拟器上没走通（输入框点击后未聚焦成功，改名未落库），`save` 的单行 upsert 逻辑与第一批已在别处验证过，但该面板的改名保存本身仍属未验。
+- 本记录只代表模拟器结果，不替代真机结论。
+
+## 2026-10-30 关系型存储迁移第一批（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`，书籍 `vol-test2`（本地 TXT，6 章）。`assembleHap` 通过，HAP 覆盖安装成功。
+- **范围**：`docs/RELATIONAL-STORE-MIGRATION.md:307` 的第一批三个仓储 `ReaderBookmarkRepository`、`ReaderMarkingRepository`、`ReaderSearchHistoryRepository` 由 preferences 整表序列化改为 relationalStore；同时落地 `data/RdbStore.ets`、`data/RdbSchema.ets`、`data/RdbMigration.ets`、`data/RdbCodec.ets`。
+- **建表**：库 `legado.db`（`SecurityLevel.S2`），落在 `/data/app/el2/100/database/io.legado.harmony/entry/rdb/`。`bookmarks`（主键 `time`，索引 `(bookName, bookAuthor)`）、`book_marks`（主键 `id`，索引 `(bookUrl, chapterIndex)`）、`search_content_history`（自增主键 `id`，唯一索引 `(bookName, bookAuthor, query)`）三表按上游实体建出，`RdbStore.version` 置 1。
+- **COLLATE LOCALIZED 验证（开工前置，结论与上游写法不同）**：relationalStore 的排序规则名是 **`LOCALES`**，不是 SQLite 文档与上游 Room 写的 `LOCALIZED`——写 `COLLATE LOCALIZED` 报 `errno 25 no such collation sequence`（DDL 报 `code=14800021`）。且必须**先 `store.setLocale('zh')`**，否则 `COLLATE LOCALES` 不报错但静默返回空结果集（界面会显示「没有书签」，比报错更危险）。实测拼音序：默认 BINARY 得 `A|b|安|张|李|王|赵|陈`，设 locale 后 `COLLATE LOCALES` 得 `安|陈|李|王|张|赵|A|b`。`setLocale` 是实例级设置，已写进 `RdbStore.getStore()` 的打开流程。**因此不退回码点序，也无需登记排序差异。**
+- **存量搬迁**：`EntryAbility.onCreate` 调 `RdbMigration.runIfNeeded`（故意不 await，不阻塞启动）。标记键 `rdb_migrated_v1_1`，事务包裹「读老 preferences → 逐条 insert → 计数校验 → commit」，失败 rollBack 且不写标记。搬迁成功后老 preferences 保留未删。冷启动复查三表数据完好。
+- **待验证清单 7 条（`RELATIONAL-STORE-MIGRATION.md:440`）**：① getRdbStore 在模拟器可打开、库落在 `context.databaseDir` ✔；② 复合主键 / UNIQUE 索引 / 自增主键全部生效 ✔；③ 中文排序见上条 ✔；④ `beginTransaction` + 中途抛错 + `rollBack` 后数据完好（before=4 after=4）✔；⑤ `querySql` 在 rowCount 为 0 时正常返回空集 ✔；⑥ `insert` 在 AUTOINCREMENT 表上返回自增 rowId，读出后转 string 与旧 `id` 语义一致 ✔；⑦ 库文件 40960 字节，远小于 preferences 文本 ✔。真机一项仍未验。
+- **结构转换（book_marks 是唯一需要转换的表）**：`anchorJson` 由 `chapterIndex/chapterPosition/selectedText/contextBefore/contextAfter/normalizedTextHash` 合成，结构与上游 `TextProcessAnchor` 一致（实测 `{"chapterIndex":2,"chapterPosition":500,"selectedText":"这一段是占位正文","contextBefore":"","contextAfter":"","normalizedTextHash":"fd185bd2f87259a89f35b8fd002a3d4a"}`）；`styleJson` 由 `effect/color` 合成，highlight 映射到 `{"underlineMode":7,"underlineColor":-13312}`。7 种效果 `solid/dashed/wave/strike/highlight/background/text` 经「写库 → 读回」完整往返。`endPosition` 不落库，由 `chapterPosition + selectedText.length` 推导（500 + 8 = 508 已核）。
+- **double 效果删除**：`ReaderMarkingEffect` 去掉 `'double'`，`ReaderMarkingEditor.ets` 效果列表同步为 7 项、`effectFromUnderlineMode` 删掉 `mode === 4` 分支、`ReaderPage.ets` 删掉 `TextDecorationStyle.DOUBLE` 分支。老数据里的 double 在搬迁时按 solid 收下（`ReaderMarkingRepository.loadFromPreferences` 白名单外降级），`ReaderBookmarkExporter.ets:257` 的 double 判断**保留**以兼容读老备份。
+- **书签界面走查**：「我的」→「书签」→ 分组 → 条目 → 编辑面板改备注并保存，DB 内容随之更新；点删除 → 二次确认 → DB 行数减少、列表实时刷新。增删改全部落到 DB。
+- **搜索历史界面走查**：搜索页输入关键词后**必须回车**才写库（`ReaderSearchPage.ets:309-310`，`.onChange` 只搜索、`.onSubmit` 才调 `saveQuery`），回车后 DB 出现对应行；「清除搜索历史」后该表归零且不影响 `bookmarks`。
+- **划线渲染界面走查（决定性验证）**：先确认 highlight 以半透明背景渲染（`#44` + 颜色，`getMarkingBackground`）。为排除「读到的是 preferences fallback」这一可能，把 DB 里 `book_marks.styleJson` 的 `underlineColor` 由 `-13312`（#FFCC00）改成 `-65536`（#FF0000）回写设备，重启后正文同一位置的高亮**由黄变红**（黄色像素 12136 → 红色像素 10577，裁剪图确认是「间的距离，使得每」8 个字），再改回 #FFCC00。→ 渲染确实取自 DB。
+- **两处已知差异（按既定决策保留，不修）**：
+  1. **书签分组可能被拆开**：`bookmarks` 表无 `bookId` 列（与上游一致），仓储层从 `bookUrl` 末段去 `.txt` 反推 `bookId`，而 `pages/Index.ets:1621-1643` 的 `getBookmarkBookSummaries()` 按 `bookId` 归并。当书签的 `bookUrl` 不是本地书路径（换源、网络书，如 `https://other-source.example/x.txt`）时反推出的 `bookId` 与原值不同，同一本书的书签会被分成两组。上游 `Bookmark.kt` 注释明确 `bookUrl` 是「创建时的源指纹」，书签仍按书名+作者关联，故属预期行为。
+  2. **搜索历史按书名+作者归属**：表无 `bookId` 列，`clear(context, bookName, bookAuthor, onlyThisBook)` 与 `visibleHistory()` 均改按书名+作者匹配。`ReaderSearchHistoryRepository.clear` 签名由 `(context, bookId, onlyThisBook)` 改为四参，全项目仅 `ReaderSearchPage.ets:116` 一处调用。这是「表结构对齐上游」的直接代价，计划中「外部引用零改动」在此处不成立。
+- **模拟器环境限制（影响走查手法，非应用缺陷）**：该页正文走滚动模式（`ReaderPageTextJoined`），点击左右区域翻页不生效；`uitest uiInput longClick` 与同点长时 swipe 都无法触发长按划词，故划线走查改用「滚动定位 + 像素统计」完成。另：设备自带 `sqlite3` 无法读带 `COLLATE LOCALES` 的表（`no such collation sequence: LOCALES`），排查 DB 须把 `legado.db` 与 `legado.db-wal` 一起拉到本地，用 Python 注册同名 collation 后再查。
+- 本记录只代表模拟器结果，不替代真机结论；`docs/RELATIONAL-STORE-MIGRATION.md:440` 的「真机各能打开」一项仍为未验。
+
 ## 当前快照状态
 
 - bundleName：`io.legado.harmony`；versionName：`0.1.0`；versionCode：`1000000`。

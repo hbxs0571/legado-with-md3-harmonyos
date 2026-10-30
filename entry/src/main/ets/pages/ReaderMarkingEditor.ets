@@ -2,11 +2,13 @@ import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
 
+// 与上游 MarkingEffect 枚举一致（7 种），已删除本地独有的「双下划线」。
+// 两个数组按下标配对，增删必须同步。
 const READER_MARKING_EFFECTS: ReaderMarkingEffect[] = [
-  'solid', 'double', 'dashed', 'wave', 'strike', 'highlight', 'background', 'text'
+  'solid', 'dashed', 'wave', 'strike', 'highlight', 'background', 'text'
 ];
 const READER_MARKING_LABELS: string[] = [
-  '实线下划线', '双下划线', '虚线下划线', '波浪下划线', '删除线', '强调线', '背景高亮', '文字颜色'
+  '实线下划线', '虚线下划线', '波浪下划线', '删除线', '强调线', '背景高亮', '文字颜色'
 ];
 /**
  * 预设颜色，逐条对齐上游 MarkingSheet.kt:449-464 的 MarkingPresetColors（15 个）。
@@ -101,8 +103,8 @@ function argbToHex(color: number | null | undefined): string | undefined {
 
 /**
  * 下划线模式反推效果，对齐上游 MarkingEffect.fromStyle。
- * 上游只认 1/3/2/6/7；本地多一个「双下划线」效果，所以把 4 也认成 double。
- * 5（自定义 SVG）本地渲染层不支持路径绘制，回退实线下划线。
+ * 上游只认 1/3/2/6/7，本地已与之一致（不再有「双下划线」）。
+ * 4（双下划线）与 5（自定义 SVG）本地都没有对应效果，回退实线下划线。
  */
 function effectFromUnderlineMode(mode: number): ReaderMarkingEffect | undefined {
   if (mode === 1) {
@@ -113,9 +115,6 @@ function effectFromUnderlineMode(mode: number): ReaderMarkingEffect | undefined 
   }
   if (mode === 3) {
     return 'wave';
-  }
-  if (mode === 4) {
-    return 'double';
   }
   if (mode === 6) {
     return 'strike';

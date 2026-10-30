@@ -70,7 +70,9 @@ export struct ReaderSearchPage {
     if (!this.historyOnlyThisBook) {
       return this.searchHistory;
     }
-    return this.searchHistory.filter((entry: ReaderSearchHistoryEntry) => entry.bookId === this.book.id);
+    // 上游 search_content_history 没有 bookId 列，按书名 + 作者过滤（同上游 getByBook）
+    return this.searchHistory.filter((entry: ReaderSearchHistoryEntry) =>
+      entry.bookName === this.book.title && entry.bookAuthor === this.book.author);
   }
 
   private async reloadSearchHistory(): Promise<void> {
@@ -112,7 +114,7 @@ export struct ReaderSearchPage {
     if (context === undefined) { return; }
     try {
       this.searchHistory = await ReaderSearchHistoryRepository.clear(
-        context, this.book.id, this.historyOnlyThisBook
+        context, this.book.title, this.book.author, this.historyOnlyThisBook
       );
     } catch (_) {
       this.onUnavailableAction('清除搜索历史失败');

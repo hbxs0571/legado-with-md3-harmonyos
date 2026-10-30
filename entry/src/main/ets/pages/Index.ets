@@ -463,20 +463,6 @@ struct Index {
     }
   }
 
-  private async addReplaceRuleGroup(name: string): Promise<void> {
-    const context = this.getUIContext().getHostContext();
-    if (context === undefined) {
-      this.showUnavailableAction('无法访问本地规则存储');
-      return;
-    }
-    try {
-      await ReplaceRuleRepository.addGroup(context, name);
-      this.replaceRules = ReplaceRuleRepository.getAll();
-    } catch (_) {
-      this.showUnavailableAction('新增分组失败');
-    }
-  }
-
   private async renameReplaceRuleGroup(oldName: string, newName: string): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -4144,7 +4130,6 @@ struct Index {
             onRemoveRule: (id: number) => this.removeReplaceRule(id),
             onEditRule: (id: number) => this.openReplaceRuleEditor(id),
             onMoveRule: (id: number, toTop: boolean) => this.moveReplaceRule(id, toTop),
-            onAddGroup: (name: string) => this.addReplaceRuleGroup(name),
             onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
             onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
             onSortModeChange: (mode: string) => this.setReplaceRuleSortMode(mode),
@@ -4165,7 +4150,6 @@ struct Index {
             onSaveRule: (rule: ReplaceRule) => this.saveReplaceRule(rule),
             editingRule: this.editingReplaceRule,
             groups: this.replaceRuleGroups(),
-            onAddGroup: (name: string) => this.addReplaceRuleGroup(name),
             onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
             onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)

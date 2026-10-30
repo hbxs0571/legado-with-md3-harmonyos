@@ -185,8 +185,8 @@ export struct ReplaceRulesPage {
   onEditRule: (id: number) => void = (_id: number) => {};
   /** 长按菜单里的置顶/置底。 */
   onMoveRule: (id: number, toTop: boolean) => void = (_id: number, _toTop: boolean) => {};
-  /** 分组管理：新增 / 重命名 / 删除。返回 Promise 便于面板等落盘后刷新。 */
-  onAddGroup: (name: string) => Promise<void> = async (_name: string) => {};
+  /** 分组管理：重命名 / 删除。返回 Promise 便于面板等落盘后刷新。
+   *  上游分组面板只有改、删两个入口（GroupManageBottomSheet 无 onAddGroup），故此处不提供新增。 */
   onRenameGroup: (oldName: string, newName: string) => Promise<void> = async (_o: string, _n: string) => {};
   onRemoveGroup: (name: string) => Promise<void> = async (_name: string) => {};
   /** 排序模式持久化。 */
@@ -300,7 +300,6 @@ export struct ReplaceRulesPage {
       // 分组面板与编辑页共用同一份实现，避免同一功能出现两种行为。
       ReplaceRuleGroupSheet({
         groups: this.groups,
-        onAddGroup: (name: string) => this.onAddGroup(name),
         onRenameGroup: (oldName: string, newName: string) => this.onRenameGroup(oldName, newName),
         onRemoveGroup: (name: string) => this.onRemoveGroup(name),
         onClose: () => this.ruleActionSheet = '',
@@ -494,7 +493,10 @@ export struct ReplaceRulesPage {
   private filteredReplaceRules(): ReplaceRule[] {
     const query = this.searchQuery.trim().toLowerCase();
     const filtered = this.rules.filter((rule: ReplaceRule) => {
-      const matchesGroup = this.selectedGroup.length === 0 || rule.group === this.selectedGroup;
+      // 一条规则可以属于多个分组（group 存的是逗号分隔的多值串），
+      // 所以这里判断「包含」而不是整串相等。
+      const matchesGroup = this.selectedGroup.length === 0 ||
+        ReplaceRuleRepository.groupContains(rule.group, this.selectedGroup);
       const matchesQuery = query.length === 0 || rule.name.toLowerCase().includes(query) ||
         rule.pattern.toLowerCase().includes(query) || rule.replacement.toLowerCase().includes(query);
       return matchesGroup && matchesQuery;
@@ -663,8 +665,8 @@ export struct ReplaceRuleEditPage {
   /** 传入已有规则时进入编辑模式；为空表示新建。 */
   @Prop editingRule: ReplaceRule | undefined = undefined;
   @Prop groups: string[] = [];
-  /** 分组管理：与列表页共用同一个面板，这里接的是同一批仓储方法。 */
-  onAddGroup: (name: string) => Promise<void> = async (_name: string) => {};
+  /** 分组管理：与列表页共用同一个面板，这里接的是同一批仓储方法。
+   *  上游面板无新增分组入口，故只有重命名与删除。 */
   onRenameGroup: (oldName: string, newName: string) => Promise<void> = async (_o: string, _n: string) => {};
   onRemoveGroup: (name: string) => Promise<void> = async (_name: string) => {};
   @State name: string = '';
@@ -959,7 +961,6 @@ export struct ReplaceRuleEditPage {
     // 与列表页共用同一份分组管理实现，这里只负责传回调。
     ReplaceRuleGroupSheet({
       groups: this.availableGroups(),
-      onAddGroup: (name: string) => this.onAddGroup(name),
       onRenameGroup: (oldName: string, newName: string) => this.onRenameGroup(oldName, newName),
       onRemoveGroup: (name: string) => this.onRemoveGroup(name),
       onClose: () => this.activeSheet = '',
@@ -1088,8 +1089,9 @@ export struct ReplaceRuleGroupSheet {
    * 因此不能只靠这个入参刷新，增删改之后由 reloadGroups() 从仓储重新取。
    */
   @Prop groups: string[] = [];
-  /** 回调返回 Promise，面板等它落盘后再刷新列表，避免用固定延时猜时机。 */
-  onAddGroup: (name: string) => Promise<void> = async (_name: string) => {};
+  /** 回调返回 Promise，面板等它落盘后再刷新列表，避免用固定延时猜时机。
+   *  上游分组面板只有改、删两个入口（GroupManageBottomSheet 无 onAddGroup 参数），
+   *  新增分组只能由规则编辑器里输入新分组名产生，故这里不提供新增回调。 */
   onRenameGroup: (oldName: string, newName: string) => Promise<void> = async (_o: string, _n: string) => {};
   onRemoveGroup: (name: string) => Promise<void> = async (_name: string) => {};
   onClose: () => void = () => {};
@@ -1097,7 +1099,7 @@ export struct ReplaceRuleGroupSheet {
   /** 面板内实际渲染的分组，操作后自行刷新，不等父级重建。 */
   @State localGroups: string[] = [];
   @State groupInput: string = '';
-  /** 非空表示正在重命名该分组，为空表示新建。 */
+  /** 非空表示正在重命名该分组；上游是点开某一条后行内展开输入框。 */
   @State groupEditing: string = '';
 
   aboutToAppear(): void {
@@ -1114,25 +1116,25 @@ export struct ReplaceRuleGroupSheet {
     return this.localGroups.filter((group: string) => group.length > 0 && group !== '默认');
   }
 
-  /** 提交输入：编辑态调用重命名，新建态调用新增，落盘后刷新列表。 */
-  private async submitGroup(): Promise<void> {
+  /** 收起行内编辑态，清掉草稿。 */
+  private cancelEditing(): void {
+    this.groupEditing = '';
+    this.groupInput = '';
+  }
+
+  /** 提交重命名：落盘后刷新列表，与上游 GroupItem 的确认按钮语义一致。 */
+  private async submitRename(): Promise<void> {
     const name = this.groupInput.trim();
     if (name.length === 0) {
       this.onUnavailableAction('分组名称不能为空');
       return;
     }
-    if (this.groupEditing.length > 0) {
-      if (name === this.groupEditing) {
-        this.groupEditing = '';
-        this.groupInput = '';
-        return;
-      }
-      await this.onRenameGroup(this.groupEditing, name);
-    } else {
-      await this.onAddGroup(name);
+    if (name === this.groupEditing) {
+      this.cancelEditing();
+      return;
     }
-    this.groupEditing = '';
-    this.groupInput = '';
+    await this.onRenameGroup(this.groupEditing, name);
+    this.cancelEditing();
     this.reloadGroups();
   }
 
@@ -1153,35 +1155,38 @@ export struct ReplaceRuleGroupSheet {
       Scroll() {
         Column() {
           ForEach(this.customGroups(), (group: string) => {
-            Row() {
-              Text(group).fontSize(15).fontColor('#E3E4E8').layoutWeight(1)
-              AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
-                .onClick(() => { this.groupEditing = group; this.groupInput = group; })
-              AppGlyph({ name: 'delete', glyphSize: 18, tint: '#D99AA5' })
-                .onClick(() => this.removeGroup(group))
+            Column() {
+              Row() {
+                Text(group).fontSize(15).fontColor('#E3E4E8').layoutWeight(1)
+                AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
+                  .onClick(() => {
+                    if (this.groupEditing === group) {
+                      this.cancelEditing();
+                    } else {
+                      this.groupEditing = group;
+                      this.groupInput = group;
+                    }
+                  })
+                AppGlyph({ name: 'delete', glyphSize: 18, tint: '#D99AA5' })
+                  .onClick(() => this.removeGroup(group))
+              }.width('100%')
+              if (this.groupEditing === group) {
+                Row() {
+                  TextInput({ placeholder: '输入新的分组名称', text: this.groupInput })
+                    .fontSize(15).fontColor('#E3E4E8').placeholderColor('#92949E')
+                    .backgroundColor(Color.Transparent).layoutWeight(1).height(44)
+                    .onChange((value: string) => this.groupInput = value)
+                  Text('取消').fontSize(13).fontColor('#92949E').padding({ left: 8, right: 8 })
+                    .onClick(() => this.cancelEditing())
+                  Text('保存')
+                    .fontSize(13).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+                    .padding({ left: 8 })
+                    .onClick(() => this.submitRename())
+                }.width('100%')
+              }
             }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
               .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
           }, (group: string) => group)
-          if (this.customGroups().length === 0) {
-            Text('暂无其他分组').fontSize(15).fontColor('#92949E').width('100%').textAlign(TextAlign.Center)
-              .padding({ top: 24, bottom: 24 })
-          }
-          Row() {
-            TextInput({ placeholder: this.groupEditing.length > 0 ? '输入新的分组名称' : '输入分组名称',
-              text: this.groupInput })
-              .fontSize(15).fontColor('#E3E4E8').placeholderColor('#92949E')
-              .backgroundColor(Color.Transparent).layoutWeight(1).height(44)
-              .onChange((value: string) => this.groupInput = value)
-            if (this.groupEditing.length > 0) {
-              Text('取消').fontSize(13).fontColor('#92949E').padding({ left: 8, right: 8 })
-                .onClick(() => { this.groupEditing = ''; this.groupInput = ''; })
-            }
-            Text(this.groupEditing.length > 0 ? '保存' : '添加')
-              .fontSize(13).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
-              .padding({ left: 8 })
-              .onClick(() => this.submitGroup())
-          }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
-            .backgroundColor('#22232A').borderRadius(12).margin({ top: 5, bottom: 20 })
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       }.layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')

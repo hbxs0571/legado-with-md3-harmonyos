@@ -1,8 +1,11 @@
-import { preferences } from '@kit.ArkData';
+import { preferences, relationalStore } from '@kit.ArkData';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { Book } from '../model/Book';
 import { ReplaceRule } from '../model/ReplaceRule';
+import { RdbCodec } from './RdbCodec';
+import { RdbSchema } from './RdbSchema';
+import { RdbStore } from './RdbStore';
 
 interface ReplaceRuleApplyResult {
   text: string;
@@ -32,21 +35,58 @@ export interface ReplaceRulePreviewResult {
 /** 持久化替换规则并提供与本地章节读取共用的有序执行入口。 */
 export class ReplaceRuleRepository {
   private static readonly preferenceName: string = 'legado_replace_rules';
+  /** 老版本的规则 JSON 键，仅搬迁时读取。 */
   private static readonly preferenceKey: string = 'rules_v1';
   private static readonly defaultEnabledKey: string = 'default_enabled_v1';
   private static readonly bookOverridesKey: string = 'book_overrides_v1';
-  private static readonly groupsKey: string = 'groups_v1';
   private static readonly sortModeKey: string = 'sort_mode_v1';
   /** 默认分组名，与 Android 的「默认」保持一致。 */
   static readonly defaultGroup: string = '默认';
   /** 导入文件大小上限，防止误选大文件占满内存。 */
   private static readonly maximumImportBytes: number = 8 * 1024 * 1024;
+  /** 分组分隔符，与上游 AppPattern.splitGroupRegex 一致。 */
+  private static readonly splitGroupPattern: RegExp = /[,;，；]/;
+  /** 重命名/删除分组时上游只用逗号拆分（ReplaceRuleRepository.kt:117/132），照抄这处不一致。 */
+  private static readonly commaPattern: RegExp = /,/;
   private static cachedRules: ReplaceRule[] = [];
   private static defaultEnabled: boolean = true;
   private static bookOverrides: BookReplaceOverride[] = [];
-  /** 显式创建过的分组；规则里出现的分组另行并入，空分组靠这份清单保留。 */
-  private static explicitGroups: string[] = [];
-  private static sortMode: string = 'asc';
+  private static sortMode: string = 'desc';
+
+  /** 全量读取：sortOrder 升序，与上游 flowAllAsc 一致。 */
+  private static readonly selectAll: string =
+    'SELECT `id`, `name`, `group`, `pattern`, `replacement`, `scope`, `scopeTitle`, ' +
+      '`scopeContent`, `excludeScope`, `isEnabled`, `isRegex`, `timeoutMillisecond`, `sortOrder` ' +
+      'FROM `replace_rules` ORDER BY `sortOrder` ASC';
+
+  private static readonly upsertSql: string =
+    'INSERT OR REPLACE INTO `replace_rules` (`id`, `name`, `group`, `pattern`, `replacement`, `scope`, ' +
+      '`scopeTitle`, `scopeContent`, `excludeScope`, `isEnabled`, `isRegex`, `timeoutMillisecond`, `sortOrder`) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+
+  private static readonly deleteSql: string = 'DELETE FROM `replace_rules` WHERE `id` = ?';
+
+  private static readonly deleteByIdsSql: string = 'DELETE FROM `replace_rules` WHERE `id` IN (';
+
+  private static readonly updateEnabledSql: string =
+    'UPDATE `replace_rules` SET `isEnabled` = ? WHERE `id` = ?';
+
+  private static readonly updateEnabledByIdsSql: string =
+    'UPDATE `replace_rules` SET `isEnabled` = ? WHERE `id` IN (';
+
+  private static readonly updateOrderSql: string =
+    'UPDATE `replace_rules` SET `sortOrder` = ? WHERE `id` = ?';
+
+  private static readonly updateGroupSql: string =
+    'UPDATE `replace_rules` SET `group` = ? WHERE `id` = ?';
+
+  /** 无分组规则：与上游 noGroup 一致（group 为 NULL 或空串）。 */
+  private static readonly selectNoGroupSql: string =
+    'SELECT * FROM `replace_rules` WHERE `group` IS NULL OR `group` = \'\'';
+
+  /** 按分组名模糊捞候选：与上游 getByGroup 一致。 */
+  private static readonly selectByGroupLikeSql: string =
+    'SELECT * FROM `replace_rules` WHERE `group` LIKE \'%\' || ? || \'%\'';
 
   static getAll(): ReplaceRule[] {
     return ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) => ReplaceRuleRepository.copyRule(rule));
@@ -55,34 +95,24 @@ export class ReplaceRuleRepository {
   static async load(context: Context): Promise<ReplaceRule[]> {
     let needsMigrate = false;
     try {
+      // 只有三个纯设置项留在 preferences：它们不是表数据，上游也放在 PreferKey 里。
       const store = await preferences.getPreferences(context, ReplaceRuleRepository.preferenceName);
-      const raw = await store.get(ReplaceRuleRepository.preferenceKey, '[]');
       const savedDefault = await store.get(ReplaceRuleRepository.defaultEnabledKey, true);
       ReplaceRuleRepository.defaultEnabled = typeof savedDefault === 'boolean' ? savedDefault : true;
       const savedOverrides = await store.get(ReplaceRuleRepository.bookOverridesKey, '[]');
       ReplaceRuleRepository.bookOverrides = typeof savedOverrides === 'string'
         ? ReplaceRuleRepository.parseOverrides(savedOverrides) : [];
-      const savedGroups = await store.get(ReplaceRuleRepository.groupsKey, '[]');
-      ReplaceRuleRepository.explicitGroups = typeof savedGroups === 'string'
-        ? ReplaceRuleRepository.parseGroups(savedGroups) : [];
-      const savedSortMode = await store.get(ReplaceRuleRepository.sortModeKey, 'asc');
+      const savedSortMode = await store.get(ReplaceRuleRepository.sortModeKey, 'desc');
       ReplaceRuleRepository.sortMode = typeof savedSortMode === 'string' &&
-        ReplaceRuleRepository.isValidSortMode(savedSortMode) ? savedSortMode : 'asc';
-      if (typeof raw !== 'string') {
-        ReplaceRuleRepository.cachedRules = [];
-      } else {
-        const parsed: ReplaceRule[] = JSON.parse(raw);
-        const loaded = parsed
-          .filter((item: ReplaceRule) => ReplaceRuleRepository.isRule(item))
-          .sort((left: ReplaceRule, right: ReplaceRule) => left.order - right.order || left.id - right.id);
-        ReplaceRuleRepository.cachedRules = loaded.map((rule: ReplaceRule) => {
-          if (ReplaceRuleRepository.needsScopeMigration(rule)) {
-            needsMigrate = true;
-            return ReplaceRuleRepository.withScopeContent(rule, true);
-          }
-          return rule;
-        });
-      }
+        ReplaceRuleRepository.isValidSortMode(savedSortMode) ? savedSortMode : 'desc';
+      const rules = await ReplaceRuleRepository.loadFromDb(context);
+      ReplaceRuleRepository.cachedRules = rules.map((rule: ReplaceRule) => {
+        if (ReplaceRuleRepository.needsScopeMigration(rule)) {
+          needsMigrate = true;
+          return ReplaceRuleRepository.withScopeContent(rule, true);
+        }
+        return rule;
+      });
     } catch (_) {
       ReplaceRuleRepository.cachedRules = [];
       needsMigrate = false;
@@ -90,12 +120,158 @@ export class ReplaceRuleRepository {
     // 迁移结果写回存储，避免每次启动重复判断，也让其他读取路径看到一致的数据。
     if (needsMigrate) {
       try {
-        await ReplaceRuleRepository.persist(context, ReplaceRuleRepository.cachedRules);
+        await ReplaceRuleRepository.writeAll(context, ReplaceRuleRepository.cachedRules);
       } catch (_) {
         // 写回失败不影响本次已加载的规则，下次启动会再次尝试。
       }
     }
     return ReplaceRuleRepository.getAll();
+  }
+
+  /** 整表覆盖写：只在设置项迁移这种一次性场景使用，常规写入走单行 SQL。 */
+  private static async writeAll(context: Context, rules: ReplaceRule[]): Promise<void> {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    store.beginTransaction();
+    try {
+      for (const item of rules) {
+        await store.executeSql(ReplaceRuleRepository.upsertSql, ReplaceRuleRepository.toArgs(item));
+      }
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`替换规则写入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 按数组下标重写 sortOrder。
+   * 与上游 updateAllOrders 一致，只更新序号真变了的行，避免无谓写入。
+   */
+  private static async writeOrders(context: Context, rules: ReplaceRule[]): Promise<void> {
+    const ordered = rules.map((rule: ReplaceRule, index: number) => {
+      const copy = ReplaceRuleRepository.copyRule(rule);
+      copy.order = index;
+      return copy;
+    });
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    store.beginTransaction();
+    try {
+      for (const item of ordered) {
+        const previous = ReplaceRuleRepository.cachedRules.find((rule: ReplaceRule) => rule.id === item.id);
+        if (previous !== undefined && previous.order === item.order) {
+          continue;
+        }
+        await store.executeSql(ReplaceRuleRepository.updateOrderSql, [item.order, item.id]);
+      }
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`替换规则排序失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    ReplaceRuleRepository.cachedRules = ordered;
+  }
+
+  /** 从 DB 读整张 replace_rules 表。 */
+  private static async loadFromDb(context: Context): Promise<ReplaceRule[]> {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const resultSet = await store.querySql(ReplaceRuleRepository.selectAll);
+    try {
+      return ReplaceRuleRepository.readAll(resultSet);
+    } finally {
+      resultSet.close();
+    }
+  }
+
+  /** 从老 preferences 读规则，仅供搬迁使用。 */
+  private static async loadFromPreferences(context: Context): Promise<ReplaceRule[]> {
+    const store = await preferences.getPreferences(context, ReplaceRuleRepository.preferenceName);
+    const raw = await store.get(ReplaceRuleRepository.preferenceKey, '[]');
+    if (typeof raw !== 'string') {
+      return [];
+    }
+    const parsed: ReplaceRule[] = JSON.parse(raw);
+    return parsed
+      .filter((item: ReplaceRule) => ReplaceRuleRepository.isRule(item))
+      .sort((left: ReplaceRule, right: ReplaceRule) => left.order - right.order || left.id - right.id)
+      .map((rule: ReplaceRule) => ReplaceRuleRepository.copyRule(rule));
+  }
+
+  /**
+   * 把 preferences 里的老规则搬进 DB；由 RdbMigration 在事务内调用，这里不开事务、不写标记。
+   * 只读不写：老数据在搬迁完成后仍原样保留（计划要求至少留一个大版本）。
+   */
+  static async migrateFromPreferences(context: Context, store: relationalStore.RdbStore): Promise<void> {
+    const legacy = await ReplaceRuleRepository.loadFromPreferences(context);
+    if (legacy.length === 0) {
+      return;
+    }
+    const ordered = legacy.map((rule: ReplaceRule, index: number) => {
+      const copy = ReplaceRuleRepository.copyRule(rule);
+      copy.order = index;
+      return copy;
+    });
+    await store.executeSql('DELETE FROM `replace_rules`');
+    for (const rule of ordered) {
+      await store.executeSql(ReplaceRuleRepository.upsertSql, ReplaceRuleRepository.toArgs(rule));
+    }
+    ReplaceRuleRepository.cachedRules = ordered;
+  }
+
+  /** 把结果集读成规则数组；可空文本列读出 undefined 后折成空串。 */
+  private static readAll(resultSet: relationalStore.ResultSet): ReplaceRule[] {
+    const rules: ReplaceRule[] = [];
+    while (resultSet.goToNextRow()) {
+      const group = RdbCodec.optionalText(resultSet, resultSet.getColumnIndex('group'));
+      const scope = RdbCodec.optionalText(resultSet, resultSet.getColumnIndex('scope'));
+      const excludeScope = RdbCodec.optionalText(resultSet, resultSet.getColumnIndex('excludeScope'));
+      rules.push({
+        id: RdbCodec.integer(resultSet, resultSet.getColumnIndex('id')),
+        name: RdbCodec.text(resultSet, resultSet.getColumnIndex('name')),
+        group: group === undefined ? '' : group,
+        pattern: RdbCodec.text(resultSet, resultSet.getColumnIndex('pattern')),
+        replacement: RdbCodec.text(resultSet, resultSet.getColumnIndex('replacement')),
+        scope: scope === undefined ? '' : scope,
+        scopeTitle: RdbCodec.boolean(resultSet, resultSet.getColumnIndex('scopeTitle'), false),
+        scopeContent: RdbCodec.boolean(resultSet, resultSet.getColumnIndex('scopeContent'), true),
+        excludeScope: excludeScope === undefined ? '' : excludeScope,
+        isEnabled: RdbCodec.boolean(resultSet, resultSet.getColumnIndex('isEnabled'), true),
+        isRegex: RdbCodec.boolean(resultSet, resultSet.getColumnIndex('isRegex'), true),
+        timeoutMillisecond: RdbCodec.integer(resultSet, resultSet.getColumnIndex('timeoutMillisecond'), 3000),
+        order: RdbCodec.integer(resultSet, resultSet.getColumnIndex('sortOrder'))
+      });
+    }
+    return rules;
+  }
+
+  /** 转成 executeSql 的绑定参数；空串写回 NULL，与上游的可空字段语义对齐。 */
+  private static toArgs(rule: ReplaceRule): relationalStore.ValueType[] {
+    return [
+      rule.id,
+      rule.name,
+      rule.group.length === 0 ? null : rule.group,
+      rule.pattern,
+      rule.replacement,
+      rule.scope.length === 0 ? null : rule.scope,
+      rule.scopeTitle ? 1 : 0,
+      rule.scopeContent ? 1 : 0,
+      rule.excludeScope.length === 0 ? null : rule.excludeScope,
+      rule.isEnabled ? 1 : 0,
+      rule.isRegex ? 1 : 0,
+      rule.timeoutMillisecond,
+      rule.order
+    ];
+  }
+
+  /** 把 id 列表拼成 `?, ?, ?` 占位串，供 IN 查询/更新使用。 */
+  private static placeholders(count: number): string {
+    const parts: string[] = [];
+    for (let index = 0; index < count; index++) {
+      parts.push('?');
+    }
+    return parts.join(', ');
   }
 
   /**
@@ -109,19 +285,50 @@ export class ReplaceRuleRepository {
   }
 
   /**
-   * 返回全部分组：默认分组始终在首位，其后是显式创建的分组与规则中实际出现的分组。
-   * 显式清单保证空分组在规则被删光后仍然存在。
+   * 返回规则里出现过的全部分组（不含「全部」「默认」这类界面占位项）。
+   *
+   * 与上游 ReplaceRuleDao.dealGroups 一致：分组不单独存储，
+   * 每条规则的 group 可以是多值串（"仙侠,都市"），按 [,;，；] 拆分后去重，
+   * 再按中文拼音序排列。因此「空分组」这个概念不存在——规则删光，分组就消失。
+   *
+   * 这里不前置「默认」：上游 allGroups 也不前置，由各界面自己拼
+   * （列表页拼「全部」+ 本结果，编辑页拼「默认」+ 本结果）。
    */
   static getGroups(): string[] {
-    const groups: string[] = [ReplaceRuleRepository.defaultGroup];
-    ReplaceRuleRepository.explicitGroups.forEach((group: string) => {
-      if (group.length > 0 && !groups.includes(group)) { groups.push(group); }
-    });
+    const collected: string[] = [];
     ReplaceRuleRepository.cachedRules.forEach((rule: ReplaceRule) => {
-      const group = typeof rule.group === 'string' ? rule.group.trim() : '';
-      if (group.length > 0 && !groups.includes(group)) { groups.push(group); }
+      ReplaceRuleRepository.splitGroups(rule.group).forEach((group: string) => {
+        if (group.length > 0 && !collected.includes(group)) {
+          collected.push(group);
+        }
+      });
     });
-    return groups;
+    collected.sort((left: string, right: string) => left.localeCompare(right, 'zh-Hans-CN'));
+    return collected;
+  }
+
+  /** 按上游 splitNotBlank 语义拆分多值分组串：拆分后逐项 trim 并丢掉空项。 */
+  static splitGroups(group: string): string[] {
+    if (typeof group !== 'string' || group.length === 0) {
+      return [];
+    }
+    const parts = group.split(ReplaceRuleRepository.splitGroupPattern);
+    const result: string[] = [];
+    parts.forEach((part: string) => {
+      const trimmed = part.trim();
+      if (trimmed.length > 0) {
+        result.push(trimmed);
+      }
+    });
+    return result;
+  }
+
+  /**
+   * 判断一条规则的 group 是否包含指定分组。
+   * 界面按分组筛选时必须用这个，不能直接比较整串——group 是多值字段。
+   */
+  static groupContains(group: string, target: string): boolean {
+    return ReplaceRuleRepository.splitGroups(group).includes(target);
   }
 
   static getSortMode(): string {
@@ -198,19 +405,34 @@ export class ReplaceRuleRepository {
     }
     const existingIndex = ReplaceRuleRepository.cachedRules.findIndex((item: ReplaceRule) => item.id === rule.id);
     const next = [...ReplaceRuleRepository.cachedRules];
+    const target = ReplaceRuleRepository.copyRule(rule);
     if (existingIndex >= 0) {
-      next[existingIndex] = ReplaceRuleRepository.copyRule(rule);
+      // 编辑已有规则时保留原顺序，避免改一次名字就跳到列表末尾。
+      target.order = next[existingIndex].order;
+      next[existingIndex] = target;
     } else {
-      const added = ReplaceRuleRepository.copyRule(rule);
-      added.order = next.length;
-      next.push(added);
+      // 新规则追加到末尾：上游取 maxOrder + 1，这里用当前最大序号 + 1，语义一致。
+      let maxOrder = -1;
+      next.forEach((item: ReplaceRule) => {
+        if (item.order > maxOrder) {
+          maxOrder = item.order;
+        }
+      });
+      target.order = maxOrder + 1;
+      next.push(target);
     }
-    await ReplaceRuleRepository.persist(context, next);
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.executeSql(ReplaceRuleRepository.upsertSql, ReplaceRuleRepository.toArgs(target));
+    ReplaceRuleRepository.cachedRules = next;
   }
 
   static async setEnabled(context: Context, id: number, enabled: boolean): Promise<void> {
-    await ReplaceRuleRepository.persist(context, ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) =>
-      rule.id === id ? ReplaceRuleRepository.withEnabled(rule, enabled) : rule));
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.executeSql(ReplaceRuleRepository.updateEnabledSql, [enabled ? 1 : 0, id]);
+    ReplaceRuleRepository.cachedRules = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) =>
+      rule.id === id ? ReplaceRuleRepository.withEnabled(rule, enabled) : rule);
   }
 
   /**
@@ -223,19 +445,26 @@ export class ReplaceRuleRepository {
     if (ids.length === 0) {
       return 0;
     }
-    let changed = 0;
+    const changedIds: number[] = [];
     const next = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) => {
       if (ids.includes(rule.id) && rule.isEnabled !== enabled) {
-        changed += 1;
+        changedIds.push(rule.id);
         return ReplaceRuleRepository.withEnabled(rule, enabled);
       }
       return rule;
     });
-    if (changed === 0) {
+    if (changedIds.length === 0) {
       return 0;
     }
-    await ReplaceRuleRepository.persist(context, next);
-    return changed;
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const sql = ReplaceRuleRepository.updateEnabledByIdsSql +
+      ReplaceRuleRepository.placeholders(changedIds.length) + ')';
+    const args: relationalStore.ValueType[] = [enabled ? 1 : 0];
+    changedIds.forEach((id: number) => args.push(id));
+    await store.executeSql(sql, args);
+    ReplaceRuleRepository.cachedRules = next;
+    return changedIds.length;
   }
 
   /**
@@ -251,7 +480,13 @@ export class ReplaceRuleRepository {
     if (removed === 0) {
       return 0;
     }
-    await ReplaceRuleRepository.persist(context, next);
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const sql = ReplaceRuleRepository.deleteByIdsSql + ReplaceRuleRepository.placeholders(ids.length) + ')';
+    const args: relationalStore.ValueType[] = [];
+    ids.forEach((id: number) => args.push(id));
+    await store.executeSql(sql, args);
+    ReplaceRuleRepository.cachedRules = next;
     return removed;
   }
 
@@ -269,7 +504,8 @@ export class ReplaceRuleRepository {
    * 把选中规则整体移到数组一端，选中项之间的相对顺序保持不变。
    * 与单条 moveToEdge 一致：desc 模式下数组尾部对应视觉顶部，故取反。
    */
-  static async moveBatchToEdge(context: Context, ids: number[], toTop: boolean): Promise<number> {    if (ids.length === 0) {
+  static async moveBatchToEdge(context: Context, ids: number[], toTop: boolean): Promise<number> {
+    if (ids.length === 0) {
       return 0;
     }
     const selected = ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) => ids.includes(rule.id));
@@ -279,28 +515,70 @@ export class ReplaceRuleRepository {
     const rest = ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) => !ids.includes(rule.id));
     const toArrayHead = ReplaceRuleRepository.sortMode === 'desc' ? !toTop : toTop;
     const next = toArrayHead ? selected.concat(rest) : rest.concat(selected);
-    await ReplaceRuleRepository.persist(context, next);
+    await ReplaceRuleRepository.writeOrders(context, next);
     return selected.length;
   }
 
   static async remove(context: Context, id: number): Promise<void> {
-    await ReplaceRuleRepository.persist(context,
-      ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) => rule.id !== id));
-  }
-
-  /** 新建分组；分组名重复或为空时不做改动。 */
-  static async addGroup(context: Context, group: string): Promise<void> {
-    const name = group.trim();
-    if (name.length === 0 || name === ReplaceRuleRepository.defaultGroup ||
-      ReplaceRuleRepository.getGroups().includes(name)) {
+    const next = ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) => rule.id !== id);
+    if (next.length === ReplaceRuleRepository.cachedRules.length) {
       return;
     }
-    await ReplaceRuleRepository.persistGroups(context, [...ReplaceRuleRepository.explicitGroups, name]);
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.executeSql(ReplaceRuleRepository.deleteSql, [id]);
+    ReplaceRuleRepository.cachedRules = next;
+  }
+
+  /**
+   * 新建分组。
+   *
+   * 与上游 ReplaceRuleRepository.addGroup 一致：分组不单独存储，
+   * 所以「新建分组」实际是把当前所有无分组的规则批量归入该组。
+   * 组里没有规则时分组自然不存在，这正是上游的行为。
+   */
+  static async addGroup(context: Context, group: string): Promise<void> {
+    const name = group.trim();
+    if (name.length === 0 || name === ReplaceRuleRepository.defaultGroup) {
+      return;
+    }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const resultSet = await store.querySql(ReplaceRuleRepository.selectNoGroupSql);
+    const targets: ReplaceRule[] = [];
+    try {
+      targets.push(...ReplaceRuleRepository.readAll(resultSet));
+    } finally {
+      resultSet.close();
+    }
+    if (targets.length === 0) {
+      return;
+    }
+    store.beginTransaction();
+    try {
+      for (const item of targets) {
+        await store.executeSql(ReplaceRuleRepository.updateGroupSql, [name, item.id]);
+      }
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`分组创建失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    const changed = new Map<number, string>();
+    targets.forEach((item: ReplaceRule) => changed.set(item.id, name));
+    ReplaceRuleRepository.cachedRules = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) => {
+      const nextGroup = changed.get(rule.id);
+      return nextGroup === undefined ? rule : ReplaceRuleRepository.withGroup(rule, nextGroup);
+    });
   }
 
   /**
    * 重命名分组，同时改写该分组下所有规则的 group 字段。
    * 目标是默认分组时不处理，避免与内置分组语义冲突。
+   *
+   * 与上游 upGroup 一致：先按 `group LIKE '%名字%'` 捞候选，再逐条拆分多值串，
+   * 删旧名加新名后拼回。上游这里只用逗号拆分（`splitNotBlank(",")`），
+   * 与 getGroups 用 [,;，；] 拆分并不一致，此处照抄。
    */
   static async renameGroup(context: Context, oldName: string, newName: string): Promise<void> {
     const from = oldName.trim();
@@ -312,27 +590,74 @@ export class ReplaceRuleRepository {
     if (ReplaceRuleRepository.getGroups().includes(to)) {
       throw new Error('分组名称已存在');
     }
-    const next = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) =>
-      (typeof rule.group === 'string' && rule.group.trim() === from)
-        ? ReplaceRuleRepository.withGroup(rule, to) : rule);
-    const nextGroups = ReplaceRuleRepository.explicitGroups.map((group: string) => group === from ? to : group);
-    await ReplaceRuleRepository.persist(context, next);
-    await ReplaceRuleRepository.persistGroups(context, nextGroups);
+    await ReplaceRuleRepository.rewriteGroups(context, from, to);
   }
 
   /**
-   * 删除分组，该分组下的规则回落到默认分组。
-   * 规则本身保留，符合 Android delGroup 只清空分组的语义。
+   * 删除分组：把该分组从规则的 group 字段里摘掉，其余分组保留。
+   * 与上游 delGroup 一致，同样只按逗号拆分。
    */
   static async removeGroup(context: Context, group: string): Promise<void> {
     const name = group.trim();
-    if (name.length === 0 || name === ReplaceRuleRepository.defaultGroup) { return; }
-    const next = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) =>
-      (typeof rule.group === 'string' && rule.group.trim() === name)
-        ? ReplaceRuleRepository.withGroup(rule, ReplaceRuleRepository.defaultGroup) : rule);
-    const nextGroups = ReplaceRuleRepository.explicitGroups.filter((item: string) => item !== name);
-    await ReplaceRuleRepository.persist(context, next);
-    await ReplaceRuleRepository.persistGroups(context, nextGroups);
+    if (name.length === 0 || name === ReplaceRuleRepository.defaultGroup) {
+      return;
+    }
+    await ReplaceRuleRepository.rewriteGroups(context, name, '');
+  }
+
+  /**
+   * 把候选规则 group 里的 oldName 换成 newName（newName 为空表示删除该分组）。
+   * 上游用 HashSet 去重后 TextUtils.join(",") 拼回，这里用数组去重再 join。
+   */
+  private static async rewriteGroups(context: Context, oldName: string, newName: string): Promise<void> {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const resultSet = await store.querySql(ReplaceRuleRepository.selectByGroupLikeSql, [oldName]);
+    const candidates: ReplaceRule[] = [];
+    try {
+      candidates.push(...ReplaceRuleRepository.readAll(resultSet));
+    } finally {
+      resultSet.close();
+    }
+    if (candidates.length === 0) {
+      return;
+    }
+    const rewritten = new Map<number, string>();
+    candidates.forEach((item: ReplaceRule) => {
+      const parts = item.group.split(ReplaceRuleRepository.commaPattern);
+      const kept: string[] = [];
+      parts.forEach((part: string) => {
+        const trimmed = part.trim();
+        if (trimmed.length === 0 || trimmed === oldName) {
+          return;
+        }
+        if (!kept.includes(trimmed)) {
+          kept.push(trimmed);
+        }
+      });
+      if (newName.length > 0 && !kept.includes(newName)) {
+        kept.push(newName);
+      }
+      rewritten.set(item.id, kept.join(','));
+    });
+    store.beginTransaction();
+    try {
+      for (const item of candidates) {
+        const next = rewritten.get(item.id);
+        if (next === undefined) {
+          continue;
+        }
+        await store.executeSql(ReplaceRuleRepository.updateGroupSql, [next.length === 0 ? null : next, item.id]);
+      }
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`分组改写失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    ReplaceRuleRepository.cachedRules = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) => {
+      const nextGroup = rewritten.get(rule.id);
+      return nextGroup === undefined ? rule : ReplaceRuleRepository.withGroup(rule, nextGroup);
+    });
   }
 
   /**
@@ -368,23 +693,41 @@ export class ReplaceRuleRepository {
     const next = [...rules];
     const moved = next.splice(fromIndex, 1)[0];
     next.splice(toIndex, 0, moved);
-    await ReplaceRuleRepository.persist(context, next);
+    await ReplaceRuleRepository.writeOrders(context, next);
     return true;
   }
 
+  /**
+   * 单条移到一端。
+   * 与上游 toTop/toBottom 一致：不改动其他规则，只把本条的 order 设成
+   * 全表最小 - 1（移到数组头部）或全表最大 + 1（移到数组尾部），
+   * 其余规则的 order 保持不变，下次整表重排时再收敛。
+   */
   private static async moveToEdge(context: Context, id: number, toTop: boolean): Promise<void> {
-    const index = ReplaceRuleRepository.cachedRules.findIndex((rule: ReplaceRule) => rule.id === id);
-    if (index < 0) { return; }
-    const next = [...ReplaceRuleRepository.cachedRules];
-    const moved = next.splice(index, 1)[0];
+    const rules = ReplaceRuleRepository.cachedRules;
+    const index = rules.findIndex((rule: ReplaceRule) => rule.id === id);
+    if (index < 0) {
+      return;
+    }
     // desc 模式下数组尾部对应视觉顶部，故取反。
     const toArrayHead = ReplaceRuleRepository.sortMode === 'desc' ? !toTop : toTop;
-    if (toArrayHead) {
-      next.unshift(moved);
-    } else {
-      next.push(moved);
-    }
-    await ReplaceRuleRepository.persist(context, next);
+    let minOrder = Number.MAX_SAFE_INTEGER;
+    let maxOrder = Number.MIN_SAFE_INTEGER;
+    rules.forEach((rule: ReplaceRule) => {
+      if (rule.order < minOrder) {
+        minOrder = rule.order;
+      }
+      if (rule.order > maxOrder) {
+        maxOrder = rule.order;
+      }
+    });
+    const targetOrder = toArrayHead ? minOrder - 1 : maxOrder + 1;
+    const moved = ReplaceRuleRepository.withOrder(rules[index], targetOrder);
+    const next = rules.map((rule: ReplaceRule) => rule.id === id ? moved : rule);
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.executeSql(ReplaceRuleRepository.updateOrderSql, [targetOrder, id]);
+    ReplaceRuleRepository.cachedRules = next;
   }
 
   /**
@@ -419,18 +762,22 @@ export class ReplaceRuleRepository {
         added += 1;
       }
     });
-    // 导入过程中可能出现分组，落盘时一并登记，避免空分组丢失。
-    const groups = [...ReplaceRuleRepository.explicitGroups];
-    incoming.forEach((rule: ReplaceRule) => {
-      const group = rule.group.trim();
-      if (group.length > 0 && group !== ReplaceRuleRepository.defaultGroup && !groups.includes(group)) {
-        groups.push(group);
-      }
-    });
-    await ReplaceRuleRepository.persist(context, next);
-    if (groups.length !== ReplaceRuleRepository.explicitGroups.length) {
-      await ReplaceRuleRepository.persistGroups(context, groups);
+    if (added === 0 && updated === 0) {
+      return { added: 0, updated: 0 };
     }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    store.beginTransaction();
+    try {
+      for (const item of next) {
+        await store.executeSql(ReplaceRuleRepository.upsertSql, ReplaceRuleRepository.toArgs(item));
+      }
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`替换规则导入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    ReplaceRuleRepository.cachedRules = next;
     return { added: added, updated: updated };
   }
 
@@ -604,18 +951,6 @@ export class ReplaceRuleRepository {
     }
     return result;
   }
-  private static async persist(context: Context, rules: ReplaceRule[]): Promise<void> {
-    const ordered = rules.map((rule: ReplaceRule, index: number) => {
-      const copy = ReplaceRuleRepository.copyRule(rule);
-      copy.order = index;
-      return copy;
-    });
-    const store = await preferences.getPreferences(context, ReplaceRuleRepository.preferenceName);
-    await store.put(ReplaceRuleRepository.preferenceKey, JSON.stringify(ordered));
-    await store.flush();
-    ReplaceRuleRepository.cachedRules = ordered;
-  }
-
   private static matchesBook(rule: ReplaceRule, book: Book): boolean {
     const scope = typeof rule.scope === 'string' ? rule.scope : '';
     const excludeScope = typeof rule.excludeScope === 'string' ? rule.excludeScope : '';
@@ -751,19 +1086,22 @@ export class ReplaceRuleRepository {
     };
   }
 
-  private static async persistGroups(context: Context, groups: string[]): Promise<void> {
-    const store = await preferences.getPreferences(context, ReplaceRuleRepository.preferenceName);
-    await store.put(ReplaceRuleRepository.groupsKey, JSON.stringify(groups));
-    await store.flush();
-    ReplaceRuleRepository.explicitGroups = groups;
-  }
-
-  private static parseGroups(raw: string): string[] {
-    try {
-      const parsed: string[] = JSON.parse(raw);
-      return parsed.filter((item: string) => typeof item === 'string' && item.trim().length > 0);
-    } catch (_) {
-      return [];
-    }
+  /** 复制一条规则并把 order 换成给定值；用于排序类操作构造新对象。 */
+  private static withOrder(rule: ReplaceRule, order: number): ReplaceRule {
+    return {
+      id: rule.id,
+      name: rule.name,
+      group: rule.group,
+      pattern: rule.pattern,
+      replacement: rule.replacement,
+      scope: rule.scope,
+      scopeTitle: rule.scopeTitle,
+      scopeContent: rule.scopeContent,
+      excludeScope: rule.excludeScope,
+      isEnabled: rule.isEnabled,
+      isRegex: rule.isRegex,
+      timeoutMillisecond: rule.timeoutMillisecond,
+      order: order
+    };
   }
 }

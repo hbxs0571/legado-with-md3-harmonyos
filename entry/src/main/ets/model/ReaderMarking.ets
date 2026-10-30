@@ -1,5 +1,7 @@
 /** 本地正文划线/高亮和笔记，不与普通书签或正文改写记录混用。 */
-export type ReaderMarkingEffect = 'solid' | 'double' | 'dashed' | 'wave' | 'strike' | 'highlight' | 'background' | 'text';
+// 与上游 MarkingEffect 枚举保持一致：上游只有 7 种，没有「双下划线」，
+// 所以本地删除 'double'，存量数据在仓储层按 solid 处理。
+export type ReaderMarkingEffect = 'solid' | 'dashed' | 'wave' | 'strike' | 'highlight' | 'background' | 'text';
 
 export interface ReaderMarking {
   id: string;

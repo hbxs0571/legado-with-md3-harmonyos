@@ -2019,13 +2019,12 @@ export struct ReaderPage {
   private getMarkingDecorationType(marking: ReaderMarking | undefined): TextDecorationType {
     if (marking === undefined) { return TextDecorationType.None; }
     if (marking.effect === 'strike') { return TextDecorationType.LineThrough; }
-    if (marking.effect === 'solid' || marking.effect === 'double' || marking.effect === 'dashed' ||
+    if (marking.effect === 'solid' || marking.effect === 'dashed' ||
       marking.effect === 'wave') { return TextDecorationType.Underline; }
     return TextDecorationType.None;
   }
 
   private getMarkingDecorationStyle(marking: ReaderMarking | undefined): TextDecorationStyle {
-    if (marking?.effect === 'double') { return TextDecorationStyle.DOUBLE; }
     if (marking?.effect === 'dashed') { return TextDecorationStyle.DASHED; }
     if (marking?.effect === 'wave') { return TextDecorationStyle.WAVY; }
     return TextDecorationStyle.SOLID;

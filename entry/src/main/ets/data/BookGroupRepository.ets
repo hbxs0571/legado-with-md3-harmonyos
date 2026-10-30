@@ -1,6 +1,9 @@
-import { preferences } from '@kit.ArkData';
+import { preferences, relationalStore } from '@kit.ArkData';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { BookGroup, BookGroupDraft } from '../model/BookGroup';
+import { RdbCodec } from './RdbCodec';
+import { RdbStore } from './RdbStore';
+import { RdbSchema } from './RdbSchema';
 
 interface AndroidBookGroupRecord {
   groupId?: number;
@@ -13,10 +16,20 @@ interface AndroidBookGroupRecord {
   isPrivate?: boolean;
 }
 
-/** 持久化 Android 兼容书架分组，并在 HOS 页面间提供稳定映射。 */
+/**
+ * 持久化 Android 兼容书架分组，并在 HOS 页面间提供稳定映射。
+ *
+ * 存储：book_groups 表（对齐上游 BookGroup.kt）。
+ * 同步 getter（getAll / getVisibleUserGroups / namesFromMask / maskFromNames）
+ * 读内存缓存，缓存由 load() 从 DB 灌入；写操作落库后同步更新缓存。
+ * preferences 只作为搬迁来源，搬迁完成后不再写入。
+ */
 export class BookGroupRepository {
   private static readonly preferenceName: string = 'book_group_store';
   private static readonly groupsKey: string = 'android_groups_v1';
+  private static readonly selectAll: string =
+    'SELECT `groupId`, `groupName`, `cover`, `order`, `enableRefresh`, `show`, `bookSort`, `isPrivate` ' +
+      'FROM `book_groups` ORDER BY `order`';
   private static groups: BookGroup[] = [];
   private static loaded: boolean = false;
   private static saveQueue: Promise<void> = Promise.resolve();
@@ -32,24 +45,85 @@ export class BookGroupRepository {
       .map((group: BookGroup) => BookGroupRepository.copyGroup(group));
   }
 
+  /**
+   * 从 DB 读全表进缓存。
+   *
+   * 读取路径：DB 有数据就直接用；DB 为空时回退读 preferences 老键
+   * android_groups_v1，再回退读 Android 备份目录里的 bookGroup.json，
+   * 读到任何一份都写回 DB（搬迁完成后 preferences 不再被写）。
+   * 失败态：DB 读失败时整表当空处理并回退 preferences，不抛给界面。
+   */
   static async load(context: Context): Promise<BookGroup[]> {
     if (BookGroupRepository.loaded) { return BookGroupRepository.getAll(); }
     let loadedGroups: BookGroup[] = [];
     try {
-      const store = await preferences.getPreferences(context, BookGroupRepository.preferenceName);
-      const saved = await store.get(BookGroupRepository.groupsKey, '');
-      if (typeof saved === 'string' && saved.length > 0) {
-        loadedGroups = BookGroupRepository.parseStoredGroups(saved);
-      } else {
-        loadedGroups = BookGroupRepository.readPreservedAndroidGroups(context);
-        await BookGroupRepository.persist(context, loadedGroups);
+      const store = await RdbStore.getStore(context);
+      await RdbSchema.ensure(store);
+      const resultSet = await store.querySql(BookGroupRepository.selectAll);
+      try {
+        loadedGroups = BookGroupRepository.readAll(resultSet);
+      } finally {
+        resultSet.close();
       }
     } catch (_) {
-      loadedGroups = BookGroupRepository.readPreservedAndroidGroups(context);
+      // DB 读不出来时回退 preferences 老数据，界面不至于变空。
+      // 这里只读不写：写回 DB 由 RdbMigration 统一负责，
+      // 否则用户把分组全删光后重启，老数据会被再次搬回来。
+      loadedGroups = await BookGroupRepository.loadLegacy(context);
     }
     BookGroupRepository.groups = BookGroupRepository.normalize(loadedGroups);
     BookGroupRepository.loaded = true;
     return BookGroupRepository.getAll();
+  }
+
+  /**
+   * 把 preferences 老数据搬进 DB，由 RdbMigration 在事务里调用。
+   *
+   * 不开事务、不写标记：事务与标记都由 RdbMigration 统一管，
+   * 这里只负责把行写进传进来的 store。
+   */
+  static async migrateFromPreferences(context: Context, store: relationalStore.RdbStore): Promise<void> {
+    const legacy = await BookGroupRepository.loadLegacy(context);
+    if (legacy.length === 0) { return; }
+    const ordered = BookGroupRepository.normalize(legacy)
+      .map((group: BookGroup, index: number) =>
+        group.groupId > 0 ? BookGroupRepository.withOrder(group, index) : BookGroupRepository.copyGroup(group));
+    await store.executeSql('DELETE FROM `book_groups`');
+    for (let index = 0; index < ordered.length; index++) {
+      const group = ordered[index];
+      if (group === undefined) { continue; }
+      await store.executeSql(
+        'INSERT OR REPLACE INTO `book_groups` ' +
+          '(`groupId`, `groupName`, `cover`, `order`, `enableRefresh`, `show`, `bookSort`, `isPrivate`) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          group.groupId,
+          group.groupName,
+          group.cover === undefined ? null : group.cover,
+          group.order,
+          group.enableRefresh ? 1 : 0,
+          group.show ? 1 : 0,
+          group.bookSort,
+          group.isPrivate ? 1 : 0
+        ]
+      );
+    }
+    BookGroupRepository.groups = ordered;
+    BookGroupRepository.loaded = true;
+  }
+
+  /** 读 preferences 老键，再回退读 Android 备份目录。仅供搬迁使用。 */
+  private static async loadLegacy(context: Context): Promise<BookGroup[]> {
+    try {
+      const store = await preferences.getPreferences(context, BookGroupRepository.preferenceName);
+      const saved = await store.get(BookGroupRepository.groupsKey, '');
+      if (typeof saved === 'string' && saved.length > 0) {
+        return BookGroupRepository.parseStoredGroups(saved);
+      }
+    } catch (_) {
+      // preferences 不可用时继续走备份目录兜底。
+    }
+    return BookGroupRepository.readPreservedAndroidGroups(context);
   }
 
   /** 导入 Android 分组定义；同 ID 的定义以本次恢复内容为准。 */
@@ -83,6 +157,7 @@ export class BookGroupRepository {
     if (BookGroupRepository.groups.some((group: BookGroup) => group.groupId > 0 && group.groupName === normalized)) {
       throw new Error('分组名称已存在');
     }
+    // 上游 getUnusedId 从 1 开始逐位左移找空位，这里保持同一分配方式。
     let groupId: number = 1;
     while (BookGroupRepository.groups.some((group: BookGroup) => group.groupId === groupId)) {
       groupId *= 2;
@@ -279,6 +354,33 @@ export class BookGroupRepository {
     }
   }
 
+  /** 从结果集读出全部分组。列顺序与 selectAll 一致。 */
+  private static readAll(resultSet: relationalStore.ResultSet): BookGroup[] {
+    const groupIdIndex = RdbCodec.column(resultSet, 'groupId');
+    const groupNameIndex = RdbCodec.column(resultSet, 'groupName');
+    const coverIndex = RdbCodec.column(resultSet, 'cover');
+    const orderIndex = RdbCodec.column(resultSet, 'order');
+    const enableRefreshIndex = RdbCodec.column(resultSet, 'enableRefresh');
+    const showIndex = RdbCodec.column(resultSet, 'show');
+    const bookSortIndex = RdbCodec.column(resultSet, 'bookSort');
+    const isPrivateIndex = RdbCodec.column(resultSet, 'isPrivate');
+    const groups: BookGroup[] = [];
+    while (resultSet.goToNextRow()) {
+      const group: BookGroup = {
+        groupId: RdbCodec.integer(resultSet, groupIdIndex),
+        groupName: RdbCodec.text(resultSet, groupNameIndex),
+        order: RdbCodec.integer(resultSet, orderIndex),
+        show: RdbCodec.boolean(resultSet, showIndex, true),
+        enableRefresh: RdbCodec.boolean(resultSet, enableRefreshIndex, true),
+        bookSort: RdbCodec.integer(resultSet, bookSortIndex, -1),
+        isPrivate: RdbCodec.boolean(resultSet, isPrivateIndex),
+        cover: RdbCodec.optionalText(resultSet, coverIndex)
+      };
+      groups.push(group);
+    }
+    return groups;
+  }
+
   private static copyGroup(group: BookGroup): BookGroup {
     const copy: BookGroup = {
       groupId: group.groupId, groupName: group.groupName, order: group.order, show: group.show,
@@ -383,14 +485,49 @@ export class BookGroupRepository {
     return normalized.sort((left: BookGroup, right: BookGroup) => left.order - right.order);
   }
 
+  /**
+   * 把整份分组列表写回 DB。
+   *
+   * 写入顺序：串行队列内先 DELETE 全表、再逐行 INSERT OR REPLACE，
+   * 整体包在一个事务里，中途失败回滚，库里保持写入前的状态。
+   * 失败态：写库失败时抛错给调用方，内存缓存不更新（保持旧值），
+   * 界面看到的是「操作没生效」而不是「显示成功但重启丢失」。
+   */
   private static async persist(context: Context, groups: BookGroup[]): Promise<void> {
     const normalized = BookGroupRepository.normalize(groups);
     const ordered = normalized.map((group: BookGroup, index: number) =>
       group.groupId > 0 ? BookGroupRepository.withOrder(group, index) : BookGroupRepository.copyGroup(group));
     const operation = BookGroupRepository.saveQueue.then(async (): Promise<void> => {
-      const store = await preferences.getPreferences(context, BookGroupRepository.preferenceName);
-      await store.put(BookGroupRepository.groupsKey, JSON.stringify(ordered));
-      await store.flush();
+      const store = await RdbStore.getStore(context);
+      await RdbSchema.ensure(store);
+      store.beginTransaction();
+      try {
+        await store.executeSql('DELETE FROM `book_groups`');
+        for (let index = 0; index < ordered.length; index++) {
+          const group = ordered[index];
+          if (group === undefined) { continue; }
+          await store.executeSql(
+            'INSERT OR REPLACE INTO `book_groups` ' +
+              '(`groupId`, `groupName`, `cover`, `order`, `enableRefresh`, `show`, `bookSort`, `isPrivate`) ' +
+              'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+              group.groupId,
+              group.groupName,
+              group.cover === undefined ? null : group.cover,
+              group.order,
+              group.enableRefresh ? 1 : 0,
+              group.show ? 1 : 0,
+              group.bookSort,
+              group.isPrivate ? 1 : 0
+            ]
+          );
+        }
+        store.commit();
+      } catch (error) {
+        store.rollBack();
+        // ArkTS 限制：catch 到的值类型不确定，不能直接 throw（arkts-limited-throw）。
+        throw new Error(`分组写入失败：${error instanceof Error ? error.message : String(error)}`);
+      }
     });
     BookGroupRepository.saveQueue = operation.then((): void => {}, (_error: Error): void => {});
     await operation;
