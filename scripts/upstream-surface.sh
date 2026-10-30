@@ -14,19 +14,44 @@
 
 set -u
 
-# 界面目录白名单：某些界面文件只写 state.menuConfig.xxx，既不提类型名也不提键名，
-# 关键词永远捞不到。按「目录 + 文件名含 Menu」兜底纳入接触面。
-# 格式：每行 "相对 app/src/main/java 的目录|文件名 glob"。新增白名单同时要写进
-# docs/parity/KEYWORDS.md 的「界面目录白名单」节，理由一并写在那里。
+# 界面白名单：个别界面文件既不提配置类名、也不提任何配置字段名，
+# 只画已经算好的颜色和动画，关键词永远捞不到。这类文件逐个判断后按**精确文件名**纳入，
+# 不做目录级 glob 兜底——整目录纳入会把同目录下与配置无关的实现一并拖进接触面，
+# 多出的只是待解释条目，不是真缺口。
+# 格式：每行 "相对 app/src/main/java 的目录|文件名1,文件名2|归属类别"。
+# 第三段声明这条白名单是为哪个类别的关键词盲区加的（多个类别用逗号分隔，`*` 表示全部）。
+# 不声明归属就会漏进别的类别的接触面：readConfig 的菜单渲染端若算进 localBook，
+# 未分配清单里会出现一批与本类别无关的文件，覆盖证明就此失真。
+# 新增白名单同时要写进 docs/parity/KEYWORDS.md 的「界面白名单」节，理由一并写在那里。
 SURFACE_DIR_WHITELIST="
-io/legado/app/ui/book/read|*Menu*.kt
+io/legado/app/ui/book/read|ReadBookMenuBarSearch.kt,SelectionMenuMotion.kt|readConfig
 "
 
-# 把目录白名单展开成文件清单，输出相对 app/src/main/java 的路径。
+# 把界面白名单展开成文件清单，输出相对 app/src/main/java 的路径。
+# 第二段是逗号分隔的精确文件名列表，逐个 stat 确认存在（不存在的名字要报出来，防止白名单烂在脚本里）。
+# 传类别时只保留声明了该类别的白名单行；不传类别时全部纳入。
 list_whitelist() {
-  printf '%s\n' "$SURFACE_DIR_WHITELIST" | while IFS='|' read -r dir pat; do
+  local category="${1:-}"
+  printf '%s\n' "$SURFACE_DIR_WHITELIST" | while IFS='|' read -r dir pat cats; do
     [ -n "$dir" ] || continue
-    find "$SRC_DIR/$dir" -name "$pat" -type f 2>/dev/null | sed "s|^$SRC_DIR/||"
+    [ -n "$pat" ] || continue
+    if [ -n "$category" ]; then
+      cats="${cats:-*}"
+      if [ "$cats" != "*" ]; then
+        case ",$cats," in
+          *",$category,"*) ;;
+          *) continue ;;
+        esac
+      fi
+    fi
+    printf '%s\n' "$pat" | tr ',' '\n' | while read -r name; do
+      [ -n "$name" ] || continue
+      if [ -f "$SRC_DIR/$dir/$name" ]; then
+        printf '%s\n' "$dir/$name"
+      else
+        echo "警告：白名单文件不存在 $dir/$name" >&2
+      fi
+    done
   done
 }
 
@@ -73,13 +98,13 @@ if [ "${1:-}" = "--coverage" ]; then
   KEYWORD="$(list_keywords | awk -F '\t' -v c="$CATEGORY" '$1 == c { print $2 }')"
   [ -n "$KEYWORD" ] || die "关键词表里没有类别 $CATEGORY"
 
-  # 上游接触面：按内容引用划定，再并上界面目录白名单（关键词捞不到的界面文件）
+  # 上游接触面：按内容引用划定，再并上本类别声明了的界面白名单
   SURFACE=$({
     grep -rlE "$KEYWORD" "$SRC_DIR" --include='*.kt' 2>/dev/null | sed "s|^$SRC_DIR/||"
-    list_whitelist
+    list_whitelist "$CATEGORY"
   } | sort -u)
   TOTAL=$(printf '%s\n' "$SURFACE" | grep -c . )
-  WL_COUNT=$(list_whitelist | grep -c . )
+  WL_COUNT=$(list_whitelist "$CATEGORY" | grep -c . )
 
   MAPPED=0
   UNASSIGNED=0
@@ -101,7 +126,7 @@ EOF
   echo "类别：$CATEGORY"
   echo "关键词：$KEYWORD"
   echo "表格：$TABLE"
-  echo "上游接触面：$TOTAL 个 .kt 文件（其中界面目录白名单 $WL_COUNT 个）"
+  echo "上游接触面：$TOTAL 个 .kt 文件（其中界面白名单 $WL_COUNT 个）"
   echo
   echo "已分配（基名在表格中出现）：$MAPPED"
   echo "未分配：$UNASSIGNED"
@@ -144,14 +169,14 @@ echo
 # 注意：对靠 config.xml 偏好键落地的类别（readConfig 等），类别键名与上游文件名本就不同名，
 # 这项对比没有意义，因此只在文件名命中不超出内容命中时才报差额。
 NAME_HITS=$(find "$SRC_DIR" -name '*.kt' -type f -iname "*${CATEGORY}*" 2>/dev/null | wc -l | tr -d ' ')
-# 与 --coverage 同口径：关键词命中 ∪ 界面目录白名单
+# 与 --coverage 同口径：关键词命中 ∪ 本类别声明的界面白名单
 CONTENT_FILES=$({
   grep -rlE "$KEYWORD" "$SRC_DIR" --include='*.kt' 2>/dev/null | sed "s|^$SRC_DIR/||"
-  list_whitelist
+  list_whitelist "$CATEGORY"
 } | sort -u)
 CONTENT_HITS=$(printf '%s\n' "$CONTENT_FILES" | grep -c . )
 
-echo "关键词命中文件：$CONTENT_HITS 个（上游 .kt 总数 $TOTAL_KT，其中界面目录白名单 $(list_whitelist | grep -c . ) 个）"
+echo "关键词命中文件：$CONTENT_HITS 个（上游 .kt 总数 $TOTAL_KT，其中界面白名单 $(list_whitelist "$CATEGORY" | grep -c . ) 个）"
 if [ "$NAME_HITS" -le "$CONTENT_HITS" ] && [ "$NAME_HITS" -gt 0 ]; then
   echo "按类别键名当文件名去找：$NAME_HITS 个文件"
   echo "差额：$((CONTENT_HITS - NAME_HITS)) 个文件只能靠内容引用找到"

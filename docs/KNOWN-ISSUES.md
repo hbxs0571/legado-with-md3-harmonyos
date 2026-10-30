@@ -82,6 +82,136 @@
 
 3. **按书净化开关的冷启闭环未验**。`book_overrides_v1` 已搬进 `books.readConfig.useReplaceRule`，读写路径已构建通过（设备实测两本书的 `readConfig` 为 `{"reSegment":false,"fixedType":false}`，无 `useReplaceRule` 键，符合「未设置 = 跟随全局默认」），但「关掉某一本书的净化 → 冷启 → 仍关闭」这条闭环没有上机走。验收要点：关闭后 `books.readConfig` 应出现 `"useReplaceRule":false`，重启后阅读该书的替换仍不生效，重置后该键应重新消失。
 
+## 阅读配置行登记（READER-CONFIG.md 的未接行）
+
+本节登记 [READER-CONFIG 对照表](parity/READER-CONFIG.md) A–G 块里 **97 行 `未接`** 的「为什么不修」。编号 `KI-<块><组>` 与对照表「备注」列的标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记不实施，本轮不改 `.ets` 代码。**
+
+判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS 朗读、WebDAV、AI、云同步与额外设备形态，不因开关已上屏而算已实现；上游没有的行为不补。凡上游行为在本地已有等价实现、或上游分支在本平台根本不存在，直接记「不接」；其余记「要接，待排期」并写补法。
+
+与字段口径的关系：本节按 **A–G 明细表的行**登记（97 行）。对照表 §一 1.5 按**上游声明名**判定的 112 项里，另有 9 项判「不接」但不对应任何 KI 组，理由直接写在 1.5 表内，不在此重复——`menuBgColor`、`menuBgColorNight`、`menuAcColor`、`menuAcColorNight`、`menuBottomCornerRadius`、`menuBottomHorizontalMargin`、`menuBottomBottomMargin`（都是上游 `Config` 里 `@Transient` 的主题包承载字段，上游没有用户设置入口）、`readStyleSelect`、`comicStyleSelect`（图片书/漫画，本地无该内容形态，明细表 A 块已判 `不适用`）。两个口径不可相加。
+
+### A 阅读界面基础
+
+**KI-A1 正文渲染适配四项（要接，待排期）** —— 覆盖 A-01 正文行高适配（`readBodyToLh`，`ReadBookConfig.kt:67`）、A-02 中文排版（`useZhLayout`，`:76`）、A-03 适配刘海屏（`paddingDisplayCutouts`，`ReadSettings.kt:11`）、A-04 适配特殊样式（`adaptSpecialStyle`，`:18`）。
+
+上游四项都落在排版管线：`MoreConfigSheet.kt:231`、`model/ReadBook.kt:420`、`ReadBookRouteScreen.kt:195`、`feature/reader/core/source/ReaderBodyOnlyFilter.kt:56`。本地这四条在 `entry/src/main/ets/pages/ReaderSettingsPage.ets:837-840` 是恒 `checked: true` 的占位开关，分页由 `ReaderPage.ets` 自己做，没有「行高归一 / 保留书籍自带样式 / 中文标点挤压」这三条分支。**先接线不会改变渲染，属假已接**，所以整组留到排版引擎那一轮。补法：分页测量处按 `readBodyToLh` 归一特殊排版行高、按 `adaptSpecialStyle` 决定是否套书籍自带样式、按 `useZhLayout` 走中文标点挤压；刘海屏在 HOS 由窗口安全区处理，接入前先确认 `ReaderPage` 是否已 `expandSafeArea`。
+
+**KI-A2 菜单层依赖三项（要接，随 KI-E1）** —— 覆盖 A-05 显示菜单图标（`showMenuIcon`，`ReadBookConfig.kt:78`）、A-08 阅读标题补充信息（`showReadTitleAddition`，`ReadSettings.kt:55`）、A-17 阅读菜单不透明度（`menuAlpha`，`:13`）。
+
+三项都作用在阅读页菜单层，而本地没有菜单外观渲染层：全仓 `readMenu*`/`titleBar*` 只命中 `data/BackupRepository.ets`，`ReaderPage.ets` 零命中。没有菜单的地方单独接这三个开关等于给不存在的界面加配置，因此与 E 块合并处理（见 KI-E1）。
+
+**KI-A3 禁用返回键（要接，待产品定调）** —— 覆盖 A-06（`disableReturnKey`，`ReadSettings.kt:50`）。
+
+需要拦截系统返回手势，与阅读页现有的下拉/侧滑退出手势冲突；`ReaderPage.ets` 目前没有 `onBackPress` 覆盖。补法：`onBackPress()` 返回 `true`，并在设置里给出「仍需退出」的二次确认，避免把用户困在阅读页。
+
+**KI-A4 优化正文渲染（不接）** —— 覆盖 A-07（`optimizeRender`，`ReadSettings.kt:49`）。
+
+上游这条只在 `feature/reader/legacy/LegacyReaderPaginationStyleFactory.kt:49` 的 `Build.VERSION.SDK_INT <= Q`（Android 10 及以下）分支里生效，是给老设备减少渲染开销的兼容路径。HOS 没有对应的老渲染管线，接了也没有可切换的实现。**不补**；设置页该条保留占位文案，不假装生效。
+
+**KI-A5 朗读与在线书源三项（不接，范围之外）** —— 覆盖 A-09 朗读悬浮窗分离提醒（`readAloudDetachReminderEnabled`，`ReadBookConfig.kt:80`）、A-10 自动切换书源（`autoChangeSource`，`ReadSettings.kt:42`，含 `defaultSourceChangeAll:15`）、A-11 换源结果应用于全部书籍。
+
+朗读（TTS）与在线书源抓取都在[项目范围](PROJECT.md)之外；因开关已上屏，判 `未接` 而非 `不适用`。补法：随对应子系统接入，本轮不动。
+
+**KI-A6 自动切换日夜模式提醒（要接，待排期）** —— 覆盖 A-12（`autoSuggestDayNight`，`ReadSettings.kt:43`）。
+
+上游是到点弹「是否切换背景」的应用内提示，依赖定时判定；本地日夜切换只有手动入口，没有提层。补法：`ReaderPage` 在前台时按整点判断一次，弹应用内提示即可，不引系统通知（HOS 通知需要授权，成本不成比例）。
+
+**KI-A7 触感反馈两项（要接，待排期）** —— 覆盖 A-13 阅读进度条触感反馈（`sliderVibrator`，`ReadSettings.kt:36`）、A-15 文字选择触感反馈（`selectVibrator`，`:41`）。
+
+HOS 有振动能力，本地一处都没接。补法：封装一个触感工具，进度条拖动与选区变化各调一次；落地前先确认 API 12 的振动接口与权限口径。
+
+**KI-A8 使用新版目录（不接）** —— 覆盖 A-14（`useNewTocSheet`，`ReadSettings.kt:37`）。
+
+上游这个字段是「阅读页内开 Sheet」与「跳独立目录页」两种呈现的切换开关（`ui/book/read/ReadBookViewModel.kt:193`）。本地目录固定为 `CatalogPage.ets` 独立页一种形态，没有第二态可切。为它造一个不存在的新旧目录等于凭空加功能，**不补**。
+
+**KI-A9 阅读亮度（要接，待排期）** —— 覆盖 A-16（`readBrightness`，`ReadSettings.kt:22`，默认 100）。
+
+上游按书保存亮度，本地没有亮度控制，退出重进也不记忆。补法：`ReaderPage` 用窗口亮度接口设置，值落 `ReaderSettingsRepository` 新字段，退出阅读页恢复系统亮度。
+
+**KI-A10 主题网格列数（不接）** —— 覆盖 A-18（`themeGridColumns`，`ReadSettings.kt:40`，默认 4）。
+
+本地背景/主题是 `READER_BACKGROUND_STYLES` 六个内置方案的自绘列表（`entry/src/main/ets/data/ReaderSettingsRepository.ets:339-346`，入口 `ReaderSettingsPage.ets:1281`），不是网格布局，该字段没有消费面。**不补**；将来若把面板改成网格，再一并接。
+
+**KI-A11 预下载两项（不接，范围之外）** —— 覆盖 A-19 向后预下载章节数（`preDownloadNum`，`ReadSettings.kt:58`，默认 10）、A-20 向前预下载章节数（`preDownloadNumPrev`，`:59`，默认 0）。
+
+依赖离线缓存/预下载子系统；本地 `AppDownloadCacheSettingsPage.ets:31` 是预览页，没有缓存实现。补法：随下载缓存子系统接入。
+
+**KI-A12 在浏览器打开（不接，范围之外）** —— 覆盖 A-21（`readUrlInBrowser`，`ReadSettings.kt:64`）。
+
+需要外部应用跳转（`module.json5` 的 browser skill），属跨应用能力而非配置接线。补法：加 browser skill 后用 `startAbility(ACTION_VIEW)` 打开；本轮不动。
+
+### C 正文排版
+
+**KI-C1 正文取色三项（要接，待与 KI-C2 一并做）** —— 覆盖 C-01 正文日间颜色（`textColor`，`ReadBookConfig.kt:55`）、C-02 正文夜间颜色（`textColorNight`，`:56`）、C-03 正文强调色（`textAccentColor`/`Night`，`:62`）。
+
+本地`ReaderPage.ets:2710-2713 getReadingTextColor()` 按纸色三值返回硬编码颜色，强调色同时被划线高亮与 E 块「种子色」引用。这三项若单独接，会出现「纸色是六方案、文字色是任意色」的错配，必须与背景系统一起改。补法：给 `ReaderSettingsSnapshot` 加 `textColor`/`textColorNight`/`textAccentColor(+Night)`，`getReadingTextColor()` 改为读字段，空值时回落到现有硬编码值以保持旧观感。
+
+**KI-C2 背景三项（要接，独立一轮）** —— 覆盖 C-04 背景透明度（`bgAlpha`，`ReadBookConfig.kt:198`，默认 100）、C-05 背景颜色/图片（`bgStr`/`bgStrNight`/`bgType`/`bgTypeNight`，`:537-551`）、C-06 白天是否暗色状态栏（`darkStatusIcon`/`Night`，`:552`）。
+
+本地背景收敛为六个内置方案（`paperIndex`/`dayPaperIndex`/`nightPaperIndex` → `READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:162-164`、`:339-346`），上游是「任意颜色串 + assets 图 + 自选图」三类，自定义能力本地为零；`ReaderSettingsPage.ets:1281` 的「背景图片」条目只弹提示。接入需要图片选择、应用私有目录存储、渲染三层（可复用 r265 书签角标图片那套），`darkStatusIcon` 又要跟背景亮度联动，所以整组一起做。补法：先加 `bgStr`/`bgStrNight`/`bgType`/`bgAlpha` 与取色器，把 `READER_BACKGROUND_STYLES` 降级为「预设」；`darkStatusIcon` 由背景亮度推导或加显式开关。
+
+**KI-C3 下划线绘制参数四项（要接，待排期）** —— 覆盖 C-07 下划线偏移量（`underlinePadding`，`ReadBookConfig.kt:322`，默认 10）、C-08 下划线延伸（`underlineExtend`，`:325`）、C-09 自定义虚线长度基准（`dottedBase`，`:331`，默认 6f）、C-10 自定义虚线间隔比例（`dottedRatio`，`:334`，默认 6f）。
+
+本地下划线只用了 `underline`/`dottedLine`/`underlineHeight`/颜色四个字段，绘制集中在 `ReaderPage.ets:2159`，四个几何参数从未参数化。补法：先确认 ArkUI 的 `TextDecorationType` 是否开放虚线段长，不开放就得改成自绘下划线，再把四个值传进去。
+
+**KI-C4 标题排版十四项（要接，需先做排版模型改造）** —— 覆盖 C-11 标题位置模式（`titleMode`，`ReadBookConfig.kt:267`）、C-12 标题字号（`titleSize`，`:269`）、C-13 标题字号是否相对正文（`titleSizeRelative`，`:270`）、C-14 标题上间距（`titleTopSpacing`，`:298`）、C-15 标题下间距（`titleBottomSpacing`，`:301`）、C-16 标题日间颜色（`titleColor`，`:304`）、C-17 标题夜间颜色（`titleColorNight`，`:307`）、C-18 标题字重（`titleBold`，`:228`）、C-19 标题行距（`titleLineSpacingExtra`，`:255`）、C-20 标题行距子项（`titleLineSpacingSub`，`:258`）、C-21 标题分段模式（`titleSegType`，`:280`）、C-22 标题分段缩放（`titleSegScaling`，`:283`）、C-23 标题分段起始位置（`titleSegDistance`，`:287`）、C-24 标题分段识别字符（`titleSegFlag`，`:290`）。
+
+共同前提：本地标题把字号写成 `this.fontSize + 4` 硬编码，共 9 处——`ReaderPage.ets:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`，覆盖测量与绘制两类调用点。字段接进去而不改这九处等于没接；改这九处又必须先定标题排版模型（绝对/相对字号、分段规则、颜色回退）。补法：抽 `resolveTitleStyle()` 统一产出字号/行距/颜色/字重/分段，九处调用点全改走它，再逐项接字段。
+
+**KI-C5 繁简转换（要接，待排期；需自带字表）** —— 覆盖 C-25（`chineseConverterType`，`ReadSettings.kt:118`，三档）。
+
+需要简繁/繁简两套字表（上游由第三方库提供），本地全仓零命中，属独立能力而非配置接线。补法：引入一份常用字表 + 三态开关，挂在正文处理管线（`entry/src/main/ets/data/BookContentProcessEngine.ets`）里做全文转换。
+
+**KI-C6 字体文件夹（不接）** —— 覆盖 C-26（`fontFolder`，`ReadSettings.kt:79`）。
+
+上游是「用户指定一个目录，扫描其中所有 TTF/OTF」（`ui/book/read/ReadBookScreen.kt:470`）。HOS 应用无法递归扫描任意用户目录；本地等价能力是 `ReaderFontRepository.listFonts()` 列系统字体 + 导入字体到应用私有目录（r265 起可用），入口就在排版设置面板。**不补**，差别只在导入方式。
+
+### D 翻页与手势交互
+
+**KI-D1 翻页按键与鼠标滚轮（要接，分批）** —— 覆盖 D-01 自定义翻页按键（`prevKeys`/`nextKeys`，`ReadSettings.kt:60`/`:61`）、D-03 鼠标滚轮翻页（`mouseWheelPage`，`:28`）。
+
+D-01 需要按键映射面板 + 键盘事件；D-03 依赖鼠标滚轮事件，属「额外设备形态」（[项目范围](PROJECT.md)之外）。补法：D-01 先做固定映射（音量键之外再补两键），再做可配置面板；D-03 随桌面形态一起。
+
+**KI-D2 划词菜单三项（要接，需先抽条目模型）** —— 覆盖 D-02 选中文字菜单（`textSelectMenuConfig`，`ReadSettings.kt:53`）、D-08 展开文字菜单（`expandTextMenu`，`:51`）、D-09 显示选择菜单图标（`showSelectMenuIcon`，`:52`）。
+
+本地划词菜单是 `ReaderPage.ets` 内联面板，条目写死；`textSelectMenuConfig` 全仓零命中，`expandTextMenu` 只有一处 `@State expandTextMenuPreview`（`ReaderSettingsPage.ets:144`）无持久化，`showSelectMenuIcon` 零命中。与本节「书签与标注」第 2 条（行内快速标记）同属划词菜单改造。补法：先抽划词菜单条目模型（id/显示/顺序/图标），再接这三个字段。
+
+**KI-D3 朗读时允许音量键翻页（不接，范围之外）** —— 覆盖 D-04（`volumeKeyPageOnPlay`，`ReadSettings.kt:30`）。朗读子系统未接入，随 TTS 一起做。
+
+**KI-D4 横屏双页（要接，属分页引擎改造）** —— 覆盖 D-05（`doubleHorizontalPage`，`ReadSettings.kt:26`）。
+
+需要双列排版 + 翻页动画跨双页，本地 `ReaderPage` 是单列（滚动/分页两模式）。补法：分页测量阶段按可用宽度拆双列，翻页步长改 2，并同步改阅读进度换算。
+
+**KI-D5 触摸灵敏度与进度条模式（要接，待排期）** —— 覆盖 D-06 翻页触摸灵敏度（`pageTouchSlop`，`ReadSettings.kt:35`，默认 0）、D-07 进度条模式（`readSliderMode`，`:25`，默认 `"0"`）。
+
+D-06 是滑动手势的位移阈值，本地阈值写死在 `ReaderPage.ets` 的手势处理里；D-07 是进度条形态（圆点/滑块），本地只有一种。补法：阈值与形态各提一个字段，前者给手势参数、后者给进度条组件的形态属性。
+
+**KI-D6 上次标记样式（要接，待排期）** —— 覆盖 D-10（`lastMarkingStyle`，`ReadSettings.kt:54`）。
+
+上游用字符串记上一次用的标记样式，连续标注时默认沿用（`MarkingSelectionMenu` 的 `lastMarkingStyle` 入参即此值）。本地标记面板每次重置为默认。补法：面板关闭时把当前 `effect+color` 存一条「最近使用」，下次打开预选。
+
+### E 菜单与主题外观
+
+**整块共同的前置条件**：本地阅读页没有菜单外观渲染层。全仓 `readMenu*`/`titleBar*` 只命中 `data/BackupRepository.ets`，`ReaderPage.ets` 零命中；设置页 36 个真实条目里 34 个只有页面 `@State`，退出即丢。要接这些字段，等于先用 ArkUI 重写一套阅读页菜单（顶栏 / 底栏 / 悬浮图标 / 模糊 / 液态玻璃），属一整轮的工作量。
+
+**另有一层备份侧证据**：这些 `readMenu*` 外观键在 `config.xml` 的两个方向都不走——导出只写 24 个键（`BackupRepository.ets:515-557`），恢复只读约 40 个键（`:1118-1255`，含 `readMenuIconShowText`/`readMenuIconStyle`/`readMenuIconItemsPerRow`/`readMenuIconRowCount` 四个已接的），且这批键只出现在 `preferenceKeysByCategory.readConfig`（`:234-256`）的忽略清单里。**因此即使现在把字段接上，也读不到 Android 备份里的值**；真正的补齐顺序是先建渲染层，再把键加进导出/恢复两组。
+
+**KI-E1 菜单配色与亮度九项（要接，随菜单渲染层）** —— 覆盖 E-01 工具栏样式（`ReadBookConfig.kt:99`）、E-02 调色板风格（`:113`）、E-03 菜单颜色来源（`:99`）、E-04 种子色（`:62`）、E-05 菜单背景颜色（`:117`）、E-06 菜单容器颜色（`:123`）、E-07 菜单强调颜色（`:120`）、E-08 显示亮度视图（`:94`）、E-09 亮度条位置（`:95`）。上游这组由 `resolvedMenuBgColor`/`resolvedMenuAccentColor`/`resolvedMenuContainerColor`（`ReadBookConfig.kt:154/:180/:183`）三套解析器统一产出日/夜/EInk 三份取色，本地连取色器都只落在 `@State`。
+
+**KI-E2 边框与模糊七项（要接，随菜单渲染层）** —— 覆盖 E-10 菜单栏边框（`ReadBookConfig.kt:88`）、E-11 边框宽度（`:115`，夹 0–4）、E-12 边框颜色（`:88-89`）、E-13 模糊半径（`:109`，夹 0–32）、E-14 模糊透明度（`:110`，夹 0–100）、E-15 菜单文字颜色（`:90-91`）、E-16 菜单模糊颜色（`:111-112`）。这组依赖 ArkUI 的模糊/描边能力，需先做一次原型确认效果等价再上屏。
+
+**KI-E3 标题栏图标四项（要接，随菜单渲染层）** —— 覆盖 E-17 显示标题栏图标（`ReadBookConfig.kt:92`）、E-18 标题栏悬浮图标配置（`:146`、`:149` 两个 `Map<String,String>`）、E-19 标题栏悬浮图标位置（`:116`，夹 0–3）、E-20 悬浮图标液态玻璃按钮（`:87`）。注意 E-18 的「标题栏悬浮图标配置」入口虽走 `handleMenuSettingsEntryClick()`（`ReaderSettingsPage.ets:470-472`），但 `:517-531` 的 `else` 分支只 `openDetailSheet`，**并未落盘**，仍属未接。
+
+**KI-E4 底栏外观七项（要接，随菜单渲染层）** —— 覆盖 E-21 底栏圆角（`ReadBookConfig.kt:104`，夹 0–32）、E-22 底栏悬浮（`:82`）、E-23 底栏模糊（`:106`，夹 0–2）、E-24 底栏模糊透明度（`:110`）、E-25 底栏模糊样式（`:108`，夹 0–1）、E-26 底栏液态玻璃（`:86`）、E-27 底栏按钮液态玻璃（`:86` 同字段的按钮级开关）。本地底栏已能渲染（`ReaderPage.ets:3156-3171` 读 `showBottomActionText`/`bottomIconStyle`/`bottomRowCount`），缺的正是这层外观参数，属渲染层改造里最先能做的一块。
+
+**KI-E5 标题栏形态八项（要接，随菜单渲染层）** —— 覆盖 E-28 标题栏胶囊（`ReadBookConfig.kt:85`）、E-29 标题栏模式（`ReadSettings.kt:12`，字符串三态）、E-30 标题栏紧凑（`ReadBookConfig.kt:81`）、E-31 标题栏图标样式（`:101`，夹 0–2）、E-32 顶栏模糊（`:105`，夹 0–2）、E-33 顶栏模糊样式（`:107`，夹 0–1）、E-34 顶栏液态玻璃按钮（`:83`）、E-35 合并标题栏按钮（`:84`）。E-29 的本地选项文案为「完整信息 / 仅标题 / 标题与章节」（`ReaderSettingsPage.ets:570`），一旦有顶栏即可直接接。
+
+**KI-E6 无上屏条目五项（要接，需先补上屏）** —— 覆盖 E-36 菜单镜头半径（`ReadBookConfig.kt:114`，夹 0–48f）、E-37 自动亮度（`:97`）、E-38 阅读栏样式（`ReadSettings.kt:69`，默认 1）、E-39 阅读栏样式跟随页面（`:68`）、E-40 更多操作配置（`:121`）。这五项连设置条目都没有：`getMenuSettingsEntries()`（`ReaderSettingsPage.ets:1788-1840`）里查无对应项，上游消费点却真实存在（`readBarStyle` 在 `data/repository/ReadSettingsRepository.kt:209` 夹 0–2 并被 `help/storage/BackupConfig.kt:216` 列入备份键；`moreActionsConfig` 被 `ReadBookViewModel.kt:2150` 解析为「更多」面板条目）。要接得先补上屏。
+
+### B 页眉页脚
+
+B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复核改判 `已接`：排版设置面板的字体目标四按钮可选「页眉」「页脚」并落 `headerFont`/`footerFont`。**残留问题**：页眉页脚 tab 里那条「选择字体」（`ReaderSettingsPage.ets:799-801`）仍走 `showNotMigrated('页眉/页脚字体选择')`，是重复的占位入口，功能已由排版设置面板提供。补法：把该行改指向 `openFontSelection()` 并带 `fontTarget: 'header'`，属一行改动，本轮不动。
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。

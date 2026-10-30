@@ -60,7 +60,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 | 类别键名 | 上游检索关键词（ERE） | 命中数 | 上游开关 | 本地键组 |
 | --- | --- | --- | --- | --- |
-| `readConfig` | `ReadBookConfig\|ReadSettings\|ReadMenuConfig\|"readConfig"\|menuConfig\|ReadPreferences` | 94 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
+| `readConfig` | `ReadBookConfig\|ReadSettings\|ReadMenuConfig\|"readConfig"\|menuConfig\|ReadPreferences\|ReadBookStyleConfig\|ReadSheetConfigUiState\|expandTextMenu\|showSelectMenuIcon\|lastMarkingStyle` | 105 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
 | `themeConfig` | `backupIgnoreThemeConfig\|"themeConfig"` | 3 | `backupIgnoreThemeConfig` | `themeConfig` |
 | `coverConfig` | `backupIgnoreCoverConfig\|"coverConfig"` | 3 | `backupIgnoreCoverConfig` | `coverConfig` |
 | `themeMode` | `themeMode\|"themeMode"` | 32 | 无独立开关 | `themeMode` |
@@ -71,27 +71,34 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 **`readConfig` 的关键词不能用开关名**。上游的 `backupIgnoreReadConfig` 只命中 2 个 `.kt`（含 `help/storage/BackupConfig.kt`），拿它当接触面等于「2 个文件全过」，覆盖证明永远自证成功。该类真正的接触面是两份配置声明：`help/config/ReadBookConfig.kt`（单本书可覆盖）与 `domain/model/settings/ReadSettings.kt`（全书统一设置，114 字段），合计声明 267 个名字，`ReadBookConfig|ReadSettings|"readConfig"` 命中 78 个文件。`backupIgnoreReadConfig` 仍作为**忽略项开关**记录在「上游开关」列，与检索关键词不是一回事。
 
-当前 `readConfig` 行的关键词是四轮补漏后的结果，每项都补在具体的漏检形态上：
+当前 `readConfig` 行的关键词是五轮补漏后的结果（78 → 85 → 91 → 94 → 100 → 105），每项都补在具体的漏检形态上：
 
-- `ReadBookConfig` / `ReadSettings` — 两个配置声明源，覆盖「引用配置类」的文件。
+- `ReadBookConfig` / `ReadSettings` — 两个配置声明源，覆盖「引用配置类」的文件（78 个）。
 - `"readConfig"` — 类别键名字面量（`BackupConfig.readConfigKey`、`ConfigTag.READ_CONFIG`），覆盖只写键名不写类名的文件。
-- `ReadMenuConfig` — `ui/book/read/ReadBookContract.kt:467` 的 `data class`，是菜单外观配置的运行时载体，只在界面层出现。
-- `menuConfig` — 界面层写法 `state.menuConfig.xxx`，只写字段不写类型名的文件靠它捞到。
-- `ReadPreferences` — `data/repository/ReadSettingsRepository.kt:21` 的 `typealias ReadPreferences = ReadSettings`，设置页拿的是这个别名；漏了它会丢掉 `sheet/GlobalThemePage.kt` 与 `sheet/ReadStyleSheet.kt` 两个设置面板（这两个是主题与排版设置页，不是渲染管线）。
+- `ReadMenuConfig` — `ui/book/read/ReadBookContract.kt:467` 的 `data class`，是菜单外观配置的运行时载体，只在界面层出现。**+7 → 85**。
+- `menuConfig` — 界面层写法 `state.menuConfig.xxx`，只写字段不写类型名的文件靠它捞到。**+6 → 91**。
+- `ReadPreferences` — `data/repository/ReadSettingsRepository.kt:21` 的 `typealias ReadPreferences = ReadSettings`，设置页拿的是这个别名；漏了它会丢掉 `sheet/GlobalThemePage.kt` 与 `sheet/ReadStyleSheet.kt` 两个设置面板（这两个是主题与排版设置页，不是渲染管线）。**+3 → 94**。
+- `ReadBookStyleConfig` / `ReadSheetConfigUiState` — `ReadBookContract.kt:74` 与 `:121` 两个 data class，是**另外两个只在界面层流动的配置载体**（样式可观察状态 / 弹层面板只读快照）。参数类型既不叫 `ReadMenuConfig` 也不叫 `menuConfig`，字段名与 `ReadSettings` 大量重名却一个配置类名都不出现。**+6 → 100**。
+- `expandTextMenu` / `showSelectMenuIcon` / `lastMarkingStyle` — 三个字段名在界面层当**参数名**一路传递，宿主读取点已被前几轮覆盖，但接收端（两个选择菜单、`sheet/TextSelectMenuConfigSheet.kt`、`ui/config/readConfig/ReadConfigContract.kt`、`constant/PreferKey.kt`）此前完全不在接触面里。**+5 → 105**。
 
-### 界面目录白名单
+### 界面白名单
 
-关键词捞不到的一类文件：整个文件只写 `state.menuConfig.xxx` 或 `menuConfig: ReadMenuConfig` 参数，既不出现配置类全名，也不出现 `menuConfig` 之外的字面量。它们由脚本里的 `SURFACE_DIR_WHITELIST` 按「目录 + 文件名」兜底纳入接触面。
+关键词捞不到的一类文件：整个文件只画已经算好的颜色和动画，既不出现配置类全名，也不出现任何配置字段名。这类文件由脚本里的 `SURFACE_DIR_WHITELIST` **按精确文件名**纳入接触面。
 
-| 目录 | 文件名 glob | 命中 | 净新增 | 纳入理由 |
+**不做目录级 glob。** 早先这一行写的是 `io/legado/app/ui/book/read|*Menu*.kt`，靠文件名含 `Menu` 整批兜底。补到第四轮时发现这种做法是错的：那 13 个文件里 11 个其实有别的关键词能命中（`ReadMenuConfig`/`menuConfig`/`ReadPreferences`/`ReadBookStyleConfig`/`ReadSheetConfigUiState`/三个字段名），只有 2 个真正无任何配置引用。目录 glob 既掩盖了「到底哪些文件是靠白名单进来的」这个事实，又会让新增的 `*Menu*.kt` 自动进接触面而不经过逐个人工判断——所以改成逐个点名。
+
+**白名单必须声明归属类别。** 脚本里每一行的格式是 `目录|文件名1,文件名2|归属类别`（多个类别用逗号分隔，`*` 表示全部）。不声明归属时这条白名单对**所有**类别生效：`--coverage localBook` 会把下面这 2 个 `readConfig` 的菜单渲染端也算进 `localBook` 的接触面，未分配清单里凭空多出与本类别无关的文件，覆盖证明就此失真（r296 实测：门控前 `localBook` 是 42 个文件 14 个未分配，门控后回到 29 个文件 1 个未分配）。
+
+| 目录 | 文件名 | 归属类别 | 净新增 | 纳入理由 |
 | --- | --- | --- | --- | --- |
-| `io/legado/app/ui/book/read` | `*Menu*.kt` | 13 | 5 | 菜单栏拆分件（`ReadBookMenuBar*`）与选择菜单（`TextActionSelectionMenu`、`MarkingSelectionMenu`），都是 `ReadMenuConfig` 的渲染端 |
+| `io/legado/app/ui/book/read` | `ReadBookMenuBarSearch.kt` | `readConfig` | 1 | 201 行搜索态底栏。只收 `colors: ReadMenuColors`（`ReadBookMenuBarShared.kt:25` 的配色值对象）和 `state: ReadBookUiState`，**不读任何配置字段**——配色由宿主算好传进来。它是 E 块菜单外观行的消费端，不引入新配置项 |
+| `io/legado/app/ui/book/read` | `SelectionMenuMotion.kt` | `readConfig` | 1 | 55 行纯动画规格常量（`internal object SelectionMenuMotion`），给 `TextActionSelectionMenu` 与 `MarkingSelectionMenu` 共用进出场时长与缩放原点。**零配置引用**，是 D 块文字菜单的渲染实现 |
 
-净新增的 5 个是不被任何关键词命中的：`MarkingSelectionMenu.kt`、`ReadBookMenuBarSearch.kt`、`SelectionMenuMotion.kt`、`TextActionSelectionMenu.kt`、`sheet/TextSelectMenuConfigSheet.kt`。另外 8 个（`ReadBookMenuBar*.kt` 五个、`ReadMenuActionDefs.kt`、`sheet/SystemMenuPage.kt`）本来就靠 `menuConfig`/`ReadMenuConfig`/`ReadPreferences` 命中，白名单只是把它们固定在接触面里。
+两个都是逐个人工判断后确认「无配置字段引用、但属于菜单/文字菜单渲染端」才点名的。判断方法：拿 `ReadSettings.kt` + `ReadBookConfig.kt` 声明的全部字段名做词边界匹配，两个文件各命中 0 个与 1 个（`ReadBookMenuBarSearch.kt` 唯一命中是 `background`，实为 `androidx.compose.foundation.background` 导入；`SelectionMenuMotion.kt` 是 0）。
 
-关键词 94 + 白名单净新增 5 = **99 个** ，就是 `ReadBookConfig|ReadSettings|ReadMenuConfig|"readConfig"|menuConfig|ReadPreferences` 与 `ui/book/read/*Menu*.kt` 的并集。
+关键词 105 + 白名单净新增 2 = **107 个**，就是 `ReadBookConfig|ReadSettings|ReadMenuConfig|"readConfig"|menuConfig|ReadPreferences|ReadBookStyleConfig|ReadSheetConfigUiState|expandTextMenu|showSelectMenuIcon|lastMarkingStyle` 与上述 2 个文件的并集。
 
-**为什么只到 `*Menu*.kt`**：`ui/book/read` 目录共 114 个 `.kt`，其中提及 `menuConfig` 的 17 个。把整目录纳入会把 `pageestimate` 之类与配置无关的实现拉进接触面，多出的只是待解释条目，不是真缺口。
+**为什么白名单只剩 2 个**：`ui/book/read` 目录共 114 个 `.kt`。除了这 2 个，其余被前五轮关键词全部覆盖；而目录里剩下的 `pageestimate/`、`config/*Span.kt`、`MarkingContract.kt` 等文件要么只吃已算好的参数、要么是纯绘制实现，把整目录纳入只会多出待解释条目，不是真缺口。
 
 盘这八类时，把 `BackupConfig.kt` 与 `AppConfigStore` 的键定义当作接触面入口。前三个类别的上游开关是布尔项，关键词本身就是开关名；后五个没有独立开关，关键词是偏好键名。
 

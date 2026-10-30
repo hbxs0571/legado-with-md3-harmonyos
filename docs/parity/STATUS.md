@@ -10,10 +10,10 @@
 >
 > 1. **盘点单位改为「整个界面」**：只要涉及某界面就把它完整列进表，未迁移的显式标 `未接`。`ZIP-BOOKMARK.md` 因此新增 F 块（长按选词菜单 34 行），`BOOKSHELF.md` 因此新增 D 块（缓存管理页 + 书架管理页 53 行）。
 > 2. **修正迁移后失效的字段引用**：`progress` 改派生、`readerPositionVersion` / `androidCharacterPosition` / `bookId` / `endPosition` 已删、`styleJson` 不再拍平、`double` 已删除、`preferences` → SQLite 两张表。
-> 3. **三张表各补「覆盖证明」节**，逐个分配上游接触面文件，未分配为 0：`bookmark` 63/63、`readConfig` 76/76、`localBook` 27/27、`bookGroup` 40/40、`readRecord` 63/63、`bookshelfLayout` 10/10。（r294 补上类别键名字面量后复算：`bookmark` 64/64、`readConfig` 78/78、`localBook` 28/28、`bookGroup` 41/41、`readRecord` 64/64、`bookshelfLayout` 10/10，仍全部为 0 未分配。）
-> 4. **`KEYWORDS.md` 的 `readConfig` 关键词修正**：`backupIgnoreReadConfig` 只命中 2 个文件（等于自证成功），改为 `ReadBookConfig|ReadSettings`（76 个）。（r294 又补上键名字面量 `"readConfig"`，复算为 78/78，见 `KEYWORDS.md` 的「存储层维度」一节。）
+> 3. **三张表各补「覆盖证明」节**，逐个分配上游接触面文件，未分配为 0：`bookmark` 63/63、`readConfig` 76/76、`localBook` 27/27、`bookGroup` 40/40、`readRecord` 63/63、`bookshelfLayout` 10/10。（r294 补上类别键名字面量后复算：`bookmark` 64/64、`readConfig` 78/78、`localBook` 28/28、`bookGroup` 41/41、`readRecord` 64/64、`bookshelfLayout` 10/10，仍全部为 0 未分配。r296 再给 `localBook` 补 `BookRestorePlan`/`LocalBookLocationStatus`/`isRelocatedCopyOf`/`normalizeLocalBookLocation` 四个词把 `BookRestorePlanner.kt` 纳入接触面，复算为 `localBook` 29/29；同时把界面白名单改为按类别门控。r297 给 `readConfig` 分五轮补关键词 `ReadMenuConfig`/`menuConfig`/`ReadPreferences`/`ReadBookStyleConfig`/`ReadSheetConfigUiState`/`expandTextMenu`/`showSelectMenuIcon`/`lastMarkingStyle`，接触面 78 → 105，再按精确文件名点名 2 个无配置引用的渲染端，复算为 `readConfig` **107/107**，增量清单见 [READER-CONFIG.md](READER-CONFIG.md) 的「接触面是怎么从 78 涨到 107 的」节。）
+> 4. **`KEYWORDS.md` 的 `readConfig` 关键词修正**：`backupIgnoreReadConfig` 只命中 2 个文件（等于自证成功），改为 `ReadBookConfig|ReadSettings`（76 个）。（r294 又补上键名字面量 `"readConfig"`，复算为 78/78，见 `KEYWORDS.md` 的「存储层维度」一节。r297 补到 11 个词后为 105 个，逐词增量与漏检形态见 `KEYWORDS.md` 的「`readConfig` 行的关键词」节。）
 >
-> **未做的部分，读表时注意**：`BOOKSHELF.md` A1–C 的 263 行、`READER-CONFIG.md` A–G 的 189 行、`ZIP-BOOKMARK.md` A–E 的 83 行，都是 r277–r280 写下的**迁移前证据，未逐行复核**。表头已逐份写明这一边界。要当当前事实用，需按上游目录分派逐块重核——那时按 `scripts/upstream-surface.sh --coverage` 的未分配清单验收，不靠「表里没有 `待定`」结案。
+> **未做的部分，读表时注意**：`BOOKSHELF.md` A1–C 的 263 行、`READER-CONFIG.md` A–G 的 189 行、`ZIP-BOOKMARK.md` A–E 的 83 行，都是 r277–r280 写下的**迁移前证据，未逐行复核**。表头已逐份写明这一边界。要当当前事实用，需按上游目录分派逐块重核——那时按 `scripts/upstream-surface.sh --coverage` 的未分配清单验收，不靠「表里没有 `待定`」结案。（r297 已对 `READER-CONFIG.md` 做完这一步：189 行逐块重核为 90 已接 / 97 `未接` / 2 不适用，97 条 `未接` 逐行登记进 `KNOWN-ISSUES.md`；其余两份表仍待重核。）
 >
 > 解冻不影响 `KEYWORDS.md`（检索词表）——它是生成接触面清单的依据，改关键词等于改口径，改前先看该文件末尾的说明。
 
@@ -68,7 +68,7 @@
 | `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) B = **1 行** |
 | `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
 | `server` | `servers.json` | — | — | — | **零行** |
-| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **180 行**；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
+| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（90 已接 / 97 `未接` / 2 不适用）；97 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [阅读配置总账](READER-CONFIG.md) F = **7 行** |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | **零行** |
 | `themeMode` | `config.xml` | ✗ | ✗ | ? | **零行** |

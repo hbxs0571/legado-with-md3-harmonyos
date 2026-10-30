@@ -305,4 +305,11 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 r297 readConfig 文档轮次收尾构建
+
+- 本轮只改文档与脚本（`docs/parity/READER-CONFIG.md`、`docs/parity/KEYWORDS.md`、`docs/parity/STATUS.md`、`docs/KNOWN-ISSUES.md`、`scripts/upstream-surface.sh` 与三个 `scripts/reader-config-*.py`），未改 `.ets`。构建目的是确认并行工作留下的 `.ets` 改动不破坏编译，以及本轮文档改动没有误伤源码。
+- 命令：`hvigorw --no-daemon --mode module -p product=default -p module=entry@default assembleHap`，`BUILD SUCCESSFUL in 3 s 454 ms`，33 项任务 16 执行 / 17 最新。`PackageHap`、`PackingCheck`、`SignHap`、`CollectDebugSymbol` 全部完成，仅 `WARN: No signingConfig found for product default`（与历史记录一致，仓库不含签名材料）。
+- **构建环境坑（供后续复跑参考）**：直接调用 `hvigorw.bat` 会报 `00308003 ENOENT ... node_modules\@ohos\hvigor\bin\hvigor.js`，即便该文件 `fs.existsSync` 为 true。原因是 wrapper 用 `child_process.fork` 拉起 hvigor，而沙箱环境拒绝 spawn（`EPERM spawn EPERM`），wrapper 把任何异常都吞成「文件不存在」并提示删缓存——删缓存无效。两个必须条件：① 放开进程 spawn 权限（沙箱 `danger-full-access`）；② 把 `JAVA_HOME/bin` 加进 `PATH`，否则 `PackageHap` 阶段报 `00308018 spawn java ENOENT`（只设 `JAVA_HOME` 不够，`hvigor` 用 `PATH` 找 java）。
+- 覆盖率脚本同时复跑：`bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG.md /n/HarmonyProjects/legado-with-MD3` → 接触面 107 个 `.kt`，已分配 107，未分配 0。
+
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**
