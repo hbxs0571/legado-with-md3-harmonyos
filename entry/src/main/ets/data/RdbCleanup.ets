@@ -21,8 +21,14 @@ import { RdbMigration } from './RdbMigration';
  *   （上游 `PreferKey.replaceEnableDefault` / `PreferKey.replaceSortMode`）
  */
 export class RdbCleanup {
-  /** 清理完成的标记键，值存完成时间戳。 */
-  private static readonly markerKey: string = 'rdb_cleanup_v1_1';
+  /**
+   * 清理完成的标记键，值存完成时间戳。
+   *
+   * v1_1 只删了 `sessions_v1`，漏掉第三批之前的老格式 `details_v1` / `summaries_v1`。
+   * 升到 v1_2 是为了让已经写过 v1_1 标记的设备重跑一遍——只改删除清单不升标记是无效的，
+   * 那些设备会直接跳过清理。
+   */
+  private static readonly markerKey: string = 'rdb_cleanup_v1_2';
   private static readonly preferenceName: string = 'legado_rdb_cleanup';
 
   /** 整个文件都只存已迁走数据的 preferences，直接删文件。 */
@@ -98,7 +104,12 @@ export class RdbCleanup {
       }
     }
     // 两个文件里混着要保留的键，只能按键删
-    await RdbCleanup.deleteKeys(context, 'legado_read_records', ['sessions_v1']);
+    // legado_read_records：sessions_v1 是第三批的搬迁源；details_v1 / summaries_v1
+    // 是第三批之前的老格式（会话、日明细、汇总三份平铺），第三批起明细与汇总改为
+    // 从 readRecordSession 派生进 readRecordDetail / readRecord 两张表，
+    // 代码里已无任何读取点（grep 零命中），一并删掉
+    await RdbCleanup.deleteKeys(context, 'legado_read_records',
+      ['sessions_v1', 'details_v1', 'summaries_v1']);
     await RdbCleanup.deleteKeys(context, 'legado_replace_rules', ['rules_v1', 'book_overrides_v1']);
   }
 

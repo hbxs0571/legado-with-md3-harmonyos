@@ -454,7 +454,7 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 **实现**（`entry/src/main/ets/data/RdbCleanup.ets`）：
 
-- 标记键 `rdb_cleanup_v1_1`（preferenceName `legado_rdb_cleanup`），删完写标记，只删一次。
+- 标记键 `rdb_cleanup_v1_1`（preferenceName `legado_rdb_cleanup`），删完写标记，只删一次。**r290 起为 `rdb_cleanup_v1_2`**（r284 漏删两个键，升标记让已跑过的设备重跑一次，见本节末尾）。
 - 前置检查：三个搬迁标记 `rdb_migrated_v1_1` / `v1_2` / `v1_3` 必须全部为真，否则直接返回，**不会误删未搬的数据**。
 - 失败只吞异常（`console.error`），不写标记、不阻塞启动，下个版本重试。
 
@@ -476,7 +476,7 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 不删的：`legado_rdb_migration`（搬迁标记）、`legado_rdb_cleanup`（清理标记）、`legado_android_backup_options`（备份选项）、以及「不迁的部分」表里那 6 个仓储自己的偏好文件。
 
-**已知遗漏（r284 遗留，待修）**：`RdbCleanup.ets:101` 实际只删了 `sessions_v1`，`details_v1` 与 `summaries_v1` 没有删，设备实测这两个键仍在。修法须同时做两处——补上这两个键，并把 `RdbCleanup.ets:25` 的 `markerKey` 由 `rdb_cleanup_v1_1` 提到 `rdb_cleanup_v1_2`，否则标记已写的设备不会重跑。详见 [KNOWN-ISSUES.md](KNOWN-ISSUES.md) 的「关系型存储迁移第五批（r284）遗留」。
+**已知遗漏（r284 遗留，r290 已修）**：r284 上线时 `RdbCleanup.ets` 实际只删了 `sessions_v1`，`details_v1` 与 `summaries_v1` 没有删，设备实测这两个键仍在。r290 修法两处同时做——删除清单补上这两个键（现在就是上表 `:474` 的样子），并把 `markerKey` 由 `rdb_cleanup_v1_1` 提到 `rdb_cleanup_v1_2`（标记已写的设备才会重跑）。详见 [VALIDATION.md](VALIDATION.md) 的「r290 修补」。
 
 **连带改动**：
 
