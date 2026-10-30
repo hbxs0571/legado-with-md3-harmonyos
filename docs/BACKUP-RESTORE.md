@@ -208,6 +208,50 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 **一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 46 个、写出 9 + 阅读外观/护眼两组。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
 
+### 三张对照表的「ZIP 类别」列怎么读
+
+按类别派活时必然要查的三张表（[书籍总账](parity/BOOKSHELF.md)、[书签对照](parity/ZIP-BOOKMARK.md)、[阅读配置总账](parity/READER-CONFIG.md)）都标了 `ZIP 类别`。任务书里引用这些行之前，先把下面四条读清，否则会从错误的基数起步。
+
+**一、判据是「会动到哪个类别」，不是「数据落在哪」。**
+
+`ZIP 类别` 回答的问题是：**这一行要改代码时，会动到哪个 ZIP 类别的键或文件**。它不回答「这行的数据存在哪个文件」。
+
+两者差得很远。典型例子是书架卡片上的标签（[书籍总账](parity/BOOKSHELF.md) A1）：
+
+```kotlin
+// ui/main/bookshelf/BookItem.kt:888
+if (settings.bookshelfShowTag && kindList.isNotEmpty())
+```
+
+`bookshelfShowTag` 属 `bookshelfLayout` 类（在 `BackupConfig.kt:319-357 bookshelfPrefKeys` 内），`kindList` 来自 `Book.kind` 属 `localBook` 类（落 `bookshelf.json`）。少任何一边标签都不显示，所以派给任一类都得看这一行——标成 `localBook / bookshelfLayout`。
+
+按「数据落在哪」判会把这类跨类项严重低估：同一批行换判据，跨类从 3 行涨到 13 行。
+
+**二、四档取值，`—` 与 `不备份` 不是一回事。**
+
+| 取值 | 含义 | 派活影响 |
+| --- | --- | --- |
+| `<类别名>` | 该类别取消勾选后，这行的数据会丢 | 归该类别任务 |
+| `A / B` | 跨类，改得动两边 | 派活时两边都要看，别只派一边 |
+| `—` | **参与备份，但不受任何忽略开关控制** | 不属任何 28 类，按类别名派活**永远覆盖不到**，必须单独派 |
+| `不备份` | 连 `config.xml` 都进不去 | 同上，且与备份兼容无关，属本地私有状态 |
+
+`—` 的判定依据是上游 `help/storage/BackupConfig.kt:413 fun keyIsNotIgnore(key: String, isBackup: Boolean = false)` 的 `else -> true` 分支：不在五个类别数组里的键照样写进 `config.xml`，只是取消任何类别勾选都不会删掉它。真正永不备份的是 `alwaysIgnoredPreferenceKeys`（`BackupConfig.kt:11-30`，24 项，含 `PRIVATE_PASSWORD_SALT`/`PRIVATE_PASSWORD_VERIFIER` 等私密凭据）。
+
+`不备份` 的判定依据是本地两个 DataStore 不相通：`data/local/preferences/LocalPreferences.kt:11` 的 `local_ui_status` 里的键，`help/storage/Backup.kt:258 val configMap = AppConfigStore.preferences.asMap()` 根本读不到（它只读 `settings`）。
+
+**把这两档混为一谈是本项目返工最多的地方**：写成同一档会导致「以为某个设置跟着备份走了」或「以为某个设置需要兼容上游」。典型是选词菜单整个 F 块（[书签对照](parity/ZIP-BOOKMARK.md) 34 行）——`textSelectMenuConfig`、`expandTextMenu`、`showSelectMenuIcon` 三键在 `BackupConfig.kt` 全文零命中，属 `—`，按「实现书签」派活一行都覆盖不到。
+
+**三、「零行」是「还没盘」，不是「已完成」，也不是「本地没有这个功能」。**
+
+[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 19 类标为**零行**（`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`replaceRule`、`searchHistory`、`txtTocRule`、`highlightRule`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`）。
+
+派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[编码规约](CODE-CONVENTIONS.md)第四节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
+
+**四、未复核边界：老行是迁移前证据。**
+
+三张表里 `r277`–`r280` 写下的行——[书籍总账](parity/BOOKSHELF.md) A1–C 259 行、[阅读配置总账](parity/READER-CONFIG.md) A–G 189 行、[书签对照](parity/ZIP-BOOKMARK.md) A–E 83 行——是**迁移前证据，未逐行复核**（表头逐份写明）。重盘这些块要按块重新核对，不要在旧行上直接改状态，否则等于在未验数据上盖新章。
+
 ## 偏好键对齐差异（待移除）
 
 本地 `entry/src/main/ets/data/BackupRepository.ets:233 preferenceKeysByCategory` 与上游 `help/storage/BackupConfig.kt` 的五个类别数组逐键比对（可复跑：拿 `PreferKey.kt` 常量值换算后求差集）：
