@@ -426,18 +426,21 @@ export class BackupRepository {
     try {
       await BookGroupRepository.load(context);
       await BackupRepository.copyPreservedEntries(context, stagingDirectory, ignoredCategories);
-      if (!ignoredCategories.includes('localBook')) {
-        const localBooks = books.filter((book: Book) => BookRepository.isPersistableBook(book));
-        if (localBooks.length > 0) {
-          const records = localBooks.map((book: Book, index: number) =>
-            BackupRepository.toAndroidBookRecord(book, index));
-          const generated = JSON.stringify(records);
-          const oldPath = `${stagingDirectory}/bookshelf.json`;
-          const combined = fileIo.accessSync(oldPath)
-            ? BackupRepository.mergeAndroidBookshelf(fileIo.readTextSync(oldPath), generated)
-            : generated;
-          BackupRepository.writeTextFile(oldPath, combined);
-        }
+      // 与上游 Backup.kt:150-154 一致：bookshelf.json 总是写，忽略 localBook 时只滤掉本地书，
+      // 其余书照写；滤完为空才不写（上游 writeListToJson 只在 list.isNotEmpty() 时落盘）。
+      const ignoreLocalBook = ignoredCategories.includes('localBook');
+      const shelfBooks = books
+        .filter((book: Book) => BookRepository.isPersistableBook(book))
+        .filter((book: Book) => !(ignoreLocalBook && book.isLocal));
+      if (shelfBooks.length > 0) {
+        const records = shelfBooks.map((book: Book, index: number) =>
+          BackupRepository.toAndroidBookRecord(book, index));
+        const generated = JSON.stringify(records);
+        const oldPath = `${stagingDirectory}/bookshelf.json`;
+        const combined = fileIo.accessSync(oldPath)
+          ? BackupRepository.mergeAndroidBookshelf(fileIo.readTextSync(oldPath), generated)
+          : generated;
+        BackupRepository.writeTextFile(oldPath, combined);
       }
 
       if (!ignoredCategories.includes('bookGroup')) {
@@ -884,6 +887,15 @@ export class BackupRepository {
     await EpubRepository.removeBackupWorkDirectory(selection.stagingDirectory);
   }
 
+  /**
+   * 上游 originName 是本地书的文件名（含扩展名），见 LocalBook.kt:273 的 originName = fileName；
+   * 目录导入时则是目录名（LocalBook.kt:351）。本地没有独立字段，按 androidOriginalPath 再退 contentPath 取末段。
+   */
+  private static localBookOriginName(book: Book, androidBookUrl: string): string {
+    const source = book.androidOriginalPath ?? androidBookUrl;
+    return source.length > 0 ? BookRepository.getFileName(source) : book.title;
+  }
+
   private static toAndroidBookRecord(book: Book, order: number): AndroidBookBackupRecord {
     // 备份导出直接读 books 行的字段，与上游 Backup 一致：不 join chapters 表，
     // 章节数取 totalChapterNum，章内位置取 durChapterPos。
@@ -895,7 +907,9 @@ export class BackupRepository {
       bookUrl: androidBookUrl,
       tocUrl: androidBookUrl,
       origin: 'loc_book',
-      originName: book.title,
+      // 上游 originName 是文件名（含扩展名，见 LocalBook.kt:273 的 fileName），
+      // name 才是去掉扩展名后拆出来的书名，两者不能都取书名。
+      originName: BackupRepository.localBookOriginName(book, androidBookUrl),
       name: book.title,
       author: book.author,
       kind: book.category,
@@ -906,7 +920,7 @@ export class BackupRepository {
       customIntro: null,
       remark: book.remark ?? null,
       charset: book.charset ?? null,
-      type: 264,
+      type: BookRepository.bookTypeMask(book),
       group: BookGroupRepository.maskFromNames(book.groupNames ?? []),
       isPrivate: false,
       latestChapterTitle: book.lastChapter,
@@ -1493,10 +1507,14 @@ export class BackupRepository {
     return count;
   }
 
+  /** 与上游 BookExtensions.kt:66-73 的 Book.isLocal 同语义：type 为 0（老数据无类型位）时按 origin 前缀判。 */
   private static isLocalAndroidBook(record: string): boolean {
     const origin = BackupRepository.readJsonString(record, 'origin') ?? '';
-    const type = BackupRepository.readJsonNumber(record, 'type') ?? 0;
-    return origin.startsWith('loc_book') || (Math.trunc(type) & 256) !== 0;
+    const type = Math.trunc(BackupRepository.readJsonNumber(record, 'type') ?? 0);
+    if (type === 0) {
+      return origin === 'loc_book' || origin.startsWith('webDav::');
+    }
+    return (type & 256) !== 0;
   }
 
   private static filterLocalBooks(text: string): string {

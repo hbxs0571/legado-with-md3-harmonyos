@@ -86,8 +86,8 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 编辑态顶栏关闭按钮 | `BookshelfScreen.kt:1355` | — | 未接 | 本地无编辑态 | 进入选择模式后顶栏左侧变成关闭按钮，点后退出并清空选择 | `cancel_select` | — |
 | 顶栏更多菜单 | `BookshelfScreen.kt:688` | `pages/BookshelfPage.ets:614-617`、`:574-601` | 已接 | 本地用 `bindMenu` 弹 Menu，上游为 ModalBottomSheet | 点更多图标弹出 11 项菜单 | — | — |
 | 更多菜单·远程书籍 | `BookshelfScreen.kt:695` | `pages/BookshelfPage.ets:576` | 未接 | 本地 `onUnavailableAction('远程书籍导入尚未迁移')` | 点该菜单项弹出导入对话框并成功导入 1 本 | 依赖网络书库协议 | — |
-| 更多菜单·添加本地 | `BookshelfScreen.kt:700` | `pages/BookshelfPage.ets:578` | 已接 | 本地走系统文件选择器导入 TXT | 选 1 个 TXT，书架新增该书并自动分组「本地未分组」 | — | localBook |
-| 更多菜单·更新目录 | `BookshelfScreen.kt:705` | `pages/BookshelfPage.ets:583` | 已接 | 本地重识别全部本地 TXT 目录 | 点后目录章数变化，书签与划线保持原章节号 | 见 r276 | localBook |
+| 更多菜单·添加本地 | `BookshelfScreen.kt:700` | `pages/BookshelfPage.ets:579-583` | 已接 | 本地走系统文件选择器导入 TXT | 选 1 个 TXT，书架新增该书并自动分组「本地未分组」 | — | localBook |
+| 更多菜单·更新目录 | `BookshelfScreen.kt:705` | `pages/BookshelfPage.ets:584-585` | 已接 | 本地重识别全部本地 TXT 目录 | 点后目录章数变化，书签与划线保持原章节号 | 见 r276 | localBook |
 | 更多菜单·布局设置 | `BookshelfScreen.kt:713` | `pages/BookshelfPage.ets:586` | 已接 | 打开同一 sheet 的布局面板 | 点后弹出「书架布局」面板 | — | bookshelfLayout |
 | 更多菜单·分组管理 | `BookshelfScreen.kt:721` | `pages/BookshelfPage.ets:588` | 已接 | 打开同一 sheet 的分组面板 | 点后弹出分组管理网格 | — | bookGroup |
 | 更多菜单·添加网址 | `BookshelfScreen.kt:729` | `pages/BookshelfPage.ets:590` | 未接 | 本地 `onUnavailableAction('网址导入尚未迁移')` | 粘贴网址后成功建立书籍条目 | — | localBook |
@@ -105,7 +105,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 文件夹书籍计数角标 | `BookshelfScreen.kt:1019-1027`、`BookItem.kt:437-447` | — | 未接 | 本地分组卡片无计数 | 文件夹卡片右上角显示「N 本」 | `showBookCount` 为 true 且分组未锁定时显示 | bookGroup |
 | 文件夹长按进分组编辑 | `BookshelfScreen.kt:1055` | `pages/BookshelfPage.ets:259` | 未接 | 本地长按入口在分组管理面板内，不在书架 | 文件夹卡片长按直接打开分组编辑表单 | 面板内已接，缺书架入口 | bookGroup |
 | 书封渲染（含占位与灰底） | `BookItem.kt:738-800` | `components/BookCover.ets:77-78` | 已接 | 本地尺寸 92×128 / compact 70×100 / mini 48×68 | 无封面书籍显示按书名生成的占位图 | — | localBook |
-| 卡片副标题作者行 | `BookItem.kt:866` | `pages/BookshelfPage.ets:664-666` | 未接 | 本地卡片只有书名，无作者行 | 卡片书名下显示作者 | — | localBook |
+| 卡片副标题作者行 | `BookItem.kt:866` | `pages/BookshelfPage.ets:665-667` | 未接 | 本地卡片只有书名，无作者行 | 卡片书名下显示作者 | — | localBook |
 | 紧凑模式「作者 · N 未读」副标题 | `BookItem.kt:866` | — | 未接 | 本地无紧凑模式，也无未读数 | 开启紧凑模式后副标题变成「作者 · 3 未读」 | `author_read` | localBook / bookshelfLayout |
 | 列表卡片描述行显示当前章 | `BookItem.kt:871` | — | 未接 | 本地卡片无当前章描述 | 列表模式卡片显示「第 12 章 章节名」 | `durChapterTitle` | localBook |
 | 标题区未读徽标叠加更新图标 | `BookItem.kt:853-865` | — | 未接 | 本地 `titleEnd` 插槽无实现 | 有更新的书在未读徽标上叠加一个刷新小图标 | — | localBook |
@@ -252,16 +252,16 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 上游主体：`ui/book/info/BookInfoScreen.kt`（2479 行）、`BookInfoViewModel.kt`（2164 行）、`BookInfoContract.kt:376-396`（20 项 `BookInfoMenuAction`）、`edit/BookInfoEditScreen.kt`（578 行）、`domain/model/Book.kt`（30 个持久字段）。
 本地主体：`pages/BookInfoPage.ets`（430 行）、`model/Book.ets`（33 字段）。
 
-本地 `model/Book.ets` 缺 `isPrivate`、`canUpdate`、`disableReadRecord`、`splitLongChapter`、`deleteAlert`、`totalChapterNum`、`latestChapterTitle`，这七项是本块多条「未接」的直接原因。
+本地 `model/Book.ets` 缺 `isPrivate`、`canUpdate`、`disableReadRecord`、`splitLongChapter`、`deleteAlert`、`totalChapterNum`、`latestChapterTitle`，这七项是本块多条「未接」的直接原因：其中 `isPrivate`、`canUpdate`、`disableReadRecord`、`totalChapterNum`、`latestChapterTitle` 在 `data/RdbSchema.ets` 的 `books` 表 DDL 里已有同名列，缺的是 `data/BookRepository.ets:127-131` 的 `selectBooksSql` 没查它们、`:674-717` 的 `readBookRow` 也没读它们；`splitLongChapter`、`deleteAlert` 两列全仓 0 命中。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 顶栏返回 | `BookInfoScreen.kt:737` | `pages/BookInfoPage.ets:262-267` | 已接 | — | 点返回回到书架并保持原分组 | — | — |
-| 顶栏编辑 | `BookInfoScreen.kt:877` | `pages/BookInfoPage.ets:268` | 已接 | — | 点编辑弹出元数据编辑面板 | — | localBook |
+| 顶栏编辑 | `BookInfoScreen.kt:877` | `pages/BookInfoPage.ets:266` | 已接 | — | 点编辑弹出元数据编辑面板 | — | localBook |
 | 顶栏分享 | `BookInfoContract.kt:376-396` | `pages/BookInfoPage.ets:269` | 未接 | 本地 `onUnavailableAction('书籍分享尚未迁移')` | 点分享生成可分享的书籍卡片或链接 | — | — |
-| 顶栏更多菜单（18 项） | `BookInfoScreen.kt:1033-1141` | `pages/BookInfoPage.ets:270` | 未接 | 本地整组占位 | 点更多弹出 18 项菜单 | 本块后续逐项列出 | localBook / bookSource / readRecord |
+| 顶栏更多菜单（18 项） | `BookInfoScreen.kt:1033-1141` | `pages/BookInfoPage.ets:268` | 未接 | 本地整组占位 | 点更多弹出 18 项菜单 | 本块后续逐项列出 | localBook / bookSource / readRecord |
 | 菜单·书源自定义按钮 | `BookInfoContract.kt:376-396` | — | 不适用 | 依赖书源自定义按钮体系，属书源模块范围，见 [项目队列](../PROJECT.md) | — | 不在本轮范围 | bookSource |
-| 菜单·编辑 | `BookInfoContract.kt:376-396` | `pages/BookInfoPage.ets:268` | 已接 | 与顶栏编辑同一入口 | 点菜单「编辑」弹出编辑面板 | — | localBook |
+| 菜单·编辑 | `BookInfoContract.kt:376-396` | `pages/BookInfoPage.ets:266` | 已接 | 与顶栏编辑同一入口 | 点菜单「编辑」弹出编辑面板 | — | localBook |
 | 菜单·分享 | `BookInfoContract.kt:376-396` | — | 未接 | 同顶栏分享 | 点菜单「分享」可分享 | — | — |
 | 菜单·上传书籍 | `BookInfoContract.kt:376-396` | — | 未接 | 本地无 WebDAV 上传 | 点上传后书籍备份到远端 | 依赖 WebDAV | localBook |
 | 菜单·同步到远端 | `BookInfoContract.kt:376-396` | — | 未接 | 同上 | 点同步后远端记录更新 | 同上 | localBook |
@@ -280,27 +280,27 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 菜单·清除缓存 | `BookInfoContract.kt:376-396` | — | 未接 | 本地无章节缓存体系 | 点清除后缓存章节数归零 | — | — |
 | 菜单·显示日志 | `BookInfoContract.kt:376-396` | — | 未接 | 本地无日志页 | 打开该书相关日志 | — | — |
 | 菜单·设为私密 | `BookInfoContract.kt:376-396` | — | 未接 | `Book.ets` 缺 `isPrivate` 字段 | 标记后封面在书架模糊 | 与 A1 私密体系同一缺口 | localBook |
-| 头部封面 | `BookInfoScreen.kt:1144` | `pages/BookInfoPage.ets:158-164` | 已接 | 本地 112×157 | 详情页顶部显示大封面 | — | localBook |
-| 头部书名（含长按菜单） | `BookInfoScreen.kt:1298-1320` | `pages/BookInfoPage.ets:160-161` | 未接 | 本地为纯 `Text`，不可点、无长按菜单 | 长按书名弹出「搜索 / 展开」，选展开后书名不再截断 | `AnimatedTextLine` + `RoundDropdownMenu` | localBook |
-| 头部作者行（点击 / 长按） | `BookInfoScreen.kt:1326` | `pages/BookInfoPage.ets:162-163` | 未接 | 本地为纯 `Text`，无点击与长按 | 点作者跳作者搜索结果，长按走另一分支 | `author_show` + `AuthorClick(longClick)` | localBook |
+| 头部封面 | `BookInfoScreen.kt:1144` | `pages/BookInfoPage.ets:155-157` | 已接 | 本地 112×157 | 详情页顶部显示大封面 | — | localBook |
+| 头部书名（含长按菜单） | `BookInfoScreen.kt:1298-1320` | `pages/BookInfoPage.ets:158-159` | 未接 | 本地为纯 `Text`，不可点、无长按菜单 | 长按书名弹出「搜索 / 展开」，选展开后书名不再截断 | `AnimatedTextLine` + `RoundDropdownMenu` | localBook |
+| 头部作者行（点击 / 长按） | `BookInfoScreen.kt:1326` | `pages/BookInfoPage.ets:160-161` | 未接 | 本地为纯 `Text`，无点击与长按 | 点作者跳作者搜索结果，长按走另一分支 | `author_show` + `AuthorClick(longClick)` | localBook |
 | 头部来源行 | `BookInfoScreen.kt:1335-1339` | — | 未接 | 本地无来源行 | 书名下显示书源名，点击进入该来源详情 | `origin_show` + `OriginClick` | localBook |
 | 头部高亮标签行 | `BookInfoScreen.kt:1355-1385` | — | 未接 | 本地无高亮标签体系 | 命中高亮规则的标签以高亮样式单独一行 | `highlightedTags` ← `highlightTagRuleRepository` | highlightTagRule |
-| 头部分组与类型标签横排 | `BookInfoScreen.kt:1367-1390` | `pages/BookInfoPage.ets:170-183` | 已接 | 本地把分类、分组、格式、文件大小、自定义标签合成一行 `BookInfoTag` | 详情页头部显示「分组：科幻」等标签 | 本地无 `fadingEdge` 渐隐 | localBook / bookGroup |
-| 封面点击与长按 | `BookInfoScreen.kt:1144` | `pages/BookInfoPage.ets:158` | 未接 | 本地封面不可点 | 点封面全屏预览，长按弹出换封面 | `CoverClick`/`CoverLongClick` | localBook |
+| 头部分组与类型标签横排 | `BookInfoScreen.kt:1367-1390` | `pages/BookInfoPage.ets:167-181` | 已接 | 本地把分类、分组、格式、文件大小、自定义标签合成一行 `BookInfoTag` | 详情页头部显示「分组：科幻」等标签 | 本地无 `fadingEdge` 渐隐 | localBook / bookGroup |
+| 封面点击与长按 | `BookInfoScreen.kt:1144` | `pages/BookInfoPage.ets:156` | 未接 | 本地封面不可点 | 点封面全屏预览，长按弹出换封面 | `CoverClick`/`CoverLongClick` | localBook |
 | 封面无障碍描述 | `BookInfoScreen.kt:1164` | — | 未接 | 本地无 | 读屏聚焦封面时播报书名 | `a11y_book_cover_actions` | localBook |
 | 加入书架（含冲突提示） | `BookInfoScreen.kt:1390-1485` | — | 未接 | 本地入口只在书架内，无「加入」动作与同名冲突高亮 | 从搜索进详情可加入书架，同名时高亮冲突 | 本地无搜索进详情的路径 | localBook |
-| 移出书架 | `BookInfoScreen.kt:1390-1485` | `pages/BookInfoPage.ets:190-194` | 已接 | 本地按钮文案「已在书架」，点击即移出并二次确认 | 点后该书从书架消失 | 文案与行为不符，见下方小结 | localBook |
+| 移出书架 | `BookInfoScreen.kt:1390-1485` | `pages/BookInfoPage.ets:188-192` | 已接 | 本地按钮文案「已在书架」，点击即移出并二次确认 | 点后该书从书架消失 | 文案与行为不符，见下方小结 | localBook |
 | 长按加入书架选分组 | `BookInfoScreen.kt:1390-1485` | — | 未接 | 本地无此手势 | 长按「加入书架」弹出分组多选 | — | localBook / bookGroup |
 | 动作卡·查看目录 | `BookInfoScreen.kt:1390-1485` | `pages/BookInfoPage.ets:195` | 已接 | — | 点后打开目录页并定位当前章 | — | — |
-| 动作卡·换源 | `BookInfoScreen.kt:1390-1485`、`BookInfoViewModel.kt:1197` | `pages/BookInfoPage.ets:196` | 未接 | 本地 `onUnavailableAction('在线换源将在 P5 接入')` | 点换源后可从其它书源打开同书 | 依赖书源体系 | localBook / bookSource |
+| 动作卡·换源 | `BookInfoScreen.kt:1390-1485`、`BookInfoViewModel.kt:1197` | `pages/BookInfoPage.ets:194` | 未接 | 本地 `onUnavailableAction('在线换源将在 P5 接入')` | 点换源后可从其它书源打开同书 | 依赖书源体系 | localBook / bookSource |
 | 动作卡·阅读记录入口 | `BookInfoScreen.kt:1390-1485` | `pages/BookInfoPage.ets:197` | 已接 | 本地入口在，但点开跳**全局**阅读记录页 | 点后打开阅读记录 | 面板本身见下一行 | readRecord |
 | 详情页内嵌本书阅读记录面板 | `BookInfoReadRecordSheet.kt:41-116` | — | 未接 | 上游是本书专属的 `GlassCard` 总时长 + 按天分组时间线面板；本地直接跳全局页，看不到本书聚合 | 点阅读记录弹出面板，顶部显示本书总时长，下面按天列出会话 | 本地 `Index.ets:3709`、`:3755` 走 `ProfileRoute.READ_RECORDS` | readRecord |
-| 摘要·当前章 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:201-202` | 已接 | 本地为「在读 · 章名」，未开始显示「尚未开始阅读」 | 读第 3 章后显示该章名 | — | localBook |
-| 摘要·最新章节 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:204-205` | 已接 | — | 显示最后一章章名 | — | localBook |
-| 摘要·总章数 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:206` | 已接 | 目录未读到时显示「章节总数待读取」 | 目录加载后显示「共 128 章」 | — | localBook |
-| 摘要·已读状态三分支 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:209` | 未接 | 本地只有「已读 N 章 / 未读」两分支，缺上游「已读完」第三分支 | 读到最后一章后显示「已读完」而非「已读 128 章」 | 上游判定 `durChapterIndex + 1 == totalChapterNum` | localBook |
+| 摘要·当前章 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:199-200` | 已接 | 本地为「在读 · 章名」，未开始显示「尚未开始阅读」 | 读第 3 章后显示该章名 | — | localBook |
+| 摘要·最新章节 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:201-202` | 已接 | — | 显示最后一章章名 | — | localBook |
+| 摘要·总章数 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:204-205` | 已接 | 目录未读到时显示「章节总数待读取」 | 目录加载后显示「共 128 章」 | — | localBook |
+| 摘要·已读状态三分支 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:207-208` | 未接 | 本地只有「已读 N 章 / 未读」两分支，缺上游「已读完」第三分支 | 读到最后一章后显示「已读完」而非「已读 128 章」 | 上游判定 `durChapterIndex + 1 == totalChapterNum` | localBook |
 | 摘要·目录加载失败提示 | `BookInfoScreen.kt:1533-1625` | — | 未接 | 本地无 `error_load_toc` 等价提示 | 目录加载失败时摘要区出现「目录加载失败」 | — | localBook |
-| 摘要·备注卡片可点编辑 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:248-251` | 未接 | 本地备注只读，编辑需进元数据面板 | 点备注卡片直接进入备注编辑 | — | localBook |
+| 摘要·备注卡片可点编辑 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:245-250` | 未接 | 本地备注只读，编辑需进元数据面板 | 点备注卡片直接进入备注编辑 | — | localBook |
 | 简介·纯文本 | `BookInfoScreen.kt:1634-1710` | `pages/BookInfoPage.ets:235-244` | 已接 | 本地只做纯文本渲染 | 简介正常显示且长文可滚动 | — | localBook |
 | 简介·HTML 渲染 | `BookInfoScreen.kt:1634-1710` | — | 未接 | 本地无 `<usehtml>` 分支 | 简介含 HTML 时按富文本渲染 | — | bookSource |
 | 简介·Web 渲染 | `BookInfoScreen.kt:1753`、`:1842-2040` | — | 未接 | 本地无 `<useweb>` 分支与 WebView 桥 | 简介含 `<useweb>` 时用 WebView 渲染并支持跳转 | 依赖 ArkWeb | bookSource |
@@ -311,21 +311,21 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 事件卡 | `BookInfoScreen.kt:2401`、`:2453` | — | 未接 | 本地无事件体系 | 显示剧情事件时间线 | — | bookSource |
 | 相关书籍横幅 | `BookInfoScreen.kt:2124` | — | 未接 | 本地无相关书籍推荐 | 详情页底部出现相关书籍横排 | — | bookSource |
 | 私密锁定内容页 | `BookInfoScreen.kt:664` | — | 未接 | 本地无锁定态 | 私密书详情页默认显示锁定内容 | — | localBook |
-| 编辑·书名 | `edit/BookInfoEditScreen.kt:238` | `pages/BookInfoPage.ets:349-352` | 已接 | — | 改名保存后书架同步 | — | localBook |
-| 编辑·作者 | `edit/BookInfoEditScreen.kt:246` | `pages/BookInfoPage.ets:353-356` | 已接 | — | 改作者保存后详情页同步 | — | localBook |
-| 编辑·分类 | `edit/BookInfoEditScreen.kt:262` | `pages/BookInfoPage.ets:357-360` | 已接 | — | 改分类保存后持久化 | — | localBook |
-| 编辑·封面 | `edit/BookInfoEditScreen.kt:254`、`:197-207` | `pages/BookInfoPage.ets:299-310` | 已接 | 本地为选本地图片，非填封面 URL | 选图后封面更新，还原后恢复 | 方式不同 | localBook |
-| 编辑·简介 | `edit/BookInfoEditScreen.kt:278` | `pages/BookInfoPage.ets:365-368` | 已接 | — | 改简介保存后详情页同步 | — | localBook |
-| 编辑·备注 | `edit/BookInfoEditScreen.kt:286` | `pages/BookInfoPage.ets:369-372` | 已接 | — | 加备注保存后详情页显示 | — | localBook |
-| 编辑·标签编辑器 | `edit/BookInfoEditScreen.kt:435-517` | `pages/BookInfoPage.ets:361-364` | 未接 | 本地是逗号分隔单行输入，无增删改标签的编辑器 | 可逐个添加、编辑、删除标签 | 上游有 `add_tag`/`edit_tag`/`reset` | localBook |
+| 编辑·书名 | `edit/BookInfoEditScreen.kt:238` | `pages/BookInfoPage.ets:339-341` | 已接 | — | 改名保存后书架同步 | — | localBook |
+| 编辑·作者 | `edit/BookInfoEditScreen.kt:246` | `pages/BookInfoPage.ets:342-345` | 已接 | — | 改作者保存后详情页同步 | — | localBook |
+| 编辑·分类 | `edit/BookInfoEditScreen.kt:262` | `pages/BookInfoPage.ets:346-349` | 已接 | — | 改分类保存后持久化 | — | localBook |
+| 编辑·封面 | `edit/BookInfoEditScreen.kt:254`、`:197-207` | `pages/BookInfoPage.ets:296-310` | 已接 | 本地为选本地图片，非填封面 URL | 选图后封面更新，还原后恢复 | 方式不同 | localBook |
+| 编辑·简介 | `edit/BookInfoEditScreen.kt:278` | `pages/BookInfoPage.ets:354-357` | 已接 | — | 改简介保存后详情页同步 | — | localBook |
+| 编辑·备注 | `edit/BookInfoEditScreen.kt:286` | `pages/BookInfoPage.ets:358-361` | 已接 | — | 加备注保存后详情页显示 | — | localBook |
+| 编辑·标签编辑器 | `edit/BookInfoEditScreen.kt:435-517` | `pages/BookInfoPage.ets:350-353` | 未接 | 本地是逗号分隔单行输入，无增删改标签的编辑器 | 可逐个添加、编辑、删除标签 | 上游有 `add_tag`/`edit_tag`/`reset` | localBook |
 | 编辑·书籍类型 | `edit/BookInfoEditScreen.kt:213-215` | `pages/BookInfoPage.ets:314-318` | 已接 | 本地三选：文本/音频/图片 | 切换类型后卡片角标随之改变 | — | localBook |
 | 编辑·固定书籍类型 | `edit/BookInfoEditScreen.kt:231` | `pages/BookInfoPage.ets:319-323` | 已接 | — | 开启后刷新信息不再改类型 | — | localBook |
 | 编辑·知识卡编辑 | `edit/BookInfoEditScreen.kt:310-343` | — | 未接 | 本地编辑面板无角色/知识/事件 | 可在编辑面板增删角色与事件 | — | localBook |
-| 编辑·空名校验 | `edit/BookInfoEditScreen.kt:245-250` | `pages/BookInfoPage.ets:116` | 已接 | 本地空名时提示并阻止保存 | 清空书名点保存被拒绝并提示 | — | localBook |
+| 编辑·空名校验 | `edit/BookInfoEditScreen.kt:245-250` | `pages/BookInfoPage.ets:113-115` | 已接 | 本地空名时提示并阻止保存 | 清空书名点保存被拒绝并提示 | — | localBook |
 | 书架删除面板 | `ShelfDeleteSheet.kt`（182 行） | `pages/BookInfoPage.ets:85` | 未接 | 本地只弹系统确认框，无「同时删除文件」等选项 | 移出时可选是否删除本地文件与阅读记录 | — | localBook |
 | 书架删除面板·同名副本切换 | `ShelfDeleteSheet.kt:102-128` | — | 未接 | 本地无同名副本概念 | 面板列出同名同作者的其他副本，可点开查看 | `shelf_delete_view_copy` | localBook |
 | 书架删除面板·删除源文件勾选 | `ShelfDeleteSheet.kt:167-168` | — | 未接 | 本地无此勾选 | 勾选后移出同时删除本地文件 | `delete_book_file` | localBook |
-| 面板·分组多选 | `BookInfoSheets.kt:109` | `pages/BookInfoPage.ets:327-340` | 未接 | 上游为独立面板（标题 + 新建分组 + 逐行编辑 + 位掩码选择）；本地把多选塞在元数据编辑面板内 | 点分组标签弹出多选面板，可在面板内新建分组 | `GroupSelectSheet`，`groupId` 位掩码 | localBook / bookGroup |
+| 面板·分组多选 | `BookInfoSheets.kt:109` | `pages/BookInfoPage.ets:324-338` | 未接 | 上游为独立面板（标题 + 新建分组 + 逐行编辑 + 位掩码选择）；本地把多选塞在元数据编辑面板内 | 点分组标签弹出多选面板，可在面板内新建分组 | `GroupSelectSheet`，`groupId` 位掩码 | localBook / bookGroup |
 | 面板·在线换封面 | `BookInfoSheets.kt:194` | — | 未接 | 本地只能从相册选图或还原，无在线搜封面 | 点换封面后按书源搜索封面，三列网格可选 | `ChangeCoverSheet`，带搜索/停止切换 | localBook |
 | 面板·网络文件选择 | `BookInfoSheets.kt:70` | — | 未接 | 本地无网络文件导入 | 导入网文链接时列出可选文件，压缩包显示文件夹图标 | `WebFileSheet` | localBook |
 | 面板·压缩包条目选择 | `BookInfoContract.kt` `ArchiveEntries` | — | 未接 | 本地无压缩包导入 | 选 zip 后列出内部条目可选其一 | — | localBook |
@@ -348,7 +348,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 阅读进度写入 | `Book.kt:45-138` | `model/Book.ets:17-18`、`:57-58` | 已接 | 本地 `chapterIndex`（落 `durChapterIndex`）`chapterProgress`（落 `durChapterPos`）`durChapterTime`；进度百分比不落库，由 `BookRepository.readProgress` 现算（`data/BookRepository.ets:191-196`） | 读 3 章后退出，书架排序按最后阅读更新 | r284 起 `progress` 改为派生（上游 Book 表无此列） | localBook / readRecord |
 | 进度恢复（打开即定位） | `ReadBookConfig.kt` | `pages/ReaderPage.ets` | 已接 | — | 关掉 App 重开，点该书回到上次章节与位置 | — | localBook |
-| 章节内位置记忆 | `Book.kt:45-138` | `model/Book.ets:18` | 已接 | 本地 `chapterProgress` 是章内百分比，直接落在上游 `durChapterPos` 列上（`data/BookRepository.ets:689-690`） | 在同一章内滚动后退出再进，停在原位 | r284 起 `readerPositionVersion` 与 `androidCharacterPosition` 两个字段已删除（上游没有这两列），搬迁时统一换算成百分比 | localBook |
+| 章节内位置记忆 | `Book.kt:45-138` | `model/Book.ets:18` | 已接 | 本地 `chapterProgress` 是章内百分比，直接落在上游 `durChapterPos` 列上（`data/BookRepository.ets:689-690`） | 在同一章内滚动后退出再进，停在原位 | r284 起 `readerPositionVersion` 已删除（上游无此列）；`androidCharacterPosition` 仍保留在 `model/Book.ets:52`，被 26 处代码读写（导出侧 `toAndroidBookRecord` 取它落 `durChapterPos`），迁移时按章内字符位置换算百分比 | localBook |
 | 阅读记录开关 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3088-3096` | 已接 | — | 关掉后读书不再产生记录 | — | 不备份 |
 | 阅读记录三视图切换 | `ReadRecordScreen.kt:939` | `pages/ProfileSubPages.ets:2935` | 已接 | 本地 `cycleDisplayMode()` 轮换 0 汇总/1 时间线/2 最后阅读 | 点视图图标在三种视图间轮换 | 上游为图标按钮组 | — |
 | 阅读记录搜索 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:2940` | 已接 | 本地按书名与作者过滤 | 输入书名后列表只剩该书记录 | — | — |
@@ -380,7 +380,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 最短有效时长阈值 | `GetReadRecordOverviewUseCase.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `minimumReadDurationMs = 10000` | 停留 5 秒退出不产生记录，15 秒产生 | — | 不备份 |
 | 自动保存间隔 | `ReadRecordViewModel.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `autoSaveIntervalMs = 120000` | 连续阅读 2 分钟后记录落盘 | — | 不备份 |
 | 章节索引格式化 | `ReadRecordScreen.kt` `chapter_index_format` | — | 未接 | 本地无「第 N 章」格式化显示 | 记录条目显示「第 12 章」而非裸数字 | — | — |
-| 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:211-217` | 已接 | 本地按 `BookRepository.readProgress(book)` 的百分比渲染（派生值，不落库） | 读到 50% 时进度条半满 | r284 起 `progress` 不再是存储字段 | localBook / readRecord |
+| 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:210-214` | 已接 | 本地按 `BookRepository.readProgress(book)` 的百分比渲染（派生值，不落库） | 读到 50% 时进度条半满 | r284 起 `progress` 不再是存储字段 | localBook / readRecord |
 
 ---
 

@@ -33,7 +33,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 | 类别键名 | 上游检索关键词（ERE） | 命中数 | 上游代表文件 |
 | --- | --- | --- | --- |
-| `localBook` | `BookDao\|bookshelf\.json\|Book\.kt\|"localBook"` | 28 | `data/entities/Book.kt`、`data/dao/BookDao.kt` |
+| `localBook` | `BookDao\|bookshelf\.json\|Book\.kt\|"localBook"\|BookRestorePlan\|LocalBookLocationStatus\|isRelocatedCopyOf\|normalizeLocalBookLocation` | 29 | `data/entities/Book.kt`、`data/dao/BookDao.kt`、`help/storage/BookRestorePlanner.kt` |
 | `bookmark` | `Bookmark\|BookMarking\|"bookmark"` | 64 | `data/entities/Bookmark.kt`、`data/entities/BookMarking.kt` |
 | `bookGroup` | `BookGroup\|"bookGroup"` | 41 | `data/entities/BookGroup.kt`、`ui/book/bookshelf/` |
 | `bookSource` | `BookSource\|BookSourcePart\|"bookSource"` | 146 | `data/entities/BookSource.kt`、`ui/book/source/` |
@@ -60,7 +60,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 | 类别键名 | 上游检索关键词（ERE） | 命中数 | 上游开关 | 本地键组 |
 | --- | --- | --- | --- | --- |
-| `readConfig` | `ReadBookConfig\|ReadSettings\|"readConfig"` | 78 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
+| `readConfig` | `ReadBookConfig\|ReadSettings\|ReadMenuConfig\|"readConfig"\|menuConfig\|ReadPreferences` | 94 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
 | `themeConfig` | `backupIgnoreThemeConfig\|"themeConfig"` | 3 | `backupIgnoreThemeConfig` | `themeConfig` |
 | `coverConfig` | `backupIgnoreCoverConfig\|"coverConfig"` | 3 | `backupIgnoreCoverConfig` | `coverConfig` |
 | `themeMode` | `themeMode\|"themeMode"` | 32 | 无独立开关 | `themeMode` |
@@ -70,6 +70,28 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 | `mangaConfig` | `mangaConfig\|comicStyleSelect\|"mangaConfig"` | 6 | 无独立开关 | `mangaConfig` |
 
 **`readConfig` 的关键词不能用开关名**。上游的 `backupIgnoreReadConfig` 只命中 2 个 `.kt`（含 `help/storage/BackupConfig.kt`），拿它当接触面等于「2 个文件全过」，覆盖证明永远自证成功。该类真正的接触面是两份配置声明：`help/config/ReadBookConfig.kt`（单本书可覆盖）与 `domain/model/settings/ReadSettings.kt`（全书统一设置，114 字段），合计声明 267 个名字，`ReadBookConfig|ReadSettings|"readConfig"` 命中 78 个文件。`backupIgnoreReadConfig` 仍作为**忽略项开关**记录在「上游开关」列，与检索关键词不是一回事。
+
+当前 `readConfig` 行的关键词是四轮补漏后的结果，每项都补在具体的漏检形态上：
+
+- `ReadBookConfig` / `ReadSettings` — 两个配置声明源，覆盖「引用配置类」的文件。
+- `"readConfig"` — 类别键名字面量（`BackupConfig.readConfigKey`、`ConfigTag.READ_CONFIG`），覆盖只写键名不写类名的文件。
+- `ReadMenuConfig` — `ui/book/read/ReadBookContract.kt:467` 的 `data class`，是菜单外观配置的运行时载体，只在界面层出现。
+- `menuConfig` — 界面层写法 `state.menuConfig.xxx`，只写字段不写类型名的文件靠它捞到。
+- `ReadPreferences` — `data/repository/ReadSettingsRepository.kt:21` 的 `typealias ReadPreferences = ReadSettings`，设置页拿的是这个别名；漏了它会丢掉 `sheet/GlobalThemePage.kt` 与 `sheet/ReadStyleSheet.kt` 两个设置面板（这两个是主题与排版设置页，不是渲染管线）。
+
+### 界面目录白名单
+
+关键词捞不到的一类文件：整个文件只写 `state.menuConfig.xxx` 或 `menuConfig: ReadMenuConfig` 参数，既不出现配置类全名，也不出现 `menuConfig` 之外的字面量。它们由脚本里的 `SURFACE_DIR_WHITELIST` 按「目录 + 文件名」兜底纳入接触面。
+
+| 目录 | 文件名 glob | 命中 | 净新增 | 纳入理由 |
+| --- | --- | --- | --- | --- |
+| `io/legado/app/ui/book/read` | `*Menu*.kt` | 13 | 5 | 菜单栏拆分件（`ReadBookMenuBar*`）与选择菜单（`TextActionSelectionMenu`、`MarkingSelectionMenu`），都是 `ReadMenuConfig` 的渲染端 |
+
+净新增的 5 个是不被任何关键词命中的：`MarkingSelectionMenu.kt`、`ReadBookMenuBarSearch.kt`、`SelectionMenuMotion.kt`、`TextActionSelectionMenu.kt`、`sheet/TextSelectMenuConfigSheet.kt`。另外 8 个（`ReadBookMenuBar*.kt` 五个、`ReadMenuActionDefs.kt`、`sheet/SystemMenuPage.kt`）本来就靠 `menuConfig`/`ReadMenuConfig`/`ReadPreferences` 命中，白名单只是把它们固定在接触面里。
+
+关键词 94 + 白名单净新增 5 = **99 个** ，就是 `ReadBookConfig|ReadSettings|ReadMenuConfig|"readConfig"|menuConfig|ReadPreferences` 与 `ui/book/read/*Menu*.kt` 的并集。
+
+**为什么只到 `*Menu*.kt`**：`ui/book/read` 目录共 114 个 `.kt`，其中提及 `menuConfig` 的 17 个。把整目录纳入会把 `pageestimate` 之类与配置无关的实现拉进接触面，多出的只是待解释条目，不是真缺口。
 
 盘这八类时，把 `BackupConfig.kt` 与 `AppConfigStore` 的键定义当作接触面入口。前三个类别的上游开关是布尔项，关键词本身就是开关名；后五个没有独立开关，关键词是偏好键名。
 

@@ -14,6 +14,22 @@
 
 set -u
 
+# 界面目录白名单：某些界面文件只写 state.menuConfig.xxx，既不提类型名也不提键名，
+# 关键词永远捞不到。按「目录 + 文件名含 Menu」兜底纳入接触面。
+# 格式：每行 "相对 app/src/main/java 的目录|文件名 glob"。新增白名单同时要写进
+# docs/parity/KEYWORDS.md 的「界面目录白名单」节，理由一并写在那里。
+SURFACE_DIR_WHITELIST="
+io/legado/app/ui/book/read|*Menu*.kt
+"
+
+# 把目录白名单展开成文件清单，输出相对 app/src/main/java 的路径。
+list_whitelist() {
+  printf '%s\n' "$SURFACE_DIR_WHITELIST" | while IFS='|' read -r dir pat; do
+    [ -n "$dir" ] || continue
+    find "$SRC_DIR/$dir" -name "$pat" -type f 2>/dev/null | sed "s|^$SRC_DIR/||"
+  done
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KEYWORDS_FILE="$SCRIPT_DIR/../docs/parity/KEYWORDS.md"
 
@@ -57,9 +73,13 @@ if [ "${1:-}" = "--coverage" ]; then
   KEYWORD="$(list_keywords | awk -F '\t' -v c="$CATEGORY" '$1 == c { print $2 }')"
   [ -n "$KEYWORD" ] || die "关键词表里没有类别 $CATEGORY"
 
-  # 上游接触面：按内容引用划定
-  SURFACE=$(grep -rlE "$KEYWORD" "$SRC_DIR" --include='*.kt' 2>/dev/null | sed "s|^$SRC_DIR/||" | sort)
+  # 上游接触面：按内容引用划定，再并上界面目录白名单（关键词捞不到的界面文件）
+  SURFACE=$({
+    grep -rlE "$KEYWORD" "$SRC_DIR" --include='*.kt' 2>/dev/null | sed "s|^$SRC_DIR/||"
+    list_whitelist
+  } | sort -u)
   TOTAL=$(printf '%s\n' "$SURFACE" | grep -c . )
+  WL_COUNT=$(list_whitelist | grep -c . )
 
   MAPPED=0
   UNASSIGNED=0
@@ -81,7 +101,7 @@ EOF
   echo "类别：$CATEGORY"
   echo "关键词：$KEYWORD"
   echo "表格：$TABLE"
-  echo "上游接触面：$TOTAL 个 .kt 文件"
+  echo "上游接触面：$TOTAL 个 .kt 文件（其中界面目录白名单 $WL_COUNT 个）"
   echo
   echo "已分配（基名在表格中出现）：$MAPPED"
   echo "未分配：$UNASSIGNED"
@@ -124,10 +144,14 @@ echo
 # 注意：对靠 config.xml 偏好键落地的类别（readConfig 等），类别键名与上游文件名本就不同名，
 # 这项对比没有意义，因此只在文件名命中不超出内容命中时才报差额。
 NAME_HITS=$(find "$SRC_DIR" -name '*.kt' -type f -iname "*${CATEGORY}*" 2>/dev/null | wc -l | tr -d ' ')
-CONTENT_FILES=$(grep -rlE "$KEYWORD" "$SRC_DIR" --include='*.kt' 2>/dev/null)
-CONTENT_HITS=$(printf '%s' "$CONTENT_FILES" | grep -c . )
+# 与 --coverage 同口径：关键词命中 ∪ 界面目录白名单
+CONTENT_FILES=$({
+  grep -rlE "$KEYWORD" "$SRC_DIR" --include='*.kt' 2>/dev/null | sed "s|^$SRC_DIR/||"
+  list_whitelist
+} | sort -u)
+CONTENT_HITS=$(printf '%s\n' "$CONTENT_FILES" | grep -c . )
 
-echo "关键词命中文件：$CONTENT_HITS 个（上游 .kt 总数 $TOTAL_KT）"
+echo "关键词命中文件：$CONTENT_HITS 个（上游 .kt 总数 $TOTAL_KT，其中界面目录白名单 $(list_whitelist | grep -c . ) 个）"
 if [ "$NAME_HITS" -le "$CONTENT_HITS" ] && [ "$NAME_HITS" -gt 0 ]; then
   echo "按类别键名当文件名去找：$NAME_HITS 个文件"
   echo "差额：$((CONTENT_HITS - NAME_HITS)) 个文件只能靠内容引用找到"

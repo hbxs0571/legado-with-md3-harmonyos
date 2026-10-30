@@ -1179,7 +1179,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /** 上游 BookType 位掩码：text=8、audio=32、image=64，本地书再加 local=256。 */
-  private static bookTypeMask(book: Book): number {
+  static bookTypeMask(book: Book): number {
     const media = book.bookType === 'image' ? 64 : book.bookType === 'audio' ? 32 : 8;
     return book.isLocal ? media | 256 : media;
   }
@@ -2009,7 +2009,8 @@ private static tryDecodeWithEncoding(bytes: Uint8Array, encoding: string): strin
     }
   }
 
-private static getFileName(uri: string): string {
+/** 取路径末段并解码，与上游 FileDoc 的 fileName 语义一致（含扩展名）。 */
+  static getFileName(uri: string): string {
     const separator = uri.lastIndexOf('/');
     const rawName = separator >= 0 ? uri.substring(separator + 1) : uri;
     try {

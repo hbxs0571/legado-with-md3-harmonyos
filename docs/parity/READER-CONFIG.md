@@ -469,7 +469,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 ## 四、覆盖证明
 
-本表对应 ZIP 类别 `readConfig`。按 [KEYWORDS.md](KEYWORDS.md) 的检索词 `ReadBookConfig|ReadSettings|"readConfig"` 命中 **78 个上游 `.kt` 文件**，本节把它们逐个分配：要么落到上面 A–G 某块的具体行，要么写明排除理由。判定可复跑：
+本表对应 ZIP 类别 `readConfig`。按 [KEYWORDS.md](KEYWORDS.md) 的检索词 `ReadBookConfig|ReadSettings|ReadMenuConfig|"readConfig"|menuConfig|ReadPreferences` 命中 **94 个上游 `.kt` 文件**，并上 `ui/book/read/*Menu*.kt` 目录白名单净新增的 5 个，接触面合计 **99 个**。本节把它们逐个分配：要么落到上面 A–G 某块的具体行，要么写明排除理由。判定可复跑：
 
 ```bash
 bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG.md <上游根>
@@ -553,9 +553,43 @@ bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG
 
 **排除理由**：本地书导入/导出归 `localBook` 类别（见 [BOOKSHELF.md](BOOKSHELF.md)）；书源脚本接口归 `bookSource`；备份恢复归备份模块。它们读 `ReadBookConfig` 只是为了拿当前配置的副本，没有配置界面。
 
-### 4.6 未分配
+### 4.6 阅读页菜单层：渲染端，落点已在 A–G 有行（21 个）
 
-**0 个。** 78 个上游接触面文件全部分配完毕（映射到行 **36** 个 + 排除 **42** 个：4.2 的 8、4.3 的 10、4.4 的 16、4.5 的 6，以及本节补记的 2 个）。
+这批是 `ReadMenuConfig` 的**渲染端**：它们读 `state.menuConfig.xxx` 或收 `menuConfig: ReadMenuConfig` 参数，把 E 块的菜单外观行与 D 块的文字菜单行画上屏。不新增配置项，因此不产生新的 A–G 行，按「已排除：同一批配置项已有行」分配。
+
+**为什么单列一节**：它们此前完全不在接触面里——文件里只出现 `menuConfig` 这个字段名和参数类型，不出现任何配置全名。补上 `ReadMenuConfig`/`menuConfig` 关键词与 `ui/book/read/*Menu*.kt` 目录白名单后才被捞到，是这次扩表的主要增量。
+
+| 上游文件 | 行数 | 读的配置 | 落到哪一行 |
+| --- | --- | --- | --- |
+| `ui/book/read/ReadBookScreen.kt` | 944 | `:393`/`:404` `menuConfig = state.menuConfig`、`:503` `menuConfig.bottomBarButtons` | E 块「底栏按钮配置」（已接）、E 块菜单外观各行的消费侧 |
+| `ui/book/read/ReadBookRouteScreen.kt` | 1181 | `:214-217` `readMenuTopBarBlurMode`/`readMenuBottomBarBlurMode`/`readMenuFloatingBottomBar`；`:953` `showSelectMenuIcon` | E 块「顶栏模糊」「底栏模糊」「底栏悬浮」、D 块「显示选择菜单图标」 |
+| `ui/book/read/ReadBookMenuBar.kt` | 1044 | `:172` `showTitleBarIcons`/`titleBarIconPosition`、`:190` `showBrightnessView` | E 块「显示标题栏图标」「标题栏悬浮图标位置」「显示亮度视图」 |
+| `ui/book/read/ReadBookMenuBarBottom.kt` | 461 | `:138-144` `showBrightnessView`/`readBrightness`/`brightnessAuto`、`:217-218` `bottomBarButtons`/`readMenuCustomIcons`、`:237-238` `readMenuIconItemsPerRow`/`readMenuIconRowCount` | E 块底栏按钮与亮度相关的 6 行 |
+| `ui/book/read/ReadBookMenuBarTitle.kt` | 1014 | `:92-95` `readMenuBorderWidth`/`readMenuBorderColor`/`readMenuBlurAlpha` | E 块「菜单栏边框宽度」「菜单栏边框颜色」「菜单模糊透明度」 |
+| `ui/book/read/ReadBookMenuBarShared.kt` | 117 | `:48` `menuConfig: ReadMenuConfig` 参数、`:50-51` `readMenuBlurRadius`/`readMenuBlurAlpha` | E 块「菜单模糊半径」「菜单模糊透明度」 |
+| `ui/book/read/ReadBookMenuBarFloating.kt` | 428 | `:73` `titleBarButtons`、`:110-111` `titleBarCustomIcons` | E 块「标题栏操作按钮」（已接）、「标题栏悬浮图标配置」 |
+| `ui/book/read/ReadBookMenuBarTool.kt` | 478 | `:351` `menuConfig`、`:373` `readMenuIconShowText`、`:453` `readMenuCustomIcons` | E 块「菜单文字颜色」「标题栏悬浮图标配置」 |
+| `ui/book/read/ReadBookMenuBarSearch.kt` | 201 | 无直接配置读取，`SearchBottomMenuContent(state: ReadBookUiState)` 走同一菜单壳 | E 块菜单外观行的消费侧（搜索模式下的底栏） |
+| `ui/book/read/ReadMenuActionDefs.kt` | 517 | `:506` `titleBarCompact`、`:508` `titleBarActions` | E 块「标题栏紧凑」「标题栏操作按钮」 |
+| `ui/book/read/TextActionSelectionMenu.kt` | 725 | `:86` `fun TextActionSelectionMenu(showSelectMenuIcon = …, …)` 由宿主传入 | D 块「显示选择菜单图标」「展开文字菜单」「上次标记样式」 |
+| `ui/book/read/MarkingSelectionMenu.kt` | 592 | 无配置读取，`fun MarkingSelectionMenu(lastMarkingStyle: String, …)` 由宿主传入 | D 块「上次标记样式」 |
+| `ui/book/read/SelectionMenuMotion.kt` | 55 | 无，纯动画时长常量 | D 块「选中文字菜单」的渲染实现，同批排除 |
+| `ui/book/read/sheet/TextSelectMenuConfigSheet.kt` | 460 | `:67` `fun TextSelectMenuConfigSheet(showSelectMenuIcon: Boolean, onShowSelectMenuIconChange: …)` | D 块「选中文字菜单」「展开文字菜单」「显示选择菜单图标」 |
+| `ui/book/read/sheet/ReaderMoreActionsSheet.kt` | 473 | `:91` `state.menuConfig.moreActionItems` | E 块「更多操作配置」 |
+| `ui/book/read/sheet/SystemMenuPage.kt` | 905 | `:82`/`:227`/`:554` `preferences: ReadPreferences`；`:232-245` `titleBarCustomIcons`/`readBarStyle`/`readMenuColorMode`/`readMenuBgColor`/`readMenuAccentColor` | E 块菜单外观 42 行的设置面板主体（`:553` `BottomBarTab`、`:739` `TopBarTab`） |
+| `ui/book/read/sheet/GlobalThemePage.kt` | 562 | `:82` `fun GlobalThemePage(styleConfig: ReadBookStyleConfig, preferences: ReadPreferences)`、`:95-100` `textSize`/`pageAnim`/`pageAnimSpeed`/`styleSelect`/`shareLayout` | A 块阅读设置主页、C 块排版入口 |
+| `ui/book/read/sheet/ReadStyleSheet.kt` | 151 | `:40` `fun ReadStyleContent(preferences: ReadPreferences, …)` 排版设置页容器 | C 块正文排版 49 行的设置面板入口 |
+| `ui/book/read/sheet/BgmSceneSheet.kt` | 336 | `:47` import `ReadMenuConfig`、`:78` `menuConfig: ReadMenuConfig? = null` | E 块菜单外观行的消费侧（段首配乐卡片沿用菜单配色）；业务归 `httpTTS` |
+| `ui/book/read/sheet/CastSheetCard.kt` | 228 | `:25` import、`:43` 注释「圆角、模糊、液态玻璃、着色都取底栏那一套 `ReadMenuConfig`」、`:51` 参数 | E 块底栏圆角/模糊/液态玻璃 6 行；业务归 `httpTTS` |
+| `ui/book/read/sheet/ReadAloudCastSheet.kt` | 325 | `:41` import、`:76` `menuConfig: ReadMenuConfig? = null` | 同上；业务归 `httpTTS` |
+
+**排除理由**：这批文件没有引入 A–G 之外的新配置项，读的都是 E 块（菜单外观 42 行）与 D 块（文字菜单 4 行）已经登记过的字段。它们的缺口就是 E 块那 40 行「有控件无持久化」——本地 `ReaderSettingsPage.ets:399-462` 有对应条目但没有仓储字段，所以这些渲染端在本地没有对应的消费代码。**补 E 块字段时会自然补上这些渲染点，此处不重复计行。**
+
+三个朗读外侧文件（`BgmSceneSheet.kt`、`CastSheetCard.kt`、`ReadAloudCastSheet.kt`）的业务归属是 `httpTTS` 类别，本次单列是因为它们靠 `ReadMenuConfig` 参数才被捞进接触面；配置口径上只贡献 E 块菜单外观的消费证据。
+
+### 4.7 未分配
+
+**0 个。** 99 个上游接触面文件全部分配完毕：映射到 A–G 行 **36** 个 + 排除 **63** 个（4.2 的 8、4.3 的 10、4.4 的 16、4.5 的 6、4.6 的 21，以及本节补记的 2 个）。
 
 补记的 2 个是补上键名字面量 `"readConfig"` 之后新进接触面的文件：
 
