@@ -61,9 +61,10 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | B 书籍详情页与元数据 | 80 | 22 | 57 | 1 |
 | C 阅读进度与记录 | 35 | 17 | 18 | 0 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
-| 合计 | 315 | 82 | 232 | 1 |
+| E 备份恢复（整界面，r295 新增） | 12 | 2 | 9 | 1 |
+| 合计 | 327 | 84 | 241 | 2 |
 
-A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的。全表状态三值，无 `待定`。
+A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 12 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的。全表状态三值，无 `待定`。
 
 ---
 
@@ -468,11 +469,41 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 ---
 
+## E 备份恢复（整界面，跨类别的公共层）
+
+本块按 [KEYWORDS.md](KEYWORDS.md) 的「存储层维度」一节新增。选题理由：A1–D 四块都在盘「某个类别的数据在界面上怎么用」，但还有一层代码既不属于任何单个类别，也**对全部 28 个类别的关键词零命中**——它们处理的是「所有类别一起」的动作：规划整批书目、规整整份 `config.xml`、加解密整个压缩包、以及那个把 28 个勾选框画出来的备份设置页。
+
+`grep -cE "Bookmark|BookMarking" help/storage/Backup.kt` = **0**：导出主文件里一个实体类名都不出现，19 个类别全以 `dbIsNotIgnored("bookmark")` 这种小写键名引用。所以按实体类名选词的本表，此前从未把这一层纳入接触面——**覆盖证明显示通过，但这一层从未被检查过**。
+
+本块 12 行覆盖该层 21 个文件里最关键的 12 个。剩余 9 个纯数据类/空壳实现（`domain/model/WebDavBackup.kt`、`domain/gateway/*.kt` 三个接口、`domain/model/settings/BackupSettings.kt`、`BackupConfig.kt` 的 `@Deprecated` 门面、`BackupRestoreLock.kt`、`BackupAES.kt`）由本块各行在其「上游位置」列一并引用，不单独占行。
+
+| 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 备份设置页整体 | `ui/config/backupConfig/BackupConfigScreen.kt:142-282`（`BackupConfigRouteScreen` 在 `:72-138`） | `pages/AppBackupSettingsPage.ets:47-184` | 已接 | 两组分栏齐全（WebDAV 设置 8 项、备份与恢复 7 项），15 个控件逐个都在；其中 WebDAV 整组只画不存，已在下两行单列 | 打开「备份与恢复」页看到两组设置 | 本地页 343 行，上游页 545 行；本行只判页面骨架 | — |
+| WebDAV 服务器地址 / 账号 / 子目录 / 设备名称 | `BackupConfigScreen.kt:170-193` | `pages/AppBackupSettingsPage.ets:55-62`、`:220-231` | 未接 | 四行都在，点开只弹一个 `TextInput`，`:225` 自己写着「WebDAV 尚未迁移，此页不会保存或发送输入」；四个 `@State` 字段初始值写死 | 改地址后重启仍保持 | 键：`web_dav_url`/`web_dav_account`/`web_dav_password` 为 `—`；`webDavDeviceName` 与 `backupUri` 在 `alwaysIgnoredPreferenceKeys` | — |
+| WebDAV 账号密码对话框 | `BackupConfigScreen.kt:446-500`（`BackupConfigDialogs` 的 `WebDavAuth` 分支）、`BackupConfigContract.kt:46-50` | — | 未接 | 本地无独立账号密码框，被合并进上一个输入框 | 弹框可填账号密码并做可见性切换 | `BackupConfigDialog.WebDavAuth` | — |
+| 测试同步 | `BackupConfigScreen.kt:194-198` | `pages/AppBackupSettingsPage.ets:63-64` | 未接 | 点击走 `onUnavailableAction('WebDAV 连接尚未迁移，未发起测试')` | 点「测试同步」返回连接结果 | `AppWebDav.testWebDav()` | — |
+| 同步书籍进度 / 增强进度同步 / 自动检查新备份 / 备份同步模式 | `BackupConfigScreen.kt:199-231` | `pages/AppBackupSettingsPage.ets:65-83` | 未接 | 三个开关 + 一个下拉都在，`onChange` 一律 `onUnavailableAction('仅界面预览…未保存')`；同步模式下拉只有两个硬编码选项 | 切换后重启仍保持 | 键 `syncBookProgress`/`syncBookProgressPlus`/`autoCheckNewBackup`/`backupSyncMode` 均为 `—`（参与备份但不受类别开关控制） | — |
+| 备份路径选择 | `BackupConfigScreen.kt:233-239`（`ChooseBackupPath` sheet 在 `:291-295`） | `pages/AppBackupSettingsPage.ets:89-90`、`:232-234` | 未接 | sheet 只有一个「选择系统目录」，点击提示「备份目录选择尚未迁移」 | 选完后路径显示在行上并持久化 | `OpenDocumentTree` → `LaunchBackupDirectoryPicker`；键 `backupUri` 属 `不备份` | — |
+| 备份三选一（本地 / WebDAV / 两者） | `BackupRestoreOptionSheets.kt:18-45`（`BackupOptionSheet`） | `pages/AppBackupSettingsPage.ets:197-203` | 未接 | 「备份到本地」已实现；「备份到 WebDAV」「同时备份」两项提示未迁移 | 三个选项各自产出 ZIP | 上游 `RequestBackup("local"/"webdav"/"both")`；已接的是 sheet 骨架与本地分支 | — |
+| 恢复二选一（本地 / WebDAV） | `BackupRestoreOptionSheets.kt:49-70`（`RestoreOptionSheet`） | `pages/AppBackupSettingsPage.ets:204-208` | 未接 | 「从本地恢复」已实现并带 ZIP 预览；「从 WebDAV 恢复」提示未迁移 | 两个来源都能恢复 | 本地还多一层预览确认（`:123-146`），上游没有；已接的是 sheet 骨架与本地分支 | — |
+| 备份 ZIP 预览 | 上游无对应能力 | `pages/AppBackupSettingsPage.ets:123-146` | 不适用 | 上游无对应能力：本地选完 ZIP 后先列全部根条目与条数，点「导入此 ZIP」才执行。这是本地补充，不构成缺陷 | 选 ZIP 后看到条目清单与本地书缺正文提示 | 唯一一条 `不适用` 是「上游没有而本地多了」，不是「做不了」 | — |
+| 恢复排除项 / 备份排除项（两个勾选面板） | `BackupConfigScreen.kt:332-382`（两个 `IgnoreItemsSheet` 调用）、`:383-444`（面板本体，`CardTabRow` 两页签：`config_ignore` 与 `database_ignore`） | `pages/AppBackupSettingsPage.ets:101-106`、`:209-219` | 已接 | 两个面板都在，28 个类别由 `BackupRepository.categoryOptionsList()` 提供，可勾选并落盘（见 [BACKUP-RESTORE.md](../BACKUP-RESTORE.md) 的 28 类清单） | 取消「书签」勾选后备份 ZIP 里没有 `bookmark.json` | 上游 `IgnoreItemsSheet` 分「配置」与「数据库」两页签，本地是一个平铺列表，**未分页签** | — |
+| 只保留最新备份 | `BackupConfigScreen.kt:269-276` | `pages/AppBackupSettingsPage.ets:109-113` | 未接 | 开关在，`onChange` 提示「仅界面预览，此设置未保存」 | 关掉后生成带日期的多份备份 | 键 `onlyLatestBackup` 为 `—` | — |
+| 导入旧版数据 | `BackupConfigScreen.kt:264-268`、`help/storage/ImportOldData.kt:28-98`（`importUri`，读 `myBookShelf.json`/`myBookSource.json`/`myBookReplaceRule.json`） | `pages/AppBackupSettingsPage.ets:107-108` | 未接 | 行在，点击提示「旧版数据导入尚未迁移」；本地全仓 `grep myBookShelf\|ImportOldData` 命中 0 | 选旧版目录后书架/书源/规则各有导入计数 | 上游 `ImportOldData.kt` 370 行，本块只覆盖入口 | — |
+
+### 这一块与其余四块的边界
+
+- **属本块**：备份/恢复的**流程**与**界面**——选路径、选来源、预览、勾忽略项、导入旧版。
+- **不属本块，仍在 A–D**：某个类别的数据本身长什么样（`bookshelf.json` 里有哪些字段、`bookmark.json` 的条目结构）。这两件事经常相邻，判据看「改这行时动的是流程代码还是数据映射代码」。
+- **也不属本块**：`config.xml` 的 28 个类别各自忽略哪个键——那是 [ZIP 类别的键表差异](../BACKUP-RESTORE.md#偏好键对齐差异待移除) 一节的事。
+
+
 ## 小结
 
-**全表合计 315 条：已接 82、未接 232、不适用 1，无 `待定`。**（A1–C 259 条 + C 块 r286 新增 3 条别名行 + D 块 53 条；A2 原 48 行删去 1 行重复）
+**全表合计 327 条：已接 84、未接 241、不适用 2，无 `待定`。**（A1–C 259 条 + C 块 r286 新增 3 条别名行 + D 块 53 条 + E 块 12 条；A2 原 48 行删去 1 行重复）
 
-按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 97 行、`—` 89 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。**28 类里有 19 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
+按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 97 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 12 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制）。**28 类里有 19 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
 五处需要特别注意：
 

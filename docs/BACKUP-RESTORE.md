@@ -210,7 +210,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 ### 三张对照表的「ZIP 类别」列怎么读
 
-按类别派活时必然要查的三张表（[书籍总账](parity/BOOKSHELF.md)、[书签对照](parity/ZIP-BOOKMARK.md)、[阅读配置总账](parity/READER-CONFIG.md)）都标了 `ZIP 类别`。任务书里引用这些行之前，先把下面四条读清，否则会从错误的基数起步。
+按类别派活时必然要查的三张表（[书籍总账](parity/BOOKSHELF.md)、[书签对照](parity/ZIP-BOOKMARK.md)、[阅读配置总账](parity/READER-CONFIG.md)）都标了 `ZIP 类别`。任务书里引用这些行之前，先把下面五条读清，否则会从错误的基数起步。
 
 **一、判据是「会动到哪个类别」，不是「数据落在哪」。**
 
@@ -244,13 +244,19 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 **三、「零行」是「还没盘」，不是「已完成」，也不是「本地没有这个功能」。**
 
-[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 19 类标为**零行**（`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`replaceRule`、`searchHistory`、`txtTocRule`、`highlightRule`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`）。
+[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 17 类标为**零行**（`rssSource`、`rssStar`、`replaceRule`、`searchHistory`、`sourceSub`、`txtTocRule`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightRule`、`server`、`coverConfig`、`themeMode`、`showRss`、`mangaConfig`）。`bookmark` 与 `themeConfig` 虽在 [书籍总账](parity/BOOKSHELF.md) 里零行，但分别归 [书签对照](parity/ZIP-BOOKMARK.md) A–E 与 [阅读配置总账](parity/READER-CONFIG.md) F，不算零行。
 
 派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[编码规约](CODE-CONVENTIONS.md)第四节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
 
 **四、未复核边界：老行是迁移前证据。**
 
 三张表里 `r277`–`r280` 写下的行——[书籍总账](parity/BOOKSHELF.md) A1–C 259 行、[阅读配置总账](parity/READER-CONFIG.md) A–G 189 行、[书签对照](parity/ZIP-BOOKMARK.md) A–E 83 行——是**迁移前证据，未逐行复核**（表头逐份写明）。重盘这些块要按块重新核对，不要在旧行上直接改状态，否则等于在未验数据上盖新章。
+
+**五、有一整块 12 行全是 `—`，那不代表可以不管。**
+
+[书籍总账](parity/BOOKSHELF.md) 的 **E 备份恢复块**（r295 新增，12 行）`ZIP 类别` 列全是 `—`：备份/恢复的流程本身不属于任何一个类别，取消任何勾选都不会让「备份按钮」消失。但它是 21 个存储层文件的唯一载体——这些文件**对 28 类关键词全部零命中**（`grep -cE "Bookmark|BookMarking" help/storage/Backup.kt` = 0，19 个类别在导出主文件里全以小写键名 `dbIsNotIgnored("bookmark")` 引用）。
+
+按类别名派活永远覆盖不到这一层，`BookRestorePlanner.kt` 的 `booksToDelete` / `isRelocatedCopyOf` / `Available-Missing-Unknown` 三态就是这样长期漏在表外的。要动备份兼容，这一块必须单独派。
 
 ## 偏好键对齐差异（待移除）
 

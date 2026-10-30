@@ -9,7 +9,7 @@
 >
 > **二、A–G 七块共 189 行是迁移前证据，未逐行复核。** 这 189 行写于 2026-10-29，本轮只做了两件事：把已完成的关系型存储迁移带来的字段口径变化核过一遍（本表不涉及 `chapters` / `bookmarks` / `book_marks` 三张表，无失效引用），并把 `readConfig` 类的上游接触面补齐（原表只覆盖 6 个上游文件）。行内容本身未逐条重跑验收。
 >
-> **三、新增「覆盖证明」节**：`readConfig` 类的上游接触面由旧的错误关键词 `backupIgnoreReadConfig`（只命中 2 个文件，等于自证成功）改为 `ReadBookConfig|ReadSettings`（命中 **76** 个文件），逐个分配。
+> **三、新增「覆盖证明」节**：`readConfig` 类的上游接触面由旧的错误关键词 `backupIgnoreReadConfig`（只命中 2 个文件，等于自证成功）改为 `ReadBookConfig|ReadSettings`（命中 **76** 个文件），逐个分配。（r294 再补键名字面量 `"readConfig"`，复算 **78** 个，见 [KEYWORDS.md](KEYWORDS.md) 的「存储层维度」一节。）
 >
 > **四、本表的口径基数未变**：上游配置来源两个文件 `help/config/ReadBookConfig.kt`（1054 行）与 `domain/model/settings/ReadSettings.kt`（122 行），合计声明 **267** 个名字。这 267 个是**字段级**基数；本表的 189 行是**界面级**基数。两者不可相加也不可相减，1.3 的 112 项差集属字段口径。
 
@@ -469,7 +469,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 ## 四、覆盖证明
 
-本表对应 ZIP 类别 `readConfig`。按 [KEYWORDS.md](KEYWORDS.md) 的检索词 `ReadBookConfig|ReadSettings` 命中 **76 个上游 `.kt` 文件**，本节把它们逐个分配：要么落到上面 A–G 某块的具体行，要么写明排除理由。判定可复跑：
+本表对应 ZIP 类别 `readConfig`。按 [KEYWORDS.md](KEYWORDS.md) 的检索词 `ReadBookConfig|ReadSettings|"readConfig"` 命中 **78 个上游 `.kt` 文件**，本节把它们逐个分配：要么落到上面 A–G 某块的具体行，要么写明排除理由。判定可复跑：
 
 ```bash
 bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG.md <上游根>
@@ -555,7 +555,14 @@ bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG
 
 ### 4.6 未分配
 
-**0 个。** 76 个上游接触面文件全部分配完毕（映射到行 **36** 个 + 排除 **40** 个）。
+**0 个。** 78 个上游接触面文件全部分配完毕（映射到行 **36** 个 + 排除 **42** 个：4.2 的 8、4.3 的 10、4.4 的 16、4.5 的 6，以及本节补记的 2 个）。
+
+补记的 2 个是补上键名字面量 `"readConfig"` 之后新进接触面的文件：
+
+- `help/storage/BackupConfig.kt`（489 行，`:69` `private const val readConfigKey = "readConfig"`、`:146`/`:172` 进 `ignoreKeys`/`backupIgnoreKeys`、`:442`/`:461` 两个 `backupIgnoreReadConfig` 取值器）——**该类忽略开关的定义处**。整份 `config.xml` 的忽略语义都在这里，本地对应 `entry/src/main/ets/data/BackupRepository.ets` 的 `preferenceKeysByCategory` 与 `ignoreKeys` 判定。归「备份恢复」块（见 [BACKUP-RESTORE.md](../BACKUP-RESTORE.md)），不在本表的阅读界面行里。
+- `ui/config/ConfigTag.kt`（15 行，`const val READ_CONFIG = "readConfig"`，同类还有 `THEME_CONFIG`/`COVER_CONFIG`/`BACKUP_CONFIG` 等 6 个）——**配置页面的路由标签常量**，不是备份逻辑。本地对应 `pages/` 下各设置页的路由名，无独立界面。
+
+这两个文件都是靠「类别键名字面量」而非实体类名被捞到的，正是 [KEYWORDS.md](KEYWORDS.md) 存储层维度要解决的漏检。`BackupConfig.kt` 此前从未出现在 `readConfig` 的覆盖证明里，但它恰恰是该类别忽略开关的唯一定义处。
 
 ---
 

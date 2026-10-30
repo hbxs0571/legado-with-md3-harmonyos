@@ -10,8 +10,8 @@
 >
 > 1. **盘点单位改为「整个界面」**：只要涉及某界面就把它完整列进表，未迁移的显式标 `未接`。`ZIP-BOOKMARK.md` 因此新增 F 块（长按选词菜单 34 行），`BOOKSHELF.md` 因此新增 D 块（缓存管理页 + 书架管理页 53 行）。
 > 2. **修正迁移后失效的字段引用**：`progress` 改派生、`readerPositionVersion` / `androidCharacterPosition` / `bookId` / `endPosition` 已删、`styleJson` 不再拍平、`double` 已删除、`preferences` → SQLite 两张表。
-> 3. **三张表各补「覆盖证明」节**，逐个分配上游接触面文件，未分配为 0：`bookmark` 63/63、`readConfig` 76/76、`localBook` 27/27、`bookGroup` 40/40、`readRecord` 63/63、`bookshelfLayout` 10/10。
-> 4. **`KEYWORDS.md` 的 `readConfig` 关键词修正**：`backupIgnoreReadConfig` 只命中 2 个文件（等于自证成功），改为 `ReadBookConfig|ReadSettings`（76 个）。
+> 3. **三张表各补「覆盖证明」节**，逐个分配上游接触面文件，未分配为 0：`bookmark` 63/63、`readConfig` 76/76、`localBook` 27/27、`bookGroup` 40/40、`readRecord` 63/63、`bookshelfLayout` 10/10。（r294 补上类别键名字面量后复算：`bookmark` 64/64、`readConfig` 78/78、`localBook` 28/28、`bookGroup` 41/41、`readRecord` 64/64、`bookshelfLayout` 10/10，仍全部为 0 未分配。）
+> 4. **`KEYWORDS.md` 的 `readConfig` 关键词修正**：`backupIgnoreReadConfig` 只命中 2 个文件（等于自证成功），改为 `ReadBookConfig|ReadSettings`（76 个）。（r294 又补上键名字面量 `"readConfig"`，复算为 78/78，见 `KEYWORDS.md` 的「存储层维度」一节。）
 >
 > **未做的部分，读表时注意**：`BOOKSHELF.md` A1–C 的 263 行、`READER-CONFIG.md` A–G 的 189 行、`ZIP-BOOKMARK.md` A–E 的 83 行，都是 r277–r280 写下的**迁移前证据，未逐行复核**。表头已逐份写明这一边界。要当当前事实用，需按上游目录分派逐块重核——那时按 `scripts/upstream-surface.sh --coverage` 的未分配清单验收，不靠「表里没有 `待定`」结案。
 >
@@ -120,10 +120,13 @@
 | 表 | 块 | 承载的类别 |
 | --- | --- | --- |
 | [书籍总账](BOOKSHELF.md) | A1 / A2 / A3 / B / C / D | `localBook`、`bookshelfLayout`、`bookGroup`、`bookSource`、`readRecord`、`readConfig`、`threadCount`、`highlightTagRule`、`tagGroupRule` |
+| [书籍总账](BOOKSHELF.md) | E（r295 新增） | 无——备份恢复流程本身不受任何类别的忽略开关控制，12 行全记 `—` |
 | [书签对照](ZIP-BOOKMARK.md) | A–E | `bookmark` |
 | [阅读配置总账](READER-CONFIG.md) | A–G | `readConfig`、`themeConfig` |
 
 上表「涉及行」列给出每类在这几张表里落在哪一块、多少行。**「零行」表示该类目前没有任何界面级盘点**——不是已完成，而是还没盘。这一类要动之前先按[对照关键词](KEYWORDS.md)取出上游接触面、新开块，不要拿「表里没这一行」当「本地没有这个功能」。
+
+E 块是个例外：它承载的是**对 28 类关键词全部隐身**的那 21 个存储层文件（`help/storage/BookRestorePlanner.kt`、`ui/config/backupConfig/BackupConfigScreen.kt` 等），不属于任何一个类别，所以它在总账表 28 行里没有对应行。之所以专门开块，是因为按类别名派活永远覆盖不到它——`BookRestorePlanner.kt` 的 `booksToDelete` / `isRelocatedCopyOf` / `Available-Missing-Unknown` 三态就是靠这个块才第一次进入盘点视野。
 
 明细表每行以一次用户可感知的操作为粒度，八列：
 
