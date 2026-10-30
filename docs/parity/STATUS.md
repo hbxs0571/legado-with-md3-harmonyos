@@ -33,12 +33,16 @@
 
 | 记号 | 含义 |
 | --- | --- |
-| `✓` | 已达，且已核实到具体代码位置 |
-| `✗` | 未达，差距写在明细表 |
+| `✓` | 该类**有具名映射链路**，数据落原生功能；不表示该类全部键/字段都接了，键级明细看 [Android ZIP 备份兼容](../BACKUP-RESTORE.md) 的 28 类清单 |
+| `✗` | 该类**完全没有映射**，ZIP 条目仅由 `copyPreservedEntries` 原样归档，不进原生功能 |
 | `—` | 不适用，理由必写（通常是[项目队列](../PROJECT.md)的范围之外） |
 | `?` | 未盘，尚未逐个文件核对 |
 
-**本表当前是骨架，不是盘点结论。** 下方状态依据「实测」一栏来自 2026-10-29 对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实（具名恢复分支只有 7 个类别：`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`/`bookMarking.json`；其余条目仅由 `copyPreservedEntries` 原样归档）。**逐类盘点尚未开始，`?` 是真实状态，不得当作已接。**
+**本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。
+
+本次核实把原先 4 个 `?`（`themeMode`、`showRss`、`threadCount`、`mangaConfig`）全部落定为 `✗`：`config.xml` 写出侧只 upsert 三段（`bookshelfLayout` 9 键、`readConfig` 阅读外观、`themeConfig` 护眼 6 键），读入侧 46 键，这 4 类的键既不在写出列表也不在读入列表。**「读」列的 `✗` 表示该类的 ZIP 条目恢复时不进原生功能，但条目本身仍会被原样归档**——归档不等于支持。
+
+逐类的「本地有无原生页面」需要另看 [Android ZIP 备份兼容](../BACKUP-RESTORE.md) 的 28 类清单，那里有样本条数与本地页面状态；本表只管 ZIP 读写通不通。
 
 ## 总账
 
@@ -65,13 +69,13 @@
 | `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | 待建 |
 | `server` | `servers.json` | — | — | — | 待建 |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) |
-| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ? | ? | 待建 |
+| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | 待建 |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | 待建 |
-| `themeMode` | `config.xml` | ? | ? | — | 待建 |
-| `bookshelfLayout` | `config.xml` | ✓ | ✓ | ? | [书架对照表](BOOKSHELF.md) A2 |
-| `showRss` | `config.xml` | ? | ? | — | 待建 |
-| `threadCount` | `config.xml` | ? | ? | — | 待建 |
-| `mangaConfig` | `config.xml` | ? | ? | — | 待建 |
+| `themeMode` | `config.xml` | ✗ | ✗ | ? | 待建 |
+| `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书架对照表](BOOKSHELF.md) A2 |
+| `showRss` | `config.xml` | ✗ | ✗ | ? | 待建 |
+| `threadCount` | `config.xml` | ✗ | ✗ | ? | 待建 |
+| `mangaConfig` | `config.xml` | ✗ | ✗ | ? | 待建 |
 
 ## 状态依据
 

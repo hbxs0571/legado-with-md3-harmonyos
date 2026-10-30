@@ -1,6 +1,6 @@
 # Android ZIP 备份兼容
 
-> 本文原公开段落与兼容队列原样保留；r257 当前状态补充见文末。r250 原公开全文另存于 [文档归档](BACKUP-RESTORE-r250.md)。
+> 本文原公开段落与兼容队列原样保留；r257 当前状态补充见文末，r287 补齐 28 类全量清单。r250 原公开全文另存于 [文档归档](BACKUP-RESTORE-r250.md)。
 
 HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导入视为完整 Android 数据库迁移。支持范围须区分原生功能、ZIP 字段映射与仅供兼容保存的数据。兼容继续使用原版的根目录 JSON/XML ZIP 格式，不新增私有容器、manifest 或脚本执行。
 
@@ -15,6 +15,36 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 
 涉及备份格式或恢复映射的修改属于危险修改，修改前须创建源码检查点备份。
 
+## 测试样本
+
+本机有一份真实的 Android 备份，用作 ZIP 往返验收的样本。**文件名与条数公开，样本文件本身不入库、不上传**——它含真实书目与阅读记录，只留本机。
+
+- 压缩包：`测试/backup2026-10-22.zip`（3.0 MB）
+- 解压目录：`测试/backup2026-10-22/`（21 个条目，逐条已核对）
+- 位置：与仓库根同级目录 `测试/`；`.gitignore` 已含 `*.zip` / `*.epub`，`git ls-files` 查不到任何样本
+- 导出时间：2026-10-22；解压时间 2026-10-27
+- 同目录另有 3 本测试书（TXT 3.8 MB、EPUB 5.2 MB、TXT 116 KB），可作本地导入测试书；文件名同样不入库
+
+**样本内容与条数**（2026-10-30 逐条统计）：
+
+| ZIP 条目 | 条数 | ZIP 条目 | 条数 |
+| --- | --- | --- | --- |
+| `bookshelf.json` | 658 | `searchHistory.json` | 737 |
+| `bookmark.json` | 344 | `txtTocRule.json` | 40 |
+| `bookGroup.json` | 28 | `httpTTS.json` | 1 |
+| `bookSource.json` | 904 | `httpTtsVoices.json` | 1 |
+| `rssSources.json` | 28 | `keyboardAssists.json` | 32 |
+| `replaceRule.json` | 40 | `dictRule.json` | 28 |
+| `readRecord.json` | 575 | `homepageCustomSets.json` | 1 |
+| `readRecordDetail.json` | 313 | `readConfig.json` | 12 |
+| `readRecordSession.json` | 39376 | `shareReadConfig.json` | 96 键（对象） |
+| `themeConfig.json` | 8 | `config.xml` | 20132 字节 / 370 个偏好项 |
+| `servers.json` | 空文件（非 JSON） | | |
+
+**这个样本缺 9 个条目**：`bookMarking.json`、`rssStar.json`、`sourceSub.json`、`homepageModules.json`、`highlightRule.json`、`highlightTagRule.json`、`tagGroupRule.json`、`coverRule.json`、`directLinkUploadRule.json`。所以凡属这 9 类的「待往返验收」都不能拿本样本当完成依据——要么另找一份带这些条目的备份，要么在设备上先造数据再导出。
+
+`config.xml` 的 370 个偏好项里，本地真正读写的只有一小部分：**写出侧 35 个键**（`upsertAndroidPreference` 去重后），分三段——`bookshelfLayout` 段 9 个（`bookGroupStyle`、`hideEmptyGroups`、`bookshelfSort`、`bookshelfSortOrder`、`bookshelfLayoutPortrait`、`bookshelfLayoutGridPortrait`、`bookshelfLayoutListPortrait`、`bookshelfTitleMaxLines`、`bookshelfCoverShadow`）、`readConfig` 段的阅读外观与菜单键、`themeConfig` 段的护眼 6 键；**读入侧 47 个键**（`readXmlInteger` / `readXmlBoolean` / `readXmlString` 去重），其中 24 个只在读入侧出现、写出侧没有。两者并集 **59 个键**。其余 311 个键既不读也不写，恢复时随 `copyPreservedEntries` 原样归档。这就是「ZIP 里有 370 项、本地只认 59 项」的直接来源，逐类缺口见下文 28 类清单。
+
 阅读配置的 Android `config.xml` 映射包含 `tocUiUseReplace` 与 `tocCountWords` 两个目录偏好键；导入时仅恢复到本地阅读设置，不执行归档中的脚本或规则。该映射尚待实际 ZIP 往返验收。
 
 替换净化规则的 JSON 映射已接入源码：备份类别未被排除时，会输出根级 replaceRule.json；当前规则列表为空时也输出空数组，避免旧归档中保留的同名文件把已删除规则重新带入。恢复时逐条解析；同 ID 或同 pattern 的条目更新本地规则并保留本地 ID 和顺序，非法正则计入跳过，原文件同时留在兼容归档目录。
@@ -23,9 +53,9 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 
 TXT 目录规则使用根级 `txtTocRule.json`，其字段为 `chapterRule`、`volumeRule`、`example`、`serialNumber` 和 `enable`；内置 27 条规则来自上游 GPL-3.0 默认规则文件，逐字节一致。E 端已验证合成 ZIP 中单条规则恢复并冷启动读回，以及规则为空时的应用备份读回。含非空目录规则的应用备份恢复仍待端到端验证；书架更新目录设备测试也未完成。
 
-阅读正文高亮规则使用根级 `highlightRule.json`，字段逐项对齐上游 `HighlightRule` 实体：本地 33 个字段与上游同名同义，上游多出的 `borderColor`、`borderRadius`、`borderWidth` 三个边框字段本地没有模型，导出时自然缺失，Android 读回时由 Kotlin 默认值兜底。备份类别未被排除时写出该文件；规则只存在 Preferences 里，写出前必须先 `await ReaderHighlightRuleRepository.load()`，否则没进过阅读页的用户会导出一份空数组。**恢复采用合并语义：同 id 或同 pattern 的条目覆盖本地规则并保留本地 id 与顺序，其余新增，本地独有的规则保留。** 这与上游 `Restore.kt:270` 的 `replaceAll`（全量替换）不同，选择合并的理由是 `replaceAll` 会在无提示的情况下删掉用户在 HarmonyOS 上新建的规则，属于数据丢失；而「用备份完全替换本地规则」的场景可以靠先全选删除再恢复达成，反向则不可挽回。空正则与无法编译的正则在导入时计入跳过，不计入新增或覆盖。N 端已在 HOS 模拟器完成备份写出（2 条规则生成 1349 字节 JSON）与恢复导入（新增 1、覆盖 1、跳过 1）双向验证。
+阅读正文高亮规则使用根级 `highlightRule.json`，字段逐项对齐上游 `HighlightRule` 实体：本地 33 个字段与上游同名同义，上游多出的 `borderColor`、`borderRadius`、`borderWidth` 三个边框字段本地没有模型，导出时自然缺失，Android 读回时由 Kotlin 默认值兜底。备份类别未被排除时写出该文件；规则自 r284 起存 `highlightRules` 表（此前是 Preferences），写出前仍必须 `await ReaderHighlightRuleRepository.load()`——这次不是为了从 Preferences 读数据，而是为了把 `cachedRules` 预载满，否则没进过阅读页的用户会导出一份空数组。**恢复采用合并语义：同 id 或同 pattern 的条目覆盖本地规则并保留本地 id 与顺序，其余新增，本地独有的规则保留。** 这与上游 `Restore.kt:270` 的 `replaceAll`（全量替换）不同，选择合并的理由是 `replaceAll` 会在无提示的情况下删掉用户在 HarmonyOS 上新建的规则，属于数据丢失；而「用备份完全替换本地规则」的场景可以靠先全选删除再恢复达成，反向则不可挽回。空正则与无法编译的正则在导入时计入跳过，不计入新增或覆盖。N 端已在 HOS 模拟器完成备份写出（2 条规则生成 1349 字节 JSON）与恢复导入（新增 1、覆盖 1、跳过 1）双向验证。
 
-书签、划线与笔记分别使用根级 `bookmark.json` 与 `bookMarking.json`，两者都是纯 JSON 数组，字段逐项对齐上游 `Bookmark.kt` 与 `BookMarking.kt`：书签 9 个字段（`time`/`bookName`/`bookAuthor`/`bookUrl`/`chapterIndex`/`chapterPos`/`chapterName`/`bookText`/`content`），笔记在上游 12 个字段之外多出本地的 `id`、`enabled`、`createdAt`、`updatedAt`，其中 `anchorJson` 与 `styleJson` 保存的是序列化后的字符串（上游同为 `String?`），所以本地划线锚点与样式可以原样往返。备份类别未被排除时写出这两个文件，数据源分别是 `ReaderBookmarkRepository.load()` 与 `ReaderMarkingRepository.load()`，导出函数为 `ReaderBookmarkExporter.toAndroidBookmarkArray()` / `toAndroidMarkingArray()`。**恢复必须先合并再落盘**：两个条目在同一次恢复里先后出现，若先写书签时用旧笔记列表、后写笔记又覆盖回去，就会互相清除，因此 `restore()` 用 `pendingBookmarks` / `pendingMarkings` 暂存两份合并结果，等循环结束后各写一次。合并口径与替换净化规则一致：同 id 或同内容视为同一条，命中时保留本地 id 并覆盖其余字段，其余新增；书签与笔记都要能找到对应书籍才计入新增或覆盖，找不到的计入跳过。N 端已在 HOS 模拟器完成双向验证：备份侧在有 1 条书签与 1 条笔记时导出 `bookmark.json` 1123 字节、`bookMarking.json` 562 字节，UTF-8 中文正常；清空本地笔记后从该 ZIP 恢复，提示「书签与笔记新增 1 条、覆盖 1 条」，冷启动后「所有书签」页显示「1 条书签 · 1 条笔记」。
+书签、划线与笔记分别使用根级 `bookmark.json` 与 `bookMarking.json`，两者都是纯 JSON 数组，字段逐项对齐上游 `Bookmark.kt` 与 `BookMarking.kt`：书签 9 个字段（`time`/`bookName`/`bookAuthor`/`bookUrl`/`chapterIndex`/`chapterPos`/`chapterName`/`bookText`/`content`）；笔记 12 列与上游 `BookMarking.kt` **逐字对齐**（r284 关系型存储迁移后本地 `book_marks` 表就是上游 12 列，`id`/`enabled`/`createdAt`/`updatedAt` 上游本来就有，不再是本地扩展字段），其中 `anchorJson` 与 `styleJson` 保存的是序列化后的字符串（上游同为 `String?`），所以本地划线锚点与样式可以原样往返。备份类别未被排除时写出这两个文件，数据源分别是 `ReaderBookmarkRepository.load()` 与 `ReaderMarkingRepository.load()`，导出函数为 `ReaderBookmarkExporter.toAndroidBookmarkArray()` / `toAndroidMarkingArray()`。**恢复必须先合并再落盘**：两个条目在同一次恢复里先后出现，若先写书签时用旧笔记列表、后写笔记又覆盖回去，就会互相清除，因此 `restore()` 用 `pendingBookmarks` / `pendingMarkings` 暂存两份合并结果，等循环结束后各写一次。合并口径与替换净化规则一致：同 id 或同内容视为同一条，命中时保留本地 id 并覆盖其余字段，其余新增；书签与笔记都要能找到对应书籍才计入新增或覆盖，找不到的计入跳过。N 端已在 HOS 模拟器完成双向验证：备份侧在有 1 条书签与 1 条笔记时导出 `bookmark.json` 1123 字节、`bookMarking.json` 562 字节，UTF-8 中文正常；清空本地笔记后从该 ZIP 恢复，提示「书签与笔记新增 1 条、覆盖 1 条」，冷启动后「所有书签」页显示「1 条书签 · 1 条笔记」。
 
 ## 兼容队列
 
@@ -37,7 +67,7 @@ TXT 目录规则使用根级 `txtTocRule.json`，其字段为 `chapterRule`、`v
 2. **当前没有原生业务的安全兼容**：字典规则 → 书源 → RSS 订阅源 → 书架分组 → 首页自定义分组 → 键盘辅助、在线朗读源及服务端配置。每类单独记录预览、忽略或原样保留结果，不把归档数据显示为可用功能。
 3. **跨类别收口**：验证合并/覆盖、冲突、异常 ZIP、资源上限、重启后状态和实际往返；受影响的 TXT/EPUB、进度、记录、书签及设置做定向回归。
 
-Android 归档中的 `readRecord.json`、`readRecordDetail.json` 与 `readRecordSession.json` 当前仅按兼容归档保留，不导入原生会话/日明细/按书汇总仓储。原生阅读记录的旧版迁移来自本机 Preferences，不等同于 ZIP 映射。
+Android 归档中的 `readRecord.json`、`readRecordDetail.json` 与 `readRecordSession.json` 当前仅按兼容归档保留，不导入原生会话/日明细/按书汇总仓储。**注意区分两件事**：这是「ZIP 导入没接」；而本机旧格式记录（`legado_read_time_records` 的扁平 `records` 键）的搬迁已在 r283 接进 `RdbMigration` 第三批，两者不是同一件事，后者不代表 ZIP 映射已接。
 
 TTS、WebDAV 服务、在线书源抓取、RSS 抓取和查词业务均不随本轮自动启动。WebDAV 服务器凭据需要单独解决解密密钥和跨设备安全；服务端配置条目的存在不表示可迁移服务。
 
@@ -45,29 +75,90 @@ TTS、WebDAV 服务、在线书源抓取、RSS 抓取和查词业务均不随本
 
 仅把原条目保存在本地兼容目录供后续备份使用，不算重构该功能；归档条目存在也不等于该包已完成实际恢复验收。
 
-## r257 状态补充：Android ZIP 功能清单
+## 28 类兼容清单
 
-下表保留原五列功能清单与全部 17 类条目。为保护本地归档隐私，样本记录数量不公开；条目是否映射到原生功能、是否经过 E 端设备验证分别标注。
+本表对齐 `entry/src/main/ets/data/BackupRepository.ets` 的 `categoryOptions`，**28 类一一对应**，缺一类就是漏一类。核对方法：本表行数与代码里 `categoryOptions` 的项数必须相等，键名逐个相同。
 
-| 功能 | ZIP 条目与数量 | HarmonyOS 功能重构状态 | Android ZIP 接入状态 | 队列位置 |
-| --- | --- | --- | --- | --- |
-| 书架、书籍元数据与进度 | `bookshelf.json`（数量未公开） | 已有原生书架、TXT/EPUB 阅读和进度保存 | **部分已接入**：本地书目、进度和缺正文标记可映射；不打包书籍正文，复杂冲突仍需验收 | 本地阅读保持可用；ZIP 映射 1 |
-| 阅读配置 | `readConfig.json`、`shareReadConfig.json`（数量未公开） | 阅读配置有原生模型与持久化 | **部分已接入**：部分阅读键映射到原生设置；分享配置未转为原生多套方案；r255 已验证其与 `themeConfig` 的类别门控相互独立 | 本地阅读核实；ZIP 映射 2 |
-| 书签、划线与笔记 | `bookmark.json`、`bookMarking.json`（数量未公开） | 原生书签与标注仓储、阅读入口已存在 | **已接入源码**：N 端设备验证备份写出与恢复导入双向通过（新增 1、覆盖 1），恢复为合并语义 | 本地功能 3；ZIP 映射 3 |
-| 通用偏好设置 | `config.xml`（键数量未公开） | 部分偏好已有原生等价项 | **部分已接入**：按类别映射已实现；其他设备/平台特有或未实现的值不会因此生效，未知项按兼容规则处理 | 对应本地模块核实；ZIP 映射 4 |
-| 主题配置 | `themeConfig.json`、`config.xml`（数量未公开） | 主题页和 HarmonyOS 主题模型已存在 | **部分已接入**：r255 验证了 `themeConfig` 对护眼六键的独立门控；Android 自定义配色/透明度等主题 JSON 未完整映射 | 对应本地模块核实；ZIP 映射 5 |
-| 书架分组 | `bookGroup.json`（数量未公开） | 已有原生分组模型、管理、编辑与筛选；私有访问保护和按组刷新未接通 | **已接入源码**：根级 `bookGroup.json` 可导出并导入原生分组；外部 Android ZIP 冲突合并与完整往返仍待验 | 本地功能已接入；外部 ZIP 往返待验 |
-| 首页自定义分组 | `homepageCustomSets.json`（结构化对象，数量未公开） | 首页基础组件已实现，自定义集合管理未迁移 | **未接入**：归档保留 | 安全兼容；自定义业务候选 |
-| 替换净化规则 | `replaceRule.json`（数量未公开） | 已有本地规则模型/仓储及阅读时替换链路 | **已接入源码**：备份写出根级 JSON、恢复逐条导入；E 端非空应用备份完整往返仍待验收 | 本地功能 5；ZIP 映射 7 |
-| 完整阅读记录与会话 | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json`（各类数量未公开） | 原生会话、按日明细、按书汇总三层记录已接通；字数和别名合并仍有缺口 | **未接入 Android 历史**：三个 ZIP 条目仅兼容保留，不导入原生记录仓储 | 本地功能已接入；ZIP 映射 6 |
-| 搜索历史 | `searchHistory.json`（数量未公开） | 阅读器搜索历史有原生仓储；全局/历史覆盖尚不完整 | **未接入 Android 数据**：归档保留 | 对应本地模块核实；ZIP 映射 8 |
-| TXT 目录规则 | `txtTocRule.json`（数量未公开） | 已接入规则仓储、管理页、TXT 切章、分卷显示及书架更新目录 | **已接入源码**：备份/恢复读写根级 JSON；合成 ZIP 单条恢复与空规则应用备份有设备记录，非空应用备份全往返仍待验 | 本地功能 4；ZIP 映射 9 |
-| 阅读正文高亮规则 | `highlightRule.json`（数量未公开） | 已接入规则模型、Preferences 仓储、HOS 正则匹配引擎与分页/滚动两种渲染 | **已接入源码**：N 端设备验证备份写出与恢复导入双向通过；恢复为合并语义，与上游 `replaceAll` 不同 | 本地功能已接入；ZIP 映射已验 |
-| 字典规则 | `dictRule.json`（数量未公开） | 列表与编辑 UI 有壳，规则存储和查词未迁移 | **未接入**：归档保留 | 安全兼容 10；字典业务候选 |
-| 书源 | `bookSource.json`（数量未公开） | 有页面壳，书源仓储、规则解释和抓取未迁移 | **未接入功能**：仅保留归档数据，不执行规则 | 安全兼容 11；抓取业务候选 |
-| RSS 订阅源 | `rssSources.json`（数量未公开） | 订阅页 UI 已有，网络抓取和订阅管理未迁移 | **未接入功能**：仅保留归档数据 | 安全兼容 12；抓取业务候选 |
-| 在线朗读源与音色 | `httpTTS.json`、`httpTtsVoices.json`（结构化对象，数量未公开） | 朗读设置界面存在，TTS 服务和音色管理未迁移 | **未接入功能**：归档保留，不调用服务 | 安全兼容；TTS 业务候选 |
-| 键盘辅助映射 | `keyboardAssists.json`（数量未公开） | 未发现与 Android 键位映射等价的原生功能 | **未接入**：归档保留 | 安全兼容；键位业务候选 |
-| 服务端配置 | `servers.json`（不透明数据，数量未公开） | HarmonyOS WebDAV/服务端同步未迁移 | **未接入**：数据保持不透明，不尝试解密或连接 | 安全兼容；WebDAV 业务候选 |
+核对命令（在仓库根执行，两个数字必须都是 28）：
+
+```bash
+grep -cE '^\| [0-9]+ \| `' docs/BACKUP-RESTORE.md
+grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
+```
+
+「ZIP 接入」判据只有三档，与 [ZIP 兼容总账](parity/STATUS.md) 的三级兼容度一致：
+
+- **已接入**：恢复时有具名分支，数据落到原生仓储/表；且已过设备往返验证，或至少写出侧已实现
+- **部分接入**：恢复侧有分支但只映射了该类的一部分键/字段，或只在合成 ZIP 上验过、真实归档未验
+- **仅归档**：恢复时由 `copyPreservedEntries` 原样保存，不解析、不落原生功能（这类条目在归档里存在 ≠ 该功能已支持）
+
+恢复侧具名分支实测只有这 9 个 `entry.name ===` 判断：`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`，其余全部走 `copyPreservedEntries`。
+
+| # | 类别键名 | ZIP 条目 | 样本条数 | 本地原生功能 | ZIP 接入 | 队列位置 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `localBook` | `bookshelf.json` | **658** | 书架、TXT/EPUB 阅读、进度保存 | **部分接入**：书目/进度/缺正文标记可映射；不打包正文；复杂冲突待验 | ZIP 映射 1 |
+| 2 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | 12 / 96 键 / 370 项 | 阅读配置有原生模型与持久化 | **部分接入**：读入 46 个 `config.xml` 键；`shareReadConfig` 未转多套方案 | ZIP 映射 2 |
+| 3 | `themeMode` | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`，333 行） | **未接入**：`themeMode` 键读写都未接 | 待接 |
+| 4 | `themeConfig` | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验；Android 配色/透明度 JSON 未映射 | ZIP 映射 5 |
+| 5 | `coverConfig` | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，149 行，3 处 `onUnavailableAction`） | **未接入**：14 个键读写均未接 | 待接 |
+| 6 | `bookshelfLayout` | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`） | **部分接入**：写出 9 键已接；读入侧未接 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A2 |
+| 7 | `showRss` | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **未接入**：`showRss` 键读写都未接 | 待接 |
+| 8 | `threadCount` | `config.xml` | 370 项内 1 键 | **无对应概念**（HOS 无并发线程数设置） | **未接入**：键读写都未接 | 安全兼容 |
+| 9 | `mangaConfig` | `config.xml` | 370 项内 32 键 | 仅设置页有漫画相关条目文字，无漫画阅读 | **未接入**：32 个键读写都未接 | 安全兼容；漫画业务候选 |
+| 10 | `bookmark` | `bookmark.json`、`bookMarking.json` | 344 / **样本缺 `bookMarking`** | 原生书签与标注仓储、阅读入口 | **已接入**：N 端双向验证通过（新增 1、覆盖 1），合并语义 | ZIP 映射 3 |
+| 11 | `bookGroup` | `bookGroup.json` | 28 | 原生分组模型、管理、编辑与筛选 | **已接入**：根级 JSON 可导出导入；外部 ZIP 冲突合并待验 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A3 |
+| 12 | `bookSource` | `bookSource.json` | 904 | 有页面壳，规则解释与抓取未迁移 | **仅归档**：不执行规则 | 安全兼容 11；抓取业务候选 |
+| 13 | `rssSource` | `rssSources.json` | 28 | 订阅页 UI 已有，抓取未迁移 | **仅归档** | 安全兼容 12；抓取业务候选 |
+| 14 | `rssStar` | `rssStar.json` | **样本缺** | **无**（`grep rssStar` 零命中） | **仅归档** | 安全兼容 |
+| 15 | `replaceRule` | `replaceRule.json` | 40 | 规则模型/仓储 + 阅读时替换链路 | **已接入**：写出根级 JSON、恢复逐条导入；非空应用备份往返待验 | ZIP 映射 7 |
+| 16 | `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | 575 / 313 / **39376** | 原生会话、日明细、按书汇总三层已接通 | **仅归档**：三个条目都不导入原生仓储 | ZIP 映射 6 |
+| 17 | `searchHistory` | `searchHistory.json` | 737 | 阅读器搜索历史有原生仓储（`search_content_history` 表） | **仅归档**：未导入 | ZIP 映射 8 |
+| 18 | `sourceSub` | `sourceSub.json` | **样本缺** | 有页面壳 | **仅归档** | 安全兼容 |
+| 19 | `txtTocRule` | `txtTocRule.json` | 40 | 规则仓储、管理页、切章、分卷、书架更新目录 | **已接入**：合成 ZIP 单条恢复与空规则备份有记录；非空应用备份往返待验 | ZIP 映射 9 |
+| 20 | `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | 1 / 1 | 朗读设置界面存在，TTS 服务未迁移 | **仅归档**：不调用服务 | 安全兼容；TTS 业务候选 |
+| 21 | `keyboardAssists` | `keyboardAssists.json` | 32 | **无**（`grep keyboardAssists` 零命中） | **仅归档** | 安全兼容；键位业务候选 |
+| 22 | `dictRule` | `dictRule.json` | 28 | 列表与编辑 UI 有壳（`pages/ProfileSubPages.ets`），存储与查词未迁移 | **仅归档** | 安全兼容 10；字典业务候选 |
+| 23 | `homepageModules` | `homepageModules.json` | **样本缺** | 首页基础组件已实现，模块管理未迁移 | **仅归档** | 安全兼容 |
+| 24 | `homepageCustomSets` | `homepageCustomSets.json` | 1 | 自定义集合管理未迁移 | **仅归档** | 安全兼容；自定义业务候选 |
+| 25 | `highlightRule` | `highlightRule.json` | **样本缺** | 规则模型、`highlightRules` 表、正则匹配、分页/滚动两渲染 | **已接入**：N 端双向验证通过；合并语义，与上游 `replaceAll` 不同 | ZIP 映射已验 |
+| 26 | `highlightTagRule` | `highlightTagRule.json` | **样本缺** | 有列表页与编辑页（`pages/ProfileSubPages.ets:2244` 起 207 行），**13 处 `onUnavailableAction`，无仓储** | **仅归档** | 安全兼容 |
+| 27 | `tagGroupRule` | `tagGroupRule.json` | **样本缺** | **无**（`grep tagGroup` 零命中） | **仅归档** | 安全兼容 |
+| 28 | `server` | `servers.json` | 空文件 | WebDAV/服务端同步未迁移 | **仅归档**：数据不透明，不尝试解密或连接 | 安全兼容；WebDAV 业务候选 |
+
+**统计（四档，合计 28）**：
+
+| 档位 | 类数 | 类别 |
+| --- | --- | --- |
+| 已接入 | **5** | `bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule` |
+| 部分接入 | **4** | `localBook`、`readConfig`、`themeConfig`、`bookshelfLayout` |
+| 未接入（本地有页面，ZIP 键读写都没接） | **5** | `themeMode`、`coverConfig`、`showRss`、`threadCount`、`mangaConfig` |
+| 仅归档 | **14** | `bookSource`、`rssSource`、`rssStar`、`readRecord`、`searchHistory`、`sourceSub`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule`、`server` |
+
+「未接入」与「仅归档」的区别只在本地有没有那页 UI：前 5 类本地有设置页可改值，只是那些值既不写进 `config.xml`、也不从 `config.xml` 读回；后 14 类连页面都没有。两者对 Android 用户的实际结果一样——换到 HarmonyOS 后这些设置不生效。
+
+**与 r257 旧版的差异**：旧版 18 行，缺 `themeMode`、`coverConfig`、`bookshelfLayout`、`showRss`、`threadCount`、`mangaConfig`、`rssStar`、`sourceSub`、`homepageModules`、`highlightTagRule`、`tagGroupRule` 共 11 类；旧版「通用偏好设置」一行现拆成 6 类（`themeMode`/`coverConfig`/`bookshelfLayout`/`showRss`/`threadCount`/`mangaConfig`），因为它们在代码里是 6 个独立的 `categoryOptions` 项，各自可单独忽略。
 
 状态修正：`bookGroup.json` 已列入原生分组映射，而不是“没有原生分组功能”；本地阅读记录三层仓储已接入，但 Android ZIP 历史仍未映射。r255 在 E 端验证 `readConfig × themeConfig` 四种包含/忽略组合；这不代表所有阅读/主题字段或外部 Android ZIP 已完整往返。
+
+## 按清单派活的依据
+
+派活时最多有三份文档会被引用，分工必须说清，否则同一个问题会有三个答案：
+
+| 文档 | 管什么 | 什么时候看 |
+| --- | --- | --- |
+| **本文** `BACKUP-RESTORE.md` | **28 类 ZIP 条目 ↔ 本地能力**的对齐状态：某类的 JSON/XML 条目恢复时会不会落到原生仓储，落到哪张表 | 派「实现某一类的 ZIP 恢复」时 |
+| [ZIP 兼容总账](parity/STATUS.md) | 28 类的**三级兼容度**（读 / 写 / 忽略项）逐类打分，以及明细表在哪 | 判断某类「算不算做完了」时 |
+| [对照关键词](parity/KEYWORDS.md) | 每类的**上游检索词**，用来生成上游接触面文件清单 | 盘点某类时要碰哪些上游文件时 |
+
+三者的键名必须完全一致，都取自 `BackupRepository.ets` 的 `categoryOptions`。
+
+**冲突时以谁为准**：以代码（`categoryOptions`、`entry.name ===` 恢复分支、`preferenceKeysByCategory`）和实测为准，文档落后就改文档。本文 28 类表在 2026-10-30（r287）已与代码逐键对齐；`STATUS.md` 的分数仍来自更早的核实，用它之前先看它顶部的日期。
+
+**派活时的最小信息集**，一份任务书里至少要给：
+
+1. 类别键名（如 `themeMode`）与对应 ZIP 条目（`config.xml` 的 `themeMode` 键）
+2. 本文表格里该类的「ZIP 接入」档位与「本地原生功能」现状——决定要不要先补本地页面
+3. 该类在 `config.xml` 里的键名清单（`preferenceKeysByCategory` 有的话直接指过去，没有就现列）
+4. 验收方式：**必须走真实样本 `测试\backup2026-10-22.zip` 的往返**，不是只看代码。样本缺该类条目时先造数据，别拿「代码写了」当验收
+
+**一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 46 个、写出 9 + 阅读外观/护眼两组。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。同理 `readConfig` 类有 85 个键、`themeConfig` 52 个、`bookshelfLayout` 41 个、`mangaConfig` 32 个、`coverConfig` 14 个，这 5 类合计 224 个键，本地实际接了不到一半。
