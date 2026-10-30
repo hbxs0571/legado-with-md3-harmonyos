@@ -17,7 +17,24 @@
 - 结构性重盘：2026-10-30（r286，改盘点单位、修失效引用、补 F 块与覆盖证明）
 - 上游基线：`legado-with-MD3`（Android，Compose）
 - 本地实现：`entry/src/main/ets`（HarmonyOS，ArkTS）
-- 对应 ZIP 类别：`bookmark`（`bookmark.json`、`bookMarking.json`），见 [ZIP 兼容总账](STATUS.md)
+- 对应 ZIP 类别：`bookmark`（`bookmark.json`、`bookMarking.json`）83 行、`—` 34 行。**本表不逐行加「ZIP 类别」列**，理由见下节。
+
+## ZIP 类别归属（整表口径）
+
+按「这一行要改代码时会动到哪个 ZIP 类别的键或文件」逐块归属：
+
+| 块 | 条数 | ZIP 类别 | 依据 |
+| --- | --- | --- | --- |
+| A 阅读页书签 | 20 | `bookmark` | `Bookmark` 实体 → `bookmark.json` |
+| B 阅读页划线 / 笔记 | 20 | `bookmark` | `BookMarking` 实体 → `bookMarking.json`（`Backup.kt:152-155` 原文「书签与划线/想法笔记（`book_marks`）视为一体，统一受既有 bookmark 忽略项控制」） |
+| C 目录页三 tab | 15 | `bookmark` | 同上两类 |
+| D 所有书签页 | 13 | `bookmark` | 同上 |
+| E 数据、导出与备份 | 15 | `bookmark` | 导出的是 `bookmark`/`bookMarking` 两表内容 |
+| F 长按选词菜单 | 34 | **`—` 全部** | `textSelectMenuConfig`、`expandTextMenu`、`showSelectMenuIcon` 三键是 `PreferKey` 成员，但**不在五个类别数组里**（`help/storage/BackupConfig.kt` 零命中）→ 照样写进 `config.xml`，取消任何类别勾选都不会删 |
+
+合计 **`bookmark` 83 + `—` 34 = 117**。
+
+`—` 的语义是「**参与备份，但不受任何忽略开关控制**」（上游 `BackupConfig.kt:413 fun keyIsNotIgnore` 的 `else -> true` 分支）。**F 块整块 34 行不属任何 28 类**——按类别名派活（如「实现书签」）不会覆盖到它，必须单独派。
 
 ## 盘面
 

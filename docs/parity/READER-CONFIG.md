@@ -16,7 +16,25 @@
 - 盘点日期：2026-10-29（r286 结构性重盘：2026-10-30）
 - 上游基线：`legado-with-MD3`（Android，Compose）
 - 本地实现：`entry/src/main/ets`（HarmonyOS，ArkTS）
-- 对应 ZIP 类别：`readConfig`
+- 对应 ZIP 类别：`readConfig` 180 行、`themeConfig` 7 行、`—` 2 行。**本表不逐行加「ZIP 类别」列**，理由见下节。
+
+## ZIP 类别归属（整表口径）
+
+本表 189 行按「这一行要改代码时会动到哪个 ZIP 类别的键或文件」逐块归属，结果只有三档：
+
+| 块 | 条数 | ZIP 类别 | 依据 |
+| --- | --- | --- | --- |
+| A 阅读界面基础 | 37 | `readConfig` | `hideStatusBar`/`hideNavigationBar` 等 `ReadBookConfig` 字段 → `BackupConfig.kt:197-262 readPrefKeys` |
+| B 页眉页脚 | 24 | `readConfig` | `tipHeaderLeft` 等属 `ReadBookConfig`，键在 `readPrefKeys` |
+| C 正文排版 | 49 | `readConfig` | `textColor`/`textSize` 等属 `ReadBookConfig.kt`，键在 `readPrefKeys` |
+| D 翻页与手势交互 | 20 | `readConfig` | 9 个 `clickAction*` 键全在 `readPrefKeys` |
+| E 菜单与主题外观 | 42 | `readConfig` | 34 个 `readMenu*` 键在 `readPrefKeys`（**注意不是 `themeConfig`**——菜单配色是阅读界面的一部分，不是主题配色） |
+| F 护眼与书签角标 | 9 | **混合** | 护眼 6 键（`eyeProtectionEnabled`/`colorTemperature`/`eyeProtectionAutoNight`/`eyeProtectionSchedule`/`eyeProtectionStartTime`/`eyeProtectionEndTime`，`BackupConfig.kt:311-316`）+ 跨零点判定共 7 行 → `themeConfig`；**书签角标 2 行**（`bookmarkBadgeImage`/`bookmarkBadgeSize`，`PreferKey.kt:205-206`）→ `—` |
+| G 页边距 | 8 | `readConfig` | `paddingTop/Bottom/Left/Right` 在 `readPrefKeys` |
+
+合计 **`readConfig` 180 + `themeConfig` 7 + `—` 2 = 189**。
+
+`—` 的语义是「**参与备份，但不受任何忽略开关控制**」：书签角标两键照样写进 `config.xml`，只是不在五个类别数组里（上游 `help/storage/BackupConfig.kt:413 fun keyIsNotIgnore` 的 `else -> true` 分支）。F 块这两行若按类别派活，落到哪一类都会漏掉。
 
 ## 口径说明
 

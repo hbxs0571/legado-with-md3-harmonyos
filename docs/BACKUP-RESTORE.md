@@ -192,7 +192,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 | 文档 | 管什么 | 什么时候看 |
 | --- | --- | --- |
 | **本文** `BACKUP-RESTORE.md` | **28 类 ZIP 条目 ↔ 本地能力**的对齐状态：某类的 JSON/XML 条目恢复时会不会落到原生仓储，落到哪张表 | 派「实现某一类的 ZIP 恢复」时 |
-| [ZIP 兼容总账](parity/STATUS.md) | 28 类的**三级兼容度**（读 / 写 / 忽略项）逐类打分，以及明细表在哪 | 判断某类「算不算做完了」时 |
+| [ZIP 兼容总账](parity/STATUS.md) | 28 类的**三级兼容度**（读 / 写 / 忽略项）逐类打分，以及「涉及行」——每类在三张对照表里落在哪一块、多少行 | 判断某类「算不算做完了」、该盘哪几块时 |
 | [对照关键词](parity/KEYWORDS.md) | 每类的**上游检索词**，用来生成上游接触面文件清单 | 盘点某类时要碰哪些上游文件时 |
 
 三者的键名必须完全一致，都取自 `BackupRepository.ets` 的 `categoryOptions`。
@@ -206,4 +206,57 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 3. 该类在 `config.xml` 里的键名清单（`preferenceKeysByCategory` 有的话直接指过去，没有就现列）
 4. 验收方式：**必须走真实样本 `测试\backup2026-10-22.zip` 的往返**，不是只看代码。样本缺该类条目时先造数据，别拿「代码写了」当验收
 
-**一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 46 个、写出 9 + 阅读外观/护眼两组。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。同理 `readConfig` 类有 85 个键、`themeConfig` 52 个、`bookshelfLayout` 41 个、`mangaConfig` 32 个、`coverConfig` 14 个，这 5 类合计 224 个键，本地实际接了不到一半。
+**一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 46 个、写出 9 + 阅读外观/护眼两组。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
+
+## 偏好键对齐差异（待移除）
+
+本地 `entry/src/main/ets/data/BackupRepository.ets:233 preferenceKeysByCategory` 与上游 `help/storage/BackupConfig.kt` 的五个类别数组逐键比对（可复跑：拿 `PreferKey.kt` 常量值换算后求差集）：
+
+| 类别 | 上游 | 本地 | 多出 | 缺失 |
+| --- | --- | --- | --- | --- |
+| `readConfig` | 60 | 85 | **25** | 0 |
+| `themeConfig` | 53 | **53** | 0 | 0（r292 已补 `bookInfoAuthorSearchFallback`） |
+| `bookshelfLayout` | 39 | 41 | **2** | 0 |
+| `mangaConfig` | 32 | 32 | 0 | 0 |
+| `coverConfig` | 14 | 14 | 0 | 0 |
+
+`readConfig` 多出的 25 个分两类：
+
+**一、上游有常量、但不在任何类别数组（14 个）——照样参与备份，本地不该把它们收进类别数组**
+
+判定依据：上游 `help/storage/BackupConfig.kt:413 fun keyIsNotIgnore` 里不在任何类别数组的键走 `else -> true`，照样写进 `config.xml`。换句话说，**取消「阅读界面」勾选时上游不会删这 14 个键，本地却会删**——这是与上游的行为不一致。
+
+| 键 | `PreferKey.kt` 行 |
+| --- | --- |
+| `readingAnchorEnabled` | `:121` |
+| `swipeToAddBookmark` | `:204` |
+| `bookmarkBadgeImage` | `:205` |
+| `bookmarkBadgeSize` | `:206` |
+| `maxLengthWithNoToc` | `:446` |
+| `progressBarBehavior` | `:170` |
+| `tocUiUseReplace` | `:163` |
+| `tocCountWords` | `:164` |
+| `clickImgWay` | `:202` |
+| `textFullJustify` | `:105` |
+| `textBottomJustify` | `:106` |
+| `bookGroupStyle` | `:13` |
+| `hideEmptyGroups` | `:14` |
+| `system_typefaces` | `:103`（常量名是 `systemTypefaces`，值是 `system_typefaces`；同时还是 `R.array.system_typefaces` 资源名，**不是偏好键**） |
+
+最后一项 `system_typefaces` 情况特殊：它在 `PreferKey` 里有常量，但全仓无人读写（只被 `R.array.system_typefaces` 资源引用），本地收进 `readConfig` 属误收，应删。
+
+**二、上游全仓不存在（13 个）——误把 JSON 结构字段名当成 `config.xml` 键，必须删**
+
+| 键 | 上游真身 |
+| --- | --- |
+| `textBold` | `help/config/ReadBookConfig.kt:573 val textBold: Int = 500` 的**字段名**；`:760 "textBold" to textBold` 是 `shareReadConfig` JSON 的键，不是 `config.xml` 键 |
+| `underlineColor` | `data/entities/HighlightRule.kt:21 var underlineColor: Int? = null` 的字段名；`ReadBookConfig.kt:800` 里作为 `highlightRules` 内嵌 JSON 的键 |
+| `underline` | `ui/widget/components/text/HtmlContent.kt:696 underline = "underline" in value.lowercase()` 的 HTML 样式字面量 |
+| `textItalic`、`textShadow`、`shadowRadius`、`shadowDx`、`shadowDy`、`shadowColor`、`shadowColorN`、`underlineHeight`、`underlineColorNight`、`dottedLine` | 全仓字面量命中 0（既非 `PreferKey`、也非 `LocalPreferences`、也非任何 JSON 键） |
+
+**三、`bookshelfLayout` 多出的 2 个**：`bookGroupStyle`（`PreferKey.kt:13`）、`hideEmptyGroups`（`PreferKey.kt:14`）——与上游同样落在 `else -> true` 的无类别分支，本地收进了 `bookshelfLayout` 数组，属上述第一类问题。
+
+**四、`themeConfig` 缺失的 1 个**：`bookInfoAuthorSearchFallback`（`PreferKey.kt:252`，在上游 `themePrefKeys` 内）。本地未收，导致取消「主题配置」勾选时这个键不会被忽略——与上游不一致。**已在 r292 补进 `BackupRepository.ets` 的 `themeConfig` 数组**（现 53 = 上游 53）。
+
+> **现状**：`themeConfig` 已对齐；`readConfig` 多 25、`bookshelfLayout` 多 2 **尚未改动代码**，仅记录。修法：第一类 14 个键从类别数组移除（改为「无类别」处理，即不出现在任何 `keysForCategory` 返回的列表里），第二类 13 个直接删，`bookshelfLayout` 那 2 个同样移除。判断口径见 `docs/parity/BOOKSHELF.md` 表头「ZIP 类别」列的取值说明（`—` = 参与备份但不受任何忽略开关控制）。
+

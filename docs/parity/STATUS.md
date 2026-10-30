@@ -46,36 +46,36 @@
 
 ## 总账
 
-| 类别键名 | 条目 | 读 | 写 | 忽略项 | 明细表 |
+| 类别键名 | 条目 | 读 | 写 | 忽略项 | 涉及行 |
 | --- | --- | --- | --- | --- | --- |
-| `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) |
-| `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | ? | [书签/划线/笔记对照](ZIP-BOOKMARK.md) |
-| `bookGroup` | `bookGroup.json` | ✓ | ✓ | ? | [书架对照表](BOOKSHELF.md) A3 |
-| `bookSource` | `bookSource.json` | — | — | — | 待建 |
-| `rssSource` | `rssSources.json` | — | — | — | 待建 |
-| `rssStar` | `rssStar.json` | — | — | — | 待建 |
-| `replaceRule` | `replaceRule.json` | ✓ | ✓ | ? | 待建 |
-| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | [书架对照表](BOOKSHELF.md) C |
-| `searchHistory` | `searchHistory.json` | ✗ | ✗ | ? | 待建 |
-| `sourceSub` | `sourceSub.json` | — | — | — | 待建 |
-| `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | ? | 待建 |
-| `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | — | — | — | 待建 |
-| `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ? | 待建 |
-| `dictRule` | `dictRule.json` | ✗ | ✗ | ? | 待建 |
-| `homepageModules` | `homepageModules.json` | ✗ | ✗ | ? | 待建 |
-| `homepageCustomSets` | `homepageCustomSets.json` | ✗ | ✗ | ? | 待建 |
-| `highlightRule` | `highlightRule.json` | ✓ | ✓ | ? | 待建 |
-| `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | ? | 待建 |
-| `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | 待建 |
-| `server` | `servers.json` | — | — | — | 待建 |
-| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) |
-| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | 待建 |
-| `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | 待建 |
-| `themeMode` | `config.xml` | ✗ | ✗ | ? | 待建 |
-| `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书架对照表](BOOKSHELF.md) A2 |
-| `showRss` | `config.xml` | ✗ | ✗ | ? | 待建 |
-| `threadCount` | `config.xml` | ✗ | ✗ | ? | 待建 |
-| `mangaConfig` | `config.xml` | ✗ | ✗ | ? | 待建 |
+| `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) A1 29 / B 51 / C 4 / D3 13 = **97 行** |
+| `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | ? | [书签对照](ZIP-BOOKMARK.md) A–E = **83 行** |
+| `bookGroup` | `bookGroup.json` | ✓ | ✓ | ? | [书籍总账](BOOKSHELF.md) A3 18 / A1 11 / D3 6 / B 3 = **38 行** |
+| `bookSource` | `bookSource.json` | — | — | — | [书籍总账](BOOKSHELF.md) B 19 / D3 5 = **24 行** |
+| `rssSource` | `rssSources.json` | — | — | — | **零行** |
+| `rssStar` | `rssStar.json` | — | — | — | **零行** |
+| `replaceRule` | `replaceRule.json` | ✓ | ✓ | ? | **零行** |
+| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) C 23 / B 5 = **28 行** |
+| `searchHistory` | `searchHistory.json` | ✗ | ✗ | ? | **零行** |
+| `sourceSub` | `sourceSub.json` | — | — | — | **零行** |
+| `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | ? | **零行** |
+| `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | — | — | — | **零行** |
+| `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ? | **零行** |
+| `dictRule` | `dictRule.json` | ✗ | ✗ | ? | **零行** |
+| `homepageModules` | `homepageModules.json` | ✗ | ✗ | ? | **零行** |
+| `homepageCustomSets` | `homepageCustomSets.json` | ✗ | ✗ | ? | **零行** |
+| `highlightRule` | `highlightRule.json` | ✓ | ✓ | ? | **零行** |
+| `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) B = **1 行** |
+| `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
+| `server` | `servers.json` | — | — | — | **零行** |
+| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **180 行**；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
+| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [阅读配置总账](READER-CONFIG.md) F = **7 行** |
+| `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | **零行** |
+| `themeMode` | `config.xml` | ✗ | ✗ | ? | **零行** |
+| `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书籍总账](BOOKSHELF.md) A2 33 / A1 20 = **53 行** |
+| `showRss` | `config.xml` | ✗ | ✗ | ? | **零行** |
+| `threadCount` | `config.xml` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
+| `mangaConfig` | `config.xml` | ✗ | ✗ | ? | **零行** |
 
 ## 状态依据
 
@@ -115,11 +115,21 @@
 
 ## 明细表约定
 
-每类一张 `docs/parity/ZIP-<大写键名>.md`，例如 `ZIP-BOOKMARK.md`。**本轮不建空表**，因为空表会被误认为已盘点。
+明细表**不按类别拆文件**，而是按界面组织，一张表可承载多个类别：
 
-明细表每行以一次用户可感知的操作为粒度，七列：
+| 表 | 块 | 承载的类别 |
+| --- | --- | --- |
+| [书籍总账](BOOKSHELF.md) | A1 / A2 / A3 / B / C / D | `localBook`、`bookshelfLayout`、`bookGroup`、`bookSource`、`readRecord`、`readConfig`、`threadCount`、`highlightTagRule`、`tagGroupRule` |
+| [书签对照](ZIP-BOOKMARK.md) | A–E | `bookmark` |
+| [阅读配置总账](READER-CONFIG.md) | A–G | `readConfig`、`themeConfig` |
 
-`上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注`
+上表「涉及行」列给出每类在这几张表里落在哪一块、多少行。**「零行」表示该类目前没有任何界面级盘点**——不是已完成，而是还没盘。这一类要动之前先按[对照关键词](KEYWORDS.md)取出上游接触面、新开块，不要拿「表里没这一行」当「本地没有这个功能」。
+
+明细表每行以一次用户可感知的操作为粒度，八列：
+
+`上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别`
+
+最后一列是 2026-10-30（r292）新增的，判据、取值与「怎么读」见各表表头的说明。
 
 状态只允许 `已接` / `未接` / `不适用` / `待定` 四值。`不适用` 必须写理由，`待定` 必须写阻塞项，**盘点结束时不得残留 `待定`**。
 

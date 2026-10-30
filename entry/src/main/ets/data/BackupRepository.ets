@@ -262,6 +262,7 @@ export class BackupRepository {
       'topBarOpacity', 'bottomBarOpacity', 'enableBlur', 'enableProgressiveBlur', 'topBarBlurRadius',
       'bottomBarBlurRadius', 'topBarBlurAlpha', 'bottomBarBlurAlpha', 'bottomBarLensRadius',
       'useFlexibleTopAppBar', 'topBarButtonStyle', 'mergeTopBarActions', 'bookInfoFollowCoverColor',
+      'bookInfoAuthorSearchFallback',
       'bookInfoBackgroundBlur', 'bookInfoNetworkCoverBackground', 'bookInfoDefaultCoverBackground',
       'colorBackground', 'colorBottomBackground', 'colorBackgroundNight', 'colorBottomBackgroundNight',
       'enableDeepPersonalization', 'colorMD3OnSurface', 'colorMD3OnPrimaryContainer', 'colorMD3Background',
