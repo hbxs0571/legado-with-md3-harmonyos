@@ -29,12 +29,12 @@
 | --- | --- | --- | --- | --- | --- |
 | `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) |
 | `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | ? | [书签/划线/笔记对照](ZIP-BOOKMARK.md) |
-| `bookGroup` | `bookGroup.json` | ✓ | ✓ | ? | 待建 |
+| `bookGroup` | `bookGroup.json` | ✓ | ✓ | ? | [书架对照表](BOOKSHELF.md) A3 |
 | `bookSource` | `bookSource.json` | — | — | — | 待建 |
 | `rssSource` | `rssSources.json` | — | — | — | 待建 |
 | `rssStar` | `rssStar.json` | — | — | — | 待建 |
 | `replaceRule` | `replaceRule.json` | ✓ | ✓ | ? | 待建 |
-| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | 待建 |
+| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | [书架对照表](BOOKSHELF.md) C |
 | `searchHistory` | `searchHistory.json` | ✗ | ✗ | ? | 待建 |
 | `sourceSub` | `sourceSub.json` | — | — | — | 待建 |
 | `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | ? | 待建 |
@@ -51,7 +51,7 @@
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ? | ? | 待建 |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | 待建 |
 | `themeMode` | `config.xml` | ? | ? | — | 待建 |
-| `bookshelfLayout` | `config.xml` | ✓ | ✓ | ? | 待建 |
+| `bookshelfLayout` | `config.xml` | ✓ | ✓ | ? | [书架对照表](BOOKSHELF.md) A2 |
 | `showRss` | `config.xml` | ? | ? | — | 待建 |
 | `threadCount` | `config.xml` | ? | ? | — | 待建 |
 | `mangaConfig` | `config.xml` | ? | ? | — | 待建 |

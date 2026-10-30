@@ -9,26 +9,27 @@
 
 ## 口径说明
 
-三处容易误判的地方，先说清楚，避免后续重复返工：
+四处容易误判的地方，先说清楚，避免后续重复返工：
 
 1. **改名不等于未接。** 上游 `textSize`、`lineSpacingExtra`、`shadowColor`、`pageAnim`、`menuIconItemsPerRow` 等在本地以 `fontSize`、`lineSpacing`、`textShadowColor`、`pageAnimation`、`bottomItemsPerRow` 落地，语义等价。这类判 `已接`，映射关系见[第二节改名映射表](#二改名映射表)。**但 `textColor` 不属此类**——本地正文色是硬编码，是真缺口（详见 C 块首行）。
-2. **控件存在不等于已接。** `entry/src/main/ets/pages/ReaderSettingsPage.ets` 的菜单外观条目（`menuSettingsContent()`，`:398`）共 39 个，控件齐备、点击有响应，但 `menuBorderEnabled`（`:168`）、`menuBarStyleMode`（`:165`）、`menuColorMode`（`:166`）等状态只存在于页面 `@State`，在 `ReaderSettingsRepository.ets` 中检索命中数为 0。退出设置页即丢失，也不驱动阅读页渲染。这类判 `未接`，不判 `已接`。
-3. **`showNotMigrated()` 是显式占位。** `grep -c "showNotMigrated(" entry/src/main/ets/pages/ReaderSettingsPage.ets` 得 21 处调用、18 个不同名称（`:485`、`:494`、`:801`、`:837`、`:838`、`:839`、`:840`、`:848`、`:851`、`:863`、`:864`、`:867`、`:868`、`:869`、`:870`、`:873`、`:879`、`:883`、`:886`、`:887`、`:1242`），点开只弹提示。凡走这条路的判 `未接`，不因界面上显示了开关而判已接。
+2. **控件存在不等于已接。** `entry/src/main/ets/pages/ReaderSettingsPage.ets` 的菜单外观条目（`menuSettingsContent()`，`:399`；条目由 `getMenuSettingsEntries()`，`:1788` 生成）共 41 条，其中 5 条是分组标题，真实条目 36 条。绝大多数控件齐备、点击有响应，但 `menuBorderEnabled`（`:168`）、`menuBarStyleMode`（`:165`）、`menuColorMode`（`:166`）等状态只存在于页面 `@State`，在 `ReaderSettingsRepository.ets` 中检索命中数为 0。退出设置页即丢失，也不驱动阅读页渲染。这类判 `未接`，不判 `已接`。**例外只有两条**：`底栏按钮配置` 与 `标题栏操作按钮` 走 `handleMenuSettingsEntryClick()`（`:517-531`）打开真实配置面板并落盘（见 E 块对应两行）。
+3. **上游配置有两个来源文件，缺一不可。** 本表早期只盘了 `ReadBookConfig.kt`（单本书可覆盖的 `Config`），漏掉 `domain/model/settings/ReadSettings.kt`（全书统一设置，114 个字段）。后者有一半字段与前者同名或同义，其余 53 个字段此前从未进表。两个文件合计声明 267 个名字，是本节字段口径的基数。
+4. **`showNotMigrated()` 是显式占位。** `grep -c "showNotMigrated(" entry/src/main/ets/pages/ReaderSettingsPage.ets` 得 21 行命中，其中 1 行是 `:1242` 的函数定义，实际调用 20 处、18 个不同名称（`:485`、`:494`、`:801`、`:837`、`:838`、`:839`、`:840`、`:848`、`:851`、`:863`、`:864`、`:867`、`:868`、`:869`、`:870`、`:873`、`:879`、`:883`、`:886`、`:887`），点开只弹提示。凡走这条路的判 `未接`，不因界面上显示了开关而判已接。
 
 ## 盘面
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A 阅读界面基础 | 28 | 11 | 15 | 2 |
+| A 阅读界面基础 | 37 | 14 | 21 | 2 |
 | B 页眉页脚 | 24 | 23 | 1 | 0 |
-| C 正文排版 | 47 | 23 | 24 | 0 |
-| D 翻页与手势交互 | 12 | 8 | 4 | 0 |
-| E 菜单与主题外观 | 39 | 0 | 39 | 0 |
+| C 正文排版 | 49 | 23 | 26 | 0 |
+| D 翻页与手势交互 | 20 | 10 | 10 | 0 |
+| E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 167 | 82 | 83 | 2 |
+| 合计 | 189 | 89 | 98 | 2 |
 
-> 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 39 条，全部未接。
+> 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 
 ## A 阅读界面基础
 
@@ -65,6 +66,15 @@
 | 文字选择触感反馈 | `ReadSettings.kt` | `ReaderSettingsPage.ets:879` | 未接 | 走 `showNotMigrated('文字选择触感反馈')` | 选中正文有振动 | — |
 | 漫画阅读样式 | `ReadBookConfig.kt:70` | — | 不适用 | 上游 `comicStyleSelect` 为漫画阅读专用 | — | 漫画/图片书不在[项目队列](../PROJECT.md)范围，本地无图片书类型 |
 | 阅读样式选择（漫画分支） | `ReadBookConfig.kt:69` | — | 不适用 | 上游 `readStyleSelect` 在漫画会话下生效 | — | 同上，`styleSelect`（`:98`）取漫画分支时无意义 |
+| 阅读亮度 | `ReadSettings.kt:22` | — | 未接 | 上游 `readBrightness` 随书保存亮度，本地无字段，亮度不随书记忆 | 调暗后退出重进亮度保持 | — |
+| 阅读菜单不透明度 | `ReadSettings.kt:13` | — | 未接 | 上游 `menuAlpha` 默认 100，是整层不透明度；E 块的「菜单模糊透明度」对应 `readMenuBlurAlpha`，不是此项 | 调后菜单整体通透度变化 | 与 E 块 `readMenuBlurAlpha` 不同字段 |
+| 主题网格列数 | `ReadSettings.kt:40` | — | 未接 | 上游 `themeGridColumns` 默认 4，本地无字段 | 主题面板每行列数变化 | — |
+| 向后预下载章节数 | `ReadSettings.kt:58` | — | 未接 | 上游 `preDownloadNum` 默认 10；`AppDownloadCacheSettingsPage.ets:31` 是预览页，滑块无持久化 | 调大后缓存章节数变化 | 下载缓存模块整体未接 |
+| 向前预下载章节数 | `ReadSettings.kt:59` | — | 未接 | 上游 `preDownloadNumPrev` 默认 0，同上 | 同上 | 同上 |
+| 在浏览器打开 | `ReadSettings.kt:64` | — | 未接 | 上游 `readUrlInBrowser`，本地无字段 | 开启后链接在系统浏览器打开 | — |
+| 无目录书籍分段长度 | `ReadSettings.kt:38` | `ReaderSettingsRepository.ets:196` | 已接 | 上游 `maxLengthWithNoToc` 默认 3000，本地同名滑块 `ReaderSettingsPage.ets:865` 区间 3000–100000 | 调节后无目录书籍分段点变化 | — |
+| 目录使用替换规则 | `ReadSettings.kt:62` | `ReaderSettingsRepository.ets:174` | 已接 | 上游 `tocUiUseReplace` → 本地 `tocUseReplace` | 目录中替换规则生效 | 存储键仍写 `tocUiUseReplace` |
+| 目录显示字数 | `ReadSettings.kt:63` | `ReaderSettingsRepository.ets:175` | 已接 | 上游 `tocCountWords` → 本地 `tocShowWordCount` | 目录条目显示字数 | 存储键仍写 `tocCountWords` |
 
 ## B 页眉页脚
 
@@ -150,6 +160,8 @@
 | 标题分段缩放 | `ReadBookConfig.kt:283` | — | 未接 | 上游夹取 0–2，负值回落 1 | 调比例后第二段字号变化 | — |
 | 标题分段起始位置 | `ReadBookConfig.kt:287` | — | 未接 | 上游 `titleSegDistance` 默认 4 | 调值后分段切点前移/后移 | — |
 | 标题分段识别字符 | `ReadBookConfig.kt:290` | — | 未接 | 上游 `titleSegFlag` 默认空串 | 填入字符后在该处拆段 | — |
+| 繁简转换 | `ReadSettings.kt:118` | — | 未接 | 上游 `chineseConverterType` 三档（不转换/繁体/简体），本地无字段 | 选繁体后正文以繁体显示 | — |
+| 字体文件夹 | `ReadSettings.kt:79` | — | 未接 | 上游 `fontFolder` 指定扫描目录，本地只支持系统字体与内置字体 | 指定文件夹后出现自定义字体 | 本地 `systemTypefaces` 只覆盖系统字体枚举 |
 
 > C 块的标题排版是整组缺口：14 个标题字段全部未接，本地用 9 处硬编码的 `this.fontSize + 4` 代替（`ReaderPage.ets:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`）。这 9 处必须同时改，否则测量、绘制与渲染三处会不一致——`:824`/`:1651` 用于行数与宽度测量，`:1656` 用于预留行高，`:2857` 起为实际绘制。
 
@@ -170,14 +182,22 @@
 | 自定义翻页按键 | `ReadSettings.kt` | `ReaderSettingsPage.ets:884` | 未接 | 点开 `showNotMigrated` 语义提示「按键映射面板尚未迁移」，无按键映射数据结构 | 绑键后按键触发对应动作 | — |
 | 选中文字菜单 | `ReadSettings.kt` | `ReaderSettingsPage.ets:885` | 未接 | 点开提示「文本操作菜单配置尚未迁移」 | 选中文字后菜单项可按配置增减 | — |
 | 鼠标滚轮翻页 | `ReadSettings.kt` | `ReaderSettingsPage.ets:848` | 未接 | 开关 `checked` 恒 `false` 且绑定 `showNotMigrated` | 接鼠标滚轮可翻页 | — |
-| 朗读时允许音量键翻页 | `ReadSettings.kt` | `ReaderSettingsPage.ets:851` | 未接 | 走 `showNotMigrated` | — | 朗读在[范围之外](../PROJECT.md)，开关已上屏故判 `未接` |
+| 朗读时允许音量键翻页 | `ReadSettings.kt:30` | `ReaderSettingsPage.ets:851` | 未接 | 走 `showNotMigrated('朗读时音量键翻页')` | — | 朗读在[范围之外](../PROJECT.md)，开关已上屏故判 `未接` |
+| 横屏双页 | `ReadSettings.kt:26` | `ReaderSettingsPage.ets:844` | 未接 | 上游 `doubleHorizontalPage` 三值，本地打开详情面板但面板内无落盘 | 横屏时左右双页显示 | — |
+| 进度条行为 | `ReadSettings.kt:27` | `ReaderSettingsRepository.ets:173` | 已接 | 上游 `progressBarBehavior` → 本地 `progressBehavior`，取值 `page`/`chapter`，面板 `ReaderSettingsPage.ets:847` | 拖动进度条按章节或页码定位 | — |
+| 翻页触摸灵敏度 | `ReadSettings.kt:35` | — | 未接 | 上游 `pageTouchSlop` 默认 0，本地无字段 | 调节后误触减少 | — |
+| 进度条模式 | `ReadSettings.kt:25` | — | 未接 | 上游 `readSliderMode` 默认 `"0"`，本地无字段 | 进度条显示形态变化 | — |
+| 允许选择正文 | `ReadSettings.kt:46` | `ReaderSettingsRepository.ets:195` | 已接 | 开关在 `ReaderSettingsPage.ets:874`，阅读页 `ReaderPage.ets:169` 消费 | 长按正文出现选择菜单 | — |
+| 展开文字菜单 | `ReadSettings.kt:51` | `ReaderSettingsPage.ets:1437` | 未接 | 仅 `expandTextMenuPreview` 页面 `@State`，无持久化 | 折叠菜单项多行展开 | — |
+| 显示选择菜单图标 | `ReadSettings.kt:52` | — | 未接 | 上游 `showSelectMenuIcon` 默认 true，本地无字段 | 选择菜单显示图标 | — |
+| 上次标记样式 | `ReadSettings.kt:54` | — | 未接 | 上游 `lastMarkingStyle` 记录上次标注样式，本地无字段 | 连续标注沿用上次样式 | — |
 
 ## E 菜单与主题外观
 
 上游主体：`ReadBookConfig.kt:77-131`（`readMenu*` 系列 getter）、`Config` 内的 `@Transient menu*` 字段（`:643-658`）。
-本地主体：`ReaderSettingsPage.ets:398-462`（`menuSettingsContent()`）、条目清单 `:1788-1840`。
+本地主体：`ReaderSettingsPage.ets:399-462`（`menuSettingsContent()`）、条目清单 `:1788-1840`。
 
-**本块共同差异**：38 个条目全部有控件、可点击、有 `@State` 承载，但没有一条写入 `ReaderSettingsRepository.ets`，也不驱动 `ReaderPage.ets` 渲染。判 `未接` 的依据是「退出设置页即丢失 + 阅读页外观不变」，不是「没有控件」。
+**本块共同差异**：39 个条目里 37 个有控件、可点击、有 `@State` 承载，但没有一条写入 `ReaderSettingsRepository.ets`，也不驱动 `ReaderPage.ets` 渲染。判 `未接` 的依据是「退出设置页即丢失 + 阅读页外观不变」，不是「没有控件」。剩下 2 条（底栏按钮配置、标题栏操作按钮）是完整持久化链路，判 `已接`。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -201,7 +221,7 @@
 | 标题栏悬浮图标配置 | `ReadBookConfig.kt:146`、`:149` | `ReaderSettingsPage.ets:1812` | 未接 | 上游 `readMenuCustomIcons`、`titleBarCustomIcons` 两个 Map，本地无字段 | 换图标后标题栏图标变化 | — |
 | 标题栏悬浮图标位置 | `ReadBookConfig.kt:116` | `ReaderSettingsPage.ets:1813` | 未接 | 上游 `titleBarIconPosition` 夹取 0–3 | 换位置后图标换到另一侧 | — |
 | 悬浮图标液态玻璃按钮 | `ReadBookConfig.kt:87` | `ReaderSettingsPage.ets:1814` | 未接 | 上游 `readMenuFloatingIconLiquidGlass` | 开关后图标按钮出现玻璃质感 | — |
-| 底栏按钮配置 | `ReadSettings.kt` | `ReaderSettingsRepository.ets:171-172` | 未接 | 本地已有 `bottomActions`/`topActions` 存配置，`:470` 只弹提示不打开面板 | 点开可排序、改显示与长按动作 | 数据结构在，编辑面板缺 |
+| 底栏按钮配置 | `ReadSettings.kt` | `ReaderSettingsRepository.ets:171-172` | 已接 | 链路完整：`ReaderSettingsPage.ets:470-472` 分流 → `handleMenuSettingsEntryClick()`（`:517-531`）→ `bottomActionConfigurationSheet()`（`:1897-1956`，显示开关 `:1936`、上下移 `:1938-1944`）→ `onBottomActionsChange` → `Index.ets:2218` → 写 `bottomActions`（`ReaderSettingsRepository.ets:804`） | 改显示与顺序后退出设置页，重进仍生效，阅读页底栏同步变化 | 只做显示/排序，未做长按动作自定义 |
 | 底栏圆角 | `ReadBookConfig.kt:104` | `ReaderSettingsPage.ets:1821` | 未接 | 上游 `readMenuBottomCornerRadius` 夹取 0–32 | 调圆角后底栏卡片变圆 | — |
 | 底栏悬浮 | `ReadBookConfig.kt:82` | `ReaderSettingsPage.ets:1822` | 未接 | 上游 `readMenuFloatingBottomBar` | 开关后底栏脱离屏幕边缘 | — |
 | 底栏模糊 | `ReadBookConfig.kt:106` | `ReaderSettingsPage.ets:1823` | 未接 | 上游 `readMenuBottomBarBlurMode` 夹取 0–2 | 切三档后底栏背景变化 | — |
@@ -210,9 +230,9 @@
 | 底栏液态玻璃 | `ReadBookConfig.kt:86` | `ReaderSettingsPage.ets:1825` | 未接 | 上游 `readMenuBottomBarLiquidGlassButtons` | 开关后底栏出现玻璃质感 | — |
 | 底栏按钮液态玻璃 | `ReadBookConfig.kt:86` | `ReaderSettingsPage.ets:1826` | 未接 | 同上字段的按钮级开关 | 开关后单个按钮出现玻璃质感 | — |
 | 标题栏胶囊 | `ReadBookConfig.kt:85` | `ReaderSettingsPage.ets:1830` | 未接 | 上游 `readMenuTopBarTitleCapsule` | 开关后标题与章节合并成胶囊 | — |
-| 标题栏模式 | `ReadBookConfig.kt:81` | `ReaderSettingsPage.ets:1831` | 未接 | 上游 `titleBarCompact`，本地上屏为三选一（`：570`） | 切「仅标题」后标题栏变矮 | — |
-| 标题栏操作按钮 | `ReadSettings.kt` | `ReaderSettingsPage.ets:1832` | 未接 | 与「底栏按钮配置」同类，`:470` 只弹提示 | 点开可配置顶栏按钮 | — |
-| 标题栏紧凑 | `ReadBookConfig.kt:81` | `ReaderSettingsPage.ets:1833` | 未接 | 与「标题栏模式」同源字段，本地重复上屏两次 | 开关后标题栏收紧 | 同一上游字段被拆成两个条目，属 UI 结构问题 |
+| 标题栏模式 | `ReadSettings.kt:12` | `ReaderSettingsPage.ets:1831` | 未接 | 上游 `titleBarMode` 是字符串三态，本地选项为「完整信息/仅标题/标题与章节」（`:570`），仅存页面态 | 切「仅标题」后标题栏变矮 | — |
+| 标题栏操作按钮 | `ReadSettings.kt` | `ReaderSettingsPage.ets:1832` | 已接 | 链路与底栏同构：`:470-472` → `handleMenuSettingsEntryClick()`（`:517-531`）→ `topActionConfigurationSheet()`（`:2006` 起）→ `onTopActionsChange` → `Index.ets:2227` → 写 `topActions`（`ReaderSettingsRepository.ets:805`） | 改显示与顺序后重进仍生效，阅读页顶栏同步变化 | 与底栏共用 `ReaderBottomActionConfig` |
+| 标题栏紧凑 | `ReadBookConfig.kt:81` | `ReaderSettingsPage.ets:1833` | 未接 | 上游 `titleBarCompact`（布尔），与「标题栏模式」是两个独立字段，本地两个条目各自独立上屏、均无持久化 | 开关后标题栏收紧 | — |
 | 标题栏图标样式 | `ReadBookConfig.kt:101` | `ReaderSettingsPage.ets:1834` | 未接 | 上游 `titleBarIconStyle` 夹取 0–2 | 切「描边」后图标变线框 | — |
 | 顶栏模糊 | `ReadBookConfig.kt:105` | `ReaderSettingsPage.ets:1835` | 未接 | 上游 `readMenuTopBarBlurMode` 夹取 0–2 | 开关后顶栏背景模糊 | — |
 | 顶栏模糊样式 | `ReadBookConfig.kt:107` | `ReaderSettingsPage.ets:1836` | 未接 | 上游 `readMenuTopBarBlurStyle` 夹取 0–1 | 切「渐变」后顶栏背景为渐变 | — |
@@ -220,6 +240,9 @@
 | 合并标题栏按钮 | `ReadBookConfig.kt:84` | `ReaderSettingsPage.ets:1838` | 未接 | 上游 `readMenuTopBarMergeButtons` | 开关后相邻按钮合并 | — |
 | 菜单镜头半径 | `ReadBookConfig.kt:114` | — | 未接 | 上游 `readMenuLensRadius` 夹取 0–48f，本地上屏条目都没有 | 调半径后高光范围变化 | — |
 | 自动亮度 | `ReadBookConfig.kt:97` | — | 未接 | 上游 `brightnessAuto`，本地无字段无条目 | 开关后亮度跟随环境光 | — |
+| 阅读栏样式 | `ReadSettings.kt:69` | — | 未接 | 上游 `readBarStyle` 默认 1；`BackupRepository.ets:244` 仅在导入时读取该键名，无渲染 | 切换后底栏形态变化 | — |
+| 阅读栏样式跟随页面 | `ReadSettings.kt:68` | — | 未接 | 上游 `readBarStyleFollowPage`，本地无字段 | 底栏样式随背景变化 | — |
+| 更多操作配置 | `ReadSettings.kt:121` | — | 未接 | 上游 `moreActionsConfig` 存「更多」面板的条目配置，本地无字段 | 增删「更多」面板项后生效 | 相关入口提示「更多操作配置保存失败」 |
 
 ## F 护眼与书签角标
 
@@ -254,31 +277,98 @@
 
 ## 一、真缺失的字段清单
 
-`ReaderSettingsRepository.ets` 相对上游 `ReadBookConfig.kt` 的 `comm` 差集共 70 项（上游 126 个 `val|var`，本地 111 个字段）。分类后：9 项判 `不适用`、14 项是颜色缓存、10 项改名已接、1 项另有独立仓储、**36 项真缺失**。复核命令（在 `N:\HarmonyProjects` 下执行）：
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（98 行未接）；本节按「上游声明名」计字段差集 112 项。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
+字段差集的计算过程：
+
+| 项 | 数 |
+| --- | --- |
+| 上游 `ReadBookConfig.kt` 声明并集（全文 1054 行） | 210 |
+| 上游 `ReadSettings.kt` 声明（全文 122 行） | 114 |
+| 两文件合并去重后并集 | 267 |
+| 本地 `ReaderSettingsSnapshot` 有效字段（自身 63 + 继承 `ReaderInfoSettings` 26） | 89 |
+| 两边同名（上游名直接命中本地） | 61 |
+| 直接差集（上游有、本地无同名） | 206 |
+| − 内部辅助属性（见下） | 26 |
+| − EInk 专用（见 1.1） | 8 |
+| − `@Transient` 颜色缓存（见 1.2） | 15 |
+| − `readMenuXxx` 与 `Config` 内 `menuXxx` 的语义重复对 | 7 |
+| − 改名已接（见第二节） | 15 |
+| − 9 个 `clickAction*` 合并为 `clickRegionActions[]` | 9 |
+| − `paddingDisplayCutouts` 之外的页边距 12 项并入 `paddingSettings` 容器 | 12 |
+| − 非配置项（`id` 为进程内列表身份、`name` 为书名字段） | 2 |
+| **= 字段级差集** | **112** |
+
+26 项内部辅助属性（不是用户可配置项，逐项列出便于复核）：
+
+- 上下文引用 2：`config`、`readSettings`。
+- 颜色/字号解析结果 11：`resolvedMenuAccentColor`、`resolvedMenuBgColor`、`resolvedMenuBlurColor`、`resolvedMenuBorderColor`、`resolvedMenuContainerColor`、`resolvedMenuTextColor`、`resolvedTipFooterColor`、`resolvedTipHeaderColor`、`resolvedTitleColor`、`resolvedTitleSize`、`resolvedTitleSizeRelative`。
+- 配置容器与存取 5：`defaults`、`background`、`menuColor`、`styleSelect`、`durConfig`。
+- 导入导出与共享 3：`exportConfig`、`configFilePath`、`shareConfigFilePath`（`shareConfig` 另计 1）。
+- 枚举与常量名表 3：`tipColorNames`、`tipDividerColorNames`、`isMiddleTitle`。
+- 状态判断 2：`isNight`、`shareConfig`。
+
+`readMenuXxx` 与 `Config` 内 `menuXxx` 的 7 对语义重复：`readMenuBgColor`、`readMenuBgColorNight`、`readMenuBottomCornerRadius`、`readMenuIconItemsPerRow`、`readMenuIconRowCount`、`readMenuIconShowText`、`readMenuIconStyle`——两边各声明一次，按一项计。
+
+
+复核脚本（必须整段跑，不能截取文件局部——早前用 `awk 'NR>=500 && NR<=900'` 只读了 1054 行里的 400 行，漏掉六成字段，是本节旧数据错误的根源）：
+
+```python
+import io, re
+
+UP = 'legado-with-MD3/app/src/main/java/io/legado/app/help/config/ReadBookConfig.kt'
+LO = 'legado-with-md3-harmonyos/entry/src/main/ets/data/ReaderSettingsRepository.ets'
+DECL = re.compile(r'^\s+(?:private\s+|internal\s+|public\s+)?(?:val|var)\s+([a-zA-Z0-9_]+)')
+
+cf, gf, in_cfg, end = set(), set(), False, 0
+for i, line in enumerate(io.open(UP, encoding='utf-8').read().split('\n'), 1):
+    if 'data class Config(' in line:
+        in_cfg = True
+        continue
+    if in_cfg:
+        # 结束行是 '    ) {' 而不是 '    )'，正则漏写 \{ 会让边界识别失败
+        if re.match(r'^    \)\s*\{?\s*$', line):
+            in_cfg, end = False, i
+            continue
+        m = DECL.match(line)
+        if m:
+            cf.add(m.group(1))
+        continue
+    if i <= end:
+        continue
+    m = DECL.match(line)
+    if m:
+        gf.add(m.group(1))
+
+lo = set()
+for line in io.open(LO, encoding='utf-8'):
+    m = re.match(r'^  ([a-zA-Z][a-zA-Z0-9]*)\??:', line)
+    if m:
+        lo.add(m.group(1))
+
+print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
+# 109 181 210 114 267 89
 ```
-awk 'NR>=500 && NR<=900' legado-with-MD3/app/src/main/java/io/legado/app/help/config/ReadBookConfig.kt \
-  | grep -oE "^\s+(private )?(val|var) [a-zA-Z0-9_]+" | awk '{print $NF}' | sort -u > /tmp/up.txt
-grep -oE "^\s{2}[a-zA-Z][a-zA-Z0-9]*\??:" \
-  legado-with-md3-harmonyos/entry/src/main/ets/data/ReaderSettingsRepository.ets | tr -d ' :?' | sort -u > /tmp/lo.txt
-comm -23 /tmp/up.txt /tmp/lo.txt
-```
 
-### 1.1 EInk 专项（9 项）：判 `不适用`
+`readMenuXxx` 与 `Config` 内 `menuXxx` 的 7 对语义重复：`readMenuBgColor`、`readMenuBgColorNight`、`readMenuBottomCornerRadius`、`readMenuIconItemsPerRow`、`readMenuIconRowCount`、`readMenuIconShowText`、`readMenuIconStyle`——两边各声明一次，按一项计。
 
-`bgStrEInk`、`bgTypeEInk`、`darkStatusIconEInk`、`textColorEInk`、`textColorIntEInk`、`textAccentColorEInk`、`textAccentColorIntEInk`、`pageAnimEInk`、`shadowColorNightInt`。
+### 1.1 EInk 专项（8 项）：判 `不适用`
+
+`bgStrEInk`、`bgTypeEInk`、`darkStatusIconEInk`、`textColorEInk`、`textAccentColorEInk`、`pageAnimEInk`、`textColorIntEInk`、`textAccentColorIntEInk`。
+
+其中 `textColorIntEInk`、`textAccentColorIntEInk` 同时也是颜色缓存，按 EInk 归类计数，不与 1.2 重复计。
 
 理由统一：EInk 是墨水屏设备形态的专用配色与动画，属 [项目队列](../PROJECT.md)「范围之外」的「额外设备形态适配」。本地只建模日/夜两套（`paperIndex`/`dayPaperIndex`/`nightPaperIndex`，`ReaderSettingsRepository.ets:162-164`）。
 
-### 1.2 颜色缓存字段（14 项）：不是缺口
+### 1.2 颜色缓存字段（15 项）：不是缺口
 
-`hex`、`initAccentColorInt`、`initColorInt`、`menuAcColorInt`、`menuAcColorNightInt`、`menuBgColorInt`、`menuBgColorNightInt`、`shadowColorInt`、`textColorInt`、`textColorIntNight`、`textAccentColorInt`、`textAccentColorIntNight`、`underlineColorInt`、`underlineColorNightInt`。
+`hex`、`initAccentColorInt`、`initColorInt`、`menuAcColorInt`、`menuAcColorNightInt`、`menuBgColorInt`、`menuBgColorNightInt`、`shadowColorInt`、`shadowColorNightInt`、`textColorInt`、`textColorIntNight`、`textAccentColorInt`、`textAccentColorIntNight`、`underlineColorInt`、`underlineColorNightInt`。
 
 这些是上游 `Config` 里的 `@Transient` 解析缓存（`ReadBookConfig.kt:683-710`），把颜色字符串解析成 `Int` 后缓存，不属于用户可配置项。本地直接用颜色字符串（`textShadowColor`、`underlineColor` 存 `string`），不需要等价物。**不列入缺口计数。**
 
-### 1.3 真缺失（36 项）
+### 1.3 字段级差集（112 项）
 
-不按块归类——块归属以 A–G 明细表的实际行为准。这里只给完整字段名单，便于逐项消账。
+按字段组列出，不按 A–G 块归类——块归属以明细表的实际行为准，这里只给完整名单，便于逐项消账。
 
 | 字段组 | 条数 | 字段 |
 | --- | --- | --- |
@@ -286,16 +376,30 @@ comm -23 /tmp/up.txt /tmp/lo.txt
 | 状态栏 | 2 | `darkStatusIcon`、`darkStatusIconNight` |
 | 下划线与虚线 | 4 | `underlinePadding`、`underlineExtend`、`dottedBase`、`dottedRatio` |
 | 标题排版 | 14 | `titleMode`、`titleSize`、`titleSizeRelative`、`titleBold`、`titleColor`、`titleColorNight`、`titleLineSpacingExtra`、`titleLineSpacingSub`、`titleTopSpacing`、`titleBottomSpacing`、`titleSegType`、`titleSegScaling`、`titleSegDistance`、`titleSegFlag` |
-| 菜单外观 | 7 | `menuAcColor`、`menuAcColorNight`、`menuBgColor`、`menuBgColorNight`、`menuBottomBottomMargin`、`menuBottomCornerRadius`、`menuBottomHorizontalMargin` |
+| 菜单颜色 | 14 | `menuAcColor`、`menuAcColorNight`、`menuBgColor`、`menuBgColorNight`、`readMenuAccentColor`、`readMenuAccentColorNight`、`readMenuBlurColor`、`readMenuBlurColorNight`、`readMenuBorderColor`、`readMenuBorderColorNight`、`readMenuContainerColor`、`readMenuContainerColorNight`、`readMenuTextColor`、`readMenuTextColorNight` |
+| 菜单样式选择 | 2 | `readMenuColorMode`、`readMenuPaletteStyle` |
+| 菜单模糊与边框数值 | 5 | `readMenuBlurAlpha`、`readMenuBlurRadius`、`readMenuBorderWidth`、`readMenuLensRadius`、`menuBottomCornerRadius` |
+| 菜单布局与玻璃效果 | 12 | `menuBottomBottomMargin`、`menuBottomHorizontalMargin`、`readMenuBottomBarBlurMode`、`readMenuBottomBarBlurStyle`、`readMenuBottomBarLiquidGlassButtons`、`readMenuFloatingBottomBar`、`readMenuFloatingIconLiquidGlass`、`readMenuTopBarBlurMode`、`readMenuTopBarBlurStyle`、`readMenuTopBarLiquidGlassButtons`、`readMenuTopBarMergeButtons`、`readMenuTopBarTitleCapsule` |
+| 标题栏与图标 | 8 | `readMenuCustomIcons`、`showMenuIcon`、`showTitleBarIcons`、`titleBarCompact`、`titleBarCustomIcons`、`titleBarIconPosition`、`titleBarIconStyle`、`titleBarMode` |
+| 亮度与滑块 | 5 | `brightnessAuto`、`brightnessVwPos`、`readBrightness`、`readSliderMode`、`showBrightnessView` |
+| 阅读模式与排版开关 | 4 | `comicStyleSelect`、`readBodyToLh`、`readStyleSelect`、`useZhLayout` |
+| 朗读提醒 | 1 | `readAloudDetachReminderEnabled` |
+| 高亮规则（独立仓储） | 1 | `highlightRules` |
+| 仅见于 `ReadSettings.kt` 的其余字段 | 31 | `adaptSpecialStyle`、`autoChangeSource`、`autoSuggestDayNight`、`chineseConverterType`、`defaultSourceChangeAll`、`disableReturnKey`、`doubleHorizontalPage`、`expandTextMenu`、`fontFolder`、`lastMarkingStyle`、`menuAlpha`、`moreActionsConfig`、`mouseWheelPage`、`nextKeys`、`optimizeRender`、`pageTouchSlop`、`paddingDisplayCutouts`、`preDownloadNum`、`preDownloadNumPrev`、`prevKeys`、`readBarStyle`、`readBarStyleFollowPage`、`readUrlInBrowser`、`selectVibrator`、`showReadTitleAddition`、`showSelectMenuIcon`、`sliderVibrator`、`textSelectMenuConfig`、`themeGridColumns`、`volumeKeyPageOnPlay`、`useNewTocSheet` |
 
-9 + 2 + 4 + 14 + 7 = 36。
+9 + 2 + 4 + 14 + 14 + 2 + 5 + 12 + 8 + 5 + 4 + 1 + 1 + 31 = 112。
 
-### 1.4 三类之外的两种情况：既不是缺口也不是改名
+其中 `highlightRules` 已由独立仓储承接（见 1.4），真正需要在 `ReaderSettingsRepository.ets` 补齐的是 **111 项**。
 
-- **改名已接 10 项**：`lineSpacingExtra`、`menuIconItemsPerRow`、`menuIconRowCount`、`menuIconShowText`、`menuIconStyle`、`pageAnim`、`pageAnimSpeed`、`shadowColor`、`shadowColorN`、`textSize`，见第二节映射表。
-- **另有独立仓储 1 项**：`highlightRules`（`ReadBookConfig.kt:656`）不在 `ReaderSettingsRepository.ets` 中，但本地对应 `entry/src/main/ets/model/ReaderHighlightRule.ets`、`data/ReaderHighlightRuleRepository.ets`、`data/ReaderHighlightRuleEngine.ets` 三个文件，属高亮规则的独立模块，不计入本表缺口。
+### 1.4 既不是缺口也不是改名的两种情况
 
-> 计数闭合：70（差集）= 9（EInk 不适用）+ 14（颜色缓存）+ 10（改名已接）+ 1（独立仓储）+ 36（真缺失）。E 块 39 条明细中只有 9 条落在字段差集里，其余 30 条是本地连字段都没有的菜单外观参数（本地按页面 `@State` 硬编码），不参与上面的 `comm` 比对——这正是「控件存在不等于已接」的由来。
+- **改名已接 15 项**：`lineSpacingExtra`、`menuIconItemsPerRow`、`menuIconRowCount`、`menuIconShowText`、`menuIconStyle`、`pageAnim`、`pageAnimSpeed`、`shadowColor`、`shadowColorN`、`textSize`、`useUnderline`、`progressBarBehavior`、`clickImgWay`、`tocUiUseReplace`、`tocCountWords`，见第二节映射表。
+- **数组合并 9 项**：`clickActionTL`…`clickActionBR` 九个整型字段由本地一个 `clickRegionActions: string[]` 承接（`ReaderSettingsRepository.ets:177`，默认值 `:243-245`，消费 `ReaderPage.ets:1125`）。字段名比对会把这 9 项全判缺失，实际是已接。
+- **容器合并 12 项**：`ReadBookConfig.kt:604-615` 的 12 个页边距字段由本地 `ReaderPaddingSettings` 容器承接（`ReaderSettingsRepository.ets:99-112`，默认值 `:114-118`）。注意 `ReadSettings.kt:11` 的 `paddingDisplayCutouts` 是另一个字段，**不在此列**，仍判未接。
+- **非配置项 2 项**：`name`（`ReadBookConfig.kt:536`，书名字段）与 `id`（`:659`，`@Transient` 进程内列表身份，注释明写「不写入主题包」）。
+- **另有独立仓储 1 项**：`highlightRules`（`ReadBookConfig.kt:656`）不在 `ReaderSettingsRepository.ets` 中，但本地对应 `entry/src/main/ets/model/ReaderHighlightRule.ets`、`data/ReaderHighlightRuleRepository.ets`、`data/ReaderHighlightRuleEngine.ets` 三个文件，属高亮规则的独立模块。它在 1.3 的 112 项里占一格，但不需补仓储字段。
+
+> 1.3 的 112 项与 A–G 明细表的 189 行是两个口径：明细表按「一次用户可感知的操作」计，字段表按「上游声明名」计。**两处数字不可相加，也不必相加。**
 
 ## 二、改名映射表
 
@@ -315,18 +419,24 @@ comm -23 /tmp/up.txt /tmp/lo.txt
 | `readMenuIconItemsPerRow` | `ReadBookConfig.kt:102` | `bottomItemsPerRow` | `ReaderSettingsRepository.ets:169` | 每行图标数 |
 | `readMenuIconRowCount` | `ReadBookConfig.kt:103` | `bottomRowCount` | `ReaderSettingsRepository.ets:170` | 图标行数 |
 | `bgStr` / `bgStrNight` | `ReadBookConfig.kt:537-538` | `dayPaperIndex` / `nightPaperIndex` | `ReaderSettingsRepository.ets:163-164` | 本地用索引指向内置配色，上游存颜色字符串 |
+| `useUnderline` | `ReadSettings.kt:24` | `underline` | `ReaderSettingsRepository.ets:155` | 下划线开关，`ReaderPage.ets:2159` 驱动 `TextDecorationType` |
+| `progressBarBehavior` | `ReadSettings.kt:27` | `progressBehavior` | `ReaderSettingsRepository.ets:173` | 进度条定位方式，取值 `page`/`chapter` |
+| `clickImgWay` | `ReadSettings.kt:48` | `clickImageBehavior` | `ReaderSettingsRepository.ets:176` | 点击图片行为，存储键仍写 `clickImgWay` |
+| `tocUiUseReplace` | `ReadSettings.kt:62` | `tocUseReplace` | `ReaderSettingsRepository.ets:174` | 目录应用替换规则，存储键仍写 `tocUiUseReplace` |
+| `tocCountWords` | `ReadSettings.kt:63` | `tocShowWordCount` | `ReaderSettingsRepository.ets:175` | 目录显示字数，存储键仍写 `tocCountWords` |
+| `clickActionTL`…`clickActionBR` | `ReadSettings.kt:70-78` | `clickRegionActions` | `ReaderSettingsRepository.ets:177` | 9 个整型字段 → 1 个 9 元素字符串数组 |
 
 ## 三、阻塞项与后续顺序
 
 盘点结论指向三个互不重叠的缺口，按收益排序：
 
-1. **E 块菜单外观 39 项**：全部有控件无持久化。所需的 30 余个字段都是纯 UI 参数（颜色、圆角、模糊半径、玻璃开关），不触碰渲染引擎与排版算法，是唯一可以整块推进的部分。前置条件：先在 `ReaderSettingsRepository.ets` 补齐字段与 `updateReaderSettings` 分支，再把 `ReaderSettingsPage.ets` 的 `@State` 改为读仓储。
+1. **E 块菜单外观 40 行未接**：全部有控件无持久化。所需字段都是纯 UI 参数（颜色、圆角、模糊半径、玻璃开关），不触碰渲染引擎与排版算法，是唯一可以整块推进的部分，字段明细见 1.3 的「菜单」与「标题栏与图标」各组。前置条件：先在 `ReaderSettingsRepository.ets` 补齐字段与 `save` 分支，再把 `ReaderSettingsPage.ets` 的 `@State` 改为读仓储。可照抄同块已接的两条（`bottomActions`/`topActions`，`ReaderSettingsRepository.ets:804-805`）的链路。
 2. **C 块标题排版 14 项**：需要同时改 `ReaderPage.ets` 的 9 处 `fontSize + 4` 硬编码（`:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`），并新增 `titleSizeRelative` 三态语义（上游回落规则见 `ReadBookConfig.kt:660-668`）。改动面比 E 块小但风险高，属排版视觉回归。
-3. **正文与背景散点 11 项**（正文日/夜颜色、正文强调色、背景透明度、背景自定义、白天暗色状态栏 2 项）+ **下划线虚线 4 项**：均为单点参数，适合随其它模块顺带补齐。其中**正文日/夜颜色（`ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码）优先做**——它是用户最容易察觉的「不能改字色」，且与背景预设（`READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:339-346`）天然配套。
+3. **C 块正文与背景 6 行 + 下划线虚线 4 行**：正文与背景 6 行对应 11 个字段（正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2），下划线虚线 4 行对应 4 个字段，均为单点参数，适合随其它模块顺带补齐。其中**正文日/夜颜色（`ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码）优先做**——它是用户最容易察觉的「不能改字色」，且与背景预设（`READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:339-346`）天然配套。
 
-三条合计 39 + 14 + 15 = 68，加上 1.4 的改名已接 10 项与独立仓储 1 项，与 `comm` 差集 70 的差额为 EInk 9 项与颜色缓存 14 项（均不计入缺口）。
+三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 98 行未接的多数。余下 34 行分布在 A 块 21 行、B 块 1 行、C 块 2 行、D 块 10 行，均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
-未列为阻塞项的两类：EInk 相关 9 项判 `不适用`（范围之外）；颜色缓存字段 14 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
+未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 
 ## 维护
 
