@@ -9,8 +9,7 @@ const READER_REPLACE_FILTERS: string[] = ['全部', '已启用', '已停用', '�
 @Component
 export struct ReaderTextProcessingSheet {
   @Prop book: Book = {
-    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-    coverColor: '#000000', coverMark: '书', isLocal: true
+    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop chapterTitle: string = '';
   @Prop replaceEnabled: boolean = true;

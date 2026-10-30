@@ -123,8 +123,7 @@ interface ReaderMarkingRange {
 export struct ReaderPage {
   @Prop @Watch('onStartAtChapterBeginningChanged') startAtChapterBeginning: boolean = false;
   @Prop @Watch('onBookChanged') book: Book = {
-    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-    coverColor: '#000000', coverMark: '书', isLocal: true
+    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop @Watch('onChapterTitleChanged') chapterTitle: string = '';
   @State @Watch('onDisplayChapterTitleChanged') displayChapterTitle: string = '';
@@ -331,6 +330,7 @@ export struct ReaderPage {
 
   aboutToAppear(): void {
     this.refreshReaderFontFamilies();
+    this.loadChapterRows();
     this.readerWindowActive = true;
     this.startPositionPending = this.startAtChapterBeginning;
     if (this.bookmarkTargetPosition >= 0) { this.pendingBookmarkTargetPosition = this.bookmarkTargetPosition; }
@@ -623,6 +623,29 @@ export struct ReaderPage {
     this.readerContentRevision++;
   }
 
+  /**
+   * 预载本书的章节行。
+   *
+   * 上游用 Room，DAO 同步返回章节列表；relationalStore 只能异步读，
+   * 所以这里先把章节行灌进 BookRepository 的缓存，页面上的同步访问器
+   * （getChapterCount / getChapterIndex / 分页 key）才拿得到真目录。
+   * 缓存原本为空（比如直接深链进来）时补读一次并重建分页。
+   */
+  private async loadChapterRows(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const before = BookRepository.cachedChapterTitles(this.book).length;
+    try {
+      await BookRepository.loadChapters(context, this.book);
+    } catch (_) {
+      return;
+    }
+    if (before === 0 && BookRepository.cachedChapterTitles(this.book).length > 0) {
+      this.rebuildReaderPages();
+      this.refreshDisplayChapterTitle();
+    }
+  }
+
   private async refreshDisplayChapterTitle(): Promise<void> {
     const generation = ++this.titleGeneration;
     const title = this.chapterTitle;
@@ -863,12 +886,11 @@ export struct ReaderPage {
     } else if (this.startPositionPending) {
       targetPosition = 0;
     } else {
+      // 阅读位置只有一套语义：durChapterPos 存字符坐标，渲染前换算一次。
+      // 旧的 readerPositionVersion 已随迁移删除，存量位置在搬迁时折进了 durChapterPos。
       const savedPosition = Math.max(0, this.book.androidCharacterPosition ?? 0);
-      if (this.book.readerPositionVersion === 2 && savedPosition > 0) {
+      if (savedPosition > 0) {
         targetPosition = LocalTextSemantics.toRenderPosition(this.localSemanticDocument, savedPosition);
-      } else if (this.book.readerPositionVersion === 1 && savedPosition > 0) {
-        // 旧 HOS 版本保存的是包含显示缩进的渲染坐标，按原值恢复以保住已有进度。
-        targetPosition = savedPosition;
       }
     }
     let pageIndex = 0;
@@ -1164,8 +1186,9 @@ export struct ReaderPage {
   }
 
   private getChapterCount(): number {
-    const titles = this.book.chapterTitles;
-    if (titles !== undefined && titles.length > 0) {
+    // 章节行已拆进 chapters 表，优先用缓存里的真实行数，其次退回 books 行的 totalChapterNum。
+    const titles = BookRepository.cachedChapterTitles(this.book);
+    if (titles.length > 0) {
       return titles.length;
     }
     const count = Number(this.book.chapterCount ?? '');
@@ -1177,12 +1200,10 @@ export struct ReaderPage {
     if (this.book.chapterIndex !== undefined) {
       return Math.max(0, Math.min(chapterCount - 1, this.book.chapterIndex));
     }
-    const titles = this.book.chapterTitles;
-    if (titles !== undefined) {
-      const index = titles.indexOf(this.chapterTitle);
-      if (index >= 0) {
-        return index;
-      }
+    const titles = BookRepository.cachedChapterTitles(this.book);
+    const index = titles.indexOf(this.chapterTitle);
+    if (index >= 0) {
+      return index;
     }
     return Math.max(0, Math.min(chapterCount - 1, Math.floor(this.book.progress / 100 * chapterCount)));
   }
@@ -1532,8 +1553,8 @@ export struct ReaderPage {
         process.enabled, process.sortOrder, process.status, process.schemaVersion, process.updatedAt
       ]));
     const chapterKey = JSON.stringify([
-      this.book.chapterTitles ?? [],
-      this.book.chapterOffsets ?? []
+      BookRepository.cachedChapterTitles(this.book),
+      BookRepository.cachedChapterOffsets(this.book)
     ]);
     return [
       this.book.id, this.book.contentPath ?? '', this.readerContentRevision, this.fontSize,
@@ -1642,7 +1663,8 @@ export struct ReaderPage {
       if (generation !== this.fullBookPaginationGeneration || key !== this.getFullBookPaginationLayoutKey()) {
         return false;
       }
-      const rawTitle = this.book.chapterTitles?.[chapterIndex] ??
+      const chapterRows = BookRepository.cachedChapters(this.book);
+      const rawTitle = chapterRows[chapterIndex]?.title ??
         (chapterIndex === this.getChapterIndex() ? this.chapterTitle : '');
       const displayTitle = await ReplaceRuleRepository.applyTitle(this.book, rawTitle);
       const document = LocalTextSemantics.parse(chapterContent, this.paragraphIndent);
@@ -1673,8 +1695,7 @@ export struct ReaderPage {
       pageCounts.push(pageCount + titlePageCount);
       return true;
     });
-    const expectedChapterCount = this.book.chapterTitles !== undefined && this.book.chapterTitles.length > 0
-      ? this.book.chapterTitles.length : 1;
+    const expectedChapterCount = Math.max(1, BookRepository.cachedChapterTitles(this.book).length);
     if (generation === this.fullBookPaginationGeneration && key === this.getFullBookPaginationLayoutKey() &&
       pageCounts.length === expectedChapterCount) {
       this.fullBookPageCounts = pageCounts;
@@ -1985,7 +2006,7 @@ export struct ReaderPage {
     this.pendingMarkingStart = -1;
     this.pendingMarkingEnd = -1;
     this.pendingMarkingText = '';
-    if (!this.book.isLocal || this.book.bodyMissing === true) {
+    if (!this.book.isLocal || BookRepository.isBodyMissing(this.book)) {
       this.onUnavailableAction('划线与笔记仅支持已有本地正文的书籍');
       return;
     }

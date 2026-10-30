@@ -2,6 +2,19 @@ import { fileIo } from '@kit.CoreFileKit';
 import zlib from '@ohos.zlib';
 import { Book } from '../model/Book';
 
+/**
+ * EPUB 导入结果。
+ *
+ * 章节行由 BookRepository 统一生成（url 的 md5 规则、字节偏移换算都在那边），
+ * 所以这里只把「标题 + 字符偏移 + 拼好的正文」交出去，不自己造章节对象。
+ */
+export interface EpubImportResult {
+  book: Book;
+  titles: string[];
+  offsets: number[];
+  content: string;
+}
+
 interface EpubManifestItem {
   id: string;
   href: string;
@@ -38,7 +51,8 @@ export class EpubRepository {
     await EpubRepository.removeTreeAsync(path);
   }
 
-  static async importFromUri(context: Context, uri: string, fileName: string, bookId: string): Promise<Book> {
+  static async importFromUri(context: Context, uri: string, fileName: string,
+    bookId: string): Promise<EpubImportResult> {
     const stagingDirectory = `${context.filesDir}/epub-import/${bookId}`;
     const zipPath = `${stagingDirectory}/${bookId}.zip`;
     const extractedDirectory = `${stagingDirectory}/content`;
@@ -130,30 +144,30 @@ export class EpubRepository {
         fileIo.closeSync(contentFile);
       }
 
-      return {
+      const book: Book = {
         id: bookId,
         title: title,
         author: author,
         category: '本地',
         groupName: '本地未分组',
-      groupNames: [],
-        chapterTitles: chapterTitles,
-        chapterOffsets: chapterOffsets,
+        groupNames: [],
         chapterIndex: 0,
         chapterProgress: 0,
         lastChapter: chapterTitles[0] ?? '全文',
         progress: 0,
-        coverColor: '#39424B',
-        coverMark: title.substring(0, 1) || '书',
         coverUri: coverUri,
         description: EpubRepository.readTagValue(packageText, 'description'),
         chapterCount: chapterTitles.length.toString(),
         contentPath: contentPath,
         format: 'epub',
-        fileSizeBytes: compressedBytes,
-        readerPositionVersion: 1,
         latestChapterTime: Date.now(),
         isLocal: true
+      };
+      return {
+        book: book,
+        titles: chapterTitles,
+        offsets: chapterOffsets,
+        content: contentSegments.join('')
       };
     } catch (error) {
       try {

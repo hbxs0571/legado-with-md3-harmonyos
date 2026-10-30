@@ -846,7 +846,7 @@ export class BackupRepository {
       selection.stagingDirectory, currentBookshelfLayout, ignoredCategories
     );
     await BookshelfLayoutRepository.save(context, bookshelfLayout);
-    const updated = BackupRepository.restoreMatchingLocalProgress(
+    const updated = await BackupRepository.restoreMatchingLocalProgress(
       selection.stagingDirectory,
       currentBooks,
       ignoredCategories
@@ -884,13 +884,11 @@ export class BackupRepository {
   }
 
   private static toAndroidBookRecord(book: Book, order: number): AndroidBookBackupRecord {
-    const chapterTitles = book.chapterTitles ?? [];
-    const chapterCount = Number(book.chapterCount ?? '0');
-    const chapterIndex = book.bodyMissing === true
-      ? Math.max(0, book.chapterIndex ?? 0)
-      : Math.max(0, Math.min(Math.max(0, chapterTitles.length - 1), book.chapterIndex ?? 0));
-    const totalChapterCount = book.bodyMissing === true && Number.isInteger(chapterCount) && chapterCount > 0
-      ? chapterCount : chapterTitles.length;
+    // 备份导出直接读 books 行的字段，与上游 Backup 一致：不 join chapters 表，
+    // 章节数取 totalChapterNum，章内位置取 durChapterPos。
+    const savedChapterCount = Number(book.chapterCount ?? '0');
+    const totalChapterCount = Number.isInteger(savedChapterCount) && savedChapterCount > 0 ? savedChapterCount : 0;
+    const chapterIndex = Math.max(0, book.chapterIndex ?? 0);
     const androidBookUrl = book.androidOriginalPath ?? book.contentPath ?? '';
     return {
       bookUrl: androidBookUrl,
@@ -917,8 +915,7 @@ export class BackupRepository {
       totalChapterNum: totalChapterCount,
       durChapterTitle: book.lastChapter,
       durChapterIndex: chapterIndex,
-      durChapterPos: book.contentPath !== undefined
-        ? BookRepository.estimateAndroidChapterPosition(book) : book.androidCharacterPosition ?? 0,
+      durChapterPos: book.androidCharacterPosition ?? 0,
       durChapterTime: book.durChapterTime ?? 0,
       wordCount: null,
       canUpdate: false,
@@ -1243,11 +1240,11 @@ export class BackupRepository {
     };
   }
 
-  private static restoreMatchingLocalProgress(
+  private static async restoreMatchingLocalProgress(
     directory: string,
     currentBooks: Book[],
     ignoredCategories: string[]
-  ): RestoredBookProgress {
+  ): Promise<RestoredBookProgress> {
     if (ignoredCategories.includes('localBook')) {
       return { books: currentBooks, updatedCount: 0, createdMissingBodyCount: 0 };
     }
@@ -1270,11 +1267,12 @@ export class BackupRepository {
         if (book.format === 'txt' && savedCharset !== undefined && savedCharset.length > 0 &&
           savedCharset !== book.charset) {
           try {
-            bookWithCharset = BookRepository.withCharset(book, savedCharset);
+            // withCharset 会顺带重算目录，这里只要书本身，章节行在保存书目后统一重写。
+            bookWithCharset = BookRepository.withCharset(book, savedCharset).book;
           } catch (_) {
           }
         }
-        const restoredProgress = BookRepository.restoreAndroidProgress(bookWithCharset,
+        const restoredProgress = await BookRepository.restoreAndroidProgress(bookWithCharset,
           index === undefined ? book.chapterIndex ?? 0 : index,
           position === undefined ? 0 : position);
         let updated = BookRepository.withShelfMetadata(restoredProgress,
@@ -1369,7 +1367,7 @@ export class BackupRepository {
     const customTag = BackupRepository.readJsonString(record, 'customTag') ?? '';
     const groupMask = BackupRepository.readJsonNumber(record, 'group') ?? 0;
     const groupNames = BookGroupRepository.namesFromMask(groupMask);
-    return {
+    const placeholder: Book = {
       id: BackupRepository.missingBodyBookId(originalPath),
       title: title,
       author: author,
@@ -1383,20 +1381,18 @@ export class BackupRepository {
       durChapterTime: Math.max(0, Math.trunc(BackupRepository.readJsonNumber(record, 'durChapterTime') ?? 0)),
       order: Math.trunc(BackupRepository.readJsonNumber(record, 'order') ?? 0),
       progress: progress,
-      coverColor: '#39424B',
-      coverMark: title.substring(0, 1) || '书',
       chapterCount: totalChapters.toString(),
       description: customIntro.length > 0 ? customIntro : intro,
       remark: BackupRepository.readJsonString(record, 'remark') ?? undefined,
       customTag: customTag.length > 0 ? customTag : undefined,
-      bodyMissing: true,
+      // 缺正文占位书：没有 contentPath，只有原始路径，正文缺失由 BookRepository.isBodyMissing 判定。
       androidOriginalPath: originalPath,
       androidCharacterPosition: Math.max(0, Math.trunc(characterPosition)),
-      readerPositionVersion: 2,
       format: originalPath.toLowerCase().endsWith('.epub') ? 'epub' : 'txt',
       charset: BackupRepository.readJsonString(record, 'charset') ?? undefined,
       isLocal: true
     };
+    return placeholder;
   }
 
   private static missingBodyBookId(originalPath: string): string {

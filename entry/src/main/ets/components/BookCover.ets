@@ -1,11 +1,11 @@
-import { Book } from '../model/Book';
+import { Book, bookCoverColor, bookCoverMark } from '../model/Book';
+import { BookRepository } from '../data/BookRepository';
 import { AppGlyph } from './AppGlyph';
 
 @Component
 export struct BookCover {
   @Prop book: Book = {
-    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-    coverColor: '#343845', coverMark: '书', isLocal: true
+    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop compact: boolean = false;
   @Prop mini: boolean = false;
@@ -32,9 +32,9 @@ export struct BookCover {
           .onError(() => this.imageFailed = true)
       }
       Column() {
-        if (this.showChapterBadge || this.book.bodyMissing === true) {
+        if (this.showChapterBadge || BookRepository.isBodyMissing(this.book)) {
           Row() {
-            if (this.book.bodyMissing === true) {
+            if (BookRepository.isBodyMissing(this.book)) {
               Text('缺正文').fontSize(8).fontColor('#FFE0DC')
                 .padding({ left: 4, right: 4, top: 2, bottom: 2 })
                 .backgroundColor('#8B3A3A').borderRadius(5)
@@ -51,7 +51,7 @@ export struct BookCover {
           }.width('100%').height(14)
         }
         if (!this.hasCoverImage()) {
-          Text(this.book.coverMark)
+          Text(bookCoverMark(this.book))
             .fontSize(this.mini ? 21 : this.compact ? 29 : 40)
             .fontWeight(FontWeight.Bold)
             .fontColor('#F1F2F6')
@@ -76,7 +76,7 @@ export struct BookCover {
     }
     .width(this.displayWidth > 0 ? this.displayWidth : this.mini ? 48 : this.compact ? 70 : 92)
     .height(this.displayHeight > 0 ? this.displayHeight : this.mini ? 68 : this.compact ? 100 : 128)
-    .backgroundColor(this.book.coverColor)
+    .backgroundColor(bookCoverColor(this.book))
     .borderRadius(this.cornerRadius)
     .shadow(this.shadowEnabled
       ? { radius: 6, color: '#66000000', offsetX: 0, offsetY: 2 }

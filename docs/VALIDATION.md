@@ -194,6 +194,27 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 旧的全量工程内含未签名 HAP 构建产物，本仓库导出已排除所有构建输出。本次未将这些历史产物作为发布包。
 - 以上设备记录来自原工程的历史工作；不代表 API 12 真机兼容，也不代表新功能全部回归。
 
+## 2026-10-30 关系型存储迁移第三批（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 26 s 511 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。
+- **范围**：`docs/RELATIONAL-STORE-MIGRATION.md:330` 的第三批两个仓储 `ReadRecordRepository`（669 行）、`BookRepository`（1602 行）由 preferences 整表序列化改为 relationalStore。`RdbSchema.version` 由 2 升到 3，追加五张表 DDL（`books` 35 列 PK `bookUrl`、`chapters` 18 列 PK `(url, bookUrl)`、`readRecord` 5 列、`readRecordDetail` 8 列、`readRecordSession` 8 列自增主键，逐列对齐上游 `132.json`）与 4 条索引（`books` 2 条、`chapters` 2 条）。`Book` 模型删除 8 个字段：`coverColor` / `coverMark`（改为 `bookCoverColor(book)` / `bookCoverMark(book)` 运行时派生）、`bodyMissing`（改 `BookRepository.isBodyMissing`）、`fileSizeBytes`、`readerPositionVersion`，以及 `chapterTitles` / `chapterOffsets` / `chapterVolumes`（章节彻底拆进 `chapters` 表）。
+- **章节拆表后的同步访问器靠缓存**：上游用 Room，`BookChapterDao.getChapterList` 同步返回；relationalStore 只能异步读。为此 `BookRepository` 增加 `chapterCache`（`bookUrl → BookChapter[]`），`saveChapters` / `deleteChapters` / `loadChapters` 负责维护，页面侧改用 `cachedChapterTitles` / `cachedChapterOffsets` / `cachedChapterVolumes` / `cachedChapters` 四个同步访问器；`CatalogPage` / `ReaderSearchPage` / `ReaderPage` 各自在 `aboutToAppear` 里 `loadChapters` 预载一次。这是本批唯一一处「不等价于上游」的实现，其余全部照上游语义。
+- **字节偏移必须实测，不能换算**：`chapters.start` / `end` 存**字节**偏移（上游 `TextFile.kt` 用 `RandomAccessFile.seek(start)`）。中文 1 字 3 字节、emoji 4 字节、ASCII 1 字节，任何乘除换算都会错。搬迁时 `buildLegacyChapterRows` 用 `charOffsetsToByteOffsets` 逐字符累加，读取时 `readChapter` 按字节切片再解码。设备实测 `chapters` 6 行的 `start` / `end` 为 0/3628、3628/7256、7256/10852、10852/14480、14480/18108、18108/21736，末值等于源文件字节数 21736，**核对通过**；正文渲染中文与 `Hello World，你好世界。` 均正常，说明切片的编码边界没有跨字符。
+- **存量搬迁（第一轮，破坏性验证）**：先用 git worktree 构建的**旧版 HAP**（HEAD `d31920a`）卸载重装并造出真实数据（导入 `test-book.txt`、读若干段、产生 2 条阅读会话），再覆盖安装新版触发搬迁。搬迁后拉库比对：`books` 1 行（`type=264` 即 text 8 + local 256、`group=0`、`totalChapterNum=6`、`latestChapterTitle='第一章 出发'`、`readConfig='{"imageStyle":"DEFAULT","reSegment":false,"fixedType":false}'`、`origin='loc_book'`、`canUpdate=1`）、`chapters` 6 行、`readRecordSession` 4 行、`readRecord` 1 行、`readRecordDetail` 1 行。三个标记 `rdb_migrated_v1_1` / `v1_2` / `v1_3` 全部写入（`v1_3=1793349136731`）。实际会话数比 preferences 基线多 2 条，原因是老版本在卸载前又读了两段（时间戳 1793348880251 早于搬迁标记），属正确行为。
+- **只搬会话，派生层重算**：`ReadRecordRepository.migrateFromPreferences` 只读 `sessions_v1`，`details_v1` / `summaries_v1` 不搬，改由 `computeDerived` 用同一份算法重算后再写两张派生表。`enabled` 开关留 preferences，与上游一致。
+- **`saveImportedBooks` 语义变更**：第二批起改成纯 upsert（`INSERT OR REPLACE` 逐本写 `books` 行），不再整表重写。因此**删除必须显式删行**——`BookRepository.deleteBook` 在一个事务里先 `DELETE FROM chapters WHERE bookUrl = ?` 再 `DELETE FROM books WHERE bookUrl = ?`（**外键 `ON DELETE CASCADE` 在 relationalStore 上实测不生效**，前置验证阶段删书后章节行仍在、`left=2`，故必须手动删），末尾清 `chapterCache`。`Index.ets` 的 `removeLocalBookFromShelf` 先调 `deleteBook` 再 `saveImportedBooks`。
+- **本轮修掉的缺陷**：`removeLocalBookFromShelf` 原先只调 `saveImportedBooks`（纯 upsert），从书架移除的书在 `books` / `chapters` 表里残留，重启后由 `loadBooksFromDb` 读全表又回弹。照上游 `DeleteBooksUseCase.kt:13-26`（先 `deleteChaptersByBook` 再 `deleteBooks`）补 `BookRepository.deleteBook`。设备实测：删前 `books=1 / chapters=6`，删后 `books=0 / chapters=0`，重启后书架仍为空不回弹；重新导入同一本书 `books=1 / chapters=6`，导入链路未受影响。
+- **UI 走查（第二轮，全部通过）**：
+  - **阅读记录**：汇总视图「1 本书 / 9 分钟」，按日「2026-10-30 / 9 分钟」，按书「test-book / 本地 TXT / 9 分钟」，与 DB 的 `readTime=568065` 毫秒（≈9.5 分钟）吻合。
+  - **正文与目录**：打开书正文中文渲染正常；点目录按钮打开章节列表，点「第二章 相遇」正确跳转，页码与进度联动。
+  - **删除书籍**：长按书架卡片进详情页 → 点「移出书架」→ 二次确认 → DB 两表归零。
+  - **备份导出**：我的 → 设置 → 备份与恢复 → 备份 → 备份到本地，导出 `backup2026-10-30.zip`（2951 字节，落在 `/storage/media/100/local/files/Docs/Documents/`）。ZIP 内 10 个根条目，`bookshelf.json` 含 `totalChapterNum:6`、`durChapterIndex:2`、`durChapterPos`、`type:264` —— **导出读的是 `books` 表新字段，未回退 preferences**。
+  - **备份恢复（实际执行，非仅预览）**：同页 → 恢复 → 从本地恢复 → 选中该 ZIP → 预览页显示「识别 10 个根条目；书架 1 本，其中本地书籍 1 本 / ZIP 不含 TXT/EPUB 正文」→ 点「导入此 ZIP」→ 显示「导入完成：保留 10 个 Android 条目；更新 0 本已有正文书目的进度，并创建 1 本缺正文书目」。书架上出现「缺正文」标记的占位书，进入详情页正确显示「已恢复书目与阅读位置，缺少正文文件」「Android 原路径：local-1793348394426.txt」并给出「移出缺正文…」「查看目录」「换源」「阅读记录」四个操作；DB 里该书 `bookUrl='local-1793348394426.txt'`（原始路径而非正文路径），`durChapterIndex=2`，`chapters` 表无它的行 —— 与「缺正文」语义一致。
+- **冷启动幂等与停写 preferences（决定性验证）**：连续两次 `aa force-stop` + `aa start` 后 `rdb_migrated_v1_3` 的值不变（仍 1793349136731），不重复搬迁。`/data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/` 下 `legado_local_books`（16:19）与 `legado_read_records`（16:30）的 mtime 停留在搬迁完成时刻，经过两次冷启动加一次备份导入后**均未再变化**，说明新版本确实不再写这两个 preferences 文件，**存储对齐判据达成**。
+- **模拟器环境与操作坑（非应用缺陷，供后续参考）**：`uitest uiInput click X Y` 传物理像素，坐标须用 `uitest dumpLayout` 读 `attributes.bounds` 定位而非目测截图；`uitest uiInput keyEvent Back` 在页面内可能直接退出应用，改用点返回箭头；`snapshot_display` 两次截图 sha256 相同即表示点击未生效；文件选择器里点文件名会直接关闭选择器，须在预览面板出现后**向下滚动**才能看到「导入此 ZIP」按钮。
+- **未验项**：① 真机上 `getRdbStore` 仍未验（第一批遗留，本批未变）；② 真机上的备份导出 / 导入未验（本轮全部为模拟器结果）。
+- 本记录只代表模拟器结果，不替代真机结论。
+
 ## 2026-10-30 关系型存储迁移第二批（通过）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`，书籍 `vol-test2`（本地 TXT，6 章）、`test-toc`。`assembleHap` 通过（`BUILD SUCCESSFUL in 30 s 13 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。

@@ -1,4 +1,5 @@
 import { Book } from '../model/Book';
+import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { HomeDashboardSection, HOME_DASHBOARD_SECTIONS } from '../data/HomeDashboardSettingsRepository';
@@ -44,7 +45,7 @@ export struct HomePage {
   }
 
   private getLocalBooks(): Book[] {
-    return this.books.filter((book: Book) => book.contentPath !== undefined || book.bodyMissing === true);
+    return this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
   }
 
   private getRecentBook(): Book {
@@ -60,8 +61,7 @@ export struct HomePage {
       return localBook;
     }
     return this.books[0] ?? {
-      id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-      coverColor: '#1C1D23', coverMark: '', isLocal: true
+      id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
     };
   }
 
@@ -72,7 +72,7 @@ export struct HomePage {
   }
 
   private openBook(book: Book): void {
-    if (book.bodyMissing === true) {
+    if (BookRepository.isBodyMissing(book)) {
       this.onOpenBookInfo(book);
     } else {
       this.onOpenBook(book);
@@ -143,7 +143,7 @@ export struct HomePage {
             Column() {
               Row() {
                 AppGlyph({ name: 'book', tint: '#AFC2FF', glyphSize: 20 })
-                Text(this.getRecentBook().bodyMissing === true ? '已恢复书目 · 缺少正文' : '最近阅读')
+                Text(BookRepository.isBodyMissing(this.getRecentBook()) ? '已恢复书目 · 缺少正文' : '最近阅读')
                   .fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 10 })
               }.margin({ bottom: 10 })
               Row() {

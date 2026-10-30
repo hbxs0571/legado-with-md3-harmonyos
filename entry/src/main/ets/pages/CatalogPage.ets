@@ -1,4 +1,4 @@
-import { Book } from '../model/Book';
+import { Book, BookChapter } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking } from '../model/ReaderMarking';
 import { BookCover } from '../components/BookCover';
@@ -16,8 +16,7 @@ interface CatalogChapter {
 @Component
 export struct CatalogPage {
   @Prop book: Book = {
-    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-    coverColor: '#343845', coverMark: '书', isLocal: true
+    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop selectedChapter: string = '';
   @Prop bookmarks: ReaderBookmark[] = [];
@@ -58,7 +57,11 @@ export struct CatalogPage {
   onOpenTxtTocRules: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
 
+  /** 目录行，打开页面时从 chapters 表读一次；章节已不在 Book 上。 */
+  @State chapterRows: BookChapter[] = [];
+
   aboutToAppear(): void {
+    this.loadChapterRows();
     if (this.showWordCount) { this.loadChapterWordCounts(); }
   }
 
@@ -66,32 +69,42 @@ export struct CatalogPage {
     this.wordCountGeneration++;
   }
 
-  private getAllChapters(): string[] {
-    if (this.book.chapterTitles !== undefined && this.book.chapterTitles.length > 0) {
-      return this.book.chapterTitles;
+  private async loadChapterRows(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      this.chapterRows = await BookRepository.loadChapters(context, this.book);
+    } catch (_) {
+      this.chapterRows = [];
     }
-    return [];
+  }
+
+  private getAllChapters(): string[] {
+    const titles: string[] = [];
+    this.chapterRows.forEach((row: BookChapter) => {
+      titles.push(row.title);
+    });
+    return titles;
   }
 
   private getChapters(): CatalogChapter[] {
     const keyword = this.query.trim();
-    const allChapters = this.getAllChapters();
-    const volumeFlags = this.book.chapterVolumes;
+    const rows = this.chapterRows;
     const chapters: CatalogChapter[] = [];
     const searching = keyword.length > 0;
     let insideCollapsedVolume = false;
-    for (let index = 0; index < allChapters.length; index++) {
-      const title = allChapters[index];
-      if (title === undefined) { continue; }
-      const isVolume = volumeFlags?.[index] === true;
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      if (row === undefined) { continue; }
+      const isVolume = row.isVolume;
       if (!searching) {
         if (isVolume) { insideCollapsedVolume = this.collapsedVolumes.has(index); }
         else if (insideCollapsedVolume) { continue; }
       }
-      const displayTitle = this.useTitleReplacement ? ReplaceRuleRepository.applyTitle(this.book, title) : title;
+      const displayTitle = this.useTitleReplacement ? ReplaceRuleRepository.applyTitle(this.book, row.title) : row.title;
       if (displayTitle.includes(keyword)) {
         chapters.push({ title: displayTitle, index: index, isVolume: isVolume,
-          isInVolume: !isVolume && this.isInsideAnyVolume(index, volumeFlags) });
+          isInVolume: !isVolume && this.isInsideAnyVolume(index, rows) });
       }
     }
     if (this.ascending) { return chapters; }
@@ -103,10 +116,10 @@ export struct CatalogPage {
     return reversed;
   }
 
-  private isInsideAnyVolume(chapterIndex: number, volumeFlags: boolean[] | undefined): boolean {
-    if (volumeFlags === undefined) { return false; }
+  /** 卷内判断：往上找最近的一个卷标题，与上游 tocLevel 的语义一致。 */
+  private isInsideAnyVolume(chapterIndex: number, rows: BookChapter[]): boolean {
     for (let index = chapterIndex - 1; index >= 0; index--) {
-      if (volumeFlags[index] === true) { return true; }
+      if (rows[index]?.isVolume === true) { return true; }
     }
     return false;
   }
@@ -261,7 +274,7 @@ export struct CatalogPage {
   }
 
   private async loadChapterWordCounts(): Promise<void> {
-    if (this.book.contentPath === undefined || this.book.bodyMissing === true || this.wordCountsLoading) { return; }
+    if (this.book.contentPath === undefined || BookRepository.isBodyMissing(this.book) || this.wordCountsLoading) { return; }
     const generation = ++this.wordCountGeneration;
     this.wordCountsLoading = true;
     const counts = new Map<number, string>();

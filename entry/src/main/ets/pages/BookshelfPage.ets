@@ -1,4 +1,4 @@
-import { Book } from '../model/Book';
+import { Book, bookCoverMark } from '../model/Book';
 import { BookGroup, BookGroupDraft, BOOK_SORT_OPTIONS, BookSortOption, bookSortLabel } from '../model/BookGroup';
 import {
   BookshelfLayoutSettings, BookshelfLayoutOption, DEFAULT_BOOKSHELF_LAYOUT,
@@ -6,6 +6,7 @@ import {
   bookshelfLayoutOptionLabel, copyBookshelfLayout
 } from '../model/BookshelfLayout';
 import { BookshelfSort } from '../data/BookshelfSort';
+import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
 
@@ -62,7 +63,7 @@ export struct BookshelfPage {
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
   private bookCardKey(book: Book): string {
-    return `${book.id}_${book.chapterCount ?? ''}_${book.chapterIndex ?? 0}_${book.chapterProgress ?? 0}_${book.coverMark ?? ''}_${book.bodyMissing === true ? 1 : 0}`;
+    return `${book.id}_${book.chapterCount ?? ''}_${book.chapterIndex ?? 0}_${book.chapterProgress ?? 0}_${bookCoverMark(book)}_${BookRepository.isBodyMissing(book) ? 1 : 0}`;
   }
 
   private getGroupNames(): string[] {
@@ -666,7 +667,7 @@ export struct BookshelfPage {
                   .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 7 })
               }.width('100%').alignItems(HorizontalAlign.Start)
                 .onClick(() => {
-                  if (book.bodyMissing === true) {
+                  if (BookRepository.isBodyMissing(book)) {
                     this.onOpenBookInfo(book);
                   } else {
                     this.onOpenBook(book);

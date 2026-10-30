@@ -337,9 +337,87 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 影响面：`chapterTitles` 在全仓 9 个文件被引用——`BackupRepository.ets`、`BookRepository.ets`、`EpubRepository.ets`、`model/Book.ets`、`pages/BookInfoPage.ets`、`pages/CatalogPage.ets`、`pages/Index.ets`、`pages/ReaderPage.ets`、`pages/ReaderSearchPage.ets`。
 
-**保留内存形态**：`Book` 模型里的三个数组字段**不删**，改成由 `BookRepository` 加载时从 `chapters` 表填充的只读投影。这样 9 个消费文件一行不用改，改动全部收敛在 `BookRepository` 内部。这是本批次最关键的决策——否则 1602 行的仓储要改成全仓 9 个页面联动改造。
+**章节数组彻底删除（推翻本节早先的「保留内存形态」）**：`Book` 模型里的 `chapterTitles` / `chapterOffsets` / `chapterVolumes` 三个数组**直接删掉**，章节一律走 `BookRepository.getChapterList(bookUrl)` 查 `chapters` 表，不做内存投影。早先那条「不删、改成只读投影」被推翻，理由三条：① 上游 `Book.kt` 实体零章节字段，章节读取全部是 `appDb.bookChapterDao.getChapterList(bookUrl)`，保留投影等于在本地再造一份上游没有的缓存，与「表结构与上游完全一致」冲突；② 投影要在每次 `loadImportedBooks` 时同步刷新，而 `chapters` 表又被 `saveImportedBooks` 整表重建，两份数据必然漂移；③ 三个数组加起来占 `Book` 对象绝大部分体积，书架五本书就有上千字符串常驻内存。代价是 9 个文件 79 处要改，但改动形态单一——「同步读数组」换成「`aboutToAppear` 里 `await` 查表存 `@State`」，属机械替换。
 
 验收：书架加载/排序/分组/搜索、书籍详情、目录页章节列表、阅读页翻章/进度恢复、TXT 与 EPUB 各一本完整走查、备份导出/导入、强停冷启。
+
+#### 第三批阶段 2 改动清单（按 `docs/CODE-CONVENTIONS.md` 第四节一次盘完）
+
+**A. `Book` 模型删字段（`entry/src/main/ets/model/Book.ets`）**
+
+删 8 个字段：`coverColor`、`coverMark`、`bodyMissing`、`fileSizeBytes`、`readerPositionVersion`、`chapterTitles`、`chapterOffsets`、`chapterVolumes`；`progress` 保留字段但不再落库（读取时由 `BookRepository.readProgress(book)` 派生）。
+
+引用实测（`ops_grep` 全 `entry/src/main/ets`）：
+
+| 字段 | 处数 | 分布 |
+| --- | --- | --- |
+| `coverColor`/`coverMark`/`bodyMissing`/`fileSizeBytes`/`readerPositionVersion` 合计 | 161 | `BookRepository` 64、`Index.ets` 46、`BookInfoPage` 9、`BackupRepository` 6、`BookCover` 5、`ProfileSubPages` 5、`EpubRepository` 4、`HomePage` 4、`ReaderPage` 4、`model/Book.ets` 5、其余 6 文件各 1–2 |
+| `chapterTitles`/`chapterOffsets`/`chapterVolumes` 合计 | 244 | `BookRepository` 150、`Index.ets` 64、`EpubRepository` 8、`ReaderPage` 7、`model/Book.ets` 4、`ReaderSearchPage` 4、`BackupRepository` 3、`CatalogPage` 3、`BookInfoPage` 1 |
+| `.progress` | 18 | `BookRepository` 9、`BookInfoPage` 3、`Index.ets` 2、`BookCard`/`HomePage`/`ReaderPage`/`SearchPage` 各 1 |
+
+逐处处置：
+
+- **`coverColor` → 运行时派生**。上游 `BookCoverModel.getRandomDefaultPath(seed = name ?: author)` 从内置图挑；本地无内置图，改为「书名哈希 → 调色板取色」，函数放 `components/BookCover.ets` 内部（`private static coverColorOf(book: Book): string`）。改 5 处渲染点：`components/BookCover.ets:79` `.backgroundColor(...)`、`pages/BookInfoPage.ets:274`、`pages/ProfileSubPages.ets:2870`（构造 `BookmarkBookSummary` 用的临时 Book 对象，`BookmarkBookSummary.coverColor` 这个 interface 字段本身保留，值改调派生函数）。占位 Book 字面量里的 `coverColor:` 全部删掉：`components/BookCard.ets:8`、`components/BookCover.ets:8`、`pages/HomePage.ets:64`、`pages/SearchPage.ets:223`、`pages/ReaderTextProcessingSheet.ets:13`、`pages/BookInfoPage.ets:11`、`pages/CatalogPage.ets:20`、`pages/ReaderPage.ets:127`、`pages/ReaderSearchPage.ets:30`、`pages/Index.ets:93`。
+- **`coverMark` → 运行时派生**。取书名首字，函数 `private static coverMarkOf(book: Book): string` 与 `coverColorOf` 同处。改 `components/BookCover.ets:54` `Text(...)`、`pages/ProfileSubPages.ets:2870`。`pages/BookshelfPage.ets:65` 的 `bookCardKey` 里 `${book.coverMark ?? ''}` 换成派生调用结果。
+- **`bodyMissing` → 运行时判定**。`BookRepository.isBodyMissing(book): boolean` = `book.contentPath === undefined || !fileIo.accessSync(book.contentPath)`。改 12 处判断：`components/BookCover.ets:35/:37`、`pages/BookshelfPage.ets:669`、`pages/HomePage.ets:47/:75/:146`、`pages/SearchPage.ets:28`、`pages/BookInfoPage.ets:88/:164/:192/:220/:280`、`pages/Index.ets:984/:1470/:2644/:2654/:2790/:3117/:3148`、`pages/CatalogPage.ets:264`、`pages/ReaderPage.ets:1988`。`pages/BookshelfPage.ets:65` 的 key 里 `${book.bodyMissing === true ? 1 : 0}` 换成派生结果。
+- **`fileSizeBytes` → 删，不派生**。上游无此列、详情页也不显示。`pages/BookInfoPage.ets:46-47` 改为只走 `fileIo.statSync(book.contentPath).size` 分支（`:50-55` 已有该兜底，删掉前面那段即可）；`pages/BookInfoPage.ets:11` 占位字面量删掉该键。`BookRepository` 内部 10 处 `fileSizeBytes:` 拷贝全部删掉。
+- **`readerPositionVersion` → 删**。搬迁时统一把存量位置换算进 `durChapterPos`（见下）。改 6 处判断：`pages/ReaderPage.ets:867/:869`、`BookRepository.ets:999/:1219/:1299`。`BookRepository.readPositionVersion`（`:1106`）随 v15 老协议一起删。
+- **`progress` → 不落库，`BookRepository.readProgress(book): number` 派生**，公式照抄现 `BookRepository.ets:1241`：`chapterCount > 0 ? (chapterIndex + chapterProgress / 100) / chapterCount * 100 : 0`。18 处 `.progress` 全部改成调用该函数。
+
+**B. 章节数组删除后各消费点改法**
+
+- `data/EpubRepository.ets:111-154`：不再往 Book 里塞 `chapterTitles`/`chapterOffsets`，改为 `return { book: Book, chapters: EpubChapterSeed[] }`（`EpubChapterSeed = { title, startByte, endByte }`），由 `BookRepository` 在写库时转成 `chapters` 行。`EpubRepository` 内部仍按字符偏移累加，写库前用 `util.TextEncoder` 转字节。
+- `pages/CatalogPage.ets:69-94`：`getAllChapters()` 删掉，改 `@State chapterRows: BookChapter[] = []`，`aboutToAppear` 里 `this.chapterRows = await BookRepository.getChapterList(this.book.contentPath ?? this.book.id)`；`getChapters()` 的 `volumeFlags` 改用 `chapterRows[index].isVolume`，`isInVolume` 用 `tocLevel > 0`。
+- `pages/ReaderPage.ets:1167`、`:1180`、`:1645`、`:1676-1677`：同 CatalogPage，改查表存 `@State chapterRows`。`:1535-1536` 的 `getFullBookPaginationLayoutKey` 里 `chapterKey` 改用 `this.chapterRows.map(r => [r.url, r.title, r.start, r.end])` 的 JSON。
+- `pages/ReaderSearchPage.ets:167/:183/:188/:335`：同上，`chapterCount` 用 `chapterRows.length`，`chapterTitle` 用 `chapterRows[chapterIndex].title`。
+- `pages/BookInfoPage.ets:77`：`getChapterTotal()` 的兜底 `this.book.chapterTitles?.length` 改为 `@State chapterTotal`，`aboutToAppear` 里 `await BookRepository.getChapterCount(...)`（新增，`SELECT COUNT(*) FROM chapters WHERE bookUrl = ?`）。
+- `pages/Index.ets` 46 处：6 处构造 Book 的字面量（`:1278`、`:1543`、`:3009`、`:3203`、`:3263`、`:3455`）删掉三个数组字段与 `progress`；`requestCreateReaderMarking`（`:982`）、`requestAddReaderBookmark`（`:1097`）、`toggleReaderBookmarkForPage`（`:1117`）改 `async` 并在内部 `await BookRepository.getChapterList(...)`，调用点 `:3866`、`:3868` 的 lambda 改 `async` 后 `await`。
+- `data/BackupRepository.ets:887-893` 的 `toAndroidBookRecord`：`chapterTitles` 来源改 `await BookRepository.getChapterList(...)`（该函数已 `async`），`totalChapterCount` 用查表结果长度；`bodyMissing` 改调 `BookRepository.isBodyMissing(book)`；`:1386-1395` 构造缺正文书的字面量删掉 `coverColor`/`coverMark`/`bodyMissing`/`readerPositionVersion` 四个键。
+
+**C. `BookRepository` 内部改造（150 处引用，但只涉及 14 个函数）**
+
+| 函数 | 现位置 | 改法 |
+| --- | --- | --- |
+| `readChapter` | `:731` | 改 `async`，内部先 `await BookRepository.getChapterList(bookUrl)`，按 `chapterIndex` 取行的 `start`/`end`（字节）→ `byteRangeToCharRange(content, start, end)` 转字符偏移再 `substring` |
+| `forEachChapter` | `:792` | 同上，行来自查表；无章节行时回退 `splitChapters` |
+| `readAllChapters` | `:782` | 只改内部调用，签名不变 |
+| `getChapterTextRange` | `:1073` | 改 `async`，入参多带 `rows: BookChapter[]`（调用方已查过表，避免重复查询） |
+| `getChapterSemanticLength` | `:1093` | 改 `async`，同上 |
+| `applyChapterContentAsync` | `:1116` | `book.chapterTitles?.indexOf` 改为在传入的 `rows` 上找 |
+| `refreshToc` | `:1176` | 改 `async`，产出 `chapters` 行数组而非三个平行数组；`changed` 判断改为比对旧行的 `(url,title,start,end,isVolume)` |
+| `refreshNoTocBook` | `:1260` | 同上 |
+| `withCharset` | `:581` | 同上 |
+| `replaceLocalChapter` | `:866` | 改 `async`，读旧行 → 重写正文 → 重算全部行的 `start`/`end` |
+| `buildNoTocChapterLayout` | `:1136` | 保持返回 `{titles, offsets}`（字符偏移），由调用方转字节 |
+| `estimateAndroidChapterPosition` | `:991` | 改 `async`；`readerPositionVersion === 2` 分支删掉，直接用 `androidCharacterPosition`（已折进 `durChapterPos`） |
+| `restoreAndroidProgress` | `:1009` | 改 `async` |
+| `createLocalBook` | `:1375` | 改为返回 `{ book, chapters }`，由 `saveImportedBooks` 落库 |
+| `splitChapters` | `:1583` | 不动（纯函数，仍按字符偏移产出） |
+
+新增：`getChapterList(bookUrl)`、`getChapterCount(bookUrl)`、`readProgress(book)`、`isBodyMissing(book)`、`byteRangeToCharRange(content, startByte, endByte)`、`charRangeToByteRange(content, startChar, endChar)`、`md5Encode16(value)`（照抄上游 `MD5Utils.md5Encode16`）、`wordCountFormat(words)`（照抄上游 `StringUtils.wordCountFormat`，严格 `> 10000` 才用万字）。
+
+**D. `ReadRecordRepository`（669 行，22 处外部引用 / 3 文件）**
+
+对外签名零改动。内部三层从「三个 preferences 键整表序列化」改为「三张表逐行读写」：
+
+- `loadSessions` / `loadDetails` / `loadSummaries` → `SELECT * FROM readRecordSession / readRecordDetail / readRecord`，仍返回同样的数组、同样的排序。
+- `saveSession` → `INSERT OR REPLACE INTO readRecordSession`，随后 `rebuildDetailsAndSummaries` 改为**一条 SQL 聚合**：`readRecordDetail` 用 `GROUP BY bookName, bookAuthor, date` 求 `SUM(readTime)`、`SUM(words)`、`MIN(NULLIF(firstReadTime,0))`、`MAX(lastReadTime)`；`readRecord` 用 `GROUP BY bookName, bookAuthor` 求 `SUM(readTime)`、`MAX(endTime)`。**跨午夜切段仍在内存里做**（`splitByDate`/`boundsOnDate` 保留），因为按本地时区切分要逐段算，SQL 表达不了。
+- `clearAll` / `removeBook` → 三张表各自 `DELETE`（`removeBook` 按 `bookName AND bookAuthor`）。
+- `scanIssues` / `repair` → `deleteDuplicateSessions` 的 SQL 照抄上游 `ReadRecordDao.kt`：`DELETE FROM readRecordSession WHERE id NOT IN (SELECT MIN(id) FROM readRecordSession GROUP BY bookName, bookAuthor, bookUrl, startTime, endTime, words)`。
+- `migrateLegacy` 不动（读的是另一套 `legado_read_time_records`，与三张表无关）。
+- `deviceId` 恒为空串 `''`；`ReadRecordSession.chapterIndex` 写进 `words` 列。
+
+**E. 五张表 + 搬迁**
+
+- `data/RdbSchema.ets`：`version` 2 → 3，追加 `books` / `chapters` / `readRecord` / `readRecordDetail` / `readRecordSession` 五条 DDL 与四条索引（`books` 两条、`chapters` 两条），DDL 逐字照抄 `132.json`。
+- `data/RdbMigration.ets`：新增 `markerKeyV3 = 'rdb_migrated_v1_3'` 与 `migrateThirdBatch`。**顺序固定：先 `ReadRecordRepository` 三表，再 `BookRepository`（`books` 行 → `chapters` 行）**，一个事务一个标记，因为 `chapters` 行依赖 `books` 行。
+- **外键 CASCADE 实测不生效**（设备探针：删书后章节仍剩 2 行）。DDL 仍照抄上游带 `ON DELETE CASCADE`，但删书必须在代码里手动删章节行：`BookRepository.discardImportedCopy`（`:122`）与 `pages/Index.ets:3138` 的删书流程各补一次 `DELETE FROM chapters WHERE bookUrl = ?`。
+
+**F. 阶段 2 之外仍需一并处理的三处**
+
+1. `data/BookGroupRepository.ets`：书架分组掩码读写依赖 `Book.groupNames`，字段保留，只确认 `withShelfMetadata` 的 13 字段拷贝同步删掉已删字段。
+2. `pages/ProfileSubPages.ets:2570-2582` 的 `BookmarkBookSummary` interface 有 `coverColor`/`coverMark` 两个字段——**这是书签页自己的展示态 interface，不是 `Book`**，保留，只是构造时改调派生函数。
+3. `entry/src/main/ets/pages/FileManagerPage.ets`、`ReaderBookmarkEditor.ets`、`ReaderMarkingEditor.ets`、`ReaderBookmarkTarget.ets`、`ReaderBookmarkImporter.ets`、`ReaderBookmarkExporter.ets`、`ReaderMarkingRepository.ets`、`ReaderSearchHistoryRepository.ets`、`ReplaceRuleRepository.ets` 里各有 1–12 处 `bookId` 引用——**这些是书签/划线/搜索历史自己的 `bookId` 字段，与 `Book.id` 无关**，不动。
 
 ## 存量搬迁流程（方案 a）
 
@@ -437,11 +515,11 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 | 0 | 本计划文档 | — |
 | 1 | 基础设施 + 第一批 3 个仓储 | ✅（已完成，r281） |
 | 2 | 第二批 5 个仓储 | ✅（已完成，r282） |
-| 3 | `ReadRecordRepository` | 待开工 |
-| 4 | `BookRepository` + 章节拆表 | 待开工 |
+| 3 | `ReadRecordRepository` | ✅（已完成，r283） |
+| 4 | `BookRepository` + 章节拆表 | ✅（已完成，r283） |
 | 5 | 清理 `preferences` 老数据（另议） | — |
 
-> 「构建验收」列的 ✅ 表示该阶段需要构建 + 设备验收；第 1、2 行已注明完成状态与轮次，其余各行尚未开工。
+> 「构建验收」列的 ✅ 表示该阶段需要构建 + 设备验收；第 1–4 行已注明完成状态与轮次。第 5 行「清理 preferences 老数据」按计划另议，本批不动——搬迁完成后老 preferences 仍原样保留，作为回滚余地。
 
 ## 待验证清单
 
@@ -458,6 +536,7 @@ Room 靠 KSP 在编译期校验「SQL 里的字段名与实体是否对得上」
 > **r281 第一批实测结果（2026-10-30，模拟器 API 26）**：① 模拟器可打开，库落在 `/data/app/el2/100/database/io.legado.harmony/entry/rdb/legado.db`，**真机仍未验**；② 复合主键（`chapters` 未建）、UNIQUE 索引（`search_content_history`）、自增主键全部生效，外键 CASCADE 随第二批验证；③ 见「中文排序」节的结论——规则名是 `LOCALES` 且须先 `setLocale('zh')`；④ 通过（`before=4 after=4`，中途抛错后数据完好）；⑤ 正常返回空结果集，`rowCount` 为 0，遍历零次；⑥ 返回自增 rowId，读出转 string 后与旧 `id` 语义一致；⑦ 三表 40960 字节，远小于原 preferences 文本（后者含 `v1\n` 头与逐字段 `encodeURIComponent` 冗余）。
 
 > **r282 第二批补充（2026-10-30，模拟器 API 26）**：⑧ **外键 CASCADE 本批仍未验**——第二批五张表里没有任何外键（上游 `132.json` 也未定义），`chapters` 表尚未建，第 ② 条的外键部分要留到第三批。⑨ **REAL 列必须用 `getDouble`**：`highlightRules` 的 14 个 REAL 列（下划线宽/偏移、九宫格四边距、字距、行距等）若用 `getLong` 读，`0.1` 会被静默截成 `0`，界面表现为边距归零、下划线消失；`RdbCodec.real` / `optionalReal` 已固定走 `getDouble`。⑩ **`INSERT OR REPLACE` 是整行覆盖**，第二批五个仓储的 upsert 均按上游 `@Insert(onConflict = REPLACE)` 语义写全字段，不做部分更新。⑪ 8 张业务表在设备上的行数与 preferences 逐表比对一致（`replace_rules` 3、`txtTocRules` 27、`highlightRules` 9、`bookmarks` 3、`book_marks` 1，其余 0），两个迁移标记 `rdb_migrated_v1_1` / `rdb_migrated_v1_2` 均写入。
+> **r283 第三批补充（2026-10-30，模拟器 API 26）**：⑫ **外键 `ON DELETE CASCADE` 在 relationalStore 上不生效**——前置验证时建 `books` / `chapters` 两表并插 2 行章节，删掉父行后章节行仍在（`left=2`），`PRAGMA foreign_keys` 即使打开也无效。因此**删书必须手动删章节行**：`BookRepository.deleteBook` 在同一事务里先 `DELETE FROM chapters WHERE bookUrl = ?` 再 `DELETE FROM books WHERE bookUrl = ?`，与上游 `DeleteBooksUseCase.kt:13-26` 的顺序一致（上游靠 Room 的外键，这里靠显式两条 SQL）。⑬ **`chapters.start` / `end` 是字节偏移，不是字符偏移**，且不能靠换算得到——实测 `第一章 相遇`（6 字符）占 16 字节、`今晚就出发。`（6 字符）占 18 字节、`😀`（2 字符）占 4 字节、ASCII 占 1 字节；中文 1 字 3 字节的假设只在纯中文段成立。搬迁时 `charOffsetsToByteOffsets` 逐字符累加，读取时按字节切片再解码（对应上游 `TextFile.kt` 的 `RandomAccessFile.seek`）。设备实测末尾 `end` 等于源文件字节数 21736，中文渲染无乱码。⑭ **`saveImportedBooks` 语义已由「整表重写」改为「纯 upsert」**（`INSERT OR REPLACE` 逐本写行），新增书目 / 改字段走它，删除走 `BookRepository.deleteBook`。这一改动把「书架整体覆盖」的原子性从「表级」降到「行级」：批量保存书目与保存章节现在是两个事务，中途失败可能出现「书目在、章节缺」的中间态，靠后续重算目录（`refreshToc` → `saveChapters`）自愈，与上游逐条 `@Update` / `@Insert` 的粒度一致。⑮ 五张新表在设备上的搬迁结果：`books` 1、`chapters` 6、`readRecordSession` 4、`readRecord` 1、`readRecordDetail` 1，三个标记 `rdb_migrated_v1_1` / `v1_2` / `v1_3` 全部写入；连续两次冷启动后 `v1_3` 不变，`legado_local_books` 与 `legado_read_records` 两个 preferences 文件的 mtime 停止更新——**存储对齐判据达成**。
 
 ## 与既有文档的关系
 

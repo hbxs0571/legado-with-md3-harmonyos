@@ -1,4 +1,4 @@
-import { Book } from '../model/Book';
+import { Book, BookChapter } from '../model/Book';
 import { ReaderSearchHistoryEntry } from '../model/ReaderSearchHistory';
 import { BookRepository } from '../data/BookRepository';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
@@ -26,8 +26,7 @@ interface ReaderSearchMatch {
 @Component
 export struct ReaderSearchPage {
   @Prop book: Book = {
-    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-    coverColor: '#000000', coverMark: '', isLocal: true
+    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop bookTitle: string = '';
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -48,12 +47,23 @@ export struct ReaderSearchPage {
   private resultScroller: Scroller = new Scroller();
   private historyContext: Context | undefined = undefined;
   private historyGeneration: number = 0;
+  /** 目录行，打开页面时从 chapters 表读一次；搜索结果的章节名从这里取。 */
+  @State chapterRows: BookChapter[] = [];
 
   aboutToAppear(): void {
     const context = this.getUIContext().getHostContext();
     if (context !== undefined) {
       this.historyContext = context;
       this.reloadSearchHistory();
+      this.loadChapterRows(context);
+    }
+  }
+
+  private async loadChapterRows(context: Context): Promise<void> {
+    try {
+      this.chapterRows = await BookRepository.loadChapters(context, this.book);
+    } catch (_) {
+      this.chapterRows = [];
     }
   }
 
@@ -164,7 +174,7 @@ export struct ReaderSearchPage {
       this.searching = false;
       return;
     }
-    if (this.book.contentPath === undefined || this.book.chapterTitles === undefined) {
+    if (this.book.contentPath === undefined || this.chapterRows.length === 0) {
       this.searching = false;
       this.searchError = '这本书没有可搜索的本地正文';
       return;
@@ -180,12 +190,12 @@ export struct ReaderSearchPage {
     if (generation !== this.searchGeneration) { return; }
     const keyword = this.query.trim();
     const results: ReaderSearchMatch[] = [];
-    const chapterCount = this.book.chapterTitles?.length ?? 0;
+    const chapterCount = this.chapterRows.length;
     try {
       await BookRepository.forEachChapter(this.book,
         async (content: string, chapterIndex: number): Promise<boolean> => {
           if (generation !== this.searchGeneration || results.length >= 200) { return false; }
-          const chapterTitle = this.book.chapterTitles?.[chapterIndex] ?? this.book.lastChapter;
+          const chapterTitle = this.chapterRows[chapterIndex]?.title ?? this.book.lastChapter;
           const semanticContent = LocalTextSemantics.fromRawBody(content);
           const chapterMatches: ReaderSearchMatch[] = [];
           const hits: ReaderSearchHit[] = [];
@@ -332,7 +342,7 @@ export struct ReaderSearchPage {
       } else {
         Row() {
           Text(this.searching
-            ? '正在搜索 ' + this.searchProgress.toString() + '/' + (this.book.chapterTitles?.length ?? 0).toString()
+            ? '正在搜索 ' + this.searchProgress.toString() + '/' + this.chapterRows.length.toString()
             : '本书正文 · 最多200条')
             .fontSize(12).fontColor('#AFC2FF')
           if (this.searching) {

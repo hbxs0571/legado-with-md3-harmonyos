@@ -1,5 +1,6 @@
 import { Book } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
+import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
 
@@ -25,7 +26,7 @@ export struct SearchPage {
   onExactMatchChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
   private getLocalBooks(): Book[] {
-    return this.books.filter((book: Book) => book.contentPath !== undefined || book.bodyMissing === true);
+    return this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
   }
 
   private getBookGroupNames(book: Book): string[] {
@@ -219,8 +220,7 @@ export struct SearchPage {
 @Component
 struct SearchBookRow {
   @Prop book: Book = {
-    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-    coverColor: '#39424B', coverMark: '书', isLocal: true
+    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   onSelect: () => void = () => {};
   build() {

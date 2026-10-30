@@ -1,14 +1,14 @@
 import { fileIo } from '@kit.CoreFileKit';
-import { Book, BookMediaType } from '../model/Book';
+import { Book, BookMediaType, bookCoverColor } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
+import { BookRepository } from '../data/BookRepository';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 
 @Component
 export struct BookInfoPage {
   @Prop book: Book = {
-    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0,
-    coverColor: '#343845', coverMark: '书', isLocal: true
+    id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop groups: BookGroup[] = [];
   onBack: () => void = () => {};
@@ -43,10 +43,7 @@ export struct BookInfoPage {
   }
 
   private loadFileSize(): void {
-    if (this.book.fileSizeBytes !== undefined && this.book.fileSizeBytes > 0) {
-      this.fileSizeLabel = this.formatFileSize(this.book.fileSizeBytes);
-      return;
-    }
+    // fileSizeBytes 已随迁移删除：一律按正文文件实际大小统计。
     if (this.book.contentPath === undefined || this.book.format === 'epub') { return; }
     try {
       this.fileSizeLabel = this.formatFileSize(fileIo.statSync(this.book.contentPath).size);
@@ -73,8 +70,9 @@ export struct BookInfoPage {
   }
 
   private getChapterTotal(): number {
+    // chapterTitles 已随迁移删除：章节数一律取 books 行的 totalChapterNum。
     const savedCount = Number(this.book.chapterCount ?? '0');
-    return savedCount > 0 ? savedCount : (this.book.chapterTitles?.length ?? 0);
+    return savedCount > 0 ? savedCount : 0;
   }
 
   private getReadChapterNumber(): number {
@@ -85,7 +83,7 @@ export struct BookInfoPage {
   private confirmRemoveFromShelf(): void {
     this.getUIContext().showAlertDialog({
       title: '移出书架？',
-      message: this.book.bodyMissing === true
+      message: BookRepository.isBodyMissing(this.book)
         ? '移出后只删除这条缺正文书目记录；Android 兼容归档和原始文件不会更改。'
         : '移出后会清理应用内的导入副本，原始文件会保留。',
       autoCancel: true,
@@ -161,7 +159,7 @@ export struct BookInfoPage {
                   .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
                 Text(this.book.author.length > 0 ? this.book.author : '作者未知')
                   .fontSize(17).fontColor('#D0D2DB').margin({ top: 8 })
-                Text(this.book.bodyMissing === true ? 'Android 备份 · 正文缺失' : this.book.isLocal ? '本地书籍' : '书籍详情')
+                Text(BookRepository.isBodyMissing(this.book) ? 'Android 备份 · 正文缺失' : this.book.isLocal ? '本地书籍' : '书籍详情')
                   .fontSize(14).fontColor('#B9C8FF').margin({ top: 8 })
               }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 16 })
             }.width('100%').alignItems(VerticalAlign.Center).padding({ left: 18, right: 18, bottom: 18 })
@@ -189,7 +187,7 @@ export struct BookInfoPage {
           Row() {
             BookInfoAction({
               icon: 'bookmark',
-              label: this.book.bodyMissing === true ? '移出缺正文记录' : '已在书架',
+              label: BookRepository.isBodyMissing(this.book) ? '移出缺正文记录' : '已在书架',
               onSelect: () => this.confirmRemoveFromShelf()
             })
             BookInfoAction({ icon: 'list', label: '查看目录', onSelect: () => this.onOpenCatalog() })
@@ -217,7 +215,7 @@ export struct BookInfoPage {
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
             .backgroundColor('#1B1C22').borderRadius(18).margin({ left: 16, right: 16, bottom: 14 })
 
-          if (this.book.bodyMissing === true) {
+          if (BookRepository.isBodyMissing(this.book)) {
             Column() {
               Text('已恢复书目与阅读位置，缺少正文文件')
                 .fontSize(17).fontWeight(FontWeight.Medium).fontColor('#F0B2A8')
@@ -271,13 +269,13 @@ export struct BookInfoPage {
       }.width('100%').height(56).padding({ left: 16, right: 16, top: 8, bottom: 8 })
         .backgroundColor(this.collapsedHeader ? '#111217' : '#00000000')
         .animation({ duration: 220, curve: Curve.EaseInOut })
-      }.layoutWeight(1).width('100%').backgroundColor(this.book.coverColor)
+      }.layoutWeight(1).width('100%').backgroundColor(bookCoverColor(this.book))
 
       Row() {
         Blank()
         Row() {
           AppGlyph({ name: 'book', glyphSize: 17, tint: '#F2F2F7' })
-          Text(this.book.bodyMissing === true ? '缺少正文' : '阅读')
+          Text(BookRepository.isBodyMissing(this.book) ? '缺少正文' : '阅读')
             .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#F2F2F7').margin({ left: 7 })
         }.justifyContent(FlexAlign.Center).width(104).padding({ top: 13, bottom: 13 })
           .backgroundColor('#46476B').borderRadius(26).onClick(() => this.onRead())

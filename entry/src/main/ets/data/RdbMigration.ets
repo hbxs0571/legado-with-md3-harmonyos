@@ -9,6 +9,8 @@ import { ReaderHighlightRuleRepository } from './ReaderHighlightRuleRepository';
 import { BookContentProcessRepository } from './BookContentProcessRepository';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
+import { BookRepository } from './BookRepository';
+import { ReadRecordRepository } from './ReadRecordRepository';
 
 /**
  * 存量数据搬迁骨架。
@@ -21,14 +23,16 @@ import { ReplaceRuleRepository } from './ReplaceRuleRepository';
  * 所以这里是「复制」而不是「剪切」。
  *
  * 每一批各自一个事务、各自一个标记：三张表要么全搬成功，要么全回滚。
- * 半搬完的状态比完全没搬更难排查。两批分开是为了让第二批能独立重试，
- * 不会因为第一批已完成就一起被跳过。
+ * 半搬完的状态比完全没搬更难排查。三批分开是为了让后面批次能独立重试，
+ * 不会因为前面的批次已完成就一起被跳过。
  */
 export class RdbMigration {
   /** 第一批（书签、划线、搜索历史）的搬迁标记键，值存完成时间戳。 */
   private static readonly markerKeyV1: string = 'rdb_migrated_v1_1';
   /** 第二批（分组、划线规则、正文处理、目录规则、替换规则）的搬迁标记键。 */
   private static readonly markerKeyV2: string = 'rdb_migrated_v1_2';
+  /** 第三批（书架与章节、阅读记录）的搬迁标记键。 */
+  private static readonly markerKeyV3: string = 'rdb_migrated_v1_3';
   private static readonly preferenceName: string = 'legado_rdb_migration';
 
   /** 指定批次的搬迁是否已完成。 */
@@ -43,7 +47,7 @@ export class RdbMigration {
   }
 
   /**
-   * 按需执行两批搬迁；两批都已完成或都失败时返回 false。
+   * 按需执行三批搬迁；都已完成或都失败时返回 false。
    *
    * 失败时该批事务回滚、不写该批标记，下次启动重试。
    * 这里不抛异常——搬迁是后台动作，不该让启动流程失败。
@@ -51,7 +55,8 @@ export class RdbMigration {
   static async runIfNeeded(context: Context): Promise<boolean> {
     const migratedV1 = await RdbMigration.migrateFirstBatch(context);
     const migratedV2 = await RdbMigration.migrateSecondBatch(context);
-    return migratedV1 || migratedV2;
+    const migratedV3 = await RdbMigration.migrateThirdBatch(context);
+    return migratedV1 || migratedV2 || migratedV3;
   }
 
   /** 第一批：书签、划线、搜索历史。 */
@@ -109,6 +114,38 @@ export class RdbMigration {
     } catch (error) {
       if (error instanceof Error) {
         console.error(`RdbMigration 第二批搬迁失败，保留 preferences 老数据：${error.message}`);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * 第三批：书架与章节、阅读记录。
+   *
+   * books 必须写在 chapters 之前：chapters 的外键指向 books。
+   * 走一个事务、一个标记，因为章节离开书就没有意义，半搬完的状态最难排查。
+   */
+  private static async migrateThirdBatch(context: Context): Promise<boolean> {
+    if (await RdbMigration.isDone(context, RdbMigration.markerKeyV3)) {
+      return false;
+    }
+    try {
+      const store = await RdbStore.getStore(context);
+      await RdbSchema.ensure(store);
+      store.beginTransaction();
+      try {
+        await ReadRecordRepository.migrateFromPreferences(context, store);
+        await BookRepository.migrateFromPreferences(context, store);
+        store.commit();
+      } catch (error) {
+        store.rollBack();
+        throw new Error(`搬迁写入失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+      await RdbMigration.writeMarker(context, RdbMigration.markerKeyV3);
+      return true;
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(`RdbMigration 第三批搬迁失败，保留 preferences 老数据：${error.message}`);
       }
       return false;
     }

@@ -2867,7 +2867,7 @@ struct BookmarkOverviewCard {
       BookCover({
         book: {
           id: this.book.key, title: this.book.title, author: this.book.author, category: '',
-          lastChapter: '', progress: 0, coverColor: this.book.coverColor, coverMark: this.book.coverMark,
+          lastChapter: '', progress: 0,
           coverUri: this.book.coverUri.length > 0 ? this.book.coverUri : undefined, isLocal: true
         },
         displayWidth: 52, displayHeight: 73, cornerRadius: 8

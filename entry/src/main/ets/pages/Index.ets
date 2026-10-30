@@ -1,4 +1,4 @@
-import { AppRoute, Book, BookMediaType, ProfileRoute } from '../model/Book';
+import { AppRoute, Book, BookChapter, bookCoverColor, bookCoverMark, BookMediaType, ProfileRoute } from '../model/Book';
 import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { HomePage } from './HomePage';
 import { BookshelfPage } from './BookshelfPage';
@@ -34,7 +34,7 @@ import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
-import { TocRefreshResult } from '../data/BookRepository';
+import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import {
@@ -90,8 +90,6 @@ const EMPTY_BOOK: Book = {
   category: '',
   lastChapter: '',
   progress: 0,
-  coverColor: '#1C1D23',
-  coverMark: '',
   isLocal: false
 };
 
@@ -981,12 +979,12 @@ struct Index {
 
   private requestCreateReaderMarking(chapterPosition: number, endPosition: number, selectedText: string): void {
     if (!this.selectedBook.isLocal || this.selectedBook.contentPath === undefined ||
-      this.selectedBook.bodyMissing === true) {
+      BookRepository.isBodyMissing(this.selectedBook)) {
       this.showUnavailableAction('划线与笔记仅支持已有本地正文的书籍');
       return;
     }
     const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ??
-      (this.selectedBook.chapterTitles ?? []).indexOf(this.selectedChapter));
+      BookRepository.cachedChapterTitles(this.selectedBook).indexOf(this.selectedChapter));
     const semanticContent = LocalTextSemantics.fromRawBody(this.readerContent);
     const start = Math.max(0, Math.min(semanticContent.length, Math.trunc(chapterPosition)));
     const end = Math.max(start, Math.min(semanticContent.length, Math.trunc(endPosition)));
@@ -1095,7 +1093,7 @@ struct Index {
   }
 
   private requestAddReaderBookmark(chapterPosition: number, pageText: string): void {
-    const chapterTitles = this.selectedBook.chapterTitles ?? [];
+    const chapterTitles: string[] = BookRepository.cachedChapterTitles(this.selectedBook);
     const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter));
     const record: ReaderBookmark = {
       id: this.selectedBook.id + '-' + Date.now().toString(),
@@ -1117,7 +1115,7 @@ struct Index {
   private toggleReaderBookmarkForPage(startPosition: number, endPosition: number, pageText: string): Promise<void> {
     const operation = this.readerBookmarkToggleQueue.then(async (): Promise<void> => {
       if (!this.selectedBook.isLocal || this.selectedBook.contentPath === undefined) { return; }
-      const chapterTitles = this.selectedBook.chapterTitles ?? [];
+      const chapterTitles: string[] = BookRepository.cachedChapterTitles(this.selectedBook);
       const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ??
         chapterTitles.indexOf(this.selectedChapter));
       const rangeEnd = Math.max(startPosition + 1, endPosition);
@@ -1262,7 +1260,7 @@ struct Index {
     chapterPosition: number,
     errorPrefix: string
   ): Promise<boolean> {
-    const chapterTitles = targetBook.chapterTitles ?? [];
+    const chapterTitles: string[] = BookRepository.cachedChapterTitles(targetBook);
     let content: string;
     try {
       content = await BookRepository.readChapter(targetBook, chapterTitle, chapterIndex);
@@ -1275,43 +1273,12 @@ struct Index {
     const position = Math.max(0, Math.min(semanticLength, Math.trunc(chapterPosition)));
     const chapterProgress = semanticLength > 0 ? position / semanticLength * 100 : 0;
     const chapterCount = Math.max(1, chapterTitles.length);
-    const updatedBook: Book = {
-      id: targetBook.id,
-      title: targetBook.title,
-      author: targetBook.author,
-      category: targetBook.category,
-      groupName: targetBook.groupName,
-      groupNames: targetBook.groupNames,
-      chapterTitles: targetBook.chapterTitles,
-      chapterOffsets: targetBook.chapterOffsets,
-      chapterVolumes: targetBook.chapterVolumes,
-      chapterIndex: chapterIndex,
-      chapterProgress: chapterProgress,
-      lastChapter: chapterTitle,
-      progress: (chapterIndex + chapterProgress / 100) / chapterCount * 100,
-      coverColor: targetBook.coverColor,
-      coverMark: targetBook.coverMark,
-      coverUri: targetBook.coverUri,
-      customCoverUri: targetBook.customCoverUri,
-      bookType: targetBook.bookType,
-      fixedType: targetBook.fixedType,
-      contentPath: targetBook.contentPath,
-      format: targetBook.format,
-      chapterCount: targetBook.chapterCount,
-      fileSizeBytes: targetBook.fileSizeBytes,
-      imageStyle: targetBook.imageStyle,
-      reSegment: targetBook.reSegment,
-      charset: targetBook.charset,
-      description: targetBook.description,
-      remark: targetBook.remark,
-      customTag: targetBook.customTag,
-      bodyMissing: targetBook.bodyMissing,
-      androidOriginalPath: targetBook.androidOriginalPath,
-      androidCharacterPosition: position,
-      readerPositionVersion: 1,
-      tocRule: targetBook.tocRule,
-      isLocal: targetBook.isLocal
-    };
+    const updatedBook: Book = BookRepository.copyBook(targetBook);
+    updatedBook.chapterIndex = chapterIndex;
+    updatedBook.chapterProgress = chapterProgress;
+    updatedBook.lastChapter = chapterTitle;
+    updatedBook.progress = (chapterIndex + chapterProgress / 100) / chapterCount * 100;
+    updatedBook.androidCharacterPosition = position;
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -1383,7 +1350,7 @@ struct Index {
    */
   private async offerStoredTargetJump(targetBook: Book, target: PendingBookmarkTarget): Promise<void> {
     const kind = target.isMarking ? '笔记' : '书签';
-    const chapterTitle = (targetBook.chapterTitles ?? [])[target.chapterIndex];
+    const chapterTitle = BookRepository.cachedChapterTitles(targetBook)[target.chapterIndex];
     if (chapterTitle === undefined) {
       this.showUnavailableAction(`${kind}章节不在当前目录中`);
       return;
@@ -1407,7 +1374,7 @@ struct Index {
     // 严格对齐上游 navigateToBookmark：先校验，通过直接跳；不通过一律交给用户确认（书签不做重定位）。
     const verdict = ReaderBookmarkTarget.verify(
       this.bookmarkTargetFingerprint(targetBook),
-      (targetBook.chapterTitles ?? [])[bookmark.chapterIndex],
+      BookRepository.cachedChapterTitles(targetBook)[bookmark.chapterIndex],
       bookmark.bookUrl,
       bookmark.chapterName
     );
@@ -1422,7 +1389,7 @@ struct Index {
       await this.offerStoredTargetJump(targetBook, target);
       return;
     }
-    const chapterTitle = (targetBook.chapterTitles ?? [])[bookmark.chapterIndex];
+    const chapterTitle = BookRepository.cachedChapterTitles(targetBook)[bookmark.chapterIndex];
     if (chapterTitle === undefined) {
       this.showUnavailableAction('书签章节不在当前目录中');
       return;
@@ -1444,7 +1411,7 @@ struct Index {
     anchorChapterIndex: number,
     anchor: MarkingRelocateAnchor
   ): Promise<MarkingRelocateTarget | undefined> {
-    const chapterTitles = targetBook.chapterTitles ?? [];
+    const chapterTitles: string[] = BookRepository.cachedChapterTitles(targetBook);
     const candidates: MarkingRelocateCandidate[] = [];
     for (let index = 0; index < chapterTitles.length; index++) {
       const title = chapterTitles[index];
@@ -1467,7 +1434,8 @@ struct Index {
     const marking = this.readerMarkings.find((record: ReaderMarking) => record.id === markingId);
     if (marking === undefined) { return; }
     const targetBook = this.books.find((book: Book) => book.id === marking.bookId);
-    if (targetBook === undefined || targetBook.contentPath === undefined || targetBook.bodyMissing === true) {
+    if (targetBook === undefined || targetBook.contentPath === undefined ||
+      BookRepository.isBodyMissing(targetBook)) {
       this.showUnavailableAction('这条笔记对应的本地正文不可用');
       return;
     }
@@ -1479,7 +1447,7 @@ struct Index {
     // 严格对齐上游 navigateToMarking：校验通过直接跳，不通过先试重定位，再退到确认框。
     const verdict = ReaderBookmarkTarget.verify(
       this.bookmarkTargetFingerprint(targetBook),
-      (targetBook.chapterTitles ?? [])[marking.chapterIndex],
+      BookRepository.cachedChapterTitles(targetBook)[marking.chapterIndex],
       marking.bookUrl,
       marking.chapterName
     );
@@ -1502,7 +1470,7 @@ struct Index {
         return;
       }
     }
-    const chapterTitle = (targetBook.chapterTitles ?? [])[chapterIndex];
+    const chapterTitle = BookRepository.cachedChapterTitles(targetBook)[chapterIndex];
     if (chapterTitle === undefined) {
       this.showUnavailableAction('笔记章节不在当前目录中');
       return;
@@ -1519,7 +1487,7 @@ struct Index {
       this.showUnavailableAction('这本书没有可搜索的本地正文');
       return;
     }
-    const chapterTitles = targetBook.chapterTitles ?? [];
+    const chapterTitles: string[] = BookRepository.cachedChapterTitles(targetBook);
     const chapterTitle = chapterTitles[chapterIndex];
     if (chapterTitle === undefined) {
       this.showUnavailableAction('搜索结果章节已不在当前目录中');
@@ -1539,43 +1507,12 @@ struct Index {
     const chapterProgress = semanticDocument.sourceLength > 0
       ? androidPosition / semanticDocument.sourceLength * 100 : 0;
     const chapterCount = Math.max(1, chapterTitles.length);
-    const updatedBook: Book = {
-      id: targetBook.id,
-      title: targetBook.title,
-      author: targetBook.author,
-      category: targetBook.category,
-      groupName: targetBook.groupName,
-      groupNames: targetBook.groupNames,
-      chapterTitles: targetBook.chapterTitles,
-      chapterOffsets: targetBook.chapterOffsets,
-      chapterVolumes: targetBook.chapterVolumes,
-      chapterIndex: chapterIndex,
-      chapterProgress: chapterProgress,
-      lastChapter: chapterTitle,
-      progress: (chapterIndex + chapterProgress / 100) / chapterCount * 100,
-      coverColor: targetBook.coverColor,
-      coverMark: targetBook.coverMark,
-      coverUri: targetBook.coverUri,
-      customCoverUri: targetBook.customCoverUri,
-      bookType: targetBook.bookType,
-      fixedType: targetBook.fixedType,
-      contentPath: targetBook.contentPath,
-      format: targetBook.format,
-      chapterCount: targetBook.chapterCount,
-      fileSizeBytes: targetBook.fileSizeBytes,
-      imageStyle: targetBook.imageStyle,
-      reSegment: targetBook.reSegment,
-      charset: targetBook.charset,
-      description: targetBook.description,
-      remark: targetBook.remark,
-      customTag: targetBook.customTag,
-      bodyMissing: targetBook.bodyMissing,
-      androidOriginalPath: targetBook.androidOriginalPath,
-      androidCharacterPosition: androidPosition,
-      readerPositionVersion: 2,
-      tocRule: targetBook.tocRule,
-      isLocal: targetBook.isLocal
-    };
+    const updatedBook: Book = BookRepository.copyBook(targetBook);
+    updatedBook.chapterIndex = chapterIndex;
+    updatedBook.chapterProgress = chapterProgress;
+    updatedBook.lastChapter = chapterTitle;
+    updatedBook.progress = (chapterIndex + chapterProgress / 100) / chapterCount * 100;
+    updatedBook.androidCharacterPosition = androidPosition;
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -1658,7 +1595,7 @@ struct Index {
       return {
         key: summary.key, title: summary.title, author: summary.author,
         bookmarkCount: summary.bookmarkCount, noteCount: summary.noteCount, sourceUrl: summary.sourceUrl,
-        coverUri: cover, coverColor: book.coverColor, coverMark: book.coverMark
+        coverUri: cover, coverColor: bookCoverColor(book), coverMark: bookCoverMark(book)
       };
     });
     // 上游 AllBookmarkViewModel 对书籍列表按书名排序（sortedBy { it.key.name }），
@@ -2628,20 +2565,21 @@ struct Index {
     if (context === undefined) {
       return undefined;
     }
-    let book: Book | undefined;
+    let created: CreatedLocalBook | undefined;
     try {
-      book = await BookRepository.importLocalBook(context, this.readerMaxLengthWithNoToc);
+      created = await BookRepository.importLocalBook(context, this.readerMaxLengthWithNoToc);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：文件格式不受支持');
       return undefined;
     }
-    if (book === undefined) {
+    if (created === undefined) {
       return undefined;
     }
-    const importedBook = book;
+    const importedBook = created.book;
+    const importedChapters = created.chapters;
     const importedBooks = await BookRepository.loadImportedBooks(context);
     const duplicate = [...this.books, ...importedBooks].find((item: Book) =>
-      (item.contentPath !== undefined || item.bodyMissing === true) && item.format === importedBook.format &&
+      BookRepository.isPersistableBook(item) && item.format === importedBook.format &&
       item.title === importedBook.title && item.author === importedBook.author
     );
     if (duplicate !== undefined) {
@@ -2651,7 +2589,7 @@ struct Index {
         this.showUnavailableAction('书籍已在书架中，重复副本清理失败');
         return undefined;
       }
-      this.showUnavailableAction(duplicate.bodyMissing === true
+      this.showUnavailableAction(BookRepository.isBodyMissing(duplicate)
         ? '书架中已有同名缺正文记录，请先移出该记录再导入正文'
         : '这本书已在书架中');
       return undefined;
@@ -2660,6 +2598,8 @@ struct Index {
       .filter((item: Book) => BookRepository.isPersistableBook(item));
     try {
       await BookRepository.saveImportedBooks(context, booksToSave);
+      // 书目落库后单独写章节行：books 与 chapters 是两张表，导入时一起写。
+      await BookRepository.saveChapters(context, importedBook.contentPath ?? '', importedChapters);
     } catch (error) {
       try {
         BookRepository.discardImportedCopy(importedBook);
@@ -2709,6 +2649,8 @@ struct Index {
           updatedBooks.push(book);
           continue;
         }
+        // 目录重算会重建整份章节行；books 行本来就在，先把 chapters 表覆盖掉。
+        await BookRepository.saveChapters(context, result.book.contentPath ?? '', result.chapters);
         updatedBooks.push(result.book);
         updatedCount += 1;
         if (this.selectedBook.id === result.book.id) {
@@ -2776,18 +2718,20 @@ struct Index {
     try {
       await BookRepository.saveImportedBooks(context,
         updatedBooks.filter((item: Book) => BookRepository.isPersistableBook(item)));
+      // 目录重算会重建整份章节行；books 行本来就在，先把 chapters 表覆盖掉。
+      await BookRepository.saveChapters(context, nextBook.contentPath ?? '', result.chapters);
     } catch (_) {
       this.showUnavailableAction('目录已更新，但保存失败，重新打开后可能回到旧目录');
       return;
     }
     this.books = updatedBooks;
     this.selectedBook = nextBook;
-    const chapterCount = nextBook.chapterTitles?.length ?? 0;
+    const chapterCount = result.chapters.length;
     this.showUnavailableAction(`更新目录完成：共 ${chapterCount} 章`);
   }
   private async openBook(book: Book): Promise<void> {
     if (book.contentPath === undefined) {
-      this.showUnavailableAction(book.bodyMissing === true
+      this.showUnavailableAction(BookRepository.isBodyMissing(book)
         ? '已恢复书目和阅读位置；备份不含正文，请重新选择原书文件后阅读'
         : '此书暂时没有可用正文');
       return;
@@ -2811,6 +2755,11 @@ struct Index {
         try {
           await BookRepository.saveImportedBooks(context,
             updatedBooks.filter((item: Book) => BookRepository.isPersistableBook(item)));
+          // 无目录分段会重排章节行，跟着一起覆盖。
+          if (noTocRefresh.chapters.length > 0) {
+            await BookRepository.saveChapters(context, openedBook.contentPath ?? '',
+              noTocRefresh.chapters);
+          }
         } catch (error) {
           this.showUnavailableAction(error instanceof Error
             ? '无目录分段设置保存失败：' + error.message : '无目录分段设置保存失败');
@@ -3005,44 +2954,17 @@ struct Index {
       this.showUnavailableAction('当前书籍不在本地书架，未保存书籍信息');
       return false;
     }
-    const updatedBook: Book = {
-      id: currentBook.id,
-      title: title,
-      author: author,
-      category: category,
-      groupName: groupNames.length > 0 ? groupNames.join('、') : '本地未分组',
-      groupNames: groupNames,
-      chapterTitles: currentBook.chapterTitles,
-      chapterOffsets: currentBook.chapterOffsets,
-      chapterVolumes: currentBook.chapterVolumes,
-      chapterIndex: currentBook.chapterIndex,
-      chapterProgress: currentBook.chapterProgress,
-      lastChapter: currentBook.lastChapter,
-      progress: currentBook.progress,
-      coverColor: currentBook.coverColor,
-      coverMark: currentBook.coverUri === undefined || currentBook.coverUri.length === 0
-        ? (title.substring(0, 1) || '书') : currentBook.coverMark,
-      coverUri: currentBook.coverUri,
-      customCoverUri: currentBook.customCoverUri,
-      bookType: bookType,
-      fixedType: fixedType,
-      contentPath: currentBook.contentPath,
-      format: currentBook.format,
-      chapterCount: currentBook.chapterCount,
-      fileSizeBytes: currentBook.fileSizeBytes,
-      imageStyle: currentBook.imageStyle,
-      reSegment: currentBook.reSegment,
-      charset: currentBook.charset,
-      description: description,
-      remark: remark,
-      customTag: customTag,
-      bodyMissing: currentBook.bodyMissing,
-      androidOriginalPath: currentBook.androidOriginalPath,
-      androidCharacterPosition: currentBook.androidCharacterPosition,
-      readerPositionVersion: currentBook.readerPositionVersion,
-      tocRule: currentBook.tocRule,
-      isLocal: currentBook.isLocal
-    };
+    const updatedBook: Book = BookRepository.copyBook(currentBook);
+    updatedBook.title = title;
+    updatedBook.author = author;
+    updatedBook.category = category;
+    updatedBook.groupName = groupNames.length > 0 ? groupNames.join('、') : '本地未分组';
+    updatedBook.groupNames = groupNames;
+    updatedBook.bookType = bookType;
+    updatedBook.fixedType = fixedType;
+    updatedBook.description = description;
+    updatedBook.remark = remark;
+    updatedBook.customTag = customTag;
     const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -3114,7 +3036,7 @@ struct Index {
   }
 
   private async removeLocalBookFromShelf(book: Book): Promise<void> {
-    if (book.contentPath === undefined && book.bodyMissing !== true) {
+    if (book.contentPath === undefined && !BookRepository.isBodyMissing(book)) {
       this.showUnavailableAction('这本书没有可清理的本地导入副本');
       return;
     }
@@ -3126,6 +3048,8 @@ struct Index {
     const remainingBooks = this.books.filter((item: Book) => item.id !== book.id);
     const booksToSave = remainingBooks.filter((item: Book) => BookRepository.isPersistableBook(item));
     try {
+      // saveImportedBooks 只做 upsert，不会清掉缺席的书：照上游显式删章节行与 books 行。
+      await BookRepository.deleteBook(context, book);
       await BookRepository.saveImportedBooks(context, booksToSave);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? error.message : '移出书架失败，原书籍仍保留');
@@ -3143,15 +3067,15 @@ struct Index {
   }
 
   private async openCatalogFromBookInfo(): Promise<void> {
-    const chapters = this.selectedBook.chapterTitles ?? [];
+    const chapters = BookRepository.cachedChapterTitles(this.selectedBook);
     if (this.selectedBook.contentPath === undefined || chapters.length === 0) {
-      this.showUnavailableAction(this.selectedBook.bodyMissing === true
+      this.showUnavailableAction(BookRepository.isBodyMissing(this.selectedBook)
         ? 'Android 备份不含章节目录或正文，请重新导入原书文件后查看'
         : '这本书暂时没有可查看的本地目录');
       return;
     }
     const chapterIndex = Math.max(0, Math.min(chapters.length - 1, this.selectedBook.chapterIndex ?? 0));
-    const chapterTitle = this.selectedBook.chapterTitles?.[chapterIndex];
+    const chapterTitle = chapters[chapterIndex];
     if (chapterTitle === undefined) {
       this.showUnavailableAction('目录信息暂不可用');
       return;
@@ -3194,53 +3118,22 @@ struct Index {
     chapterPosition: number,
     androidCoordinate: boolean = false
   ): Promise<void> {
-    const chapterTitles = this.selectedBook.chapterTitles ?? [this.selectedChapter];
-    const chapterIndex = Math.max(0, Math.min(chapterTitles.length - 1,
-      this.selectedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter)));
-    const chapterCount = Math.max(1, chapterTitles.length);
+    const chapterTitles = BookRepository.cachedChapterTitles(this.selectedBook);
+    const effectiveTitles = chapterTitles.length > 0 ? chapterTitles : [this.selectedChapter];
+    const chapterIndex = Math.max(0, Math.min(effectiveTitles.length - 1,
+      this.selectedBook.chapterIndex ?? effectiveTitles.indexOf(this.selectedChapter)));
+    const chapterCount = Math.max(1, effectiveTitles.length);
     const safeChapterProgress = Math.max(0, Math.min(100, chapterProgress));
-    const updatedBook: Book = {
-      id: this.selectedBook.id,
-      title: this.selectedBook.title,
-      author: this.selectedBook.author,
-      category: this.selectedBook.category,
-      groupName: this.selectedBook.groupName,
-      groupNames: this.selectedBook.groupNames,
-      chapterTitles: this.selectedBook.chapterTitles,
-      chapterOffsets: this.selectedBook.chapterOffsets,
-      chapterVolumes: this.selectedBook.chapterVolumes,
-      chapterIndex: chapterIndex,
-      chapterProgress: safeChapterProgress,
-      lastChapter: this.selectedChapter,
-      progress: (chapterIndex + safeChapterProgress / 100) / chapterCount * 100,
-      coverColor: this.selectedBook.coverColor,
-      coverMark: this.selectedBook.coverMark,
-      coverUri: this.selectedBook.coverUri,
-      customCoverUri: this.selectedBook.customCoverUri,
-      bookType: this.selectedBook.bookType,
-      fixedType: this.selectedBook.fixedType,
-      contentPath: this.selectedBook.contentPath,
-      format: this.selectedBook.format,
-      chapterCount: this.selectedBook.chapterCount,
-      fileSizeBytes: this.selectedBook.fileSizeBytes,
-      imageStyle: this.selectedBook.imageStyle,
-      reSegment: this.selectedBook.reSegment,
-      charset: this.selectedBook.charset,
-      description: this.selectedBook.description,
-      remark: this.selectedBook.remark,
-      customTag: this.selectedBook.customTag,
-      bodyMissing: this.selectedBook.bodyMissing,
-      androidOriginalPath: this.selectedBook.androidOriginalPath,
-      androidCharacterPosition: Math.max(0, Math.trunc(chapterPosition)),
-      readerPositionVersion: this.selectedBook.isLocal && (this.selectedBook.format === 'txt' ||
-        this.selectedBook.format === 'epub') ? (androidCoordinate ? 2 : 0) : this.selectedBook.readerPositionVersion,
-      tocRule: this.selectedBook.tocRule,
-      latestChapterTime: this.selectedBook.latestChapterTime,
-      // 保存阅读进度就是「刚读过」，用来驱动书架的按最近列表 / 综合排序。
-      durChapterTime: Date.now(),
-      order: this.selectedBook.order,
-      isLocal: this.selectedBook.isLocal
-    };
+    const updatedBook: Book = BookRepository.copyBook(this.selectedBook);
+    updatedBook.chapterIndex = chapterIndex;
+    updatedBook.chapterProgress = safeChapterProgress;
+    updatedBook.lastChapter = this.selectedChapter;
+    updatedBook.progress = (chapterIndex + safeChapterProgress / 100) / chapterCount * 100;
+    // 阅读位置只有一套语义：durChapterPos 一律存字符坐标，渲染前才换算。
+    // 旧的 readerPositionVersion 已随迁移删除，位置类型不再区分。
+    updatedBook.androidCharacterPosition = Math.max(0, Math.trunc(chapterPosition));
+    // 保存阅读进度就是「刚读过」，用来驱动书架的按最近列表 / 综合排序。
+    updatedBook.durChapterTime = Date.now();
     this.selectedBook = updatedBook;
     this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
     if (this.selectedBook.contentPath === undefined) {
@@ -3259,43 +3152,8 @@ struct Index {
   private async setReaderImageStyle(imageStyle: string): Promise<void> {
     const allowedStyles: string[] = ['DEFAULT', 'FULL', 'TEXT', 'SINGLE'];
     if (!allowedStyles.includes(imageStyle) || this.selectedBook.imageStyle === imageStyle) { return; }
-    const updatedBook: Book = {
-      id: this.selectedBook.id,
-      title: this.selectedBook.title,
-      author: this.selectedBook.author,
-      category: this.selectedBook.category,
-      groupName: this.selectedBook.groupName,
-      groupNames: this.selectedBook.groupNames,
-      chapterTitles: this.selectedBook.chapterTitles,
-      chapterOffsets: this.selectedBook.chapterOffsets,
-      chapterVolumes: this.selectedBook.chapterVolumes,
-      chapterIndex: this.selectedBook.chapterIndex,
-      chapterProgress: this.selectedBook.chapterProgress,
-      lastChapter: this.selectedBook.lastChapter,
-      progress: this.selectedBook.progress,
-      coverColor: this.selectedBook.coverColor,
-      coverMark: this.selectedBook.coverMark,
-      coverUri: this.selectedBook.coverUri,
-      customCoverUri: this.selectedBook.customCoverUri,
-      bookType: this.selectedBook.bookType,
-      fixedType: this.selectedBook.fixedType,
-      contentPath: this.selectedBook.contentPath,
-      format: this.selectedBook.format,
-      chapterCount: this.selectedBook.chapterCount,
-      fileSizeBytes: this.selectedBook.fileSizeBytes,
-      imageStyle: imageStyle,
-      reSegment: this.selectedBook.reSegment,
-      charset: this.selectedBook.charset,
-      description: this.selectedBook.description,
-      remark: this.selectedBook.remark,
-      customTag: this.selectedBook.customTag,
-      bodyMissing: this.selectedBook.bodyMissing,
-      androidOriginalPath: this.selectedBook.androidOriginalPath,
-      androidCharacterPosition: this.selectedBook.androidCharacterPosition,
-      readerPositionVersion: this.selectedBook.readerPositionVersion,
-      tocRule: this.selectedBook.tocRule,
-      isLocal: this.selectedBook.isLocal
-    };
+    const updatedBook: Book = BookRepository.copyBook(this.selectedBook);
+    updatedBook.imageStyle = imageStyle;
     this.selectedBook = updatedBook;
     this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
     const context = this.getUIContext().getHostContext();
@@ -3316,7 +3174,7 @@ struct Index {
       return;
     }
     const updatedBook = BookRepository.withReSegment(this.selectedBook, enabled);
-    const chapterTitles = updatedBook.chapterTitles ?? [];
+    const chapterTitles = BookRepository.cachedChapterTitles(updatedBook);
     const chapterIndex = Math.max(0, Math.min(Math.max(0, chapterTitles.length - 1),
       updatedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter)));
     const chapterTitle = chapterTitles[chapterIndex] ?? this.selectedChapter;
@@ -3349,11 +3207,14 @@ struct Index {
       return;
     }
     let updatedBook: Book;
+    let updatedChapters: BookChapter[];
     let content: string;
     let chapterTitle: string;
     try {
-      updatedBook = BookRepository.withCharset(this.selectedBook, charset, this.readerMaxLengthWithNoToc);
-      const titles = updatedBook.chapterTitles ?? [];
+      const converted = BookRepository.withCharset(this.selectedBook, charset, this.readerMaxLengthWithNoToc);
+      updatedBook = converted.book;
+      updatedChapters = converted.chapters;
+      const titles = BookRepository.cachedChapterTitles(updatedBook);
       const chapterIndex = Math.max(0, Math.min(Math.max(0, titles.length - 1), updatedBook.chapterIndex ?? 0));
       chapterTitle = titles[chapterIndex] ?? updatedBook.lastChapter;
       content = await BookRepository.readChapter(updatedBook, chapterTitle);
@@ -3371,6 +3232,10 @@ struct Index {
     try {
       await BookRepository.saveImportedBooks(context,
         updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+      // 换字符集会重算章节字节偏移，章节行必须跟着覆盖。
+      if (updatedChapters.length > 0) {
+        await BookRepository.saveChapters(context, updatedBook.contentPath ?? '', updatedChapters);
+      }
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? error.message : '字符集设置保存失败');
       return;
@@ -3385,8 +3250,9 @@ struct Index {
     if (!this.readerReadingAnchorEnabled || !this.selectedBook.isLocal || this.selectedBook.contentPath === undefined) {
       return;
     }
-    const chapterTitles = this.selectedBook.chapterTitles ?? [this.selectedChapter];
-    const currentChapterIndex = this.selectedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter);
+    const chapterTitles = BookRepository.cachedChapterTitles(this.selectedBook);
+    const effectiveTitles = chapterTitles.length > 0 ? chapterTitles : [this.selectedChapter];
+    const currentChapterIndex = this.selectedBook.chapterIndex ?? effectiveTitles.indexOf(this.selectedChapter);
     if (targetChapterIndex === currentChapterIndex) { return; }
     if (this.readerAnchorOriginBook === undefined) {
       this.readerAnchorOriginBook = this.selectedBook;
@@ -3405,7 +3271,7 @@ struct Index {
   private async restoreReaderAnchor(): Promise<void> {
     const originBook = this.readerAnchorOriginBook;
     if (originBook === undefined) { return; }
-    const chapterTitles = originBook.chapterTitles ?? [];
+    const chapterTitles = BookRepository.cachedChapterTitles(originBook);
     const chapterIndex = Math.max(0, originBook.chapterIndex ??
       chapterTitles.indexOf(this.readerAnchorOriginChapter));
     const chapterTitle = chapterTitles[chapterIndex] ?? this.readerAnchorOriginChapter ?? originBook.lastChapter;
@@ -3439,7 +3305,8 @@ struct Index {
     this.route = AppRoute.READER;
   }
   private async selectChapter(title: string, requestedIndex?: number, initialProgress: number = 0): Promise<void> {
-    const chapterTitles = this.selectedBook.chapterTitles ?? [title];
+    const cachedTitles = BookRepository.cachedChapterTitles(this.selectedBook);
+    const chapterTitles = cachedTitles.length > 0 ? cachedTitles : [title];
     const titleIndex = chapterTitles.indexOf(title);
     const chapterIndex = requestedIndex !== undefined && requestedIndex >= 0 && requestedIndex < chapterTitles.length
       ? requestedIndex : Math.max(0, titleIndex);
@@ -3451,43 +3318,13 @@ struct Index {
     this.readerStartAtChapterBeginning = false;
     this.saveReaderAnchorBeforeChapterJump(chapterIndex);
     const chapterCount = Math.max(1, chapterTitles.length);
-    const updatedBook: Book = {
-      id: this.selectedBook.id,
-      title: this.selectedBook.title,
-      author: this.selectedBook.author,
-      category: this.selectedBook.category,
-      groupName: this.selectedBook.groupName,
-      groupNames: this.selectedBook.groupNames,
-      chapterTitles: this.selectedBook.chapterTitles,
-      chapterOffsets: this.selectedBook.chapterOffsets,
-      chapterVolumes: this.selectedBook.chapterVolumes,
-      chapterIndex: chapterIndex,
-      chapterProgress: Math.max(0, Math.min(100, initialProgress)),
-      lastChapter: title,
-      progress: (chapterIndex + Math.max(0, Math.min(100, initialProgress)) / 100) / chapterCount * 100,
-      coverColor: this.selectedBook.coverColor,
-      coverMark: this.selectedBook.coverMark,
-      coverUri: this.selectedBook.coverUri,
-      customCoverUri: this.selectedBook.customCoverUri,
-      bookType: this.selectedBook.bookType,
-      fixedType: this.selectedBook.fixedType,
-      contentPath: this.selectedBook.contentPath,
-      format: this.selectedBook.format,
-      chapterCount: this.selectedBook.chapterCount,
-      fileSizeBytes: this.selectedBook.fileSizeBytes,
-      imageStyle: this.selectedBook.imageStyle,
-      reSegment: this.selectedBook.reSegment,
-      charset: this.selectedBook.charset,
-      description: this.selectedBook.description,
-      remark: this.selectedBook.remark,
-      customTag: this.selectedBook.customTag,
-      bodyMissing: this.selectedBook.bodyMissing,
-      androidOriginalPath: this.selectedBook.androidOriginalPath,
-      androidCharacterPosition: 0,
-      readerPositionVersion: 1,
-      tocRule: this.selectedBook.tocRule,
-      isLocal: this.selectedBook.isLocal
-    };
+    const updatedBook: Book = BookRepository.copyBook(this.selectedBook);
+    updatedBook.chapterIndex = chapterIndex;
+    updatedBook.chapterProgress = Math.max(0, Math.min(100, initialProgress));
+    updatedBook.lastChapter = title;
+    updatedBook.progress =
+      (chapterIndex + Math.max(0, Math.min(100, initialProgress)) / 100) / chapterCount * 100;
+    updatedBook.androidCharacterPosition = 0;
     let content: string = '';
     try {
       content = await BookRepository.readChapter(updatedBook, title);
@@ -3524,11 +3361,15 @@ struct Index {
       return;
     }
     try {
-      const updatedBook = BookRepository.replaceLocalChapter(this.selectedBook, chapterIndex, title, body);
+      const replaced = await BookRepository.replaceLocalChapter(this.selectedBook, chapterIndex, title, body,
+        BookRepository.cachedChapters(this.selectedBook));
+      const updatedBook = replaced.book;
       const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
       await BookRepository.saveImportedBooks(context,
         updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
-      const chapterTitle = updatedBook.chapterTitles?.[chapterIndex] ?? title;
+      // 改章节正文会重排后续章节的字节偏移，章节行跟着覆盖。
+      await BookRepository.saveChapters(context, updatedBook.contentPath ?? '', replaced.chapters);
+      const chapterTitle = BookRepository.cachedChapterTitles(updatedBook)[chapterIndex] ?? title;
       const updatedContent = await BookRepository.readChapter(updatedBook, chapterTitle, chapterIndex);
       this.replaceRules = ReplaceRuleRepository.getAll();
       this.selectedBook = updatedBook;
@@ -3664,7 +3505,7 @@ struct Index {
   private acceptReaderProgress(bookId: string, chapterIndex: number, chapterProgress: number,
     chapterPosition: number, androidCoordinate: boolean): void {
     const currentChapterIndex = this.selectedBook.chapterIndex ??
-      (this.selectedBook.chapterTitles ?? []).indexOf(this.selectedChapter);
+      BookRepository.cachedChapterTitles(this.selectedBook).indexOf(this.selectedChapter);
     if (this.selectedBook.id !== bookId || currentChapterIndex !== chapterIndex) { return; }
     this.updateReadingProgress(chapterProgress, chapterPosition, androidCoordinate);
   }
@@ -3772,7 +3613,8 @@ struct Index {
             bookmarks: this.readerBookmarks,
             markings: this.readerMarkings.filter((marking: ReaderMarking) =>
               marking.bookId === this.selectedBook.id && marking.chapterIndex ===
-                Math.max(0, this.selectedBook.chapterIndex ?? (this.selectedBook.chapterTitles ?? []).indexOf(this.selectedChapter))),
+                Math.max(0, this.selectedBook.chapterIndex ??
+                  BookRepository.cachedChapterTitles(this.selectedBook).indexOf(this.selectedChapter))),
             chapterTitle: this.selectedChapter,
             replaceRules: this.replaceRules,
             content: this.readerContent,
@@ -3886,7 +3728,7 @@ struct Index {
             bookmarkTargetRevision: this.readerBookmarkTargetRevision,
             onBookmarkTargetConsumed: () => this.readerBookmarkTargetPosition = -1,
             onSelectChapterIndex: (chapterIndex: number) => {
-              const chapters = this.selectedBook.chapterTitles ?? [];
+              const chapters = BookRepository.cachedChapterTitles(this.selectedBook);
               const title = chapters[chapterIndex];
               if (title !== undefined) {
                 this.selectChapter(title, chapterIndex);
@@ -3896,7 +3738,7 @@ struct Index {
               }
             },
             onTurnChapterBoundary: (delta: number) => {
-              const chapters = this.selectedBook.chapterTitles ?? [];
+              const chapters = BookRepository.cachedChapterTitles(this.selectedBook);
               const currentIndex = this.selectedBook.chapterIndex ?? chapters.indexOf(this.selectedChapter);
               const targetIndex = currentIndex + delta;
               const targetTitle = chapters[targetIndex];
@@ -3928,7 +3770,7 @@ struct Index {
               onOpenTxtTocRules: (): void => this.openProfileDetail(ProfileRoute.TXT_TOC_RULES),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
               onSelectChapter: (chapterIndex: number) => {
-              const chapterTitle = this.selectedBook.chapterTitles?.[chapterIndex];
+              const chapterTitle = BookRepository.cachedChapterTitles(this.selectedBook)[chapterIndex];
               if (chapterTitle !== undefined) {
                 this.selectChapter(chapterTitle, chapterIndex);
               }

@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。第二批追加五张表后升到 2。 */
-  static readonly version: number = 2;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。第三批追加五张表后升到 3。 */
+  static readonly version: number = 3;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -215,6 +215,138 @@ export class RdbSchema {
     'CREATE INDEX IF NOT EXISTS `index_book_content_processes_aiArtifactId` ' +
     'ON `book_content_processes` (`aiArtifactId`)';
 
+  /**
+   * books：上游 Book.kt，35 列，主键 bookUrl。
+   * 本地书 bookUrl 就是正文文件路径（上游 LocalBook.kt 同样如此）。
+   * order 与 group 是 SQL 关键字，整表列名都带反引号（与上游 Room 生成的语句一致）。
+   */
+  static readonly createBooks: string =
+    'CREATE TABLE IF NOT EXISTS `books` (' +
+    "`bookUrl` TEXT NOT NULL DEFAULT '', " +
+    "`tocUrl` TEXT NOT NULL DEFAULT '', " +
+    "`origin` TEXT NOT NULL DEFAULT 'loc_book', " +
+    "`originName` TEXT NOT NULL DEFAULT '', " +
+    "`name` TEXT NOT NULL DEFAULT '', " +
+    "`author` TEXT NOT NULL DEFAULT '', " +
+    '`kind` TEXT, ' +
+    '`customTag` TEXT, ' +
+    '`coverUrl` TEXT, ' +
+    '`customCoverUrl` TEXT, ' +
+    '`intro` TEXT, ' +
+    '`customIntro` TEXT, ' +
+    '`remark` TEXT, ' +
+    '`charset` TEXT, ' +
+    '`type` INTEGER NOT NULL DEFAULT 0, ' +
+    '`group` INTEGER NOT NULL DEFAULT 0, ' +
+    '`isPrivate` INTEGER NOT NULL DEFAULT 0, ' +
+    '`latestChapterTitle` TEXT, ' +
+    '`latestChapterTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`lastCheckTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`lastCheckCount` INTEGER NOT NULL DEFAULT 0, ' +
+    '`totalChapterNum` INTEGER NOT NULL DEFAULT 0, ' +
+    '`durChapterTitle` TEXT, ' +
+    '`durChapterIndex` INTEGER NOT NULL DEFAULT 0, ' +
+    '`durChapterPos` INTEGER NOT NULL DEFAULT 0, ' +
+    '`durChapterTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`wordCount` TEXT, ' +
+    '`canUpdate` INTEGER NOT NULL DEFAULT 1, ' +
+    '`disableReadRecord` INTEGER NOT NULL DEFAULT 0, ' +
+    '`order` INTEGER NOT NULL DEFAULT 0, ' +
+    '`originOrder` INTEGER NOT NULL DEFAULT 0, ' +
+    '`variable` TEXT, ' +
+    '`readConfig` TEXT, ' +
+    '`syncTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`listIntro` TEXT, ' +
+    'PRIMARY KEY(`bookUrl`)' +
+    ')';
+
+  static readonly createBooksIndexNameAuthor: string =
+    'CREATE INDEX IF NOT EXISTS `index_books_name_author` ON `books` (`name`, `author`)';
+
+  static readonly createBooksIndexDurChapterTime: string =
+    'CREATE INDEX IF NOT EXISTS `index_books_durChapterTime` ON `books` (`durChapterTime`)';
+
+  /**
+   * chapters：上游 BookChapter.kt，18 列，主键 (url, bookUrl)。
+   * index / start / end 都是 SQL 关键字，必须带反引号。
+   * start / end 是正文里的**字节**偏移（上游 TextFile.kt 用 toByteArray().size 累加）。
+   * 外键声明照抄上游，但实测 relationalStore 默认不开 PRAGMA foreign_keys，
+   * CASCADE 不会真的执行 —— 删书必须手动删章节行，不能依赖这里。
+   */
+  static readonly createChapters: string =
+    'CREATE TABLE IF NOT EXISTS `chapters` (' +
+    '`url` TEXT NOT NULL, ' +
+    '`title` TEXT NOT NULL, ' +
+    '`isVolume` INTEGER NOT NULL, ' +
+    '`tocLevel` INTEGER NOT NULL DEFAULT 0, ' +
+    '`baseUrl` TEXT NOT NULL, ' +
+    '`bookUrl` TEXT NOT NULL, ' +
+    '`index` INTEGER NOT NULL, ' +
+    '`isVip` INTEGER NOT NULL, ' +
+    '`isPay` INTEGER NOT NULL, ' +
+    '`resourceUrl` TEXT, ' +
+    '`tag` TEXT, ' +
+    '`wordCount` TEXT, ' +
+    '`start` INTEGER, ' +
+    '`end` INTEGER, ' +
+    '`startFragmentId` TEXT, ' +
+    '`endFragmentId` TEXT, ' +
+    '`variable` TEXT, ' +
+    '`reviewImg` TEXT, ' +
+    'PRIMARY KEY(`url`, `bookUrl`), ' +
+    'FOREIGN KEY(`bookUrl`) REFERENCES `books`(`bookUrl`) ON UPDATE NO ACTION ON DELETE CASCADE' +
+    ')';
+
+  static readonly createChaptersIndexBookUrl: string =
+    'CREATE INDEX IF NOT EXISTS `index_chapters_bookUrl` ON `chapters` (`bookUrl`)';
+
+  static readonly createChaptersIndexBookUrlIndex: string =
+    'CREATE UNIQUE INDEX IF NOT EXISTS `index_chapters_bookUrl_index` ON `chapters` (`bookUrl`, `index`)';
+
+  /**
+   * readRecord：上游 ReadRecord.kt，主键 (deviceId, bookName, bookAuthor)。
+   * deviceId 本地恒为空串（上游 Restore.kt 的 LOCAL_READ_RECORD_DEVICE_ID = ""）。
+   */
+  static readonly createReadRecord: string =
+    'CREATE TABLE IF NOT EXISTS `readRecord` (' +
+    '`deviceId` TEXT NOT NULL, ' +
+    '`bookName` TEXT NOT NULL, ' +
+    "`bookAuthor` TEXT NOT NULL DEFAULT '', " +
+    '`readTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`lastRead` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`deviceId`, `bookName`, `bookAuthor`)' +
+    ')';
+
+  /** readRecordDetail：上游 ReadRecordDetail.kt，主键 (deviceId, bookName, bookAuthor, date)。 */
+  static readonly createReadRecordDetail: string =
+    'CREATE TABLE IF NOT EXISTS `readRecordDetail` (' +
+    '`deviceId` TEXT NOT NULL, ' +
+    '`bookName` TEXT NOT NULL, ' +
+    "`bookAuthor` TEXT NOT NULL DEFAULT '', " +
+    '`date` TEXT NOT NULL, ' +
+    '`readTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`readWords` INTEGER NOT NULL DEFAULT 0, ' +
+    '`firstReadTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`lastReadTime` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`deviceId`, `bookName`, `bookAuthor`, `date`)' +
+    ')';
+
+  /**
+   * readRecordSession：上游 ReadRecordSession.kt，主键 id 自增。
+   * words 列名是上游原样：它存的是本次阅读所在的章节序号，不是字数。
+   */
+  static readonly createReadRecordSession: string =
+    'CREATE TABLE IF NOT EXISTS `readRecordSession` (' +
+    '`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, ' +
+    '`deviceId` TEXT NOT NULL, ' +
+    '`bookName` TEXT NOT NULL, ' +
+    "`bookAuthor` TEXT NOT NULL DEFAULT '', " +
+    "`bookUrl` TEXT NOT NULL DEFAULT '', " +
+    '`startTime` INTEGER NOT NULL, ' +
+    '`endTime` INTEGER NOT NULL, ' +
+    '`words` INTEGER NOT NULL' +
+    ')';
+
   /** 全部建表语句，按依赖顺序排列。 */
   private static readonly allStatements: string[] = [
     RdbSchema.createBookmarks,
@@ -231,7 +363,17 @@ export class RdbSchema {
     RdbSchema.createBookContentProcesses,
     RdbSchema.createBookContentProcessesIndex1,
     RdbSchema.createBookContentProcessesIndex2,
-    RdbSchema.createBookContentProcessesIndex3
+    RdbSchema.createBookContentProcessesIndex3,
+    // 第三批：books 必须在 chapters 之前，chapters 的外键指向 books
+    RdbSchema.createBooks,
+    RdbSchema.createBooksIndexNameAuthor,
+    RdbSchema.createBooksIndexDurChapterTime,
+    RdbSchema.createChapters,
+    RdbSchema.createChaptersIndexBookUrl,
+    RdbSchema.createChaptersIndexBookUrlIndex,
+    RdbSchema.createReadRecord,
+    RdbSchema.createReadRecordDetail,
+    RdbSchema.createReadRecordSession
   ];
 
   /**
