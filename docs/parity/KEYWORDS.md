@@ -49,7 +49,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 | 类别键名 | 上游检索关键词（ERE） | 命中数 | 上游开关 | 本地键组 |
 | --- | --- | --- | --- | --- |
-| `readConfig` | `backupIgnoreReadConfig` | — | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
+| `readConfig` | `ReadBookConfig\|ReadSettings` | 76 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
 | `themeConfig` | `backupIgnoreThemeConfig` | — | `backupIgnoreThemeConfig` | `themeConfig` |
 | `coverConfig` | `backupIgnoreCoverConfig` | — | `backupIgnoreCoverConfig` | `coverConfig` |
 | `themeMode` | `themeMode` | 32 | 无独立开关 | `themeMode` |
@@ -57,6 +57,8 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 | `showRss` | `showRss` | 12 | 无独立开关 | `showRss` |
 | `threadCount` | `threadCount` | 23 | 无独立开关 | `threadCount` |
 | `mangaConfig` | `mangaConfig\|comicStyleSelect` | 6 | 无独立开关 | `mangaConfig` |
+
+**`readConfig` 的关键词不能用开关名**。上游的 `backupIgnoreReadConfig` 只命中 2 个 `.kt`（含 `help/storage/BackupConfig.kt`），拿它当接触面等于「2 个文件全过」，覆盖证明永远自证成功。该类真正的接触面是两份配置声明：`help/config/ReadBookConfig.kt`（单本书可覆盖）与 `domain/model/settings/ReadSettings.kt`（全书统一设置，114 字段），合计声明 267 个名字，`ReadBookConfig|ReadSettings` 命中 76 个文件。`backupIgnoreReadConfig` 仍作为**忽略项开关**记录在「上游开关」列，与检索关键词不是一回事。
 
 盘这八类时，把 `BackupConfig.kt` 与 `AppConfigStore` 的键定义当作接触面入口。前三个类别的上游开关是布尔项，关键词本身就是开关名；后五个没有独立开关，关键词是偏好键名。
 
