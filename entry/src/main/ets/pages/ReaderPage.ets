@@ -205,6 +205,13 @@ export struct ReaderPage {
    * 判定口径照 ReaderColumnMode.kt 的 columnCount()（'1' 对滚动模式也生效）。
    */
   @Prop @Watch('onPaginationInputsChanged') doubleHorizontalPage: string = '0';
+
+  /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
+  @Prop dayNightReminderText: string = '';
+  /** 点「切换到深色/浅色模式」。 */
+  onAcceptDayNightReminder: () => void = () => {};
+  /** 点「关闭」，本会话不再提示这一类。 */
+  onDismissDayNightReminder: () => void = () => {};
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）；空串沿用内置顺序。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop noAnimScrollPage: boolean = false;
@@ -2477,6 +2484,34 @@ export struct ReaderPage {
   // 分页正文统一由这些自绘线表达「正文下划线」，Text.decoration 只留给划线/高亮规则。
   // 必须自绘：ArkUI 的 TextDecorationStyle 不开放虚线段长、间隔与竖直偏移，上游这四项无法用装饰表达。
   // 每条 Line 都与本层同尺寸，坐标按整层计，于是可以直接用页级 y 定位到各自行底。
+  /**
+   * 环境光日夜提醒胶囊，对齐上游 `ReadBookFloatingActionBar.ThemeReminderCapsule`：
+   * 底部一条带「切换到深色/浅色模式」与「关闭」两个按钮的胶囊，5 秒后由 Index 侧定时关掉。
+   */
+  @Builder
+  private ReaderDayNightReminderCapsule() {
+    Row({ space: 8 }) {
+      Row() {
+        Text(this.dayNightReminderText).fontSize(13).fontColor('#101116')
+      }
+      .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+      .backgroundColor('#C6D3FF')
+      .borderRadius(18)
+      .onClick(() => this.onAcceptDayNightReminder())
+
+      Row() {
+        Text('关闭').fontSize(13).fontColor('#D9DAE0')
+      }
+      .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+      .backgroundColor('#2A2B33')
+      .borderRadius(18)
+      .onClick(() => this.onDismissDayNightReminder())
+    }
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+    .backgroundColor('#E6242127')
+    .borderRadius(20)
+  }
+
   @Builder
   private ReaderUnderlineLayer(uniform: boolean, column: number = 0) {
     if (this.underline) {
@@ -4045,6 +4080,25 @@ export struct ReaderPage {
         .backgroundColor('#FF000000')
         .onClick(() => {})
         .zIndex(1000)
+      }
+
+      // 环境光日夜提醒：贴底居中、底距 88vp，与上游 ReadBookFloatingActionBar 一致；
+      // 阅读菜单展开时不显示（上游 `takeIf { !state.menuVisible }`）。
+      if (this.dayNightReminderText.length > 0 && !this.controlsVisible) {
+        Column() {
+          Blank()
+          Row() {
+            this.ReaderDayNightReminderCapsule()
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
+          .padding({ bottom: 88 })
+        }
+        .width('100%')
+        .height('100%')
+        // 用 Default 而不是 Transparent：胶囊本身要吃掉点击，否则会穿透到正文。
+        .hitTestBehavior(HitTestMode.Default)
+        .zIndex(900)
       }
     }
     .width('100%')

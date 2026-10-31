@@ -188,6 +188,8 @@ export struct ReaderSettingsPage {
   @Prop showSelectMenuIcon: boolean = true;
   /** 横屏双页档位，对齐上游 doubleHorizontalPage（ReadSettings.kt:26），四档 '0'..'3'。 */
   @Prop doubleHorizontalPage: string = '0';
+  /** 环境光日夜提醒开关；上游 `autoSuggestDayNight`（`ReadSettings.kt:43`）。 */
+  @Prop autoSuggestDayNight: boolean = false;
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -336,6 +338,7 @@ export struct ReaderSettingsPage {
   onExpandTextMenuChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onShowSelectMenuIconChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onDoubleHorizontalPageChange: (value: string) => void = (_value: string) => {};
+  onAutoSuggestDayNightChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -1132,7 +1135,7 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onSelectVibratorChange(enabled) })
           MenuSettingSwitch({ title: '自动切换书源', detail: '当前书源失效时尝试其它书源', checked: false }).onClick(() => this.showNotMigrated('自动切换书源'))
           MenuSettingSwitch({ title: '换源结果应用于全部书籍', detail: '同步更新其它书籍的书源', checked: false }).onClick(() => this.showNotMigrated('换源结果应用于全部书籍'))
-          MenuSettingSwitch({ title: '自动切换日夜模式提醒', detail: '提示切换阅读背景', checked: false }).onClick(() => this.showNotMigrated('自动切换日夜模式提醒'))
+          MenuSettingSwitch({ title: '自动切换日夜模式提醒', detail: '根据环境光提醒切换浅色/深色模式', checked: this.autoSuggestDayNight, onChange: (enabled: boolean) => this.onAutoSuggestDayNightChange(enabled) })
           MenuSettingSwitch({ title: '阅读位置锚点', detail: '跳转章节两次及以上后可返回原阅读位置', checked: this.readingAnchorEnabled,
             onChange: (enabled: boolean) => this.onReadingAnchorEnabledChange(enabled) })
           MenuSettingSwitch({ title: '朗读悬浮窗分离提醒', detail: '分离朗读控制时显示提醒', checked: true }).onClick(() => this.showNotMigrated('朗读悬浮窗分离提醒'))

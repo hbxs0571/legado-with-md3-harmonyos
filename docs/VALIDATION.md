@@ -305,6 +305,27 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-A6 自动切换日夜模式提醒（弹出与自动消失通过，按钮点击未验）
+
+10. **设备与构建**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832），包名 `io.legado.harmony`。`assembleHap` → `BUILD SUCCESSFUL in 31 s 589 ms`（33 任务，17 执行 / 16 最新），`hdc install -r` → `install bundle successfully`。
+
+11. **上游口径核对**：`ReadSettings.kt:43` `autoSuggestDayNight: Boolean = false`；`PreferKey.kt:120` 键名同名；采集在 `ReadBookRouteScreen.kt:1089-1138`（`repeatOnLifecycle(RESUMED)` + `TYPE_LIGHT` + `SENSOR_DELAY_NORMAL` + 首帧 `delay(1.seconds)` + 循环 `delay(15.minutes)`）；判定在 `ReadStyleDelegate.kt:503-555`（`DARK_LUX_THRESHOLD = 8f`、`BRIGHT_LUX_THRESHOLD = 100f`、`LIGHT_LUMINANCE_THRESHOLD = 0.35`、`REMINDER_COOLDOWN_MS = 10 * 60 * 1000L`）；胶囊在 `ReadBookFloatingActionBar.kt:122-156`（贴底居中、`padding(bottom = 88.dp)`、`LaunchedEffect` 5 秒自动消失、切换/关闭两个 `MediumTonalButton`）。
+
+12. **环境光传感器在模拟器上真实存在（决定性）**：`hdc shell "hidumper -s SensorService -a '-l'"` 输出含 `sensorType:AMBIENT LIGHT |sensorId:5 |sensorName:light |vendorName:Taos |maxRange:10000`；应用订阅后 `hdc shell "hidumper -s SensorService -a '-o'"` 输出含 `AMBIENT LIGHT |sensorId:5 |channelSize:1`。这条证据直接作废了 KNOWN-ISSUES 里原先「本轮不做」的判断。
+
+13. **设置项上屏**：设置 → 阅读界面 → 更多 tab（`(1084,2629)`）下滚后读到「自动切换日夜模式提醒 / 根据环境光提醒切换浅色/深色模式」，`Toggle` 可点，点后偏好文件写出 `<bool key="autoSuggestDayNight" value="true"/>`。
+
+14. **胶囊弹出（决定性）**：用 `hdc file recv` 拉回 `legado_reader_settings` → 本地改 `autoSuggestDayNight=true`、`readerNightMode=false` → `hdc file send` 推回 → `aa force-stop` + `aa start` → 点书架「最近阅读」卡片 `(640,900)` 进阅读页，随后连续 4 轮 `uitest dumpLayout`：第 1、2 轮读到「当前环境光较暗，是否切换至深色模式？」（bounds `[114,2307][934,2360]`）与「关闭」（`[1074,2307][1166,2360]`），第 3、4 轮消失。**弹出与 5 秒自动消失都成立**（模拟器环境光恒为暗，`lux <= 8`，且当前背景是浅色，正好命中上游 `!isNight && lux <= 8` 分支）。
+
+15. **未验部分：胶囊按钮点击**。多次尝试 `uitest uiInput click` 命中「切换」与「关闭」的坐标（`(640,2333)`、`(520,2333)`、`(524,2333)`、`(500,2333)`），偏好文件里的 `readerNightMode` 始终未变；加 `hilog` 埋点（tag `KI-A6`，`checkReaderDayNightReminder` / `acceptReaderDayNightReminder` / `dismissReaderDayNightReminder` 三处）后重装重跑，`hdc shell "hilog -x"` 抓 6445 行也没有一条 `KI-A6`，说明点击根本没走到处理函数（不是埋点位置问题）。根因是这条链路在当前模拟器上不可达：**没有一本正文可读的书**——本地书正文文件已丢失（`find /data/app/el2/100/base/io.legado.harmony -name '*1793348394426*'` 无结果），点书架卡片只进「缺正文」详情页，点详情页的「阅读」入口（`(1028,2618)` `Row`）也停在详情页；停不住阅读页就无法在胶囊出现的 5 秒窗口内完成「确认位置 + 点击」。这与 KI-D2/KI-D6 记录的手势限制同源。代码侧已保证 `hitTestBehavior(HitTestMode.Default)` + `zIndex(900)`，`acceptReaderDayNightReminder()` 直接调 `toggleReaderNightMode()`。
+
+16. **调试埋点已移除**：排查用的三处 `hilog.info` 与 `import { hilog }` 在最终构建前删除，`grep -c hilog entry/src/main/ets/pages/Index.ets` = 0，删除后重新构建通过（`BUILD SUCCESSFUL in 25 s 357 ms`）。
+
+17. **测试期改动已复原**：`readerNightMode=true`、`autoSuggestDayNight=false`（均为出厂值）。
+
+18. **结论只代表 N 端模拟器**：真机上环境光会随时间变化，提醒的触发条件（`lux <= 8` / `lux >= 100`）与背景亮度判断需要在实机上复验；本轮只证明了「订阅 → 判定 → 弹出 → 5 秒消失」这条链路是通的。
+
+
 ## 2026-10-31 N 端 KI-D2 选中文字菜单三项（面板与落库通过，阅读页菜单渲染未验）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 22 s 184 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。

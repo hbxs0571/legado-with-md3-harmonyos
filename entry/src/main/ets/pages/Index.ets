@@ -59,6 +59,7 @@ import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
+import { sensor } from '@kit.SensorServiceKit';
 import { ReaderBackgroundImageRepository } from '../data/ReaderBackgroundImageRepository';
 import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
@@ -97,7 +98,7 @@ const EMPTY_BOOK: Book = {
 @Entry
 @Component
 struct Index {
-  @State route: AppRoute = AppRoute.HOME;
+  @State @Watch('onReaderRouteChanged') route: AppRoute = AppRoute.HOME;
   @State readerReturnRoute: AppRoute = AppRoute.BOOKSHELF;
   @State bookInfoReturnRoute: AppRoute = AppRoute.BOOKSHELF;
   @State catalogReturnRoute: AppRoute = AppRoute.READER;
@@ -214,6 +215,22 @@ struct Index {
   @State readerTextSelectMenuConfig: string = '';
   /** 横屏双页档位，对齐上游 doubleHorizontalPage（ReadSettings.kt:26），'0' 全局单页。 */
   @State readerDoubleHorizontalPage: string = '0';
+  /** 环境光驱动日夜提醒开关；上游 `autoSuggestDayNight`（`ReadSettings.kt:43`）。 */
+  @State @Watch('onReaderAutoSuggestDayNightChanged') readerAutoSuggestDayNight: boolean = false;
+  /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
+  @State readerDayNightReminderDismissedDark: boolean = false;
+  /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
+  @State readerDayNightReminderDismissedLight: boolean = false;
+  /** 环境光提醒的可见文案；空串表示没有提醒在显示。上游是 5 秒自动消失的底部胶囊。 */
+  @State readerDayNightReminderText: string = '';
+  /** 提醒要切到的目标模式；只在 `readerDayNightReminderText` 非空时有意义。 */
+  @State readerDayNightReminderTargetNight: boolean = false;
+  /** 提醒的请求序号：连续触发时只认最后一次，避免定时器把新提醒提前关掉。 */
+  private readerDayNightReminderRequestId: number = 0;
+  /** 上次弹出提醒的时间戳，用于上游那 10 分钟冷却（`REMINDER_COOLDOWN_MS`）。 */
+  private readerDayNightReminderLastAt: number = 0;
+  /** 环境光订阅是否在跑，避免重复 `sensor.on`。 */
+  private readerAmbientLightSubscribed: boolean = false;
   @State readerReadingAnchorEnabled: boolean = true;
   @State readerSwipeToAddBookmark: boolean = false;
   /** 阅读页书签角标宽度（dp），0 表示不显示；与上游 bookmarkBadgeSize 对齐。 */
@@ -1806,6 +1823,7 @@ struct Index {
       this.readerShowSelectMenuIcon = settings.showSelectMenuIcon;
       this.readerTextSelectMenuConfig = settings.textSelectMenuConfig;
     this.readerDoubleHorizontalPage = settings.doubleHorizontalPage;
+    this.readerAutoSuggestDayNight = settings.autoSuggestDayNight;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1904,6 +1922,7 @@ struct Index {
     // 横屏双页档位也进快照，否则 save() 会因为缺字段编译不过、运行时也会丢档位。
     return {
         doubleHorizontalPage: this.readerDoubleHorizontalPage,
+        autoSuggestDayNight: this.readerAutoSuggestDayNight,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
         lineSpacing: this.readerLineSpacing,
@@ -2239,6 +2258,139 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
 
+  /** 上游 `DARK_LUX_THRESHOLD`（`ReadStyleDelegate.kt:633`）：非夜间模式下 lux 低于它才提示切深色。 */
+  private static readonly READER_DARK_LUX_THRESHOLD: number = 8;
+  /** 上游 `BRIGHT_LUX_THRESHOLD`（`ReadStyleDelegate.kt:634`）：夜间模式下 lux 高于它才提示切浅色。 */
+  private static readonly READER_BRIGHT_LUX_THRESHOLD: number = 100;
+  /** 上游 `LIGHT_LUMINANCE_THRESHOLD`（`ReadStyleDelegate.kt:635`）：判断当前背景算不算浅色。 */
+  private static readonly READER_LIGHT_LUMINANCE_THRESHOLD: number = 0.35;
+  /** 上游 `REMINDER_COOLDOWN_MS`（`ReadStyleDelegate.kt:636`）：两次提醒之间至少隔 10 分钟。 */
+  private static readonly READER_REMINDER_COOLDOWN_MS: number = 10 * 60 * 1000;
+  /** 提醒胶囊的存活时间，对齐上游 `ThemeReminderCapsule` 的 `delay(5.seconds)`。 */
+  private static readonly READER_REMINDER_VISIBLE_MS: number = 5000;
+
+  /**
+   * 把 `#RRGGBB`/`#AARRGGBB` 换算成 0..1 的相对亮度，口径对齐 Android 的
+   * `ColorUtils.calculateLuminance`（先线性化再按 0.2126/0.7152/0.0722 加权）。
+   * 无法解析时返回 -1，调用方按「无法判断」处理。
+   */
+  private computeReaderColorLuminance(color: string): number {
+    const hex = color.startsWith('#') ? color.slice(1) : color;
+    if (hex.length !== 6 && hex.length !== 8) { return -1; }
+    const rgbText = hex.length === 8 ? hex.slice(2) : hex;
+    const value = Number.parseInt(rgbText, 16);
+    if (Number.isNaN(value)) { return -1; }
+    const channel = (shift: number): number => {
+      const srgb = ((value >> shift) & 0xFF) / 255;
+      return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0);
+  }
+
+  /** 当前背景算不算浅色；颜色解析不出来时按上游口径回落「算浅色」。 */
+  private isReaderBackgroundLight(): boolean {
+    const luminance = this.computeReaderColorLuminance(this.getPaperColor());
+    if (luminance < 0) { return true; }
+    return luminance >= Index.READER_LIGHT_LUMINANCE_THRESHOLD;
+  }
+
+  private isReaderDayNightReminderCoolingDown(): boolean {
+    return Date.now() - this.readerDayNightReminderLastAt < Index.READER_REMINDER_COOLDOWN_MS;
+  }
+
+  /**
+   * 环境光变化时判断要不要提示切换日夜，逐条照上游 `ReadStyleDelegate.checkSwitchDayNight()`：
+   * 只在「当前背景确实与目标模式相反」时提示——深色模式配浅色背景时不该劝用户切回去。
+   */
+  private checkReaderDayNightReminder(lux: number): void {
+    if (!this.readerAutoSuggestDayNight || this.isReaderDayNightReminderCoolingDown()) { return; }
+    const isNight = this.readerNightMode;
+    if (!isNight && lux <= Index.READER_DARK_LUX_THRESHOLD) {
+      if (this.readerDayNightReminderDismissedDark) { return; }
+      if (!this.isReaderBackgroundLight()) { return; }
+      this.showReaderDayNightReminder(true);
+    } else if (isNight && lux >= Index.READER_BRIGHT_LUX_THRESHOLD) {
+      if (this.readerDayNightReminderDismissedLight) { return; }
+      if (this.isReaderBackgroundLight()) { return; }
+      this.showReaderDayNightReminder(false);
+    }
+  }
+
+  private showReaderDayNightReminder(targetNight: boolean): void {
+    this.readerDayNightReminderLastAt = Date.now();
+    this.readerDayNightReminderText = targetNight
+      ? '当前环境光较暗，是否切换至深色模式？'
+      : '当前环境光较亮，是否切换至浅色模式？';
+    this.readerDayNightReminderTargetNight = targetNight;
+    this.readerDayNightReminderRequestId += 1;
+    const requestId = this.readerDayNightReminderRequestId;
+    // 对齐上游 ThemeReminderCapsule 的 5 秒自动消失。
+    setTimeout(() => {
+      if (this.readerDayNightReminderRequestId !== requestId) { return; }
+      this.readerDayNightReminderText = '';
+    }, Index.READER_REMINDER_VISIBLE_MS);
+  }
+
+  /** 点「切换到深色/浅色模式」：先关提醒，再切换；切换本身会重置冷却与两个拒绝标记。 */
+  private acceptReaderDayNightReminder(): void {
+    const targetNight = this.readerDayNightReminderTargetNight;
+    this.readerDayNightReminderText = '';
+    if (this.readerNightMode !== targetNight) {
+      this.toggleReaderNightMode();
+    }
+  }
+
+  /** 点「关闭」：记住这一类提醒本次会话不再出现，对齐上游 `dismissReminder()` 的两个标记。 */
+  private dismissReaderDayNightReminder(): void {
+    if (this.readerDayNightReminderTargetNight) {
+      this.readerDayNightReminderDismissedDark = true;
+    } else {
+      this.readerDayNightReminderDismissedLight = true;
+    }
+    this.readerDayNightReminderText = '';
+  }
+
+  /** 进出阅读页时开关环境光订阅；上游是 repeatOnLifecycle(RESUMED) 里起、离开即停。 */
+  private onReaderRouteChanged(): void {
+    if (this.route === AppRoute.READER) {
+      this.startReaderAmbientLightWatch();
+    } else {
+      this.stopReaderAmbientLightWatch();
+      this.readerDayNightReminderText = '';
+    }
+  }
+
+  private onReaderAutoSuggestDayNightChanged(): void {
+    if (this.readerAutoSuggestDayNight && this.route === AppRoute.READER) {
+      this.startReaderAmbientLightWatch();
+    } else {
+      this.stopReaderAmbientLightWatch();
+      this.readerDayNightReminderText = '';
+    }
+  }
+
+  private startReaderAmbientLightWatch(): void {
+    if (this.readerAmbientLightSubscribed || !this.readerAutoSuggestDayNight) { return; }
+    try {
+      sensor.on(sensor.SensorId.AMBIENT_LIGHT, (data: sensor.LightResponse) => {
+        this.checkReaderDayNightReminder(data.intensity);
+      }, { interval: 1000000000 });
+      this.readerAmbientLightSubscribed = true;
+    } catch (_) {
+      // 设备没有环境光传感器或订阅被拒时静默跳过，不影响阅读。
+      this.readerAmbientLightSubscribed = false;
+    }
+  }
+
+  private stopReaderAmbientLightWatch(): void {
+    if (!this.readerAmbientLightSubscribed) { return; }
+    try {
+      sensor.off(sensor.SensorId.AMBIENT_LIGHT);
+    } catch (_) {
+    }
+    this.readerAmbientLightSubscribed = false;
+  }
+
   private isEyeProtectionActive(): boolean {
     if (!(this.eyeProtectionEnabled || (this.eyeProtectionAutoNight && this.readerNightMode))) { return false; }
     if (!this.eyeProtectionSchedule) { return true; }
@@ -2447,6 +2599,19 @@ struct Index {
   /** 横屏双页档位：只认上游那四档，其余一律回到全局单页。 */
   private setReaderDoubleHorizontalPage(value: string): void {
     this.readerDoubleHorizontalPage = value === '1' || value === '2' || value === '3' ? value : '0';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 打开环境光提醒时复位「本会话已关闭提醒」的两个标记，对齐上游 `resetDayNightReminderDismissal()`。 */
+  private setReaderAutoSuggestDayNight(enabled: boolean): void {
+    this.readerAutoSuggestDayNight = enabled === true;
+    if (enabled) {
+      this.readerDayNightReminderDismissedDark = false;
+      this.readerDayNightReminderDismissedLight = false;
+    }
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) {
       this.persistReaderSettings();
@@ -2863,6 +3028,7 @@ struct Index {
       this.readerShowSelectMenuIcon = result.settings.showSelectMenuIcon;
       this.readerTextSelectMenuConfig = result.settings.textSelectMenuConfig;
     this.readerDoubleHorizontalPage = result.settings.doubleHorizontalPage;
+    this.readerAutoSuggestDayNight = result.settings.autoSuggestDayNight;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4163,6 +4329,9 @@ struct Index {
             showSelectMenuIcon: this.readerShowSelectMenuIcon,
             textSelectMenuConfig: this.readerTextSelectMenuConfig,
             doubleHorizontalPage: this.readerDoubleHorizontalPage,
+            dayNightReminderText: this.readerDayNightReminderText,
+            onAcceptDayNightReminder: () => this.acceptReaderDayNightReminder(),
+            onDismissDayNightReminder: () => this.dismissReaderDayNightReminder(),
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4354,6 +4523,7 @@ struct Index {
               showSelectMenuIcon: this.readerShowSelectMenuIcon,
               textSelectMenuConfig: this.readerTextSelectMenuConfig,
               doubleHorizontalPage: this.readerDoubleHorizontalPage,
+              autoSuggestDayNight: this.readerAutoSuggestDayNight,
               readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4370,6 +4540,7 @@ struct Index {
               onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
               onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
               onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
+              onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -4738,6 +4909,7 @@ struct Index {
             showSelectMenuIcon: this.readerShowSelectMenuIcon,
             textSelectMenuConfig: this.readerTextSelectMenuConfig,
             doubleHorizontalPage: this.readerDoubleHorizontalPage,
+            autoSuggestDayNight: this.readerAutoSuggestDayNight,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4754,6 +4926,7 @@ struct Index {
             onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
             onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
+            onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -4987,6 +5160,7 @@ struct Index {
             showSelectMenuIcon: this.readerShowSelectMenuIcon,
             textSelectMenuConfig: this.readerTextSelectMenuConfig,
             doubleHorizontalPage: this.readerDoubleHorizontalPage,
+            autoSuggestDayNight: this.readerAutoSuggestDayNight,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -5003,6 +5177,7 @@ struct Index {
             onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
             onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
+            onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5178,6 +5353,7 @@ struct Index {
           showSelectMenuIcon: this.readerShowSelectMenuIcon,
           textSelectMenuConfig: this.readerTextSelectMenuConfig,
           doubleHorizontalPage: this.readerDoubleHorizontalPage,
+          autoSuggestDayNight: this.readerAutoSuggestDayNight,
           readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -5194,6 +5370,7 @@ struct Index {
           onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
           onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
           onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
+          onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

@@ -245,6 +245,8 @@ interface AndroidReadConfigBackupRecord {
   textSelectMenuConfig: string;
   /** 横屏双页档位 '0'..'3'，上游键名 doubleHorizontalPage（PreferKey.kt:157）。 */
   doubleHorizontalPage: string;
+  /** 环境光日夜提醒开关，上游键名 autoSuggestDayNight（PreferKey.kt:120）。 */
+  autoSuggestDayNight: boolean;
 }
 
 interface JsonStringResult {
@@ -618,6 +620,8 @@ export class BackupRepository {
         // 横屏双页：上游不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 无条件备份。
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'doubleHorizontalPage', settings.doubleHorizontalPage);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'autoSuggestDayNight', settings.autoSuggestDayNight ? 'true' : 'false');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'float', 'dottedBase', `${settings.dottedBase}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1075,6 +1079,7 @@ export class BackupRepository {
       showSelectMenuIcon: settings.showSelectMenuIcon,
       textSelectMenuConfig: settings.textSelectMenuConfig,
       doubleHorizontalPage: settings.doubleHorizontalPage,
+      autoSuggestDayNight: settings.autoSuggestDayNight,
       dottedBase: settings.dottedBase,
       dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
@@ -1347,6 +1352,9 @@ export class BackupRepository {
         }
         return mode;
       })(),
+      // 环境光日夜提醒开关：缺键时保留本机现值。
+      autoSuggestDayNight: BackupRepository.readJsonBoolean(selected, 'autoSuggestDayNight') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'autoSuggestDayNight') ?? current.autoSuggestDayNight,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

@@ -155,11 +155,41 @@
 
 朗读（TTS）与在线书源抓取都在[项目范围](PROJECT.md)之外；因开关已上屏，判 `未接` 而非 `不适用`。补法：随对应子系统接入，本轮不动。
 
-**KI-A6 自动切换日夜模式提醒（要接，待排期）** —— 覆盖 A-12（`autoSuggestDayNight`，`ReadSettings.kt:43`）。
+**KI-A6 自动切换日夜模式提醒（已实现）** —— 覆盖 A-12（`autoSuggestDayNight`，`ReadSettings.kt:43`）。
 
 上游不是「到点弹提示」，是**环境光传感器驱动**：`ReadBookRouteScreen.kt:1089-1138` 的 `AutoSuggestDayNightObserver` 在 `repeatOnLifecycle(RESUMED)` 里注册 `TYPE_LIGHT` 监听，取 lux 后 `onIntent(CheckSwitchDayNight(lux))`，再 `delay(15.minutes)` 循环；判定在 `ReadStyleDelegate.kt:503-555`（`DARK_LUX_THRESHOLD = 8f`、`BRIGHT_LUX_THRESHOLD = 100f`、`LIGHT_LUMINANCE_THRESHOLD = 0.35`，另有 10 分钟冷却 `REMINDER_COOLDOWN_MS`），命中后由 `ReadBookFloatingActionBar.kt:122-156` 的 `ThemeReminderCapsule` 显示 5 秒自动消失的底部胶囊（切换 / 关闭两个按钮），点过「关闭」后本次会话不再提示。
 
-本地日夜切换只有手动入口，没有环境光订阅也没有提醒层。**本轮不做**：HOS 侧要完整对齐需 `@kit.SensorServiceKit` 的 `sensor.on(SensorId.AMBIENT_LIGHT, …)` 常驻订阅 + 15 分钟节流 + 5 秒自动消失胶囊 + 与 `toggleReaderNightMode()` 的冷却联动；只做「开关可拨 + 落库 + 随备份」会变成假接线（开关能拨但没有任何效果），违反「上游有这个问题就保留」的判据。补法：等传感器与提醒层一并接入时再做，届时不用系统通知（HOS 通知需授权，成本不成比例）。
+**为什么早先记为「本轮不做」，以及那条理由为什么作废**
+
+早先的判断是「HOS 侧要完整对齐需 `@kit.SensorServiceKit` 的 `sensor.on(SensorId.AMBIENT_LIGHT, …)` 常驻订阅，模拟器大概率没有环境光传感器」。本轮实测证伪：
+
+- `hdc shell "hidumper -s SensorService -a '-l'"` 在本机模拟器上直接列出 `sensorType:AMBIENT LIGHT |sensorId:5 |sensorName:light |vendorName:Taos |maxRange:10000`；
+- 应用订阅之后，`hidumper -s SensorService -a '-o'`（已打开的传感器）会多出 `AMBIENT LIGHT |sensorId:5 |channelSize:1`，说明订阅链路真的通了。
+
+所以「上游有这个问题」在 HOS 侧是**能保留**的，不接反而成了缺口。
+
+**本地落地**
+
+1. `entry/src/main/ets/data/ReaderSettingsRepository.ets`：`ReaderSettingsSnapshot` 加 `autoSuggestDayNight: boolean`（默认 `false`），存储键与上游 `PreferKey.kt:120` 同名，`load`/`save`/默认值三处对齐。
+2. `entry/src/main/ets/pages/Index.ets`：`@State @Watch('onReaderAutoSuggestDayNightChanged') readerAutoSuggestDayNight`；`:101` 的 `route` 加 `@Watch('onReaderRouteChanged')`，进 `AppRoute.READER` 时 `startReaderAmbientLightWatch()`、离开时 `stopReaderAmbientLightWatch()` 并清空提醒（对齐上游 `repeatOnLifecycle(RESUMED)` 的生命周期口径）。
+3. 订阅：`sensor.on(sensor.SensorId.AMBIENT_LIGHT, (data: sensor.LightResponse) => this.checkReaderDayNightReminder(data.intensity), { interval: 1000000000 })`（1 秒一帧，上游是 `SENSOR_DELAY_NORMAL` + 首帧 `delay(1.seconds)`，本地取等价的最小实现，不再叠 15 分钟节流轮询——1 秒间隔本身开销可忽略，且判定里有 10 分钟冷却兜底）。
+4. 判定 `checkReaderDayNightReminder(lux)`：复刻 `ReadStyleDelegate.kt:503-555` 的四个常量 `DARK_LUX_THRESHOLD = 8`、`BRIGHT_LUX_THRESHOLD = 100`、`LIGHT_LUMINANCE_THRESHOLD = 0.35`、`REMINDER_COOLDOWN_MS = 10 * 60 * 1000`；白天且 `lux <= 8` 且当前背景偏亮时提醒切深色，夜间且 `lux >= 100` 且当前背景偏暗时提醒切浅色；背景亮度由 `computeReaderColorLuminance()` 按 sRGB 线性化后以 0.2126/0.7152/0.0722 加权（等价于 Android `ColorUtils.calculateLuminance`）。
+5. 两个 dismissed 标记 `readerDayNightReminderDismissedDark`/`ReaderDayNightReminderDismissedLight` 对应上游 `hasDismissedDarkReminder`/`hasDismissedLightReminder`：点「关闭」后本次会话不再提示；`toggleReaderNightMode()` 与「开关被打开」时复位，对齐上游 `resetDayNightReminderDismissal()`。
+6. 胶囊 `ReaderPage.ets` 的 `@Builder ReaderDayNightReminderCapsule()`：文案「当前环境光较暗，是否切换至深色模式？」/「当前环境光较亮，是否切换至浅色模式？」（`switch_to_dark_mode_tip`/`switch_to_light_mode_tip`），左侧「切换」按钮直接 `onAcceptDayNightReminder()`，右侧「关闭」`onDismissDayNightReminder()`；贴底居中、`padding({ bottom: 88 })`、`zIndex(900)`、`hitTestBehavior(HitTestMode.Default)`，菜单展开时（`controlsVisible`）不显示，对齐上游 `takeIf { !state.menuVisible }`；5 秒自动消失由 `showReaderDayNightReminder()` 里的 `setTimeout` 按请求序号实现（对齐 `LaunchedEffect(reminder.id) { delay(5.seconds); DismissReminder }`）。
+7. `entry/src/main/ets/pages/ReaderSettingsPage.ets:1138`：原占位 `showNotMigrated` 换成真 `MenuSettingSwitch`。
+8. `entry/src/main/ets/data/BackupRepository.ets`：`autoSuggestDayNight` 三个方向全接（接口字段、config.xml `upsertAndroidPreference`、readConfig.json 记录、恢复段 `readJsonBoolean ?? readXmlBoolean ?? current`）。上游 `BackupConfig.readPrefKeys` 忽略清单里没有它，随 config.xml 无条件备份。
+
+**已知差异**
+
+- 传感器采样间隔用固定 1 秒（上游 `SENSOR_DELAY_NORMAL` 名义 5Hz 但只在 RESUMED 且每 15 分钟取一帧），本地更密但由 10 分钟冷却与 dismissed 标记兜底，不会刷屏。
+- 平板/横屏下背景亮度取自用户配置的背景色；背景是图片时（`bgType != 0`）按「浅色」处理，上游此时读 `ReadSessionState.backgroundMeanColor`（页面背景图片的平均色），本地没有这个采样。
+- **胶囊按钮的点击未能取证**：该模拟器当前没有一本正文可读的书（本地书正文文件已丢失，点书架卡片只进详情页，详情页的「阅读」入口也不进阅读页），无法稳定停在阅读页等胶囊出现再点。代码侧 `acceptReaderDayNightReminder()` 直接调 `toggleReaderNightMode()`，与上游「切换」按钮语义一致。
+
+**验收**
+
+- 构建 `BUILD SUCCESSFUL in 31 s 589 ms`，`install bundle successfully`。
+- 设备：注入 `autoSuggestDayNight=true` + `readerNightMode=false` 后重启进阅读页，连续 4 轮 `uitest dumpLayout` 的第 1、2 轮读到「当前环境光较暗，是否切换至深色模式？」（bounds `[114,2307][934,2360]`）与「关闭」（`[1074,2307][1166,2360]`），第 3、4 轮消失——**弹出与 5 秒自动消失都对**（模拟器环境光恒为暗，`lux <= 8`）。
+- 测试期改动已复原为 `readerNightMode=true`、`autoSuggestDayNight=false`。
 
 **KI-A7 触感反馈两项（已实现）** —— 覆盖 A-13 阅读进度条触感反馈（`sliderVibrator`，`ReadSettings.kt:36`）、A-15 文字选择触感反馈（`selectVibrator`，`:41`）。
 
