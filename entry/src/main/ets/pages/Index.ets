@@ -281,6 +281,22 @@ struct Index {
   @State readerMenuAccentColor: string = '';
   /** 菜单强调色（夜间）；上游 readMenuAccentColorNight（ReadSettings.kt:84，默认 0）。 */
   @State readerMenuAccentColorNight: string = '';
+  /** 菜单栏边框宽度（0 表示不显示边框）；上游 readMenuBorderWidth（ReadSettings.kt:111，默认 1）夹 0–4。 */
+  @State readerMenuBorderWidth: number = 1;
+  /** 菜单栏边框颜色（日间）；上游 readMenuBorderColor（ReadSettings.kt:112，默认 0 未设置）。 */
+  @State readerMenuBorderColor: string = '';
+  /** 菜单栏边框颜色（夜间）；上游 readMenuBorderColorNight（ReadSettings.kt:113）。 */
+  @State readerMenuBorderColorNight: string = '';
+  /** 菜单模糊半径；上游 readMenuBlurRadius（ReadSettings.kt:105，默认 24）夹 0–32。 */
+  @State readerMenuBlurRadius: number = 24;
+  /** 菜单文字与图标颜色（日间）；上游 readMenuTextColor（ReadSettings.kt:86，默认 0 未设置）。 */
+  @State readerMenuTextColor: string = '';
+  /** 菜单文字与图标颜色（夜间）；上游 readMenuTextColorNight（ReadSettings.kt:87）。 */
+  @State readerMenuTextColorNight: string = '';
+  /** 菜单模糊层着色（日间）；上游 readMenuBlurColor（ReadSettings.kt:107，默认 0 未设置）。 */
+  @State readerMenuBlurColor: string = '';
+  /** 菜单模糊层着色（夜间）；上游 readMenuBlurColorNight（ReadSettings.kt:108）。 */
+  @State readerMenuBlurColorNight: string = '';
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1920,6 +1936,14 @@ struct Index {
     this.readerMenuContainerColorNight = settings.readMenuContainerColorNight;
     this.readerMenuAccentColor = settings.readMenuAccentColor;
     this.readerMenuAccentColorNight = settings.readMenuAccentColorNight;
+    this.readerMenuBorderWidth = settings.readMenuBorderWidth;
+    this.readerMenuBorderColor = settings.readMenuBorderColor;
+    this.readerMenuBorderColorNight = settings.readMenuBorderColorNight;
+    this.readerMenuBlurRadius = settings.readMenuBlurRadius;
+    this.readerMenuTextColor = settings.readMenuTextColor;
+    this.readerMenuTextColorNight = settings.readMenuTextColorNight;
+    this.readerMenuBlurColor = settings.readMenuBlurColor;
+    this.readerMenuBlurColorNight = settings.readMenuBlurColorNight;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -2050,6 +2074,14 @@ struct Index {
         readMenuContainerColorNight: this.readerMenuContainerColorNight,
         readMenuAccentColor: this.readerMenuAccentColor,
         readMenuAccentColorNight: this.readerMenuAccentColorNight,
+        readMenuBorderWidth: this.readerMenuBorderWidth,
+        readMenuBorderColor: this.readerMenuBorderColor,
+        readMenuBorderColorNight: this.readerMenuBorderColorNight,
+        readMenuBlurRadius: this.readerMenuBlurRadius,
+        readMenuTextColor: this.readerMenuTextColor,
+        readMenuTextColorNight: this.readerMenuTextColorNight,
+        readMenuBlurColor: this.readerMenuBlurColor,
+        readMenuBlurColorNight: this.readerMenuBlurColorNight,
         adaptSpecialStyle: this.readerAdaptSpecialStyle,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
@@ -3018,6 +3050,76 @@ struct Index {
     }
   }
 
+  private setReaderReadMenuBorderWidth(value: number): void {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    this.readerMenuBorderWidth = Math.max(0, Math.min(4, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBorderColor(value: string): void {
+    this.readerMenuBorderColor = typeof value === 'string' ? value : '';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBorderColorNight(value: string): void {
+    this.readerMenuBorderColorNight = typeof value === 'string' ? value : '';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBlurRadius(value: number): void {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    this.readerMenuBlurRadius = Math.max(0, Math.min(32, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuTextColor(value: string): void {
+    this.readerMenuTextColor = typeof value === 'string' ? value : '';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuTextColorNight(value: string): void {
+    this.readerMenuTextColorNight = typeof value === 'string' ? value : '';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBlurColor(value: string): void {
+    this.readerMenuBlurColor = typeof value === 'string' ? value : '';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBlurColorNight(value: string): void {
+    this.readerMenuBlurColorNight = typeof value === 'string' ? value : '';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -3461,6 +3563,14 @@ struct Index {
     this.readerMenuContainerColorNight = result.settings.readMenuContainerColorNight;
     this.readerMenuAccentColor = result.settings.readMenuAccentColor;
     this.readerMenuAccentColorNight = result.settings.readMenuAccentColorNight;
+    this.readerMenuBorderWidth = result.settings.readMenuBorderWidth;
+    this.readerMenuBorderColor = result.settings.readMenuBorderColor;
+    this.readerMenuBorderColorNight = result.settings.readMenuBorderColorNight;
+    this.readerMenuBlurRadius = result.settings.readMenuBlurRadius;
+    this.readerMenuTextColor = result.settings.readMenuTextColor;
+    this.readerMenuTextColorNight = result.settings.readMenuTextColorNight;
+    this.readerMenuBlurColor = result.settings.readMenuBlurColor;
+    this.readerMenuBlurColorNight = result.settings.readMenuBlurColorNight;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4795,6 +4905,14 @@ struct Index {
             readMenuContainerColorNight: this.readerMenuContainerColorNight,
             readMenuAccentColor: this.readerMenuAccentColor,
             readMenuAccentColorNight: this.readerMenuAccentColorNight,
+            readMenuBorderWidth: this.readerMenuBorderWidth,
+            readMenuBorderColor: this.readerMenuBorderColor,
+            readMenuBorderColorNight: this.readerMenuBorderColorNight,
+            readMenuBlurRadius: this.readerMenuBlurRadius,
+            readMenuTextColor: this.readerMenuTextColor,
+            readMenuTextColorNight: this.readerMenuTextColorNight,
+            readMenuBlurColor: this.readerMenuBlurColor,
+            readMenuBlurColorNight: this.readerMenuBlurColorNight,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -5039,6 +5157,14 @@ struct Index {
               readMenuContainerColorNight: this.readerMenuContainerColorNight,
               readMenuAccentColor: this.readerMenuAccentColor,
               readMenuAccentColorNight: this.readerMenuAccentColorNight,
+              readMenuBorderWidth: this.readerMenuBorderWidth,
+              readMenuBorderColor: this.readerMenuBorderColor,
+              readMenuBorderColorNight: this.readerMenuBorderColorNight,
+              readMenuBlurRadius: this.readerMenuBlurRadius,
+              readMenuTextColor: this.readerMenuTextColor,
+              readMenuTextColorNight: this.readerMenuTextColorNight,
+              readMenuBlurColor: this.readerMenuBlurColor,
+              readMenuBlurColorNight: this.readerMenuBlurColorNight,
               adaptSpecialStyle: this.readerAdaptSpecialStyle,
               onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
               onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5068,6 +5194,14 @@ struct Index {
               onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
               onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
               onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
+              onReadMenuBorderWidthChange: (value: number) => this.setReaderReadMenuBorderWidth(value),
+              onReadMenuBorderColorChange: (value: string) => this.setReaderReadMenuBorderColor(value),
+              onReadMenuBorderColorNightChange: (value: string) => this.setReaderReadMenuBorderColorNight(value),
+              onReadMenuBlurRadiusChange: (value: number) => this.setReaderReadMenuBlurRadius(value),
+              onReadMenuTextColorChange: (value: string) => this.setReaderReadMenuTextColor(value),
+              onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
+              onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
+              onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5489,6 +5623,14 @@ struct Index {
             readMenuContainerColorNight: this.readerMenuContainerColorNight,
             readMenuAccentColor: this.readerMenuAccentColor,
             readMenuAccentColorNight: this.readerMenuAccentColorNight,
+            readMenuBorderWidth: this.readerMenuBorderWidth,
+            readMenuBorderColor: this.readerMenuBorderColor,
+            readMenuBorderColorNight: this.readerMenuBorderColorNight,
+            readMenuBlurRadius: this.readerMenuBlurRadius,
+            readMenuTextColor: this.readerMenuTextColor,
+            readMenuTextColorNight: this.readerMenuTextColorNight,
+            readMenuBlurColor: this.readerMenuBlurColor,
+            readMenuBlurColorNight: this.readerMenuBlurColorNight,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5518,6 +5660,14 @@ struct Index {
             onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
             onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
             onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
+            onReadMenuBorderWidthChange: (value: number) => this.setReaderReadMenuBorderWidth(value),
+            onReadMenuBorderColorChange: (value: string) => this.setReaderReadMenuBorderColor(value),
+            onReadMenuBorderColorNightChange: (value: string) => this.setReaderReadMenuBorderColorNight(value),
+            onReadMenuBlurRadiusChange: (value: number) => this.setReaderReadMenuBlurRadius(value),
+            onReadMenuTextColorChange: (value: string) => this.setReaderReadMenuTextColor(value),
+            onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
+            onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
+            onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5804,6 +5954,14 @@ struct Index {
             readMenuContainerColorNight: this.readerMenuContainerColorNight,
             readMenuAccentColor: this.readerMenuAccentColor,
             readMenuAccentColorNight: this.readerMenuAccentColorNight,
+            readMenuBorderWidth: this.readerMenuBorderWidth,
+            readMenuBorderColor: this.readerMenuBorderColor,
+            readMenuBorderColorNight: this.readerMenuBorderColorNight,
+            readMenuBlurRadius: this.readerMenuBlurRadius,
+            readMenuTextColor: this.readerMenuTextColor,
+            readMenuTextColorNight: this.readerMenuTextColorNight,
+            readMenuBlurColor: this.readerMenuBlurColor,
+            readMenuBlurColorNight: this.readerMenuBlurColorNight,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5833,6 +5991,14 @@ struct Index {
             onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
             onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
             onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
+            onReadMenuBorderWidthChange: (value: number) => this.setReaderReadMenuBorderWidth(value),
+            onReadMenuBorderColorChange: (value: string) => this.setReaderReadMenuBorderColor(value),
+            onReadMenuBorderColorNightChange: (value: string) => this.setReaderReadMenuBorderColorNight(value),
+            onReadMenuBlurRadiusChange: (value: number) => this.setReaderReadMenuBlurRadius(value),
+            onReadMenuTextColorChange: (value: string) => this.setReaderReadMenuTextColor(value),
+            onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
+            onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
+            onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -6061,6 +6227,14 @@ struct Index {
           readMenuContainerColorNight: this.readerMenuContainerColorNight,
           readMenuAccentColor: this.readerMenuAccentColor,
           readMenuAccentColorNight: this.readerMenuAccentColorNight,
+          readMenuBorderWidth: this.readerMenuBorderWidth,
+          readMenuBorderColor: this.readerMenuBorderColor,
+          readMenuBorderColorNight: this.readerMenuBorderColorNight,
+          readMenuBlurRadius: this.readerMenuBlurRadius,
+          readMenuTextColor: this.readerMenuTextColor,
+          readMenuTextColorNight: this.readerMenuTextColorNight,
+          readMenuBlurColor: this.readerMenuBlurColor,
+          readMenuBlurColorNight: this.readerMenuBlurColorNight,
           adaptSpecialStyle: this.readerAdaptSpecialStyle,
           onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
           onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -6090,6 +6264,14 @@ struct Index {
           onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
           onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
           onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
+          onReadMenuBorderWidthChange: (value: number) => this.setReaderReadMenuBorderWidth(value),
+          onReadMenuBorderColorChange: (value: string) => this.setReaderReadMenuBorderColor(value),
+          onReadMenuBorderColorNightChange: (value: string) => this.setReaderReadMenuBorderColorNight(value),
+          onReadMenuBlurRadiusChange: (value: number) => this.setReaderReadMenuBlurRadius(value),
+          onReadMenuTextColorChange: (value: string) => this.setReaderReadMenuTextColor(value),
+          onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
+          onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
+          onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

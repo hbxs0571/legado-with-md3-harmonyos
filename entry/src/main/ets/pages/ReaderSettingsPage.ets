@@ -258,6 +258,22 @@ export struct ReaderSettingsPage {
   /** 菜单强调色，与「种子色」共用；上游 `readMenuAccentColor`/`Night`（`ReadSettings.kt:81`/`:84`）。 */
   @Prop readMenuAccentColor: string = '';
   @Prop readMenuAccentColorNight: string = '';
+  /** 菜单栏边框宽度 0–4，0 = 无边框（上游 readMenuBorderWidth，夹 0–4）。 */
+  @Prop readMenuBorderWidth: number = 1;
+  /** 菜单栏边框颜色（日间），空串 = 未设置（上游 readMenuBorderColor）。 */
+  @Prop readMenuBorderColor: string = '';
+  /** 菜单栏边框颜色（夜间）（上游 readMenuBorderColorNight）。 */
+  @Prop readMenuBorderColorNight: string = '';
+  /** 菜单模糊半径 0–32（上游 readMenuBlurRadius，默认 24）。 */
+  @Prop readMenuBlurRadius: number = 24;
+  /** 菜单文字与图标颜色（日间），空串 = 未设置（上游 readMenuTextColor）。 */
+  @Prop readMenuTextColor: string = '';
+  /** 菜单文字与图标颜色（夜间）（上游 readMenuTextColorNight）。 */
+  @Prop readMenuTextColorNight: string = '';
+  /** 菜单模糊层着色（日间），空串 = 未设置（上游 readMenuBlurColor）。 */
+  @Prop readMenuBlurColor: string = '';
+  /** 菜单模糊层着色（夜间）（上游 readMenuBlurColorNight）。 */
+  @Prop readMenuBlurColorNight: string = '';
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -306,7 +322,6 @@ export struct ReaderSettingsPage {
   private menuSettingsScroller: Scroller = new Scroller();
   // 工具栏样式 / 色板来源 / 调色板风格的选中态不再用本地 @State 假值承载，
   // 一律读 @Prop（readBarStyle / readMenuColorMode / readMenuPaletteStyle）的真值。
-  @State menuBorderEnabled: boolean = true;
   @State menuTitleIconsVisible: boolean = true;
 
   aboutToAppear(): void {
@@ -437,6 +452,14 @@ export struct ReaderSettingsPage {
   onReadMenuContainerColorNightChange: (value: string) => void = (_value: string) => {};
   onReadMenuAccentColorChange: (value: string) => void = (_value: string) => {};
   onReadMenuAccentColorNightChange: (value: string) => void = (_value: string) => {};
+  onReadMenuBorderWidthChange: (value: number) => void = (_value: number) => {};
+  onReadMenuBorderColorChange: (value: string) => void = (_value: string) => {};
+  onReadMenuBorderColorNightChange: (value: string) => void = (_value: string) => {};
+  onReadMenuBlurRadiusChange: (value: number) => void = (_value: number) => {};
+  onReadMenuTextColorChange: (value: string) => void = (_value: string) => {};
+  onReadMenuTextColorNightChange: (value: string) => void = (_value: string) => {};
+  onReadMenuBlurColorChange: (value: string) => void = (_value: string) => {};
+  onReadMenuBlurColorNightChange: (value: string) => void = (_value: string) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -817,7 +840,8 @@ export struct ReaderSettingsPage {
         title: entry.title,
         detail: entry.detail,
         checked: entry.title === '菜单栏边框'
-          ? this.menuBorderEnabled
+          // 上游开关本体就是 readMenuBorderWidth > 0（SystemMenuPage.kt:398），没有独立布尔字段。
+          ? this.readMenuBorderWidth > 0
           : entry.title === '显示标题栏图标'
             ? this.menuTitleIconsVisible
             : entry.title === '底栏悬浮'
@@ -841,7 +865,10 @@ export struct ReaderSettingsPage {
                             ? this.readMenuTopBarLiquidGlassButtons
                             : entry.title === '合并标题栏按钮' ? this.readMenuTopBarMergeButtons : false,
         onChange: (enabled: boolean) => {
-          if (entry.title === '菜单栏边框') { this.menuBorderEnabled = enabled; }
+          if (entry.title === '菜单栏边框') {
+            // 打开时给上游默认宽度 1，关闭时写 0（SystemMenuPage.kt:401-406 的 BorderWidth(if (it) 1 else 0)）。
+            this.onReadMenuBorderWidthChange(enabled ? 1 : 0);
+          }
           else if (entry.title === '显示标题栏图标') { this.menuTitleIconsVisible = enabled; }
           else if (entry.title === '底栏悬浮') { this.onReadMenuFloatingBottomBarChange(enabled); }
           else if (entry.title === '底栏模糊') {
@@ -874,6 +901,11 @@ export struct ReaderSettingsPage {
         onChange: (value: number) => {
           if (entry.title === '底栏圆角') { this.onReadMenuBottomCornerRadiusChange(value); }
           else if (entry.title === '底栏模糊透明度') { this.onReadMenuBlurAlphaChange(value); }
+          else if (entry.title === '菜单栏边框宽度') { this.onReadMenuBorderWidthChange(value); }
+          else if (entry.title === '菜单模糊半径') { this.onReadMenuBlurRadiusChange(value); }
+          // 上游只有 read_menu_blur_alpha 一个字段，菜单栏 tab 与底栏 tab 共用同一项（SystemMenuPage.kt:448-456），
+          // 因此这里与「底栏模糊透明度」写同一个回调。
+          else if (entry.title === '菜单模糊透明度') { this.onReadMenuBlurAlphaChange(value); }
           else { this.showNotMigrated(entry.title); }
         }
       })
@@ -950,6 +982,9 @@ export struct ReaderSettingsPage {
     // 已接的两项读真值，其余仍是被 KI-E1/E2 接管的占位值。
     if (title === '底栏模糊透明度') { return this.readMenuBlurAlpha; }
     if (title === '底栏圆角') { return this.readMenuBottomCornerRadius; }
+    if (title === '菜单栏边框宽度') { return this.readMenuBorderWidth; }
+    if (title === '菜单模糊半径') { return this.readMenuBlurRadius; }
+    if (title === '菜单模糊透明度') { return this.readMenuBlurAlpha; }
     if (title.includes('透明度')) { return 70; }
     if (title.includes('圆角')) { return 20; }
     if (title.includes('宽度')) { return 1; }
@@ -986,6 +1021,18 @@ export struct ReaderSettingsPage {
       if (night) { this.onReadMenuContainerColorNightChange(next); } else { this.onReadMenuContainerColorChange(next); }
       return;
     }
+    if (title === '菜单栏边框颜色') {
+      if (night) { this.onReadMenuBorderColorNightChange(next); } else { this.onReadMenuBorderColorChange(next); }
+      return;
+    }
+    if (title === '菜单文字颜色') {
+      if (night) { this.onReadMenuTextColorNightChange(next); } else { this.onReadMenuTextColorChange(next); }
+      return;
+    }
+    if (title === '菜单模糊颜色') {
+      if (night) { this.onReadMenuBlurColorNightChange(next); } else { this.onReadMenuBlurColorChange(next); }
+      return;
+    }
     if (night) { this.onReadMenuAccentColorNightChange(next); } else { this.onReadMenuAccentColorChange(next); }
   }
 
@@ -997,6 +1044,9 @@ export struct ReaderSettingsPage {
   private menuColorDay(title: string): string {
     if (title === '菜单背景颜色') { return this.readMenuBgColor; }
     if (title === '菜单容器颜色') { return this.readMenuContainerColor; }
+    if (title === '菜单栏边框颜色') { return this.readMenuBorderColor; }
+    if (title === '菜单文字颜色') { return this.readMenuTextColor; }
+    if (title === '菜单模糊颜色') { return this.readMenuBlurColor; }
     return this.readMenuAccentColor;
   }
 
@@ -1004,6 +1054,9 @@ export struct ReaderSettingsPage {
   private menuColorNight(title: string): string {
     if (title === '菜单背景颜色') { return this.readMenuBgColorNight; }
     if (title === '菜单容器颜色') { return this.readMenuContainerColorNight; }
+    if (title === '菜单栏边框颜色') { return this.readMenuBorderColorNight; }
+    if (title === '菜单文字颜色') { return this.readMenuTextColorNight; }
+    if (title === '菜单模糊颜色') { return this.readMenuBlurColorNight; }
     return this.readMenuAccentColorNight;
   }
 
@@ -1161,7 +1214,9 @@ export struct ReaderSettingsPage {
     if (title === '标题栏悬浮图标配置' || title === '标题栏悬浮图标位置' || title === '悬浮图标液态玻璃按钮') {
       return this.menuTitleIconsVisible;
     }
-    if (title === '菜单栏边框宽度' || title === '菜单栏边框颜色') { return this.menuBorderEnabled; }
+    // 上游 SystemMenuPage.kt:408-436 用 AnimatedVisibility(visible = borderEnabled) 包住宽度与颜色，
+    // borderEnabled 就是 readMenuBorderWidth > 0。
+    if (title === '菜单栏边框宽度' || title === '菜单栏边框颜色') { return this.readMenuBorderWidth > 0; }
     return true;
   }
 
@@ -1875,7 +1930,9 @@ export struct ReaderSettingsPage {
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
         Text(this.detailSheetDescription).fontSize(13).fontColor('#D3D4DC').width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
         if (this.detailSheetTitle === '种子色' || this.detailSheetTitle === '菜单背景颜色' ||
-          this.detailSheetTitle === '菜单容器颜色' || this.detailSheetTitle === '菜单强调颜色') {
+          this.detailSheetTitle === '菜单容器颜色' || this.detailSheetTitle === '菜单强调颜色' ||
+          this.detailSheetTitle === '菜单栏边框颜色' || this.detailSheetTitle === '菜单文字颜色' ||
+          this.detailSheetTitle === '菜单模糊颜色') {
           Scroll() {
             Column() {
               // 上游 SystemMenuPage.kt:308-368 的 TinyColorModeSettingItem 是「日间 + 夜间」双色点，
@@ -1895,7 +1952,8 @@ export struct ReaderSettingsPage {
                 onChange: (color: string) => this.applyMenuColor(this.detailSheetTitle, color, true)
               })
               Text('「种子色」与「菜单强调颜色」共用同一组字段（上游 readMenuAccentColor / Night）；' +
-                '菜单背景色、容器色未设置时回落到主题默认值。')
+                '菜单背景色、容器色未设置时回落到主题默认值，边框色回落描边默认色，' +
+                '文字色回落 onSurface，模糊色未设置时不影响底色。')
                 .fontSize(10).fontColor('#92949E').width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(360).scrollBar(BarState.Off)
@@ -2499,6 +2557,9 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '菜单背景颜色' ||
                 this.detailSheetTitle === '菜单容器颜色' ||
                 this.detailSheetTitle === '菜单强调颜色' ||
+                this.detailSheetTitle === '菜单栏边框颜色' ||
+                this.detailSheetTitle === '菜单文字颜色' ||
+                this.detailSheetTitle === '菜单模糊颜色' ||
                 this.detailSheetTitle === '显示模式' ||
                 this.detailSheetTitle === '正文排版' ||
                 this.detailInfoSlot !== undefined

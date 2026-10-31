@@ -392,6 +392,22 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   readMenuAccentColor: string;
   /** 菜单强调色（夜间）；上游 `readMenuAccentColorNight: Int = 0`（`ReadSettings.kt:84`）。 */
   readMenuAccentColorNight: string;
+  // 菜单栏边框宽度 0–4，0 表示不显示边框（上游 ReadSettings.kt:111 默认 1、ReadBookConfig.kt:115 夹 0–4）
+  readMenuBorderWidth: number;
+  // 菜单栏边框颜色日间值，空串表示未设置、回落到主题 outlineVariant（上游 ReadSettings.kt:112）
+  readMenuBorderColor: string;
+  // 菜单栏边框颜色夜间值（上游 ReadSettings.kt:113）
+  readMenuBorderColorNight: string;
+  // 菜单模糊半径 0–32（上游 ReadSettings.kt:105 默认 24、ReadBookConfig.kt:109 夹 0–32）
+  readMenuBlurRadius: number;
+  // 菜单文字与图标颜色日间值，空串表示未设置、回落到主题 onSurface（上游 ReadSettings.kt:86）
+  readMenuTextColor: string;
+  // 菜单文字与图标颜色夜间值（上游 ReadSettings.kt:87）
+  readMenuTextColorNight: string;
+  // 菜单模糊层着色日间值，空串表示未设置（上游 ReadSettings.kt:107）
+  readMenuBlurColor: string;
+  // 菜单模糊层着色夜间值（上游 ReadSettings.kt:108）
+  readMenuBlurColorNight: string;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -781,6 +797,15 @@ export class ReaderSettingsRepository {
       readMenuContainerColorNight: '',
       readMenuAccentColor: '',
       readMenuAccentColorNight: '',
+      // 边框与模糊七项默认值对齐上游 ReadSettings.kt:86-87/105/107-108/111-113。
+      readMenuBorderWidth: 1,
+      readMenuBorderColor: '',
+      readMenuBorderColorNight: '',
+      readMenuBlurRadius: 24,
+      readMenuTextColor: '',
+      readMenuTextColorNight: '',
+      readMenuBlurColor: '',
+      readMenuBlurColorNight: '',
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -936,6 +961,17 @@ export class ReaderSettingsRepository {
     const readMenuAccentColorValue = await store.get('readMenuAccentColor', defaults.readMenuAccentColor);
     const readMenuAccentColorNightValue =
       await store.get('readMenuAccentColorNight', defaults.readMenuAccentColorNight);
+    const readMenuBorderWidthValue = await store.get('readMenuBorderWidth', defaults.readMenuBorderWidth);
+    const readMenuBorderColorValue = await store.get('readMenuBorderColor', defaults.readMenuBorderColor);
+    const readMenuBorderColorNightValue =
+      await store.get('readMenuBorderColorNight', defaults.readMenuBorderColorNight);
+    const readMenuBlurRadiusValue = await store.get('readMenuBlurRadius', defaults.readMenuBlurRadius);
+    const readMenuTextColorValue = await store.get('readMenuTextColor', defaults.readMenuTextColor);
+    const readMenuTextColorNightValue =
+      await store.get('readMenuTextColorNight', defaults.readMenuTextColorNight);
+    const readMenuBlurColorValue = await store.get('readMenuBlurColor', defaults.readMenuBlurColor);
+    const readMenuBlurColorNightValue =
+      await store.get('readMenuBlurColorNight', defaults.readMenuBlurColorNight);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1262,6 +1298,14 @@ export class ReaderSettingsRepository {
             ReaderSettingsRepository.normalizeOptionalHexColor(readMenuContainerColorNightValue),
           readMenuAccentColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuAccentColorValue),
           readMenuAccentColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuAccentColorNightValue),
+          readMenuBorderWidth: ReaderSettingsRepository.normalizeInteger(readMenuBorderWidthValue, 0, 4, defaults.readMenuBorderWidth),
+          readMenuBorderColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBorderColorValue),
+          readMenuBorderColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBorderColorNightValue),
+          readMenuBlurRadius: ReaderSettingsRepository.normalizeInteger(readMenuBlurRadiusValue, 0, 32, defaults.readMenuBlurRadius),
+          readMenuTextColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuTextColorValue),
+          readMenuTextColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuTextColorNightValue),
+          readMenuBlurColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBlurColorValue),
+          readMenuBlurColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBlurColorNightValue),
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1465,6 +1509,22 @@ export class ReaderSettingsRepository {
         ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuAccentColor));
       await store.put('readMenuAccentColorNight',
         ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuAccentColorNight));
+      await store.put('readMenuBorderWidth',
+        Math.max(0, Math.min(4, Math.round(settings.readMenuBorderWidth))));
+      await store.put('readMenuBorderColor',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBorderColor));
+      await store.put('readMenuBorderColorNight',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBorderColorNight));
+      await store.put('readMenuBlurRadius',
+        Math.max(0, Math.min(32, Math.round(settings.readMenuBlurRadius))));
+      await store.put('readMenuTextColor',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuTextColor));
+      await store.put('readMenuTextColorNight',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuTextColorNight));
+      await store.put('readMenuBlurColor',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBlurColor));
+      await store.put('readMenuBlurColorNight',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBlurColorNight));
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));

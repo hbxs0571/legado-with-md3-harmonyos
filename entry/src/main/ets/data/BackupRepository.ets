@@ -1467,6 +1467,16 @@ export class BackupRepository {
       readMenuContainerColorNight: current.readMenuContainerColorNight,
       readMenuAccentColor: current.readMenuAccentColor,
       readMenuAccentColorNight: current.readMenuAccentColorNight,
+      // 边框与模糊七项（KI-E2）：上游 BackupConfig.kt:225-251 把这批键全部列进
+      // readPrefKeys 忽略清单，既不写 config.xml 也不进 readConfig.json，恢复一律保留本机现值。
+      readMenuBorderWidth: current.readMenuBorderWidth,
+      readMenuBorderColor: current.readMenuBorderColor,
+      readMenuBorderColorNight: current.readMenuBorderColorNight,
+      readMenuBlurRadius: current.readMenuBlurRadius,
+      readMenuTextColor: current.readMenuTextColor,
+      readMenuTextColorNight: current.readMenuTextColorNight,
+      readMenuBlurColor: current.readMenuBlurColor,
+      readMenuBlurColorNight: current.readMenuBlurColorNight,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

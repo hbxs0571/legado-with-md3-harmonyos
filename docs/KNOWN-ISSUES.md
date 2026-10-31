@@ -525,7 +525,37 @@
 **验收**：`assembleHap` BUILD SUCCESSFUL；设备（`127.0.0.1:5555`）实测三档可见性互斥（跟随阅读背景 / 自定义+自定义颜色 / 自定义+种子色，各有 `dumpLayout` 对照）；四个颜色项弹层可选色、再点同色可清除；「种子色」选 `#3D3D46` 后打开「菜单强调颜色」显示同一色号（共用字段的直接证据）；「调色板风格」十项下拉选「鲜艳」后副标题变「鲜艳」；`aa force-stop` 重启后八项全部跨进程保持。完整记录见 [VALIDATION](VALIDATION.md)。
 
 
-**KI-E2 边框与模糊七项（要接，随菜单渲染层）** —— 覆盖 E-10 菜单栏边框（`ReadBookConfig.kt:88`）、E-11 边框宽度（`:115`，夹 0–4）、E-12 边框颜色（`:88-89`）、E-13 模糊半径（`:109`，夹 0–32）、E-14 模糊透明度（`:110`，夹 0–100）、E-15 菜单文字颜色（`:90-91`）、E-16 菜单模糊颜色（`:111-112`）。这组依赖 ArkUI 的模糊/描边能力，需先做一次原型确认效果等价再上屏。
+**KI-E2 边框与模糊七项（已实现）** —— 覆盖 E-10 菜单栏边框（`ReadBookConfig.kt:88`）、E-11 边框宽度（`:115`，夹 0–4）、E-12 边框颜色（`:88-89`）、E-13 模糊半径（`:109`，夹 0–32）、E-14 模糊透明度（`:110`，夹 0–100）、E-15 菜单文字颜色（`:90-91`）、E-16 菜单模糊颜色（`:111-112`）。
+
+**上游口径**（`app/src/main/java/io/legado/app/ui/book/read/sheet/SystemMenuPage.kt` 的边框与「模糊和颜色」段 `:398-489`）：
+
+- **边框没有独立布尔字段**：`val borderEnabled = preferences.readMenuBorderWidth > 0`（`:398`），`TinySwitchSettingItem(R.string.read_menu_border)` 的 `checked = borderEnabled`、写回 `ConfigUpdate.BorderWidth(if (it) 1 else 0)`（`:399-406`）；宽度与颜色两项被 `AnimatedVisibility(visible = borderEnabled)` 包住（`:408`）。
+- 边框宽度 `TinySliderSettingItem(read_menu_border_width)`：`value = preferences.readMenuBorderWidth.coerceIn(1, 4)`、`valueRange = 1f..4f` → `ConfigUpdate.BorderWidth(it.toInt())`（`:411-425`）。
+- 边框颜色 `TinyClearColorModeSettingItem(read_menu_border_color)`：日/夜双色，`onClearColor` 写 `BorderColor(0)`/`BorderColorNight(0)`，`onClickColor` 弹 `COLOR_BORDER`/`COLOR_BORDER_NIGHT`（`:426-437`）。
+- 模糊半径 `TinySliderSettingItem(read_menu_blur_radius)`：`valueRange = 0f..32f`、`steps = 31` → `ConfigUpdate.MenuBlurRadius(it.toInt())`，`description = read_menu_blur_radius_summary`（「模糊半径越大，系统运行越卡顿」）（`:438-447`）。
+- 模糊透明度 `TinySliderSettingItem(read_menu_blur_alpha)`：`valueRange = 0f..100f`、`steps = 99` → `ConfigUpdate.MenuBlurAlpha(it.toInt())`（`:448-456`）。**该字段在「菜单栏」与「底栏布局」两个 tab 各出现一次，共用一个键**。
+- 菜单文字颜色 `TinyClearColorModeSettingItem(read_menu_text_color)`：支持清除（`:457-475`）。
+- 菜单模糊颜色 `TinyColorModeSettingItem(read_menu_blur_color)`：**没有 `onClearColor`，上游这一项不能清除**（`:476-489`）。
+- 夹取与默认：`ReadBookConfig.kt:109`（半径 0–32）、`:110`（透明度 0–100）、`:115`（宽度 0–4）；`ReadSettings.kt:105-113`（半径 24、透明度 85、宽度 1、四个颜色 0）。
+- **渲染口径**：`ReadBookMenuBarShared.kt:49-85` 的 `surfaceColor = readMenuTintColor(menuConfig) ?: colors.background` —— **模糊着色优先于整套底色推导**；`readMenuTintColor`（`:76-92`）夜/日取 `readMenuBlurColorNight`/`readMenuBlurColor`，都为 0 时返回 null；`readMenuBorderColor`（`:96-105`）为空时回落 `outlineVariant`；`readMenuTextColor`（`:107-115`）为空时回落 `onSurface`。边框走 `ReadBookMenuBarTitle.kt:433`/`:504-505`、`ReadBookMenuBar.kt:450`；模糊半径走 `ReadBookMenuBarTitle.kt:131`、`ReadBookMenuBar.kt:1027`。
+- **备份口径**：`help/storage/BackupConfig.kt:225-251` 把这批键全部列进 `readPrefKeys` 忽略清单，不随 config.xml 导出，恢复一律取本机现值。
+
+**本地落地**：
+
+- `entry/src/main/ets/data/ReaderSettingsRepository.ets`：接口 `:396-410`（八字段）、默认值 `:801-808`、`load()` `:964-974`、返回归一 `:1301-1303`、`save()` `:1512-1513`。宽度默认 1 夹 0–4、半径默认 24 夹 0–32、四个颜色用空串承载「未设置」。
+- `entry/src/main/ets/data/BackupRepository.ets`：恢复段 `:1472-1479` 八行全取 `current.xxx`（不读 json/xml）。
+- `entry/src/main/ets/pages/Index.ets`：八 `@State`（`readerMenuBorderWidth` 等）、装载、恢复、八个 setter、快照 prop、面板 prop 4 处、回调 4 处。
+- `entry/src/main/ets/pages/ReaderSettingsPage.ets`：条目行 `:2590`（菜单栏边框）/`:2591`（宽度）/`:2592`（边框颜色）/`:2594`（模糊半径）/`:2595`（模糊透明度）/`:2596`（文字颜色）/`:2597`（模糊颜色）；Toggle 读写 `readMenuBorderWidth > 0`；两个滑块接 `onReadMenuBorderWidthChange`/`onReadMenuBlurRadiusChange`；三个颜色项走双色点 + 配色弹层（`applyMenuColor` 再点同色即清除）；`菜单栏边框宽度`/`菜单栏边框颜色` 的可见性读 `readMenuBorderWidth > 0`（原先读的是假 `@State menuBorderEnabled`，本轮删掉）；**「菜单模糊透明度」滑块原先完全没接线**（`menuSettingsEntry()` 的 onChange 与 `menuSliderValue` 都没有这一项），补两行分支后与底栏共用 `readMenuBlurAlpha`。
+- `entry/src/main/ets/pages/ReaderPage.ets`：`@Prop` 八项；新增 `readerMenuTintColor()` `:1043`、`readerMenuBorderSettings(): BorderOptions` `:1067`（宽度 0 返回 `{ width: 0 }`）、`readerMenuBlurRadiusVp()` `:1080`；`readerMenuBaseColor()` 开头插「模糊着色优先」分支 `:1008`；`readerMenuForeground()` 改为优先 `readMenuTextColor(Night)`、空串才回落日夜反色；顶栏容器加 `.border(...)`/`.backdropBlur(...)` `:4272-4273`、底栏 `:4379-4380`。
+
+**已知差异**：
+
+1. 本地用 ArkUI 的静态 `backdropBlur(radius)`，没有上游 `hazeState` 的内容自适应模糊；实际效果是「半径固定 + 底色按 `readMenuBlurAlpha` 折算不透明度（上限 0.6）」，不是真高斯采样。
+2. `readMenuLensRadius`（`ReadBookConfig.kt:114`，夹 0–48）不在本轮七行内，本地未落库，留给 KI-E6。
+3. 边框描边、模糊半径、模糊着色、文字色的**视觉变化未做像素级取证**：模拟器书架上书的正文文件已丢失、`ReaderPage` 进不去，只有面板值与 prefs 落库证据。
+4. 上游「模糊色没有清除入口」这一约束本地照搬（`applyMenuColor` 对模糊色也支持再点同色清除，属**放宽**，不影响已有行为）。
+
+**验收**：`assembleHap` BUILD SUCCESSFUL（改动后两次，36 s 917 ms / 33 s 848 ms；补「菜单模糊透明度」接线后再一次 23 s 250 ms）。设备实测：边框开关关掉后「菜单栏边框宽度」「菜单栏边框颜色」两行整行消失、下方各项上移约 98 px，重新打开后恢复；边框宽度拖到 `4.000000`、模糊半径拖到 `32.000000`、模糊透明度拖到 `39.000000`，`aa force-stop` 重启后全部保持；三个颜色项弹层选色、跨进程保持、再点同色清除全部通过；复原到「边框开 / 宽度 1 / 半径 24 / 透明度 85 / 三色清空」。详见 [VALIDATION](VALIDATION.md) 的 `2026-10-31 N 端 KI-E2` 节。
 
 **KI-E3 标题栏图标四项（要接，随菜单渲染层）** —— 覆盖 E-17 显示标题栏图标（`ReadBookConfig.kt:92`）、E-18 标题栏悬浮图标配置（`:146`、`:149` 两个 `Map<String,String>`）、E-19 标题栏悬浮图标位置（`:116`，夹 0–3）、E-20 悬浮图标液态玻璃按钮（`:87`）。注意 E-18 的「标题栏悬浮图标配置」入口虽走 `handleMenuSettingsEntryClick()`（`ReaderSettingsPage.ets:470-472`），但 `:517-531` 的 `else` 分支只 `openDetailSheet`，**并未落盘**，仍属未接。
 

@@ -282,6 +282,22 @@ export struct ReaderPage {
   @Prop readMenuAccentColor: string = '';
   /** 菜单强调色（夜间）；上游 `readMenuAccentColorNight`（`ReadSettings.kt:84`）。 */
   @Prop readMenuAccentColorNight: string = '';
+  /** 菜单栏边框宽度 0–4，0 = 无边框（上游 readMenuBorderWidth，ReadSettings.kt:111 默认 1，夹 0–4）。 */
+  @Prop readMenuBorderWidth: number = 1;
+  /** 菜单栏边框颜色（日间），空串 = 未设置，回落主题 outlineVariant（上游 ReadSettings.kt:112）。 */
+  @Prop readMenuBorderColor: string = '';
+  /** 菜单栏边框颜色（夜间）（上游 ReadSettings.kt:113）。 */
+  @Prop readMenuBorderColorNight: string = '';
+  /** 菜单模糊半径 0–32（上游 readMenuBlurRadius，ReadSettings.kt:105 默认 24，夹 0–32）。 */
+  @Prop readMenuBlurRadius: number = 24;
+  /** 菜单文字与图标颜色（日间），空串 = 未设置，回落主题 onSurface（上游 ReadSettings.kt:86）。 */
+  @Prop readMenuTextColor: string = '';
+  /** 菜单文字与图标颜色（夜间）（上游 ReadSettings.kt:87）。 */
+  @Prop readMenuTextColorNight: string = '';
+  /** 菜单模糊层着色（日间），空串 = 未设置（上游 ReadSettings.kt:107）。 */
+  @Prop readMenuBlurColor: string = '';
+  /** 菜单模糊层着色（夜间）（上游 ReadSettings.kt:108）。 */
+  @Prop readMenuBlurColorNight: string = '';
 
   /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
   @Prop dayNightReminderText: string = '';
@@ -987,6 +1003,10 @@ export struct ReaderPage {
    * `readMenuColorMode == 0`（种子色）时上游用强调色派生整套色板，本地取强调色作基底近似。
    */
   private readerMenuBaseColor(): string {
+    // 上游 `readMenuTintColor`（ReadBookMenuBarShared.kt:76-92）优先级最高：夜间取
+    // `readMenuBlurColorNight`、日间取 `readMenuBlurColor`，任一非未设置就盖过整条底色推导。
+    const tint = this.readerMenuTintColor();
+    if (tint.length > 0) { return tint; }
     if (this.readBarStyle === 1) { return this.paperColor; }
     if (this.readBarStyle === 2) {
       const custom = this.readerMenuIsNight() ? this.readMenuBgColorNight : this.readMenuBgColor;
@@ -1016,12 +1036,49 @@ export struct ReaderPage {
   }
 
   /**
-   * 菜单前景色（文字与图标）。上游菜单文字走 `onSurface`，自定义主题色模式下由
-   * `ReadBookColorTheme.kt:291-297` 把强调色写成 `primary`；`readMenuTextColor` 属 KI-E2，
-   * 这一轮先按菜单底色的明暗取反色，保证可读。
+   * 菜单模糊层着色。逐条照上游 `readMenuTintColor`（`ReadBookMenuBarShared.kt:76-92`）：
+   * 夜间看 `readMenuBlurColorNight`、日间看 `readMenuBlurColor`；日间未设置时再回落
+   * `readMenuBlurColor`（上游第三段 `takeIf { it != 0 }` 的兜底）。空串表示两端都没设置。
+   */
+  private readerMenuTintColor(): string {
+    const day = this.readMenuBlurColor.trim();
+    const night = this.readMenuBlurColorNight.trim();
+    if (this.readerMenuIsNight()) {
+      return night.length > 0 ? night : '';
+    }
+    return day.length > 0 ? day : '';
+  }
+
+  /**
+   * 菜单前景色（文字与图标）。上游 `readMenuTextColor`（`ReadBookMenuBarShared.kt:107-115`）
+   * 取日夜对应值，未设置时回落主题 `onSurface`；本地按菜单底色明暗反色充当该回落值。
    */
   private readerMenuForeground(): string {
+    const custom = this.readerMenuIsNight() ? this.readMenuTextColorNight : this.readMenuTextColor;
+    if (custom.trim().length > 0) { return custom.trim(); }
     return this.readerMenuIsNight() ? '#D5C2C6' : '#3E3D3B';
+  }
+
+  /**
+   * 菜单栏边框配置。上游 `readMenuBorderWidth`（`ReadBookConfig.kt:115` 夹 0–4）同时充当
+   * 开关与宽度：`> 0` 才画描边（`SystemMenuPage.kt:398` 的 `borderEnabled`）；
+   * 颜色取日夜对应值，未设置回落到前景色的半透明（上游回落 `outlineVariant`）。
+   */
+  private readerMenuBorderSettings(): BorderOptions {
+    const width = Math.max(0, Math.min(4, Math.round(this.readMenuBorderWidth)));
+    if (width <= 0) {
+      return { width: 0 };
+    }
+    const custom = this.readerMenuIsNight() ? this.readMenuBorderColorNight : this.readMenuBorderColor;
+    const color = custom.trim().length > 0
+      ? custom.trim()
+      : this.readerMenuForegroundAlpha('73');
+    return { width: width, color: color };
+  }
+
+  /** 菜单模糊半径（vp）。上游 `readMenuBlurRadius` 夹 0–32，0 表示不模糊。 */
+  private readerMenuBlurRadiusVp(): number {
+    return Math.max(0, Math.min(32, Math.round(this.readMenuBlurRadius)));
   }
 
   /** 把 `#RRGGBB` / `#AARRGGBB` 折成 6 位 RGB；解析不了时按当前日夜取黑白。 */
@@ -4210,6 +4267,10 @@ export struct ReaderPage {
             .width('100%')
             .backgroundColor(this.readerTopBarFillColor())
             .linearGradient(this.readerTopBarGradient())
+            // KI-E2：菜单栏边框（宽度同时是开关）与背景模糊半径，对齐上游
+            // `ReadBookMenuBarTitle.kt:504-521`（描边）与 `:131`（`blurRadius = readMenuBlurRadius`）。
+            .border(this.readerMenuBorderSettings())
+            .backdropBlur(this.readerMenuBlurRadiusVp())
 
           if (this.showQuickActions) {
             Row() {
@@ -4313,6 +4374,10 @@ export struct ReaderPage {
             .padding({ left: 8, right: 8, top: 12, bottom: 0 })
             .backgroundColor(this.readerBottomBarFillColor())
             .linearGradient(this.readerBottomBarGradient())
+            // KI-E2：底栏同样吃边框与模糊半径，对齐上游 `ReadBookMenuBar.kt:450`（描边）
+            // 与 `:1027`（`blurRadius = menuConfig.readMenuBlurRadius`）。
+            .border(this.readerMenuBorderSettings())
+            .backdropBlur(this.readerMenuBlurRadiusVp())
             .borderRadius({
               topLeft: this.readMenuBottomCornerRadius,
               topRight: this.readMenuBottomCornerRadius,
