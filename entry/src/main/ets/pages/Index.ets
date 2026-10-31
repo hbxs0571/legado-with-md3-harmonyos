@@ -206,6 +206,12 @@ struct Index {
   @State readerNextKeys: string = '';
   /** 鼠标滚轮翻页开关，对齐上游 mouseWheelPage。 */
   @State readerMouseWheelPage: boolean = true;
+  /** 划词菜单是否展开成多行，对齐上游 expandTextMenu。 */
+  @State readerExpandTextMenu: boolean = false;
+  /** 划词菜单是否显示图标，对齐上游 showSelectMenuIcon。 */
+  @State readerShowSelectMenuIcon: boolean = true;
+  /** 划词菜单条目配置 JSON 串，对齐上游 textSelectMenuConfig；空串表示沿用内置顺序。 */
+  @State readerTextSelectMenuConfig: string = '';
   @State readerReadingAnchorEnabled: boolean = true;
   @State readerSwipeToAddBookmark: boolean = false;
   /** 阅读页书签角标宽度（dp），0 表示不显示；与上游 bookmarkBadgeSize 对齐。 */
@@ -1794,6 +1800,9 @@ struct Index {
       this.readerPrevKeys = settings.prevKeys;
       this.readerNextKeys = settings.nextKeys;
       this.readerMouseWheelPage = settings.mouseWheelPage;
+      this.readerExpandTextMenu = settings.expandTextMenu;
+      this.readerShowSelectMenuIcon = settings.showSelectMenuIcon;
+      this.readerTextSelectMenuConfig = settings.textSelectMenuConfig;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1941,6 +1950,9 @@ struct Index {
         prevKeys: this.readerPrevKeys,
         nextKeys: this.readerNextKeys,
         mouseWheelPage: this.readerMouseWheelPage,
+        expandTextMenu: this.readerExpandTextMenu,
+        showSelectMenuIcon: this.readerShowSelectMenuIcon,
+        textSelectMenuConfig: this.readerTextSelectMenuConfig,
         readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -2409,6 +2421,24 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
 
+  private setReaderExpandTextMenu(enabled: boolean): void {
+    this.readerExpandTextMenu = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderShowSelectMenuIcon(enabled: boolean): void {
+    this.readerShowSelectMenuIcon = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderTextSelectMenuConfig(value: string): void {
+    this.readerTextSelectMenuConfig = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -2815,6 +2845,9 @@ struct Index {
       this.readerPrevKeys = result.settings.prevKeys;
       this.readerNextKeys = result.settings.nextKeys;
       this.readerMouseWheelPage = result.settings.mouseWheelPage;
+      this.readerExpandTextMenu = result.settings.expandTextMenu;
+      this.readerShowSelectMenuIcon = result.settings.showSelectMenuIcon;
+      this.readerTextSelectMenuConfig = result.settings.textSelectMenuConfig;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4111,6 +4144,9 @@ struct Index {
             prevKeys: this.readerPrevKeys,
             nextKeys: this.readerNextKeys,
             mouseWheelPage: this.readerMouseWheelPage,
+            expandTextMenu: this.readerExpandTextMenu,
+            showSelectMenuIcon: this.readerShowSelectMenuIcon,
+            textSelectMenuConfig: this.readerTextSelectMenuConfig,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4298,6 +4334,9 @@ struct Index {
               prevKeys: this.readerPrevKeys,
               nextKeys: this.readerNextKeys,
               mouseWheelPage: this.readerMouseWheelPage,
+              expandTextMenu: this.readerExpandTextMenu,
+              showSelectMenuIcon: this.readerShowSelectMenuIcon,
+              textSelectMenuConfig: this.readerTextSelectMenuConfig,
               readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4311,6 +4350,9 @@ struct Index {
               onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
               onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
               onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
+              onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
+              onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
+              onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
@@ -4674,6 +4716,9 @@ struct Index {
             prevKeys: this.readerPrevKeys,
             nextKeys: this.readerNextKeys,
             mouseWheelPage: this.readerMouseWheelPage,
+            expandTextMenu: this.readerExpandTextMenu,
+            showSelectMenuIcon: this.readerShowSelectMenuIcon,
+            textSelectMenuConfig: this.readerTextSelectMenuConfig,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4687,6 +4732,9 @@ struct Index {
             onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
             onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
             onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
+            onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
+            onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
+            onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
@@ -4915,6 +4963,9 @@ struct Index {
             prevKeys: this.readerPrevKeys,
             nextKeys: this.readerNextKeys,
             mouseWheelPage: this.readerMouseWheelPage,
+            expandTextMenu: this.readerExpandTextMenu,
+            showSelectMenuIcon: this.readerShowSelectMenuIcon,
+            textSelectMenuConfig: this.readerTextSelectMenuConfig,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4928,6 +4979,9 @@ struct Index {
             onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
             onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
             onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
+            onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
+            onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
+            onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
@@ -5098,6 +5152,9 @@ struct Index {
           prevKeys: this.readerPrevKeys,
           nextKeys: this.readerNextKeys,
           mouseWheelPage: this.readerMouseWheelPage,
+          expandTextMenu: this.readerExpandTextMenu,
+          showSelectMenuIcon: this.readerShowSelectMenuIcon,
+          textSelectMenuConfig: this.readerTextSelectMenuConfig,
           readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -5111,6 +5168,9 @@ struct Index {
           onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
           onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
           onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
+          onExpandTextMenuChange: (enabled: boolean) => this.setReaderExpandTextMenu(enabled),
+          onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
+          onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),

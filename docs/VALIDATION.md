@@ -305,6 +305,21 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-D2 选中文字菜单三项（面板与落库通过，阅读页菜单渲染未验）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 22 s 184 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。
+- **编译期修掉一处 ArkTS 违规**：`ReaderSelectionMenu.ets` 初版用 `Record<string, Object>` 接 `JSON.parse` 结果并写匿名对象字面量，`assembleHap` 报 `10605038 ArkTS Compiler Error / Object literal must correspond to some explicitly declared class or interface (arkts-no-untyped-obj-literals) At File: .../data/ReaderSelectionMenu.ets:139:44`。改为具名 `interface SelectionMenuConfigRecord { id?: string; enabled?: boolean; showState?: number; }` 后通过。这条 ArkTS 约束在上游（Kotlin）不存在，是移植 `GSON.fromJsonObject<List<SelectionMenuConfigItem>>` 时必须显式建模的地方。
+- **设置项上屏**：设置 → 阅读界面 → 更多 tab，滚动到底可见「选中文字菜单 / 配置文本选择后的操作 / ›」，已去掉原先的「未迁移」标记（`migrated: true`）。注意该入口不在「全局」tab，且「更多」页需要连续几次上滑才露出来。
+- **面板内容**：标题「选中文字菜单」、描述「排序、分组与图标开关，保存后随备份同步」、两个开关「展开文字菜单」（副标题「折叠菜单项是否与一级菜单同排展开」）与「显示菜单图标」（「在文字菜单操作项旁显示图标」）、三个分组「主菜单」（14 项：复制、书签、划线 / 笔记、分享、浏览器、朗读、字典、替换、编辑、AI 净化、AI 改写、全文搜索、插入(前)、插入(后)）、「折叠菜单 / 隐藏项目」、底部说明与「保存」按钮。行内四个图标按钮依次是上移、下移、移入折叠、隐藏；折叠组是上移、下移、移回一级、隐藏；隐藏组只有恢复。
+- **落库格式（决定性证据，与上游逐字段一致）**：把「分享」移入折叠后点「保存」，`cat .../preferences/legado_reader_settings` 实测写出
+  `<string key="textSelectMenuConfig">[{&quot;id&quot;:&quot;menu_copy&quot;,&quot;enabled&quot;:true,&quot;showState&quot;:0},…,{&quot;id&quot;:&quot;menu_share_str&quot;,&quot;enabled&quot;:false,&quot;showState&quot;:1},…]</string>`
+  —— 数组元素字段名 `id`/`enabled`/`showState` 与上游 `ReadBookController.kt:3351` 的 `SelectionMenuConfigItem` 完全相同，`enabled` 恒等于 `showState == 0`、`showState` 0/1/2 的三分组语义也与 `:3316` 的注释一致；未被编排的条目按内置顺序保留在串里。随后把「划线 / 笔记」也移入折叠并保存，`menu_mark` 同样变 `enabled:false, showState:1`，且它在面板折叠组里排在「分享」之前（与配置串里的顺序一致，验证了「读回顺序 = 配置串顺序」）。
+- **两个布尔键落库**：`<bool key="expandTextMenu" value="false"/>`、`<bool key="showSelectMenuIcon" value="true"/>`，与上游 `ReadSettings.kt:51-52` 的默认值一致；面板上的两个开关可直接切换并即时落库。
+- **未验的部分（本记录不写「渲染通过」的原因）**：阅读页划词菜单的实际渲染（按 `showState` 显隐、`expandTextMenu` 决定平铺还是「更多」、图标开关）**未能取证**。该模拟器上本地书 `test-book` 与 `dup-probe` 的正文文件都已丢失，阅读页正文位置显示的是书目 JSON 文本，没有可长按选中的正常正文；`uitest uiInput longClick`、`doubleClick`、`drag`（含 `drag x y x y 1500` 与 `drag x1 y x2 y 2000`）四种注入在 `dumpLayout` 里都只得到 27 个节点（正文 + 页码），没有任何「复制 / 书签 / 划线」文本节点。这与本文档 KI-D6 节已记录的限制是同一原因（该模拟器正文长按与单击手势注入都只落在系统层），不是本次代码的问题：`selectText` 为 `true`、三处 `.textSelectable(...)` 与 `.bindSelectionMenu(TextSpanType.TEXT, …, TextResponseType.LONG_PRESS, …)` 都在位。
+- **已知差异**：本地只有 `menu_copy`/`menu_bookmark`/`menu_mark` 三项有真实动作，其余 11 项是尚未迁移的能力，面板里可编排、阅读页菜单里不显示（配置串照常保存，待能力接入后自然出现）。这是按「上游没有就不要这个效果」的取舍，不是配置丢失。
+- **测试期改动已复原**：`textSelectMenuConfig` 回空串、`expandTextMenu=false`、`showSelectMenuIcon=true`、`selectText=true`，复原后重新拉取偏好文件确认（前三项分别为空串 / false / true）。
+- 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
+
 ## 2026-10-31 N 端 KI-D1 自定义翻页按键与鼠标滚轮翻页（落库与接线通过，按键与滚轮实际翻页未验）
 
 - 设备与构建：模拟器 `127.0.0.1:5555`（1280×2832，HOS）。`assembleHap` 通过，`BUILD SUCCESSFUL in 36 s 264 ms`，33 项任务 17 执行 / 16 最新；仅既有 ArkTS 警告与 `No signingConfig found for product default`。`hdc install -r` 回 `install bundle successfully`。

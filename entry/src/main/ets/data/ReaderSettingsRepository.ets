@@ -211,6 +211,19 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   nextKeys: string;
   /** 鼠标滚轮是否翻页，对应上游 `ReadSettings.mouseWheelPage`（`ReadSettings.kt:28`），默认开。 */
   mouseWheelPage: boolean;
+  /**
+   * 划词菜单是否展开成多行，对应上游 `ReadSettings.expandTextMenu`（`ReadSettings.kt:51`），默认关。
+   * 上游 `TextActionSelectionMenu.kt:166` 为真时走 `MultiLineMenuView`，为假时走「一行 + 更多」。
+   */
+  expandTextMenu: boolean;
+  /** 划词菜单是否在条目旁显示图标，对应上游 `ReadSettings.showSelectMenuIcon`（`ReadSettings.kt:52`），默认开。 */
+  showSelectMenuIcon: boolean;
+  /**
+   * 划词菜单条目配置的 JSON 串，对应上游 `ReadSettings.textSelectMenuConfig`（`ReadSettings.kt:53`）。
+   * 上游格式是 `[{"id":"menu_copy","enabled":true,"showState":0}]`（`ReadBookController.kt:3351` 的
+   * `SelectionMenuConfigItem`），showState 0=一级 / 1=折叠 / 2=隐藏。空串表示沿用内置顺序。
+   */
+  textSelectMenuConfig: string;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -556,6 +569,10 @@ export class ReaderSettingsRepository {
       prevKeys: '',
       nextKeys: '',
       mouseWheelPage: true,
+      // 上游默认值：expandTextMenu 关、showSelectMenuIcon 开、textSelectMenuConfig 空串（ReadSettings.kt:51-53）
+      expandTextMenu: false,
+      showSelectMenuIcon: true,
+      textSelectMenuConfig: '',
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -671,6 +688,9 @@ export class ReaderSettingsRepository {
       const prevKeysValue = await store.get('prevKeyCodes', defaults.prevKeys);
       const nextKeysValue = await store.get('nextKeyCodes', defaults.nextKeys);
       const mouseWheelPageValue = await store.get('mouseWheelPage', defaults.mouseWheelPage);
+      const expandTextMenuValue = await store.get('expandTextMenu', defaults.expandTextMenu);
+      const showSelectMenuIconValue = await store.get('showSelectMenuIcon', defaults.showSelectMenuIcon);
+      const textSelectMenuConfigValue = await store.get('textSelectMenuConfig', defaults.textSelectMenuConfig);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -937,6 +957,9 @@ export class ReaderSettingsRepository {
         prevKeys: ReaderSettingsRepository.normalizeKeyCodes(prevKeysValue),
         nextKeys: ReaderSettingsRepository.normalizeKeyCodes(nextKeysValue),
         mouseWheelPage: typeof mouseWheelPageValue === 'boolean' ? mouseWheelPageValue : defaults.mouseWheelPage,
+        expandTextMenu: typeof expandTextMenuValue === 'boolean' ? expandTextMenuValue : defaults.expandTextMenu,
+        showSelectMenuIcon: typeof showSelectMenuIconValue === 'boolean' ? showSelectMenuIconValue : defaults.showSelectMenuIcon,
+        textSelectMenuConfig: typeof textSelectMenuConfigValue === 'string' ? textSelectMenuConfigValue : defaults.textSelectMenuConfig,
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1091,6 +1114,9 @@ export class ReaderSettingsRepository {
       await store.put('prevKeyCodes', ReaderSettingsRepository.normalizeKeyCodes(settings.prevKeys));
       await store.put('nextKeyCodes', ReaderSettingsRepository.normalizeKeyCodes(settings.nextKeys));
       await store.put('mouseWheelPage', settings.mouseWheelPage === true);
+      await store.put('expandTextMenu', settings.expandTextMenu === true);
+      await store.put('showSelectMenuIcon', settings.showSelectMenuIcon !== false);
+      await store.put('textSelectMenuConfig', typeof settings.textSelectMenuConfig === 'string' ? settings.textSelectMenuConfig : '');
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));

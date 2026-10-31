@@ -1,6 +1,12 @@
 import { ReaderBackgroundStyle, READER_BACKGROUND_STYLES } from '../data/ReaderSettingsRepository';
 import { ReaderFontEntry, ReaderFontRepository } from '../data/ReaderFontRepository';
 import {
+  defaultReaderSelectionMenuItems,
+  parseReaderSelectionMenuConfig,
+  ReaderSelectionMenuItem,
+  serializeReaderSelectionMenuConfig
+} from '../data/ReaderSelectionMenu';
+import {
   ReaderActionOption, ReaderBottomActionConfig, READER_ACTION_OPTIONS,
   READER_LOCAL_BOTTOM_ACTION_DEFAULTS, READER_LOCAL_TOP_ACTION_DEFAULTS,
   ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, ReaderPaddingSettings, DEFAULT_READER_PADDING_SETTINGS,
@@ -175,6 +181,12 @@ export struct ReaderSettingsPage {
   @Prop titleSegScaling: number = 1;
   @Prop titleSegDistance: number = 4;
   @Prop titleSegFlag: string = '';
+  /** 划词菜单是否展开成多行，对齐上游 expandTextMenu（ReadSettings.kt:51）。 */
+  @Prop expandTextMenu: boolean = false;
+  /** 划词菜单是否显示图标，对齐上游 showSelectMenuIcon（ReadSettings.kt:52）。 */
+  @Prop showSelectMenuIcon: boolean = true;
+  /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
+  @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = READER_CLICK_REGION_DEFAULTS;
@@ -200,8 +212,6 @@ export struct ReaderSettingsPage {
   @State selectedClickRegionIndex: number = 4;
   @State previousPageKeys: string = '';
   @State nextPageKeys: string = '';
-  @State expandTextMenuPreview: boolean = false;
-  @State showTextMenuIconsPreview: boolean = true;
   @State primaryTextMenuExpanded: boolean = true;
   @State collapsedTextMenuExpanded: boolean = true;
   @State hiddenTextMenuExpanded: boolean = false;
@@ -229,6 +239,7 @@ export struct ReaderSettingsPage {
   @State brightnessViewMode: number = 0;
 
   aboutToAppear(): void {
+    this.syncTextMenuEntriesFromConfig();
     this.loadReaderFontEntries();
     if (this.openBottomActionConfigOnAppear) {
       this.selectedSettingsTab = 1;
@@ -319,6 +330,9 @@ export struct ReaderSettingsPage {
   onTitleSegScalingChange: (value: number) => void = (_value: number) => {};
   onTitleSegDistanceChange: (value: number) => void = (_value: number) => {};
   onTitleSegFlagChange: (value: string) => void = (_value: string) => {};
+  onExpandTextMenuChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onShowSelectMenuIconChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
   private getBackgroundImageOf(night: boolean): string {
@@ -1124,7 +1138,7 @@ export struct ReaderSettingsPage {
           MenuSettingOption({ title: '点击区域配置', detail: '设置屏幕各区域的触摸动作', migrated: true }).onClick(() => this.openDetailSheet('点击区域配置', '配置九宫格点按动作，并应用到阅读界面。'))
           MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: false }).onClick(() => this.showNotMigrated('禁用返回键'))
           MenuSettingOption({ title: '自定义翻页按键', detail: this.getPageKeysLabel(), migrated: true }).onClick(() => this.openDetailSheet('自定义翻页按键', '录制物理按键作为上一页/下一页'))
-          MenuSettingOption({ title: '选中文字菜单', detail: '配置文本选择后的操作' }).onClick(() => this.openDetailSheet('选中文字菜单', '文本操作菜单配置尚未迁移'))
+          MenuSettingOption({ title: '选中文字菜单', detail: '配置文本选择后的操作', migrated: true }).onClick(() => this.openDetailSheet('选中文字菜单', '排序、分组与图标开关，保存后随备份同步'))
           MenuSettingSwitch({ title: '显示阅读标题补充信息', detail: '在阅读标题中显示附加信息', checked: false }).onClick(() => this.showNotMigrated('阅读标题补充信息'))
           MenuSettingSwitch({ title: '显示菜单图标', detail: '在阅读菜单中显示图标', checked: true }).onClick(() => this.showNotMigrated('显示菜单图标'))
           Text('未迁移项目保留原版设置入口；当前仅呈现设置界面，不执行对应业务。')
@@ -1132,6 +1146,26 @@ export struct ReaderSettingsPage {
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
       }.layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').layoutWeight(1)
+  }
+
+  /**
+   * 用已保存的配置串重建条目表。
+   * 上游 `ReadBookController.kt:2204` 读回时也是「按配置顺序排列 + 配置里没提到的追加到末尾」，
+   * 空串或坏 JSON 回落内置顺序（`parseReaderSelectionMenuConfig` 内已处理）。
+   */
+  private syncTextMenuEntriesFromConfig(): void {
+    const parsed = parseReaderSelectionMenuConfig(this.textSelectMenuConfig, defaultReaderSelectionMenuItems());
+    this.textMenuEntries = parsed.map(
+      (item: ReaderSelectionMenuItem): ReaderTextMenuEntry => ({ id: item.id, title: item.title, group: item.group })
+    );
+  }
+
+  /** 把当前条目表序列化落库，对齐上游 `saveMenuConfig` → `viewModel.setTextSelectMenuConfig(GSON.toJson(...))`。 */
+  private saveTextMenuConfig(): void {
+    const items: ReaderSelectionMenuItem[] = this.textMenuEntries.map(
+      (item: ReaderTextMenuEntry): ReaderSelectionMenuItem => ({ id: item.id, title: item.title, group: item.group })
+    );
+    this.onTextSelectMenuConfigChange(serializeReaderSelectionMenuConfig(items));
   }
 
   private getTextMenuEntries(group: number): ReaderTextMenuEntry[] {
@@ -1349,6 +1383,10 @@ export struct ReaderSettingsPage {
     if (title === '自定义翻页按键') {
       this.previousPageKeys = this.prevKeys;
       this.nextPageKeys = this.nextKeys;
+    }
+    // 选中文字菜单是草稿式编辑：每次打开都用已落库的配置重建条目表。
+    if (title === '选中文字菜单') {
+      this.syncTextMenuEntriesFromConfig();
     }
     if (title === '排版设置') {
       this.detailSelectedOption = '正文';
@@ -1787,14 +1825,14 @@ export struct ReaderSettingsPage {
           Scroll() {
             Column() {
               MenuSettingSwitch({
-                title: '展开文字菜单', detail: '折叠菜单项是否多行展开',
-                checked: this.expandTextMenuPreview,
-                onChange: (enabled: boolean) => this.expandTextMenuPreview = enabled
+                title: '展开文字菜单', detail: '折叠菜单项是否与一级菜单同排展开',
+                checked: this.expandTextMenu,
+                onChange: (enabled: boolean) => this.onExpandTextMenuChange(enabled)
               })
               MenuSettingSwitch({
                 title: '显示菜单图标', detail: '在文字菜单操作项旁显示图标',
-                checked: this.showTextMenuIconsPreview,
-                onChange: (enabled: boolean) => this.showTextMenuIconsPreview = enabled
+                checked: this.showSelectMenuIcon,
+                onChange: (enabled: boolean) => this.onShowSelectMenuIconChange(enabled)
               })
               Row() {
                 Text('主菜单').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
@@ -1806,7 +1844,7 @@ export struct ReaderSettingsPage {
               if (this.primaryTextMenuExpanded) {
                 ForEach(this.getTextMenuEntries(0), (item: ReaderTextMenuEntry) => {
                   Row() {
-                    if (this.showTextMenuIconsPreview) { this.readerTextMenuIcon(item.id) }
+                    if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
                     Text(item.title).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor('#C8CAD2')
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 0))
@@ -1830,7 +1868,7 @@ export struct ReaderSettingsPage {
               if (this.collapsedTextMenuExpanded) {
                 ForEach(this.getTextMenuEntries(1), (item: ReaderTextMenuEntry) => {
                   Row() {
-                    if (this.showTextMenuIconsPreview) { this.readerTextMenuIcon(item.id) }
+                    if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
                     Text(item.title).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor('#C8CAD2')
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 1))
@@ -1854,7 +1892,7 @@ export struct ReaderSettingsPage {
               if (this.hiddenTextMenuExpanded) {
                 ForEach(this.getTextMenuEntries(2), (item: ReaderTextMenuEntry) => {
                   Row() {
-                    if (this.showTextMenuIconsPreview) { this.readerTextMenuIcon(item.id) }
+                    if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
                     Text(item.title).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.app_add')).width(17).height(17).fillColor('#C8CAD2')
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 0))
@@ -1865,7 +1903,7 @@ export struct ReaderSettingsPage {
               Column() {
                 Text('Android 系统提供的文字处理应用项暂未迁移。')
                   .fontSize(11).fontColor('#AEB0B9').width('100%')
-                Text('当前列表顺序、分组与开关均为预览，保存功能尚未迁移。')
+                Text('排序、分组与两个开关点「保存」后落库，并随备份同步；阅读页菜单只显示已实现能力的条目。')
                   .fontSize(10).fontColor('#92949E').width('100%').margin({ top: 5 })
               }.padding(12).backgroundColor('#202127').borderRadius(10).margin({ top: 8 })
               Row() {
@@ -1873,7 +1911,10 @@ export struct ReaderSettingsPage {
                 Text('保存').fontSize(13).fontColor('#101116')
                   .padding({ left: 20, right: 20, top: 10, bottom: 10 })
                   .backgroundColor('#C6D3FF').borderRadius(18)
-                  .onClick(() => this.onUnavailableAction('选中文字菜单配置尚未保存'))
+                  .onClick(() => {
+                    this.saveTextMenuConfig();
+                    this.onUnavailableAction('选中文字菜单配置已保存');
+                  })
               }.width('100%').padding({ top: 10 })
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.layoutWeight(1).scrollBar(BarState.Off)

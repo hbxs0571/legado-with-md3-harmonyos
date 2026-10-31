@@ -14,6 +14,7 @@ import { BookContentProcess } from '../model/BookContentProcess';
 import { ReaderFontRepository } from '../data/ReaderFontRepository';
 import { LocalSemanticDocument, LocalTextSemantics } from '../data/LocalTextSemantics';
 import { ReaderTitleSegment, segmentReaderTitle } from '../data/ReaderTitleSegmentation';
+import { READER_SELECTION_MENU_SUPPORTED, ReaderSelectionMenuItem, parseReaderSelectionMenuConfig } from '../data/ReaderSelectionMenu';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
@@ -193,6 +194,12 @@ export struct ReaderPage {
   @Prop @Watch('onVolumeKeyPageChanged') nextKeys: string = '';
   /** 鼠标滚轮是否翻页，对齐上游 mouseWheelPage（ReadSettings.kt:28）。滚动模式本来靠滚轮滚动，不受此开关影响。 */
   @Prop mouseWheelPage: boolean = true;
+  /** 划词菜单是否展开成多行，对齐上游 expandTextMenu（ReadSettings.kt:51）。 */
+  @Prop expandTextMenu: boolean = false;
+  /** 划词菜单是否显示图标，对齐上游 showSelectMenuIcon（ReadSettings.kt:52）。 */
+  @Prop showSelectMenuIcon: boolean = true;
+  /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）；空串沿用内置顺序。 */
+  @Prop textSelectMenuConfig: string = '';
   @Prop noAnimScrollPage: boolean = false;
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
@@ -248,6 +255,8 @@ export struct ReaderPage {
   @Prop topActions: ReaderBottomActionConfig[] = READER_LOCAL_TOP_ACTION_DEFAULTS;
   @Prop moreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS;
   @State @Watch('onControlsVisibilityChanged') controlsVisible: boolean = false;
+  /** 划词菜单「更多」是否就地展开；每次菜单重新弹出前由 onMenuShow 复位。 */
+  @State selectionMenuMoreVisible: boolean = false;
   @State imagePreviewVisible: boolean = false;
   @State imagePreviewUri: string = '';
   @State overflowVisible: boolean = false;
@@ -2448,23 +2457,94 @@ export struct ReaderPage {
 
   /**
    * 划词菜单。
-   * 上游 ReadBookController.kt:2155-2169 的选区菜单是一整排（复制/分享/浏览器/朗读/书签/笔记/词典/
-   * 替换/编辑/AI…），本地 bindSelectionMenu 一旦指定就会顶掉系统菜单，所以至少要保住最基础的
-   * 三个能力：复制、加书签、划线/笔记。其余项本地没有对应能力，不在这里塞占位。
+   * 上游 `TextActionSelectionMenu.kt:122-124` 按 `textSelectMenuConfig` 里的 `showState` 分三组：
+   * 0 一级、1 折叠、2 隐藏；`:166` 在 `expandTextMenu` 为真时走 `MultiLineMenuView`（一级 + 折叠一起平铺），
+   * 为假时只平铺一级、折叠项收进「更多」弹层。本地按同一口径渲染：
+   *   - 只渲染 `READER_SELECTION_MENU_SUPPORTED` 里那些**有真实处理函数**的条目，
+   *     上游其余 11 项本地没有对应能力，塞进来就是点了没反应的假按钮（`README`/KNOWN-ISSUES 口径）。
+   *   - 隐藏（showState 2）的条目不出现；`expandTextMenu` 决定折叠项是与一级同排还是收进「更多」。
    */
   @Builder
   private readerMarkingSelectionMenu() {
-    Row() {
-      Text('复制').fontSize(14).fontColor('#E5E6EB')
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-        .onClick(() => this.copyCurrentSelection())
-      Text('书签').fontSize(14).fontColor('#E5E6EB')
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-        .onClick(() => this.bookmarkCurrentSelection())
-      Text('划线 / 笔记').fontSize(14).fontColor('#E5E6EB')
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-        .onClick(() => this.createMarkingFromCurrentSelection())
-    }.backgroundColor('#242127').borderRadius(12)
+    Column() {
+      Flex({ wrap: this.expandTextMenu ? FlexWrap.Wrap : FlexWrap.NoWrap, justifyContent: FlexAlign.Center }) {
+        ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
+          Row() {
+            if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
+            Text(item.title).fontSize(14).fontColor('#E5E6EB').margin({ left: this.showSelectMenuIcon ? 6 : 0 })
+          }
+          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+          .onClick(() => this.runSelectionMenuAction(item.id))
+        }, (item: ReaderSelectionMenuItem) => `${item.id}-${this.showSelectMenuIcon}-${this.expandTextMenu}-${this.selectionMenuMoreVisible}`)
+      }.backgroundColor('#242127').borderRadius(12)
+      // 未展开且存在折叠项时，上游是一行 + 「更多」弹层（TextActionSelectionMenu.kt:245）；
+      // 本地没有 Popup 层，改成在同一张卡片下方就地展开折叠项，语义等价。
+      if (this.hasCollapsedSelectionMenuItem() && !this.selectionMenuMoreVisible) {
+        Text('更多').fontSize(13).fontColor('#AEB0B9')
+          .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+          .onClick(() => { this.selectionMenuMoreVisible = true; })
+      }
+    }
+  }
+
+  /**
+   * 当前该出现在菜单里的条目。
+   * 上游读配置的顺序与「配置里没提到的条目追加到末尾」都交给 `parseReaderSelectionMenuConfig`；
+   * 这里再按 `showState` 与本地能力过滤。
+   */
+  private resolveSelectionMenuItems(): ReaderSelectionMenuItem[] {
+    const items = parseReaderSelectionMenuConfig(this.textSelectMenuConfig);
+    const visible: ReaderSelectionMenuItem[] = [];
+    const collapsed: ReaderSelectionMenuItem[] = [];
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      if (item === undefined || item.group === 2) { continue; }
+      if (!READER_SELECTION_MENU_SUPPORTED.includes(item.id)) { continue; }
+      if (item.group === 1) {
+        collapsed.push(item);
+      } else {
+        visible.push(item);
+      }
+    }
+    // expandTextMenu 为真时折叠项与一级同排（上游 activeMultiItems = showState 0 或 1）；
+    // 为假时折叠项留在「更多」里，点开后同样拼进来（上游是弹层，本地是就地展开）。
+    if (this.expandTextMenu || this.selectionMenuMoreVisible) {
+      return visible.concat(collapsed);
+    }
+    return visible;
+  }
+
+  /** 未展开时是否还有折叠项被收起来（决定要不要提示「更多」，本地不做弹层）。 */
+  private hasCollapsedSelectionMenuItem(): boolean {
+    if (this.expandTextMenu || this.selectionMenuMoreVisible) { return false; }
+    const items = parseReaderSelectionMenuConfig(this.textSelectMenuConfig);
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      if (item === undefined || item.group !== 1) { continue; }
+      if (READER_SELECTION_MENU_SUPPORTED.includes(item.id)) { return true; }
+    }
+    return false;
+  }
+
+  /** 划词菜单条目的图标，与设置面板的 `readerTextMenuIcon` 保持同一套资源。 */
+  @Builder
+  private readerSelectionMenuIcon(id: string) {
+    if (id === 'menu_copy') {
+      Image($r('app.media.reader_menu_copy')).width(16).height(16).fillColor('#D9DAE0')
+    } else if (id === 'menu_bookmark') {
+      Image($r('app.media.reader_menu_bookmark')).width(16).height(16).fillColor('#D9DAE0')
+    } else if (id === 'menu_mark') {
+      Image($r('app.media.reader_menu_border_color')).width(16).height(16).fillColor('#D9DAE0')
+    } else {
+      Blank().width(16).height(16)
+    }
+  }
+
+  /** 划词菜单条目的动作分发；只有三个本地已实现的能力。 */
+  private runSelectionMenuAction(id: string): void {
+    if (id === 'menu_copy') { this.copyCurrentSelection(); return; }
+    if (id === 'menu_bookmark') { this.bookmarkCurrentSelection(); return; }
+    if (id === 'menu_mark') { this.createMarkingFromCurrentSelection(); return; }
   }
 
   /** 复制当前选区。对齐上游 R.id.menu_copy：直接写系统剪贴板。 */
@@ -2745,7 +2825,10 @@ export struct ReaderPage {
     .onTextSelectionChange((start: number, end: number) =>
       this.updatePendingLineSelection(0, start, end))
     .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
-      onMenuShow: (start: number, end: number) => this.updatePendingLineSelection(0, start, end)
+      onMenuShow: (start: number, end: number) => {
+        this.selectionMenuMoreVisible = false;
+        this.updatePendingLineSelection(0, start, end);
+      }
     })
   }
 
@@ -2787,8 +2870,10 @@ export struct ReaderPage {
               .onTextSelectionChange((start: number, end: number) =>
                 this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end))
               .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
-                onMenuShow: (start: number, end: number) =>
-                  this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end)
+                onMenuShow: (start: number, end: number) => {
+                  this.selectionMenuMoreVisible = false;
+                  this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end);
+                }
               })
           }
         }, (item: LocalReaderLineItem, itemIndex: number) =>
@@ -2839,8 +2924,10 @@ export struct ReaderPage {
       .onTextSelectionChange((start: number, end: number) =>
         this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end))
       .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
-        onMenuShow: (start: number, end: number) =>
-          this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end)
+        onMenuShow: (start: number, end: number) => {
+          this.selectionMenuMoreVisible = false;
+          this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end);
+        }
       })
       .margin({ top: line.verticalSpaceBefore + this.readerBottomJustifyGap * lineIndex, bottom: line.paragraphSpacingAfter })
     }

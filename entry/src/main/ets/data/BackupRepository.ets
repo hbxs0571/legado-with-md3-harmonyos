@@ -237,6 +237,12 @@ interface AndroidReadConfigBackupRecord {
   nextKeyCodes: string;
   /** 鼠标滚轮翻页；上游 ReadSettings.kt:28 `mouseWheelPage: Boolean = true`。 */
   mouseWheelPage: boolean;
+  /** 划词菜单展开；上游 ReadSettings.kt:51 `expandTextMenu: Boolean = false`。 */
+  expandTextMenu: boolean;
+  /** 划词菜单显示图标；上游 ReadSettings.kt:52 `showSelectMenuIcon: Boolean = true`。 */
+  showSelectMenuIcon: boolean;
+  /** 划词菜单条目配置 JSON 串；上游 ReadSettings.kt:53 `textSelectMenuConfig: String = ""`。 */
+  textSelectMenuConfig: string;
 }
 
 interface JsonStringResult {
@@ -600,6 +606,13 @@ export class BackupRepository {
           configText, 'string', 'nextKeyCodes', settings.nextKeys);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'mouseWheelPage', settings.mouseWheelPage ? 'true' : 'false');
+        // 划词菜单三项：上游同样不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 无条件备份。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'expandTextMenu', settings.expandTextMenu ? 'true' : 'false');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'showSelectMenuIcon', settings.showSelectMenuIcon ? 'true' : 'false');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'textSelectMenuConfig', settings.textSelectMenuConfig);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'float', 'dottedBase', `${settings.dottedBase}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1053,6 +1066,9 @@ export class BackupRepository {
       prevKeyCodes: settings.prevKeys,
       nextKeyCodes: settings.nextKeys,
       mouseWheelPage: settings.mouseWheelPage,
+      expandTextMenu: settings.expandTextMenu,
+      showSelectMenuIcon: settings.showSelectMenuIcon,
+      textSelectMenuConfig: settings.textSelectMenuConfig,
       dottedBase: settings.dottedBase,
       dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
@@ -1309,6 +1325,13 @@ export class BackupRepository {
         BackupRepository.readXmlString(`${directory}/config.xml`, 'nextKeyCodes') ?? current.nextKeys,
       mouseWheelPage: BackupRepository.readJsonBoolean(selected, 'mouseWheelPage') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'mouseWheelPage') ?? current.mouseWheelPage,
+      // 划词菜单三项；配置串缺键时保留本机现值，避免恢复把已排好的顺序清空。
+      expandTextMenu: BackupRepository.readJsonBoolean(selected, 'expandTextMenu') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'expandTextMenu') ?? current.expandTextMenu,
+      showSelectMenuIcon: BackupRepository.readJsonBoolean(selected, 'showSelectMenuIcon') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'showSelectMenuIcon') ?? current.showSelectMenuIcon,
+      textSelectMenuConfig: BackupRepository.readJsonString(selected, 'textSelectMenuConfig') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'textSelectMenuConfig') ?? current.textSelectMenuConfig,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

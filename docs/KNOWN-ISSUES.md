@@ -330,9 +330,22 @@
 
 面板上屏（「鼠标滚轮翻页 / 分页模式下用滚轮翻页」「自定义翻页按键 / 未配置」）；填 `2069` 点确定后列表副标题变 `上 2069 / 下 —`，偏好文件出现 `<string key="prevKeyCodes">2069</string>`；开关点两次在 `<bool key="mouseWheelPage" value="false"/>` 与 `value="true"` 之间往返；测试值已复原为空串/`true`。**按键与滚轮的实际翻页未能取证**：该模拟器上 `uitest uiInput keyEvent` 与 `uinput -K`/`uinput -M` 连设置页明显可滚动的列表都推不动，属工具限制，见 [VALIDATION](VALIDATION.md) 同日对照实验。
 
-**KI-D2 划词菜单三项（要接，需先抽条目模型）** —— 覆盖 D-02 选中文字菜单（`textSelectMenuConfig`，`ReadSettings.kt:53`）、D-08 展开文字菜单（`expandTextMenu`，`:51`）、D-09 显示选择菜单图标（`showSelectMenuIcon`，`:52`）。
+**KI-D2 划词菜单三项（已实现）** —— 覆盖 D-02 选中文字菜单（`textSelectMenuConfig`，`ReadSettings.kt:53`）、D-08 展开文字菜单（`expandTextMenu`，`:51`）、D-09 显示选择菜单图标（`showSelectMenuIcon`，`:52`）。
 
-本地划词菜单是 `ReaderPage.ets` 内联面板，条目写死；`textSelectMenuConfig` 全仓零命中，`expandTextMenu` 只有一处 `@State expandTextMenuPreview`（`ReaderSettingsPage.ets:144`）无持久化，`showSelectMenuIcon` 零命中。与本节「书签与标注」第 2 条（行内快速标记）同属划词菜单改造。补法：先抽划词菜单条目模型（id/显示/顺序/图标），再接这三个字段。
+**上游口径**：三个字段都在 `domain/model/settings/ReadSettings.kt:51-53`，偏好键名与字段名完全相同（`constant/PreferKey.kt:153-155`），且都不在 `help/storage/BackupConfig.kt` 的 `readPrefKeys` 忽略清单里，因此随 `config.xml` 无条件备份。`textSelectMenuConfig` 不是自由文本，而是 `ReadBookController.kt:3351` 的 `SelectionMenuConfigItem(id, enabled, showState)` 数组的 JSON：`showState` 0 一级 / 1 折叠 / 2 隐藏（`:3316` 的 `ActionMenuItem.showState` 注释），`enabled` 是派生值 `showState == 0`；`id` 是 `R.id.menu_xxx` 映射出来的 `"menu_xxx"` 字符串（`:3321-3345`）。写盘在 `:2246` 的 `saveMenuConfig()`，读回在 `:2204-2232`——按配置串里的顺序取回已知条目（`allItems.find { it.uniqueId == saved.id }`），配置没提到的条目按内置顺序追加到末尾，`resolvedShowState = saved.showState ?: if (saved.enabled == false) 1 else 0` 兼容只有 `enabled` 的旧配置，整体包在 `runCatching {}.getOrDefault(allItems)` 里，坏 JSON 回落全量条目。渲染消费在 `ui/book/read/TextActionSelectionMenu.kt:122-124`（三组 filter）与 `:166`（`expandTextMenu` 为真走 `MultiLineMenuView`，为假走一行 + 「更多」弹层）；图标开关在 `:181`/`:227`/`:294` 三处传 `showIcons = showSelectMenuIcon`。配置面板是 `ui/book/read/sheet/TextSelectMenuConfigSheet.kt`：两个 `TinySwitchSettingItem`（`:155-172`）+ 一级 / 折叠 / 隐藏三个分组，行内两个按钮（移入折叠、移入隐藏），隐藏项点一下恢复。
+
+**本地落地**：
+1. 新建 `entry/src/main/ets/data/ReaderSelectionMenu.ets`：`ReaderSelectionMenuItem { id, title, group }` 条目模型、14 项内置序（出厂全部 `showState = 0`，与上游一致）、`READER_SELECTION_MENU_SUPPORTED = ['menu_copy','menu_bookmark','menu_mark']`、`parseReaderSelectionMenuConfig()`（严格照上游读回算法：配置顺序优先、未提到的追加、未知 id 跳过、空串与非数组回落全量）、`serializeReaderSelectionMenuConfig()`（写出 `{id, enabled, showState}`，`enabled` 恒等于 `group === 0`）。
+2. `entry/src/main/ets/data/ReaderSettingsRepository.ets`：三字段落库，存储键与上游同名——接口 `:218`/`:220`/`:226`，默认值 `:573-575`（`false` / `true` / `''`），读 `:691-693`，归一 `:960-962`，写 `:1117-1119`。
+3. `entry/src/main/ets/pages/ReaderSettingsPage.ets`：「选中文字菜单」面板接真（`:1824`）——两个开关绑真值与回调，三个分组的排序 / 分组 / 隐藏点「保存」后整体序列化落库（`syncTextMenuEntriesFromConfig()` `:1156`、`saveTextMenuConfig()` `:1164`，每次打开面板都按已落库配置重建条目表 `:1387-1389`）；入口行去掉「未迁移」，改 `migrated: true`（`:1141`）。
+4. `entry/src/main/ets/pages/ReaderPage.ets`：划词菜单改为按配置渲染（`:2495` 的 `resolveSelectionMenuItems()` 跳过 `showState === 2` 与未受支持的 id，`expandTextMenu` 为真时一级 + 折叠一起平铺、为假时折叠项收进「更多」，`:2482` 的「更多」点一下就地把折叠项展开——上游是 Popup，本地没有 Popup 层，就地展开语义等价）；图标开关在 `:2473`；三处 `onMenuShow` 都先复位「更多」展开态。
+5. `entry/src/main/ets/data/BackupRepository.ets`：三键随 `config.xml` 与 `readConfig.json` 双向导出/恢复（接口 `:240-245`、导出 `:611`/`:613`/`:615` 与 `:1069-1071`、恢复 `:1329-1334`，恢复优先 json 再 xml，缺键保留本机现值以免把已排好的顺序清空）。
+
+**已知差异**：
+1. 本地只有 `menu_copy`/`menu_bookmark`/`menu_mark` 三项有真实动作，其余 11 项是尚未迁移的能力（分享、浏览器、朗读、字典、替换、编辑、AI 净化/改写、全文搜索、插入背景音前/后）。因此**面板里可以编排 14 项，阅读页菜单只显示其中已实现的三项**——这是按「上游没有就不要这个效果」的取舍，不是配置丢失；配置串里这 11 项的 `showState` 会照存照备份，待能力接入后自然出现。
+2. **阅读页菜单的渲染未能取证**：该模拟器上本地书正文文件已丢失（正文位置显示的是书目 JSON），没有可长按选中的正常正文；`uitest uiInput longClick`、`doubleClick`、`drag` 三种注入方式都只落在系统层、不触发选区，与 KI-D6 记录的是同一限制。
+
+**验收**：面板上屏（14 项一级 / 折叠 / 隐藏三组齐备、两个开关可切）、落库格式（把「分享」移入折叠后保存 → `<string key="textSelectMenuConfig">[{&quot;id&quot;:&quot;menu_share_str&quot;,&quot;enabled&quot;:false,&quot;showState&quot;:1},…]</string>`，字段名与派生规则与上游 `SelectionMenuConfigItem` 逐字段一致）、两个布尔键默认值落库、测试期改动已复原。
 
 **KI-D3 朗读时允许音量键翻页（不接，范围之外）** —— 覆盖 D-04（`volumeKeyPageOnPlay`，`ReadSettings.kt:30`）。朗读子系统未接入，随 TTS 一起做。
 
