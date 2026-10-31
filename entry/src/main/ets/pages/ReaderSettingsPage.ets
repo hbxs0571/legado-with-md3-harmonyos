@@ -128,6 +128,12 @@ export struct ReaderSettingsPage {
   @Prop volumeKeyPage: boolean = true;
   @Prop keyPageOnLongPress: boolean = false;
   @Prop noAnimScrollPage: boolean = false;
+  /** 自定义「上一页」按键串，对齐上游 prevKeys（ReadSettings.kt:60）。 */
+  @Prop prevKeys: string = '';
+  /** 自定义「下一页」按键串，对齐上游 nextKeys（ReadSettings.kt:61）。 */
+  @Prop nextKeys: string = '';
+  /** 鼠标滚轮翻页开关，对齐上游 mouseWheelPage（ReadSettings.kt:28）。 */
+  @Prop mouseWheelPage: boolean = true;
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
   @Prop bookmarkBadgeSize: number = 10;
@@ -269,6 +275,9 @@ export struct ReaderSettingsPage {
   onVolumeKeyPageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onKeyPageOnLongPressChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onNoAnimScrollPageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onPrevKeysChange: (value: string) => void = (_value: string) => {};
+  onNextKeysChange: (value: string) => void = (_value: string) => {};
+  onMouseWheelPageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onReadingAnchorEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onSwipeToAddBookmarkChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   /** 书签角标宽度（dp）；0 表示不显示角标。 */
@@ -1075,7 +1084,8 @@ export struct ReaderSettingsPage {
           MenuSettingOption({
             title: '进度条行为', detail: this.progressBehavior === 'chapter' ? '章节进度' : '页码进度', migrated: true
           }).onClick(() => this.openDetailSheet('进度条行为', '设置拖动进度条的定位方式'))
-          MenuSettingSwitch({ title: '鼠标滚轮翻页', detail: '连接鼠标时用滚轮翻页', checked: false }).onClick(() => this.showNotMigrated('鼠标滚轮翻页'))
+          MenuSettingSwitch({ title: '鼠标滚轮翻页', detail: '分页模式下用滚轮翻页', checked: this.mouseWheelPage,
+            onChange: (enabled: boolean) => this.onMouseWheelPageChange(enabled) })
           MenuSettingSwitch({ title: '音量键翻页', detail: '按音量键切换页面', checked: this.volumeKeyPage,
             onChange: (enabled: boolean) => this.onVolumeKeyPageChange(enabled) })
           MenuSettingSwitch({ title: '朗读时允许音量键翻页', detail: '朗读期间使用音量键翻页', checked: false }).onClick(() => this.showNotMigrated('朗读时音量键翻页'))
@@ -1113,7 +1123,7 @@ export struct ReaderSettingsPage {
             .onClick(() => this.openDetailSheet('点击图片行为', '选择正文图片的点击行为'))
           MenuSettingOption({ title: '点击区域配置', detail: '设置屏幕各区域的触摸动作', migrated: true }).onClick(() => this.openDetailSheet('点击区域配置', '配置九宫格点按动作，并应用到阅读界面。'))
           MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: false }).onClick(() => this.showNotMigrated('禁用返回键'))
-          MenuSettingOption({ title: '自定义翻页按键', detail: '配置键盘快捷键' }).onClick(() => this.openDetailSheet('自定义翻页按键', '按键映射面板尚未迁移'))
+          MenuSettingOption({ title: '自定义翻页按键', detail: this.getPageKeysLabel(), migrated: true }).onClick(() => this.openDetailSheet('自定义翻页按键', '录制物理按键作为上一页/下一页'))
           MenuSettingOption({ title: '选中文字菜单', detail: '配置文本选择后的操作' }).onClick(() => this.openDetailSheet('选中文字菜单', '文本操作菜单配置尚未迁移'))
           MenuSettingSwitch({ title: '显示阅读标题补充信息', detail: '在阅读标题中显示附加信息', checked: false }).onClick(() => this.showNotMigrated('阅读标题补充信息'))
           MenuSettingSwitch({ title: '显示菜单图标', detail: '在阅读菜单中显示图标', checked: true }).onClick(() => this.showNotMigrated('显示菜单图标'))
@@ -1250,6 +1260,14 @@ export struct ReaderSettingsPage {
       ?? '关闭简繁转换';
   }
 
+  /** 自定义翻页按键的副标题：未配置时显示「未配置」，否则显示两串原文。 */
+  private getPageKeysLabel(): string {
+    const prev = this.prevKeys.trim();
+    const next = this.nextKeys.trim();
+    if (prev.length === 0 && next.length === 0) { return '未配置'; }
+    return `上 ${prev.length === 0 ? '—' : prev} / 下 ${next.length === 0 ? '—' : next}`;
+  }
+
   private getCurrentFontDisplayName(): string {
     const selectedPath = this.getFontTargetPath();
     if (selectedPath.length === 0) {
@@ -1327,6 +1345,11 @@ export struct ReaderSettingsPage {
     this.detailSheetDescription = description;
     this.detailInfoSlot = undefined;
     const choices = this.getDetailChoices(title);
+    // 自定义翻页按键面板是即时编辑式，打开时把已保存的键值串灌进输入框作为草稿。
+    if (title === '自定义翻页按键') {
+      this.previousPageKeys = this.prevKeys;
+      this.nextPageKeys = this.nextKeys;
+    }
     if (title === '排版设置') {
       this.detailSelectedOption = '正文';
     } else if (title === '页边距') {
@@ -1898,16 +1921,20 @@ export struct ReaderSettingsPage {
         } else if (this.detailSheetTitle === '自定义翻页按键') {
           Scroll() {
             Column() {
-              TextInput({ text: this.previousPageKeys, placeholder: '输入上一页按键码，多个按键用逗号分隔' })
+              Text('上一页按键').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 6, bottom: 6 })
+              TextInput({ text: this.previousPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
                 .fontSize(13).fontColor('#E5E6EB').placeholderColor('#92949E')
                 .backgroundColor('#292A31').borderRadius(10).padding(12)
                 .onChange((value: string) => this.previousPageKeys = value)
-              TextInput({ text: this.nextPageKeys, placeholder: '输入下一页按键码，多个按键用逗号分隔' })
+              Text('下一页按键').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 12, bottom: 6 })
+              TextInput({ text: this.nextPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
                 .fontSize(13).fontColor('#E5E6EB').placeholderColor('#92949E')
-                .backgroundColor('#292A31').borderRadius(10).padding(12).margin({ top: 10 })
+                .backgroundColor('#292A31').borderRadius(10).padding(12)
                 .onChange((value: string) => this.nextPageKeys = value)
-              Text('按键设置支持输入按键码；确定后会应用上一页和下一页快捷键。')
-                .fontSize(11).fontColor('#AEB0B9').width('100%').padding({ top: 10, bottom: 14 })
+              Text('将焦点放到输入框按下物理按键会自动录入键值，多个按键会自动用英文逗号隔开。')
+                .fontSize(11).fontColor('#AEB0B9').width('100%').padding({ top: 10, bottom: 6 })
+              Text('当前可由系统接管翻页的按键只有音量键与媒体键（上一曲/下一曲/播放暂停）；其余键值会被保存并随备份同步，但按下时只有应用窗口持有焦点才会生效。')
+                .fontSize(10).fontColor('#92949E').width('100%').padding({ bottom: 14 })
               Row() {
                 Text('重置').fontSize(13).fontColor('#D3D4DC').padding({ left: 18, right: 18, top: 10, bottom: 10 })
                   .backgroundColor('#292A31').borderRadius(18)
@@ -1915,10 +1942,12 @@ export struct ReaderSettingsPage {
                 Blank()
                 Text('确定').fontSize(13).fontColor('#101116').padding({ left: 20, right: 20, top: 10, bottom: 10 })
                   .backgroundColor('#C6D3FF').borderRadius(18)
-                  .onClick(() => this.onUnavailableAction('翻页按键设置尚未保存'))
+                  .onClick(() => {
+                    this.onPrevKeysChange(this.previousPageKeys);
+                    this.onNextKeysChange(this.nextPageKeys);
+                    this.detailSheetVisible = false;
+                  })
               }.width('100%')
-              Text('当前字段仅供界面预览，设置尚未保存或接入物理按键事件。')
-                .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '护眼设置') {

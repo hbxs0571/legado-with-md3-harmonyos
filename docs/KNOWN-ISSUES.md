@@ -300,9 +300,35 @@
 
 ### D 翻页与手势交互
 
-**KI-D1 翻页按键与鼠标滚轮（要接，分批）** —— 覆盖 D-01 自定义翻页按键（`prevKeys`/`nextKeys`，`ReadSettings.kt:60`/`:61`）、D-03 鼠标滚轮翻页（`mouseWheelPage`，`:28`）。
+**KI-D1 翻页按键与鼠标滚轮（已实现）** —— 覆盖 D-01 自定义翻页按键（`prevKeys`/`nextKeys`，`ReadSettings.kt:60`/`:61`）、D-03 鼠标滚轮翻页（`mouseWheelPage`，`:28`）。
 
-D-01 需要按键映射面板 + 键盘事件；D-03 依赖鼠标滚轮事件，属「额外设备形态」（[项目范围](PROJECT.md)之外）。补法：D-01 先做固定映射（音量键之外再补两键），再做可配置面板；D-03 随桌面形态一起。
+**上游口径**
+
+- 存储键与字段名不同：`constant/PreferKey.kt:48-49` 是 `prevKeys = "prevKeyCodes"`、`nextKeys = "nextKeyCodes"`，值都是英文逗号分隔的键值串。
+- 判键 `ui/book/read/ReadBookController.kt:3241-3255`：`prevKeysStr.split(",").contains(keyCode.toString())`。注意是字符串包含，不是整数比较。
+- `:2699` `onKeyDown` 的顺序是**自定义键优先**：先 `isPrevKey`/`isNextKey` 命中就 `handleKeyPage` 并 `return true`，之后才轮到音量键、PAGE_UP/DOWN、SPACE、DPAD、媒体键。菜单可见时（`menuLayoutIsVisible`）直接 `return false` 不接管。
+- `:2845` `mouseWheelPage(direction)`：`if (menuLayoutIsVisible || !readSettingsGateway.currentSettings.mouseWheelPage) { return }`，之后走 `keyPageDebounce(direction, mouseWheel = true, longPress = false)`。
+- 面板 `ui/book/read/sheet/PageKeyConfigSheet.kt`：两个 `OutlinedTextField`，`onKeyEvent` 里读 `event.nativeKeyEvent.keyCode`，只要不是 BACK/DEL 就追加进串（空串或已以逗号结尾直接接，否则先补逗号）；「重置」清空两串，「确定」调 `ReadSettingsRepository.setPageKeys(prevKeys, nextKeys)`。
+
+**本地落地**
+
+1. `ReaderSettingsRepository.ets:209`/`:211`/`:213` 三字段，`:556-558` 默认值 `''`/`''`/`true`（对齐 `ReadSettings.kt:28`/`:60`/`:61`），读 `:671-673` 用 `prevKeyCodes`/`nextKeyCodes`/`mouseWheelPage` 三个偏好键，写 `:1091-1093`，归一函数 `:1241` `normalizeKeyCodes`（切逗号、只留正整数、去重）。
+2. `ReaderPage.ets:545` `matchPageKey(code)` 返回 -1/1/0，`parsePageKeyCodes` `:515` 解析串，`collectPageKeyCodes` `:528` 合并自定义键与音量键（音量键仅在 `volumeKeyPage` 为真时补），`isConsumablePageKey` `:508` 只认五个能被系统让出的键。
+3. `syncVolumeKeyPage` `:479` 改成按签名（`volumeKeyPage|keyPageOnLongPress|prevKeys|nextKeys`）比对后重订阅，每个键单独 try/catch，某个键不允许抢占时静默跳过而不是整组失败。
+4. 滚轮：根容器 `:3869` `.onAxisEvent`，先判 `pageAnimation === 3`（滚动模式本就靠滚轮滚动，不接管）、`mouseWheelPage`、`controlsVisible`，只响应 `AxisAction.UPDATE`，`|axisVertical| < 0.5` 视为抖动，最后 `turnReaderPage(vertical > 0 ? 1 : -1)`。
+5. 键盘兜底：根容器 `:3878` `.onKeyEvent` 走 `matchPageKey`，命中就翻页并 `stopPropagation()`；根容器同时 `.focusable(true)`。
+6. 面板 `ReaderSettingsPage.ets:1126` 副标题由 `getPageKeysLabel()` `:1264` 生成（未配置显示「未配置」，否则 `上 X / 下 Y`）；详情面板 `:1921-1950` 两个 `TextInput` + 重置 + 确定，打开时把已存值灌进草稿（`:1349-1351`）。滚轮开关 `:1087-1088` 绑真值。
+7. 备份 `BackupRepository.ets:598/600/602` 写进 config.xml（`prevKeyCodes`/`nextKeyCodes` 为 string、`mouseWheelPage` 为 boolean），`:1053-1055` 写进 readConfig.json，`:1306-1311` 恢复时 json 优先、config.xml 次之、否则保当前值。
+
+**已知差异（SDK 硬约束，不是取舍）**
+
+- 上游 `onKeyDown` 能吃掉任意物理键。HOS 侧：`@ohos.multimodalInput.inputConsumer.d.ts` 的 `KeyPressedConfig.key` 注释写明——API 21 起才支持 `KEYCODE_MEDIA_PLAY_PAUSE`/`KEYCODE_MEDIA_NEXT`/`KEYCODE_MEDIA_PREVIOUS`，**API 20 及以下只支持 `KEYCODE_VOLUME_UP`/`KEYCODE_VOLUME_DOWN`**。所以本机能做应用级抢占的只有这五个键（`isConsumablePageKey`）。
+- 其余键值照常保存、照常随备份同步，按下时靠 ArkUI `onKeyEvent` 冒泡接收，前置条件是窗口/组件持有焦点（根容器已 `.focusable(true)`，但系统级快捷键、输入法焦点转移仍可能先吃掉事件）。面板文案已把这条写给用户，不做静默丢弃。
+- 滚轮：`onAxisEvent` 是 ArkUI 的轴事件，触控板/鼠标滚轮在分页模式下接管；滚动模式（`pageAnimation === 3`）主动不接管，与上游「只在分页模式生效」一致。
+
+**验收**
+
+面板上屏（「鼠标滚轮翻页 / 分页模式下用滚轮翻页」「自定义翻页按键 / 未配置」）；填 `2069` 点确定后列表副标题变 `上 2069 / 下 —`，偏好文件出现 `<string key="prevKeyCodes">2069</string>`；开关点两次在 `<bool key="mouseWheelPage" value="false"/>` 与 `value="true"` 之间往返；测试值已复原为空串/`true`。**按键与滚轮的实际翻页未能取证**：该模拟器上 `uitest uiInput keyEvent` 与 `uinput -K`/`uinput -M` 连设置页明显可滚动的列表都推不动，属工具限制，见 [VALIDATION](VALIDATION.md) 同日对照实验。
 
 **KI-D2 划词菜单三项（要接，需先抽条目模型）** —— 覆盖 D-02 选中文字菜单（`textSelectMenuConfig`，`ReadSettings.kt:53`）、D-08 展开文字菜单（`expandTextMenu`，`:51`）、D-09 显示选择菜单图标（`showSelectMenuIcon`，`:52`）。
 

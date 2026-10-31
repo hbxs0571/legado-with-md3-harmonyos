@@ -202,6 +202,15 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   volumeKeyPage: boolean;
   keyPageOnLongPress: boolean;
   noAnimScrollPage: boolean;
+  /**
+   * 上一页按键，英文逗号分隔的键值串，对应上游 `ReadSettings.prevKeys`
+   * （`ReadSettings.kt:60`；存储键是 `prevKeyCodes`，见 `PreferKey.kt:48`）。空串表示不额外映射。
+   */
+  prevKeys: string;
+  /** 下一页按键，规则同 `prevKeys`（`ReadSettings.kt:61`；存储键 `nextKeyCodes`，见 `PreferKey.kt:49`）。 */
+  nextKeys: string;
+  /** 鼠标滚轮是否翻页，对应上游 `ReadSettings.mouseWheelPage`（`ReadSettings.kt:28`），默认开。 */
+  mouseWheelPage: boolean;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -543,6 +552,10 @@ export class ReaderSettingsRepository {
       volumeKeyPage: true,
       keyPageOnLongPress: false,
       noAnimScrollPage: false,
+      // 上游默认值：prevKeys/nextKeys 空串、mouseWheelPage 开（ReadSettings.kt:28/60/61）
+      prevKeys: '',
+      nextKeys: '',
+      mouseWheelPage: true,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -654,6 +667,10 @@ export class ReaderSettingsRepository {
       const volumeKeyPageValue = await store.get('volumeKeyPage', defaults.volumeKeyPage);
       const keyPageOnLongPressValue = await store.get('keyPageOnLongPress', defaults.keyPageOnLongPress);
       const noAnimScrollPageValue = await store.get('noAnimScrollPage', defaults.noAnimScrollPage);
+      // 存储键沿用上游偏好键名 prevKeyCodes / nextKeyCodes（PreferKey.kt:48-49），备份才能互通
+      const prevKeysValue = await store.get('prevKeyCodes', defaults.prevKeys);
+      const nextKeysValue = await store.get('nextKeyCodes', defaults.nextKeys);
+      const mouseWheelPageValue = await store.get('mouseWheelPage', defaults.mouseWheelPage);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -917,6 +934,9 @@ export class ReaderSettingsRepository {
           ? keyPageOnLongPressValue : defaults.keyPageOnLongPress,
         noAnimScrollPage: typeof noAnimScrollPageValue === 'boolean'
           ? noAnimScrollPageValue : defaults.noAnimScrollPage,
+        prevKeys: ReaderSettingsRepository.normalizeKeyCodes(prevKeysValue),
+        nextKeys: ReaderSettingsRepository.normalizeKeyCodes(nextKeysValue),
+        mouseWheelPage: typeof mouseWheelPageValue === 'boolean' ? mouseWheelPageValue : defaults.mouseWheelPage,
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1068,6 +1088,9 @@ export class ReaderSettingsRepository {
       await store.put('volumeKeyPage', settings.volumeKeyPage);
       await store.put('keyPageOnLongPress', settings.keyPageOnLongPress);
       await store.put('noAnimScrollPage', settings.noAnimScrollPage);
+      await store.put('prevKeyCodes', ReaderSettingsRepository.normalizeKeyCodes(settings.prevKeys));
+      await store.put('nextKeyCodes', ReaderSettingsRepository.normalizeKeyCodes(settings.nextKeys));
+      await store.put('mouseWheelPage', settings.mouseWheelPage === true);
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
@@ -1210,6 +1233,24 @@ export class ReaderSettingsRepository {
    * 小数归一：上游 titleSegScaling 的规则是「负值非法回落 1，上限 2」（ReadBookConfig.kt:283-286），
    * 与整数夹取语义不同，单列一个函数。
    */
+  /**
+   * 键值串归一：上游把键值存成英文逗号分隔的整数串（`ReadBookController.kt:3241-3247` 用
+   * `split(",").contains(keyCode.toString())` 比对）。这里只保留能解析成非负整数的项并去重，
+   * 顺带把分隔符统一成全角逗号与空格都认的写法，避免脏数据让整串失效。
+   */
+  private static normalizeKeyCodes(value: number | boolean | string | bigint | Uint8Array | object): string {
+    if (typeof value !== 'string') { return ''; }
+    const codes: number[] = [];
+    for (const piece of value.split(',')) {
+      const trimmed = piece.trim();
+      if (trimmed.length === 0) { continue; }
+      const parsed = Number(trimmed);
+      if (!Number.isInteger(parsed) || parsed <= 0) { continue; }
+      if (!codes.includes(parsed)) { codes.push(parsed); }
+    }
+    return codes.join(',');
+  }
+
   private static normalizeFraction(value: number | boolean | string | bigint | Uint8Array | object,
     lower: number, upper: number, fallback: number): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) { return fallback; }

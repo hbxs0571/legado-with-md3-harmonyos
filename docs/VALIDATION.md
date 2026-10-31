@@ -305,6 +305,19 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-D1 自定义翻页按键与鼠标滚轮翻页（落库与接线通过，按键与滚轮实际翻页未验）
+
+- 设备与构建：模拟器 `127.0.0.1:5555`（1280×2832，HOS）。`assembleHap` 通过，`BUILD SUCCESSFUL in 36 s 264 ms`，33 项任务 17 执行 / 16 最新；仅既有 ArkTS 警告与 `No signingConfig found for product default`。`hdc install -r` 回 `install bundle successfully`。
+- 面板上屏：设置 → 阅读界面 → 底部「更多」tab（y 2618）→ 下滚到「翻页控制」段，读到「鼠标滚轮翻页 / 分页模式下用滚轮翻页」（Toggle bounds x 1057–1183）与「自定义翻页按键 / 未配置」。副标题不再是写死的「尚未迁移」。
+- 详情面板：点「自定义翻页按键」读到标题、描述「录制物理按键作为上一页/下一页」、「上一页按键」+ 输入框（hint「按键码，多个用英文逗号分隔」，bounds `[140,1189][1140,1357]`）、「下一页按键」+ 输入框（`[140,1469][1140,1637]`）、两句口径说明、「重置」「确定」。
+- 按键串落库：聚焦第一个输入框输入 `2069` 点「确定」后，偏好文件出现 `<string key="prevKeyCodes">2069</string>`，列表副标题同步变为 **`上 2069 / 下 —`**；清空后副标题回「未配置」、偏好文件两串为空。
+- 滚轮开关落库：点开关 → `<bool key="mouseWheelPage" value="false"/>`；再点一次回 `value="true"`。符合上游默认开（`ReadSettings.kt:28`）。
+- **未验（工具限制）**：按键真正触发翻页、鼠标滚轮真正翻页都没能取证。三项输入注入手段全部无效——`uitest uiInput keyEvent 2069`（PAGE_DOWN）/`2050`（SPACE）/`17`（VOLUME_DOWN）在阅读页不翻页；`uinput -K -d <code> -u <code>` 无反应；`uinput -M -m 640 1400` + `-s 1..10` 连设置页明显可滚动的列表都滚不动（首项仍是「设置 / 外观 / 高级 / 阅读界面 / 朗读设置」）。既然注入在已知可滚动的列表上也不生效，判定为该模拟器的注入能力限制，不是本次代码问题。
+- 只读证据链：`syncVolumeKeyPage`（`ReaderPage.ets:479`）按签名重订阅、`collectPageKeyCodes`（`:528`）只收 `isConsumablePageKey`（`:508`）放行的五键、`matchPageKey`（`:545`）自定义键先于音量键，与上游 `ReadBookController.kt:2699`/`:3241-3255` 同序；滚轮在根容器 `onAxisEvent`（`:3869`）且只在分页模式接管，与上游 `:2845` 的早退条件一致。
+- 已知差异：`inputConsumer` 在 API 20 及以下只放开音量键、API 21+ 才加媒体三键，其余键值本地照存照备份但需窗口持焦点才能经 `onKeyEvent` 生效；上游 `onKeyDown` 无此限制。详情见 `docs/KNOWN-ISSUES.md` KI-D1。
+- 测试期改动已复原：`prevKeyCodes` 与 `nextKeyCodes` 为空串、`mouseWheelPage` 为 `true`。
+- 本节只代表 N 端模拟器，不代表真机与 API 12 兼容结论。
+
 ## 2026-10-31 N 端 KI-C3 下划线四个几何参数（分页模式通过，滚动模式未接）
 
 1. 设备与构建：HOS 模拟器 `127.0.0.1:5555`（Mate 90 Pro，1280×2832），`io.legado.harmony`。

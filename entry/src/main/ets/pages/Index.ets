@@ -200,6 +200,12 @@ struct Index {
   @State readerVolumeKeyPage: boolean = true;
   @State readerKeyPageOnLongPress: boolean = false;
   @State readerNoAnimScrollPage: boolean = false;
+  /** 自定义翻页按键：英文逗号分隔的键值串，对齐上游 prevKeys（存储键 prevKeyCodes）。 */
+  @State readerPrevKeys: string = '';
+  /** 自定义翻页按键：对齐上游 nextKeys（存储键 nextKeyCodes）。 */
+  @State readerNextKeys: string = '';
+  /** 鼠标滚轮翻页开关，对齐上游 mouseWheelPage。 */
+  @State readerMouseWheelPage: boolean = true;
   @State readerReadingAnchorEnabled: boolean = true;
   @State readerSwipeToAddBookmark: boolean = false;
   /** 阅读页书签角标宽度（dp），0 表示不显示；与上游 bookmarkBadgeSize 对齐。 */
@@ -1785,6 +1791,9 @@ struct Index {
       this.readerVolumeKeyPage = settings.volumeKeyPage;
       this.readerKeyPageOnLongPress = settings.keyPageOnLongPress;
       this.readerNoAnimScrollPage = settings.noAnimScrollPage;
+      this.readerPrevKeys = settings.prevKeys;
+      this.readerNextKeys = settings.nextKeys;
+      this.readerMouseWheelPage = settings.mouseWheelPage;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1929,6 +1938,9 @@ struct Index {
         volumeKeyPage: this.readerVolumeKeyPage,
         keyPageOnLongPress: this.readerKeyPageOnLongPress,
         noAnimScrollPage: this.readerNoAnimScrollPage,
+        prevKeys: this.readerPrevKeys,
+        nextKeys: this.readerNextKeys,
+        mouseWheelPage: this.readerMouseWheelPage,
         readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -2379,6 +2391,24 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
 
+  private setReaderPrevKeys(value: string): void {
+    this.readerPrevKeys = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderNextKeys(value: string): void {
+    this.readerNextKeys = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderMouseWheelPage(enabled: boolean): void {
+    this.readerMouseWheelPage = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -2782,6 +2812,9 @@ struct Index {
       ReplaceRuleRepository.setChineseConverterType(result.settings.chineseConverterType);
       this.readerPageTouchSlop = result.settings.pageTouchSlop;
       this.readerLastMarkingStyle = result.settings.lastMarkingStyle;
+      this.readerPrevKeys = result.settings.prevKeys;
+      this.readerNextKeys = result.settings.nextKeys;
+      this.readerMouseWheelPage = result.settings.mouseWheelPage;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4075,6 +4108,9 @@ struct Index {
             volumeKeyPage: this.readerVolumeKeyPage,
             keyPageOnLongPress: this.readerKeyPageOnLongPress,
             noAnimScrollPage: this.readerNoAnimScrollPage,
+            prevKeys: this.readerPrevKeys,
+            nextKeys: this.readerNextKeys,
+            mouseWheelPage: this.readerMouseWheelPage,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4259,6 +4295,9 @@ struct Index {
               keyPageOnLongPress: this.readerKeyPageOnLongPress,
               onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
               noAnimScrollPage: this.readerNoAnimScrollPage,
+              prevKeys: this.readerPrevKeys,
+              nextKeys: this.readerNextKeys,
+              mouseWheelPage: this.readerMouseWheelPage,
               readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4269,6 +4308,9 @@ struct Index {
         chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
               onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+              onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
+              onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
+              onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
@@ -4629,6 +4671,9 @@ struct Index {
             keyPageOnLongPress: this.readerKeyPageOnLongPress,
             onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
             noAnimScrollPage: this.readerNoAnimScrollPage,
+            prevKeys: this.readerPrevKeys,
+            nextKeys: this.readerNextKeys,
+            mouseWheelPage: this.readerMouseWheelPage,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4639,6 +4684,9 @@ struct Index {
         chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+            onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
+            onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
+            onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
@@ -4864,6 +4912,9 @@ struct Index {
             keyPageOnLongPress: this.readerKeyPageOnLongPress,
             onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
             noAnimScrollPage: this.readerNoAnimScrollPage,
+            prevKeys: this.readerPrevKeys,
+            nextKeys: this.readerNextKeys,
+            mouseWheelPage: this.readerMouseWheelPage,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4874,6 +4925,9 @@ struct Index {
         chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+            onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
+            onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
+            onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),
@@ -5041,6 +5095,9 @@ struct Index {
           keyPageOnLongPress: this.readerKeyPageOnLongPress,
           onKeyPageOnLongPressChange: (enabled: boolean) => this.setReaderKeyPageOnLongPress(enabled),
           noAnimScrollPage: this.readerNoAnimScrollPage,
+          prevKeys: this.readerPrevKeys,
+          nextKeys: this.readerNextKeys,
+          mouseWheelPage: this.readerMouseWheelPage,
           readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -5051,6 +5108,9 @@ struct Index {
         chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
           onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
+          onPrevKeysChange: (value: string) => this.setReaderPrevKeys(value),
+          onNextKeysChange: (value: string) => this.setReaderNextKeys(value),
+          onMouseWheelPageChange: (enabled: boolean) => this.setReaderMouseWheelPage(enabled),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
               onBookmarkBadgeSizeChange: (value: number) => this.setReaderBookmarkBadgeSize(value),

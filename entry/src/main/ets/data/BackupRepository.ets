@@ -229,6 +229,14 @@ interface AndroidReadConfigBackupRecord {
   titleSegScaling: number;
   titleSegDistance: number;
   titleSegFlag: string;
+  /**
+   * 自定义翻页按键与滚轮翻页；上游存储键是 prevKeyCodes/nextKeyCodes
+   * （PreferKey.kt:48-49），字段名才是 prevKeys/nextKeys（ReadSettings.kt:60-61）。
+   */
+  prevKeyCodes: string;
+  nextKeyCodes: string;
+  /** 鼠标滚轮翻页；上游 ReadSettings.kt:28 `mouseWheelPage: Boolean = true`。 */
+  mouseWheelPage: boolean;
 }
 
 interface JsonStringResult {
@@ -584,6 +592,14 @@ export class BackupRepository {
           configText, 'int', 'underlinePadding', `${settings.underlinePadding}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'underlineExtend', settings.underlineExtend ? 'true' : 'false');
+        // 自定义翻页按键与滚轮翻页：上游这几个键不在 BackupConfig.readPrefKeys
+        // 忽略清单里，随 config.xml 无条件备份。存储键用 prevKeyCodes/nextKeyCodes。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'prevKeyCodes', settings.prevKeys);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'nextKeyCodes', settings.nextKeys);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'mouseWheelPage', settings.mouseWheelPage ? 'true' : 'false');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'float', 'dottedBase', `${settings.dottedBase}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1034,6 +1050,9 @@ export class BackupRepository {
       underlineHeight: settings.underlineHeight,
       underlinePadding: settings.underlinePadding,
       underlineExtend: settings.underlineExtend,
+      prevKeyCodes: settings.prevKeys,
+      nextKeyCodes: settings.nextKeys,
+      mouseWheelPage: settings.mouseWheelPage,
       dottedBase: settings.dottedBase,
       dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
@@ -1282,6 +1301,14 @@ export class BackupRepository {
         current.underlinePadding))),
       underlineExtend: BackupRepository.readJsonBoolean(selected, 'underlineExtend') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'underlineExtend') ?? current.underlineExtend,
+      // 上游把这两串存在 prevKeyCodes/nextKeyCodes 里（PreferKey.kt:48-49），
+      // 缺键时保留本机现值，避免恢复把已配置的按键清空。
+      prevKeys: BackupRepository.readJsonString(selected, 'prevKeyCodes') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'prevKeyCodes') ?? current.prevKeys,
+      nextKeys: BackupRepository.readJsonString(selected, 'nextKeyCodes') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'nextKeyCodes') ?? current.nextKeys,
+      mouseWheelPage: BackupRepository.readJsonBoolean(selected, 'mouseWheelPage') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'mouseWheelPage') ?? current.mouseWheelPage,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

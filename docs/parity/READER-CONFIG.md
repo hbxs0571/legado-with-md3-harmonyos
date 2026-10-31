@@ -52,15 +52,15 @@
 | A 阅读界面基础 | 37 | 16 | 19 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
 | C 正文排版 | 49 | 48 | 1 | 0 |
-| D 翻页与手势交互 | 20 | 13 | 7 | 0 |
+| D 翻页与手势交互 | 20 | 15 | 5 | 0 |
 | E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 120 | 67 | 2 |
+| 合计 | 189 | 122 | 65 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 KI-C3 落库：C 块四个下划线几何参数（`underlinePadding`/`underlineExtend`/`dottedBase`/`dottedRatio`）改判 `已接`。这四项**不能**用 ArkUI 的 `Text.decoration` 表达——`DecorationStyleInterface` 只有 `type`/`color`/`style`/`thicknessScale` 四个字段，没有虚线段长、间隔与竖直偏移（这是上游 `ReaderPageUnderline` 能自由配 `DashPathEffect` 而 HOS 不能的根因）。所以改为**自绘**：`ReaderPage.ets` 新增 `ReaderUnderlineLayer(uniform)`，用 `Line()` 的 `startPoint`/`endPoint`/`strokeWidth`/`strokeDashArray` 按 `LocalReaderLine` 逐行叠在正文之上，并把原本 6 处 `Text.decoration` 的正文下划线收敛为 `None` 以免双线；滚动模式拿不到行几何，仍用 Text 装饰（四项只在分页模式生效，已在 KNOWN-ISSUES KI-C3 记为已知差异）。设备实测三档偏移 409/444/478、撑满前后短行 665→1168、虚线段数 34→18。现 67 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 KI-C3 落库：C 块四个下划线几何参数（`underlinePadding`/`underlineExtend`/`dottedBase`/`dottedRatio`）改判 `已接`。这四项**不能**用 ArkUI 的 `Text.decoration` 表达——`DecorationStyleInterface` 只有 `type`/`color`/`style`/`thicknessScale` 四个字段，没有虚线段长、间隔与竖直偏移（这是上游 `ReaderPageUnderline` 能自由配 `DashPathEffect` 而 HOS 不能的根因）。所以改为**自绘**：`ReaderPage.ets` 新增 `ReaderUnderlineLayer(uniform)`，用 `Line()` 的 `startPoint`/`endPoint`/`strokeWidth`/`strokeDashArray` 按 `LocalReaderLine` 逐行叠在正文之上，并把原本 6 处 `Text.decoration` 的正文下划线收敛为 `None` 以免双线；滚动模式拿不到行几何，仍用 Text 装饰（四项只在分页模式生效，已在 KNOWN-ISSUES KI-C3 记为已知差异）。设备实测三档偏移 409/444/478、撑满前后短行 665→1168、虚线段数 34→18。现 65 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 > 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
@@ -68,6 +68,7 @@
 > 2026-10-31 KI-C5 落库：C 块「繁简转换」（`chineseConverterType`）由 `未接` 改 `已接`，C 块 26 未接 → 25 未接，全表 92 → 91。上游用 `quick-chinese-transfer` 字表，本地改用系统 ICU 的 `i18n.Transliterator`（`Traditional-Simplified` / `Simplified-Traditional`），正文与章节标题两处应用点都接上了；设备实测选「简体转繁体」后正文与标题同时变繁体，改回关闭恢复简体。
 > 2026-10-31 KI-C1/KI-C2 落库：C 块「正文日间颜色」「正文夜间颜色」「正文强调色」「背景透明度」「背景颜色/图片」「白天是否暗色状态栏」六条由 `未接` 改 `已接`，C 块 25 未接 → 19 未接，全表 91 → 85。两组必须一并做（`textColor` 与自定义 `bgStr` 必须同源，否则会出现「纸色六方案、文字色任意色」的错配）。上游 `textAccentColor` 的真实消费点是链接、搜索结果与朗读中段落（`ReaderCanvasSurface.kt:2997`），本地这三条路径都还没有（搜索只切路由、朗读未迁移），按「上游没有就不要这个效果」只做可配+落库+随备份，不发明新着色；`bgAlpha` 与上游一致只作用于背景图片。
 > 2026-10-31 KI-C4 落库：C 块标题排版十四项（`titleMode`、`titleSize`、`titleSizeRelative`、`titleTopSpacing`、`titleBottomSpacing`、`titleColor`、`titleColorNight`、`titleBold`、`titleLineSpacingExtra`、`titleLineSpacingSub`、`titleSegType`、`titleSegScaling`、`titleSegDistance`、`titleSegFlag`）全部由 `未接` 改 `已接`，C 块 19 未接 → 5 未接，全表 85 → 71。原先 9 处硬编码 `this.fontSize + 4` 与两处 `.margin({ bottom: 24 })` 全部清除，标题样式统一走 `ReaderPage.ets` 的 `resolveTitle*()` 系列方法与 `measureTitleReservedLines()`，因此改字号、字距、间距、分段都会触发章节页数重算。标题分段移植为独立模块 `entry/src/main/ets/data/ReaderTitleSegmentation.ets`（109 行），渲染与分页度量共用同一份切段结果。设备验收顺带修掉两个真实缺陷：① 排版面板「标题」tab 内容超出屏幕且不可滚动（缺少上游 `TypographyTabs.kt` 那样的可滚动容器）；② 分段/标题位置选项行的 `ForEach` key 不含选中项，导致点选后高亮与右侧标签都不刷新（偏好文件已落库，界面却显示旧值）。
+> 2026-10-31 KI-D1 落库：D 块「自定义翻页按键」（`prevKeys`/`nextKeys`）与「鼠标滚轮翻页」（`mouseWheelPage`）两条由 `未接` 改 `已接`，D 块 7 未接 → 5 未接，全表 67 → 65。存储键用上游偏好键名 `prevKeyCodes`/`nextKeyCodes`（`PreferKey.kt:48-49`），备份可互通。**已知差异（SDK 限制）**：上游 `onKeyDown` 能吃掉任意物理键，而 HOS 的 `inputConsumer` 只放开音量键（API 20-）与媒体三键（API 21+）共五键做应用级抢占，其余键值本地照存照备份，但要靠 ArkUI `onKeyEvent` 冒泡且需窗口持焦点。滚轮走根容器 `onAxisEvent` 且只在分页模式接管（滚动模式本来靠滚轮滚动），对齐上游 `mouseWheelPage()` 的「菜单可见或开关关闭就 return」。设备上验到面板上屏、副标题联动与三键落库，按键/滚轮的实际翻页未能取证——该模拟器上 `uitest keyEvent` 与 `uinput -K`/`-M` 在明显可滚动的设置列表上也不生效，属工具限制。
 
 ## A 阅读界面基础
 
@@ -217,9 +218,9 @@
 | 下滑添加书签 | `ReadSettings.kt` | `ReaderSettingsRepository.ets:190` | 已接 | 本地仅对本地书生效（`ReaderPage.ets:1006` 判 `book.isLocal`） | 下滑后书签角标出现 | — |
 | 九宫格点击区域 | `ReadSettings.kt` | `ReaderSettingsRepository.ets:177` | 已接 | 本地 `clickRegionActions` 存 9 格动作数组 | 改某格动作后点击该区执行新动作 | — |
 | 点击图片行为 | `ReadSettings.kt` | `ReaderSettingsRepository.ets:176` | 已接 | — | 点插图后行为符合所选 | — |
-| 自定义翻页按键 | `ReadSettings.kt` | `ReaderSettingsPage.ets:884` | 未接 | 点开 `showNotMigrated` 语义提示「按键映射面板尚未迁移」，无按键映射数据结构 | 绑键后按键触发对应动作 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D1 |
+| 自定义翻页按键 | `ReadSettings.kt:60-61`（`prevKeys`/`nextKeys`，存储键 `prevKeyCodes`/`nextKeyCodes`，见 `PreferKey.kt:48-49`） | `ReaderSettingsRepository.ets:209`/`:211`（接口）、读 `:671-672`、写 `:1091-1092`、归一 `:1241`；消费 `ReaderPage.ets:479` `syncVolumeKeyPage`、`:515` `parsePageKeyCodes`、`:528` `collectPageKeyCodes`、`:508` `isConsumablePageKey`、`:545` `matchPageKey`、`:3869` `onAxisEvent`、`:3878` `onKeyEvent`；面板 `ReaderSettingsPage.ets:1126`、`:1921-1950`；备份 `BackupRepository.ets:598/600`（config.xml）、`:1053-1054`（json）、`:1306-1309`（恢复） | 已接 | 上游 `ReadBookController.kt:3241-3255` 用 `split(",").contains(keyCode.toString())` 判键、`:2699` `onKeyDown` 里自定义键先于内置键，本地 `matchPageKey` 同序。**SDK 限制**：`inputConsumer` 的 `KeyPressedConfig.key` 在 API 20 及以下只放开 `KEYCODE_VOLUME_UP`/`VOLUME_DOWN`，API 21+ 才加媒体三键，故只有这五键能被应用级抢占；其余键值照常保存并随备份同步，按下时靠 ArkUI `onKeyEvent` 冒泡（需窗口持焦点）才生效，与上游「任意键都行」不同，已在面板文案中说明 | 面板「上一页按键」填 `2069` 点「确定」→ 列表副标题变 `上 2069 / 下 —`，偏好文件出现 `<string key="prevKeyCodes">2069</string>`；改回空串后副标题回「未配置」、偏好文件两串为空。按键真正触发翻页未在本模拟器取证（`uitest keyEvent`/`uinput -K` 连可滚动列表都推不动，见 VALIDATION 同日对照实验） | KI-D1 已实现（见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行)） |
 | 选中文字菜单 | `ReadSettings.kt` | `ReaderSettingsPage.ets:885` | 未接 | 点开提示「文本操作菜单配置尚未迁移」 | 选中文字后菜单项可按配置增减 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D2 |
-| 鼠标滚轮翻页 | `ReadSettings.kt` | `ReaderSettingsPage.ets:848` | 未接 | 开关 `checked` 恒 `false` 且绑定 `showNotMigrated` | 接鼠标滚轮可翻页 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D1 |
+| 鼠标滚轮翻页 | `ReadSettings.kt:28`（`mouseWheelPage: Boolean = true`） | `ReaderSettingsRepository.ets:213`（接口）、读 `:673`、写 `:1093`；消费 `ReaderPage.ets:3869` 根容器 `onAxisEvent`；面板 `ReaderSettingsPage.ets:1087-1088`；备份 `BackupRepository.ets:602`（config.xml）、`:1055`（json）、`:1310-1311`（恢复） | 已接 | 上游 `ReadBookController.kt:2845` `mouseWheelPage(direction)` 在 `menuLayoutIsVisible` 或开关关闭时直接 return，本地同样先判 `controlsVisible` 与开关；本地额外要求 `pageAnimation !== 3`（滚动模式本来靠滚轮滚动，不该被接管），对齐上游「只在分页模式生效」的语义。阈值 `|axisVertical| < 0.5` 过滤触摸板抖动 | 点开关 → 偏好文件 `<bool key="mouseWheelPage" value="false"/>`；再点一次回 `true`。滚轮实际滚动翻页未在本模拟器取证（`uinput -M` 滚轮注入在设置页的 Scroll 列表上也不生效，见 VALIDATION 同日对照实验） | KI-D1 已实现（见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行)） |
 | 朗读时允许音量键翻页 | `ReadSettings.kt:30` | `ReaderSettingsPage.ets:851` | 未接 | 走 `showNotMigrated('朗读时音量键翻页')` | — | 朗读在[范围之外](../PROJECT.md)，开关已上屏故判 `未接`；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D3 |
 | 横屏双页 | `ReadSettings.kt:26` | `ReaderSettingsPage.ets:844` | 未接 | 上游 `doubleHorizontalPage` 三值，本地打开详情面板但面板内无落盘 | 横屏时左右双页显示 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D4 |
 | 进度条行为 | `ReadSettings.kt:27` | `ReaderSettingsRepository.ets:173` | 已接 | 上游 `progressBarBehavior` → 本地 `progressBehavior`，取值 `page`/`chapter`，面板 `ReaderSettingsPage.ets:847` | 拖动进度条按章节或页码定位 | — |
@@ -315,7 +316,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（67 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（65 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -608,9 +609,9 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `autoSuggestDayNight` | 要接 | 到点提示切换背景（KI-A6） |
 | `sliderVibrator` | 要接 | 进度条触感反馈；**KI-A7 已实现**（存储键 `sliderVibrator`；上游 UI 侧无消费点，本地只做可配+落库+随备份，不加振动） |
 | `selectVibrator` | 要接 | 选字触感反馈；**KI-A7 已实现**（存储键 `selectVibrator`，`ReaderPage.ets:1984`/`:1986` 经 `ReaderHaptics` 消费） |
-| `prevKeys` | 要接 | 上一页按键映射（KI-D1） |
-| `nextKeys` | 要接 | 下一页按键映射（KI-D1） |
-| `mouseWheelPage` | 要接 | 滚轮翻页，随桌面形态（KI-D1） |
+| `prevKeys` | 已接 | **KI-D1 已实现**（存储键 `prevKeyCodes`，`ReaderSettingsRepository.ets:209`/读 `:671`/写 `:1091`，面板 `ReaderSettingsPage.ets:1921`） |
+| `nextKeys` | 已接 | **KI-D1 已实现**（存储键 `nextKeyCodes`，`ReaderSettingsRepository.ets:211`/读 `:672`/写 `:1092`，面板 `ReaderSettingsPage.ets:1921`） |
+| `mouseWheelPage` | 已接 | **KI-D1 已实现**（`ReaderSettingsRepository.ets:213`/读 `:673`/写 `:1093`，消费 `ReaderPage.ets:3869` `onAxisEvent`，面板 `ReaderSettingsPage.ets:1087`） |
 | `textSelectMenuConfig` | 要接 | 划词菜单条目配置（KI-D2） |
 | `expandTextMenu` | 要接 | 菜单展开态，本地只有预览 `@State`（KI-D2） |
 | `showSelectMenuIcon` | 要接 | 选择菜单图标（KI-D2） |
@@ -670,7 +671,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 2. ~~**C 块标题排版 14 项**~~ —— **2026-10-31 KI-C4 已完成**。当初估计的改动面正确（9 处 `fontSize + 4` 硬编码确实全部清除，`titleSizeRelative` 用显式 `boolean` 默认 `true` 等价覆盖上游 null 态）。实际风险点不在取值而在两处 UI：面板缺少可滚动容器、`ForEach` key 不含选中项，两处都已修（详见本节末段与 `docs/VALIDATION.md` 的 KI-C4 节）。
 3. ~~**C 块正文与背景 6 行 + 下划线虚线 4 行**~~ —— **正文与背景 6 行已由 2026-10-31 KI-C1/KI-C2 完成**（11 个字段全部落库：正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2；`getReadingTextColor()` 的硬编码已改走 `textColor`/`textColorNight`，背景预设 `READER_BACKGROUND_STYLES` 降级为「自定义 `bgStr` 为空时的回退」）。**下划线虚线 4 行已由 2026-10-31 KI-C3 完成**：这四项不能用 `Text.decoration`（ArkUI 只开放 `type`/`color`/`style`/`thicknessScale`），改为 `ReaderPage.ets` 的 `ReaderUnderlineLayer` 用 `Line()` 逐行自绘，并把 6 处正文 `Text.decoration` 收敛为 `None`；滚动模式无行几何，仍用 Text 装饰（已知差异）。
 
-三处阻塞里只剩第 1 条（E 块菜单外观 40 行），共 40 行未接（明细表口径）。A–G 明细表的 67 行未接分布为：E 块 40 行、A 块 19 行、D 块 7 行、C 块 1 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5，第四次因 KI-C3 接上四个下划线几何参数由 5 减到 1），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞里只剩第 1 条（E 块菜单外观 40 行），共 40 行未接（明细表口径）。A–G 明细表的 65 行未接分布为：E 块 40 行、A 块 19 行、D 块 5 行、C 块 1 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7，第五次因 KI-D1 接上 `prevKeys`/`nextKeys`/`mouseWheelPage` 减到 5；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5，第四次因 KI-C3 接上四个下划线几何参数由 5 减到 1），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 

@@ -187,6 +187,12 @@ export struct ReaderPage {
   @Prop @Watch('onKeepLightChanged') keepLight: string = '0';
   @Prop @Watch('onVolumeKeyPageChanged') volumeKeyPage: boolean = true;
   @Prop @Watch('onVolumeKeyPageChanged') keyPageOnLongPress: boolean = false;
+  /** 自定义「上一页」按键，英文逗号分隔的键值串，对齐上游 prevKeys（ReadSettings.kt:60）。 */
+  @Prop @Watch('onVolumeKeyPageChanged') prevKeys: string = '';
+  /** 自定义「下一页」按键，对齐上游 nextKeys（ReadSettings.kt:61）。 */
+  @Prop @Watch('onVolumeKeyPageChanged') nextKeys: string = '';
+  /** 鼠标滚轮是否翻页，对齐上游 mouseWheelPage（ReadSettings.kt:28）。滚动模式本来靠滚轮滚动，不受此开关影响。 */
+  @Prop mouseWheelPage: boolean = true;
   @Prop noAnimScrollPage: boolean = false;
   @Prop readingAnchorEnabled: boolean = true;
   @Prop swipeToAddBookmark: boolean = false;
@@ -319,11 +325,22 @@ export struct ReaderPage {
   private readerWindowActive: boolean = false;
   private volumeKeysSubscribed: boolean = false;
   private subscribedVolumeKeyLongPress: boolean | undefined = undefined;
-  private volumeUpHandler: (event: KeyEvent) => void = (event: KeyEvent): void => {
-    if (event.action === Action.DOWN && this.readerWindowActive && !this.controlsVisible) { this.turnReaderPage(-1); }
-  };
-  private volumeDownHandler: (event: KeyEvent) => void = (event: KeyEvent): void => {
-    if (event.action === Action.DOWN && this.readerWindowActive && !this.controlsVisible) { this.turnReaderPage(1); }
+  /** 已订阅的按键签名（音量开关|长按|上一页键串|下一页键串），变了才重订阅。 */
+  private subscribedPageKeySignature: string = '';
+  /**
+   * 统一的翻页键回调。上游 ReadBookController.kt:2699 的 onKeyDown 里自定义映射优先，
+   * 再落到音量键等内置语义；这里自定义映射命中就直接翻页，否则按音量键默认方向走。
+   */
+  private pageKeyHandler: (event: KeyEvent) => void = (event: KeyEvent): void => {
+    if (event.action !== Action.DOWN || !this.readerWindowActive || this.controlsVisible) { return; }
+    const code = event.key.code;
+    const mapped = this.matchPageKey(code);
+    if (mapped !== 0) {
+      this.turnReaderPage(mapped);
+      return;
+    }
+    if (code === KeyCode.KEYCODE_VOLUME_UP) { this.turnReaderPage(-1); }
+    else if (code === KeyCode.KEYCODE_VOLUME_DOWN) { this.turnReaderPage(1); }
   };
   onBack: () => void = () => {};
   onOpenCatalog: () => void = () => {};
@@ -460,30 +477,82 @@ export struct ReaderPage {
   }
 
   private syncVolumeKeyPage(): void {
-    if (!this.readerWindowActive || !this.volumeKeyPage || this.controlsVisible) {
+    if (!this.readerWindowActive || (!this.volumeKeyPage && this.prevKeys.length === 0 && this.nextKeys.length === 0)
+      || this.controlsVisible) {
       this.releaseVolumeKeys();
       return;
     }
-    if (this.volumeKeysSubscribed && this.subscribedVolumeKeyLongPress === this.keyPageOnLongPress) { return; }
+    const signature = `${this.volumeKeyPage}|${this.keyPageOnLongPress}|${this.prevKeys}|${this.nextKeys}`;
+    if (this.volumeKeysSubscribed && this.subscribedVolumeKeyLongPress === this.keyPageOnLongPress
+      && this.subscribedPageKeySignature === signature) { return; }
     if (this.volumeKeysSubscribed) { this.releaseVolumeKeys(); }
-    try {
-      inputConsumer.on('keyPressed', {
-        key: KeyCode.KEYCODE_VOLUME_UP, action: 1, isRepeat: this.keyPageOnLongPress
-      }, this.volumeUpHandler);
-      inputConsumer.on('keyPressed', {
-        key: KeyCode.KEYCODE_VOLUME_DOWN, action: 1, isRepeat: this.keyPageOnLongPress
-      }, this.volumeDownHandler);
-      this.volumeKeysSubscribed = true;
-      this.subscribedVolumeKeyLongPress = this.keyPageOnLongPress;
-    } catch (_) {
-      this.releaseVolumeKeys();
+    for (const code of this.collectPageKeyCodes()) {
+      try {
+        inputConsumer.on('keyPressed', {
+          key: code, action: 1, isRepeat: this.keyPageOnLongPress
+        }, this.pageKeyHandler);
+      } catch (_) {
+        // 该系统键不允许应用级抢占（inputConsumer 只在 API 21+ 放开媒体键，其余仅音量键），
+        // 交给面板说明与 onKeyEvent 兜底，这里静默跳过，避免整组订阅失败。
+      }
     }
+    this.volumeKeysSubscribed = true;
+    this.subscribedVolumeKeyLongPress = this.keyPageOnLongPress;
+    this.subscribedPageKeySignature = signature;
+  }
+
+  /**
+   * 该键是否允许用系统级 inputConsumer 抢占。上游是任意物理键（ReadBookController.kt:2699 的 onKeyDown），
+   * 本地 SDK 只放开音量键（API 20 及以下）与媒体三键（API 21+），其余键无法从这里接管。
+   */
+  private isConsumablePageKey(code: number): boolean {
+    return code === KeyCode.KEYCODE_VOLUME_UP || code === KeyCode.KEYCODE_VOLUME_DOWN
+      || code === KeyCode.KEYCODE_MEDIA_NEXT || code === KeyCode.KEYCODE_MEDIA_PREVIOUS
+      || code === KeyCode.KEYCODE_MEDIA_PLAY_PAUSE;
+  }
+
+  /** 把「英文逗号分隔的键值串」解析成去重的键值数组，非法项直接丢弃。 */
+  private parsePageKeyCodes(value: string): number[] {
+    const codes: number[] = [];
+    for (const piece of value.split(',')) {
+      const trimmed = piece.trim();
+      if (trimmed.length === 0) { continue; }
+      const parsed = Number(trimmed);
+      if (!Number.isInteger(parsed) || parsed <= 0) { continue; }
+      if (!codes.includes(parsed)) { codes.push(parsed); }
+    }
+    return codes;
+  }
+
+  /** 需要订阅的键集合：用户映射的可接管键 + 音量键开关打开时的两个默认键。 */
+  private collectPageKeyCodes(): number[] {
+    const codes: number[] = [];
+    const mapped = this.parsePageKeyCodes(this.prevKeys).concat(this.parsePageKeyCodes(this.nextKeys));
+    for (const code of mapped) {
+      if (this.isConsumablePageKey(code) && !codes.includes(code)) { codes.push(code); }
+    }
+    if (this.volumeKeyPage) {
+      if (!codes.includes(KeyCode.KEYCODE_VOLUME_UP)) { codes.push(KeyCode.KEYCODE_VOLUME_UP); }
+      if (!codes.includes(KeyCode.KEYCODE_VOLUME_DOWN)) { codes.push(KeyCode.KEYCODE_VOLUME_DOWN); }
+    }
+    return codes;
+  }
+
+  /**
+   * 该键映射到哪个方向：-1 上一页、1 下一页、0 未映射。
+   * 自定义映射优先于内置语义，对齐上游 isPrevKey/isNextKey 在 onKeyDown 里排在所有内置键之前的顺序。
+   */
+  private matchPageKey(code: number): number {
+    if (this.parsePageKeyCodes(this.prevKeys).includes(code)) { return -1; }
+    if (this.parsePageKeyCodes(this.nextKeys).includes(code)) { return 1; }
+    return 0;
   }
 
   private releaseVolumeKeys(): void {
     try { inputConsumer.off('keyPressed'); } catch (_) {}
     this.volumeKeysSubscribed = false;
     this.subscribedVolumeKeyLongPress = undefined;
+    this.subscribedPageKeySignature = '';
   }
 
   onSystemBarSettingsChanged(): void {
@@ -3793,6 +3862,26 @@ export struct ReaderPage {
     .backgroundColor(this.paperColor)
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) { this.renewKeepLightTimeout(); }
+    })
+    .focusable(true)
+    // 鼠标滚轮翻页：仅分页模式接管，滚动模式本来就靠滚轮滚动（对齐上游
+    // ReadBookController.kt:2845 的 mouseWheelPage，那里也是翻页而非滚动）。
+    .onAxisEvent((event: AxisEvent) => {
+      if (this.pageAnimation === 3 || !this.mouseWheelPage || this.controlsVisible) { return; }
+      if (event.action !== AxisAction.UPDATE) { return; }
+      const vertical = event.axisVertical ?? 0;
+      if (Math.abs(vertical) < 0.5) { return; }
+      this.turnReaderPage(vertical > 0 ? 1 : -1);
+    })
+    // 自定义翻页按键的兜底入口：inputConsumer 只能抢占音量键与媒体键（API 21+），
+    // 其余键靠这里冒泡接收，对齐上游 ReadBookController.kt:2699 的 onKeyDown。
+    .onKeyEvent((event) => {
+      if (event.type !== KeyType.Down || this.controlsVisible || !this.readerWindowActive) { return; }
+      const mapped = this.matchPageKey(event.keyCode);
+      if (mapped !== 0) {
+        this.turnReaderPage(mapped);
+        event.stopPropagation();
+      }
     })
   }
 }
