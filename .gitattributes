@@ -1,0 +1,11 @@
+# 语言统计修正
+#
+# GitHub 的语言识别工具 linguist 目前不认识 .ets（ArkTS 的官方支持 PR 尚未合入主干，
+# 见 github-linguist/linguist#7742 与 #7275）。结果是本仓库 94 个 .ets 文件一个字节
+# 都不计入语言统计，右侧语言条只剩 3 个 .py 脚本与 1 个 .sh 脚本，显示成
+# 「Python 57% / Shell 41% / TypeScript 1%」——与项目实际形态完全不符。
+#
+# 显式声明 .ets 按 TypeScript 统计。ArkTS 本就是 TypeScript 的超集，这样标注与实际
+# 语义一致，也让语言条回到真实比例（约 99% TypeScript）。
+# 这一行只影响 GitHub 网页上的语言条与语言标签，不影响 clone、构建、CI 或代码高亮。
+*.ets linguist-language=TypeScript
