@@ -315,6 +315,51 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * 底栏与顶栏共用同一个字段（`ReadBookMenuBar.kt:482`、`ReadBookMenuBarTitle.kt:95`）。
    */
   readMenuBlurAlpha: number;
+  /**
+   * 标题栏是否把书名与章节名合并成胶囊；上游 `readMenuTopBarTitleCapsule: Boolean = false`
+   * （`ReadSettings.kt:100`），存储键同名（`PreferKey.kt:399`）。
+   */
+  readMenuTopBarTitleCapsule: boolean;
+  /**
+   * 标题栏显示方式；上游 `titleBarMode: String = "1"`（`ReadSettings.kt:12`），
+   * 存储键同名（`PreferKey.kt:426`）。四值见 `array_values.xml:146-151` 的
+   * `title_bar_mode_value`："0" 书名在应用栏 + 章节名在下一行 / "1" 书名独立一行 +
+   * 章节名再一行 / "2" 仅书名 / "3" 都不显示（消费点 `ReadBookMenuBarTitle.kt:198-262`）。
+   */
+  titleBarMode: string;
+  /**
+   * 标题栏是否精简；上游 `titleBarCompact: Boolean = false`（`ReadSettings.kt:120`），
+   * 存储键同名（`PreferKey.kt:418`）。为真时顶栏只保留「更多」按钮
+   * （`ReadMenuActionDefs.kt:506`）。
+   */
+  titleBarCompact: boolean;
+  /**
+   * 标题栏图标样式；上游 `titleBarIconStyle: Int = 0`（`ReadSettings.kt:91`），
+   * 存储键同名（`PreferKey.kt:390`），消费前 `coerceIn(0, 2)`（`ReadBookConfig.kt:101`）。
+   * 0 纯色 / 1 色调 / 2 描边。
+   */
+  titleBarIconStyle: number;
+  /**
+   * 顶栏模糊模式；上游 `readMenuTopBarBlurMode: Int = ReadMenuBlurMode.None`
+   * （`ReadSettings.kt:96`），存储键同名（`PreferKey.kt:395`），夹 0-2（`ReadBookConfig.kt:105`）。
+   * 注意与底栏不同：顶栏的开关只认 `Haze = 2`（`SystemMenuPage.kt` TopBarTab）。
+   */
+  readMenuTopBarBlurMode: number;
+  /**
+   * 顶栏模糊样式；上游 `readMenuTopBarBlurStyle: Int = ReadMenuBlurStyle.Solid`
+   * （`ReadSettings.kt:103`），存储键同名（`PreferKey.kt:402`），夹 0-1（`ReadBookConfig.kt:107`）。
+   */
+  readMenuTopBarBlurStyle: number;
+  /**
+   * 顶栏按钮是否用液态玻璃表面；上游 `readMenuTopBarLiquidGlassButtons: Boolean = false`
+   * （`ReadSettings.kt:98`），存储键同名（`PreferKey.kt:397`）。
+   */
+  readMenuTopBarLiquidGlassButtons: boolean;
+  /**
+   * 顶栏相邻按钮是否合并成一组；上游 `readMenuTopBarMergeButtons: Boolean = false`
+   * （`ReadSettings.kt:99`），存储键同名（`PreferKey.kt:398`）。
+   */
+  readMenuTopBarMergeButtons: boolean;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -685,6 +730,15 @@ export class ReaderSettingsRepository {
       readMenuBottomBarBlurStyle: 0,
       readMenuBottomBarLiquidGlassButtons: false,
       readMenuBlurAlpha: 85,
+      // 标题栏形态八项默认值对齐上游 ReadSettings.kt:12/91/96/98-100/103/120。
+      readMenuTopBarTitleCapsule: false,
+      titleBarMode: '1',
+      titleBarCompact: false,
+      titleBarIconStyle: 0,
+      readMenuTopBarBlurMode: 0,
+      readMenuTopBarBlurStyle: 0,
+      readMenuTopBarLiquidGlassButtons: false,
+      readMenuTopBarMergeButtons: false,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -820,6 +874,15 @@ export class ReaderSettingsRepository {
     const readMenuBottomBarBlurStyleValue = await store.get('readMenuBottomBarBlurStyle', defaults.readMenuBottomBarBlurStyle);
     const readMenuBottomBarLiquidGlassButtonsValue = await store.get('readMenuBottomBarLiquidGlassButtons', defaults.readMenuBottomBarLiquidGlassButtons);
     const readMenuBlurAlphaValue = await store.get('readMenuBlurAlpha', defaults.readMenuBlurAlpha);
+    const readMenuTopBarTitleCapsuleValue = await store.get('readMenuTopBarTitleCapsule', defaults.readMenuTopBarTitleCapsule);
+    const titleBarModeValue = await store.get('titleBarMode', defaults.titleBarMode);
+    const titleBarCompactValue = await store.get('titleBarCompact', defaults.titleBarCompact);
+    const titleBarIconStyleValue = await store.get('titleBarIconStyle', defaults.titleBarIconStyle);
+    const readMenuTopBarBlurModeValue = await store.get('readMenuTopBarBlurMode', defaults.readMenuTopBarBlurMode);
+    const readMenuTopBarBlurStyleValue = await store.get('readMenuTopBarBlurStyle', defaults.readMenuTopBarBlurStyle);
+    const readMenuTopBarLiquidGlassButtonsValue =
+      await store.get('readMenuTopBarLiquidGlassButtons', defaults.readMenuTopBarLiquidGlassButtons);
+    const readMenuTopBarMergeButtonsValue = await store.get('readMenuTopBarMergeButtons', defaults.readMenuTopBarMergeButtons);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1115,6 +1178,24 @@ export class ReaderSettingsRepository {
             ? readMenuBottomBarLiquidGlassButtonsValue : defaults.readMenuBottomBarLiquidGlassButtons,
           readMenuBlurAlpha: ReaderSettingsRepository.normalizeInteger(
             readMenuBlurAlphaValue, 0, 100, defaults.readMenuBlurAlpha),
+          readMenuTopBarTitleCapsule: typeof readMenuTopBarTitleCapsuleValue === 'boolean'
+            ? readMenuTopBarTitleCapsuleValue : defaults.readMenuTopBarTitleCapsule,
+          // titleBarMode 是字符串四态（"0"-"3"），非法值退回默认 "1"。
+          titleBarMode: titleBarModeValue === '0' || titleBarModeValue === '1' ||
+            titleBarModeValue === '2' || titleBarModeValue === '3'
+            ? titleBarModeValue : defaults.titleBarMode,
+          titleBarCompact: typeof titleBarCompactValue === 'boolean'
+            ? titleBarCompactValue : defaults.titleBarCompact,
+          titleBarIconStyle: ReaderSettingsRepository.normalizeInteger(
+            titleBarIconStyleValue, 0, 2, defaults.titleBarIconStyle),
+          readMenuTopBarBlurMode: ReaderSettingsRepository.normalizeInteger(
+            readMenuTopBarBlurModeValue, 0, 2, defaults.readMenuTopBarBlurMode),
+          readMenuTopBarBlurStyle: ReaderSettingsRepository.normalizeInteger(
+            readMenuTopBarBlurStyleValue, 0, 1, defaults.readMenuTopBarBlurStyle),
+          readMenuTopBarLiquidGlassButtons: typeof readMenuTopBarLiquidGlassButtonsValue === 'boolean'
+            ? readMenuTopBarLiquidGlassButtonsValue : defaults.readMenuTopBarLiquidGlassButtons,
+          readMenuTopBarMergeButtons: typeof readMenuTopBarMergeButtonsValue === 'boolean'
+            ? readMenuTopBarMergeButtonsValue : defaults.readMenuTopBarMergeButtons,
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1294,6 +1375,15 @@ export class ReaderSettingsRepository {
       await store.put('readMenuBottomBarLiquidGlassButtons',
         settings.readMenuBottomBarLiquidGlassButtons === true);
       await store.put('readMenuBlurAlpha', Math.max(0, Math.min(100, Math.round(settings.readMenuBlurAlpha))));
+      await store.put('readMenuTopBarTitleCapsule', settings.readMenuTopBarTitleCapsule === true);
+      await store.put('titleBarMode', ['0', '1', '2', '3'].includes(settings.titleBarMode)
+        ? settings.titleBarMode : '1');
+      await store.put('titleBarCompact', settings.titleBarCompact === true);
+      await store.put('titleBarIconStyle', Math.max(0, Math.min(2, Math.round(settings.titleBarIconStyle))));
+      await store.put('readMenuTopBarBlurMode', Math.max(0, Math.min(2, Math.round(settings.readMenuTopBarBlurMode))));
+      await store.put('readMenuTopBarBlurStyle', settings.readMenuTopBarBlurStyle === 1 ? 1 : 0);
+      await store.put('readMenuTopBarLiquidGlassButtons', settings.readMenuTopBarLiquidGlassButtons === true);
+      await store.put('readMenuTopBarMergeButtons', settings.readMenuTopBarMergeButtons === true);
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));

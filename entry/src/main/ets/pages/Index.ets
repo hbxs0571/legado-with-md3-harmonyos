@@ -247,6 +247,22 @@ struct Index {
   @State readerReadMenuBottomBarLiquidGlassButtons: boolean = false;
   /** 菜单不透明度（0-100）；底栏与顶栏共用上游 readMenuBlurAlpha，默认 85。 */
   @State readerReadMenuBlurAlpha: number = 85;
+  /** 标题栏胶囊；上游 readMenuTopBarTitleCapsule（ReadSettings.kt:100，默认 false）。 */
+  @State readerReadMenuTopBarTitleCapsule: boolean = false;
+  /** 标题栏显示方式，四值字符串 "0"-"3"；上游 titleBarMode（ReadSettings.kt:12，默认 "1"）。 */
+  @State readerTitleBarMode: string = '1';
+  /** 标题栏精简；上游 titleBarCompact（ReadSettings.kt:120，默认 false）。 */
+  @State readerTitleBarCompact: boolean = false;
+  /** 标题栏图标样式 0/1/2；上游 titleBarIconStyle（ReadSettings.kt:91，默认 0）。 */
+  @State readerTitleBarIconStyle: number = 0;
+  /** 顶栏模糊模式 0/1/2；上游 readMenuTopBarBlurMode（ReadSettings.kt:96，默认 0）。 */
+  @State readerReadMenuTopBarBlurMode: number = 0;
+  /** 顶栏模糊样式 0 填充 / 1 渐变；上游 readMenuTopBarBlurStyle（ReadSettings.kt:103，默认 0）。 */
+  @State readerReadMenuTopBarBlurStyle: number = 0;
+  /** 顶栏按钮液态玻璃；上游 readMenuTopBarLiquidGlassButtons（ReadSettings.kt:98，默认 false）。 */
+  @State readerReadMenuTopBarLiquidGlassButtons: boolean = false;
+  /** 顶栏按钮合并；上游 readMenuTopBarMergeButtons（ReadSettings.kt:99，默认 false）。 */
+  @State readerReadMenuTopBarMergeButtons: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1869,6 +1885,14 @@ struct Index {
     this.readerReadMenuBottomBarBlurStyle = settings.readMenuBottomBarBlurStyle;
     this.readerReadMenuBottomBarLiquidGlassButtons = settings.readMenuBottomBarLiquidGlassButtons;
     this.readerReadMenuBlurAlpha = settings.readMenuBlurAlpha;
+    this.readerReadMenuTopBarTitleCapsule = settings.readMenuTopBarTitleCapsule;
+    this.readerTitleBarMode = settings.titleBarMode;
+    this.readerTitleBarCompact = settings.titleBarCompact;
+    this.readerTitleBarIconStyle = settings.titleBarIconStyle;
+    this.readerReadMenuTopBarBlurMode = settings.readMenuTopBarBlurMode;
+    this.readerReadMenuTopBarBlurStyle = settings.readMenuTopBarBlurStyle;
+    this.readerReadMenuTopBarLiquidGlassButtons = settings.readMenuTopBarLiquidGlassButtons;
+    this.readerReadMenuTopBarMergeButtons = settings.readMenuTopBarMergeButtons;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1982,6 +2006,14 @@ struct Index {
         readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
         readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
         readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
+        readMenuTopBarTitleCapsule: this.readerReadMenuTopBarTitleCapsule,
+        titleBarMode: this.readerTitleBarMode,
+        titleBarCompact: this.readerTitleBarCompact,
+        titleBarIconStyle: this.readerTitleBarIconStyle,
+        readMenuTopBarBlurMode: this.readerReadMenuTopBarBlurMode,
+        readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
+        readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
+        readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
         adaptSpecialStyle: this.readerAdaptSpecialStyle,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
@@ -2806,6 +2838,71 @@ struct Index {
     }
   }
 
+  private setReaderReadMenuTopBarTitleCapsule(enabled: boolean): void {
+    this.readerReadMenuTopBarTitleCapsule = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 标题栏显示方式只接受上游四值 "0"-"3"，其余回默认 "1"。 */
+  private setReaderTitleBarMode(value: string): void {
+    this.readerTitleBarMode = ['0', '1', '2', '3'].includes(value) ? value : '1';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderTitleBarCompact(enabled: boolean): void {
+    this.readerTitleBarCompact = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderTitleBarIconStyle(value: number): void {
+    this.readerTitleBarIconStyle = Math.max(0, Math.min(2, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuTopBarBlurMode(value: number): void {
+    this.readerReadMenuTopBarBlurMode = Math.max(0, Math.min(2, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuTopBarBlurStyle(value: number): void {
+    this.readerReadMenuTopBarBlurStyle = value === 1 ? 1 : 0;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuTopBarLiquidGlassButtons(enabled: boolean): void {
+    this.readerReadMenuTopBarLiquidGlassButtons = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuTopBarMergeButtons(enabled: boolean): void {
+    this.readerReadMenuTopBarMergeButtons = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -3232,6 +3329,14 @@ struct Index {
     this.readerReadMenuBottomBarBlurStyle = result.settings.readMenuBottomBarBlurStyle;
     this.readerReadMenuBottomBarLiquidGlassButtons = result.settings.readMenuBottomBarLiquidGlassButtons;
     this.readerReadMenuBlurAlpha = result.settings.readMenuBlurAlpha;
+    this.readerReadMenuTopBarTitleCapsule = result.settings.readMenuTopBarTitleCapsule;
+    this.readerTitleBarMode = result.settings.titleBarMode;
+    this.readerTitleBarCompact = result.settings.titleBarCompact;
+    this.readerTitleBarIconStyle = result.settings.titleBarIconStyle;
+    this.readerReadMenuTopBarBlurMode = result.settings.readMenuTopBarBlurMode;
+    this.readerReadMenuTopBarBlurStyle = result.settings.readMenuTopBarBlurStyle;
+    this.readerReadMenuTopBarLiquidGlassButtons = result.settings.readMenuTopBarLiquidGlassButtons;
+    this.readerReadMenuTopBarMergeButtons = result.settings.readMenuTopBarMergeButtons;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4549,6 +4654,14 @@ struct Index {
             readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
             readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
             readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
+            readMenuTopBarTitleCapsule: this.readerReadMenuTopBarTitleCapsule,
+            titleBarMode: this.readerTitleBarMode,
+            titleBarCompact: this.readerTitleBarCompact,
+            titleBarIconStyle: this.readerTitleBarIconStyle,
+            readMenuTopBarBlurMode: this.readerReadMenuTopBarBlurMode,
+            readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
+            readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
+            readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4776,6 +4889,14 @@ struct Index {
               readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
               readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
               readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
+              readMenuTopBarTitleCapsule: this.readerReadMenuTopBarTitleCapsule,
+              titleBarMode: this.readerTitleBarMode,
+              titleBarCompact: this.readerTitleBarCompact,
+              titleBarIconStyle: this.readerTitleBarIconStyle,
+              readMenuTopBarBlurMode: this.readerReadMenuTopBarBlurMode,
+              readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
+              readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
+              readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
               adaptSpecialStyle: this.readerAdaptSpecialStyle,
               onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
               onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -4788,6 +4909,14 @@ struct Index {
               onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
               onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
               onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
+              onReadMenuTopBarTitleCapsuleChange: (enabled: boolean) => this.setReaderReadMenuTopBarTitleCapsule(enabled),
+              onTitleBarModeChange: (value: string) => this.setReaderTitleBarMode(value),
+              onTitleBarCompactChange: (enabled: boolean) => this.setReaderTitleBarCompact(enabled),
+              onTitleBarIconStyleChange: (value: number) => this.setReaderTitleBarIconStyle(value),
+              onReadMenuTopBarBlurModeChange: (value: number) => this.setReaderReadMenuTopBarBlurMode(value),
+              onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
+              onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
+              onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5192,6 +5321,14 @@ struct Index {
             readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
             readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
             readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
+            readMenuTopBarTitleCapsule: this.readerReadMenuTopBarTitleCapsule,
+            titleBarMode: this.readerTitleBarMode,
+            titleBarCompact: this.readerTitleBarCompact,
+            titleBarIconStyle: this.readerTitleBarIconStyle,
+            readMenuTopBarBlurMode: this.readerReadMenuTopBarBlurMode,
+            readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
+            readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
+            readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5204,6 +5341,14 @@ struct Index {
             onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
             onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
             onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
+            onReadMenuTopBarTitleCapsuleChange: (enabled: boolean) => this.setReaderReadMenuTopBarTitleCapsule(enabled),
+            onTitleBarModeChange: (value: string) => this.setReaderTitleBarMode(value),
+            onTitleBarCompactChange: (enabled: boolean) => this.setReaderTitleBarCompact(enabled),
+            onTitleBarIconStyleChange: (value: number) => this.setReaderTitleBarIconStyle(value),
+            onReadMenuTopBarBlurModeChange: (value: number) => this.setReaderReadMenuTopBarBlurMode(value),
+            onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
+            onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
+            onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5473,6 +5618,14 @@ struct Index {
             readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
             readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
             readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
+            readMenuTopBarTitleCapsule: this.readerReadMenuTopBarTitleCapsule,
+            titleBarMode: this.readerTitleBarMode,
+            titleBarCompact: this.readerTitleBarCompact,
+            titleBarIconStyle: this.readerTitleBarIconStyle,
+            readMenuTopBarBlurMode: this.readerReadMenuTopBarBlurMode,
+            readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
+            readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
+            readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5485,6 +5638,14 @@ struct Index {
             onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
             onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
             onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
+            onReadMenuTopBarTitleCapsuleChange: (enabled: boolean) => this.setReaderReadMenuTopBarTitleCapsule(enabled),
+            onTitleBarModeChange: (value: string) => this.setReaderTitleBarMode(value),
+            onTitleBarCompactChange: (enabled: boolean) => this.setReaderTitleBarCompact(enabled),
+            onTitleBarIconStyleChange: (value: number) => this.setReaderTitleBarIconStyle(value),
+            onReadMenuTopBarBlurModeChange: (value: number) => this.setReaderReadMenuTopBarBlurMode(value),
+            onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
+            onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
+            onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5696,6 +5857,14 @@ struct Index {
           readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
           readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
           readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
+          readMenuTopBarTitleCapsule: this.readerReadMenuTopBarTitleCapsule,
+          titleBarMode: this.readerTitleBarMode,
+          titleBarCompact: this.readerTitleBarCompact,
+          titleBarIconStyle: this.readerTitleBarIconStyle,
+          readMenuTopBarBlurMode: this.readerReadMenuTopBarBlurMode,
+          readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
+          readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
+          readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
           adaptSpecialStyle: this.readerAdaptSpecialStyle,
           onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
           onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5708,6 +5877,14 @@ struct Index {
           onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
           onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
           onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
+          onReadMenuTopBarTitleCapsuleChange: (enabled: boolean) => this.setReaderReadMenuTopBarTitleCapsule(enabled),
+          onTitleBarModeChange: (value: string) => this.setReaderTitleBarMode(value),
+          onTitleBarCompactChange: (enabled: boolean) => this.setReaderTitleBarCompact(enabled),
+          onTitleBarIconStyleChange: (value: number) => this.setReaderTitleBarIconStyle(value),
+          onReadMenuTopBarBlurModeChange: (value: number) => this.setReaderReadMenuTopBarBlurMode(value),
+          onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
+          onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
+          onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

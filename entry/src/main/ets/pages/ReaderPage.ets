@@ -244,6 +244,26 @@ export struct ReaderPage {
   @Prop readMenuBottomBarLiquidGlassButtons: boolean = false;
   /** 菜单不透明度 0-100；底栏与顶栏共用上游 `readMenuBlurAlpha`（`ReadSettings.kt:106`，默认 85）。 */
   @Prop readMenuBlurAlpha: number = 85;
+  /** 标题栏胶囊；上游 `readMenuTopBarTitleCapsule`（`ReadSettings.kt:100`，默认 false）。 */
+  @Prop readMenuTopBarTitleCapsule: boolean = false;
+  /**
+   * 标题栏显示方式，上游四值字符串（`ReadSettings.kt:12` 默认 "1"）：
+   * "0" 书名在应用栏 + 章节名下一行；"1" 书名独立一行 + 章节名再一行；
+   * "2" 只有书名（应用栏），无章节行；"3" 都不显示。
+   */
+  @Prop titleBarMode: string = '1';
+  /** 标题栏精简；上游 `titleBarCompact`（`ReadSettings.kt:120`，默认 false），开启后顶栏只留「更多」。 */
+  @Prop titleBarCompact: boolean = false;
+  /** 标题栏图标样式 0 纯色 / 1 色调 / 2 描边；上游 `titleBarIconStyle`（`ReadSettings.kt:91`，默认 0）。 */
+  @Prop titleBarIconStyle: number = 0;
+  /** 顶栏模糊模式 0 关闭 / 1 液态玻璃 / 2 雾化；上游 `readMenuTopBarBlurMode`（`ReadSettings.kt:96`）。 */
+  @Prop readMenuTopBarBlurMode: number = 0;
+  /** 顶栏模糊样式 0 填充 / 1 渐变；上游 `readMenuTopBarBlurStyle`（`ReadSettings.kt:103`）。 */
+  @Prop readMenuTopBarBlurStyle: number = 0;
+  /** 顶栏按钮液态玻璃；上游 `readMenuTopBarLiquidGlassButtons`（`ReadSettings.kt:98`）。 */
+  @Prop readMenuTopBarLiquidGlassButtons: boolean = false;
+  /** 顶栏按钮合并成一个胶囊组；上游 `readMenuTopBarMergeButtons`（`ReadSettings.kt:99`）。 */
+  @Prop readMenuTopBarMergeButtons: boolean = false;
 
   /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
   @Prop dayNightReminderText: string = '';
@@ -873,6 +893,58 @@ export struct ReaderPage {
   /** 底栏按钮表面是否加玻璃底色；上游 `readMenuBottomBarLiquidGlassButtons`（`ReadSettings.kt:101`）。 */
   private readerBottomBarButtonGlassEnabled(): boolean {
     return this.readMenuBottomBarLiquidGlassButtons;
+  }
+
+  /**
+   * 顶栏背景填充色。与底栏共用上游 `readMenuBlurAlpha`（`ReadSettings.kt:106`，
+   * `ReadBookMenuBarShared.kt:49-85` 把不透明度上限夹到 0.6），因此直接复用同一折算。
+   */
+  private readerTopBarFillColor(): string {
+    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
+    const channel = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+    return '#' + channel + '31282A';
+  }
+
+  /** 顶栏背景渐变，语义同底栏；样式取上游 `readMenuTopBarBlurStyle`（0 填充 / 1 渐变）。 */
+  private readerTopBarGradient(): LinearGradientOptions {
+    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
+    if (this.readMenuTopBarBlurStyle !== 1) {
+      const solid = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+      return {
+        angle: 180,
+        colors: [['#' + solid + '31282A', 0.0], ['#' + solid + '31282A', 1.0]]
+      };
+    }
+    const top = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+    const bottom = Math.round(Math.max(0, alpha - 0.25) * 255).toString(16).padStart(2, '0').toUpperCase();
+    return {
+      angle: 180,
+      colors: [['#' + top + '31282A', 0.0], ['#' + bottom + '31282A', 1.0]]
+    };
+  }
+
+  /**
+   * 顶栏按钮表面填充。对齐上游 `ReadBookMenuBarTitle.kt:534-540`：
+   * `iconStyle == 1`（色调）时用 surfaceContainerLow 做底，其余透明。
+   */
+  private readerTopBarButtonFillColor(): string {
+    return this.titleBarIconStyle === 1 ? '#2A2B31' : 'Transparent';
+  }
+
+  /**
+   * 顶栏按钮描边宽度。对齐上游 `ReadBookMenuBarTitle.kt:436`：
+   * `iconStyle == 2`（描边）时未开液态玻璃才画 1vp 半透明边。
+   */
+  private readerTopBarButtonBorderWidth(): number {
+    if (this.titleBarIconStyle !== 2) {
+      return 0;
+    }
+    return this.readMenuTopBarLiquidGlassButtons ? 0 : 1;
+  }
+
+  /** 顶栏按钮是否用合并胶囊容器（上游 `readMenuTopBarMergeButtons`，`ReadBookMenuBarTitle.kt:973`）。 */
+  private readerTopBarMergeEnabled(): boolean {
+    return this.readMenuTopBarMergeButtons;
   }
 
   private stopAutoPageTimer(): void {
@@ -1571,6 +1643,10 @@ export struct ReaderPage {
       return item.enabled && option !== undefined &&
         isReaderActionApplicable(option.id, this.book.isLocal, this.book.format);
     });
+    if (this.titleBarCompact) {
+      // 上游 ReadMenuActionDefs.kt:506：精简顶部按钮时直接退回只显示「更多」。
+      return [{ id: 'more_actions', enabled: true }];
+    }
     if (actions.length > 0) {
       // ArkUI 顶栏 Row 中后插入的配置项靠左，因此反转数据以保持视觉顺序与配置列表一致。
       return actions.reverse();
@@ -1593,13 +1669,112 @@ export struct ReaderPage {
     }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(18)
   }
 
+  /**
+   * 顶栏动作按钮。图标配色对齐上游 `titleBarIconStyle`：
+   * 0 纯色（透明底）、1 色调（surfaceContainerLow 底）、2 描边（1vp 半透明边）。
+   */
   @Builder
   private topActionButton(action: ReaderBottomActionConfig) {
     Stack({ alignContent: Alignment.Center }) {
       ReaderControlGlyph({ kind: this.getTopActionKind(action.id), glyphSize: 20 })
-    }.width(40).height(40).margin({ left: 6 }).onClick(() => {
+    }
+    .width(40).height(40)
+    .margin({ left: this.readerTopBarMergeEnabled() ? 0 : 6 })
+    .borderRadius(20)
+    .backgroundColor(this.readerTopBarMergeEnabled() ? Color.Transparent : this.readerTopBarButtonFillColor())
+    .border({
+      width: this.readerTopBarMergeEnabled() ? 0 : this.readerTopBarButtonBorderWidth(),
+      color: '#73D5C2C6'
+    })
+    .onClick(() => {
       this.selectBottomAction(this.getTopActionKind(action.id));
     })
+  }
+
+  /**
+   * 顶栏右侧动作区。合并模式下按上游 `ReadBookMenuBarTitle.kt:973-996` 收进一个胶囊容器；
+   * 非合并模式逐个按钮独立排列。
+   */
+  @Builder
+  private readerTopActionGroup() {
+    if (this.readerTopBarMergeEnabled()) {
+      Row() {
+        if (this.getVisibleTopActions().length > 0) {
+          this.topActionButton(this.getVisibleTopActions()[0] as ReaderBottomActionConfig)
+        }
+        if (this.getVisibleTopActions().length > 1) {
+          this.topActionButton(this.getVisibleTopActions()[1] as ReaderBottomActionConfig)
+        }
+        if (this.getVisibleTopActions().length > 2) {
+          this.readerTopActionOverflowButton()
+        }
+      }
+      .height(40).borderRadius(20).margin({ left: 6 })
+      .backgroundColor(this.readerTopBarButtonFillColor())
+      .border({ width: this.readerTopBarButtonBorderWidth(), color: '#73D5C2C6' })
+    } else {
+      if (this.getVisibleTopActions().length > 0) {
+        this.topActionButton(this.getVisibleTopActions()[0] as ReaderBottomActionConfig)
+      }
+      if (this.getVisibleTopActions().length > 1) {
+        this.topActionButton(this.getVisibleTopActions()[1] as ReaderBottomActionConfig)
+      }
+      if (this.getVisibleTopActions().length > 2) {
+        this.readerTopActionOverflowButton()
+      }
+    }
+  }
+
+  /** 顶栏动作溢出入口（第三个及之后的动作收进菜单）。 */
+  @Builder
+  private readerTopActionOverflowButton() {
+    Stack({ alignContent: Alignment.Center }) {
+      AppGlyph({ name: 'more', glyphSize: 18, tint: '#D5C2C6' })
+    }.width(40).height(40)
+    .margin({ left: this.readerTopBarMergeEnabled() ? 0 : 6 })
+    .bindMenu(this.TopActionOverflowMenu, { placement: Placement.Bottom })
+  }
+
+  /**
+   * 标题栏胶囊：把书名与章节名压成一行两段，对齐上游 `ReadBookMenuBarTitle.kt:492-620`
+   * 的 `TitleCapsuleGlassLayout`（书名中等字重 + 章名小字 0.7 透明）。
+   */
+  @Builder
+  private readerTitleCapsule() {
+    Column() {
+      Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#D5C2C6').maxLines(1)
+        .width('100%').textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.displayChapterTitle.length > 0) {
+        Text(this.displayChapterTitle).fontSize(11).fontColor('#B3D5C2C6').maxLines(1)
+          .width('100%').margin({ top: 2 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+    }
+    .layoutWeight(1).alignItems(HorizontalAlign.Start)
+    .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+    .borderRadius(20)
+    .backgroundColor(this.readerTopBarButtonFillColor())
+    .border({ width: this.readerTopBarButtonBorderWidth(), color: '#73D5C2C6' })
+  }
+
+  /** 顶栏是否显示行内书名（非胶囊模式且模式为 "0" 或 "2"）。 */
+  private readerTitleInlineVisible(): boolean {
+    return !this.readMenuTopBarTitleCapsule && this.titleBarMode !== '1' && this.titleBarMode !== '3';
+  }
+
+  /** 顶栏是否显示独立的书名行（模式 "1"，上游 `ReadBookMenuBarTitle.kt:239`）。 */
+  private readerTitleOwnLineVisible(): boolean {
+    return !this.readMenuTopBarTitleCapsule && this.titleBarMode === '1';
+  }
+
+  /** 顶栏是否显示章节行（模式 "0" 或 "1"，上游 `ReadBookMenuBarTitle.kt:259`）。 */
+  private readerChapterLineVisible(): boolean {
+    return !this.readMenuTopBarTitleCapsule &&
+      (this.titleBarMode === '0' || this.titleBarMode === '1');
+  }
+
+  /** 顶栏是否显示胶囊（非模式 "3"；上游 `ReadBookMenuBarTitle.kt:198`）。 */
+  private readerTitleCapsuleVisible(): boolean {
+    return this.readMenuTopBarTitleCapsule && this.titleBarMode !== '3';
   }
 
   private getBottomActionPageIndex(): number {
@@ -3901,28 +4076,37 @@ export struct ReaderPage {
           Column() {
             Column() {
               Row() {
-              Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D5C2C6')
-              }.width(40).height(40).onClick(() => this.onBack())
-              Blank().layoutWeight(1)
-              if (this.getVisibleTopActions().length > 0) {
-                this.topActionButton(this.getVisibleTopActions()[0] as ReaderBottomActionConfig)
-              }
-              if (this.getVisibleTopActions().length > 1) {
-                this.topActionButton(this.getVisibleTopActions()[1] as ReaderBottomActionConfig)
-              }
-              if (this.getVisibleTopActions().length > 2) {
                 Stack({ alignContent: Alignment.Center }) {
-                  AppGlyph({ name: 'more', glyphSize: 18, tint: '#D5C2C6' })
-                }.width(40).height(40).margin({ left: 6 })
-                  .bindMenu(this.TopActionOverflowMenu, { placement: Placement.Bottom })
+                  Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D5C2C6')
+                }.width(40).height(40).onClick(() => this.onBack())
+                // 胶囊模式：书名 + 章节名压成一行两段，独占中间剩余宽度（上游 ReadBookMenuBarTitle.kt:198/492）。
+                if (this.readerTitleCapsuleVisible()) {
+                  this.readerTitleCapsule()
+                } else {
+                  // 非胶囊模式：仅 titleBarMode 为 "0"/"2" 时书名留在应用栏行内（:207）。
+                  if (this.readerTitleInlineVisible()) {
+                    Text(this.book.title).fontSize(16).fontColor('#D5C2C6').maxLines(1)
+                      .layoutWeight(1).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                  Blank().layoutWeight(1)
+                }
+                this.readerTopActionGroup()
+              }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
+              // 模式 "1"：书名单独占一行（上游 :239）。
+              if (this.readerTitleOwnLineVisible()) {
+                Text(this.book.title).fontSize(16).fontColor('#D5C2C6').maxLines(1)
+                  .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 4 })
               }
-            }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
-            Text(this.book.title).fontSize(16).fontColor('#D5C2C6').maxLines(1)
-              .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 4 })
-            Text(this.displayChapterTitle).fontSize(12).fontColor('#D5C2C6').maxLines(1)
-              .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 8 })
-          }.width('100%').backgroundColor('#D931282A')
+              // 模式 "0"/"1"：章节名独占一行（上游 :259）。
+              if (this.readerChapterLineVisible()) {
+                Text(this.displayChapterTitle).fontSize(12).fontColor('#D5C2C6').maxLines(1)
+                  .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 8 })
+              }
+            }
+            .width('100%')
+            .backgroundColor(this.readerTopBarFillColor())
+            .linearGradient(this.readerTopBarGradient())
 
           if (this.showQuickActions) {
             Row() {

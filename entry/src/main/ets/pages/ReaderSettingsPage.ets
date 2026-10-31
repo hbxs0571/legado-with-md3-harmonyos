@@ -220,6 +220,22 @@ export struct ReaderSettingsPage {
   @Prop readMenuBottomBarLiquidGlassButtons: boolean = false;
   /** 菜单不透明度 0-100；底栏与顶栏共用上游 `readMenuBlurAlpha`（`ReadSettings.kt:106`，默认 85）。 */
   @Prop readMenuBlurAlpha: number = 85;
+  /** 标题栏胶囊；上游 `readMenuTopBarTitleCapsule`（`ReadSettings.kt:100`）。 */
+  @Prop readMenuTopBarTitleCapsule: boolean = false;
+  /** 标题栏显示方式，上游四值 "0"-"3"（`ReadSettings.kt:12`）。 */
+  @Prop titleBarMode: string = '1';
+  /** 标题栏精简；上游 `titleBarCompact`（`ReadSettings.kt:120`）。 */
+  @Prop titleBarCompact: boolean = false;
+  /** 标题栏图标样式 0 纯色 / 1 色调 / 2 描边；上游 `titleBarIconStyle`（`ReadSettings.kt:91`）。 */
+  @Prop titleBarIconStyle: number = 0;
+  /** 顶栏模糊模式 0/1/2；上游 `readMenuTopBarBlurMode`（`ReadSettings.kt:96`）。 */
+  @Prop readMenuTopBarBlurMode: number = 0;
+  /** 顶栏模糊样式 0 填充 / 1 渐变；上游 `readMenuTopBarBlurStyle`（`ReadSettings.kt:103`）。 */
+  @Prop readMenuTopBarBlurStyle: number = 0;
+  /** 顶栏按钮液态玻璃；上游 `readMenuTopBarLiquidGlassButtons`（`ReadSettings.kt:98`）。 */
+  @Prop readMenuTopBarLiquidGlassButtons: boolean = false;
+  /** 顶栏按钮合并；上游 `readMenuTopBarMergeButtons`（`ReadSettings.kt:99`）。 */
+  @Prop readMenuTopBarMergeButtons: boolean = false;
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -383,6 +399,14 @@ export struct ReaderSettingsPage {
   onReadMenuBottomBarBlurStyleChange: (value: number) => void = (_value: number) => {};
   onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onReadMenuBlurAlphaChange: (value: number) => void = (_value: number) => {};
+  onReadMenuTopBarTitleCapsuleChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onTitleBarModeChange: (value: string) => void = (_value: string) => {};
+  onTitleBarCompactChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onTitleBarIconStyleChange: (value: number) => void = (_value: number) => {};
+  onReadMenuTopBarBlurModeChange: (value: number) => void = (_value: number) => {};
+  onReadMenuTopBarBlurStyleChange: (value: number) => void = (_value: number) => {};
+  onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -776,7 +800,16 @@ export struct ReaderSettingsPage {
                   ? this.readMenuBottomBarBlurMode === 1
                   : entry.title === '底栏按钮液态玻璃'
                     ? this.readMenuBottomBarLiquidGlassButtons
-                    : entry.title === '标题栏胶囊' || entry.title === '标题栏紧凑',
+                    : entry.title === '标题栏胶囊'
+                      ? this.readMenuTopBarTitleCapsule
+                      : entry.title === '标题栏紧凑'
+                        ? this.titleBarCompact
+                        : entry.title === '顶栏模糊'
+                          // 上游「模糊效果」开关只认 Haze(2)（SystemMenuPage.kt:790-800）。
+                          ? this.readMenuTopBarBlurMode === 2
+                          : entry.title === '顶栏液态玻璃按钮'
+                            ? this.readMenuTopBarLiquidGlassButtons
+                            : entry.title === '合并标题栏按钮' ? this.readMenuTopBarMergeButtons : false,
         onChange: (enabled: boolean) => {
           if (entry.title === '菜单栏边框') { this.menuBorderEnabled = enabled; }
           else if (entry.title === '显示标题栏图标') { this.menuTitleIconsVisible = enabled; }
@@ -791,6 +824,14 @@ export struct ReaderSettingsPage {
             this.onReadMenuBottomBarBlurModeChange(next);
           }
           else if (entry.title === '底栏按钮液态玻璃') { this.onReadMenuBottomBarLiquidGlassButtonsChange(enabled); }
+          else if (entry.title === '标题栏胶囊') { this.onReadMenuTopBarTitleCapsuleChange(enabled); }
+          else if (entry.title === '标题栏紧凑') { this.onTitleBarCompactChange(enabled); }
+          else if (entry.title === '顶栏模糊') {
+            // 上游：开写 Haze(2)、关写 None(0)，样式取当前值（SystemMenuPage.kt:790-805）。
+            this.onReadMenuTopBarBlurModeChange(enabled ? 2 : 0);
+          }
+          else if (entry.title === '顶栏液态玻璃按钮') { this.onReadMenuTopBarLiquidGlassButtonsChange(enabled); }
+          else if (entry.title === '合并标题栏按钮') { this.onReadMenuTopBarMergeButtonsChange(enabled); }
           else { this.showNotMigrated(entry.title); }
         }
       })
@@ -817,6 +858,9 @@ export struct ReaderSettingsPage {
           if (entry.title === '调色板风格') { this.menuPaletteStyleIndex = index; }
           if (entry.title === '显示亮度视图') { this.onShowBrightnessViewChange(['0', '1', '2'][index] ?? '0'); }
           if (entry.title === '亮度条位置') { this.onBrightnessVwPosChange(index === 0 ? '0' : '1'); }
+          if (entry.title === '标题栏模式') { this.onTitleBarModeChange(['0', '1', '2', '3'][index] ?? '1'); }
+          if (entry.title === '标题栏图标样式') { this.onTitleBarIconStyleChange(index); }
+          if (entry.title === '顶栏模糊样式') { this.onReadMenuTopBarBlurStyleChange(index === 1 ? 1 : 0); }
           this.openDetailSheet(entry.title, entry.detail);
         }
       })
@@ -896,7 +940,12 @@ export struct ReaderSettingsPage {
     if (title === '菜单颜色来源') { return ['种子色', '自定义主题色']; }
     if (title === '显示亮度视图') { return ['关闭', '横排', '竖排']; }
     if (title === '亮度条位置') { return ['左侧', '右侧']; }
-    if (title === '标题栏模式') { return ['完整信息', '仅标题', '标题与章节']; }
+    // 上游 title_bar_mode 四值（values-zh-rCN/arrays.xml:242-247、array_values.xml:146-151）：
+    // "0" 书名在应用栏 + 章节名下一行；"1" 书名独立一行 + 章节名再一行；
+    // "2" 只有书名（应用栏），无章节行；"3" 都不显示。
+    if (title === '标题栏模式') {
+      return ['在应用栏上显示', '在独立行上显示', '仅显示标题', '不显示'];
+    }
     if (title.includes('图标样式')) { return ['纯色', '色调', '描边']; }
     if (title.includes('模糊样式')) { return ['纯色', '渐变']; }
     return [];
@@ -909,6 +958,9 @@ export struct ReaderSettingsPage {
     if (title === '显示亮度视图') { return ['0', '1', '2'].indexOf(this.showBrightnessView); }
     if (title === '亮度条位置') { return this.brightnessVwPos === '0' ? 0 : 1; }
     if (title === '底栏模糊样式') { return this.readMenuBottomBarBlurStyle === 1 ? 1 : 0; }
+    if (title === '标题栏模式') { return Math.max(0, ['0', '1', '2', '3'].indexOf(this.titleBarMode)); }
+    if (title === '标题栏图标样式') { return Math.max(0, Math.min(2, this.titleBarIconStyle)); }
+    if (title === '顶栏模糊样式') { return this.readMenuTopBarBlurStyle === 1 ? 1 : 0; }
     return 0;
   }
 
@@ -941,6 +993,15 @@ export struct ReaderSettingsPage {
     }
     if (this.detailSheetTitle === '底栏模糊样式' && choiceIndex >= 0) {
       this.onReadMenuBottomBarBlurStyleChange(choiceIndex === 1 ? 1 : 0);
+    }
+    if (this.detailSheetTitle === '标题栏模式' && choiceIndex >= 0) {
+      this.onTitleBarModeChange(['0', '1', '2', '3'][choiceIndex] ?? '1');
+    }
+    if (this.detailSheetTitle === '标题栏图标样式' && choiceIndex >= 0) {
+      this.onTitleBarIconStyleChange(choiceIndex);
+    }
+    if (this.detailSheetTitle === '顶栏模糊样式' && choiceIndex >= 0) {
+      this.onReadMenuTopBarBlurStyleChange(choiceIndex === 1 ? 1 : 0);
     }
     if (this.detailSheetTitle === '中文简繁体转换' && choiceIndex >= 0) {
       this.onChineseConverterTypeChange(choiceIndex);
@@ -996,6 +1057,10 @@ export struct ReaderSettingsPage {
     // 放在短路之后等于永不生效（本函数第一版就踩了这个坑）。
     // 与上游两个 AnimatedVisibility 一一对应 —— 非悬浮才显示「模糊样式」下拉，
     // 悬浮才显示「液态玻璃背景」开关（SystemMenuPage.kt:684-726）。
+    // 上游 AnimatedVisibility(visible = !preferences.readMenuTopBarTitleCapsule)
+    // 包住了「菜单标题显示方式」下拉（SystemMenuPage.kt:730 一带），胶囊开着就不显示。
+    // 注意：必须写在下面 selectedMenuSettingsTab 短路之前，否则在标题栏 tab 里永不生效。
+    if (title === '标题栏模式') { return !this.readMenuTopBarTitleCapsule; }
     if (title === '底栏模糊样式') { return !this.readMenuFloatingBottomBar; }
     if (title === '底栏液态玻璃') { return this.readMenuFloatingBottomBar; }
     if (this.selectedMenuSettingsTab !== 0) { return true; }
@@ -1600,7 +1665,12 @@ export struct ReaderSettingsPage {
     if (title === '菜单颜色来源') { return ['种子色', '自定义主题色']; }
     if (title === '显示亮度视图') { return ['关闭', '横排', '竖排']; }
     if (title === '亮度条位置') { return ['左侧', '右侧']; }
-    if (title === '标题栏模式') { return ['完整信息', '仅标题', '标题与章节']; }
+    // 上游 title_bar_mode 四值（values-zh-rCN/arrays.xml:242-247、array_values.xml:146-151）：
+    // "0" 书名在应用栏 + 章节名下一行；"1" 书名独立一行 + 章节名再一行；
+    // "2" 只有书名（应用栏），无章节行；"3" 都不显示。
+    if (title === '标题栏模式') {
+      return ['在应用栏上显示', '在独立行上显示', '仅显示标题', '不显示'];
+    }
     if (title.includes('图标样式')) { return ['纯色', '色调', '描边']; }
     if (title.includes('模糊样式')) { return ['纯色', '渐变']; }
     if (title === '中文简繁体转换') { return ['关闭简繁转换', '繁体转简体', '简体转繁体']; }
@@ -2308,6 +2378,10 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '中文简繁体转换' ||
                 this.detailSheetTitle === '点击图片行为' ||
                 this.detailSheetTitle === '屏幕方向' ||
+                this.detailSheetTitle === '标题栏模式' ||
+                this.detailSheetTitle === '标题栏图标样式' ||
+                this.detailSheetTitle === '顶栏模糊样式' ||
+                this.detailSheetTitle === '底栏模糊样式' ||
                 this.detailSheetTitle === '显示模式' ||
                 this.detailSheetTitle === '正文排版' ||
                 this.detailInfoSlot !== undefined

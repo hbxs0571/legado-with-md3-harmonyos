@@ -528,7 +528,35 @@
 
 **验收**：`assembleHap` BUILD SUCCESSFUL；设备（`127.0.0.1:5555`）实测底栏圆角 32→0 后退出重进仍为 0；关闭「底栏悬浮」→「底栏模糊样式」出现且「底栏液态玻璃」消失，重新打开则相反（两个方向都验过）；「底栏模糊」开关落库 `2`、「底栏按钮液态玻璃」落库 `true`；「底栏模糊样式」切「渐变」后条目副标题变「渐变」且**重启应用后保持**；「底栏模糊透明度」85→50 后重进仍为 50。完整记录见 [VALIDATION](VALIDATION.md)。
 
-**KI-E5 标题栏形态八项（要接，随菜单渲染层）** —— 覆盖 E-28 标题栏胶囊（`ReadBookConfig.kt:85`）、E-29 标题栏模式（`ReadSettings.kt:12`，字符串三态）、E-30 标题栏紧凑（`ReadBookConfig.kt:81`）、E-31 标题栏图标样式（`:101`，夹 0–2）、E-32 顶栏模糊（`:105`，夹 0–2）、E-33 顶栏模糊样式（`:107`，夹 0–1）、E-34 顶栏液态玻璃按钮（`:83`）、E-35 合并标题栏按钮（`:84`）。E-29 的本地选项文案为「完整信息 / 仅标题 / 标题与章节」（`ReaderSettingsPage.ets:570`），一旦有顶栏即可直接接。
+**KI-E5 标题栏形态八项（已实现）** —— 覆盖 E-28 标题栏胶囊（`ReadBookConfig.kt:85`）、E-29 标题栏模式（`ReadSettings.kt:12`，**字符串四态** `"0"`–`"3"`）、E-30 标题栏紧凑（`ReadBookConfig.kt:81`）、E-31 标题栏图标样式（`:101`，夹 0–2）、E-32 顶栏模糊（`:105`，夹 0–2）、E-33 顶栏模糊样式（`:107`，夹 0–1）、E-34 顶栏液态玻璃按钮（`:83`）、E-35 合并标题栏按钮（`:84`）。
+
+**上游口径**（`ui/book/read/sheet/SystemMenuPage.kt` 的 `TopBarTab`，`:703-868`）：
+- `TinySwitchSettingItem(read_menu_top_bar_title_capsule)` → `ConfigUpdate.MenuTopBarTitleCapsule`。
+- **`AnimatedVisibility(visible = !preferences.readMenuTopBarTitleCapsule) { TinyDropdownSettingItem(title_bar_mode) }`** —— 胶囊开启时「标题显示方式」整项隐藏。
+- `TinySwitchSettingItem(title_bar_compact)` → `ConfigUpdate.TitleBarCompact`；消费点 `ui/book/read/ReadMenuActionDefs.kt:505-506`：`if (state.menuConfig.titleBarCompact) return listOf(moreDef)` —— **开启后顶栏只保留「更多」**。
+- `TinyDropdownSettingItem(read_menu_icon_container_style)`，选项「纯色 / 色调 / 描边」= `"0"/"1"/"2"` → `ConfigUpdate.TitleBarIconStyle`。折算在 `ReadBookMenuBarTitle.kt`：`iconStyle == 1 → surfaceContainerLow` 底色（`:1008-1013`、`:534-540`）、`iconStyle == 2 → BorderStroke(1.dp, tint.copy(alpha = 0.45f))`（`:436`、`:873-876`）、`0` 透明底无描边。
+- `TinySwitchSettingItem(read_menu_bar_blur)`，**`checked = preferences.readMenuTopBarBlurMode == ReadMenuBlurMode.Haze`** —— 顶栏只认 `Haze(2)`，不认 `LiquidGlass(1)`，也**没有**底栏那种「非悬浮降级」逻辑（只读判定 `ReadBookMenuBarTitle.kt:1000-1006`）。
+- `TinyDropdownSettingItem(read_menu_bar_blur_style)`，选项「填充 / 渐变」= `Solid`/`Progressive`；**与底栏不同：顶栏这个下拉没有 `AnimatedVisibility` 包裹，常驻可见**。
+- `TinySwitchSettingItem(read_menu_bar_liquid_glass_buttons)` → `ConfigUpdate.MenuTopBarLiquidGlassButtons`；消费 `ReadBookMenuBarTitle.kt:996-1000 readMenuTopBarButtonLiquidGlassEnabled()`（`&& readerMenuLiquidGlassAvailable(backdrop)`）。
+- `TinySwitchSettingItem(read_menu_top_bar_merge_buttons)` → `ConfigUpdate.MenuTopBarMergeButtons`；消费 `ReadBookMenuBarTitle.kt:973-996`：为真走 `MenuTitleBarMergedGlassButton`（`Row(height 40.dp)` + pillShape + 分隔线），为假走 `Row(spacedBy(6.dp))`。
+- **`titleBarMode` 是四值不是三值**：中文 `values-zh-rCN/arrays.xml:242-247`（在应用栏上显示 / 在独立行上显示 / 仅显示标题 / 不显示），值 `values/array_values.xml:146-151`（`"0"`–`"3"`），默认 `"1"`。消费点 `ReadBookMenuBarTitle.kt`：`:207` 非胶囊时只有 `"0"`/`"2"` 把书名放应用栏行内；`:239` 只有 `"1"` 让书名单独占一行；`:259` 只有 `"0"`/`"1"` 显示章节行；`:198` 只有 `"3"` 才把胶囊整体隐藏。
+- 备份口径（**八项里只有一项随备份**）：`readMenuTopBarBlurMode`（`BackupConfig.kt:234`）、`readMenuTopBarLiquidGlassButtons`（`:236`）、`readMenuTopBarMergeButtons`（`:237`）、`readMenuTopBarTitleCapsule`（`:238`）、`readMenuTopBarBlurStyle`（`:240`）、`titleBarIconStyle`（`:254`）、`titleBarMode`（`:259`）**全在** `readPrefKeys` 忽略清单里；**`titleBarCompact` 不在**（该文件 `grep titleBar` 只有 `:254`/`:255`/`:256`/`:259`），随 `config.xml` 无条件导出。
+
+**本地落地**（逐文件行号）：
+- 数据层 `data/ReaderSettingsRepository.ets`：接口 `:319-362`（八字段各带上游行号注释）、默认值 `:734-741`（`false / '1' / false / 0 / 0 / 0 / false / false`）、`load()` `:877-885`、返回归一 `:1181-1197`（`titleBarMode` 走四值白名单、`titleBarIconStyle` 0–2、`readMenuTopBarBlurMode` 0–2、`readMenuTopBarBlurStyle` 0–1、两个布尔 `typeof` 保护）、`save()` `:1378-1386`。
+- 状态与接线 `pages/Index.ets`：八个 `@State reader*`（`:251-265`）+ 装载 `:1888-1895` + 备份恢复 `:3332-3339` + 八个 setter `:2842-2899` + 快照 `:2009-2016`；**prop 共 6 处**（`:2009`、`:4657`、`:4892`、`:5324`、`:5621`、`:5860`），**回调共 4 处**（只在设置面板的四个 tab 实例，ReaderPage 调用点不接回调）。
+- 面板 `pages/ReaderSettingsPage.ets`：八 `@Prop` `:224-238` + 八回调 `:403-409`；五个 Toggle 接真 `:803-834`（`顶栏模糊` 按 `readMenuTopBarBlurMode === 2` 回显、写 2/0）；`getMenuChoices('标题栏模式')` 改成上游四值、`getMenuSelectedIndex` `:961-963`、`applyDetailChoicePreview` `:998-1004`、**Segments 的 `onSelect` 也补了同样三行落库** `:861-863`（原先只有弹层路径落库）；`isMenuSettingsEntryVisible()` `:1063` 在 tab 短路**之前**加「标题栏模式仅在胶囊关闭时可见」；弹层底部提示文案把「标题栏模式 / 标题栏图标样式 / 顶栏模糊样式 / 底栏模糊样式」四项从「仅展示选择预览，不保存设置。」改为「选择后立即应用并保存」，因为这四项已真落库。
+- 阅读页 `pages/ReaderPage.ets`：八 `@Prop` `:248-266`；新增 `readerTopBarFillColor()` `:902`、`readerTopBarGradient()` `:909-928`、`readerTopBarButtonFillColor()` `:930-931`、`readerTopBarButtonBorderWidth()` `:938-942`、`readerTopBarMergeEnabled()` `:946-947`、`readerTitleInlineVisible()` `:1760-1761`、`readerTitleOwnLineVisible()` `:1765-1766`、`readerChapterLineVisible()` `:1770-1773`、`readerTitleCapsuleVisible()` `:1776-1777`；`getVisibleTopActions()` 在 `:1646` 按 `titleBarCompact` 短路只留「更多」；新增 `readerTopActionGroup()` `:1699-1728`（合并胶囊容器）、`readerTopActionOverflowButton()` `:1730`、`readerTitleCapsule()` `:1743-1757`；顶栏渲染块 `:4083-4109` 按上面四个可见性方法分流，容器底色由硬编码 `'#D931282A'` 改为 `readerTopBarFillColor()` + `readerTopBarGradient()`。
+- 备份 `data/BackupRepository.ets`：导出段补 `titleBarCompact` `:695-698`（唯一随备份项）；恢复段 `:1446-1451` 补八字段（`titleBarCompact` 读 `config.xml` 并 `current` 兜底，其余七项直接取 `current`，因为它们都在忽略清单里）。
+
+**已知差异**：
+1. `readMenuTopBarLiquidGlassButtons` 的玻璃材质**无实现**：ArkUI 没有 `backdropBlur` 等效物，本地只做可配 + 落库 + 用它抑制描边（`readerTopBarButtonBorderWidth()`）。
+2. 顶栏模糊的实际模糊半径同样未做（ArkUI 无模糊滤镜），只把 `readMenuBlurAlpha` 折算成填充不透明度（上限 0.6，对齐 `ReadBookMenuBarShared.kt:49-85` 的 `coerceAtMost(0.6f)`），与 KI-E4 底栏口径一致。
+3. 胶囊里的书名/章节名**只做展示、点不进去书籍详情**：上游 `TitleCapsuleGlassLayout`（`ReadBookMenuBarTitle.kt:492-620`）在非本地书上还有书源小圆点入口，本地 `ReaderPage` 没有 `onOpenBookInfo` 回调，暂无该入口。
+4. 「标题栏紧凑」在上游还会把「换源」「朗读音频下载」搬进悬浮菜单（`ReadBookMenuBarFloating.kt:190`）；本地没有悬浮菜单层，只实现「顶栏只留更多」这一半。
+5. 顶栏的**像素级视觉未取证**：模拟器书架上的书正文文件丢失、`ReaderPage` 进不去，取不到顶栏帧，六组视觉对比（书名位置四态、胶囊、紧凑、合并容器、图标样式三档、底色随透明度）只有面板值与落库证据。
+
+**验收**：`assembleHap` BUILD SUCCESSFUL（两次：39 s 738 ms / 21 s 843 ms，无 ERROR）；设备实测（`127.0.0.1:5555`，API 26）：开「标题栏胶囊」后「标题栏模式」整行消失、关闭后恢复（两个方向都做了 `dumpLayout` 对照）；八项逐项拨动后退出设置页重进 + `aa force-stop` 重启应用，值全部跨进程保持；「标题栏模式」弹层四项文案与上游中文串一致。详见 [VALIDATION](../VALIDATION.md) 的 2026-10-31 KI-E5 节。
 
 **KI-E6 无上屏条目四项（要接，需先补上屏）** —— 覆盖 E-36 菜单镜头半径（`ReadBookConfig.kt:114`，夹 0–48f）、E-38 阅读栏样式（`ReadSettings.kt:69`，默认 1）、E-39 阅读栏样式跟随页面（`:68`）、E-40 更多操作配置（`:121`）。原第五项「E-37 自动亮度」已于 2026-10-31 随 KI-A9 接上（上游本就没有独立条目，是亮度条上的内联按钮，详见 KI-A9）。这五项连设置条目都没有：`getMenuSettingsEntries()`（`ReaderSettingsPage.ets:1788-1840`）里查无对应项，上游消费点却真实存在（`readBarStyle` 在 `data/repository/ReadSettingsRepository.kt:209` 夹 0–2 并被 `help/storage/BackupConfig.kt:216` 列入备份键；`moreActionsConfig` 被 `ReadBookViewModel.kt:2150` 解析为「更多」面板条目）。要接得先补上屏。
 

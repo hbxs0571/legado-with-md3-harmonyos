@@ -692,6 +692,10 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'chineseConverterType',
           `${Math.max(0, Math.min(2, Math.round(settings.chineseConverterType)))}`);
+        // 标题栏精简：上游 BackupConfig.readPrefKeys（BackupConfig.kt:197-261）没有列 titleBarCompact，
+        // 因此它随 config.xml 无条件备份；同组的另外七项都在忽略清单里，不导出。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'titleBarCompact', settings.titleBarCompact ? 'true' : 'false');
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1436,6 +1440,20 @@ export class BackupRepository {
       readMenuBottomBarBlurStyle: current.readMenuBottomBarBlurStyle,
       readMenuBottomBarLiquidGlassButtons: current.readMenuBottomBarLiquidGlassButtons,
       readMenuBlurAlpha: current.readMenuBlurAlpha,
+      // 标题栏形态八项：上游 BackupConfig.readPrefKeys（BackupConfig.kt:234-259）把
+      // readMenuTopBarBlurMode / readMenuTopBarLiquidGlassButtons / readMenuTopBarMergeButtons /
+      // readMenuTopBarTitleCapsule / readMenuTopBarBlurStyle / titleBarIconStyle / titleBarMode
+      // 七项列进忽略清单，只有 titleBarCompact 未列入、会随 config.xml 一起备份，
+      // 因此只有它读备份，其余七项一律保留本机现值。
+      readMenuTopBarTitleCapsule: current.readMenuTopBarTitleCapsule,
+      titleBarMode: current.titleBarMode,
+      titleBarCompact: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'titleBarCompact') ??
+        current.titleBarCompact,
+      titleBarIconStyle: current.titleBarIconStyle,
+      readMenuTopBarBlurMode: current.readMenuTopBarBlurMode,
+      readMenuTopBarBlurStyle: current.readMenuTopBarBlurStyle,
+      readMenuTopBarLiquidGlassButtons: current.readMenuTopBarLiquidGlassButtons,
+      readMenuTopBarMergeButtons: current.readMenuTopBarMergeButtons,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),
