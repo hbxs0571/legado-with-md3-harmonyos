@@ -18,6 +18,7 @@
 | 书架 / 元数据 / 进度对照 | [书架对照表](parity/BOOKSHELF.md) |
 | 书签 / 划线 / 笔记对照 | [书签对照表](parity/ZIP-BOOKMARK.md) |
 | 阅读配置字段对照 | [阅读配置总账](parity/READER-CONFIG.md) |
+| 深色模式 / 主题设置对照 | [深色模式对照表](parity/ZIP-THEME.md) |
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
 | 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
 | 存储层迁移计划 | [关系型存储迁移计划](RELATIONAL-STORE-MIGRATION.md) |

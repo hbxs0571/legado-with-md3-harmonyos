@@ -324,7 +324,7 @@ export class BackupRepository {
   private static readonly categoryOptions: BackupCategoryOption[] = [
     { key: 'localBook', title: '本地书架记录', files: ['bookshelf.json'] },
     { key: 'readConfig', title: '阅读配置', files: ['readConfig.json', 'shareReadConfig.json', 'config.xml'], preferenceKeys: BackupRepository.preferenceKeysByCategory.readConfig },
-    { key: 'themeMode', title: '主题模式', files: ['config.xml'], preferenceKeys: BackupRepository.preferenceKeysByCategory.themeMode },
+    { key: 'themeMode', title: '深色模式', files: ['config.xml'], preferenceKeys: BackupRepository.preferenceKeysByCategory.themeMode },
     { key: 'themeConfig', title: '主题配置', files: ['themeConfig.json', 'config.xml'], preferenceKeys: BackupRepository.preferenceKeysByCategory.themeConfig },
     { key: 'coverConfig', title: '封面配置', files: ['coverRule.json', 'config.xml'], preferenceKeys: BackupRepository.preferenceKeysByCategory.coverConfig },
     { key: 'bookshelfLayout', title: '书架布局', files: ['config.xml'], preferenceKeys: BackupRepository.preferenceKeysByCategory.bookshelfLayout },

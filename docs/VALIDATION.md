@@ -373,4 +373,16 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - **两次失败的造数尝试（供复跑参考）**：① 先用 `name` 不同（`stale-copy` vs `test-book`）造重复，规划器第一分支按「同规范化路径别名」先命中，落不到删书分支；② 用 `android-backup-entries/../cache/` 造 `Missing`，实际解析到不存在的 `files/cache`，父目录判不到 → `Unknown` → `hasUnknownLocation` 使删书分支放弃。正确造法是「同 `originName`/书名/作者 + 一条真实存在且未被占用的 `Available` 路径 + 一条父目录存在的 `Missing` 路径」。
 - 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
 
+## 2026-10-31 r298 深色模式盘点轮次收尾构建
+
+- 本轮以文档为主（新建 `docs/parity/ZIP-THEME.md`，改 `docs/parity/KEYWORDS.md`、`STATUS.md`、`docs/INDEX.md`、`docs/BACKUP-RESTORE.md`），`.ets` 只动一处文案：`entry/src/main/ets/data/BackupRepository.ets:327` 的 `title: '主题模式'` → `'深色模式'`（与上游 `strings.xml:660`、[备份恢复](BACKUP-RESTORE.md) 的写法对齐）。按仓库规约，改了 `.ets` 就要跑 `assembleHap`。
+- 12:04 的构建 `BUILD SUCCESSFUL in 36 s 683 ms`（33 任务），产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（8253847 字节）。**从 HAP 的 abc 字符串表取证**：offset 182284 处为「深色模式」，与相邻的「阅读配置」「主题配置」「封面配置」同在一个连续区间；「主题模式」在该表只剩 `pages/ThemeSettingsPage.ets` 的分组标题一处（offset 1194470）。即新文案确实进了产物。
+- 12:21 之后的复跑 `BUILD FAILED`，`default@CompileArkTS` 报 `COMPILE RESULT:FAIL {ERROR:3}`，三条错误全部落在**并行会话尚未完成的 `.ets` 改动**上，与本轮文案无关：
+  1. `ReaderPage.ets:206:9` `Property 'backgroundImage' in type 'ReaderPage' is not assignable to the same property in base type 'CustomComponent'. Type 'string' is not assignable to type '{ (src: ResourceStr | PixelMap, ...) }'` —— 新加的 `@Prop backgroundImage: string` 与 ArkUI 组件基类同名成员冲突。
+  2. `BackupRepository.ets:1119:5` `Type '{ paddingSettings: ... }' is missing the following properties from type 'ReaderSettingsSnapshot': textColor, textColorNight, textAccentColor, textAccentColorNight, and 7 more.` —— 并行会话给 `ReaderSettingsSnapshot` 加了字段，但恢复侧的返回对象还没补齐（该处不是本轮的 `title` hunk）。
+  3. 再复跑一次后错误变为 7 条（`ReaderSettingsPage.ets:148:9 Duplicate identifier 'readerNightMode'`、`Index.ets:4116/4454/4657/4802:15 An object literal cannot have multiple properties with the same name`），说明对方仍在编辑中，工作区处于中间态。
+- **结论**：本轮的 `.ets` 改动（单条字符串字面量）不会引入类型错误，12:04 的成功构建已证明它能编译进产物；当前 `BUILD FAILED` 是并行会话的中间态，未改其代码，待其收尾后重跑即可。
+- 覆盖率脚本复跑：`--coverage themeMode docs/parity/ZIP-THEME.md <上游根>` → 80 个 `.kt`，已分配 80，未分配 0；`--coverage themeConfig` → 132 个 `.kt`，已分配 132，未分配 0。
+- 本记录只代表 N 端编译结果，不涉及设备安装，也不代表 API 12 真机兼容。
+
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**

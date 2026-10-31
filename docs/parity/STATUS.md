@@ -69,9 +69,9 @@
 | `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
 | `server` | `servers.json` | — | — | — | **零行** |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（90 已接 / 97 `未接` / 2 不适用）；97 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
-| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [阅读配置总账](READER-CONFIG.md) F = **7 行** |
+| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（1 已接 / 70 `未接` / 1 不适用）；另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | **零行** |
-| `themeMode` | `config.xml` | ✗ | ✗ | ? | **零行** |
+| `themeMode` | `config.xml` | ✗ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（4 已接 / 13 `未接` / 2 不适用）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
 | `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书籍总账](BOOKSHELF.md) A2 33 / A1 20 = **53 行** |
 | `showRss` | `config.xml` | ✗ | ✗ | ? | **零行** |
 | `threadCount` | `config.xml` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
@@ -101,9 +101,9 @@
 
 ### 判 `?` 的四类与一处待补
 
-`themeMode`、`showRss`、`threadCount`、`mangaConfig` 只有 `preferenceKeysByCategory` 的键分组，没有独立的备份或恢复分支，实际效果取决于 `config.xml` 的整体搬运路径，需逐个键核对才能定论。
+`themeMode`、`showRss`、`threadCount`、`mangaConfig` 只有 `preferenceKeysByCategory` 的键分组，没有独立的备份或恢复分支，实际效果取决于 `config.xml` 的整体搬运路径，需逐个键核对才能定论。其中 `themeMode` 已在 [深色模式总账](ZIP-THEME.md) F9 逐行核实：`createBackup` 的 `config.xml` 写出清单不含该键，恢复侧 `filterAndroidConfigXml` 只是原样保留，故读写两侧都判 `✗`，界面侧另见该表 C/D/F 三块。
 
-`themeConfig` 的「写」也标 `?`：`createBackup` 里没有为它单独写 `themeConfig.json` 的分支，只有恢复侧 `:1041` 的忽略判断，是否需要补写出要看过上游 `ThemeConfigStore.configFileName` 的语义再定。
+`themeConfig` 的「写」也标 `?`：`createBackup` 里没有为它单独写 `themeConfig.json` 的分支，只有恢复侧 `:1041` 的忽略判断，是否需要补写出要看过上游 `ThemeConfigStore.configFileName` 的语义再定。**这一条已在 [深色模式总账](ZIP-THEME.md) F5 定论**：上游 `help/storage/Backup.kt:241-246` 明确用 `backupIgnoreThemeConfig` 门控写出 `ThemeConfigStore.configFileName`，本地应补写出分支，当前判 `未接`。
 
 ### 忽略项一列普遍为 `?`
 
@@ -123,6 +123,7 @@
 | [书籍总账](BOOKSHELF.md) | E（r295 新增） | 无——备份恢复流程本身不受任何类别的忽略开关控制，12 行全记 `—` |
 | [书签对照](ZIP-BOOKMARK.md) | A–E | `bookmark` |
 | [阅读配置总账](READER-CONFIG.md) | A–G | `readConfig`、`themeConfig` |
+| [深色模式总账](ZIP-THEME.md) | A–F（r298 新增） | `themeMode`、`themeConfig` |
 
 上表「涉及行」列给出每类在这几张表里落在哪一块、多少行。**「零行」表示该类目前没有任何界面级盘点**——不是已完成，而是还没盘。这一类要动之前先按[对照关键词](KEYWORDS.md)取出上游接触面、新开块，不要拿「表里没这一行」当「本地没有这个功能」。
 
