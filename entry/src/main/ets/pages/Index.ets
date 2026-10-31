@@ -202,6 +202,18 @@ struct Index {
    * 天然等价，故只落库、不加开关。
    */
   @State readerReadBarStyleFollowPage: boolean = false;
+  /**
+   * 「更多」下拉菜单是否显示每项前置图标，上游 `showMenuIcon`（ReadSettings.kt:119，默认 false）。
+   * 上游消费点 `ReadBookMenuBarFloating.kt:174` 的 `OverflowDropdownMenu`。
+   */
+  @State readerShowMenuIcon: boolean = false;
+  /**
+   * 顶部工具栏附加区域是否显示，上游 `showReadTitleAddition`（ReadSettings.kt:55，默认 true）。
+   * 上游只有字段与设置界面、没有渲染消费点，本地只落库。
+   */
+  @State readerShowReadTitleAddition: boolean = true;
+  /** 菜单不透明度 0-100，上游 `menuAlpha`（ReadSettings.kt:13，默认 100）；上游无渲染消费点，本地只落库。 */
+  @State readerMenuAlpha: number = 100;
   @State readerProgressBehavior: string = 'page';
   @State readerReadSliderMode: string = '0';
   @State readerPageTouchSlop: number = 0;
@@ -1980,6 +1992,9 @@ struct Index {
     this.readerReadMenuCustomIcons = settings.readMenuCustomIcons;
     this.readerReadMenuLensRadius = settings.readMenuLensRadius;
     this.readerReadBarStyleFollowPage = settings.readBarStyleFollowPage;
+    this.readerShowMenuIcon = settings.showMenuIcon;
+    this.readerShowReadTitleAddition = settings.showReadTitleAddition;
+    this.readerMenuAlpha = settings.menuAlpha;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -2129,6 +2144,9 @@ struct Index {
         readMenuCustomIcons: this.readerReadMenuCustomIcons,
         readMenuLensRadius: this.readerReadMenuLensRadius,
         readBarStyleFollowPage: this.readerReadBarStyleFollowPage,
+        showMenuIcon: this.readerShowMenuIcon,
+        showReadTitleAddition: this.readerShowReadTitleAddition,
+        menuAlpha: this.readerMenuAlpha,
         // 「更多」面板条目的备份投影：运行时真源是 ReaderMoreActionsRepository，
         // 这里按上游 moreActionsConfig 的 `id,enabled;` 格式编码进快照，供 config.xml 导出。
         moreActionsConfig: ReaderSettingsRepository.encodeMoreActions(this.readerMoreActions),
@@ -3029,6 +3047,31 @@ struct Index {
     }
   }
 
+  private setReaderShowMenuIcon(enabled: boolean): void {
+    this.readerShowMenuIcon = enabled === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderShowReadTitleAddition(enabled: boolean): void {
+    this.readerShowReadTitleAddition = enabled === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 菜单不透明度夹 0-100，对齐上游 `ReadSettings.kt:13` 的默认值 100。 */
+  private setReaderMenuAlpha(value: number): void {
+    this.readerMenuAlpha = Math.max(0, Math.min(100, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadMenuPaletteStyle(value: string): void {
     // 空串（跟随系统）是合法值，其余交给数据层白名单过滤。
     this.readerMenuPaletteStyle = value;
@@ -3684,6 +3727,9 @@ struct Index {
     this.readerReadMenuCustomIcons = result.settings.readMenuCustomIcons;
     this.readerReadMenuLensRadius = result.settings.readMenuLensRadius;
     this.readerReadBarStyleFollowPage = result.settings.readBarStyleFollowPage;
+    this.readerShowMenuIcon = result.settings.showMenuIcon;
+    this.readerShowReadTitleAddition = result.settings.showReadTitleAddition;
+    this.readerMenuAlpha = result.settings.menuAlpha;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -5037,6 +5083,9 @@ struct Index {
             floatingIcons: this.readerFloatingIcons,
             titleBarCustomIcons: this.readerTitleBarCustomIcons,
             readMenuCustomIcons: this.readerReadMenuCustomIcons,
+            showMenuIcon: this.readerShowMenuIcon,
+            showReadTitleAddition: this.readerShowReadTitleAddition,
+            menuAlpha: this.readerMenuAlpha,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -5295,6 +5344,9 @@ struct Index {
               floatingIcons: this.readerFloatingIcons,
               titleBarCustomIcons: this.readerTitleBarCustomIcons,
               readMenuCustomIcons: this.readerReadMenuCustomIcons,
+              showMenuIcon: this.readerShowMenuIcon,
+              showReadTitleAddition: this.readerShowReadTitleAddition,
+              menuAlpha: this.readerMenuAlpha,
               adaptSpecialStyle: this.readerAdaptSpecialStyle,
               onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
               onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5338,6 +5390,9 @@ struct Index {
               onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
               onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
               onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
+              onShowMenuIconChange: (enabled: boolean) => this.setReaderShowMenuIcon(enabled),
+              onShowReadTitleAdditionChange: (enabled: boolean) => this.setReaderShowReadTitleAddition(enabled),
+              onMenuAlphaChange: (value: number) => this.setReaderMenuAlpha(value),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5773,6 +5828,9 @@ struct Index {
             floatingIcons: this.readerFloatingIcons,
             titleBarCustomIcons: this.readerTitleBarCustomIcons,
             readMenuCustomIcons: this.readerReadMenuCustomIcons,
+            showMenuIcon: this.readerShowMenuIcon,
+            showReadTitleAddition: this.readerShowReadTitleAddition,
+            menuAlpha: this.readerMenuAlpha,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5816,6 +5874,9 @@ struct Index {
             onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
             onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
             onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
+            onShowMenuIconChange: (enabled: boolean) => this.setReaderShowMenuIcon(enabled),
+            onShowReadTitleAdditionChange: (enabled: boolean) => this.setReaderShowReadTitleAddition(enabled),
+            onMenuAlphaChange: (value: number) => this.setReaderMenuAlpha(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -6116,6 +6177,9 @@ struct Index {
             floatingIcons: this.readerFloatingIcons,
             titleBarCustomIcons: this.readerTitleBarCustomIcons,
             readMenuCustomIcons: this.readerReadMenuCustomIcons,
+            showMenuIcon: this.readerShowMenuIcon,
+            showReadTitleAddition: this.readerShowReadTitleAddition,
+            menuAlpha: this.readerMenuAlpha,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -6159,6 +6223,9 @@ struct Index {
             onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
             onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
             onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
+            onShowMenuIconChange: (enabled: boolean) => this.setReaderShowMenuIcon(enabled),
+            onShowReadTitleAdditionChange: (enabled: boolean) => this.setReaderShowReadTitleAddition(enabled),
+            onMenuAlphaChange: (value: number) => this.setReaderMenuAlpha(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -6401,6 +6468,9 @@ struct Index {
           floatingIcons: this.readerFloatingIcons,
           titleBarCustomIcons: this.readerTitleBarCustomIcons,
           readMenuCustomIcons: this.readerReadMenuCustomIcons,
+          showMenuIcon: this.readerShowMenuIcon,
+          showReadTitleAddition: this.readerShowReadTitleAddition,
+          menuAlpha: this.readerMenuAlpha,
           adaptSpecialStyle: this.readerAdaptSpecialStyle,
           onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
           onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -6444,6 +6514,9 @@ struct Index {
           onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
           onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
           onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
+          onShowMenuIconChange: (enabled: boolean) => this.setReaderShowMenuIcon(enabled),
+          onShowReadTitleAdditionChange: (enabled: boolean) => this.setReaderShowReadTitleAddition(enabled),
+          onMenuAlphaChange: (value: number) => this.setReaderMenuAlpha(value),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

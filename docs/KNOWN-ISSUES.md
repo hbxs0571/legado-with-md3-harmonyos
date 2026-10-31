@@ -169,10 +169,27 @@
 
 **本轮顺带修复的环境故障**（记入 VALIDATION 备查）：KI-A1 设备验收时发现 prefs 完全不落盘。排查后定位为 **prefs XML 被测试期 `hdc file send` 反复整文件覆盖后损坏** —— `hilog` 报 `E C01653/NativePreferences: ParseNodeElement: An unsupported element type was encountered in parsing = text` / `E ReadSettingXml: The error occurred during getting xml child elements` / `W ReloadFromDisk: ... reload result is 0`，于是 store 与磁盘脱钩，`put()`+`flush()` 静默成功但不写盘。推入一个只有 `<?xml version="1.0" encoding="UTF-8"?><preferences version="1.0"/>` 的空文件即恢复。**后续设备验收不要再整文件覆盖 prefs**，要注入测试值只拨 UI 控件。
 
-**KI-A2 菜单层依赖三项（要接，随 KI-E1）** —— 覆盖 A-05 显示菜单图标（`showMenuIcon`，`ReadBookConfig.kt:78`）、A-08 阅读标题补充信息（`showReadTitleAddition`，`ReadSettings.kt:55`）、A-17 阅读菜单不透明度（`menuAlpha`，`:13`）。
+**KI-A2 菜单层依赖三项（已实现）** —— 覆盖 A-05 展示菜单项图标（`showMenuIcon`，`ReadSettings.kt:119`）、A-08 阅读标题补充信息（`showReadTitleAddition`，`ReadSettings.kt:55`）、A-17 阅读菜单不透明度（`menuAlpha`，`ReadSettings.kt:13`）。
 
-三项都作用在阅读页菜单层，而本地没有菜单外观渲染层：全仓 `readMenu*`/`titleBar*` 只命中 `data/BackupRepository.ets`，`ReaderPage.ets` 零命中。没有菜单的地方单独接这三个开关等于给不存在的界面加配置，因此与 E 块合并处理（见 KI-E1）。
+**上游口径**：三项恰好覆盖「上游有配置」的三种形态，判据因此各不相同 ——
 
+- `showMenuIcon`：**有设置入口也有渲染消费点**。入口 `MoreConfigSheet.kt:463` 与 `ReadConfigScreen.kt:426`（中文串「展示菜单项图标」`values-zh-rCN/strings.xml:1324`），落库 `ReadSettingsRepository.kt:332`，字段 `ReadSettings.kt:119` 默认 `false`，夹取 `ReadBookConfig.kt:78`；消费在 `ReadBookMenuBarFloating.kt:174` `val showIcon = state.menuConfig.showMenuIcon`，`:175-181` 只在 `showIcon` 为真时给 `RoundDropdownMenuItem` 传 `leadingIcon`。
+- `showReadTitleAddition`：**有设置入口但没有渲染消费点**。字段 `ReadSettings.kt:55` 默认 **`true`**，入口 `MoreConfigSheet.kt:458` 与 `ReadConfigScreen.kt:418`（中文串 `values-zh-rCN/strings.xml:1395`「展示顶部工具栏附加区域」）。全仓 29 处命中全部是键名、`ReadSettingsRepository.kt:169-170`/`:422`/`:544`/`:678` 落库与映射、字段本身、`ReadBookContract.kt:2070` 契约、`ReadConfigUpdateDelegate.kt:739-741` 委托、两处设置界面、`ApplyReadSettingUseCase.kt:23`、`ReadConfig.kt:62` 只读快照、`ReadConfigContract.kt:49`/`:108`、`ReadConfigScreen.kt:418-420`、`ReadConfigViewModel.kt:146`/`:219`、以及单测 `ReadSettingsMappingTest.kt:246`/`:299` 与 `ConfigUpdateActionsInvariantTest.kt:157` —— **没有任何渲染处读取它**。
+- `menuAlpha`：**既没有设置入口也没有渲染消费点**。字段 `ReadSettings.kt:13` 默认 `100`，键 `PreferKey.kt:367`，落库 `ReadSettingsRepository.kt:64-65`，映射 `:373`/`:505`/`:637`；中文串 `values-zh-rCN/strings.xml:1912`「菜单不透明度」与 `:1911`「当前 %d%%」。全仓再无消费：`ReadBookMenuBar.kt:484-492` 的 `menuSurfaceAlpha`/`dragMenuAlpha` **取的是 `readMenuBlurAlpha`**（`:482` `val menuSurfaceAlpha = state.menuConfig.readMenuBlurAlpha.coerceIn(0, 100)`），`TextActionSelectionMenu.kt:197-208` 的 `quickMenuAlpha` 是局部动画变量，`res/xml/pref_config_read.xml:53` 那份旧 xml 全仓已无引用（`grep -rn "pref_config_read" app/src/main/java/ app/src/main/res/` 为空）。
+
+**本地落地**（按上游形态一一对应）：
+
+- `showMenuIcon`：存储键同名、布尔默认 `false`。数据层 `entry/src/main/ets/data/ReaderSettingsRepository.ets:443`（接口）、`:866`（默认值）、`:1043`（读）、`:1389`（归一）、`:1625`（写）；`Index.ets` `@State readerShowMenuIcon`、装载与恢复各一行、`setReaderShowMenuIcon`、快照一行、prop 6 处、回调 4 处；面板 `ReaderSettingsPage.ets:1512` 的 `MenuSettingSwitch`（副标题「在「更多」面板中显示每项图标」）；消费 `ReaderPage.ets:4586-4593` —— 「更多」网格面板里 `AppGlyph` 整块包进 `if (this.showMenuIcon)`，对齐上游只在 `showIcon` 为真时给菜单项加前置图标。**在 `BackupConfig.kt:258` 的忽略清单里，不随 config.xml 导出**（`BackupRepository.ets:332` 的忽略键表原本就含 `showMenuIcon`）。
+- `showReadTitleAddition`：存储键同名、布尔默认 `true`。数据层 `:451`（接口）、`:867`（默认值）、`:1044`（读）、`:1390`（归一）、`:1626`（写）；面板 `ReaderSettingsPage.ets:1511` 的 `MenuSettingSwitch`（文案对齐上游「展示顶部工具栏附加区域」，副标题直接写「上游只落库，无渲染效果」）；`BackupRepository.ets:702-703` 导出、`:1504-1505` 恢复（不在忽略清单，随 config.xml 备份）。
+- `menuAlpha`：存储键同名、整型默认 `100` 夹 0–100。数据层 `:456`（接口）、`:868`（默认值）、`:1045`（读）、`:1391`（归一）、`:1627`（写）；面板无条目（上游也没有）；`BackupRepository.ets:704-705` 导出、`:1506-1507` 恢复。
+
+**已知差异**：
+
+- `menuAlpha` 与 `showReadTitleAddition` **只落库不上屏** —— 上游本就没有消费点，本地不发明效果（与 KI-A3 `disableReturnKey`、KI-E6 `readMenuLensRadius` 同一判据）。
+- `showMenuIcon` 的作用域是本地「更多」**网格面板**，不是上游那种下拉菜单：本地顶栏溢出菜单 `TopActionOverflowMenu()`（`ReaderPage.ets:1836-1843`）用的 `MenuItem` 只接受 `startIcon: ResourceStr`，不接受自定义 Builder 组件，而本地图标是自绘的 `AppGlyph`（`components/AppGlyph.ets`）。
+- 「更多」面板的图标显隐**未做像素级取证**：模拟器书架三本书的正文文件均已丢失、`ReaderPage` 进不去，只有面板 Toggle 状态与 prefs 落库证据。
+
+**验收**：见 `docs/VALIDATION.md` 的「2026-11-01 N 端 KI-A2 菜单层依赖三项」节。两个 Toggle 拨动即落库、`aa force-stop` 重启后回显保持、prefs 三键（`showMenuIcon`/`showReadTitleAddition`/`menuAlpha`）齐备，测试值已复原。
 **KI-A3 禁用返回键（已实现，只做可配 + 落库 + 随备份）** —— 覆盖 A-06（`disableReturnKey`，`ReadSettings.kt:50`）。
 
 **这条判据的转折点：上游有这个配置项，但没有这个效果。** 上一版写的是「需要补 `onBackPress()` 拦截」，那是按照设置项文案推断的；本轮把上游全仓翻了一遍，结论相反：

@@ -374,6 +374,15 @@ export struct ReaderPage {
   @Prop bottomActions: ReaderBottomActionConfig[] = READER_LOCAL_BOTTOM_ACTION_DEFAULTS;
   @Prop topActions: ReaderBottomActionConfig[] = READER_LOCAL_TOP_ACTION_DEFAULTS;
   @Prop moreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS;
+  /**
+   * 「更多」下拉菜单是否显示每项前置图标，上游 `showMenuIcon`（ReadSettings.kt:119，默认 false）。
+   * 上游消费点 `ReadBookMenuBarFloating.kt:174-186`：为 true 才给菜单项传 `leadingIcon`。
+   */
+  @Prop showMenuIcon: boolean = false;
+  /** 顶部工具栏附加区域，上游 `showReadTitleAddition`（ReadSettings.kt:55，默认 true）；上游无渲染消费点，本地只落库。 */
+  @Prop showReadTitleAddition: boolean = true;
+  /** 菜单不透明度 0-100，上游 `menuAlpha`（ReadSettings.kt:13，默认 100）；上游无渲染消费点，本地只落库。 */
+  @Prop menuAlpha: number = 100;
   @State @Watch('onControlsVisibilityChanged') controlsVisible: boolean = false;
   /** 划词菜单「更多」是否就地展开；每次菜单重新弹出前由 onMenuShow 复位。 */
   @State selectionMenuMoreVisible: boolean = false;
@@ -4583,9 +4592,14 @@ export struct ReaderPage {
               ForEach(this.getVisibleMoreActions(), (action: ReaderMoreAction) => {
                 GridItem() {
                   Column() {
-                    AppGlyph({ name: action.glyph,
-                      tint: action.id === 're_segment' && this.book.reSegment === true ? this.readerMenuAccentTint() : this.readerMenuForeground(),
-                      glyphSize: 22 }).margin({ bottom: 8 })
+                    if (this.showMenuIcon) {
+                      // 「展示菜单项图标」（上游 showMenuIcon，ReadSettings.kt:119，默认 false）：
+                      // 上游 ReadBookMenuBarFloating.kt:174-186 的 OverflowDropdownMenu 只在 showIcon 为真时
+                      // 给 RoundDropdownMenuItem 传 leadingIcon；本地「更多」是网格面板，对应地整块隐藏图标。
+                      AppGlyph({ name: action.glyph,
+                        tint: action.id === 're_segment' && this.book.reSegment === true ? this.readerMenuAccentTint() : this.readerMenuForeground(),
+                        glyphSize: 22 }).margin({ bottom: 8 })
+                    }
                     Text(action.id === 're_segment' && this.book.reSegment === true
                       ? '重新分段（已启用）' : action.label)
                       .fontSize(11).fontColor('#E1DADD').textAlign(TextAlign.Center)

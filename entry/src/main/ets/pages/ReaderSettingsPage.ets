@@ -286,6 +286,12 @@ export struct ReaderSettingsPage {
   @Prop titleBarCustomIcons: string = '';
   /** 底栏菜单自定义图标路径表（`id,path;` 编码），上游 readMenuCustomIcons（ReadSettings.kt:114）。 */
   @Prop readMenuCustomIcons: string = '';
+  /** 「更多」下拉菜单是否显示每项前置图标，上游 `showMenuIcon`（ReadSettings.kt:119，默认 false）。 */
+  @Prop showMenuIcon: boolean = false;
+  /** 顶部工具栏附加区域，上游 `showReadTitleAddition`（ReadSettings.kt:55，默认 true）；上游无渲染消费点，只落库。 */
+  @Prop showReadTitleAddition: boolean = true;
+  /** 菜单不透明度 0-100，上游 `menuAlpha`（ReadSettings.kt:13，默认 100）；上游无渲染消费点，只落库。 */
+  @Prop menuAlpha: number = 100;
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -480,6 +486,9 @@ export struct ReaderSettingsPage {
   onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => void = (_value: ReaderBottomActionConfig[]) => {};
   onTitleBarCustomIconsChange: (value: string) => void = (_value: string) => {};
   onReadMenuCustomIconsChange: (value: string) => void = (_value: string) => {};
+  onShowMenuIconChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onShowReadTitleAdditionChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onMenuAlphaChange: (value: number) => void = (_value: number) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -1499,8 +1508,20 @@ export struct ReaderSettingsPage {
           MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: this.disableReturnKey, onChange: (enabled: boolean) => this.onDisableReturnKeyChange(enabled) })
           MenuSettingOption({ title: '自定义翻页按键', detail: this.getPageKeysLabel(), migrated: true }).onClick(() => this.openDetailSheet('自定义翻页按键', '录制物理按键作为上一页/下一页'))
           MenuSettingOption({ title: '选中文字菜单', detail: '配置文本选择后的操作', migrated: true }).onClick(() => this.openDetailSheet('选中文字菜单', '排序、分组与图标开关，保存后随备份同步'))
-          MenuSettingSwitch({ title: '显示阅读标题补充信息', detail: '在阅读标题中显示附加信息', checked: false }).onClick(() => this.showNotMigrated('阅读标题补充信息'))
-          MenuSettingSwitch({ title: '显示菜单图标', detail: '在阅读菜单中显示图标', checked: true }).onClick(() => this.showNotMigrated('显示菜单图标'))
+          // 「展示顶部工具栏附加区域」上游 showReadTitleAddition（ReadSettings.kt:55，默认 true）：
+          // 上游只有字段与设置界面（MoreConfigSheet.kt:458 / ReadConfigScreen.kt:418）、没有渲染消费点，本地只落库。
+          MenuSettingSwitch({
+            title: '展示顶部工具栏附加区域', detail: '上游只落库，无渲染效果',
+            checked: this.showReadTitleAddition,
+            onChange: (enabled: boolean) => this.onShowReadTitleAdditionChange(enabled)
+          })
+          // 「展示菜单项图标」上游 showMenuIcon（ReadSettings.kt:119，默认 false）：
+          // 消费点 ReadBookMenuBarFloating.kt:174-186 的 OverflowDropdownMenu，本地对应「更多」网格面板的图标。
+          MenuSettingSwitch({
+            title: '展示菜单项图标', detail: '在「更多」面板中显示每项图标',
+            checked: this.showMenuIcon,
+            onChange: (enabled: boolean) => this.onShowMenuIconChange(enabled)
+          })
           Text('未迁移项目保留原版设置入口；当前仅呈现设置界面，不执行对应业务。')
             .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })

@@ -305,6 +305,44 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-11-01 N 端 KI-A2 菜单层依赖三项（面板落库通过，菜单图标视觉未验）
+
+**范围**：`docs/parity/READER-CONFIG.md` A 块的 A-05 展示菜单项图标（`showMenuIcon`）、A-08 阅读标题补充信息（`showReadTitleAddition`）、A-17 阅读菜单不透明度（`menuAlpha`）。三项对应上游 `domain/model/settings/ReadSettings.kt:119`、`:55`、`:13`，恰好是「上游有配置」的三种形态：有设置入口且有渲染消费点、有设置入口但无消费点、两者都没有。判据与证据见 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的 KI-A2 段。
+
+**构建**：`assembleHap` 两次。第一次 **FAILED**，40 个错（12 × `10605090 arkts-no-implicit-return-types`、28 × `10505001`），全部指向 `entry/src/main/ets/pages/Index.ets` 里 `onShowMenuIconChange` 等三行回调。根因是改写脚本第一次执行只跑了前五步（states / 装载 / 恢复 / 快照 / setter）就退出，**没有写盘**，导致 `Index.ets` 里 setter 定义缺失、回调指向不存在的方法。重跑完整脚本后 **BUILD SUCCESSFUL in 39 s 873 ms**，无 ERROR，`hdc -t 127.0.0.1:5555 install -r` 覆盖安装成功。
+
+**设备**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832，API 26）。
+
+导航：主界面 →「我的」`(1103,2688)` →「设置」`(640,2244)` →「阅读界面」`(640,1099)` → 底部分段**「更多」**`(1084,2629)` → `swipe 640 2400 640 900 400` 连续 8 次滚到底。两个开关在设置页「更多」分段最底部，**不在「菜单栏」或「全局」分段**。
+
+| 项 | 面板初始态 | 拨动后 |
+| --- | --- | --- |
+| 展示顶部工具栏附加区域 | `[91,2184][592,2237]`，副标题「上游只落库，无渲染效果」，Toggle `[1057,2203][1183,2273]` = **true** | `click 1120 2238` → **false** |
+| 展示菜单项图标 | `[91,2376][410,2429]`，副标题「在「更多」面板中显示每项图标」，Toggle `[1057,2395][1183,2465]` = **false** | `click 1120 2430` → **true** |
+
+面板底部同时显示「未迁移项目保留原版设置入口；当前仅呈现设置界面，不执行对应业务。」，说明该分段其余条目仍是占位。
+
+**落库**：先 `aa force-stop` 再 `hdc file recv /data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_reader_settings`（11009 B），三键齐备：
+
+```
+<bool key="showMenuIcon" value="true"/>
+<bool key="showReadTitleAddition" value="false"/>
+<double key="menuAlpha" value="100.000000"/>
+```
+
+`menuAlpha` 面板上没有条目（上游也没有），只随阅读设置一起落库，值为默认 100。
+
+**跨进程复查**：`aa start -a EntryAbility -b io.legado.harmony` 重启后重走导航，两个 Toggle 仍为 false / true，与拨动后的状态一致。
+
+**复原**：`click 1120 2238` 把「展示顶部工具栏附加区域」拨回 **true**、`click 1120 2430` 把「展示菜单项图标」拨回 **false**，dump 复核确认出厂默认。
+
+**未取证部分**：
+
+- 「更多」面板里 `showMenuIcon` 的**图标显隐没有像素级取证**：模拟器书架三本书的正文文件均已丢失，`ReaderPage` 进不去，只能给到「面板 Toggle 状态 + prefs 落库」两级证据。
+- `menuAlpha` 与 `showReadTitleAddition` 上游本就没有渲染消费点，本轮按判据**只落库不上屏**，因此也没有视觉可验。
+- `showMenuIcon` 在本地的作用域是「更多」网格面板；本地顶栏溢出菜单用的 `MenuItem` 只接受 `startIcon: ResourceStr`，不接受自绘 `AppGlyph` 这样的自定义组件，所以无法复刻上游下拉菜单的 `leadingIcon` 形态。
+
+
 ## 2026-11-01 N 端 KI-E6 无上屏四项（落库通过，面板无条目与上游一致）
 
 **范围**：`docs/parity/READER-CONFIG.md` E 块 E-36..E-40 中最后四行 —— 菜单镜头半径 / 阅读栏样式 / 阅读栏样式跟随页面 / 更多操作配置，对应上游 `ui/book/read/sheet/SystemMenuPage.kt` 与 `domain/model/settings/ReadSettings.kt:68-69`、`:110`、`:121`。原条目里的「E-37 自动亮度」已由 KI-A9 接上，本轮不涉及。

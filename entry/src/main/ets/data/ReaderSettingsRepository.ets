@@ -452,6 +452,27 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * 备份投影：写回时由 Index 用 `readerMoreActions` 编码，恢复时再解码回该仓储。
    */
   moreActionsConfig: string;
+  /**
+   * 「更多」下拉菜单是否显示每项的前置图标，上游 `showMenuIcon`（ReadSettings.kt:119，默认 false）。
+   * 上游消费点 `ReadBookMenuBarFloating.kt:174`（`OverflowDropdownMenu` 里 `val showIcon = state.menuConfig.showMenuIcon`，
+   * 为 true 才给 `RoundDropdownMenuItem` 传 `leadingIcon`）；设置入口 `MoreConfigSheet.kt:463` 与
+   * `ReadConfigScreen.kt:426`（中文串「展示菜单项图标」`values-zh-rCN/strings.xml:1324`）。
+   */
+  showMenuIcon: boolean;
+  /**
+   * 顶部工具栏附加区域是否显示，上游 `showReadTitleAddition`（ReadSettings.kt:55，默认 **true**）。
+   * 上游只有字段、落库、契约与两处设置界面（`MoreConfigSheet.kt:458` / `ReadConfigScreen.kt:418`），
+   * **全仓没有任何渲染消费点**（grep 29 处全是键名/落库/映射/字段/契约/界面/只读快照/单测），
+   * 因此本地只做可配 + 落库，不造渲染效果。
+   */
+  showReadTitleAddition: boolean;
+  /**
+   * 菜单不透明度 0-100，上游 `menuAlpha`（ReadSettings.kt:13，默认 100）。
+   * 上游同样**没有任何渲染消费点**（`ReadBookMenuBar.kt:484-492` 的 `dragMenuAlpha` 与
+   * `TextActionSelectionMenu.kt:197` 的 `quickMenuAlpha` 都是局部变量，与设置字段无关；
+   * `pref_config_read.xml:53` 那份旧 xml 全仓已无引用），本地只做可落库，不上屏。
+   */
+  menuAlpha: number;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -863,6 +884,10 @@ export class ReaderSettingsRepository {
       readMenuLensRadius: 24,
       readBarStyleFollowPage: false,
       moreActionsConfig: '',
+      // 「展示菜单项图标」默认 false、「展示顶部工具栏附加区域」默认 true、「菜单不透明度」默认 100（ReadSettings.kt:119/55/13）
+      showMenuIcon: false,
+      showReadTitleAddition: true,
+      menuAlpha: 100,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -1040,6 +1065,9 @@ export class ReaderSettingsRepository {
     const readMenuLensRadiusValue = await store.get('readMenuLensRadius', defaults.readMenuLensRadius);
     const readBarStyleFollowPageValue = await store.get('readBarStyleFollowPage', defaults.readBarStyleFollowPage);
     const moreActionsConfigValue = await store.get('moreActionsConfig', defaults.moreActionsConfig);
+    const showMenuIconValue = await store.get('showMenuIcon', defaults.showMenuIcon);
+    const showReadTitleAdditionValue = await store.get('showReadTitleAddition', defaults.showReadTitleAddition);
+    const menuAlphaValue = await store.get('menuAlpha', defaults.menuAlpha);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1390,6 +1418,10 @@ export class ReaderSettingsRepository {
             ? readBarStyleFollowPageValue : defaults.readBarStyleFollowPage,
           moreActionsConfig: typeof moreActionsConfigValue === 'string'
             ? moreActionsConfigValue : defaults.moreActionsConfig,
+          showMenuIcon: typeof showMenuIconValue === 'boolean' ? showMenuIconValue : defaults.showMenuIcon,
+          showReadTitleAddition: typeof showReadTitleAdditionValue === 'boolean'
+            ? showReadTitleAdditionValue : defaults.showReadTitleAddition,
+          menuAlpha: ReaderSettingsRepository.normalizeInteger(menuAlphaValue, 0, 100, defaults.menuAlpha),
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1622,6 +1654,9 @@ export class ReaderSettingsRepository {
         Math.max(0, Math.min(48, Math.round(settings.readMenuLensRadius))));
       await store.put('readBarStyleFollowPage', settings.readBarStyleFollowPage === true);
       await store.put('moreActionsConfig', settings.moreActionsConfig);
+      await store.put('showMenuIcon', settings.showMenuIcon === true);
+      await store.put('showReadTitleAddition', settings.showReadTitleAddition === true);
+      await store.put('menuAlpha', Math.max(0, Math.min(100, Math.round(settings.menuAlpha))));
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));

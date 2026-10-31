@@ -702,6 +702,12 @@ export class BackupRepository {
         // 值形如 `id,enabled;id,enabled`（上游 ReadButtonConfigDelegate.kt:75-84 saveMoreActions）。
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'moreActionsConfig', settings.moreActionsConfig);
+        // 「展示顶部工具栏附加区域」与「菜单不透明度」：上游 readPrefKeys 同样没有列这两项，
+        // 随 config.xml 无条件备份（showMenuIcon 在忽略清单 BackupConfig.kt:258 里，故不导出）。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'showReadTitleAddition', settings.showReadTitleAddition ? 'true' : 'false');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'menuAlpha', `${Math.max(0, Math.min(100, Math.round(settings.menuAlpha)))}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1502,6 +1508,12 @@ export class BackupRepository {
       // moreActionsConfig 不在忽略清单里，优先读 config.xml；读不到（旧备份）就保留本机现值。
       moreActionsConfig: BackupRepository.readXmlString(`${directory}/config.xml`, 'moreActionsConfig') ??
         current.moreActionsConfig,
+      // showMenuIcon 在忽略清单（BackupConfig.kt:258）里，恢复一律保留本机现值；
+      // 另两项不在清单里，优先取 config.xml 的备份值。
+      showMenuIcon: current.showMenuIcon,
+      showReadTitleAddition: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'showReadTitleAddition') ??
+        current.showReadTitleAddition,
+      menuAlpha: BackupRepository.readXmlInteger(`${directory}/config.xml`, 'menuAlpha') ?? current.menuAlpha,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),
