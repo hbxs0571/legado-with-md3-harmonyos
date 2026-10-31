@@ -483,37 +483,37 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 判定口径：**要接** = 上游有该行为、本地范围内应当补；**不接** = 上游虽有但本地不补，理由必须写明（上游没有的行为一律不补）；**已接** = 已有等价实现，无需动作。「要接」项的去处指向 1.3 与 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 的 KI 登记组，两组编号同源。
 
-| 判定 | 项数 |
-| --- | --- |
-| 要接 | 91 |
-| 不接 | 20 |
-| 已接 | 1 |
-| 合计 | 112 |
+| 判定 | 项数 | 说明 |
+| --- | --- | --- |
+| 已接 | 92 | 判「要接」的 91 项已由 KI-A1..A12、C1..C6、D1..D6、E1..E6 逐组实现并落库，另有 `highlightRules` 1 项原本就是独立仓储的等价实现 |
+| 要接 | 0 | 无剩余待接项 |
+| 不接 | 20 | 上游虽有但本地不补，逐条理由见各节 |
+| 合计 | 112 | |
 
-**本表 112 行与 1.3 的 14 个字段组逐组对齐，无未判项。** 判定只做「接不接」，本轮不实现（按目标约束，1.3 的代码实现不在本轮范围）。
+**本表 112 行与 1.3 的 14 个字段组逐组对齐，无未判项，也无「要接」残留。** 判定与实现分两阶段：先逐项判「接不接」，再由 KI 分组逐组实现；92 项已接的状态列都附了存储键与读/写/消费行号，可逐条复核。判「不接」的 20 项保持原判据不动（上游没有的行为一律不补、范围外能力不扩）。
 
-#### 1.5.1 背景与颜色（9 项）：要接 9
+#### 1.5.1 背景与颜色（9 项）：已接 9
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `bgAlpha` | 要接 | 上游背景透明度，本地无字段（KI-C2）；**KI-C2 已实现**（存储键 `bgAlpha`，`ReaderSettingsRepository.ets:247`，只作用于背景图片） |
-| `bgStr` | 要接 | 上游任意颜色串，本地只有六方案索引（KI-C2）；**KI-C2 已实现**（存储键 `bgStr`，六方案降级为预设） |
-| `bgStrNight` | 要接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现**（存储键 `bgStrNight`） |
-| `bgType` | 要接 | 上游 0=颜色/1=assets 图/2=自选图，本地无（KI-C2）；**KI-C2 已实现**（自选图写 2，`ReaderBackgroundImageRepository.ets` 负责选图与复制） |
-| `bgTypeNight` | 要接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现** |
-| `textColor` | 要接 | 正文字色被 `ReaderPage.ets` 的 `getReadingTextColor()` 硬编码（KI-C1）；**KI-C1 已实现**（存储键 `textColor`，默认 `#38383B` 沿用原硬编码观感） |
-| `textColorNight` | 要接 | 同上，夜间侧（KI-C1）；**KI-C1 已实现**（存储键 `textColorNight`，默认 `#D8D8DC`） |
-| `textAccentColor` | 要接 | 强调色无字段（KI-C1）；**KI-C1 已实现**（存储键 `textAccentColor`，默认 `#834E00`）。上游真实消费点是链接/搜索结果/朗读段落，本地这三条路径都还没有，故只做可配+落库+随备份 |
-| `textAccentColorNight` | 要接 | 同上，夜间侧（KI-C1）；**KI-C1 已实现**（默认 `#FE4D55`） |
+| `bgAlpha` | 已接 | 上游背景透明度，本地无字段（KI-C2）；**KI-C2 已实现**（存储键 `bgAlpha`，`ReaderSettingsRepository.ets:247`，只作用于背景图片） |
+| `bgStr` | 已接 | 上游任意颜色串，本地只有六方案索引（KI-C2）；**KI-C2 已实现**（存储键 `bgStr`，六方案降级为预设） |
+| `bgStrNight` | 已接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现**（存储键 `bgStrNight`） |
+| `bgType` | 已接 | 上游 0=颜色/1=assets 图/2=自选图，本地无（KI-C2）；**KI-C2 已实现**（自选图写 2，`ReaderBackgroundImageRepository.ets` 负责选图与复制） |
+| `bgTypeNight` | 已接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现** |
+| `textColor` | 已接 | 正文字色被 `ReaderPage.ets` 的 `getReadingTextColor()` 硬编码（KI-C1）；**KI-C1 已实现**（存储键 `textColor`，默认 `#38383B` 沿用原硬编码观感） |
+| `textColorNight` | 已接 | 同上，夜间侧（KI-C1）；**KI-C1 已实现**（存储键 `textColorNight`，默认 `#D8D8DC`） |
+| `textAccentColor` | 已接 | 强调色无字段（KI-C1）；**KI-C1 已实现**（存储键 `textAccentColor`，默认 `#834E00`）。上游真实消费点是链接/搜索结果/朗读段落，本地这三条路径都还没有，故只做可配+落库+随备份 |
+| `textAccentColorNight` | 已接 | 同上，夜间侧（KI-C1）；**KI-C1 已实现**（默认 `#FE4D55`） |
 
-#### 1.5.2 状态栏（2 项）：要接 2
+#### 1.5.2 状态栏（2 项）：已接 2
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `darkStatusIcon` | 要接 | 上游按背景亮度决定状态栏图标色，本地无字段（KI-C2）；**KI-C2 已实现**（`ReaderPage.ets` 的 `applyReaderStatusBarIcon()` 走 `setWindowSystemBarProperties`） |
-| `darkStatusIconNight` | 要接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现**（设备实测亮像素 6726→0） |
+| `darkStatusIcon` | 已接 | 上游按背景亮度决定状态栏图标色，本地无字段（KI-C2）；**KI-C2 已实现**（`ReaderPage.ets` 的 `applyReaderStatusBarIcon()` 走 `setWindowSystemBarProperties`） |
+| `darkStatusIconNight` | 已接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现**（设备实测亮像素 6726→0） |
 
-#### 1.5.3 下划线与虚线（4 项）：要接 4
+#### 1.5.3 下划线与虚线（4 项）：已接 4
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
@@ -522,7 +522,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `dottedBase` | 已接 | **KI-C3 已实现**（存储键 `dottedBase`，默认 6；作 `strokeDashArray` 第一项，`ReaderPage.ets:2274`） |
 | `dottedRatio` | 已接 | **KI-C3 已实现**（存储键 `dottedRatio`，默认 6；作 `strokeDashArray` 第二项，`ReaderPage.ets:2274`） |
 
-#### 1.5.4 标题排版（14 项）：要接 14
+#### 1.5.4 标题排版（14 项）：已接 14
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
@@ -600,24 +600,24 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | --- | --- | --- |
 | `readMenuCustomIcons` | 已接 | **KI-E3 已实现**（`id,path;` 编码串：读 `ReaderSettingsRepository.ets:1009`/`:1353`、写 `:1580`，归一 `:1778 normalizeCustomIconMap`；本地无选图入口，见 KNOWN-ISSUES KI-E3 已知差异） |
 | `titleBarCustomIcons` | 已接 | **KI-E3 已实现**（同上：读 `ReaderSettingsRepository.ets:1008`/`:1352`、写 `:1578`，解码 `:1797 decodeCustomIconMap` 供 `ReaderPage.ets:1989` 渲染自定义图标；本地无选图入口） |
-| `showMenuIcon` | 要接 | 显示菜单图标（KI-A2，随菜单层） |
+| `showMenuIcon` | 已接 | 存储 `ReaderSettingsRepository.ets:443`（默认 `false`）、读 `:1043`/归一 `:1389`、写 `:1625`；面板 `ReaderSettingsPage.ets:1512`；消费 `ReaderPage.ets:4586-4593`（「更多」网格面板图标）；在 `BackupConfig.kt:258` 忽略清单内，不随 config.xml 导出（KI-A2） |
 | `showTitleBarIcons` | 已接 | **KI-E3 已实现**（存储键同名，布尔默认 false：读 `ReaderSettingsRepository.ets:1002`/`:1344`、写 `:1573`；面板 Toggle `ReaderSettingsPage.ets:2639`/`:866`/`:894`，并让三项互斥可见 `:1247`；消费 `ReaderPage.ets:1979`/`:1984`，挂载 `:4371`/`:4388`） |
 | `titleBarCompact` | 已接 | **KI-E5 已实现**（存储键同名，布尔：读 `ReaderSettingsRepository.ets:879`/`:1187`、写 `:1381`；面板 `ReaderSettingsPage.ets:2444`/`:828`；消费 `ReaderPage.ets:1646` —— 开启后顶栏只留「更多」，对齐上游 `ReadMenuActionDefs.kt:506`；**随 config.xml 备份** `BackupRepository.ets:698`/`:1450`） |
 | `titleBarIconPosition` | 已接 | **KI-E3 已实现**（存储键同名，夹 0–3 默认 3：读 `ReaderSettingsRepository.ets:1003`/`:1347`、写 `:1574`；面板四值下拉 `ReaderSettingsPage.ets:2641`/`:1106`/`:1849`/`:1123`/`:947`/`:1173`；消费 `ReaderPage.ets:1974` 对齐） |
 | `titleBarIconStyle` | 已接 | **KI-E5 已实现**（存储键同名，夹 0–2：读 `ReaderSettingsRepository.ets:880`/`:1189`、写 `:1382`；下拉 `ReaderSettingsPage.ets:2445`、选中态 `:962`、写回 `:1001`；消费 `ReaderPage.ets:930-942` 底色与描边） |
 | `titleBarMode` | 已接 | **KI-E5 已实现**（存储键同名，**字符串四态** `"0"`–`"3"` 白名单：读 `ReaderSettingsRepository.ets:878`/`:1184-1186`、写 `:1379-1380`；面板两处选项改四值 `ReaderSettingsPage.ets:961`/`:998`/`:2442`；消费 `ReaderPage.ets:1760-1777` 四个可见性方法 + `:4083-4106`） | 
 
-#### 1.5.10 亮度与滑块（5 项）：要接 5
+#### 1.5.10 亮度与滑块（5 项）：已接 5
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `showBrightnessView` | 要接 | 亮度条显隐三值（KI-E1） |
+| `showBrightnessView` | 已接 | 亮度条显隐三值（KI-E1） |
 | `brightnessVwPos` | 已接 | **KI-A9 已实现**（存储键 `readBrightnessControlPosition`，读 `ReaderSettingsRepository.ets:735`、写 `:1176`、面板 `ReaderSettingsPage.ets:2240`、条件可见 `:926`） |
 | `brightnessAuto` | 已接 | **KI-A9 已实现**（存储键同名，读 `ReaderSettingsRepository.ets:736`、写 `:1177`、消费 `ReaderPage.ets:747`；随 config.xml 备份） |
 | `readBrightness` | 已接 | **KI-A9 已实现**（存储键是 `brightness` 而非字段名，读 `ReaderSettingsRepository.ets:733`、写 `:1174`、消费 `ReaderPage.ets:747`；随 config.xml 备份） |
-| `readSliderMode` | 要接 | 进度条显示/不显示默认 `"0"`；**KI-D5 已实现**（存储键 `readSliderMode`，`ReaderPage.ets:3109` 消费） |
+| `readSliderMode` | 已接 | 进度条显示/不显示默认 `"0"`；**KI-D5 已实现**（存储键 `readSliderMode`，`ReaderPage.ets:3109` 消费） |
 
-#### 1.5.11 阅读模式与排版开关（4 项）：要接 2、不接 2
+#### 1.5.11 阅读模式与排版开关（4 项）：已接 2、不接 2
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
@@ -658,8 +658,8 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `pageTouchSlop` | 已接 | 翻页触摸阈值，0=平台默认；**KI-D5 已实现**（存储键 `pageTouchSlop`，`ReaderPage.ets:2947-2948` 消费） |
 | `lastMarkingStyle` | 已接 | 沿用上次标记样式；**KI-D6 已实现**（存储键 `lastMarkingStyle`，`ReaderMarkingEditor.ets:255-264` 消费） |
 | `chineseConverterType` | 已接 | 繁简转换三档，需自带字表；**KI-C5 已实现**（ICU Transliterator，`ChineseTextConverter.ets`） |
-| `menuAlpha` | 要接 | 菜单不透明度，随菜单层（KI-A2） |
-| `showReadTitleAddition` | 要接 | 阅读标题补充信息（KI-A2） |
+| `menuAlpha` | 已接 | 存储 `ReaderSettingsRepository.ets:456`（默认 100，夹 0–100）、读 `:1045`/归一 `:1391`、写 `:1627`；面板无条目（上游也没有）；`BackupRepository.ets:704-705` 导出、`:1506-1507` 恢复；上游全仓无渲染消费点，本地只落库不上屏（KI-A2） |
+| `showReadTitleAddition` | 已接 | 存储 `ReaderSettingsRepository.ets:451`（默认 `true`）、读 `:1044`/归一 `:1390`、写 `:1626`；面板 `ReaderSettingsPage.ets:1511`；`BackupRepository.ets:702-703` 导出、`:1504-1505` 恢复；上游全仓无渲染消费点，本地只落库不上屏（KI-A2） |
 | `readBarStyle` | 已接 | 阅读栏样式默认 1，上游被 `BackupConfig.kt:216` 列入备份键；**由 KI-E1 一并接上、KI-E6 复核确认不重复实现**（`ReaderSettingsRepository.ets:372` 接口、`:775` 默认 1、`:928` 读、`:1453` 写，夹 0–2；面板 `ReaderSettingsPage.ets:2518`/`:886`/`:1028`；渲染 `ReaderPage.ets:1023 readerMenuBaseColor()`） |
 | `readBarStyleFollowPage` | 已接 | **KI-E6 已实现**：存储键同名（默认 false），读 `ReaderSettingsRepository.ets:1041`、写 `:1623`；**上游没有任何 UI 发送点**（只有 `ReadBook.kt:724` 与 `ReadStyleDelegate.kt:446` 两个消费点 + `ReadConfig.kt:56` 只读快照）；本地 `ReaderPage.ets:1023 readerMenuBaseColor()` 由 `@Prop paperColor` 等响应式重算，语义天然等价，故只落库不上屏 |
 | `moreActionsConfig` | 已接 | **KI-E6 已实现**：`ReaderSettingsRepository.ets:454` 接口、编解码 `:1896 encodeMoreActions`/`:1905 decodeMoreActions`；运行时真源仍是 `ReaderMoreActionsRepository`（独立 prefs，23 项），本字段是备份投影，`Index.ets:2134` 编码、`:3695-3696` 恢复解码并写回；**不在 `BackupConfig.readPrefKeys` 忽略清单里，随 `config.xml` 导出** |
