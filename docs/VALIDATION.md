@@ -305,6 +305,51 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-11-01 N 端 KI-E6 无上屏四项（落库通过，面板无条目与上游一致）
+
+**范围**：`docs/parity/READER-CONFIG.md` E 块 E-36..E-40 中最后四行 —— 菜单镜头半径 / 阅读栏样式 / 阅读栏样式跟随页面 / 更多操作配置，对应上游 `ui/book/read/sheet/SystemMenuPage.kt` 与 `domain/model/settings/ReadSettings.kt:68-69`、`:110`、`:121`。原条目里的「E-37 自动亮度」已由 KI-A9 接上，本轮不涉及。
+
+**构建**：`assembleHap` 两次全部 BUILD SUCCESSFUL（53 s 447 ms / 35 s 399 ms），无 ERROR，覆盖安装成功。
+
+**设备**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832，API 26）。这三项在设置面板里**没有条目**（与上游一致：上游 `SystemMenuPage.kt` 与 `ReadConfigScreen.kt` 都查无 `MenuLensRadius` / `readBarStyleFollowPage` 控件），因此无法像前几组那样「拨控件 + 看 dump」，只能走「改一次阅读设置触发保存 → 拉 prefs 核对三键」。
+
+### 上游判据（先于实现查实）
+
+| 字段 | 上游有无设置入口 | 检索证据 |
+| --- | --- | --- |
+| `readMenuLensRadius` | **无** | `grep -rn "MenuLensRadius" app/src/main/java/io/legado/app/` 共 16 处，全是键名 / 落库与映射 / 字段声明 / 夹取 / 契约 / 委托 / 快照 / 渲染消费 / 备份忽略清单 |
+| `readBarStyleFollowPage` | **无** | 全仓只命中 `PreferKey.kt:290`、`ReadSettingsRepository.kt:206`/`:557`/`:691`、`ReadSettings.kt:68`、`BackupConfig.kt:217`、`ReadConfig.kt:56` 只读快照，加 `ReadBook.kt:724-726` 与 `ReadStyleDelegate.kt:445-449` 两个消费点 |
+| `readBarStyle` | 有（KI-E1 已接） | 面板「工具栏样式」三档下拉 |
+| `moreActionsConfig` | 有（`ReaderMoreActionsSheet.kt`） | 本地已有等价运行时实现 `ReaderMoreActionsRepository` |
+
+前三项按 KI-A3 `disableReturnKey` 同一判据处理：**上游有字段就保留、上游没有效果就不造**，本地只落库、不上屏。
+
+### 落库实测（`aa force-stop` 后 `hdc file recv` 拉偏好文件）
+
+| 键 | 实测值 | 跨进程 |
+| --- | --- | --- |
+| `readMenuLensRadius` | `<double key="readMenuLensRadius" value="24.000000"/>` | 重启后仍 24 |
+| `readBarStyleFollowPage` | `<bool key="readBarStyleFollowPage" value="false"/>` | 重启后仍 false |
+| `moreActionsConfig` | `<string key="moreActionsConfig">source_custom_button,true;change_source,true;refresh,true;download,true;audio_download,true;edit_content,true;add_bookmark,true;text_processing,true;reverse_content,true;re_segment,true;del_ruby,true;del_h,true;toc_rule,true;charset,true;image_style,true;page_anim,true;simulated_reading,true;get_progress,true;cover_progress,true;highlight_rule,true;read_style,true;bottom_button_config,true;log,true</string>` | 重启后仍 23 项、全部 `,true` |
+
+**关键发现**：这三键**只在「任意阅读设置改动触发 `persistReaderSettings()`」之后才写入**，纯启动不会落盘（实测首轮 prefs 里三键缺失，文件 10331 B；改一次字号后出现，文件 10875 B）。因此验收时先改字号（`Slider 20 → 49`）触发保存，再拉 prefs。
+
+### 操作踩坑
+
+1. **字号滑块 `[91,417][958,557]` 用 `uitest uiInput click` 完全无效** —— 连点 5 个不同 x 位置读数都不变；只有 `swipe 起点x 487 目标x 487 800/1500` 才生效。复原路径 `swipe 950 487 380 487 1500` → `20.000000`。
+2. `legado_reader_more_actions` 这个独立 prefs 文件在模拟器上**不存在**（`hdc file recv` 报 no such file or directory），因为该仓储只在用户改「更多」面板时才写；`moreActionsConfig` 出现在 `legado_reader_settings` 里是 `Index` 快照编码的结果，两者不矛盾。
+
+### 未验部分
+
+1. **面板无这三项**，因此没有「开关互斥 / 控件拨动」类证据，只有 prefs 落库证据。
+2. **菜单镜头半径的 `lens` 高光效果不实现**（ArkUI 无液态玻璃材质），也无法取证。
+3. **阅读栏样式跟随页面的效果未做像素级取证** —— 模拟器书架上书正文文件已丢失、`ReaderPage` 进不去，只能记录「`readerMenuBaseColor()` 由 `@Prop` 响应式重算」这一源码事实。
+4. **更多操作配置的双向一致性未在设备上走完整闭环** —— 需要进阅读页打开「更多」面板增删条目才能观察 `moreActionsConfig` 变化，本轮只验到「默认 23 项编码正确 + 重启后保持」。
+
+### 复原状态
+
+三项均为默认值（`24` / `false` / 23 项全开），字号已 `swipe` 复原到 `20.000000`，无需其他复原动作。
+
 ## 2026-10-31 N 端 KI-E3 浮动图标四项（面板互斥与落库通过，图标行视觉未验）
 
 **范围**：`docs/parity/READER-CONFIG.md` E 块 E-17..E-20 四行（显示标题栏图标 / 标题栏悬浮图标配置 / 标题栏悬浮图标位置 / 悬浮图标液态玻璃按钮），对应上游 `ui/book/read/sheet/SystemMenuPage.kt:491-544` 的「Floating icon settings」段。字段共六项（`showTitleBarIcons`、`titleBarIconPosition`、`readMenuFloatingIconLiquidGlass`、`floatingIcons` 图标池、`titleBarCustomIcons`、`readMenuCustomIcons`）。

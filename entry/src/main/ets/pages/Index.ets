@@ -190,6 +190,18 @@ struct Index {
   @State readerMoreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS.map(
     (item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({ id: item.id, enabled: item.enabled })
   );
+  /**
+   * 菜单镜头半径（上游 `readMenuLensRadius`，ReadSettings.kt:110，默认 24，夹 0–48）。
+   * 上游全仓没有该字段的设置入口，只在 API 33+ 液态玻璃材质下生效，ArkUI 无对应材质，
+   * 因此本地只落库、不上屏（与 KI-A3 `disableReturnKey` 同一判据）。
+   */
+  @State readerReadMenuLensRadius: number = 24;
+  /**
+   * 阅读栏样式是否跟随页面（上游 `readBarStyleFollowPage`，ReadSettings.kt:68，默认 false）。
+   * 上游同样没有设置入口；本地 `ReaderPage.readerMenuBaseColor()` 由纸色等 @Prop 响应式重算，
+   * 天然等价，故只落库、不加开关。
+   */
+  @State readerReadBarStyleFollowPage: boolean = false;
   @State readerProgressBehavior: string = 'page';
   @State readerReadSliderMode: string = '0';
   @State readerPageTouchSlop: number = 0;
@@ -1966,6 +1978,8 @@ struct Index {
     );
     this.readerTitleBarCustomIcons = settings.titleBarCustomIcons;
     this.readerReadMenuCustomIcons = settings.readMenuCustomIcons;
+    this.readerReadMenuLensRadius = settings.readMenuLensRadius;
+    this.readerReadBarStyleFollowPage = settings.readBarStyleFollowPage;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -2039,6 +2053,9 @@ struct Index {
     if (context === undefined) { return; }
     try {
       await ReaderMoreActionsRepository.save(context, this.readerMoreActions);
+      // 「更多」面板条目在快照里以 moreActionsConfig 的形式参与备份（上游 ReadSettings.kt:121），
+      // 仓储写完要立刻回写一次阅读设置，否则 config.xml 导出拿到的还是上一次的旧串。
+      await this.persistReaderSettings();
     } catch (_) {
       this.showUnavailableAction('更多操作配置保存失败');
     }
@@ -2110,6 +2127,11 @@ struct Index {
         floatingIcons: this.readerFloatingIcons,
         titleBarCustomIcons: this.readerTitleBarCustomIcons,
         readMenuCustomIcons: this.readerReadMenuCustomIcons,
+        readMenuLensRadius: this.readerReadMenuLensRadius,
+        readBarStyleFollowPage: this.readerReadBarStyleFollowPage,
+        // 「更多」面板条目的备份投影：运行时真源是 ReaderMoreActionsRepository，
+        // 这里按上游 moreActionsConfig 的 `id,enabled;` 格式编码进快照，供 config.xml 导出。
+        moreActionsConfig: ReaderSettingsRepository.encodeMoreActions(this.readerMoreActions),
         adaptSpecialStyle: this.readerAdaptSpecialStyle,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
@@ -3660,11 +3682,18 @@ struct Index {
     );
     this.readerTitleBarCustomIcons = result.settings.titleBarCustomIcons;
     this.readerReadMenuCustomIcons = result.settings.readMenuCustomIcons;
+    this.readerReadMenuLensRadius = result.settings.readMenuLensRadius;
+    this.readerReadBarStyleFollowPage = result.settings.readBarStyleFollowPage;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
       this.readerAnimationSpeed = result.settings.animationSpeed;
       this.readerInfoSettings = this.getReaderInfoSettingsFromSnapshot(result.settings);
+      // 「更多」面板条目的运行时真源是 ReaderMoreActionsRepository（独立 prefs），
+      // 快照里的 moreActionsConfig 只是它的备份投影；恢复时把串解码回仓储并落盘，
+      // 否则备份里改过的「更多」条目在重启后会被旧仓储值覆盖回去。
+      this.readerMoreActions = ReaderSettingsRepository.decodeMoreActions(result.settings.moreActionsConfig);
+      await ReaderMoreActionsRepository.save(context, this.readerMoreActions);
       this.readerSettingsLoaded = true;
       this.readerSettingsRevision += 1;
       // 恢复可能写入了替换净化规则，重新读一次让规则页和阅读页都看到最新结果。

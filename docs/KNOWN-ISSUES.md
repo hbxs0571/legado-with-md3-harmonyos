@@ -551,7 +551,7 @@
 **已知差异**：
 
 1. 本地用 ArkUI 的静态 `backdropBlur(radius)`，没有上游 `hazeState` 的内容自适应模糊；实际效果是「半径固定 + 底色按 `readMenuBlurAlpha` 折算不透明度（上限 0.6）」，不是真高斯采样。
-2. `readMenuLensRadius`（`ReadBookConfig.kt:114`，夹 0–48）不在本轮七行内，本地未落库，留给 KI-E6。
+2. `readMenuLensRadius`（`ReadBookConfig.kt:114`，夹 0–48）不在本轮七行内；**2026-10-31 KI-E6 已补上落库（只落库不上屏，上游同样没有设置入口）**，见 KI-E6 段。
 3. 边框描边、模糊半径、模糊着色、文字色的**视觉变化未做像素级取证**：模拟器书架上书的正文文件已丢失、`ReaderPage` 进不去，只有面板值与 prefs 落库证据。
 4. 上游「模糊色没有清除入口」这一约束本地照搬（`applyMenuColor` 对模糊色也支持再点同色清除，属**放宽**，不影响已有行为）。
 
@@ -642,7 +642,34 @@
 
 **验收**：`assembleHap` BUILD SUCCESSFUL（两次：39 s 738 ms / 21 s 843 ms，无 ERROR）；设备实测（`127.0.0.1:5555`，API 26）：开「标题栏胶囊」后「标题栏模式」整行消失、关闭后恢复（两个方向都做了 `dumpLayout` 对照）；八项逐项拨动后退出设置页重进 + `aa force-stop` 重启应用，值全部跨进程保持；「标题栏模式」弹层四项文案与上游中文串一致。详见 [VALIDATION](../VALIDATION.md) 的 2026-10-31 KI-E5 节。
 
-**KI-E6 无上屏条目四项（要接，需先补上屏）** —— 覆盖 E-36 菜单镜头半径（`ReadBookConfig.kt:114`，夹 0–48f）、E-38 阅读栏样式（`ReadSettings.kt:69`，默认 1）、E-39 阅读栏样式跟随页面（`:68`）、E-40 更多操作配置（`:121`）。原第五项「E-37 自动亮度」已于 2026-10-31 随 KI-A9 接上（上游本就没有独立条目，是亮度条上的内联按钮，详见 KI-A9）。这五项连设置条目都没有：`getMenuSettingsEntries()`（`ReaderSettingsPage.ets:1788-1840`）里查无对应项，上游消费点却真实存在（`readBarStyle` 在 `data/repository/ReadSettingsRepository.kt:209` 夹 0–2 并被 `help/storage/BackupConfig.kt:216` 列入备份键；`moreActionsConfig` 被 `ReadBookViewModel.kt:2150` 解析为「更多」面板条目）。要接得先补上屏。
+**KI-E6 无上屏条目四项（已实现）** —— 涉及 E-36 菜单镜头半径（`ReadBookConfig.kt:114`，夹 0–48f）、E-38 阅读栏样式（`ReadSettings.kt:69`，默认 1）、E-39 阅读栏样式跟随页面（`:68`）、E-40 更多操作配置（`:121`）。原条目里「E-37 自动亮度」已由 2026-10-31 的 KI-A9 接上，本轮不再涉及。
+
+**上游口径**
+
+这四项里有三项是「上游有字段、没有设置入口」：
+
+- **E-36 `readMenuLensRadius`**（`PreferKey.kt:409`、`ReadSettings.kt:110` 默认 24f、`ReadBookConfig.kt:114` 夹 0–48f）：`grep -rn "MenuLensRadius" app/src/main/java/io/legado/app/` 共 16 处，全部是键名、`ReadSettingsRepository.kt:307-308`/`:483`/`:604`/`:733` 落库与映射、字段声明、夹取、`ReadBookContract.kt:484`/`:1920` 契约、`ReadConfigUpdateDelegate.kt:457-461` 委托、`ReadBookViewModel.kt:2130` 快照、`ReadBookMenuBarShared.kt:78` 渲染消费、`BackupConfig.kt:248` 忽略清单 —— **没有任何 UI 发送点**（`SystemMenuPage.kt` 与 `ReadConfigScreen.kt` 都查无此项）。消费端把它当 `readerMenuLiquidGlass` 的 `lensRadius`（`ReaderMenuGlass.kt:25-53` 的 `lens()`），而该材质只在 `readerMenuLiquidGlassAvailable(backdrop)` 即 API 33+ 生效。
+- **E-39 `readBarStyleFollowPage`**（`ReadSettings.kt:68` 默认 false）：全仓只有 `PreferKey.kt:290`、`ReadSettingsRepository.kt:206`/`:557`/`:691`、`BackupConfig.kt:217`、`ReadConfig.kt:56` 只读快照，加两个消费点 `model/ReadBook.kt:724-726`（`upReadBookConfig` 里阅读样式档位变化时刷新动作栏）与 `ui/book/read/ReadStyleDelegate.kt:445-449 postActionBarUpdateIfFollowingPage()`（`colorSelected` 的 TEXT_COLOR `:376` / TEXT_ACCENT_COLOR `:384` / BG_COLOR `:392` 三处调用），**同样没有 UI 发送点**。它控制的是「正文色/强调色/背景色变化后是否刷新动作栏」。
+- **E-38 `readBarStyle`**（`ReadSettings.kt:69` 默认 1，`ReadBookConfig.kt:99` 夹 0–2）：**已由 KI-E1 完整接上**，本轮只纠正状态、不重复实现。
+- **E-40 `moreActionsConfig`**（`ReadSettings.kt:121` 默认空串）是唯一有完整 UI 与落库链路的：编码 `ReadButtonConfigDelegate.kt:75-84 saveMoreActions` （`joinToString(";") { "${it.id},${it.enabled}" }`），解析 `parseMoreActions`（`:86-98`）**空串 = 全部默认开启**、串里未出现的项补 `true`（与顶栏/底栏「默认关闭」相反），动作池 `ReadBookContract.kt:548-560`（28 项），UI `sheet/ReaderMoreActionsSheet.kt:78-131`。**`moreActionsConfig` 不在 `BackupConfig.readPrefKeys` 忽略清单里**（该清单只有 `:216`/`:217`/`:248` 三条相关命中），随 `config.xml` 无条件备份。
+
+**本地落地**
+
+- 数据层 `entry/src/main/ets/data/ReaderSettingsRepository.ets`：`readMenuLensRadius` 接口 `:439`、默认 `:863`、读 `:1040`、归一 `:1387-1388`、写 `:1621-1622`；`readBarStyleFollowPage` 接口 `:447`、默认 `:864`、读 `:1041`、归一 `:1389-1390`、写 `:1623`；`moreActionsConfig` 接口 `:454`、默认 `:865`、读 `:1042`、归一 `:1391-1392`、写 `:1624`；编解码 `:1896 encodeMoreActions` / `:1905 decodeMoreActions`。
+- `entry/src/main/ets/pages/Index.ets`：`@State readerReadMenuLensRadius` `:198`、`@State readerReadBarStyleFollowPage` `:204`；装载 `:1981-1982`；快照 `:2130`/`:2131`/`:2134`；备份恢复 `:3685-3686`；`setReaderMoreActions` 里补 `persistReaderSettings()` 回写 `:2047-2058`；恢复流程里解码写回仓储 `:3695-3696`。
+- `entry/src/main/ets/data/BackupRepository.ets`：`config.xml` 导出 `moreActionsConfig` `:701-704`；恢复段 `:1500-1504`（前两项取 `current`，第三项优先读 `config.xml`）。
+- 面板 `ReaderSettingsPage.ets` 无这三项条目 —— 与上游一致。
+
+**已知差异**
+
+1. `readMenuLensRadius` 只落库不上屏，`lens` 高光效果不实现（ArkUI 无液态玻璃材质）；这与 KI-A3 `disableReturnKey` 同一判据「上游有字段就保留、上游没有效果就不造」。
+2. `readBarStyleFollowPage` 只落库不上屏，靠 `ReaderPage.ets:1023 readerMenuBaseColor()` 的 `@Prop` 响应式重算等价实现，未做像素级取证。
+3. `moreActionsConfig` 的运行时真源仍是本地独立仓储 `ReaderMoreActionsRepository`（prefs `legado_reader_more_actions`，23 项，比上游 28 项少 `source_login`/`source_pay`/`edit_source`/`disable_source`/`ai_chat` 五项，与「在线书源 / AI」范围外一致），快照字段是它的备份投影，两者靠 `Index` 的双向编解码保持一致。
+4. 上游 `parseMoreActions` 的「未出现的项补 `true`」语义本地照抄；但本地默认池只有 23 项，备份串里若出现本地不认识的 id 会被 `decodeMoreActions` 过滤掉。
+
+**验收**
+
+`assembleHap` 两次 BUILD SUCCESSFUL（53 s 447 ms / 35 s 399 ms），无 ERROR。设备实测（HOS 模拟器 `127.0.0.1:5555`，API 26）：改一次阅读设置触发保存后，偏好文件出现 `<double key="readMenuLensRadius" value="24.000000"/>`、`<bool key="readBarStyleFollowPage" value="false"/>`、`<string key="moreActionsConfig">source_custom_button,true;change_source,true;…</string>`（23 项，全部 `,true`），`aa force-stop` 重启后不变；面板无这三项。详见 [验证记录](VALIDATION.md)。
 
 ### B 页眉页脚
 

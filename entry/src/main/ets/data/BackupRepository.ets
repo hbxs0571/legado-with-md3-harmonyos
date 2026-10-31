@@ -698,6 +698,10 @@ export class BackupRepository {
         // 因此它随 config.xml 无条件备份；同组的另外七项都在忽略清单里，不导出。
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'titleBarCompact', settings.titleBarCompact ? 'true' : 'false');
+        // 更多操作配置：上游 readPrefKeys 里同样没有 moreActionsConfig，随 config.xml 无条件备份。
+        // 值形如 `id,enabled;id,enabled`（上游 ReadButtonConfigDelegate.kt:75-84 saveMoreActions）。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'moreActionsConfig', settings.moreActionsConfig);
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1491,6 +1495,13 @@ export class BackupRepository {
       ),
       titleBarCustomIcons: current.titleBarCustomIcons,
       readMenuCustomIcons: current.readMenuCustomIcons,
+      // 菜单镜头半径与「阅读栏样式跟随页面」都在 BackupConfig.kt:248 / :217 的忽略清单里，
+      // 上游有字段但没有任何设置入口，恢复一律保留本机现值。
+      readMenuLensRadius: current.readMenuLensRadius,
+      readBarStyleFollowPage: current.readBarStyleFollowPage,
+      // moreActionsConfig 不在忽略清单里，优先读 config.xml；读不到（旧备份）就保留本机现值。
+      moreActionsConfig: BackupRepository.readXmlString(`${directory}/config.xml`, 'moreActionsConfig') ??
+        current.moreActionsConfig,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

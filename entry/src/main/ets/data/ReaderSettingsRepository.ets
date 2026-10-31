@@ -1,4 +1,5 @@
 import { preferences } from '@kit.ArkData';
+import { ReaderMoreActionConfig, READER_MORE_ACTION_DEFAULTS } from './ReaderMoreActionsRepository';
 
 export interface ReaderInfoSettings {
   headerMode: number;
@@ -426,6 +427,31 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   titleBarCustomIcons: string;
   /** 底栏菜单图标自定义路径表（`id,path;` 编码），上游 `readMenuCustomIcons`（ReadSettings.kt:114）。 */
   readMenuCustomIcons: string;
+  /**
+   * 菜单镜头半径（dp），上游 `readMenuLensRadius`（ReadSettings.kt:110，默认 24，夹 0–48）。
+   * 上游只有字段与落库：`grep -rn MenuLensRadius app/src/main/java/io/legado/app/` 全仓
+   * 只有 PreferKey / ReadSettingsRepository / ReadSettings / ReadBookConfig / 契约 /
+   * ReadConfigUpdateDelegate / 渲染消费，**没有任何 UI 发送点**，因此本地同样只落库、
+   * 不上屏（与 KI-A3 `disableReturnKey`、KI-A7 两项振动同一判据）。
+   * 上游消费点 `ReadBookMenuBarShared.kt:78 lensRadius = menuConfig.readMenuLensRadius.dp`，
+   * 只在 API 33+ 的液态玻璃材质下生效，ArkUI 无对应材质。
+   */
+  readMenuLensRadius: number;
+  /**
+   * 阅读栏样式是否跟随页面，上游 `readBarStyleFollowPage`（ReadSettings.kt:68，默认 false）。
+   * 上游同样只有字段与落库、没有 UI 发送点（grep 只在 ReadStyleDelegate.kt:446 与
+   * ReadConfig.kt:56 的只读快照命中）。它控制的是「文字色/强调色/背景色变化后是否刷新
+   * 动作栏」，本地 `ReaderPage.ets:readerMenuBaseColor()` 直接由 `@Prop paperColor` 等
+   * 响应式重算，天然等价，因此本地只落库、不加额外开关。
+   */
+  readBarStyleFollowPage: boolean;
+  /**
+   * 「更多」面板条目配置（`id,enabled;` 编码），上游 `moreActionsConfig`（ReadSettings.kt:121，默认空串）。
+   * 上游空串表示全部默认开启（`ReadButtonConfigDelegate.kt:86-98`），本地运行时真源是
+   * `ReaderMoreActionsRepository`（独立 prefs `legado_reader_more_actions`）；本字段是它的
+   * 备份投影：写回时由 Index 用 `readerMoreActions` 编码，恢复时再解码回该仓储。
+   */
+  moreActionsConfig: string;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -833,6 +859,10 @@ export class ReaderSettingsRepository {
       ),
       titleBarCustomIcons: '',
       readMenuCustomIcons: '',
+      // 菜单镜头半径默认 24（上游 ReadSettings.kt:110）；另两项上游默认 false / 空串。
+      readMenuLensRadius: 24,
+      readBarStyleFollowPage: false,
+      moreActionsConfig: '',
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -1007,6 +1037,9 @@ export class ReaderSettingsRepository {
       await store.get('floatingIcons', ReaderSettingsRepository.encodeTopActions(defaults.floatingIcons));
     const titleBarCustomIconsValue = await store.get('titleBarCustomIcons', defaults.titleBarCustomIcons);
     const readMenuCustomIconsValue = await store.get('readMenuCustomIcons', defaults.readMenuCustomIcons);
+    const readMenuLensRadiusValue = await store.get('readMenuLensRadius', defaults.readMenuLensRadius);
+    const readBarStyleFollowPageValue = await store.get('readBarStyleFollowPage', defaults.readBarStyleFollowPage);
+    const moreActionsConfigValue = await store.get('moreActionsConfig', defaults.moreActionsConfig);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1351,6 +1384,12 @@ export class ReaderSettingsRepository {
             typeof floatingIconsValue === 'string' ? floatingIconsValue : '', defaults.floatingIcons),
           titleBarCustomIcons: ReaderSettingsRepository.normalizeCustomIconMap(titleBarCustomIconsValue),
           readMenuCustomIcons: ReaderSettingsRepository.normalizeCustomIconMap(readMenuCustomIconsValue),
+          readMenuLensRadius: ReaderSettingsRepository.normalizeInteger(
+            readMenuLensRadiusValue, 0, 48, defaults.readMenuLensRadius),
+          readBarStyleFollowPage: typeof readBarStyleFollowPageValue === 'boolean'
+            ? readBarStyleFollowPageValue : defaults.readBarStyleFollowPage,
+          moreActionsConfig: typeof moreActionsConfigValue === 'string'
+            ? moreActionsConfigValue : defaults.moreActionsConfig,
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1579,6 +1618,10 @@ export class ReaderSettingsRepository {
         ReaderSettingsRepository.normalizeCustomIconMap(settings.titleBarCustomIcons));
       await store.put('readMenuCustomIcons',
         ReaderSettingsRepository.normalizeCustomIconMap(settings.readMenuCustomIcons));
+      await store.put('readMenuLensRadius',
+        Math.max(0, Math.min(48, Math.round(settings.readMenuLensRadius))));
+      await store.put('readBarStyleFollowPage', settings.readBarStyleFollowPage === true);
+      await store.put('moreActionsConfig', settings.moreActionsConfig);
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
@@ -1840,6 +1883,37 @@ export class ReaderSettingsRepository {
     });
     defaults.forEach((item: ReaderBottomActionConfig) => {
       if (!result.some((saved: ReaderBottomActionConfig) => saved.id === item.id)) {
+        result.push({ id: item.id, enabled: item.enabled });
+      }
+    });
+    return result;
+  }
+
+  /**
+   * 把「更多」面板条目编码成上游 `moreActionsConfig` 的 `id,enabled;` 形式
+   * （上游 `ReadButtonConfigDelegate.kt:75-84 saveMoreActions`）。
+   */
+  static encodeMoreActions(items: ReaderMoreActionConfig[]): string {
+    return items.map((item: ReaderMoreActionConfig) => `${item.id},${item.enabled}`).join(';');
+  }
+
+  /**
+   * 解析上游 `moreActionsConfig`（`ReadButtonConfigDelegate.kt:86-98 parseMoreActions`）：
+   * 空串表示全部默认开启；非空时按 `;` 拆、只保留默认池里的 id 且去重，
+   * **未出现在串里的项补默认值（上游补 true）** —— 与顶栏/底栏「默认关闭」相反。
+   */
+  static decodeMoreActions(value: string): ReaderMoreActionConfig[] {
+    const allowed = READER_MORE_ACTION_DEFAULTS.map((item: ReaderMoreActionConfig) => item.id);
+    const result: ReaderMoreActionConfig[] = [];
+    value.split(';').forEach((entry: string) => {
+      const parts = entry.split(',');
+      const id = parts[0] ?? '';
+      if (allowed.includes(id) && !result.some((saved: ReaderMoreActionConfig) => saved.id === id)) {
+        result.push({ id: id, enabled: parts[1] !== 'false' });
+      }
+    });
+    READER_MORE_ACTION_DEFAULTS.forEach((item: ReaderMoreActionConfig) => {
+      if (!result.some((saved: ReaderMoreActionConfig) => saved.id === item.id)) {
         result.push({ id: item.id, enabled: item.enabled });
       }
     });
