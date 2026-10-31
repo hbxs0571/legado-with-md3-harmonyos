@@ -130,6 +130,21 @@ export class ReaderMarkingRepository {
   }
 
   /**
+   * 公开的「样式 ↔ styleJson」编解码，供标记面板的「上次使用样式」复用。
+   * 上游把上一次的样式以 TextProcessStyle 的 JSON 存进 lastMarkingStyle
+   * （ReadBookViewModel.kt:1519 `it.copy(lastMarkingStyle = GSON.toJson(intent.style))`），
+   * 本地沿用同一份 JSON 形态，因此复用仓储里已有的两个转换函数，避免第三份口径。
+   */
+  static encodeStyle(effect: ReaderMarkingEffect, color: string): string {
+    return ReaderMarkingRepository.toStyleJson(effect, color);
+  }
+
+  /** styleJson → 本地 effect + color；解析失败回落默认实线下划线 + 默认绿。 */
+  static decodeStyle(styleJson: string): StyleResult {
+    return ReaderMarkingRepository.fromStyleJson(styleJson);
+  }
+
+  /**
    * 本地 effect + color → styleJson，逐条对齐上游 MarkingEffect.toStyle。
    * 本地已删除 'double'（上游没有该枚举值），存量 'double' 在搬迁时按 solid 处理。
    */
@@ -355,7 +370,7 @@ export class ReaderMarkingRepository {
 }
 
 /** fromStyleJson 的返回值：本地 effect + color。 */
-interface StyleResult {
+export interface StyleResult {
   effect: ReaderMarkingEffect;
   color: string;
 }

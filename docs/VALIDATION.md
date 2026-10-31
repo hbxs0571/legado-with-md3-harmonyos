@@ -305,6 +305,17 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-D6 上次标记样式（源码接入，设备验收未完成）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 2 s 188 ms`，33 项任务 15 执行 / 18 最新），HAP 覆盖安装成功。
+- **持久化闭环（设备实测，已取证）**：把 `{"underlineMode":3,"underlineColor":4278255360}` 手工写进 `.../preferences/legado_reader_settings` 的 `lastMarkingStyle` 键 → `aa force-stop` 后重启应用 → 在「阅读界面 → 更多」拖动「滑动翻页阈值」滑块触发 `persistReaderSettings()` → 偏好文件 mtime 由 `11:33:13` 变为 `11:34:29`、`pageTouchSlop` 由 `0` 变 `300`，而 `lastMarkingStyle` **仍是注入的那份 JSON**（被 Preferences 转义成 `&quot;` 形式）。说明「读进 `@State` → 快照回写 → `save()` 落盘」这条链没有把该键清空或改写，字段与存储键名对得上。
+- **编解码往返一致（离线核对）**：按 `ReaderMarkingRepository.encodeStyle`/`decodeStyle` 的同一份规则，对 solid / wave / dashed / strike / highlight / background / text 七种效果各取两组色值做 encode→decode 往返，10 例全部回到原 effect 与原色值（`background` 的 `0x33` alpha 与 `text` 的整型色都无损）。该脚本只复现算法、不执行 ArkTS，用于确认「存进去的 JSON 能被读回来」这一层，不替代设备验收。
+- **未完成的部分（本记录不写「通过」的原因）**：`lastMarkingStyle` 的用户可见效果是「新建标记时面板预选上次的效果与颜色」，入口在阅读页正文的**划词菜单**（`ReaderPage.ets:2085` 的 `bindSelectionMenu` + `TextResponseType.LONG_PRESS` → `:2099` 「划线 / 笔记」→ `Index.ets:990 requestCreateReaderMarking`）。该模拟器上正文的长按与单击手势均不通（详见上一节 KI-D5 记录的「模拟器限制」），`uitest uiInput longClick` 与 `uiInput swipe x y x+1 y+1 1500` 两种注入方式都只落在系统层、不触发选区。另一条能打开标记面板的路径是「目录页 → 笔记条目 → 编辑」（`Index.ets:3806 onEditMarking`），但它走 `isNew = false`，**按上游语义本就不该应用 lastMarkingStyle**，只能证明「编辑时不覆盖标记自身样式」，证明不了预选。
+- 因此本条只到**第 2 级（构建通过 + 覆盖安装）**，加上上面的持久化闭环证据；「新建标记预选上次样式」的界面闭环**未验**，需在真机（或手势正常的设备）上补：新建一条划线并选「波浪 + 红色」保存 → 再新建另一条，面板打开时应已预选「波浪」与红色。
+- 顺带纠正的历史错位：`ReaderMarkingEditor` 的 `useRule` 默认值原为 `true`，与上游 `MarkingSelectionMenu.kt:181` 的 `mutableStateOf(false)` 相反，已改为 `false`；原先新建标记会被「复用规则」列表盖住、看不到预选样式，这与「预选不生效」的观感容易混淆。
+- 测试期改动已全部复原：`pageTouchSlop` 回 `0`、`lastMarkingStyle` 键已删除，复原后重新拉取偏好文件确认（`grep` 该键为 0 条、`pageTouchSlop` 为 `0.000000`）。
+- 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
+
 ## 2026-10-31 N 端 KI-D5 进度条显示样式与滑动翻页阈值（通过）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 24 s 832 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。

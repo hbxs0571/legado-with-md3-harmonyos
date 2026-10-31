@@ -233,9 +233,17 @@ D-01 需要按键映射面板 + 键盘事件；D-03 依赖鼠标滚轮事件，�
 - 顺带纠正历史错位：该面板位置原先挂的是本地 `progressBehavior`（页码/章节），与上游 `readSliderMode` 不是一回事，现在两者分别由「滑动条显示样式」和「进度条行为」承担。
 - 备份：两个键都不在 `BackupConfig.readPrefKeys` 忽略清单里，属「无条件随 config.xml 备份」，本地已在 `BackupRepository.ets:561-566`（导出）与 `:1176-1185`（恢复）对齐。
 
-**KI-D6 上次标记样式（要接，待排期）** —— 覆盖 D-10（`lastMarkingStyle`，`ReadSettings.kt:54`）。
+**KI-D6 上次标记样式（已实现）** —— 覆盖 D-10（`lastMarkingStyle`，`ReadSettings.kt:54`）。
 
-上游用字符串记上一次用的标记样式，连续标注时默认沿用（`MarkingSelectionMenu` 的 `lastMarkingStyle` 入参即此值）。本地标记面板每次重置为默认。补法：面板关闭时把当前 `effect+color` 存一条「最近使用」，下次打开预选。
+上游口径：`ReadBookViewModel.kt:1519` 在 `ApplyQuickMarking` 分支里 `it.copy(lastMarkingStyle = GSON.toJson(intent.style))`，把 `TextProcessStyle` 的 JSON 存进该键；消费点 `MarkingSelectionMenu.kt:166-167` 取 `state.editing?.styleJson ?: lastMarkingStyle`——**编辑已有标记优先用标记自身样式，新建才沿用上次**；两者都没有才回落 `MarkingEffect.BG` + `DEFAULT_COLOR`（`0xFF63C37D`）。`PreferKey.kt:156` 是键常量，`ReadSettingsRepository.kt:421`/`:543`/`:677` 是读/键/写。
+
+本地落地（2026-10-31）：
+- 字段与持久化：`ReaderSettingsRepository.ets:181` `lastMarkingStyle: string;`，默认 `''`（`:430`），读 `:501`，写 `:826`。
+- 写点：`Index.ets` 的 `saveReaderMarking()` 在 `ReaderMarkingRepository.save()` 成功之后调 `setReaderLastMarkingStyle(ReaderMarkingRepository.encodeStyle(effect, color))`；编码复用 `ReaderMarkingRepository.encodeStyle`/`decodeStyle`（`:137`/`:144`），与标记自身的 styleJson 是同一份转换，没有第二份口径。
+- 消费点：`ReaderMarkingEditor.ets:222` 的 `@Prop lastMarkingStyle`，`aboutToAppear()` 里 `applyLastMarkingStyle()`（`:255-264`）——只在 `isNew` 且非空时应用，与上游 `state.editing?.styleJson ?: lastMarkingStyle` 同序。
+- 备份：`BackupConfig.kt` 的 `readPrefKeys` 忽略清单**不含**该键，属「随 `config.xml` 无条件导出」，因此补了导出 `BackupRepository.ets:568` 与恢复 `:1188-1189`。
+- **顺带纠正的历史错位**：`ReaderMarkingEditor` 的 `useRule` 原默认 `true`，而上游 `MarkingSelectionMenu.kt:181` 是 `mutableStateOf(false)`；已改为 `false`，并删掉 `aboutToAppear()` 里的 `this.useRule = this.isNew;`。现在只有 `loadHighlightRules()` 之后 `selectRuleMatchingCurrentStyle()` 按 `effect`+`color` 匹配到已有规则时才置 `true`，与上游 `LaunchedEffect(storedStyle, state.highlightRules)` 同义。
+- 验收限制：模拟器上阅读页正文的单击/长按手势不通（见本文件「模拟器限制」与 VALIDATION 的 KI-D5 节），因此**无法从正文划词路径在设备上验「新建时预选上次样式」**；只做了代码层核对与「编辑路径不覆盖标记自身样式」的核对。详见 `docs/VALIDATION.md` 的 2026-10-31 KI-D6 节。
 
 ### E 菜单与主题外观
 

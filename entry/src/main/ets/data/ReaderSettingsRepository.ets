@@ -173,6 +173,12 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   progressBehavior: string;
   readSliderMode: string;
   pageTouchSlop: number;
+  /**
+   * 上一次用过的标记样式，存上游 TextProcessStyle 的 JSON 字符串（默认空串 = 没有历史）。
+   * 上游 ReadSettings.kt:54 `lastMarkingStyle: String = ""`，只在
+   * ReadBookViewModel.kt:1519 的 ApplyQuickMarking 分支写入。
+   */
+  lastMarkingStyle: string;
   tocUseReplace: boolean;
   tocShowWordCount: boolean;
   clickImageBehavior: string;
@@ -421,6 +427,7 @@ export class ReaderSettingsRepository {
       progressBehavior: 'page',
       readSliderMode: '0',
       pageTouchSlop: 0,
+      lastMarkingStyle: '',
       tocUseReplace: false,
       tocShowWordCount: true,
       clickImageBehavior: '2',
@@ -491,6 +498,7 @@ export class ReaderSettingsRepository {
       const progressBehaviorValue = await store.get('progressBehavior', defaults.progressBehavior);
       const readSliderModeValue = await store.get('readSliderMode', defaults.readSliderMode);
       const pageTouchSlopValue = await store.get('pageTouchSlop', defaults.pageTouchSlop);
+    const lastMarkingStyleValue = await store.get('lastMarkingStyle', defaults.lastMarkingStyle);
       const tocUseReplaceValue = await store.get('tocUiUseReplace', defaults.tocUseReplace);
       const tocShowWordCountValue = await store.get('tocCountWords', defaults.tocShowWordCount);
       const clickImageBehaviorValue = await store.get('clickImgWay', defaults.clickImageBehavior);
@@ -703,6 +711,7 @@ export class ReaderSettingsRepository {
         progressBehavior: progressBehaviorValue === 'chapter' ? 'chapter' : 'page',
         readSliderMode: readSliderModeValue === '1' ? '1' : '0',
         pageTouchSlop: ReaderSettingsRepository.normalizeInteger(pageTouchSlopValue, 0, 1000, defaults.pageTouchSlop),
+        lastMarkingStyle: typeof lastMarkingStyleValue === 'string' ? lastMarkingStyleValue : defaults.lastMarkingStyle,
         tocUseReplace: typeof tocUseReplaceValue === 'boolean' ? tocUseReplaceValue : defaults.tocUseReplace,
         tocShowWordCount: typeof tocShowWordCountValue === 'boolean'
           ? tocShowWordCountValue : defaults.tocShowWordCount,
@@ -814,6 +823,7 @@ export class ReaderSettingsRepository {
       await store.put('progressBehavior', settings.progressBehavior === 'chapter' ? 'chapter' : 'page');
       await store.put('readSliderMode', settings.readSliderMode === '1' ? '1' : '0');
       await store.put('pageTouchSlop', Math.max(0, Math.min(1000, Math.round(settings.pageTouchSlop))));
+    await store.put('lastMarkingStyle', settings.lastMarkingStyle);
       await store.put('tocUiUseReplace', settings.tocUseReplace);
       await store.put('tocCountWords', settings.tocShowWordCount);
       await store.put('clickImgWay', ['0', '1', '2', '3', '4'].includes(settings.clickImageBehavior)

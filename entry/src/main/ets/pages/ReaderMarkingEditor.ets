@@ -1,4 +1,5 @@
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
+import { ReaderMarkingRepository, StyleResult } from '../data/ReaderMarkingRepository';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
 
@@ -213,6 +214,12 @@ export struct ReaderMarkingEditor {
     effect: 'solid', color: '#63C37D', note: '', enabled: true, createdAt: 0, updatedAt: 0
   };
   @Prop isNew: boolean = true;
+  /**
+   * 上一次用过的标记样式（上游 TextProcessStyle 的 JSON，ReadSettings.kt:54）。
+   * 只影响「新建标记」的预选样式；编辑已有标记时仍以标记自身存的样式为准，
+   * 与上游 MarkingSelectionMenu.kt:166 `state.editing?.styleJson ?: lastMarkingStyle` 同序。
+   */
+  @Prop lastMarkingStyle: string = '';
   @State effect: ReaderMarkingEffect = 'solid';
   @State color: string = '#63C37D';
   @State note: string = '';
@@ -221,10 +228,11 @@ export struct ReaderMarkingEditor {
   /** 取色面板里手输的色值，切换色板时同步。 */
   @State colorInput: string = '';
   /**
-   * 样式来源。对齐上游 MarkingSheet.kt:96：新建默认「复用高亮规则」，
-   * 编辑已有标记时默认「自定义」，以便直接看到标记实际存的样式。
+   * 样式来源。对齐上游 MarkingSelectionMenu.kt:181 `useRules` 默认 false（自定义样式）——
+   * 只有当前样式恰好命中某条高亮规则时才自动切到「复用已有规则」（:231-234）。
+   * 这样打开面板就能直接看到预选的效果与颜色，不会被规则列表盖住。
    */
-  @State useRule: boolean = true;
+  @State useRule: boolean = false;
   /** 当前选中的规则 id，空串表示未选。 */
   @State selectedRuleId: string = '';
   /** 可选的高亮规则快照，打开面板时异步载入。 */
@@ -239,8 +247,21 @@ export struct ReaderMarkingEditor {
     this.color = this.marking.color;
     this.note = this.marking.note;
     this.colorInput = this.marking.color;
-    this.useRule = this.isNew;
+    this.applyLastMarkingStyle();
     this.loadHighlightRules();
+  }
+
+  /**
+   * 新建标记时沿用上一次的样式，对齐上游 lastMarkingStyle 的「连续标注默认沿用」语义。
+   * 编辑已有标记不走这里（样式来自标记自身）；没有历史或解析失败时保持默认。
+   */
+  private applyLastMarkingStyle(): void {
+    if (!this.isNew || this.lastMarkingStyle.length === 0) {
+      return;
+    }
+    const stored: StyleResult = ReaderMarkingRepository.decodeStyle(this.lastMarkingStyle);
+    this.effect = stored.effect;
+    this.pickColor(stored.color);
   }
 
   /** 载入高亮规则供「复用规则」列出；失败时保持空列表，面板退化为只能自定义。 */
@@ -254,6 +275,24 @@ export struct ReaderMarkingEditor {
     } catch (_) {
       this.highlightRules = [];
     }
+    this.selectRuleMatchingCurrentStyle();
+  }
+
+  /**
+   * 当前样式命中某条高亮规则时自动切到「复用已有规则」并选中它，
+   * 对齐上游 MarkingSelectionMenu.kt:231-234 的
+   * `highlightRules.firstOrNull { it.toProcessStyle() == storedStyle }`。
+   */
+  private selectRuleMatchingCurrentStyle(): void {
+    const matched = this.highlightRules.find((rule: ReaderHighlightRule) => {
+      const style = ruleToMarkingStyle(rule);
+      return style.effect === this.effect && style.color === this.color;
+    });
+    if (matched === undefined) {
+      return;
+    }
+    this.useRule = true;
+    this.selectedRuleId = matched.id;
   }
 
   /**

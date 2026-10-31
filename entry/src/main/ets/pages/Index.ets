@@ -187,6 +187,8 @@ struct Index {
   @State readerProgressBehavior: string = 'page';
   @State readerReadSliderMode: string = '0';
   @State readerPageTouchSlop: number = 0;
+  /** 上一次用过的标记样式（上游 TextProcessStyle 的 JSON），空串表示没有历史。 */
+  @State readerLastMarkingStyle: string = '';
   @State readerPaddingSettings: ReaderPaddingSettings = copyReaderPaddingSettings(DEFAULT_READER_PADDING_SETTINGS);
   @State readerScreenOrientation: string = '0';
   @State readerKeepLight: string = '0';
@@ -1074,6 +1076,9 @@ struct Index {
     try {
       await ReaderMarkingRepository.save(context, next);
       this.readerMarkings = next;
+      // 对齐上游 ReadBookViewModel.kt:1519：每次应用样式都把它记成「上次用的样式」，
+      // 供下一次新建标记预选。存 TextProcessStyle 的 JSON，与上游同形态。
+      this.setReaderLastMarkingStyle(ReaderMarkingRepository.encodeStyle(effect, color));
       this.markingEditor = undefined;
       this.showUnavailableAction('标记已保存');
     } catch (_) {
@@ -1711,6 +1716,7 @@ struct Index {
       this.readerProgressBehavior = settings.progressBehavior;
       this.readerReadSliderMode = settings.readSliderMode;
       this.readerPageTouchSlop = settings.pageTouchSlop;
+      this.readerLastMarkingStyle = settings.lastMarkingStyle;
       this.readerPaddingSettings = copyReaderPaddingSettings(settings.paddingSettings);
       this.readerScreenOrientation = settings.screenOrientation;
       this.readerKeepLight = settings.keepLight;
@@ -1820,6 +1826,7 @@ struct Index {
         progressBehavior: this.readerProgressBehavior,
         readSliderMode: this.readerReadSliderMode,
         pageTouchSlop: this.readerPageTouchSlop,
+        lastMarkingStyle: this.readerLastMarkingStyle,
         paddingSettings: this.readerPaddingSettings,
         screenOrientation: this.readerScreenOrientation,
         keepLight: this.readerKeepLight,
@@ -2186,6 +2193,12 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
 
+  private setReaderLastMarkingStyle(value: string): void {
+    this.readerLastMarkingStyle = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
   private setReaderPaddingSettings(settings: ReaderPaddingSettings): void {
     this.readerPaddingSettings = copyReaderPaddingSettings(settings);
     this.readerSettingsRevision += 1;
@@ -2448,6 +2461,7 @@ struct Index {
       this.readerProgressBehavior = result.settings.progressBehavior;
       this.readerReadSliderMode = result.settings.readSliderMode;
       this.readerPageTouchSlop = result.settings.pageTouchSlop;
+      this.readerLastMarkingStyle = result.settings.lastMarkingStyle;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -3809,6 +3823,7 @@ struct Index {
             ReaderMarkingEditor({
               marking: this.markingEditor,
               isNew: this.markingEditorIsNew,
+              lastMarkingStyle: this.readerLastMarkingStyle,
               onSave: (effect: ReaderMarkingEffect, color: string, note: string) =>
                 this.saveReaderMarking(effect, color, note),
               onDelete: () => this.deleteReaderMarking(),

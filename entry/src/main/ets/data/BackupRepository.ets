@@ -564,6 +564,8 @@ export class BackupRepository {
           configText, 'string', 'readSliderMode', settings.readSliderMode === '1' ? '1' : '0');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'pageTouchSlop', `${Math.max(0, Math.min(1000, Math.round(settings.pageTouchSlop)))}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'lastMarkingStyle', settings.lastMarkingStyle);
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1183,6 +1185,8 @@ export class BackupRepository {
       pageTouchSlop: Math.max(0, Math.min(1000,
         BackupRepository.readJsonNumber(selected, 'pageTouchSlop') ??
         BackupRepository.readXmlInteger(`${directory}/config.xml`, 'pageTouchSlop') ?? current.pageTouchSlop)),
+      lastMarkingStyle: BackupRepository.readJsonString(selected, 'lastMarkingStyle') ??
+        BackupRepository.readXmlString(`${directory}/config.xml`, 'lastMarkingStyle') ?? current.lastMarkingStyle,
       tocUseReplace: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'tocUiUseReplace') ??
         current.tocUseReplace,
       tocShowWordCount: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'tocCountWords') ??

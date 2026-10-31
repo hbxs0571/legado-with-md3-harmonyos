@@ -52,17 +52,18 @@
 | A 阅读界面基础 | 37 | 14 | 21 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
 | C 正文排版 | 49 | 23 | 26 | 0 |
-| D 翻页与手势交互 | 20 | 12 | 8 | 0 |
+| D 翻页与手势交互 | 20 | 13 | 7 | 0 |
 | E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 92 | 95 | 2 |
+| 合计 | 189 | 93 | 94 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 95 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 94 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
+> 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
 
 ## A 阅读界面基础
 
@@ -223,7 +224,7 @@
 | 允许选择正文 | `ReadSettings.kt:46` | `ReaderSettingsRepository.ets:195` | 已接 | 开关在 `ReaderSettingsPage.ets:874`，阅读页 `ReaderPage.ets:169` 消费 | 长按正文出现选择菜单 | — |
 | 展开文字菜单 | `ReadSettings.kt:51` | `ReaderSettingsPage.ets:1437` | 未接 | 仅 `expandTextMenuPreview` 页面 `@State`，无持久化 | 折叠菜单项多行展开 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D2 |
 | 显示选择菜单图标 | `ReadSettings.kt:52` | — | 未接 | 上游 `showSelectMenuIcon` 默认 true，本地无字段 | 选择菜单显示图标 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D2 |
-| 上次标记样式 | `ReadSettings.kt:54` | — | 未接 | 上游 `lastMarkingStyle` 记录上次标注样式，本地无字段 | 连续标注沿用上次样式 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D6 |
+| 上次标记样式 | `ReadSettings.kt:54`（`lastMarkingStyle: String = ""`） | `ReaderSettingsRepository.ets:181` | 已接 | 上游在 `ReadBookViewModel.kt:1519` 把 `TextProcessStyle` 的 JSON 存进该键，消费点 `MarkingSelectionMenu.kt:166` 取 `state.editing?.styleJson ?: lastMarkingStyle`（编辑已有标记优先用标记自身样式，新建才沿用上次）。本地同口径：存储键 `lastMarkingStyle`，读 `:501`、写 `:826`；写点 `Index.ets` 的 `saveReaderMarking()` 在标记保存成功后调 `setReaderLastMarkingStyle(ReaderMarkingRepository.encodeStyle(effect, color))`；消费点 `ReaderMarkingEditor.ets:222` 的 `@Prop lastMarkingStyle` + `:255-264 applyLastMarkingStyle()`（仅 `isNew` 且非空时应用）。JSON 形态复用 `ReaderMarkingRepository.encodeStyle`/`decodeStyle`，与标记自身的 styleJson 共用同一份转换 | 新建一条划线并选「波浪 + 红色」保存 → 再新建另一条，面板打开时效果已预选「波浪」、颜色已预选红色；编辑已有标记时不预选（保留该标记自身样式） | 顺带纠正历史错位：`ReaderMarkingEditor` 的 `useRule` 原默认 `true`，与上游 `MarkingSelectionMenu.kt:181` 的 `mutableStateOf(false)` 相反，已改为 `false`，只在 `loadHighlightRules()` 后按样式匹配到规则时才置 `true`。备份口径：`BackupConfig.kt` 的 `readPrefKeys` 忽略清单不含该键，故随 `config.xml` 无条件导出，已补导出 `BackupRepository.ets:568` / 恢复 `:1188-1189` |
 
 ## E 菜单与主题外观
 
@@ -310,7 +311,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（95 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（94 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -611,7 +612,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `showSelectMenuIcon` | 要接 | 选择菜单图标（KI-D2） |
 | `doubleHorizontalPage` | 要接 | 横屏双页，属分页引擎改造（KI-D4） |
 | `pageTouchSlop` | 要接 | 翻页触摸阈值，0=平台默认；**KI-D5 已实现**（存储键 `pageTouchSlop`，`ReaderPage.ets:2947-2948` 消费） |
-| `lastMarkingStyle` | 要接 | 沿用上次标记样式（KI-D6） |
+| `lastMarkingStyle` | 要接 | 沿用上次标记样式；**KI-D6 已实现**（存储键 `lastMarkingStyle`，`ReaderMarkingEditor.ets:255-264` 消费） |
 | `chineseConverterType` | 要接 | 繁简转换三档，需自带字表（KI-C5） |
 | `menuAlpha` | 要接 | 菜单不透明度，随菜单层（KI-A2） |
 | `showReadTitleAddition` | 要接 | 阅读标题补充信息（KI-A2） |
@@ -665,7 +666,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 2. **C 块标题排版 14 项**：需要同时改 `ReaderPage.ets` 的 9 处 `fontSize + 4` 硬编码（`:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`），并新增 `titleSizeRelative` 三态语义（上游回落规则见 `ReadBookConfig.kt:660-668`）。改动面比 E 块小但风险高，属排版视觉回归。
 3. **C 块正文与背景 6 行 + 下划线虚线 4 行**：正文与背景 6 行对应 11 个字段（正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2），下划线虚线 4 行对应 4 个字段，均为单点参数，适合随其它模块顺带补齐。其中**正文日/夜颜色（`ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码）优先做**——它是用户最容易察觉的「不能改字色」，且与背景预设（`READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:339-346`）天然配套。
 
-三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 95 行未接的多数。余下 31 行分布在 A 块 21 行、C 块 2 行、D 块 8 行（B 块已于 2026-10-31 复核清零，D 块同日因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 94 行未接的多数。余下 30 行分布在 A 块 21 行、C 块 2 行、D 块 7 行（B 块已于 2026-10-31 复核清零；D 块同日先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 
