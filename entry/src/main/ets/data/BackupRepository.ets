@@ -194,6 +194,17 @@ interface AndroidReadConfigBackupRecord {
   bgStr: string;
   bgTypeNight: number;
   bgStrNight: string;
+  /** 背景透明度百分比 0..100；上游 ReadBookConfig.kt:548 `bgAlpha: Int = 100`。 */
+  bgAlpha: number;
+  /** 正文颜色；上游 ReadBookConfig.kt:555-556。 */
+  textColor: string;
+  textColorNight: string;
+  /** 强调色；上游 ReadBookConfig.kt:558-559。 */
+  textAccentColor: string;
+  textAccentColorNight: string;
+  /** 状态栏图标深浅；上游 ReadBookConfig.kt:552-553。 */
+  darkStatusIcon: boolean;
+  darkStatusIconNight: boolean;
 }
 
 interface JsonStringResult {
@@ -1034,10 +1045,19 @@ export class BackupRepository {
       tipFooterColor: settings.tipFooterColor,
       tipFooterColorNight: settings.tipFooterColorNight,
       tipDividerColor: settings.tipDividerColor,
-      bgType: 0,
-      bgStr: dayStyle.dayColor,
-      bgTypeNight: 0,
-      bgStrNight: nightStyle.nightColor
+      // 上游 readConfig.json 里颜色与图片共用 bgStr，由 bgType 区分（ReadBookConfig.kt:549）；
+      // 本地没自定义时回落到内置方案色，保持与旧备份的可读性。
+      bgType: settings.bgType,
+      bgStr: settings.bgStr.length > 0 ? settings.bgStr : dayStyle.dayColor,
+      bgTypeNight: settings.bgTypeNight,
+      bgStrNight: settings.bgStrNight.length > 0 ? settings.bgStrNight : nightStyle.nightColor,
+      bgAlpha: Math.max(0, Math.min(100, Math.round(settings.bgAlpha))),
+      textColor: settings.textColor,
+      textColorNight: settings.textColorNight,
+      textAccentColor: settings.textAccentColor,
+      textAccentColorNight: settings.textAccentColorNight,
+      darkStatusIcon: settings.darkStatusIcon,
+      darkStatusIconNight: settings.darkStatusIconNight
     };
   }
 
@@ -1137,6 +1157,19 @@ export class BackupRepository {
       paperIndex: paperIndex,
       dayPaperIndex: dayPaperIndex,
       nightPaperIndex: nightPaperIndex,
+      // 自定义背景与文字颜色：上游这些字段都在 readConfig.json 里（ReadBookConfig.kt:731-746），
+      // 老备份没有这些键时保持当前值。
+      bgType: Math.max(0, Math.min(2, Math.round(BackupRepository.readJsonNumber(selected, 'bgType') ?? current.bgType))),
+      bgStr: BackupRepository.readJsonString(selected, 'bgStr') ?? current.bgStr,
+      bgTypeNight: Math.max(0, Math.min(2, Math.round(BackupRepository.readJsonNumber(selected, 'bgTypeNight') ?? current.bgTypeNight))),
+      bgStrNight: BackupRepository.readJsonString(selected, 'bgStrNight') ?? current.bgStrNight,
+      bgAlpha: Math.max(0, Math.min(100, Math.round(BackupRepository.readJsonNumber(selected, 'bgAlpha') ?? current.bgAlpha))),
+      textColor: BackupRepository.readJsonString(selected, 'textColor') ?? current.textColor,
+      textColorNight: BackupRepository.readJsonString(selected, 'textColorNight') ?? current.textColorNight,
+      textAccentColor: BackupRepository.readJsonString(selected, 'textAccentColor') ?? current.textAccentColor,
+      textAccentColorNight: BackupRepository.readJsonString(selected, 'textAccentColorNight') ?? current.textAccentColorNight,
+      darkStatusIcon: BackupRepository.readJsonBoolean(selected, 'darkStatusIcon') ?? current.darkStatusIcon,
+      darkStatusIconNight: BackupRepository.readJsonBoolean(selected, 'darkStatusIconNight') ?? current.darkStatusIconNight,
       readerNightMode: current.readerNightMode,
       shareLayout: shareLayout,
       systemTypefaces: Math.max(0, Math.min(2,

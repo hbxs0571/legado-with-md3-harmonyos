@@ -221,6 +221,33 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * 设置项在 ui/book/read/sheet/TypographyTabs.kt:310-321）。
    */
   chineseConverterType: number;
+  /**
+   * 正文日间颜色，对齐上游 ReadBookConfig.kt:55 `textColor`（`durConfig.curTextColor()`）。
+   * 上游可配任意色，默认取自样式里的 textColor；本地为空串时回落到既有硬编码色。
+   */
+  textColor: string;
+  /** 正文夜间颜色，对齐上游 ReadBookConfig.kt:56 `textColorNight`（异常时上游回落 0xFFADADAD）。 */
+  textColorNight: string;
+  /**
+   * 正文强调色，对齐上游 ReadBookConfig.kt:62 `textAccentColor`（默认 #834E00，夜间 #FE4D55）。
+   * 上游消费点：ReaderCanvasSurface.kt:2044 把链接、搜索结果、朗读中段落的文字色换成强调色。
+   */
+  textAccentColor: string;
+  textAccentColorNight: string;
+  /**
+   * 自定义背景颜色，对齐上游 ReadBookConfig.kt:537 `bgStr` / `bgStrNight`。
+   * 空串表示没有自定义，沿用 paperIndex 指向的六个内置方案。
+   */
+  bgStr: string;
+  bgStrNight: string;
+  /** 背景类型，对齐上游 ReadBookConfig.kt:549：0 = 颜色、2 = 自选图片（1 的 assets 图本地没有）。 */
+  bgType: number;
+  bgTypeNight: number;
+  /** 背景不透明度百分比，对齐上游 ReadBookConfig.kt:548 `bgAlpha`（默认 100，0..100）。 */
+  bgAlpha: number;
+  /** 白天是否用暗色状态栏图标，对齐上游 ReadBookConfig.kt:552 `darkStatusIcon`。 */
+  darkStatusIcon: boolean;
+  darkStatusIconNight: boolean;
   maxLengthWithNoToc: number;
   eyeProtectionEnabled: boolean;
   eyeProtectionAutoNight: boolean;
@@ -474,6 +501,22 @@ export class ReaderSettingsRepository {
       selectVibrator: false,
       // 上游 ReadSettings.chineseConverterType 默认 0（不转换）。
       chineseConverterType: 0,
+      // 默认值与 ReaderPage 原本硬编码的 #38383B / #D8D8DC 一致，保持旧观感不变。
+      textColor: '#38383B',
+      textColorNight: '#D8D8DC',
+      // 上游 ReadBookConfig.kt:558-559 的默认强调色。
+      textAccentColor: '#834E00',
+      textAccentColorNight: '#FE4D55',
+      // 空串表示沿用 paperIndex 的六个内置方案，不改变既有行为。
+      bgStr: '',
+      bgStrNight: '',
+      bgType: 0,
+      bgTypeNight: 0,
+      // 上游 ReadBookConfig.kt:548 默认 100（完全不透明）。
+      bgAlpha: 100,
+      // 上游 ReadBookConfig.kt:552-553：白天用暗色状态栏图标，夜间不用。
+      darkStatusIcon: true,
+      darkStatusIconNight: false,
       maxLengthWithNoToc: 3000,
       eyeProtectionEnabled: false,
       eyeProtectionAutoNight: false,
@@ -546,6 +589,17 @@ export class ReaderSettingsRepository {
       const sliderVibratorValue = await store.get('sliderVibrator', defaults.sliderVibrator);
       const selectVibratorValue = await store.get('selectVibrator', defaults.selectVibrator);
       const chineseConverterTypeValue = await store.get('chineseConverterType', defaults.chineseConverterType);
+      const textColorValue = await store.get('textColor', defaults.textColor);
+      const textColorNightValue = await store.get('textColorNight', defaults.textColorNight);
+      const textAccentColorValue = await store.get('textAccentColor', defaults.textAccentColor);
+      const textAccentColorNightValue = await store.get('textAccentColorNight', defaults.textAccentColorNight);
+      const bgStrValue = await store.get('bgStr', defaults.bgStr);
+      const bgStrNightValue = await store.get('bgStrNight', defaults.bgStrNight);
+      const bgTypeValue = await store.get('bgType', defaults.bgType);
+      const bgTypeNightValue = await store.get('bgTypeNight', defaults.bgTypeNight);
+      const bgAlphaValue = await store.get('bgAlpha', defaults.bgAlpha);
+      const darkStatusIconValue = await store.get('darkStatusIcon', defaults.darkStatusIcon);
+      const darkStatusIconNightValue = await store.get('darkStatusIconNight', defaults.darkStatusIconNight);
       const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
       const eyeProtectionEnabledValue = await store.get('eyeProtectionEnabled', defaults.eyeProtectionEnabled);
       const eyeProtectionAutoNightValue = await store.get('eyeProtectionAutoNight', defaults.eyeProtectionAutoNight);
@@ -778,6 +832,21 @@ export class ReaderSettingsRepository {
             selectVibrator: typeof selectVibratorValue === 'boolean' ? selectVibratorValue : defaults.selectVibrator,
           chineseConverterType: ReaderSettingsRepository.normalizeInteger(
             chineseConverterTypeValue, 0, 2, defaults.chineseConverterType),
+          textColor: ReaderSettingsRepository.normalizeHexColor(textColorValue, defaults.textColor),
+          textColorNight: ReaderSettingsRepository.normalizeHexColor(textColorNightValue, defaults.textColorNight),
+          textAccentColor: ReaderSettingsRepository.normalizeHexColor(textAccentColorValue, defaults.textAccentColor),
+          textAccentColorNight: ReaderSettingsRepository.normalizeHexColor(
+            textAccentColorNightValue, defaults.textAccentColorNight),
+          // 背景色既可能是颜色串也可能是图片路径，空串表示「没有自定义」，
+          // 因此不能走 normalizeHexColor（它会把空串判成非法并回落默认值）。
+          bgStr: typeof bgStrValue === 'string' ? bgStrValue : defaults.bgStr,
+          bgStrNight: typeof bgStrNightValue === 'string' ? bgStrNightValue : defaults.bgStrNight,
+          bgType: ReaderSettingsRepository.normalizeInteger(bgTypeValue, 0, 2, defaults.bgType),
+          bgTypeNight: ReaderSettingsRepository.normalizeInteger(bgTypeNightValue, 0, 2, defaults.bgTypeNight),
+          bgAlpha: ReaderSettingsRepository.normalizeInteger(bgAlphaValue, 0, 100, defaults.bgAlpha),
+          darkStatusIcon: typeof darkStatusIconValue === 'boolean' ? darkStatusIconValue : defaults.darkStatusIcon,
+          darkStatusIconNight: typeof darkStatusIconNightValue === 'boolean'
+            ? darkStatusIconNightValue : defaults.darkStatusIconNight,
           maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
             ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc,
           eyeProtectionEnabled: typeof eyeProtectionEnabledValue === 'boolean'
@@ -883,6 +952,18 @@ export class ReaderSettingsRepository {
       await store.put('sliderVibrator', settings.sliderVibrator);
       await store.put('selectVibrator', settings.selectVibrator);
       await store.put('chineseConverterType', Math.max(0, Math.min(2, Math.round(settings.chineseConverterType))));
+      // 颜色统一存成大写 #RRGGBB / #AARRGGBB，与 normalizeHexColor 的判定一致。
+      await store.put('textColor', settings.textColor);
+      await store.put('textColorNight', settings.textColorNight);
+      await store.put('textAccentColor', settings.textAccentColor);
+      await store.put('textAccentColorNight', settings.textAccentColorNight);
+      await store.put('bgStr', settings.bgStr);
+      await store.put('bgStrNight', settings.bgStrNight);
+      await store.put('bgType', Math.max(0, Math.min(2, Math.round(settings.bgType))));
+      await store.put('bgTypeNight', Math.max(0, Math.min(2, Math.round(settings.bgTypeNight))));
+      await store.put('bgAlpha', Math.max(0, Math.min(100, Math.round(settings.bgAlpha))));
+      await store.put('darkStatusIcon', settings.darkStatusIcon);
+      await store.put('darkStatusIconNight', settings.darkStatusIconNight);
       await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
       await store.put('eyeProtectionEnabled', settings.eyeProtectionEnabled);
       await store.put('eyeProtectionAutoNight', settings.eyeProtectionAutoNight);

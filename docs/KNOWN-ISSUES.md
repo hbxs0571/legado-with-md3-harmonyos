@@ -201,13 +201,39 @@
 
 ### C 正文排版
 
-**KI-C1 正文取色三项（要接，待与 KI-C2 一并做）** —— 覆盖 C-01 正文日间颜色（`textColor`，`ReadBookConfig.kt:55`）、C-02 正文夜间颜色（`textColorNight`，`:56`）、C-03 正文强调色（`textAccentColor`/`Night`，`:62`）。
+**KI-C1 正文取色三项（已实现，与 KI-C2 同轮）** —— 覆盖 C-01 正文日间颜色（`textColor`，`ReadBookConfig.kt:55`）、C-02 正文夜间颜色（`textColorNight`，`:56`）、C-03 正文强调色（`textAccentColor`/`Night`，`:62`）。
 
-本地`ReaderPage.ets:2710-2713 getReadingTextColor()` 按纸色三值返回硬编码颜色，强调色同时被划线高亮与 E 块「种子色」引用。这三项若单独接，会出现「纸色是六方案、文字色是任意色」的错配，必须与背景系统一起改。补法：给 `ReaderSettingsSnapshot` 加 `textColor`/`textColorNight`/`textAccentColor(+Night)`，`getReadingTextColor()` 改为读字段，空值时回落到现有硬编码值以保持旧观感。
+上游口径：`ReadBookConfig.kt:55-61` 声明 `textColor`/`textColorNight`/`textAccentColor`，默认 `#834E00`（白天）/ `#FE4D55`（夜间）。`textAccentColor` 的真实消费点只有一个——`ReaderCanvasSurface.kt:2997 resolvedColorArgb(text, accentColorArgb)`，即**链接文字、搜索结果、朗读中的段落**三处换色，不是给划线用的。
 
-**KI-C2 背景三项（要接，独立一轮）** —— 覆盖 C-04 背景透明度（`bgAlpha`，`ReadBookConfig.kt:198`，默认 100）、C-05 背景颜色/图片（`bgStr`/`bgStrNight`/`bgType`/`bgTypeNight`，`:537-551`）、C-06 白天是否暗色状态栏（`darkStatusIcon`/`Night`，`:552`）。
+本地落地（5 处）：
+1. `ReaderSettingsRepository.ets:228`/`:230`/`:235` 三对字段（含 `textAccentColorNight`）；默认 `:505`/`:506`/`:508` 取原硬编码值（`#38383B`/`#D8D8DC`）以免升级后观感突变，强调色默认与上游一致；读 `:835`–`:838`；写 `:956`–`:959`。
+2. `Index.ets` 加 `readerTextColor` 等四个 `@State` + `getReadingTextColorSetting()`/`getTextAccentColorSetting()`，作为 prop 传给 `ReaderPage`。
+3. `ReaderPage.ets` 的 `getReadingTextColor()` 改为「配置色非空优先，空则回落原三值判断」；新增 `textAccentColor` prop（供后续链接/朗读高亮使用）。
+4. `ReaderSettingsPage.ets:1373-1430`「自定义阅读背景」面板加「日间文字颜色」「夜间文字颜色」「日间强调色」「夜间强调色」四个色板。
+5. `BackupRepository.ets` 导出/恢复两条链路补齐这四个键（上游不在 `readPrefKeys` 忽略清单里，随 `config.xml` 无条件导出）。
 
-本地背景收敛为六个内置方案（`paperIndex`/`dayPaperIndex`/`nightPaperIndex` → `READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:162-164`、`:339-346`），上游是「任意颜色串 + assets 图 + 自选图」三类，自定义能力本地为零；`ReaderSettingsPage.ets:1281` 的「背景图片」条目只弹提示。接入需要图片选择、应用私有目录存储、渲染三层（可复用 r265 书签角标图片那套），`darkStatusIcon` 又要跟背景亮度联动，所以整组一起做。补法：先加 `bgStr`/`bgStrNight`/`bgType`/`bgAlpha` 与取色器，把 `READER_BACKGROUND_STYLES` 降级为「预设」；`darkStatusIcon` 由背景亮度推导或加显式开关。
+已知差异：上游强调色驱动链接/搜索结果/朗读高亮三处着色，**本地这三条路径都还没有**（阅读页搜索只切路由、朗读整体未迁移），按「上游有这个问题就保留、上游没有就不要这个效果」，本地只做可配+落库+随备份，不发明新着色效果。
+
+验收：注入 `textColor = #DB4B4B` 后重进阅读页，截图彩色像素 top8 全为红色系（`(213,77,77)` 等），正文与章节标题同时变红；改回 `#38383B` 恢复正常深灰。见 [VALIDATION](../VALIDATION.md)。
+
+**KI-C2 背景三项（已实现，与 KI-C1 同轮）** —— 覆盖 C-04 背景透明度（`bgAlpha`，`ReadBookConfig.kt:198`，默认 100）、C-05 背景颜色/图片（`bgStr`/`bgStrNight`/`bgType`/`bgTypeNight`，`:537-551`）、C-06 白天是否暗色状态栏（`darkStatusIcon`/`Night`，`:552`）。
+
+上游口径：`bgStr` 存任意颜色串，颜色与图片**共用** `bgStr`，由 `bgType` 区分（`ReadBookConfig.kt:549`，0=颜色/1=assets 图/2=自选图）；`bgAlpha` 0..100 百分比，经 `ReaderBackgroundAlpha.kt` 的 `readerBackgroundAlpha(percent) = (percent / 100f).coerceIn(0f, 1f)` **只作用于背景图片**，不作用于纯色背景；`darkStatusIcon`/`Night` 在 Android 侧落在 `isAppearanceLightStatusBars`。
+
+本地落地（6 处）：
+1. `ReaderSettingsRepository.ets:241`–`:249` 七个字段（`bgStr`/`bgStrNight`/`bgType`/`bgTypeNight`/`bgAlpha`/`darkStatusIcon`/`darkStatusIconNight`）；默认 `:511`–`:519`；读 `:842`–`:849`；写 `:960`–`:966`。
+2. `Index.getPaperColor()` 改为「自定义色优先，否则回落 `READER_BACKGROUND_STYLES` 六方案」——六方案从「唯一可选项」降级为「预设」。
+3. 新建 `entry/src/main/ets/data/ReaderBackgroundImageRepository.ets`（照 `ReaderBookmarkBadgeRepository` 的 picker 那套），负责选图、16 MB 上限、复制进 `filesDir/reader-background/`、删除旧图。
+4. `ReaderPage.ets` 加 `readerBackgroundImage` prop（**不能叫 `backgroundImage`**，与 ArkUI 内置属性冲突）+ 背景图 `Image(...).objectFit(ImageFit.Cover).opacity(...)` 层；两处内层容器的 `paperColor` 在铺图时改为透明，否则不透明底色会盖住图。
+5. `ReaderPage.ets` 新增 `applyReaderStatusBarIcon()`/`restoreReaderStatusBarIcon()`，走 `window.setWindowSystemBarProperties({ statusBarContentColor })`（深色图标 `#E5000000`、浅色 `#E5FFFFFF`），用请求序号防异步乱序，退出阅读页还原。
+6. `ReaderSettingsPage.ets:1368-1433`「自定义阅读背景」面板整块重写：日/夜两组并列（对齐上游 `BgTextConfigSheet` 的 `TinyColorModeSettingItem` 日/夜双色 + `TinyBgImageModeSettingItem` 日/夜双图），含背景色、背景图、透明度、深色状态栏图标、文字色、强调色。原来那 5 个「编辑/删除/恢复/导入/导出」占位按钮与「文件选择与样式保存尚未迁移。」一并删除。
+
+已知差异与限制：
+- `bgAlpha` 与上游一致**只作用于背景图片**，不作用于纯色背景。
+- 上游 `bgType = 1` 是 assets 内置图，本地没有内置背景图集，只做 `0`（颜色）与 `2`（自选图）。
+- 模拟器上图片选择器能正常弹出，但无可选图片、且沙箱 `files` 目录不可写（`mkdir`/`file send` 都 `Permission denied`），**背景图渲染与透明度只到代码层核对**，未做像素级确认。
+
+验收：日间 `bgStr = #FFFFFF` 后阅读页中心像素为 `(255,255,255)`；`darkStatusIconNight` false 时状态栏亮像素 6726、改 true 后同一区域 0。见 [VALIDATION](../VALIDATION.md)。
 
 **KI-C3 下划线绘制参数四项（要接，待排期）** —— 覆盖 C-07 下划线偏移量（`underlinePadding`，`ReadBookConfig.kt:322`，默认 10）、C-08 下划线延伸（`underlineExtend`，`:325`）、C-09 自定义虚线长度基准（`dottedBase`，`:331`，默认 6f）、C-10 自定义虚线间隔比例（`dottedRatio`，`:334`，默认 6f）。
 

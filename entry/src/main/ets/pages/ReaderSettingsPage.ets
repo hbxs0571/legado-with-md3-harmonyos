@@ -19,6 +19,10 @@ const READER_BODY_WEIGHT_VALUES: number[] = [300, 400, 500, 700, 900];
 const READER_EFFECT_COLORS: string[] = [
   '#3E3D3B', '#ADADAD', '#FFFFFF', '#000000', '#FF8C00', '#5A8DEE', '#63C37D', '#DB4B4B'
 ];
+/** 自定义背景色板：比强调色板多几个常见纸色，对齐上游 bg_color 的取色场景。 */
+const READER_BACKGROUND_COLORS: string[] = [
+  '#FFFFFF', '#EEEEEE', '#DDC090', '#C2D8AA', '#ABCEE0', '#DBB8E2', '#FFC0EDC6', '#000000', '#3C3F43', '#343832'
+];
 interface ReaderTextMenuEntry {
   id: string;
   title: string;
@@ -126,6 +130,20 @@ export struct ReaderSettingsPage {
   @Prop selectVibrator: boolean = false;
   /** 中文简繁体转换档位：0 = 不转换、1 = 繁转简、2 = 简转繁。上游 ReadSettings.kt:118。 */
   @Prop chineseConverterType: number = 0;
+  /** 正文日间/夜间颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight。 */
+  @Prop textColor: string = '#38383B';
+  @Prop textColorNight: string = '#D8D8DC';
+  /** 正文强调色；上游 ReadBookConfig.kt:62 textAccentColor。 */
+  @Prop textAccentColor: string = '#834E00';
+  @Prop textAccentColorNight: string = '#FE4D55';
+  /** 自定义背景；空串表示沿用内置六方案。上游 ReadBookConfig.kt:537-551。 */
+  @Prop bgStr: string = '';
+  @Prop bgStrNight: string = '';
+  @Prop bgType: number = 0;
+  @Prop bgTypeNight: number = 0;
+  @Prop bgAlpha: number = 100;
+  @Prop darkStatusIcon: boolean = true;
+  @Prop darkStatusIconNight: boolean = false;
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = READER_CLICK_REGION_DEFAULTS;
@@ -249,6 +267,41 @@ export struct ReaderSettingsPage {
   onSliderVibratorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onSelectVibratorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onChineseConverterTypeChange: (value: number) => void = (_value: number) => {};
+  onTextColorChange: (value: string, night: boolean) => void = (_value: string, _night: boolean) => {};
+  onTextAccentColorChange: (value: string, night: boolean) => void = (_value: string, _night: boolean) => {};
+  onBackgroundColorChange: (value: string, night: boolean) => void = (_value: string, _night: boolean) => {};
+  onBackgroundImageChange: (path: string, night: boolean) => void = (_path: string, _night: boolean) => {};
+  onBgAlphaChange: (value: number) => void = (_value: number) => {};
+  onDarkStatusIconChange: (enabled: boolean, night: boolean) => void = (_enabled: boolean, _night: boolean) => {};
+  onPickBackgroundImage: (night: boolean) => void = (_night: boolean) => {};
+
+  /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
+  private getBackgroundImageOf(night: boolean): string {
+    const type = night ? this.bgTypeNight : this.bgType;
+    return type !== 0 ? (night ? this.bgStrNight : this.bgStr) : '';
+  }
+
+  /** 背景图片一行：显示是否已选，并提供「选择图片」「清除」两个动作。 */
+  @Builder
+  private BackgroundImageRow(title: string, night: boolean) {
+    Row() {
+      Column() {
+        Text(title).fontSize(13).fontColor('#E2E3E8')
+        Text(this.getBackgroundImageOf(night).length > 0 ? '已选择图片' : '未选择图片')
+          .fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Text('选择').fontSize(11).fontColor('#C6D3FF')
+        .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+        .backgroundColor('#292A31').borderRadius(8)
+        .onClick(() => this.onPickBackgroundImage(night))
+      if (this.getBackgroundImageOf(night).length > 0) {
+        Text('清除').fontSize(11).fontColor('#C6D3FF')
+          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+          .backgroundColor('#292A31').borderRadius(8).margin({ left: 8 })
+          .onClick(() => this.onBackgroundImageChange('', night))
+      }
+    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+  }
 
   /** 把设置里存的沙箱绝对路径转成 `Image()` 能读的 `file://` URI（裸路径会渲染空白）。 */
   private badgeImageSource(): string {
@@ -1315,22 +1368,70 @@ export struct ReaderSettingsPage {
         if (this.detailSheetTitle === '自定义阅读背景') {
           Scroll() {
             Column() {
-              Row() {
-                ForEach(['编辑', '删除', '恢复', '导入', '导出'], (label: string) => {
-                  Text(label).fontSize(10).fontColor('#D9DAE0').layoutWeight(1).textAlign(TextAlign.Center)
-                    .padding({ top: 10, bottom: 10 }).backgroundColor('#292A31').borderRadius(8)
-                    .margin({ right: 4 }).onClick(() => this.openDetailSheet(label, `${label}背景功能尚未迁移`))
-                }, (label: string) => label)
-              }.width('100%').padding({ bottom: 8 })
-              MenuSettingSwitch({ title: '深色状态栏图标', detail: '调整系统状态栏图标颜色', checked: false })
-              MenuSettingOption({ title: '背景颜色', detail: '日间颜色 / 夜间颜色' })
-                .onClick(() => this.openDetailSheet('背景颜色', '选择日间或夜间背景颜色'))
-              MenuSettingOption({ title: '背景图片', detail: '选择日间图片 / 夜间图片 / 清除' })
-                .onClick(() => this.openDetailSheet('背景图片', '选择或清除日间、夜间背景图片'))
-              MenuSettingSlider({ title: '背景透明度', value: 100, minValue: 0, maxValue: 100 })
-              Text('文件选择与样式保存尚未迁移。').fontSize(10).fontColor('#92949E').width('100%').padding(10)
+              // 上游 BgTextConfigSheet 是日/夜两组并列（TinyColorModeSettingItem 日间+夜间双色、
+              // TinyBgImageModeSettingItem 日/夜双图），这里同样两组同时显示，不做「编辑哪一组」切换。
+              MenuSettingPalette({
+                title: '日间背景颜色',
+                colors: READER_BACKGROUND_COLORS,
+                selectedColor: this.bgType === 0 ? this.bgStr : '',
+                onChange: (color: string) => this.onBackgroundColorChange(color, false)
+              })
+              MenuSettingPalette({
+                title: '夜间背景颜色',
+                colors: READER_BACKGROUND_COLORS,
+                selectedColor: this.bgTypeNight === 0 ? this.bgStrNight : '',
+                onChange: (color: string) => this.onBackgroundColorChange(color, true)
+              })
+              this.BackgroundImageRow('日间背景图片', false)
+              this.BackgroundImageRow('夜间背景图片', true)
+              MenuSettingSlider({
+                title: '背景透明度',
+                value: this.bgAlpha,
+                minValue: 0,
+                maxValue: 100,
+                stepValue: 5,
+                onChange: (value: number) => this.onBgAlphaChange(value)
+              })
+              MenuSettingSwitch({
+                title: '日间深色状态栏图标',
+                detail: '状态栏图标改用深色，浅色背景更清楚',
+                checked: this.darkStatusIcon,
+                onChange: (enabled: boolean) => this.onDarkStatusIconChange(enabled, false)
+              })
+              MenuSettingSwitch({
+                title: '夜间深色状态栏图标',
+                detail: '状态栏图标改用深色，浅色背景更清楚',
+                checked: this.darkStatusIconNight,
+                onChange: (enabled: boolean) => this.onDarkStatusIconChange(enabled, true)
+              })
+              MenuSettingPalette({
+                title: '日间文字颜色',
+                colors: READER_EFFECT_COLORS,
+                selectedColor: this.textColor,
+                onChange: (color: string) => this.onTextColorChange(color, false)
+              })
+              MenuSettingPalette({
+                title: '夜间文字颜色',
+                colors: READER_EFFECT_COLORS,
+                selectedColor: this.textColorNight,
+                onChange: (color: string) => this.onTextColorChange(color, true)
+              })
+              MenuSettingPalette({
+                title: '日间强调色',
+                colors: READER_EFFECT_COLORS,
+                selectedColor: this.textAccentColor,
+                onChange: (color: string) => this.onTextAccentColorChange(color, false)
+              })
+              MenuSettingPalette({
+                title: '夜间强调色',
+                colors: READER_EFFECT_COLORS,
+                selectedColor: this.textAccentColorNight,
+                onChange: (color: string) => this.onTextAccentColorChange(color, true)
+              })
+              Text('强调色用于链接、搜索结果与朗读中的段落；背景透明度只作用于背景图片。')
+                .fontSize(10).fontColor('#92949E').width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.height(360).scrollBar(BarState.Off)
+          }.height(460).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '选择字体') {
           Scroll() {
             Column() {
@@ -1818,7 +1919,8 @@ export struct ReaderSettingsPage {
               if (this.getDetailChoices(this.detailSheetTitle).length === 0) {
                 Text('此配置项的实际操作尚未迁移。').fontSize(12).fontColor('#A9ABB5').width('100%').padding(12)
               }
-              Text(this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
+              Text(this.detailSheetTitle === '自定义阅读背景' ||
+                this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '滑动条显示样式' ||
                 this.detailSheetTitle === '中文简繁体转换' ||
                 this.detailSheetTitle === '点击图片行为' ||

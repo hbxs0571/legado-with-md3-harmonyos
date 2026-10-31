@@ -305,6 +305,19 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-C1/KI-C2 正文颜色与自定义背景（通过，背景图片渲染未验）
+
+1. **设备与构建**：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），`assembleHap` → `BUILD SUCCESSFUL in 32 s 579 ms`（33 任务 17 执行 / 16 最新），HAP 覆盖安装 `install bundle successfully`。
+2. **面板上屏**：设置 → 阅读界面 → 「长按自定义」`(951,675)` 打开「自定义阅读背景」，dump 读到全部条目：`日间背景颜色`、`夜间背景颜色`、`日间背景图片/未选择图片/选择`、`夜间背景图片/…`、`背景透明度 100`、`日间深色状态栏图标`、`夜间深色状态栏图标`、四个文字色/强调色板；底部提示为「选择后立即应用并保存；自定义内容需点击保存。」（不是「仅展示选择预览」）。
+3. **色板落库**：日间色板第一颗（`#FFFFFF`）中心 `(248,875)` → `bgStr` = `#FFFFFF`；夜间色板最后一颗 `(1179,1180)` → `bgStrNight` = `#000000`；文字颜色日间板点 `(503,1933)` → `textColorNight` = `#FFFFFF`，点 `(701,1933)` → `#000000`。`bgType`/`bgTypeNight` 均为 `0.000000`。
+4. **状态栏图标决定性对比**：`darkStatusIconNight = false` 时阅读页状态栏（y 0..120 全宽）亮像素 **6726**；改为 `true` 后同一区域亮像素 **0**。证明 `setWindowSystemBarProperties({ statusBarContentColor })` 真的生效。
+5. **纸色决定性证据**：`readerNightMode` 由 `true` 改 `false` 后，日间 `bgStr = #FFFFFF` 生效——阅读页中心像素 `(255,255,255)`；未设置自定义时默认纸色不是纯白，两次截图对比排除了巧合。
+6. **正文文字色决定性证据**：注入 `textColor = #DB4B4B` 后重进阅读页，截图彩色像素统计 top8 全为红色系（`(213,77,77)`/`(220,76,75)`/…），正文与章节标题同时变红；改回 `#38383B` 后恢复正常深灰。
+7. **图片选择器可弹出**：点「选择」`(1017,1385)` 后系统 `DocumentViewPicker` 正常弹出（「最近 / 浏览 / ×」）。**但模拟器里没有可选图片**，且 `/data/storage/el2/base/haps/entry/files` 与 `/data/app/el2/.../entry/files` 都不可写（`mkdir` 报 `Permission denied`、`hdc file send` 报 `permission denied`），无法注入测试图。因此**背景图片的渲染与透明度只到代码层核对**（`ReaderPage.ets` 的 `Image(...).opacity(backgroundImageAlpha())` 层 + 两处内层容器铺图时改透明底），未做像素级确认。
+8. **测试期改动已全部复原**：`textColor=#38383B`、`textColorNight=#D8D8DC`、`textAccentColor=#834E00`、`textAccentColorNight=#FE4D55`、`bgStr=''`、`bgStrNight=''`、`bgType=0`、`bgTypeNight=0`、`bgAlpha=100`、`darkStatusIcon=true`、`darkStatusIconNight=false`（已重新拉取偏好文件确认）。
+9. **上游口径核对**：`textAccentColor` 在上游只驱动链接/搜索结果/朗读段落三处着色（`ReaderCanvasSurface.kt:2997`），本地这三条路径都没有，故按约束只做可配+落库+随备份；`bgAlpha` 与上游 `ReaderBackgroundAlpha.kt` 一致**只作用于背景图片**，不作用于纯色背景。
+10. 本条只代表 N 端模拟器结论。
+
 ## 2026-10-31 N 端 KI-C5 简繁转换（通过）
 
 1. 设备与构建：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832）。`assembleHap` 通过 `BUILD SUCCESSFUL in 36 s 683 ms`（33 任务 17 执行 / 16 最新），HAP 覆盖安装成功。

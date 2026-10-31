@@ -198,6 +198,16 @@ export struct ReaderPage {
   @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetRevision: number = 0;
   onBookmarkTargetConsumed: () => void = () => {};
   @Prop paperColor: string = '#000000';
+  /** 正文颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight，空串回落原有硬编码。 */
+  @Prop readingTextColor: string = '';
+  /** 强调色；上游 ReadBookConfig.kt:62 textAccentColor，用于链接、搜索结果与朗读段落。 */
+  @Prop textAccentColor: string = '';
+  /** 自定义背景图片的沙箱路径；空串表示没有，上游 ReadBookConfig.kt:549 bgType != 0 的情况。 */
+  @Prop readerBackgroundImage: string = '';
+  /** 背景图片不透明度百分比（0..100），上游 ReadBookConfig.kt:548 bgAlpha。 */
+  @Prop backgroundAlpha: number = 100;
+  /** 状态栏图标是否用深色；上游 ReadBookConfig.kt:552-553 darkStatusIcon / darkStatusIconNight。 */
+  @Prop @Watch('onDarkStatusIconChanged') darkStatusIcon: boolean = true;
   @Prop showQuickActions: boolean = false;
   @Prop showControlsOnAppear: boolean = false;
   @Prop showBottomActionText: boolean = true;
@@ -275,6 +285,8 @@ export struct ReaderPage {
   private titleGeneration: number = 0;
   private readerScroller: Scroller = new Scroller();
   private readerSystemBarRequestId: number = 0;
+  /** 状态栏图标色的请求序号：连续改色时只认最后一次，避免异步返回乱序。 */
+  private readerStatusBarIconRequestId: number = 0;
   private readerOrientationRequestId: number = 0;
   private originalReaderOrientation: window.Orientation = window.Orientation.UNSPECIFIED;
   private originalReaderOrientationCaptured: boolean = false;
@@ -367,6 +379,7 @@ export struct ReaderPage {
     this.refreshContentProcesses();
     this.loadReaderHighlightRules();
     this.syncReaderSystemBars();
+    this.applyReaderStatusBarIcon();
     this.applyReaderOrientation(this.screenOrientation, true);
     this.applyKeepLight();
     this.syncVolumeKeyPage();
@@ -377,6 +390,7 @@ export struct ReaderPage {
     this.clearKeepLight();
     this.releaseVolumeKeys();
     this.syncReaderSystemBars(true);
+    this.restoreReaderStatusBarIcon();
     this.restoreReaderOrientation();
     this.fullBookPaginationGeneration++;
     this.stopAutoPageTimer();
@@ -547,6 +561,39 @@ export struct ReaderPage {
         targetWindow.setSpecificSystemBarEnabled('navigationIndicator', showNavigationBar, false)
       ]).catch(() => {});
     }).catch(() => {});
+  }
+
+  /**
+   * 按 `darkStatusIcon` 调系统状态栏图标色。
+   * 上游是 `WindowCompat.getInsetsController(...).isAppearanceLightStatusBars = !isDarkTheme`
+   * （`base/BaseActivity.kt:167`）；HOS 侧对应 `setWindowSystemBarProperties` 的 `statusBarContentColor`。
+   * 深浅用 `#E5FFFFFF` / `#E5000000`，与 EntryAbility 里的默认值同一口径。
+   */
+  private applyReaderStatusBarIcon(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const requestId = ++this.readerStatusBarIconRequestId;
+    window.getLastWindow(context).then((targetWindow: window.Window) => {
+      if (requestId !== this.readerStatusBarIconRequestId) { return; }
+      targetWindow.setWindowSystemBarProperties({
+        statusBarContentColor: this.darkStatusIcon ? '#E5000000' : '#E5FFFFFF'
+      }).catch(() => {});
+    }).catch(() => {});
+  }
+
+  /** 退出阅读页时把状态栏图标恢复成应用默认（EntryAbility 里设的浅色）。 */
+  private restoreReaderStatusBarIcon(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const requestId = ++this.readerStatusBarIconRequestId;
+    window.getLastWindow(context).then((targetWindow: window.Window) => {
+      if (requestId !== this.readerStatusBarIconRequestId) { return; }
+      targetWindow.setWindowSystemBarProperties({ statusBarContentColor: '#E5FFFFFF' }).catch(() => {});
+    }).catch(() => {});
+  }
+
+  onDarkStatusIconChanged(): void {
+    if (this.readerWindowActive) { this.applyReaderStatusBarIcon(); }
   }
 
   private stopAutoPageTimer(): void {
@@ -2748,8 +2795,23 @@ export struct ReaderPage {
   }
 
   private getReadingTextColor(): string {
+    // 有配置色就用配置色（上游 textColor/textColorNight 可配任意色）；
+    // 空串说明还没装载过设置，回落到原有硬编码，保持旧观感。
+    if (this.readingTextColor.length > 0) { return this.readingTextColor; }
     return this.paperColor === '#000000' || this.paperColor === '#343832' || this.paperColor === '#3C3F43'
       ? '#D8D8DC' : '#38383B';
+  }
+
+  /** 背景图片的 `file://` URI；空串时返回空串，由调用方判断是否渲染。 */
+  private backgroundImageSource(): string {
+    const path = this.readerBackgroundImage;
+    if (path.length === 0) { return ''; }
+    return path.startsWith('file://') ? path : `file://${path}`;
+  }
+
+  /** 上游 readerBackgroundAlpha：0..100 百分比换算成 0..1。 */
+  private backgroundImageAlpha(): number {
+    return Math.max(0, Math.min(1, this.backgroundAlpha / 100));
   }
 
   private isReaderHeaderVisible(): boolean {
@@ -2887,6 +2949,15 @@ export struct ReaderPage {
 
   build() {
     Stack() {
+      // 自定义背景图片铺满整屏，垫在正文与底栏之下；不拦截触摸，透明度取 bgAlpha。
+      if (this.readerBackgroundImage.length > 0) {
+        Image(this.backgroundImageSource())
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .opacity(this.backgroundImageAlpha())
+          .hitTestBehavior(HitTestMode.None)
+      }
       if ((this.book.format === 'txt' || this.book.format === 'epub') && this.localReaderPages.length > 0 && this.pageAnimation !== 3) {
         Stack({ alignContent: Alignment.TopEnd }) {
           Column() {
@@ -2947,7 +3018,8 @@ export struct ReaderPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor(this.paperColor)
+        // 有自定义背景图片时这层不能压不透明底色，否则图片被盖住。
+        .backgroundColor(this.readerBackgroundImage.length > 0 ? '#00000000' : this.paperColor)
         .onAreaChange((oldArea: Area, newArea: Area) => {
           this.readerContentWidth = this.toDimension(newArea.width);
           this.viewportHeight = this.toDimension(newArea.height);
@@ -3040,7 +3112,8 @@ export struct ReaderPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(this.paperColor)
+      // 同上：图片层在最外层，滚动容器要让出底色。
+      .backgroundColor(this.readerBackgroundImage.length > 0 ? '#00000000' : this.paperColor)
       .scrollBar(BarState.Off)
       .onDidScroll((xOffset: number, yOffset: number, scrollState: ScrollState) => {
         if (this.usesLocalPagination()) { return; }

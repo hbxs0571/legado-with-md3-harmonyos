@@ -59,6 +59,7 @@ import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
+import { ReaderBackgroundImageRepository } from '../data/ReaderBackgroundImageRepository';
 import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository } from '../data/ReaderMarkingRepository';
@@ -211,6 +212,20 @@ struct Index {
    * 上游 ReadSettings.kt:118 chineseConverterType，设置项在排版面板。
    */
   @State readerChineseConverterType: number = 0;
+  /** 正文日间/夜间颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight。 */
+  @State readerTextColor: string = '#38383B';
+  @State readerTextColorNight: string = '#D8D8DC';
+  /** 正文强调色；上游 ReadBookConfig.kt:62 textAccentColor，用于链接/搜索结果/朗读段落。 */
+  @State readerTextAccentColor: string = '#834E00';
+  @State readerTextAccentColorNight: string = '#FE4D55';
+  /** 自定义背景；空串表示沿用 paperIndex 指向的六个内置方案。上游 ReadBookConfig.kt:537-551。 */
+  @State readerBgStr: string = '';
+  @State readerBgStrNight: string = '';
+  @State readerBgType: number = 0;
+  @State readerBgTypeNight: number = 0;
+  @State readerBgAlpha: number = 100;
+  @State readerDarkStatusIcon: boolean = true;
+  @State readerDarkStatusIconNight: boolean = false;
   @State readerMaxLengthWithNoToc: number = 3000;
   @State eyeProtectionEnabled: boolean = false;
   @State eyeProtectionAutoNight: boolean = false;
@@ -1755,6 +1770,17 @@ struct Index {
       this.readerSliderVibrator = settings.sliderVibrator;
       this.readerSelectVibrator = settings.selectVibrator;
       this.readerChineseConverterType = settings.chineseConverterType;
+      this.readerTextColor = settings.textColor;
+      this.readerTextColorNight = settings.textColorNight;
+      this.readerTextAccentColor = settings.textAccentColor;
+      this.readerTextAccentColorNight = settings.textAccentColorNight;
+      this.readerBgStr = settings.bgStr;
+      this.readerBgStrNight = settings.bgStrNight;
+      this.readerBgType = settings.bgType;
+      this.readerBgTypeNight = settings.bgTypeNight;
+      this.readerBgAlpha = settings.bgAlpha;
+      this.readerDarkStatusIcon = settings.darkStatusIcon;
+      this.readerDarkStatusIconNight = settings.darkStatusIconNight;
       BookRepository.setChineseConverterType(settings.chineseConverterType);
       ReplaceRuleRepository.setChineseConverterType(settings.chineseConverterType);
       this.readerMaxLengthWithNoToc = settings.maxLengthWithNoToc;
@@ -1870,6 +1896,17 @@ struct Index {
         sliderVibrator: this.readerSliderVibrator,
         selectVibrator: this.readerSelectVibrator,
         chineseConverterType: this.readerChineseConverterType,
+        textColor: this.readerTextColor,
+        textColorNight: this.readerTextColorNight,
+        textAccentColor: this.readerTextAccentColor,
+        textAccentColorNight: this.readerTextAccentColorNight,
+        bgStr: this.readerBgStr,
+        bgStrNight: this.readerBgStrNight,
+        bgType: this.readerBgType,
+        bgTypeNight: this.readerBgTypeNight,
+        bgAlpha: this.readerBgAlpha,
+        darkStatusIcon: this.readerDarkStatusIcon,
+        darkStatusIconNight: this.readerDarkStatusIconNight,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
         eyeProtectionEnabled: this.eyeProtectionEnabled,
         eyeProtectionAutoNight: this.eyeProtectionAutoNight,
@@ -2309,6 +2346,27 @@ struct Index {
       ReaderBookmarkBadgeRepository.removeImage(previous);
     }
   }
+  /** 选择日间/夜间背景图片；换图时删掉上一张副本。 */
+  private async pickReaderBackgroundImage(night: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    let picked: string | undefined = undefined;
+    try {
+      picked = await ReaderBackgroundImageRepository.chooseImage(context);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '选择背景图片失败';
+      this.showUnavailableAction(message);
+      return;
+    }
+    if (picked === undefined) { return; }
+    const previous = night ? this.readerBgStrNight : this.readerBgStr;
+    const previousType = night ? this.readerBgTypeNight : this.readerBgType;
+    this.setReaderBackgroundImage(picked, night);
+    // 只有上一张也是本仓储的图片副本时才删；如果上一张是纯色就没什么可删。
+    if (previousType !== 0 && previous.length > 0 && previous !== picked) {
+      ReaderBackgroundImageRepository.removeImage(previous);
+    }
+  }
   /** 恢复默认书签角标：清空设置并删掉私有目录里的图片副本。 */
   private resetReaderBookmarkBadgeImage(): void {
     const previous = this.readerBookmarkBadgeImage;
@@ -2341,6 +2399,48 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
     // 正文是按已转换结果缓存的，档位变了必须重读，否则要等下次翻页才生效。
     this.reloadSelectedChapterForTransform();
+  }
+  /** 颜色类设置统一走这里：只改显示，不重读正文，因此不必触发章节重载。 */
+  private setReaderTextColor(value: string, night: boolean): void {
+    if (night) { this.readerTextColorNight = value; } else { this.readerTextColor = value; }
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTextAccentColor(value: string, night: boolean): void {
+    if (night) { this.readerTextAccentColorNight = value; } else { this.readerTextAccentColor = value; }
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  /**
+   * 自定义背景色。传空串表示清除自定义、回落到 paperIndex 的六个内置方案，
+   * 因此不能像其他颜色那样在空串时回落默认色。
+   */
+  private setReaderBackgroundColor(value: string, night: boolean): void {
+    if (night) { this.readerBgStrNight = value; } else { this.readerBgStr = value; }
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  /** 自定义背景图片：设置时同时把 bgType 置 2，清除时回到 0 并清空路径。 */
+  private setReaderBackgroundImage(path: string, night: boolean): void {
+    if (night) {
+      this.readerBgStrNight = path;
+      this.readerBgTypeNight = path.length > 0 ? 2 : 0;
+    } else {
+      this.readerBgStr = path;
+      this.readerBgType = path.length > 0 ? 2 : 0;
+    }
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderBgAlpha(value: number): void {
+    this.readerBgAlpha = Math.max(0, Math.min(100, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderDarkStatusIcon(enabled: boolean, night: boolean): void {
+    if (night) { this.readerDarkStatusIconNight = enabled; } else { this.readerDarkStatusIcon = enabled; }
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
   private setReaderMaxLengthWithNoToc(value: number): void {
     this.readerMaxLengthWithNoToc = Math.max(3000, Math.min(100000, Math.round(value)));
@@ -2515,6 +2615,17 @@ struct Index {
       this.readerSliderVibrator = result.settings.sliderVibrator;
       this.readerSelectVibrator = result.settings.selectVibrator;
       this.readerChineseConverterType = result.settings.chineseConverterType;
+      this.readerTextColor = result.settings.textColor;
+      this.readerTextColorNight = result.settings.textColorNight;
+      this.readerTextAccentColor = result.settings.textAccentColor;
+      this.readerTextAccentColorNight = result.settings.textAccentColorNight;
+      this.readerBgStr = result.settings.bgStr;
+      this.readerBgStrNight = result.settings.bgStrNight;
+      this.readerBgType = result.settings.bgType;
+      this.readerBgTypeNight = result.settings.bgTypeNight;
+      this.readerBgAlpha = result.settings.bgAlpha;
+      this.readerDarkStatusIcon = result.settings.darkStatusIcon;
+      this.readerDarkStatusIconNight = result.settings.darkStatusIconNight;
       BookRepository.setChineseConverterType(result.settings.chineseConverterType);
       ReplaceRuleRepository.setChineseConverterType(result.settings.chineseConverterType);
       this.readerPageTouchSlop = result.settings.pageTouchSlop;
@@ -2777,9 +2888,36 @@ struct Index {
     this.showUnavailableAction(`更新目录完成：${parts.join('，')}`);
   }
 
+  /**
+   * 当前纸色。优先取用户自定义的背景色（上游 `bgStr`/`bgStrNight`），
+   * 没有自定义时回落到 `paperIndex` 指向的内置方案——`READER_BACKGROUND_STYLES`
+   * 因此从「唯一来源」降级为「预设」。
+   * `bgType` 为 2 时 `bgStr` 存的是图片路径，纸色仍取内置方案，图片由 ReaderPage 叠在上面。
+   */
   private getPaperColor(): string {
+    const custom = this.readerNightMode ? this.readerBgStrNight : this.readerBgStr;
+    const customType = this.readerNightMode ? this.readerBgTypeNight : this.readerBgType;
+    if (customType === 0 && custom.length > 0) { return custom; }
     const style = READER_BACKGROUND_STYLES[Math.max(0, Math.min(5, this.paperIndex))];
     return style === undefined ? '#000000' : (this.readerNightMode ? style.nightColor : style.dayColor);
+  }
+  /** 当前生效的正文颜色；上游 `textColor`/`textColorNight`。 */
+  private getReadingTextColorSetting(): string {
+    return this.readerNightMode ? this.readerTextColorNight : this.readerTextColor;
+  }
+  /** 当前生效的强调色；上游 `textAccentColor`/`textAccentColorNight`。 */
+  private getTextAccentColorSetting(): string {
+    return this.readerNightMode ? this.readerTextAccentColorNight : this.readerTextAccentColor;
+  }
+  /** 当前生效的状态栏图标深浅；上游 `darkStatusIcon`/`darkStatusIconNight`。 */
+  private getDarkStatusIconSetting(): boolean {
+    return this.readerNightMode ? this.readerDarkStatusIconNight : this.readerDarkStatusIcon;
+  }
+  /** 当前生效的背景图片路径；空串表示没有自定义图片。 */
+  private getReaderBackgroundImage(): string {
+    const custom = this.readerNightMode ? this.readerBgStrNight : this.readerBgStr;
+    const customType = this.readerNightMode ? this.readerBgTypeNight : this.readerBgType;
+    return customType !== 0 ? custom : '';
   }
 
   /**
@@ -3740,6 +3878,11 @@ struct Index {
         textBottomJustify: this.readerTextBottomJustify,
             imageStyle: this.selectedBook.imageStyle ?? 'DEFAULT',
             paperColor: this.getPaperColor(),
+            readingTextColor: this.getReadingTextColorSetting(),
+            textAccentColor: this.getTextAccentColorSetting(),
+            readerBackgroundImage: this.getReaderBackgroundImage(),
+            backgroundAlpha: this.readerBgAlpha,
+            darkStatusIcon: this.getDarkStatusIconSetting(),
             readerNightMode: this.readerNightMode,
             eyeProtectionActive: this.isEyeProtectionActive(),
             showQuickActions: this.showReaderQuickActions,
@@ -3960,6 +4103,24 @@ struct Index {
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
+              textColor: this.readerTextColor,
+              textColorNight: this.readerTextColorNight,
+              textAccentColor: this.readerTextAccentColor,
+              textAccentColorNight: this.readerTextAccentColorNight,
+              bgStr: this.readerBgStr,
+              bgStrNight: this.readerBgStrNight,
+              bgType: this.readerBgType,
+              bgTypeNight: this.readerBgTypeNight,
+              bgAlpha: this.readerBgAlpha,
+              darkStatusIcon: this.readerDarkStatusIcon,
+              darkStatusIconNight: this.readerDarkStatusIconNight,
+              onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
+              onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
+              onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
+              onBackgroundImageChange: (path: string, night: boolean) => this.setReaderBackgroundImage(path, night),
+              onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
+              onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
+              onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
               clickRegionActions: this.readerClickRegionActions,
               onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4279,6 +4440,24 @@ struct Index {
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
+              textColor: this.readerTextColor,
+              textColorNight: this.readerTextColorNight,
+              textAccentColor: this.readerTextAccentColor,
+              textAccentColorNight: this.readerTextAccentColorNight,
+              bgStr: this.readerBgStr,
+              bgStrNight: this.readerBgStrNight,
+              bgType: this.readerBgType,
+              bgTypeNight: this.readerBgTypeNight,
+              bgAlpha: this.readerBgAlpha,
+              darkStatusIcon: this.readerDarkStatusIcon,
+              darkStatusIconNight: this.readerDarkStatusIconNight,
+              onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
+              onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
+              onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
+              onBackgroundImageChange: (path: string, night: boolean) => this.setReaderBackgroundImage(path, night),
+              onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
+              onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
+              onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4463,6 +4642,24 @@ struct Index {
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
+              textColor: this.readerTextColor,
+              textColorNight: this.readerTextColorNight,
+              textAccentColor: this.readerTextAccentColor,
+              textAccentColorNight: this.readerTextAccentColorNight,
+              bgStr: this.readerBgStr,
+              bgStrNight: this.readerBgStrNight,
+              bgType: this.readerBgType,
+              bgTypeNight: this.readerBgTypeNight,
+              bgAlpha: this.readerBgAlpha,
+              darkStatusIcon: this.readerDarkStatusIcon,
+              darkStatusIconNight: this.readerDarkStatusIconNight,
+              onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
+              onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
+              onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
+              onBackgroundImageChange: (path: string, night: boolean) => this.setReaderBackgroundImage(path, night),
+              onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
+              onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
+              onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4589,6 +4786,24 @@ struct Index {
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
+              textColor: this.readerTextColor,
+              textColorNight: this.readerTextColorNight,
+              textAccentColor: this.readerTextAccentColor,
+              textAccentColorNight: this.readerTextAccentColorNight,
+              bgStr: this.readerBgStr,
+              bgStrNight: this.readerBgStrNight,
+              bgType: this.readerBgType,
+              bgTypeNight: this.readerBgTypeNight,
+              bgAlpha: this.readerBgAlpha,
+              darkStatusIcon: this.readerDarkStatusIcon,
+              darkStatusIconNight: this.readerDarkStatusIconNight,
+              onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
+              onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
+              onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
+              onBackgroundImageChange: (path: string, night: boolean) => this.setReaderBackgroundImage(path, night),
+              onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
+              onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
+              onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
           clickRegionActions: this.readerClickRegionActions,
           onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),

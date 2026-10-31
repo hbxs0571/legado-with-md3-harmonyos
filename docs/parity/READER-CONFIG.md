@@ -40,7 +40,7 @@
 
 四处容易误判的地方，先说清楚，避免后续重复返工：
 
-1. **改名不等于未接。** 上游 `textSize`、`lineSpacingExtra`、`shadowColor`、`pageAnim`、`menuIconItemsPerRow` 等在本地以 `fontSize`、`lineSpacing`、`textShadowColor`、`pageAnimation`、`bottomItemsPerRow` 落地，语义等价。这类判 `已接`，映射关系见[第二节改名映射表](#二改名映射表)。**但 `textColor` 不属此类**——本地正文色是硬编码，是真缺口（详见 C 块首行）。
+1. **改名不等于未接。** 上游 `textSize`、`lineSpacingExtra`、`shadowColor`、`pageAnim`、`menuIconItemsPerRow` 等在本地以 `fontSize`、`lineSpacing`、`textShadowColor`、`pageAnimation`、`bottomItemsPerRow` 落地，语义等价。这类判 `已接`，映射关系见[第二节改名映射表](#二改名映射表)。**但 `textColor` 不属此类**——本轮之前本地正文色是硬编码，是真缺口；已于 KI-C1 补上 `textColor`/`textColorNight` 字段（详见 C 块首两行）。
 2. **控件存在不等于已接。** `entry/src/main/ets/pages/ReaderSettingsPage.ets` 的菜单外观条目（`menuSettingsContent()`，`:399`；条目由 `getMenuSettingsEntries()`，`:1788` 生成）共 41 条，其中 5 条是分组标题，真实条目 36 条。绝大多数控件齐备、点击有响应，但 `menuBorderEnabled`（`:168`）、`menuBarStyleMode`（`:165`）、`menuColorMode`（`:166`）等状态只存在于页面 `@State`，在 `ReaderSettingsRepository.ets` 中检索命中数为 0。退出设置页即丢失，也不驱动阅读页渲染。这类判 `未接`，不判 `已接`。**例外只有两条**：`底栏按钮配置` 与 `标题栏操作按钮` 走 `handleMenuSettingsEntryClick()`（`:517-531`）打开真实配置面板并落盘（见 E 块对应两行）。
 3. **上游配置有两个来源文件，缺一不可。** 本表早期只盘了 `ReadBookConfig.kt`（单本书可覆盖的 `Config`），漏掉 `domain/model/settings/ReadSettings.kt`（全书统一设置，114 个字段）。后者有一半字段与前者同名或同义，其余 53 个字段此前从未进表。两个文件合计声明 267 个名字，是本节字段口径的基数。
 4. **`showNotMigrated()` 是显式占位。** `grep -c "showNotMigrated(" entry/src/main/ets/pages/ReaderSettingsPage.ets` 得 21 行命中，其中 1 行是 `:1242` 的函数定义，实际调用 20 处、18 个不同名称（`:485`、`:494`、`:801`、`:837`、`:838`、`:839`、`:840`、`:848`、`:851`、`:863`、`:864`、`:867`、`:868`、`:869`、`:870`、`:873`、`:879`、`:883`、`:886`、`:887`），点开只弹提示。凡走这条路的判 `未接`，不因界面上显示了开关而判已接。
@@ -51,21 +51,22 @@
 | --- | --- | --- | --- | --- |
 | A 阅读界面基础 | 37 | 16 | 19 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
-| C 正文排版 | 49 | 24 | 25 | 0 |
+| C 正文排版 | 49 | 30 | 19 | 0 |
 | D 翻页与手势交互 | 20 | 13 | 7 | 0 |
 | E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 96 | 91 | 2 |
+| 合计 | 189 | 102 | 85 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 91 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 85 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 > 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
 > 2026-10-31 KI-A7 落库：A 块「阅读进度条触感反馈」（`sliderVibrator`）与「文字选择触感反馈」（`selectVibrator`）两条由 `未接` 改 `已接`，A 块 21 未接 → 19 未接，全表 94 → 92。其中 `sliderVibrator` 上游 UI 侧无消费点（只有设置项与落库），按「上游没有就不要这个效果」本地只做可配+落库+随备份，不给进度条加振动。
 > 2026-10-31 KI-C5 落库：C 块「繁简转换」（`chineseConverterType`）由 `未接` 改 `已接`，C 块 26 未接 → 25 未接，全表 92 → 91。上游用 `quick-chinese-transfer` 字表，本地改用系统 ICU 的 `i18n.Transliterator`（`Traditional-Simplified` / `Simplified-Traditional`），正文与章节标题两处应用点都接上了；设备实测选「简体转繁体」后正文与标题同时变繁体，改回关闭恢复简体。
+> 2026-10-31 KI-C1/KI-C2 落库：C 块「正文日间颜色」「正文夜间颜色」「正文强调色」「背景透明度」「背景颜色/图片」「白天是否暗色状态栏」六条由 `未接` 改 `已接`，C 块 25 未接 → 19 未接，全表 91 → 85。两组必须一并做（`textColor` 与自定义 `bgStr` 必须同源，否则会出现「纸色六方案、文字色任意色」的错配）。上游 `textAccentColor` 的真实消费点是链接、搜索结果与朗读中段落（`ReaderCanvasSurface.kt:2997`），本地这三条路径都还没有（搜索只切路由、朗读未迁移），按「上游没有就不要这个效果」只做可配+落库+随备份，不发明新着色；`bgAlpha` 与上游一致只作用于背景图片。
 
 ## A 阅读界面基础
 
@@ -149,12 +150,12 @@
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 正文日间颜色 | `ReadBookConfig.kt:55` | `ReaderPage.ets:2710-2713` | 未接 | 上游 `textColor` 可配（默认 `#3E3D3B`）；本地 `getReadingTextColor()` 硬编码，按 `paperColor` 三值判断日/夜后返回固定色 | 改正文颜色后正文字变色 | 属于「有默认值但不可配」；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C1 |
-| 正文夜间颜色 | `ReadBookConfig.kt:56` | `ReaderPage.ets:2710-2713` | 未接 | 上游 `textColorNight`（默认 `#ADADAD`）；本地同上硬编码为 `#D8D8DC` | 切夜间后正文字取该值 | 同上；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C1 |
-| 正文强调色 | `ReadBookConfig.kt:62` | — | 未接 | 上游 `textAccentColor`/`Night` 三套，本地无字段 | 改强调色后划线高亮色变化 | 与 E 块「种子色」同源；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C1 |
-| 背景透明度 | `ReadBookConfig.kt:198` | — | 未接 | 上游 `bgAlpha` 默认 100，本地无字段 | 调透明度后背景图透出 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C2 |
-| 背景颜色/图片 | `ReadBookConfig.kt:537-551` | `ReaderSettingsRepository.ets:162-164` | 未接 | 本地 `paperIndex`/`dayPaperIndex`/`nightPaperIndex` 存索引，指向 `READER_BACKGROUND_STYLES`（`:339-346`）六个内置方案，用户只能在这六个里选；上游 `bgStr` 存任意颜色串、`bgType` 支持 assets 与自选图片，自定义能力本地为零。行内「背景图片」条目（`ReaderSettingsPage.ets:1281`）也只弹提示 | 六方案可切换；自选颜色或图片不可用 | 六个预设可用属既有能力，不改变本行「自定义背景」未接；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C2 |
-| 白天是否暗色状态栏 | `ReadBookConfig.kt:552` | — | 未接 | 上游 `darkStatusIcon`/`Night`，本地无字段 | 浅色背景下状态栏图标变暗 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C2 |
+| 正文日间颜色 | `ReadBookConfig.kt:55` | `ReaderSettingsRepository.ets:228` | 已接 | 上游 `textColor` 可配（默认 `#3E3D3B`）；本地新增 `textColor` 字段，默认 `#38383B`（沿用原硬编码观感，见 `:505`），读 `:835`、写 `:956`；`ReaderPage.ets` 的 `getReadingTextColor()` 改为「配置色非空优先，空则回落原三值判断」 | 在「自定义阅读背景」面板的「日间文字颜色」色板选色 → 阅读页正文字变该色。已实测：注入 `#DB4B4B` 后正文与章节标题同时变红，改回 `#38383B` 恢复正常（docs/VALIDATION.md 2026-10-31 KI-C1/KI-C2 节） | 上游默认 `#3E3D3B` 与本地原硬编码 `#38383B` 差一档，取本地原值以免升级后观感突变；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C1 |
+| 正文夜间颜色 | `ReadBookConfig.kt:56` | `ReaderSettingsRepository.ets:230` | 已接 | 上游 `textColorNight`（默认 `#ADADAD`）；本地新增 `textColorNight` 字段，默认 `#D8D8DC`（沿用原硬编码，见 `:506`），读 `:836`、写 `:957`；`ReaderPage.ets` 夜间取该值 | 切夜间后在「夜间文字颜色」色板选色 → 阅读页正文字变该色 | 同上；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C1 |
+| 正文强调色 | `ReadBookConfig.kt:62` | `ReaderSettingsRepository.ets:235` | 已接 | 上游 `textAccentColor`/`Night` 两套（`#834E00`/`#FE4D55`），消费点是链接文字、搜索结果与朗读中段落（`ReaderCanvasSurface.kt:2997`）；本地新增 `textAccentColor`/`textAccentColorNight` 两字段，默认与上游一致（`:508` 起），读 `:837`、写 `:958`，随 `ReaderPage.ets` 的 `textAccentColor` prop 传入 | 面板「日间强调色」「夜间强调色」选色 → 落库并可随备份导出 | **本地没有链接/搜索结果/朗读高亮这三条着色路径**（阅读页搜索只切路由、朗读尚未迁移），按「上游有这个问题就保留、上游没有就不要这个效果」，只做可配+落库+随备份，不发明新着色效果；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C1 |
+| 背景透明度 | `ReadBookConfig.kt:198` | `ReaderSettingsRepository.ets:247` | 已接 | 上游 `bgAlpha` 0..100 百分比，只作用于背景图片（`ReaderBackgroundAlpha.kt` 的 `percent / 100f`）；本地新增 `bgAlpha` 字段，默认 100（`:516`），读 `:846`、写 `:964`，`ReaderPage.ets` 的 `backgroundImageAlpha()` 做同样换算 | 面板「背景透明度」滑块 0..100 → 落库；设了背景图时图按比例透出 | 与上游一致，**只作用于背景图片、不作用于纯色背景**；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C2 |
+| 背景颜色/图片 | `ReadBookConfig.kt:537-551` | `ReaderSettingsRepository.ets:241-246` | 已接 | 上游 `bgStr` 存任意颜色串、`bgType` 区分 0=颜色/1=assets 图/2=自选图，颜色与图片共用 `bgStr`（`ReadBookConfig.kt:549`）；本地新增 `bgStr`/`bgStrNight`/`bgType`/`bgTypeNight` 四字段（默认空串 + 0，见 `:511-515`），读 `:842-845`、写 `:960-963`。`paperIndex` 六方案降级为「未自定义时的预设」：`Index.getPaperColor()` 先看 `bgType === 0 && bgStr 非空`，否则回落六方案。背景图由新建的 `data/ReaderBackgroundImageRepository.ets` 选择并复制进 `filesDir/reader-background/`，`ReaderPage.ets` 用 `Image(...).objectFit(ImageFit.Cover).opacity(...)` 铺在正文下层 | 面板「日间/夜间背景颜色」色板选色 → 阅读页背景变该色（已实测：日间 `#FFFFFF` 后阅读页中心像素为 `(255,255,255)`）；「日间/夜间背景图片」选择按钮 → 系统文件选择器弹出（已实测弹出），选中后背景铺图 | 图片选择器在模拟器上能弹出但无可选图片、且沙箱 `files` 目录不可写，**背景图渲染与透明度只到代码层核对**；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C2 |
+| 白天是否暗色状态栏 | `ReadBookConfig.kt:552` | `ReaderSettingsRepository.ets:249` | 已接 | 上游 `darkStatusIcon`/`darkStatusIconNight`（默认 true/false），Android 侧落在 `isAppearanceLightStatusBars`；本地新增两字段（`:518` 起），读 `:847`、写 `:965`，`ReaderPage.ets` 的 `applyReaderStatusBarIcon()` 用 `window.setWindowSystemBarProperties({ statusBarContentColor })` 落地（深色图标 `#E5000000`、浅色 `#E5FFFFFF`），退出阅读页由 `restoreReaderStatusBarIcon()` 还原 | 面板「日间/夜间深色状态栏图标」拨动 → 阅读页状态栏图标变深/变浅。已实测：`darkStatusIconNight` false 时状态栏亮像素 6726，改 true 后同一区域 0 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C2 |
 | 正文字号 | `ReadBookConfig.kt:246` | `ReaderSettingsRepository.ets:139` | 已接 | 上游 `textSize` → 本地 `fontSize` | 调字号后正文字变大 | — |
 | 段距 | `ReadBookConfig.kt:261` | `ReaderSettingsRepository.ets:140` | 已接 | 上游默认 2 | 调段距后段落间隙变化 | — |
 | 行距 | `ReadBookConfig.kt:252` | `ReaderSettingsRepository.ets:141` | 已接 | 上游 `lineSpacingExtra` → 本地 `lineSpacing` | 调行距后行间空白变化 | — |
@@ -313,7 +314,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（91 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（85 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -454,22 +455,22 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `bgAlpha` | 要接 | 上游背景透明度，本地无字段（KI-C2） |
-| `bgStr` | 要接 | 上游任意颜色串，本地只有六方案索引（KI-C2） |
-| `bgStrNight` | 要接 | 同上，夜间侧（KI-C2） |
-| `bgType` | 要接 | 上游 0=颜色/1=assets 图/2=自选图，本地无（KI-C2） |
-| `bgTypeNight` | 要接 | 同上，夜间侧（KI-C2） |
-| `textColor` | 要接 | 正文字色被 `ReaderPage.ets:2710-2713` 硬编码（KI-C1） |
-| `textColorNight` | 要接 | 同上，夜间侧（KI-C1） |
-| `textAccentColor` | 要接 | 强调色无字段，被划线高亮与菜单种子色引用（KI-C1） |
-| `textAccentColorNight` | 要接 | 同上，夜间侧（KI-C1） |
+| `bgAlpha` | 要接 | 上游背景透明度，本地无字段（KI-C2）；**KI-C2 已实现**（存储键 `bgAlpha`，`ReaderSettingsRepository.ets:247`，只作用于背景图片） |
+| `bgStr` | 要接 | 上游任意颜色串，本地只有六方案索引（KI-C2）；**KI-C2 已实现**（存储键 `bgStr`，六方案降级为预设） |
+| `bgStrNight` | 要接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现**（存储键 `bgStrNight`） |
+| `bgType` | 要接 | 上游 0=颜色/1=assets 图/2=自选图，本地无（KI-C2）；**KI-C2 已实现**（自选图写 2，`ReaderBackgroundImageRepository.ets` 负责选图与复制） |
+| `bgTypeNight` | 要接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现** |
+| `textColor` | 要接 | 正文字色被 `ReaderPage.ets` 的 `getReadingTextColor()` 硬编码（KI-C1）；**KI-C1 已实现**（存储键 `textColor`，默认 `#38383B` 沿用原硬编码观感） |
+| `textColorNight` | 要接 | 同上，夜间侧（KI-C1）；**KI-C1 已实现**（存储键 `textColorNight`，默认 `#D8D8DC`） |
+| `textAccentColor` | 要接 | 强调色无字段（KI-C1）；**KI-C1 已实现**（存储键 `textAccentColor`，默认 `#834E00`）。上游真实消费点是链接/搜索结果/朗读段落，本地这三条路径都还没有，故只做可配+落库+随备份 |
+| `textAccentColorNight` | 要接 | 同上，夜间侧（KI-C1）；**KI-C1 已实现**（默认 `#FE4D55`） |
 
 #### 1.5.2 状态栏（2 项）：要接 2
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `darkStatusIcon` | 要接 | 上游按背景亮度决定状态栏图标色，本地无字段（KI-C2） |
-| `darkStatusIconNight` | 要接 | 同上，夜间侧（KI-C2） |
+| `darkStatusIcon` | 要接 | 上游按背景亮度决定状态栏图标色，本地无字段（KI-C2）；**KI-C2 已实现**（`ReaderPage.ets` 的 `applyReaderStatusBarIcon()` 走 `setWindowSystemBarProperties`） |
+| `darkStatusIconNight` | 要接 | 同上，夜间侧（KI-C2）；**KI-C2 已实现**（设备实测亮像素 6726→0） |
 
 #### 1.5.3 下划线与虚线（4 项）：要接 4
 
@@ -642,7 +643,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | 上游字段 | 上游位置 | 本地字段 | 本地位置 | 落库证据（接口 / 默认值 / 读键 / 写键 / 消费端） |
 | --- | --- | --- | --- | --- |
 | `textSize` | `ReadBookConfig.kt:246` | `fontSize` | `ReaderSettingsRepository.ets:139` | 默认 `:381`；读 `:452 store.get('fontSize')`；写 `:756 put('fontSize')` 夹 5–50；消费 `Index.ets:1677`、`ReaderPage.ets` 排版 |
-| `textColor` / `textColorNight` | `ReadBookConfig.kt:55-56` | — | — | **不属改名，是真缺口。** 本地正文颜色由 `ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码：背景为 `#000000`/`#343832`/`#3C3F43` 时返回 `#D8D8DC`，否则 `#38383B`。用户不可配（登记 KI-C1） |
+| `textColor` / `textColorNight` | `ReadBookConfig.kt:55-56` | `textColor` / `textColorNight`（同名） | `ReaderSettingsRepository.ets:228`/`:230` | **原判「不属改名，是真缺口」，已于 KI-C1 补上。** 默认 `:505`/`:506` 取原硬编码值（`#38383B`/`#D8D8DC`）以免升级后观感突变；读 `:835`/`:836`；写 `:956`/`:957`；消费 `ReaderPage.ets` 的 `getReadingTextColor()`（配置色非空优先，空则回落原三值判断）与面板 `ReaderSettingsPage.ets:1374-1430` 的「日间/夜间文字颜色」色板 |
 | `textSize`（标题侧） | `ReadBookConfig.kt:269` | 无字段 | `ReaderPage.ets:824` 硬编码 `fontSize + 4` | 这一条是真缺口，不是改名（登记 KI-C4，同一硬编码共 9 处） |
 | `lineSpacingExtra` | `ReadBookConfig.kt:252` | `lineSpacing` | `ReaderSettingsRepository.ets:141` | 默认 `:383`；读 `:454 get('lineSpacingExtra')`；写 `:758 put('lineSpacingExtra')` 夹 0–20；消费 `Index.ets:1677`、`:1784` |
 | `shadowColor` / `shadowColorN` | `ReadBookConfig.kt:543-544` | `textShadowColor` / `textShadowColorN` | `ReaderSettingsRepository.ets:153-154` | 默认 `:395`/`:396`；读 `:466 get('shadowColor')`、`:467 get('shadowColorN')`；写 `:770`/`:772`；消费 `BackupRepository.ets:539`、`:965`、`:1138` |
@@ -652,7 +653,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `readMenuIconStyle` | `ReadBookConfig.kt:100` | `bottomIconStyle` | `ReaderSettingsRepository.ets:168` | 默认 `:410`；读 `:482`；写 `:801` 夹 0–2；消费 `Index.ets:1704`/`:1811`、`ReaderPage.ets:3159` |
 | `readMenuIconItemsPerRow` | `ReadBookConfig.kt:102` | `bottomItemsPerRow` | `ReaderSettingsRepository.ets:169` | 默认 `:411`；读 `:483`；写 `:802` 夹 2–8；消费 `Index.ets:1705`/`:1812`、`ReaderPage.ets:1213-1237` 分列 |
 | `readMenuIconRowCount` | `ReadBookConfig.kt:103` | `bottomRowCount` | `ReaderSettingsRepository.ets:170` | 默认 `:412`；读 `:484`；写 `:803` 夹 1–2；消费 `Index.ets:1706`/`:1813`、`ReaderPage.ets:3171` 底栏高度 |
-| `bgStr` / `bgStrNight` | `ReadBookConfig.kt:537-538` | `dayPaperIndex` / `nightPaperIndex` | `ReaderSettingsRepository.ets:163-164` | 默认 `:405`/`:406`；读 `:477`/`:478`（仅 `styleVersion>=1` 认索引）；写 `:796`/`:797`，旧版本迁移分支在 `:605`/`:606`；消费 `BackupRepository.ets:948-951`、`:1085-1116` 与 `bgStr` 互转。本地用索引指向内置配色，上游存颜色字符串 |
+| `bgStr` / `bgStrNight` | `ReadBookConfig.kt:537-538` | 新增同名 `bgStr` / `bgStrNight`；旧的 `dayPaperIndex` / `nightPaperIndex` 降级为「未自定义时的预设」 | `ReaderSettingsRepository.ets:241`/`:243`（新）；`:163-164`（旧索引） | **KI-C2 已补上同名 `bgStr`/`bgStrNight` 任意色串**：默认 `:511`/`:512` 为空串，读 `:842`/`:843`，写 `:960`/`:961`；`Index.getPaperColor()` 先看自定义色再回落六方案。旧索引字段仍在：读 `:477`/`:478`、写 `:796`/`:797`、`BackupRepository.ets:948-951` 与 `:1085-1116` 做索引↔色串互转 |
 | `useUnderline` | `ReadSettings.kt:24` | `underline` | `ReaderSettingsRepository.ets:155` | 默认 `:397`；读 `:468 get('underline')`；写 `:774`；消费 `ReaderPage.ets:2159` 驱动 `TextDecorationType`、`BackupRepository.ets:535`/`:967` |
 | `progressBarBehavior` | `ReadSettings.kt:27` | `progressBehavior` | `ReaderSettingsRepository.ets:173` | 默认 `:419`；读 `:487 get('progressBehavior')`；写 `:806` 只认 `'chapter'` 否则 `'page'`；消费 `Index.ets:1709`/`:1816` |
 | `clickImgWay` | `ReadSettings.kt:48` | `clickImageBehavior` | `ReaderSettingsRepository.ets:176` | 默认 `:422`；读 `:490 get('clickImgWay')`（**存储键仍写上游名**）；写 `:809` 限 `['0'..'4']`；消费 `Index.ets:1730`/`:1837` |
@@ -668,7 +669,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 2. **C 块标题排版 14 项**：需要同时改 `ReaderPage.ets` 的 9 处 `fontSize + 4` 硬编码（`:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`），并新增 `titleSizeRelative` 三态语义（上游回落规则见 `ReadBookConfig.kt:660-668`）。改动面比 E 块小但风险高，属排版视觉回归。
 3. **C 块正文与背景 6 行 + 下划线虚线 4 行**：正文与背景 6 行对应 11 个字段（正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2），下划线虚线 4 行对应 4 个字段，均为单点参数，适合随其它模块顺带补齐。其中**正文日/夜颜色（`ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码）优先做**——它是用户最容易察觉的「不能改字色」，且与背景预设（`READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:339-346`）天然配套。
 
-三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 91 行未接的多数。余下 27 行分布在 A 块 19 行、C 块 1 行、D 块 7 行（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞共 40 + 14 + 4 = 58 行未接（明细表口径），占明细表 85 行未接的多数。余下 27 行分布在 A 块 19 行、C 块 1 行、D 块 7 行（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，故第 3 条阻塞项由 10 行缩到 4 行），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 
