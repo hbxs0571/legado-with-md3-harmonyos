@@ -226,6 +226,21 @@ struct Index {
   @State readerBgAlpha: number = 100;
   @State readerDarkStatusIcon: boolean = true;
   @State readerDarkStatusIconNight: boolean = false;
+  // 标题排版十四个字段，对齐上游 help/config/ReadBookConfig.kt:596-608。
+  @State readerTitleMode: number = 0;
+  @State readerTitleSize: number = 4;
+  @State readerTitleSizeRelative: boolean = true;
+  @State readerTitleTopSpacing: number = 0;
+  @State readerTitleBottomSpacing: number = 0;
+  @State readerTitleColor: string = '';
+  @State readerTitleColorNight: string = '';
+  @State readerTitleBold: number = 500;
+  @State readerTitleLineSpacingExtra: number = 12;
+  @State readerTitleLineSpacingSub: number = 12;
+  @State readerTitleSegType: number = 0;
+  @State readerTitleSegScaling: number = 1;
+  @State readerTitleSegDistance: number = 4;
+  @State readerTitleSegFlag: string = '';
   @State readerMaxLengthWithNoToc: number = 3000;
   @State eyeProtectionEnabled: boolean = false;
   @State eyeProtectionAutoNight: boolean = false;
@@ -1781,6 +1796,20 @@ struct Index {
       this.readerBgAlpha = settings.bgAlpha;
       this.readerDarkStatusIcon = settings.darkStatusIcon;
       this.readerDarkStatusIconNight = settings.darkStatusIconNight;
+      this.readerTitleMode = settings.titleMode;
+      this.readerTitleSize = settings.titleSize;
+      this.readerTitleSizeRelative = settings.titleSizeRelative;
+      this.readerTitleTopSpacing = settings.titleTopSpacing;
+      this.readerTitleBottomSpacing = settings.titleBottomSpacing;
+      this.readerTitleColor = settings.titleColor;
+      this.readerTitleColorNight = settings.titleColorNight;
+      this.readerTitleBold = settings.titleBold;
+      this.readerTitleLineSpacingExtra = settings.titleLineSpacingExtra;
+      this.readerTitleLineSpacingSub = settings.titleLineSpacingSub;
+      this.readerTitleSegType = settings.titleSegType;
+      this.readerTitleSegScaling = settings.titleSegScaling;
+      this.readerTitleSegDistance = settings.titleSegDistance;
+      this.readerTitleSegFlag = settings.titleSegFlag;
       BookRepository.setChineseConverterType(settings.chineseConverterType);
       ReplaceRuleRepository.setChineseConverterType(settings.chineseConverterType);
       this.readerMaxLengthWithNoToc = settings.maxLengthWithNoToc;
@@ -1907,6 +1936,20 @@ struct Index {
         bgAlpha: this.readerBgAlpha,
         darkStatusIcon: this.readerDarkStatusIcon,
         darkStatusIconNight: this.readerDarkStatusIconNight,
+        titleMode: this.readerTitleMode,
+        titleSize: this.readerTitleSize,
+        titleSizeRelative: this.readerTitleSizeRelative,
+        titleTopSpacing: this.readerTitleTopSpacing,
+        titleBottomSpacing: this.readerTitleBottomSpacing,
+        titleColor: this.readerTitleColor,
+        titleColorNight: this.readerTitleColorNight,
+        titleBold: this.readerTitleBold,
+        titleLineSpacingExtra: this.readerTitleLineSpacingExtra,
+        titleLineSpacingSub: this.readerTitleLineSpacingSub,
+        titleSegType: this.readerTitleSegType,
+        titleSegScaling: this.readerTitleSegScaling,
+        titleSegDistance: this.readerTitleSegDistance,
+        titleSegFlag: this.readerTitleSegFlag,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
         eyeProtectionEnabled: this.eyeProtectionEnabled,
         eyeProtectionAutoNight: this.eyeProtectionAutoNight,
@@ -2442,6 +2485,65 @@ struct Index {
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
+  // 标题排版：改样式只影响排版与绘制，不需要重读章节内容。
+  private setReaderTitleMode(value: number): void {
+    this.readerTitleMode = Math.max(0, Math.min(2, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleSize(value: number): void {
+    this.readerTitleSize = Math.max(0, Math.min(100, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleSizeRelative(relative: boolean): void {
+    this.readerTitleSizeRelative = relative;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleSpacing(top: number, bottom: number): void {
+    this.readerTitleTopSpacing = Math.max(0, Math.min(100, Math.round(top)));
+    this.readerTitleBottomSpacing = Math.max(0, Math.min(100, Math.round(bottom)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleColor(value: string, night: boolean): void {
+    if (night) { this.readerTitleColorNight = value; } else { this.readerTitleColor = value; }
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleBold(value: number): void {
+    this.readerTitleBold = Math.max(0, Math.min(900, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleLineSpacing(extra: number, sub: number): void {
+    this.readerTitleLineSpacingExtra = Math.max(0, Math.min(20, Math.round(extra)));
+    this.readerTitleLineSpacingSub = Math.max(0, Math.min(20, Math.round(sub)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleSegScaling(value: number): void {
+    // 上游 titleSegScaling 负值非法回落 1、上限 2（ReadBookConfig.kt:283-286）。
+    this.readerTitleSegScaling = value < 0 ? 1 : Math.max(1, Math.min(2, value));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleSegType(value: number): void {
+    this.readerTitleSegType = Math.max(0, Math.min(3, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleSegDistance(value: number): void {
+    this.readerTitleSegDistance = Math.max(0, Math.min(100, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderTitleSegFlag(value: string): void {
+    this.readerTitleSegFlag = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
   private setReaderMaxLengthWithNoToc(value: number): void {
     this.readerMaxLengthWithNoToc = Math.max(3000, Math.min(100000, Math.round(value)));
     this.readerSettingsRevision += 1;
@@ -2626,6 +2728,20 @@ struct Index {
       this.readerBgAlpha = result.settings.bgAlpha;
       this.readerDarkStatusIcon = result.settings.darkStatusIcon;
       this.readerDarkStatusIconNight = result.settings.darkStatusIconNight;
+      this.readerTitleMode = result.settings.titleMode;
+      this.readerTitleSize = result.settings.titleSize;
+      this.readerTitleSizeRelative = result.settings.titleSizeRelative;
+      this.readerTitleTopSpacing = result.settings.titleTopSpacing;
+      this.readerTitleBottomSpacing = result.settings.titleBottomSpacing;
+      this.readerTitleColor = result.settings.titleColor;
+      this.readerTitleColorNight = result.settings.titleColorNight;
+      this.readerTitleBold = result.settings.titleBold;
+      this.readerTitleLineSpacingExtra = result.settings.titleLineSpacingExtra;
+      this.readerTitleLineSpacingSub = result.settings.titleLineSpacingSub;
+      this.readerTitleSegType = result.settings.titleSegType;
+      this.readerTitleSegScaling = result.settings.titleSegScaling;
+      this.readerTitleSegDistance = result.settings.titleSegDistance;
+      this.readerTitleSegFlag = result.settings.titleSegFlag;
       BookRepository.setChineseConverterType(result.settings.chineseConverterType);
       ReplaceRuleRepository.setChineseConverterType(result.settings.chineseConverterType);
       this.readerPageTouchSlop = result.settings.pageTouchSlop;
@@ -3882,6 +3998,21 @@ struct Index {
             textAccentColor: this.getTextAccentColorSetting(),
             readerBackgroundImage: this.getReaderBackgroundImage(),
             backgroundAlpha: this.readerBgAlpha,
+            // 标题排版十四个字段（上游 ReadBookConfig.kt:596-608）。
+            titleMode: this.readerTitleMode,
+            titleSize: this.readerTitleSize,
+            titleSizeRelative: this.readerTitleSizeRelative,
+            titleTopSpacing: this.readerTitleTopSpacing,
+            titleBottomSpacing: this.readerTitleBottomSpacing,
+            titleColor: this.readerTitleColor,
+            titleColorNight: this.readerTitleColorNight,
+            titleBold: this.readerTitleBold,
+            titleLineSpacingExtra: this.readerTitleLineSpacingExtra,
+            titleLineSpacingSub: this.readerTitleLineSpacingSub,
+            titleSegType: this.readerTitleSegType,
+            titleSegScaling: this.readerTitleSegScaling,
+            titleSegDistance: this.readerTitleSegDistance,
+            titleSegFlag: this.readerTitleSegFlag,
             darkStatusIcon: this.getDarkStatusIconSetting(),
             readerNightMode: this.readerNightMode,
             eyeProtectionActive: this.isEyeProtectionActive(),
@@ -4114,6 +4245,20 @@ struct Index {
               bgAlpha: this.readerBgAlpha,
               darkStatusIcon: this.readerDarkStatusIcon,
               darkStatusIconNight: this.readerDarkStatusIconNight,
+              titleMode: this.readerTitleMode,
+              titleSize: this.readerTitleSize,
+              titleSizeRelative: this.readerTitleSizeRelative,
+              titleTopSpacing: this.readerTitleTopSpacing,
+              titleBottomSpacing: this.readerTitleBottomSpacing,
+              titleColor: this.readerTitleColor,
+              titleColorNight: this.readerTitleColorNight,
+              titleBold: this.readerTitleBold,
+              titleLineSpacingExtra: this.readerTitleLineSpacingExtra,
+              titleLineSpacingSub: this.readerTitleLineSpacingSub,
+              titleSegType: this.readerTitleSegType,
+              titleSegScaling: this.readerTitleSegScaling,
+              titleSegDistance: this.readerTitleSegDistance,
+              titleSegFlag: this.readerTitleSegFlag,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -4121,6 +4266,17 @@ struct Index {
               onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
               onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
               onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
+              onTitleModeChange: (value: number) => this.setReaderTitleMode(value),
+              onTitleSizeChange: (value: number) => this.setReaderTitleSize(value),
+              onTitleSizeRelativeChange: (relative: boolean) => this.setReaderTitleSizeRelative(relative),
+              onTitleSpacingChange: (top: number, bottom: number) => this.setReaderTitleSpacing(top, bottom),
+              onTitleColorChange: (value: string, night: boolean) => this.setReaderTitleColor(value, night),
+              onTitleBoldChange: (value: number) => this.setReaderTitleBold(value),
+              onTitleLineSpacingChange: (extra: number, sub: number) => this.setReaderTitleLineSpacing(extra, sub),
+              onTitleSegTypeChange: (value: number) => this.setReaderTitleSegType(value),
+              onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
+              onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
+              onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
               clickRegionActions: this.readerClickRegionActions,
               onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4451,6 +4607,20 @@ struct Index {
               bgAlpha: this.readerBgAlpha,
               darkStatusIcon: this.readerDarkStatusIcon,
               darkStatusIconNight: this.readerDarkStatusIconNight,
+              titleMode: this.readerTitleMode,
+              titleSize: this.readerTitleSize,
+              titleSizeRelative: this.readerTitleSizeRelative,
+              titleTopSpacing: this.readerTitleTopSpacing,
+              titleBottomSpacing: this.readerTitleBottomSpacing,
+              titleColor: this.readerTitleColor,
+              titleColorNight: this.readerTitleColorNight,
+              titleBold: this.readerTitleBold,
+              titleLineSpacingExtra: this.readerTitleLineSpacingExtra,
+              titleLineSpacingSub: this.readerTitleLineSpacingSub,
+              titleSegType: this.readerTitleSegType,
+              titleSegScaling: this.readerTitleSegScaling,
+              titleSegDistance: this.readerTitleSegDistance,
+              titleSegFlag: this.readerTitleSegFlag,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -4458,6 +4628,17 @@ struct Index {
               onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
               onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
               onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
+              onTitleModeChange: (value: number) => this.setReaderTitleMode(value),
+              onTitleSizeChange: (value: number) => this.setReaderTitleSize(value),
+              onTitleSizeRelativeChange: (relative: boolean) => this.setReaderTitleSizeRelative(relative),
+              onTitleSpacingChange: (top: number, bottom: number) => this.setReaderTitleSpacing(top, bottom),
+              onTitleColorChange: (value: string, night: boolean) => this.setReaderTitleColor(value, night),
+              onTitleBoldChange: (value: number) => this.setReaderTitleBold(value),
+              onTitleLineSpacingChange: (extra: number, sub: number) => this.setReaderTitleLineSpacing(extra, sub),
+              onTitleSegTypeChange: (value: number) => this.setReaderTitleSegType(value),
+              onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
+              onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
+              onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4653,6 +4834,20 @@ struct Index {
               bgAlpha: this.readerBgAlpha,
               darkStatusIcon: this.readerDarkStatusIcon,
               darkStatusIconNight: this.readerDarkStatusIconNight,
+              titleMode: this.readerTitleMode,
+              titleSize: this.readerTitleSize,
+              titleSizeRelative: this.readerTitleSizeRelative,
+              titleTopSpacing: this.readerTitleTopSpacing,
+              titleBottomSpacing: this.readerTitleBottomSpacing,
+              titleColor: this.readerTitleColor,
+              titleColorNight: this.readerTitleColorNight,
+              titleBold: this.readerTitleBold,
+              titleLineSpacingExtra: this.readerTitleLineSpacingExtra,
+              titleLineSpacingSub: this.readerTitleLineSpacingSub,
+              titleSegType: this.readerTitleSegType,
+              titleSegScaling: this.readerTitleSegScaling,
+              titleSegDistance: this.readerTitleSegDistance,
+              titleSegFlag: this.readerTitleSegFlag,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -4660,6 +4855,17 @@ struct Index {
               onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
               onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
               onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
+              onTitleModeChange: (value: number) => this.setReaderTitleMode(value),
+              onTitleSizeChange: (value: number) => this.setReaderTitleSize(value),
+              onTitleSizeRelativeChange: (relative: boolean) => this.setReaderTitleSizeRelative(relative),
+              onTitleSpacingChange: (top: number, bottom: number) => this.setReaderTitleSpacing(top, bottom),
+              onTitleColorChange: (value: string, night: boolean) => this.setReaderTitleColor(value, night),
+              onTitleBoldChange: (value: number) => this.setReaderTitleBold(value),
+              onTitleLineSpacingChange: (extra: number, sub: number) => this.setReaderTitleLineSpacing(extra, sub),
+              onTitleSegTypeChange: (value: number) => this.setReaderTitleSegType(value),
+              onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
+              onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
+              onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4797,6 +5003,20 @@ struct Index {
               bgAlpha: this.readerBgAlpha,
               darkStatusIcon: this.readerDarkStatusIcon,
               darkStatusIconNight: this.readerDarkStatusIconNight,
+              titleMode: this.readerTitleMode,
+              titleSize: this.readerTitleSize,
+              titleSizeRelative: this.readerTitleSizeRelative,
+              titleTopSpacing: this.readerTitleTopSpacing,
+              titleBottomSpacing: this.readerTitleBottomSpacing,
+              titleColor: this.readerTitleColor,
+              titleColorNight: this.readerTitleColorNight,
+              titleBold: this.readerTitleBold,
+              titleLineSpacingExtra: this.readerTitleLineSpacingExtra,
+              titleLineSpacingSub: this.readerTitleLineSpacingSub,
+              titleSegType: this.readerTitleSegType,
+              titleSegScaling: this.readerTitleSegScaling,
+              titleSegDistance: this.readerTitleSegDistance,
+              titleSegFlag: this.readerTitleSegFlag,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -4804,6 +5024,17 @@ struct Index {
               onBgAlphaChange: (value: number) => this.setReaderBgAlpha(value),
               onDarkStatusIconChange: (enabled: boolean, night: boolean) => this.setReaderDarkStatusIcon(enabled, night),
               onPickBackgroundImage: (night: boolean): void => { this.pickReaderBackgroundImage(night); },
+              onTitleModeChange: (value: number) => this.setReaderTitleMode(value),
+              onTitleSizeChange: (value: number) => this.setReaderTitleSize(value),
+              onTitleSizeRelativeChange: (relative: boolean) => this.setReaderTitleSizeRelative(relative),
+              onTitleSpacingChange: (top: number, bottom: number) => this.setReaderTitleSpacing(top, bottom),
+              onTitleColorChange: (value: string, night: boolean) => this.setReaderTitleColor(value, night),
+              onTitleBoldChange: (value: number) => this.setReaderTitleBold(value),
+              onTitleLineSpacingChange: (extra: number, sub: number) => this.setReaderTitleLineSpacing(extra, sub),
+              onTitleSegTypeChange: (value: number) => this.setReaderTitleSegType(value),
+              onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
+              onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
+              onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
           clickRegionActions: this.readerClickRegionActions,
           onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),

@@ -305,6 +305,42 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-C4 标题排版十四项（通过）
+
+1. 设备与构建：HOS 模拟器 `127.0.0.1:5555`（Mate 90 Pro，1280×2832），`io.legado.harmony`。
+   `assembleHap` 通过两次（修 UI 缺陷中各一次）：`BUILD SUCCESSFUL in 21 s 876 ms`、`BUILD SUCCESSFUL in 22 s 102 ms`，
+   均 33 项任务 17 执行 / 16 最新，`WARN: No signingConfig found for product default`（既有，不影响安装）。
+2. 面板上屏：设置 → 阅读界面 →「排版」→「标题」tab，14 组控件全部可读到：标题位置（居左显示/居中显示/隐藏标题）、
+   标题字号（正文 + 4）、字号相对正文开关、标题上间距、标题下间距、标题字重（纤细/常规/中等/粗体/特粗）、
+   标题行距、标题副项行距、日间标题颜色、夜间标题颜色、标题颜色跟随正文、标题分段（不分段/按字数/按分隔符/按正则）、
+   分段字数、副标题字号比例。
+3. 落库（偏好文件 `/data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_reader_settings`）：
+   点「居中显示」→ `titleMode=1.000000`；点「纤细」→ `titleBold=300.000000`；
+   点日间色板第 4 颗（`#FFFFFF`）→ `titleColor=#FFFFFF`，面板标签同步变「日间标题颜色（#FFFFFF）」；
+   点「按字数」→ `titleSegType=1.000000` 且联动出现「分段字数」行（`titleSegDistance=4`、`titleSegScaling=1`、`titleSegFlag` 空串）。
+4. 渲染决定性证据（正反对照）：`titleSegType=1`（按 4 字分段）时 `uitest dumpLayout` 读到**两个独立 Text 节点**
+   「第二章」`[56,157][1224,342]` 与「乙」`[56,342][1224,527]`，且都居中；把 `titleSegType` 改回 `0` 重进同一章，
+   变成**单个**「第二章 乙」`[56,157][1224,342]`（高度从两行收回一行）。反向对照排除巧合。
+5. 隐藏标题：`titleMode=2` 时正文直接从 `[56,157]` 开始（正是原先标题所在位置），标题节点完全不存在，
+   标题页也不再单独占一页（分页判定改走 `isReaderTitleVisible()`）。
+6. 标题颜色决定性证据：夜间模式下注入 `titleColorNight=#FF8C00`，截图像素统计得**标题区（y 120–400）橙色像素 6153 个、
+   整页也是 6153 个**——所有橙色都落在标题区内，正文零橙色。改回默认后标题恢复正文色。
+7. 本轮修掉两个真实缺陷（都由设备验收暴露，非臆测）：
+   - 「标题」tab 内容超出屏幕且**不能滚动**：面板容器 `.width('88%').height('86%')` 而标题 tab 有 14 组控件，
+     底部被裁到屏外，`dumpLayout` 里该分支没有任何 `scrollable: true` 的 `Scroll`。
+     上游 `ui/book/read/sheet/TypographyTabs.kt` 的标题页在可滚动容器内，本地没有 → 属真实缺失。
+     修法：该分支外包 `Scroll(){ … }.width('100%').layoutWeight(1).scrollBar(BarState.Off)`，改后 dump 出现
+     `Scroll [77,679][1203,2552]`，滚到底可读到末尾说明文字。
+   - 选项行选中态**不刷新**：`TitleChoiceRow` 的 `ForEach` key 生成函数不含 `selectedIndex`，数组内容不变时
+     ForEach 判定无需更新 → 子项不重建 → 按钮高亮与右侧标签都停在旧值（偏好文件已落库，界面却显示旧值，
+     极易被误判成「改了没生效」）。连续两次 `dumpLayout` 的 json md5 完全相同可佐证。
+     修法：key 改为 `` `${title}-${index}-${label}-${selectedIndex}` ``；改后复查截图确认高亮与右侧标签同步。
+8. 取证方法备忘：`uitest dumpLayout` 的 json 内中文为 GBK 乱码，须用 python 以 `encoding='utf-8'` 读入后落文件再看；
+   判断「按钮是否高亮」**不能靠 dump**（dump 只给文本与 bounds，无颜色），须 `snapshot_display` 截图 + PIL 裁剪 + 读图。
+   滚动后布局整体上移，每次点击前必须重新 dump 取当前 bounds。
+9. 测试期写入的 14 个 `title*` 键已全部复原（验收后偏好文件里 0 个 `title*` 键，回到默认值）。
+10. 只代表 N 端模拟器结果，不替代真机与其它设备形态。
+
 ## 2026-10-31 N 端 KI-C1/KI-C2 正文颜色与自定义背景（通过，背景图片渲染未验）
 
 1. **设备与构建**：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），`assembleHap` → `BUILD SUCCESSFUL in 32 s 579 ms`（33 任务 17 执行 / 16 最新），HAP 覆盖安装 `install bundle successfully`。

@@ -13,6 +13,7 @@ import { BookContentProcessRepository } from '../data/BookContentProcessReposito
 import { BookContentProcess } from '../model/BookContentProcess';
 import { ReaderFontRepository } from '../data/ReaderFontRepository';
 import { LocalSemanticDocument, LocalTextSemantics } from '../data/LocalTextSemantics';
+import { ReaderTitleSegment, segmentReaderTitle } from '../data/ReaderTitleSegmentation';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
@@ -140,6 +141,22 @@ export struct ReaderPage {
   @Prop @Watch('onPaginationInputsChanged') systemTypefaces: number = 0;
   @Prop @Watch('onPaginationInputsChanged') textItalic: boolean = false;
   @Prop @Watch('onPaginationInputsChanged') textBold: number = 500;
+  // 标题排版十四个字段，对齐上游 help/config/ReadBookConfig.kt:596-608。
+  // 全部进分页输入，改标题样式要重算分页（上游 titleStyle 参与排版度量）。
+  @Prop @Watch('onPaginationInputsChanged') titleMode: number = 0;
+  @Prop @Watch('onPaginationInputsChanged') titleSize: number = 4;
+  @Prop @Watch('onPaginationInputsChanged') titleSizeRelative: boolean = true;
+  @Prop @Watch('onPaginationInputsChanged') titleTopSpacing: number = 0;
+  @Prop @Watch('onPaginationInputsChanged') titleBottomSpacing: number = 0;
+  @Prop titleColor: string = '';
+  @Prop titleColorNight: string = '';
+  @Prop @Watch('onPaginationInputsChanged') titleBold: number = 500;
+  @Prop @Watch('onPaginationInputsChanged') titleLineSpacingExtra: number = 12;
+  @Prop @Watch('onPaginationInputsChanged') titleLineSpacingSub: number = 12;
+  @Prop @Watch('onPaginationInputsChanged') titleSegType: number = 0;
+  @Prop @Watch('onPaginationInputsChanged') titleSegScaling: number = 1;
+  @Prop @Watch('onPaginationInputsChanged') titleSegDistance: number = 4;
+  @Prop @Watch('onPaginationInputsChanged') titleSegFlag: string = '';
   @Prop textShadow: boolean = false;
   @Prop shadowRadius: number = 16;
   @Prop shadowDx: number = 1;
@@ -898,14 +915,9 @@ export struct ReaderPage {
         }
       }
     }
-    const titleSize = this.fontSize + 4;
-    const titleWidth = ReaderFontRepository.measureTextWidth(
-      context, this.displayChapterTitle, this.readerTitleFontFamily, titleSize) +
-      this.getReaderTextLetterSpacingWidth(this.displayChapterTitle, titleSize);
-    const titleLineHeight = ReaderFontRepository.measureLineHeight(
-      context, this.readerTitleFontFamily, titleSize);
-    const titleLines = this.displayChapterTitle.length > 0 ? Math.max(1, Math.ceil(titleWidth / width)) : 0;
-    const titleReservedLines = Math.ceil((titleLines * titleLineHeight + 12) / lineHeight);
+    // 标题占位按实际配置算：字号走 resolveTitleSizeFp，间距走 titleTopSpacing/titleBottomSpacing，
+    // 分段标题逐段累加（对齐上游 LegacyReaderPaginationStyleFactory 的标题样式与分段块）。
+    const titleReservedLines = this.measureTitleReservedLines(context, width, lineHeight);
     const paginatedPages = LocalReaderPaginator.paginate(
       document,
       width,
@@ -925,7 +937,7 @@ export struct ReaderPage {
       this.textFullJustify
     );
     const nextPages: LocalReaderPage[] = [];
-    const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.displayChapterTitle.length > 0;
+    const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible();
     if (titlePageInserted) {
       nextPages.push({ lines: [], startPosition: 0, endPosition: 0, titleOnly: true });
     }
@@ -1724,12 +1736,7 @@ export struct ReaderPage {
       const document = LocalTextSemantics.parse(chapterContent, this.paragraphIndent);
       await cacheDocumentGlyphWidths(document);
       await this.loadImageSizesForDocument(document, imageSizes);
-      const titleSize = this.fontSize + 4;
-      const titleWidth = ReaderFontRepository.measureTextWidth(
-        context, displayTitle, this.readerTitleFontFamily, titleSize) +
-        this.getReaderTextLetterSpacingWidth(displayTitle, titleSize);
-      const titleLines = displayTitle.length > 0 ? Math.max(1, Math.ceil(titleWidth / width)) : 0;
-      const titleReservedLines = Math.ceil((titleLines * (this.fontSize + 4) * 1.25 + 12) / lineHeight);
+      const titleReservedLines = this.measureTitleReservedLines(context, width, lineHeight, displayTitle);
       const pageCount = chapterIndex === this.getChapterIndex() && this.localReaderPages.length > 0
         ? this.localReaderPages.length
         : await LocalReaderPaginator.countPagesIncrementally(
@@ -1745,7 +1752,8 @@ export struct ReaderPage {
           inlineImageWidth,
           this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines
         );
-      const titlePageCount = this.activeImageStyle === 'SINGLE' && displayTitle.length > 0 ? 1 : 0;
+      // titleMode 为 2 时标题整块隐藏，上游也不为它单独留一页。
+      const titlePageCount = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible() && displayTitle.length > 0 ? 1 : 0;
       pageCounts.push(pageCount + titlePageCount);
       return true;
     });
@@ -2123,6 +2131,135 @@ export struct ReaderPage {
     if (this.textBold === 1) { return 900; }
     if (this.textBold === 2) { return 300; }
     return Math.max(100, Math.min(900, this.textBold));
+  }
+
+  /**
+   * 标题字号（fp），对齐上游 ReadBookConfig.kt:669-676：
+   * 相对模式 = 正文字号 + titleSize，绝对模式 = titleSize，两者都至少 1。
+   */
+  private resolveTitleSizeFp(): number {
+    const resolved = this.titleSizeRelative ? this.fontSize + this.titleSize : this.titleSize;
+    return Math.max(1, resolved);
+  }
+
+  /**
+   * 标题字重，对齐上游 LegacyReaderPaginationStyleFactory.kt:113-119 的 resolveWeight：
+   * 1 → 900、2 → 300、100..900 原值、其余（含默认 500）→ 400。
+   */
+  private resolveTitleWeight(): number {
+    if (this.titleBold === 1) { return 900; }
+    if (this.titleBold === 2) { return 300; }
+    if (this.titleBold >= 100 && this.titleBold <= 900) { return this.titleBold; }
+    return 400;
+  }
+
+  /** 标题颜色：配置为空串表示未设置，回落正文色（上游 resolvedTitleColor 取 0 时同理）。 */
+  private resolveTitleColor(): string {
+    const configured = this.readerNightMode ? this.titleColorNight : this.titleColor;
+    return configured.length > 0 ? configured : this.getReadingTextColor();
+  }
+
+  /** 标题对齐：0 居左、1 居中、2 隐藏（隐藏时不渲染，这里只处理前两种）。 */
+  private resolveTitleAlign(): TextAlign {
+    return this.titleMode === 1 ? TextAlign.Center : TextAlign.Start;
+  }
+
+  /** 标题上间距，上游 titleTopSpacing 按 dp 直接换算（LegacyReaderPaginationStyleFactory.kt:101）。 */
+  private resolveTitleTopSpacing(): number {
+    return Math.max(0, this.titleTopSpacing);
+  }
+
+  /** 标题下间距，上游 titleBottomSpacing 按 dp 直接换算。 */
+  private resolveTitleBottomSpacing(): number {
+    return Math.max(0, this.titleBottomSpacing);
+  }
+
+  /**
+   * 标题行距倍率，对齐上游 LegacyReaderPaginationStyleFactory.kt:98-101：
+   * titleLineSpacingExtra / 10 与 titleLineSpacingSub / 10 都是「行高的十分之几」。
+   * 首段用 Extra，副标题段用 Sub。
+   */
+  private resolveTitleLineSpacingFactor(isSubtitle: boolean): number {
+    const configured = isSubtitle ? this.titleLineSpacingSub : this.titleLineSpacingExtra;
+    return Math.max(0, configured) / 10;
+  }
+
+  /** 标题分段结果；titleSegType 为 0 时上游也走「整行为一段」，行为不变。 */
+  private resolveTitleSegments(): ReaderTitleSegment[] {
+    const title = this.displayChapterTitle;
+    if (title.length === 0) { return []; }
+    return segmentReaderTitle(title, {
+      type: this.titleSegType,
+      distance: this.titleSegDistance,
+      delimiter: this.titleSegFlag,
+      subtitleScale: this.titleSegScaling
+    });
+  }
+
+  /** 是否渲染标题：上游 titleMode 为 2 时整块隐藏（ReadBookConfig.kt:267）。 */
+  private isReaderTitleVisible(): boolean {
+    return this.titleMode !== 2 && this.displayChapterTitle.length > 0;
+  }
+
+  /**
+   * 标题渲染。按 titleSegType 切段后逐段渲染：首段用正常字号，副标题段按 titleSegScaling 缩放。
+   * 对齐上游 ReaderTitleSegmentation 的分段 + LegacyReaderPaginationStyleFactory 的标题样式。
+   */
+  @Builder
+  private ReaderTitleSegments(centered: boolean) {
+    if (this.isReaderTitleVisible()) {
+      Column() {
+        ForEach(this.resolveTitleSegments(), (segment: ReaderTitleSegment, index: number) => {
+          Text(segment.text)
+            .fontSize(Math.max(1, this.resolveTitleSizeFp() * segment.fontSizeScale))
+            .fontFamily(this.readerTitleFontFamily)
+            .letterSpacing(this.getReaderLetterSpacingFp(
+              Math.max(1, this.resolveTitleSizeFp() * segment.fontSizeScale)))
+            .fontWeight(this.resolveTitleWeight())
+            .fontColor(this.resolveTitleColor())
+            .width('100%')
+            .textAlign(centered ? TextAlign.Center : this.resolveTitleAlign())
+            .lineHeight(Math.max(1, this.resolveTitleSizeFp() * segment.fontSizeScale) *
+              (1 + this.resolveTitleLineSpacingFactor(segment.isSubtitle)))
+        }, (segment: ReaderTitleSegment, index: number) =>
+          `${this.readerContentRevision}-title-${index}-${segment.text}-${this.titleMode}-${this.titleColor}-${this.titleColorNight}`)
+      }
+      .width('100%')
+      .alignItems(centered ? HorizontalAlign.Center : this.titleMode === 1 ? HorizontalAlign.Center : HorizontalAlign.Start)
+      .padding({ top: this.resolveTitleTopSpacing(), bottom: this.resolveTitleBottomSpacing() })
+    }
+  }
+
+  /**
+   * 标题在分页时占多少行。逐段累加每段的行高（首段用 titleLineSpacingExtra，
+   * 副标题段用 titleLineSpacingSub），再加上下间距与段间距。
+   * 上游标题参与排版度量（LegacyReaderPaginationStyleFactory.kt:51-57），这里同口径。
+   */
+  private measureTitleReservedLines(context: UIContext, width: number, lineHeight: number,
+    title: string = this.displayChapterTitle): number {
+    // 标题不渲染（titleMode 为 2 或标题为空）时不占任何行高。
+    if (!this.isReaderTitleVisible() || title.length === 0) { return 0; }
+    const segments = segmentReaderTitle(title, {
+      type: this.titleSegType,
+      distance: this.titleSegDistance,
+      delimiter: this.titleSegFlag,
+      subtitleScale: this.titleSegScaling
+    });
+    const baseSize = this.resolveTitleSizeFp();
+    let total = 0;
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index] as ReaderTitleSegment;
+      const segmentSize = Math.max(1, baseSize * segment.fontSizeScale);
+      const segmentWidth = ReaderFontRepository.measureTextWidth(
+        context, segment.text, this.readerTitleFontFamily, segmentSize) +
+        this.getReaderTextLetterSpacingWidth(segment.text, segmentSize);
+      const baseHeight = ReaderFontRepository.measureLineHeight(
+        context, this.readerTitleFontFamily, segmentSize);
+      const spacedHeight = baseHeight * (1 + this.resolveTitleLineSpacingFactor(segment.isSubtitle));
+      const lines = Math.max(1, Math.ceil(segmentWidth / Math.max(1, width)));
+      total += lines * spacedHeight;
+    }
+    return Math.ceil((total + this.titleTopSpacing + this.titleBottomSpacing) / lineHeight);
   }
 
   private getReaderShadowColor(): string {
@@ -2963,25 +3100,15 @@ export struct ReaderPage {
           Column() {
             if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
             if (this.localReaderPages[this.currentPageIndex]?.titleOnly === true) {
-              Blank().layoutWeight(1)
-              Text(this.displayChapterTitle)
-                .fontSize(this.fontSize + 4)
-                .fontFamily(this.readerTitleFontFamily)
-                .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize + 4))
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.getReadingTextColor())
-                .width('100%')
-                .textAlign(TextAlign.Center)
-              Blank().layoutWeight(1)
+              // 独立的标题页：上游这里垂直居中，对齐方式仍按 titleMode 走。
+              Column() {
+                this.ReaderTitleSegments(true)
+              }
+              .width('100%')
+              .layoutWeight(1)
+              .justifyContent(FlexAlign.Center)
             } else if (this.currentPageIndex === 0) {
-              Text(this.displayChapterTitle)
-                .fontSize(this.fontSize + 4)
-                .fontFamily(this.readerTitleFontFamily)
-                .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize + 4))
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.getReadingTextColor())
-                .width('100%')
-                .margin({ bottom: 24 })
+              this.ReaderTitleSegments(false)
             }
             if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
               this.ReaderPageTextLines()
@@ -3051,14 +3178,7 @@ export struct ReaderPage {
       Scroll(this.readerScroller) {
         Column() {
           if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
-          Text(this.displayChapterTitle)
-            .fontSize(this.fontSize + 4)
-            .fontFamily(this.readerTitleFontFamily)
-            .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize + 4))
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.getReadingTextColor())
-            .width('100%')
-            .margin({ bottom: 24 })
+          this.ReaderTitleSegments(false)
           ForEach(this.getReaderContentSegments(), (segment: ReaderContentSegment, index: number) => {
             if (segment.kind === 'image') {
               if (this.imageSizes.has(segment.value)) {

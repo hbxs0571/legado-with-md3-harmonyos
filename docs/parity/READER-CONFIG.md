@@ -51,22 +51,23 @@
 | --- | --- | --- | --- | --- |
 | A 阅读界面基础 | 37 | 16 | 19 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
-| C 正文排版 | 49 | 30 | 19 | 0 |
+| C 正文排版 | 49 | 44 | 5 | 0 |
 | D 翻页与手势交互 | 20 | 13 | 7 | 0 |
 | E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 102 | 85 | 2 |
+| 合计 | 189 | 116 | 71 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 85 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 71 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 > 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
 > 2026-10-31 KI-A7 落库：A 块「阅读进度条触感反馈」（`sliderVibrator`）与「文字选择触感反馈」（`selectVibrator`）两条由 `未接` 改 `已接`，A 块 21 未接 → 19 未接，全表 94 → 92。其中 `sliderVibrator` 上游 UI 侧无消费点（只有设置项与落库），按「上游没有就不要这个效果」本地只做可配+落库+随备份，不给进度条加振动。
 > 2026-10-31 KI-C5 落库：C 块「繁简转换」（`chineseConverterType`）由 `未接` 改 `已接`，C 块 26 未接 → 25 未接，全表 92 → 91。上游用 `quick-chinese-transfer` 字表，本地改用系统 ICU 的 `i18n.Transliterator`（`Traditional-Simplified` / `Simplified-Traditional`），正文与章节标题两处应用点都接上了；设备实测选「简体转繁体」后正文与标题同时变繁体，改回关闭恢复简体。
 > 2026-10-31 KI-C1/KI-C2 落库：C 块「正文日间颜色」「正文夜间颜色」「正文强调色」「背景透明度」「背景颜色/图片」「白天是否暗色状态栏」六条由 `未接` 改 `已接`，C 块 25 未接 → 19 未接，全表 91 → 85。两组必须一并做（`textColor` 与自定义 `bgStr` 必须同源，否则会出现「纸色六方案、文字色任意色」的错配）。上游 `textAccentColor` 的真实消费点是链接、搜索结果与朗读中段落（`ReaderCanvasSurface.kt:2997`），本地这三条路径都还没有（搜索只切路由、朗读未迁移），按「上游没有就不要这个效果」只做可配+落库+随备份，不发明新着色；`bgAlpha` 与上游一致只作用于背景图片。
+> 2026-10-31 KI-C4 落库：C 块标题排版十四项（`titleMode`、`titleSize`、`titleSizeRelative`、`titleTopSpacing`、`titleBottomSpacing`、`titleColor`、`titleColorNight`、`titleBold`、`titleLineSpacingExtra`、`titleLineSpacingSub`、`titleSegType`、`titleSegScaling`、`titleSegDistance`、`titleSegFlag`）全部由 `未接` 改 `已接`，C 块 19 未接 → 5 未接，全表 85 → 71。原先 9 处硬编码 `this.fontSize + 4` 与两处 `.margin({ bottom: 24 })` 全部清除，标题样式统一走 `ReaderPage.ets` 的 `resolveTitle*()` 系列方法与 `measureTitleReservedLines()`，因此改字号、字距、间距、分段都会触发章节页数重算。标题分段移植为独立模块 `entry/src/main/ets/data/ReaderTitleSegmentation.ets`（109 行），渲染与分页度量共用同一份切段结果。设备验收顺带修掉两个真实缺陷：① 排版面板「标题」tab 内容超出屏幕且不可滚动（缺少上游 `TypographyTabs.kt` 那样的可滚动容器）；② 分段/标题位置选项行的 `ForEach` key 不含选中项，导致点选后高亮与右侧标签都不刷新（偏好文件已落库，界面却显示旧值）。
 
 ## A 阅读界面基础
 
@@ -183,20 +184,20 @@
 | 下划线延伸 | `ReadBookConfig.kt:325` | — | 未接 | 上游 `underlineExtend`，仓储无字段 | 开关后下划线延伸到页边 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
 | 自定义虚线长度基准 | `ReadBookConfig.kt:331` | — | 未接 | 上游 `dottedBase` 默认 6f，仓储无字段 | 调基准后虚线每段变长 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
 | 自定义虚线间隔比例 | `ReadBookConfig.kt:334` | — | 未接 | 上游 `dottedRatio` 默认 6f，仓储无字段 | 调比例后虚线间隔变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
-| 标题位置模式 | `ReadBookConfig.kt:267` | — | 未接 | 上游三值：居左/居中/隐藏；本地 `ReaderPage.ets:824` 固定按左对齐绘制 | 切「居中」后标题居中 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题字号 | `ReadBookConfig.kt:269` | — | 未接 | 上游 `titleSize` 有绝对值/相对正文两模式（`isTitleSizeRelative()`，`:660-668`）；本地无字段，改为 9 处硬编码 `this.fontSize + 4`：`ReaderPage.ets:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943` | 改标题字号后标题字变大 | 相对偏移量固定为 4，不可配置；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题字号是否相对正文 | `ReadBookConfig.kt:270` | — | 未接 | 上游 `titleSizeRelative` 为三态（null/true/false），本地无字段亦无 UI | 切绝对模式后标题不随正文字号变 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题上间距 | `ReadBookConfig.kt:298` | — | 未接 | 上游 `titleTopSpacing` 默认 0 | 调上间距后标题上方空白变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题下间距 | `ReadBookConfig.kt:301` | — | 未接 | 上游 `titleBottomSpacing` 默认 0 | 调下间距后标题下方空白变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题日间颜色 | `ReadBookConfig.kt:304` | — | 未接 | 上游 `titleColor` 默认 0（跟随正文） | 改色后标题变色 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题夜间颜色 | `ReadBookConfig.kt:307` | — | 未接 | 上游 `titleColorNight` 默认 0 | 切夜间后标题取该值 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题字重 | `ReadBookConfig.kt:228` | — | 未接 | 上游 `titleBold` 独立于正文 `textBold` | 切标题粗体后标题加粗 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题行距 | `ReadBookConfig.kt:255` | — | 未接 | 上游 `titleLineSpacingExtra` 默认 12 | 调后标题多行时行间变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题行距子项 | `ReadBookConfig.kt:258` | — | 未接 | 上游 `titleLineSpacingSub` 默认 12 | 分段标题的第二段行距变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题分段模式 | `ReadBookConfig.kt:280` | — | 未接 | 上游 `titleSegType` 默认 0 | 开关后长标题按规则拆两段 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题分段缩放 | `ReadBookConfig.kt:283` | — | 未接 | 上游夹取 0–2，负值回落 1 | 调比例后第二段字号变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题分段起始位置 | `ReadBookConfig.kt:287` | — | 未接 | 上游 `titleSegDistance` 默认 4 | 调值后分段切点前移/后移 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 标题分段识别字符 | `ReadBookConfig.kt:290` | — | 未接 | 上游 `titleSegFlag` 默认空串 | 填入字符后在该处拆段 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题位置模式 | `ReadBookConfig.kt:267` | `ReaderSettingsRepository.ets:255`、`ReaderPage.ets:2163`、`ReaderPage.ets:2200` | 已接 | 上游三值 `titleMode`：0 居左 / 1 居中 / 2 隐藏（`ReadBookConfig.kt:267`）。本地同名落地，`resolveTitleAlign()` 决定对齐、`isReaderTitleVisible()` 决定是否绘制与是否单占标题页；界面 `ReaderSettingsPage.ets:360` 三选一。 | 设「居中显示」后标题居中；设「隐藏标题」后标题整块消失且不再单独占页 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题字号 | `ReadBookConfig.kt:269` | `ReaderSettingsRepository.ets:260`、`ReaderPage.ets:2140` | 已接 | 上游 `titleSize` 支持「相对正文偏移」与「绝对 sp」两模式（`ReadBookConfig.kt:669-676`）。本地同名落地，`resolveTitleSizeFp()` 统一解析；原先 9 处硬编码 `this.fontSize + 4` 已全部清除。 | 改标题字号后标题字变大，且章节页数随之重算 | 默认 4 + 相对模式，等价于原「正文 + 4」；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题字号是否相对正文 | `ReadBookConfig.kt:270` | `ReaderSettingsRepository.ets:266`、`ReaderPage.ets:2140` | 已接 | 上游 `titleSizeRelative` 为 `Boolean?`，null 时按旧约定 auto（`titleSize < 8` 视为相对）。本地存 `boolean` 并显式默认 `true`，等价于上游 null + 默认 4 的结果；界面 `ReaderSettingsPage.ets:369` 有「字号相对正文」开关并注明「关闭后按绝对号数显示」。 | 关闭后标题不随正文字号变化 | 上游 null 态用显式默认值等价覆盖；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题上间距 | `ReadBookConfig.kt:298` | `ReaderSettingsRepository.ets:268`、`ReaderPage.ets:2168` | 已接 | 上游 `titleTopSpacing` 默认 0，`LegacyReaderPaginationStyleFactory.kt:98-101` 用 `dpToPx()` 折算。本地同名落地，`resolveTitleTopSpacing()` 出值并进入分页度量。 | 调上间距后标题上方空白变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题下间距 | `ReadBookConfig.kt:301` | `ReaderSettingsRepository.ets:270`、`ReaderPage.ets:2173` | 已接 | 上游 `titleBottomSpacing` 默认 0；本地原先在两处标题处写死 `.margin({ bottom: 24 })`，已改由本字段承担。 | 调下间距后标题下方空白变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题日间颜色 | `ReadBookConfig.kt:304` | `ReaderSettingsRepository.ets:276`、`ReaderPage.ets:2157` | 已接 | 上游 `titleColor` 默认 0 表示未设置、回落正文色（`LegacyReaderPaginationStyleFactory.kt:52`）。本地存可选 `#RRGGBB`，空串即「跟随正文」，与上游 0 的语义一一对应；`resolveTitleColor()` 按日夜取值。 | 日间设色后标题变色、正文不变 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题夜间颜色 | `ReadBookConfig.kt:307` | `ReaderSettingsRepository.ets:277`、`ReaderPage.ets:2157` | 已接 | 上游 `titleColorNight` 默认 0。本地同名落地，`resolveTitleColor()` 在夜间取该值、空串回落正文色。 | 切夜间后标题取该值 | 设备实测：夜间模式注入 `#FF8C00` 后，标题区橙色像素 6153 个、整页也是 6153 个（正文零橙色）；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题字重 | `ReadBookConfig.kt:228` | `ReaderSettingsRepository.ets:279`、`ReaderPage.ets:2149` | 已接 | 上游 `titleBold` 独立于正文 `textBold`，口径 `resolveWeight()`：1→900、2→300、100..900 原值、其它→400（`LegacyReaderPaginationStyleFactory.kt:113-119`）。本地同名落地并照搬该口径，默认 500 按上游会落到 400。 | 切标题粗体后标题加粗 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题行距 | `ReadBookConfig.kt:255` | `ReaderSettingsRepository.ets:281`、`ReaderPage.ets:2182` | 已接 | 上游 `titleLineSpacingExtra` 默认 12，按十分之一行高参与排版（`LegacyReaderPaginationStyleFactory.kt:98-101`）。本地同名落地，`resolveTitleLineSpacingFactor()` 除以 10。 | 调后标题多行时行间变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题行距子项 | `ReadBookConfig.kt:258` | `ReaderSettingsRepository.ets:283`、`ReaderPage.ets:2182` | 已接 | 上游 `titleLineSpacingSub` 默认 12，只作用于分段后的副标题段。本地同名落地，`resolveTitleLineSpacingFactor(isSubtitle)` 按段落类型分取两值。 | 分段标题的第二段行距变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题分段模式 | `ReadBookConfig.kt:280` | `ReaderSettingsRepository.ets:285`、`ReaderPage.ets:2188`、`data/ReaderTitleSegmentation.ets` | 已接 | 上游 `titleSegType` 默认 0：0 不分段 / 1 按字数 / 2 按分隔符（逗号分隔多词）/ 3 按正则（`ReaderTitleSegmentation.kt` 全文 44 行）。本地移植同名模块 `ReaderTitleSegmentation.ets`（109 行），`segmentReaderTitle()` 输出分段数组，`resolveTitleSegments()` 供渲染与分页度量共用。 | 设「按字数」并给 4 后长标题拆成两段；改回「不分段」恢复单段 | 设备实测：分段时 dump 出两个独立 Text 节点（「第二章」+「乙」），改回不分段变成单个「第二章 乙」；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题分段缩放 | `ReadBookConfig.kt:283` | `ReaderSettingsRepository.ets:287`、`ReaderPage.ets:2188` | 已接 | 上游 `titleSegScaling` 默认 1f，负值非法回落 1、上限 2（`ReadBookConfig.kt:283-286`）。本地同名落地，`normalizeFraction(…, 1, 2, …)` 照搬该归一规则；界面为「副标题字号比例」滑块（1–2，步长 0.1）。 | 调比例后第二段字号变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题分段起始位置 | `ReadBookConfig.kt:287` | `ReaderSettingsRepository.ets:289`、`ReaderPage.ets:2188` | 已接 | 上游 `titleSegDistance` 默认 4，type=1 时作为切点字数；越界或非正时不分段。本地同名落地，`splitTitleLine()` 的 type 1 分支同口径。 | 调值后分段切点前移/后移 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
+| 标题分段识别字符 | `ReadBookConfig.kt:290` | `ReaderSettingsRepository.ets:291`、`ReaderPage.ets:2188` | 已接 | 上游 `titleSegFlag` 默认空串：type=2 时按逗号分词再转义成 `a|b|c` 的正则，type=3 时整串当正则，都构造零宽后行断言切分，构造失败回落整行。本地 `splitTitleLine()` 与 `escapeRegExp()` 同口径移植。 | 填入字符后在该处拆段 | 正则能力以 ArkTS 支持为限；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
 | 繁简转换 | `ReadSettings.kt:118` | `ReaderSettingsRepository.ets:222`、`ChineseTextConverter.ets` | 已接 | 上游三档 `chineseConverterType`（0 不转换 / 1 繁转简 / 2 简转繁），正文应用点在 `ContentProcessor.kt:161-171`、标题应用点在 `BookChapter.kt:103-116`。本地存储键 `chineseConverterType`，读 `ReaderSettingsRepository.ets:548`、写 `:885`；转换实现用系统 ICU 的 `i18n.Transliterator`（`Traditional-Simplified` / `Simplified-Traditional`），正文接入 `BookRepository.ets:1653`（净化之后）、标题接入 `ReplaceRuleRepository.ets:954`（替换规则之前）；设置项在排版面板「正文」页 `ReaderSettingsPage.ets:1403`，切换后 `Index.ets:2343` 重读当前章节 | 三档都能切换并落库；选「简体转繁体」后正文与章节标题同时变繁体（`第一卷 风起` → `第一卷 風起`、`这一段是占位正文` → `這一段是佔位正文`），改回「关闭简繁转换」后恢复简体。已实测（docs/VALIDATION.md 2026-10-31 KI-C5 节） | 上游用 `quick-chinese-transfer` 字表并带约 110 条 t2s 排除词，本地用 ICU 转换，个别词形可能有差异 |
 | 字体文件夹 | `ReadSettings.kt:79` | — | 未接 | 上游 `fontFolder` 指定扫描目录，本地只支持系统字体与内置字体 | 指定文件夹后出现自定义字体 | 本地 `systemTypefaces` 只覆盖系统字体枚举；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C6 |
 
@@ -314,7 +315,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（85 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（71 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -485,20 +486,20 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `titleMode` | 要接 | 居左/居中/隐藏三态，本地恒左对齐（KI-C4） |
-| `titleSize` | 要接 | 标题字号被 9 处 `fontSize + 4` 写死（KI-C4） |
-| `titleSizeRelative` | 要接 | 绝对/相对三态语义，本地无（KI-C4） |
-| `titleBold` | 要接 | 标题字重独立于正文（KI-C4） |
-| `titleColor` | 要接 | 标题日间颜色（KI-C4） |
-| `titleColorNight` | 要接 | 标题夜间颜色（KI-C4） |
-| `titleLineSpacingExtra` | 要接 | 标题行距默认 12（KI-C4） |
-| `titleLineSpacingSub` | 要接 | 分段标题第二段行距（KI-C4） |
-| `titleTopSpacing` | 要接 | 标题上间距（KI-C4） |
-| `titleBottomSpacing` | 要接 | 标题下间距（KI-C4） |
-| `titleSegType` | 要接 | 长标题分段模式（KI-C4） |
-| `titleSegScaling` | 要接 | 分段缩放夹 0–2（KI-C4） |
-| `titleSegDistance` | 要接 | 分段起始位置默认 4（KI-C4） |
-| `titleSegFlag` | 要接 | 分段识别字符（KI-C4） |
+| `titleMode` | 已接 | **KI-C4 已实现**（存储键 `titleMode`，三值 0/1/2；渲染 `ReaderPage.ets:2163`、`:2200`；面板 `ReaderSettingsPage.ets:360`） |
+| `titleSize` | 已接 | **KI-C4 已实现**（存储键 `titleSize`，默认 4；9 处 `fontSize + 4` 已清除，统一走 `ReaderPage.ets:2140`） |
+| `titleSizeRelative` | 已接 | **KI-C4 已实现**（存储键 `titleSizeRelative`，显式 boolean 默认 true，等价覆盖上游 null 态） |
+| `titleBold` | 已接 | **KI-C4 已实现**（存储键 `titleBold`，口径 `resolveWeight()` 照搬上游 `:113-119`；渲染 `ReaderPage.ets:2149`） |
+| `titleColor` | 已接 | **KI-C4 已实现**（存储键 `titleColor`，空串 = 跟随正文，对应上游默认 0；渲染 `ReaderPage.ets:2157`） |
+| `titleColorNight` | 已接 | **KI-C4 已实现**（存储键 `titleColorNight`；夜间实测注入 `#FF8C00` 后标题区橙色像素 6153 个、正文零橙色） |
+| `titleLineSpacingExtra` | 已接 | **KI-C4 已实现**（存储键 `titleLineSpacingExtra`，除以 10 作行高倍率，见 `ReaderPage.ets:2182`） |
+| `titleLineSpacingSub` | 已接 | **KI-C4 已实现**（存储键 `titleLineSpacingSub`，按 `isSubtitle` 分取两值） |
+| `titleTopSpacing` | 已接 | **KI-C4 已实现**（存储键 `titleTopSpacing`，参与分页度量 `measureTitleReservedLines()`） |
+| `titleBottomSpacing` | 已接 | **KI-C4 已实现**（存储键 `titleBottomSpacing`，取代原先写死的 `.margin({ bottom: 24 })`） |
+| `titleSegType` | 已接 | **KI-C4 已实现**（存储键 `titleSegType`；分段模块 `data/ReaderTitleSegmentation.ets`；设「按字数」后 dump 出两个独立 Text 节点） |
+| `titleSegScaling` | 已接 | **KI-C4 已实现**（存储键 `titleSegScaling`；`normalizeFraction(…,1,2,…)` 照搬上游负值回落 1 的规则） |
+| `titleSegDistance` | 已接 | **KI-C4 已实现**（存储键 `titleSegDistance`，type=1 时作切点字数） |
+| `titleSegFlag` | 已接 | **KI-C4 已实现**（存储键 `titleSegFlag`，type=2 按逗号分词转义、type=3 整串作正则） |
 
 #### 1.5.5 菜单颜色（14 项）：要接 10、不接 4
 
@@ -666,10 +667,10 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 盘点结论指向三个互不重叠的缺口，按收益排序：
 
 1. **E 块菜单外观 40 行未接**：全部有控件无持久化。所需字段都是纯 UI 参数（颜色、圆角、模糊半径、玻璃开关），不触碰渲染引擎与排版算法，是唯一可以整块推进的部分，字段明细见 1.3 的「菜单」与「标题栏与图标」各组。前置条件：先在 `ReaderSettingsRepository.ets` 补齐字段与 `save` 分支，再把 `ReaderSettingsPage.ets` 的 `@State` 改为读仓储。可照抄同块已接的两条（`bottomActions`/`topActions`，`ReaderSettingsRepository.ets:804-805`）的链路。
-2. **C 块标题排版 14 项**：需要同时改 `ReaderPage.ets` 的 9 处 `fontSize + 4` 硬编码（`:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`），并新增 `titleSizeRelative` 三态语义（上游回落规则见 `ReadBookConfig.kt:660-668`）。改动面比 E 块小但风险高，属排版视觉回归。
-3. **C 块正文与背景 6 行 + 下划线虚线 4 行**：正文与背景 6 行对应 11 个字段（正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2），下划线虚线 4 行对应 4 个字段，均为单点参数，适合随其它模块顺带补齐。其中**正文日/夜颜色（`ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码）优先做**——它是用户最容易察觉的「不能改字色」，且与背景预设（`READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:339-346`）天然配套。
+2. ~~**C 块标题排版 14 项**~~ —— **2026-10-31 KI-C4 已完成**。当初估计的改动面正确（9 处 `fontSize + 4` 硬编码确实全部清除，`titleSizeRelative` 用显式 `boolean` 默认 `true` 等价覆盖上游 null 态）。实际风险点不在取值而在两处 UI：面板缺少可滚动容器、`ForEach` key 不含选中项，两处都已修（详见本节末段与 `docs/VALIDATION.md` 的 KI-C4 节）。
+3. ~~**C 块正文与背景 6 行 + 下划线虚线 4 行**~~ —— **正文与背景 6 行已由 2026-10-31 KI-C1/KI-C2 完成**（11 个字段全部落库：正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2；`getReadingTextColor()` 的硬编码已改走 `textColor`/`textColorNight`，背景预设 `READER_BACKGROUND_STYLES` 降级为「自定义 `bgStr` 为空时的回退」）。**下划线虚线 4 行仍待办**（KI-C3）：ArkUI 的 `TextDecoration` 不开放虚线段长/偏移/延伸，需改自绘。
 
-三处阻塞共 40 + 14 + 4 = 58 行未接（明细表口径），占明细表 85 行未接的多数。余下 27 行分布在 A 块 19 行、C 块 1 行、D 块 7 行（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，故第 3 条阻塞项由 10 行缩到 4 行），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞里只剩第 1 条（E 块菜单外观 40 行）与 KI-C3 的下划线虚线 4 行，共 44 行未接（明细表口径）。A–G 明细表的 71 行未接分布为：E 块 40 行、A 块 19 行、D 块 7 行、C 块 5 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 

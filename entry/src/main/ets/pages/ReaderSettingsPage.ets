@@ -16,6 +16,8 @@ const READER_INFO_COLOR_VALUES: number[] = [0, -1, -16777216, -8355712, -65536, 
 const READER_INFO_COLOR_CHOICES: string[] = ['跟随正文', '白色', '黑色', '灰色', '红色', '绿色', '蓝色'];
 const CLICK_REGION_NAMES: string[] = ['左上', '上中', '右上', '左中', '中间', '右中', '左下', '下中', '右下'];
 const READER_BODY_WEIGHT_VALUES: number[] = [300, 400, 500, 700, 900];
+// 标题取色候选：正文用的八色之外补上深浅两端，「跟随正文」由单独一行入口负责（空串不能画成色块）。
+const READER_TITLE_COLORS: string[] = ['#38383B', '#000000', '#3C3F43', '#FFFFFF', '#D8D8DC', '#ADADAD', '#FF8C00', '#5A8DEE'];
 const READER_EFFECT_COLORS: string[] = [
   '#3E3D3B', '#ADADAD', '#FFFFFF', '#000000', '#FF8C00', '#5A8DEE', '#63C37D', '#DB4B4B'
 ];
@@ -144,6 +146,21 @@ export struct ReaderSettingsPage {
   @Prop bgAlpha: number = 100;
   @Prop darkStatusIcon: boolean = true;
   @Prop darkStatusIconNight: boolean = false;
+  // 标题排版十四个字段，对齐上游 help/config/ReadBookConfig.kt:596-608。
+  @Prop titleMode: number = 0;
+  @Prop titleSize: number = 4;
+  @Prop titleSizeRelative: boolean = true;
+  @Prop titleTopSpacing: number = 0;
+  @Prop titleBottomSpacing: number = 0;
+  @Prop titleColor: string = '';
+  @Prop titleColorNight: string = '';
+  @Prop titleBold: number = 500;
+  @Prop titleLineSpacingExtra: number = 12;
+  @Prop titleLineSpacingSub: number = 12;
+  @Prop titleSegType: number = 0;
+  @Prop titleSegScaling: number = 1;
+  @Prop titleSegDistance: number = 4;
+  @Prop titleSegFlag: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = READER_CLICK_REGION_DEFAULTS;
@@ -274,6 +291,17 @@ export struct ReaderSettingsPage {
   onBgAlphaChange: (value: number) => void = (_value: number) => {};
   onDarkStatusIconChange: (enabled: boolean, night: boolean) => void = (_enabled: boolean, _night: boolean) => {};
   onPickBackgroundImage: (night: boolean) => void = (_night: boolean) => {};
+  onTitleModeChange: (value: number) => void = (_value: number) => {};
+  onTitleSizeChange: (value: number) => void = (_value: number) => {};
+  onTitleSizeRelativeChange: (relative: boolean) => void = (_relative: boolean) => {};
+  onTitleSpacingChange: (top: number, bottom: number) => void = (_top: number, _bottom: number) => {};
+  onTitleColorChange: (value: string, night: boolean) => void = (_value: string, _night: boolean) => {};
+  onTitleBoldChange: (value: number) => void = (_value: number) => {};
+  onTitleLineSpacingChange: (extra: number, sub: number) => void = (_extra: number, _sub: number) => {};
+  onTitleSegTypeChange: (value: number) => void = (_value: number) => {};
+  onTitleSegScalingChange: (value: number) => void = (_value: number) => {};
+  onTitleSegDistanceChange: (value: number) => void = (_value: number) => {};
+  onTitleSegFlagChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
   private getBackgroundImageOf(night: boolean): string {
@@ -301,6 +329,115 @@ export struct ReaderSettingsPage {
           .onClick(() => this.onBackgroundImageChange('', night))
       }
     }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+  }
+
+  /** 三段式选择器：点一次弹一个内联选择条，选中就落库。标题的对齐与字重都用它。 */
+  @Builder
+  private TitleChoiceRow(title: string, choices: string[], selectedIndex: number, onSelect: (index: number) => void) {
+    Column() {
+      Row() {
+        Text(title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
+        Text(choices[selectedIndex] ?? choices[0] ?? '').fontSize(11).fontColor('#D3D4DC')
+      }.width('100%')
+      Row() {
+        ForEach(choices, (label: string, index: number) => {
+          Text(label).fontSize(11)
+            .fontColor(selectedIndex === index ? '#ECECF0' : '#B7B8C1')
+            .layoutWeight(1).textAlign(TextAlign.Center).padding(8)
+            .backgroundColor(selectedIndex === index ? '#454B62' : '#15161B').borderRadius(8)
+            .margin({ right: 4 })
+            .onClick(() => onSelect(index))
+        }, (label: string, index: number) => `${title}-${index}-${label}-${selectedIndex}`)
+      }.width('100%').margin({ top: 8 })
+    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+  }
+
+  /** 标题排版：十四个字段全部可配，对齐上游 TypographyTabs 的标题页。 */
+  @Builder
+  private TitleTypographySettings() {
+    Column() {
+      // 位置模式：0 居左 / 1 居中 / 2 隐藏（ReadBookConfig.kt:267）。
+      this.TitleChoiceRow('标题位置', ['居左显示', '居中显示', '隐藏标题'],
+        Math.max(0, Math.min(2, this.titleMode)), (index: number) => this.onTitleModeChange(index))
+      // 字号：relative 决定是「正文 + n」还是绝对号数（ReadBookConfig.kt:669-676）。
+      MenuSettingSlider({
+        title: `标题字号（${this.getTitleSizeLabel()}）`,
+        value: this.titleSize,
+        minValue: this.titleSizeRelative ? 0 : 5,
+        maxValue: this.titleSizeRelative ? 40 : 60,
+        stepValue: 1,
+        onChange: (value: number) => this.onTitleSizeChange(value)
+      })
+      MenuSettingSwitch({
+        title: '字号相对正文', detail: '关闭后按绝对号数显示',
+        checked: this.titleSizeRelative,
+        onChange: (enabled: boolean) => this.onTitleSizeRelativeChange(enabled)
+      })
+      // 上下间距（ReadBookConfig.kt:298/301），单位与上游一致按 dp。
+      MenuSettingSlider({
+        title: '标题上间距', value: this.titleTopSpacing, minValue: 0, maxValue: 60, stepValue: 1,
+        onChange: (value: number) => this.onTitleSpacingChange(value, this.titleBottomSpacing)
+      })
+      MenuSettingSlider({
+        title: '标题下间距', value: this.titleBottomSpacing, minValue: 0, maxValue: 60, stepValue: 1,
+        onChange: (value: number) => this.onTitleSpacingChange(this.titleTopSpacing, value)
+      })
+      // 字重：档位与上游 resolveWeight 一致（LegacyReaderPaginationStyleFactory.kt:113-119）。
+      this.TitleChoiceRow('标题字重', ['纤细', '常规', '中等', '粗体', '特粗'],
+        Math.max(0, [300, 400, 500, 700, 900].indexOf(this.titleBold)),
+        (index: number) => this.onTitleBoldChange([300, 400, 500, 700, 900][index] ?? 500))
+      // 行距：Extra 是首段、Sub 是分段后的副标题段（LegacyReaderPaginationStyleFactory.kt:99-101）。
+      MenuSettingSlider({
+        title: '标题行距', value: this.titleLineSpacingExtra, minValue: 0, maxValue: 20, stepValue: 1,
+        onChange: (value: number) => this.onTitleLineSpacingChange(value, this.titleLineSpacingSub)
+      })
+      MenuSettingSlider({
+        title: '标题副项行距', value: this.titleLineSpacingSub, minValue: 0, maxValue: 20, stepValue: 1,
+        onChange: (value: number) => this.onTitleLineSpacingChange(this.titleLineSpacingExtra, value)
+      })
+      // 标题取色：空串表示跟随正文（上游 titleColor 取 0 时回落正文色）。
+      MenuSettingPalette({
+        title: `日间标题颜色（${this.getTitleColorLabel(false)}）`,
+        colors: READER_TITLE_COLORS,
+        selectedColor: this.titleColor,
+        onChange: (color: string) => this.onTitleColorChange(color, false)
+      })
+      MenuSettingPalette({
+        title: `夜间标题颜色（${this.getTitleColorLabel(true)}）`,
+        colors: READER_TITLE_COLORS,
+        selectedColor: this.titleColorNight,
+        onChange: (color: string) => this.onTitleColorChange(color, true)
+      })
+      Row() {
+        Text('标题颜色跟随正文').fontSize(11).fontColor('#C6D3FF')
+          .onClick(() => {
+            this.onTitleColorChange('', false);
+            this.onTitleColorChange('', true);
+          })
+      }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+      // 分段：上游把标题切成多段，首段正常字号、后续段按缩放（ReaderTitleSegmentation.kt）。
+      this.TitleChoiceRow(`标题分段（${this.getTitleSegTypeLabel()}）`, ['不分段', '按字数', '按分隔符', '按正则'],
+        Math.max(0, Math.min(3, this.titleSegType)), (index: number) => this.onTitleSegTypeChange(index))
+      if (this.titleSegType === 1) {
+        MenuSettingSlider({
+          title: '分段字数', value: this.titleSegDistance, minValue: 1, maxValue: 40, stepValue: 1,
+          onChange: (value: number) => this.onTitleSegDistanceChange(value)
+        })
+      } else if (this.titleSegType !== 0) {
+        TextInput({ text: this.titleSegFlag, placeholder: this.titleSegType === 2 ? '分隔符，多个用英文逗号分隔' : '正则表达式' })
+          .width('100%').height(44).backgroundColor('#202127').borderRadius(12)
+          .fontSize(12).fontColor('#E5E6EB').margin({ bottom: 8 })
+          .onChange((value: string) => this.onTitleSegFlagChange(value))
+      }
+      if (this.titleSegType !== 0) {
+        MenuSettingSlider({
+          title: '副标题字号比例', value: this.titleSegScaling, minValue: 1, maxValue: 2, stepValue: 0.1,
+          onChange: (value: number) => this.onTitleSegScalingChange(value)
+        })
+      }
+      Text('标题样式参与分页度量：改字号、行距、间距或分段后，章节页数会重新计算。标题颜色留空时跟随正文色。')
+        .fontSize(10).fontColor('#92949E').width('100%').padding(12)
+    }.width('100%').padding({ bottom: 16 })
   }
 
   /** 把设置里存的沙箱绝对路径转成 `Image()` 能读的 `file://` URI（裸路径会渲染空白）。 */
@@ -1084,6 +1221,22 @@ export struct ReaderSettingsPage {
   }
 
   /** 中文简繁体转换档位的显示文案，与详情面板的三个选项一一对应。 */
+  /** 标题字号标签：相对模式显示成「正文 + n」，绝对模式直接显示 sp。 */
+  private getTitleSizeLabel(): string {
+    return this.titleSizeRelative ? `正文 + ${this.titleSize}` : `${this.titleSize} 号`;
+  }
+
+  /** 标题颜色标签；空串表示未设置、跟随正文色（对齐上游 titleColor 取 0 时回落正文色）。 */
+  private getTitleColorLabel(night: boolean): string {
+    const configured = night ? this.titleColorNight : this.titleColor;
+    return configured.length > 0 ? configured : '跟随正文';
+  }
+
+  /** 标题分段模式标签，对齐上游 titleSegType（ReadBookConfig.kt:280）。 */
+  private getTitleSegTypeLabel(): string {
+    return ['不分段', '按字数分段', '按分隔符分段', '按正则分段'][Math.max(0, Math.min(3, this.titleSegType))] ?? '不分段';
+  }
+
   private getChineseConverterLabel(): string {
     return ['关闭简繁转换', '繁体转简体', '简体转繁体'][Math.max(0, Math.min(2, this.chineseConverterType))]
       ?? '关闭简繁转换';
@@ -1482,6 +1635,7 @@ export struct ReaderSettingsPage {
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '排版设置') {
+          Scroll() {
           Column() {
             Row() {
               ForEach(['正文', '标题', '页眉', '页脚'], (label: string) => {
@@ -1490,6 +1644,9 @@ export struct ReaderSettingsPage {
                   .onClick(() => this.detailSelectedOption = label)
               }, (label: string) => label)
             }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
+            if (this.detailSelectedOption === '标题') {
+              this.TitleTypographySettings()
+            } else {
             MenuSettingOption({ title: '字体', detail: this.getCurrentFontDisplayName(), migrated: true })
               .onClick(() => this.openFontSelection())
             MenuSettingSlider({ title: '字号', value: this.fontSize, minValue: 5, maxValue: 50 })
@@ -1504,7 +1661,9 @@ export struct ReaderSettingsPage {
             MenuSettingOption({ title: '中文简繁体转换', detail: this.getChineseConverterLabel(), migrated: true })
               .onClick(() => this.openDetailSheet('中文简繁体转换', '按档位转换正文与章节标题的字形'))
             Text('正文和标题支持系统字体及导入的 TTF/OTF；字体族会参与文字测量和分页。页眉页脚字体沿用各自选项。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
+            }
           }.width('100%').padding({ bottom: 16 })
+          }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '文字效果') {
           Scroll() {
             Column() {

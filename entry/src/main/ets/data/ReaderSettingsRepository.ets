@@ -248,6 +248,47 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   /** 白天是否用暗色状态栏图标，对齐上游 ReadBookConfig.kt:552 `darkStatusIcon`。 */
   darkStatusIcon: boolean;
   darkStatusIconNight: boolean;
+  /**
+   * 标题位置模式，对齐上游 help/config/ReadBookConfig.kt:267 `titleMode`（默认 0）：
+   * 0 = 居左、1 = 居中、2 = 隐藏。
+   */
+  titleMode: number;
+  /**
+   * 标题字号，对齐上游 ReadBookConfig.kt:269 `titleSize`（默认 4）。
+   * 相对模式是「相对正文的偏移」，绝对模式是「绝对 sp」，由 titleSizeRelative 决定。
+   */
+  titleSize: number;
+  /**
+   * 标题字号是否相对正文，对齐上游 ReadBookConfig.kt:270 `titleSizeRelative`。
+   * 上游该字段可为 null，null 时按旧约定自动识别：`titleSize < 8` 视为相对（ReadBookConfig.kt:669）。
+   * 本地没有 null 语义，用显式布尔值 + 默认 true 表达「沿用旧约定识别的结果」。
+   */
+  titleSizeRelative: boolean;
+  /** 标题上间距，对齐上游 ReadBookConfig.kt:298 `titleTopSpacing`（默认 0）。 */
+  titleTopSpacing: number;
+  /** 标题下间距，对齐上游 ReadBookConfig.kt:301 `titleBottomSpacing`（默认 0）。 */
+  titleBottomSpacing: number;
+  /**
+   * 标题日间/夜间颜色，对齐上游 ReadBookConfig.kt:304/:307 `titleColor`/`titleColorNight`。
+   * 上游默认 0（未设置），此时回落正文色（LegacyReaderPaginationStyleFactory.kt:52
+   * `resolvedTitleColor.takeIf { it != 0 } ?: bodyStyle.colorArgb`）；本地同样用空串表示回落。
+   */
+  titleColor: string;
+  titleColorNight: string;
+  /** 标题字重，对齐上游 ReadBookConfig.kt:228 `titleBold`（默认 500，口径同 textBold）。 */
+  titleBold: number;
+  /** 标题行距附加，对齐上游 ReadBookConfig.kt:255 `titleLineSpacingExtra`（默认 12，按十分之一行高）。 */
+  titleLineSpacingExtra: number;
+  /** 标题行距子项，对齐上游 ReadBookConfig.kt:258 `titleLineSpacingSub`（默认 12）。 */
+  titleLineSpacingSub: number;
+  /** 标题分段模式，对齐上游 ReadBookConfig.kt:280 `titleSegType`（默认 0）：0 不分段/1 按字数/2 按分隔符/3 按正则。 */
+  titleSegType: number;
+  /** 标题分段缩放，对齐上游 ReadBookConfig.kt:283 `titleSegScaling`（默认 1f，负值非法回落 1、上限 2）。 */
+  titleSegScaling: number;
+  /** 标题分段起始位置，对齐上游 ReadBookConfig.kt:287 `titleSegDistance`（默认 4）。 */
+  titleSegDistance: number;
+  /** 标题分段识别字符，对齐上游 ReadBookConfig.kt:290 `titleSegFlag`（默认空串）。 */
+  titleSegFlag: string;
   maxLengthWithNoToc: number;
   eyeProtectionEnabled: boolean;
   eyeProtectionAutoNight: boolean;
@@ -517,6 +558,22 @@ export class ReaderSettingsRepository {
       // 上游 ReadBookConfig.kt:552-553：白天用暗色状态栏图标，夜间不用。
       darkStatusIcon: true,
       darkStatusIconNight: false,
+      // 标题排版默认值全部取上游 ReadBookConfig.kt:596-608 的声明值。
+      // titleSize 默认 4 + titleSizeRelative 默认 true，等价于本地原先的「正文 + 4」。
+      titleMode: 0,
+      titleSize: 4,
+      titleSizeRelative: true,
+      titleTopSpacing: 0,
+      titleBottomSpacing: 0,
+      titleColor: '',
+      titleColorNight: '',
+      titleBold: 500,
+      titleLineSpacingExtra: 12,
+      titleLineSpacingSub: 12,
+      titleSegType: 0,
+      titleSegScaling: 1,
+      titleSegDistance: 4,
+      titleSegFlag: '',
       maxLengthWithNoToc: 3000,
       eyeProtectionEnabled: false,
       eyeProtectionAutoNight: false,
@@ -600,6 +657,21 @@ export class ReaderSettingsRepository {
       const bgAlphaValue = await store.get('bgAlpha', defaults.bgAlpha);
       const darkStatusIconValue = await store.get('darkStatusIcon', defaults.darkStatusIcon);
       const darkStatusIconNightValue = await store.get('darkStatusIconNight', defaults.darkStatusIconNight);
+      // 标题排版十四个字段，对齐上游 ReadBookConfig.kt:596-608。
+      const titleModeValue = await store.get('titleMode', defaults.titleMode);
+      const titleSizeValue = await store.get('titleSize', defaults.titleSize);
+      const titleSizeRelativeValue = await store.get('titleSizeRelative', defaults.titleSizeRelative);
+      const titleTopSpacingValue = await store.get('titleTopSpacing', defaults.titleTopSpacing);
+      const titleBottomSpacingValue = await store.get('titleBottomSpacing', defaults.titleBottomSpacing);
+      const titleColorValue = await store.get('titleColor', defaults.titleColor);
+      const titleColorNightValue = await store.get('titleColorNight', defaults.titleColorNight);
+      const titleBoldValue = await store.get('titleBold', defaults.titleBold);
+      const titleLineSpacingExtraValue = await store.get('titleLineSpacingExtra', defaults.titleLineSpacingExtra);
+      const titleLineSpacingSubValue = await store.get('titleLineSpacingSub', defaults.titleLineSpacingSub);
+      const titleSegTypeValue = await store.get('titleSegType', defaults.titleSegType);
+      const titleSegScalingValue = await store.get('titleSegScaling', defaults.titleSegScaling);
+      const titleSegDistanceValue = await store.get('titleSegDistance', defaults.titleSegDistance);
+      const titleSegFlagValue = await store.get('titleSegFlag', defaults.titleSegFlag);
       const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
       const eyeProtectionEnabledValue = await store.get('eyeProtectionEnabled', defaults.eyeProtectionEnabled);
       const eyeProtectionAutoNightValue = await store.get('eyeProtectionAutoNight', defaults.eyeProtectionAutoNight);
@@ -847,6 +919,28 @@ export class ReaderSettingsRepository {
           darkStatusIcon: typeof darkStatusIconValue === 'boolean' ? darkStatusIconValue : defaults.darkStatusIcon,
           darkStatusIconNight: typeof darkStatusIconNightValue === 'boolean'
             ? darkStatusIconNightValue : defaults.darkStatusIconNight,
+          // 标题排版：颜色用空串表示「回落正文色」，所以不能走 normalizeHexColor。
+          titleMode: ReaderSettingsRepository.normalizeInteger(titleModeValue, 0, 2, defaults.titleMode),
+          titleSize: ReaderSettingsRepository.normalizeInteger(titleSizeValue, 0, 100, defaults.titleSize),
+          titleSizeRelative: typeof titleSizeRelativeValue === 'boolean'
+            ? titleSizeRelativeValue : defaults.titleSizeRelative,
+          titleTopSpacing: ReaderSettingsRepository.normalizeInteger(titleTopSpacingValue, 0, 100, defaults.titleTopSpacing),
+          titleBottomSpacing: ReaderSettingsRepository.normalizeInteger(
+            titleBottomSpacingValue, 0, 100, defaults.titleBottomSpacing),
+          titleColor: ReaderSettingsRepository.normalizeOptionalHexColor(titleColorValue),
+          titleColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(titleColorNightValue),
+          titleBold: ReaderSettingsRepository.normalizeInteger(titleBoldValue, 0, 900, defaults.titleBold),
+          titleLineSpacingExtra: ReaderSettingsRepository.normalizeInteger(
+            titleLineSpacingExtraValue, 0, 20, defaults.titleLineSpacingExtra),
+          titleLineSpacingSub: ReaderSettingsRepository.normalizeInteger(
+            titleLineSpacingSubValue, 0, 20, defaults.titleLineSpacingSub),
+          titleSegType: ReaderSettingsRepository.normalizeInteger(titleSegTypeValue, 0, 3, defaults.titleSegType),
+          // 上游 titleSegScaling 负值非法回落 1、上限 2（ReadBookConfig.kt:283-286）。
+          titleSegScaling: ReaderSettingsRepository.normalizeFraction(
+            titleSegScalingValue, 1, 2, defaults.titleSegScaling),
+          titleSegDistance: ReaderSettingsRepository.normalizeInteger(
+            titleSegDistanceValue, 0, 100, defaults.titleSegDistance),
+          titleSegFlag: typeof titleSegFlagValue === 'string' ? titleSegFlagValue : defaults.titleSegFlag,
           maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
             ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc,
           eyeProtectionEnabled: typeof eyeProtectionEnabledValue === 'boolean'
@@ -964,6 +1058,20 @@ export class ReaderSettingsRepository {
       await store.put('bgAlpha', Math.max(0, Math.min(100, Math.round(settings.bgAlpha))));
       await store.put('darkStatusIcon', settings.darkStatusIcon);
       await store.put('darkStatusIconNight', settings.darkStatusIconNight);
+      await store.put('titleMode', Math.max(0, Math.min(2, Math.round(settings.titleMode))));
+      await store.put('titleSize', Math.max(0, Math.min(100, Math.round(settings.titleSize))));
+      await store.put('titleSizeRelative', settings.titleSizeRelative);
+      await store.put('titleTopSpacing', Math.max(0, Math.min(100, Math.round(settings.titleTopSpacing))));
+      await store.put('titleBottomSpacing', Math.max(0, Math.min(100, Math.round(settings.titleBottomSpacing))));
+      await store.put('titleColor', settings.titleColor);
+      await store.put('titleColorNight', settings.titleColorNight);
+      await store.put('titleBold', Math.max(0, Math.min(900, Math.round(settings.titleBold))));
+      await store.put('titleLineSpacingExtra', Math.max(0, Math.min(20, Math.round(settings.titleLineSpacingExtra))));
+      await store.put('titleLineSpacingSub', Math.max(0, Math.min(20, Math.round(settings.titleLineSpacingSub))));
+      await store.put('titleSegType', Math.max(0, Math.min(3, Math.round(settings.titleSegType))));
+      await store.put('titleSegScaling', Math.max(1, Math.min(2, settings.titleSegScaling)));
+      await store.put('titleSegDistance', Math.max(0, Math.min(100, Math.round(settings.titleSegDistance))));
+      await store.put('titleSegFlag', settings.titleSegFlag);
       await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
       await store.put('eyeProtectionEnabled', settings.eyeProtectionEnabled);
       await store.put('eyeProtectionAutoNight', settings.eyeProtectionAutoNight);
@@ -1054,6 +1162,29 @@ export class ReaderSettingsRepository {
     const normalized = value.trim().toUpperCase();
     return /^#[0-9A-F]{6}$/.test(normalized) || /^#[0-9A-F]{8}$/.test(normalized)
       ? normalized : fallback;
+  }
+
+  /**
+   * 可选颜色：空串是合法值（表示「未设置、回落正文色」），对齐上游 titleColor 默认 0 的语义。
+   * 非空时必须是 #RRGGBB 或 #RRGGBBAA，否则回落到空串。
+   */
+  private static normalizeOptionalHexColor(value: number | boolean | string | bigint | Uint8Array | object): string {
+    if (typeof value !== 'string') { return ''; }
+    const normalized = value.trim().toUpperCase();
+    if (normalized.length === 0) { return ''; }
+    return /^#[0-9A-F]{6}$/.test(normalized) || /^#[0-9A-F]{8}$/.test(normalized)
+      ? normalized : '';
+  }
+
+  /**
+   * 小数归一：上游 titleSegScaling 的规则是「负值非法回落 1，上限 2」（ReadBookConfig.kt:283-286），
+   * 与整数夹取语义不同，单列一个函数。
+   */
+  private static normalizeFraction(value: number | boolean | string | bigint | Uint8Array | object,
+    lower: number, upper: number, fallback: number): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) { return fallback; }
+    if (value < 0) { return 1; }
+    return Math.max(lower, Math.min(upper, value));
   }
 
   private static clampStyleIndex(value: number, fallback: number): number {

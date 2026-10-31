@@ -205,6 +205,22 @@ interface AndroidReadConfigBackupRecord {
   /** 状态栏图标深浅；上游 ReadBookConfig.kt:552-553。 */
   darkStatusIcon: boolean;
   darkStatusIconNight: boolean;
+  /** 标题排版十四个字段；上游 ReadBookConfig.kt:596-608。 */
+  titleMode: number;
+  titleSize: number;
+  titleSizeRelative: boolean;
+  titleTopSpacing: number;
+  titleBottomSpacing: number;
+  /** 标题颜色，空串表示未设置、沿用正文色（上游默认 0 同义）。 */
+  titleColor: string;
+  titleColorNight: string;
+  titleBold: number;
+  titleLineSpacingExtra: number;
+  titleLineSpacingSub: number;
+  titleSegType: number;
+  titleSegScaling: number;
+  titleSegDistance: number;
+  titleSegFlag: string;
 }
 
 interface JsonStringResult {
@@ -1057,7 +1073,21 @@ export class BackupRepository {
       textAccentColor: settings.textAccentColor,
       textAccentColorNight: settings.textAccentColorNight,
       darkStatusIcon: settings.darkStatusIcon,
-      darkStatusIconNight: settings.darkStatusIconNight
+      darkStatusIconNight: settings.darkStatusIconNight,
+      titleMode: Math.max(0, Math.min(2, Math.round(settings.titleMode))),
+      titleSize: Math.max(0, Math.min(100, Math.round(settings.titleSize))),
+      titleSizeRelative: settings.titleSizeRelative,
+      titleTopSpacing: Math.max(0, Math.min(100, Math.round(settings.titleTopSpacing))),
+      titleBottomSpacing: Math.max(0, Math.min(100, Math.round(settings.titleBottomSpacing))),
+      titleColor: settings.titleColor,
+      titleColorNight: settings.titleColorNight,
+      titleBold: Math.max(0, Math.min(900, Math.round(settings.titleBold))),
+      titleLineSpacingExtra: Math.max(0, Math.min(20, Math.round(settings.titleLineSpacingExtra))),
+      titleLineSpacingSub: Math.max(0, Math.min(20, Math.round(settings.titleLineSpacingSub))),
+      titleSegType: Math.max(0, Math.min(3, Math.round(settings.titleSegType))),
+      titleSegScaling: Math.max(1, Math.min(2, settings.titleSegScaling)),
+      titleSegDistance: Math.max(0, Math.min(100, Math.round(settings.titleSegDistance))),
+      titleSegFlag: settings.titleSegFlag
     };
   }
 
@@ -1170,6 +1200,31 @@ export class BackupRepository {
       textAccentColorNight: BackupRepository.readJsonString(selected, 'textAccentColorNight') ?? current.textAccentColorNight,
       darkStatusIcon: BackupRepository.readJsonBoolean(selected, 'darkStatusIcon') ?? current.darkStatusIcon,
       darkStatusIconNight: BackupRepository.readJsonBoolean(selected, 'darkStatusIconNight') ?? current.darkStatusIconNight,
+      // 标题排版十四个字段，读 readConfig.json；缺键时保留本机现值。
+      titleMode: Math.max(0, Math.min(2,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleMode') ?? current.titleMode))),
+      titleSize: Math.max(0, Math.min(100,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleSize') ?? current.titleSize))),
+      titleSizeRelative: BackupRepository.readJsonBoolean(selected, 'titleSizeRelative') ?? current.titleSizeRelative,
+      titleTopSpacing: Math.max(0, Math.min(100,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleTopSpacing') ?? current.titleTopSpacing))),
+      titleBottomSpacing: Math.max(0, Math.min(100,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleBottomSpacing') ?? current.titleBottomSpacing))),
+      titleColor: BackupRepository.readJsonString(selected, 'titleColor') ?? current.titleColor,
+      titleColorNight: BackupRepository.readJsonString(selected, 'titleColorNight') ?? current.titleColorNight,
+      titleBold: Math.max(0, Math.min(900,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleBold') ?? current.titleBold))),
+      titleLineSpacingExtra: Math.max(0, Math.min(20,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleLineSpacingExtra') ?? current.titleLineSpacingExtra))),
+      titleLineSpacingSub: Math.max(0, Math.min(20,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleLineSpacingSub') ?? current.titleLineSpacingSub))),
+      titleSegType: Math.max(0, Math.min(3,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleSegType') ?? current.titleSegType))),
+      titleSegScaling: Math.max(1, Math.min(2,
+        BackupRepository.readJsonNumber(selected, 'titleSegScaling') ?? current.titleSegScaling)),
+      titleSegDistance: Math.max(0, Math.min(100,
+        Math.round(BackupRepository.readJsonNumber(selected, 'titleSegDistance') ?? current.titleSegDistance))),
+      titleSegFlag: BackupRepository.readJsonString(selected, 'titleSegFlag') ?? current.titleSegFlag,
       readerNightMode: current.readerNightMode,
       shareLayout: shareLayout,
       systemTypefaces: Math.max(0, Math.min(2,
