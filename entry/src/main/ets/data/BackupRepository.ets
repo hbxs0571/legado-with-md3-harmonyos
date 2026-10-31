@@ -1425,6 +1425,17 @@ export class BackupRepository {
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'paddingDisplayCutouts') ?? current.paddingDisplayCutouts,
       adaptSpecialStyle: BackupRepository.readJsonBoolean(selected, 'adaptSpecialStyle') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'adaptSpecialStyle') ?? current.adaptSpecialStyle,
+      // 底栏外观六项：上游 BackupConfig.readPrefKeys 把 readMenuBottomCornerRadius /
+      // readMenuFloatingBottomBar / readMenuBottomBarBlurMode / readMenuBottomBarBlurStyle /
+      // readMenuBottomBarLiquidGlassButtons / readMenuBlurAlpha 全部列进忽略清单
+      // （BackupConfig.kt:232-244），因此这里刻意不读备份、只用本机现值，
+      // 保证恢复备份不会把这些外观项改掉。
+      readMenuBottomCornerRadius: current.readMenuBottomCornerRadius,
+      readMenuFloatingBottomBar: current.readMenuFloatingBottomBar,
+      readMenuBottomBarBlurMode: current.readMenuBottomBarBlurMode,
+      readMenuBottomBarBlurStyle: current.readMenuBottomBarBlurStyle,
+      readMenuBottomBarLiquidGlassButtons: current.readMenuBottomBarLiquidGlassButtons,
+      readMenuBlurAlpha: current.readMenuBlurAlpha,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

@@ -208,6 +208,18 @@ export struct ReaderSettingsPage {
   @Prop paddingDisplayCutouts: boolean = false;
   /** 适配特殊样式；上游 `adaptSpecialStyle`（默认 true），控制 `[newpage]`/`<usehtml>` 的解释。 */
   @Prop adaptSpecialStyle: boolean = true;
+  /** 底栏圆角（vp）；上游 `readMenuBottomCornerRadius`（`ReadSettings.kt:94`，默认 32，夹 0-32）。 */
+  @Prop readMenuBottomCornerRadius: number = 32;
+  /** 底栏是否悬浮；上游 `readMenuFloatingBottomBar`（`ReadSettings.kt:95`，默认 true）。 */
+  @Prop readMenuFloatingBottomBar: boolean = true;
+  /** 底栏模糊模式；0 关闭 / 1 液态玻璃 / 2 雾化（`ReadSettings.kt:97`、`PreferKey.kt:498`）。 */
+  @Prop readMenuBottomBarBlurMode: number = 0;
+  /** 底栏模糊样式；0 填充 / 1 渐变（`ReadSettings.kt:104`、`PreferKey.kt:504`）。 */
+  @Prop readMenuBottomBarBlurStyle: number = 0;
+  /** 底栏按钮液态玻璃；上游 `readMenuBottomBarLiquidGlassButtons`（`ReadSettings.kt:101`）。 */
+  @Prop readMenuBottomBarLiquidGlassButtons: boolean = false;
+  /** 菜单不透明度 0-100；底栏与顶栏共用上游 `readMenuBlurAlpha`（`ReadSettings.kt:106`，默认 85）。 */
+  @Prop readMenuBlurAlpha: number = 85;
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -365,6 +377,12 @@ export struct ReaderSettingsPage {
   onUseZhLayoutChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onPaddingDisplayCutoutsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onAdaptSpecialStyleChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadMenuBottomCornerRadiusChange: (value: number) => void = (_value: number) => {};
+  onReadMenuFloatingBottomBarChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadMenuBottomBarBlurModeChange: (value: number) => void = (_value: number) => {};
+  onReadMenuBottomBarBlurStyleChange: (value: number) => void = (_value: number) => {};
+  onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadMenuBlurAlphaChange: (value: number) => void = (_value: number) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -748,10 +766,31 @@ export struct ReaderSettingsPage {
           ? this.menuBorderEnabled
           : entry.title === '显示标题栏图标'
             ? this.menuTitleIconsVisible
-            : entry.title === '标题栏胶囊' || entry.title === '标题栏紧凑',
+            : entry.title === '底栏悬浮'
+              ? this.readMenuFloatingBottomBar
+              : entry.title === '底栏模糊'
+                // 上游「模糊效果」开关只看「是否不等于 None」，写回时固定 Haze（SystemMenuPage.kt:670-680）。
+                ? this.readMenuBottomBarBlurMode !== 0
+                : entry.title === '底栏液态玻璃'
+                  // 上游「液态玻璃背景」只在悬浮时出现，勾选写 LiquidGlass(1)（SystemMenuPage.kt:707-726）。
+                  ? this.readMenuBottomBarBlurMode === 1
+                  : entry.title === '底栏按钮液态玻璃'
+                    ? this.readMenuBottomBarLiquidGlassButtons
+                    : entry.title === '标题栏胶囊' || entry.title === '标题栏紧凑',
         onChange: (enabled: boolean) => {
           if (entry.title === '菜单栏边框') { this.menuBorderEnabled = enabled; }
           else if (entry.title === '显示标题栏图标') { this.menuTitleIconsVisible = enabled; }
+          else if (entry.title === '底栏悬浮') { this.onReadMenuFloatingBottomBarChange(enabled); }
+          else if (entry.title === '底栏模糊') {
+            // 打开写 Haze(2)、关闭写 None(0)，与上游开关的两个取值一致。
+            this.onReadMenuBottomBarBlurModeChange(enabled ? 2 : 0);
+          }
+          else if (entry.title === '底栏液态玻璃') {
+            // 上游：勾选写 LiquidGlass(1)；取消时若当前不是 None 就退回 Haze(2)，否则 None(0)。
+            const next = enabled ? 1 : (this.effectiveBottomBarBlurMode() !== 0 ? 2 : 0);
+            this.onReadMenuBottomBarBlurModeChange(next);
+          }
+          else if (entry.title === '底栏按钮液态玻璃') { this.onReadMenuBottomBarLiquidGlassButtonsChange(enabled); }
           else { this.showNotMigrated(entry.title); }
         }
       })
@@ -760,8 +799,13 @@ export struct ReaderSettingsPage {
         title: entry.title,
         value: this.menuSliderValue(entry.title),
         minValue: this.menuSliderMinimum(entry.title),
-        maxValue: this.menuSliderMaximum(entry.title)
-      }).onClick(() => this.showNotMigrated(entry.title))
+        maxValue: this.menuSliderMaximum(entry.title),
+        onChange: (value: number) => {
+          if (entry.title === '底栏圆角') { this.onReadMenuBottomCornerRadiusChange(value); }
+          else if (entry.title === '底栏模糊透明度') { this.onReadMenuBlurAlphaChange(value); }
+          else { this.showNotMigrated(entry.title); }
+        }
+      })
     } else if (this.getMenuChoices(entry.title).length > 0) {
       MenuSettingSegments({
         title: entry.title,
@@ -801,6 +845,15 @@ export struct ReaderSettingsPage {
     }
   }
 
+  /**
+   * 实际生效的底栏模糊模式。对齐上游 `SystemMenuPage.kt:560-568`：
+   * 非悬浮时如果存的是液态玻璃(1)，实际按雾化(2)渲染 —— 因为液态玻璃需要悬浮形状才成立。
+   */
+  private effectiveBottomBarBlurMode(): number {
+    if (!this.readMenuFloatingBottomBar && this.readMenuBottomBarBlurMode === 1) { return 2; }
+    return this.readMenuBottomBarBlurMode;
+  }
+
   private isMenuToggle(title: string): boolean {
     return ['显示标题栏图标', '标题栏胶囊', '标题栏紧凑', '顶栏液态玻璃按钮', '合并标题栏按钮',
       '显示图标文字', '底栏悬浮', '底栏模糊', '顶栏模糊', '底栏液态玻璃', '底栏按钮液态玻璃', '菜单栏边框'].includes(title);
@@ -815,6 +868,9 @@ export struct ReaderSettingsPage {
   }
 
   private menuSliderValue(title: string): number {
+    // 已接的两项读真值，其余仍是被 KI-E1/E2 接管的占位值。
+    if (title === '底栏模糊透明度') { return this.readMenuBlurAlpha; }
+    if (title === '底栏圆角') { return this.readMenuBottomCornerRadius; }
     if (title.includes('透明度')) { return 70; }
     if (title.includes('圆角')) { return 20; }
     if (title.includes('宽度')) { return 1; }
@@ -822,6 +878,8 @@ export struct ReaderSettingsPage {
   }
 
   private menuSliderMaximum(title: string): number {
+    // 底栏圆角上限对齐上游 0f..32f（SystemMenuPage.kt:645-655）。
+    if (title === '底栏圆角') { return 32; }
     if (title.includes('透明度')) { return 100; }
     if (title.includes('边框宽度')) { return 4; }
     if (title.includes('宽度')) { return 10; }
@@ -850,6 +908,7 @@ export struct ReaderSettingsPage {
     if (title === '调色板风格') { return this.menuPaletteStyleIndex; }
     if (title === '显示亮度视图') { return ['0', '1', '2'].indexOf(this.showBrightnessView); }
     if (title === '亮度条位置') { return this.brightnessVwPos === '0' ? 0 : 1; }
+    if (title === '底栏模糊样式') { return this.readMenuBottomBarBlurStyle === 1 ? 1 : 0; }
     return 0;
   }
 
@@ -879,6 +938,9 @@ export struct ReaderSettingsPage {
     }
     if (this.detailSheetTitle === '亮度条位置' && choiceIndex >= 0) {
       this.onBrightnessVwPosChange(choiceIndex === 0 ? '0' : '1');
+    }
+    if (this.detailSheetTitle === '底栏模糊样式' && choiceIndex >= 0) {
+      this.onReadMenuBottomBarBlurStyleChange(choiceIndex === 1 ? 1 : 0);
     }
     if (this.detailSheetTitle === '中文简繁体转换' && choiceIndex >= 0) {
       this.onChineseConverterTypeChange(choiceIndex);
@@ -930,6 +992,12 @@ export struct ReaderSettingsPage {
   }
 
   private isMenuSettingsEntryVisible(title: string): boolean {
+    // 底栏布局子页的两条互斥规则必须先判：下面那句 tab 短路会直接 return true，
+    // 放在短路之后等于永不生效（本函数第一版就踩了这个坑）。
+    // 与上游两个 AnimatedVisibility 一一对应 —— 非悬浮才显示「模糊样式」下拉，
+    // 悬浮才显示「液态玻璃背景」开关（SystemMenuPage.kt:684-726）。
+    if (title === '底栏模糊样式') { return !this.readMenuFloatingBottomBar; }
+    if (title === '底栏液态玻璃') { return this.readMenuFloatingBottomBar; }
     if (this.selectedMenuSettingsTab !== 0) { return true; }
     if (title === '调色板风格') {
       return this.menuBarStyleMode === 1 || (this.menuBarStyleMode === 2 && this.menuColorMode === 0);
@@ -2288,7 +2356,8 @@ export struct ReaderSettingsPage {
         { title: '底栏布局', detail: '', section: true },
         { title: '底栏圆角', detail: '设置底栏卡片圆角' },
         { title: '底栏悬浮', detail: '悬浮显示与位置' },
-        { title: '底栏模糊', detail: '关闭 / 纯色 / 渐变' },
+        { title: '底栏模糊', detail: '开关雾化背景' },
+        { title: '底栏模糊样式', detail: '纯色 / 渐变' },
         { title: '底栏模糊透明度', detail: '调整背景透明程度' },
         { title: '底栏液态玻璃', detail: '悬浮底栏背景效果' },
         { title: '底栏按钮液态玻璃', detail: '按钮表面效果' }

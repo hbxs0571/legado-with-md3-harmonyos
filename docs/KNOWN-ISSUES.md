@@ -500,7 +500,33 @@
 
 **KI-E3 标题栏图标四项（要接，随菜单渲染层）** —— 覆盖 E-17 显示标题栏图标（`ReadBookConfig.kt:92`）、E-18 标题栏悬浮图标配置（`:146`、`:149` 两个 `Map<String,String>`）、E-19 标题栏悬浮图标位置（`:116`，夹 0–3）、E-20 悬浮图标液态玻璃按钮（`:87`）。注意 E-18 的「标题栏悬浮图标配置」入口虽走 `handleMenuSettingsEntryClick()`（`ReaderSettingsPage.ets:470-472`），但 `:517-531` 的 `else` 分支只 `openDetailSheet`，**并未落盘**，仍属未接。
 
-**KI-E4 底栏外观七项（要接，随菜单渲染层）** —— 覆盖 E-21 底栏圆角（`ReadBookConfig.kt:104`，夹 0–32）、E-22 底栏悬浮（`:82`）、E-23 底栏模糊（`:106`，夹 0–2）、E-24 底栏模糊透明度（`:110`）、E-25 底栏模糊样式（`:108`，夹 0–1）、E-26 底栏液态玻璃（`:86`）、E-27 底栏按钮液态玻璃（`:86` 同字段的按钮级开关）。本地底栏已能渲染（`ReaderPage.ets:3156-3171` 读 `showBottomActionText`/`bottomIconStyle`/`bottomRowCount`），缺的正是这层外观参数，属渲染层改造里最先能做的一块。
+**KI-E4 底栏外观七项（已实现）** —— 覆盖 E-21 底栏圆角（`ReadBookConfig.kt:104`，夹 0–32）、E-22 底栏悬浮（`:82`）、E-23 底栏模糊（`:106`，夹 0–2）、E-24 底栏模糊透明度（`:110`）、E-25 底栏模糊样式（`:108`，夹 0–1）、E-26 底栏液态玻璃（`:86`）、E-27 底栏按钮液态玻璃（`:101` 的 `readMenuBottomBarLiquidGlassButtons`）。本地底栏已能渲染（`ReaderPage.ets:3156-3171` 读 `showBottomActionText`/`bottomIconStyle`/`bottomRowCount`），缺的正是这层外观参数，属渲染层改造里最先能做的一块。
+
+**上游口径**（`ui/book/read/sheet/SystemMenuPage.kt` 的 `BottomBarTab`，`:553-740`；**注意 E 块设置项不在 `MoreConfigSheet.kt`**，该文件 `grep readMenu*` 为零命中）：
+- `:645-655` `TinySliderSettingItem(read_menu_bottom_corner_radius)`，`valueRange = 0f..32f`、`steps = 31` → `ConfigUpdate.MenuBottomCornerRadius`。
+- `:660` 附近 `TinySwitchSettingItem(read_menu_floating_bottom_bar)` → `ConfigUpdate.FloatingBottomBar`。
+- `:668` 附近 `TinySwitchSettingItem(read_menu_bar_blur)`，`checked = bottomBarBlurMode != ReadMenuBlurMode.None`，回写 `if (it) Haze else None` —— **只写 2 与 0，不写 1**。
+- `AnimatedVisibility(visible = !floatingBottomBar) { TinyDropdownSettingItem(read_menu_bar_blur_style) }`，选项「纯色 / 渐变」对应 `entryValues = ["0","1"]`。
+- `AnimatedVisibility(visible = floatingBottomBar) { TinySwitchSettingItem(read_menu_bar_liquid_glass) }`，`checked = readMenuBottomBarBlurMode == ReadMenuBlurMode.LiquidGlass`，回写 `if (it) LiquidGlass else if (bottomBarBlurMode != None) Haze else None`。
+- `TinySwitchSettingItem(read_menu_bar_liquid_glass_buttons)` → `ConfigUpdate.MenuBottomBarLiquidGlassButtons`，说明文案 `read_menu_bottom_bar_liquid_glass_buttons_summary`（`values-zh-rCN/strings.xml:2496`「需要 Android 13 及以上系统」）。
+- `bottomBarBlurMode` 推导在 `:560-568`：`if (!floatingBottomBar && preferences.readMenuBottomBarBlurMode == ReadMenuBlurMode.LiquidGlass) ReadMenuBlurMode.Haze else preferences.readMenuBottomBarBlurMode` —— **非悬浮时液态玻璃降级为雾化**。
+- 枚举定义 `constant/PreferKey.kt:498`（`ReadMenuBlurMode.None = 0 / LiquidGlass = 1 / Haze = 2`）与 `:504`（`ReadMenuBlurStyle.Solid = 0 / Progressive = 1`）。
+- 「底栏模糊透明度」的真实入口不在 `BottomBarTab`，在同文件的模糊/边框段 `:448-456`：`TinySliderSettingItem(read_menu_blur_alpha)`，`valueRange = 0f..100f`、`steps = 99` → `ConfigUpdate.MenuBlurAlpha`；中文串 `values-zh-rCN/strings.xml:2504`「菜单不透明度」。**上游只有一个 `readMenuBlurAlpha`，底栏与整块菜单共用**。
+
+**本地落地**（逐文件行号）：
+- 数据层 `data/ReaderSettingsRepository.ets`：接口 `:287-317`（六字段各带上游行号注释）、默认值 `:682-687`（32 / true / 0 / 0 / false / 85）、`load()` `:817-822`、返回归一 `:1106-1117`（圆角 0–32、模式 0–2、样式 0–1、alpha 0–100，均走 `normalizeInteger`；布尔走 `typeof === 'boolean'`）、`save()` `:1287-1296`（样式只认 1 否则 0）。
+- 状态与接线 `pages/Index.ets`：六个 `@State readerReadMenu*` + 装载 + 备份恢复 + 六个 setter + 快照六行；**prop 共 6 处**（快照 1、ReaderPage 1、设置面板 4），**回调共 4 处**（只在设置面板的四个 tab 实例上；ReaderPage 不接回调，这组 prop 在阅读页是纯展示型）。
+- 设置面板 `pages/ReaderSettingsPage.ets`：六 `@Prop` `:211-222`；Toggle 接真 `:769-793`；Slider 接真 `:804-805`；实际生效模式 `:849-852 effectiveBottomBarBlurMode()`；滑块真值 `:872-873`、上限 `:882`；下拉选中态 `:911`、写回 `:942`；互斥可见 `:999-1000`；条目表 `:2357-2363`（「底栏模糊样式」是**本地新增的一行**，上游是同一 tab 内的下拉项）。
+- 渲染 `pages/ReaderPage.ets`：props `:235-246`；`readerBottomBarFillColor()` `:842-843`（`Math.min(0.6, max(0, min(100, alpha)) / 100)`，上限 0.6 对齐 `ReadBookMenuBarShared.kt:49-85` 的 `coerceAtMost(0.6f)`）；`readerBottomBarGradient()` `:856-858`（`Solid` 两段同色、`Progressive` 上浓下淡且第二段 `max(0, alpha - 0.25)`，`angle: 180`）；`readerBottomBarButtonGlassEnabled()` `:874-875`；底栏容器 `:4022`（宽度）、`:4025`（填充）、`:4026`（渐变）、`:4028-4031`（四角圆角，非悬浮时下方两角强制 0）、`:4033`（底部外边距）。原来这五行是硬编码 `.width('92%').backgroundColor('#D931282A').borderRadius(32).margin({bottom:16})`。
+- 备份 `data/BackupRepository.ets`：恢复返回对象补六行 `current.<field>`（不读 json/xml）。六个键全在 `help/storage/BackupConfig.kt:232-244` 的 `readPrefKeys` 忽略清单（`readMenuBottomCornerRadius` `:232`、`readMenuFloatingBottomBar` `:233`、`readMenuBottomBarBlurMode` `:235`、`readMenuBottomBarLiquidGlassButtons` `:239`、`readMenuBottomBarBlurStyle` `:242`、`readMenuBlurRadius` `:243`、`readMenuBlurAlpha` `:244`），本地 `preferenceKeysByCategory.readConfig` 早已列全，**因此这组外观项不随备份走、恢复时保留本机现值**。
+
+**已知差异**：
+1. **「底栏按钮液态玻璃」只做了可配+落库**：`readerBottomBarButtonGlassEnabled()` 尚无调用点，按钮底色未真驱动。ArkUI 没有 `backdropBlur` 的等效物，上游的液态玻璃按钮在 HOS 上要靠半透明渐变近似，本轮未做近似（避免发明上游没有的视觉效果）。
+2. **「底栏模糊」的实际模糊未做**：本地只把「模糊模式」作为背景不透明度与渐变的开关使用，没有真的做背景模糊。上游的 `Haze` 在 `ReadBookMenuBarShared.kt` 里最终是按 alpha 叠半透明色，本地照此；但若上游在 API 13+ 走了真正的模糊材质，本地无法等价。
+3. **「底栏模糊样式」是本地新增的一条独立条目**（上游是同一 tab 内的下拉项，本地条目表原本没有它），因此 E 块已接数比未接减行数多 1。
+4. 圆角/悬浮/透明度/渐变的**像素级视觉对比未取证**：模拟器书架无正文可读、进不了阅读页，取不到底栏帧。
+
+**验收**：`assembleHap` BUILD SUCCESSFUL；设备（`127.0.0.1:5555`）实测底栏圆角 32→0 后退出重进仍为 0；关闭「底栏悬浮」→「底栏模糊样式」出现且「底栏液态玻璃」消失，重新打开则相反（两个方向都验过）；「底栏模糊」开关落库 `2`、「底栏按钮液态玻璃」落库 `true`；「底栏模糊样式」切「渐变」后条目副标题变「渐变」且**重启应用后保持**；「底栏模糊透明度」85→50 后重进仍为 50。完整记录见 [VALIDATION](VALIDATION.md)。
 
 **KI-E5 标题栏形态八项（要接，随菜单渲染层）** —— 覆盖 E-28 标题栏胶囊（`ReadBookConfig.kt:85`）、E-29 标题栏模式（`ReadSettings.kt:12`，字符串三态）、E-30 标题栏紧凑（`ReadBookConfig.kt:81`）、E-31 标题栏图标样式（`:101`，夹 0–2）、E-32 顶栏模糊（`:105`，夹 0–2）、E-33 顶栏模糊样式（`:107`，夹 0–1）、E-34 顶栏液态玻璃按钮（`:83`）、E-35 合并标题栏按钮（`:84`）。E-29 的本地选项文案为「完整信息 / 仅标题 / 标题与章节」（`ReaderSettingsPage.ets:570`），一旦有顶栏即可直接接。
 

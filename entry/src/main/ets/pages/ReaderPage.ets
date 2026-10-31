@@ -232,6 +232,19 @@ export struct ReaderPage {
   /** 适配书籍自带特殊样式；上游 `adaptSpecialStyle`（`ReadSettings.kt:18`），控制 `[newpage]`/`<usehtml>` 的解释。 */
   @Prop @Watch('onAdaptSpecialStyleChanged') adaptSpecialStyle: boolean = true;
 
+  /** 底栏圆角（vp）；上游 `readMenuBottomCornerRadius`（`ReadSettings.kt:94`，默认 32，夹 0-32）。 */
+  @Prop readMenuBottomCornerRadius: number = 32;
+  /** 底栏是否悬浮；上游 `readMenuFloatingBottomBar`（`ReadSettings.kt:95`，默认 true）。 */
+  @Prop readMenuFloatingBottomBar: boolean = true;
+  /** 底栏模糊模式；0 关闭 / 1 液态玻璃 / 2 雾化（`ReadSettings.kt:97`、`PreferKey.kt:498`）。 */
+  @Prop readMenuBottomBarBlurMode: number = 0;
+  /** 底栏模糊样式；0 填充 / 1 渐变（`ReadSettings.kt:104`、`PreferKey.kt:504`）。 */
+  @Prop readMenuBottomBarBlurStyle: number = 0;
+  /** 底栏按钮液态玻璃；上游 `readMenuBottomBarLiquidGlassButtons`（`ReadSettings.kt:101`）。 */
+  @Prop readMenuBottomBarLiquidGlassButtons: boolean = false;
+  /** 菜单不透明度 0-100；底栏与顶栏共用上游 `readMenuBlurAlpha`（`ReadSettings.kt:106`，默认 85）。 */
+  @Prop readMenuBlurAlpha: number = 85;
+
   /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
   @Prop dayNightReminderText: string = '';
   /** 点「切换到深色/浅色模式」。 */
@@ -819,6 +832,47 @@ export struct ReaderPage {
   onAdaptSpecialStyleChanged(): void {
     this.readerContentRevision += 1;
     this.rebuildReaderPages();
+  }
+
+  /**
+   * 底栏背景填充色。对齐上游 `ReadBookMenuBarShared.kt:49-85` 的
+   * `containerColor = surfaceColor.copy(alpha = (blurAlpha/100).coerceAtMost(0.6f))`：
+   * 不透明度取 `readMenuBlurAlpha / 100`，并且**上限 0.6**，保证背后正文始终透得出来。
+   */
+  private readerBottomBarFillColor(): string {
+    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
+    const channel = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+    return `#${channel}31282A`;
+  }
+
+  /**
+   * 底栏背景渐变。对齐上游 `ReadMenuBlurStyle`：
+   * - `0` 填充（Solid）：两段同色，视觉上是纯色，等价于只用 `backgroundColor`；
+   * - `1` 渐变（Progressive）：上浓下淡，等价于上游 `ReaderMenuTintStyle.Gradient` 分支
+   *   （`ReadBookMenuBarShared.kt:41-47` 把 Progressive 映射成 Gradient）。
+   * 模糊模式（0 关闭 / 1 液态玻璃 / 2 雾化）在 ArkUI 侧没有逐帧背景采样等价物，
+   * 用降低不透明度近似，因此不额外影响这里的渐变。
+   */
+  private readerBottomBarGradient(): LinearGradientOptions {
+    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
+    if (this.readMenuBottomBarBlurStyle !== 1) {
+      const solid = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+      return {
+        angle: 180,
+        colors: [[`#${solid}31282A`, 0.0], [`#${solid}31282A`, 1.0]]
+      };
+    }
+    const top = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+    const bottom = Math.round(Math.max(0, alpha - 0.25) * 255).toString(16).padStart(2, '0').toUpperCase();
+    return {
+      angle: 180,
+      colors: [[`#${top}31282A`, 0.0], [`#${bottom}31282A`, 1.0]]
+    };
+  }
+
+  /** 底栏按钮表面是否加玻璃底色；上游 `readMenuBottomBarLiquidGlassButtons`（`ReadSettings.kt:101`）。 */
+  private readerBottomBarButtonGlassEnabled(): boolean {
+    return this.readMenuBottomBarLiquidGlassButtons;
   }
 
   private stopAutoPageTimer(): void {
@@ -3962,11 +4016,21 @@ export struct ReaderPage {
               .onChange((pageIndex: number) => this.currentBottomActionPage = pageIndex)
               .padding({ left: 8, right: 8, top: 4, bottom: 17 })
             }
-          }.width('92%').alignSelf(ItemAlign.Center)
+          }
+            // 底栏容器几何全部参数化，对齐上游 `ReadBookMenuBar.kt:416-440`：
+            // 悬浮时左右留边、底部留 16vp 且四角同圆；非悬浮时铺满宽度、底部不留白，只圆上两个角。
+            .width(this.readMenuFloatingBottomBar ? '92%' : '100%')
+            .alignSelf(ItemAlign.Center)
             .padding({ left: 8, right: 8, top: 12, bottom: 0 })
-            .backgroundColor('#D931282A')
-            .borderRadius(32)
-            .margin({ bottom: 16 })
+            .backgroundColor(this.readerBottomBarFillColor())
+            .linearGradient(this.readerBottomBarGradient())
+            .borderRadius({
+              topLeft: this.readMenuBottomCornerRadius,
+              topRight: this.readMenuBottomCornerRadius,
+              bottomLeft: this.readMenuFloatingBottomBar ? this.readMenuBottomCornerRadius : 0,
+              bottomRight: this.readMenuFloatingBottomBar ? this.readMenuBottomCornerRadius : 0
+            })
+            .margin({ bottom: this.readMenuFloatingBottomBar ? 16 : 0 })
 
         }
           .width('100%')

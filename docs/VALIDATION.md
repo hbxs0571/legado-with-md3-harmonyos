@@ -305,6 +305,28 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-E4 底栏外观七项（面板互斥与落库通过，底栏视觉未验）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL`，无 ERROR），HAP 覆盖安装成功。
+- **本轮先修掉一个自造 bug 才进入验收**：`ReaderSettingsPage.ets` 的 `isMenuSettingsEntryVisible()` 首行是 `if (this.selectedMenuSettingsTab !== 0) { return true; }`，会把非「菜单栏」tab 的条目全部直接放行。两条互斥规则（「底栏模糊样式」仅在非悬浮时显示、「底栏液态玻璃」仅在悬浮时显示）最初写在函数末尾，**在底栏布局 tab 里永远不会生效**。移到该短路之前才正确，第一版构建能过但面板上一直两项同时存在。
+- **互斥显示（决定性对照，两个方向都验过）**：
+  - 「底栏悬浮」开启（Toggle `checked: 'true'`）时，`uitest dumpLayout` 里出现「底栏液态玻璃」+「悬浮底栏背景效果」、**不出现**「底栏模糊样式」。
+  - 关掉「底栏悬浮」后，同一次 dump 里「底栏模糊样式」+「纯色」+ `⌄` 出现、「底栏液态玻璃」消失。
+  - 重新打开「底栏悬浮」，「底栏液态玻璃」回来、「底栏模糊样式」再次消失。三次 dump 的条目集合互为补集，与上游 `SystemMenuPage.kt` 的两个 `AnimatedVisibility(visible = !floatingBottomBar / floatingBottomBar)` 一致。
+- **落库逐项**：
+  - 「底栏圆角」滑块 32 → 0（`Slider` 读回 `0.000000`），退出设置页再重进仍为 `0`。
+  - 「底栏模糊」开关打开后 `Toggle.checked` 为 `'true'`，退出重进保持（对应写回 `Haze = 2`）。
+  - 「底栏按钮液态玻璃」开关打开后 `Toggle.checked` 为 `'true'`，退出重进保持。
+  - 「底栏模糊样式」点开下拉，面板标题「底栏模糊样式」、描述「纯色 / 渐变」、两项「纯色」「渐变」；点「渐变」后条目副标题由「纯色」变「渐变」，**`aa force-stop` 后重新启动应用再进设置页，该条目仍显示「渐变」**——证明是真落库不是页面态。
+  - 「底栏模糊透明度」85 → 50（`Slider` 读回 `50.000000`），退出重进仍为 `50`。
+  - 应用重启后复查：底栏圆角 `0`、底栏悬浮关闭、底栏模糊开启、底栏按钮液态玻璃开启、「底栏模糊样式」显示「渐变」，五项全部跨进程保持。
+- **未验部分（重要）**：
+  - **底栏视觉本身没有像素级取证**。原因是模拟器书架上的书正文文件已丢失，`ReaderPage` 进不去，取不到底栏帧，因此「圆角 0 vs 32 的圆角差异」「悬浮 vs 非悬浮的宽度与下圆角差异」「透明度 20 vs 100 的底色浓淡」「纯色 vs 渐变的渐变方向」四组视觉对比**都没有截图证据**，只有面板值与落库证据。
+  - 「底栏按钮液态玻璃」的玻璃质感无消费点（`readerBottomBarButtonGlassEnabled()` 目前没有被调用），ArkUI 也没有 `backdropBlur` 的等效物，本轮按上游「配置存在、效果不发明」只做可配+落库。
+  - 「底栏模糊」没有真正的背景模糊，本地把模糊模式折算成背景不透明度与渐变（对照 `ReadBookMenuBarShared.kt:49-85` 的 alpha 叠色实现）。
+- 测试期改动已复原：底栏圆角回到 `32`、底栏悬浮回到开启、底栏模糊回到关闭、底栏按钮液态玻璃回到关闭、底栏模糊样式回到「纯色」、底栏模糊透明度回到 `85`。
+- 本节结论只代表 N 端模拟器本次构建，不代表真机材质与 API 13+ 液态玻璃效果。
+
 ## 2026-10-31 N 端 KI-A1 正文渲染适配四项（开关与落库通过，`[newpage]`/`<usehtml>` 渲染未验）
 
 37. **设备与构建**：模拟器 `127.0.0.1:5555`（1280×2832），`hvigorw --no-daemon --mode module -p product=default -p module=entry@default assembleHap` → `BUILD SUCCESSFUL in 30 s 589 ms`（33 任务 18 执行 / 15 最新）；`hdc install -r ...entry-default-unsigned.hap` → `install bundle successfully`。清埋点前后各构建一次，均通过。

@@ -235,6 +235,18 @@ struct Index {
   @State readerPaddingDisplayCutouts: boolean = false;
   /** 适配书籍自带特殊样式；上游 `adaptSpecialStyle`（`ReadSettings.kt:18`，默认 true）。 */
   @State readerAdaptSpecialStyle: boolean = true;
+  /** 底栏圆角（vp）；上游 readMenuBottomCornerRadius 默认 32，存 0-32。 */
+  @State readerReadMenuBottomCornerRadius: number = 32;
+  /** 底栏是否悬浮；上游 readMenuFloatingBottomBar 默认开。 */
+  @State readerReadMenuFloatingBottomBar: boolean = true;
+  /** 底栏模糊模式；0 关闭 / 1 液态玻璃 / 2 雾化，上游 readMenuBottomBarBlurMode。 */
+  @State readerReadMenuBottomBarBlurMode: number = 0;
+  /** 底栏模糊样式；0 填充 / 1 渐变，上游 readMenuBottomBarBlurStyle。 */
+  @State readerReadMenuBottomBarBlurStyle: number = 0;
+  /** 底栏按钮液态玻璃；上游 readMenuBottomBarLiquidGlassButtons。 */
+  @State readerReadMenuBottomBarLiquidGlassButtons: boolean = false;
+  /** 菜单不透明度（0-100）；底栏与顶栏共用上游 readMenuBlurAlpha，默认 85。 */
+  @State readerReadMenuBlurAlpha: number = 85;
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1851,6 +1863,12 @@ struct Index {
     this.readerUseZhLayout = settings.useZhLayout;
     this.readerPaddingDisplayCutouts = settings.paddingDisplayCutouts;
     this.readerAdaptSpecialStyle = settings.adaptSpecialStyle;
+    this.readerReadMenuBottomCornerRadius = settings.readMenuBottomCornerRadius;
+    this.readerReadMenuFloatingBottomBar = settings.readMenuFloatingBottomBar;
+    this.readerReadMenuBottomBarBlurMode = settings.readMenuBottomBarBlurMode;
+    this.readerReadMenuBottomBarBlurStyle = settings.readMenuBottomBarBlurStyle;
+    this.readerReadMenuBottomBarLiquidGlassButtons = settings.readMenuBottomBarLiquidGlassButtons;
+    this.readerReadMenuBlurAlpha = settings.readMenuBlurAlpha;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1958,6 +1976,12 @@ struct Index {
         readBodyToLh: this.readerReadBodyToLh,
         useZhLayout: this.readerUseZhLayout,
         paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+        readMenuBottomCornerRadius: this.readerReadMenuBottomCornerRadius,
+        readMenuFloatingBottomBar: this.readerReadMenuFloatingBottomBar,
+        readMenuBottomBarBlurMode: this.readerReadMenuBottomBarBlurMode,
+        readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
+        readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
+        readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
         adaptSpecialStyle: this.readerAdaptSpecialStyle,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
@@ -2734,6 +2758,54 @@ struct Index {
     this.reloadSelectedChapterForTransform();
   }
 
+  private setReaderReadMenuBottomCornerRadius(value: number): void {
+    this.readerReadMenuBottomCornerRadius = Math.max(0, Math.min(32, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuFloatingBottomBar(enabled: boolean): void {
+    this.readerReadMenuFloatingBottomBar = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBottomBarBlurMode(value: number): void {
+    this.readerReadMenuBottomBarBlurMode = Math.max(0, Math.min(2, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBottomBarBlurStyle(value: number): void {
+    this.readerReadMenuBottomBarBlurStyle = value === 1 ? 1 : 0;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBottomBarLiquidGlassButtons(enabled: boolean): void {
+    this.readerReadMenuBottomBarLiquidGlassButtons = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBlurAlpha(value: number): void {
+    this.readerReadMenuBlurAlpha = Math.max(0, Math.min(100, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -3154,6 +3226,12 @@ struct Index {
     this.readerUseZhLayout = result.settings.useZhLayout;
     this.readerPaddingDisplayCutouts = result.settings.paddingDisplayCutouts;
     this.readerAdaptSpecialStyle = result.settings.adaptSpecialStyle;
+    this.readerReadMenuBottomCornerRadius = result.settings.readMenuBottomCornerRadius;
+    this.readerReadMenuFloatingBottomBar = result.settings.readMenuFloatingBottomBar;
+    this.readerReadMenuBottomBarBlurMode = result.settings.readMenuBottomBarBlurMode;
+    this.readerReadMenuBottomBarBlurStyle = result.settings.readMenuBottomBarBlurStyle;
+    this.readerReadMenuBottomBarLiquidGlassButtons = result.settings.readMenuBottomBarLiquidGlassButtons;
+    this.readerReadMenuBlurAlpha = result.settings.readMenuBlurAlpha;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4465,6 +4543,12 @@ struct Index {
             readBodyToLh: this.readerReadBodyToLh,
             useZhLayout: this.readerUseZhLayout,
             paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+            readMenuBottomCornerRadius: this.readerReadMenuBottomCornerRadius,
+            readMenuFloatingBottomBar: this.readerReadMenuFloatingBottomBar,
+            readMenuBottomBarBlurMode: this.readerReadMenuBottomBarBlurMode,
+            readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
+            readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
+            readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4686,12 +4770,24 @@ struct Index {
               readBodyToLh: this.readerReadBodyToLh,
               useZhLayout: this.readerUseZhLayout,
               paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+              readMenuBottomCornerRadius: this.readerReadMenuBottomCornerRadius,
+              readMenuFloatingBottomBar: this.readerReadMenuFloatingBottomBar,
+              readMenuBottomBarBlurMode: this.readerReadMenuBottomBarBlurMode,
+              readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
+              readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
+              readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
               adaptSpecialStyle: this.readerAdaptSpecialStyle,
               onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
               onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
               onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
               onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
               onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
+              onReadMenuBottomCornerRadiusChange: (value: number) => this.setReaderReadMenuBottomCornerRadius(value),
+              onReadMenuFloatingBottomBarChange: (enabled: boolean) => this.setReaderReadMenuFloatingBottomBar(enabled),
+              onReadMenuBottomBarBlurModeChange: (value: number) => this.setReaderReadMenuBottomBarBlurMode(value),
+              onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
+              onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
+              onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5090,12 +5186,24 @@ struct Index {
             readBodyToLh: this.readerReadBodyToLh,
             useZhLayout: this.readerUseZhLayout,
             paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+            readMenuBottomCornerRadius: this.readerReadMenuBottomCornerRadius,
+            readMenuFloatingBottomBar: this.readerReadMenuFloatingBottomBar,
+            readMenuBottomBarBlurMode: this.readerReadMenuBottomBarBlurMode,
+            readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
+            readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
+            readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
             onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
             onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
             onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
+            onReadMenuBottomCornerRadiusChange: (value: number) => this.setReaderReadMenuBottomCornerRadius(value),
+            onReadMenuFloatingBottomBarChange: (enabled: boolean) => this.setReaderReadMenuFloatingBottomBar(enabled),
+            onReadMenuBottomBarBlurModeChange: (value: number) => this.setReaderReadMenuBottomBarBlurMode(value),
+            onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
+            onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
+            onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5359,12 +5467,24 @@ struct Index {
             readBodyToLh: this.readerReadBodyToLh,
             useZhLayout: this.readerUseZhLayout,
             paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+            readMenuBottomCornerRadius: this.readerReadMenuBottomCornerRadius,
+            readMenuFloatingBottomBar: this.readerReadMenuFloatingBottomBar,
+            readMenuBottomBarBlurMode: this.readerReadMenuBottomBarBlurMode,
+            readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
+            readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
+            readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
             onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
             onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
             onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
+            onReadMenuBottomCornerRadiusChange: (value: number) => this.setReaderReadMenuBottomCornerRadius(value),
+            onReadMenuFloatingBottomBarChange: (enabled: boolean) => this.setReaderReadMenuFloatingBottomBar(enabled),
+            onReadMenuBottomBarBlurModeChange: (value: number) => this.setReaderReadMenuBottomBarBlurMode(value),
+            onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
+            onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
+            onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5570,12 +5690,24 @@ struct Index {
           readBodyToLh: this.readerReadBodyToLh,
           useZhLayout: this.readerUseZhLayout,
           paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+          readMenuBottomCornerRadius: this.readerReadMenuBottomCornerRadius,
+          readMenuFloatingBottomBar: this.readerReadMenuFloatingBottomBar,
+          readMenuBottomBarBlurMode: this.readerReadMenuBottomBarBlurMode,
+          readMenuBottomBarBlurStyle: this.readerReadMenuBottomBarBlurStyle,
+          readMenuBottomBarLiquidGlassButtons: this.readerReadMenuBottomBarLiquidGlassButtons,
+          readMenuBlurAlpha: this.readerReadMenuBlurAlpha,
           adaptSpecialStyle: this.readerAdaptSpecialStyle,
           onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
           onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
           onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
           onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
           onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
+          onReadMenuBottomCornerRadiusChange: (value: number) => this.setReaderReadMenuBottomCornerRadius(value),
+          onReadMenuFloatingBottomBarChange: (enabled: boolean) => this.setReaderReadMenuFloatingBottomBar(enabled),
+          onReadMenuBottomBarBlurModeChange: (value: number) => this.setReaderReadMenuBottomBarBlurMode(value),
+          onReadMenuBottomBarBlurStyleChange: (value: number) => this.setReaderReadMenuBottomBarBlurStyle(value),
+          onReadMenuBottomBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuBottomBarLiquidGlassButtons(enabled),
+          onReadMenuBlurAlphaChange: (value: number) => this.setReaderReadMenuBlurAlpha(value),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

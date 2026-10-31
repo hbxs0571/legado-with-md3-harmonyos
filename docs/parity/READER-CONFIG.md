@@ -53,16 +53,17 @@
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
 | C 正文排版 | 49 | 48 | 1 | 0 |
 | D 翻页与手势交互 | 20 | 19 | 1 | 0 |
-| E 菜单与主题外观 | 42 | 5 | 37 | 0 |
+| E 菜单与主题外观 | 42 | 12 | 30 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 136 | 51 | 2 |
+| 合计 | 189 | 143 | 44 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
 > 2026-10-31 KI-C3 落库：C 块四个下划线几何参数（`underlinePadding`/`underlineExtend`/`dottedBase`/`dottedRatio`）改判 `已接`。这四项**不能**用 ArkUI 的 `Text.decoration` 表达——`DecorationStyleInterface` 只有 `type`/`color`/`style`/`thicknessScale` 四个字段，没有虚线段长、间隔与竖直偏移（这是上游 `ReaderPageUnderline` 能自由配 `DashPathEffect` 而 HOS 不能的根因）。所以改为**自绘**：`ReaderPage.ets` 新增 `ReaderUnderlineLayer(uniform)`，用 `Line()` 的 `startPoint`/`endPoint`/`strokeWidth`/`strokeDashArray` 按 `LocalReaderLine` 逐行叠在正文之上，并把原本 6 处 `Text.decoration` 的正文下划线收敛为 `None` 以免双线；滚动模式拿不到行几何，仍用 Text 装饰（四项只在分页模式生效，已在 KNOWN-ISSUES KI-C3 记为已知差异）。设备实测三档偏移 409/444/478、撑满前后短行 665→1168、虚线段数 34→18。> 2026-10-31 KI-A9 落库：亮度四项（A 块「阅读亮度」、E 块「显示亮度视图」「亮度条位置」「自动亮度」）改判 `已接`。**四处存储键都与字段名不同或部分不同，容易踩坑**：`readBrightness` → `brightness`（`PreferKey.kt:151`）、`showBrightnessView` → `readBrightnessMode`（`:112`）、`brightnessVwPos` → `readBrightnessControlPosition`（`:193`）、`brightnessAuto` → `brightnessAuto`（`:194`，唯一同名）。备份口径也不一致：`brightness` 与 `brightnessAuto` **不在** `BackupConfig.readPrefKeys` 忽略清单里（随 config.xml 无条件备份），`readBrightnessMode` 与 `readBrightnessControlPosition` **在**清单里（不导出）——本地 `BackupRepository.ets` 的 `preferenceKeysByCategory.readConfig` 早已列了后两者，口径本就一致。窗口亮度落地：上游 `ReadBookController.kt:3179-3187` 在 `brightnessAuto` 为真时用 `WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE` 交回系统、否则写 `readBrightness / 100f`；HOS 用 `window.setWindowBrightness()`，**`-1` 正是「恢复系统亮度」**，与 `BRIGHTNESS_OVERRIDE_NONE` 等价，退出时 `restoreReaderBrightness()` 也调 `-1`。亮度条挂在底栏进度条上方（`ReaderPage.ets:3805`），`'1'` 横排 / `'2'` 竖排。设备实测：`readBrightnessMode` 由「关闭」切「横排」后落库 `1`、切「竖排」后落库 `2` 且列表副标题同步；竖排时「亮度条位置」才出现（`ReaderSettingsPage.ets:926`），点「左侧」落库 `readBrightnessControlPosition` = `0`、副标题变「左侧」；`brightness=20` 与 `=100` 两次截图平均亮度都是 36.16 —— **模拟器截图不反映窗口亮度叠加，故亮度视觉效果未取证**（`setWindowBrightness` 在模拟器上是真实调用，`hidumper` 无对应读数）。> 2026-10-31 KI-A1 落库：正文渲染适配四项（A 块「正文行高适配」「中文排版」「适配刘海屏」「适配特殊样式」）改判 `已接`，A 块 16→12。四项存储键**都与字段同名**（`PreferKey.kt:104`/`:150`/`:337`/`:117`），且四个都**不在** `BackupConfig.readPrefKeys` 忽略清单里，随 config.xml 无条件备份。各自的落地口径差别很大：① `readBodyToLh` 上游只有配置、**无渲染消费点**（`ReadBookConfig.kt:67` 只是只读快照，全仓 20 处命中全是设置项/落库/契约/资源串），按「上游没有就不要这个效果」只做可配+落库+备份；② `useZhLayout` 上游断行器唯一、开关只进 `PageEstimateConfig.kt:61` 的布局签名，本地照此拼进 `getFullBookPaginationLayoutKey()` 触发重排；③ `paddingDisplayCutouts` 有真实消费点 `ReaderContentAvoidancePolicy.kt:34-51`，本地用 `getWindowAvoidArea(TYPE_CUTOUT)` 取左右与底部 inset，`getBodyContentWidth()`/`getBodyContentHeight()` 各减一次（顶部仍由外层状态栏 padding 承担）；④ `adaptSpecialStyle` 有真实消费点 `ReaderChapterSource.kt:158-166`，本地在 `LocalTextSemantics.parse()` 识别 `[newpage]` 与 `<usehtml>` 并打 `pageBreak`/`richHtml` 标记，分页器 `LocalReaderPaginator.ets:306`/`:515` 两条路径都按 `pageBreak` 强制换页。设备实测四个 Toggle 与四个存储键一一对应、写盘持续正常（`adaptSpecialStyle`/`paddingDisplayCutouts`/`useZhLayout`/`readBodyToLh` 拨动后立即落库，已复原出厂值）；`[newpage]` 换页与 `<usehtml>` 富文本段因模拟器无正文可读，只做代码侧只读取证。**本轮同时查明并修复了一个环境故障**：prefs XML 被测试期 `hdc file send` 反复覆盖后，`NativePreferences` 报 `ParseNodeElement: unsupported element type = text` + `ReloadFromDisk: reload result is 0`，此后 `put()+flush()` 静默不落盘；推入空 `<preferences version="1.0"/>` 即恢复（已记入 VALIDATION，后续注入测试值不再覆盖整个 prefs 文件）。
-现 51 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+现 44 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
+> 2026-10-31 KI-E4 落库：E 块底栏外观七行（底栏圆角、底栏悬浮、底栏模糊、底栏模糊透明度、底栏模糊样式、底栏液态玻璃、底栏按钮液态玻璃）由 `未接` 改 `已接`，E 块 37 未接 → 30 未接，全表 51 → 44。**上游这七行只对应 6 个字段，且有一个字段被两个开关共用**：① `readMenuBlurAlpha` 被「底栏模糊透明度」与 E2 块的「菜单模糊透明度」两行共用（上游就是一个字段 `ReadSettings.kt:106`，底栏顶栏整块菜单一起变）；② `readMenuBottomBarBlurMode` 被「底栏模糊」与「底栏液态玻璃」两个开关共用——上游 `SystemMenuPage.kt` 里「底栏模糊」是 `TinySwitchSettingItem(read_menu_bar_blur)` 写 `if (it) Haze(2) else None(0)`（**不写 1**），「底栏液态玻璃」是 `TinySwitchSettingItem(read_menu_bar_liquid_glass)` 写 `if (it) LiquidGlass(1) else if (bottomBarBlurMode != None) Haze(2) else None(0)`，两项被两个互斥的 `AnimatedVisibility` 包着（`!floatingBottomBar` / `floatingBottomBar`）；③ 「底栏按钮液态玻璃」才是独立字段 `readMenuBottomBarLiquidGlassButtons`——表内此前写「同上字段的按钮级开关」是错的，已纠正。本地逐项对齐了这三处语义，包括 `SystemMenuPage.kt:560-568` 的**非悬浮时液态玻璃降级为雾化**（`ReaderSettingsPage.ets:849-852 effectiveBottomBarBlurMode()`）。渲染侧把 `ReaderPage.ets` 底栏容器原本硬编码的 `.width('92%').backgroundColor('#D931282A').borderRadius(32).margin({bottom:16})` 五行全部参数化：宽度与底部外边距跟 `readMenuFloatingBottomBar`、四角圆角跟 `readMenuBottomCornerRadius`（非悬浮时下方两角强制 0）、填充色跟 `readMenuBlurAlpha` 且**上限 0.6**（对齐 `ReadBookMenuBarShared.kt:49-85` 的 `coerceAtMost(0.6f)`）、渐变跟 `readMenuBottomBarBlurStyle`。备份口径：六个键**全部**在 `BackupConfig.kt:232-244` 的 `readPrefKeys` 忽略清单里，本地 `BackupRepository.ets` 早已列全，故恢复备份只取本机现值、不覆盖（`BackupRepository.ets` 恢复返回对象补六行 `current.<field>` 仅为满足类型完整性）。**修掉一个自造 bug**：`isMenuSettingsEntryVisible()` 首行 `if (this.selectedMenuSettingsTab !== 0) { return true; }` 会短路，两条互斥规则最初写在函数末尾因而在底栏布局 tab 永不生效，已移到短路之前。设备实测（`127.0.0.1:5555`）：底栏圆角 32→0 后退出设置页重进仍为 0；关闭「底栏悬浮」后「底栏模糊样式」出现、「底栏液态玻璃」消失，重新打开则相反（两个方向都验过）；「底栏模糊」开关落库 `2`、「底栏按钮液态玻璃」落库 `true`、「底栏模糊样式」切「渐变」后条目副标题变「渐变」且重启应用后保持；「底栏模糊透明度」85→50 后重进仍为 50。**未取证部分**：底栏圆角/悬浮/透明度/渐变的**像素级视觉对比**——模拟器书架无正文可读，进不了阅读页取不到底栏帧；「底栏按钮液态玻璃」的玻璃质感本地尚无消费点（ArkUI 无 `backdropBlur` 等效物），两者均记入 KNOWN-ISSUES KI-E4 已知差异。
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 > 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
 > 2026-10-31 KI-A7 落库：A 块「阅读进度条触感反馈」（`sliderVibrator`）与「文字选择触感反馈」（`selectVibrator`）两条由 `未接` 改 `已接`，A 块 21 未接 → 19 未接，全表 94 → 92。其中 `sliderVibrator` 上游 UI 侧无消费点（只有设置项与落库），按「上游没有就不要这个效果」本地只做可配+落库+随备份，不给进度条加振动。
@@ -241,7 +242,7 @@
 上游主体：`ReadBookConfig.kt:77-131`（`readMenu*` 系列 getter）、`Config` 内的 `@Transient menu*` 字段（`:643-658`）。
 本地主体：`ReaderSettingsPage.ets:399-462`（`menuSettingsContent()`）、条目清单 `:1788-1840`。
 
-**本块共同差异**：39 个条目里 37 个有控件、可点击、有 `@State` 承载，但没有一条写入 `ReaderSettingsRepository.ets`，也不驱动 `ReaderPage.ets` 渲染。判 `未接` 的依据是「退出设置页即丢失 + 阅读页外观不变」，不是「没有控件」。剩下 2 条（底栏按钮配置、标题栏操作按钮）是完整持久化链路，判 `已接`。
+**本块共同差异**：42 个条目里 30 个有控件、可点击、有 `@State` 承载，但没有一条写入 `ReaderSettingsRepository.ets`，也不驱动 `ReaderPage.ets` 渲染。判 `未接` 的依据是「退出设置页即丢失 + 阅读页外观不变」，不是「没有控件」。已接的 12 条分三类：2 条完整持久化链路（底栏按钮配置、标题栏操作按钮）；3 条是 KI-A9 接上的亮度侧字段（显示亮度视图、亮度条位置、自动亮度）；7 条是 2026-10-31 KI-E4 接上的底栏外观七行（含本地新增的一条「底栏模糊样式」入口，故 7 行对应上游 6 个字段）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -266,13 +267,13 @@
 | 标题栏悬浮图标位置 | `ReadBookConfig.kt:116` | `ReaderSettingsPage.ets:1813` | 未接 | 上游 `titleBarIconPosition` 夹取 0–3 | 换位置后图标换到另一侧 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E3 |
 | 悬浮图标液态玻璃按钮 | `ReadBookConfig.kt:87` | `ReaderSettingsPage.ets:1814` | 未接 | 上游 `readMenuFloatingIconLiquidGlass` | 开关后图标按钮出现玻璃质感 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E3 |
 | 底栏按钮配置 | `ReadSettings.kt` | `ReaderSettingsRepository.ets:171-172` | 已接 | 链路完整：`ReaderSettingsPage.ets:470-472` 分流 → `handleMenuSettingsEntryClick()`（`:517-531`）→ `bottomActionConfigurationSheet()`（`:1897-1956`，显示开关 `:1936`、上下移 `:1938-1944`）→ `onBottomActionsChange` → `Index.ets:2218` → 写 `bottomActions`（`ReaderSettingsRepository.ets:804`） | 改显示与顺序后退出设置页，重进仍生效，阅读页底栏同步变化 | 只做显示/排序，未做长按动作自定义 |
-| 底栏圆角 | `ReadBookConfig.kt:104` | `ReaderSettingsPage.ets:1821` | 未接 | 上游 `readMenuBottomCornerRadius` 夹取 0–32 | 调圆角后底栏卡片变圆 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E4 |
-| 底栏悬浮 | `ReadBookConfig.kt:82` | `ReaderSettingsPage.ets:1822` | 未接 | 上游 `readMenuFloatingBottomBar` | 开关后底栏脱离屏幕边缘 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E4 |
-| 底栏模糊 | `ReadBookConfig.kt:106` | `ReaderSettingsPage.ets:1823` | 未接 | 上游 `readMenuBottomBarBlurMode` 夹取 0–2 | 切三档后底栏背景变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E4 |
-| 底栏模糊透明度 | `ReadBookConfig.kt:110` | `ReaderSettingsPage.ets:1824` | 未接 | 与「菜单模糊透明度」共用上游字段，本地无字段 | 调后底栏通透度变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E4 |
-| 底栏模糊样式 | `ReadBookConfig.kt:108` | `ReaderSettingsPage.ets:1823` | 未接 | 上游 `readMenuBottomBarBlurStyle` 夹取 0–1（纯色/渐变） | 切「渐变」后底栏背景为渐变 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E4 |
-| 底栏液态玻璃 | `ReadBookConfig.kt:86` | `ReaderSettingsPage.ets:1825` | 未接 | 上游 `readMenuBottomBarLiquidGlassButtons` | 开关后底栏出现玻璃质感 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E4 |
-| 底栏按钮液态玻璃 | `ReadBookConfig.kt:86` | `ReaderSettingsPage.ets:1826` | 未接 | 同上字段的按钮级开关 | 开关后单个按钮出现玻璃质感 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E4 |
+| 底栏圆角 | `ReadBookConfig.kt:104`（`readMenuBottomCornerRadius: Int = 32`） | `ReaderSettingsRepository.ets:290`、`ReaderSettingsPage.ets:211`/`:2357`、`ReaderPage.ets:236`/`:4028-4031` | 已接 | 上游夹取 0–32（`SystemMenuPage.kt:645-655` 滑块 `0f..32f` steps 31），本地 `save()` 同样夹 0–32、`load()` 用 `normalizeInteger(...,0,32,...)`。渲染：`ReaderPage.ets:4028-4031` 的 `borderRadius` 四角取该值，**非悬浮时下方两角强制 0**（卡片贴屏幕底边不能有下圆角） | 设置 → 阅读界面 → 菜单 tab → 底栏布局，把「底栏圆角」拖到 0 再拖到 32，退出设置页重进值保持；阅读页调出菜单，底栏卡片圆角随之从直角变圆角 | 备份口径：`readMenuBottomCornerRadius` 在 `BackupConfig.kt:232` 的 `readPrefKeys` 忽略清单里，不随 `config.xml` 导出，恢复备份不改本机值 |
+| 底栏悬浮 | `ReadBookConfig.kt:82`（`readMenuFloatingBottomBar: Boolean = true`） | `ReaderSettingsRepository.ets:296`、`ReaderSettingsPage.ets:769`/`:783`/`:2358`、`ReaderPage.ets:238`/`:4022`/`:4033` | 已接 | 上游默认 `true`（`ReadSettings.kt:95`），本地上屏在底栏布局 tab，Toggle 直连。渲染三处同时变化：宽度 `92%`↔`100%`（`:4022`）、下方两角圆角 `0`↔`readMenuBottomCornerRadius`（`:4030-4031`）、底部外边距 `16`↔`0`（`:4033`） | 关闭「底栏悬浮」后阅读页底栏铺满屏宽、下圆角消失、贴底无空隙；重新打开恢复悬浮卡片。设置页退出重进值保持 | 同一开关还决定底栏布局 tab 里「底栏模糊样式」与「底栏液态玻璃」两项互斥显示（见该两行） |
+| 底栏模糊 | `ReadBookConfig.kt:106`（`readMenuBottomBarBlurMode: Int = ReadMenuBlurMode.None`） | `ReaderSettingsRepository.ets:301`、`ReaderSettingsPage.ets:215`/`:771`/`:784`/`:2359`、`ReaderPage.ets:240` | 已接 | 上游三档 `ReadMenuBlurMode`（`PreferKey.kt:498`）：`None = 0` / `LiquidGlass = 1` / `Haze = 2`，但**开关控件只写 2 与 0**（`SystemMenuPage.kt` 的 `TinySwitchSettingItem(read_menu_bar_blur)` 写 `if (it) Haze else None`），`LiquidGlass` 由「底栏液态玻璃」那个开关写。本地把三条入口都保留：本行开关写 2/0，「底栏液态玻璃」写 1。**非悬浮时存的 1 会降级成 2**（`ReaderSettingsPage.ets:849-852 effectiveBottomBarBlurMode()`，对齐 `SystemMenuPage.kt:560-568`）。存储夹 0–2 | 打开「底栏模糊」后底栏背景从不透明变半透雾化；关掉恢复 | 备忘录：上游没有名为「模糊效果」的独立三档下拉，只有这个二值开关 + 液态玻璃开关，本地按此还原，未造三档 |
+| 底栏模糊透明度 | `ReadBookConfig.kt:110`（`readMenuBlurAlpha: Int = 85`） | `ReaderSettingsRepository.ets:317`、`ReaderSettingsPage.ets:872`/`:882`/`:2361`、`ReaderPage.ets:246`/`:842-843` | 已接 | **上游只有一个字段 `readMenuBlurAlpha`（夹 0–100），底栏与顶栏、整块菜单共用**；本地照此只建一个字段，底栏消费点 `ReaderPage.ets:842-843 readerBottomBarFillColor()` 取 `alpha = min(0.6, 值/100)`，**上限 0.6** 对齐上游 `ReadBookMenuBarShared.kt:49-85` 的 `coerceAtMost(0.6f)`。滑块范围 0–100、步长 1（`menuSliderMaximum()` → 100） | 把「底栏模糊透明度」拖到 20 与 100，底栏背景浓淡明显变化且 100 也不会完全遮住正文（上限 0.6）；退出重进值保持 | 本地的「菜单模糊透明度」行（E2 块）绑同一字段，两处改一处会同时生效——这是上游行为，非本地缺陷 |
+| 底栏模糊样式 | `ReadBookConfig.kt:108`（`readMenuBottomBarBlurStyle: Int = ReadMenuBlurStyle.Solid`） | `ReaderSettingsRepository.ets:306`、`ReaderSettingsPage.ets:217`/`:911`/`:942`/`:2360`、`ReaderPage.ets:242`/`:856-858` | 已接 | 上游 `ReadMenuBlurStyle`（`PreferKey.kt:504`）：`Solid = 0` / `Progressive = 1`，是**下拉**而非常驻行，且被 `AnimatedVisibility(visible = !floatingBottomBar)` 包着——只在非悬浮时出现。本地同样只在「底栏悬浮」关闭时显示该条目（`ReaderSettingsPage.ets:999`）。渲染：`ReaderPage.ets:856-858 readerBottomBarGradient()`，`Solid` 时两段同色（视觉等价纯色），`Progressive` 时上浓下淡（`alpha` → `max(0, alpha - 0.25)`），`angle: 180`。存储只认 1 否则 0 | 关闭「底栏悬浮」后该项出现，切「渐变」，阅读页底栏背景呈上深下浅；退出重进仍为「渐变」 | **本地新增的条目行**（上游是同一 Tab 内的下拉项，本地条目表里没有对应的历史行），因此 E 块已接数比未接减行数多 1 |
+| 底栏液态玻璃 | `ReadBookConfig.kt:86`（`readMenuBottomBarBlurMode` 取 `LiquidGlass = 1`） | `ReaderSettingsRepository.ets:301`、`ReaderSettingsPage.ets:774`/`:788-790`/`:2362`、`ReaderPage.ets:240` | 已接 | **上游没有独立字段**：这个开关写的就是 `readMenuBottomBarBlurMode = LiquidGlass(1)`（`SystemMenuPage.kt` 的 `TinySwitchSettingItem(read_menu_bar_liquid_glass)`，`checked = readMenuBottomBarBlurMode == LiquidGlass`，关时 `if (bottomBarBlurMode != None) Haze else None`）。本地逐字对齐该三态回写：`enabled ? 1 : (effectiveBottomBarBlurMode() !== 0 ? 2 : 0)`（`ReaderSettingsPage.ets:788-790`）。该条目被 `AnimatedVisibility(visible = floatingBottomBar)` 包着——**只在悬浮时出现**，本地同（`:1000`） | 打开「底栏悬浮」后「底栏液态玻璃」出现、「底栏模糊样式」隐藏；开启液态玻璃后关掉「底栏悬浮」，液态玻璃自动降级为雾化（开关显示关闭、「底栏模糊」显示开启） | 与上一行共用同一字段，两行是**同一上游开关的两个 UI 侧**，不是两个配置项 |
+| 底栏按钮液态玻璃 | `ReadBookConfig.kt:86`（`readMenuBottomBarLiquidGlassButtons: Boolean = false`） | `ReaderSettingsRepository.ets:311`、`ReaderSettingsPage.ets:219`/`:777`/`:793`/`:2363`、`ReaderPage.ets:244`/`:874-875` | 已接 | 这一行才是独立字段 `readMenuBottomBarLiquidGlassButtons`（默认 `false`，`ReadSettings.kt:101`），控制底栏**每个按钮**的表面是否用玻璃质感，与底栏整体背景无关。上游给的中文说明是「需要 Android 13 及以上系统」。本地只做可配+落库：`ReaderPage.ets:874-875 readerBottomBarButtonGlassEnabled()` 已就位，**但尚无调用点**，按钮底色未真驱动（见 KNOWN-ISSUES KI-E4 已知差异） | 开关可拨动、退出重进值保持；按钮玻璃质感本身**未取证**（模拟器无 API 13+ 液态玻璃材质，ArkUI 也无对应 `backdropBlur` 等效物） | 与「底栏液态玻璃」**不是**同一字段，此前表内写「同上字段」是错的，已纠正 |
 | 标题栏胶囊 | `ReadBookConfig.kt:85` | `ReaderSettingsPage.ets:1830` | 未接 | 上游 `readMenuTopBarTitleCapsule` | 开关后标题与章节合并成胶囊 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E5 |
 | 标题栏模式 | `ReadSettings.kt:12` | `ReaderSettingsPage.ets:1831` | 未接 | 上游 `titleBarMode` 是字符串三态，本地选项为「完整信息/仅标题/标题与章节」（`:570`），仅存页面态 | 切「仅标题」后标题栏变矮 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-E5 |
 | 标题栏操作按钮 | `ReadSettings.kt` | `ReaderSettingsPage.ets:1832` | 已接 | 链路与底栏同构：`:470-472` → `handleMenuSettingsEntryClick()`（`:517-531`）→ `topActionConfigurationSheet()`（`:2006` 起）→ `onTopActionsChange` → `Index.ets:2227` → 写 `topActions`（`ReaderSettingsRepository.ets:805`） | 改显示与顺序后重进仍生效，阅读页顶栏同步变化 | 与底栏共用 `ReaderBottomActionConfig` |
@@ -321,7 +322,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（51 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（44 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -533,24 +534,24 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `readMenuColorMode` | 要接 | 菜单配色来源（跟随/自定义），本地只有页面 `@State`（KI-E1） |
 | `readMenuPaletteStyle` | 要接 | 调色板风格，本地条目存在无状态（KI-E1） |
 
-#### 1.5.7 菜单模糊与边框数值（5 项）：要接 4、不接 1
+#### 1.5.7 菜单模糊与边框数值（5 项）：已接 1、要接 3、不接 1
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `readMenuBlurAlpha` | 要接 | 模糊透明度夹 0–100（KI-E2） |
+| `readMenuBlurAlpha` | 已接 | **KI-E4 已实现字段与底栏消费**（存储键同名，夹 0–100：读 `ReaderSettingsRepository.ets:822`/`:1116`、写 `:1296`；面板滑块 `ReaderSettingsPage.ets:2361`/`:872`/`:882`；底栏消费 `ReaderPage.ets:842-843`，上限 0.6）。该字段上游本就是底栏与整块菜单共用一个值，E2 组剩余工作只是把**整块菜单背景**也按它调不透明度，字段链路不再重复建 |
 | `readMenuBlurRadius` | 要接 | 模糊半径夹 0–32（KI-E2） |
 | `readMenuBorderWidth` | 要接 | 描边宽度夹 0–4（KI-E2） |
 | `readMenuLensRadius` | 要接 | 镜头半径夹 0–48f；本地连条目都没有，需先上屏（KI-E6） |
 | `menuBottomCornerRadius` | 不接 | `Config` 内 `@Transient`（`ReadBookConfig.kt:651`），与 `readMenuBottomCornerRadius` 是同一配置的两处声明；上游用户项是后者，本地已接 |
 
-#### 1.5.8 菜单布局与玻璃效果（12 项）：要接 10、不接 2
+#### 1.5.8 菜单布局与玻璃效果（12 项）：已接 4、要接 6、不接 2
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `readMenuBottomBarBlurMode` | 要接 | 底栏模糊三档（KI-E4） |
-| `readMenuBottomBarBlurStyle` | 要接 | 底栏模糊样式（纯色/渐变，KI-E4） |
-| `readMenuBottomBarLiquidGlassButtons` | 要接 | 底栏按钮液态玻璃（KI-E4） |
-| `readMenuFloatingBottomBar` | 要接 | 底栏悬浮（KI-E4） |
+| `readMenuBottomBarBlurMode` | 已接 | **KI-E4 已实现**（存储键同名，夹 0–2：读 `ReaderSettingsRepository.ets:819`/`:1110`、写 `:1290`；面板 Toggle `ReaderSettingsPage.ets:784-787` 写 2/0、液态玻璃开关 `:788-791` 写 1；非悬浮降级 `:849-852`；消费 `ReaderPage.ets:240`） |
+| `readMenuBottomBarBlurStyle` | 已接 | **KI-E4 已实现**（存储键同名，夹 0–1：读 `ReaderSettingsRepository.ets:820`/`:1112`、写 `:1292`；下拉 `ReaderSettingsPage.ets:2360`、选中态 `:911`、写回 `:942`；消费 `ReaderPage.ets:856-858 readerBottomBarGradient()`） |
+| `readMenuBottomBarLiquidGlassButtons` | 已接 | **KI-E4 已实现**（存储键同名，布尔：读 `ReaderSettingsRepository.ets:821`/`:1114`、写 `:1294`；面板 `ReaderSettingsPage.ets:2363`/`:793`；消费方法 `ReaderPage.ets:874-875` —— 可配+落库已通，按钮底色尚无调用点，见 KNOWN-ISSUES KI-E4） |
+| `readMenuFloatingBottomBar` | 已接 | **KI-E4 已实现**（存储键同名，布尔默认 true：读 `ReaderSettingsRepository.ets:818`/`:1108`、写 `:1289`；面板 `ReaderSettingsPage.ets:2358`/`:783`；消费 `ReaderPage.ets:4022`/`:4030-4031`/`:4033` 三处，并决定另两项互斥可见 `ReaderSettingsPage.ets:999-1000`） |
 | `readMenuFloatingIconLiquidGlass` | 要接 | 悬浮图标液态玻璃（KI-E3） |
 | `readMenuTopBarBlurMode` | 要接 | 顶栏模糊三档（KI-E5） |
 | `readMenuTopBarBlurStyle` | 要接 | 顶栏模糊样式（KI-E5） |
@@ -672,11 +673,11 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 盘点结论指向三个互不重叠的缺口，按收益排序：
 
-1. **E 块菜单外观 40 行未接**：全部有控件无持久化。所需字段都是纯 UI 参数（颜色、圆角、模糊半径、玻璃开关），不触碰渲染引擎与排版算法，是唯一可以整块推进的部分，字段明细见 1.3 的「菜单」与「标题栏与图标」各组。前置条件：先在 `ReaderSettingsRepository.ets` 补齐字段与 `save` 分支，再把 `ReaderSettingsPage.ets` 的 `@State` 改为读仓储。可照抄同块已接的两条（`bottomActions`/`topActions`，`ReaderSettingsRepository.ets:804-805`）的链路。
+1. **E 块菜单外观 30 行未接**：全部有控件无持久化（2026-10-31 底栏外观七行已由 KI-E4 接上，见复核段）。所需字段都是纯 UI 参数（颜色、圆角、模糊半径、玻璃开关），不触碰渲染引擎与排版算法，是唯一可以整块推进的部分，字段明细见 1.3 的「菜单」与「标题栏与图标」各组。前置条件：先在 `ReaderSettingsRepository.ets` 补齐字段与 `save` 分支，再把 `ReaderSettingsPage.ets` 的 `@State` 改为读仓储。可照抄同块已接的两条（`bottomActions`/`topActions`，`ReaderSettingsRepository.ets:804-805`）的链路。
 2. ~~**C 块标题排版 14 项**~~ —— **2026-10-31 KI-C4 已完成**。当初估计的改动面正确（9 处 `fontSize + 4` 硬编码确实全部清除，`titleSizeRelative` 用显式 `boolean` 默认 `true` 等价覆盖上游 null 态）。实际风险点不在取值而在两处 UI：面板缺少可滚动容器、`ForEach` key 不含选中项，两处都已修（详见本节末段与 `docs/VALIDATION.md` 的 KI-C4 节）。
 3. ~~**C 块正文与背景 6 行 + 下划线虚线 4 行**~~ —— **正文与背景 6 行已由 2026-10-31 KI-C1/KI-C2 完成**（11 个字段全部落库：正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2；`getReadingTextColor()` 的硬编码已改走 `textColor`/`textColorNight`，背景预设 `READER_BACKGROUND_STYLES` 降级为「自定义 `bgStr` 为空时的回退」）。**下划线虚线 4 行已由 2026-10-31 KI-C3 完成**：这四项不能用 `Text.decoration`（ArkUI 只开放 `type`/`color`/`style`/`thicknessScale`），改为 `ReaderPage.ets` 的 `ReaderUnderlineLayer` 用 `Line()` 逐行自绘，并把 6 处正文 `Text.decoration` 收敛为 `None`；滚动模式无行几何，仍用 Text 装饰（已知差异）。
 
-三处阻塞里只剩第 1 条（E 块菜单外观 40 行），共 40 行未接（明细表口径）。A–G 明细表的 51 行未接分布为：E 块 37 行、A 块 12 行、D 块 1 行、C 块 1 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19、再因 KI-A6 接上 `autoSuggestDayNight` 减到 18、又因 KI-A3 接上 `disableReturnKey` 减到 17，再因 KI-A9 接上 `readBrightness` 减到 16，第八次因 KI-A1 接上正文渲染适配四项减到 12；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7，第五次因 KI-D1 接上 `prevKeys`/`nextKeys`/`mouseWheelPage` 减到 5；第六次因 KI-D2 接上 `textSelectMenuConfig`/`expandTextMenu`/`showSelectMenuIcon` 减到 2，第七次因 KI-D4 接上 `doubleHorizontalPage` 减到 1C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5，第四次因 KI-C3 接上四个下划线几何参数由 5 减到 1），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞里只剩第 1 条（E 块菜单外观 30 行），明细表口径共 44 行未接。A–G 明细表的 44 行未接分布为：E 块 30 行、A 块 12 行、D 块 1 行、C 块 1 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19、再因 KI-A6 接上 `autoSuggestDayNight` 减到 18、又因 KI-A3 接上 `disableReturnKey` 减到 17，再因 KI-A9 接上 `readBrightness` 减到 16，第八次因 KI-A1 接上正文渲染适配四项减到 12；E 块同日因 KI-E4 接上底栏外观六字段七行由 37 减到 30；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7，第五次因 KI-D1 接上 `prevKeys`/`nextKeys`/`mouseWheelPage` 减到 5；第六次因 KI-D2 接上 `textSelectMenuConfig`/`expandTextMenu`/`showSelectMenuIcon` 减到 2，第七次因 KI-D4 接上 `doubleHorizontalPage` 减到 1C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5，第四次因 KI-C3 接上四个下划线几何参数由 5 减到 1），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 

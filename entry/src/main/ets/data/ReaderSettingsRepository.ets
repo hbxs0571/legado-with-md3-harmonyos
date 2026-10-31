@@ -283,6 +283,38 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * （`ReaderChapterSource.kt:158-166`、`ContentProcessor.kt:173`）；关闭时两者按字面文字显示。
    */
   adaptSpecialStyle: boolean;
+  /**
+   * 底栏圆角（vp）；上游 `readMenuBottomCornerRadius: Int = 32`（`ReadSettings.kt:94`），
+   * 存储键同名（`PreferKey.kt:393`），消费前 `coerceIn(0, 32)`（`ReadBookConfig.kt:104`）。
+   */
+  readMenuBottomCornerRadius: number;
+  /**
+   * 底栏是否悬浮；上游 `readMenuFloatingBottomBar: Boolean = true`（`ReadSettings.kt:95`），
+   * 存储键同名（`PreferKey.kt:394`）。悬浮时左右各留 16dp、底部留 16dp + 导航栏高度
+   * （`ReadBookMenuBar.kt:416-420`）；不悬浮时铺满宽度、只有顶角圆（`:437-440`）。
+   */
+  readMenuFloatingBottomBar: boolean;
+  /**
+   * 底栏模糊模式；上游 `readMenuBottomBarBlurMode: Int = ReadMenuBlurMode.None`（`ReadSettings.kt:97`），
+   * 存储键同名（`PreferKey.kt:396`）。0 关闭 / 1 液态玻璃 / 2 雾化（`PreferKey.kt:498-502`）。
+   */
+  readMenuBottomBarBlurMode: number;
+  /**
+   * 底栏模糊样式；上游 `readMenuBottomBarBlurStyle: Int = ReadMenuBlurStyle.Solid`（`ReadSettings.kt:104`），
+   * 存储键同名（`PreferKey.kt:403`）。0 填充 / 1 渐变（`PreferKey.kt:504-507`）。
+   */
+  readMenuBottomBarBlurStyle: number;
+  /**
+   * 底栏按钮是否用液态玻璃表面；上游 `readMenuBottomBarLiquidGlassButtons: Boolean = false`
+   * （`ReadSettings.kt:101`），存储键同名（`PreferKey.kt:400`）。
+   */
+  readMenuBottomBarLiquidGlassButtons: boolean;
+  /**
+   * 菜单不透明度（0-100）；上游 `readMenuBlurAlpha: Int = 85`（`ReadSettings.kt:106`），
+   * 存储键同名（`PreferKey.kt:405`），消费前 `coerceIn(0, 100)`（`ReadBookConfig.kt:110`）。
+   * 底栏与顶栏共用同一个字段（`ReadBookMenuBar.kt:482`、`ReadBookMenuBarTitle.kt:95`）。
+   */
+  readMenuBlurAlpha: number;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -646,6 +678,13 @@ export class ReaderSettingsRepository {
   useZhLayout: false,
   paddingDisplayCutouts: false,
   adaptSpecialStyle: true,
+      // 底栏外观六项默认值对齐上游 ReadSettings.kt:94-106。
+      readMenuBottomCornerRadius: 32,
+      readMenuFloatingBottomBar: true,
+      readMenuBottomBarBlurMode: 0,
+      readMenuBottomBarBlurStyle: 0,
+      readMenuBottomBarLiquidGlassButtons: false,
+      readMenuBlurAlpha: 85,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -775,6 +814,12 @@ export class ReaderSettingsRepository {
     const useZhLayoutValue = await store.get('useZhLayout', defaults.useZhLayout);
     const paddingDisplayCutoutsValue = await store.get('paddingDisplayCutouts', defaults.paddingDisplayCutouts);
     const adaptSpecialStyleValue = await store.get('adaptSpecialStyle', defaults.adaptSpecialStyle);
+    const readMenuBottomCornerRadiusValue = await store.get('readMenuBottomCornerRadius', defaults.readMenuBottomCornerRadius);
+    const readMenuFloatingBottomBarValue = await store.get('readMenuFloatingBottomBar', defaults.readMenuFloatingBottomBar);
+    const readMenuBottomBarBlurModeValue = await store.get('readMenuBottomBarBlurMode', defaults.readMenuBottomBarBlurMode);
+    const readMenuBottomBarBlurStyleValue = await store.get('readMenuBottomBarBlurStyle', defaults.readMenuBottomBarBlurStyle);
+    const readMenuBottomBarLiquidGlassButtonsValue = await store.get('readMenuBottomBarLiquidGlassButtons', defaults.readMenuBottomBarLiquidGlassButtons);
+    const readMenuBlurAlphaValue = await store.get('readMenuBlurAlpha', defaults.readMenuBlurAlpha);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1058,6 +1103,18 @@ export class ReaderSettingsRepository {
       useZhLayout: typeof useZhLayoutValue === 'boolean' ? useZhLayoutValue : defaults.useZhLayout,
       paddingDisplayCutouts: typeof paddingDisplayCutoutsValue === 'boolean' ? paddingDisplayCutoutsValue : defaults.paddingDisplayCutouts,
       adaptSpecialStyle: typeof adaptSpecialStyleValue === 'boolean' ? adaptSpecialStyleValue : defaults.adaptSpecialStyle,
+          readMenuBottomCornerRadius: ReaderSettingsRepository.normalizeInteger(
+            readMenuBottomCornerRadiusValue, 0, 32, defaults.readMenuBottomCornerRadius),
+          readMenuFloatingBottomBar: typeof readMenuFloatingBottomBarValue === 'boolean'
+            ? readMenuFloatingBottomBarValue : defaults.readMenuFloatingBottomBar,
+          readMenuBottomBarBlurMode: ReaderSettingsRepository.normalizeInteger(
+            readMenuBottomBarBlurModeValue, 0, 2, defaults.readMenuBottomBarBlurMode),
+          readMenuBottomBarBlurStyle: ReaderSettingsRepository.normalizeInteger(
+            readMenuBottomBarBlurStyleValue, 0, 1, defaults.readMenuBottomBarBlurStyle),
+          readMenuBottomBarLiquidGlassButtons: typeof readMenuBottomBarLiquidGlassButtonsValue === 'boolean'
+            ? readMenuBottomBarLiquidGlassButtonsValue : defaults.readMenuBottomBarLiquidGlassButtons,
+          readMenuBlurAlpha: ReaderSettingsRepository.normalizeInteger(
+            readMenuBlurAlphaValue, 0, 100, defaults.readMenuBlurAlpha),
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1227,6 +1284,16 @@ export class ReaderSettingsRepository {
       await store.put('useZhLayout', settings.useZhLayout === true);
       await store.put('paddingDisplayCutouts', settings.paddingDisplayCutouts === true);
       await store.put('adaptSpecialStyle', settings.adaptSpecialStyle !== false);
+      await store.put('readMenuBottomCornerRadius',
+        Math.max(0, Math.min(32, Math.round(settings.readMenuBottomCornerRadius))));
+      await store.put('readMenuFloatingBottomBar', settings.readMenuFloatingBottomBar !== false);
+      await store.put('readMenuBottomBarBlurMode',
+        Math.max(0, Math.min(2, Math.round(settings.readMenuBottomBarBlurMode))));
+      await store.put('readMenuBottomBarBlurStyle',
+        settings.readMenuBottomBarBlurStyle === 1 ? 1 : 0);
+      await store.put('readMenuBottomBarLiquidGlassButtons',
+        settings.readMenuBottomBarLiquidGlassButtons === true);
+      await store.put('readMenuBlurAlpha', Math.max(0, Math.min(100, Math.round(settings.readMenuBlurAlpha))));
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
