@@ -19,6 +19,8 @@ export interface LocalReaderLine {
   startPosition: number;
   endPosition: number;
   justifyGap: number;
+  /** 该行未拉伸时的文字实际宽度，供自绘下划线决定线段右端。 */
+  contentWidth: number;
 }
 
 export interface LocalReaderPage {
@@ -134,7 +136,8 @@ export class LocalReaderPaginator {
         verticalSpaceBefore: verticalSpaceBefore,
         startPosition: lineStart,
         endPosition: lineEnd,
-        justifyGap: justifyGap
+        justifyGap: justifyGap,
+        contentWidth: naturalWidth
       };
       pageLines.push(line);
       pageUsedHeight += verticalSpaceBefore + currentLineHeight + spacingAfter;

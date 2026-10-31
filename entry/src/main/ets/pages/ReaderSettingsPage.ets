@@ -81,6 +81,10 @@ export struct ReaderSettingsPage {
   @Prop underlineColor: string = '#3E3D3B';
   @Prop underlineColorNight: string = '#ADADAD';
   @Prop underlineHeight: number = 1;
+  @Prop underlinePadding: number = 10;
+  @Prop underlineExtend: boolean = false;
+  @Prop dottedBase: number = 6;
+  @Prop dottedRatio: number = 6;
   onTextItalicChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onTextBoldChange: (weight: number) => void = (_weight: number) => {};
   onTextShadowChange: (enabled: boolean) => void = (_enabled: boolean) => {};
@@ -92,6 +96,10 @@ export struct ReaderSettingsPage {
   onDottedLineChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onUnderlineColorChange: (value: string, night: boolean) => void = (_value: string, _night: boolean) => {};
   onUnderlineHeightChange: (value: number) => void = (_value: number) => {};
+  onUnderlinePaddingChange: (value: number) => void = (_value: number) => {};
+  onUnderlineExtendChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onDottedBaseChange: (value: number) => void = (_value: number) => {};
+  onDottedRatioChange: (value: number) => void = (_value: number) => {};
   @Prop textFullJustify: boolean = true;
   @Prop textBottomJustify: boolean = true;
   @Prop paperIndex: number = 2;
@@ -1717,6 +1725,19 @@ export struct ReaderSettingsPage {
                 })
                 MenuSettingSlider({ title: '下划线粗细', value: this.underlineHeight, minValue: 0, maxValue: 10,
                   onChange: (value: number) => this.onUnderlineHeightChange(value) })
+                MenuSettingSlider({ title: '离字间距', value: this.underlinePadding, minValue: 0, maxValue: 20,
+                  onChange: (value: number) => this.onUnderlinePaddingChange(value) })
+                MenuSettingSwitch({
+                  title: '撑满整行', detail: '下划线延伸到页面左右边距',
+                  checked: this.underlineExtend,
+                  onChange: (enabled: boolean) => this.onUnderlineExtendChange(enabled)
+                })
+                if (this.dottedLine) {
+                  MenuSettingSlider({ title: '实线段长', value: this.dottedBase, minValue: 0, maxValue: 20,
+                    onChange: (value: number) => this.onDottedBaseChange(value) })
+                  MenuSettingSlider({ title: '空隙长度', value: this.dottedRatio, minValue: 0, maxValue: 20,
+                    onChange: (value: number) => this.onDottedRatioChange(value) })
+                }
               }
               Text('高亮规则依赖 Android 规则库；当前 HOS 尚无兼容规则仓储，本页不伪造规则列表。')
                 .fontSize(10).fontColor('#92949E').width('100%').padding(12)

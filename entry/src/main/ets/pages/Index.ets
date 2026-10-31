@@ -165,6 +165,10 @@ struct Index {
   @State readerUnderlineColor: string = '#3E3D3B';
   @State readerUnderlineColorNight: string = '#ADADAD';
   @State readerUnderlineHeight: number = 1;
+  @State readerUnderlinePadding: number = 10;
+  @State readerUnderlineExtend: boolean = false;
+  @State readerDottedBase: number = 6;
+  @State readerDottedRatio: number = 6;
   @State readerTextFullJustify: boolean = true;
   @State readerTextBottomJustify: boolean = true;
   @State paperIndex: number = 0;
@@ -1754,6 +1758,10 @@ struct Index {
       this.readerUnderlineColor = settings.underlineColor;
       this.readerUnderlineColorNight = settings.underlineColorNight;
       this.readerUnderlineHeight = settings.underlineHeight;
+      this.readerUnderlinePadding = settings.underlinePadding;
+      this.readerUnderlineExtend = settings.underlineExtend;
+      this.readerDottedBase = settings.dottedBase;
+      this.readerDottedRatio = settings.dottedRatio;
       this.readerTextFullJustify = settings.textFullJustify;
       this.readerTextBottomJustify = settings.textBottomJustify;
       this.paperIndex = settings.paperIndex;
@@ -1894,6 +1902,10 @@ struct Index {
         underlineColor: this.readerUnderlineColor,
         underlineColorNight: this.readerUnderlineColorNight,
         underlineHeight: this.readerUnderlineHeight,
+        underlinePadding: this.readerUnderlinePadding,
+        underlineExtend: this.readerUnderlineExtend,
+        dottedBase: this.readerDottedBase,
+        dottedRatio: this.readerDottedRatio,
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
         paperIndex: this.paperIndex,
@@ -2117,6 +2129,26 @@ struct Index {
 
   private setReaderUnderlineHeight(value: number): void {
     this.readerUnderlineHeight = Math.max(0, Math.min(10, Math.round(value)));
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderUnderlinePadding(value: number): void {
+    this.readerUnderlinePadding = Math.max(0, Math.min(20, Math.round(value)));
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderUnderlineExtend(enabled: boolean): void {
+    this.readerUnderlineExtend = enabled;
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderDottedBase(value: number): void {
+    this.readerDottedBase = Math.max(0, Math.min(20, Math.round(value)));
+    this.saveReaderBodyEffect();
+  }
+
+  private setReaderDottedRatio(value: number): void {
+    this.readerDottedRatio = Math.max(0, Math.min(20, Math.round(value)));
     this.saveReaderBodyEffect();
   }
 
@@ -2695,6 +2727,10 @@ struct Index {
       this.readerUnderlineColor = result.settings.underlineColor;
       this.readerUnderlineColorNight = result.settings.underlineColorNight;
       this.readerUnderlineHeight = result.settings.underlineHeight;
+      this.readerUnderlinePadding = result.settings.underlinePadding;
+      this.readerUnderlineExtend = result.settings.underlineExtend;
+      this.readerDottedBase = result.settings.dottedBase;
+      this.readerDottedRatio = result.settings.dottedRatio;
       this.paperIndex = result.settings.paperIndex;
       this.dayPaperIndex = result.settings.dayPaperIndex;
       this.nightPaperIndex = result.settings.nightPaperIndex;
@@ -3990,6 +4026,10 @@ struct Index {
               underlineColor: this.readerUnderlineColor,
               underlineColorNight: this.readerUnderlineColorNight,
               underlineHeight: this.readerUnderlineHeight,
+              underlinePadding: this.readerUnderlinePadding,
+              underlineExtend: this.readerUnderlineExtend,
+              dottedBase: this.readerDottedBase,
+              dottedRatio: this.readerDottedRatio,
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
             imageStyle: this.selectedBook.imageStyle ?? 'DEFAULT',
@@ -4185,6 +4225,10 @@ struct Index {
               underlineColor: this.readerUnderlineColor,
               underlineColorNight: this.readerUnderlineColorNight,
               underlineHeight: this.readerUnderlineHeight,
+              underlinePadding: this.readerUnderlinePadding,
+              underlineExtend: this.readerUnderlineExtend,
+              dottedBase: this.readerDottedBase,
+              dottedRatio: this.readerDottedRatio,
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
               paperIndex: this.paperIndex,
@@ -4332,6 +4376,10 @@ struct Index {
               onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
               onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
               onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onUnderlinePaddingChange: (value: number) => this.setReaderUnderlinePadding(value),
+              onUnderlineExtendChange: (enabled: boolean) => this.setReaderUnderlineExtend(enabled),
+              onDottedBaseChange: (value: number) => this.setReaderDottedBase(value),
+              onDottedRatioChange: (value: number) => this.setReaderDottedRatio(value),
               onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
               onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
               onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),
@@ -4547,6 +4595,10 @@ struct Index {
               underlineColor: this.readerUnderlineColor,
               underlineColorNight: this.readerUnderlineColorNight,
               underlineHeight: this.readerUnderlineHeight,
+              underlinePadding: this.readerUnderlinePadding,
+              underlineExtend: this.readerUnderlineExtend,
+              dottedBase: this.readerDottedBase,
+              dottedRatio: this.readerDottedRatio,
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
             paperIndex: this.paperIndex,
@@ -4690,6 +4742,10 @@ struct Index {
               onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
               onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
               onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onUnderlinePaddingChange: (value: number) => this.setReaderUnderlinePadding(value),
+              onUnderlineExtendChange: (enabled: boolean) => this.setReaderUnderlineExtend(enabled),
+              onDottedBaseChange: (value: number) => this.setReaderDottedBase(value),
+              onDottedRatioChange: (value: number) => this.setReaderDottedRatio(value),
               onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
               onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
               onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),
@@ -4779,6 +4835,10 @@ struct Index {
               underlineColor: this.readerUnderlineColor,
               underlineColorNight: this.readerUnderlineColorNight,
               underlineHeight: this.readerUnderlineHeight,
+              underlinePadding: this.readerUnderlinePadding,
+              underlineExtend: this.readerUnderlineExtend,
+              dottedBase: this.readerDottedBase,
+              dottedRatio: this.readerDottedRatio,
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
             paperIndex: this.paperIndex,
@@ -4912,6 +4972,10 @@ struct Index {
               onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
               onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
               onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onUnderlinePaddingChange: (value: number) => this.setReaderUnderlinePadding(value),
+              onUnderlineExtendChange: (enabled: boolean) => this.setReaderUnderlineExtend(enabled),
+              onDottedBaseChange: (value: number) => this.setReaderDottedBase(value),
+              onDottedRatioChange: (value: number) => this.setReaderDottedRatio(value),
               onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
               onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
               onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),
@@ -4948,6 +5012,10 @@ struct Index {
               underlineColor: this.readerUnderlineColor,
               underlineColorNight: this.readerUnderlineColorNight,
               underlineHeight: this.readerUnderlineHeight,
+              underlinePadding: this.readerUnderlinePadding,
+              underlineExtend: this.readerUnderlineExtend,
+              dottedBase: this.readerDottedBase,
+              dottedRatio: this.readerDottedRatio,
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
           paperIndex: this.paperIndex,
@@ -5077,6 +5145,10 @@ struct Index {
               onTextShadowColorChange: (value: string, night: boolean) => this.setReaderTextShadowColor(value, night),
               onUnderlineColorChange: (value: string, night: boolean) => this.setReaderUnderlineColor(value, night),
               onUnderlineHeightChange: (value: number) => this.setReaderUnderlineHeight(value),
+              onUnderlinePaddingChange: (value: number) => this.setReaderUnderlinePadding(value),
+              onUnderlineExtendChange: (enabled: boolean) => this.setReaderUnderlineExtend(enabled),
+              onDottedBaseChange: (value: number) => this.setReaderDottedBase(value),
+              onDottedRatioChange: (value: number) => this.setReaderDottedRatio(value),
               onTextFontChange: (fontPath: string) => this.setReaderTextFont(fontPath),
               onTitleFontChange: (fontPath: string) => this.setReaderTitleFont(fontPath),
               onSystemTypefacesChange: (index: number) => this.setReaderSystemTypefaces(index),

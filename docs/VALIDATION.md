@@ -305,6 +305,54 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-C3 下划线四个几何参数（分页模式通过，滚动模式未接）
+
+1. 设备与构建：HOS 模拟器 `127.0.0.1:5555`（Mate 90 Pro，1280×2832），`io.legado.harmony`。
+   `assembleHap` 通过：`BUILD SUCCESSFUL in 31 s 652 ms`，33 项任务 17 执行 / 16 最新，
+   仅有既存的 ArkTS「Function may throw exceptions」警告与 `WARN: No signingConfig found for product default`。
+   `hdc install -r` 返回 `install bundle successfully`。
+
+2. 面板上屏：设置 → 阅读界面 → 排版图标 →「正文」tab →「效果」→「文字效果」面板。
+   打开「正文下划线」后，面板依次出现「夜间下划线颜色（#ADADAD）」「下划线粗细 1」「离字间距 10」
+   「撑满整行 / 下划线延伸到页面左右边距」，勾选「虚线下划线」后再展开「实线段长」与「空隙长度」两个滑块。
+   四个新控件全部真上屏（`uitest dumpLayout` 读到），不是占位。
+
+3. 落库：`cat /data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_reader_settings` 得到
+   `<bool key="underlineExtend" value="false"/>`、`<double key="underlinePadding" value="10.000000"/>`、
+   `<double key="dottedBase" value="6.000000"/>`、`<double key="dottedRatio" value="6.000000"/>`，四个键名与默认值都与上游同名同默认。
+
+4. **偏移量决定性证据（三档线性）**：注入 `underlinePadding` 分别为 0 / 10 / 20，重启后进阅读页截图，
+   用 PIL 找出下划线色（`#ADADAD`，判据 `abs(r-173)<45 且 abs(g-173)<45 且 abs(b-173)<45 且三通道互差<12`）
+   在每行出现的像素行，取第一条完整线段的 y：
+   `padding=0 → y 409..411`、`padding=10 → y 444..446`、`padding=20 → y 478..481`。
+   相邻档差分别为 35 与 34 像素，等于 10vp × 3.5 屏幕密度 —— **线性关系成立，且与上游
+   `(underlinePadding - 10).dpToPx()` 的相对量口径一致**（默认 10 时相对偏移为 0）。
+
+5. **延伸开关决定性证据（同一行前后对比）**：`underlineExtend=false` 时，短行（最后一行不足整行）
+   线段为 `x0=56 x1=720`（宽 665）；改成 `true` 后同一行变成 `x0=56 x1=1223`（宽 1168），
+   且该页所有行都统一到 `56..1223`。即关闭时线只到该行文字右边界、打开时延伸到正文列宽，与上游
+   `ReaderPaginator.kt:449` 的 `extendToColumn` 分支（`columnLeft()` 到 `columnLeft() + contentWidthPx`）逐字对应。
+
+6. **虚线两参数决定性证据（段数反比）**：`dottedLine=true` 时统计同一行线段的连通段数——
+   `dottedBase=6, dottedRatio=6` 得 **34 段**（命中像素 624）；
+   `dottedBase=20, dottedRatio=6` 得 **18 段**（命中像素 913）。
+   段数随实线段长变长而减少、每段变长使总命中像素增加，说明 `strokeDashArray([dottedBase, dottedRatio])`
+   真的在按这两个值画 dash/gap，不是系统固定样式的虚线。
+
+7. 只读证据链（未改代码即可复现）：`grep -n "fontSize + 4"` 与本轮无关；本轮的自绘入口用
+   `grep -n "ReaderUnderlineLayer" entry/src/main/ets/pages/ReaderPage.ets` 可定位，
+   `grep -c "this.underline ? TextDecorationType.Underline"` 现为 2（都留在滚动模式的
+   `getReaderHighlightTextRuns()` 里，是刻意的已知差异）。
+
+8. 已知差异（如实记录）：**滚动模式未接这四项**。滚动模式拿不到逐行几何，无法自绘 `Line()`，
+   仍用 `Text.decoration` 表达下划线，所以虚线段长/间隔/偏移/延伸只在分页模式生效。
+   这一点写进了代码注释与 `KNOWN-ISSUES` KI-C3。
+
+9. 测试期改动已复原：`underline` 回到 `false`、`underlinePadding` 10、`underlineExtend` false、
+   `dottedLine` false、`dottedBase` 6、`dottedRatio` 6，偏好文件里四个键与初始值一致。
+
+10. 本节只代表 N 端模拟器；未在真机、EInk 模式或其他密度屏上验证，密度的 3.5 只是本模拟器的换算系数。
+
 ## 2026-10-31 N 端 KI-C4 标题排版十四项（通过）
 
 1. 设备与构建：HOS 模拟器 `127.0.0.1:5555`（Mate 90 Pro，1280×2832），`io.legado.harmony`。

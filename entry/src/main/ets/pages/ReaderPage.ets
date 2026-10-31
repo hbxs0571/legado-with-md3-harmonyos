@@ -168,6 +168,13 @@ export struct ReaderPage {
   @Prop underlineColor: string = '#3E3D3B';
   @Prop underlineColorNight: string = '#ADADAD';
   @Prop underlineHeight: number = 1;
+  // 上游 underlinePadding：默认 10，绘制时取 (值 - 10) 作相对偏移（LegacyReaderPaginationStyleFactory.kt:68）
+  @Prop underlinePadding: number = 10;
+  // 上游 underlineExtend：下划线是否撑满整列（ReaderPaginator.kt:449 的 extendToColumn）
+  @Prop underlineExtend: boolean = false;
+  // 上游 dottedBase / dottedRatio：虚线的实线段长与空隙，单位在上游是 px，本地按 vp 传给 strokeDashArray
+  @Prop dottedBase: number = 6;
+  @Prop dottedRatio: number = 6;
   @Prop readerNightMode: boolean = true;
   @Prop @Watch('onPaginationInputsChanged') textFullJustify: boolean = true;
   @Prop @Watch('onPaginationInputsChanged') textBottomJustify: boolean = true;
@@ -2270,6 +2277,97 @@ export struct ReaderPage {
     return this.readerNightMode ? this.underlineColorNight : this.underlineColor;
   }
 
+  // 上游 offsetPx = (underlinePadding - 10).dpToPx()：默认 10 时偏移为 0，配大则线下移、配小则上移。
+  private resolveUnderlineOffsetVp(): number {
+    return this.underlinePadding - 10;
+  }
+
+  // 上游 strokeWidth = widthPx.coerceAtLeast(1f)（ReaderPageDecorationDrawCache.kt）。
+  private resolveUnderlineWidthVp(): number {
+    return Math.max(1, this.underlineHeight);
+  }
+
+  // 上游 DashPathEffect(dashOnPx, dashOffPx)；非虚线时给空数组即实线。
+  private resolveUnderlineDashArray(): number[] {
+    if (!this.dottedLine) { return []; }
+    return [Math.max(0.1, this.dottedBase), Math.max(0.1, this.dottedRatio)];
+  }
+
+  // 正文区实际内容宽度（不含左右内边距），撑满整行时的线段右端。
+  private resolveUnderlineLineEnd(line: LocalReaderLine): number {
+    const available = this.getBodyContentWidth();
+    if (this.underlineExtend) { return available; }
+    return Math.max(0, Math.min(available, line.contentWidth));
+  }
+
+  private readerPageLineOffset(index: number): number {
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined) { return 0; }
+    let offset = 0;
+    for (let lineIndex = 0; lineIndex < index; lineIndex++) {
+      const line = page.lines[lineIndex];
+      if (line === undefined) { continue; }
+      offset += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+    }
+    return offset;
+  }
+
+  private readerPageLinesTotalHeight(): number {
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined) { return 0; }
+    return this.readerPageLineOffset(page.lines.length);
+  }
+
+  // ReaderPageTextJoined 把整页塞进一个 Text，行与行之间只有统一 lineHeight，没有段距与段前空白。
+  private readerJoinedLineHeight(): number {
+    return Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10);
+  }
+
+  private readerUnderlineY(lineIndex: number, uniform: boolean): number {
+    if (uniform) {
+      return (lineIndex + 1) * this.readerJoinedLineHeight() + this.resolveUnderlineOffsetVp();
+    }
+    const line = this.localReaderPages[this.currentPageIndex]?.lines[lineIndex];
+    const height = line?.height ?? 0;
+    const spaceBefore = line?.verticalSpaceBefore ?? 0;
+    return this.readerPageLineOffset(lineIndex) + spaceBefore + height + this.resolveUnderlineOffsetVp();
+  }
+
+  private readerUnderlineLayerHeight(uniform: boolean): number {
+    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
+    if (uniform) { return Math.max(1, lines.length * this.readerJoinedLineHeight()); }
+    return Math.max(1, this.readerPageLinesTotalHeight());
+  }
+
+  // 分页正文统一由这些自绘线表达「正文下划线」，Text.decoration 只留给划线/高亮规则。
+  // 必须自绘：ArkUI 的 TextDecorationStyle 不开放虚线段长、间隔与竖直偏移，上游这四项无法用装饰表达。
+  // 每条 Line 都与本层同尺寸，坐标按整层计，于是可以直接用页级 y 定位到各自行底。
+  @Builder
+  private ReaderUnderlineLayer(uniform: boolean) {
+    if (this.underline) {
+      Stack({ alignContent: Alignment.TopStart }) {
+        ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
+          (line: LocalReaderLine, lineIndex: number) => {
+            if (!line.imageOnly) {
+              Line()
+                .width('100%')
+                .height(this.readerUnderlineLayerHeight(uniform))
+                .startPoint([0, this.readerUnderlineY(lineIndex, uniform)])
+                .endPoint([this.resolveUnderlineLineEnd(line), this.readerUnderlineY(lineIndex, uniform)])
+                .stroke(this.getReaderUnderlineColor())
+                .strokeWidth(this.resolveUnderlineWidthVp())
+                .strokeDashArray(this.resolveUnderlineDashArray())
+            }
+          }, (line: LocalReaderLine, lineIndex: number) =>
+            `${this.readerContentRevision}-underline-${this.currentPageIndex}-${lineIndex}-${uniform}-${this.underlinePadding}` +
+            `-${this.underlineExtend}-${this.dottedLine}-${this.dottedBase}-${this.dottedRatio}-${this.underlineHeight}`)
+      }
+      .width('100%')
+      .height(this.readerUnderlineLayerHeight(uniform))
+      .hitTestBehavior(HitTestMode.None)
+    }
+  }
+
   private getReaderGlyphStartPosition(value: string, basePosition: number, glyphIndex: number): number {
     let position = basePosition;
     const glyphs = this.getReaderTextGlyphs(value);
@@ -2493,9 +2591,11 @@ export struct ReaderPage {
         // Span 的背景只认 textBackgroundStyle，用 backgroundColor 会静默不渲染。
         .textBackgroundStyle({ color: ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.bgColor) ?? 'transparent' })
         .decoration({
+          // 正文下划线改由 ReaderUnderlineLayer 自绘（ArkUI 的 TextDecoration 不开放虚线长度与偏移），
+          // 这里只保留高亮规则自带的划线，避免同一条线画两遍。
           type: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
             ? this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0)
-            : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+            : TextDecorationType.None,
           color: ReaderHighlightRuleEngine.colorToCss(
             this.getHighlightStyle(start, end)?.underlineColor ?? this.getHighlightStyle(start, end)?.textColor
           ) ?? this.getReaderUnderlineColor(),
@@ -2513,9 +2613,10 @@ export struct ReaderPage {
         // 荧光/背景高亮同样只能靠 textBackgroundStyle 才真正上色。
         .textBackgroundStyle({ color: this.getMarkingBackground(marking) })
         .decoration({
+          // 同上：正文下划线自绘，这里只留划线自带的 decoration。
           type: this.getMarkingDecorationType(marking) !== TextDecorationType.None
             ? this.getMarkingDecorationType(marking)
-            : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+            : TextDecorationType.None,
           color: marking.color.length > 0 ? marking.color : this.getReaderUnderlineColor(),
           style: this.getMarkingDecorationType(marking) !== TextDecorationType.None
             ? this.getMarkingDecorationStyle(marking)
@@ -2565,12 +2666,7 @@ export struct ReaderPage {
     .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
     .fontWeight(this.getReaderFontWeight())
     .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
-    .decoration({
-      type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
-      color: this.getReaderUnderlineColor(),
-      style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-      thicknessScale: Math.max(0, this.underlineHeight)
-    })
+    .decoration({ type: TextDecorationType.None })
     .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
     .width('100%')
     .textAlign(TextAlign.Start)
@@ -2613,12 +2709,7 @@ export struct ReaderPage {
               .fontWeight(this.getReaderFontWeight())
               .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
               .fontColor(this.getReadingTextColor())
-              .decoration({
-                type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
-                color: this.getReaderUnderlineColor(),
-                style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-                thicknessScale: Math.max(0, this.underlineHeight)
-              })
+              .decoration({ type: TextDecorationType.None })
               .maxLines(1)
               .height(line.height)
               .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
@@ -2667,12 +2758,7 @@ export struct ReaderPage {
       .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
       .fontWeight(this.getReaderFontWeight())
       .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
-      .decoration({
-        type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
-        color: this.getReaderUnderlineColor(),
-        style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-        thicknessScale: Math.max(0, this.underlineHeight)
-      })
+      .decoration({ type: TextDecorationType.None })
       .lineHeight(line.height)
       .width('100%')
       .height(line.height)
@@ -3110,12 +3196,22 @@ export struct ReaderPage {
             } else if (this.currentPageIndex === 0) {
               this.ReaderTitleSegments(false)
             }
-            if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
-              this.ReaderPageTextLines()
-            } else {
-              this.ReaderPageTextJoined()
+            // 正文与自绘下划线同层：下划线要按行底定位，只能叠在正文之上再往下画。
+            Stack({ alignContent: Alignment.TopStart }) {
+              Column() {
+                if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
+                  this.ReaderPageTextLines()
+                } else {
+                  this.ReaderPageTextJoined()
+                }
+                Blank().layoutWeight(1)
+              }
+              .width('100%')
+              .height('100%')
+              this.ReaderUnderlineLayer(!this.currentPageContainsImages() && this.readerBottomJustifyGap <= 0)
             }
-            Blank().layoutWeight(1)
+            .width('100%')
+            .layoutWeight(1)
             if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
           }
           .width('100%')
@@ -3204,10 +3300,14 @@ export struct ReaderPage {
                 .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
                 .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
                 .fontColor(this.getReadingTextColor())
-                .decoration({ type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
+                // 滚动模式拿不到行几何，无法自绘下划线，这里仍用 Text 装饰表达
+                // （代价是虚线段长/间隔与偏移无法微调，KI-C3 的四项只在分页模式生效）。
+                .decoration({
+                  type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
                   color: this.getReaderUnderlineColor(),
                   style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-                  thicknessScale: Math.max(0, this.underlineHeight) })
+                  thicknessScale: Math.max(0, this.underlineHeight)
+                })
                 .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
                 .textAlign(this.textFullJustify ? TextAlign.JUSTIFY : TextAlign.Start)
                 .width('100%')

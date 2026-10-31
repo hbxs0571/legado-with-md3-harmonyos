@@ -145,6 +145,14 @@ interface AndroidReadConfigBackupRecord {
   shadowColorN: string;
   underline: boolean;
   underlineHeight: number;
+  /** 下划线离字间距；上游 ReadBookConfig.kt:322 的 underlinePadding，默认 10。 */
+  underlinePadding: number;
+  /** 下划线是否撑满整行；上游 :325 的 underlineExtend。 */
+  underlineExtend: boolean;
+  /** 虚线段长；上游 :331 的 dottedBase，默认 6f。 */
+  dottedBase: number;
+  /** 虚线空隙；上游 :334 的 dottedRatio，默认 6f。 */
+  dottedRatio: number;
   underlineColor: string;
   underlineColorNight: string;
   dottedLine: boolean;
@@ -572,6 +580,14 @@ export class BackupRepository {
           configText, 'string', 'shadowColorN', settings.textShadowColorN);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'underlineHeight', `${settings.underlineHeight}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'underlinePadding', `${settings.underlinePadding}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'underlineExtend', settings.underlineExtend ? 'true' : 'false');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'float', 'dottedBase', `${settings.dottedBase}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'float', 'dottedRatio', `${settings.dottedRatio}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'underlineColor', settings.underlineColor);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1016,6 +1032,10 @@ export class BackupRepository {
       shadowColorN: settings.textShadowColorN,
       underline: settings.underline,
       underlineHeight: settings.underlineHeight,
+      underlinePadding: settings.underlinePadding,
+      underlineExtend: settings.underlineExtend,
+      dottedBase: settings.dottedBase,
+      dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
       underlineColorNight: settings.underlineColorNight,
       dottedLine: settings.dottedLine,
@@ -1256,6 +1276,18 @@ export class BackupRepository {
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'dottedLine') ?? current.dottedLine,
       underlineHeight: BackupRepository.readJsonNumber(selected, 'underlineHeight') ??
         BackupRepository.readXmlInteger(`${directory}/config.xml`, 'underlineHeight') ?? current.underlineHeight,
+      underlinePadding: Math.max(0, Math.min(20, Math.round(
+        BackupRepository.readJsonNumber(selected, 'underlinePadding') ??
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'underlinePadding') ??
+        current.underlinePadding))),
+      underlineExtend: BackupRepository.readJsonBoolean(selected, 'underlineExtend') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'underlineExtend') ?? current.underlineExtend,
+      dottedBase: Math.max(0, Math.min(20, Math.round(
+        BackupRepository.readJsonNumber(selected, 'dottedBase') ??
+        BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),
+      dottedRatio: Math.max(0, Math.min(20, Math.round(
+        BackupRepository.readJsonNumber(selected, 'dottedRatio') ??
+        BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedRatio') ?? current.dottedRatio))),
       underlineColor: BackupRepository.readJsonString(selected, 'underlineColor') ??
         BackupRepository.readXmlString(`${directory}/config.xml`, 'underlineColor') ?? current.underlineColor,
       underlineColorNight: BackupRepository.readJsonString(selected, 'underlineColorNight') ??

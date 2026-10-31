@@ -157,6 +157,14 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   underlineColor: string;
   underlineColorNight: string;
   underlineHeight: number;
+  /** 下划线离字间距，对应上游 underlinePadding（ReadBookConfig.kt:322）。0-20，默认 10；绘制时取 (值 - 10) 作为相对偏移。 */
+  underlinePadding: number;
+  /** 下划线是否撑满整行，对应上游 underlineExtend（ReadBookConfig.kt:325）。 */
+  underlineExtend: boolean;
+  /** 虚线段长，对应上游 dottedBase（ReadBookConfig.kt:331）。0-20，默认 6。 */
+  dottedBase: number;
+  /** 虚线空隙长度，对应上游 dottedRatio（ReadBookConfig.kt:334）。0-20，默认 6。 */
+  dottedRatio: number;
   textFullJustify: boolean;
   textBottomJustify: boolean;
   paperIndex: number;
@@ -495,6 +503,10 @@ export class ReaderSettingsRepository {
       underlineColor: '#3E3D3B',
       underlineColorNight: '#ADADAD',
       underlineHeight: 1,
+      underlinePadding: 10,
+      underlineExtend: false,
+      dottedBase: 6,
+      dottedRatio: 6,
       textFullJustify: true,
       textBottomJustify: true,
       paperIndex: 2,
@@ -605,6 +617,10 @@ export class ReaderSettingsRepository {
       const underlineColorValue = await store.get('underlineColor', defaults.underlineColor);
       const underlineColorNightValue = await store.get('underlineColorNight', defaults.underlineColorNight);
       const underlineHeightValue = await store.get('underlineHeight', defaults.underlineHeight);
+      const underlinePaddingValue = await store.get('underlinePadding', defaults.underlinePadding);
+      const underlineExtendValue = await store.get('underlineExtend', defaults.underlineExtend);
+      const dottedBaseValue = await store.get('dottedBase', defaults.dottedBase);
+      const dottedRatioValue = await store.get('dottedRatio', defaults.dottedRatio);
       const textFullJustifyValue = await store.get('textFullJustify', defaults.textFullJustify);
       const textBottomJustifyValue = await store.get('textBottomJustify', defaults.textBottomJustify);
       const paperIndexValue = await store.get('paperIndex', defaults.paperIndex);
@@ -749,6 +765,12 @@ export class ReaderSettingsRepository {
         underlineColorNightValue, defaults.underlineColorNight);
       const underlineHeight = ReaderSettingsRepository.normalizeInteger(
         underlineHeightValue, 0, 10, defaults.underlineHeight);
+      const underlinePadding = ReaderSettingsRepository.normalizeInteger(
+        underlinePaddingValue, 0, 20, defaults.underlinePadding);
+      const dottedBase = ReaderSettingsRepository.normalizeInteger(
+        dottedBaseValue, 0, 20, defaults.dottedBase);
+      const dottedRatio = ReaderSettingsRepository.normalizeInteger(
+        dottedRatioValue, 0, 20, defaults.dottedRatio);
       const textFullJustify = typeof textFullJustifyValue === 'boolean'
         ? textFullJustifyValue : defaults.textFullJustify;
       const textBottomJustify = typeof textBottomJustifyValue === 'boolean'
@@ -840,6 +862,10 @@ export class ReaderSettingsRepository {
         underlineColor: underlineColor,
         underlineColorNight: underlineColorNight,
         underlineHeight: underlineHeight,
+        underlinePadding: underlinePadding,
+        underlineExtend: typeof underlineExtendValue === 'boolean' ? underlineExtendValue : defaults.underlineExtend,
+        dottedBase: dottedBase,
+        dottedRatio: dottedRatio,
         textFullJustify: textFullJustify,
         textBottomJustify: textBottomJustify,
         paperIndex: paperIndex,
@@ -989,6 +1015,10 @@ export class ReaderSettingsRepository {
       await store.put('underlineColorNight', ReaderSettingsRepository.normalizeHexColor(
         settings.underlineColorNight, '#ADADAD'));
       await store.put('underlineHeight', Math.max(0, Math.min(10, Math.round(settings.underlineHeight))));
+      await store.put('underlinePadding', Math.max(0, Math.min(20, Math.round(settings.underlinePadding))));
+      await store.put('underlineExtend', settings.underlineExtend === true);
+      await store.put('dottedBase', Math.max(0, Math.min(20, Math.round(settings.dottedBase))));
+      await store.put('dottedRatio', Math.max(0, Math.min(20, Math.round(settings.dottedRatio))));
       await store.put('textFullJustify', settings.textFullJustify);
       await store.put('textBottomJustify', settings.textBottomJustify);
       await store.put('paddingTop', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.paddingTop))));

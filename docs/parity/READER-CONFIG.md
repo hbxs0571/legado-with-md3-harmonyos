@@ -51,16 +51,16 @@
 | --- | --- | --- | --- | --- |
 | A 阅读界面基础 | 37 | 16 | 19 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
-| C 正文排版 | 49 | 44 | 5 | 0 |
+| C 正文排版 | 49 | 48 | 1 | 0 |
 | D 翻页与手势交互 | 20 | 13 | 7 | 0 |
 | E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 116 | 71 | 2 |
+| 合计 | 189 | 120 | 67 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 71 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 KI-C3 落库：C 块四个下划线几何参数（`underlinePadding`/`underlineExtend`/`dottedBase`/`dottedRatio`）改判 `已接`。这四项**不能**用 ArkUI 的 `Text.decoration` 表达——`DecorationStyleInterface` 只有 `type`/`color`/`style`/`thicknessScale` 四个字段，没有虚线段长、间隔与竖直偏移（这是上游 `ReaderPageUnderline` 能自由配 `DashPathEffect` 而 HOS 不能的根因）。所以改为**自绘**：`ReaderPage.ets` 新增 `ReaderUnderlineLayer(uniform)`，用 `Line()` 的 `startPoint`/`endPoint`/`strokeWidth`/`strokeDashArray` 按 `LocalReaderLine` 逐行叠在正文之上，并把原本 6 处 `Text.decoration` 的正文下划线收敛为 `None` 以免双线；滚动模式拿不到行几何，仍用 Text 装饰（四项只在分页模式生效，已在 KNOWN-ISSUES KI-C3 记为已知差异）。设备实测三档偏移 409/444/478、撑满前后短行 665→1168、虚线段数 34→18。现 67 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 > 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
@@ -180,10 +180,10 @@
 | 下划线粗细 | `ReadBookConfig.kt:319` | `ReaderSettingsRepository.ets:159` | 已接 | 上游默认 1 | 调粗细后下划线变粗 | — |
 | 两端对齐 | `ReadBookConfig.kt:72` | `ReaderSettingsRepository.ets:160` | 已接 | — | 开关后行尾对齐到页边 | — |
 | 底部对齐 | `ReadBookConfig.kt:73` | `ReaderSettingsRepository.ets:161` | 已接 | — | 开关后正文贴底排版 | — |
-| 下划线偏移量 | `ReadBookConfig.kt:322` | — | 未接 | 上游 `underlinePadding` 默认 10，仓储无字段 | 调偏移后下划线与文字距离变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
-| 下划线延伸 | `ReadBookConfig.kt:325` | — | 未接 | 上游 `underlineExtend`，仓储无字段 | 开关后下划线延伸到页边 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
-| 自定义虚线长度基准 | `ReadBookConfig.kt:331` | — | 未接 | 上游 `dottedBase` 默认 6f，仓储无字段 | 调基准后虚线每段变长 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
-| 自定义虚线间隔比例 | `ReadBookConfig.kt:334` | — | 未接 | 上游 `dottedRatio` 默认 6f，仓储无字段 | 调比例后虚线间隔变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
+| 下划线偏移量 | `ReadBookConfig.kt:322` | `ReaderSettingsRepository.ets:161`、`ReaderPage.ets:2271` | 已接 | 上游 `underlinePadding` 默认 10，绘制时取 `(值 - 10)` 作相对偏移（`LegacyReaderPaginationStyleFactory.kt:68`）。本地同名落地：接口 `:161`、默认 `:506`、读 `:620`、写 `:1018`，绘制 `ReaderPage.ets:2271 resolveUnderlineOffsetVp()` | 设备实测：`underlinePadding` 0 / 10 / 20 三档，同一行下划线所在 y 分别为 409 / 444 / 478，每档差 ~35px（10vp × 3.5 密度），线性关系成立 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
+| 下划线延伸 | `ReadBookConfig.kt:325` | `ReaderSettingsRepository.ets:162`、`ReaderPage.ets:2278` | 已接 | 上游 `underlineExtend` 对应 `ReaderPaginator.kt:449` 的 `extendToColumn`：整列 or 该行实际文字左右边界。本地同名落地：接口 `:162`、默认 `:507`、读 `:621`、写 `:1019`，绘制 `ReaderPage.ets:2278 resolveUnderlineLineEnd()` | 设备实测：关闭时短行 `x0=56 x1=720`（宽 665）；打开后所有行统一 `x0=56 x1=1223`（宽 1168），即延伸到正文列宽 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
+| 自定义虚线长度基准 | `ReadBookConfig.kt:331` | `ReaderSettingsRepository.ets:163`、`ReaderPage.ets:2274` | 已接 | 上游 `dottedBase` 默认 6f，经 `ReaderPageDecorationDrawCache.kt:72 DashPathEffect(dashOn, dashOff)` 画虚线段。本地同名落地：接口 `:163`、默认 `:508`、读 `:622`、写 `:1020`，绘制 `ReaderPage.ets:2274 resolveUnderlineDashArray()` 的 `strokeDashArray` 第一项 | 设备实测：`dottedLine` 开时，`dottedBase=6` 单行 34 段、`dottedBase=20` 单行 18 段（线段变长则段数变少），可复现 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
+| 自定义虚线间隔比例 | `ReadBookConfig.kt:334` | `ReaderSettingsRepository.ets:164`、`ReaderPage.ets:2274` | 已接 | 上游 `dottedRatio` 默认 6f，作 `DashPathEffect` 的 `dashOffPx`。本地同名落地：接口 `:164`、默认 `:509`、读 `:623`、写 `:1021`，绘制 `ReaderPage.ets:2274 resolveUnderlineDashArray()` 的 `strokeDashArray` 第二项 | 同上一条的实测：`strokeDashArray([dottedBase, dottedRatio])` 直接决定段数与间隔，改这两项段数即变（34 → 18） | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C3 |
 | 标题位置模式 | `ReadBookConfig.kt:267` | `ReaderSettingsRepository.ets:255`、`ReaderPage.ets:2163`、`ReaderPage.ets:2200` | 已接 | 上游三值 `titleMode`：0 居左 / 1 居中 / 2 隐藏（`ReadBookConfig.kt:267`）。本地同名落地，`resolveTitleAlign()` 决定对齐、`isReaderTitleVisible()` 决定是否绘制与是否单占标题页；界面 `ReaderSettingsPage.ets:360` 三选一。 | 设「居中显示」后标题居中；设「隐藏标题」后标题整块消失且不再单独占页 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
 | 标题字号 | `ReadBookConfig.kt:269` | `ReaderSettingsRepository.ets:260`、`ReaderPage.ets:2140` | 已接 | 上游 `titleSize` 支持「相对正文偏移」与「绝对 sp」两模式（`ReadBookConfig.kt:669-676`）。本地同名落地，`resolveTitleSizeFp()` 统一解析；原先 9 处硬编码 `this.fontSize + 4` 已全部清除。 | 改标题字号后标题字变大，且章节页数随之重算 | 默认 4 + 相对模式，等价于原「正文 + 4」；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
 | 标题字号是否相对正文 | `ReadBookConfig.kt:270` | `ReaderSettingsRepository.ets:266`、`ReaderPage.ets:2140` | 已接 | 上游 `titleSizeRelative` 为 `Boolean?`，null 时按旧约定 auto（`titleSize < 8` 视为相对）。本地存 `boolean` 并显式默认 `true`，等价于上游 null + 默认 4 的结果；界面 `ReaderSettingsPage.ets:369` 有「字号相对正文」开关并注明「关闭后按绝对号数显示」。 | 关闭后标题不随正文字号变化 | 上游 null 态用显式默认值等价覆盖；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
@@ -315,7 +315,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（71 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（67 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -477,10 +477,10 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `underlinePadding` | 要接 | 上游下划线偏移量默认 10，本地绘制参数写死（KI-C3） |
-| `underlineExtend` | 要接 | 上游下划线延伸开关，本地无（KI-C3） |
-| `dottedBase` | 要接 | 上游虚线长度基准默认 6f，本地无（KI-C3） |
-| `dottedRatio` | 要接 | 上游虚线间隔比例默认 6f，本地无（KI-C3） |
+| `underlinePadding` | 已接 | **KI-C3 已实现**（存储键 `underlinePadding`，默认 10，绘制时取 `值 - 10` 作相对偏移；`ReaderPage.ets:2271`） |
+| `underlineExtend` | 已接 | **KI-C3 已实现**（存储键 `underlineExtend`，默认 false；打开后线段右端取整列宽，`ReaderPage.ets:2278`） |
+| `dottedBase` | 已接 | **KI-C3 已实现**（存储键 `dottedBase`，默认 6；作 `strokeDashArray` 第一项，`ReaderPage.ets:2274`） |
+| `dottedRatio` | 已接 | **KI-C3 已实现**（存储键 `dottedRatio`，默认 6；作 `strokeDashArray` 第二项，`ReaderPage.ets:2274`） |
 
 #### 1.5.4 标题排版（14 项）：要接 14
 
@@ -668,9 +668,9 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 1. **E 块菜单外观 40 行未接**：全部有控件无持久化。所需字段都是纯 UI 参数（颜色、圆角、模糊半径、玻璃开关），不触碰渲染引擎与排版算法，是唯一可以整块推进的部分，字段明细见 1.3 的「菜单」与「标题栏与图标」各组。前置条件：先在 `ReaderSettingsRepository.ets` 补齐字段与 `save` 分支，再把 `ReaderSettingsPage.ets` 的 `@State` 改为读仓储。可照抄同块已接的两条（`bottomActions`/`topActions`，`ReaderSettingsRepository.ets:804-805`）的链路。
 2. ~~**C 块标题排版 14 项**~~ —— **2026-10-31 KI-C4 已完成**。当初估计的改动面正确（9 处 `fontSize + 4` 硬编码确实全部清除，`titleSizeRelative` 用显式 `boolean` 默认 `true` 等价覆盖上游 null 态）。实际风险点不在取值而在两处 UI：面板缺少可滚动容器、`ForEach` key 不含选中项，两处都已修（详见本节末段与 `docs/VALIDATION.md` 的 KI-C4 节）。
-3. ~~**C 块正文与背景 6 行 + 下划线虚线 4 行**~~ —— **正文与背景 6 行已由 2026-10-31 KI-C1/KI-C2 完成**（11 个字段全部落库：正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2；`getReadingTextColor()` 的硬编码已改走 `textColor`/`textColorNight`，背景预设 `READER_BACKGROUND_STYLES` 降级为「自定义 `bgStr` 为空时的回退」）。**下划线虚线 4 行仍待办**（KI-C3）：ArkUI 的 `TextDecoration` 不开放虚线段长/偏移/延伸，需改自绘。
+3. ~~**C 块正文与背景 6 行 + 下划线虚线 4 行**~~ —— **正文与背景 6 行已由 2026-10-31 KI-C1/KI-C2 完成**（11 个字段全部落库：正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2；`getReadingTextColor()` 的硬编码已改走 `textColor`/`textColorNight`，背景预设 `READER_BACKGROUND_STYLES` 降级为「自定义 `bgStr` 为空时的回退」）。**下划线虚线 4 行已由 2026-10-31 KI-C3 完成**：这四项不能用 `Text.decoration`（ArkUI 只开放 `type`/`color`/`style`/`thicknessScale`），改为 `ReaderPage.ets` 的 `ReaderUnderlineLayer` 用 `Line()` 逐行自绘，并把 6 处正文 `Text.decoration` 收敛为 `None`；滚动模式无行几何，仍用 Text 装饰（已知差异）。
 
-三处阻塞里只剩第 1 条（E 块菜单外观 40 行）与 KI-C3 的下划线虚线 4 行，共 44 行未接（明细表口径）。A–G 明细表的 71 行未接分布为：E 块 40 行、A 块 19 行、D 块 7 行、C 块 5 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞里只剩第 1 条（E 块菜单外观 40 行），共 40 行未接（明细表口径）。A–G 明细表的 67 行未接分布为：E 块 40 行、A 块 19 行、D 块 7 行、C 块 1 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5，第四次因 KI-C3 接上四个下划线几何参数由 5 减到 1），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 
