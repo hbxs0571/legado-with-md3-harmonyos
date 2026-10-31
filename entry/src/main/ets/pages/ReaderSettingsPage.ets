@@ -124,6 +124,8 @@ export struct ReaderSettingsPage {
   @Prop sliderVibrator: boolean = false;
   /** 选择正文时震动；上游 ReadSettings.kt:41 selectVibrator。 */
   @Prop selectVibrator: boolean = false;
+  /** 中文简繁体转换档位：0 = 不转换、1 = 繁转简、2 = 简转繁。上游 ReadSettings.kt:118。 */
+  @Prop chineseConverterType: number = 0;
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = READER_CLICK_REGION_DEFAULTS;
@@ -246,6 +248,7 @@ export struct ReaderSettingsPage {
   onSelectTextChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onSliderVibratorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onSelectVibratorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onChineseConverterTypeChange: (value: number) => void = (_value: number) => {};
 
   /** 把设置里存的沙箱绝对路径转成 `Image()` 能读的 `file://` URI（裸路径会渲染空白）。 */
   private badgeImageSource(): string {
@@ -616,6 +619,9 @@ export struct ReaderSettingsPage {
     if (this.detailSheetTitle === '菜单颜色来源' && choiceIndex >= 0) { this.menuColorMode = choiceIndex; }
     if (this.detailSheetTitle === '调色板风格' && choiceIndex >= 0) { this.menuPaletteStyleIndex = choiceIndex; }
     if (this.detailSheetTitle === '显示亮度视图' && choiceIndex >= 0) { this.brightnessViewMode = choiceIndex; }
+    if (this.detailSheetTitle === '中文简繁体转换' && choiceIndex >= 0) {
+      this.onChineseConverterTypeChange(choiceIndex);
+    }
     if (this.detailSheetTitle === '翻页动画' && choiceIndex >= 0) { this.onPageAnimationChange(choiceIndex); }
     if (this.detailSheetTitle === '翻页动画速度' && choiceIndex >= 0) { this.onAnimationSpeedChange(choiceIndex); }
     if (this.detailSheetTitle === '屏幕方向' && choiceIndex >= 0) { this.onScreenOrientationChange(choiceIndex.toString()); }
@@ -1024,6 +1030,12 @@ export struct ReaderSettingsPage {
     return this.textFont;
   }
 
+  /** 中文简繁体转换档位的显示文案，与详情面板的三个选项一一对应。 */
+  private getChineseConverterLabel(): string {
+    return ['关闭简繁转换', '繁体转简体', '简体转繁体'][Math.max(0, Math.min(2, this.chineseConverterType))]
+      ?? '关闭简繁转换';
+  }
+
   private getCurrentFontDisplayName(): string {
     const selectedPath = this.getFontTargetPath();
     if (selectedPath.length === 0) {
@@ -1113,6 +1125,8 @@ export struct ReaderSettingsPage {
       this.detailSelectedOption = choices[this.pageAnimationIndex] ?? choices[0] ?? '';
     } else if (title === '翻页动画速度') {
       this.detailSelectedOption = choices[this.animationSpeedIndex] ?? choices[2] ?? '';
+    } else if (title === '中文简繁体转换') {
+      this.detailSelectedOption = choices[this.chineseConverterType] ?? choices[0] ?? '';
     } else if (title === '进度条行为') {
       this.detailSelectedOption = this.progressBehavior === 'chapter'
         ? (choices[1] ?? choices[0] ?? '') : (choices[0] ?? '');
@@ -1182,6 +1196,7 @@ export struct ReaderSettingsPage {
     if (title === '标题栏模式') { return ['完整信息', '仅标题', '标题与章节']; }
     if (title.includes('图标样式')) { return ['纯色', '色调', '描边']; }
     if (title.includes('模糊样式')) { return ['纯色', '渐变']; }
+    if (title === '中文简繁体转换') { return ['关闭简繁转换', '繁体转简体', '简体转繁体']; }
     if (title === '翻页动画') { return ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画']; }
     if (title === '翻页动画速度') { return ['极速', '快速', '适中', '优雅']; }
     if (title === '显示模式') {
@@ -1385,6 +1400,8 @@ export struct ReaderSettingsPage {
             MenuSettingOption({ title: '段距', detail: '按行高比例设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
             MenuSettingOption({ title: '行距', detail: '行高比例设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
             MenuSettingOption({ title: '文字对齐', detail: '两端对齐 / 底部对齐', migrated: true }).onClick(() => this.openDetailSheet('文字对齐', '选择正文对齐方式'))
+            MenuSettingOption({ title: '中文简繁体转换', detail: this.getChineseConverterLabel(), migrated: true })
+              .onClick(() => this.openDetailSheet('中文简繁体转换', '按档位转换正文与章节标题的字形'))
             Text('正文和标题支持系统字体及导入的 TTF/OTF；字体族会参与文字测量和分页。页眉页脚字体沿用各自选项。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
           }.width('100%').padding({ bottom: 16 })
         } else if (this.detailSheetTitle === '文字效果') {
@@ -1803,6 +1820,7 @@ export struct ReaderSettingsPage {
               }
               Text(this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '滑动条显示样式' ||
+                this.detailSheetTitle === '中文简繁体转换' ||
                 this.detailSheetTitle === '点击图片行为' ||
                 this.detailSheetTitle === '屏幕方向' ||
                 this.detailSheetTitle === '显示模式' ||

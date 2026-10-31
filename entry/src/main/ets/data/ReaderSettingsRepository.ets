@@ -215,6 +215,12 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * 由 ReadBookRouteScreen.kt:755 以 `selectionHapticsEnabled` 传入。
    */
   selectVibrator: boolean;
+  /**
+   * 中文简繁体转换档位，对齐上游 ReadSettings.kt:118 `chineseConverterType: Int = 0`：
+   * 0 = 不转换、1 = 繁体转简体、2 = 简体转繁体（上游 arrays.xml 的 chinese_mode 三档，
+   * 设置项在 ui/book/read/sheet/TypographyTabs.kt:310-321）。
+   */
+  chineseConverterType: number;
   maxLengthWithNoToc: number;
   eyeProtectionEnabled: boolean;
   eyeProtectionAutoNight: boolean;
@@ -466,6 +472,8 @@ export class ReaderSettingsRepository {
       selectText: true,
       sliderVibrator: false,
       selectVibrator: false,
+      // 上游 ReadSettings.chineseConverterType 默认 0（不转换）。
+      chineseConverterType: 0,
       maxLengthWithNoToc: 3000,
       eyeProtectionEnabled: false,
       eyeProtectionAutoNight: false,
@@ -537,6 +545,7 @@ export class ReaderSettingsRepository {
       const selectTextValue = await store.get('selectText', defaults.selectText);
       const sliderVibratorValue = await store.get('sliderVibrator', defaults.sliderVibrator);
       const selectVibratorValue = await store.get('selectVibrator', defaults.selectVibrator);
+      const chineseConverterTypeValue = await store.get('chineseConverterType', defaults.chineseConverterType);
       const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
       const eyeProtectionEnabledValue = await store.get('eyeProtectionEnabled', defaults.eyeProtectionEnabled);
       const eyeProtectionAutoNightValue = await store.get('eyeProtectionAutoNight', defaults.eyeProtectionAutoNight);
@@ -767,6 +776,8 @@ export class ReaderSettingsRepository {
             selectText: typeof selectTextValue === 'boolean' ? selectTextValue : defaults.selectText,
             sliderVibrator: typeof sliderVibratorValue === 'boolean' ? sliderVibratorValue : defaults.sliderVibrator,
             selectVibrator: typeof selectVibratorValue === 'boolean' ? selectVibratorValue : defaults.selectVibrator,
+          chineseConverterType: ReaderSettingsRepository.normalizeInteger(
+            chineseConverterTypeValue, 0, 2, defaults.chineseConverterType),
           maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
             ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc,
           eyeProtectionEnabled: typeof eyeProtectionEnabledValue === 'boolean'
@@ -871,6 +882,7 @@ export class ReaderSettingsRepository {
       await store.put('selectText', settings.selectText);
       await store.put('sliderVibrator', settings.sliderVibrator);
       await store.put('selectVibrator', settings.selectVibrator);
+      await store.put('chineseConverterType', Math.max(0, Math.min(2, Math.round(settings.chineseConverterType))));
       await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
       await store.put('eyeProtectionEnabled', settings.eyeProtectionEnabled);
       await store.put('eyeProtectionAutoNight', settings.eyeProtectionAutoNight);

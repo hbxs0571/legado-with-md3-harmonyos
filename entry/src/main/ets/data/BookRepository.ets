@@ -9,6 +9,7 @@ import { LocalTextReSegmenter } from './LocalTextReSegmenter';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { BookContentProcessRepository } from './BookContentProcessRepository';
 import { BookContentProcessEngine } from './BookContentProcessEngine';
+import { ChineseTextConverter } from './ChineseTextConverter';
 import { RdbCodec } from './RdbCodec';
 import { RdbSchema } from './RdbSchema';
 import { RdbStore } from './RdbStore';
@@ -87,6 +88,22 @@ export interface TocRefreshResult {
 }
 
 export class BookRepository {
+  /**
+   * 简繁转换档位，由 Index 在装载/变更阅读设置时注入（对齐上游 ReadSettings.chineseConverterType）。
+   * 正文处理管线是静态方法，拿不到 Context，因此用注入而不是每次读偏好。
+   */
+  private static chineseConverterType: number = 0;
+
+  /** 由页面注入当前的简繁转换档位；0 = 不转换。 */
+  static setChineseConverterType(type: number): void {
+    BookRepository.chineseConverterType = ChineseTextConverter.normalizeType(type);
+  }
+
+  /** 当前注入的简繁转换档位。 */
+  static getChineseConverterType(): number {
+    return BookRepository.chineseConverterType;
+  }
+
   private static readonly preferenceName: string = 'legado_local_books';
   private static effectiveRuleIdsByChapter: Map<string, number[]> = new Map<string, number[]>();
   private static effectiveRuleCacheOrder: string[] = [];
@@ -1629,7 +1646,10 @@ private static async applyChapterContentAsync(
     }
     await BookContentProcessRepository.waitUntilLoaded();
     const records = BookContentProcessRepository.getForChapter(book.id, chapterIndex);
-    return BookContentProcessEngine.apply(ruleResult?.text ?? segmented, records).text;
+    const processed = BookContentProcessEngine.apply(ruleResult?.text ?? segmented, records).text;
+    // 简繁转换放在正文处理链末端，对应上游 ContentProcessor.kt:161-171 在 reSegment 与
+    // 净化之后、HTML 占位之前的位置：先按简体/繁体原文做锚点匹配，再统一转字形。
+    return ChineseTextConverter.convert(processed, BookRepository.chineseConverterType);
   }
   private static buildNoTocChapterLayout(
     content: string, maxLengthWithNoToc: number, charset?: string

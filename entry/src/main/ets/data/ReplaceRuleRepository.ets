@@ -6,6 +6,7 @@ import { ReplaceRule } from '../model/ReplaceRule';
 import { RdbCodec } from './RdbCodec';
 import { RdbSchema } from './RdbSchema';
 import { RdbStore } from './RdbStore';
+import { ChineseTextConverter } from './ChineseTextConverter';
 
 interface ReplaceRuleApplyResult {
   text: string;
@@ -30,6 +31,17 @@ export interface ReplaceRulePreviewResult {
 
 /** 持久化替换规则并提供与本地章节读取共用的有序执行入口。 */
 export class ReplaceRuleRepository {
+  /**
+   * 简繁转换档位，与 BookRepository 同源注入（对齐上游 BookChapter.getDisplayTitle 的
+   * chineseConverterType 参数）。0 = 不转换、1 = 繁转简、2 = 简转繁。
+   */
+  private static chineseConverterType: number = 0;
+
+  /** 由页面注入当前简繁转换档位。 */
+  static setChineseConverterType(type: number): void {
+    ReplaceRuleRepository.chineseConverterType = ChineseTextConverter.normalizeType(type);
+  }
+
   private static readonly preferenceName: string = 'legado_replace_rules';
   /** 老版本的规则 JSON 键，仅搬迁时读取。 */
   private static readonly preferenceKey: string = 'rules_v1';
@@ -937,6 +949,9 @@ export class ReplaceRuleRepository {
   }
   static applyTitle(book: Book, title: string): string {
     let result = title.replace(/[\r\n]/g, '');
+    // 章节标题的简繁转换放在净化之前：上游 BookChapter.getDisplayTitle 也是先
+    // ChineseUtils.t2s/s2t 再逐条套替换规则（BookChapter.kt:110-116）。
+    result = ChineseTextConverter.convert(result, ReplaceRuleRepository.chineseConverterType);
     if (!ReplaceRuleRepository.isBookEnabled(book)) {
       return result;
     }

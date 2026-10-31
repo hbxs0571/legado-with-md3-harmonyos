@@ -571,6 +571,10 @@ export class BackupRepository {
           configText, 'boolean', 'sliderVibrator', String(settings.sliderVibrator));
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'selectVibrator', String(settings.selectVibrator));
+        // 简繁转换档位同样不在 readPrefKeys 忽略清单里，随 config.xml 无条件导出。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'chineseConverterType',
+          `${Math.max(0, Math.min(2, Math.round(settings.chineseConverterType)))}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1244,6 +1248,10 @@ export class BackupRepository {
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'sliderVibrator') ?? current.sliderVibrator,
       selectVibrator: BackupRepository.readJsonBoolean(selected, 'selectVibrator') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'selectVibrator') ?? current.selectVibrator,
+      chineseConverterType: Math.max(0, Math.min(2,
+        Math.round(BackupRepository.readJsonNumber(selected, 'chineseConverterType') ??
+          BackupRepository.readXmlInteger(`${directory}/config.xml`, 'chineseConverterType') ??
+          current.chineseConverterType))),
       paragraphSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'paragraphSpacing') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'paragraphSpacing') ?? current.paragraphSpacing))),
       lineSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'lineSpacingExtra') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'lineSpacingExtra') ?? current.lineSpacing))),
       maxLengthWithNoToc: Math.max(3000, Math.min(100000,

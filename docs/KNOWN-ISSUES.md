@@ -217,9 +217,22 @@
 
 共同前提：本地标题把字号写成 `this.fontSize + 4` 硬编码，共 9 处——`ReaderPage.ets:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`，覆盖测量与绘制两类调用点。字段接进去而不改这九处等于没接；改这九处又必须先定标题排版模型（绝对/相对字号、分段规则、颜色回退）。补法：抽 `resolveTitleStyle()` 统一产出字号/行距/颜色/字重/分段，九处调用点全改走它，再逐项接字段。
 
-**KI-C5 繁简转换（要接，待排期；需自带字表）** —— 覆盖 C-25（`chineseConverterType`，`ReadSettings.kt:118`，三档）。
+**KI-C5 繁简转换（已实现）** —— 覆盖 C-25（`chineseConverterType`，`ReadSettings.kt:118`，三档）。
 
-需要简繁/繁简两套字表（上游由第三方库提供），本地全仓零命中，属独立能力而非配置接线。补法：引入一份常用字表 + 三态开关，挂在正文处理管线（`entry/src/main/ets/data/BookContentProcessEngine.ets`）里做全文转换。
+上游口径：`chineseConverterType` 取 0/1/2（`arrays.xml:173-177` 的 `chinese_mode`，中文文案见 `values-zh-rCN/arrays.xml:76-80`：关闭简繁转换 / 繁体转简体 / 简体转繁体）。设置项在排版面板（`ui/book/read/sheet/TypographyTabs.kt:310-321`，entryValues 为 `"0"/"1"/"2"`）。两处应用点：正文 `help/book/ContentProcessor.kt:161-171`（`reSegment` 之后、HTML 占位之前，`when (chineseConverterType) { 1 -> ChineseUtils.t2s(mContent); 2 -> ChineseUtils.s2t(mContent) }`），章节标题 `data/entities/BookChapter.kt:103-116`（先转换再逐条套替换规则）。转换库是 `utils/ChineseUtils.kt` 包 `quick-chinese-transfer`，`t2s` 还带约 110 条排除词。该键不在 `BackupConfig.readPrefKeys` 忽略清单里，随 `config.xml` 无条件备份。
+
+本地落地：
+1. 转换能力 `entry/src/main/ets/data/ChineseTextConverter.ets`（新建）——HOS 不自带字表，改用系统 ICU 的 `i18n.Transliterator`（`@kit.LocalizationKit`，`getAvailableIDs()` 查 ID 存在再 `getInstance()`，`transform(text)` 转换）。ID 为 `Traditional-Simplified` / `Simplified-Traditional`。取不到转换器时只 `console.warn` 并原样返回，不抛异常。
+2. 配置字段 `entry/src/main/ets/data/ReaderSettingsRepository.ets:222`，默认 `0`；读 `:548`、写 `:885`，读写都夹在 0–2。
+3. 正文接入 `entry/src/main/ets/data/BookRepository.ets:1653`——`applyChapterContentAsync` 里净化结果之后再转换，位置对齐上游「reSegment 与净化之后」。因为正文管线是静态方法拿不到 Context，档位由 `BookRepository.setChineseConverterType()` 注入（`:91-105`）。
+4. 标题接入 `entry/src/main/ets/data/ReplaceRuleRepository.ets:954`——`applyTitle` 里在去换行之后、替换规则之前转换，位置对齐上游「先转换再套规则」。同样走静态注入。
+5. 设置项 `entry/src/main/ets/pages/ReaderSettingsPage.ets:1403`（排版面板「正文」页，档位文案由 `:1033 getChineseConverterLabel()` 给出），详情面板三个选项在 `:1206`，落盘在 `:628`。
+6. 切换后重读当前章节：`entry/src/main/ets/pages/Index.ets:2343` 调 `:442 reloadSelectedChapterForTransform()`（与 `reloadSelectedChapter` 的差别只在路由判断——档位是在设置页改的，那时 `route` 不是 `READER`）。
+7. 备份：导出 `entry/src/main/ets/data/BackupRepository.ets:576`（`int`），恢复 `:1251`（json → xml → 当前值三级回退，夹 0–2）。
+
+验收：设备实测三档都能切换并落库（`chineseConverterType` = 0/1/2）；选「简体转繁体」后正文与章节标题同时变繁体（`第一卷 风起` → `第一卷 風起`、`这一段是占位正文` → `這一段是佔位正文`），改回「关闭简繁转换」后恢复简体。详见 `docs/VALIDATION.md` 2026-10-31 KI-C5 节。
+
+已知差异：上游字表带 t2s 排除词（如「雪梨」「芝士」这类一词多形的），ICU 转换没有这层修正，个别词形可能不同。这是转换库差异，不是接线缺失。
 
 **KI-C6 字体文件夹（不接）** —— 覆盖 C-26（`fontFolder`，`ReadSettings.kt:79`）。
 

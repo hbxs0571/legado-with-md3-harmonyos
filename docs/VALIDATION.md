@@ -305,6 +305,20 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-C5 简繁转换（通过）
+
+1. 设备与构建：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832）。`assembleHap` 通过 `BUILD SUCCESSFUL in 36 s 683 ms`（33 任务 17 执行 / 16 最新），HAP 覆盖安装成功。
+2. 转换能力先核对：HOS 不自带简繁字表，改用系统 ICU 的 `i18n.Transliterator`（`@kit.LocalizationKit`）。`ChineseTextConverter` 先 `getAvailableIDs()` 判断 `Traditional-Simplified` / `Simplified-Traditional` 是否存在再 `getInstance()`，本机两个 ID 都在，转换器可用（否则会降级为原样返回）。
+3. 设置项上屏：设置 → 阅读界面 → 排版图标（`(1091,459)`）→ 排版面板「正文」页最后一条为「中文简繁体转换」，副标题显示当前档位，初始为「关闭简繁转换」。
+4. 详情面板：点开后标题「中文简繁体转换」、描述「按档位转换正文与章节标题的字形」、三个选项「关闭简繁转换」「繁体转简体」「简体转繁体」，底部提示为「选择后立即应用并保存；自定义内容需点击保存。」（不是「仅展示选择预览」）。
+5. 落库实测（读 `/data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_reader_settings`）：选「繁体转简体」→ `chineseConverterType` = `1.000000`；选「简体转繁体」→ `2.000000`；选回「关闭简繁转换」→ `0.000000`。三档往返可写。
+6. **正文真的变了（决定性证据）**：档位取 `2` 后回书架打开第一本书，`uitest dumpLayout` 读到的正文文本为「第一卷 風起 / 這一段是佔位正文，用來拉 / 開章節之間的距離，使得每一個 / 章節標題之間的字符數足夠多。」——正文与章节标题**同时**变繁体；档位改回 `0` 后重进同一章，文本恢复为「第一卷 风起 / 这一段是占位正文，用来拉 / 开章节之间的距离」。方向相反的两次对比，排除巧合。
+7. 备份口径：`chineseConverterType` 不在上游 `BackupConfig.readPrefKeys` 忽略清单里，本地同样补了导出（`BackupRepository.ets:576`，`int`）与恢复（`:1251`）。
+8. 已知差异：上游 `ChineseUtils.t2s` 带约 110 条排除词（一词多形的场景），ICU 没有这层修正，个别词形可能不同。属转换库差异，不是接线缺失。
+9. 测试期改动已复原：`chineseConverterType` 已回到 `0.000000`（重新拉取确认）。
+
+只代表 N 端模拟器上的结果，Android 侧未做同机对比。
+
 ## 2026-10-31 N 端 KI-A7 触感反馈两项（开关落库通过，振动本身未验）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 32 s 535 ms`，33 项任务 17 执行 / 16 最新，只有 `ReaderBookmarkBadgeRepository.ets` 的既有警告），HAP 覆盖安装成功。

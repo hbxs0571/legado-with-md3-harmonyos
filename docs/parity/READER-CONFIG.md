@@ -51,20 +51,21 @@
 | --- | --- | --- | --- | --- |
 | A 阅读界面基础 | 37 | 16 | 19 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
-| C 正文排版 | 49 | 23 | 26 | 0 |
+| C 正文排版 | 49 | 24 | 25 | 0 |
 | D 翻页与手势交互 | 20 | 13 | 7 | 0 |
 | E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 95 | 92 | 2 |
+| 合计 | 189 | 96 | 91 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 92 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 91 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 > 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
 > 2026-10-31 KI-A7 落库：A 块「阅读进度条触感反馈」（`sliderVibrator`）与「文字选择触感反馈」（`selectVibrator`）两条由 `未接` 改 `已接`，A 块 21 未接 → 19 未接，全表 94 → 92。其中 `sliderVibrator` 上游 UI 侧无消费点（只有设置项与落库），按「上游没有就不要这个效果」本地只做可配+落库+随备份，不给进度条加振动。
+> 2026-10-31 KI-C5 落库：C 块「繁简转换」（`chineseConverterType`）由 `未接` 改 `已接`，C 块 26 未接 → 25 未接，全表 92 → 91。上游用 `quick-chinese-transfer` 字表，本地改用系统 ICU 的 `i18n.Transliterator`（`Traditional-Simplified` / `Simplified-Traditional`），正文与章节标题两处应用点都接上了；设备实测选「简体转繁体」后正文与标题同时变繁体，改回关闭恢复简体。
 
 ## A 阅读界面基础
 
@@ -195,7 +196,7 @@
 | 标题分段缩放 | `ReadBookConfig.kt:283` | — | 未接 | 上游夹取 0–2，负值回落 1 | 调比例后第二段字号变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
 | 标题分段起始位置 | `ReadBookConfig.kt:287` | — | 未接 | 上游 `titleSegDistance` 默认 4 | 调值后分段切点前移/后移 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
 | 标题分段识别字符 | `ReadBookConfig.kt:290` | — | 未接 | 上游 `titleSegFlag` 默认空串 | 填入字符后在该处拆段 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C4 |
-| 繁简转换 | `ReadSettings.kt:118` | — | 未接 | 上游 `chineseConverterType` 三档（不转换/繁体/简体），本地无字段 | 选繁体后正文以繁体显示 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C5 |
+| 繁简转换 | `ReadSettings.kt:118` | `ReaderSettingsRepository.ets:222`、`ChineseTextConverter.ets` | 已接 | 上游三档 `chineseConverterType`（0 不转换 / 1 繁转简 / 2 简转繁），正文应用点在 `ContentProcessor.kt:161-171`、标题应用点在 `BookChapter.kt:103-116`。本地存储键 `chineseConverterType`，读 `ReaderSettingsRepository.ets:548`、写 `:885`；转换实现用系统 ICU 的 `i18n.Transliterator`（`Traditional-Simplified` / `Simplified-Traditional`），正文接入 `BookRepository.ets:1653`（净化之后）、标题接入 `ReplaceRuleRepository.ets:954`（替换规则之前）；设置项在排版面板「正文」页 `ReaderSettingsPage.ets:1403`，切换后 `Index.ets:2343` 重读当前章节 | 三档都能切换并落库；选「简体转繁体」后正文与章节标题同时变繁体（`第一卷 风起` → `第一卷 風起`、`这一段是占位正文` → `這一段是佔位正文`），改回「关闭简繁转换」后恢复简体。已实测（docs/VALIDATION.md 2026-10-31 KI-C5 节） | 上游用 `quick-chinese-transfer` 字表并带约 110 条 t2s 排除词，本地用 ICU 转换，个别词形可能有差异 |
 | 字体文件夹 | `ReadSettings.kt:79` | — | 未接 | 上游 `fontFolder` 指定扫描目录，本地只支持系统字体与内置字体 | 指定文件夹后出现自定义字体 | 本地 `systemTypefaces` 只覆盖系统字体枚举；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-C6 |
 
 > C 块的标题排版是整组缺口：14 个标题字段全部未接，本地用 9 处硬编码的 `this.fontSize + 4` 代替（`ReaderPage.ets:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`）。这 9 处必须同时改，否则测量、绘制与渲染三处会不一致——`:824`/`:1651` 用于行数与宽度测量，`:1656` 用于预留行高，`:2857` 起为实际绘制。
@@ -312,7 +313,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（92 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（91 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -614,7 +615,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `doubleHorizontalPage` | 要接 | 横屏双页，属分页引擎改造（KI-D4） |
 | `pageTouchSlop` | 要接 | 翻页触摸阈值，0=平台默认；**KI-D5 已实现**（存储键 `pageTouchSlop`，`ReaderPage.ets:2947-2948` 消费） |
 | `lastMarkingStyle` | 要接 | 沿用上次标记样式；**KI-D6 已实现**（存储键 `lastMarkingStyle`，`ReaderMarkingEditor.ets:255-264` 消费） |
-| `chineseConverterType` | 要接 | 繁简转换三档，需自带字表（KI-C5） |
+| `chineseConverterType` | 要接 | 繁简转换三档，需自带字表；**KI-C5 已实现**（ICU Transliterator，`ChineseTextConverter.ets`） |
 | `menuAlpha` | 要接 | 菜单不透明度，随菜单层（KI-A2） |
 | `showReadTitleAddition` | 要接 | 阅读标题补充信息（KI-A2） |
 | `readBarStyle` | 要接 | 阅读栏样式默认 1，上游被 `BackupConfig.kt:216` 列入备份键（KI-E6） |
@@ -667,7 +668,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 2. **C 块标题排版 14 项**：需要同时改 `ReaderPage.ets` 的 9 处 `fontSize + 4` 硬编码（`:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`），并新增 `titleSizeRelative` 三态语义（上游回落规则见 `ReadBookConfig.kt:660-668`）。改动面比 E 块小但风险高，属排版视觉回归。
 3. **C 块正文与背景 6 行 + 下划线虚线 4 行**：正文与背景 6 行对应 11 个字段（正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2），下划线虚线 4 行对应 4 个字段，均为单点参数，适合随其它模块顺带补齐。其中**正文日/夜颜色（`ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码）优先做**——它是用户最容易察觉的「不能改字色」，且与背景预设（`READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:339-346`）天然配套。
 
-三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 92 行未接的多数。余下 28 行分布在 A 块 19 行、C 块 2 行、D 块 7 行（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 91 行未接的多数。余下 27 行分布在 A 块 19 行、C 块 1 行、D 块 7 行（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7；C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 

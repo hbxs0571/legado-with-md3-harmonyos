@@ -206,6 +206,11 @@ struct Index {
   @State readerSliderVibrator: boolean = false;
   /** 选择正文时震动；上游 ReadSettings.kt:41 selectVibrator，消费点在选区手势。 */
   @State readerSelectVibrator: boolean = false;
+  /**
+   * 中文简繁体转换档位：0 = 不转换、1 = 繁转简、2 = 简转繁。
+   * 上游 ReadSettings.kt:118 chineseConverterType，设置项在排版面板。
+   */
+  @State readerChineseConverterType: number = 0;
   @State readerMaxLengthWithNoToc: number = 3000;
   @State eyeProtectionEnabled: boolean = false;
   @State eyeProtectionAutoNight: boolean = false;
@@ -426,6 +431,21 @@ struct Index {
       await this.reloadSelectedChapter();
     } catch (_) {
       this.showUnavailableAction('恢复默认替换净化设置失败');
+    }
+  }
+
+  /**
+   * 简繁转换档位改动后重读当前章节。
+   * 与 reloadSelectedChapter 的差别只在路由判断：那个函数要求已经停在阅读页，
+   * 而档位是在设置页里改的（route 为 READER_SETTINGS），回到阅读页时正文需要是转换后的。
+   */
+  private async reloadSelectedChapterForTransform(): Promise<void> {
+    if (this.selectedBook.contentPath === undefined) { return; }
+    try {
+      this.readerContent = await BookRepository.readChapter(this.selectedBook, this.selectedChapter);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (_) {
+      this.showUnavailableAction('重新读取本章失败');
     }
   }
 
@@ -1734,6 +1754,9 @@ struct Index {
       this.readerSelectText = settings.selectText;
       this.readerSliderVibrator = settings.sliderVibrator;
       this.readerSelectVibrator = settings.selectVibrator;
+      this.readerChineseConverterType = settings.chineseConverterType;
+      BookRepository.setChineseConverterType(settings.chineseConverterType);
+      ReplaceRuleRepository.setChineseConverterType(settings.chineseConverterType);
       this.readerMaxLengthWithNoToc = settings.maxLengthWithNoToc;
       this.eyeProtectionEnabled = settings.eyeProtectionEnabled;
       this.eyeProtectionAutoNight = settings.eyeProtectionAutoNight;
@@ -1846,6 +1869,7 @@ struct Index {
         selectText: this.readerSelectText,
         sliderVibrator: this.readerSliderVibrator,
         selectVibrator: this.readerSelectVibrator,
+        chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
         eyeProtectionEnabled: this.eyeProtectionEnabled,
         eyeProtectionAutoNight: this.eyeProtectionAutoNight,
@@ -2308,6 +2332,16 @@ struct Index {
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
+  private setReaderChineseConverterType(value: number): void {
+    this.readerChineseConverterType = value === 1 ? 1 : (value === 2 ? 2 : 0);
+    // 正文管线是静态方法，注入后需要重读当前章节才会体现，由调用方负责刷新。
+    BookRepository.setChineseConverterType(this.readerChineseConverterType);
+    ReplaceRuleRepository.setChineseConverterType(this.readerChineseConverterType);
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+    // 正文是按已转换结果缓存的，档位变了必须重读，否则要等下次翻页才生效。
+    this.reloadSelectedChapterForTransform();
+  }
   private setReaderMaxLengthWithNoToc(value: number): void {
     this.readerMaxLengthWithNoToc = Math.max(3000, Math.min(100000, Math.round(value)));
     this.readerSettingsRevision += 1;
@@ -2480,6 +2514,9 @@ struct Index {
       this.readerReadSliderMode = result.settings.readSliderMode;
       this.readerSliderVibrator = result.settings.sliderVibrator;
       this.readerSelectVibrator = result.settings.selectVibrator;
+      this.readerChineseConverterType = result.settings.chineseConverterType;
+      BookRepository.setChineseConverterType(result.settings.chineseConverterType);
+      ReplaceRuleRepository.setChineseConverterType(result.settings.chineseConverterType);
       this.readerPageTouchSlop = result.settings.pageTouchSlop;
       this.readerLastMarkingStyle = result.settings.lastMarkingStyle;
       this.showReaderQuickActions = result.settings.showQuickActions;
@@ -3911,6 +3948,7 @@ struct Index {
         selectText: this.readerSelectText,
         sliderVibrator: this.readerSliderVibrator,
         selectVibrator: this.readerSelectVibrator,
+        chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
               onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -3921,6 +3959,7 @@ struct Index {
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
+              onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
               clickRegionActions: this.readerClickRegionActions,
               onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4228,6 +4267,7 @@ struct Index {
         selectText: this.readerSelectText,
         sliderVibrator: this.readerSliderVibrator,
         selectVibrator: this.readerSelectVibrator,
+        chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -4238,6 +4278,7 @@ struct Index {
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
+              onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4410,6 +4451,7 @@ struct Index {
         selectText: this.readerSelectText,
         sliderVibrator: this.readerSliderVibrator,
         selectVibrator: this.readerSelectVibrator,
+        chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -4420,6 +4462,7 @@ struct Index {
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
+              onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4534,6 +4577,7 @@ struct Index {
         selectText: this.readerSelectText,
         sliderVibrator: this.readerSliderVibrator,
         selectVibrator: this.readerSelectVibrator,
+        chineseConverterType: this.readerChineseConverterType,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
           onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -4544,6 +4588,7 @@ struct Index {
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
               onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
               onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
+              onChineseConverterTypeChange: (value: number) => this.setReaderChineseConverterType(value),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
           clickRegionActions: this.readerClickRegionActions,
           onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
