@@ -192,6 +192,14 @@ export struct ReaderSettingsPage {
   @Prop autoSuggestDayNight: boolean = false;
   /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`）。 */
   @Prop disableReturnKey: boolean = false;
+  /** 阅读亮度 1..100；上游 `readBrightness`（`ReadSettings.kt:22`，默认 100）。 */
+  @Prop readBrightness: number = 100;
+  /** 亮度条形态；上游 `showBrightnessView`（`ReadSettings.kt:20`），"0" 关闭 / "1" 横排 / "2" 竖排。 */
+  @Prop showBrightnessView: string = '0';
+  /** 竖排亮度条贴哪一侧；上游 `brightnessVwPos`（`ReadSettings.kt:21`），"0" 左 / "1" 右。 */
+  @Prop brightnessVwPos: string = '1';
+  /** 亮度是否跟随系统；上游 `brightnessAuto`（`ReadSettings.kt:23`，默认 true）。 */
+  @Prop brightnessAuto: boolean = true;
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -243,7 +251,6 @@ export struct ReaderSettingsPage {
   @State menuPaletteStyleIndex: number = 0;
   @State menuBorderEnabled: boolean = true;
   @State menuTitleIconsVisible: boolean = true;
-  @State brightnessViewMode: number = 0;
 
   aboutToAppear(): void {
     this.syncTextMenuEntriesFromConfig();
@@ -342,6 +349,10 @@ export struct ReaderSettingsPage {
   onDoubleHorizontalPageChange: (value: string) => void = (_value: string) => {};
   onAutoSuggestDayNightChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onDisableReturnKeyChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadBrightnessChange: (value: number) => void = (_value: number) => {};
+  onShowBrightnessViewChange: (value: string) => void = (_value: string) => {};
+  onBrightnessVwPosChange: (value: string) => void = (_value: string) => {};
+  onBrightnessAutoChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -748,7 +759,8 @@ export struct ReaderSettingsPage {
           if (entry.title === '工具栏样式') { this.menuBarStyleMode = index; }
           if (entry.title === '菜单颜色来源') { this.menuColorMode = index; }
           if (entry.title === '调色板风格') { this.menuPaletteStyleIndex = index; }
-          if (entry.title === '显示亮度视图') { this.brightnessViewMode = index; }
+          if (entry.title === '显示亮度视图') { this.onShowBrightnessViewChange(['0', '1', '2'][index] ?? '0'); }
+          if (entry.title === '亮度条位置') { this.onBrightnessVwPosChange(index === 0 ? '0' : '1'); }
           this.openDetailSheet(entry.title, entry.detail);
         }
       })
@@ -824,7 +836,8 @@ export struct ReaderSettingsPage {
     if (title === '工具栏样式') { return this.menuBarStyleMode; }
     if (title === '菜单颜色来源') { return this.menuColorMode; }
     if (title === '调色板风格') { return this.menuPaletteStyleIndex; }
-    if (title === '显示亮度视图') { return this.brightnessViewMode; }
+    if (title === '显示亮度视图') { return ['0', '1', '2'].indexOf(this.showBrightnessView); }
+    if (title === '亮度条位置') { return this.brightnessVwPos === '0' ? 0 : 1; }
     return 0;
   }
 
@@ -849,7 +862,12 @@ export struct ReaderSettingsPage {
     if (this.detailSheetTitle === '工具栏样式' && choiceIndex >= 0) { this.menuBarStyleMode = choiceIndex; }
     if (this.detailSheetTitle === '菜单颜色来源' && choiceIndex >= 0) { this.menuColorMode = choiceIndex; }
     if (this.detailSheetTitle === '调色板风格' && choiceIndex >= 0) { this.menuPaletteStyleIndex = choiceIndex; }
-    if (this.detailSheetTitle === '显示亮度视图' && choiceIndex >= 0) { this.brightnessViewMode = choiceIndex; }
+    if (this.detailSheetTitle === '显示亮度视图' && choiceIndex >= 0) {
+      this.onShowBrightnessViewChange(['0', '1', '2'][choiceIndex] ?? '0');
+    }
+    if (this.detailSheetTitle === '亮度条位置' && choiceIndex >= 0) {
+      this.onBrightnessVwPosChange(choiceIndex === 0 ? '0' : '1');
+    }
     if (this.detailSheetTitle === '中文简繁体转换' && choiceIndex >= 0) {
       this.onChineseConverterTypeChange(choiceIndex);
     }
@@ -905,7 +923,7 @@ export struct ReaderSettingsPage {
       return this.menuBarStyleMode === 1 || (this.menuBarStyleMode === 2 && this.menuColorMode === 0);
     }
     if (title === '菜单颜色来源') { return this.menuBarStyleMode === 2; }
-    if (title === '亮度条位置') { return this.brightnessViewMode === 2; }
+    if (title === '亮度条位置') { return this.showBrightnessView === '2'; }
     if (title === '种子色') { return this.menuBarStyleMode === 2 && this.menuColorMode === 0; }
     if (title === '菜单背景颜色' || title === '菜单容器颜色' || title === '菜单强调颜色') {
       return this.menuBarStyleMode === 2 && this.menuColorMode === 1;
@@ -1478,6 +1496,18 @@ export struct ReaderSettingsPage {
   private getAnimationSpeedLabel(): string {
     const choices = this.getDetailChoices('翻页动画速度');
     return choices[this.animationSpeedIndex] ?? choices[2] ?? '适中';
+  }
+
+  /** 亮度条形态的回显文案，取值对齐上游 brightness_bar_off/horizontal/vertical。 */
+  private getBrightnessViewDetail(): string {
+    const choices = ['关闭', '横排', '竖排'];
+    const index = ['0', '1', '2'].indexOf(this.showBrightnessView);
+    return choices[Math.max(0, index)] ?? choices[0] ?? '';
+  }
+
+  /** 亮度条位置的回显文案，对齐上游 brightness_bar_left/right。 */
+  private getBrightnessPositionDetail(): string {
+    return this.brightnessVwPos === '0' ? '左侧' : '右侧';
   }
 
   private getDetailChoices(title: string): string[] {
@@ -2218,8 +2248,8 @@ export struct ReaderSettingsPage {
         { title: '菜单容器颜色', detail: '日间与夜间容器色' },
         { title: '菜单强调颜色', detail: '日间与夜间强调色' },
         { title: '显示亮度调节控件', detail: '', section: true },
-        { title: '显示亮度视图', detail: '关闭 / 横向 / 竖向' },
-        { title: '亮度条位置', detail: '顶栏 / 底栏' },
+        { title: '显示亮度视图', detail: this.getBrightnessViewDetail() },
+        { title: '亮度条位置', detail: this.getBrightnessPositionDetail() },
         { title: '菜单边框', detail: '', section: true },
         { title: '菜单栏边框', detail: '显示菜单栏边框' },
         { title: '菜单栏边框宽度', detail: '1–4 dp' },

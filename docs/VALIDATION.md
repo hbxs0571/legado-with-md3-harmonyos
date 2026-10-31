@@ -305,6 +305,28 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-A9 阅读亮度四项（落库与面板通过，窗口亮度视觉效果未验）
+
+27. **设备与构建**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832），包名 `io.legado.harmony`。`assembleHap` → `BUILD SUCCESSFUL in 20 s 155 ms`（33 任务，18 执行 / 15 最新），`hdc install -r` → `install bundle successfully`。首次构建失败并暴露一处真实缺漏：`10505001 Type '{...131 more...}' is missing the following properties from type 'ReaderSettingsSnapshot': readBrightness, showBrightnessView, brightnessVwPos, brightnessAuto At File: .../data/BackupRepository.ets:1241:5` —— 备份恢复返回的对象少了这四个字段，补上后通过。这条再次验证「新增配置字段必须同时改 `ReaderSettingsRepository` 的接口与 `BackupRepository` 恢复返回对象」，否则编译即报。
+
+28. **上游口径核对**：字段在 `domain/model/settings/ReadSettings.kt:20-23`；**存储键与字段名不同**：`readBrightness` → `brightness`（`PreferKey.kt:151`）、`showBrightnessView` → `readBrightnessMode`（`:112`）、`brightnessVwPos` → `readBrightnessControlPosition`（`:193`）、`brightnessAuto` → `brightnessAuto`（`:194`）。备份忽略清单 `BackupConfig.readPrefKeys` 含前两者中的后两个（`readBrightnessMode`/`readBrightnessControlPosition`），不含 `brightness`/`brightnessAuto`。窗口亮度应用点 `ReadBookController.kt:3179-3187`，`BRIGHTNESS_OVERRIDE_NONE` 对应 HOS 的 `setWindowBrightness(-1)`。
+
+29. **设置项上屏（两条都真上屏）**：设置 → 阅读界面 → 菜单 tab（`(493,2629)`）→ 读到「显示亮度调节控件」分组标题、「显示亮度视图 / 当前值与右侧 `⌄`」、「亮度条位置 / 当前值」。默认 `readBrightnessMode` 为 `"0"` 时只显示「显示亮度视图」一行，副标题「关闭」；切到「竖排」后「亮度条位置」行才出现（`ReaderSettingsPage.ets:926` 条件），副标题「右侧」。
+
+30. **显示亮度视图落库（决定性）**：点「显示亮度视图」行 `(640,960)` 打开详情面板，读到标题「显示亮度视图」、描述、「关闭」（`[182,1330][1035,1383]`）、「横排」（`[182,1493][1098,1546]`）、「竖排」（`[182,1651][1098,1704]`）四个选项；点「横排」`(640,1519)` → 偏好文件从**没有该键**变为 `<string key="readBrightnessMode">1</string>`，返回列表副标题同步变「横排」。
+
+31. **亮度条位置落库（决定性）**：注入 `readBrightnessMode=2` 重启后面板出现「亮度条位置 / 右侧」；点该行 `(640,1120)` 打开详情面板，读到「左侧」（`[182,1409][1035,1462]`）与「右侧」（`[182,1572][1098,1625]`），点「左侧」`(640,1435)` → `<string key="readBrightnessControlPosition">0</string>`，返回列表副标题变「左侧」。
+
+32. **亮度与自动亮度两键落库**：默认启动后偏好文件里 `<double key="brightness" value="100.000000"/>` 与 `<bool key="brightnessAuto" value="true"/>` 已写出（与 `ReadSettings.kt:22-23` 默认一致）；注入 `brightness=20` + `brightnessAuto=false` 重启后两键分别读回 `20.000000` / `false`，证明读路径与快照回灌都对。
+
+33. **未验部分：窗口亮度的视觉效果**。这是本组唯一没取到的证据。把 `brightness` 分别设为 `20` 与 `100`（`brightnessAuto` 均为 `false`）后各截一张全屏图，按 7×7 步长统计 `y∈[200,2632]`、`x∈[50,1230]` 区域的平均通道值，两张都是 **36.16** —— 一模一样的数字说明模拟器截图不叠加窗口亮度（`setWindowBrightness` 影响的是面板背光叠加层，不是合成帧内容）。`hidumper` 也没有对应读数可查。因此本项只到「代码路径核对 + 四键落库」，「调暗后确实变暗」需要在真机上看。
+
+34. **已知差异**：亮度条上**没有**上游那个内联「自动亮度」按钮（上游在 `ReadBookMenuBarBottom.kt:316` 的 `BrightnessBar` 里用 `onToggleAuto` 实现），本地本轮只做了滑块；另外上游拖动滑块会绕开 `brightnessAuto` 直接写窗口亮度（`ReadBookController.kt:2465-2469`），本地滑块只落库，自动亮度开着时拖动不会立刻变亮。两条都记在 KNOWN-ISSUES KI-A9 的「已知差异」里。
+
+35. **测试期改动已复原**：`readBrightnessMode` 回到 `0`、`readBrightnessControlPosition` 回到 `1`、`brightness` 回到 `100.000000`、`brightnessAuto` 回到 `true`，四次 `hdc file recv` 读回确认。
+
+36. **只代表 N 端模拟器**：以上均为 HarmonyOS 模拟器（API 26 镜像，工程 `compatibleSdkVersion` 5.0.0(12)）的实测结果，不代表真机窗口亮度行为，也不代表平板/折叠屏形态。
+
 ## 2026-10-31 N 端 KI-A3 禁用返回键（开关与落库通过）
 
 19. **设备与构建**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832），包名 `io.legado.harmony`。`assembleHap` → `BUILD SUCCESSFUL in 31 s 592 ms`（33 任务，17 执行 / 16 最新），`hdc install -r` → `install bundle successfully`。

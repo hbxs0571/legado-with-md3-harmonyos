@@ -219,6 +219,14 @@ struct Index {
   @State @Watch('onReaderAutoSuggestDayNightChanged') readerAutoSuggestDayNight: boolean = false;
   /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`）。上游 UI 侧无消费点，本地只做可配+落库。 */
   @State readerDisableReturnKey: boolean = false;
+  /** 阅读亮度 1..100；上游 `readBrightness`（`ReadSettings.kt:22`，默认 100），按 readBrightness/100 设窗口亮度。 */
+  @State readerReadBrightness: number = 100;
+  /** 阅读菜单里亮度条的形态；上游 `showBrightnessView`（`ReadSettings.kt:20`），"0" 关闭 / "1" 横排 / "2" 竖排。 */
+  @State readerShowBrightnessView: string = '0';
+  /** 竖排亮度条贴哪一侧；上游 `brightnessVwPos`（`ReadSettings.kt:21`），"0" 左 / "1" 右。 */
+  @State readerBrightnessVwPos: string = '1';
+  /** 亮度是否跟随系统；上游 `brightnessAuto`（`ReadSettings.kt:23`，默认 true）。 */
+  @State readerBrightnessAuto: boolean = true;
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1827,6 +1835,10 @@ struct Index {
     this.readerDoubleHorizontalPage = settings.doubleHorizontalPage;
     this.readerAutoSuggestDayNight = settings.autoSuggestDayNight;
     this.readerDisableReturnKey = settings.disableReturnKey;
+    this.readerReadBrightness = settings.readBrightness;
+    this.readerShowBrightnessView = settings.showBrightnessView;
+    this.readerBrightnessVwPos = settings.brightnessVwPos;
+    this.readerBrightnessAuto = settings.brightnessAuto;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1927,6 +1939,10 @@ struct Index {
         doubleHorizontalPage: this.readerDoubleHorizontalPage,
         autoSuggestDayNight: this.readerAutoSuggestDayNight,
         disableReturnKey: this.readerDisableReturnKey,
+        readBrightness: this.readerReadBrightness,
+        showBrightnessView: this.readerShowBrightnessView,
+        brightnessVwPos: this.readerBrightnessVwPos,
+        brightnessAuto: this.readerBrightnessAuto,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
         lineSpacing: this.readerLineSpacing,
@@ -2631,6 +2647,40 @@ struct Index {
     }
   }
 
+  /** 阅读亮度：夹 1..100（上游按 readBrightness/100 设窗口亮度，0 会全黑）。 */
+  private setReaderReadBrightness(value: number): void {
+    this.readerReadBrightness = Math.max(1, Math.min(100, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderShowBrightnessView(value: string): void {
+    this.readerShowBrightnessView = value === '1' || value === '2' ? value : '0';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderBrightnessVwPos(value: string): void {
+    this.readerBrightnessVwPos = value === '0' ? '0' : '1';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 亮度跟随系统开关；上游 `ReadBookIntent.ToggleBrightnessAuto`（`ReadBookViewModel.kt:1007`）。 */
+  private setReaderBrightnessAuto(enabled: boolean): void {
+    this.readerBrightnessAuto = enabled !== false;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -3043,6 +3093,10 @@ struct Index {
     this.readerDoubleHorizontalPage = result.settings.doubleHorizontalPage;
     this.readerAutoSuggestDayNight = result.settings.autoSuggestDayNight;
     this.readerDisableReturnKey = result.settings.disableReturnKey;
+    this.readerReadBrightness = result.settings.readBrightness;
+    this.readerShowBrightnessView = result.settings.showBrightnessView;
+    this.readerBrightnessVwPos = result.settings.brightnessVwPos;
+    this.readerBrightnessAuto = result.settings.brightnessAuto;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4346,6 +4400,11 @@ struct Index {
             dayNightReminderText: this.readerDayNightReminderText,
             onAcceptDayNightReminder: () => this.acceptReaderDayNightReminder(),
             onDismissDayNightReminder: () => this.dismissReaderDayNightReminder(),
+            readBrightness: this.readerReadBrightness,
+            onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
+            showBrightnessView: this.readerShowBrightnessView,
+            brightnessVwPos: this.readerBrightnessVwPos,
+            brightnessAuto: this.readerBrightnessAuto,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4557,6 +4616,14 @@ struct Index {
               onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
               onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
               onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+              readBrightness: this.readerReadBrightness,
+              onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
+              showBrightnessView: this.readerShowBrightnessView,
+              onShowBrightnessViewChange: (value: string) => this.setReaderShowBrightnessView(value),
+              brightnessVwPos: this.readerBrightnessVwPos,
+              onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
+              brightnessAuto: this.readerBrightnessAuto,
+              onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -4945,6 +5012,14 @@ struct Index {
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
             onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+            readBrightness: this.readerReadBrightness,
+            onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
+            showBrightnessView: this.readerShowBrightnessView,
+            onShowBrightnessViewChange: (value: string) => this.setReaderShowBrightnessView(value),
+            brightnessVwPos: this.readerBrightnessVwPos,
+            onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
+            brightnessAuto: this.readerBrightnessAuto,
+            onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5198,6 +5273,14 @@ struct Index {
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
             onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+            readBrightness: this.readerReadBrightness,
+            onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
+            showBrightnessView: this.readerShowBrightnessView,
+            onShowBrightnessViewChange: (value: string) => this.setReaderShowBrightnessView(value),
+            brightnessVwPos: this.readerBrightnessVwPos,
+            onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
+            brightnessAuto: this.readerBrightnessAuto,
+            onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5393,6 +5476,14 @@ struct Index {
           onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
           onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
           onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+          readBrightness: this.readerReadBrightness,
+          onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
+          showBrightnessView: this.readerShowBrightnessView,
+          onShowBrightnessViewChange: (value: string) => this.setReaderShowBrightnessView(value),
+          brightnessVwPos: this.readerBrightnessVwPos,
+          onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
+          brightnessAuto: this.readerBrightnessAuto,
+          onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

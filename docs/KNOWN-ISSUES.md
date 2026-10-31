@@ -227,9 +227,28 @@
 
 上游这个字段是「阅读页内开 Sheet」与「跳独立目录页」两种呈现的切换开关（`ui/book/read/ReadBookViewModel.kt:193`）。本地目录固定为 `CatalogPage.ets` 独立页一种形态，没有第二态可切。为它造一个不存在的新旧目录等于凭空加功能，**不补**。
 
-**KI-A9 阅读亮度（要接，待排期）** —— 覆盖 A-16（`readBrightness`，`ReadSettings.kt:22`，默认 100）。
+**KI-A9 阅读亮度四项（已实现）** —— 覆盖 A-16（`readBrightness`，`ReadSettings.kt:22`，默认 100）、E-36 显示亮度视图（`showBrightnessView`，`:20`，默认 `"0"`）、E-37 亮度条位置（`brightnessVwPos`，`:21`，默认 `"1"`）、以及原 KI-E6 的「自动亮度」一项（`brightnessAuto`，`:23`，默认 `true`）。
 
-上游按书保存亮度，本地没有亮度控制，退出重进也不记忆。补法：`ReaderPage` 用窗口亮度接口设置，值落 `ReaderSettingsRepository` 新字段，退出阅读页恢复系统亮度。
+上一版把「自动亮度」单放在 KI-E6 里判「要接，需先补上屏」。实际核对上游后修正：上游**没有**独立的「自动亮度」设置条目 —— `ui/config/readConfig/ReadConfigScreen.kt:182-199` 只有 `show_brightness_view` 与 `brightnessVwPos` 两项，自动亮度是亮度条上的一个内联按钮（`ReadBookMenuBarBottom.kt:316` 的 `BrightnessBar(brightnessAuto, onToggleAuto, ...)`）。所以「没有上屏条目」不是缺口，本地按同一形态挂在亮度条上即可，本轮与 A-16 一并接上。
+
+**上游口径（逐条）**
+- **存储键与字段名不一致，这是本组最容易踩的坑**：`data/repository/ReadSettingsRepository.kt:380-391` —— `showBrightnessView = compatDsString(PreferKey.readBrightnessMode)`、`brightnessVwPos = compatDsString(PreferKey.readBrightnessControlPosition)`、`readBrightness = compatDsValue(Keys.ReadBrightness, 100)`、`brightnessAuto = compatDsValue(Keys.BrightnessAuto, true)`。对应 `constant/PreferKey.kt:112 readBrightnessMode`、`:193 readBrightnessControlPosition`、`:151 brightness`、`:194 brightnessAuto`。
+- **备份口径也不一致**：`help/storage/BackupConfig.kt` 的 `readPrefKeys` 忽略清单里**有** `readBrightnessMode` 与 `readBrightnessControlPosition`（不导出），**没有** `brightness` 与 `brightnessAuto`（随 config.xml 无条件备份）。本地 `BackupRepository.ets` 的 `preferenceKeysByCategory.readConfig` 早前列的就是前两个键，与上游一致；后两个按 config.xml 条目导出。
+- 应用到窗口：`ui/book/read/ReadBookController.kt:3179-3187` `applyReadBrightness()` —— `lp.screenBrightness = if (ReadBookConfig.brightnessAuto) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else ReadBookConfig.readBrightness / 100f`；开书时 `:1833` 调一次；退出 `:3192` 还原 `originalScreenBrightness`（原值在 `:464` 捕获）。拖动滑块实时生效走 `ReadBookEffect.SetBrightness` → `:2465-2469`（**这条不看 `brightnessAuto`**，上游有意的「拖动即覆盖自动」）。
+- 亮度条位置：`ui/book/read/ReadBookMenuBarBottom.kt:139-163` 只在 `showBrightnessView == "1"` 时在底栏横排；`ReadBookMenuBar.kt:250-268` 顶栏 `vertical = true` 并给 `onTogglePosition` 在 `"0"`/`"1"` 间切换。
+- 设置项可见性：`ReadConfigScreen.kt:182-199` 里「亮度条位置」**只在「显示亮度视图」为「竖排」时出现**。
+
+**本地落地**
+1. `entry/src/main/ets/data/ReaderSettingsRepository.ets`：接口 `:243` `readBrightness`、`:249` `showBrightnessView`、`:254` `brightnessVwPos`、`:256` `brightnessAuto`；默认 `:609-612`；读 `:733-736`（存储键分别 `brightness`/`readBrightnessMode`/`readBrightnessControlPosition`/`brightnessAuto`）；归一 `:1009-1014`（亮度夹 1..100 —— 0 会让窗口全黑）；写 `:1174-1177`。
+2. `entry/src/main/ets/pages/ReaderPage.ets`：`@Prop @Watch('onReadBrightnessChanged') readBrightness`、`@Prop showBrightnessView`、`@Prop brightnessVwPos`、`@Prop @Watch('onReadBrightnessChanged') brightnessAuto`；`applyReaderBrightness()`（`:747`）用 `this.brightnessAuto ? -1 : Math.max(0, Math.min(1, this.readBrightness / 100))` 调 `setWindowBrightness`，带 requestId 防乱序；`restoreReaderBrightness()` 调 `-1`；`aboutToAppear()`/`aboutToDisappear()` 分别调用。
+3. 亮度条 UI：`ReaderPage.ets:2544` 的 `@Builder ReaderBrightnessBar(vertical)` + `ReaderBrightnessSlider(vertical)`，挂载点 `:3805`（底栏进度条上方，`showBrightnessView` 为 `'1'`/`'2'` 时显示）。**自动亮度按钮本轮未做**：本地亮度条只有滑块，没有上游那个内联的「自动」开关 —— 见「已知差异」。
+4. 面板：`ReaderSettingsPage.ets:2239`/`:2240` 两条（分段控件 + 详情面板），回显走 `getBrightnessViewDetail()`/`getBrightnessPositionDetail()`；`:926` 让「亮度条位置」只在竖排时可见。
+5. 备份：`BackupRepository.ets` 的接口、config.xml 导出（只导 `brightness`/`brightnessAuto`）、readConfig.json 记录（四键都记）、恢复段（四键都恢复）。
+
+**已知差异**
+- **窗口亮度的视觉效果无法在模拟器取证**：`setWindowBrightness()` 是真实调用（`-1` 表示恢复系统亮度，与上游 `BRIGHTNESS_OVERRIDE_NONE` 等价），但模拟器截图不叠加窗口亮度 —— `brightness=20` 与 `brightness=100` 两次全屏截图的平均亮度都是 36.16。故本组的验收只到「四键落库 + 面板回显 + 可见性联动 + 代码路径核对」。
+- 亮度条上没有「自动亮度」按钮，自动亮度目前只能由备份恢复或面板外写入 `brightnessAuto`。上游该按钮是 `BrightnessBar` 的 `onToggleAuto`，本地 `ReaderBrightnessBar` 尚未加，属于后续 E 块统一做菜单外观时的收尾项。
+- 上游拖动滑块会绕开 `brightnessAuto` 直接写窗口亮度；本地滑块只调 `onReadBrightnessChange` 落库，`applyReaderBrightness()` 在 `brightnessAuto` 为真时仍用 `-1`，因此**自动亮度开着时拖滑块不会立刻变亮**。这是本轮的简化，已在 VALIDATION 记明。
 
 **KI-A10 主题网格列数（不接）** —— 覆盖 A-18（`themeGridColumns`，`ReadSettings.kt:40`，默认 4）。
 
@@ -455,7 +474,7 @@
 
 **KI-E5 标题栏形态八项（要接，随菜单渲染层）** —— 覆盖 E-28 标题栏胶囊（`ReadBookConfig.kt:85`）、E-29 标题栏模式（`ReadSettings.kt:12`，字符串三态）、E-30 标题栏紧凑（`ReadBookConfig.kt:81`）、E-31 标题栏图标样式（`:101`，夹 0–2）、E-32 顶栏模糊（`:105`，夹 0–2）、E-33 顶栏模糊样式（`:107`，夹 0–1）、E-34 顶栏液态玻璃按钮（`:83`）、E-35 合并标题栏按钮（`:84`）。E-29 的本地选项文案为「完整信息 / 仅标题 / 标题与章节」（`ReaderSettingsPage.ets:570`），一旦有顶栏即可直接接。
 
-**KI-E6 无上屏条目五项（要接，需先补上屏）** —— 覆盖 E-36 菜单镜头半径（`ReadBookConfig.kt:114`，夹 0–48f）、E-37 自动亮度（`:97`）、E-38 阅读栏样式（`ReadSettings.kt:69`，默认 1）、E-39 阅读栏样式跟随页面（`:68`）、E-40 更多操作配置（`:121`）。这五项连设置条目都没有：`getMenuSettingsEntries()`（`ReaderSettingsPage.ets:1788-1840`）里查无对应项，上游消费点却真实存在（`readBarStyle` 在 `data/repository/ReadSettingsRepository.kt:209` 夹 0–2 并被 `help/storage/BackupConfig.kt:216` 列入备份键；`moreActionsConfig` 被 `ReadBookViewModel.kt:2150` 解析为「更多」面板条目）。要接得先补上屏。
+**KI-E6 无上屏条目四项（要接，需先补上屏）** —— 覆盖 E-36 菜单镜头半径（`ReadBookConfig.kt:114`，夹 0–48f）、E-38 阅读栏样式（`ReadSettings.kt:69`，默认 1）、E-39 阅读栏样式跟随页面（`:68`）、E-40 更多操作配置（`:121`）。原第五项「E-37 自动亮度」已于 2026-10-31 随 KI-A9 接上（上游本就没有独立条目，是亮度条上的内联按钮，详见 KI-A9）。这五项连设置条目都没有：`getMenuSettingsEntries()`（`ReaderSettingsPage.ets:1788-1840`）里查无对应项，上游消费点却真实存在（`readBarStyle` 在 `data/repository/ReadSettingsRepository.kt:209` 夹 0–2 并被 `help/storage/BackupConfig.kt:216` 列入备份键；`moreActionsConfig` 被 `ReadBookViewModel.kt:2150` 解析为「更多」面板条目）。要接得先补上屏。
 
 ### B 页眉页脚
 

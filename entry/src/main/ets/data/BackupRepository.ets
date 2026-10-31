@@ -249,6 +249,14 @@ interface AndroidReadConfigBackupRecord {
   autoSuggestDayNight: boolean;
   /** 禁用返回键，上游键名 disableReturnKey（PreferKey.kt:420）。 */
   disableReturnKey: boolean;
+  /** 阅读亮度 1..100，上游键名 brightness（PreferKey.kt:151），随 config.xml 备份。 */
+  readBrightness: number;
+  /** 亮度条形态，上游键名 readBrightnessMode（PreferKey.kt:112），在阅读配置忽略清单里，不导出。 */
+  showBrightnessView: string;
+  /** 亮度条位置，上游键名 readBrightnessControlPosition（PreferKey.kt:193），同上不导出。 */
+  brightnessVwPos: string;
+  /** 亮度是否跟随系统，上游键名 brightnessAuto（PreferKey.kt:194），随 config.xml 备份。 */
+  brightnessAuto: boolean;
 }
 
 interface JsonStringResult {
@@ -624,6 +632,15 @@ export class BackupRepository {
           configText, 'string', 'doubleHorizontalPage', settings.doubleHorizontalPage);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'autoSuggestDayNight', settings.autoSuggestDayNight ? 'true' : 'false');
+        // 禁用返回键：上游不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 无条件备份。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'disableReturnKey', settings.disableReturnKey ? 'true' : 'false');
+        // 阅读亮度：亮度与自动亮度不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 备份；
+        // 亮度条形态与位置在忽略清单里（ReadSettingsRepository 的 readBrightnessMode/readBrightnessControlPosition），不导出。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'brightness', `${Math.max(1, Math.min(100, Math.round(settings.readBrightness)))}`);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'brightnessAuto', settings.brightnessAuto ? 'true' : 'false');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'float', 'dottedBase', `${settings.dottedBase}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1083,6 +1100,10 @@ export class BackupRepository {
       doubleHorizontalPage: settings.doubleHorizontalPage,
       autoSuggestDayNight: settings.autoSuggestDayNight,
       disableReturnKey: settings.disableReturnKey,
+      readBrightness: Math.max(1, Math.min(100, Math.round(settings.readBrightness))),
+      showBrightnessView: settings.showBrightnessView,
+      brightnessVwPos: settings.brightnessVwPos,
+      brightnessAuto: settings.brightnessAuto,
       dottedBase: settings.dottedBase,
       dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
@@ -1360,6 +1381,21 @@ export class BackupRepository {
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'autoSuggestDayNight') ?? current.autoSuggestDayNight,
       disableReturnKey: BackupRepository.readJsonBoolean(selected, 'disableReturnKey') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'disableReturnKey') ?? current.disableReturnKey,
+      readBrightness: Math.max(1, Math.min(100, Math.round(
+        BackupRepository.readJsonNumber(selected, 'readBrightness') ??
+          BackupRepository.readXmlInteger(`${directory}/config.xml`, 'brightness') ?? current.readBrightness))),
+      showBrightnessView: (() => {
+        const raw = BackupRepository.readJsonString(selected, 'showBrightnessView');
+        if (raw === undefined) { return current.showBrightnessView; }
+        return raw === '1' || raw === '2' ? raw : '0';
+      })(),
+      brightnessVwPos: (() => {
+        const raw = BackupRepository.readJsonString(selected, 'brightnessVwPos');
+        if (raw === undefined) { return current.brightnessVwPos; }
+        return raw === '0' ? '0' : '1';
+      })(),
+      brightnessAuto: BackupRepository.readJsonBoolean(selected, 'brightnessAuto') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'brightnessAuto') ?? current.brightnessAuto,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

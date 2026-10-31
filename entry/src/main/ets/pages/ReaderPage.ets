@@ -206,6 +206,23 @@ export struct ReaderPage {
    */
   @Prop @Watch('onPaginationInputsChanged') doubleHorizontalPage: string = '0';
 
+  /**
+   * 阅读亮度 1..100；上游 `readBrightness`（`ReadSettings.kt:22`，默认 100），
+   * 窗口亮度取 `readBrightness / 100`（`ReadBookController.kt:3179-3187 applyReadBrightness`）。
+   */
+  @Prop @Watch('onReadBrightnessChanged') readBrightness: number = 100;
+  /** 亮度条拖动时回写；上游 `ReadBookIntent.SetBrightness`（`ReadBookContract.kt:687`）。 */
+  onReadBrightnessChange: (value: number) => void = (_value: number) => {};
+  /** 亮度条形态；上游 `showBrightnessView`（`ReadSettings.kt:20`），"0" 关闭 / "1" 横排 / "2" 竖排。 */
+  @Prop showBrightnessView: string = '0';
+  /** 竖排亮度条贴哪一侧；上游 `brightnessVwPos`（`ReadSettings.kt:21`），"0" 左 / "1" 右。 */
+  @Prop brightnessVwPos: string = '1';
+  /**
+   * 亮度是否跟随系统；上游 `brightnessAuto`（`ReadSettings.kt:23`，默认 true）。
+   * 为真时窗口亮度交回系统（`BRIGHTNESS_OVERRIDE_NONE`），为假才用 `readBrightness / 100`。
+   */
+  @Prop @Watch('onReadBrightnessChanged') brightnessAuto: boolean = true;
+
   /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
   @Prop dayNightReminderText: string = '';
   /** 点「切换到深色/浅色模式」。 */
@@ -340,6 +357,8 @@ export struct ReaderPage {
   private readerSystemBarRequestId: number = 0;
   /** 状态栏图标色的请求序号：连续改色时只认最后一次，避免异步返回乱序。 */
   private readerStatusBarIconRequestId: number = 0;
+  /** 窗口亮度请求序号，用途同上。 */
+  private readerBrightnessRequestId: number = 0;
   private readerOrientationRequestId: number = 0;
   private originalReaderOrientation: window.Orientation = window.Orientation.UNSPECIFIED;
   private originalReaderOrientationCaptured: boolean = false;
@@ -444,6 +463,7 @@ export struct ReaderPage {
     this.loadReaderHighlightRules();
     this.syncReaderSystemBars();
     this.applyReaderStatusBarIcon();
+    this.applyReaderBrightness();
     this.applyReaderOrientation(this.screenOrientation, true);
     this.applyKeepLight();
     this.syncVolumeKeyPage();
@@ -455,6 +475,7 @@ export struct ReaderPage {
     this.releaseVolumeKeys();
     this.syncReaderSystemBars(true);
     this.restoreReaderStatusBarIcon();
+    this.restoreReaderBrightness();
     this.restoreReaderOrientation();
     this.fullBookPaginationGeneration++;
     this.stopAutoPageTimer();
@@ -710,6 +731,39 @@ export struct ReaderPage {
 
   onDarkStatusIconChanged(): void {
     if (this.readerWindowActive) { this.applyReaderStatusBarIcon(); }
+  }
+
+  /**
+   * 按 `readBrightness` 设窗口亮度。
+   * 上游是 `window.attributes.screenBrightness = readBrightness / 100f`
+   * （`ReadBookController.kt:3179-3187`，`brightnessAuto` 为真时用 `BRIGHTNESS_OVERRIDE_NONE` 交回系统）。
+   * HOS 侧对应 `setWindowBrightness`：传 -1 表示恢复系统亮度。
+   */
+  private applyReaderBrightness(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const requestId = ++this.readerBrightnessRequestId;
+    // 自动亮度时把亮度交回系统：上游用 BRIGHTNESS_OVERRIDE_NONE，HOS 对应 -1。
+    const value = this.brightnessAuto ? -1 : Math.max(0, Math.min(1, this.readBrightness / 100));
+    window.getLastWindow(context).then((targetWindow: window.Window) => {
+      if (requestId !== this.readerBrightnessRequestId) { return; }
+      targetWindow.setWindowBrightness(value).catch(() => {});
+    }).catch(() => {});
+  }
+
+  /** 退出阅读页时把窗口亮度交回系统（对应上游 `lp.screenBrightness = originalScreenBrightness`，`ReadBookController.kt:3192`）。 */
+  private restoreReaderBrightness(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const requestId = ++this.readerBrightnessRequestId;
+    window.getLastWindow(context).then((targetWindow: window.Window) => {
+      if (requestId !== this.readerBrightnessRequestId) { return; }
+      targetWindow.setWindowBrightness(-1).catch(() => {});
+    }).catch(() => {});
+  }
+
+  onReadBrightnessChanged(): void {
+    if (this.readerWindowActive) { this.applyReaderBrightness(); }
   }
 
   private stopAutoPageTimer(): void {
@@ -2485,6 +2539,51 @@ export struct ReaderPage {
   // 必须自绘：ArkUI 的 TextDecorationStyle 不开放虚线段长、间隔与竖直偏移，上游这四项无法用装饰表达。
   // 每条 Line 都与本层同尺寸，坐标按整层计，于是可以直接用页级 y 定位到各自行底。
   /**
+   * 阅读菜单里的亮度条，对齐上游 `BrightnessBar`（`ReadBookMenuBarBottom.kt:316`）
+   * 以及两处用法：底栏横排 `ReadBookMenuBarBottom.kt:139`、顶栏竖排 `ReadBookMenuBar.kt:250-268`。
+   * 上游由 `showBrightnessView` 控制是否显示，"0" 关闭 / "1" 横排 / "2" 竖排。
+   */
+  @Builder private ReaderBrightnessBar(vertical: boolean) {
+    Row() {
+      if (vertical) {
+        this.ReaderBrightnessSlider(true)
+      } else {
+        Image($r('app.media.reader_brightness')).width(18).height(18).fillColor('#D5C2C6')
+          .margin({ right: 8 })
+        this.ReaderBrightnessSlider(false)
+        Text(`${Math.round(this.readBrightness)}`).fontSize(11).fontColor('#B7B8C1').width(32)
+          .textAlign(TextAlign.End)
+      }
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: 14, right: 14, top: 4, bottom: 4 })
+  }
+
+  @Builder private ReaderBrightnessSlider(vertical: boolean) {
+    Slider({
+      value: this.readBrightness,
+      min: 1,
+      max: 100,
+      step: 1,
+      style: SliderStyle.InSet,
+      direction: vertical ? Axis.Vertical : Axis.Horizontal
+    })
+      .layoutWeight(vertical ? 0 : 1)
+      .width(vertical ? 40 : undefined)
+      .height(vertical ? 120 : 40)
+      .selectedColor('#FFB1C8').trackColor('#5A3F47').blockColor('#FFB1C8')
+      .trackThickness(6)
+      .blockSize({ width: 14, height: 14 })
+      .onChange((value: number, mode: SliderChangeMode) => {
+        if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
+          this.onReadBrightnessChange(Math.max(1, Math.min(100, Math.round(value))));
+        }
+      })
+  }
+
+  /**
    * 环境光日夜提醒胶囊，对齐上游 `ReadBookFloatingActionBar.ThemeReminderCapsule`：
    * 底部一条带「切换到深色/浅色模式」与「关闭」两个按钮的胶囊，5 秒后由 Index 侧定时关掉。
    */
@@ -3709,6 +3808,9 @@ export struct ReaderPage {
           Blank().layoutWeight(1)
 
           Column() {
+            if (this.showBrightnessView === '1' || this.showBrightnessView === '2') {
+              this.ReaderBrightnessBar(this.showBrightnessView === '2')
+            }
             if (this.readSliderMode !== '1') {
               Row() {
                 Stack({ alignContent: Alignment.Center }) {

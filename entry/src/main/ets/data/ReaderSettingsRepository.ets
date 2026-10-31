@@ -235,6 +235,29 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   autoSuggestDayNight: boolean;
   /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`），存储键同名（`PreferKey.kt:420`）。 */
   disableReturnKey: boolean;
+  /**
+   * 阅读亮度；上游 `readBrightness: Int = 100`（`ReadSettings.kt:22`），
+   * 窗口亮度取 `readBrightness / 100` 应用（`ReadBookController.kt:3179-3187 applyReadBrightness`），
+   * 存储键 `brightness`（`PreferKey.kt:151`，不在 `BackupConfig.readPrefKeys` 忽略清单里，随 config.xml 备份）。
+   */
+  readBrightness: number;
+  /**
+   * 是否在阅读菜单里显示亮度条；上游 `showBrightnessView: String = "0"`（`ReadSettings.kt:20`），
+   * 三档 `"0"` 关闭 / `"1"` 横排 / `"2"` 竖排（`array_values.xml` 的 `brightness_bar_mode_value`）。
+   * 存储键 `readBrightnessMode`（`PreferKey.kt:112`），上游列入 `readPrefKeys` 忽略清单，不随备份导出。
+   */
+  showBrightnessView: string;
+  /**
+   * 竖排亮度条贴哪一侧；上游 `brightnessVwPos: String = "1"`（`ReadSettings.kt:21`），
+   * `"0"` 左 / `"1"` 右。存储键 `readBrightnessControlPosition`（`PreferKey.kt:193`），同样不随备份导出。
+   */
+  brightnessVwPos: string;
+  /**
+   * 亮度是否跟随系统；上游 `brightnessAuto: Boolean = true`（`ReadSettings.kt:23`），
+   * 为真时窗口用 `BRIGHTNESS_OVERRIDE_NONE` 交回系统（`ReadBookController.kt:3183`）。
+   * 存储键 `brightnessAuto`（`PreferKey.kt:194`），不在 `BackupConfig.readPrefKeys` 忽略清单里，随 config.xml 备份。
+   */
+  brightnessAuto: boolean;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -588,6 +611,11 @@ export class ReaderSettingsRepository {
       doubleHorizontalPage: '0',
   autoSuggestDayNight: false,
   disableReturnKey: false,
+  // 上游默认亮度 100（ReadSettings.kt:22），亮度条默认不显示、竖排时贴右侧。
+  readBrightness: 100,
+  showBrightnessView: '0',
+  brightnessVwPos: '1',
+  brightnessAuto: true,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -709,6 +737,10 @@ export class ReaderSettingsRepository {
       const doubleHorizontalPageValue = await store.get('doubleHorizontalPage', defaults.doubleHorizontalPage);
     const autoSuggestDayNightValue = await store.get('autoSuggestDayNight', defaults.autoSuggestDayNight);
     const disableReturnKeyValue = await store.get('disableReturnKey', defaults.disableReturnKey);
+    const readBrightnessValue = await store.get('brightness', defaults.readBrightness);
+    const showBrightnessViewValue = await store.get('readBrightnessMode', defaults.showBrightnessView);
+    const brightnessVwPosValue = await store.get('readBrightnessControlPosition', defaults.brightnessVwPos);
+    const brightnessAutoValue = await store.get('brightnessAuto', defaults.brightnessAuto);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -982,6 +1014,12 @@ export class ReaderSettingsRepository {
         doubleHorizontalPage: ReaderSettingsRepository.normalizeColumnMode(doubleHorizontalPageValue, defaults.doubleHorizontalPage),
       autoSuggestDayNight: typeof autoSuggestDayNightValue === 'boolean' ? autoSuggestDayNightValue : defaults.autoSuggestDayNight,
       disableReturnKey: typeof disableReturnKeyValue === 'boolean' ? disableReturnKeyValue : defaults.disableReturnKey,
+      // 亮度夹 1..100：上游窗口亮度按 readBrightness/100 计算，0 会让屏幕全黑。
+      readBrightness: ReaderSettingsRepository.normalizeInteger(readBrightnessValue, 1, 100, defaults.readBrightness),
+      showBrightnessView: typeof showBrightnessViewValue === 'string' &&
+        (showBrightnessViewValue === '1' || showBrightnessViewValue === '2') ? showBrightnessViewValue : defaults.showBrightnessView,
+      brightnessVwPos: typeof brightnessVwPosValue === 'string' && brightnessVwPosValue === '0' ? '0' : defaults.brightnessVwPos,
+      brightnessAuto: typeof brightnessAutoValue === 'boolean' ? brightnessAutoValue : defaults.brightnessAuto,
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1142,6 +1180,11 @@ export class ReaderSettingsRepository {
       await store.put('doubleHorizontalPage', ReaderSettingsRepository.normalizeColumnMode(settings.doubleHorizontalPage, '0'));
       await store.put('autoSuggestDayNight', settings.autoSuggestDayNight === true);
       await store.put('disableReturnKey', settings.disableReturnKey === true);
+      await store.put('brightness', Math.max(1, Math.min(100, Math.round(settings.readBrightness))));
+      await store.put('readBrightnessMode', settings.showBrightnessView === '1' || settings.showBrightnessView === '2'
+        ? settings.showBrightnessView : '0');
+      await store.put('readBrightnessControlPosition', settings.brightnessVwPos === '0' ? '0' : '1');
+      await store.put('brightnessAuto', settings.brightnessAuto !== false);
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
