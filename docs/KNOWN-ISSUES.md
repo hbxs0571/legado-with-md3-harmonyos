@@ -349,9 +349,31 @@
 
 **KI-D3 朗读时允许音量键翻页（不接，范围之外）** —— 覆盖 D-04（`volumeKeyPageOnPlay`，`ReadSettings.kt:30`）。朗读子系统未接入，随 TTS 一起做。
 
-**KI-D4 横屏双页（要接，属分页引擎改造）** —— 覆盖 D-05（`doubleHorizontalPage`，`ReadSettings.kt:26`）。
+**KI-D4 横屏双页（已实现）** —— 覆盖 D-05（`doubleHorizontalPage`，`ReadSettings.kt:26`）。
 
-需要双列排版 + 翻页动画跨双页，本地 `ReaderPage` 是单列（滚动/分页两模式）。补法：分页测量阶段按可用宽度拆双列，翻页步长改 2，并同步改阅读进度换算。
+**上游口径**
+- 字段是四档**字符串**而不是布尔：`domain/model/settings/ReadSettings.kt:26` `val doubleHorizontalPage: String = "0"`；偏好键 `constant/PreferKey.kt:157` `const val doublePageHorizontal = "doubleHorizontalPage"`（键值与字段名相同），`data/repository/ReadSettingsRepository.kt:394`/`:651` 读写。
+- 四档取值 `res/values/array_values.xml:64` `double_page_value` = `0`,`1`,`2`,`3`，标题 `res/values-zh-rCN/arrays.xml:42` `double_page_title` =「全局单页」「全局双页」「横屏双页」「平板/横屏双页」；设置项自身标题 `values-zh-rCN/strings.xml:1257` `double_page_horizontal` =「平板/横屏双页」。
+- 判定集中在 `feature/reader/core/layout/ReaderColumnMode.kt`（全文 22 行）：`SINGLE -> false`、`DOUBLE -> true`（注释原文：显式双页对滚动模式也生效）、`LANDSCAPE -> widthPx > heightPx && !isScroll`、`LANDSCAPE_OR_TABLET -> (widthPx > heightPx || isTablet) && !isScroll`，`columnCount()` 返回 `if (double) 2 else 1`。
+- 列几何 `feature/reader/core/layout/ReaderPaginator.kt`：`:86` `columnStridePx get() = viewportWidthPx / columnCount`、`:87` `contentWidthPx get() = (columnStridePx - paddingLeftPx - paddingRightPx).coerceAtLeast(0f)`（**每列各自带左右内边距**）、`:83` `require(columnCount in 1..2)`。换列在 `advanceColumn()`：`if (columnIndex + 1 < config.columnCount) { justifyColumnBottom(); columnIndex++; columnElementStart = elements.size; columnRows.clear(); y = config.paddingTopPx } else finishPage()` —— 一个 page 先填满第 0 列再填第 1 列，两列都满才出页。
+- 接线：`feature/reader/legacy/LegacyReaderPaginationStyleFactory.kt:61`、`LegacyReaderChapterPaginator.kt:263`/`:331`、`model/ReadBook.kt:386`；`ui/book/read/ReadBookController.kt:1266` 把 `columnCount` 拼进布局缓存 key，**列数变化必须触发重排**。
+- 面板：`ui/book/read/sheet/MoreConfigSheet.kt:271-278` 与 `ui/config/readConfig/ReadConfigScreen.kt:225-234` 都是下拉；Intent `ReadConfigIntent.DoubleHorizontalPageChanged`（`ReadConfigViewModel.kt:124`）。
+
+**本地落地**
+- 数据层：`entry/src/main/ets/data/ReaderSettingsRepository.ets:228` 字段、`:584` 默认 `'0'`、`:703` 读、`:974` 返回归一、`:1132` 写、`:1295` `normalizeColumnMode`（只认 `'1'/'2'/'3'`，其余一律 `'0'`）。存储键与上游同名 `doubleHorizontalPage`。
+- 判定模块（新建）：`entry/src/main/ets/data/ReaderColumnMode.ets` —— 四档常量、`READER_COLUMN_MODE_TITLES`、`normalizeReaderColumnMode`、`readerColumnModeTitle`、`isReaderTablet`（短边 ≥ 600vp）、`readerColumnCount(mode, widthVp, heightVp, isScroll)`，逻辑逐条照上游 `columnCount()`。
+- 分页：`entry/src/main/ets/pages/LocalReaderPaginator.ets` 的 `paginate()` 与 `countPagesIncrementally()` 都新增 `columnCount` 参数，`pageColumns` 记录每行所属列并落进 `LocalReaderPage.lineColumns`，高度超限时调 `advanceColumn()` 换列而不是直接出页。
+- 渲染：`entry/src/main/ets/pages/ReaderPage.ets` 新增 `resolveReaderColumnCount()`、`getColumnStrideWidth()`、`lineColumnAt()`、`readerColumnIndexes()`、`readerColumnFirstLineIndex()`；`getBodyContentWidth()` 改为按列宽折算；正文由单个 `Column` 改为按列 `Row` + `ForEach(this.readerColumnIndexes())`，每列各自 `padding({left, right})`，外层容器的左右内边距在双列时置 0；下划线层、行偏移、行高统计、图片行 margin 全部按列分组；`getFullBookPaginationLayoutKey()` 拼进列数。
+- 面板：`entry/src/main/ets/pages/ReaderSettingsPage.ets:1097` 的「横屏双页」由占位改为四档下拉，副标题 `readerColumnModeTitle(this.doubleHorizontalPage)`，`getDetailChoices` 返回 `READER_COLUMN_MODE_TITLES`，`applyDetailChoicePreview` 落库，`openDetailSheet` 按当前档位回显。
+- 备份：`entry/src/main/ets/data/BackupRepository.ets` 的 `AndroidReadConfigBackupRecord` 加 `doubleHorizontalPage: string`，config.xml 与 readConfig.json 双向导出、恢复走 `readJsonString ?? readXmlString ?? current.xxx` 并校验四档。
+
+**已知差异**
+- 平板判定：本地按「视口短边 ≥ 600vp」近似 Android 的 `sw600dp`；上游用资源限定 `isTablet`，在折叠屏/分屏等非常规尺寸上可能判定不同。
+- 底部两端对齐：`ReaderPage.ets` 的 `calculateReaderBottomJustifyGap()` 在列数 > 1 时直接返回 0。原因是本地按「整页行数」摊分末行空隙，双列下会把两列的高度算错；上游是 `justifyColumnBottom()` 逐列独立摊分。因此**双列模式下末行不做两端对齐**，这是有意为之的保守处理。
+- 翻页动画仍是整页平移：上游双页模式下翻一页 = 跨两列，本地 `turnReaderPage()` 的步长语义没变（`localReaderPages` 的每一个元素本来就是「一页 = 最多两列」），所以跨列已经在排版阶段完成，动画层面无需再改。
+
+**验收**
+`BUILD SUCCESSFUL in 25 s 835 ms` 后装机实测三组对照：档位 `1`（全局双页）时正文分成两栏 `[56,342][584,2591]` 与 `[696,342][1224,2591]`；档位 `0`（全局单页）时正文整块铺满 `[112,342][1280,445]…`；档位 `2`（横屏双页）在竖屏下保持单栏。面板上屏、四档选项、落库 `<string key="doubleHorizontalPage">1</string>` 均已验。测试期改动已复原为 `0`。
 
 **KI-D5 触摸灵敏度与进度条模式（已实现）** —— 覆盖 D-06 翻页触摸灵敏度（`pageTouchSlop`，`ReadSettings.kt:35`，默认 0）、D-07 进度条模式（`readSliderMode`，`:25`，默认 `"0"`）。
 

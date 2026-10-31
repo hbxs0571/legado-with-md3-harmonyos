@@ -320,6 +320,23 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - **测试期改动已复原**：`textSelectMenuConfig` 回空串、`expandTextMenu=false`、`showSelectMenuIcon=true`、`selectText=true`，复原后重新拉取偏好文件确认（前三项分别为空串 / false / true）。
 - 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
 
+## 2026-10-31 N 端 KI-D4 横屏双页（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 25 s 835 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。
+- **编译期两处真实错误**：① `LocalReaderPaginator.ets` 的 `lineColumns` 是 `LocalReaderPage` 的必填字段，`ReaderPage.ets` 里补的 `nextPages.push({ …, titleOnly: true })` 缺它，报 `10505001 Argument of type '{ lines: undefined[]; startPosition: number; endPosition: number; titleOnly: true; }' is not assignable to parameter of type 'LocalReaderPage'.`；② `ForEach` 的 itemGenerator 里不能写 `return`，原来按列过滤写成 `if (…) { return; }`，报 `10905209 ArkTS Compiler Error / Only UI component syntax can be written here.`，改为 `if (…) { … }` 包裹整段组件。这两条都是 ArkTS/ArkUI 相对上游 Kotlin 的额外约束。
+- **接线遗漏与后果（值得记录）**：第一次构建能过、面板也能点，但点了不落库。原因是 `Index.ets` 里 `ReaderSettingsPage` 的 `onDoubleHorizontalPageChange` 回调 4 处全没插上（`ReaderPage` 的 prop 也漏了），组件走的是默认空实现。用脚本按 `onShowSelectMenuIconChange` 那行做锚点补齐 4 处回调、按 `textSelectMenuConfig` 那行补齐 5 处 prop（快照 + `ReaderPage` + 4 处 `ReaderSettingsPage`）后才真正通。**教训：新增配置项时，prop 与回调必须成对核对 `grep` 命中数，不能只确认「构建通过」。**
+- **设置项上屏**：设置 → 阅读界面 → 更多 tab，上滑一次可见「横屏双页 / 全局单页 / ›」（`migrated: true`，副标题随档位变化）。
+- **面板上屏**：点开后标题「横屏双页」、描述「选择单页、双页以及双页生效的屏幕形态」、四档选项「全局单页」「全局双页」「横屏双页」「平板/横屏双页」、底部提示「选择后立即应用并保存；自定义内容需点击保存。」（说明条件链已补上该项，不再显示「仅展示选择预览」）。
+- **落库**：选「全局双页」后偏好文件出现 `<string key="doubleHorizontalPage">1</string>`。
+- **决定性对照（三组，同一本书同一章）**：
+  - 档位 `1`（全局双页）：正文分成左右两栏，`uitest dumpLayout` 读到两块文本 `[56,342][584,2591]` 与 `[696,342][1224,2591]`，两栏各占半屏宽并各自带左右内边距。
+  - 档位 `0`（全局单页）：正文整块铺满，`[112,342][1280,445]` 起连续多行直到屏幕右侧。
+  - 档位 `2`（横屏双页）在竖屏下：仍是单栏，与 `0` 一致——证明判定确实按「横屏且非滚动」把关，而不是简单按档位恒双列。
+- 三组数据互相印证了列数判定（`readerColumnCount`）、列宽折算（`columnStride = 视口宽 / 列数`）与按列渲染（`Row` + `ForEach`）三处都真的生效。
+- **未验部分**：平板判定（`LANDSCAPE_OR_TABLET` 的 `isTablet` 分支）在模拟器上无平板形态可切，只做代码核对；底部两端对齐在双列下被主动关闭（见 KNOWN-ISSUES KI-D4 已知差异），该模式在双列下未做像素级比对。
+- 测试期改动已复原：`doubleHorizontalPage` 回到 `0`。
+- 本节结论只代表 N 端模拟器本次构建，不代表真机旋转、折叠屏与分屏形态。
+
 ## 2026-10-31 N 端 KI-D1 自定义翻页按键与鼠标滚轮翻页（落库与接线通过，按键与滚轮实际翻页未验）
 
 - 设备与构建：模拟器 `127.0.0.1:5555`（1280×2832，HOS）。`assembleHap` 通过，`BUILD SUCCESSFUL in 36 s 264 ms`，33 项任务 17 执行 / 16 最新；仅既有 ArkTS 警告与 `No signingConfig found for product default`。`hdc install -r` 回 `install bundle successfully`。

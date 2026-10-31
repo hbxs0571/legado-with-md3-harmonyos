@@ -15,6 +15,7 @@ import { ReaderFontRepository } from '../data/ReaderFontRepository';
 import { LocalSemanticDocument, LocalTextSemantics } from '../data/LocalTextSemantics';
 import { ReaderTitleSegment, segmentReaderTitle } from '../data/ReaderTitleSegmentation';
 import { READER_SELECTION_MENU_SUPPORTED, ReaderSelectionMenuItem, parseReaderSelectionMenuConfig } from '../data/ReaderSelectionMenu';
+import { readerColumnCount } from '../data/ReaderColumnMode';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
@@ -198,6 +199,12 @@ export struct ReaderPage {
   @Prop expandTextMenu: boolean = false;
   /** 划词菜单是否显示图标，对齐上游 showSelectMenuIcon（ReadSettings.kt:52）。 */
   @Prop showSelectMenuIcon: boolean = true;
+  /**
+   * 横屏双页档位，对齐上游 doubleHorizontalPage（ReadSettings.kt:26）。
+   * 取值四档：'0' 全局单页 / '1' 全局双页 / '2' 横屏双页 / '3' 平板或横屏双页，
+   * 判定口径照 ReaderColumnMode.kt 的 columnCount()（'1' 对滚动模式也生效）。
+   */
+  @Prop @Watch('onPaginationInputsChanged') doubleHorizontalPage: string = '0';
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）；空串沿用内置顺序。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop noAnimScrollPage: boolean = false;
@@ -1019,12 +1026,13 @@ export struct ReaderPage {
       (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
         this.getReaderLetterSpacingVp(fontSize)),
       this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines,
-      this.textFullJustify
+      this.textFullJustify,
+      this.resolveReaderColumnCount()
     );
     const nextPages: LocalReaderPage[] = [];
     const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible();
     if (titlePageInserted) {
-      nextPages.push({ lines: [], startPosition: 0, endPosition: 0, titleOnly: true });
+      nextPages.push({ lines: [], startPosition: 0, endPosition: 0, titleOnly: true, lineColumns: [] });
     }
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {
       const page = paginatedPages[pageIndex];
@@ -1070,6 +1078,9 @@ export struct ReaderPage {
 
   private calculateReaderBottomJustifyGap(pageHeight: number, lineHeight: number, titleReservedLines: number): number {
     if (!this.textBottomJustify) { return 0; }
+    // 双页时本地这套「按整页行数摊分」的算法会把间隙摊到两列上而错位，
+    // 上游是 justifyColumnBottom() 逐列独立摊分，差异记在 KNOWN-ISSUES 的 KI-D4。
+    if (this.resolveReaderColumnCount() > 1) { return 0; }
     const page = this.localReaderPages[this.currentPageIndex];
     if (page === undefined || page.titleOnly || page.lines.length <= 1) { return 0; }
     const lastLine = page.lines[page.lines.length - 1];
@@ -1711,7 +1722,7 @@ export struct ReaderPage {
       this.book.id, this.book.contentPath ?? '', this.readerContentRevision, this.fontSize,
       this.textFontPath, this.titleFontPath, this.systemTypefaces,
       this.paragraphSpacing, this.lineSpacing, this.letterSpacing, this.paragraphIndent,
-      this.readerContentWidth, this.viewportHeight, this.activeImageStyle,
+      this.readerContentWidth, this.viewportHeight, this.activeImageStyle, this.resolveReaderColumnCount(),
       JSON.stringify(this.paddingSettings),
       this.infoSettings.headerMode, this.infoSettings.footerMode,
       this.infoSettings.headerFont, this.infoSettings.footerFont,
@@ -1835,7 +1846,8 @@ export struct ReaderPage {
           this.activeImageStyle,
           context.px2vp(80),
           inlineImageWidth,
-          this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines
+          this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines,
+          this.resolveReaderColumnCount()
         );
       // titleMode 为 2 时标题整块隐藏，上游也不为它单独留一页。
       const titlePageCount = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible() && displayTitle.length > 0 ? 1 : 0;
@@ -1926,8 +1938,36 @@ export struct ReaderPage {
     return 0;
   }
 
+  // 上游 ReaderColumnMode.kt 的 columnCount()：'1' 恒双页（滚动模式也生效），
+  // '2' 只在横屏且非滚动时双页，'3' 放宽到平板，其余单页。
+  private resolveReaderColumnCount(): number {
+    return readerColumnCount(this.doubleHorizontalPage, this.readerContentWidth, this.viewportHeight,
+      this.pageAnimation === 3);
+  }
+
+  // 单列的横向步长（含左右内边距），对齐上游 ReaderPaginator.kt:86 的 columnStridePx。
+  private getColumnStrideWidth(): number {
+    const columns = this.resolveReaderColumnCount();
+    return Math.max(1, this.readerContentWidth / columns);
+  }
+
+  // 列内文字可用宽度：步长减去左右内边距，对齐上游 ReaderPaginator.kt:87 的 contentWidthPx。
+  // 双页时每列各自带左右内边距，所以这里必须按列宽算，不能按整页宽算。
   private getBodyContentWidth(): number {
-    return Math.max(1, this.readerContentWidth - this.paddingSettings.paddingLeft - this.paddingSettings.paddingRight);
+    return Math.max(1, this.getColumnStrideWidth() - this.paddingSettings.paddingLeft - this.paddingSettings.paddingRight);
+  }
+
+  // 某一页内第 index 行落在哪一列（0 或 1）。分页器保证先填满第 0 列再填第 1 列。
+  private lineColumnAt(lineIndex: number): number {
+    return this.localReaderPages[this.currentPageIndex]?.lineColumns[lineIndex] ?? 0;
+  }
+
+  // 当前页要渲染哪几列。单页时只有 [0]，双页时 [0, 1]。
+  private readerColumnIndexes(): number[] {
+    const columns = this.resolveReaderColumnCount();
+    const indexes: number[] = [];
+    for (let column = 0; column < columns; column++) { indexes.push(column); }
+    return indexes;
   }
 
   private getBodyContentHeight(headerReserve: number, footerReserve: number): number {
@@ -2378,11 +2418,15 @@ export struct ReaderPage {
     return Math.max(0, Math.min(available, line.contentWidth));
   }
 
+  // 只累加同一列里排在 index 之前的行：双页时两列各有自己的纵向坐标，
+  // 上游每一列都从 paddingTop 重新开始（ReaderPaginator.advanceColumn）。
   private readerPageLineOffset(index: number): number {
     const page = this.localReaderPages[this.currentPageIndex];
     if (page === undefined) { return 0; }
+    const column = this.lineColumnAt(index);
     let offset = 0;
     for (let lineIndex = 0; lineIndex < index; lineIndex++) {
+      if ((page.lineColumns[lineIndex] ?? 0) !== column) { continue; }
       const line = page.lines[lineIndex];
       if (line === undefined) { continue; }
       offset += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
@@ -2390,10 +2434,17 @@ export struct ReaderPage {
     return offset;
   }
 
-  private readerPageLinesTotalHeight(): number {
+  private readerPageLinesTotalHeight(column: number = 0): number {
     const page = this.localReaderPages[this.currentPageIndex];
     if (page === undefined) { return 0; }
-    return this.readerPageLineOffset(page.lines.length);
+    let usedHeight = 0;
+    for (let lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
+      if ((page.lineColumns[lineIndex] ?? 0) !== column) { continue; }
+      const line = page.lines[lineIndex];
+      if (line === undefined) { continue; }
+      usedHeight += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+    }
+    return usedHeight;
   }
 
   // ReaderPageTextJoined 把整页塞进一个 Text，行与行之间只有统一 lineHeight，没有段距与段前空白。
@@ -2411,25 +2462,31 @@ export struct ReaderPage {
     return this.readerPageLineOffset(lineIndex) + spaceBefore + height + this.resolveUnderlineOffsetVp();
   }
 
-  private readerUnderlineLayerHeight(uniform: boolean): number {
-    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
-    if (uniform) { return Math.max(1, lines.length * this.readerJoinedLineHeight()); }
-    return Math.max(1, this.readerPageLinesTotalHeight());
+  private readerUnderlineLayerHeight(uniform: boolean, column: number = 0): number {
+    if (uniform) {
+      const page = this.localReaderPages[this.currentPageIndex];
+      let count = 0;
+      for (let lineIndex = 0; lineIndex < (page?.lines.length ?? 0); lineIndex++) {
+        if ((page?.lineColumns[lineIndex] ?? 0) === column) { count++; }
+      }
+      return Math.max(1, count * this.readerJoinedLineHeight());
+    }
+    return Math.max(1, this.readerPageLinesTotalHeight(column));
   }
 
   // 分页正文统一由这些自绘线表达「正文下划线」，Text.decoration 只留给划线/高亮规则。
   // 必须自绘：ArkUI 的 TextDecorationStyle 不开放虚线段长、间隔与竖直偏移，上游这四项无法用装饰表达。
   // 每条 Line 都与本层同尺寸，坐标按整层计，于是可以直接用页级 y 定位到各自行底。
   @Builder
-  private ReaderUnderlineLayer(uniform: boolean) {
+  private ReaderUnderlineLayer(uniform: boolean, column: number = 0) {
     if (this.underline) {
       Stack({ alignContent: Alignment.TopStart }) {
         ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
           (line: LocalReaderLine, lineIndex: number) => {
-            if (!line.imageOnly) {
+            if (!line.imageOnly && this.lineColumnAt(lineIndex) === column) {
               Line()
                 .width('100%')
-                .height(this.readerUnderlineLayerHeight(uniform))
+                .height(this.readerUnderlineLayerHeight(uniform, column))
                 .startPoint([0, this.readerUnderlineY(lineIndex, uniform)])
                 .endPoint([this.resolveUnderlineLineEnd(line), this.readerUnderlineY(lineIndex, uniform)])
                 .stroke(this.getReaderUnderlineColor())
@@ -2437,11 +2494,11 @@ export struct ReaderPage {
                 .strokeDashArray(this.resolveUnderlineDashArray())
             }
           }, (line: LocalReaderLine, lineIndex: number) =>
-            `${this.readerContentRevision}-underline-${this.currentPageIndex}-${lineIndex}-${uniform}-${this.underlinePadding}` +
+            `${this.readerContentRevision}-underline-${this.currentPageIndex}-${lineIndex}-${column}-${uniform}-${this.underlinePadding}` +
             `-${this.underlineExtend}-${this.dottedLine}-${this.dottedBase}-${this.dottedRatio}-${this.underlineHeight}`)
       }
       .width('100%')
-      .height(this.readerUnderlineLayerHeight(uniform))
+      .height(this.readerUnderlineLayerHeight(uniform, column))
       .hitTestBehavior(HitTestMode.None)
     }
   }
@@ -2777,11 +2834,12 @@ export struct ReaderPage {
     }
   }
   @Builder
-  private ReaderPageTextJoined() {
+  private ReaderPageTextJoined(column: number = 0) {
     Text() {
       ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
         (line: LocalReaderLine, lineIndex: number) => {
-          if (lineIndex > 0) {
+          if (this.lineColumnAt(lineIndex) === column) {
+          if (lineIndex > this.readerColumnFirstLineIndex(column)) {
             Span('\n').fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
           }
           ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
@@ -2807,6 +2865,7 @@ export struct ReaderPage {
             }
           }, (item: LocalReaderLineItem, itemIndex: number) =>
             `${this.readerContentRevision}-joined-${lineIndex}-${itemIndex}`)
+          }
         }, (line: LocalReaderLine, lineIndex: number) =>
           `${this.readerContentRevision}-joined-${this.currentPageIndex}-${lineIndex}`)
     }
@@ -2833,15 +2892,29 @@ export struct ReaderPage {
   }
 
   @Builder
-  private ReaderPageTextLines() {
+  private ReaderPageTextLines(column: number = 0) {
     ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
-      (line: LocalReaderLine, lineIndex: number) => this.ReaderPageTextLine(line, lineIndex),
+      (line: LocalReaderLine, lineIndex: number) => {
+        if (this.lineColumnAt(lineIndex) === column) {
+          this.ReaderPageTextLine(line, lineIndex, column)
+        }
+      },
       (line: LocalReaderLine, lineIndex: number) =>
-        `${this.readerContentRevision}-${this.currentPageIndex}-${lineIndex}`)
+        `${this.readerContentRevision}-${this.currentPageIndex}-${column}-${lineIndex}`)
+  }
+
+  // 该列的第一行在页内的行号；单页时恒为 0，双页第 1 列是它自己的首行。
+  private readerColumnFirstLineIndex(column: number): number {
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined) { return 0; }
+    for (let lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
+      if ((page.lineColumns[lineIndex] ?? 0) === column) { return lineIndex; }
+    }
+    return 0;
   }
 
   @Builder
-  private ReaderPageTextLine(line: LocalReaderLine, lineIndex: number) {
+  private ReaderPageTextLine(line: LocalReaderLine, lineIndex: number, column: number = 0) {
     if (this.readerLineContainsImage(line)) {
       Row() {
         ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
@@ -2882,7 +2955,10 @@ export struct ReaderPage {
       .width('100%')
       .height(line.height)
       .justifyContent(line.imageOnly ? FlexAlign.Center : FlexAlign.Start)
-      .margin({ top: line.verticalSpaceBefore + this.readerBottomJustifyGap * lineIndex, bottom: line.paragraphSpacingAfter })
+      .margin({
+        top: line.verticalSpaceBefore + this.readerBottomJustifyGap * (lineIndex - this.readerColumnFirstLineIndex(column)),
+        bottom: line.paragraphSpacingAfter
+      })
     } else {
       Text() {
         ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
@@ -3340,7 +3416,14 @@ export struct ReaderPage {
       if ((this.book.format === 'txt' || this.book.format === 'epub') && this.localReaderPages.length > 0 && this.pageAnimation !== 3) {
         Stack({ alignContent: Alignment.TopEnd }) {
           Column() {
-            if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
+            if (this.isReaderHeaderVisible()) {
+              Column() { this.ReaderInfoRow(true) }
+                .width('100%')
+                .padding({
+                  left: this.resolveReaderColumnCount() > 1 ? this.paddingSettings.paddingLeft : 0,
+                  right: this.resolveReaderColumnCount() > 1 ? this.paddingSettings.paddingRight : 0
+                })
+            }
             if (this.localReaderPages[this.currentPageIndex]?.titleOnly === true) {
               // 独立的标题页：上游这里垂直居中，对齐方式仍按 titleMode 走。
               Column() {
@@ -3353,28 +3436,48 @@ export struct ReaderPage {
               this.ReaderTitleSegments(false)
             }
             // 正文与自绘下划线同层：下划线要按行底定位，只能叠在正文之上再往下画。
-            Stack({ alignContent: Alignment.TopStart }) {
-              Column() {
-                if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
-                  this.ReaderPageTextLines()
-                } else {
-                  this.ReaderPageTextJoined()
+            // 双页时两列并排，每列各自带左右内边距，与上游 columnStridePx 口径一致。
+            Row() {
+              ForEach(this.readerColumnIndexes(), (column: number) => {
+                Stack({ alignContent: Alignment.TopStart }) {
+                  Column() {
+                    if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
+                      this.ReaderPageTextLines(column)
+                    } else {
+                      this.ReaderPageTextJoined(column)
+                    }
+                    Blank().layoutWeight(1)
+                  }
+                  .width('100%')
+                  .height('100%')
+                  this.ReaderUnderlineLayer(!this.currentPageContainsImages() && this.readerBottomJustifyGap <= 0, column)
                 }
-                Blank().layoutWeight(1)
-              }
-              .width('100%')
-              .height('100%')
-              this.ReaderUnderlineLayer(!this.currentPageContainsImages() && this.readerBottomJustifyGap <= 0)
+                .width(this.getColumnStrideWidth())
+                .height('100%')
+                .padding({
+                  left: this.paddingSettings.paddingLeft,
+                  right: this.paddingSettings.paddingRight
+                })
+              }, (column: number) => `${this.readerContentRevision}-${this.currentPageIndex}-col-${column}`)
             }
             .width('100%')
             .layoutWeight(1)
-            if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
+            .alignItems(VerticalAlign.Top)
+            if (this.isReaderFooterVisible()) {
+              Column() { this.ReaderInfoRow(false) }
+                .width('100%')
+                .padding({
+                  left: this.resolveReaderColumnCount() > 1 ? this.paddingSettings.paddingLeft : 0,
+                  right: this.resolveReaderColumnCount() > 1 ? this.paddingSettings.paddingRight : 0
+                })
+            }
           }
           .width('100%')
           .height('100%')
+          // 双页时左右内边距由每一列自己带（见正文那层 Row），外层只在单页时补。
           .padding({
-            left: this.paddingSettings.paddingLeft,
-            right: this.paddingSettings.paddingRight,
+            left: this.resolveReaderColumnCount() > 1 ? 0 : this.paddingSettings.paddingLeft,
+            right: this.resolveReaderColumnCount() > 1 ? 0 : this.paddingSettings.paddingRight,
             top: this.paddingSettings.paddingTop,
             bottom: this.paddingSettings.paddingBottom
           })

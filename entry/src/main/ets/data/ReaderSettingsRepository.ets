@@ -224,6 +224,13 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * `SelectionMenuConfigItem`），showState 0=一级 / 1=折叠 / 2=隐藏。空串表示沿用内置顺序。
    */
   textSelectMenuConfig: string;
+  /**
+   * 双页模式，对应上游 `ReadSettings.doubleHorizontalPage`（`ReadSettings.kt:26`），默认 `'0'`。
+   * 四档与 `ReaderColumnMode.fromPreference` 一致：`'0'` 全局单页 / `'1'` 全局双页 /
+   * `'2'` 横屏双页 / `'3'` 平板或横屏双页。存储键用上游偏好键名 `doubleHorizontalPage`
+   * （`PreferKey.kt:157` 的 `doublePageHorizontal`）。
+   */
+  doubleHorizontalPage: string;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -573,6 +580,8 @@ export class ReaderSettingsRepository {
       expandTextMenu: false,
       showSelectMenuIcon: true,
       textSelectMenuConfig: '',
+      // 上游默认值是字符串 "0"，不是数字（ReadSettings.kt:26）。
+      doubleHorizontalPage: '0',
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -691,6 +700,7 @@ export class ReaderSettingsRepository {
       const expandTextMenuValue = await store.get('expandTextMenu', defaults.expandTextMenu);
       const showSelectMenuIconValue = await store.get('showSelectMenuIcon', defaults.showSelectMenuIcon);
       const textSelectMenuConfigValue = await store.get('textSelectMenuConfig', defaults.textSelectMenuConfig);
+      const doubleHorizontalPageValue = await store.get('doubleHorizontalPage', defaults.doubleHorizontalPage);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -960,6 +970,8 @@ export class ReaderSettingsRepository {
         expandTextMenu: typeof expandTextMenuValue === 'boolean' ? expandTextMenuValue : defaults.expandTextMenu,
         showSelectMenuIcon: typeof showSelectMenuIconValue === 'boolean' ? showSelectMenuIconValue : defaults.showSelectMenuIcon,
         textSelectMenuConfig: typeof textSelectMenuConfigValue === 'string' ? textSelectMenuConfigValue : defaults.textSelectMenuConfig,
+        // 只认上游那四档，其他值一律按全局单页（对齐 ReaderColumnMode.fromPreference 的 else 分支）。
+        doubleHorizontalPage: ReaderSettingsRepository.normalizeColumnMode(doubleHorizontalPageValue, defaults.doubleHorizontalPage),
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1117,6 +1129,7 @@ export class ReaderSettingsRepository {
       await store.put('expandTextMenu', settings.expandTextMenu === true);
       await store.put('showSelectMenuIcon', settings.showSelectMenuIcon !== false);
       await store.put('textSelectMenuConfig', typeof settings.textSelectMenuConfig === 'string' ? settings.textSelectMenuConfig : '');
+      await store.put('doubleHorizontalPage', ReaderSettingsRepository.normalizeColumnMode(settings.doubleHorizontalPage, '0'));
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
@@ -1275,6 +1288,16 @@ export class ReaderSettingsRepository {
       if (!codes.includes(parsed)) { codes.push(parsed); }
     }
     return codes.join(',');
+  }
+
+  /**
+   * 双页模式只认上游四档（`ReaderColumnMode.fromPreference`）：
+   * `'1'` 全局双页、`'2'` 横屏双页、`'3'` 平板或横屏双页、其他一律 `'0'` 全局单页。
+   */
+  private static normalizeColumnMode(value: number | boolean | string | bigint | Uint8Array | object,
+    fallback: string): string {
+    if (typeof value !== 'string') { return fallback; }
+    return value === '1' || value === '2' || value === '3' ? value : '0';
   }
 
   private static normalizeFraction(value: number | boolean | string | bigint | Uint8Array | object,

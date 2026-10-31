@@ -1,5 +1,6 @@
 import { ReaderBackgroundStyle, READER_BACKGROUND_STYLES } from '../data/ReaderSettingsRepository';
 import { ReaderFontEntry, ReaderFontRepository } from '../data/ReaderFontRepository';
+import { READER_COLUMN_MODE_TITLES, readerColumnModeTitle } from '../data/ReaderColumnMode';
 import {
   defaultReaderSelectionMenuItems,
   parseReaderSelectionMenuConfig,
@@ -185,6 +186,8 @@ export struct ReaderSettingsPage {
   @Prop expandTextMenu: boolean = false;
   /** 划词菜单是否显示图标，对齐上游 showSelectMenuIcon（ReadSettings.kt:52）。 */
   @Prop showSelectMenuIcon: boolean = true;
+  /** 横屏双页档位，对齐上游 doubleHorizontalPage（ReadSettings.kt:26），四档 '0'..'3'。 */
+  @Prop doubleHorizontalPage: string = '0';
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -332,6 +335,7 @@ export struct ReaderSettingsPage {
   onTitleSegFlagChange: (value: string) => void = (_value: string) => {};
   onExpandTextMenuChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onShowSelectMenuIconChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onDoubleHorizontalPageChange: (value: string) => void = (_value: string) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -849,6 +853,9 @@ export struct ReaderSettingsPage {
     if (this.detailSheetTitle === '保持屏幕常亮' && choiceIndex >= 0) {
       this.onKeepLightChange(['0', '60', '300', '600', '-1'][choiceIndex] ?? '0');
     }
+    if (this.detailSheetTitle === '横屏双页' && choiceIndex >= 0) {
+      this.onDoubleHorizontalPageChange(['0', '1', '2', '3'][choiceIndex] ?? '0');
+    }
     if (this.detailSheetTitle === '进度条行为' && choiceIndex >= 0) {
       this.onProgressBehaviorChange(choiceIndex === 1 ? 'chapter' : 'page');
     }
@@ -1094,7 +1101,9 @@ export struct ReaderSettingsPage {
           })
           Text('滑动翻页阈值（0 = 系统默认值）').fontSize(10).fontColor('#898B95')
             .width('100%').padding({ left: 18, right: 18, bottom: 8 })
-          MenuSettingOption({ title: '横屏双页', detail: '关闭 / 左右双页' }).onClick(() => this.openDetailSheet('横屏双页', '单页或左右双页阅读'))
+          MenuSettingOption({
+            title: '横屏双页', detail: readerColumnModeTitle(this.doubleHorizontalPage), migrated: true
+          }).onClick(() => this.openDetailSheet('横屏双页', '选择单页、双页以及双页生效的屏幕形态'))
           MenuSettingOption({
             title: '进度条行为', detail: this.progressBehavior === 'chapter' ? '章节进度' : '页码进度', migrated: true
           }).onClick(() => this.openDetailSheet('进度条行为', '设置拖动进度条的定位方式'))
@@ -1402,6 +1411,9 @@ export struct ReaderSettingsPage {
       this.detailSelectedOption = choices[this.animationSpeedIndex] ?? choices[2] ?? '';
     } else if (title === '中文简繁体转换') {
       this.detailSelectedOption = choices[this.chineseConverterType] ?? choices[0] ?? '';
+    } else if (title === '横屏双页') {
+      const modeIndex = ['0', '1', '2', '3'].indexOf(this.doubleHorizontalPage);
+      this.detailSelectedOption = choices[Math.max(0, modeIndex)] ?? choices[0] ?? '';
     } else if (title === '进度条行为') {
       this.detailSelectedOption = this.progressBehavior === 'chapter'
         ? (choices[1] ?? choices[0] ?? '') : (choices[0] ?? '');
@@ -1489,7 +1501,7 @@ export struct ReaderSettingsPage {
     }
     if (title === '屏幕方向') { return ['跟随系统', '竖屏', '横屏', '传感器自动', '反向竖屏', '反向横屏']; }
     if (title === '保持屏幕常亮') { return ['默认', '1分钟', '5分钟', '10分钟', '常亮']; }
-    if (title === '横屏双页') { return ['关闭', '左右双页']; }
+    if (title === '横屏双页') { return READER_COLUMN_MODE_TITLES; }
     if (title === '进度条行为') { return ['页码进度', '章节进度']; }
     if (title === '滑动条显示样式') { return ['常驻', '不显示']; }
     if (title === '点击图片行为') { return ['新版行为', '预览图片', '经典', '禁用点击', '双击']; }
@@ -2171,6 +2183,7 @@ export struct ReaderSettingsPage {
               }
               Text(this.detailSheetTitle === '自定义阅读背景' ||
                 this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
+                this.detailSheetTitle === '横屏双页' ||
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '滑动条显示样式' ||
                 this.detailSheetTitle === '中文简繁体转换' ||
                 this.detailSheetTitle === '点击图片行为' ||

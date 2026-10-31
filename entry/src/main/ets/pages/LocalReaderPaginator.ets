@@ -28,6 +28,12 @@ export interface LocalReaderPage {
   startPosition: number;
   endPosition: number;
   titleOnly: boolean;
+  /**
+   * 每行落在第几列（双页模式用），长度与 `lines` 相同。
+   * 对齐上游 `ReaderPaginator.advanceColumn()`：先填满第 0 列再填第 1 列，
+   * 两列都满才 `finishPage()`，即「一个 page 装两列」。单页模式下全为 0。
+   */
+  lineColumns: number[];
 }
 
 export interface LocalReaderImageSize {
@@ -62,16 +68,21 @@ export class LocalReaderPaginator {
     standaloneImageThreshold: number,
     inlineImageWidth: number,
     firstPageReservedLines: number,
-    fullJustify: boolean = true
+    fullJustify: boolean = true,
+    columnCount: number = 1
   ): LocalReaderPage[] {
+    const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) {
-      return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false }];
+      return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false, lineColumns: [] }];
     }
     const pages: LocalReaderPage[] = [];
     let pageLines: LocalReaderLine[] = [];
+    let pageColumns: number[] = [];
     let pageStart = 0;
     let pageEnd = 0;
     let pageUsedHeight = 0;
+    // 当前正在填的列号；上游 ReaderPaginator 用 columnIndex。
+    let columnIndex = 0;
     let lineItems: LocalReaderLineItem[] = [];
     let lineWidth = 0;
     let currentLineHeight = lineHeight;
@@ -81,9 +92,23 @@ export class LocalReaderPaginator {
       contentHeight - (pages.length === 0 ? Math.max(0, firstPageReservedLines) * lineHeight : 0));
     const flushPage = (): void => {
       if (pageLines.length === 0) { return; }
-      pages.push({ lines: pageLines, startPosition: pageStart, endPosition: pageEnd, titleOnly: false });
+      pages.push({
+        lines: pageLines, startPosition: pageStart, endPosition: pageEnd,
+        titleOnly: false, lineColumns: pageColumns
+      });
       pageLines = [];
+      pageColumns = [];
       pageUsedHeight = 0;
+      columnIndex = 0;
+    };
+    /** 当前列已满：还有下一列就换列（清空已用高度），否则出页。对齐 advanceColumn()。 */
+    const advanceColumn = (): void => {
+      if (columnIndex + 1 < columns) {
+        columnIndex++;
+        pageUsedHeight = 0;
+        return;
+      }
+      flushPage();
     };
     const appendLine = (
       endPosition?: number,
@@ -125,7 +150,7 @@ export class LocalReaderPaginator {
       if (pageBreakBefore && pageLines.length > 0) { flushPage(); }
       if (pageLines.length > 0 &&
         pageUsedHeight + verticalSpaceBefore + currentLineHeight > currentPageCapacity()) {
-        flushPage();
+        advanceColumn();
       }
       if (pageLines.length === 0) { pageStart = lineStart; }
       const line: LocalReaderLine = {
@@ -140,6 +165,7 @@ export class LocalReaderPaginator {
         contentWidth: naturalWidth
       };
       pageLines.push(line);
+      pageColumns.push(columnIndex);
       pageUsedHeight += verticalSpaceBefore + currentLineHeight + spacingAfter;
       pageEnd = lineEnd;
       lineItems = [];
@@ -280,7 +306,7 @@ export class LocalReaderPaginator {
     }
     flushPage();
     if (pages.length === 0) {
-      return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false }];
+      return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false, lineColumns: [] }];
     }
     return pages;
   }
@@ -297,12 +323,16 @@ export class LocalReaderPaginator {
     imageStyle: string,
     standaloneImageThreshold: number,
     inlineImageWidth: number,
-    firstPageReservedLines: number
+    firstPageReservedLines: number,
+    columnCount: number = 1
   ): Promise<number> {
+    const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) { return 1; }
     let pageCount = 0;
     let pageLineCount = 0;
     let pageUsedHeight = 0;
+    // 与 paginate 同一套换列规则，否则全书画布与当页排版对不上。
+    let columnIndex = 0;
     let lineItems: LocalReaderLineItem[] = [];
     let lineWidth = 0;
     let currentLineHeight = lineHeight;
@@ -316,6 +346,15 @@ export class LocalReaderPaginator {
       pageCount++;
       pageLineCount = 0;
       pageUsedHeight = 0;
+      columnIndex = 0;
+    };
+    const advanceColumn = (): void => {
+      if (columnIndex + 1 < columns) {
+        columnIndex++;
+        pageUsedHeight = 0;
+        return;
+      }
+      flushPage();
     };
     const appendLine = (
       spacingAfter: number = 0,
@@ -327,7 +366,7 @@ export class LocalReaderPaginator {
       if (pageBreakBefore && pageLineCount > 0) { flushPage(); }
       if (pageLineCount > 0 &&
         pageUsedHeight + verticalSpaceBefore + currentLineHeight > currentPageCapacity()) {
-        flushPage();
+        advanceColumn();
       }
       pageLineCount++;
       pageUsedHeight += verticalSpaceBefore + currentLineHeight + spacingAfter;

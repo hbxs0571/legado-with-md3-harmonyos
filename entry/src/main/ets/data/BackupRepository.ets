@@ -243,6 +243,8 @@ interface AndroidReadConfigBackupRecord {
   showSelectMenuIcon: boolean;
   /** 划词菜单条目配置 JSON 串；上游 ReadSettings.kt:53 `textSelectMenuConfig: String = ""`。 */
   textSelectMenuConfig: string;
+  /** 横屏双页档位 '0'..'3'，上游键名 doubleHorizontalPage（PreferKey.kt:157）。 */
+  doubleHorizontalPage: string;
 }
 
 interface JsonStringResult {
@@ -613,6 +615,9 @@ export class BackupRepository {
           configText, 'boolean', 'showSelectMenuIcon', settings.showSelectMenuIcon ? 'true' : 'false');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'textSelectMenuConfig', settings.textSelectMenuConfig);
+        // 横屏双页：上游不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 无条件备份。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'doubleHorizontalPage', settings.doubleHorizontalPage);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'float', 'dottedBase', `${settings.dottedBase}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1069,6 +1074,7 @@ export class BackupRepository {
       expandTextMenu: settings.expandTextMenu,
       showSelectMenuIcon: settings.showSelectMenuIcon,
       textSelectMenuConfig: settings.textSelectMenuConfig,
+      doubleHorizontalPage: settings.doubleHorizontalPage,
       dottedBase: settings.dottedBase,
       dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
@@ -1332,6 +1338,15 @@ export class BackupRepository {
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'showSelectMenuIcon') ?? current.showSelectMenuIcon,
       textSelectMenuConfig: BackupRepository.readJsonString(selected, 'textSelectMenuConfig') ??
         BackupRepository.readXmlString(`${directory}/config.xml`, 'textSelectMenuConfig') ?? current.textSelectMenuConfig,
+      // 横屏双页档位：缺键或缺省成未知值时保留本机现值（四档以外一律回落 current）。
+      doubleHorizontalPage: (() => {
+        const mode = BackupRepository.readJsonString(selected, 'doubleHorizontalPage') ??
+          BackupRepository.readXmlString(`${directory}/config.xml`, 'doubleHorizontalPage');
+        if (mode === undefined || (mode !== '0' && mode !== '1' && mode !== '2' && mode !== '3')) {
+          return current.doubleHorizontalPage;
+        }
+        return mode;
+      })(),
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),
