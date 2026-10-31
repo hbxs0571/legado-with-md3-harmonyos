@@ -20,6 +20,7 @@ import { ReaderBookmarkExporter } from './ReaderBookmarkExporter';
 import { BookmarkImportOutcome, ReaderBookmarkImporter } from './ReaderBookmarkImporter';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking } from '../model/ReaderMarking';
+import { LocalBookRestorePlanner } from './LocalBookRestorePlanner';
 
 /** 解析 highlightRule.json 的结果：可用规则与因形态不符被跳过的条数。 */
 interface HighlightRuleParseOutcome {
@@ -65,6 +66,8 @@ export interface RestoreResult {
   preservedEntryCount: number;
   updatedLocalBookCount: number;
   createdMissingBodyBookCount: number;
+  /** 恢复期按 LocalBookRestorePlanner 判定为重复书目并删除的条数。 */
+  deletedDuplicateLocalBookCount: number;
   localBooksWithoutBody: number;
   restoredEntries: BackupEntryPreview[];
   /** 恢复替换净化规则的新增条数；没有 replaceRule.json 时为 0。 */
@@ -202,6 +205,7 @@ interface RestoredBookProgress {
   books: Book[];
   updatedCount: number;
   createdMissingBodyCount: number;
+  deletedDuplicateCount: number;
 }
 
 interface AndroidPreferenceKeyGroups {
@@ -851,6 +855,7 @@ export class BackupRepository {
     );
     await BookshelfLayoutRepository.save(context, bookshelfLayout);
     const updated = await BackupRepository.restoreMatchingLocalProgress(
+      context,
       selection.stagingDirectory,
       currentBooks,
       ignoredCategories
@@ -866,6 +871,7 @@ export class BackupRepository {
       preservedEntryCount: preservedEntryCount,
       updatedLocalBookCount: updated.updatedCount,
       createdMissingBodyBookCount: updated.createdMissingBodyCount,
+      deletedDuplicateLocalBookCount: updated.deletedDuplicateCount,
       localBooksWithoutBody: selection.preview.localBooksWithoutBody,
       restoredEntries: restoredEntries,
       replaceRuleAdded: replaceRuleAdded,
@@ -1256,25 +1262,49 @@ export class BackupRepository {
   }
 
   private static async restoreMatchingLocalProgress(
+    context: Context,
     directory: string,
     currentBooks: Book[],
     ignoredCategories: string[]
   ): Promise<RestoredBookProgress> {
     if (ignoredCategories.includes('localBook')) {
-      return { books: currentBooks, updatedCount: 0, createdMissingBodyCount: 0 };
+      return { books: currentBooks, updatedCount: 0, createdMissingBodyCount: 0, deletedDuplicateCount: 0 };
     }
     const path = `${directory}/bookshelf.json`;
-    if (!fileIo.accessSync(path)) { return { books: currentBooks, updatedCount: 0, createdMissingBodyCount: 0 }; }
+    if (!fileIo.accessSync(path)) {
+      return { books: currentBooks, updatedCount: 0, createdMissingBodyCount: 0, deletedDuplicateCount: 0 };
+    }
     const records = BackupRepository.splitJsonArray(fileIo.readTextSync(path));
     let result: Book[] = currentBooks;
     let updatedCount: number = 0;
     let createdMissingBodyCount: number = 0;
+    let deletedDuplicateCount: number = 0;
+    // ZIP 里读出来的本地书先收集，交给 LocalBookRestorePlanner 做冲突规划。
+    // 上游 Restore.kt:130-140 是先 planBookRestore 再一次性 delete/update/insert，
+    // 所以规划要提到进度合并之前：重定位的书得先知道落到哪一条路径上。
+    const restoredLocalBooks: Book[] = [];
+    for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
+      const record = records[recordIndex] ?? '';
+      if (!BackupRepository.isLocalAndroidBook(record)) { continue; }
+      const originalPath = BackupRepository.readJsonString(record, 'bookUrl') ?? '';
+      if (originalPath.length === 0) { continue; }
+      restoredLocalBooks.push(BackupRepository.createMissingBodyBook(record, originalPath));
+    }
+    const plan = LocalBookRestorePlanner.planBookRestore(
+      restoredLocalBooks,
+      result,
+      false,
+      LocalBookRestorePlanner.localBookLocationStatus
+    );
     for (let bookIndex = 0; bookIndex < currentBooks.length; bookIndex++) {
       const book = currentBooks[bookIndex];
       if (book === undefined || book.contentPath === undefined) { continue; }
       for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
         const record = records[recordIndex] ?? '';
-        if (BackupRepository.readJsonString(record, 'bookUrl') !== book.contentPath) { continue; }
+        const recordUrl = BackupRepository.readJsonString(record, 'bookUrl') ?? '';
+        // 重定位的书：备份里的原始路径已被规划到本地另一条路径，按落点匹配才能合并进度。
+        const targetUrl = plan.resolvedTargets.get(recordUrl) ?? recordUrl;
+        if (targetUrl !== book.contentPath) { continue; }
         const index = BackupRepository.readJsonNumber(record, 'durChapterIndex');
         const position = BackupRepository.readJsonNumber(record, 'durChapterPos');
         const savedCharset = BackupRepository.readJsonString(record, 'charset');
@@ -1321,20 +1351,27 @@ export class BackupRepository {
         break;
       }
     }
-    for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
-      const record = records[recordIndex] ?? '';
-      if (!BackupRepository.isLocalAndroidBook(record)) { continue; }
-      const originalPath = BackupRepository.readJsonString(record, 'bookUrl') ?? '';
-      if (originalPath.length === 0 || result.some((book: Book) =>
-        book.contentPath === originalPath || book.androidOriginalPath === originalPath)) { continue; }
-      const placeholder = BackupRepository.createMissingBodyBook(record, originalPath);
-      result = [...result, placeholder];
+    for (let index = 0; index < plan.booksToDelete.length; index++) {
+      const duplicate = plan.booksToDelete[index];
+      if (duplicate === undefined) { continue; }
+      await BookRepository.deleteBook(context, duplicate);
+      result = result.filter((book: Book) => book.id !== duplicate.id);
+      deletedDuplicateCount += 1;
+    }
+    for (let index = 0; index < plan.booksToInsert.length; index++) {
+      const inserted = plan.booksToInsert[index];
+      if (inserted === undefined) { continue; }
+      if (result.some((book: Book) =>
+        book.contentPath === inserted.androidOriginalPath ||
+        book.androidOriginalPath === inserted.androidOriginalPath)) { continue; }
+      result = [...result, inserted];
       createdMissingBodyCount += 1;
     }
     return {
       books: result,
       updatedCount: updatedCount,
-      createdMissingBodyCount: createdMissingBodyCount
+      createdMissingBodyCount: createdMissingBodyCount,
+      deletedDuplicateCount: deletedDuplicateCount
     };
   }
 

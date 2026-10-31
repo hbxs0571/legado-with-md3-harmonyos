@@ -115,7 +115,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 | # | 类别键名 | 上游中文名 | ZIP 条目 | 样本条数 | 本地原生功能 | ZIP 接入 | 队列位置 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `localBook` | 本地书籍 | `bookshelf.json` | **658** | 书架、TXT/EPUB 阅读、进度保存 | **部分接入**：书目/进度/缺正文标记可映射；不打包正文；缺恢复期冲突处理（上游 `BookRestorePlanner.kt` 的删重复书 / 重定位识别 / 三态定位，本地无对应） | ZIP 映射 1 |
+| 1 | `localBook` | 本地书籍 | `bookshelf.json` | **658** | 书架、TXT/EPUB 阅读、进度保存 | **部分接入**：书目/进度/缺正文标记可映射；恢复期冲突处理已接（`data/LocalBookRestorePlanner.ets` 移植上游 `BookRestorePlanner.kt` 的删重复书 / 重定位识别 / 三态定位）；不打包正文 | ZIP 映射 1 |
 | 2 | `readConfig` | 阅读界面 | `readConfig.json`、`shareReadConfig.json`、`config.xml` | 12 / 96 键 / 370 项 | 阅读配置有原生模型与持久化 | **部分接入**：读入 46 个 `config.xml` 键；`shareReadConfig` 未转多套方案 | ZIP 映射 2 |
 | 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`，333 行） | **未接入**：`themeMode` 键读写都未接 | 待接 |
 | 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验；Android 配色/透明度 JSON 未映射 | ZIP 映射 5 |

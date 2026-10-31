@@ -2441,7 +2441,7 @@ struct Index {
       // 恢复可能写入了书签与笔记，重新读一次让「所有书签」页与阅读页看到最新结果。
       this.readerBookmarks = await ReaderBookmarkRepository.load(context);
       this.readerMarkings = await ReaderMarkingRepository.load(context);
-      const restoreSummary = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目`;
+      const restoreSummary = `导入完成：保留 ${result.preservedEntryCount} 个 Android 条目；更新 ${result.updatedLocalBookCount} 本已有正文书籍的进度，并创建 ${result.createdMissingBodyBookCount} 本缺正文书目；清理 ${result.deletedDuplicateLocalBookCount} 本重复书目`;
       const details: string[] = [];
       const replaceRuleSummary = this.describeReplaceRuleRestore(
         result.replaceRuleAdded, result.replaceRuleUpdated, result.replaceRuleSkipped

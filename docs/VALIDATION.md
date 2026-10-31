@@ -312,4 +312,14 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - **构建环境坑（供后续复跑参考）**：直接调用 `hvigorw.bat` 会报 `00308003 ENOENT ... node_modules\@ohos\hvigor\bin\hvigor.js`，即便该文件 `fs.existsSync` 为 true。原因是 wrapper 用 `child_process.fork` 拉起 hvigor，而沙箱环境拒绝 spawn（`EPERM spawn EPERM`），wrapper 把任何异常都吞成「文件不存在」并提示删缓存——删缓存无效。两个必须条件：① 放开进程 spawn 权限（沙箱 `danger-full-access`）；② 把 `JAVA_HOME/bin` 加进 `PATH`，否则 `PackageHap` 阶段报 `00308018 spawn java ENOENT`（只设 `JAVA_HOME` 不够，`hvigor` 用 `PATH` 找 java）。
 - 覆盖率脚本同时复跑：`bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG.md /n/HarmonyProjects/legado-with-MD3` → 接触面 107 个 `.kt`，已分配 107，未分配 0。
 
+## 2026-10-31 N 端 r296 localBook 恢复期冲突规划（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`。构建 `assembleHap` 通过，HAP 覆盖安装成功（8175637 字节）。书架基线 2 本：`/data/storage/el2/base/haps/entry/files/books/local-1793351616205.txt`（真实正文，`durChapterIndex=1`）与相对路径占位书 `local-1793348394426.txt`（`durChapterIndex=2`）。
+- **取证手法**：设备 `sqlite3` 只读（任何写操作报 `unable to open database file`），`hdc shell` 为 `uid=2000(shell)` 且 SELinux `Enforcing`，无法改库或写应用沙箱，故全部通过「造单条 `bookshelf.json` 的合成 ZIP → 恢复 → 从本地恢复 → 导入此 ZIP」注入数据，再用只读 `sqlite3` 核对 `books` 表。ZIP 经 `hdc file send` 推到 `/storage/media/100/local/files/Docs/Documents/`。
+- **场景一 重定位（`isRelocatedCopyOf` + `resolvedTargets`）**：`lb-reloc.zip` 的 `bookUrl` 指向 `files/../cache/local-1793351616205.txt`（父目录在、文件不在，判 `Missing`），`originName`/`name`/`author` 与真实书相同。预览原文「识别 1 个根条目；书架 1 本，其中本地书籍 1 本」「ZIP 不含 TXT/EPUB 正文；1 本本地书未匹配到当前书架中的可读正文。」导入提示原文「导入完成：保留 1 个 Android 条目；更新 1 本已有正文书籍的进度，并创建 0 本缺正文书目；清理 0 本重复书目。」导入后 `books` 仍是 2 行，真实书 `durChapterIndex` 由 1 变 **0**（备份值）、`durChapterTitle` 变为书内真实第 0 章标题「第一卷 风起」。**结论：重定位归并与进度合并均通过，未新增书目。**
+- **场景二 `Unknown` 不删书**：`lb-unknown.zip` 的 `bookUrl` 指向整段不存在的 `files/nodir/`（父目录也访问不了 → `Unknown`）。导入提示「…更新 0 本已有正文书籍的进度，并创建 1 本缺正文书目；清理 0 本重复书目。」`books` 由 2 行变 3 行，新增 `files/nodir/local-1793351616205.txt`（`durChapterIndex=5`），原两行一条未删。**结论：`Unknown` 一律不删的保守语义通过。**
+- **场景三 `Missing` 重复条目被清理（`booksToDelete`）**：分两步。先导 `lb-del-1.zip`（`bookUrl` 为 `files/../cache/config.xml`，父目录 `haps/entry/cache` 存在、文件不存在 → `Missing`）插入一条占位书 `dup-probe3`，提示「创建 1 本缺正文书目；清理 0 本重复书目」。再导 `lb-del-2.zip`（同 `originName`/书名/作者，路径为真实存在的 `files/android-backup-entries/config.xml` → `Available`，且未被任何书占用），提示「…并创建 1 本缺正文书目；**清理 1 本重复书目**。」`books` 中 `files/../cache/config.xml` 那条占位书消失，只剩 `files/android-backup-entries/config.xml`。**结论：唯一 `Available` 时清理其余 `Missing` 重复条目通过，`deletedDuplicateLocalBookCount` 计数与提示文案一致。**
+- **两次失败的造数尝试（供复跑参考）**：① 先用 `name` 不同（`stale-copy` vs `test-book`）造重复，规划器第一分支按「同规范化路径别名」先命中，落不到删书分支；② 用 `android-backup-entries/../cache/` 造 `Missing`，实际解析到不存在的 `files/cache`，父目录判不到 → `Unknown` → `hasUnknownLocation` 使删书分支放弃。正确造法是「同 `originName`/书名/作者 + 一条真实存在且未被占用的 `Available` 路径 + 一条父目录存在的 `Missing` 路径」。
+- 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
+
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**

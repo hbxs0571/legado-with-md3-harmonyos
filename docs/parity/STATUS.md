@@ -48,7 +48,7 @@
 
 | 类别键名 | 条目 | 读 | 写 | 忽略项 | 涉及行 |
 | --- | --- | --- | --- | --- | --- |
-| `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) A1 29 / B 51 / C 4 / D3 13 = **97 行** |
+| `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) A1 29 / B 51 / C 4 / D3 13 / E 1 = **98 行**（72 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) 逐条登记） |
 | `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | ? | [书签对照](ZIP-BOOKMARK.md) A–E = **83 行** |
 | `bookGroup` | `bookGroup.json` | ✓ | ✓ | ? | [书籍总账](BOOKSHELF.md) A3 18 / A1 11 / D3 6 / B 3 = **38 行** |
 | `bookSource` | `bookSource.json` | — | — | — | [书籍总账](BOOKSHELF.md) B 19 / D3 5 = **24 行** |
