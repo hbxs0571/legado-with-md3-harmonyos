@@ -305,6 +305,25 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-A3 禁用返回键（开关与落库通过）
+
+19. **设备与构建**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832），包名 `io.legado.harmony`。`assembleHap` → `BUILD SUCCESSFUL in 31 s 592 ms`（33 任务，17 执行 / 16 最新），`hdc install -r` → `install bundle successfully`。
+
+20. **上游判据（决定本轮只做可配、不做拦截）**：`grep -rni "disablereturn" --include=*.kt --include=*.xml`（排除 `build/`）共 21 处，全部是字段/偏好键/落库/映射/两处设置项/Intent 链/五处资源字符串/一个单元测试断言；**没有任何 `BackHandler`、`onBackPressed`、`OnBackPressedCallback`、`KEYCODE_BACK` 消费点**。阅读页真正的返回键处理在 `ReadBookRouteScreen.kt:240-249`，分支只有 sheet/搜索/自动翻页/菜单层级，`canHandleBack` 在 `:220` 取的是 `isTopRoute`。所以本地只做可配 + 落库 + 随备份，不加 `onBackPress()` 拦截。
+
+21. **设置项上屏**：设置 → 阅读界面 → 更多 tab（`(1084,2629)`）→ 连续三次 `swipe 640 2200 640 1000/1300 300` 后读到「禁用返回键 / 阻止阅读时返回键退出」，`Toggle` bounds `[1057,1800][1183,1870]`。此前该条目走 `showNotMigrated`，现在是真的 `MenuSettingSwitch`。
+
+22. **拨动落库（决定性）**：点击 `(1120,1835)` → 偏好文件从**没有该键**变为 `<bool key="disableReturnKey" value="true"/>`，同一时刻 `uitest dumpLayout` 读到该 Toggle 的 `checked` 由 `false` 变 `true`；再点一次 → `<bool key="disableReturnKey" value="false"/>`。
+
+23. **重启持久 + 面板回显**：用 `hdc file recv` 拉回 `legado_reader_settings`，把该键改成 `true` 后 `hdc file send` 推回，`aa force-stop` + `aa start` 重启，进「阅读界面 → 更多」滚到该条，`Toggle` 的 `checked` 为 `true` —— 证明读路径（`ReaderSettingsRepository.ets:709`）与快照回灌都对。
+
+24. **测试期改动已复原**：最终 `disableReturnKey` 为 `false`（出厂值）。
+
+25. **未验部分：拦截效果本身**。这一项**本来就不该有拦截效果**（上游没有消费点），所以「开启后按返回键不退出」不是本轮要验的东西；如果后续产品要加拦截，需要另立条目并明确它与阅读页下拉/侧滑退出手势的冲突处理。
+
+26. **结论只代表 N 端模拟器**：本轮证明了「开关 → 落库 → 重启回显 → 备份序列化」这条链路通，未涉及拦截行为。
+
+
 ## 2026-10-31 N 端 KI-A6 自动切换日夜模式提醒（弹出与自动消失通过，按钮点击未验）
 
 10. **设备与构建**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832），包名 `io.legado.harmony`。`assembleHap` → `BUILD SUCCESSFUL in 31 s 589 ms`（33 任务，17 执行 / 16 最新），`hdc install -r` → `install bundle successfully`。

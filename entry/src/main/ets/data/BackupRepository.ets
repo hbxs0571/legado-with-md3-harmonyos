@@ -247,6 +247,8 @@ interface AndroidReadConfigBackupRecord {
   doubleHorizontalPage: string;
   /** 环境光日夜提醒开关，上游键名 autoSuggestDayNight（PreferKey.kt:120）。 */
   autoSuggestDayNight: boolean;
+  /** 禁用返回键，上游键名 disableReturnKey（PreferKey.kt:420）。 */
+  disableReturnKey: boolean;
 }
 
 interface JsonStringResult {
@@ -1080,6 +1082,7 @@ export class BackupRepository {
       textSelectMenuConfig: settings.textSelectMenuConfig,
       doubleHorizontalPage: settings.doubleHorizontalPage,
       autoSuggestDayNight: settings.autoSuggestDayNight,
+      disableReturnKey: settings.disableReturnKey,
       dottedBase: settings.dottedBase,
       dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
@@ -1355,6 +1358,8 @@ export class BackupRepository {
       // 环境光日夜提醒开关：缺键时保留本机现值。
       autoSuggestDayNight: BackupRepository.readJsonBoolean(selected, 'autoSuggestDayNight') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'autoSuggestDayNight') ?? current.autoSuggestDayNight,
+      disableReturnKey: BackupRepository.readJsonBoolean(selected, 'disableReturnKey') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'disableReturnKey') ?? current.disableReturnKey,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

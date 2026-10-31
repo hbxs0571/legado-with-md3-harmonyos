@@ -190,6 +190,8 @@ export struct ReaderSettingsPage {
   @Prop doubleHorizontalPage: string = '0';
   /** 环境光日夜提醒开关；上游 `autoSuggestDayNight`（`ReadSettings.kt:43`）。 */
   @Prop autoSuggestDayNight: boolean = false;
+  /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`）。 */
+  @Prop disableReturnKey: boolean = false;
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -339,6 +341,7 @@ export struct ReaderSettingsPage {
   onShowSelectMenuIconChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onDoubleHorizontalPageChange: (value: string) => void = (_value: string) => {};
   onAutoSuggestDayNightChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onDisableReturnKeyChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -1148,7 +1151,7 @@ export struct ReaderSettingsPage {
           MenuSettingOption({ title: '点击图片行为', detail: this.getClickImageBehaviorLabel(), migrated: true })
             .onClick(() => this.openDetailSheet('点击图片行为', '选择正文图片的点击行为'))
           MenuSettingOption({ title: '点击区域配置', detail: '设置屏幕各区域的触摸动作', migrated: true }).onClick(() => this.openDetailSheet('点击区域配置', '配置九宫格点按动作，并应用到阅读界面。'))
-          MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: false }).onClick(() => this.showNotMigrated('禁用返回键'))
+          MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: this.disableReturnKey, onChange: (enabled: boolean) => this.onDisableReturnKeyChange(enabled) })
           MenuSettingOption({ title: '自定义翻页按键', detail: this.getPageKeysLabel(), migrated: true }).onClick(() => this.openDetailSheet('自定义翻页按键', '录制物理按键作为上一页/下一页'))
           MenuSettingOption({ title: '选中文字菜单', detail: '配置文本选择后的操作', migrated: true }).onClick(() => this.openDetailSheet('选中文字菜单', '排序、分组与图标开关，保存后随备份同步'))
           MenuSettingSwitch({ title: '显示阅读标题补充信息', detail: '在阅读标题中显示附加信息', checked: false }).onClick(() => this.showNotMigrated('阅读标题补充信息'))

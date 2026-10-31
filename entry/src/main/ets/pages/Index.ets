@@ -217,6 +217,8 @@ struct Index {
   @State readerDoubleHorizontalPage: string = '0';
   /** 环境光驱动日夜提醒开关；上游 `autoSuggestDayNight`（`ReadSettings.kt:43`）。 */
   @State @Watch('onReaderAutoSuggestDayNightChanged') readerAutoSuggestDayNight: boolean = false;
+  /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`）。上游 UI 侧无消费点，本地只做可配+落库。 */
+  @State readerDisableReturnKey: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1824,6 +1826,7 @@ struct Index {
       this.readerTextSelectMenuConfig = settings.textSelectMenuConfig;
     this.readerDoubleHorizontalPage = settings.doubleHorizontalPage;
     this.readerAutoSuggestDayNight = settings.autoSuggestDayNight;
+    this.readerDisableReturnKey = settings.disableReturnKey;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1923,6 +1926,7 @@ struct Index {
     return {
         doubleHorizontalPage: this.readerDoubleHorizontalPage,
         autoSuggestDayNight: this.readerAutoSuggestDayNight,
+        disableReturnKey: this.readerDisableReturnKey,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
         lineSpacing: this.readerLineSpacing,
@@ -2618,6 +2622,15 @@ struct Index {
     }
   }
 
+  /** 禁用返回键；上游 UI 侧无消费点，本地只做可配 + 落库 + 随备份（见 KNOWN-ISSUES KI-A3）。 */
+  private setReaderDisableReturnKey(enabled: boolean): void {
+    this.readerDisableReturnKey = enabled === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -3029,6 +3042,7 @@ struct Index {
       this.readerTextSelectMenuConfig = result.settings.textSelectMenuConfig;
     this.readerDoubleHorizontalPage = result.settings.doubleHorizontalPage;
     this.readerAutoSuggestDayNight = result.settings.autoSuggestDayNight;
+    this.readerDisableReturnKey = result.settings.disableReturnKey;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4524,6 +4538,7 @@ struct Index {
               textSelectMenuConfig: this.readerTextSelectMenuConfig,
               doubleHorizontalPage: this.readerDoubleHorizontalPage,
               autoSuggestDayNight: this.readerAutoSuggestDayNight,
+              disableReturnKey: this.readerDisableReturnKey,
               readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4541,6 +4556,7 @@ struct Index {
               onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
               onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
               onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+              onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -4910,6 +4926,7 @@ struct Index {
             textSelectMenuConfig: this.readerTextSelectMenuConfig,
             doubleHorizontalPage: this.readerDoubleHorizontalPage,
             autoSuggestDayNight: this.readerAutoSuggestDayNight,
+            disableReturnKey: this.readerDisableReturnKey,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -4927,6 +4944,7 @@ struct Index {
             onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+            onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5161,6 +5179,7 @@ struct Index {
             textSelectMenuConfig: this.readerTextSelectMenuConfig,
             doubleHorizontalPage: this.readerDoubleHorizontalPage,
             autoSuggestDayNight: this.readerAutoSuggestDayNight,
+            disableReturnKey: this.readerDisableReturnKey,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -5178,6 +5197,7 @@ struct Index {
             onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+            onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5354,6 +5374,7 @@ struct Index {
           textSelectMenuConfig: this.readerTextSelectMenuConfig,
           doubleHorizontalPage: this.readerDoubleHorizontalPage,
           autoSuggestDayNight: this.readerAutoSuggestDayNight,
+          disableReturnKey: this.readerDisableReturnKey,
           readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -5371,6 +5392,7 @@ struct Index {
           onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
           onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
           onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+          onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

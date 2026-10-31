@@ -143,9 +143,23 @@
 
 三项都作用在阅读页菜单层，而本地没有菜单外观渲染层：全仓 `readMenu*`/`titleBar*` 只命中 `data/BackupRepository.ets`，`ReaderPage.ets` 零命中。没有菜单的地方单独接这三个开关等于给不存在的界面加配置，因此与 E 块合并处理（见 KI-E1）。
 
-**KI-A3 禁用返回键（要接，待产品定调）** —— 覆盖 A-06（`disableReturnKey`，`ReadSettings.kt:50`）。
+**KI-A3 禁用返回键（已实现，只做可配 + 落库 + 随备份）** —— 覆盖 A-06（`disableReturnKey`，`ReadSettings.kt:50`）。
 
-需要拦截系统返回手势，与阅读页现有的下拉/侧滑退出手势冲突；`ReaderPage.ets` 目前没有 `onBackPress` 覆盖。补法：`onBackPress()` 返回 `true`，并在设置里给出「仍需退出」的二次确认，避免把用户困在阅读页。
+**这条判据的转折点：上游有这个配置项，但没有这个效果。** 上一版写的是「需要补 `onBackPress()` 拦截」，那是按照设置项文案推断的；本轮把上游全仓翻了一遍，结论相反：
+
+- 上游有这个配置：`ReadSettings.kt:50` `val disableReturnKey: Boolean = false`，偏好键 `PreferKey.kt:420` `const val disableReturnKey = "disableReturnKey"`（与字段同名），落库在 `ReadSettingsRepository.kt:160-161` `setDisableReturnKey()`，映射在 `:417` 与 `:673`；两处设置项 `MoreConfigSheet.kt:443-448` 与 `ReadConfigScreen.kt:404-407`；Intent 链 `ReadBookContract.kt:2061` `ConfigUpdate.DisableReturnKey` → `ReadConfigUpdateDelegate.kt:724-726`。
+- 上游**没有**这个效果：`grep -rni "disablereturn" --include=*.kt --include=*.xml` 排除 `build/` 后共 21 处命中，全部集中在上面那些文件、资源字符串（`values/strings.xml:1019`、`values-zh-rCN/strings.xml:987`、`values-zh-rHK/strings.xml:827`、`values-zh-rTW/strings.xml:839`、`res/xml/pref_config_read.xml:229-230`）以及一个单元测试断言（`app/src/test/java/io/legado/app/data/repository/ReadSettingsMappingTest.kt:245` `base.copy(disableReturnKey = true)`）。**没有任何 `BackHandler`、`onBackPressed`、`OnBackPressedCallback`、`KEYCODE_BACK` 读取它。**
+- 对照：阅读页真正处理返回键的是 `ui/book/read/ReadBookRouteScreen.kt:240-249` 的 `BackHandler(enabled = canHandleBack)`，分支只有 `activeSheet != null → DismissSheet`、`isShowingSearchResult → ExitSearch`、`isAutoPage → StopAutoPage`、`menuState.canNavigateBack → ReadMenuBack`、否则 `requestClose()`。`canHandleBack` 在 `:220` 是 `isTopRoute`，与 `disableReturnKey` 无关。
+
+所以按「上游有这个问题就保留、上游没有就不要这个效果」，本地**只做可配 + 落库 + 随备份**，不加返回键拦截——加了反而会造出上游没有的行为。这与 KI-A7 的 `sliderVibrator` 同一种处理方式。
+
+本地落地：
+1. `entry/src/main/ets/data/ReaderSettingsRepository.ets`：接口 `:236` `disableReturnKey: boolean;`（注释引 `ReadSettings.kt:50` 与 `PreferKey.kt:420`）；默认值 `:590` `false`；读 `:709` `store.get('disableReturnKey', ...)`；返回对象 `:982` `typeof === 'boolean'` 归一；写 `:1141`。
+2. `entry/src/main/ets/pages/Index.ets`：`@State readerDisableReturnKey`（`:221`）；装载 `:1829`；快照 `:1929`；恢复备份 `:3033` 一带；setter `setReaderDisableReturnKey()`（三行式，不触发章节重读）。
+3. `entry/src/main/ets/pages/ReaderSettingsPage.ets`：`@Prop disableReturnKey` 与 `onDisableReturnKeyChange`；`:1151` 的 `showNotMigrated` 占位改成真 `MenuSettingSwitch`。
+4. `entry/src/main/ets/data/BackupRepository.ets`：接口字段、config.xml 导出（`upsertAndroidPreference(configText, 'boolean', 'disableReturnKey', ...)`）、readConfig.json 记录、恢复段 `readJsonBoolean ?? readXmlBoolean ?? current.disableReturnKey`。上游 `BackupConfig.readPrefKeys` 忽略清单里没有这个键，随 config.xml 无条件备份。
+
+验收：拨开 → `<bool key="disableReturnKey" value="true"/>`；注入 `true` 重启后面板回显为开；拨回关 → `false`。详见 `docs/VALIDATION.md` 的 `KI-A3` 节。
 
 **KI-A4 优化正文渲染（不接）** —— 覆盖 A-07（`optimizeRender`，`ReadSettings.kt:49`）。
 

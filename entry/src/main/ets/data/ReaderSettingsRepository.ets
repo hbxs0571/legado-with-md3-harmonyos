@@ -233,6 +233,8 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   doubleHorizontalPage: string;
   /** 按环境光提醒切换日夜；上游 `autoSuggestDayNight`（`ReadSettings.kt:43`），存储键同名（`PreferKey.kt:120`）。 */
   autoSuggestDayNight: boolean;
+  /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`），存储键同名（`PreferKey.kt:420`）。 */
+  disableReturnKey: boolean;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -585,6 +587,7 @@ export class ReaderSettingsRepository {
       // 上游默认值是字符串 "0"，不是数字（ReadSettings.kt:26）。
       doubleHorizontalPage: '0',
   autoSuggestDayNight: false,
+  disableReturnKey: false,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -705,6 +708,7 @@ export class ReaderSettingsRepository {
       const textSelectMenuConfigValue = await store.get('textSelectMenuConfig', defaults.textSelectMenuConfig);
       const doubleHorizontalPageValue = await store.get('doubleHorizontalPage', defaults.doubleHorizontalPage);
     const autoSuggestDayNightValue = await store.get('autoSuggestDayNight', defaults.autoSuggestDayNight);
+    const disableReturnKeyValue = await store.get('disableReturnKey', defaults.disableReturnKey);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -977,6 +981,7 @@ export class ReaderSettingsRepository {
         // 只认上游那四档，其他值一律按全局单页（对齐 ReaderColumnMode.fromPreference 的 else 分支）。
         doubleHorizontalPage: ReaderSettingsRepository.normalizeColumnMode(doubleHorizontalPageValue, defaults.doubleHorizontalPage),
       autoSuggestDayNight: typeof autoSuggestDayNightValue === 'boolean' ? autoSuggestDayNightValue : defaults.autoSuggestDayNight,
+      disableReturnKey: typeof disableReturnKeyValue === 'boolean' ? disableReturnKeyValue : defaults.disableReturnKey,
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1136,6 +1141,7 @@ export class ReaderSettingsRepository {
       await store.put('textSelectMenuConfig', typeof settings.textSelectMenuConfig === 'string' ? settings.textSelectMenuConfig : '');
       await store.put('doubleHorizontalPage', ReaderSettingsRepository.normalizeColumnMode(settings.doubleHorizontalPage, '0'));
       await store.put('autoSuggestDayNight', settings.autoSuggestDayNight === true);
+      await store.put('disableReturnKey', settings.disableReturnKey === true);
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
