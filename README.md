@@ -13,7 +13,8 @@ Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/Hap
 - HarmonyOS 原生界面与书架，支持本地 TXT、EPUB、分组、列表/网格布局和排序设置。
 - 阅读器包含目录、阅读进度、书签、阅读记录、正文处理、文本选择和部分排版设置。
 - 可选择系统字体；源码也支持导入本地 TTF/OTF 字体文件，真实字体文件导入和 EPUB 字体兼容仍待设备验证。
-- Android ZIP 对部分书架、书架分组、阅读设置、护眼设置和规则数据提供兼容映射。它不等同于完整 Android 数据库迁移。
+- Android ZIP 兼容按 **28 个数据类别**逐类盘点，清单见[备份恢复说明](docs/BACKUP-RESTORE.md)：已接入 5 类、部分接入 4 类、未接入 5 类、仅归档 14 类。它不等同于完整 Android 数据库迁移。
+- 逐界面的上游对照与「哪一块还没盘」见[ZIP 兼容总账](docs/parity/STATUS.md)与三张对照表（[书架](docs/parity/BOOKSHELF.md)、[书签](docs/parity/ZIP-BOOKMARK.md)、[阅读配置](docs/parity/READER-CONFIG.md)）。
 - 设备验证范围和遗留问题见[当前进度](docs/PROGRESS.md)、[验证记录](docs/VALIDATION.md)、[备份恢复说明](docs/BACKUP-RESTORE.md)和[已知问题](docs/KNOWN-ISSUES.md)。
 
 ## 🛠️ 核心功能
@@ -21,7 +22,7 @@ Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/Hap
 1. **本地阅读：** 支持 TXT、EPUB、目录与阅读进度管理。
 2. **阅读设置：** 接入字体、间距、对齐、文字效果和部分护眼设置；各设置的验证范围以文档为准。
 3. **书架管理：** 支持分组及部分布局、筛选和排序设置；私有标记与分组刷新目前不控制实际权限或更新行为。
-4. **数据兼容：** 对 Android ZIP 的部分条目进行预览、映射或安全保留；尚未映射的阅读历史不导入原生阅读记录。
+4. **数据兼容：** 对 Android ZIP 的 28 个数据类别逐类处理：已接入的 5 类双向映射，部分接入的 4 类只映射了其中一部分字段，其余 19 类做预览或安全归档保留、不导入原生功能。各类的读写状态与差异见[备份恢复说明](docs/BACKUP-RESTORE.md)。注意本地有自己的阅读记录三层仓储，但 Android ZIP 里的 `readRecord.json` 属仅归档，不导入这套原生记录。
 5. **开源：** 项目采用 GPL-3.0；第三方资源来源和许可见[资源清单](docs/RESOURCE-LICENSES.md)。
 
 在线书源抓取、在线搜索、RSS、TTS、AI、WebDAV、云同步和 Web 服务尚未接入。界面或备份中出现相关入口或数据类别，不代表对应服务可用。
