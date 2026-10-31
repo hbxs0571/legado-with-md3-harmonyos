@@ -7,7 +7,9 @@ import { BookRepository } from './BookRepository';
 import { BookGroupRepository } from './BookGroupRepository';
 import { BookshelfLayoutRepository } from './BookshelfLayoutRepository';
 import { BookshelfLayoutSettings, copyBookshelfLayout } from '../model/BookshelfLayout';
-import { READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot } from './ReaderSettingsRepository';
+import {
+  READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot, ReaderBottomActionConfig
+} from './ReaderSettingsRepository';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { ReplaceRuleImporter } from './ReplaceRuleImporter';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
@@ -1477,6 +1479,18 @@ export class BackupRepository {
       readMenuTextColorNight: current.readMenuTextColorNight,
       readMenuBlurColor: current.readMenuBlurColor,
       readMenuBlurColorNight: current.readMenuBlurColorNight,
+      // 浮动图标四项的键全在 BackupConfig.readPrefKeys 忽略清单里
+      // （BackupConfig.kt:228 readMenuIconShowText、:240 readMenuFloatingIconLiquidGlass、
+      // :252 readMenuCustomIcons、:255 titleBarCustomIcons、:256 titleBarIconPosition、
+      // :257 showTitleBarIcons），因此只保留本机现值、不从备份读写。
+      showTitleBarIcons: current.showTitleBarIcons,
+      titleBarIconPosition: current.titleBarIconPosition,
+      readMenuFloatingIconLiquidGlass: current.readMenuFloatingIconLiquidGlass,
+      floatingIcons: current.floatingIcons.map(
+        (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
+      ),
+      titleBarCustomIcons: current.titleBarCustomIcons,
+      readMenuCustomIcons: current.readMenuCustomIcons,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

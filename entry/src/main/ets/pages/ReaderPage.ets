@@ -27,7 +27,8 @@ import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPagin
 import {
   ReaderBottomActionConfig, ReaderControlKind, READER_ACTION_OPTIONS, READER_LOCAL_BOTTOM_ACTION_DEFAULTS,
   READER_LOCAL_TOP_ACTION_DEFAULTS, ReaderActionOption, isReaderActionApplicable,
-  ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, ReaderPaddingSettings, DEFAULT_READER_PADDING_SETTINGS
+  ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, ReaderPaddingSettings, DEFAULT_READER_PADDING_SETTINGS,
+  ReaderSettingsRepository
 } from '../data/ReaderSettingsRepository';
 import {
   ReaderMoreActionConfig, READER_MORE_ACTION_DEFAULTS
@@ -298,6 +299,18 @@ export struct ReaderPage {
   @Prop readMenuBlurColor: string = '';
   /** 菜单模糊层着色（夜间）（上游 ReadSettings.kt:108）。 */
   @Prop readMenuBlurColorNight: string = '';
+  /** 显示浮动图标行（上游 showTitleBarIcons，ReadSettings.kt:117，默认 false）。 */
+  @Prop showTitleBarIcons: boolean = false;
+  /** 浮动图标位置 0 左上 / 1 右上 / 2 左下 / 3 右下（上游 titleBarIconPosition，默认 3）。 */
+  @Prop titleBarIconPosition: number = 3;
+  /** 浮动图标液态玻璃按钮（上游 readMenuFloatingIconLiquidGlass，默认 false）。 */
+  @Prop readMenuFloatingIconLiquidGlass: boolean = false;
+  /** 浮动图标行的按钮池；上游与顶栏操作按钮同池（ReadBookMenuBarFloating.kt:411）。 */
+  @Prop floatingIcons: ReaderBottomActionConfig[] = READER_LOCAL_BOTTOM_ACTION_DEFAULTS;
+  /** 浮动图标自定义图标路径表（`id,path;` 编码），上游 titleBarCustomIcons。 */
+  @Prop titleBarCustomIcons: string = '';
+  /** 底栏菜单自定义图标路径表（`id,path;` 编码），上游 readMenuCustomIcons（ReadSettings.kt:114）。 */
+  @Prop readMenuCustomIcons: string = '';
 
   /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
   @Prop dayNightReminderText: string = '';
@@ -1939,6 +1952,88 @@ export struct ReaderPage {
 
   private getBottomActionPageIndex(): number {
     return Math.max(0, Math.min(this.currentBottomActionPage, this.getBottomActionPages().length - 1));
+  }
+
+  /**
+   * 浮动图标行的图标序列：与顶栏操作按钮同池（上游 `ReadBookMenuBarFloating.kt:411`
+   * 直接读 `menuConfig.titleBarButtons`），只保留启用且对本书适用的项。
+   */
+  private readerFloatingIconKinds(): ReaderControlKind[] {
+    const kinds: ReaderControlKind[] = [];
+    this.floatingIcons.forEach((item: ReaderBottomActionConfig) => {
+      const option = READER_ACTION_OPTIONS.find((action: ReaderActionOption) => action.id === item.id);
+      if (item.enabled && option !== undefined &&
+        isReaderActionApplicable(option.id, this.book.isLocal, this.book.format)) {
+        kinds.push(option.id);
+      }
+    });
+    return kinds;
+  }
+
+  /** 位置 0/2 靠左、1/3 靠右（上游 `ReadBookMenuBar.kt:172` 与 `:310-330` 的 Alignment 选择）。 */
+  private readerFloatingIconAlignment(position: number): FlexAlign {
+    return position === 0 || position === 2 ? FlexAlign.Start : FlexAlign.End;
+  }
+
+  /** 顶栏区的浮动图标行只在位置 0/1 出现。 */
+  private readerFloatingIconTopVisible(): boolean {
+    return this.showTitleBarIcons && this.titleBarIconPosition <= 1;
+  }
+
+  /** 菜单浮层区的浮动图标行只在位置 2/3 出现。 */
+  private readerFloatingIconBottomVisible(): boolean {
+    return this.showTitleBarIcons && this.titleBarIconPosition >= 2;
+  }
+
+  /** 自定义图标的 `file://` URI；未自定义时返回空串，调用方回落到内置字形。 */
+  private readerFloatingIconCustomUri(kind: string): string {
+    const icons: Map<string, string> = ReaderSettingsRepository.decodeCustomIconMap(this.titleBarCustomIcons);
+    const path: string | undefined = icons.get(kind);
+    if (path === undefined || path.length === 0) { return ''; }
+    return path.startsWith('file://') ? path : `file://${path}`;
+  }
+
+  /**
+   * 单个浮动图标。自定义图片走圆形裁切（上游 `ReadBookMenuBarFloating.kt:63-150` 的
+   * `AsyncImage(clip = CircleShape)`）；否则用内置字形。液态玻璃开关只影响底色：
+   * 打开时用半透明容器，关闭时透明底（对齐上游 `ReadMenuGlassButtonSurface` 的 glassEnabled）。
+   */
+  @Builder
+  private readerFloatingIconButton(kind: ReaderControlKind) {
+    Stack({ alignContent: Alignment.Center }) {
+      if (this.readerFloatingIconCustomUri(kind).length > 0) {
+        Image(this.readerFloatingIconCustomUri(kind)).width(24).height(24)
+          .objectFit(ImageFit.Cover).borderRadius(12)
+      } else {
+        ReaderControlGlyph({
+          kind: kind,
+          glyphSize: 20,
+          active: (kind === 'autoPage' && this.autoPageActive) ||
+            (kind === 'eye_protection' && this.eyeProtectionActive),
+          menuForeground: this.readerMenuForeground(),
+          menuAccent: this.readerMenuAccentTint()
+        })
+      }
+    }
+    .width(36).height(36).borderRadius(18)
+    .backgroundColor(this.readMenuFloatingIconLiquidGlass ? this.readerMenuForegroundAlpha('1F') : '#00000000')
+    .onClick(() => this.selectBottomAction(kind))
+    .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+      this.longSelectBottomAction(kind);
+    }))
+  }
+
+  /** 浮动图标整行，对齐上游 `FloatingIconRow`（`ReadBookMenuBarFloating.kt:63-150`）。 */
+  @Builder
+  private readerFloatingIconRow(position: number) {
+    Row() {
+      ForEach(this.readerFloatingIconKinds(), (kind: ReaderControlKind) => {
+        this.readerFloatingIconButton(kind)
+      }, (kind: ReaderControlKind) => kind)
+    }
+    .width('100%')
+    .justifyContent(this.readerFloatingIconAlignment(position))
+    .padding({ left: 16, right: 16, top: 4, bottom: 4 })
   }
 
   private getBottomActionLabel(kind: string): string {
@@ -4272,6 +4367,11 @@ export struct ReaderPage {
             .border(this.readerMenuBorderSettings())
             .backdropBlur(this.readerMenuBlurRadiusVp())
 
+          // KI-E3：位置 0/1 的浮动图标行贴在顶栏下方（上游 ReadBookMenuBar.kt:172）。
+          if (this.readerFloatingIconTopVisible()) {
+            this.readerFloatingIconRow(this.titleBarIconPosition)
+          }
+
           if (this.showQuickActions) {
             Row() {
               ReaderControl({ kind: 'search', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: () => this.onOpenSearchContent() })
@@ -4283,6 +4383,11 @@ export struct ReaderPage {
           }
 
           Blank().layoutWeight(1)
+
+          // KI-E3：位置 2/3 的浮动图标行贴在菜单浮层上方（上游 ReadBookMenuBar.kt:310-330）。
+          if (this.readerFloatingIconBottomVisible()) {
+            this.readerFloatingIconRow(this.titleBarIconPosition)
+          }
 
           Column() {
             if (this.showBrightnessView === '1' || this.showBrightnessView === '2') {

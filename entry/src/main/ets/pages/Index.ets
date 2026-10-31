@@ -297,6 +297,20 @@ struct Index {
   @State readerMenuBlurColor: string = '';
   /** 菜单模糊层着色（夜间）；上游 readMenuBlurColorNight（ReadSettings.kt:108）。 */
   @State readerMenuBlurColorNight: string = '';
+  // 浮动图标四项（KI-E3），对齐上游 ReadSettings.kt:102/114-117。
+  @State readerShowTitleBarIcons: boolean = false;
+  @State readerTitleBarIconPosition: number = 3;
+  @State readerReadMenuFloatingIconLiquidGlass: boolean = false;
+  /**
+   * 浮动图标行按钮池，与顶栏操作按钮分开保存（上游 `ReadBookMenuBarFloating.kt:411`）。
+   * 默认启用项对齐上游 `ReadButtonConfigDelegate.DEFAULT_ENABLED_BUTTON_IDS`
+   * （search / auto_page / catalog / read_aloud / setting），与底栏默认一致，故取 BOTTOM 默认池。
+   */
+  @State readerFloatingIcons: ReaderBottomActionConfig[] = READER_LOCAL_BOTTOM_ACTION_DEFAULTS.map(
+    (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
+  );
+  @State readerTitleBarCustomIcons: string = '';
+  @State readerReadMenuCustomIcons: string = '';
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1944,6 +1958,14 @@ struct Index {
     this.readerMenuTextColorNight = settings.readMenuTextColorNight;
     this.readerMenuBlurColor = settings.readMenuBlurColor;
     this.readerMenuBlurColorNight = settings.readMenuBlurColorNight;
+    this.readerShowTitleBarIcons = settings.showTitleBarIcons;
+    this.readerTitleBarIconPosition = settings.titleBarIconPosition;
+    this.readerReadMenuFloatingIconLiquidGlass = settings.readMenuFloatingIconLiquidGlass;
+    this.readerFloatingIcons = settings.floatingIcons.map(
+      (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
+    );
+    this.readerTitleBarCustomIcons = settings.titleBarCustomIcons;
+    this.readerReadMenuCustomIcons = settings.readMenuCustomIcons;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -2082,6 +2104,12 @@ struct Index {
         readMenuTextColorNight: this.readerMenuTextColorNight,
         readMenuBlurColor: this.readerMenuBlurColor,
         readMenuBlurColorNight: this.readerMenuBlurColorNight,
+        showTitleBarIcons: this.readerShowTitleBarIcons,
+        titleBarIconPosition: this.readerTitleBarIconPosition,
+        readMenuFloatingIconLiquidGlass: this.readerReadMenuFloatingIconLiquidGlass,
+        floatingIcons: this.readerFloatingIcons,
+        titleBarCustomIcons: this.readerTitleBarCustomIcons,
+        readMenuCustomIcons: this.readerReadMenuCustomIcons,
         adaptSpecialStyle: this.readerAdaptSpecialStyle,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
@@ -3050,6 +3078,59 @@ struct Index {
     }
   }
 
+  private setReaderShowTitleBarIcons(value: boolean): void {
+    this.readerShowTitleBarIcons = value === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 浮动图标位置夹在 0-3（上游 `ReadBookConfig.kt:116` 的 coerceIn(0, 3)）。 */
+  private setReaderTitleBarIconPosition(value: number): void {
+    this.readerTitleBarIconPosition = Number.isFinite(value)
+      ? Math.max(0, Math.min(3, Math.round(value))) : 3;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuFloatingIconLiquidGlass(value: boolean): void {
+    this.readerReadMenuFloatingIconLiquidGlass = value === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 浮动图标行按钮池整体替换（与顶栏操作按钮同构）。 */
+  private setReaderFloatingIcons(value: ReaderBottomActionConfig[]): void {
+    this.readerFloatingIcons = value.map(
+      (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
+    );
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderTitleBarCustomIcons(value: string): void {
+    this.readerTitleBarCustomIcons = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuCustomIcons(value: string): void {
+    this.readerReadMenuCustomIcons = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadMenuBorderWidth(value: number): void {
     if (!Number.isFinite(value)) {
       return;
@@ -3571,6 +3652,14 @@ struct Index {
     this.readerMenuTextColorNight = result.settings.readMenuTextColorNight;
     this.readerMenuBlurColor = result.settings.readMenuBlurColor;
     this.readerMenuBlurColorNight = result.settings.readMenuBlurColorNight;
+    this.readerShowTitleBarIcons = result.settings.showTitleBarIcons;
+    this.readerTitleBarIconPosition = result.settings.titleBarIconPosition;
+    this.readerReadMenuFloatingIconLiquidGlass = result.settings.readMenuFloatingIconLiquidGlass;
+    this.readerFloatingIcons = result.settings.floatingIcons.map(
+      (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
+    );
+    this.readerTitleBarCustomIcons = result.settings.titleBarCustomIcons;
+    this.readerReadMenuCustomIcons = result.settings.readMenuCustomIcons;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4913,6 +5002,12 @@ struct Index {
             readMenuTextColorNight: this.readerMenuTextColorNight,
             readMenuBlurColor: this.readerMenuBlurColor,
             readMenuBlurColorNight: this.readerMenuBlurColorNight,
+            showTitleBarIcons: this.readerShowTitleBarIcons,
+            titleBarIconPosition: this.readerTitleBarIconPosition,
+            readMenuFloatingIconLiquidGlass: this.readerReadMenuFloatingIconLiquidGlass,
+            floatingIcons: this.readerFloatingIcons,
+            titleBarCustomIcons: this.readerTitleBarCustomIcons,
+            readMenuCustomIcons: this.readerReadMenuCustomIcons,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -5165,6 +5260,12 @@ struct Index {
               readMenuTextColorNight: this.readerMenuTextColorNight,
               readMenuBlurColor: this.readerMenuBlurColor,
               readMenuBlurColorNight: this.readerMenuBlurColorNight,
+              showTitleBarIcons: this.readerShowTitleBarIcons,
+              titleBarIconPosition: this.readerTitleBarIconPosition,
+              readMenuFloatingIconLiquidGlass: this.readerReadMenuFloatingIconLiquidGlass,
+              floatingIcons: this.readerFloatingIcons,
+              titleBarCustomIcons: this.readerTitleBarCustomIcons,
+              readMenuCustomIcons: this.readerReadMenuCustomIcons,
               adaptSpecialStyle: this.readerAdaptSpecialStyle,
               onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
               onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5202,6 +5303,12 @@ struct Index {
               onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
               onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
               onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
+              onShowTitleBarIconsChange: (value: boolean) => this.setReaderShowTitleBarIcons(value),
+              onTitleBarIconPositionChange: (value: number) => this.setReaderTitleBarIconPosition(value),
+              onReadMenuFloatingIconLiquidGlassChange: (value: boolean) => this.setReaderReadMenuFloatingIconLiquidGlass(value),
+              onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
+              onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
+              onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5631,6 +5738,12 @@ struct Index {
             readMenuTextColorNight: this.readerMenuTextColorNight,
             readMenuBlurColor: this.readerMenuBlurColor,
             readMenuBlurColorNight: this.readerMenuBlurColorNight,
+            showTitleBarIcons: this.readerShowTitleBarIcons,
+            titleBarIconPosition: this.readerTitleBarIconPosition,
+            readMenuFloatingIconLiquidGlass: this.readerReadMenuFloatingIconLiquidGlass,
+            floatingIcons: this.readerFloatingIcons,
+            titleBarCustomIcons: this.readerTitleBarCustomIcons,
+            readMenuCustomIcons: this.readerReadMenuCustomIcons,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5668,6 +5781,12 @@ struct Index {
             onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
             onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
             onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
+            onShowTitleBarIconsChange: (value: boolean) => this.setReaderShowTitleBarIcons(value),
+            onTitleBarIconPositionChange: (value: number) => this.setReaderTitleBarIconPosition(value),
+            onReadMenuFloatingIconLiquidGlassChange: (value: boolean) => this.setReaderReadMenuFloatingIconLiquidGlass(value),
+            onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
+            onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
+            onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5962,6 +6081,12 @@ struct Index {
             readMenuTextColorNight: this.readerMenuTextColorNight,
             readMenuBlurColor: this.readerMenuBlurColor,
             readMenuBlurColorNight: this.readerMenuBlurColorNight,
+            showTitleBarIcons: this.readerShowTitleBarIcons,
+            titleBarIconPosition: this.readerTitleBarIconPosition,
+            readMenuFloatingIconLiquidGlass: this.readerReadMenuFloatingIconLiquidGlass,
+            floatingIcons: this.readerFloatingIcons,
+            titleBarCustomIcons: this.readerTitleBarCustomIcons,
+            readMenuCustomIcons: this.readerReadMenuCustomIcons,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5999,6 +6124,12 @@ struct Index {
             onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
             onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
             onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
+            onShowTitleBarIconsChange: (value: boolean) => this.setReaderShowTitleBarIcons(value),
+            onTitleBarIconPositionChange: (value: number) => this.setReaderTitleBarIconPosition(value),
+            onReadMenuFloatingIconLiquidGlassChange: (value: boolean) => this.setReaderReadMenuFloatingIconLiquidGlass(value),
+            onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
+            onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
+            onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -6235,6 +6366,12 @@ struct Index {
           readMenuTextColorNight: this.readerMenuTextColorNight,
           readMenuBlurColor: this.readerMenuBlurColor,
           readMenuBlurColorNight: this.readerMenuBlurColorNight,
+          showTitleBarIcons: this.readerShowTitleBarIcons,
+          titleBarIconPosition: this.readerTitleBarIconPosition,
+          readMenuFloatingIconLiquidGlass: this.readerReadMenuFloatingIconLiquidGlass,
+          floatingIcons: this.readerFloatingIcons,
+          titleBarCustomIcons: this.readerTitleBarCustomIcons,
+          readMenuCustomIcons: this.readerReadMenuCustomIcons,
           adaptSpecialStyle: this.readerAdaptSpecialStyle,
           onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
           onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -6272,6 +6409,12 @@ struct Index {
           onReadMenuTextColorNightChange: (value: string) => this.setReaderReadMenuTextColorNight(value),
           onReadMenuBlurColorChange: (value: string) => this.setReaderReadMenuBlurColor(value),
           onReadMenuBlurColorNightChange: (value: string) => this.setReaderReadMenuBlurColorNight(value),
+          onShowTitleBarIconsChange: (value: boolean) => this.setReaderShowTitleBarIcons(value),
+          onTitleBarIconPositionChange: (value: number) => this.setReaderTitleBarIconPosition(value),
+          onReadMenuFloatingIconLiquidGlassChange: (value: boolean) => this.setReaderReadMenuFloatingIconLiquidGlass(value),
+          onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => this.setReaderFloatingIcons(value),
+          onTitleBarCustomIconsChange: (value: string) => this.setReaderTitleBarCustomIcons(value),
+          onReadMenuCustomIconsChange: (value: string) => this.setReaderReadMenuCustomIcons(value),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

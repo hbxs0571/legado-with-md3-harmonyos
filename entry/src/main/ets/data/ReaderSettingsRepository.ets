@@ -408,6 +408,24 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   readMenuBlurColor: string;
   // 菜单模糊层着色夜间值（上游 ReadSettings.kt:108）
   readMenuBlurColorNight: string;
+  /** 显示浮动图标（上游 `showTitleBarIcons`，ReadSettings.kt:117，默认 false）。 */
+  showTitleBarIcons: boolean;
+  /**
+   * 浮动图标位置（上游 `titleBarIconPosition`，ReadSettings.kt:116，默认 3）：
+   * 0 左上 / 1 右上 / 2 左下 / 3 右下（values-zh-rCN/strings.xml:2486-2489）。
+   */
+  titleBarIconPosition: number;
+  /** 浮动图标液态玻璃按钮（上游 `readMenuFloatingIconLiquidGlass`，ReadSettings.kt:102，默认 false）。 */
+  readMenuFloatingIconLiquidGlass: boolean;
+  /**
+   * 浮动图标行的按钮池。上游 `ReadBookMenuBarFloating.kt:411` 直接读 `menuConfig.titleBarButtons`，
+   * 即浮动图标行与顶栏操作按钮同池；本地两份独立保存，默认值同样是 search/autoPage/catalog/voice/settings。
+   */
+  floatingIcons: ReaderBottomActionConfig[];
+  /** 浮动图标自定义图标路径表（`id,path;` 编码），上游 `titleBarCustomIcons`（ReadSettings.kt:115）。 */
+  titleBarCustomIcons: string;
+  /** 底栏菜单图标自定义路径表（`id,path;` 编码），上游 `readMenuCustomIcons`（ReadSettings.kt:114）。 */
+  readMenuCustomIcons: string;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -806,6 +824,15 @@ export class ReaderSettingsRepository {
       readMenuTextColorNight: '',
       readMenuBlurColor: '',
       readMenuBlurColorNight: '',
+      // 浮动图标四项默认值对齐上游 ReadSettings.kt:102/114-117。
+      showTitleBarIcons: false,
+      titleBarIconPosition: 3,
+      readMenuFloatingIconLiquidGlass: false,
+      floatingIcons: READER_LOCAL_BOTTOM_ACTION_DEFAULTS.map(
+        (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
+      ),
+      titleBarCustomIcons: '',
+      readMenuCustomIcons: '',
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -972,6 +999,14 @@ export class ReaderSettingsRepository {
     const readMenuBlurColorValue = await store.get('readMenuBlurColor', defaults.readMenuBlurColor);
     const readMenuBlurColorNightValue =
       await store.get('readMenuBlurColorNight', defaults.readMenuBlurColorNight);
+    const showTitleBarIconsValue = await store.get('showTitleBarIcons', defaults.showTitleBarIcons);
+    const titleBarIconPositionValue = await store.get('titleBarIconPosition', defaults.titleBarIconPosition);
+    const readMenuFloatingIconLiquidGlassValue =
+      await store.get('readMenuFloatingIconLiquidGlass', defaults.readMenuFloatingIconLiquidGlass);
+    const floatingIconsValue =
+      await store.get('floatingIcons', ReaderSettingsRepository.encodeTopActions(defaults.floatingIcons));
+    const titleBarCustomIconsValue = await store.get('titleBarCustomIcons', defaults.titleBarCustomIcons);
+    const readMenuCustomIconsValue = await store.get('readMenuCustomIcons', defaults.readMenuCustomIcons);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1306,6 +1341,16 @@ export class ReaderSettingsRepository {
           readMenuTextColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuTextColorNightValue),
           readMenuBlurColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBlurColorValue),
           readMenuBlurColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBlurColorNightValue),
+          showTitleBarIcons: typeof showTitleBarIconsValue === 'boolean'
+            ? showTitleBarIconsValue : defaults.showTitleBarIcons,
+          titleBarIconPosition: ReaderSettingsRepository.normalizeInteger(
+            titleBarIconPositionValue, 0, 3, defaults.titleBarIconPosition),
+          readMenuFloatingIconLiquidGlass: typeof readMenuFloatingIconLiquidGlassValue === 'boolean'
+            ? readMenuFloatingIconLiquidGlassValue : defaults.readMenuFloatingIconLiquidGlass,
+          floatingIcons: ReaderSettingsRepository.normalizeActions(
+            typeof floatingIconsValue === 'string' ? floatingIconsValue : '', defaults.floatingIcons),
+          titleBarCustomIcons: ReaderSettingsRepository.normalizeCustomIconMap(titleBarCustomIconsValue),
+          readMenuCustomIcons: ReaderSettingsRepository.normalizeCustomIconMap(readMenuCustomIconsValue),
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1525,6 +1570,15 @@ export class ReaderSettingsRepository {
         ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBlurColor));
       await store.put('readMenuBlurColorNight',
         ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBlurColorNight));
+      await store.put('showTitleBarIcons', settings.showTitleBarIcons === true);
+      await store.put('titleBarIconPosition',
+        Math.max(0, Math.min(3, Math.round(settings.titleBarIconPosition))));
+      await store.put('readMenuFloatingIconLiquidGlass', settings.readMenuFloatingIconLiquidGlass === true);
+      await store.put('floatingIcons', ReaderSettingsRepository.encodeTopActions(settings.floatingIcons));
+      await store.put('titleBarCustomIcons',
+        ReaderSettingsRepository.normalizeCustomIconMap(settings.titleBarCustomIcons));
+      await store.put('readMenuCustomIcons',
+        ReaderSettingsRepository.normalizeCustomIconMap(settings.readMenuCustomIcons));
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
@@ -1715,6 +1769,42 @@ export class ReaderSettingsRepository {
 
   private static clampStyleIndex(value: number, fallback: number): number {
     return typeof value === 'number' && Number.isInteger(value) ? Math.max(0, Math.min(5, value)) : fallback;
+  }
+
+  /**
+   * 自定义图标路径表归一：上游 `ReadBookConfig.kt:146-150` 把偏好里的字符串解析成
+   * `Map<String, String>`，这里保持同样的 `id,path;` 编码，只保留 id 合法且 path 非空的项。
+   */
+  private static normalizeCustomIconMap(value: number | boolean | string | bigint | Uint8Array | object): string {
+    if (typeof value !== 'string') { return ''; }
+    const allowed: string[] = READER_ACTION_OPTIONS.map((option: ReaderActionOption) => option.id as string);
+    const entries: string[] = [];
+    const seen: string[] = [];
+    for (const piece of value.split(';')) {
+      const trimmed = piece.trim();
+      if (trimmed.length === 0) { continue; }
+      const parts: string[] = trimmed.split(',');
+      const id: string = (parts[0] ?? '').trim();
+      const path: string = parts.slice(1).join(',').trim();
+      if (!allowed.includes(id) || path.length === 0 || seen.includes(id)) { continue; }
+      seen.push(id);
+      entries.push(`${id},${path}`);
+    }
+    return entries.join(';');
+  }
+
+  /** 自定义图标路径表的读取：`id,path;` 解成 Map 语义的键值对数组。 */
+  static decodeCustomIconMap(value: string): Map<string, string> {
+    const result: Map<string, string> = new Map<string, string>();
+    for (const piece of value.split(';')) {
+      const trimmed = piece.trim();
+      if (trimmed.length === 0) { continue; }
+      const parts: string[] = trimmed.split(',');
+      const id: string = (parts[0] ?? '').trim();
+      const path: string = parts.slice(1).join(',').trim();
+      if (id.length > 0 && path.length > 0) { result.set(id, path); }
+    }
+    return result;
   }
 
   private static encodeBottomActions(items: ReaderBottomActionConfig[]): string {

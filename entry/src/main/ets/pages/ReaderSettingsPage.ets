@@ -274,6 +274,18 @@ export struct ReaderSettingsPage {
   @Prop readMenuBlurColor: string = '';
   /** 菜单模糊层着色（夜间）（上游 readMenuBlurColorNight）。 */
   @Prop readMenuBlurColorNight: string = '';
+  /** 显示浮动图标行（上游 showTitleBarIcons，ReadSettings.kt:117，默认 false）。 */
+  @Prop showTitleBarIcons: boolean = false;
+  /** 浮动图标位置 0 左上 / 1 右上 / 2 左下 / 3 右下（上游 titleBarIconPosition，默认 3）。 */
+  @Prop titleBarIconPosition: number = 3;
+  /** 浮动图标液态玻璃按钮（上游 readMenuFloatingIconLiquidGlass，默认 false）。 */
+  @Prop readMenuFloatingIconLiquidGlass: boolean = false;
+  /** 浮动图标行的按钮池；上游与顶栏操作按钮同池（ReadBookMenuBarFloating.kt:411）。 */
+  @Prop floatingIcons: ReaderBottomActionConfig[] = READER_LOCAL_BOTTOM_ACTION_DEFAULTS;
+  /** 浮动图标自定义图标路径表（`id,path;` 编码），上游 titleBarCustomIcons。 */
+  @Prop titleBarCustomIcons: string = '';
+  /** 底栏菜单自定义图标路径表（`id,path;` 编码），上游 readMenuCustomIcons（ReadSettings.kt:114）。 */
+  @Prop readMenuCustomIcons: string = '';
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -291,6 +303,8 @@ export struct ReaderSettingsPage {
   @State selectedMenuSettingsTab: number = 0;
   @State bottomActionConfigVisible: boolean = false;
   @State topActionConfigVisible: boolean = false;
+  /** 浮动图标配置面板（上游 FloatingBarIconConfigSheet），复用顶栏操作按钮的草稿与行渲染。 */
+  @State floatingIconConfigVisible: boolean = false;
   @State detailSheetVisible: boolean = false;
   @State detailSheetTitle: string = '';
   @State detailSheetDescription: string = '';
@@ -322,7 +336,7 @@ export struct ReaderSettingsPage {
   private menuSettingsScroller: Scroller = new Scroller();
   // 工具栏样式 / 色板来源 / 调色板风格的选中态不再用本地 @State 假值承载，
   // 一律读 @Prop（readBarStyle / readMenuColorMode / readMenuPaletteStyle）的真值。
-  @State menuTitleIconsVisible: boolean = true;
+  // 浮动图标显示开关改为读 @Prop showTitleBarIcons（上游 showTitleBarIcons 字段）。
 
   aboutToAppear(): void {
     this.syncTextMenuEntriesFromConfig();
@@ -460,6 +474,12 @@ export struct ReaderSettingsPage {
   onReadMenuTextColorNightChange: (value: string) => void = (_value: string) => {};
   onReadMenuBlurColorChange: (value: string) => void = (_value: string) => {};
   onReadMenuBlurColorNightChange: (value: string) => void = (_value: string) => {};
+  onShowTitleBarIconsChange: (value: boolean) => void = (_value: boolean) => {};
+  onTitleBarIconPositionChange: (value: number) => void = (_value: number) => {};
+  onReadMenuFloatingIconLiquidGlassChange: (value: boolean) => void = (_value: boolean) => {};
+  onFloatingIconsChange: (value: ReaderBottomActionConfig[]) => void = (_value: ReaderBottomActionConfig[]) => {};
+  onTitleBarCustomIconsChange: (value: string) => void = (_value: string) => {};
+  onReadMenuCustomIconsChange: (value: string) => void = (_value: string) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -843,7 +863,9 @@ export struct ReaderSettingsPage {
           // 上游开关本体就是 readMenuBorderWidth > 0（SystemMenuPage.kt:398），没有独立布尔字段。
           ? this.readMenuBorderWidth > 0
           : entry.title === '显示标题栏图标'
-            ? this.menuTitleIconsVisible
+            ? this.showTitleBarIcons
+            : entry.title === '悬浮图标液态玻璃按钮'
+              ? this.readMenuFloatingIconLiquidGlass
             : entry.title === '底栏悬浮'
               ? this.readMenuFloatingBottomBar
               : entry.title === '底栏模糊'
@@ -869,7 +891,8 @@ export struct ReaderSettingsPage {
             // 打开时给上游默认宽度 1，关闭时写 0（SystemMenuPage.kt:401-406 的 BorderWidth(if (it) 1 else 0)）。
             this.onReadMenuBorderWidthChange(enabled ? 1 : 0);
           }
-          else if (entry.title === '显示标题栏图标') { this.menuTitleIconsVisible = enabled; }
+          else if (entry.title === '显示标题栏图标') { this.onShowTitleBarIconsChange(enabled); }
+          else if (entry.title === '悬浮图标液态玻璃按钮') { this.onReadMenuFloatingIconLiquidGlassChange(enabled); }
           else if (entry.title === '底栏悬浮') { this.onReadMenuFloatingBottomBarChange(enabled); }
           else if (entry.title === '底栏模糊') {
             // 打开写 Haze(2)、关闭写 None(0)，与上游开关的两个取值一致。
@@ -921,6 +944,7 @@ export struct ReaderSettingsPage {
           if (entry.title === '显示亮度视图') { this.onShowBrightnessViewChange(['0', '1', '2'][index] ?? '0'); }
           if (entry.title === '亮度条位置') { this.onBrightnessVwPosChange(index === 0 ? '0' : '1'); }
           if (entry.title === '标题栏模式') { this.onTitleBarModeChange(['0', '1', '2', '3'][index] ?? '1'); }
+          if (entry.title === '标题栏悬浮图标位置') { this.onTitleBarIconPositionChange(index); }
           if (entry.title === '标题栏图标样式') { this.onTitleBarIconStyleChange(index); }
           if (entry.title === '顶栏模糊样式') { this.onReadMenuTopBarBlurStyleChange(index === 1 ? 1 : 0); }
           this.openDetailSheet(entry.title, entry.detail);
@@ -951,8 +975,13 @@ export struct ReaderSettingsPage {
         (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
       );
       this.topActionConfigVisible = true;
-    } else {
-      this.openDetailSheet('标题栏悬浮图标配置', '显示位置、操作图标及按钮背景样式');
+    } else if (entry.title === '标题栏悬浮图标配置') {
+      // 上游 FloatingBarIconConfigSheet 走通用按钮配置面板（排序 + 开关 + 自定义图标），
+      // 这里复用顶栏操作按钮那套 sheet，只把草稿源换成浮动图标池。
+      this.draftTopActions = this.floatingIcons.map(
+        (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
+      );
+      this.floatingIconConfigVisible = true;
     }
   }
 
@@ -966,8 +995,9 @@ export struct ReaderSettingsPage {
   }
 
   private isMenuToggle(title: string): boolean {
-    return ['显示标题栏图标', '标题栏胶囊', '标题栏紧凑', '顶栏液态玻璃按钮', '合并标题栏按钮',
-      '显示图标文字', '底栏悬浮', '底栏模糊', '顶栏模糊', '底栏液态玻璃', '底栏按钮液态玻璃', '菜单栏边框'].includes(title);
+    return ['显示标题栏图标', '悬浮图标液态玻璃按钮', '标题栏胶囊', '标题栏紧凑', '顶栏液态玻璃按钮',
+      '合并标题栏按钮', '显示图标文字', '底栏悬浮', '底栏模糊', '顶栏模糊', '底栏液态玻璃',
+      '底栏按钮液态玻璃', '菜单栏边框'].includes(title);
   }
 
   private isMenuSlider(title: string): boolean {
@@ -1072,6 +1102,8 @@ export struct ReaderSettingsPage {
     if (title === '标题栏模式') {
       return ['在应用栏上显示', '在独立行上显示', '仅显示标题', '不显示'];
     }
+    // 上游 title_bar_icon_position 四值（values-zh-rCN/strings.xml:2486-2489）。
+    if (title === '标题栏悬浮图标位置') { return ['左上', '右上', '左下', '右下']; }
     if (title.includes('图标样式')) { return ['纯色', '色调', '描边']; }
     if (title.includes('模糊样式')) { return ['纯色', '渐变']; }
     return [];
@@ -1088,6 +1120,7 @@ export struct ReaderSettingsPage {
     if (title === '亮度条位置') { return this.brightnessVwPos === '0' ? 0 : 1; }
     if (title === '底栏模糊样式') { return this.readMenuBottomBarBlurStyle === 1 ? 1 : 0; }
     if (title === '标题栏模式') { return Math.max(0, ['0', '1', '2', '3'].indexOf(this.titleBarMode)); }
+    if (title === '标题栏悬浮图标位置') { return Math.max(0, Math.min(3, this.titleBarIconPosition)); }
     if (title === '标题栏图标样式') { return Math.max(0, Math.min(2, this.titleBarIconStyle)); }
     if (title === '顶栏模糊样式') { return this.readMenuTopBarBlurStyle === 1 ? 1 : 0; }
     return 0;
@@ -1134,6 +1167,10 @@ export struct ReaderSettingsPage {
     }
     if (this.detailSheetTitle === '标题栏图标样式' && choiceIndex >= 0) {
       this.onTitleBarIconStyleChange(choiceIndex);
+    }
+    // 浮动图标位置四值（上游 title_bar_icon_position，SystemMenuPage.kt:512-520）。
+    if (this.detailSheetTitle === '标题栏悬浮图标位置' && choiceIndex >= 0) {
+      this.onTitleBarIconPositionChange(choiceIndex);
     }
     if (this.detailSheetTitle === '顶栏模糊样式' && choiceIndex >= 0) {
       this.onReadMenuTopBarBlurStyleChange(choiceIndex === 1 ? 1 : 0);
@@ -1212,7 +1249,8 @@ export struct ReaderSettingsPage {
       return this.readBarStyle === 2 && this.readMenuColorMode === 1;
     }
     if (title === '标题栏悬浮图标配置' || title === '标题栏悬浮图标位置' || title === '悬浮图标液态玻璃按钮') {
-      return this.menuTitleIconsVisible;
+      // 上游 SystemMenuPage.kt:497-500 用 AnimatedVisibility(visible = preferences.showTitleBarIcons) 包住这三项。
+      return this.showTitleBarIcons;
     }
     // 上游 SystemMenuPage.kt:408-436 用 AnimatedVisibility(visible = borderEnabled) 包住宽度与颜色，
     // borderEnabled 就是 readMenuBorderWidth > 0。
@@ -1811,6 +1849,8 @@ export struct ReaderSettingsPage {
     if (title === '标题栏模式') {
       return ['在应用栏上显示', '在独立行上显示', '仅显示标题', '不显示'];
     }
+    // 上游 title_bar_icon_position 四值（values-zh-rCN/strings.xml:2486-2489）。
+    if (title === '标题栏悬浮图标位置') { return ['左上', '右上', '左下', '右下']; }
     if (title.includes('图标样式')) { return ['纯色', '色调', '描边']; }
     if (title.includes('模糊样式')) { return ['纯色', '渐变']; }
     if (title === '中文简繁体转换') { return ['关闭简繁转换', '繁体转简体', '简体转繁体']; }
@@ -2793,23 +2833,37 @@ export struct ReaderSettingsPage {
     }
   }
 
+  /** 关闭按钮配置面板：顶栏操作按钮与浮动图标共用一个 sheet，两个标志一起复位。 */
+  private closeButtonConfigSheet(): void {
+    this.topActionConfigVisible = false;
+    this.floatingIconConfigVisible = false;
+  }
+
   @Builder
   private topActionConfigurationSheet() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column().width('100%').height('100%').backgroundColor('#99000000')
-        .onClick(() => this.topActionConfigVisible = false)
+        .onClick(() => this.closeButtonConfigSheet())
       Column() {
         Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4).margin({ top: 10, bottom: 14 })
         Row() {
-          Text('顶栏按钮配置').fontSize(17).fontColor('#E5E6EB').layoutWeight(1)
+          // 同一个 sheet 服务两个入口：顶栏操作按钮与浮动图标（上游 FloatingBarIconConfigSheet
+          // 同样复用 ButtonIconConfigSheet，只换标题与保存目标）。
+          Text(this.floatingIconConfigVisible ? '浮动图标' : '顶栏按钮配置')
+            .fontSize(17).fontColor('#E5E6EB').layoutWeight(1)
           Text('取消').fontSize(13).fontColor('#C7C9D1').margin({ right: 18 })
-            .onClick(() => this.topActionConfigVisible = false)
+            .onClick(() => this.closeButtonConfigSheet())
           Text('保存').fontSize(13).fontColor('#C6D3FF')
             .onClick(() => {
-              this.onTopActionsChange(this.draftTopActions.map(
+              const saved = this.draftTopActions.map(
                 (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
-              ));
-              this.topActionConfigVisible = false;
+              );
+              if (this.floatingIconConfigVisible) {
+                this.onFloatingIconsChange(saved);
+              } else {
+                this.onTopActionsChange(saved);
+              }
+              this.closeButtonConfigSheet();
             })
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
         Scroll() {
@@ -2866,7 +2920,7 @@ export struct ReaderSettingsPage {
         if (this.bottomActionConfigVisible) {
           this.bottomActionConfigurationSheet()
         }
-        if (this.topActionConfigVisible) {
+        if (this.topActionConfigVisible || this.floatingIconConfigVisible) {
           this.topActionConfigurationSheet()
         }
         if (this.detailSheetVisible) {
@@ -2881,7 +2935,7 @@ export struct ReaderSettingsPage {
         if (this.bottomActionConfigVisible) {
           this.bottomActionConfigurationSheet()
         }
-        if (this.topActionConfigVisible) {
+        if (this.topActionConfigVisible || this.floatingIconConfigVisible) {
           this.topActionConfigurationSheet()
         }
         if (this.detailSheetVisible) {

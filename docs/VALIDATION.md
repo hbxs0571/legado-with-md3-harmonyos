@@ -305,6 +305,48 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-E3 浮动图标四项（面板互斥与落库通过，图标行视觉未验）
+
+**范围**：`docs/parity/READER-CONFIG.md` E 块 E-17..E-20 四行（显示标题栏图标 / 标题栏悬浮图标配置 / 标题栏悬浮图标位置 / 悬浮图标液态玻璃按钮），对应上游 `ui/book/read/sheet/SystemMenuPage.kt:491-544` 的「Floating icon settings」段。字段共六项（`showTitleBarIcons`、`titleBarIconPosition`、`readMenuFloatingIconLiquidGlass`、`floatingIcons` 图标池、`titleBarCustomIcons`、`readMenuCustomIcons`）。
+
+**构建**：`assembleHap` 共三次全部 BUILD SUCCESSFUL（44 s 860 ms / 27 s 44 ms / 27 s 223 ms），无 ERROR。三次分别对应：首次（补齐 `readMenuCustomIcons` 缺的 `@Prop` 后）、补「悬浮图标液态玻璃按钮」进 `isMenuToggle` 名单后、补「标题栏悬浮图标位置」弹层落库分支后。
+
+**设备**：HarmonyOS 模拟器 `127.0.0.1:5555`，1280×2832，API 26。导航：主界面 →「我的」`(1103,2688)` →「设置」`(640,2244)` →「阅读界面」`(640,1099)` → 底部分段「菜单」`(493,2629)` → 滚到底部（`swipe 640 2400 640 900 400` 两次）。四项位于「悬浮图标设置」section，是该 tab 的最后一段。
+
+### 互斥显示（决定性对照）
+
+「显示标题栏图标」Toggle 在 `[1106,2387][1232,2457]`（点 `1169 2422`）。
+
+| 状态 | 面板 dump 结果 |
+| --- | --- |
+| 关 | 「标题栏悬浮图标配置」「标题栏悬浮图标位置」「悬浮图标液态玻璃按钮」**三项计数全为 0**，section 只剩「显示标题栏图标」一行 |
+| 开 | 三项全部出现：「标题栏悬浮图标配置」`[42,2015]`（副标题「图标内容与显示位置」）、「标题栏悬浮图标位置」`[28,2219]`（摘要「右下」）、「悬浮图标液态玻璃按钮」`[42,2368]` + Toggle `[1106,2387]` |
+
+与上游 `SystemMenuPage.kt:498` 的 `AnimatedVisibility(visible = preferences.showTitleBarIcons)` 一致。
+
+### 四项落库（逐项，含跨进程复查）
+
+| 项 | 操作 | 结果 |
+| --- | --- | --- |
+| 显示标题栏图标 | 打开 Toggle | prefs `showTitleBarIcons` = `true`；`aa force-stop` 重启后仍为 `true` |
+| 标题栏悬浮图标位置 | 点 `(640,2250)` 开弹层，四项「左上/右上/左下/右下」齐全（`[182,1251]`/`[182,1414]`/`[182,1572]`/`[182,1730]`），选「左上」`(640,1277)` | 条目摘要变「左上」；重启后仍是「左上」；prefs `titleBarIconPosition` = `0.000000` |
+| 悬浮图标液态玻璃按钮 | 打开 Toggle | prefs `readMenuFloatingIconLiquidGlass` = `true`；重启后仍为 `true` |
+| 标题栏悬浮图标配置 | 点 `(640,2040)` 开 sheet，标题「浮动图标」；滚两次到「更多操作/全文搜索/自动翻页/目录/朗读/护眼模式/设置」段，关掉「自动翻页」`(895,1761)`，点保存 `(1171,1256)` | prefs `floatingIcons` 字符串里 `autoPage` 由 `true` 变 `false`；重启后仍为 `false`。**图标池与「标题栏操作按钮」同池的直接证据** |
+
+### 暴露并修掉的两个问题
+
+1. **「悬浮图标液态玻璃按钮」原先不在 `isMenuToggle` 名单里** —— 面板把它渲染成普通条目，`dump` 里出现 `Text '尚未迁移' [1060,2404]`，Toggle 根本不存在，等于开关无法拨动。补进名单并加 checked 分支后才上屏。
+2. **「标题栏悬浮图标位置」弹层不落库** —— 段落（Segments）路径的 `onSelect` 有落库，但 `applyDetailChoicePreview()` 缺这一支，点弹层里的「左上」后条目摘要仍是「右下」。补分支后通过。**教训：Segments 与底部弹层是两条独立路径，凡是 `getMenuChoices` 返回非空的条目，两条路径都要写落库分支。**
+
+### 未验部分
+
+1. **浮动图标行的实际渲染完全没有像素级取证**：模拟器书架上的书正文文件已丢失、`ReaderPage` 进不去，取不到阅读页帧。因此「位置 0/1 挂顶栏区、2/3 挂菜单浮层区」「自定义圆形图 36dp」「玻璃底 `readerMenuForegroundAlpha('1F')`」都只有代码、面板与 prefs 证据。
+2. **没有「换自定义图标图片」的选图入口**：上游 `OpenTitleBarCustomIconPicker` 本地未迁移，`titleBarCustomIcons`/`readMenuCustomIcons` 两个串可落库、渲染侧已能解码显示，但面板里选不了图。
+
+### 复原终态
+
+`showTitleBarIcons` = `false`、`titleBarIconPosition` = `3.000000`（右下）、`readMenuFloatingIconLiquidGlass` = `false`、`floatingIcons` 里 `autoPage` 回到 `true` —— 全部回到默认，已 `aa force-stop` 后拉 prefs 复核。
+
 ## 2026-10-31 N 端 KI-E2 边框与模糊七项（面板互斥与落库通过，菜单视觉未验）
 
 **范围**：`docs/parity/READER-CONFIG.md` E 块 E-10..E-16 七行（菜单栏边框 / 菜单栏边框宽度 / 菜单栏边框颜色 / 菜单模糊半径 / 菜单模糊透明度 / 菜单文字颜色 / 菜单模糊颜色），对应上游 `ui/book/read/sheet/SystemMenuPage.kt:398-489` 的边框与「模糊和颜色」段。字段共八个（七行里「菜单模糊透明度」复用 KI-E4 已落库的 `readMenuBlurAlpha`）。

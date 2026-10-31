@@ -557,7 +557,32 @@
 
 **验收**：`assembleHap` BUILD SUCCESSFUL（改动后两次，36 s 917 ms / 33 s 848 ms；补「菜单模糊透明度」接线后再一次 23 s 250 ms）。设备实测：边框开关关掉后「菜单栏边框宽度」「菜单栏边框颜色」两行整行消失、下方各项上移约 98 px，重新打开后恢复；边框宽度拖到 `4.000000`、模糊半径拖到 `32.000000`、模糊透明度拖到 `39.000000`，`aa force-stop` 重启后全部保持；三个颜色项弹层选色、跨进程保持、再点同色清除全部通过；复原到「边框开 / 宽度 1 / 半径 24 / 透明度 85 / 三色清空」。详见 [VALIDATION](VALIDATION.md) 的 `2026-10-31 N 端 KI-E2` 节。
 
-**KI-E3 标题栏图标四项（要接，随菜单渲染层）** —— 覆盖 E-17 显示标题栏图标（`ReadBookConfig.kt:92`）、E-18 标题栏悬浮图标配置（`:146`、`:149` 两个 `Map<String,String>`）、E-19 标题栏悬浮图标位置（`:116`，夹 0–3）、E-20 悬浮图标液态玻璃按钮（`:87`）。注意 E-18 的「标题栏悬浮图标配置」入口虽走 `handleMenuSettingsEntryClick()`（`ReaderSettingsPage.ets:470-472`），但 `:517-531` 的 `else` 分支只 `openDetailSheet`，**并未落盘**，仍属未接。
+**KI-E3 标题栏图标四项（已实现）** —— 覆盖 E-17 显示标题栏图标（`ReadBookConfig.kt:92`）、E-18 标题栏悬浮图标配置（`:146`、`:149` 两个 `Map<String,String>`）、E-19 标题栏悬浮图标位置（`:116`，夹 0–3）、E-20 悬浮图标液态玻璃按钮（`:87`）。
+
+**上游口径**（`ui/book/read/sheet/SystemMenuPage.kt` 的 `GlobalMenuTab` 末尾「Floating icon settings」段，`:491-544`）：
+- `:491-497` `SectionTitle(show_title_bar_icons)` + `TinySwitchSettingItem(show_title_bar_icons)`，`checked = preferences.showTitleBarIcons` → `ConfigUpdate.ShowTitleBarIcons(it)`。
+- `:498` 起 `AnimatedVisibility(visible = preferences.showTitleBarIcons) { Column { … } }` 包住后面三项 —— **关掉总开关时三项整行消失**。
+- `:501-508` `TinyClickableSettingItem(title_bar_icons)`（中文串「浮动图标」，`strings.xml:2478`）→ `ShowSheet(ReadBookSheet.FloatingBarIconConfig)`；`description` 按 `customIconCount == 0` 取 `read_menu_custom_icons_none`「使用默认图标」/ `read_menu_custom_icons_count`「已自定义 %1$d 个图标」（`strings.xml:2476`/`:2477`），`customIconCount = remember(preferences.titleBarCustomIcons) { countCustomIcons(...) }`（`:232-234`）。
+- `:509-520` `TinyDropdownSettingItem(title_bar_icon_position)`，`selectedValue = preferences.titleBarIconPosition.toString()`，`entryValues = ["0","1","2","3"]` → `ConfigUpdate.TitleBarIconPosition(it.toInt())`；中文串「左上 / 右上 / 左下 / 右下」（`strings.xml:2486-2489`）。
+- `:521-527` `TinySwitchSettingItem(read_menu_bar_liquid_glass_buttons)` → `ConfigUpdate.MenuFloatingIconLiquidGlass(it)` —— **与底栏 E-27 同名串但是不同字段**。
+- 字段与默认值（`ReadSettings.kt`）：`:102 readMenuFloatingIconLiquidGlass = false`、`:114 readMenuCustomIcons = ""`、`:115 titleBarCustomIcons = ""`、`:116 titleBarIconPosition = 3`、`:117 showTitleBarIcons = false`；夹取 `ReadBookConfig.kt:116`（位置 0–3）；两个自定义图标在 `ReadBookConfig.kt:146-150` 由 `parseReadMenuCustomIcons` 解析成 `Map<String,String>`。
+- 渲染：`ReadBookMenuBar.kt:172` 位置 0/1 挂顶栏区（`Alignment.Start`/`End`）、`:310-330` 位置 2/3 挂菜单浮层区；`ReadBookMenuBarFloating.kt:63-150 FloatingIconRow` 每图标 36dp 圆形、自定义走 `AsyncImage(model = customPath, contentScale = Crop, clip CircleShape)`、否则 `AppIcon(tint = if (isActive) primary else colors.content)`，`glassEnabled = !isCustom && readMenuFloatingIconLiquidGlass && readerMenuLiquidGlassAvailable(backdrop)`。
+- **图标池与「标题栏操作按钮」同池**：`ReadBookMenuBarFloating.kt:399-425 loadFloatingIcons()` 读 `state.menuConfig.titleBarButtons`，池子由 `ReadButtonConfigDelegate.kt:36` 的 `TITLE_BAR_ICON_PREFS`/`TITLE_BAR_ICON_KEY` 与 `:204-205` 加载；`DEFAULT_ENABLED_BUTTON_IDS` = search / auto_page / catalog / read_aloud / setting。配置面板 `FloatingBarIconConfigSheet.kt:25-46` 复用通用 `ButtonIconConfigSheet`（排序 + 开关 + 自定义图标，`onSelectIcon = OpenTitleBarCustomIconPicker`、`onClearIcon = ConfigUpdate.TitleBarCustomIcon(id, "")`）。
+- **备份口径**：`BackupConfig.kt` 的 `readPrefKeys` 忽略清单里含 `readMenuIconShowText`(`:228`)、`readMenuFloatingIconLiquidGlass`(`:240`)、`readMenuCustomIcons`(`:252`)、`titleBarCustomIcons`(`:255`)、`titleBarIconPosition`(`:256`)、`showTitleBarIcons`(`:257`) ⇒ 本组**全部不导出**，恢复一律取本机现值。
+
+**本地落地**（六字段 + 图标池）：
+- 数据层 `entry/src/main/ets/data/ReaderSettingsRepository.ets`：接口 `:412`（`showTitleBarIcons`）/`:417`（`titleBarIconPosition`）/`:419`（`readMenuFloatingIconLiquidGlass`）/`:424`（`floatingIcons: ReaderBottomActionConfig[]`）/`:426`（`titleBarCustomIcons`）/`:428`（`readMenuCustomIcons`）；默认值 `:828-836`（位置 3、图标池取 `READER_LOCAL_BOTTOM_ACTION_DEFAULTS`，对齐上游 `DEFAULT_ENABLED_BUTTON_IDS`）；读取 `:1002-1009`；归一 `:1344-1353`（位置夹 0–3、图标池走 `normalizeActions`、两个自定义图标走 `normalizeCustomIconMap`）；写回 `:1573-1581`；新增 `:1778 normalizeCustomIconMap`（`id,path;` 编码，只保留合法 id 与非空路径、去重）与 `:1797 decodeCustomIconMap`。
+- `entry/src/main/ets/pages/Index.ets`：六个 `@State` + 装载 + 备份恢复 + 六个 setter + 快照，prop 6 处、回调 4 处（与 E4/E5 同构）。
+- 面板 `entry/src/main/ets/pages/ReaderSettingsPage.ets`：「显示标题栏图标」Toggle `:2639` 接 `showTitleBarIcons`（checked `:866`、onChange `:894`）；「悬浮图标液态玻璃按钮」Toggle `:2642`（名单 `:998`、checked `:866-868`、onChange `:895`）；三项可见性统一读 `showTitleBarIcons`（`:1247`）；「标题栏悬浮图标位置」四值下拉 `:2641`（`getMenuChoices :1106` 与 `getDetailChoices :1849` 两处、选中态 `:1123`、段落 `onSelect :947` 与弹层 `applyDetailChoicePreview :1173` 两处都落库）；「标题栏悬浮图标配置」`:2640` 点击把 `floatingIcons` 拷进 `draftTopActions` 并置 `floatingIconConfigVisible`（`:978-985`），复用 `topActionConfigurationSheet()`（`:2852` 标题切换、`:2861-2864` 保存分流、`:2837-2840 closeButtonConfigSheet()`）。
+- 渲染 `entry/src/main/ets/pages/ReaderPage.ets`：`readerFloatingIconKinds()` `:1961`、`readerFloatingIconAlignment()` `:1974`、`readerFloatingIconTopVisible()` `:1979`、`readerFloatingIconBottomVisible()` `:1984`、`readerFloatingIconCustomUri()` `:1989`、`readerFloatingIconButton()` `:2002`、`readerFloatingIconRow()` `:2028`；挂载 `:4371`（顶栏区）/`:4388`（菜单浮层区）。
+- 备份 `entry/src/main/ets/data/BackupRepository.ets:1486-1491`：恢复段六行全取 `current.xxx`，config.xml 导出段不动。
+
+**已知差异**：
+1. **没有实现「换自定义图标图片」的选图入口**（上游 `OpenTitleBarCustomIconPicker`）。两个自定义图标串已落库、渲染侧 `decodeCustomIconMap` 已能解码并显示圆形图，但面板里选不了图。
+2. ArkUI 无液态玻璃材质，`readMenuFloatingIconLiquidGlass` 用「半透明前景色底」近似（`readerMenuForegroundAlpha('1F')`）。
+3. 浮动图标行的实际渲染（位置 0/1 在顶栏下、2/3 在菜单浮层上、自定义圆形图、玻璃底）**未做像素级取证** —— 模拟器书架正文文件丢失、`ReaderPage` 进不去。
+
+**验收**：`assembleHap` BUILD SUCCESSFUL（改动后三次：44 s 860 ms / 27 s 44 ms / 27 s 223 ms）。设备实测：关掉「显示标题栏图标」后三项整行消失（dump 三项计数全为 0）、重新打开后恢复；位置下拉四项齐全，选「左上」后 `aa force-stop` 重启仍是「左上」（prefs `titleBarIconPosition` = `0.000000`）；液态玻璃开关打开后 prefs 为 `true`、重启保持；浮动图标配置面板标题为「浮动图标」、列表是顶栏按钮池，关掉「自动翻页」保存后 prefs `floatingIcons` 里 `autoPage` 由 `true` 变 `false`、重启保持；复原到「显示关 / 位置右下(3) / 液态玻璃关 / 图标池默认」。详见 [VALIDATION](VALIDATION.md) 的 `2026-10-31 N 端 KI-E3` 节。
 
 **KI-E4 底栏外观七项（已实现）** —— 覆盖 E-21 底栏圆角（`ReadBookConfig.kt:104`，夹 0–32）、E-22 底栏悬浮（`:82`）、E-23 底栏模糊（`:106`，夹 0–2）、E-24 底栏模糊透明度（`:110`）、E-25 底栏模糊样式（`:108`，夹 0–1）、E-26 底栏液态玻璃（`:86`）、E-27 底栏按钮液态玻璃（`:101` 的 `readMenuBottomBarLiquidGlassButtons`）。本地底栏已能渲染（`ReaderPage.ets:3156-3171` 读 `showBottomActionText`/`bottomIconStyle`/`bottomRowCount`），缺的正是这层外观参数，属渲染层改造里最先能做的一块。
 
