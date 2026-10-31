@@ -227,6 +227,14 @@ struct Index {
   @State readerBrightnessVwPos: string = '1';
   /** 亮度是否跟随系统；上游 `brightnessAuto`（`ReadSettings.kt:23`，默认 true）。 */
   @State readerBrightnessAuto: boolean = true;
+  /** 正文行高适配；上游 `readBodyToLh`（`ReadSettings.kt:14`，默认 true），存储键同名。 */
+  @State readerReadBodyToLh: boolean = true;
+  /** 自定义中文分行；上游 `useZhLayout`（`ReadSettings.kt:19`，默认 false），只参与分页输入签名。 */
+  @State readerUseZhLayout: boolean = false;
+  /** 正文避让显示缺口；上游 `paddingDisplayCutouts`（`ReadSettings.kt:11`，默认 false）。 */
+  @State readerPaddingDisplayCutouts: boolean = false;
+  /** 适配书籍自带特殊样式；上游 `adaptSpecialStyle`（`ReadSettings.kt:18`，默认 true）。 */
+  @State readerAdaptSpecialStyle: boolean = true;
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1839,6 +1847,10 @@ struct Index {
     this.readerShowBrightnessView = settings.showBrightnessView;
     this.readerBrightnessVwPos = settings.brightnessVwPos;
     this.readerBrightnessAuto = settings.brightnessAuto;
+    this.readerReadBodyToLh = settings.readBodyToLh;
+    this.readerUseZhLayout = settings.useZhLayout;
+    this.readerPaddingDisplayCutouts = settings.paddingDisplayCutouts;
+    this.readerAdaptSpecialStyle = settings.adaptSpecialStyle;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -1943,6 +1955,10 @@ struct Index {
         showBrightnessView: this.readerShowBrightnessView,
         brightnessVwPos: this.readerBrightnessVwPos,
         brightnessAuto: this.readerBrightnessAuto,
+        readBodyToLh: this.readerReadBodyToLh,
+        useZhLayout: this.readerUseZhLayout,
+        paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+        adaptSpecialStyle: this.readerAdaptSpecialStyle,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
         lineSpacing: this.readerLineSpacing,
@@ -2681,6 +2697,43 @@ struct Index {
     }
   }
 
+  /** 正文行高适配开关；上游 `ConfigUpdate.ReadBodyToLh`（`ReadBookContract.kt:1958`）。 */
+  private setReaderReadBodyToLh(enabled: boolean): void {
+    this.readerReadBodyToLh = enabled !== false;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 自定义中文分行开关；上游 `ConfigUpdate.UseZhLayout`（`ReadBookContract.kt:1973`）。只改分页输入，不重读章节。 */
+  private setReaderUseZhLayout(enabled: boolean): void {
+    this.readerUseZhLayout = enabled === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 正文避让显示缺口；上游 `ReadConfigIntent.PaddingDisplayCutoutsChanged`（`ReadConfigViewModel.kt:111`）。 */
+  private setReaderPaddingDisplayCutouts(enabled: boolean): void {
+    this.readerPaddingDisplayCutouts = enabled === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 适配特殊样式；上游 `ConfigUpdate.AdaptSpecialStyle`，改动会改变 `[newpage]`/`<usehtml>` 的解释方式，需重读章节。 */
+  private setReaderAdaptSpecialStyle(enabled: boolean): void {
+    this.readerAdaptSpecialStyle = enabled !== false;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+    this.reloadSelectedChapterForTransform();
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -3097,6 +3150,10 @@ struct Index {
     this.readerShowBrightnessView = result.settings.showBrightnessView;
     this.readerBrightnessVwPos = result.settings.brightnessVwPos;
     this.readerBrightnessAuto = result.settings.brightnessAuto;
+    this.readerReadBodyToLh = result.settings.readBodyToLh;
+    this.readerUseZhLayout = result.settings.useZhLayout;
+    this.readerPaddingDisplayCutouts = result.settings.paddingDisplayCutouts;
+    this.readerAdaptSpecialStyle = result.settings.adaptSpecialStyle;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4405,6 +4462,9 @@ struct Index {
             showBrightnessView: this.readerShowBrightnessView,
             brightnessVwPos: this.readerBrightnessVwPos,
             brightnessAuto: this.readerBrightnessAuto,
+            readBodyToLh: this.readerReadBodyToLh,
+            useZhLayout: this.readerUseZhLayout,
+            paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4623,7 +4683,15 @@ struct Index {
               brightnessVwPos: this.readerBrightnessVwPos,
               onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
               brightnessAuto: this.readerBrightnessAuto,
+              readBodyToLh: this.readerReadBodyToLh,
+              useZhLayout: this.readerUseZhLayout,
+              paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+              adaptSpecialStyle: this.readerAdaptSpecialStyle,
               onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
+              onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
+              onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
+              onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
+              onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5019,7 +5087,15 @@ struct Index {
             brightnessVwPos: this.readerBrightnessVwPos,
             onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
             brightnessAuto: this.readerBrightnessAuto,
+            readBodyToLh: this.readerReadBodyToLh,
+            useZhLayout: this.readerUseZhLayout,
+            paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+            adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
+            onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
+            onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
+            onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
+            onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5280,7 +5356,15 @@ struct Index {
             brightnessVwPos: this.readerBrightnessVwPos,
             onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
             brightnessAuto: this.readerBrightnessAuto,
+            readBodyToLh: this.readerReadBodyToLh,
+            useZhLayout: this.readerUseZhLayout,
+            paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+            adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
+            onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
+            onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
+            onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
+            onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5483,7 +5567,15 @@ struct Index {
           brightnessVwPos: this.readerBrightnessVwPos,
           onBrightnessVwPosChange: (value: string) => this.setReaderBrightnessVwPos(value),
           brightnessAuto: this.readerBrightnessAuto,
+          readBodyToLh: this.readerReadBodyToLh,
+          useZhLayout: this.readerUseZhLayout,
+          paddingDisplayCutouts: this.readerPaddingDisplayCutouts,
+          adaptSpecialStyle: this.readerAdaptSpecialStyle,
           onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
+          onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
+          onUseZhLayoutChange: (enabled: boolean) => this.setReaderUseZhLayout(enabled),
+          onPaddingDisplayCutoutsChange: (enabled: boolean) => this.setReaderPaddingDisplayCutouts(enabled),
+          onAdaptSpecialStyleChange: (enabled: boolean) => this.setReaderAdaptSpecialStyle(enabled),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),

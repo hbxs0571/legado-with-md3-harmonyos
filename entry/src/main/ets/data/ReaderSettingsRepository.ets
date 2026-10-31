@@ -258,6 +258,31 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * 存储键 `brightnessAuto`（`PreferKey.kt:194`），不在 `BackupConfig.readPrefKeys` 忽略清单里，随 config.xml 备份。
    */
   brightnessAuto: boolean;
+  /**
+   * 正文行高是否按行高适配；上游 `readBodyToLh: Boolean = true`（`ReadSettings.kt:14`），
+   * 存储键同名（`PreferKey.kt:104`）。上游只把它映射成 `ReadBookConfig.readBodyToLh` 只读快照
+   * （`ReadBookConfig.kt:67`），全仓没有任何渲染消费点，本地同样只做可配 + 落库 + 随备份。
+   */
+  readBodyToLh: boolean;
+  /**
+   * 是否用自定义中文分行；上游 `useZhLayout: Boolean = false`（`ReadSettings.kt:19`），
+   * 存储键同名（`PreferKey.kt:150`）。上游的 `ChineseLineBreaker` 已是唯一断行实现，
+   * 这个开关实际只进 `PageEstimateConfig` 的布局签名（`PageEstimateConfig.kt:23/61`），
+   * 即改动它会触发重新分页。本地照此语义接：只参与分页输入签名。
+   */
+  useZhLayout: boolean;
+  /**
+   * 正文是否避让屏幕显示缺口（刘海/挖孔）；上游 `paddingDisplayCutouts: Boolean = false`
+   * （`ReadSettings.kt:11`），存储键同名（`PreferKey.kt:337`）。
+   * 消费点 `ReaderContentAvoidancePolicy.padding()`：开启时把 cutout inset 加进正文内边距。
+   */
+  paddingDisplayCutouts: boolean;
+  /**
+   * 是否适配书籍自带的特殊样式；上游 `adaptSpecialStyle: Boolean = true`（`ReadSettings.kt:18`），
+   * 存储键同名（`PreferKey.kt:117`）。开启时 `[newpage]` 变成换页、`<usehtml>` 变成富文本块
+   * （`ReaderChapterSource.kt:158-166`、`ContentProcessor.kt:173`）；关闭时两者按字面文字显示。
+   */
+  adaptSpecialStyle: boolean;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -616,6 +641,11 @@ export class ReaderSettingsRepository {
   showBrightnessView: '0',
   brightnessVwPos: '1',
   brightnessAuto: true,
+  // 上游默认：正文行高适配开、中文分行关、避让缺口关、适配特殊样式开（ReadSettings.kt:11-19）。
+  readBodyToLh: true,
+  useZhLayout: false,
+  paddingDisplayCutouts: false,
+  adaptSpecialStyle: true,
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -741,6 +771,10 @@ export class ReaderSettingsRepository {
     const showBrightnessViewValue = await store.get('readBrightnessMode', defaults.showBrightnessView);
     const brightnessVwPosValue = await store.get('readBrightnessControlPosition', defaults.brightnessVwPos);
     const brightnessAutoValue = await store.get('brightnessAuto', defaults.brightnessAuto);
+    const readBodyToLhValue = await store.get('readBodyToLh', defaults.readBodyToLh);
+    const useZhLayoutValue = await store.get('useZhLayout', defaults.useZhLayout);
+    const paddingDisplayCutoutsValue = await store.get('paddingDisplayCutouts', defaults.paddingDisplayCutouts);
+    const adaptSpecialStyleValue = await store.get('adaptSpecialStyle', defaults.adaptSpecialStyle);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1020,6 +1054,10 @@ export class ReaderSettingsRepository {
         (showBrightnessViewValue === '1' || showBrightnessViewValue === '2') ? showBrightnessViewValue : defaults.showBrightnessView,
       brightnessVwPos: typeof brightnessVwPosValue === 'string' && brightnessVwPosValue === '0' ? '0' : defaults.brightnessVwPos,
       brightnessAuto: typeof brightnessAutoValue === 'boolean' ? brightnessAutoValue : defaults.brightnessAuto,
+      readBodyToLh: typeof readBodyToLhValue === 'boolean' ? readBodyToLhValue : defaults.readBodyToLh,
+      useZhLayout: typeof useZhLayoutValue === 'boolean' ? useZhLayoutValue : defaults.useZhLayout,
+      paddingDisplayCutouts: typeof paddingDisplayCutoutsValue === 'boolean' ? paddingDisplayCutoutsValue : defaults.paddingDisplayCutouts,
+      adaptSpecialStyle: typeof adaptSpecialStyleValue === 'boolean' ? adaptSpecialStyleValue : defaults.adaptSpecialStyle,
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1185,6 +1223,10 @@ export class ReaderSettingsRepository {
         ? settings.showBrightnessView : '0');
       await store.put('readBrightnessControlPosition', settings.brightnessVwPos === '0' ? '0' : '1');
       await store.put('brightnessAuto', settings.brightnessAuto !== false);
+      await store.put('readBodyToLh', settings.readBodyToLh !== false);
+      await store.put('useZhLayout', settings.useZhLayout === true);
+      await store.put('paddingDisplayCutouts', settings.paddingDisplayCutouts === true);
+      await store.put('adaptSpecialStyle', settings.adaptSpecialStyle !== false);
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));

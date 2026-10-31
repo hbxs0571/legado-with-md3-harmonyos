@@ -302,7 +302,13 @@ export class LocalReaderPaginator {
 
     for (let index = 0; index < document.paragraphs.length; index++) {
       const paragraph = document.paragraphs[index];
-      if (paragraph !== undefined) { addParagraph(paragraph); }
+      if (paragraph === undefined) { continue; }
+      if (paragraph.pageBreak) {
+        // `[newpage]`：本段之后强制换页（上游 ReaderChapterSourceBlock.PageBreak）。
+        if (pageLines.length > 0) { flushPage(); }
+        continue;
+      }
+      addParagraph(paragraph);
     }
     flushPage();
     if (pages.length === 0) {
@@ -505,7 +511,13 @@ export class LocalReaderPaginator {
 
     for (let index = 0; index < document.paragraphs.length; index++) {
       const paragraph = document.paragraphs[index];
-      if (paragraph !== undefined) { await addParagraph(paragraph); }
+      if (paragraph === undefined) { continue; }
+      if (paragraph.pageBreak) {
+        // 与 paginate 同一套分页标记语义，否则全书画布页数与当页排版对不上。
+        if (pageLineCount > 0) { flushPage(); }
+        continue;
+      }
+      await addParagraph(paragraph);
     }
     flushPage();
     return Math.max(1, pageCount);

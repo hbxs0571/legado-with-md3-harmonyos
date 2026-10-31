@@ -135,9 +135,39 @@
 
 ### A 阅读界面基础
 
-**KI-A1 正文渲染适配四项（要接，待排期）** —— 覆盖 A-01 正文行高适配（`readBodyToLh`，`ReadBookConfig.kt:67`）、A-02 中文排版（`useZhLayout`，`:76`）、A-03 适配刘海屏（`paddingDisplayCutouts`，`ReadSettings.kt:11`）、A-04 适配特殊样式（`adaptSpecialStyle`，`:18`）。
+**KI-A1 正文渲染适配四项（已实现）** —— 覆盖 A-01 正文行高适配（`readBodyToLh`，`ReadBookConfig.kt:67`）、A-02 中文排版（`useZhLayout`，`:76`）、A-03 适配刘海屏（`paddingDisplayCutouts`，`ReadSettings.kt:11`）、A-04 适配特殊样式（`adaptSpecialStyle`，`:18`）。
 
-上游四项都落在排版管线：`MoreConfigSheet.kt:231`、`model/ReadBook.kt:420`、`ReadBookRouteScreen.kt:195`、`feature/reader/core/source/ReaderBodyOnlyFilter.kt:56`。本地这四条在 `entry/src/main/ets/pages/ReaderSettingsPage.ets:837-840` 是恒 `checked: true` 的占位开关，分页由 `ReaderPage.ets` 自己做，没有「行高归一 / 保留书籍自带样式 / 中文标点挤压」这三条分支。**先接线不会改变渲染，属假已接**，所以整组留到排版引擎那一轮。补法：分页测量处按 `readBodyToLh` 归一特殊排版行高、按 `adaptSpecialStyle` 决定是否套书籍自带样式、按 `useZhLayout` 走中文标点挤压；刘海屏在 HOS 由窗口安全区处理，接入前先确认 `ReaderPage` 是否已 `expandSafeArea`。
+**本轮判定**：四项全部接上，但**四项的性质完全不同**，不能一律按「接上渲染」写。
+
+**上游口径**
+
+- `readBodyToLh`（`ReadSettings.kt:14`，存储键同名 `PreferKey.kt:104`，默认 `true`）：上游**没有渲染消费点**。`help/config/ReadBookConfig.kt:67` 只有 `val readBodyToLh get() = readSettings.readBodyToLh` 这个只读快照；全仓（`--include=*.kt --include=*.xml`）grep `readBodyToLh|ReadBodyToLh` 共 20 处，除 `PreferKey`/`ReadSettingsRepository`/`ReadSettings`/`ReadBookConfig`/`MoreConfigSheet.kt:230-231`（开关项）/`ReadConfigContract.kt:15`/`ReadConfigScreen.kt:123-124`/`ReadConfigViewModel.kt:114,185`/`res/values*/strings.xml`（文案「扩展到刘海」，`values-zh-rCN/strings.xml:967`）/`res/xml/pref_config_read.xml:60-61` 之外，**没有任何渲染或分页读取点**。按「上游没有就不要这个效果」，本地只做可配 + 落库 + 随备份，不实现扩展正文到刘海。
+- `useZhLayout`（`ReadSettings.kt:19`，`PreferKey.kt:150`，默认 `false`）：上游断行器唯一。`feature/reader/core/layout/ChineseLineBreaker.kt` 是平台无关实现，`ReaderPaginator.kt:559`/`:721` 两处**无条件**使用它、不看开关；`ChineseLineBreaker.kt:58`/`:128` 的注释也只说「旧 ZhLayout 的语义已并入」。开关的唯一去处是 `ui/book/read/pageestimate/PageEstimateConfig.kt:23` `val useZhLayout: Boolean = false` 与 `:61` `add(useZhLayout)`（进 `stableHash` 布局签名），由 `model/ReadBook.kt:420` 传入。
+- `paddingDisplayCutouts`（`ReadSettings.kt:11`，`PreferKey.kt:337`，默认 `false`）：有真实消费点 `ui/book/read/ReaderContentAvoidancePolicy.kt:34-51` —— `val cutout = if (paddingDisplayCutouts) insets else SystemBarInsets()`，`left = cutout.cutoutLeftPx`、`right = cutout.cutoutRightPx`、`bottom = (if (navPlaceholderGone) 0 else insets.navigationBarBottomPx) + cutout.cutoutBottomPx`，顶部 `top = (if (statusPlaceholderGone) 0 else insets.statusBarTopPx) + (if (statusPlaceholderGone) cutout.cutoutTopPx else 0)`。接线 `ReadBookRouteScreen.kt:195`。
+- `adaptSpecialStyle`（`ReadSettings.kt:18`，`PreferKey.kt:117`，默认 `true`）：有真实消费点 `feature/reader/core/source/ReaderChapterSource.kt:158-166` —— `if (adaptSpecialStyle && trimmed == "[newpage]") { result += ReaderChapterSourceBlock.PageBreak(position); return@forEachIndexed }`、`if (adaptSpecialStyle && trimmed.startsWith("<usehtml>") && trimmed.endsWith("</usehtml>")) { ... result += ReaderChapterSourceBlock.Html(html, position, semanticLength) }`；另有 `help/book/ContentProcessor.kt:173-179` 与 `ReaderBodyOnlyFilter.kt:56-70` 同源判断。关闭时两者按字面文字显示。
+
+**备份口径**：四个键都**不在** `help/storage/BackupConfig.kt` 的 `readPrefKeys` 忽略清单里（grep 四个键名零命中），随 config.xml 无条件备份。
+
+**本地落地**
+
+1. `entry/src/main/ets/data/ReaderSettingsRepository.ets`：接口 `:260` `readBodyToLh`、`:264` `useZhLayout`、`:268` `paddingDisplayCutouts`、`:272` `adaptSpecialStyle`；默认值 `:621-624`（`true`/`false`/`false`/`true`，与上游一致）；读 `:741`/`:743`/`:745`/`:747`；归一四个 `typeof === 'boolean'`；写 `:1184`/`:1186`/`:1188`/`:1190`。存储键全部与字段同名。
+2. `entry/src/main/ets/pages/Index.ets`：`@State readerReadBodyToLh`/`readerUseZhLayout`/`readerPaddingDisplayCutouts`/`readerAdaptSpecialStyle`（`:231-245`）；装载、快照、恢复备份各四行；四个 setter（`setReaderReadBodyToLh`/`setReaderUseZhLayout`/`setReaderPaddingDisplayCutouts`/`setReaderAdaptSpecialStyle`），其中 `setReaderAdaptSpecialStyle` 末尾额外调 `reloadSelectedChapterForTransform()`（改它要重建正文语义）。
+3. `entry/src/main/ets/pages/ReaderPage.ets`：四个 prop（`:212` 不带 Watch、`:214`/`:216` 带 `onPaginationInputsChanged`、`:218` 带 `onAdaptSpecialStyleChanged`）；三个缺口 inset 字段与 `readerCutoutLeftInset()`/`readerCutoutRightInset()`/`readerCutoutBottomInset()`（`:842` 一带）；`applyReaderDisplayCutout()`（`:812`）用 `getWindowAvoidArea(TYPE_CUTOUT)` + `this.getUIContext().px2vp(...)` 换算，`aboutToAppear()` 里调用；`getBodyContentWidth()`/`getBodyContentHeight()` 各减 inset；`onAdaptSpecialStyleChanged()`（`:886`）触发重排；`LocalTextSemantics.parse()` 两处补第三参；`getFullBookPaginationLayoutKey()` 加 `this.useZhLayout`。
+4. `entry/src/main/ets/data/LocalTextSemantics.ets`：`interface LocalSemanticParagraph` 增 `pageBreak`/`richHtml` 两个必填布尔；`static parse(rawBody, paragraphIndent, adaptSpecialStyle = true)` 增第三参；`:94` 识别 `[newpage]` 推 `pageBreak: true` 段、`:107` 识别 `<usehtml>...</usehtml>` 并把 `:113` 整段做一个 part 打 `richHtml: true`；普通段 `:158` 补 `pageBreak: false, richHtml: false`。
+5. `entry/src/main/ets/pages/LocalReaderPaginator.ets`：`paginate()` 的 `:306` 与 `countPagesIncrementally()` 的 `:515` 都是 `if (paragraph.pageBreak) { if (<已积累行数> > 0) { flushPage(); } continue; }`。**注意两条路径判空的变量不同**：`paginate` 用 `pageLines.length`，`countPagesIncrementally` 用 `pageLineCount`（该函数内部用计数器，`flushPage` 在 `:350` 判 `pageLineCount === 0`）。
+6. `entry/src/main/ets/pages/ReaderSettingsPage.ets`：四个 prop + 四个回调；`:1119`/`:1125`/`:1131`/`:1137` 四个原本 `showNotMigrated(...)` 的占位改真 `MenuSettingSwitch`，文案按上游 strings.xml（「扩展到刘海」`read_body_to_lh:967`、「填充刘海区域」`padding_display_cutouts:1802`、「使用自定义中文分行」`use_zh_layout:1156`、「适配特殊样式」`adapt_special_style:2021`）。
+7. `entry/src/main/ets/data/BackupRepository.ets`：接口 `:264-275` 四字段；config.xml 导出四条（`:647` 一带，`'boolean'`）；readConfig.json 记录四条（`:1110` 一带）；恢复段四条（`:1401` 一带，`readJsonBoolean ?? readXmlBoolean ?? current`）。
+
+**已知差异**
+
+- `readBodyToLh` 上游本就没有渲染效果，本地保持同样口径（只有可配 + 落库 + 随备份），不额外发明行高归一。
+- `paddingDisplayCutouts` 只处理左右与底部缺口，**顶部避让仍由外层状态栏 padding 承担**；上游在「状态栏占位消失」时还会额外补 `cutoutTopPx`，本地未实现该分支。
+- `<usehtml>` 富文本段本地按纯文本整段渲染（单个 part、不逐字排版），不执行 HTML。
+- `[newpage]` 换页与 `<usehtml>` 富文本段**未做设备端像素级取证**：当前模拟器没有一本正文可读的书（书架三本正文文件均已丢失），只做了代码侧只读证据链核对（`LocalTextSemantics.ets:94`/`:107`/`:113` 与 `LocalReaderPaginator.ets:306`/`:515`）。
+
+**验收**：见 `docs/VALIDATION.md` 的「2026-10-31 N 端 KI-A1 正文渲染适配四项」节。四个 Toggle 与四个存储键一一对应、拨动即落库、重启回显保持、测试值已复原出厂值。
+
+**本轮顺带修复的环境故障**（记入 VALIDATION 备查）：KI-A1 设备验收时发现 prefs 完全不落盘。排查后定位为 **prefs XML 被测试期 `hdc file send` 反复整文件覆盖后损坏** —— `hilog` 报 `E C01653/NativePreferences: ParseNodeElement: An unsupported element type was encountered in parsing = text` / `E ReadSettingXml: The error occurred during getting xml child elements` / `W ReloadFromDisk: ... reload result is 0`，于是 store 与磁盘脱钩，`put()`+`flush()` 静默成功但不写盘。推入一个只有 `<?xml version="1.0" encoding="UTF-8"?><preferences version="1.0"/>` 的空文件即恢复。**后续设备验收不要再整文件覆盖 prefs**，要注入测试值只拨 UI 控件。
 
 **KI-A2 菜单层依赖三项（要接，随 KI-E1）** —— 覆盖 A-05 显示菜单图标（`showMenuIcon`，`ReadBookConfig.kt:78`）、A-08 阅读标题补充信息（`showReadTitleAddition`，`ReadSettings.kt:55`）、A-17 阅读菜单不透明度（`menuAlpha`，`:13`）。
 

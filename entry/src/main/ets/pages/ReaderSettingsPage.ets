@@ -200,6 +200,14 @@ export struct ReaderSettingsPage {
   @Prop brightnessVwPos: string = '1';
   /** 亮度是否跟随系统；上游 `brightnessAuto`（`ReadSettings.kt:23`，默认 true）。 */
   @Prop brightnessAuto: boolean = true;
+  /** 正文行高适配；上游 `readBodyToLh`（默认 true）。上游只有配置没有渲染消费点，本地同样只落库。 */
+  @Prop readBodyToLh: boolean = true;
+  /** 自定义中文分行；上游 `useZhLayout`（默认 false），只参与分页签名。 */
+  @Prop useZhLayout: boolean = false;
+  /** 填充刘海区域；上游 `paddingDisplayCutouts`（默认 false），见 `ReaderContentAvoidancePolicy`。 */
+  @Prop paddingDisplayCutouts: boolean = false;
+  /** 适配特殊样式；上游 `adaptSpecialStyle`（默认 true），控制 `[newpage]`/`<usehtml>` 的解释。 */
+  @Prop adaptSpecialStyle: boolean = true;
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -353,6 +361,10 @@ export struct ReaderSettingsPage {
   onShowBrightnessViewChange: (value: string) => void = (_value: string) => {};
   onBrightnessVwPosChange: (value: string) => void = (_value: string) => {};
   onBrightnessAutoChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadBodyToLhChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onUseZhLayoutChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onPaddingDisplayCutoutsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onAdaptSpecialStyleChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -1108,10 +1120,14 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onHideStatusBarChange(enabled) })
           MenuSettingSwitch({ title: '隐藏导航栏', detail: '沉浸式阅读', checked: this.hideNavigationBar,
             onChange: (enabled: boolean) => this.onHideNavigationBarChange(enabled) })
-          MenuSettingSwitch({ title: '适配刘海屏', detail: '为显示缺口留出安全区域', checked: true }).onClick(() => this.showNotMigrated('适配刘海屏'))
-          MenuSettingSwitch({ title: '正文行高适配', detail: '修正特殊排版行距', checked: true }).onClick(() => this.showNotMigrated('正文行高适配'))
-          MenuSettingSwitch({ title: '适配特殊样式', detail: '保留书籍正文样式', checked: true }).onClick(() => this.showNotMigrated('适配特殊样式'))
-          MenuSettingSwitch({ title: '中文排版', detail: '优化中文标点与排版', checked: true }).onClick(() => this.showNotMigrated('中文排版'))
+          MenuSettingSwitch({ title: '填充刘海区域', detail: '把显示缺口算进正文可用区', checked: this.paddingDisplayCutouts,
+            onChange: (enabled: boolean) => this.onPaddingDisplayCutoutsChange(enabled) })
+          MenuSettingSwitch({ title: '扩展到刘海', detail: '上游同名字段只做配置，没有对应渲染效果', checked: this.readBodyToLh,
+            onChange: (enabled: boolean) => this.onReadBodyToLhChange(enabled) })
+          MenuSettingSwitch({ title: '适配特殊样式', detail: '按标记解释正文里的分段与富文本', checked: this.adaptSpecialStyle,
+            onChange: (enabled: boolean) => this.onAdaptSpecialStyleChange(enabled) })
+          MenuSettingSwitch({ title: '使用自定义中文分行', detail: '改后重新计算分页', checked: this.useZhLayout,
+            onChange: (enabled: boolean) => this.onUseZhLayoutChange(enabled) })
           MenuSettingOption({ title: '护眼设置', detail: '护眼模式与色温', migrated: true })
             .onClick(() => this.openDetailSheet('护眼设置', '配置护眼模式、色温与日夜参数'))
           Text('翻页控制').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })

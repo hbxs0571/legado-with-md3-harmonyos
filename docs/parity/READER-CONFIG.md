@@ -49,18 +49,19 @@
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A 阅读界面基础 | 37 | 19 | 16 | 2 |
+| A 阅读界面基础 | 37 | 23 | 12 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
 | C 正文排版 | 49 | 48 | 1 | 0 |
 | D 翻页与手势交互 | 20 | 19 | 1 | 0 |
 | E 菜单与主题外观 | 42 | 5 | 37 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 132 | 55 | 2 |
+| 合计 | 189 | 136 | 51 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 KI-C3 落库：C 块四个下划线几何参数（`underlinePadding`/`underlineExtend`/`dottedBase`/`dottedRatio`）改判 `已接`。这四项**不能**用 ArkUI 的 `Text.decoration` 表达——`DecorationStyleInterface` 只有 `type`/`color`/`style`/`thicknessScale` 四个字段，没有虚线段长、间隔与竖直偏移（这是上游 `ReaderPageUnderline` 能自由配 `DashPathEffect` 而 HOS 不能的根因）。所以改为**自绘**：`ReaderPage.ets` 新增 `ReaderUnderlineLayer(uniform)`，用 `Line()` 的 `startPoint`/`endPoint`/`strokeWidth`/`strokeDashArray` 按 `LocalReaderLine` 逐行叠在正文之上，并把原本 6 处 `Text.decoration` 的正文下划线收敛为 `None` 以免双线；滚动模式拿不到行几何，仍用 Text 装饰（四项只在分页模式生效，已在 KNOWN-ISSUES KI-C3 记为已知差异）。设备实测三档偏移 409/444/478、撑满前后短行 665→1168、虚线段数 34→18。> 2026-10-31 KI-A9 落库：亮度四项（A 块「阅读亮度」、E 块「显示亮度视图」「亮度条位置」「自动亮度」）改判 `已接`。**四处存储键都与字段名不同或部分不同，容易踩坑**：`readBrightness` → `brightness`（`PreferKey.kt:151`）、`showBrightnessView` → `readBrightnessMode`（`:112`）、`brightnessVwPos` → `readBrightnessControlPosition`（`:193`）、`brightnessAuto` → `brightnessAuto`（`:194`，唯一同名）。备份口径也不一致：`brightness` 与 `brightnessAuto` **不在** `BackupConfig.readPrefKeys` 忽略清单里（随 config.xml 无条件备份），`readBrightnessMode` 与 `readBrightnessControlPosition` **在**清单里（不导出）——本地 `BackupRepository.ets` 的 `preferenceKeysByCategory.readConfig` 早已列了后两者，口径本就一致。窗口亮度落地：上游 `ReadBookController.kt:3179-3187` 在 `brightnessAuto` 为真时用 `WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE` 交回系统、否则写 `readBrightness / 100f`；HOS 用 `window.setWindowBrightness()`，**`-1` 正是「恢复系统亮度」**，与 `BRIGHTNESS_OVERRIDE_NONE` 等价，退出时 `restoreReaderBrightness()` 也调 `-1`。亮度条挂在底栏进度条上方（`ReaderPage.ets:3805`），`'1'` 横排 / `'2'` 竖排。设备实测：`readBrightnessMode` 由「关闭」切「横排」后落库 `1`、切「竖排」后落库 `2` 且列表副标题同步；竖排时「亮度条位置」才出现（`ReaderSettingsPage.ets:926`），点「左侧」落库 `readBrightnessControlPosition` = `0`、副标题变「左侧」；`brightness=20` 与 `=100` 两次截图平均亮度都是 36.16 —— **模拟器截图不反映窗口亮度叠加，故亮度视觉效果未取证**（`setWindowBrightness` 在模拟器上是真实调用，`hidumper` 无对应读数）。现 55 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 KI-C3 落库：C 块四个下划线几何参数（`underlinePadding`/`underlineExtend`/`dottedBase`/`dottedRatio`）改判 `已接`。这四项**不能**用 ArkUI 的 `Text.decoration` 表达——`DecorationStyleInterface` 只有 `type`/`color`/`style`/`thicknessScale` 四个字段，没有虚线段长、间隔与竖直偏移（这是上游 `ReaderPageUnderline` 能自由配 `DashPathEffect` 而 HOS 不能的根因）。所以改为**自绘**：`ReaderPage.ets` 新增 `ReaderUnderlineLayer(uniform)`，用 `Line()` 的 `startPoint`/`endPoint`/`strokeWidth`/`strokeDashArray` 按 `LocalReaderLine` 逐行叠在正文之上，并把原本 6 处 `Text.decoration` 的正文下划线收敛为 `None` 以免双线；滚动模式拿不到行几何，仍用 Text 装饰（四项只在分页模式生效，已在 KNOWN-ISSUES KI-C3 记为已知差异）。设备实测三档偏移 409/444/478、撑满前后短行 665→1168、虚线段数 34→18。> 2026-10-31 KI-A9 落库：亮度四项（A 块「阅读亮度」、E 块「显示亮度视图」「亮度条位置」「自动亮度」）改判 `已接`。**四处存储键都与字段名不同或部分不同，容易踩坑**：`readBrightness` → `brightness`（`PreferKey.kt:151`）、`showBrightnessView` → `readBrightnessMode`（`:112`）、`brightnessVwPos` → `readBrightnessControlPosition`（`:193`）、`brightnessAuto` → `brightnessAuto`（`:194`，唯一同名）。备份口径也不一致：`brightness` 与 `brightnessAuto` **不在** `BackupConfig.readPrefKeys` 忽略清单里（随 config.xml 无条件备份），`readBrightnessMode` 与 `readBrightnessControlPosition` **在**清单里（不导出）——本地 `BackupRepository.ets` 的 `preferenceKeysByCategory.readConfig` 早已列了后两者，口径本就一致。窗口亮度落地：上游 `ReadBookController.kt:3179-3187` 在 `brightnessAuto` 为真时用 `WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE` 交回系统、否则写 `readBrightness / 100f`；HOS 用 `window.setWindowBrightness()`，**`-1` 正是「恢复系统亮度」**，与 `BRIGHTNESS_OVERRIDE_NONE` 等价，退出时 `restoreReaderBrightness()` 也调 `-1`。亮度条挂在底栏进度条上方（`ReaderPage.ets:3805`），`'1'` 横排 / `'2'` 竖排。设备实测：`readBrightnessMode` 由「关闭」切「横排」后落库 `1`、切「竖排」后落库 `2` 且列表副标题同步；竖排时「亮度条位置」才出现（`ReaderSettingsPage.ets:926`），点「左侧」落库 `readBrightnessControlPosition` = `0`、副标题变「左侧」；`brightness=20` 与 `=100` 两次截图平均亮度都是 36.16 —— **模拟器截图不反映窗口亮度叠加，故亮度视觉效果未取证**（`setWindowBrightness` 在模拟器上是真实调用，`hidumper` 无对应读数）。> 2026-10-31 KI-A1 落库：正文渲染适配四项（A 块「正文行高适配」「中文排版」「适配刘海屏」「适配特殊样式」）改判 `已接`，A 块 16→12。四项存储键**都与字段同名**（`PreferKey.kt:104`/`:150`/`:337`/`:117`），且四个都**不在** `BackupConfig.readPrefKeys` 忽略清单里，随 config.xml 无条件备份。各自的落地口径差别很大：① `readBodyToLh` 上游只有配置、**无渲染消费点**（`ReadBookConfig.kt:67` 只是只读快照，全仓 20 处命中全是设置项/落库/契约/资源串），按「上游没有就不要这个效果」只做可配+落库+备份；② `useZhLayout` 上游断行器唯一、开关只进 `PageEstimateConfig.kt:61` 的布局签名，本地照此拼进 `getFullBookPaginationLayoutKey()` 触发重排；③ `paddingDisplayCutouts` 有真实消费点 `ReaderContentAvoidancePolicy.kt:34-51`，本地用 `getWindowAvoidArea(TYPE_CUTOUT)` 取左右与底部 inset，`getBodyContentWidth()`/`getBodyContentHeight()` 各减一次（顶部仍由外层状态栏 padding 承担）；④ `adaptSpecialStyle` 有真实消费点 `ReaderChapterSource.kt:158-166`，本地在 `LocalTextSemantics.parse()` 识别 `[newpage]` 与 `<usehtml>` 并打 `pageBreak`/`richHtml` 标记，分页器 `LocalReaderPaginator.ets:306`/`:515` 两条路径都按 `pageBreak` 强制换页。设备实测四个 Toggle 与四个存储键一一对应、写盘持续正常（`adaptSpecialStyle`/`paddingDisplayCutouts`/`useZhLayout`/`readBodyToLh` 拨动后立即落库，已复原出厂值）；`[newpage]` 换页与 `<usehtml>` 富文本段因模拟器无正文可读，只做代码侧只读取证。**本轮同时查明并修复了一个环境故障**：prefs XML 被测试期 `hdc file send` 反复覆盖后，`NativePreferences` 报 `ParseNodeElement: unsupported element type = text` + `ReloadFromDisk: reload result is 0`，此后 `put()+flush()` 静默不落盘；推入空 `<preferences version="1.0"/>` 即恢复（已记入 VALIDATION，后续注入测试值不再覆盖整个 prefs 文件）。
+现 51 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
 >
 > 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 > 2026-10-31 KI-D6 落库：D 块「上次标记样式」（`lastMarkingStyle`）由 `未接` 改 `已接`，D 块 8 未接 → 7 未接，全表 95 → 94。同时纠正了 `ReaderMarkingEditor` 的 `useRule` 默认值与上游相反的历史错位（上游 `MarkingSelectionMenu.kt:181` 默认 `false`）。
@@ -92,10 +93,10 @@
 | 底栏图标样式 | `ReadBookConfig.kt:100` | `ReaderSettingsRepository.ets:168` | 已接 | 上游 `readMenuIconStyle` → 本地 `bottomIconStyle`，取值 0–2 | 切换后图标填充/描边变化 | — |
 | 底栏每行图标数 | `ReadBookConfig.kt:102` | `ReaderSettingsRepository.ets:169` | 已接 | 上游夹取 2–8，本地滑块同区间 | 拖动后每行图标个数变化 | — |
 | 底栏图标行数 | `ReadBookConfig.kt:103` | `ReaderSettingsRepository.ets:170` | 已接 | 上游夹取 1–2，本地滑块同区间 | 切到 2 行后底栏变高 | — |
-| 正文行高适配 | `ReadSettings.kt` | `ReaderSettingsPage.ets:838` | 未接 | 走 `showNotMigrated('正文行高适配')`，无对应仓储字段 | 开关后特殊排版的书行距被修正 | 上游 `readBodyToLh`（`ReadBookConfig.kt:67`）；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-A1 |
-| 中文排版 | `ReadBookConfig.kt:76` | `ReaderSettingsPage.ets:839` | 未接 | 走 `showNotMigrated('中文排版')`，`useZhLayout` 无对应字段 | 开关后中文标点挤压生效 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-A1 |
-| 适配刘海屏 | `ReadSettings.kt` | `ReaderSettingsPage.ets:837` | 未接 | 开关恒为 `checked: true` 且点击即占位提示 | 开关后正文避让显示缺口 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-A1 |
-| 适配特殊样式 | `ReadSettings.kt` | `ReaderSettingsPage.ets:840` | 未接 | 走 `showNotMigrated('适配特殊样式')` | 开关后书籍自带样式被保留 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-A1 |
+| 正文行高适配 | `ReadSettings.kt:14` `readBodyToLh` | `ReaderSettingsRepository.ets:260`、读 `:741`、写 `:1184`；`ReaderSettingsPage.ets:1119`；`ReaderPage.ets:212` | 已接 | 上游文案是「扩展到刘海」；**上游没有渲染消费点**——`ReadBookConfig.kt:67` 只把它映射成只读快照，全仓 grep 20 处全是设置项/落库/契约/资源串，无一处读取用于排版。按「上游没有就不要这个效果」，本地只做可配 + 落库 + 随备份，不改渲染 | 开关落库为 `readBodyToLh`，重启后回显保持 | 存储键与字段同名（`PreferKey.kt:104`），随 config.xml 无条件备份 |
+| 中文排版 | `ReadBookConfig.kt:76` `useZhLayout` | `ReaderSettingsRepository.ets:264`、读 `:743`、写 `:1186`；`ReaderSettingsPage.ets:1131`；`ReaderPage.ets:214`、布局 key `:1802` | 已接 | 上游文案是「使用自定义中文分行」。断行器 `ChineseLineBreaker.kt` 在 `ReaderPaginator.kt:559`/`:721` **无条件**使用、不看开关；开关唯一去处是 `PageEstimateConfig.kt:61` 的 `add(useZhLayout)` 进布局签名。本地照此只把 `useZhLayout` 拼进 `getFullBookPaginationLayoutKey()`，改它触发重排，不改断行算法 | 开关落库为 `useZhLayout`；改动后旧页数缓存失效并重算 | 存储键同名（`PreferKey.kt:150`） |
+| 适配刘海屏 | `ReadSettings.kt:11` `paddingDisplayCutouts` | `ReaderSettingsRepository.ets:268`、读 `:745`、写 `:1188`；`ReaderSettingsPage.ets:1125`；`ReaderPage.ets:216`、`applyReaderDisplayCutout()` `:812`、`readerCutoutLeftInset()` `:842` | 已接 | 上游文案是「填充刘海区域」。真实消费点 `ReaderContentAvoidancePolicy.kt:34-51`：`val cutout = if (paddingDisplayCutouts) insets else SystemBarInsets()`，左右取 `cutoutLeftPx`/`cutoutRightPx`、底部 `navigationBarBottomPx + cutoutBottomPx`，顶部只在状态栏占位消失时才避让。本地用 `getWindowAvoidArea(TYPE_CUTOUT)` 取左右与底部写进三个 inset，`getBodyContentWidth()`/`getBodyContentHeight()` 各减一次。**已知差异：顶部避让仍由外层状态栏 padding 承担，未按「占位消失」分支再补 cutoutTopPx** | 开关落库为 `paddingDisplayCutouts`，左侧有缺口时正文左边界内缩 | 存储键同名（`PreferKey.kt:337`），缺省 0（无缺口设备无变化） |
+| 适配特殊样式 | `ReadSettings.kt:18` `adaptSpecialStyle` | `ReaderSettingsRepository.ets:272`、读 `:747`、写 `:1190`；`ReaderSettingsPage.ets:1137`；`ReaderPage.ets:218`、`onAdaptSpecialStyleChanged()` `:886`；`LocalTextSemantics.ets:94`/`:107`；`LocalReaderPaginator.ets:306`/`:515` | 已接 | 上游 `ReaderChapterSource.kt:158-166`：`[newpage]` 独占一段即成为 `PageBreak`，`<usehtml>...</usehtml>` 整段成为 `Html` 块；关闭时按字面文字显示。本地 `LocalTextSemantics.parse()` 增第三参识别两个标记并打 `pageBreak`/`richHtml`；分页器两条路径都按 `pageBreak` 强制换页；`<usehtml>` 整段单 part 不逐字排版。改开关触发重读章节 | 开关落库为 `adaptSpecialStyle`；正文含 `[newpage]` 时该段独占新页 | 存储键同名（`PreferKey.kt:117`）；本地不执行 HTML，富文本段按纯文本整段渲染 |
 | 显示菜单图标 | `ReadBookConfig.kt:78` | `ReaderSettingsPage.ets:883` | 未接 | 走 `showNotMigrated('显示菜单图标')` | 总开关关闭后阅读页菜单图标消失 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-A2 |
 | 禁用返回键 | `ReadSettings.kt:50` `disableReturnKey`；面板 `MoreConfigSheet.kt:443-448`、`ReadConfigScreen.kt:404-407`；契约 `ReadBookContract.kt:2061`、`ReadConfigUpdateDelegate.kt:724-726` | `ReaderSettingsRepository.ets:236`、读 `:709`、写 `:1141`；`ReaderSettingsPage.ets:1151`；`BackupRepository.ets:251` | 已接 | 存储键与上游同名 `disableReturnKey`（`PreferKey.kt:420`），默认 `false`。**上游只有这个配置项，没有对应的拦截实现**：全仓对 `disablereturn` 大小写不敏感共 21 处，全部是设置项/落库/契约/资源字符串/一个单元测试断言，没有任何 `BackHandler`/`onBackPressed`/`KEYCODE_BACK` 消费点；阅读页真正的返回处理在 `ReadBookRouteScreen.kt:240-249`，只按 sheet/搜索/自动翻页/菜单层级分支，不读该字段。按「上游有这个配置就保留、上游没有这个效果就不要」，本地只做可配 + 落库 + 随备份，不加返回键拦截。 | 开关拨到开 → 偏好文件出现 `<bool key="disableReturnKey" value="true"/>`；注入 `true` 重启后开关回显为开；拨回关 → `false`。 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-A3 |
 | 优化正文渲染 | `ReadSettings.kt` | `ReaderSettingsPage.ets:863` | 未接 | 走 `showNotMigrated('优化正文渲染')` | 开关后长章节渲染耗时变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-A4 |
@@ -320,7 +321,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（55 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（51 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -438,7 +439,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 - **改名已接 15 项**：`lineSpacingExtra`、`menuIconItemsPerRow`、`menuIconRowCount`、`menuIconShowText`、`menuIconStyle`、`pageAnim`、`pageAnimSpeed`、`shadowColor`、`shadowColorN`、`textSize`、`useUnderline`、`progressBarBehavior`、`clickImgWay`、`tocUiUseReplace`、`tocCountWords`，见第二节映射表。
 - **数组合并 9 项**：`clickActionTL`…`clickActionBR` 九个整型字段由本地一个 `clickRegionActions: string[]` 承接（`ReaderSettingsRepository.ets:177`，默认值 `:243-245`，消费 `ReaderPage.ets:1125`）。字段名比对会把这 9 项全判缺失，实际是已接。
-- **容器合并 12 项**：`ReadBookConfig.kt:604-615` 的 12 个页边距字段由本地 `ReaderPaddingSettings` 容器承接（`ReaderSettingsRepository.ets:99-112`，默认值 `:114-118`）。注意 `ReadSettings.kt:11` 的 `paddingDisplayCutouts` 是另一个字段，**不在此列**，仍判未接。
+- **容器合并 12 项**：`ReadBookConfig.kt:604-615` 的 12 个页边距字段由本地 `ReaderPaddingSettings` 容器承接（`ReaderSettingsRepository.ets:99-112`，默认值 `:114-118`）。注意 `ReadSettings.kt:11` 的 `paddingDisplayCutouts` 是另一个字段，**不在此列**，已由 KI-A1 单独接上。
 - **非配置项 2 项**：`name`（`ReadBookConfig.kt:536`，书名字段）与 `id`（`:659`，`@Transient` 进程内列表身份，注释明写「不写入主题包」）。
 - **另有独立仓储 1 项**：`highlightRules`（`ReadBookConfig.kt:656`）不在 `ReaderSettingsRepository.ets` 中，但本地对应 `entry/src/main/ets/model/ReaderHighlightRule.ets`、`data/ReaderHighlightRuleRepository.ets`、`data/ReaderHighlightRuleEngine.ets` 三个文件，属高亮规则的独立模块。它在 1.3 的 112 项里占一格，但不需补仓储字段。
 
@@ -586,8 +587,8 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `readBodyToLh` | 要接 | 正文行高归一，本地只有恒 true 的占位开关（KI-A1） |
-| `useZhLayout` | 要接 | 中文标点排版，本地无分支（KI-A1） |
+| `readBodyToLh` | 已接 | **KI-A1 已实现**（存储键同名 `PreferKey.kt:104`，读 `ReaderSettingsRepository.ets:741`、写 `:1184`、面板 `ReaderSettingsPage.ets:1119`、`ReaderPage.ets:212`）。上游无渲染消费点，只做可配 + 落库 + 随备份 | 正文行高归一，本地只有恒 true 的占位开关（KI-A1） |
+| `useZhLayout` | 已接 | **KI-A1 已实现**（存储键同名 `PreferKey.kt:150`，读 `:743`、写 `:1186`、面板 `:1131`、`ReaderPage.ets:214` + 布局 key `:1802`）。断行器不变，只进分页布局签名 | 中文标点排版，本地无分支（KI-A1） |
 | `readStyleSelect` | 不接 | 图片书/漫画的排版样式索引；本地无图片书类型，属[项目范围](../PROJECT.md)之外的设备/内容形态（明细表 A 块 `:96` 已判 `不适用`） |
 | `comicStyleSelect` | 不接 | 同上，漫画侧（明细表 A 块 `:97` 已判 `不适用`） |
 
@@ -607,8 +608,8 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `adaptSpecialStyle` | 要接 | 保留书籍自带样式，本地占位恒 true（KI-A1） |
-| `paddingDisplayCutouts` | 要接 | 刘海屏安全区，本地占位恒 true（KI-A1） |
+| `adaptSpecialStyle` | 已接 | **KI-A1 已实现**（存储键同名 `PreferKey.kt:117`，读 `:747`、写 `:1190`、面板 `:1137`、`LocalTextSemantics.ets:94`/`:107`、`LocalReaderPaginator.ets:306`/`:515`）。`[newpage]` 换页与 `<usehtml>` 整段单 part | 保留书籍自带样式，本地占位恒 true（KI-A1） |
+| `paddingDisplayCutouts` | 已接 | **KI-A1 已实现**（存储键同名 `PreferKey.kt:337`，读 `:745`、写 `:1188`、面板 `:1125`、`ReaderPage.ets:216`/`applyReaderDisplayCutout()` `:812`）。顶部避让仍由状态栏 padding 承担 | 刘海屏安全区，本地占位恒 true（KI-A1） |
 | `disableReturnKey` | 已接 | **KI-A3 已实现**（存储键同名 `disableReturnKey`，读 `ReaderSettingsRepository.ets:709`、写 `:1141`、面板 `ReaderSettingsPage.ets:1151`、备份 `BackupRepository.ets:251`）。只做可配 + 落库 + 随备份：上游全仓无任何读该字段的 `BackHandler`/`onBackPressed`，本地也不加拦截 |
 | `autoSuggestDayNight` | 已接 | **KI-A6 已实现**（`sensor.on(AMBIENT_LIGHT)` 订阅 + 10 分钟冷却 + 5 秒自动消失胶囊，存储键同名） |
 | `sliderVibrator` | 要接 | 进度条触感反馈；**KI-A7 已实现**（存储键 `sliderVibrator`；上游 UI 侧无消费点，本地只做可配+落库+随备份，不加振动） |
@@ -675,7 +676,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 2. ~~**C 块标题排版 14 项**~~ —— **2026-10-31 KI-C4 已完成**。当初估计的改动面正确（9 处 `fontSize + 4` 硬编码确实全部清除，`titleSizeRelative` 用显式 `boolean` 默认 `true` 等价覆盖上游 null 态）。实际风险点不在取值而在两处 UI：面板缺少可滚动容器、`ForEach` key 不含选中项，两处都已修（详见本节末段与 `docs/VALIDATION.md` 的 KI-C4 节）。
 3. ~~**C 块正文与背景 6 行 + 下划线虚线 4 行**~~ —— **正文与背景 6 行已由 2026-10-31 KI-C1/KI-C2 完成**（11 个字段全部落库：正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2；`getReadingTextColor()` 的硬编码已改走 `textColor`/`textColorNight`，背景预设 `READER_BACKGROUND_STYLES` 降级为「自定义 `bgStr` 为空时的回退」）。**下划线虚线 4 行已由 2026-10-31 KI-C3 完成**：这四项不能用 `Text.decoration`（ArkUI 只开放 `type`/`color`/`style`/`thicknessScale`），改为 `ReaderPage.ets` 的 `ReaderUnderlineLayer` 用 `Line()` 逐行自绘，并把 6 处正文 `Text.decoration` 收敛为 `None`；滚动模式无行几何，仍用 Text 装饰（已知差异）。
 
-三处阻塞里只剩第 1 条（E 块菜单外观 40 行），共 40 行未接（明细表口径）。A–G 明细表的 55 行未接分布为：E 块 37 行、A 块 16 行、D 块 1 行、C 块 1 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19、再因 KI-A6 接上 `autoSuggestDayNight` 减到 18、又因 KI-A3 接上 `disableReturnKey` 减到 17，再因 KI-A9 接上 `readBrightness` 减到 16；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7，第五次因 KI-D1 接上 `prevKeys`/`nextKeys`/`mouseWheelPage` 减到 5；第六次因 KI-D2 接上 `textSelectMenuConfig`/`expandTextMenu`/`showSelectMenuIcon` 减到 2，第七次因 KI-D4 接上 `doubleHorizontalPage` 减到 1C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5，第四次因 KI-C3 接上四个下划线几何参数由 5 减到 1），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞里只剩第 1 条（E 块菜单外观 40 行），共 40 行未接（明细表口径）。A–G 明细表的 51 行未接分布为：E 块 37 行、A 块 12 行、D 块 1 行、C 块 1 行，B/F/G 三块清零。（B 块已于 2026-10-31 复核清零；A 块同日因 KI-A7 接上 `sliderVibrator`/`selectVibrator` 由 21 减到 19、再因 KI-A6 接上 `autoSuggestDayNight` 减到 18、又因 KI-A3 接上 `disableReturnKey` 减到 17，再因 KI-A9 接上 `readBrightness` 减到 16，第八次因 KI-A1 接上正文渲染适配四项减到 12；D 块先因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8，再因 KI-D6 接上 `lastMarkingStyle` 减到 7，第五次因 KI-D1 接上 `prevKeys`/`nextKeys`/`mouseWheelPage` 减到 5；第六次因 KI-D2 接上 `textSelectMenuConfig`/`expandTextMenu`/`showSelectMenuIcon` 减到 2，第七次因 KI-D4 接上 `doubleHorizontalPage` 减到 1C 块同日因 KI-C5 接上 `chineseConverterType` 由 2 减到 1，再因 KI-C1/KI-C2 接上正文与背景 6 行由 25 减到 19，第三次因 KI-C4 接上标题排版 14 行由 19 减到 5，第四次因 KI-C3 接上四个下划线几何参数由 5 减到 1），余下均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 

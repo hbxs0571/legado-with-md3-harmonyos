@@ -10,6 +10,10 @@ export interface LocalSemanticParagraph {
   parts: LocalSemanticPart[];
   startPosition: number;
   endPosition: number;
+  /** 该段是 `[newpage]` 分页标记，只有 `adaptSpecialStyle` 开启时才会被识别（上游 `ReaderChapterSource.kt:158`）。 */
+  pageBreak: boolean;
+  /** 该段是 `<usehtml>...</usehtml>` 富文本块，只有 `adaptSpecialStyle` 开启时才会被识别（上游 `ReaderChapterSource.kt:162`）。 */
+  richHtml: boolean;
 }
 
 export interface LocalSemanticDocument {
@@ -40,7 +44,14 @@ export class LocalTextSemantics {
     return document.content.length;
   }
 
-  static parse(rawBody: string, paragraphIndent: string = '　　'): LocalSemanticDocument {
+  /**
+   * 按 Android 默认章节正文管线生成段落、图片占位和字符坐标。
+   *
+   * [adaptSpecialStyle] 对齐上游 `ReadSettings.adaptSpecialStyle`（默认开）：开启时 `[newpage]`
+   * 独占一段即成为一个换页点、`<usehtml>...</usehtml>` 整段成为富文本块（渲染层不显示源码）；
+   * 关闭时两者都按字面文字显示（`ReaderChapterSource.kt:158-166`、`ReaderBodyOnlyFilter.kt:56-60`）。
+   */
+  static parse(rawBody: string, paragraphIndent: string = '　　', adaptSpecialStyle: boolean = true): LocalSemanticDocument {
     const paragraphs: LocalSemanticParagraph[] = [];
     const semanticContent: string[] = [];
     const sourcePositionMap: number[] = [0];
@@ -79,10 +90,42 @@ export class LocalTextSemantics {
       }
       if (end > start) {
         const paragraphText = line.substring(start, end);
+        const trimmedText = paragraphText.trim();
+        if (adaptSpecialStyle && trimmedText === '[newpage]') {
+          // 分页标记：独占一段，渲染层据此换页，不显示源码（上游 ReaderChapterSource.kt:158）。
+          appendSourceOnly(line.substring(0, start));
+          const pageBreakStart = position;
+          appendBoth(paragraphText);
+          appendSourceOnly(line.substring(end));
+          appendBoth('\n');
+          paragraphs.push({
+            parts: [], startPosition: pageBreakStart, endPosition: position,
+            pageBreak: true, richHtml: false
+          });
+          continue;
+        }
+        const isRichHtml = adaptSpecialStyle && trimmedText.startsWith('<usehtml>') &&
+          trimmedText.endsWith('</usehtml>');
         const parts: LocalSemanticPart[] = [];
         const paragraphStart = position;
         const imageOnlyParagraph = /^\s*(?:\[\[EPUB_IMAGE:[^;\]\r\n]+(?:;[^\]\r\n]*)?\]\]\s*)+$/.test(paragraphText);
         appendSourceOnly(line.substring(0, start));
+        if (isRichHtml) {
+          // 富文本块：整段作为一个 part，源码不逐字进入正文排版（上游 ReaderChapterSource.kt:162）。
+          // 源码偏移已在上面统一 appendSourceOnly 过一次，这里只补正文与段尾换行。
+          parts.push({
+            kind: 'text', value: paragraphText, startPosition: position,
+            endPosition: position + paragraphText.length, leadingIndent: false
+          });
+          appendBoth(paragraphText);
+          appendSourceOnly(line.substring(end));
+          appendBoth('\n');
+          paragraphs.push({
+            parts: parts, startPosition: paragraphStart, endPosition: position,
+            pageBreak: false, richHtml: true
+          });
+          continue;
+        }
         if (!imageOnlyParagraph && paragraphIndent.length > 0) {
           parts.push({ kind: 'text', value: paragraphIndent, startPosition: position,
             endPosition: position + paragraphIndent.length, leadingIndent: true });
@@ -112,7 +155,7 @@ export class LocalTextSemantics {
         }
         appendSourceOnly(line.substring(end));
         appendBoth('\n');
-        paragraphs.push({ parts: parts, startPosition: paragraphStart, endPosition: position });
+        paragraphs.push({ parts: parts, startPosition: paragraphStart, endPosition: position, pageBreak: false, richHtml: false });
       } else {
         // 空段落不绘制，但原文换行仍占 Android 正文字符坐标。
         appendSourceOnly(line);

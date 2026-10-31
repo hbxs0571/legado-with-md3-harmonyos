@@ -223,6 +223,15 @@ export struct ReaderPage {
    */
   @Prop @Watch('onReadBrightnessChanged') brightnessAuto: boolean = true;
 
+  /** 正文行高适配；上游 `readBodyToLh`（`ReadSettings.kt:14`，默认 true）。上游只有只读快照，无渲染消费点。 */
+  @Prop readBodyToLh: boolean = true;
+  /** 自定义中文分行；上游 `useZhLayout`（`ReadSettings.kt:19`），只参与分页输入签名（`PageEstimateConfig.kt:23`）。 */
+  @Prop @Watch('onPaginationInputsChanged') useZhLayout: boolean = false;
+  /** 正文避让显示缺口；上游 `paddingDisplayCutouts`（`ReadSettings.kt:11`），见 `ReaderContentAvoidancePolicy.padding()`。 */
+  @Prop @Watch('onPaginationInputsChanged') paddingDisplayCutouts: boolean = false;
+  /** 适配书籍自带特殊样式；上游 `adaptSpecialStyle`（`ReadSettings.kt:18`），控制 `[newpage]`/`<usehtml>` 的解释。 */
+  @Prop @Watch('onAdaptSpecialStyleChanged') adaptSpecialStyle: boolean = true;
+
   /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
   @Prop dayNightReminderText: string = '';
   /** 点「切换到深色/浅色模式」。 */
@@ -359,6 +368,10 @@ export struct ReaderPage {
   private readerStatusBarIconRequestId: number = 0;
   /** 窗口亮度请求序号，用途同上。 */
   private readerBrightnessRequestId: number = 0;
+  /** 显示缺口（刘海/挖孔）的左右与底部 inset，单位 vp；系统回调写入，配置关闭时不用。 */
+  private readerDisplayCutoutLeft: number = 0;
+  private readerDisplayCutoutRight: number = 0;
+  private readerDisplayCutoutBottom: number = 0;
   private readerOrientationRequestId: number = 0;
   private originalReaderOrientation: window.Orientation = window.Orientation.UNSPECIFIED;
   private originalReaderOrientationCaptured: boolean = false;
@@ -464,6 +477,7 @@ export struct ReaderPage {
     this.syncReaderSystemBars();
     this.applyReaderStatusBarIcon();
     this.applyReaderBrightness();
+    this.applyReaderDisplayCutout();
     this.applyReaderOrientation(this.screenOrientation, true);
     this.applyKeepLight();
     this.syncVolumeKeyPage();
@@ -766,6 +780,47 @@ export struct ReaderPage {
     if (this.readerWindowActive) { this.applyReaderBrightness(); }
   }
 
+  /**
+   * 读取显示缺口（刘海 / 挖孔）避让量并写进三个 inset 字段。
+   * 对齐上游 `ReaderContentAvoidancePolicy.padding()`（`ui/book/read/ReaderContentAvoidancePolicy.kt:34-51`）：
+   * 只有 `paddingDisplayCutouts` 打开时才把缺口算进正文可用区，关闭时一律按 0 处理。
+   * 顶部不在这里避让：状态栏占位已盖住顶部缺口，与上游 `statusPlaceholderGone` 的判法一致。
+   */
+  private applyReaderDisplayCutout(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    window.getLastWindow(context).then((targetWindow: window.Window) => {
+      let area: window.AvoidArea | undefined = undefined;
+      try {
+        area = targetWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT);
+      } catch (_) {
+        return;
+      }
+      if (area === undefined || area.visible !== true) {
+        this.readerDisplayCutoutLeft = 0;
+        this.readerDisplayCutoutRight = 0;
+        this.readerDisplayCutoutBottom = 0;
+      } else {
+        // getWindowAvoidArea 返回 px，排版全部按 vp 计算，这里用 UIContext 换算一次。
+        const uiContext = this.getUIContext();
+        this.readerDisplayCutoutLeft = Math.max(0, uiContext.px2vp(area.leftRect.width));
+        this.readerDisplayCutoutRight = Math.max(0, uiContext.px2vp(area.rightRect.width));
+        this.readerDisplayCutoutBottom = Math.max(0, uiContext.px2vp(area.bottomRect.height));
+      }
+      if (this.readerWindowActive) { this.rebuildReaderPages(); }
+    }).catch(() => {});
+  }
+
+  /**
+   * 适配特殊样式变化：`[newpage]`/`<usehtml>` 的解释方式变了，正文语义文档要重建。
+   * 上游是重读章节正文（`ContentProcessor.kt:173` + `ReaderChapterSource.kt:158-166`），
+   * 本地正文由父组件传入，这里只重建分页并让渲染 revision 前进。
+   */
+  onAdaptSpecialStyleChanged(): void {
+    this.readerContentRevision += 1;
+    this.rebuildReaderPages();
+  }
+
   private stopAutoPageTimer(): void {
     if (this.autoPageTimer >= 0) {
       clearInterval(this.autoPageTimer);
@@ -1049,7 +1104,7 @@ export struct ReaderPage {
     const pageHeight = Math.max(lineHeight, this.getBodyContentHeight(infoHeaderReserve, infoFooterReserve));
     // Android 段距范围为 0–20，每一档按行高的十分之一计算。
     const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
-    const document = LocalTextSemantics.parse(this.content, this.paragraphIndent);
+    const document = LocalTextSemantics.parse(this.content, this.paragraphIndent, this.adaptSpecialStyle);
     this.localSemanticContent = document.content;
     const nextRanges = ReaderHighlightRuleEngine.findBodyRanges(document.content, this.readerHighlightRules);
     if (nextRanges.length !== this.readerHighlightRanges.length) {
@@ -1785,6 +1840,7 @@ export struct ReaderPage {
       this.paragraphSpacing, this.lineSpacing, this.letterSpacing, this.paragraphIndent,
       this.readerContentWidth, this.viewportHeight, this.activeImageStyle, this.resolveReaderColumnCount(),
       JSON.stringify(this.paddingSettings),
+      this.useZhLayout,
       this.infoSettings.headerMode, this.infoSettings.footerMode,
       this.infoSettings.headerFont, this.infoSettings.footerFont,
       this.infoSettings.headerFontSize, this.infoSettings.footerFontSize, this.infoSettings.applyHeaderStyle,
@@ -1890,7 +1946,7 @@ export struct ReaderPage {
       const rawTitle = chapterRows[chapterIndex]?.title ??
         (chapterIndex === this.getChapterIndex() ? this.chapterTitle : '');
       const displayTitle = await ReplaceRuleRepository.applyTitle(this.book, rawTitle);
-      const document = LocalTextSemantics.parse(chapterContent, this.paragraphIndent);
+      const document = LocalTextSemantics.parse(chapterContent, this.paragraphIndent, this.adaptSpecialStyle);
       await cacheDocumentGlyphWidths(document);
       await this.loadImageSizesForDocument(document, imageSizes);
       const titleReservedLines = this.measureTitleReservedLines(context, width, lineHeight, displayTitle);
@@ -2015,7 +2071,26 @@ export struct ReaderPage {
   // 列内文字可用宽度：步长减去左右内边距，对齐上游 ReaderPaginator.kt:87 的 contentWidthPx。
   // 双页时每列各自带左右内边距，所以这里必须按列宽算，不能按整页宽算。
   private getBodyContentWidth(): number {
-    return Math.max(1, this.getColumnStrideWidth() - this.paddingSettings.paddingLeft - this.paddingSettings.paddingRight);
+    return Math.max(1, this.getColumnStrideWidth() - this.paddingSettings.paddingLeft - this.paddingSettings.paddingRight -
+      this.readerCutoutLeftInset() - this.readerCutoutRightInset());
+  }
+
+  /**
+   * 显示缺口避让量（vp）。对齐上游 `ReaderContentAvoidancePolicy.padding()`：
+   * 关闭时不避让；开启时左右各按 cutout inset 让开，底部叠加 cutout 底部 inset。
+   * 上游顶部只在状态栏占位消失时避让（占位本身已盖住刘海），本地由外层 Stack 的 paddingTop 承担状态栏，
+   * 所以这里只处理左右与底部。
+   */
+  private readerCutoutLeftInset(): number {
+    return this.paddingDisplayCutouts ? this.readerDisplayCutoutLeft : 0;
+  }
+
+  private readerCutoutRightInset(): number {
+    return this.paddingDisplayCutouts ? this.readerDisplayCutoutRight : 0;
+  }
+
+  private readerCutoutBottomInset(): number {
+    return this.paddingDisplayCutouts ? this.readerDisplayCutoutBottom : 0;
   }
 
   // 某一页内第 index 行落在哪一列（0 或 1）。分页器保证先填满第 0 列再填第 1 列。
@@ -2033,7 +2108,7 @@ export struct ReaderPage {
 
   private getBodyContentHeight(headerReserve: number, footerReserve: number): number {
     return Math.max(1, this.viewportHeight - this.paddingSettings.paddingTop -
-      this.paddingSettings.paddingBottom - headerReserve - footerReserve);
+      this.paddingSettings.paddingBottom - headerReserve - footerReserve - this.readerCutoutBottomInset());
   }
 
   private getReaderInfoReserve(isHeader: boolean): number {

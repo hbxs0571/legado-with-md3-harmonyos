@@ -257,6 +257,14 @@ interface AndroidReadConfigBackupRecord {
   brightnessVwPos: string;
   /** 亮度是否跟随系统，上游键名 brightnessAuto（PreferKey.kt:194），随 config.xml 备份。 */
   brightnessAuto: boolean;
+  /** 正文行高适配；上游 ReadSettings.kt:14，键名同名，不在 readPrefKeys 忽略清单里。 */
+  readBodyToLh: boolean;
+  /** 自定义中文分行；上游 ReadSettings.kt:19。 */
+  useZhLayout: boolean;
+  /** 填充刘海区域；上游 ReadSettings.kt:11。 */
+  paddingDisplayCutouts: boolean;
+  /** 适配特殊样式；上游 ReadSettings.kt:18。 */
+  adaptSpecialStyle: boolean;
 }
 
 interface JsonStringResult {
@@ -641,6 +649,15 @@ export class BackupRepository {
           configText, 'int', 'brightness', `${Math.max(1, Math.min(100, Math.round(settings.readBrightness)))}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'brightnessAuto', settings.brightnessAuto ? 'true' : 'false');
+    // 正文渲染适配四项：上游四个键都不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 无条件备份。
+    configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'readBodyToLh', settings.readBodyToLh ? 'true' : 'false');
+    configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'useZhLayout', settings.useZhLayout ? 'true' : 'false');
+    configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'paddingDisplayCutouts', settings.paddingDisplayCutouts ? 'true' : 'false');
+    configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'adaptSpecialStyle', settings.adaptSpecialStyle ? 'true' : 'false');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'float', 'dottedBase', `${settings.dottedBase}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1104,6 +1121,10 @@ export class BackupRepository {
       showBrightnessView: settings.showBrightnessView,
       brightnessVwPos: settings.brightnessVwPos,
       brightnessAuto: settings.brightnessAuto,
+      readBodyToLh: settings.readBodyToLh,
+      useZhLayout: settings.useZhLayout,
+      paddingDisplayCutouts: settings.paddingDisplayCutouts,
+      adaptSpecialStyle: settings.adaptSpecialStyle,
       dottedBase: settings.dottedBase,
       dottedRatio: settings.dottedRatio,
       underlineColor: settings.underlineColor,
@@ -1396,6 +1417,14 @@ export class BackupRepository {
       })(),
       brightnessAuto: BackupRepository.readJsonBoolean(selected, 'brightnessAuto') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'brightnessAuto') ?? current.brightnessAuto,
+      readBodyToLh: BackupRepository.readJsonBoolean(selected, 'readBodyToLh') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'readBodyToLh') ?? current.readBodyToLh,
+      useZhLayout: BackupRepository.readJsonBoolean(selected, 'useZhLayout') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'useZhLayout') ?? current.useZhLayout,
+      paddingDisplayCutouts: BackupRepository.readJsonBoolean(selected, 'paddingDisplayCutouts') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'paddingDisplayCutouts') ?? current.paddingDisplayCutouts,
+      adaptSpecialStyle: BackupRepository.readJsonBoolean(selected, 'adaptSpecialStyle') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'adaptSpecialStyle') ?? current.adaptSpecialStyle,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),
