@@ -105,6 +105,10 @@ export struct ReaderSettingsPage {
   @Prop bottomActions: ReaderBottomActionConfig[] = READER_LOCAL_BOTTOM_ACTION_DEFAULTS;
   @Prop topActions: ReaderBottomActionConfig[] = READER_LOCAL_TOP_ACTION_DEFAULTS;
   @Prop progressBehavior: string = 'page';
+  // 上游 readSliderMode："0" 常驻 / "1" 不显示
+  @Prop readSliderMode: string = '0';
+  // 上游 pageTouchSlop：0 = 系统默认阈值，范围 0–1000
+  @Prop pageTouchSlop: number = 0;
   @Prop screenOrientation: string = '0';
   @Prop keepLight: string = '0';
   @Prop volumeKeyPage: boolean = true;
@@ -209,6 +213,8 @@ export struct ReaderSettingsPage {
   onBottomActionsChange: (actions: ReaderBottomActionConfig[]) => void = (_actions: ReaderBottomActionConfig[]) => {};
   onTopActionsChange: (actions: ReaderBottomActionConfig[]) => void = (_actions: ReaderBottomActionConfig[]) => {};
   onProgressBehaviorChange: (value: string) => void = (_value: string) => {};
+  onReadSliderModeChange: (value: string) => void = (_value: string) => {};
+  onPageTouchSlopChange: (value: number) => void = (_value: number) => {};
   onScreenOrientationChange: (value: string) => void = (_value: string) => {};
   onKeepLightChange: (value: string) => void = (_value: string) => {};
   onVolumeKeyPageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
@@ -416,11 +422,12 @@ export struct ReaderSettingsPage {
       Scroll(this.menuSettingsScroller) {
         Column() {
           if (this.selectedMenuSettingsTab === 1) {
-            MenuSettingChoice({
-              title: '进度条模式',
-              value: this.progressBehavior,
-              onChange: (value: string) => this.onProgressBehaviorChange(value)
+            MenuSettingOption({
+              title: '滑动条显示样式',
+              detail: this.readSliderMode === '1' ? '不显示' : '常驻',
+              migrated: true
             }).margin({ left: 14, right: 14, bottom: 8 })
+              .onClick(() => this.openDetailSheet('滑动条显示样式', '底栏是否显示进度滑动条'))
             MenuSettingSwitch({
               title: '显示底栏图标名称',
               detail: '在阅读操作图标下显示文字',
@@ -611,6 +618,9 @@ export struct ReaderSettingsPage {
     }
     if (this.detailSheetTitle === '进度条行为' && choiceIndex >= 0) {
       this.onProgressBehaviorChange(choiceIndex === 1 ? 'chapter' : 'page');
+    }
+    if (this.detailSheetTitle === '滑动条显示样式' && choiceIndex >= 0) {
+      this.onReadSliderModeChange(choiceIndex === 1 ? '1' : '0');
     }
     if (this.detailSheetTitle === '点击图片行为' && choiceIndex >= 0) {
       this.onClickImageBehaviorChange(choiceIndex.toString());
@@ -841,6 +851,16 @@ export struct ReaderSettingsPage {
           MenuSettingOption({ title: '护眼设置', detail: '护眼模式与色温', migrated: true })
             .onClick(() => this.openDetailSheet('护眼设置', '配置护眼模式、色温与日夜参数'))
           Text('翻页控制').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
+          MenuSettingSlider({
+            title: '滑动翻页阈值',
+            value: this.pageTouchSlop,
+            minValue: 0,
+            maxValue: 1000,
+            stepValue: 10,
+            onChange: (value: number) => this.onPageTouchSlopChange(value)
+          })
+          Text('滑动翻页阈值（0 = 系统默认值）').fontSize(10).fontColor('#898B95')
+            .width('100%').padding({ left: 18, right: 18, bottom: 8 })
           MenuSettingOption({ title: '横屏双页', detail: '关闭 / 左右双页' }).onClick(() => this.openDetailSheet('横屏双页', '单页或左右双页阅读'))
           MenuSettingOption({
             title: '进度条行为', detail: this.progressBehavior === 'chapter' ? '章节进度' : '页码进度', migrated: true
@@ -1088,6 +1108,9 @@ export struct ReaderSettingsPage {
     } else if (title === '进度条行为') {
       this.detailSelectedOption = this.progressBehavior === 'chapter'
         ? (choices[1] ?? choices[0] ?? '') : (choices[0] ?? '');
+    } else if (title === '滑动条显示样式') {
+      this.detailSelectedOption = this.readSliderMode === '1'
+        ? (choices[1] ?? choices[0] ?? '') : (choices[0] ?? '');
     } else if (title === '屏幕方向') {
       const orientationIndex = Math.max(0, Math.min(5, Number.parseInt(this.screenOrientation, 10)));
       this.detailSelectedOption = choices[orientationIndex] ?? choices[0] ?? '';
@@ -1170,6 +1193,7 @@ export struct ReaderSettingsPage {
     if (title === '保持屏幕常亮') { return ['默认', '1分钟', '5分钟', '10分钟', '常亮']; }
     if (title === '横屏双页') { return ['关闭', '左右双页']; }
     if (title === '进度条行为') { return ['页码进度', '章节进度']; }
+    if (title === '滑动条显示样式') { return ['常驻', '不显示']; }
     if (title === '点击图片行为') { return ['新版行为', '预览图片', '经典', '禁用点击', '双击']; }
     if (title === '信息字体' || title === '选择字体') { return ['默认字体', '系统字体', '选择本地字体']; }
     if (title === '分割线颜色' || title === '文字颜色' || title === '信息颜色') {
@@ -1770,7 +1794,8 @@ export struct ReaderSettingsPage {
                 Text('此配置项的实际操作尚未迁移。').fontSize(12).fontColor('#A9ABB5').width('100%').padding(12)
               }
               Text(this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
-                this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '点击图片行为' ||
+                this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '滑动条显示样式' ||
+                this.detailSheetTitle === '点击图片行为' ||
                 this.detailSheetTitle === '屏幕方向' ||
                 this.detailSheetTitle === '显示模式' ||
                 this.detailSheetTitle === '正文排版' ||

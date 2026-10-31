@@ -558,6 +558,12 @@ export class BackupRepository {
           configText, 'int', 'bookmarkBadgeSize', `${Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize)))}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'bookmarkBadgeImage', settings.bookmarkBadgeImage);
+        // 上游 readSliderMode / pageTouchSlop 不在 BackupConfig.readPrefKeys 忽略清单里，
+        // 属于「无条件随 config.xml 备份」的键，这里按同样口径导出。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'readSliderMode', settings.readSliderMode === '1' ? '1' : '0');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'pageTouchSlop', `${Math.max(0, Math.min(1000, Math.round(settings.pageTouchSlop)))}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1167,6 +1173,16 @@ export class BackupRepository {
       topActions: current.topActions,
       progressBehavior: BackupRepository.readXmlString(`${directory}/config.xml`, 'progressBarBehavior') === 'chapter'
         ? 'chapter' : 'page',
+      readSliderMode: (() => {
+        // 备份里没有这个键就保留当前值，有则按 "1"/"0" 归一
+        const rawMode = BackupRepository.readJsonString(selected, 'readSliderMode') ??
+          BackupRepository.readXmlString(`${directory}/config.xml`, 'readSliderMode');
+        if (rawMode === undefined) { return current.readSliderMode; }
+        return rawMode === '1' ? '1' : '0';
+      })(),
+      pageTouchSlop: Math.max(0, Math.min(1000,
+        BackupRepository.readJsonNumber(selected, 'pageTouchSlop') ??
+        BackupRepository.readXmlInteger(`${directory}/config.xml`, 'pageTouchSlop') ?? current.pageTouchSlop)),
       tocUseReplace: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'tocUiUseReplace') ??
         current.tocUseReplace,
       tocShowWordCount: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'tocCountWords') ??

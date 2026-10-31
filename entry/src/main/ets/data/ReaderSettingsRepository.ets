@@ -171,6 +171,8 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   bottomActions: ReaderBottomActionConfig[];
   topActions: ReaderBottomActionConfig[];
   progressBehavior: string;
+  readSliderMode: string;
+  pageTouchSlop: number;
   tocUseReplace: boolean;
   tocShowWordCount: boolean;
   clickImageBehavior: string;
@@ -417,6 +419,8 @@ export class ReaderSettingsRepository {
         (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
       ),
       progressBehavior: 'page',
+      readSliderMode: '0',
+      pageTouchSlop: 0,
       tocUseReplace: false,
       tocShowWordCount: true,
       clickImageBehavior: '2',
@@ -485,6 +489,8 @@ export class ReaderSettingsRepository {
       const bottomActionsValue = await store.get('bottomActions', ReaderSettingsRepository.encodeBottomActions(defaults.bottomActions));
       const topActionsValue = await store.get('topActions', ReaderSettingsRepository.encodeTopActions(defaults.topActions));
       const progressBehaviorValue = await store.get('progressBehavior', defaults.progressBehavior);
+      const readSliderModeValue = await store.get('readSliderMode', defaults.readSliderMode);
+      const pageTouchSlopValue = await store.get('pageTouchSlop', defaults.pageTouchSlop);
       const tocUseReplaceValue = await store.get('tocUiUseReplace', defaults.tocUseReplace);
       const tocShowWordCountValue = await store.get('tocCountWords', defaults.tocShowWordCount);
       const clickImageBehaviorValue = await store.get('clickImgWay', defaults.clickImageBehavior);
@@ -695,6 +701,8 @@ export class ReaderSettingsRepository {
           typeof topActionsValue === 'string' ? topActionsValue : ''
         ),
         progressBehavior: progressBehaviorValue === 'chapter' ? 'chapter' : 'page',
+        readSliderMode: readSliderModeValue === '1' ? '1' : '0',
+        pageTouchSlop: ReaderSettingsRepository.normalizeInteger(pageTouchSlopValue, 0, 1000, defaults.pageTouchSlop),
         tocUseReplace: typeof tocUseReplaceValue === 'boolean' ? tocUseReplaceValue : defaults.tocUseReplace,
         tocShowWordCount: typeof tocShowWordCountValue === 'boolean'
           ? tocShowWordCountValue : defaults.tocShowWordCount,
@@ -804,6 +812,8 @@ export class ReaderSettingsRepository {
       await store.put('bottomActions', ReaderSettingsRepository.encodeBottomActions(settings.bottomActions));
       await store.put('topActions', ReaderSettingsRepository.encodeTopActions(settings.topActions));
       await store.put('progressBehavior', settings.progressBehavior === 'chapter' ? 'chapter' : 'page');
+      await store.put('readSliderMode', settings.readSliderMode === '1' ? '1' : '0');
+      await store.put('pageTouchSlop', Math.max(0, Math.min(1000, Math.round(settings.pageTouchSlop))));
       await store.put('tocUiUseReplace', settings.tocUseReplace);
       await store.put('tocCountWords', settings.tocShowWordCount);
       await store.put('clickImgWay', ['0', '1', '2', '3', '4'].includes(settings.clickImageBehavior)

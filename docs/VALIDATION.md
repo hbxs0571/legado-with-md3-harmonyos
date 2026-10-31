@@ -305,6 +305,18 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-D5 进度条显示样式与滑动翻页阈值（通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 24 s 832 ms`，33 项任务 17 执行 / 16 最新），HAP 覆盖安装成功。
+- **设置项上屏（D-06「滑动条显示样式」）**：设置 → 阅读界面 → 底栏布局 tab，首项显示「滑动条显示样式 / 常驻」。此条原本错挂成「进度条模式」并绑在本地 `progressBehavior`（页码/章节）上，本轮纠正为上游 `readSliderMode` 的「常驻 / 不显示」二值。
+- **详情面板与落库**：点开显示标题「滑动条显示样式」、描述「底栏是否显示进度滑动条」、选项「常驻」「不显示」，选中「不显示」后条目副标题即时变「不显示」。`cat .../preferences/legado_reader_settings` 实测出现 `<string key="readSliderMode">1</string>`；改回「常驻」后回到 `0`。
+- **面板底部提示（本轮新修）**：条件链原先漏了这个新标题，导致面板底部恒显示「仅展示选择预览，不保存设置」。补上后实测变为「选择后立即应用并保存；自定义内容需点击保存。」，与实际落盘行为一致。
+- **设置项上屏（D-07「滑动翻页阈值」）**：设置 → 阅读界面 → 更多 → 「翻页控制」段第一项为「滑动翻页阈值」，初值 `0`，下方说明「滑动翻页阈值（0 = 系统默认值）」；滑块范围 0–1000、步长 10，点滑块约 30% 位置后数值变 `310`，`legado_reader_settings` 出现 `<double key="pageTouchSlop" value="310.000000"/>`。
+- **阈值生效（决定性对比）**：同一本书同一页，`pageTouchSlop=310`（≈110vp）时横向短滑 400px（≈141vp）**截图 md5 前后完全一致、不翻页**；滑 1200px（≈424vp）**翻页**。把该值改回 `0`（走平台默认 36vp）后，同样 400px 的短滑**能翻页**（截图 md5 由 `645ad35f…` 变 `dbde7a89…`，稳定后再滑仍变 `c60d86eb…`）。两次对比方向相反，确认阈值确实取自该配置。
+- **备份口径**：`readSliderMode`（string）与 `pageTouchSlop`（int）已进 `BackupRepository.ets` 的导出与恢复两段；未加入 `preferenceKeysByCategory.readConfig` 忽略清单，与上游 `BackupConfig.readPrefKeys` 不含这两个键一致（上游 `Backup.kt:257` 全量导出 `preferences.asMap()`）。
+- **模拟器限制（影响走读手法，非本次改动引入）**：该模拟器上阅读页正文区的单击手势不稳定——`hilog` 显示 `Click try accept` 后仍无动作，即使把九宫格中心格改成「目录」、把 9 格全改成「菜单」也不弹面板；同一份配置在「点击区域」以外的入口（设置页）均正常。这与 `docs/KNOWN-ISSUES.md` 里既有的「模拟器上长按划词不可靠」属同一类环境问题，故本轮用「设置页读写 + 偏好文件实测 + 滑动距离对比」完成验收，未依赖正文单击。
+- 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
+
 ## 2026-10-31 r297 readConfig 文档轮次收尾构建
 
 - 本轮只改文档与脚本（`docs/parity/READER-CONFIG.md`、`docs/parity/KEYWORDS.md`、`docs/parity/STATUS.md`、`docs/KNOWN-ISSUES.md`、`scripts/upstream-surface.sh` 与三个 `scripts/reader-config-*.py`），未改 `.ets`。构建目的是确认并行工作留下的 `.ets` 改动不破坏编译，以及本轮文档改动没有误伤源码。

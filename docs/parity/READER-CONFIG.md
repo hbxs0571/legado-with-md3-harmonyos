@@ -52,15 +52,17 @@
 | A 阅读界面基础 | 37 | 14 | 21 | 2 |
 | B 页眉页脚 | 24 | 24 | 0 | 0 |
 | C 正文排版 | 49 | 23 | 26 | 0 |
-| D 翻页与手势交互 | 20 | 10 | 10 | 0 |
+| D 翻页与手势交互 | 20 | 12 | 8 | 0 |
 | E 菜单与主题外观 | 42 | 2 | 40 | 0 |
 | F 护眼与书签角标 | 9 | 9 | 0 | 0 |
 | G 页边距 | 8 | 8 | 0 | 0 |
-| 合计 | 189 | 90 | 97 | 2 |
+| 合计 | 189 | 92 | 95 | 2 |
 
 > 早前口头估计「菜单外观 30-40 项全占位」方向对、原因错：不是没有控件，是有控件无持久化无渲染（见口径第 2 条）。逐项核完 E 块共 42 条：40 条未接，2 条已接（底栏按钮配置、标题栏操作按钮）。
 >
-> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 97 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+> 2026-10-31 复核：B 块唯一一行（页眉/页脚独立字体）改判 `已接`——排版设置面板的字体目标四按钮可选「页眉」「页脚」，经 `openFontSelection()` → `setFontPathForCurrentTarget()` 分别落 `headerFont`/`footerFont`，`ReaderPage.ets:711-715 readerInfoFontFamily()` 按其取字体族。原先判 `未接` 是因为只看了页眉页脚 tab 里那条 `showNotMigrated` 占位入口，未查到另一条可达路径。现 95 行未接**逐行**在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记了「为什么不修」与补法，本表备注列的 `KI-xx` 即其锚点，无裸「未接」。
+>
+> 2026-10-31 KI-D5 落库：D 块「翻页触摸灵敏度」（`pageTouchSlop`）与「进度条模式」（`readSliderMode`）两条由 `未接` 改 `已接`，D 块 10 未接 → 8 未接，全表 97 → 95。D-07 顺带纠正了「底栏布局」tab 首项把本地 `progressBehavior`（页码/章节）挂在 `readSliderMode` 位置的历史错位。
 
 ## A 阅读界面基础
 
@@ -216,8 +218,8 @@
 | 朗读时允许音量键翻页 | `ReadSettings.kt:30` | `ReaderSettingsPage.ets:851` | 未接 | 走 `showNotMigrated('朗读时音量键翻页')` | — | 朗读在[范围之外](../PROJECT.md)，开关已上屏故判 `未接`；见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D3 |
 | 横屏双页 | `ReadSettings.kt:26` | `ReaderSettingsPage.ets:844` | 未接 | 上游 `doubleHorizontalPage` 三值，本地打开详情面板但面板内无落盘 | 横屏时左右双页显示 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D4 |
 | 进度条行为 | `ReadSettings.kt:27` | `ReaderSettingsRepository.ets:173` | 已接 | 上游 `progressBarBehavior` → 本地 `progressBehavior`，取值 `page`/`chapter`，面板 `ReaderSettingsPage.ets:847` | 拖动进度条按章节或页码定位 | — |
-| 翻页触摸灵敏度 | `ReadSettings.kt:35` | — | 未接 | 上游 `pageTouchSlop` 默认 0，本地无字段 | 调节后误触减少 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D5 |
-| 进度条模式 | `ReadSettings.kt:25` | — | 未接 | 上游 `readSliderMode` 默认 `"0"`，本地无字段 | 进度条显示形态变化 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D5 |
+| 翻页触摸灵敏度 | `ReadSettings.kt:35`（`pageTouchSlop: Int = 0`） | `ReaderSettingsRepository.ets:175` | 已接 | 上游 0 表示用平台默认阈值（`ReaderGestureSettingsPolicy.touchSlopPx`）；本地同口径：`pageTouchSlop > 0` 时取该值，否则回落 36vp。存储键 `pageTouchSlop`，读 `:493`、写 `:816`（夹 0–1000），面板「翻页控制」段的 `MenuSettingSlider`（`ReaderSettingsPage.ets:854-861`，0–1000 步长 10），消费点 `ReaderPage.ets:2947-2948` 的水平 `PanGesture` 阈值 | 把滑块从 0 调到 310 → 横滑 400px（≈141vp）截图 md5 不变、不翻页，滑 1200px（≈424vp）翻页；调回 0（平台默认 36vp）后同样 400px 能翻页。已实测（docs/VALIDATION.md 2026-10-31 KI-D5 节） | 上游把选择拖选阈值刻意与它解耦（`selectionDragSlopPx` 用平台值），本地未联动，保持解耦 |
+| 进度条模式 | `ReadSettings.kt:25`（`readSliderMode: String = "0"`） | `ReaderSettingsRepository.ets:174` | 已接 | 上游语义是**显示/不显示**（`ReadBookMenuBarBottom.kt:161` `AnimatedVisibility(visible = readSliderMode != "1")`），选项「常驻」/「不显示」；本地存储键 `readSliderMode`，读 `:492`、写 `:815`，面板「底栏布局」tab 首项 `ReaderSettingsPage.ets:424-430`，消费点 `ReaderPage.ets:3109` 整行进度条外包 `if (this.readSliderMode !== '1')` | 选「不显示」→ 打开阅读菜单，底栏上方那行「上一章 / 滑块 / 下一章」消失，底部图标行仍在；选「常驻」→ 该行恢复。落库已实测：选「不显示」后偏好文件出现 `readSliderMode` = `1`，改回「常驻」回到 `0`（docs/VALIDATION.md 2026-10-31 KI-D5 节） | 顺带纠正了历史错位：该位置原本挂的是本地 `progressBehavior`（页码/章节），与上游 `readSliderMode` 语义不同，现分别由「滑动条显示样式」和「进度条行为」两项承担 |
 | 允许选择正文 | `ReadSettings.kt:46` | `ReaderSettingsRepository.ets:195` | 已接 | 开关在 `ReaderSettingsPage.ets:874`，阅读页 `ReaderPage.ets:169` 消费 | 长按正文出现选择菜单 | — |
 | 展开文字菜单 | `ReadSettings.kt:51` | `ReaderSettingsPage.ets:1437` | 未接 | 仅 `expandTextMenuPreview` 页面 `@State`，无持久化 | 折叠菜单项多行展开 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D2 |
 | 显示选择菜单图标 | `ReadSettings.kt:52` | — | 未接 | 上游 `showSelectMenuIcon` 默认 true，本地无字段 | 选择菜单显示图标 | 见 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) KI-D2 |
@@ -308,7 +310,7 @@
 
 ## 一、真缺失的字段清单
 
-**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（97 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
+**本节与 A–G 明细表是两个不同的计数口径，不可相加。** A–G 按「一次用户可感知的操作」计 189 行（95 行未接，逐行在 [KNOWN-ISSUES](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 登记）；本节按「上游声明名」计字段差集 112 项，逐项判定见 1.5。一个操作可能对应多个字段（「菜单背景颜色」对应 `readMenuBgColor` + `readMenuBgColorNight`），也有上游字段在本地连条目都没有（`readMenuLensRadius`、`brightnessAuto`）。硬凑成一个数字会反复返工，因此两处各记各的。
 
 字段差集的计算过程：
 
@@ -568,7 +570,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `brightnessVwPos` | 要接 | 亮度条位置（KI-E1） |
 | `brightnessAuto` | 要接 | 自动亮度，本地连条目都没有（KI-E6） |
 | `readBrightness` | 要接 | 阅读亮度默认 100，本地无亮度控制（KI-A9） |
-| `readSliderMode` | 要接 | 进度条形态默认 `"0"`（KI-D5） |
+| `readSliderMode` | 要接 | 进度条显示/不显示默认 `"0"`；**KI-D5 已实现**（存储键 `readSliderMode`，`ReaderPage.ets:3109` 消费） |
 
 #### 1.5.11 阅读模式与排版开关（4 项）：要接 2、不接 2
 
@@ -608,7 +610,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 | `expandTextMenu` | 要接 | 菜单展开态，本地只有预览 `@State`（KI-D2） |
 | `showSelectMenuIcon` | 要接 | 选择菜单图标（KI-D2） |
 | `doubleHorizontalPage` | 要接 | 横屏双页，属分页引擎改造（KI-D4） |
-| `pageTouchSlop` | 要接 | 翻页触摸阈值（KI-D5） |
+| `pageTouchSlop` | 要接 | 翻页触摸阈值，0=平台默认；**KI-D5 已实现**（存储键 `pageTouchSlop`，`ReaderPage.ets:2947-2948` 消费） |
 | `lastMarkingStyle` | 要接 | 沿用上次标记样式（KI-D6） |
 | `chineseConverterType` | 要接 | 繁简转换三档，需自带字表（KI-C5） |
 | `menuAlpha` | 要接 | 菜单不透明度，随菜单层（KI-A2） |
@@ -663,7 +665,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 2. **C 块标题排版 14 项**：需要同时改 `ReaderPage.ets` 的 9 处 `fontSize + 4` 硬编码（`:824`、`:1651`、`:1656`、`:2857`、`:2859`、`:2867`、`:2869`、`:2941`、`:2943`），并新增 `titleSizeRelative` 三态语义（上游回落规则见 `ReadBookConfig.kt:660-668`）。改动面比 E 块小但风险高，属排版视觉回归。
 3. **C 块正文与背景 6 行 + 下划线虚线 4 行**：正文与背景 6 行对应 11 个字段（正文日/夜颜色 2、正文强调色 2、背景透明度 1、背景自定义 4、白天暗色状态栏 2），下划线虚线 4 行对应 4 个字段，均为单点参数，适合随其它模块顺带补齐。其中**正文日/夜颜色（`ReaderPage.ets:2710-2713` 的 `getReadingTextColor()` 硬编码）优先做**——它是用户最容易察觉的「不能改字色」，且与背景预设（`READER_BACKGROUND_STYLES`，`ReaderSettingsRepository.ets:339-346`）天然配套。
 
-三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 97 行未接的多数。余下 33 行分布在 A 块 21 行、C 块 2 行、D 块 10 行（B 块已于 2026-10-31 复核清零），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
+三处阻塞共 40 + 14 + 10 = 64 行未接（明细表口径），占明细表 95 行未接的多数。余下 31 行分布在 A 块 21 行、C 块 2 行、D 块 8 行（B 块已于 2026-10-31 复核清零，D 块同日因 KI-D5 接上 `pageTouchSlop`/`readSliderMode` 由 10 减到 8），均为单点占位开关，不单独列阻塞。字段口径的 112 项见 1.3，与这里的行数不可相加。
 
 未列为阻塞项的两类：EInk 相关 8 项判 `不适用`（范围之外）；颜色缓存字段 15 项不是缺口（上游 `@Transient` 解析缓存，本地用字符串不需要等价物）。
 

@@ -225,9 +225,13 @@ D-01 需要按键映射面板 + 键盘事件；D-03 依赖鼠标滚轮事件，�
 
 需要双列排版 + 翻页动画跨双页，本地 `ReaderPage` 是单列（滚动/分页两模式）。补法：分页测量阶段按可用宽度拆双列，翻页步长改 2，并同步改阅读进度换算。
 
-**KI-D5 触摸灵敏度与进度条模式（要接，待排期）** —— 覆盖 D-06 翻页触摸灵敏度（`pageTouchSlop`，`ReadSettings.kt:35`，默认 0）、D-07 进度条模式（`readSliderMode`，`:25`，默认 `"0"`）。
+**KI-D5 触摸灵敏度与进度条模式（已实现）** —— 覆盖 D-06 翻页触摸灵敏度（`pageTouchSlop`，`ReadSettings.kt:35`，默认 0）、D-07 进度条模式（`readSliderMode`，`:25`，默认 `"0"`）。
 
-D-06 是滑动手势的位移阈值，本地阈值写死在 `ReaderPage.ets` 的手势处理里；D-07 是进度条形态（圆点/滑块），本地只有一种。补法：阈值与形态各提一个字段，前者给手势参数、后者给进度条组件的形态属性。
+已按上游语义接上：
+- **D-06**：存储键 `pageTouchSlop`，`ReaderSettingsRepository.ets:175` 字段 / `:423` 默认 0 / `:493` 读 / `:816` 写（夹 0–1000）；面板 `ReaderSettingsPage.ets:854-861` 的 `MenuSettingSlider`（0–1000 步长 10）；消费点 `ReaderPage.ets:2947-2948`，`pageTouchSlop > 0` 时用它，否则回落原来的 36vp 平台默认值——与上游 `ReaderGestureSettingsPolicy.touchSlopPx(platformTouchSlopPx, configuredTouchSlopPx)` 同口径。上游刻意让选择拖选阈值（`selectionDragSlopPx`）不受此配置影响，本地保持解耦。
+- **D-07**：上游 `readSliderMode` 的语义是**显示 / 不显示**（`ReadBookMenuBarBottom.kt:161` `AnimatedVisibility(visible = readSliderMode != "1")`），不是形态切换。存储键 `readSliderMode`，`ReaderSettingsRepository.ets:174` / `:422` / `:492` / `:815`；面板「底栏布局」tab 首项 `ReaderSettingsPage.ets:424-430`（详情面板选项「常驻」/「不显示」）；消费点 `ReaderPage.ets:3109` 把整行「上一章 / 滑块 / 下一章」包进 `if (this.readSliderMode !== '1')`。
+- 顺带纠正历史错位：该面板位置原先挂的是本地 `progressBehavior`（页码/章节），与上游 `readSliderMode` 不是一回事，现在两者分别由「滑动条显示样式」和「进度条行为」承担。
+- 备份：两个键都不在 `BackupConfig.readPrefKeys` 忽略清单里，属「无条件随 config.xml 备份」，本地已在 `BackupRepository.ets:561-566`（导出）与 `:1176-1185`（恢复）对齐。
 
 **KI-D6 上次标记样式（要接，待排期）** —— 覆盖 D-10（`lastMarkingStyle`，`ReadSettings.kt:54`）。
 

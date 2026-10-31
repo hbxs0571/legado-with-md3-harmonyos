@@ -154,6 +154,10 @@ export struct ReaderPage {
   @Prop @Watch('onPaginationInputsChanged') textFullJustify: boolean = true;
   @Prop @Watch('onPaginationInputsChanged') textBottomJustify: boolean = true;
   @Prop @Watch('onProgressBehaviorChanged') progressBehavior: string = 'page';
+  // 上游 readSliderMode："0" 常驻 / "1" 不显示（ReadBookMenuBarBottom.kt:161 的 AnimatedVisibility）
+  @Prop readSliderMode: string = '0';
+  // 上游 pageTouchSlop：0 = 用平台默认阈值（ReaderGestureSettingsPolicy.touchSlopPx）
+  @Prop pageTouchSlop: number = 0;
   @Prop @Watch('onScreenOrientationChanged') screenOrientation: string = '0';
   @Prop @Watch('onKeepLightChanged') keepLight: string = '0';
   @Prop @Watch('onVolumeKeyPageChanged') volumeKeyPage: boolean = true;
@@ -2940,8 +2944,10 @@ export struct ReaderPage {
           }),
           PanGesture({ direction: PanDirection.Horizontal })
             .onActionEnd((event: GestureEvent) => {
-              if (event.offsetX < -36) { this.turnReaderPage(1); }
-              else if (event.offsetX > 36) { this.turnReaderPage(-1); }
+              // 上游 pageTouchSlop：配了正数就用配置值，0 表示用平台默认阈值 36vp
+              const slop = this.pageTouchSlop > 0 ? this.pageTouchSlop : 36;
+              if (event.offsetX < -slop) { this.turnReaderPage(1); }
+              else if (event.offsetX > slop) { this.turnReaderPage(-1); }
             }),
           PanGesture({ direction: this.swipeToAddBookmark && this.book.isLocal && this.pageAnimation !== 3
             ? PanDirection.Vertical : PanDirection.None })
@@ -3100,49 +3106,51 @@ export struct ReaderPage {
           Blank().layoutWeight(1)
 
           Column() {
-            Row() {
-              Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D5C2C6')
-              }.width(40).height(40).onClick(() => this.turnReaderChapter(-1))
-              Stack({ alignContent: Alignment.Center }) {
-                Slider({
-                  value: this.sliderProgressIndex,
-                  min: 0,
-                  max: Math.max(0, this.getProgressSliderMaximum()),
-                  step: 1,
-                  style: SliderStyle.InSet
-                })
-                  .width('100%').height(40)
-                  .selectedColor('#FFB1C8').trackColor('#5A3F47').blockColor('#00000000')
-                  .trackThickness(6)
-                  .blockSize({ width: 12, height: 12 })
-                  .showSteps(true).stepColor('#FFB1C8').stepSize(3)
-                  .onChange((value: number, mode: SliderChangeMode) => {
-                    const maximum = this.getProgressSliderMaximum();
-                    const index = Math.max(0, Math.min(maximum, Math.round(value)));
-                    this.sliderProgressIndex = index;
-                    if (this.pageAnimation === 3) {
-                      if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                        this.seekToProgress(index);
-                      }
-                    } else if (this.isPageProgressMode()) {
-                      this.currentPageIndex = index;
-                      this.reportReaderPageProgress();
-                    } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                      this.onSelectChapterIndex(index);
-                    }
+            if (this.readSliderMode !== '1') {
+              Row() {
+                Stack({ alignContent: Alignment.Center }) {
+                  Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D5C2C6')
+                }.width(40).height(40).onClick(() => this.turnReaderChapter(-1))
+                Stack({ alignContent: Alignment.Center }) {
+                  Slider({
+                    value: this.sliderProgressIndex,
+                    min: 0,
+                    max: Math.max(0, this.getProgressSliderMaximum()),
+                    step: 1,
+                    style: SliderStyle.InSet
                   })
-                Row() {
-                  Blank().layoutWeight(this.getProgressSliderThumbRatio())
-                  Column().width(5).height(40).backgroundColor('#FFB1C8').borderRadius(2.5)
-                  Blank().layoutWeight(1 - this.getProgressSliderThumbRatio())
-                }.width('100%').height(40).padding({ left: 10, right: 10 })
-                  .hitTestBehavior(HitTestMode.Transparent)
-              }.layoutWeight(1).height(40)
-              Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor('#D5C2C6')
-              }.width(40).height(40).onClick(() => this.turnReaderChapter(1))
-            }.width('100%').height(40).padding({ left: 8, right: 8 })
+                    .width('100%').height(40)
+                    .selectedColor('#FFB1C8').trackColor('#5A3F47').blockColor('#00000000')
+                    .trackThickness(6)
+                    .blockSize({ width: 12, height: 12 })
+                    .showSteps(true).stepColor('#FFB1C8').stepSize(3)
+                    .onChange((value: number, mode: SliderChangeMode) => {
+                      const maximum = this.getProgressSliderMaximum();
+                      const index = Math.max(0, Math.min(maximum, Math.round(value)));
+                      this.sliderProgressIndex = index;
+                      if (this.pageAnimation === 3) {
+                        if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+                          this.seekToProgress(index);
+                        }
+                      } else if (this.isPageProgressMode()) {
+                        this.currentPageIndex = index;
+                        this.reportReaderPageProgress();
+                      } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+                        this.onSelectChapterIndex(index);
+                      }
+                    })
+                  Row() {
+                    Blank().layoutWeight(this.getProgressSliderThumbRatio())
+                    Column().width(5).height(40).backgroundColor('#FFB1C8').borderRadius(2.5)
+                    Blank().layoutWeight(1 - this.getProgressSliderThumbRatio())
+                  }.width('100%').height(40).padding({ left: 10, right: 10 })
+                    .hitTestBehavior(HitTestMode.Transparent)
+                }.layoutWeight(1).height(40)
+                Stack({ alignContent: Alignment.Center }) {
+                  Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor('#D5C2C6')
+                }.width(40).height(40).onClick(() => this.turnReaderChapter(1))
+              }.width('100%').height(40).padding({ left: 8, right: 8 })
+            }
             if (this.getBottomActionPages().length > 0) {
             Swiper() {
               ForEach(this.getBottomActionPages(), (rows: ReaderControlKind[][], _pageIndex: number) => {

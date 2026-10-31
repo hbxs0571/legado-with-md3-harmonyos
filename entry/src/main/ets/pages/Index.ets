@@ -185,6 +185,8 @@ struct Index {
     (item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({ id: item.id, enabled: item.enabled })
   );
   @State readerProgressBehavior: string = 'page';
+  @State readerReadSliderMode: string = '0';
+  @State readerPageTouchSlop: number = 0;
   @State readerPaddingSettings: ReaderPaddingSettings = copyReaderPaddingSettings(DEFAULT_READER_PADDING_SETTINGS);
   @State readerScreenOrientation: string = '0';
   @State readerKeepLight: string = '0';
@@ -1707,6 +1709,8 @@ struct Index {
       this.readerBottomActions = settings.bottomActions;
       this.readerTopActions = settings.topActions;
       this.readerProgressBehavior = settings.progressBehavior;
+      this.readerReadSliderMode = settings.readSliderMode;
+      this.readerPageTouchSlop = settings.pageTouchSlop;
       this.readerPaddingSettings = copyReaderPaddingSettings(settings.paddingSettings);
       this.readerScreenOrientation = settings.screenOrientation;
       this.readerKeepLight = settings.keepLight;
@@ -1814,6 +1818,8 @@ struct Index {
         bottomActions: this.readerBottomActions,
         topActions: this.readerTopActions,
         progressBehavior: this.readerProgressBehavior,
+        readSliderMode: this.readerReadSliderMode,
+        pageTouchSlop: this.readerPageTouchSlop,
         paddingSettings: this.readerPaddingSettings,
         screenOrientation: this.readerScreenOrientation,
         keepLight: this.readerKeepLight,
@@ -2168,6 +2174,18 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
 
+  private setReaderReadSliderMode(value: string): void {
+    this.readerReadSliderMode = value === '1' ? '1' : '0';
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderPageTouchSlop(value: number): void {
+    this.readerPageTouchSlop = Math.max(0, Math.min(1000, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
   private setReaderPaddingSettings(settings: ReaderPaddingSettings): void {
     this.readerPaddingSettings = copyReaderPaddingSettings(settings);
     this.readerSettingsRevision += 1;
@@ -2428,6 +2446,8 @@ struct Index {
       this.readerBottomActions = result.settings.bottomActions;
       this.readerTopActions = result.settings.topActions;
       this.readerProgressBehavior = result.settings.progressBehavior;
+      this.readerReadSliderMode = result.settings.readSliderMode;
+      this.readerPageTouchSlop = result.settings.pageTouchSlop;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -3662,6 +3682,8 @@ struct Index {
             topActions: this.readerTopActions,
             moreActions: this.readerMoreActions,
             progressBehavior: this.readerProgressBehavior,
+            readSliderMode: this.readerReadSliderMode,
+            pageTouchSlop: this.readerPageTouchSlop,
             paddingSettings: this.readerPaddingSettings,
             screenOrientation: this.readerScreenOrientation,
             keepLight: this.readerKeepLight,
@@ -3878,6 +3900,10 @@ struct Index {
               onBottomActionsChange: (actions: ReaderBottomActionConfig[]) => this.setReaderBottomActions(actions),
               onTopActionsChange: (actions: ReaderBottomActionConfig[]) => this.setReaderTopActions(actions),
               onProgressBehaviorChange: (value: string) => this.setReaderProgressBehavior(value),
+              readSliderMode: this.readerReadSliderMode,
+              onReadSliderModeChange: (value: string) => this.setReaderReadSliderMode(value),
+              pageTouchSlop: this.readerPageTouchSlop,
+              onPageTouchSlopChange: (value: number) => this.setReaderPageTouchSlop(value),
               onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
               onAnimationSpeedChange: (speed: number) => this.setReaderAnimationSpeed(speed),
               onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
@@ -4187,6 +4213,10 @@ struct Index {
             onBottomActionsChange: (actions: ReaderBottomActionConfig[]) => this.setReaderBottomActions(actions),
             onTopActionsChange: (actions: ReaderBottomActionConfig[]) => this.setReaderTopActions(actions),
             onProgressBehaviorChange: (value: string) => this.setReaderProgressBehavior(value),
+            readSliderMode: this.readerReadSliderMode,
+            onReadSliderModeChange: (value: string) => this.setReaderReadSliderMode(value),
+            pageTouchSlop: this.readerPageTouchSlop,
+            onPageTouchSlopChange: (value: number) => this.setReaderPageTouchSlop(value),
             onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
             onAnimationSpeedChange: (speed: number) => this.setReaderAnimationSpeed(speed),
             onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
@@ -4356,6 +4386,10 @@ struct Index {
             pageAnimationIndex: this.readerPageAnimation,
             animationSpeedIndex: this.readerAnimationSpeed,
             onProgressBehaviorChange: (value: string) => this.setReaderProgressBehavior(value),
+            readSliderMode: this.readerReadSliderMode,
+            onReadSliderModeChange: (value: string) => this.setReaderReadSliderMode(value),
+            pageTouchSlop: this.readerPageTouchSlop,
+            onPageTouchSlopChange: (value: number) => this.setReaderPageTouchSlop(value),
             onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
             onAnimationSpeedChange: (speed: number) => this.setReaderAnimationSpeed(speed),
             onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
@@ -4470,6 +4504,10 @@ struct Index {
           infoSettings: this.readerInfoSettings,
           onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
           onProgressBehaviorChange: (value: string) => this.setReaderProgressBehavior(value),
+          readSliderMode: this.readerReadSliderMode,
+          onReadSliderModeChange: (value: string) => this.setReaderReadSliderMode(value),
+          pageTouchSlop: this.readerPageTouchSlop,
+          onPageTouchSlopChange: (value: number) => this.setReaderPageTouchSlop(value),
           onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
           onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
           onToggleNightMode: () => this.toggleReaderNightMode(),
