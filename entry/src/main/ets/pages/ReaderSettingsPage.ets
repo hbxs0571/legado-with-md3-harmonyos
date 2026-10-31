@@ -25,6 +25,13 @@ const CLICK_REGION_NAMES: string[] = ['左上', '上中', '右上', '左中', '�
 const READER_BODY_WEIGHT_VALUES: number[] = [300, 400, 500, 700, 900];
 // 标题取色候选：正文用的八色之外补上深浅两端，「跟随正文」由单独一行入口负责（空串不能画成色块）。
 const READER_TITLE_COLORS: string[] = ['#38383B', '#000000', '#3C3F43', '#FFFFFF', '#D8D8DC', '#ADADAD', '#FF8C00', '#5A8DEE'];
+// 上游 paletteStyle_value（values/array_values.xml:101-111）九项；索引 0 是「跟随系统」，
+// 用空串承载（SystemMenuPage.kt:277-291 的 entryValues 第一个元素就是 ""）。
+const MENU_PALETTE_VALUES: string[] = ['', 'tonalSpot', 'neutral', 'vibrant', 'expressive',
+  'rainbow', 'fruitSalad', 'monochrome', 'fidelity', 'content'];
+// 菜单配色弹层的色板：沿用正文效果色板，另加两档中性灰便于做菜单底色与容器色。
+const MENU_COLOR_PALETTE: string[] = ['#FFFFFF', '#E6E1E7', '#D0CBD1', '#9A9CA5',
+  '#3D3D46', '#31282A', '#1A1B21', '#000000', '#FFB1C8', '#5A8DEE'];
 const READER_EFFECT_COLORS: string[] = [
   '#3E3D3B', '#ADADAD', '#FFFFFF', '#000000', '#FF8C00', '#5A8DEE', '#63C37D', '#DB4B4B'
 ];
@@ -236,6 +243,21 @@ export struct ReaderSettingsPage {
   @Prop readMenuTopBarLiquidGlassButtons: boolean = false;
   /** 顶栏按钮合并；上游 `readMenuTopBarMergeButtons`（`ReadSettings.kt:99`）。 */
   @Prop readMenuTopBarMergeButtons: boolean = false;
+  /** 菜单工具栏样式 0 跟随系统 / 1 跟随阅读背景 / 2 自定义；上游 `readBarStyle`（`ReadSettings.kt:69`）。 */
+  @Prop readBarStyle: number = 1;
+  /** 菜单调色板样式，空串表示跟随系统；上游 `readMenuPaletteStyle`（`ReadSettings.kt:109`）。 */
+  @Prop readMenuPaletteStyle: string = '';
+  /** 菜单色板来源 0 种子色 / 1 自定义颜色；上游 `readMenuColorMode`（`ReadSettings.kt:88`）。 */
+  @Prop readMenuColorMode: number = 1;
+  /** 菜单背景色，空串表示未设置；上游 `readMenuBgColor`/`readMenuBgColorNight`（`ReadSettings.kt:80`/`:83`）。 */
+  @Prop readMenuBgColor: string = '';
+  @Prop readMenuBgColorNight: string = '';
+  /** 菜单容器色，空串表示未设置；上游 `readMenuContainerColor`/`Night`（`ReadSettings.kt:82`/`:85`）。 */
+  @Prop readMenuContainerColor: string = '';
+  @Prop readMenuContainerColorNight: string = '';
+  /** 菜单强调色，与「种子色」共用；上游 `readMenuAccentColor`/`Night`（`ReadSettings.kt:81`/`:84`）。 */
+  @Prop readMenuAccentColor: string = '';
+  @Prop readMenuAccentColorNight: string = '';
   /** 划词菜单条目配置串，对齐上游 textSelectMenuConfig（ReadSettings.kt:53）。 */
   @Prop textSelectMenuConfig: string = '';
   @Prop maxLengthWithNoToc: number = 3000;
@@ -282,9 +304,8 @@ export struct ReaderSettingsPage {
   );
   private backgroundScroller: Scroller = new Scroller();
   private menuSettingsScroller: Scroller = new Scroller();
-  @State menuBarStyleMode: number = 1;
-  @State menuColorMode: number = 0;
-  @State menuPaletteStyleIndex: number = 0;
+  // 工具栏样式 / 色板来源 / 调色板风格的选中态不再用本地 @State 假值承载，
+  // 一律读 @Prop（readBarStyle / readMenuColorMode / readMenuPaletteStyle）的真值。
   @State menuBorderEnabled: boolean = true;
   @State menuTitleIconsVisible: boolean = true;
 
@@ -407,6 +428,15 @@ export struct ReaderSettingsPage {
   onReadMenuTopBarBlurStyleChange: (value: number) => void = (_value: number) => {};
   onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onReadBarStyleChange: (value: number) => void = (_value: number) => {};
+  onReadMenuPaletteStyleChange: (value: string) => void = (_value: string) => {};
+  onReadMenuColorModeChange: (value: number) => void = (_value: number) => {};
+  onReadMenuBgColorChange: (value: string) => void = (_value: string) => {};
+  onReadMenuBgColorNightChange: (value: string) => void = (_value: string) => {};
+  onReadMenuContainerColorChange: (value: string) => void = (_value: string) => {};
+  onReadMenuContainerColorNightChange: (value: string) => void = (_value: string) => {};
+  onReadMenuAccentColorChange: (value: string) => void = (_value: string) => {};
+  onReadMenuAccentColorNightChange: (value: string) => void = (_value: string) => {};
   onTextSelectMenuConfigChange: (value: string) => void = (_value: string) => {};
 
   /** 某一组的背景图片路径；空串表示这一组没有自定义图片（bgType 为 0 时 bgStr 是纯色）。 */
@@ -853,9 +883,9 @@ export struct ReaderSettingsPage {
         choices: this.getMenuChoices(entry.title),
         selectedIndex: this.getMenuSelectedIndex(entry.title),
         onSelect: (index: number) => {
-          if (entry.title === '工具栏样式') { this.menuBarStyleMode = index; }
-          if (entry.title === '菜单颜色来源') { this.menuColorMode = index; }
-          if (entry.title === '调色板风格') { this.menuPaletteStyleIndex = index; }
+          if (entry.title === '工具栏样式') { this.onReadBarStyleChange(index); }
+          if (entry.title === '菜单颜色来源') { this.onReadMenuColorModeChange(index); }
+          if (entry.title === '调色板风格') { this.onReadMenuPaletteStyleChange(MENU_PALETTE_VALUES[index] ?? ''); }
           if (entry.title === '显示亮度视图') { this.onShowBrightnessViewChange(['0', '1', '2'][index] ?? '0'); }
           if (entry.title === '亮度条位置') { this.onBrightnessVwPosChange(index === 0 ? '0' : '1'); }
           if (entry.title === '标题栏模式') { this.onTitleBarModeChange(['0', '1', '2', '3'][index] ?? '1'); }
@@ -865,7 +895,12 @@ export struct ReaderSettingsPage {
         }
       })
     } else if (this.isMenuColor(entry.title)) {
-      MenuSettingColor({ title: entry.title, detail: entry.detail })
+      MenuSettingColor({
+        title: entry.title,
+        detail: entry.detail,
+        dayColor: this.menuColorDay(entry.title),
+        nightColor: this.menuColorNight(entry.title)
+      })
         .onClick(() => this.openDetailSheet(entry.title, entry.detail))
     } else {
       MenuSettingOption({ title: entry.title, detail: entry.detail })
@@ -934,10 +969,48 @@ export struct ReaderSettingsPage {
     return title.includes('边框宽度') ? 1 : 0;
   }
 
+  /**
+   * 写回菜单颜色项的日/夜值。四项分别对应上游三个字段：
+   * 「菜单背景颜色」→ readMenuBgColor / Night；「菜单容器颜色」→ readMenuContainerColor / Night；
+   * 「种子色」与「菜单强调颜色」→ readMenuAccentColor / Night（上游两处 UI 共用这一对字段）。
+   * 再点一次已选中的颜色 = 清除，回到上游的「0 = 未设置」。
+   */
+  private applyMenuColor(title: string, color: string, night: boolean): void {
+    const current = night ? this.menuColorNight(title) : this.menuColorDay(title);
+    const next = current.toUpperCase() === color.toUpperCase() ? '' : color;
+    if (title === '菜单背景颜色') {
+      if (night) { this.onReadMenuBgColorNightChange(next); } else { this.onReadMenuBgColorChange(next); }
+      return;
+    }
+    if (title === '菜单容器颜色') {
+      if (night) { this.onReadMenuContainerColorNightChange(next); } else { this.onReadMenuContainerColorChange(next); }
+      return;
+    }
+    if (night) { this.onReadMenuAccentColorNightChange(next); } else { this.onReadMenuAccentColorChange(next); }
+  }
+
+  /**
+   * 菜单颜色项的日间色。四项分别对应上游 `SystemMenuPage.kt:308-368` 的
+   * `dayMenuAccentColor`（种子色与强调色共用）、`dayMenuBgColor`、`dayMenuContainerColor`；
+   * 空串即上游的「0 = 未设置」。
+   */
+  private menuColorDay(title: string): string {
+    if (title === '菜单背景颜色') { return this.readMenuBgColor; }
+    if (title === '菜单容器颜色') { return this.readMenuContainerColor; }
+    return this.readMenuAccentColor;
+  }
+
+  /** 菜单颜色项的夜间色，与 `menuColorDay` 一一对应，取上游的 xxxNight。 */
+  private menuColorNight(title: string): string {
+    if (title === '菜单背景颜色') { return this.readMenuBgColorNight; }
+    if (title === '菜单容器颜色') { return this.readMenuContainerColorNight; }
+    return this.readMenuAccentColorNight;
+  }
+
   private getMenuChoices(title: string): string[] {
-    if (title === '工具栏样式') { return ['系统', '跟随阅读背景', '自定义']; }
+    if (title === '工具栏样式') { return ['跟随系统', '跟随阅读背景', '自定义']; }
     if (title === '调色板风格') { return ['跟随系统', '柔和', '中性', '鲜艳', '表现力', '彩虹', '水果拼盘', '单色', '仿真', '内容取色']; }
-    if (title === '菜单颜色来源') { return ['种子色', '自定义主题色']; }
+    if (title === '菜单颜色来源') { return ['种子色', '自定义颜色']; }
     if (title === '显示亮度视图') { return ['关闭', '横排', '竖排']; }
     if (title === '亮度条位置') { return ['左侧', '右侧']; }
     // 上游 title_bar_mode 四值（values-zh-rCN/arrays.xml:242-247、array_values.xml:146-151）：
@@ -952,9 +1025,12 @@ export struct ReaderSettingsPage {
   }
 
   private getMenuSelectedIndex(title: string): number {
-    if (title === '工具栏样式') { return this.menuBarStyleMode; }
-    if (title === '菜单颜色来源') { return this.menuColorMode; }
-    if (title === '调色板风格') { return this.menuPaletteStyleIndex; }
+    if (title === '工具栏样式') { return Math.max(0, Math.min(2, this.readBarStyle)); }
+    if (title === '菜单颜色来源') { return Math.max(0, Math.min(1, this.readMenuColorMode)); }
+    if (title === '调色板风格') {
+      const paletteIndex = MENU_PALETTE_VALUES.indexOf(this.readMenuPaletteStyle);
+      return paletteIndex >= 0 ? paletteIndex : 0;
+    }
     if (title === '显示亮度视图') { return ['0', '1', '2'].indexOf(this.showBrightnessView); }
     if (title === '亮度条位置') { return this.brightnessVwPos === '0' ? 0 : 1; }
     if (title === '底栏模糊样式') { return this.readMenuBottomBarBlurStyle === 1 ? 1 : 0; }
@@ -982,9 +1058,15 @@ export struct ReaderSettingsPage {
         this.saveInfoTip(this.detailInfoSlot, tipValue);
       }
     }
-    if (this.detailSheetTitle === '工具栏样式' && choiceIndex >= 0) { this.menuBarStyleMode = choiceIndex; }
-    if (this.detailSheetTitle === '菜单颜色来源' && choiceIndex >= 0) { this.menuColorMode = choiceIndex; }
-    if (this.detailSheetTitle === '调色板风格' && choiceIndex >= 0) { this.menuPaletteStyleIndex = choiceIndex; }
+    if (this.detailSheetTitle === '工具栏样式' && choiceIndex >= 0) {
+      this.onReadBarStyleChange(choiceIndex);
+    }
+    if (this.detailSheetTitle === '菜单颜色来源' && choiceIndex >= 0) {
+      this.onReadMenuColorModeChange(choiceIndex);
+    }
+    if (this.detailSheetTitle === '调色板风格' && choiceIndex >= 0) {
+      this.onReadMenuPaletteStyleChange(MENU_PALETTE_VALUES[choiceIndex] ?? '');
+    }
     if (this.detailSheetTitle === '显示亮度视图' && choiceIndex >= 0) {
       this.onShowBrightnessViewChange(['0', '1', '2'][choiceIndex] ?? '0');
     }
@@ -1064,14 +1146,17 @@ export struct ReaderSettingsPage {
     if (title === '底栏模糊样式') { return !this.readMenuFloatingBottomBar; }
     if (title === '底栏液态玻璃') { return this.readMenuFloatingBottomBar; }
     if (this.selectedMenuSettingsTab !== 0) { return true; }
+    // 三条可见性逐条照上游 SystemMenuPage.kt:276-320 的 AnimatedVisibility：
+    // 调色板风格 showPaletteStyle = bottomMode == 1 || (bottomMode == 2 && colorMode == 0)；
+    // 色板来源 bottomMode == 2；种子色 = 色板来源为种子色；三个自定义颜色 = 色板来源为自定义颜色。
     if (title === '调色板风格') {
-      return this.menuBarStyleMode === 1 || (this.menuBarStyleMode === 2 && this.menuColorMode === 0);
+      return this.readBarStyle === 1 || (this.readBarStyle === 2 && this.readMenuColorMode === 0);
     }
-    if (title === '菜单颜色来源') { return this.menuBarStyleMode === 2; }
+    if (title === '菜单颜色来源') { return this.readBarStyle === 2; }
     if (title === '亮度条位置') { return this.showBrightnessView === '2'; }
-    if (title === '种子色') { return this.menuBarStyleMode === 2 && this.menuColorMode === 0; }
+    if (title === '种子色') { return this.readBarStyle === 2 && this.readMenuColorMode === 0; }
     if (title === '菜单背景颜色' || title === '菜单容器颜色' || title === '菜单强调颜色') {
-      return this.menuBarStyleMode === 2 && this.menuColorMode === 1;
+      return this.readBarStyle === 2 && this.readMenuColorMode === 1;
     }
     if (title === '标题栏悬浮图标配置' || title === '标题栏悬浮图标位置' || title === '悬浮图标液态玻璃按钮') {
       return this.menuTitleIconsVisible;
@@ -1660,9 +1745,9 @@ export struct ReaderSettingsPage {
   }
 
   private getDetailChoices(title: string): string[] {
-    if (title === '工具栏样式') { return ['系统', '跟随阅读背景', '自定义']; }
+    if (title === '工具栏样式') { return ['跟随系统', '跟随阅读背景', '自定义']; }
     if (title === '调色板风格') { return ['跟随系统', '柔和', '中性', '鲜艳', '表现力', '彩虹', '水果拼盘', '单色', '仿真', '内容取色']; }
-    if (title === '菜单颜色来源') { return ['种子色', '自定义主题色']; }
+    if (title === '菜单颜色来源') { return ['种子色', '自定义颜色']; }
     if (title === '显示亮度视图') { return ['关闭', '横排', '竖排']; }
     if (title === '亮度条位置') { return ['左侧', '右侧']; }
     // 上游 title_bar_mode 四值（values-zh-rCN/arrays.xml:242-247、array_values.xml:146-151）：
@@ -1789,7 +1874,32 @@ export struct ReaderSettingsPage {
           Text('关闭').fontSize(13).fontColor('#C6D3FF').onClick(() => this.detailSheetVisible = false)
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
         Text(this.detailSheetDescription).fontSize(13).fontColor('#D3D4DC').width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
-        if (this.detailSheetTitle === '自定义阅读背景') {
+        if (this.detailSheetTitle === '种子色' || this.detailSheetTitle === '菜单背景颜色' ||
+          this.detailSheetTitle === '菜单容器颜色' || this.detailSheetTitle === '菜单强调颜色') {
+          Scroll() {
+            Column() {
+              // 上游 SystemMenuPage.kt:308-368 的 TinyColorModeSettingItem 是「日间 + 夜间」双色点，
+              // 点任一侧都弹同一个取色器（COLOR_MENU_ACCENT / COLOR_MENU_BG / COLOR_MENU_CONTAINER），
+              // 这里照抄成日/夜两块并列色板。「种子色」与「菜单强调颜色」在上游共用 readMenuAccentColor，
+              // 因此两块色板读写同一对字段（日间 readMenuAccentColor / 夜间 readMenuAccentColorNight）。
+              MenuSettingPalette({
+                title: this.detailSheetTitle + '（日间）',
+                colors: MENU_COLOR_PALETTE,
+                selectedColor: this.menuColorDay(this.detailSheetTitle),
+                onChange: (color: string) => this.applyMenuColor(this.detailSheetTitle, color, false)
+              })
+              MenuSettingPalette({
+                title: this.detailSheetTitle + '（夜间）',
+                colors: MENU_COLOR_PALETTE,
+                selectedColor: this.menuColorNight(this.detailSheetTitle),
+                onChange: (color: string) => this.applyMenuColor(this.detailSheetTitle, color, true)
+              })
+              Text('「种子色」与「菜单强调颜色」共用同一组字段（上游 readMenuAccentColor / Night）；' +
+                '菜单背景色、容器色未设置时回落到主题默认值。')
+                .fontSize(10).fontColor('#92949E').width('100%').padding(10)
+            }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+          }.height(360).scrollBar(BarState.Off)
+        } else if (this.detailSheetTitle === '自定义阅读背景') {
           Scroll() {
             Column() {
               // 上游 BgTextConfigSheet 是日/夜两组并列（TinyColorModeSettingItem 日间+夜间双色、
@@ -2382,6 +2492,13 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '标题栏图标样式' ||
                 this.detailSheetTitle === '顶栏模糊样式' ||
                 this.detailSheetTitle === '底栏模糊样式' ||
+                this.detailSheetTitle === '工具栏样式' ||
+                this.detailSheetTitle === '调色板风格' ||
+                this.detailSheetTitle === '菜单颜色来源' ||
+                this.detailSheetTitle === '种子色' ||
+                this.detailSheetTitle === '菜单背景颜色' ||
+                this.detailSheetTitle === '菜单容器颜色' ||
+                this.detailSheetTitle === '菜单强调颜色' ||
                 this.detailSheetTitle === '显示模式' ||
                 this.detailSheetTitle === '正文排版' ||
                 this.detailInfoSlot !== undefined
@@ -2398,9 +2515,9 @@ export struct ReaderSettingsPage {
   private getMenuSettingsEntries(): ReaderMenuSettingsEntry[] {
     if (this.selectedMenuSettingsTab === 0) {
       return [
-        { title: '工具栏样式', detail: '系统 / 跟随阅读背景 / 自定义' },
+        { title: '工具栏样式', detail: '跟随系统 / 跟随阅读背景 / 自定义' },
         { title: '调色板风格', detail: '跟随系统颜色 / 固定风格' },
-        { title: '菜单颜色来源', detail: '种子色 / 自定义主题色' },
+        { title: '菜单颜色来源', detail: '种子色 / 自定义颜色' },
         { title: '种子色', detail: '日间强调色 / 夜间强调色' },
         { title: '菜单背景颜色', detail: '日间与夜间背景色' },
         { title: '菜单容器颜色', detail: '日间与夜间容器色' },
@@ -2999,6 +3116,10 @@ struct ReaderInfoSliderRow {
 struct MenuSettingColor {
   @Prop title: string = '';
   @Prop detail: string = '';
+  /** 日间色；空串表示上游「0 = 未设置」，显示成占位灰。 */
+  @Prop dayColor: string = '';
+  /** 夜间色；空串同上。 */
+  @Prop nightColor: string = '';
 
   build() {
     Row() {
@@ -3007,8 +3128,14 @@ struct MenuSettingColor {
         Text(this.detail).fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Row() {
-        Column().width(22).height(22).backgroundColor('#E6E1E7').borderRadius(11)
-        Column().width(22).height(22).backgroundColor('#3D3D46').borderRadius(11).margin({ left: 5 })
+        Column().width(22).height(22)
+          .backgroundColor(this.dayColor.length > 0 ? this.dayColor : '#3D3D46')
+          .border({ width: this.dayColor.length > 0 ? 0 : 1, color: '#5A5C66' })
+          .borderRadius(11)
+        Column().width(22).height(22)
+          .backgroundColor(this.nightColor.length > 0 ? this.nightColor : '#E6E1E7')
+          .border({ width: this.nightColor.length > 0 ? 0 : 1, color: '#5A5C66' })
+          .borderRadius(11).margin({ left: 5 })
       }
       Text('›').fontSize(20).fontColor('#A7A9B3').margin({ left: 8 })
     }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)

@@ -111,6 +111,11 @@ export interface ReaderPaddingSettings {
   footerPaddingRight: number;
 }
 
+/** 调色板样式的九个合法取值，与上游 `array_values.xml:101-111` 的 paletteStyle_value 一致。 */
+const PALETTE_STYLE_VALUES: string[] = [
+  'tonalSpot', 'neutral', 'vibrant', 'expressive', 'rainbow', 'fruitSalad', 'monochrome', 'fidelity', 'content'
+];
+
 export const DEFAULT_READER_PADDING_SETTINGS: ReaderPaddingSettings = {
   paddingTop: 6, paddingBottom: 6, paddingLeft: 16, paddingRight: 16,
   headerPaddingTop: 0, headerPaddingBottom: 0, headerPaddingLeft: 16, headerPaddingRight: 16,
@@ -360,6 +365,33 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
    * （`ReadSettings.kt:99`），存储键同名（`PreferKey.kt:398`）。
    */
   readMenuTopBarMergeButtons: boolean;
+  /**
+   * 菜单工具栏样式；上游 `readBarStyle: Int = 1`（`ReadSettings.kt:69`），
+   * `0` 跟随系统 / `1` 跟随阅读背景 / `2` 自定义（`ReadBookConfig.kt:157-177` 的 `resolvedMenuBgColor`）。
+   */
+  readBarStyle: number;
+  /**
+   * 调色板样式；上游 `readMenuPaletteStyle: String = ""`（`ReadSettings.kt:109`），
+   * 空串表示「跟随系统」，其余取值见 `array_values.xml:101-111` 的 paletteStyle_value。
+   */
+  readMenuPaletteStyle: string;
+  /** 色板来源；上游 `readMenuColorMode: Int = 1`（`ReadSettings.kt:88`），`0` 种子色 / `1` 自定义颜色。 */
+  readMenuColorMode: number;
+  /**
+   * 菜单背景色；上游 `readMenuBgColor: Int = 0`（`ReadSettings.kt:80`），0 表示未设置、
+   * 回落主题默认。本地用空串承载「未设置」，与 `normalizeOptionalHexColor` 的语义一致。
+   */
+  readMenuBgColor: string;
+  /** 菜单背景色（夜间）；上游 `readMenuBgColorNight: Int = 0`（`ReadSettings.kt:83`）。 */
+  readMenuBgColorNight: string;
+  /** 菜单容器色；上游 `readMenuContainerColor: Int = 0`（`ReadSettings.kt:82`），为 0 时回落菜单背景色。 */
+  readMenuContainerColor: string;
+  /** 菜单容器色（夜间）；上游 `readMenuContainerColorNight: Int = 0`（`ReadSettings.kt:85`）。 */
+  readMenuContainerColorNight: string;
+  /** 菜单强调色；上游 `readMenuAccentColor: Int = 0`（`ReadSettings.kt:81`），「种子色」项与它共用同一字段。 */
+  readMenuAccentColor: string;
+  /** 菜单强调色（夜间）；上游 `readMenuAccentColorNight: Int = 0`（`ReadSettings.kt:84`）。 */
+  readMenuAccentColorNight: string;
   readingAnchorEnabled: boolean;
   swipeToAddBookmark: boolean;
   /** 阅读页书签角标宽度（dp）；0 表示不显示角标，对齐上游 `bookmarkBadgeSize`。 */
@@ -739,6 +771,16 @@ export class ReaderSettingsRepository {
       readMenuTopBarBlurStyle: 0,
       readMenuTopBarLiquidGlassButtons: false,
       readMenuTopBarMergeButtons: false,
+      // 配色七项默认值对齐上游 ReadSettings.kt:69/88/80-85/109。
+      readBarStyle: 1,
+      readMenuPaletteStyle: '',
+      readMenuColorMode: 1,
+      readMenuBgColor: '',
+      readMenuBgColorNight: '',
+      readMenuContainerColor: '',
+      readMenuContainerColorNight: '',
+      readMenuAccentColor: '',
+      readMenuAccentColorNight: '',
       readingAnchorEnabled: true,
       swipeToAddBookmark: false,
       // 与上游 ReadSettings.bookmarkBadgeSize 默认值一致（10dp）。
@@ -883,6 +925,17 @@ export class ReaderSettingsRepository {
     const readMenuTopBarLiquidGlassButtonsValue =
       await store.get('readMenuTopBarLiquidGlassButtons', defaults.readMenuTopBarLiquidGlassButtons);
     const readMenuTopBarMergeButtonsValue = await store.get('readMenuTopBarMergeButtons', defaults.readMenuTopBarMergeButtons);
+    const readBarStyleValue = await store.get('readBarStyle', defaults.readBarStyle);
+    const readMenuPaletteStyleValue = await store.get('readMenuPaletteStyle', defaults.readMenuPaletteStyle);
+    const readMenuColorModeValue = await store.get('readMenuColorMode', defaults.readMenuColorMode);
+    const readMenuBgColorValue = await store.get('readMenuBgColor', defaults.readMenuBgColor);
+    const readMenuBgColorNightValue = await store.get('readMenuBgColorNight', defaults.readMenuBgColorNight);
+    const readMenuContainerColorValue = await store.get('readMenuContainerColor', defaults.readMenuContainerColor);
+    const readMenuContainerColorNightValue =
+      await store.get('readMenuContainerColorNight', defaults.readMenuContainerColorNight);
+    const readMenuAccentColorValue = await store.get('readMenuAccentColor', defaults.readMenuAccentColor);
+    const readMenuAccentColorNightValue =
+      await store.get('readMenuAccentColorNight', defaults.readMenuAccentColorNight);
       const readingAnchorEnabledValue = await store.get('readingAnchorEnabled', defaults.readingAnchorEnabled);
       const swipeToAddBookmarkValue = await store.get('swipeToAddBookmark', defaults.swipeToAddBookmark);
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
@@ -1196,6 +1249,19 @@ export class ReaderSettingsRepository {
             ? readMenuTopBarLiquidGlassButtonsValue : defaults.readMenuTopBarLiquidGlassButtons,
           readMenuTopBarMergeButtons: typeof readMenuTopBarMergeButtonsValue === 'boolean'
             ? readMenuTopBarMergeButtonsValue : defaults.readMenuTopBarMergeButtons,
+          readBarStyle: ReaderSettingsRepository.normalizeInteger(
+            readBarStyleValue, 0, 2, defaults.readBarStyle),
+          // 空串「跟随系统」是合法值，非空时只认上游 paletteStyle_value 的九个取值。
+          readMenuPaletteStyle: ReaderSettingsRepository.normalizePaletteStyle(readMenuPaletteStyleValue),
+          readMenuColorMode: ReaderSettingsRepository.normalizeInteger(
+            readMenuColorModeValue, 0, 1, defaults.readMenuColorMode),
+          readMenuBgColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBgColorValue),
+          readMenuBgColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuBgColorNightValue),
+          readMenuContainerColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuContainerColorValue),
+          readMenuContainerColorNight:
+            ReaderSettingsRepository.normalizeOptionalHexColor(readMenuContainerColorNightValue),
+          readMenuAccentColor: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuAccentColorValue),
+          readMenuAccentColorNight: ReaderSettingsRepository.normalizeOptionalHexColor(readMenuAccentColorNightValue),
           readingAnchorEnabled: typeof readingAnchorEnabledValue === 'boolean'
             ? readingAnchorEnabledValue : defaults.readingAnchorEnabled,
             swipeToAddBookmark: typeof swipeToAddBookmarkValue === 'boolean'
@@ -1384,6 +1450,21 @@ export class ReaderSettingsRepository {
       await store.put('readMenuTopBarBlurStyle', settings.readMenuTopBarBlurStyle === 1 ? 1 : 0);
       await store.put('readMenuTopBarLiquidGlassButtons', settings.readMenuTopBarLiquidGlassButtons === true);
       await store.put('readMenuTopBarMergeButtons', settings.readMenuTopBarMergeButtons === true);
+      await store.put('readBarStyle', Math.max(0, Math.min(2, Math.round(settings.readBarStyle))));
+      await store.put('readMenuPaletteStyle',
+        ReaderSettingsRepository.normalizePaletteStyle(settings.readMenuPaletteStyle));
+      await store.put('readMenuColorMode', Math.max(0, Math.min(1, Math.round(settings.readMenuColorMode))));
+      await store.put('readMenuBgColor', ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBgColor));
+      await store.put('readMenuBgColorNight',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuBgColorNight));
+      await store.put('readMenuContainerColor',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuContainerColor));
+      await store.put('readMenuContainerColorNight',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuContainerColorNight));
+      await store.put('readMenuAccentColor',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuAccentColor));
+      await store.put('readMenuAccentColorNight',
+        ReaderSettingsRepository.normalizeOptionalHexColor(settings.readMenuAccentColorNight));
       await store.put('readingAnchorEnabled', settings.readingAnchorEnabled);
       await store.put('swipeToAddBookmark', settings.swipeToAddBookmark);
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
@@ -1520,6 +1601,17 @@ export class ReaderSettingsRepository {
     if (normalized.length === 0) { return ''; }
     return /^#[0-9A-F]{6}$/.test(normalized) || /^#[0-9A-F]{8}$/.test(normalized)
       ? normalized : '';
+  }
+
+  /**
+   * 调色板样式归一：空串是合法值（上游默认 `""`，表示跟随系统）；
+   * 非空时只保留 `array_values.xml:101-111` 列出的九个取值，脏数据一律回落空串。
+   */
+  private static normalizePaletteStyle(value: number | boolean | string | bigint | Uint8Array | object): string {
+    if (typeof value !== 'string') { return ''; }
+    const normalized = value.trim();
+    if (normalized.length === 0) { return ''; }
+    return PALETTE_STYLE_VALUES.includes(normalized) ? normalized : '';
   }
 
   /**

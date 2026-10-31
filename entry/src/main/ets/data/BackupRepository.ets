@@ -1454,6 +1454,19 @@ export class BackupRepository {
       readMenuTopBarBlurStyle: current.readMenuTopBarBlurStyle,
       readMenuTopBarLiquidGlassButtons: current.readMenuTopBarLiquidGlassButtons,
       readMenuTopBarMergeButtons: current.readMenuTopBarMergeButtons,
+      // 菜单配色九项：上游 BackupConfig.readPrefKeys（BackupConfig.kt:216-247）把
+      // readBarStyle / readMenuBgColor(Night) / readMenuAccentColor(Night) /
+      // readMenuContainerColor(Night) / readMenuColorMode / readMenuPaletteStyle
+      // 全部列进忽略清单，因此恢复备份时一律保留本机现值，不从 config.xml 读取。
+      readBarStyle: current.readBarStyle,
+      readMenuPaletteStyle: current.readMenuPaletteStyle,
+      readMenuColorMode: current.readMenuColorMode,
+      readMenuBgColor: current.readMenuBgColor,
+      readMenuBgColorNight: current.readMenuBgColorNight,
+      readMenuContainerColor: current.readMenuContainerColor,
+      readMenuContainerColorNight: current.readMenuContainerColorNight,
+      readMenuAccentColor: current.readMenuAccentColor,
+      readMenuAccentColorNight: current.readMenuAccentColorNight,
       dottedBase: Math.max(0, Math.min(20, Math.round(
         BackupRepository.readJsonNumber(selected, 'dottedBase') ??
         BackupRepository.readXmlFloat(`${directory}/config.xml`, 'dottedBase') ?? current.dottedBase))),

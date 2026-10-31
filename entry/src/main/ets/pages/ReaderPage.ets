@@ -264,6 +264,24 @@ export struct ReaderPage {
   @Prop readMenuTopBarLiquidGlassButtons: boolean = false;
   /** 顶栏按钮合并成一个胶囊组；上游 `readMenuTopBarMergeButtons`（`ReadSettings.kt:99`）。 */
   @Prop readMenuTopBarMergeButtons: boolean = false;
+  /** 菜单工具栏样式 0 跟随系统 / 1 跟随阅读背景 / 2 自定义；上游 `readBarStyle`（`ReadSettings.kt:69`，默认 1）。 */
+  @Prop readBarStyle: number = 1;
+  /** 菜单调色板样式，空串表示跟随系统；上游 `readMenuPaletteStyle`（`ReadSettings.kt:109`）。 */
+  @Prop readMenuPaletteStyle: string = '';
+  /** 菜单色板来源 0 种子色 / 1 自定义颜色；上游 `readMenuColorMode`（`ReadSettings.kt:88`，默认 1）。 */
+  @Prop readMenuColorMode: number = 1;
+  /** 菜单背景色，空串表示未设置；上游 `readMenuBgColor`（`ReadSettings.kt:80`）。 */
+  @Prop readMenuBgColor: string = '';
+  /** 菜单背景色（夜间）；上游 `readMenuBgColorNight`（`ReadSettings.kt:83`）。 */
+  @Prop readMenuBgColorNight: string = '';
+  /** 菜单容器色，空串时回落菜单背景色；上游 `readMenuContainerColor`（`ReadSettings.kt:82`）。 */
+  @Prop readMenuContainerColor: string = '';
+  /** 菜单容器色（夜间）；上游 `readMenuContainerColorNight`（`ReadSettings.kt:85`）。 */
+  @Prop readMenuContainerColorNight: string = '';
+  /** 菜单强调色，与「种子色」共用同一字段；上游 `readMenuAccentColor`（`ReadSettings.kt:81`）。 */
+  @Prop readMenuAccentColor: string = '';
+  /** 菜单强调色（夜间）；上游 `readMenuAccentColorNight`（`ReadSettings.kt:84`）。 */
+  @Prop readMenuAccentColorNight: string = '';
 
   /** 环境光日夜提醒的文案；空串表示当前没有提醒。 */
   @Prop dayNightReminderText: string = '';
@@ -860,9 +878,7 @@ export struct ReaderPage {
    * 不透明度取 `readMenuBlurAlpha / 100`，并且**上限 0.6**，保证背后正文始终透得出来。
    */
   private readerBottomBarFillColor(): string {
-    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
-    const channel = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
-    return `#${channel}31282A`;
+    return this.readerMenuTintAlphaString(this.readerMenuContainerBaseColor());
   }
 
   /**
@@ -874,19 +890,19 @@ export struct ReaderPage {
    * 用降低不透明度近似，因此不额外影响这里的渐变。
    */
   private readerBottomBarGradient(): LinearGradientOptions {
-    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
+    const base = this.readerMenuContainerBaseColor();
     if (this.readMenuBottomBarBlurStyle !== 1) {
-      const solid = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+      const solid = this.readerMenuTintAlphaString(base);
       return {
         angle: 180,
-        colors: [[`#${solid}31282A`, 0.0], [`#${solid}31282A`, 1.0]]
+        colors: [[solid, 0.0], [solid, 1.0]]
       };
     }
-    const top = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
-    const bottom = Math.round(Math.max(0, alpha - 0.25) * 255).toString(16).padStart(2, '0').toUpperCase();
+    const top = this.readerMenuTintAlphaString(base);
+    const bottom = this.readerMenuTintAlphaString(base, 0.25);
     return {
       angle: 180,
-      colors: [[`#${top}31282A`, 0.0], [`#${bottom}31282A`, 1.0]]
+      colors: [[top, 0.0], [bottom, 1.0]]
     };
   }
 
@@ -900,26 +916,24 @@ export struct ReaderPage {
    * `ReadBookMenuBarShared.kt:49-85` 把不透明度上限夹到 0.6），因此直接复用同一折算。
    */
   private readerTopBarFillColor(): string {
-    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
-    const channel = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
-    return '#' + channel + '31282A';
+    return this.readerMenuTintAlphaString(this.readerMenuContainerBaseColor());
   }
 
   /** 顶栏背景渐变，语义同底栏；样式取上游 `readMenuTopBarBlurStyle`（0 填充 / 1 渐变）。 */
   private readerTopBarGradient(): LinearGradientOptions {
-    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
+    const base = this.readerMenuContainerBaseColor();
     if (this.readMenuTopBarBlurStyle !== 1) {
-      const solid = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
+      const solid = this.readerMenuTintAlphaString(base);
       return {
         angle: 180,
-        colors: [['#' + solid + '31282A', 0.0], ['#' + solid + '31282A', 1.0]]
+        colors: [[solid, 0.0], [solid, 1.0]]
       };
     }
-    const top = Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase();
-    const bottom = Math.round(Math.max(0, alpha - 0.25) * 255).toString(16).padStart(2, '0').toUpperCase();
+    const top = this.readerMenuTintAlphaString(base);
+    const bottom = this.readerMenuTintAlphaString(base, 0.25);
     return {
       angle: 180,
-      colors: [['#' + top + '31282A', 0.0], ['#' + bottom + '31282A', 1.0]]
+      colors: [[top, 0.0], [bottom, 1.0]]
     };
   }
 
@@ -945,6 +959,95 @@ export struct ReaderPage {
   /** 顶栏按钮是否用合并胶囊容器（上游 `readMenuTopBarMergeButtons`，`ReadBookMenuBarTitle.kt:973`）。 */
   private readerTopBarMergeEnabled(): boolean {
     return this.readMenuTopBarMergeButtons;
+  }
+
+  /**
+   * 当前纸色是不是深色。上游用 `ReadStyleResolver.isNightTheme()` 判断，
+   * 本地没有独立日夜状态，按纸色亮度折算（与 Index.isReaderBackgroundLight 同一口径，
+   * 阈值 0.5）。解析不出来时按「浅色」处理。
+   */
+  private readerMenuIsNight(): boolean {
+    const raw = this.paperColor.trim().toUpperCase();
+    let hex = '';
+    if (/^#[0-9A-F]{6}$/.test(raw)) { hex = raw.substring(1); }
+    else if (/^#[0-9A-F]{8}$/.test(raw)) { hex = raw.substring(3); }
+    if (hex.length !== 6) { return false; }
+    const channel = (shift: number): number => {
+      const srgb = parseInt(hex.substring(shift, shift + 2), 16) / 255;
+      return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+    };
+    const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+    return luminance < 0.5;
+  }
+
+  /**
+   * 菜单基底色（不含透明度）。逐条照上游 `ReadBookConfig.kt:154-178` 的 `resolvedMenuBgColor`：
+   * `0` 跟随系统 → 日间白、夜间黑；`1` 跟随阅读背景 → 取当前纸色；
+   * `2` 自定义 → 取 `readMenuBgColor`/`Night`（空串表示未设置，回落跟随系统那一档）。
+   * `readMenuColorMode == 0`（种子色）时上游用强调色派生整套色板，本地取强调色作基底近似。
+   */
+  private readerMenuBaseColor(): string {
+    if (this.readBarStyle === 1) { return this.paperColor; }
+    if (this.readBarStyle === 2) {
+      const custom = this.readerMenuIsNight() ? this.readMenuBgColorNight : this.readMenuBgColor;
+      if (custom.length > 0) { return custom; }
+      if (this.readMenuColorMode === 0) { return this.readerMenuAccentTint(); }
+    }
+    return this.readerMenuIsNight() ? '#000000' : '#FFFFFF';
+  }
+
+  /**
+   * 菜单容器色（不含透明度）。上游 `readMenuContainerColor`/`Night` 为 0 时回落菜单背景色
+   * （`ReadBookConfig.kt:123-132`），因此空串直接继承基底色。
+   */
+  private readerMenuContainerBaseColor(): string {
+    const custom = this.readerMenuIsNight() ? this.readMenuContainerColorNight : this.readMenuContainerColor;
+    return custom.length > 0 ? custom : this.readerMenuBaseColor();
+  }
+
+  /**
+   * 菜单强调色。上游 `resolvedMenuAccentColor`（`ReadBookConfig.kt:180-181`）取
+   * `readMenuAccentColor`/`Night`；未设置时上游回落到主题色，本地沿用原有硬编码 `#FFB1C8`。
+   * 上游「种子色」与「强调色」共用同一字段（`SystemMenuPage.kt:308-368`），这里同样只读一处。
+   */
+  private readerMenuAccentTint(): string {
+    const custom = this.readerMenuIsNight() ? this.readMenuAccentColorNight : this.readMenuAccentColor;
+    return custom.length > 0 ? custom : '#FFB1C8';
+  }
+
+  /**
+   * 菜单前景色（文字与图标）。上游菜单文字走 `onSurface`，自定义主题色模式下由
+   * `ReadBookColorTheme.kt:291-297` 把强调色写成 `primary`；`readMenuTextColor` 属 KI-E2，
+   * 这一轮先按菜单底色的明暗取反色，保证可读。
+   */
+  private readerMenuForeground(): string {
+    return this.readerMenuIsNight() ? '#D5C2C6' : '#3E3D3B';
+  }
+
+  /** 把 `#RRGGBB` / `#AARRGGBB` 折成 6 位 RGB；解析不了时按当前日夜取黑白。 */
+  private readerMenuRgb(color: string): string {
+    const raw = color.trim().toUpperCase();
+    if (/^#[0-9A-F]{6}$/.test(raw)) { return raw.substring(1); }
+    if (/^#[0-9A-F]{8}$/.test(raw)) { return raw.substring(3); }
+    return this.readerMenuIsNight() ? '000000' : 'FFFFFF';
+  }
+
+  /**
+   * 给菜单色叠上 `readMenuBlurAlpha` 决定的不透明度。上游
+   * `ReadBookMenuBarShared.kt:49-85` 的口径是 `(blurAlpha/100).coerceAtMost(0.6f)`，
+   * 因此这里同样把上限压到 0.6，保证背后正文透得出来。
+   * `delta` 供渐变用：第二段色再降一点不透明度，等价上游 `ReaderMenuTintStyle.Gradient`。
+   */
+  private readerMenuTintAlphaString(color: string, delta: number = 0): string {
+    const alpha = Math.min(0.6, Math.max(0, Math.min(100, this.readMenuBlurAlpha)) / 100);
+    const effective = Math.max(0, alpha - delta);
+    const channel = Math.round(effective * 255).toString(16).padStart(2, '0').toUpperCase();
+    return '#' + channel + this.readerMenuRgb(color);
+  }
+
+  /** 给菜单前景色套一个固定 alpha 前缀（本地原先把 `#73`/`#B3` 半透明前景写死）。 */
+  private readerMenuForegroundAlpha(alphaHex: string): string {
+    return '#' + alphaHex + this.readerMenuRgb(this.readerMenuForeground());
   }
 
   private stopAutoPageTimer(): void {
@@ -1676,7 +1779,7 @@ export struct ReaderPage {
   @Builder
   private topActionButton(action: ReaderBottomActionConfig) {
     Stack({ alignContent: Alignment.Center }) {
-      ReaderControlGlyph({ kind: this.getTopActionKind(action.id), glyphSize: 20 })
+      ReaderControlGlyph({ kind: this.getTopActionKind(action.id), glyphSize: 20, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint() })
     }
     .width(40).height(40)
     .margin({ left: this.readerTopBarMergeEnabled() ? 0 : 6 })
@@ -1684,7 +1787,7 @@ export struct ReaderPage {
     .backgroundColor(this.readerTopBarMergeEnabled() ? Color.Transparent : this.readerTopBarButtonFillColor())
     .border({
       width: this.readerTopBarMergeEnabled() ? 0 : this.readerTopBarButtonBorderWidth(),
-      color: '#73D5C2C6'
+      color: this.readerMenuForegroundAlpha('73')
     })
     .onClick(() => {
       this.selectBottomAction(this.getTopActionKind(action.id));
@@ -1711,7 +1814,7 @@ export struct ReaderPage {
       }
       .height(40).borderRadius(20).margin({ left: 6 })
       .backgroundColor(this.readerTopBarButtonFillColor())
-      .border({ width: this.readerTopBarButtonBorderWidth(), color: '#73D5C2C6' })
+      .border({ width: this.readerTopBarButtonBorderWidth(), color: this.readerMenuForegroundAlpha('73') })
     } else {
       if (this.getVisibleTopActions().length > 0) {
         this.topActionButton(this.getVisibleTopActions()[0] as ReaderBottomActionConfig)
@@ -1729,7 +1832,7 @@ export struct ReaderPage {
   @Builder
   private readerTopActionOverflowButton() {
     Stack({ alignContent: Alignment.Center }) {
-      AppGlyph({ name: 'more', glyphSize: 18, tint: '#D5C2C6' })
+      AppGlyph({ name: 'more', glyphSize: 18, tint: this.readerMenuForeground() })
     }.width(40).height(40)
     .margin({ left: this.readerTopBarMergeEnabled() ? 0 : 6 })
     .bindMenu(this.TopActionOverflowMenu, { placement: Placement.Bottom })
@@ -1742,10 +1845,10 @@ export struct ReaderPage {
   @Builder
   private readerTitleCapsule() {
     Column() {
-      Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#D5C2C6').maxLines(1)
+      Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.readerMenuForeground()).maxLines(1)
         .width('100%').textOverflow({ overflow: TextOverflow.Ellipsis })
       if (this.displayChapterTitle.length > 0) {
-        Text(this.displayChapterTitle).fontSize(11).fontColor('#B3D5C2C6').maxLines(1)
+        Text(this.displayChapterTitle).fontSize(11).fontColor(this.readerMenuForegroundAlpha('B3')).maxLines(1)
           .width('100%').margin({ top: 2 }).textOverflow({ overflow: TextOverflow.Ellipsis })
       }
     }
@@ -1753,7 +1856,7 @@ export struct ReaderPage {
     .padding({ left: 12, right: 12, top: 4, bottom: 4 })
     .borderRadius(20)
     .backgroundColor(this.readerTopBarButtonFillColor())
-    .border({ width: this.readerTopBarButtonBorderWidth(), color: '#73D5C2C6' })
+    .border({ width: this.readerTopBarButtonBorderWidth(), color: this.readerMenuForegroundAlpha('73') })
   }
 
   /** 顶栏是否显示行内书名（非胶囊模式且模式为 "0" 或 "2"）。 */
@@ -1878,7 +1981,7 @@ export struct ReaderPage {
   private moreActionConfigRow(config: ReaderMoreActionConfig, index: number) {
     Row() {
       AppGlyph({ name: this.getMoreAction(config.id)?.glyph ?? 'more', glyphSize: 20,
-        tint: config.enabled ? '#D5C2C6' : '#777984' }).margin({ right: 12 })
+        tint: config.enabled ? this.readerMenuForeground() : '#777984' }).margin({ right: 12 })
       Column() {
         Text(this.getMoreAction(config.id)?.label ?? config.id).fontSize(14)
           .fontColor(config.enabled ? '#E5E6EB' : '#777984')
@@ -1892,7 +1995,7 @@ export struct ReaderPage {
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
       Stack({ alignContent: Alignment.Center }) {
         Image(config.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
-          .width(20).height(20).fillColor(config.enabled ? '#D5C2C6' : '#777984')
+          .width(20).height(20).fillColor(config.enabled ? this.readerMenuForeground() : '#777984')
       }.width(36).height(36).borderRadius(18).backgroundColor('#292A31')
         .onClick(() => this.toggleMoreAction(config.id))
       Column() {
@@ -2852,7 +2955,7 @@ export struct ReaderPage {
       if (vertical) {
         this.ReaderBrightnessSlider(true)
       } else {
-        Image($r('app.media.reader_brightness')).width(18).height(18).fillColor('#D5C2C6')
+        Image($r('app.media.reader_brightness')).width(18).height(18).fillColor(this.readerMenuForeground())
           .margin({ right: 8 })
         this.ReaderBrightnessSlider(false)
         Text(`${Math.round(this.readBrightness)}`).fontSize(11).fontColor('#B7B8C1').width(32)
@@ -2877,7 +2980,7 @@ export struct ReaderPage {
       .layoutWeight(vertical ? 0 : 1)
       .width(vertical ? 40 : undefined)
       .height(vertical ? 120 : 40)
-      .selectedColor('#FFB1C8').trackColor('#5A3F47').blockColor('#FFB1C8')
+      .selectedColor(this.readerMenuAccentTint()).trackColor('#5A3F47').blockColor(this.readerMenuAccentTint())
       .trackThickness(6)
       .blockSize({ width: 14, height: 14 })
       .onChange((value: number, mode: SliderChangeMode) => {
@@ -4077,7 +4180,7 @@ export struct ReaderPage {
             Column() {
               Row() {
                 Stack({ alignContent: Alignment.Center }) {
-                  Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D5C2C6')
+                  Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
                 }.width(40).height(40).onClick(() => this.onBack())
                 // 胶囊模式：书名 + 章节名压成一行两段，独占中间剩余宽度（上游 ReadBookMenuBarTitle.kt:198/492）。
                 if (this.readerTitleCapsuleVisible()) {
@@ -4085,7 +4188,7 @@ export struct ReaderPage {
                 } else {
                   // 非胶囊模式：仅 titleBarMode 为 "0"/"2" 时书名留在应用栏行内（:207）。
                   if (this.readerTitleInlineVisible()) {
-                    Text(this.book.title).fontSize(16).fontColor('#D5C2C6').maxLines(1)
+                    Text(this.book.title).fontSize(16).fontColor(this.readerMenuForeground()).maxLines(1)
                       .layoutWeight(1).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
@@ -4095,12 +4198,12 @@ export struct ReaderPage {
               }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
               // 模式 "1"：书名单独占一行（上游 :239）。
               if (this.readerTitleOwnLineVisible()) {
-                Text(this.book.title).fontSize(16).fontColor('#D5C2C6').maxLines(1)
+                Text(this.book.title).fontSize(16).fontColor(this.readerMenuForeground()).maxLines(1)
                   .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 4 })
               }
               // 模式 "0"/"1"：章节名独占一行（上游 :259）。
               if (this.readerChapterLineVisible()) {
-                Text(this.displayChapterTitle).fontSize(12).fontColor('#D5C2C6').maxLines(1)
+                Text(this.displayChapterTitle).fontSize(12).fontColor(this.readerMenuForeground()).maxLines(1)
                   .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 8 })
               }
             }
@@ -4110,11 +4213,11 @@ export struct ReaderPage {
 
           if (this.showQuickActions) {
             Row() {
-              ReaderControl({ kind: 'search', active: false, onSelect: () => this.onOpenSearchContent() })
-              ReaderControl({ kind: 'autoPage', active: this.autoPageActive, onSelect: (): void => this.toggleAutoPage() })
-              ReaderControl({ kind: 'catalog', active: false, onSelect: () => this.onOpenCatalog() })
-              ReaderControl({ kind: 'voice', active: false, onSelect: (): void => { this.onUnavailableAction('朗读播放尚未迁移'); }, onLongSelect: (): void => { this.onOpenReadAloud(); } })
-              ReaderControl({ kind: 'settings', active: false, onSelect: () => this.onOpenSettings() })
+              ReaderControl({ kind: 'search', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: () => this.onOpenSearchContent() })
+              ReaderControl({ kind: 'autoPage', active: this.autoPageActive, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: (): void => this.toggleAutoPage() })
+              ReaderControl({ kind: 'catalog', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: () => this.onOpenCatalog() })
+              ReaderControl({ kind: 'voice', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: (): void => { this.onUnavailableAction('朗读播放尚未迁移'); }, onLongSelect: (): void => { this.onOpenReadAloud(); } })
+              ReaderControl({ kind: 'settings', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: () => this.onOpenSettings() })
             }.width('100%').justifyContent(FlexAlign.Start).padding({ left: 18, right: 18, top: 8, bottom: 8 })
           }
 
@@ -4127,7 +4230,7 @@ export struct ReaderPage {
             if (this.readSliderMode !== '1') {
               Row() {
                 Stack({ alignContent: Alignment.Center }) {
-                  Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D5C2C6')
+                  Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
                 }.width(40).height(40).onClick(() => this.turnReaderChapter(-1))
                 Stack({ alignContent: Alignment.Center }) {
                   Slider({
@@ -4138,10 +4241,10 @@ export struct ReaderPage {
                     style: SliderStyle.InSet
                   })
                     .width('100%').height(40)
-                    .selectedColor('#FFB1C8').trackColor('#5A3F47').blockColor('#00000000')
+                    .selectedColor(this.readerMenuAccentTint()).trackColor('#5A3F47').blockColor('#00000000')
                     .trackThickness(6)
                     .blockSize({ width: 12, height: 12 })
-                    .showSteps(true).stepColor('#FFB1C8').stepSize(3)
+                    .showSteps(true).stepColor(this.readerMenuAccentTint()).stepSize(3)
                     .onChange((value: number, mode: SliderChangeMode) => {
                       const maximum = this.getProgressSliderMaximum();
                       const index = Math.max(0, Math.min(maximum, Math.round(value)));
@@ -4159,13 +4262,13 @@ export struct ReaderPage {
                     })
                   Row() {
                     Blank().layoutWeight(this.getProgressSliderThumbRatio())
-                    Column().width(5).height(40).backgroundColor('#FFB1C8').borderRadius(2.5)
+                    Column().width(5).height(40).backgroundColor(this.readerMenuAccentTint()).borderRadius(2.5)
                     Blank().layoutWeight(1 - this.getProgressSliderThumbRatio())
                   }.width('100%').height(40).padding({ left: 10, right: 10 })
                     .hitTestBehavior(HitTestMode.Transparent)
                 }.layoutWeight(1).height(40)
                 Stack({ alignContent: Alignment.Center }) {
-                  Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor('#D5C2C6')
+                  Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
                 }.width(40).height(40).onClick(() => this.turnReaderChapter(1))
               }.width('100%').height(40).padding({ left: 8, right: 8 })
             }
@@ -4183,6 +4286,8 @@ export struct ReaderPage {
                           active: (kind === 'autoPage' && this.autoPageActive) ||
                             (kind === 'eye_protection' && this.eyeProtectionActive),
                           iconStyle: this.bottomIconStyle,
+                          menuForeground: this.readerMenuForeground(),
+                          menuAccent: this.readerMenuAccentTint(),
                           onSelect: () => this.selectBottomAction(kind),
                           onLongSelect: () => this.longSelectBottomAction(kind)
                         }).width(40)
@@ -4309,7 +4414,7 @@ export struct ReaderPage {
                 GridItem() {
                   Column() {
                     AppGlyph({ name: action.glyph,
-                      tint: action.id === 're_segment' && this.book.reSegment === true ? '#FFB1C8' : '#D5C2C6',
+                      tint: action.id === 're_segment' && this.book.reSegment === true ? this.readerMenuAccentTint() : this.readerMenuForeground(),
                       glyphSize: 22 }).margin({ bottom: 8 })
                     Text(action.id === 're_segment' && this.book.reSegment === true
                       ? '重新分段（已启用）' : action.label)
@@ -4559,12 +4664,16 @@ export struct ReaderPage {
 struct ReaderControl {
   @Prop kind: ReaderControlKind = 'catalog';
   @Prop active: boolean = false;
+  /** 菜单前景色（文字与图标），由 ReaderPage 按菜单配色折算后传入。 */
+  @Prop menuForeground: string = '#D5C2C6';
+  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
+  @Prop menuAccent: string = '#FFB1C8';
   onSelect: () => void = () => {};
   onLongSelect: () => void = () => {};
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      ReaderControlGlyph({ kind: this.kind, glyphSize: 19, active: this.active })
+      ReaderControlGlyph({ kind: this.kind, glyphSize: 19, active: this.active, menuForeground: this.menuForeground, menuAccent: this.menuAccent })
     }.width(36).height(36).backgroundColor(this.active ? '#454B62' : '#303139').borderRadius(20)
       .parallelGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => { this.onLongSelect(); }))
       .onClick(() => this.onSelect())
@@ -4578,13 +4687,17 @@ struct ReaderBottomAction {
   @Prop showLabel: boolean = true;
   @Prop active: boolean = false;
   @Prop iconStyle: number = 1;
+  /** 菜单前景色（文字与图标），由 ReaderPage 按菜单配色折算后传入。 */
+  @Prop menuForeground: string = '#D5C2C6';
+  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
+  @Prop menuAccent: string = '#FFB1C8';
   onSelect: () => void = () => {};
   onLongSelect: () => void = () => {};
 
   build() {
     Column() {
       Stack({ alignContent: Alignment.Center }) {
-        ReaderControlGlyph({ kind: this.kind, glyphSize: 20, active: this.active })
+        ReaderControlGlyph({ kind: this.kind, glyphSize: 20, active: this.active, menuForeground: this.menuForeground, menuAccent: this.menuAccent })
       }.width(40).height(40)
         .backgroundColor(this.active ? '#454B62' : (this.iconStyle === 1 ? '#292A31' : '#00000000'))
         .border({ width: this.iconStyle === 2 ? 1 : 0, color: '#8B8E98' })
@@ -4603,51 +4716,55 @@ struct ReaderControlGlyph {
   @Prop kind: ReaderControlKind = 'catalog';
   @Prop glyphSize: number = 20;
   @Prop active: boolean = false;
+  /** 菜单前景色（文字与图标），由 ReaderPage 按菜单配色折算后传入。 */
+  @Prop menuForeground: string = '#D5C2C6';
+  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
+  @Prop menuAccent: string = '#FFB1C8';
 
   build() {
     if (this.kind === 'search') {
-      Image($r('app.media.reader_search')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? '#FFB1C8' : '#D5C2C6')
+      Image($r('app.media.reader_search')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? this.menuAccent : this.menuForeground)
     } else if (this.kind === 'catalog') {
-      Image($r('app.media.reader_toc')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? '#FFB1C8' : '#D5C2C6')
+      Image($r('app.media.reader_toc')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? this.menuAccent : this.menuForeground)
     } else if (this.kind === 'settings') {
-      Image($r('app.media.reader_settings')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? '#FFB1C8' : '#D5C2C6')
+      Image($r('app.media.reader_settings')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? this.menuAccent : this.menuForeground)
     } else if (this.kind === 'autoPage') {
       Image(this.active ? $r('app.media.reader_pause') : $r('app.media.reader_play'))
-        .width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? '#FFB1C8' : '#D5C2C6')
+        .width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? this.menuAccent : this.menuForeground)
     } else if (this.kind === 'addBookmark') {
-      Image($r('app.media.app_bookmark')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_bookmark')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'theme') {
-      Image($r('app.media.app_daynight')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_daynight')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'prev_chapter') {
-      Image($r('app.media.app_previous')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_previous')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'next_chapter') {
-      Image($r('app.media.reader_arrow_forward')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.reader_arrow_forward')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'replace' || this.kind === 'replace_badge') {
-      Image($r('app.media.profile_find_replace')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.profile_find_replace')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'charset' || this.kind === 'translate') {
-      Image($r('app.media.reader_translate')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.reader_translate')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'more_actions' || this.kind === 'source_custom_button') {
-      Image($r('app.media.reader_more')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.reader_more')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'download' || this.kind === 'audio_download') {
-      Image($r('app.media.app_download')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_download')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'refresh' || this.kind === 'refresh_current') {
-      Image($r('app.media.app_refresh')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_refresh')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'change_source') {
-      Image($r('app.media.app_swap')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_swap')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'toc_rule') {
-      Image($r('app.media.profile_rule')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.profile_rule')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'ai_summary' || this.kind === 'ai_cast') {
-      Image($r('app.media.profile_auto_awesome')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.profile_auto_awesome')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'ai_rewrite') {
-      Image($r('app.media.app_edit')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_edit')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'multi_role_read' || this.kind === 'multi_role_cast') {
-      Image($r('app.media.app_group')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_group')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'cast_table') {
-      Image($r('app.media.app_list')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_list')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'eye_protection') {
-      Image($r('app.media.app_visibility')).width(this.glyphSize).height(this.glyphSize).fillColor('#D5C2C6')
+      Image($r('app.media.app_visibility')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else {
-      Image($r('app.media.reader_voice')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? '#FFB1C8' : '#D5C2C6')
+      Image($r('app.media.reader_voice')).width(this.glyphSize).height(this.glyphSize).fillColor(this.active ? this.menuAccent : this.menuForeground)
     }
   }
 }

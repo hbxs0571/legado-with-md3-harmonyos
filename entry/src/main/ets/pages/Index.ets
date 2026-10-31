@@ -263,6 +263,24 @@ struct Index {
   @State readerReadMenuTopBarLiquidGlassButtons: boolean = false;
   /** 顶栏按钮合并；上游 readMenuTopBarMergeButtons（ReadSettings.kt:99，默认 false）。 */
   @State readerReadMenuTopBarMergeButtons: boolean = false;
+  /** 菜单工具栏样式 0 跟随系统 / 1 跟随阅读背景 / 2 自定义；上游 readBarStyle（ReadSettings.kt:69，默认 1）。 */
+  @State readerReadBarStyle: number = 1;
+  /** 菜单调色板样式，空串表示跟随系统；上游 readMenuPaletteStyle（ReadSettings.kt:109，默认空串）。 */
+  @State readerMenuPaletteStyle: string = '';
+  /** 菜单色板来源 0 种子色 / 1 自定义颜色；上游 readMenuColorMode（ReadSettings.kt:88，默认 1）。 */
+  @State readerMenuColorMode: number = 1;
+  /** 菜单背景色，空串表示未设置；上游 readMenuBgColor（ReadSettings.kt:80，默认 0）。 */
+  @State readerMenuBgColor: string = '';
+  /** 菜单背景色（夜间）；上游 readMenuBgColorNight（ReadSettings.kt:83，默认 0）。 */
+  @State readerMenuBgColorNight: string = '';
+  /** 菜单容器色，空串时回落菜单背景色；上游 readMenuContainerColor（ReadSettings.kt:82，默认 0）。 */
+  @State readerMenuContainerColor: string = '';
+  /** 菜单容器色（夜间）；上游 readMenuContainerColorNight（ReadSettings.kt:85，默认 0）。 */
+  @State readerMenuContainerColorNight: string = '';
+  /** 菜单强调色，「种子色」项与它共用同一字段；上游 readMenuAccentColor（ReadSettings.kt:81，默认 0）。 */
+  @State readerMenuAccentColor: string = '';
+  /** 菜单强调色（夜间）；上游 readMenuAccentColorNight（ReadSettings.kt:84，默认 0）。 */
+  @State readerMenuAccentColorNight: string = '';
   /** 环境光提醒：本会话已拒绝过「切到深色」的提醒，对齐上游 `hasDismissedDarkReminder`。 */
   @State readerDayNightReminderDismissedDark: boolean = false;
   /** 环境光提醒：本会话已拒绝过「切到浅色」的提醒，对齐上游 `hasDismissedLightReminder`。 */
@@ -1893,6 +1911,15 @@ struct Index {
     this.readerReadMenuTopBarBlurStyle = settings.readMenuTopBarBlurStyle;
     this.readerReadMenuTopBarLiquidGlassButtons = settings.readMenuTopBarLiquidGlassButtons;
     this.readerReadMenuTopBarMergeButtons = settings.readMenuTopBarMergeButtons;
+    this.readerReadBarStyle = settings.readBarStyle;
+    this.readerMenuPaletteStyle = settings.readMenuPaletteStyle;
+    this.readerMenuColorMode = settings.readMenuColorMode;
+    this.readerMenuBgColor = settings.readMenuBgColor;
+    this.readerMenuBgColorNight = settings.readMenuBgColorNight;
+    this.readerMenuContainerColor = settings.readMenuContainerColor;
+    this.readerMenuContainerColorNight = settings.readMenuContainerColorNight;
+    this.readerMenuAccentColor = settings.readMenuAccentColor;
+    this.readerMenuAccentColorNight = settings.readMenuAccentColorNight;
       this.readerReadingAnchorEnabled = settings.readingAnchorEnabled;
       this.readerSwipeToAddBookmark = settings.swipeToAddBookmark;
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
@@ -2014,6 +2041,15 @@ struct Index {
         readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
         readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
         readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
+        readBarStyle: this.readerReadBarStyle,
+        readMenuPaletteStyle: this.readerMenuPaletteStyle,
+        readMenuColorMode: this.readerMenuColorMode,
+        readMenuBgColor: this.readerMenuBgColor,
+        readMenuBgColorNight: this.readerMenuBgColorNight,
+        readMenuContainerColor: this.readerMenuContainerColor,
+        readMenuContainerColorNight: this.readerMenuContainerColorNight,
+        readMenuAccentColor: this.readerMenuAccentColor,
+        readMenuAccentColorNight: this.readerMenuAccentColorNight,
         adaptSpecialStyle: this.readerAdaptSpecialStyle,
         fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
@@ -2903,6 +2939,85 @@ struct Index {
     }
   }
 
+  private setReaderReadBarStyle(value: number): void {
+    this.readerReadBarStyle = Math.max(0, Math.min(2, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuPaletteStyle(value: string): void {
+    // 空串（跟随系统）是合法值，其余交给数据层白名单过滤。
+    this.readerMenuPaletteStyle = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuColorMode(value: number): void {
+    this.readerMenuColorMode = Math.max(0, Math.min(1, Math.round(value)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBgColor(value: string): void {
+    // 空串表示未设置，颜色交给数据层 normalizeOptionalHexColor 过滤。
+    this.readerMenuBgColor = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuBgColorNight(value: string): void {
+    // 空串表示未设置，颜色交给数据层 normalizeOptionalHexColor 过滤。
+    this.readerMenuBgColorNight = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuContainerColor(value: string): void {
+    // 空串表示未设置，颜色交给数据层 normalizeOptionalHexColor 过滤。
+    this.readerMenuContainerColor = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuContainerColorNight(value: string): void {
+    // 空串表示未设置，颜色交给数据层 normalizeOptionalHexColor 过滤。
+    this.readerMenuContainerColorNight = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuAccentColor(value: string): void {
+    // 空串表示未设置，颜色交给数据层 normalizeOptionalHexColor 过滤。
+    this.readerMenuAccentColor = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  private setReaderReadMenuAccentColorNight(value: string): void {
+    // 空串表示未设置，颜色交给数据层 normalizeOptionalHexColor 过滤。
+    this.readerMenuAccentColorNight = value;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
   private setReaderReadingAnchorEnabled(enabled: boolean): void {
     this.readerReadingAnchorEnabled = enabled;
     this.readerSettingsRevision += 1;
@@ -3337,6 +3452,15 @@ struct Index {
     this.readerReadMenuTopBarBlurStyle = result.settings.readMenuTopBarBlurStyle;
     this.readerReadMenuTopBarLiquidGlassButtons = result.settings.readMenuTopBarLiquidGlassButtons;
     this.readerReadMenuTopBarMergeButtons = result.settings.readMenuTopBarMergeButtons;
+    this.readerReadBarStyle = result.settings.readBarStyle;
+    this.readerMenuPaletteStyle = result.settings.readMenuPaletteStyle;
+    this.readerMenuColorMode = result.settings.readMenuColorMode;
+    this.readerMenuBgColor = result.settings.readMenuBgColor;
+    this.readerMenuBgColorNight = result.settings.readMenuBgColorNight;
+    this.readerMenuContainerColor = result.settings.readMenuContainerColor;
+    this.readerMenuContainerColorNight = result.settings.readMenuContainerColorNight;
+    this.readerMenuAccentColor = result.settings.readMenuAccentColor;
+    this.readerMenuAccentColorNight = result.settings.readMenuAccentColorNight;
       this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
@@ -4662,6 +4786,15 @@ struct Index {
             readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
             readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
             readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
+            readBarStyle: this.readerReadBarStyle,
+            readMenuPaletteStyle: this.readerMenuPaletteStyle,
+            readMenuColorMode: this.readerMenuColorMode,
+            readMenuBgColor: this.readerMenuBgColor,
+            readMenuBgColorNight: this.readerMenuBgColorNight,
+            readMenuContainerColor: this.readerMenuContainerColor,
+            readMenuContainerColorNight: this.readerMenuContainerColorNight,
+            readMenuAccentColor: this.readerMenuAccentColor,
+            readMenuAccentColorNight: this.readerMenuAccentColorNight,
             readingAnchorAvailable: this.readerReadingAnchorEnabled && this.readerAnchorJumpCount >= 2,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
@@ -4897,6 +5030,15 @@ struct Index {
               readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
               readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
               readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
+              readBarStyle: this.readerReadBarStyle,
+              readMenuPaletteStyle: this.readerMenuPaletteStyle,
+              readMenuColorMode: this.readerMenuColorMode,
+              readMenuBgColor: this.readerMenuBgColor,
+              readMenuBgColorNight: this.readerMenuBgColorNight,
+              readMenuContainerColor: this.readerMenuContainerColor,
+              readMenuContainerColorNight: this.readerMenuContainerColorNight,
+              readMenuAccentColor: this.readerMenuAccentColor,
+              readMenuAccentColorNight: this.readerMenuAccentColorNight,
               adaptSpecialStyle: this.readerAdaptSpecialStyle,
               onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
               onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -4917,6 +5059,15 @@ struct Index {
               onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
               onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
               onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
+              onReadBarStyleChange: (value: number) => this.setReaderReadBarStyle(value),
+              onReadMenuPaletteStyleChange: (value: string) => this.setReaderReadMenuPaletteStyle(value),
+              onReadMenuColorModeChange: (value: number) => this.setReaderReadMenuColorMode(value),
+              onReadMenuBgColorChange: (value: string) => this.setReaderReadMenuBgColor(value),
+              onReadMenuBgColorNightChange: (value: string) => this.setReaderReadMenuBgColorNight(value),
+              onReadMenuContainerColorChange: (value: string) => this.setReaderReadMenuContainerColor(value),
+              onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
+              onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
+              onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
               onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5329,6 +5480,15 @@ struct Index {
             readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
             readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
             readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
+            readBarStyle: this.readerReadBarStyle,
+            readMenuPaletteStyle: this.readerMenuPaletteStyle,
+            readMenuColorMode: this.readerMenuColorMode,
+            readMenuBgColor: this.readerMenuBgColor,
+            readMenuBgColorNight: this.readerMenuBgColorNight,
+            readMenuContainerColor: this.readerMenuContainerColor,
+            readMenuContainerColorNight: this.readerMenuContainerColorNight,
+            readMenuAccentColor: this.readerMenuAccentColor,
+            readMenuAccentColorNight: this.readerMenuAccentColorNight,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5349,6 +5509,15 @@ struct Index {
             onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
             onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
             onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
+            onReadBarStyleChange: (value: number) => this.setReaderReadBarStyle(value),
+            onReadMenuPaletteStyleChange: (value: string) => this.setReaderReadMenuPaletteStyle(value),
+            onReadMenuColorModeChange: (value: number) => this.setReaderReadMenuColorMode(value),
+            onReadMenuBgColorChange: (value: string) => this.setReaderReadMenuBgColor(value),
+            onReadMenuBgColorNightChange: (value: string) => this.setReaderReadMenuBgColorNight(value),
+            onReadMenuContainerColorChange: (value: string) => this.setReaderReadMenuContainerColor(value),
+            onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
+            onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
+            onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5626,6 +5795,15 @@ struct Index {
             readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
             readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
             readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
+            readBarStyle: this.readerReadBarStyle,
+            readMenuPaletteStyle: this.readerMenuPaletteStyle,
+            readMenuColorMode: this.readerMenuColorMode,
+            readMenuBgColor: this.readerMenuBgColor,
+            readMenuBgColorNight: this.readerMenuBgColorNight,
+            readMenuContainerColor: this.readerMenuContainerColor,
+            readMenuContainerColorNight: this.readerMenuContainerColorNight,
+            readMenuAccentColor: this.readerMenuAccentColor,
+            readMenuAccentColorNight: this.readerMenuAccentColorNight,
             adaptSpecialStyle: this.readerAdaptSpecialStyle,
             onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
             onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5646,6 +5824,15 @@ struct Index {
             onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
             onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
             onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
+            onReadBarStyleChange: (value: number) => this.setReaderReadBarStyle(value),
+            onReadMenuPaletteStyleChange: (value: string) => this.setReaderReadMenuPaletteStyle(value),
+            onReadMenuColorModeChange: (value: number) => this.setReaderReadMenuColorMode(value),
+            onReadMenuBgColorChange: (value: string) => this.setReaderReadMenuBgColor(value),
+            onReadMenuBgColorNightChange: (value: string) => this.setReaderReadMenuBgColorNight(value),
+            onReadMenuContainerColorChange: (value: string) => this.setReaderReadMenuContainerColor(value),
+            onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
+            onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
+            onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
             onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
@@ -5865,6 +6052,15 @@ struct Index {
           readMenuTopBarBlurStyle: this.readerReadMenuTopBarBlurStyle,
           readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
           readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
+          readBarStyle: this.readerReadBarStyle,
+          readMenuPaletteStyle: this.readerMenuPaletteStyle,
+          readMenuColorMode: this.readerMenuColorMode,
+          readMenuBgColor: this.readerMenuBgColor,
+          readMenuBgColorNight: this.readerMenuBgColorNight,
+          readMenuContainerColor: this.readerMenuContainerColor,
+          readMenuContainerColorNight: this.readerMenuContainerColorNight,
+          readMenuAccentColor: this.readerMenuAccentColor,
+          readMenuAccentColorNight: this.readerMenuAccentColorNight,
           adaptSpecialStyle: this.readerAdaptSpecialStyle,
           onBrightnessAutoChange: (enabled: boolean) => this.setReaderBrightnessAuto(enabled),
           onReadBodyToLhChange: (enabled: boolean) => this.setReaderReadBodyToLh(enabled),
@@ -5885,6 +6081,15 @@ struct Index {
           onReadMenuTopBarBlurStyleChange: (value: number) => this.setReaderReadMenuTopBarBlurStyle(value),
           onReadMenuTopBarLiquidGlassButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarLiquidGlassButtons(enabled),
           onReadMenuTopBarMergeButtonsChange: (enabled: boolean) => this.setReaderReadMenuTopBarMergeButtons(enabled),
+          onReadBarStyleChange: (value: number) => this.setReaderReadBarStyle(value),
+          onReadMenuPaletteStyleChange: (value: string) => this.setReaderReadMenuPaletteStyle(value),
+          onReadMenuColorModeChange: (value: number) => this.setReaderReadMenuColorMode(value),
+          onReadMenuBgColorChange: (value: string) => this.setReaderReadMenuBgColor(value),
+          onReadMenuBgColorNightChange: (value: string) => this.setReaderReadMenuBgColorNight(value),
+          onReadMenuContainerColorChange: (value: string) => this.setReaderReadMenuContainerColor(value),
+          onReadMenuContainerColorNightChange: (value: string) => this.setReaderReadMenuContainerColorNight(value),
+          onReadMenuAccentColorChange: (value: string) => this.setReaderReadMenuAccentColor(value),
+          onReadMenuAccentColorNightChange: (value: string) => this.setReaderReadMenuAccentColorNight(value),
           onTextSelectMenuConfigChange: (value: string) => this.setReaderTextSelectMenuConfig(value),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
               onSwipeToAddBookmarkChange: (enabled: boolean) => this.setReaderSwipeToAddBookmark(enabled),
