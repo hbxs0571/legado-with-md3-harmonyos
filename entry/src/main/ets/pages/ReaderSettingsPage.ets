@@ -120,6 +120,10 @@ export struct ReaderSettingsPage {
   /** 自定义书签角标图片路径；空串表示默认丝带。 */
   @Prop bookmarkBadgeImage: string = '';
   @Prop selectText: boolean = true;
+  /** 滑动进度条时震动；上游 ReadSettings.kt:36 sliderVibrator。 */
+  @Prop sliderVibrator: boolean = false;
+  /** 选择正文时震动；上游 ReadSettings.kt:41 selectVibrator。 */
+  @Prop selectVibrator: boolean = false;
   @Prop maxLengthWithNoToc: number = 3000;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = READER_CLICK_REGION_DEFAULTS;
@@ -240,6 +244,8 @@ export struct ReaderSettingsPage {
   onQuickActionsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onSelectTextChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onSliderVibratorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onSelectVibratorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
   /** 把设置里存的沙箱绝对路径转成 `Image()` 能读的 `file://` URI（裸路径会渲染空白）。 */
   private badgeImageSource(): string {
@@ -880,11 +886,13 @@ export struct ReaderSettingsPage {
             onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
           })
           Text('其他').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
-          MenuSettingSwitch({ title: '进度条触感反馈', detail: '拖动时提供触觉反馈', checked: false }).onClick(() => this.showNotMigrated('进度条触感反馈'))
+          MenuSettingSwitch({ title: '进度条触感反馈', detail: '拖动时提供触觉反馈', checked: this.sliderVibrator,
+            onChange: (enabled: boolean) => this.onSliderVibratorChange(enabled) })
           MenuSettingSwitch({ title: '使用新版目录', detail: '使用新的目录面板', checked: true }).onClick(() => this.showNotMigrated('使用新版目录'))
           MenuSettingSlider({ title: '无目录书籍分段长度', value: this.maxLengthWithNoToc, minValue: 3000, maxValue: 100000, stepValue: 100,
             onChange: (value: number) => this.onMaxLengthWithNoTocChange(value) })
-          MenuSettingSwitch({ title: '文字选择触感反馈', detail: '选择正文时提供触觉反馈', checked: false }).onClick(() => this.showNotMigrated('文字选择触感反馈'))
+          MenuSettingSwitch({ title: '文字选择触感反馈', detail: '选择正文时提供触觉反馈', checked: this.selectVibrator,
+            onChange: (enabled: boolean) => this.onSelectVibratorChange(enabled) })
           MenuSettingSwitch({ title: '自动切换书源', detail: '当前书源失效时尝试其它书源', checked: false }).onClick(() => this.showNotMigrated('自动切换书源'))
           MenuSettingSwitch({ title: '换源结果应用于全部书籍', detail: '同步更新其它书籍的书源', checked: false }).onClick(() => this.showNotMigrated('换源结果应用于全部书籍'))
           MenuSettingSwitch({ title: '自动切换日夜模式提醒', detail: '提示切换阅读背景', checked: false }).onClick(() => this.showNotMigrated('自动切换日夜模式提醒'))

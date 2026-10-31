@@ -202,6 +202,10 @@ struct Index {
   /** 自定义书签角标图片路径，空串表示用默认丝带；与上游 bookmarkBadgeImage 对齐。 */
   @State readerBookmarkBadgeImage: string = '';
   @State readerSelectText: boolean = true;
+  /** 滑动进度条时震动；上游 ReadSettings.kt:36 sliderVibrator。上游 UI 无消费点，本地同样只落库。 */
+  @State readerSliderVibrator: boolean = false;
+  /** 选择正文时震动；上游 ReadSettings.kt:41 selectVibrator，消费点在选区手势。 */
+  @State readerSelectVibrator: boolean = false;
   @State readerMaxLengthWithNoToc: number = 3000;
   @State eyeProtectionEnabled: boolean = false;
   @State eyeProtectionAutoNight: boolean = false;
@@ -1728,6 +1732,8 @@ struct Index {
       this.readerBookmarkBadgeSize = settings.bookmarkBadgeSize;
       this.readerBookmarkBadgeImage = settings.bookmarkBadgeImage;
       this.readerSelectText = settings.selectText;
+      this.readerSliderVibrator = settings.sliderVibrator;
+      this.readerSelectVibrator = settings.selectVibrator;
       this.readerMaxLengthWithNoToc = settings.maxLengthWithNoToc;
       this.eyeProtectionEnabled = settings.eyeProtectionEnabled;
       this.eyeProtectionAutoNight = settings.eyeProtectionAutoNight;
@@ -1838,6 +1844,8 @@ struct Index {
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
         bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
+        sliderVibrator: this.readerSliderVibrator,
+        selectVibrator: this.readerSelectVibrator,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
         eyeProtectionEnabled: this.eyeProtectionEnabled,
         eyeProtectionAutoNight: this.eyeProtectionAutoNight,
@@ -2290,6 +2298,16 @@ struct Index {
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
+  private setReaderSliderVibrator(enabled: boolean): void {
+    this.readerSliderVibrator = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+  private setReaderSelectVibrator(enabled: boolean): void {
+    this.readerSelectVibrator = enabled;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
   private setReaderMaxLengthWithNoToc(value: number): void {
     this.readerMaxLengthWithNoToc = Math.max(3000, Math.min(100000, Math.round(value)));
     this.readerSettingsRevision += 1;
@@ -2460,6 +2478,8 @@ struct Index {
       this.readerTopActions = result.settings.topActions;
       this.readerProgressBehavior = result.settings.progressBehavior;
       this.readerReadSliderMode = result.settings.readSliderMode;
+      this.readerSliderVibrator = result.settings.sliderVibrator;
+      this.readerSelectVibrator = result.settings.selectVibrator;
       this.readerPageTouchSlop = result.settings.pageTouchSlop;
       this.readerLastMarkingStyle = result.settings.lastMarkingStyle;
       this.showReaderQuickActions = result.settings.showQuickActions;
@@ -3710,6 +3730,7 @@ struct Index {
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
         bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
+        selectVibrator: this.readerSelectVibrator,
             clickImageBehavior: this.readerClickImageBehavior,
             clickRegionActions: this.readerClickRegionActions,
             hideStatusBar: this.readerHideStatusBar,
@@ -3888,6 +3909,8 @@ struct Index {
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
         bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
+        sliderVibrator: this.readerSliderVibrator,
+        selectVibrator: this.readerSelectVibrator,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
               onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
               onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -3896,6 +3919,8 @@ struct Index {
               onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
               onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
+              onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
+              onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
               clickRegionActions: this.readerClickRegionActions,
               onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4201,6 +4226,8 @@ struct Index {
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
         bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
+        sliderVibrator: this.readerSliderVibrator,
+        selectVibrator: this.readerSelectVibrator,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -4209,6 +4236,8 @@ struct Index {
               onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
               onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
+              onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
+              onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4379,6 +4408,8 @@ struct Index {
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
         bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
+        sliderVibrator: this.readerSliderVibrator,
+        selectVibrator: this.readerSelectVibrator,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
             onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
             onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -4387,6 +4418,8 @@ struct Index {
               onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
               onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
+              onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
+              onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -4499,6 +4532,8 @@ struct Index {
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
         bookmarkBadgeImage: this.readerBookmarkBadgeImage,
         selectText: this.readerSelectText,
+        sliderVibrator: this.readerSliderVibrator,
+        selectVibrator: this.readerSelectVibrator,
         maxLengthWithNoToc: this.readerMaxLengthWithNoToc,
           onNoAnimScrollPageChange: (enabled: boolean) => this.setReaderNoAnimScrollPage(enabled),
           onReadingAnchorEnabledChange: (enabled: boolean) => this.setReaderReadingAnchorEnabled(enabled),
@@ -4507,6 +4542,8 @@ struct Index {
               onPickBookmarkBadgeImage: (): void => { this.pickReaderBookmarkBadgeImage(); },
               onResetBookmarkBadgeImage: (): void => this.resetReaderBookmarkBadgeImage(),
               onSelectTextChange: (enabled: boolean) => this.setReaderSelectText(enabled),
+              onSliderVibratorChange: (enabled: boolean) => this.setReaderSliderVibrator(enabled),
+              onSelectVibratorChange: (enabled: boolean) => this.setReaderSelectVibrator(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
           clickRegionActions: this.readerClickRegionActions,
           onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),

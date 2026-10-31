@@ -4,6 +4,7 @@ import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderHighlightRule, ReaderHighlightRange, ReaderHighlightStyle } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
+import { ReaderHaptics } from '../data/ReaderHaptics';
 import { ReaderHighlightRuleSheet } from './ReaderHighlightRuleSheet';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
@@ -170,6 +171,8 @@ export struct ReaderPage {
   /** 自定义书签角标图片路径；空串表示用默认黄色丝带，对齐上游 bookmarkBadgeImage。 */
   @Prop bookmarkBadgeImage: string = '';
   @Prop selectText: boolean = true;
+  /** 选择正文时震动；上游 ReadSettings.kt:41 selectVibrator，消费点见 ReaderHaptics。 */
+  @Prop selectVibrator: boolean = false;
   @Prop bookmarks: ReaderBookmark[] = [];
   // 标记变化必须递增 revision，否则滚动模式的 ForEach 复用旧 Span、划线渲染不出来。
   @Prop @Watch('onMarkingsChanged') markings: ReaderMarking[] = [];
@@ -1964,11 +1967,24 @@ export struct ReaderPage {
     if (part === undefined) { return; }
     const start = Math.max(0, Math.min(part.value.length, Math.trunc(Math.min(selectionStart, selectionEnd))));
     const end = Math.max(start, Math.min(part.value.length, Math.trunc(Math.max(selectionStart, selectionEnd))));
+    const previousRange = this.pendingMarkingRanges.get(partIndex);
     if (end <= start) {
       this.pendingMarkingRanges.delete(partIndex);
     } else {
       const range: ReaderMarkingRange = { start: start, end: end };
       this.pendingMarkingRanges.set(partIndex, range);
+    }
+    // 触感只在选区真正变化时给：上游 ReaderCanvasSurface.kt:1109 是「长按选中首个词」
+    // （此前没有选区），:1225 是「拖手柄后 updatedSelection != selection」。空选区不算。
+    const selectionChanged = previousRange === undefined
+      ? end > start
+      : (previousRange.start !== start || previousRange.end !== end);
+    if (selectionChanged && end > start) {
+      if (previousRange === undefined) {
+        ReaderHaptics.selectionStart(this.selectVibrator);
+      } else {
+        ReaderHaptics.selectionMove(this.selectVibrator);
+      }
     }
     this.rebuildPendingMarkingRange();
   }

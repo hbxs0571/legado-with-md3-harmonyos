@@ -201,6 +201,20 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   /** 自定义书签角标图片在应用私有目录的路径；空串表示用默认黄色丝带，对齐上游 `bookmarkBadgeImage`。 */
   bookmarkBadgeImage: string;
   selectText: boolean;
+  /**
+   * 滑动进度条时震动。上游 ReadSettings.kt:36 `sliderVibrator: Boolean = false`。
+   * 注意：上游该开关只有设置项与落库，UI 侧没有任何消费点（全仓 grep sliderVibrator
+   * 只命中 PreferKey / ReadSettingsRepository / ReadSettings / MoreConfigSheet /
+   * ReadConfig* 这些存储与设置项，feature/reader 里一处都没有），因此本地同样只做到
+   * 「可配、落库、随备份走」，不额外发明振动效果——对齐「上游没有就不要这个效果」。
+   */
+  sliderVibrator: boolean;
+  /**
+   * 选择正文时震动。上游 ReadSettings.kt:41 `selectVibrator: Boolean = false`，
+   * 消费点在 ReaderCanvasSurface.kt:1109（长按选中首个词）与 :1225（拖动手柄改变选区），
+   * 由 ReadBookRouteScreen.kt:755 以 `selectionHapticsEnabled` 传入。
+   */
+  selectVibrator: boolean;
   maxLengthWithNoToc: number;
   eyeProtectionEnabled: boolean;
   eyeProtectionAutoNight: boolean;
@@ -450,6 +464,8 @@ export class ReaderSettingsRepository {
       // 上游 ReadSettings.bookmarkBadgeImage 默认空串，即使用默认丝带。
       bookmarkBadgeImage: '',
       selectText: true,
+      sliderVibrator: false,
+      selectVibrator: false,
       maxLengthWithNoToc: 3000,
       eyeProtectionEnabled: false,
       eyeProtectionAutoNight: false,
@@ -519,6 +535,8 @@ export class ReaderSettingsRepository {
       const bookmarkBadgeSizeValue = await store.get('bookmarkBadgeSize', defaults.bookmarkBadgeSize);
       const bookmarkBadgeImageValue = await store.get('bookmarkBadgeImage', defaults.bookmarkBadgeImage);
       const selectTextValue = await store.get('selectText', defaults.selectText);
+      const sliderVibratorValue = await store.get('sliderVibrator', defaults.sliderVibrator);
+      const selectVibratorValue = await store.get('selectVibrator', defaults.selectVibrator);
       const maxLengthWithNoTocValue = await store.get('maxLengthWithNoToc', defaults.maxLengthWithNoToc);
       const eyeProtectionEnabledValue = await store.get('eyeProtectionEnabled', defaults.eyeProtectionEnabled);
       const eyeProtectionAutoNightValue = await store.get('eyeProtectionAutoNight', defaults.eyeProtectionAutoNight);
@@ -747,6 +765,8 @@ export class ReaderSettingsRepository {
             bookmarkBadgeImage: typeof bookmarkBadgeImageValue === 'string'
               ? bookmarkBadgeImageValue : defaults.bookmarkBadgeImage,
             selectText: typeof selectTextValue === 'boolean' ? selectTextValue : defaults.selectText,
+            sliderVibrator: typeof sliderVibratorValue === 'boolean' ? sliderVibratorValue : defaults.sliderVibrator,
+            selectVibrator: typeof selectVibratorValue === 'boolean' ? selectVibratorValue : defaults.selectVibrator,
           maxLengthWithNoToc: typeof maxLengthWithNoTocValue === 'number' && Number.isInteger(maxLengthWithNoTocValue)
             ? Math.max(3000, Math.min(100000, maxLengthWithNoTocValue)) : defaults.maxLengthWithNoToc,
           eyeProtectionEnabled: typeof eyeProtectionEnabledValue === 'boolean'
@@ -849,6 +869,8 @@ export class ReaderSettingsRepository {
       await store.put('bookmarkBadgeSize', Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize))));
       await store.put('bookmarkBadgeImage', settings.bookmarkBadgeImage);
       await store.put('selectText', settings.selectText);
+      await store.put('sliderVibrator', settings.sliderVibrator);
+      await store.put('selectVibrator', settings.selectVibrator);
       await store.put('maxLengthWithNoToc', Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc))));
       await store.put('eyeProtectionEnabled', settings.eyeProtectionEnabled);
       await store.put('eyeProtectionAutoNight', settings.eyeProtectionAutoNight);

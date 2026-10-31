@@ -157,11 +157,27 @@
 
 **KI-A6 自动切换日夜模式提醒（要接，待排期）** —— 覆盖 A-12（`autoSuggestDayNight`，`ReadSettings.kt:43`）。
 
-上游是到点弹「是否切换背景」的应用内提示，依赖定时判定；本地日夜切换只有手动入口，没有提层。补法：`ReaderPage` 在前台时按整点判断一次，弹应用内提示即可，不引系统通知（HOS 通知需要授权，成本不成比例）。
+上游不是「到点弹提示」，是**环境光传感器驱动**：`ReadBookRouteScreen.kt:1089-1138` 的 `AutoSuggestDayNightObserver` 在 `repeatOnLifecycle(RESUMED)` 里注册 `TYPE_LIGHT` 监听，取 lux 后 `onIntent(CheckSwitchDayNight(lux))`，再 `delay(15.minutes)` 循环；判定在 `ReadStyleDelegate.kt:503-555`（`DARK_LUX_THRESHOLD = 8f`、`BRIGHT_LUX_THRESHOLD = 100f`、`LIGHT_LUMINANCE_THRESHOLD = 0.35`，另有 10 分钟冷却 `REMINDER_COOLDOWN_MS`），命中后由 `ReadBookFloatingActionBar.kt:122-156` 的 `ThemeReminderCapsule` 显示 5 秒自动消失的底部胶囊（切换 / 关闭两个按钮），点过「关闭」后本次会话不再提示。
 
-**KI-A7 触感反馈两项（要接，待排期）** —— 覆盖 A-13 阅读进度条触感反馈（`sliderVibrator`，`ReadSettings.kt:36`）、A-15 文字选择触感反馈（`selectVibrator`，`:41`）。
+本地日夜切换只有手动入口，没有环境光订阅也没有提醒层。**本轮不做**：HOS 侧要完整对齐需 `@kit.SensorServiceKit` 的 `sensor.on(SensorId.AMBIENT_LIGHT, …)` 常驻订阅 + 15 分钟节流 + 5 秒自动消失胶囊 + 与 `toggleReaderNightMode()` 的冷却联动；只做「开关可拨 + 落库 + 随备份」会变成假接线（开关能拨但没有任何效果），违反「上游有这个问题就保留」的判据。补法：等传感器与提醒层一并接入时再做，届时不用系统通知（HOS 通知需授权，成本不成比例）。
 
-HOS 有振动能力，本地一处都没接。补法：封装一个触感工具，进度条拖动与选区变化各调一次；落地前先确认 API 12 的振动接口与权限口径。
+**KI-A7 触感反馈两项（已实现）** —— 覆盖 A-13 阅读进度条触感反馈（`sliderVibrator`，`ReadSettings.kt:36`）、A-15 文字选择触感反馈（`selectVibrator`，`:41`）。
+
+**上游口径（关键：两个开关只有一个真消费）**
+
+- `sliderVibrator`：**上游 UI 侧零消费点**。全仓 `grep -rn sliderVibrator app/src/main/java` 只命中 `PreferKey.kt:444`、`ReadSettingsRepository.kt:125`/`:404`/`:527`/`:661`、`ReadSettings.kt:36`、`MoreConfigSheet.kt:360`（设置项）、`ReadConfig.kt:80`、`ReadConfigContract.kt:34`、`ReadConfigScreen.kt:293`、`ReadConfigViewModel.kt:131`/`:204`，`feature/reader` 一处都没有；`ReadBookMenuBarBottom.kt` 也没有 haptic。按「上游没有就不要这个效果」，本地**只做可配 + 落库 + 随备份，不给进度条加振动**。
+- `selectVibrator`：真消费。`ReadBookRouteScreen.kt:755 selectionHapticsEnabled = readPreferences.selectVibrator` → `ReaderCanvasSurface.kt:228` 参数、`:312 rememberUpdatedState`，两处触发：`:1109`（长按选中首个词，`HapticFeedbackType.LongPress`）、`:1225`（拖手柄后 `updatedSelection != selection`，`HapticFeedbackType.TextHandleMove`）。
+
+**本地落地**
+
+1. 新文件 `entry/src/main/ets/data/ReaderHaptics.ets`：`ReaderHaptics.selectionStart(enabled)`（40ms）、`selectionMove(enabled)`（15ms），底层 `vibrator.startVibration({ type: 'time', duration }, { usage: 'touch' })`，双层 try/catch 吞异常并 `console.warn`（模拟器无马达会抛 14600101）。
+2. 两个字段：`ReaderSettingsSnapshot` 的 `sliderVibrator`（`:211`）/`selectVibrator`（`:217`），默认 `false`；读 `:538`/`:539`，写 `:872`/`:873`。
+3. `Index.ets`：`@State readerSliderVibrator`（`:206`）/`readerSelectVibrator`（`:208`），装载 `:1735-1736`、快照 `:1847-1848`、恢复后重载 `:2481-2482`、setter `:2301`/`:2306`；5 处组件调用点（1 处 `ReaderPage` 只传 prop，4 处 `ReaderSettingsPage` prop + 回调）。
+4. `ReaderPage.ets`：`@Prop selectVibrator`（`:174`），消费在 `updatePendingLineSelection` 里，只在**选区真的变化**时振（首次 `selectionStart`，之后 `selectionMove`），对应上游「首个词」与「拖手柄」两处。
+5. `ReaderSettingsPage.ets`：两个开关从 `showNotMigrated` 占位改为真开关（`:892`/`:897`）。
+6. 备份：两键都不在 `BackupConfig.readPrefKeys` 忽略清单里 → 随 `config.xml` 无条件导出；本地导出 `BackupRepository.ets:569-573`、恢复 `:1243-1246`。
+
+**验收**：设备上拨「进度条触感反馈」→ 偏好文件 `sliderVibrator` 变 `true`，拨回变 `false`；「文字选择触感反馈」同样 `selectVibrator` `true`/`false` 往返。振动本身在模拟器上无法确认（无马达），只到「开关落库 + 代码路径核对」这一级。
 
 **KI-A8 使用新版目录（不接）** —— 覆盖 A-14（`useNewTocSheet`，`ReadSettings.kt:37`）。
 

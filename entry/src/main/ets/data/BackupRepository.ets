@@ -566,6 +566,11 @@ export class BackupRepository {
           configText, 'int', 'pageTouchSlop', `${Math.max(0, Math.min(1000, Math.round(settings.pageTouchSlop)))}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'lastMarkingStyle', settings.lastMarkingStyle);
+        // 两个触感开关同样不在 readPrefKeys 忽略清单里，随 config.xml 无条件导出。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'sliderVibrator', String(settings.sliderVibrator));
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'selectVibrator', String(settings.selectVibrator));
         BackupRepository.writeTextFile(configPath, configText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
@@ -1235,6 +1240,10 @@ export class BackupRepository {
         }
       })(),
       selectText: current.selectText,
+      sliderVibrator: BackupRepository.readJsonBoolean(selected, 'sliderVibrator') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'sliderVibrator') ?? current.sliderVibrator,
+      selectVibrator: BackupRepository.readJsonBoolean(selected, 'selectVibrator') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'selectVibrator') ?? current.selectVibrator,
       paragraphSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'paragraphSpacing') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'paragraphSpacing') ?? current.paragraphSpacing))),
       lineSpacing: Math.max(0, Math.min(20, Math.round(BackupRepository.readJsonNumber(selected, 'lineSpacingExtra') ?? BackupRepository.readXmlInteger(`${directory}/config.xml`, 'lineSpacingExtra') ?? current.lineSpacing))),
       maxLengthWithNoToc: Math.max(3000, Math.min(100000,

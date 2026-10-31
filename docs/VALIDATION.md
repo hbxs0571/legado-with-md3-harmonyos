@@ -305,6 +305,20 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-10-31 N 端 KI-A7 触感反馈两项（开关落库通过，振动本身未验）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 32 s 535 ms`，33 项任务 17 执行 / 16 最新，只有 `ReaderBookmarkBadgeRepository.ets` 的既有警告），HAP 覆盖安装成功。
+- **上游口径先核对清楚，避免做出上游没有的效果**：`sliderVibrator`（`ReadSettings.kt:36`）在上游只出现在设置项（`MoreConfigSheet.kt:360`、`ReadConfigScreen.kt:293`）与仓储读写，`feature/reader` 目录零消费点，`ReadBookMenuBarBottom.kt` 也没有 haptic —— 即**上游本身没有「滑进度条振动」这个效果**，本地因此只做可配 + 落库 + 随备份，不给进度条加振动。`selectVibrator`（`:41`）是真消费：`ReadBookRouteScreen.kt:755` → `ReaderCanvasSurface.kt:1109`（长按选中首个词）与 `:1225`（拖手柄后选区变化）。
+- **两个开关都上屏**：设置 → 阅读界面 → 更多 → 下滑到「其他」段，「进度条触感反馈」（副标题「拖动时提供触觉反馈」）与「文字选择触感反馈」（副标题「选择正文时提供触觉反馈」）均已是真开关，不再是「尚未迁移」占位。
+- **落库实测（关键证据）**：`uitest dumpLayout` 定位到两行的 `Toggle` 节点自带 bounds（进度条行 `[1057,1679][1183,1749]`，文字选择行 `[1057,2340][1183,2410]`），点其中心后直接读偏好文件 `/data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_reader_settings`：
+  - `uitest uiInput click 1120 1714` → `sliderVibrator` 由 `true` 变 `false`（此前一次点击已置 `true`，说明写入是双向的）。
+  - `uitest uiInput click 1120 2375` → `selectVibrator` 由 `false` 变 `true`；再点一次 → 回到 `false`。
+  两键都能随开关往返，且字段名与存储键名一致。
+- **未完成的部分（本记录不写「通过」的原因）**：模拟器无振动马达，`vibrator.startVibration` 会抛 `14600101`（代码里已双层 try/catch 吞掉并 `console.warn`，不影响功能）。所以「选中正文真的振一下」这一级只能到代码路径核对：`ReaderPage.ets:1984`/`:1986` 在 `updatePendingLineSelection` 里，仅当选区**真的变化**才调 `ReaderHaptics.selectionStart`（首次）或 `selectionMove`（后续），与上游「首个词一次、拖手柄一次」的节奏对应；正文长按划词在该模拟器上本来就不通（见 KI-D5 记录的模拟器限制），无法从界面触发。
+- **踩坑记录（留给后续）**：`uitest dumpLayout` 里 Text 节点一律 `clickable=false`，不能据此判断整行不可点；开关本体是独立的 `Toggle` 节点、有自己的 bounds，按行的 y 中心 + 右侧 x 估点是错的（本轮先按估算点了两次 `click 1108 2170`、`click 1106 2237` 都没命中，改成从 dump 里取 `Toggle` 的 bounds 中心才成功）。
+- 测试期改动已复原：两个开关都拨回关闭，重新读偏好文件确认 `sliderVibrator` 与 `selectVibrator` 均为 `false`。
+- 本记录只代表 N 端模拟器结果，不替代 E 端结论，也不代表 API 12 真机兼容。
+
 ## 2026-10-31 N 端 KI-D6 上次标记样式（源码接入，设备验收未完成）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832），包名 `io.legado.harmony`。`assembleHap` 通过（`BUILD SUCCESSFUL in 2 s 188 ms`，33 项任务 15 执行 / 18 最新），HAP 覆盖安装成功。
