@@ -703,7 +703,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4），剩余 76 行 `未接`。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）。累计 20 行转 `已接`，剩余 **62 行 `未接`**（要接 57 / 不接 5）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -880,39 +880,39 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **验收**：阅读页点日夜 → 退出到书架，书架也是深色（全局生效）；重进阅读页仍深色；把 themeMode 设「跟随系统」+ 系统切深色 → 阅读页跟着变。
 
-**KI-TH-D2 菜单配色与提醒耦合（要接）** —— 覆盖 D7 阅读页快速按钮的提醒冷却与去重、D8 阅读页菜单的日夜配色。
+**KI-TH-D2 菜单配色与提醒耦合（D7 已实现 r302，D8 要接）** —— 覆盖 D7 阅读页快速按钮的提醒冷却与去重、D8 阅读页菜单的日夜配色。
 
 **上游口径**：D7 手动切日夜会顺手清掉待弹的提醒（`ReadStyleDelegate.kt:489-491 resetDayNightReminderDismissal()`）；D8 菜单配色由 `isNightTheme` + `paletteStyle` 共同算出（`ReadBookColorTheme.kt:52-63`/`:144-162`/`:286-298`）。
 
-**本地现状**：D7 本地没有提醒机制，所以也不需要冷却——**随 E 块一起做**；D8 阅读菜单全用写死深色字面量，不随日夜变。
+**本地现状**：D7 **已实现**（r302）——`pages/Index.ets` 的 `toggleReaderNightMode()` 开头补了四行：`readerDayNightReminderLastAt = Date.now()`（冷却从本次切换算起）、清 `readerDayNightReminderDismissedDark`/`DismissedLight`（对齐 `resetDayNightReminderDismissal()`）、`readerDayNightReminderRequestId += 1`（作废在途的 5 秒隐藏定时器）、`readerDayNightReminderText = ''`。上游清的是 `reminderQueue` 里排队的项，本地只有一个文案槽位，用 `requestId` 递增达到同样效果。D8 仍未接：阅读菜单全用写死深色字面量，不随日夜变。
 
-**补法**：D7 在 E 块落地后加一行「切换时清提醒」；D8 把菜单配色改成按 `isDarkTheme` + 调色板算，复用 KI-TH-A1 的调色板状态。
+**补法**：D7 无剩余工作。D8 把菜单配色改成按 `isDarkTheme` + 调色板算，复用 KI-TH-A1 的调色板状态。
 
-**验收**：D8 切到浅色主题 → 阅读菜单底色与文字色变浅；D7 提醒弹出后手动切日夜 → 提醒消失且不再弹。
+**验收**：D7 开提醒 → 阅读页手动切日夜 → 不再弹出「是否切换至深色模式」（VALIDATION.md r302 已实测）。D8 切到浅色主题 → 阅读菜单底色与文字色变浅。
 
 ### E 日夜提醒
 
-**E 块整体判定：7 行里 6 行要接、1 行不接。** 本地只有 `ReaderSettingsPage.ets:898` 一个开关壳（`checked: false` 恒假、点击走 `showNotMigrated`），全仓 `autoSuggestDayNight|DayNight|dayNight` 零命中——**提醒机制整块不存在**。
+**E 块整体判定：7 行里 6 行已实现（r302 核实）、1 行不接。** r297 盘点时判「本地只有 `ReaderSettingsPage.ets:898` 一个开关壳、全仓零命中」是**误判**——提醒机制其实早已存在于仓库（`pages/Index.ets` 的传感器订阅与判定、`pages/ReaderPage.ets` 的提醒胶囊、`pages/ReaderSettingsPage.ets:1495` 的真开关、`data/ReaderSettingsRepository.ets:240-241/1583` 的持久化），只是当时没查到。r302 逐行核实后 E1–E6 改判 `已接`，并在模拟器上验通了胶囊弹出、5 秒消失、点击切换、关闭后不再弹四条。
 
-**KI-TH-E1 提醒开关与采样判定（要接）** —— 覆盖 E1 「自动切换日夜模式提醒」开关（阅读设置页）、E2 阅读页「更多设置」里的同一开关、E3 环境光传感器采样、E4 亮度阈值判定。
+**KI-TH-E1 提醒开关与采样判定（已实现 r302）** —— 覆盖 E1 「自动切换日夜模式提醒」开关（阅读设置页）、E2 阅读页「更多设置」里的同一开关、E3 环境光传感器采样、E4 亮度阈值判定。
 
-**上游口径**：开关 `autoSuggestDayNight`（`PreferKey.kt:120`），两处入口 —— `ReadConfigScreen.kt:337-344` 与 `MoreConfigSheet.kt:399-404`；采样 `ReadStyleDelegate.kt:500-560 checkSwitchDayNight(lux)`；阈值 `:633 DARK_LUX_THRESHOLD = 8f` / `:634 BRIGHT_LUX_THRESHOLD = 100f`；关键的一层是 `isLightBg` 判定（按 `styleConfig.bgType` 与 `backgroundMeanColor` 算）——**用户已经把背景设成深色时，暗环境下不该再提醒切深色**。
+**上游口径**：开关 `autoSuggestDayNight`（`PreferKey.kt:120`），两处入口 —— `ReadConfigScreen.kt:337-344` 与 `MoreConfigSheet.kt:399-404`；采样 `ReadStyleDelegate.kt:500-560 checkSwitchDayNight(lux)`；阈值 `:633 DARK_LUX_THRESHOLD = 8f` / `:634 BRIGHT_LUX_THRESHOLD = 100f`；关键的一层是 `isLightBg` 判定（按 `styleConfig.bgType` 与 `backgroundMeanColor` 算）——用户已经把背景设成深色时，暗环境下不该再提醒切深色。
 
-**本地现状**：E1 开关恒 false 且未接；E2 无该 sheet 项；E3 全仓唯一传感器引用是 `data/ReaderHaptics.ets:1` 的 `vibrator`，与光线无关；E4 无阈值、无背景亮度判定。
+**本地落地**：E1/E2 是同一份状态的两个入口——`pages/ReaderSettingsPage.ets:1495` 的 `MenuSettingSwitch`（位于 `moreSettingsContent()` 的「其他」段，该面板由阅读页 `onOpenSettings` 以 `asSheet: true` 弹出，上游两处入口在本地合并成同一面板的两个 tab）；`data/ReaderSettingsRepository.ets:240-241` 字段 + `:1583` 落盘 + `data/BackupRepository.ets:250-251/644` 进备份。E3 `pages/Index.ets:2700-2711 startReaderAmbientLightWatch()` 订阅 `sensor.SensorId.AMBIENT_LIGHT`，`@Watch('onReaderRouteChanged')` 进阅读页才订阅、离开即停。E4 `:2590-2598` 两条阈值 + `:2604-2616 computeReaderColorLuminance()`（按 Android `ColorUtils.calculateLuminance` 的 sRGB 线性化 + 0.2126/0.7152/0.0722 加权）+ `:2618-2623 isReaderBackgroundLight()`（阈值 0.35）。
 
-**补法**：E1/E2 接真实布尔并落盘；E3 接 `@ohos.sensor` 的 `SensorId.AMBIENT_LIGHT`，**先核目标设备是否有该传感器**，没有则整块降级为不提示（不能伪造）；E4 照抄上游两条阈值 + `isLightBg`。
+**与上游的差异（未消除，如实记录）**：① 上游每 15 分钟一轮、每轮注册监听 1 秒取 `finalLux` 后注销（`ReadBookRouteScreen.kt:1088-1138`），本地是常驻订阅、1 秒一次回调，**没有 15 分钟节流**；② 上游按 `bgType/bgStr`（含夜间一套）与 `backgroundMeanColor` 判底色，本地只有 `getPaperColor()` 单值 + 亮度阈值，**没有背景图均值色这一支**。
 
-**验收**：开提醒 → 暗处（遮住感光）且当前为浅色背景 → 弹出提醒；当前已是深色背景 → 不弹。
+**验收**：开提醒 → 暗处（遮住感光）且当前为浅色背景 → 弹出提醒；当前已是深色背景 → 不弹。模拟器实测见 VALIDATION.md r302（前置条件：`themeMode` 必须是 `"1"`，否则 `readerNightMode` 会被重算成 `true`、非夜间分支进不去）。
 
-**KI-TH-E2 提醒的防骚扰与呈现（要接）** —— 覆盖 E5 提醒冷却与去重、E6 提醒胶囊 UI。
+**KI-TH-E2 提醒的防骚扰与呈现（已实现 r302）** —— 覆盖 E5 提醒冷却与去重、E6 提醒胶囊 UI。
 
 **上游口径**：`:636 REMINDER_COOLDOWN_MS = 10 * 60 * 1000L`、`:574-576` 用户点掉后置 `hasDismissedDarkReminder`/`hasDismissedLightReminder`；胶囊 UI 5 秒自动消失，点击执行 `ReadBookIntent.ToggleDayNight`（即 D1 同一个动作）。
 
-**本地现状**：无冷却、无「点掉后不再弹」、无胶囊层。
+**本地落地**：`:2625-2627 isReaderDayNightReminderCoolingDown()`（10 分钟）、`:2633-2645 checkReaderDayNightReminder()`（`dismissed*` 标记 + `isReaderBackgroundLight()` 双闸）、`:2647-2661 showReaderDayNightReminder()`（`setTimeout` 5 秒清空）、`:2672-2681 dismissReaderDayNightReminder()`（按 target 置标记）、`:2928-2938 setReaderAutoSuggestDayNight()`（开启时复位两个标记，对齐 `resetDayNightReminderDismissal()`）；胶囊 UI 在 `pages/ReaderPage.ets:3161-3181 ReaderDayNightReminderCapsule()`，点击复用 `toggleReaderNightMode()`，未新建第二条切换路径。
 
-**补法**：随 KI-TH-E1 一起做；胶囊点击复用 D1 的切换函数，不新建第二条切换路径。
+**差异**：上游有 `reminderQueue` 排队，本地只有单个 `readerDayNightReminderText`。
 
-**验收**：弹出后点掉 → 本轮不再弹；10 分钟内重复触发 → 不弹；胶囊 5 秒后自动消失。
+**验收**：弹出后点掉 → 本轮不再弹（实测 14 秒内未再弹）；10 分钟内重复触发 → 不弹；胶囊 5 秒后自动消失；点胶囊左侧 → `themeMode` 由 `"1"` 变 `"2"`。见 VALIDATION.md r302。
 
 **KI-TH-E3 提醒的 intent/effect 链路（不接）** —— 覆盖 E7。
 

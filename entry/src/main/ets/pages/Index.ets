@@ -2578,6 +2578,14 @@ struct Index {
       this.showUnavailableAction('无法切换日夜模式，请重试');
       return;
     }
+    // 上游 toggleDayNight()（ReadStyleDelegate.kt:451-482）切日夜时顺手做三件事：
+    // 刷新冷却起点、复位「已忽略提醒」标记、清掉待弹的 DayNight 提醒。
+    // 不清的话，用户刚手动切完日夜还会被问「要不要切日夜」。
+    this.readerDayNightReminderLastAt = Date.now();
+    this.readerDayNightReminderDismissedDark = false;
+    this.readerDayNightReminderDismissedLight = false;
+    this.readerDayNightReminderRequestId += 1;
+    this.readerDayNightReminderText = '';
     const nextMode = this.readerNightMode ? THEME_MODE_LIGHT : THEME_MODE_DARK;
     this.applyThemeMode(context, nextMode, this.themePaletteIndex, true).then(() => {
       this.paperIndex = this.readerNightMode ? this.nightPaperIndex : this.dayPaperIndex;

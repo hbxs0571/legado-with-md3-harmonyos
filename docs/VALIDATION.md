@@ -30,6 +30,36 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r302 深色模式阶段三：日夜提醒（E1–E6）与 D7 冷却复位
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 两次通过，40 s 254 ms / 26 s 373 ms）。
+- **本轮性质**：E 块代码在 r302 之前就已存在于仓库（`pages/Index.ets` 的传感器订阅与判定、`pages/ReaderPage.ets` 的提醒胶囊、`pages/ReaderSettingsPage.ets:1495` 的真开关、`data/ReaderSettingsRepository.ets` 的持久化），但 `docs/parity/ZIP-THEME.md` 的 E1–E7 七行一直写着「未接」，是盘点滞后。本轮**只补 D7 的一处代码**，其余是回填 + 设备取证。
+- **改了哪些**：`pages/Index.ets` 的 `toggleReaderNightMode()` 开头补上上游 `ReadStyleDelegate.kt:451-482 toggleDayNight()` 的三件事——把 `readerDayNightReminderLastAt` 置为当前时刻（冷却从这次手动切换算起）、清掉 `readerDayNightReminderDismissedDark`/`DismissedLight` 两个拒绝标记、把 `readerDayNightReminderRequestId` 加一（作废在途的 5 秒隐藏定时器），并清空 `readerDayNightReminderText`。`pages/ReaderPage.ets:4823` 把提醒层全屏容器的 `.hitTestBehavior(HitTestMode.Default)` 改为 `HitTestMode.None`（Default 会让这层在提醒弹出的 5 秒里拦住整屏点击）。
+- **前置条件（复验必须照做）**：`legado_theme` 的 `themeMode` 必须是 `"1"`（浅色）。若留在 `"2"`，`applyThemeMode` 会把 `readerNightMode` 重新算成 `true`，`checkReaderDayNightReminder` 的「非夜间分支」永远进不去，胶囊不会弹。这是本轮第一次取证失败的原因，记在这里免得下次重踩。
+
+### 验收①胶囊弹出与 5 秒自动消失
+
+- 操作：改 `legado_reader_settings` 的 `autoSuggestDayNight=true`、`readerNightMode=false`，改 `legado_theme` 的 `themeMode="1"`，重启应用 → 书架 → 点 `np-test` 封面 `(127,1088)` 进阅读页，随后连续 `uitest dumpLayout`。
+- 预期：进页后提醒胶囊出现，约 5 秒后自动消失。
+- 实际：第 1–4 轮 dump 都读到「当前环境光较暗，是否切换至深色模式？」`bounds [114,2307][934,2360]` 与「关闭」`[1074,2307][1166,2360]`，第 5 轮起消失。**通过**。
+
+### 验收②点胶囊左侧 → 切到深色并落盘
+
+- 操作：胶囊出现后立刻点左半 `(524,2333)`。
+- 预期：`legado_theme` 的 `themeMode` 由 `"1"` 变 `"2"`，阅读页变深色。
+- 实际：`.pwork_cap.sh` 轮询到胶囊后立即点击，点前 `themeMode">1<`，点后 `themeMode">2<`，截图确认阅读页正文与面板转深色。**通过**。这是 r297/r299 两轮都没能取证的那一条。
+
+### 验收③点「关闭」→ 本轮不再弹（E5 拒绝标记）
+
+- 操作：胶囊出现后点右侧「关闭」`(1120,2333)`，然后等 14 秒不再操作。
+- 预期：胶囊立即消失；此后 14 秒内（远超 5 秒显示窗口，仍在 10 分钟冷却内）不再弹；`themeMode` 保持 `"1"` 不切。
+- 实际：胶囊 1 秒内消失；等 14 秒期间轮询均未再读到提醒文案；`themeMode` 仍 `"1"`。**通过**。
+
+### 未验与回归归因
+
+- **阅读页正文单击唤菜单：未验（工具限制，非本轮引入）**。本轮一度怀疑是 `ReaderPage.ets:4823` 的 `hitTestBehavior` 改动导致，用 `git stash` 把 `Index.ets`/`ReaderPage.ets` 两处改动暂存、构建 HEAD 版本（`BUILD SUCCESSFUL in 40 s 861 ms`）后重测，**现象完全一致**——中心 `(640,1400)`、`(640,660)`、`(640,700)`、`(640,1500)`、`(640,2600)` 与右三分格 `(1100,1400)` 全部无响应，页脚仍是 `1/3`。归因结论：该模拟器对阅读页正文区的单击/滑动注入不稳定，与 `docs/KNOWN-ISSUES.md` 既有的「模拟器上正文单击经常不触发」属同一环境问题，不是本次改动引入。stash 已 pop 回，构建恢复为带改动的版本（`BUILD SUCCESSFUL in 40 s 502 ms`）。
+- **与上游的四处差异（如实记录，未消除）**：① 上游 `ReadBookRouteScreen.kt:1088-1138` 是「每 15 分钟一轮、每轮注册监听 1 秒取 `finalLux` 后注销」，本地 `Index.ets:2700-2711` 是 `sensor.on` 常驻订阅（`interval: 1000000000` ns = 1 秒一次回调），没有 15 分钟节流；② 上游按 `bgType/bgStr`（含夜间一套）与 `backgroundMeanColor` 判底色，本地只有 `getPaperColor()` 单值 + 亮度阈值 0.35，**没有背景图均值色这一支**；③ 上游有 `reminderQueue` 排队，本地只有单个 `readerDayNightReminderText`；④ 上游 `toggleDayNight()` 会顺带清队列里的 DayNight 提醒，本轮 D7 已补上「重置冷却 + 清拒绝标记 + 作废在途定时器」等价动作。
+
 ## 2026-11-01 N 端 r301 深色模式阶段二第一批：护眼六项（A24–A29）设备验收通过
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 两次通过，43 s 356 ms / 44 s 862 ms）。

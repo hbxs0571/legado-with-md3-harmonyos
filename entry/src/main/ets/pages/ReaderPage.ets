@@ -4820,8 +4820,9 @@ export struct ReaderPage {
         }
         .width('100%')
         .height('100%')
-        // 用 Default 而不是 Transparent：胶囊本身要吃掉点击，否则会穿透到正文。
-        .hitTestBehavior(HitTestMode.Default)
+        // None：这层全屏容器自身不响应，子节点（胶囊两个按钮）照常响应。
+        // 之前用 Default 会把整屏都拦住——提醒弹出的 5 秒里用户连菜单都唤不出来。
+        .hitTestBehavior(HitTestMode.None)
         .zIndex(900)
       }
     }
