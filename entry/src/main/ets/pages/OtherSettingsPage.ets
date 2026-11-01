@@ -2,6 +2,7 @@ import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct OtherSettingsPage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -52,7 +53,7 @@ export struct OtherSettingsPage {
             Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
           }.width(40).height(40).onClick(() => this.onBack())
           Text('高级').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).margin({ left: 8 })
-        }.width('100%').height(56).padding({ left: 12, right: 16, top: 8, bottom: 8 }).backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+        }.width('100%').height(56).padding({ left: 12, right: 16, top: 8, bottom: 8 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
       } else {
         Column() {
           Row() {
@@ -117,7 +118,7 @@ export struct OtherSettingsPage {
         const shouldCollapse = Math.abs(this.settingsScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
       })
-      }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+      }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
 
       if (this.activeDialog.length > 0) {
         Stack({ alignContent: Alignment.Center }) {
@@ -148,7 +149,7 @@ export struct OtherSettingsPage {
           }.width('calc(100% - 48vp)').padding(22).backgroundColor('#292A31').borderRadius(24)
         }.width('100%').height('100%').zIndex(10)
       }
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
       .bindSheet(this.activeSheet.length > 0, this.SettingsSheetContent(), {
         height: this.activeSheet === 'directLink' ? 620 : 300,
         dragBar: true,
@@ -256,6 +257,7 @@ struct OtherSettingsSection {
 
 @Component
 struct OtherSettingsDropdown {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop detail: string = '';
@@ -269,7 +271,7 @@ struct OtherSettingsDropdown {
       ForEach(this.options, (value: string) => {
         MenuItem({ content: value }).height(48).onClick(() => this.onSelect(value))
       }, (value: string) => value)
-    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(16)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(16)
   }
 
   build() {
@@ -322,6 +324,7 @@ struct OtherSettingsAction {
 
 @Component
 struct OtherSettingsInput {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop value: string = '';
@@ -344,7 +347,7 @@ struct OtherSettingsInput {
       if (this.expanded) {
         Column() {
           TextInput({ text: this.editValue, placeholder: this.title }).onChange((value: string) => this.editValue = value)
-            .fontSize(14).backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(8)
+            .fontSize(14).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(8)
           Row() {
             Text('默认').fontSize(14).fontColor($r('app.color.theme_text_secondary')).onClick(() => this.expanded = false)
             Blank()
@@ -361,6 +364,7 @@ struct OtherSettingsInput {
 
 @Component
 struct OtherSettingsSheetField {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop value: string = '';
@@ -371,7 +375,7 @@ struct OtherSettingsSheetField {
       Text(this.title).fontSize(13).fontColor('#B6B8C2').alignSelf(ItemAlign.Start).margin({ bottom: 6 })
       TextInput({ text: this.value, placeholder: this.title })
         .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor('#858792')
-        .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(8)
+        .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(8)
         .onChange((value: string) => this.onChange(value))
     }.width('100%').margin({ bottom: 14 })
   }

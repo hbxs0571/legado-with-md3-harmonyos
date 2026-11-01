@@ -25,6 +25,7 @@ interface ReaderSearchMatch {
 
 @Component
 export struct ReaderSearchPage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
@@ -297,7 +298,7 @@ export struct ReaderSearchPage {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.reader_back')).width(22).height(22).fillColor('#E4E5EA')
-        }.width(40).height(40).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(22).onClick(() => this.onBack())
+        }.width(40).height(40).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(22).onClick(() => this.onBack())
         Blank()
         Image($r('app.media.profile_find_replace')).width(20).height(20)
           .fillColor(this.replaceEnabled ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary')).width(38)
@@ -323,7 +324,7 @@ export struct ReaderSearchPage {
           Image($r('app.media.profile_close')).width(18).height(18).fillColor('#AEB0B9')
             .width(30).onClick(() => this.scheduleSearch(''))
         }
-      }.padding({ left: 14, right: 10, top: 7, bottom: 7 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
+      }.padding({ left: 14, right: 10, top: 7, bottom: 7 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
         .margin({ left: 16, right: 16 })
 
       if (this.query.trim().length === 0) {
@@ -387,7 +388,7 @@ export struct ReaderSearchPage {
                 }
                 .width('100%')
                 .padding({ left: 14, right: 8, top: 12, bottom: 12 })
-                .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))
+                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')))
                 .borderRadius(12)
               }.margin({ left: 16, right: 16, bottom: 7 })
             }, (entry: ReaderSearchHistoryEntry) => entry.id)
@@ -398,7 +399,7 @@ export struct ReaderSearchPage {
                 Text('清除搜索历史').fontSize(13).fontColor('#D9DAE0')
               }
               .padding({ left: 18, right: 18, top: 10, bottom: 10 })
-              .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')))
               .borderRadius(20)
               .onClick(() => this.clearSearchHistory())
             }.align(Alignment.Center).margin({ top: 14, bottom: 20 })
@@ -440,7 +441,7 @@ export struct ReaderSearchPage {
                 }
                 .width('100%')
                 .padding(14)
-                .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))
+                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')))
                 .borderRadius(12)
                 .onClick(() => this.onOpenResult(match.chapterIndex, match.position))
               }
@@ -474,7 +475,7 @@ export struct ReaderSearchPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
   }
 }
 

@@ -8,6 +8,7 @@ const READER_REPLACE_FILTERS: string[] = ['全部', '已启用', '已停用', '�
 
 @Component
 export struct ReaderTextProcessingSheet {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
@@ -47,7 +48,7 @@ export struct ReaderTextProcessingSheet {
         MenuItem({ content: filter })
           .onClick(() => this.replaceFilter = filter)
       }, (filter: string) => filter)
-    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(18)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(18)
   }
 
   private openFullReplaceRules(): void {
@@ -111,7 +112,7 @@ export struct ReaderTextProcessingSheet {
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
           Text(this.activeTab === 0 ? '替换净化' : '正文处理')
             .fontSize(11).fontColor($r('app.color.theme_text_secondary')).padding({ left: 10, right: 10, top: 7, bottom: 7 })
-            .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(16)
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(16)
         }.width('100%').padding({ left: 16, right: 16, bottom: 12 })
 
         Row() {

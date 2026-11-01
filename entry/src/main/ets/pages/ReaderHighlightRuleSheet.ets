@@ -4,6 +4,7 @@ import { ReaderHighlightRulePresets } from '../data/ReaderHighlightRulePresets';
 
 @Component
 export struct ReaderHighlightRuleSheet {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop rules: ReaderHighlightRule[] = [];
   @Prop chapterLength: number = 0;
@@ -407,7 +408,7 @@ export struct ReaderHighlightRuleSheet {
           Text(this.errorMessage).fontSize(12).fontColor('#FFB4AB').width('100%').margin({ top: 8 })
         }
       }
-      .width('100%').height('82%').padding(18).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))
+      .width('100%').height('82%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')))
       .borderRadius({ topLeft: 24, topRight: 24 }).alignItems(HorizontalAlign.Start)
       if (this.pendingDeleteId.length > 0) {
         Column() {
@@ -467,7 +468,7 @@ export struct ReaderHighlightRuleSheet {
               .onClick(() => this.applyPresets())
           }.width('100%').margin({ top: 10 })
         }
-        .width('90%').height('72%').padding(18).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))
+        .width('90%').height('72%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')))
         .borderRadius(20).zIndex(3)
       }
     }

@@ -208,6 +208,7 @@ function ruleStyleSummary(rule: ReaderHighlightRule): string {
 /** 编辑一次选区标记的样式与备注。 */
 @Component
 export struct ReaderMarkingEditor {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop marking: ReaderMarking = {
     id: '', bookId: '', bookName: '', bookAuthor: '', bookUrl: '', chapterIndex: 0, chapterName: '',
@@ -394,7 +395,7 @@ export struct ReaderMarkingEditor {
         .onClick(() => this.useRule = true)
       MenuItem({ content: '自定义样式' }).height(44)
         .onClick(() => this.useRule = false)
-    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   build() {

@@ -10,6 +10,7 @@ import { ProfileRoute } from '../model/Book';
 
 @Component
 export struct ProfilePage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onOpenDetail: (destination: ProfileRoute) => void = () => {};
@@ -25,7 +26,7 @@ export struct ProfilePage {
         Row() {
           Text('我的').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
         }.width('100%').height(56).alignItems(VerticalAlign.Center).padding({ left: 16, right: 16 })
-          .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       } else {
         Text('我的').fontSize(28).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
@@ -65,7 +66,7 @@ export struct ProfilePage {
             }.width('100%').padding({ left: 10, right: 10, bottom: 8 })
               .height(this.showWebPreview ? 70 : 0).opacity(this.showWebPreview ? 1 : 0)
               .clip(true).animation({ duration: 220, curve: Curve.EaseInOut })
-          }.width('100%').backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(14).margin({ bottom: 13 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(14).margin({ bottom: 13 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           Text('规则').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor($r('app.color.theme_accent')).alignSelf(ItemAlign.Start).margin({ left: 12, bottom: 8 })
           Column() {
             ProfileRow({ title: '书源管理', detail: '新建 · 导入 · 编辑或管理书源', onSelect: () => this.onOpenDetail(ProfileRoute.BOOK_SOURCE_MANAGE) })
@@ -94,12 +95,13 @@ export struct ProfilePage {
           });
         }
       })
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
   }
 }
 
 @Component
 struct ProfileRow {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop icon: string = '';
   @Prop title: string = '';
@@ -132,7 +134,7 @@ struct ProfileRow {
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Image($r('app.media.reader_next')).width(16).height(16).fillColor('#AEB0BA')
       }.width('100%').padding({ left: 14, right: 14, top: PROFILE_ROW_VERTICAL_PADDING, bottom: PROFILE_ROW_VERTICAL_PADDING })
-      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).margin({ left: 48, right: 14 }) }
+      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).margin({ left: 48, right: 14 }) }
     }.width('100%').onClick(() => this.onSelect())
   }
 }

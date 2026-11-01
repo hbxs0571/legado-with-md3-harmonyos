@@ -30,6 +30,30 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r310 深色模式阶段二：全 App 背景图片（A13）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`assembleHap` 三次 `BUILD SUCCESSFUL`（`47 s 189 ms` / `46 s 708 ms`，第一次因 ArkTS 属性名冲突失败），均 `hdc install -r` 覆盖安装成功。
+- 改动文件：`data/ThemeSettingsRepository.ets`（`ThemeSnapshot` 26 → **30 字段**，新增 `backgroundImage`/`backgroundImageNight`/`backgroundImageBlurring`/`backgroundImageNightBlurring` 与 `normalizeBackgroundBlur()`）、`pages/Index.ets`（4 个 `@State` + `pickThemeBackgroundImage()`/`selectThemeBackgroundBlur()`/`clearThemeBackgroundImage()`/`appBackgroundSource()`/`appBackgroundBlur()` + `publishThemeCardStyle()` 广播 `themeAppBackground` + 根 `Stack` 首子节点的背景 `Image` + 根 `Column` 让位）、`pages/ThemeSettingsPage.ets`（「背景图片」行改为可展开组，4 个 `@Prop` + 3 个回调）、以及 30 个页面/组件文件的 **59 个 struct** 加 `@StorageProp('themeAppBackground')` 并把 208 处页面底色包成「有背景图时 `Color.Transparent`」。
+
+**关键实现选择**：上游 `ui/theme/AppBackground.kt:17-48` 把背景图放在 `Box` 的**第一个子节点**、内容层在其上，按 `hasBackgroundImage(darkTheme)` 选 `backgroundImageDark`/`backgroundImageLight` 与对应虚化度，`AsyncImage(...).fillMaxSize().blur(blur.dp)`、`ContentScale.Crop`。本地照此把 `Image` 放在根 `Stack` 首子节点。**但本地各页自己带不透明底色**（`theme_surface_primary`），会把背景图整块盖住——上游没有这个问题，因为它的页面底色来自 `SplicedColumnGroup`/`GlassCard` 的卡片层。所以本轮把 30 个文件的 208 处页面底色统一改成「有背景图时 `Color.Transparent`」，这是实现差异，不是行为差异。
+
+**踩坑**：
+1. `@Prop backgroundImage` 与 ArkUI `CustomComponent.backgroundImage` 方法同名，编译报 `Property 'backgroundImage' in type 'ThemeSettingsPage' is not assignable to the same property in base type 'CustomComponent'`（`ThemeSettingsPage.ets:118:9`）。四个 prop 全部改名为 `appBackgroundImage`/`appBackgroundImageNight`/`appBackgroundBlur`/`appBackgroundNightBlur` 才通过。**`@Prop` 命名要避开所有 `CustomComponent` 内置属性方法名。**
+2. 选图后只 `saveThemeSettings()` 不广播，根背景层与页面底色不同步——必须同时 `publishThemeCardStyle()`。虚化与清空回调同理。
+3. 只改各页面底色、漏了 `Index.ets` 根 `Column` 的 `theme_surface_primary`，背景图仍被根容器盖住（第一版实测整屏无变化）。补上根 `Column` 的条件透明后才可见。
+4. 复制进沙箱时必须保留原扩展名（`.jpg`/`.png`），存成 `.img` 会让 `Image()` 解不出、背景图不显示（r308 容器背景图已踩过同一坑）。
+
+**验收①日间背景图**：外观 → 上滑到「背景图片」→ 点行展开 → 点「日间背景图片」→ 系统文件选择器 `浏览` → `我的手机` → `Documents` → 点 `cover-test.jpg` 图标 → 返回，行摘要变「已选日间，点击展开」、子行变「已选择，点击换图」，prefs `backgroundImage` = `/data/storage/el2/base/haps/entry/files/theme-backgrounds/app-day-1793531889381.jpg`。重启后书架整屏显示该图；与清空状态对比 `ImageChops`：changed pixels **2259594**、bbox `(0,0,1280,2100)`、区域均值 `(219.1,219.0,221.6)` vs `(32.9,33.2,38.8)`。**通过。**
+
+**验收②虚化**：拖日间虚化滑块到右端 → prefs `backgroundImageBlurring` 由 `0.000000` 变 `40.000000`；截图对比 changed pixels **704394**、区域标准差由 `(29.9,29.2,34.2)` 降到 `(25.1,24.1,29.6)`（图变糊）。**通过。**
+
+**验收③移除**：点「移除背景图片」→ prefs `backgroundImage` 变空串、`backgroundImageNight` 仍空；重启后整屏回纯色底，与开图状态对比 changed pixels **864843**。**通过。**
+
+**未验**：夜间背景图（需把 `themeMode` 切 `"2"` 后再选图；键与日间共用同一段代码，本轮只验证日间分支）；上游 `.9.png` 九宫格拉伸未做（本地按 `ImageFit.Cover` 平铺，已在对照表差异说明记录）。
+
+**复原**：`backgroundImage` 清空、`backgroundImageBlurring` 回 `0.000000`、`themeMode` 保持 `"1"`、`pureBlack` 保持 `false`。
+
 ## 2026-11-01 N 端 r309 深色模式阶段二：纯黑深色模式（A4）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。

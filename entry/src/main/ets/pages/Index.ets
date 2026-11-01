@@ -44,7 +44,7 @@ import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
 import { OnboardingRepository } from '../data/OnboardingRepository';
-import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground, normalizeThemeColor, FONT_SCALE_DEFAULT } from '../data/ThemeSettingsRepository';
+import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground, normalizeThemeColor, FONT_SCALE_DEFAULT, normalizeBackgroundBlur } from '../data/ThemeSettingsRepository';
 import {
   CARD_BORDER_WIDTH_DEFAULT,
   CARD_RADIUS_DEFAULT,
@@ -528,6 +528,14 @@ struct Index {
   @State themeItemBackgroundDark: string = '';
   /** 纯黑深色模式（AMOLED），对齐上游 `ThemeSettings.kt:6 isPureBlack`。 */
   @State themePureBlack: boolean = false;
+  /** 全 App 日间背景图，对齐上游 `PreferKey.kt:281 backgroundImage`。 */
+  @State themeBackgroundImage: string = '';
+  /** 全 App 夜间背景图，对齐上游 `PreferKey.kt:287 backgroundImageNight`。 */
+  @State themeBackgroundImageNight: string = '';
+  /** 日间背景图虚化半径，对齐上游 `backgroundImageBlurring`（默认 0）。 */
+  @State themeBackgroundBlur: number = 0;
+  /** 夜间背景图虚化半径，对齐上游 `backgroundImageNightBlurring`（默认 0）。 */
+  @State themeBackgroundNightBlur: number = 0;
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -2031,6 +2039,10 @@ struct Index {
     this.themeItemBackgroundLight = theme.itemBackgroundImageLight;
     this.themeItemBackgroundDark = theme.itemBackgroundImageDark;
     this.themePureBlack = theme.pureBlack;
+    this.themeBackgroundImage = theme.backgroundImage;
+    this.themeBackgroundImageNight = theme.backgroundImageNight;
+    this.themeBackgroundBlur = theme.backgroundImageBlurring;
+    this.themeBackgroundNightBlur = theme.backgroundImageNightBlurring;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2210,6 +2222,81 @@ struct Index {
     });
   }
 
+  /** 当前生效的全 App 背景图路径（按日夜选），对齐上游 `ThemeSettings.hasBackgroundImage`。 */
+  private appBackgroundSource(): string {
+    const context = this.getUIContext().getHostContext();
+    const isDark = context === undefined ? false
+      : ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context));
+    return isDark ? this.themeBackgroundImageNight : this.themeBackgroundImage;
+  }
+
+  /** 当前生效的背景图虚化半径，对齐上游 `backgroundImageBlurring`/`backgroundImageNightBlurring`。 */
+  private appBackgroundBlur(): number {
+    const context = this.getUIContext().getHostContext();
+    const isDark = context === undefined ? false
+      : ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context));
+    return isDark ? this.themeBackgroundNightBlur : this.themeBackgroundBlur;
+  }
+
+  /**
+   * 选一张全 App 背景图并复制进应用沙箱。
+   *
+   * 上游 `ui/theme/AppBackground.kt:17-48` 按 `backgroundImageDark`/`backgroundImageLight`
+   * 选路径、按 `backgroundImageDarkBlurring`/`Blurring` 选模糊度，铺在内容层之下、
+   * `ContentScale.Crop` 填满。本地沿用容器背景图那套「选图 → 复制进 `files/theme-backgrounds/` → 存路径」流程。
+   */
+  private async pickThemeBackgroundImage(isNight: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地文件，未选择背景图');
+      return;
+    }
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.fileSuffixFilters = ['图片|.png', '图片|.jpg', '图片|.jpeg', '图片|.webp'];
+      options.maxSelectNumber = 1;
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris[0];
+      if (uri === undefined) { return; }
+      const directory = `${context.filesDir}/theme-backgrounds`;
+      if (!fileIo.accessSync(directory)) { fileIo.mkdirSync(directory, true); }
+      const suffix = uri.substring(uri.lastIndexOf('.') === -1 ? uri.length : uri.lastIndexOf('.')).toLowerCase();
+      const extension = suffix.length > 1 && suffix.length <= 6 ? suffix : '.png';
+      const target = `${directory}/app-${isNight ? 'night' : 'day'}-${Date.now()}${extension}`;
+      const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      try {
+        fileIo.copyFileSync(source.fd, target);
+        if (fileIo.statSync(target).size <= 0) { throw new Error('所选背景图文件为空'); }
+      } finally {
+        fileIo.closeSync(source);
+      }
+      if (isNight) { this.themeBackgroundImageNight = target; } else { this.themeBackgroundImage = target; }
+      this.publishThemeCardStyle();
+      await this.saveThemeSettings(context);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '选择背景图失败');
+    }
+  }
+
+  /** 背景图虚化半径滑块回调，对齐上游 `backgroundImageBlurring`/`backgroundImageNightBlurring`。 */
+  private selectThemeBackgroundBlur(context: Context, isNight: boolean, blur: number): void {
+    const value = normalizeBackgroundBlur(blur);
+    if (isNight) { this.themeBackgroundNightBlur = value; } else { this.themeBackgroundBlur = value; }
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('背景图虚化设置保存失败，请重试');
+    });
+  }
+
+  /** 清空背景图（对应上游 `BackgroundImageManageSheet` 的「移除」）。 */
+  private clearThemeBackgroundImage(context: Context, isNight: boolean): void {
+    if (isNight) { this.themeBackgroundImageNight = ''; } else { this.themeBackgroundImage = ''; }
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('清空背景图失败，请重试');
+    });
+  }
+
   /**
    * 选一张背景图并复制进应用沙箱。
    *
@@ -2294,6 +2381,10 @@ struct Index {
     this.bookInfoNetworkCoverBackground = 'on';
     this.bookInfoDefaultCoverBackground = 'on';
     this.themePureBlack = false;
+    this.themeBackgroundImage = '';
+    this.themeBackgroundImageNight = '';
+    this.themeBackgroundBlur = 0;
+    this.themeBackgroundNightBlur = 0;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2360,7 +2451,11 @@ struct Index {
       largeContainerBackgroundImageDark: this.themeLargeContainerBackgroundDark,
       itemBackgroundImageLight: this.themeItemBackgroundLight,
       itemBackgroundImageDark: this.themeItemBackgroundDark,
-      pureBlack: this.themePureBlack
+      pureBlack: this.themePureBlack,
+      backgroundImage: this.themeBackgroundImage,
+      backgroundImageNight: this.themeBackgroundImageNight,
+      backgroundImageBlurring: this.themeBackgroundBlur,
+      backgroundImageNightBlurring: this.themeBackgroundNightBlur
     });
   }
 
@@ -2419,6 +2514,8 @@ struct Index {
     AppStorage.setOrCreate('themeItemBackground', this.themeItemBackgroundSource());
     // 纯黑只在深色下生效，对齐上游 `ThemeEngine.kt:132-146 applyAmoledIfNeeded` 的 `darkTheme && isAmoled`。
     AppStorage.setOrCreate('themePureBlack', isDark && this.themePureBlack);
+    // 全 App 背景图：页面底色要让位给根 Stack 里的背景图，否则各页自己的不透明底色会把图盖住。
+    AppStorage.setOrCreate('themeAppBackground', this.appBackgroundSource());
   }
 
   /** 主题设置页「界面颜色跟随封面取色」回调。上游 `ThemeConfigScreen.kt:399` 的 `BookInfoFollowCoverColor`。 */
@@ -5510,6 +5607,15 @@ struct Index {
 
   build() {
     Stack() {
+    // 全 App 背景图：上游 `ui/theme/AppBackground.kt:17-48` 把背景图铺在内容层之下、按日夜选路径与虚化度。
+    // 本地放在根 Stack 的首个子节点，`ImageFit.Cover` 填满；`.blur()` 接受动态半径。
+    if (this.appBackgroundSource().length > 0) {
+      Image(`file://${this.appBackgroundSource()}`)
+        .width('100%').height('100%')
+        .objectFit(ImageFit.Cover)
+        .blur(this.appBackgroundBlur())
+        .hitTestBehavior(HitTestMode.None)
+    }
     Column() {
       if (!this.onboardingLoaded) {
         Column() {
@@ -6454,6 +6560,19 @@ struct Index {
             onPureBlackChange: (enabled: boolean) => {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectThemePureBlack(themeContext, enabled); }
+            },
+            appBackgroundImage: this.themeBackgroundImage,
+            appBackgroundImageNight: this.themeBackgroundImageNight,
+            appBackgroundBlur: this.themeBackgroundBlur,
+            appBackgroundNightBlur: this.themeBackgroundNightBlur,
+            onPickBackgroundImage: (isNight: boolean) => this.pickThemeBackgroundImage(isNight),
+            onBackgroundBlurChange: (isNight: boolean, blur: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeBackgroundBlur(themeContext, isNight, blur); }
+            },
+            onClearBackgroundImage: (isNight: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.clearThemeBackgroundImage(themeContext, isNight); }
             },
             eyeProtectionEnabled: this.eyeProtectionEnabled,
             eyeProtectionAutoNight: this.eyeProtectionAutoNight,
@@ -7430,7 +7549,7 @@ struct Index {
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
       }
-    }.width('100%').height('100%').backgroundColor(this.themePureBlackActive ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.appBackgroundSource().length > 0 ? Color.Transparent : (this.themePureBlackActive ? '#000000' : $r('app.color.theme_surface_primary')))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     // 护眼覆盖层：上游用 ColorFilter.colorMatrix 给全屏套对角色矩阵，这里用同尺寸纯色层
     // 配 MULTIPLY 混合，混合公式 result = 内容 × 覆盖色，与对角矩阵逐通道相乘等价。

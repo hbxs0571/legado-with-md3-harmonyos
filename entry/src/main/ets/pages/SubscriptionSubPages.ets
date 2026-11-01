@@ -33,6 +33,7 @@ export struct SubscriptionFavoritesPage {
 
 @Component
 struct SubscriptionListPage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop subtitle: string = '';
@@ -64,7 +65,7 @@ struct SubscriptionListPage {
         MenuItem({ content: '删除所选分组' }).onClick(() => this.onUnavailableAction('收藏分组尚未接入'))
         MenuItem({ content: '删除全部' }).onClick(() => this.onUnavailableAction('收藏数据尚未接入'))
       }
-    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
@@ -73,15 +74,15 @@ struct SubscriptionListPage {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
-        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).onClick(() => this.onBack())
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
-        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18)
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18)
           .onClick(() => this.searchVisible = !this.searchVisible)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
-        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).margin({ left: 8 })
           .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 2 })
 
@@ -100,7 +101,7 @@ struct SubscriptionListPage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
-          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -120,7 +121,7 @@ struct SubscriptionListPage {
             .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
         }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 8 })
       }
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
       .bindSheet(this.activeSheet.length > 0, this.subscriptionSheet(), {
         height: this.activeSheet === 'ruleEditor' ? 460 : 320,
         dragBar: true,
@@ -171,6 +172,7 @@ struct SubscriptionListPage {
 
 @Component
 export struct SubscriptionSourceManagePage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -187,7 +189,7 @@ export struct SubscriptionSourceManagePage {
       MenuItem({ content: '已禁用' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
       MenuItem({ content: '需登录' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
       MenuItem({ content: '未分组' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
-    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
@@ -196,15 +198,15 @@ export struct SubscriptionSourceManagePage {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
-        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).onClick(() => this.onBack())
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
-        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18)
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18)
           .onClick(() => this.searchVisible = !this.searchVisible)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
-        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).margin({ left: 8 })
           .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 2 })
 
@@ -221,7 +223,7 @@ export struct SubscriptionSourceManagePage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
-          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -232,6 +234,6 @@ export struct SubscriptionSourceManagePage {
         }.width(50).height(50).backgroundColor('#4D5C8D').borderRadius(16)
           .onClick(() => this.onUnavailableAction('订阅源编辑页尚未迁移'))
       }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
   }
 }

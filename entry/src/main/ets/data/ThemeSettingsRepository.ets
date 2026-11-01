@@ -85,6 +85,14 @@ export interface ThemeSnapshot {
    * 与 `constant/PreferKey.kt:365 pureBlack = "pure_black"`（默认 false）。
    */
   pureBlack: boolean;
+  /** 全 App 日间背景图本地路径，空串表示未设置。对齐上游 `backgroundImage`。 */
+  backgroundImage: string;
+  /** 全 App 夜间背景图本地路径，空串表示未设置。对齐上游 `backgroundImageNight`。 */
+  backgroundImageNight: string;
+  /** 日间背景图虚化半径（vp），对齐上游 `backgroundImageBlurring`（默认 0）。 */
+  backgroundImageBlurring: number;
+  /** 夜间背景图虚化半径（vp），对齐上游 `backgroundImageNightBlurring`（默认 0）。 */
+  backgroundImageNightBlurring: number;
 }
 
 /** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
@@ -99,6 +107,17 @@ export function normalizeBookInfoBackground(value: string): string {
 }
 
 /** 字体缩放夹取到 8..16，非法值回落到默认 10。 */
+/**
+ * 背景图虚化半径归一（0..40）。上游 `ThemeSettings.kt:54 backgroundImageBlurring: Int = 0`，
+ * 界面滑块上限 40（`ThemeConfigScreen.kt:828-880` 的 BackgroundImageManageSheet）。
+ */
+export function normalizeBackgroundBlur(value: number): number {
+  if (!Number.isFinite(value)) { return 0; }
+  const rounded = Math.round(value);
+  if (rounded < 0) { return 0; }
+  return rounded > 40 ? 40 : rounded;
+}
+
 export function normalizeFontScale(value: number): number {
   if (!Number.isFinite(value)) { return FONT_SCALE_DEFAULT; }
   const rounded = Math.round(value);
@@ -163,7 +182,11 @@ export class ThemeSettingsRepository {
       largeContainerBackgroundImageDark: '',
       itemBackgroundImageLight: '',
       itemBackgroundImageDark: '',
-      pureBlack: false
+      pureBlack: false,
+      backgroundImage: '',
+      backgroundImageNight: '',
+      backgroundImageBlurring: 0,
+      backgroundImageNightBlurring: 0
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -194,6 +217,10 @@ export class ThemeSettingsRepository {
       const itemLight = await store.get('itemBackgroundImageLight', defaults.itemBackgroundImageLight);
       const itemDark = await store.get('itemBackgroundImageDark', defaults.itemBackgroundImageDark);
       const pureBlack = await store.get('pureBlack', defaults.pureBlack);
+      const appBgLight = await store.get('backgroundImage', defaults.backgroundImage);
+      const appBgDark = await store.get('backgroundImageNight', defaults.backgroundImageNight);
+      const appBgBlur = await store.get('backgroundImageBlurring', defaults.backgroundImageBlurring);
+      const appBgNightBlur = await store.get('backgroundImageNightBlurring', defaults.backgroundImageNightBlurring);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
@@ -238,7 +265,13 @@ export class ThemeSettingsRepository {
           ? itemLight : defaults.itemBackgroundImageLight,
         itemBackgroundImageDark: typeof itemDark === 'string'
           ? itemDark : defaults.itemBackgroundImageDark,
-        pureBlack: typeof pureBlack === 'boolean' ? pureBlack : defaults.pureBlack
+        pureBlack: typeof pureBlack === 'boolean' ? pureBlack : defaults.pureBlack,
+        backgroundImage: typeof appBgLight === 'string' ? appBgLight : defaults.backgroundImage,
+        backgroundImageNight: typeof appBgDark === 'string' ? appBgDark : defaults.backgroundImageNight,
+        backgroundImageBlurring: typeof appBgBlur === 'number'
+          ? normalizeBackgroundBlur(appBgBlur) : defaults.backgroundImageBlurring,
+        backgroundImageNightBlurring: typeof appBgNightBlur === 'number'
+          ? normalizeBackgroundBlur(appBgNightBlur) : defaults.backgroundImageNightBlurring
       };
     } catch (_) {
       return defaults;
@@ -290,6 +323,10 @@ export class ThemeSettingsRepository {
     await store.put('itemBackgroundImageLight', snapshot.itemBackgroundImageLight);
     await store.put('itemBackgroundImageDark', snapshot.itemBackgroundImageDark);
     await store.put('pureBlack', snapshot.pureBlack);
+    await store.put('backgroundImage', snapshot.backgroundImage);
+    await store.put('backgroundImageNight', snapshot.backgroundImageNight);
+    await store.put('backgroundImageBlurring', normalizeBackgroundBlur(snapshot.backgroundImageBlurring));
+    await store.put('backgroundImageNightBlurring', normalizeBackgroundBlur(snapshot.backgroundImageNightBlurring));
     await store.flush();
   }
 

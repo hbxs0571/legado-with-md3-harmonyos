@@ -3,6 +3,7 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct OpenSourceLicensePage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   @State selectedLicense: string = 'GPL-3.0';
@@ -69,7 +70,7 @@ export struct OpenSourceLicensePage {
             .width('100%').padding(16).textAlign(TextAlign.Start)
         }.layoutWeight(1).width('100%').scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
   }
 }
 

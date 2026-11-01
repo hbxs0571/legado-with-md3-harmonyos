@@ -2,6 +2,7 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct AppDownloadCacheSettingsPage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -48,7 +49,7 @@ export struct AppDownloadCacheSettingsPage {
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
   }
 }
 
@@ -114,6 +115,7 @@ struct CacheSettingsSlider {
 
 @Component
 struct CacheSettingsInput {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop value: string = '';
@@ -124,7 +126,7 @@ struct CacheSettingsInput {
       Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
       TextInput({ text: this.currentValue, placeholder: '默认' })
         .fontSize(12).fontColor($r('app.color.theme_text_secondary')).textAlign(TextAlign.End)
-        .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).width(130).borderRadius(8)
+        .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).width(130).borderRadius(8)
         .onChange((value: string) => this.currentValue = value)
     }.padding({ left: 14, right: 14, top: 10, bottom: 10 })
   }

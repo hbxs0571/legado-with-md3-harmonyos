@@ -20,6 +20,7 @@ import {
 
 @Component
 export struct ThemeSettingsPage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -113,6 +114,21 @@ export struct ThemeSettingsPage {
   @Prop pureBlack: boolean = false;
   /** 纯黑深色模式开关回调。 */
   onPureBlackChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 全 App 日间背景图路径，对齐上游 `backgroundImage`。 */
+  @Prop appBackgroundImage: string = '';
+  /** 全 App 夜间背景图路径，对齐上游 `backgroundImageNight`。 */
+  @Prop appBackgroundImageNight: string = '';
+  /** 日间背景图虚化半径，对齐上游 `backgroundImageBlurring`。 */
+  @Prop appBackgroundBlur: number = 0;
+  /** 夜间背景图虚化半径，对齐上游 `backgroundImageNightBlurring`。 */
+  @Prop appBackgroundNightBlur: number = 0;
+  /** 选背景图回调，`isNight` 区分夜间/日间。 */
+  onPickBackgroundImage: (isNight: boolean) => void = (_isNight: boolean) => {};
+  /** 背景图虚化半径回调。 */
+  onBackgroundBlurChange: (isNight: boolean, blur: number) => void =
+    (_isNight: boolean, _blur: number) => {};
+  /** 清空背景图回调。 */
+  onClearBackgroundImage: (isNight: boolean) => void = (_isNight: boolean) => {};
   /** 护眼模式总开关，与阅读设置页共用同一份全局状态。 */
   @Prop eyeProtectionEnabled: boolean = false;
   /** 深色模式时自动开启护眼。 */
@@ -133,6 +149,7 @@ export struct ThemeSettingsPage {
   onEyeProtectionIntensityChange: (intensity: number) => void = (_intensity: number) => {};
   onEyeProtectionStartTimeChange: (time: string) => void = (_time: string) => {};
   onEyeProtectionEndTimeChange: (time: string) => void = (_time: string) => {};
+  @State backgroundExpanded: boolean = false;
   @State showRefactorTip: boolean = true;
   @State predictiveBack: boolean = true;
   @State sharedElement: boolean = true;
@@ -167,6 +184,16 @@ export struct ThemeSettingsPage {
   }
 
   /** 封面背景模式的中文文案，对齐上游 `values-zh-rCN/strings.xml:1751-1753`。 */
+  /** 背景图行摘要：上游 `BackgroundImageManageSheet` 的两个路径都空时显示「选择图片」，否则「已选择」。 */
+  private appBackgroundSummary(): string {
+    const day = this.appBackgroundImage.length > 0;
+    const night = this.appBackgroundImageNight.length > 0;
+    if (day && night) { return '日间/夜间已选择'; }
+    if (day) { return '已选日间，点击展开'; }
+    if (night) { return '已选夜间，点击展开'; }
+    return '日间/夜间背景图与背景虚化';
+  }
+
   private coverBackgroundOptions(): string[] {
     return [BOOK_INFO_BACKGROUND_ON, BOOK_INFO_BACKGROUND_OFF, BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT];
   }
@@ -285,8 +312,8 @@ export struct ThemeSettingsPage {
               Blank()
               Row().width(14).height(14).backgroundColor(this.paletteColor(this.paletteIndex)).borderRadius(7)
             }.width('100%').padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(10)
-          }.width(112).height(224).padding(10).backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(22)
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(10)
+          }.width(112).height(224).padding(10).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(22)
             .border({ width: 1, color: $r('app.color.theme_accent') })
             .alignSelf(ItemAlign.Center).margin({ top: 18, bottom: 16 })
 
@@ -297,7 +324,7 @@ export struct ThemeSettingsPage {
               AppGlyph({ name: 'profileClose', glyphSize: 18, tint: '#C5C7D0' })
                 .onClick(() => this.showRefactorTip = false)
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
-              .backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(16)
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(16)
               .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
@@ -356,7 +383,20 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             ThemeSettingsOption({ title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onUnavailableAction('主题包管理尚未迁移') })
             ThemeItemDivider()
-            ThemeSettingsOption({ title: '背景图片', detail: '日间/夜间背景图与背景虚化', onSelect: () => this.onUnavailableAction('背景图片设置尚未迁移') })
+            ThemeSettingsOption({ title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.backgroundExpanded = !this.backgroundExpanded } })
+            if (this.backgroundExpanded) {
+              ThemeSettingsOption({ title: '日间背景图片', detail: this.appBackgroundImage.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(false) })
+              ThemeItemDivider()
+              Slider({ value: this.appBackgroundBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
+                .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(false, value))
+              ThemeItemDivider()
+              ThemeSettingsOption({ title: '夜间背景图片', detail: this.appBackgroundImageNight.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(true) })
+              ThemeItemDivider()
+              Slider({ value: this.appBackgroundNightBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
+                .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(true, value))
+              ThemeItemDivider()
+              ThemeSettingsOption({ title: '移除背景图片', detail: '同时清空日间与夜间', onSelect: () => { this.onClearBackgroundImage(false); this.onClearBackgroundImage(true); } })
+            }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '主界面' }).margin({ top: 20 })
@@ -514,7 +554,7 @@ export struct ThemeSettingsPage {
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ top: 4, bottom: 18 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
   }
 }
 
@@ -614,6 +654,7 @@ struct ThemeSwitchRow {
 /** 下拉行，对齐上游 `DropdownListSettingItem`：点开菜单选一项。 */
 @Component
 struct ThemeSettingsDropdown {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop value: string = '';
@@ -640,7 +681,7 @@ struct ThemeSettingsDropdown {
       ForEach(this.options, (option: string) => {
         MenuItem({ content: this.label(option) }).height(48).onClick(() => this.onSelect(option))
       }, (option: string) => option)
-    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(16)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(16)
   }
 
   build() {

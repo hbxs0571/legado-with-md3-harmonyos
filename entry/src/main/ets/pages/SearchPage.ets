@@ -6,6 +6,7 @@ import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct SearchPage {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @Prop books: Book[] = [];
@@ -97,17 +98,17 @@ export struct SearchPage {
             Blank()
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'settings', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
-            }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18)
+            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18)
               .onClick(() => this.onUnavailableAction('搜索设置将在在线书源搜索接入后提供'))
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: this.exactMatch ? 'searchPrecisionOn' : 'searchPrecisionOff', glyphSize: 20,
                 tint: this.exactMatch ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary') })
-            }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
+            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).margin({ left: 8 })
               .onClick(() => this.onExactMatchChange(!this.exactMatch))
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileFilterAlt', glyphSize: 20,
                 tint: this.sourceScope || this.selectedGroup !== '全部书籍' ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary') })
-            }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
+            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).margin({ left: 8 })
               .onClick(() => this.showScopePanel = true)
           }.width('100%').height(64).padding({ left: 12, right: 12 })
           Text('搜索').fontSize(28).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
@@ -127,7 +128,7 @@ export struct SearchPage {
           }
         }.width('100%').padding({ left: 14, right: 14, top: 11, bottom: 11 })
           .margin({ left: 16, right: 16, top: 7, bottom: 8 })
-          .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
 
         if (this.query.trim().length === 0) {
           Scroll(this.suggestionScroller) {
@@ -192,7 +193,7 @@ export struct SearchPage {
             }.layoutWeight(1)
           }
         }
-      }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+      }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
 
       if (this.showScopePanel) {
         SearchScopePanel({
@@ -215,12 +216,13 @@ export struct SearchPage {
           }
         }).transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
-    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
   }
 }
 
 @Component
 struct SearchBookRow {
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
@@ -236,7 +238,7 @@ struct SearchBookRow {
         Text(this.book.lastChapter).fontSize(13).fontColor('#858792').margin({ top: 6 }).maxLines(1)
       }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
       Text(`${Math.round(this.book.progress)}%`).fontSize(13).fontColor($r('app.color.theme_text_secondary'))
-    }.width('100%').padding(12).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+    }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       .margin({ left: 16, right: 16, bottom: 9 }).onClick(() => this.onSelect())
   }
 }
