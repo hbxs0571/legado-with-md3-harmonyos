@@ -1,4 +1,5 @@
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import { BackupCategoryOption, BackupEntryPreview, BackupPreview } from '../data/BackupRepository';
 
 /** 本地备份与恢复页面，文件格式与 Android 原项目兼容。 */
@@ -44,6 +45,11 @@ export struct AppBackupSettingsPage {
     }
   }
 
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       BackupHeader({ collapsed: this.collapsedHeader, onBack: () => this.onBack() })
@@ -54,19 +60,25 @@ export struct AppBackupSettingsPage {
           Column() {
             BackupActionRow({ icon: 'cloud', title: 'WebDAV 服务器地址', detail: '未配置 · 尚未迁移',
               onSelect: () => this.openInput('WebDAV 服务器地址') })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'profileSource', title: 'WebDAV 账号', detail: '账号与密码尚未配置',
               onSelect: () => this.openInput('WebDAV 账号') })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'folder', title: '子目录', detail: 'legado',
               onSelect: () => this.openInput('子目录') })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'profileSource', title: '设备名称', detail: '未设置',
               onSelect: () => this.openInput('设备名称') })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'cloudSync', title: '测试同步', detail: '检查 WebDAV 连接',
               onSelect: () => this.onUnavailableAction('WebDAV 连接尚未迁移，未发起测试') })
+            ThemeItemDivider()
             BackupPreviewSwitchRow({ title: '同步书籍进度', detail: '在设备之间同步阅读位置',
               checked: this.syncBookProgress, onChange: (value: boolean) => {
                 this.syncBookProgress = value;
                 this.onUnavailableAction('仅界面预览，WebDAV 同步设置未保存');
               } })
+            ThemeItemDivider()
             if (this.syncBookProgress) {
               BackupPreviewSwitchRow({ title: '增强进度同步', detail: '同步更多阅读状态',
                 checked: this.syncBookProgressPlus, onChange: (value: boolean) => {
@@ -74,44 +86,52 @@ export struct AppBackupSettingsPage {
                   this.onUnavailableAction('仅界面预览，WebDAV 同步设置未保存');
                 } }).transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
+            ThemeItemDivider()
             BackupPreviewSwitchRow({ title: '自动检查新备份', detail: '打开时检查 WebDAV 备份',
               checked: this.autoCheckBackup, onChange: (value: boolean) => {
                 this.autoCheckBackup = value;
                 this.onUnavailableAction('仅界面预览，WebDAV 设置未保存');
               } })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'settings', title: '备份同步模式', detail: '未迁移', last: true,
               onSelect: () => this.activeSheet = 'syncMode' })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           Text('备份与恢复').fontSize(14).fontColor($r('app.color.theme_accent'))
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'folder', title: '备份路径', detail: '选择本地备份目录',
               onSelect: () => this.activeSheet = 'path', disabled: this.busy })
+            ThemeItemDivider()
             BackupActionRow({
               icon: 'cloud', title: '备份',
               detail: `导出 Android 兼容 ZIP；当前书架 ${this.localBookCount} 本`,
               onSelect: () => this.activeSheet = 'backup', disabled: this.busy
             })
+            ThemeItemDivider()
             BackupActionRow({
               icon: 'download', title: '恢复',
               detail: '选择 Android 阅读 ZIP，预览后导入可映射内容',
               onSelect: () => this.activeSheet = 'restore', disabled: this.busy
             })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'settings', title: '恢复排除项',
               detail: `当前跳过 ${this.restoreIgnoreKeys.length} 个数据类别`,
               onSelect: () => this.activeSheet = 'ignoreRestore', disabled: this.busy })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'settings', title: '备份排除项',
               detail: `当前排除 ${this.backupIgnoreKeys.length} 个数据类别`,
               onSelect: () => this.activeSheet = 'ignoreBackup', disabled: this.busy })
+            ThemeItemDivider()
             BackupActionRow({ icon: 'download', title: '导入旧版数据', detail: '从旧版本文件迁移',
               onSelect: () => this.onUnavailableAction('旧版数据导入尚未迁移') })
+            ThemeItemDivider()
             BackupPreviewSwitchRow({ title: '只保留最新备份', detail: '自动清理较早的备份文件',
               checked: this.onlyLatestBackup, onChange: (value: boolean) => {
                 this.onlyLatestBackup = value;
                 this.onUnavailableAction('仅界面预览，此设置未保存');
               } })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           if (this.busy) {
             Row() {

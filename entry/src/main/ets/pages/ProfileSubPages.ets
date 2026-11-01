@@ -4,6 +4,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import {
   PROFILE_PAGE_SUBTITLE_SIZE,
   PROFILE_PAGE_TITLE_SIZE,
@@ -2851,6 +2852,11 @@ struct BookmarkOverviewCard {
   /** 搜索命中的笔记 id；非空时卡片显示「包含匹配笔记，点击查看」。 */
   @Prop matchedMarkingId: string = '';
   onSelect: () => void = () => {};
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Row() {
       Column() {
@@ -2872,7 +2878,7 @@ struct BookmarkOverviewCard {
         },
         displayWidth: 52, displayHeight: 73, cornerRadius: 8
       }).margin({ left: 12 })
-    }.width('100%').padding(12).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16).margin({ bottom: 8 })
+    }.width('100%').padding(12).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat).margin({ bottom: 8 })
       .onClick(() => this.onSelect())
   }
 }
@@ -3617,6 +3623,11 @@ export struct AppSettingsHomePage {
       animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
     }
   }
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       SettingsPageHeader({ title: '设置', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
@@ -3624,17 +3635,27 @@ export struct AppSettingsHomePage {
         Column() {
           Column() {
           SettingsCategoryRow({ title: '外观', onSelect: () => this.onOpenCategory(ProfileRoute.APP_THEME_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '高级', onSelect: () => this.onOpenCategory(ProfileRoute.APP_OTHER_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '阅读界面', onSelect: () => this.onOpenCategory(ProfileRoute.APP_READ_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '朗读设置', summary: '管理角色声音池、背景音乐池与角色配音分配', onSelect: () => this.onOpenCategory(ProfileRoute.APP_ALOUD_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '封面设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_COVER_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '下载与缓存', onSelect: () => this.onOpenCategory(ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '备份与恢复', onSelect: () => this.onOpenCategory(ProfileRoute.APP_BACKUP_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: 'AI 设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_AI_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '翻译设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_TRANSLATION_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '隐私', onSelect: () => this.onOpenCategory(ProfileRoute.APP_PRIVACY_SETTINGS) })
+          ThemeItemDivider()
           SettingsCategoryRow({ title: '实验室', last: true, onSelect: () => this.onOpenCategory(ProfileRoute.APP_LAB_SETTINGS) })
-          }.width('100%').backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.padding({ left: 16, right: 16, top: 8, bottom: 16 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))

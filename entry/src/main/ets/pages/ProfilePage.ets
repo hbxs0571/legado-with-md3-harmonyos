@@ -10,6 +10,7 @@ import { ProfileRoute } from '../model/Book';
 
 @Component
 export struct ProfilePage {
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onOpenDetail: (destination: ProfileRoute) => void = () => {};
   onExit: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -63,7 +64,7 @@ export struct ProfilePage {
             }.width('100%').padding({ left: 10, right: 10, bottom: 8 })
               .height(this.showWebPreview ? 70 : 0).opacity(this.showWebPreview ? 1 : 0)
               .clip(true).animation({ duration: 220, curve: Curve.EaseInOut })
-          }.width('100%').backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).margin({ bottom: 13 })
+          }.width('100%').backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).margin({ bottom: 13 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           Text('规则').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor($r('app.color.theme_accent')).alignSelf(ItemAlign.Start).margin({ left: 12, bottom: 8 })
           Column() {
             ProfileRow({ title: '书源管理', detail: '新建 · 导入 · 编辑或管理书源', onSelect: () => this.onOpenDetail(ProfileRoute.BOOK_SOURCE_MANAGE) })

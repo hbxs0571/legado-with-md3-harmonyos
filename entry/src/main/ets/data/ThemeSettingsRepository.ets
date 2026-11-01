@@ -1,4 +1,16 @@
 import { preferences } from '@kit.ArkData';
+import {
+  CONTAINER_OPACITY_DEFAULT,
+  CARD_BORDER_WIDTH_DEFAULT,
+  CARD_RADIUS_DEFAULT,
+  DIVIDER_LENGTH_DEFAULT,
+  DIVIDER_WIDTH_DEFAULT,
+  normalizeCardBorderWidth,
+  normalizeCardCornerRadius,
+  normalizeContainerOpacity,
+  normalizeDividerLength,
+  normalizeDividerWidth
+} from './ThemeCardStyle';
 
 /**
  * 主题模式取值域。
@@ -34,6 +46,40 @@ export interface ThemeSnapshot {
   bookInfoNetworkCoverBackground: string;
   /** 默认封面背景模式，对齐上游 bookInfoDefaultCoverBackground（默认 `on`）。 */
   bookInfoDefaultCoverBackground: string;
+  /** 容器底色不透明度 0..100，对齐上游 `ThemeSettings.kt:24 containerOpacity`（默认 100）。 */
+  containerOpacity: number;
+  /** 关闭设置分组圆角，对齐上游 `disableSplicedColumnGroupCornerRadius`（默认 false）。 */
+  disableSplicedColumnGroupCornerRadius: boolean;
+  /** 覆盖卡片圆角总开关，对齐上游 `overrideBaseCardCornerRadius`（默认 false）。 */
+  overrideBaseCardCornerRadius: boolean;
+  /** 卡片圆角数值 0..40，对齐上游 `baseCardCornerRadius`（默认 16）。 */
+  baseCardCornerRadius: number;
+  /** 覆盖卡片边框总开关，对齐上游 `overrideBaseCardBorder`（默认 false）。 */
+  overrideBaseCardBorder: boolean;
+  /** 边框宽度 0..5，对齐上游 `baseCardBorderWidth`（默认 1）。 */
+  baseCardBorderWidth: number;
+  /** 日间边框色 `#RRGGBB`，空串表示未设置。对齐上游 `baseCardBorderColor`。 */
+  baseCardBorderColorDay: string;
+  /** 夜间边框色 `#RRGGBB`，空串表示未设置。对齐上游 `baseCardBorderColorNight`。 */
+  baseCardBorderColorNight: string;
+  /** 显示分隔线，对齐上游 `ThemeSettings.kt:63 enableItemDivider`（默认 false）。 */
+  enableItemDivider: boolean;
+  /** 分隔线宽度 0..5，对齐上游 `itemDividerWidth`（默认 1）。 */
+  itemDividerWidth: number;
+  /** 分隔线长度 30..100（百分比），对齐上游 `itemDividerLength`（默认 80）。 */
+  itemDividerLength: number;
+  /** 分隔线颜色 `#RRGGBB`，空串表示未设置。对齐上游 `itemDividerColor`。 */
+  itemDividerColor: string;
+  /** 容器背景图总开关，对齐上游 `enableContainerBackgroundImage`（默认 false）。 */
+  enableContainerBackgroundImage: boolean;
+  /** 大容器日间背景图本地路径，空串表示未选择。对齐上游 `largeContainerBackgroundImageLight`。 */
+  largeContainerBackgroundImageLight: string;
+  /** 大容器夜间背景图本地路径。对齐上游 `largeContainerBackgroundImageDark`。 */
+  largeContainerBackgroundImageDark: string;
+  /** 项目日间背景图本地路径。对齐上游 `itemBackgroundImageLight`。 */
+  itemBackgroundImageLight: string;
+  /** 项目夜间背景图本地路径。对齐上游 `itemBackgroundImageDark`。 */
+  itemBackgroundImageDark: string;
 }
 
 /** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
@@ -54,6 +100,19 @@ export function normalizeFontScale(value: number): number {
   if (rounded < FONT_SCALE_MIN) { return FONT_SCALE_MIN; }
   if (rounded > FONT_SCALE_MAX) { return FONT_SCALE_MAX; }
   return rounded;
+}
+
+/**
+ * 颜色串归一成 `#RRGGBB` 或 `#AARRGGBB`，其余一律返回空串（= 未设置）。
+ *
+ * 上游这四个颜色键是 Int（0 表示未设置，`FeatureSettingsRepositories.kt:384-385`），
+ * 本地存字符串便于直接喂给 `ResourceColor`；空串对应上游的 0。
+ */
+export function normalizeThemeColor(value: string): string {
+  if (value.length === 0) { return ''; }
+  const trimmed = value.trim().toUpperCase();
+  if (!/^#([0-9A-F]{6}|[0-9A-F]{8})$/.test(trimmed)) { return ''; }
+  return trimmed;
 }
 
 /**
@@ -81,7 +140,24 @@ export class ThemeSettingsRepository {
       swipeAnimation: true,
       bookInfoFollowCoverColor: true,
       bookInfoNetworkCoverBackground: BOOK_INFO_BACKGROUND_ON,
-      bookInfoDefaultCoverBackground: BOOK_INFO_BACKGROUND_ON
+      bookInfoDefaultCoverBackground: BOOK_INFO_BACKGROUND_ON,
+      containerOpacity: CONTAINER_OPACITY_DEFAULT,
+      disableSplicedColumnGroupCornerRadius: false,
+      overrideBaseCardCornerRadius: false,
+      baseCardCornerRadius: CARD_RADIUS_DEFAULT,
+      overrideBaseCardBorder: false,
+      baseCardBorderWidth: CARD_BORDER_WIDTH_DEFAULT,
+      baseCardBorderColorDay: '',
+      baseCardBorderColorNight: '',
+      enableItemDivider: false,
+      itemDividerWidth: DIVIDER_WIDTH_DEFAULT,
+      itemDividerLength: DIVIDER_LENGTH_DEFAULT,
+      itemDividerColor: '',
+      enableContainerBackgroundImage: false,
+      largeContainerBackgroundImageLight: '',
+      largeContainerBackgroundImageDark: '',
+      itemBackgroundImageLight: '',
+      itemBackgroundImageDark: ''
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -93,6 +169,24 @@ export class ThemeSettingsRepository {
       const followCoverColor = await store.get('bookInfoFollowCoverColor', defaults.bookInfoFollowCoverColor);
       const networkCoverBackground = await store.get('bookInfoNetworkCoverBackground', defaults.bookInfoNetworkCoverBackground);
       const defaultCoverBackground = await store.get('bookInfoDefaultCoverBackground', defaults.bookInfoDefaultCoverBackground);
+      const containerOpacity = await store.get('containerOpacity', defaults.containerOpacity);
+      const disableGroupCorner = await store.get('disableSplicedColumnGroupCornerRadius',
+        defaults.disableSplicedColumnGroupCornerRadius);
+      const overrideCardCorner = await store.get('overrideBaseCardCornerRadius', defaults.overrideBaseCardCornerRadius);
+      const cardCornerRadius = await store.get('baseCardCornerRadius', defaults.baseCardCornerRadius);
+      const overrideCardBorder = await store.get('overrideBaseCardBorder', defaults.overrideBaseCardBorder);
+      const cardBorderWidth = await store.get('baseCardBorderWidth', defaults.baseCardBorderWidth);
+      const borderColorDay = await store.get('baseCardBorderColorDay', defaults.baseCardBorderColorDay);
+      const borderColorNight = await store.get('baseCardBorderColorNight', defaults.baseCardBorderColorNight);
+      const enableDivider = await store.get('enableItemDivider', defaults.enableItemDivider);
+      const dividerWidth = await store.get('itemDividerWidth', defaults.itemDividerWidth);
+      const dividerLength = await store.get('itemDividerLength', defaults.itemDividerLength);
+      const dividerColor = await store.get('itemDividerColor', defaults.itemDividerColor);
+      const containerBg = await store.get('enableContainerBackgroundImage', defaults.enableContainerBackgroundImage);
+      const largeLight = await store.get('largeContainerBackgroundImageLight', defaults.largeContainerBackgroundImageLight);
+      const largeDark = await store.get('largeContainerBackgroundImageDark', defaults.largeContainerBackgroundImageDark);
+      const itemLight = await store.get('itemBackgroundImageLight', defaults.itemBackgroundImageLight);
+      const itemDark = await store.get('itemBackgroundImageDark', defaults.itemBackgroundImageDark);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
@@ -103,7 +197,40 @@ export class ThemeSettingsRepository {
         bookInfoNetworkCoverBackground: typeof networkCoverBackground === 'string'
           ? normalizeBookInfoBackground(networkCoverBackground) : defaults.bookInfoNetworkCoverBackground,
         bookInfoDefaultCoverBackground: typeof defaultCoverBackground === 'string'
-          ? normalizeBookInfoBackground(defaultCoverBackground) : defaults.bookInfoDefaultCoverBackground
+          ? normalizeBookInfoBackground(defaultCoverBackground) : defaults.bookInfoDefaultCoverBackground,
+        containerOpacity: typeof containerOpacity === 'number'
+          ? normalizeContainerOpacity(containerOpacity) : defaults.containerOpacity,
+        disableSplicedColumnGroupCornerRadius: typeof disableGroupCorner === 'boolean'
+          ? disableGroupCorner : defaults.disableSplicedColumnGroupCornerRadius,
+        overrideBaseCardCornerRadius: typeof overrideCardCorner === 'boolean'
+          ? overrideCardCorner : defaults.overrideBaseCardCornerRadius,
+        baseCardCornerRadius: typeof cardCornerRadius === 'number'
+          ? normalizeCardCornerRadius(cardCornerRadius) : defaults.baseCardCornerRadius,
+        overrideBaseCardBorder: typeof overrideCardBorder === 'boolean'
+          ? overrideCardBorder : defaults.overrideBaseCardBorder,
+        baseCardBorderWidth: typeof cardBorderWidth === 'number'
+          ? normalizeCardBorderWidth(cardBorderWidth) : defaults.baseCardBorderWidth,
+        baseCardBorderColorDay: typeof borderColorDay === 'string'
+          ? normalizeThemeColor(borderColorDay) : defaults.baseCardBorderColorDay,
+        baseCardBorderColorNight: typeof borderColorNight === 'string'
+          ? normalizeThemeColor(borderColorNight) : defaults.baseCardBorderColorNight,
+        enableItemDivider: typeof enableDivider === 'boolean' ? enableDivider : defaults.enableItemDivider,
+        itemDividerWidth: typeof dividerWidth === 'number'
+          ? normalizeDividerWidth(dividerWidth) : defaults.itemDividerWidth,
+        itemDividerLength: typeof dividerLength === 'number'
+          ? normalizeDividerLength(dividerLength) : defaults.itemDividerLength,
+        itemDividerColor: typeof dividerColor === 'string'
+          ? normalizeThemeColor(dividerColor) : defaults.itemDividerColor,
+        enableContainerBackgroundImage: typeof containerBg === 'boolean'
+          ? containerBg : defaults.enableContainerBackgroundImage,
+        largeContainerBackgroundImageLight: typeof largeLight === 'string'
+          ? largeLight : defaults.largeContainerBackgroundImageLight,
+        largeContainerBackgroundImageDark: typeof largeDark === 'string'
+          ? largeDark : defaults.largeContainerBackgroundImageDark,
+        itemBackgroundImageLight: typeof itemLight === 'string'
+          ? itemLight : defaults.itemBackgroundImageLight,
+        itemBackgroundImageDark: typeof itemDark === 'string'
+          ? itemDark : defaults.itemBackgroundImageDark
       };
     } catch (_) {
       return defaults;
@@ -137,6 +264,23 @@ export class ThemeSettingsRepository {
       normalizeBookInfoBackground(snapshot.bookInfoNetworkCoverBackground));
     await store.put('bookInfoDefaultCoverBackground',
       normalizeBookInfoBackground(snapshot.bookInfoDefaultCoverBackground));
+    await store.put('containerOpacity', normalizeContainerOpacity(snapshot.containerOpacity));
+    await store.put('disableSplicedColumnGroupCornerRadius', snapshot.disableSplicedColumnGroupCornerRadius);
+    await store.put('overrideBaseCardCornerRadius', snapshot.overrideBaseCardCornerRadius);
+    await store.put('baseCardCornerRadius', normalizeCardCornerRadius(snapshot.baseCardCornerRadius));
+    await store.put('overrideBaseCardBorder', snapshot.overrideBaseCardBorder);
+    await store.put('baseCardBorderWidth', normalizeCardBorderWidth(snapshot.baseCardBorderWidth));
+    await store.put('baseCardBorderColorDay', normalizeThemeColor(snapshot.baseCardBorderColorDay));
+    await store.put('baseCardBorderColorNight', normalizeThemeColor(snapshot.baseCardBorderColorNight));
+    await store.put('enableItemDivider', snapshot.enableItemDivider);
+    await store.put('itemDividerWidth', normalizeDividerWidth(snapshot.itemDividerWidth));
+    await store.put('itemDividerLength', normalizeDividerLength(snapshot.itemDividerLength));
+    await store.put('itemDividerColor', normalizeThemeColor(snapshot.itemDividerColor));
+    await store.put('enableContainerBackgroundImage', snapshot.enableContainerBackgroundImage);
+    await store.put('largeContainerBackgroundImageLight', snapshot.largeContainerBackgroundImageLight);
+    await store.put('largeContainerBackgroundImageDark', snapshot.largeContainerBackgroundImageDark);
+    await store.put('itemBackgroundImageLight', snapshot.itemBackgroundImageLight);
+    await store.put('itemBackgroundImageDark', snapshot.itemBackgroundImageDark);
     await store.flush();
   }
 

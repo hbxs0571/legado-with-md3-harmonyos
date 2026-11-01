@@ -235,6 +235,11 @@ struct OtherSettingsSection {
   @BuilderParam content: () => void = this.emptyContent;
   @Builder emptyContent() {}
 
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       if (this.title.length > 0) {
@@ -243,7 +248,7 @@ struct OtherSettingsSection {
       }
       Column() {
         this.content()
-      }.width('100%').backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+      }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
     }.width('100%').margin({ bottom: 8 })
   }
 }

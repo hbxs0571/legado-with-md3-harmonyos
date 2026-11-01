@@ -53,12 +53,17 @@ struct PrivacyNoticeSection {
   @Prop title: string = '';
   @Prop body: string = '';
 
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
         .alignSelf(ItemAlign.Start).margin({ bottom: 8 })
       Text(this.body).fontSize(15).fontColor($r('app.color.theme_text_secondary')).lineHeight(22).textAlign(TextAlign.Start)
-    }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+    }.width('100%').padding(16).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       .margin({ left: 16, right: 16, bottom: 12 })
   }
 }

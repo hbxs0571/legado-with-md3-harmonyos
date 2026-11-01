@@ -6,6 +6,7 @@ import { HomeDashboardSection, HOME_DASHBOARD_SECTIONS } from '../data/HomeDashb
 
 @Component
 export struct HomePage {
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @Prop books: Book[] = [];
   @Prop totalReadTimeMs: number = 0;
   onOpenBook: (book: Book) => void = () => {};
@@ -159,7 +160,7 @@ export struct HomePage {
             Progress({ value: this.getRecentBookProgress(this.getRecentBook()), total: 100, type: ProgressType.Linear })
               .width('100%').height(3).color($r('app.color.theme_accent')).backgroundColor('#3A3B43')
               .animation({ duration: 300, curve: Curve.EaseInOut })
-            }.width('100%').backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(17)
+            }.width('100%').backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(17).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.openBook(this.getRecentBook()))
           } else if (this.visibleSections.includes('recentBook')) {
             Column() {
@@ -171,7 +172,7 @@ export struct HomePage {
               Text('暂无阅读记录').fontSize(14).fontColor('#AEB0BA').alignSelf(ItemAlign.Center)
               Blank().layoutWeight(1)
             }.width('100%').height(160).padding({ left: 16, right: 16, top: 16, bottom: 14 }).justifyContent(FlexAlign.Center)
-              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(17).alignItems(HorizontalAlign.Center)
+              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(17).alignItems(HorizontalAlign.Center).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           if (this.visibleSections.includes('totalBooks') || this.visibleSections.includes('totalTime')) {
             Row() {
@@ -210,7 +211,7 @@ export struct HomePage {
                 Text('分钟').fontSize(12).fontColor('#B6B8C2').margin({ top: 3 })
               }.width('100%').alignItems(HorizontalAlign.Center).margin({ bottom: 20 })
           }.width('100%').height(136)
-          }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(16).margin({ top: 12 })
+          }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(16).margin({ top: 12 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           if (this.visibleSections.includes('backup')) {
           Column() {
@@ -238,7 +239,7 @@ export struct HomePage {
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onUnavailableAction('WebDAV 设置尚未迁移'))
             }.margin({ top: 12 })
-          }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(16).margin({ top: 12, bottom: 18 })
+          }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(16).margin({ top: 12, bottom: 18 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           Column() {
             Text('未选择任何书源集').fontSize(14).fontColor('#AEB0BA').textAlign(TextAlign.Center)
@@ -286,6 +287,7 @@ struct SummaryCard {
   @Prop value: string = '';
   @Prop unit: string = '';
   onSelect: () => void = () => {};
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   build() {
     Row() {
       AppGlyph({ name: this.icon, tint: $r('app.color.theme_accent'), glyphSize: 20 }).margin({ right: 12 })
@@ -297,7 +299,7 @@ struct SummaryCard {
         }
       }.alignItems(HorizontalAlign.Start)
     }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 8 })
-      .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).onClick(() => this.onSelect())
+      .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).onClick(() => this.onSelect()).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
   }
 }
 

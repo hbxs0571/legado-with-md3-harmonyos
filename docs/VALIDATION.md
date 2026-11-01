@@ -30,6 +30,36 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r308 深色模式阶段二：容器设置十六项（A32–A47）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`assembleHap` **BUILD SUCCESSFUL in 49 s 37 ms**（33 tasks / 17 executed）→ 后续两批资源改动又各构建一次（`45 s 981 ms` / `40 s 972 ms` / `46 s 843 ms`），全部 `hdc install -r` 覆盖安装成功。
+- 改动文件：新建 `entry/src/main/ets/data/ThemeCardStyle.ets`、新建 `entry/src/main/ets/components/ThemeItemDivider.ets`、新建 `entry/src/main/resources/base/media/transparent_pixel.png`；`data/ThemeSettingsRepository.ets`（`ThemeSnapshot` 8 → **25 字段**）、`pages/Index.ets`（17 个新 `@State` + `publishThemeCardStyle()` + 12 个 `selectTheme*` 回调 + `resetThemeDefaults()` + `pickThemeContainerBackground()`）、`pages/ThemeSettingsPage.ets`（15 条控件改真回调）、以及 20 个页面文件（24 张设置分组卡片与内容页卡片接 `@StorageProp`）。
+
+**关键实现选择**：ArkUI 没有 `CompositionLocal` 那种隐式下发，也不接受 `AppStorage` 之外的全局可观察通道，所以本轮用 `AppStorage` 的九个键做广播——`themeCardRadius` / `themeCardBorderWidth` / `themeCardBorderColor` / `themeCardBackground` / `themeDividerWidth` / `themeDividerLength` / `themeDividerColor` / `themeContainerBackground` / `themeItemBackground`。`publishThemeCardStyle()` 是唯一写入点，`applyThemeMode()` 之后会重发一次（日夜一变边框色要重选）。**`@StorageProp` 必须落在使用它的那个 struct 上**——只写在文件第一个 struct 会报 `Property 'themeItemBackground' does not exist on type 'SummaryCard'` / `... 'SearchBookRow'` / `... 'SubscriptionListPage'`。
+
+**验收 1（A35 容器背景不透明度）**：外观 → 容器设置 → 拖「容器背景不透明度」滑块（`uitest uiInput swipe 112 1335 429 1335 500`）→ 文案变 `28%`，prefs `containerOpacity=28.000000`；卡片区域 `(900,1000)-(1150,1180)` 平均色由 `(251.5,251.5,251.5)` 变 `(245.1,246.0,247.9)`。**通过**。
+
+**验收 2（A37/A38 覆盖卡片圆角）**：点「覆盖卡片圆角」Toggle `(1099,1818)` → 出现「卡片圆角」行；拖滑块到右端 → 文案 `40vp`，prefs `overrideBaseCardCornerRadius=true`、`baseCardCornerRadius=40.000000`；角落像素 `(60,1005)` 由 `(254,255,255)` 变 `(245,246,248)`（圆角变大露出底色）。**通过**。
+
+**验收 3（A39/A40 覆盖卡片边框与宽度）**：点「覆盖卡片边框」Toggle → 出现「边框宽度」「日间边框颜色」「夜间边框颜色」三行；拖宽度滑块 `uitest uiInput swipe 115 1715 1140 1715 700` → prefs `baseCardBorderWidth=5.000000`、文案 `5vp`。**踩坑**：滑块起点必须落在轨道内，起点在轨道外整段拖动无效（第一次用 `112` 起手失败）。**通过**。
+
+**验收 4（A41/A42 日间/夜间边框颜色）**：点「日间边框颜色」行中心 `(400,1975)` → `Menu` 弹出七项（`默认描边色` / `#3F5BD9` / `#AFC2FF` / `#92949E` / `#6A6D77` / `#F4D45E` / `#A6D28A`）→ 点 `#3F5BD9` → prefs `baseCardBorderColorDay=#3F5BD9`；夜间同法选 `#AFC2FF` → `baseCardBorderColorNight=#AFC2FF`。**通过**。
+
+**验收 5（A36 关闭设置分组圆角）**：点 Toggle `(1082,792)` → prefs `disableSplicedColumnGroupCornerRadius=true`；前后截图 `ImageChops` 差异 bbox `(47,751,1233,2737)`、changed pixels **203123**，分组卡片由圆角变直角。**踩坑**：该 Toggle 在本机第一次点无效（`checked` 仍 false、prefs 未变），第二次才生效——属模拟器注入层问题，验收以 prefs 变值为准。**通过**。
+
+**验收 6（A43–A46 分隔线四项）**：点「显示分隔线」`(1099,2271)` → prefs `enableItemDivider=true`，每个条目之间出现细线；拖「分隔线宽度」`uitest uiInput swipe 118 2649 1150 2649 700` → `itemDividerWidth=5.000000`；拖「分隔线长度」`uitest uiInput swipe 115 2606 460 2606 700` → `itemDividerLength=51.000000`；点「分隔线颜色」`(400,2288)` → 选 `#3F5BD9` → `itemDividerColor=#3F5BD9`。返回设置首页截图可见 10 个分类之间全部带蓝线（`AppStorage` 广播成立）。**通过**。
+
+**验收 7（A32/A33/A34 容器背景图）**：点「容器背景图」Toggle `(1096,960)` → prefs `enableContainerBackgroundImage=true`，「大容器背景图片」「项目背景图片」两行出现且文案为「选择图片」；点「大容器背景图片」`(400,1162)` → 系统文件选择器 → `浏览` → `我的手机` → `Documents` → 点 `cover-test.jpg` 图标 `(1030,1550)` → 回到设置页文案变「已选日间，点击换图」，prefs `largeContainerBackgroundImageLight` 写入 `/data/storage/el2/base/haps/entry/files/theme-backgrounds/large-day-*.jpg`。把 `itemBackgroundImageLight` 指向同一张图后重启，开关前后截图 `ImageChops` changed pixels：设置页 **2304811**、首页 **1522253**。**踩坑**：最初把选中的图复制成 `.img` 后缀，`Image()` 解不出来、背景图完全不显示——必须保留原扩展名。**通过**。
+
+**验收 8（A47 恢复默认主题配置）**：滚到底点行 `(400,2500)` → `AlertDialog` 弹出，标题「恢复默认主题配置」、正文「将恢复外观页中的主题、界面布局、背景图片、应用字体和导航图标等配置。已保存的主题、封面图集和书籍封面不会被删除。」、按钮「取消」`(306,1599)` / 「恢复」`(862,1599)`；点「恢复」`(918,1632)` → prefs 全部回默认（`overrideBaseCardBorder=false`、`overrideBaseCardCornerRadius=false`、`baseCardCornerRadius=16.000000`、`baseCardBorderWidth=1.000000`、两个边框色空串、`containerOpacity=100.000000`、`disableSplicedColumnGroupCornerRadius=false`）。**通过**。
+
+**未验**：A33/A34 的**夜间**图片（`largeContainerBackgroundImageDark` / `itemBackgroundImageDark`）没有在设备上单独选过——本地 UI 只提供「选日间图」入口（`onPickContainerBackground(isLarge, false)`），夜间路径目前只能通过备份或 prefs 注入；这是本轮已知的 UI 缺口，已在对照表 A33/A34 差异说明里如实记录。
+
+**与上游的差异**：① A41/A42/A46 上游是 `ColorPickerSheet` 任意取色 + 「重置」置透明，本地只有七档预设下拉；② 容器背景图上游按 `appColumnBackgroundOpacity` / `glassCardBackgroundOpacity` 两套 alpha，本地统一由 `containerOpacity` 驱动；③ 上游 `resetDefaults()` 会删沙箱背景图文件与导航图标目录，本地只清路径不删文件；④ 分隔线只插进 4 个文件的卡片，`@BuilderParam` 外壳型卡片（`AppAiSettingsPage` 等 7 个）子项在调用方，本轮未插。
+
+**复原**：`enableContainerBackgroundImage` 保持 `true`，两张路径都指向 `large-day-*.jpg`，`containerOpacity=50.000000`。
+
 ## 2026-11-01 N 端 r307 深色模式阶段二：书籍详情页三项（A20/A21/A22）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。

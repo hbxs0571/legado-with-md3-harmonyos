@@ -12,6 +12,7 @@ import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct BookshelfPage {
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @Prop books: Book[] = [];
   @Prop groups: BookGroup[] = [];
   /** 书架布局设置，来自 Index 的持久化状态。 */
@@ -633,7 +634,7 @@ export struct BookshelfPage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
-          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22)
+          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       }
 
       // 分组样式为「隐藏页签」时不渲染顶部筛选栏，切换分组改由分组管理面板完成。

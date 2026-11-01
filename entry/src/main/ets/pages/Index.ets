@@ -44,7 +44,27 @@ import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
 import { OnboardingRepository } from '../data/OnboardingRepository';
-import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground } from '../data/ThemeSettingsRepository';
+import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground, normalizeThemeColor, FONT_SCALE_DEFAULT } from '../data/ThemeSettingsRepository';
+import {
+  CARD_BORDER_WIDTH_DEFAULT,
+  CARD_RADIUS_DEFAULT,
+  CONTAINER_OPACITY_DEFAULT,
+  DIVIDER_LENGTH_DEFAULT,
+  DIVIDER_WIDTH_DEFAULT,
+  ThemeCardStyleSnapshot,
+  normalizeCardBorderWidth,
+  normalizeCardCornerRadius,
+  normalizeContainerOpacity,
+  normalizeDividerLength,
+  normalizeDividerWidth,
+  resolveCardBackgroundColor,
+  resolveCardBorderColor,
+  resolveCardBorderWidth,
+  resolveCardCornerRadius,
+  resolveDividerColor,
+  resolveDividerLength,
+  resolveDividerWidth
+} from '../data/ThemeCardStyle';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { EyeProtection } from '../data/EyeProtection';
 import {
@@ -64,6 +84,7 @@ import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
 import { sensor } from '@kit.SensorServiceKit';
 import { window } from '@kit.ArkUI';
+import { fileIo, picker } from '@kit.CoreFileKit';
 import { ReaderBackgroundImageRepository } from '../data/ReaderBackgroundImageRepository';
 import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
@@ -469,6 +490,40 @@ struct Index {
   @State bookInfoNetworkCoverBackground: string = 'on';
   /** 默认封面背景模式，对齐上游 `bookInfoDefaultCoverBackground`。 */
   @State bookInfoDefaultCoverBackground: string = 'on';
+  /** 容器底色不透明度 0..100，对齐上游 `ThemeSettings.kt:24 containerOpacity`（默认 100）。 */
+  @State themeContainerOpacity: number = CONTAINER_OPACITY_DEFAULT;
+  /** 关闭设置分组圆角，对齐上游 `disableSplicedColumnGroupCornerRadius`（默认 false）。 */
+  @State themeDisableGroupCorner: boolean = false;
+  /** 覆盖卡片圆角总开关，对齐上游 `overrideBaseCardCornerRadius`（默认 false）。 */
+  @State themeOverrideCardCorner: boolean = false;
+  /** 卡片圆角数值 0..40，对齐上游 `baseCardCornerRadius`（默认 16）。 */
+  @State themeCardCornerRadius: number = CARD_RADIUS_DEFAULT;
+  /** 覆盖卡片边框总开关，对齐上游 `overrideBaseCardBorder`（默认 false）。 */
+  @State themeOverrideCardBorder: boolean = false;
+  /** 边框宽度 0..5，对齐上游 `baseCardBorderWidth`（默认 1）。 */
+  @State themeCardBorderWidth: number = CARD_BORDER_WIDTH_DEFAULT;
+  /** 日间边框色，空串表示未设置（上游 Int 0）。 */
+  @State themeCardBorderColorDay: string = '';
+  /** 夜间边框色，空串表示未设置。 */
+  @State themeCardBorderColorNight: string = '';
+  /** 显示分隔线，对齐上游 `enableItemDivider`（默认 false）。 */
+  @State themeEnableItemDivider: boolean = false;
+  /** 分隔线宽度 0..5，对齐上游 `itemDividerWidth`（默认 1）。 */
+  @State themeItemDividerWidth: number = DIVIDER_WIDTH_DEFAULT;
+  /** 分隔线长度 30..100（百分比），对齐上游 `itemDividerLength`（默认 80）。 */
+  @State themeItemDividerLength: number = DIVIDER_LENGTH_DEFAULT;
+  /** 分隔线颜色，空串表示未设置（上游 Int 0）。 */
+  @State themeItemDividerColor: string = '';
+  /** 容器背景图总开关，对齐上游 `enableContainerBackgroundImage`（默认 false）。 */
+  @State themeEnableContainerBackgroundImage: boolean = false;
+  /** 大容器日间背景图本地路径，空串表示未选择。 */
+  @State themeLargeContainerBackgroundLight: string = '';
+  /** 大容器夜间背景图本地路径。 */
+  @State themeLargeContainerBackgroundDark: string = '';
+  /** 项目日间背景图本地路径。 */
+  @State themeItemBackgroundLight: string = '';
+  /** 项目夜间背景图本地路径。 */
+  @State themeItemBackgroundDark: string = '';
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -1954,8 +2009,26 @@ struct Index {
     this.bookInfoFollowCoverColor = theme.bookInfoFollowCoverColor;
     this.bookInfoNetworkCoverBackground = theme.bookInfoNetworkCoverBackground;
     this.bookInfoDefaultCoverBackground = theme.bookInfoDefaultCoverBackground;
+    this.themeContainerOpacity = theme.containerOpacity;
+    this.themeDisableGroupCorner = theme.disableSplicedColumnGroupCornerRadius;
+    this.themeOverrideCardCorner = theme.overrideBaseCardCornerRadius;
+    this.themeCardCornerRadius = theme.baseCardCornerRadius;
+    this.themeOverrideCardBorder = theme.overrideBaseCardBorder;
+    this.themeCardBorderWidth = theme.baseCardBorderWidth;
+    this.themeCardBorderColorDay = theme.baseCardBorderColorDay;
+    this.themeCardBorderColorNight = theme.baseCardBorderColorNight;
+    this.themeEnableItemDivider = theme.enableItemDivider;
+    this.themeItemDividerWidth = theme.itemDividerWidth;
+    this.themeItemDividerLength = theme.itemDividerLength;
+    this.themeItemDividerColor = theme.itemDividerColor;
+    this.themeEnableContainerBackgroundImage = theme.enableContainerBackgroundImage;
+    this.themeLargeContainerBackgroundLight = theme.largeContainerBackgroundImageLight;
+    this.themeLargeContainerBackgroundDark = theme.largeContainerBackgroundImageDark;
+    this.themeItemBackgroundLight = theme.itemBackgroundImageLight;
+    this.themeItemBackgroundDark = theme.itemBackgroundImageDark;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
+    this.publishThemeCardStyle();
     if (!hasStored && state.completed) {
       const mode = ThemeSettingsRepository.fromModeNumber(state.themeMode);
       await this.applyThemeMode(context, mode, state.paletteIndex, true);
@@ -1994,6 +2067,222 @@ struct Index {
     });
   }
 
+  /** 容器背景不透明度回调。上游 `ThemeConfigScreen.kt:585` 的 `container_opacity`。 */
+  private selectThemeContainerOpacity(context: Context, value: number): void {
+    this.themeContainerOpacity = normalizeContainerOpacity(value);
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('容器不透明度保存失败，请重试');
+    });
+  }
+
+  /** 关闭设置分组圆角回调。上游 `ThemeConfigScreen.kt:598`。 */
+  private selectThemeDisableGroupCorner(context: Context, value: boolean): void {
+    this.themeDisableGroupCorner = value;
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('设置分组圆角保存失败，请重试');
+    });
+  }
+
+  /** 覆盖卡片圆角总开关回调。上游 `ThemeConfigScreen.kt:608`。 */
+  private selectThemeOverrideCardCorner(context: Context, value: boolean): void {
+    this.themeOverrideCardCorner = value;
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('卡片圆角设置保存失败，请重试');
+    });
+  }
+
+  /** 卡片圆角数值回调。上游 `ThemeConfigScreen.kt:617` 的 `base_card_corner_radius`（0..40）。 */
+  private selectThemeCardCornerRadius(context: Context, value: number): void {
+    this.themeCardCornerRadius = normalizeCardCornerRadius(value);
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('卡片圆角保存失败，请重试');
+    });
+  }
+
+  /** 覆盖卡片边框总开关回调。上游 `ThemeConfigScreen.kt:630`。 */
+  private selectThemeOverrideCardBorder(context: Context, value: boolean): void {
+    this.themeOverrideCardBorder = value;
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('卡片边框设置保存失败，请重试');
+    });
+  }
+
+  /** 边框宽度回调。上游 `ThemeConfigScreen.kt:640` 的 `border_width`（0..5）。 */
+  private selectThemeCardBorderWidth(context: Context, value: number): void {
+    this.themeCardBorderWidth = normalizeCardBorderWidth(value);
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('边框宽度保存失败，请重试');
+    });
+  }
+
+  /**
+   * 边框颜色回调。上游 `ThemeConfigScreen.kt:652`/`:663` 的
+   * `BaseCardBorderColorSettingItem`（日间/夜间各一）。
+   */
+  private selectThemeCardBorderColor(context: Context, isNight: boolean, value: string): void {
+    const color = normalizeThemeColor(value);
+    if (isNight) {
+      this.themeCardBorderColorNight = color;
+    } else {
+      this.themeCardBorderColorDay = color;
+    }
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('边框颜色保存失败，请重试');
+    });
+  }
+
+  /**
+   * 显示分隔线开关。上游 `ThemeConfigScreen.kt:676` `SwitchSettingItem(show_divider_line)`，
+   * 键 `enableItemDivider`。
+   */
+  private selectThemeEnableItemDivider(context: Context, enabled: boolean): void {
+    this.themeEnableItemDivider = enabled;
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('分隔线设置保存失败，请重试');
+    });
+  }
+
+  /** 分隔线宽度回调。上游 `ThemeConfigScreen.kt:684` 的 `theme_config_divider_width`（0..5）。 */
+  private selectThemeItemDividerWidth(context: Context, value: number): void {
+    this.themeItemDividerWidth = normalizeDividerWidth(value);
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('分隔线宽度保存失败，请重试');
+    });
+  }
+
+  /** 分隔线长度回调。上游 `ThemeConfigScreen.kt:696` 的 `theme_config_divider_length`（30..100%）。 */
+  private selectThemeItemDividerLength(context: Context, value: number): void {
+    this.themeItemDividerLength = normalizeDividerLength(value);
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('分隔线长度保存失败，请重试');
+    });
+  }
+
+  /** 分隔线颜色回调。上游 `ThemeConfigScreen.kt:707` 的 `tip_divider_color`。 */
+  private selectThemeItemDividerColor(context: Context, value: string): void {
+    this.themeItemDividerColor = normalizeThemeColor(value);
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('分隔线颜色保存失败，请重试');
+    });
+  }
+
+  /**
+   * 容器背景图总开关。上游 `ThemeConfigScreen.kt:533` 的 `enableContainerBackgroundImage`。
+   *
+   * 打开后 `AnimatedVisibility` 放出「大容器背景图片」「项目背景图片」两行（A33/A34）。
+   */
+  private selectThemeEnableContainerBackgroundImage(context: Context, enabled: boolean): void {
+    this.themeEnableContainerBackgroundImage = enabled;
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('容器背景图设置保存失败，请重试');
+    });
+  }
+
+  /**
+   * 选一张背景图并复制进应用沙箱。
+   *
+   * 上游用 `BackgroundImageManageSheet`（`ThemeConfigScreen.kt:828-880`）分别给大容器/项目
+   * 选日间与夜间两张图，路径存在 `largeContainerBackgroundImage*` / `itemBackgroundImage*`。
+   * 本地用 `DocumentViewPicker` 选图，复制到 `filesDir/theme-backgrounds/` 后存路径，
+   * 与上游「先存文件再存路径」的顺序一致——这样备份/清理时能按目录统一处理。
+   */
+  private async pickThemeContainerBackground(isLarge: boolean, isNight: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地文件，未选择背景图');
+      return;
+    }
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.fileSuffixFilters = ['图片|.png', '图片|.jpg', '图片|.jpeg', '图片|.webp'];
+      options.maxSelectNumber = 1;
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris[0];
+      if (uri === undefined) { return; }
+      const directory = `${context.filesDir}/theme-backgrounds`;
+      if (!fileIo.accessSync(directory)) { fileIo.mkdirSync(directory, true); }
+      // 保留原扩展名：`Image()` 按扩展名判解码器，存成 `.img` 会解不出来。
+      const suffix = uri.substring(uri.lastIndexOf('.') === -1 ? uri.length : uri.lastIndexOf('.')).toLowerCase();
+      const extension = suffix.length > 1 && suffix.length <= 6 ? suffix : '.png';
+      const target = `${directory}/${isLarge ? 'large' : 'item'}-${isNight ? 'night' : 'day'}-${Date.now()}${extension}`;
+      const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      try {
+        fileIo.copyFileSync(source.fd, target);
+        if (fileIo.statSync(target).size <= 0) { throw new Error('所选背景图文件为空'); }
+      } finally {
+        fileIo.closeSync(source);
+      }
+      if (isLarge) {
+        if (isNight) { this.themeLargeContainerBackgroundDark = target; } else { this.themeLargeContainerBackgroundLight = target; }
+      } else {
+        if (isNight) { this.themeItemBackgroundDark = target; } else { this.themeItemBackgroundLight = target; }
+      }
+      this.publishThemeCardStyle();
+      await this.saveThemeSettings(context);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '选择背景图失败');
+    }
+  }
+
+  /**
+   * 恢复默认主题配置。上游 `ThemeConfigViewModel.kt:205-240 resetDefaults()`。
+   *
+   * 上游重置的是整份 `AppShellSettings` + `CoverSettings` + `ThemeSettings`，
+   * 并删掉背景图/导航图标/应用字体文件；本地这三类里已落地的只有主题设置这几项，
+   * 所以只重置它们——不碰书架、阅读设置与护眼（上游的 `ThemeSettings()` 也把
+   * `eyeProtection*` 归零，但那属于阅读配置，本地按 READER-CONFIG 的既有口径保留）。
+   */
+  private resetThemeDefaults(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('恢复默认配置失败，请重试');
+      return;
+    }
+    this.themeContainerOpacity = CONTAINER_OPACITY_DEFAULT;
+    this.themeDisableGroupCorner = false;
+    this.themeOverrideCardCorner = false;
+    this.themeCardCornerRadius = CARD_RADIUS_DEFAULT;
+    this.themeOverrideCardBorder = false;
+    this.themeCardBorderWidth = CARD_BORDER_WIDTH_DEFAULT;
+    this.themeCardBorderColorDay = '';
+    this.themeCardBorderColorNight = '';
+    this.themeEnableItemDivider = false;
+    this.themeItemDividerWidth = DIVIDER_WIDTH_DEFAULT;
+    this.themeItemDividerLength = DIVIDER_LENGTH_DEFAULT;
+    this.themeItemDividerColor = '';
+    this.themeEnableContainerBackgroundImage = false;
+    this.themeLargeContainerBackgroundLight = '';
+    this.themeLargeContainerBackgroundDark = '';
+    this.themeItemBackgroundLight = '';
+    this.themeItemBackgroundDark = '';
+    this.themeFontScale = FONT_SCALE_DEFAULT;
+    this.themeShowStatusBar = true;
+    this.themeSwipeAnimation = true;
+    this.bookInfoFollowCoverColor = true;
+    this.bookInfoNetworkCoverBackground = 'on';
+    this.bookInfoDefaultCoverBackground = 'on';
+    this.applyThemeFontScale(context);
+    this.applyThemeStatusBar(context);
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).then(() => {
+      this.showUnavailableAction('已恢复默认主题配置');
+    }).catch(() => {
+      this.showUnavailableAction('恢复默认配置失败，请重试');
+    });
+  }
+
   /**
    * 应用主题模式：写全局状态 + 落盘 + 通知系统换资源目录。
    *
@@ -2005,6 +2294,8 @@ struct Index {
     this.themePaletteIndex = paletteIndex;
     this.readerNightMode = ThemeModeResolver.isDarkTheme(themeMode, ThemeModeResolver.isSystemDark(context));
     ThemeModeResolver.apply(context, themeMode);
+    // 日夜一变，卡片边框色就要按 baseCardBorderColor(Night) 重选，所以顺带刷新一次。
+    this.publishThemeCardStyle();
     if (!persist) {
       return;
     }
@@ -2030,8 +2321,80 @@ struct Index {
       swipeAnimation: this.themeSwipeAnimation,
       bookInfoFollowCoverColor: this.bookInfoFollowCoverColor,
       bookInfoNetworkCoverBackground: this.bookInfoNetworkCoverBackground,
-      bookInfoDefaultCoverBackground: this.bookInfoDefaultCoverBackground
+      bookInfoDefaultCoverBackground: this.bookInfoDefaultCoverBackground,
+      containerOpacity: this.themeContainerOpacity,
+      disableSplicedColumnGroupCornerRadius: this.themeDisableGroupCorner,
+      overrideBaseCardCornerRadius: this.themeOverrideCardCorner,
+      baseCardCornerRadius: this.themeCardCornerRadius,
+      overrideBaseCardBorder: this.themeOverrideCardBorder,
+      baseCardBorderWidth: this.themeCardBorderWidth,
+      baseCardBorderColorDay: this.themeCardBorderColorDay,
+      baseCardBorderColorNight: this.themeCardBorderColorNight,
+      enableItemDivider: this.themeEnableItemDivider,
+      itemDividerWidth: this.themeItemDividerWidth,
+      itemDividerLength: this.themeItemDividerLength,
+      itemDividerColor: this.themeItemDividerColor,
+      enableContainerBackgroundImage: this.themeEnableContainerBackgroundImage,
+      largeContainerBackgroundImageLight: this.themeLargeContainerBackgroundLight,
+      largeContainerBackgroundImageDark: this.themeLargeContainerBackgroundDark,
+      itemBackgroundImageLight: this.themeItemBackgroundLight,
+      itemBackgroundImageDark: this.themeItemBackgroundDark
     });
+  }
+
+  /** 当前卡片外观快照，供 `ThemeCardStyle` 的解析函数使用。 */
+  private themeCardStyleSnapshot(): ThemeCardStyleSnapshot {
+    return {
+      containerOpacity: this.themeContainerOpacity,
+      disableSplicedColumnGroupCornerRadius: this.themeDisableGroupCorner,
+      overrideBaseCardCornerRadius: this.themeOverrideCardCorner,
+      baseCardCornerRadius: this.themeCardCornerRadius,
+      overrideBaseCardBorder: this.themeOverrideCardBorder,
+      baseCardBorderWidth: this.themeCardBorderWidth,
+      baseCardBorderColorDay: this.themeCardBorderColorDay,
+      baseCardBorderColorNight: this.themeCardBorderColorNight,
+      enableItemDivider: this.themeEnableItemDivider,
+      itemDividerWidth: this.themeItemDividerWidth,
+      itemDividerLength: this.themeItemDividerLength,
+      itemDividerColor: this.themeItemDividerColor
+    };
+  }
+
+  /** 容器背景图的当前值，供 `publishThemeCardStyle` 写进 AppStorage。 */
+  private themeContainerBackgroundSource(): string {
+    if (!this.themeEnableContainerBackgroundImage) { return ''; }
+    const isDark = this.themeMode === THEME_MODE_DARK;
+    return isDark ? this.themeLargeContainerBackgroundDark : this.themeLargeContainerBackgroundLight;
+  }
+
+  /** 项目背景图的当前值（日夜各一套），供 `publishThemeCardStyle` 写进 AppStorage。 */
+  private themeItemBackgroundSource(): string {
+    if (!this.themeEnableContainerBackgroundImage) { return ''; }
+    const isDark = this.themeMode === THEME_MODE_DARK;
+    return isDark ? this.themeItemBackgroundDark : this.themeItemBackgroundLight;
+  }
+
+  /**
+   * 把解析后的卡片外观写进 `AppStorage`，供二十多个设置卡片组件用 `@StorageProp` 读取。
+   *
+   * 上游是 CompositionLocal（`LocalAppUiConfiguration.current.theme`）随处可取；
+   * ArkUI 没有等价物，`AppStorage` 是最接近的全局可观察通道，且改动会触发所有
+   * `@StorageProp` 组件重渲染——这正是「调滑块，全 App 卡片立刻变」需要的行为。
+   */
+  private publishThemeCardStyle(): void {
+    const snapshot = this.themeCardStyleSnapshot();
+    const context = this.getUIContext().getHostContext();
+    const isDark = context === undefined ? false
+      : ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context));
+    AppStorage.setOrCreate('themeCardRadius', resolveCardCornerRadius(snapshot));
+    AppStorage.setOrCreate('themeCardBorderWidth', resolveCardBorderWidth(snapshot));
+    AppStorage.setOrCreate('themeCardBorderColor', resolveCardBorderColor(snapshot, isDark));
+    AppStorage.setOrCreate('themeCardBackground', resolveCardBackgroundColor(snapshot, isDark));
+    AppStorage.setOrCreate('themeDividerWidth', resolveDividerWidth(snapshot));
+    AppStorage.setOrCreate('themeDividerLength', resolveDividerLength(snapshot));
+    AppStorage.setOrCreate('themeDividerColor', resolveDividerColor(snapshot));
+    AppStorage.setOrCreate('themeContainerBackground', this.themeContainerBackgroundSource());
+    AppStorage.setOrCreate('themeItemBackground', this.themeItemBackgroundSource());
   }
 
   /** 主题设置页「界面颜色跟随封面取色」回调。上游 `ThemeConfigScreen.kt:399` 的 `BookInfoFollowCoverColor`。 */
@@ -5996,6 +6359,73 @@ struct Index {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectBookInfoCoverBackground(themeContext, isDefaultCover, value); }
             },
+            containerOpacity: this.themeContainerOpacity,
+            disableGroupCorner: this.themeDisableGroupCorner,
+            overrideCardCorner: this.themeOverrideCardCorner,
+            cardCornerRadius: this.themeCardCornerRadius,
+            overrideCardBorder: this.themeOverrideCardBorder,
+            cardBorderWidth: this.themeCardBorderWidth,
+            cardBorderColorDay: this.themeCardBorderColorDay,
+            cardBorderColorNight: this.themeCardBorderColorNight,
+            enableItemDivider: this.themeEnableItemDivider,
+            dividerWidth: this.themeItemDividerWidth,
+            dividerLength: this.themeItemDividerLength,
+            dividerColor: this.themeItemDividerColor,
+            enableContainerBackgroundImage: this.themeEnableContainerBackgroundImage,
+            largeContainerBackgroundLight: this.themeLargeContainerBackgroundLight,
+            largeContainerBackgroundDark: this.themeLargeContainerBackgroundDark,
+            itemBackgroundLight: this.themeItemBackgroundLight,
+            itemBackgroundDark: this.themeItemBackgroundDark,
+            onContainerOpacityChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeContainerOpacity(themeContext, value); }
+            },
+            onDisableGroupCornerChange: (value: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeDisableGroupCorner(themeContext, value); }
+            },
+            onOverrideCardCornerChange: (value: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeOverrideCardCorner(themeContext, value); }
+            },
+            onCardCornerRadiusChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeCardCornerRadius(themeContext, value); }
+            },
+            onOverrideCardBorderChange: (value: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeOverrideCardBorder(themeContext, value); }
+            },
+            onCardBorderWidthChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeCardBorderWidth(themeContext, value); }
+            },
+            onCardBorderColorChange: (isNight: boolean, value: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeCardBorderColor(themeContext, isNight, value); }
+            },
+            onResetDefaults: () => this.resetThemeDefaults(),
+            onEnableItemDividerChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeEnableItemDivider(themeContext, enabled); }
+            },
+            onDividerWidthChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeItemDividerWidth(themeContext, value); }
+            },
+            onDividerLengthChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeItemDividerLength(themeContext, value); }
+            },
+            onDividerColorChange: (value: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeItemDividerColor(themeContext, value); }
+            },
+            onEnableContainerBackgroundImageChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeEnableContainerBackgroundImage(themeContext, enabled); }
+            },
+            onPickContainerBackground: (isLarge: boolean, isNight: boolean) => this.pickThemeContainerBackground(isLarge, isNight),
             eyeProtectionEnabled: this.eyeProtectionEnabled,
             eyeProtectionAutoNight: this.eyeProtectionAutoNight,
             eyeProtectionSchedule: this.eyeProtectionSchedule,

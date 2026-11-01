@@ -6,6 +6,7 @@ import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct SearchPage {
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @Prop books: Book[] = [];
   @Prop groups: BookGroup[] = [];
   @Prop query: string = '';
@@ -223,6 +224,7 @@ struct SearchBookRow {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   onSelect: () => void = () => {};
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   build() {
     Row() {
       BookCover({ book: this.book, compact: true })
@@ -232,7 +234,7 @@ struct SearchBookRow {
         Text(this.book.lastChapter).fontSize(13).fontColor('#858792').margin({ top: 6 }).maxLines(1)
       }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
       Text(`${Math.round(this.book.progress)}%`).fontSize(13).fontColor($r('app.color.theme_text_secondary'))
-    }.width('100%').padding(12).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14)
+    }.width('100%').padding(12).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       .margin({ left: 16, right: 16, bottom: 9 }).onClick(() => this.onSelect())
   }
 }

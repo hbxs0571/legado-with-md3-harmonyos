@@ -6,6 +6,7 @@ const SUBSCRIPTION_EMPTY_FACES: string[] = [
 
 @Component
 export struct SubscriptionRulesPage {
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   build() {
@@ -65,6 +66,7 @@ struct SubscriptionListPage {
     }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   build() {
     Column() {
       Row() {
@@ -97,7 +99,7 @@ struct SubscriptionListPage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
-          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22)
+          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -186,6 +188,7 @@ export struct SubscriptionSourceManagePage {
     }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   build() {
     Column() {
       Row() {
@@ -216,7 +219,7 @@ export struct SubscriptionSourceManagePage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
-          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22)
+          .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 

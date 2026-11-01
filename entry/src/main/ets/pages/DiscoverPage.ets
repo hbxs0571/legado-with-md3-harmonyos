@@ -7,6 +7,7 @@ interface DiscoverSourceDemo {
 
 @Component
 export struct DiscoverPage {
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   private readonly sources: DiscoverSourceDemo[] = [];
   private readonly groups: string[] = ['全部'];
@@ -109,7 +110,7 @@ export struct DiscoverPage {
               .onAppear(() => focusControl.requestFocus('discover_search_input'))
               .onChange((value: string) => this.searchQuery = value)
           }.layoutWeight(1).height(48).padding({ left: 14, right: 14 })
-            .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(24)
+            .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(24).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       }
 

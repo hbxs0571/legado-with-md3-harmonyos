@@ -697,13 +697,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 深色模式行登记（ZIP-THEME.md 的未接行）
 
-本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r307 后剩 48 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r308 后剩 32 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）；**r306 复查改判 3 行**（D3 三值派生布尔、D5 日夜两套背景、D8 阅读菜单日夜配色——三行在 r297 判 `未接` 时点早于实现，D3/D5 随 r300 的全局 `themeMode` 派生成立，D8 由 `9902eb8`/`154f91e` 落地配色后又随 r300 打通日夜来源）。**书籍详情页 r307 落地 3 行**（A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置），同批把 A23 作者搜索回退由「要接」改判「不接」（上游唯一消费者依赖书源 `relatedBooks`，本地无网络书源）。累计 34 行转 `已接`，剩余 **48 行 `未接`**（要接 42 / 不接 6）。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）；**r306 复查改判 3 行**（D3 三值派生布尔、D5 日夜两套背景、D8 阅读菜单日夜配色——三行在 r297 判 `未接` 时点早于实现，D3/D5 随 r300 的全局 `themeMode` 派生成立，D8 由 `9902eb8`/`154f91e` 落地配色后又随 r300 打通日夜来源）。**书籍详情页 r307 落地 3 行**（A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置），同批把 A23 作者搜索回退由「要接」改判「不接」（上游唯一消费者依赖书源 `relatedBooks`，本地无网络书源）。**容器设置 r308 落地 16 行**（A32 容器背景图总开关、A33 大容器背景图片、A34 项目背景图片、A35 容器背景不透明度、A36 关闭设置分组圆角、A37 覆盖卡片圆角总开关、A38 卡片圆角数值、A39 覆盖卡片边框总开关、A40 边框宽度、A41 日间边框颜色、A42 夜间边框颜色、A43 显示分隔线、A44 分隔线宽度、A45 分隔线长度、A46 分隔线颜色、A47 恢复默认主题配置）。累计 50 行转 `已接`，剩余 **32 行 `未接`**（要接 26 / 不接 6）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -812,25 +812,32 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **验收**：开控件模糊 → 卡片背景出现模糊；关掉 → 恢复实心。
 
-**KI-TH-A9 容器设置十五项（要接）** —— 覆盖 A32 容器背景图总开关、A33 大容器背景图片、A34 项目背景图片、A35 容器背景不透明度、A36 关闭设置分组圆角、A37 覆盖卡片圆角（总开关）、A38 卡片圆角数值、A39 覆盖卡片边框（总开关）、A40 边框宽度、A41 日间边框颜色、A42 夜间边框颜色、A43 显示分隔线、A44 分隔线宽度、A45 分隔线长度、A46 分隔线颜色。
+**KI-TH-A9 容器设置十五项（已实现 r308）** —— 覆盖 A32 容器背景图总开关、A33 大容器背景图片、A34 项目背景图片、A35 容器背景不透明度、A36 关闭设置分组圆角、A37 覆盖卡片圆角（总开关）、A38 卡片圆角数值、A39 覆盖卡片边框（总开关）、A40 边框宽度、A41 日间边框颜色、A42 夜间边框颜色、A43 显示分隔线、A44 分隔线宽度、A45 分隔线长度、A46 分隔线颜色。
 
 **上游口径**（`ThemeConfigScreen.kt:532-735`）：`:532 SplicedColumnGroup(theme_manage_section_container)`；`:533-540` 容器背景图 Switch；`:541 AnimatedVisibility(enableContainerBackgroundImage)` 包 A33/A34；`:585 SliderSettingItem(container_opacity)`；`:598` 分组圆角；`:608` 覆盖卡片圆角总开关 + `:616-617` 数值；`:630` 覆盖卡片边框总开关 + `:638-663` 宽度与日/夜颜色；`:676` 分隔线开关 + `:683-707` 宽度/长度/颜色。**A41/A42 是整表里唯一成对出现「日间/夜间」两个颜色入口的地方**，是日夜双套在设置界面上的直接体现。
 
-**本地现状**：15 条全 `onUnavailableAction`（`:200`–`:229`），条件显示（`:202`/`:204` 在 `containerBackgroundEnabled` 内、`:211` 在 `overrideCardCornerRadius` 内、`:216`/`:218`/`:220` 在 `overrideCardBorder` 内、`:225`/`:227`/`:229` 在 `dividerEnabled` 内）与上游一致，但都不生效。
+**本地落地**（r308，五个文件 + 一个新建组件 + 一张占位图）：
+1. 新建 `entry/src/main/ets/data/ThemeCardStyle.ets`：`ThemeCardStyleSnapshot` 接口 + 四组归一函数（`normalizeContainerOpacity` / `normalizeCardCornerRadius` / `normalizeCardBorderWidth` / `normalizeDividerWidth` / `normalizeDividerLength`）+ 五个解析函数（`resolveCardCornerRadius` / `resolveCardBorderWidth` / `resolveCardBorderColor` / `resolveCardBackgroundColor` / `resolveDividerWidth` / `resolveDividerLength` / `resolveDividerColor`）。`resolveCardCornerRadius` 的三档优先级逐条照抄上游 `SplicedColumnGroup.kt:49-53`：`disable → 0`、`override → baseCardCornerRadius`、`else → 16`。
+2. `entry/src/main/ets/data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 从 8 字段扩到 **25 字段**（+8 卡片/边框 + 4 分隔线 + 5 容器背景图），`load()` / `save()` 逐键同步；新增 `export function normalizeThemeColor(value: string): string`（只放行 `#RRGGBB` / `#AARRGGBB`，空串表示上游的 `0`）。
+3. `entry/src/main/ets/pages/Index.ets`：新增 17 个 `@State`；`saveThemeSettings()` 整份写全；新增 `themeCardStyleSnapshot()` 与 `publishThemeCardStyle()`——后者把解析结果写进 `AppStorage` 的九个键（`themeCardRadius` / `themeCardBorderWidth` / `themeCardBorderColor` / `themeCardBackground` / `themeDividerWidth` / `themeDividerLength` / `themeDividerColor` / `themeContainerBackground` / `themeItemBackground`），并在 `applyThemeMode()` 之后重发（日夜一变边框色要重选）；新增 12 个 `selectTheme*` 回调与 `resetThemeDefaults()`；`pickThemeContainerBackground(isLarge, isNight)` 用 `picker.DocumentViewPicker` 选图后复制到 `filesDir/theme-backgrounds/`（**保留原扩展名**）。
+4. `entry/src/main/ets/pages/ThemeSettingsPage.ets`：15 个控件全部从 `onUnavailableAction` 改为真回调；容器不透明度/卡片圆角/边框宽度/分隔线宽度/分隔线长度五条改用 `ThemeSettingsSlider`；日间边框色/夜间边框色/分隔线颜色三条改用 `ThemeSettingsDropdown`（七档预设，空串 = 「默认描边色」）。
+5. 新建 `entry/src/main/ets/components/ThemeItemDivider.ets`：读 `@StorageProp('themeDividerWidth'/'themeDividerLength'/'themeDividerColor')`，`width > 0` 才画；圆角取 `width / 2` 对齐上游 `clip(CircleShape)`。已插入 `ThemeSettingsPage.ets` 27 处、`AppBackupSettingsPage.ets` 14 处、`AppReadAloudSettingsPage.ets` 12 处、`ProfileSubPages.ets` 12 处。
+6. 24 个设置分组卡片统一改为 `.backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor })`；容器背景图（Large）挂这 24 张卡，项目背景图（Item）挂 `HomePage`/`ProfilePage`/`BookshelfPage`/`DiscoverPage`/`SearchPage`/`SubscriptionPage`/`SubscriptionSubPages` 的内容卡；`@StorageProp` 必须落在**使用它的那个 struct** 上（否则 ArkTS 报 `Property 'themeItemBackground' does not exist on type '...'`）。
+7. 新建 `entry/src/main/resources/base/media/transparent_pixel.png`（1×1 透明 PNG）作 `.backgroundImage()` 的「无背景图」占位。
 
-**补法**：15 个键一次性落盘 + 接到卡片/分隔线渲染层。A41/A42 取色盘与 F4 的两套颜色资源是同一件事的两面——日间边框色在浅色主题下用、夜间边框色在深色主题下用，**必须先有 F4 才有意义**。
+**与上游的差异**：① A41/A42/A46 上游用 `ColorPickerSheet` 任意取色 + 「重置」置透明，本地只有七档预设下拉，任意取色器留到 B 块一起做；② 容器背景图上游按 `appColumnBackgroundOpacity` / `glassCardBackgroundOpacity` 两套 alpha，本地统一由 A35 的 `containerOpacity` 驱动；③ 容器不透明度在无背景图时退化成「卡片底色透明度」，方向一致但不是同一层；④ 分隔线只在 4 个文件的卡片里插了，`@BuilderParam` 外壳型卡片（`AppAiSettingsPage` 等 7 个）子项在调用方，本轮未插。
 
-**验收**：开容器背景图并选图 → 卡片后出现背景图；调不透明度 → 背景图透明度变化；开覆盖卡片边框并设日间色 → 浅色下边框变色、深色下用夜间色。
+**验收**（模拟器 127.0.0.1:5555 / API 26，全部通过）：A32 开关 → prefs `enableContainerBackgroundImage=true` 且放出两行；A33 选图 → prefs 写入沙箱路径、`files/theme-backgrounds/large-day-*.jpg` 出现；A34 同图 → 首页开关前后 changed pixels 1522253；A35 拖到 28% → prefs `containerOpacity=28.000000`、卡片区域 `(251.5,251.5,251.5)`→`(245.1,246.0,247.9)`；A36 打开 → changed pixels 203123、分组变直角；A37/A38 → `baseCardCornerRadius=40.000000`、角落像素由白变底色；A39/A40 → `baseCardBorderWidth=5.000000`；A41/A42 → 日/夜边框色分别写入；A43 → `enableItemDivider=true` 且设置首页 10 个分类间全部带线；A44/A45/A46 → `itemDividerWidth=5`、`itemDividerLength=51`、`itemDividerColor=#3F5BD9`。
 
-**KI-TH-A10 恢复默认主题配置（要接）** —— 覆盖 A47。
+**KI-TH-A10 恢复默认主题配置（已实现 r308）** —— 覆盖 A47。
 
-**上游口径**：`ThemeConfigScreen.kt:736-745` `SplicedColumnGroup` + `:752 AppAlertDialog(ResetDefaults)`，确认后重置全部 themeConfig 键。
+**上游口径**：`ThemeConfigScreen.kt:737` `ClickableSettingItem(theme_config_reset_defaults)` + `:752 AppAlertDialog(ResetDefaults)`；`ThemeConfigViewModel.kt:205-240 resetDefaults()` 先删 6 张背景图文件（限 `appCtx.externalFiles` 内）+ 清 `filesDir/nav_icons` + 删 `appFontPath`，再 `appShellSettingsGateway.update { AppShellSettings() }` + `coverSettingsGateway.update { CoverSettings() }` + `themeSettingsGateway.update { ThemeSettings() }`，emit `ApplyDayNight` / `NotifyMain` / `ChangeLauncherIcon` / `ShowToast(theme_config_reset_success)`。文案 `values-zh-rCN/strings.xml:1776-1778`。
 
-**本地现状**：`:233-235` 是 `onUnavailableAction`，无二次确认对话框。
+**本地落地**：`pages/ThemeSettingsPage.ets` 新增 `confirmResetDefaults()` 用 `this.getUIContext().showAlertDialog(...)`，标题「恢复默认主题配置」、正文「将恢复外观页中的主题、界面布局、背景图片、应用字体和导航图标等配置。已保存的主题、封面图集和书籍封面不会被删除。」逐字对齐上游；确认按钮回调 `onResetDefaults` → `pages/Index.ets` 的 `resetThemeDefaults()`，把 25 字段快照 + 字号 + 状态栏 + 滑动动画 + 三个书籍详情页项复位，再 `applyThemeFontScale` / `applyThemeStatusBar` / `publishThemeCardStyle` / `saveThemeSettings`，成功提示「已恢复默认主题配置」。
 
-**补法**：接确认对话框，确认后把 53 个 themeConfig 键批量恢复默认并重建主题。
+**与上游的差异**：上游会**删掉**沙箱里的背景图文件与导航图标目录；本地只把路径清空、不删文件（文件留在 `files/theme-backgrounds/` 不再被引用）。本地没有导航图标与自定义字体这两块，故无对应删除动作。
 
-**验收**：改几项 → 点恢复默认 → 确认 → 全部回到默认值且重进保持。
+**验收**（模拟器 127.0.0.1:5555 / API 26，通过）：先把容器不透明度、卡片圆角、两个边框色、分隔线四项都改掉，再点「恢复默认主题配置」→ 弹确认框（取消 `(306,1599)` / 恢复 `(862,1599)`）→ 点「恢复」→ prefs 全部回默认：`overrideBaseCardBorder=false`、`overrideBaseCardCornerRadius=false`、`baseCardCornerRadius=16.000000`、`baseCardBorderWidth=1.000000`、两个边框色空串、`containerOpacity=100.000000`、`disableSplicedColumnGroupCornerRadius=false`。
 
 ### B 主题包管理
 

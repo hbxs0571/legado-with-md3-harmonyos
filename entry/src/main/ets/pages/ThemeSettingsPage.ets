@@ -1,9 +1,22 @@
 import { AppGlyph } from '../components/AppGlyph';
+import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import {
   BOOK_INFO_BACKGROUND_OFF,
   BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT,
   BOOK_INFO_BACKGROUND_ON
 } from '../data/ThemeSettingsRepository';
+import {
+  CARD_BORDER_WIDTH_MAX,
+  CARD_BORDER_WIDTH_MIN,
+  CARD_RADIUS_MAX,
+  CARD_RADIUS_MIN,
+  CONTAINER_OPACITY_MAX,
+  CONTAINER_OPACITY_MIN,
+  DIVIDER_LENGTH_MAX,
+  DIVIDER_LENGTH_MIN,
+  DIVIDER_WIDTH_MAX,
+  DIVIDER_WIDTH_MIN
+} from '../data/ThemeCardStyle';
 
 @Component
 export struct ThemeSettingsPage {
@@ -39,6 +52,62 @@ export struct ThemeSettingsPage {
   /** 封面背景下拉回调，`isDefaultCover` 区分「网络封面」与「默认封面」两行。 */
   onBookInfoCoverBackgroundChange: (isDefaultCover: boolean, value: string) => void =
     (_isDefaultCover: boolean, _value: string) => {};
+  /** 容器底色不透明度 0..100，对齐上游 `ThemeSettings.kt:24 containerOpacity`。 */
+  @Prop containerOpacity: number = CONTAINER_OPACITY_MAX;
+  /** 关闭设置分组圆角，对齐上游 `disableSplicedColumnGroupCornerRadius`。 */
+  @Prop disableGroupCorner: boolean = false;
+  /** 覆盖卡片圆角总开关，对齐上游 `overrideBaseCardCornerRadius`。 */
+  @Prop overrideCardCorner: boolean = false;
+  /** 卡片圆角数值 0..40，对齐上游 `baseCardCornerRadius`。 */
+  @Prop cardCornerRadius: number = 16;
+  /** 覆盖卡片边框总开关，对齐上游 `overrideBaseCardBorder`。 */
+  @Prop overrideCardBorder: boolean = false;
+  /** 边框宽度 0..5，对齐上游 `baseCardBorderWidth`。 */
+  @Prop cardBorderWidth: number = 1;
+  /** 日间边框色 `#RRGGBB`，空串表示未设置。 */
+  @Prop cardBorderColorDay: string = '';
+  /** 夜间边框色 `#RRGGBB`，空串表示未设置。 */
+  @Prop cardBorderColorNight: string = '';
+  /** 显示分隔线，对齐上游 `ThemeSettings.kt:63 enableItemDivider`。 */
+  @Prop enableItemDivider: boolean = false;
+  /** 分隔线宽度 0..5，对齐上游 `itemDividerWidth`。 */
+  @Prop dividerWidth: number = 1;
+  /** 分隔线长度 30..100（百分比），对齐上游 `itemDividerLength`。 */
+  @Prop dividerLength: number = 80;
+  /** 分隔线颜色 `#RRGGBB`，空串表示未设置。 */
+  @Prop dividerColor: string = '';
+  /** 容器背景图总开关，对齐上游 `enableContainerBackgroundImage`。 */
+  @Prop enableContainerBackgroundImage: boolean = false;
+  /** 大容器日间/夜间背景图路径，空串表示未选择。 */
+  @Prop largeContainerBackgroundLight: string = '';
+  @Prop largeContainerBackgroundDark: string = '';
+  /** 项目日间/夜间背景图路径。 */
+  @Prop itemBackgroundLight: string = '';
+  @Prop itemBackgroundDark: string = '';
+  onContainerOpacityChange: (value: number) => void = (_value: number) => {};
+  onDisableGroupCornerChange: (value: boolean) => void = (_value: boolean) => {};
+  onOverrideCardCornerChange: (value: boolean) => void = (_value: boolean) => {};
+  onCardCornerRadiusChange: (value: number) => void = (_value: number) => {};
+  onOverrideCardBorderChange: (value: boolean) => void = (_value: boolean) => {};
+  onCardBorderWidthChange: (value: number) => void = (_value: number) => {};
+  /** 边框颜色回调，`isNight` 区分日间/夜间两行。 */
+  onCardBorderColorChange: (isNight: boolean, value: string) => void =
+    (_isNight: boolean, _value: string) => {};
+  /** 恢复默认主题配置回调（上游 `ThemeConfigIntent.ResetDefaults`）。 */
+  onResetDefaults: () => void = () => {};
+  /** 显示分隔线开关回调。 */
+  onEnableItemDividerChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 分隔线宽度回调。 */
+  onDividerWidthChange: (value: number) => void = (_value: number) => {};
+  /** 分隔线长度回调。 */
+  onDividerLengthChange: (value: number) => void = (_value: number) => {};
+  /** 分隔线颜色回调。 */
+  onDividerColorChange: (value: string) => void = (_value: string) => {};
+  /** 容器背景图总开关回调。 */
+  onEnableContainerBackgroundImageChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 选背景图回调，`isLarge` 区分大容器/项目，`isNight` 区分夜间/日间。 */
+  onPickContainerBackground: (isLarge: boolean, isNight: boolean) => void =
+    (_isLarge: boolean, _isNight: boolean) => {};
   /** 护眼模式总开关，与阅读设置页共用同一份全局状态。 */
   @Prop eyeProtectionEnabled: boolean = false;
   /** 深色模式时自动开启护眼。 */
@@ -66,11 +135,6 @@ export struct ThemeSettingsPage {
   @State followCoverColor: boolean = true;
   @State blurEnabled: boolean = false;
   @State progressiveBlurEnabled: boolean = false;
-  @State containerBackgroundEnabled: boolean = false;
-  @State disableGroupCorner: boolean = false;
-  @State overrideCardCorner: boolean = false;
-  @State overrideCardBorder: boolean = false;
-  @State dividerEnabled: boolean = false;
   @State collapsedHeader: boolean = false;
   private themeScroller: Scroller = new Scroller();
 
@@ -125,6 +189,64 @@ export struct ThemeSettingsPage {
     });
   }
 
+  /**
+   * 边框颜色候选。
+   *
+   * 上游用 `ColorPickerSheet`（`ui/widget/components/dialog/ColorPickerSheet.kt:51`）：
+   * 取色盘 + hex 输入 + 「重置」（置透明）。本地没有取色盘组件，用下拉给一组预设色 + 「默认描边色」，
+   * 语义对齐「重置回未设置」——空串即上游的 `baseCardBorderColor = 0`。
+   */
+  private cardBorderColorOptions(): string[] {
+    return ['', '#3F5BD9', '#AFC2FF', '#92949E', '#6A6D77', '#F4D45E', '#A6D28A'];
+  }
+
+  /**
+   * 背景图选择行的摘要文案。
+   *
+   * 上游 `ThemeConfigScreen.kt:545`/`:564` 在两个路径都空时显示 `select_image`（「选择图片」），
+   * 否则显示 `selected`（「已选择」）。本地把「日/夜各选没选」直接摊开，比「已选择」更好用。
+   */
+  private backgroundSummary(light: string, dark: string): string {
+    const hasLight = light.length > 0;
+    const hasDark = dark.length > 0;
+    if (!hasLight && !hasDark) { return '选择图片'; }
+    if (hasLight && hasDark) { return '日间/夜间已选择'; }
+    return hasLight ? '已选日间，点击换图' : '已选夜间，点击换图';
+  }
+
+  /** 分隔线颜色候选，与边框色同一组预设；空串即上游 `itemDividerColor = 0` 的「默认灰」。 */
+  private dividerColorOptions(): string[] {
+    return ['', '#3F5BD9', '#AFC2FF', '#92949E', '#6A6D77', '#F4D45E', '#A6D28A'];
+  }
+
+  /**
+   * 恢复默认主题配置的二次确认。
+   *
+   * 上游 `ThemeConfigScreen.kt:752` 弹 `AppAlertDialog`，文案取
+   * `theme_config_reset_defaults` / `theme_config_reset_defaults_confirm`（`values-zh-rCN/strings.xml:1776-1778`）。
+   */
+  private confirmResetDefaults(): void {
+    this.getUIContext().showAlertDialog({
+      title: '恢复默认主题配置',
+      message: '将恢复外观页中的主题、界面布局、背景图片、应用字体和导航图标等配置。已保存的主题、封面图集和书籍封面不会被删除。',
+      autoCancel: true,
+      primaryButton: {
+        value: '取消',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: '恢复',
+        fontColor: $r('app.color.theme_accent'),
+        action: () => this.onResetDefaults()
+      }
+    });
+  }
+
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       Column() {
@@ -184,7 +306,7 @@ export struct ThemeSettingsPage {
             ThemeModeItem({ title: '深色', selected: this.themeMode === '2', last: true,
               onSelect: () => this.onThemeModeChange('2') })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, bottom: 18 })
-            .backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+            .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           Row() {
             ForEach([0, 1, 2, 3, 4], (index: number) => {
@@ -208,11 +330,17 @@ export struct ThemeSettingsPage {
               Toggle({ type: ToggleType.Switch, isOn: this.pureBlack })
                 .onChange((enabled: boolean) => this.pureBlack = enabled)
             }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '字体设置', detail: '', onSelect: () => this.onUnavailableAction('字体设置尚未迁移') })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '主题风格', detail: 'Material Design', onSelect: () => this.onUnavailableAction('主题风格切换尚未接入') })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
+            ThemeItemDivider()
             ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => { this.predictiveBack = value; this.onUnavailableAction('预见性返回设置暂未保存') } })
+            ThemeItemDivider()
             ThemeSwitchRow({ title: '阅读界面共享元素动画', detail: '进入阅读界面时从封面展开，关闭后使用渐变过渡', checked: this.sharedElement, onChange: (value: boolean) => { this.sharedElement = value; this.onUnavailableAction('共享元素动画设置暂未保存') } })
+            ThemeItemDivider()
             Column() {
               Row() {
                 Text('字体大小').fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
@@ -221,31 +349,42 @@ export struct ThemeSettingsPage {
               Slider({ value: this.fontScale, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
                 .width('100%').onChange((value: number) => this.onFontScaleChange(value))
             }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 8 })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onUnavailableAction('主题包管理尚未迁移') })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '背景图片', detail: '日间/夜间背景图与背景虚化', onSelect: () => this.onUnavailableAction('背景图片设置尚未迁移') })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '主界面' }).margin({ top: 20 })
           Column() {
             ThemeSettingsOption({ title: '首页与导航', detail: '配置首页、发现、订阅、默认主页面和导航栏图标', onSelect: () => this.onUnavailableAction('首页与导航设置尚未迁移') })
+            ThemeItemDivider()
             ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBarVisible, onChange: (value: boolean) => this.onShowStatusBarChange(value) })
+            ThemeItemDivider()
             ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimationEnabled, onChange: (value: boolean) => this.onSwipeAnimationChange(value) })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '顶栏与底栏', detail: '配置顶栏按钮与底部导航栏', onSelect: () => this.onUnavailableAction('顶栏与底栏设置尚未迁移') })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '导航布局', detail: '', onSelect: () => this.onUnavailableAction('导航布局设置尚未迁移') })
+            ThemeItemDivider()
             ThemeSettingsOption({ title: '多窗布局', detail: '', onSelect: () => this.onUnavailableAction('多窗布局设置尚未迁移') })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '书籍详情页' }).margin({ top: 20 })
           Column() {
             ThemeSwitchRow({ title: '界面颜色跟随封面取色', detail: '仅在显示背景封面时生效', checked: this.bookInfoFollowCoverColor, onChange: (value: boolean) => this.onBookInfoFollowCoverColorChange(value) })
+            ThemeItemDivider()
             ThemeSettingsDropdown({ title: '网络封面背景设置', value: this.bookInfoNetworkCoverBackground, options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
+            ThemeItemDivider()
             ThemeSettingsDropdown({ title: '默认封面背景设置', value: this.bookInfoDefaultCoverBackground, options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '护眼模式' }).margin({ top: 20 })
           Column() {
             ThemeSwitchRow({ title: '启用护眼模式', detail: '使用暖色调降低蓝光', checked: this.eyeProtectionEnabled, onChange: (value: boolean) => this.onEyeProtectionEnabledChange(value) })
+            ThemeItemDivider()
             ThemeSwitchRow({ title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换', checked: this.eyeProtectionAutoNight, onChange: (value: boolean) => this.onEyeProtectionAutoNightChange(value) })
+            ThemeItemDivider()
             if (this.eyeProtectionEnabled || this.eyeProtectionAutoNight) {
               ThemeSettingsSlider({
                 title: '色温',
@@ -265,55 +404,110 @@ export struct ThemeSettingsPage {
                   .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               }
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '模糊效果' }).margin({ top: 20 })
           Column() {
             ThemeSwitchRow({ title: '启用控件模糊', checked: this.blurEnabled, onChange: (value: boolean) => { this.blurEnabled = value; this.onUnavailableAction('模糊效果设置暂未保存') } })
+            ThemeItemDivider()
             if (this.blurEnabled) {
               ThemeSwitchRow({ title: '启用渐变模糊', checked: this.progressiveBlurEnabled, onChange: (value: boolean) => { this.progressiveBlurEnabled = value; this.onUnavailableAction('渐变模糊设置暂未保存') } })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '容器设置' }).margin({ top: 20 })
           Column() {
-            ThemeSwitchRow({ title: '容器背景图', detail: '大容器和项目分别使用独立的日间/夜间图片', checked: this.containerBackgroundEnabled, onChange: (value: boolean) => { this.containerBackgroundEnabled = value; this.onUnavailableAction('容器背景图片设置暂未保存') } })
-            if (this.containerBackgroundEnabled) {
-              ThemeSettingsOption({ title: '大容器背景图片', detail: '', onSelect: () => this.onUnavailableAction('背景图片选择尚未迁移') })
+            ThemeSwitchRow({ title: '容器背景图', detail: '大容器和项目分别使用独立的日间/夜间图片', checked: this.enableContainerBackgroundImage, onChange: (value: boolean) => this.onEnableContainerBackgroundImageChange(value) })
+            ThemeItemDivider()
+            if (this.enableContainerBackgroundImage) {
+              ThemeSettingsOption({ title: '大容器背景图片', detail: this.backgroundSummary(this.largeContainerBackgroundLight, this.largeContainerBackgroundDark), onSelect: () => this.onPickContainerBackground(true, false) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              ThemeSettingsOption({ title: '项目背景图片', detail: '', onSelect: () => this.onUnavailableAction('背景图片选择尚未迁移') })
+              ThemeItemDivider()
+              ThemeSettingsOption({ title: '项目背景图片', detail: this.backgroundSummary(this.itemBackgroundLight, this.itemBackgroundDark), onSelect: () => this.onPickContainerBackground(false, false) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-            ThemeSettingsOption({ title: '容器背景不透明度', detail: '', onSelect: () => this.onUnavailableAction('容器不透明度尚未迁移') })
-            ThemeSwitchRow({ title: '关闭设置分组圆角', detail: '让设置分组使用直角外轮廓', checked: this.disableGroupCorner, onChange: (value: boolean) => { this.disableGroupCorner = value; this.onUnavailableAction('设置分组圆角暂未保存') } })
-            ThemeSwitchRow({ title: '覆盖卡片圆角', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardCorner, onChange: (value: boolean) => { this.overrideCardCorner = value; this.onUnavailableAction('卡片圆角设置暂未保存') } })
+            ThemeItemDivider()
+            ThemeSettingsSlider({
+              title: '容器背景不透明度',
+              detail: `${this.containerOpacity}%`,
+              value: this.containerOpacity,
+              minValue: CONTAINER_OPACITY_MIN,
+              maxValue: CONTAINER_OPACITY_MAX,
+              onChange: (value: number) => this.onContainerOpacityChange(value)
+            })
+            ThemeItemDivider()
+            ThemeSwitchRow({ title: '关闭设置分组圆角', detail: '让设置分组使用直角外轮廓', checked: this.disableGroupCorner, onChange: (value: boolean) => this.onDisableGroupCornerChange(value) })
+            ThemeItemDivider()
+            ThemeSwitchRow({ title: '覆盖卡片圆角', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardCorner, onChange: (value: boolean) => this.onOverrideCardCornerChange(value) })
+            ThemeItemDivider()
             if (this.overrideCardCorner) {
-              ThemeSettingsOption({ title: '卡片圆角', detail: '', onSelect: () => this.onUnavailableAction('卡片圆角调节尚未迁移') })
+              ThemeSettingsSlider({
+                title: '卡片圆角',
+                detail: `${this.cardCornerRadius}vp`,
+                value: this.cardCornerRadius,
+                minValue: CARD_RADIUS_MIN,
+                maxValue: CARD_RADIUS_MAX,
+                onChange: (value: number) => this.onCardCornerRadiusChange(value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-            ThemeSwitchRow({ title: '覆盖卡片边框', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardBorder, onChange: (value: boolean) => { this.overrideCardBorder = value; this.onUnavailableAction('卡片边框设置暂未保存') } })
+            ThemeItemDivider()
+            ThemeSwitchRow({ title: '覆盖卡片边框', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardBorder, onChange: (value: boolean) => this.onOverrideCardBorderChange(value) })
+            ThemeItemDivider()
             if (this.overrideCardBorder) {
-              ThemeSettingsOption({ title: '边框宽度', detail: '', onSelect: () => this.onUnavailableAction('边框宽度设置尚未迁移') })
+              ThemeSettingsSlider({
+                title: '边框宽度',
+                detail: `${this.cardBorderWidth}vp`,
+                value: this.cardBorderWidth,
+                minValue: CARD_BORDER_WIDTH_MIN,
+                maxValue: CARD_BORDER_WIDTH_MAX,
+                onChange: (value: number) => this.onCardBorderWidthChange(value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              ThemeSettingsOption({ title: '日间边框颜色', detail: '', onSelect: () => this.onUnavailableAction('边框颜色选择尚未迁移') })
+              ThemeSettingsDropdown({
+                title: '日间边框颜色',
+                value: this.cardBorderColorDay,
+                options: this.cardBorderColorOptions(),
+                onSelect: (value: string) => this.onCardBorderColorChange(false, value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              ThemeSettingsOption({ title: '夜间边框颜色', detail: '', onSelect: () => this.onUnavailableAction('边框颜色选择尚未迁移') })
+              ThemeSettingsDropdown({
+                title: '夜间边框颜色',
+                value: this.cardBorderColorNight,
+                options: this.cardBorderColorOptions(),
+                onSelect: (value: string) => this.onCardBorderColorChange(true, value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-            ThemeSwitchRow({ title: '显示分隔线', checked: this.dividerEnabled, onChange: (value: boolean) => { this.dividerEnabled = value; this.onUnavailableAction('分隔线设置暂未保存') } })
-            if (this.dividerEnabled) {
-              ThemeSettingsOption({ title: '分隔线宽度', detail: '', onSelect: () => this.onUnavailableAction('分隔线宽度设置尚未迁移') })
+            ThemeItemDivider()
+            ThemeSwitchRow({ title: '显示分隔线', checked: this.enableItemDivider, onChange: (value: boolean) => this.onEnableItemDividerChange(value) })
+            ThemeItemDivider()
+            if (this.enableItemDivider) {
+              ThemeSettingsSlider({
+                title: '分隔线宽度', detail: `${this.dividerWidth}vp`,
+                value: this.dividerWidth, minValue: DIVIDER_WIDTH_MIN, maxValue: DIVIDER_WIDTH_MAX,
+                onChange: (value: number) => this.onDividerWidthChange(value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              ThemeSettingsOption({ title: '分隔线长度', detail: '', onSelect: () => this.onUnavailableAction('分隔线长度设置尚未迁移') })
+              ThemeSettingsSlider({
+                title: '分隔线长度', detail: `${this.dividerLength}%`,
+                value: this.dividerLength, minValue: DIVIDER_LENGTH_MIN, maxValue: DIVIDER_LENGTH_MAX,
+                onChange: (value: number) => this.onDividerLengthChange(value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              ThemeSettingsOption({ title: '分隔线颜色', detail: '', onSelect: () => this.onUnavailableAction('分隔线颜色选择尚未迁移') })
+              ThemeSettingsDropdown({
+                title: '分隔线颜色',
+                value: this.dividerColor,
+                options: this.dividerColorOptions(),
+                onSelect: (value: string) => this.onDividerColorChange(value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           Column() {
-            ThemeSettingsOption({ title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.onUnavailableAction('恢复默认配置尚未迁移') })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+            ThemeSettingsOption({ title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.confirmResetDefaults() })
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ top: 4, bottom: 18 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
@@ -421,8 +615,15 @@ struct ThemeSettingsDropdown {
   @Prop options: string[] = [];
   onSelect: (value: string) => void = (_value: string) => {};
 
-  /** 取值转中文，对齐上游 `values-zh-rCN/strings.xml:1751-1753` 的三条文案。 */
+  /**
+   * 取值转显示文案。
+   *
+   * 封面背景三档对齐上游 `values-zh-rCN/strings.xml:1751-1753`；
+   * 边框色两档（A41/A42）是颜色串，空串对应上游 `baseCardBorderColor = 0` 的「未设置」。
+   */
   private label(value: string): string {
+    if (value.length === 0) { return '默认描边色'; }
+    if (value.startsWith('#')) { return value; }
     if (value === BOOK_INFO_BACKGROUND_OFF) { return '关闭模糊封面'; }
     if (value === BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT) { return '不显示背景封面'; }
     return '开启模糊封面';
@@ -462,7 +663,10 @@ struct ThemeSettingsSlider {
       Row() {
         Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary'))
         Blank()
-        Text(`${this.value}`).fontSize(12).fontColor($r('app.color.theme_accent'))
+        // 有 detail 时数值只显示在下方说明里，避免「3」与「3vp」重复
+        if (this.detail.length === 0) {
+          Text(`${this.value}`).fontSize(12).fontColor($r('app.color.theme_accent'))
+        }
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: 1, style: SliderStyle.OutSet })
         .width('100%')

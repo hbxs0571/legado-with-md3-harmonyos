@@ -2,6 +2,7 @@ import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct SubscriptionPage {
+  @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onOpenRules: () => void = () => {};
   onOpenFavorites: () => void = () => {};
@@ -100,7 +101,7 @@ export struct SubscriptionPage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 14, right: 14, top: 10, bottom: 10 })
-          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22)
+          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       }
 
       Scroll(this.subscriptionScroller) {
@@ -110,13 +111,13 @@ export struct SubscriptionPage {
               AppGlyph({ name: 'ruleSubscription', glyphSize: 18, tint: '#C5C7D0' })
               Text('规则').fontSize(14).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
-              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(13)
+              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(13).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenRules())
             Row() {
               AppGlyph({ name: 'favoriteStar', glyphSize: 18, tint: '#C5C7D0' })
               Text('收藏').fontSize(14).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
-              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(13).margin({ left: 10 })
+              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(13).margin({ left: 10 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenFavorites())
           }.width('100%').padding({ left: 16, right: 16, top: this.collapsedHeader ? 16 : 1, bottom: 14 })
 
@@ -127,7 +128,7 @@ export struct SubscriptionPage {
                   Column() {
                     Stack({ alignContent: Alignment.Center }) {
                       AppGlyph({ name: 'subscription', tint: $r('app.color.theme_accent'), glyphSize: 28 })
-                    }.width(48).height(48).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14)
+                    }.width(48).height(48).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
                     Text(item).fontSize(12).fontColor('#C5C7D0').textAlign(TextAlign.Center)
                       .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).height(36).margin({ top: 8 })
                   }.width('100%').padding({ top: 8, bottom: 8 })

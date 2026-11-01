@@ -17,6 +17,11 @@ export struct AppLabSettingsPage {
     }
   }
 
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       CollapsingSettingsHeader({ title: '实验室', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
@@ -25,7 +30,7 @@ export struct AppLabSettingsPage {
         Column() {
           Column() {
             LabSettingsSwitch({ title: '启用实验室', detail: '开启后显示实验性功能，可能不稳定', value: this.labEnabled, onChange: (value: boolean) => this.labEnabled = value })
-          }.margin({ left: 16, right: 16, top: 12 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+          }.margin({ left: 16, right: 16, top: 12 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           if (this.labEnabled) {
             Text('显示').fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
@@ -36,7 +41,7 @@ export struct AppLabSettingsPage {
                 Text('可在“主题 → 显示”中调整墨水屏设置')
                   .fontSize(12).fontColor($r('app.color.theme_accent')).padding({ left: 14, right: 14, bottom: 12 })
               }
-            }.margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+            }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
@@ -51,7 +56,7 @@ export struct AppLabSettingsPage {
             Text('0 条').fontSize(12).fontColor($r('app.color.theme_accent'))
             Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary')).margin({ left: 6 })
           }.padding({ left: 14, right: 14, top: 13, bottom: 13 }).margin({ left: 16, right: 16 })
-            .backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
+            .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
             .onClick(() => this.onUnavailableAction('全文页码诊断导出尚未迁移'))
 
           Text('实验室开关仅作页面预览，不会启用实验功能或导出诊断数据。')
