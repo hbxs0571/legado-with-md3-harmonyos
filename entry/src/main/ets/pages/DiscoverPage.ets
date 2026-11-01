@@ -7,6 +7,7 @@ interface DiscoverSourceDemo {
 
 @Component
 export struct DiscoverPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   private readonly sources: DiscoverSourceDemo[] = [];
@@ -46,7 +47,7 @@ export struct DiscoverPage {
             })
         }, (group: string) => group)
       }
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private getVisibleSources(): DiscoverSourceDemo[] {
@@ -66,7 +67,7 @@ export struct DiscoverPage {
         if (!this.showExploreContent) {
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'search', glyphSize: 20 })
-          }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(18)
+          }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18)
             .onClick(() => {
               this.showSearch = !this.showSearch;
               if (!this.showSearch) {
@@ -76,7 +77,7 @@ export struct DiscoverPage {
         }
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'swap', glyphSize: 20 })
-        }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
+        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
           .onClick(() => {
             this.showExploreContent = !this.showExploreContent;
             this.expandedSourceName = '';
@@ -85,7 +86,7 @@ export struct DiscoverPage {
           })
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 20 })
-        }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
+        }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
           .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
       }.width('100%').height(48).padding({ left: 18, right: 18 })
 
@@ -110,7 +111,7 @@ export struct DiscoverPage {
               .onAppear(() => focusControl.requestFocus('discover_search_input'))
               .onChange((value: string) => this.searchQuery = value)
           }.layoutWeight(1).height(48).padding({ left: 14, right: 14 })
-            .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(24).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+            .backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(24).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       }
 
@@ -169,7 +170,7 @@ export struct DiscoverPage {
           }.padding({ left: 16, right: 16, bottom: 16 }).constraintSize({ minHeight: '100%' })
         }.layoutWeight(1).scrollBar(BarState.Off)
       }
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 }

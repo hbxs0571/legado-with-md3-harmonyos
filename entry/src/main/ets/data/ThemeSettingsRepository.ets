@@ -80,6 +80,11 @@ export interface ThemeSnapshot {
   itemBackgroundImageLight: string;
   /** 项目夜间背景图本地路径。对齐上游 `itemBackgroundImageDark`。 */
   itemBackgroundImageDark: string;
+  /**
+   * 纯黑深色模式（AMOLED），对齐上游 `domain/model/settings/ThemeSettings.kt:6 isPureBlack`
+   * 与 `constant/PreferKey.kt:365 pureBlack = "pure_black"`（默认 false）。
+   */
+  pureBlack: boolean;
 }
 
 /** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
@@ -157,7 +162,8 @@ export class ThemeSettingsRepository {
       largeContainerBackgroundImageLight: '',
       largeContainerBackgroundImageDark: '',
       itemBackgroundImageLight: '',
-      itemBackgroundImageDark: ''
+      itemBackgroundImageDark: '',
+      pureBlack: false
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -187,6 +193,7 @@ export class ThemeSettingsRepository {
       const largeDark = await store.get('largeContainerBackgroundImageDark', defaults.largeContainerBackgroundImageDark);
       const itemLight = await store.get('itemBackgroundImageLight', defaults.itemBackgroundImageLight);
       const itemDark = await store.get('itemBackgroundImageDark', defaults.itemBackgroundImageDark);
+      const pureBlack = await store.get('pureBlack', defaults.pureBlack);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
@@ -230,7 +237,8 @@ export class ThemeSettingsRepository {
         itemBackgroundImageLight: typeof itemLight === 'string'
           ? itemLight : defaults.itemBackgroundImageLight,
         itemBackgroundImageDark: typeof itemDark === 'string'
-          ? itemDark : defaults.itemBackgroundImageDark
+          ? itemDark : defaults.itemBackgroundImageDark,
+        pureBlack: typeof pureBlack === 'boolean' ? pureBlack : defaults.pureBlack
       };
     } catch (_) {
       return defaults;
@@ -281,6 +289,7 @@ export class ThemeSettingsRepository {
     await store.put('largeContainerBackgroundImageDark', snapshot.largeContainerBackgroundImageDark);
     await store.put('itemBackgroundImageLight', snapshot.itemBackgroundImageLight);
     await store.put('itemBackgroundImageDark', snapshot.itemBackgroundImageDark);
+    await store.put('pureBlack', snapshot.pureBlack);
     await store.flush();
   }
 

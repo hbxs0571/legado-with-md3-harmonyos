@@ -30,6 +30,28 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r309 深色模式阶段二：纯黑深色模式（A4）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`assembleHap` 三次全部 `BUILD SUCCESSFUL`（`48 s 150 ms` / `41 s 899 ms`，第一次因 ArkTS `Duplicate identifier 'themePureBlack'` 失败后修复），均 `hdc install -r` 覆盖安装成功。
+- 改动文件：`data/ThemeSettingsRepository.ets`（`ThemeSnapshot` 25 → **26 字段**，新增 `pureBlack`）、`pages/Index.ets`（`@State themePureBlack` + `selectThemePureBlack()` + `publishThemeCardStyle()` 广播 + `restoreOnboarding`/`saveThemeSettings`/`resetThemeDefaults` 各补一项）、`pages/ThemeSettingsPage.ets`（`@State pureBlack` → `@Prop pureBlack` + `onPureBlackChange`）、以及 29 个页面/组件文件的 **60 个 struct** 加 `@StorageProp('themePureBlack')` 并把三档底色改成条件取色。
+
+**关键实现选择**：上游 `ui/theme/ThemeEngine.kt:132-146 applyAmoledIfNeeded(darkTheme, isAmoled)` 是 `ColorScheme.copy()`——`if (!darkTheme || !isAmoled) return this`，否则 surface/background 压 `Color.Black`、`surfaceContainerLow` 压 `#0A0A0A`、`surfaceContainer` 压 `#121212`。本地没有 ColorScheme 令牌层，改为「`AppStorage` 广播一个布尔 + 各 struct 的 `@StorageProp` 在三处底色上条件取色」，广播值是 `isDark && themePureBlack`——**条件与上游完全一致**，浅色下即使开关为 `true` 也不生效。
+
+**踩坑**：`Index` 自己既是开关源（`@State themePureBlack`）又要读广播值，同一 struct 内两个同名成员会报 `Duplicate identifier 'themePureBlack'`；解决办法是把 `Index` 里的 `@StorageProp` 字段改名为 `themePureBlackActive`，只用于 `Index` 自身的两处底色。
+
+**验收 1（开关落盘）**：外观 → 上滑到「纯黑深色模式」→ 点 Toggle `(1096,2629)` → `legado_theme` 出现 `<bool key="pureBlack" value="true"/>`。**通过**。
+
+**验收 2（深色下真的压黑）**：深色（`themeMode="2"`）下截图取色 `(20,400)=(0,0,0)`、`(640,1500)=(0,0,0)`、`(20,2600)=(0,0,0)`、`(1200,400)=(0,0,0)`；关掉开关后同点变 `(17,18,23)`（= `theme_surface_primary` 深色值 `#111217`）。**通过**。
+
+**验收 3（浅色下不生效）**：保持 `pureBlack=true`、把 `themeMode` 改成 `"1"` 后重启 → 同点 `(245,246,248)`（= 浅色 `theme_surface_primary` `#F5F6F8`），说明条件里的 `isDark` 生效。**通过**。
+
+**验收 4（重启保持）**：切回 `themeMode="2"` 重启 → 同点回 `(0,0,0)`，且 prefs 的 `pureBlack` 仍为 `true`。**通过**。
+
+**与上游的差异**：本地只压三档底色（`theme_surface_primary`/`tertiary`/`elevated`），上游是整套 `ColorScheme` 拷贝，`surfaceContainerHigh`/`Highest` 等令牌本地未建，故不参与；`pure_black` 不在上游 `themePrefKeys` 53 键里，本地 `BackupRepository.ets` 同样不含该键，不进 themeConfig 备份，与上游一致。
+
+**复原**：`pureBlack` 保持 `true`（设备当前状态），`themeMode` 保持 `"2"`。
+
 ## 2026-11-01 N 端 r308 深色模式阶段二：容器设置十六项（A32–A47）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。

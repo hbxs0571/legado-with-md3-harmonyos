@@ -123,6 +123,8 @@ const EMPTY_BOOK: Book = {
 @Entry
 @Component
 struct Index {
+  /** 纯黑是否实际生效（深色 + 用户开启），由 `publishThemeCardStyle` 广播；Index 自身持有开关源状态，故用别名读回。 */
+  @StorageProp('themePureBlack') themePureBlackActive: boolean = false;
   @State @Watch('onReaderRouteChanged') route: AppRoute = AppRoute.HOME;
   @State readerReturnRoute: AppRoute = AppRoute.BOOKSHELF;
   @State bookInfoReturnRoute: AppRoute = AppRoute.BOOKSHELF;
@@ -524,6 +526,8 @@ struct Index {
   @State themeItemBackgroundLight: string = '';
   /** 项目夜间背景图本地路径。 */
   @State themeItemBackgroundDark: string = '';
+  /** 纯黑深色模式（AMOLED），对齐上游 `ThemeSettings.kt:6 isPureBlack`。 */
+  @State themePureBlack: boolean = false;
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -2026,6 +2030,7 @@ struct Index {
     this.themeLargeContainerBackgroundDark = theme.largeContainerBackgroundImageDark;
     this.themeItemBackgroundLight = theme.itemBackgroundImageLight;
     this.themeItemBackgroundDark = theme.itemBackgroundImageDark;
+    this.themePureBlack = theme.pureBlack;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2178,6 +2183,21 @@ struct Index {
   }
 
   /**
+   * 纯黑深色模式开关，对齐上游 `ThemeEngine.kt:132-146 applyAmoledIfNeeded`。
+   *
+   * 上游只在 `darkTheme && isAmoled` 时把 surface/background 压成纯黑、
+   * surfaceContainerLow 压 `#0A0A0A`、surfaceContainer 压 `#121212`；
+   * 本地按同样的条件广播到 `AppStorage`，各页面用 `@StorageProp('themePureBlack')` 取用。
+   */
+  private selectThemePureBlack(context: Context, enabled: boolean): void {
+    this.themePureBlack = enabled;
+    this.publishThemeCardStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('纯黑模式设置保存失败，请重试');
+    });
+  }
+
+  /**
    * 容器背景图总开关。上游 `ThemeConfigScreen.kt:533` 的 `enableContainerBackgroundImage`。
    *
    * 打开后 `AnimatedVisibility` 放出「大容器背景图片」「项目背景图片」两行（A33/A34）。
@@ -2273,6 +2293,7 @@ struct Index {
     this.bookInfoFollowCoverColor = true;
     this.bookInfoNetworkCoverBackground = 'on';
     this.bookInfoDefaultCoverBackground = 'on';
+    this.themePureBlack = false;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2338,7 +2359,8 @@ struct Index {
       largeContainerBackgroundImageLight: this.themeLargeContainerBackgroundLight,
       largeContainerBackgroundImageDark: this.themeLargeContainerBackgroundDark,
       itemBackgroundImageLight: this.themeItemBackgroundLight,
-      itemBackgroundImageDark: this.themeItemBackgroundDark
+      itemBackgroundImageDark: this.themeItemBackgroundDark,
+      pureBlack: this.themePureBlack
     });
   }
 
@@ -2395,6 +2417,8 @@ struct Index {
     AppStorage.setOrCreate('themeDividerColor', resolveDividerColor(snapshot));
     AppStorage.setOrCreate('themeContainerBackground', this.themeContainerBackgroundSource());
     AppStorage.setOrCreate('themeItemBackground', this.themeItemBackgroundSource());
+    // 纯黑只在深色下生效，对齐上游 `ThemeEngine.kt:132-146 applyAmoledIfNeeded` 的 `darkTheme && isAmoled`。
+    AppStorage.setOrCreate('themePureBlack', isDark && this.themePureBlack);
   }
 
   /** 主题设置页「界面颜色跟随封面取色」回调。上游 `ThemeConfigScreen.kt:399` 的 `BookInfoFollowCoverColor`。 */
@@ -6426,6 +6450,11 @@ struct Index {
               if (themeContext !== undefined) { this.selectThemeEnableContainerBackgroundImage(themeContext, enabled); }
             },
             onPickContainerBackground: (isLarge: boolean, isNight: boolean) => this.pickThemeContainerBackground(isLarge, isNight),
+            pureBlack: this.themePureBlack,
+            onPureBlackChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemePureBlack(themeContext, enabled); }
+            },
             eyeProtectionEnabled: this.eyeProtectionEnabled,
             eyeProtectionAutoNight: this.eyeProtectionAutoNight,
             eyeProtectionSchedule: this.eyeProtectionSchedule,
@@ -7397,11 +7426,11 @@ struct Index {
           TabItem({ icon: this.selectedTab === 2 ? 'navExploreFilled' : 'navExploreOutlined', label: '发现', selected: this.selectedTab === 2 }).width('20%').onClick(() => this.selectTab(2))
           TabItem({ icon: 'navRss', label: '订阅', selected: this.selectedTab === 3 }).width('20%').onClick(() => this.selectTab(3))
           TabItem({ icon: this.selectedTab === 4 ? 'navProfileFilled' : 'navProfileOutlined', label: '我的', selected: this.selectedTab === 4 }).width('20%').onClick(() => this.selectTab(4))
-        }.width('100%').padding({ top: 7, bottom: 6 }).backgroundColor($r('app.color.theme_surface_elevated'))
+        }.width('100%').padding({ top: 7, bottom: 6 }).backgroundColor(this.themePureBlackActive ? '#121212' : $r('app.color.theme_surface_elevated'))
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
       }
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlackActive ? '#000000' : $r('app.color.theme_surface_primary'))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     // 护眼覆盖层：上游用 ColorFilter.colorMatrix 给全屏套对角色矩阵，这里用同尺寸纯色层
     // 配 MULTIPLY 混合，混合公式 result = 内容 × 覆盖色，与对角矩阵逐通道相乘等价。

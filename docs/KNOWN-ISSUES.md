@@ -697,13 +697,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 深色模式行登记（ZIP-THEME.md 的未接行）
 
-本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r308 后剩 32 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r309 后剩 31 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）；**r306 复查改判 3 行**（D3 三值派生布尔、D5 日夜两套背景、D8 阅读菜单日夜配色——三行在 r297 判 `未接` 时点早于实现，D3/D5 随 r300 的全局 `themeMode` 派生成立，D8 由 `9902eb8`/`154f91e` 落地配色后又随 r300 打通日夜来源）。**书籍详情页 r307 落地 3 行**（A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置），同批把 A23 作者搜索回退由「要接」改判「不接」（上游唯一消费者依赖书源 `relatedBooks`，本地无网络书源）。**容器设置 r308 落地 16 行**（A32 容器背景图总开关、A33 大容器背景图片、A34 项目背景图片、A35 容器背景不透明度、A36 关闭设置分组圆角、A37 覆盖卡片圆角总开关、A38 卡片圆角数值、A39 覆盖卡片边框总开关、A40 边框宽度、A41 日间边框颜色、A42 夜间边框颜色、A43 显示分隔线、A44 分隔线宽度、A45 分隔线长度、A46 分隔线颜色、A47 恢复默认主题配置）。累计 50 行转 `已接`，剩余 **32 行 `未接`**（要接 26 / 不接 6）。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）；**r306 复查改判 3 行**（D3 三值派生布尔、D5 日夜两套背景、D8 阅读菜单日夜配色——三行在 r297 判 `未接` 时点早于实现，D3/D5 随 r300 的全局 `themeMode` 派生成立，D8 由 `9902eb8`/`154f91e` 落地配色后又随 r300 打通日夜来源）。**书籍详情页 r307 落地 3 行**（A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置），同批把 A23 作者搜索回退由「要接」改判「不接」（上游唯一消费者依赖书源 `relatedBooks`，本地无网络书源）。**容器设置 r308 落地 16 行**（A32 容器背景图总开关、A33 大容器背景图片、A34 项目背景图片、A35 容器背景不透明度、A36 关闭设置分组圆角、A37 覆盖卡片圆角总开关、A38 卡片圆角数值、A39 覆盖卡片边框总开关、A40 边框宽度、A41 日间边框颜色、A42 夜间边框颜色、A43 显示分隔线、A44 分隔线宽度、A45 分隔线长度、A46 分隔线颜色、A47 恢复默认主题配置）。**纯黑 r309 落地 1 行**（A4 纯黑深色模式：`ThemeSnapshot.pureBlack` + `Index.ets` 的 `selectThemePureBlack()` 与 `AppStorage` 广播 `themePureBlack`（条件 `isDark && pureBlack`）+ 60 个 struct 的 `@StorageProp` 把 `theme_surface_primary`/`tertiary`/`elevated` 压成 `#000000`/`#0A0A0A`/`#121212`）。累计 51 行转 `已接`，剩余 **31 行 `未接`**（要接 25 / 不接 6）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -731,15 +731,19 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **验收**：无（不接）。备份里出现 `composeEngine` 键时原样保留、不报错。
 
-**KI-TH-A3 纯黑深色模式（要接）** —— 覆盖 A4 纯黑深色模式（AMOLED）。
+**KI-TH-A3 纯黑深色模式（已实现 r309）** —— 覆盖 A4 纯黑深色模式（AMOLED）。
 
-**上游口径**：`isPureBlack` 键；打开后 `ui/theme/ThemeEngine.kt`、`OpaqueColorScheme.kt`、`ThemeOverride` 把容器与页面底色换成纯黑。
+**上游口径**：键 `constant/PreferKey.kt:365 pure_black`、`domain/model/settings/ThemeSettings.kt:6 isPureBlack = false`、`data/repository/FeatureSettingsRepositories.kt:355/441` 读写；界面在 `ThemeConfigScreen.kt:255 SwitchSettingItem(pure_black)`（仅非 Miuix）。生效点是 `ui/theme/ThemeEngine.kt:132-146 applyAmoledIfNeeded(darkTheme, isAmoled)`：`if (!darkTheme || !isAmoled) return this`，否则 `copy(surface = Color.Black, background = Color.Black, surfaceContainerLow = Color(0xFF0A0A0A), surfaceContainer = Color(0xFF121212))`，调用点在 `:64`。`pure_black` **不在** `themePrefKeys` 53 键里，所以不进 `themeConfig.json` 备份。
 
-**本地现状**：`:134` `Toggle` 只改 `@State pureBlack`，**且没有调用 `onUnavailableAction`**——比其它条目更容易被误读成「已接」，这是 A 块里最需要留意的一处假通过。
+**本地落地**：
+1. `data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 增加第 26 个字段 `pureBlack: boolean`，`load()` 读 `store.get('pureBlack', false)`、`save()` 写 `store.put('pureBlack', snapshot.pureBlack)`。
+2. `pages/Index.ets`：`@State themePureBlack = false`；`restoreOnboarding()` 读回 `this.themePureBlack = theme.pureBlack`；`saveThemeSettings()` 带上该字段；`resetThemeDefaults()` 复位为 `false`；`publishThemeCardStyle()` 末尾 `AppStorage.setOrCreate('themePureBlack', isDark && this.themePureBlack)`——**条件与上游一致，浅色下即使开关为 true 也不生效**；新增 `selectThemePureBlack(context, enabled)`（写状态 → 广播 → 落盘，失败提示「纯黑模式设置保存失败，请重试」）。
+3. `pages/ThemeSettingsPage.ets`：删掉 `@State pureBlack`，改 `@Prop pureBlack` + `onPureBlackChange`，`Toggle` 的 `.onChange` 调回调。
+4. 60 个 struct 的 `@StorageProp('themePureBlack')`：把 `theme_surface_primary` 换成 `#000000`（对齐上游 `surface`/`background`）、`theme_surface_tertiary` 换成 `#0A0A0A`（对齐 `surfaceContainerLow`）、`theme_surface_elevated` 换成 `#121212`（对齐 `surfaceContainer`）。
 
-**补法**：开关写 `isPureBlack` 键；`isDarkTheme` 为真且 `isPureBlack` 为真时，把页面底色与卡片底色的颜色资源切到 `#000000` 一组。依赖 F4 的双套资源。
+**与上游的差异**：上游是整套 `ColorScheme.copy()`，本地没有 ColorScheme 令牌层，只压了三档底色（primary/tertiary/elevated）；`surfaceContainerHigh`/`Highest` 等本地未建令牌，故不参与。`Index` 里 `@StorageProp` 字段改名为 `themePureBlackActive`，避免与它自己的 `@State themePureBlack`（开关源）重名。
 
-**验收**：开纯黑 → 深色下页面底色为 `#000000`（像素取值），关掉 → 回到普通深色。
+**验收**（r309，模拟器 127.0.0.1:5555 / API 26）：外观页打开「纯黑深色模式」→ `legado_theme` 的 `pureBlack` 变 `true`；深色下截图取色 `(20,400)=(0,0,0)`、`(640,1500)=(0,0,0)`，关掉后同点变 `(17,18,23)`；切回浅色重启同点 `(245,246,248)`（不生效）；再切深色重启同点回 `(0,0,0)`（持久化成立）。
 
 **KI-TH-A4 外观杂项七项（A11 已实现 r304 / 其余 6 项要接）** —— 覆盖 A5 字体设置、A8 切换图标、A9 预见性返回手势、A10 阅读界面共享元素动画、A11 字体大小缩放、A12 主题包管理入口、A13 背景图片。
 

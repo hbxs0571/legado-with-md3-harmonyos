@@ -1,5 +1,6 @@
 @Component
 export struct AppAiSettingsPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State collapsedHeader: boolean = false;
@@ -13,7 +14,7 @@ export struct AppAiSettingsPage {
             .width(40).height(40).onClick(() => this.onBack())
           Text('AI 设置').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).margin({ left: 8 })
         }.width('100%').height(56).padding({ left: 12, right: 16, top: 8, bottom: 8 })
-          .backgroundColor($r('app.color.theme_surface_primary'))
+          .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       } else {
         Column() {
           Row() {
@@ -38,9 +39,9 @@ export struct AppAiSettingsPage {
 
           AiSettingsSection({ title: '任务' }) {
             AiSettingsAction({ title: '翻译设置', onSelect: () => this.onUnavailableAction('AI 翻译服务设置尚未迁移') })
-            Row().height(1).width('100%').backgroundColor($r('app.color.theme_surface_primary'))
+            Row().height(1).width('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
             AiSettingsAction({ title: '章节梗概', onSelect: () => this.onUnavailableAction('AI 章节梗概设置尚未迁移') })
-            Row().height(1).width('100%').backgroundColor($r('app.color.theme_surface_primary'))
+            Row().height(1).width('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
             AiSettingsAction({ title: '提示词设置', detail: '编辑各 AI 工具的提示词', onSelect: () => this.onUnavailableAction('AI 提示词设置尚未迁移') })
           }
 
@@ -52,7 +53,7 @@ export struct AppAiSettingsPage {
         const shouldCollapse = Math.abs(this.settingsScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
       })
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 

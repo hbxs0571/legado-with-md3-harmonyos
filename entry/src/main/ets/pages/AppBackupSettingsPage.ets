@@ -5,6 +5,7 @@ import { BackupCategoryOption, BackupEntryPreview, BackupPreview } from '../data
 /** 本地备份与恢复页面，文件格式与 Android 原项目兼容。 */
 @Component
 export struct AppBackupSettingsPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop localBookCount: number = 0;
   @Prop backupPreview: BackupPreview | undefined = undefined;
   @Prop restoredEntries: BackupEntryPreview[] = [];
@@ -193,7 +194,7 @@ export struct AppBackupSettingsPage {
             .width('100%').padding(15).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.activeSheet.length > 0, this.backupSheetContent(), {
         height: 520,
         dragBar: true,
@@ -317,6 +318,7 @@ struct BackupPreviewSwitchRow {
 
 @Component
 struct BackupActionRow {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop icon: AppGlyphName = 'folder';
   @Prop title: string = '';
   @Prop detail: string = '';
@@ -335,7 +337,7 @@ struct BackupActionRow {
       }.padding({ left: 15, right: 15, top: 16, bottom: 16 }).onClick(() => {
         if (!this.disabled) { this.onSelect(); }
       })
-      if (!this.last) { Row().height(1).width('100%').backgroundColor($r('app.color.theme_surface_primary')).margin({ left: 51, right: 12 }) }
+      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).margin({ left: 51, right: 12 }) }
     }.width('100%')
   }
 }

@@ -9,6 +9,7 @@ import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 
 @Component
 export struct BookInfoPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
@@ -260,7 +261,7 @@ export struct BookInfoPage {
               Blank()
             }.width('100%').height(5).backgroundColor('#3A3C46').borderRadius(3).margin({ top: 12 })
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
-            .backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(18).margin({ left: 16, right: 16, bottom: 14 })
+            .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(18).margin({ left: 16, right: 16, bottom: 14 })
 
           if (BookRepository.isBodyMissing(this.book)) {
             Column() {
@@ -296,8 +297,8 @@ export struct BookInfoPage {
                 .alignSelf(ItemAlign.Start).margin({ top: 6 })
             }
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
-            .backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
-          }.width('100%').backgroundColor($r('app.color.theme_surface_primary'))
+            .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
+          }.width('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
         }.width('100%').padding({ bottom: 12 })
       }.width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.infoScroller.currentOffset().yOffset) > 70;
@@ -419,7 +420,7 @@ export struct BookInfoPage {
           .onClick(() => {})
         }.width('100%').height('100%').zIndex(1000)
       }
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
@@ -460,6 +461,7 @@ struct BookInfoTag {
 
 @Component
 struct BookInfoAction {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop icon: AppGlyphName = 'book';
   @Prop label: string = '';
   onSelect: () => void = () => {};
@@ -469,7 +471,7 @@ struct BookInfoAction {
       Text(this.label).fontSize(12).fontColor($r('app.color.theme_text_secondary')).maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }.layoutWeight(1).height(72).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).margin({ left: 4, right: 4 })
+      .backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(14).margin({ left: 4, right: 4 })
       .onClick(() => this.onSelect())
   }
 }

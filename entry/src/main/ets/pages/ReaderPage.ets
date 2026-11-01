@@ -126,6 +126,7 @@ interface ReaderMarkingRange {
 
 @Component
 export struct ReaderPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop @Watch('onStartAtChapterBeginningChanged') startAtChapterBeginning: boolean = false;
   @Prop @Watch('onBookChanged') book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
@@ -1849,7 +1850,7 @@ export struct ReaderPage {
         MenuItem({ content: this.getBottomActionLabel(action.id) })
           .onClick(() => this.selectBottomAction(this.getTopActionKind(action.id)))
       }, (action: ReaderBottomActionConfig) => action.id)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(18)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(18)
   }
 
   /**
@@ -4596,7 +4597,7 @@ export struct ReaderPage {
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Text(`${this.getChapterIndex() + 1} / ${this.getChapterCount()}`)
                 .fontSize(11).fontColor('#E5E6EB').padding({ left: 10, right: 10, top: 7, bottom: 7 })
-                .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(16)
+                .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(16)
             }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
             Grid() {
               ForEach(this.getVisibleMoreActions(), (action: ReaderMoreAction) => {
@@ -4774,7 +4775,7 @@ export struct ReaderPage {
                 .onClick(() => this.applyCharset())
             }.width('100%').margin({ top: 12 })
           }
-          .width('86%').padding(18).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(20)
+          .width('86%').padding(18).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(20)
         }
         .width('100%').height('100%')
       }

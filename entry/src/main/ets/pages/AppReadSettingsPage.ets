@@ -2,6 +2,7 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct AppReadSettingsPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State collapsedHeader: boolean = false;
@@ -74,7 +75,7 @@ export struct AppReadSettingsPage {
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 

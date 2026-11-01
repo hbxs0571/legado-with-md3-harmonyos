@@ -12,6 +12,7 @@ import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct BookshelfPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @Prop books: Book[] = [];
   @Prop groups: BookGroup[] = [];
@@ -187,7 +188,7 @@ export struct BookshelfPage {
         MenuItem({ content: option.label }).height(44)
           .onClick(() => this.draftSort = option.value)
       }, (option: BookSortOption) => `${option.value}`)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @Builder
@@ -213,7 +214,7 @@ export struct BookshelfPage {
             this.showGroupManager = false;
           })
       }, (groupName: string) => groupName)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   /** 分组管理：自适应网格卡片，对应上游 LazyVerticalGrid(GridCells.Adaptive(160.dp))。 */
@@ -259,7 +260,7 @@ export struct BookshelfPage {
                   .fontSize(11).fontColor($r('app.color.theme_text_tertiary')).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 4 }).width('100%')
-              }.width('100%').padding(12).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(14)
+              }.width('100%').padding(12).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(14)
                 .alignItems(HorizontalAlign.Start)
                 .onClick(() => this.openGroupEditor(group))
             }
@@ -446,7 +447,7 @@ export struct BookshelfPage {
         MenuItem({ content: option.label }).height(44)
           .onClick(() => onPick(option.value))
       }, (option: BookshelfLayoutOption) => `${option.value}_${option.label}`)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   /** 开关行。 */
@@ -600,7 +601,7 @@ export struct BookshelfPage {
         .onClick(() => this.onUnavailableAction('书单导入尚未迁移'))
       MenuItem({ startIcon: $r('app.media.profile_history'), content: '日志' }).height(48)
         .onClick(() => this.onUnavailableAction('日志界面尚未迁移'))
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   build() {
@@ -610,13 +611,13 @@ export struct BookshelfPage {
           Text('书架').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
         }
         Blank()
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 20 }) }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(20)
+        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 20 }) }.width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(20)
           .onClick(() => {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
         Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
-          .width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(20).margin({ left: 8 })
+          .width(36).height(36).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(20).margin({ left: 8 })
           .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
       }.width('100%').height(56).padding({ left: 16, right: 16, top: 10, bottom: 0 })
       Row() {
@@ -634,7 +635,7 @@ export struct BookshelfPage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
-          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       }
 
       // 分组样式为「隐藏页签」时不渲染顶部筛选栏，切换分组改由分组管理面板完成。
@@ -703,7 +704,7 @@ export struct BookshelfPage {
             .width(220).fontSize(11).fontColor($r('app.color.theme_text_secondary')).textAlign(TextAlign.Center).maxLines(2)
         }.layoutWeight(1).width('100%').padding({ bottom: 104 }).justifyContent(FlexAlign.Center)
       }
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.showGroupManager || this.showLayoutSheet, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E'
       })

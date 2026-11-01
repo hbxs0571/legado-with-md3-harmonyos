@@ -20,6 +20,7 @@ import {
 
 @Component
 export struct ThemeSettingsPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** 当前全局 themeMode（`"0"` 跟随系统 / `"1"` 亮色 / `"2"` 暗色），由 Index 传入。 */
@@ -108,6 +109,10 @@ export struct ThemeSettingsPage {
   /** 选背景图回调，`isLarge` 区分大容器/项目，`isNight` 区分夜间/日间。 */
   onPickContainerBackground: (isLarge: boolean, isNight: boolean) => void =
     (_isLarge: boolean, _isNight: boolean) => {};
+  /** 纯黑深色模式，对齐上游 `ThemeSettings.kt:6 isPureBlack`（默认 false）。 */
+  @Prop pureBlack: boolean = false;
+  /** 纯黑深色模式开关回调。 */
+  onPureBlackChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   /** 护眼模式总开关，与阅读设置页共用同一份全局状态。 */
   @Prop eyeProtectionEnabled: boolean = false;
   /** 深色模式时自动开启护眼。 */
@@ -128,7 +133,6 @@ export struct ThemeSettingsPage {
   onEyeProtectionIntensityChange: (intensity: number) => void = (_intensity: number) => {};
   onEyeProtectionStartTimeChange: (time: string) => void = (_time: string) => {};
   onEyeProtectionEndTimeChange: (time: string) => void = (_time: string) => {};
-  @State pureBlack: boolean = false;
   @State showRefactorTip: boolean = true;
   @State predictiveBack: boolean = true;
   @State sharedElement: boolean = true;
@@ -281,8 +285,8 @@ export struct ThemeSettingsPage {
               Blank()
               Row().width(14).height(14).backgroundColor(this.paletteColor(this.paletteIndex)).borderRadius(7)
             }.width('100%').padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(10)
-          }.width(112).height(224).padding(10).backgroundColor($r('app.color.theme_surface_primary')).borderRadius(22)
+              .backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(10)
+          }.width(112).height(224).padding(10).backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(22)
             .border({ width: 1, color: $r('app.color.theme_accent') })
             .alignSelf(ItemAlign.Center).margin({ top: 18, bottom: 16 })
 
@@ -293,7 +297,7 @@ export struct ThemeSettingsPage {
               AppGlyph({ name: 'profileClose', glyphSize: 18, tint: '#C5C7D0' })
                 .onClick(() => this.showRefactorTip = false)
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
-              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(16)
+              .backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(16)
               .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
@@ -328,7 +332,7 @@ export struct ThemeSettingsPage {
                 Text('使用纯黑阅读背景').fontSize(13).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               Toggle({ type: ToggleType.Switch, isOn: this.pureBlack })
-                .onChange((enabled: boolean) => this.pureBlack = enabled)
+                .onChange((enabled: boolean) => this.onPureBlackChange(enabled))
             }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
             ThemeItemDivider()
             ThemeSettingsOption({ title: '字体设置', detail: '', onSelect: () => this.onUnavailableAction('字体设置尚未迁移') })
@@ -510,7 +514,7 @@ export struct ThemeSettingsPage {
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ top: 4, bottom: 18 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
@@ -610,6 +614,7 @@ struct ThemeSwitchRow {
 /** 下拉行，对齐上游 `DropdownListSettingItem`：点开菜单选一项。 */
 @Component
 struct ThemeSettingsDropdown {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop value: string = '';
   @Prop options: string[] = [];
@@ -635,7 +640,7 @@ struct ThemeSettingsDropdown {
       ForEach(this.options, (option: string) => {
         MenuItem({ content: this.label(option) }).height(48).onClick(() => this.onSelect(option))
       }, (option: string) => option)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(16)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(16)
   }
 
   build() {

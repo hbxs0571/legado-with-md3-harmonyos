@@ -1,5 +1,6 @@
 @Component
 export struct OnboardingPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop localBooksPath: string = '';
   onComplete: (themeMode: number, paletteIndex: number) => void = (_mode: number, _palette: number) => {};
   /**
@@ -71,11 +72,11 @@ export struct OnboardingPage {
         Text('你可以稍后在「我的 - 备份与恢复」中选择 Android 阅读 ZIP，预览并恢复书目、阅读进度及可保留的数据条目。TXT/EPUB 正文需要从原文件重新导入。')
           .fontSize(14).fontColor($r('app.color.theme_text_tertiary')).lineHeight(22).width('100%')
         TextInput({ placeholder: 'WebDAV 服务器地址（尚未接入）' }).enabled(false).width('100%').height(52)
-          .backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(6).margin({ top: 20 })
+          .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(6).margin({ top: 20 })
         TextInput({ placeholder: 'WebDAV 账号' }).enabled(false).width('100%').height(52)
-          .backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(6).margin({ top: 10 })
+          .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(6).margin({ top: 10 })
         TextInput({ placeholder: 'WebDAV 密码' }).enabled(false).width('100%').height(52)
-          .backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(6).margin({ top: 10 })
+          .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(6).margin({ top: 10 })
         Text('WebDAV 云同步和本地备份密码尚未接入；这些字段仅说明 Android 原版设置位置，不会保存或发送凭据。')
           .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).lineHeight(18).width('100%').margin({ top: 14 })
       }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
@@ -90,7 +91,7 @@ export struct OnboardingPage {
           .alignSelf(ItemAlign.Start)
         Text(this.localBooksPath.length > 0 ? this.localBooksPath : '应用私有文件目录 /books')
           .fontSize(13).fontColor($r('app.color.theme_text_tertiary')).lineHeight(19).width('100%')
-          .padding(12).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(8)
+          .padding(12).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(8)
         Text('目录选择会在后续适配系统文件授权后开放。')
           .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 12 }).alignSelf(ItemAlign.Start)
       }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
@@ -124,7 +125,7 @@ export struct OnboardingPage {
           Text('我的书架　　继续阅读').fontSize(14).fontColor(this.paletteColor(this.paletteIndex))
             .width('100%').padding(16).margin({ top: 12 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(12)
         }.width('100%').alignItems(HorizontalAlign.Start).padding(16).margin({ top: 24 })
-          .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(16)
+          .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(16)
         Text('深色模式点选即写入主题设置并在整个应用生效；配色序号会一并保存，配色渲染仍在迁移中。')
           .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).lineHeight(18).margin({ top: 14 })
       }.width('100%').padding(16)
@@ -153,19 +154,19 @@ export struct OnboardingPage {
       Text(this.pageSummary()).fontSize(16).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4, bottom: 12 })
       Progress({ value: this.page, total: 4, type: ProgressType.Linear })
         .width('calc(100% - 32vp)').height(4).color($r('app.color.theme_accent'))
-        .backgroundColor($r('app.color.theme_surface_tertiary'))
+        .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))
         .margin({ left: 16, right: 16, bottom: 10 })
         .animation({ duration: 300, curve: Curve.EaseInOut })
       Column() {
         this.pageContent()
       }.width('100%').layoutWeight(1).margin({ left: 16, right: 16 })
-        .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(18)
+        .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(18)
       Row() {
         Blank()
         Button(this.page === 0 ? '阅读并同意　→' : this.page === 3 ? '完成　→' : '下一步　→')
           .fontSize(14).fontColor($r('app.color.theme_surface_primary')).backgroundColor($r('app.color.theme_accent')).borderRadius(28)
           .padding({ left: 22, right: 22, top: 12, bottom: 12 }).onClick(() => this.next())
       }.width('100%').padding({ left: 20, right: 20, top: 14, bottom: 18 })
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary')).justifyContent(FlexAlign.Start)
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).justifyContent(FlexAlign.Start)
   }
 }

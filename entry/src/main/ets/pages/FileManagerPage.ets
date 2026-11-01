@@ -16,6 +16,7 @@ interface FileBreadcrumb {
 
 @Component
 export struct FileManagerPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop rootPath: string = '';
   @Prop books: Book[] = [];
   onBack: () => void = () => {};
@@ -129,12 +130,12 @@ export struct FileManagerPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.openParent())
         Text('筛选 • 文件管理').fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1).margin({ left: 8 })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => {
           this.showSearch = !this.showSearch;
@@ -152,7 +153,7 @@ export struct FileManagerPage {
             .onAppear(() => focusControl.requestFocus('my_file_manager_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 4, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 4, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
       }
 
       Scroll() {
@@ -194,7 +195,7 @@ export struct FileManagerPage {
           }
         }.width('100%').height('100%')
       }.layoutWeight(1).scrollBar(BarState.Off)
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 
   private getIcon(entry: ManagedFileEntry): 'folder' | 'file' {

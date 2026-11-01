@@ -22,6 +22,7 @@ import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 
 @Component
 export struct BookSourceManagePage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
@@ -63,7 +64,7 @@ export struct BookSourceManagePage {
       MenuItem({ content: '按启用状态排序' }).onClick(() => this.sortMode = '按启用状态排序')
       MenuItem({ content: this.sortDescending ? '切换为升序' : '切换为降序' })
         .onClick(() => this.sortDescending = !this.sortDescending)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @Builder
@@ -108,7 +109,7 @@ export struct BookSourceManagePage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(18)
+          Row().width(36).height(36).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(18)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.onBack())
         Column() {
@@ -117,16 +118,16 @@ export struct BookSourceManagePage {
             .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(18)
+          Row().width(36).height(36).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(18)
           AppGlyph({ name: 'profileFilterAlt', glyphSize: 19, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => { this.groupFilterQuery = ''; this.showGroupFilter = true; })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(18)
+          Row().width(36).height(36).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(18)
           AppGlyph({ name: 'search', glyphSize: 19, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40)
           .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(18)
+          Row().width(36).height(36).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(18)
           AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 12, right: 12, top: 11, bottom: 9 })
@@ -139,7 +140,7 @@ export struct BookSourceManagePage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(22)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(22)
       }
 
       if (this.selectedGroup.length > 0 || this.searchQuery.length > 0 || this.sortMode !== '手动排序' || this.groupByDomain) {
@@ -165,7 +166,7 @@ export struct BookSourceManagePage {
       }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
         .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 }).alignSelf(ItemAlign.End)
         .onClick(() => this.onUnavailableAction('书源编辑和保存尚未迁移，未创建书源'))
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.showGroupFilter, this.GroupFilterSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
@@ -178,6 +179,7 @@ export struct BookSourceManagePage {
 
 @Component
 export struct ReplaceRulesPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onOpenEditor: () => void = () => {};
   onToggleRule: (id: number, enabled: boolean) => void = (_id: number, _enabled: boolean) => {};
@@ -279,7 +281,7 @@ export struct ReplaceRulesPage {
         .onClick(() => this.onSortModeChange('name_asc'))
       MenuItem({ content: '名称降序' })
         .onClick(() => this.onSortModeChange('name_desc'))
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   /** 规则条目长按菜单：置顶、置底、删除（与上游条目下拉的三项一致）。 */
@@ -292,7 +294,7 @@ export struct ReplaceRulesPage {
         .onClick(() => this.onMoveRule(rule.id, false))
       MenuItem({ content: '删除' })
         .onClick(() => this.requestDelete([rule.id]))
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @Builder
@@ -518,17 +520,17 @@ export struct ReplaceRulesPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40)
           .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40)
           .bindMenu(this.ReplaceRuleMenu, { placement: Placement.BottomRight })
@@ -549,7 +551,7 @@ export struct ReplaceRulesPage {
             .onAppear(() => focusControl.requestFocus('my_replace_rule_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -599,7 +601,7 @@ export struct ReplaceRulesPage {
                     .bindMenu(this.RuleRowMenu(rule), { placement: Placement.BottomRight })
                 }
               }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
-                .backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(14)
+                .backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(14)
                 .onClick(() => this.selectionMode ? this.toggleSelectedRule(rule.id) : this.onEditRule(rule.id))
             }
           }, (rule: ReplaceRule) => replaceRuleRowKey(rule))
@@ -646,7 +648,7 @@ export struct ReplaceRulesPage {
         .visibility(this.selectionMode ? Visibility.None : Visibility.Visible)
         .onClick(() => this.onOpenEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.ruleActionSheet.length > 0, this.RuleActionSheet(), {
         // 删除确认只有几行文字，用内容自适应高度，避免半屏空白。
         height: this.ruleActionSheet === 'confirmDelete' ? SheetSize.FIT_CONTENT : SheetSize.MEDIUM,
@@ -660,6 +662,7 @@ export struct ReplaceRulesPage {
 
 @Component
 export struct ReplaceRuleEditPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onSaveRule: (rule: ReplaceRule) => void = (_rule: ReplaceRule) => {};
@@ -752,7 +755,7 @@ export struct ReplaceRuleEditPage {
         .onClick(() => this.showPasteAuthorization = true)
       MenuItem({ content: '测试规则' })
         .onClick(() => this.activeSheet = 'test')
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   /**
@@ -830,7 +833,7 @@ export struct ReplaceRuleEditPage {
           MenuItem({ content: group }).onClick(() => this.group = group)
         }
       }, (group: string) => group)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private clipboardJson(): string {
@@ -973,19 +976,19 @@ export struct ReplaceRuleEditPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         if (this.keyboardVisible) {
           Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+            Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
             AppGlyph({ name: 'profileSave', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
           }.width(40).height(40).margin({ right: 8 })
             .onClick(() => this.saveRule())
         }
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40)
           .bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
@@ -1067,7 +1070,7 @@ export struct ReplaceRuleEditPage {
           .visibility(this.keyboardVisible ? Visibility.Hidden : Visibility.Visible)
           .onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.activeSheet.length > 0, this.EditPageSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
@@ -1233,6 +1236,7 @@ export interface RuleListEntry {
 
 @Component
 struct RuleListBody {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop rules: RuleListEntry[] = [];
   @Prop query: string = '';
   @Prop selectedIds: string[] = [];
@@ -1260,7 +1264,7 @@ struct RuleListBody {
         .onClick(() => this.onMoveToEdge(rule.id, false))
       MenuItem({ content: '删除' })
         .onClick(() => this.onDelete(rule.id))
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private visibleRules(): RuleListEntry[] {
@@ -1318,6 +1322,7 @@ struct RuleListBody {
 
 @Component
 export struct TxtTocRulesPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** 当前规则列表，由 Index 持有并随仓储刷新。 */
@@ -1577,7 +1582,7 @@ export struct TxtTocRulesPage {
         .onClick(async () => {
           await this.onImportBuiltin();
         })
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @Builder
@@ -1587,7 +1592,7 @@ export struct TxtTocRulesPage {
         .onClick(() => this.copyRuleToClipboard())
       MenuItem({ content: '粘贴规则' })
         .onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @Builder
@@ -1605,22 +1610,22 @@ export struct TxtTocRulesPage {
           Text('名称').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start)
           TextInput({ placeholder: '名称', text: this.ruleName })
             .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(12).padding(12).width('100%')
+            .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.ruleName = value; this.clearRuleTest(); })
           Text('章节正则').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '章节正则', text: this.chapterRegex })
             .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(12).padding(12).width('100%')
+            .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.chapterRegex = value; this.clearRuleTest(); })
           Text('示例').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextArea({ placeholder: '示例', text: this.exampleText })
             .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(12).height(96).padding(12).width('100%')
+            .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(12).height(96).padding(12).width('100%')
             .onChange((value: string) => { this.exampleText = value; this.clearRuleTest(); })
           Text('分卷正则').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '分卷正则', text: this.volumeRegex })
             .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(12).padding(12).width('100%')
+            .backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.volumeRegex = value; this.clearRuleTest(); })
           if (this.testHasRun) {
             if (this.testError.length > 0) {
@@ -1745,7 +1750,7 @@ export struct TxtTocRulesPage {
             .onAppear(() => focusControl.requestFocus('my_txt_toc_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
       }
 
       if (this.selectionMode) {
@@ -1811,7 +1816,7 @@ export struct TxtTocRulesPage {
         }.width(56).height(56).backgroundColor('#B9C8FF').borderRadius(28)
           .onClick(() => this.openCreator())
       }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.showAddRule, this.ruleEditorSheet(), {
         height: 620,
         dragBar: true,
@@ -1879,6 +1884,7 @@ interface TxtRuleClipboardData {
 
 @Component
 export struct DictionaryRulesPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onOpenEditor: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -1899,7 +1905,7 @@ export struct DictionaryRulesPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyDictionaryRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private async copyDictionaryRule(): Promise<void> {
@@ -2018,7 +2024,7 @@ export struct DictionaryRulesPage {
       })
       MenuItem({ content: '导入' })
         .onClick(() => this.onUnavailableAction('字典规则导入尚未接入，未导入任何数据'))
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private toggleSelectedRule(id: string): void {
@@ -2030,12 +2036,12 @@ export struct DictionaryRulesPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40)
           .onClick(() => {
@@ -2043,7 +2049,7 @@ export struct DictionaryRulesPage {
             if (!this.showSearch) { this.searchQuery = ''; }
           })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40)
           .bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
@@ -2064,7 +2070,7 @@ export struct DictionaryRulesPage {
             .onAppear(() => focusControl.requestFocus('my_dictionary_rule_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
       }
 
       if (this.selectionMode && this.selectedRuleIds.length > 0) {
@@ -2088,7 +2094,7 @@ export struct DictionaryRulesPage {
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.showRuleEditor, this.DictionaryRuleSheet(), {
         height: SheetSize.LARGE,
         dragBar: true,
@@ -2109,6 +2115,7 @@ interface DictionaryRuleClipboardData {
 
 @Component
 export struct DictionaryRuleEditPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State name: string = '';
@@ -2121,7 +2128,7 @@ export struct DictionaryRuleEditPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private clipboardJson(): string {
@@ -2208,12 +2215,12 @@ export struct DictionaryRuleEditPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
@@ -2237,12 +2244,13 @@ export struct DictionaryRuleEditPage {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
 @Component
 export struct HighlightTagRulesPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onOpenEditor: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -2268,7 +2276,7 @@ export struct HighlightTagRulesPage {
       })
       MenuItem({ content: '导入' })
         .onClick(() => this.onUnavailableAction('标签规则导入尚未接入，未导入任何数据'))
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private toggleSelectedRule(id: string): void {
@@ -2281,7 +2289,7 @@ export struct HighlightTagRulesPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyTagRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private async copyTagRule(): Promise<void> {
@@ -2381,12 +2389,12 @@ export struct HighlightTagRulesPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40)
           .onClick(() => {
@@ -2394,7 +2402,7 @@ export struct HighlightTagRulesPage {
             if (!this.showSearch) { this.searchQuery = ''; }
           })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
@@ -2413,7 +2421,7 @@ export struct HighlightTagRulesPage {
             .onAppear(() => focusControl.requestFocus('my_highlight_tag_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
       }
 
       if (this.selectionMode && this.selectedRuleIds.length > 0) {
@@ -2437,7 +2445,7 @@ export struct HighlightTagRulesPage {
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openTagRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.showRuleEditor, this.TagRuleEditorSheet(), {
         height: SheetSize.LARGE,
         dragBar: true,
@@ -2458,6 +2466,7 @@ interface HighlightTagRuleClipboardData {
 
 @Component
 export struct HighlightTagRuleEditPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State title: string = '';
@@ -2470,7 +2479,7 @@ export struct HighlightTagRuleEditPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private clipboardJson(): string {
@@ -2522,12 +2531,12 @@ export struct HighlightTagRuleEditPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
@@ -2564,7 +2573,7 @@ export struct HighlightTagRuleEditPage {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
@@ -2602,6 +2611,7 @@ const BOOKMARK_EMPTY_FACES: string[] = [
 
 @Component
 export struct AllBookmarksPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
   /** 打开书签编辑面板；上游 AllBookmarkScreen 点击书签条目即进入编辑。 */
@@ -2737,12 +2747,12 @@ export struct AllBookmarksPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.handleBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => {
           this.showSearch = !this.showSearch;
@@ -2750,7 +2760,7 @@ export struct AllBookmarksPage {
         })
         if (this.selectedBookKey.length > 0) {
           Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+            Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
             AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
           }.width(40).height(40).bindMenu(this.BookmarkExportMenu, { placement: Placement.BottomRight })
         }
@@ -2773,7 +2783,7 @@ export struct AllBookmarksPage {
             .onAppear(() => focusControl.requestFocus('my_bookmark_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
       }
 
       if (this.selectedBookKey.length > 0) {
@@ -2839,7 +2849,7 @@ export struct AllBookmarksPage {
           }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
         }.layoutWeight(1).scrollBar(BarState.Off)
       }
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
@@ -2916,6 +2926,7 @@ struct BookmarkEntryCard {
 
 @Component
 export struct ReadRecordsPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** 扫描/修复/清空改变了数据后通知 Index 重读会话，避免页面仍显示旧列表。 */
@@ -3168,7 +3179,7 @@ export struct ReadRecordsPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.onBack())
         Column() {
@@ -3176,18 +3187,18 @@ export struct ReadRecordsPage {
           Text(this.getModeLabel()).fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 2 })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'), glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => this.cycleDisplayMode())
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => this.showActionsSheet = true)
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
@@ -3202,7 +3213,7 @@ export struct ReadRecordsPage {
             .onAppear(() => focusControl.requestFocus('my_read_record_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -3219,7 +3230,7 @@ export struct ReadRecordsPage {
                 Text(this.formatRecordDuration(this.getSummaryDuration()))
                   .fontSize(16).fontColor($r('app.color.theme_text_secondary'))
               }.width('100%').margin({ top: 12 })
-            }.width('calc(100% - 32vp)').padding(16).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+            }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
               .margin({ left: 16, right: 16, bottom: 10 }).onClick(() => this.showCalendarSheet = true)
             if (this.displayMode === 0) {
               ForEach(this.getSummaryDateKeys(), (dateKey: string) => {
@@ -3241,7 +3252,7 @@ export struct ReadRecordsPage {
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                       .border({ width: { top: 1 }, color: $r('app.color.theme_surface_primary') })
                   }, (detail: ReadRecordDetail) => `${dateKey}-${detail.bookName}-${detail.bookAuthor}`)
-                }.width('calc(100% - 32vp)').backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(12)
+                }.width('calc(100% - 32vp)').backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
             } else if (this.displayMode === 1) {
@@ -3261,7 +3272,7 @@ export struct ReadRecordsPage {
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                       .border({ width: { top: 1 }, color: $r('app.color.theme_surface_primary') })
                   }, (record: ReadTimeRecord) => record.id)
-                }.width('calc(100% - 32vp)').backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(12)
+                }.width('calc(100% - 32vp)').backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
             } else {
@@ -3277,7 +3288,7 @@ export struct ReadRecordsPage {
                   }.width('100%')
                   Text(`最后阅读 ${this.formatRecordDate(record.endTime)}`)
                     .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).width('100%').margin({ top: 10 })
-                }.width('calc(100% - 32vp)').padding(16).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(14)
+                }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(14)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (record: ReadTimeRecord) => record.bookId)
             }
@@ -3285,7 +3296,7 @@ export struct ReadRecordsPage {
         }.layoutWeight(1).scrollBar(BarState.Off)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       // 三个半模态共用一个 bindSheet：同一节点链式挂多个 bindSheet 时，
       // 任一状态变化都会让刚打开的 sheet 立即 onDisappear（实测 0.6s 内被顶掉），
       // 所以用互斥条件 + 单一入口。
@@ -3315,7 +3326,7 @@ export struct ReadRecordsPage {
           .layoutWeight(1).height(48).backgroundColor('#D95656').borderRadius(24).margin({ left: 12 })
           .onClick(() => { this.confirmClearAll(); })
       }.width('100%').padding({ left: 28, right: 28, bottom: 24 })
-    }.backgroundColor($r('app.color.theme_surface_elevated'))
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))
   }
 
   @Builder
@@ -3387,6 +3398,7 @@ export struct ReadRecordsPage {
 
 @Component
 export struct CacheManagementPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
@@ -3411,30 +3423,30 @@ export struct CacheManagementPage {
         MenuItem({ content: group, labelInfo: this.selectedCacheGroup === group ? '✓' : '' })
           .onClick(() => this.selectedCacheGroup = group)
       }, (group: string) => group)
-    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   build() {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'profileFilterAlt', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).bindMenu(this.CacheGroupMenu, { placement: Placement.BottomRight })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(16)
+          Row().width(32).height(32).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(16)
           AppGlyph({ name: 'profileRefresh', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
         }.width(40).height(40).onClick(() => this.onUnavailableAction('缓存数据仓储尚未接入，未刷新缓存'))
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
@@ -3452,7 +3464,7 @@ export struct CacheManagementPage {
             .onAppear(() => focusControl.requestFocus('my_cache_manage_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(24)
       }
 
       Column() {
@@ -3468,7 +3480,7 @@ export struct CacheManagementPage {
         }
       }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 8, bottom: 18 })
         .layoutWeight(1)
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
@@ -3508,6 +3520,7 @@ struct CacheEmptySection {
 
 @Component
 export struct AboutAppPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onOpenPrivacyNotice: () => void = () => {};
   onOpenLicense: () => void = () => {};
@@ -3551,7 +3564,7 @@ export struct AboutAppPage {
             Text('阅读·D').fontSize(18).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
             if (this.versionName.length > 0) {
               Text(this.versionName).fontSize(12).fontColor($r('app.color.theme_text_secondary')).padding({ left: 9, right: 9, top: 4, bottom: 4 })
-                .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(8).margin({ top: 3 })
+                .backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')).borderRadius(8).margin({ top: 3 })
             }
             Text('全新设计的阅读 3.0').fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
           }.width('100%').padding({ top: 4, bottom: 8 }).alignItems(HorizontalAlign.Center)
@@ -3573,7 +3586,7 @@ export struct AboutAppPage {
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 4, bottom: 18 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
@@ -3595,6 +3608,7 @@ struct AboutQuickAction {
 
 @Component
 struct AboutActionRow {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop last: boolean = false;
   onSelect: () => void = () => {};
@@ -3603,13 +3617,14 @@ struct AboutActionRow {
       Row() {
         Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
       }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 }).onClick(() => this.onSelect())
-      if (!this.last) { Row().height(1).width('100%').backgroundColor($r('app.color.theme_surface_primary')).margin({ left: 16, right: 16 }) }
+      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')).margin({ left: 16, right: 16 }) }
     }.width('100%')
   }
 }
 
 @Component
 export struct AppSettingsHomePage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onOpenCategory: (destination: ProfileRoute) => void = (_destination: ProfileRoute) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -3658,7 +3673,7 @@ export struct AppSettingsHomePage {
           }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.padding({ left: 16, right: 16, top: 8, bottom: 16 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
@@ -3686,6 +3701,7 @@ struct SettingsPageHeader {
 
 @Component
 struct SettingsCategoryRow {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
   @Prop summary: string = '';
   @Prop last: boolean = false;
@@ -3702,13 +3718,14 @@ struct SettingsCategoryRow {
         Image($r('app.media.reader_next')).width(18).height(18).fillColor($r('app.color.theme_text_tertiary'))
       }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
         .onClick(() => this.onSelect())
-      if (!this.last) { Row().width('100%').height(2).backgroundColor($r('app.color.theme_surface_primary')) }
+      if (!this.last) { Row().width('100%').height(2).backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')) }
     }.width('100%')
   }
 }
 
 @Component
 export struct AiChatPage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State historyVisible: boolean = false;
@@ -3805,7 +3822,7 @@ export struct AiChatPage {
             Text('AI 服务未配置').fontSize(12).fontColor('#858792')
           }.padding({ left: 6, right: 6, top: 7, bottom: 5 })
         }.padding({ left: 16, right: 16, top: 8, bottom: 12 })
-      }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+      }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
 
       if (this.historyVisible) {
         Stack({ alignContent: Alignment.TopStart }) {
@@ -3834,7 +3851,7 @@ export struct AiChatPage {
           }.width('82%').height('100%').backgroundColor('#17181E')
         }.width('100%').height('100%')
       }
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
       .bindSheet(this.showReasoningSheet, this.ReasoningSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
@@ -3870,6 +3887,7 @@ struct ModuleHeader {
 
 @Component
 struct ModuleSearch {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop hint: string = '';
   @State query: string = '';
   build() {
@@ -3882,7 +3900,7 @@ struct ModuleSearch {
         .backgroundColor(Color.Transparent)
         .onChange((value: string) => this.query = value)
         .layoutWeight(1)
-    }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 }).margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(22)
+    }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 }).margin({ left: 16, right: 16 }).backgroundColor(this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary')).borderRadius(22)
   }
 }
 
@@ -3915,13 +3933,14 @@ struct ModuleEmpty {
 
 @Component
 struct MetricCard {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop label: string = '';
   @Prop value: string = '';
   build() {
     Column() {
       Text(this.label).fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
       Text(this.value).fontSize(17).fontColor($r('app.color.theme_text_secondary')).margin({ top: 5 })
-    }.layoutWeight(1).alignItems(HorizontalAlign.Start).padding(15).backgroundColor($r('app.color.theme_surface_elevated'))
+    }.layoutWeight(1).alignItems(HorizontalAlign.Start).padding(15).backgroundColor(this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))
       .borderRadius(14).margin({ right: 6 })
   }
 }

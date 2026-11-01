@@ -2,6 +2,7 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct PrivacyNoticePage {
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   @State collapsedHeader: boolean = false;
   private noticeScroller: Scroller = new Scroller();
@@ -44,7 +45,7 @@ export struct PrivacyNoticePage {
             .fontSize(13).fontColor('#D9A6A0').lineHeight(20).padding({ left: 18, right: 18, top: 8, bottom: 22 })
         }.width('100%').padding({ top: 4 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
+    }.width('100%').height('100%').backgroundColor(this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))
   }
 }
 
