@@ -1,4 +1,5 @@
 import { preferences } from '@kit.ArkData';
+import { normalizeLabelVisibility } from './MainNavigationSettings';
 import {
   CONTAINER_OPACITY_DEFAULT,
   CARD_BORDER_WIDTH_DEFAULT,
@@ -93,6 +94,25 @@ export interface ThemeSnapshot {
   backgroundImageBlurring: number;
   /** 夜间背景图虚化半径（vp），对齐上游 `backgroundImageNightBlurring`（默认 0）。 */
   backgroundImageNightBlurring: number;
+  /** 首页是否出现在主导航里，对齐上游 `AppShellSettings.kt:6 showHome`（默认 true）。 */
+  showHome: boolean;
+  /** 发现是否出现在主导航里，对齐上游 `AppShellSettings.kt:7 showDiscovery`（默认 true）。 */
+  showDiscovery: boolean;
+  /** 订阅是否出现在主导航里，对齐上游 `AppShellSettings.kt:8 showRss`（默认 true）。 */
+  showRss: boolean;
+  /** 默认主页面 route，对齐上游 `AppShellSettings.kt:17 defaultHomePage`（默认 bookshelf）。 */
+  defaultHomePage: string;
+  /** 主导航顺序（逗号分隔），对齐上游 `AppShellSettings.kt:18 mainNavigationOrder`。 */
+  mainNavigationOrder: string;
+  /** 导航标签模式，对齐上游 `AppShellSettings.kt:19 labelVisibilityMode`（默认 auto）。 */
+  labelVisibilityMode: string;
+  /**
+   * 预见性返回手势，对齐上游 `AppShellSettings.kt:9 predictiveBackEnabled`（默认 true）。
+   * ArkUI 没有对应的系统能力（SDK 里 `predictiveBack` 零命中），只落盘不驱动渲染。
+   */
+  predictiveBack: boolean;
+  /** 阅读界面共享元素动画，对齐上游 `AppShellSettings.kt:10 readerSharedElementEnabled`（默认 true）。 */
+  readerSharedElement: boolean;
 }
 
 /** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
@@ -186,7 +206,15 @@ export class ThemeSettingsRepository {
       backgroundImage: '',
       backgroundImageNight: '',
       backgroundImageBlurring: 0,
-      backgroundImageNightBlurring: 0
+      backgroundImageNightBlurring: 0,
+      showHome: true,
+      showDiscovery: true,
+      showRss: true,
+      defaultHomePage: 'bookshelf',
+      mainNavigationOrder: 'home,bookshelf,explore,rss,my',
+      labelVisibilityMode: 'auto',
+      predictiveBack: true,
+      readerSharedElement: true
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -221,6 +249,14 @@ export class ThemeSettingsRepository {
       const appBgDark = await store.get('backgroundImageNight', defaults.backgroundImageNight);
       const appBgBlur = await store.get('backgroundImageBlurring', defaults.backgroundImageBlurring);
       const appBgNightBlur = await store.get('backgroundImageNightBlurring', defaults.backgroundImageNightBlurring);
+      const showHome = await store.get('showHome', defaults.showHome);
+      const showDiscovery = await store.get('showDiscovery', defaults.showDiscovery);
+      const showRss = await store.get('showRss', defaults.showRss);
+      const defaultHomePage = await store.get('defaultHomePage', defaults.defaultHomePage);
+      const mainNavigationOrder = await store.get('mainNavigationOrder', defaults.mainNavigationOrder);
+      const labelVisibilityMode = await store.get('labelVisibilityMode', defaults.labelVisibilityMode);
+      const predictiveBack = await store.get('predictiveBack', defaults.predictiveBack);
+      const readerSharedElement = await store.get('readerSharedElement', defaults.readerSharedElement);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
@@ -271,7 +307,19 @@ export class ThemeSettingsRepository {
         backgroundImageBlurring: typeof appBgBlur === 'number'
           ? normalizeBackgroundBlur(appBgBlur) : defaults.backgroundImageBlurring,
         backgroundImageNightBlurring: typeof appBgNightBlur === 'number'
-          ? normalizeBackgroundBlur(appBgNightBlur) : defaults.backgroundImageNightBlurring
+          ? normalizeBackgroundBlur(appBgNightBlur) : defaults.backgroundImageNightBlurring,
+        showHome: typeof showHome === 'boolean' ? showHome : defaults.showHome,
+        showDiscovery: typeof showDiscovery === 'boolean' ? showDiscovery : defaults.showDiscovery,
+        showRss: typeof showRss === 'boolean' ? showRss : defaults.showRss,
+        defaultHomePage: typeof defaultHomePage === 'string' && defaultHomePage.length > 0
+          ? defaultHomePage : defaults.defaultHomePage,
+        mainNavigationOrder: typeof mainNavigationOrder === 'string' && mainNavigationOrder.length > 0
+          ? mainNavigationOrder : defaults.mainNavigationOrder,
+        labelVisibilityMode: typeof labelVisibilityMode === 'string'
+          ? normalizeLabelVisibility(labelVisibilityMode) : defaults.labelVisibilityMode,
+        predictiveBack: typeof predictiveBack === 'boolean' ? predictiveBack : defaults.predictiveBack,
+        readerSharedElement: typeof readerSharedElement === 'boolean'
+          ? readerSharedElement : defaults.readerSharedElement
       };
     } catch (_) {
       return defaults;
@@ -327,6 +375,14 @@ export class ThemeSettingsRepository {
     await store.put('backgroundImageNight', snapshot.backgroundImageNight);
     await store.put('backgroundImageBlurring', normalizeBackgroundBlur(snapshot.backgroundImageBlurring));
     await store.put('backgroundImageNightBlurring', normalizeBackgroundBlur(snapshot.backgroundImageNightBlurring));
+    await store.put('showHome', snapshot.showHome);
+    await store.put('showDiscovery', snapshot.showDiscovery);
+    await store.put('showRss', snapshot.showRss);
+    await store.put('defaultHomePage', snapshot.defaultHomePage);
+    await store.put('mainNavigationOrder', snapshot.mainNavigationOrder);
+    await store.put('labelVisibilityMode', normalizeLabelVisibility(snapshot.labelVisibilityMode));
+    await store.put('predictiveBack', snapshot.predictiveBack);
+    await store.put('readerSharedElement', snapshot.readerSharedElement);
     await store.flush();
   }
 

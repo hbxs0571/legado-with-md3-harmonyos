@@ -46,6 +46,18 @@ import {
 import { OnboardingRepository } from '../data/OnboardingRepository';
 import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground, normalizeThemeColor, FONT_SCALE_DEFAULT, normalizeBackgroundBlur } from '../data/ThemeSettingsRepository';
 import {
+  DEFAULT_HOME_PAGE_DEFAULT,
+  LABEL_VISIBILITY_DEFAULT,
+  MAIN_NAVIGATION_ORDER_DEFAULT,
+  joinMainNavigation,
+  mainNavigationLabel,
+  moveNavigationDown,
+  moveNavigationUp,
+  normalizeDefaultHomePage,
+  orderedMainNavigation,
+  visibleMainNavigation
+} from '../data/MainNavigationSettings';
+import {
   CARD_BORDER_WIDTH_DEFAULT,
   CARD_RADIUS_DEFAULT,
   CONTAINER_OPACITY_DEFAULT,
@@ -536,6 +548,22 @@ struct Index {
   @State themeBackgroundBlur: number = 0;
   /** 夜间背景图虚化半径，对齐上游 `backgroundImageNightBlurring`（默认 0）。 */
   @State themeBackgroundNightBlur: number = 0;
+  /** 首页是否出现在主导航；上游 `AppShellSettings.kt:6 showHome`。 */
+  @State themeShowHome: boolean = true;
+  /** 发现是否出现在主导航；上游 `AppShellSettings.kt:7 showDiscovery`。 */
+  @State themeShowDiscovery: boolean = true;
+  /** 订阅是否出现在主导航；上游 `AppShellSettings.kt:8 showRss`。 */
+  @State themeShowRss: boolean = true;
+  /** 默认主页面；上游 `AppShellSettings.kt:17 defaultHomePage`。 */
+  @State themeDefaultHomePage: string = DEFAULT_HOME_PAGE_DEFAULT;
+  /** 主导航顺序；上游 `AppShellSettings.kt:18 mainNavigationOrder`。 */
+  @State themeMainNavigationOrder: string = MAIN_NAVIGATION_ORDER_DEFAULT;
+  /** 导航标签模式；上游 `AppShellSettings.kt:19 labelVisibilityMode`。 */
+  @State themeLabelVisibilityMode: string = LABEL_VISIBILITY_DEFAULT;
+  /** 预见性返回手势；上游 `AppShellSettings.kt:9 predictiveBackEnabled`。ArkUI 无等价能力，只落盘。 */
+  @State themePredictiveBack: boolean = true;
+  /** 阅读界面共享元素动画；上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
+  @State themeReaderSharedElement: boolean = true;
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -2043,6 +2071,15 @@ struct Index {
     this.themeBackgroundImageNight = theme.backgroundImageNight;
     this.themeBackgroundBlur = theme.backgroundImageBlurring;
     this.themeBackgroundNightBlur = theme.backgroundImageNightBlurring;
+    this.themeShowHome = theme.showHome;
+    this.themeShowDiscovery = theme.showDiscovery;
+    this.themeShowRss = theme.showRss;
+    this.themeDefaultHomePage = theme.defaultHomePage;
+    this.themeMainNavigationOrder = theme.mainNavigationOrder;
+    this.themeLabelVisibilityMode = theme.labelVisibilityMode;
+    this.themePredictiveBack = theme.predictiveBack;
+    this.themeReaderSharedElement = theme.readerSharedElement;
+    this.applyDefaultHomePage();
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2206,6 +2243,140 @@ struct Index {
     this.publishThemeCardStyle();
     this.saveThemeSettings(context).catch(() => {
       this.showUnavailableAction('纯黑模式设置保存失败，请重试');
+    });
+  }
+
+  /**
+   * 主导航的可见项（按配置顺序），对齐上游 `MainDestination.ordered` + 三个 show* 开关。
+   * 底栏只渲染这一组，顺序与显隐都由它决定。
+   */
+  private visibleNavigationRoutes(): string[] {
+    return visibleMainNavigation(this.themeMainNavigationOrder,
+      this.themeShowHome, this.themeShowDiscovery, this.themeShowRss);
+  }
+
+  /** route 对应的 Swiper 绝对页序号（0..4），与 `selectTab` 的口径一致。 */
+  private navigationRouteTabIndex(route: string): number {
+    if (route === 'home') { return 0; }
+    if (route === 'bookshelf') { return 1; }
+    if (route === 'explore') { return 2; }
+    if (route === 'rss') { return 3; }
+    return 4;
+  }
+
+  /** 底栏图标名；选中态换实心图标，与改动前一致。 */
+  private navigationTabIcon(route: string): AppGlyphName {
+    const selected = this.selectedTab === this.navigationRouteTabIndex(route);
+    if (route === 'home') { return selected ? 'navHomeFilled' : 'navHomeOutlined'; }
+    if (route === 'bookshelf') { return selected ? 'navBookshelfFilled' : 'navBookshelfOutlined'; }
+    if (route === 'explore') { return selected ? 'navExploreFilled' : 'navExploreOutlined'; }
+    if (route === 'rss') { return 'navRss'; }
+    return selected ? 'navProfileFilled' : 'navProfileOutlined';
+  }
+
+  /**
+   * 该项是否显示文字标签。上游 `labelVisibilityMode` 四档：
+   * auto / selected（仅选中项）/ labeled（全部）/ unlabeled（全部隐藏）。
+   */
+  private navigationLabelVisible(route: string): boolean {
+    const selected = this.selectedTab === this.navigationRouteTabIndex(route);
+    if (this.themeLabelVisibilityMode === 'labeled') { return true; }
+    if (this.themeLabelVisibilityMode === 'unlabeled') { return false; }
+    return selected;
+  }
+
+  /**
+   * 冷启动落到「默认主页面」。上游 `AppShellSettings.kt:17 defaultHomePage`。
+   *
+   * 不可见的页面按上游 `MainNavigationSettingsSheet.kt:81-84` 回落书架。
+   */
+  private applyDefaultHomePage(): void {
+    const target = normalizeDefaultHomePage(this.themeDefaultHomePage, this.visibleNavigationRoutes());
+    this.themeDefaultHomePage = target;
+    this.selectTab(this.navigationRouteTabIndex(target));
+  }
+
+  /** 逐项显隐回调。上游 `MainNavigationSettingsSheet.kt:63-76` 的 `setVisibilityForRoute`。 */
+  private selectThemeNavigationVisibility(context: Context, route: string, visible: boolean): void {
+    if (route === 'home') { this.themeShowHome = visible; }
+    else if (route === 'explore') { this.themeShowDiscovery = visible; }
+    else if (route === 'rss') { this.themeShowRss = visible; }
+    else { return; }
+    // 关掉当前停留的页面时，按上游口径退回默认主页面。
+    if (!visible && this.navigationRouteTabIndex(route) === this.selectedTab) {
+      this.applyDefaultHomePage();
+    }
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('导航显隐保存失败，请重试');
+    });
+  }
+
+  /** 拖动排序：把 route 上移一位。上游 `onMoveItem` 的 `move(from, to)`。 */
+  private moveThemeNavigationUp(context: Context, route: string): void {
+    const next = moveNavigationUp(orderedMainNavigation(this.themeMainNavigationOrder), route);
+    this.themeMainNavigationOrder = joinMainNavigation(next);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('导航顺序保存失败，请重试');
+    });
+  }
+
+  /** 拖动排序：把 route 下移一位。 */
+  private moveThemeNavigationDown(context: Context, route: string): void {
+    const next = moveNavigationDown(orderedMainNavigation(this.themeMainNavigationOrder), route);
+    this.themeMainNavigationOrder = joinMainNavigation(next);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('导航顺序保存失败，请重试');
+    });
+  }
+
+  /** 默认主页面回调。上游 `onSetDefault`。 */
+  private selectThemeDefaultHomePage(context: Context, route: string): void {
+    this.themeDefaultHomePage = normalizeDefaultHomePage(route, this.visibleNavigationRoutes());
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('默认主页面保存失败，请重试');
+    });
+  }
+
+  /** 导航标签模式回调。上游 `onSetLabelVisibilityMode`。 */
+  private selectThemeLabelVisibilityMode(context: Context, value: string): void {
+    this.themeLabelVisibilityMode = value;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('导航标签模式保存失败，请重试');
+    });
+  }
+
+  /**
+   * 预见性返回手势开关。
+   *
+   * 上游 `AppShellSettings.kt:9 predictiveBackEnabled` 驱动 `BaseActivity.kt:111` 的
+   * `registerOnBackInvokedCallback`；ArkUI 的 SDK 里没有对应能力（`predictiveBack` 零命中），
+   * 所以本地只落盘，不造假效果。
+   */
+  private selectThemePredictiveBack(context: Context, enabled: boolean): void {
+    this.themePredictiveBack = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('预见性返回设置保存失败，请重试');
+    });
+  }
+
+  /**
+   * 进阅读页的转场。
+   *
+   * 上游 `readerSharedElementEnabled` 打开时走共享元素（书封展开），关闭时走渐变；
+   * ArkUI 的 `geometryTransition` 要求源与目标组件同时在场，本地是整页 if/else 切换，
+   * 做不到真正的共享元素，所以打开时用「缩小淡入 + 放大淡出」近似，关闭时只做淡入淡出。
+   */
+  private readerRouteTransition(): TransitionEffect {
+    const fade = TransitionEffect.OPACITY.animation({ duration: 220 });
+    if (!this.themeReaderSharedElement) { return fade; }
+    return fade.combine(TransitionEffect.scale({ x: 0.92, y: 0.92 }).animation({ duration: 220 }));
+  }
+
+  /** 阅读界面共享元素动画开关。上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
+  private selectThemeReaderSharedElement(context: Context, enabled: boolean): void {
+    this.themeReaderSharedElement = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('共享元素动画设置保存失败，请重试');
     });
   }
 
@@ -2385,6 +2556,14 @@ struct Index {
     this.themeBackgroundImageNight = '';
     this.themeBackgroundBlur = 0;
     this.themeBackgroundNightBlur = 0;
+    this.themeShowHome = true;
+    this.themeShowDiscovery = true;
+    this.themeShowRss = true;
+    this.themeDefaultHomePage = DEFAULT_HOME_PAGE_DEFAULT;
+    this.themeMainNavigationOrder = MAIN_NAVIGATION_ORDER_DEFAULT;
+    this.themeLabelVisibilityMode = LABEL_VISIBILITY_DEFAULT;
+    this.themePredictiveBack = true;
+    this.themeReaderSharedElement = true;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2455,7 +2634,15 @@ struct Index {
       backgroundImage: this.themeBackgroundImage,
       backgroundImageNight: this.themeBackgroundImageNight,
       backgroundImageBlurring: this.themeBackgroundBlur,
-      backgroundImageNightBlurring: this.themeBackgroundNightBlur
+      backgroundImageNightBlurring: this.themeBackgroundNightBlur,
+      showHome: this.themeShowHome,
+      showDiscovery: this.themeShowDiscovery,
+      showRss: this.themeShowRss,
+      defaultHomePage: this.themeDefaultHomePage,
+      mainNavigationOrder: this.themeMainNavigationOrder,
+      labelVisibilityMode: this.themeLabelVisibilityMode,
+      predictiveBack: this.themePredictiveBack,
+      readerSharedElement: this.themeReaderSharedElement
     });
   }
 
@@ -6299,6 +6486,7 @@ struct Index {
             })
           }
         }.width('100%').height('100%')
+          .transition(this.readerRouteTransition())
         } else if (this.route === AppRoute.READER_SEARCH) {
         ReaderSearchPage({
           book: this.selectedBook,
@@ -6560,6 +6748,40 @@ struct Index {
             onPureBlackChange: (enabled: boolean) => {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectThemePureBlack(themeContext, enabled); }
+            },
+            predictiveBack: this.themePredictiveBack,
+            onPredictiveBackChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemePredictiveBack(themeContext, enabled); }
+            },
+            readerSharedElement: this.themeReaderSharedElement,
+            onReaderSharedElementChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeReaderSharedElement(themeContext, enabled); }
+            },
+            showHome: this.themeShowHome,
+            showDiscovery: this.themeShowDiscovery,
+            showRss: this.themeShowRss,
+            defaultHomePage: this.themeDefaultHomePage,
+            mainNavigationOrder: this.themeMainNavigationOrder,
+            labelVisibilityMode: this.themeLabelVisibilityMode,
+            onNavigationVisibilityChange: (route: string, visible: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeNavigationVisibility(themeContext, route, visible); }
+            },
+            onNavigationMove: (route: string, up: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext === undefined) { return; }
+              if (up) { this.moveThemeNavigationUp(themeContext, route); }
+              else { this.moveThemeNavigationDown(themeContext, route); }
+            },
+            onDefaultHomePageChange: (route: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeDefaultHomePage(themeContext, route); }
+            },
+            onLabelVisibilityModeChange: (value: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeLabelVisibilityMode(themeContext, value); }
             },
             appBackgroundImage: this.themeBackgroundImage,
             appBackgroundImageNight: this.themeBackgroundImageNight,
@@ -7540,11 +7762,16 @@ struct Index {
       }.width('100%').layoutWeight(1)
       if (this.route === AppRoute.HOME || this.route === AppRoute.BOOKSHELF || this.route === AppRoute.DISCOVER || this.route === AppRoute.SUBSCRIPTIONS || this.route === AppRoute.PROFILE) {
         Row() {
-          TabItem({ icon: this.selectedTab === 0 ? 'navHomeFilled' : 'navHomeOutlined', label: '首页', selected: this.selectedTab === 0 }).width('20%').onClick(() => this.selectTab(0))
-          TabItem({ icon: this.selectedTab === 1 ? 'navBookshelfFilled' : 'navBookshelfOutlined', label: '书架', selected: this.selectedTab === 1 }).width('20%').onClick(() => this.selectTab(1))
-          TabItem({ icon: this.selectedTab === 2 ? 'navExploreFilled' : 'navExploreOutlined', label: '发现', selected: this.selectedTab === 2 }).width('20%').onClick(() => this.selectTab(2))
-          TabItem({ icon: 'navRss', label: '订阅', selected: this.selectedTab === 3 }).width('20%').onClick(() => this.selectTab(3))
-          TabItem({ icon: this.selectedTab === 4 ? 'navProfileFilled' : 'navProfileOutlined', label: '我的', selected: this.selectedTab === 4 }).width('20%').onClick(() => this.selectTab(4))
+          // 底栏项、顺序与显隐都来自「首页与导航」设置，对齐上游 `MainDestination.ordered` +
+          // `showHome`/`showDiscovery`/`showRss`；标签显隐由 labelVisibilityMode 决定。
+          ForEach(this.visibleNavigationRoutes(), (navRoute: string) => {
+            TabItem({
+              icon: this.navigationTabIcon(navRoute),
+              label: mainNavigationLabel(navRoute),
+              selected: this.selectedTab === this.navigationRouteTabIndex(navRoute),
+              showLabel: this.navigationLabelVisible(navRoute)
+            }).layoutWeight(1).onClick(() => this.selectTab(this.navigationRouteTabIndex(navRoute)))
+          }, (navRoute: string) => navRoute)
         }.width('100%').padding({ top: 7, bottom: 6 }).backgroundColor(this.themePureBlackActive ? '#121212' : $r('app.color.theme_surface_elevated'))
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
@@ -7570,12 +7797,14 @@ struct TabItem {
   @Prop icon: AppGlyphName = 'home';
   @Prop label: string = '';
   @Prop selected: boolean = false;
+  /** 是否显示文字标签；由 labelVisibilityMode 决定，对齐上游 `labelVisibilityMode`。 */
+  @Prop showLabel: boolean = true;
   build() {
     Column() {
       Stack({ alignContent: Alignment.Center }) {
         AppGlyph({ name: this.icon, tint: '#C5C7D0', glyphSize: 20 })
       }.width(50).height(32).backgroundColor(this.selected ? '#3A4054' : Color.Transparent).borderRadius(18)
-      if (this.selected) { Text(this.label).fontSize(10).fontColor('#D7DFFB').margin({ top: 2 }) }
+      if (this.selected && this.showLabel) { Text(this.label).fontSize(10).fontColor('#D7DFFB').margin({ top: 2 }) }
     }.width('100%').alignItems(HorizontalAlign.Center).padding({ top: 1, bottom: 1 })
   }
 }

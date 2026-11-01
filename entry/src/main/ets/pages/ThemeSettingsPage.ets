@@ -6,6 +6,12 @@ import {
   BOOK_INFO_BACKGROUND_ON
 } from '../data/ThemeSettingsRepository';
 import {
+  LABEL_VISIBILITY_VALUES,
+  labelVisibilityLabel,
+  mainNavigationLabel,
+  orderedMainNavigation
+} from '../data/MainNavigationSettings';
+import {
   CARD_BORDER_WIDTH_MAX,
   CARD_BORDER_WIDTH_MIN,
   CARD_RADIUS_MAX,
@@ -151,8 +157,25 @@ export struct ThemeSettingsPage {
   onEyeProtectionEndTimeChange: (time: string) => void = (_time: string) => {};
   @State backgroundExpanded: boolean = false;
   @State showRefactorTip: boolean = true;
-  @State predictiveBack: boolean = true;
-  @State sharedElement: boolean = true;
+  /** 预见性返回手势；上游 `AppShellSettings.kt:9 predictiveBackEnabled`。 */
+  @Prop predictiveBack: boolean = true;
+  onPredictiveBackChange: (enabled: boolean) => void = () => {};
+  /** 阅读界面共享元素动画；上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
+  @Prop readerSharedElement: boolean = true;
+  onReaderSharedElementChange: (enabled: boolean) => void = () => {};
+  /** 主导航显隐与顺序；上游 `AppShellSettings.kt:6-8` + `:17-19`。 */
+  @Prop showHome: boolean = true;
+  @Prop showDiscovery: boolean = true;
+  @Prop showRss: boolean = true;
+  @Prop defaultHomePage: string = 'bookshelf';
+  @Prop mainNavigationOrder: string = 'home,bookshelf,explore,rss,my';
+  @Prop labelVisibilityMode: string = 'auto';
+  onNavigationVisibilityChange: (route: string, visible: boolean) => void = () => {};
+  onNavigationMove: (route: string, up: boolean) => void = () => {};
+  onDefaultHomePageChange: (route: string) => void = () => {};
+  onLabelVisibilityModeChange: (value: string) => void = () => {};
+  /** 「首页与导航」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
+  @State navigationExpanded: boolean = false;
   @State followCoverColor: boolean = true;
   @State blurEnabled: boolean = false;
   @State progressiveBlurEnabled: boolean = false;
@@ -192,6 +215,28 @@ export struct ThemeSettingsPage {
     if (day) { return '已选日间，点击展开'; }
     if (night) { return '已选夜间，点击展开'; }
     return '日间/夜间背景图与背景虚化';
+  }
+
+  /** 「首页与导航」行的摘要文案：显示可见项数量与默认页。 */
+  private navigationSummary(): string {
+    const visible: string[] = this.visibleNavigationOptions();
+    const hidden = 3 - (this.showHome ? 1 : 0) - (this.showDiscovery ? 1 : 0) - (this.showRss ? 1 : 0);
+    const base = `默认 ${mainNavigationLabel(this.defaultHomePage)}`;
+    return hidden > 0 ? `${base} · 隐藏 ${hidden} 项` : `${base} · ${visible.length} 项`;
+  }
+
+  /** 可见导航项（按配置顺序），供「默认主页面」下拉使用。 */
+  private visibleNavigationOptions(): string[] {
+    const ordered = orderedMainNavigation(this.mainNavigationOrder);
+    const result: string[] = [];
+    for (let index = 0; index < ordered.length; index++) {
+      const route = ordered[index];
+      if (route === 'home' && !this.showHome) { continue; }
+      if (route === 'explore' && !this.showDiscovery) { continue; }
+      if (route === 'rss' && !this.showRss) { continue; }
+      result.push(route);
+    }
+    return result;
   }
 
   private coverBackgroundOptions(): string[] {
@@ -368,9 +413,9 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             ThemeSettingsOption({ title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
             ThemeItemDivider()
-            ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => { this.predictiveBack = value; this.onUnavailableAction('预见性返回设置暂未保存') } })
+            ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => this.onPredictiveBackChange(value) })
             ThemeItemDivider()
-            ThemeSwitchRow({ title: '阅读界面共享元素动画', detail: '进入阅读界面时从封面展开，关闭后使用渐变过渡', checked: this.sharedElement, onChange: (value: boolean) => { this.sharedElement = value; this.onUnavailableAction('共享元素动画设置暂未保存') } })
+            ThemeSwitchRow({ title: '阅读界面共享元素动画', detail: '进入阅读界面时从封面展开，关闭后使用渐变过渡', checked: this.readerSharedElement, onChange: (value: boolean) => this.onReaderSharedElementChange(value) })
             ThemeItemDivider()
             Column() {
               Row() {
@@ -401,7 +446,45 @@ export struct ThemeSettingsPage {
 
           ThemeSectionTitle({ title: '主界面' }).margin({ top: 20 })
           Column() {
-            ThemeSettingsOption({ title: '首页与导航', detail: '配置首页、发现、订阅、默认主页面和导航栏图标', onSelect: () => this.onUnavailableAction('首页与导航设置尚未迁移') })
+            ThemeSettingsOption({ title: '首页与导航', detail: this.navigationSummary(), onSelect: () => { this.navigationExpanded = !this.navigationExpanded; } })
+            if (this.navigationExpanded) {
+              Column() {
+                // 逐项显隐：上游 `setVisibilityForRoute`，书架与我的恒可见。
+                ThemeSwitchRow({ title: '首页', detail: '在底部导航显示首页', checked: this.showHome, onChange: (value: boolean) => this.onNavigationVisibilityChange('home', value) })
+                ThemeItemDivider()
+                ThemeSwitchRow({ title: '发现', detail: '在底部导航显示发现', checked: this.showDiscovery, onChange: (value: boolean) => this.onNavigationVisibilityChange('explore', value) })
+                ThemeItemDivider()
+                ThemeSwitchRow({ title: '订阅', detail: '在底部导航显示订阅', checked: this.showRss, onChange: (value: boolean) => this.onNavigationVisibilityChange('rss', value) })
+                ThemeItemDivider()
+                // 默认主页面：只能选可见项，对齐上游 `MainNavigationSettingsSheet.kt:81-84`。
+                ThemeSettingsDropdown({
+                  title: '默认主页面',
+                  value: this.defaultHomePage,
+                  options: this.visibleNavigationOptions(),
+                  labelBuilder: (value: string) => mainNavigationLabel(value),
+                  onSelect: (value: string) => this.onDefaultHomePageChange(value)
+                })
+                ThemeItemDivider()
+                ThemeSettingsDropdown({
+                  title: '导航标签显示',
+                  value: this.labelVisibilityMode,
+                  options: LABEL_VISIBILITY_VALUES,
+                  labelBuilder: (value: string) => labelVisibilityLabel(value),
+                  onSelect: (value: string) => this.onLabelVisibilityModeChange(value)
+                })
+                ThemeItemDivider()
+                // 拖排顺序：上游用可拖列表，本地用上下移两枚按钮承接同一个 onSetOrder。
+                Text('主导航顺序').fontSize(16).fontColor($r('app.color.theme_text_secondary')).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
+                ForEach(orderedMainNavigation(this.mainNavigationOrder), (navRoute: string) => {
+                  Row() {
+                    Text(mainNavigationLabel(navRoute)).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1)
+                    Button('上移').fontSize(13).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).fontColor($r('app.color.theme_text_secondary')).onClick(() => this.onNavigationMove(navRoute, true))
+                    Button('下移').fontSize(13).height(32).margin({ left: 8 }).backgroundColor($r('app.color.theme_surface_tertiary')).fontColor($r('app.color.theme_text_secondary')).onClick(() => this.onNavigationMove(navRoute, false))
+                  }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 })
+                }, (navRoute: string) => navRoute)
+              }
+              .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+            }
             ThemeItemDivider()
             ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBarVisible, onChange: (value: boolean) => this.onShowStatusBarChange(value) })
             ThemeItemDivider()
@@ -659,6 +742,8 @@ struct ThemeSettingsDropdown {
   @Prop title: string = '';
   @Prop value: string = '';
   @Prop options: string[] = [];
+  /** 外部文案构建器；返回空串表示回落到内置的封面/描边色文案。 */
+  labelBuilder: (value: string) => string = (_value: string) => '';
   onSelect: (value: string) => void = (_value: string) => {};
 
   /**
@@ -668,6 +753,8 @@ struct ThemeSettingsDropdown {
    * 边框色两档（A41/A42）是颜色串，空串对应上游 `baseCardBorderColor = 0` 的「未设置」。
    */
   private label(value: string): string {
+    const custom = this.labelBuilder(value);
+    if (custom.length > 0) { return custom; }
     if (value.length === 0) { return '默认描边色'; }
     if (value.startsWith('#')) { return value; }
     if (value === BOOK_INFO_BACKGROUND_OFF) { return '关闭模糊封面'; }

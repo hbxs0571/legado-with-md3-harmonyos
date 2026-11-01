@@ -30,6 +30,39 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r311 深色模式阶段二：首页与导航、预见性返回、共享元素动画（A9/A10/A14）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`assembleHap` 两次 `BUILD SUCCESSFUL`（`2 s 62 ms` / `35 s 5 ms`），均 `hdc install -r` 覆盖安装成功。
+
+**改了什么**
+
+- 新建 `entry/src/main/ets/data/MainNavigationSettings.ets`：`MAIN_NAVIGATION_ROUTES`、`mainNavigationLabel()`、`orderedMainNavigation()`（对齐上游 `MainDestination.ordered` 的「过滤未知与重复 → 补齐未出现项」）、`moveNavigationUp()`/`moveNavigationDown()`、`normalizeDefaultHomePage()`（不可见回落 `bookshelf`）、`isMainDestinationVisible()`/`visibleMainNavigation()`、`LABEL_VISIBILITY_VALUES` 与 `labelVisibilityLabel()`。
+- `entry/src/main/ets/data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 由 30 字段扩到 **38 字段**，新增 `showHome`/`showDiscovery`/`showRss`/`defaultHomePage`/`mainNavigationOrder`/`labelVisibilityMode`/`predictiveBack`/`readerSharedElement`；`load()`/`save()` 逐键读写。
+- `entry/src/main/ets/pages/Index.ets`：8 个 `@State`；底栏由 5 个硬编码 `TabItem` 改为 `ForEach(this.visibleNavigationRoutes())`（`TabItem` 新增 `@Prop showLabel`）；新增 `applyDefaultHomePage()`、`selectThemeNavigationVisibility()`、`moveThemeNavigationUp/Down()`、`selectThemeDefaultHomePage()`、`selectThemeLabelVisibilityMode()`、`selectThemePredictiveBack()`、`selectThemeReaderSharedElement()`、`readerRouteTransition()`；阅读页整块收尾追加 `.transition(this.readerRouteTransition())`。
+- `entry/src/main/ets/pages/ThemeSettingsPage.ets`：A9/A10 两个 `ThemeSwitchRow` 改真回调；「首页与导航」由 `ThemeSettingsOption` 改为可展开组（三枚显隐开关 + 默认主页面下拉 + 导航标签显示下拉 + 逐项上下移按钮）；`ThemeSettingsDropdown` 新增 `labelBuilder` 回调以便同一组件既显示封面背景三档文案又显示导航项名称。
+
+**与上游的三处差异**
+
+1. **A9 平台缺项**：SDK 里 `grep -rln "predictiveBack" --include=*.d.ts` 零命中，上游 `BaseActivity.kt:111` 的 `registerOnBackInvokedCallback` 在本平台没有等价物，所以只落盘、不伪造预览动画。
+2. **A10 用近似**：ArkUI 的 `geometryTransition` 要求源与目标组件同时在场，本地阅读页是整页 `if/else` 切换，做不到上游 Compose `SharedTransitionLayout` 的书封展开；关闭时只做 220ms 淡入淡出，打开时叠 0.92 倍缩放。
+3. **A14 用按钮代替拖拽**：上游 `MainNavigationSettingsSheet` 用可拖列表（`rememberReorderableLazyListState`）改顺序，本地用「上移/下移」两枚按钮承接同一个 `onSetOrder` 语义；上游的「导航栏图标」子 sheet（`NavIconManageSheet`，10 个自定义图标键）未做。
+
+**验收**
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| A14 显隐 | 外观 → 上滑 2 次 → 点「首页与导航」行展开 → 关「首页」→ 重启 | 底栏由 5 项变 4 项，「首页」消失 | 通过；prefs `showHome` = `false`；截图 `nav1.jpeg` vs `nav2.jpeg` changed pixels **25092**、bbox `(63,0,1184,105)` |
+| A14 顺序 | `mainNavigationOrder` 改 `my,home,bookshelf,explore,rss` → 重启 | 底栏首项变「我的」 | 通过；底栏截图首项是「我的」、当前选中「书架」 |
+| A14 默认主页面 | `defaultHomePage` 改 `explore` → 重启 | 冷启动直接停在发现页 | 通过；dumpLayout 读到「发现 | 当前没有发现源！」 |
+| A14 回落 | `showDiscovery=false` + `defaultHomePage=explore` → 重启 | 自动回落书架（对齐上游 `MainNavigationSettingsSheet.kt:81-84`） | 通过；dumpLayout 读到书架列表 `np-test` 等 |
+| A9 | 外观 → 点「预见性返回手势」 | prefs 变 `false`，重启保持；无预览动画 | 通过；`<bool key="predictiveBack" value="false"/>` |
+| A10 | 外观 → 点「阅读界面共享元素动画」 | prefs 变 `false`，重启保持；打开时进阅读页有缩放淡入 | 通过；`<bool key="readerSharedElement" value="false"/>` |
+
+**复原**：`showHome`/`showDiscovery`/`showRss` 回 `true`、`defaultHomePage` 回 `bookshelf`、`mainNavigationOrder` 回 `home,bookshelf,explore,rss,my`、`predictiveBack`/`readerSharedElement` 回 `true`（已 grep 确认）。
+
+**未验**：导航标签显示四档（`auto`/`selected`/`labeled`/`unlabeled`）只做了落盘与渲染分支，未逐档截图；A10 的缩放幅度（0.92）是目测选定，未与上游共享元素的曲线做像素级对比。
+
 ## 2026-11-01 N 端 r310 深色模式阶段二：全 App 背景图片（A13）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
