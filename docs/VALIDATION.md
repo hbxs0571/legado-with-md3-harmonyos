@@ -51,9 +51,9 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。
 - 构建：`bash scripts/build-hap.sh` 每次源码改动后均跑，全程 `BUILD SUCCESSFUL`（12 s – 1 min 6 s）。唯一告警是 `No signingConfig found for product default`。
 - 改动文件：
-  - 新增 `entry/src/main/ets/reader/ReaderCanvasSurface.ets`（画布绘制主体：页面窗口、逐行排版、转场策略、选区自绘、图片预取）。
-  - 新增 `entry/src/main/ets/reader/ReaderPageCurl.ets`（折页几何与触点策略，照上游 `PageCurlGeometry.kt` / `ReaderCurlTouchPolicy`）。
-  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5134 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支）。
+  - 新增 `entry/src/main/ets/reader/ReaderCanvasSurface.ets`（1765 行，画布绘制主体：页面窗口、逐行排版、五种转场策略、滚动模型、选区自绘、高亮样式分段、图片预取）。
+  - 新增 `entry/src/main/ets/reader/ReaderPageCurl.ets`（390 行，折页几何与触点策略，照上游 `PageCurlGeometry.kt` / `ReaderCurlTouchPolicy`）。
+  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5153 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支与整章 `Scroll` 分支）。
   - 改 `entry/src/main/ets/pages/Index.ets`（17 行：阅读页渲染门控）。
   - 新增 `scripts/build-hap.sh`（构建封装，导出 `JAVA_HOME=$DEVECO_ROOT/jbr`）。
 
@@ -62,7 +62,9 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 2. **每页先铺纸面**。上游是整页位图快照，天然不透明；本地逐元素自绘，转场时两页重叠会互相透出形成双重字影（折页首轮实测）。修法是 `drawSlot()` 里先 `fillPageSurface()`（`pageSurfaceArgb` + 不透明 Brush）再画字，`drawCurl()` 的底页/reveal/纸背/兜底四处同样先铺。
 3. **绘制拆成「先算几何、再逐元素画」**。`layoutPage()` 产出 `ReaderCanvasPageGeometry`（每个 item 的 `left/top/widthPx/heightPx`），绘制与命中测试共用同一套坐标。此前两套算法各算一遍的写法已经出现过「日志坐标对、屏幕画不出」的排查成本。
 4. **`Paragraph.paint()` 会改画笔状态且不恢复**。`drawTextBox()` 里必须用 `canvas.save()` / `canvas.restore()` 包住，否则同一块画布后续的 `attachBrush + drawRect`（选区条带、把手、下划线）全部不落像素 —— 日志照样打印 `drawRect done`，屏幕上什么都没有。
-5. **选区按上游 `feature/reader/core/selection/` 自绘**，不做简化：几何走 `getRectsForRange` / `getGlyphPositionAtCoordinate` / `getWordBoundary`，条带色 `0x63858585`（上游 `legacySelectionFill`），两个把手半径 7vp + 描边 2vp，长按 600 ms 起选，`canvasSuppressTap` 吞掉长按抬手那次 tap（对齐上游 `suppressTap`）。
+5. **滚动模式也搬进画布**。分页与连续滚动共用同一张画布（上游 `ScrollPageStack` 一条通路），`ReaderScrollPolicy`（`pageStep` / `stepDurationMillis` / `apply`，逐项照 `ReaderScrollState.kt`）算步距与越界，四页按 `scrollExtentPx` 堆叠、整体 `translate(0, stackOffsetY)` 平移，`clipRect` 保证不画出视口。滚动模式额外两个不变量：`calculateReaderBottomJustifyGap()` 必须返回 0（连续滚动没有「页底」，摊进剩余高度会把下一页首行推到本页已画的行上），进度必须按「当前页 + 全部前置页高度」的绝对位移算（`readerScrollAbsoluteOffset()`），否则每换一页进度条就打回 0。
+6. **高亮规则与选区一样走画布自绘**。`ReaderHighlightRule` 的正则命中区间转成 `ReaderCanvasStyleRange`，交给 `ParagraphBuilder` 逐段 `pushStyle`（字色 / 背景块 / 下划线），用户划线里 `effect === 'text'` 的字色排在高亮规则之后（对齐上游 `LegacyReaderStyleRangeMapper` 的 `priority = 10_000 + index`）。`RectStyle` 的四个圆角是 API 12 必填项，漏写报 `10505001`。
+7. **选区按上游 `feature/reader/core/selection/` 自绘**，不做简化：几何走 `getRectsForRange` / `getGlyphPositionAtCoordinate` / `getWordBoundary`，条带色 `0x63858585`（上游 `legacySelectionFill`），两个把手半径 7vp + 描边 2vp，长按 600 ms 起选，`canvasSuppressTap` 吞掉长按抬手那次 tap（对齐上游 `suppressTap`）。
 
 **踩坑**：
 1. **未被引用的 `.ets` 不参与类型检查**。往 `ReaderCanvasSurface.ets` 末尾塞 `const __probe: number = "not-a-number";` 后构建仍 `BUILD SUCCESSFUL`，构建产物里也搜不到该文件 —— **构建通过不等于新文件过了编译**，必须先有 import + 使用再拿构建当证据。
@@ -78,13 +80,18 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **验收③KI-EXP3 选区与划词**：`uitest uiInput longClick 400 1000` 出灰色选区带 + 两个圆形把手 + 浮动菜单「复制 / 书签 / 划线 / 笔记」；`drag 378 1050 200 900 800` 拖起始把手把选区从单字扩到两行，`drag 459 1050 900 1250 800` 拖结束把手跨行；点「划线 — 笔记」面板回显完整选中文本（「“让我们来采访一下展馆主人金先生。」）与章节「zh-book / 第3章 盗神将至」，保存后正文下方出现绿色下划线；点「复制」菜单收起、选区色块保留。**通过。**
 
+**验收④五种转场各连翻 20 页**：每改一次 `pageAnimation` 都 `aa force-stop` → `aa start` → 点书架进书，再连点右侧翻页 20 次。COVER(`0`) 到第 16 章 5/10；SLIDE(`1`) 到第 18 章 1/10；折页(`2`) 到第 18 章；FADE(`4`) 到第 20 章 2/10；滚动(`3`) 到第 22 章 8/9 `4.0%`。全程每帧都有完整正文，无整页空白、无末行裁切、无两页文字互相透出。滚动模式另验跨章：连点 12 次从第 4 章滚到第 5 章，`scrollOffset` 越界时正确换页并清选区。**通过。**
+
+滚动模式修复前实测到两个真实缺陷（均已在画布侧修掉）：① 底部对齐位移让「当前页末行与下一页首行叠在同一处」；② `scrollOffset` 是相对当前页的偏移，进度条每换一页就打回 0。
+
 **未验 / 已知差异**：
-- 滚动模式（`pageAnimation=3`）仍走 ArkUI `Scroll` 分支，画布分支不消费 `ReaderScrollPolicy`；上游画布内滚动的 `ReaderScrollState.kt` 语义尚未移植。
 - 折页在程序化翻页（点击翻页，非手势拖拽）下触点轨迹全程近水平，曲线弧度很浅，视觉上接近「左右半屏分界」；与上游 `programmaticX/Y` 同款轨迹，未额外调参。
 - 受限于模拟器，只能验证点击翻页与长按选区两种输入；手势拖拽折页的跟手效果需真机补验。
 - 页眉页脚、章节标题、书签角标仍由 ArkUI 绘制（不搬画布），与上游一致的只有正文层。
 
 **复原**：`pageAnimation` 回 `0`（COVER）、`pageTouchSlop` 回 `500`；阅读设置其余键未改。
+
+**改 prefs 的正确写法**：`re.sub(r'(key="%s" value=")[^"]*(")', ...)` 单键替换后必须 `xml.dom.minidom.parseString` 校验再推设备。本轮曾用 `re.sub(r'key="%s"[^/]*', ...)` 吞掉了 `/>` 的结尾斜杠，把 XML 写坏成 `//>`，应用把 `legado_reader_settings` 改名 `.broken` 并重置成 6 个键——**设备上的阅读进度与所有面板自定义值都会被清掉**。
 
 ## 2026-11-01 N 端 r317 深色模式收口复核：四条地基验收重新取证（纯验证，无代码改动）
 

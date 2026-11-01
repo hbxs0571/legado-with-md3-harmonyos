@@ -146,11 +146,11 @@ this.pageTurnTimer = setTimeout(() => {
 
 **本地现状（已接）**：
 - 翻页不再改节点树，而是改画布内部的 `turnTransition.offsetPx`：`ReaderPage.ets` 的 `turnReaderPage()` 用 `getUIContext().createAnimator(...)` 的 `onFrame(progress)` 逐帧调 `paintReaderCanvas()`，**`onFinish` 才改 `currentPageIndex`**。
-- 位移全部由 `ReaderCanvasSurface.ets` 的 `ReaderPageTransitionPolicy.transforms(mode, transition, pageWidthPx)` 给出，与上游逐分支同式：COVER（`current.translationX = offsetPx` + `currentOnTop = true`）、SLIDE（另给 `next.translationX = width + offsetPx`）、FADE（`next.alpha = progress`）、折页（`ReaderPageCurl.ets` 的 `PageCurlGeometry`）、SCROLL（上游 `ReaderScrollState.kt` 语义，本地仍走 ArkUI `Scroll` 分支，见下方「已知差异」）。
+- 位移全部由 `ReaderCanvasSurface.ets` 的 `ReaderPageTransitionPolicy.transforms(mode, transition, pageWidthPx)` 给出，与上游逐分支同式：COVER（`current.translationX = offsetPx` + `currentOnTop = true`）、SLIDE（另给 `next.translationX = width + offsetPx`）、FADE（`next.alpha = progress`）、折页（`ReaderPageCurl.ets` 的 `PageCurlGeometry`）、SCROLL（`ReaderScrollPolicy` 的 `pageStep` / `stepDurationMillis` / `apply` 逐项照 `ReaderScrollState.kt`，四页按 `scrollExtentPx` 堆叠后整体平移，画布内滚动）。
 - 绘制前先按 `pageBackgroundArgb` 铺满整块画布，每个 slot 再各自 `fillPageSurface()` 铺纸面，**任何一帧都不会露出空白**。
 - 时长一律经 `ReaderPageTransitionPolicy.settleDurationMillis()`（FADE 用整段基准、其余按剩余距离缩放），基准值来自 `animationSpeed` 索引 `[240, 300, 360, 540]`，与上游 `ReaderPageTurnSpeed.kt` 的四档一致。
 
-**验收**：模拟器 `127.0.0.1:5555`（API 26）上按 COVER / SLIDE / FADE / 折页逐模式翻页截图，每帧都有完整正文；详见 [VALIDATION](VALIDATION.md) 的「2026-11-02 N 端正文改画布逐行绘制」。
+**验收**：模拟器 `127.0.0.1:5555`（API 26）上五种转场（COVER / SLIDE / FADE / 折页 / 滚动）各连翻 20 页，每帧都有完整正文、无整页空白；滚动模式另验跨章 12 次翻页。详见 [VALIDATION](VALIDATION.md) 的「2026-11-02 N 端正文改画布逐行绘制」。
 
 ### KI-EXP2 开书时排版先乱 1-2 秒（用户原话「排版总是会先乱一秒两秒」）—— 已接
 
@@ -159,7 +159,7 @@ this.pageTurnTimer = setTimeout(() => {
 **放大因素（历史记录）**：① 约 40 个 `@Prop` 共用 `onPaginationInputsChanged`，设置分几次到达就重建几次；② `Index.ets` 的 `restoreReaderSettings(context)` 是 async 且未 await；③ 尺寸三条到达路径都调 `rebuildReaderPages()`；④ 每次重建跑全章解析与高亮匹配；⑤ 带图章节缺图片尺寸就清空整章分页，走两轮「滚动 → 分页」切换。
 
 **本地现状（已接，五条逐个消除）**：
-1. 分页判据去掉 `localReaderPages.length > 0`，现在只要 `(format === 'txt' || 'epub') && pageAnimation !== 3` 就**一律进画布**。没有排好页时画布什么都不画（`ReaderCanvasRenderer.draw()` 开头 `window.current === undefined` 直接 return，注释点名上游 `ReaderCanvasSurface.kt:254` 的 `val current = pages.current ?: return`），**绝不换一套排版兜底**。else 分支的 `Scroll` 整章滚动已随 Span 分支一起删除。
+1. 分页判据去掉 `localReaderPages.length > 0`，现在只要 `format === 'txt' || 'epub'` 就**一律进画布**（连续滚动模式也是同一张画布，不再有第二套 ArkUI 排版）。没有排好页时画布什么都不画（`ReaderCanvasRenderer.draw()` 开头 `window.current === undefined` 直接 return，注释点名上游 `ReaderCanvasSurface.kt:254` 的 `val current = pages.current ?: return`），**绝不换一套排版兜底**。else 分支的 `Scroll` 整章滚动已删除。
 2. 约 40 个 `@Watch('onPaginationInputsChanged')` 现在只调 `scheduleReaderPaginationRebuild()`：`refreshReaderFontFamilies()` 立即执行，重建合并到 16ms 防抖窗口内只跑一次（`PAGINATION_DEBOUNCE_MILLIS = 16`）。
 3. `Index.ets` 的 `ReaderPage` 外层加了渲染门控 `if (this.readerSettingsLoaded || this.route !== AppRoute.READER)`，设置没载入完时显示与阅读页同色的空白占位 + `LoadingProgress`，不再按初值先排一次错的。
 4. 图片尺寸未就绪不再清空整章分页：`rebuildReaderPages()` 里用 `paginationImageSizes.set(part.value, { width: placeholderExtent, height: placeholderExtent })`（`placeholderExtent = max(1, lineHeight)`，对齐上游 `ReaderChapterBlockMeasurer.kt:457-462` 的占位口径），并置 `paginationUsesImagePlaceholder`；尺寸异步到达后只重排一次。
@@ -180,6 +180,15 @@ this.pageTurnTimer = setTimeout(() => {
 - 清理：程序化翻页的 `animator.onFinish` 调 `resetCanvasSelectionState()`（对齐上游 `ReaderSelectionLifecyclePolicy.shouldClearForPageChange`）。
 
 **验收**：模拟器上长按出选区带 + 两个把手 + 浮动菜单；拖起始把手把选区从单字扩到两行、拖结束把手跨行；点「划线 — 笔记」面板回显完整选中文本并可保存，保存后正文出现绿色下划线；详见 [VALIDATION](VALIDATION.md) 同节。
+
+### 顺带补回：高亮规则（正则命中的字色/底色/下划线）—— 已接
+
+画布化时先只搬了「用户划线/笔记」（`markings`），`ReaderHighlightRule` 的正则命中样式一度完全没画——这是 Span 分支删除后的真实功能退化，2026-11-02 已补齐。
+
+- 上游口径：`legacy/LegacyReaderStyleRangeMapper.kt` 的 `map()` 把启用规则按 `position` 升序展开成区间，`priority = index`；用户划线走 `priority = 10_000 + index` 压在高亮规则之上。
+- 本地实现：`ReaderPage.ets` 的 `buildReaderCanvasHighlights()` 把 `readerHighlightRanges` 转成 `ReaderCanvasStyleRange`（`textColorArgb` / `backgroundArgb` / `decoration` / `decorationArgb`），再把 `markings` 里 `effect === 'text'` 的字色区间追加在数组末尾；`ReaderCanvasSurface.ets` 的 `splitStyledSegments()` 按区间端点切段、每段取「完全覆盖它的最后一个 range」，`getParagraph()` 用 `ParagraphBuilder.pushStyle / addText / popStyle` 逐段套样式。
+- `underlineMode` 映射：`6 → LINE_THROUGH`、`1..4 → UNDERLINE`、否则 NONE；线型 `2 → DASHED`、`3 → WAVY`、`4 → DOUBLE`、否则 SOLID。
+- 验收：设备上原本无高亮规则数据，用 UI 造了一条「文字颜色」划线（`uitest uiInput longClick 400 1000` → 菜单「划线 / 笔记」→ 样式「文字颜色」→ 保存），第 2 次翻页后屏幕上出现绿色字形像素（738 个，bbox `(392,2374)-(540,2440)`），确认分段样式确实下到了 `Paragraph` 并画出。**通过。**
 
 ### 已删除：默认参数把所有人推到最慢的渲染分支
 
