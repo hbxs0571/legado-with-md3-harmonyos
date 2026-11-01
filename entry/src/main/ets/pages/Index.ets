@@ -20,6 +20,7 @@ import { ReaderSearchPage } from './ReaderSearchPage';
 import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
 import { BookInfoPage } from './BookInfoPage';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
+import { CustomThemePage } from './CustomThemePage';
 import { APP_FONT_FAMILY, appFontDisplayName, normalizeAppFontPath } from '../data/AppFontSettings';
 import { OtherSettingsPage } from './OtherSettingsPage';
 import { AppReadAloudSettingsPage } from './AppReadAloudSettingsPage';
@@ -46,7 +47,10 @@ import {
 } from '../data/HomeDashboardSettingsRepository';
 import { OnboardingRepository } from '../data/OnboardingRepository';
 import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground, normalizeThemeColor, FONT_SCALE_DEFAULT, normalizeBackgroundBlur } from '../data/ThemeSettingsRepository';
-import { applyPalette, normalizePaletteIndex } from '../data/ThemePalette';
+import { applyThemeColors, normalizePaletteIndex, resolvePaletteColors } from '../data/ThemePalette';
+import {
+  CustomThemeSnapshot, defaultCustomThemeSnapshot, normalizeCustomThemeSnapshot, resolveCustomPaletteColors
+} from '../data/CustomThemeColors';
 import {
   BOTTOM_BAR_BLUR_ALPHA_DEFAULT, BOTTOM_BAR_BLUR_RADIUS_DEFAULT, BOTTOM_BAR_LENS_RADIUS_DEFAULT,
   BOTTOM_BAR_OPACITY_DEFAULT, TOP_BAR_BLUR_ALPHA_DEFAULT, TOP_BAR_BLUR_RADIUS_DEFAULT,
@@ -595,6 +599,13 @@ struct Index {
   @State themeBottomBarOpacity: number = BOTTOM_BAR_OPACITY_DEFAULT;
   /** 应用字体在沙箱内的绝对路径；空串表示系统默认字体。对齐上游 `ThemeSettings.appFontPath`。 */
   @State themeAppFontPath: string = '';
+  /**
+   * 自定义主题配色（上游 `appTheme == "12"` 那套）。
+   *
+   * 只在调色板序号为 12 且深度个性化开着、且至少设了一个颜色时才真正参与换肤，
+   * 判断顺序对齐上游 `ui/theme/AppTheme.kt:105-125`。
+   */
+  @State themeCustomColors: CustomThemeSnapshot = defaultCustomThemeSnapshot();
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -2053,6 +2064,22 @@ struct Index {
   }
 
   /**
+   * 自定义主题配色页的回调：改一项就写一次，对齐上游 `CustomThemeViewModel`
+   * 每次 intent 都直接写 `ThemeSettingsGateway` 的行为。
+   *
+   * 写完立刻重跑 `applyThemeMode`，否则要等下次换日夜才看得到新颜色。
+   */
+  private saveCustomTheme(next: CustomThemeSnapshot): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法保存自定义配色，请重试');
+      return;
+    }
+    this.themeCustomColors = normalizeCustomThemeSnapshot(next);
+    this.applyThemeMode(context, this.themeMode, this.themePaletteIndex, true);
+  }
+
+  /**
    * 首次启动向导第 4 页深色模式回调。上游 `OnboardingViewModel.kt:120-123`
    * 的 `SetThemeMode`：点一下就写 `themeMode` 网关 + `ApplyDayNight`，
    * 所以这里立刻走与主题设置页同一条 `applyThemeMode` 写入路径，不等「完成」。
@@ -2126,6 +2153,7 @@ struct Index {
     this.themeTopBarOpacity = theme.topBarOpacity;
     this.themeBottomBarOpacity = theme.bottomBarOpacity;
     this.themeAppFontPath = theme.appFontPath;
+    this.themeCustomColors = theme.customTheme;
     this.applyDefaultHomePage();
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
@@ -2798,6 +2826,7 @@ struct Index {
     this.themeTopBarOpacity = TOP_BAR_OPACITY_DEFAULT;
     this.themeBottomBarOpacity = BOTTOM_BAR_OPACITY_DEFAULT;
     this.themeAppFontPath = '';
+    this.themeCustomColors = defaultCustomThemeSnapshot();
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2821,7 +2850,14 @@ struct Index {
     ThemeModeResolver.apply(context, themeMode);
     // 配色跟着日夜走：同一套调色板的日间/夜间色值不同，所以放在 `ThemeModeResolver.apply` 之后广播。
     // 对齐上游 `ThemeEngine.getColorScheme(context, mode, darkTheme, ...)` 每次换肤都现算一套。
-    applyPalette(context, normalizePaletteIndex(paletteIndex), themeMode);
+    // 调色板序号为 12（自定义）时改用用户手选的 6 个颜色，判断顺序见 `resolveCustomPaletteColors`。
+    const normalizedIndex = normalizePaletteIndex(paletteIndex);
+    const isDarkNow = this.readerNightMode;
+    const customColors = normalizedIndex === 12
+      ? resolveCustomPaletteColors(this.themeCustomColors, isDarkNow,
+        resolvePaletteColors(normalizedIndex, isDarkNow))
+      : undefined;
+    applyThemeColors(context, normalizedIndex, themeMode, customColors);
     // 日夜一变，卡片边框色就要按 baseCardBorderColor(Night) 重选，所以顺带刷新一次。
     this.publishThemeCardStyle();
     this.publishTopBottomBarStyle();
@@ -2896,7 +2932,8 @@ struct Index {
       bottomBarBlurAlpha: this.themeBottomBarBlurAlpha,
       topBarOpacity: this.themeTopBarOpacity,
       bottomBarOpacity: this.themeBottomBarOpacity,
-      appFontPath: this.themeAppFontPath
+      appFontPath: this.themeAppFontPath,
+      customTheme: this.themeCustomColors
     });
   }
 
@@ -6061,7 +6098,8 @@ struct Index {
   }
 
   private isProfileSettingsPage(destination: ProfileRoute): boolean {
-    return destination === ProfileRoute.APP_THEME_SETTINGS || destination === ProfileRoute.APP_OTHER_SETTINGS ||
+    return destination === ProfileRoute.APP_THEME_SETTINGS || destination === ProfileRoute.APP_CUSTOM_THEME ||
+      destination === ProfileRoute.APP_OTHER_SETTINGS ||
       destination === ProfileRoute.APP_READ_SETTINGS || destination === ProfileRoute.APP_ALOUD_SETTINGS ||
       destination === ProfileRoute.APP_COVER_SETTINGS || destination === ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS ||
       destination === ProfileRoute.APP_BACKUP_SETTINGS || destination === ProfileRoute.APP_AI_SETTINGS ||
@@ -7244,7 +7282,16 @@ struct Index {
             onEyeProtectionScheduleChange: (enabled: boolean) => this.setEyeProtectionSchedule(enabled),
             onEyeProtectionIntensityChange: (intensity: number) => this.setEyeProtectionIntensity(intensity),
             onEyeProtectionStartTimeChange: (time: string) => this.setEyeProtectionStartTime(time),
-            onEyeProtectionEndTimeChange: (time: string) => this.setEyeProtectionEndTime(time)
+            onEyeProtectionEndTimeChange: (time: string) => this.setEyeProtectionEndTime(time),
+            customTheme: this.themeCustomColors,
+            onOpenCustomTheme: () => this.openSettingsCategory(ProfileRoute.APP_CUSTOM_THEME)
+          })
+        } else if (this.profileSubpage === ProfileRoute.APP_CUSTOM_THEME) {
+          CustomThemePage({
+            onBack: () => this.profileSubpage = ProfileRoute.APP_THEME_SETTINGS,
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            customTheme: this.themeCustomColors,
+            onChange: (snapshot: CustomThemeSnapshot) => this.saveCustomTheme(snapshot)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_OTHER_SETTINGS) {
           OtherSettingsPage({

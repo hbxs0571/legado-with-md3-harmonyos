@@ -1,5 +1,8 @@
 import { normalizeAppFontPath } from './AppFontSettings';
 import { THEME_PALETTE_MAX, THEME_PALETTE_MIN } from './ThemePalette';
+import {
+  CustomThemeSnapshot, defaultCustomThemeSnapshot, normalizeCustomThemeSnapshot
+} from './CustomThemeColors';
 import { preferences } from '@kit.ArkData';
 import { normalizeLabelVisibility } from './MainNavigationSettings';
 import {
@@ -155,6 +158,13 @@ export interface ThemeSnapshot {
   bottomBarOpacity: number;
   /** 应用字体文件在沙箱内的绝对路径；空串表示系统默认字体。对齐上游 `ThemeSettings.appFontPath`。 */
   appFontPath: string;
+  /**
+   * 自定义主题配色（上游 `appTheme == "12"` 那套 16 个键）。
+   *
+   * 上游是 16 个平铺键（`ThemeSettings.kt` 的 6 个颜色 + 6 个 `*Night` + 4 个开关/枚举），
+   * 本地序列化成一个 JSON 字符串存在单键 `customTheme` 里，避免 preferences 里多出 16 个散键。
+   */
+  customTheme: CustomThemeSnapshot;
 }
 
 /** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
@@ -199,6 +209,33 @@ export function normalizeThemeColor(value: string): string {
   const trimmed = value.trim().toUpperCase();
   if (!/^#([0-9A-F]{6}|[0-9A-F]{8})$/.test(trimmed)) { return ''; }
   return trimmed;
+}
+
+/**
+ * `customTheme` 单键（JSON 字符串）→ 快照；解析失败或格式不对一律回落默认。
+ *
+ * 上游这 16 个键是平铺在 preferences 里的（`FeatureSettingsRepositories.kt` 的 `toPrefMap()`），
+ * 本地合成一个键，所以读回时要自己兜住脏数据，不能让一条坏 JSON 把整个主题设置带崩。
+ */
+export function parseCustomThemeSnapshot(raw: string): CustomThemeSnapshot {
+  if (raw.length === 0) { return defaultCustomThemeSnapshot(); }
+  try {
+    const parsed = JSON.parse(raw) as CustomThemeSnapshot;
+    if (parsed === null || typeof parsed !== 'object') { return defaultCustomThemeSnapshot(); }
+    const fallback = defaultCustomThemeSnapshot();
+    return normalizeCustomThemeSnapshot({
+      enableDeepPersonalization: parsed.enableDeepPersonalization === true,
+      paletteStyle: typeof parsed.paletteStyle === 'string' ? parsed.paletteStyle : fallback.paletteStyle,
+      customContrast: typeof parsed.customContrast === 'string' ? parsed.customContrast : fallback.customContrast,
+      materialVersion: typeof parsed.materialVersion === 'string' ? parsed.materialVersion : fallback.materialVersion,
+      seedColorDay: typeof parsed.seedColorDay === 'string' ? parsed.seedColorDay : '',
+      seedColorNight: typeof parsed.seedColorNight === 'string' ? parsed.seedColorNight : '',
+      day: parsed.day !== undefined && parsed.day !== null ? parsed.day : fallback.day,
+      night: parsed.night !== undefined && parsed.night !== null ? parsed.night : fallback.night
+    });
+  } catch (_) {
+    return defaultCustomThemeSnapshot();
+  }
 }
 
 /**
@@ -272,7 +309,8 @@ export class ThemeSettingsRepository {
       bottomBarBlurAlpha: BOTTOM_BAR_BLUR_ALPHA_DEFAULT,
       topBarOpacity: TOP_BAR_OPACITY_DEFAULT,
       bottomBarOpacity: BOTTOM_BAR_OPACITY_DEFAULT,
-      appFontPath: ''
+      appFontPath: '',
+      customTheme: defaultCustomThemeSnapshot()
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -332,6 +370,7 @@ export class ThemeSettingsRepository {
       const topBarOpacity = await store.get('topBarOpacity', defaults.topBarOpacity);
       const bottomBarOpacity = await store.get('bottomBarOpacity', defaults.bottomBarOpacity);
       const appFontPath = await store.get('appFontPath', defaults.appFontPath);
+      const customThemeRaw = await store.get('customTheme', '');
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(THEME_PALETTE_MIN, Math.min(THEME_PALETTE_MAX, paletteIndex)) : defaults.paletteIndex,
@@ -425,7 +464,8 @@ export class ThemeSettingsRepository {
           typeof topBarOpacity === 'number' ? topBarOpacity : defaults.topBarOpacity),
         bottomBarOpacity: normalizeBottomBarOpacity(
           typeof bottomBarOpacity === 'number' ? bottomBarOpacity : defaults.bottomBarOpacity),
-        appFontPath: normalizeAppFontPath(typeof appFontPath === 'string' ? appFontPath : defaults.appFontPath)
+        appFontPath: normalizeAppFontPath(typeof appFontPath === 'string' ? appFontPath : defaults.appFontPath),
+        customTheme: parseCustomThemeSnapshot(typeof customThemeRaw === 'string' ? customThemeRaw : '')
       };
     } catch (_) {
       return defaults;
@@ -506,6 +546,7 @@ export class ThemeSettingsRepository {
     await store.put('topBarOpacity', normalizeTopBarOpacity(snapshot.topBarOpacity));
     await store.put('bottomBarOpacity', normalizeBottomBarOpacity(snapshot.bottomBarOpacity));
     await store.put('appFontPath', normalizeAppFontPath(snapshot.appFontPath));
+    await store.put('customTheme', JSON.stringify(normalizeCustomThemeSnapshot(snapshot.customTheme)));
     await store.flush();
   }
 

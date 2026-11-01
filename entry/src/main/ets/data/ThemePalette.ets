@@ -528,3 +528,20 @@ export function applyPalette(context: Context, index: number, themeMode: string)
   publishPaletteColors(colors);
   return colors;
 }
+
+/**
+ * 同上，但传入了自定义配色时优先用它。
+ *
+ * 上游 `ui/theme/AppTheme.kt:105-125`：`appTheme == Custom && enableDeepPersonalization && hasCustomColor`
+ * 时走 `generateColorScheme(userPalette, ...)`，否则继续走 `ThemeEngine.getColorScheme`。
+ * 本地按同一顺序：调用方算出 `customColors`（`undefined` 表示不走自定义）就优先用，否则查内置调色板表。
+ */
+export function applyThemeColors(
+  context: Context, index: number, themeMode: string,
+  customColors: ThemePaletteColors | undefined
+): ThemePaletteColors {
+  const isDark = ThemeModeResolver.isDarkTheme(themeMode, ThemeModeResolver.isSystemDark(context));
+  const colors = customColors !== undefined ? customColors : resolvePaletteColors(index, isDark);
+  publishPaletteColors(colors);
+  return colors;
+}

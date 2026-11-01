@@ -3,6 +3,9 @@ import { appFontDisplayName } from '../data/AppFontSettings';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import { resolvePaletteColors, THEME_PALETTES, ThemePaletteDefinition } from '../data/ThemePalette';
 import {
+  CustomThemeSnapshot, defaultCustomThemeSnapshot, hasCustomColor
+} from '../data/CustomThemeColors';
+import {
   BOOK_INFO_BACKGROUND_OFF,
   BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT,
   BOOK_INFO_BACKGROUND_ON
@@ -64,6 +67,10 @@ export struct ThemeSettingsPage {
   onPaletteChange: (paletteIndex: number) => void = (_paletteIndex: number) => {};
   /** 当前是否深色，用于调色板预览色按日/夜取值；由 Index 传入（`ThemeModeResolver.isDarkTheme` 派生）。 */
   @Prop readerNightMode: boolean = false;
+  /** 自定义主题配色快照，只用来生成「自定义颜色」行的摘要文案。 */
+  @Prop customTheme: CustomThemeSnapshot = defaultCustomThemeSnapshot();
+  /** 打开自定义颜色页；上游 `ThemeConfigScreen.kt:266-270` 的 `onNavigateToCustomTheme`。 */
+  onOpenCustomTheme: () => void = () => {};
   /** 全局字体缩放 8..16（10 = 1.0x），对齐上游 `AppShellSettings.kt:5 fontScale`。 */
   @Prop fontScale: number = 10;
   /** 是否显示状态栏，对齐上游 `AppShellSettings.kt:10 showStatusBar`。 */
@@ -296,6 +303,21 @@ export struct ThemeSettingsPage {
     return appFontDisplayName(this.appFontPath);
   }
 
+  /**
+   * 「自定义颜色」行的摘要。
+   *
+   * 对齐上游 `ThemeConfigScreen.kt:266-270` 那行的 description：没有单独摘要时留空即可，
+   * 这里给一句能说明当前状态的短文案，避免一行只有标题看不出是否已设色。
+   */
+  private customColorSummary(): string {
+    if (this.customTheme.enableDeepPersonalization) {
+      return hasCustomColor(this.customTheme.day) || hasCustomColor(this.customTheme.night)
+        ? '已自定义日间/夜间颜色' : '自定义日间/夜间颜色';
+    }
+    return this.customTheme.seedColorDay.length > 0 || this.customTheme.seedColorNight.length > 0
+      ? '已设置种子色' : '用种子色生成整套配色';
+  }
+
   /** 「顶栏与底栏」行的摘要文案。 */
   private topBottomBarSummary(): string {
     const barParts: string[] = [];
@@ -515,6 +537,12 @@ export struct ThemeSettingsPage {
               ThemeSettingsOption({ title: '恢复系统字体', detail: '清除已选择的应用字体', onSelect: () => this.onClearAppFont() })
             }
             ThemeItemDivider()
+            // 上游 `ThemeConfigScreen.kt:266-270`：只有 appTheme == "12"（自定义）时才显示这一行。
+            if (this.paletteIndex === 12) {
+              ThemeSettingsOption({ title: '自定义颜色', detail: this.customColorSummary(),
+                onSelect: () => this.onOpenCustomTheme() })
+              ThemeItemDivider()
+            }
             ThemeSettingsOption({ title: '主题风格', detail: 'Material Design', onSelect: () => this.onUnavailableAction('主题风格切换尚未接入') })
             ThemeItemDivider()
             ThemeSettingsOption({ title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })

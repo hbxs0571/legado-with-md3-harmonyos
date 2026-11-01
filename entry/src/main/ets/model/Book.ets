@@ -136,6 +136,7 @@ export enum ProfileRoute {
   AI_CHAT = 'aiChat',
   APP_SETTINGS = 'appSettings',
   APP_THEME_SETTINGS = 'appThemeSettings',
+  APP_CUSTOM_THEME = 'appCustomTheme',
   APP_OTHER_SETTINGS = 'appOtherSettings',
   APP_READ_SETTINGS = 'appReadSettings',
   APP_ALOUD_SETTINGS = 'appAloudSettings',

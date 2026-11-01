@@ -30,6 +30,54 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r315 深色模式阶段二：自定义主题配色（A6）
+
+**改动**
+
+- 新建 `entry/src/main/ets/data/CustomThemeColors.ets`：`CustomThemeColorSet`（`primary`/`secondary`/`primaryText`/`secondaryText`/`background`/`labelContainer`，空串 = 未设置，对应上游 Int 0）、`CustomThemeSnapshot`（`enableDeepPersonalization`/`paletteStyle`/`customContrast`/`materialVersion`/`seedColorDay`/`seedColorNight`/`day`/`night`）、三张取值表 `CUSTOM_PALETTE_STYLES`（9 项）/`CUSTOM_CONTRASTS`（3 项）/`CUSTOM_MATERIAL_VERSIONS`（2 项）与中文标签、`SLOT_FALLBACK`（= 上游 `AppTheme.kt:110-121`）、`CUSTOM_OUTLINE = '#79747E'`；函数 `normalizeCustomColor`、`defaultCustomThemeSnapshot`、`normalizeCustomThemeSnapshot`、`resolveCustomColorSet`（夜间未设回落日间）、`hasCustomColor`、`buildCustomPaletteColors`（6 色位 → 本地 8 语义色位）、`resolveCustomPaletteColors`（种子色全空返回 `undefined`）。
+- `entry/src/main/ets/data/ThemePalette.ets`：新增 `applyThemeColors(context, index, themeMode, customColors)`，有自定义色优先，否则回落 `resolvePaletteColors`。
+- `entry/src/main/ets/data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 加 `customTheme: CustomThemeSnapshot`（上游 16 个平铺键合成单键存 JSON）；`load`/`save` 各一处读写；新增导出 `parseCustomThemeSnapshot(raw)`。
+- `entry/src/main/ets/pages/CustomThemePage.ets`（新建）：`CollapsingSettingsHeader` + 分组卡片；`@State editingSlot` 用 -1 / 0..5 / 6..11 / 12 / 13 区分关闭、日间六项、夜间六项、两个种子色；底部固定「选择颜色」面板（「重置」「保存」+ 48dp 预览块 + hex `TextInput` + 提示文案）。
+- `entry/src/main/ets/pages/ThemeSettingsPage.ets`：`paletteIndex === 12` 时于「主题风格」之前插入「自定义颜色」行，摘要由 `customColorSummary()` 生成。
+- `entry/src/main/ets/model/Book.ets`：`ProfileRoute` 加 `APP_CUSTOM_THEME = 'appCustomTheme'`。
+- `entry/src/main/ets/pages/Index.ets`：`@State themeCustomColors`、`saveCustomTheme()`、`isProfileSettingsPage` 白名单、渲染分支，`applyThemeMode` 在 `normalizedIndex === 12` 时改走 `applyThemeColors`。
+
+**与上游的差异**
+
+- 上游 `ColorPickerSheet` 用 8×12 色环任意取色，本地 SDK 无 `ColorPicker` 组件（全仓与 SDK 检索均零命中），改成「hex 输入 + 48dp 预览块 + 重置 + 保存」，能力边界对齐上游的 `hexInput`/「重置」/「保存」三项。
+- 上游种子色模式用 `CustomColorScheme` 做 HCT 生成整套 45 色位，ArkUI 无 HCT 生成器（`hct`、`materialkolor` 检索零命中），本地只把种子色落到 `primary`、其余 7 位用调色板表兜底。
+- 上游 16 个平铺 prefs 键，本地合成单键 `customTheme` 存 JSON。
+
+**验收**
+
+| # | 操作 | 期望 | 结果 |
+| --- | --- | --- | --- |
+| 1 | 外观页 `paletteIndex=12` | 出现「自定义颜色」行 | 通过：`[112,1739][392,1805]`，摘要「用种子色生成整套配色」 |
+| 2 | 进入自定义颜色页（种子色模式） | 渲染开关 + 日夜两个种子色 + 三个下拉 | 通过：「使用色板生成颜色」开关 on、「种子色（日间）」「种子色（夜间）」「色板风格=柔和」「对比度=默认」「Material 版本=Material 3 (2021)」 |
+| 3 | 种子色（日间）输入 `#FF8800` 保存 | prefs 写入、行内显示 hex + 色块 | 通过：`seedColorDay:"#FF8800"`，行右侧 `#FF8800` + 橙色圆点 |
+| 4 | 关闭「使用色板生成颜色」 | 深度个性化开，出现「白天」「夜间」各 6 项 | 通过：12 行全部渲染（主题色/次要主题色/主要字体色/次要字体色/背景色/标签容器色） |
+| 5 | 白天·主题色设 `#FF8800` 保存 | 整 App 立刻换色 | 通过：`enableDeepPersonalization:true`、`day.primary:"#FF8800"`，底色 `(254,247,255)`、强调色 `(255,131,0)` |
+| 6 | 夜间·主题色设 `#00FF88` 保存 | 暗色下强调色变绿 | 通过：`night.primary:"#00FF88"`，强调色 `(2,255,136)` |
+| 7 | 白天·背景色设 `#FFCC00` 保存 | 整屏底色变黄 | 通过：`day.background:"#FFCC00"`，整屏底色 `(255,204,1)` |
+| 8 | 杀进程重启 | 颜色保持 | 通过：重启后底色仍 `(255,204,1)` |
+| 9 | `paletteIndex` 改 1 后重启 | 「自定义颜色」行消失、配色回草野 | 通过：行不再渲染，底色 `(17,19,14)` |
+
+**踩坑**
+
+- `bindMenu` 用参数化的 `@Builder Menu` 报 `Error Message: No overload matches this call. Argument of type 'MenuAttribute' is not assignable to parameter of type 'boolean'.`，改用 `bindMenu(MenuElement[], { placement: Placement.Bottom })` 后通过。
+- `@Prop` 对象默认值不能调函数，只能内联字面量（`customTheme` 在 `ThemeSettingsPage` 与 `CustomThemePage` 两处都是内联默认对象）。
+- `uitest uiInput inputText` 必须带坐标（`inputText <x> <y> <text>`），不带坐标报 `Missing parameter`。
+- 改 prefs 里的数值键要按 `key="paletteIndex" value="1.000000"` 匹配，用 `name="..."` 匹配不到。
+
+**未验**
+
+- 只在亮色下逐项验证了六色与种子色；暗色下只验了「夜间·主题色」一项。
+- 色板风格 / 对比度 / Material 版本三个下拉只验了默认值渲染，未逐个切换验证（ArkUI 无 HCT，切换对配色无可见影响）。
+
+**复原**
+
+- `paletteIndex` 已从 12 改回 1，`customTheme` 保留用户值（不影响非 12 号主题）。
+
 ## 2026-11-01 N 端 r314 深色模式阶段二：主题配色选择 14 套（A2）
 
 **改动**
