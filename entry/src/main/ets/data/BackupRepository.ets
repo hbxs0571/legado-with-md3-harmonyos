@@ -1,4 +1,9 @@
 import { fileIo, picker } from '@kit.CoreFileKit';
+import {
+  THEME_CONFIG_FILE_NAME, ThemeConfigEntry, buildCurrentThemeConfigs, parseThemeConfigs, saveThemeConfigs,
+  themeConfigsToJson, upThemeConfig
+} from './ThemeConfigStore';
+import { CustomThemeSnapshot, defaultCustomThemeSnapshot } from './CustomThemeColors';
 import { preferences } from '@kit.ArkData';
 import zlib from '@ohos.zlib';
 import { Book } from '../model/Book';
@@ -531,7 +536,9 @@ export class BackupRepository {
     settings: ReaderSettingsSnapshot,
     bookshelfLayout: BookshelfLayoutSettings,
     ignoredCategories: string[],
-    themeMode: string
+    themeMode: string,
+    paletteIndex: number,
+    customTheme: CustomThemeSnapshot
   ): Promise<boolean> {
     const stagingDirectory = `${context.cacheDir}/legado-android-backup-${Date.now()}`;
     const zipPath = `${context.cacheDir}/legado-android-backup-${Date.now()}.zip`;
@@ -773,6 +780,15 @@ export class BackupRepository {
           configText, 'string', 'themeMode', BackupRepository.normalizeThemeModeForBackup(themeMode));
         BackupRepository.writeTextFile(configPath, configText);
       }
+      // 主题配色清单：上游 `Backup.kt:241-246` 在未忽略 themeConfig 时把
+      // `ThemeConfigStore.configList` 整份 GSON 写进 `themeConfig.json`。
+      // 本地没有内存清单，按当前调色板/自定义配色现算日/夜两套再写，
+      // 与 `getDurConfig` 取的是同一批键，所以 Android 读回去能直接生效。
+      if (!ignoredCategories.includes('themeConfig')) {
+        const generated: ThemeConfigEntry[] = buildCurrentThemeConfigs(paletteIndex, customTheme);
+        BackupRepository.writeTextFile(`${stagingDirectory}/${THEME_CONFIG_FILE_NAME}`,
+          themeConfigsToJson(generated));
+      }
       const files = fileIo.listFileSync(stagingDirectory)
         .filter((name: string) => BackupRepository.isSafeRootEntry(name))
         .map((name: string) => `${stagingDirectory}/${name}`);
@@ -905,6 +921,7 @@ export class BackupRepository {
     let bookmarkSkipped: number = 0;
     // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
     // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
+    let restoredThemeConfigCount: number = 0;
     let pendingBookmarks: ReaderBookmark[] | undefined = undefined;
     let pendingMarkings: ReaderMarking[] | undefined = undefined;
     const bookmarkOutcome: BookmarkImportOutcome = { added: 0, updated: 0, skipped: 0 };
@@ -1021,8 +1038,28 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === THEME_CONFIG_FILE_NAME) {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复主题配色清单`);
+        }
+        // 上游是整份覆盖：归档里的清单先解析成合法条目（坏条目在 parseThemeConfigs
+        // 里就被剔除），再写进私有目录；归档目录里同时留一份原样副本供排查。
+        const parsed: ThemeConfigEntry[] = parseThemeConfigs(text);
+        saveThemeConfigs(context, parsed);
+        restoredThemeConfigCount = parsed.length;
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
+    }
+
+    // 归档里的 themeConfig.json 已经落进私有目录，这里补一次装载，
+    // 对齐上游 `Restore.kt:332` 的 `ThemeConfigStore.upConfig()`。
+    if (restoredThemeConfigCount > 0) {
+      upThemeConfig(context);
     }
 
     // 书签与笔记都合并完再各写一次，避免两份文件互相覆盖对方的合并结果。

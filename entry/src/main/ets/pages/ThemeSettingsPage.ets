@@ -71,6 +71,8 @@ export struct ThemeSettingsPage {
   @Prop customTheme: CustomThemeSnapshot = defaultCustomThemeSnapshot();
   /** 打开自定义颜色页；上游 `ThemeConfigScreen.kt:266-270` 的 `onNavigateToCustomTheme`。 */
   onOpenCustomTheme: () => void = () => {};
+  /** 主题包管理入口，对齐上游 `ThemeManageScreen`。 */
+  onOpenThemeManage: () => void = () => {};
   /** 全局字体缩放 8..16（10 = 1.0x），对齐上游 `AppShellSettings.kt:5 fontScale`。 */
   @Prop fontScale: number = 10;
   /** 是否显示状态栏，对齐上游 `AppShellSettings.kt:10 showStatusBar`。 */
@@ -560,7 +562,7 @@ export struct ThemeSettingsPage {
                 .width('100%').onChange((value: number) => this.onFontScaleChange(value))
             }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 8 })
             ThemeItemDivider()
-            ThemeSettingsOption({ title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onUnavailableAction('主题包管理尚未迁移') })
+            ThemeSettingsOption({ title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onOpenThemeManage() })
             ThemeItemDivider()
             ThemeSettingsOption({ title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.backgroundExpanded = !this.backgroundExpanded } })
             if (this.backgroundExpanded) {

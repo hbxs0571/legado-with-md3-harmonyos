@@ -30,6 +30,57 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r316 深色模式阶段三：主题包管理（A12、B1–B12）与 themeConfig.json 导出（F5）
+
+**改动**
+
+- 新建 `entry/src/main/ets/data/ThemePackageRepository.ets`（1159 行）：主题包清单/落盘/打包/解包/资产/迁移。常量 `THEME_PACKAGE_FORMAT_VERSION = 1`、`THEME_MANIFEST_PATH = 'manifest.json'`、`SAVED_THEME_DIR = 'saved_themes'`、`MAX_THEME_ENTRY_COUNT = 4096`、`MAX_THEME_ENTRY_BYTES = 64 * 1024 * 1024`、`MAX_THEME_TOTAL_BYTES = 512 * 1024 * 1024`；资产 key 7 个（`background.light`/`background.dark`/`container.large.light`/`container.large.dark`/`container.item.light`/`container.item.dark`/`font.app`）；`ThemePortableConfig` 63 字段（对齐上游 `ThemeExportData` 中有本地对应功能的部分）；静态方法 `saveTheme`/`deleteSavedTheme`/`renameSavedTheme`/`readSavedTheme`/`loadSavedThemes`/`exportCurrentTheme`/`exportSavedTheme`/`importPackage`/`importLegacyJson`/`hasLegacySavedThemes`/`migrateLegacySavedThemes`/`uniqueSavedThemeName`/`validateExtracted`。
+- 新建 `entry/src/main/ets/pages/ThemeManagePage.ets`：`CollapsingSettingsHeader` + 五个入口（保存当前设置 / 导出当前主题 / 导入主题包 / 导入旧版主题配置 / 迁移旧版主题，最后一项仅 `hasLegacyThemes` 时显示）+ 搜索框 + 已存主题列表（日/夜各 3 个 12dp 色点 + 应用/编辑/导出/删除）+ 底部命名面板（保存与重命名共用）。
+- 新建 `entry/src/main/ets/data/ThemeConfigStore.ets`：`ThemeConfigEntry`（对齐上游 `ThemeConfigStore.Config` 8 字段）、`defaultThemeConfigs()` 内置 4 套（默认/典雅蓝/黑白/A屏黑）、`parseThemeConfigs`/`themeConfigsToJson`/`loadThemeConfigs`/`saveThemeConfigs`/`addThemeConfig`/`buildCurrentThemeConfigs`/`upThemeConfig`/`currentThemeConfig`。
+- `entry/src/main/ets/model/Book.ets`：`ProfileRoute` 加 `APP_THEME_MANAGE = 'appThemeManage'`。
+- `entry/src/main/ets/pages/ThemeSettingsPage.ets`：`onOpenThemeManage` prop；「主题管理」由 `onUnavailableAction('主题包管理尚未迁移')` 改为 `onOpenThemeManage()`。
+- `entry/src/main/ets/pages/Index.ets`：`isProfileSettingsPage` 白名单加 `APP_THEME_MANAGE`；新增 `applyThemePackage(patch, assets)`、`applyThemePackageAssets(assets)`、`themePackageSource()`；渲染分支接 `ThemeManagePage`。
+- `entry/src/main/ets/data/BackupRepository.ets`：`createBackup` 签名加 `paletteIndex`/`customTheme` 两参（现 8 参），未忽略 `themeConfig` 时写出 `themeConfig.json`；恢复侧遇 `themeConfig.json` 解析校验后落盘并 `upThemeConfig`。
+
+**与上游的差异**
+
+- 资产只认本地有对应功能的 7 类（上游 17 类，缺 10 个导航图标与封面图集——本地 `grep navIcon|coverAlbum` 全仓 0 命中），导入时计数提示「N 个本地不支持的资源已忽略」。
+- B8「编辑已存主题」本地只改名、不改色位：上游 `EditThemeSheet.kt`（403 行）是完整编辑器，本地颜色位编辑已有一套 `pages/CustomThemePage.ets`，在主题包层再复制一份会让色位 UI 分叉。
+- B4 不实现混淆版 v1 JSON（`parseObfuscatedThemeV1`）：本地从未发布过该格式，无历史数据。
+- F5 只写 `MD3-Day`/`MD3-Night` 两条（上游 `configList` 是「内置 4 套 + 用户 `addConfig` 过的」，本地无 `addConfig` 入口）；内置 4 套保留在 `defaultThemeConfigs()` 供回落。
+- 保存/重命名用页面底部固定输入面板，不是对话框：ArkUI 的 `showAlertDialog` 不能带输入框。
+
+**验收（模拟器 127.0.0.1:5555，`assembleHap` 通过后 `hdc install -r`）**
+
+| 项 | 操作 | 结果 |
+| --- | --- | --- |
+| A12 入口 | 外观页上滑 → 点「主题管理」 | 进入「主题包」页，五个入口与空态提示全部渲染 |
+| B1 保存 | 点「保存当前设置」→ 面板预填「我的主题」→ 保存 | 列表出现该项；`files/saved_themes/theme_%E6%88%91%E7%9A%84%E4%B8%BB%E9%A2%98/manifest.json` + `assets/…` 落盘 |
+| B2 导出当前主题 | 点「导出当前主题」→ 保存 | zip 内 `manifest.json 1861` / `assets/container/item/light.jpg 130586` / `assets/container/large/light.jpg 130586`，层级正确 |
+| B3 导入主题包 | 导入 `appTheme='3'` 的包 | prefs `paletteIndex=3`、`themeMode=1`、`fontScale=10`，界面立刻换黑白浅色 |
+| B4 导入旧版 JSON | 导入 `legacy-theme.json` | prefs `paletteIndex=2`、`themeMode=1`、`topBarButtonStyle=plain`，换柠檬配色 |
+| B5 迁移旧版主题 | `saved_themes/` 有 `.json` 时入口出现 | 入口条件显示正确；本机 shell 对 `files/` 无写权限，未能构造 `.json` 做真机迁移 |
+| B6 列表与搜索 | 存 2 套 → 搜索框输入「NewTheme 2」 | 列表从 2 项过滤到 1 项 |
+| B7 应用 | 点「应用」→ 确认框 → 应用 | prefs `paletteIndex` 由 3 回到存盘时的 1、`themeMode` 回到 2 |
+| B8 编辑改名 | 点「编辑」→ 改名 `NewTheme` → 保存 | 目录变 `theme_…%20NewTheme`、列表显示「我的主题 NewTheme」 |
+| B9 导出已存主题 | 点「导出」 | 保存对话框预填「我的主题 NewTheme.zip」，zip 内 `manifest.json 1717`（该主题无资产） |
+| B10 删除 | 点「删除」→ 确认框 → 删除 | `saved_themes/` 清空、页面回到空态提示 |
+| F5 备份 | 备份到本地 → 解压 zip | 含 `themeConfig.json 304`，内容为 `MD3-Day`/`MD3-Night` 两条且颜色与当前配色一致 |
+| F5 恢复 | 恢复该 zip → 预览底部「导入此 ZIP」 | `files/themeConfig.json` 落盘 304 字节；预览显示「themeConfig.json 2 条」 |
+
+**踩坑**
+
+- `zlib.compressFiles(files, zipPath, {})` 会把每个文件平铺到 zip 根，`assets/container/item/light.jpg` 与 `assets/container/large/light.jpg` 都变成 `light.jpg` 互相覆盖；改用 `zlib.compressFile(directory, zipPath, {})` 压整个目录才保留层级。
+- 文件选择器给的 `file://` uri 不能直接喂 `fileIo.readTextSync`（只认沙箱路径，报 `No such file or directory`），必须先 `copyFileSync(fd, 临时路径)`。
+- 便携配置里调色板字段叫 `appTheme`（对齐上游 `ThemeExportData.appTheme`），不是 `paletteIndex`；改错字段名时导入「看起来成功」但配色不动。
+- `DocumentViewPicker` 目标文件已存在时提示重名且不会覆盖，必须先删旧文件。
+- `hdc shell` 是 `uid=2000(shell)`，对 `files/`、`cache/`、`files/saved_themes/` 无写权限（只有 `preferences/` 可写，`run-as` 不存在），构造测试数据只能走应用自身入口或 `hdc file send` + 文件选择器。
+
+**未验**
+
+- B5 迁移旧版主题的真机执行（受上面 shell 权限限制，只验证了入口条件与代码路径）。
+- 主题包跨设备导入（同一台设备上导出再导入已验）。
+
 ## 2026-11-01 N 端 r315 深色模式阶段二：自定义主题配色（A6）
 
 **改动**

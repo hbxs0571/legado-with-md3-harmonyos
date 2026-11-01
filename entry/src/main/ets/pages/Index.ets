@@ -21,6 +21,7 @@ import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
 import { BookInfoPage } from './BookInfoPage';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
 import { CustomThemePage } from './CustomThemePage';
+import { ThemeManagePage } from './ThemeManagePage';
 import { APP_FONT_FAMILY, appFontDisplayName, normalizeAppFontPath } from '../data/AppFontSettings';
 import { OtherSettingsPage } from './OtherSettingsPage';
 import { AppReadAloudSettingsPage } from './AppReadAloudSettingsPage';
@@ -51,6 +52,11 @@ import { applyThemeColors, normalizePaletteIndex, resolvePaletteColors } from '.
 import {
   CustomThemeSnapshot, defaultCustomThemeSnapshot, normalizeCustomThemeSnapshot, resolveCustomPaletteColors
 } from '../data/CustomThemeColors';
+import {
+  ASSET_BACKGROUND_DARK, ASSET_BACKGROUND_LIGHT, ASSET_CONTAINER_ITEM_DARK, ASSET_CONTAINER_ITEM_LIGHT,
+  ASSET_CONTAINER_LARGE_DARK, ASSET_CONTAINER_LARGE_LIGHT, ASSET_FONT_APP,
+  ThemeConfigPatch, ThemePackageSource
+} from '../data/ThemePackageRepository';
 import {
   BOTTOM_BAR_BLUR_ALPHA_DEFAULT, BOTTOM_BAR_BLUR_RADIUS_DEFAULT, BOTTOM_BAR_LENS_RADIUS_DEFAULT,
   BOTTOM_BAR_OPACITY_DEFAULT, TOP_BAR_BLUR_ALPHA_DEFAULT, TOP_BAR_BLUR_RADIUS_DEFAULT,
@@ -2077,6 +2083,164 @@ struct Index {
     }
     this.themeCustomColors = normalizeCustomThemeSnapshot(next);
     this.applyThemeMode(context, this.themeMode, this.themePaletteIndex, true);
+  }
+
+  /**
+   * 应用一份主题包配置（「应用已存主题」与「导入主题包」共用）。
+   *
+   * 上游 `ThemePackageManager.applyThemeSettings` 把整份 `ThemeExportData` 交给
+   * `themePackageSettingsGateway.applyAndAwait(data)`，一次性覆盖所有主题键；
+   * 本地按同一口径逐字段覆盖 `@State`，资产路径由 `assets` 回填，最后统一走
+   * `applyThemeMode` 重算日夜与配色，再补一次落盘。
+   */
+  private applyThemePackage(patch: ThemeConfigPatch, assets: Record<string, string>): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法应用主题，请重试');
+      return;
+    }
+    this.themePureBlack = patch.pureBlack;
+    this.themeFontScale = normalizeFontScale(patch.fontScale);
+    this.themePredictiveBack = patch.predictiveBack;
+    this.themeContainerOpacity = patch.containerOpacity;
+    this.themeOverrideCardCorner = patch.overrideBaseCardCornerRadius;
+    this.themeCardCornerRadius = patch.baseCardCornerRadius;
+    this.themeOverrideCardBorder = patch.overrideBaseCardBorder;
+    this.themeCardBorderWidth = patch.baseCardBorderWidth;
+    this.themeCardBorderColorDay = patch.baseCardBorderColorDay;
+    this.themeCardBorderColorNight = patch.baseCardBorderColorNight;
+    this.themeDisableGroupCorner = patch.disableSplicedColumnGroupCornerRadius;
+    this.themeEnableItemDivider = patch.enableItemDivider;
+    this.themeItemDividerWidth = patch.itemDividerWidth;
+    this.themeItemDividerLength = patch.itemDividerLength;
+    this.themeItemDividerColor = patch.itemDividerColor;
+    this.themeEnableBlur = patch.enableBlur;
+    this.themeEnableProgressiveBlur = patch.enableProgressiveBlur;
+    this.themeTopBarBlurRadius = patch.topBarBlurRadius;
+    this.themeBottomBarBlurRadius = patch.bottomBarBlurRadius;
+    this.themeTopBarBlurAlpha = patch.topBarBlurAlpha;
+    this.themeBottomBarBlurAlpha = patch.bottomBarBlurAlpha;
+    this.themeBottomBarLensRadius = patch.bottomBarLensRadius;
+    this.themeTopBarOpacity = patch.topBarOpacity;
+    this.themeBottomBarOpacity = patch.bottomBarOpacity;
+    this.themeShowHome = patch.showHome;
+    this.themeShowDiscovery = patch.showDiscovery;
+    this.themeShowRss = patch.showRss;
+    this.themeShowStatusBar = patch.showStatusBar;
+    this.themeSwipeAnimation = patch.swipeAnimation;
+    this.themeShowBottomView = patch.showBottomView;
+    this.themeUseFloatingBottomBar = patch.useFloatingBottomBar;
+    this.themeUseFloatingBottomBarLiquidGlass = patch.useFloatingBottomBarLiquidGlass;
+    this.themeLabelVisibilityMode = patch.labelVisibilityMode;
+    this.themeDefaultHomePage = patch.defaultHomePage;
+    this.themeMainNavigationOrder = patch.mainNavigationOrder;
+    this.themeUseFlexibleTopAppBar = patch.useFlexibleTopAppBar;
+    this.themeTopBarButtonStyle = patch.topBarButtonStyle;
+    this.themeMergeTopBarActions = patch.mergeTopBarActions;
+    this.themeEnableContainerBackgroundImage = patch.enableContainerBackgroundImage;
+    this.themeBackgroundBlur = patch.backgroundImageBlurring;
+    this.themeBackgroundNightBlur = patch.backgroundImageNightBlurring;
+    this.bookInfoFollowCoverColor = patch.bookInfoFollowCoverColor;
+    this.bookInfoNetworkCoverBackground = patch.bookInfoNetworkCoverBackground;
+    this.bookInfoDefaultCoverBackground = patch.bookInfoDefaultCoverBackground;
+    this.themeCustomColors = normalizeCustomThemeSnapshot(patch.customTheme);
+    // 资产路径只在包里有对应条目时覆盖，避免「导入一个不含背景图的主题」把现有背景图清掉。
+    this.applyThemePackageAssets(assets);
+    this.applyDefaultHomePage();
+    this.applyThemeFontScale(context);
+    this.applyThemeStatusBar(context);
+    this.publishThemeCardStyle();
+    this.publishTopBottomBarStyle();
+    this.applyThemeMode(context, patch.themeMode, patch.paletteIndex, true).catch(() => {
+      this.showUnavailableAction('主题已应用，但保存失败，请重试');
+    });
+  }
+
+  /** 把主题包里的资产路径回填到对应状态；空值不覆盖。 */
+  private applyThemePackageAssets(assets: Record<string, string>): void {
+    const take = (key: string): string => {
+      const value = assets[key];
+      return typeof value === 'string' ? value : '';
+    };
+    if (take(ASSET_BACKGROUND_LIGHT).length > 0) { this.themeBackgroundImage = take(ASSET_BACKGROUND_LIGHT); }
+    if (take(ASSET_BACKGROUND_DARK).length > 0) { this.themeBackgroundImageNight = take(ASSET_BACKGROUND_DARK); }
+    if (take(ASSET_CONTAINER_LARGE_LIGHT).length > 0) {
+      this.themeLargeContainerBackgroundLight = take(ASSET_CONTAINER_LARGE_LIGHT);
+    }
+    if (take(ASSET_CONTAINER_LARGE_DARK).length > 0) {
+      this.themeLargeContainerBackgroundDark = take(ASSET_CONTAINER_LARGE_DARK);
+    }
+    if (take(ASSET_CONTAINER_ITEM_LIGHT).length > 0) {
+      this.themeItemBackgroundLight = take(ASSET_CONTAINER_ITEM_LIGHT);
+    }
+    if (take(ASSET_CONTAINER_ITEM_DARK).length > 0) {
+      this.themeItemBackgroundDark = take(ASSET_CONTAINER_ITEM_DARK);
+    }
+    if (take(ASSET_FONT_APP).length > 0) { this.themeAppFontPath = take(ASSET_FONT_APP); }
+  }
+
+  /** 主题包管理页的「当前设置」来源，供保存 / 导出当前主题使用。 */
+  private themePackageSource(): ThemePackageSource {
+    return {
+      snapshot: {
+        themeMode: this.themeMode,
+        paletteIndex: this.themePaletteIndex,
+        fontScale: this.themeFontScale,
+        showStatusBar: this.themeShowStatusBar,
+        swipeAnimation: this.themeSwipeAnimation,
+        bookInfoFollowCoverColor: this.bookInfoFollowCoverColor,
+        bookInfoNetworkCoverBackground: this.bookInfoNetworkCoverBackground,
+        bookInfoDefaultCoverBackground: this.bookInfoDefaultCoverBackground,
+        containerOpacity: this.themeContainerOpacity,
+        disableSplicedColumnGroupCornerRadius: this.themeDisableGroupCorner,
+        overrideBaseCardCornerRadius: this.themeOverrideCardCorner,
+        baseCardCornerRadius: this.themeCardCornerRadius,
+        overrideBaseCardBorder: this.themeOverrideCardBorder,
+        baseCardBorderWidth: this.themeCardBorderWidth,
+        baseCardBorderColorDay: this.themeCardBorderColorDay,
+        baseCardBorderColorNight: this.themeCardBorderColorNight,
+        enableItemDivider: this.themeEnableItemDivider,
+        itemDividerWidth: this.themeItemDividerWidth,
+        itemDividerLength: this.themeItemDividerLength,
+        itemDividerColor: this.themeItemDividerColor,
+        enableContainerBackgroundImage: this.themeEnableContainerBackgroundImage,
+        largeContainerBackgroundImageLight: this.themeLargeContainerBackgroundLight,
+        largeContainerBackgroundImageDark: this.themeLargeContainerBackgroundDark,
+        itemBackgroundImageLight: this.themeItemBackgroundLight,
+        itemBackgroundImageDark: this.themeItemBackgroundDark,
+        pureBlack: this.themePureBlack,
+        backgroundImage: this.themeBackgroundImage,
+        backgroundImageNight: this.themeBackgroundImageNight,
+        backgroundImageBlurring: this.themeBackgroundBlur,
+        backgroundImageNightBlurring: this.themeBackgroundNightBlur,
+        showHome: this.themeShowHome,
+        showDiscovery: this.themeShowDiscovery,
+        showRss: this.themeShowRss,
+        defaultHomePage: this.themeDefaultHomePage,
+        mainNavigationOrder: this.themeMainNavigationOrder,
+        labelVisibilityMode: this.themeLabelVisibilityMode,
+        predictiveBack: this.themePredictiveBack,
+        readerSharedElement: this.themeReaderSharedElement,
+        enableBlur: this.themeEnableBlur,
+        enableProgressiveBlur: this.themeEnableProgressiveBlur,
+        useFlexibleTopAppBar: this.themeUseFlexibleTopAppBar,
+        topBarButtonStyle: this.themeTopBarButtonStyle,
+        mergeTopBarActions: this.themeMergeTopBarActions,
+        showBottomView: this.themeShowBottomView,
+        useFloatingBottomBar: this.themeUseFloatingBottomBar,
+        useFloatingBottomBarLiquidGlass: this.themeUseFloatingBottomBarLiquidGlass,
+        bottomBarLensRadius: this.themeBottomBarLensRadius,
+        topBarBlurRadius: this.themeTopBarBlurRadius,
+        bottomBarBlurRadius: this.themeBottomBarBlurRadius,
+        topBarBlurAlpha: this.themeTopBarBlurAlpha,
+        bottomBarBlurAlpha: this.themeBottomBarBlurAlpha,
+        topBarOpacity: this.themeTopBarOpacity,
+        bottomBarOpacity: this.themeBottomBarOpacity,
+        appFontPath: this.themeAppFontPath,
+        customTheme: this.themeCustomColors
+      },
+      themeMode: this.themeMode
+    };
   }
 
   /**
@@ -4872,7 +5036,7 @@ struct Index {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const settings = await ReaderSettingsRepository.load(context);
       const bookshelfLayout = await BookshelfLayoutRepository.load(context);
-      const created = await BackupRepository.createBackup(context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys, this.themeMode);
+      const created = await BackupRepository.createBackup(context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys, this.themeMode, this.themePaletteIndex, this.themeCustomColors);
       this.backupStatusMessage = created ? 'Android 兼容 ZIP 已保存到你选择的位置。' : '';
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `创建备份失败：${error.message}` : '创建备份失败';
@@ -6099,6 +6263,7 @@ struct Index {
 
   private isProfileSettingsPage(destination: ProfileRoute): boolean {
     return destination === ProfileRoute.APP_THEME_SETTINGS || destination === ProfileRoute.APP_CUSTOM_THEME ||
+      destination === ProfileRoute.APP_THEME_MANAGE ||
       destination === ProfileRoute.APP_OTHER_SETTINGS ||
       destination === ProfileRoute.APP_READ_SETTINGS || destination === ProfileRoute.APP_ALOUD_SETTINGS ||
       destination === ProfileRoute.APP_COVER_SETTINGS || destination === ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS ||
@@ -7284,7 +7449,8 @@ struct Index {
             onEyeProtectionStartTimeChange: (time: string) => this.setEyeProtectionStartTime(time),
             onEyeProtectionEndTimeChange: (time: string) => this.setEyeProtectionEndTime(time),
             customTheme: this.themeCustomColors,
-            onOpenCustomTheme: () => this.openSettingsCategory(ProfileRoute.APP_CUSTOM_THEME)
+            onOpenCustomTheme: () => this.openSettingsCategory(ProfileRoute.APP_CUSTOM_THEME),
+            onOpenThemeManage: () => this.openSettingsCategory(ProfileRoute.APP_THEME_MANAGE)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_CUSTOM_THEME) {
           CustomThemePage({
@@ -7292,6 +7458,14 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             customTheme: this.themeCustomColors,
             onChange: (snapshot: CustomThemeSnapshot) => this.saveCustomTheme(snapshot)
+          })
+        } else if (this.profileSubpage === ProfileRoute.APP_THEME_MANAGE) {
+          ThemeManagePage({
+            onBack: () => this.profileSubpage = ProfileRoute.APP_THEME_SETTINGS,
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            provideSource: () => this.themePackageSource(),
+            onApplyTheme: (patch: ThemeConfigPatch, assets: Record<string, string>) =>
+              this.applyThemePackage(patch, assets)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_OTHER_SETTINGS) {
           OtherSettingsPage({
