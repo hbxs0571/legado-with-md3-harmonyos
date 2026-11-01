@@ -117,18 +117,20 @@
 
 ## 阅读体验：翻页空白与开书排版跳变
 
-本节登记两个用户可感知的阅读体验缺陷。**二者都不是「某个开关没接」，而是渲染架构与上游不同**——上游正文是画布逐行绘制（`feature/reader/ReaderCanvasSurface.kt`，3747 行 Compose `Canvas`，`:2049` `native.drawText(...)`），本地是 ArkUI 组件树逐字 `Span`。本节只记录根因与修法方向，**未改任何代码**。
+本节登记两个用户可感知的阅读体验缺陷，**2026-11-02 已随「正文改画布逐行绘制」一起消除**。二者的根因都不是「某个开关没接」，而是渲染架构与上游不同——上游正文是画布逐行绘制（`feature/reader/ReaderCanvasSurface.kt`，3747 行 Compose `Canvas`，`:2049` `native.drawText(...)`），本地原本是 ArkUI 组件树逐字 `Span`。本地现已同构：`entry/src/main/ets/reader/ReaderCanvasSurface.ets` 用 `text.Paragraph` + `drawing.Canvas` 逐行绘制。
 
-### KI-EXP1 翻页出现整页空白（用户原话「差不多一页的空白才翻到另一页」）
+**状态口径（只有三值）**：KI-EXP1 **已接**、KI-EXP2 **已接**、KI-EXP3 **已接**。
 
-**根因**：`entry/src/main/ets/pages/ReaderPage.ets:1636-1702` 的 `turnReaderPage(delta)` 是「半程出、半程进」的整页替换，且**只有一层内容**在同一时刻存在。
+### KI-EXP1 翻页出现整页空白（用户原话「差不多一页的空白才翻到另一页」）—— 已接
+
+**原根因（历史记录）**：`ReaderPage.ets` 的 `turnReaderPage(delta)` 是「半程出、半程进」的整页替换，且只有一层内容在同一时刻存在。
 
 ```typescript
-// :1683-1687 前半程：旧页滑出到 offset = horizontalTravel
+// 历史实现：前半程旧页滑出到 offset = horizontalTravel
 animateTo({ duration: duration / 2, curve: Curve.EaseIn }, () => {
   this.pageTurnOffsetX = direction * horizontalTravel;
 });
-// :1688-1701 中点：切页 → 新页从反方向屏外滑入
+// 历史实现：中点切页 → 新页从反方向屏外滑入
 this.pageTurnTimer = setTimeout(() => {
   this.currentPageIndex = nextPageIndex;
   this.pageTurnOffsetX = reverseDirection * horizontalTravel;
@@ -136,78 +138,52 @@ this.pageTurnTimer = setTimeout(() => {
 }, duration / 2);
 ```
 
-- 默认 `pageAnimation = 0`（cover）、`animationSpeed = 2` → `durationBySpeed[2] = 360`，即 180ms 出 + 180ms 进。
-- `pageAnimation === 0` 时 `horizontalTravel = pageWidth`（`:1677`），**旧页整页移出、新页整页自屏外移入**，中间那一瞬两层都不在可视区。
-- 渲染层 `:4196` 对唯一一层 `.translate({ x: this.pageTurnOffsetX, ... })`；`:4172` 的 `ForEach` key 含 `currentPageIndex`，切页必然整树重建 —— 新页布局+字体测量耗时正好落在空白窗口里。
-- 次要：`pageTurnAnimating` 只在 setTimeout 末尾复位（`:1699`），快速连点被吞（`:1637` 首行直接 return）。
+- 默认 `pageAnimation = 0`（cover）、`animationSpeed = 2` → `durationBySpeed[2] = 360`，即 180ms 出 + 180ms 进；`pageAnimation === 0` 时 `horizontalTravel = pageWidth`，旧页整页移出、新页整页自屏外移入，中间那一瞬两层都不在可视区。
+- 切页必然整树重建（`ForEach` key 含 `currentPageIndex`），新页布局+字体测量耗时正好落在空白窗口里。
+- `pageTurnAnimating` 只在 setTimeout 末尾复位，快速连点被吞。
 
-**上游为什么没有这个空档**：`feature/reader/core/transition/ReaderPageTransition.kt` 的 `transforms(mode)` 对 `COVER` 返回 `current = ReaderPageTransform(translationX = offsetPx)` + **`next = ReaderPageTransform()`（位移 0，就在原位）+ `currentOnTop = true`** —— 新页是静止的底页，旧页盖在上面滑走，屏幕全程有内容。`SLIDE` 才是两页同时位移。本地把 cover 与 slide 实现成了同一套「出+进」。
+**上游语义**：`feature/reader/core/transition/ReaderPageTransition.kt` 的 `transforms(mode)` 对 `COVER` 返回 `current = ReaderPageTransform(translationX = offsetPx)` + **`next = ReaderPageTransform()`（位移 0，就在原位）+ `currentOnTop = true`** —— 新页是静止的底页，旧页盖在上面滑走，屏幕全程有内容。
 
-**修法方向**（按工作量从轻到重）：
-1. cover（`pageAnimation === 0`）只移旧页、新页从 0 位移开始：前半程用旧页快照做位移层，新页在下面静止渲染 —— 需要一层「上一页快照」，ArkUI 可用 `componentSnapshot` 或双 `if` 分支叠两层。
-2. 五种转场统一改成「同时存在 current/next 两层 + 按 `currentOnTop` 定叠放顺序」，参照上游 `ReaderCanvasSurface.kt:1636-1650` 的 `PagedLayerRole` 排序（该处注释原文：「同一页必须带着自己的 RenderNode 换位；按槽位复用会先画出上一次留在该槽位的页，再重录新页，形成旧页闪帧。」）。
-3. 彻底做法：正文改画布逐行绘制（`text.Paragraph.paint(drawing.Canvas)`，SDK 已有），换页不重建节点树 —— 与上游同构，但牵动全部选区能力（见 KI-EXP3）。
+**本地现状（已接）**：
+- 翻页不再改节点树，而是改画布内部的 `turnTransition.offsetPx`：`ReaderPage.ets` 的 `turnReaderPage()` 用 `getUIContext().createAnimator(...)` 的 `onFrame(progress)` 逐帧调 `paintReaderCanvas()`，**`onFinish` 才改 `currentPageIndex`**。
+- 位移全部由 `ReaderCanvasSurface.ets` 的 `ReaderPageTransitionPolicy.transforms(mode, transition, pageWidthPx)` 给出，与上游逐分支同式：COVER（`current.translationX = offsetPx` + `currentOnTop = true`）、SLIDE（另给 `next.translationX = width + offsetPx`）、FADE（`next.alpha = progress`）、折页（`ReaderPageCurl.ets` 的 `PageCurlGeometry`）、SCROLL（上游 `ReaderScrollState.kt` 语义，本地仍走 ArkUI `Scroll` 分支，见下方「已知差异」）。
+- 绘制前先按 `pageBackgroundArgb` 铺满整块画布，每个 slot 再各自 `fillPageSurface()` 铺纸面，**任何一帧都不会露出空白**。
+- 时长一律经 `ReaderPageTransitionPolicy.settleDurationMillis()`（FADE 用整段基准、其余按剩余距离缩放），基准值来自 `animationSpeed` 索引 `[240, 300, 360, 540]`，与上游 `ReaderPageTurnSpeed.kt` 的四档一致。
 
-### KI-EXP2 开书时排版先乱 1-2 秒（用户原话「排版总是会先乱一秒两秒」）
+**验收**：模拟器 `127.0.0.1:5555`（API 26）上按 COVER / SLIDE / FADE / 折页逐模式翻页截图，每帧都有完整正文；详见 [VALIDATION](VALIDATION.md) 的「2026-11-02 N 端正文改画布逐行绘制」。
 
-**根因**：分页未就绪时走的是**另一套排版**，不是同一套排版的中间态。
+### KI-EXP2 开书时排版先乱 1-2 秒（用户原话「排版总是会先乱一秒两秒」）—— 已接
 
-`entry/src/main/ets/pages/ReaderPage.ets:4127` 的分支：
+**原根因（历史记录）**：分页未就绪时走的是**另一套排版**，不是同一套排版的中间态。`ReaderPage.ets` 的分支 `if ((format === 'txt' || 'epub') && this.localReaderPages.length > 0 && pageAnimation !== 3) { 分页 } else { Scroll 整章连续铺开 }` —— 首帧 `readerContentWidth` / `viewportHeight` 初值都是 0，`rebuildReaderPages()` 一进来就清空分页返回，于是先渲染整章滚动，等尺寸到位再切分页。
 
-```typescript
-if ((this.book.format === 'txt' || this.book.format === 'epub')
-    && this.localReaderPages.length > 0 && this.pageAnimation !== 3) {
-  // 分页排版：只渲染当前页的 lines
-} else {
-  // :4244-4245 Scroll(this.readerScroller) { Column() { ... } }
-  // :4249 ForEach(this.getReaderContentSegments(), ...) —— 整章连续铺开
-  // :4282 .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
-}
-```
+**放大因素（历史记录）**：① 约 40 个 `@Prop` 共用 `onPaginationInputsChanged`，设置分几次到达就重建几次；② `Index.ets` 的 `restoreReaderSettings(context)` 是 async 且未 await；③ 尺寸三条到达路径都调 `rebuildReaderPages()`；④ 每次重建跑全章解析与高亮匹配；⑤ 带图章节缺图片尺寸就清空整章分页，走两轮「滚动 → 分页」切换。
 
-- `:407-408` `viewportHeight = 0`、`readerContentWidth = 0` 是初值；`rebuildReaderPages()`（`:1397-1403`）开头判 `readerContentWidth <= 0 || viewportHeight <= 0` 就直接 `localReaderPages = []` 返回。**所以首帧必然不是分页**，用户看到的是整章滚动的连续文本，几帧后才切成第一页。
-- 两种形态的字号/行高/段距算法不同（滚动分支 `fontSize * 1.05` + 统一 `lineHeight`；分页分支逐行 `line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter`），所以观感是「排版跳了一下」。
+**本地现状（已接，五条逐个消除）**：
+1. 分页判据去掉 `localReaderPages.length > 0`，现在只要 `(format === 'txt' || 'epub') && pageAnimation !== 3` 就**一律进画布**。没有排好页时画布什么都不画（`ReaderCanvasRenderer.draw()` 开头 `window.current === undefined` 直接 return，注释点名上游 `ReaderCanvasSurface.kt:254` 的 `val current = pages.current ?: return`），**绝不换一套排版兜底**。else 分支的 `Scroll` 整章滚动已随 Span 分支一起删除。
+2. 约 40 个 `@Watch('onPaginationInputsChanged')` 现在只调 `scheduleReaderPaginationRebuild()`：`refreshReaderFontFamilies()` 立即执行，重建合并到 16ms 防抖窗口内只跑一次（`PAGINATION_DEBOUNCE_MILLIS = 16`）。
+3. `Index.ets` 的 `ReaderPage` 外层加了渲染门控 `if (this.readerSettingsLoaded || this.route !== AppRoute.READER)`，设置没载入完时显示与阅读页同色的空白占位 + `LoadingProgress`，不再按初值先排一次错的。
+4. 图片尺寸未就绪不再清空整章分页：`rebuildReaderPages()` 里用 `paginationImageSizes.set(part.value, { width: placeholderExtent, height: placeholderExtent })`（`placeholderExtent = max(1, lineHeight)`，对齐上游 `ReaderChapterBlockMeasurer.kt:457-462` 的占位口径），并置 `paginationUsesImagePlaceholder`；尺寸异步到达后只重排一次。
+5. 画布侧新增 `syncReaderCanvasBodyHeight()`：`Canvas.onAreaChange` 把实测正文高写进 `readerCanvasBodyHeightVp`，分页时 `pageHeight = min(公式值, 实测值)`，保证「分页算得下」与「画布画得下」同源。
 
-**放大因素（同一窗口期内多次全量重建）**：
-1. **约 40 个 `@Prop` 共用 `onPaginationInputsChanged`**（`:1282-1285` 只有 `refreshReaderFontFamilies()` + `rebuildReaderPages()`）。字号、行距、段距、字距、缩进、正文/标题字体、字体族、斜体、粗体、标题排版 14 项、`textFullJustify`、`textBottomJustify`、`paddingSettings`、`doubleHorizontalPage`、`useZhLayout`、`paddingDisplayCutouts` 全挂在这一个回调上 —— 设置分几次到达就重建几次。
-2. **设置异步到达且未 await**：`Index.ets:496` 直接调 `restoreReaderSettings(context)`（async 函数不 await），`Index.ets:152-159` 的初值（`readerFontSize: 20`、`readerLineSpacing: 12`）与仓储默认值不同 → 先按错值排一次。
-3. **尺寸三条到达路径**都调 `rebuildReaderPages()`：`:4217-4221`（分页容器 `.onAreaChange`）、`:4299-4301`（滚动分支 `.onAreaChange`）、`:3954-3956` `onReaderContentAreaChanged()`。
-4. **每次重建跑同步大计算**：`:1415` `LocalTextSemantics.parse(...)` 全章解析、`:1417` `ReaderHighlightRuleEngine.findBodyRanges(...)` 全章高亮匹配、`:1418-1421` 变化时 `readerContentRevision++` 让所有 ForEach key 失效。
-5. **带图章节更明显**：`:1426-1433` 遇到未测尺寸的图片就 `localReaderPages = []` 并 return，`loadContentImageSizes()`（`:3858-3898`）异步完成后（`:3896`）再重建 —— 走两轮「整章滚动 → 分页」切换。
+**验收**：冷启动 → `aa start` → 点书架进书，连续 6 次 `uitest dumpLayout` 每次都只有 `Canvas=1 Scroll=0`，**开书全程从未出现整章滚动分支**；详见 [VALIDATION](VALIDATION.md) 同节。
 
-**修法方向**：
-1. 首帧不要渲染未分页的整章。`localReaderPages` 为空时渲染**空白底色 + 页眉页脚**（上游 `ReaderCanvasSurface.kt:254` 就是 `val current = pages.current ?: return`，没有当前页什么都不画），而不是换一套排版。
-2. 尺寸 0 时用一个**与设置同步到达的估算值**先分页（`refreshEstimatedContentHeight()` `:3949` 已有估算器），避免空页期。
-3. `Index.ets:496` 改成 `await`，或在设置未就绪前不进入 ReaderPage。
-4. 把 40 个 `@Prop` 的 watch 合并成「变化入队 + 下一帧统一重建一次」（现在每次变化各重建一次）。
-5. 图片尺寸预取放在进入阅读页之前，或首帧先按占位尺寸分页。
+### KI-EXP3 改画布会连带失效的选区能力 —— 已接
 
-### KI-EXP3 改画布会连带失效的选区能力（做 KI-EXP1 方案 3 时必须一起处理）
+**原风险（历史记录）**：本地选区完全依赖 ArkUI `Text` 的原生能力（`.copyOption(CopyOptions.InApp)`、`.onTextSelectionChange(...)`、`.bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {...})`），正文改自绘后这些全部失效，阅读页会掉「长按选词、拖把手、标笔记」三项。
 
-本地选区完全依赖 ArkUI `Text` 的原生能力，正文改自绘后这些全部消失：
+**本地现状（已接，按上游 `feature/reader/core/selection/` 六文件 503 行自绘）**：
+- 几何：`ReaderCanvasRenderer` 把绘制拆成「先 `layoutPage()` 算几何、再逐元素画」，`ReaderCanvasPageGeometry` 记录每个 item 的 `left/top/widthPx/heightPx`，命中测试与绘制共用同一套坐标，不会漂移。
+- 命中与选词：`hitTestTextBox(x, y)` → `glyphOffsetAt(box, x, y, style)`（`Paragraph.getGlyphPositionAtCoordinate`）→ `wordRangeAt(box, offset, style)`（`Paragraph.getWordBoundary` 取整词，空词退化成单字）。
+- 绘制：`drawSelection()` 用 `Paragraph.getRectsForRange(range, TIGHT, TIGHT)` 拿条带矩形，`drawing.Brush` 填 `0x63858585`（上游 `legacySelectionFill`），再用 `drawing.Brush` + `drawing.Pen` 各画一次 `drawCircle` 作两个把手（半径 7vp、描边 2vp，对齐上游 `SelectionHandleRadius`/`SelectionHandleStrokeWidth`）。
+- 交互：`ReaderPage.ets` 的 `Stack` 挂 `LongPressGesture({ duration: 600 })` 起选（对齐上游 `LONG_PRESS_TIMEOUT_MILLIS = 600L`），横向 `PanGesture` 先 `canvasHandleHit()` 判把手命中，命中则拖 `dragCanvasSelectionTo()` 不翻页；`canvasSuppressTap` 标记吞掉长按抬手的那次 tap（对齐上游 `suppressTap`）。
+- 菜单：菜单浮层 `Column(){ readerMarkingSelectionMenu() }.position(...)`，锚点由 `refreshCanvasSelectionMenuAnchor()` 按选区条带的 `selectionStartX/Y`、`selectionEndX/Y`、`selectionTopY/BottomY` 回填；沿用既有 `runSelectionMenuAction()`（复制 / 书签 / 划线 — 笔记）与 `createMarkingFromCurrentSelection()`。
+- 清理：程序化翻页的 `animator.onFinish` 调 `resetCanvasSelectionState()`（对齐上游 `ReaderSelectionLifecyclePolicy.shouldClearForPageChange`）。
 
-- `:3594` `.copyOption(CopyOptions.InApp)`、`:3596` `.onTextSelectionChange(...)`、`:3598` `.bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {...})`
-- `:3653` / `:3655` / `:3657` 同上（逐行分支）
-- `:3715` `.copyOption(CopyOptions.InApp)`、`:3719` `.bindSelectionMenu(...)`（整段 Text 分支）
-- 辅助链路：`getCurrentPageSelectionParts()` `:2677`、`createJoinedPageSelectionPart()` `:2711`、`createReaderTextSelectionPart(items: LocalReaderLineItem[])` `:2742`、接口 `ReaderTextSelectionPart` `:117`
+**验收**：模拟器上长按出选区带 + 两个把手 + 浮动菜单；拖起始把手把选区从单字扩到两行、拖结束把手跨行；点「划线 — 笔记」面板回显完整选中文本并可保存，保存后正文出现绿色下划线；详见 [VALIDATION](VALIDATION.md) 同节。
 
-上游在画布上自绘选区：`ReaderCanvasSurface.kt:181-184` 的 `SelectionHandleRadius = 7.dp`、`SelectionHandleStrokeWidth = 2.dp`、`SelectionHandleFadeOutMillis = 90`、`SelectionHandleFadeInMillis = 140`，全文件 `selection|Selection` 命中 258 处。SDK 侧有对应能力：`@ohos.graphics.text` 的 `Paragraph.getRectsForRange(range, widthStyle, heightStyle)`、`getGlyphPositionAtCoordinate(x, y)`、`getWordBoundary(offset)`、`TextLine.getStringIndexForPosition(point)`。
+### 已删除：默认参数把所有人推到最慢的渲染分支
 
-**结论：KI-EXP1 的修法 1 或 2（补快照层 / 双页叠放）不动选区，可以先做；修法 3（画布重写）必须与选区自绘同批交付，否则阅读页会掉「长按选词、拖把手、标笔记」三项。**
-
-### 顺带记录：默认参数把所有人推到最慢的渲染分支
-
-`ReaderPage.ets:4138-4140`：
-
-```typescript
-if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
-  this.ReaderPageTextLines(column);   // 逐行 ForEach + 每字一个 Span
-} else {
-  this.ReaderPageTextJoined(column);  // 整段 Text + Span('\n') 快路径
-}
-```
-
-`textBottomJustify` 默认 `true`（`ReaderPage.ets:183`、`ReaderSettingsRepository.ets:782`），于是**默认配置下走慢路径**：一页 20-30 行 × 20-30 字 = 每次翻页新建 400-900 个 Span 节点（`ReaderPageTextLine` `:3600-3680` → `ReaderGlyphSpan` `:3485`，每个 Span 带 `fontSize/fontColor/letterSpacing/textBackgroundStyle/decoration`）。这是 KI-EXP1 空白窗口的直接放大器。上游同一个开关（`ReadSettings.kt:17 textBottomJustify: Boolean = true`）默认也 true，但上游是画布绘制，不存在节点新建成本 —— **默认值一致不等于代价一致**。
+原记录点名的 `ReaderPage.ets` 分支 `if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) { ReaderPageTextLines } else { ReaderPageTextJoined }` 与 `textBottomJustify` 默认 true 导致每页新建 400-900 个 Span 节点的代价，**已随 Span 渲染分支整体删除而消失**：现在一页的绘制成本与行数线性相关，与默认值无关。`textBottomJustify` 的语义仍保留（画布下表现为 `ReaderCanvasLayout.bottomJustifyGapPx` 按行 y 摊分）。
 
 ## 关系型存储迁移第五批（r284）遗留
 
@@ -450,8 +426,8 @@ if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
 本地落地：
 1. 仓储 `entry/src/main/ets/data/ReaderSettingsRepository.ets` —— 接口加同名四字段 `:161`–`:164`，默认 `:506`–`:509`（10 / false / 6 / 6），读 `:620`–`:623`，归一 `:768`–`:773`（三个数值夹 0–20），写 `:1018`–`:1021`。
 2. 分页器 `entry/src/main/ets/pages/LocalReaderPaginator.ets` —— `interface LocalReaderLine` 新增 `contentWidth: number`（该行未拉伸时的文字实际宽度），在 `appendLine()` 里赋 `contentWidth: naturalWidth`，供自绘线决定右端；这是「不撑满时线只到该行文字右边界」所需的几何。
-3. 渲染 `entry/src/main/ets/pages/ReaderPage.ets` —— 加四个 `@Prop`（`underlinePadding` 10 / `underlineExtend` false / `dottedBase` 6 / `dottedRatio` 6）。新增 `resolveUnderlineOffsetVp()`（`underlinePadding - 10`，直接对齐上游相对量口径）、`resolveUnderlineWidthVp()`（`max(1, underlineHeight)`，对齐 `coerceAtLeast(1f)`）、`resolveUnderlineDashArray()`（非虚线返回 `[]` 即实线，虚线返回 `[max(0.1, dottedBase), max(0.1, dottedRatio)]`，对齐 `coerceAtLeast(0.1f)`）、`resolveUnderlineLineEnd()`（`underlineExtend` 时取 `getBodyContentWidth()`，否则取 `min(列宽, line.contentWidth)`）、`readerPageLineOffset()`/`readerUnderlineY()`（按 `LocalReaderLine` 的 `verticalSpaceBefore + height + paragraphSpacingAfter` 累加出行底 y；走 `ReaderPageTextJoined` 时整页共用一个 `lineHeight`，改按 `(index + 1) * lineHeight` 定位）。新增 `@Builder ReaderUnderlineLayer(uniform)`：`Stack` 内 `ForEach` 每行画一条 `Line()`，`startPoint([0, y])` → `endPoint([end, y])`，`stroke` 取 `getReaderUnderlineColor()`、`strokeWidth` 取 `resolveUnderlineWidthVp()`、`strokeDashArray` 取 `resolveUnderlineDashArray()`。分页正文外层因此改成 `Stack { Column { 正文 + Blank } ; ReaderUnderlineLayer }`（下划线要按行底定位，只能叠在正文之上）。
-4. 避免双线 —— 原来 6 处 `Text.decoration` 里的正文下划线回落全部收敛为 `TextDecorationType.None`：`ReaderGlyphSpan` 的高亮分支与 marking 分支、`ReaderPageTextJoined()` 的整块 Text、`ReaderPageTextLine` 的图片行与正文行、以及 `getReaderHighlightTextRuns()` 里的回落。**但 marking/highlight 自身语义的 decoration 保留**（那是划线/高亮规则的线，与「正文下划线」不是一回事）。
+3. 渲染参数 —— `entry/src/main/ets/pages/ReaderPage.ets` 里保留四个 `@Prop`（`underlinePadding` 10 / `underlineExtend` false / `dottedBase` 6 / `dottedRatio` 6），换算成画布样式的四个量后交给绘制层：`underlineOffsetPx = vp2px(resolveUnderlineOffsetVp())`（`underlinePadding - 10`，直接对齐上游相对量口径）、`underlineWidthPx = vp2px(max(1, underlineHeight))`（对齐 `coerceAtLeast(1f)`）、`dashIntervals = resolveUnderlineDashArray().map(vp2px)`（非虚线为空数组即实线，虚线为 `[max(0.1, dottedBase), max(0.1, dottedRatio)]`，对齐 `coerceAtLeast(0.1f)`）。**真实绘制在 `entry/src/main/ets/reader/ReaderCanvasSurface.ets`**：`layoutPage()` 记下每行的 `top` 与 `line.contentWidth`，`drawLineUnderline()` 用 `drawing.Pen`（`setStrokeWidth(style.underlineWidthPx)` + 虚线段 `setPathEffect(drawing.PathEffect.createDashPathEffect(style.dashIntervals, 0))`）+ `canvas.drawLine(x0, y, x1, y)` 直接画在画布上，右端 `x1 = underlineExtend ? bodyWidthPx : min(bodyWidthPx, line.contentWidth * vpScale)`。2026-11-02 画布重写后，原 `ReaderPage.ets` 的 `resolveUnderlineLineEnd()`、`readerPageLineOffset()`、`readerUnderlineY()` 与 `@Builder ReaderUnderlineLayer`（`Line()` 自绘）已随 Span 分支一起删除。
+4. 避免双线（历史记录，现已不适用）—— 画布重写前曾把 6 处 `Text.decoration` 里的正文下划线回落收敛为 `TextDecorationType.None`，避免与 `Line()` 自绘的那条重复。2026-11-02 之后正文里已没有任何 `Text` 组件，下划线只由画布的 `drawLineUnderline()` 画一次，不存在双线问题。
 5. 备份 `entry/src/main/ets/data/BackupRepository.ets` —— `AndroidReadConfigBackupRecord` 补四字段，导出写 `config.xml`（`int` / `boolean` / `float` / `float`），恢复按 `readJsonNumber`/`readJsonBoolean`/`readXmlInteger`/`readXmlFloat` 取值并夹 0–20，缺键保留现值。这四键不在上游 `BackupConfig.readPrefKeys` 忽略清单里，随 `config.xml` 无条件备份。
 6. 面板 `entry/src/main/ets/pages/ReaderSettingsPage.ets` —— 「文字效果」面板在「下划线粗细」之后补「离字间距」滑块（0–20）、「撑满整行」开关；`dottedLine` 为 true 时再展开「实线段长」（0–20）与「空隙长度」（0–20）两个滑块。
 
@@ -569,14 +545,14 @@ if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
 - 数据层：`entry/src/main/ets/data/ReaderSettingsRepository.ets:228` 字段、`:584` 默认 `'0'`、`:703` 读、`:974` 返回归一、`:1132` 写、`:1295` `normalizeColumnMode`（只认 `'1'/'2'/'3'`，其余一律 `'0'`）。存储键与上游同名 `doubleHorizontalPage`。
 - 判定模块（新建）：`entry/src/main/ets/data/ReaderColumnMode.ets` —— 四档常量、`READER_COLUMN_MODE_TITLES`、`normalizeReaderColumnMode`、`readerColumnModeTitle`、`isReaderTablet`（短边 ≥ 600vp）、`readerColumnCount(mode, widthVp, heightVp, isScroll)`，逻辑逐条照上游 `columnCount()`。
 - 分页：`entry/src/main/ets/pages/LocalReaderPaginator.ets` 的 `paginate()` 与 `countPagesIncrementally()` 都新增 `columnCount` 参数，`pageColumns` 记录每行所属列并落进 `LocalReaderPage.lineColumns`，高度超限时调 `advanceColumn()` 换列而不是直接出页。
-- 渲染：`entry/src/main/ets/pages/ReaderPage.ets` 新增 `resolveReaderColumnCount()`、`getColumnStrideWidth()`、`lineColumnAt()`、`readerColumnIndexes()`、`readerColumnFirstLineIndex()`；`getBodyContentWidth()` 改为按列宽折算；正文由单个 `Column` 改为按列 `Row` + `ForEach(this.readerColumnIndexes())`，每列各自 `padding({left, right})`，外层容器的左右内边距在双列时置 0；下划线层、行偏移、行高统计、图片行 margin 全部按列分组；`getFullBookPaginationLayoutKey()` 拼进列数。
+- 渲染：`entry/src/main/ets/pages/ReaderPage.ets` 新增 `resolveReaderColumnCount()`、`getColumnStrideWidth()`、`lineColumnAt()`、`readerColumnIndexes()`、`getBodyContentWidth()`（按列宽折算）；列几何交给画布：`buildReaderCanvasLayout()` 把 `columnCount` / `columnStridePx` / `bodyWidthPx` 写进 `ReaderCanvasLayout`，`ReaderCanvasSurface.ets` 的 `layoutPage()` 用 `left = originXpx + column * columnStridePx` 与 `used[column]` 分列累加行高，与 `advanceColumn()` 的「先填满第 0 列再填第 1 列」一致。2026-11-02 画布重写后，原 `readerColumnFirstLineIndex()`、按列 `ForEach(readerColumnIndexes())` 的 ArkUI 列容器、按列分组的 `ReaderUnderlineLayer` 都已删除（`readerColumnFirstLineIndex()` 与 `ReaderUnderlineLayer` 随 Span 分支删除）。`getFullBookPaginationLayoutKey()` 仍拼进列数。
 - 面板：`entry/src/main/ets/pages/ReaderSettingsPage.ets:1097` 的「横屏双页」由占位改为四档下拉，副标题 `readerColumnModeTitle(this.doubleHorizontalPage)`，`getDetailChoices` 返回 `READER_COLUMN_MODE_TITLES`，`applyDetailChoicePreview` 落库，`openDetailSheet` 按当前档位回显。
 - 备份：`entry/src/main/ets/data/BackupRepository.ets` 的 `AndroidReadConfigBackupRecord` 加 `doubleHorizontalPage: string`，config.xml 与 readConfig.json 双向导出、恢复走 `readJsonString ?? readXmlString ?? current.xxx` 并校验四档。
 
 **已知差异**
 - 平板判定：本地按「视口短边 ≥ 600vp」近似 Android 的 `sw600dp`；上游用资源限定 `isTablet`，在折叠屏/分屏等非常规尺寸上可能判定不同。
 - 底部两端对齐：`ReaderPage.ets` 的 `calculateReaderBottomJustifyGap()` 在列数 > 1 时直接返回 0。原因是本地按「整页行数」摊分末行空隙，双列下会把两列的高度算错；上游是 `justifyColumnBottom()` 逐列独立摊分。因此**双列模式下末行不做两端对齐**，这是有意为之的保守处理。
-  - 单列下的位移实现已按上游改正：位移必须用 `.translate({ y })` 施加，**不能塞进 `margin`**。曾把 `gap * lineIndex` 加进 `margin-top`，margin 参与布局流会让位移逐行累加（总和 `gap·n²/2`），表现为行距越往下越疏、末行溢出屏幕并与页脚重叠；上游是逐行 `offsetY(deltaY)` 平移、不改变布局流。修复与设备取证见 [VALIDATION](VALIDATION.md) 的「2026-11-01 N 端正文排版三缺陷修复」。
+  - 单列下的位移实现（2026-11-02 画布重写后已改为直接算进行 y）：画布 `layoutPage()` 里 `top = originYpx + used[column] + line.verticalSpaceBefore * vpScale + layout.bottomJustifyGapPx * lineCount[column]`，即第 i 行直接按 `i * gap` 下移，不经过任何布局流累加，等价于上游 `justifyColumnBottom()` 的逐行 `offsetY(deltaY)`。Span 时代的 `.translate({ y })` 实现已随分支删除；当时的历史教训仍然有效：**位移不能塞进 `margin`**，margin 参与布局流会让位移逐行累加（总和 `gap·n²/2`），表现为行距越往下越疏、末行溢出屏幕并与页脚重叠。
 - 翻页动画仍是整页平移：上游双页模式下翻一页 = 跨两列，本地 `turnReaderPage()` 的步长语义没变（`localReaderPages` 的每一个元素本来就是「一页 = 最多两列」），所以跨列已经在排版阶段完成，动画层面无需再改。
 
 **验收**
