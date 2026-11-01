@@ -978,7 +978,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 ## 2026-11-01 N 端 KI-A2 菜单层依赖三项（面板落库通过；菜单图标视觉已于 r299 补像素取证）
 
-**范围**：`docs/parity/READER-CONFIG.md` A 块的 A-05 展示菜单项图标（`showMenuIcon`）、A-08 阅读标题补充信息（`showReadTitleAddition`）、A-17 阅读菜单不透明度（`menuAlpha`）。三项对应上游 `domain/model/settings/ReadSettings.kt:119`、`:55`、`:13`，恰好是「上游有配置」的三种形态：有设置入口且有渲染消费点、有设置入口但无消费点、两者都没有。判据与证据见 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的 KI-A2 段。
+**范围**：`docs/parity/READER-CONFIG.md` A 块的 A-05 展示菜单项图标（`showMenuIcon`）、A-08 阅读标题补充信息（`showReadTitleAddition`）、A-17 阅读菜单不透明度（`menuAlpha`）。三项对应上游 `domain/model/settings/ReadSettings.kt:119`、`:55`、`:13`，恰好是「上游有配置」的三种形态：有设置入口且有渲染消费点、有设置入口但无消费点、两者都没有。判据与证据见 [KNOWN-ISSUES](KNOWN-ISSUES.md) 的 KI-A2 段。
 
 **构建**：`assembleHap` 两次。第一次 **FAILED**，40 个错（12 × `10605090 arkts-no-implicit-return-types`、28 × `10505001`），全部指向 `entry/src/main/ets/pages/Index.ets` 里 `onShowMenuIconChange` 等三行回调。根因是改写脚本第一次执行只跑了前五步（states / 装载 / 恢复 / 快照 / setter）就退出，**没有写盘**，导致 `Index.ets` 里 setter 定义缺失、回调指向不存在的方法。重跑完整脚本后 **BUILD SUCCESSFUL in 39 s 873 ms**，无 ERROR，`hdc -t 127.0.0.1:5555 install -r` 覆盖安装成功。
 

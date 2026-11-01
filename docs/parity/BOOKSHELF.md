@@ -61,10 +61,10 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | B 书籍详情页与元数据 | 80 | 22 | 57 | 1 |
 | C 阅读进度与记录 | 35 | 17 | 18 | 0 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
-| E 备份恢复（整界面，r295 新增） | 12 | 2 | 9 | 1 |
-| 合计 | 327 | 84 | 241 | 2 |
+| E 备份恢复（整界面，r295 新增，r296 补 1 行） | 13 | 3 | 9 | 1 |
+| 合计 | 328 | 85 | 241 | 2 |
 
-A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 12 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的。全表状态三值，无 `待定`。
+A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 13 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行。全表状态三值，无 `待定`。
 
 ---
 
@@ -504,9 +504,9 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 ## 小结
 
-**全表合计 327 条：已接 84、未接 241、不适用 2，无 `待定`。**（A1–C 259 条 + C 块 r286 新增 3 条别名行 + D 块 53 条 + E 块 12 条；A2 原 48 行删去 1 行重复）
+**全表合计 328 条：已接 85、未接 241、不适用 2，无 `待定`。**（A1–C 259 条 + C 块 r286 新增 3 条别名行 + D 块 53 条 + E 块 13 条；A2 原 48 行删去 1 行重复）
 
-按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 97 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 12 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制）。**28 类里有 19 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
+按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 97 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制）。**28 类里有 19 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
 五处需要特别注意：
 

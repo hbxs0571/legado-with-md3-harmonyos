@@ -127,11 +127,13 @@
 
 ## 阅读配置行登记（READER-CONFIG.md 的未接行）
 
-本节登记 [READER-CONFIG 对照表](parity/READER-CONFIG.md) A–G 块里 **97 行 `未接`** 的「为什么不修」。编号 `KI-<块><组>` 与对照表「备注」列的标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记不实施，本轮不改 `.ets` 代码。**
+本节登记 [READER-CONFIG 对照表](parity/READER-CONFIG.md) A–G 块里 **11 行 `未接`** 的「为什么不修」。编号 `KI-<块><组>` 与对照表「备注」列的标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记不实施，本轮不改 `.ets` 代码。**
+
+> 数字沿革：本节最初写于 r297，当时是 97 行 `未接`；r300–r316 深色模式与阅读配置各批落地后，实测已降到 **11 行**（189 行 = 176 已接 / 11 未接 / 2 不适用，用 `python scripts/reader-config-pending.py` 复算）。KI 组保留原编号不动，已实现组在组内标注「已实现」，不删组——删了会让对照表「备注」列的 `KI-xx` 锚点变成死链。
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS 朗读、WebDAV、AI、云同步与额外设备形态，不因开关已上屏而算已实现；上游没有的行为不补。凡上游行为在本地已有等价实现、或上游分支在本平台根本不存在，直接记「不接」；其余记「要接，待排期」并写补法。
 
-与字段口径的关系：本节按 **A–G 明细表的行**登记（97 行）。对照表 §一 1.5 按**上游声明名**判定的 112 项里，另有 9 项判「不接」但不对应任何 KI 组，理由直接写在 1.5 表内，不在此重复——`menuBgColor`、`menuBgColorNight`、`menuAcColor`、`menuAcColorNight`、`menuBottomCornerRadius`、`menuBottomHorizontalMargin`、`menuBottomBottomMargin`（都是上游 `Config` 里 `@Transient` 的主题包承载字段，上游没有用户设置入口）、`readStyleSelect`、`comicStyleSelect`（图片书/漫画，本地无该内容形态，明细表 A 块已判 `不适用`）。两个口径不可相加。
+与字段口径的关系：本节按 **A–G 明细表的行**登记（现 11 行）。对照表 §一 1.5 按**上游声明名**判定的 112 项里，另有 9 项判「不接」但不对应任何 KI 组，理由直接写在 1.5 表内，不在此重复——`menuBgColor`、`menuBgColorNight`、`menuAcColor`、`menuAcColorNight`、`menuBottomCornerRadius`、`menuBottomHorizontalMargin`、`menuBottomBottomMargin`（都是上游 `Config` 里 `@Transient` 的主题包承载字段，上游没有用户设置入口）、`readStyleSelect`、`comicStyleSelect`（图片书/漫画，本地无该内容形态，明细表 A 块已判 `不适用`）。两个口径不可相加。
 
 ### A 阅读界面基础
 
@@ -324,7 +326,7 @@
 
 已知差异：上游强调色驱动链接/搜索结果/朗读高亮三处着色，**本地这三条路径都还没有**（阅读页搜索只切路由、朗读整体未迁移），按「上游有这个问题就保留、上游没有就不要这个效果」，本地只做可配+落库+随备份，不发明新着色效果。
 
-验收：注入 `textColor = #DB4B4B` 后重进阅读页，截图彩色像素 top8 全为红色系（`(213,77,77)` 等），正文与章节标题同时变红；改回 `#38383B` 恢复正常深灰。见 [VALIDATION](../VALIDATION.md)。
+验收：注入 `textColor = #DB4B4B` 后重进阅读页，截图彩色像素 top8 全为红色系（`(213,77,77)` 等），正文与章节标题同时变红；改回 `#38383B` 恢复正常深灰。见 [VALIDATION](VALIDATION.md)。
 
 **KI-C2 背景三项（已实现，与 KI-C1 同轮）** —— 覆盖 C-04 背景透明度（`bgAlpha`，`ReadBookConfig.kt:198`，默认 100）、C-05 背景颜色/图片（`bgStr`/`bgStrNight`/`bgType`/`bgTypeNight`，`:537-551`）、C-06 白天是否暗色状态栏（`darkStatusIcon`/`Night`，`:552`）。
 
@@ -343,7 +345,7 @@
 - 上游 `bgType = 1` 是 assets 内置图，本地没有内置背景图集，只做 `0`（颜色）与 `2`（自选图）。
 - 模拟器上图片选择器能正常弹出，但无可选图片、且沙箱 `files` 目录不可写（`mkdir`/`file send` 都 `Permission denied`），**背景图渲染与透明度只到代码层核对**，未做像素级确认。
 
-验收：日间 `bgStr = #FFFFFF` 后阅读页中心像素为 `(255,255,255)`；`darkStatusIconNight` false 时状态栏亮像素 6726、改 true 后同一区域 0。见 [VALIDATION](../VALIDATION.md)。
+验收：日间 `bgStr = #FFFFFF` 后阅读页中心像素为 `(255,255,255)`；`darkStatusIconNight` false 时状态栏亮像素 6726、改 true 后同一区域 0。见 [VALIDATION](VALIDATION.md)。
 
 **KI-C3 下划线绘制参数四项（已实现）** —— 覆盖 C-07 下划线偏移量（`underlinePadding`，`ReadBookConfig.kt:322`，默认 10）、C-08 下划线延伸（`underlineExtend`，`:325`）、C-09 自定义虚线长度基准（`dottedBase`，`:331`，默认 6f）、C-10 自定义虚线间隔比例（`dottedRatio`，`:334`，默认 6f）。
 
@@ -363,7 +365,7 @@
 - **滚动模式不支持这四项**。`ReaderPageTextJoined`/`ReaderPageTextLine` 之外，滚动模式（`Scroll` 里那串 `Text`）拿不到逐行几何，无法自绘，仍用 `Text.decoration` 表达下划线，因此虚线段长/间隔/偏移/延伸只在分页模式生效。已在代码注释与本节同时记录。
 - 单位：上游 `dottedBase`/`dottedRatio` 是 px，本地按 vp 传给 `strokeDashArray`，两者在 3.5 密度屏上比值为 3.5，视觉疏密随设备密度略有不同。
 
-验收：设备实测三档 `underlinePadding` 0 / 10 / 20 时同一行下划线 y 依次为 409 / 444 / 478（每档差 ~35px = 10vp × 3.5 密度，线性成立）；`underlineExtend` 关闭时短行 `x0=56 x1=720`（宽 665），打开后所有行统一 `x0=56 x1=1223`（宽 1168）；`dottedBase=6` 单行 34 段、`dottedBase=20` 单行 18 段。见 [VALIDATION](../VALIDATION.md)。
+验收：设备实测三档 `underlinePadding` 0 / 10 / 20 时同一行下划线 y 依次为 409 / 444 / 478（每档差 ~35px = 10vp × 3.5 密度，线性成立）；`underlineExtend` 关闭时短行 `x0=56 x1=720`（宽 665），打开后所有行统一 `x0=56 x1=1223`（宽 1168）；`dottedBase=6` 单行 34 段、`dottedBase=20` 单行 18 段。见 [VALIDATION](VALIDATION.md)。
 
 **KI-C4 标题排版十四项（已实现）** —— 覆盖 C-11 标题位置模式（`titleMode`，`ReadBookConfig.kt:267`）、C-12 标题字号（`titleSize`，`:269`）、C-13 标题字号是否相对正文（`titleSizeRelative`，`:270`）、C-14 标题上间距（`titleTopSpacing`，`:298`）、C-15 标题下间距（`titleBottomSpacing`，`:301`）、C-16 标题日间颜色（`titleColor`，`:304`）、C-17 标题夜间颜色（`titleColorNight`，`:307`）、C-18 标题字重（`titleBold`，`:228`）、C-19 标题行距（`titleLineSpacingExtra`，`:255`）、C-20 标题行距子项（`titleLineSpacingSub`，`:258`）、C-21 标题分段模式（`titleSegType`，`:280`）、C-22 标题分段缩放（`titleSegScaling`，`:283`）、C-23 标题分段起始位置（`titleSegDistance`，`:287`）、C-24 标题分段识别字符（`titleSegFlag`，`:290`）。
 
@@ -660,7 +662,7 @@
 4. 「标题栏紧凑」在上游还会把「换源」「朗读音频下载」搬进悬浮菜单（`ReadBookMenuBarFloating.kt:190`）；本地没有悬浮菜单层，只实现「顶栏只留更多」这一半。
 5. ~~顶栏的像素级视觉未取证~~ —— **2026-11-01 r299 已补齐五组**：`titleBarMode` 四档顶栏文字带各不相同（行投影区间见 r299 节）、胶囊 vs 非胶囊 changed px=242055、紧凑 changed px=2721（bbox `x187-1156 y59-280`）、图标样式三档 0→1 changed px=30656 / 1→2 changed px=29947、底色随透明度见 KI-E2 条。**仍未取证**：合并按钮的胶囊容器。详见 `docs/VALIDATION.md` 的 r299 节。
 
-**验收**：`assembleHap` BUILD SUCCESSFUL（两次：39 s 738 ms / 21 s 843 ms，无 ERROR）；设备实测（`127.0.0.1:5555`，API 26）：开「标题栏胶囊」后「标题栏模式」整行消失、关闭后恢复（两个方向都做了 `dumpLayout` 对照）；八项逐项拨动后退出设置页重进 + `aa force-stop` 重启应用，值全部跨进程保持；「标题栏模式」弹层四项文案与上游中文串一致。详见 [VALIDATION](../VALIDATION.md) 的 2026-10-31 KI-E5 节。
+**验收**：`assembleHap` BUILD SUCCESSFUL（两次：39 s 738 ms / 21 s 843 ms，无 ERROR）；设备实测（`127.0.0.1:5555`，API 26）：开「标题栏胶囊」后「标题栏模式」整行消失、关闭后恢复（两个方向都做了 `dumpLayout` 对照）；八项逐项拨动后退出设置页重进 + `aa force-stop` 重启应用，值全部跨进程保持；「标题栏模式」弹层四项文案与上游中文串一致。详见 [VALIDATION](VALIDATION.md) 的 2026-10-31 KI-E5 节。
 
 **KI-E6 无上屏条目四项（已实现）** —— 涉及 E-36 菜单镜头半径（`ReadBookConfig.kt:114`，夹 0–48f）、E-38 阅读栏样式（`ReadSettings.kt:69`，默认 1）、E-39 阅读栏样式跟随页面（`:68`）、E-40 更多操作配置（`:121`）。原条目里「E-37 自动亮度」已由 2026-10-31 的 KI-A9 接上，本轮不再涉及。
 

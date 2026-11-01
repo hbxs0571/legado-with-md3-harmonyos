@@ -73,17 +73,48 @@ _避免_：只盘「与本功能相关的按钮」，把同一界面上其余未
 
 **覆盖证明通过 ≠ 上游被覆盖，关键词本身可能选错。** 这个判据的分子分母都由关键词决定，关键词只认「实体类名」时会系统性漏掉一整层。上游的类别有两副面孔——实体类名（`data/entities/Bookmark.kt`）与忽略项键名字符串（`help/storage/BackupConfig.kt` 的 `dbKeyBookmark = "bookmark"`），而导出/恢复主文件 `help/storage/Backup.kt` 里一个实体类名都不出现（`grep -cE "Bookmark|BookMarking"` = 0），19 个类别全写成 `dbIsNotIgnored("bookmark")`。按实体类名选词，`Backup.kt` 就不在接触面里——而它正是该类别导出逻辑的唯一所在地，于是「表格显示通过、导出逻辑从未被检查」长期共存。r294 给 28 类全部补上键名字面量后 `Backup.kt` 才进入接触面；补完后仍有 18 个存储层文件对全部 28 类零命中，它们的共同点是「处理所有类别一起的动作」，只能靠[书籍总账](parity/BOOKSHELF.md)的 E 备份恢复块整块承载。新增或复核类别关键词时，先把「这个类别的逻辑会不会出现在按类别名检索不到的位置」问一遍。
 
+**「已接」的证据必须是「看到什么」，不是「键落库了」。** 字段对上不等于行为对上。`pageAnim` 这条判过 `已接`：存储键同名对位、默认值一致、面板能改、能落库——但上游 `COVER` 是「新页在原位不动、旧页盖上去滑走」（`feature/reader/core/transition/ReaderPageTransition.kt` 的 `transforms(COVER)` 里 `next = ReaderPageTransform()` 位移为 0、`currentOnTop = true`），本地 `ReaderPage.ets:1683-1701` 是「旧页滑出 → 中点切页 → 新页从另一侧滑入」，中间 360ms 屏幕是空的。数据层完全等价，屏幕效果完全不是一回事，表上写的是 `已接`。
+
+因此凡是改变屏幕呈现的行（排版、翻页、渲染、动画、手势判定、绘制），验收列必须写一句**屏幕现象**。写不出这句话就只能判 `未接`，哪怕字段全对、面板全上屏——字段级证据只能支撑「字段已接」，不能支撑「这项已接」。
+
+**「架构差异」不能单独作为排除理由。** 上游 `feature/reader/ReaderCanvasSurface.kt` 是 3747 行的 Compose `Canvas` 自绘管线，本地是 ArkUI 组件树；拿这条理由把它整体排除，等于把渲染主体排除在检查范围之外（[书签对照表](parity/ZIP-BOOKMARK.md) 的「已排除：渲染管线差异」就是这么写的，两行都写了「架构差异不是缺口」）。
+
+排除「实现方式」可以，但必须同时回答一句：**上游这个实现方式带来的效果，由哪一行负责？** 没有任何一行负责就不能排除，必须新开块。判断依据是「用户能不能感知到差别」，不是「代码结构像不像」。
+
+**渲染与公共管线不属于任何类别，必须单独立块。** 有一层代码对所有类别关键词零命中，因为它们处理的是「所有类别一起」的动作：`help/storage/` 的整批规划与规整、`feature/reader/core/` 的分页器 / 文字整形 / 转场策略 / 选区几何。按类别名派活永远覆盖不到，散在「已排除」里就永久隐身。处置方式是整块承载——[书籍总账](parity/BOOKSHELF.md) 的 E 备份恢复块是这个模式，渲染管线同样要单独立块。
+
+**语义等价比行为等价更深一层：同样的输入要给同样的输出。** 上游这批重构把判定逻辑大量抽成了纯函数（`BookRestorePlanner.planBookRestore`、`BackupConfig.keyIsNotIgnore`、`BookExtensions.isLocal`、`ReaderPageTransitionPolicy.release` 的 `commitProgress = 0.35f` / `flingVelocityPxPerSecond = 900f`、`AppUiConfiguration.isDarkTheme`、`RestoreConfigNormalizer.normalizeConfigMap`）。纯函数意味着可以逐条对拍：把上游判定分支全排列成决策表，一行一个用例，本地实现必须逐行通过。
+
+这类差异的共同特征是**正常路径一致、边界路径才分叉**，人工点一遍永远发现不了。仓库里已经有一例：`ReaderPage.ets:1999 getMarkingForTextRange` 只判区间相交、不看 `selectedText`，而上游 `domain/model/BookContentProcessEngine.kt:101-131` 按「选中文本 → 去空白 → 全空白归一化」三级退让重定位——用户不改字号时两者一模一样，一改字号本地高亮就落到错误的文字上。这条已登记在[已知问题](KNOWN-ISSUES.md)，但它是散文，不是可复跑的断言。
+
 **盘点结论必须当轮落盘，没落盘等于没盘**。每轮盘点结束必须把结论写进对照表或已知问题，不能只留在对话里。理由：对话会被压缩，未落盘的结论等于没产生，同一件事会被重新发现第三次。
 
 **验收合并成一次**：全部差异改完，构建一次，上设备走完整清单。不以单个文件的差异作为一轮交付。
 
 违反后会发生什么：差异清单不完整，每一轮都以「又发现一处」结束，构建与设备验证被重复消耗，交付节奏由未被发现的缺口数量决定。
 
-## 五、构建不是可选项
+## 五、功能做完必须恢复到上游默认状态
+
+**规则**：一处功能改完、验证完之后，把该功能的设置项恢复成上游默认值再交付，不要留在测试时用的取值上。
+
+**为什么**：验证过程必然会改设置——改字号看排版、改主题看配色、开关一堆选项看差异。这些值留在设备上，下一个人接手时看到的不是「代码的默认行为」，而是「上一个人测试到一半的状态」。更麻烦的是它会被误读成缺陷：r299 取证时把 `readBarStyle` 改成 `2`、把 `readMenuBgColorNight` 改成 `#FF0000`，如果不清回，后续任何人打开阅读页都会看到红色顶栏，而默认值本来是跟随纸色。
+
+**上游默认在哪里**：两份声明就是唯一事实来源，不要凭印象记：
+
+- `domain/model/settings/ReadSettings.kt`（阅读设置，如 `:16` `textFullJustify: Boolean = true`、`:17` `textBottomJustify: Boolean = true`）
+- `help/config/ReadBookConfig.kt`（书级配置，如 `:561` `private val pageAnim: Int = 0`）
+
+本地对应 `entry/src/main/ets/data/ReaderSettingsRepository.ets` 的 `defaults` 对象（`:781` `textFullJustify: true`、`:782` `textBottomJustify: true`、`:810` `pageAnimation: 0`、`:811` `animationSpeed: 2`），三者必须逐项相同。**本地 defaults 与上游声明不一致时，以上游为准改本地，不是以本地为准改文档。**
+
+**怎么恢复**：优先走应用内设置面板把值改回去；面板做不到的（如 `titleBarMode` 是字符串键、`readMenuLensRadius` 没有设置项）直接改设备上的偏好文件，再 `aa force-stop` + `aa start` 冷启复核。r299 记录的做法是 `sed` 就地改单个键后 `cp` 覆盖（`preferences/` 下新建文件会 `Permission denied`，覆盖已有文件可以；模拟器上没有 `run-as`）。
+
+**交付前自查**：列出本轮改过的所有设置项，逐项对照上游默认值，确认已复原。这一条要写进验收说明——「已恢复到上游默认」是和「构建通过」「设备验收通过」并列的交付项。
+
+## 六、构建不是可选项
 
 每次源码改动后必须执行一次 `assembleHap`。命令见 [构建说明](BUILDING.md)。历史上有一次交付因 ArkTS 不接受对象展开写法而在目标工程构建失败，N 端未跑构建即交出。构建通过也不等于功能正确，等级口径见 [验证记录](VALIDATION.md) 开头的「验证等级口径」。
 
-## 六、ArkTS 类型约束易错点
+## 七、ArkTS 类型约束易错点
 
 - 不支持对象展开（`...obj`）用于类型化对象；需要复制时逐字段赋值或写显式拷贝方法。
 - 变量名与字符串值不要指望一致：设置在存储里的键是**字面量**，不是变量标识符；改名时两者会脱钩。
