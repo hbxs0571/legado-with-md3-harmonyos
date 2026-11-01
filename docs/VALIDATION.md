@@ -53,7 +53,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 改动文件：
   - 新增 `entry/src/main/ets/reader/ReaderCanvasSurface.ets`（画布绘制主体：页面窗口、逐行排版、转场策略、选区自绘、图片预取）。
   - 新增 `entry/src/main/ets/reader/ReaderPageCurl.ets`（折页几何与触点策略，照上游 `PageCurlGeometry.kt` / `ReaderCurlTouchPolicy`）。
-  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5089 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支）。
+  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5134 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支）。
   - 改 `entry/src/main/ets/pages/Index.ets`（17 行：阅读页渲染门控）。
   - 新增 `scripts/build-hap.sh`（构建封装，导出 `JAVA_HOME=$DEVECO_ROOT/jbr`）。
 
