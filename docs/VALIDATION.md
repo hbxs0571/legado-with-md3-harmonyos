@@ -30,6 +30,49 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r312 深色模式阶段二：顶栏与底栏、控件模糊、渐变模糊（A17/A30/A31）
+
+本轮把 [深色模式对照表](parity/ZIP-THEME.md) 的 A17（顶栏与底栏 13 个键）、A30（启用控件模糊）、A31（启用渐变模糊）三行从 `未接` 转为 `已接`。
+
+**改了什么**
+
+1. 新建 `entry/src/main/ets/data/TopBottomBarSettings.ets`：`TOP_BAR_BUTTON_STYLES` 五档（`plain`/`tonal`/`outlined`/`glass`/`liquid`）与 `topBarButtonStyleLabel`（普通/填充/描边/半透明/液态玻璃，逐条对齐上游 `values-zh-rCN/arrays.xml:226-232`）；`TopBottomBarSnapshot` 15 字段；7 个 `normalize*`；`resolveBarBackgroundColor` 按上游 `GlassDefaults.glassColor()` + `AppNavigationBar.kt:60` 合成（未开模糊用底色，开了先把底色压到 `blurAlpha` 再乘 `opacity`，结果 `>= 0.999` 时返回空串以保持组件资源色）；`resolveTopBarBackground` / `resolveBottomBarBackground` / `resolveBottomBarCornerRadius`。
+2. `entry/src/main/ets/data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 从 38 扩到 **53 字段**（+15），`load()` / `save()` 逐键同步。
+3. `entry/src/main/ets/pages/Index.ets`：新增 15 个 `@State`、`topBottomBarSnapshot()`、`publishTopBottomBarStyle()`（广播 `themeTopBarBackground`/`themeBottomBarBackground`/`themeTopBarBlurRadius`/`themeBottomBarBlurRadius`/`themeBottomBarRadius`）与 15 个 `selectTheme*` 回调；底栏渲染改成 `if (this.themeShowBottomView && ...)`，按 `useFloatingBottomBar` 改宽度与圆角，按合成色设底色，按 `enableBlur` 挂 `backdropBlur`。
+4. `entry/src/main/ets/pages/ThemeSettingsPage.ets`：「模糊效果」两项改真回调；「顶栏与底栏」由 `ThemeSettingsOption` 改为可展开组，13 项全部接上（使用折叠应用栏 / 顶栏按钮样式 / 合并顶栏按钮 / 显示导航栏 / 悬浮底栏 / 液态玻璃 / 底栏模糊强度 / 顶栏与底栏模糊半径 / 顶栏与底栏模糊透明度 / 顶栏与底栏不透明度），并按 `enableBlur` 与 `useFloatingBottomBar` 决定显示哪几项。
+5. 顶栏底色消费端：`entry/src/main/ets/components/CollapsingSettingsHeader.ets`（12 个设置子页）+ `HomePage.ets`/`SearchPage.ets`/`ThemeSettingsPage.ets` 三处内联 header，各加两个 `@StorageProp` 与 `.backgroundColor(...)` + `.backdropBlur(...)`。
+
+**与上游的差异**（已写进对照表 A17/A30/A31 三行）
+
+1. 上游 `hazeSource`/`hazeEffect` 是跨组件采样（顶栏采样下方滚动内容做毛玻璃），ArkUI `backdropBlur` 只采样组件自身背后的内容——语义近似而非等价。上游 `enableBlur` 影响 6 处（含内容卡片），本地只作用于顶栏与底栏。
+2. A31 的 `HazeProgressive.verticalGradient(1f, 0f)` 在 ArkUI 无等价物（`backdropBlur` 不支持渐变梯度），本地只落盘并参与摘要文案，**不产生可见渐变**。
+3. `useFlexibleTopAppBar` 只落盘不改折叠行为（本地顶栏本就是固定高度 + `collapsedHeader` 折叠）；`topBarButtonStyle` 五种样式只落盘不改按钮外观。
+4. 上游是独立 sheet，本地用可展开组承接。
+
+**验收**（模拟器 127.0.0.1:5555 / API 26 / 包 `io.legado.harmony`；构建 `BUILD SUCCESSFUL in 40 s 836 ms` / `36 s 858 ms` / `38 s 448 ms`）
+
+| # | 设备操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| 1 | 外观 → 主界面组 →「顶栏与底栏」→ 关「显示导航栏」→ 重启 | 底栏消失 | 通过：`(640,2700)` 由 `(255,255,255)` 变 `(245,246,248)`（页面底色） |
+| 2 | 「顶栏按钮样式」→ 选「液态玻璃」 | prefs `topBarButtonStyle=liquid` | 通过：菜单五项文案为普通/填充/描边/半透明/液态玻璃，选中后 prefs 变 `liquid` |
+| 3 | 开「悬浮底栏」 | 底栏变胶囊 | 通过：`.pwork/float.jpeg` 底栏左右留出页面底色（`x=10`/`x=1270`），`x=60`/`x=1220` 为卡片描边 |
+| 4 | prefs `bottomBarOpacity=40` → 重启 | 底栏底色变淡 | 通过：`(255,255,255)`→`(249,250,252)` |
+| 5 | prefs `topBarOpacity=40` → 重启 → 进外观页 | 顶栏底色变淡 | 通过：顶栏像素 `(16,15,13)`→`(107,107,107)`，`ImageChops` bbox `(0,56,1280,616)`、changed 616208 |
+| 6 | 拖「顶栏模糊半径」滑块 | prefs `topBarBlurRadius` 变化 | 通过：`24.000000`→`7.000000`（`uitest uiInput swipe 200 2334 400 2334 800`） |
+| 7 | 开「启用控件模糊」 | prefs `enableBlur=true`、出现「启用渐变模糊」行 | 通过：prefs 变 `true`，顶栏组摘要变「模糊 24/8」 |
+| 8 | 开/关「启用控件模糊」对比截图 | 顶栏与底栏出现毛玻璃 | 通过：`ImageChops` bbox `(0,2511,1280,2832)`、changed 395714（变化集中在底栏） |
+| 9 | 开「启用渐变模糊」 | prefs `enableProgressiveBlur=true` | 通过：prefs 变 `true` |
+
+**踩坑**
+
+1. `ThemeSettingsPage.ets` 的头部是**页面内联写的**（不是 `CollapsingSettingsHeader` 组件），第一版漏改，导致 `topBarOpacity` 改了但截图 `ImageChops` changed 为 0。补三处内联 header（`HomePage`/`SearchPage`/`ThemeSettingsPage`）后才生效——**改广播式主题键时，要先把所有消费点找全，组件与内联两套都要覆盖**。
+2. `uitest uiInput swipe` 拖 Slider 必须从轨道内起手且距离适中：`swipe 120 y 1100 y 700` 无效，`swipe 200 y 400 y 800` 才落到滑块上。
+3. `uitest uiInput click` 落在 Toggle 上偶发第一次无效（r308 的「关闭设置分组圆角」也是第二次才生效），一律以 prefs 变值为准。
+
+**复原**：`topBarOpacity`/`bottomBarOpacity` 回 `100.000000`、`topBarBlurRadius` 回 `24.000000`、`bottomBarBlurRadius` 回 `8.000000`、`topBarButtonStyle` 回 `tonal`、`showBottomView`/`useFloatingBottomBar` 回 `true`/`false`、`backgroundImage` 清空、`fontScale` 回 `10.000000`、`enableProgressiveBlur` 回 `false`。
+
+**未验**：液态玻璃效果（`useFloatingBottomBarLiquidGlass`）与底栏模糊强度滑块只确认落盘，未做像素级比对；顶栏按钮五档样式的外观差异未验（本地未实现样式渲染）。
+
 ## 2026-11-01 N 端 r311 深色模式阶段二：首页与导航、预见性返回、共享元素动画（A9/A10/A14）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。

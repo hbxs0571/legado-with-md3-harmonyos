@@ -17,6 +17,10 @@ export struct SearchPage {
   @Prop exactMatch: boolean = false;
   @State showScopePanel: boolean = false;
   @State collapsedHeader: boolean = false;
+  /** 顶栏底色（含不透明度与模糊透明度），由 `Index.publishTopBottomBarStyle()` 广播。 */
+  @StorageProp('themeTopBarBackground') themeTopBarBackground: string = '';
+  /** 顶栏模糊半径；0 表示不模糊。 */
+  @StorageProp('themeTopBarBlurRadius') themeTopBarBlurRadius: number = 0;
   private suggestionScroller: Scroller = new Scroller();
   private resultsScroller: Scroller = new Scroller();
   onBack: () => void = () => {};
@@ -115,6 +119,10 @@ export struct SearchPage {
             .width('100%').height(72).padding({ left: 16, bottom: 14 })
             .opacity(this.collapsedHeader ? 0 : 1)
         }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
+        .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
+          : (this.themeAppBackground.length > 0 ? Color.Transparent
+            : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))))
+        .backdropBlur(this.themeTopBarBlurRadius)
 
         Row() {
           AppGlyph({ name: 'search', glyphSize: 19, tint: '#C5C7D0' }).margin({ right: 9 })

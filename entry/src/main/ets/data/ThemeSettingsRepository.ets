@@ -1,6 +1,14 @@
 import { preferences } from '@kit.ArkData';
 import { normalizeLabelVisibility } from './MainNavigationSettings';
 import {
+  BAR_BLUR_ALPHA_MAX, BAR_BLUR_ALPHA_MIN, BOTTOM_BAR_BLUR_ALPHA_DEFAULT, BOTTOM_BAR_BLUR_RADIUS_DEFAULT,
+  BOTTOM_BAR_LENS_RADIUS_DEFAULT, BOTTOM_BAR_OPACITY_DEFAULT, TOP_BAR_BLUR_ALPHA_DEFAULT,
+  TOP_BAR_BLUR_RADIUS_DEFAULT, TOP_BAR_BUTTON_STYLE_DEFAULT, TOP_BAR_OPACITY_DEFAULT,
+  normalizeBarBlurAlpha, normalizeBottomBarBlurRadius, normalizeBottomBarLensRadius,
+  normalizeBottomBarOpacity, normalizeTopBarBlurRadius, normalizeTopBarButtonStyle,
+  normalizeTopBarOpacity
+} from './TopBottomBarSettings';
+import {
   CONTAINER_OPACITY_DEFAULT,
   CARD_BORDER_WIDTH_DEFAULT,
   CARD_RADIUS_DEFAULT,
@@ -113,6 +121,36 @@ export interface ThemeSnapshot {
   predictiveBack: boolean;
   /** 阅读界面共享元素动画，对齐上游 `AppShellSettings.kt:10 readerSharedElementEnabled`（默认 true）。 */
   readerSharedElement: boolean;
+  /** 控件模糊总开关，对齐上游 `ThemeSettings.kt:33 enableBlur`（默认 false）。 */
+  enableBlur: boolean;
+  /** 渐变模糊，对齐上游 `ThemeSettings.kt:34 enableProgressiveBlur`（默认 false）。 */
+  enableProgressiveBlur: boolean;
+  /** 折叠应用栏，对齐上游 `ThemeSettings.kt:44 useFlexibleTopAppBar`（默认 true）。 */
+  useFlexibleTopAppBar: boolean;
+  /** 顶栏按钮样式，对齐上游 `ThemeSettings.kt:45 topBarButtonStyle`（默认 tonal）。 */
+  topBarButtonStyle: string;
+  /** 合并顶栏按钮，对齐上游 `ThemeSettings.kt:46 mergeTopBarActions`（默认 false）。 */
+  mergeTopBarActions: boolean;
+  /** 显示导航栏，对齐上游 `AppShellSettings.kt showBottomView`（默认 true）。 */
+  showBottomView: boolean;
+  /** 悬浮底栏，对齐上游 `AppShellSettings.kt useFloatingBottomBar`（默认 false）。 */
+  useFloatingBottomBar: boolean;
+  /** 悬浮底栏液态玻璃，对齐上游 `AppShellSettings.kt useFloatingBottomBarLiquidGlass`（默认 false）。 */
+  useFloatingBottomBarLiquidGlass: boolean;
+  /** 底栏模糊强度（液态玻璃扭曲程度），对齐上游 `ThemeSettings.kt:43 bottomBarLensRadius`（默认 24）。 */
+  bottomBarLensRadius: number;
+  /** 顶栏模糊半径，对齐上游 `ThemeSettings.kt:39 topBarBlurRadius`（默认 24）。 */
+  topBarBlurRadius: number;
+  /** 底栏模糊半径，对齐上游 `ThemeSettings.kt:40 bottomBarBlurRadius`（默认 8）。 */
+  bottomBarBlurRadius: number;
+  /** 顶栏模糊透明度，对齐上游 `ThemeSettings.kt:41 topBarBlurAlpha`（默认 73）。 */
+  topBarBlurAlpha: number;
+  /** 底栏模糊透明度，对齐上游 `ThemeSettings.kt:42 bottomBarBlurAlpha`（默认 40）。 */
+  bottomBarBlurAlpha: number;
+  /** 顶栏不透明度，对齐上游 `ThemeSettings.kt:35 topBarOpacity`（默认 100）。 */
+  topBarOpacity: number;
+  /** 底栏不透明度，对齐上游 `ThemeSettings.kt:36 bottomBarOpacity`（默认 100）。 */
+  bottomBarOpacity: number;
 }
 
 /** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
@@ -214,7 +252,22 @@ export class ThemeSettingsRepository {
       mainNavigationOrder: 'home,bookshelf,explore,rss,my',
       labelVisibilityMode: 'auto',
       predictiveBack: true,
-      readerSharedElement: true
+      readerSharedElement: true,
+      enableBlur: false,
+      enableProgressiveBlur: false,
+      useFlexibleTopAppBar: true,
+      topBarButtonStyle: TOP_BAR_BUTTON_STYLE_DEFAULT,
+      mergeTopBarActions: false,
+      showBottomView: true,
+      useFloatingBottomBar: false,
+      useFloatingBottomBarLiquidGlass: false,
+      bottomBarLensRadius: BOTTOM_BAR_LENS_RADIUS_DEFAULT,
+      topBarBlurRadius: TOP_BAR_BLUR_RADIUS_DEFAULT,
+      bottomBarBlurRadius: BOTTOM_BAR_BLUR_RADIUS_DEFAULT,
+      topBarBlurAlpha: TOP_BAR_BLUR_ALPHA_DEFAULT,
+      bottomBarBlurAlpha: BOTTOM_BAR_BLUR_ALPHA_DEFAULT,
+      topBarOpacity: TOP_BAR_OPACITY_DEFAULT,
+      bottomBarOpacity: BOTTOM_BAR_OPACITY_DEFAULT
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -257,6 +310,22 @@ export class ThemeSettingsRepository {
       const labelVisibilityMode = await store.get('labelVisibilityMode', defaults.labelVisibilityMode);
       const predictiveBack = await store.get('predictiveBack', defaults.predictiveBack);
       const readerSharedElement = await store.get('readerSharedElement', defaults.readerSharedElement);
+      const enableBlur = await store.get('enableBlur', defaults.enableBlur);
+      const enableProgressiveBlur = await store.get('enableProgressiveBlur', defaults.enableProgressiveBlur);
+      const useFlexibleTopAppBar = await store.get('useFlexibleTopAppBar', defaults.useFlexibleTopAppBar);
+      const topBarButtonStyle = await store.get('topBarButtonStyle', defaults.topBarButtonStyle);
+      const mergeTopBarActions = await store.get('mergeTopBarActions', defaults.mergeTopBarActions);
+      const showBottomView = await store.get('showBottomView', defaults.showBottomView);
+      const useFloatingBottomBar = await store.get('useFloatingBottomBar', defaults.useFloatingBottomBar);
+      const useFloatingBottomBarLiquidGlass =
+        await store.get('useFloatingBottomBarLiquidGlass', defaults.useFloatingBottomBarLiquidGlass);
+      const bottomBarLensRadius = await store.get('bottomBarLensRadius', defaults.bottomBarLensRadius);
+      const topBarBlurRadius = await store.get('topBarBlurRadius', defaults.topBarBlurRadius);
+      const bottomBarBlurRadius = await store.get('bottomBarBlurRadius', defaults.bottomBarBlurRadius);
+      const topBarBlurAlpha = await store.get('topBarBlurAlpha', defaults.topBarBlurAlpha);
+      const bottomBarBlurAlpha = await store.get('bottomBarBlurAlpha', defaults.bottomBarBlurAlpha);
+      const topBarOpacity = await store.get('topBarOpacity', defaults.topBarOpacity);
+      const bottomBarOpacity = await store.get('bottomBarOpacity', defaults.bottomBarOpacity);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
@@ -319,7 +388,37 @@ export class ThemeSettingsRepository {
           ? normalizeLabelVisibility(labelVisibilityMode) : defaults.labelVisibilityMode,
         predictiveBack: typeof predictiveBack === 'boolean' ? predictiveBack : defaults.predictiveBack,
         readerSharedElement: typeof readerSharedElement === 'boolean'
-          ? readerSharedElement : defaults.readerSharedElement
+          ? readerSharedElement : defaults.readerSharedElement,
+        enableBlur: typeof enableBlur === 'boolean' ? enableBlur : defaults.enableBlur,
+        enableProgressiveBlur: typeof enableProgressiveBlur === 'boolean'
+          ? enableProgressiveBlur : defaults.enableProgressiveBlur,
+        useFlexibleTopAppBar: typeof useFlexibleTopAppBar === 'boolean'
+          ? useFlexibleTopAppBar : defaults.useFlexibleTopAppBar,
+        topBarButtonStyle: typeof topBarButtonStyle === 'string'
+          ? normalizeTopBarButtonStyle(topBarButtonStyle) : defaults.topBarButtonStyle,
+        mergeTopBarActions: typeof mergeTopBarActions === 'boolean'
+          ? mergeTopBarActions : defaults.mergeTopBarActions,
+        showBottomView: typeof showBottomView === 'boolean' ? showBottomView : defaults.showBottomView,
+        useFloatingBottomBar: typeof useFloatingBottomBar === 'boolean'
+          ? useFloatingBottomBar : defaults.useFloatingBottomBar,
+        useFloatingBottomBarLiquidGlass: typeof useFloatingBottomBarLiquidGlass === 'boolean'
+          ? useFloatingBottomBarLiquidGlass : defaults.useFloatingBottomBarLiquidGlass,
+        bottomBarLensRadius: normalizeBottomBarLensRadius(
+          typeof bottomBarLensRadius === 'number' ? bottomBarLensRadius : defaults.bottomBarLensRadius),
+        topBarBlurRadius: normalizeTopBarBlurRadius(
+          typeof topBarBlurRadius === 'number' ? topBarBlurRadius : defaults.topBarBlurRadius),
+        bottomBarBlurRadius: normalizeBottomBarBlurRadius(
+          typeof bottomBarBlurRadius === 'number' ? bottomBarBlurRadius : defaults.bottomBarBlurRadius),
+        topBarBlurAlpha: normalizeBarBlurAlpha(
+          typeof topBarBlurAlpha === 'number' ? topBarBlurAlpha : defaults.topBarBlurAlpha,
+          TOP_BAR_BLUR_ALPHA_DEFAULT),
+        bottomBarBlurAlpha: normalizeBarBlurAlpha(
+          typeof bottomBarBlurAlpha === 'number' ? bottomBarBlurAlpha : defaults.bottomBarBlurAlpha,
+          BOTTOM_BAR_BLUR_ALPHA_DEFAULT),
+        topBarOpacity: normalizeTopBarOpacity(
+          typeof topBarOpacity === 'number' ? topBarOpacity : defaults.topBarOpacity),
+        bottomBarOpacity: normalizeBottomBarOpacity(
+          typeof bottomBarOpacity === 'number' ? bottomBarOpacity : defaults.bottomBarOpacity)
       };
     } catch (_) {
       return defaults;
@@ -383,6 +482,22 @@ export class ThemeSettingsRepository {
     await store.put('labelVisibilityMode', normalizeLabelVisibility(snapshot.labelVisibilityMode));
     await store.put('predictiveBack', snapshot.predictiveBack);
     await store.put('readerSharedElement', snapshot.readerSharedElement);
+    await store.put('enableBlur', snapshot.enableBlur);
+    await store.put('enableProgressiveBlur', snapshot.enableProgressiveBlur);
+    await store.put('useFlexibleTopAppBar', snapshot.useFlexibleTopAppBar);
+    await store.put('topBarButtonStyle', normalizeTopBarButtonStyle(snapshot.topBarButtonStyle));
+    await store.put('mergeTopBarActions', snapshot.mergeTopBarActions);
+    await store.put('showBottomView', snapshot.showBottomView);
+    await store.put('useFloatingBottomBar', snapshot.useFloatingBottomBar);
+    await store.put('useFloatingBottomBarLiquidGlass', snapshot.useFloatingBottomBarLiquidGlass);
+    await store.put('bottomBarLensRadius', normalizeBottomBarLensRadius(snapshot.bottomBarLensRadius));
+    await store.put('topBarBlurRadius', normalizeTopBarBlurRadius(snapshot.topBarBlurRadius));
+    await store.put('bottomBarBlurRadius', normalizeBottomBarBlurRadius(snapshot.bottomBarBlurRadius));
+    await store.put('topBarBlurAlpha', normalizeBarBlurAlpha(snapshot.topBarBlurAlpha, TOP_BAR_BLUR_ALPHA_DEFAULT));
+    await store.put('bottomBarBlurAlpha',
+      normalizeBarBlurAlpha(snapshot.bottomBarBlurAlpha, BOTTOM_BAR_BLUR_ALPHA_DEFAULT));
+    await store.put('topBarOpacity', normalizeTopBarOpacity(snapshot.topBarOpacity));
+    await store.put('bottomBarOpacity', normalizeBottomBarOpacity(snapshot.bottomBarOpacity));
     await store.flush();
   }
 

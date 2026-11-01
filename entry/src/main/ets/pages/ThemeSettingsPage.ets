@@ -12,6 +12,20 @@ import {
   orderedMainNavigation
 } from '../data/MainNavigationSettings';
 import {
+  BAR_BLUR_ALPHA_MAX,
+  BAR_BLUR_ALPHA_MIN,
+  BOTTOM_BAR_BLUR_RADIUS_MAX,
+  BOTTOM_BAR_BLUR_RADIUS_MIN,
+  BOTTOM_BAR_LENS_RADIUS_MAX,
+  BOTTOM_BAR_LENS_RADIUS_MIN,
+  TOP_BAR_BLUR_RADIUS_MAX,
+  TOP_BAR_BLUR_RADIUS_MIN,
+  TOP_BAR_BUTTON_STYLES,
+  TOP_BAR_OPACITY_MAX,
+  TOP_BAR_OPACITY_MIN,
+  topBarButtonStyleLabel
+} from '../data/TopBottomBarSettings';
+import {
   CARD_BORDER_WIDTH_MAX,
   CARD_BORDER_WIDTH_MIN,
   CARD_RADIUS_MAX,
@@ -177,9 +191,45 @@ export struct ThemeSettingsPage {
   /** 「首页与导航」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
   @State navigationExpanded: boolean = false;
   @State followCoverColor: boolean = true;
-  @State blurEnabled: boolean = false;
-  @State progressiveBlurEnabled: boolean = false;
+  /** 模糊效果两项；上游 `ThemeSettings.kt:33-34 enableBlur`/`enableProgressiveBlur`。 */
+  @Prop enableBlur: boolean = false;
+  onEnableBlurChange: (enabled: boolean) => void = () => {};
+  @Prop enableProgressiveBlur: boolean = false;
+  onEnableProgressiveBlurChange: (enabled: boolean) => void = () => {};
+  /** 顶栏与底栏的 13 项；上游 `TopBottomBarSettingsSheet.kt`。 */
+  @Prop useFlexibleTopAppBar: boolean = true;
+  onUseFlexibleTopAppBarChange: (enabled: boolean) => void = () => {};
+  @Prop topBarButtonStyle: string = 'tonal';
+  onTopBarButtonStyleChange: (value: string) => void = () => {};
+  @Prop mergeTopBarActions: boolean = false;
+  onMergeTopBarActionsChange: (enabled: boolean) => void = () => {};
+  @Prop showBottomView: boolean = true;
+  onShowBottomViewChange: (enabled: boolean) => void = () => {};
+  @Prop useFloatingBottomBar: boolean = false;
+  onUseFloatingBottomBarChange: (enabled: boolean) => void = () => {};
+  @Prop useFloatingBottomBarLiquidGlass: boolean = false;
+  onUseFloatingBottomBarLiquidGlassChange: (enabled: boolean) => void = () => {};
+  @Prop bottomBarLensRadius: number = 24;
+  onBottomBarLensRadiusChange: (value: number) => void = () => {};
+  @Prop topBarBlurRadius: number = 24;
+  onTopBarBlurRadiusChange: (value: number) => void = () => {};
+  @Prop bottomBarBlurRadius: number = 8;
+  onBottomBarBlurRadiusChange: (value: number) => void = () => {};
+  @Prop topBarBlurAlpha: number = 73;
+  onTopBarBlurAlphaChange: (value: number) => void = () => {};
+  @Prop bottomBarBlurAlpha: number = 40;
+  onBottomBarBlurAlphaChange: (value: number) => void = () => {};
+  @Prop topBarOpacity: number = 100;
+  onTopBarOpacityChange: (value: number) => void = () => {};
+  @Prop bottomBarOpacity: number = 100;
+  onBottomBarOpacityChange: (value: number) => void = () => {};
+  /** 「顶栏与底栏」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
+  @State topBottomBarExpanded: boolean = false;
   @State collapsedHeader: boolean = false;
+  /** 顶栏底色（含不透明度与模糊透明度），由 `Index.publishTopBottomBarStyle()` 广播。 */
+  @StorageProp('themeTopBarBackground') themeTopBarBackground: string = '';
+  /** 顶栏模糊半径；0 表示不模糊。 */
+  @StorageProp('themeTopBarBlurRadius') themeTopBarBlurRadius: number = 0;
   private themeScroller: Scroller = new Scroller();
 
   private updateHeader(): void {
@@ -218,6 +268,17 @@ export struct ThemeSettingsPage {
   }
 
   /** 「首页与导航」行的摘要文案：显示可见项数量与默认页。 */
+  /** 「顶栏与底栏」行的摘要文案。 */
+  private topBottomBarSummary(): string {
+    const barParts: string[] = [];
+    if (!this.showBottomView) { barParts.push('无导航栏'); }
+    else if (this.useFloatingBottomBar) { barParts.push('悬浮底栏'); }
+    if (this.enableBlur) { barParts.push(`模糊 ${this.topBarBlurRadius}/${this.bottomBarBlurRadius}`); }
+    else { barParts.push(`不透明度 ${this.topBarOpacity}%/${this.bottomBarOpacity}%`); }
+    barParts.push(topBarButtonStyleLabel(this.topBarButtonStyle));
+    return barParts.join(' · ');
+  }
+
   private navigationSummary(): string {
     const visible: string[] = this.visibleNavigationOptions();
     const hidden = 3 - (this.showHome ? 1 : 0) - (this.showDiscovery ? 1 : 0) - (this.showRss ? 1 : 0);
@@ -338,6 +399,10 @@ export struct ThemeSettingsPage {
           .width('100%').height(72).padding({ left: 16, bottom: 14 })
           .opacity(this.collapsedHeader ? 0 : 1)
       }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
+        .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
+          : (this.themeAppBackground.length > 0 ? Color.Transparent
+            : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))))
+        .backdropBlur(this.themeTopBarBlurRadius)
 
       Scroll(this.themeScroller) {
         Column() {
@@ -490,7 +555,100 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimationEnabled, onChange: (value: boolean) => this.onSwipeAnimationChange(value) })
             ThemeItemDivider()
-            ThemeSettingsOption({ title: '顶栏与底栏', detail: '配置顶栏按钮与底部导航栏', onSelect: () => this.onUnavailableAction('顶栏与底栏设置尚未迁移') })
+            ThemeSettingsOption({ title: '顶栏与底栏', detail: this.topBottomBarSummary(), onSelect: () => { this.topBottomBarExpanded = !this.topBottomBarExpanded } })
+            if (this.topBottomBarExpanded) {
+              Column() {
+                ThemeSwitchRow({ title: '使用折叠应用栏', checked: this.useFlexibleTopAppBar, onChange: (value: boolean) => this.onUseFlexibleTopAppBarChange(value) })
+                ThemeItemDivider()
+                ThemeSettingsDropdown({
+                  title: '顶栏按钮样式',
+                  value: this.topBarButtonStyle,
+                  options: TOP_BAR_BUTTON_STYLES,
+                  labelBuilder: (value: string) => topBarButtonStyleLabel(value),
+                  onSelect: (value: string) => this.onTopBarButtonStyleChange(value)
+                })
+                ThemeItemDivider()
+                if (this.topBarButtonStyle !== 'plain') {
+                  ThemeSwitchRow({ title: '合并顶栏按钮', checked: this.mergeTopBarActions, onChange: (value: boolean) => this.onMergeTopBarActionsChange(value) })
+                    .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                  ThemeItemDivider()
+                }
+                ThemeSwitchRow({ title: '显示导航栏', detail: '仍可滑动切换页面', checked: this.showBottomView, onChange: (value: boolean) => this.onShowBottomViewChange(value) })
+                ThemeItemDivider()
+                ThemeSwitchRow({ title: '悬浮底栏', detail: '底部导航栏使用悬浮胶囊样式', checked: this.useFloatingBottomBar, onChange: (value: boolean) => this.onUseFloatingBottomBarChange(value) })
+                if (this.useFloatingBottomBar) {
+                  ThemeItemDivider()
+                  ThemeSwitchRow({ title: '液态玻璃效果', detail: '为悬浮底栏启用液态玻璃高光效果', checked: this.useFloatingBottomBarLiquidGlass, onChange: (value: boolean) => this.onUseFloatingBottomBarLiquidGlassChange(value) })
+                    .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                  ThemeItemDivider()
+                  ThemeSettingsSlider({
+                    title: '底栏模糊强度',
+                    detail: `液态玻璃扭曲程度 ${this.bottomBarLensRadius}vp`,
+                    value: this.bottomBarLensRadius,
+                    minValue: BOTTOM_BAR_LENS_RADIUS_MIN,
+                    maxValue: BOTTOM_BAR_LENS_RADIUS_MAX,
+                    onChange: (value: number) => this.onBottomBarLensRadiusChange(value)
+                  })
+                }
+                ThemeItemDivider()
+                if (this.enableBlur) {
+                  ThemeSettingsSlider({
+                    title: '顶栏模糊半径',
+                    detail: `采样模糊强度 ${this.topBarBlurRadius}`,
+                    value: this.topBarBlurRadius,
+                    minValue: TOP_BAR_BLUR_RADIUS_MIN,
+                    maxValue: TOP_BAR_BLUR_RADIUS_MAX,
+                    onChange: (value: number) => this.onTopBarBlurRadiusChange(value)
+                  })
+                  ThemeItemDivider()
+                  ThemeSettingsSlider({
+                    title: '底栏模糊半径',
+                    detail: `采样模糊强度 ${this.bottomBarBlurRadius}`,
+                    value: this.bottomBarBlurRadius,
+                    minValue: BOTTOM_BAR_BLUR_RADIUS_MIN,
+                    maxValue: BOTTOM_BAR_BLUR_RADIUS_MAX,
+                    onChange: (value: number) => this.onBottomBarBlurRadiusChange(value)
+                  })
+                  ThemeItemDivider()
+                  ThemeSettingsSlider({
+                    title: '顶栏模糊透明度',
+                    detail: `${this.topBarBlurAlpha}%`,
+                    value: this.topBarBlurAlpha,
+                    minValue: BAR_BLUR_ALPHA_MIN,
+                    maxValue: BAR_BLUR_ALPHA_MAX,
+                    onChange: (value: number) => this.onTopBarBlurAlphaChange(value)
+                  })
+                  ThemeItemDivider()
+                  ThemeSettingsSlider({
+                    title: '底栏模糊透明度',
+                    detail: `${this.bottomBarBlurAlpha}%`,
+                    value: this.bottomBarBlurAlpha,
+                    minValue: BAR_BLUR_ALPHA_MIN,
+                    maxValue: BAR_BLUR_ALPHA_MAX,
+                    onChange: (value: number) => this.onBottomBarBlurAlphaChange(value)
+                  })
+                } else {
+                  ThemeSettingsSlider({
+                    title: '顶栏不透明度',
+                    detail: `${this.topBarOpacity}%`,
+                    value: this.topBarOpacity,
+                    minValue: TOP_BAR_OPACITY_MIN,
+                    maxValue: TOP_BAR_OPACITY_MAX,
+                    onChange: (value: number) => this.onTopBarOpacityChange(value)
+                  })
+                  ThemeItemDivider()
+                  ThemeSettingsSlider({
+                    title: '底栏不透明度',
+                    detail: `${this.bottomBarOpacity}%`,
+                    value: this.bottomBarOpacity,
+                    minValue: TOP_BAR_OPACITY_MIN,
+                    maxValue: TOP_BAR_OPACITY_MAX,
+                    onChange: (value: number) => this.onBottomBarOpacityChange(value)
+                  })
+                }
+              }
+              .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+            }
             ThemeItemDivider()
             ThemeSettingsOption({ title: '导航布局', detail: '', onSelect: () => this.onUnavailableAction('导航布局设置尚未迁移') })
             ThemeItemDivider()
@@ -535,10 +693,10 @@ export struct ThemeSettingsPage {
 
           ThemeSectionTitle({ title: '模糊效果' }).margin({ top: 20 })
           Column() {
-            ThemeSwitchRow({ title: '启用控件模糊', checked: this.blurEnabled, onChange: (value: boolean) => { this.blurEnabled = value; this.onUnavailableAction('模糊效果设置暂未保存') } })
+            ThemeSwitchRow({ title: '启用控件模糊', detail: '顶栏与底栏采样背后内容做毛玻璃', checked: this.enableBlur, onChange: (value: boolean) => this.onEnableBlurChange(value) })
             ThemeItemDivider()
-            if (this.blurEnabled) {
-              ThemeSwitchRow({ title: '启用渐变模糊', checked: this.progressiveBlurEnabled, onChange: (value: boolean) => { this.progressiveBlurEnabled = value; this.onUnavailableAction('渐变模糊设置暂未保存') } })
+            if (this.enableBlur) {
+              ThemeSwitchRow({ title: '启用渐变模糊', checked: this.enableProgressiveBlur, onChange: (value: boolean) => this.onEnableProgressiveBlurChange(value) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)

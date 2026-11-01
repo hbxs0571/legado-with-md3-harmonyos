@@ -46,6 +46,14 @@ import {
 import { OnboardingRepository } from '../data/OnboardingRepository';
 import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground, normalizeThemeColor, FONT_SCALE_DEFAULT, normalizeBackgroundBlur } from '../data/ThemeSettingsRepository';
 import {
+  BOTTOM_BAR_BLUR_ALPHA_DEFAULT, BOTTOM_BAR_BLUR_RADIUS_DEFAULT, BOTTOM_BAR_LENS_RADIUS_DEFAULT,
+  BOTTOM_BAR_OPACITY_DEFAULT, TOP_BAR_BLUR_ALPHA_DEFAULT, TOP_BAR_BLUR_RADIUS_DEFAULT,
+  TOP_BAR_BUTTON_STYLE_DEFAULT, TOP_BAR_OPACITY_DEFAULT, TopBottomBarSnapshot, normalizeBarBlurAlpha,
+  normalizeBottomBarBlurRadius, normalizeBottomBarLensRadius, normalizeBottomBarOpacity,
+  normalizeTopBarBlurRadius, normalizeTopBarButtonStyle, normalizeTopBarOpacity,
+  resolveBottomBarBackground, resolveBottomBarCornerRadius, resolveTopBarBackground
+} from '../data/TopBottomBarSettings';
+import {
   DEFAULT_HOME_PAGE_DEFAULT,
   LABEL_VISIBILITY_DEFAULT,
   MAIN_NAVIGATION_ORDER_DEFAULT,
@@ -564,6 +572,22 @@ struct Index {
   @State themePredictiveBack: boolean = true;
   /** 阅读界面共享元素动画；上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
   @State themeReaderSharedElement: boolean = true;
+  /** 顶栏与底栏的 15 个键，对齐上游 `TopBottomBarSettingsSheet.kt` + `ThemeSettings.kt:35-46`。 */
+  @State themeEnableBlur: boolean = false;
+  @State themeEnableProgressiveBlur: boolean = false;
+  @State themeUseFlexibleTopAppBar: boolean = true;
+  @State themeTopBarButtonStyle: string = TOP_BAR_BUTTON_STYLE_DEFAULT;
+  @State themeMergeTopBarActions: boolean = false;
+  @State themeShowBottomView: boolean = true;
+  @State themeUseFloatingBottomBar: boolean = false;
+  @State themeUseFloatingBottomBarLiquidGlass: boolean = false;
+  @State themeBottomBarLensRadius: number = BOTTOM_BAR_LENS_RADIUS_DEFAULT;
+  @State themeTopBarBlurRadius: number = TOP_BAR_BLUR_RADIUS_DEFAULT;
+  @State themeBottomBarBlurRadius: number = BOTTOM_BAR_BLUR_RADIUS_DEFAULT;
+  @State themeTopBarBlurAlpha: number = TOP_BAR_BLUR_ALPHA_DEFAULT;
+  @State themeBottomBarBlurAlpha: number = BOTTOM_BAR_BLUR_ALPHA_DEFAULT;
+  @State themeTopBarOpacity: number = TOP_BAR_OPACITY_DEFAULT;
+  @State themeBottomBarOpacity: number = BOTTOM_BAR_OPACITY_DEFAULT;
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -2079,10 +2103,26 @@ struct Index {
     this.themeLabelVisibilityMode = theme.labelVisibilityMode;
     this.themePredictiveBack = theme.predictiveBack;
     this.themeReaderSharedElement = theme.readerSharedElement;
+    this.themeEnableBlur = theme.enableBlur;
+    this.themeEnableProgressiveBlur = theme.enableProgressiveBlur;
+    this.themeUseFlexibleTopAppBar = theme.useFlexibleTopAppBar;
+    this.themeTopBarButtonStyle = theme.topBarButtonStyle;
+    this.themeMergeTopBarActions = theme.mergeTopBarActions;
+    this.themeShowBottomView = theme.showBottomView;
+    this.themeUseFloatingBottomBar = theme.useFloatingBottomBar;
+    this.themeUseFloatingBottomBarLiquidGlass = theme.useFloatingBottomBarLiquidGlass;
+    this.themeBottomBarLensRadius = theme.bottomBarLensRadius;
+    this.themeTopBarBlurRadius = theme.topBarBlurRadius;
+    this.themeBottomBarBlurRadius = theme.bottomBarBlurRadius;
+    this.themeTopBarBlurAlpha = theme.topBarBlurAlpha;
+    this.themeBottomBarBlurAlpha = theme.bottomBarBlurAlpha;
+    this.themeTopBarOpacity = theme.topBarOpacity;
+    this.themeBottomBarOpacity = theme.bottomBarOpacity;
     this.applyDefaultHomePage();
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
+    this.publishTopBottomBarStyle();
     if (!hasStored && state.completed) {
       const mode = ThemeSettingsRepository.fromModeNumber(state.themeMode);
       await this.applyThemeMode(context, mode, state.paletteIndex, true);
@@ -2359,6 +2399,176 @@ struct Index {
     });
   }
 
+  /** 顶栏底色；空串表示保持组件自己的资源色。对齐上游 `GlassDefaults.glassColor()`。 */
+  private topBarBackgroundColor(): string {
+    const context = this.getUIContext().getHostContext();
+    const isDark = context === undefined ? false
+      : ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context));
+    return resolveTopBarBackground(this.topBottomBarSnapshot(), isDark);
+  }
+
+  /** 底栏底色；空串表示保持 `theme_surface_elevated`。 */
+  private bottomBarBackgroundColor(): string {
+    const context = this.getUIContext().getHostContext();
+    const isDark = context === undefined ? false
+      : ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context));
+    return resolveBottomBarBackground(this.topBottomBarSnapshot(), isDark);
+  }
+
+  /** 底栏圆角：悬浮胶囊模式用 `bottomBarLensRadius`，否则 0。 */
+  private bottomBarCornerRadius(): number {
+    return resolveBottomBarCornerRadius(this.topBottomBarSnapshot());
+  }
+
+  /** 顶栏与底栏设置快照，字段顺序对齐上游 `TopBottomBarSettingsSheet.kt`。 */
+  private topBottomBarSnapshot(): TopBottomBarSnapshot {
+    return {
+      enableBlur: this.themeEnableBlur,
+      enableProgressiveBlur: this.themeEnableProgressiveBlur,
+      useFlexibleTopAppBar: this.themeUseFlexibleTopAppBar,
+      topBarButtonStyle: this.themeTopBarButtonStyle,
+      mergeTopBarActions: this.themeMergeTopBarActions,
+      showBottomView: this.themeShowBottomView,
+      useFloatingBottomBar: this.themeUseFloatingBottomBar,
+      useFloatingBottomBarLiquidGlass: this.themeUseFloatingBottomBarLiquidGlass,
+      bottomBarLensRadius: this.themeBottomBarLensRadius,
+      topBarBlurRadius: this.themeTopBarBlurRadius,
+      bottomBarBlurRadius: this.themeBottomBarBlurRadius,
+      topBarBlurAlpha: this.themeTopBarBlurAlpha,
+      bottomBarBlurAlpha: this.themeBottomBarBlurAlpha,
+      topBarOpacity: this.themeTopBarOpacity,
+      bottomBarOpacity: this.themeBottomBarOpacity
+    };
+  }
+
+  /** 把顶栏/底栏的解析结果广播出去，供 `CollapsingSettingsHeader` 等独立组件读取。 */
+  private publishTopBottomBarStyle(): void {
+    const snapshot = this.topBottomBarSnapshot();
+    const context = this.getUIContext().getHostContext();
+    const isDark = context === undefined ? false
+      : ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context));
+    AppStorage.setOrCreate('themeTopBarBackground', resolveTopBarBackground(snapshot, isDark));
+    AppStorage.setOrCreate('themeBottomBarBackground', resolveBottomBarBackground(snapshot, isDark));
+    AppStorage.setOrCreate('themeTopBarBlurRadius', this.themeEnableBlur ? this.themeTopBarBlurRadius : 0);
+    AppStorage.setOrCreate('themeBottomBarBlurRadius', this.themeEnableBlur ? this.themeBottomBarBlurRadius : 0);
+    AppStorage.setOrCreate('themeBottomBarRadius', resolveBottomBarCornerRadius(snapshot));
+  }
+
+  private selectThemeEnableBlur(context: Context, enabled: boolean): void {
+    this.themeEnableBlur = enabled;
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('模糊效果设置保存失败，请重试');
+    });
+  }
+
+  private selectThemeEnableProgressiveBlur(context: Context, enabled: boolean): void {
+    this.themeEnableProgressiveBlur = enabled;
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('渐变模糊设置保存失败，请重试');
+    });
+  }
+
+  private selectThemeUseFlexibleTopAppBar(context: Context, enabled: boolean): void {
+    this.themeUseFlexibleTopAppBar = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('折叠应用栏设置保存失败，请重试');
+    });
+  }
+
+  private selectThemeTopBarButtonStyle(context: Context, value: string): void {
+    this.themeTopBarButtonStyle = normalizeTopBarButtonStyle(value);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('顶栏按钮样式保存失败，请重试');
+    });
+  }
+
+  private selectThemeMergeTopBarActions(context: Context, enabled: boolean): void {
+    this.themeMergeTopBarActions = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('合并顶栏按钮设置保存失败，请重试');
+    });
+  }
+
+  private selectThemeShowBottomView(context: Context, enabled: boolean): void {
+    this.themeShowBottomView = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('显示导航栏设置保存失败，请重试');
+    });
+  }
+
+  private selectThemeUseFloatingBottomBar(context: Context, enabled: boolean): void {
+    this.themeUseFloatingBottomBar = enabled;
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('悬浮底栏设置保存失败，请重试');
+    });
+  }
+
+  private selectThemeUseFloatingBottomBarLiquidGlass(context: Context, enabled: boolean): void {
+    this.themeUseFloatingBottomBarLiquidGlass = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('液态玻璃设置保存失败，请重试');
+    });
+  }
+
+  private selectThemeBottomBarLensRadius(context: Context, value: number): void {
+    this.themeBottomBarLensRadius = normalizeBottomBarLensRadius(value);
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('底栏模糊强度保存失败，请重试');
+    });
+  }
+
+  private selectThemeTopBarBlurRadius(context: Context, value: number): void {
+    this.themeTopBarBlurRadius = normalizeTopBarBlurRadius(value);
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('顶栏模糊半径保存失败，请重试');
+    });
+  }
+
+  private selectThemeBottomBarBlurRadius(context: Context, value: number): void {
+    this.themeBottomBarBlurRadius = normalizeBottomBarBlurRadius(value);
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('底栏模糊半径保存失败，请重试');
+    });
+  }
+
+  private selectThemeTopBarBlurAlpha(context: Context, value: number): void {
+    this.themeTopBarBlurAlpha = normalizeBarBlurAlpha(value, TOP_BAR_BLUR_ALPHA_DEFAULT);
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('顶栏模糊透明度保存失败，请重试');
+    });
+  }
+
+  private selectThemeBottomBarBlurAlpha(context: Context, value: number): void {
+    this.themeBottomBarBlurAlpha = normalizeBarBlurAlpha(value, BOTTOM_BAR_BLUR_ALPHA_DEFAULT);
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('底栏模糊透明度保存失败，请重试');
+    });
+  }
+
+  private selectThemeTopBarOpacity(context: Context, value: number): void {
+    this.themeTopBarOpacity = normalizeTopBarOpacity(value);
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('顶栏不透明度保存失败，请重试');
+    });
+  }
+
+  private selectThemeBottomBarOpacity(context: Context, value: number): void {
+    this.themeBottomBarOpacity = normalizeBottomBarOpacity(value);
+    this.publishTopBottomBarStyle();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('底栏不透明度保存失败，请重试');
+    });
+  }
+
   /**
    * 进阅读页的转场。
    *
@@ -2564,6 +2774,21 @@ struct Index {
     this.themeLabelVisibilityMode = LABEL_VISIBILITY_DEFAULT;
     this.themePredictiveBack = true;
     this.themeReaderSharedElement = true;
+    this.themeEnableBlur = false;
+    this.themeEnableProgressiveBlur = false;
+    this.themeUseFlexibleTopAppBar = true;
+    this.themeTopBarButtonStyle = TOP_BAR_BUTTON_STYLE_DEFAULT;
+    this.themeMergeTopBarActions = false;
+    this.themeShowBottomView = true;
+    this.themeUseFloatingBottomBar = false;
+    this.themeUseFloatingBottomBarLiquidGlass = false;
+    this.themeBottomBarLensRadius = BOTTOM_BAR_LENS_RADIUS_DEFAULT;
+    this.themeTopBarBlurRadius = TOP_BAR_BLUR_RADIUS_DEFAULT;
+    this.themeBottomBarBlurRadius = BOTTOM_BAR_BLUR_RADIUS_DEFAULT;
+    this.themeTopBarBlurAlpha = TOP_BAR_BLUR_ALPHA_DEFAULT;
+    this.themeBottomBarBlurAlpha = BOTTOM_BAR_BLUR_ALPHA_DEFAULT;
+    this.themeTopBarOpacity = TOP_BAR_OPACITY_DEFAULT;
+    this.themeBottomBarOpacity = BOTTOM_BAR_OPACITY_DEFAULT;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2587,6 +2812,7 @@ struct Index {
     ThemeModeResolver.apply(context, themeMode);
     // 日夜一变，卡片边框色就要按 baseCardBorderColor(Night) 重选，所以顺带刷新一次。
     this.publishThemeCardStyle();
+    this.publishTopBottomBarStyle();
     if (!persist) {
       return;
     }
@@ -2642,7 +2868,22 @@ struct Index {
       mainNavigationOrder: this.themeMainNavigationOrder,
       labelVisibilityMode: this.themeLabelVisibilityMode,
       predictiveBack: this.themePredictiveBack,
-      readerSharedElement: this.themeReaderSharedElement
+      readerSharedElement: this.themeReaderSharedElement,
+      enableBlur: this.themeEnableBlur,
+      enableProgressiveBlur: this.themeEnableProgressiveBlur,
+      useFlexibleTopAppBar: this.themeUseFlexibleTopAppBar,
+      topBarButtonStyle: this.themeTopBarButtonStyle,
+      mergeTopBarActions: this.themeMergeTopBarActions,
+      showBottomView: this.themeShowBottomView,
+      useFloatingBottomBar: this.themeUseFloatingBottomBar,
+      useFloatingBottomBarLiquidGlass: this.themeUseFloatingBottomBarLiquidGlass,
+      bottomBarLensRadius: this.themeBottomBarLensRadius,
+      topBarBlurRadius: this.themeTopBarBlurRadius,
+      bottomBarBlurRadius: this.themeBottomBarBlurRadius,
+      topBarBlurAlpha: this.themeTopBarBlurAlpha,
+      bottomBarBlurAlpha: this.themeBottomBarBlurAlpha,
+      topBarOpacity: this.themeTopBarOpacity,
+      bottomBarOpacity: this.themeBottomBarOpacity
     });
   }
 
@@ -6759,6 +7000,81 @@ struct Index {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectThemeReaderSharedElement(themeContext, enabled); }
             },
+            enableBlur: this.themeEnableBlur,
+            onEnableBlurChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeEnableBlur(themeContext, enabled); }
+            },
+            enableProgressiveBlur: this.themeEnableProgressiveBlur,
+            onEnableProgressiveBlurChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeEnableProgressiveBlur(themeContext, enabled); }
+            },
+            useFlexibleTopAppBar: this.themeUseFlexibleTopAppBar,
+            onUseFlexibleTopAppBarChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeUseFlexibleTopAppBar(themeContext, enabled); }
+            },
+            topBarButtonStyle: this.themeTopBarButtonStyle,
+            onTopBarButtonStyleChange: (value: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeTopBarButtonStyle(themeContext, value); }
+            },
+            mergeTopBarActions: this.themeMergeTopBarActions,
+            onMergeTopBarActionsChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeMergeTopBarActions(themeContext, enabled); }
+            },
+            showBottomView: this.themeShowBottomView,
+            onShowBottomViewChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeShowBottomView(themeContext, enabled); }
+            },
+            useFloatingBottomBar: this.themeUseFloatingBottomBar,
+            onUseFloatingBottomBarChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeUseFloatingBottomBar(themeContext, enabled); }
+            },
+            useFloatingBottomBarLiquidGlass: this.themeUseFloatingBottomBarLiquidGlass,
+            onUseFloatingBottomBarLiquidGlassChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeUseFloatingBottomBarLiquidGlass(themeContext, enabled); }
+            },
+            bottomBarLensRadius: this.themeBottomBarLensRadius,
+            onBottomBarLensRadiusChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeBottomBarLensRadius(themeContext, value); }
+            },
+            topBarBlurRadius: this.themeTopBarBlurRadius,
+            onTopBarBlurRadiusChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeTopBarBlurRadius(themeContext, value); }
+            },
+            bottomBarBlurRadius: this.themeBottomBarBlurRadius,
+            onBottomBarBlurRadiusChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeBottomBarBlurRadius(themeContext, value); }
+            },
+            topBarBlurAlpha: this.themeTopBarBlurAlpha,
+            onTopBarBlurAlphaChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeTopBarBlurAlpha(themeContext, value); }
+            },
+            bottomBarBlurAlpha: this.themeBottomBarBlurAlpha,
+            onBottomBarBlurAlphaChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeBottomBarBlurAlpha(themeContext, value); }
+            },
+            topBarOpacity: this.themeTopBarOpacity,
+            onTopBarOpacityChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeTopBarOpacity(themeContext, value); }
+            },
+            bottomBarOpacity: this.themeBottomBarOpacity,
+            onBottomBarOpacityChange: (value: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeBottomBarOpacity(themeContext, value); }
+            },
             showHome: this.themeShowHome,
             showDiscovery: this.themeShowDiscovery,
             showRss: this.themeShowRss,
@@ -7760,7 +8076,9 @@ struct Index {
           })
         }
       }.width('100%').layoutWeight(1)
-      if (this.route === AppRoute.HOME || this.route === AppRoute.BOOKSHELF || this.route === AppRoute.DISCOVER || this.route === AppRoute.SUBSCRIPTIONS || this.route === AppRoute.PROFILE) {
+      if (this.themeShowBottomView &&
+        (this.route === AppRoute.HOME || this.route === AppRoute.BOOKSHELF || this.route === AppRoute.DISCOVER ||
+          this.route === AppRoute.SUBSCRIPTIONS || this.route === AppRoute.PROFILE)) {
         Row() {
           // 底栏项、顺序与显隐都来自「首页与导航」设置，对齐上游 `MainDestination.ordered` +
           // `showHome`/`showDiscovery`/`showRss`；标签显隐由 labelVisibilityMode 决定。
@@ -7772,7 +8090,13 @@ struct Index {
               showLabel: this.navigationLabelVisible(navRoute)
             }).layoutWeight(1).onClick(() => this.selectTab(this.navigationRouteTabIndex(navRoute)))
           }, (navRoute: string) => navRoute)
-        }.width('100%').padding({ top: 7, bottom: 6 }).backgroundColor(this.themePureBlackActive ? '#121212' : $r('app.color.theme_surface_elevated'))
+        }.width(this.themeUseFloatingBottomBar ? 'calc(100% - 32vp)' : '100%')
+          .padding({ top: 7, bottom: 6 })
+          .margin(this.themeUseFloatingBottomBar ? { left: 16, right: 16, bottom: 8 } : 0)
+          .borderRadius(this.bottomBarCornerRadius())
+          .backgroundColor(this.bottomBarBackgroundColor().length > 0 ? this.bottomBarBackgroundColor()
+            : (this.themePureBlackActive ? '#121212' : $r('app.color.theme_surface_elevated')))
+          .backdropBlur(this.themeEnableBlur ? this.themeBottomBarBlurRadius : 0)
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
       }
