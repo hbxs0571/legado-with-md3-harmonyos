@@ -44,7 +44,7 @@ import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
 import { OnboardingRepository } from '../data/OnboardingRepository';
-import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale } from '../data/ThemeSettingsRepository';
+import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground } from '../data/ThemeSettingsRepository';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { EyeProtection } from '../data/EyeProtection';
 import {
@@ -463,6 +463,12 @@ struct Index {
    * 「这个可以不要了」的 TODO），所以本地也只落盘、不造一个上游没有的动画效果。
    */
   @State themeSwipeAnimation: boolean = true;
+  /** 书籍详情页界面颜色是否跟随封面取色，对齐上游 `ThemeSettings.bookInfoFollowCoverColor`。 */
+  @State bookInfoFollowCoverColor: boolean = true;
+  /** 网络封面背景模式 `off`/`on`/`off_for_default`，对齐上游 `bookInfoNetworkCoverBackground`。 */
+  @State bookInfoNetworkCoverBackground: string = 'on';
+  /** 默认封面背景模式，对齐上游 `bookInfoDefaultCoverBackground`。 */
+  @State bookInfoDefaultCoverBackground: string = 'on';
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -1945,6 +1951,9 @@ struct Index {
     this.themeFontScale = theme.fontScale;
     this.themeShowStatusBar = theme.showStatusBar;
     this.themeSwipeAnimation = theme.swipeAnimation;
+    this.bookInfoFollowCoverColor = theme.bookInfoFollowCoverColor;
+    this.bookInfoNetworkCoverBackground = theme.bookInfoNetworkCoverBackground;
+    this.bookInfoDefaultCoverBackground = theme.bookInfoDefaultCoverBackground;
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     if (!hasStored && state.completed) {
@@ -2018,7 +2027,36 @@ struct Index {
       paletteIndex: this.themePaletteIndex,
       fontScale: this.themeFontScale,
       showStatusBar: this.themeShowStatusBar,
-      swipeAnimation: this.themeSwipeAnimation
+      swipeAnimation: this.themeSwipeAnimation,
+      bookInfoFollowCoverColor: this.bookInfoFollowCoverColor,
+      bookInfoNetworkCoverBackground: this.bookInfoNetworkCoverBackground,
+      bookInfoDefaultCoverBackground: this.bookInfoDefaultCoverBackground
+    });
+  }
+
+  /** 主题设置页「界面颜色跟随封面取色」回调。上游 `ThemeConfigScreen.kt:399` 的 `BookInfoFollowCoverColor`。 */
+  private selectBookInfoFollowCoverColor(context: Context, enabled: boolean): void {
+    this.bookInfoFollowCoverColor = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('封面取色设置保存失败，请重试');
+    });
+  }
+
+  /**
+   * 主题设置页「网络封面背景设置 / 默认封面背景设置」回调。
+   *
+   * 上游 `ThemeConfigScreen.kt:407` 与 `:416` 是同一组下拉（`off`/`on`/`off_for_default`），
+   * `isDefaultCover` 区分写哪个键。
+   */
+  private selectBookInfoCoverBackground(context: Context, isDefaultCover: boolean, value: string): void {
+    const normalized = normalizeBookInfoBackground(value);
+    if (isDefaultCover) {
+      this.bookInfoDefaultCoverBackground = normalized;
+    } else {
+      this.bookInfoNetworkCoverBackground = normalized;
+    }
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('封面背景设置保存失败，请重试');
     });
   }
 
@@ -5152,6 +5190,9 @@ struct Index {
         BookInfoPage({
           book: this.selectedBook,
           groups: this.bookGroups,
+          followCoverColor: this.bookInfoFollowCoverColor,
+          networkCoverBackground: this.bookInfoNetworkCoverBackground,
+          defaultCoverBackground: this.bookInfoDefaultCoverBackground,
           onBack: () => this.route = this.bookInfoReturnRoute,
           onRead: () => this.openBook(this.selectedBook),
           onOpenCatalog: () => this.openCatalogFromBookInfo(),
@@ -5943,6 +5984,17 @@ struct Index {
             onSwipeAnimationChange: (enabled: boolean) => {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectThemeSwipeAnimation(themeContext, enabled); }
+            },
+            bookInfoFollowCoverColor: this.bookInfoFollowCoverColor,
+            bookInfoNetworkCoverBackground: this.bookInfoNetworkCoverBackground,
+            bookInfoDefaultCoverBackground: this.bookInfoDefaultCoverBackground,
+            onBookInfoFollowCoverColorChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectBookInfoFollowCoverColor(themeContext, enabled); }
+            },
+            onBookInfoCoverBackgroundChange: (isDefaultCover: boolean, value: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectBookInfoCoverBackground(themeContext, isDefaultCover, value); }
             },
             eyeProtectionEnabled: this.eyeProtectionEnabled,
             eyeProtectionAutoNight: this.eyeProtectionAutoNight,

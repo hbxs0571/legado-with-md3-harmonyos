@@ -4,6 +4,8 @@ import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
+import { BookInfoBackdropStyle, resolveBookInfoBackdropStyleFor } from '../data/BookInfoBackdropStyle';
+import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 
 @Component
 export struct BookInfoPage {
@@ -11,6 +13,12 @@ export struct BookInfoPage {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop groups: BookGroup[] = [];
+  /** 界面颜色是否跟随封面取色，对齐上游 `ThemeSettings.bookInfoFollowCoverColor`。 */
+  @Prop followCoverColor: boolean = true;
+  /** 网络封面背景模式，对齐上游 `bookInfoNetworkCoverBackground`。 */
+  @Prop networkCoverBackground: string = 'on';
+  /** 默认封面背景模式，对齐上游 `bookInfoDefaultCoverBackground`。 */
+  @Prop defaultCoverBackground: string = 'on';
   onBack: () => void = () => {};
   onRead: () => void = () => {};
   onOpenCatalog: () => void = () => {};
@@ -36,10 +44,45 @@ export struct BookInfoPage {
   @State metadataGroupNames: string[] = [];
   @State metadataBookType: BookMediaType = 'text';
   @State metadataFixedType: boolean = false;
+  /** 从封面提取出的主色，空串表示尚未取到或取色失败。 */
+  @State coverSeedColor: string = '';
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadFileSize();
+    this.loadCoverSeedColor();
+  }
+
+  /**
+   * 背景样式。对齐上游 `BookInfoScreen.kt:863-875`：使用默认封面时读默认封面那档，
+   * 否则读网络封面那档；本地没有内置默认封面图，`usesDefaultCover` 恒为 false。
+   */
+  private backdropStyle(): BookInfoBackdropStyle {
+    return resolveBookInfoBackdropStyleFor(false, this.defaultCoverBackground, this.networkCoverBackground);
+  }
+
+  /**
+   * 取封面主色。
+   *
+   * 对齐上游 `BookInfoScreen.kt:807-847 rememberBookInfoColorTheme` 的三个前置：
+   * 有封面、`showCover` 为真、`followCoverColor` 为真；任一不满足就不取色（返回空串）。
+   */
+  private loadCoverSeedColor(): void {
+    this.coverSeedColor = '';
+    const coverUri = this.book.coverUri;
+    if (coverUri === undefined || coverUri.length === 0) { return; }
+    if (!this.backdropStyle().showCover || !this.followCoverColor) { return; }
+    ImageSeedColorExtractor.extract(coverUri).then((color: string) => {
+      this.coverSeedColor = color;
+    }).catch(() => {
+      this.coverSeedColor = '';
+    });
+  }
+
+  /** 取色叠层的颜色：主色半透明，对齐上游 `seedOverlay.copy(alpha = 0.34f)`。 */
+  private seedOverlayColor(): string {
+    if (this.coverSeedColor.length === 0) { return ''; }
+    return `#57${this.coverSeedColor.substring(1)}`;
   }
 
   private loadFileSize(): void {
@@ -139,12 +182,16 @@ export struct BookInfoPage {
   build() {
     Column() {
       Stack({ alignContent: Alignment.TopStart }) {
-      if (this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
-        Image(this.book.coverUri).width('100%').height(480).objectFit(ImageFit.Cover).blur(24)
+      if (this.backdropStyle().showCover && this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
+        Image(this.book.coverUri).width('100%').height(480).objectFit(ImageFit.Cover)
+          .blur(this.backdropStyle().blurCover ? 24 : 0)
           .opacity(this.backdropOpacity).onAppear(() => {
             this.backdropOpacity = 0;
             animateTo({ duration: 800, curve: Curve.EaseInOut }, () => this.backdropOpacity = 0.45);
           })
+      }
+      if (this.backdropStyle().applySeedOverlay && this.seedOverlayColor().length > 0) {
+        Column().width('100%').height(480).backgroundColor(this.seedOverlayColor())
       }
       Scroll(this.infoScroller) {
         Column() {

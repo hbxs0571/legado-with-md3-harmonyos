@@ -1,4 +1,9 @@
 import { AppGlyph } from '../components/AppGlyph';
+import {
+  BOOK_INFO_BACKGROUND_OFF,
+  BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT,
+  BOOK_INFO_BACKGROUND_ON
+} from '../data/ThemeSettingsRepository';
 
 @Component
 export struct ThemeSettingsPage {
@@ -24,6 +29,16 @@ export struct ThemeSettingsPage {
   onShowStatusBarChange: (visible: boolean) => void = (_visible: boolean) => {};
   /** 滑动动画开关回调。 */
   onSwipeAnimationChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 书籍详情页界面颜色是否跟随封面取色，对齐上游 `ThemeSettings.bookInfoFollowCoverColor`。 */
+  @Prop bookInfoFollowCoverColor: boolean = true;
+  /** 网络封面背景模式 `off`/`on`/`off_for_default`。 */
+  @Prop bookInfoNetworkCoverBackground: string = 'on';
+  /** 默认封面背景模式。 */
+  @Prop bookInfoDefaultCoverBackground: string = 'on';
+  onBookInfoFollowCoverColorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 封面背景下拉回调，`isDefaultCover` 区分「网络封面」与「默认封面」两行。 */
+  onBookInfoCoverBackgroundChange: (isDefaultCover: boolean, value: string) => void =
+    (_isDefaultCover: boolean, _value: string) => {};
   /** 护眼模式总开关，与阅读设置页共用同一份全局状态。 */
   @Prop eyeProtectionEnabled: boolean = false;
   /** 深色模式时自动开启护眼。 */
@@ -81,6 +96,11 @@ export struct ThemeSettingsPage {
     if (index === 2) { return '#665C32'; }
     if (index === 3) { return '#55565A'; }
     return '#385C8A';
+  }
+
+  /** 封面背景模式的中文文案，对齐上游 `values-zh-rCN/strings.xml:1751-1753`。 */
+  private coverBackgroundOptions(): string[] {
+    return [BOOK_INFO_BACKGROUND_ON, BOOK_INFO_BACKGROUND_OFF, BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT];
   }
 
   /** 护眼定时的起止时间选择，对齐阅读设置页同名能力。 */
@@ -217,9 +237,9 @@ export struct ThemeSettingsPage {
 
           ThemeSectionTitle({ title: '书籍详情页' }).margin({ top: 20 })
           Column() {
-            ThemeSwitchRow({ title: '界面颜色跟随封面取色', detail: '仅在显示背景封面时生效', checked: this.followCoverColor, onChange: (value: boolean) => { this.followCoverColor = value; this.onUnavailableAction('封面取色设置暂未保存') } })
-            ThemeSettingsOption({ title: '网络封面背景设置', detail: '', onSelect: () => this.onUnavailableAction('网络封面背景设置尚未迁移') })
-            ThemeSettingsOption({ title: '默认封面背景设置', detail: '', onSelect: () => this.onUnavailableAction('默认封面背景设置尚未迁移') })
+            ThemeSwitchRow({ title: '界面颜色跟随封面取色', detail: '仅在显示背景封面时生效', checked: this.bookInfoFollowCoverColor, onChange: (value: boolean) => this.onBookInfoFollowCoverColorChange(value) })
+            ThemeSettingsDropdown({ title: '网络封面背景设置', value: this.bookInfoNetworkCoverBackground, options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
+            ThemeSettingsDropdown({ title: '默认封面背景设置', value: this.bookInfoDefaultCoverBackground, options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
 
           ThemeSectionTitle({ title: '护眼模式' }).margin({ top: 20 })
@@ -390,6 +410,41 @@ struct ThemeSwitchRow {
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .onChange((enabled: boolean) => this.onChange(enabled))
     }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
+  }
+}
+
+/** 下拉行，对齐上游 `DropdownListSettingItem`：点开菜单选一项。 */
+@Component
+struct ThemeSettingsDropdown {
+  @Prop title: string = '';
+  @Prop value: string = '';
+  @Prop options: string[] = [];
+  onSelect: (value: string) => void = (_value: string) => {};
+
+  /** 取值转中文，对齐上游 `values-zh-rCN/strings.xml:1751-1753` 的三条文案。 */
+  private label(value: string): string {
+    if (value === BOOK_INFO_BACKGROUND_OFF) { return '关闭模糊封面'; }
+    if (value === BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT) { return '不显示背景封面'; }
+    return '开启模糊封面';
+  }
+
+  @Builder
+  private OptionMenu() {
+    Menu() {
+      ForEach(this.options, (option: string) => {
+        MenuItem({ content: this.label(option) }).height(48).onClick(() => this.onSelect(option))
+      }, (option: string) => option)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(16)
+  }
+
+  build() {
+    Row() {
+      Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+      Text(this.label(this.value)).fontSize(14).fontColor($r('app.color.theme_accent'))
+      Image($r('app.media.reader_next')).width(16).height(16).fillColor($r('app.color.theme_text_tertiary'))
+        .margin({ left: 4 })
+    }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+      .bindMenu(this.OptionMenu, { placement: Placement.Bottom })
   }
 }
 

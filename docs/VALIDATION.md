@@ -30,6 +30,38 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r307 深色模式阶段二：书籍详情页三项（A20/A21/A22）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`assembleHap` **BUILD SUCCESSFUL in 38 s 666 ms**（33 tasks / 17 executed），`hdc install -r` 覆盖安装成功。
+- 改动文件：`entry/src/main/ets/data/ThemeSettingsRepository.ets`（`ThemeSnapshot` 扩到 8 字段）、新建 `data/BookInfoBackdropStyle.ets`、新建 `data/ImageSeedColorExtractor.ets`、`pages/ThemeSettingsPage.ets`（书籍详情页组三项改真回调 + 新增 `ThemeSettingsDropdown`）、`pages/Index.ets`（三个新状态 + 两个回调 + 传参）、`pages/BookInfoPage.ets`（`backdropStyle()`/`loadCoverSeedColor()`/`seedOverlayColor()`）。
+
+**前置条件**：本地书籍原本没有封面图，`coverUri` 为空时取色与背景封面都不会生效。必须先给书加封面——书架长按书籍 → 详情页 → 右上编辑 → 「选择图片」→ 文件选择器选一张图 → 保存。本轮用 `dup-probe` + `badge-test.png`（彩色格子图，取色差异明显）。
+
+**验收①（A20 界面颜色跟随封面取色）**
+- 操作：改 `legado_theme` 的 `bookInfoFollowCoverColor` 为 `true`/`false`，各 `aa force-stop` + `aa start` 重启一次，进详情页截图；用 Pillow 取顶部同一区域（相对坐标 `0.05,0.06`–`0.95,0.20`）的平均色。
+- 预期：开→有关卡取色叠层，关→叠层消失，平均色应可分辨。
+- 实际：**开 `(87.2, 88.9, 156.9)` → 关 `(81.9, 83.9, 142.7)`**，叠层出现/消失可见。通过。
+
+**验收②（A21 网络封面背景设置三档）**
+- 操作：改 `legado_theme` 的 `bookInfoNetworkCoverBackground` 为 `on`/`off`/`off_for_default`，各重启一次进详情页截图。
+- 预期：`on` 背景模糊、`off` 背景清晰、`off_for_default` 背景封面整块消失。
+- 实际：`on` 彩色格子明显模糊；`off` 彩色格子清晰无模糊；`off_for_default` 背景封面整块消失、退回纯色底。三档均可分辨。通过。
+- 补充：下拉菜单本身也验过——点「网络封面背景设置」弹出 `MenuItem` 三项（开启模糊封面 / 关闭模糊封面 / 不显示背景封面），点「关闭模糊封面」后 prefs 由 `on` 变 `off`。
+
+**验收③（A22 默认封面背景设置）**
+- 操作：主题设置页「默认封面背景设置」下拉选「不显示背景封面」→ 重启 → 读 `legado_theme`。
+- 预期：`bookInfoDefaultCoverBackground` 变 `off_for_default`。
+- 实际：prefs 为 `off_for_default`。**详情页不受影响**——本地没有内置默认封面图（无封面时走 `model/Book.ets:90-101 bookCoverColor` 的书名 hash 色块，不是图片），`usesDefaultCover` 恒为 false，所以这一档在本平台没有渲染路径。此差异已如实写进 ZIP-THEME.md 的 A22 行与 KI-TH-A6。
+
+**复原**：`bookInfoFollowCoverColor` 改回 `true`、`bookInfoNetworkCoverBackground` 改回 `on`、`fontScale` 改回 `10.000000`，重启确认详情页背景恢复正常。
+
+**与上游的差异（如实记录，不写成已对齐）**
+1. 取色算法不同：上游 `ImageSeedColorExtractor.kt` 是 `QuantizerCelebi.quantize` + `Score.score`，本地是「缩到 16×16 取像素均值 + 提饱和度 1.6 倍」。都产出代表封面的主色，但同一张图给的具体色值不会相同。
+2. 叠层取色不同：上游 `lerp(secondaryContainer, seedColor, 0.42f)` 再 `alpha 0.34`；本地直接用主色 `alpha 0.34`（A2 未接，本地没有 secondaryContainer 这一层）。
+
+**未验**：A22 的渲染路径（平台无对应物，见上）；取色在深色主题下的观感差异（A2 未接，本地只有一套深色资源）。
+
 ## 2026-11-01 N 端 r306 深色模式复查：D3/D5/D8 三行盘点误判纠正（纯文档，无代码改动）
 
 - 设备：本轮**未改任何源码**，不构建、不上机。结论全部来自逐行读代码 + 复跑 `--coverage`。

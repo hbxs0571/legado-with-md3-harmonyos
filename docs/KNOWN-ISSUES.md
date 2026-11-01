@@ -697,13 +697,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 深色模式行登记（ZIP-THEME.md 的未接行）
 
-本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r306 后剩 51 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r307 后剩 48 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）；**r306 复查改判 3 行**（D3 三值派生布尔、D5 日夜两套背景、D8 阅读菜单日夜配色——三行在 r297 判 `未接` 时点早于实现，D3/D5 随 r300 的全局 `themeMode` 派生成立，D8 由 `9902eb8`/`154f91e` 落地配色后又随 r300 打通日夜来源）。累计 31 行转 `已接`，剩余 **51 行 `未接`**（要接 46 / 不接 5）。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）；**r306 复查改判 3 行**（D3 三值派生布尔、D5 日夜两套背景、D8 阅读菜单日夜配色——三行在 r297 判 `未接` 时点早于实现，D3/D5 随 r300 的全局 `themeMode` 派生成立，D8 由 `9902eb8`/`154f91e` 落地配色后又随 r300 打通日夜来源）。**书籍详情页 r307 落地 3 行**（A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置），同批把 A23 作者搜索回退由「要接」改判「不接」（上游唯一消费者依赖书源 `relatedBooks`，本地无网络书源）。累计 34 行转 `已接`，剩余 **48 行 `未接`**（要接 42 / 不接 6）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -761,15 +761,31 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **验收**：A15 已验（r304：关掉 → 顶部状态栏立即消失、页面顶到屏幕边，重启仍隐藏，prefs `showStatusBar` = `false`）；A16 已验（r304：关掉 → prefs `swipeAnimation` = `false`，重启后开关仍为关）；A17 调不透明度 → 顶栏底色透明度变化；A18/A19 无（不接）。
 
-**KI-TH-A6 书籍详情页组四项（要接）** —— 覆盖 A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置、A23 作者搜索回退。
+**KI-TH-A6 书籍详情页组四项（A20/A21/A22 已实现 r307，A23 不接）** —— 覆盖 A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置、A23 作者搜索回退。
 
-**上游口径**：A20 `tintBookInfoByCover`，详情页按封面主色取色；A21/A22 是封面背景图的两条来源；A23 在详情页点作者时决定搜作者名还是书名。
+**本轮判定**：A20/A21/A22 要接，r307 已实现；A23 不接——上游唯一消费者 `BookInfoViewModel.kt:2007-2016` 依赖书源实体 `source.ruleBookInfo.relatedBooks`，本地无网络书源（`entry/src/main/ets/` 里 `bookSource` 只作为备份/规则壳出现），属 [项目范围](PROJECT.md)「在线书源抓取…不因出现在页面或备份归档中而视为已实现」。
 
-**本地现状**：A20–A22 三条（`:166`/`:167`/`:168`）全 `onUnavailableAction`；A23 **条目本身都缺**。
+**上游口径**：
+- A20 `ThemeConfigScreen.kt:399` → `BookInfoScreen.kt:807-847 rememberBookInfoColorTheme`：`book == null || !enabled || !followCoverColor` 时返回 null；取色用 `ImageSeedColorExtractor.kt` 的 `QuantizerCelebi.quantize` + `Score.score`，常量 `IMAGE_COLOR_EXTRACT_SIZE_PX = 128`、`IMAGE_QUANTIZE_BITMAP_MAX_SIZE = 64`、`IMAGE_MAX_QUANTIZE_COLORS = 64`、`IMAGE_FALLBACK_SEED_COLOR = 0xFF4285F4`；叠层是 `lerp(secondaryContainer, seedColor, 0.42f)` 再 `alpha 0.34`。
+- A21/A22 `ThemeConfigScreen.kt:407`/`:416` 两个 `DropdownListSettingItem`，值域 `off`/`on`/`off_for_default`（`res/values/array_values.xml:135-139`），中文文案 `关闭模糊封面`/`开启模糊封面`/`不显示背景封面`（`values-zh-rCN/strings.xml:1751-1753`）；语义在 `BookInfoBackdropStyle.kt:9-30`：`off` → (showCover=true, blurCover=false, applySeedOverlay=true)、`off_for_default` → 全 false、else → (true, true, true)。`BookInfoScreen.kt:863-875` 按 `usesDefaultCover` 在两个键之间选。
+- A23 见上「本轮判定」。
 
-**补法**：A20 落盘后接封面主色提取；A21/A22 接图片选择；A23 补条目并接 `BookInfoPage` 的作者点击。
+**本地落地**（r307）：
+1. `data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 扩到 8 字段，新增 `bookInfoFollowCoverColor`/`bookInfoNetworkCoverBackground`/`bookInfoDefaultCoverBackground`；导出 `BOOK_INFO_BACKGROUND_OFF`/`BOOK_INFO_BACKGROUND_ON`/`BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT` 与 `normalizeBookInfoBackground`；`load`/`save` 逐键读写。
+2. 新建 `data/BookInfoBackdropStyle.ets`：`BookInfoBackdropStyle` 三字段 + `resolveBookInfoBackdropStyle(backgroundMode)`（三档语义逐条照抄上游）+ `resolveBookInfoBackdropStyleFor(usesDefaultCover, defaultCoverBackground, networkCoverBackground)`。
+3. 新建 `data/ImageSeedColorExtractor.ets`：`ImageSeedColorExtractor.extract(uri)` 用 `image.createImageSource` → `createPixelMap({ desiredSize: { width: 16, height: 16 } })` → `readPixelsToBufferSync` 取像素均值，再按 1.6 倍提饱和度；失败回落 `#4285F4`。
+4. `pages/ThemeSettingsPage.ets`：书籍详情页组三项改真回调；新增 `ThemeSettingsDropdown` 组件（`bindMenu` + `MenuItem`，与 `OtherSettingsPage.ets` 的 `OtherSettingsDropdown` 同写法）。
+5. `pages/Index.ets`：新增 `@State bookInfoFollowCoverColor`/`bookInfoNetworkCoverBackground`/`bookInfoDefaultCoverBackground`、`selectBookInfoFollowCoverColor`、`selectBookInfoCoverBackground`，并接进 `saveThemeSettings` 与 `restoreOnboarding`。
+6. `pages/BookInfoPage.ets`：新增三个 `@Prop`、`backdropStyle()`、`loadCoverSeedColor()`、`seedOverlayColor()`；背景封面按 `showCover`/`blurCover` 分支，叠层按 `applySeedOverlay` 挂载。
 
-**验收**：A20 打开 → 详情页头部底色随封面主色变化；A23 打开 → 点作者跳到「作者名」搜索结果而非书名。
+**与上游的两条差异**（如实记录）：
+- 取色算法不同：上游是 Celebi 量化 + Score 打分，本地是 16×16 像素均值 + 提饱和——都产出「代表封面的主色」，但同一张图给的具体色值不会相同。
+- 叠层取色不同：上游 `lerp(secondaryContainer, seedColor, 0.42f)`，本地直接用主色（A2 未接，本地没有 secondaryContainer 这一层）。
+
+**验收**（2026-11-01 模拟器实测通过，见 [验证记录](VALIDATION.md) r307 节）：
+- A20：开/关「界面颜色跟随封面取色」→ 详情页顶部同一区域平均色 `(87.2, 88.9, 156.9)` → `(81.9, 83.9, 142.7)`。
+- A21：三档各重启一次进详情页——`on` 背景模糊、`off` 背景清晰、`off_for_default` 背景封面整块消失。
+- A22：设置页选「不显示背景封面」→ 重启 → prefs `bookInfoDefaultCoverBackground` 为 `off_for_default`。
 
 **KI-TH-A7 护眼六项（已实现，r301）** —— 覆盖 A24 启用护眼模式、A25 深色模式时自动开启、A26 护眼色温强度、A27 护眼定时开启、A28 护眼开始时间、A29 护眼结束时间。
 

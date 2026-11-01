@@ -28,6 +28,23 @@ export interface ThemeSnapshot {
   showStatusBar: boolean;
   /** 是否启用滑动时动画，对齐上游 `AppShellSettings.kt:11 swipeAnimation`（默认 true）。 */
   swipeAnimation: boolean;
+  /** 书籍详情页界面颜色是否跟随封面取色，对齐上游 `ThemeSettings.kt` 的 bookInfoFollowCoverColor（默认 true）。 */
+  bookInfoFollowCoverColor: boolean;
+  /** 网络封面背景模式，对齐上游 bookInfoNetworkCoverBackground（`off`/`on`/`off_for_default`，默认 `on`）。 */
+  bookInfoNetworkCoverBackground: string;
+  /** 默认封面背景模式，对齐上游 bookInfoDefaultCoverBackground（默认 `on`）。 */
+  bookInfoDefaultCoverBackground: string;
+}
+
+/** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
+export const BOOK_INFO_BACKGROUND_OFF: string = 'off';
+export const BOOK_INFO_BACKGROUND_ON: string = 'on';
+export const BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT: string = 'off_for_default';
+
+/** 背景封面模式的取值域归一，非法值回落到 `on`。 */
+export function normalizeBookInfoBackground(value: string): string {
+  if (value === BOOK_INFO_BACKGROUND_OFF || value === BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT) { return value; }
+  return BOOK_INFO_BACKGROUND_ON;
 }
 
 /** 字体缩放夹取到 8..16，非法值回落到默认 10。 */
@@ -61,7 +78,10 @@ export class ThemeSettingsRepository {
       paletteIndex: 0,
       fontScale: FONT_SCALE_DEFAULT,
       showStatusBar: true,
-      swipeAnimation: true
+      swipeAnimation: true,
+      bookInfoFollowCoverColor: true,
+      bookInfoNetworkCoverBackground: BOOK_INFO_BACKGROUND_ON,
+      bookInfoDefaultCoverBackground: BOOK_INFO_BACKGROUND_ON
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -70,12 +90,20 @@ export class ThemeSettingsRepository {
       const fontScale = await store.get('fontScale', defaults.fontScale);
       const showStatusBar = await store.get('showStatusBar', defaults.showStatusBar);
       const swipeAnimation = await store.get('swipeAnimation', defaults.swipeAnimation);
+      const followCoverColor = await store.get('bookInfoFollowCoverColor', defaults.bookInfoFollowCoverColor);
+      const networkCoverBackground = await store.get('bookInfoNetworkCoverBackground', defaults.bookInfoNetworkCoverBackground);
+      const defaultCoverBackground = await store.get('bookInfoDefaultCoverBackground', defaults.bookInfoDefaultCoverBackground);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
         fontScale: typeof fontScale === 'number' ? normalizeFontScale(fontScale) : defaults.fontScale,
         showStatusBar: typeof showStatusBar === 'boolean' ? showStatusBar : defaults.showStatusBar,
-        swipeAnimation: typeof swipeAnimation === 'boolean' ? swipeAnimation : defaults.swipeAnimation
+        swipeAnimation: typeof swipeAnimation === 'boolean' ? swipeAnimation : defaults.swipeAnimation,
+        bookInfoFollowCoverColor: typeof followCoverColor === 'boolean' ? followCoverColor : defaults.bookInfoFollowCoverColor,
+        bookInfoNetworkCoverBackground: typeof networkCoverBackground === 'string'
+          ? normalizeBookInfoBackground(networkCoverBackground) : defaults.bookInfoNetworkCoverBackground,
+        bookInfoDefaultCoverBackground: typeof defaultCoverBackground === 'string'
+          ? normalizeBookInfoBackground(defaultCoverBackground) : defaults.bookInfoDefaultCoverBackground
       };
     } catch (_) {
       return defaults;
@@ -104,6 +132,11 @@ export class ThemeSettingsRepository {
     await store.put('fontScale', normalizeFontScale(snapshot.fontScale));
     await store.put('showStatusBar', snapshot.showStatusBar);
     await store.put('swipeAnimation', snapshot.swipeAnimation);
+    await store.put('bookInfoFollowCoverColor', snapshot.bookInfoFollowCoverColor);
+    await store.put('bookInfoNetworkCoverBackground',
+      normalizeBookInfoBackground(snapshot.bookInfoNetworkCoverBackground));
+    await store.put('bookInfoDefaultCoverBackground',
+      normalizeBookInfoBackground(snapshot.bookInfoDefaultCoverBackground));
     await store.flush();
   }
 
