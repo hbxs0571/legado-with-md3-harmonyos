@@ -6458,6 +6458,10 @@ struct Index {
         (this.route === AppRoute.READER_SETTINGS && this.settingsReturnRoute === AppRoute.READER) ||
         this.route === AppRoute.READ_ALOUD_SETTINGS) {
         Stack() {
+          // 阅读设置是异步载入的（restoreReaderSettings 不能 await，aboutToAppear 是同步生命周期），
+          // 设置没到位就开门会让阅读页先用默认值排一遍版，数值到达后再整页跳一次。
+          // 上游 ReadBookActivity 也是把配置装好再起 UI，这里同样先给占位。
+          if (this.readerSettingsLoaded || this.route !== AppRoute.READER) {
           ReaderPage({
             startAtChapterBeginning: this.readerStartAtChapterBeginning,
             book: this.selectedBook,
@@ -6685,6 +6689,19 @@ struct Index {
               }
             }
           })
+          } else {
+            // 设置还没载入完：给一张与阅读页同色的空白占位，不闪别的排版。
+            Column()
+              .width('100%')
+              .height('100%')
+              .backgroundColor(this.getPaperColor())
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+            LoadingProgress()
+              .width(28)
+              .height(28)
+              .color(this.themeColorAccent)
+          }
           if (this.route === AppRoute.CATALOG) {
             CatalogPage({
               book: this.selectedBook,

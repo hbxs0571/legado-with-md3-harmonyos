@@ -21,9 +21,17 @@ import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import image from '@ohos.multimedia.image';
 import { batteryInfo, pasteboard, settings } from '@kit.BasicServicesKit';
-import { window } from '@kit.ArkUI';
+import { AnimatorResult, window } from '@kit.ArkUI';
+import { LengthMetricsUnit } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
 import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator } from './LocalReaderPaginator';
+import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
+import {
+  ReaderCanvasDrawRequest, ReaderCanvasItemBox, ReaderCanvasLayout, ReaderCanvasMarking, ReaderCanvasPage,
+  ReaderCanvasRenderer, ReaderCanvasStyle, ReaderCanvasWindow, ReaderPageTransform, ReaderPageTransition,
+  ReaderPageTransitionPolicy, ReaderTransitionDirection, ReaderTransitionMode, ReaderTransitionTransforms,
+  readerTransitionModeFromPageAnim
+} from '../reader/ReaderCanvasSurface';
 import {
   ReaderBottomActionConfig, ReaderControlKind, READER_ACTION_OPTIONS, READER_LOCAL_BOTTOM_ACTION_DEFAULTS,
   READER_LOCAL_TOP_ACTION_DEFAULTS, ReaderActionOption, isReaderActionApplicable,
@@ -114,11 +122,6 @@ interface ReaderBookmarkPageRange {
   text: string;
 }
 
-interface ReaderTextSelectionPart {
-  value: string;
-  positions: number[];
-}
-
 interface ReaderMarkingRange {
   start: number;
   end: number;
@@ -174,19 +177,19 @@ export struct ReaderPage {
   @Prop shadowDy: number = 1;
   @Prop textShadowColor: string = '#3E3D3B';
   @Prop textShadowColorN: string = '#3E3D3B';
-  @Prop underline: boolean = false;
-  @Prop dottedLine: boolean = false;
-  @Prop underlineColor: string = '#3E3D3B';
-  @Prop underlineColorNight: string = '#ADADAD';
-  @Prop underlineHeight: number = 1;
+  @Prop @Watch('onReaderCanvasStyleChanged') underline: boolean = false;
+  @Prop @Watch('onReaderCanvasStyleChanged') dottedLine: boolean = false;
+  @Prop @Watch('onReaderCanvasStyleChanged') underlineColor: string = '#3E3D3B';
+  @Prop @Watch('onReaderCanvasStyleChanged') underlineColorNight: string = '#ADADAD';
+  @Prop @Watch('onReaderCanvasStyleChanged') underlineHeight: number = 1;
   // 上游 underlinePadding：默认 10，绘制时取 (值 - 10) 作相对偏移（LegacyReaderPaginationStyleFactory.kt:68）
-  @Prop underlinePadding: number = 10;
+  @Prop @Watch('onReaderCanvasStyleChanged') underlinePadding: number = 10;
   // 上游 underlineExtend：下划线是否撑满整列（ReaderPaginator.kt:449 的 extendToColumn）
-  @Prop underlineExtend: boolean = false;
+  @Prop @Watch('onReaderCanvasStyleChanged') underlineExtend: boolean = false;
   // 上游 dottedBase / dottedRatio：虚线的实线段长与空隙，单位在上游是 px，本地按 vp 传给 strokeDashArray
-  @Prop dottedBase: number = 6;
-  @Prop dottedRatio: number = 6;
-  @Prop readerNightMode: boolean = true;
+  @Prop @Watch('onReaderCanvasStyleChanged') dottedBase: number = 6;
+  @Prop @Watch('onReaderCanvasStyleChanged') dottedRatio: number = 6;
+  @Prop @Watch('onReaderCanvasStyleChanged') readerNightMode: boolean = true;
   @Prop @Watch('onPaginationInputsChanged') textFullJustify: boolean = true;
   @Prop @Watch('onPaginationInputsChanged') textBottomJustify: boolean = true;
   @Prop @Watch('onProgressBehaviorChanged') progressBehavior: string = 'page';
@@ -362,13 +365,13 @@ export struct ReaderPage {
   @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetPosition: number = -1;
   @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetRevision: number = 0;
   onBookmarkTargetConsumed: () => void = () => {};
-  @Prop paperColor: string = '#000000';
+  @Prop @Watch('onReaderCanvasStyleChanged') paperColor: string = '#000000';
   /** 正文颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight，空串回落原有硬编码。 */
-  @Prop readingTextColor: string = '';
+  @Prop @Watch('onReaderCanvasStyleChanged') readingTextColor: string = '';
   /** 强调色；上游 ReadBookConfig.kt:62 textAccentColor，用于链接、搜索结果与朗读段落。 */
   @Prop textAccentColor: string = '';
   /** 自定义背景图片的沙箱路径；空串表示没有，上游 ReadBookConfig.kt:549 bgType != 0 的情况。 */
-  @Prop readerBackgroundImage: string = '';
+  @Prop @Watch('onReaderCanvasStyleChanged') readerBackgroundImage: string = '';
   /** 背景图片不透明度百分比（0..100），上游 ReadBookConfig.kt:548 bgAlpha。 */
   @Prop backgroundAlpha: number = 100;
   /** 状态栏图标是否用深色；上游 ReadBookConfig.kt:552-553 darkStatusIcon / darkStatusIconNight。 */
@@ -439,6 +442,72 @@ export struct ReaderPage {
   @State bookmarkPullArmed: boolean = false;
   @State bookmarkWillRemove: boolean = false;
   private pageTurnTimer: number = -1;
+  // 分页输入防抖：几十个 @Prop 的 @Watch 会连续触发，合并成一帧后再排一次
+  private static readonly PAGINATION_DEBOUNCE_MILLIS: number = 16;
+  private paginationRebuildTimer: number = -1;
+  // 本轮分页是否用了「图片尺寸未就绪」的占位高度；尺寸到达后要再排一次
+  private paginationUsesImagePlaceholder: boolean = false;
+  // 画布渲染：四页窗口 + 逐行绘制（对齐上游 ReaderCanvasSurface）。
+  // 一个 Canvas 持一个 DrawingRenderingContext，按 z 序把四页画进同一张画布。
+  private readerCanvasContext: DrawingRenderingContext =
+    new DrawingRenderingContext(LengthMetricsUnit.PX);
+  private readerCanvasRenderer: ReaderCanvasRenderer = new ReaderCanvasRenderer();
+  private readerCanvasReady: boolean = false;
+  /**
+   * 画布实测正文区高度（vp）。分页按公式算的 pageHeight 与画布真实可分高度并不等值：
+   * 页脚实际占位比 getReaderInfoReserve(false) 的预留更大，公式会多算出几十 px，
+   * 结果分页认为放得下、画到画布上时最后一行被下边缘裁掉半行。
+   * 这里记下画布量到的真实高度，分页以「公式值」与「实测值」的较小者为准。
+   */
+  private readerCanvasBodyHeightVp: number = 0;
+  /**
+   * 上一次分页时用来算底部对齐位移的输入。底部对齐是「按当前页内容摊分剩余高度」，
+   * 所以 gap 只对当时那一页成立；翻页后必须按新页重算，否则上一页的位移会套到新页上，
+   * 把新页最后一行推出画布下边缘（表现为末行被裁掉一半）。
+   */
+  private readerBottomJustifyPageHeight: number = 0;
+  private readerBottomJustifyLineHeight: number = 0;
+  private readerBottomJustifyTitleLines: number = 0;
+  // 渲染路径开关（逃生舱）：true 走画布逐行绘制，false 走老的 ArkUI Span 渲染。
+  // 画布上还没有自绘选区，长按选词/拖把手/标笔记/高亮只有老路径能给；
+  // 阶段 C 把选区画到画布上并通过验收后，这个开关与老路径一起删掉。
+  // 用 @State 而非常量，是为了能临时改一行就切回去核对选区是否退化。
+  @State canvasSelectionStart: number = -1;
+  @State canvasSelectionEnd: number = -1;
+  /** 长按后拖把手：1 = 拖起始把手，2 = 拖结束把手，0 = 没在拖。 */
+  @State canvasSelectionDragging: number = 0;
+  /** 选区菜单是否显示，以及菜单锚点（vp，相对阅读页 Stack）。 */
+  @State canvasSelectionMenuVisible: boolean = false;
+  @State canvasSelectionMenuX: number = 0;
+  @State canvasSelectionMenuY: number = 0;
+  /** 长按计时器与按下点（px）。 */
+  // 长按起选之后紧跟的那次抬手会再触发一次 TapGesture，
+  // 上游用 suppressTap 吞掉它（ReaderCanvasSurface.kt:1035-1080），
+  // 否则选区刚建好就被单击逻辑清掉，看起来像「选了没反应」。
+  private canvasSuppressTap: boolean = false;
+  private canvasLongPressTimer: number = -1;
+  private canvasLongPressX: number = 0;
+  private canvasLongPressY: number = 0;
+  /** 最近一次绘制回填的把手位置（px），用来判断是否抓到了把手。 */
+  private canvasHandleStartX: number = 0;
+  private canvasHandleStartY: number = 0;
+  private canvasHandleEndX: number = 0;
+  private canvasHandleEndY: number = 0;
+  /** 画布相对外层 Stack 的纵向偏移（vp），给选区菜单定位。 */
+  private readerCanvasOffsetYVp: number = 0;
+  // 当前正在播放的转场；NONE 表示没有转场（只画 current）。
+  private turnTransition: ReaderPageTransition = new ReaderPageTransition();
+  private turnAnimator: AnimatorResult | undefined = undefined;
+  private turnMode: ReaderTransitionMode = ReaderTransitionMode.NONE;
+  // 仿真折页的触点与角点：逐帧写入，绘制期只读（上游 curlTouchX/curlTouchY/curlCornerY）
+  private curlTouchX: number = 0;
+  private curlTouchY: number = 0;
+  private curlCornerY: number = 0;
+  private curlRevealProgress: number = 1;
+  private curlPrevious: boolean = false;
+  // 翻页动画期的临时页索引：COVER 期间旧页仍是 currentPageIndex，新页已经作为 next 参与绘制，
+  // 动画收尾才把索引换过去 —— 这样任何一帧都不会出现「两页都没画」。
+  private turnTargetPageIndex: number = -1;
   private fullBookPaginationGeneration: number = 0;
   private fullBookPaginationKey: string = '';
   private pendingMarkingStart: number = -1;
@@ -1216,6 +1285,8 @@ export struct ReaderPage {
   /** 划线/笔记增删改后重建渲染：run 的分段与装饰都在 ForEach key 里，必须换 key。 */
   onMarkingsChanged(): void {
     this.readerContentRevision++;
+    // 画布是高亮/笔记的唯一出口：markings 变了必须重画，否则要等下一次翻页才刷新
+    this.invalidateReaderCanvas();
   }
 
   /**
@@ -1288,8 +1359,28 @@ export struct ReaderPage {
   }
 
   onPaginationInputsChanged(): void {
+    // 分页输入是整批下发的：约 30 个 @Prop 各自 @Watch，设置页一次保存会连续触发几十次。
+    // 每次都全量重排会把主线程占满（开书那 1-2 秒的卡顿有它一份），这里合并成一帧后只排一次。
+    this.scheduleReaderPaginationRebuild();
+  }
+
+  /** 防抖调度：同一轮内多次调用只留最后一次真正的重排。 */
+  private scheduleReaderPaginationRebuild(): void {
     this.refreshReaderFontFamilies();
-    this.rebuildReaderPages();
+    if (this.paginationRebuildTimer >= 0) {
+      clearTimeout(this.paginationRebuildTimer);
+    }
+    this.paginationRebuildTimer = setTimeout(() => {
+      this.paginationRebuildTimer = -1;
+      this.rebuildReaderPages();
+    }, ReaderPage.PAGINATION_DEBOUNCE_MILLIS);
+  }
+
+  private cancelPendingPaginationRebuild(): void {
+    if (this.paginationRebuildTimer >= 0) {
+      clearTimeout(this.paginationRebuildTimer);
+      this.paginationRebuildTimer = -1;
+    }
   }
 
   private refreshReaderFontFamilies(): void {
@@ -1417,7 +1508,11 @@ export struct ReaderPage {
     const lineHeight = Math.max(1, baseLineHeight * this.lineSpacing / 10);
     const infoHeaderReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
     const infoFooterReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
-    const pageHeight = Math.max(lineHeight, this.getBodyContentHeight(infoHeaderReserve, infoFooterReserve));
+    const formulaPageHeight = this.getBodyContentHeight(infoHeaderReserve, infoFooterReserve);
+    // 画布实测高度优先：公式算的预留比实际占位小，只用公式会让最后一行被画布下边缘裁掉。
+    const pageHeight = this.readerCanvasBodyHeightVp > 0
+      ? Math.max(lineHeight, Math.min(formulaPageHeight, this.readerCanvasBodyHeightVp))
+      : Math.max(lineHeight, formulaPageHeight);
     // Android 段距范围为 0–20，每一档按行高的十分之一计算。
     const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
     const document = LocalTextSemantics.parse(this.content, this.paragraphIndent, this.adaptSpecialStyle);
@@ -1428,17 +1523,26 @@ export struct ReaderPage {
     }
     this.readerHighlightRanges = nextRanges;
     this.localSemanticDocument = document;
+    // 图片尺寸是异步量的，开书那一两秒里通常还没到齐。
+    // 旧实现只要有一张缺尺寸就整章分页作废、退回「整章滚动」，等尺寸到了再切回分页，
+    // 带图章节因此要经历两轮排版切换。上游 ReaderChapterBlockMeasurer.kt:457-462 的处理是
+    // `placeholderExtent = lineHeight.coerceAtLeast(1f)`，用行高做正方形占位继续排版，
+    // 尺寸到达后再按新尺寸重排一次——排版只有一套，切换时不会整页跳。
+    const paginationImageSizes = new Map<string, ReaderIntrinsicImageSize>(this.imageSizes);
+    const placeholderExtent = Math.max(1, lineHeight);
+    let placeholderUsed = false;
     for (let paragraphIndex = 0; paragraphIndex < document.paragraphs.length; paragraphIndex++) {
       const paragraph = document.paragraphs[paragraphIndex];
       if (paragraph === undefined) { continue; }
       for (let partIndex = 0; partIndex < paragraph.parts.length; partIndex++) {
         const part = paragraph.parts[partIndex];
-        if (part?.kind === 'image' && !this.imageSizes.has(part.value)) {
-          this.localReaderPages = [];
-          return;
+        if (part?.kind === 'image' && !paginationImageSizes.has(part.value)) {
+          paginationImageSizes.set(part.value, { width: placeholderExtent, height: placeholderExtent });
+          placeholderUsed = true;
         }
       }
     }
+    this.paginationUsesImagePlaceholder = placeholderUsed;
     // 标题占位按实际配置算：字号走 resolveTitleSizeFp，间距走 titleTopSpacing/titleBottomSpacing，
     // 分段标题逐段累加（对齐上游 LegacyReaderPaginationStyleFactory 的标题样式与分段块）。
     const titleReservedLines = this.measureTitleReservedLines(context, width, lineHeight);
@@ -1453,7 +1557,7 @@ export struct ReaderPage {
           context, text, this.readerBodyFontFamily, fontSize, this.getReaderFontWeight()) +
           this.getReaderTextLetterSpacingWidth(text, fontSize);
       },
-      this.imageSizes,
+      paginationImageSizes,
       this.activeImageStyle,
       context.px2vp(80),
       (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
@@ -1496,7 +1600,16 @@ export struct ReaderPage {
     }
     this.localReaderPages = nextPages;
     this.currentPageIndex = pageIndex;
+    this.readerBottomJustifyPageHeight = pageHeight;
+    this.readerBottomJustifyLineHeight = lineHeight;
+    this.readerBottomJustifyTitleLines = titleReservedLines;
     this.readerBottomJustifyGap = this.calculateReaderBottomJustifyGap(pageHeight, lineHeight, titleReservedLines);
+    // 排版结果变了，画布要按新页重画，并把四页窗口里会用到的图先解进缓存。
+    // 上游 ReaderCanvasSurface.kt:414-430 在翻页前就把 current/next/previous/nextPlus 的图全部预载，
+    // 注释原文「翻页前先把 LRU 解好，绘制期直读必然命中，新页就不会出现『有字无气泡』的那一两帧」。
+    this.readerCanvasRenderer.clearParagraphs();
+    this.prefetchReaderCanvasWindow();
+    this.paintReaderCanvas();
     const consumedBookmarkTarget = this.pendingBookmarkTargetPosition >= 0;
     this.pendingBookmarkTargetPosition = -1;
     if (this.pageAnimation !== 3 && forceProgressCommit) {
@@ -1531,6 +1644,16 @@ export struct ReaderPage {
     const surplus = pageHeight - usedHeight;
     if (surplus <= 0 || surplus >= lastLine.height + lineHeight) { return 0; }
     return surplus / (page.lines.length - 1);
+  }
+
+  /** 只重算当前页的底部对齐位移，不重排分页（翻页路径专用）。 */
+  private refreshReaderBottomJustifyGap(): void {
+    if (this.readerBottomJustifyPageHeight <= 0 || this.readerBottomJustifyLineHeight <= 0) {
+      return;
+    }
+    this.readerBottomJustifyGap = this.calculateReaderBottomJustifyGap(
+      this.readerBottomJustifyPageHeight, this.readerBottomJustifyLineHeight,
+      this.readerBottomJustifyTitleLines);
   }
 
   private reportReaderPageProgress(): void {
@@ -1677,36 +1800,93 @@ export struct ReaderPage {
       return;
     }
     const durationBySpeed: number[] = [240, 300, 360, 540];
-    const duration = durationBySpeed[this.animationSpeed] ?? 360;
-    const direction: number = delta > 0 ? -1 : 1;
-    const reverseDirection: number = delta > 0 ? 1 : -1;
-    const pageWidth = Math.max(1, this.readerContentWidth);
-    const pageHeight = Math.max(1, this.viewportHeight);
-    const horizontalTravel = this.pageAnimation === 0 ? pageWidth :
-      this.pageAnimation === 1 ? Math.min(140, pageWidth * 0.18) :
-      this.pageAnimation === 2 ? Math.min(72, pageWidth * 0.07) : 0;
-    const verticalTravel = this.pageAnimation === 3 ? Math.min(180, pageHeight * 0.18) : 0;
-    const fade = this.pageAnimation === 2 || this.pageAnimation === 4;
+    const baseDuration = durationBySpeed[this.animationSpeed] ?? 360;
+    // 翻页方向：进度只增不减，负值一律算 PREVIOUS（上游 ReaderHorizontalDrag.capture 同口径）
+    const turnDirection = delta > 0 ? ReaderTransitionDirection.NEXT : ReaderTransitionDirection.PREVIOUS;
+    const mode = readerTransitionModeFromPageAnim(this.pageAnimation);
+    const pageExtentPx = this.getUIContext().vp2px(Math.max(1, this.readerContentWidth));
+    const pageHeightPx = this.getUIContext().vp2px(Math.max(1, this.viewportHeight));
+    const targetOffsetPx = turnDirection === ReaderTransitionDirection.NEXT ? -pageExtentPx : pageExtentPx;
+    const isPrevious = turnDirection === ReaderTransitionDirection.PREVIOUS;
+    // 仿真折页的触点起讫：起点由 ReaderCurlTouchPolicy.programmaticX/Y 给出，
+    // 终点把纸页送过对边，时长按剩余距离折算（上游 settlePageTurn 同款）。
+    const simulation = mode === ReaderTransitionMode.SIMULATION;
+    const startCurlX = simulation ? ReaderCurlTouchPolicy.programmaticX(isPrevious, pageExtentPx) : 0;
+    const startCurlY = simulation
+      ? ReaderCurlTouchPolicy.programmaticY(isPrevious, this.curlTouchY, pageHeightPx) : 0;
+    const endCurlX = isPrevious ? pageExtentPx : -pageExtentPx;
+    const endCurlY = simulation
+      ? ReaderCurlTouchPolicy.settledY(
+        ReaderCurlTouchPolicy.cornerY(isPrevious, startCurlY, pageHeightPx), pageHeightPx) : 0;
+    if (simulation) {
+      this.curlPrevious = isPrevious;
+      this.curlRevealProgress = 1;
+      this.curlTouchX = startCurlX;
+      this.curlTouchY = startCurlY;
+      this.curlCornerY = ReaderCurlTouchPolicy.cornerY(isPrevious, startCurlY, pageHeightPx);
+    }
+    const duration = simulation
+      ? Math.max(1, ReaderCurlTouchPolicy.settleDurationMillis(startCurlX, endCurlX, pageExtentPx, baseDuration))
+      : Math.max(1,
+        ReaderPageTransitionPolicy.settleDurationMillis(mode, 0, targetOffsetPx, pageExtentPx, baseDuration));
     this.pageTurnAnimating = true;
-    animateTo({ duration: duration / 2, curve: Curve.EaseIn }, () => {
-      this.pageTurnOffsetX = direction * horizontalTravel;
-      this.pageTurnOffsetY = direction * verticalTravel;
-      this.pageTurnOpacity = fade ? 0 : 1;
+    this.turnMode = mode;
+    this.turnTargetPageIndex = nextPageIndex;
+    this.turnTransition = new ReaderPageTransition();
+    this.turnTransition.direction = turnDirection;
+    this.turnTransition.pageExtentPx = pageExtentPx;
+    this.turnTransition.dragging = true;
+    // 转场交给画布自己画：旧页盖在新页上滑走，中间不留空帧。
+    // 不在这里用 animateTo 平移 ArkUI 节点——上游的位移是各页独立变换，不是整块视图移出再移回。
+    this.cancelTurnAnimator();
+    const animator = this.getUIContext().createAnimator({
+      duration: duration,
+      // 折页用线性：滑出本身就是主体动作，减速收尾会让人以为翻页卡住
+      easing: simulation ? 'linear' : 'ease-out',
+      delay: 0,
+      fill: 'forwards',
+      direction: 'normal',
+      iterations: 1,
+      begin: 0,
+      end: 1
     });
-    this.pageTurnTimer = setTimeout(() => {
-      this.currentPageIndex = nextPageIndex;
-      this.reportReaderPageProgress();
-      this.pageTurnOffsetX = reverseDirection * horizontalTravel;
-      this.pageTurnOffsetY = reverseDirection * verticalTravel;
-      this.pageTurnOpacity = fade ? 0 : 1;
-      animateTo({ duration: duration / 2, curve: Curve.EaseOut }, () => {
-        this.pageTurnOffsetX = 0;
-        this.pageTurnOffsetY = 0;
-        this.pageTurnOpacity = 1;
-      });
+    animator.onFrame = (progress: number) => {
+      if (simulation) {
+        this.curlTouchX = startCurlX + (endCurlX - startCurlX) * progress;
+        this.curlTouchY = startCurlY + (endCurlY - startCurlY) * progress;
+      } else {
+        this.turnTransition.offsetPx = targetOffsetPx * progress;
+      }
+      this.paintReaderCanvas();
+    };
+    animator.onFinish = () => {
+      this.currentPageIndex = this.turnTargetPageIndex;
+      this.turnTargetPageIndex = -1;
+      this.turnMode = ReaderTransitionMode.NONE;
+      this.turnTransition = new ReaderPageTransition();
       this.pageTurnAnimating = false;
-      this.pageTurnTimer = -1;
-    }, duration / 2);
+      this.turnAnimator = undefined;
+      // 上游 ReaderSelectionLifecyclePolicy：程序化翻页要清选区，否则旧页的选区会画到新页上
+      this.resetCanvasSelectionState();
+      // 换页后按新页重算底部对齐位移（只换索引不重排，避免翻页时整页重排卡顿）
+      this.refreshReaderBottomJustifyGap();
+      this.reportReaderPageProgress();
+      this.paintReaderCanvas();
+    };
+    this.turnAnimator = animator;
+    animator.play();
+  }
+
+  /** 打断正在跑的转场动画（关页、换章、重建分页时都要先停）。 */
+  private cancelTurnAnimator(): void {
+    const animator = this.turnAnimator;
+    this.turnAnimator = undefined;
+    if (animator !== undefined) {
+      try {
+        animator.cancel();
+      } catch (_) {
+      }
+    }
   }
 
   private resetPageTurnTransition(): void {
@@ -1714,6 +1894,10 @@ export struct ReaderPage {
       clearTimeout(this.pageTurnTimer);
       this.pageTurnTimer = -1;
     }
+    this.cancelTurnAnimator();
+    this.turnMode = ReaderTransitionMode.NONE;
+    this.turnTransition = new ReaderPageTransition();
+    this.turnTargetPageIndex = -1;
     this.pageTurnOffsetX = 0;
     this.pageTurnOffsetY = 0;
     this.pageTurnOpacity = 1;
@@ -2634,22 +2818,7 @@ export struct ReaderPage {
     return context.px2vp(context.fp2px(this.getReaderLetterSpacingFp(fontSize)));
   }
 
-  private getReaderTextLetterSpacingWidth(value: string, fontSize: number): number {
-    return this.getReaderTextGlyphCount(value) * this.getReaderLetterSpacingVp(fontSize);
-  }
-
-  private getReaderTextGlyphs(value: string): string[] {
-    const glyphs: string[] = [];
-    let cursor = 0;
-    while (cursor < value.length) {
-      const codePoint = value.codePointAt(cursor);
-      const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
-      glyphs.push(value.substring(cursor, nextCursor));
-      cursor = nextCursor;
-    }
-    return glyphs;
-  }
-
+  // 按 codePoint 数字形：代理对算一个字形，字间距是按字形数摊的。
   private getReaderTextGlyphCount(value: string): number {
     let count = 0;
     let cursor = 0;
@@ -2661,181 +2830,8 @@ export struct ReaderPage {
     return count;
   }
 
-  private getReaderGlyphGapAfter(
-    line: LocalReaderLine,
-    itemIndex: number,
-    glyphIndex: number,
-    glyphCount: number,
-    item: LocalReaderLineItem
-  ): number {
-    if (item.leadingIndent) { return 0; }
-    if (glyphIndex < glyphCount - 1) { return line.justifyGap; }
-    const nextItem = line.items[itemIndex + 1];
-    return nextItem !== undefined && !nextItem.leadingIndent ? line.justifyGap : 0;
-  }
-
-  private getCurrentPageSelectionParts(): ReaderTextSelectionPart[] {
-    const parts: ReaderTextSelectionPart[] = [];
-    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
-    if (!this.currentPageContainsImages()) {
-      const joinedPart = this.createJoinedPageSelectionPart();
-      if (joinedPart.value.length > 0) { parts.push(joinedPart); }
-      return parts;
-    }
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      const line = lines[lineIndex];
-      if (line === undefined) { continue; }
-      if (this.readerLineContainsImage(line)) {
-        for (let itemIndex = 0; itemIndex < line.items.length; itemIndex++) {
-          const item = line.items[itemIndex];
-          if (item !== undefined && item.kind === 'text') {
-            parts.push(this.createReaderTextSelectionPart([item]));
-          }
-        }
-      } else {
-        parts.push(this.createReaderTextSelectionPart(line.items));
-      }
-    }
-    return parts;
-  }
-
-  private currentPageContainsImages(): boolean {
-    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
-    for (let index = 0; index < lines.length; index++) {
-      const line = lines[index];
-      if (line !== undefined && this.readerLineContainsImage(line)) { return true; }
-    }
-    return false;
-  }
-
-  private createJoinedPageSelectionPart(): ReaderTextSelectionPart {
-    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
-    let value: string = '';
-    const positions: number[] = [];
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      const line = lines[lineIndex];
-      if (line === undefined) { continue; }
-      const linePart = this.createReaderTextSelectionPart(line.items);
-      if (linePart.value.length === 0) { continue; }
-      if (positions.length === 0) {
-        positions.push(linePart.positions[0] ?? line.startPosition);
-      } else {
-        value += '\n';
-        positions.push(linePart.positions[0] ?? line.startPosition);
-      }
-      value += linePart.value;
-      for (let offset = 1; offset < linePart.positions.length; offset++) {
-        positions.push(linePart.positions[offset] ?? line.endPosition);
-      }
-    }
-    if (positions.length === 0) { positions.push(0); }
-    return { value: value, positions: positions };
-  }
-
-  private readerLineContainsImage(line: LocalReaderLine): boolean {
-    for (let index = 0; index < line.items.length; index++) {
-      if (line.items[index]?.kind === 'image') { return true; }
-    }
-    return false;
-  }
-
-  private createReaderTextSelectionPart(items: LocalReaderLineItem[]): ReaderTextSelectionPart {
-    let value: string = '';
-    const positions: number[] = [];
-    for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-      const item = items[itemIndex];
-      if (item === undefined || item.kind !== 'text') { continue; }
-      if (positions.length === 0) { positions.push(item.startPosition); }
-      else { positions[positions.length - 1] = item.startPosition; }
-      value += item.value;
-      for (let offset = 0; offset < item.value.length; offset++) {
-        positions.push(item.startPosition + offset + 1);
-      }
-    }
-    if (positions.length === 0) { positions.push(0); }
-    return { value: value, positions: positions };
-  }
-
-  private getReaderSelectionPartIndex(lineIndex: number, itemIndex: number = -1): number {
-    if (!this.currentPageContainsImages()) { return 0; }
-    const lines = this.localReaderPages[this.currentPageIndex]?.lines ?? [];
-    let partIndex: number = 0;
-    for (let index = 0; index < Math.min(lineIndex, lines.length); index++) {
-      const line = lines[index];
-      if (line === undefined) { continue; }
-      if (this.readerLineContainsImage(line)) {
-        for (let item = 0; item < line.items.length; item++) {
-          if (line.items[item]?.kind === 'text') { partIndex++; }
-        }
-      } else if (line.items.some((item: LocalReaderLineItem) => item.kind === 'text')) {
-        partIndex++;
-      }
-    }
-    const currentLine = lines[lineIndex];
-    if (currentLine !== undefined && this.readerLineContainsImage(currentLine)) {
-      for (let item = 0; item < Math.max(0, itemIndex); item++) {
-        if (currentLine.items[item]?.kind === 'text') { partIndex++; }
-      }
-    }
-    return partIndex;
-  }
-
-  private updatePendingLineSelection(partIndex: number, selectionStart: number, selectionEnd: number): void {
-    const parts = this.getCurrentPageSelectionParts();
-    const part = parts[partIndex];
-    if (part === undefined) { return; }
-    const start = Math.max(0, Math.min(part.value.length, Math.trunc(Math.min(selectionStart, selectionEnd))));
-    const end = Math.max(start, Math.min(part.value.length, Math.trunc(Math.max(selectionStart, selectionEnd))));
-    const previousRange = this.pendingMarkingRanges.get(partIndex);
-    if (end <= start) {
-      this.pendingMarkingRanges.delete(partIndex);
-    } else {
-      const range: ReaderMarkingRange = { start: start, end: end };
-      this.pendingMarkingRanges.set(partIndex, range);
-    }
-    // 触感只在选区真正变化时给：上游 ReaderCanvasSurface.kt:1109 是「长按选中首个词」
-    // （此前没有选区），:1225 是「拖手柄后 updatedSelection != selection」。空选区不算。
-    const selectionChanged = previousRange === undefined
-      ? end > start
-      : (previousRange.start !== start || previousRange.end !== end);
-    if (selectionChanged && end > start) {
-      if (previousRange === undefined) {
-        ReaderHaptics.selectionStart(this.selectVibrator);
-      } else {
-        ReaderHaptics.selectionMove(this.selectVibrator);
-      }
-    }
-    this.rebuildPendingMarkingRange();
-  }
-
-  private rebuildPendingMarkingRange(): void {
-    const parts = this.getCurrentPageSelectionParts();
-    const ranges = Array.from(this.pendingMarkingRanges.entries()).sort((first, second) => first[0] - second[0]);
-    if (ranges.length === 0) {
-      this.pendingMarkingStart = -1;
-      this.pendingMarkingEnd = -1;
-      this.pendingMarkingText = '';
-      return;
-    }
-    const firstPart = parts[ranges[0]?.[0] ?? -1];
-    const firstRange = ranges[0]?.[1];
-    const lastPair = ranges[ranges.length - 1];
-    const lastPart = parts[lastPair?.[0] ?? -1];
-    if (firstPart === undefined || firstRange === undefined || lastPart === undefined || lastPair === undefined) { return; }
-    const start = firstPart.positions[firstRange.start] ?? 0;
-    const end = lastPart.positions[lastPair[1].end] ?? start;
-    if (end <= start) {
-      this.pendingMarkingStart = -1;
-      this.pendingMarkingEnd = -1;
-      this.pendingMarkingText = '';
-      return;
-    }
-    const rawText = this.localSemanticContent.substring(start, end);
-    const leftTrim = rawText.length - rawText.trimStart().length;
-    const selectedText = rawText.trim();
-    this.pendingMarkingStart = start + leftTrim;
-    this.pendingMarkingEnd = this.pendingMarkingStart + selectedText.length;
-    this.pendingMarkingText = selectedText;
+  private getReaderTextLetterSpacingWidth(value: string, fontSize: number): number {
+    return this.getReaderTextGlyphCount(value) * this.getReaderLetterSpacingVp(fontSize);
   }
 
   private createMarkingFromCurrentSelection(): void {
@@ -3050,69 +3046,6 @@ export struct ReaderPage {
     return [Math.max(0.1, this.dottedBase), Math.max(0.1, this.dottedRatio)];
   }
 
-  // 正文区实际内容宽度（不含左右内边距），撑满整行时的线段右端。
-  private resolveUnderlineLineEnd(line: LocalReaderLine): number {
-    const available = this.getBodyContentWidth();
-    if (this.underlineExtend) { return available; }
-    return Math.max(0, Math.min(available, line.contentWidth));
-  }
-
-  // 只累加同一列里排在 index 之前的行：双页时两列各有自己的纵向坐标，
-  // 上游每一列都从 paddingTop 重新开始（ReaderPaginator.advanceColumn）。
-  private readerPageLineOffset(index: number): number {
-    const page = this.localReaderPages[this.currentPageIndex];
-    if (page === undefined) { return 0; }
-    const column = this.lineColumnAt(index);
-    let offset = 0;
-    for (let lineIndex = 0; lineIndex < index; lineIndex++) {
-      if ((page.lineColumns[lineIndex] ?? 0) !== column) { continue; }
-      const line = page.lines[lineIndex];
-      if (line === undefined) { continue; }
-      offset += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
-    }
-    return offset;
-  }
-
-  private readerPageLinesTotalHeight(column: number = 0): number {
-    const page = this.localReaderPages[this.currentPageIndex];
-    if (page === undefined) { return 0; }
-    let usedHeight = 0;
-    for (let lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
-      if ((page.lineColumns[lineIndex] ?? 0) !== column) { continue; }
-      const line = page.lines[lineIndex];
-      if (line === undefined) { continue; }
-      usedHeight += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
-    }
-    return usedHeight;
-  }
-
-  // ReaderPageTextJoined 把整页塞进一个 Text，行与行之间只有统一 lineHeight，没有段距与段前空白。
-  private readerJoinedLineHeight(): number {
-    return Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10);
-  }
-
-  private readerUnderlineY(lineIndex: number, uniform: boolean): number {
-    if (uniform) {
-      return (lineIndex + 1) * this.readerJoinedLineHeight() + this.resolveUnderlineOffsetVp();
-    }
-    const line = this.localReaderPages[this.currentPageIndex]?.lines[lineIndex];
-    const height = line?.height ?? 0;
-    const spaceBefore = line?.verticalSpaceBefore ?? 0;
-    return this.readerPageLineOffset(lineIndex) + spaceBefore + height + this.resolveUnderlineOffsetVp();
-  }
-
-  private readerUnderlineLayerHeight(uniform: boolean, column: number = 0): number {
-    if (uniform) {
-      const page = this.localReaderPages[this.currentPageIndex];
-      let count = 0;
-      for (let lineIndex = 0; lineIndex < (page?.lines.length ?? 0); lineIndex++) {
-        if ((page?.lineColumns[lineIndex] ?? 0) === column) { count++; }
-      }
-      return Math.max(1, count * this.readerJoinedLineHeight());
-    }
-    return Math.max(1, this.readerPageLinesTotalHeight(column));
-  }
-
   // 分页正文统一由这些自绘线表达「正文下划线」，Text.decoration 只留给划线/高亮规则。
   // 必须自绘：ArkUI 的 TextDecorationStyle 不开放虚线段长、间隔与竖直偏移，上游这四项无法用装饰表达。
   // 每条 Line 都与本层同尺寸，坐标按整层计，于是可以直接用页级 y 定位到各自行底。
@@ -3187,41 +3120,6 @@ export struct ReaderPage {
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .backgroundColor('#E6242127')
     .borderRadius(20)
-  }
-
-  @Builder
-  private ReaderUnderlineLayer(uniform: boolean, column: number = 0) {
-    if (this.underline) {
-      Stack({ alignContent: Alignment.TopStart }) {
-        ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
-          (line: LocalReaderLine, lineIndex: number) => {
-            if (!line.imageOnly && this.lineColumnAt(lineIndex) === column) {
-              Line()
-                .width('100%')
-                .height(this.readerUnderlineLayerHeight(uniform, column))
-                .startPoint([0, this.readerUnderlineY(lineIndex, uniform)])
-                .endPoint([this.resolveUnderlineLineEnd(line), this.readerUnderlineY(lineIndex, uniform)])
-                .stroke(this.getReaderUnderlineColor())
-                .strokeWidth(this.resolveUnderlineWidthVp())
-                .strokeDashArray(this.resolveUnderlineDashArray())
-            }
-          }, (line: LocalReaderLine, lineIndex: number) =>
-            `${this.readerContentRevision}-underline-${this.currentPageIndex}-${lineIndex}-${column}-${uniform}-${this.underlinePadding}` +
-            `-${this.underlineExtend}-${this.dottedLine}-${this.dottedBase}-${this.dottedRatio}-${this.underlineHeight}`)
-      }
-      .width('100%')
-      .height(this.readerUnderlineLayerHeight(uniform, column))
-      .hitTestBehavior(HitTestMode.None)
-    }
-  }
-
-  private getReaderGlyphStartPosition(value: string, basePosition: number, glyphIndex: number): number {
-    let position = basePosition;
-    const glyphs = this.getReaderTextGlyphs(value);
-    for (let index = 0; index < glyphIndex; index++) {
-      position += glyphs[index]?.length ?? 0;
-    }
-    return position;
   }
 
   /**
@@ -3311,6 +3209,10 @@ export struct ReaderPage {
 
   /** 划词菜单条目的动作分发；只有三个本地已实现的能力。 */
   private runSelectionMenuAction(id: string): void {
+    // 老路径的 bindSelectionMenu 会在点中条目后自动收起菜单，画布上得自己收：
+    // 只藏菜单、保留选区色块，与 ArkUI 点完菜单仍保持选中的行为一致。
+    this.canvasSelectionMenuVisible = false;
+    this.paintReaderCanvas();
     if (id === 'menu_copy') { this.copyCurrentSelection(); return; }
     if (id === 'menu_bookmark') { this.bookmarkCurrentSelection(); return; }
     if (id === 'menu_mark') { this.createMarkingFromCurrentSelection(); return; }
@@ -3489,244 +3391,7 @@ export struct ReaderPage {
     return saved;
   }
 
-  @Builder
-  private ReaderGlyphSpan(
-    glyph: string,
-    start: number,
-    end: number,
-    gapAfter: number,
-    marking: ReaderMarking | undefined
-  ) {
-    if (marking === undefined && this.getHighlightStyle(start, end) === undefined) {
-      Span(glyph)
-        .fontSize(this.fontSize * 1.05)
-        .fontColor(this.getReadingTextColor())
-        .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
-    } else if (marking === undefined) {
-      Span(glyph)
-        .fontSize(this.fontSize * 1.05)
-        .fontColor(ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.textColor) ?? this.getReadingTextColor())
-        // Span 的背景只认 textBackgroundStyle，用 backgroundColor 会静默不渲染。
-        .textBackgroundStyle({ color: ReaderHighlightRuleEngine.colorToCss(this.getHighlightStyle(start, end)?.bgColor) ?? 'transparent' })
-        .decoration({
-          // 正文下划线改由 ReaderUnderlineLayer 自绘（ArkUI 的 TextDecoration 不开放虚线长度与偏移），
-          // 这里只保留高亮规则自带的划线，避免同一条线画两遍。
-          type: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
-            ? this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0)
-            : TextDecorationType.None,
-          color: ReaderHighlightRuleEngine.colorToCss(
-            this.getHighlightStyle(start, end)?.underlineColor ?? this.getHighlightStyle(start, end)?.textColor
-          ) ?? this.getReaderUnderlineColor(),
-          style: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
-            ? this.getHighlightDecorationStyle(this.getHighlightStyle(start, end)?.underlineMode ?? 0)
-            : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-          thicknessScale: this.getHighlightDecorationType(this.getHighlightStyle(start, end)?.underlineMode ?? 0) !== TextDecorationType.None
-            ? 1 : Math.max(0, this.underlineHeight)
-        })
-        .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
-    } else {
-      Span(glyph)
-        .fontSize(this.fontSize * 1.05)
-        .fontColor(marking.effect === 'text' ? marking.color : this.getReadingTextColor())
-        // 荧光/背景高亮同样只能靠 textBackgroundStyle 才真正上色。
-        .textBackgroundStyle({ color: this.getMarkingBackground(marking) })
-        .decoration({
-          // 同上：正文下划线自绘，这里只留划线自带的 decoration。
-          type: this.getMarkingDecorationType(marking) !== TextDecorationType.None
-            ? this.getMarkingDecorationType(marking)
-            : TextDecorationType.None,
-          color: marking.color.length > 0 ? marking.color : this.getReaderUnderlineColor(),
-          style: this.getMarkingDecorationType(marking) !== TextDecorationType.None
-            ? this.getMarkingDecorationStyle(marking)
-            : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-          thicknessScale: this.underline && this.getMarkingDecorationType(marking) === TextDecorationType.None
-            ? Math.max(0, this.underlineHeight) : 1
-        })
-        .letterSpacing(gapAfter + this.getReaderLetterSpacingFp(this.fontSize * 1.05))
-    }
-  }
-  @Builder
-  private ReaderPageTextJoined(column: number = 0) {
-    Text() {
-      ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
-        (line: LocalReaderLine, lineIndex: number) => {
-          if (this.lineColumnAt(lineIndex) === column) {
-          if (lineIndex > this.readerColumnFirstLineIndex(column)) {
-            Span('\n').fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
-          }
-          ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
-            if (item.kind === 'text') {
-              if (item.leadingIndent) {
-                Span(item.value).fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
-                  .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
-              } else {
-                ForEach(this.getReaderTextGlyphs(item.value), (glyph: string, glyphIndex: number) => {
-                  this.ReaderGlyphSpan(
-                    glyph,
-                    this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
-                    this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length,
-                    this.getReaderGlyphGapAfter(line, itemIndex, glyphIndex,
-                      this.getReaderTextGlyphCount(item.value), item),
-                    this.getMarkingForTextRange(
-                      this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
-                      this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length)
-                  )
-                }, (glyph: string, glyphIndex: number) =>
-                  `${this.readerContentRevision}-joined-${lineIndex}-${itemIndex}-${glyphIndex}-${glyph}`)
-              }
-            }
-          }, (item: LocalReaderLineItem, itemIndex: number) =>
-            `${this.readerContentRevision}-joined-${lineIndex}-${itemIndex}`)
-          }
-        }, (line: LocalReaderLine, lineIndex: number) =>
-          `${this.readerContentRevision}-joined-${this.currentPageIndex}-${lineIndex}`)
-    }
-    .fontSize(this.fontSize * 1.05)
-    .fontFamily(this.readerBodyFontFamily)
-    .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
-    .fontWeight(this.getReaderFontWeight())
-    .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
-    .decoration({ type: TextDecorationType.None })
-    .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
-    .width('100%')
-    .textAlign(TextAlign.Start)
-    .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
-    .copyOption(CopyOptions.InApp)
-    .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
-    .onTextSelectionChange((start: number, end: number) =>
-      this.updatePendingLineSelection(0, start, end))
-    .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
-      onMenuShow: (start: number, end: number) => {
-        this.selectionMenuMoreVisible = false;
-        this.updatePendingLineSelection(0, start, end);
-      }
-    })
-  }
 
-  @Builder
-  private ReaderPageTextLines(column: number = 0) {
-    ForEach(this.localReaderPages[this.currentPageIndex]?.lines ?? [],
-      (line: LocalReaderLine, lineIndex: number) => {
-        if (this.lineColumnAt(lineIndex) === column) {
-          this.ReaderPageTextLine(line, lineIndex, column)
-        }
-      },
-      (line: LocalReaderLine, lineIndex: number) =>
-        `${this.readerContentRevision}-${this.currentPageIndex}-${column}-${lineIndex}`)
-  }
-
-  // 该列的第一行在页内的行号；单页时恒为 0，双页第 1 列是它自己的首行。
-  private readerColumnFirstLineIndex(column: number): number {
-    const page = this.localReaderPages[this.currentPageIndex];
-    if (page === undefined) { return 0; }
-    for (let lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
-      if ((page.lineColumns[lineIndex] ?? 0) === column) { return lineIndex; }
-    }
-    return 0;
-  }
-
-  @Builder
-  private ReaderPageTextLine(line: LocalReaderLine, lineIndex: number, column: number = 0) {
-    if (this.readerLineContainsImage(line)) {
-      Row() {
-        ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
-          if (item.kind === 'image') {
-            Image(item.value)
-              .width(item.width)
-              .height(item.height)
-              .objectFit(ImageFit.Contain)
-              .alignSelf(ItemAlign.Center)
-              .margin({ right: this.getReaderLineGapAfter(line, itemIndex, item) })
-              .onClick(() => this.openReaderImage(item.value))
-          } else {
-            Text(item.value)
-              .fontSize(this.fontSize * 1.05)
-              .fontFamily(this.readerBodyFontFamily)
-              .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
-              .fontWeight(this.getReaderFontWeight())
-              .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
-              .fontColor(this.getReadingTextColor())
-              .decoration({ type: TextDecorationType.None })
-              .maxLines(1)
-              .height(line.height)
-              .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
-              .copyOption(CopyOptions.InApp)
-              .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
-              .onTextSelectionChange((start: number, end: number) =>
-                this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end))
-              .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
-                onMenuShow: (start: number, end: number) => {
-                  this.selectionMenuMoreVisible = false;
-                  this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex, itemIndex), start, end);
-                }
-              })
-          }
-        }, (item: LocalReaderLineItem, itemIndex: number) =>
-          `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${item.kind}`)
-      }
-      .width('100%')
-      .height(line.height)
-      .justifyContent(line.imageOnly ? FlexAlign.Center : FlexAlign.Start)
-      .margin({
-        top: line.verticalSpaceBefore,
-        bottom: line.paragraphSpacingAfter
-      })
-      // 底部对齐的位移必须用 translate 而不是 margin-top：margin 会参与布局累加，
-      // 第 i 行再加 gap*i 会让后面每一行都被前面所有位移推下去（总和 gap*n²/2），
-      // 行距越往下越疏、最后一行溢出屏幕。上游 justifyColumnBottom() 是逐行
-      // offsetY(deltaY) 平移，不改变布局流，这里用 translate 等价还原。
-      .translate({ y: this.readerBottomJustifyGap * (lineIndex - this.readerColumnFirstLineIndex(column)) })
-    } else {
-      Text() {
-        ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
-          if (item.leadingIndent) {
-            Span(item.value).fontSize(this.fontSize * 1.05).fontColor(this.getReadingTextColor())
-              .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
-          } else {
-            ForEach(this.getReaderTextGlyphs(item.value), (glyph: string, glyphIndex: number) => {
-              this.ReaderGlyphSpan(
-                glyph,
-                this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
-                this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length,
-                this.getReaderGlyphGapAfter(line, itemIndex, glyphIndex,
-                  this.getReaderTextGlyphCount(item.value), item),
-                this.getMarkingForTextRange(
-                  this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex),
-                  this.getReaderGlyphStartPosition(item.value, item.startPosition, glyphIndex) + glyph.length)
-              )
-            }, (glyph: string, glyphIndex: number) =>
-              `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${glyphIndex}-${glyph}`)
-          }
-        }, (item: LocalReaderLineItem, itemIndex: number) =>
-          `${this.readerContentRevision}-${lineIndex}-${itemIndex}-${item.kind}`)
-      }
-      .fontSize(this.fontSize * 1.05)
-      .fontFamily(this.readerBodyFontFamily)
-      .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
-      .fontWeight(this.getReaderFontWeight())
-      .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
-      .decoration({ type: TextDecorationType.None })
-      .lineHeight(line.height)
-      .width('100%')
-      .height(line.height)
-      .maxLines(1)
-      .textAlign(line.justifyGap > 0 ? TextAlign.JUSTIFY : TextAlign.Start)
-      .textSelectable(this.selectText ? TextSelectableMode.SELECTABLE_UNFOCUSABLE : TextSelectableMode.UNSELECTABLE)
-      .copyOption(CopyOptions.InApp)
-      .onClick((event: ClickEvent) => this.handleReaderTapAt(event.windowX, event.windowY))
-      .onTextSelectionChange((start: number, end: number) =>
-        this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end))
-      .bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {
-        onMenuShow: (start: number, end: number) => {
-          this.selectionMenuMoreVisible = false;
-          this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end);
-        }
-      })
-      .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
-      // 同上：底部对齐位移走 translate，不能塞进 margin。
-      .translate({ y: this.readerBottomJustifyGap * (lineIndex - this.readerColumnFirstLineIndex(column)) })
-    }
-  }
 
   private usesLocalPagination(): boolean {
     return (this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation !== 3;
@@ -3959,6 +3624,442 @@ export struct ReaderPage {
     this.contentHeight = Math.max(this.contentHeight, this.estimatedContentHeight);
   }
 
+  // -------------------------------------------------------------------------
+  // 画布渲染（阶段 A）
+  //
+  // 正文从「ArkUI 组件树逐行拼 Text/Span」改成「一个 Canvas 逐行绘制」，
+  // 对齐上游 feature/reader/ReaderCanvasSurface.kt：
+  //   - 页面窗口四页（previous/current/next/nextPlus）常驻内存，翻页只移动窗口；
+  //   - 绘制顺序由 ReaderPageTransitionPolicy.transforms() 的 currentOnTop 决定；
+  //   - 没有当前页（尺寸未就绪）就不画，绝不回落「整章滚动」那套排版。
+  // -------------------------------------------------------------------------
+
+  /** 当前视口下能拿到画布尺寸时才算就绪；尺寸为 0 时上游也是直接不画。 */
+  private canPaintReaderCanvas(): boolean {
+    return this.readerContentWidth > 0 && this.viewportHeight > 0 && this.localReaderPages.length > 0;
+  }
+
+  /**
+   * 构造一帧的绘制输入。
+   *
+   * 位移/透明度的口径：`ReaderPageTransitionPolicy.transforms()` 全部按 px 计算，
+   * 所以这里把 vp 的布局量统一换成 px，画布 context 也用 LengthMetricsUnit.PX。
+   */
+  private buildReaderCanvasRequest(transforms: ReaderTransitionTransforms): ReaderCanvasDrawRequest {
+    const request = new ReaderCanvasDrawRequest();
+    request.window = ReaderCanvasWindow.of(this.localReaderPages, this.currentPageIndex);
+    request.transforms = transforms;
+    request.layout = this.buildReaderCanvasLayout();
+    request.style = this.buildReaderCanvasStyle();
+    request.markings = this.buildReaderCanvasMarkings();
+    request.pageBackgroundArgb = this.readerCanvasPageBackgroundArgb();
+    // 纸面底色始终不透明：折页时每页要先铺自己的纸，否则两页文字互相透出
+    request.pageSurfaceArgb = this.readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
+    // 有自定义背景图时不铺纸面，否则背景图被纸色盖住
+    request.pageSurfaceOpaque = this.readerBackgroundImage.length === 0;
+    // 仿真折页：触点逐帧写入，绘制期只读；只有 SIMULATION 才走折页分支
+    request.curlActive = this.turnMode === ReaderTransitionMode.SIMULATION;
+    request.curlTouchX = this.curlTouchX;
+    request.curlTouchY = this.curlTouchY;
+    request.curlCornerY = this.curlCornerY;
+    request.curlRevealProgress = this.curlRevealProgress;
+    request.curlPrevious = this.curlPrevious;
+    // 选区：渲染坐标直接来自长按/拖把手，画布按元素切分后用 getRectsForRange 出高亮条带。
+    request.selectionStart = this.canvasSelectionStart;
+    request.selectionEnd = this.canvasSelectionEnd;
+    const context = this.getUIContext();
+    // 上游 SelectionHandleRadius = 7.dp、SelectionHandleStrokeWidth = 2.dp
+    request.handleRadiusPx = context.vp2px(7);
+    request.handleStrokeWidthPx = context.vp2px(2);
+    request.handleFillArgb = this.getReadingTextColor().length > 0
+      ? this.readerCanvasArgb(this.getReadingTextColor(), 0xFFFFFFFF) : 0xFFFFFFFF;
+    request.handleStrokeArgb = this.readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
+    return request;
+  }
+
+  private buildReaderCanvasLayout(): ReaderCanvasLayout {
+    const layout = new ReaderCanvasLayout();
+    const context = this.getUIContext();
+    const columnCount = Math.max(1, this.resolveReaderColumnCount());
+    const stride = Math.max(1, this.getColumnStrideWidth());
+    layout.columnCount = columnCount;
+    layout.columnStridePx = context.vp2px(stride);
+    layout.bodyWidthPx = context.vp2px(this.getBodyContentWidth());
+    layout.bodyHeightPx = context.vp2px(this.getBodyContentHeight(
+      this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0,
+      this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0));
+    // 列起点：第一列带左内边距与刘海内缩，第二列再偏移一个 stride。
+    // 纵向原点必须是 0：Canvas 在 Column 里排在页眉/标题之后，已经自带那段偏移，
+    // 这里再减一次 paddingTop + 页眉高度就会把正文整体往下推两遍。
+    const leftPadding = context.vp2px(this.paddingSettings.paddingLeft + this.readerCutoutLeftInset());
+    layout.originXpx = leftPadding;
+    layout.originYpx = 0;
+    layout.bottomJustifyGapPx = context.vp2px(this.readerBottomJustifyGap);
+    // 分页器的行高/字宽/图片尺寸都是 vp，绘制层要按 px 排，比例从这里带下去
+    layout.vpScale = context.vp2px(1);
+    layout.viewportWidthPx = context.vp2px(Math.max(1, this.readerContentWidth));
+    layout.viewportHeightPx = context.vp2px(Math.max(1, this.viewportHeight));
+    return layout;
+  }
+
+  private buildReaderCanvasStyle(): ReaderCanvasStyle {
+    const style = new ReaderCanvasStyle();
+    const context = this.getUIContext();
+    style.colorArgb = this.readerCanvasArgb(this.getReadingTextColor(), 0xFF000000);
+    style.fontFamilies = [this.readerBodyFontFamily];
+    style.fontSizePx = context.fp2px(this.fontSize * 1.05);
+    style.fontWeight = this.getReaderFontWeight();
+    style.italic = this.textItalic;
+    style.letterSpacingPx = context.vp2px(this.getReaderLetterSpacingVp(this.fontSize * 1.05));
+    style.underline = this.underline;
+    style.underlineColorArgb = this.readerCanvasArgb(this.getReaderUnderlineColor(), 0xFF3E3D3B);
+    style.underlineWidthPx = context.vp2px(this.resolveUnderlineWidthVp());
+    style.underlineOffsetPx = context.vp2px(this.resolveUnderlineOffsetVp());
+    style.underlineExtend = this.underlineExtend;
+    style.dashIntervals = this.resolveUnderlineDashArray().map((value: number) => context.vp2px(value));
+    return style;
+  }
+
+  /** 高亮/笔记：把本页可见的 marking 转成绘制层要的区间 + 颜色。 */
+  private buildReaderCanvasMarkings(): ReaderCanvasMarking[] {
+    const list: ReaderCanvasMarking[] = [];
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined) {
+      return list;
+    }
+    const chapterIndex = this.getChapterIndex();
+    for (let index = 0; index < this.markings.length; index++) {
+      const marking = this.markings[index];
+      if (!marking.enabled || marking.chapterIndex !== chapterIndex) {
+        continue;
+      }
+      if (marking.chapterPosition >= page.endPosition || marking.endPosition <= page.startPosition) {
+        continue;
+      }
+      const item = new ReaderCanvasMarking();
+      item.start = marking.chapterPosition;
+      item.end = marking.endPosition;
+      item.backgroundArgb = this.readerCanvasMarkingBackgroundArgb(marking);
+      item.decoration = this.readerCanvasMarkingDecoration(marking);
+      item.decorationArgb = this.readerCanvasArgb(marking.color, 0xFF000000);
+      list.push(item);
+    }
+    return list;
+  }
+
+  private readerCanvasMarkingBackgroundArgb(marking: ReaderMarking): number {
+    if (marking.effect !== 'highlight' && marking.effect !== 'background') {
+      return 0;
+    }
+    // 与 getMarkingBackground 同口径：#44RRGGBB
+    const base = this.readerCanvasArgb(marking.color, 0x00000000);
+    const alpha = (base >>> 24) & 0xFF;
+    if (alpha !== 0) {
+      return base;
+    }
+    return 0x44000000 | (base & 0x00FFFFFF);
+  }
+
+  private readerCanvasMarkingDecoration(marking: ReaderMarking): number {
+    if (marking.effect === 'solid') { return 1; }
+    if (marking.effect === 'dashed') { return 2; }
+    if (marking.effect === 'wave') { return 3; }
+    return 0;
+  }
+
+  private readerCanvasPageBackgroundArgb(): number {
+    // 有自定义背景图时画布不压底色（否则图片被盖住），由下层的 Image 兜底
+    if (this.readerBackgroundImage.length > 0) {
+      return 0x00000000;
+    }
+    return this.readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
+  }
+
+  /** #RGB / #RRGGBB / #AARRGGBB / 'transparent' → 0xAARRGGBB。解析失败用 fallback。 */
+  private readerCanvasArgb(value: string, fallback: number): number {
+    if (value.length === 0) {
+      return fallback;
+    }
+    if (value === 'transparent') {
+      return 0x00000000;
+    }
+    if (value.startsWith('#')) {
+      const hex = value.substring(1);
+      if (hex.length === 3) {
+        const r = Number.parseInt(`${hex[0]}${hex[0]}`, 16);
+        const g = Number.parseInt(`${hex[1]}${hex[1]}`, 16);
+        const b = Number.parseInt(`${hex[2]}${hex[2]}`, 16);
+        if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+          return (0xFF << 24) | (r << 16) | (g << 8) | b;
+        }
+      } else if (hex.length === 6) {
+        const parsed = Number.parseInt(hex, 16);
+        if (!Number.isNaN(parsed)) {
+          return (0xFF000000 | parsed) >>> 0;
+        }
+      } else if (hex.length === 8) {
+        const parsed = Number.parseInt(hex, 16);
+        if (!Number.isNaN(parsed)) {
+          return parsed >>> 0;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  /** 没有转场时的绘制：只画 current，屏幕不空靠 renderer 铺底色兜底。 */
+  /**
+   * 记下画布的实测高度并驱动一次重排。
+   * 首页会显示章节标题（那是画布之外的 ArkUI 组件），此时画布高度天然更矮，
+   * 不能拿它当「一页可分多少」的口径，所以首页不采信，等翻到第二页再校准。
+   */
+  private syncReaderCanvasBodyHeight(heightVp: number): void {
+    // 注意：Area 的 width/height 本来就是 vp（与 toDimension 的口径一致），
+    // 这里绝不能再 px2vp 一次，否则分页高度会被缩小约 2.75 倍、一页只剩几行。
+    if (heightVp <= 0) {
+      return;
+    }
+    if (this.currentPageIndex === 0 && this.isReaderTitleVisible()) {
+      return;
+    }
+    if (Math.abs(heightVp - this.readerCanvasBodyHeightVp) < 1) {
+      return;
+    }
+    this.readerCanvasBodyHeightVp = heightVp;
+    this.rebuildReaderPages();
+  }
+
+  private paintReaderCanvas(): void {
+    if (!this.readerCanvasReady) {
+      return;
+    }
+    if (!this.canPaintReaderCanvas()) {
+      return;
+    }
+    const transforms = this.turnMode === ReaderTransitionMode.NONE
+      ? new ReaderTransitionTransforms()
+      : ReaderPageTransitionPolicy.transforms(this.turnMode, this.turnTransition,
+        this.getUIContext().vp2px(Math.max(1, this.readerContentWidth)));
+    const request = this.buildReaderCanvasRequest(transforms);
+    const canvas = this.readerCanvasContext.canvas;
+    this.readerCanvasRenderer.draw(canvas, request);
+    this.readerCanvasContext.invalidate();
+    // 回填把手位置：拖把手时要用它判断有没有抓到，以及把菜单挪到选区上下方。
+    this.canvasHandleStartX = request.selectionStartX;
+    this.canvasHandleStartY = request.selectionStartY;
+    this.canvasHandleEndX = request.selectionEndX;
+    this.canvasHandleEndY = request.selectionEndY;
+    if (this.canvasSelectionMenuVisible) {
+      this.refreshCanvasSelectionMenuAnchor(request);
+    }
+  }
+
+  /** 菜单锚点：选区上方一排，放不下就挪到下方（上游 ReaderSelectionMenuAnchor）。 */
+  private refreshCanvasSelectionMenuAnchor(request: ReaderCanvasDrawRequest): void {
+    const context = this.getUIContext();
+    // 选区坐标是画布局部 px，菜单定位在外层 Stack 里，所以要加上画布自身在 Stack 中的偏移
+    const offsetVp = this.readerCanvasOffsetYVp;
+    const topVp = offsetVp + context.px2vp(Math.max(0, request.selectionTopY));
+    const bottomVp = offsetVp + context.px2vp(Math.max(0, request.selectionBottomY));
+    const centerVp = context.px2vp((request.selectionStartX + request.selectionEndX) / 2);
+    // 只在真的变了才写 @State，否则每次 paint 都触发一次 UI 重建，形成重绘循环
+    const menuX = Math.max(0, centerVp - 80);
+    const menuY = topVp > 56 ? topVp - 48 : bottomVp + 12;
+    if (Math.abs(menuX - this.canvasSelectionMenuX) > 0.5) {
+      this.canvasSelectionMenuX = menuX;
+    }
+    if (Math.abs(menuY - this.canvasSelectionMenuY) > 0.5) {
+      this.canvasSelectionMenuY = menuY;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 画布选区（阶段 C）：长按选词 → 拖把手 → 菜单
+  // 上游把这块放在 ReaderCanvasSurface.kt 的手势里（LONG_PRESS_TIMEOUT_MILLIS = 600L），
+  // 本地沿用同一套 pendingMarking* 记账，保证标笔记/复制/高亮链路完全不变。
+  // -------------------------------------------------------------------------
+
+  /** 只重置选区状态，不触发重绘（重排/翻页路径里调用，之后自己会画一次）。 */
+  private resetCanvasSelectionState(): void {
+    this.canvasCancelLongPress();
+    this.canvasSelectionStart = -1;
+    this.canvasSelectionEnd = -1;
+    this.canvasSelectionDragging = 0;
+    this.canvasSelectionMenuVisible = false;
+    this.selectionMenuMoreVisible = false;
+    this.pendingMarkingRanges.clear();
+    this.pendingMarkingStart = -1;
+    this.pendingMarkingEnd = -1;
+    this.pendingMarkingText = '';
+  }
+
+  /** 清空画布选区与菜单。 */
+  private clearCanvasSelection(): void {
+    this.resetCanvasSelectionState();
+    this.paintReaderCanvas();
+  }
+
+  private canvasCancelLongPress(): void {
+    if (this.canvasLongPressTimer >= 0) {
+      clearTimeout(this.canvasLongPressTimer);
+      this.canvasLongPressTimer = -1;
+    }
+  }
+
+  /** 长按：起选。上游 ReaderSelectionPolicy.startWord —— 命中整词而不是单字。 */
+  private startCanvasSelectionAt(xpx: number, ypx: number): void {
+    const geo = this.readerCanvasRenderer.getGeometry();
+    const box = this.readerCanvasRenderer.hitTestTextBox(xpx, ypx);
+    if (box === undefined || box.item === undefined) {
+      this.clearCanvasSelection();
+      return;
+    }
+    const style = this.buildReaderCanvasStyle();
+    const offset = this.readerCanvasRenderer.glyphOffsetAt(box, xpx, ypx, style);
+    const word = this.readerCanvasRenderer.wordRangeAt(box, offset, style);
+    const item = box.item;
+    let start = item.startPosition + offset;
+    let end = start;
+    if (word !== undefined && word.end > word.start) {
+      start = item.startPosition + word.start;
+      end = item.startPosition + word.end;
+    }
+    if (end <= start) {
+      // 空词（标点、空白）退化成单字，避免长按没反应
+      end = Math.min(item.endPosition, start + 1);
+    }
+    this.canvasSelectionStart = start;
+    this.canvasSelectionEnd = end;
+    this.canvasSelectionDragging = 0;
+    this.canvasSelectionMenuVisible = true;
+    this.selectionMenuMoreVisible = false;
+    ReaderHaptics.selectionStart(this.selectVibrator);
+    this.syncCanvasSelectionToPending();
+    this.paintReaderCanvas();
+  }
+
+  /**
+   * 拖把手：按抓到的把手把另一端点固定，只移动被抓的那一端。
+   * 上游是 grabbingStart/grabbingEnd + handleGrabOffset，本地等价于「锁定另一端」。
+   */
+  private dragCanvasSelectionTo(xpx: number, ypx: number): void {
+    if (this.canvasSelectionDragging === 0 || this.canvasSelectionStart < 0) {
+      return;
+    }
+    const box = this.readerCanvasRenderer.hitTestTextBox(xpx, ypx);
+    if (box === undefined || box.item === undefined) {
+      return;
+    }
+    const style = this.buildReaderCanvasStyle();
+    const offset = this.readerCanvasRenderer.glyphOffsetAt(box, xpx, ypx, style);
+    const position = box.item.startPosition + offset;
+    if (this.canvasSelectionDragging === 1) {
+      this.canvasSelectionStart = Math.min(position, this.canvasSelectionEnd - 1);
+    } else {
+      this.canvasSelectionEnd = Math.max(position, this.canvasSelectionStart + 1);
+    }
+    ReaderHaptics.selectionMove(this.selectVibrator);
+    this.syncCanvasSelectionToPending();
+    this.paintReaderCanvas();
+  }
+
+  /** 把画布选区写进 pendingMarking*，菜单动作（复制/书签/笔记）照旧可用。 */
+  private syncCanvasSelectionToPending(): void {
+    const start = this.canvasSelectionStart;
+    const end = this.canvasSelectionEnd;
+    this.pendingMarkingRanges.clear();
+    if (start < 0 || end <= start) {
+      this.pendingMarkingStart = -1;
+      this.pendingMarkingEnd = -1;
+      this.pendingMarkingText = '';
+      return;
+    }
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined) {
+      return;
+    }
+    // 画布选区跨多行时按行拆成多个 range，与老 Span 路径的 part 记账等价
+    for (let index = 0; index < page.lines.length; index++) {
+      const line = page.lines[index];
+      const lineStart = Math.max(start, line.startPosition);
+      const lineEnd = Math.min(end, line.endPosition);
+      if (lineEnd <= lineStart) {
+        continue;
+      }
+      const range: ReaderMarkingRange = { start: lineStart, end: lineEnd };
+      this.pendingMarkingRanges.set(index, range);
+    }
+    this.rebuildCanvasPendingMarkingRange(start, end);
+  }
+
+  /** 画布版 rebuildPendingMarkingRange：坐标已是渲染坐标，直接映射回源坐标再 trim。 */
+  private rebuildCanvasPendingMarkingRange(start: number, end: number): void {
+    const renderStart = Math.max(0, Math.min(this.localSemanticContent.length, start));
+    const renderEnd = Math.max(renderStart, Math.min(this.localSemanticContent.length, end));
+    const rawText = this.localSemanticContent.substring(renderStart, renderEnd);
+    const leftTrim = rawText.length - rawText.trimStart().length;
+    const selectedText = rawText.trim();
+    if (selectedText.length === 0) {
+      this.pendingMarkingStart = -1;
+      this.pendingMarkingEnd = -1;
+      this.pendingMarkingText = '';
+      return;
+    }
+    this.pendingMarkingStart = renderStart + leftTrim;
+    this.pendingMarkingEnd = this.pendingMarkingStart + selectedText.length;
+    this.pendingMarkingText = selectedText;
+  }
+
+  /** 是否抓到了把手（上游 handleHitRadius 判定）。 */
+  private canvasHandleHit(xpx: number, ypx: number): number {
+    if (this.canvasSelectionStart < 0 || this.canvasSelectionEnd <= this.canvasSelectionStart) {
+      return 0;
+    }
+    const radius = this.getUIContext().vp2px(7) + this.getUIContext().vp2px(10);
+    const startDistance = Math.sqrt(
+      (xpx - this.canvasHandleStartX) * (xpx - this.canvasHandleStartX) +
+      (ypx - this.canvasHandleStartY) * (ypx - this.canvasHandleStartY));
+    const endDistance = Math.sqrt(
+      (xpx - this.canvasHandleEndX) * (xpx - this.canvasHandleEndX) +
+      (ypx - this.canvasHandleEndY) * (ypx - this.canvasHandleEndY));
+    if (startDistance <= radius && startDistance <= endDistance) {
+      return 1;
+    }
+    if (endDistance <= radius) {
+      return 2;
+    }
+    return 0;
+  }
+
+
+  /** 页内容或样式变化：清段落缓存后重画。 */
+  private invalidateReaderCanvas(): void {
+    this.paintReaderCanvas();
+  }
+
+  /**
+   * 只影响绘制、不影响排版的样式变更（下划线、颜色、背景图）。
+   * 这些项不走 rebuildReaderPages——重排一次要全章测量，代价远大于重画一帧。
+   */
+  onReaderCanvasStyleChanged(): void {
+    this.paintReaderCanvas();
+  }
+
+  /**
+   * 四页窗口的图片预取。
+   * 上游 ReaderCanvasSurface.kt:414-430 把 current/next/previous/nextPlus 的图一起解进 LRU，
+   * 翻页那一刻绘制期直读必然命中，新页就不会闪「有字无图」的帧。
+   */
+  private prefetchReaderCanvasWindow(): void {
+    if (this.localReaderPages.length === 0) {
+      return;
+    }
+    const window = ReaderCanvasWindow.of(this.localReaderPages, this.currentPageIndex);
+    this.readerCanvasRenderer.prefetch(window).catch((error: Error) => {
+      console.warn(`[ReaderCanvas] 预取失败: ${error.message}`);
+    });
+  }
+
   private onReaderContentAreaChanged(oldArea: Area, newArea: Area): void {
     this.contentHeight = this.toDimension(newArea.height);
     this.rebuildReaderPages();
@@ -4132,7 +4233,11 @@ export struct ReaderPage {
           .opacity(this.backgroundImageAlpha())
           .hitTestBehavior(HitTestMode.None)
       }
-      if ((this.book.format === 'txt' || this.book.format === 'epub') && this.localReaderPages.length > 0 && this.pageAnimation !== 3) {
+      // 只要格式走本地分页，就一律进画布分支——哪怕这一帧还没有排好页。
+      // 上游 ReaderCanvasSurface.kt:254 是 `val current = pages.current ?: return`：
+      // 没有当前页就什么都不画，绝不换「整章连续滚动」那套排版兜底，
+      // 否则开书时先滚动再切分页，两套排版视觉不同，切换必然整页跳一次。
+      if ((this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation !== 3) {
         Stack({ alignContent: Alignment.TopEnd }) {
           Column() {
             if (this.isReaderHeaderVisible()) {
@@ -4154,34 +4259,21 @@ export struct ReaderPage {
             } else if (this.currentPageIndex === 0) {
               this.ReaderTitleSegments(false)
             }
-            // 正文与自绘下划线同层：下划线要按行底定位，只能叠在正文之上再往下画。
-            // 双页时两列并排，每列各自带左右内边距，与上游 columnStridePx 口径一致。
-            Row() {
-              ForEach(this.readerColumnIndexes(), (column: number) => {
-                Stack({ alignContent: Alignment.TopStart }) {
-                  Column() {
-                    if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
-                      this.ReaderPageTextLines(column)
-                    } else {
-                      this.ReaderPageTextJoined(column)
-                    }
-                    Blank().layoutWeight(1)
-                  }
-                  .width('100%')
-                  .height('100%')
-                  this.ReaderUnderlineLayer(!this.currentPageContainsImages() && this.readerBottomJustifyGap <= 0, column)
-                }
-                .width(this.getColumnStrideWidth())
-                .height('100%')
-                .padding({
-                  left: this.paddingSettings.paddingLeft,
-                  right: this.paddingSettings.paddingRight
-                })
-              }, (column: number) => `${this.readerContentRevision}-${this.currentPageIndex}-col-${column}`)
-            }
-            .width('100%')
-            .layoutWeight(1)
-            .alignItems(VerticalAlign.Top)
+            // 正文：单个 Canvas 逐行绘制（对齐上游 ReaderCanvasSurface）。
+            // 四页窗口按 z 序画进同一张画布，因此不能有多个 Canvas 抢同一个 context。
+            Canvas(this.readerCanvasContext)
+              .width('100%')
+              .layoutWeight(1)
+              .onReady(() => {
+                this.readerCanvasReady = true;
+                this.paintReaderCanvas();
+              })
+              .onAreaChange((oldArea: Area, newArea: Area) => {
+                // 菜单要定位在外层 Stack 里，记下画布自己的纵向偏移（Area 的 position 单位是 vp）
+                this.readerCanvasOffsetYVp = this.toDimension(newArea.position.y ?? 0);
+                this.syncReaderCanvasBodyHeight(this.toDimension(newArea.height));
+                this.paintReaderCanvas();
+              })
             if (this.isReaderFooterVisible()) {
               Column() { this.ReaderInfoRow(false) }
                 .width('100%')
@@ -4217,6 +4309,13 @@ export struct ReaderPage {
             .translate({ x: this.pageTurnOffsetX, y: this.pageTurnOffsetY + this.bookmarkPullOffset })
             .opacity(this.pageTurnOpacity)
           }
+          // 画布选区菜单：浮在选区上方（放不下就挪到下方），复用老路径同一套菜单项
+          if (this.canvasSelectionMenuVisible && this.canvasSelectionStart >= 0) {
+            Column() {
+              this.readerMarkingSelectionMenu()
+            }
+            .position({ x: this.canvasSelectionMenuX, y: this.canvasSelectionMenuY })
+          }
         }
         .width('100%')
         .height('100%')
@@ -4228,12 +4327,70 @@ export struct ReaderPage {
           this.rebuildReaderPages();
         })
         .gesture(GestureGroup(GestureMode.Parallel,
+          // 画布选区（阶段 C）：长按选词 → 拖把手。上游 LONG_PRESS_TIMEOUT_MILLIS = 600L。
+          LongPressGesture({ repeat: false, duration: 600 })
+            .onAction((event: GestureEvent) => {
+              const finger = event.fingerList !== undefined && event.fingerList.length > 0
+                ? event.fingerList[0] : undefined;
+              if (finger === undefined) {
+                return;
+              }
+              const context = this.getUIContext();
+              this.canvasLongPressX = context.vp2px(finger.localX);
+              // 手势挂在最外层 Stack 上，文字画布的局部坐标 = 手指坐标 - 画布自身偏移
+              this.canvasLongPressY = context.vp2px(Math.max(0, finger.localY - this.readerCanvasOffsetYVp));
+              this.startCanvasSelectionAt(this.canvasLongPressX, this.canvasLongPressY);
+              this.canvasSuppressTap = true;
+            }),
           TapGesture().onAction((event: GestureEvent) => {
             const finger = event.fingerList[0];
-            if (finger !== undefined) { this.handleReaderTapAt(finger.localX, finger.localY); }
+            if (finger !== undefined) {
+              if (this.canvasSuppressTap) {
+                this.canvasSuppressTap = false;
+                return;
+              }
+              if (this.canvasSelectionStart >= 0) {
+                // 有选区时单击先收掉选区与菜单，不要误触翻页/菜单热区
+                this.clearCanvasSelection();
+                return;
+              }
+              this.handleReaderTapAt(finger.localX, finger.localY);
+            }
           }),
           PanGesture({ direction: PanDirection.Horizontal })
+            .onActionStart((event: GestureEvent) => {
+              // 先判有没有抓到选区把手：抓到了这一段拖动就只挪把手，不翻页
+              if (this.canvasSelectionStart < 0) {
+                this.canvasSelectionDragging = 0;
+                return;
+              }
+              const context = this.getUIContext();
+              const finger = event.fingerList !== undefined && event.fingerList.length > 0
+                ? event.fingerList[0] : undefined;
+              if (finger === undefined) {
+                return;
+              }
+              this.canvasSelectionDragging = this.canvasHandleHit(context.vp2px(finger.localX),
+                context.vp2px(Math.max(0, finger.localY - this.readerCanvasOffsetYVp)));
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              if (this.canvasSelectionDragging === 0) {
+                return;
+              }
+              const context = this.getUIContext();
+              const finger = event.fingerList !== undefined && event.fingerList.length > 0
+                ? event.fingerList[0] : undefined;
+              if (finger === undefined) {
+                return;
+              }
+              this.dragCanvasSelectionTo(context.vp2px(finger.localX),
+                context.vp2px(Math.max(0, finger.localY - this.readerCanvasOffsetYVp)));
+            })
             .onActionEnd((event: GestureEvent) => {
+              if (this.canvasSelectionDragging !== 0) {
+                this.canvasSelectionDragging = 0;
+                return;
+              }
               // 上游 pageTouchSlop：配了正数就用配置值，0 表示用平台默认阈值 36vp
               const slop = this.pageTouchSlop > 0 ? this.pageTouchSlop : 36;
               if (event.offsetX < -slop) { this.turnReaderPage(1); }
