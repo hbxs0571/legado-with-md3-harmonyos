@@ -162,12 +162,12 @@
 
 - `readBodyToLh` 上游本就没有渲染效果，本地保持同样口径（只有可配 + 落库 + 随备份），不额外发明行高归一。
 - `paddingDisplayCutouts` 只处理左右与底部缺口，**顶部避让仍由外层状态栏 padding 承担**；上游在「状态栏占位消失」时还会额外补 `cutoutTopPx`，本地未实现该分支。
-- `<usehtml>` 富文本段本地按纯文本整段渲染（单个 part、不逐字排版），不执行 HTML。
-- `[newpage]` 换页与 `<usehtml>` 富文本段**未做设备端像素级取证**：当前模拟器没有一本正文可读的书（书架三本正文文件均已丢失），只做了代码侧只读证据链核对（`LocalTextSemantics.ets:94`/`:107`/`:113` 与 `LocalReaderPaginator.ets:306`/`:515`）。
+- **`<usehtml>` 富文本段实际没有渲染层**：`richHtml` 字段只在 `entry/src/main/ets/data/LocalTextSemantics.ets:16/103/125/158` 四处定义与赋值，全仓 grep `richHtml` 无任何消费点，`ReaderPage` 也不读它。2026-11-01 r299 实测：`adaptSpecialStyle=true` 下正文仍**字面显示** `<usehtml><b>粗体富文本块</b> 与 <i>斜体</i> …</usehtml>` 源码（截图 `tmp/y2.png`、`r4.png`）。即当前行为与「关闭适配特殊样式」在渲染结果上无差别，只有 `[newpage]` 换页是真生效的。
+- `[newpage]` 换页**已于 2026-11-01 r299 设备取证通过**：`np-test`（1450 B）在 `adaptSpecialStyle=true` 下分页 1/3→2/3→3/3、第 3 页首行是「　　第9段正文，出现在」、全文无字面 `[newpage]`；`false` 下同一本变 1/6 页。页数 3 vs 6 构成决定性对照。`paddingDisplayCutouts` 仍属未验（模拟器无显示缺口，`getWindowAvoidArea(TYPE_CUTOUT)` 返回 `visible=false`）。详见 `docs/VALIDATION.md` 的 r299 节。
 
 **验收**：见 `docs/VALIDATION.md` 的「2026-10-31 N 端 KI-A1 正文渲染适配四项」节。四个 Toggle 与四个存储键一一对应、拨动即落库、重启回显保持、测试值已复原出厂值。
 
-**本轮顺带修复的环境故障**（记入 VALIDATION 备查）：KI-A1 设备验收时发现 prefs 完全不落盘。排查后定位为 **prefs XML 被测试期 `hdc file send` 反复整文件覆盖后损坏** —— `hilog` 报 `E C01653/NativePreferences: ParseNodeElement: An unsupported element type was encountered in parsing = text` / `E ReadSettingXml: The error occurred during getting xml child elements` / `W ReloadFromDisk: ... reload result is 0`，于是 store 与磁盘脱钩，`put()`+`flush()` 静默成功但不写盘。推入一个只有 `<?xml version="1.0" encoding="UTF-8"?><preferences version="1.0"/>` 的空文件即恢复。**后续设备验收不要再整文件覆盖 prefs**，要注入测试值只拨 UI 控件。
+**本轮顺带修复的环境故障**（记入 VALIDATION 备查）：KI-A1 设备验收时发现 prefs 完全不落盘。排查后定位为 **prefs XML 被测试期 `hdc file send` 反复整文件覆盖后损坏** —— `hilog` 报 `E C01653/NativePreferences: ParseNodeElement: An unsupported element type was encountered in parsing = text` / `E ReadSettingXml: The error occurred during getting xml child elements` / `W ReloadFromDisk: ... reload result is 0`，于是 store 与磁盘脱钩，`put()`+`flush()` 静默成功但不写盘。推入一个只有 `<?xml version="1.0" encoding="UTF-8"?><preferences version="1.0"/>` 的空文件即恢复。**后续设备验收不要再整文件覆盖 prefs**。要注入测试值优先用 sed 就地改单个键（`sed 's|旧值|新值|' $P > /data/local/tmp/pv.xml && cp /data/local/tmp/pv.xml $P`，2026-11-01 r299 实测这条路安全，`bgStrNight`/`readBarStyle`/`readMenuBgColorNight` 等都即时生效），或直接拨 UI 控件；整文件 base64 覆盖会踩内存快照与磁盘脱钩（r299 改 `adaptSpecialStyle` 时复现过一次假阴性）。
 
 **KI-A2 菜单层依赖三项（已实现）** —— 覆盖 A-05 展示菜单项图标（`showMenuIcon`，`ReadSettings.kt:119`）、A-08 阅读标题补充信息（`showReadTitleAddition`，`ReadSettings.kt:55`）、A-17 阅读菜单不透明度（`menuAlpha`，`ReadSettings.kt:13`）。
 
@@ -187,7 +187,7 @@
 
 - `menuAlpha` 与 `showReadTitleAddition` **只落库不上屏** —— 上游本就没有消费点，本地不发明效果（与 KI-A3 `disableReturnKey`、KI-E6 `readMenuLensRadius` 同一判据）。
 - `showMenuIcon` 的作用域是本地「更多」**网格面板**，不是上游那种下拉菜单：本地顶栏溢出菜单 `TopActionOverflowMenu()`（`ReaderPage.ets:1836-1843`）用的 `MenuItem` 只接受 `startIcon: ResourceStr`，不接受自定义 Builder 组件，而本地图标是自绘的 `AppGlyph`（`components/AppGlyph.ets`）。
-- 「更多」面板的图标显隐**未做像素级取证**：模拟器书架三本书的正文文件均已丢失、`ReaderPage` 进不去，只有面板 Toggle 状态与 prefs 落库证据。
+- ~~「更多」面板的图标显隐未做像素级取证~~ —— **2026-11-01 r299 已补齐**。阅读页已可进（`the-metamorphosis` 正文完好），把底栏首格从 `settings` 换成 `more_actions` 打开「更多」网格面板后，`showMenuIcon` false vs true 的 changed px=79021（其中 78309 落在面板区 y>1400），即每个网格项左上角的 `AppGlyph` 图标整块出现/消失。同层另外两项也一并取了像素证据：`showMenuIcon` 对顶栏小图标位 changed px=792（bbox `x187-214 y59-99`，全落状态栏区）、`showBottomActionText` changed px=375981（底栏区 375553，开启后出现「更多操作 / 全文搜索 / 自动翻页 / 目录 / 朗读」五个标签）。详见 `docs/VALIDATION.md` 的 r299 节。
 
 **验收**：见 `docs/VALIDATION.md` 的「2026-11-01 N 端 KI-A2 菜单层依赖三项」节。两个 Toggle 拨动即落库、`aa force-stop` 重启后回显保持、prefs 三键（`showMenuIcon`/`showReadTitleAddition`/`menuAlpha`）齐备，测试值已复原。
 **KI-A3 禁用返回键（已实现，只做可配 + 落库 + 随备份）** —— 覆盖 A-06（`disableReturnKey`，`ReadSettings.kt:50`）。
@@ -570,8 +570,9 @@
 
 1. 本地用 ArkUI 的静态 `backdropBlur(radius)`，没有上游 `hazeState` 的内容自适应模糊；实际效果是「半径固定 + 底色按 `readMenuBlurAlpha` 折算不透明度（上限 0.6）」，不是真高斯采样。
 2. `readMenuLensRadius`（`ReadBookConfig.kt:114`，夹 0–48）不在本轮七行内；**2026-10-31 KI-E6 已补上落库（只落库不上屏，上游同样没有设置入口）**，见 KI-E6 段。
-3. 边框描边、模糊半径、模糊着色、文字色的**视觉变化未做像素级取证**：模拟器书架上书的正文文件已丢失、`ReaderPage` 进不去，只有面板值与 prefs 落库证据。
+3. ~~边框描边、模糊半径、模糊着色、文字色的视觉变化未做像素级取证~~ —— **2026-11-01 r299 已补齐**：边框宽度 0 vs 4 changed px=222402、模糊半径 0 vs 32 changed px=358357（正文区 0 变化）、模糊透明度 100 vs 20 changed px=290444、描边色 `#00FFFF` 后青色像素 19578 且横竖带位置与面板 `bounds` 一致。详见 `docs/VALIDATION.md` 的「2026-11-01 N 端 r299 菜单与正文视觉取证」。
 4. 上游「模糊色没有清除入口」这一约束本地照搬（`applyMenuColor` 对模糊色也支持再点同色清除，属**放宽**，不影响已有行为）。
+5. **`readMenuTopBarBlurMode` / `readMenuBottomBarBlurMode` 无消费点**：`ReaderPage.ets:261`/`:241` 只有 `@Prop` 声明，全仓 grep 只命中这两行；实测改值 `changed px=0`，即「顶栏/底栏模糊模式」开关落库但不改变任何像素。
 
 **验收**：`assembleHap` BUILD SUCCESSFUL（改动后两次，36 s 917 ms / 33 s 848 ms；补「菜单模糊透明度」接线后再一次 23 s 250 ms）。设备实测：边框开关关掉后「菜单栏边框宽度」「菜单栏边框颜色」两行整行消失、下方各项上移约 98 px，重新打开后恢复；边框宽度拖到 `4.000000`、模糊半径拖到 `32.000000`、模糊透明度拖到 `39.000000`，`aa force-stop` 重启后全部保持；三个颜色项弹层选色、跨进程保持、再点同色清除全部通过；复原到「边框开 / 宽度 1 / 半径 24 / 透明度 85 / 三色清空」。详见 [VALIDATION](VALIDATION.md) 的 `2026-10-31 N 端 KI-E2` 节。
 
@@ -598,7 +599,7 @@
 **已知差异**：
 1. **没有实现「换自定义图标图片」的选图入口**（上游 `OpenTitleBarCustomIconPicker`）。两个自定义图标串已落库、渲染侧 `decodeCustomIconMap` 已能解码并显示圆形图，但面板里选不了图。
 2. ArkUI 无液态玻璃材质，`readMenuFloatingIconLiquidGlass` 用「半透明前景色底」近似（`readerMenuForegroundAlpha('1F')`）。
-3. 浮动图标行的实际渲染（位置 0/1 在顶栏下、2/3 在菜单浮层上、自定义圆形图、玻璃底）**未做像素级取证** —— 模拟器书架正文文件丢失、`ReaderPage` 进不去。
+3. ~~浮动图标行的实际渲染未做像素级取证~~ —— **2026-11-01 r299 已补齐位置两项**：`titleBarIconPosition` 0 vs 3 changed px=131697（正文区 103120，图标行从顶栏下方移到菜单浮层上方）、0 vs 1 changed px=10541（bbox `x92-1189 y570-629`，同行改右对齐），像素分区与 `readerFloatingIconTopVisible()`/`readerFloatingIconBottomVisible()` 分支一致；「自定义圆形图 36dp」「玻璃底」仍只有代码与面板证据。详见 `docs/VALIDATION.md` 的 r299 节。
 
 **验收**：`assembleHap` BUILD SUCCESSFUL（改动后三次：44 s 860 ms / 27 s 44 ms / 27 s 223 ms）。设备实测：关掉「显示标题栏图标」后三项整行消失（dump 三项计数全为 0）、重新打开后恢复；位置下拉四项齐全，选「左上」后 `aa force-stop` 重启仍是「左上」（prefs `titleBarIconPosition` = `0.000000`）；液态玻璃开关打开后 prefs 为 `true`、重启保持；浮动图标配置面板标题为「浮动图标」、列表是顶栏按钮池，关掉「自动翻页」保存后 prefs `floatingIcons` 里 `autoPage` 由 `true` 变 `false`、重启保持；复原到「显示关 / 位置右下(3) / 液态玻璃关 / 图标池默认」。详见 [VALIDATION](VALIDATION.md) 的 `2026-10-31 N 端 KI-E3` 节。
 
@@ -626,7 +627,8 @@
 1. **「底栏按钮液态玻璃」只做了可配+落库**：`readerBottomBarButtonGlassEnabled()` 尚无调用点，按钮底色未真驱动。ArkUI 没有 `backdropBlur` 的等效物，上游的液态玻璃按钮在 HOS 上要靠半透明渐变近似，本轮未做近似（避免发明上游没有的视觉效果）。
 2. **「底栏模糊」的实际模糊未做**：本地只把「模糊模式」作为背景不透明度与渐变的开关使用，没有真的做背景模糊。上游的 `Haze` 在 `ReadBookMenuBarShared.kt` 里最终是按 alpha 叠半透明色，本地照此；但若上游在 API 13+ 走了真正的模糊材质，本地无法等价。
 3. **「底栏模糊样式」是本地新增的一条独立条目**（上游是同一 tab 内的下拉项，本地条目表原本没有它），因此 E 块已接数比未接减行数多 1。
-4. 圆角/悬浮/透明度/渐变的**像素级视觉对比未取证**：模拟器书架无正文可读、进不了阅读页，取不到底栏帧。
+4. ~~圆角/悬浮/透明度/渐变的像素级视觉对比未取证~~ —— **2026-11-01 r299 已补齐三组**：圆角 0 vs 32 changed px=13651（圆角 0 时 y=2250 行面板左缘 x=51 即开始、圆角 32 时 x=155，内缩 104px ≈ 30vp）、悬浮 vs 非悬浮 changed px=121541（悬浮态 x 155-1124、关闭后贴满 x 0-1279）、透明度 20 vs 100 changed px=290444。**仍未取证**：纯色 vs 渐变的渐变方向。详见 `docs/VALIDATION.md` 的 r299 节。
+5. **`readMenuBottomBarBlurMode` 无消费点**：`ReaderPage.ets:241` 只有 `@Prop` 声明、全仓无消费点，改值 `changed px=0`；`readerBottomBarButtonGlassEnabled()`（`:948`）全仓无调用点，底栏按钮液态玻璃也无渲染效果。两项都只做到「可配 + 落库」。
 
 **验收**：`assembleHap` BUILD SUCCESSFUL；设备（`127.0.0.1:5555`）实测底栏圆角 32→0 后退出重进仍为 0；关闭「底栏悬浮」→「底栏模糊样式」出现且「底栏液态玻璃」消失，重新打开则相反（两个方向都验过）；「底栏模糊」开关落库 `2`、「底栏按钮液态玻璃」落库 `true`；「底栏模糊样式」切「渐变」后条目副标题变「渐变」且**重启应用后保持**；「底栏模糊透明度」85→50 后重进仍为 50。完整记录见 [VALIDATION](VALIDATION.md)。
 
@@ -656,7 +658,7 @@
 2. 顶栏模糊的实际模糊半径同样未做（ArkUI 无模糊滤镜），只把 `readMenuBlurAlpha` 折算成填充不透明度（上限 0.6，对齐 `ReadBookMenuBarShared.kt:49-85` 的 `coerceAtMost(0.6f)`），与 KI-E4 底栏口径一致。
 3. 胶囊里的书名/章节名**只做展示、点不进去书籍详情**：上游 `TitleCapsuleGlassLayout`（`ReadBookMenuBarTitle.kt:492-620`）在非本地书上还有书源小圆点入口，本地 `ReaderPage` 没有 `onOpenBookInfo` 回调，暂无该入口。
 4. 「标题栏紧凑」在上游还会把「换源」「朗读音频下载」搬进悬浮菜单（`ReadBookMenuBarFloating.kt:190`）；本地没有悬浮菜单层，只实现「顶栏只留更多」这一半。
-5. 顶栏的**像素级视觉未取证**：模拟器书架上的书正文文件丢失、`ReaderPage` 进不去，取不到顶栏帧，六组视觉对比（书名位置四态、胶囊、紧凑、合并容器、图标样式三档、底色随透明度）只有面板值与落库证据。
+5. ~~顶栏的像素级视觉未取证~~ —— **2026-11-01 r299 已补齐五组**：`titleBarMode` 四档顶栏文字带各不相同（行投影区间见 r299 节）、胶囊 vs 非胶囊 changed px=242055、紧凑 changed px=2721（bbox `x187-1156 y59-280`）、图标样式三档 0→1 changed px=30656 / 1→2 changed px=29947、底色随透明度见 KI-E2 条。**仍未取证**：合并按钮的胶囊容器。详见 `docs/VALIDATION.md` 的 r299 节。
 
 **验收**：`assembleHap` BUILD SUCCESSFUL（两次：39 s 738 ms / 21 s 843 ms，无 ERROR）；设备实测（`127.0.0.1:5555`，API 26）：开「标题栏胶囊」后「标题栏模式」整行消失、关闭后恢复（两个方向都做了 `dumpLayout` 对照）；八项逐项拨动后退出设置页重进 + `aa force-stop` 重启应用，值全部跨进程保持；「标题栏模式」弹层四项文案与上游中文串一致。详见 [VALIDATION](../VALIDATION.md) 的 2026-10-31 KI-E5 节。
 
@@ -681,7 +683,7 @@
 **已知差异**
 
 1. `readMenuLensRadius` 只落库不上屏，`lens` 高光效果不实现（ArkUI 无液态玻璃材质）；这与 KI-A3 `disableReturnKey` 同一判据「上游有字段就保留、上游没有效果就不造」。
-2. `readBarStyleFollowPage` 只落库不上屏，靠 `ReaderPage.ets:1023 readerMenuBaseColor()` 的 `@Prop` 响应式重算等价实现，未做像素级取证。
+2. `readBarStyleFollowPage` 只落库不上屏，靠 `ReaderPage.ets:1023 readerMenuBaseColor()` 的 `@Prop` 响应式重算等价实现。**2026-11-01 r299 已补像素级取证**：`readBarStyle=1` + `bgStrNight=#1E88E5` 下顶栏主色 `(31,136,230)` 与正文主色 `(30,135,228)` 几乎同色；改 `readBarStyle=2` + `readMenuBgColorNight=#FF0000` 后顶栏变 `(202,34,57)` 而正文保持 `(30,135,228)`，两种底色来源的差异是决定性的。
 3. `moreActionsConfig` 的运行时真源仍是本地独立仓储 `ReaderMoreActionsRepository`（prefs `legado_reader_more_actions`，23 项，比上游 28 项少 `source_login`/`source_pay`/`edit_source`/`disable_source`/`ai_chat` 五项，与「在线书源 / AI」范围外一致），快照字段是它的备份投影，两者靠 `Index` 的双向编解码保持一致。
 4. 上游 `parseMoreActions` 的「未出现的项补 `true`」语义本地照抄；但本地默认池只有 23 项，备份串里若出现本地不认识的 id 会被 `decodeMoreActions` 过滤掉。
 
