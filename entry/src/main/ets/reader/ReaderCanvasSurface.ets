@@ -252,6 +252,118 @@ export class ReaderPageTransitionPolicy {
 }
 
 // ---------------------------------------------------------------------------
+// 连续滚动（照抄 ReaderScrollState.kt）
+// ---------------------------------------------------------------------------
+
+export enum ReaderScrollCrossing {
+  NONE = 0,
+  PREVIOUS = 1,
+  NEXT = 2
+}
+
+export class ReaderScrollResult {
+  offsetPx: number = 0;
+  crossing: ReaderScrollCrossing = ReaderScrollCrossing.NONE;
+  hitBoundary: boolean = false;
+}
+
+/** 一行的纵向区间（滚动坐标系，已含 stackOffset）。 */
+export class ReaderScrollLine {
+  top: number = 0;
+  bottom: number = 0;
+}
+
+export class ReaderScrollPolicy {
+  /**
+   * 滚动模式的下一页/上一页步距：滚到只剩一行，而不是整屏。
+   *
+   * 上游 `ReaderScrollPolicy.pageStep`：NEXT 取最远可见行的顶边、PREVIOUS 取最近
+   * 可见行的底边，钳进 [0, viewport]；为 0（整屏都被同一行占满）时退回整屏。
+   */
+  static pageStep(lines: ReaderScrollLine[], contentTopPx: number, contentBottomPx: number,
+    isPrevious: boolean, viewportExtentPx: number): number {
+    const viewport = viewportExtentPx > 0 ? viewportExtentPx : 1;
+    let maxTop = -Number.MAX_VALUE;
+    let minBottom = Number.MAX_VALUE;
+    let visible = 0;
+    for (const line of lines) {
+      if (line.bottom <= contentTopPx || line.top >= contentBottomPx) {
+        continue;
+      }
+      visible = visible + 1;
+      if (line.top > maxTop) {
+        maxTop = line.top;
+      }
+      if (line.bottom < minBottom) {
+        minBottom = line.bottom;
+      }
+    }
+    // 可见区里没有正文（整页是图或空白）：退化成整屏
+    if (visible === 0) {
+      return isPrevious ? viewport : -viewport;
+    }
+    const raw = isPrevious
+      ? viewport - (minBottom - contentTopPx)
+      : maxTop - contentTopPx;
+    const distance = Math.max(0, Math.min(viewport, raw));
+    const effective = distance > 0 ? distance : viewport;
+    return isPrevious ? effective : -effective;
+  }
+
+  /** 步进时长按位移折算（上游 stepDurationMillis，线性缓动）。 */
+  static stepDurationMillis(distancePx: number, viewportExtentPx: number,
+    animationSpeedMillis: number): number {
+    if (viewportExtentPx <= 0) {
+      return animationSpeedMillis;
+    }
+    const duration = animationSpeedMillis * Math.abs(distancePx) / viewportExtentPx;
+    return Math.max(1, Math.trunc(duration));
+  }
+
+  /**
+   * 把一次滚动位移落到偏移上，越过页边界时返回 crossing 让调用方换窗口。
+   * 上游 `ReaderScrollPolicy.apply` 逐分支照抄，含「章末不够一屏时钳回」的兜底。
+   */
+  static apply(offsetPx: number, deltaPx: number, previousExtentPx: number,
+    currentExtentPx: number, viewportExtentPx: number, hasPrevious: boolean,
+    hasNext: boolean): ReaderScrollResult {
+    const result = new ReaderScrollResult();
+    if (currentExtentPx <= 0) {
+      result.offsetPx = 0;
+      return result;
+    }
+    const next = offsetPx + deltaPx;
+    if (next > 0) {
+      if (hasPrevious && previousExtentPx > 0) {
+        result.offsetPx = next - previousExtentPx;
+        result.crossing = ReaderScrollCrossing.PREVIOUS;
+        return result;
+      }
+      result.offsetPx = 0;
+      result.hitBoundary = true;
+      return result;
+    }
+    if (!hasNext && next < 0 && next + currentExtentPx < viewportExtentPx) {
+      result.offsetPx = Math.min(0, viewportExtentPx - currentExtentPx);
+      result.hitBoundary = true;
+      return result;
+    }
+    if (next < -currentExtentPx) {
+      if (hasNext) {
+        result.offsetPx = next + currentExtentPx;
+        result.crossing = ReaderScrollCrossing.NEXT;
+        return result;
+      }
+      result.offsetPx = Math.min(0, viewportExtentPx - currentExtentPx);
+      result.hitBoundary = true;
+      return result;
+    }
+    result.offsetPx = next;
+    return result;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 页面窗口（照抄 ReaderPage.kt 的 ReaderPageWindow / ReaderPageNavigator.window）
 // ---------------------------------------------------------------------------
 
@@ -356,6 +468,32 @@ export class ReaderCanvasStyle {
 }
 
 /** 一条高亮 / 笔记标记，start/end 是渲染坐标（与 LocalReaderLineItem 同口径）。 */
+/** 分段后的「文本 + 生效样式」，供 ParagraphBuilder 逐段 pushStyle。 */
+class ReaderCanvasStyledSegment {
+  text: string = '';
+  range: ReaderCanvasStyleRange | undefined = undefined;
+}
+
+/**
+ * 正文样式区间（高亮规则 / 划线「文字颜色」）。
+ *
+ * 坐标与 `LocalReaderLineItem.startPosition` 同口径（渲染坐标）。
+ * 数组顺序即优先级：后面的区间覆盖前面的重叠部分——上游
+ * `LegacyReaderStyleRangeMapper.map()` 里高亮规则按 `position` 升序、用户划线
+ * 用 `priority = 10_000 + index` 压在上面，同一句里「上层的赢」。
+ */
+export class ReaderCanvasStyleRange {
+  start: number = 0;
+  end: number = 0;
+  /** 0 表示不覆盖文字颜色。 */
+  textColorArgb: number = 0;
+  /** 0 表示没有底色。 */
+  backgroundArgb: number = 0;
+  /** 0 无 / 1 实线 / 2 虚线 / 3 波浪 / 4 双线 / 6 删除线（对齐 TextDecorationType）。 */
+  decoration: number = 0;
+  decorationArgb: number = 0;
+}
+
 export class ReaderCanvasMarking {
   start: number = 0;
   end: number = 0;
@@ -372,6 +510,8 @@ export class ReaderCanvasDrawRequest {
   layout: ReaderCanvasLayout = new ReaderCanvasLayout();
   style: ReaderCanvasStyle = new ReaderCanvasStyle();
   markings: ReaderCanvasMarking[] = [];
+  /** 高亮规则命中的正文样式区间（底色/字色/下划线），与 markings 一起参与逐元素绘制。 */
+  highlights: ReaderCanvasStyleRange[] = [];
   /** 页面底色（画布先整体铺一层，滚动/翻页时就靠它保证不透明）。 */
   pageBackgroundArgb: number = 0xFFFFFFFF;
   /** 选区（渲染坐标，与 LocalReaderLineItem.startPosition 同口径）；start < 0 表示没有选区。 */
@@ -413,6 +553,20 @@ export class ReaderCanvasDrawRequest {
    * 文字互相透出。有自定义背景图时不能铺，否则图片被纸色盖住。
    */
   pageSurfaceOpaque: boolean = true;
+  /**
+   * 连续滚动（SCROLL）模式。
+   *
+   * 上游 `ReaderCanvasSurface.kt:1517-1540` 在滚动模式下走 `ScrollPageStack`：
+   * 四页按 `scrollExtentPx` 首尾堆叠、整栈按 `scrollOffsetPx` 平移，
+   * 而不是像分页那样给每页一个独立的翻页变换。
+   */
+  scrollActive: boolean = false;
+  /** 整栈的纵向平移（px，≤0 表示已经往上滚过一段）。 */
+  scrollOffsetPx: number = 0;
+  /** 章末页额外留白（上游 CHAPTER_END_PADDING_DP = 20dp）。 */
+  scrollEndPaddingPx: number = 0;
+  /** 本章最后一页的下标（章末留白只加在它身上）。 */
+  scrollLastPageIndex: number = -1;
   curlActive: boolean = false;
   curlTouchX: number = 0;
   curlTouchY: number = 0;
@@ -634,6 +788,11 @@ export class ReaderCanvasRenderer {
       this.drawCurl(canvas, request);
       return;
     }
+    // 连续滚动：四页按 extent 首尾堆叠、整栈平移（上游 ScrollPageStack）
+    if (request.scrollActive) {
+      this.drawScroll(canvas, request);
+      return;
+    }
     // z 序严格照上游 ReaderCanvasSurface.kt:1643-1663：
     //   currentOnTop && drawsNext → next
     //   → current
@@ -650,6 +809,124 @@ export class ReaderCanvasRenderer {
     }
     if (!transforms.currentOnTop && transforms.drawsNext) {
       this.drawSlot(canvas, window.next, transforms.next, request);
+    }
+  }
+
+  /**
+   * 连续滚动一帧（上游 `ScrollPageStack`，ReaderCanvasSurface.kt:1903-2057）。
+   *
+   * previous 放在 `offset − extent(previous)`、current 放在 `offset`、
+   * next 放在 `offset + extent(current)`、nextPlus 再往后一页；
+   * 每页按自己的 stackOffset 平移后整页绘制，超出视口的部分裁掉。
+   */
+  private drawScroll(canvas: drawing.Canvas, request: ReaderCanvasDrawRequest): void {
+    const window = request.window;
+    const current = window.current;
+    if (current === undefined) {
+      return;
+    }
+    const offset = request.scrollOffsetPx;
+    const currentExtent = this.pageScrollExtent(current.page, current.pageIndex, request);
+    if (window.previous !== undefined) {
+      this.drawScrollSlot(canvas, window.previous,
+        offset - this.pageScrollExtent(window.previous.page, window.previous.pageIndex, request),
+        request);
+    }
+    this.drawScrollSlot(canvas, current, offset, request);
+    if (window.next !== undefined) {
+      const nextOffset = offset + currentExtent;
+      this.drawScrollSlot(canvas, window.next, nextOffset, request);
+      if (window.nextPlus !== undefined) {
+        this.drawScrollSlot(canvas, window.nextPlus,
+          nextOffset + this.pageScrollExtent(window.next.page, window.next.pageIndex, request),
+          request);
+      }
+    }
+  }
+
+  /** 滚动栈里的一页：按 stackOffset 平移后整页画，超出视口的部分裁掉。 */
+  private drawScrollSlot(canvas: drawing.Canvas, slot: ReaderCanvasPage,
+    stackOffsetY: number, request: ReaderCanvasDrawRequest): void {
+    const layout = request.layout;
+    canvas.save();
+    // 滚动栈天然会画出视口之外（上一页还在上面、下一页还在下面），必须裁
+    canvas.clipRect({
+      left: 0, top: 0, right: layout.viewportWidthPx, bottom: layout.viewportHeightPx
+    }, drawing.ClipOp.INTERSECT, true);
+    canvas.translate(0, stackOffsetY);
+    if (request.pageSurfaceOpaque) {
+      this.fillPageSurface(canvas, request, layout.viewportWidthPx, layout.viewportHeightPx);
+    }
+    this.drawPage(canvas, slot.page, slot.pageIndex, request);
+    canvas.restore();
+  }
+
+  /**
+   * 一页在滚动栈里占的高度（px）。
+   *
+   * 上游 `scrollExtentPx` 就是排版游标（`ReaderPaginator.kt:1126-1172`）：
+   * 章末页额外加 `chapterEndPaddingPx`，且**不**向内容区高度收口——收口会让
+   * 残页后面的空白顶满一屏，必须滚过整屏空白才接上下一章正文。
+   */
+  pageScrollExtent(page: LocalReaderPage, pageIndex: number,
+    request: ReaderCanvasDrawRequest): number {
+    const vp = Math.max(0.0001, request.layout.vpScale);
+    let used = 0;
+    for (const line of page.lines) {
+      used += (line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter) * vp;
+    }
+    if (page.titleOnly && used <= 0) {
+      used = Math.max(1, request.layout.bodyHeightPx);
+    }
+    let extent = Math.max(1, used);
+    if (request.scrollLastPageIndex >= 0 && pageIndex === request.scrollLastPageIndex) {
+      extent += request.scrollEndPaddingPx;
+    }
+    return extent;
+  }
+
+  /**
+   * 四页在滚动坐标系里的所有文字行区间（pageStep 用）。
+   * 行坐标已含 stackOffset，调用方只需再传正文区的 contentTop / contentBottom。
+   */
+  scrollLineBoxes(request: ReaderCanvasDrawRequest): ReaderScrollLine[] {
+    const window = request.window;
+    const lines: ReaderScrollLine[] = [];
+    const current = window.current;
+    if (current === undefined) {
+      return lines;
+    }
+    const offset = request.scrollOffsetPx;
+    const currentExtent = this.pageScrollExtent(current.page, current.pageIndex, request);
+    if (window.previous !== undefined) {
+      this.pushScrollLineBoxes(lines, window.previous,
+        offset - this.pageScrollExtent(window.previous.page, window.previous.pageIndex, request),
+        request);
+    }
+    this.pushScrollLineBoxes(lines, current, offset, request);
+    if (window.next !== undefined) {
+      const nextOffset = offset + currentExtent;
+      this.pushScrollLineBoxes(lines, window.next, nextOffset, request);
+      if (window.nextPlus !== undefined) {
+        this.pushScrollLineBoxes(lines, window.nextPlus,
+          nextOffset + this.pageScrollExtent(window.next.page, window.next.pageIndex, request),
+          request);
+      }
+    }
+    return lines;
+  }
+
+  private pushScrollLineBoxes(out: ReaderScrollLine[], slot: ReaderCanvasPage,
+    stackOffsetY: number, request: ReaderCanvasDrawRequest): void {
+    const vp = Math.max(0.0001, request.layout.vpScale);
+    let used = 0;
+    for (const line of slot.page.lines) {
+      const top = stackOffsetY + used + line.verticalSpaceBefore * vp;
+      const box = new ReaderScrollLine();
+      box.top = top;
+      box.bottom = top + Math.max(1, line.height * vp);
+      out.push(box);
+      used += (line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter) * vp;
     }
   }
 
@@ -968,7 +1245,8 @@ export class ReaderCanvasRenderer {
           const extraSpacingPx = line.justifyGap > 0 && !item.leadingIndent ? line.justifyGap * vp : 0;
           box.extraSpacingPx = extraSpacingPx;
           box.widthPx = Math.max(1, item.width * vp + extraSpacingPx * Math.max(0, item.value.length - 1));
-          const built = this.getParagraph(item.value, request.style, box.widthPx, extraSpacingPx);
+          const built = this.getParagraph(item.value, request.style, box.widthPx, extraSpacingPx,
+            this.styleRangesForItem(item, request));
           const builtHeight = built !== undefined ? built.heightPx : line.height * vp;
           box.top = top + Math.max(0, (line.height * vp - builtHeight) / 2);
           box.heightPx = builtHeight;
@@ -1017,7 +1295,8 @@ export class ReaderCanvasRenderer {
     if (item === undefined) {
       return;
     }
-    const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx);
+    const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx,
+      this.styleRangesForItem(item, request));
     if (built === undefined) {
       return;
     }
@@ -1287,15 +1566,154 @@ export class ReaderCanvasRenderer {
   }
 
   /** 段落缓存：key 必须含全部影响排版与外观的输入，否则样式切换会命中旧段落。 */
+  /** 分段样式的缓存签名：任何一栏变化都必须换 key。 */
+  private static styleSignature(ranges: ReaderCanvasStyleRange[]): string {
+    let out = '';
+    for (const range of ranges) {
+      out += `${range.start}-${range.end}-${range.textColorArgb}-${range.backgroundArgb}-` +
+        `${range.decoration}-${range.decorationArgb};`;
+    }
+    return out;
+  }
+
+  /**
+   * 按区间边界把一段文字切成「文本 + 生效样式」的小段。
+   * 区间顺序即优先级：后出现的覆盖先出现的（高亮规则在前、用户划线在后）。
+   */
+  private static splitStyledSegments(value: string,
+    ranges: ReaderCanvasStyleRange[]): ReaderCanvasStyledSegment[] {
+    if (ranges.length === 0) {
+      return [{ text: value, range: undefined }];
+    }
+    const points: number[] = [0, value.length];
+    for (const range of ranges) {
+      points.push(Math.max(0, Math.min(value.length, range.start)));
+      points.push(Math.max(0, Math.min(value.length, range.end)));
+    }
+    points.sort((left: number, right: number) => left - right);
+    const cuts: number[] = [];
+    for (const point of points) {
+      if (cuts.length === 0 || cuts[cuts.length - 1] !== point) {
+        cuts.push(point);
+      }
+    }
+    const segments: ReaderCanvasStyledSegment[] = [];
+    for (let index = 0; index + 1 < cuts.length; index++) {
+      const start = cuts[index];
+      const end = cuts[index + 1];
+      if (start === undefined || end === undefined || end <= start) {
+        continue;
+      }
+      let winner: ReaderCanvasStyleRange | undefined = undefined;
+      for (const range of ranges) {
+        if (range.start <= start && range.end >= end) {
+          winner = range;
+        }
+      }
+      segments.push({ text: value.substring(start, end), range: winner });
+    }
+    return segments;
+  }
+
+  /**
+   * 把基础 TextStyle 与一段生效样式合成。
+   * 老路径用 `textBackgroundStyle` 铺底色，画布对应 `backgroundRect`；
+   * 下划线对应 `decoration`（虚线/波浪/双线由 `decorationStyle` 表达）。
+   */
+  private static segmentStyle(base: text.TextStyle,
+    range: ReaderCanvasStyleRange | undefined): text.TextStyle {
+    if (range === undefined) {
+      return base;
+    }
+    const out: text.TextStyle = {
+      fontFamilies: base.fontFamilies,
+      fontSize: base.fontSize,
+      fontWeight: base.fontWeight,
+      fontStyle: base.fontStyle,
+      letterSpacing: base.letterSpacing,
+      color: range.textColorArgb !== 0 ? readerCanvasColor(range.textColorArgb) : base.color
+    };
+    if (range.backgroundArgb !== 0) {
+      // RectStyle 的四个圆角是必填项（API 12），底色块照老路径 textBackgroundStyle 画直角
+      out.backgroundRect = {
+        color: readerCanvasColor(range.backgroundArgb),
+        leftTopRadius: 0,
+        rightTopRadius: 0,
+        rightBottomRadius: 0,
+        leftBottomRadius: 0
+      };
+    }
+    if (range.decoration !== 0) {
+      const decoration: text.Decoration = {
+        textDecoration: ReaderCanvasRenderer.decorationType(range.decoration),
+        color: readerCanvasColor(range.decorationArgb !== 0 ? range.decorationArgb : range.textColorArgb),
+        decorationStyle: ReaderCanvasRenderer.decorationLineStyle(range.decoration),
+        decorationThicknessScale: 1
+      };
+      out.decoration = decoration;
+    }
+    return out;
+  }
+
+  private static decorationType(mode: number): text.TextDecorationType {
+    if (mode === 6) {
+      return text.TextDecorationType.LINE_THROUGH;
+    }
+    if (mode >= 1 && mode <= 4) {
+      return text.TextDecorationType.UNDERLINE;
+    }
+    return text.TextDecorationType.NONE;
+  }
+
+  private static decorationLineStyle(mode: number): text.TextDecorationStyle {
+    if (mode === 2) {
+      return text.TextDecorationStyle.DASHED;
+    }
+    if (mode === 3) {
+      return text.TextDecorationStyle.WAVY;
+    }
+    if (mode === 4) {
+      return text.TextDecorationStyle.DOUBLE;
+    }
+    return text.TextDecorationStyle.SOLID;
+  }
+
+  /** 取该元素命中的样式区间（换算成元素内局部下标，顺序不变）。 */
+  private styleRangesForItem(item: LocalReaderLineItem,
+    request: ReaderCanvasDrawRequest): ReaderCanvasStyleRange[] {
+    const out: ReaderCanvasStyleRange[] = [];
+    if (request.highlights.length === 0) {
+      return out;
+    }
+    for (const range of request.highlights) {
+      const start = Math.max(range.start, item.startPosition);
+      const end = Math.min(range.end, item.endPosition);
+      if (end <= start) {
+        continue;
+      }
+      const local = new ReaderCanvasStyleRange();
+      local.start = start - item.startPosition;
+      local.end = end - item.startPosition;
+      local.textColorArgb = range.textColorArgb;
+      local.backgroundArgb = range.backgroundArgb;
+      local.decoration = range.decoration;
+      local.decorationArgb = range.decorationArgb;
+      out.push(local);
+    }
+    return out;
+  }
+
   private getParagraph(value: string, style: ReaderCanvasStyle, widthPx: number,
-    extraSpacingPx: number = 0): ReaderCanvasParagraph | undefined {
+    extraSpacingPx: number = 0, ranges: ReaderCanvasStyleRange[] = []): ReaderCanvasParagraph | undefined {
     if (value.length === 0) {
       return undefined;
     }
     // extraSpacingPx 是行内拉伸叠进 letterSpacing 的部分，必须进 key，否则拉伸量不同的行会命中同一段落
     const letterSpacingPx = style.letterSpacingPx + extraSpacingPx;
+    // 分段样式也要进 key：同一段文字在不同高亮规则下是不同的段落
+    const signature = ranges.length === 0 ? '' : ReaderCanvasRenderer.styleSignature(ranges);
     const key = `${style.fontFamilies.join(',')}|${style.fontSizePx}|${style.fontWeight}|${style.italic ? 1 : 0}` +
-      `|${letterSpacingPx}|${Math.round(widthPx)}|${value}`;
+      `|${letterSpacingPx}|${Math.round(widthPx)}|${signature}|${value}`;
     const cached = this.paragraphCache.get(key);
     if (cached !== undefined) {
       return cached;
@@ -1316,8 +1734,18 @@ export class ReaderCanvasRenderer {
         maxLines: 1
       };
       const builder = new text.ParagraphBuilder(paragraphStyle, text.FontCollection.getGlobalInstance());
-      builder.pushStyle(textStyle);
-      builder.addText(value);
+      const segments = ReaderCanvasRenderer.splitStyledSegments(value, ranges);
+      if (segments.length <= 1 && ranges.length === 0) {
+        builder.pushStyle(textStyle);
+        builder.addText(value);
+      } else {
+        // 分段：每段 pushStyle 后再 addText，等价于老路径的逐样式 Span
+        for (const segment of segments) {
+          builder.pushStyle(ReaderCanvasRenderer.segmentStyle(textStyle, segment.range));
+          builder.addText(segment.text);
+          builder.popStyle();
+        }
+      }
       const paragraph = builder.build();
       // 排版宽度要比测量宽度留一点余量：分页器的宽度是「测量结果 + 字间距」算出来的，
       // 与 Paragraph 自己带 letterSpacing 的真实排版可能差零点几 px；若按 item.width 精确排版，

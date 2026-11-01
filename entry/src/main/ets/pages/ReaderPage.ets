@@ -1,7 +1,7 @@
 import { Book } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
-import { ReaderHighlightRule, ReaderHighlightRange, ReaderHighlightStyle } from '../model/ReaderHighlightRule';
+import { ReaderHighlightRule, ReaderHighlightRange } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
 import { ReaderHaptics } from '../data/ReaderHaptics';
@@ -28,8 +28,10 @@ import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPagin
 import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
 import {
   ReaderCanvasDrawRequest, ReaderCanvasItemBox, ReaderCanvasLayout, ReaderCanvasMarking, ReaderCanvasPage,
-  ReaderCanvasRenderer, ReaderCanvasStyle, ReaderCanvasWindow, ReaderPageTransform, ReaderPageTransition,
-  ReaderPageTransitionPolicy, ReaderTransitionDirection, ReaderTransitionMode, ReaderTransitionTransforms,
+  ReaderCanvasRenderer, ReaderCanvasStyle, ReaderCanvasStyleRange, ReaderCanvasWindow, ReaderPageTransform,
+  ReaderPageTransition,
+  ReaderPageTransitionPolicy, ReaderScrollCrossing, ReaderScrollPolicy, ReaderScrollResult,
+  ReaderTransitionDirection, ReaderTransitionMode, ReaderTransitionTransforms,
   readerTransitionModeFromPageAnim
 } from '../reader/ReaderCanvasSurface';
 import {
@@ -92,19 +94,6 @@ const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
 };
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
-interface ReaderHighlightTextRun {
-  value: string;
-  // 不用嵌套对象：ArkUI 的 @Builder 按值传参会丢失嵌套字段，这里全部拍平为基本类型。
-  textColor: string;
-  backgroundColor: string;
-  underlineMode: number;
-  underlineColor: string;
-  // 划线/笔记的装饰属性也在 run 里算好：@Builder 里再查标记会读不到最新的 markings。
-  decorationType: TextDecorationType;
-  decorationStyle: TextDecorationStyle;
-  decorationColor: string;
-  decorationThickness: number;
-}
 interface ReaderContentSegment {
   kind: 'text' | 'image';
   value: string;
@@ -413,8 +402,6 @@ export struct ReaderPage {
   @State activeImageStyle: string = 'DEFAULT';
   @State readerProgress: number = 0;
   @State sliderProgressIndex: number = 0;
-  @State contentHeight: number = 0;
-  @State estimatedContentHeight: number = 0;
   @State viewportHeight: number = 0;
   @State readerContentWidth: number = 0;
   @State readerContentRevision: number = 0;
@@ -504,7 +491,12 @@ export struct ReaderPage {
   private curlTouchY: number = 0;
   private curlCornerY: number = 0;
   private curlRevealProgress: number = 1;
+  /** 连续滚动纵向拖动起点（vp），拖动期以它为基准加位移，避免累积误差。 */
+  private scrollDragStartOffset: number = 0;
   private curlPrevious: boolean = false;
+  // 高亮样式区间的构造缓存（翻页动画每帧都会重建 request，不缓存会每帧新建上千对象）
+  private canvasHighlights: ReaderCanvasStyleRange[] = [];
+  private canvasHighlightSignature: string = '';
   // 翻页动画期的临时页索引：COVER 期间旧页仍是 currentPageIndex，新页已经作为 next 参与绘制，
   // 动画收尾才把索引换过去 —— 这样任何一帧都不会出现「两页都没画」。
   private turnTargetPageIndex: number = -1;
@@ -528,7 +520,6 @@ export struct ReaderPage {
   @Prop autoReadSpeedSeconds: number = 10;
   private autoPageTimer: number = -1;
   private titleGeneration: number = 0;
-  private readerScroller: Scroller = new Scroller();
   private readerSystemBarRequestId: number = 0;
   /** 状态栏图标色的请求序号：连续改色时只认最后一次，避免异步返回乱序。 */
   private readerStatusBarIconRequestId: number = 0;
@@ -629,10 +620,6 @@ export struct ReaderPage {
     if (this.startPositionPending) {
       this.restoredProgressPosition = false;
       this.scrollOffset = 0;
-      try {
-        this.readerScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
-      } catch (_) {
-      }
       this.rebuildReaderPages();
     }
     this.loadContentImageSizes();
@@ -687,10 +674,6 @@ export struct ReaderPage {
     this.sliderProgressIndex = 0;
     this.restoredProgressPosition = false;
     this.scrollOffset = 0;
-    try {
-      this.readerScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
-    } catch (_) {
-    }
     this.rebuildReaderPages();
   }
 
@@ -1259,13 +1242,7 @@ export struct ReaderPage {
     this.lastReportedProgress = this.readerProgress;
     this.sliderProgressIndex = this.getChapterIndex();
     this.restoredProgressPosition = false;
-    this.contentHeight = 0;
-    this.estimatedContentHeight = 0;
     this.scrollOffset = 0;
-    try {
-      this.readerScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
-    } catch (_) {
-    }
     this.rebuildReaderPages();
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
@@ -1341,21 +1318,14 @@ export struct ReaderPage {
     this.refreshContentProcesses();
     this.readerContentRevision++;
     this.imageSizes = new Map<string, ReaderIntrinsicImageSize>();
-    this.contentHeight = 0;
-    this.estimatedContentHeight = 0;
     this.scrollOffset = 0;
     this.restoredProgressPosition = false;
     this.currentPageIndex = 0;
     this.localReaderPages = [];
     this.localSemanticContent = '';
     this.localSemanticDocument = { paragraphs: [], content: '', sourceLength: 0, sourcePositionMap: [0] };
-    this.refreshEstimatedContentHeight();
     this.loadContentImageSizes();
     this.rebuildReaderPages();
-    try {
-      this.readerScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
-    } catch (_) {
-    }
   }
 
   onPaginationInputsChanged(): void {
@@ -1408,12 +1378,6 @@ export struct ReaderPage {
         ? this.currentPageIndex : this.getChapterIndex());
   }
 
-  private openReaderImage(uri: string): void {
-    if (this.clickImageBehavior !== '1' || uri.length === 0) { return; }
-    this.imagePreviewUri = uri;
-    this.imagePreviewVisible = true;
-    this.onOpenImagePreview(uri);
-  }
 
   private closeReaderImagePreview(): void {
     if (!this.imagePreviewVisible) { return; }
@@ -1431,8 +1395,6 @@ export struct ReaderPage {
     this.restoredProgressPosition = false;
     if (this.pageAnimation === 3) {
       this.scrollOffset = 0;
-      this.contentHeight = 0;
-      this.estimatedContentHeight = 0;
     } else {
       this.rebuildReaderPages();
     }
@@ -1624,6 +1586,9 @@ export struct ReaderPage {
 
   private calculateReaderBottomJustifyGap(pageHeight: number, lineHeight: number, titleReservedLines: number): number {
     if (!this.textBottomJustify) { return 0; }
+    // 连续滚动没有「页底」这个概念：页高就是内容高，把剩余高度摊进行间会把
+    // 下一章的行推到本页已有的行上（画布按 extent 堆叠，靠位移区分页）。
+    if (this.usesCanvasScroll()) { return 0; }
     // 双页时本地这套「按整页行数摊分」的算法会把间隙摊到两列上而错位，
     // 上游是 justifyColumnBottom() 逐列独立摊分，差异记在 KNOWN-ISSUES 的 KI-D4。
     if (this.resolveReaderColumnCount() > 1) { return 0; }
@@ -1764,28 +1729,143 @@ export struct ReaderPage {
     }
   }
 
+  /**
+   * 连续滚动的一次翻页（上游 `tapScrollPage`，ReaderCanvasSurface.kt:679-737）。
+   *
+   * 步距不是整屏而是「滚到只剩一行」（`ReaderScrollPolicy.pageStep`），
+   * 时长按位移折算，缓动固定线性（上游 ScrollPageStack 的 tween 就是 LinearEasing）。
+   */
+  private turnReaderScrollPage(delta: number): void {
+    const window = ReaderCanvasWindow.of(this.localReaderPages, this.currentPageIndex);
+    const current = window.current;
+    if (current === undefined) {
+      return;
+    }
+    const context = this.getUIContext();
+    const request = this.buildReaderCanvasRequest(new ReaderTransitionTransforms());
+    const viewportExtentPx = context.vp2px(Math.max(1, this.viewportHeight));
+    const contentTopPx = this.readerScrollContentTopPx(request);
+    const contentBottomPx = contentTopPx + viewportExtentPx;
+    const lines = this.readerCanvasRenderer.scrollLineBoxes(request);
+    const isPrevious = delta < 0;
+    const distancePx = ReaderScrollPolicy.pageStep(lines, contentTopPx, contentBottomPx,
+      isPrevious, viewportExtentPx);
+    if (this.noAnimScrollPage) {
+      if (this.applyReaderScrollDelta(distancePx)) {
+        this.onTurnChapterBoundary(delta > 0 ? 1 : -1);
+      }
+      return;
+    }
+    const baseDuration = [240, 300, 360, 540][this.animationSpeed] ?? 360;
+    const duration = Math.max(1,
+      ReaderScrollPolicy.stepDurationMillis(distancePx, viewportExtentPx, baseDuration));
+    this.pageTurnAnimating = true;
+    this.cancelTurnAnimator();
+    let applied = 0;
+    let hitBoundary = false;
+    const animator = context.createAnimator({
+      duration, easing: 'linear', delay: 0, fill: 'forwards', direction: 'normal', iterations: 1, begin: 0, end: 1
+    });
+    animator.onFrame = (progress: number) => {
+      const target = distancePx * progress;
+      if (this.applyReaderScrollDelta(target - applied)) {
+        hitBoundary = true;
+      }
+      applied = target;
+    };
+    animator.onFinish = () => {
+      this.pageTurnAnimating = false;
+      this.turnAnimator = undefined;
+      this.updateProgress();
+      // 上游 tapScrollPage 触界抛 ReaderScrollBoundaryReached 直接跳出这一段，
+      // 顺带把这一下点击转成翻章；本地在动画收尾时补同样的动作。
+      if (hitBoundary) {
+        this.onTurnChapterBoundary(delta > 0 ? 1 : -1);
+      }
+    };
+    this.turnAnimator = animator;
+    animator.play();
+  }
+
+  /** 滚动坐标系里正文区的顶边（画布局部 px）。 */
+  private readerScrollContentTopPx(request: ReaderCanvasDrawRequest): number {
+    // 画布自己从 0 开始画，正文顶边就是 layout.originYpx；页眉与标题在画布之外
+    return request.layout.originYpx;
+  }
+
+  /**
+   * 把一段滚动位移落到 scrollOffset 上，越过页边界就换窗口。
+   *
+   * 上游 `applyScrollResult`：跨页时若邻页还没排好（新窗口为 null），
+   * 这次越界偏移是相对邻页坐标系的，直接写会把当前页画到页外，所以钳回边界。
+   */
+  private applyReaderScrollDelta(deltaPx: number): boolean {
+    const pages = this.localReaderPages;
+    if (pages.length === 0) {
+      return false;
+    }
+    const context = this.getUIContext();
+    const viewportExtentPx = context.vp2px(Math.max(1, this.viewportHeight));
+    const request = this.buildReaderCanvasRequest(new ReaderTransitionTransforms());
+    const window = request.window;
+    const current = window.current;
+    if (current === undefined) {
+      return false;
+    }
+    const currentExtentPx = this.readerCanvasRenderer.pageScrollExtent(current.page, current.pageIndex, request);
+    const previousExtentPx = window.previous === undefined ? 0
+      : this.readerCanvasRenderer.pageScrollExtent(window.previous.page, window.previous.pageIndex, request);
+    const result: ReaderScrollResult = ReaderScrollPolicy.apply(
+      context.vp2px(this.scrollOffset), deltaPx, previousExtentPx, currentExtentPx,
+      viewportExtentPx, window.previous !== undefined, window.next !== undefined);
+    if (result.crossing === ReaderScrollCrossing.NEXT) {
+      if (this.currentPageIndex + 1 >= pages.length) {
+        // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示
+        this.scrollOffset = context.px2vp(result.offsetPx);
+        this.paintReaderCanvas();
+        return true;
+      }
+      this.currentPageIndex = this.currentPageIndex + 1;
+      this.resetCanvasSelectionState();
+    } else if (result.crossing === ReaderScrollCrossing.PREVIOUS) {
+      if (this.currentPageIndex === 0) {
+        this.scrollOffset = context.px2vp(result.offsetPx);
+        this.paintReaderCanvas();
+        return true;
+      }
+      this.currentPageIndex = this.currentPageIndex - 1;
+      this.resetCanvasSelectionState();
+    }
+    this.scrollOffset = context.px2vp(result.offsetPx);
+    this.refreshReaderBottomJustifyGap();
+    this.paintReaderCanvas();
+    return result.hitBoundary;
+  }
+
+  /**
+   * 连续滚动的纵向拖动（上游 ScrollPageStack 的拖拽路径）。
+   *
+   * 拖动期不换页：跨页要等抬手后的 `applyReaderScrollDelta` 收口，
+   * 否则一帧内既换索引又改偏移，页面栈会跳一下。
+   */
+  private dragReaderScrollBy(offsetYVp: number): void {
+    const total = this.readerScrollTotalHeight();
+    if (total <= 0) {
+      return;
+    }
+    const next = Math.max(0, Math.min(total, this.scrollDragStartOffset - offsetYVp));
+    if (Math.abs(next - this.scrollOffset) < 0.5) {
+      return;
+    }
+    this.scrollOffset = next;
+    this.paintReaderCanvas();
+  }
+
   private turnReaderPage(delta: number): void {
     if (this.pageTurnAnimating) { return; }
-    if (this.usesLocalPagination() && this.localReaderPages.length === 0) { return; }
-    if (this.pageAnimation === 3) {
-      let totalScrollHeight = Math.max(0, this.contentHeight - this.viewportHeight);
-      try {
-        totalScrollHeight = Math.max(totalScrollHeight,
-          this.toDimension(this.readerScroller.contentSize().height) - this.viewportHeight);
-      } catch (_) {
-      }
-      if ((delta < 0 && this.scrollOffset <= 1) || (delta > 0 && this.scrollOffset >= totalScrollHeight - 1)) {
-        this.onTurnChapterBoundary(delta);
-        return;
-      }
-      this.scrollOffset = Math.max(0, Math.min(totalScrollHeight, this.scrollOffset + delta * this.viewportHeight));
-      try {
-        this.readerScroller.scrollTo({
-          xOffset: 0, yOffset: this.scrollOffset, animation: !this.noAnimScrollPage
-        });
-      } catch (_) {
-      }
-      this.updateProgress();
+    if (this.usesReaderCanvas() && this.localReaderPages.length === 0) { return; }
+    if (this.usesCanvasScroll()) {
+      this.turnReaderScrollPage(delta);
       return;
     }
     const nextPageIndex = this.currentPageIndex + delta;
@@ -3022,9 +3102,6 @@ export struct ReaderPage {
     return Math.ceil((total + this.titleTopSpacing + this.titleBottomSpacing) / lineHeight);
   }
 
-  private getReaderShadowColor(): string {
-    return this.readerNightMode ? this.textShadowColorN : this.textShadowColor;
-  }
 
   private getReaderUnderlineColor(): string {
     return this.readerNightMode ? this.underlineColorNight : this.underlineColor;
@@ -3249,121 +3326,10 @@ export struct ReaderPage {
     this.onAddBookmark(start, text);
   }
 
-  /**
-   * 把一段文本按「高亮规则命中区间 + 用户划线/笔记区间」切成等样式的小段。
-   * 划线/笔记优先于全局高亮规则（与上游一致：用户手动标记不该被规则样式盖掉）。
-   */
-  private getReaderHighlightTextRuns(value: string, basePosition: number): ReaderHighlightTextRun[] {
-    if (value.length === 0) { return []; }
-    const boundaries: number[] = [0, value.length];
-    const endPosition = basePosition + value.length;
-    for (let index = 0; index < this.readerHighlightRanges.length; index++) {
-      const range = this.readerHighlightRanges[index];
-      if (range === undefined || range.start >= endPosition || range.endExclusive <= basePosition) { continue; }
-      boundaries.push(Math.max(0, range.start - basePosition));
-      boundaries.push(Math.min(value.length, range.endExclusive - basePosition));
-    }
-    // 划线/笔记的起止也要切段，否则整段会被当成同一段、标记范围渲染不出来。
-    for (let index = 0; index < this.markings.length; index++) {
-      const marking = this.markings[index];
-      if (marking === undefined || !marking.enabled) { continue; }
-      if (marking.chapterIndex !== this.getChapterIndex()) { continue; }
-      if (marking.chapterPosition >= endPosition || marking.endPosition <= basePosition) { continue; }
-      boundaries.push(Math.max(0, marking.chapterPosition - basePosition));
-      boundaries.push(Math.min(value.length, marking.endPosition - basePosition));
-    }
-    boundaries.sort((left: number, right: number) => left - right);
-    const unique: number[] = [];
-    for (let index = 0; index < boundaries.length; index++) {
-      const point = boundaries[index];
-      if (point !== undefined && (unique.length === 0 || unique[unique.length - 1] !== point)) {
-        unique.push(point);
-      }
-    }
-    const runs: ReaderHighlightTextRun[] = [];
-    for (let index = 0; index < unique.length - 1; index++) {
-      const start = unique[index];
-      const end = unique[index + 1];
-      if (start === undefined || end === undefined || end <= start) { continue; }
-      const absoluteStart = basePosition + start;
-      const absoluteEnd = basePosition + end;
-      const marking = this.getMarkingForTextRange(absoluteStart, absoluteEnd);
-      if (marking !== undefined) {
-        // 有用户标记时整段按标记渲染，不再叠规则样式。
-        runs.push({
-          value: value.substring(start, end),
-          textColor: marking.effect === 'text' ? marking.color : this.getReadingTextColor(),
-          backgroundColor: this.getMarkingBackground(marking),
-          underlineMode: 0,
-          underlineColor: marking.color,
-          decorationType: this.getMarkingDecorationType(marking) !== TextDecorationType.None
-            ? this.getMarkingDecorationType(marking)
-            : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
-          decorationStyle: this.getMarkingDecorationType(marking) !== TextDecorationType.None
-            ? this.getMarkingDecorationStyle(marking)
-            : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-          decorationColor: marking.color.length > 0 ? marking.color : this.getReaderUnderlineColor(),
-          decorationThickness: this.underline && this.getMarkingDecorationType(marking) === TextDecorationType.None
-            ? Math.max(0, this.underlineHeight) : 1
-        });
-        continue;
-      }
-      const style = this.getHighlightStyle(absoluteStart, absoluteEnd);
-      const ruleMode = style?.underlineMode ?? 0;
-      runs.push({
-        value: value.substring(start, end),
-        textColor: ReaderHighlightRuleEngine.colorToCss(style?.textColor) ?? this.getReadingTextColor(),
-        backgroundColor: ReaderHighlightRuleEngine.colorToCss(style?.bgColor) ?? 'transparent',
-        underlineMode: ruleMode,
-        underlineColor: ReaderHighlightRuleEngine.colorToCss(style?.underlineColor ?? style?.textColor)
-          ?? this.getReaderUnderlineColor(),
-        decorationType: this.getHighlightDecorationType(ruleMode) !== TextDecorationType.None
-          ? this.getHighlightDecorationType(ruleMode)
-          : this.underline ? TextDecorationType.Underline : TextDecorationType.None,
-        decorationStyle: this.getHighlightDecorationType(ruleMode) !== TextDecorationType.None
-          ? this.getHighlightDecorationStyle(ruleMode)
-          : this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-        decorationColor: ReaderHighlightRuleEngine.colorToCss(style?.underlineColor ?? style?.textColor)
-          ?? this.getReaderUnderlineColor(),
-        decorationThickness: this.getHighlightDecorationType(ruleMode) !== TextDecorationType.None
-          ? 1 : Math.max(0, this.underlineHeight)
-      });
-    }
-    return runs;
-  }
 
-  @Builder
-  private ReaderHighlightRunSpan(run: ReaderHighlightTextRun) {
-    Span(run.value)
-      .fontSize(this.fontSize * 1.05)
-      .fontColor(run.textColor)
-      // Span 不支持 backgroundColor（CommonMethod 虽有该方法但不渲染），背景必须走 textBackgroundStyle。
-      .textBackgroundStyle({ color: run.backgroundColor })
-      .decoration({
-        type: run.decorationType,
-        color: run.decorationColor,
-        style: run.decorationStyle,
-        thicknessScale: run.decorationThickness
-      })
-      .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
-  }
 
-  private getHighlightStyle(start: number, endExclusive: number): ReaderHighlightStyle | undefined {
-    return ReaderHighlightRuleEngine.resolve(this.readerHighlightRanges, start, endExclusive);
-  }
 
-  private getHighlightDecorationType(mode: number): TextDecorationType {
-    if (mode === 6) { return TextDecorationType.LineThrough; }
-    if (mode >= 1 && mode <= 4) { return TextDecorationType.Underline; }
-    return TextDecorationType.None;
-  }
 
-  private getHighlightDecorationStyle(mode: number): TextDecorationStyle {
-    if (mode === 2) { return TextDecorationStyle.DASHED; }
-    if (mode === 3) { return TextDecorationStyle.WAVY; }
-    if (mode === 4) { return TextDecorationStyle.DOUBLE; }
-    return TextDecorationStyle.SOLID;
-  }
 
   private async loadReaderHighlightRules(): Promise<void> {
     const context = this.getUIContext().getHostContext();
@@ -3397,27 +3363,132 @@ export struct ReaderPage {
     return (this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation !== 3;
   }
 
+  /**
+   * 连续滚动也走画布（上游 ReaderCanvasSurface.kt:1517-1540 的 ScrollPageStack）。
+   *
+   * 改造前滚动模式退回 ArkUI `Scroll` 把整章铺开，一是有两套排版（KI-EXP2 的残留形态），
+   * 二是拿不到行几何，KI-C3 的下划线四项与选区都只得分页模式才有。
+   */
+  private usesCanvasScroll(): boolean {
+    return (this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation === 3;
+  }
+
+  /** 是否走画布渲染：本地分页与连续滚动都算。 */
+  private usesReaderCanvas(): boolean {
+    return this.book.format === 'txt' || this.book.format === 'epub';
+  }
+  /**
+   * 滚动模式的整章内容高度（vp）：所有页的滚动 extent 累加。
+   *
+   * 上游 `scrollExtentPx` 就是排版游标，章末页再加 `chapterEndPaddingPx`；
+   * 这里与画布 `pageScrollExtent()` 用同一套累加口径，保证进度条与实际可滚范围一致。
+   */
+  private readerScrollContentHeight(): number {
+    const pages = this.localReaderPages;
+    if (pages.length === 0) {
+      return Math.max(0, this.viewportHeight);
+    }
+    const endPadding = 20;
+    const bodyHeight = this.getBodyContentHeight(
+      this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0,
+      this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0);
+    let total = 0;
+    for (let index = 0; index < pages.length; index++) {
+      const page = pages[index];
+      if (page === undefined) {
+        continue;
+      }
+      let used = 0;
+      for (const line of page.lines) {
+        used += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+      }
+      if (page.titleOnly && used <= 0) {
+        used = Math.max(1, bodyHeight);
+      }
+      total += Math.max(1, used);
+      if (index === pages.length - 1) {
+        total += endPadding;
+      }
+    }
+    // 内容不足一屏时也要能停在一屏的高度上，与上游 minOf(0, viewport - extent) 同口径
+    return Math.max(1, total);
+  }
+
+  /**
+   * 滚动模式的可滚高度（vp）：整章内容高减去一屏。
+   *
+   * 画布把整章按页堆叠绘制，`scrollOffset` 就是这个堆叠坐标系里的平移量，
+   * 所以可滚范围不再是 `Scroll` 组件的内容尺寸，而是 `readerScrollContentHeight()`。
+   */
+  private readerScrollTotalHeight(): number {
+    return Math.max(0, this.readerScrollContentHeight() - this.viewportHeight);
+  }
+
+  /**
+   * 章内绝对滚动位移（vp）：当前页之前的页 extent 之和 + 当前页内偏移。
+   *
+   * `scrollOffset` 只记「相对当前页」的平移（上游 scrollOffsetState 同口径），
+   * 直接用它会每换一页就把进度打回 0，进度条与「跳到百分比」都会错。
+   */
+  private readerScrollAbsoluteOffset(): number {
+    const pages = this.localReaderPages;
+    let before = 0;
+    for (let index = 0; index < this.currentPageIndex && index < pages.length; index++) {
+      const page = pages[index];
+      if (page === undefined) { continue; }
+      let used = 0;
+      for (const line of page.lines) {
+        used += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+      }
+      if (page.titleOnly && used <= 0) {
+        used = Math.max(1, this.getBodyContentHeight(
+          this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0,
+          this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0));
+      }
+      before += Math.max(1, used);
+    }
+    return before + this.scrollOffset;
+  }
+
+  /** 把章内绝对位移还原成「当前页索引 + 页内偏移」。 */
+  private seekReaderScrollAbsolute(target: number): void {
+    const pages = this.localReaderPages;
+    if (pages.length === 0) {
+      return;
+    }
+    const footerReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
+    const headerReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
+    const bodyHeight = this.getBodyContentHeight(headerReserve, footerReserve);
+    let remaining = Math.max(0, target);
+    for (let index = 0; index < pages.length; index++) {
+      const page = pages[index];
+      if (page === undefined) { continue; }
+      let used = 0;
+      for (const line of page.lines) {
+        used += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+      }
+      if (page.titleOnly && used <= 0) { used = Math.max(1, bodyHeight); }
+      const extent = Math.max(1, used);
+      if (remaining < extent || index === pages.length - 1) {
+        this.currentPageIndex = index;
+        this.scrollOffset = Math.min(remaining, Math.max(0, extent - 1));
+        return;
+      }
+      remaining -= extent;
+    }
+  }
+
   private updateProgress(): void {
     if (this.usesLocalPagination()) { return; }
     if (this.startPositionPending) { return; }
-    if (this.estimatedContentHeight <= 0) {
-      this.refreshEstimatedContentHeight();
-    }
-    try {
-      const scrollContentSize = this.readerScroller.contentSize();
-      const reportedHeight = this.toDimension(scrollContentSize.height);
-      if (reportedHeight > this.contentHeight) {
-        this.contentHeight = reportedHeight;
-      }
-    } catch (_) {
-    }
-    const totalScrollHeight = this.contentHeight - this.viewportHeight;
+    const totalScrollHeight = this.readerScrollTotalHeight();
     if (totalScrollHeight <= 0) {
       return;
     }
-    const progress = Math.max(0, Math.min(100, Math.round(this.scrollOffset / totalScrollHeight * 100)));
+    const progress = Math.max(0, Math.min(100,
+      Math.round(this.readerScrollAbsoluteOffset() / totalScrollHeight * 100)));
     this.readerProgress = progress;
-    if (this.pageAnimation === 3) { this.sliderProgressIndex = progress; }
+    if (this.usesCanvasScroll()) { this.sliderProgressIndex = progress; }
     if (progress !== this.lastReportedProgress) {
       this.lastReportedProgress = progress;
       this.emitReaderProgress(progress, Math.round(this.content.length * progress / 100), false);
@@ -3427,45 +3498,34 @@ export struct ReaderPage {
   private restoreProgressPosition(): void {
     if (this.usesLocalPagination()) { return; }
     if (this.startPositionPending) { return; }
-    if (this.estimatedContentHeight <= 0) {
-      this.refreshEstimatedContentHeight();
+    if (this.restoredProgressPosition) {
+      return;
     }
-    if (this.restoredProgressPosition || this.contentHeight <= this.viewportHeight) {
+    const totalScrollHeight = this.readerScrollTotalHeight();
+    if (totalScrollHeight <= 0) {
       return;
     }
     this.restoredProgressPosition = true;
-    const totalScrollHeight = this.contentHeight - this.viewportHeight;
     const chapterProgress = this.book.chapterProgress ?? 0;
-    this.scrollOffset = totalScrollHeight * chapterProgress / 100;
+    this.seekReaderScrollAbsolute(totalScrollHeight * chapterProgress / 100);
     this.readerProgress = chapterProgress;
     this.lastReportedProgress = chapterProgress;
     this.sliderProgressIndex = chapterProgress;
-    if (chapterProgress > 0) {
-      try {
-        this.readerScroller.scrollTo({
-          xOffset: 0,
-          yOffset: this.scrollOffset,
-          animation: false
-        });
-      } catch (_) {
-      }
-    }
+    this.paintReaderCanvas();
   }
 
   private seekToProgress(progress: number): void {
     this.resolveStartPosition();
     const nextProgress = Math.max(0, Math.min(100, Math.round(progress)));
-    const totalScrollHeight = this.contentHeight - this.viewportHeight;
+    const totalScrollHeight = this.readerScrollTotalHeight();
     if (totalScrollHeight <= 0) {
       return;
     }
     this.readerProgress = nextProgress;
     this.lastReportedProgress = nextProgress;
-    this.scrollOffset = totalScrollHeight * nextProgress / 100;
-    try {
-      this.readerScroller.scrollTo({ xOffset: 0, yOffset: this.scrollOffset, animation: false });
-    } catch (_) {
-    }
+    this.seekReaderScrollAbsolute(totalScrollHeight * nextProgress / 100);
+    this.refreshReaderBottomJustifyGap();
+    this.paintReaderCanvas();
     this.emitReaderProgress(nextProgress, Math.round(this.content.length * nextProgress / 100), false);
   }
 
@@ -3565,64 +3625,13 @@ export struct ReaderPage {
     }
     if (changed) {
       this.imageSizes = nextSizes;
-      this.refreshEstimatedContentHeight();
-      this.rebuildReaderPages();
+        this.rebuildReaderPages();
     }
   }
 
-  private getReaderImageWidth(uri: string): number {
-    const size = this.imageSizes.get(uri);
-    if (size === undefined || size.width <= 0 || size.height <= 0) { return 1; }
-    const headerReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
-    const footerReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
-    const scale = Math.min(1,
-      this.readerContentWidth > 0 ? this.getBodyContentWidth() / size.width : 1,
-      this.viewportHeight > 0 ? this.getBodyContentHeight(headerReserve, footerReserve) / size.height : 1);
-    return size.width * scale;
-  }
 
-  private getReaderImageHeight(uri: string): number {
-    const size = this.imageSizes.get(uri);
-    if (size === undefined || size.width <= 0 || size.height <= 0) { return 1; }
-    const headerReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
-    const footerReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
-    const scale = Math.min(1,
-      this.readerContentWidth > 0 ? this.getBodyContentWidth() / size.width : 1,
-      this.viewportHeight > 0 ? this.getBodyContentHeight(headerReserve, footerReserve) / size.height : 1);
-    return size.height * scale;
-  }
 
-  private estimateContentHeight(): number {
-    const availableWidth = this.getBodyContentWidth();
-    const fontSize = this.fontSize * 1.05;
-    const baseLineHeight = this.fontSize * 1.25;
-    const lineHeight = Math.max(1, baseLineHeight * this.lineSpacing / 10);
-    const charactersPerLine = Math.max(1, availableWidth / Math.max(1, fontSize + this.getReaderLetterSpacingVp(fontSize)));
-    let estimatedHeight = this.fontSize * 4 + 12;
-    const segments = this.getReaderContentSegments();
-    for (let index = 0; index < segments.length; index++) {
-      const segment = segments[index];
-      if (segment === undefined) { continue; }
-      if (segment.kind === 'image') {
-        const size = this.imageSizes.get(segment.value);
-        estimatedHeight += (size?.height ?? fontSize * 1.5) + 16;
-      } else {
-        const lines = segment.value.split(/\r?\n/);
-        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-          const line = lines[lineIndex] ?? '';
-          const wrappedLines = Math.max(1, Math.ceil((line.length + this.paragraphIndent.length) / charactersPerLine));
-          estimatedHeight += wrappedLines * lineHeight;
-        }
-        estimatedHeight += baseLineHeight * this.paragraphSpacing / 10;
-      }
-    }
-    return estimatedHeight + 34;
-  }
 
-  private refreshEstimatedContentHeight(): void {
-    this.estimatedContentHeight = this.estimateContentHeight();
-    this.contentHeight = Math.max(this.contentHeight, this.estimatedContentHeight);
-  }
 
   // -------------------------------------------------------------------------
   // 画布渲染（阶段 A）
@@ -3652,6 +3661,7 @@ export struct ReaderPage {
     request.layout = this.buildReaderCanvasLayout();
     request.style = this.buildReaderCanvasStyle();
     request.markings = this.buildReaderCanvasMarkings();
+    request.highlights = this.buildReaderCanvasHighlights();
     request.pageBackgroundArgb = this.readerCanvasPageBackgroundArgb();
     // 纸面底色始终不透明：折页时每页要先铺自己的纸，否则两页文字互相透出
     request.pageSurfaceArgb = this.readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
@@ -3664,6 +3674,13 @@ export struct ReaderPage {
     request.curlCornerY = this.curlCornerY;
     request.curlRevealProgress = this.curlRevealProgress;
     request.curlPrevious = this.curlPrevious;
+    // 连续滚动：四页按 extent 堆叠、整栈按 scrollOffset 平移（上游 ScrollPageStack）。
+    // 章末页要留一章末余白（上游 CHAPTER_END_PADDING_DP = 20dp），否则残页后面
+    // 直接贴上一句「下一章」，与旧 View 的 `height = durY + 20dp` 不一致。
+    request.scrollActive = this.usesCanvasScroll();
+    request.scrollOffsetPx = this.getUIContext().vp2px(this.scrollOffset);
+    request.scrollEndPaddingPx = this.getUIContext().vp2px(20);
+    request.scrollLastPageIndex = this.localReaderPages.length - 1;
     // 选区：渲染坐标直接来自长按/拖把手，画布按元素切分后用 getRectsForRange 出高亮条带。
     request.selectionStart = this.canvasSelectionStart;
     request.selectionEnd = this.canvasSelectionEnd;
@@ -3745,6 +3762,70 @@ export struct ReaderPage {
       list.push(item);
     }
     return list;
+  }
+
+  /**
+   * 高亮规则命中的正文样式区间（上游 HighlightRule）。
+   *
+   * 画布逐元素绘制，只能把「区间 → 底色/字色/下划线」交给 ParagraphBuilder 分段，
+   * 所以这里把 `readerHighlightRanges` 转成画布口径的区间数组：
+   * 先放规则（按 position 升序，后面的覆盖前面的），再放用户划线里 effect==='text'
+   * 的文字颜色——与老路径一致，用户手动标记压在高亮规则之上。
+   *
+   * 结果按 `readerContentRevision + 规则条数 + 划线条数` 缓存：翻页动画每帧都会构造
+   * request，不缓存会每帧重建上千个对象。
+   */
+  private buildReaderCanvasHighlights(): ReaderCanvasStyleRange[] {
+    const signature = `${this.readerContentRevision}|${this.readerHighlightRanges.length}|` +
+      `${this.markings.length}|${this.getChapterIndex()}`;
+    if (this.canvasHighlightSignature === signature) {
+      return this.canvasHighlights;
+    }
+    const list: ReaderCanvasStyleRange[] = [];
+    for (let index = 0; index < this.readerHighlightRanges.length; index++) {
+      const range = this.readerHighlightRanges[index];
+      if (range === undefined) {
+        continue;
+      }
+      const rule = range.rule;
+      const item = new ReaderCanvasStyleRange();
+      item.start = range.start;
+      item.end = range.endExclusive;
+      item.textColorArgb = rule.textColor ?? 0;
+      item.backgroundArgb = rule.bgColor ?? 0;
+      item.decoration = this.readerCanvasHighlightDecoration(rule.underlineMode);
+      item.decorationArgb = rule.underlineColor ?? rule.textColor ?? 0;
+      if (item.textColorArgb === 0 && item.backgroundArgb === 0 && item.decoration === 0) {
+        continue;
+      }
+      list.push(item);
+    }
+    const chapterIndex = this.getChapterIndex();
+    for (let index = 0; index < this.markings.length; index++) {
+      const marking = this.markings[index];
+      if (marking === undefined || !marking.enabled || marking.chapterIndex !== chapterIndex) {
+        continue;
+      }
+      if (marking.effect !== 'text') {
+        continue;
+      }
+      // 划线「文字颜色」：底色与下划线由 buildReaderCanvasMarkings 单独画，这里只管字色
+      const item = new ReaderCanvasStyleRange();
+      item.start = marking.chapterPosition;
+      item.end = marking.endPosition;
+      item.textColorArgb = this.readerCanvasArgb(marking.color, 0);
+      list.push(item);
+    }
+    this.canvasHighlightSignature = signature;
+    this.canvasHighlights = list;
+    return list;
+  }
+
+  /** HighlightRule.underlineMode → 画布 decoration 口径（与 TextDecorationType 对齐）。 */
+  private readerCanvasHighlightDecoration(mode: number): number {
+    if (mode === 6) { return 6; }
+    if (mode >= 1 && mode <= 4) { return mode; }
+    return 0;
   }
 
   private readerCanvasMarkingBackgroundArgb(marking: ReaderMarking): number {
@@ -4061,10 +4142,9 @@ export struct ReaderPage {
   }
 
   private onReaderContentAreaChanged(oldArea: Area, newArea: Area): void {
-    this.contentHeight = this.toDimension(newArea.height);
     this.rebuildReaderPages();
     if (this.usesLocalPagination()) { return; }
-    this.refreshEstimatedContentHeight();
+    // 连续滚动模式没有 Scroll 组件可量，进度只由分页累加高度推出（readerScrollTotalHeight）
     this.restoreProgressPosition();
     this.updateProgress();
   }
@@ -4237,7 +4317,9 @@ export struct ReaderPage {
       // 上游 ReaderCanvasSurface.kt:254 是 `val current = pages.current ?: return`：
       // 没有当前页就什么都不画，绝不换「整章连续滚动」那套排版兜底，
       // 否则开书时先滚动再切分页，两套排版视觉不同，切换必然整页跳一次。
-      if ((this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation !== 3) {
+      // 连续滚动（pageAnimation === 3）现在也走画布：上游 ReaderCanvasSurface.kt:1517-1540
+      // 在滚动模式下用同一个 Canvas 画 ScrollPageStack，不再有第二套 ArkUI 排版。
+      if (this.usesReaderCanvas()) {
         Stack({ alignContent: Alignment.TopEnd }) {
           Column() {
             if (this.isReaderHeaderVisible()) {
@@ -4396,6 +4478,21 @@ export struct ReaderPage {
               if (event.offsetX < -slop) { this.turnReaderPage(1); }
               else if (event.offsetX > slop) { this.turnReaderPage(-1); }
             }),
+          // 连续滚动的纵向拖动：手指往上（offsetY 为负）就把内容往上推，即 offset 增大。
+          // 上游 ScrollPageStack 用 graphicsLayer.translationY 拖拽，这里等价地改 scrollOffset
+          // 后重绘（画布只有一个组件，省掉图层与逐帧 draw 的组合开销）。
+          PanGesture({ direction: this.usesCanvasScroll() ? PanDirection.Vertical : PanDirection.None })
+            .onActionStart(() => {
+              this.cancelTurnAnimator();
+              this.pageTurnAnimating = false;
+              this.scrollDragStartOffset = this.scrollOffset;
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.dragReaderScrollBy(event.offsetY);
+            })
+            .onActionEnd(() => {
+              this.updateProgress();
+            }),
           PanGesture({ direction: this.swipeToAddBookmark && this.book.isLocal && this.pageAnimation !== 3
             ? PanDirection.Vertical : PanDirection.None })
             .onActionStart(() => {
@@ -4406,88 +4503,9 @@ export struct ReaderPage {
             .onActionUpdate((event: GestureEvent) => this.updateBookmarkPull(event))
             .onActionEnd((event: GestureEvent) => this.finishBookmarkPull(event))
         ))
-      } else {
-      Scroll(this.readerScroller) {
-        Column() {
-          if (this.isReaderHeaderVisible()) { this.ReaderInfoRow(true) }
-          this.ReaderTitleSegments(false)
-          ForEach(this.getReaderContentSegments(), (segment: ReaderContentSegment, index: number) => {
-            if (segment.kind === 'image') {
-              if (this.imageSizes.has(segment.value)) {
-                Image(segment.value)
-                  .width(this.getReaderImageWidth(segment.value))
-                  .height(this.getReaderImageHeight(segment.value))
-                  .objectFit(ImageFit.Contain)
-                  .alignSelf(ItemAlign.Center)
-                  .margin({ top: 8, bottom: 8 })
-                  .onClick(() => this.openReaderImage(segment.value))
-              }
-            } else {
-              Text() {
-                ForEach(this.getReaderHighlightTextRuns(this.getDisplayContent(segment.value), segment.startPosition),
-                  (run: ReaderHighlightTextRun, runIndex: number) => this.ReaderHighlightRunSpan(run),
-                  (run: ReaderHighlightTextRun, runIndex: number) =>
-                    `${this.readerContentRevision}-scroll-${index}-${runIndex}-${run.textColor}-${run.backgroundColor}-${run.decorationType}-${run.decorationColor}-${run.decorationStyle}-${run.decorationThickness}`)
-              }
-                .fontSize(this.fontSize * 1.05)
-                .fontFamily(this.readerBodyFontFamily)
-                .fontStyle(this.textItalic ? FontStyle.Italic : FontStyle.Normal)
-                .fontWeight(this.getReaderFontWeight())
-                .textShadow(this.textShadow ? [{ radius: this.shadowRadius, color: this.getReaderShadowColor(), offsetX: this.shadowDx, offsetY: this.shadowDy }] : [])
-                .letterSpacing(this.getReaderLetterSpacingFp(this.fontSize * 1.05))
-                .fontColor(this.getReadingTextColor())
-                // 滚动模式拿不到行几何，无法自绘下划线，这里仍用 Text 装饰表达
-                // （代价是虚线段长/间隔与偏移无法微调，KI-C3 的四项只在分页模式生效）。
-                .decoration({
-                  type: this.underline ? TextDecorationType.Underline : TextDecorationType.None,
-                  color: this.getReaderUnderlineColor(),
-                  style: this.dottedLine ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-                  thicknessScale: Math.max(0, this.underlineHeight)
-                })
-                .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
-                .textAlign(this.textFullJustify ? TextAlign.JUSTIFY : TextAlign.Start)
-                .width('100%')
-                .margin({ bottom: this.fontSize * 1.25 * this.paragraphSpacing / 10 })
-            }
-          }, (segment: ReaderContentSegment, index: number) => `${this.readerContentRevision}-${segment.kind}-${index}`)
-          if (this.isReaderFooterVisible()) { this.ReaderInfoRow(false) }
-        }
-        .width('100%')
-        .constraintSize({ minHeight: '100%' })
-        .padding({
-          left: this.paddingSettings.paddingLeft,
-          right: this.paddingSettings.paddingRight,
-          top: this.paddingSettings.paddingTop,
-          bottom: this.paddingSettings.paddingBottom
-        })
-        .onClick((event: ClickEvent) => this.handleReaderTap(event))
-        .onAreaChange((oldArea: Area, newArea: Area) => {
-          this.readerContentWidth = this.toDimension(newArea.width);
-          this.onReaderContentAreaChanged(oldArea, newArea);
-        })
       }
-      .width('100%')
-      .height('100%')
-      // 同上：图片层在最外层，滚动容器要让出底色。
-      .backgroundColor(this.readerBackgroundImage.length > 0 ? '#00000000' : this.paperColor)
-      .scrollBar(BarState.Off)
-      .onDidScroll((xOffset: number, yOffset: number, scrollState: ScrollState) => {
-        if (this.usesLocalPagination()) { return; }
-        const nextOffset = Math.max(0, this.scrollOffset + yOffset);
-        if (this.startPositionPending && Math.abs(nextOffset - this.scrollOffset) > 1) {
-          this.resolveStartPosition();
-        }
-        this.scrollOffset = nextOffset;
-        this.updateProgress();
-      })
-      .onAreaChange((oldArea: Area, newArea: Area) => {
-        this.viewportHeight = this.toDimension(newArea.height);
-        this.rebuildReaderPages();
-          if (this.usesLocalPagination()) { return; }
-        this.restoreProgressPosition();
-        this.updateProgress();
-      })
-      }
+      // 连续滚动与分页共用同一张画布（上游 ScrollPageStack），这里不再有第二套
+      // ArkUI 排版分支：`Scroll` 整章铺开那套拿不到行几何，下划线与选区都缺。
 
       if (this.bookmarkPullArmed && !this.controlsVisible) {
         Row() {
@@ -5001,7 +5019,8 @@ export struct ReaderPage {
     // 鼠标滚轮翻页：仅分页模式接管，滚动模式本来就靠滚轮滚动（对齐上游
     // ReadBookController.kt:2845 的 mouseWheelPage，那里也是翻页而非滚动）。
     .onAxisEvent((event: AxisEvent) => {
-      if (this.pageAnimation === 3 || !this.mouseWheelPage || this.controlsVisible) { return; }
+      // 滚动模式也接管滚轮（上游 tapScrollPage 与滚轮走同一条步距策略）
+      if (!this.mouseWheelPage || this.controlsVisible) { return; }
       if (event.action !== AxisAction.UPDATE) { return; }
       const vertical = event.axisVertical ?? 0;
       if (Math.abs(vertical) < 0.5) { return; }
