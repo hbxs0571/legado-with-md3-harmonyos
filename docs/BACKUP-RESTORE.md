@@ -246,7 +246,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 [ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 17 类标为**零行**（`rssSource`、`rssStar`、`replaceRule`、`searchHistory`、`sourceSub`、`txtTocRule`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightRule`、`server`、`coverConfig`、`themeMode`、`showRss`、`mangaConfig`）。`bookmark` 与 `themeConfig` 虽在 [书籍总账](parity/BOOKSHELF.md) 里零行，但分别归 [书签对照](parity/ZIP-BOOKMARK.md) A–E 与 [阅读配置总账](parity/READER-CONFIG.md) F，不算零行。
 
-派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[编码规约](CODE-CONVENTIONS.md)第四节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
+派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[盘点规约](PARITY-RULES.md)第二节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
 
 **四、未复核边界：老行是迁移前证据。**
 

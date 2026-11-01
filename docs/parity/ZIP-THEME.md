@@ -1,6 +1,6 @@
 # 深色模式对照表
 
-本表按 [模块对照要求](../CODE-CONVENTIONS.md) 第四节点完一次，行粒度是**一个界面**——不是「一个备份键」，也不是「一个按钮」。`themeMode`（上游中文名「深色模式」）与 `themeConfig`（主题配置）两类共用「主题设置页」这一个界面，所以合成一张表盘：拆开盘会把同一个页面的四十多个条目写两遍。
+本表按 [盘点规约](../PARITY-RULES.md) 第二节点完一次，行粒度是**一个界面**——不是「一个备份键」，也不是「一个按钮」。`themeMode`（上游中文名「深色模式」）与 `themeConfig`（主题配置）两类共用「主题设置页」这一个界面，所以合成一张表盘：拆开盘会把同一个页面的四十多个条目写两遍。
 
 状态只允许三个值：**已接** / **未接** / **不适用**。`不适用` 必须写理由。
 
@@ -59,7 +59,7 @@
 
 本地主体：`entry/src/main/ets/pages/ThemeSettingsPage.ets`（333 行）。widget 调用 **47 处**，ForEach 循环折叠后 **46 个可见条目**，分七组：主题模式 4 / 无标题 9 / 主界面 6 / 书籍详情页 3 / 护眼 6 / 模糊 2 / 容器 15，另有 1 个「恢复默认主题配置」独立卡片。
 
-> **口径说明**：任务书里「本地 19 条」是只数开关类控件的粗口径（主界面 2 = 2 个 Switch、护眼 3 = 3 个 Switch……）。本表按**页面上真实可见的行**计数（46 条），因为本地「设置项」既有 `ThemeSwitchRow` 也有 `ThemeSettingsOption`（点开才有 sheet 的条目），只数 Switch 会把「主题管理」「背景图片」「字体设置」这类条目从盘面里漏掉——这正是 [编码规约](../CODE-CONVENTIONS.md) 第四节警告的「只盘相关按钮」漏法。
+> **口径说明**：任务书里「本地 19 条」是只数开关类控件的粗口径（主界面 2 = 2 个 Switch、护眼 3 = 3 个 Switch……）。本表按**页面上真实可见的行**计数（46 条），因为本地「设置项」既有 `ThemeSwitchRow` 也有 `ThemeSettingsOption`（点开才有 sheet 的条目），只数 Switch 会把「主题管理」「背景图片」「字体设置」这类条目从盘面里漏掉——这正是 [盘点规约](../PARITY-RULES.md) 第二节警告的「只盘相关按钮」漏法。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -116,7 +116,7 @@
 上游主体：`ui/config/themeManage/ThemeManageScreen.kt`（331 行，5 个入口 + 已存主题列表 + 3 个确认框）、`help/config/ThemePackageManager.kt`（1254 行，保存/导入/导出/资产打包全在这）、`help/config/ThemeImportExport.kt`（393 行，资产嵌入与旧版 JSON 解析）、`ui/config/themeManage/EditThemeSheet.kt`（403 行，已存主题编辑器）。
 本地主体（r316 建）：`pages/ThemeManagePage.ets`（五个入口 + 已存主题列表与四个动作 + 底部命名面板）、`data/ThemePackageRepository.ets`（清单/落盘/打包/解包/资产/迁移）、`data/ThemeConfigStore.ets`（`themeConfig.json` 的读写与 `MD3-Day`/`MD3-Night` 生成）。r316 之前 `pages/ThemeSettingsPage.ets:563` 的「主题管理」只弹一句「主题包管理尚未迁移」，`pages/` 目录里没有任何主题包相关页面。
 
-> **这一块在 r297 盘点时整块缺失**，按 [编码规约](../CODE-CONVENTIONS.md) 第四节「发现整块缺失仍要新开块」处理：当时没有压进 A12 一行，而是逐条列出上游可见能力。r316 按这 12 行逐行实现，现在全部 `已接`。
+> **这一块在 r297 盘点时整块缺失**，按 [盘点规约](../PARITY-RULES.md) 第二节「发现整块缺失仍要新开块」处理：当时没有压进 A12 一行，而是逐条列出上游可见能力。r316 按这 12 行逐行实现，现在全部 `已接`。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -201,7 +201,7 @@
 
 ## 四、覆盖证明
 
-判据按 [编码规约](../CODE-CONVENTIONS.md) 第四节：上游接触面的**每一个 `.kt` 文件**都必须被显式分配到「已映射到某行」或「已排除 + 理由」，未分配必须为 0。
+判据按 [盘点规约](../PARITY-RULES.md) 第二节：上游接触面的**每一个 `.kt` 文件**都必须被显式分配到「已映射到某行」或「已排除 + 理由」，未分配必须为 0。
 
 ```bash
 bash scripts/upstream-surface.sh --coverage themeMode docs/parity/ZIP-THEME.md <上游根>

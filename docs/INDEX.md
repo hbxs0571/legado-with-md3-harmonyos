@@ -9,6 +9,7 @@
 | 双机协作（历史，已失效） | [双机 N 端执行说明](DUAL-MACHINE-HANDOFF.md) |
 | 模块验收摘要 | [模块状态](MODULE-STATUS.md) |
 | 编码规约与已踩缺陷 | [编码规约](CODE-CONVENTIONS.md) |
+| 盘点方法与验收等级 | [盘点规约](PARITY-RULES.md) |
 | 移交前协作教训 | [E 端会话教训](E-SESSION-LESSONS.md) |
 | 已知问题与验收边界 | [已知问题](KNOWN-ISSUES.md) |
 | 模块入口与责任范围 | [模块概览](MODULES.md) |

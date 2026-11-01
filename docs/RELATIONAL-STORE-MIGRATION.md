@@ -341,7 +341,7 @@ SDK：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\@oh
 
 验收：书架加载/排序/分组/搜索、书籍详情、目录页章节列表、阅读页翻章/进度恢复、TXT 与 EPUB 各一本完整走查、备份导出/导入、强停冷启。
 
-#### 第三批阶段 2 改动清单（按 `docs/CODE-CONVENTIONS.md` 第四节一次盘完）
+#### 第三批阶段 2 改动清单（按 `docs/PARITY-RULES.md` 第二节一次盘完）
 
 **A. `Book` 模型删字段（`entry/src/main/ets/model/Book.ets`）**
 
