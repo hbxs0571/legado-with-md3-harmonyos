@@ -44,7 +44,7 @@ import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
 import { OnboardingRepository } from '../data/OnboardingRepository';
-import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT } from '../data/ThemeSettingsRepository';
+import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale } from '../data/ThemeSettingsRepository';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { EyeProtection } from '../data/EyeProtection';
 import {
@@ -63,6 +63,7 @@ import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
 import { sensor } from '@kit.SensorServiceKit';
+import { window } from '@kit.ArkUI';
 import { ReaderBackgroundImageRepository } from '../data/ReaderBackgroundImageRepository';
 import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
@@ -446,6 +447,22 @@ struct Index {
   @State themeMode: string = '0';
   /** 调色板序号，与 `themeMode` 一同落盘，对齐上游 `theme.paletteStyle`。 */
   @State themePaletteIndex: number = 0;
+  /**
+   * 全局字体缩放 8..16（10 = 1.0x），对齐上游 `AppShellSettings.kt:5 fontScale`。
+   *
+   * 上游在 `base/AppContextWrapper.kt:18-25 applyFont()` 里把它写进 `Configuration.fontScale`；
+   * ArkUI 的等价机制是 `ApplicationContext.setFontSizeScale`，见 `applyThemeFontScale`。
+   */
+  @State themeFontScale: number = 10;
+  /** 是否显示状态栏，对齐上游 `AppShellSettings.kt:10 showStatusBar`。 */
+  @State themeShowStatusBar: boolean = true;
+  /**
+   * 是否启用滑动时动画，对齐上游 `AppShellSettings.kt:11 swipeAnimation`。
+   *
+   * 上游这个键**没有任何渲染消费者**（`ThemeConfigScreen.kt:362` 上方还留着
+   * 「这个可以不要了」的 TODO），所以本地也只落盘、不造一个上游没有的动画效果。
+   */
+  @State themeSwipeAnimation: boolean = true;
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -1911,12 +1928,48 @@ struct Index {
     // 已显式存过全局值时以全局为准：向导只在首启用一次，之后用户在主题设置页的改动不能被它冲掉。
     const theme = await ThemeSettingsRepository.load(context);
     const hasStored = await ThemeSettingsRepository.hasStoredThemeMode(context);
+    // 字号与两个布尔开关先落到全局状态，再应用（与 themeMode 同一次启动读取，避免两次读盘）。
+    this.themeFontScale = theme.fontScale;
+    this.themeShowStatusBar = theme.showStatusBar;
+    this.themeSwipeAnimation = theme.swipeAnimation;
+    this.applyThemeFontScale(context);
+    this.applyThemeStatusBar(context);
     if (!hasStored && state.completed) {
       const mode = ThemeSettingsRepository.fromModeNumber(state.themeMode);
       await this.applyThemeMode(context, mode, state.paletteIndex, true);
     } else {
       await this.applyThemeMode(context, theme.themeMode, theme.paletteIndex, false);
     }
+  }
+
+  /** 主题设置页字体大小回调。上游 `ThemeConfigScreen.kt:309-320` 的 `SetFontScale`。 */
+  private selectThemeFontScale(context: Context, fontScale: number): void {
+    this.themeFontScale = normalizeFontScale(fontScale);
+    this.applyThemeFontScale(context);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('字体大小保存失败，请重试');
+    });
+  }
+
+  /** 主题设置页「显示状态栏」回调。上游 `ThemeConfigScreen.kt:352-360` 的 `SetShowStatusBar`。 */
+  private selectThemeShowStatusBar(context: Context, visible: boolean): void {
+    this.themeShowStatusBar = visible;
+    this.applyThemeStatusBar(context);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('状态栏设置保存失败，请重试');
+    });
+  }
+
+  /**
+   * 主题设置页「启用滑动时动画」回调。上游 `ThemeConfigScreen.kt:362-370` 的 `SetSwipeAnimation`。
+   *
+   * 上游这个键没有渲染消费者（同处留着「这个可以不要了」的 TODO），本地只落盘、不造假效果。
+   */
+  private selectThemeSwipeAnimation(context: Context, enabled: boolean): void {
+    this.themeSwipeAnimation = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('滑动动画设置保存失败，请重试');
+    });
   }
 
   /**
@@ -1934,9 +1987,56 @@ struct Index {
       return;
     }
     try {
-      await ThemeSettingsRepository.save(context, themeMode, paletteIndex);
+      await this.saveThemeSettings(context);
     } catch (_) {
       this.showUnavailableAction('主题设置保存失败，请重试');
+    }
+  }
+
+  /**
+   * 把当前主题状态整份落盘。
+   *
+   * 上游 `AppShellSettings` 是一个整体对象、一次写全（`FeatureSettingsRepositories.kt:321-327`
+   * 的 `toPrefMap()`），所以这里也整份写，避免「只写 themeMode、字号与两个开关丢」。
+   */
+  private async saveThemeSettings(context: Context): Promise<void> {
+    await ThemeSettingsRepository.save(context, {
+      themeMode: this.themeMode,
+      paletteIndex: this.themePaletteIndex,
+      fontScale: this.themeFontScale,
+      showStatusBar: this.themeShowStatusBar,
+      swipeAnimation: this.themeSwipeAnimation
+    });
+  }
+
+  /**
+   * 应用全局字体缩放。
+   *
+   * 上游口径 `ui/theme/AppDensity.kt:13-14 resolveAppFontScale`：把 8..16 的整数设置除以 10
+   * 得到 0.8..1.6 的比例，越界时回落到系统字体缩放。这里只做前半段——本地滑块本身就夹在
+   * 8..16，所以直接除以 10；`setFontSizeScale` 由系统负责与用户系统字号上限取小。
+   */
+  private applyThemeFontScale(context: Context): void {
+    try {
+      const scale = this.themeFontScale / 10;
+      context.getApplicationContext().setFontSizeScale(scale);
+    } catch (_) {
+    }
+  }
+
+  /**
+   * 应用状态栏显隐。
+   *
+   * 上游 `base/BaseComposeActivity.kt:151` 调 `utils/ActivityExtensions.kt:153 toggleSystemBar(show)`，
+   * 内部是 `WindowInsetsControllerCompat.show/hide(systemBars())`。ArkUI 的等价物是
+   * `window.Window.setWindowSystemBarEnable(['status'])` / `setWindowSystemBarEnable([])`。
+   */
+  private applyThemeStatusBar(context: Context): void {
+    try {
+      window.getLastWindow(context).then((win) => {
+        win.setSpecificSystemBarEnabled('status', this.themeShowStatusBar, false).catch(() => {});
+      }).catch(() => {});
+    } catch (_) {
     }
   }
 
@@ -5812,8 +5912,23 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             themeMode: this.themeMode,
             paletteIndex: this.themePaletteIndex,
+            fontScale: this.themeFontScale,
+            showStatusBarVisible: this.themeShowStatusBar,
+            swipeAnimationEnabled: this.themeSwipeAnimation,
             onThemeModeChange: (themeMode: string) => this.selectThemeMode(themeMode),
             onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex),
+            onFontScaleChange: (fontScale: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeFontScale(themeContext, fontScale); }
+            },
+            onShowStatusBarChange: (visible: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeShowStatusBar(themeContext, visible); }
+            },
+            onSwipeAnimationChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeSwipeAnimation(themeContext, enabled); }
+            },
             eyeProtectionEnabled: this.eyeProtectionEnabled,
             eyeProtectionAutoNight: this.eyeProtectionAutoNight,
             eyeProtectionSchedule: this.eyeProtectionSchedule,

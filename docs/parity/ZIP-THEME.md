@@ -20,7 +20,7 @@
 3. **主题设置页零持久化**。`pages/ThemeSettingsPage.ets` 内 `preferences|getPreferences|store.put|Repository` 命中 **0**；47 处 widget 调用、46 个可见条目里，**39 处**走 `onUnavailableAction('…尚未迁移')`，其余 7 处（三个模式项、五个调色板）只改 `@State`，退出即丢。页面入口 `pages/Index.ets:4135` 是 `ThemeSettingsPage({ onBack, onUnavailableAction })`——**没传任何主题状态**。
 4. **唯一落盘的 themeMode 没人读**。`data/OnboardingRepository.ets` 把 `{ completed, themeMode, paletteIndex }` 写进 preferences（`legado_first_run`），但 `pages/Index.ets:1653-1657` 的 `restoreOnboarding` 只读 `state.completed`，`themeMode` 读出来就丢。
 
-结论：**在本地，「深色模式」不是「一个没接的键」，而是一整层没建的地基**。只补 `themeMode` 的读写分支，结果只是备份文件里多一个键，界面上不会有任何变化——真正的成本在 A 块与 F 块：建浅色资源、把 2252 处字面量改成引用、让设置页落盘、再让全局跟随。下面 91 行里 83 行 `未接`，原因基本都收束到这一条。
+结论：**在本地，「深色模式」不是「一个没接的键」，而是一整层没建的地基**。只补 `themeMode` 的读写分支，结果只是备份文件里多一个键，界面上不会有任何变化——真正的成本在 A 块与 F 块：建浅色资源、把 2252 处字面量改成引用、让设置页落盘、再让全局跟随。下面 91 行里仍有 56 行 `未接`（r297 盘点时是 83 行，r300–r304 五批落地 27 行），原因基本都收束到这一条。
 
 ## ZIP 类别归属（整表口径）
 
@@ -33,21 +33,21 @@
 | E 日夜提醒 | 7 | `themeConfig`（`autoSuggestDayNight` 是 53 键之一），触发后写 `themeMode` | 开关落在 themeConfig，效果落在 themeMode |
 | F 网关与全局换肤 | 12 | 两者 | `themeMode` 的存储/派生/应用 + `themeConfig` 的导出与忽略门控 |
 
-合计 **91 行**：已接 29 / 未接 59 / 不适用 3（r300 阶段一 7 行、r301 阶段二首批 7 行、r302 阶段三 E 块 6 行 + D7 1 行、r303 备份侧 F9/F11/F12 3 行已转已接）。按 ZIP 类别列归属，`themeConfig` 72 行、`themeMode` 19 行。`themeMode` 与 `themeConfig` 交叉出现在 A1–A4、D5、E、F，按类别派活时两张都要看。
+合计 **91 行**：已接 32 / 未接 56 / 不适用 3（r300 阶段一 7 行、r301 阶段二首批 7 行、r302 阶段三 E 块 6 行 + D7 1 行、r303 备份侧 F9/F11/F12 3 行、r304 外观三项 A11/A15/A16 3 行已转已接）。按 ZIP 类别列归属，`themeConfig` 72 行、`themeMode` 19 行。`themeMode` 与 `themeConfig` 交叉出现在 A1–A4、D5、E、F，按类别派活时两张都要看。
 
 ## 盘面
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A 主题设置页 | 47 | 7 | 40 | 0 |
+| A 主题设置页 | 47 | 10 | 37 | 0 |
 | B 主题包管理 | 12 | 0 | 12 | 0 |
 | C 首次启动向导 | 5 | 2 | 2 | 1 |
 | D 阅读页日夜快捷按钮 | 8 | 4 | 3 | 1 |
 | E 日夜提醒 | 7 | 6 | 1 | 0 |
 | F 网关与全局换肤 | 12 | 10 | 1 | 1 |
-| **合计** | **91** | **29** | **59** | **3** |
+| **合计** | **91** | **32** | **56** | **3** |
 
-**阶段一（r300）已把 7 行从 `未接` 转为 `已接`**：A1、C4、D2、F1、F2、F3、F4。**阶段二第一批（r301）又把护眼 6 行转为 `已接`**：A24、A25、A26、A27、A28、A29。护眼 6 行转 `已接` 后，F7（护眼 6 键备份）也随之转 `已接`。**阶段三（r302）把日夜提醒 6 行转为 `已接`**：E1、E2、E3、E4、E5、E6（这 6 行在 r297 盘点时判 `未接`，实为当时未查到阅读页那套实现，本轮逐行核实后改判），**同批把 D7 也转为 `已接`**（`toggleReaderNightMode()` 补上冷却复位与待弹提醒作废）。**阶段二备份侧（r303）再把 3 行转为 `已接`**：F9（`themeMode` 的 config.xml 写出与恢复读回）、F11（两类备份忽略开关接上真实效果）、F12（恢复侧键过滤，复核后由「未接」改判「已接」——按类别整体剔除与上游逐键查集合结果等价）。剩余 59 行 `未接` 已在「备注」列逐行标注 **要接 / 不接**（不改状态）：**要接 54 / 不接 5**。判不接的 5 行是 A3（Miuix 动态取色）、A7（主题引擎切换）、A18（平板界面）、A19（多窗布局）、E7（提醒的 intent/effect 链路），理由见各行备注与 [问题登记](../KNOWN-ISSUES.md)「深色模式行登记」节。判「不接」不删行、不改状态，仍按 `未接` 计。
+**阶段一（r300）已把 7 行从 `未接` 转为 `已接`**：A1、C4、D2、F1、F2、F3、F4。**阶段二第一批（r301）又把护眼 6 行转为 `已接`**：A24、A25、A26、A27、A28、A29。护眼 6 行转 `已接` 后，F7（护眼 6 键备份）也随之转 `已接`。**阶段三（r302）把日夜提醒 6 行转为 `已接`**：E1、E2、E3、E4、E5、E6（这 6 行在 r297 盘点时判 `未接`，实为当时未查到阅读页那套实现，本轮逐行核实后改判），**同批把 D7 也转为 `已接`**（`toggleReaderNightMode()` 补上冷却复位与待弹提醒作废）。**阶段二备份侧（r303）再把 3 行转为 `已接`**：F9（`themeMode` 的 config.xml 写出与恢复读回）、F11（两类备份忽略开关接上真实效果）、F12（恢复侧键过滤，复核后由「未接」改判「已接」——按类别整体剔除与上游逐键查集合结果等价）。**阶段二外观三项（r304）再把 3 行转为 `已接`**：A11（字体大小缩放，走 `ApplicationContext.setFontSizeScale`）、A15（显示状态栏）、A16（启用滑动时动画，上游本身无渲染消费者，本地只落盘）。剩余 56 行 `未接` 已在「备注」列逐行标注 **要接 / 不接**（不改状态）：**要接 51 / 不接 5**。判不接的 5 行是 A3（Miuix 动态取色）、A7（主题引擎切换）、A18（平板界面）、A19（多窗布局）、E7（提醒的 intent/effect 链路），理由见各行备注与 [问题登记](../KNOWN-ISSUES.md)「深色模式行登记」节。判「不接」不删行、不改状态，仍按 `未接` 计。
 
 ## A 主题设置页
 
@@ -69,12 +69,12 @@
 | **A8** 切换图标（启动器图标） | `ThemeConfigScreen.kt:284` `ClickableSettingItem(change_icon)` → `ShowSheet(ThemeConfigSheet.LauncherIcon)` | `pages/ThemeSettingsPage.ets:139`「切换图标」 | 未接 | 本地 `onUnavailableAction`。上游由 `ThemeConfigRouteScreen.kt` 的 `navigationIconLauncher`（`GetContent` + MD5 命名）落盘到 `nav_icons/` | 真机：换图标 → 桌面图标变化 | 上游键 `launcherIcon` 在 `data/BackupRepository.ets:231-236` 的 `alwaysIgnoredPreferenceKeys` 里，**永不进备份**——与上游 `alwaysIgnoredPreferenceKeys` 一致，不算差异；**要接**（阶段二）——启动器图标切换，接文件选择并把图标落 `nav_icons` 目录 | `themeConfig` |
 | **A9** 预见性返回手势 | `ThemeConfigScreen.kt:291` `SwitchSettingItem(predictive_back)` → `SetPredictiveBackEnabled`；键 `isPredictiveBackEnabled` | `pages/ThemeSettingsPage.ets:140` `ThemeSwitchRow` | 未接 | 本地 `onUnavailableAction` | 真机：打开后返回手势有预览动画 | 依赖系统能力，上游只在支持的版本显示；**要接**（阶段二）——先核 ArkUI 侧是否有预测性返回能力；没有则按「上游有、平台无」记为平台缺项并保留开关落盘 | `themeConfig` |
 | **A10** 阅读界面共享元素动画 | `ThemeConfigScreen.kt:301` `SwitchSettingItem(reader_shared_element)` → `SetReaderSharedElementEnabled` | `pages/ThemeSettingsPage.ets:141` `ThemeSwitchRow` | 未接 | 本地 `onUnavailableAction` | 真机：打开后书籍封面→详情页有共享元素过渡 | —；**要接**（阶段二）——阅读页共享元素动画开关，落盘后驱动页面转场 | `themeConfig` |
-| **A11** 字体大小缩放 | `ThemeConfigScreen.kt:309` `SliderSettingItem(font_scale, 8f..16f, steps 7)` → `SetFontScale`；键 `fontScale` | `pages/ThemeSettingsPage.ets:142-149` Slider（8..16） | 未接 | 本地 Slider 只改 `@State fontScalePreview`，不写盘、不影响任何文字 | 真机：拖到 16 → 全 App 字号变大；重启保持 | 本地阅读页字号另有独立设置（[阅读配置总账](READER-CONFIG.md) 已盘），与全局 `fontScale` 是两套；**要接**（阶段二）——Slider 落盘 `fontScale` 并驱动全局字号缩放 | `themeConfig` |
+| **A11** 字体大小缩放 | `ThemeConfigScreen.kt:309` `SliderSettingItem(font_scale, 8f..16f, steps 7)` → `SetFontScale`；键 `fontScale` | `pages/ThemeSettingsPage.ets` 字体大小 Slider + `pages/Index.ets` 的 `selectThemeFontScale()` / `applyThemeFontScale()` + `data/ThemeSettingsRepository.ets` 的 `fontScale` | 已接 | 上游 `base/AppContextWrapper.kt:18-25 applyFont()` 把 `fontScale/10` 写进 `Configuration.fontScale` 再 `resources.updateConfiguration()`；ArkUI 无 Configuration 改写入口，本地走 `ApplicationContext.setFontSizeScale(fontScale / 10)`（`@since 13`）。上游 `ui/theme/AppDensity.kt:13-14 resolveAppFontScale` 在越界时回落系统字号，本地滑块本身就夹在 8..16，不会走那条回落分支。| 真机：把滑块拖到最右 → 全 App 文字明显放大（1.0x → 1.6x）；杀进程重进仍是 1.6x；prefs `legado_theme` 的 `fontScale` 为 `16.000000` | r304 落地。本地阅读页字号另有独立设置（[阅读配置总账](READER-CONFIG.md) 已盘），与全局 `fontScale` 是两套，与上游一致 | `themeConfig` |
 | **A12** 主题包管理入口 | `ThemeConfigScreen.kt:324` `ClickableSettingItem(theme_pack)` → `onNavigateToThemeManage` | `pages/ThemeSettingsPage.ets:150`「主题管理」 | 未接 | 本地 `onUnavailableAction('主题包管理尚未迁移')`——**入口文案在、页面不在**。整块展开见 B | 真机：点进去能保存/导入/导出主题包 | 上游目标页 `ui/config/themeManage/ThemeManageScreen.kt`（331 行）；**要接**（阶段三）——入口指向阶段三新建的主题包管理页（B 块） | `themeConfig` |
 | **A13** 背景图片（日间/夜间各一张 + 模糊图） | `ThemeConfigScreen.kt:329` `ClickableSettingItem(background_image)` → `ShowSheet(ThemeConfigSheet.BackgroundImage(...))`；键 `backgroundImage`/`backgroundImageNight`/`backgroundImageBlurring`/`backgroundImageNightBlurring` | `pages/ThemeSettingsPage.ets:151`「背景图片」 | 未接 | 本地 `onUnavailableAction('背景图片设置尚未迁移')`。上游按日夜选图：`ui/theme/AppBackground.kt:22-29` 读 `backgroundImageDark`/`backgroundImageLight`/`backgroundImageDarkBlurring`/`backgroundImageBlurring` | 真机：日间/夜间各设一张图 → 切日夜时背景跟着换 | 本地无任何全 App 背景图能力；**要接**（阶段二）——背景图日/夜两张 + 模糊图的选择与渲染 | `themeConfig` |
 | **A14** 首页与导航设置 | `ThemeConfigScreen.kt:345` `ClickableSettingItem(main_navigation_settings)` → `ShowSheet(ThemeConfigSheet.MainNavigation)` | `pages/ThemeSettingsPage.ets:156`「首页与导航」 | 未接 | 本地 `onUnavailableAction`。上游 sheet 里可拖排主导航顺序、逐项显隐（`SetMainNavigationOrder`/`SetMainDestinationVisible`） | 真机：关掉「发现」→ 底部导航少一项 | —；**要接**（阶段二）——首页与导航 sheet：主导航拖排顺序 + 逐项显隐 | `themeConfig` |
-| **A15** 显示状态栏 | `ThemeConfigScreen.kt:352` `SwitchSettingItem(show_status)` → `SetShowStatusBar`；键 `showStatusBar` | `pages/ThemeSettingsPage.ets:157` `ThemeSwitchRow` | 未接 | 本地 `onUnavailableAction` | 真机：关掉后全 App 顶部状态栏消失 | —；**要接**（阶段二）——显示状态栏开关落盘并驱动窗口布局 | `themeConfig` |
-| **A16** 启用滑动时动画 | `ThemeConfigScreen.kt:362` `SwitchSettingItem(show_swipe_animation)` → `SetSwipeAnimation`；键 `swipeAnimation` | `pages/ThemeSettingsPage.ets:158` `ThemeSwitchRow` | 未接 | 本地 `onUnavailableAction` | 真机：关掉后翻页无过渡动画 | 上游此条带 TODO 注释「这个可以不要了」，仍属可见条目；**要接**（阶段二）——滑动动画开关落盘并驱动列表滚动动画 | `themeConfig` |
+| **A15** 显示状态栏 | `ThemeConfigScreen.kt:352` `SwitchSettingItem(show_status)` → `SetShowStatusBar`；键 `showStatusBar` | `pages/ThemeSettingsPage.ets` 的「显示状态栏」`ThemeSwitchRow` + `pages/Index.ets` 的 `selectThemeShowStatusBar()` / `applyThemeStatusBar()` + `data/ThemeSettingsRepository.ets` 的 `showStatusBar` | 已接 | 上游 `base/BaseComposeActivity.kt:151` 调 `utils/ActivityExtensions.kt:153 toggleSystemBar(show)`，内部 `WindowInsetsControllerCompat.show/hide(systemBars())`——**状态栏与导航栏一起控**；本地只用 `setSpecificSystemBarEnabled('status', visible, false)` 控状态栏，导航栏仍归阅读页自己的 `hideNavigationBar`（`ReaderPage.ets:794-802`），因为全 App 隐藏导航栏会与阅读页的沉浸逻辑打架。| 真机：关掉 → 顶部状态栏立即消失、页面顶到屏幕边；重启仍隐藏；prefs `showStatusBar` 为 `false` | r304 落地。上游在非全屏/非最大化窗口下该调用不生效，本地同受系统限制 | `themeConfig` |
+| **A16** 启用滑动时动画 | `ThemeConfigScreen.kt:362` `SwitchSettingItem(show_swipe_animation)` → `SetSwipeAnimation`；键 `swipeAnimation` | `pages/ThemeSettingsPage.ets` 的「启用滑动时动画」`ThemeSwitchRow` + `pages/Index.ets` 的 `selectThemeSwipeAnimation()` + `data/ThemeSettingsRepository.ets` 的 `swipeAnimation` | 已接 | 上游这个键**没有任何渲染消费者**：全仓 `grep "\.swipeAnimation"` 除配置层与 `ThemeConfigScreen.kt:364` 外零命中，`ThemeConfigScreen.kt:361` 上方还留着原文注释 `//TODO:这个可以不要了，在删掉原来的设置页以后删`。所以本地照实只落盘、**不造一个上游没有的动画效果**——与上游现状等价。| 真机：关掉 → prefs `swipeAnimation` 为 `false`；重启后开关仍为关 | r304 落地。若上游日后真接上消费者，本地需同步补渲染端 | `themeConfig` |
 | **A17** 顶栏与底栏设置 | `ThemeConfigScreen.kt:371` `ClickableSettingItem(top_bottom_bar_settings)` → `ShowSheet(ThemeConfigSheet.TopBottomBar)`；`ui/config/themeConfig/TopBottomBarSettingsSheet.kt` | `pages/ThemeSettingsPage.ets:159`「顶栏与底栏」 | 未接 | 本地 `onUnavailableAction`。上游 sheet 有 10 个键：`topBarOpacity`/`bottomBarOpacity`/`topBarBlurRadius`/`bottomBarBlurRadius`/`topBarBlurAlpha`/`bottomBarBlurAlpha`/`bottomBarLensRadius`/`useFlexibleTopAppBar`/`topBarButtonStyle`/`mergeTopBarActions` | 真机：调顶栏不透明度 → 滚动时顶栏透出背景 | 渲染端在 `ui/widget/components/topbar/*` 与 `FloatingBottomBar.kt`/`AppNavigationBar.kt`；**要接**（阶段二）——顶栏底栏 sheet 10 个键（不透明度/模糊半径/模糊透明度/高度） | `themeConfig` |
 | **A18** 平板界面 | `ThemeConfigScreen.kt:378` `DropdownListSettingItem(tabletInterface)` → `SetTabletInterface` | 无 | 未接 | 本地无此条目（**条目本身都缺**，不只是开关没接） | 无 | 上游按设备形态显示；**不接**——平板界面属额外设备形态，[项目范围](PROJECT.md)「范围之外」明确不计为已实现 | `themeConfig` |
 | **A19** 多窗布局 | `ThemeConfigScreen.kt:389` `DropdownListSettingItem(multi_pane_layout)` → `SetMultiPaneMode` | `pages/ThemeSettingsPage.ets:161`「多窗布局」 | 未接 | 本地 `onUnavailableAction` | 真机：宽屏下切单/双栏 | 本地 `:160`「导航布局」是上游没有的额外条目（对应 `labelVisibilityMode`），本表不单列；**不接**——多窗布局属额外设备形态，同上；本地 `:161` 条目保留但不实施 | `themeConfig` |
@@ -473,7 +473,8 @@ bash scripts/upstream-surface.sh --coverage themeConfig docs/parity/ZIP-THEME.md
 5. **主题包管理（B 块 12 行）整块缺失**，本地只有一个弹「尚未迁移」的入口。
 6. **日夜提醒（E 块）在 r302 全部落地**（E1–E6 六行转 `已接`，E7 判不接）：开关、阈值、传感器订阅、冷却去重、提醒胶囊都在，模拟器已实测胶囊弹出与 5 秒消失。三处与上游的实现差异已如实记在 E3/E4/E5/E6 行的「差异说明」列：无 15 分钟采样节流、无背景图均值色分支、无提醒排队。
 7. **关键词是本轮最大的发现**：`themeConfig` 必须用 53 键的**真实字符串值**检索（常量名与值有 22 处不同），`themeMode` 必须补 `isDarkTheme`/`isNightTheme`/`DayNight` 这层派生词。旧词只覆盖存储层三个文件，界面层一个都进不来。
-8. **备份侧已在 r303 打通（F9/F11/F12）**：`themeMode` 现在会写进备份的 `config.xml`，恢复时读回并真正 `applyThemeMode`；两类忽略开关都接上真实效果（排除后不写、不读）。F12 复核后由「未接」改判「已接」——上游逐 key 查集合与本地按类别整体剔除结果等价，原判属口径过严。`themeConfig.json`（F5）仍缺，因为它需要先有本地主题包数据结构（B 块）。
+8. **外观三项已在 r304 打通（A11/A15/A16）**：字体大小走 `ApplicationContext.setFontSizeScale(fontScale / 10)`（上游是改 `Configuration.fontScale`，ArkUI 无等价入口），状态栏走 `setSpecificSystemBarEnabled('status', visible, false)`（上游 `toggleSystemBar` 是状态栏+导航栏一起控，本地只控状态栏以免与阅读页沉浸逻辑打架），滑动动画**只落盘不造效果**——上游这个键本身就没有任何渲染消费者（`ThemeConfigScreen.kt:361` 原文 TODO「这个可以不要了」），照实对齐现状而不是补一个上游没有的动画。
+9. **备份侧已在 r303 打通（F9/F11/F12）**：`themeMode` 现在会写进备份的 `config.xml`，恢复时读回并真正 `applyThemeMode`；两类忽略开关都接上真实效果（排除后不写、不读）。F12 复核后由「未接」改判「已接」——上游逐 key 查集合与本地按类别整体剔除结果等价，原判属口径过严。`themeConfig.json`（F5）仍缺，因为它需要先有本地主题包数据结构（B 块）。
 
 ## 建议后续顺序
 
@@ -483,8 +484,9 @@ bash scripts/upstream-surface.sh --coverage themeConfig docs/parity/ZIP-THEME.md
 4. **D2**：让阅读页按钮改全局 `themeMode`，而不是私有布尔。
 5. ~~**A24–A29**：给护眼补上色温滤镜渲染，并把主题页那套死 UI 接到阅读设置页那套状态上。~~ **r301 已完成**。
 6. ~~**F9**：补 `themeMode` 的 `config.xml` 写出与恢复读回。~~ **r303 已完成**（F11/F12 随之转已接）。**F5 仍缺**：`themeConfig.json` 的写出要有本地主题包数据结构才能做，依赖 B 块。
-7. **B 块**：主题包管理整块新做，工作量最大，放最后。
-8. ~~**E 块**：日夜提醒依赖 D2 与传感器采样，排在 D2 之后。~~ **r302 已完成**（D2 已在 r300 落地，E1–E6 直接复用）。
+7. ~~**A11/A15/A16**：字体缩放、状态栏显隐、滑动动画三项。~~ **r304 已完成**（A16 上游本身无渲染消费者，只落盘）。
+8. **B 块**：主题包管理整块新做，工作量最大，放最后。
+9. ~~**E 块**：日夜提醒依赖 D2 与传感器采样，排在 D2 之后。~~ **r302 已完成**（D2 已在 r300 落地，E1–E6 直接复用）。
 
 ## 维护
 

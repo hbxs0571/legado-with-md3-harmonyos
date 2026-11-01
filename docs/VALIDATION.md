@@ -30,6 +30,51 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r304 深色模式阶段二外观三项：字体缩放、状态栏显隐、滑动动画（A11/A15/A16）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 通过，38 s 137 ms，33 tasks / 17 executed）。
+- **改了哪些**：
+  - `data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 从 2 字段扩到 5 字段（新增 `fontScale`/`showStatusBar`/`swipeAnimation`），`load()` 逐键读、`save()` 改为**整份对象一次写全**（对齐上游 `FeatureSettingsRepositories.kt:321-327 toPrefMap()` 的整份写）；新增导出 `FONT_SCALE_MIN=8`/`FONT_SCALE_MAX=16`/`FONT_SCALE_DEFAULT=10` 与 `normalizeFontScale()`。
+  - `pages/Index.ets`：新增 `@State themeFontScale: number = 10`、`themeShowStatusBar: boolean = true`、`themeSwipeAnimation: boolean = true`；`applyThemeMode()` 的落盘改调新的 `saveThemeSettings()`；新增 `applyThemeFontScale()`（`context.getApplicationContext().setFontSizeScale(this.themeFontScale / 10)`）、`applyThemeStatusBar()`（`setSpecificSystemBarEnabled('status', visible, false)`）、`selectThemeFontScale()`/`selectThemeShowStatusBar()`/`selectThemeSwipeAnimation()`；`restoreOnboarding()` 启动时读回三项并应用；顶部新增 `import { window } from '@kit.ArkUI';`。
+  - `pages/ThemeSettingsPage.ets`：删掉 `@State fontScalePreview`/`showStatusBar`/`swipeAnimation`，改为 `@Prop fontScale`/`showStatusBarVisible`/`swipeAnimationEnabled` + 三个 `on*Change` 回调；字体大小 Slider 与两个 `ThemeSwitchRow` 全部从 `onUnavailableAction` 改为真回调。
+- **与上游的三处差异（如实记录）**：
+  1. **字体缩放**：上游 `base/AppContextWrapper.kt:18-25 applyFont()` 改写 `Configuration.fontScale` 再 `resources.updateConfiguration()`；ArkUI 无 Configuration 改写入口，本地用 `ApplicationContext.setFontSizeScale(fontScale / 10)`（`@since 13`）。上游 `AppDensity.kt:13-14 resolveAppFontScale` 在越界时回落系统字号，本地滑块夹在 8..16 所以不会走那条分支。
+  2. **状态栏**：上游 `utils/ActivityExtensions.kt:153 toggleSystemBar(show)` 是**状态栏与导航栏一起** `show/hide(systemBars())`；本地只控状态栏（`setSpecificSystemBarEnabled('status', …)`），导航栏仍归阅读页自己的 `hideNavigationBar`（`ReaderPage.ets:794-802`）——全 App 隐藏导航栏会与阅读页沉浸逻辑打架。
+  3. **滑动动画**：上游这个键**没有任何渲染消费者**（全仓 `grep "\.swipeAnimation"` 除配置层与 `ThemeConfigScreen.kt:364` 外零命中，`ThemeConfigScreen.kt:361` 上方原文注释 `//TODO:这个可以不要了，在删掉原来的设置页以后删`）。本地照实**只落盘、不造效果**，与上游现状等价；不补一个上游没有的动画。
+
+### 验收①字体大小缩放落盘并驱动全局字号
+
+- 操作：外观页上滑露出「字体大小」，点滑块最右端 `(1150,2186)`。
+- 预期：全 App 文字放大；prefs `fontScale` 变 `16.000000`。
+- 实际：`legado_theme` 变 `<double key="fontScale" value="16.000000"/>`；截图 `.pwork/f1.jpeg` 中外观页标题「外观」与各条目文字从 1.0x 放大到 1.6x（「阅读界面共享元素动画」由一行变两行折行）。**通过**。
+
+### 验收②字体大小重启保持
+
+- 操作：`aa force-stop` → `aa start` → 我的 `(1152,2620)` → 设置 → 外观。
+- 预期：字号仍是 1.6x，滑块仍停在 16。
+- 实际：重启后首页与设置页文字都是 1.6x（截图 `.pwork/r0.jpeg`），外观页 dumpLayout 读到 `Text 1.6x | [1021,733][1168,825]` 与 `Slider 16.000000`。**通过**。
+
+### 验收③状态栏显隐
+
+- 操作：外观页「主界面」组点「显示状态栏」右侧 Toggle（`(1099,955)` 附近，须先 dumpLayout 取实时 bounds）。
+- 预期：顶部状态栏立即消失，页面顶到屏幕边；prefs `showStatusBar` 变 `false`；重启后仍隐藏。
+- 实际：prefs 变 `<bool key="showStatusBar" value="false"/>`；截图 `.pwork/s0.jpeg` 顶部系统状态栏（时间/电量/信号）整条消失，「外观」标题上移到屏幕最顶端。**通过**。
+
+### 验收④滑动动画开关落盘
+
+- 操作：点「启用滑动时动画」右侧 Toggle（dumpLayout 读到的 bounds `[1036,920][1162,990]`，中心 `(1099,955)`）。
+- 预期：prefs `swipeAnimation` 变 `false`，无渲染变化（上游此键本就无消费者）。
+- 实际：prefs 变 `<bool key="swipeAnimation" value="false"/>`；界面无任何视觉变化，与预期一致。**通过**。
+
+### 复原
+
+三项验收完成后已复原：`fontScale` 拖回 `10.000000`（1.0x）、`showStatusBar` 与 `swipeAnimation` 用 `sed` 改回 `true`，重启后确认状态栏恢复显示、字号回到 1.0x（截图 `.pwork/ok.jpeg`）。
+
+### 未验
+
+- 上游 `AppDensity.kt:19-20` 单参重载的「越界回落系统字号」分支本地不可达（滑块已夹在 8..16），未构造验证。
+- 状态栏在非全屏/非最大化窗口下的行为未验（系统限制，模拟器默认全屏）。
+
 ## 2026-11-01 N 端 r303 深色模式阶段二备份侧：themeMode 写出与恢复读回（F9/F11/F12）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 通过，34 s 63 ms，33 tasks / 17 executed）。

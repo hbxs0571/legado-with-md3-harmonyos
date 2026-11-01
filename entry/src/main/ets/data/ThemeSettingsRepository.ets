@@ -11,12 +11,32 @@ export const THEME_MODE_FOLLOW_SYSTEM: string = '0';
 export const THEME_MODE_LIGHT: string = '1';
 export const THEME_MODE_DARK: string = '2';
 
+/** 全局字体缩放的合法区间，对齐上游 `AppShellSettings.fontScale` 的 8..16（即 0.8x..1.6x）。 */
+export const FONT_SCALE_MIN: number = 8;
+export const FONT_SCALE_MAX: number = 16;
+export const FONT_SCALE_DEFAULT: number = 10;
+
 /** 主题模式快照。 */
 export interface ThemeSnapshot {
   /** 三值字符串 `"0"`/`"1"`/`"2"`，对齐上游 `AppShellSettings.themeMode`。 */
   themeMode: string;
   /** 调色板序号 0..4，对齐本地 `ThemeSettingsPage` 的五个 `ThemePaletteItem`。 */
   paletteIndex: number;
+  /** 全局字体缩放 8..16，对齐上游 `constant/PreferKey.kt:6 fontScale`（默认 10 = 1.0x）。 */
+  fontScale: number;
+  /** 是否显示状态栏，对齐上游 `AppShellSettings.kt:10 showStatusBar`（默认 true）。 */
+  showStatusBar: boolean;
+  /** 是否启用滑动时动画，对齐上游 `AppShellSettings.kt:11 swipeAnimation`（默认 true）。 */
+  swipeAnimation: boolean;
+}
+
+/** 字体缩放夹取到 8..16，非法值回落到默认 10。 */
+export function normalizeFontScale(value: number): number {
+  if (!Number.isFinite(value)) { return FONT_SCALE_DEFAULT; }
+  const rounded = Math.round(value);
+  if (rounded < FONT_SCALE_MIN) { return FONT_SCALE_MIN; }
+  if (rounded > FONT_SCALE_MAX) { return FONT_SCALE_MAX; }
+  return rounded;
 }
 
 /**
@@ -36,14 +56,26 @@ export class ThemeSettingsRepository {
   }
 
   static async load(context: Context): Promise<ThemeSnapshot> {
-    const defaults: ThemeSnapshot = { themeMode: THEME_MODE_FOLLOW_SYSTEM, paletteIndex: 0 };
+    const defaults: ThemeSnapshot = {
+      themeMode: THEME_MODE_FOLLOW_SYSTEM,
+      paletteIndex: 0,
+      fontScale: FONT_SCALE_DEFAULT,
+      showStatusBar: true,
+      swipeAnimation: true
+    };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
       const themeMode = await store.get('themeMode', defaults.themeMode);
       const paletteIndex = await store.get('paletteIndex', defaults.paletteIndex);
+      const fontScale = await store.get('fontScale', defaults.fontScale);
+      const showStatusBar = await store.get('showStatusBar', defaults.showStatusBar);
+      const swipeAnimation = await store.get('swipeAnimation', defaults.swipeAnimation);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
-        paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex
+        paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
+        fontScale: typeof fontScale === 'number' ? normalizeFontScale(fontScale) : defaults.fontScale,
+        showStatusBar: typeof showStatusBar === 'boolean' ? showStatusBar : defaults.showStatusBar,
+        swipeAnimation: typeof swipeAnimation === 'boolean' ? swipeAnimation : defaults.swipeAnimation
       };
     } catch (_) {
       return defaults;
@@ -65,10 +97,13 @@ export class ThemeSettingsRepository {
     }
   }
 
-  static async save(context: Context, themeMode: string, paletteIndex: number): Promise<void> {
+  static async save(context: Context, snapshot: ThemeSnapshot): Promise<void> {
     const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
-    await store.put('themeMode', ThemeSettingsRepository.normalizeThemeMode(themeMode));
-    await store.put('paletteIndex', Math.max(0, Math.min(4, paletteIndex)));
+    await store.put('themeMode', ThemeSettingsRepository.normalizeThemeMode(snapshot.themeMode));
+    await store.put('paletteIndex', Math.max(0, Math.min(4, snapshot.paletteIndex)));
+    await store.put('fontScale', normalizeFontScale(snapshot.fontScale));
+    await store.put('showStatusBar', snapshot.showStatusBar);
+    await store.put('swipeAnimation', snapshot.swipeAnimation);
     await store.flush();
   }
 

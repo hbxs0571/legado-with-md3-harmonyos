@@ -12,6 +12,18 @@ export struct ThemeSettingsPage {
   onThemeModeChange: (themeMode: string) => void = (_themeMode: string) => {};
   /** 用户选了调色板，参数是序号 0..4。 */
   onPaletteChange: (paletteIndex: number) => void = (_paletteIndex: number) => {};
+  /** 全局字体缩放 8..16（10 = 1.0x），对齐上游 `AppShellSettings.kt:5 fontScale`。 */
+  @Prop fontScale: number = 10;
+  /** 是否显示状态栏，对齐上游 `AppShellSettings.kt:10 showStatusBar`。 */
+  @Prop showStatusBarVisible: boolean = true;
+  /** 是否启用滑动时动画，对齐上游 `AppShellSettings.kt:11 swipeAnimation`。 */
+  @Prop swipeAnimationEnabled: boolean = true;
+  /** 字体大小滑块回调。 */
+  onFontScaleChange: (fontScale: number) => void = (_fontScale: number) => {};
+  /** 显示状态栏开关回调。 */
+  onShowStatusBarChange: (visible: boolean) => void = (_visible: boolean) => {};
+  /** 滑动动画开关回调。 */
+  onSwipeAnimationChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   /** 护眼模式总开关，与阅读设置页共用同一份全局状态。 */
   @Prop eyeProtectionEnabled: boolean = false;
   /** 深色模式时自动开启护眼。 */
@@ -34,8 +46,6 @@ export struct ThemeSettingsPage {
   onEyeProtectionEndTimeChange: (time: string) => void = (_time: string) => {};
   @State pureBlack: boolean = false;
   @State showRefactorTip: boolean = true;
-  @State showStatusBar: boolean = true;
-  @State swipeAnimation: boolean = true;
   @State predictiveBack: boolean = true;
   @State sharedElement: boolean = true;
   @State followCoverColor: boolean = true;
@@ -47,7 +57,6 @@ export struct ThemeSettingsPage {
   @State overrideCardBorder: boolean = false;
   @State dividerEnabled: boolean = false;
   @State collapsedHeader: boolean = false;
-  @State fontScalePreview: number = 10;
   private themeScroller: Scroller = new Scroller();
 
   private updateHeader(): void {
@@ -187,10 +196,10 @@ export struct ThemeSettingsPage {
             Column() {
               Row() {
                 Text('字体大小').fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
-                Text(`${(this.fontScalePreview / 10).toFixed(1)}x`).fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
+                Text(`${(this.fontScale / 10).toFixed(1)}x`).fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
               }.width('100%')
-              Slider({ value: this.fontScalePreview, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
-                .width('100%').onChange((value: number) => this.fontScalePreview = value)
+              Slider({ value: this.fontScale, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
+                .width('100%').onChange((value: number) => this.onFontScaleChange(value))
             }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 8 })
             ThemeSettingsOption({ title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onUnavailableAction('主题包管理尚未迁移') })
             ThemeSettingsOption({ title: '背景图片', detail: '日间/夜间背景图与背景虚化', onSelect: () => this.onUnavailableAction('背景图片设置尚未迁移') })
@@ -199,8 +208,8 @@ export struct ThemeSettingsPage {
           ThemeSectionTitle({ title: '主界面' }).margin({ top: 20 })
           Column() {
             ThemeSettingsOption({ title: '首页与导航', detail: '配置首页、发现、订阅、默认主页面和导航栏图标', onSelect: () => this.onUnavailableAction('首页与导航设置尚未迁移') })
-            ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBar, onChange: (value: boolean) => { this.showStatusBar = value; this.onUnavailableAction('状态栏设置暂未保存') } })
-            ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimation, onChange: (value: boolean) => { this.swipeAnimation = value; this.onUnavailableAction('滑动动画设置暂未保存') } })
+            ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBarVisible, onChange: (value: boolean) => this.onShowStatusBarChange(value) })
+            ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimationEnabled, onChange: (value: boolean) => this.onSwipeAnimationChange(value) })
             ThemeSettingsOption({ title: '顶栏与底栏', detail: '配置顶栏按钮与底部导航栏', onSelect: () => this.onUnavailableAction('顶栏与底栏设置尚未迁移') })
             ThemeSettingsOption({ title: '导航布局', detail: '', onSelect: () => this.onUnavailableAction('导航布局设置尚未迁移') })
             ThemeSettingsOption({ title: '多窗布局', detail: '', onSelect: () => this.onUnavailableAction('多窗布局设置尚未迁移') })

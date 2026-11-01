@@ -697,13 +697,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 深色模式行登记（ZIP-THEME.md 的未接行）
 
-本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r303 后剩 59 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r304 后剩 56 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）。累计 23 行转 `已接`，剩余 **59 行 `未接`**（要接 54 / 不接 5）。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）。累计 26 行转 `已接`，剩余 **56 行 `未接`**（要接 51 / 不接 5）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -741,25 +741,25 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **验收**：开纯黑 → 深色下页面底色为 `#000000`（像素取值），关掉 → 回到普通深色。
 
-**KI-TH-A4 外观杂项七项（要接）** —— 覆盖 A5 字体设置、A8 切换图标、A9 预见性返回手势、A10 阅读界面共享元素动画、A11 字体大小缩放、A12 主题包管理入口、A13 背景图片。
+**KI-TH-A4 外观杂项七项（A11 已实现 r304 / 其余 6 项要接）** —— 覆盖 A5 字体设置、A8 切换图标、A9 预见性返回手势、A10 阅读界面共享元素动画、A11 字体大小缩放、A12 主题包管理入口、A13 背景图片。
 
 **上游口径**：A5 走 `fontFolderLauncher`（`OpenDocumentTree` → `SetFontFolder`）；A8 走 `navigationIconLauncher`（`GetContent` + MD5 命名落 `nav_icons/`）；A9/A10 是布尔键，分别驱动返回手势与阅读页转场；A11 `fontScale` 驱动全局字号；A12 是主题包管理页入口（B 块）；A13 `AppBackground.kt:22-29` 按日夜读 `backgroundImageDark`/`backgroundImageLight`/`backgroundImageDarkBlur` 等键。
 
-**本地现状**：A5/A8/A12/A13 全是 `onUnavailableAction`（`:137`/`:139`/`:150`/`:151`）；A9/A10 是 `ThemeSwitchRow` 但同样只弹提示（`:140`/`:141`）；A11 的 Slider（`:142-149`）只改 `@State fontScalePreview`，不写盘、不影响任何文字。
+**本地现状**：A5/A8/A12/A13 全是 `onUnavailableAction`（`:137`/`:139`/`:150`/`:151`）；A9/A10 是 `ThemeSwitchRow` 但同样只弹提示（`:140`/`:141`）。**A11 已在 r304 落地**：`pages/ThemeSettingsPage.ets` 的字体大小 Slider 改为读 `@Prop fontScale`、回调 `onFontScaleChange`；`pages/Index.ets` 的 `selectThemeFontScale()` 写 `themeFontScale` + `applyThemeFontScale()` + `saveThemeSettings()`；`applyThemeFontScale()` 调 `context.getApplicationContext().setFontSizeScale(this.themeFontScale / 10)`；`data/ThemeSettingsRepository.ets` 的 `ThemeSnapshot` 增加 `fontScale` 并在 `load()`/`save()` 里读写，`normalizeFontScale()` 夹到 8..16。
 
-**补法**：A5/A8/A13 接 HarmonyOS 文件选择器（`@ohos.file.picker`）并落目录；A9 先核 ArkUI 是否有预测性返回能力，**没有则按「上游有、平台无」记为平台缺项，只保留开关落盘**，不伪造效果；A10/A11 落盘后驱动转场与字号；A12 指向阶段三新建的主题包管理页（KI-TH-B1）。
+**补法**：A5/A8/A13 接 HarmonyOS 文件选择器（`@ohos.file.picker`）并落目录；A9 先核 ArkUI 是否有预测性返回能力，**没有则按「上游有、平台无」记为平台缺项，只保留开关落盘**，不伪造效果；A10 落盘后驱动转场；A12 指向阶段三新建的主题包管理页（KI-TH-B1）。**A11 无剩余工作**。
 
-**验收**：A11 拖到 16 → 全 App 字号变大且重进保持；A5 选一个字体目录 → 正文字体变化；A9/A10 开关落盘后重进保持（若平台无对应能力，注明「仅落盘」）。
+**验收**：A11 已验（r304：滑块拖到最右 → 全 App 文字 1.0x→1.6x，杀进程重进仍 1.6x，prefs `legado_theme` 的 `fontScale` = `16.000000`）；A5 选一个字体目录 → 正文字体变化；A9/A10 开关落盘后重进保持（若平台无对应能力，注明「仅落盘」）。
 
-**KI-TH-A5 主界面组六项（要接 4 / 不接 2）** —— 覆盖 A14 首页与导航、A15 显示状态栏、A16 启用滑动时动画、A17 顶栏与底栏、A18 平板界面（**不接**）、A19 多窗布局（**不接**）。
+**KI-TH-A5 主界面组六项（A15/A16 已实现 r304 / 要接 2 / 不接 2）** —— 覆盖 A14 首页与导航、A15 显示状态栏、A16 启用滑动时动画、A17 顶栏与底栏、A18 平板界面（**不接**）、A19 多窗布局（**不接**）。
 
 **上游口径**：A14 sheet 可拖排主导航顺序、逐项显隐（`SetMainNavigationOrder`/`SetMainDestinationVisible`）；A15 `showStatusBar`；A16 `enableSwipeAnimation`；A17 sheet 10 个键（`topBarOpacity`/`bottomBarOpacity`/`topBarBlurRadius`/`bottomBarBlurRadius`/`topBarBlurAlpha`/`bottomBarBlurAlpha`/`topBarHeight`/`bottomBarHeight` 等）；A18 `tabletInterface`、A19 `multiPaneMode` 都按设备形态显示。
 
 **判定**：A14–A17 **要接**；A18 平板界面与 A19 多窗布局属**额外设备形态**，按 [项目范围](PROJECT.md)「范围之外」判**不接**——本地 `:161` 的「多窗布局」条目保留在界面上，但不实施、不删行。
 
-**补法**：A14–A17 落盘对应键并接渲染（状态栏显隐走窗口布局、顶底栏不透明度与模糊走已有菜单渲染层）；A18/A19 不动。
+**补法**：A14/A17 落盘对应键并接渲染（顶底栏不透明度与模糊走已有菜单渲染层）；A18/A19 不动。**A15 已在 r304 落地**：`pages/ThemeSettingsPage.ets` 的「显示状态栏」改为 `@Prop showStatusBarVisible` + `onShowStatusBarChange`；`pages/Index.ets` 的 `selectThemeShowStatusBar()` 写 `themeShowStatusBar` + `applyThemeStatusBar()`（`setSpecificSystemBarEnabled('status', visible, false)`）+ 落盘；`restoreOnboarding()` 启动时读回并应用。**A16 已在 r304 落地**：同构的 `themeSwipeAnimation` / `selectThemeSwipeAnimation()`，**只落盘不造效果**——上游这个键本身没有任何渲染消费者（`ThemeConfigScreen.kt:361` 原文 TODO「这个可以不要了」），照实对齐现状。
 
-**验收**：A15 关掉 → 首页状态栏消失；A17 调不透明度 → 顶栏底色透明度变化；A18/A19 无（不接）。
+**验收**：A15 已验（r304：关掉 → 顶部状态栏立即消失、页面顶到屏幕边，重启仍隐藏，prefs `showStatusBar` = `false`）；A16 已验（r304：关掉 → prefs `swipeAnimation` = `false`，重启后开关仍为关）；A17 调不透明度 → 顶栏底色透明度变化；A18/A19 无（不接）。
 
 **KI-TH-A6 书籍详情页组四项（要接）** —— 覆盖 A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置、A23 作者搜索回退。
 
