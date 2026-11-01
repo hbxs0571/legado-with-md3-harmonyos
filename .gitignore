@@ -25,7 +25,21 @@ local.properties
 
 # 仅供本机续接的进度和历史证据
 docs/CURRENT.md
-docs/history/
+# 注意必须写成 docs/history/*（而不是 docs/history/）：整目录忽略后 git 不会进入该目录，
+# 下面的反忽略就永远不会生效。写成 /* 后 git 会逐个子项判断。
+docs/history/*
+# 例外：VALIDATION.md 拆分出来的归档要随仓库发布，否则主文件里的索引链接在 clone 后是死链。
+# 这里逐个点名而不放开整个 validation/ —— 该目录里另有 6 份 2026-10-23 的 P2 报告含真实书名
+# 与作者名，从未进过仓库，不能因为这次拆分顺带公开。
+# 其余 history 子目录（analysis/evidence/project-records 等）含设备地址、书名与盘符路径，仍留本机。
+!docs/history/validation/
+docs/history/validation/*
+!docs/history/validation/2026-10-31-reading-config-ki-rounds.md
+!docs/history/validation/2026-10-r241-r262-e-rounds.md
+!docs/history/validation/2026-10-storage-migration-batches.md
+!docs/history/validation/2026-11-01-n-r299-visual-evidence.md
+!docs/history/validation/2026-11-01-n-r300-r309-theme.md
+!docs/history/validation/reader-config-ki-landing-log.md
 **/*-local.md
 
 # 未审核的参考素材与本机证据目录

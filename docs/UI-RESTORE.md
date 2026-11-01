@@ -75,4 +75,4 @@
 | [验证记录](VALIDATION.md) | 设备与 OCR 操作规范、按日期排列的验证事实 |
 | [资源许可清单](RESOURCE-LICENSES.md)、[来源哈希表](RESOURCE-SOURCES-SHA256-2026-10-26.csv) | 图标来源、许可与双端哈希 |
 | [素材说明](ASSETS.md) | 资源公开范围与新增资源的前置记录要求 |
-| [历史流程细节](history/project-records/WORKFLOW.md) | 2026-10-24 用户纠正的原文记录，已提升为本文 |
+| 历史流程细节（本机归档，不随仓库发布） | `docs/history/project-records/WORKFLOW.md`，2026-10-24 用户纠正的原文记录，已提升为本文 |

@@ -115,6 +115,100 @@
 
 注意：③多选（`TocScreen.kt:325`）与④反序（`TocScreen.kt:447`）仍按缺口登记，理由是它们属「上游真实写过但未接线」的设计，补不补由用户定调；这与「tab 数差异不算缺口」并不矛盾。
 
+## 阅读体验：翻页空白与开书排版跳变
+
+本节登记两个用户可感知的阅读体验缺陷。**二者都不是「某个开关没接」，而是渲染架构与上游不同**——上游正文是画布逐行绘制（`feature/reader/ReaderCanvasSurface.kt`，3747 行 Compose `Canvas`，`:2049` `native.drawText(...)`），本地是 ArkUI 组件树逐字 `Span`。本节只记录根因与修法方向，**未改任何代码**。
+
+### KI-EXP1 翻页出现整页空白（用户原话「差不多一页的空白才翻到另一页」）
+
+**根因**：`entry/src/main/ets/pages/ReaderPage.ets:1636-1702` 的 `turnReaderPage(delta)` 是「半程出、半程进」的整页替换，且**只有一层内容**在同一时刻存在。
+
+```typescript
+// :1683-1687 前半程：旧页滑出到 offset = horizontalTravel
+animateTo({ duration: duration / 2, curve: Curve.EaseIn }, () => {
+  this.pageTurnOffsetX = direction * horizontalTravel;
+});
+// :1688-1701 中点：切页 → 新页从反方向屏外滑入
+this.pageTurnTimer = setTimeout(() => {
+  this.currentPageIndex = nextPageIndex;
+  this.pageTurnOffsetX = reverseDirection * horizontalTravel;
+  animateTo({ duration: duration / 2, curve: Curve.EaseOut }, () => { this.pageTurnOffsetX = 0; });
+}, duration / 2);
+```
+
+- 默认 `pageAnimation = 0`（cover）、`animationSpeed = 2` → `durationBySpeed[2] = 360`，即 180ms 出 + 180ms 进。
+- `pageAnimation === 0` 时 `horizontalTravel = pageWidth`（`:1677`），**旧页整页移出、新页整页自屏外移入**，中间那一瞬两层都不在可视区。
+- 渲染层 `:4196` 对唯一一层 `.translate({ x: this.pageTurnOffsetX, ... })`；`:4172` 的 `ForEach` key 含 `currentPageIndex`，切页必然整树重建 —— 新页布局+字体测量耗时正好落在空白窗口里。
+- 次要：`pageTurnAnimating` 只在 setTimeout 末尾复位（`:1699`），快速连点被吞（`:1637` 首行直接 return）。
+
+**上游为什么没有这个空档**：`feature/reader/core/transition/ReaderPageTransition.kt` 的 `transforms(mode)` 对 `COVER` 返回 `current = ReaderPageTransform(translationX = offsetPx)` + **`next = ReaderPageTransform()`（位移 0，就在原位）+ `currentOnTop = true`** —— 新页是静止的底页，旧页盖在上面滑走，屏幕全程有内容。`SLIDE` 才是两页同时位移。本地把 cover 与 slide 实现成了同一套「出+进」。
+
+**修法方向**（按工作量从轻到重）：
+1. cover（`pageAnimation === 0`）只移旧页、新页从 0 位移开始：前半程用旧页快照做位移层，新页在下面静止渲染 —— 需要一层「上一页快照」，ArkUI 可用 `componentSnapshot` 或双 `if` 分支叠两层。
+2. 五种转场统一改成「同时存在 current/next 两层 + 按 `currentOnTop` 定叠放顺序」，参照上游 `ReaderCanvasSurface.kt:1636-1650` 的 `PagedLayerRole` 排序（该处注释原文：「同一页必须带着自己的 RenderNode 换位；按槽位复用会先画出上一次留在该槽位的页，再重录新页，形成旧页闪帧。」）。
+3. 彻底做法：正文改画布逐行绘制（`text.Paragraph.paint(drawing.Canvas)`，SDK 已有），换页不重建节点树 —— 与上游同构，但牵动全部选区能力（见 KI-EXP3）。
+
+### KI-EXP2 开书时排版先乱 1-2 秒（用户原话「排版总是会先乱一秒两秒」）
+
+**根因**：分页未就绪时走的是**另一套排版**，不是同一套排版的中间态。
+
+`entry/src/main/ets/pages/ReaderPage.ets:4127` 的分支：
+
+```typescript
+if ((this.book.format === 'txt' || this.book.format === 'epub')
+    && this.localReaderPages.length > 0 && this.pageAnimation !== 3) {
+  // 分页排版：只渲染当前页的 lines
+} else {
+  // :4244-4245 Scroll(this.readerScroller) { Column() { ... } }
+  // :4249 ForEach(this.getReaderContentSegments(), ...) —— 整章连续铺开
+  // :4282 .lineHeight(Math.max(1, this.fontSize * 1.25 * this.lineSpacing / 10))
+}
+```
+
+- `:407-408` `viewportHeight = 0`、`readerContentWidth = 0` 是初值；`rebuildReaderPages()`（`:1397-1403`）开头判 `readerContentWidth <= 0 || viewportHeight <= 0` 就直接 `localReaderPages = []` 返回。**所以首帧必然不是分页**，用户看到的是整章滚动的连续文本，几帧后才切成第一页。
+- 两种形态的字号/行高/段距算法不同（滚动分支 `fontSize * 1.05` + 统一 `lineHeight`；分页分支逐行 `line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter`），所以观感是「排版跳了一下」。
+
+**放大因素（同一窗口期内多次全量重建）**：
+1. **约 40 个 `@Prop` 共用 `onPaginationInputsChanged`**（`:1282-1285` 只有 `refreshReaderFontFamilies()` + `rebuildReaderPages()`）。字号、行距、段距、字距、缩进、正文/标题字体、字体族、斜体、粗体、标题排版 14 项、`textFullJustify`、`textBottomJustify`、`paddingSettings`、`doubleHorizontalPage`、`useZhLayout`、`paddingDisplayCutouts` 全挂在这一个回调上 —— 设置分几次到达就重建几次。
+2. **设置异步到达且未 await**：`Index.ets:496` 直接调 `restoreReaderSettings(context)`（async 函数不 await），`Index.ets:152-159` 的初值（`readerFontSize: 20`、`readerLineSpacing: 12`）与仓储默认值不同 → 先按错值排一次。
+3. **尺寸三条到达路径**都调 `rebuildReaderPages()`：`:4217-4221`（分页容器 `.onAreaChange`）、`:4299-4301`（滚动分支 `.onAreaChange`）、`:3954-3956` `onReaderContentAreaChanged()`。
+4. **每次重建跑同步大计算**：`:1415` `LocalTextSemantics.parse(...)` 全章解析、`:1417` `ReaderHighlightRuleEngine.findBodyRanges(...)` 全章高亮匹配、`:1418-1421` 变化时 `readerContentRevision++` 让所有 ForEach key 失效。
+5. **带图章节更明显**：`:1426-1433` 遇到未测尺寸的图片就 `localReaderPages = []` 并 return，`loadContentImageSizes()`（`:3858-3898`）异步完成后（`:3896`）再重建 —— 走两轮「整章滚动 → 分页」切换。
+
+**修法方向**：
+1. 首帧不要渲染未分页的整章。`localReaderPages` 为空时渲染**空白底色 + 页眉页脚**（上游 `ReaderCanvasSurface.kt:254` 就是 `val current = pages.current ?: return`，没有当前页什么都不画），而不是换一套排版。
+2. 尺寸 0 时用一个**与设置同步到达的估算值**先分页（`refreshEstimatedContentHeight()` `:3949` 已有估算器），避免空页期。
+3. `Index.ets:496` 改成 `await`，或在设置未就绪前不进入 ReaderPage。
+4. 把 40 个 `@Prop` 的 watch 合并成「变化入队 + 下一帧统一重建一次」（现在每次变化各重建一次）。
+5. 图片尺寸预取放在进入阅读页之前，或首帧先按占位尺寸分页。
+
+### KI-EXP3 改画布会连带失效的选区能力（做 KI-EXP1 方案 3 时必须一起处理）
+
+本地选区完全依赖 ArkUI `Text` 的原生能力，正文改自绘后这些全部消失：
+
+- `:3594` `.copyOption(CopyOptions.InApp)`、`:3596` `.onTextSelectionChange(...)`、`:3598` `.bindSelectionMenu(TextSpanType.TEXT, this.readerMarkingSelectionMenu(), TextResponseType.LONG_PRESS, {...})`
+- `:3653` / `:3655` / `:3657` 同上（逐行分支）
+- `:3715` `.copyOption(CopyOptions.InApp)`、`:3719` `.bindSelectionMenu(...)`（整段 Text 分支）
+- 辅助链路：`getCurrentPageSelectionParts()` `:2677`、`createJoinedPageSelectionPart()` `:2711`、`createReaderTextSelectionPart(items: LocalReaderLineItem[])` `:2742`、接口 `ReaderTextSelectionPart` `:117`
+
+上游在画布上自绘选区：`ReaderCanvasSurface.kt:181-184` 的 `SelectionHandleRadius = 7.dp`、`SelectionHandleStrokeWidth = 2.dp`、`SelectionHandleFadeOutMillis = 90`、`SelectionHandleFadeInMillis = 140`，全文件 `selection|Selection` 命中 258 处。SDK 侧有对应能力：`@ohos.graphics.text` 的 `Paragraph.getRectsForRange(range, widthStyle, heightStyle)`、`getGlyphPositionAtCoordinate(x, y)`、`getWordBoundary(offset)`、`TextLine.getStringIndexForPosition(point)`。
+
+**结论：KI-EXP1 的修法 1 或 2（补快照层 / 双页叠放）不动选区，可以先做；修法 3（画布重写）必须与选区自绘同批交付，否则阅读页会掉「长按选词、拖把手、标笔记」三项。**
+
+### 顺带记录：默认参数把所有人推到最慢的渲染分支
+
+`ReaderPage.ets:4138-4140`：
+
+```typescript
+if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) {
+  this.ReaderPageTextLines(column);   // 逐行 ForEach + 每字一个 Span
+} else {
+  this.ReaderPageTextJoined(column);  // 整段 Text + Span('\n') 快路径
+}
+```
+
+`textBottomJustify` 默认 `true`（`ReaderPage.ets:183`、`ReaderSettingsRepository.ets:782`），于是**默认配置下走慢路径**：一页 20-30 行 × 20-30 字 = 每次翻页新建 400-900 个 Span 节点（`ReaderPageTextLine` `:3600-3680` → `ReaderGlyphSpan` `:3485`，每个 Span 带 `fontSize/fontColor/letterSpacing/textBackgroundStyle/decoration`）。这是 KI-EXP1 空白窗口的直接放大器。上游同一个开关（`ReadSettings.kt:17 textBottomJustify: Boolean = true`）默认也 true，但上游是画布绘制，不存在节点新建成本 —— **默认值一致不等于代价一致**。
+
 ## 关系型存储迁移第五批（r284）遗留
 
 本节登记 2026-10-30 第五批（preferences 老数据清理）设备验收后仍待处理的三项。**第 1 项已于 r290 修掉，保留记录备查；第 2、3 项仍未处理。**
