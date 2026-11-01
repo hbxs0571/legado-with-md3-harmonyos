@@ -1441,7 +1441,8 @@ export struct ReaderPage {
       lineHeight,
       paragraphSpacing,
       (text: string): number => {
-        return ReaderFontRepository.measureTextWidthForPagination(context, text, this.readerBodyFontFamily, fontSize) +
+        return ReaderFontRepository.measureTextWidthForPagination(
+          context, text, this.readerBodyFontFamily, fontSize, this.getReaderFontWeight()) +
           this.getReaderTextLetterSpacingWidth(text, fontSize);
       },
       this.imageSizes,
@@ -2393,7 +2394,7 @@ export struct ReaderPage {
         const glyph = text.substring(cursor, nextCursor);
         if (!glyphWidths.has(glyph)) {
           const width = ReaderFontRepository.measureTextWidth(
-            context, glyph, this.readerBodyFontFamily, fontSize);
+            context, glyph, this.readerBodyFontFamily, fontSize, this.getReaderFontWeight());
           glyphWidths.set(glyph, width + this.getReaderLetterSpacingVp(fontSize));
           measuredGlyphCount++;
           if (measuredGlyphCount % 8 === 0) { await yieldToUi(); }
@@ -2426,7 +2427,8 @@ export struct ReaderPage {
       return totalWidth;
     };
     const inlineImageWidth = ReaderFontRepository.measureTextWidth(
-      context, '袮', this.readerBodyFontFamily, fontSize) + this.getReaderLetterSpacingVp(fontSize);
+      context, '袮', this.readerBodyFontFamily, fontSize, this.getReaderFontWeight()) +
+      this.getReaderLetterSpacingVp(fontSize);
     const pageCounts: number[] = [];
     await BookRepository.forEachChapter(this.book, async (
       chapterContent: string,
@@ -3005,7 +3007,7 @@ export struct ReaderPage {
       const segment = segments[index] as ReaderTitleSegment;
       const segmentSize = Math.max(1, baseSize * segment.fontSizeScale);
       const segmentWidth = ReaderFontRepository.measureTextWidth(
-        context, segment.text, this.readerTitleFontFamily, segmentSize) +
+        context, segment.text, this.readerTitleFontFamily, segmentSize, this.resolveTitleWeight()) +
         this.getReaderTextLetterSpacingWidth(segment.text, segmentSize);
       const baseHeight = ReaderFontRepository.measureLineHeight(
         context, this.readerTitleFontFamily, segmentSize);
@@ -3658,9 +3660,14 @@ export struct ReaderPage {
       .height(line.height)
       .justifyContent(line.imageOnly ? FlexAlign.Center : FlexAlign.Start)
       .margin({
-        top: line.verticalSpaceBefore + this.readerBottomJustifyGap * (lineIndex - this.readerColumnFirstLineIndex(column)),
+        top: line.verticalSpaceBefore,
         bottom: line.paragraphSpacingAfter
       })
+      // 底部对齐的位移必须用 translate 而不是 margin-top：margin 会参与布局累加，
+      // 第 i 行再加 gap*i 会让后面每一行都被前面所有位移推下去（总和 gap*n²/2），
+      // 行距越往下越疏、最后一行溢出屏幕。上游 justifyColumnBottom() 是逐行
+      // offsetY(deltaY) 平移，不改变布局流，这里用 translate 等价还原。
+      .translate({ y: this.readerBottomJustifyGap * (lineIndex - this.readerColumnFirstLineIndex(column)) })
     } else {
       Text() {
         ForEach(line.items, (item: LocalReaderLineItem, itemIndex: number) => {
@@ -3707,7 +3714,9 @@ export struct ReaderPage {
           this.updatePendingLineSelection(this.getReaderSelectionPartIndex(lineIndex), start, end);
         }
       })
-      .margin({ top: line.verticalSpaceBefore + this.readerBottomJustifyGap * lineIndex, bottom: line.paragraphSpacingAfter })
+      .margin({ top: line.verticalSpaceBefore, bottom: line.paragraphSpacingAfter })
+      // 同上：底部对齐位移走 translate，不能塞进 margin。
+      .translate({ y: this.readerBottomJustifyGap * (lineIndex - this.readerColumnFirstLineIndex(column)) })
     }
   }
 
@@ -4176,10 +4185,11 @@ export struct ReaderPage {
           }
           .width('100%')
           .height('100%')
-          // 双页时左右内边距由每一列自己带（见正文那层 Row），外层只在单页时补。
+          // 左右内边距一律由每一列自己带（见正文那层 Row）。外层再加一次会让单页
+          // 的左边距变成两倍（16vp → 32vp），右边距则被列宽顶出屏幕。
           .padding({
-            left: this.resolveReaderColumnCount() > 1 ? 0 : this.paddingSettings.paddingLeft,
-            right: this.resolveReaderColumnCount() > 1 ? 0 : this.paddingSettings.paddingRight,
+            left: 0,
+            right: 0,
             top: this.paddingSettings.paddingTop,
             bottom: this.paddingSettings.paddingBottom
           })

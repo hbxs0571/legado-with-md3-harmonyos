@@ -149,17 +149,18 @@ export class ReaderFontRepository {
   }
 
   /** 分页阶段按字形缓存宽度，避免逐字符同步排版整段文本。 */
-  static measureTextWidthForPagination(context: UIContext, value: string, family: string, fontSizeFp: number): number {
+  static measureTextWidthForPagination(context: UIContext, value: string, family: string, fontSizeFp: number,
+    fontWeight: number = 400): number {
     let totalWidth = 0;
     let cursor = 0;
     while (cursor < value.length) {
       const codePoint = value.codePointAt(cursor);
       const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
       const glyph = value.substring(cursor, nextCursor);
-      const cacheKey = `${family}|${fontSizeFp}|${glyph}`;
+      const cacheKey = `${family}|${fontSizeFp}|${fontWeight}|${glyph}`;
       let glyphWidth = ReaderFontRepository.widthCache.get(cacheKey);
       if (glyphWidth === undefined) {
-        glyphWidth = ReaderFontRepository.measureTextWidth(context, glyph, family, fontSizeFp);
+        glyphWidth = ReaderFontRepository.measureTextWidth(context, glyph, family, fontSizeFp, fontWeight);
         if (ReaderFontRepository.widthCache.size >= ReaderFontRepository.maxWidthCacheEntries) {
           ReaderFontRepository.widthCache.clear();
         }
@@ -170,23 +171,34 @@ export class ReaderFontRepository {
     }
     return totalWidth;
   }
-  /** 用与阅读器相同的字体引擎测量一行宽度，覆盖自定义字体和衬线/等宽系统族。 */
-  static measureTextWidth(context: UIContext, value: string, family: string, fontSizeFp: number): number {
+  /**
+   * 用与阅读器相同的字体引擎测量一行宽度，覆盖自定义字体和衬线/等宽系统族。
+   * 字重必须跟正文渲染一致：正文用 fontWeight(500/900/…) 时字形更宽，
+   * 若按默认 400 测量，分页算出的行宽会偏窄，行尾单词被挤到下一行，
+   * 而正文每行是 maxLines(1) 定高，多出来的单词就被直接裁掉（行末丢词）。
+   */
+  static measureTextWidth(context: UIContext, value: string, family: string, fontSizeFp: number,
+    fontWeight: number = 400): number {
     if (value.length === 0) { return 0; }
     // MeasureUtils 的系统默认字体测量路径更轻；只把非默认字体交给 ParagraphBuilder。
     if (family === 'HarmonyOS Sans') {
-      const metrics = context.getMeasureUtils().measureTextSize({ textContent: value, fontSize: fontSizeFp });
+      const metrics = context.getMeasureUtils().measureTextSize({
+        textContent: value, fontSize: fontSizeFp, fontWeight: fontWeight
+      });
       const rawWidth = metrics.width ?? 0;
       let widthPx = 0;
       if (typeof rawWidth === 'number') { widthPx = rawWidth; }
       else if (typeof rawWidth === 'string') { widthPx = Number.parseFloat(rawWidth); }
       return context.px2vp(Number.isFinite(widthPx) ? widthPx : 0);
     }
-    const cacheKey = `${family}|${fontSizeFp}|${value}`;
+    const cacheKey = `${family}|${fontSizeFp}|${fontWeight}|${value}`;
     const cached = ReaderFontRepository.widthCache.get(cacheKey);
     if (cached !== undefined) { return cached; }
     const builder = new text.ParagraphBuilder({
-      textStyle: { fontFamilies: [family], fontSize: context.fp2px(fontSizeFp) }
+      textStyle: {
+        fontFamilies: [family], fontSize: context.fp2px(fontSizeFp),
+        fontWeight: fontWeight
+      }
     }, text.FontCollection.getGlobalInstance());
     builder.addText(value);
     const paragraph = builder.build();

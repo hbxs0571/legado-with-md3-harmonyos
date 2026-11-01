@@ -305,6 +305,43 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - ArkTS 编译有既有异常处理、弃用 API 与剪贴板授权警告；本次未出现编译错误。Hvigor 提示 `No signingConfig found for product default`。
 - 构建产生的 HAP 仅作本地编译验证，受 Git 忽略，未作为安装包提交或发行。构建成功不代表 API 12 真机兼容或上述 E 端未验项已通过。
 
+## 2026-11-01 N 端正文排版三缺陷修复（设备验收通过）
+
+**范围**：阅读页正文排版。三个缺陷由用户在一张菜单截图里发现并回报：「整个正文阅读部分都不对吧，右边距去哪儿了，底下还有半行，也没有下边距」。
+
+**设备与素材**：HarmonyOS 模拟器 `127.0.0.1:5555`（1280×2832，密度 3.5 px/vp，API 26），包名 `io.legado.harmony`，书 `the-metamorphosis`（本地 TXT，119736 B，正文文件 `files/books/local-1793481021711.txt` 完好，`ReaderPage` 可正常进入）。设备偏好：`fontSize=20`、`lineSpacing=12`、`paddingLeft/Right=16`、`paddingTop/Bottom=6`、`textBottomJustify=true`、`textBold=500`、`letterSpacing=0.1`、`paragraphIndent=　　`、`readerNightMode=true`。
+
+**取证方法**：`uitest dumpLayout -p /data/local/tmp/x.json` 取布局树逐行 `bounds`（比截图像素统计更精确，不受行内空白干扰），`uitest screenCap` 取图做左右边界复核。
+
+### 缺陷一：左右边距不对称（左边距翻倍、右边距被顶出屏幕）
+
+- **修复前**：正文行 `bounds` 左边界 `x=113`（=32vp）、右边界 `x=1271`（屏幕宽 1280，余量仅 9px）。左边距被叠加两次，右边距被列宽挤出屏幕。
+- **根因**：`entry/src/main/ets/pages/ReaderPage.ets` 的 `build()` 里，外层 Column 在单页时补了一次 `left/right: paddingLeft/Right`，而正文那层 `Row` 的每一列又各自 `.padding({ left, right })`，单页时两者相加；`getColumnStrideWidth()` 又按整屏宽 `readerContentWidth / columns` 算列宽（不减外层内边距），列宽把内容顶到屏幕右缘。
+- **修复**：外层 Column 左右内边距恒为 `0`，左右内边距一律由每一列自己带（`getColumnStrideWidth()` / `getBodyContentWidth()` 原逻辑不动）。
+- **修复后**：正文行 `bounds` 恒为 `x 56-1224`，即左 56px、右 1280-1224=56px，两侧对称 **16vp**，与 `paddingLeft/Right=16` 完全一致。
+
+### 缺陷二：底部对齐位移逐行累加，行距越往下越疏、末行溢出屏幕
+
+- **修复前**：21 行正文中心步进从 96px 单调递增到 158px；末行压到 `y=2828`（屏底 2832），与页脚「第1章(1) / 1/16 0.5%」（`y2626-2675`）直接重叠。
+- **根因**：`ReaderPageTextLine` 两个分支都把底部对齐位移塞进 `margin({ top: line.verticalSpaceBefore + this.readerBottomJustifyGap * lineIndex })`。margin 参与布局流，第 i 行再加 `gap*i` 会把前面所有位移一起推下去，累计位移是 `gap·n²/2`。上游 `app/src/main/java/io/legado/app/feature/reader/core/layout/ReaderPaginator.kt:481` 的 `justifyColumnBottom()` 是逐行 `offsetY(deltaY)` 平移，不改变布局流。
+- **修复**：两处 `margin` 只保留 `top: line.verticalSpaceBefore`，位移改用 `.translate({ y: this.readerBottomJustifyGap * (lineIndex - this.readerColumnFirstLineIndex(column)) })`（后者原分支漏了 `- readerColumnFirstLineIndex(column)`，一并补上，与前者统一）。
+- **修复后**：20 行正文步进为 `105 / 105 / 107 / 105 / 106 / 105 / 106 / 106 / 105 / 106 / 105 / 106 / 106 / 106 / 105 / 105 / 106 / 106` px，理论值 `fontSize × 1.25 × lineSpacing / 10 = 20 × 1.25 × 12 / 10 = 30vp = 105px`，实测均值 105.5px（±1px 为字形升降部差异），**离散度从 62px 降到 2px**。末行底 `y=2469`，页脚顶 `y=2626`，中间留 157px，底部不再溢出。
+
+### 缺陷三：行末丢词（本轮顺带发现并修复）
+
+- **修复前**：屏幕首行显示 `One morning,`，而分页器算出的该行文本是 `　　One morning, when`——**「when」被裁掉了**。多行都有此现象（`bed into a horrible` 丢 `vermin.`、`arches into stiff` 丢 `sections.` 等）。
+- **根因**：分页测量用的字重与渲染不一致。`ReaderFontRepository.measureTextWidth()` 走 `MeasureUtils.measureTextSize({ textContent, fontSize })`，未传 `fontWeight`，按默认 **400** 测量；而正文 `Text` 用 `getReaderFontWeight()` = **500**（`textBold=500`）渲染。实测同一串 `One morning, when`：400 → 661px、500 → **670px**、900 → 706px，即渲染比测量宽 1.4%。分页器按偏窄的宽度算行宽，行尾单词本应塞得下；渲染时实际宽度超出行宽，`TextAlign.JUSTIFY` 把它挤到第二行，而每行是 `maxLines(1)` + 固定 `height(line.height)`，多出来的单词直接被裁掉。
+- **修复**：`ReaderFontRepository.measureTextWidth()` / `measureTextWidthForPagination()` 增加 `fontWeight: number = 400` 参数并透传给 `measureTextSize` 与 `ParagraphBuilder` 的 `textStyle.fontWeight`，缓存键带上字重；`ReaderPage.ets` 四处调用点分别传入 `getReaderFontWeight()`（正文三处）与 `resolveTitleWeight()`（标题一处）。
+- **修复后**：首行显示为 `　　One morning, when`，与分页器文本一致；正文全页无缺词。分页总数由 `1/16` 变为 `1/17`（内容完整后每页行数变化，属预期）。
+
+**复原**：三处调试埋点（`[READER-GAP]`、`[LINE]`、`[W]` 的 `console.info`）已全部删除，`grep -c "READER-GAP\|\[LINE\]\|\[W\]" entry/src/main/ets/pages/ReaderPage.ets` = 0；删后重建仍 `BUILD SUCCESSFUL`，覆盖安装后复查排版不变。
+
+**未取证部分**：
+
+- 上述全部取证在 **API 26 模拟器**上完成，未上真机；真机的字体渲染度量与模拟器可能有微小差异，若真机字重度量偏差更大，行末丢词可能以更隐蔽的形式复现（现有修复已让测量与渲染同源，理论上消除该类偏差，但未在真机验证）。
+- `textBold` 取 `1`（→900）与 `2`（→300）两档只做了代码路径核对，未逐档截图比对行末是否仍完整。
+- 双列（横屏双页）下的行末丢词与底部对齐未复测：`calculateReaderBottomJustifyGap()` 在 `resolveReaderColumnCount() > 1` 时直接返回 0（KI-D4 已知差异），本轮未改变该行为。
+
 ## 2026-11-01 N 端 KI-A2 菜单层依赖三项（面板落库通过，菜单图标视觉未验）
 
 **范围**：`docs/parity/READER-CONFIG.md` A 块的 A-05 展示菜单项图标（`showMenuIcon`）、A-08 阅读标题补充信息（`showReadTitleAddition`）、A-17 阅读菜单不透明度（`menuAlpha`）。三项对应上游 `domain/model/settings/ReadSettings.kt:119`、`:55`、`:13`，恰好是「上游有配置」的三种形态：有设置入口且有渲染消费点、有设置入口但无消费点、两者都没有。判据与证据见 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的 KI-A2 段。
@@ -338,7 +375,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **未取证部分**：
 
-- 「更多」面板里 `showMenuIcon` 的**图标显隐没有像素级取证**：模拟器书架三本书的正文文件均已丢失，`ReaderPage` 进不去，只能给到「面板 Toggle 状态 + prefs 落库」两级证据。
+- 「更多」面板里 `showMenuIcon` 的**图标显隐没有像素级取证**：本条取证时模拟器书架三本书的正文文件均已丢失、`ReaderPage` 进不去，只能给到「面板 Toggle 状态 + prefs 落库」两级证据。**该阻塞点此后已解除**——`the-metamorphosis` 的正文文件（`files/books/local-1793481021711.txt`，119736 B）完好，阅读页可正常进入并渲染正文（见同日的「正文排版三缺陷修复」段），本条未借新条件重测。
 - `menuAlpha` 与 `showReadTitleAddition` 上游本就没有渲染消费点，本轮按判据**只落库不上屏**，因此也没有视觉可验。
 - `showMenuIcon` 在本地的作用域是「更多」网格面板；本地顶栏溢出菜单用的 `MenuItem` 只接受 `startIcon: ResourceStr`，不接受自绘 `AppGlyph` 这样的自定义组件，所以无法复刻上游下拉菜单的 `leadingIcon` 形态。
 
@@ -609,7 +646,7 @@ prefs 直读（先 `aa force-stop` 再 `hdc file recv /data/app/el2/100/base/io.
 39. **设置项上屏**（我的 `(1103,2688)` → 设置 `(640,2181)` → 阅读界面 `(640,1115)` → 更多 tab `(1084,2629)`，四项在首屏）：`uitest dumpLayout` 读到 `填充刘海区域 / 把显示缺口算进正文可用区`（Toggle `[1057,1231][1183,1301]`，`checked=false`）、`扩展到刘海 / 上游同名字段只做配置，没有对应渲染效果`（`[1057,1423][1183,1493]`，`checked=true`）、`适配特殊样式 / 按标记解释正文里的分段与富文本`（`[1057,1615][1183,1685]`，`checked=true`）、`使用自定义中文分行 / 改后重新计算分页`（`[1057,1807][1183,1877]`，`checked=false`）。**四个默认值与上游 `ReadSettings.kt:11/14/18/19` 完全一致。**
 40. **落库决定性证据（四个 Toggle 与四个存储键一一对应）**：依次点 `(1120,1266)`/`(1120,1458)`/`(1120,1650)`/`(1120,1842)` 共两轮（一轮改一轮复原），偏好文件每次立即更新（8028↔8029 字节、mtime 同步变化），读回：`paddingDisplayCutouts` `false→true→false`、`readBodyToLh` `true→false→true`、`adaptSpecialStyle` `true→false→true`、`useZhLayout` `false→true→false` —— **无一处串键**。
 41. **重启回显**：`aa force-stop`/`aa start` 后重新进面板，四个 Toggle 的 `checked` 与偏好文件一致（`false`/`true`/`true`/`false`），证明读路径与快照回灌都对。
-42. **未验部分**：`adaptSpecialStyle` 的两种标记渲染 —— `[newpage]` 独占一段成为换页点、`<usehtml>...</usehtml>` 整段作为富文本块。**当前模拟器没有一本正文可读的书**（书架 `dup-probe`/`test-book` 等正文文件均已丢失，打开只显示「缺正文」详情页），因此只做代码侧只读证据链：`LocalTextSemantics.ets:94`（`[newpage]` → `pageBreak: true`）、`:107`/`:113`（`<usehtml>` → `richHtml: true`）、`LocalReaderPaginator.ets:306`（`paginate` 路径）与 `:515`（`countPagesIncrementally` 路径）都按 `pageBreak` 强制换页。`paddingDisplayCutouts` 同理：模拟器无显示缺口，`getWindowAvoidArea(TYPE_CUTOUT)` 返回 `visible=false`，三个 inset 恒 0，正文宽度不变 —— 只能验到开关与落库。
+42. **未验部分**：`adaptSpecialStyle` 的两种标记渲染 —— `[newpage]` 独占一段成为换页点、`<usehtml>...</usehtml>` 整段作为富文本块。本条取证时**模拟器没有一本正文可读的书**（书架 `dup-probe`/`test-book` 等正文文件均已丢失，打开只显示「缺正文」详情页），因此只做代码侧只读证据链：`LocalTextSemantics.ets:94`（`[newpage]` → `pageBreak: true`）、`:107`/`:113`（`<usehtml>` → `richHtml: true`）、`LocalReaderPaginator.ets:306`（`paginate` 路径）与 `:515`（`countPagesIncrementally` 路径）都按 `pageBreak` 强制换页。**该阻塞点此后已解除**（`the-metamorphosis` 正文完好、阅读页可进），本条未借新条件重测。`paddingDisplayCutouts` 同理：模拟器无显示缺口，`getWindowAvoidArea(TYPE_CUTOUT)` 返回 `visible=false`，三个 inset 恒 0，正文宽度不变 —— 只能验到开关与落库。
 43. **本轮顺带查明并修复了一个环境故障（重要，后续沿用）**：设备验收时发现 prefs **完全不落盘** —— 不只本轮四个新键没写，连已有键（如拨「隐藏状态栏」改 `hideStatusBar`）也不写，文件 mtime 卡死在 `20:59`。排查排除项：`persist start`/`context ok`/`snapshot ok`/`save done` 四行埋点齐全（Promise 正常 resolve、无 `save threw:`）、磁盘 `26%` 充足、`ps` 无多进程、`ls -lZ` 的 SELinux 标签与正常文件一致、`xml.etree` 解析该文件 149 个键良构无重复。**决定性日志**：`hilog -x` 中反复出现 `E C01653/NativePreferences: ParseNodeElement: An unsupported element type was encountered in parsing = text`、`E ReadSettingXml: The error occurred during getting xml child elements`、`W ReloadFromDisk: ... reload result is 0`。**根因**：该 prefs XML 被测试期多次 `hdc file send` 整文件覆盖后，`string` 节点全部变成文本子节点形式（42 个 text-form、0 个 attr-form），`NativePreferences` 回读失败 → 内存 store 与磁盘脱钩 → 此后 `put()`+`flush()` 静默不落盘。**修复**：`aa force-stop` 后推入 67 字节的 `<?xml version="1.0" encoding="UTF-8"?><preferences version="1.0"/>`，重启即恢复（第一次拨开关就把文件写成 8028 字节、四键全部落盘）。**结论：这是测试手法造成的环境损坏，不是本轮代码缺陷。后续注入测试值只拨 UI 控件，不要整文件覆盖 prefs。**
 44. **测试期改动已复原**：四个开关回到出厂值 `paddingDisplayCutouts=false`、`readBodyToLh=true`、`adaptSpecialStyle=true`、`useZhLayout=false`（读回确认）；调试埋点（`import { hilog }`、三处 `KI-A1-DBG`、`setter loaded=`）已全部删除，`grep -c "KI-A1-DBG" entry/src/main/ets/pages/Index.ets` = 0，删后重建仍 `BUILD SUCCESSFUL`。
 45. **只代表 N 端模拟器**：以上结论基于 HarmonyOS 模拟器（API 26 运行时、`compatibleSdkVersion 5.0.0(12)`），未在真机验证；屏幕缺口与正文标记渲染两项在真机上仍需补验。

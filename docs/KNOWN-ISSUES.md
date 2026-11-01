@@ -480,6 +480,7 @@
 **已知差异**
 - 平板判定：本地按「视口短边 ≥ 600vp」近似 Android 的 `sw600dp`；上游用资源限定 `isTablet`，在折叠屏/分屏等非常规尺寸上可能判定不同。
 - 底部两端对齐：`ReaderPage.ets` 的 `calculateReaderBottomJustifyGap()` 在列数 > 1 时直接返回 0。原因是本地按「整页行数」摊分末行空隙，双列下会把两列的高度算错；上游是 `justifyColumnBottom()` 逐列独立摊分。因此**双列模式下末行不做两端对齐**，这是有意为之的保守处理。
+  - 单列下的位移实现已按上游改正：位移必须用 `.translate({ y })` 施加，**不能塞进 `margin`**。曾把 `gap * lineIndex` 加进 `margin-top`，margin 参与布局流会让位移逐行累加（总和 `gap·n²/2`），表现为行距越往下越疏、末行溢出屏幕并与页脚重叠；上游是逐行 `offsetY(deltaY)` 平移、不改变布局流。修复与设备取证见 [VALIDATION](VALIDATION.md) 的「2026-11-01 N 端正文排版三缺陷修复」。
 - 翻页动画仍是整页平移：上游双页模式下翻一页 = 跨两列，本地 `turnReaderPage()` 的步长语义没变（`localReaderPages` 的每一个元素本来就是「一页 = 最多两列」），所以跨列已经在排版阶段完成，动画层面无需再改。
 
 **验收**
