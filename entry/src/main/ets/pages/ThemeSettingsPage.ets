@@ -12,6 +12,26 @@ export struct ThemeSettingsPage {
   onThemeModeChange: (themeMode: string) => void = (_themeMode: string) => {};
   /** 用户选了调色板，参数是序号 0..4。 */
   onPaletteChange: (paletteIndex: number) => void = (_paletteIndex: number) => {};
+  /** 护眼模式总开关，与阅读设置页共用同一份全局状态。 */
+  @Prop eyeProtectionEnabled: boolean = false;
+  /** 深色模式时自动开启护眼。 */
+  @Prop eyeProtectionAutoNight: boolean = false;
+  /** 护眼是否按时间段生效。 */
+  @Prop eyeProtectionSchedule: boolean = false;
+  /** 护眼强度 0..100，对齐上游 `colorTemperature`。 */
+  @Prop eyeProtectionIntensity: number = 50;
+  /** 定时开始时间 `HH:mm`。 */
+  @Prop eyeProtectionStartTime: string = '22:00';
+  /** 定时结束时间 `HH:mm`。 */
+  @Prop eyeProtectionEndTime: string = '07:00';
+  /** 护眼当前是否正在生效，用于色温行显示实际值。 */
+  @Prop eyeProtectionActive: boolean = false;
+  onEyeProtectionEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onEyeProtectionAutoNightChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onEyeProtectionScheduleChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onEyeProtectionIntensityChange: (intensity: number) => void = (_intensity: number) => {};
+  onEyeProtectionStartTimeChange: (time: string) => void = (_time: string) => {};
+  onEyeProtectionEndTimeChange: (time: string) => void = (_time: string) => {};
   @State pureBlack: boolean = false;
   @State showRefactorTip: boolean = true;
   @State showStatusBar: boolean = true;
@@ -19,9 +39,6 @@ export struct ThemeSettingsPage {
   @State predictiveBack: boolean = true;
   @State sharedElement: boolean = true;
   @State followCoverColor: boolean = true;
-  @State eyeProtectionEnabled: boolean = false;
-  @State eyeProtectionAutoNight: boolean = false;
-  @State eyeProtectionSchedule: boolean = false;
   @State blurEnabled: boolean = false;
   @State progressiveBlurEnabled: boolean = false;
   @State containerBackgroundEnabled: boolean = false;
@@ -55,6 +72,28 @@ export struct ThemeSettingsPage {
     if (index === 2) { return '#665C32'; }
     if (index === 3) { return '#55565A'; }
     return '#385C8A';
+  }
+
+  /** 护眼定时的起止时间选择，对齐阅读设置页同名能力。 */
+  private pickEyeProtectionTime(isStart: boolean): void {
+    const current = isStart ? this.eyeProtectionStartTime : this.eyeProtectionEndTime;
+    const parts: string[] = current.split(':');
+    const selected: Date = new Date();
+    selected.setHours(Number(parts[0]), Number(parts[1]), 0, 0);
+    this.getUIContext().showTimePickerDialog({
+      selected: selected,
+      useMilitaryTime: true,
+      onAccept: (value: TimePickerResult): void => {
+        const hourText = value.hour < 10 ? `0${value.hour}` : `${value.hour}`;
+        const minuteText = value.minute < 10 ? `0${value.minute}` : `${value.minute}`;
+        const time = `${hourText}:${minuteText}`;
+        if (isStart) {
+          this.onEyeProtectionStartTimeChange(time);
+        } else {
+          this.onEyeProtectionEndTimeChange(time);
+        }
+      }
+    });
   }
 
   build() {
@@ -176,17 +215,24 @@ export struct ThemeSettingsPage {
 
           ThemeSectionTitle({ title: '护眼模式' }).margin({ top: 20 })
           Column() {
-            ThemeSwitchRow({ title: '启用护眼模式', detail: '使用暖色调降低蓝光', checked: this.eyeProtectionEnabled, onChange: (value: boolean) => { this.eyeProtectionEnabled = value; this.onUnavailableAction('护眼模式设置暂未保存') } })
-            ThemeSwitchRow({ title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换', checked: this.eyeProtectionAutoNight, onChange: (value: boolean) => { this.eyeProtectionAutoNight = value; this.onUnavailableAction('护眼模式设置暂未保存') } })
-            if (this.eyeProtectionEnabled) {
-              ThemeSettingsOption({ title: '色温', detail: '', onSelect: () => this.onUnavailableAction('色温调节尚未迁移') })
+            ThemeSwitchRow({ title: '启用护眼模式', detail: '使用暖色调降低蓝光', checked: this.eyeProtectionEnabled, onChange: (value: boolean) => this.onEyeProtectionEnabledChange(value) })
+            ThemeSwitchRow({ title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换', checked: this.eyeProtectionAutoNight, onChange: (value: boolean) => this.onEyeProtectionAutoNightChange(value) })
+            if (this.eyeProtectionEnabled || this.eyeProtectionAutoNight) {
+              ThemeSettingsSlider({
+                title: '色温',
+                detail: this.eyeProtectionActive ? `当前生效：${this.eyeProtectionIntensity}` : `强度 ${this.eyeProtectionIntensity}`,
+                value: this.eyeProtectionIntensity,
+                minValue: 0,
+                maxValue: 100,
+                onChange: (value: number) => this.onEyeProtectionIntensityChange(value)
+              })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              ThemeSwitchRow({ title: '定时开启', detail: '仅在设定的时间段内生效', checked: this.eyeProtectionSchedule, onChange: (value: boolean) => { this.eyeProtectionSchedule = value; this.onUnavailableAction('护眼定时尚未保存') } })
+              ThemeSwitchRow({ title: '定时开启', detail: '仅在设定的时间段内生效', checked: this.eyeProtectionSchedule, onChange: (value: boolean) => this.onEyeProtectionScheduleChange(value) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               if (this.eyeProtectionSchedule) {
-                ThemeSettingsOption({ title: '开始时间', detail: '', onSelect: () => this.onUnavailableAction('时间选择尚未迁移') })
+                ThemeSettingsOption({ title: '开始时间', detail: this.eyeProtectionStartTime, onSelect: () => this.pickEyeProtectionTime(true) })
                   .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-                ThemeSettingsOption({ title: '结束时间', detail: '', onSelect: () => this.onUnavailableAction('时间选择尚未迁移') })
+                ThemeSettingsOption({ title: '结束时间', detail: this.eyeProtectionEndTime, onSelect: () => this.pickEyeProtectionTime(false) })
                   .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               }
             }
@@ -335,5 +381,33 @@ struct ThemeSwitchRow {
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .onChange((enabled: boolean) => this.onChange(enabled))
     }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
+  }
+}
+
+/** 带数值的滑杆行，用于色温等连续参数；对齐上游 `SliderSettingItem`。 */
+@Component
+struct ThemeSettingsSlider {
+  @Prop title: string = '';
+  @Prop detail: string = '';
+  @Prop value: number = 0;
+  @Prop minValue: number = 0;
+  @Prop maxValue: number = 100;
+  onChange: (value: number) => void = (_value: number) => {};
+  build() {
+    Column() {
+      Row() {
+        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary'))
+        Blank()
+        Text(`${this.value}`).fontSize(12).fontColor($r('app.color.theme_accent'))
+      }.width('100%')
+      Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: 1, style: SliderStyle.OutSet })
+        .width('100%')
+        .selectedColor($r('app.color.theme_accent'))
+        .trackColor($r('app.color.theme_surface_tertiary'))
+        .onChange((value: number) => this.onChange(Math.round(value)))
+      if (this.detail.length > 0) {
+        Text(this.detail).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+      }
+    }.alignItems(HorizontalAlign.Start).width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
   }
 }

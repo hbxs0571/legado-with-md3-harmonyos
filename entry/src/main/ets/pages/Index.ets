@@ -46,6 +46,7 @@ import {
 import { OnboardingRepository } from '../data/OnboardingRepository';
 import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT } from '../data/ThemeSettingsRepository';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
+import { EyeProtection } from '../data/EyeProtection';
 import {
   ReaderBottomActionConfig, ReaderSettingsRepository, ReaderSettingsSnapshot, READER_BACKGROUND_STYLES,
   READER_CLICK_REGION_DEFAULTS,
@@ -2719,26 +2720,31 @@ struct Index {
   }
 
   private isEyeProtectionActive(): boolean {
-    if (!(this.eyeProtectionEnabled || (this.eyeProtectionAutoNight && this.readerNightMode))) { return false; }
-    if (!this.eyeProtectionSchedule) { return true; }
-    const start = this.parseEyeProtectionMinutes(this.eyeProtectionStartTime);
-    const end = this.parseEyeProtectionMinutes(this.eyeProtectionEndTime);
-    if (start < 0 || end < 0) { return true; }
-    if (start === end) { return true; }
+    return EyeProtection.isActiveAt(
+      this.eyeProtectionEnabled,
+      this.eyeProtectionAutoNight,
+      this.readerNightMode,
+      this.eyeProtectionSchedule,
+      this.eyeProtectionStartTime,
+      this.eyeProtectionEndTime,
+      this.eyeProtectionMinuteOfDay()
+    );
+  }
+
+  /** 当天已过的本地分钟数；`eyeProtectionMinute` 是 epoch 分钟，这里按本地时区折算。 */
+  private eyeProtectionMinuteOfDay(): number {
     const now = new Date(this.eyeProtectionMinute * 60000);
-    const current = now.getHours() * 60 + now.getMinutes();
-    return start < end ? current >= start && current < end : current >= start || current < end;
+    return now.getHours() * 60 + now.getMinutes();
+  }
+
+  /** 护眼覆盖层颜色；空串表示当前不需要覆盖，对齐上游强度 <= 0 时不加滤镜。 */
+  private eyeProtectionOverlayColor(): string {
+    if (!this.isEyeProtectionActive()) { return ''; }
+    return EyeProtection.overlayColorForIntensity(this.eyeProtectionIntensity);
   }
 
   private parseEyeProtectionMinutes(value: string): number {
-    const parts = value.trim().split(':');
-    if (parts.length !== 2) { return -1; }
-    const hour = Number(parts[0]);
-    const minute = Number(parts[1]);
-    if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour >= 24 || minute < 0 || minute >= 60) {
-      return -1;
-    }
-    return hour * 60 + minute;
+    return EyeProtection.parseTime(value);
   }
 
   private commitEyeProtectionChange(): void {
@@ -4950,6 +4956,7 @@ struct Index {
   }
 
   build() {
+    Stack() {
     Column() {
       if (!this.onboardingLoaded) {
         Column() {
@@ -5791,7 +5798,20 @@ struct Index {
             themeMode: this.themeMode,
             paletteIndex: this.themePaletteIndex,
             onThemeModeChange: (themeMode: string) => this.selectThemeMode(themeMode),
-            onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex)
+            onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex),
+            eyeProtectionEnabled: this.eyeProtectionEnabled,
+            eyeProtectionAutoNight: this.eyeProtectionAutoNight,
+            eyeProtectionSchedule: this.eyeProtectionSchedule,
+            eyeProtectionIntensity: this.eyeProtectionIntensity,
+            eyeProtectionStartTime: this.eyeProtectionStartTime,
+            eyeProtectionEndTime: this.eyeProtectionEndTime,
+            eyeProtectionActive: this.isEyeProtectionActive(),
+            onEyeProtectionEnabledChange: (enabled: boolean) => this.setEyeProtectionEnabled(enabled),
+            onEyeProtectionAutoNightChange: (enabled: boolean) => this.setEyeProtectionAutoNight(enabled),
+            onEyeProtectionScheduleChange: (enabled: boolean) => this.setEyeProtectionSchedule(enabled),
+            onEyeProtectionIntensityChange: (intensity: number) => this.setEyeProtectionIntensity(intensity),
+            onEyeProtectionStartTimeChange: (time: string) => this.setEyeProtectionStartTime(time),
+            onEyeProtectionEndTimeChange: (time: string) => this.setEyeProtectionEndTime(time)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_OTHER_SETTINGS) {
           OtherSettingsPage({
@@ -6756,7 +6776,17 @@ struct Index {
       }
     }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
-      .sepia(this.isEyeProtectionActive() ? this.eyeProtectionIntensity / 100 : 0)
+    // 护眼覆盖层：上游用 ColorFilter.colorMatrix 给全屏套对角色矩阵，这里用同尺寸纯色层
+    // 配 MULTIPLY 混合，混合公式 result = 内容 × 覆盖色，与对角矩阵逐通道相乘等价。
+    if (this.eyeProtectionOverlayColor().length > 0) {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(this.eyeProtectionOverlayColor())
+        .blendMode(BlendMode.MULTIPLY)
+        .hitTestBehavior(HitTestMode.None)
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    }
+    }.width('100%').height('100%')
   }
 }
 

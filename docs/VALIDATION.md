@@ -30,6 +30,57 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r301 深色模式阶段二第一批：护眼六项（A24–A29）设备验收通过
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 两次通过，43 s 356 ms / 44 s 862 ms）。
+- **改了哪些**：新建 `entry/src/main/ets/data/EyeProtection.ets`（逐句移植上游 `ui/book/read/EyeProtection.kt` 的 9 个二次拟合系数、`temperatureForIntensity`、`matrixValuesForIntensity`、`parseTime`、`isActiveAt`，另加 `overlayColorForIntensity` 把矩阵对角线转覆盖色）；`pages/Index.ets` 把 `isEyeProtectionActive()` 改为调 `EyeProtection.isActiveAt`，根 `Column` 上的 `.sepia(...)` 换成根 `Stack` 顶层一层 `blendMode(BlendMode.MULTIPLY)` 纯色覆盖层；`pages/ThemeSettingsPage.ets` 护眼组六个控件由 `onUnavailableAction` 改为 `@Prop` + 回调，与阅读设置页共用 `Index.ets` 同一份状态。
+- **为什么 blendMode 不是近似**：上游矩阵 `[red,0,0,0,0, 0,green,0,0,0, 0,0,blue,0,0, 0,0,0,1,0]` 除对角线外全 0，是纯对角矩阵；`BlendMode.MULTIPLY` 的公式是 `result = 内容 × 覆盖色`，逐通道相乘与对角矩阵乘法数学等价。这是 F3「ArkUI 无 `AppCompatDelegate` 等价物、必须换机制而不是照抄」的一次具体落法。
+
+### 验收①启用护眼模式 → 全 App 泛暖
+
+- 操作：我的 → 设置 → 外观 → 护眼模式 → 打开「启用护眼模式」。
+- 预期：整屏偏暖；`legado_reader_settings` 的 `eyeProtectionEnabled` 变 `true`。
+- 实际：开关变开，整屏立刻泛暖；prefs 由 `bool eyeProtectionEnabled=false` 变 `true`。像素取样（同一坐标）：改前 `(245,246,248)`，改后 `(255,187,122)`。按上游系数在强度 50 处算出的理论值为 `(255,187,121)`，**实测与理论只差 1**（JPEG 量化误差）。**通过**。
+
+### 验收②色温强度 → 暖色随强度加深
+
+- 操作：在护眼组把「色温」滑块由 50 拖到约 97。
+- 预期：`eyeProtectionIntensity` 变 97；屏幕更暖；文案由「强度 N」变「当前生效：N」。
+- 实际：prefs 的 `double eyeProtectionIntensity` 由 `50.000000` 变 `97.000000`；屏幕明显更暖；行尾文案变为「当前生效：97」。**通过**。
+
+### 验收③深色模式时自动开启 → 只随深色生效
+
+- 操作：关掉「启用护眼模式」、只开「深色模式时自动开启」；先在浅色下截图，再切到深色截图。
+- 预期：浅色不生效（像素不变），深色生效（泛暖）。
+- 实际：浅色下取色 `(254,255,255)`（未泛暖）；切深色后取色 `(17,13,10)`（明显泛暖）。**通过**。
+- 说明：这一支在 r301 之前就读了 `autoNight` 但没用，本轮由 `EyeProtection.isActiveAt` 的 `enabled || (autoNight && isDark)` 正式接上，与上游 `EyeProtection.kt:52-78` 同构。
+
+### 验收④定时开启 → 区间外不生效
+
+- 操作：打开「定时开启」，保持默认 22:00–07:00，在 14:16 截图。
+- 预期：当前不在区间内，覆盖层不挂。
+- 实际：开始/结束两行出现；整屏取色回到未泛暖的基色，与「定时关闭时」一致。**通过**。
+
+### 验收⑤起止时间选择器 → 真能改
+
+- 操作：点「开始时间」→ 弹时间选择器 → 滚到 14:00 → 确定。
+- 预期：`eyeProtectionStartTime` 变 `14:00`。
+- 实际：选择器弹出且默认停在 22:00；改成 14:00 确定后，prefs 的 `string eyeProtectionStartTime` 变 `14:00`，行尾 detail 同步显示 `14:00`。**通过**。
+
+### 验收⑥跨零点区间 → 14:00–07:00 立即生效
+
+- 操作：起止改为 `14:00`–`07:00`（跨零点），在 14:20 截图。
+- 预期：跨零点分支命中，覆盖层生效。
+- 实际：覆盖层生效，取色 `(25,20,14)`，色温行显示「当前生效：97」。**通过**。
+
+### 踩坑记录
+
+覆盖层最初用 `.width('100%').height('100%')` 直接贴在根 `Stack` 上，只染到内容区，状态栏与底部手势条保持原色（截图可见两条未染的横带）。加 `.expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])` 后整屏一致。另加 `.hitTestBehavior(HitTestMode.None)` 保证覆盖层不吃点击。
+
+### 复原状态
+
+`legado_reader_settings` 已复原为 `eyeProtectionEnabled=false`、`eyeProtectionAutoNight=false`、`eyeProtectionSchedule=false`、`eyeProtectionIntensity=50`、`eyeProtectionStartTime=22:00`、`eyeProtectionEndTime=07:00`。模拟器系统显示模式仍是「浅色」，应用 `legado_theme` 停在 `themeMode="0"`。
+
 ## 2026-11-01 N 端 r300 深色模式阶段一：全局 themeMode 与两套颜色资源（设备验收通过）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（9503748 字节，`assembleHap` 于 13:33 通过）。

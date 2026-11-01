@@ -771,18 +771,20 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **验收**：A20 打开 → 详情页头部底色随封面主色变化；A23 打开 → 点作者跳到「作者名」搜索结果而非书名。
 
-**KI-TH-A7 护眼六项（要接）** —— 覆盖 A24 启用护眼模式、A25 深色模式时自动开启、A26 护眼色温强度、A27 护眼定时开启、A28 护眼开始时间、A29 护眼结束时间。
+**KI-TH-A7 护眼六项（已实现，r301）** —— 覆盖 A24 启用护眼模式、A25 深色模式时自动开启、A26 护眼色温强度、A27 护眼定时开启、A28 护眼开始时间、A29 护眼结束时间。
 
-**这是 A 块里唯一「有半套实现」的一组，必须写清两层缺口**：
+**本轮判定**：要接，已实现。
 
-- **第一层：主题页这套是死 UI**。`:173`/`:174`/`:176`/`:178`/`:181`/`:183` 六行全 `onUnavailableAction`，开关只改 `@State`，与另一套状态不通。
-- **第二层：阅读设置页那套能存盘，但没有渲染**。`ReaderSettingsPage.ets:1618-1659` 六个控件齐全且真的写盘（`Index.ets:1842-1847`），`Index.ets:2069-2079 isEyeProtectionActive()` 也真的按「开关 + 定时」判定；但判定结果只传成 `@Prop eyeProtectionActive`（`ReaderPage.ets:305`），**仅用于 `:3166` 底部动作条的高亮态**。全仓无 `colorFilter`/`blendMode`/暖色遮罩层 ⇒ **护眼在本地不改变任何像素**。
+**上游口径**：`ui/book/read/EyeProtection.kt`（149 行）—— `MIN_FILTER_TEMPERATURE = 2596` / `MAX_FILTER_TEMPERATURE = 5500`（`:21-22`）、`matrixValuesForIntensity(intensity)`（`:36-50`，9 个二次拟合系数）、`Modifier.eyeProtectionColorFilter(enabled, intensity)`（`:99-117`）；`base/BaseComposeActivity.kt:89-104` 把 `rememberEyeProtectionActive(...)` 的结果套在 `Box(Modifier.fillMaxSize().eyeProtectionColorFilter(...))` 上包住整页 —— **是全 App 级，不只是阅读页**。
 
-**上游口径**：`ui/book/read/EyeProtection.kt`（149 行）—— `MIN_FILTER_TEMPERATURE = 2596` / `MAX_FILTER_TEMPERATURE = 5500`（`:21-22`）、`matrixValuesForIntensity(intensity)`（`:36-50`）、`Modifier.eyeProtectionColorFilter(enabled, intensity)`（`:99-117`）；`base/BaseComposeActivity.kt:89-104` 把 `rememberEyeProtectionActive(...)` 的结果套在 `Box(Modifier.fillMaxSize().eyeProtectionColorFilter(...))` 上包住整页 —— **是全 App 级，不只是阅读页**。
+**本地落地**：
 
-**补法**：① 主题页六行改接 `Index.ets` 那套状态（与阅读设置页共用，不建第二套）；② `isEyeProtectionActive()` 补「深色时自动开启」这一支（当前只按开关+定时判，`autoNight` 读了但没用）；③ 新增色温矩阵工具，把 0..100 强度按 `EyeProtection.kt:36-50` 的系数映射到 2596K..5500K，用 ArkUI 的 `.colorFilter(...)`/`.blendMode(...)` 套到根容器上，**不能只存盘**。
+1. 新建 `entry/src/main/ets/data/EyeProtection.ets`，逐句移植上游：`temperatureForIntensity`、`matrixValuesForIntensity`（9 个系数原样照抄）、`parseTime`、`isActiveAt`（含跨零点分支）。额外加 `overlayColorForIntensity(intensity)` 把矩阵对角线转成覆盖色。
+2. **渲染不是近似**：上游矩阵 `[red,0,0,0,0, 0,green,0,0,0, 0,0,blue,0,0, 0,0,0,1,0]` 除对角线外全 0，是纯对角矩阵；`.blendMode(BlendMode.MULTIPLY)` 的混合公式是 `result = 内容 × 覆盖色`，逐通道相乘与对角矩阵数学等价。所以在 `Index.ets:6784-6792` 的根 Stack 上叠一层同尺寸纯色覆盖层（`hitTestBehavior(HitTestMode.None)` + `expandSafeArea` 覆盖状态栏与手势条）即等价实现。**原先根节点的 `.sepia()` 已删除**。
+3. 主题设置页六个控件（`ThemeSettingsPage.ets:180-199`）从死 UI 改为 `@Prop` + 回调，与阅读设置页共用 `Index.ets:407-412` 同一份状态，统一走 `setEyeProtection*` 写盘，不再有第二套。
+4. `isEyeProtectionActive()` 改为调 `EyeProtection.isActiveAt`，「深色时自动开启」这一支由 `readerNightMode`（全局 `themeMode` 的投影）提供。
 
-**验收**：护眼强度拖到 100 → 屏幕整体偏暖（像素取样 R 通道上升、B 通道下降）；拖到 0 → 恢复原色；开「深色时自动开启」+ 切到深色 → 自动生效；退出阅读页回到书架仍偏暖（全 App 级）。
+**验收**（r301 设备实测，见 [验证记录](VALIDATION.md)）：打开护眼 → 整屏泛暖，截图取色由 `(245,246,248)` 变 `(255,187,122)`，与上游系数算出的 `(255,187,121)` 一致；强度 50→97 暖色加深；只开「深色时自动开启」时浅色不生效、切深色即生效；定时 22:00–07:00 在 14:16 不生效（正确）；改成跨零点的 14:00–07:00 立即生效。
 
 **KI-TH-A8 模糊两项（要接）** —— 覆盖 A30 启用控件模糊、A31 启用渐变模糊。
 
