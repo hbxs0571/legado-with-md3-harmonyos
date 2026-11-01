@@ -697,13 +697,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 深色模式行登记（ZIP-THEME.md 的未接行）
 
-本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r305 后剩 54 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r306 后剩 51 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）。累计 28 行转 `已接`，剩余 **54 行 `未接`**（要接 49 / 不接 5）。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）；**r306 复查改判 3 行**（D3 三值派生布尔、D5 日夜两套背景、D8 阅读菜单日夜配色——三行在 r297 判 `未接` 时点早于实现，D3/D5 随 r300 的全局 `themeMode` 派生成立，D8 由 `9902eb8`/`154f91e` 落地配色后又随 r300 打通日夜来源）。累计 31 行转 `已接`，剩余 **51 行 `未接`**（要接 46 / 不接 5）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -875,27 +875,27 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **D 块前提**：本地阅读页**有**日夜按钮（`ReaderPage.ets:1293` 底部动作条 `theme` 项、`ReaderSettingsPage.ets:360-362` 「背景」行的月亮图标），切的是阅读页私有 `readerNightMode` 布尔（`ReaderSettingsRepository.ets:165`），**不写全局 `themeMode`**。所以 D 块的问题不是「按钮没有」，是「按钮只管自己那一页」。
 
-**KI-TH-D1 日夜切换接到全局（D2 已实现 / D3、D5 见下）** —— 覆盖 D2 切换效果写入全局 `themeMode`、D3 日夜派生：三值 → 布尔、D5 阅读背景的日夜三套。
+**KI-TH-D1 日夜切换接到全局（D2/D3/D5 全部已实现：D2 r300，D3/D5 r306 复查改判）** —— 覆盖 D2 切换效果写入全局 `themeMode`、D3 日夜派生：三值 → 布尔、D5 阅读背景的日夜三套。
 
 **D2 已实现（r300）**：`pages/Index.ets:2574-2584 toggleReaderNightMode()` 重写为 `const nextMode = this.readerNightMode ? THEME_MODE_LIGHT : THEME_MODE_DARK;` → `applyThemeMode(context, nextMode, this.themePaletteIndex, true)`。`@State readerNightMode` 保留，但语义降级为「全局 themeMode 的投影」，唯一来源是 `applyThemeMode`（注释已写在字段上）。验收已过：阅读页设置面板点月亮图标 → `legado_theme` 从 `"2"` 变 `"1"`，返回书架书架整页变浅。
 
 **上游口径**：`ReadStyleDelegate.kt:455-470` `val nextIsNight = !(ReadSessionState.isDarkThemeOverride ?: host.isNightTheme)`、`val nextMode = if (nextIsNight) "2" else "1"` → 写网关；`ReadBookController.kt:1762-1790 onAppThemeChanged(isDarkTheme)` 处理来源往返（`:1769` 注释「ToggleDayNight installs the target override before DataStore publishes the app configuration」）。D3：`AppUiConfiguration.kt:11-15` 三值派生。D5：`appTheme == "4"` 时整套换墨水屏背景与配色。
 
-**本地现状**：D3 已随 F2 落地（`ThemeModeResolver.isDarkTheme` 三值派生 + `paperIndex` 按 `readerNightMode` 二选一，等价于「三值 → 布尔 → 两套背景」）。D5 只有 day/night 两套 `READER_BACKGROUND_STYLES`，无墨水屏（随 F8 判不适用）。
+**本地现状（r306 复查）**：D3 与 D5 都判 `已接`，原判 `未接` 属盘点时点早于实现。D3：`data/ThemeModeResolver.ets:52-56` `static isDarkTheme(themeMode, systemDark)` 三支对齐上游 `isNightThemeCompat`（`THEME_MODE_LIGHT`→false、`THEME_MODE_DARK`→true、其余 `return systemDark`），派生点三处 `pages/Index.ets:1997`/`:2114`/`:3856` 全部写 `this.readerNightMode = ThemeModeResolver.isDarkTheme(...)`。D5：`pages/Index.ets:4235-4240` `getPaperColor()` 的日/夜两套**结构上与上游一致**——自定义色走 `readerBgType`+`readerBgStr` 对 `readerBgTypeNight`+`readerBgStrNight`（`customType === 0 && custom.length > 0` 时直接用），内置样式走 `READER_BACKGROUND_STYLES[paperIndex]` 的 `dayColor`/`nightColor`。第三套墨水屏在上游靠 `appTheme == "4"` 切，本地归 lab 且无渲染，该维度已在 F8 判 `不适用`（产品定位不同），不计入本行。
 
-**补法**：D3 无剩余工作。D5 保持两套。上游的 `ReadSessionState.isDarkThemeOverride` 会话态本地未照抄——阅读页配色由 `paperIndex` 直接跟随全局，不存在「临时覆盖后退出阅读页还要还原」的往返。
+**补法**：D3、D5 均无剩余工作。上游的 `ReadSessionState.isDarkThemeOverride` 会话态本地未照抄——阅读页配色由 `paperIndex` 直接跟随全局，不存在「临时覆盖后退出阅读页还要还原」的往返。上游用 `ReadStyleMode` 枚举判定、本地用 `readerNightMode` 布尔，两者对两套背景的取用结果相同。
 
-**验收**：阅读页点日夜 → 退出到书架，书架也是深色（全局生效）；重进阅读页仍深色；把 themeMode 设「跟随系统」+ 系统切深色 → 阅读页跟着变。
+**验收**：阅读页点日夜 → 退出到书架，书架也是深色（全局生效，r300 已验）；重进阅读页仍深色；把 themeMode 设「跟随系统」+ 系统切深色 → 阅读页跟着变（r300 验收③已验）；在阅读设置里给日/夜各设一个自定义背景色 → 切日夜时两套各自生效（D5）。
 
-**KI-TH-D2 菜单配色与提醒耦合（D7 已实现 r302，D8 要接）** —— 覆盖 D7 阅读页快速按钮的提醒冷却与去重、D8 阅读页菜单的日夜配色。
+**KI-TH-D2 菜单配色与提醒耦合（D7 已实现 r302，D8 r306 复查改判已接）** —— 覆盖 D7 阅读页快速按钮的提醒冷却与去重、D8 阅读页菜单的日夜配色。
 
 **上游口径**：D7 手动切日夜会顺手清掉待弹的提醒（`ReadStyleDelegate.kt:489-491 resetDayNightReminderDismissal()`）；D8 菜单配色由 `isNightTheme` + `paletteStyle` 共同算出（`ReadBookColorTheme.kt:52-63`/`:144-162`/`:286-298`）。
 
-**本地现状**：D7 **已实现**（r302）——`pages/Index.ets` 的 `toggleReaderNightMode()` 开头补了四行：`readerDayNightReminderLastAt = Date.now()`（冷却从本次切换算起）、清 `readerDayNightReminderDismissedDark`/`DismissedLight`（对齐 `resetDayNightReminderDismissal()`）、`readerDayNightReminderRequestId += 1`（作废在途的 5 秒隐藏定时器）、`readerDayNightReminderText = ''`。上游清的是 `reminderQueue` 里排队的项，本地只有一个文案槽位，用 `requestId` 递增达到同样效果。D8 仍未接：阅读菜单全用写死深色字面量，不随日夜变。
+**本地现状**：D7 **已实现**（r302）——`pages/Index.ets` 的 `toggleReaderNightMode()` 开头补了四行：`readerDayNightReminderLastAt = Date.now()`（冷却从本次切换算起）、清 `readerDayNightReminderDismissedDark`/`DismissedLight`（对齐 `resetDayNightReminderDismissal()`）、`readerDayNightReminderRequestId += 1`（作废在途的 5 秒隐藏定时器）、`readerDayNightReminderText = ''`。上游清的是 `reminderQueue` 里排队的项，本地只有一个文案槽位，用 `requestId` 递增达到同样效果。D8 **r306 复查改判 `已接`**：`pages/ReaderPage.ets:1007-1019` `readerMenuIsNight()` 按纸色 sRGB 相对亮度 < 0.5 判日夜，六个取色函数全部按它分支——`readerMenuBaseColor()`（`:1027-1039`，`readBarStyle===1` 取纸色、`===2` 取自定义 `readMenuBgColor`/`Night`、否则日夜取 `#000000`/`#FFFFFF`）、`readerMenuContainerBaseColor()`（`:1045-1048`）、`readerMenuAccentTint()`（`:1055-1058`）、`readerMenuTintColor()`（`:1065-1070`）、`readerMenuForeground()`（`:1078-1082`，`#D5C2C6`/`#3E3D3B`）。配色本体由 `9902eb8 feat(readConfig): 接上配色七项（KI-E1）` 与 `154f91e feat(readConfig): 接上边框与模糊七项（KI-E2）` 落地，r300 打通 `paperColor ← readerNightMode ← themeMode` 之后这条链路才真正随日夜变。原判「全用写死深色字面量」是那两次提交之前的状态。
 
-**补法**：D7 无剩余工作。D8 把菜单配色改成按 `isDarkTheme` + 调色板算，复用 KI-TH-A1 的调色板状态。
+**补法**：D7、D8 均无剩余工作。D8 与上游的剩余差别是**配色维度**——上游还有 `paletteStyle`（种子色/经典/单调）与 `materialVersion` 两个维度参与计算，本地只有日夜一维（`readMenuColorMode === 0` 的种子色分支只取强调色作基底近似），该缺口归 A2（调色板，未接）。
 
-**验收**：D7 开提醒 → 阅读页手动切日夜 → 不再弹出「是否切换至深色模式」（VALIDATION.md r302 已实测）。D8 切到浅色主题 → 阅读菜单底色与文字色变浅。
+**验收**：D7 开提醒 → 阅读页手动切日夜 → 不再弹出「是否切换至深色模式」（VALIDATION.md r302 已实测）。D8 切到浅色主题 → 阅读菜单为白底深字（`#FFFFFF` 基底 + `#3E3D3B` 文字）；切回深色 → 深底浅字（r300 验收①/② 已覆盖该链路）。
 
 ### E 日夜提醒
 

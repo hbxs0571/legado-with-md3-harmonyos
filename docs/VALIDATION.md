@@ -30,6 +30,18 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r306 深色模式复查：D3/D5/D8 三行盘点误判纠正（纯文档，无代码改动）
+
+- 设备：本轮**未改任何源码**，不构建、不上机。结论全部来自逐行读代码 + 复跑 `--coverage`。
+- **背景**：r297 盘点时 D3（日夜派生三值→布尔）、D5（日夜三套背景）、D8（阅读页菜单日夜配色）判 `未接`。r300 阶段一把全局 `themeMode` 打通后，这三行的前提条件已经变了，但表里的状态没跟着改。本轮逐行核对后确认三行都已成立，改判 `已接`。
+- **D3 依据**：`entry/src/main/ets/data/ThemeModeResolver.ets:52-56` `static isDarkTheme(themeMode: string, systemDark: boolean)` 三支——`THEME_MODE_LIGHT` → `false`、`THEME_MODE_DARK` → `true`、其余 `return systemDark`，与上游 `ReadStyleResolver.kt:27-32` 的 `when (themeMode) { "1" -> false; "2" -> true; else -> sysConfiguration.isNightMode }` 逐支对齐。`systemDark` 由 `ThemeModeResolver.isSystemDark(context)` 提供（`resourceManager.getConfigurationSync().colorMode === ColorMode.DARK`）。派生点三处：`pages/Index.ets:1997`（`applyThemeMode` 内）、`:2114`（`loadReaderSettings` 内）、`:3856`（恢复备份内），都是 `this.readerNightMode = ThemeModeResolver.isDarkTheme(...)`。
+- **D5 依据**：`pages/Index.ets:4235-4240` `getPaperColor()`——自定义色走 `this.readerNightMode ? this.readerBgStrNight : this.readerBgStr` 与对应的 `readerBgType*`（`customType === 0 && custom.length > 0` 时直接用自定义色），内置样式走 `READER_BACKGROUND_STYLES[paperIndex]` 的 `style.nightColor` / `style.dayColor`。日/夜两套结构与上游 `bgType/bgStr` 对 `bgTypeNight/bgStrNight` 一致。第三套墨水屏（上游 `appTheme == "4"`）本地归 lab 且无渲染，该维度已在 F8 判 `不适用`。
+- **D8 依据**：`entry/src/main/ets/pages/ReaderPage.ets:1007-1019` `readerMenuIsNight()` 按 `this.paperColor` 的 sRGB 相对亮度（0.2126/0.7152/0.0722 加权，阈值 0.5）判日夜；六个取色函数全部按它分支——`readerMenuBaseColor()`（`:1027-1039`）、`readerMenuContainerBaseColor()`（`:1045-1048`）、`readerMenuAccentTint()`（`:1055-1058`）、`readerMenuTintColor()`（`:1065-1070`）、`readerMenuForeground()`（`:1078-1082`，夜 `#D5C2C6` / 日 `#3E3D3B`）。配色本体由 `9902eb8 feat(readConfig): 接上配色七项（KI-E1）` 与 `154f91e feat(readConfig): 接上边框与模糊七项（KI-E2）` 落地；r300 打通 `paperColor ← readerNightMode ← themeMode` 后这条链路才真正随日夜变。
+- **为什么不改代码**：三行要验的能力已存在，改代码只会造出上游没有的东西（例如给 D3 再加一层会话覆盖、给 D5 补第三套墨水屏），违反「上游有就保留、上游没有就不要」。
+- **验收（复用已有设备记录，不重复跑）**：D3/D5 由 r300 验收①（主题页点深色 → 全 App 立刻变深）与③（跟随系统 + 系统切深色 → 全 App 跟着变）覆盖；D8 由 r300 验收②（阅读页切日夜 → 退出到书架书架也变）覆盖配色来源。本轮只做静态核对，未上机。
+- **盘面变化**：91 行 = 已接 34→37 / 未接 54→51 / 不适用 3（D 块由 4/3/1 变 7/0/1）；按类别 `themeConfig` 72（19→20 已接 / 52→51 未接 / 1 不适用）、`themeMode` 19（15→17 已接 / 2→0 未接 / 2 不适用）。
+- **`--coverage` 复跑**：themeMode 80/80、themeConfig 132/132，未分配 0。
+
 ## 2026-11-01 N 端 r305 深色模式向导：点选即写全局并换肤（C1/C2）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 通过，32 s 412 ms，33 tasks / 17 executed）。
