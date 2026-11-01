@@ -30,6 +30,50 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r313 深色模式阶段二：应用字体（A5）、切换图标改判不适用（A8）
+
+**改动**
+
+- 新建 `entry/src/main/ets/data/AppFontSettings.ets`：`APP_FONT_EXTENSIONS = ['.ttf', '.otf', '.ttc']`、`APP_FONT_FAMILY = 'LegadoAppFont'`、`normalizeAppFontPath()`（非三个扩展名之一返回空串）、`appFontDisplayName()`。
+- `entry/src/main/ets/data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 53 → **54 字段**，新增 `appFontPath: string`；`load()` 的 defaults/读取/归一与 `save()` 的 `store.put` 各补一处。
+- `entry/src/main/ets/pages/Index.ets`：`@State themeAppFontPath`；`restoreOnboarding()` / `resetThemeDefaults()` / `saveThemeSettings()` 各补一处；新增 `pickThemeAppFont()`（`picker.DocumentViewPicker`，`fileSuffixFilters = ['字体|.ttf', '字体|.otf', '字体|.ttc']`，复制到 `${context.filesDir}/fonts/app_font_${Date.now()}${ext}` 并校验 `statSync(target).size > 0`）、`clearThemeAppFont()`、`pruneThemeAppFonts(directory, keep)`（只删 `app_font` 前缀）、`applyThemeAppFont()`（`this.getUIContext().getFont().registerFont({ familyName: APP_FONT_FAMILY, familySrc: 'file://' + path })` + `context.getApplicationContext().setFont(APP_FONT_FAMILY)`，路径为空时 `setFont('')`）；`applyThemeFontScale()` 末尾串一次 `applyThemeAppFont()`，使启动与改字号时都重建字体。
+- `entry/src/main/ets/pages/ThemeSettingsPage.ets`：「字体设置」由 `onUnavailableAction` 改为可展开组——行摘要 `appFontSummary()`（未选显示「系统默认字体」，已选显示文件名），展开后「选择字体文件」（detail「支持 .ttf / .otf / .ttc」）与「恢复系统字体」（detail「清除已选择的应用字体」）。
+- 文档：`docs/parity/ZIP-THEME.md` 的 A5 转 `已接`、A8 改判 `不适用` 并补检索证据；`docs/KNOWN-ISSUES.md` 的 KI-TH-A4 与「排期分布」同步；`docs/parity/STATUS.md` 的 `themeConfig` 行改 48 已接 / 22 未接 / 2 不适用。
+
+**与上游的差异**
+
+1. 上游 `FontSelectSheet`（`ThemeConfigScreen.kt:948`）列出私有目录里已导入的多个字体供二次选择；本地每次只能重新选文件——`DocumentViewPicker` 无法回读 `filesDir` 生成可点列表。已记入对照表 A5 差异说明。
+2. 上游靠 `base/AppContextWrapper.kt` 改写 `Configuration` 换字体；本地走 `UIContext.getFont().registerFont` + `ApplicationContext.setFont`（`ApplicationContext.d.ts:481`，要求窗口已创建且 `loadContent` 之后调）。
+3. 复制与清理逻辑逐条对齐：`ThemeConfigViewModel.kt:555` 的 `substringAfterLast('.', "ttf")` 对应 `APP_FONT_EXTENSIONS` 校验，`:582` 的 `pruneCopiedFonts(keep = target)` 对应 `pruneThemeAppFonts`，`:589` 的 `clearAppFont()` 清路径后一并 prune 也照做。
+4. A8 切换图标判「不适用」：Android 靠预置 `<activity-alias>` + `PackageManager.setComponentEnabledSetting`；HarmonyOS NEXT 的 `module.json5` 只允许一个 `abilities` 图标，SDK 里 `setAppIcon`/`changeAppIcon`/`updateAppIcon` 在 `sdk/default/openharmony/ets/api` 下零命中，`@ohos.bundle.launcherBundleManager.d.ts` 只有只读的 `getLauncherAbilityInfoSync`，`@ohos.enterprise.applicationManager.d.ts` 只有需企业 MDM `admin: Want` 的 `addHideLauncherIcon`/`removeHideLauncherIcon`。
+
+**验收**（模拟器 `127.0.0.1:5555`，API 26，包 `io.legado.harmony`，测试字体 `C:\Windows\Fonts\Candara.ttf` 经 `hdc file send` 放到 `/storage/media/100/local/files/Docs/Documents/font-test.ttf`）
+
+| 项 | 操作 | 期望 | 结果 |
+| --- | --- | --- | --- |
+| A5 选择字体 | 外观页上滑 1 次 → 点「字体设置」`(400,1560)` 展开 → 点「选择字体文件」`(400,1770)` → 浏览 `(783,290)` → 我的手机 `(640,897)` → Documents `(244,1052)` → `font-test.ttf` `(244,1250)` | 行摘要变文件名；prefs 写入；字体文件被复制 | 通过：摘要变 `app_font_1793536581141.ttf`；prefs `appFontPath` = `/data/storage/el2/base/haps/entry/files/fonts/app_font_1793536581141.ttf`；`files/fonts/` 下 242012 字节 |
+| A5 旧副本清理 | 选第二次字体（`app_font_1793536505517.ttf`）后查目录 | 只剩最新一个 | 通过：目录里只有 `app_font_1793536505517.ttf` |
+| A5 字体生效 | 同一页面开字体 / 关字体各截一张（重启使 `setFont` 重新执行） | 字形不同 | 通过：`ImageChops` bbox `(56,1583,1224,2657)`、changed **300873** |
+| A5 恢复系统字体 | 点「恢复系统字体」`(400,1985)` | prefs 置空、字体副本被删、字形回落 | 通过：`appFontPath` 变空串、`files/fonts/` 目录清空 |
+| A5 重启保持 | 杀进程重启 | 字体仍生效 | 通过：重启后 `files/fonts/` 仍有当前副本、prefs 仍有路径、渲染仍为自定义字形 |
+| A8 入口保留 | 点「切换图标」`(400,2440)` | 提示未迁移，不崩溃 | 通过：`onUnavailableAction('启动图标设置尚未迁移')` |
+
+**踩坑**
+
+1. 首次实现 `clearThemeAppFont()` 只清 prefs 不删文件，与上游 `:589` 的 `pruneCopiedFonts()` 不一致——补 `this.pruneThemeAppFonts(\`${context.filesDir}/fonts\`, '')` 后才对齐。
+2. 文件选择器进入后默认停在「最近」，且该 tab 下**不显示** `hdc file send` 放进去的文件（显示「没有文件」），必须切「浏览」→「我的手机」→「Documents」才看得到。
+3. `applyThemeAppFont()` 必须挂在 `applyThemeFontScale()` 之后串行调用——`registerFont` + `setFont` 要求窗口已创建且页面已 `loadContent`，启动时只能排在那之后。
+
+**复原**
+
+点「恢复系统字体」，或 `hdc shell` 把 prefs `legado_theme` 里的 `appFontPath` 置空后重启；`files/fonts/` 下的 `app_font*` 副本可一并删除。
+
+**未验项**
+
+1. `.otf` / `.ttc` 两种扩展名未实测（只验了 `.ttf`）。
+2. 中文字形未验——Candara 无中文字形，中文回落系统字体，只在英文字符上比对到差异。
+3. A8 无验收（平台无该能力）。
+
 ## 2026-11-01 N 端 r312 深色模式阶段二：顶栏与底栏、控件模糊、渐变模糊（A17/A30/A31）
 
 本轮把 [深色模式对照表](parity/ZIP-THEME.md) 的 A17（顶栏与底栏 13 个键）、A30（启用控件模糊）、A31（启用渐变模糊）三行从 `未接` 转为 `已接`。

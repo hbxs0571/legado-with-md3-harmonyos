@@ -1,3 +1,4 @@
+import { normalizeAppFontPath } from './AppFontSettings';
 import { preferences } from '@kit.ArkData';
 import { normalizeLabelVisibility } from './MainNavigationSettings';
 import {
@@ -151,6 +152,8 @@ export interface ThemeSnapshot {
   topBarOpacity: number;
   /** 底栏不透明度，对齐上游 `ThemeSettings.kt:36 bottomBarOpacity`（默认 100）。 */
   bottomBarOpacity: number;
+  /** 应用字体文件在沙箱内的绝对路径；空串表示系统默认字体。对齐上游 `ThemeSettings.appFontPath`。 */
+  appFontPath: string;
 }
 
 /** 书籍详情页背景封面的三种模式，取值与上游 `res/values/array_values.xml:135-139` 一致。 */
@@ -267,7 +270,8 @@ export class ThemeSettingsRepository {
       topBarBlurAlpha: TOP_BAR_BLUR_ALPHA_DEFAULT,
       bottomBarBlurAlpha: BOTTOM_BAR_BLUR_ALPHA_DEFAULT,
       topBarOpacity: TOP_BAR_OPACITY_DEFAULT,
-      bottomBarOpacity: BOTTOM_BAR_OPACITY_DEFAULT
+      bottomBarOpacity: BOTTOM_BAR_OPACITY_DEFAULT,
+      appFontPath: ''
     };
     try {
       const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
@@ -326,6 +330,7 @@ export class ThemeSettingsRepository {
       const bottomBarBlurAlpha = await store.get('bottomBarBlurAlpha', defaults.bottomBarBlurAlpha);
       const topBarOpacity = await store.get('topBarOpacity', defaults.topBarOpacity);
       const bottomBarOpacity = await store.get('bottomBarOpacity', defaults.bottomBarOpacity);
+      const appFontPath = await store.get('appFontPath', defaults.appFontPath);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
         paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
@@ -418,7 +423,8 @@ export class ThemeSettingsRepository {
         topBarOpacity: normalizeTopBarOpacity(
           typeof topBarOpacity === 'number' ? topBarOpacity : defaults.topBarOpacity),
         bottomBarOpacity: normalizeBottomBarOpacity(
-          typeof bottomBarOpacity === 'number' ? bottomBarOpacity : defaults.bottomBarOpacity)
+          typeof bottomBarOpacity === 'number' ? bottomBarOpacity : defaults.bottomBarOpacity),
+        appFontPath: normalizeAppFontPath(typeof appFontPath === 'string' ? appFontPath : defaults.appFontPath)
       };
     } catch (_) {
       return defaults;
@@ -498,6 +504,7 @@ export class ThemeSettingsRepository {
       normalizeBarBlurAlpha(snapshot.bottomBarBlurAlpha, BOTTOM_BAR_BLUR_ALPHA_DEFAULT));
     await store.put('topBarOpacity', normalizeTopBarOpacity(snapshot.topBarOpacity));
     await store.put('bottomBarOpacity', normalizeBottomBarOpacity(snapshot.bottomBarOpacity));
+    await store.put('appFontPath', normalizeAppFontPath(snapshot.appFontPath));
     await store.flush();
   }
 

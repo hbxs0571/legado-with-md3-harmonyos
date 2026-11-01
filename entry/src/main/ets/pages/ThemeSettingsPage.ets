@@ -1,4 +1,5 @@
 import { AppGlyph } from '../components/AppGlyph';
+import { appFontDisplayName } from '../data/AppFontSettings';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import {
   BOOK_INFO_BACKGROUND_OFF,
@@ -223,6 +224,12 @@ export struct ThemeSettingsPage {
   onTopBarOpacityChange: (value: number) => void = () => {};
   @Prop bottomBarOpacity: number = 100;
   onBottomBarOpacityChange: (value: number) => void = () => {};
+  /** 应用字体文件路径；空串表示系统默认字体。上游 `ThemeSettings.appFontPath`。 */
+  @Prop appFontPath: string = '';
+  onPickAppFont: () => void = () => {};
+  onClearAppFont: () => void = () => {};
+  /** 「字体设置」组是否展开；上游是一个 sheet（`FontSelectSheet`），本地用可展开组承接。 */
+  @State appFontExpanded: boolean = false;
   /** 「顶栏与底栏」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
   @State topBottomBarExpanded: boolean = false;
   @State collapsedHeader: boolean = false;
@@ -268,6 +275,12 @@ export struct ThemeSettingsPage {
   }
 
   /** 「首页与导航」行的摘要文案：显示可见项数量与默认页。 */
+  /** 「字体设置」行的摘要：未选时提示系统默认，已选时显示文件名。 */
+  private appFontSummary(): string {
+    if (this.appFontPath.length === 0) { return '系统默认字体'; }
+    return appFontDisplayName(this.appFontPath);
+  }
+
   /** 「顶栏与底栏」行的摘要文案。 */
   private topBottomBarSummary(): string {
     const barParts: string[] = [];
@@ -472,7 +485,14 @@ export struct ThemeSettingsPage {
                 .onChange((enabled: boolean) => this.onPureBlackChange(enabled))
             }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
             ThemeItemDivider()
-            ThemeSettingsOption({ title: '字体设置', detail: '', onSelect: () => this.onUnavailableAction('字体设置尚未迁移') })
+            ThemeSettingsOption({ title: '字体设置', detail: this.appFontSummary(),
+              onSelect: () => { this.appFontExpanded = !this.appFontExpanded } })
+            if (this.appFontExpanded) {
+              ThemeItemDivider()
+              ThemeSettingsOption({ title: '选择字体文件', detail: '支持 .ttf / .otf / .ttc', onSelect: () => this.onPickAppFont() })
+              ThemeItemDivider()
+              ThemeSettingsOption({ title: '恢复系统字体', detail: '清除已选择的应用字体', onSelect: () => this.onClearAppFont() })
+            }
             ThemeItemDivider()
             ThemeSettingsOption({ title: '主题风格', detail: 'Material Design', onSelect: () => this.onUnavailableAction('主题风格切换尚未接入') })
             ThemeItemDivider()

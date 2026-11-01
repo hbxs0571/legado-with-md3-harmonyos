@@ -20,6 +20,7 @@ import { ReaderSearchPage } from './ReaderSearchPage';
 import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
 import { BookInfoPage } from './BookInfoPage';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
+import { APP_FONT_FAMILY, appFontDisplayName, normalizeAppFontPath } from '../data/AppFontSettings';
 import { OtherSettingsPage } from './OtherSettingsPage';
 import { AppReadAloudSettingsPage } from './AppReadAloudSettingsPage';
 import { AppCoverSettingsPage } from './AppCoverSettingsPage';
@@ -588,6 +589,8 @@ struct Index {
   @State themeBottomBarBlurAlpha: number = BOTTOM_BAR_BLUR_ALPHA_DEFAULT;
   @State themeTopBarOpacity: number = TOP_BAR_OPACITY_DEFAULT;
   @State themeBottomBarOpacity: number = BOTTOM_BAR_OPACITY_DEFAULT;
+  /** 应用字体在沙箱内的绝对路径；空串表示系统默认字体。对齐上游 `ThemeSettings.appFontPath`。 */
+  @State themeAppFontPath: string = '';
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -2118,6 +2121,7 @@ struct Index {
     this.themeBottomBarBlurAlpha = theme.bottomBarBlurAlpha;
     this.themeTopBarOpacity = theme.topBarOpacity;
     this.themeBottomBarOpacity = theme.bottomBarOpacity;
+    this.themeAppFontPath = theme.appFontPath;
     this.applyDefaultHomePage();
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
@@ -2789,6 +2793,7 @@ struct Index {
     this.themeBottomBarBlurAlpha = BOTTOM_BAR_BLUR_ALPHA_DEFAULT;
     this.themeTopBarOpacity = TOP_BAR_OPACITY_DEFAULT;
     this.themeBottomBarOpacity = BOTTOM_BAR_OPACITY_DEFAULT;
+    this.themeAppFontPath = '';
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
@@ -2883,7 +2888,8 @@ struct Index {
       topBarBlurAlpha: this.themeTopBarBlurAlpha,
       bottomBarBlurAlpha: this.themeBottomBarBlurAlpha,
       topBarOpacity: this.themeTopBarOpacity,
-      bottomBarOpacity: this.themeBottomBarOpacity
+      bottomBarOpacity: this.themeBottomBarOpacity,
+      appFontPath: this.themeAppFontPath
     });
   }
 
@@ -2979,10 +2985,106 @@ struct Index {
    * 得到 0.8..1.6 的比例，越界时回落到系统字体缩放。这里只做前半段——本地滑块本身就夹在
    * 8..16，所以直接除以 10；`setFontSizeScale` 由系统负责与用户系统字号上限取小。
    */
+  /**
+   * 选择应用字体文件。
+   *
+   * 上游 `ThemeConfigViewModel.kt:555-582` 选完文件后复制到 `filesDir/fonts/app_font*`，
+   * 再把路径写进 `ThemeSettings.appFontPath`；本地同样复制进 `filesDir/fonts/`，
+   * 避免文档选择器的 URI 授权过期后字体失效。
+   */
+  private async pickThemeAppFont(context: Context): Promise<void> {
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.fileSuffixFilters = ['字体|.ttf', '字体|.otf', '字体|.ttc'];
+      options.maxSelectNumber = 1;
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris[0];
+      if (uri === undefined) { return; }
+      const directory = `${context.filesDir}/fonts`;
+      if (!fileIo.accessSync(directory)) { fileIo.mkdirSync(directory, true); }
+      const suffix = uri.substring(uri.lastIndexOf('.') === -1 ? uri.length : uri.lastIndexOf('.')).toLowerCase();
+      const extension = suffix.length > 1 && suffix.length <= 5 ? suffix : '.ttf';
+      const target = `${directory}/app_font_${Date.now()}${extension}`;
+      const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      try {
+        fileIo.copyFileSync(source.fd, target);
+        if (fileIo.statSync(target).size <= 0) { throw new Error('所选字体文件为空'); }
+      } finally {
+        fileIo.closeSync(source);
+      }
+      this.themeAppFontPath = normalizeAppFontPath(target);
+      this.pruneThemeAppFonts(directory, target);
+      this.applyThemeAppFont();
+      await this.saveThemeSettings(context);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '选择字体失败');
+    }
+  }
+
+  /** 清空自定义字体，回落到系统默认字体。 */
+  private clearThemeAppFont(context: Context): void {
+    this.themeAppFontPath = '';
+    // 对齐上游 `ThemeConfigViewModel.kt:589 clearAppFont()`：清空路径后一并清掉私有目录里的字体副本。
+    this.pruneThemeAppFonts(`${context.filesDir}/fonts`, '');
+    this.applyThemeAppFont();
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('清除字体失败，请重试');
+    });
+  }
+
+  /** 只保留当前字体副本，对齐上游 `pruneCopiedFonts()`（只删 `app_font` 前缀）。 */
+  private pruneThemeAppFonts(directory: string, keep: string): void {
+    try {
+      const names = fileIo.listFileSync(directory);
+      for (let index = 0; index < names.length; index++) {
+        const name = names[index];
+        if (!name.startsWith('app_font')) { continue; }
+        const full = `${directory}/${name}`;
+        if (full === keep) { continue; }
+        try { fileIo.unlinkSync(full); } catch (_) { }
+      }
+    } catch (_) {
+    }
+  }
+
   private applyThemeFontScale(context: Context): void {
     try {
       const scale = this.themeFontScale / 10;
       context.getApplicationContext().setFontSizeScale(scale);
+    } catch (_) {
+    }
+    this.applyThemeAppFont();
+  }
+
+  /**
+   * 应用自定义字体族。
+   *
+   * 上游把 `appFontPath` 交给 `base/AppContextWrapper.kt` 的 `applyFont()` 改写 `Configuration`；
+   * ArkUI 的等价链路是 `UIContext.getFont().registerFont({ familyName, familySrc })` 注册，
+   * 再 `ApplicationContext.setFont(familyName)` 让全局默认字体换成它。
+   * 清空字体时把族名设回空串，系统回落到默认字体。
+   */
+  private applyThemeAppFont(): void {
+    const path = this.themeAppFontPath;
+    if (path.length === 0) {
+      try {
+        const context = this.getUIContext().getHostContext();
+        if (context !== undefined) {
+          context.getApplicationContext().setFont('');
+        }
+      } catch (_) {
+      }
+      return;
+    }
+    try {
+      this.getUIContext().getFont().registerFont({
+        familyName: APP_FONT_FAMILY,
+        familySrc: `file://${path}`
+      });
+      const context = this.getUIContext().getHostContext();
+      if (context !== undefined) {
+        context.getApplicationContext().setFont(APP_FONT_FAMILY);
+      }
     } catch (_) {
     }
   }
@@ -6985,6 +7087,15 @@ struct Index {
               if (themeContext !== undefined) { this.selectThemeEnableContainerBackgroundImage(themeContext, enabled); }
             },
             onPickContainerBackground: (isLarge: boolean, isNight: boolean) => this.pickThemeContainerBackground(isLarge, isNight),
+            appFontPath: this.themeAppFontPath,
+            onPickAppFont: () => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.pickThemeAppFont(themeContext); }
+            },
+            onClearAppFont: () => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.clearThemeAppFont(themeContext); }
+            },
             pureBlack: this.themePureBlack,
             onPureBlackChange: (enabled: boolean) => {
               const themeContext = this.getUIContext().getHostContext();
