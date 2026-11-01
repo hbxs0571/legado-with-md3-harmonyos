@@ -296,13 +296,13 @@ export struct ReaderSearchPage {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.reader_back')).width(22).height(22).fillColor('#E4E5EA')
-        }.width(40).height(40).backgroundColor('#1B1C22').borderRadius(22).onClick(() => this.onBack())
+        }.width(40).height(40).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(22).onClick(() => this.onBack())
         Blank()
         Image($r('app.media.profile_find_replace')).width(20).height(20)
-          .fillColor(this.replaceEnabled ? '#AFC2FF' : '#D8D9E0').width(38)
+          .fillColor(this.replaceEnabled ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary')).width(38)
           .onClick(() => this.toggleReplaceMode())
-        Image($r('app.media.app_code')).width(18).height(18).fillColor('#D8D9E0').width(42)
-          .fillColor(this.regexMode ? '#AFC2FF' : '#D8D9E0').onClick(() => this.toggleRegexMode())
+        Image($r('app.media.app_code')).width(18).height(18).fillColor($r('app.color.theme_text_secondary')).width(42)
+          .fillColor(this.regexMode ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary')).onClick(() => this.toggleRegexMode())
       }.padding({ left: 16, right: 16, top: 14, bottom: 18 })
 
       Text(this.query.trim().length > 0 && this.matches.length > 0
@@ -313,7 +313,7 @@ export struct ReaderSearchPage {
       Row() {
         AppSearchGlyph()
         TextInput({ placeholder: '搜索本书…', text: this.query })
-          .fontSize(14).fontColor('#E3E4E8').placeholderColor('#8C8E98')
+          .fontSize(14).fontColor($r('app.color.theme_text_primary')).placeholderColor('#8C8E98')
           .backgroundColor(Color.Transparent).layoutWeight(1)
           .enterKeyType(EnterKeyType.Search)
           .onChange((value: string) => this.scheduleSearch(value))
@@ -322,12 +322,12 @@ export struct ReaderSearchPage {
           Image($r('app.media.profile_close')).width(18).height(18).fillColor('#AEB0B9')
             .width(30).onClick(() => this.scheduleSearch(''))
         }
-      }.padding({ left: 14, right: 10, top: 7, bottom: 7 }).backgroundColor('#1B1C22').borderRadius(24)
+      }.padding({ left: 14, right: 10, top: 7, bottom: 7 }).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(24)
         .margin({ left: 16, right: 16 })
 
       if (this.query.trim().length === 0) {
         Row() {
-          Text('搜索历史').fontSize(12).fontColor('#AFC2FF')
+          Text('搜索历史').fontSize(12).fontColor($r('app.color.theme_accent'))
           Blank()
           Row() {
             AppGlyph({ name: this.historyOnlyThisBook ? 'book' : 'bookshelf', glyphSize: 13, tint: '#25262C' })
@@ -344,9 +344,9 @@ export struct ReaderSearchPage {
           Text(this.searching
             ? '正在搜索 ' + this.searchProgress.toString() + '/' + this.chapterRows.length.toString()
             : '本书正文 · 最多200条')
-            .fontSize(12).fontColor('#AFC2FF')
+            .fontSize(12).fontColor($r('app.color.theme_accent'))
           if (this.searching) {
-            Text('停止').fontSize(12).fontColor('#AFC2FF').margin({ left: 12 })
+            Text('停止').fontSize(12).fontColor($r('app.color.theme_accent')).margin({ left: 12 })
               .onClick(() => this.stopSearch())
           }
         }.padding({ left: 18, right: 18, top: 13, bottom: 8 })
@@ -360,7 +360,7 @@ export struct ReaderSearchPage {
       } else if (this.query.trim().length === 0) {
         if (this.visibleHistory().length === 0) {
           Column() {
-            Text('(つ＿⊂)').fontSize(27).fontColor('#E3E4E8')
+            Text('(つ＿⊂)').fontSize(27).fontColor($r('app.color.theme_text_primary'))
             Text('暂无搜索历史').fontSize(11).fontColor('#B4B5BC').margin({ top: 8 })
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         } else {
@@ -368,7 +368,7 @@ export struct ReaderSearchPage {
             ForEach(this.visibleHistory(), (entry: ReaderSearchHistoryEntry) => {
               ListItem() {
                 Row() {
-                  AppGlyph({ name: 'profileHistory', glyphSize: 18, tint: '#AFC2FF' })
+                  AppGlyph({ name: 'profileHistory', glyphSize: 18, tint: $r('app.color.theme_accent') })
                     .margin({ right: 12 })
                   Column() {
                     Text(entry.query).fontSize(14).fontColor('#D9DAE0').maxLines(1)
@@ -386,7 +386,7 @@ export struct ReaderSearchPage {
                 }
                 .width('100%')
                 .padding({ left: 14, right: 8, top: 12, bottom: 12 })
-                .backgroundColor('#1B1C22')
+                .backgroundColor($r('app.color.theme_surface_tertiary'))
                 .borderRadius(12)
               }.margin({ left: 16, right: 16, bottom: 7 })
             }, (entry: ReaderSearchHistoryEntry) => entry.id)
@@ -397,7 +397,7 @@ export struct ReaderSearchPage {
                 Text('清除搜索历史').fontSize(13).fontColor('#D9DAE0')
               }
               .padding({ left: 18, right: 18, top: 10, bottom: 10 })
-              .backgroundColor('#1B1C22')
+              .backgroundColor($r('app.color.theme_surface_tertiary'))
               .borderRadius(20)
               .onClick(() => this.clearSearchHistory())
             }.align(Alignment.Center).margin({ top: 14, bottom: 20 })
@@ -407,7 +407,7 @@ export struct ReaderSearchPage {
         }
       } else if (this.matches.length === 0 && this.searching) {
         Column() {
-          LoadingProgress().width(24).height(24).color('#AFC2FF')
+          LoadingProgress().width(24).height(24).color($r('app.color.theme_accent'))
           Text('正在搜索本书正文').fontSize(12).fontColor('#B4B5BC').margin({ top: 8 })
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.matches.length === 0) {
@@ -422,7 +422,7 @@ export struct ReaderSearchPage {
               ListItem() {
                 Column() {
                   Row() {
-                    Text(match.chapterTitle).fontSize(13).fontColor('#AFC2FF')
+                    Text(match.chapterTitle).fontSize(13).fontColor($r('app.color.theme_accent'))
                       .layoutWeight(1).maxLines(1)
                     if (match.isCurrentChapter) {
                       Text('当前章').fontSize(10).fontColor('#25262C')
@@ -439,7 +439,7 @@ export struct ReaderSearchPage {
                 }
                 .width('100%')
                 .padding(14)
-                .backgroundColor('#1B1C22')
+                .backgroundColor($r('app.color.theme_surface_tertiary'))
                 .borderRadius(12)
                 .onClick(() => this.onOpenResult(match.chapterIndex, match.position))
               }
@@ -473,7 +473,7 @@ export struct ReaderSearchPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#111217')
+    .backgroundColor($r('app.color.theme_surface_primary'))
   }
 }
 

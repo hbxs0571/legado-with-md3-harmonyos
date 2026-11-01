@@ -695,6 +695,269 @@
 
 B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复核改判 `已接`：排版设置面板的字体目标四按钮可选「页眉」「页脚」并落 `headerFont`/`footerFont`。**残留问题**：页眉页脚 tab 里那条「选择字体」（`ReaderSettingsPage.ets:799-801`）仍走 `showNotMigrated('页眉/页脚字体选择')`，是重复的占位入口，功能已由排版设置面板提供。补法：把该行改指向 `openFontSelection()` 并带 `fontTarget: 'header'`，属一行改动，本轮不动。
 
+## 深色模式行登记（ZIP-THEME.md 的未接行）
+
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`** 的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+
+判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
+
+**与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
+
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4），剩余 76 行 `未接`。
+
+**全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
+
+### A 主题设置页
+
+**A 块共同前提**：本地 `pages/ThemeSettingsPage.ets`（333 行）**整页零持久化**——`grep preferences|getPreferences|store.put|Repository` 命中 0；除 A1 的 `selectedMode`、A2 的 `selectedPalette`、A4 的 `pureBlack`、A11 的 `fontScalePreview`、A30 的 `blurEnabled`、A32 的 `containerBackgroundEnabled`、A37 的 `overrideCardCornerRadius`、A39 的 `overrideCardBorder`、A43 的 `dividerEnabled` 这 9 个纯 `@State` 外，**其余 39 处一律 `onUnavailableAction`**（`:1274-1276` 打开 sheet 写「…尚未迁移」）。因此 A 块的补法不是「逐行改开关」，而是**先建一个主题配置仓库 + 全局状态，再让这 47 行共用它**。
+
+**KI-TH-A1 深色模式三选一与主题配色（A1 已实现 / A2、A6 要接）** —— 覆盖 A1 深色模式三选一、A2 主题配色选择、A6 自定义主题配色（12 号主题）。
+
+**A1 已实现（r300）**：`pages/ThemeSettingsPage.ets` 删掉 `@State selectedMode`，改 `@Prop themeMode: string` + `onThemeModeChange(themeMode: string)`；三个 `ThemeModeItem` 的 `selected` 用 `this.themeMode === '0'/'1'/'2'`、`onSelect` 回调对应三值字符串。写入路径在 `pages/Index.ets` 的 `selectThemeMode` → `applyThemeMode(context, themeMode, paletteIndex, persist)`：写 `@State themeMode` + `ThemeSettingsRepository.save`（preference 名 `legado_theme`）+ `ThemeModeResolver.apply`（`ApplicationContext.setColorMode`）。验收已过：点「深色」全 App 立刻变深、杀进程重进仍深、`legado_theme` 里 `themeMode = "2"`。
+
+**上游口径**：`ThemeConfigScreen.kt:187-198` `DropdownListSettingItem(title = theme_mode, displayEntries = R.array.theme_mode, entryValues = R.array.theme_mode_v)` → `SetThemeMode`；`:212` `DropdownListSettingItem(theme)` → `SelectTheme`；非 Miuix 引擎时 `:222-229` 换成 `ThemeModeSelector` + `:231-250` `ThemeColorSelector`（`visibleThemes` 按 `showEInkTheme` 过滤掉 `"4"`，并分别传 `customLightSeedColor = theme.customPrimary` / `customNightSeedColor = theme.customNightPrimary`）。
+
+**本地现状**：A2 五个 `ThemePaletteItem`（`ThemeSettingsPage.ets:121-131`）的 `onSelect` 现在回调 `onPaletteChange(index)` → `Index.ets` 的 `selectThemePalette`，只写 `themePaletteIndex` + 落盘，**还没有真正改配色**（`paletteColor()` 只用于色卡预览）。A6 **条目本身都缺**——本地没有自定义配色页，上游是 `ui/config/customTheme/CustomThemeScreen.kt`（269 行），可分别调日/夜 6 组颜色 + 对比度 + 深度个性化。
+
+**补法**：A2 的 5 个调色板写 `appTheme` 键，选中后重建主题色；本地 5 个调色板（动态取色/草野/柠檬/黑白/晴空）与上游 `R.array.theme` 条目**不是一一对应**，按上游顺序重新对齐。A6 随 A2 的调色板一起做：调色板里选「自定义」时进入自定义配色页，日/夜两栏各 6 色写 `customPrimary`/`customNightPrimary` 等键。
+
+**验收**：点「晴空」→ 强调色与卡片底色变为该配色，重进保持。
+
+**KI-TH-A2 Miuix 引擎两项（不接）** —— 覆盖 A3 Miuix 动态取色（Monet）、A7 主题引擎切换。
+
+**判定理由**：`composeEngine` 是上游 Compose 侧的**全局渲染分支开关**，`ui/theme/LegadoTheme.kt` 暴露后被 30+ 处读取，决定用 Miuix 还是 Material 控件；`useMiuixMonet` 只在 `isMiuixEngine` 为真时出现（`ThemeConfigScreen.kt:199` 在 `:187` 的引擎分支内）。ArkUI 只有一套控件体系，**没有可切换的等价分支**，也没有引擎概念，因此这两行按「上游机制在本平台根本不存在」判不接。
+
+**保留部分**：`composeEngine` 与 `useMiuixMonet` 两个键仍在 `data/BackupRepository.ets:261-277` 的 53 键组里，随 themeConfig 备份进出（F6 已接），只是没有界面。本地 `:138`「主题风格」这一行**不改成引擎切换**——文案与上游 `compose_engine` 语义不同，按文案对齐会错。
+
+**验收**：无（不接）。备份里出现 `composeEngine` 键时原样保留、不报错。
+
+**KI-TH-A3 纯黑深色模式（要接）** —— 覆盖 A4 纯黑深色模式（AMOLED）。
+
+**上游口径**：`isPureBlack` 键；打开后 `ui/theme/ThemeEngine.kt`、`OpaqueColorScheme.kt`、`ThemeOverride` 把容器与页面底色换成纯黑。
+
+**本地现状**：`:134` `Toggle` 只改 `@State pureBlack`，**且没有调用 `onUnavailableAction`**——比其它条目更容易被误读成「已接」，这是 A 块里最需要留意的一处假通过。
+
+**补法**：开关写 `isPureBlack` 键；`isDarkTheme` 为真且 `isPureBlack` 为真时，把页面底色与卡片底色的颜色资源切到 `#000000` 一组。依赖 F4 的双套资源。
+
+**验收**：开纯黑 → 深色下页面底色为 `#000000`（像素取值），关掉 → 回到普通深色。
+
+**KI-TH-A4 外观杂项七项（要接）** —— 覆盖 A5 字体设置、A8 切换图标、A9 预见性返回手势、A10 阅读界面共享元素动画、A11 字体大小缩放、A12 主题包管理入口、A13 背景图片。
+
+**上游口径**：A5 走 `fontFolderLauncher`（`OpenDocumentTree` → `SetFontFolder`）；A8 走 `navigationIconLauncher`（`GetContent` + MD5 命名落 `nav_icons/`）；A9/A10 是布尔键，分别驱动返回手势与阅读页转场；A11 `fontScale` 驱动全局字号；A12 是主题包管理页入口（B 块）；A13 `AppBackground.kt:22-29` 按日夜读 `backgroundImageDark`/`backgroundImageLight`/`backgroundImageDarkBlur` 等键。
+
+**本地现状**：A5/A8/A12/A13 全是 `onUnavailableAction`（`:137`/`:139`/`:150`/`:151`）；A9/A10 是 `ThemeSwitchRow` 但同样只弹提示（`:140`/`:141`）；A11 的 Slider（`:142-149`）只改 `@State fontScalePreview`，不写盘、不影响任何文字。
+
+**补法**：A5/A8/A13 接 HarmonyOS 文件选择器（`@ohos.file.picker`）并落目录；A9 先核 ArkUI 是否有预测性返回能力，**没有则按「上游有、平台无」记为平台缺项，只保留开关落盘**，不伪造效果；A10/A11 落盘后驱动转场与字号；A12 指向阶段三新建的主题包管理页（KI-TH-B1）。
+
+**验收**：A11 拖到 16 → 全 App 字号变大且重进保持；A5 选一个字体目录 → 正文字体变化；A9/A10 开关落盘后重进保持（若平台无对应能力，注明「仅落盘」）。
+
+**KI-TH-A5 主界面组六项（要接 4 / 不接 2）** —— 覆盖 A14 首页与导航、A15 显示状态栏、A16 启用滑动时动画、A17 顶栏与底栏、A18 平板界面（**不接**）、A19 多窗布局（**不接**）。
+
+**上游口径**：A14 sheet 可拖排主导航顺序、逐项显隐（`SetMainNavigationOrder`/`SetMainDestinationVisible`）；A15 `showStatusBar`；A16 `enableSwipeAnimation`；A17 sheet 10 个键（`topBarOpacity`/`bottomBarOpacity`/`topBarBlurRadius`/`bottomBarBlurRadius`/`topBarBlurAlpha`/`bottomBarBlurAlpha`/`topBarHeight`/`bottomBarHeight` 等）；A18 `tabletInterface`、A19 `multiPaneMode` 都按设备形态显示。
+
+**判定**：A14–A17 **要接**；A18 平板界面与 A19 多窗布局属**额外设备形态**，按 [项目范围](PROJECT.md)「范围之外」判**不接**——本地 `:161` 的「多窗布局」条目保留在界面上，但不实施、不删行。
+
+**补法**：A14–A17 落盘对应键并接渲染（状态栏显隐走窗口布局、顶底栏不透明度与模糊走已有菜单渲染层）；A18/A19 不动。
+
+**验收**：A15 关掉 → 首页状态栏消失；A17 调不透明度 → 顶栏底色透明度变化；A18/A19 无（不接）。
+
+**KI-TH-A6 书籍详情页组四项（要接）** —— 覆盖 A20 界面颜色跟随封面取色、A21 网络封面背景设置、A22 默认封面背景设置、A23 作者搜索回退。
+
+**上游口径**：A20 `tintBookInfoByCover`，详情页按封面主色取色；A21/A22 是封面背景图的两条来源；A23 在详情页点作者时决定搜作者名还是书名。
+
+**本地现状**：A20–A22 三条（`:166`/`:167`/`:168`）全 `onUnavailableAction`；A23 **条目本身都缺**。
+
+**补法**：A20 落盘后接封面主色提取；A21/A22 接图片选择；A23 补条目并接 `BookInfoPage` 的作者点击。
+
+**验收**：A20 打开 → 详情页头部底色随封面主色变化；A23 打开 → 点作者跳到「作者名」搜索结果而非书名。
+
+**KI-TH-A7 护眼六项（要接）** —— 覆盖 A24 启用护眼模式、A25 深色模式时自动开启、A26 护眼色温强度、A27 护眼定时开启、A28 护眼开始时间、A29 护眼结束时间。
+
+**这是 A 块里唯一「有半套实现」的一组，必须写清两层缺口**：
+
+- **第一层：主题页这套是死 UI**。`:173`/`:174`/`:176`/`:178`/`:181`/`:183` 六行全 `onUnavailableAction`，开关只改 `@State`，与另一套状态不通。
+- **第二层：阅读设置页那套能存盘，但没有渲染**。`ReaderSettingsPage.ets:1618-1659` 六个控件齐全且真的写盘（`Index.ets:1842-1847`），`Index.ets:2069-2079 isEyeProtectionActive()` 也真的按「开关 + 定时」判定；但判定结果只传成 `@Prop eyeProtectionActive`（`ReaderPage.ets:305`），**仅用于 `:3166` 底部动作条的高亮态**。全仓无 `colorFilter`/`blendMode`/暖色遮罩层 ⇒ **护眼在本地不改变任何像素**。
+
+**上游口径**：`ui/book/read/EyeProtection.kt`（149 行）—— `MIN_FILTER_TEMPERATURE = 2596` / `MAX_FILTER_TEMPERATURE = 5500`（`:21-22`）、`matrixValuesForIntensity(intensity)`（`:36-50`）、`Modifier.eyeProtectionColorFilter(enabled, intensity)`（`:99-117`）；`base/BaseComposeActivity.kt:89-104` 把 `rememberEyeProtectionActive(...)` 的结果套在 `Box(Modifier.fillMaxSize().eyeProtectionColorFilter(...))` 上包住整页 —— **是全 App 级，不只是阅读页**。
+
+**补法**：① 主题页六行改接 `Index.ets` 那套状态（与阅读设置页共用，不建第二套）；② `isEyeProtectionActive()` 补「深色时自动开启」这一支（当前只按开关+定时判，`autoNight` 读了但没用）；③ 新增色温矩阵工具，把 0..100 强度按 `EyeProtection.kt:36-50` 的系数映射到 2596K..5500K，用 ArkUI 的 `.colorFilter(...)`/`.blendMode(...)` 套到根容器上，**不能只存盘**。
+
+**验收**：护眼强度拖到 100 → 屏幕整体偏暖（像素取样 R 通道上升、B 通道下降）；拖到 0 → 恢复原色；开「深色时自动开启」+ 切到深色 → 自动生效；退出阅读页回到书架仍偏暖（全 App 级）。
+
+**KI-TH-A8 模糊两项（要接）** —— 覆盖 A30 启用控件模糊、A31 启用渐变模糊。
+
+**上游口径**：`enableBlur` 被 `AppScaffold`/`GlassDefaults`/`BookshelfViewModel`/`HomepageModuleFeed` 等 6 处读取；`enableGradientBlur` 控制顶栏渐变层。
+
+**本地现状**：`:191`/`:193` 两条 `onUnavailableAction`，开关只改 `@State`；条件显示逻辑（父开关打开才出现）与上游一致。
+
+**补法**：两个布尔键落盘，接 ArkUI `.blur()` / `.backgroundBlurStyle()` 到卡片与顶栏。
+
+**验收**：开控件模糊 → 卡片背景出现模糊；关掉 → 恢复实心。
+
+**KI-TH-A9 容器设置十五项（要接）** —— 覆盖 A32 容器背景图总开关、A33 大容器背景图片、A34 项目背景图片、A35 容器背景不透明度、A36 关闭设置分组圆角、A37 覆盖卡片圆角（总开关）、A38 卡片圆角数值、A39 覆盖卡片边框（总开关）、A40 边框宽度、A41 日间边框颜色、A42 夜间边框颜色、A43 显示分隔线、A44 分隔线宽度、A45 分隔线长度、A46 分隔线颜色。
+
+**上游口径**（`ThemeConfigScreen.kt:532-735`）：`:532 SplicedColumnGroup(theme_manage_section_container)`；`:533-540` 容器背景图 Switch；`:541 AnimatedVisibility(enableContainerBackgroundImage)` 包 A33/A34；`:585 SliderSettingItem(container_opacity)`；`:598` 分组圆角；`:608` 覆盖卡片圆角总开关 + `:616-617` 数值；`:630` 覆盖卡片边框总开关 + `:638-663` 宽度与日/夜颜色；`:676` 分隔线开关 + `:683-707` 宽度/长度/颜色。**A41/A42 是整表里唯一成对出现「日间/夜间」两个颜色入口的地方**，是日夜双套在设置界面上的直接体现。
+
+**本地现状**：15 条全 `onUnavailableAction`（`:200`–`:229`），条件显示（`:202`/`:204` 在 `containerBackgroundEnabled` 内、`:211` 在 `overrideCardCornerRadius` 内、`:216`/`:218`/`:220` 在 `overrideCardBorder` 内、`:225`/`:227`/`:229` 在 `dividerEnabled` 内）与上游一致，但都不生效。
+
+**补法**：15 个键一次性落盘 + 接到卡片/分隔线渲染层。A41/A42 取色盘与 F4 的两套颜色资源是同一件事的两面——日间边框色在浅色主题下用、夜间边框色在深色主题下用，**必须先有 F4 才有意义**。
+
+**验收**：开容器背景图并选图 → 卡片后出现背景图；调不透明度 → 背景图透明度变化；开覆盖卡片边框并设日间色 → 浅色下边框变色、深色下用夜间色。
+
+**KI-TH-A10 恢复默认主题配置（要接）** —— 覆盖 A47。
+
+**上游口径**：`ThemeConfigScreen.kt:736-745` `SplicedColumnGroup` + `:752 AppAlertDialog(ResetDefaults)`，确认后重置全部 themeConfig 键。
+
+**本地现状**：`:233-235` 是 `onUnavailableAction`，无二次确认对话框。
+
+**补法**：接确认对话框，确认后把 53 个 themeConfig 键批量恢复默认并重建主题。
+
+**验收**：改几项 → 点恢复默认 → 确认 → 全部回到默认值且重进保持。
+
+### B 主题包管理
+
+**B 块整体判定：12 行全部要接，整块缺失。** 本地没有主题包这个概念——`pages/ThemeSettingsPage.ets:150` 的「主题管理」是 `onUnavailableAction('主题包管理尚未迁移')`，**入口文案在、页面不在**。上游是三份文件：`help/config/ThemePackageManager.kt`（1254 行）、`help/config/ThemeImportExport.kt`（393 行）、`ui/config/themeManage/EditThemeSheet.kt`（403 行），加列表页 `ThemeManageScreen.kt`（331 行）。这不是「补几个开关」，是**新建一整页 + 一套包格式**，故单列阶段三。
+
+**KI-TH-B1 主题包管理页与保存/导出/导入（要接）** —— 覆盖 B1 保存当前配置为主题、B2 导出当前主题为文件、B3 导入主题包（zip）、B4 导入旧版 JSON 主题、B5 迁移旧版已存主题、B6 已存主题列表与搜索。
+
+**上游口径**：`ThemeManageScreen.kt:85-117` 五个 `ClickableSettingItem` —— 保存（`OpenSaveDialog`）、导出（`RequestExport`）、导入包（`RequestImportPackage`）、导入旧版 JSON（`RequestImportLegacyJson`）、迁移旧版（`MigrateLegacyThemes`，仅 `hasLegacyThemes` 时出现）；`:120-150` 已存主题列表（`:122-129 SearchBar`、`:141-149 SavedThemeItem` 四动作）；三个对话框 `:155`/`:184`/`:204`。B4 含**混淆版 v1** 兼容分支（`parseObfuscatedThemeV1`）。
+
+**本地现状**：六行全部无入口、无目录、无格式。
+
+**补法**：新建 `pages/ThemeManagePage.ets`，先定主题包格式（见 KI-TH-B3），再做保存/导出/导入/列表/搜索。B5 迁移只在检测到旧版目录时显示，本地从零开始，**第一版可以不实现迁移入口**（上游也是条件显示）。
+
+**验收**：保存当前配置 → 列表出现一条；导出 → 生成一个包文件；导入刚导出的包 → 列表多一条且能应用；搜索框输入 → 列表过滤。
+
+**KI-TH-B2 已存主题的四动作（要接）** —— 覆盖 B7 应用已存主题、B8 编辑已存主题、B9 导出已存主题、B10 删除已存主题。
+
+**上游口径**：列表项 `onApply`/`onEdit`/`onExport`/`onDelete`；B7 应用前 `prepareForApply` 把资产拷到可读位置再重建主题；B8 是 `EditThemeSheet.kt`（403 行），**日间 6 色与夜间 6 色并列编辑**，是「日夜两套」最完整的体现；B10 带确认框。
+
+**本地现状**：四行全部无对象——没有已存主题，所以四个动作都无从存在。
+
+**补法**：随 KI-TH-B1 一起做；B8 的编辑器要照上游做成日/夜并列两栏。
+
+**验收**：应用某条 → 全局配色变为该主题；编辑某条改日间色 → 保存后应用生效；删除 → 列表少一条且确认框出现过。
+
+**KI-TH-B3 主题包格式与资产（要接）** —— 覆盖 B11 主题包内嵌资产打包与还原、B12 主题包目录结构与清单。
+
+**上游口径**：`ThemeImportExport.kt` 定义包结构（manifest + 配置 + 背景图/封面/字体等内嵌资产），导出时打包、导入时解包并还原资产。
+
+**本地现状**：无目录约定、无 manifest、无资产打包——背景图、封面相册、字体都不会随主题走。
+
+**补法**：先定本地 manifest 格式（建议 JSON，字段与 themeConfig 键同名），资产按目录内嵌；**这是 B 块的地基，必须先于 KI-TH-B1 的导入/导出**。
+
+**验收**：导出含背景图的主题 → 包内可见资产文件；在另一份数据上导入 → 背景图跟着还原。
+
+### C 首次启动向导
+
+**KI-TH-C1 向导的两处选择要落到全局（C4 已实现 / C1、C2 要接）** —— 覆盖 C1 向导第 4 页深色模式三选一、C2 向导调色板选择、C4 启动时读取并应用已保存的 themeMode。
+
+**C4 已实现（r300）**：`pages/Index.ets` 的 `restoreOnboarding(context)` 改为两分支——`ThemeSettingsRepository.hasStoredThemeMode(context)` 为真时用 `legado_theme` 里的全局值（`persist=false`），否则用 `OnboardingRepository` 存的向导值并写进全局（`persist=true`）；两条路都经 `applyThemeMode` 落到 `@State themeMode` + `setColorMode`。`finishOnboarding` 末尾也补了同一次 `applyThemeMode`，向导选完当场生效。
+
+**上游口径**：`feature/onboarding/OnboardingScreen.kt:339-357` 第 4 页 `ThemeModeSelector` + `ThemeColorSelector`；`OnboardingViewModel.kt:120-123` `SetThemeMode` 立即 `appShellSettingsGateway.update { it.copy(themeMode = intent.value) }` 并发出 `ApplyDayNight` effect。
+
+**本地现状**：`pages/OnboardingPage.ets:90-94` 三个 `modeOption`（`:122-128`）与 `:95-108` 五个调色板，点选只改 `@State`（`themeMode`/`paletteIndex`），不写盘、不换肤；`:115-116` 自己写着「外观选择会保存用于向导偏好；全局换肤仍在迁移中」。这两处（C1/C2）**本轮未动**——`finishOnboarding` 已在向导结束时把选择送进全局，所以「选完有没有效果」已通；向导**页内**点选即时预览换肤仍未做。
+
+**补法**：C1/C2 与 A1/A2 共用同一条写入路径（`applyThemeMode`）；C2 的调色板要等 A2 真能改配色才有意义。取值域已在边界统一：`OnboardingRepository` 存 number `0/1/2`，`ThemeSettingsRepository.fromModeNumber`/`toModeNumber` 负责换算，全局只存字符串。
+
+**验收**：首次启动选「深色」→ 向导结束进入书架即为深色；杀进程重进 → 仍是深色（C4 已验）；选「跟随系统」+ 系统切深色 → App 跟着变。
+
+### D 阅读页日夜快捷按钮
+
+**D 块前提**：本地阅读页**有**日夜按钮（`ReaderPage.ets:1293` 底部动作条 `theme` 项、`ReaderSettingsPage.ets:360-362` 「背景」行的月亮图标），切的是阅读页私有 `readerNightMode` 布尔（`ReaderSettingsRepository.ets:165`），**不写全局 `themeMode`**。所以 D 块的问题不是「按钮没有」，是「按钮只管自己那一页」。
+
+**KI-TH-D1 日夜切换接到全局（D2 已实现 / D3、D5 见下）** —— 覆盖 D2 切换效果写入全局 `themeMode`、D3 日夜派生：三值 → 布尔、D5 阅读背景的日夜三套。
+
+**D2 已实现（r300）**：`pages/Index.ets:2574-2584 toggleReaderNightMode()` 重写为 `const nextMode = this.readerNightMode ? THEME_MODE_LIGHT : THEME_MODE_DARK;` → `applyThemeMode(context, nextMode, this.themePaletteIndex, true)`。`@State readerNightMode` 保留，但语义降级为「全局 themeMode 的投影」，唯一来源是 `applyThemeMode`（注释已写在字段上）。验收已过：阅读页设置面板点月亮图标 → `legado_theme` 从 `"2"` 变 `"1"`，返回书架书架整页变浅。
+
+**上游口径**：`ReadStyleDelegate.kt:455-470` `val nextIsNight = !(ReadSessionState.isDarkThemeOverride ?: host.isNightTheme)`、`val nextMode = if (nextIsNight) "2" else "1"` → 写网关；`ReadBookController.kt:1762-1790 onAppThemeChanged(isDarkTheme)` 处理来源往返（`:1769` 注释「ToggleDayNight installs the target override before DataStore publishes the app configuration」）。D3：`AppUiConfiguration.kt:11-15` 三值派生。D5：`appTheme == "4"` 时整套换墨水屏背景与配色。
+
+**本地现状**：D3 已随 F2 落地（`ThemeModeResolver.isDarkTheme` 三值派生 + `paperIndex` 按 `readerNightMode` 二选一，等价于「三值 → 布尔 → 两套背景」）。D5 只有 day/night 两套 `READER_BACKGROUND_STYLES`，无墨水屏（随 F8 判不适用）。
+
+**补法**：D3 无剩余工作。D5 保持两套。上游的 `ReadSessionState.isDarkThemeOverride` 会话态本地未照抄——阅读页配色由 `paperIndex` 直接跟随全局，不存在「临时覆盖后退出阅读页还要还原」的往返。
+
+**验收**：阅读页点日夜 → 退出到书架，书架也是深色（全局生效）；重进阅读页仍深色；把 themeMode 设「跟随系统」+ 系统切深色 → 阅读页跟着变。
+
+**KI-TH-D2 菜单配色与提醒耦合（要接）** —— 覆盖 D7 阅读页快速按钮的提醒冷却与去重、D8 阅读页菜单的日夜配色。
+
+**上游口径**：D7 手动切日夜会顺手清掉待弹的提醒（`ReadStyleDelegate.kt:489-491 resetDayNightReminderDismissal()`）；D8 菜单配色由 `isNightTheme` + `paletteStyle` 共同算出（`ReadBookColorTheme.kt:52-63`/`:144-162`/`:286-298`）。
+
+**本地现状**：D7 本地没有提醒机制，所以也不需要冷却——**随 E 块一起做**；D8 阅读菜单全用写死深色字面量，不随日夜变。
+
+**补法**：D7 在 E 块落地后加一行「切换时清提醒」；D8 把菜单配色改成按 `isDarkTheme` + 调色板算，复用 KI-TH-A1 的调色板状态。
+
+**验收**：D8 切到浅色主题 → 阅读菜单底色与文字色变浅；D7 提醒弹出后手动切日夜 → 提醒消失且不再弹。
+
+### E 日夜提醒
+
+**E 块整体判定：7 行里 6 行要接、1 行不接。** 本地只有 `ReaderSettingsPage.ets:898` 一个开关壳（`checked: false` 恒假、点击走 `showNotMigrated`），全仓 `autoSuggestDayNight|DayNight|dayNight` 零命中——**提醒机制整块不存在**。
+
+**KI-TH-E1 提醒开关与采样判定（要接）** —— 覆盖 E1 「自动切换日夜模式提醒」开关（阅读设置页）、E2 阅读页「更多设置」里的同一开关、E3 环境光传感器采样、E4 亮度阈值判定。
+
+**上游口径**：开关 `autoSuggestDayNight`（`PreferKey.kt:120`），两处入口 —— `ReadConfigScreen.kt:337-344` 与 `MoreConfigSheet.kt:399-404`；采样 `ReadStyleDelegate.kt:500-560 checkSwitchDayNight(lux)`；阈值 `:633 DARK_LUX_THRESHOLD = 8f` / `:634 BRIGHT_LUX_THRESHOLD = 100f`；关键的一层是 `isLightBg` 判定（按 `styleConfig.bgType` 与 `backgroundMeanColor` 算）——**用户已经把背景设成深色时，暗环境下不该再提醒切深色**。
+
+**本地现状**：E1 开关恒 false 且未接；E2 无该 sheet 项；E3 全仓唯一传感器引用是 `data/ReaderHaptics.ets:1` 的 `vibrator`，与光线无关；E4 无阈值、无背景亮度判定。
+
+**补法**：E1/E2 接真实布尔并落盘；E3 接 `@ohos.sensor` 的 `SensorId.AMBIENT_LIGHT`，**先核目标设备是否有该传感器**，没有则整块降级为不提示（不能伪造）；E4 照抄上游两条阈值 + `isLightBg`。
+
+**验收**：开提醒 → 暗处（遮住感光）且当前为浅色背景 → 弹出提醒；当前已是深色背景 → 不弹。
+
+**KI-TH-E2 提醒的防骚扰与呈现（要接）** —— 覆盖 E5 提醒冷却与去重、E6 提醒胶囊 UI。
+
+**上游口径**：`:636 REMINDER_COOLDOWN_MS = 10 * 60 * 1000L`、`:574-576` 用户点掉后置 `hasDismissedDarkReminder`/`hasDismissedLightReminder`；胶囊 UI 5 秒自动消失，点击执行 `ReadBookIntent.ToggleDayNight`（即 D1 同一个动作）。
+
+**本地现状**：无冷却、无「点掉后不再弹」、无胶囊层。
+
+**补法**：随 KI-TH-E1 一起做；胶囊点击复用 D1 的切换函数，不新建第二条切换路径。
+
+**验收**：弹出后点掉 → 本轮不再弹；10 分钟内重复触发 → 不弹；胶囊 5 秒后自动消失。
+
+**KI-TH-E3 提醒的 intent/effect 链路（不接）** —— 覆盖 E7。
+
+**判定理由**：本地阅读页用 `@Prop` 回调直连（`onToggleNightMode`），**没有 intent/effect 分层**，这是架构差异而非缺功能。上游这一层还有历史包袱：`ReadBookContract.kt:1271 data object ToggleDayNight : ReadBookEffect` 定义了但 `ReadBookController.kt:2563-2565` 注释写明「Handled directly by ViewModel — effect not currently emitted」，即**上游这个 effect 从不发出**。为一行从不生效的分层引入整套架构，违背「上游没有就不要这个效果」。
+
+**保留部分**：提醒的实际行为在 KI-TH-E1/E2 里直接实现，不依赖该层。
+
+**验收**：无（不接）。提醒功能照 KI-TH-E2 的验收走。
+
+### F 网关与全局换肤
+
+**F 块是整张表的地基**：F1/F2/F3/F4 四行不落地，A/B/C/D/E 五块的所有开关接了也不会有可见变化。这四行必须在阶段一一起做完。
+
+**KI-TH-F1 全局网关与三值派生（已实现，r300）** —— 覆盖 F1 `themeMode` 全局网关、F2 `isDarkTheme` 派生、F3 应用夜间模式。
+
+**上游口径**：F1 `constant/PreferKey.kt:9` + `AppShellSettings.kt:4 val themeMode: String = "0"` + `App.kt:194-203` 注释（唯一来源 + 三个写入方）；F2 `AppUiConfiguration.kt:11-15` `isDarkTheme = when (themeMode) { "1" -> false; "2" -> true; else -> isSystemDarkTheme }`；F3 `ThemeConfigStore.kt:70-89 initNightMode()` → `AppCompatDelegate.setDefaultNightMode(mode)`。
+
+**本地落地**：新建 `entry/src/main/ets/data/ThemeSettingsRepository.ets`（preference 名 `legado_theme`，字段 `themeMode: string` + `paletteIndex: number`，含 `hasStoredThemeMode`/`fromModeNumber`/`toModeNumber` 边界换算）与 `entry/src/main/ets/data/ThemeModeResolver.ets`（`isDarkTheme(themeMode, systemDark)` 照搬上游三段；`isSystemDark` 读 `context.resourceManager.getConfigurationSync().colorMode === resourceManager.ColorMode.DARK`；`toColorMode` 把三值映射成 `COLOR_MODE_LIGHT`/`COLOR_MODE_DARK`/`COLOR_MODE_NOT_SET`）。`pages/Index.ets` 加 `@State themeMode: string = '0'` / `@State themePaletteIndex: number = 0` 与唯一写入点 `applyThemeMode(context, themeMode, paletteIndex, persist)`，三个写入方（主题页 A1、阅读页 D2、向导 C4）全部走它。`entryability/EntryAbility.ets` 在 `loadContent` 之后 `applyStoredThemeMode()`，并用 `SystemBarEnvironmentCallback`（`EnvironmentCallback.onConfigurationUpdated`）监听系统深浅色变化同步系统栏。
+
+**与上游的机制差异（F3，不照抄）**：ArkUI 无 `AppCompatDelegate`。本地走 `ApplicationContext.setColorMode()` 让系统按 `resources/dark` 限定目录重新解析资源，再由 `@State` 驱动重建。三档映射：`MODE_NIGHT_NO`→`COLOR_MODE_LIGHT`、`MODE_NIGHT_YES`→`COLOR_MODE_DARK`、`MODE_NIGHT_FOLLOW_SYSTEM`→`COLOR_MODE_NOT_SET`（**必须**是 `NOT_SET`，否则应用会盖住系统设置）。
+
+**踩过的坑**：`resourceManager.getConfigurationSync().colorMode` 的类型是 `resourceManager.ColorMode`，与 `ConfigurationConstant.ColorMode` 是两个互不相通的枚举，混比会报 `10505001 ArkTS Compiler Error ... have no overlap`。
+
+**验收（全部已过，见 VALIDATION.md r300）**：`themeMode="2"` → 全 App 深色且 `legado_theme` 里读得到 `themeMode="2"`；杀进程重进仍深；`themeMode="0"` + 系统切深色 → 全 App 跟着变；`themeMode="1"` + 系统深色 → App 仍为浅色。
+
+**KI-TH-F2 两套颜色资源（已实现，r300）** —— 覆盖 F4。
+
+**这是整张表最大的一行，也是唯一真正的前置。** 本地原 2252 处颜色字面量全部内联在 `.ets` 里，`entry/src/main/resources/` 只有 `base/` 与 `rawfile/`、**无 `dark/`**，`base/element/color.json` 只有 1 个颜色（`start_window_background = #F6F4F0`），全仓 `$r('app.color.*')` 引用 **0 处**。
+
+**本地落地**：新建 `entry/src/main/resources/dark/element/color.json`，扩写 `base/element/color.json`，两边各 9 个键成对：`start_window_background`、`theme_text_primary`、`theme_text_secondary`、`theme_text_tertiary`、`theme_accent`、`theme_surface_primary`、`theme_surface_secondary`、`theme_surface_tertiary`、`theme_surface_elevated`。`base` 提供浅色值（`theme_text_primary = #1B1C22`、`theme_surface_primary = #F5F6F8`、`theme_accent = #3F5BD9` …），`dark` 提供深色值（`theme_text_primary = #E3E4E8`、`theme_surface_primary = #111217`、`theme_accent = #AFC2FF` …）。高频 8 色映射：`D8D9E0→theme_text_secondary`、`AFC2FF→theme_accent`、`92949E→theme_text_tertiary`、`E3E4E8→theme_text_primary`、`1C1D23→theme_surface_elevated`、`111217→theme_surface_primary`、`1A1B21→theme_surface_secondary`、`1B1C22→theme_surface_tertiary`。
+
+**替换结果**：34 个 `.ets` 文件、**926 处**字面量换成 `$r('app.color.*')`（属性调用 `fontColor`/`backgroundColor`/`borderColor`/`fillColor`/`stroke`/`selectedColor`/`trackColor`/`color`/`placeholderColor`/`caretColor`/`blockColor`/`border`/`stepColor`）。`components/AppGlyph.ets:7` 的 `@Prop tint: string` 改为 `@Prop tint: ResourceColor = '#C5C7D0'` 才能吃资源。剩 1336 处未抽：低频色 + 自定义组件 prop 传参（改 `Resource` 会引发类型连锁，需逐个改声明）。
+
+**替换方法的坑**：正则批量改 `.ets` **必须靠括号配对**取实参范围，不能用简单正则闭合——第一次用 `\(...\)` 把属性调用的闭括号吃掉，34 个文件全改坏，靠 `git show HEAD:<path>` 逐个恢复。
+
+**验收（已过，见 VALIDATION.md r300）**：`assembleHap` 通过；切深/浅两档同页配色整体翻转。
+
+**KI-TH-F3 主题配置随备份走（要接）** —— 覆盖 F5 `themeConfig.json` 导出、F7 `themeConfig` 的 6 个护眼键双向落盘、F9 `themeMode` 的备份忽略开关、F11 备份忽略开关的界面、F12 恢复时的 `config.xml` 键过滤。
+
+**上游口径**：`help/storage/BackupConfig.kt` —— themeConfig 是 53 键的数组类别（`:263-317`），`themeMode` 是单键类别（`:147`/`:173` 直接列进 ignoreKeys/backupIgnoreKeys），门控在 `:422`/`:434`；`keyIsNotIgnore(key, isBackup)`（`:413-439`）**按 key 逐个判**。
+
+**本地现状**：F5 归档清单里有 `'themeConfig.json'`（`data/BackupRepository.ets:321`）但**从不生成它**；F7 备份侧 6 个护眼键双向通（`:571-587` 写出、`:1062-1084` 读回），但功能侧不通（见 KI-TH-A7）；F9 有类别条目（`:327`）但**无写出/读回分支**，`createBackup` 的 config.xml 清单（`:474-482`/`:520-563`）不含 `themeMode`；F11 备份设置页开关无实际效果；F12 `filterAndroidConfigXml`（`:1620-1646`）**按类别整体剔除**，不是上游那种按 key 逐个判。
+
+**补法**：F5 在 `createBackup` 补 `themeConfig.json` 写出分支（53 键当前值）；F9 在 config.xml 写出清单补 `themeMode`；F12 把忽略判定改成按 key 逐个判；F11 随 F5/F9 自动生效；F7 等 KI-TH-A7 的渲染落地后功能侧才算通。
+
+**验收**：备份 → 归档里出现 `themeConfig.json` 且 `config.xml` 含 `themeMode`；改主题色后恢复备份 → 颜色还原；关掉 themeConfig 类别后备份 → `themeConfig.json` 不出现。
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。

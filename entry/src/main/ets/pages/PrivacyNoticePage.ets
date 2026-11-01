@@ -44,7 +44,7 @@ export struct PrivacyNoticePage {
             .fontSize(13).fontColor('#D9A6A0').lineHeight(20).padding({ left: 18, right: 18, top: 8, bottom: 22 })
         }.width('100%').padding({ top: 4 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor('#111217')
+    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
   }
 }
 
@@ -55,10 +55,10 @@ struct PrivacyNoticeSection {
 
   build() {
     Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor('#AFC2FF')
+      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
         .alignSelf(ItemAlign.Start).margin({ bottom: 8 })
-      Text(this.body).fontSize(15).fontColor('#D8D9E0').lineHeight(22).textAlign(TextAlign.Start)
-    }.width('100%').padding(16).backgroundColor('#1A1B21').borderRadius(16)
+      Text(this.body).fontSize(15).fontColor($r('app.color.theme_text_secondary')).lineHeight(22).textAlign(TextAlign.Start)
+    }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
       .margin({ left: 16, right: 16, bottom: 12 })
   }
 }

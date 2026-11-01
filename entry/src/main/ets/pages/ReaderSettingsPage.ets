@@ -624,7 +624,7 @@ export struct ReaderSettingsPage {
         })
       }
       Text('标题样式参与分页度量：改字号、行距、间距或分段后，章节页数会重新计算。标题颜色留空时跟随正文色。')
-        .fontSize(10).fontColor('#92949E').width('100%').padding(12)
+        .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(12)
     }.width('100%').padding({ bottom: 16 })
   }
 
@@ -685,7 +685,7 @@ export struct ReaderSettingsPage {
         }.padding({ left: 14, right: 14, top: 10, bottom: 16 })
       }
     }.width('100%').height('100%')
-      .backgroundColor(this.asSheet ? '#D91A1B21' : '#1A1B21')
+      .backgroundColor(this.asSheet ? '#D91A1B21' : $r('app.color.theme_surface_secondary'))
       .borderRadius(this.asSheet ? 22 : 0).clip(this.asSheet)
   }
 
@@ -1362,7 +1362,7 @@ export struct ReaderSettingsPage {
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
       Scroll() {
         Column() {
-          Text('内容').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 6, bottom: 4 })
+          Text('内容').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ left: 4, top: 6, bottom: 4 })
           ReaderInfoSettingRow({
             iconKind: 0,
             title: this.infoSubTab === 0 ? '页眉' : '页脚',
@@ -1382,7 +1382,7 @@ export struct ReaderSettingsPage {
               onSelect: (_index: number) => this.openInfoTipSheet(position)
             })
           }, (position: string) => position)
-          Text('分隔线').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
+          Text('分隔线').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           ReaderInfoSwitchRow({
             title: '显示分割线', detail: '显示页眉/页脚分隔线',
             checked: this.infoSubTab === 0 ? this.infoSettings.showHeaderLine : this.infoSettings.showFooterLine,
@@ -1393,7 +1393,7 @@ export struct ReaderSettingsPage {
           })
           ReaderInfoColorRow({ iconKind: 4, title: '分割线', detail: '页眉与页脚共用' })
             .onClick(() => this.openDetailSheet('分割线颜色', '选择页眉/页脚分割线颜色'))
-          Text('文字字体').fontSize(12).fontColor('#AFC2FF')
+          Text('文字字体').fontSize(12).fontColor($r('app.color.theme_accent'))
             .width('100%').padding({ left: 4, top: 10, bottom: 4 })
           if (this.infoSubTab === 1) {
             MenuSettingSwitch({
@@ -1422,7 +1422,7 @@ export struct ReaderSettingsPage {
                 this.infoSubTab === 0 ? '页眉夜间文字颜色' : '页脚夜间文字颜色', '选择信息文字颜色'))
           }
           Text('页眉/页脚模式、提示内容、分隔线和字号会保存到阅读样式。字体文件选择与颜色取色器尚未迁移。')
-            .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
+            .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
       }.layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').layoutWeight(1)
@@ -1433,7 +1433,7 @@ export struct ReaderSettingsPage {
     Column() {
       Scroll() {
         Column() {
-          Text('屏幕设置').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 6, bottom: 4 })
+          Text('屏幕设置').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ left: 4, top: 6, bottom: 4 })
           MenuSettingOption({ title: '屏幕方向', detail: '跟随系统 / 竖屏 / 横屏', migrated: true }).onClick(() => this.openDetailSheet('屏幕方向', '选择系统、竖屏或横屏'))
           MenuSettingOption({ title: '保持屏幕常亮', detail: this.getDetailChoices('保持屏幕常亮')[Math.max(0, ['0', '60', '300', '600', '-1'].indexOf(this.keepLight))] ?? '默认', migrated: true }).onClick(() => this.openDetailSheet('保持屏幕常亮', '设置阅读期间的屏幕超时'))
           MenuSettingSwitch({ title: '隐藏状态栏', detail: '沉浸式阅读', checked: this.hideStatusBar,
@@ -1450,7 +1450,7 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onUseZhLayoutChange(enabled) })
           MenuSettingOption({ title: '护眼设置', detail: '护眼模式与色温', migrated: true })
             .onClick(() => this.openDetailSheet('护眼设置', '配置护眼模式、色温与日夜参数'))
-          Text('翻页控制').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
+          Text('翻页控制').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSlider({
             title: '滑动翻页阈值',
             value: this.pageTouchSlop,
@@ -1482,7 +1482,7 @@ export struct ReaderSettingsPage {
             title: '书签标记大小', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
             onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
           })
-          Text('其他').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ left: 4, top: 10, bottom: 4 })
+          Text('其他').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSwitch({ title: '进度条触感反馈', detail: '拖动时提供触觉反馈', checked: this.sliderVibrator,
             onChange: (enabled: boolean) => this.onSliderVibratorChange(enabled) })
           MenuSettingSwitch({ title: '使用新版目录', detail: '使用新的目录面板', checked: true }).onClick(() => this.showNotMigrated('使用新版目录'))
@@ -1523,7 +1523,7 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onShowMenuIconChange(enabled)
           })
           Text('未迁移项目保留原版设置入口；当前仅呈现设置界面，不执行对应业务。')
-            .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
+            .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
       }.layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').layoutWeight(1)
@@ -2015,7 +2015,7 @@ export struct ReaderSettingsPage {
               Text('「种子色」与「菜单强调颜色」共用同一组字段（上游 readMenuAccentColor / Night）；' +
                 '菜单背景色、容器色未设置时回落到主题默认值，边框色回落描边默认色，' +
                 '文字色回落 onSurface，模糊色未设置时不影响底色。')
-                .fontSize(10).fontColor('#92949E').width('100%').padding(10)
+                .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(360).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '自定义阅读背景') {
@@ -2082,16 +2082,16 @@ export struct ReaderSettingsPage {
                 onChange: (color: string) => this.onTextAccentColorChange(color, true)
               })
               Text('强调色用于链接、搜索结果与朗读中的段落；背景透明度只作用于背景图片。')
-                .fontSize(10).fontColor('#92949E').width('100%').padding(10)
+                .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(460).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '选择字体') {
           Scroll() {
             Column() {
-              Text('当前字体').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 8, bottom: 6 })
+              Text('当前字体').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ top: 8, bottom: 6 })
               Text(this.getCurrentFontDisplayName()).fontSize(14).fontColor('#E5E6EB').width('100%')
                 .padding(12).backgroundColor('#202127').borderRadius(10)
-              Text('系统字体').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 14, bottom: 6 })
+              Text('系统字体').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ top: 14, bottom: 6 })
               Row() {
                 ForEach(['默认字体', '衬线字体', '等宽字体'], (label: string, index: number) => {
                   Text(label).fontSize(11).fontColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
@@ -2104,29 +2104,29 @@ export struct ReaderSettingsPage {
               }.width('100%')
               Row() {
                 Text('导入字体文件').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
-                Text('选择 TTF/OTF').fontSize(11).fontColor('#AFC2FF')
+                Text('选择 TTF/OTF').fontSize(11).fontColor($r('app.color.theme_accent'))
               }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10)
                 .margin({ top: 12, bottom: 6 }).onClick(() => this.importReaderFontFile())
               Row() {
                 Text('导入字体目录').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
-                Text('支持时可用').fontSize(11).fontColor('#92949E')
+                Text('支持时可用').fontSize(11).fontColor($r('app.color.theme_text_tertiary'))
               }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10)
                 .margin({ bottom: 8 }).onClick(() => this.importReaderFontFolder())
               if (this.fontEntries.length === 0) {
                 Text('尚无导入字体。可选择单个字体文件；已选字体复制到应用私有目录。')
-                  .fontSize(11).fontColor('#92949E').width('100%').padding(12)
+                  .fontSize(11).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(12)
               } else {
-                Text('已导入字体').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 10, bottom: 6 })
+                Text('已导入字体').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ top: 10, bottom: 6 })
                 ForEach(this.fontEntries, (font: ReaderFontEntry) => {
                   Row() {
                     Column() {
                       Text(font.displayName).fontSize(13).fontColor('#E5E6EB').maxLines(1)
-                      Text(font.familyName).fontSize(10).fontColor('#92949E').maxLines(1).margin({ top: 3 })
+                      Text(font.familyName).fontSize(10).fontColor($r('app.color.theme_text_tertiary')).maxLines(1).margin({ top: 3 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     if (this.getFontTargetPath() === font.path) {
-                      Image($r('app.media.app_check')).width(18).height(18).fillColor('#AFC2FF')
+                      Image($r('app.media.app_check')).width(18).height(18).fillColor($r('app.color.theme_accent'))
                     } else {
-                      Text('选择').fontSize(11).fontColor('#AFC2FF')
+                      Text('选择').fontSize(11).fontColor($r('app.color.theme_accent'))
                     }
                   }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10).margin({ bottom: 6 })
                     .onClick(() => this.chooseReaderFont(font))
@@ -2160,7 +2160,7 @@ export struct ReaderSettingsPage {
             MenuSettingOption({ title: '文字对齐', detail: '两端对齐 / 底部对齐', migrated: true }).onClick(() => this.openDetailSheet('文字对齐', '选择正文对齐方式'))
             MenuSettingOption({ title: '中文简繁体转换', detail: this.getChineseConverterLabel(), migrated: true })
               .onClick(() => this.openDetailSheet('中文简繁体转换', '按档位转换正文与章节标题的字形'))
-            Text('正文和标题支持系统字体及导入的 TTF/OTF；字体族会参与文字测量和分页。页眉页脚字体沿用各自选项。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
+            Text('正文和标题支持系统字体及导入的 TTF/OTF；字体族会参与文字测量和分页。页眉页脚字体沿用各自选项。').fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(12)
             }
           }.width('100%').padding({ bottom: 16 })
           }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
@@ -2232,7 +2232,7 @@ export struct ReaderSettingsPage {
                 }
               }
               Text('高亮规则依赖 Android 规则库；当前 HOS 尚无兼容规则仓储，本页不伪造规则列表。')
-                .fontSize(10).fontColor('#92949E').width('100%').padding(12)
+                .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(440).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '文字对齐') {
@@ -2250,7 +2250,7 @@ export struct ReaderSettingsPage {
               onChange: (enabled: boolean) => this.onTextBottomJustifyChange(enabled)
             })
             Text('设置会立即保存并应用。两端对齐改变行内间距；底部对齐只移动本页文字，不改章节位置。')
-              .fontSize(10).fontColor('#92949E').width('100%').padding(12)
+              .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '选中文字菜单') {
           Scroll() {
@@ -2335,7 +2335,7 @@ export struct ReaderSettingsPage {
                 Text('Android 系统提供的文字处理应用项暂未迁移。')
                   .fontSize(11).fontColor('#AEB0B9').width('100%')
                 Text('排序、分组与两个开关点「保存」后落库，并随备份同步；阅读页菜单只显示已实现能力的条目。')
-                  .fontSize(10).fontColor('#92949E').width('100%').margin({ top: 5 })
+                  .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').margin({ top: 5 })
               }.padding(12).backgroundColor('#202127').borderRadius(10).margin({ top: 8 })
               Row() {
                 Blank()
@@ -2370,12 +2370,12 @@ export struct ReaderSettingsPage {
                 }.width('100%')
               }, (rowIndex: number) => `row-${rowIndex}`)
               Text(`设置${CLICK_REGION_NAMES[this.selectedClickRegionIndex] ?? ''}区域动作`)
-                .fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 8, bottom: 6 })
+                .fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ top: 8, bottom: 6 })
               ForEach(READER_CLICK_REGION_ACTIONS, (action: string) => {
                 Row() {
                   Text(action).fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
                   if ((this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action) {
-                    Image($r('app.media.app_check')).width(18).height(18).fillColor('#AFC2FF')
+                    Image($r('app.media.app_check')).width(18).height(18).fillColor($r('app.color.theme_accent'))
                   }
                 }.width('100%').padding(10).backgroundColor(
                   (this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action ? '#34394C' : '#202127'
@@ -2387,7 +2387,7 @@ export struct ReaderSettingsPage {
                 })
               }, (action: string) => action)
               Text('动作会立即保存，并应用到阅读页对应分区。未迁移的动作会明确提示。')
-                .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
+                .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '自定义翻页按键') {
@@ -2395,18 +2395,18 @@ export struct ReaderSettingsPage {
             Column() {
               Text('上一页按键').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 6, bottom: 6 })
               TextInput({ text: this.previousPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
-                .fontSize(13).fontColor('#E5E6EB').placeholderColor('#92949E')
+                .fontSize(13).fontColor('#E5E6EB').placeholderColor($r('app.color.theme_text_tertiary'))
                 .backgroundColor('#292A31').borderRadius(10).padding(12)
                 .onChange((value: string) => this.previousPageKeys = value)
               Text('下一页按键').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 12, bottom: 6 })
               TextInput({ text: this.nextPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
-                .fontSize(13).fontColor('#E5E6EB').placeholderColor('#92949E')
+                .fontSize(13).fontColor('#E5E6EB').placeholderColor($r('app.color.theme_text_tertiary'))
                 .backgroundColor('#292A31').borderRadius(10).padding(12)
                 .onChange((value: string) => this.nextPageKeys = value)
               Text('将焦点放到输入框按下物理按键会自动录入键值，多个按键会自动用英文逗号隔开。')
                 .fontSize(11).fontColor('#AEB0B9').width('100%').padding({ top: 10, bottom: 6 })
               Text('当前可由系统接管翻页的按键只有音量键与媒体键（上一曲/下一曲/播放暂停）；其余键值会被保存并随备份同步，但按下时只有应用窗口持有焦点才会生效。')
-                .fontSize(10).fontColor('#92949E').width('100%').padding({ bottom: 14 })
+                .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding({ bottom: 14 })
               Row() {
                 Text('重置').fontSize(13).fontColor('#D3D4DC').padding({ left: 18, right: 18, top: 10, bottom: 10 })
                   .backgroundColor('#292A31').borderRadius(18)
@@ -2450,23 +2450,23 @@ export struct ReaderSettingsPage {
                     Text('开始时间').fontSize(12).fontColor('#D9DAE0')
                     Blank()
                     Text(this.eyeProtectionStartTime).fontSize(12).fontColor('#C6D3FF')
-                    Text('›').fontSize(20).fontColor('#92949E').margin({ left: 8 })
+                    Text('›').fontSize(20).fontColor($r('app.color.theme_text_tertiary')).margin({ left: 8 })
                   }.width('100%').padding({ top: 10, bottom: 6 }).onClick(() => this.showEyeProtectionTimePicker(true))
                   Row() {
                     Text('结束时间').fontSize(12).fontColor('#D9DAE0')
                     Blank()
                     Text(this.eyeProtectionEndTime).fontSize(12).fontColor('#C6D3FF')
-                    Text('›').fontSize(20).fontColor('#92949E').margin({ left: 8 })
+                    Text('›').fontSize(20).fontColor($r('app.color.theme_text_tertiary')).margin({ left: 8 })
                   }.width('100%').padding({ top: 6, bottom: 8 }).onClick(() => this.showEyeProtectionTimePicker(false))
                 }
               }
               Text('设置会立即保存并应用到阅读页面；定时支持跨越午夜。')
-                .fontSize(10).fontColor('#92949E').width('100%').textAlign(TextAlign.Center).padding(12)
+                .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '书签标记') {
           Column() {
-            Text('当前标记').fontSize(12).fontColor('#AFC2FF').width('100%').padding({ top: 4, bottom: 8 })
+            Text('当前标记').fontSize(12).fontColor($r('app.color.theme_accent')).width('100%').padding({ top: 4, bottom: 8 })
             Row() {
               Stack({ alignContent: Alignment.Center }) {
                 // 有自定义图片时预览真实图片，否则用内置书签图标示意默认丝带。
@@ -2499,7 +2499,7 @@ export struct ReaderSettingsPage {
               onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
             })
             Text('角标大小会立即保存并应用到阅读页右上角；0 表示不显示角标。自定义图片保存在应用内，可随时恢复默认。')
-              .fontSize(10).fontColor('#92949E').width('100%').padding(12)
+              .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '页边距') {
           Column() {
@@ -2522,7 +2522,7 @@ export struct ReaderSettingsPage {
             MenuSettingSlider({ title: '右边距', value: this.getPaddingValue('右'), minValue: 0,
               maxValue: this.detailSelectedOption === '正文' ? 200 : 300,
               onChange: (value: number) => this.updatePadding('右', value) })
-            Text('边距会立即保存并应用到阅读页。').fontSize(10).fontColor('#92949E').width('100%').padding(12)
+            Text('边距会立即保存并应用到阅读页。').fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '正文排版') {
           Column() {
@@ -2531,7 +2531,7 @@ export struct ReaderSettingsPage {
               Text(this.paragraphIndent.length.toString()).fontSize(12).fontColor('#D3D4DC')
             }.width('100%')
             Slider({ value: this.paragraphIndent.length, min: 0, max: 4, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .width('100%').selectedColor($r('app.color.theme_accent')).trackColor('#454751').blockColor($r('app.color.theme_accent'))
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onParagraphIndentCountChange(Math.max(0, Math.min(4, Math.round(value))));
@@ -2542,7 +2542,7 @@ export struct ReaderSettingsPage {
               Text(this.letterSpacing.toFixed(2)).fontSize(12).fontColor('#D3D4DC')
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.letterSpacing * 100 + 50, min: 0, max: 100, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .width('100%').selectedColor($r('app.color.theme_accent')).trackColor('#454751').blockColor($r('app.color.theme_accent'))
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onLetterSpacingChange((Math.round(value) - 50) / 100);
@@ -2553,7 +2553,7 @@ export struct ReaderSettingsPage {
               Text((this.paragraphSpacing / 10).toFixed(1)).fontSize(12).fontColor('#D3D4DC')
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.paragraphSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .width('100%').selectedColor($r('app.color.theme_accent')).trackColor('#454751').blockColor($r('app.color.theme_accent'))
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onParagraphSpacingChange(Math.max(0, Math.min(20, Math.round(value))));
@@ -2564,14 +2564,14 @@ export struct ReaderSettingsPage {
               Text(((this.lineSpacing - 10) / 10).toFixed(1)).fontSize(12).fontColor('#D3D4DC')
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.lineSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+              .width('100%').selectedColor($r('app.color.theme_accent')).trackColor('#454751').blockColor($r('app.color.theme_accent'))
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onLineSpacingChange(Math.max(0, Math.min(20, Math.round(value))));
                 }
               })
             Text('缩进为全角空格，范围0–4；字距按 em 比例调整（-0.50–0.50）。段距和行距遵循 Android 配置。更改后立即保存并应用。')
-              .fontSize(10).fontColor('#92949E').width('100%').padding({ top: 10, bottom: 12 })
+              .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding({ top: 10, bottom: 12 })
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else {
           Scroll() {
@@ -2580,7 +2580,7 @@ export struct ReaderSettingsPage {
                 Row() {
                   Text(choice).fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
                   if (this.detailSelectedOption === choice) {
-                    Image($r('app.media.app_check')).width(18).height(18).fillColor('#AFC2FF')
+                    Image($r('app.media.app_check')).width(18).height(18).fillColor($r('app.color.theme_accent'))
                   }
                 }.width('100%').padding(12).backgroundColor(
                   this.detailSelectedOption === choice ? '#34394C' : '#202127'
@@ -2588,11 +2588,11 @@ export struct ReaderSettingsPage {
               }, (choice: string) => choice)
               if (this.detailInfoSlot !== undefined && this.detailSelectedOption === '自定义') {
                 TextInput({ text: this.detailCustomText, placeholder: '输入自定义提示内容' })
-                  .fontSize(13).fontColor('#E5E6EB').placeholderColor('#92949E')
+                  .fontSize(13).fontColor('#E5E6EB').placeholderColor($r('app.color.theme_text_tertiary'))
                   .backgroundColor('#292A31').borderRadius(10).padding(12)
                   .onChange((value: string) => this.detailCustomText = value)
                 Text('可用变量：{BookName}、{ChapterTitle}、{Time}、{BatteryPercent}、{ChapterIndex}、{ChapterSize}、{PageIndex}、{PageSize}、{PageRemaining}、{ReadProgress}、{FullPageIndex}、{FullPageSize}')
-                  .fontSize(10).fontColor('#92949E').width('100%').padding({ top: 8, bottom: 8 })
+                  .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding({ top: 8, bottom: 8 })
                 Text('保存').fontSize(13).fontColor('#101116').padding({ left: 18, right: 18, top: 9, bottom: 9 })
                   .backgroundColor('#C6D3FF').borderRadius(18).alignSelf(ItemAlign.End)
                   .onClick(() => this.saveCustomInfoTip())
@@ -2625,7 +2625,7 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '正文排版' ||
                 this.detailInfoSlot !== undefined
                 ? '选择后立即应用并保存；自定义内容需点击保存。' : '仅展示选择预览，不保存设置。')
-                .fontSize(10).fontColor('#92949E')
+                .fontSize(10).fontColor($r('app.color.theme_text_tertiary'))
                 .width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
@@ -2773,10 +2773,10 @@ export struct ReaderSettingsPage {
                     .fontColor(item.enabled ? '#E5E6EB' : '#777984')
                   if (this.getBottomActionOption(item.id)?.scopeLabel) {
                     Text(this.getBottomActionOption(item.id)?.scopeLabel ?? '')
-                      .fontSize(10).fontColor('#92949E').margin({ top: 2 })
+                      .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
                   }
                   if (this.getBottomActionOption(item.id)?.migrated === false) {
-                    Text('未迁移').fontSize(10).fontColor('#92949E').margin({ top: 2 })
+                    Text('未迁移').fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
                   }
                 }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                 Stack({ alignContent: Alignment.Center }) {
@@ -2897,10 +2897,10 @@ export struct ReaderSettingsPage {
                   .fontColor(item.enabled ? '#E5E6EB' : '#777984')
                 if (this.getBottomActionOption(item.id)?.scopeLabel) {
                   Text(this.getBottomActionOption(item.id)?.scopeLabel ?? '')
-                    .fontSize(10).fontColor('#92949E').margin({ top: 2 })
+                    .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
                 }
                 if (this.getBottomActionOption(item.id)?.migrated === false) {
-                  Text('未迁移').fontSize(10).fontColor('#92949E').margin({ top: 2 })
+                  Text('未迁移').fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
                 }
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Stack({ alignContent: Alignment.Center }) {
@@ -2977,7 +2977,7 @@ struct BackgroundShareOption {
     }.width(40).height(56).justifyContent(FlexAlign.Center)
       .backgroundColor(this.selected ? '#34394C' : '#15161B')
       .borderRadius(9)
-      .border({ width: this.selected ? 2 : 1, color: this.selected ? '#AFC2FF' : '#33343C' })
+      .border({ width: this.selected ? 2 : 1, color: this.selected ? $r('app.color.theme_accent') : '#33343C' })
   }
 }
 
@@ -3018,8 +3018,8 @@ struct MenuSettingSlider {
         Text(`${this.value}`).fontSize(12).fontColor('#D3D4DC')
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: this.stepValue, style: SliderStyle.InSet })
-        .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
-        .showSteps(true).stepColor('#AFC2FF').stepSize(3)
+        .width('100%').selectedColor($r('app.color.theme_accent')).trackColor('#454751').blockColor($r('app.color.theme_accent'))
+        .showSteps(true).stepColor($r('app.color.theme_accent')).stepSize(3)
         .onChange((value: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
             this.onChange(Math.max(this.minValue, Math.min(this.maxValue, Math.round(value))));
@@ -3090,7 +3090,7 @@ struct MenuSettingPalette {
             Circle().width(27).height(27).fill(color)
             if (this.selectedColor.toUpperCase() === color.toUpperCase()) {
               Circle().width(33).height(33).fill(Color.Transparent)
-                .stroke('#AFC2FF').strokeWidth(2)
+                .stroke($r('app.color.theme_accent')).strokeWidth(2)
             }
           }.width(38).height(38).onClick(() => this.onChange(color))
         }, (color: string) => color)
@@ -3104,7 +3104,7 @@ struct MenuSettingSection {
   @Prop title: string = '';
 
   build() {
-    Text(this.title).fontSize(12).fontColor('#AFC2FF').width('100%')
+    Text(this.title).fontSize(12).fontColor($r('app.color.theme_accent')).width('100%')
       .padding({ left: 4, top: 10, bottom: 4 })
   }
 }
@@ -3238,7 +3238,7 @@ struct ReaderInfoSliderRow {
         Text(`${this.value}`).fontSize(12).fontColor('#D3D4DC')
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: 1, style: SliderStyle.InSet })
-        .width('100%').selectedColor('#AFC2FF').trackColor('#454751').blockColor('#AFC2FF')
+        .width('100%').selectedColor($r('app.color.theme_accent')).trackColor('#454751').blockColor($r('app.color.theme_accent'))
         .onChange((value: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
             this.onChange(Math.max(this.minValue, Math.min(this.maxValue, Math.round(value))));
@@ -3313,6 +3313,6 @@ struct BackgroundOption {
         Image($r('app.media.app_check')).width(12).height(12).fillColor('#C6D3FF').margin({ top: 6 })
       }
     }.width(44).height(56).justifyContent(FlexAlign.Center).backgroundColor(this.color)
-      .borderRadius(11).border({ width: this.selected ? 2 : 1, color: this.selected ? '#AFC2FF' : '#33343C' })
+      .borderRadius(11).border({ width: this.selected ? 2 : 1, color: this.selected ? $r('app.color.theme_accent') : '#33343C' })
   }
 }

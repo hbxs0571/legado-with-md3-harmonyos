@@ -21,7 +21,7 @@ export struct SubscriptionPage {
         .onClick(() => this.onOpenSourceManage())
       MenuItem({ content: '全部' })
         .onClick(() => this.onUnavailableAction('当前已显示全部订阅源'))
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(18)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(18)
   }
 
   private getVisibleItems(): string[] {
@@ -50,22 +50,22 @@ export struct SubscriptionPage {
       if (this.collapsedHeader) {
         Column() {
           Row() {
-            Text('订阅').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+            Text('订阅').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
             Blank().layoutWeight(1)
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'search', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18)
+            }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(18)
               .onClick(() => {
                 this.showSearch = !this.showSearch;
                 if (!this.showSearch) { this.searchQuery = ''; }
               })
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'more', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+            }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
               .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
           }.width('100%').height(48).alignItems(VerticalAlign.Top)
             .padding({ left: 18, right: 18 })
-        }.width('100%').padding({ top: 20 }).backgroundColor('#111217')
+        }.width('100%').padding({ top: 20 }).backgroundColor($r('app.color.theme_surface_primary'))
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       } else {
         Column() {
@@ -73,22 +73,22 @@ export struct SubscriptionPage {
             Blank()
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'search', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18)
+            }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(18)
               .onClick(() => {
                 this.showSearch = !this.showSearch;
                 if (!this.showSearch) { this.searchQuery = ''; }
               })
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'more', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(18).margin({ left: 8 })
+            }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(18).margin({ left: 8 })
               .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
           }.width('100%').height(48).padding({ left: 18, right: 18 })
           Column() {
-            Text('订阅').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+            Text('订阅').fontSize(28).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
             Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
           }.width('100%').alignItems(HorizontalAlign.Start)
             .padding({ left: 18, right: 18, top: 12, bottom: 18 }).offset({ y: -5 })
-        }.width('100%').padding({ top: 20 }).backgroundColor('#111217')
+        }.width('100%').padding({ top: 20 }).backgroundColor($r('app.color.theme_surface_primary'))
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -96,11 +96,11 @@ export struct SubscriptionPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 17 }).margin({ right: 9 })
           TextInput({ placeholder: '搜索订阅源…', text: this.searchQuery })
-            .fontSize(16).fontColor('#D8D9E0').placeholderColor('#92949E')
+            .fontSize(16).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 14, right: 14, top: 10, bottom: 10 })
-          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor('#1C1D23').borderRadius(22)
+          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22)
       }
 
       Scroll(this.subscriptionScroller) {
@@ -108,15 +108,15 @@ export struct SubscriptionPage {
           Row() {
             Row() {
               AppGlyph({ name: 'ruleSubscription', glyphSize: 18, tint: '#C5C7D0' })
-              Text('规则').fontSize(14).fontColor('#D8D9E0').margin({ left: 10 })
+              Text('规则').fontSize(14).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
-              .backgroundColor('#1C1D23').borderRadius(13)
+              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(13)
               .onClick(() => this.onOpenRules())
             Row() {
               AppGlyph({ name: 'favoriteStar', glyphSize: 18, tint: '#C5C7D0' })
-              Text('收藏').fontSize(14).fontColor('#D8D9E0').margin({ left: 10 })
+              Text('收藏').fontSize(14).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
-              .backgroundColor('#1C1D23').borderRadius(13).margin({ left: 10 })
+              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(13).margin({ left: 10 })
               .onClick(() => this.onOpenFavorites())
           }.width('100%').padding({ left: 16, right: 16, top: this.collapsedHeader ? 16 : 1, bottom: 14 })
 
@@ -126,8 +126,8 @@ export struct SubscriptionPage {
                 GridItem() {
                   Column() {
                     Stack({ alignContent: Alignment.Center }) {
-                      AppGlyph({ name: 'subscription', tint: '#AFC2FF', glyphSize: 28 })
-                    }.width(48).height(48).backgroundColor('#1C1D23').borderRadius(14)
+                      AppGlyph({ name: 'subscription', tint: $r('app.color.theme_accent'), glyphSize: 28 })
+                    }.width(48).height(48).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14)
                     Text(item).fontSize(12).fontColor('#C5C7D0').textAlign(TextAlign.Center)
                       .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).height(36).margin({ top: 8 })
                   }.width('100%').padding({ top: 8, bottom: 8 })
@@ -139,8 +139,8 @@ export struct SubscriptionPage {
               .scrollBar(BarState.Off)
           } else if (this.showSearch && this.searchQuery.trim().length > 0) {
             Column() {
-              AppGlyph({ name: 'search', glyphSize: 32, tint: '#AFC2FF' }).margin({ bottom: 14 })
-              Text('没有匹配的订阅源').fontSize(16).fontColor('#D8D9E0')
+              AppGlyph({ name: 'search', glyphSize: 32, tint: $r('app.color.theme_accent') }).margin({ bottom: 14 })
+              Text('没有匹配的订阅源').fontSize(16).fontColor($r('app.color.theme_text_secondary'))
               Text('调整搜索内容后重试').fontSize(14).fontColor('#858792').margin({ top: 8 })
             }.width('100%').height(240).justifyContent(FlexAlign.Center)
           }
@@ -162,7 +162,7 @@ export struct SubscriptionPage {
           this.setCollapsedHeader(false);
         }
       })
-    }.width('100%').height('100%').backgroundColor('#111217')
+    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
       .onTouch((event: TouchEvent) => {
         if (event.type === TouchType.Down && event.touches.length > 0) {
           this.touchStartY = event.touches[0].screenY;

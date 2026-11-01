@@ -361,24 +361,24 @@ export struct CatalogPage {
         Row() {
           TextInput({ placeholder: '搜索章节…', text: this.query })
             .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
-            .backgroundColor('#1A1B21').layoutWeight(1).borderRadius(12)
+            .backgroundColor($r('app.color.theme_surface_secondary')).layoutWeight(1).borderRadius(12)
             .onChange((value: string) => this.query = value)
           if (this.query.length > 0) {
             AppGlyph({ name: 'profileClose', glyphSize: 16, tint: '#C5C7D0' })
               .width(32).onClick(() => this.query = '')
           }
           AppGlyph({ name: 'profileFindReplace', glyphSize: 17,
-            tint: this.useTitleReplacement ? '#AFC2FF' : '#D8D9E0' })
+            tint: this.useTitleReplacement ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary') })
             .width(32)
             .onClick(() => this.onTitleReplacementChange(!this.useTitleReplacement))
           AppGlyph({ name: 'profileTimeline', glyphSize: 17,
-            tint: this.showWordCount ? '#AFC2FF' : '#D8D9E0' })
+            tint: this.showWordCount ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary') })
             .width(32)
             .onClick(() => this.toggleShowWordCount())
-          AppGlyph({ name: 'swap', glyphSize: 18, tint: this.ascending ? '#D8D9E0' : '#AFC2FF' })
+          AppGlyph({ name: 'swap', glyphSize: 18, tint: this.ascending ? $r('app.color.theme_text_secondary') : $r('app.color.theme_accent') })
             .width(32).onClick(() => this.ascending = !this.ascending)
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
+            AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') })
           }
           .width(28)
           .height(32)
@@ -424,7 +424,7 @@ export struct CatalogPage {
                 }
                 .width('100%')
                 .padding({ left: chapter.isInVolume ? 26 : 12, right: 12, top: 11, bottom: 11 })
-                .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : '#1A1B21')
+                .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : $r('app.color.theme_surface_secondary'))
                 .borderRadius(10)
                 .onClick(() => chapter.isVolume ? this.toggleVolume(chapter.index) : this.onSelectChapter(chapter.index))
               }.margin({ left: 12, right: 12, bottom: 6 })
@@ -443,14 +443,14 @@ export struct CatalogPage {
         Row() {
           TextInput({ placeholder: '搜索', text: this.markQuery })
             .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
-            .backgroundColor('#1A1B21').layoutWeight(1).borderRadius(12)
+            .backgroundColor($r('app.color.theme_surface_secondary')).layoutWeight(1).borderRadius(12)
             .onChange((value: string) => this.markQuery = value)
           if (this.markQuery.length > 0) {
             AppGlyph({ name: 'profileClose', glyphSize: 16, tint: '#C5C7D0' })
               .width(32).onClick(() => this.markQuery = '')
           }
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
+            AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') })
           }
           .width(32)
           .height(32)
@@ -461,7 +461,7 @@ export struct CatalogPage {
 
         if (this.getVisibleBookmarks().length === 0) {
           Column() {
-            AppGlyph({ name: 'bookmark', glyphSize: 30, tint: '#AFC2FF' })
+            AppGlyph({ name: 'bookmark', glyphSize: 30, tint: $r('app.color.theme_accent') })
             Text(this.markQuery.length > 0 ? '没有找到相关书签' : '暂无书签')
               .fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
           }
@@ -489,13 +489,13 @@ export struct CatalogPage {
                       .maxLines(2).margin({ top: 4 }).textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
                   if (bookmark.content.length > 0) {
-                    Text(bookmark.content).fontSize(11).fontColor('#AFC2FF')
+                    Text(bookmark.content).fontSize(11).fontColor($r('app.color.theme_accent'))
                       .maxLines(2).margin({ top: 4 }).textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
                 }
                 .width('100%')
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-                .backgroundColor(this.isCurrentChapterItem(bookmark.chapterIndex) ? '#303442' : '#1A1B21')
+                .backgroundColor(this.isCurrentChapterItem(bookmark.chapterIndex) ? '#303442' : $r('app.color.theme_surface_secondary'))
                 .borderRadius(12)
                 .onClick(() => this.onEditBookmark(bookmark.id))
                 .gesture(LongPressGesture({ duration: 500 })
@@ -515,7 +515,7 @@ export struct CatalogPage {
       // 对齐上游 ReaderBookMarkingsPage：第一行创建时间 + 章名 + 其他书源 + 定位图标。
       if (this.getVisibleMarkings().length === 0) {
         Column() {
-          AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: '#AFC2FF' })
+          AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: $r('app.color.theme_accent') })
           Text(this.markQuery.length > 0 ? '没有找到相关笔记' : '暂无笔记')
             .fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
         }
@@ -532,7 +532,7 @@ export struct CatalogPage {
                     .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(marking.chapterName.length > 0 ? marking.chapterName
                     : this.getChapterFallbackName(marking.chapterIndex))
-                    .fontSize(10).fontColor('#92949E').maxLines(1)
+                    .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ right: 4 })
                   if (this.isMarkingFromOtherSource(marking)) {
                     Text('其他书源').fontSize(10).fontColor('#E57373').margin({ right: 4 })
@@ -547,13 +547,13 @@ export struct CatalogPage {
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
                 if (marking.note.trim().length > 0) {
-                  Text(marking.note).fontSize(12).fontColor('#AFC2FF').lineHeight(17)
+                  Text(marking.note).fontSize(12).fontColor($r('app.color.theme_accent')).lineHeight(17)
                     .maxLines(2).width('100%').margin({ top: 4 })
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
               }
               .width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .backgroundColor(this.isCurrentChapterItem(marking.chapterIndex) ? '#303442' : '#1A1B21')
+              .backgroundColor(this.isCurrentChapterItem(marking.chapterIndex) ? '#303442' : $r('app.color.theme_surface_secondary'))
               .borderRadius(12).margin({ bottom: 6 })
               .onClick(() => this.onEditMarking(marking.id))
               .gesture(LongPressGesture({ duration: 500 })
@@ -609,7 +609,7 @@ export struct CatalogPage {
               .textAlign(TextAlign.Center)
               .layoutWeight(1)
               .padding({ top: 8, bottom: 8 })
-              .backgroundColor(this.selectedTab === index ? '#454B62' : '#1C1D23')
+              .backgroundColor(this.selectedTab === index ? '#454B62' : $r('app.color.theme_surface_elevated'))
               .borderRadius(12)
               .margin({ left: index === 0 ? 12 : 4, right: index === 3 ? 12 : 4 })
               .onClick(() => {
@@ -656,7 +656,7 @@ struct CatalogInformationRow {
       Text(this.label)
         .fontSize(11)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#AFC2FF')
+        .fontColor($r('app.color.theme_accent'))
       Text(this.value.trim().length > 0 ? this.value : '--')
         .fontSize(13)
         .fontColor('#D4D5DB')
@@ -665,7 +665,7 @@ struct CatalogInformationRow {
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .backgroundColor('#1A1B21')
+    .backgroundColor($r('app.color.theme_surface_secondary'))
     .borderRadius(14)
   }
 }

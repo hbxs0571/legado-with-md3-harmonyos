@@ -30,6 +30,43 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r300 深色模式阶段一：全局 themeMode 与两套颜色资源（设备验收通过）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（9503748 字节，`assembleHap` 于 13:33 通过）。
+- **改了哪些**：新建 `entry/src/main/ets/data/ThemeSettingsRepository.ets`（preference 名 `legado_theme`）与 `entry/src/main/ets/data/ThemeModeResolver.ets`；`pages/Index.ets` 加 `@State themeMode: string` / `@State themePaletteIndex: number` 与唯一写入点 `applyThemeMode`；`pages/ThemeSettingsPage.ets` 三个 `ThemeModeItem` 改真回调；`entryability/EntryAbility.ets` 在 `loadContent` 后 `setColorMode` 并监听 `'environment'`；新建 `entry/src/main/resources/dark/element/color.json` + 扩写 `base/element/color.json`（各 9 键成对），34 个 `.ets` 文件共 926 处颜色字面量换成 `$r('app.color.*')`。
+
+### 验收①主题页点「深色」→ 全 App 立刻变深、杀进程重进仍深
+
+- 操作：我的 → 设置 → 外观 → 主题模式 → 点「深色」。
+- 预期：整页立刻变深；`legado_theme` 里 `themeMode = "2"`；`aa force-stop` 后重进仍是深色。
+- 实际：点「深色」后同一屏（外观页）由浅底 `#F5F6F8` 系变为深底 `#111217` 系，标题、卡片、说明文字、色卡边框全部翻转，选中态从「跟随系统」移到「深色」；`/data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_theme` 内容为 `<string key="themeMode">2</string><double key="paletteIndex" value="0.000000"/>`；`aa force-stop` 后重进停在首页，首页仍是深色（最近阅读卡、今日阅读目标、底栏全部深色）。**通过**。
+
+### 验收②阅读页点日夜按钮 → 退出到书架，书架也深
+
+- 操作：书架 → 打开 `np-test` → 点中间唤出菜单 → 齿轮进「阅读界面」面板 → 点「背景」行右侧月亮图标 → 关闭面板 → 返回书架。
+- 预期：`legado_theme` 由 `themeMode="2"` 变 `"1"`；退出阅读页后书架整页变浅。
+- 实际：点月亮图标后阅读页正文与面板配色即时翻转为浅色（月亮图标变太阳图标），`legado_theme` 变为 `<string key="themeMode">1</string>`；返回书架，书架顶栏、分组标签、封面阴影、底栏全部由深转浅。**通过**。
+- 说明：阅读页正文纸张色本身仍由 `paperIndex` 决定（`READER_BACKGROUND_STYLES` 两套），全局 `themeMode` 只驱动「是哪一套」——这与上游「`themeMode` 是日夜唯一来源、背景另有一套配置」的口径一致。
+
+### 验收③themeMode 设「跟随系统」→ 系统切深色全 App 跟着变
+
+- 操作：主题页点「跟随系统」→ 进系统设置 → 显示和亮度 → 显示模式点「深色」→ 回到应用；再把系统切回「浅色」→ 回到应用。
+- 预期：`legado_theme` 为 `themeMode="0"`；系统切深色时应用跟着变深，切回浅色时跟着变浅。
+- 实际：点「跟随系统」后 `legado_theme` 变为 `<string key="themeMode">0</string>`，此时系统为浅色，应用保持浅色；系统切「深色」后回到应用，外观页整屏变深、选中态回到「跟随系统」；系统切回「浅色」后回到应用，整屏恢复浅色。**通过**。
+
+### 验收④preferences 里读得到 themeMode="2"
+
+- 操作：`hdc shell cat /data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_theme`。
+- 实际：三档模式分别读到 `"2"`、`"1"`、`"0"`，与主题页选中态一一对应；`paletteIndex` 始终为 `0`（本轮只接了 themeMode，调色板仍只落盘不改配色，见 ZIP-THEME.md A2）。**通过**。
+
+### 构建踩坑记录
+
+`entry/src/main/ets/data/ThemeModeResolver.ets:28` 首版写成 `configuration.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK`，报 `10505001 ArkTS Compiler Error`：`'@ohos.resourceManager'.default.ColorMode` 与 `'@ohos.app.ability.ConfigurationConstant'.default.ColorMode` have no overlap。`resourceManager.getConfigurationSync()` 返回的是 `resourceManager.Configuration`，其 `colorMode` 属于 `resourceManager.ColorMode`（`DARK=0`/`LIGHT=1`），必须 `import { resourceManager } from '@kit.LocalizationKit'` 后比 `resourceManager.ColorMode.DARK`。改完 `BUILD SUCCESSFUL in 53 s 682 ms`。
+
+### 复原状态
+
+模拟器系统显示模式已切回「浅色」；应用 `legado_theme` 停在 `themeMode="0"`（跟随系统）+ `paletteIndex=0`。本轮只改代码与资源，未动设备上的书籍与阅读偏好。
+
 ## 2026-10-29 N 端 r260 高亮预设导入与划线笔记渲染（通过）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26），包名 `io.legado.harmony`，书籍 `vol-test2`（本地 TXT，6 章）。

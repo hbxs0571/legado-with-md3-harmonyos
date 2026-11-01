@@ -4,7 +4,9 @@ export type AppGlyphName = 'home' | 'bookshelf' | 'discover' | 'subscription' | 
 export struct AppGlyph {
   @Prop name: AppGlyphName = 'home';
   @Prop glyphSize: number = 22;
-  @Prop tint: string = '#C5C7D0';
+  // 类型放宽到 ResourceColor：调用方既能传字面量，也能传 $r('app.color.*')，
+  // 后者才会随 resources/dark 目录切换深浅色。
+  @Prop tint: ResourceColor = '#C5C7D0';
 
   build() {
     if (this.name === 'home') {

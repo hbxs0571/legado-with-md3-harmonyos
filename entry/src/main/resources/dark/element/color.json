@@ -1,0 +1,40 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#111217"
+    },
+    {
+      "name": "theme_text_primary",
+      "value": "#E3E4E8"
+    },
+    {
+      "name": "theme_text_secondary",
+      "value": "#D8D9E0"
+    },
+    {
+      "name": "theme_text_tertiary",
+      "value": "#92949E"
+    },
+    {
+      "name": "theme_accent",
+      "value": "#AFC2FF"
+    },
+    {
+      "name": "theme_surface_primary",
+      "value": "#111217"
+    },
+    {
+      "name": "theme_surface_secondary",
+      "value": "#1A1B21"
+    },
+    {
+      "name": "theme_surface_tertiary",
+      "value": "#1B1C22"
+    },
+    {
+      "name": "theme_surface_elevated",
+      "value": "#1C1D23"
+    }
+  ]
+}

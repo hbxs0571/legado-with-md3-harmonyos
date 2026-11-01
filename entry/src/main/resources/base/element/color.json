@@ -3,6 +3,38 @@
     {
       "name": "start_window_background",
       "value": "#F6F4F0"
+    },
+    {
+      "name": "theme_text_primary",
+      "value": "#1B1C22"
+    },
+    {
+      "name": "theme_text_secondary",
+      "value": "#2E3038"
+    },
+    {
+      "name": "theme_text_tertiary",
+      "value": "#6A6D77"
+    },
+    {
+      "name": "theme_accent",
+      "value": "#3F5BD9"
+    },
+    {
+      "name": "theme_surface_primary",
+      "value": "#F5F6F8"
+    },
+    {
+      "name": "theme_surface_secondary",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "theme_surface_tertiary",
+      "value": "#F0F1F5"
+    },
+    {
+      "name": "theme_surface_elevated",
+      "value": "#FFFFFF"
     }
   ]
 }

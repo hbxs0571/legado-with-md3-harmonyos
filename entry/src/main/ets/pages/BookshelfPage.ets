@@ -186,7 +186,7 @@ export struct BookshelfPage {
         MenuItem({ content: option.label }).height(44)
           .onClick(() => this.draftSort = option.value)
       }, (option: BookSortOption) => `${option.value}`)
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   @Builder
@@ -212,7 +212,7 @@ export struct BookshelfPage {
             this.showGroupManager = false;
           })
       }, (groupName: string) => groupName)
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   /** 分组管理：自适应网格卡片，对应上游 LazyVerticalGrid(GridCells.Adaptive(160.dp))。 */
@@ -220,19 +220,19 @@ export struct BookshelfPage {
   private GroupManagerGrid() {
     Column() {
       Row() {
-        Text('分组管理').fontSize(19).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text('分组管理').fontSize(19).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
         Text('新建').fontSize(14).fontColor('#B9C8FF').padding(8)
           .onClick(() => this.openGroupEditor(undefined))
         Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Row() {
-        Text(`切换分组：${this.activeFilter()}`).fontSize(13).fontColor('#AFC2FF').layoutWeight(1)
+        Text(`切换分组：${this.activeFilter()}`).fontSize(13).fontColor($r('app.color.theme_accent')).layoutWeight(1)
           .bindMenu(this.GroupFilterMenu())
       }.width('100%').padding({ left: 18, right: 18, bottom: 10 })
 
       if (this.getUserGroups().length === 0) {
         Column() {
-          Text('还没有自定义分组').fontSize(14).fontColor('#92949E')
+          Text('还没有自定义分组').fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
           Text('点右上「新建」创建第一个分组').fontSize(12).fontColor('#6E7078').margin({ top: 6 })
         }.width('100%').padding({ top: 40, bottom: 40 }).justifyContent(FlexAlign.Center)
       } else {
@@ -251,14 +251,14 @@ export struct BookshelfPage {
                       if (!visible && this.selectedFilter === group.groupName) { this.selectedFilter = '全部'; }
                     })
                 }.width('100%')
-                Text(group.groupName).fontSize(14).fontColor('#E3E4E8').maxLines(1)
+                Text(group.groupName).fontSize(14).fontColor($r('app.color.theme_text_primary')).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 10 }).width('100%')
                 Text(`${bookSortLabel(group.bookSort)}${group.isPrivate ? ' · 私有标记未生效' : ''} · 分组刷新未接入`)
-                  .fontSize(11).fontColor('#92949E').maxLines(1)
+                  .fontSize(11).fontColor($r('app.color.theme_text_tertiary')).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 4 }).width('100%')
-              }.width('100%').padding(12).backgroundColor('#1B1C22').borderRadius(14)
+              }.width('100%').padding(12).backgroundColor($r('app.color.theme_surface_tertiary')).borderRadius(14)
                 .alignItems(HorizontalAlign.Start)
                 .onClick(() => this.openGroupEditor(group))
             }
@@ -282,22 +282,22 @@ export struct BookshelfPage {
     Column() {
       Row() {
         Text(this.editingGroupId > 0 ? '编辑分组' : '新建分组')
-          .fontSize(19).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+          .fontSize(19).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
         Text('保存').fontSize(14).fontColor('#B9C8FF').padding(8)
           .onClick(async () => { await this.submitGroupDraft(); })
-        Text('取消').fontSize(14).fontColor('#92949E').padding(8)
+        Text('取消').fontSize(14).fontColor($r('app.color.theme_text_tertiary')).padding(8)
           .onClick(() => this.showGroupEditor = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Scroll() {
         Column() {
           // 封面：点击选图，长按清除，与上游 GroupEditContent 的封面项一致。
           Row() {
-            Text('封面').fontSize(14).fontColor('#D8D9E0').layoutWeight(1)
+            Text('封面').fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
             Stack({ alignContent: Alignment.Center }) {
               if (this.draftCover.length > 0) {
                 Image(this.draftCover).width(48).height(48).borderRadius(10).objectFit(ImageFit.Cover)
               } else {
-                AppGlyph({ name: 'add', glyphSize: 18, tint: '#92949E' })
+                AppGlyph({ name: 'add', glyphSize: 18, tint: $r('app.color.theme_text_tertiary') })
               }
             }
             .width(48).height(48).backgroundColor('#22232A').borderRadius(10)
@@ -319,23 +319,23 @@ export struct BookshelfPage {
           }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
 
           Row() {
-            Text('分组名称').fontSize(14).fontColor('#D8D9E0').width(88)
+            Text('分组名称').fontSize(14).fontColor($r('app.color.theme_text_secondary')).width(88)
             TextInput({ text: this.draftName, placeholder: '分组名称' }).layoutWeight(1).height(40)
-              .fontSize(14).fontColor('#E3E4E8').placeholderColor('#92949E')
+              .fontSize(14).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
               .backgroundColor('#22232A').borderRadius(9)
               .onChange((value: string) => this.draftName = value)
           }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
 
           Row() {
-            Text('排序方式').fontSize(14).fontColor('#D8D9E0').layoutWeight(1)
-            Text(bookSortLabel(this.draftSort)).fontSize(14).fontColor('#AFC2FF')
+            Text('排序方式').fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+            Text(bookSortLabel(this.draftSort)).fontSize(14).fontColor($r('app.color.theme_accent'))
               .bindMenu(this.SortMenu())
           }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
 
           Row() {
             Column() {
-              Text('下拉刷新').fontSize(14).fontColor('#D8D9E0')
-              Text('仅保存 Android 兼容字段；当前不控制实际更新').fontSize(11).fontColor('#92949E').margin({ top: 3 })
+              Text('下拉刷新').fontSize(14).fontColor($r('app.color.theme_text_secondary'))
+              Text('仅保存 Android 兼容字段；当前不控制实际更新').fontSize(11).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.draftRefresh })
               .onChange((enabled: boolean) => this.draftRefresh = enabled)
@@ -343,8 +343,8 @@ export struct BookshelfPage {
 
           Row() {
             Column() {
-              Text('私有分组').fontSize(14).fontColor('#D8D9E0')
-              Text('仅保存兼容标记；当前不限制跨分组显示').fontSize(11).fontColor('#92949E').margin({ top: 3 })
+              Text('私有分组').fontSize(14).fontColor($r('app.color.theme_text_secondary'))
+              Text('仅保存兼容标记；当前不限制跨分组显示').fontSize(11).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.draftPrivate })
               .onChange((enabled: boolean) => this.draftPrivate = enabled)
@@ -368,7 +368,7 @@ export struct BookshelfPage {
                   }
                 })
               if (this.pendingDeleteGroupId === this.editingGroupId) {
-                Text('取消').fontSize(13).fontColor('#92949E').padding({ left: 12 })
+                Text('取消').fontSize(13).fontColor($r('app.color.theme_text_tertiary')).padding({ left: 12 })
                   .onClick(() => this.pendingDeleteGroupId = -1)
               }
             }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
@@ -427,12 +427,12 @@ export struct BookshelfPage {
   ) {
     Row() {
       Column() {
-        Text(title).fontSize(14).fontColor('#D8D9E0')
+        Text(title).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
         if (description.length > 0) {
-          Text(description).fontSize(11).fontColor('#92949E').margin({ top: 3 })
+          Text(description).fontSize(11).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text(bookshelfLayoutOptionLabel(options, current)).fontSize(14).fontColor('#AFC2FF')
+      Text(bookshelfLayoutOptionLabel(options, current)).fontSize(14).fontColor($r('app.color.theme_accent'))
         .bindMenu(this.LayoutOptionsMenu(options, onPick))
     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
@@ -445,7 +445,7 @@ export struct BookshelfPage {
         MenuItem({ content: option.label }).height(44)
           .onClick(() => onPick(option.value))
       }, (option: BookshelfLayoutOption) => `${option.value}_${option.label}`)
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   /** 开关行。 */
@@ -453,9 +453,9 @@ export struct BookshelfPage {
   private LayoutSwitchRow(title: string, description: string, isOn: boolean, onToggle: (value: boolean) => void) {
     Row() {
       Column() {
-        Text(title).fontSize(14).fontColor('#D8D9E0')
+        Text(title).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
         if (description.length > 0) {
-          Text(description).fontSize(11).fontColor('#92949E').margin({ top: 3 })
+          Text(description).fontSize(11).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: isOn })
@@ -471,16 +471,16 @@ export struct BookshelfPage {
   ) {
     Row() {
       Column() {
-        Text(title).fontSize(14).fontColor('#D8D9E0')
+        Text(title).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
         if (description.length > 0) {
-          Text(description).fontSize(11).fontColor('#92949E').margin({ top: 3 })
+          Text(description).fontSize(11).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('−').fontSize(18).fontColor(value > minimum ? '#AFC2FF' : '#4A4C55')
+      Text('−').fontSize(18).fontColor(value > minimum ? $r('app.color.theme_accent') : '#4A4C55')
         .width(36).height(32).textAlign(TextAlign.Center)
         .onClick(() => { if (value > minimum) { onStep(-1); } })
-      Text(`${value}`).fontSize(14).fontColor('#E3E4E8').width(34).textAlign(TextAlign.Center)
-      Text('+').fontSize(18).fontColor(value < maximum ? '#AFC2FF' : '#4A4C55')
+      Text(`${value}`).fontSize(14).fontColor($r('app.color.theme_text_primary')).width(34).textAlign(TextAlign.Center)
+      Text('+').fontSize(18).fontColor(value < maximum ? $r('app.color.theme_accent') : '#4A4C55')
         .width(36).height(32).textAlign(TextAlign.Center)
         .onClick(() => { if (value < maximum) { onStep(1); } })
     }.width('100%').padding({ left: 16, right: 12, top: 10, bottom: 10 })
@@ -490,7 +490,7 @@ export struct BookshelfPage {
   @Builder
   private LayoutSectionHeader(title: string) {
     Row() {
-      Text(title).fontSize(12).fontColor('#92949E')
+      Text(title).fontSize(12).fontColor($r('app.color.theme_text_tertiary'))
     }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 6 })
   }
 
@@ -504,7 +504,7 @@ export struct BookshelfPage {
   private LayoutSheetContent() {
     Column() {
       Row() {
-        Text('书架布局').fontSize(19).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
+        Text('书架布局').fontSize(19).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
         Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8)
           .onClick(async () => { await this.submitLayout(); })
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 6 })
@@ -599,27 +599,27 @@ export struct BookshelfPage {
         .onClick(() => this.onUnavailableAction('书单导入尚未迁移'))
       MenuItem({ startIcon: $r('app.media.profile_history'), content: '日志' }).height(48)
         .onClick(() => this.onUnavailableAction('日志界面尚未迁移'))
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   build() {
     Column() {
       Row() {
         if (this.collapsedHeader) {
-          Text('书架').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          Text('书架').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
         }
         Blank()
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 20 }) }.width(36).height(36).backgroundColor('#1C1D23').borderRadius(20)
+        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 20 }) }.width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(20)
           .onClick(() => {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
         Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
-          .width(36).height(36).backgroundColor('#1C1D23').borderRadius(20).margin({ left: 8 })
+          .width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(20).margin({ left: 8 })
           .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
       }.width('100%').height(56).padding({ left: 16, right: 16, top: 10, bottom: 0 })
       Row() {
-        Text('书架').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+        Text('书架').fontSize(28).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
       }.width('100%').height(this.collapsedHeader ? 0 : 58)
         .padding({ left: 16, right: 16, bottom: this.collapsedHeader ? 0 : 18 })
         .opacity(this.collapsedHeader ? 0 : 1)
@@ -629,11 +629,11 @@ export struct BookshelfPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 17 }).margin({ right: 9 })
           TextInput({ placeholder: '搜索书名或作者…', text: this.searchQuery })
-            .fontSize(16).fontColor('#D8D9E0').placeholderColor('#92949E')
+            .fontSize(16).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
-          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor('#1C1D23').borderRadius(22)
+          .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22)
       }
 
       // 分组样式为「隐藏页签」时不渲染顶部筛选栏，切换分组改由分组管理面板完成。
@@ -646,8 +646,8 @@ export struct BookshelfPage {
         }.width('100%').padding({ left: 12, right: 12, bottom: 14 })
       } else {
         Row() {
-          Text(`当前分组：${this.activeFilter()}`).fontSize(12).fontColor('#92949E').layoutWeight(1)
-          Text('切换分组').fontSize(12).fontColor('#AFC2FF').padding(6)
+          Text(`当前分组：${this.activeFilter()}`).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1)
+          Text('切换分组').fontSize(12).fontColor($r('app.color.theme_accent')).padding(6)
             .onClick(() => { this.showGroupEditor = false; this.showGroupManager = true; })
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       }
@@ -662,7 +662,7 @@ export struct BookshelfPage {
                   showChapterBadge: true,
                   shadowEnabled: this.layout.bookshelfCoverShadow
                 })
-                Text(book.title).fontSize(13).fontColor('#D8D9E0')
+                Text(book.title).fontSize(13).fontColor($r('app.color.theme_text_secondary'))
                   .maxLines(this.layout.bookshelfTitleMaxLines)
                   .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 7 })
               }.width('100%').alignItems(HorizontalAlign.Start)
@@ -692,17 +692,17 @@ export struct BookshelfPage {
           })
       } else {
         Column() {
-          Text(this.emptyFace).fontSize(32).fontColor('#D8D9E0').margin({ bottom: 14 })
+          Text(this.emptyFace).fontSize(32).fontColor($r('app.color.theme_text_secondary')).margin({ bottom: 14 })
             .onClick(() => {
               const currentIndex = this.emptyFaces.indexOf(this.emptyFace);
               this.emptyFace = this.emptyFaces[(currentIndex + 1) % this.emptyFaces.length];
             })
           Text(this.searchQuery.length > 0 ? '没有匹配的书籍' : this.books.length === 0
             ? '书架还空着，先去搜索书籍或从发现里添加吧！' : '这个分组还没有书籍')
-            .width(220).fontSize(11).fontColor('#D8D9E0').textAlign(TextAlign.Center).maxLines(2)
+            .width(220).fontSize(11).fontColor($r('app.color.theme_text_secondary')).textAlign(TextAlign.Center).maxLines(2)
         }.layoutWeight(1).width('100%').padding({ bottom: 104 }).justifyContent(FlexAlign.Center)
       }
-    }.width('100%').height('100%').backgroundColor('#111217')
+    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
       .bindSheet(this.showGroupManager || this.showLayoutSheet, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E'
       })
@@ -716,7 +716,7 @@ struct ShelfFilter {
   build() {
     Column() {
       Text(this.label).fontSize(12).fontColor(this.selected ? '#C4D1FF' : '#B6B8C2').padding({ left: 7, right: 7, top: 7, bottom: 7 })
-      Row().width(42).height(2).backgroundColor('#AFC2FF').borderRadius(1)
+      Row().width(42).height(2).backgroundColor($r('app.color.theme_accent')).borderRadius(1)
         .opacity(this.selected ? 1 : 0)
         .animation({ duration: 180, curve: Curve.EaseInOut })
     }.layoutWeight(1).alignItems(HorizontalAlign.Center)

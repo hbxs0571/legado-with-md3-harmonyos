@@ -48,19 +48,19 @@ export struct OtherSettingsPage {
       if (this.collapsedHeader) {
         Row() {
           Stack({ alignContent: Alignment.Center }) {
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
+            Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
           }.width(40).height(40).onClick(() => this.onBack())
-          Text('高级').fontSize(20).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').margin({ left: 8 })
-        }.width('100%').height(56).padding({ left: 12, right: 16, top: 8, bottom: 8 }).backgroundColor('#111217')
+          Text('高级').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).margin({ left: 8 })
+        }.width('100%').height(56).padding({ left: 12, right: 16, top: 8, bottom: 8 }).backgroundColor($r('app.color.theme_surface_primary'))
       } else {
         Column() {
           Row() {
             Stack({ alignContent: Alignment.Center }) {
-              Image($r('app.media.reader_back')).width(20).height(20).fillColor('#D8D9E0')
+              Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
             }.width(40).height(40).onClick(() => this.onBack())
             Blank()
           }.width('100%')
-          Text('高级').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+          Text('高级').fontSize(24).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
             .alignSelf(ItemAlign.Start).margin({ top: 18, left: 8 })
         }.width('100%').padding({ left: 12, right: 16, top: 8, bottom: 10 })
       }
@@ -116,7 +116,7 @@ export struct OtherSettingsPage {
         const shouldCollapse = Math.abs(this.settingsScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
       })
-      }.width('100%').height('100%').backgroundColor('#111217')
+      }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
 
       if (this.activeDialog.length > 0) {
         Stack({ alignContent: Alignment.Center }) {
@@ -124,17 +124,17 @@ export struct OtherSettingsPage {
             .onClick(() => this.activeDialog = '')
           Column() {
             Text(this.activeDialog === 'battery' ? '后台保活与省电策略设置指引' : '清除 WebView 数据')
-              .fontSize(20).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+              .fontSize(20).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
               .textAlign(TextAlign.Center).width('100%')
             Text(this.activeDialog === 'battery'
               ? '后台保活设置指引：\n1. 在系统设置中进入【电池 / 耗电管理】。\n2. 将后台行为设为【无限制】或【不优化】。\n3. 允许应用【后台活动】与【自启动】。'
               : '是否确认删除?')
-              .fontSize(15).fontColor('#D8D9E0').lineHeight(24).margin({ top: 22, bottom: 24 })
+              .fontSize(15).fontColor($r('app.color.theme_text_secondary')).lineHeight(24).margin({ top: 22, bottom: 24 })
             Row() {
-              Text('取消').fontSize(15).fontColor('#AFC2FF').textAlign(TextAlign.Center)
+              Text('取消').fontSize(15).fontColor($r('app.color.theme_accent')).textAlign(TextAlign.Center)
                 .layoutWeight(1).padding({ top: 14, bottom: 14 })
                 .onClick(() => this.activeDialog = '')
-              Text(this.activeDialog === 'battery' ? '设置' : '确认').fontSize(15).fontColor('#AFC2FF')
+              Text(this.activeDialog === 'battery' ? '设置' : '确认').fontSize(15).fontColor($r('app.color.theme_accent'))
                 .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 14, bottom: 14 })
                 .onClick(() => {
                   const dialogType = this.activeDialog;
@@ -147,12 +147,12 @@ export struct OtherSettingsPage {
           }.width('calc(100% - 48vp)').padding(22).backgroundColor('#292A31').borderRadius(24)
         }.width('100%').height('100%').zIndex(10)
       }
-    }.width('100%').height('100%').backgroundColor('#111217')
+    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
       .bindSheet(this.activeSheet.length > 0, this.SettingsSheetContent(), {
         height: this.activeSheet === 'directLink' ? 620 : 300,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#1C1D23',
+        backgroundColor: $r('app.color.theme_surface_elevated'),
         onDisappear: () => this.activeSheet = ''
       })
   }
@@ -166,7 +166,7 @@ export struct OtherSettingsPage {
         .onClick(() => this.onUnavailableAction('规则复制尚未接入'))
       MenuItem({ content: '粘贴规则' }).height(48)
         .onClick(() => this.onUnavailableAction('规则粘贴尚未接入'))
-    }.backgroundColor('#25262D').fontColor('#E3E4E8').radius(16)
+    }.backgroundColor('#25262D').fontColor($r('app.color.theme_text_primary')).radius(16)
   }
 
   @Builder
@@ -174,12 +174,12 @@ export struct OtherSettingsPage {
     Column() {
       if (this.activeSheet === 'folderPicker') {
         Row() {
-          Text('选择操作').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').layoutWeight(1)
-          Text('取消').fontSize(14).fontColor('#AFC2FF').onClick(() => this.activeSheet = '')
+          Text('选择操作').fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+          Text('取消').fontSize(14).fontColor($r('app.color.theme_accent')).onClick(() => this.activeSheet = '')
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 16 })
         Row() {
-          AppGlyph({ name: 'profileFolder', glyphSize: 28, tint: '#AFC2FF' })
-          Text('系统文件夹选择器').fontSize(15).fontColor('#E3E4E8').margin({ left: 12 })
+          AppGlyph({ name: 'profileFolder', glyphSize: 28, tint: $r('app.color.theme_accent') })
+          Text('系统文件夹选择器').fontSize(15).fontColor($r('app.color.theme_text_primary')).margin({ left: 12 })
           Blank()
         }.width('100%').height(84).padding({ left: 20, right: 20 })
           .backgroundColor('#25262D').borderRadius(14)
@@ -190,13 +190,13 @@ export struct OtherSettingsPage {
       } else {
         Row() {
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: '#AFC2FF' })
+            AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: $r('app.color.theme_accent') })
           }.width(40).height(40).backgroundColor('#25262D').borderRadius(20)
             .onClick(() => this.onUnavailableAction('直链规则测试尚未迁移'))
-          Text('直链上传配置').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          Text('直链上传配置').fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
             .layoutWeight(1).textAlign(TextAlign.Center)
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'more', glyphSize: 18, tint: '#D8D9E0' })
+            AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') })
           }.width(40).height(40).backgroundColor('#25262D').borderRadius(20)
             .bindMenu(this.DirectLinkMenu, { placement: Placement.Bottom })
         }.width('100%').padding({ left: 18, right: 14, top: 8, bottom: 14 })
@@ -206,7 +206,7 @@ export struct OtherSettingsPage {
             OtherSettingsSheetField({ title: '下载 URL 规则', value: this.directDownloadRule, onChange: (value: string) => this.directDownloadRule = value })
             OtherSettingsSheetField({ title: '注释', value: this.directRuleSummary, onChange: (value: string) => this.directRuleSummary = value })
             Row() {
-              Text('是否压缩').fontSize(15).fontColor('#E3E4E8').layoutWeight(1)
+              Text('是否压缩').fontSize(15).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
               Checkbox({ name: 'direct_link_compress' }).shape(CheckBoxShape.ROUNDED_SQUARE)
                 .select(this.directCompress)
                 .onChange((value: boolean) => this.directCompress = value)
@@ -214,11 +214,11 @@ export struct OtherSettingsPage {
           }.width('100%').padding({ left: 16, right: 16, top: 4 }).constraintSize({ minHeight: '100%' })
         }.layoutWeight(1).scrollBar(BarState.Off)
         Row() {
-          Text('取消').fontSize(14).fontColor('#D8D9E0').layoutWeight(1).textAlign(TextAlign.Center)
+          Text('取消').fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor('#25262D').borderRadius(20)
             .onClick(() => this.activeSheet = '')
-          Text('确认').fontSize(14).fontColor('#111217').layoutWeight(1).textAlign(TextAlign.Center)
-            .padding({ top: 12, bottom: 12 }).backgroundColor('#AFC2FF').borderRadius(20).margin({ left: 10 })
+          Text('确认').fontSize(14).fontColor($r('app.color.theme_surface_primary')).layoutWeight(1).textAlign(TextAlign.Center)
+            .padding({ top: 12, bottom: 12 }).backgroundColor($r('app.color.theme_accent')).borderRadius(20).margin({ left: 10 })
             .onClick(() => {
               this.onUnavailableAction('直链上传规则尚未保存');
               this.activeSheet = '';
@@ -238,12 +238,12 @@ struct OtherSettingsSection {
   build() {
     Column() {
       if (this.title.length > 0) {
-        Text(this.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#AFC2FF')
+        Text(this.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
           .alignSelf(ItemAlign.Start).padding({ left: 12, top: 14, bottom: 8 })
       }
       Column() {
         this.content()
-      }.width('100%').backgroundColor('#1A1B21').borderRadius(16)
+      }.width('100%').backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
     }.width('100%').margin({ bottom: 8 })
   }
 }
@@ -262,15 +262,15 @@ struct OtherSettingsDropdown {
       ForEach(this.options, (value: string) => {
         MenuItem({ content: value }).height(48).onClick(() => this.onSelect(value))
       }, (value: string) => value)
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(16)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(16)
   }
 
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor('#E3E4E8')
+        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_primary'))
         if (this.detail.length > 0) { Text(this.detail).fontSize(12).fontColor('#AEB0BA').margin({ top: 3 }) }
-        Text(this.option).fontSize(14).fontColor('#AFC2FF').margin({ top: 4 })
+        Text(this.option).fontSize(14).fontColor($r('app.color.theme_accent')).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       AppGlyph({ name: 'profileExpandMore', glyphSize: 22, tint: '#AEB0BA' })
     }.width('100%').padding({ left: 16, right: 14, top: 14, bottom: 14 })
@@ -288,7 +288,7 @@ struct OtherSettingsSwitch {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor('#E3E4E8')
+        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_primary'))
         if (this.detail.length > 0) { Text(this.detail).fontSize(14).fontColor('#AEB0BA').margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.value }).onChange((value: boolean) => this.onChange(value))
@@ -305,7 +305,7 @@ struct OtherSettingsAction {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor('#E3E4E8')
+        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_primary'))
         if (this.detail.length > 0) { Text(this.detail).fontSize(14).fontColor('#AEB0BA').margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Image($r('app.media.reader_next')).width(18).height(18).fillColor('#AEB0BA')
@@ -325,8 +325,8 @@ struct OtherSettingsInput {
     Column() {
       Row() {
         Column() {
-          Text(this.title).fontSize(16).fontColor('#E3E4E8')
-          Text(this.value).fontSize(14).fontColor('#AFC2FF').margin({ top: 4 })
+          Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_primary'))
+          Text(this.value).fontSize(14).fontColor($r('app.color.theme_accent')).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         AppGlyph({ name: 'profileExpandMore', glyphSize: 22, tint: '#AEB0BA' })
       }.width('100%').padding({ left: 16, right: 14, top: 14, bottom: 14 }).onClick(() => {
@@ -336,11 +336,11 @@ struct OtherSettingsInput {
       if (this.expanded) {
         Column() {
           TextInput({ text: this.editValue, placeholder: this.title }).onChange((value: string) => this.editValue = value)
-            .fontSize(14).backgroundColor('#111217').borderRadius(8)
+            .fontSize(14).backgroundColor($r('app.color.theme_surface_primary')).borderRadius(8)
           Row() {
-            Text('默认').fontSize(14).fontColor('#D8D9E0').onClick(() => this.expanded = false)
+            Text('默认').fontSize(14).fontColor($r('app.color.theme_text_secondary')).onClick(() => this.expanded = false)
             Blank()
-            Text('确定').fontSize(14).fontColor('#AFC2FF').onClick(() => {
+            Text('确定').fontSize(14).fontColor($r('app.color.theme_accent')).onClick(() => {
               this.onConfirm();
               this.expanded = false;
             })
@@ -361,8 +361,8 @@ struct OtherSettingsSheetField {
     Column() {
       Text(this.title).fontSize(13).fontColor('#B6B8C2').alignSelf(ItemAlign.Start).margin({ bottom: 6 })
       TextInput({ text: this.value, placeholder: this.title })
-        .fontSize(15).fontColor('#E3E4E8').placeholderColor('#858792')
-        .backgroundColor('#111217').borderRadius(8)
+        .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor('#858792')
+        .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(8)
         .onChange((value: string) => this.onChange(value))
     }.width('100%').margin({ bottom: 14 })
   }

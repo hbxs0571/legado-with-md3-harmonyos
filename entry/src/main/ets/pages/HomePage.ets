@@ -41,7 +41,7 @@ export struct HomePage {
     Menu() {
       MenuItem({ content: '首页组件' }).height(48)
         .onClick(() => this.showHomeOptions = true)
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   private getLocalBooks(): Book[] {
@@ -121,17 +121,17 @@ export struct HomePage {
     Column() {
       Column() {
         Row() {
-          Text('首页').fontSize(22).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+          Text('首页').fontSize(22).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
             .opacity(this.collapsedHeader ? 1 : 0)
           Blank()
           Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'settings', glyphSize: 20 }) }
-            .width(36).height(36).backgroundColor('#1C1D23').borderRadius(22)
+            .width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22)
             .onClick(() => this.showHomeOptions = !this.showHomeOptions)
           Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
-            .width(36).height(36).backgroundColor('#1C1D23').borderRadius(22).margin({ left: 8 })
+            .width(36).height(36).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(22).margin({ left: 8 })
             .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
         }.width('100%').height(64).padding({ left: 16, right: 12 })
-        Text('首页').fontSize(28).fontWeight(FontWeight.Medium).fontColor('#E3E4E8')
+        Text('首页').fontSize(28).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
           .width('100%').height(72).padding({ left: 16, bottom: 14 })
           .opacity(this.collapsedHeader ? 0 : 1)
       }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
@@ -142,14 +142,14 @@ export struct HomePage {
             Stack({ alignContent: Alignment.Bottom }) {
             Column() {
               Row() {
-                AppGlyph({ name: 'book', tint: '#AFC2FF', glyphSize: 20 })
+                AppGlyph({ name: 'book', tint: $r('app.color.theme_accent'), glyphSize: 20 })
                 Text(BookRepository.isBodyMissing(this.getRecentBook()) ? '已恢复书目 · 缺少正文' : '最近阅读')
-                  .fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 10 })
+                  .fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
               }.margin({ bottom: 10 })
               Row() {
                 BookCover({ book: this.getRecentBook(), mini: true, displayWidth: 56, displayHeight: 78 })
                 Column() {
-                  Text(this.getRecentBook().title).fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E3E4E8').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(this.getRecentBook().title).fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(this.getRecentBook().format === 'epub' ? this.getRecentBook().author : '本地 TXT').fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
                   Text(this.getRecentBook().lastChapter).fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
@@ -157,21 +157,21 @@ export struct HomePage {
               }.width('100%')
             }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 14 })
             Progress({ value: this.getRecentBookProgress(this.getRecentBook()), total: 100, type: ProgressType.Linear })
-              .width('100%').height(3).color('#AFC2FF').backgroundColor('#3A3B43')
+              .width('100%').height(3).color($r('app.color.theme_accent')).backgroundColor('#3A3B43')
               .animation({ duration: 300, curve: Curve.EaseInOut })
-            }.width('100%').backgroundColor('#1C1D23').borderRadius(17)
+            }.width('100%').backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(17)
               .onClick(() => this.openBook(this.getRecentBook()))
           } else if (this.visibleSections.includes('recentBook')) {
             Column() {
               Row() {
-                AppGlyph({ name: 'book', tint: '#AFC2FF', glyphSize: 20 })
-                Text('最近阅读').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 10 })
+                AppGlyph({ name: 'book', tint: $r('app.color.theme_accent'), glyphSize: 20 })
+                Text('最近阅读').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
               }.alignSelf(ItemAlign.Start)
               Blank().layoutWeight(1)
               Text('暂无阅读记录').fontSize(14).fontColor('#AEB0BA').alignSelf(ItemAlign.Center)
               Blank().layoutWeight(1)
             }.width('100%').height(160).padding({ left: 16, right: 16, top: 16, bottom: 14 }).justifyContent(FlexAlign.Center)
-              .backgroundColor('#1C1D23').borderRadius(17).alignItems(HorizontalAlign.Center)
+              .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(17).alignItems(HorizontalAlign.Center)
           }
           if (this.visibleSections.includes('totalBooks') || this.visibleSections.includes('totalTime')) {
             Row() {
@@ -197,8 +197,8 @@ export struct HomePage {
           if (this.visibleSections.includes('dailyGoal')) {
           Column() {
             Row() {
-              AppGlyph({ name: 'goal', tint: '#AFC2FF', glyphSize: 20 })
-              Text('今日阅读目标').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0').margin({ left: 10 })
+              AppGlyph({ name: 'goal', tint: $r('app.color.theme_accent'), glyphSize: 20 })
+              Text('今日阅读目标').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
               Blank()
               Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'pencil', glyphSize: 18 }) }.width(36).height(36).backgroundColor('#24252C').borderRadius(22)
                 .onClick(() => this.onUnavailableAction('阅读目标设置尚未迁移'))
@@ -206,18 +206,18 @@ export struct HomePage {
             Stack({ alignContent: Alignment.Bottom }) {
               Canvas(this.goalContext).width(240).height(120).onReady(() => this.drawGoalArc())
               Column() {
-                Text('0 / 30').fontSize(24).fontWeight(FontWeight.Bold).fontColor('#E3E4E8')
+                Text('0 / 30').fontSize(24).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
                 Text('分钟').fontSize(12).fontColor('#B6B8C2').margin({ top: 3 })
               }.width('100%').alignItems(HorizontalAlign.Center).margin({ bottom: 20 })
           }.width('100%').height(136)
-          }.width('100%').padding(16).backgroundColor('#1C1D23').borderRadius(16).margin({ top: 12 })
+          }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(16).margin({ top: 12 })
           }
           if (this.visibleSections.includes('backup')) {
           Column() {
             Row() {
-              AppGlyph({ name: 'cloudSync', tint: '#AFC2FF', glyphSize: 20 })
+              AppGlyph({ name: 'cloudSync', tint: $r('app.color.theme_accent'), glyphSize: 20 })
               Column() {
-                Text('WebDAV 备份').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0')
+                Text('WebDAV 备份').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary'))
                 Text('暂无 WebDAV 备份').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
               }.alignItems(HorizontalAlign.Start).margin({ left: 10 })
             }.width('100%')
@@ -238,7 +238,7 @@ export struct HomePage {
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onUnavailableAction('WebDAV 设置尚未迁移'))
             }.margin({ top: 12 })
-          }.width('100%').padding(16).backgroundColor('#1C1D23').borderRadius(16).margin({ top: 12, bottom: 18 })
+          }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(16).margin({ top: 12, bottom: 18 })
           }
           Column() {
             Text('未选择任何书源集').fontSize(14).fontColor('#AEB0BA').textAlign(TextAlign.Center)
@@ -255,12 +255,12 @@ export struct HomePage {
           }
         })
       }.layoutWeight(1).refreshOffset(64).onRefreshing(() => this.handlePullToRefresh())
-    }.width('100%').height('100%').backgroundColor('#111217')
+    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
       .bindSheet(this.showHomeOptions, this.homeOptionsSheetContent(), {
         height: 410,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#1C1D23',
+        backgroundColor: $r('app.color.theme_surface_elevated'),
         onDisappear: () => this.showHomeOptions = false
       })
   }
@@ -270,7 +270,7 @@ export struct HomePage {
     Column() {
       ForEach(HOME_DASHBOARD_SECTIONS, (section: HomeDashboardSection) => {
         Row() {
-          Text(this.sectionTitle(section)).fontSize(16).fontColor('#D8D9E0').layoutWeight(1)
+          Text(this.sectionTitle(section)).fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.visibleSections.includes(section) })
             .onChange((visible: boolean) => this.onSectionVisibilityChange(section, visible))
         }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
@@ -288,16 +288,16 @@ struct SummaryCard {
   onSelect: () => void = () => {};
   build() {
     Row() {
-      AppGlyph({ name: this.icon, tint: '#AFC2FF', glyphSize: 20 }).margin({ right: 12 })
+      AppGlyph({ name: this.icon, tint: $r('app.color.theme_accent'), glyphSize: 20 }).margin({ right: 12 })
       Column() {
         Text(this.title).fontSize(12).fontColor('#B6B8C2')
         Row() {
-          Text(this.value).fontSize(16).fontWeight(FontWeight.Medium).fontColor('#D8D9E0')
+          Text(this.value).fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary'))
           Text(this.unit).fontSize(12).fontColor('#B6B8C2').margin({ left: 2 })
         }
       }.alignItems(HorizontalAlign.Start)
     }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 8 })
-      .backgroundColor('#1C1D23').borderRadius(14).onClick(() => this.onSelect())
+      .backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(14).onClick(() => this.onSelect())
   }
 }
 

@@ -48,7 +48,7 @@ export struct AppPrivacySettingsPage {
             .fontSize(12).fontColor('#D9A6A0').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor('#111217')
+    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
   }
 }
 
@@ -61,9 +61,9 @@ struct PrivacySettingsSection {
   }
   build() {
     Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor('#AFC2FF')
+      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
         .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor('#1A1B21').borderRadius(16)
+      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(16)
     }
   }
 }
@@ -76,8 +76,8 @@ struct PrivacySettingsSwitch {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(18).fontColor('#D8D9E0')
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor('#92949E').margin({ top: 3 }) }
+        Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary'))
+        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.toggleValue })
         .onChange((value: boolean) => this.toggleValue = value)
@@ -93,10 +93,10 @@ struct PrivacySettingsAction {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(18).fontColor('#D8D9E0')
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor('#92949E').margin({ top: 3 }) }
+        Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary'))
+        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor('#92949E')
+      Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary'))
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.onSelect())
   }
 }
@@ -113,9 +113,9 @@ struct PrivacySettingsChoice {
   }
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor('#D8D9E0').layoutWeight(1)
-      Text(this.getSelectedLabel()).fontSize(12).fontColor('#AFC2FF')
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor('#92949E').margin({ left: 6 })
+      Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+      Text(this.getSelectedLabel()).fontSize(12).fontColor($r('app.color.theme_accent'))
+      Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary')).margin({ left: 6 })
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => {
       if (this.options.length > 0) {
         this.onSelect((this.selected + 1) % this.options.length);

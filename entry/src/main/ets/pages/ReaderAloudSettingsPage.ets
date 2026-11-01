@@ -189,7 +189,7 @@ export struct ReaderAloudSettingsPage {
       }
       .width('100%')
       .height('84%')
-      .backgroundColor('#1A1B21')
+      .backgroundColor($r('app.color.theme_surface_secondary'))
       .borderRadius(22)
     }
     .width('100%')
@@ -232,17 +232,17 @@ struct AloudBottomAction {
   build() {
     Column() {
       if (this.icon === 'home') {
-        Image($r('app.media.app_home')).width(21).height(21).fillColor('#D8D9E0')
+        Image($r('app.media.app_home')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
       } else if (this.icon === 'catalog') {
-        Image($r('app.media.reader_toc')).width(21).height(21).fillColor('#D8D9E0')
+        Image($r('app.media.reader_toc')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
       } else if (this.icon === 'hide') {
-        Image($r('app.media.reader_visibility_off')).width(21).height(21).fillColor('#D8D9E0')
+        Image($r('app.media.reader_visibility_off')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
       } else if (this.icon === 'reader_settings') {
-        Image($r('app.media.reader_settings')).width(21).height(21).fillColor('#D8D9E0')
+        Image($r('app.media.reader_settings')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
       } else {
-        Image($r('app.media.reader_voice')).width(21).height(21).fillColor('#D8D9E0')
+        Image($r('app.media.reader_voice')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
       }
-      Text(this.label).fontSize(10).fontColor('#D8D9E0').margin({ top: 5 })
+      Text(this.label).fontSize(10).fontColor($r('app.color.theme_text_secondary')).margin({ top: 5 })
     }
     .layoutWeight(1)
     .padding({ top: 5, bottom: 5 })

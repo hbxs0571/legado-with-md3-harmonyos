@@ -44,6 +44,8 @@ import {
   HomeDashboardSection, HOME_DASHBOARD_SECTIONS, HomeDashboardSettingsRepository
 } from '../data/HomeDashboardSettingsRepository';
 import { OnboardingRepository } from '../data/OnboardingRepository';
+import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT } from '../data/ThemeSettingsRepository';
+import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import {
   ReaderBottomActionConfig, ReaderSettingsRepository, ReaderSettingsSnapshot, READER_BACKGROUND_STYLES,
   READER_CLICK_REGION_DEFAULTS,
@@ -175,6 +177,13 @@ struct Index {
   @State paperIndex: number = 0;
   @State dayPaperIndex: number = 0;
   @State nightPaperIndex: number = 0;
+  /**
+   * 阅读页当前是否夜间。
+   *
+   * 这里不再让它做独立来源：它的唯一来源是全局 `themeMode`（见 `applyThemeMode`），
+   * 只作为投影向下传给 `ReaderPage` / `ReaderSettingsPage`。
+   * 上游 `ReadStyleDelegate.kt:455-470` 的日夜按钮同样是写全局 `themeMode`，不是写阅读页私有值。
+   */
   @State readerNightMode: boolean = true;
   @State shareReaderStyleLayout: boolean = false;
   @State showReaderBottomActionText: boolean = true;
@@ -427,6 +436,15 @@ struct Index {
   @State backupCategoryOptions: BackupCategoryOption[] = BackupRepository.categoryOptionsList();
   @State onboardingLoaded: boolean = false;
   @State onboardingComplete: boolean = false;
+  /**
+   * 全局深色模式开关，上游 `AppShellSettings.themeMode`（`"0"` 跟随系统 / `"1"` 亮色 / `"2"` 暗色）。
+   *
+   * 这是本地日夜的唯一来源：主题设置页下拉、阅读页日夜按钮、首次启动向导都写它，
+   * 界面颜色由 `resources/dark` 资源目录按 `setColorMode` 的结果自动切换。
+   */
+  @State themeMode: string = '0';
+  /** 调色板序号，与 `themeMode` 一同落盘，对齐上游 `theme.paletteStyle`。 */
+  @State themePaletteIndex: number = 0;
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
@@ -1857,10 +1875,68 @@ struct Index {
     return entries;
   }
 
+  /**
+   * 主题设置页「深色模式」下拉的回调。
+   *
+   * 上游 `ThemeConfigScreen.kt:186-198` 的 `DropdownListSettingItem(theme_mode)` 走
+   * `SetThemeMode` intent，最终写 `appShellSettingsGateway`；本地等价物就是这一个入口。
+   */
+  private selectThemeMode(themeMode: string): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法切换主题模式，请重试');
+      return;
+    }
+    this.applyThemeMode(context, themeMode, this.themePaletteIndex, true).then(() => {
+      this.paperIndex = this.readerNightMode ? this.nightPaperIndex : this.dayPaperIndex;
+    });
+  }
+
+  /** 主题设置页调色板回调。上游 `ThemeConfigScreen.kt:231-250` 的 `SelectTheme`。 */
+  private selectThemePalette(paletteIndex: number): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法保存调色板，请重试');
+      return;
+    }
+    this.applyThemeMode(context, this.themeMode, paletteIndex, true);
+  }
+
   private async restoreOnboarding(context: Context): Promise<void> {
     const state = await OnboardingRepository.load(context);
     this.onboardingComplete = state.completed;
     this.onboardingLoaded = true;
+    // 向导里选的深色模式要接进全局状态，否则「首次启动选了深色」等于没选。
+    // 已显式存过全局值时以全局为准：向导只在首启用一次，之后用户在主题设置页的改动不能被它冲掉。
+    const theme = await ThemeSettingsRepository.load(context);
+    const hasStored = await ThemeSettingsRepository.hasStoredThemeMode(context);
+    if (!hasStored && state.completed) {
+      const mode = ThemeSettingsRepository.fromModeNumber(state.themeMode);
+      await this.applyThemeMode(context, mode, state.paletteIndex, true);
+    } else {
+      await this.applyThemeMode(context, theme.themeMode, theme.paletteIndex, false);
+    }
+  }
+
+  /**
+   * 应用主题模式：写全局状态 + 落盘 + 通知系统换资源目录。
+   *
+   * 对齐上游 `App.kt:194-203` 的注释——`themeMode` 是日夜的唯一来源，
+   * 主题设置页、阅读页快捷按钮、首次启动向导三处都走这一个入口。
+   */
+  private async applyThemeMode(context: Context, themeMode: string, paletteIndex: number, persist: boolean): Promise<void> {
+    this.themeMode = themeMode;
+    this.themePaletteIndex = paletteIndex;
+    this.readerNightMode = ThemeModeResolver.isDarkTheme(themeMode, ThemeModeResolver.isSystemDark(context));
+    ThemeModeResolver.apply(context, themeMode);
+    if (!persist) {
+      return;
+    }
+    try {
+      await ThemeSettingsRepository.save(context, themeMode, paletteIndex);
+    } catch (_) {
+      this.showUnavailableAction('主题设置保存失败，请重试');
+    }
   }
 
   private async finishOnboarding(themeMode: number, paletteIndex: number): Promise<void> {
@@ -1872,6 +1948,9 @@ struct Index {
     try {
       await OnboardingRepository.complete(context, themeMode, paletteIndex);
       this.onboardingComplete = true;
+      // 向导里选的深色模式要立刻生效并接进全局状态（上游 OnboardingViewModel.kt:120-123
+      // 的 SetThemeMode 也是当场写 appShellSettingsGateway，不是只记下来）。
+      await this.applyThemeMode(context, ThemeSettingsRepository.fromModeNumber(themeMode), paletteIndex, true);
     } catch (_) {
       this.showUnavailableAction('设置保存失败，请重试完成向导');
     }
@@ -1916,7 +1995,11 @@ struct Index {
       this.paperIndex = settings.paperIndex;
       this.dayPaperIndex = settings.dayPaperIndex;
       this.nightPaperIndex = settings.nightPaperIndex;
-      this.readerNightMode = settings.readerNightMode;
+      // readerNightMode 不再从阅读设置里读：它的唯一来源是全局 themeMode（见 applyThemeMode），
+      // 这里只按全局值补一次投影，并据此选定当前纸色。
+      this.readerNightMode = ThemeModeResolver.isDarkTheme(this.themeMode,
+        ThemeModeResolver.isSystemDark(context));
+      this.paperIndex = this.readerNightMode ? this.nightPaperIndex : this.dayPaperIndex;
       this.shareReaderStyleLayout = settings.shareLayout;
       this.showReaderBottomActionText = settings.showBottomActionText;
       this.readerBottomIconStyle = settings.bottomIconStyle;
@@ -2479,11 +2562,27 @@ struct Index {
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
 
+  /**
+   * 阅读页日夜快捷按钮。
+   *
+   * 上游 `ReadStyleDelegate.kt:455-470`：
+   * `val nextIsNight = !(ReadSessionState.isDarkThemeOverride ?: host.isNightTheme)`
+   * `val nextMode = if (nextIsNight) "2" else "1"` → 写 appShellSettingsGateway，
+   * 即**直接改全局 themeMode**，退出阅读页后书架等页面也是新色。
+   * 本地照此实现：不再只翻阅读页私有布尔。
+   */
   private toggleReaderNightMode(): void {
-    this.readerNightMode = !this.readerNightMode;
-    this.paperIndex = this.readerNightMode ? this.nightPaperIndex : this.dayPaperIndex;
-    this.readerSettingsRevision += 1;
-    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法切换日夜模式，请重试');
+      return;
+    }
+    const nextMode = this.readerNightMode ? THEME_MODE_LIGHT : THEME_MODE_DARK;
+    this.applyThemeMode(context, nextMode, this.themePaletteIndex, true).then(() => {
+      this.paperIndex = this.readerNightMode ? this.nightPaperIndex : this.dayPaperIndex;
+      this.readerSettingsRevision += 1;
+      if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+    });
   }
 
   /** 上游 `DARK_LUX_THRESHOLD`（`ReadStyleDelegate.kt:633`）：非夜间模式下 lux 低于它才提示切深色。 */
@@ -4854,7 +4953,7 @@ struct Index {
     Column() {
       if (!this.onboardingLoaded) {
         Column() {
-          LoadingProgress().width(28).height(28).color('#AFC2FF')
+          LoadingProgress().width(28).height(28).color($r('app.color.theme_accent'))
         }.width('100%').height('100%').justifyContent(FlexAlign.Center)
       } else if (!this.onboardingComplete) {
         OnboardingPage({
@@ -5688,7 +5787,11 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.APP_THEME_SETTINGS) {
           ThemeSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
-            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            themeMode: this.themeMode,
+            paletteIndex: this.themePaletteIndex,
+            onThemeModeChange: (themeMode: string) => this.selectThemeMode(themeMode),
+            onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_OTHER_SETTINGS) {
           OtherSettingsPage({
@@ -6647,11 +6750,11 @@ struct Index {
           TabItem({ icon: this.selectedTab === 2 ? 'navExploreFilled' : 'navExploreOutlined', label: '发现', selected: this.selectedTab === 2 }).width('20%').onClick(() => this.selectTab(2))
           TabItem({ icon: 'navRss', label: '订阅', selected: this.selectedTab === 3 }).width('20%').onClick(() => this.selectTab(3))
           TabItem({ icon: this.selectedTab === 4 ? 'navProfileFilled' : 'navProfileOutlined', label: '我的', selected: this.selectedTab === 4 }).width('20%').onClick(() => this.selectTab(4))
-        }.width('100%').padding({ top: 7, bottom: 6 }).backgroundColor('#1C1D23')
+        }.width('100%').padding({ top: 7, bottom: 6 }).backgroundColor($r('app.color.theme_surface_elevated'))
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
       }
-    }.width('100%').height('100%').backgroundColor('#111217')
+    }.width('100%').height('100%').backgroundColor($r('app.color.theme_surface_primary'))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       .sepia(this.isEyeProtectionActive() ? this.eyeProtectionIntensity / 100 : 0)
   }

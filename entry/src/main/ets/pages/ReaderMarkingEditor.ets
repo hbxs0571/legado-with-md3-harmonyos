@@ -344,8 +344,8 @@ export struct ReaderMarkingEditor {
   private ColorPickerPanel() {
     Column() {
       Row() {
-        Text('自定义颜色').fontSize(13).fontColor('#D8D9E0').layoutWeight(1)
-        Text('关闭').fontSize(12).fontColor('#AFC2FF')
+        Text('自定义颜色').fontSize(13).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+        Text('关闭').fontSize(12).fontColor($r('app.color.theme_accent'))
           .onClick(() => this.colorPickerVisible = false)
       }.width('100%').margin({ bottom: 6 })
       Column() {
@@ -367,7 +367,7 @@ export struct ReaderMarkingEditor {
             ? normalizeColorText(this.colorInput) : '#292A31')
           .margin({ right: 8 })
         TextInput({ text: this.colorInput, placeholder: '#RRGGBB' })
-          .fontSize(13).fontColor('#E3E4E8').placeholderColor('#92949E')
+          .fontSize(13).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
           .backgroundColor('#15161B').layoutWeight(1)
           .onChange((value: string) => {
             // 手输框实时同步到选中色：合法立即生效，非法保留文本待用户改完
@@ -379,7 +379,7 @@ export struct ReaderMarkingEditor {
           })
       }.width('100%').margin({ top: 8 })
       Text('支持 #RRGGBB 与 #AARRGGBB；背景高亮会自动叠加约 20% 透明度。')
-        .fontSize(11).fontColor('#92949E').width('100%').margin({ top: 6 })
+        .fontSize(11).fontColor($r('app.color.theme_text_tertiary')).width('100%').margin({ top: 6 })
     }
     .width('100%').padding(10).backgroundColor('#1D1E24').borderRadius(12)
     .margin({ top: 8 })
@@ -393,7 +393,7 @@ export struct ReaderMarkingEditor {
         .onClick(() => this.useRule = true)
       MenuItem({ content: '自定义样式' }).height(44)
         .onClick(() => this.useRule = false)
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(20)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(20)
   }
 
   build() {
@@ -403,44 +403,44 @@ export struct ReaderMarkingEditor {
         Row() {
           Text(this.isNew ? '划线与笔记' : '编辑标记').fontSize(19).fontWeight(FontWeight.Medium)
             .fontColor('#E5E6EB').layoutWeight(1)
-          Text('关闭').fontSize(13).fontColor('#AFC2FF').onClick(() => this.onClose())
+          Text('关闭').fontSize(13).fontColor($r('app.color.theme_accent')).onClick(() => this.onClose())
         }.width('100%').margin({ bottom: 10 })
         Text(this.marking.bookName).fontSize(13).fontColor('#D9DAE0').maxLines(1).width('100%')
-        Text(this.marking.chapterName).fontSize(12).fontColor('#AFC2FF').maxLines(1).width('100%')
+        Text(this.marking.chapterName).fontSize(12).fontColor($r('app.color.theme_accent')).maxLines(1).width('100%')
           .margin({ top: 3, bottom: 8 })
         // 取色面板展开后内容会超出一屏，中间这部分必须能滚动，
         // 否则「笔记」与底部按钮会被挤出屏幕而无法保存。
         Scroll() {
           Column() {
             Scroll() {
-              Text(this.marking.selectedText).fontSize(13).fontColor('#D8D9E0').lineHeight(20)
+              Text(this.marking.selectedText).fontSize(13).fontColor($r('app.color.theme_text_secondary')).lineHeight(20)
                 .width('100%')
             }.height(76).width('100%').padding(9).backgroundColor('#15161B').borderRadius(10)
             // 样式来源：对齐上游 MarkingSheet.kt:175 的 TinyDropdownSettingItem。
             Row() {
-              Text('样式来源').fontSize(13).fontColor('#D8D9E0').layoutWeight(1)
+              Text('样式来源').fontSize(13).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
               Text(this.useRule ? '复用已有规则' : '自定义样式')
-                .fontSize(13).fontColor('#AFC2FF')
+                .fontSize(13).fontColor($r('app.color.theme_accent'))
                 .padding({ left: 8, right: 8, top: 5, bottom: 5 })
                 .bindMenu(this.StyleSourceMenu())
             }.width('100%').margin({ top: 10, bottom: 5 })
             if (this.useRule) {
               if (this.highlightRules.length === 0) {
                 Text('还没有高亮规则，可切到「自定义样式」直接设置')
-                  .fontSize(12).fontColor('#92949E').width('100%')
+                  .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).width('100%')
                   .padding({ top: 10, bottom: 10 })
               } else {
                 Column() {
                   ForEach(this.highlightRules, (rule: ReaderHighlightRule) => {
                     Row() {
                       Text(this.selectedRuleId === rule.id ? '✓' : '')
-                        .fontSize(13).fontColor('#AFC2FF').width(18)
+                        .fontSize(13).fontColor($r('app.color.theme_accent')).width(18)
                       Column() {
                         Text(this.ruleLabel(rule)).fontSize(13)
                           .fontColor(this.selectedRuleId === rule.id ? '#E7E9F5' : '#C5C7D0')
                           .maxLines(2).width('100%')
                         if (this.ruleHint(rule).length > 0) {
-                          Text(this.ruleHint(rule)).fontSize(11).fontColor('#92949E')
+                          Text(this.ruleHint(rule)).fontSize(11).fontColor($r('app.color.theme_text_tertiary'))
                             .width('100%').margin({ top: 2 })
                         }
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
@@ -454,7 +454,7 @@ export struct ReaderMarkingEditor {
               }
             }
             if (!this.useRule) {
-            Text('样式').fontSize(13).fontColor('#D8D9E0').margin({ top: 10, bottom: 5 })
+            Text('样式').fontSize(13).fontColor($r('app.color.theme_text_secondary')).margin({ top: 10, bottom: 5 })
               .alignSelf(ItemAlign.Start)
             Flex({ wrap: FlexWrap.Wrap }) {
               ForEach(READER_MARKING_EFFECTS, (item: ReaderMarkingEffect, index: number) => {
@@ -465,7 +465,7 @@ export struct ReaderMarkingEditor {
                   .onClick(() => this.effect = item)
               }, (item: ReaderMarkingEffect) => item)
             }.width('100%')
-            Text('颜色').fontSize(13).fontColor('#D8D9E0').margin({ top: 2, bottom: 5 }).alignSelf(ItemAlign.Start)
+            Text('颜色').fontSize(13).fontColor($r('app.color.theme_text_secondary')).margin({ top: 2, bottom: 5 }).alignSelf(ItemAlign.Start)
             // 上游是横向滚动的单行色带，但本地面板外层套了「点空白关闭」的遮罩，
             // 横向手势会被遮罩吃掉，所以改成换行排列，与上方「样式」的排布一致。
             Flex({ wrap: FlexWrap.Wrap }) {
@@ -482,7 +482,7 @@ export struct ReaderMarkingEditor {
               Stack() {
                 Row().width(28).height(28).borderRadius(14)
                   .backgroundColor(this.isCustomColor() ? this.color : '#292A31')
-                  .border({ width: 1, color: this.isCustomColor() ? '#AFC2FF' : '#4A4C56' })
+                  .border({ width: 1, color: this.isCustomColor() ? $r('app.color.theme_accent') : '#4A4C56' })
                 if (this.isCustomColor()) {
                   Text('✓').fontSize(14).fontColor('#171820').fontWeight(FontWeight.Bold)
                 } else {
@@ -498,9 +498,9 @@ export struct ReaderMarkingEditor {
               this.ColorPickerPanel()
             }
             }
-            Text('笔记').fontSize(13).fontColor('#D8D9E0').margin({ top: 8, bottom: 5 }).alignSelf(ItemAlign.Start)
+            Text('笔记').fontSize(13).fontColor($r('app.color.theme_text_secondary')).margin({ top: 8, bottom: 5 }).alignSelf(ItemAlign.Start)
             TextArea({ text: this.note, placeholder: '添加笔记（可选）' })
-              .fontSize(14).fontColor('#E3E4E8').placeholderColor('#92949E')
+              .fontSize(14).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
               .backgroundColor('#15161B').height(82).width('100%')
               .onChange((value: string) => this.note = value)
           }.width('100%').alignItems(HorizontalAlign.Start)

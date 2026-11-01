@@ -1849,7 +1849,7 @@ export struct ReaderPage {
         MenuItem({ content: this.getBottomActionLabel(action.id) })
           .onClick(() => this.selectBottomAction(this.getTopActionKind(action.id)))
       }, (action: ReaderBottomActionConfig) => action.id)
-    }.backgroundColor('#1C1D23').fontColor('#E3E4E8').radius(18)
+    }.backgroundColor($r('app.color.theme_surface_elevated')).fontColor($r('app.color.theme_text_primary')).radius(18)
   }
 
   /**
@@ -2149,10 +2149,10 @@ export struct ReaderPage {
           .fontColor(config.enabled ? '#E5E6EB' : '#777984')
         if ((this.getMoreAction(config.id)?.scopeLabel ?? '').length > 0) {
           Text(this.getMoreAction(config.id)?.scopeLabel ?? '')
-            .fontSize(10).fontColor('#92949E').margin({ top: 2 })
+            .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
         }
         if (this.getMoreAction(config.id)?.migrated === false) {
-          Text('未迁移').fontSize(10).fontColor('#92949E').margin({ top: 2 })
+          Text('未迁移').fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
         }
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
       Stack({ alignContent: Alignment.Center }) {
@@ -2233,7 +2233,7 @@ export struct ReaderPage {
             .backgroundColor('#B9C6FF').borderRadius(18)
             .onClick(() => this.moreActionShellVisible = false)
         }.width('100%').justifyContent(FlexAlign.End).margin({ top: 20 })
-      }.width('86%').padding(18).backgroundColor('#1A1B21').borderRadius(20)
+      }.width('86%').padding(18).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(20)
     }.width('100%').height('100%')
   }
 
@@ -4551,9 +4551,9 @@ export struct ReaderPage {
               Text('×').fontSize(23).fontColor('#C8C9D0').onClick(() => this.autoPageSettingsVisible = false)
             }.width('100%').padding({ bottom: 18 })
             Row() {
-              Text('翻页间隔').fontSize(14).fontColor('#D8D9E0')
+              Text('翻页间隔').fontSize(14).fontColor($r('app.color.theme_text_secondary'))
               Blank()
-              Text(`${this.autoReadSpeedSeconds} 秒`).fontSize(14).fontColor('#D8D9E0')
+              Text(`${this.autoReadSpeedSeconds} 秒`).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
             }.width('100%')
             Slider({ value: this.autoReadSpeedSeconds, min: 1, max: 120, step: 1, style: SliderStyle.InSet })
               .width('100%').selectedColor('#B9C6FF').trackColor('#565A6B').blockColor('#B9C6FF')
@@ -4596,7 +4596,7 @@ export struct ReaderPage {
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Text(`${this.getChapterIndex() + 1} / ${this.getChapterCount()}`)
                 .fontSize(11).fontColor('#E5E6EB').padding({ left: 10, right: 10, top: 7, bottom: 7 })
-                .backgroundColor('#111217').borderRadius(16)
+                .backgroundColor($r('app.color.theme_surface_primary')).borderRadius(16)
             }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
             Grid() {
               ForEach(this.getVisibleMoreActions(), (action: ReaderMoreAction) => {
@@ -4615,7 +4615,7 @@ export struct ReaderPage {
                       .fontSize(11).fontColor('#E1DADD').textAlign(TextAlign.Center)
                       .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                     if (!action.migrated) {
-                      Text('未迁移').fontSize(9).fontColor('#92949E').margin({ top: 2 })
+                      Text('未迁移').fontSize(9).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
                     }
                   }.width('100%').height(100).justifyContent(FlexAlign.Center)
                     .backgroundColor('#202127').borderRadius(16)
@@ -4626,7 +4626,7 @@ export struct ReaderPage {
               .width('100%').padding({ left: 16, right: 16, bottom: 16 }).layoutWeight(1)
               .scrollBar(BarState.Off)
           }
-          .width('100%').height('52%').backgroundColor('#1A1B21')
+          .width('100%').height('52%').backgroundColor($r('app.color.theme_surface_secondary'))
           .borderRadius({ topLeft: 26, topRight: 26 })
         }
         .width('100%')
@@ -4653,7 +4653,7 @@ export struct ReaderPage {
                 .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
                 .onClick(() => this.chooseImageStyle(style.id))
             }, (style: ReaderImageStyleOption) => style.id)
-          }.width('86%').padding(16).backgroundColor('#1A1B21').borderRadius(20)
+          }.width('86%').padding(16).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(20)
         }.width('100%').height('100%')
       }
 
@@ -4685,7 +4685,7 @@ export struct ReaderPage {
               .borderRadius(10).padding(12)
               .onChange((value: string) => this.contentEditBody = value)
             Row() {
-              Text('还原').fontSize(14).fontColor('#D8D9E0').layoutWeight(1).textAlign(TextAlign.Center)
+              Text('还原').fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1).textAlign(TextAlign.Center)
                 .onClick(() => {
                   this.contentEditTitle = this.chapterTitle;
                   this.contentEditBody = this.content;
@@ -4700,7 +4700,7 @@ export struct ReaderPage {
                 })
             }.width('100%').padding({ top: 14 })
           }
-          .width('92%').height('76%').padding(18).backgroundColor('#1A1B21').borderRadius(22)
+          .width('92%').height('76%').padding(18).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(22)
           .onClick(() => {})
         }.width('100%').height('100%')
       }
@@ -4774,7 +4774,7 @@ export struct ReaderPage {
                 .onClick(() => this.applyCharset())
             }.width('100%').margin({ top: 12 })
           }
-          .width('86%').padding(18).backgroundColor('#1C1D23').borderRadius(20)
+          .width('86%').padding(18).backgroundColor($r('app.color.theme_surface_elevated')).borderRadius(20)
         }
         .width('100%').height('100%')
       }

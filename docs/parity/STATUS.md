@@ -69,9 +69,9 @@
 | `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
 | `server` | `servers.json` | — | — | — | **零行** |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（90 已接 / 97 `未接` / 2 不适用）；97 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
-| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（1 已接 / 70 `未接` / 1 不适用）；另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
+| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（2 已接 / 69 `未接` / 1 不适用；F4、F6 已接，r300 落地）；另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | **零行** |
-| `themeMode` | `config.xml` | ✗ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（4 已接 / 13 `未接` / 2 不适用）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
+| `themeMode` | `config.xml` | ✗ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（10 已接 / 7 `未接` / 2 不适用；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
 | `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书籍总账](BOOKSHELF.md) A2 33 / A1 20 = **53 行** |
 | `showRss` | `config.xml` | ✗ | ✗ | ? | **零行** |
 | `threadCount` | `config.xml` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
@@ -123,7 +123,7 @@
 | [书籍总账](BOOKSHELF.md) | E（r295 新增） | 无——备份恢复流程本身不受任何类别的忽略开关控制，12 行全记 `—` |
 | [书签对照](ZIP-BOOKMARK.md) | A–E | `bookmark` |
 | [阅读配置总账](READER-CONFIG.md) | A–G | `readConfig`、`themeConfig` |
-| [深色模式总账](ZIP-THEME.md) | A–F（r298 新增） | `themeMode`、`themeConfig` |
+| [深色模式总账](ZIP-THEME.md) | A–F（r298 新增，r300 阶段一落地） | `themeMode`、`themeConfig` |
 
 上表「涉及行」列给出每类在这几张表里落在哪一块、多少行。**「零行」表示该类目前没有任何界面级盘点**——不是已完成，而是还没盘。这一类要动之前先按[对照关键词](KEYWORDS.md)取出上游接触面、新开块，不要拿「表里没这一行」当「本地没有这个功能」。
 
