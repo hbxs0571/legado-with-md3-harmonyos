@@ -3663,7 +3663,7 @@ struct Index {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const settings = await ReaderSettingsRepository.load(context);
       const bookshelfLayout = await BookshelfLayoutRepository.load(context);
-      const created = await BackupRepository.createBackup(context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys);
+      const created = await BackupRepository.createBackup(context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys, this.themeMode);
       this.backupStatusMessage = created ? 'Android 兼容 ZIP 已保存到你选择的位置。' : '';
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `创建备份失败：${error.message}` : '创建备份失败';
@@ -3709,6 +3709,10 @@ struct Index {
       this.books = result.books;
       this.bookGroups = BookGroupRepository.getAll();
       this.bookshelfLayout = copyBookshelfLayout(result.bookshelfLayout);
+      // 全局深色模式：归档里没有该键（或该类被忽略）时保留当前值，不硬覆盖。
+      if (result.themeMode !== undefined && result.themeMode !== this.themeMode) {
+        await this.applyThemeMode(context, result.themeMode, this.themePaletteIndex, true);
+      }
       this.readerFontSize = result.settings.fontSize;
       this.readerParagraphSpacing = result.settings.paragraphSpacing;
       this.readerLineSpacing = result.settings.lineSpacing;
@@ -3734,7 +3738,10 @@ struct Index {
       this.paperIndex = result.settings.paperIndex;
       this.dayPaperIndex = result.settings.dayPaperIndex;
       this.nightPaperIndex = result.settings.nightPaperIndex;
-      this.readerNightMode = result.settings.readerNightMode;
+      // 与 `loadReaderSettings`（:1999-2003）同一口径：readerNightMode 不再是独立来源，
+      // 恢复时也按全局 themeMode 重新投影，否则备份里的旧布尔会把刚恢复的模式冲掉。
+      this.readerNightMode = ThemeModeResolver.isDarkTheme(this.themeMode,
+        ThemeModeResolver.isSystemDark(context));
       this.eyeProtectionEnabled = result.settings.eyeProtectionEnabled;
       this.eyeProtectionAutoNight = result.settings.eyeProtectionAutoNight;
       this.eyeProtectionSchedule = result.settings.eyeProtectionSchedule;

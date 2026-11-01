@@ -30,6 +30,43 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r303 深色模式阶段二备份侧：themeMode 写出与恢复读回（F9/F11/F12）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 通过，34 s 63 ms，33 tasks / 17 executed）。
+- **改了哪些**：`data/BackupRepository.ets` 新增 `import { ThemeSettingsRepository }`、`RestoreResult.themeMode: string | undefined`、`createBackup` 第 6 个参数 `themeMode: string` 与它的写出分支、`normalizeThemeModeForBackup()`、`restoreThemeMode()`；`pages/Index.ets` 的 `createLocalBackup()` 传 `this.themeMode`，`restoreLocalBackup()` 在恢复后按需 `applyThemeMode`，并把 `readerNightMode` 从「采信备份里的旧布尔」改成「按全局 `themeMode` 投影重算」。
+- **前置条件（复验必须照做）**：① 备份/恢复入口都在「我的 → 设置 → 备份与恢复」，页面较长需要上滑两次才能露出「备份」「恢复」两行；② 恢复时文件选择器默认停在「最近」且是空的，必须点「浏览 → 我的手机 → Documents」才看得到 ZIP；③ 选完 ZIP 后要再上滑两次才会露出「导入此 ZIP」按钮。
+- **踩坑**：保存对话框右上角有两个按钮，文件夹图标在 `(980,146)`、**确认勾在 `(1188,260)`**。第一次误点文件夹图标导致没有生成文件，白跑一轮。
+
+### 验收①备份写出 `themeMode`
+
+- 操作：prefs `legado_theme` 的 `themeMode` 设 `"2"` → 备份与恢复 → 备份 → 备份到本地 → 确认保存。
+- 预期：`/storage/media/100/local/files/Docs/Documents/` 下生成 ZIP，解压后 `config.xml` 含 `<string name="themeMode">2</string>`。
+- 实际：生成 `backup2026-11-01.zip`（4094 字节），`hdc file recv` 后解压，`config.xml` 68 行，`grep themeMode` 命中 `<string name="themeMode">2</string>`。**通过**。
+
+### 验收②恢复读回并应用
+
+- 操作：`aa force-stop` → 把 prefs 的 `themeMode` 改回 `"1"` → 重启 → 恢复 → 从本地恢复 → 选 `backup2026-11-01.zip` → 预览（「识别 10 个根条目；书架 12 本」「config.xml 65 条」）→ 导入此 ZIP。
+- 预期：prefs 的 `themeMode` 变回 `"2"`，全 App 变深色。
+- 实际：导入后再读 `legado_theme`，`themeMode` 为 `"2"`。**通过**。
+
+### 验收③恢复排除项：忽略「深色模式」后恢复不动全局主题（F12）
+
+- 操作：把 prefs 改回 `"1"` 并重启 → 备份与恢复 → 恢复排除项 → 打开「深色模式」开关 → 返回（页面显示「当前跳过 1 个数据类别」）→ 恢复同一个含 `themeMode=2` 的 ZIP。
+- 预期：`themeMode` 保持 `"1"`。
+- 实际：导入后再读 prefs，`themeMode` 仍为 `"1"`。**通过**。
+
+### 验收④备份排除项：忽略「深色模式」后备份不写该键（F11）
+
+- 操作：备份排除项 → 打开「深色模式」开关 → 返回（显示「当前排除 1 个数据类别」）→ 备份到本地 → 确认保存。
+- 预期：新 ZIP 的 `config.xml` 不含 `themeMode`。
+- 实际：生成 `backup2026-11-01.zip`（4076 字节，验收①那次是 4094），解压后 `config.xml` 66 行，`grep -c themeMode` 为 0。两次行数差 2 而不止 1，是因为中间做过一次恢复（验收②③）改动了若干阅读设置，不能全算在 `themeMode` 一条上；本条的判据只看 `themeMode` 是否出现。**通过**。
+
+### 与上游的差异（如实记录）
+
+- 上游 `help/storage/BackupConfig.kt:413-439 keyIsNotIgnore(key, isBackup)` 是逐 key 查 `readPrefKeys`/`themePrefKeys`/`coverPrefKeys`/`bookshelfPrefKeys`/`mangaPrefKeys` 五个集合；本地 `filterAndroidConfigXml` 是「先算被忽略类别的键集合，再整体剔除」。两者结果等价（集合就是类别），差异只在实现形态。据此把对照表 F12 由「未接」改判「已接」，原判属盘点口径过严。
+- 上游恢复 `themeMode` 只改偏好，靠 `AppCompatDelegate.setDefaultNightMode` 反射生效；本地必须在 `restoreLocalBackup()` 里显式 `applyThemeMode(context, mode, paletteIndex, true)`，否则资源目录不会重算。
+- 上游 `themeConfig.json`（F5）本地仍不生成——它需要先有本地主题包数据结构（B 块），本轮未做。
+
 ## 2026-11-01 N 端 r302 深色模式阶段三：日夜提醒（E1–E6）与 D7 冷却复位
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 两次通过，40 s 254 ms / 26 s 373 ms）。

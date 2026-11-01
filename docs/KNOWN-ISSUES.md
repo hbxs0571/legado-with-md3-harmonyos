@@ -697,13 +697,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 深色模式行登记（ZIP-THEME.md 的未接行）
 
-本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`** 的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r303 后剩 59 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）。累计 20 行转 `已接`，剩余 **62 行 `未接`**（要接 57 / 不接 5）。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）。累计 23 行转 `已接`，剩余 **59 行 `未接`**（要接 54 / 不接 5）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -950,15 +950,25 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **验收（已过，见 VALIDATION.md r300）**：`assembleHap` 通过；切深/浅两档同页配色整体翻转。
 
-**KI-TH-F3 主题配置随备份走（要接）** —— 覆盖 F5 `themeConfig.json` 导出、F7 `themeConfig` 的 6 个护眼键双向落盘、F9 `themeMode` 的备份忽略开关、F11 备份忽略开关的界面、F12 恢复时的 `config.xml` 键过滤。
+**KI-TH-F3 主题配置随备份走（F7/F9/F11/F12 已实现 r303，F5 要接）** —— 覆盖 F5 `themeConfig.json` 导出、F7 `themeConfig` 的 6 个护眼键双向落盘、F9 `themeMode` 的备份写出与恢复读回、F11 备份忽略开关的界面、F12 恢复时的 `config.xml` 键过滤。
 
 **上游口径**：`help/storage/BackupConfig.kt` —— themeConfig 是 53 键的数组类别（`:263-317`），`themeMode` 是单键类别（`:147`/`:173` 直接列进 ignoreKeys/backupIgnoreKeys），门控在 `:422`/`:434`；`keyIsNotIgnore(key, isBackup)`（`:413-439`）**按 key 逐个判**。
 
-**本地现状**：F5 归档清单里有 `'themeConfig.json'`（`data/BackupRepository.ets:321`）但**从不生成它**；F7 备份侧 6 个护眼键双向通（`:571-587` 写出、`:1062-1084` 读回），但功能侧不通（见 KI-TH-A7）；F9 有类别条目（`:327`）但**无写出/读回分支**，`createBackup` 的 config.xml 清单（`:474-482`/`:520-563`）不含 `themeMode`；F11 备份设置页开关无实际效果；F12 `filterAndroidConfigXml`（`:1620-1646`）**按类别整体剔除**，不是上游那种按 key 逐个判。
+**本地现状（r303 核实）**：
+- **F7 已接**：备份侧 6 个护眼键双向通（`data/BackupRepository.ets` 的 `createBackup` 写 6 键、`applyEyeProtection` 读回），且 r301 之后功能侧也通了——读回的 6 个值经 `pages/Index.ets` 的 `isEyeProtectionActive()` 与 `eyeProtectionOverlayColor()` 直接驱动全 App 覆盖层。
+- **F9 已接**：`createBackup` 新增 `if (!ignoredCategories.includes('themeMode')) { upsertAndroidPreference(configText, 'string', 'themeMode', normalizeThemeModeForBackup(themeMode)) }`，值域先归一成 `"0"/"1"/"2"`；恢复侧新增 `restoreThemeMode(directory, ignoredCategories)` 与 `RestoreResult.themeMode`，`pages/Index.ets` 的 `restoreLocalBackup()` 拿到后 `await this.applyThemeMode(context, result.themeMode, this.themePaletteIndex, true)` 真正改全 App 配色。同一处把 `this.readerNightMode = result.settings.readerNightMode` 改成按全局投影重算（`ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context))`），否则备份里的旧布尔会冲掉刚恢复的模式。
+- **F11 已接**：`pages/AppBackupSettingsPage.ets` 的两个 sheet（`ignoreBackup` / `ignoreRestore`）经 `pages/Index.ets` 的 `backupIgnoreKeys` / `restoreIgnoreKeys` 传给 `BackupRepository`，r303 之后两类开关都有真实效果。
+- **F12 已接（改判）**：原判「`filterAndroidConfigXml` 按类别整体剔除，不是上游那种按 key 逐个判」——复核后认为两者结果等价：上游 `keyIsNotIgnore` 逐 key 查的也是那几组 `*PrefKeys` 集合，等价于「该 key 是否属于某个被忽略类别」。本地另外给 `themeMode` 加了 `restoreThemeMode` 里的独立早退，`themeConfig` 被忽略时 `applyEyeProtection` 早退，两条都对。r297 盘点时判「未接」属口径过严，已在对照表改判并写明理由。
+- **F5 仍要接**：归档清单里有 `'themeConfig.json'`（`data/BackupRepository.ets` 的 `fileNames`）与 `categoryOptions` 里的 `files: ['themeConfig.json', 'config.xml']`，但 `createBackup` **从不生成它**。恢复侧 `copyPreservedEntries` 对非 `config.xml` 条目是原样搬运，所以从 Android 迁来的 `themeConfig.json` 会被搬过去但无人解析。
 
-**补法**：F5 在 `createBackup` 补 `themeConfig.json` 写出分支（53 键当前值）；F9 在 config.xml 写出清单补 `themeMode`；F12 把忽略判定改成按 key 逐个判；F11 随 F5/F9 自动生效；F7 等 KI-TH-A7 的渲染落地后功能侧才算通。
+**补法**：只剩 F5 —— 在 `createBackup` 补 `themeConfig.json` 写出分支，格式对齐上游 `help/config/ThemeConfigStore.kt:265-274` 的 `Config(themeName, isNightTheme, primaryColor, accentColor, backgroundColor, bottomBackground, backgroundImgPath: String?, backgroundImgBlur: Int)` 数组（`backgroundImgPath` 可为 null、`backgroundImgBlur` 可缺省）。**但它必须先有本地主题包数据结构**——本地现在只有 `ThemeSettingsPage.ets` 里 5 个硬编码调色板色，不是可存的主题，所以 F5 与 B 块（KI-TH-B1/B2/B3）必须一起做，否则会写出与主题包管理语义不一致的文件。
 
-**验收**：备份 → 归档里出现 `themeConfig.json` 且 `config.xml` 含 `themeMode`；改主题色后恢复备份 → 颜色还原；关掉 themeConfig 类别后备份 → `themeConfig.json` 不出现。
+**验收（r303 已在模拟器实测，见 [验证记录](VALIDATION.md) r303 节）**：
+1. `themeMode` 设 `"2"` → 备份 → 解压 `config.xml` 含 `<string name="themeMode">2</string>`（实测通过）。
+2. prefs 改回 `"1"` → 恢复该 ZIP → prefs 变回 `"2"`（实测通过）。
+3. 备份排除项打开「深色模式」→ 备份 → `config.xml` 不含 `themeMode`（实测 66 行、grep 0 命中）。
+4. 恢复排除项打开「深色模式」→ 恢复含 `themeMode=2` 的 ZIP → prefs 仍为 `"1"`（实测通过）。
+5. F5 完成后补：改一套配色 → 备份 → 解压看得到 `themeConfig.json` 且内容含 53 键。
 
 ## 设备范围
 

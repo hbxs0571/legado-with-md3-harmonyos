@@ -23,6 +23,7 @@ import { BookmarkImportOutcome, ReaderBookmarkImporter } from './ReaderBookmarkI
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking } from '../model/ReaderMarking';
 import { LocalBookRestorePlanner } from './LocalBookRestorePlanner';
+import { ThemeSettingsRepository } from './ThemeSettingsRepository';
 
 /** 解析 highlightRule.json 的结果：可用规则与因形态不符被跳过的条数。 */
 interface HighlightRuleParseOutcome {
@@ -65,6 +66,8 @@ export interface RestoreResult {
   books: Book[];
   settings: ReaderSettingsSnapshot;
   bookshelfLayout: BookshelfLayoutSettings;
+  /** 恢复出来的全局主题模式（`"0"`/`"1"`/`"2"`）；备份里没有该键时为 undefined。 */
+  themeMode: string | undefined;
   preservedEntryCount: number;
   updatedLocalBookCount: number;
   createdMissingBodyBookCount: number;
@@ -456,6 +459,38 @@ export class BackupRepository {
     return entries;
   }
 
+  /**
+   * 把本地 `themeMode` 归一成上游的字符串三值再写进 config.xml。
+   *
+   * 上游 `AppShellSettings.kt:4` 存的就是字符串 `"0"`/`"1"`/`"2"`，直接原样写；
+   * 万一拿到的是旧口径的 number（向导早期版本存过 0/1/2），按同一映射换算，不写出非法值。
+   */
+  private static normalizeThemeModeForBackup(value: string): string {
+    if (value === '1' || value === '2' || value === '0') { return value; }
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) { return ThemeSettingsRepository.fromModeNumber(numeric); }
+    return ThemeSettingsRepository.fromModeNumber(0);
+  }
+
+  /**
+   * 从 `config.xml` 读回全局深色模式。
+   *
+   * 与上游 `BackupConfig.keyIsNotIgnore` 对齐：`themeMode` 属于 `themeMode` 类别，
+   * 该类被忽略时整键不恢复（返回 undefined，调用方保留当前值）。
+   */
+  private static restoreThemeMode(
+    directory: string,
+    ignoredCategories: string[]
+  ): string | undefined {
+    if (ignoredCategories.includes('themeMode')) { return undefined; }
+    const path = `${directory}/config.xml`;
+    const raw = BackupRepository.readXmlString(path, 'themeMode');
+    if (raw === undefined) { return undefined; }
+    const trimmed = raw.trim();
+    if (trimmed === '0' || trimmed === '1' || trimmed === '2') { return trimmed; }
+    return undefined;
+  }
+
   private static preferenceKeysForCategory(key: string): string[] | undefined {
     if (key === 'readConfig') { return BackupRepository.preferenceKeysByCategory.readConfig; }
     if (key === 'themeConfig') { return BackupRepository.preferenceKeysByCategory.themeConfig; }
@@ -495,7 +530,8 @@ export class BackupRepository {
     books: Book[],
     settings: ReaderSettingsSnapshot,
     bookshelfLayout: BookshelfLayoutSettings,
-    ignoredCategories: string[]
+    ignoredCategories: string[],
+    themeMode: string
   ): Promise<boolean> {
     const stagingDirectory = `${context.cacheDir}/legado-android-backup-${Date.now()}`;
     const zipPath = `${context.cacheDir}/legado-android-backup-${Date.now()}.zip`;
@@ -725,6 +761,16 @@ export class BackupRepository {
           configText, 'string', 'eyeProtectionStartTime', settings.eyeProtectionStartTime);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'eyeProtectionEndTime', settings.eyeProtectionEndTime);
+        BackupRepository.writeTextFile(configPath, configText);
+      }
+      // 全局深色模式：上游 `Backup.kt:257` 把整个 preferences 全量导出成 config.xml，
+      // 再由 `BackupConfig.keyIsNotIgnore`（BackupConfig.kt:413-439）按
+      // `PreferKey.themeMode == key && backupIgnoreThemeMode` 剔掉。
+      // 本地是白名单式逐键写出，所以这里显式补一条，忽略门控与上游同向。
+      if (!ignoredCategories.includes('themeMode')) {
+        let configText = fileIo.readTextSync(configPath);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'themeMode', BackupRepository.normalizeThemeModeForBackup(themeMode));
         BackupRepository.writeTextFile(configPath, configText);
       }
       const files = fileIo.listFileSync(stagingDirectory)
@@ -1000,6 +1046,11 @@ export class BackupRepository {
       selection.stagingDirectory, restoredReadSettings, ignoredCategories
     );
     await ReaderSettingsRepository.save(context, settings);
+    // 全局深色模式与阅读设置分开存（`legado_theme`），所以单独读、单独回传，
+    // 由调用方 `Index.ets` 走 `applyThemeMode` 应用，与上游 Restore.kt:326-335 同序。
+    const restoredThemeMode = BackupRepository.restoreThemeMode(
+      selection.stagingDirectory, ignoredCategories
+    );
     const bookshelfLayout = BackupRepository.restoreBookshelfLayout(
       selection.stagingDirectory, currentBookshelfLayout, ignoredCategories
     );
@@ -1018,6 +1069,7 @@ export class BackupRepository {
       books: updated.books,
       settings: settings,
       bookshelfLayout: bookshelfLayout,
+      themeMode: restoredThemeMode,
       preservedEntryCount: preservedEntryCount,
       updatedLocalBookCount: updated.updatedCount,
       createdMissingBodyBookCount: updated.createdMissingBodyCount,
