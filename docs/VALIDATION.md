@@ -30,6 +30,29 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r305 深色模式向导：点选即写全局并换肤（C1/C2）
+
+- 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 通过，32 s 412 ms，33 tasks / 17 executed）。
+- **改了哪些**：
+  - `entry/src/main/ets/pages/OnboardingPage.ets`：新增 `onThemeModeChange(themeMode: number)` / `onPaletteChange(paletteIndex: number)` 两个回调 prop；`modeOption()` 与调色板 ForEach 的 `.onClick` 由「只改 `@State`」改为「改 `@State` + 回调」；18 处颜色字面量换成 `$r('app.color.theme_*')`（原先写死浅色，深色模式下向导页是一块白板）；页脚文案改为「深色模式点选即写入主题设置并在整个应用生效；配色序号会一并保存，配色渲染仍在迁移中」。
+  - `entry/src/main/ets/pages/Index.ets`：新增 `selectOnboardingThemeMode(themeMode: number)` → `applyThemeMode(context, ThemeSettingsRepository.fromModeNumber(themeMode), this.themePaletteIndex, true)`；`OnboardingPage({...})` 调用处补传两个回调（调色板复用已有 `selectThemePalette`）。
+- **与上游的差异**：① 上游点选后显式发 `ApplyDayNight` effect 通知 AppCompat 重算夜间模式，本地 `setColorMode` 改完系统按 `resources/dark` 自行重解析，无独立 effect 层（同 F3/E7）；② 上游调色板 14 套完整 colorScheme，本地 5 个写死色板且只用于色卡与预览卡，全局 1051 处 `$r('app.color.theme_*')` 与序号无关——配色渲染仍归 A2（未接）。
+- **前置条件**：`legado_first_run` 的 `completed` 必须为 `false` 才会进向导。置位方式：`hdc shell "sed -e 's|key=\"completed\" value=\"true\"|key=\"completed\" value=\"false\"|' $P > /data/local/tmp/x.xml && cp /data/local/tmp/x.xml $P"`，`P=/data/app/el2/100/base/io.legado.harmony/haps/entry/preferences/legado_first_run`，然后 `aa force-stop` + `aa start -a EntryAbility -b io.legado.harmony`。
+- **验收①（C1 深色模式点选即生效）**
+  - 操作：向导第 1 页点「阅读并同意　→」`(961,2600)` → 第 2 页「下一步　→」`(1010,2600)` ×2 → 第 4 页「主题样式」点「深色」`(1030,982)`。
+  - 预期：`legado_theme` 的 `themeMode` 立刻变 `"2"`，且向导页自身变深色（此时尚未点「完成」）。
+  - 实际：**通过**。点前 prefs 为 `<string key="themeMode">1</string>`，点后为 `2`；截图取证向导页整页转深（底色黑、文字浅、选中档「深色」高亮为 `#AFC2FF`）。
+- **验收②（C2 调色板选择落盘）**
+  - 操作：同一页点第 5 个色板「玫瑰」卡片中心 `(1107,1250)`。
+  - 预期：`legado_theme` 的 `paletteIndex` 变 `4.000000`，选中态 ✓ 移到「玫瑰」，预览卡文字变玫瑰色。
+  - 实际：**通过**。`paletteIndex` 由 `0.000000` 变 `4.000000`；dumpLayout 里 ✓ 已在「玫瑰」项，截图确认预览卡「我的书架／继续阅读」变粉色。
+- **未验**：向导第 4 页选「跟随系统」后切系统深浅色的联动（该路径与 A1 同一条 `applyThemeMode`，已在 r300 验收③覆盖，本轮不重复）。
+- **踩坑**：
+  - 点「深色」不能点文字坐标（`(1030,982)` 在深色档的胶囊中心才有效；点上一页残留坐标会落在「浅色」或空白）。
+  - 色板必须点卡片本体（`y≈1250`），点下面的标签文字（`y≈1356`）不触发 `onClick`。
+  - `uitest dumpLayout` 的 `hdc file recv` 目标路径必须是相对路径，写绝对路径会被拼成 `N:\...\/n/...` 而失败。
+- **复原**：把 `legado_first_run` 的 `completed` 改回 `true`，`legado_theme` 的 `themeMode` 用 `sed` 改回 `"1"`、`paletteIndex` 改回 `0.000000`，重启确认回到浅色首页。
+
 ## 2026-11-01 N 端 r304 深色模式阶段二外观三项：字体缩放、状态栏显隐、滑动动画（A11/A15/A16）
 
 - 设备：HOS 模拟器 `127.0.0.1:5555`（API 26，HarmonyOS 7.0.0），包名 `io.legado.harmony`，构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`（`assembleHap` 通过，38 s 137 ms，33 tasks / 17 executed）。

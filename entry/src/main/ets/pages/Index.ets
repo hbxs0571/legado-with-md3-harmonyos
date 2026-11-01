@@ -1920,6 +1920,19 @@ struct Index {
     this.applyThemeMode(context, this.themeMode, paletteIndex, true);
   }
 
+  /**
+   * 首次启动向导第 4 页深色模式回调。上游 `OnboardingViewModel.kt:120-123`
+   * 的 `SetThemeMode`：点一下就写 `themeMode` 网关 + `ApplyDayNight`，
+   * 所以这里立刻走与主题设置页同一条 `applyThemeMode` 写入路径，不等「完成」。
+   */
+  private selectOnboardingThemeMode(themeMode: number): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    this.applyThemeMode(context, ThemeSettingsRepository.fromModeNumber(themeMode), this.themePaletteIndex, true);
+  }
+
   private async restoreOnboarding(context: Context): Promise<void> {
     const state = await OnboardingRepository.load(context);
     this.onboardingComplete = state.completed;
@@ -5080,6 +5093,8 @@ struct Index {
       } else if (!this.onboardingComplete) {
         OnboardingPage({
           localBooksPath: `${this.getAppFilesDirectory()}/books`,
+          onThemeModeChange: (themeMode: number) => this.selectOnboardingThemeMode(themeMode),
+          onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex),
           onComplete: (themeMode: number, paletteIndex: number) => this.finishOnboarding(themeMode, paletteIndex)
         })
       } else {

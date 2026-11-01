@@ -697,13 +697,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 深色模式行登记（ZIP-THEME.md 的未接行）
 
-本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r304 后剩 56 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
+本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **83 行 `未接`**（r305 后剩 54 行，见下「排期分布」）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
 判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
-**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）。累计 26 行转 `已接`，剩余 **56 行 `未接`**（要接 51 / 不接 5）。
+**83 行的排期分布**：阶段一 6 行（F1/F2/F3/F4 + A1/C4/D2）、阶段二 61 行、阶段三 16 行；`不接` 5 行。**阶段一已于 r300 全部落地**（7 行转 `已接`：A1/C4/D2/F1/F2/F3/F4）；**阶段二第一批 r301 落地护眼 6 行 + F7**（A24/A25/A26/A27/A28/A29/F7）；**阶段三 r302 落地 E 块 6 行 + D7**（E1/E2/E3/E4/E5/E6/D7）；**阶段二备份侧 r303 落地 3 行**（F9 `themeMode` 的 config.xml 写出与恢复读回、F11 两类忽略开关接真实效果、F12 恢复侧键过滤——F12 由「未接」改判「已接」，理由见 KI-TH-F3）；**阶段二外观三项 r304 落地 3 行**（A11 字体大小缩放、A15 显示状态栏、A16 启用滑动时动画）；**向导 r305 落地 2 行**（C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex`）。累计 28 行转 `已接`，剩余 **54 行 `未接`**（要接 49 / 不接 5）。
 
 **全局前置**：这 83 行里 **78 行都要先有 F4（两套颜色资源）**才可能「看起来变了」。F4 没落地时，任何开关即使接了状态，界面也不会有可见变化——这是本表与其它对照表最大的不同，排期不能按「先接开关、后补皮肤」的顺序做。
 
@@ -852,17 +852,24 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ### C 首次启动向导
 
-**KI-TH-C1 向导的两处选择要落到全局（C4 已实现 / C1、C2 要接）** —— 覆盖 C1 向导第 4 页深色模式三选一、C2 向导调色板选择、C4 启动时读取并应用已保存的 themeMode。
+**KI-TH-C1 向导的三处选择已全部落到全局（C1/C2 已实现 r305，C4 已实现 r300）** —— 覆盖 C1 向导第 4 页深色模式三选一、C2 向导调色板选择、C4 启动时读取并应用已保存的 themeMode。
 
-**C4 已实现（r300）**：`pages/Index.ets` 的 `restoreOnboarding(context)` 改为两分支——`ThemeSettingsRepository.hasStoredThemeMode(context)` 为真时用 `legado_theme` 里的全局值（`persist=false`），否则用 `OnboardingRepository` 存的向导值并写进全局（`persist=true`）；两条路都经 `applyThemeMode` 落到 `@State themeMode` + `setColorMode`。`finishOnboarding` 末尾也补了同一次 `applyThemeMode`，向导选完当场生效。
+**本轮判定**：三行全部 `已接`。C1/C2 在 r305 落地——向导页内点选即写全局并立刻换肤，不再等「完成」。
 
-**上游口径**：`feature/onboarding/OnboardingScreen.kt:339-357` 第 4 页 `ThemeModeSelector` + `ThemeColorSelector`；`OnboardingViewModel.kt:120-123` `SetThemeMode` 立即 `appShellSettingsGateway.update { it.copy(themeMode = intent.value) }` 并发出 `ApplyDayNight` effect。
+**上游口径**：`feature/onboarding/OnboardingScreen.kt:339-357` 第 4 页 `ThemeModeSelector` + `ThemeColorSelector`（配色数据 `R.array.themes_item`，`values-zh-rCN/arrays.xml:160-177` 共 14 套完整 `lightColorScheme`/`darkColorScheme`）；`OnboardingViewModel.kt:120-123` `SetThemeMode` 立即 `appShellSettingsGateway.update { it.copy(themeMode = intent.value) }` 并发出 `ApplyDayNight` effect；`:47` 向导初值直接取 `appShellSettingsGateway.currentSettings.themeMode`。
 
-**本地现状**：`pages/OnboardingPage.ets:90-94` 三个 `modeOption`（`:122-128`）与 `:95-108` 五个调色板，点选只改 `@State`（`themeMode`/`paletteIndex`），不写盘、不换肤；`:115-116` 自己写着「外观选择会保存用于向导偏好；全局换肤仍在迁移中」。这两处（C1/C2）**本轮未动**——`finishOnboarding` 已在向导结束时把选择送进全局，所以「选完有没有效果」已通；向导**页内**点选即时预览换肤仍未做。
+**本地落地**（r305）：
+1. `pages/OnboardingPage.ets` 新增两个回调 prop `onThemeModeChange(themeMode: number)` 与 `onPaletteChange(paletteIndex: number)`；`modeOption()` 的 `.onClick` 改为 `() => { this.themeMode = mode; this.onThemeModeChange(mode); }`，调色板 ForEach 的 `.onClick` 改为 `() => { this.paletteIndex = index; this.onPaletteChange(index); }`。
+2. `pages/Index.ets` 新增 `selectOnboardingThemeMode(themeMode: number)`（走 `applyThemeMode(context, ThemeSettingsRepository.fromModeNumber(themeMode), this.themePaletteIndex, true)`，与 A1 同一条写入路径）；调色板复用已有的 `selectThemePalette(paletteIndex)`。
+3. `OnboardingPage({...})` 调用处补传两个回调，`const themeContext = this.getUIContext().getHostContext()` 为空时静默返回。
+4. `pages/OnboardingPage.ets` 的 18 处颜色字面量全部换成 `$r('app.color.theme_*')`，向导页因此能随 `resources/dark` 翻转（原先写死浅色，在深色模式下是一块白板）；页脚文案由「外观选择会保存用于向导偏好；全局换肤仍在迁移中」改为「深色模式点选即写入主题设置并在整个应用生效；配色序号会一并保存，配色渲染仍在迁移中」。
 
-**补法**：C1/C2 与 A1/A2 共用同一条写入路径（`applyThemeMode`）；C2 的调色板要等 A2 真能改配色才有意义。取值域已在边界统一：`OnboardingRepository` 存 number `0/1/2`，`ThemeSettingsRepository.fromModeNumber`/`toModeNumber` 负责换算，全局只存字符串。
+**与上游的差异**：① 上游点选后显式发 `ApplyDayNight` effect 通知 AppCompat 重算夜间模式，本地 `setColorMode` 改完系统自己按 `resources/dark` 重解析资源，没有独立 effect 层（同 F3/E7 的理由）；② 上游调色板是 14 套完整 colorScheme，本地只有 5 个写死色板（`0 #B9C8FF` / `1 #A6D28A` / `2 #F4D45E` / `3 #B7B8BC` / else `#85B7FF`）且只用于色卡与预览卡，全局 1051 处 `$r('app.color.theme_*')` 与序号无关——**配色渲染缺口归 A2**，C2 只保证「选择被记住」。
 
-**验收**：首次启动选「深色」→ 向导结束进入书架即为深色；杀进程重进 → 仍是深色（C4 已验）；选「跟随系统」+ 系统切深色 → App 跟着变。
+**验收**（2026-11-01 模拟器实测，见 `docs/VALIDATION.md` r305 节）：
+- C1：把 `legado_first_run` 的 `completed` 置 false → 重启进向导 → 翻到第 4 页「主题样式」→ 点「深色」→ ①`legado_theme` 的 `themeMode` 由 `"1"` 变 `"2"`；②向导页自身立刻变深色（截图取证），此时尚未点「完成」。
+- C2：点第 5 个色板「玫瑰」→ `legado_theme` 的 `paletteIndex` 由 `0.000000` 变 `4.000000`，选中态 ✓ 与预览卡文字同步变色。
+- C4（r300 已验）：向导结束进书架即为深色；杀进程重进仍是深色。
 
 ### D 阅读页日夜快捷按钮
 

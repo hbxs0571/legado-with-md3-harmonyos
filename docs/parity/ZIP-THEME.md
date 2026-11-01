@@ -20,7 +20,7 @@
 3. **主题设置页零持久化**。`pages/ThemeSettingsPage.ets` 内 `preferences|getPreferences|store.put|Repository` 命中 **0**；47 处 widget 调用、46 个可见条目里，**39 处**走 `onUnavailableAction('…尚未迁移')`，其余 7 处（三个模式项、五个调色板）只改 `@State`，退出即丢。页面入口 `pages/Index.ets:4135` 是 `ThemeSettingsPage({ onBack, onUnavailableAction })`——**没传任何主题状态**。
 4. **唯一落盘的 themeMode 没人读**。`data/OnboardingRepository.ets` 把 `{ completed, themeMode, paletteIndex }` 写进 preferences（`legado_first_run`），但 `pages/Index.ets:1653-1657` 的 `restoreOnboarding` 只读 `state.completed`，`themeMode` 读出来就丢。
 
-结论：**在本地，「深色模式」不是「一个没接的键」，而是一整层没建的地基**。只补 `themeMode` 的读写分支，结果只是备份文件里多一个键，界面上不会有任何变化——真正的成本在 A 块与 F 块：建浅色资源、把 2252 处字面量改成引用、让设置页落盘、再让全局跟随。下面 91 行里仍有 56 行 `未接`（r297 盘点时是 83 行，r300–r304 五批落地 27 行），原因基本都收束到这一条。
+结论：**在本地，「深色模式」不是「一个没接的键」，而是一整层没建的地基**。只补 `themeMode` 的读写分支，结果只是备份文件里多一个键，界面上不会有任何变化——真正的成本在 A 块与 F 块：建浅色资源、把 2252 处字面量改成引用、让设置页落盘、再让全局跟随。下面 91 行里仍有 54 行 `未接`（r297 盘点时是 83 行，r300–r305 六批落地 29 行），原因基本都收束到这一条。
 
 ## ZIP 类别归属（整表口径）
 
@@ -33,7 +33,7 @@
 | E 日夜提醒 | 7 | `themeConfig`（`autoSuggestDayNight` 是 53 键之一），触发后写 `themeMode` | 开关落在 themeConfig，效果落在 themeMode |
 | F 网关与全局换肤 | 12 | 两者 | `themeMode` 的存储/派生/应用 + `themeConfig` 的导出与忽略门控 |
 
-合计 **91 行**：已接 32 / 未接 56 / 不适用 3（r300 阶段一 7 行、r301 阶段二首批 7 行、r302 阶段三 E 块 6 行 + D7 1 行、r303 备份侧 F9/F11/F12 3 行、r304 外观三项 A11/A15/A16 3 行已转已接）。按 ZIP 类别列归属，`themeConfig` 72 行、`themeMode` 19 行。`themeMode` 与 `themeConfig` 交叉出现在 A1–A4、D5、E、F，按类别派活时两张都要看。
+合计 **91 行**：已接 34 / 未接 54 / 不适用 3（r300 阶段一 7 行、r301 阶段二首批 7 行、r302 阶段三 E 块 6 行 + D7 1 行、r303 备份侧 F9/F11/F12 3 行、r304 外观三项 A11/A15/A16 3 行、r305 向导 C1/C2 2 行已转已接）。按 ZIP 类别列归属，`themeConfig` 72 行、`themeMode` 19 行。`themeMode` 与 `themeConfig` 交叉出现在 A1–A4、D5、E、F，按类别派活时两张都要看。
 
 ## 盘面
 
@@ -41,13 +41,13 @@
 | --- | --- | --- | --- | --- |
 | A 主题设置页 | 47 | 10 | 37 | 0 |
 | B 主题包管理 | 12 | 0 | 12 | 0 |
-| C 首次启动向导 | 5 | 2 | 2 | 1 |
+| C 首次启动向导 | 5 | 4 | 0 | 1 |
 | D 阅读页日夜快捷按钮 | 8 | 4 | 3 | 1 |
 | E 日夜提醒 | 7 | 6 | 1 | 0 |
 | F 网关与全局换肤 | 12 | 10 | 1 | 1 |
-| **合计** | **91** | **32** | **56** | **3** |
+| **合计** | **91** | **34** | **54** | **3** |
 
-**阶段一（r300）已把 7 行从 `未接` 转为 `已接`**：A1、C4、D2、F1、F2、F3、F4。**阶段二第一批（r301）又把护眼 6 行转为 `已接`**：A24、A25、A26、A27、A28、A29。护眼 6 行转 `已接` 后，F7（护眼 6 键备份）也随之转 `已接`。**阶段三（r302）把日夜提醒 6 行转为 `已接`**：E1、E2、E3、E4、E5、E6（这 6 行在 r297 盘点时判 `未接`，实为当时未查到阅读页那套实现，本轮逐行核实后改判），**同批把 D7 也转为 `已接`**（`toggleReaderNightMode()` 补上冷却复位与待弹提醒作废）。**阶段二备份侧（r303）再把 3 行转为 `已接`**：F9（`themeMode` 的 config.xml 写出与恢复读回）、F11（两类备份忽略开关接上真实效果）、F12（恢复侧键过滤，复核后由「未接」改判「已接」——按类别整体剔除与上游逐键查集合结果等价）。**阶段二外观三项（r304）再把 3 行转为 `已接`**：A11（字体大小缩放，走 `ApplicationContext.setFontSizeScale`）、A15（显示状态栏）、A16（启用滑动时动画，上游本身无渲染消费者，本地只落盘）。剩余 56 行 `未接` 已在「备注」列逐行标注 **要接 / 不接**（不改状态）：**要接 51 / 不接 5**。判不接的 5 行是 A3（Miuix 动态取色）、A7（主题引擎切换）、A18（平板界面）、A19（多窗布局）、E7（提醒的 intent/effect 链路），理由见各行备注与 [问题登记](../KNOWN-ISSUES.md)「深色模式行登记」节。判「不接」不删行、不改状态，仍按 `未接` 计。
+**阶段一（r300）已把 7 行从 `未接` 转为 `已接`**：A1、C4、D2、F1、F2、F3、F4。**阶段二第一批（r301）又把护眼 6 行转为 `已接`**：A24、A25、A26、A27、A28、A29。护眼 6 行转 `已接` 后，F7（护眼 6 键备份）也随之转 `已接`。**阶段三（r302）把日夜提醒 6 行转为 `已接`**：E1、E2、E3、E4、E5、E6（这 6 行在 r297 盘点时判 `未接`，实为当时未查到阅读页那套实现，本轮逐行核实后改判），**同批把 D7 也转为 `已接`**（`toggleReaderNightMode()` 补上冷却复位与待弹提醒作废）。**阶段二备份侧（r303）再把 3 行转为 `已接`**：F9（`themeMode` 的 config.xml 写出与恢复读回）、F11（两类备份忽略开关接上真实效果）、F12（恢复侧键过滤，复核后由「未接」改判「已接」——按类别整体剔除与上游逐键查集合结果等价）。**阶段二外观三项（r304）再把 3 行转为 `已接`**：A11（字体大小缩放，走 `ApplicationContext.setFontSizeScale`）、A15（显示状态栏）、A16（启用滑动时动画，上游本身无渲染消费者，本地只落盘）。**r305 再把向导 C1/C2 转为 `已接`**：C1（向导第 4 页深色模式点选即写全局 `themeMode` 并立刻换肤）、C2（向导调色板选择落盘 `paletteIndex`；配色渲染仍归 A2）。剩余 54 行 `未接` 已在「备注」列逐行标注 **要接 / 不接**（不改状态）：**要接 49 / 不接 5**。判不接的 5 行是 A3（Miuix 动态取色）、A7（主题引擎切换）、A18（平板界面）、A19（多窗布局）、E7（提醒的 intent/effect 链路），理由见各行备注与 [问题登记](../KNOWN-ISSUES.md)「深色模式行登记」节。判「不接」不删行、不改状态，仍按 `未接` 计。
 
 ## A 主题设置页
 
@@ -137,8 +137,8 @@
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **C1** 向导第 4 页深色模式三选一 | `OnboardingScreen.kt:341` `ThemeModeSelector(selectedMode = state.themeMode, onModeSelected = { onIntent(SetThemeMode(it)) })`；`OnboardingViewModel.kt:120-123` 点击即 `appShellSettingsGateway.update { it.copy(themeMode = intent.value) }` + `_effects.tryEmit(OnboardingEffect.ApplyDayNight)` | `pages/OnboardingPage.ets:90-94` Row 内 `:91` `modeOption('跟随系统', 0)`、`:92` `('浅色', 1)`、`:93` `('深色', 2)`；`:122-128` `modeOption` 只 `onClick(() => this.themeMode = mode)` | 未接 | 选项齐全、文案一致，但点选只改 `@State themeMode`：**不写盘、不换肤、没有 `ApplyDayNight` 等价 effect**。上游是「点一下就立刻写网关并套用夜间模式」 | 真机：向导里点「深色」→ 向导页自身立刻变深色 | 本地 `:115` 的文案自己写着「外观选择会保存用于向导偏好；全局换肤仍在迁移中」——向导作者已经知道这一步没接；**要接**（阶段一）——向导点选即写全局 themeMode 并换肤，与 A1 共用同一条写入路径 | `themeMode` |
-| **C2** 向导调色板选择 | `OnboardingScreen.kt:343-357` `ThemeColorSelector(...)` | `pages/OnboardingPage.ets:95-108` ForEach 5 个调色板（`:104` `['动态色','草原','柠檬','黑白','玫瑰']`），`:99-103` 选中态 ✓ + 边框 | 未接 | 本地 5 个调色板与 A2 那 5 个是同一套写死色，点选只改 `@State paletteIndex` | 真机：选「玫瑰」→ 向导预览与主界面都变玫瑰色 | 与 A2 共用同一份缺口；**要接**（阶段二）——向导调色板写 `appTheme` 键 | `themeMode` |
+| **C1** 向导第 4 页深色模式三选一 | `OnboardingScreen.kt:341` `ThemeModeSelector(selectedMode = state.themeMode, onModeSelected = { onIntent(SetThemeMode(it)) })`；`OnboardingViewModel.kt:120-123` 点击即 `appShellSettingsGateway.update { it.copy(themeMode = intent.value) }` + `_effects.tryEmit(OnboardingEffect.ApplyDayNight)` | `pages/OnboardingPage.ets:100-104` Row 内 `this.modeOption('跟随系统', 0)` / `('浅色', 1)` / `('深色', 2)`；`modeOption` 的 `.onClick` 现为 `() => { this.themeMode = mode; this.onThemeModeChange(mode); }`；回调由 `pages/Index.ets` 的 `selectOnboardingThemeMode(themeMode)` 接住 → `applyThemeMode(context, ThemeSettingsRepository.fromModeNumber(themeMode), this.themePaletteIndex, true)` | 已接 | 点选即写全局：`applyThemeMode` 是 F1/A1 同一条唯一写入路径（改 `@State themeMode` + `ThemeModeResolver.apply` → `setColorMode` + `ThemeSettingsRepository.save`），所以向导页自身与整个 App 立刻换肤，不用等「完成」。与上游的差别是**没有 `ApplyDayNight` 这个独立 effect**——上游要显式发一次 effect 通知 AppCompat 重算夜间模式，ArkUI 侧 `setColorMode` 改完系统自己按 `resources/dark` 重解析资源，无需二次通知（见 F3） | 真机（2026-11-01 实测通过，见 VALIDATION.md r305）：把 `legado_first_run` 的 `completed` 置 false → 重启进向导 → 翻到第 4 页「主题样式」→ 点「深色」→ ①`legado_theme` 的 `themeMode` 由 `"1"` 变 `"2"`；②向导页自身立刻变深色（截图取证），此时尚未点「完成」 | r305 落地。页脚原文案「外观选择会保存用于向导偏好；全局换肤仍在迁移中」已改为「深色模式点选即写入主题设置并在整个应用生效；配色序号会一并保存，配色渲染仍在迁移中」 | `themeMode` |
+| **C2** 向导调色板选择 | `OnboardingScreen.kt:343-357` `ThemeColorSelector(...)`；配色数据来自 `R.array.themes_item`（`values-zh-rCN/arrays.xml:160-177` 共 14 套），每套是完整的 `lightColorScheme(...)` + `darkColorScheme(...)` | `pages/OnboardingPage.ets:105-119` ForEach 5 个调色板（`['动态色','草原','柠檬','黑白','玫瑰']`），`:106-111` 选中态 ✓ + 边框，`:116` `.onClick(() => { this.paletteIndex = index; this.onPaletteChange(index); })`；回调由 `pages/Index.ets` 的 `selectThemePalette(paletteIndex)` 接住 → `applyThemeMode(context, this.themeMode, paletteIndex, true)` | 已接 | 序号已真正落盘（`legado_theme` 的 `paletteIndex`），但**配色渲染仍未接**：本地只有 `paletteColor(index)` 那 5 个写死色板（`0 #B9C8FF` / `1 #A6D28A` / `2 #F4D45E` / `3 #B7B8BC` / else `#85B7FF`），且只用于色卡与预览卡；全局 1051 处 `$r('app.color.theme_*')` 与调色板序号无关。上游是 14 套完整 Material colorScheme 直接改全 App 配色——这条渲染缺口归 A2（未接），C2 只负责「选择被记住」 | 真机（2026-11-01 实测通过，见 VALIDATION.md r305）：向导第 4 页点第 5 个色板「玫瑰」→ `legado_theme` 的 `paletteIndex` 由 `0.000000` 变 `4.000000`，向导页选中态 ✓ 移到「玫瑰」、预览卡文字变玫瑰色 | r305 落地。与 A2 共用同一份渲染缺口；上游 14 套本地 5 套，缺 9 套（见 A2） | `themeMode` |
 | **C3** 外观选择写入偏好 | `OnboardingViewModel.kt:120-123` 写 `themeMode` 网关；`OnboardingRepository` 等价物在上游是 `AppShellSettings` 持久化 | `data/OnboardingRepository.ets:10` `preferenceName = 'legado_first_run'`、`:13` `defaults = { completed: false, themeMode: 0, paletteIndex: 0 }`、`:29-31` `static async complete(context, themeMode, paletteIndex)` → `store.put('themeMode', ...)`；调用方 `pages/Index.ets:1659-1670` `finishOnboarding` | 已接 | 本地确实把 `themeMode`（number 0..2）与 `paletteIndex` 写进了 preferences，`:21` 还做了 0..2 夹取。与上游的差别是**写的位置不同**：上游写 `AppShellSettings`（全局网关，写了就生效），本地写独立的 `legado_first_run`（只有向导自己知道） | 真机：走完向导 → 读 preferences 能看到 `themeMode` | 这是全表**唯一**真正落盘 `themeMode` 的地方；也正因它写在了错的容器里，才有 C4 | `themeMode` |
 | **C4** 启动时读取并应用已保存的 themeMode | `OnboardingViewModel.kt:47` `themeMode = appShellSettingsGateway.currentSettings.themeMode`（向导初值就取网关） | `pages/Index.ets:1653-1657` `restoreOnboarding(context)` **只** `this.onboardingComplete = state.completed` | 已接 | 本轮之前读得出 `themeMode`/`paletteIndex` 但**读完就丢**。现 `restoreOnboarding` 改为：`legado_theme` 里已有值（`hasStoredThemeMode`）就用全局值（`persist=false`），否则用向导存的值并写进全局（`persist=true`），两条路都经 `applyThemeMode` 落到 `@State themeMode` + `setColorMode` | 真机：向导选深色 → 杀进程重进 → 仍是深色；再进主题页看到「深色」为选中态 | 与 F1/C3 同一批；**已实现**（阶段一） | `themeMode` |
 | **C5** 向导主题预览卡 | 上游无独立预览卡——`ThemeColorSelector` 自身带选中态预览 | `pages/OnboardingPage.ets:109-114`「主题预览」卡（底色 `#FFFFFF`、外框 `#E8E9F2`） | 不适用 | 上游没有这个界面元素，按「上游没有就不要这个效果」本不该有；本地这块还是写死的浅色，与它周围的全深色页面不一致 | 无 | 建议随 A2 一起处理：调色板真接上以后，这张卡自然会被真实配色取代 | `themeMode` |
@@ -467,7 +467,7 @@ bash scripts/upstream-surface.sh --coverage themeConfig docs/parity/ZIP-THEME.md
 ## 结论
 
 1. **本地缺的是整套浅色主题，不是一个备份键。** 2252 处颜色字面量全内联、无 `dark/` 资源目录、`$r('app.color.*')` 引用 0 处。在补完 F4 之前，`themeMode` 怎么接都不会让界面变色。
-2. **`themeMode` 的三处界面（A1 主题页、C1 向导、D1 阅读页）全都没有写到全局状态。** 向导把值写进了 `legado_first_run`（C3 已接），但启动时 `restoreOnboarding` 读完就丢（C4）；主题页只改 `@State`（A1）；阅读页切的是私有布尔（D2）。
+2. **`themeMode` 的三处界面（A1 主题页、C1 向导、D1 阅读页）在 r297 盘点时全都没有写到全局状态。** 向导把值写进了 `legado_first_run`（C3 已接），但启动时 `restoreOnboarding` 读完就丢（C4）；主题页只改 `@State`（A1）；阅读页切的是私有布尔（D2）。**r300–r305 已把这四处全部接通**：A1/C4/D2 在 r300 经 `applyThemeMode` 统一写入，C1/C2 在 r305 让向导点选即生效（点「深色」立刻写 `themeMode="2"` 并换肤，不等「完成」）。现在三条界面共用同一条写入路径，`readerNightMode` 只是全局模式的投影。
 3. **阅读页日夜按钮其实有**（D1 已接，两处入口），任务书里「本地无入口」的判断需要更正。真正的差异是它只切阅读页纸张，不碰全局网关。
 4. **护眼已在 r301 全部落地**（A24–A29 六行转 `已接`）：主题页与阅读设置页现在共用 `Index.ets` 那一份状态，渲染走 `data/EyeProtection.ets` 移植的上游 2596K..5500K 系数。上游的 4×5 色矩阵除对角线外全 0，`.blendMode(BlendMode.MULTIPLY)` 的逐通道相乘与它数学等价，所以覆盖层不是近似实现。原先根节点上的 `.sepia()` 已删除。
 5. **主题包管理（B 块 12 行）整块缺失**，本地只有一个弹「尚未迁移」的入口。
@@ -484,7 +484,7 @@ bash scripts/upstream-surface.sh --coverage themeConfig docs/parity/ZIP-THEME.md
 4. **D2**：让阅读页按钮改全局 `themeMode`，而不是私有布尔。
 5. ~~**A24–A29**：给护眼补上色温滤镜渲染，并把主题页那套死 UI 接到阅读设置页那套状态上。~~ **r301 已完成**。
 6. ~~**F9**：补 `themeMode` 的 `config.xml` 写出与恢复读回。~~ **r303 已完成**（F11/F12 随之转已接）。**F5 仍缺**：`themeConfig.json` 的写出要有本地主题包数据结构才能做，依赖 B 块。
-7. ~~**A11/A15/A16**：字体缩放、状态栏显隐、滑动动画三项。~~ **r304 已完成**（A16 上游本身无渲染消费者，只落盘）。
+7. ~~**A11/A15/A16**：字体缩放、状态栏显隐、滑动动画三项。~~ **r304 已完成**（A16 上游本身无渲染消费者，只落盘）。~~**C1/C2**：向导点选即生效。~~ **r305 已完成**（配色渲染仍归 A2）。
 8. **B 块**：主题包管理整块新做，工作量最大，放最后。
 9. ~~**E 块**：日夜提醒依赖 D2 与传感器采样，排在 D2 之后。~~ **r302 已完成**（D2 已在 r300 落地，E1–E6 直接复用）。
 
