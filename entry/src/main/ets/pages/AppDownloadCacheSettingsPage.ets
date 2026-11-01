@@ -2,6 +2,7 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct AppDownloadCacheSettingsPage {
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -49,12 +50,14 @@ export struct AppDownloadCacheSettingsPage {
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct CacheSettingsSection {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop title: string = '';
   @BuilderParam content: () => void = this.emptyContent;
   @Builder
@@ -67,29 +70,34 @@ struct CacheSettingsSection {
   @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
+      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
         .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
     }
   }
 }
 
 @Component
 struct CacheSettingsAction {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   onSelect: () => void = () => {};
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
-      if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ right: 8 }) }
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary'))
+      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ right: 8 }) }
+      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary)
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.onSelect())
   }
 }
 
 @Component
 struct CacheSettingsSlider {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop value: number = 0;
@@ -101,13 +109,13 @@ struct CacheSettingsSlider {
     Column() {
       Row() {
         Column() {
-          Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary'))
-          if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 }) }
+          Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
+          if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Text(`${Math.round(this.currentValue)}`).fontSize(12).fontColor($r('app.color.theme_accent'))
+        Text(`${Math.round(this.currentValue)}`).fontSize(12).fontColor(this.themeColorAccent)
       }
       Slider({ value: this.currentValue, min: this.min, max: this.max, step: 1 })
-        .selectedColor($r('app.color.theme_accent')).trackColor('#454750')
+        .selectedColor(this.themeColorAccent).trackColor('#454750')
         .onChange((value: number) => this.currentValue = value)
     }.padding({ left: 14, right: 14, top: 9, bottom: 9 })
   }
@@ -115,6 +123,8 @@ struct CacheSettingsSlider {
 
 @Component
 struct CacheSettingsInput {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
@@ -123,10 +133,10 @@ struct CacheSettingsInput {
   aboutToAppear(): void { this.currentValue = this.value; }
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
       TextInput({ text: this.currentValue, placeholder: '默认' })
-        .fontSize(12).fontColor($r('app.color.theme_text_secondary')).textAlign(TextAlign.End)
-        .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).width(130).borderRadius(8)
+        .fontSize(12).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.End)
+        .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).width(130).borderRadius(8)
         .onChange((value: string) => this.currentValue = value)
     }.padding({ left: 14, right: 14, top: 10, bottom: 10 })
   }
@@ -134,14 +144,16 @@ struct CacheSettingsInput {
 
 @Component
 struct CacheSettingsSwitch {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   @State toggleValue: boolean = false;
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary'))
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 }) }
+        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
+        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.toggleValue })
         .onChange((value: boolean) => this.toggleValue = value)

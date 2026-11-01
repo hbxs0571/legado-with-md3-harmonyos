@@ -30,6 +30,49 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
+## 2026-11-01 N 端 r314 深色模式阶段二：主题配色选择 14 套（A2）
+
+**改动**
+
+- 新建 `entry/src/main/ets/data/ThemePalette.ets`（261 行）：`ThemePaletteColors` 10 字段（8 个换肤色位 + 2 个只供色块预览的 `secondary`/`tertiary`）、`ThemePaletteDefinition`、`THEME_PALETTE_MIN = 0`/`THEME_PALETTE_MAX = 13`、`DEFAULT_LIGHT`/`DEFAULT_DARK`（= `resources/base|dark/element/color.json` 现值）、`THEME_PALETTES` 14 套（中文名对齐 `values-zh-rCN/arrays.xml:160-175`，色值由上游 12 个 `ui/theme/colorScheme/*ColorScheme.kt` 抽取 8 个语义位）、`normalizePaletteIndex`、`themePaletteName`、`resolvePaletteColors`、`publishPaletteColors`、`applyPalette`。
+- `entry/src/main/ets/pages/Index.ets`：`applyThemeMode` 里 `ThemeModeResolver.apply(...)` 之后加 `applyPalette(context, normalizePaletteIndex(paletteIndex), themeMode)`（:2824）；`ThemeSettingsPage` 与 `OnboardingPage` 的调用各补一个 `readerNightMode: this.readerNightMode`。
+- `entry/src/main/ets/pages/ThemeSettingsPage.ets`：`paletteColor`/`paletteArcColor`/`paletteCenterColor` 三个函数查 `THEME_PALETTES`；调色板行由 `Row(){ForEach([0..4])}` 改横向 `Scroll` + `ForEach(THEME_PALETTES)`；`ThemePaletteItem` 重写为上下两半圆 + 中心 `primary` 圆点 + 选中 34dp 圆与 ✓；顶部手机模型预览的两处取色改用 `themeColorAccent`。
+- `entry/src/main/ets/pages/OnboardingPage.ets`：`paletteSurface`/`paletteCenter` 查表，`ForEach(THEME_PALETTES)` 渲染 14 项。
+- `entry/src/main/ets/data/ThemeSettingsRepository.ets`：`paletteIndex` 读写两侧的 `Math.max(0, Math.min(4, ...))` 换成 `THEME_PALETTE_MIN/MAX`。
+- 35 个页面/组件文件的 8 个 `theme_*` 颜色资源引用（1102 处 / 36 文件 / 155 struct）由 `$r('app.color.theme_*')` 改成 422 个 `@StorageProp('themeColor*')` 订阅 AppStorage 广播。
+
+**与上游的差异**
+
+- 动态取色（`appTheme == "0"`）在本平台无对应能力：SDK `sdk/default/openharmony/ets/api` 下 `dynamicColor|DynamicColor|Monet` 零命中，本地回落 `DEFAULT_LIGHT`/`DEFAULT_DARK`。
+- 自定义配色（`appTheme == "12"`）同样回落默认，A6 另接。
+- 上游 `ThemeEngine.getColorScheme` 走 Compose CompositionLocal 重建整套 `ColorScheme`；本地走「`Index.ets` 一个写入点 → AppStorage → 各 struct `@StorageProp` 订阅」，与 r308 `themeCardRadius`、r309 `themePureBlack`、r310 `themeAppBackground` 同一套机制。
+- 上游每套 45 个 Material 色位，本地只落 8 个（其余色位全仓无引用）。
+
+**验收**
+
+| 项 | 操作 | 期望 | 实际 |
+| --- | --- | --- | --- |
+| 14 项齐全 | 外观页调色板行横向滑动，逐屏 `uitest dumpLayout` | 14 个中文名全部出现且顺序与上游一致 | 依次 dump 到「动态取色/草野/柠檬/黑白/电子书」→「黑白/电子书/晴空/八月/新浪潮」→「八月/新浪潮/春/千禧年/隐海修会」→「隐海修会/乐队/自定义/透明」 ✅ |
+| 亮色 + 草野 | 点第 2 个色块 | 页面底色与强调色变草野 | `page bg (231,233,222)`、`accent (77,102,45)`；prefs `paletteIndex = 1` ✅ |
+| 亮色 + 柠檬 | 点第 3 个色块 | 换成柠檬底色 | `page bg (238,232,218)`；prefs `paletteIndex = 2` ✅ |
+| 暗色 + 草野 | 切深色 | 草野的 darkScheme 生效 | `page bg (42,43,37)`、`accent (177,210,141)` ✅ |
+| 亮色 + 透明 | 滑到最后一格点选 | 底色纯白、强调色纯黑 | `page bg (255,255,255)`、`accent (0,0,0)`；prefs `paletteIndex = 13` ✅ |
+| 暗色 + 透明 | 切深色 | 强调色反转为白 | `accent (255,255,255)`，与上游 `TransparentColorScheme` 的 `primary` 亮 `#000000` / 暗 `#FFFFFF` 一致 ✅ |
+| 整屏换肤 | 点色块前后截图比对 | changed px 远大于色块本身面积 | `ImageChops` + numpy 阈值 10，changed px **798332** ✅ |
+| 自定义项 | 点「自定义」 | 回落内置默认配色 | `paletteIndex = 12`，页面回到默认色 ✅ |
+| 重启保持 | 杀进程重进 | 仍停在草野 + 深色 | 书架页 `bg (17,19,14)`、外观页 `bg (42,43,37)`，prefs `paletteIndex = 1`/`themeMode = 2` ✅ |
+
+**踩坑**
+
+1. **AppStorage 广播键必须与 `@StorageProp` 键逐字一致**。第一版 `publishPaletteColors` 按上游字段名广播 `themeColorPrimary`/`themeColorOnSurface`/…，而 130 个 struct 的 `@StorageProp` 是按 8 个 `theme_*` 资源命名的（`themeColorTextPrimary` 等）——键名对不上，点色块 prefs 变了、界面完全不变（changed px 只有 51726，全是色块自己）。改成按资源映射（`primary`→`themeColorAccent`、`onSurface`→`themeColorTextPrimary`、`onSurfaceVariant`→`themeColorTextSecondary`、`outline`→`themeColorTextTertiary`、`surface`→`themeColorSurfacePrimary`、`surfaceContainerLow`→`themeColorSurfaceSecondary`、`surfaceContainer`→`themeColorSurfaceTertiary`、`surfaceContainerHigh`→`themeColorSurfaceElevated`）后同一动作 changed px 798332。
+2. 生成脚本里 `SLOTS` 少了 `PREVIEW` 两项，`emit_colors` 漏出 `secondary`/`tertiary`，编译报 `Type '{...}' is missing the following properties from type 'ThemePaletteColors': secondary, tertiary`。
+3. `uitest uiInput click` 要落在 56×56 色块圆内：点 `(448,2382)`（标题行）无效，点 `(448,2312)` 才命中。
+
+**未验**
+
+- 只逐套验了草野、柠檬、透明、自定义四套 + 默认（动态取色）；黑白/电子书/晴空/八月/新浪潮/春/千禧年/隐海修会/乐队 9 套只验了「色块在列表里」，没逐套截图比对底色。
+- 未验墨水屏（`appTheme == "4"`）的隐藏逻辑——本地无 `showEInkTheme` 概念，见 F8。
+
 ## 2026-11-01 N 端 r313 深色模式阶段二：应用字体（A5）、切换图标改判不适用（A8）
 
 **改动**

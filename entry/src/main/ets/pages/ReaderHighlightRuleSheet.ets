@@ -4,6 +4,8 @@ import { ReaderHighlightRulePresets } from '../data/ReaderHighlightRulePresets';
 
 @Component
 export struct ReaderHighlightRuleSheet {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop rules: ReaderHighlightRule[] = [];
@@ -377,7 +379,7 @@ export struct ReaderHighlightRuleSheet {
                 .onChange((value: string) => this.editBackgroundColor = value)
                 .fontSize(14).margin({ top: 6, bottom: 12 })
               Row() {
-                Text('下划线样式').fontSize(13).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+                Text('下划线样式').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                 Text(this.underlineLabel()).fontSize(13).fontColor('#B9C6FF')
                   .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .backgroundColor('#303139').borderRadius(12).onClick(() => this.cycleUnderlineMode())
@@ -408,7 +410,7 @@ export struct ReaderHighlightRuleSheet {
           Text(this.errorMessage).fontSize(12).fontColor('#FFB4AB').width('100%').margin({ top: 8 })
         }
       }
-      .width('100%').height('82%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')))
+      .width('100%').height('82%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
       .borderRadius({ topLeft: 24, topRight: 24 }).alignItems(HorizontalAlign.Start)
       if (this.pendingDeleteId.length > 0) {
         Column() {
@@ -468,7 +470,7 @@ export struct ReaderHighlightRuleSheet {
               .onClick(() => this.applyPresets())
           }.width('100%').margin({ top: 10 })
         }
-        .width('90%').height('72%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')))
+        .width('90%').height('72%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
         .borderRadius(20).zIndex(3)
       }
     }

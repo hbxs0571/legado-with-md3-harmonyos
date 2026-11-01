@@ -1,4 +1,5 @@
 import { normalizeAppFontPath } from './AppFontSettings';
+import { THEME_PALETTE_MAX, THEME_PALETTE_MIN } from './ThemePalette';
 import { preferences } from '@kit.ArkData';
 import { normalizeLabelVisibility } from './MainNavigationSettings';
 import {
@@ -42,7 +43,7 @@ export const FONT_SCALE_DEFAULT: number = 10;
 export interface ThemeSnapshot {
   /** 三值字符串 `"0"`/`"1"`/`"2"`，对齐上游 `AppShellSettings.themeMode`。 */
   themeMode: string;
-  /** 调色板序号 0..4，对齐本地 `ThemeSettingsPage` 的五个 `ThemePaletteItem`。 */
+  /** 调色板序号 0..13，对齐上游 `appTheme` 的 14 个取值（`res/values/array_values.xml:30-45`）。 */
   paletteIndex: number;
   /** 全局字体缩放 8..16，对齐上游 `constant/PreferKey.kt:6 fontScale`（默认 10 = 1.0x）。 */
   fontScale: number;
@@ -333,7 +334,7 @@ export class ThemeSettingsRepository {
       const appFontPath = await store.get('appFontPath', defaults.appFontPath);
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
-        paletteIndex: typeof paletteIndex === 'number' ? Math.max(0, Math.min(4, paletteIndex)) : defaults.paletteIndex,
+        paletteIndex: typeof paletteIndex === 'number' ? Math.max(THEME_PALETTE_MIN, Math.min(THEME_PALETTE_MAX, paletteIndex)) : defaults.paletteIndex,
         fontScale: typeof fontScale === 'number' ? normalizeFontScale(fontScale) : defaults.fontScale,
         showStatusBar: typeof showStatusBar === 'boolean' ? showStatusBar : defaults.showStatusBar,
         swipeAnimation: typeof swipeAnimation === 'boolean' ? swipeAnimation : defaults.swipeAnimation,
@@ -449,7 +450,7 @@ export class ThemeSettingsRepository {
   static async save(context: Context, snapshot: ThemeSnapshot): Promise<void> {
     const store = await preferences.getPreferences(context, ThemeSettingsRepository.preferenceName);
     await store.put('themeMode', ThemeSettingsRepository.normalizeThemeMode(snapshot.themeMode));
-    await store.put('paletteIndex', Math.max(0, Math.min(4, snapshot.paletteIndex)));
+    await store.put('paletteIndex', Math.max(THEME_PALETTE_MIN, Math.min(THEME_PALETTE_MAX, snapshot.paletteIndex)));
     await store.put('fontScale', normalizeFontScale(snapshot.fontScale));
     await store.put('showStatusBar', snapshot.showStatusBar);
     await store.put('swipeAnimation', snapshot.swipeAnimation);

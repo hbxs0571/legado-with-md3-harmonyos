@@ -2,6 +2,10 @@ import { ReaderBookmark } from '../model/ReaderBookmark';
 
 @Component
 export struct ReaderBookmarkEditor {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop bookmark: ReaderBookmark = {
     id: '', bookId: '', bookName: '', bookAuthor: '', bookUrl: '',
     chapterIndex: 0, chapterName: '', chapterPosition: 0, bookText: '', content: '', createdAt: 0
@@ -28,16 +32,16 @@ export struct ReaderBookmarkEditor {
           .alignSelf(ItemAlign.Start).margin({ bottom: 14 })
         Text(this.bookmark.bookName).fontSize(14).fontColor('#E1E2E8').maxLines(1)
           .alignSelf(ItemAlign.Start)
-        Text(this.bookmark.chapterName).fontSize(13).fontColor($r('app.color.theme_accent')).maxLines(1)
+        Text(this.bookmark.chapterName).fontSize(13).fontColor(this.themeColorAccent).maxLines(1)
           .alignSelf(ItemAlign.Start).margin({ top: 4, bottom: 10 })
-        Text('原文').fontSize(13).fontColor($r('app.color.theme_text_secondary')).alignSelf(ItemAlign.Start).margin({ bottom: 6 })
+        Text('原文').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ bottom: 6 })
         TextArea({ text: this.bookText, placeholder: '书签原文（可编辑）' })
-          .fontSize(13).fontColor('#C8CAD3').placeholderColor($r('app.color.theme_text_tertiary'))
+          .fontSize(13).fontColor('#C8CAD3').placeholderColor(this.themeColorTextTertiary)
           .backgroundColor('#15161B').height(118).width('100%')
           .onChange((value: string) => this.bookText = value)
-        Text('备注').fontSize(13).fontColor($r('app.color.theme_text_secondary')).alignSelf(ItemAlign.Start).margin({ top: 12, bottom: 6 })
+        Text('备注').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ top: 12, bottom: 6 })
         TextArea({ text: this.note, placeholder: '添加书签备注（可选）' })
-          .fontSize(14).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+          .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor('#15161B').height(92).width('100%')
           .onChange((value: string) => this.note = value)
         Row() {

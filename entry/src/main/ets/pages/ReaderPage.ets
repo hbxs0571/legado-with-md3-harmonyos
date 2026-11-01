@@ -126,6 +126,12 @@ interface ReaderMarkingRange {
 
 @Component
 export struct ReaderPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop @Watch('onStartAtChapterBeginningChanged') startAtChapterBeginning: boolean = false;
@@ -1851,7 +1857,7 @@ export struct ReaderPage {
         MenuItem({ content: this.getBottomActionLabel(action.id) })
           .onClick(() => this.selectBottomAction(this.getTopActionKind(action.id)))
       }, (action: ReaderBottomActionConfig) => action.id)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(18)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(18)
   }
 
   /**
@@ -2151,10 +2157,10 @@ export struct ReaderPage {
           .fontColor(config.enabled ? '#E5E6EB' : '#777984')
         if ((this.getMoreAction(config.id)?.scopeLabel ?? '').length > 0) {
           Text(this.getMoreAction(config.id)?.scopeLabel ?? '')
-            .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
+            .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
         }
         if (this.getMoreAction(config.id)?.migrated === false) {
-          Text('未迁移').fontSize(10).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
+          Text('未迁移').fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
         }
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
       Stack({ alignContent: Alignment.Center }) {
@@ -2235,7 +2241,7 @@ export struct ReaderPage {
             .backgroundColor('#B9C6FF').borderRadius(18)
             .onClick(() => this.moreActionShellVisible = false)
         }.width('100%').justifyContent(FlexAlign.End).margin({ top: 20 })
-      }.width('86%').padding(18).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(20)
+      }.width('86%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
     }.width('100%').height('100%')
   }
 
@@ -4553,9 +4559,9 @@ export struct ReaderPage {
               Text('×').fontSize(23).fontColor('#C8C9D0').onClick(() => this.autoPageSettingsVisible = false)
             }.width('100%').padding({ bottom: 18 })
             Row() {
-              Text('翻页间隔').fontSize(14).fontColor($r('app.color.theme_text_secondary'))
+              Text('翻页间隔').fontSize(14).fontColor(this.themeColorTextSecondary)
               Blank()
-              Text(`${this.autoReadSpeedSeconds} 秒`).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
+              Text(`${this.autoReadSpeedSeconds} 秒`).fontSize(14).fontColor(this.themeColorTextSecondary)
             }.width('100%')
             Slider({ value: this.autoReadSpeedSeconds, min: 1, max: 120, step: 1, style: SliderStyle.InSet })
               .width('100%').selectedColor('#B9C6FF').trackColor('#565A6B').blockColor('#B9C6FF')
@@ -4598,7 +4604,7 @@ export struct ReaderPage {
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Text(`${this.getChapterIndex() + 1} / ${this.getChapterCount()}`)
                 .fontSize(11).fontColor('#E5E6EB').padding({ left: 10, right: 10, top: 7, bottom: 7 })
-                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(16)
+                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(16)
             }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
             Grid() {
               ForEach(this.getVisibleMoreActions(), (action: ReaderMoreAction) => {
@@ -4617,7 +4623,7 @@ export struct ReaderPage {
                       .fontSize(11).fontColor('#E1DADD').textAlign(TextAlign.Center)
                       .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                     if (!action.migrated) {
-                      Text('未迁移').fontSize(9).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 2 })
+                      Text('未迁移').fontSize(9).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                     }
                   }.width('100%').height(100).justifyContent(FlexAlign.Center)
                     .backgroundColor('#202127').borderRadius(16)
@@ -4628,7 +4634,7 @@ export struct ReaderPage {
               .width('100%').padding({ left: 16, right: 16, bottom: 16 }).layoutWeight(1)
               .scrollBar(BarState.Off)
           }
-          .width('100%').height('52%').backgroundColor($r('app.color.theme_surface_secondary'))
+          .width('100%').height('52%').backgroundColor(this.themeColorSurfaceSecondary)
           .borderRadius({ topLeft: 26, topRight: 26 })
         }
         .width('100%')
@@ -4655,7 +4661,7 @@ export struct ReaderPage {
                 .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
                 .onClick(() => this.chooseImageStyle(style.id))
             }, (style: ReaderImageStyleOption) => style.id)
-          }.width('86%').padding(16).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(20)
+          }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
         }.width('100%').height('100%')
       }
 
@@ -4687,7 +4693,7 @@ export struct ReaderPage {
               .borderRadius(10).padding(12)
               .onChange((value: string) => this.contentEditBody = value)
             Row() {
-              Text('还原').fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1).textAlign(TextAlign.Center)
+              Text('还原').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
                 .onClick(() => {
                   this.contentEditTitle = this.chapterTitle;
                   this.contentEditBody = this.content;
@@ -4702,7 +4708,7 @@ export struct ReaderPage {
                 })
             }.width('100%').padding({ top: 14 })
           }
-          .width('92%').height('76%').padding(18).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(22)
+          .width('92%').height('76%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(22)
           .onClick(() => {})
         }.width('100%').height('100%')
       }
@@ -4776,7 +4782,7 @@ export struct ReaderPage {
                 .onClick(() => this.applyCharset())
             }.width('100%').margin({ top: 12 })
           }
-          .width('86%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(20)
+          .width('86%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(20)
         }
         .width('100%').height('100%')
       }

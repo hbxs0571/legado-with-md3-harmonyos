@@ -7,6 +7,12 @@ interface DiscoverSourceDemo {
 
 @Component
 export struct DiscoverPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
@@ -48,7 +54,7 @@ export struct DiscoverPage {
             })
         }, (group: string) => group)
       }
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private getVisibleSources(): DiscoverSourceDemo[] {
@@ -68,7 +74,7 @@ export struct DiscoverPage {
         if (!this.showExploreContent) {
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'search', glyphSize: 20 })
-          }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18)
+          }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
             .onClick(() => {
               this.showSearch = !this.showSearch;
               if (!this.showSearch) {
@@ -78,7 +84,7 @@ export struct DiscoverPage {
         }
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'swap', glyphSize: 20 })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).margin({ left: 8 })
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
           .onClick(() => {
             this.showExploreContent = !this.showExploreContent;
             this.expandedSourceName = '';
@@ -87,12 +93,12 @@ export struct DiscoverPage {
           })
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 20 })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(18).margin({ left: 8 })
+        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
           .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
       }.width('100%').height(48).padding({ left: 18, right: 18 })
 
       Column() {
-        Text('发现').fontSize(28).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
+        Text('发现').fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
         if (!this.showExploreContent) {
           Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
         }
@@ -106,29 +112,29 @@ export struct DiscoverPage {
               placeholder: '搜索',
               text: this.searchQuery
             })
-              .height(48).fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+              .height(48).fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(Color.Transparent).layoutWeight(1)
               .id('discover_search_input')
               .onAppear(() => focusControl.requestFocus('discover_search_input'))
               .onChange((value: string) => this.searchQuery = value)
           }.layoutWeight(1).height(48).padding({ left: 14, right: 14 })
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(24).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(24).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       }
 
       if (this.showExploreContent) {
         Column() {
-          Text(this.currentEmptyFace).fontSize(26).fontColor($r('app.color.theme_text_secondary')).margin({ bottom: 8 })
+          Text(this.currentEmptyFace).fontSize(26).fontColor(this.themeColorTextSecondary).margin({ bottom: 8 })
             .onClick(() => this.currentEmptyFace = this.pickEmptyFace())
-          Text('当前没有发现源！').fontSize(14).fontColor($r('app.color.theme_text_secondary')).maxLines(2)
+          Text('当前没有发现源！').fontSize(14).fontColor(this.themeColorTextSecondary).maxLines(2)
             .textAlign(TextAlign.Center)
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
           .offset({ y: 0 })
       } else if (this.getVisibleSources().length === 0) {
         Column() {
-          Text(this.currentEmptyFace).fontSize(26).fontColor($r('app.color.theme_text_secondary')).margin({ bottom: 8 })
+          Text(this.currentEmptyFace).fontSize(26).fontColor(this.themeColorTextSecondary).margin({ bottom: 8 })
             .onClick(() => this.currentEmptyFace = this.pickEmptyFace())
-          Text('当前没有发现源！').fontSize(14).fontColor($r('app.color.theme_text_secondary')).maxLines(2)
+          Text('当前没有发现源！').fontSize(14).fontColor(this.themeColorTextSecondary).maxLines(2)
             .textAlign(TextAlign.Center)
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
           .offset({ y: this.showSearch ? -35 : 0 })
@@ -138,9 +144,9 @@ export struct DiscoverPage {
             ForEach(this.getVisibleSources(), (source: DiscoverSourceDemo) => {
               Column() {
                 Row() {
-                  Text(source.name).fontSize(16).fontColor($r('app.color.theme_text_secondary')).maxLines(2)
+                  Text(source.name).fontSize(16).fontColor(this.themeColorTextSecondary).maxLines(2)
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-                  Image($r('app.media.reader_next')).width(20).height(20).fillColor(this.expandedSourceName === source.name ? $r('app.color.theme_accent') : '#C5C7D0')
+                  Image($r('app.media.reader_next')).width(20).height(20).fillColor(this.expandedSourceName === source.name ? this.themeColorAccent : '#C5C7D0')
                     .rotate({ angle: this.expandedSourceName === source.name ? 90 : 0 })
                     .animation({ duration: 200, curve: Curve.EaseInOut })
                 }.width('100%').padding({ left: 14, right: 12, top: 14, bottom: 14 })
@@ -152,26 +158,26 @@ export struct DiscoverPage {
                   })
                 if (this.expandedSourceName === source.name) {
                   Row() {
-                    AppGlyph({ name: 'list', glyphSize: 17, tint: $r('app.color.theme_accent') }).margin({ right: 8 })
+                    AppGlyph({ name: 'list', glyphSize: 17, tint: this.themeColorAccent }).margin({ right: 8 })
                     Text('来源分类由书源规则提供，尚未接入')
-                      .fontSize(14).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1)
+                      .fontSize(14).fontColor(this.themeColorTextTertiary).layoutWeight(1)
                   }.width('100%').padding({ left: 14, right: 14, top: 11, bottom: 13 })
                     .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseInOut }))
                 }
-              }.width('100%').backgroundColor(this.expandedSourceName === source.name ? '#383D50' : $r('app.color.theme_surface_elevated'))
+              }.width('100%').backgroundColor(this.expandedSourceName === source.name ? '#383D50' : this.themeColorSurfaceElevated)
                 .borderRadius(13).margin({ bottom: 8 })
                 .animation({ duration: 200, curve: Curve.EaseInOut })
             }, (source: DiscoverSourceDemo) => source.name)
             if (this.getVisibleSources().length === 0) {
               Column() {
-                Text('没有匹配的书源').fontSize(16).fontColor($r('app.color.theme_text_secondary'))
+                Text('没有匹配的书源').fontSize(16).fontColor(this.themeColorTextSecondary)
                 Text('调整搜索内容后重试').fontSize(14).fontColor('#858792').margin({ top: 8 })
               }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
             }
           }.padding({ left: 16, right: 16, bottom: 16 }).constraintSize({ minHeight: '100%' })
         }.layoutWeight(1).scrollBar(BarState.Off)
       }
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 }

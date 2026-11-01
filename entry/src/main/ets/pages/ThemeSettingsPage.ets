@@ -1,6 +1,7 @@
 import { AppGlyph } from '../components/AppGlyph';
 import { appFontDisplayName } from '../data/AppFontSettings';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
+import { resolvePaletteColors, THEME_PALETTES, ThemePaletteDefinition } from '../data/ThemePalette';
 import {
   BOOK_INFO_BACKGROUND_OFF,
   BOOK_INFO_BACKGROUND_OFF_FOR_DEFAULT,
@@ -41,6 +42,14 @@ import {
 
 @Component
 export struct ThemeSettingsPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -51,8 +60,10 @@ export struct ThemeSettingsPage {
   @Prop paletteIndex: number = 0;
   /** 用户选了深色模式三选项之一，参数是三值字符串。 */
   onThemeModeChange: (themeMode: string) => void = (_themeMode: string) => {};
-  /** 用户选了调色板，参数是序号 0..4。 */
+  /** 用户选了调色板，参数是序号 0..13（对齐上游 `appTheme` 的 14 个取值）。 */
   onPaletteChange: (paletteIndex: number) => void = (_paletteIndex: number) => {};
+  /** 当前是否深色，用于调色板预览色按日/夜取值；由 Index 传入（`ThemeModeResolver.isDarkTheme` 派生）。 */
+  @Prop readerNightMode: boolean = false;
   /** 全局字体缩放 8..16（10 = 1.0x），对齐上游 `AppShellSettings.kt:5 fontScale`。 */
   @Prop fontScale: number = 10;
   /** 是否显示状态栏，对齐上游 `AppShellSettings.kt:10 showStatusBar`。 */
@@ -247,20 +258,24 @@ export struct ThemeSettingsPage {
     }
   }
 
+  /**
+   * 调色板预览色：查 `data/ThemePalette.ets` 的 14 套表。
+   *
+   * 上游 `ThemeColorButton`（`ThemeConfigScreen.kt:1077`）用 `getThemeColorPalette(...)` 现算一套配色，
+   * 卡片底色取 `surfaceContainer`、48dp 圆上半圆取 `secondary`、下半圆取 `tertiary`、中心 24dp 圆取 `primary`。
+   * 本地照抄这四处取色，日间/夜间按当前 `themeMode` 派生，所以点「深色」后预览色块也跟着换。
+   */
   private paletteColor(index: number): string {
-    if (index === 0) { return '#B9C8FF'; }
-    if (index === 1) { return '#A6D28A'; }
-    if (index === 2) { return '#F4D45E'; }
-    if (index === 3) { return '#B7B8BC'; }
-    return '#85B7FF';
+    return resolvePaletteColors(index, this.readerNightMode).surfaceContainer;
   }
 
-  private paletteDarkColor(index: number): string {
-    if (index === 0) { return '#5C637F'; }
-    if (index === 1) { return '#315449'; }
-    if (index === 2) { return '#665C32'; }
-    if (index === 3) { return '#55565A'; }
-    return '#385C8A';
+  private paletteArcColor(index: number, upper: boolean): string {
+    const colors = resolvePaletteColors(index, this.readerNightMode);
+    return upper ? colors.secondary : colors.tertiary;
+  }
+
+  private paletteCenterColor(index: number): string {
+    return resolvePaletteColors(index, this.readerNightMode).primary;
   }
 
   /** 封面背景模式的中文文案，对齐上游 `values-zh-rCN/strings.xml:1751-1753`。 */
@@ -386,7 +401,7 @@ export struct ThemeSettingsPage {
       },
       secondaryButton: {
         value: '恢复',
-        fontColor: $r('app.color.theme_accent'),
+        fontColor: this.themeColorAccent,
         action: () => this.onResetDefaults()
       }
     });
@@ -402,19 +417,19 @@ export struct ThemeSettingsPage {
       Column() {
         Row() {
           Stack({ alignContent: Alignment.Center }) {
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
           }.width(40).height(40).onClick(() => this.onBack())
-          Text('外观').fontSize(22).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+          Text('外观').fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
             .opacity(this.collapsedHeader ? 1 : 0)
           Blank()
         }.width('100%').height(64).padding({ left: 12, right: 16 })
-        Text('外观').fontSize(28).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+        Text('外观').fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .width('100%').height(72).padding({ left: 16, bottom: 14 })
           .opacity(this.collapsedHeader ? 0 : 1)
       }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
         .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
           : (this.themeAppBackground.length > 0 ? Color.Transparent
-            : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))))
+            : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)))
         .backdropBlur(this.themeTopBarBlurRadius)
 
       Scroll(this.themeScroller) {
@@ -423,31 +438,31 @@ export struct ThemeSettingsPage {
             Column() {
               Row().width(54).height(12).backgroundColor('#AEB0B8').borderRadius(6)
               Column() {
-                Row().width(30).height(5).backgroundColor($r('app.color.theme_accent')).borderRadius(3)
-                Row().width(42).height(7).backgroundColor($r('app.color.theme_text_secondary')).borderRadius(4).margin({ top: 8 })
+                Row().width(30).height(5).backgroundColor(this.themeColorAccent).borderRadius(3)
+                Row().width(42).height(7).backgroundColor(this.themeColorTextSecondary).borderRadius(4).margin({ top: 8 })
                 Row().width(34).height(6).backgroundColor('#858792').borderRadius(3).margin({ top: 5 })
               }.width(62).height(95).padding(9).margin({ top: 8 }).backgroundColor('#454B62').borderRadius(8)
                 .alignItems(HorizontalAlign.Start)
             }.width('100%').alignItems(HorizontalAlign.Start)
             Blank().layoutWeight(1)
             Row() {
-              Row().width(28).height(8).backgroundColor(this.paletteColor(this.paletteIndex)).borderRadius(5)
+              Row().width(28).height(8).backgroundColor(this.themeColorAccent).borderRadius(5)
               Blank()
-              Row().width(14).height(14).backgroundColor(this.paletteColor(this.paletteIndex)).borderRadius(7)
+              Row().width(14).height(14).backgroundColor(this.themeColorAccent).borderRadius(7)
             }.width('100%').padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(10)
-          }.width(112).height(224).padding(10).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(22)
-            .border({ width: 1, color: $r('app.color.theme_accent') })
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(10)
+          }.width(112).height(224).padding(10).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(22)
+            .border({ width: 1, color: this.themeColorAccent })
             .alignSelf(ItemAlign.Center).margin({ top: 18, bottom: 16 })
 
           if (this.showRefactorTip) {
             Row() {
               Text('仍有部分界面未用Compose重构，这些界面会与大部分界面有较大差异。')
-                .fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+                .fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               AppGlyph({ name: 'profileClose', glyphSize: 18, tint: '#C5C7D0' })
                 .onClick(() => this.showRefactorTip = false)
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
-              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(16)
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16)
               .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
@@ -460,26 +475,32 @@ export struct ThemeSettingsPage {
             ThemeModeItem({ title: '深色', selected: this.themeMode === '2', last: true,
               onSelect: () => this.onThemeModeChange('2') })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, bottom: 18 })
-            .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+            .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
-          Row() {
-            ForEach([0, 1, 2, 3, 4], (index: number) => {
-              ThemePaletteItem({
-                index: index,
-                title: index === 0 ? '动态取色' : (index === 1 ? '草野' : (index === 2 ? '柠檬' : (index === 3 ? '黑白' : '晴空'))),
-                lightColor: this.paletteColor(index),
-                darkColor: this.paletteDarkColor(index),
-                selected: this.paletteIndex === index,
-                onSelect: () => this.onPaletteChange(index)
-              })
-            }, (index: number) => index.toString())
-          }.width('100%').padding({ left: 16, right: 16, bottom: 20 })
+          // 上游是 `LazyRow`（横向滚动、间距 16dp），14 项一屏放不下，所以横向 Scroll + 每项 64vp 固定宽。
+          Scroll() {
+            Row() {
+              ForEach(THEME_PALETTES, (palette: ThemePaletteDefinition) => {
+                ThemePaletteItem({
+                  index: palette.index,
+                  title: palette.name,
+                  surfaceColor: this.paletteColor(palette.index),
+                  upperColor: this.paletteArcColor(palette.index, true),
+                  lowerColor: this.paletteArcColor(palette.index, false),
+                  centerColor: this.paletteCenterColor(palette.index),
+                  selected: this.paletteIndex === palette.index,
+                  onSelect: () => this.onPaletteChange(palette.index)
+                })
+              }, (palette: ThemePaletteDefinition) => palette.index.toString())
+            }.padding({ left: 16, right: 16 })
+          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+            .width('100%').align(Alignment.Start).padding({ bottom: 20 })
 
           Column() {
             Row() {
               Column() {
-                Text('纯黑深色模式').fontSize(16).fontColor($r('app.color.theme_text_secondary'))
-                Text('使用纯黑阅读背景').fontSize(13).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+                Text('纯黑深色模式').fontSize(16).fontColor(this.themeColorTextSecondary)
+                Text('使用纯黑阅读背景').fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               Toggle({ type: ToggleType.Switch, isOn: this.pureBlack })
                 .onChange((enabled: boolean) => this.onPureBlackChange(enabled))
@@ -504,8 +525,8 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             Column() {
               Row() {
-                Text('字体大小').fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
-                Text(`${(this.fontScale / 10).toFixed(1)}x`).fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
+                Text('字体大小').fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text(`${(this.fontScale / 10).toFixed(1)}x`).fontSize(14).fontColor(this.themeColorTextTertiary)
               }.width('100%')
               Slider({ value: this.fontScale, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
                 .width('100%').onChange((value: number) => this.onFontScaleChange(value))
@@ -527,7 +548,7 @@ export struct ThemeSettingsPage {
               ThemeItemDivider()
               ThemeSettingsOption({ title: '移除背景图片', detail: '同时清空日间与夜间', onSelect: () => { this.onClearBackgroundImage(false); this.onClearBackgroundImage(true); } })
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '主界面' }).margin({ top: 20 })
           Column() {
@@ -559,12 +580,12 @@ export struct ThemeSettingsPage {
                 })
                 ThemeItemDivider()
                 // 拖排顺序：上游用可拖列表，本地用上下移两枚按钮承接同一个 onSetOrder。
-                Text('主导航顺序').fontSize(16).fontColor($r('app.color.theme_text_secondary')).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
+                Text('主导航顺序').fontSize(16).fontColor(this.themeColorTextSecondary).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
                 ForEach(orderedMainNavigation(this.mainNavigationOrder), (navRoute: string) => {
                   Row() {
-                    Text(mainNavigationLabel(navRoute)).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1)
-                    Button('上移').fontSize(13).height(32).backgroundColor($r('app.color.theme_surface_tertiary')).fontColor($r('app.color.theme_text_secondary')).onClick(() => this.onNavigationMove(navRoute, true))
-                    Button('下移').fontSize(13).height(32).margin({ left: 8 }).backgroundColor($r('app.color.theme_surface_tertiary')).fontColor($r('app.color.theme_text_secondary')).onClick(() => this.onNavigationMove(navRoute, false))
+                    Text(mainNavigationLabel(navRoute)).fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+                    Button('上移').fontSize(13).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
+                    Button('下移').fontSize(13).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
                   }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 })
                 }, (navRoute: string) => navRoute)
               }
@@ -673,7 +694,7 @@ export struct ThemeSettingsPage {
             ThemeSettingsOption({ title: '导航布局', detail: '', onSelect: () => this.onUnavailableAction('导航布局设置尚未迁移') })
             ThemeItemDivider()
             ThemeSettingsOption({ title: '多窗布局', detail: '', onSelect: () => this.onUnavailableAction('多窗布局设置尚未迁移') })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '书籍详情页' }).margin({ top: 20 })
           Column() {
@@ -682,7 +703,7 @@ export struct ThemeSettingsPage {
             ThemeSettingsDropdown({ title: '网络封面背景设置', value: this.bookInfoNetworkCoverBackground, options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
             ThemeItemDivider()
             ThemeSettingsDropdown({ title: '默认封面背景设置', value: this.bookInfoDefaultCoverBackground, options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '护眼模式' }).margin({ top: 20 })
           Column() {
@@ -709,7 +730,7 @@ export struct ThemeSettingsPage {
                   .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               }
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '模糊效果' }).margin({ top: 20 })
           Column() {
@@ -719,7 +740,7 @@ export struct ThemeSettingsPage {
               ThemeSwitchRow({ title: '启用渐变模糊', checked: this.enableProgressiveBlur, onChange: (value: boolean) => this.onEnableProgressiveBlurChange(value) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '容器设置' }).margin({ top: 20 })
           Column() {
@@ -809,21 +830,22 @@ export struct ThemeSettingsPage {
               })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           Column() {
             ThemeSettingsOption({ title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.confirmResetDefaults() })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ top: 4, bottom: 18 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct ThemeSectionTitle {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop title: string = '';
   build() {
-    Text(this.title).fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
+    Text(this.title).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
       .alignSelf(ItemAlign.Start).margin({ left: 18, bottom: 9 })
   }
 }
@@ -847,53 +869,70 @@ struct ThemeModeItem {
 
 @Component
 struct ThemePaletteItem {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @Prop index: number = 0;
   @Prop title: string = '';
-  @Prop lightColor: string = '#B9C8FF';
-  @Prop darkColor: string = '#5C637F';
+  /** 卡片底色，取该套配色的 `surfaceContainer`（上游 `CardDefaults.cardColors(containerColor = colors.surfaceContainer)`）。 */
+  @Prop surfaceColor: string = '#F0F1F5';
+  /** 48dp 圆的上半圆，取 `secondary`。 */
+  @Prop upperColor: string = '#5F74B8';
+  /** 48dp 圆的下半圆，取 `tertiary`。 */
+  @Prop lowerColor: string = '#4A5FA8';
+  /** 中心 24dp 圆，取 `primary`。 */
+  @Prop centerColor: string = '#3F5BD9';
   @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   build() {
     Column() {
+      // 上游卡片 64dp、圆角 16dp，选中时 2dp `primary` 描边；本地 56vp 与既有尺寸一致。
       Stack({ alignContent: Alignment.Center }) {
-        Row() {
-          Column().layoutWeight(1).height(42).backgroundColor(this.lightColor)
-          Column().layoutWeight(1).height(42).backgroundColor(this.darkColor)
-        }.width(42).height(42).borderRadius(21)
-        Column().width(20).height(20).backgroundColor(this.lightColor).borderRadius(10)
+        // 用上下两个 42×21 的半圆拼出 42dp 圆：上半 `secondary`、下半 `tertiary`，中心再叠 20dp `primary`。
+        Column() {
+          Row().width(42).height(21).backgroundColor(this.upperColor)
+            .borderRadius({ topLeft: 21, topRight: 21 })
+          Row().width(42).height(21).backgroundColor(this.lowerColor)
+            .borderRadius({ bottomLeft: 21, bottomRight: 21 })
+        }.width(42).height(42).borderRadius(21).clip(true)
+        Column().width(20).height(20).backgroundColor(this.centerColor).borderRadius(10)
         if (this.selected) {
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#20212A' })
-          }.width(34).height(34).backgroundColor($r('app.color.theme_accent')).borderRadius(17)
+          }.width(34).height(34).backgroundColor(this.themeColorAccent).borderRadius(17)
         }
-      }.width(56).height(56).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
-        .border({ width: this.selected ? 2 : 0, color: $r('app.color.theme_accent') }).onClick(() => this.onSelect())
-      Text(this.title).fontSize(11).fontColor(this.selected ? $r('app.color.theme_accent') : '#C5C7D0')
+      }.width(56).height(56).backgroundColor(this.surfaceColor).borderRadius(14)
+        .border({ width: this.selected ? 2 : 0, color: this.themeColorAccent }).onClick(() => this.onSelect())
+      Text(this.title).fontSize(11)
+        .fontColor(this.selected ? this.themeColorAccent : this.themeColorTextPrimary)
         .textAlign(TextAlign.Center).margin({ top: 8 })
-    }.layoutWeight(1).alignItems(HorizontalAlign.Center)
+    }.width(64).alignItems(HorizontalAlign.Center).margin({ right: 16 })
   }
 }
 
 @Component
 struct ThemeSettingsOption {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   onSelect: () => void = () => {};
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary'))
+        Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
         if (this.detail.length > 0) {
-          Text(this.detail).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+          Text(this.detail).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(16).height(16).fillColor($r('app.color.theme_text_tertiary'))
+      Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
     }.padding({ left: 16, right: 16, top: 14, bottom: 14 }).onClick(() => this.onSelect())
   }
 }
 
 @Component
 struct ThemeSwitchRow {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop checked: boolean = false;
@@ -901,9 +940,9 @@ struct ThemeSwitchRow {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary'))
+        Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
         if (this.detail.length > 0) {
-          Text(this.detail).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+          Text(this.detail).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
@@ -915,6 +954,11 @@ struct ThemeSwitchRow {
 /** 下拉行，对齐上游 `DropdownListSettingItem`：点开菜单选一项。 */
 @Component
 struct ThemeSettingsDropdown {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
@@ -946,14 +990,14 @@ struct ThemeSettingsDropdown {
       ForEach(this.options, (option: string) => {
         MenuItem({ content: this.label(option) }).height(48).onClick(() => this.onSelect(option))
       }, (option: string) => option)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(16)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(16)
   }
 
   build() {
     Row() {
-      Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
-      Text(this.label(this.value)).fontSize(14).fontColor($r('app.color.theme_accent'))
-      Image($r('app.media.reader_next')).width(16).height(16).fillColor($r('app.color.theme_text_tertiary'))
+      Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.label(this.value)).fontSize(14).fontColor(this.themeColorAccent)
+      Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
         .margin({ left: 4 })
     }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
       .bindMenu(this.OptionMenu, { placement: Placement.Bottom })
@@ -963,6 +1007,10 @@ struct ThemeSettingsDropdown {
 /** 带数值的滑杆行，用于色温等连续参数；对齐上游 `SliderSettingItem`。 */
 @Component
 struct ThemeSettingsSlider {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop value: number = 0;
@@ -972,20 +1020,20 @@ struct ThemeSettingsSlider {
   build() {
     Column() {
       Row() {
-        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary'))
+        Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
         Blank()
         // 有 detail 时数值只显示在下方说明里，避免「3」与「3vp」重复
         if (this.detail.length === 0) {
-          Text(`${this.value}`).fontSize(12).fontColor($r('app.color.theme_accent'))
+          Text(`${this.value}`).fontSize(12).fontColor(this.themeColorAccent)
         }
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: 1, style: SliderStyle.OutSet })
         .width('100%')
-        .selectedColor($r('app.color.theme_accent'))
-        .trackColor($r('app.color.theme_surface_tertiary'))
+        .selectedColor(this.themeColorAccent)
+        .trackColor(this.themeColorSurfaceTertiary)
         .onChange((value: number) => this.onChange(Math.round(value)))
       if (this.detail.length > 0) {
-        Text(this.detail).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+        Text(this.detail).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
       }
     }.alignItems(HorizontalAlign.Start).width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
   }

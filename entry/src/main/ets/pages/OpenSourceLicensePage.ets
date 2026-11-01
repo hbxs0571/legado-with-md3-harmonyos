@@ -3,6 +3,9 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct OpenSourceLicensePage {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -52,7 +55,7 @@ export struct OpenSourceLicensePage {
 
       Text('应用主体遵循 GPL-3.0；app_home、app_moon、app_share 图标遵循 Apache-2.0。')
         .fontSize(13).lineHeight(19).fontColor('#C6C8D2')
-        .width('100%').padding(14).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(12)
+        .width('100%').padding(14).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
         .margin({ left: 16, right: 16, bottom: 10 })
 
       Row() {
@@ -66,23 +69,26 @@ export struct OpenSourceLicensePage {
         Text(this.loadError).fontSize(14).fontColor('#F0B2A8').padding(16)
       } else {
         Scroll(this.licenseScroller) {
-          Text(this.licenseText).fontSize(12).lineHeight(17).fontColor($r('app.color.theme_text_secondary'))
+          Text(this.licenseText).fontSize(12).lineHeight(17).fontColor(this.themeColorTextSecondary)
             .width('100%').padding(16).textAlign(TextAlign.Start)
         }.layoutWeight(1).width('100%').scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct LicenseChoice {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop title: string = '';
   @Prop selected: boolean = false;
 
   build() {
-    Text(this.title).fontSize(14).fontColor(this.selected ? '#151720' : $r('app.color.theme_text_secondary'))
+    Text(this.title).fontSize(14).fontColor(this.selected ? '#151720' : this.themeColorTextSecondary)
       .padding({ left: 14, right: 14, top: 9, bottom: 9 })
-      .backgroundColor(this.selected ? $r('app.color.theme_accent') : $r('app.color.theme_surface_secondary'))
+      .backgroundColor(this.selected ? this.themeColorAccent : this.themeColorSurfaceSecondary)
       .borderRadius(18).margin({ right: 8 })
   }
 }

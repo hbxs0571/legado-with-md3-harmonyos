@@ -2,6 +2,7 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct AppPrivacySettingsPage {
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -50,12 +51,14 @@ export struct AppPrivacySettingsPage {
             .fontSize(12).fontColor('#D9A6A0').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct PrivacySettingsSection {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop title: string = '';
   @BuilderParam content: () => void = this.emptyContent;
   @Builder
@@ -68,23 +71,25 @@ struct PrivacySettingsSection {
   @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
+      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
         .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
     }
   }
 }
 
 @Component
 struct PrivacySettingsSwitch {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   @State toggleValue: boolean = false;
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary'))
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 }) }
+        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
+        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.toggleValue })
         .onChange((value: boolean) => this.toggleValue = value)
@@ -94,22 +99,27 @@ struct PrivacySettingsSwitch {
 
 @Component
 struct PrivacySettingsAction {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   onSelect: () => void = () => {};
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary'))
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 }) }
+        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
+        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary'))
+      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary)
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.onSelect())
   }
 }
 
 @Component
 struct PrivacySettingsChoice {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop title: string = '';
   @Prop options: string[] = [];
   @Prop selected: number = 0;
@@ -120,9 +130,9 @@ struct PrivacySettingsChoice {
   }
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
-      Text(this.getSelectedLabel()).fontSize(12).fontColor($r('app.color.theme_accent'))
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary')).margin({ left: 6 })
+      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.getSelectedLabel()).fontSize(12).fontColor(this.themeColorAccent)
+      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => {
       if (this.options.length > 0) {
         this.onSelect((this.selected + 1) % this.options.length);

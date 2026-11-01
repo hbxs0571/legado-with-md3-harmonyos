@@ -9,6 +9,13 @@ import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 
 @Component
 export struct BookInfoPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop book: Book = {
@@ -246,40 +253,40 @@ export struct BookInfoPage {
 
           Column() {
             Text(this.book.progress > 0 ? `在读 · ${this.book.lastChapter}` : '尚未开始阅读')
-              .fontSize(19).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
+              .fontSize(19).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
             Text(`最新 · ${this.book.lastChapter.length > 0 ? this.book.lastChapter : '尚无章节信息'}`)
               .fontSize(16).fontColor('#BFC1CB').margin({ top: 8 })
             Row() {
               Text(this.getChapterTotal() > 0 ? `共 ${this.getChapterTotal()} 章` : '章节总数待读取')
-                .fontSize(14).fontColor($r('app.color.theme_accent'))
+                .fontSize(14).fontColor(this.themeColorAccent)
               Text('  |  ').fontSize(14).fontColor('#777B88')
               Text(this.getReadChapterNumber() > 0 ? `已读 ${this.getReadChapterNumber()} 章` : '未读')
-                .fontSize(14).fontColor($r('app.color.theme_accent'))
+                .fontSize(14).fontColor(this.themeColorAccent)
             }.margin({ top: 8 })
             Row() {
               Row().width(`${Math.max(0, Math.min(100, this.book.progress))}%`).height(5)
-                .backgroundColor($r('app.color.theme_accent')).borderRadius(3)
+                .backgroundColor(this.themeColorAccent).borderRadius(3)
               Blank()
             }.width('100%').height(5).backgroundColor('#3A3C46').borderRadius(3).margin({ top: 12 })
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(18).margin({ left: 16, right: 16, bottom: 14 })
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18).margin({ left: 16, right: 16, bottom: 14 })
 
           if (BookRepository.isBodyMissing(this.book)) {
             Column() {
               Text('已恢复书目与阅读位置，缺少正文文件')
                 .fontSize(17).fontWeight(FontWeight.Medium).fontColor('#F0B2A8')
               Text('Android 备份只保存书架记录和阅读位置，不包含 TXT / EPUB 正文。重新选择原书文件后才能继续阅读。')
-                .fontSize(14).lineHeight(21).fontColor($r('app.color.theme_text_secondary')).margin({ top: 8 })
+                .fontSize(14).lineHeight(21).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
               if ((this.book.androidOriginalPath ?? '').length > 0) {
                 Text(`Android 原路径：${this.book.androidOriginalPath ?? ''}`)
-                  .fontSize(12).lineHeight(18).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 8 })
+                  .fontSize(12).lineHeight(18).fontColor(this.themeColorTextTertiary).margin({ top: 8 })
               }
             }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
               .backgroundColor('#2A1D20').borderRadius(16).margin({ left: 16, right: 16, bottom: 14 })
           }
 
           Column() {
-            Text('小说简介').fontSize(20).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
+            Text('小说简介').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
               .alignSelf(ItemAlign.Start)
             if (this.book.description !== undefined && this.book.description.trim().length > 0) {
               Text(this.book.description).fontSize(16).lineHeight(25).fontColor('#D0D2DB')
@@ -292,14 +299,14 @@ export struct BookInfoPage {
                 .margin({ top: 6 })
             }
             if ((this.book.remark ?? '').trim().length > 0) {
-              Text('备注').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+              Text('备注').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
                 .alignSelf(ItemAlign.Start).margin({ top: 16 })
               Text(this.book.remark ?? '').fontSize(14).lineHeight(21).fontColor('#BFC1CB')
                 .alignSelf(ItemAlign.Start).margin({ top: 6 })
             }
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
-          }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
+          }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
         }.width('100%').padding({ bottom: 12 })
       }.width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.infoScroller.currentOffset().yOffset) > 70;
@@ -316,7 +323,7 @@ export struct BookInfoPage {
         BookInfoIconButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
         BookInfoIconButton({ icon: 'more', onSelect: () => this.onUnavailableAction('书籍更多操作尚未迁移') })
       }.width('100%').height(56).padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        .backgroundColor(this.collapsedHeader ? $r('app.color.theme_surface_primary') : '#00000000')
+        .backgroundColor(this.collapsedHeader ? this.themeColorSurfacePrimary : '#00000000')
         .animation({ duration: 220, curve: Curve.EaseInOut })
       }.layoutWeight(1).width('100%').backgroundColor(bookCoverColor(this.book))
 
@@ -374,11 +381,11 @@ export struct BookInfoPage {
                   Text('书架分组（可多选）').fontSize(14).fontColor('#ECEEF2').margin({ bottom: 8 })
                   if (this.groups.filter((group: BookGroup) => group.groupId > 0).length === 0) {
                     Text('暂无自定义分组，可从书架右上角的分组管理中添加')
-                      .fontSize(12).fontColor($r('app.color.theme_text_tertiary'))
+                      .fontSize(12).fontColor(this.themeColorTextTertiary)
                   } else {
                     ForEach(this.groups.filter((group: BookGroup) => group.groupId > 0), (group: BookGroup) => {
                       Row() {
-                        Text(group.groupName).fontSize(13).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+                        Text(group.groupName).fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                         Toggle({ type: ToggleType.Checkbox, isOn: this.metadataGroupNames.includes(group.groupName) })
                           .onChange((selected: boolean) => this.toggleMetadataGroup(group.groupName, selected))
                       }.width('100%').padding({ top: 5, bottom: 5 })
@@ -417,23 +424,24 @@ export struct BookInfoPage {
                 .onClick(() => this.saveMetadata())
             }.width('100%').padding({ top: 12 })
           }
-          .width('90%').height('78%').padding(18).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(22)
+          .width('90%').height('78%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(22)
           .onClick(() => {})
         }.width('100%').height('100%').zIndex(1000)
       }
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct BookTypeChoice {
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @Prop label: string = '';
   @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   build() {
     Text(this.label).fontSize(13).fontColor(this.selected ? '#F1F2F6' : '#C5C7D0')
       .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 9, bottom: 9 })
-      .backgroundColor(this.selected ? '#46476B' : $r('app.color.theme_surface_elevated')).borderRadius(10)
+      .backgroundColor(this.selected ? '#46476B' : this.themeColorSurfaceElevated).borderRadius(10)
       .margin({ right: 6 }).onClick(() => this.onSelect())
   }
 }
@@ -452,9 +460,10 @@ struct BookInfoIconButton {
 
 @Component
 struct BookInfoTag {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop label: string = '';
   build() {
-    Text(this.label).fontSize(13).fontColor($r('app.color.theme_text_secondary'))
+    Text(this.label).fontSize(13).fontColor(this.themeColorTextSecondary)
       .padding({ left: 10, right: 10, top: 6, bottom: 6 })
       .backgroundColor('#171820').borderRadius(14).margin({ right: 8 })
   }
@@ -462,6 +471,8 @@ struct BookInfoTag {
 
 @Component
 struct BookInfoAction {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop icon: AppGlyphName = 'book';
@@ -469,11 +480,11 @@ struct BookInfoAction {
   onSelect: () => void = () => {};
   build() {
     Column() {
-      AppGlyph({ name: this.icon, glyphSize: 20, tint: $r('app.color.theme_text_secondary') }).margin({ bottom: 7 })
-      Text(this.label).fontSize(12).fontColor($r('app.color.theme_text_secondary')).maxLines(1)
+      AppGlyph({ name: this.icon, glyphSize: 20, tint: this.themeColorTextSecondary }).margin({ bottom: 7 })
+      Text(this.label).fontSize(12).fontColor(this.themeColorTextSecondary).maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }.layoutWeight(1).height(72).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(14).margin({ left: 4, right: 4 })
+      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).margin({ left: 4, right: 4 })
       .onClick(() => this.onSelect())
   }
 }

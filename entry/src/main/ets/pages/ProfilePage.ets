@@ -10,6 +10,12 @@ import { ProfileRoute } from '../model/Book';
 
 @Component
 export struct ProfilePage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
@@ -24,12 +30,12 @@ export struct ProfilePage {
     Column() {
       if (this.collapsedHeader) {
         Row() {
-          Text('我的').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+          Text('我的').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         }.width('100%').height(56).alignItems(VerticalAlign.Center).padding({ left: 16, right: 16 })
-          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       } else {
-        Text('我的').fontSize(28).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
+        Text('我的').fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
           .alignSelf(ItemAlign.Start).padding({ left: 16, right: 16, top: 50, bottom: 38 })
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
@@ -39,10 +45,10 @@ export struct ProfilePage {
             Row() {
               Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'profileWeb', tint: '#C5C7D0', glyphSize: 20 }) }.width(26).height(26)
               Column() {
-                Text('Web 服务').fontSize(PROFILE_ROW_TITLE_SIZE).fontColor($r('app.color.theme_text_secondary'))
+                Text('Web 服务').fontSize(PROFILE_ROW_TITLE_SIZE).fontColor(this.themeColorTextSecondary)
                 Text('用浏览器看书源与书籍').fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor('#AEB0BA').margin({ top: 4 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Text(this.showWebPreview ? '收起' : '预览').fontSize(12).fontColor($r('app.color.theme_accent'))
+              Text(this.showWebPreview ? '收起' : '预览').fontSize(12).fontColor(this.themeColorAccent)
                 .padding({ left: 8, right: 8, top: 8, bottom: 8 })
                 .onClick(() => this.showWebPreview = !this.showWebPreview)
               Toggle({ type: ToggleType.Switch, isOn: false })
@@ -66,16 +72,16 @@ export struct ProfilePage {
             }.width('100%').padding({ left: 10, right: 10, bottom: 8 })
               .height(this.showWebPreview ? 70 : 0).opacity(this.showWebPreview ? 1 : 0)
               .clip(true).animation({ duration: 220, curve: Curve.EaseInOut })
-          }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(14).margin({ bottom: 13 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-          Text('规则').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor($r('app.color.theme_accent')).alignSelf(ItemAlign.Start).margin({ left: 12, bottom: 8 })
+          }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).margin({ bottom: 13 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          Text('规则').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor(this.themeColorAccent).alignSelf(ItemAlign.Start).margin({ left: 12, bottom: 8 })
           Column() {
             ProfileRow({ title: '书源管理', detail: '新建 · 导入 · 编辑或管理书源', onSelect: () => this.onOpenDetail(ProfileRoute.BOOK_SOURCE_MANAGE) })
             ProfileRow({ title: '替换净化', detail: '', onSelect: () => this.onOpenDetail(ProfileRoute.REPLACE_RULES) })
             ProfileRow({ title: 'TXT 目录规则', detail: '', onSelect: () => this.onOpenDetail(ProfileRoute.TXT_TOC_RULES) })
             ProfileRow({ title: '字典规则', detail: '', onSelect: () => this.onOpenDetail(ProfileRoute.DICTIONARY_RULES) })
             ProfileRow({ title: '标签规则', detail: '', last: true, onSelect: () => this.onOpenDetail(ProfileRoute.HIGHLIGHT_TAG_RULES) })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
-          Text('其它').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor($r('app.color.theme_accent')).alignSelf(ItemAlign.Start).margin({ left: 12, top: 16, bottom: 8 })
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
+          Text('其它').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor(this.themeColorAccent).alignSelf(ItemAlign.Start).margin({ left: 12, top: 16, bottom: 8 })
           Column() {
             ProfileRow({ title: 'AI 对话', detail: '', onSelect: () => this.onOpenDetail(ProfileRoute.AI_CHAT) })
             ProfileRow({ title: '设置', detail: '', onSelect: () => this.onOpenDetail(ProfileRoute.APP_SETTINGS) })
@@ -85,7 +91,7 @@ export struct ProfilePage {
             ProfileRow({ title: '文件管理', detail: '', onSelect: () => this.onOpenDetail(ProfileRoute.FILE_MANAGER) })
             ProfileRow({ title: '关于', detail: '', onSelect: () => this.onOpenDetail(ProfileRoute.ABOUT) })
             ProfileRow({ title: '退出', detail: '', last: true, onSelect: () => this.onExit() })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, bottom: 120 }).constraintSize({ minHeight: '100%' })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.profileScroller.currentOffset().yOffset) > 70;
@@ -95,12 +101,15 @@ export struct ProfilePage {
           });
         }
       })
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct ProfileRow {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop icon: string = '';
@@ -129,12 +138,12 @@ struct ProfileRow {
       Row() {
         Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: this.getGlyphName(), tint: '#C5C7D0', glyphSize: 20 }) }.width(34).height(34)
         Column() {
-          Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor($r('app.color.theme_text_secondary'))
-          if (this.detail.length > 0) { Text(this.detail).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 }) }
+          Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor(this.themeColorTextSecondary)
+          if (this.detail.length > 0) { Text(this.detail).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 4 }) }
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Image($r('app.media.reader_next')).width(16).height(16).fillColor('#AEB0BA')
       }.width('100%').padding({ left: 14, right: 14, top: PROFILE_ROW_VERTICAL_PADDING, bottom: PROFILE_ROW_VERTICAL_PADDING })
-      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).margin({ left: 48, right: 14 }) }
+      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).margin({ left: 48, right: 14 }) }
     }.width('100%').onClick(() => this.onSelect())
   }
 }

@@ -1,5 +1,6 @@
 @Component
 export struct ReaderAloudSettingsPage {
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @State followSystem: boolean = true;
   @State rate: number = 40;
   @State musicVolume: number = 100;
@@ -189,7 +190,7 @@ export struct ReaderAloudSettingsPage {
       }
       .width('100%')
       .height('84%')
-      .backgroundColor($r('app.color.theme_surface_secondary'))
+      .backgroundColor(this.themeColorSurfaceSecondary)
       .borderRadius(22)
     }
     .width('100%')
@@ -225,6 +226,7 @@ struct AloudTransportButton {
 
 @Component
 struct AloudBottomAction {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop icon: string = 'reader_settings';
   @Prop label: string = '';
   action: () => void = () => {};
@@ -232,17 +234,17 @@ struct AloudBottomAction {
   build() {
     Column() {
       if (this.icon === 'home') {
-        Image($r('app.media.app_home')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.app_home')).width(21).height(21).fillColor(this.themeColorTextSecondary)
       } else if (this.icon === 'catalog') {
-        Image($r('app.media.reader_toc')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.reader_toc')).width(21).height(21).fillColor(this.themeColorTextSecondary)
       } else if (this.icon === 'hide') {
-        Image($r('app.media.reader_visibility_off')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.reader_visibility_off')).width(21).height(21).fillColor(this.themeColorTextSecondary)
       } else if (this.icon === 'reader_settings') {
-        Image($r('app.media.reader_settings')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.reader_settings')).width(21).height(21).fillColor(this.themeColorTextSecondary)
       } else {
-        Image($r('app.media.reader_voice')).width(21).height(21).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.reader_voice')).width(21).height(21).fillColor(this.themeColorTextSecondary)
       }
-      Text(this.label).fontSize(10).fontColor($r('app.color.theme_text_secondary')).margin({ top: 5 })
+      Text(this.label).fontSize(10).fontColor(this.themeColorTextSecondary).margin({ top: 5 })
     }
     .layoutWeight(1)
     .padding({ top: 5, bottom: 5 })

@@ -46,6 +46,7 @@ import {
 } from '../data/HomeDashboardSettingsRepository';
 import { OnboardingRepository } from '../data/OnboardingRepository';
 import { ThemeSettingsRepository, THEME_MODE_DARK, THEME_MODE_LIGHT, normalizeFontScale, normalizeBookInfoBackground, normalizeThemeColor, FONT_SCALE_DEFAULT, normalizeBackgroundBlur } from '../data/ThemeSettingsRepository';
+import { applyPalette, normalizePaletteIndex } from '../data/ThemePalette';
 import {
   BOTTOM_BAR_BLUR_ALPHA_DEFAULT, BOTTOM_BAR_BLUR_RADIUS_DEFAULT, BOTTOM_BAR_LENS_RADIUS_DEFAULT,
   BOTTOM_BAR_OPACITY_DEFAULT, TOP_BAR_BLUR_ALPHA_DEFAULT, TOP_BAR_BLUR_RADIUS_DEFAULT,
@@ -144,6 +145,9 @@ const EMPTY_BOOK: Book = {
 @Entry
 @Component
 struct Index {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   /** 纯黑是否实际生效（深色 + 用户开启），由 `publishThemeCardStyle` 广播；Index 自身持有开关源状态，故用别名读回。 */
   @StorageProp('themePureBlack') themePureBlackActive: boolean = false;
   @State @Watch('onReaderRouteChanged') route: AppRoute = AppRoute.HOME;
@@ -2815,6 +2819,9 @@ struct Index {
     this.themePaletteIndex = paletteIndex;
     this.readerNightMode = ThemeModeResolver.isDarkTheme(themeMode, ThemeModeResolver.isSystemDark(context));
     ThemeModeResolver.apply(context, themeMode);
+    // 配色跟着日夜走：同一套调色板的日间/夜间色值不同，所以放在 `ThemeModeResolver.apply` 之后广播。
+    // 对齐上游 `ThemeEngine.getColorScheme(context, mode, darkTheme, ...)` 每次换肤都现算一套。
+    applyPalette(context, normalizePaletteIndex(paletteIndex), themeMode);
     // 日夜一变，卡片边框色就要按 baseCardBorderColor(Night) 重选，所以顺带刷新一次。
     this.publishThemeCardStyle();
     this.publishTopBottomBarStyle();
@@ -6149,11 +6156,12 @@ struct Index {
     Column() {
       if (!this.onboardingLoaded) {
         Column() {
-          LoadingProgress().width(28).height(28).color($r('app.color.theme_accent'))
+          LoadingProgress().width(28).height(28).color(this.themeColorAccent)
         }.width('100%').height('100%').justifyContent(FlexAlign.Center)
       } else if (!this.onboardingComplete) {
         OnboardingPage({
           localBooksPath: `${this.getAppFilesDirectory()}/books`,
+          readerNightMode: this.readerNightMode,
           onThemeModeChange: (themeMode: number) => this.selectOnboardingThemeMode(themeMode),
           onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex),
           onComplete: (themeMode: number, paletteIndex: number) => this.finishOnboarding(themeMode, paletteIndex)
@@ -6992,6 +7000,7 @@ struct Index {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             themeMode: this.themeMode,
             paletteIndex: this.themePaletteIndex,
+            readerNightMode: this.readerNightMode,
             fontScale: this.themeFontScale,
             showStatusBarVisible: this.themeShowStatusBar,
             swipeAnimationEnabled: this.themeSwipeAnimation,
@@ -8206,12 +8215,12 @@ struct Index {
           .margin(this.themeUseFloatingBottomBar ? { left: 16, right: 16, bottom: 8 } : 0)
           .borderRadius(this.bottomBarCornerRadius())
           .backgroundColor(this.bottomBarBackgroundColor().length > 0 ? this.bottomBarBackgroundColor()
-            : (this.themePureBlackActive ? '#121212' : $r('app.color.theme_surface_elevated')))
+            : (this.themePureBlackActive ? '#121212' : this.themeColorSurfaceElevated))
           .backdropBlur(this.themeEnableBlur ? this.themeBottomBarBlurRadius : 0)
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
       }
-    }.width('100%').height('100%').backgroundColor(this.appBackgroundSource().length > 0 ? Color.Transparent : (this.themePureBlackActive ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.appBackgroundSource().length > 0 ? Color.Transparent : (this.themePureBlackActive ? '#000000' : this.themeColorSurfacePrimary))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     // 护眼覆盖层：上游用 ColorFilter.colorMatrix 给全屏套对角色矩阵，这里用同尺寸纯色层
     // 配 MULTIPLY 混合，混合公式 result = 内容 × 覆盖色，与对角矩阵逐通道相乘等价。

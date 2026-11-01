@@ -1,5 +1,8 @@
 @Component
 export struct CollapsingSettingsHeader {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   /** 顶栏底色（含不透明度与模糊透明度），由 `Index.publishTopBottomBarStyle()` 广播。 */
@@ -13,19 +16,19 @@ export struct CollapsingSettingsHeader {
   build() {
     Column() {
       Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
           .width(40).height(40).onClick(() => this.onBack())
-        Text(this.title).fontSize(22).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+        Text(this.title).fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .opacity(this.collapsed ? 1 : 0)
         Blank()
       }.width('100%').height(64).padding({ left: 12, right: 16 })
-      Text(this.title).fontSize(28).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text(this.title).fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').height(72).padding({ left: 16, bottom: 14 })
         .opacity(this.collapsed ? 0 : 1)
     }.width('100%').height(this.collapsed ? 64 : 136).clip(true)
       .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
         : (this.themeAppBackground.length > 0 ? Color.Transparent
-          : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))))
+          : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)))
       .backdropBlur(this.themeTopBarBlurRadius)
   }
 }

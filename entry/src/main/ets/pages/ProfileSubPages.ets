@@ -22,6 +22,12 @@ import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 
 @Component
 export struct BookSourceManagePage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -65,21 +71,21 @@ export struct BookSourceManagePage {
       MenuItem({ content: '按启用状态排序' }).onClick(() => this.sortMode = '按启用状态排序')
       MenuItem({ content: this.sortDescending ? '切换为升序' : '切换为降序' })
         .onClick(() => this.sortDescending = !this.sortDescending)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   @Builder
   private GroupFilterSheet() {
     Column() {
       Row() {
-        Text('分组筛选').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+        Text('分组筛选').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text('清除').fontSize(14).fontColor('#B9C8FF').padding({ left: 12, right: 8, top: 8, bottom: 8 })
           .onClick(() => { this.selectedGroup = ''; this.groupFilterQuery = ''; this.showGroupFilter = false; })
       }.width('100%').padding({ left: 20, right: 16, top: 20, bottom: 12 })
       Row() {
         AppGlyph({ name: 'search', glyphSize: 18, tint: '#C5C7D0' }).margin({ right: 9 })
         TextInput({ placeholder: '搜索分组', text: this.groupFilterQuery })
-          .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor('#858792')
+          .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor('#858792')
           .backgroundColor(Color.Transparent).layoutWeight(1)
           .onChange((value: string) => this.groupFilterQuery = value)
       }.margin({ left: 16, right: 16, bottom: 10 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
@@ -88,13 +94,13 @@ export struct BookSourceManagePage {
         Column() {
           ForEach(this.groupFilterOptions(), (option: string) => {
             Row() {
-              Text(option).fontSize(15).fontColor(this.selectedGroup === option ? '#DCE3FF' : $r('app.color.theme_text_secondary'))
+              Text(option).fontSize(15).fontColor(this.selectedGroup === option ? '#DCE3FF' : this.themeColorTextSecondary)
                 .layoutWeight(1)
               if (this.selectedGroup === option) {
                 AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C8FF' })
               }
             }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
-              .backgroundColor(this.selectedGroup === option ? '#41485D' : $r('app.color.theme_surface_tertiary')).borderRadius(12)
+              .backgroundColor(this.selectedGroup === option ? '#41485D' : this.themeColorSurfaceTertiary).borderRadius(12)
               .margin({ left: 16, right: 16, bottom: 7 })
               .onClick(() => {
                 this.selectedGroup = option === '全部' ? '' : option;
@@ -110,26 +116,26 @@ export struct BookSourceManagePage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(18)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
         Column() {
-          Text('书源').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
+          Text('书源').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
           Text(this.selectedGroup.length === 0 ? '全部' : this.selectedGroup)
-            .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+            .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(18)
-          AppGlyph({ name: 'profileFilterAlt', glyphSize: 19, tint: $r('app.color.theme_text_secondary') })
+          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
+          AppGlyph({ name: 'profileFilterAlt', glyphSize: 19, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => { this.groupFilterQuery = ''; this.showGroupFilter = true; })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(18)
-          AppGlyph({ name: 'search', glyphSize: 19, tint: $r('app.color.theme_text_secondary') })
+          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
+          AppGlyph({ name: 'search', glyphSize: 19, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(18)
-          AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') })
+          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
+          AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
         }.width(40).height(40).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 12, right: 12, top: 11, bottom: 9 })
 
@@ -137,11 +143,11 @@ export struct BookSourceManagePage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索书源…', text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(22)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(22)
       }
 
       if (this.selectedGroup.length > 0 || this.searchQuery.length > 0 || this.sortMode !== '手动排序' || this.groupByDomain) {
@@ -149,9 +155,9 @@ export struct BookSourceManagePage {
           Text(this.selectedGroup.length > 0 ? this.selectedGroup : '全部')
             .fontSize(12).fontColor('#DCE3FF').padding({ left: 10, right: 10, top: 5, bottom: 5 })
             .backgroundColor('#41485D').borderRadius(14)
-          Text(this.sortMode).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ left: 8 })
+          Text(this.sortMode).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
           if (this.groupByDomain) {
-            Text('按域名分组').fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ left: 8 })
+            Text('按域名分组').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
           }
         }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 5 })
       }
@@ -167,7 +173,7 @@ export struct BookSourceManagePage {
       }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
         .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 }).alignSelf(ItemAlign.End)
         .onClick(() => this.onUnavailableAction('书源编辑和保存尚未迁移，未创建书源'))
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showGroupFilter, this.GroupFilterSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
@@ -180,6 +186,13 @@ export struct BookSourceManagePage {
 
 @Component
 export struct ReplaceRulesPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -283,7 +296,7 @@ export struct ReplaceRulesPage {
         .onClick(() => this.onSortModeChange('name_asc'))
       MenuItem({ content: '名称降序' })
         .onClick(() => this.onSortModeChange('name_desc'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   /** 规则条目长按菜单：置顶、置底、删除（与上游条目下拉的三项一致）。 */
@@ -296,7 +309,7 @@ export struct ReplaceRulesPage {
         .onClick(() => this.onMoveRule(rule.id, false))
       MenuItem({ content: '删除' })
         .onClick(() => this.requestDelete([rule.id]))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   @Builder
@@ -313,15 +326,15 @@ export struct ReplaceRulesPage {
     } else if (this.ruleActionSheet === 'confirmDelete') {
       // 删除确认：批量删除与长按菜单的单条删除共用，确认前不动数据。
       Column() {
-        Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+        Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .width('100%').padding({ left: 18, right: 18, top: 16, bottom: 10 })
         Text(this.pendingDeleteIds.length > 1
           ? `确定删除选中的 ${this.pendingDeleteIds.length} 条替换规则？删除后可通过导入恢复。`
           : '确定删除这条替换规则？删除后可通过导入恢复。')
-          .fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
+          .fontSize(14).fontColor(this.themeColorTextTertiary)
           .width('100%').padding({ left: 18, right: 18, bottom: 20 })
         Row() {
-          Text('取消').fontSize(15).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1).textAlign(TextAlign.Center)
+          Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 14, bottom: 14 })
             .onClick(() => this.cancelDelete())
           Text('删除').fontSize(15).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
@@ -333,23 +346,23 @@ export struct ReplaceRulesPage {
       Column() {
         Row() {
           Text(this.ruleActionSheet === 'manual' ? '手动输入规则' : '导入替换规则')
-            .fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+            .fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+            AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40).onClick(() => this.ruleActionSheet = '')
         }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
         if (this.ruleActionSheet === 'manual') {
           Column() {
-            Text('粘贴规则文本').fontSize(13).fontColor($r('app.color.theme_text_tertiary')).margin({ bottom: 8 })
+            Text('粘贴规则文本').fontSize(13).fontColor(this.themeColorTextTertiary).margin({ bottom: 8 })
             TextArea({ placeholder: '粘贴 JSON 规则数组或单条规则对象', text: this.manualInput })
-              .fontSize(14).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+              .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor('#22232A').borderRadius(12)
               .width('100%').height(220).padding(12)
               .onChange((value: string) => this.manualInput = value)
             Row() {
-              Text('清空').fontSize(15).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1)
+              Text('清空').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
                 .onClick(() => this.manualInput = '')
-              Text('取消').fontSize(15).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1)
+              Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
                 .onClick(() => { this.manualInput = ''; this.ruleActionSheet = 'import'; })
               Text('导入').fontSize(15).fontColor(this.manualInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
                 .onClick(() => this.submitManualImport())
@@ -358,19 +371,19 @@ export struct ReplaceRulesPage {
         } else {
           Column() {
             Row() {
-              AppGlyph({ name: 'folder', glyphSize: 20, tint: $r('app.color.theme_accent') }).margin({ right: 12 })
+              AppGlyph({ name: 'folder', glyphSize: 20, tint: this.themeColorAccent }).margin({ right: 12 })
               Column() {
-                Text('选择本地文件').fontSize(15).fontColor($r('app.color.theme_text_primary'))
-                Text('支持 JSON、TXT 规则文件').fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+                Text('选择本地文件').fontSize(15).fontColor(this.themeColorTextPrimary)
+                Text('支持 JSON、TXT 规则文件').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start)
             }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
               .backgroundColor('#22232A').borderRadius(12)
               .onClick(() => this.onImportRules('', 'file'))
             Row() {
-              AppGlyph({ name: 'edit', glyphSize: 20, tint: $r('app.color.theme_accent') }).margin({ right: 12 })
+              AppGlyph({ name: 'edit', glyphSize: 20, tint: this.themeColorAccent }).margin({ right: 12 })
               Column() {
-                Text('手动输入').fontSize(15).fontColor($r('app.color.theme_text_primary'))
-                Text('粘贴规则文本或链接').fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+                Text('手动输入').fontSize(15).fontColor(this.themeColorTextPrimary)
+                Text('粘贴规则文本或链接').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start)
             }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
               .backgroundColor('#22232A').borderRadius(12).margin({ top: 8, bottom: 18 })
@@ -522,38 +535,38 @@ export struct ReplaceRulesPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .bindMenu(this.ReplaceRuleMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 })
         .margin({ top: -8 })
 
       Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '替换净化')
-        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索', text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_replace_rule_search')
             .onAppear(() => focusControl.requestFocus('my_replace_rule_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -584,26 +597,26 @@ export struct ReplaceRulesPage {
                 if (this.selectionMode) {
                   AppGlyph({
                     name: this.selectedRuleIds.includes(rule.id) ? 'profileCheck' : 'profileClose',
-                    glyphSize: 20, tint: this.selectedRuleIds.includes(rule.id) ? $r('app.color.theme_accent') : $r('app.color.theme_text_tertiary')
+                    glyphSize: 20, tint: this.selectedRuleIds.includes(rule.id) ? this.themeColorAccent : this.themeColorTextTertiary
                   }).margin({ right: 12 })
                 }
                 Column() {
-                  Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(15).fontColor($r('app.color.theme_text_primary'))
+                  Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(15).fontColor(this.themeColorTextPrimary)
                     .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(`${rule.group} · ${rule.scopeContent ? '正文' : ''}${rule.scopeTitle ? ' 标题' : ''}`)
-                    .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+                    .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                 if (!this.selectionMode) {
                   Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
                     .onChange((enabled: boolean) => this.onToggleRule(rule.id, enabled))
                   // 长按手势留给拖拽排序，条目操作改由「更多」图标触发，与上游条目右侧的更多按钮一致。
                   Stack({ alignContent: Alignment.Center }) {
-                    AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_tertiary') })
+                    AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary })
                   }.width(32).height(32).margin({ left: 4 })
                     .bindMenu(this.RuleRowMenu(rule), { placement: Placement.BottomRight })
                 }
               }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
-                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(14)
+                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
                 .onClick(() => this.selectionMode ? this.toggleSelectedRule(rule.id) : this.onEditRule(rule.id))
             }
           }, (rule: ReplaceRule) => replaceRuleRowKey(rule))
@@ -615,28 +628,28 @@ export struct ReplaceRulesPage {
       if (this.selectionMode) {
         Row() {
           Text(this.selectedRuleIds.length === 0 ? '取消' : `已选择 ${this.selectedRuleIds.length} 项`)
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+            .fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
             .onClick(() => this.exitSelection())
-          Text('全选').fontSize(14).fontColor($r('app.color.theme_accent')).padding({ left: 10, right: 10 })
+          Text('全选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 10, right: 10 })
             .onClick(() => this.selectAllVisible())
-          Text('反选').fontSize(14).fontColor($r('app.color.theme_accent')).padding({ left: 0, right: 10 })
+          Text('反选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 0, right: 10 })
             .onClick(() => this.invertSelection())
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 4 })
         Row() {
           Text('启用').fontSize(14)
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(true))
           Text('停用').fontSize(14).margin({ left: 18 })
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(false))
           Text('置顶').fontSize(14).margin({ left: 18 })
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchMove(true))
           Text('置底').fontSize(14).margin({ left: 18 })
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchMove(false))
           Text('导出').fontSize(14).margin({ left: 18 })
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchExport())
           Blank().layoutWeight(1)
           Text('删除').fontSize(14)
@@ -650,7 +663,7 @@ export struct ReplaceRulesPage {
         .visibility(this.selectionMode ? Visibility.None : Visibility.Visible)
         .onClick(() => this.onOpenEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.ruleActionSheet.length > 0, this.RuleActionSheet(), {
         // 删除确认只有几行文字，用内容自适应高度，避免半屏空白。
         height: this.ruleActionSheet === 'confirmDelete' ? SheetSize.FIT_CONTENT : SheetSize.MEDIUM,
@@ -664,6 +677,12 @@ export struct ReplaceRulesPage {
 
 @Component
 export struct ReplaceRuleEditPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -758,7 +777,7 @@ export struct ReplaceRuleEditPage {
         .onClick(() => this.showPasteAuthorization = true)
       MenuItem({ content: '测试规则' })
         .onClick(() => this.activeSheet = 'test')
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   /**
@@ -793,31 +812,31 @@ export struct ReplaceRuleEditPage {
       // 「清空」「试跑」放在标题栏里：键盘弹出时半模态面板被压到很矮，
       // 只有标题栏始终可见，放在底部或滚动区内都会被裁掉点不到。
       Row() {
-        Text('测试规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
-        Text('清空').fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ right: 18 })
+        Text('测试规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('清空').fontSize(15).fontColor(this.themeColorTextTertiary).margin({ right: 18 })
           .onClick(() => { this.testSource = ''; this.clearRuleTest(); })
         Text('试跑').fontSize(15).fontColor(this.testSource.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
           .margin({ right: 8 })
           .onClick(() => this.runRuleTest())
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 8 })
       Text('只对已保存并启用的正文规则试跑，编辑中的改动需要先保存')
-        .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).width('100%').padding({ left: 18, right: 18, bottom: 10 })
+        .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').padding({ left: 18, right: 18, bottom: 10 })
       Scroll() {
         Column() {
           TextArea({ placeholder: '粘贴一段正文用于试跑', text: this.testSource })
-            .fontSize(14).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor('#22232A').borderRadius(12)
             .width('100%').height(140).padding(12)
             .onChange((value: string) => { this.testSource = value; this.clearRuleTest(); })
           if (this.testHasRun) {
             Text(this.testError).fontSize(13)
-              .fontColor(this.testError.startsWith('当前没有') ? $r('app.color.theme_text_tertiary') : $r('app.color.theme_text_secondary'))
+              .fontColor(this.testError.startsWith('当前没有') ? this.themeColorTextTertiary : this.themeColorTextSecondary)
               .width('100%').textAlign(TextAlign.Start).margin({ top: 16 })
             if (this.testOutput.length > 0) {
-              Text(this.testOutput).fontSize(14).fontColor($r('app.color.theme_text_primary'))
+              Text(this.testOutput).fontSize(14).fontColor(this.themeColorTextPrimary)
                 .width('100%').textAlign(TextAlign.Start).padding(12).margin({ top: 10 })
                 .backgroundColor('#22232A').borderRadius(12)
             }
@@ -836,7 +855,7 @@ export struct ReplaceRuleEditPage {
           MenuItem({ content: group }).onClick(() => this.group = group)
         }
       }, (group: string) => group)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private clipboardJson(): string {
@@ -934,7 +953,7 @@ export struct ReplaceRuleEditPage {
     Column() {
       Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       TextInput({ placeholder: placeholder, text: value })
-        .fontSize(16).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+        .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
         .height(52).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
         .width('100%')
         .onFocus(() => { this.activeField = field; this.keyboardVisible = true; })
@@ -979,25 +998,25 @@ export struct ReplaceRuleEditPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         if (this.keyboardVisible) {
           Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-            AppGlyph({ name: 'profileSave', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40).margin({ right: 8 })
             .onClick(() => this.saveRule())
         }
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 })
         .margin({ top: -8 })
-      Text(this.editingId > 0 ? '编辑替换' : '新建替换').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+      Text(this.editingId > 0 ? '编辑替换' : '新建替换').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 14, right: 0, top: 12, bottom: 0 })
       Scroll() {
         Column() {
@@ -1010,8 +1029,8 @@ export struct ReplaceRuleEditPage {
               }.width('100%')
               Row() {
                 Blank().width(14)
-                Text(this.group).fontSize(15).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
-                AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+                Text(this.group).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextSecondary })
                 Blank().width(14)
               }.width('100%')
               Row().width('calc(100% - 4vp)').height(1).backgroundColor('#898B94').margin({ left: 2, right: 2 })
@@ -1019,7 +1038,7 @@ export struct ReplaceRuleEditPage {
               .backgroundColor('#24252C').borderRadius(8)
               .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
             Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'profileSettings', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+              AppGlyph({ name: 'profileSettings', glyphSize: 20, tint: this.themeColorTextSecondary })
             }.width(48).height(56).onClick(() => { this.activeSheet = 'group'; })
           }.width('100%')
           Blank().height(12)
@@ -1039,7 +1058,7 @@ export struct ReplaceRuleEditPage {
           Column() {
             Text('超时 (ms)').fontSize(14).fontColor('#C3C5CD').width('100%').textAlign(TextAlign.Start)
             TextInput({ text: this.timeout, placeholder: '3000' })
-              .fontSize(16).fontColor($r('app.color.theme_text_primary')).backgroundColor(Color.Transparent)
+              .fontSize(16).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
               .height(30).padding({ left: 0, right: 0 }).width('100%')
               .onFocus(() => { this.activeField = 'timeout'; this.keyboardVisible = true; })
               .onBlur(() => this.keyboardVisible = false)
@@ -1054,7 +1073,7 @@ export struct ReplaceRuleEditPage {
         Scroll() {
           Row() {
             ForEach(['.*', '\\d+', '\\w+', '[]', '()', '^', '$', '|', '{}', '<>'], (symbol: string) => {
-              Text(symbol).fontSize(14).fontColor($r('app.color.theme_text_secondary')).padding({ left: 10, right: 10, top: 7, bottom: 7 })
+              Text(symbol).fontSize(14).fontColor(this.themeColorTextSecondary).padding({ left: 10, right: 10, top: 7, bottom: 7 })
                 .backgroundColor('#303139').borderRadius(18).margin({ right: 7 })
                 .onClick(() => this.insertQuickText(symbol))
             })
@@ -1073,7 +1092,7 @@ export struct ReplaceRuleEditPage {
           .visibility(this.keyboardVisible ? Visibility.Hidden : Visibility.Visible)
           .onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet.length > 0, this.EditPageSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
@@ -1091,6 +1110,9 @@ export struct ReplaceRuleEditPage {
  */
 @Component
 export struct ReplaceRuleGroupSheet {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   /**
    * 初始分组清单。面板是 bindSheet 的 builder 内容，打开期间不会随父级重新构建，
    * 因此不能只靠这个入参刷新，增删改之后由 reloadGroups() 从仓储重新取。
@@ -1154,9 +1176,9 @@ export struct ReplaceRuleGroupSheet {
   build() {
     Column() {
       Row() {
-        Text('分组管理').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+        Text('分组管理').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onClose())
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
       Scroll() {
@@ -1164,7 +1186,7 @@ export struct ReplaceRuleGroupSheet {
           ForEach(this.customGroups(), (group: string) => {
             Column() {
               Row() {
-                Text(group).fontSize(15).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+                Text(group).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
                 AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
                   .onClick(() => {
                     if (this.groupEditing === group) {
@@ -1180,10 +1202,10 @@ export struct ReplaceRuleGroupSheet {
               if (this.groupEditing === group) {
                 Row() {
                   TextInput({ placeholder: '输入新的分组名称', text: this.groupInput })
-                    .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+                    .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
                     .backgroundColor(Color.Transparent).layoutWeight(1).height(44)
                     .onChange((value: string) => this.groupInput = value)
-                  Text('取消').fontSize(13).fontColor($r('app.color.theme_text_tertiary')).padding({ left: 8, right: 8 })
+                  Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary).padding({ left: 8, right: 8 })
                     .onClick(() => this.cancelEditing())
                   Text('保存')
                     .fontSize(13).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
@@ -1202,15 +1224,16 @@ export struct ReplaceRuleGroupSheet {
 
 @Component
 struct ReplaceScopeChip {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop label: string = '';
   @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   build() {
     Row() {
       if (this.selected) {
-        AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: $r('app.color.theme_text_secondary') }).margin({ right: 5 })
+        AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorTextSecondary }).margin({ right: 5 })
       }
-      Text(this.label).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
+      Text(this.label).fontSize(14).fontColor(this.themeColorTextSecondary)
     }.padding({ left: 12, right: 12, top: 7, bottom: 7 })
       .backgroundColor(this.selected ? '#3A4054' : Color.Transparent).borderRadius(12)
       .border({ width: 1, color: '#51535D' }).margin({ right: 8 }).onClick(() => this.onSelect())
@@ -1239,6 +1262,12 @@ export interface RuleListEntry {
 
 @Component
 struct RuleListBody {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop rules: RuleListEntry[] = [];
@@ -1268,7 +1297,7 @@ struct RuleListBody {
         .onClick(() => this.onMoveToEdge(rule.id, false))
       MenuItem({ content: '删除' })
         .onClick(() => this.onDelete(rule.id))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private visibleRules(): RuleListEntry[] {
@@ -1280,9 +1309,9 @@ struct RuleListBody {
   build() {
     if (this.visibleRules().length === 0) {
       Column() {
-        Text('(；′⌒`)').fontSize(32).fontColor($r('app.color.theme_text_primary'))
+        Text('(；′⌒`)').fontSize(32).fontColor(this.themeColorTextPrimary)
         Text(this.query.length > 0 ? '没有匹配的规则' : this.emptyMessage)
-          .fontSize(14).fontColor($r('app.color.theme_text_secondary')).margin({ top: 8 })
+          .fontSize(14).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
     } else {
       Scroll() {
@@ -1291,29 +1320,29 @@ struct RuleListBody {
             Row() {
               if (this.selectionMode) {
                 AppGlyph({ name: this.selectedIds.includes(rule.id) ? 'profileCheck' : 'profileClose',
-                  glyphSize: 20, tint: this.selectedIds.includes(rule.id) ? $r('app.color.theme_accent') : $r('app.color.theme_text_tertiary') })
+                  glyphSize: 20, tint: this.selectedIds.includes(rule.id) ? this.themeColorAccent : this.themeColorTextTertiary })
                   .margin({ right: 12 })
               }
               Column() {
-                Text(rule.title).fontSize(16).fontColor(rule.enabled ? $r('app.color.theme_text_primary') : $r('app.color.theme_text_tertiary'))
-                Text(rule.detail).fontSize(13).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 }).maxLines(2)
+                Text(rule.title).fontSize(16).fontColor(rule.enabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
+                Text(rule.detail).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 4 }).maxLines(2)
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               if (this.sortMode) {
-                Image($r('app.media.reader_reorder_up')).width(18).height(18).fillColor($r('app.color.theme_accent'))
+                Image($r('app.media.reader_reorder_up')).width(18).height(18).fillColor(this.themeColorAccent)
                   .margin({ right: 12 }).onClick(() => this.onMove(rule.id, -1))
-                Image($r('app.media.reader_reorder_down')).width(18).height(18).fillColor($r('app.color.theme_accent'))
+                Image($r('app.media.reader_reorder_down')).width(18).height(18).fillColor(this.themeColorAccent)
                   .onClick(() => this.onMove(rule.id, 1))
               } else if (!this.selectionMode) {
                 // 开关、编辑与更多图标并排；key 里带上 enabled，避免 ArkUI 复用节点导致开关不刷新。
                 Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
                   .onChange((enabled: boolean) => this.onEnabledChange(rule.id, enabled))
-                AppGlyph({ name: 'edit', glyphSize: 18, tint: $r('app.color.theme_accent') }).margin({ left: 8 })
+                AppGlyph({ name: 'edit', glyphSize: 18, tint: this.themeColorAccent }).margin({ left: 8 })
                 Stack({ alignContent: Alignment.Center }) {
-                  AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_tertiary') })
+                  AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary })
                 }.width(32).height(32).margin({ left: 4 })
                   .bindMenu(this.RowMenu(rule), { placement: Placement.BottomRight })
               }
-            }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
+            }.width('100%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
               .margin({ left: 16, right: 16, bottom: 8 })
               .onClick(() => this.selectionMode ? this.onToggle(rule.id) : this.onOpen(rule.id))
               .priorityGesture(LongPressGesture({ duration: 500 }).onAction(() => this.onLongSelect(rule.id)))
@@ -1326,6 +1355,13 @@ struct RuleListBody {
 
 @Component
 export struct TxtTocRulesPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -1587,7 +1623,7 @@ export struct TxtTocRulesPage {
         .onClick(async () => {
           await this.onImportBuiltin();
         })
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   @Builder
@@ -1597,53 +1633,53 @@ export struct TxtTocRulesPage {
         .onClick(() => this.copyRuleToClipboard())
       MenuItem({ content: '粘贴规则' })
         .onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   @Builder
   private ruleEditorSheet() {
     Column() {
       Row() {
-        AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') }).padding({ right: 12 })
+        AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary }).padding({ right: 12 })
           .onClick(() => this.showAddRule = false)
-        Text(this.editingExisting ? '编辑目录规则' : 'TXT 目录规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
-        AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+        Text(this.editingExisting ? '编辑目录规则' : 'TXT 目录规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
           .bindMenu(this.EditMoreMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 18, right: 16, top: 8, bottom: 12 })
       Scroll() {
         Column() {
           Text('名称').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start)
           TextInput({ placeholder: '名称', text: this.ruleName })
-            .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(12).padding(12).width('100%')
+            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.ruleName = value; this.clearRuleTest(); })
           Text('章节正则').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '章节正则', text: this.chapterRegex })
-            .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(12).padding(12).width('100%')
+            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.chapterRegex = value; this.clearRuleTest(); })
           Text('示例').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextArea({ placeholder: '示例', text: this.exampleText })
-            .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(12).height(96).padding(12).width('100%')
+            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).height(96).padding(12).width('100%')
             .onChange((value: string) => { this.exampleText = value; this.clearRuleTest(); })
           Text('分卷正则').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '分卷正则', text: this.volumeRegex })
-            .fontSize(15).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).borderRadius(12).padding(12).width('100%')
+            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.volumeRegex = value; this.clearRuleTest(); })
           if (this.testHasRun) {
             if (this.testError.length > 0) {
               Text(this.testError).fontSize(14).fontColor('#FF8A80').width('100%').textAlign(TextAlign.Start).margin({ top: 14 })
             } else {
               Text(`${this.testResults.filter((item: TxtRuleTestLine) => item.matched).length} / ${this.testResults.length}`)
-                .fontSize(14).fontColor($r('app.color.theme_text_secondary')).width('100%').textAlign(TextAlign.Start).margin({ top: 14, bottom: 6 })
+                .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start).margin({ top: 14, bottom: 6 })
               ForEach(this.testResults, (item: TxtRuleTestLine, index: number) => {
                 Row() {
                   AppGlyph({ name: item.matched ? 'profileCheck' : 'profileClose', glyphSize: 18,
-                    tint: item.matched ? $r('app.color.theme_accent') : '#FF8A80' }).margin({ right: 8 })
+                    tint: item.matched ? this.themeColorAccent : '#FF8A80' }).margin({ right: 8 })
                   Text(item.line.length > 0 ? item.line : '（空行）').fontSize(13)
-                    .fontColor(item.matched ? $r('app.color.theme_text_secondary') : $r('app.color.theme_text_tertiary')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .fontColor(item.matched ? this.themeColorTextSecondary : this.themeColorTextTertiary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                 }.width('100%')
               }, (item: TxtRuleTestLine, index: number) => `txt_rule_test_${index}`)
             }
@@ -1652,8 +1688,8 @@ export struct TxtTocRulesPage {
       }.layoutWeight(1).scrollBar(BarState.Off)
       Row() {
         Row() {
-          AppGlyph({ name: 'profileRunningWithErrors', glyphSize: 20, tint: $r('app.color.theme_text_primary') })
-          Text('测试').fontSize(14).fontColor($r('app.color.theme_text_primary')).margin({ left: 7 })
+          AppGlyph({ name: 'profileRunningWithErrors', glyphSize: 20, tint: this.themeColorTextPrimary })
+          Text('测试').fontSize(14).fontColor(this.themeColorTextPrimary).margin({ left: 7 })
         }.padding({ left: 14, right: 14, top: 10, bottom: 10 }).backgroundColor('#34353D').borderRadius(22)
           .onClick(() => this.runRuleTest())
         if (this.showPasteAuthorization) {
@@ -1729,54 +1765,54 @@ export struct TxtTocRulesPage {
     Column() {
       Blank().height(32)
       Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
           .width(36).onClick(() => this.onBack())
         Blank().layoutWeight(1)
-        AppGlyph({ name: 'search', glyphSize: 19, tint: $r('app.color.theme_text_secondary') }).padding({ left: 8, right: 8 })
+        AppGlyph({ name: 'search', glyphSize: 19, tint: this.themeColorTextSecondary }).padding({ left: 8, right: 8 })
           .onClick(() => {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
-        AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') }).padding({ left: 6, right: 8 })
+        AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary }).padding({ left: 6, right: 8 })
           .bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 18, right: 18 })
       Row() {
         Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : 'TXT 目录规则')
-          .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
+          .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
       }.width('100%').padding({ left: 18, right: 18, top: 12 })
 
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索 TXT 目录规则', text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_txt_toc_search')
             .onAppear(() => focusControl.requestFocus('my_txt_toc_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
       }
 
       if (this.selectionMode) {
         Row() {
           Text(this.selectedRuleIds.length === 0 ? '取消' : `已选择 ${this.selectedRuleIds.length} 项`)
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+            .fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
             .onClick(() => this.exitSelection())
-          Text('全选').fontSize(14).fontColor($r('app.color.theme_accent')).padding({ left: 10, right: 10 })
+          Text('全选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 10, right: 10 })
             .onClick(() => this.selectAllVisible())
-          Text('反选').fontSize(14).fontColor($r('app.color.theme_accent')).padding({ left: 0, right: 10 })
+          Text('反选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 0, right: 10 })
             .onClick(() => this.invertSelection())
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 4 })
         Row() {
           Text('启用').fontSize(14)
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(true))
           Text('停用').fontSize(14).margin({ left: 18 })
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(false))
           Text('导出').fontSize(14).margin({ left: 18 })
-            .fontColor(this.selectedRuleIds.length > 0 ? $r('app.color.theme_accent') : '#5C5E68')
+            .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchExport())
           Blank().layoutWeight(1)
           Text('删除').fontSize(14)
@@ -1821,12 +1857,12 @@ export struct TxtTocRulesPage {
         }.width(56).height(56).backgroundColor('#B9C8FF').borderRadius(28)
           .onClick(() => this.openCreator())
       }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showAddRule, this.ruleEditorSheet(), {
         height: 620,
         dragBar: true,
         showClose: false,
-        backgroundColor: $r('app.color.theme_surface_elevated'),
+        backgroundColor: this.themeColorSurfaceElevated,
         onDisappear: () => this.showAddRule = false
       })
       .bindSheet(this.confirmSheet === 'confirmDelete', this.DeleteConfirmSheet(), {
@@ -1846,15 +1882,15 @@ export struct TxtTocRulesPage {
   @Builder
   private DeleteConfirmSheet() {
     Column() {
-      Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 18, right: 18, top: 16, bottom: 10 })
       Text(this.pendingDeleteIds.length > 1
         ? `确定删除选中的 ${this.pendingDeleteIds.length} 条目录规则？删除后可通过导入恢复。`
         : '确定删除这条目录规则？删除后可通过导入恢复。')
-        .fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
+        .fontSize(14).fontColor(this.themeColorTextTertiary)
         .width('100%').padding({ left: 18, right: 18, bottom: 20 })
       Row() {
-        Text('取消').fontSize(15).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1).textAlign(TextAlign.Center)
+        Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
           .padding({ top: 14, bottom: 14 })
           .onClick(() => this.cancelDelete())
         Text('删除').fontSize(15).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
@@ -1889,6 +1925,13 @@ interface TxtRuleClipboardData {
 
 @Component
 export struct DictionaryRulesPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -1911,7 +1954,7 @@ export struct DictionaryRulesPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyDictionaryRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private async copyDictionaryRule(): Promise<void> {
@@ -1958,12 +2001,12 @@ export struct DictionaryRulesPage {
     Column() {
       Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       if (multiline) {
-        TextArea({ placeholder: '', text: value }).fontSize(16).fontColor($r('app.color.theme_text_primary'))
+        TextArea({ placeholder: '', text: value }).fontSize(16).fontColor(this.themeColorTextPrimary)
           .height(120).backgroundColor('#24252C').borderRadius(8)
           .padding({ left: 14, right: 14, top: 14 }).width('100%')
           .onChange((text: string) => this.updateDictionaryField(field, text))
       } else {
-        TextInput({ placeholder: '', text: value }).fontSize(16).fontColor($r('app.color.theme_text_primary'))
+        TextInput({ placeholder: '', text: value }).fontSize(16).fontColor(this.themeColorTextPrimary)
           .height(54).backgroundColor('#24252C').borderRadius(8)
           .padding({ left: 14, right: 14 }).width('100%')
           .onChange((text: string) => this.updateDictionaryField(field, text))
@@ -1989,12 +2032,12 @@ export struct DictionaryRulesPage {
   private DictionaryRuleSheet() {
     Column() {
       Row() {
-        Text('字典规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+        Text('字典规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'more', glyphSize: 19, tint: $r('app.color.theme_text_secondary') })
+          AppGlyph({ name: 'more', glyphSize: 19, tint: this.themeColorTextSecondary })
         }.width(40).height(40).bindMenu(this.RuleEditorMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
       Scroll() {
@@ -2030,7 +2073,7 @@ export struct DictionaryRulesPage {
       })
       MenuItem({ content: '导入' })
         .onClick(() => this.onUnavailableAction('字典规则导入尚未接入，未导入任何数据'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private toggleSelectedRule(id: string): void {
@@ -2042,46 +2085,46 @@ export struct DictionaryRulesPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 })
         .margin({ top: -8 })
 
       Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '字典规则')
-        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索字典规则', text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_dictionary_rule_search')
             .onAppear(() => focusControl.requestFocus('my_dictionary_rule_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
       }
 
       if (this.selectionMode && this.selectedRuleIds.length > 0) {
         Row() {
-          Text('全选').fontSize(14).fontColor($r('app.color.theme_accent')).onClick(() =>
+          Text('全选').fontSize(14).fontColor(this.themeColorAccent).onClick(() =>
             this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
           Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
             .onClick(() => this.onUnavailableAction('字典规则删除尚未迁移，未更改数据'))
@@ -2100,7 +2143,7 @@ export struct DictionaryRulesPage {
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showRuleEditor, this.DictionaryRuleSheet(), {
         height: SheetSize.LARGE,
         dragBar: true,
@@ -2121,6 +2164,12 @@ interface DictionaryRuleClipboardData {
 
 @Component
 export struct DictionaryRuleEditPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -2135,7 +2184,7 @@ export struct DictionaryRuleEditPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private clipboardJson(): string {
@@ -2191,12 +2240,12 @@ export struct DictionaryRuleEditPage {
       Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       if (multiline) {
         TextArea({ placeholder: '', text: value })
-          .fontSize(16).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+          .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .height(120).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14, top: 14 })
           .width('100%').onChange((text: string) => this.updateField(field, text))
       } else {
         TextInput({ placeholder: '', text: value })
-          .fontSize(16).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+          .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .height(58).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
           .width('100%').onChange((text: string) => this.updateField(field, text))
       }
@@ -2222,16 +2271,16 @@ export struct DictionaryRuleEditPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
-      Text('字典规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+      Text('字典规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 14, right: 0, top: 12 })
       Scroll() {
         Column() {
@@ -2251,12 +2300,19 @@ export struct DictionaryRuleEditPage {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 export struct HighlightTagRulesPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -2284,7 +2340,7 @@ export struct HighlightTagRulesPage {
       })
       MenuItem({ content: '导入' })
         .onClick(() => this.onUnavailableAction('标签规则导入尚未接入，未导入任何数据'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private toggleSelectedRule(id: string): void {
@@ -2297,7 +2353,7 @@ export struct HighlightTagRulesPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyTagRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private async copyTagRule(): Promise<void> {
@@ -2351,28 +2407,28 @@ export struct HighlightTagRulesPage {
   private TagRuleEditorSheet() {
     Column() {
       Row() {
-        Text('添加规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+        Text('添加规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'more', glyphSize: 19, tint: $r('app.color.theme_text_secondary') })
+          AppGlyph({ name: 'more', glyphSize: 19, tint: this.themeColorTextSecondary })
         }.width(40).height(40).bindMenu(this.TagEditorMenu, { placement: Placement.BottomRight })
       }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
       Scroll() {
         Column() {
           Text('标题（可选）').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
-          TextInput({ placeholder: '', text: this.draftTitle }).fontSize(16).fontColor($r('app.color.theme_text_primary'))
+          TextInput({ placeholder: '', text: this.draftTitle }).fontSize(16).fontColor(this.themeColorTextPrimary)
             .height(54).backgroundColor('#24252C').borderRadius(8)
             .padding({ left: 14, right: 14 }).width('100%')
             .onChange((value: string) => this.draftTitle = value)
           Text('匹配规则').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3, top: 8 })
-          TextArea({ placeholder: '', text: this.draftPattern }).fontSize(16).fontColor($r('app.color.theme_text_primary'))
+          TextArea({ placeholder: '', text: this.draftPattern }).fontSize(16).fontColor(this.themeColorTextPrimary)
             .height(120).backgroundColor('#24252C').borderRadius(8)
             .padding({ left: 14, right: 14, top: 14 }).width('100%')
             .onChange((value: string) => this.draftPattern = value)
           Row() {
-            Text('已启用').fontSize(16).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+            Text('已启用').fontSize(16).fontColor(this.themeColorTextPrimary).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.draftEnabled })
               .onChange((value: boolean) => this.draftEnabled = value)
           }.width('100%').padding({ top: 12, bottom: 12 })
@@ -2397,44 +2453,44 @@ export struct HighlightTagRulesPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
       Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '标签规则')
-        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索标签规则', text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_highlight_tag_search')
             .onAppear(() => focusControl.requestFocus('my_highlight_tag_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
       }
 
       if (this.selectionMode && this.selectedRuleIds.length > 0) {
         Row() {
-          Text('全选').fontSize(14).fontColor($r('app.color.theme_accent')).onClick(() =>
+          Text('全选').fontSize(14).fontColor(this.themeColorAccent).onClick(() =>
             this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
           Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
             .onClick(() => this.onUnavailableAction('标签规则删除尚未迁移，未更改数据'))
@@ -2453,7 +2509,7 @@ export struct HighlightTagRulesPage {
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openTagRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showRuleEditor, this.TagRuleEditorSheet(), {
         height: SheetSize.LARGE,
         dragBar: true,
@@ -2474,6 +2530,12 @@ interface HighlightTagRuleClipboardData {
 
 @Component
 export struct HighlightTagRuleEditPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -2488,7 +2550,7 @@ export struct HighlightTagRuleEditPage {
     Menu() {
       MenuItem({ content: '复制规则' }).onClick(() => this.copyRule())
       MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   private clipboardJson(): string {
@@ -2540,33 +2602,33 @@ export struct HighlightTagRuleEditPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
-      Text('添加规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+      Text('添加规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 14, right: 0, top: 12 })
       Scroll() {
         Column() {
           Text('标题（可选）').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
           TextInput({ placeholder: '', text: this.title })
-            .fontSize(16).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .height(58).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 }).width('100%')
             .onChange((value: string) => this.title = value)
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
           Text('匹配规则').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
           TextArea({ placeholder: '', text: this.pattern })
-            .fontSize(16).fontColor($r('app.color.theme_text_primary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .height(120).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14, top: 14 }).width('100%')
             .onChange((value: string) => this.pattern = value)
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
           Row() {
-            Text('已启用').fontSize(16).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
+            Text('已启用').fontSize(16).fontColor(this.themeColorTextPrimary).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.ruleEnabled }).onChange((value: boolean) => this.ruleEnabled = value)
           }.width('100%').padding({ top: 8, bottom: 8 })
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 140 })
@@ -2582,7 +2644,7 @@ export struct HighlightTagRuleEditPage {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
@@ -2620,6 +2682,11 @@ const BOOKMARK_EMPTY_FACES: string[] = [
 
 @Component
 export struct AllBookmarksPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -2745,9 +2812,9 @@ export struct AllBookmarksPage {
   @Builder
   private BookmarkEmptyMessage(message: string) {
     Column() {
-      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(32).fontColor($r('app.color.theme_text_primary'))
+      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(32).fontColor(this.themeColorTextPrimary)
         .textAlign(TextAlign.Center).onClick(() => this.randomizeEmptyFace())
-      Text(message).fontSize(14).fontColor($r('app.color.theme_text_secondary')).textAlign(TextAlign.Center).maxLines(2)
+      Text(message).fontSize(14).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2)
         .margin({ top: 2 })
     }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       .padding({ left: 16, right: 16 })
@@ -2757,27 +2824,27 @@ export struct AllBookmarksPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.handleBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
         if (this.selectedBookKey.length > 0) {
           Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-            AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40).bindMenu(this.BookmarkExportMenu, { placement: Placement.BottomRight })
         }
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
       Text(this.selectedBookKey.length === 0 ? '所有书签' : this.selectedBookTitle)
-        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+        .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
@@ -2787,13 +2854,13 @@ export struct AllBookmarksPage {
           TextInput({ placeholder: this.selectedBookKey.length === 0
             ? '搜索笔记内容'
             : `搜索当前${this.selectedTab === 0 ? '书签' : '笔记'}`, text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_bookmark_search')
             .onAppear(() => focusControl.requestFocus('my_bookmark_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
       }
 
       if (this.selectedBookKey.length > 0) {
@@ -2859,12 +2926,16 @@ export struct AllBookmarksPage {
           }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
         }.layoutWeight(1).scrollBar(BarState.Off)
       }
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct BookmarkOverviewCard {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop book: BookmarkBookSummary = {
     key: '', title: '', author: '', bookmarkCount: 0, noteCount: 0, sourceUrl: '',
     coverUri: '', coverColor: '', coverMark: ''
@@ -2880,13 +2951,13 @@ struct BookmarkOverviewCard {
   build() {
     Row() {
       Column() {
-        Text(this.book.title).fontSize(17).fontColor($r('app.color.theme_text_secondary')).maxLines(2)
-        if (this.book.author.length > 0) { Text(this.book.author).fontSize(14).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 }) }
+        Text(this.book.title).fontSize(17).fontColor(this.themeColorTextSecondary).maxLines(2)
+        if (this.book.author.length > 0) { Text(this.book.author).fontSize(14).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
         // 上游 feature_bookmarks_counts：「%1$d 个书签 · %2$d 个笔记」
-        Text(`${this.book.bookmarkCount} 个书签 · ${this.book.noteCount} 个笔记`).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+        Text(`${this.book.bookmarkCount} 个书签 · ${this.book.noteCount} 个笔记`).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
         // 上游 feature_bookmarks_match_hint：搜索命中笔记时用主色提示「包含匹配笔记，点击查看」
         if (this.matchedMarkingId.length > 0) {
-          Text('包含匹配笔记，点击查看').fontSize(12).fontColor($r('app.color.theme_accent')).margin({ top: 2 })
+          Text('包含匹配笔记，点击查看').fontSize(12).fontColor(this.themeColorAccent).margin({ top: 2 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       // 上游 CoilBookCover width(52.dp)：封面占位与宽度与书架一致
@@ -2898,13 +2969,17 @@ struct BookmarkOverviewCard {
         },
         displayWidth: 52, displayHeight: 73, cornerRadius: 8
       }).margin({ left: 12 })
-    }.width('100%').padding(12).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat).margin({ bottom: 8 })
+    }.width('100%').padding(12).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat).margin({ bottom: 8 })
       .onClick(() => this.onSelect())
   }
 }
 
 @Component
 struct BookmarkEntryCard {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop entry: BookmarkEntrySummary = {
     id: '', bookKey: '', chapterName: '', excerpt: '', note: '', kind: 'bookmark',
     chapterIndex: 0, chapterPosition: 0, sourceUrl: ''
@@ -2919,16 +2994,16 @@ struct BookmarkEntryCard {
       Row() {
         // 上游：章名为空时回退「第 N 章」（feature_bookmarks_chapter_fallback，用 chapterIndex + 1）
         Text(this.entry.chapterName.length > 0 ? this.entry.chapterName : `第 ${this.entry.chapterIndex + 1} 章`)
-          .fontSize(14).fontColor($r('app.color.theme_accent')).maxLines(1).layoutWeight(1)
+          .fontSize(14).fontColor(this.themeColorAccent).maxLines(1).layoutWeight(1)
         // 上游 marks_other_source：`bookUrl.isNotBlank() && bookUrl != book?.bookUrl`
         // 记录属于别的书源时标红提示，避免误以为当前书里找不到。
         if (this.entry.sourceUrl.length > 0 && this.entry.sourceUrl !== this.currentSourceUrl) {
           Text('其他书源').fontSize(12).fontColor('#E57373').margin({ left: 6 })
         }
       }.width('100%')
-      if (this.entry.excerpt.length > 0) { Text(this.entry.excerpt).fontSize(14).fontColor($r('app.color.theme_text_secondary')).maxLines(3).margin({ top: 6 }) }
-      if (this.entry.note.length > 0) { Text(this.entry.note).fontSize(14).fontColor($r('app.color.theme_text_tertiary')).maxLines(3).margin({ top: 4 }) }
-    }.width('100%').padding(16).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14).margin({ bottom: 8 })
+      if (this.entry.excerpt.length > 0) { Text(this.entry.excerpt).fontSize(14).fontColor(this.themeColorTextSecondary).maxLines(3).margin({ top: 6 }) }
+      if (this.entry.note.length > 0) { Text(this.entry.note).fontSize(14).fontColor(this.themeColorTextTertiary).maxLines(3).margin({ top: 4 }) }
+    }.width('100%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14).margin({ bottom: 8 })
       .onClick(() => this.onSelect())
       .gesture(LongPressGesture().onAction(() => this.onJump()))
   }
@@ -2936,6 +3011,13 @@ struct BookmarkEntryCard {
 
 @Component
 export struct ReadRecordsPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -3177,11 +3259,11 @@ export struct ReadRecordsPage {
   @Builder
   private ReadRecordEmptyMessage(message: string) {
     Column() {
-      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(32).fontColor($r('app.color.theme_text_primary'))
+      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(32).fontColor(this.themeColorTextPrimary)
         .textAlign(TextAlign.Center).onClick(() => {
           this.emptyFaceIndex = Math.floor(Math.random() * BOOKMARK_EMPTY_FACES.length);
         })
-      Text(message).fontSize(14).fontColor($r('app.color.theme_text_secondary')).textAlign(TextAlign.Center).maxLines(2).margin({ top: 2 })
+      Text(message).fontSize(14).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2).margin({ top: 2 })
     }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       .padding({ left: 16, right: 16 })
   }
@@ -3190,27 +3272,27 @@ export struct ReadRecordsPage {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
         Column() {
-          Text('阅读记录').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
-          Text(this.getModeLabel()).fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+          Text('阅读记录').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
+          Text(this.getModeLabel()).fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 2 })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'), glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'), glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.cycleDisplayMode())
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.showActionsSheet = true)
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
@@ -3218,13 +3300,13 @@ export struct ReadRecordsPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索', text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_read_record_search')
             .onAppear(() => focusControl.requestFocus('my_read_record_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
 
@@ -3234,56 +3316,56 @@ export struct ReadRecordsPage {
         Scroll() {
           Column() {
             Column() {
-              Text('阅读总成就').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+              Text('阅读总成就').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               Row() {
-                Text(`${this.getSummaryBookCount()} 本书`).fontSize(20).fontColor($r('app.color.theme_accent'))
+                Text(`${this.getSummaryBookCount()} 本书`).fontSize(20).fontColor(this.themeColorAccent)
                 Blank()
                 Text(this.formatRecordDuration(this.getSummaryDuration()))
-                  .fontSize(16).fontColor($r('app.color.theme_text_secondary'))
+                  .fontSize(16).fontColor(this.themeColorTextSecondary)
               }.width('100%').margin({ top: 12 })
-            }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
+            }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
               .margin({ left: 16, right: 16, bottom: 10 }).onClick(() => this.showCalendarSheet = true)
             if (this.displayMode === 0) {
               ForEach(this.getSummaryDateKeys(), (dateKey: string) => {
                 Column() {
                   Row() {
-                    Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary'))
+                    Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
                     Blank()
                     Text(this.formatRecordDuration(this.getSummaryDurationForDate(dateKey)))
-                      .fontSize(13).fontColor($r('app.color.theme_accent'))
+                      .fontSize(13).fontColor(this.themeColorAccent)
                   }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
                   ForEach(this.getDistinctSummaryBooksForDate(dateKey), (detail: ReadRecordDetail) => {
                     Row() {
                       Column() {
-                        Text(detail.bookName).fontSize(16).fontColor($r('app.color.theme_text_primary'))
-                        Text(detail.bookAuthor).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+                        Text(detail.bookName).fontSize(16).fontColor(this.themeColorTextPrimary)
+                        Text(detail.bookAuthor).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                       Text(this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
-                        .fontSize(13).fontColor($r('app.color.theme_accent'))
+                        .fontSize(13).fontColor(this.themeColorAccent)
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
-                      .border({ width: { top: 1 }, color: $r('app.color.theme_surface_primary') })
+                      .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                   }, (detail: ReadRecordDetail) => `${dateKey}-${detail.bookName}-${detail.bookAuthor}`)
-                }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(12)
+                }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
             } else if (this.displayMode === 1) {
               ForEach(this.getDateKeys(), (dateKey: string) => {
                 Column() {
-                  Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary'))
+                  Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
                     .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
                   ForEach(this.getRecordsForDate(dateKey), (record: ReadTimeRecord) => {
                     Row() {
-                      Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor($r('app.color.theme_accent'))
+                      Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor(this.themeColorAccent)
                         .width(56)
                       Column() {
-                        Text(record.bookName).fontSize(16).fontColor($r('app.color.theme_text_primary'))
-                        Text(record.bookAuthor).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+                        Text(record.bookName).fontSize(16).fontColor(this.themeColorTextPrimary)
+                        Text(record.bookAuthor).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                      Text(this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor($r('app.color.theme_text_secondary'))
+                      Text(this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
-                      .border({ width: { top: 1 }, color: $r('app.color.theme_surface_primary') })
+                      .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                   }, (record: ReadTimeRecord) => record.id)
-                }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(12)
+                }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
             } else {
@@ -3291,15 +3373,15 @@ export struct ReadRecordsPage {
                 Column() {
                   Row() {
                     Column() {
-                      Text(record.bookName).fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
-                      Text(record.bookAuthor).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+                      Text(record.bookName).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                      Text(record.bookAuthor).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     Text(this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
-                      .fontSize(13).fontColor($r('app.color.theme_accent'))
+                      .fontSize(13).fontColor(this.themeColorAccent)
                   }.width('100%')
                   Text(`最后阅读 ${this.formatRecordDate(record.endTime)}`)
-                    .fontSize(12).fontColor($r('app.color.theme_text_tertiary')).width('100%').margin({ top: 10 })
-                }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(14)
+                    .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
+                }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (record: ReadTimeRecord) => record.bookId)
             }
@@ -3307,7 +3389,7 @@ export struct ReadRecordsPage {
         }.layoutWeight(1).scrollBar(BarState.Off)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       // 三个半模态共用一个 bindSheet：同一节点链式挂多个 bindSheet 时，
       // 任一状态变化都会让刚打开的 sheet 立即 onDisappear（实测 0.6s 内被顶掉），
       // 所以用互斥条件 + 单一入口。
@@ -3315,7 +3397,7 @@ export struct ReadRecordsPage {
         height: this.showClearConfirm ? SheetSize.FIT_CONTENT : (this.showCalendarSheet ? 570 : 500),
         dragBar: !this.showClearConfirm,
         showClose: false,
-        backgroundColor: $r('app.color.theme_surface_elevated'),
+        backgroundColor: this.themeColorSurfaceElevated,
         onDisappear: () => { this.showActionsSheet = false; this.showCalendarSheet = false; this.showClearConfirm = false; }
       })
   }
@@ -3324,20 +3406,20 @@ export struct ReadRecordsPage {
   @Builder
   private ReadRecordClearConfirmSheet() {
     Column() {
-      Text('清空阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text('清空阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 22 })
       Text(`确定删除全部 ${this.records.length} 条阅读会话？删除后不可恢复。`)
-        .fontSize(14).fontColor($r('app.color.theme_text_secondary')).width('100%').textAlign(TextAlign.Center)
+        .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
         .padding({ left: 28, right: 28, top: 12, bottom: 20 })
       Row() {
-        Text('取消').fontSize(16).fontColor($r('app.color.theme_text_secondary')).textAlign(TextAlign.Center)
+        Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
           .onClick(() => this.showClearConfirm = false)
         Text('清空').fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#D95656').borderRadius(24).margin({ left: 12 })
           .onClick(() => { this.confirmClearAll(); })
       }.width('100%').padding({ left: 28, right: 28, bottom: 24 })
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')))
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
   }
 
   @Builder
@@ -3351,23 +3433,23 @@ export struct ReadRecordsPage {
   private ReadRecordCalendarSheet() {
     Column() {
       Row() {
-        Text('阅读日历').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
-        Text('关闭').fontSize(14).fontColor($r('app.color.theme_accent')).onClick(() => this.showCalendarSheet = false)
+        Text('阅读日历').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('关闭').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.showCalendarSheet = false)
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       Text(`${new Date().getFullYear()} 年 ${new Date().getMonth() + 1} 月`)
-        .fontSize(16).fontColor($r('app.color.theme_text_secondary')).width('100%').textAlign(TextAlign.Center).margin({ bottom: 18 })
+        .fontSize(16).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center).margin({ bottom: 18 })
       Row() {
         ForEach(['日', '一', '二', '三', '四', '五', '六'], (weekday: string) => {
-          Text(weekday).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).layoutWeight(1).textAlign(TextAlign.Center)
+          Text(weekday).fontSize(12).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
         }, (weekday: string) => weekday)
       }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       Grid() {
         ForEach(this.getCalendarCells(), (day: number, index: number) => {
           GridItem() {
             if (day > 0) {
-              Text(day.toString()).fontSize(13).fontColor(this.selectedCalendarDay === day ? $r('app.color.theme_surface_primary') : $r('app.color.theme_text_secondary'))
+              Text(day.toString()).fontSize(13).fontColor(this.selectedCalendarDay === day ? this.themeColorSurfacePrimary : this.themeColorTextSecondary)
                 .width(36).height(36).textAlign(TextAlign.Center)
-                .backgroundColor(this.selectedCalendarDay === day ? $r('app.color.theme_accent') :
+                .backgroundColor(this.selectedCalendarDay === day ? this.themeColorAccent :
                   this.getCalendarDayDuration(day) > 0 ? '#48577D' : '#292B33')
                 .borderRadius(8).onClick(() => this.selectedCalendarDay = day)
             }
@@ -3378,14 +3460,14 @@ export struct ReadRecordsPage {
       Text(this.selectedCalendarDay > 0 ?
         `${this.selectedCalendarDay} 日 · ${this.formatRecordDuration(this.getCalendarDayDuration(this.selectedCalendarDay))}` :
         '选择日期查看当天阅读时长')
-        .fontSize(13).fontColor($r('app.color.theme_accent')).width('100%').textAlign(TextAlign.Center).margin({ top: 16 })
+        .fontSize(13).fontColor(this.themeColorAccent).width('100%').textAlign(TextAlign.Center).margin({ top: 16 })
     }.width('100%').padding({ bottom: 20 })
   }
 
   @Builder
   private ReadRecordOptionsSheet() {
     Column() {
-      Text('阅读记录选项').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text('阅读记录选项').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 18, right: 16, top: 12, bottom: 14 })
       ReadRecordOptionRow({ icon: 'clock', title: '显示阅读日历', detail: '按日期查看阅读记录', onSelect: () => {
         this.showActionsSheet = false;
@@ -3409,6 +3491,12 @@ export struct ReadRecordsPage {
 
 @Component
 export struct CacheManagementPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -3435,48 +3523,48 @@ export struct CacheManagementPage {
         MenuItem({ content: group, labelInfo: this.selectedCacheGroup === group ? '✓' : '' })
           .onClick(() => this.selectedCacheGroup = group)
       }, (group: string) => group)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).fontColor($r('app.color.theme_text_primary')).radius(20)
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
   build() {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'search', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'profileFilterAlt', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'profileFilterAlt', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).bindMenu(this.CacheGroupMenu, { placement: Placement.BottomRight })
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(16)
-          AppGlyph({ name: 'profileRefresh', glyphSize: 20, tint: $r('app.color.theme_text_secondary') })
+          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+          AppGlyph({ name: 'profileRefresh', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onUnavailableAction('缓存数据仓储尚未接入，未刷新缓存'))
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
-      Text('缓存管理').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor($r('app.color.theme_text_primary'))
+      Text('缓存管理').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 12, right: 18, top: 12 })
 
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '筛选书名/作者', text: this.searchQuery })
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_cache_manage_search')
             .onAppear(() => focusControl.requestFocus('my_cache_manage_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(24)
+          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
       }
 
       Column() {
@@ -3492,12 +3580,15 @@ export struct CacheManagementPage {
         }
       }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 8, bottom: 18 })
         .layoutWeight(1)
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct ReadRecordOptionRow {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop icon: AppGlyphName = 'info';
   @Prop title: string = '';
   @Prop detail: string = '';
@@ -3505,10 +3596,10 @@ struct ReadRecordOptionRow {
 
   build() {
     Row() {
-      AppGlyph({ name: this.icon, glyphSize: 19, tint: $r('app.color.theme_accent') }).width(32)
+      AppGlyph({ name: this.icon, glyphSize: 19, tint: this.themeColorAccent }).width(32)
       Column() {
-        Text(this.title).fontSize(15).fontColor($r('app.color.theme_text_primary'))
-        Text(this.detail).fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+        Text(this.title).fontSize(15).fontColor(this.themeColorTextPrimary)
+        Text(this.detail).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
     }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
       .onClick(() => this.onSelect())
@@ -3517,14 +3608,17 @@ struct ReadRecordOptionRow {
 
 @Component
 struct CacheEmptySection {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop title: string = '';
   @Prop message: string = '';
   build() {
     Column() {
-      Text(this.title).fontSize(14).fontColor($r('app.color.theme_accent'))
+      Text(this.title).fontSize(14).fontColor(this.themeColorAccent)
         .alignSelf(ItemAlign.Start).margin({ left: 10, bottom: 7 })
-      Text(this.message).fontSize(14).fontColor($r('app.color.theme_text_secondary')).width('100%').textAlign(TextAlign.Start)
-        .padding({ left: 12, right: 12, top: 12, bottom: 12 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(8)
+      Text(this.message).fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start)
+        .padding({ left: 12, right: 12, top: 12, bottom: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(8)
     }.width('100%').margin({ bottom: 14 })
   }
 }
@@ -3532,6 +3626,12 @@ struct CacheEmptySection {
 
 @Component
 export struct AboutAppPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -3574,12 +3674,12 @@ export struct AboutAppPage {
             Image($r('app.media.about_cat')).width(72).height(72)
             Blank().height(18)
             Blank().height(5)
-            Text('阅读·D').fontSize(18).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
+            Text('阅读·D').fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
             if (this.versionName.length > 0) {
-              Text(this.versionName).fontSize(12).fontColor($r('app.color.theme_text_secondary')).padding({ left: 9, right: 9, top: 4, bottom: 4 })
-                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated'))).borderRadius(8).margin({ top: 3 })
+              Text(this.versionName).fontSize(12).fontColor(this.themeColorTextSecondary).padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(8).margin({ top: 3 })
             }
-            Text('全新设计的阅读 3.0').fontSize(12).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+            Text('全新设计的阅读 3.0').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
           }.width('100%').padding({ top: 4, bottom: 8 }).alignItems(HorizontalAlign.Center)
 
           Row() {
@@ -3596,15 +3696,16 @@ export struct AboutAppPage {
             AboutActionRow({ title: '崩溃日志', onSelect: () => this.onUnavailableAction('崩溃日志页面尚未迁移') })
             AboutActionRow({ title: '保存日志', onSelect: () => this.onUnavailableAction('日志导出尚未迁移') })
             AboutActionRow({ title: '创建堆转储', last: true, onSelect: () => this.onUnavailableAction('堆转储尚未迁移') })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 4, bottom: 18 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct AboutQuickAction {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop icon: string = 'about_web';
   @Prop description: string = '';
   onSelect: () => void = () => {};
@@ -3613,7 +3714,7 @@ struct AboutQuickAction {
       Stack({ alignContent: Alignment.Center }) {
         Image(this.icon === 'about_github' ? $r('app.media.about_github') :
           (this.icon === 'about_update' ? $r('app.media.about_update') : $r('app.media.about_web')))
-          .width(20).height(20).fillColor($r('app.color.theme_text_secondary')).accessibilityText(this.description)
+          .width(20).height(20).fillColor(this.themeColorTextSecondary).accessibilityText(this.description)
       }.width(36).height(36).backgroundColor('#3A4054').borderRadius(18).onClick(() => this.onSelect())
     }.layoutWeight(1).alignItems(HorizontalAlign.Center)
   }
@@ -3621,6 +3722,8 @@ struct AboutQuickAction {
 
 @Component
 struct AboutActionRow {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
@@ -3629,15 +3732,17 @@ struct AboutActionRow {
   build() {
     Column() {
       Row() {
-        Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+        Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
       }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 }).onClick(() => this.onSelect())
-      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).margin({ left: 16, right: 16 }) }
+      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).margin({ left: 16, right: 16 }) }
     }.width('100%')
   }
 }
 
 @Component
 export struct AppSettingsHomePage {
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -3685,15 +3790,17 @@ export struct AppSettingsHomePage {
           SettingsCategoryRow({ title: '隐私', onSelect: () => this.onOpenCategory(ProfileRoute.APP_PRIVACY_SETTINGS) })
           ThemeItemDivider()
           SettingsCategoryRow({ title: '实验室', last: true, onSelect: () => this.onOpenCategory(ProfileRoute.APP_LAB_SETTINGS) })
-          }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.padding({ left: 16, right: 16, top: 8, bottom: 16 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct SettingsPageHeader {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop title: string = '';
   @Prop collapsed: boolean = false;
   onBack: () => void = () => {};
@@ -3701,13 +3808,13 @@ struct SettingsPageHeader {
     Column() {
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
-        Text(this.title).fontSize(22).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+        Text(this.title).fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .opacity(this.collapsed ? 1 : 0)
         Blank()
       }.width('100%').height(64).padding({ left: 12, right: 16 })
-      Text(this.title).fontSize(28).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text(this.title).fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').height(72).padding({ left: 16, bottom: 14 })
         .opacity(this.collapsed ? 0 : 1)
     }.width('100%').height(this.collapsed ? 64 : 136).clip(true)
@@ -3716,6 +3823,9 @@ struct SettingsPageHeader {
 
 @Component
 struct SettingsCategoryRow {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop title: string = '';
@@ -3726,21 +3836,27 @@ struct SettingsCategoryRow {
     Column() {
       Row() {
         Column() {
-          Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor($r('app.color.theme_text_secondary'))
+          Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor(this.themeColorTextSecondary)
           if (this.summary.length > 0) {
-            Text(this.summary).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+            Text(this.summary).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
           }
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Image($r('app.media.reader_next')).width(18).height(18).fillColor($r('app.color.theme_text_tertiary'))
+        Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
       }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
         .onClick(() => this.onSelect())
-      if (!this.last) { Row().width('100%').height(2).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))) }
+      if (!this.last) { Row().width('100%').height(2).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)) }
     }.width('100%')
   }
 }
 
 @Component
 export struct AiChatPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -3776,16 +3892,16 @@ export struct AiChatPage {
   @Builder
   private ReasoningSheet() {
     Column() {
-      Text('思考模式').fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text('思考模式').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 20, right: 20, top: 20, bottom: 10 })
-      Text(this.reasoningLabel()).fontSize(24).fontColor($r('app.color.theme_text_primary'))
+      Text(this.reasoningLabel()).fontSize(24).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 20, bottom: 20 })
       Slider({ value: this.reasoningIndex, min: 0, max: 6, step: 1, style: SliderStyle.OutSet })
         .blockColor('#B9C8FF').trackColor('#41485D').selectedColor('#B9C8FF')
         .showSteps(true).showTips(false).margin({ left: 22, right: 22 })
         .onChange((value: number) => this.reasoningIndex = Math.round(value))
       Text('此选项仅为本页预览；AI 服务未连接时不会用于生成。')
-        .fontSize(13).fontColor($r('app.color.theme_text_tertiary')).textAlign(TextAlign.Center)
+        .fontSize(13).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center)
         .width('100%').padding({ left: 20, right: 20, top: 18, bottom: 24 })
     }.width('100%').backgroundColor('#17181E')
   }
@@ -3794,30 +3910,30 @@ export struct AiChatPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         Row() {
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
             .width(36).onClick(() => this.handleBack())
           Column() {
-            Text('AI 对话').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
-            Text('新对话').fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+            Text('AI 对话').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+            Text('新对话').fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-          AppGlyph({ name: 'list', glyphSize: 19, tint: $r('app.color.theme_text_secondary') }).padding({ left: 8, right: 8 })
+          AppGlyph({ name: 'list', glyphSize: 19, tint: this.themeColorTextSecondary }).padding({ left: 8, right: 8 })
             .onClick(() => this.historyVisible = true)
-          AppGlyph({ name: 'add', glyphSize: 19, tint: $r('app.color.theme_text_secondary') }).padding({ left: 8, right: 8 })
+          AppGlyph({ name: 'add', glyphSize: 19, tint: this.themeColorTextSecondary }).padding({ left: 8, right: 8 })
             .onClick(() => { this.draft = ''; this.onUnavailableAction('新会话已准备；配置 AI 服务后即可发送消息'); })
         }.width('100%').padding({ left: 12, right: 10, top: 11, bottom: 9 })
 
         Row() {
-          AppGlyph({ name: 'sparkles', glyphSize: 16, tint: $r('app.color.theme_accent') }).margin({ right: 7 })
-          Text('模型未配置').fontSize(14).fontColor($r('app.color.theme_text_secondary'))
+          AppGlyph({ name: 'sparkles', glyphSize: 16, tint: this.themeColorAccent }).margin({ right: 7 })
+          Text('模型未配置').fontSize(14).fontColor(this.themeColorTextSecondary)
           Blank()
-          AppGlyph({ name: 'more', glyphSize: 16, tint: $r('app.color.theme_text_tertiary') })
+          AppGlyph({ name: 'more', glyphSize: 16, tint: this.themeColorTextTertiary })
         }.padding({ left: 12, right: 12, top: 9, bottom: 9 }).margin({ left: 16, right: 16, top: 4 })
-          .backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(18)
+          .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(18)
           .onClick(() => this.onUnavailableAction('请先在“我的→设置→AI 设置”配置服务商和模型'))
 
         Column() {
-          AppGlyph({ name: 'sparkles', glyphSize: 40, tint: $r('app.color.theme_accent') }).margin({ bottom: 14 })
-          Text('和你的书对话').fontSize(17).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_secondary'))
+          AppGlyph({ name: 'sparkles', glyphSize: 40, tint: this.themeColorAccent }).margin({ bottom: 14 })
+          Text('和你的书对话').fontSize(17).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
           Text('配置 AI 服务后，提问和回复会显示在这里。')
             .fontSize(14).fontColor('#858792').textAlign(TextAlign.Center).margin({ top: 8 })
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
@@ -3825,21 +3941,21 @@ export struct AiChatPage {
         Column() {
           Row() {
             TextInput({ placeholder: '输入问题…', text: this.draft })
-              .fontSize(15).fontColor($r('app.color.theme_text_secondary')).placeholderColor($r('app.color.theme_text_tertiary'))
+              .fontSize(15).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(Color.Transparent).layoutWeight(1).maxLines(4)
               .onChange((value: string) => this.draft = value)
-            Image($r('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? '#151720' : $r('app.color.theme_text_tertiary'))
+            Image($r('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? '#151720' : this.themeColorTextTertiary)
               .width(40).height(40).backgroundColor(this.draft.trim().length > 0 ? '#B9C8FF' : '#303139')
               .borderRadius(20).onClick(() => this.sendDraft())
-          }.padding({ left: 14, right: 8, top: 7, bottom: 7 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(24)
+          }.padding({ left: 14, right: 8, top: 7, bottom: 7 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(24)
           Row() {
-            Text(`思考模式：${this.reasoningLabel()}`).fontSize(12).fontColor($r('app.color.theme_text_tertiary'))
+            Text(`思考模式：${this.reasoningLabel()}`).fontSize(12).fontColor(this.themeColorTextTertiary)
               .onClick(() => this.showReasoningSheet = true)
             Blank()
             Text('AI 服务未配置').fontSize(12).fontColor('#858792')
           }.padding({ left: 6, right: 6, top: 7, bottom: 5 })
         }.padding({ left: 16, right: 16, top: 8, bottom: 12 })
-      }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+      }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
 
       if (this.historyVisible) {
         Stack({ alignContent: Alignment.TopStart }) {
@@ -3847,18 +3963,18 @@ export struct AiChatPage {
             .onClick(() => this.historyVisible = false)
           Column() {
             Row() {
-              Text('最近会话').fontSize(20).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
-              AppGlyph({ name: 'add', glyphSize: 19, tint: $r('app.color.theme_text_secondary') }).padding(8)
+              Text('最近会话').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+              AppGlyph({ name: 'add', glyphSize: 19, tint: this.themeColorTextSecondary }).padding(8)
                 .onClick(() => { this.historyVisible = false; this.draft = ''; })
             }.padding({ left: 18, right: 12, top: 18, bottom: 16 })
             Row() {
               AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
-              TextInput({ placeholder: '搜索会话…' }).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
-                .placeholderColor($r('app.color.theme_text_tertiary')).backgroundColor(Color.Transparent).layoutWeight(1)
+              TextInput({ placeholder: '搜索会话…' }).fontSize(14).fontColor(this.themeColorTextSecondary)
+                .placeholderColor(this.themeColorTextTertiary).backgroundColor(Color.Transparent).layoutWeight(1)
             }.padding({ left: 12, right: 12, top: 8, bottom: 8 }).margin({ left: 14, right: 14 })
               .backgroundColor('#22232A').borderRadius(20)
             Column() {
-              AppGlyph({ name: 'sparkles', glyphSize: 28, tint: $r('app.color.theme_text_tertiary') }).margin({ bottom: 10 })
+              AppGlyph({ name: 'sparkles', glyphSize: 28, tint: this.themeColorTextTertiary }).margin({ bottom: 10 })
               Text('暂无会话记录').fontSize(14).fontColor('#AEB0BA')
             }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
             Text('新建对话').fontSize(15).fontColor('#151720').textAlign(TextAlign.Center)
@@ -3868,7 +3984,7 @@ export struct AiChatPage {
           }.width('82%').height('100%').backgroundColor('#17181E')
         }.width('100%').height('100%')
       }
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showReasoningSheet, this.ReasoningSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
@@ -3881,6 +3997,9 @@ export struct AiChatPage {
 
 @Component
 struct ModuleHeader {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop subtitle: string = '';
   onBack: () => void = () => {};
@@ -3888,14 +4007,14 @@ struct ModuleHeader {
   build() {
     Column() {
       Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary')).width(36).onClick(() => this.onBack())
+        Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary).width(36).onClick(() => this.onBack())
         Column() {
-          Text(this.title).fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor($r('app.color.theme_text_primary'))
-          Text(this.subtitle).fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+          Text(this.title).fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+          Text(this.subtitle).fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        AppGlyph({ name: 'search', glyphSize: 18, tint: $r('app.color.theme_text_secondary') }).padding({ left: 8, right: 8 })
+        AppGlyph({ name: 'search', glyphSize: 18, tint: this.themeColorTextSecondary }).padding({ left: 8, right: 8 })
           .onClick(() => this.onUnavailableAction('设置搜索尚未迁移'))
-        AppGlyph({ name: 'more', glyphSize: 17, tint: $r('app.color.theme_text_secondary') }).padding({ left: 6, right: 6 })
+        AppGlyph({ name: 'more', glyphSize: 17, tint: this.themeColorTextSecondary }).padding({ left: 6, right: 6 })
           .onClick(() => this.onUnavailableAction('设置更多操作尚未迁移'))
       }.width('100%').padding({ left: 12, right: 10, top: 11, bottom: 9 })
     }
@@ -3904,6 +4023,9 @@ struct ModuleHeader {
 
 @Component
 struct ModuleSearch {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop hint: string = '';
@@ -3913,37 +4035,40 @@ struct ModuleSearch {
       AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
       TextInput({ placeholder: this.hint, text: this.query })
         .fontSize(16)
-        .fontColor($r('app.color.theme_text_secondary'))
-        .placeholderColor($r('app.color.theme_text_tertiary'))
+        .fontColor(this.themeColorTextSecondary)
+        .placeholderColor(this.themeColorTextTertiary)
         .backgroundColor(Color.Transparent)
         .onChange((value: string) => this.query = value)
         .layoutWeight(1)
-    }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 }).margin({ left: 16, right: 16 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : $r('app.color.theme_surface_tertiary'))).borderRadius(22)
+    }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 }).margin({ left: 16, right: 16 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(22)
   }
 }
 
 @Component
 struct ModuleTab {
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop label: string = '';
   @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   build() {
     Text(this.label).fontSize(16).fontColor(this.selected ? '#E1E5F3' : '#A4A6B0')
       .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 9, bottom: 9 })
-      .backgroundColor(this.selected ? '#41485D' : $r('app.color.theme_surface_secondary')).borderRadius(20).margin({ right: 7 })
+      .backgroundColor(this.selected ? '#41485D' : this.themeColorSurfaceSecondary).borderRadius(20).margin({ right: 7 })
       .onClick(() => this.onSelect())
   }
 }
 
 @Component
 struct ModuleEmpty {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop icon: AppGlyphName = 'book';
   @Prop title: string = '';
   @Prop detail: string = '';
   build() {
     Column() {
-      AppGlyph({ name: this.icon, glyphSize: 34, tint: $r('app.color.theme_accent') }).margin({ bottom: 14 })
-      Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary'))
+      AppGlyph({ name: this.icon, glyphSize: 34, tint: this.themeColorAccent }).margin({ bottom: 14 })
+      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
       Text(this.detail).fontSize(15).fontColor('#858792').textAlign(TextAlign.Center).margin({ left: 34, right: 34, top: 8 })
     }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
   }
@@ -3951,35 +4076,42 @@ struct ModuleEmpty {
 
 @Component
 struct MetricCard {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop label: string = '';
   @Prop value: string = '';
   build() {
     Column() {
-      Text(this.label).fontSize(14).fontColor($r('app.color.theme_text_tertiary'))
-      Text(this.value).fontSize(17).fontColor($r('app.color.theme_text_secondary')).margin({ top: 5 })
-    }.layoutWeight(1).alignItems(HorizontalAlign.Start).padding(15).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : $r('app.color.theme_surface_elevated')))
+      Text(this.label).fontSize(14).fontColor(this.themeColorTextTertiary)
+      Text(this.value).fontSize(17).fontColor(this.themeColorTextSecondary).margin({ top: 5 })
+    }.layoutWeight(1).alignItems(HorizontalAlign.Start).padding(15).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
       .borderRadius(14).margin({ right: 6 })
   }
 }
 
 @Component
 struct FileCategoryRow {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop icon: AppGlyphName = 'folder';
   @Prop title: string = '';
   @Prop detail: string = '';
   onSelect: () => void = () => {};
   build() {
     Row() {
-      AppGlyph({ name: this.icon, glyphSize: 20, tint: $r('app.color.theme_accent') }).width(36)
+      AppGlyph({ name: this.icon, glyphSize: 20, tint: this.themeColorAccent }).width(36)
       Column() {
-        Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor($r('app.color.theme_text_secondary'))
-        Text(this.detail).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+        Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor(this.themeColorTextSecondary)
+        Text(this.detail).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(18).height(18).fillColor($r('app.color.theme_text_tertiary'))
+      Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
     }.padding({ left: 15, right: 15, top: PROFILE_ROW_VERTICAL_PADDING, bottom: PROFILE_ROW_VERTICAL_PADDING }).margin({ left: 16, right: 16, bottom: 1 })
-      .backgroundColor($r('app.color.theme_surface_secondary')).onClick(() => this.onSelect())
+      .backgroundColor(this.themeColorSurfaceSecondary).onClick(() => this.onSelect())
   }
 }
 

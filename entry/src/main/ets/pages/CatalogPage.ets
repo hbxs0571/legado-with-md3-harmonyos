@@ -15,6 +15,11 @@ interface CatalogChapter {
 
 @Component
 export struct CatalogPage {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
@@ -361,24 +366,24 @@ export struct CatalogPage {
         Row() {
           TextInput({ placeholder: '搜索章节…', text: this.query })
             .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
-            .backgroundColor($r('app.color.theme_surface_secondary')).layoutWeight(1).borderRadius(12)
+            .backgroundColor(this.themeColorSurfaceSecondary).layoutWeight(1).borderRadius(12)
             .onChange((value: string) => this.query = value)
           if (this.query.length > 0) {
             AppGlyph({ name: 'profileClose', glyphSize: 16, tint: '#C5C7D0' })
               .width(32).onClick(() => this.query = '')
           }
           AppGlyph({ name: 'profileFindReplace', glyphSize: 17,
-            tint: this.useTitleReplacement ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary') })
+            tint: this.useTitleReplacement ? this.themeColorAccent : this.themeColorTextSecondary })
             .width(32)
             .onClick(() => this.onTitleReplacementChange(!this.useTitleReplacement))
           AppGlyph({ name: 'profileTimeline', glyphSize: 17,
-            tint: this.showWordCount ? $r('app.color.theme_accent') : $r('app.color.theme_text_secondary') })
+            tint: this.showWordCount ? this.themeColorAccent : this.themeColorTextSecondary })
             .width(32)
             .onClick(() => this.toggleShowWordCount())
-          AppGlyph({ name: 'swap', glyphSize: 18, tint: this.ascending ? $r('app.color.theme_text_secondary') : $r('app.color.theme_accent') })
+          AppGlyph({ name: 'swap', glyphSize: 18, tint: this.ascending ? this.themeColorTextSecondary : this.themeColorAccent })
             .width(32).onClick(() => this.ascending = !this.ascending)
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') })
+            AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
           }
           .width(28)
           .height(32)
@@ -424,7 +429,7 @@ export struct CatalogPage {
                 }
                 .width('100%')
                 .padding({ left: chapter.isInVolume ? 26 : 12, right: 12, top: 11, bottom: 11 })
-                .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : $r('app.color.theme_surface_secondary'))
+                .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : this.themeColorSurfaceSecondary)
                 .borderRadius(10)
                 .onClick(() => chapter.isVolume ? this.toggleVolume(chapter.index) : this.onSelectChapter(chapter.index))
               }.margin({ left: 12, right: 12, bottom: 6 })
@@ -443,14 +448,14 @@ export struct CatalogPage {
         Row() {
           TextInput({ placeholder: '搜索', text: this.markQuery })
             .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
-            .backgroundColor($r('app.color.theme_surface_secondary')).layoutWeight(1).borderRadius(12)
+            .backgroundColor(this.themeColorSurfaceSecondary).layoutWeight(1).borderRadius(12)
             .onChange((value: string) => this.markQuery = value)
           if (this.markQuery.length > 0) {
             AppGlyph({ name: 'profileClose', glyphSize: 16, tint: '#C5C7D0' })
               .width(32).onClick(() => this.markQuery = '')
           }
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'more', glyphSize: 18, tint: $r('app.color.theme_text_secondary') })
+            AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
           }
           .width(32)
           .height(32)
@@ -461,7 +466,7 @@ export struct CatalogPage {
 
         if (this.getVisibleBookmarks().length === 0) {
           Column() {
-            AppGlyph({ name: 'bookmark', glyphSize: 30, tint: $r('app.color.theme_accent') })
+            AppGlyph({ name: 'bookmark', glyphSize: 30, tint: this.themeColorAccent })
             Text(this.markQuery.length > 0 ? '没有找到相关书签' : '暂无书签')
               .fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
           }
@@ -489,13 +494,13 @@ export struct CatalogPage {
                       .maxLines(2).margin({ top: 4 }).textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
                   if (bookmark.content.length > 0) {
-                    Text(bookmark.content).fontSize(11).fontColor($r('app.color.theme_accent'))
+                    Text(bookmark.content).fontSize(11).fontColor(this.themeColorAccent)
                       .maxLines(2).margin({ top: 4 }).textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
                 }
                 .width('100%')
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-                .backgroundColor(this.isCurrentChapterItem(bookmark.chapterIndex) ? '#303442' : $r('app.color.theme_surface_secondary'))
+                .backgroundColor(this.isCurrentChapterItem(bookmark.chapterIndex) ? '#303442' : this.themeColorSurfaceSecondary)
                 .borderRadius(12)
                 .onClick(() => this.onEditBookmark(bookmark.id))
                 .gesture(LongPressGesture({ duration: 500 })
@@ -515,7 +520,7 @@ export struct CatalogPage {
       // 对齐上游 ReaderBookMarkingsPage：第一行创建时间 + 章名 + 其他书源 + 定位图标。
       if (this.getVisibleMarkings().length === 0) {
         Column() {
-          AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: $r('app.color.theme_accent') })
+          AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: this.themeColorAccent })
           Text(this.markQuery.length > 0 ? '没有找到相关笔记' : '暂无笔记')
             .fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
         }
@@ -532,7 +537,7 @@ export struct CatalogPage {
                     .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(marking.chapterName.length > 0 ? marking.chapterName
                     : this.getChapterFallbackName(marking.chapterIndex))
-                    .fontSize(10).fontColor($r('app.color.theme_text_tertiary')).maxLines(1)
+                    .fontSize(10).fontColor(this.themeColorTextTertiary).maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ right: 4 })
                   if (this.isMarkingFromOtherSource(marking)) {
                     Text('其他书源').fontSize(10).fontColor('#E57373').margin({ right: 4 })
@@ -547,13 +552,13 @@ export struct CatalogPage {
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
                 if (marking.note.trim().length > 0) {
-                  Text(marking.note).fontSize(12).fontColor($r('app.color.theme_accent')).lineHeight(17)
+                  Text(marking.note).fontSize(12).fontColor(this.themeColorAccent).lineHeight(17)
                     .maxLines(2).width('100%').margin({ top: 4 })
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
               }
               .width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .backgroundColor(this.isCurrentChapterItem(marking.chapterIndex) ? '#303442' : $r('app.color.theme_surface_secondary'))
+              .backgroundColor(this.isCurrentChapterItem(marking.chapterIndex) ? '#303442' : this.themeColorSurfaceSecondary)
               .borderRadius(12).margin({ bottom: 6 })
               .onClick(() => this.onEditMarking(marking.id))
               .gesture(LongPressGesture({ duration: 500 })
@@ -609,7 +614,7 @@ export struct CatalogPage {
               .textAlign(TextAlign.Center)
               .layoutWeight(1)
               .padding({ top: 8, bottom: 8 })
-              .backgroundColor(this.selectedTab === index ? '#454B62' : $r('app.color.theme_surface_elevated'))
+              .backgroundColor(this.selectedTab === index ? '#454B62' : this.themeColorSurfaceElevated)
               .borderRadius(12)
               .margin({ left: index === 0 ? 12 : 4, right: index === 3 ? 12 : 4 })
               .onClick(() => {
@@ -648,6 +653,8 @@ export struct CatalogPage {
 
 @Component
 struct CatalogInformationRow {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop label: string = '';
   @Prop value: string = '';
 
@@ -656,7 +663,7 @@ struct CatalogInformationRow {
       Text(this.label)
         .fontSize(11)
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.theme_accent'))
+        .fontColor(this.themeColorAccent)
       Text(this.value.trim().length > 0 ? this.value : '--')
         .fontSize(13)
         .fontColor('#D4D5DB')
@@ -665,7 +672,7 @@ struct CatalogInformationRow {
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .backgroundColor($r('app.color.theme_surface_secondary'))
+    .backgroundColor(this.themeColorSurfaceSecondary)
     .borderRadius(14)
   }
 }

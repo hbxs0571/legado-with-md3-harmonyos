@@ -5,6 +5,12 @@ import { BackupCategoryOption, BackupEntryPreview, BackupPreview } from '../data
 /** 本地备份与恢复页面，文件格式与 Android 原项目兼容。 */
 @Component
 export struct AppBackupSettingsPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop localBookCount: number = 0;
@@ -57,7 +63,7 @@ export struct AppBackupSettingsPage {
       BackupHeader({ collapsed: this.collapsedHeader, onBack: () => this.onBack() })
       Scroll(this.backupScroller) {
         Column() {
-          Text('WebDAV 设置').fontSize(14).fontColor($r('app.color.theme_accent'))
+          Text('WebDAV 设置').fontSize(14).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'cloud', title: 'WebDAV 服务器地址', detail: '未配置 · 尚未迁移',
@@ -97,9 +103,9 @@ export struct AppBackupSettingsPage {
             ThemeItemDivider()
             BackupActionRow({ icon: 'settings', title: '备份同步模式', detail: '未迁移', last: true,
               onSelect: () => this.activeSheet = 'syncMode' })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
-          Text('备份与恢复').fontSize(14).fontColor($r('app.color.theme_accent'))
+          Text('备份与恢复').fontSize(14).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'folder', title: '备份路径', detail: '选择本地备份目录',
@@ -133,74 +139,74 @@ export struct AppBackupSettingsPage {
                 this.onlyLatestBackup = value;
                 this.onUnavailableAction('仅界面预览，此设置未保存');
               } })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           if (this.busy) {
             Row() {
-              LoadingProgress().width(18).height(18).color($r('app.color.theme_accent'))
-              Text('正在处理 Android 备份…').fontSize(14).fontColor($r('app.color.theme_text_secondary')).margin({ left: 10 })
-            }.width('100%').padding(14).margin({ top: 12 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(12)
+              LoadingProgress().width(18).height(18).color(this.themeColorAccent)
+              Text('正在处理 Android 备份…').fontSize(14).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+            }.width('100%').padding(14).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
           }
 
           if (this.backupPreview !== undefined) {
             Column() {
-              Text('Android ZIP 预览').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+              Text('Android ZIP 预览').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               Text(`识别 ${this.backupPreview.entryCount} 个根条目；书架 ${this.backupPreview.bookCount} 本，其中本地书籍 ${this.backupPreview.localBookCount} 本`)
-                .fontSize(14).fontColor($r('app.color.theme_text_secondary')).lineHeight(20).margin({ top: 8 })
+                .fontSize(14).fontColor(this.themeColorTextSecondary).lineHeight(20).margin({ top: 8 })
                 Text(`ZIP 不含 TXT/EPUB 正文；${this.backupPreview.localBooksWithoutBody} 本本地书未匹配到当前书架中的可读正文。`)
-                .fontSize(13).fontColor($r('app.color.theme_text_tertiary')).lineHeight(18).margin({ top: 5 })
+                .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(18).margin({ top: 5 })
               Column() {
                 ForEach(this.backupPreview.entries, (entry: BackupEntryPreview) => {
                   Row() {
-                    Text(entry.name).fontSize(12).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+                    Text(entry.name).fontSize(12).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                     Text(entry.recordCount >= 0 ? `${entry.recordCount} 条` : '配置文件')
-                      .fontSize(12).fontColor($r('app.color.theme_text_tertiary'))
+                      .fontSize(12).fontColor(this.themeColorTextTertiary)
                   }.padding({ top: 5, bottom: 5 })
                 }, (entry: BackupEntryPreview) => entry.name)
               }.width('100%').margin({ top: 8 })
               Row() {
-                Button('取消').layoutWeight(1).height(42).fontColor($r('app.color.theme_text_secondary'))
+                Button('取消').layoutWeight(1).height(42).fontColor(this.themeColorTextSecondary)
                   .backgroundColor('#292B33').onClick(() => this.onCancelRestore())
-                Button('导入此 ZIP').layoutWeight(1).height(42).fontColor($r('app.color.theme_surface_primary'))
-                  .backgroundColor($r('app.color.theme_accent')).margin({ left: 10 }).onClick(() => this.onApplyRestore())
+                Button('导入此 ZIP').layoutWeight(1).height(42).fontColor(this.themeColorSurfacePrimary)
+                  .backgroundColor(this.themeColorAccent).margin({ left: 10 }).onClick(() => this.onApplyRestore())
               }.width('100%').margin({ top: 14 })
-            }.width('100%').padding(15).margin({ top: 12 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
+            }.width('100%').padding(15).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
           }
 
           if (this.statusMessage.length > 0) {
-            Text(this.statusMessage).fontSize(14).fontColor($r('app.color.theme_accent')).lineHeight(20)
-              .width('100%').padding(13).margin({ top: 12 }).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(12)
+            Text(this.statusMessage).fontSize(14).fontColor(this.themeColorAccent).lineHeight(20)
+              .width('100%').padding(13).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
           }
 
           if (this.restoredEntries.length > 0) {
             Column() {
-              Text('已恢复的 Android 数据壳').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+              Text('已恢复的 Android 数据壳').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               Text('书源、规则、历史等原始 JSON/XML 已保留，可继续导出；尚未接入的功能不会执行其中的脚本或网络请求。')
-                .fontSize(13).fontColor($r('app.color.theme_text_tertiary')).lineHeight(19).margin({ top: 6, bottom: 8 })
+                .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(19).margin({ top: 6, bottom: 8 })
               ForEach(this.restoredEntries, (entry: BackupEntryPreview) => {
                 Row() {
-                  Text(entry.name).fontSize(12).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+                  Text(entry.name).fontSize(12).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                   Text(entry.recordCount >= 0 ? `${entry.recordCount} 条` : '配置文件')
-                    .fontSize(12).fontColor($r('app.color.theme_accent'))
+                    .fontSize(12).fontColor(this.themeColorAccent)
                 }.padding({ top: 5, bottom: 5 })
               }, (entry: BackupEntryPreview) => entry.name)
             }.width('100%').padding(15).margin({ top: 12 })
-              .backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
           }
 
-          Text('兼容说明').fontSize(14).fontColor($r('app.color.theme_accent'))
+          Text('兼容说明').fontSize(14).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 16, bottom: 7 })
           Text('备份沿用 Android 原项目的 ZIP 根目录 JSON/XML 条目和文件名，不增加自定义封装。当前支持的数据会映射到本地书架与阅读设置；尚未迁移的书源、规则、RSS、历史等条目只原样保留，不能在 HarmonyOS 中使用，也不会执行其中的脚本。Android ZIP 不包含 TXT/EPUB 正文。')
-            .fontSize(14).fontColor($r('app.color.theme_text_secondary')).lineHeight(20)
-            .width('100%').padding(15).backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
+            .fontSize(14).fontColor(this.themeColorTextSecondary).lineHeight(20)
+            .width('100%').padding(15).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet.length > 0, this.backupSheetContent(), {
         height: 520,
         dragBar: true,
         showClose: false,
-        backgroundColor: $r('app.color.theme_surface_secondary'),
+        backgroundColor: this.themeColorSurfaceSecondary,
         onDisappear: () => this.activeSheet = ''
       })
   }
@@ -213,8 +219,8 @@ export struct AppBackupSettingsPage {
           this.activeSheet === 'ignoreBackup' ? '备份排除项' : this.activeSheet === 'ignoreRestore' ?
           '恢复排除项' : this.activeSheet === 'path' ? '备份路径' : this.activeSheet === 'syncMode' ?
           '备份同步模式' : this.inputTitle)
-          .fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary')).layoutWeight(1)
-        Text('关闭').fontSize(14).fontColor($r('app.color.theme_accent')).onClick(() => this.activeSheet = '')
+          .fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('关闭').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       if (this.activeSheet === 'backup') {
         BackupSheetOption({ title: '备份到本地', detail: '创建 Android 兼容 ZIP',
@@ -241,10 +247,10 @@ export struct AppBackupSettingsPage {
         }.height(420).scrollBar(BarState.Off)
       } else if (this.activeSheet === 'input') {
         TextInput({ placeholder: this.inputTitle, text: this.inputDraft })
-          .fontSize(16).fontColor($r('app.color.theme_text_primary')).backgroundColor('#292B33').borderRadius(12)
+          .fontSize(16).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
           .margin({ left: 18, right: 18, bottom: 16 })
           .onChange((value: string) => this.inputDraft = value)
-        Text('WebDAV 尚未迁移，此页不会保存或发送输入。').fontSize(13).fontColor($r('app.color.theme_text_tertiary'))
+        Text('WebDAV 尚未迁移，此页不会保存或发送输入。').fontSize(13).fontColor(this.themeColorTextTertiary)
           .margin({ left: 18, right: 18 })
         Button('完成').margin({ top: 18 }).onClick(() => {
           this.inputDraft = '';
@@ -266,18 +272,20 @@ export struct AppBackupSettingsPage {
 
 @Component
 struct BackupHeader {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop collapsed: boolean = false;
   onBack: () => void = () => {};
   build() {
     Column() {
       Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor($r('app.color.theme_text_secondary'))
+        Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
           .width(40).height(40).onClick(() => this.onBack())
-        Text('备份与恢复').fontSize(22).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+        Text('备份与恢复').fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .opacity(this.collapsed ? 1 : 0)
         Blank()
       }.width('100%').height(64).padding({ left: 12, right: 16 })
-      Text('备份与恢复').fontSize(28).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text('备份与恢复').fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').height(72).padding({ left: 16, bottom: 14 })
         .opacity(this.collapsed ? 0 : 1)
     }.width('100%').height(this.collapsed ? 64 : 136).clip(true)
@@ -286,13 +294,15 @@ struct BackupHeader {
 
 @Component
 struct BackupSheetOption {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   onSelect: () => void = () => {};
   build() {
     Column() {
-      Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary'))
-      Text(this.detail).fontSize(13).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+      Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
+      Text(this.detail).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
     }.width('calc(100% - 32vp)').padding(16).alignItems(HorizontalAlign.Start)
       .backgroundColor('#292B33').borderRadius(14).margin({ left: 16, right: 16, bottom: 8 })
       .onClick(() => this.onSelect())
@@ -301,6 +311,8 @@ struct BackupSheetOption {
 
 @Component
 struct BackupPreviewSwitchRow {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop checked: boolean = false;
@@ -308,8 +320,8 @@ struct BackupPreviewSwitchRow {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor($r('app.color.theme_text_secondary'))
-        Text(this.detail).fontSize(13).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+        Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
+        Text(this.detail).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .onChange((checked: boolean) => this.onChange(checked))
@@ -319,6 +331,10 @@ struct BackupPreviewSwitchRow {
 
 @Component
 struct BackupActionRow {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop icon: AppGlyphName = 'folder';
@@ -330,22 +346,24 @@ struct BackupActionRow {
   build() {
     Column() {
       Row() {
-        AppGlyph({ name: this.icon, glyphSize: 20, tint: this.disabled ? '#656873' : $r('app.color.theme_accent') }).width(36)
+        AppGlyph({ name: this.icon, glyphSize: 20, tint: this.disabled ? '#656873' : this.themeColorAccent }).width(36)
         Column() {
-          Text(this.title).fontSize(16).fontColor(this.disabled ? $r('app.color.theme_text_tertiary') : $r('app.color.theme_text_secondary'))
-          Text(this.detail).fontSize(14).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 4 })
+          Text(this.title).fontSize(16).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
+          Text(this.detail).fontSize(14).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Image($r('app.media.reader_next')).width(18).height(18).fillColor($r('app.color.theme_text_tertiary'))
+        Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
       }.padding({ left: 15, right: 15, top: 16, bottom: 16 }).onClick(() => {
         if (!this.disabled) { this.onSelect(); }
       })
-      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary'))).margin({ left: 51, right: 12 }) }
+      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).margin({ left: 51, right: 12 }) }
     }.width('100%')
   }
 }
 
 @Component
 struct BackupIgnoreList {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop options: BackupCategoryOption[] = [];
   @Prop ignoredKeys: string[] = [];
   onToggle: (key: string, ignored: boolean) => void = (_key: string, _ignored: boolean) => {};
@@ -354,7 +372,7 @@ struct BackupIgnoreList {
       ForEach(this.options, (option: BackupCategoryOption) => {
         Row() {
           Column() {
-            Text(option.title).fontSize(14).fontColor($r('app.color.theme_text_secondary'))
+            Text(option.title).fontSize(14).fontColor(this.themeColorTextSecondary)
             Text(option.files.join('、')).fontSize(11).fontColor('#858792').margin({ top: 3 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.ignoredKeys.includes(option.key) })
@@ -362,6 +380,6 @@ struct BackupIgnoreList {
         }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
       }, (option: BackupCategoryOption) => option.key)
     }.width('100%').margin({ top: 6 }).padding({ left: 8, right: 8, top: 4, bottom: 4 })
-      .backgroundColor($r('app.color.theme_surface_secondary')).borderRadius(14)
+      .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
   }
 }

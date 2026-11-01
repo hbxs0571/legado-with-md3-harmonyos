@@ -2,6 +2,10 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 
 @Component
 export struct AppTranslationSettingsPage {
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -36,11 +40,11 @@ export struct AppTranslationSettingsPage {
             TranslationSettingsChoice({ title: '目标语言', options: this.languages, selected: this.languageIndex, onSelect: (index: number) => this.languageIndex = index })
             Column() {
               Row() {
-                Text('每块最大字符数').fontSize(18).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
-                Text(`${Math.round(this.maxChars)}`).fontSize(12).fontColor($r('app.color.theme_accent'))
+                Text('每块最大字符数').fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text(`${Math.round(this.maxChars)}`).fontSize(12).fontColor(this.themeColorAccent)
               }
               Slider({ value: this.maxChars, min: 1000, max: 10000, step: 500 })
-                .selectedColor($r('app.color.theme_accent')).trackColor('#454750')
+                .selectedColor(this.themeColorAccent).trackColor('#454750')
                 .onChange((value: number) => this.maxChars = value)
             }.padding({ left: 14, right: 14, top: 9, bottom: 9 })
           }
@@ -50,10 +54,10 @@ export struct AppTranslationSettingsPage {
               TranslationSettingsSection({ title: '应用 AI 接口' }) {
                 Row() {
                   Column() {
-                    Text('使用应用 AI 接口').fontSize(18).fontColor($r('app.color.theme_text_secondary'))
-                    Text('模型、API Key 和协议在 AI 设置中配置。').fontSize(15).fontColor($r('app.color.theme_text_tertiary')).margin({ top: 3 })
+                    Text('使用应用 AI 接口').fontSize(18).fontColor(this.themeColorTextSecondary)
+                    Text('模型、API Key 和协议在 AI 设置中配置。').fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                   }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                  Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary'))
+                  Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary)
                 }.padding({ left: 14, right: 14, top: 13, bottom: 13 }).onClick(() => this.onOpenAiSettings())
               }
             }.transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
@@ -62,12 +66,14 @@ export struct AppTranslationSettingsPage {
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : $r('app.color.theme_surface_primary')))
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
 
 @Component
 struct TranslationSettingsSection {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop title: string = '';
   @BuilderParam content: () => void = this.emptyContent;
   @Builder
@@ -80,15 +86,20 @@ struct TranslationSettingsSection {
   @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_accent'))
+      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
         .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : $r('app.color.theme_surface_secondary')).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
     }
   }
 }
 
 @Component
 struct TranslationSettingsChoice {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop title: string = '';
   @Prop options: string[] = [];
   @Prop selected: number = 0;
@@ -102,15 +113,15 @@ struct TranslationSettingsChoice {
   @Builder
   private ChoiceSheet() {
     Column() {
-      Text(this.title).fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.theme_text_primary'))
+      Text(this.title).fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       Scroll() {
         Column() {
           ForEach(this.options, (option: string, index: number) => {
             Row() {
-              Text(option).fontSize(16).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
+              Text(option).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               if (this.selected === index) {
-                Image($r('app.media.app_check')).width(18).height(18).fillColor($r('app.color.theme_accent'))
+                Image($r('app.media.app_check')).width(18).height(18).fillColor(this.themeColorAccent)
               }
             }.width('100%').padding({ left: 18, right: 18, top: 13, bottom: 13 })
               .onClick(() => { this.onSelect(index); this.showOptions = false; })
@@ -121,13 +132,13 @@ struct TranslationSettingsChoice {
   }
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor($r('app.color.theme_text_secondary')).layoutWeight(1)
-      Text(this.getSelectedLabel()).fontSize(12).fontColor($r('app.color.theme_accent'))
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor($r('app.color.theme_text_tertiary')).margin({ left: 6 })
+      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.getSelectedLabel()).fontSize(12).fontColor(this.themeColorAccent)
+      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.showOptions = true)
       .bindSheet(this.showOptions, this.ChoiceSheet(), {
         height: Math.min(520, 90 + this.options.length * 54),
-        dragBar: true, showClose: false, backgroundColor: $r('app.color.theme_surface_secondary'),
+        dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceSecondary,
         onDisappear: () => this.showOptions = false
       })
   }
