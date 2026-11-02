@@ -46,6 +46,88 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-02 N 端阅读器四项缺陷与两项发版风险（画布缓存释放 / 无动画重绘 / 进度条重绘 / 启动恢复 await / catch 日志 / .tmp 忽略）
+
+- 基线：`main` HEAD `af3651f`（任务书写的 `8d89325` 是它的祖先，`8d89325..af3651f` 有 8 个提交，行号已整体偏移，全部按语义定位）。工作区开工时干净，无其他会话改动。
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。
+- 构建：`bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1 min 10 s 502 ms`（33 tasks，17 executed），产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`；`hdc install -r` 覆盖安装成功。唯一告警仍是既有的 `No signingConfig found for product default`。
+
+### 改动清单（源码接入：源码已接入）
+
+| 项 | 文件:行 | 改动 |
+| --- | --- | --- |
+| 缺陷一 画布图片缓存不释放 | `entry/src/main/ets/pages/ReaderPage.ets:690` | `aboutToDisappear()` 在 `resetPageTurnTransition()` 之后补 `this.readerCanvasRenderer.clear();`，与退出阅读页那批释放同处 |
+| 缺陷二 无动画翻页不重绘 | `entry/src/main/ets/pages/ReaderPage.ets:1930-1936` | `turnReaderPage()` 的 `pageAnimation === 5` 分支补 `this.paintReaderCanvas()` |
+| 缺陷三 拖动进度条不重绘 | `entry/src/main/ets/pages/ReaderPage.ets:4738-4743` | `Slider.onChange` 的 `isPageProgressMode()` 分支补 `this.paintReaderCanvas()` |
+| 缺陷四 12 个 restore 未 await | `entry/src/main/ets/pages/Index.ets:638,653` | 14 行 restore 调用抽成 `private async restoreStartupState(context: Context)`，其中只 `await this.restoreReaderSettings(context)`；其余保持并发（`aboutToAppear` 是同步生命周期，不能直接写 await） |
+| 风险五 catch (_) 空吞 | `ReaderPage.ets` 12 处、`BookRepository.ets` 18 处、`BackupRepository.ets` 13 处 | 全部改 `catch (error)` + `console.error('[模块] 动作失败: ${error}')`，控制流不变（失败后继续） |
+| 风险六 .tmp-* 未忽略 | `.gitignore:8-9` | 加中文注释 + `.tmp-*` |
+
+缺陷一的边界按任务书守住：`clear()` 只加在 `aboutToDisappear()`，**没有**加进 `onReaderContentChanged()`——换章要复用缓存，那条路径仍然只走 `clearParagraphs()`。
+
+批量改 catch 时用花括号深度跟踪脚本查过一遍变量遮蔽：唯一真嵌套在 `entry/src/main/ets/data/BackupRepository.ets:2338`（`ensureDirectory()` 的内层 try），已改名 `catch (probeError)`，外层 `if (error instanceof Error) { throw error; }` 语义恢复。改后三文件 `grep -c "catch (_)"` 全为 0。
+
+### 缺陷二 设备验收通过
+
+前置：阅读设置 → 翻页动画选「无动画」（`pageAnimation = 5`）。**必须用无动画模式**，其余四种动画本来每帧重绘，看不出这个缺陷。
+
+- 改前行为：`pageAnimation === 5` 只改 `currentPageIndex` 就 return；`currentPageIndex` 是 `@State` 但没有 `@Watch`（22 个 `@Watch` 无一盯页码），画布重绘全靠显式调用。
+- 实测：第 1 页按右侧翻页 → 底部进度 `1/17 0.5%` → `2/17 0.9%`；正文区（crop `(0,560,1280,2200)`）像素比对 **changed 426996 / 2099200 = 20.3%**，两页画面不同 → 画布确实重绘了。**通过。**
+
+### 缺陷三 设备验收通过
+
+同模式（无动画）下把底部 `Slider` 从第 2 页拖到第 15 页：
+
+- 进度 `2/17 0.9%` → `15/17 6.8%`；正文区像素比对 **changed 380176 / 2099200 = 18.1%** → 重绘生效。**通过。**
+
+两个数字与上一轮（b3 记录里 21.9% / 17.1%）同量级，口径一致。
+
+### 缺陷一 设备验收未验（阻塞原因已定位）
+
+**结论：源码已接入、构建通过、覆盖安装成功，但设备验收未验。** 不能写「通过」。
+
+阻塞原因不在本次改动，而是画布图片渲染链路本身在本地没打通：
+
+1. 造了两本带图 EPUB 并都导入成功：探针书（6 章 × 3 张手写 PNG = 18 张，刻意小于 `ReaderCanvasSurface.ets:704` 的 `IMAGE_CACHE_LIMIT = 32`，这样 LRU 不会淘汰，`clear()` 是唯一释放路径）、以及用户指定的 `测试/古神？这分明是白发兽耳小萝莉 作者：尚简.epub`（5.49 MB，1378 章，封面 JPEG 600×800）。
+2. 两本的图片文件都确实落到了沙箱：探针书 `files/epub-assets/local-1793587448804/0.img … 17.img`，真实书 `files/covers/local-1793588129455.img`（268022 字节，pull 下来确认是合法 JPEG）；正文里 `[[EPUB_IMAGE:file:///...]]` 标记齐全。
+3. 但阅读页画布**一个图片像素都没画**：正文区颜色统计只有背景色与正文白字，既没有图、也没有 `drawImageBox()` 的灰底占位（`0x2E808080`）。探针书整页 `distinct = 1` 全黑。
+4. **这是既有缺陷，不是本次改动引入**：把 5 个改动 `git stash` 掉、用 HEAD `af3651f` 原样构建装机，探针书同样不出图（`distinct = 1`、`nonblack_px = 0`）；恢复改动重新构建装机后现象一致。
+
+因此 `imageCache` 里根本没有 `PixelMap`，无论调不调 `clear()` 都观测不到 pixelMap 泄漏。已采集的内存曲线**只能说明「进出阅读页本身不涨 native heap」，不能作为缺陷一通过的证据**：
+
+真实 EPUB 进出 10 次（`hidumper --mem <pid>`，书架点开 → 7 s → 返回 → 4 s）：
+
+| 次数 | native heap (kB) 阅读页 | native heap (kB) 书架 |
+| --- | --- | --- |
+| 1 | 36881 | 43635 |
+| 2 | 38367 | 43643 |
+| 3 | 38755 | 43803 |
+| 4 | 39215 | 43939 |
+| 5 | 38903 | 43899 |
+| 6 | 39227 | 44255 |
+| 7 | 39259 | 44095 |
+| 8 | 39459 | 44287 |
+| 9 | 39537 | 44265 |
+| 10 | 39325 | 44273 |
+
+第 1 次之后平台在 43.6–44.3 MB（±700 kB 抖动），不随次数线性增长。探针书同样在第 1–2 次后平台在 44 MB 左右。**但因为缓存里没有 pixelMap，这份数据与缺陷一无关。**
+
+排查结论（供下一轮接手，本轮按「只改这几处」的范围没有动它）：尺寸拿不到时 `entry/src/main/ets/pages/LocalReaderPaginator.ets:251` 的 `if (sourceWidth <= 0 || sourceHeight <= 0) { continue; }` 会直接跳过这张图，既不画图也不画占位；`ReaderPage.ets:1546-1560` 虽然准备了 `placeholderExtent` 占位并写进 `paginationUsesImagePlaceholder`，但**该字段全仓没有任何读取点**（只在 `:460` 声明、`:1560` 赋值）。也就是说「占位兜底」这条路实际上没接上。
+
+另：这台模拟器上读不到 ArkTS 的 `console.*` 输出（`hilog -x` 全量 7064 行里没有任何 `A03d00/JSAPP` 域，`hilog -x -T JSAPP` 为空），所以无法用日志确认 `image.createImageSource()` 是否抛错。风险五新增的 `console.error` 在这台设备上同样**无法取证**，只保证源码接入与构建通过。
+
+### 缺陷四 设备验收未验
+
+`restoreReaderSettings` 现在会 await 完再返回，理论上开书不会再「先按默认排版排一次再跳变」。但排版跳变是个瞬时现象，模拟器截图（`uitest screenCap` 单帧）抓不到这个时序，本轮**没有**做出可信的前后对比，按「未验」记录。源码与构建均已通过。
+
+### 风险六 无法按任务书口径验证
+
+任务书说 `.gitignore` 加 `.tmp-*` 后「确认 git status 里那 18 个 `??` 文件消失」，但本工作区开工时**就没有任何 `.tmp-*` 文件**（`find` 全仓无匹配，`git status --porcelain` 无 `??` 条目）。规则已加，属预防性改动，无法验证「18 个文件消失」这件事。
+
+### 提交
+
+用 `git diff` 生成的 patch 只挑本会话的 5 个文件（`.gitignore`、`ReaderPage.ets`、`Index.ets`、`BookRepository.ets`、`BackupRepository.ets`），没有 `git add -A`；一次性改写脚本 `scripts/tmp-add-catch-logs.py` 已删除，未入库。
+
 ## 2026-11-02 N 端阅读器正文改画布逐行绘制（KI-EXP1/KI-EXP2/KI-EXP3 收口）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。

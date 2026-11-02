@@ -219,7 +219,8 @@ export class BookRepository {
     if (book.contentPath === undefined || book.contentPath.length === 0) { return true; }
     try {
       return !fileIo.accessSync(book.contentPath);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 检查正文文件是否存在失败: ${error}`);
       return true;
     }
   }
@@ -313,7 +314,8 @@ export class BookRepository {
       }
       if (hex.length < 24) { return hex; }
       return hex.substring(8, 24);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 计算内容摘要失败: ${error}`);
       return '';
     }
   }
@@ -435,7 +437,8 @@ return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, max
     } catch (error) {
       try {
         fileIo.unlinkSync(contentPath);
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BookRepository] 删除损坏的正文文件失败: ${error}`);
       }
       if (error instanceof Error) { throw error; }
       throw new Error('读取 TXT 文件失败');
@@ -454,7 +457,8 @@ private static parseGroupNames(value: string): string[] {
       const parsed: string[] = JSON.parse(value);
       return parsed.filter((name: string) => typeof name === 'string' && name.trim().length > 0)
         .map((name: string) => name.trim());
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 解析分组名失败: ${error}`);
       return [];
     }
   }
@@ -463,7 +467,8 @@ private static isGroupNamesField(value: string | undefined): boolean {
     try {
       const parsed: string[] = JSON.parse(decodeURIComponent(value ?? ''));
       return Array.isArray(parsed) && parsed.every((name: string) => typeof name === 'string');
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 判断分组名字段失败: ${error}`);
       return false;
     }
   }
@@ -647,7 +652,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     const hasOffsets = legacy.offsets.length === legacy.titles.length;
     try {
       content = await BookRepository.readTextFileAsync(legacy.bookUrl, charset);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 读取旧版正文文件失败: ${error}`);
       // 正文文件已不在：章节标题仍然保留，偏移按 0 处理。
       content = '';
     }
@@ -737,7 +743,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     if (text === undefined || text.length === 0) { return {}; }
     try {
       return JSON.parse(text) as StoredReadConfig;
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 解析阅读配置失败: ${error}`);
       return {};
     }
   }
@@ -987,7 +994,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
         }
       }
       return books;
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 扫描本地书目失败: ${error}`);
       return [];
     }
   }
@@ -1497,18 +1505,21 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       fileIo.renameSync(temporaryPath, book.contentPath);
       try {
         fileIo.unlinkSync(backupPath);
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BookRepository] 删除正文备份失败: ${error}`);
       }
     } catch (error) {
       try {
         if (!fileIo.accessSync(book.contentPath) && fileIo.accessSync(backupPath)) {
           fileIo.renameSync(backupPath, book.contentPath);
         }
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BookRepository] 回滚正文备份失败: ${error}`);
       }
       try {
         if (fileIo.accessSync(temporaryPath)) { fileIo.unlinkSync(temporaryPath); }
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BookRepository] 删除临时正文失败: ${error}`);
       }
       if (error instanceof Error) { throw error; }
       throw new Error('章节内容保存失败');
@@ -1545,7 +1556,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
         return Math.max(0, Math.min(chapterLength, Math.trunc(book.androidCharacterPosition)));
       }
       return Math.round(chapterLength * progress / 100);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 计算章内字符位置失败: ${error}`);
       return 0;
     }
   }
@@ -1558,7 +1570,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       try {
         const encoding = book.format === 'txt' ? book.charset : undefined;
         rows = BookRepository.deriveChapters(book, BookRepository.readTextFile(book.contentPath, encoding));
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BookRepository] 推导章节目录失败: ${error}`);
         rows = [];
       }
     }
@@ -1573,7 +1586,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
         if (chapterLength > 0) {
           chapterProgress = Math.max(0, Math.min(100, characterPosition / chapterLength * 100));
         }
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BookRepository] 计算章内进度失败: ${error}`);
       }
     }
     const next = BookRepository.copyBook(book);
@@ -1882,7 +1896,8 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     let content: string = '';
     try {
       content = importedContent ?? BookRepository.readTextFile(contentPath, charset);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 读取导入正文失败: ${error}`);
     }
     const chapterRule = BookRepository.resolveChapterRule(undefined, content);
     let chapterTitles: string[] = [];
@@ -2024,7 +2039,8 @@ private static tryDecodeWithEncoding(bytes: Uint8Array, encoding: string): strin
     try {
       const decoder = util.TextDecoder.create(encoding, { fatal: true, ignoreBOM: true });
       return decoder.decodeToString(bytes);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 按编码解码失败: ${error}`);
       return undefined;
     }
   }
@@ -2035,7 +2051,8 @@ private static tryDecodeWithEncoding(bytes: Uint8Array, encoding: string): strin
     const rawName = separator >= 0 ? uri.substring(separator + 1) : uri;
     try {
       return decodeURIComponent(rawName);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BookRepository] 解析文件名失败: ${error}`);
       return rawName;
     }
   }
@@ -2046,7 +2063,8 @@ private static ensureDirectory(path: string): void {
     } catch (error) {
       try {
         if (fileIo.lstatSync(path).isDirectory()) { return; }
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BookRepository] 创建目录后读取属性失败: ${error}`);
       }
       if (error instanceof Error) { throw error; }
       throw new Error('无法创建本地书籍目录');

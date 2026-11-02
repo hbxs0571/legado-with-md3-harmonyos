@@ -444,11 +444,12 @@ export class BackupRepository {
       if (typeof value === 'string' && value.length > 0) {
         return BackupRepository.parseEntrySummary(value);
       }
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BackupRepository] 读取恢复摘要失败: ${error}`);
     }
     const directory = `${context.filesDir}/${BackupRepository.legacyDirectoryName}`;
     let names: string[] = [];
-    try { names = fileIo.listFileSync(directory); } catch (_) { return []; }
+    try { names = fileIo.listFileSync(directory); } catch (error) { console.error(`[BackupRepository] 列出旧版备份目录失败: ${error}`); return []; }
     const entries: BackupEntryPreview[] = [];
     for (let index = 0; index < names.length; index++) {
       const name = names[index];
@@ -458,7 +459,8 @@ export class BackupRepository {
         if (fileIo.lstatSync(path).isFile()) {
           entries.push({ name: name, recordCount: -1, byteSize: fileIo.statSync(path).size });
         }
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BackupRepository] 读取旧版备份条目失败: ${error}`);
       }
     }
     return entries;
@@ -518,7 +520,8 @@ export class BackupRepository {
         backup: typeof backupValue === 'string' ? BackupRepository.parseIgnoreList(backupValue) : [],
         restore: typeof restoreValue === 'string' ? BackupRepository.parseIgnoreList(restoreValue) : []
       };
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BackupRepository] 读取忽略名单失败: ${error}`);
       return defaults;
     }
   }
@@ -817,7 +820,7 @@ export class BackupRepository {
       return true;
     } finally {
       await EpubRepository.removeBackupWorkDirectory(stagingDirectory);
-      try { fileIo.unlinkSync(zipPath); } catch (_) { }
+      try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
     }
   }
 
@@ -891,7 +894,7 @@ export class BackupRepository {
       const detail = error instanceof Error ? error.message : '未知错误';
       throw new Error(`Android ZIP 备份校验失败：${detail}`);
     } finally {
-      try { fileIo.unlinkSync(zipPath); } catch (_) { }
+      try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
     }
   }
 
@@ -1680,7 +1683,8 @@ export class BackupRepository {
         if (restoredBadgeImage === undefined || restoredBadgeImage.length === 0) { return ''; }
         try {
           return fileIo.accessSync(restoredBadgeImage) ? restoredBadgeImage : current.bookmarkBadgeImage;
-        } catch (_) {
+        } catch (error) {
+          console.error(`[BackupRepository] 检查角标图片是否存在失败: ${error}`);
           return current.bookmarkBadgeImage;
         }
       })(),
@@ -1792,7 +1796,8 @@ export class BackupRepository {
           try {
             // withCharset 会顺带重算目录，这里只要书本身，章节行在保存书目后统一重写。
             bookWithCharset = BookRepository.withCharset(book, savedCharset).book;
-          } catch (_) {
+          } catch (error) {
+            console.error(`[BackupRepository] 按保存的编码重算书目失败: ${error}`);
           }
         }
         const restoredProgress = await BookRepository.restoreAndroidProgress(bookWithCharset,
@@ -1936,7 +1941,7 @@ export class BackupRepository {
 
   private static readEntryPreviews(directory: string): BackupEntryPreview[] {
     let names: string[] = [];
-    try { names = fileIo.listFileSync(directory); } catch (_) { return []; }
+    try { names = fileIo.listFileSync(directory); } catch (error) { console.error(`[BackupRepository] 列出备份目录失败: ${error}`); return []; }
     const entries: BackupEntryPreview[] = [];
     for (let index = 0; index < names.length; index++) {
       const name = names[index];
@@ -1953,7 +1958,8 @@ export class BackupRepository {
           count = BackupRepository.countXmlEntries(fileIo.readTextSync(path));
         }
         entries.push({ name: name, recordCount: count, byteSize: size });
-      } catch (_) {
+      } catch (error) {
+        console.error(`[BackupRepository] 读取备份条目失败: ${error}`);
       }
     }
     return entries;
@@ -2041,7 +2047,7 @@ export class BackupRepository {
   private static async copyPreservedEntries(context: Context, targetDirectory: string, ignored: string[]): Promise<void> {
     const sourceDirectory = `${context.filesDir}/${BackupRepository.legacyDirectoryName}`;
     let names: string[] = [];
-    try { names = fileIo.listFileSync(sourceDirectory); } catch (_) { return; }
+    try { names = fileIo.listFileSync(sourceDirectory); } catch (error) { console.error(`[BackupRepository] 列出待保留条目目录失败: ${error}`); return; }
     for (let index = 0; index < names.length; index++) {
       const name = names[index];
       if (name === undefined || !BackupRepository.isSafeRootEntry(name) ||
@@ -2329,7 +2335,7 @@ export class BackupRepository {
   private static ensureDirectory(path: string): void {
     try { fileIo.mkdirSync(path, true); }
     catch (error) {
-      try { if (fileIo.lstatSync(path).isDirectory()) { return; } } catch (_) { }
+      try { if (fileIo.lstatSync(path).isDirectory()) { return; } } catch (probeError) { console.error(`[BackupRepository] 检查目录是否已存在失败: ${probeError}`); }
       if (error instanceof Error) { throw error; }
       throw new Error('无法创建 Android 备份临时目录');
     }
@@ -2357,7 +2363,8 @@ export class BackupRepository {
     let parsed: Object;
     try {
       parsed = JSON.parse(text) as Object;
-    } catch (_) {
+    } catch (error) {
+      console.error(`[BackupRepository] 解析高亮规则失败: ${error}`);
       return { rules: rules, skipped: skipped };
     }
     let candidates: Object[] = [];

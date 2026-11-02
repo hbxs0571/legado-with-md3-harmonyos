@@ -685,6 +685,9 @@ export struct ReaderPage {
     this.fullBookPaginationGeneration++;
     this.stopAutoPageTimer();
     this.resetPageTurnTransition();
+    // 退出阅读页时释放画布缓存：clear() 会逐个 pixelMap.release()，不释放则带图 EPUB 反复进出会线性涨内存。
+    // 换章复用缓存，那条路径只走 clearParagraphs()，不要改到这里来。
+    this.readerCanvasRenderer.clear();
     if (this.readSessionTimer >= 0) {
       clearInterval(this.readSessionTimer);
       this.readSessionTimer = -1;
@@ -736,7 +739,8 @@ export struct ReaderPage {
         inputConsumer.on('keyPressed', {
           key: code, action: 1, isRepeat: this.keyPageOnLongPress
         }, this.pageKeyHandler);
-      } catch (_) {
+      } catch (error) {
+        console.error(`[ReaderPage] 订阅翻页键 ${code} 失败: ${error}`);
         // 该系统键不允许应用级抢占（inputConsumer 只在 API 21+ 放开媒体键，其余仅音量键），
         // 交给面板说明与 onKeyEvent 兜底，这里静默跳过，避免整组订阅失败。
       }
@@ -794,7 +798,7 @@ export struct ReaderPage {
   }
 
   private releaseVolumeKeys(): void {
-    try { inputConsumer.off('keyPressed'); } catch (_) {}
+    try { inputConsumer.off('keyPressed'); } catch (error) { console.error(`[ReaderPage] 取消翻页键订阅失败: ${error}`); }
     this.volumeKeysSubscribed = false;
     this.subscribedVolumeKeyLongPress = undefined;
     this.subscribedPageKeySignature = '';
@@ -840,7 +844,7 @@ export struct ReaderPage {
     let systemTimeout = 60000;
     try {
       systemTimeout = Number.parseInt(settings.getValueSync(context, settings.display.SCREEN_OFF_TIMEOUT, '60000'), 10);
-    } catch (_) {}
+    } catch (error) { console.error(`[ReaderPage] 读取系统息屏超时失败: ${error}`); }
     const shouldKeepOn = this.readerWindowActive && (seconds < 0 || (seconds > 0 &&
       seconds * 1000 > (Number.isFinite(systemTimeout) ? systemTimeout : 60000)));
     const requestId = ++this.keepLightRequestId;
@@ -980,7 +984,8 @@ export struct ReaderPage {
       let area: window.AvoidArea | undefined = undefined;
       try {
         area = targetWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT);
-      } catch (_) {
+      } catch (error) {
+        console.error(`[ReaderPage] 读取屏幕缺口区域失败: ${error}`);
         return;
       }
       if (area === undefined || area.visible !== true) {
@@ -1318,7 +1323,8 @@ export struct ReaderPage {
     const before = BookRepository.cachedChapterTitles(this.book).length;
     try {
       await BookRepository.loadChapters(context, this.book);
-    } catch (_) {
+    } catch (error) {
+      console.error(`[ReaderPage] 加载章节目录失败: ${error}`);
       return;
     }
     if (before === 0 && BookRepository.cachedChapterTitles(this.book).length > 0) {
@@ -1924,6 +1930,8 @@ export struct ReaderPage {
     if (this.pageAnimation === 5) {
       this.currentPageIndex = nextPageIndex;
       this.reportReaderPageProgress();
+      // 无动画翻页也要重绘：currentPageIndex 是 @State 但没有 @Watch，画布不会自己刷新。
+      this.paintReaderCanvas();
       return;
     }
     const durationBySpeed: number[] = [240, 300, 360, 540];
@@ -2011,7 +2019,8 @@ export struct ReaderPage {
     if (animator !== undefined) {
       try {
         animator.cancel();
-      } catch (_) {
+      } catch (error) {
+        console.error(`[ReaderPage] 取消翻页动画失败: ${error}`);
       }
     }
   }
@@ -2815,10 +2824,11 @@ export struct ReaderPage {
               height: context.px2vp(info.size.height / density)
             });
           }
-        } catch (_) {
+        } catch (error) {
+          console.error(`[ReaderPage] 读取正文图片尺寸失败: ${error}`);
         } finally {
           if (source !== undefined) {
-            try { await source.release(); } catch (_) {}
+            try { await source.release(); } catch (error) { console.error(`[ReaderPage] 释放图片源失败: ${error}`); }
           }
         }
       }
@@ -3312,7 +3322,8 @@ export struct ReaderPage {
       const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
       await pasteboard.getSystemPasteboard().setData(data);
       this.onUnavailableAction('已复制');
-    } catch (_) {
+    } catch (error) {
+      console.error(`[ReaderPage] 写入剪贴板失败: ${error}`);
       this.onUnavailableAction('复制失败，请重试');
     }
   }
@@ -3619,12 +3630,14 @@ export struct ReaderPage {
           });
           changed = true;
         }
-      } catch (_) {
+      } catch (error) {
+        console.error(`[ReaderPage] 读取图片尺寸失败: ${error}`);
       } finally {
         if (source !== undefined) {
           try {
             await source.release();
-          } catch (_) {
+          } catch (error) {
+            console.error(`[ReaderPage] 释放图片源失败: ${error}`);
           }
         }
       }
@@ -4143,7 +4156,8 @@ export struct ReaderPage {
     if (this.canvasHandleAnimator !== undefined) {
       try {
         this.canvasHandleAnimator.cancel();
-      } catch (_) {
+      } catch (error) {
+        console.error(`[ReaderPage] 取消选区把手动画失败: ${error}`);
       }
       this.canvasHandleAnimator = undefined;
     }
@@ -4724,6 +4738,8 @@ export struct ReaderPage {
                       } else if (this.isPageProgressMode()) {
                         this.currentPageIndex = index;
                         this.reportReaderPageProgress();
+                        // 同上：页码没有 @Watch，改完必须显式重绘画布，否则拖进度条屏幕停在旧页。
+                        this.paintReaderCanvas();
                       } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
                         this.onSelectChapterIndex(index);
                       }

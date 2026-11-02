@@ -5,6 +5,8 @@ oh_modules/
 node_modules/
 **/build/
 local.properties
+# 本机临时文件（编辑器/脚本落盘的 .tmp-* 备份，不应进仓库）
+.tmp-*
 # 签名材料和本机配置
 *.p12
 *.pfx

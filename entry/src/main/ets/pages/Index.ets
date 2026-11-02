@@ -635,24 +635,36 @@ struct Index {
         });
         this.readerLifecycleEventsRegistered = true;
       }
-      this.restoreOnboarding(context);
-      this.restoreReadTimeRecords(context);
-      this.restoreHomeDashboardSettings(context);
-      this.restoreImportedBooks(context);
-      this.restoreBookshelfLayout(context);
-      this.restoreReaderBookmarks(context);
-      this.restoreReaderMarkings(context);
-      this.restoreReaderSettings(context);
-      this.restoreReaderMoreActions(context);
-      this.restoreReplaceRules(context);
-      this.restoreTxtTocRules(context);
-      this.restoreBookContentProcesses(context);
-      this.restoreBackupIgnoreLists(context);
-      this.loadRestoredAndroidEntries(context);
+      this.restoreStartupState(context);
     }
     this.eyeProtectionTimerId = setInterval(() => {
       this.eyeProtectionMinute = Math.floor(Date.now() / 60000);
     }, 60000);
+  }
+
+  /**
+   * 启动时的一批本地状态恢复。
+   *
+   * 只有 `restoreReaderSettings` 需要等待：它写的是阅读排版（字号、行距、页边距等），
+   * 不等它落盘就开书，会先按默认排版排一次再跳变成用户设置。
+   * 其余 restore 各自独立、写的是互不重叠的 @State 字段，不串行等待，
+   * 保持原本的并发启动速度（逐个 await 会明显拖慢首帧）。
+   */
+  private async restoreStartupState(context: Context): Promise<void> {
+    this.restoreOnboarding(context);
+    this.restoreReadTimeRecords(context);
+    this.restoreHomeDashboardSettings(context);
+    this.restoreImportedBooks(context);
+    this.restoreBookshelfLayout(context);
+    this.restoreReaderBookmarks(context);
+    this.restoreReaderMarkings(context);
+    await this.restoreReaderSettings(context);
+    this.restoreReaderMoreActions(context);
+    this.restoreReplaceRules(context);
+    this.restoreTxtTocRules(context);
+    this.restoreBookContentProcesses(context);
+    this.restoreBackupIgnoreLists(context);
+    this.loadRestoredAndroidEntries(context);
   }
 
   aboutToDisappear(): void {
