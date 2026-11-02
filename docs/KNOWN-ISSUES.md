@@ -173,9 +173,16 @@ this.pageTurnTimer = setTimeout(() => {
 
 **本地现状（已接，按上游 `feature/reader/core/selection/` 六文件 503 行自绘）**：
 - 几何：`ReaderCanvasRenderer` 把绘制拆成「先 `layoutPage()` 算几何、再逐元素画」，`ReaderCanvasPageGeometry` 记录每个 item 的 `left/top/widthPx/heightPx`，命中测试与绘制共用同一套坐标，不会漂移。
-- 命中与选词：`hitTestTextBox(x, y)` → `glyphOffsetAt(box, x, y, style)`（`Paragraph.getGlyphPositionAtCoordinate`）→ `wordRangeAt(box, offset, style)`（`Paragraph.getWordBoundary` 取整词，空词退化成单字）。
+- 命中与选词：`hitTestTextBox(x, y)` → `glyphOffsetAt(box, x, y, style)`（`Paragraph.getGlyphPositionAtCoordinate`）→ `wordRangeAt(box, offset, style)`（`Paragraph.getWordBoundary` 取整词，空词退化成单字）。**偏移已贴到元素末尾时起点要回退一格**：否则 `start === end` 得到零长选区，`getRectsForRange` 拿不到矩形、两个把手也无处可放，表现为「长按有菜单但看不见选区、也抓不到把手」（`startCanvasSelectionAt` 里已处理）。
 - 绘制：`drawSelection()` 用 `Paragraph.getRectsForRange(range, TIGHT, TIGHT)` 拿条带矩形，`drawing.Brush` 填 `0x63858585`（上游 `legacySelectionFill`），再用 `drawing.Brush` + `drawing.Pen` 各画一次 `drawCircle` 作两个把手（半径 7vp、描边 2vp，对齐上游 `SelectionHandleRadius`/`SelectionHandleStrokeWidth`）。
 - 交互：`ReaderPage.ets` 的 `Stack` 挂 `LongPressGesture({ duration: 600 })` 起选（对齐上游 `LONG_PRESS_TIMEOUT_MILLIS = 600L`），横向 `PanGesture` 先 `canvasHandleHit()` 判把手命中，命中则拖 `dragCanvasSelectionTo()` 不翻页；`canvasSuppressTap` 标记吞掉长按抬手的那次 tap（对齐上游 `suppressTap`）。
+- 坐标口径（三处，缺一就会「选区跑到屏幕外」或「抓不到把手」）：
+  1. `drawPage` 只对**当前页**记几何（`recordGeometry`）和画选区（`drawSelection`），四页窗口里邻页一律不记——否则最后画的邻页会顶掉当前页坐标。
+  2. 手指坐标换算 `canvasViewportY()`：`finger.localY` 相对外层 `Stack`，画布顶边用 `getComponentUtils().getRectangleById(CANVAS_ID).windowOffset.y` 与 `STACK_ID` 的同名值相减求得（两者同口径，状态栏自动抵消）；**不要**直接减 `Area.position.y`，它会漏掉父容器的页眉占位。
+  3. 滚动模式下再减 `scrollOffset`：`canvasContentY()` = 视口 y − `vp2px(scrollOffset)`（`drawScrollSlot` 里是 `translate(0, scrollOffsetPx)`）。
+- 把手几何与命中照上游 `drawPinHandle` / `handleHitRadius`：圆心在矩形 `bottom + radius`，竖线只画到矩形 `bottom`（不画到圆心），命中热区 28vp 且按「竖线顶端—圆心」胶囊中轴线求最短距离；拖动时端点跟**把手**走而不是跟手指走（记 `canvasHandleGrabOffsetX/Y`），再减 `radius` 回到行底做 `positionAt()`。
+- 跨元素/跨行扩展：拖动取位用 `ReaderCanvasRenderer.positionAt(x, y, style)`，它在一行的**所有**元素间推进、超出最后一个元素就返回该行 `endPosition`；不能沿用单元素的 `glyphOffsetAt`（分页器会把一行按标点/样式切成多个小元素，单元素会被行末 clamp 住，选区再也扩不出去）。
+- 把手淡入淡出：`animateCanvasHandleTo()` 用 `UIContext.createAnimator` 做真补间，淡出 90ms、淡入 140ms（对齐上游 `SelectionHandleFadeOutMillis` / `SelectionHandleFadeInMillis`），拖动时另一侧把手同时淡出。
 - 菜单：菜单浮层 `Column(){ readerMarkingSelectionMenu() }.position(...)`，锚点由 `refreshCanvasSelectionMenuAnchor()` 按选区条带的 `selectionStartX/Y`、`selectionEndX/Y`、`selectionTopY/BottomY` 回填；沿用既有 `runSelectionMenuAction()`（复制 / 书签 / 划线 — 笔记）与 `createMarkingFromCurrentSelection()`。
 - 清理：程序化翻页的 `animator.onFinish` 调 `resetCanvasSelectionState()`（对齐上游 `ReaderSelectionLifecyclePolicy.shouldClearForPageChange`）。
 

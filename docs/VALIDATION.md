@@ -51,9 +51,9 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。
 - 构建：`bash scripts/build-hap.sh` 每次源码改动后均跑，全程 `BUILD SUCCESSFUL`（12 s – 1 min 6 s）。唯一告警是 `No signingConfig found for product default`。
 - 改动文件：
-  - 新增 `entry/src/main/ets/reader/ReaderCanvasSurface.ets`（1765 行，画布绘制主体：页面窗口、逐行排版、五种转场策略、滚动模型、选区自绘、高亮样式分段、图片预取）。
+  - 新增 `entry/src/main/ets/reader/ReaderCanvasSurface.ets`（1892 行，画布绘制主体：页面窗口、逐行排版、五种转场策略、滚动模型、选区自绘、高亮样式分段、图片预取）。
   - 新增 `entry/src/main/ets/reader/ReaderPageCurl.ets`（390 行，折页几何与触点策略，照上游 `PageCurlGeometry.kt` / `ReaderCurlTouchPolicy`）。
-  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5153 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支与整章 `Scroll` 分支）。
+  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5322 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支与整章 `Scroll` 分支）。
   - 改 `entry/src/main/ets/pages/Index.ets`（17 行：阅读页渲染门控）。
   - 新增 `scripts/build-hap.sh`（构建封装，导出 `JAVA_HOME=$DEVECO_ROOT/jbr`）。
 
@@ -64,7 +64,8 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 4. **`Paragraph.paint()` 会改画笔状态且不恢复**。`drawTextBox()` 里必须用 `canvas.save()` / `canvas.restore()` 包住，否则同一块画布后续的 `attachBrush + drawRect`（选区条带、把手、下划线）全部不落像素 —— 日志照样打印 `drawRect done`，屏幕上什么都没有。
 5. **滚动模式也搬进画布**。分页与连续滚动共用同一张画布（上游 `ScrollPageStack` 一条通路），`ReaderScrollPolicy`（`pageStep` / `stepDurationMillis` / `apply`，逐项照 `ReaderScrollState.kt`）算步距与越界，四页按 `scrollExtentPx` 堆叠、整体 `translate(0, stackOffsetY)` 平移，`clipRect` 保证不画出视口。滚动模式额外两个不变量：`calculateReaderBottomJustifyGap()` 必须返回 0（连续滚动没有「页底」，摊进剩余高度会把下一页首行推到本页已画的行上），进度必须按「当前页 + 全部前置页高度」的绝对位移算（`readerScrollAbsoluteOffset()`），否则每换一页进度条就打回 0。
 6. **高亮规则与选区一样走画布自绘**。`ReaderHighlightRule` 的正则命中区间转成 `ReaderCanvasStyleRange`，交给 `ParagraphBuilder` 逐段 `pushStyle`（字色 / 背景块 / 下划线），用户划线里 `effect === 'text'` 的字色排在高亮规则之后（对齐上游 `LegacyReaderStyleRangeMapper` 的 `priority = 10_000 + index`）。`RectStyle` 的四个圆角是 API 12 必填项，漏写报 `10505001`。
-7. **选区按上游 `feature/reader/core/selection/` 自绘**，不做简化：几何走 `getRectsForRange` / `getGlyphPositionAtCoordinate` / `getWordBoundary`，条带色 `0x63858585`（上游 `legacySelectionFill`），两个把手半径 7vp + 描边 2vp，长按 600 ms 起选，`canvasSuppressTap` 吞掉长按抬手那次 tap（对齐上游 `suppressTap`）。
+7. **选区按上游 `feature/reader/core/selection/` 自绘**，不做简化：几何走 `getRectsForRange` / `getGlyphPositionAtCoordinate` / `getWordBoundary`，条带色 `0x63858585`（上游 `legacySelectionFill`），两个把手半径 7vp + 描边 2vp，长按 600 ms 起选，`canvasSuppressTap` 吞掉长按抬手那次 tap（对齐上游 `suppressTap`）。把手是「竖线 + 圆柄」胶囊：圆心在矩形 `bottom + radius`，竖线只画到矩形 `bottom`，命中热区 28vp 且按胶囊中轴线求最短距离（对齐上游 `drawPinHandle` / `handleHitRadius`）；淡出 90 ms、淡入 140 ms 用 `UIContext.createAnimator` 做真补间。
+8. **选区有三套坐标口径，必须各自对齐**：① 四页窗口只对当前页记几何与画选区（`recordGeometry` / `drawSelection` 两个标志），否则最后画的邻页顶掉当前页坐标；② 手指 `finger.localY` 相对外层 `Stack`，画布顶边用 `getComponentUtils().getRectangleById()` 的 `windowOffset.y` 两者相减（同口径，状态栏自动抵消），**不能**直接减 `Area.position.y`；③ 滚动模式再减 `scrollOffset`。拖动取位用 `positionAt()` 在一行所有元素间推进，不能沿用单元素的 `glyphOffsetAt`（分页器按标点/样式切元素，单元素会被行末 clamp 住，选区再也扩不出去）。
 
 **踩坑**：
 1. **未被引用的 `.ets` 不参与类型检查**。往 `ReaderCanvasSurface.ets` 末尾塞 `const __probe: number = "not-a-number";` 后构建仍 `BUILD SUCCESSFUL`，构建产物里也搜不到该文件 —— **构建通过不等于新文件过了编译**，必须先有 import + 使用再拿构建当证据。
@@ -78,7 +79,9 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **验收②KI-EXP2 开书不出现整章滚动**：冷启动 `aa force-stop` → `aa start` → 点书架进书，连续 6 次 `uitest dumpLayout` 每次都只有 `Canvas=1、Scroll=0`，全程从未进入整章滚动分支；首屏 21 个文字带、末行带底部未触画布下边缘（无裁切）。**通过。**
 
-**验收③KI-EXP3 选区与划词**：`uitest uiInput longClick 400 1000` 出灰色选区带 + 两个圆形把手 + 浮动菜单「复制 / 书签 / 划线 / 笔记」；`drag 378 1050 200 900 800` 拖起始把手把选区从单字扩到两行，`drag 459 1050 900 1250 800` 拖结束把手跨行；点「划线 — 笔记」面板回显完整选中文本（「“让我们来采访一下展馆主人金先生。」）与章节「zh-book / 第3章 盗神将至」，保存后正文下方出现绿色下划线；点「复制」菜单收起、选区色块保留。**通过。**
+**验收③KI-EXP3 选区与划词**：`uitest uiInput longClick 400 1000` 出灰色选区带 + 两个圆形把手 + 浮动菜单「复制 / 书签 / 划线 / 笔记」；拖把手跨行扩展（`longClick 400 800` 起选 → `drag 378 864 800 1100 700`，选区从 `sel=102-103` 扩到 `102-127`、终点把手随拖移到 `E=804,1203`，截图确认灰底覆盖两行、起点把手在上行终点把手在下行）；点「划线 — 笔记」面板回显完整选中文本（「“让我们来采访一下展馆主人金先生。」）与章节「zh-book / 第3章 盗神将至」，保存后正文下方出现绿色下划线；点「复制」菜单收起、选区色块保留。**通过。**
+
+本轮修掉的两个真实缺陷（都在设备上先复现、修完复验）：① 长按落在元素末尾时 `start === end` 得到**零长选区**，`getRectsForRange` 拿不到矩形 → 屏幕上「有菜单但看不见选区、也抓不到把手」；`startCanvasSelectionAt` 现在会把起点回退一格。② 拖把手时端点跟手指走而不是跟把手走，且取位被单元素 clamp；改为记 `canvasHandleGrabOffsetX/Y` 再减 `radius` 回到行底做 `positionAt()`。
 
 **验收④五种转场各连翻 20 页**：每改一次 `pageAnimation` 都 `aa force-stop` → `aa start` → 点书架进书，再连点右侧翻页 20 次。COVER(`0`) 到第 16 章 5/10；SLIDE(`1`) 到第 18 章 1/10；折页(`2`) 到第 18 章；FADE(`4`) 到第 20 章 2/10；滚动(`3`) 到第 22 章 8/9 `4.0%`。全程每帧都有完整正文，无整页空白、无末行裁切、无两页文字互相透出。滚动模式另验跨章：连点 12 次从第 4 章滚到第 5 章，`scrollOffset` 越界时正确换页并清选区。**通过。**
 
