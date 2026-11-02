@@ -208,6 +208,47 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 用 `git diff` 生成的 patch 只挑本会话的 5 个文件（`.gitignore`、`ReaderPage.ets`、`Index.ets`、`BookRepository.ets`、`BackupRepository.ets`），没有 `git add -A`；一次性改写脚本 `scripts/tmp-add-catch-logs.py` 已删除，未入库。
 
+## 2026-11-02 N 端阅读进度与目录 ANR（KI-PROG1–KI-PROG5）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。
+- 构建：`bash scripts/build-hap.sh` 每次源码改动后均跑，全程 `BUILD SUCCESSFUL`。唯一告警是 `No signingConfig found for product default`。
+- 提交：`git diff -- <本次 3 个文件>` 生成 patch 后 `git apply --cached`，**没有用 `git add -A`**。
+
+### 源码接入（第 1 级）
+
+| 项 | 文件 | 状态 |
+| --- | --- | --- |
+| KI-PROG1 开书回章首 | `entry/src/main/ets/pages/Index.ets`（`openBook()` 的 `readerStartAtChapterBeginning`）、`entry/src/main/ets/data/BookRepository.ets`（`StoredReadConfig.chapterProgress`、`readBookRow()`、`toBookArgs()`） | 源码已接入 |
+| KI-PROG2 目录跳章自激循环 | `entry/src/main/ets/pages/ReaderPage.ets`（`refreshDisplayChapterTitle()`、`onChapterTitleChanged()`） | 源码已接入 |
+| KI-PROG3 图片尺寸防抖重排 | `entry/src/main/ets/pages/ReaderPage.ets`（`rebuildReaderPages()`、`scheduleImageSizesPaginationRebuild()`、`loadContentImageSizes()`） | 源码已接入 |
+| KI-PROG4 折页阴影 `25 * 1.414` | `entry/src/main/ets/reader/ReaderPageCurl.ets` | 经比对上游源码确认不是缺陷，**不改** |
+| KI-PROG5 大目录 ANR | `entry/src/main/ets/pages/CatalogPage.ets`（`aboutToAppear()`、`loadChapterWordCountsAfterRows()`、`loadChapterWordCounts()`）、`entry/src/main/ets/data/BookRepository.ets`（`byteOffsetsToCharIndices()`、`sequentialChapterRanges()`、`chapterBody()`、`forEachChapter()`） | 源码已接入 |
+
+### 构建通过（第 2 级）
+
+全部改动落盘后 `BUILD SUCCESSFUL`（多次，最长一次 `in 1 min 2 s 826 ms`），产物 `entry/build/default/outputs/default/entry-default-unsigned.hap`，`hdc install -r` 覆盖安装成功。ArkTS 只有既有 `WARN`（RdbSchema/RdbStore/RdbCodec 废弃 API、`Function may throw exceptions`），无 ERROR。
+
+### 设备验收（第 3 级）
+
+**验收 1 阅读进度跨退出保留 —— 通过。** the-metamorphosis（17 页）打开 → 点正文中部 `(640,1400)` 唤出菜单 → 拖滑块到 `5/17 2.3%` → 收起菜单 → Back 回书架 → 重新打开，**仍是 `5/17 2.3%`、标题「第1章(1)」**。修复前是 `1/9 0.1%`。
+
+**验收 2 阅读进度跨进程冷启动保留 —— 通过。** zh-book 打开 → 拖滑块到 `3/10 2.7%` → Back → `aa force-stop` → `aa start` 冷启动 → 重新打开，**仍是 `3/10 2.7%`、标题「第15章 对练」**。
+
+**验收 3 大目录不卡死 —— 通过。** 见 KI-PROG5：1378 章的 `古神？这分明是白发兽耳小萝莉` 目录 6461 ms 渲染完成（`共 1378 章` + 每章字数），572 章的 zh-book 2522 ms；两本修复前都必 ANR。`/data/log/faultlog/faultlogger/` 最新一条 `appfreeze-...` 停在修复前那一轮（14:56），此后整轮验收未再产生新日志。
+
+**验收 4 连续从目录跳章 —— 通过。** 1378 章书连续 5 轮跳章，落地章节与目标一致（第19章 / 第24章 / 第29章），`pidof` 全程 13273 未变；zh-book 跳第 21 章成功，`pidof` 14043 未变。
+
+**验收 5 带图 EPUB 开书时间 —— 通过（口径是「不退化」）。** 改后 3645 / 4046 / 3981 ms，基线 3982 / 4131 / 4029 ms，噪声内无可测退化。这本 EPUB 全书只有 1 张图，N=1 的路径本来就只重排一次，KI-PROG3 的收益体现在多图章节，本机没有可用样本。
+
+**验收 6 翻页动画无整页空白 —— 通过。** 仿真动画连翻 6 页 `2/16 → 8/16`，正文区文字像素占比 9.19% / 9.53% / 9.95% / 9.53% / 9.57% / 9.28%，无空白页。
+
+### 边界与教训
+
+- **KI-PROG2 的「跳章卡死」现象本机复现不出来**：A/B 对照（stash 掉改动重新构建装机）在 13 章书上跳章同样正常，因为 `replace_rules` 表 0 条、`applyTitle` 是 `async` 会让出事件循环。改动去掉的是确定存在的自激回路，只能按「源码已修 + 跳章验收通过」登记。
+- **A/B 对照必须做**：不做就会把「改动正确」误报成「现象已修复」。
+- **KI-PROG5 的决定性证据是关开关对照**：把 `tocCountWords` 改成 `false` 后 1378 章目录立刻正常渲染，改回 `true` 必被杀 —— 直接把卡死定位到字数统计路径。
+- **只补传参不够**：`loadChapterWordCounts()` 补传 `chapterRows` 之外还必须等 `loadChapterRows()` 完成，否则那时 `chapterRows` 还是空数组，`forEachChapter` 仍会退回 `deriveChapters()`。第一版只补了传参，实测目录仍打不开。
+
 ## 2026-11-02 N 端阅读器正文改画布逐行绘制（KI-EXP1/KI-EXP2/KI-EXP3 收口）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。

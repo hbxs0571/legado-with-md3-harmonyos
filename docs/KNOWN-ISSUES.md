@@ -237,7 +237,27 @@ onChapterTitleChanged()
 
 - 验收：13 章的 the-metamorphosis 连续从目录跳第 8–13 章，每次标题正确、`pidof` 恒为同一进程未变。**通过**（三级口径第 3 级）。
 - **边界**：`replace_rules` 表 0 条时 `getAll()` 返回空数组、`applyTitle` 是 `async` 会让出事件循环，所以这个自激循环在当前数据下不会真卡死 —— A/B 对照（stash 改动后重新构建装机）在 13 章书上跳章同样正常。改动去掉的是确定存在的自激回路，**「跳章卡死」这个现象本身在本机复现不出来**。
-- **另有一处既有缺陷不算在本条**：zh-book 有 572 章，打开目录页必 ANR（`/data/log/faultlog/faultlogger/` 里 `appfreeze-...` 全部 `Reason:THREAD_BLOCK_6S`，主线程栈只有 `BCStub_HandleLdaV8StwCopy` / `BCStub_HandleMovV4V4StwCopy`）。基线（stash 改动）同样 ANR，根因是 `CatalogPage.ets:281 loadChapterWordCounts()` → `BookRepository.forEachChapter()`（`BookRepository.ets:1447`，逐章 `applyChapterContentAsync` 全文处理）在 572 章上的全量遍历。**本次未改**。
+- **另有一处既有缺陷不算在本条**：zh-book 有 572 章，打开目录页必 ANR（`/data/log/faultlog/faultlogger/` 里 `appfreeze-...` 全部 `Reason:THREAD_BLOCK_6S`，主线程栈只有 `BCStub_HandleLdaV8StwCopy` / `BCStub_HandleMovV4V4StwCopy`）。基线（stash 改动）同样 ANR，根因是 `CatalogPage.ets:281 loadChapterWordCounts()` → `BookRepository.forEachChapter()`（`BookRepository.ets:1447`，逐章 `applyChapterContentAsync` 全文处理）在 572 章上的全量遍历。**该缺陷已在 KI-PROG5 修复**。
+
+### KI-PROG5 大目录（上千章）打开目录页必 ANR —— 已修
+
+两处叠加，都在 `CatalogPage` 打开时同步占用界面线程：
+
+1. **`loadChapterWordCounts()` 没把 `chapterRows` 传给 `forEachChapter()`**。`BookRepository.forEachChapter(book, cb, useReplaceRules, chapters = [])` 的 `chapters` 默认是空数组，不传时 `BookRepository.ets:1458` 走 `chapters.length > 0 ? chapters : deriveChapters(book, content)` —— 即对 8.4MB 全书正文**再跑一遍目录规则正则**（`splitChapters` → `TxtTocRuleRepository.splitChapterStarts`），只为拿回一份调用方手里早就有的章节行。
+2. **`chapterBody()` 逐章调用 `byteOffsetToCharIndex()`**。这个函数每次从全书开头逐字符累加字节宽度直到命中目标偏移，`forEachChapter` 的循环里每章都要调两次（start、end），1378 章就是 **O(N²)**：平均每章扫半本书约 42 万个字符，合计约 **11.6 亿次字符迭代**，全部在界面线程上同步执行。
+
+对照实验（决定性证据）：把 preferences 里 `tocCountWords` 改成 `false` 关掉字数统计后，1378 章的目录**立刻正常渲染**（`共 1378 章`，进程存活）；改回 `true` 就必被杀。说明卡死来自字数统计这条路径，不是目录本身渲染。
+
+修法两处：
+
+- `CatalogPage.ets` 的 `aboutToAppear()` 改为在需要统计字数时走新增的 `loadChapterWordCountsAfterRows()`：先 `await this.loadChapterRows()`，确认 `chapterRows.length > 0` 后再 `await this.loadChapterWordCounts()`；`loadChapterWordCounts()` 里的 `forEachChapter` 补传第四个参数 `this.chapterRows`。**两处缺一不可** —— 只补传参不串行等待，`chapterRows` 那时还是空数组，仍然会退回 `deriveChapters()`。
+- `BookRepository.ets` 新增 `byteOffsetsToCharIndices(content, byteOffsets, encoding)`（一次顺序扫描换算一组递增的字节偏移，写法与既有的 `charOffsetsToByteOffsets` 同构）与 `sequentialChapterRanges(content, rows, encoding)`（预先算出每章字符区间，任一行缺 `start`/`end` 就返回 `undefined` 让调用方退回逐章换算）；`chapterBody()` 增加可选参数 `charRange`，`forEachChapter()` 在循环前算一次区间表再逐章传进去。`chapterBody()` 的原有逐章换算路径保留，增量导入等只处理少数章节的调用方行为不变。
+
+- 验收（三级口径第 3 级，**通过**）：
+  - 1378 章的 `古神？这分明是白发兽耳小萝莉`：点目录到 `共 1378 章` 渲染完成 **6461 ms**（修复前必被杀），章节标题与右侧字数（`2179字` / `2108字` …）全部正常显示，目录滚动流畅，`pidof` 全程 13273 未变。
+  - 连续 5 轮从目录跳章：目标章节与实际落地章节逐轮一致（第19章 / 第24章 / 第29章），进程始终存活。
+  - 572 章的 zh-book（修复前必 ANR）：目录 **2522 ms** 打开，跳第 21 章成功，`pidof` 14043 未变。
+  - `/data/log/faultlog/faultlogger/` 最新一条 `appfreeze-...` 停在 **14:56**（修复前那一轮），之后整轮验收（15:00 起）**没有再产生任何新的 appfreeze 日志**。
 
 ### KI-PROG3 带图章节图片尺寸到达后整章重排 N 次 —— 已修
 

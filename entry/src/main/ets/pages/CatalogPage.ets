@@ -66,8 +66,23 @@ export struct CatalogPage {
   @State chapterRows: BookChapter[] = [];
 
   aboutToAppear(): void {
-    this.loadChapterRows();
-    if (this.showWordCount) { this.loadChapterWordCounts(); }
+    // 字数统计依赖 chapterRows，所以只在需要统计时串起来等；不统计时单独加载章节行。
+    if (this.showWordCount) {
+      this.loadChapterWordCountsAfterRows();
+    } else {
+      this.loadChapterRows();
+    }
+  }
+
+  /** 先等章节行加载完，再统计字数。 */
+  private async loadChapterWordCountsAfterRows(): Promise<void> {
+    try {
+      await this.loadChapterRows();
+    } catch (_) {
+      return;
+    }
+    if (this.chapterRows.length === 0) { return; }
+    await this.loadChapterWordCounts();
   }
 
   aboutToDisappear(): void {
@@ -284,6 +299,8 @@ export struct CatalogPage {
     this.wordCountsLoading = true;
     const counts = new Map<number, string>();
     try {
+      // 必须把已加载的 chapterRows 传进去：不传时 forEachChapter 会退回 deriveChapters()，
+      // 对全书正文再跑一遍目录规则正则（1378 章的书要 6 秒以上，直接把界面线程卡死）。
       await BookRepository.forEachChapter(
         this.book,
         async (content: string, chapterIndex: number): Promise<boolean> => {
@@ -291,7 +308,8 @@ export struct CatalogPage {
           counts.set(chapterIndex, this.formatWordCount(content.length));
           return true;
         },
-        false
+        false,
+        this.chapterRows
       );
       if (generation === this.wordCountGeneration) { this.chapterWordCounts = counts; }
     } catch (_) {

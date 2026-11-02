@@ -1356,15 +1356,73 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /**
+   * 一次顺序扫描把一组「递增的」字节偏移换算成字符下标。
+   *
+   * 逐章调用 byteOffsetToCharIndex 时每章都要从全书开头重扫一遍，1378 章的书
+   * 是 O(N²)（十几亿次字符迭代），目录页的字数统计会把界面线程卡到 ANR。
+   * 章节行的 start/end 本身按正文顺序递增，扫一遍就能全部换算完。
+   */
+  private static byteOffsetsToCharIndices(content: string, byteOffsets: number[],
+    encoding: string | undefined): number[] {
+    const result: number[] = [];
+    if (byteOffsets.length === 0) { return result; }
+    const normalized = BookRepository.normalizeEncoding(encoding);
+    let targetIndex = 0;
+    let charIndex = 0;
+    let byteCount = 0;
+    while (targetIndex < byteOffsets.length && byteOffsets[targetIndex] <= 0) {
+      result.push(0);
+      targetIndex++;
+    }
+    while (charIndex < content.length && targetIndex < byteOffsets.length) {
+      const width = BookRepository.charByteWidth(content, charIndex, normalized);
+      charIndex += width === 4 ? 2 : 1;
+      byteCount += width;
+      while (targetIndex < byteOffsets.length && byteOffsets[targetIndex] <= byteCount) {
+        result.push(charIndex);
+        targetIndex++;
+      }
+    }
+    while (result.length < byteOffsets.length) {
+      result.push(content.length);
+    }
+    return result;
+  }
+
+  /**
+   * 预先算出每一章的字符区间；只要有一行缺 start/end 就返回 undefined，
+   * 调用方退回逐章换算（增量导入等少数路径）。
+   */
+  private static sequentialChapterRanges(content: string, rows: BookChapter[],
+    encoding: string | undefined): ChapterTextRange[] | undefined {
+    const starts: number[] = [];
+    const ends: number[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      if (row === undefined || row.start === undefined || row.end === undefined) { return undefined; }
+      starts.push(row.start);
+      ends.push(row.end);
+    }
+    const startChars = BookRepository.byteOffsetsToCharIndices(content, starts, encoding);
+    const endChars = BookRepository.byteOffsetsToCharIndices(content, ends, encoding);
+    const ranges: ChapterTextRange[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      ranges.push({ start: startChars[index] ?? 0, end: endChars[index] ?? content.length });
+    }
+    return ranges;
+  }
+
+  /**
    * 取一章的正文（已去掉标题行）。
    * start/end 是字节偏移，先换算成字符下标再切字符串，与上游按字节 seek 等价。
+   * charRange 是调用方已经算好的字符区间，批量路径传它以避免逐章重扫全书。
    */
   private static chapterBody(book: Book, content: string, chapter: BookChapter,
-    encoding: string | undefined): string {
-    const startChar = chapter.start === undefined
-      ? 0 : BookRepository.byteOffsetToCharIndex(content, chapter.start, encoding);
-    const endChar = chapter.end === undefined
-      ? content.length : BookRepository.byteOffsetToCharIndex(content, chapter.end, encoding);
+    encoding: string | undefined, charRange?: ChapterTextRange): string {
+    const startChar = charRange !== undefined ? charRange.start
+      : chapter.start === undefined ? 0 : BookRepository.byteOffsetToCharIndex(content, chapter.start, encoding);
+    const endChar = charRange !== undefined ? charRange.end
+      : chapter.end === undefined ? content.length : BookRepository.byteOffsetToCharIndex(content, chapter.end, encoding);
     const section = content.substring(startChar, Math.max(startChar, endChar));
     const bodyStart = BookRepository.chapterBodyStart(section, chapter.title);
     const body = section.substring(bodyStart).trim();
@@ -1466,9 +1524,13 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const yieldAfterChapter = async (): Promise<void> => {
       await new Promise<void>((resolve: () => void) => setTimeout(resolve, 0));
     };
+    // 章节行的 start/end 按正文顺序递增，一次性换算完字符区间；
+    // 逐章调用 byteOffsetToCharIndex 是 O(N²)，大目录（上千章）会卡死界面线程。
+    const sequentialRanges = BookRepository.sequentialChapterRanges(content, rows, encoding);
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
-      const body = BookRepository.chapterBody(book, content, row, encoding);
+      const body = BookRepository.chapterBody(book, content, row, encoding,
+        sequentialRanges !== undefined ? sequentialRanges[index] : undefined);
       const chapter = await BookRepository.applyChapterContentAsync(book, row.title, body, row.index, useReplaceRules);
       if (!(await onChapter(chapter, row.index))) { return; }
       await yieldAfterChapter();
