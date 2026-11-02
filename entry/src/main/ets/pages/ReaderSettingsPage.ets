@@ -672,7 +672,7 @@ export struct ReaderSettingsPage {
         Text(this.selectedSettingsTab === 2 ? '信息' : this.selectedSettingsTab === 3 ? '更多设置' : '阅读界面')
           .fontSize(17).fontColor('#E5E6EB').margin({ left: 10 })
         Blank()
-      }.padding({ left: 16, right: 16, bottom: 14 })
+      }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
 
       if (this.selectedSettingsTab < 2) {
         Swiper() {
@@ -712,7 +712,9 @@ export struct ReaderSettingsPage {
 
   @Builder
   private globalSettingsPage() {
-    Column() {
+    // 整页纵向可滚动：字号卡 + 背景样式卡行 + 翻页动画行加起来比面板高，
+    // 不滚的话最后一行会被底部 tab 栏盖住（上游 GlobalThemePage 也是 verticalScroll）。
+    Scroll() {
       Column() {
         Row() {
           Column() {
@@ -806,12 +808,12 @@ export struct ReaderSettingsPage {
           Image($r('app.media.app_padding')).width(20).height(20).fillColor('#D9DAE0').margin({ left: 14 })
             .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
         }.padding(13).backgroundColor('#202127').borderRadius(13).margin({ top: 13 })
-      }.padding({ left: 14, right: 14 })
-
-      Blank().layoutWeight(1)
+      }.width('100%').padding({ left: 14, right: 14, bottom: 14 })
     }
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
+    .scrollBar(BarState.Off)
+    .align(Alignment.Top)
   }
 
   private selectSettingsTab(index: number): void {
@@ -2019,7 +2021,7 @@ export struct ReaderSettingsPage {
   }
 
   private settingsSheetHeight(): string {
-    if (this.selectedSettingsTab === 0) { return '46%'; }
+    if (this.selectedSettingsTab === 0) { return '62%'; }
     if (this.selectedSettingsTab === 1) { return '68%'; }
     if (this.selectedSettingsTab === 2) { return '70%'; }
     return '86%';
