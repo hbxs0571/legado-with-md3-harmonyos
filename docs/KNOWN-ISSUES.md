@@ -287,6 +287,20 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 - 观感差异仅在于宿主绘制 API 不同（上游 Compose `drawRect(Brush.horizontalGradient(...))`，本地 `drawing.Brush.setShaderEffect(drawing.ShaderEffect.createLinearGradient(...))` + `canvas.rotate()`），`drawCurlBackShadow` / `drawCurlFolderShadow` / `drawCurlFrontShadows` 三个函数的几何参数已与上游同构。基准包 `android-reader-animation-simulation-frame-during.png`（1080×2400）里折页是右上角一条细暗带，与本机抓到的折页中间帧方向、位置一致。
 
+### KI-SCROLL1 滚动模式拖拽方向相反、量纲错、跨页收口未实现 —— 已修
+
+连续滚动模式（`pageAnimation === 3`）下手指向上滑，内容跟着向上走但只走一点点就停；换页永远不触发。三个错误叠在同一条路径上：
+
+1. **方向符号反了**。`dragReaderScrollBy()` 里 `const next = Math.max(0, Math.min(total, this.scrollDragStartOffset - offsetYVp));` 的减号是错的。`offsetPx = 0` 表示当前页顶边对齐视口顶边，`deltaPx` 为负才是内容上移（往后读）；ArkUI `PanGesture` 的 `offsetY` 手指向下为正，与上游 `ReaderCanvasSurface.kt:1333-1342` 直接拿 `moveDelta.y` 当 delta 同口径，不该取负。
+2. **钳制量纲错**。`scrollOffset` 的正常值域是 `[-currentExtent, 0]`，而 `total` 来自 `readerScrollTotalHeight()`（整章内容高减一屏），不是同一量纲。只改符号不修夹取，位移会被 `Math.max(0, …)` 钳成 0，表现为「手指向上滑完全没反应」。
+3. **跨页收口从未实现**。`onActionEnd` 只有 `this.updateProgress();`，注释却写着「跨页要等抬手后的 applyReaderScrollDelta 收口」——那条调用根本不存在。
+
+修法：删掉 `dragReaderScrollBy()` 与字段 `scrollDragStartOffset`，换成 `scrollDragLastY`；纵向 `PanGesture` 的 `onActionUpdate` 把 ArkUI 的累计 `offsetY` 换算成逐帧 delta 后直接调 `applyReaderScrollDelta(vp2px(delta))`（它内部负责换页、`refreshReaderBottomJustifyGap()` 与重绘），`onActionEnd` 保持只 `updateProgress()`。
+
+- 验收：纯观测（不点击）下手指上滑 200 px，正文条带位移 `-198 px`、`residual=0.05`，正文文本顺序同步前进；连续 8 次上滑可正常跨页；退出重进保持 `17/17`；分页模式横向翻页与滚动模式长按选词均不受影响。**通过**（三级口径第 3 级）。
+
+**未实现、属已知行为差异**：抬手惯性 fling。上游 `ReaderCanvasSurface.kt:1414-1450` 用 `animateDecay` 做松手后的减速滑行，本地完全没有这条路径，松手即停。本轮按任务范围只修方向、量纲、跨页三处，**没有顺带实现惯性**。
+
 ### KI-SHELF1 书架网格与无封面文字封面与上游的差异 —— 已对齐
 
 书架原先有两组与上游不一致的地方，本轮全部对齐。上游基准：`ui/main/bookshelf/BookItem.kt`（网格项与封面容器）与 `ui/widget/components/image/cover/CoilBookCover.kt`（无封面时的文字封面）。

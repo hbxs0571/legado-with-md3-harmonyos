@@ -322,6 +322,51 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 用 `git diff` 生成的 patch 只挑本会话的 4 个文件（`ReaderSettingsRepository.ets`、`Index.ets`、`ReaderSettingsPage.ets`、`BackupRepository.ets`）加两份文档，没有 `git add -A`。
 
+## 2026-11-02 N 端滚动模式拖拽方向与跨页收口
+
+目标：修复连续滚动模式（`pageAnimation === 3`）下拖拽方向相反的问题，顺带修掉同一条路径上的量纲错误与从未实现的跨页收口。只改这三处，不扩大到抬手惯性。
+
+- 基线：`main` HEAD `f490fc7`，工作区开工时干净。
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。
+- 测试书：`the-metamorphosis`（13 章，正文 `local-1793481021711.txt`，118,395 字符）。
+
+### 源码接入
+
+| 文件 | 改动 |
+| --- | --- |
+| `entry/src/main/ets/pages/ReaderPage.ets` | 删除 `dragReaderScrollBy()` 与字段 `scrollDragStartOffset`；新增 `scrollDragLastY`；纵向 `PanGesture` 的 `onActionStart` 归零、`onActionUpdate` 把 ArkUI 的累计 `offsetY` 换算成逐帧 delta 后直接调 `applyReaderScrollDelta(vp2px(delta))`、`onActionEnd` 仍只 `updateProgress()` |
+
+三处错误一起修：
+1. **方向符号**：原式 `scrollDragStartOffset - offsetYVp` 的减号反了。`offsetPx = 0` 表示当前页顶边对齐视口顶边，`deltaPx` 为负才是内容上移（往后读），而 ArkUI 的 `offsetY` 手指向下为正——两者同向，不该取负。
+2. **量纲**：原式用 `Math.max(0, Math.min(total, …))` 夹取，但 `scrollOffset` 的值域是 `[-currentExtent, 0]`，`total` 来自 `readerScrollTotalHeight()`（整章内容高减一屏），不是同一量纲。只改符号不修夹取，位移会被 `Math.max(0, …)` 钳成 0，表现为「手指向上滑完全没反应」。
+3. **跨页收口**：`onActionEnd` 原本只有 `updateProgress()`，注释却写着「跨页要等抬手后的 applyReaderScrollDelta 收口」——那条路径从未实现。改为拖拽期就逐帧调 `applyReaderScrollDelta`，它内部负责换页、`refreshReaderBottomJustifyGap()` 与重绘，抬手时无需再补。
+
+### 构建通过
+
+`bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 2 s 433 ms`，`hdc install -r` 覆盖安装成功。唯一告警仍是既有的 `No signingConfig found for product default`。
+
+### 设备验收
+
+| 验收项 | 证据 | 结论 |
+| --- | --- | --- |
+| ① 拖拽方向 | 纯观测（不点击、只截图 + swipe）：手指上滑 200 px，正文顶部条带在下一帧位于原位置上方 `198 px`（`strip@1000 -> 802 residual=0.05`，另两条带同样 `-198`）；正文文本顺序同步前进——滑前顶部是 `the longer it went on…`（字符 56838），滑后顶部是 `sooner had she come in / close the door as a`（字符 57068） | **通过** |
+| ② 连续跨页不卡边界 | 连续 8 次上滑后进度由 `5/16 40.4%` 到 `6/16 40.8%` 并持续可滚；章末停住、章首停住（`applyReaderScrollDelta` 在 `currentPageIndex === 0` 与末页时钳回边界） | **通过** |
+| ③ 退出重进回原位 | 滚到 `17/17` 后经菜单返回箭头退出，重开同一本书仍是 `17/17 38.5%`；`books` 表 `durChapterIndex=4`、`durChapterPos=8106`、`readConfig` 的 `chapterProgress=85` 与之一致 | **通过** |
+| ④ 分页模式横向翻页不受影响 | `pageAnimation=2` 下横向左滑两次 `15/17→14/17→13/17`、右滑一次回到 `14/17`；纵向滑动不翻页（`14/17` 保持） | **通过** |
+| ⑤ 滚动模式长按选词不受影响 | 长按正文弹出「复制 / 书签 / 划线 / 笔记」菜单 | **通过** |
+
+### 边界与教训
+
+- **抬手惯性 fling 仍未实现**（上游 `ReaderCanvasSurface.kt:1414-1450` 的 `animateDecay`）。本轮按要求只修方向、量纲、跨页三处，没有顺带实现惯性；松手即停，属已知行为差异。
+- **滚动模式下底部 `x/y z%` 不是页码**：`getReaderFooterProgress()` 在 `isPageProgressMode()` 为假时显示的是「章序号/总章数 整本百分比」。拿这个数字判方向会得出完全相反的结论——`1/16` 里的 `1` 是章序号。判方向必须用正文文本顺序或像素位移。
+- **验收脚本自己会污染测量**：本轮一度用「点正文中央 `(640,950)`」关闭菜单，而该点落在 `clickRegionActions` 的「上一页」热区（`row=1,col=0`），每关一次菜单就往前翻一页，导致「文本前进、页码倒退」的矛盾现象。正确做法是点**屏幕正中**（`row=1,col=1`，`clickRegionActions[4] === '菜单'`），或干脆不做任何点击、只截图。
+- **`uitest uiInput drag` 慢速会被识别成长按**并弹出选词菜单；`swipe <from_x> <from_y> <to_x> <to_y> <velocity>`（velocity 500-1200）更可靠。
+- 横向 `PanGesture({ direction: PanDirection.Horizontal })` 是既有代码（`onActionEnd` 里按 `offsetX` 与 `touchSlop` 判翻页），滚动模式下同样生效，本轮未改。
+
+### 提交
+
+用 `git diff` 生成的 patch 只挑本会话的 `ReaderPage.ets` 与两份文档，没有 `git add -A`。
+
 ## 2026-11-02 N 端阅读进度与目录 ANR（KI-PROG1–KI-PROG5）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。

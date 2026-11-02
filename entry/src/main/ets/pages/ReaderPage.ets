@@ -535,8 +535,8 @@ export struct ReaderPage {
   private curlTouchY: number = 0;
   private curlCornerY: number = 0;
   private curlRevealProgress: number = 1;
-  /** 连续滚动纵向拖动起点（vp），拖动期以它为基准加位移，避免累积误差。 */
-  private scrollDragStartOffset: number = 0;
+  /** 滚动拖拽上一帧的累计 offsetY（vp），用于把累计量换算成逐帧 delta。 */
+  private scrollDragLastY: number = 0;
   private curlPrevious: boolean = false;
   // 高亮样式区间的构造缓存（翻页动画每帧都会重建 request，不缓存会每帧新建上千对象）
   private canvasHighlights: ReaderCanvasStyleRange[] = [];
@@ -1941,25 +1941,6 @@ export struct ReaderPage {
     this.refreshReaderBottomJustifyGap();
     this.paintReaderCanvas();
     return result.hitBoundary;
-  }
-
-  /**
-   * 连续滚动的纵向拖动（上游 ScrollPageStack 的拖拽路径）。
-   *
-   * 拖动期不换页：跨页要等抬手后的 `applyReaderScrollDelta` 收口，
-   * 否则一帧内既换索引又改偏移，页面栈会跳一下。
-   */
-  private dragReaderScrollBy(offsetYVp: number): void {
-    const total = this.readerScrollTotalHeight();
-    if (total <= 0) {
-      return;
-    }
-    const next = Math.max(0, Math.min(total, this.scrollDragStartOffset - offsetYVp));
-    if (Math.abs(next - this.scrollOffset) < 0.5) {
-      return;
-    }
-    this.scrollOffset = next;
-    this.paintReaderCanvas();
   }
 
   private turnReaderPage(delta: number): void {
@@ -4642,17 +4623,24 @@ export struct ReaderPage {
               if (event.offsetX < -slop) { this.turnReaderPage(1); }
               else if (event.offsetX > slop) { this.turnReaderPage(-1); }
             }),
-          // 连续滚动的纵向拖动：手指往上（offsetY 为负）就把内容往上推，即 offset 增大。
-          // 上游 ScrollPageStack 用 graphicsLayer.translationY 拖拽，这里等价地改 scrollOffset
-          // 后重绘（画布只有一个组件，省掉图层与逐帧 draw 的组合开销）。
+          // 连续滚动的纵向拖动：delta 符号直接沿用 ArkUI 的 offsetY（手指向下为正），
+          // 与上游 ReaderCanvasSurface.kt 拿 moveDelta.y 当 delta 同口径。
+          // 拖拽期就会跨页（applyReaderScrollDelta 内部改 currentPageIndex），
+          // 所以抬手时不需要再收口。
           PanGesture({ direction: this.usesCanvasScroll() ? PanDirection.Vertical : PanDirection.None })
             .onActionStart(() => {
               this.cancelTurnAnimator();
               this.pageTurnAnimating = false;
-              this.scrollDragStartOffset = this.scrollOffset;
+              this.scrollDragLastY = 0;
             })
             .onActionUpdate((event: GestureEvent) => {
-              this.dragReaderScrollBy(event.offsetY);
+              // ArkUI 的 offsetY 是相对手势起点的累计量，apply 要的是逐帧 delta
+              const deltaVp = event.offsetY - this.scrollDragLastY;
+              if (deltaVp === 0) {
+                return;
+              }
+              this.scrollDragLastY = event.offsetY;
+              this.applyReaderScrollDelta(this.getUIContext().vp2px(deltaVp));
             })
             .onActionEnd(() => {
               this.updateProgress();
