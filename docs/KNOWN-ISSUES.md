@@ -287,6 +287,40 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 - 观感差异仅在于宿主绘制 API 不同（上游 Compose `drawRect(Brush.horizontalGradient(...))`，本地 `drawing.Brush.setShaderEffect(drawing.ShaderEffect.createLinearGradient(...))` + `canvas.rotate()`），`drawCurlBackShadow` / `drawCurlFolderShadow` / `drawCurlFrontShadows` 三个函数的几何参数已与上游同构。基准包 `android-reader-animation-simulation-frame-during.png`（1080×2400）里折页是右上角一条细暗带，与本机抓到的折页中间帧方向、位置一致。
 
+### KI-SHELF1 书架网格与无封面文字封面与上游的差异 —— 已对齐
+
+书架原先有两组与上游不一致的地方，本轮全部对齐。上游基准：`ui/main/bookshelf/BookItem.kt`（网格项与封面容器）与 `ui/widget/components/image/cover/CoilBookCover.kt`（无封面时的文字封面）。
+
+**A 部分：书架网格**
+
+| # | 差异 | 修法 |
+|---|---|---|
+| 1 | 封面是固定 70×100 的小块，不填满格子 | `BookCover` 新增 `fillWidth` / `maxWidth`：宽取格子可用宽，高按 **5:7** 算，对齐上游 `BookItem.kt:271` 的 `aspectRatio(5f / 7f)` |
+| 2 | 卡片左对齐、标题也左对齐 | 卡片 `alignItems(HorizontalAlign.Center)`；标题 `width('100%')` + `textAlign` 由新字段 `bookshelfTitleCenter` 决定（默认 true，对齐上游 `BookshelfGridItem` 的 `titleCenter = true`） |
+| 3 | 网格间距写死 `rowsGap(16)` / `columnsGap(10)` / 左右 padding 14 | 统一成常量 `BOOKSHELF_GRID_GAP = 8` / `BOOKSHELF_GRID_PADDING = 8`，对齐上游 `BookshelfScreen.kt:1748-1772` 的 `spacedBy(8.dp)` + `horizontal = 8.dp` |
+| 4 | 标题没有内边距、字号写死 13 | 标题 `padding({ left: 4, right: 4, bottom: 4 })`（上游 `padding(start = 4.dp, end = 4.dp, bottom = 4.dp)`）；字号由新字段 `bookshelfTitleSmallFont` 在 11（`labelSmall`）与 13（`labelMedium`）之间切 |
+| 5 | 没有封面宽度设置 | 新增 `bookshelfGridCoverWidth`（默认 120）/ `bookshelfListCoverWidth`（默认 84），对齐上游 `BookshelfSettingsRepository.kt:82-83`；布局面板补「网格封面宽度」「列表封面宽度」两个步进器 |
+
+**B 部分：无封面书的文字封面**
+
+| # | 差异 | 修法 |
+|---|---|---|
+| 1 | 无封面时只显示一个书名首字 | 改成 `Canvas` 逐字绘制完整书名与作者，排版规则复刻上游 `CoilBookCover.kt`：书名 `w/8` 粗体、作者 `w/12`；竖排起点 `w*0.16 / h*0.16`、作者列 `w*0.84`；横排书名 3 行、作者居中 `h*0.75`；拉丁文占比 > 0.3 时强制横排（`CoilBookCover.kt:505-509`） |
+| 2 | 没有居中书本图标 | 无封面时居中叠 `AppGlyph('book')`，占封面 35%，对齐上游 `CoilBookCover.kt:210-218` 的 `fillMaxSize(0.35f)` |
+| 3 | 竖排/横排不可选 | 新增 `infoOrientation`（`'0'` 竖向 / `'1'` 横向），封面设置页可切 |
+| 4 | 没有文字颜色、描边、阴影设置 | 新建 `data/CoverSettingsRepository.ets`，12 个字段与上游 `CoverSettings.kt` 逐项对齐（`showShadow` 默认 false、`showStroke` 默认 true、`useDefaultColor` 默认 true、日/夜两套文字色与阴影色、显示书名/作者开关） |
+| 5 | 封面设置页是静态占位，改了不生效 | `AppCoverSettingsPage` 整体重写为受控页面，改动经 `Index.saveCoverSettings` 落 `legado_cover_settings` preferences 并即时回传书架 |
+
+**模型裁剪（有意为之）**：本地没有 EInk 形态，上游 `ReadStyleItem` / `CoverSettings` 里与墨水屏相关的字段不引入；`CoverSettings` 只保留实际会参与绘制的那 12 项。
+
+**踩到的坑（已修，留作记录）**：
+
+- **`Canvas` 文字量纲**：`CanvasRenderingContext2D` 的 `context.width/height` 与绘制坐标同为 vp，但 `context.font` 字符串里的 `px` 是**物理像素**。一开始把 `onAreaChange` 拿到的 vp 宽度直接当像素算字号，字号小了 density 倍（本机 3.47），文字缩成一条条细线。正确写法是排版用 vp、写 `font` 时经 `vp2px()` 换算，`lineWidth` 保持 vp 量纲（换算成像素会粗一个 density 倍，字糊成一团）。
+- **竖排基线**：第一字的 y 就是起点本身，不要再加一个字号（加了整体下移一格）。
+- **日/夜文字色**：深色主题下生效的是 `*Dark` 那套，改日间颜色看不到变化，容易误判成「设置无效」。
+
+**验收（第 3 级）**：A 部分 ①封面填满 5:7（3 列时 361 px 宽）②卡片与标题居中 ③间距 8/8/8 ④标题 padding 与 11/13 字号切换 ⑤封面宽度 50/200 生效且 200 时居中不撑满（694 px = 200vp × 3.47）✔；B 部分 ⑥无封面书显示图标 + 竖排书名/作者 ⑦竖向/横向切换 ⑧显示书名/作者开关（关书名时作者同隐）⑨文字颜色与阴影生效且冷启动保持 ✔。
+
 ### KI-STYLE1 背景样式区与上游的五处差异 —— 已对齐（含样式可增删）
 
 全局设置页「背景」样式卡行原先与上游 `GlobalThemePage.kt` 的背景样式区有 5 处差异，本轮全部对齐：

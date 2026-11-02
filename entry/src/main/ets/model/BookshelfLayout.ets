@@ -23,6 +23,14 @@ export interface BookshelfLayoutSettings {
   bookshelfTitleMaxLines: number;
   /** 书封阴影。对应上游 PreferKey.bookshelfCoverShadow。 */
   bookshelfCoverShadow: boolean;
+  /** 标题居中。对应上游 PreferKey.bookshelfTitleCenter，上游默认 true。 */
+  bookshelfTitleCenter: boolean;
+  /** 标题用小字号。对应上游 PreferKey.bookshelfTitleSmallFont。 */
+  bookshelfTitleSmallFont: boolean;
+  /** 网格封面宽度上限（vp）。对应上游 PreferKey.bookshelfGridCoverWidth，默认 120。 */
+  bookshelfGridCoverWidth: number;
+  /** 列表封面宽度（vp）。对应上游 PreferKey.bookshelfListCoverWidth，默认 84。 */
+  bookshelfListCoverWidth: number;
 }
 
 /** 下拉选项的通用结构。 */
@@ -55,6 +63,8 @@ export const BOOKSHELF_SORT_ORDER_OPTIONS: BookshelfLayoutOption[] = [
  * 逐项对齐上游 app/src/main/java/io/legado/app/data/repository/BookshelfSettingsRepository.kt
  * 的 toBookshelfSettings()：排序 0/倒序 1、竖屏网格、网格 3 列、列表 1 行、标题 2 行、
  * 隐藏空分组 true、封面阴影 false。
+ * 封面宽度默认值取上游 BookshelfSettingsRepository.kt:82-83 的 120 / 84；
+ * 标题居中 true、小字号 false 也来自上游同名键的默认值。
  */
 export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   bookGroupStyle: 0,
@@ -65,7 +75,11 @@ export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   bookshelfLayoutGridPortrait: 3,
   bookshelfLayoutListPortrait: 1,
   bookshelfTitleMaxLines: 2,
-  bookshelfCoverShadow: false
+  bookshelfCoverShadow: false,
+  bookshelfTitleCenter: true,
+  bookshelfTitleSmallFont: false,
+  bookshelfGridCoverWidth: 120,
+  bookshelfListCoverWidth: 84
 };
 
 /** 按值取文案，未知值返回空串由调用方兜底。 */
@@ -85,6 +99,10 @@ export function copyBookshelfLayout(settings: BookshelfLayoutSettings): Bookshel
     bookshelfLayoutGridPortrait: settings.bookshelfLayoutGridPortrait,
     bookshelfLayoutListPortrait: settings.bookshelfLayoutListPortrait,
     bookshelfTitleMaxLines: settings.bookshelfTitleMaxLines,
-    bookshelfCoverShadow: settings.bookshelfCoverShadow
+    bookshelfCoverShadow: settings.bookshelfCoverShadow,
+    bookshelfTitleCenter: settings.bookshelfTitleCenter,
+    bookshelfTitleSmallFont: settings.bookshelfTitleSmallFont,
+    bookshelfGridCoverWidth: settings.bookshelfGridCoverWidth,
+    bookshelfListCoverWidth: settings.bookshelfListCoverWidth
   };
 }

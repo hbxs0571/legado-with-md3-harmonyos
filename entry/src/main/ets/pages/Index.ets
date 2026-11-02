@@ -40,6 +40,7 @@ import { BookRepository } from '../data/BookRepository';
 import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
+import { CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository } from '../data/CoverSettingsRepository';
 import {
   BookshelfLayoutSettings, DEFAULT_BOOKSHELF_LAYOUT, copyBookshelfLayout
 } from '../model/BookshelfLayout';
@@ -185,6 +186,8 @@ struct Index {
   @State bookGroups: BookGroup[] = [];
   /** 书架布局设置，与 BookshelfLayoutRepository 的持久化值保持同步。 */
   @State bookshelfLayout: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
+  /** 封面文字设置，与 CoverSettingsRepository 的持久化值保持同步。 */
+  @State coverSettings: CoverSettings = copyCoverSettings(DEFAULT_COVER_SETTINGS);
   @State readTimeRecords: ReadTimeRecord[] = [];
   @State readRecordDetails: ReadRecordDetail[] = [];
   @State readRecordSummaries: ReadRecordSummary[] = [];
@@ -683,6 +686,8 @@ struct Index {
 
   private async restoreBookshelfLayout(context: Context): Promise<void> {
     this.bookshelfLayout = await BookshelfLayoutRepository.load(context);
+    // 封面文字设置与书架布局一起恢复：书架首帧就要按它决定画书名还是首字
+    this.coverSettings = await CoverSettingsRepository.load(context);
   }
 
   private async restoreReadTimeRecords(context: Context): Promise<void> {
@@ -5795,6 +5800,22 @@ struct Index {
     }
   }
 
+  /** 保存封面文字设置。 */
+  private async saveCoverSettings(settings: CoverSettings): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('封面设置保存失败');
+      return;
+    }
+    try {
+      await CoverSettingsRepository.save(context, settings);
+      this.coverSettings = copyCoverSettings(settings);
+    } catch (error) {
+      console.error(`[Index] 保存封面设置失败: ${error}`);
+      this.showUnavailableAction('封面设置保存失败，当前值未更改');
+    }
+  }
+
   /** 保存书架布局设置。 */
   private async saveBookshelfLayout(settings: BookshelfLayoutSettings): Promise<void> {
     const context = this.getUIContext().getHostContext();
@@ -6501,6 +6522,8 @@ struct Index {
           books: this.books,
           groups: this.bookGroups,
           layout: this.bookshelfLayout,
+          coverSettings: this.coverSettings,
+          readerNightMode: this.readerNightMode,
           onSaveLayout: (settings: BookshelfLayoutSettings) => this.saveBookshelfLayout(settings),
           onAddGroup: (name: string) => this.addBookshelfGroup(name),
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
@@ -7923,6 +7946,11 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.APP_COVER_SETTINGS) {
           AppCoverSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
+            onChange: (settings: CoverSettings) => {
+              // 页面改一项就通知一次：书架与封面设置页同步，返回时无需再读盘
+              this.coverSettings = settings;
+              this.saveCoverSettings(settings);
+            },
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS) {

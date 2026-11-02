@@ -49,6 +49,14 @@ export class BookshelfLayoutRepository {
         store, 'bookshelfTitleMaxLines', settings.bookshelfTitleMaxLines);
       settings.bookshelfCoverShadow = await BookshelfLayoutRepository.readBoolean(
         store, 'bookshelfCoverShadow', settings.bookshelfCoverShadow);
+      settings.bookshelfTitleCenter = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfTitleCenter', settings.bookshelfTitleCenter);
+      settings.bookshelfTitleSmallFont = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfTitleSmallFont', settings.bookshelfTitleSmallFont);
+      settings.bookshelfGridCoverWidth = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfGridCoverWidth', settings.bookshelfGridCoverWidth);
+      settings.bookshelfListCoverWidth = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfListCoverWidth', settings.bookshelfListCoverWidth);
     } catch (_) {
       // 读失败时保持默认值：书架能用比抛错中断启动更重要。
     }
@@ -72,6 +80,10 @@ export class BookshelfLayoutRepository {
       await store.put('bookshelfLayoutListPortrait', snapshot.bookshelfLayoutListPortrait);
       await store.put('bookshelfTitleMaxLines', snapshot.bookshelfTitleMaxLines);
       await store.put('bookshelfCoverShadow', snapshot.bookshelfCoverShadow);
+      await store.put('bookshelfTitleCenter', snapshot.bookshelfTitleCenter);
+      await store.put('bookshelfTitleSmallFont', snapshot.bookshelfTitleSmallFont);
+      await store.put('bookshelfGridCoverWidth', snapshot.bookshelfGridCoverWidth);
+      await store.put('bookshelfListCoverWidth', snapshot.bookshelfListCoverWidth);
       await store.flush();
       BookshelfLayoutRepository.cached = copyBookshelfLayout(snapshot);
       BookshelfLayoutRepository.loaded = true;
@@ -109,6 +121,14 @@ export class BookshelfLayoutRepository {
     if (titleLines !== undefined) { merged.bookshelfTitleMaxLines = titleLines; }
     const shadow = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfCoverShadow'));
     if (shadow !== undefined) { merged.bookshelfCoverShadow = shadow; }
+    const titleCenter = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfTitleCenter'));
+    if (titleCenter !== undefined) { merged.bookshelfTitleCenter = titleCenter; }
+    const titleSmallFont = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfTitleSmallFont'));
+    if (titleSmallFont !== undefined) { merged.bookshelfTitleSmallFont = titleSmallFont; }
+    const gridCoverWidth = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfGridCoverWidth'));
+    if (gridCoverWidth !== undefined) { merged.bookshelfGridCoverWidth = gridCoverWidth; }
+    const listCoverWidth = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfListCoverWidth'));
+    if (listCoverWidth !== undefined) { merged.bookshelfListCoverWidth = listCoverWidth; }
     return merged;
   }
 
@@ -124,6 +144,10 @@ export class BookshelfLayoutRepository {
     values.set('bookshelfLayoutListPortrait', `${settings.bookshelfLayoutListPortrait}`);
     values.set('bookshelfTitleMaxLines', `${settings.bookshelfTitleMaxLines}`);
     values.set('bookshelfCoverShadow', `${settings.bookshelfCoverShadow}`);
+    values.set('bookshelfTitleCenter', `${settings.bookshelfTitleCenter}`);
+    values.set('bookshelfTitleSmallFont', `${settings.bookshelfTitleSmallFont}`);
+    values.set('bookshelfGridCoverWidth', `${settings.bookshelfGridCoverWidth}`);
+    values.set('bookshelfListCoverWidth', `${settings.bookshelfListCoverWidth}`);
     return values;
   }
 

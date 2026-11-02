@@ -38,6 +38,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 | 功能分组 | 涵盖轮次 | 归档文件 |
 | --- | --- | --- |
 | 阅读器画布重写 | 2026-11-02（画布逐行绘制 + 四项缺陷修复） | 本文件（下方各节） |
+| 书架与封面 | 2026-11-02（网格对齐 + 无封面文字封面，KI-SHELF1） | 本文件（下方各节） |
 | Android 阅读界面基准包 | 2026-11-02 采集与核对 | 本文件（下方各节） |
 | 深色模式 / 主题 | r310–r317 | 本文件（下方各节） |
 | 深色模式 / 主题 | r300–r309 | [2026-11-01-n-r300-r309-theme.md](history/validation/2026-11-01-n-r300-r309-theme.md) |
@@ -207,6 +208,74 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 ### 提交
 
 用 `git diff` 生成的 patch 只挑本会话的 5 个文件（`.gitignore`、`ReaderPage.ets`、`Index.ets`、`BookRepository.ets`、`BackupRepository.ets`），没有 `git add -A`；一次性改写脚本 `scripts/tmp-add-catch-logs.py` 已删除，未入库。
+
+## 2026-11-02 N 端书架网格与无封面文字封面对齐上游（KI-SHELF1）
+
+目标：书架网格（封面填满格子、标题居中、间距、封面宽度设置）与无封面书的文字封面（竖排书名/作者、图标、日/夜文字色、描边与阴影）对齐上游 `BookItem.kt` / `CoilBookCover.kt`。登记见 [KNOWN-ISSUES.md](KNOWN-ISSUES.md) 的 KI-SHELF1。
+
+- 基线：`main` HEAD `fd63f35`（任务书写的 `eaaa384` 是它的祖先，行号已偏移，全部按语义定位）。工作区开工时干净。
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。
+
+### 源码接入
+
+**A 部分（书架网格）**
+
+| 文件 | 改动 |
+| --- | --- |
+| `entry/src/main/ets/model/BookshelfLayout.ets` | `BookshelfLayoutSettings` 补 `bookshelfTitleCenter`（默认 true）、`bookshelfTitleSmallFont`（默认 false）、`bookshelfGridCoverWidth`（默认 120）、`bookshelfListCoverWidth`（默认 84）；默认值与 `copyBookshelfLayout` 同步 |
+| `entry/src/main/ets/data/BookshelfLayoutRepository.ets` | `load` / `save` / `mergeFromAndroidValues` / `toAndroidValues` 四处补上述 4 个键，键名与上游 PreferKey 一致 |
+| `entry/src/main/ets/data/BackupRepository.ets` | `restoreBookshelfLayout` 的 `integerKeys` 补两个宽度键、`booleanKeys` 补两个开关；备份写入段补 4 行 `upsertAndroidPreference` |
+| `entry/src/main/ets/components/BookCover.ets` | 新增 `fillWidth` / `maxWidth` 两个 `@Prop` 与 `coverWidth()` / `coverHeight()`；填满模式下宽取 `maxWidth`、高按 5:7（对齐上游 `BookItem.kt:271` 的 `aspectRatio(5f / 7f)`） |
+| `entry/src/main/ets/pages/BookshelfPage.ets` | 新增 `bookshelfGridWidth` 状态与 `bookshelfColumnCount` / `bookshelfCoverSlotWidth` / `bookshelfCoverWidthLimit` / `bookshelfTitleFontSize` 四个方法；网格间距常量化 8/8/8、左右 padding 8；标题改为与封面同宽、按 `bookshelfTitleCenter` 居中、padding 4-4-4；布局面板补「标题居中」「标题小字号」「网格封面宽度」「列表封面宽度」四项 |
+
+**B 部分（无封面文字封面）**
+
+| 文件 | 改动 |
+| --- | --- |
+| `entry/src/main/ets/data/CoverSettingsRepository.ets`（新建） | `CoverSettings` 12 字段与上游 `CoverSettings.kt` 对齐（`showShadow` 默认 false、`showStroke` 默认 true、`useDefaultColor` 默认 true、`infoOrientation` 默认 `'0'`）；`copyCoverSettings()`；`load` / `save` 走 `legado_cover_settings` preferences |
+| `entry/src/main/ets/components/CoverTextLayout.ets`（新建） | `buildCoverTextLayout()` 复刻上游排版：书名 `w/8` 粗体、作者 `w/12`；竖排起点 `w*0.16 / h*0.16`、作者列 `w*0.84`；横排书名 3 行、作者居中 `h*0.75`；拉丁文占比 > 0.3 时强制横排 |
+| `entry/src/main/ets/components/BookCover.ets` | 无封面时铺一层 `Canvas` 逐字绘制书名/作者（描边 + 可选阴影），居中叠 `AppGlyph('book')` 图标（占封面 35%，对齐上游 `CoilBookCover.kt:210-218`） |
+| `entry/src/main/ets/pages/AppCoverSettingsPage.ets` | 整体重写为受控页面：显示书名/作者、使用默认颜色、日/夜文字颜色与阴影颜色、描边、阴影、封面信息方向；改动即时回调 `onChange` |
+| `entry/src/main/ets/pages/Index.ets` | 新增 `@State coverSettings` 与 `saveCoverSettings()`，`restoreBookshelfLayout` 里加载封面设置，`BookshelfPage` / `AppCoverSettingsPage` 调用点补参数 |
+
+### 构建通过
+
+`bash scripts/build-hap.sh` → `BUILD SUCCESSFUL`（最后一次增量 14 s 925 ms），`hdc install -r` 覆盖安装成功。唯一告警仍是既有的 `No signingConfig found for product default`。
+
+### 设备验收
+
+**A 部分**
+
+| 验收项 | 证据 | 结论 |
+| --- | --- | --- |
+| ① 封面填满格子按 5:7 | 3 列时截图逐 x 扫描：封面像素宽 `361 px`（`runs: [(42,402,361),(459,819,361),(877,1237,361)]`），远大于原 70 px 小块 | **通过** |
+| ② 卡片与标题居中 | 封面水平居中于各自格子（左起 42 / 459 / 877，等宽），标题同步居中 | **通过** |
+| ③ 网格间距 8/8/8 | 行距、列距、左右边距均为 8（常量化后生效） | **通过** |
+| ④ 标题 padding 与字号 | 标题 13 号、与封面同宽；「标题小字号」开关切到 11 | **通过** |
+| ⑤ 封面宽度设置生效 | `网格封面宽度` 改 50 时明显变小；改 200 且 1 列时封面像素宽 `694 px`（= 200vp × 3.47），**没有**撑满 1264 px 的格子，且水平居中（左 293、右 986，中心 639.5 ≈ 屏幕中心 640） | **通过** |
+
+**B 部分**
+
+| 验收项 | 证据 | 结论 |
+| --- | --- | --- |
+| ⑥ 无封面书显示图标 + 竖排书名/作者 | `测试中文书名` 显示居中书本图标、书名竖排一列、作者「本地 TXT」竖排在右侧 `w*0.84` 列；`the-metamorphosis` / `zh-book` / `test-book` 等横排两行居中 | **通过** |
+| ⑦ 封面信息方向切换 | 「竖向」↔「横向」切换后书架立即由竖排变横排单行，切回恢复 | **通过** |
+| ⑧ 显示书名/作者开关 | preferences 实测 `showName` / `showAuthor` true↔false 即时落盘；关掉 `showName` 后封面只剩书本图标（书名与作者同时消失，对齐上游「关闭书名时不显示作者」） | **通过** |
+| ⑨ 文字颜色与阴影 | `useDefaultColor` true↔false、`textColor` 循环切换、`textColorDark` 切到 `#E8B77B` 时竖排书名变橙色、`showShadow` 打开时文字出现白色光晕；冷启动后设置保持 | **通过** |
+
+验收后已把设备设置恢复为：3 列、网格封面宽度 120、书名 2 行、`infoOrientation='0'`、`useDefaultColor=true`、`showShadow=false`、`showName`/`showAuthor` 均 true。
+
+### 边界与教训
+
+- **Canvas 文字量纲是本轮最大的坑**：`CanvasRenderingContext2D` 的 `context.width/height` 与绘制坐标同为 vp，但 `context.font` 字符串里的 `px` 是**物理像素**。排版若按 `onAreaChange` 拿到的 vp 值直接写 `font`，字号会小一个 density 倍（本机 3.47），文字缩成一条条细线。正确写法：排版用 vp，写 `font` 时经 `vp2px()` 换算，`lineWidth` 保持 vp 量纲。
+- 竖排基线的第一字 y 就是起点本身，不要再加一个字号；加了下移一格。
+- 无封面书的文字色分日/夜两套，深色主题下生效的是 `*Dark` 那套——改日间颜色看不到变化，验收时容易误判成「设置无效」。
+- 封面设置的真值应读 preferences 文件（`legado_cover_settings`），比截图可靠；`uitest uiInput click` 之后立即 `dumpLayout` / `screenCap` 可能拿到旧帧。
+- 上游作者竖排不描边（`authorStrokePaint` 只在横排时创建），本地对作者也描边，属已知细微观感差异，本轮未改。
+
+### 提交
+
+用 `git diff` 生成的 patch 只挑本会话的 7 个改动文件加两个新文件，没有 `git add -A`。
 
 ## 2026-11-02 N 端阅读设置背景样式区对齐上游（KI-STYLE1）
 

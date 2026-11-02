@@ -6,9 +6,15 @@ import {
   bookshelfLayoutOptionLabel, copyBookshelfLayout
 } from '../model/BookshelfLayout';
 import { BookshelfSort } from '../data/BookshelfSort';
+import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
+
+/** 网格左右内边距，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
+const BOOKSHELF_GRID_PADDING: number = 8;
+/** 网格行间距与列间距，对应上游 BookshelfScreen.kt:1770-1772 的 spacedBy(8.dp)。 */
+const BOOKSHELF_GRID_GAP: number = 8;
 
 @Component
 export struct BookshelfPage {
@@ -26,6 +32,10 @@ export struct BookshelfPage {
   @Prop groups: BookGroup[] = [];
   /** 书架布局设置，来自 Index 的持久化状态。 */
   @Prop layout: BookshelfLayoutSettings = DEFAULT_BOOKSHELF_LAYOUT;
+  /** 封面文字设置，来自 Index 的持久化状态。 */
+  @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
+  /** 当前是否夜间主题，决定封面文字用日间还是夜间那一套开关与颜色。 */
+  @Prop readerNightMode: boolean = false;
   @State showLayoutSheet: boolean = false;
   /** 布局面板编辑中的草稿；打开面板时从 layout 复制，确认后整体提交。 */
   @State layoutDraft: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
@@ -43,6 +53,13 @@ export struct BookshelfPage {
   @State searchQuery: string = '';
   @State collapsedHeader: boolean = false;
   @State emptyFace: string = '(；′⌒`)';
+  /**
+   * 网格容器的实测宽度（vp）。
+   *
+   * 封面宽度要按格子宽度算（上游是 fillMaxWidth + aspectRatio 5:7），
+   * 而格子宽度只有在布局完成后才知道，所以记下网格的 onAreaChange 结果。
+   */
+  @State bookshelfGridWidth: number = 0;
   private readonly bookshelfScroller: Scroller = new Scroller();
   private readonly emptyFaces: string[] = ['(；′⌒`)', '(つ﹏⊂)', '(•̀ᴗ•́)و', '(๑•́ ₃ •̀๑)', '(눈‸눈)', '(ಥ﹏ಥ)', '(｡•́︿•̀｡)'];
   onOpenBook: (book: Book) => void = () => {};
@@ -409,6 +426,49 @@ export struct BookshelfPage {
     return template.join(' ');
   }
 
+  /** 当前生效的列数，供封面宽度换算用。 */
+  private bookshelfColumnCount(): number {
+    const configuredColumns = this.layout.bookshelfLayoutModePortrait === 1
+      ? this.layout.bookshelfLayoutGridPortrait : this.layout.bookshelfLayoutListPortrait;
+    const maximum = this.layout.bookshelfLayoutModePortrait === 1 ? 6 : 5;
+    return Math.max(1, Math.min(maximum, Math.round(configuredColumns)));
+  }
+
+  /**
+   * 网格里单个格子能给出的封面宽度（vp）。
+   *
+   * 对齐上游 BookItem.kt:269-273：封面宽度由格子宽度决定，高度按 5:7 推导。
+   * 格子宽度 = (网格可用宽 - 左右内边距 8*2 - 列间距 8*(列数-1)) / 列数，
+   * 再减 8 给上游 BookshelfItemCover 的 padding(4.dp) 留位置。
+   * 宽度未知时返回 0，调用方回落到 100% 让布局自己算。
+   */
+  private bookshelfCoverSlotWidth(): number {
+    if (this.bookshelfGridWidth <= 0) { return 0; }
+    const columns = this.bookshelfColumnCount();
+    const available = this.bookshelfGridWidth - BOOKSHELF_GRID_PADDING * 2
+      - BOOKSHELF_GRID_GAP * (columns - 1);
+    if (available <= 0) { return 0; }
+    return Math.max(0, Math.floor(available / columns) - 8);
+  }
+
+  /**
+   * 书封宽度上限：格子宽与用户设置取小值。
+   *
+   * 上游 bookshelfGridCoverWidth 默认 120，作用是限制封面不要随格子无限放大；
+   * 格子比它窄时以格子为准，保证「填满格子」与「用户设定」两个约束同时成立。
+   */
+  private bookshelfCoverWidthLimit(): number {
+    const slot = this.bookshelfCoverSlotWidth();
+    const configured = Math.max(0, Math.round(this.layout.bookshelfGridCoverWidth));
+    if (slot <= 0) { return configured; }
+    return configured > 0 ? Math.min(slot, configured) : slot;
+  }
+
+  /** 书封标题字号：上游 labelMedium 13sp、labelSmall 11sp。 */
+  private bookshelfTitleFontSize(): number {
+    return this.layout.bookshelfTitleSmallFont ? 11 : 13;
+  }
+
   /** 打开布局面板：从已生效设置复制一份草稿，面板内改动只落到草稿。 */
   private openLayoutSheet(): void {
     this.layoutDraft = copyBookshelfLayout(this.layout);
@@ -557,8 +617,18 @@ export struct BookshelfPage {
           this.LayoutStepperRow('书名行数', '书封下方标题最多显示几行',
             this.layoutDraft.bookshelfTitleMaxLines, 1, 5,
             (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfTitleMaxLines += delta; }); })
+          this.LayoutSwitchRow('标题居中', '关闭后书名左对齐', this.layoutDraft.bookshelfTitleCenter,
+            (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfTitleCenter = value; }); })
+          this.LayoutSwitchRow('标题小字号', '书名用 11 号字，默认 13 号', this.layoutDraft.bookshelfTitleSmallFont,
+            (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfTitleSmallFont = value; }); })
 
           this.LayoutSectionHeader('外观')
+          this.LayoutStepperRow('网格封面宽度', '书封在格子里最宽能到多少，格子更窄时以格子为准',
+            this.layoutDraft.bookshelfGridCoverWidth, 40, 200,
+            (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGridCoverWidth = Math.max(40, Math.min(200, draft.bookshelfGridCoverWidth + delta * 10)); }); })
+          this.LayoutStepperRow('列表封面宽度', '列表模式下书封宽度',
+            this.layoutDraft.bookshelfListCoverWidth, 40, 200,
+            (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfListCoverWidth = Math.max(40, Math.min(200, draft.bookshelfListCoverWidth + delta * 10)); }); })
           this.LayoutSwitchRow('书封阴影', '', this.layoutDraft.bookshelfCoverShadow,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfCoverShadow = value; }); })
         }.width('100%').padding({ bottom: 24 })
@@ -670,12 +740,19 @@ export struct BookshelfPage {
                   book: book,
                   compact: true,
                   showChapterBadge: true,
-                  shadowEnabled: this.layout.bookshelfCoverShadow
+                  shadowEnabled: this.layout.bookshelfCoverShadow,
+                  fillWidth: true,
+                  maxWidth: this.bookshelfCoverWidthLimit(),
+                  coverSettings: this.coverSettings,
+                  isNight: this.readerNightMode
                 })
-                Text(book.title).fontSize(13).fontColor(this.themeColorTextSecondary)
+                Text(book.title).fontSize(this.bookshelfTitleFontSize()).fontColor(this.themeColorTextSecondary)
                   .maxLines(this.layout.bookshelfTitleMaxLines)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 7 })
-              }.width('100%').alignItems(HorizontalAlign.Start)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+                  .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
+                  .padding({ left: 4, right: 4, bottom: 4 })
+              }.width('100%').alignItems(HorizontalAlign.Center)
                 .onClick(() => {
                   if (BookRepository.isBodyMissing(book)) {
                     this.onOpenBookInfo(book);
@@ -690,8 +767,16 @@ export struct BookshelfPage {
           }, (book: Book) => this.bookCardKey(book))
         }
         .columnsTemplate(this.bookshelfColumnsTemplate())
-        .rowsGap(16).columnsGap(10).width('100%').padding({ left: 14, right: 14 })
+        .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
+        .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
         .layoutWeight(1).scrollBar(BarState.Off)
+          .onAreaChange((_oldArea: Area, newArea: Area) => {
+            // 记下网格可用宽度，封面宽度按格子宽度换算（见 bookshelfCoverSlotWidth）
+            const width = parseFloat(String(newArea.width));
+            if (Number.isFinite(width) && Math.abs(width - this.bookshelfGridWidth) > 0.5) {
+              this.bookshelfGridWidth = width;
+            }
+          })
           .onScroll(() => {
             const shouldCollapse = Math.abs(this.bookshelfScroller.currentOffset().yOffset) > 60;
             if (this.collapsedHeader !== shouldCollapse) {

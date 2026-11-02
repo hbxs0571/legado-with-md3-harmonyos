@@ -600,6 +600,10 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutListPortrait', `${bookshelfLayout.bookshelfLayoutListPortrait}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfTitleMaxLines', `${bookshelfLayout.bookshelfTitleMaxLines}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfCoverShadow', `${bookshelfLayout.bookshelfCoverShadow}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfTitleCenter', `${bookshelfLayout.bookshelfTitleCenter}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfTitleSmallFont', `${bookshelfLayout.bookshelfTitleSmallFont}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGridCoverWidth', `${bookshelfLayout.bookshelfGridCoverWidth}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfListCoverWidth', `${bookshelfLayout.bookshelfListCoverWidth}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
 
@@ -1323,7 +1327,8 @@ export class BackupRepository {
     const values = new Map<string, string>();
     const integerKeys = [
       'bookGroupStyle', 'bookshelfSort', 'bookshelfSortOrder', 'bookshelfLayoutPortrait',
-      'bookshelfLayoutGridPortrait', 'bookshelfLayoutListPortrait', 'bookshelfTitleMaxLines'
+      'bookshelfLayoutGridPortrait', 'bookshelfLayoutListPortrait', 'bookshelfTitleMaxLines',
+      'bookshelfGridCoverWidth', 'bookshelfListCoverWidth'
     ];
     for (let index = 0; index < integerKeys.length; index++) {
       const key = integerKeys[index];
@@ -1331,7 +1336,7 @@ export class BackupRepository {
       const value = BackupRepository.readXmlInteger(`${directory}/config.xml`, key);
       if (value !== undefined) { values.set(key, value.toString()); }
     }
-    const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow'];
+    const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow', 'bookshelfTitleCenter', 'bookshelfTitleSmallFont'];
     for (let index = 0; index < booleanKeys.length; index++) {
       const key = booleanKeys[index];
       if (key === undefined) { continue; }
