@@ -32,11 +32,13 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 ## 按功能分组的历史索引
 
-主文件只放最近 8 轮（r310–r317）。更早的轮次原样归档在 `docs/history/validation/`，按下面这张表找。
+主文件放两类记录：①最近 8 轮深色模式（r310–r317）；②当前仍在推进的专题（画布重写、基准包核对）。更早的轮次原样归档在 `docs/history/validation/`，按下面这张表找。
 归档规则与理由见[盘点规约](PARITY-RULES.md)。
 
 | 功能分组 | 涵盖轮次 | 归档文件 |
 | --- | --- | --- |
+| 阅读器画布重写 | 2026-11-02（画布逐行绘制 + 四项缺陷修复） | 本文件（下方各节） |
+| Android 阅读界面基准包 | 2026-11-02 采集与核对 | 本文件（下方各节） |
 | 深色模式 / 主题 | r310–r317 | 本文件（下方各节） |
 | 深色模式 / 主题 | r300–r309 | [2026-11-01-n-r300-r309-theme.md](history/validation/2026-11-01-n-r300-r309-theme.md) |
 | 阅读配置 KI 落地 | KI-A1–A12 / C1–C6 / D1–D6 / E1–E6、r296–r298 | [2026-10-31-reading-config-ki-rounds.md](history/validation/2026-10-31-reading-config-ki-rounds.md) |
@@ -45,6 +47,84 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 | E 端早期阅读/高亮/书签 | r241–r262 及更早 | [2026-10-r241-r262-e-rounds.md](history/validation/2026-10-r241-r262-e-rounds.md) |
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
+
+## 2026-11-02 Android 阅读界面基准包核对（纯取证，无代码改动）
+
+**这批证据的用途**：与 HarmonyOS 端做**私下视觉对照**，补上「上游界面到底长什么样」这一层。此前 `PARITY-RULES.md` 第四节写的「与上游成对核实」有两种形态，实际只能用形态二（按源码参数逐项核对），因为本机无 Android 运行时、上游截图存量仅 43 张且阅读相关只有 7 张。本包把形态一（成对截图）解锁了。
+
+**包与校验**
+
+| 项 | 值 |
+| --- | --- |
+| 来源 | E 端采集，`测试/android-reader-baseline-2026-11-02.zip`，44,437,409 字节 |
+| ZIP SHA-256 | `D27B12B66F00E21A26C4A90B1D39F3B9DA4A780157C63009D151EBA9D29AD82D`（与移交声明一致） |
+| 包内校验 | `SHA256SUMS.txt` 共 71 条，**全部 OK**。注意该文件是 CRLF 行尾，直接 `sha256sum -c` 会因文件名带 `\r` 报「No such file」，须先 `tr -d '\r'` |
+| 解包位置 | `N:\HarmonyProjects\project-resources\legado-with-MD3\screenshots\android\reader-baseline-2026-11-02\`（仓库外，不入库） |
+| 内容 | 62 张 PNG、6 段 H.264 MP4、3 个 fixtures（合成 TXT / EPUB / 插图源） |
+| 采集基线 | Android 源码 `67970a10b16f90d3cdaf50b487a31bf75950f938`；`appDebug`；AVD `Medium_Phone_API_37.0`；Android 17 / API 37；1080×2400 @420dpi；系统字体缩放 1.0；系统夜间模式 `no`；**应用主题显式深色、纯黑关闭**；隐藏状态栏/导航栏均关闭 |
+
+**边界（照移交声明原样记录，不扩大）**：这是 `appDebug` 构建在 API 37 模拟器上的结果，**不是 release 包证据，也不是 API 12 设备证据**。跨平台不要求像素级一致，只用于判断「动作语义是否相同」。
+
+### 一、翻页转场：三种动画确认为两页同屏
+
+判据是各模式原视频抽出的 `*-frame-during.png`（中间帧），不是翻页后的静态图。
+
+| 档位 | 中间帧文件名 | 相对时间 | 画面实测 |
+| --- | --- | --- | --- |
+| `0` 覆盖 | `android-reader-animation-cover-frame-during.png` | 1.55s | **左右两页同屏**：左为旧页（页码 `1/11 27.3%`）正滑出，右为新页（页码 `2/11 29.5%`）已停在最终位置。画面无空白 |
+| `1` 滑动 | `android-reader-animation-slide-frame-during.png` | 1.40s | 两页都在位移：左页滑出、右页自右缘滑入，右页排版位置与终态不同 |
+| `2` 仿真 | `android-reader-animation-simulation-frame-during.png` | 1.55s | 页面右上角掀起折页，折线下方露出下一页内容，底部页码仍 `1/11 27.3%` |
+| `3` 滚动 | `android-reader-animation-scroll-frame-during.png` | 1.60s | 竖向上滑，帧间 OCR 可辨段落 01→02→03 |
+| `4` 渐变 | `android-reader-animation-fade-frame-during.png` | 1.60s | 新旧两页文字交叉淡入 |
+| `5` 无动画 | 按该档行为**不列中间帧** | — | 仅 `-before` / `-after` 两张 |
+
+**结论（已由视频验证）**：COVER 是「新页静止底页 + 旧页盖在上面滑走」，不是「两页同时位移」。这与 `ReaderPageTransition.kt` 的 `transforms(COVER)` 返回 `next = ReaderPageTransform()`（位移 0）+ `currentOnTop = true` 完全吻合，**KI-EXP1 里那条依据源码推断的语义描述，现升级为有视频佐证**。SLIDE 与 COVER 是两套不同动作，本地曾把两者实现成同一套，该判断得到独立确认。
+
+### 二、开书排版：上游无「整章滚动」中间态
+
+- `android-reader-txt-layout-page-01.png`（TXT 第 1 章第 1 页，24sp、覆盖）：顶部有 `第1章 基线章节1` 标题，正文从段落 `01` 起。
+- `android-reader-txt-layout-page-02.png`（同一章第 2 页，右向左滑动一次）：**顶部无重复标题**，正文自上一段续行开始，段落 `04` 出现在中部。
+
+**结论（已由截图验证）**：上游两页的正文起点口径一致，没有出现「先渲染整章连续滚动、再切成分页」的形态切换。KI-EXP2 的修法方向（首帧即为分页）与上游行为一致。
+
+### 三、滚动档在极小字号下的形态
+
+`android-reader-txt-font-min-5sp.png`（5sp）显示整章连续铺开、进度 `1/1 50.0%`。这不是切换了渲染形态，而是「一页容得下整章」——仍属分页容器，只是页数为 1。**不能拿它当作「上游也存在整章滚动兜底」的证据**。
+
+### 四、进度条：圆点分段 + 竖线滑块
+
+`android-reader-progress-position.png`、`android-reader-controls-expanded.png` 实测：滑块是一根细长**竖线**（不是圆点），轨道按页分段显示为**圆点**，已读段实心填充，左右各有 `←` / `→` 切换章节按钮。
+
+**本地差异**：`entry/src/main/ets/pages/ReaderPage.ets:4726` 用 `.blockSize({ width: 12, height: 12 })`，滑块是 12×12 的圆。**这是视觉差异，不是功能缺陷**；是否对齐留待产品判断，本轮不改。
+
+### 五、目录面板与更多操作
+
+- `android-reader-directory-panel.png`：顶部四页签 `信息 / 目录 / 书签 / 笔记`；搜索框右侧五个按钮（搜索、刷新、`#`、排序、更多）；章目行右侧显示字数（如 `3877字`）。
+- `android-reader-more-actions.png`：两行四列共 8 项——`听书下载 / 编辑内容 / 添加书签 / 文本处理 / 反转内容 / 重新分段 / TXT 目录规则 / 设置编码`。
+
+这两张可用于 `BOOKSHELF.md` B 块与 `READER-CONFIG.md` E 块的界面级对照，但**本轮只登记证据存在，不据此改任何行的状态**。
+
+### 六、选词菜单：未采到实际弹出画面（重要边界）
+
+- 包内 `android-reader-selection-menu-config.png` / `-actions.png` / `-hidden-items.png` 是**设置页**（`阅读器控制栏 → 设置 → 更多 → 编辑选择菜单`），可见一级菜单项 `复制 / 分享 / 浏览器 / 朗读 / 书签 / …` 及每项的显隐、排序图标。
+- **未捕获**：长按正文后的选区手柄、实际选词弹出菜单及其展开态、点「标记」后的样式面板。
+- 原因（移交声明原文）：ADB 注入的长按被阅读页识别为翻页，没有产生可核实的选区。
+- 因此：`ZIP-BOOKMARK.md` F 块那 34 行**继续标「依据源码推断」**，不得改标「已由截图验证」。若要收口，需另做人工长按采集。
+
+### 七、与 HarmonyOS 端当前状态的对照（本轮新发现）
+
+核对基准包时同步复查了本地实现，画布会话（`baf856f` → `38debc1`，9 个提交）已完成：
+
+- 五种转场全部接到画布：COVER / SLIDE / FADE 在 `ReaderCanvasSurface.ets`，折页在 `ReaderPageCurl.ets`（390 行，照 `PageCurlGeometry.kt`），滚动在 `ReaderScrollPolicy`。
+- 选区自绘已落地（`ReaderCanvasSurface.ets` 内 `selection` 命中 41 处），把手半径 7vp + 描边 2vp，长按 600ms 起选。
+- 老 Span 路径已删净：`ReaderPageTextLines` / `ReaderPageTextJoined` / `ReaderGlyphSpan` 命中 **0**。
+- `ReaderPage.ets` 5269 行，`entry/src/main/ets/reader/` 三个模块合计 2406 行。
+
+**结论**：KI-EXP1 / KI-EXP2 / KI-EXP3 三者在 `KNOWN-ISSUES.md:122` 已标「已接」，与本轮基准包的实测语义**方向一致、无冲突**。基准包的价值转为「后续复核的参照物」，而非「待修清单」。
+
+**未验**：本轮的对照是「读图 vs 读代码」，**没有在 HarmonyOS 设备上做逐帧比对**。跨平台不要求像素级一致，但「COVER 是否真的不露空白」仍以 `VALIDATION.md` 里那次五种转场各连翻 20 页的设备记录为准，基准包不替代它。
+
+**复原**：本轮无代码改动、无设备操作、无设置变更。基准包只解包到仓库外目录。
 
 ## 2026-11-02 N 端阅读器四项缺陷与两项发版风险（画布缓存释放 / 无动画重绘 / 进度条重绘 / 启动恢复 await / catch 日志 / .tmp 忽略）
 

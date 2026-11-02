@@ -144,6 +144,8 @@ this.pageTurnTimer = setTimeout(() => {
 
 **上游语义**：`feature/reader/core/transition/ReaderPageTransition.kt` 的 `transforms(mode)` 对 `COVER` 返回 `current = ReaderPageTransform(translationX = offsetPx)` + **`next = ReaderPageTransform()`（位移 0，就在原位）+ `currentOnTop = true`** —— 新页是静止的底页，旧页盖在上面滑走，屏幕全程有内容。
 
+**已由上游实机视频佐证（2026-11-02）**：E 端在 Android 模拟器上采集的基准包（`N:\HarmonyProjects\project-resources\legado-with-MD3\screenshots\android\reader-baseline-2026-11-02\`，仓库外不入库）里，`android-reader-animation-cover-frame-during.png`（翻页中间帧 1.55s）实测为**左右两页同屏**：左为旧页（页码 `1/11 27.3%`）正滑出，右为新页（页码 `2/11 29.5%`）已停在最终位置，画面无空白。同一批里 `android-reader-animation-slide-frame-during.png`（1.40s）则是**两页都在位移**——证实 COVER 与 SLIDE 是两套不同动作，本地曾把两者实现成同一套。采集基线与边界见 [VALIDATION](VALIDATION.md) 的「2026-11-02 Android 阅读界面基准包核对」节（`appDebug` / API 37 模拟器，不是 release 证据也不是 API 12 设备证据）。
+
 **本地现状（已接）**：
 - 翻页不再改节点树，而是改画布内部的 `turnTransition.offsetPx`：`ReaderPage.ets` 的 `turnReaderPage()` 用 `getUIContext().createAnimator(...)` 的 `onFrame(progress)` 逐帧调 `paintReaderCanvas()`，**`onFinish` 才改 `currentPageIndex`**。
 - 位移全部由 `ReaderCanvasSurface.ets` 的 `ReaderPageTransitionPolicy.transforms(mode, transition, pageWidthPx)` 给出，与上游逐分支同式：COVER（`current.translationX = offsetPx` + `currentOnTop = true`）、SLIDE（另给 `next.translationX = width + offsetPx`）、FADE（`next.alpha = progress`）、折页（`ReaderPageCurl.ets` 的 `PageCurlGeometry`）、SCROLL（`ReaderScrollPolicy` 的 `pageStep` / `stepDurationMillis` / `apply` 逐项照 `ReaderScrollState.kt`，四页按 `scrollExtentPx` 堆叠后整体平移，画布内滚动）。
