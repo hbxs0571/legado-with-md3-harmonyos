@@ -363,6 +363,36 @@ export class ReaderScrollPolicy {
   }
 }
 
+/**
+ * 抬手后的滚动惯性（上游 `ReaderCanvasSurface.kt:1414-1452` 的
+ * `Animatable(0f).animateDecay(velocity, scrollDecay)`）。
+ *
+ * 上游用的是 Compose 的 spline-based decay（`rememberSplineBasedDecay`，
+ * 摩擦系数 0.015），本质是指数衰减：v(t) = v0·e^(-λt)，总位移 v0/λ。
+ * ArkUI 没有 animateDecay，这里把同一条曲线拆成「总位移 + 剩余比例」两个纯函数，
+ * 由调用方按帧驱动，保证首帧速度与手指抬起速度连续、末端自然停住。
+ */
+export class ReaderScrollDecay {
+  /** 衰减率（1/s）：取值让 2000vp/s 的甩动大约滑 600vp，与 Android 手感接近。 */
+  static readonly DECAY_RATE_PER_SECOND: number = 3.3;
+  /** 惯性动画的总时长：到这个时刻残余速度已不足首帧的 2%。 */
+  static readonly DURATION_MILLIS: number = 1200;
+
+  /** 给定首帧速度，整段惯性会滑过的距离（带符号）。 */
+  static totalDistance(velocityPxPerSecond: number): number {
+    const rate = ReaderScrollDecay.DECAY_RATE_PER_SECOND;
+    const total = ReaderScrollDecay.DURATION_MILLIS / 1000;
+    return velocityPxPerSecond / rate * (1 - Math.exp(-rate * total));
+  }
+
+  /** 第 elapsedMillis 毫秒时已经滑过的距离（带符号）。 */
+  static distanceAt(velocityPxPerSecond: number, elapsedMillis: number): number {
+    const rate = ReaderScrollDecay.DECAY_RATE_PER_SECOND;
+    const elapsed = Math.max(0, Math.min(ReaderScrollDecay.DURATION_MILLIS, elapsedMillis)) / 1000;
+    return velocityPxPerSecond / rate * (1 - Math.exp(-rate * elapsed));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 页面窗口（照抄 ReaderPage.kt 的 ReaderPageWindow / ReaderPageNavigator.window）
 // ---------------------------------------------------------------------------
@@ -435,8 +465,13 @@ export class ReaderCanvasLayout {
   bodyHeightPx: number = 0;
   columnCount: number = 1;
   columnStridePx: number = 0;
-  /** 底部对齐的逐行位移（vp 的对齐值已换算成 px）。 */
+  /** 底部对齐的逐行位移（vp 的对齐值已换算成 px）。单列时用这一项。 */
   bottomJustifyGapPx: number = 0;
+  /**
+   * 逐列的底部对齐位移（px）。双页模式两列的剩余高度不同，上游 `justifyColumnBottom()`
+   * 是按列各算一份的，所以这里存一份数组；为空时回落到 `bottomJustifyGapPx`。
+   */
+  bottomJustifyGapByColumn: number[] = [];
   /**
    * vp → px 的比例（等于 `vp2px(1)`）。
    * 分页器（LocalReaderPaginator）产出的行高、行距、字宽、图片尺寸全是 vp，
@@ -1238,14 +1273,16 @@ export class ReaderCanvasRenderer {
       used.push(0);
       lineCount.push(0);
     }
+    // 底部对齐：上游 justifyColumnBottom() 是**逐列**独立摊分（两列的行数不同，
+    // 剩余高度也不同），所以这里按列取各自的位移，不能用全页一个值。
+    const gaps = layout.bottomJustifyGapByColumn;
     for (let index = 0; index < page.lines.length; index++) {
       const line = page.lines[index];
       const column = page.lineColumns.length > index ? page.lineColumns[index] : 0;
       const safeColumn = Math.min(columnCount - 1, Math.max(0, column));
-      // 底部对齐：按行序号在行 y 坐标上摊分（上游 justifyColumnBottom 是逐行 offsetY 平移，
-      // 不改变布局流；画布本来就是绝对坐标，等价于直接加到 y 上）。
+      const columnGap = gaps.length > safeColumn ? (gaps[safeColumn] ?? 0) : layout.bottomJustifyGapPx;
       const top = layout.originYpx + used[safeColumn] + line.verticalSpaceBefore * vp +
-        layout.bottomJustifyGapPx * lineCount[safeColumn];
+        columnGap * lineCount[safeColumn];
       const left = layout.originXpx + safeColumn * stride;
       const lineBox = new ReaderCanvasLineBox();
       lineBox.line = line;

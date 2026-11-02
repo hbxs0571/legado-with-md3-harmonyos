@@ -35,8 +35,9 @@ import {
   ReaderCanvasDrawRequest, ReaderCanvasItemBox, ReaderCanvasLayout, ReaderCanvasMarking, ReaderCanvasPage,
   ReaderCanvasRenderer, ReaderCanvasStyle, ReaderCanvasStyleRange, ReaderCanvasWindow, ReaderPageTransform,
   ReaderPageTransition,
-  ReaderPageTransitionPolicy, ReaderScrollCrossing, ReaderScrollPolicy, ReaderScrollResult,
+  ReaderPageTransitionPolicy, ReaderScrollCrossing, ReaderScrollDecay, ReaderScrollPolicy, ReaderScrollResult,
   ReaderTransitionDirection, ReaderTransitionMode, ReaderTransitionTransforms,
+  captureReaderDragDirection,
   readerTransitionModeFromPageAnim
 } from '../reader/ReaderCanvasSurface';
 import {
@@ -537,6 +538,15 @@ export struct ReaderPage {
   private curlRevealProgress: number = 1;
   /** 滚动拖拽上一帧的累计 offsetY（vp），用于把累计量换算成逐帧 delta。 */
   private scrollDragLastY: number = 0;
+  /**
+   * 横向拖动翻页的状态（上游 `ReaderHorizontalDrag`）。
+   * 方向在越过 touch-slop 那一刻锁定，此后位移从锁定点算起——
+   * 这样手指先横后竖、或反向回拖，都不会让页面从别处开始跟手。
+   */
+  private horizontalDragOriginVp: number = 0;
+  private horizontalDragLocked: boolean = false;
+  /** 上一帧已画出的位移（vp），收尾动画从它起步，不回到 0。 */
+  private horizontalDragLastOffsetVp: number = 0;
   private curlPrevious: boolean = false;
   // 高亮样式区间的构造缓存（翻页动画每帧都会重建 request，不缓存会每帧新建上千对象）
   private canvasHighlights: ReaderCanvasStyleRange[] = [];
@@ -661,6 +671,8 @@ export struct ReaderPage {
     this.readerProgress = this.startPositionPending ? 0 : (this.book.chapterProgress ?? 0);
     this.lastReportedProgress = this.readerProgress;
     this.sliderProgressIndex = this.startPositionPending ? 0 : this.getChapterIndex();
+    // 首排之前先把本章图片尺寸量好：排版期就用真实尺寸，图片解码完只重绘不重排
+    this.primeContentImageSizesSync();
     if (this.startPositionPending) {
       this.restoredProgressPosition = false;
       this.scrollOffset = 0;
@@ -1378,6 +1390,8 @@ export struct ReaderPage {
     this.localReaderPages = [];
     this.localSemanticContent = '';
     this.localSemanticDocument = { paragraphs: [], content: '', sourceLength: 0, sourcePositionMap: [0] };
+    // 换章后同样先同步量一次：否则新章的图会先按行高占位排一遍，再被尺寸到达推一遍
+    this.primeContentImageSizesSync();
     this.loadContentImageSizes();
     this.rebuildReaderPages();
   }
@@ -1686,30 +1700,53 @@ export struct ReaderPage {
   }
 
   private calculateReaderBottomJustifyGap(pageHeight: number, lineHeight: number, titleReservedLines: number): number {
-    if (!this.textBottomJustify) { return 0; }
+    const gaps = this.calculateReaderBottomJustifyGaps(pageHeight, lineHeight, titleReservedLines);
+    return gaps.length > 0 ? (gaps[0] ?? 0) : 0;
+  }
+
+  /**
+   * 逐列的底部对齐位移（上游 `ReaderPaginator.justifyColumnBottom()`）。
+   *
+   * 上游按列各算一份：每列有自己的行数与剩余高度，把整页行数混在一起摊分会让
+   * 短的那一列被推下去。返回数组长度 = 列数；不需要对齐时返回全 0。
+   */
+  private calculateReaderBottomJustifyGaps(pageHeight: number, lineHeight: number,
+    titleReservedLines: number): number[] {
+    const columns = Math.max(1, this.resolveReaderColumnCount());
+    const zeros: number[] = [];
+    for (let index = 0; index < columns; index++) { zeros.push(0); }
+    if (!this.textBottomJustify) { return zeros; }
     // 连续滚动没有「页底」这个概念：页高就是内容高，把剩余高度摊进行间会把
     // 下一章的行推到本页已有的行上（画布按 extent 堆叠，靠位移区分页）。
-    if (this.usesCanvasScroll()) { return 0; }
-    // 双页时本地这套「按整页行数摊分」的算法会把间隙摊到两列上而错位，
-    // 上游是 justifyColumnBottom() 逐列独立摊分，差异记在 KNOWN-ISSUES 的 KI-D4。
-    if (this.resolveReaderColumnCount() > 1) { return 0; }
+    if (this.usesCanvasScroll()) { return zeros; }
     const page = this.localReaderPages[this.currentPageIndex];
-    if (page === undefined || page.titleOnly || page.lines.length <= 1) { return 0; }
-    const lastLine = page.lines[page.lines.length - 1];
-    if (lastLine === undefined || lastLine.imageOnly) { return 0; }
-    let usedHeight = 0;
-    for (let index = 0; index < page.lines.length; index++) {
-      const line = page.lines[index];
-      if (line !== undefined) {
+    if (page === undefined || page.titleOnly || page.lines.length <= 1) { return zeros; }
+    const result: number[] = [];
+    for (let column = 0; column < columns; column++) {
+      let columnLines = 0;
+      let usedHeight = 0;
+      let lastHeight = 0;
+      let lastImageOnly = false;
+      for (let index = 0; index < page.lines.length; index++) {
+        const line = page.lines[index];
+        if (line === undefined) { continue; }
+        const lineColumn = page.lineColumns.length > index ? (page.lineColumns[index] ?? 0) : 0;
+        if (lineColumn !== column) { continue; }
+        columnLines++;
         usedHeight += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+        lastHeight = line.height;
+        lastImageOnly = line.imageOnly;
       }
+      if (columnLines <= 1 || lastImageOnly) { result.push(0); continue; }
+      // 首页的标题占位只压在第一列上（分页器把 titleReservedLines 记在首屏容量里）
+      const reserved = column === 0 && this.currentPageIndex === 0 && this.activeImageStyle !== 'SINGLE'
+        ? Math.max(0, titleReservedLines) * lineHeight : 0;
+      const surplus = pageHeight - reserved - usedHeight;
+      // 上游两条提前返回：剩余高度还够一行（或为负）就不摊分
+      if (surplus <= 0 || surplus >= lastHeight + lineHeight) { result.push(0); continue; }
+      result.push(surplus / (columnLines - 1));
     }
-    if (this.currentPageIndex === 0 && this.activeImageStyle !== 'SINGLE') {
-      usedHeight += Math.max(0, titleReservedLines) * lineHeight;
-    }
-    const surplus = pageHeight - usedHeight;
-    if (surplus <= 0 || surplus >= lastLine.height + lineHeight) { return 0; }
-    return surplus / (page.lines.length - 1);
+    return result;
   }
 
   /** 只重算当前页的底部对齐位移，不重排分页（翻页路径专用）。 */
@@ -1943,9 +1980,202 @@ export struct ReaderPage {
     return result.hitBoundary;
   }
 
+  /** 当前页还能不能往回翻：非首页，或上一章存在。 */
+  private canTurnToPrevious(): boolean {
+    return this.currentPageIndex > 0 || this.getChapterIndex() > 0;
+  }
+
+  /** 当前页还能不能往后翻：非末页，或下一章存在。 */
+  private canTurnToNext(): boolean {
+    return this.currentPageIndex + 1 < this.localReaderPages.length ||
+      this.getChapterIndex() + 1 < this.getChapterCount();
+  }
+
+  /**
+   * 横向拖动的逐帧更新（上游 `ReaderCanvasSurface.kt:1304-1330`）。
+   *
+   * 越过 touch-slop 时锁定方向并记下锁定点，之后位移都从锁定点算——
+   * 上游注释：方向在 touch-slop 处捕获，可见位移从捕获点开始。
+   * 折页模式另外写触点，让纸角跟着手指走。
+   */
+  private updateHorizontalPageDrag(event: GestureEvent): void {
+    if (this.pageAnimation === 5) { return; }
+    if (this.usesCanvasScroll()) { return; }
+    const context = this.getUIContext();
+    const slop = this.pageTouchSlop > 0 ? this.pageTouchSlop : 36;
+    if (!this.horizontalDragLocked) {
+      if (Math.abs(event.offsetX) < slop) { return; }
+      this.horizontalDragLocked = true;
+      this.horizontalDragOriginVp = event.offsetX;
+      // 折页：记下锁定时的触点，收尾要把它送出对边
+      if (this.turnMode === ReaderTransitionMode.SIMULATION) {
+        this.curlRevealProgress = 1;
+      }
+    }
+    const direction = captureReaderDragDirection(event.offsetX - this.horizontalDragOriginVp);
+    if (direction === ReaderTransitionDirection.NONE) { return; }
+    const pageExtentPx = context.vp2px(Math.max(1, this.readerContentWidth));
+    const dragPx = context.vp2px(event.offsetX - this.horizontalDragOriginVp);
+    const transition = ReaderPageTransitionPolicy.drag(direction, dragPx, pageExtentPx,
+      this.canTurnToPrevious(), this.canTurnToNext());
+    if (transition.direction === ReaderTransitionDirection.NONE) {
+      this.horizontalDragLastOffsetVp = 0;
+      return;
+    }
+    const mode = readerTransitionModeFromPageAnim(this.pageAnimation);
+    this.turnMode = mode;
+    this.turnTransition = transition;
+    this.horizontalDragLastOffsetVp = context.px2vp(transition.offsetPx);
+    if (mode === ReaderTransitionMode.SIMULATION) {
+      const isPrevious = direction === ReaderTransitionDirection.PREVIOUS;
+      const pageHeightPx = context.vp2px(Math.max(1, this.viewportHeight));
+      const finger = event.fingerList !== undefined && event.fingerList.length > 0
+        ? event.fingerList[0] : undefined;
+      const fingerX = finger === undefined ? 0 : context.vp2px(finger.localX);
+      const fingerY = finger === undefined ? 0 : context.vp2px(finger.localY);
+      this.curlPrevious = isPrevious;
+      this.curlCornerY = ReaderCurlTouchPolicy.cornerY(isPrevious, fingerY, pageHeightPx);
+      this.curlTouchX = ReaderCurlTouchPolicy.dragX(isPrevious, fingerX, pageExtentPx);
+      this.curlTouchY = ReaderCurlTouchPolicy.dragY(isPrevious, fingerY, fingerY, pageHeightPx);
+    }
+    this.paintReaderCanvas();
+  }
+
+  /**
+   * 横向拖动松手（上游 `settlePageTurn(release(...))`）。
+   *
+   * 判定口径全在 `ReaderPageTransitionPolicy.release()`：位移过 35% 或甩动过 900 px/s 就翻，
+   * 否则回弹。收尾动画从当前位移起步，不回到 0 再重放，避免松手瞬间画面跳一下。
+   */
+  private finishHorizontalPageDrag(event: GestureEvent): void {
+    const locked = this.horizontalDragLocked;
+    const startOffsetVp = this.horizontalDragLastOffsetVp;
+    this.horizontalDragLocked = false;
+    this.horizontalDragLastOffsetVp = 0;
+    if (!locked) {
+      // 兜底：某些注入式输入只给抬手不给逐帧回调，此时退回「按总位移判翻页」，
+      // 保证翻页永远不会因为拿不到 update 而失灵。
+      const slop = this.pageTouchSlop > 0 ? this.pageTouchSlop : 36;
+      if (event.offsetX < -slop) { this.turnReaderPage(1); }
+      else if (event.offsetX > slop) { this.turnReaderPage(-1); }
+      return;
+    }
+    const context = this.getUIContext();
+    const pageExtentPx = context.vp2px(Math.max(1, this.readerContentWidth));
+    // ArkUI 的 velocityX 单位是 vp/s，正方向「左→右」，与 offsetX 同号
+    const velocityPxPerSecond = context.vp2px(event.velocityX ?? 0);
+    const transition = this.turnTransition;
+    const decision = ReaderPageTransitionPolicy.release(transition, velocityPxPerSecond);
+    const isPrevious = transition.direction === ReaderTransitionDirection.PREVIOUS;
+    const mode = readerTransitionModeFromPageAnim(this.pageAnimation);
+    const targetOffsetPx = decision.targetOffsetPx;
+    const currentOffsetPx = context.vp2px(startOffsetVp);
+    const baseDuration = [240, 300, 360, 540][this.animationSpeed] ?? 360;
+    if (mode === ReaderTransitionMode.NONE) {
+      // 无动画：直接按判定结果落页
+      this.turnMode = ReaderTransitionMode.NONE;
+      this.turnTransition = new ReaderPageTransition();
+      if (decision.commit) {
+        this.commitDraggedPageTurn(isPrevious);
+      } else {
+        this.paintReaderCanvas();
+      }
+      return;
+    }
+    const duration = Math.max(1, ReaderPageTransitionPolicy.settleDurationMillis(
+      mode, currentOffsetPx, targetOffsetPx, pageExtentPx, baseDuration));
+    this.pageTurnAnimating = true;
+    this.cancelTurnAnimator();
+    const animator = context.createAnimator({
+      duration: duration,
+      easing: mode === ReaderTransitionMode.SIMULATION ? 'linear' : 'ease-out',
+      delay: 0,
+      fill: 'forwards',
+      direction: 'normal',
+      iterations: 1,
+      begin: 0,
+      end: 1
+    });
+    animator.onFrame = (progress: number) => {
+      this.turnTransition.offsetPx = currentOffsetPx + (targetOffsetPx - currentOffsetPx) * progress;
+      this.paintReaderCanvas();
+    };
+    animator.onFinish = () => {
+      this.turnAnimator = undefined;
+      this.pageTurnAnimating = false;
+      this.turnTransition = new ReaderPageTransition();
+      this.turnMode = ReaderTransitionMode.NONE;
+      if (decision.commit) {
+        this.commitDraggedPageTurn(isPrevious);
+      } else {
+        this.paintReaderCanvas();
+      }
+    };
+    this.turnAnimator = animator;
+    animator.play();
+  }
+
+  /**
+   * 抬手惯性：把首帧速度交给指数衰减曲线，逐帧落到 scrollOffset 上。
+   * 撞到章边界就停下（上游 `throw ReaderScrollBoundaryReached()` 跳出这段）。
+   */
+  private startReaderScrollFling(velocityYVpPerSecond: number): void {
+    if (!this.usesCanvasScroll()) { return; }
+    const context = this.getUIContext();
+    const velocityPxPerSecond = context.vp2px(velocityYVpPerSecond);
+    const totalPx = ReaderScrollDecay.totalDistance(velocityPxPerSecond);
+    // 位移不到一行就不值得起动画，直接停住
+    if (Math.abs(totalPx) < context.vp2px(8)) { return; }
+    this.cancelTurnAnimator();
+    let applied = 0;
+    const animator = context.createAnimator({
+      duration: ReaderScrollDecay.DURATION_MILLIS,
+      easing: 'linear',
+      delay: 0,
+      fill: 'forwards',
+      direction: 'normal',
+      iterations: 1,
+      begin: 0,
+      end: 1
+    });
+    animator.onFrame = (progress: number) => {
+      const target = ReaderScrollDecay.distanceAt(velocityPxPerSecond,
+        progress * ReaderScrollDecay.DURATION_MILLIS);
+      const step = target - applied;
+      applied = target;
+      if (step === 0) { return; }
+      if (this.applyReaderScrollDelta(step)) {
+        // 到章边界：惯性结束，把这一下转成翻章（与点击翻页同口径）
+        this.cancelTurnAnimator();
+        this.updateProgress();
+        this.onTurnChapterBoundary(step < 0 ? 1 : -1);
+      }
+    };
+    animator.onFinish = () => {
+      this.turnAnimator = undefined;
+      this.updateProgress();
+    };
+    this.turnAnimator = animator;
+    animator.play();
+  }
+
+  /** 拖动翻页落地：改索引并重绘；到章边界就交给换章回调。 */  private commitDraggedPageTurn(isPrevious: boolean): void {
+    const nextPageIndex = this.currentPageIndex + (isPrevious ? -1 : 1);
+    if (nextPageIndex < 0 || nextPageIndex >= this.localReaderPages.length) {
+      this.resetCanvasSelectionState();
+      this.paintReaderCanvas();
+      this.onTurnChapterBoundary(isPrevious ? -1 : 1);
+      return;
+    }
+    this.currentPageIndex = nextPageIndex;
+    this.resetCanvasSelectionState();
+    this.refreshReaderBottomJustifyGap();
+    this.reportReaderPageProgress();
+    this.paintReaderCanvas();
+  }
+
   private turnReaderPage(delta: number): void {
-    if (this.pageTurnAnimating) { return; }
-    if (this.usesReaderCanvas() && this.localReaderPages.length === 0) { return; }
+    if (this.pageTurnAnimating) { return; }    if (this.usesReaderCanvas() && this.localReaderPages.length === 0) { return; }
     if (this.usesCanvasScroll()) {
       this.turnReaderScrollPage(delta);
       return;
@@ -2042,8 +2272,7 @@ export struct ReaderPage {
   }
 
   /** 打断正在跑的转场动画（关页、换章、重建分页时都要先停）。 */
-  private cancelTurnAnimator(): void {
-    const animator = this.turnAnimator;
+  private cancelTurnAnimator(): void {    const animator = this.turnAnimator;
     this.turnAnimator = undefined;
     if (animator !== undefined) {
       try {
@@ -3679,6 +3908,66 @@ export struct ReaderPage {
     }
   }
 
+  /**
+   * 首次排版前把本章图片尺寸量好（上游 `ReadBookController.kt:239-248` 的口径）。
+   *
+   * 上游在排版期就用 `ImageProvider.getImageSize` 拿到真实尺寸，异步解码完成只重绘，
+   * 所以图片出现时正文不会跳。本地原来是「先按行高正方形占位排版、尺寸到了再重排」，
+   * 每张图加载完都会把整章行位推一遍。这里在首排之前同步量一次，
+   * 量到的尺寸直接进 `imageSizes`，之后的分页就用真实尺寸，不再有二次重排。
+   *
+   * 同步接口会阻塞当前线程（SDK 明确警告），所以只处理本章、只处理尚未量过的图，
+   * 且章节图片数量很少时收益最大；量失败就退回异步路径，不阻塞开书。
+   */
+  private primeContentImageSizesSync(): void {
+    const segments = this.getReaderContentSegments();
+    let pending = 0;
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index];
+      if (segment !== undefined && segment.kind === 'image' && !this.imageSizes.has(segment.value)) {
+        pending++;
+      }
+    }
+    if (pending === 0) {
+      return;
+    }
+    const nextSizes = new Map<string, ReaderIntrinsicImageSize>(this.imageSizes);
+    let changed = false;
+    const context = this.getUIContext();
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index];
+      if (segment === undefined || segment.kind !== 'image' || nextSizes.has(segment.value)) {
+        continue;
+      }
+      let source: image.ImageSource | undefined = undefined;
+      try {
+        source = image.createImageSource(segment.value);
+        const info = source.getImageInfoSync();
+        if (info.size.width > 0 && info.size.height > 0) {
+          const density = info.density > 0 ? info.density / 160 : 1;
+          nextSizes.set(segment.value, {
+            width: context.px2vp(info.size.width / density),
+            height: context.px2vp(info.size.height / density)
+          });
+          changed = true;
+        }
+      } catch (error) {
+        console.warn(`[ReaderPage] 同步读取图片尺寸失败，退回异步: ${error}`);
+      } finally {
+        if (source !== undefined) {
+          try {
+            source.release();
+          } catch (error) {
+            console.warn(`[ReaderPage] 释放图片源失败: ${error}`);
+          }
+        }
+      }
+    }
+    if (changed) {
+      this.imageSizes = nextSizes;
+    }
+  }
+
 
 
 
@@ -3765,6 +4054,17 @@ export struct ReaderPage {
     layout.originXpx = leftPadding;
     layout.originYpx = 0;
     layout.bottomJustifyGapPx = context.vp2px(this.readerBottomJustifyGap);
+    // 双页模式按列各算一份（上游 justifyColumnBottom 逐列摊分）
+    if (columnCount > 1) {
+      const perColumn = this.calculateReaderBottomJustifyGaps(
+        this.readerBottomJustifyPageHeight, this.readerBottomJustifyLineHeight,
+        this.readerBottomJustifyTitleLines);
+      const gapsPx: number[] = [];
+      for (let index = 0; index < perColumn.length; index++) {
+        gapsPx.push(context.vp2px(perColumn[index] ?? 0));
+      }
+      layout.bottomJustifyGapByColumn = gapsPx;
+    }
     // 分页器的行高/字宽/图片尺寸都是 vp，绘制层要按 px 排，比例从这里带下去
     layout.vpScale = context.vp2px(1);
     layout.viewportWidthPx = context.vp2px(Math.max(1, this.readerContentWidth));
@@ -3942,6 +4242,13 @@ export struct ReaderPage {
   // 拖动取位用 renderer.positionAt()（跨元素），端点跟把手走（canvasHandleGrabOffset）。
   // -------------------------------------------------------------------------
 
+  /**
+   * 菜单锚点：默认贴选区**下沿**（上游 `TextActionSelectionMenu.kt:674-735`）。
+   *
+   * 上游把菜单放在选区下方，并给末端选择柄留出净空（柄圆心在行底 +7dp、直径 14dp，
+   * 预留 14dp）；只有下方放不下、上方放得下时才翻到上方。本地原来优先弹上方，
+   * 选页面顶部第一行时菜单会盖住页眉，改成同一口径。
+   */
   private refreshCanvasSelectionMenuAnchor(request: ReaderCanvasDrawRequest): void {
     const context = this.getUIContext();
     // 选区坐标是画布局部 px，菜单定位在外层 Stack 里，所以要加上画布自身在 Stack 中的偏移
@@ -3949,9 +4256,22 @@ export struct ReaderPage {
     const topVp = offsetVp + context.px2vp(Math.max(0, request.selectionTopY));
     const bottomVp = offsetVp + context.px2vp(Math.max(0, request.selectionBottomY));
     const centerVp = context.px2vp((request.selectionStartX + request.selectionEndX) / 2);
-    // 只在真的变了才写 @State，否则每次 paint 都触发一次 UI 重建，形成重绘循环
     const menuX = Math.max(0, centerVp - 80);
-    const menuY = topVp > 56 ? topVp - 48 : bottomVp + 12;
+    // 选择柄净空 14vp（柄圆心在行底 +7dp、直径 14dp），再留 12vp 垂直边距
+    const handleClearanceVp: number = 14;
+    const verticalMarginVp: number = 12;
+    const menuHeightVp: number = 44;
+    const belowY = bottomVp + handleClearanceVp + verticalMarginVp;
+    const aboveY = topVp - verticalMarginVp - menuHeightVp;
+    const spaceBelow = this.viewportHeight - belowY;
+    const spaceAbove = topVp - verticalMarginVp;
+    // 下方放得下就贴下沿；否则上方够高才翻上去；两边都不够仍贴下沿并夹进屏幕
+    let menuY = belowY;
+    if (spaceBelow < menuHeightVp && spaceAbove >= menuHeightVp) {
+      menuY = aboveY;
+    }
+    menuY = Math.max(0, Math.min(Math.max(0, this.viewportHeight - menuHeightVp), menuY));
+    // 只在真的变了才写 @State，否则每次 paint 都触发一次 UI 重建，形成重绘循环
     if (Math.abs(menuX - this.canvasSelectionMenuX) > 0.5) {
       this.canvasSelectionMenuX = menuX;
     }
@@ -4574,6 +4894,8 @@ export struct ReaderPage {
               // 先判有没有抓到选区把手：抓到了这一段拖动就只挪把手，不翻页
               if (this.canvasSelectionStart < 0) {
                 this.canvasSelectionDragging = 0;
+                this.horizontalDragLocked = false;
+                this.horizontalDragLastOffsetVp = 0;
                 return;
               }
               const context = this.getUIContext();
@@ -4600,9 +4922,11 @@ export struct ReaderPage {
             })
             .onActionUpdate((event: GestureEvent) => {
               if (this.canvasSelectionDragging === 0) {
+                // 拖拽期就把页面跟着手指挪（上游 ReaderCanvasSurface.kt:1304-1330）：
+                // 越过 touch-slop 时锁定方向并记下锁定点，之后位移从锁定点算起。
+                this.updateHorizontalPageDrag(event);
                 return;
-              }
-              const context = this.getUIContext();
+              }              const context = this.getUIContext();
               const finger = event.fingerList !== undefined && event.fingerList.length > 0
                 ? event.fingerList[0] : undefined;
               if (finger === undefined) {
@@ -4618,10 +4942,7 @@ export struct ReaderPage {
                 this.paintReaderCanvas();
                 return;
               }
-              // 上游 pageTouchSlop：配了正数就用配置值，0 表示用平台默认阈值 36vp
-              const slop = this.pageTouchSlop > 0 ? this.pageTouchSlop : 36;
-              if (event.offsetX < -slop) { this.turnReaderPage(1); }
-              else if (event.offsetX > slop) { this.turnReaderPage(-1); }
+              this.finishHorizontalPageDrag(event);
             }),
           // 连续滚动的纵向拖动：delta 符号直接沿用 ArkUI 的 offsetY（手指向下为正），
           // 与上游 ReaderCanvasSurface.kt 拿 moveDelta.y 当 delta 同口径。
@@ -4642,8 +4963,11 @@ export struct ReaderPage {
               this.scrollDragLastY = event.offsetY;
               this.applyReaderScrollDelta(this.getUIContext().vp2px(deltaVp));
             })
-            .onActionEnd(() => {
+            .onActionEnd((event: GestureEvent) => {
               this.updateProgress();
+              // 抬手惯性（上游 ReaderCanvasSurface.kt:1414-1452 animateDecay）。
+              // 速度沿用 ArkUI 给的 velocityY（vp/s，手指向下为正），与 delta 同号。
+              this.startReaderScrollFling(event.velocityY ?? 0);
             }),
           PanGesture({ direction: this.swipeToAddBookmark && this.book.isLocal && this.pageAnimation !== 3
             ? PanDirection.Vertical : PanDirection.None })

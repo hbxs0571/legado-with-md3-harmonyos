@@ -299,7 +299,9 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 - 验收：纯观测（不点击）下手指上滑 200 px，正文条带位移 `-198 px`、`residual=0.05`，正文文本顺序同步前进；连续 8 次上滑可正常跨页；退出重进保持 `17/17`；分页模式横向翻页与滚动模式长按选词均不受影响。**通过**（三级口径第 3 级）。
 
-**未实现、属已知行为差异**：抬手惯性 fling。上游 `ReaderCanvasSurface.kt:1414-1450` 用 `animateDecay` 做松手后的减速滑行，本地完全没有这条路径，松手即停。本轮按任务范围只修方向、量纲、跨页三处，**没有顺带实现惯性**。
+**抬手惯性 fling —— 已接**（2026-11-02 第二批）。上游 `ReaderCanvasSurface.kt:1414-1452` 用 `animateDecay(velocity, scrollDecay)` 做松手后的减速滑行，本地补了同形状的指数衰减：`ReaderPage.ets:2122` 的 `startReaderScrollFling(velocityYVpPerSecond)` 配 `ReaderCanvasSurface.ets` 的 `ReaderScrollDecay`（`DECAY_RATE_PER_SECOND = 3.3`、`DURATION_MILLIS = 1200`，位移 `v0/λ·(1-e^(-λt))`），撞章边界立即停。滚动 PanGesture 的 `onActionEnd` 现在是 `this.updateProgress(); this.startReaderScrollFling(event.velocityY ?? 0);`。
+
+- 验收：滚动模式下快速上滑一次松手，页码从 `14/17` 自动滑到 `12/17`（抬手后继续滑过 2 页）✔。
 
 ### KI-SHELF1 书架网格与无封面文字封面与上游的差异 —— 已对齐
 

@@ -23,14 +23,14 @@
 
 ## 已知未完成项（引用，不当新发现）
 
-下列四条已登记在案，本表只登记「上游应有行为」，不作为本轮新发现：
+下列四条已登记在案，本表只登记「上游应有行为」，不作为本轮新发现。**其中三条已在 2026-11-02 的第二批实现落地**，状态见括号：
 
 | 项 | 上游位置 | 说明 |
 | --- | --- | --- |
-| 抬手惯性（fling）未实现 | `feature/reader/ReaderCanvasSurface.kt:1414-1452` 的 `Animatable(0f).animateDecay(velocity, scrollDecay)`（`:1423`） | 见 B5 块 |
+| 抬手惯性（fling）—— **已接** | `feature/reader/ReaderCanvasSurface.kt:1414-1452` 的 `Animatable(0f).animateDecay(velocity, scrollDecay)`（`:1423`） | 见 B5 块；本地 `ReaderPage.ets:2122` `startReaderScrollFling` + `ReaderScrollDecay`，已设备验证 |
 | 页眉页脚、章节标题、书签角标仍由 ArkUI 绘制 | `ReaderCanvasSurface.kt:2869` 的 `drawPageDecoration` 也在 `clipRect` 之外 | 属等价，不列差异 |
-| 折页手势拖拽跟手需真机验证 | `PageCurlGeometry.kt:130-155` | 见 B4 块备注 |
-| 滚动模式拖拽方向 | `ReaderCanvasSurface.kt:1414` 分支 | **正在由另一会话修**，本表只写上游应有行为 |
+| 折页手势拖拽跟手需真机验证 | `PageCurlGeometry.kt:130-155` | 见 B4 块备注；拖拽通路已接，卷曲形状是否真跟手指同步仍未真机验证 |
+| 滚动模式拖拽方向 —— **已修** | `ReaderCanvasSurface.kt:1414` 分支 | 已由另一会话修（`KI-SCROLL1`），本表按上游应有行为登记 |
 
 `docs/KNOWN-ISSUES.md` 的 KI-EXP1/2/3 已标「已接」，本表沿用，不重开。
 
@@ -129,11 +129,11 @@
 | 段间距 = 正文行高 × `paragraphSpacing` / 10 | `feature/reader/legacy/LegacyReaderChapterPaginator.kt:260-296` | `entry/src/main/ets/pages/ReaderPage.ets:1573`、`:2738`（`baseLineHeight * this.paragraphSpacing / 10`） | 已接 | 一致：同为行高的十分之几。 | 把段距从 0 拖到 20，看段与段之间空隙是否变大 | 依据源码推断，未设备验证 | `readConfig` |
 | 两端对齐：非末行按可拉伸间隙摊分（首行缩进不拉伸） | `feature/reader/core/layout/ReaderPaginator.kt:578-581`、`:849-866` | `entry/src/main/ets/pages/LocalReaderPaginator.ets:148`（`stretchableGaps = itemCount - 1 - leadingIndentCount`，`justifyGap` 摊分） | 已接 | 一致：首行缩进不参与拉伸、末行不对齐。 | 看一段多行正文，右边缘是否齐平 | 依据源码推断，未设备验证 | `readConfig` |
 | 两端对齐开关（`textFullJustify`，默认开） | `domain/model/settings/ReadSettings.kt`、`ReaderPaginator.kt:578-581` | `entry/src/main/ets/pages/ReaderPage.ets:1629`（传给 `LocalReaderPaginator.paginate` 的 `fullJustify` 形参） | 已接 | 一致：开关真的进了分页器。**注意**：本地早前版本恒传 `true`，本轮核实 `:1629` 已改为传 `this.textFullJustify`。 | 关掉「两端对齐」后看右边缘是否变成不齐 | 依据源码推断，未设备验证 | `readConfig` |
-| 底部对齐：把剩余高度逐行摊分，让最后一行贴到页底 | `feature/reader/core/layout/ReaderPaginator.kt:481-499`（`justifyColumnBottom()` 逐列摊分） | `entry/src/main/ets/pages/ReaderPage.ets:1688-1715`（`calculateReaderBottomJustifyGap`） | 未接 | 本地有 4 个「直接返回 0」的提前退出：滚动模式、**双列模式**、`surplus >= lastLine.height + lineHeight`、以及开关关闭。**双页模式下底部对齐完全不生效**，最后一行会浮在页面上方（代码注释自认与上游 `justifyColumnBottom()` 不符，记为 KI-D4）。 | 横屏开双页，看每列最后一行是否贴到底 | 依据源码推断，未设备验证。KI-D4 | `readConfig` |
-| 中文标点避头尾（`ChineseLineBreaker`：收尾标点悬挂、回退断行、连打例外、可压缩标点、再检查） | `feature/reader/core/layout/ChineseLineBreaker.kt:81-92`、`:109-122`、`:89`、`:61-79`、`:95-108` | `entry/src/main/ets/pages/LocalReaderPaginator.ets:46-57`（`findWordBreakIndex` 只处理 ASCII 空格/制表符断词） | 未接 | **`useZhLayout` 开关只参与分页签名，排版链路 0 消费**（`ReaderPage.ets:250-251` 注释自述）。本地断行只按空格切，中文长句靠系统默认断行：**行首会出现「，」「。」「）」**，行尾会孤零零留一个「（」，这是本地与上游最显眼的排版差异。 | 找一段连续中文长句，看行首是否有逗号或句号 | 依据源码推断，未设备验证。`useZhLayout` 在 `ReaderSettingsRepository.ets:280-285` 存取，但 `LocalReaderPaginator.paginate()` 形参表里没有它 | `readConfig` |
+| 底部对齐：把剩余高度逐行摊分，让最后一行贴到页底 | `feature/reader/core/layout/ReaderPaginator.kt:481-499`（`justifyColumnBottom()` 逐列摊分） | `entry/src/main/ets/pages/ReaderPage.ets:1713`（`calculateReaderBottomJustifyGaps` 逐列摊分）、`:4066`（写进 `layout.bottomJustifyGapByColumn`）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:1278`（按列取 gap） | 已接 | 与上游一致：每列各自摊分剩余高度，双列模式下两列最后一行都贴到页底。原来「双列直接返回 0」的提前退出已去掉，首页标题占位只压第一列。**双列未设备验证**（模拟器竖屏只有单列）。 | 横屏开双页，看每列最后一行是否贴到底 | 依据源码推断，未设备验证。KI-D4 已销项 | `readConfig` |
+| 中文标点避头尾（`ChineseLineBreaker`：回退断行、连打例外、可压缩标点、再检查） | `feature/reader/core/layout/ChineseLineBreaker.kt:81-92`、`:109-122`、`:89`、`:61-79`、`:95-108` | `entry/src/main/ets/reader/ChineseLineBreaker.ets:76`（`resolve` 返回要回搬的字数）、`entry/src/main/ets/pages/LocalReaderPaginator.ets:241-276`（溢出分支先试避头尾、再硬断） | 已接 | 行首不再出现「，」「。」「」」「？」，行尾不再孤零零留一个「“」「（」；长句会在标点前回搬一个字，上一行因此变短一点点。**没有做 HANG（收尾标点悬挂）**：本地按 Paragraph 绘制，无法让字形越出版心，所以标点不会「挂」在页边外——这一半行为上游有、本地没有，但用户只在极满的行上才看得出来。 | 找一段连续中文长句，看行首是否有逗号或句号 | 已设备验证（zh-book 第 20 章多页行首无标点）。避头尾按上游口径常开，与 `useZhLayout` 无关（上游 `ReaderPaginator.kt:559` 也是无条件调用） | `readConfig` |
 | 双页模式四档（`"1"` 恒双页 / `"2"` 横屏双页 / `"3"` 横屏或平板 / 其余单页） | `feature/reader/core/layout/ReaderColumnMode.kt:7-22` | `entry/src/main/ets/pages/ReaderPage.ets:229`（`@Prop doubleHorizontalPage`）、`:2900-2903`（`resolveReaderColumnCount`） | 已接 | 一致：`'1'` 对滚动模式也生效。 | 横屏时切双页模式，看是否变成左右两列 | 依据源码推断，未设备验证 | `readConfig` |
 | 视口 ≤ 0 时不排版，返回 `Unsupported("viewport")` | `feature/reader/legacy/LegacyReaderChapterPaginator.kt:141-143` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:779-830`（`draw()` 里 `window.current === undefined` 直接 return） | 已接 | 一致：视口无效时画布不画，不回落到整章滚动排版。 | 首次开书那一瞬看是否出现错位文字 | 依据源码推断，未设备验证 | `不备份` |
-| 章末留白 `CHAPTER_END_PADDING_DP = 20f` | `feature/reader/legacy/LegacyReaderChapterPaginator.kt:277`、`:406` | 无（`LocalReaderPaginator.ets` 无章末留白常量） | 未接 | 本地读完一章的最后一页，**最后一行会顶到页面最底部**（有时贴到页脚），上游会在章末留 20dp 呼吸空间。 | 翻到任意一章的最后一页，看最后一行与页脚的距离 | 依据源码推断，未设备验证 | `不备份` |
+| 章末留白 `CHAPTER_END_PADDING_DP = 20f` | `feature/reader/legacy/LegacyReaderChapterPaginator.kt:277`、`:406`、`feature/reader/core/layout/ReaderPaginator.kt:1149` | `entry/src/main/ets/pages/ReaderPage.ets:4021`（`request.scrollEndPaddingPx = vp2px(20)`）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:933-935`（章末页 extent 加留白） | 已接 | 与上游口径一致：**只有连续滚动模式**在章末页的堆叠高度上加 20dp，分页模式不加（上游 `stackedExtentPx` 同样只在 `continuousScroll` 时加）。滚动到章末继续往下，最后一页下方会多出一小段呼吸空间再进下一章。 | 滚动模式滚到一章末尾，看最后一行与下一章之间是否有一小段空白 | 依据源码推断，未设备验证 | `不备份` |
 | 页眉页脚高度计入正文 padding | `feature/reader/legacy/LegacyReaderChapterPaginator.kt:260-296` | `entry/src/main/ets/pages/ReaderPage.ets:1708`（`usedHeight += titleReservedLines * lineHeight`，页眉页脚另走 `getReaderInfoReserve`） | 已接 | 一致：正文高度会扣掉页眉页脚占位。 | 开关页眉后看正文可用行数是否减少 | 依据源码推断，未设备验证 | `readConfig` |
 
 ### B2 图片与图文混排
@@ -142,7 +142,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 小图阈值：任一边 ≥80px 当独立图，否则按行内图排 | `feature/reader/core/layout/ReaderChapterBlockMeasurer.kt:467-472` | `entry/src/main/ets/pages/ReaderPage.ets:1625`（`context.px2vp(80)` 作为 `standaloneImageThreshold`） | 已接 | 一致：80px 阈值。 | 看含小图标（如表情）的段落，图标是否混排在文字行里 | 依据源码推断，未设备验证 | `readConfig` |
 | 图片尺寸未解出时按「一行高的正方形」占位继续排版 | `feature/reader/core/layout/ReaderChapterBlockMeasurer.kt:455-460` | `entry/src/main/ets/pages/ReaderPage.ets:1586-1608`（`placeholderExtent = max(1, lineHeight)`）、`paginationUsesImagePlaceholder` 标记 | 已接 | 一致：先用正方形占位，尺寸到达后再重排。 | 首次打开带大图的章，看是否先出现方形灰块再变成长图 | 依据源码推断，未设备验证 | `不备份` |
-| 图片尺寸解出后**只重绘不重排**（排版期已按 `getImageSize` 预留真实尺寸） | `ui/book/read/ReadBookController.kt:239-248`（只 `page.copy(revision = ...)`） | `entry/src/main/ets/pages/ReaderPage.ets:1416`（`scheduleImageSizesPaginationRebuild` 触发**重新分页**） | 未接 | 本地图片尺寸到达后会**重新分页**，用户会看到页面内容跳一下（文字重新断行、页码可能变）；上游因为排版期就拿到了真实尺寸，只重绘不跳版。本地用 `onlyImageSizesChanged` 跳过了语义解析与高亮扫描来减轻代价，但跳版本身仍在。 | 打开一本带大图的章，盯住正文看它是否在图片加载完成后重新断行 | 依据源码推断，未设备验证 | `不备份` |
+| 图片尺寸解出后**只重绘不重排**（排版期已按 `getImageSize` 预留真实尺寸） | `ui/book/read/ReadBookController.kt:239-248`（只 `page.copy(revision = ...)`） | `entry/src/main/ets/pages/ReaderPage.ets:3922`（`primeContentImageSizesSync` 首排前用 `getImageInfoSync` 同步量出真实尺寸）、`:1416`（同步失败时回落重排） | 已接 | 首次排版前就把本章图片的真实尺寸量出来，图文混排的章**不再在图片加载完之后跳版**（文字重新断行、页码变化）。只有同步量尺寸失败（格式不支持、超大图）时才回落到「先占位再重排」。 | 打开一本带大图的章，盯住正文看它是否在图片加载完成后重新断行 | 依据源码推断，未设备验证（模拟器书库无图文本） | `不备份` |
 | 坏图按一行高的正方形占位，不撑破版面 | `feature/reader/core/layout/ReaderChapterBlockMeasurer.kt:455-460` | `entry/src/main/ets/pages/ReaderPage.ets:1586-1608` | 已接 | 一致。 | 放一张损坏的图片引用进 TXT，看版面是否正常 | 依据源码推断，未设备验证 | `不备份` |
 | 图片大小 0.1~5 倍缩放，九宫格按九切片等比缩放 | `feature/reader/core/model/ReaderPage.kt:140`、`:154-157`、`ReaderNineSliceLayout.kt:18-109` | `entry/src/main/ets/pages/ReaderPage.ets`（`activeImageStyle` 只有 `TEXT`/`FULL`/`SINGLE` 三档） | 未接 | 本地**没有图片缩放倍数与九宫格切片**。高亮规则里配的背景图会被整体拉伸，圆角气泡图会被压扁；上游按九切片保护四角不变形。 | 给一条高亮规则配圆角背景图，看圆角是否变形 | 依据源码推断，未设备验证 | `themeConfig` |
 | 图片布局模式解析（TEXT / FULL / SINGLE 三档映射） | `feature/reader/core/layout/ReaderChapterBlockMeasurer.kt:694-724`、`feature/reader/legacy/LegacyReaderChapterPaginator.kt:148-159` | `entry/src/main/ets/pages/ReaderPage.ets:1628`（`activeImageStyle === 'SINGLE' ? 0 : titleReservedLines`） | 已接 | 一致：SINGLE 独占一页。 | 切图片样式三档，看大图是否独占页 | 依据源码推断，未设备验证 | `readConfig` |
@@ -172,7 +172,7 @@
 | 折页转场三道阴影（`0x99111111` / `0x4D111111` / `0x73333333`） | `feature/reader/core/transition/PageCurlGeometry.kt:46-50` | `entry/src/main/ets/reader/ReaderPageCurl.ets:67-71`（`ReaderCurlVisualPolicy` 三个常量） | 已接 | 一致：三个 ARGB 完全相同。 | 用仿真翻页，看卷起处是否有三层阴影 | 依据源码推断，未设备验证 | `readConfig` |
 | 折页收尾时长下限为基准的 25%（=90ms） | `feature/reader/core/transition/PageCurlGeometry.kt:66-79` | `entry/src/main/ets/reader/ReaderPageCurl.ets:81`（`MIN_SETTLE_FRACTION = 0.25`）、`:85` `settleDurationMillis` | 已接 | 一致。 | 快速点按翻页，看收尾是否干脆 | 依据源码推断，未设备验证 | `readConfig` |
 | 折页起始吸附：拖动不足页宽 4% 时吸附回原位 | `feature/reader/core/transition/PageCurlGeometry.kt:86-98` | `entry/src/main/ets/reader/ReaderPageCurl.ets:82`（`DRAG_SNAP_FRACTION = 0.04`）、`:107-118` `dragX` | 已接 | 一致。 | 极轻地拖一下再松手，看是否纹丝不动 | 依据源码推断，未设备验证 | `readConfig` |
-| 折页角点选择（按触点落在上半/下半页决定从哪个角卷起） | `feature/reader/core/transition/PageCurlGeometry.kt:130-155` | `entry/src/main/ets/reader/ReaderPageCurl.ets:143-155`（`cornerY`/`settledY`） | 未接 | 本地有 `cornerY`，但**拖拽跟手性需真机验证**：触摸屏上手指移动与纸张卷起是否同步，尚未设备确认（任务书列为已知未完成项）。 | 真机上用仿真动画慢慢拖，看纸张是否跟着手指走 | 依据源码推断，未设备验证。任务书已知项「折页手势拖拽跟手需真机验证」 | `readConfig` |
+| 折页角点选择（按触点落在上半/下半页决定从哪个角卷起） | `feature/reader/core/transition/PageCurlGeometry.kt:130-155` | `entry/src/main/ets/reader/ReaderPageCurl.ets:143-155`（`cornerY`/`settledY`）、`entry/src/main/ets/pages/ReaderPage.ets:2001`（拖动时每帧按触点重算 `curlCornerY`/`curlTouchX`/`curlTouchY`） | 未接 | 代码通路已接：拖动时每帧按触点上下半页重算卷起角与触点位置。但**纸张卷曲形状是否真的跟着手指同步**还没在真机上确认——模拟器 `snapshot_display` 抓不到拖动中间帧（连拍 8 张字节数全等），只能证明回调每帧都进，证明不了画面。按「已接必须指到屏幕位置」的口径，仍判未接。 | 真机上用仿真动画慢慢拖，看纸张卷起角是否跟着触点在上半页/下半页之间切换 | 依据源码推断，未设备验证。任务书已知项「折页手势拖拽跟手需真机验证」 | `readConfig` |
 | 翻页速度四档 240 / 300 / 360 / 540ms，基准统一 360 | `feature/reader/core/transition/ReaderPageTurnSpeed.kt:19-32`、`:41-43`、`:46` | `entry/src/main/ets/pages/ReaderPage.ets:1966-1967`（`durationBySpeed = [240,300,360,540]`）、`:364`（`animationSpeed` 默认 2） | 已接 | 一致：四档数值相同、默认第 3 档（360ms）。 | 速度切到最快档与最慢档，感受差别 | 依据源码推断，未设备验证 | `readConfig` |
 | 自动翻页顶部 1px 进度指示条；墨水屏整页跳变、普通屏逐行揭示 | `feature/reader/core/transition/ReaderAutoPagePolicy.kt:10-11`、`:16-18`、`ReaderCanvasSurface.kt:1683-1722` | `entry/src/main/ets/pages/ReaderPage.ets:1256-1272`（`setInterval` 到点直接 `turnReaderPage(1)`） | 未接 | 本地自动翻页是**到点直接翻整页**，没有顶部 1px 进度条提示「还剩多久翻」，也没有逐行揭示。用户在等待时会不确定是不是卡住了。 | 开自动翻页，看顶部是否有细进度条 | 依据源码推断，未设备验证 | `readConfig` |
 
@@ -184,7 +184,7 @@
 | 步进时长 = 基准 × 步距 ÷ 视口高 | `feature/reader/core/transition/ReaderScrollState.kt:83-91` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:314`（`stepDurationMillis`） | 已接 | 一致：线性折算，最短 1ms。 | 短距离步进与整屏步进，感受时长差异 | 依据源码推断，未设备验证 | `readConfig` |
 | 跨页：越过页边界时换窗口 | `feature/reader/core/transition/ReaderScrollState.kt:41-58`、`:104-122` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:325`（`apply`，含 `crossing` 返回） | 已接 | 一致：`apply` 返回 `PREVIOUS`/`NEXT` 让调用方换窗口。 | 滚动到底继续滑，看是否无缝进入下一章 | 依据源码推断，未设备验证 | `readConfig` |
 | 章末不够一屏时钳回 | `feature/reader/core/transition/ReaderScrollState.kt:109-114` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:325-340`（`apply` 的 `hitBoundary` 分支） | 已接 | 一致。 | 滚动到一章末尾，看是否停在最后一行而不是留白 | 依据源码推断，未设备验证 | `readConfig` |
-| **抬手惯性（fling）**：`animateDecay(velocity, scrollDecay)`，spline decay，碰到边界抛 `ReaderScrollBoundaryReached` 静默取消 | `feature/reader/ReaderCanvasSurface.kt:1414-1452`（调用点 `:1423`）、`:261`（`rememberSplineBasedDecay`）、`:1879` | 无（`applyReaderScrollDelta` 只处理手指位移） | 未接 | **已知未完成项。** 本地抬手即停，上游抬手后还会惯性滑行一段并逐渐减速。这是滚动模式手感差距最大的一条。 | 滚动模式下快速甩一下手指后松手，看是否继续滑行 | 依据源码推断，未设备验证。任务书列为已知未完成项，此处只登记上游应有行为 | `readConfig` |
+| **抬手惯性（fling）**：`animateDecay(velocity, scrollDecay)`，spline decay，碰到边界抛 `ReaderScrollBoundaryReached` 静默取消 | `feature/reader/ReaderCanvasSurface.kt:1414-1452`（调用点 `:1423`）、`:261`（`rememberSplineBasedDecay`）、`:1879` | `entry/src/main/ets/pages/ReaderPage.ets:2122`（`startReaderScrollFling`）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets`（`ReaderScrollDecay`：`DECAY_RATE_PER_SECOND = 3.3`、`DURATION_MILLIS = 1200`） | 已接 | 抬手后正文按指数衰减继续滑行、速度逐渐降下来，撞到章边界立即停住不再滑。设备实测：快速上滑一次松手，页码从 `14/17` 自动滑到 `12/17`。 | 滚动模式下快速甩一下手指后松手，看是否继续滑行 | 已设备验证 | `readConfig` |
 | 滚动动画开关（关掉后滚动无缓动） | `feature/reader/core/gesture/ReaderGestureSettingsPolicy.kt:27` | `entry/src/main/ets/pages/ReaderPage.ets:1860`（滚动步进用 `durationBySpeed` 表） | 已接 | 一致：本地滚动步进走同一套四档时长。 | 关掉滚动动画后点翻页，看是否瞬移 | 依据源码推断，未设备验证 | `readConfig` |
 
 ### B6 页眉页脚与角标（绘制）
@@ -342,17 +342,17 @@
 
 | 上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 横向拖动跟手（拖动过程中页面跟着手指位移） | `feature/reader/ReaderCanvasSurface.kt:1586-1602`（COVER 的 `clipRect` 随 `displayOffset` 变） | `entry/src/main/ets/pages/ReaderPage.ets:4620-4624`（`PanGesture` 只在 `onActionEnd` 按 `offsetX` 判方向） | 未接 | 本地**拖拽过程中页面纹丝不动**，只在松手时判断往哪边翻。用户拖到一半松手，看起来像「没反应」；上游页面一直跟着手指走。这是翻页手感差距最大的一条。 | 慢慢拖动页面但先不松手，看页面是否跟着移动 | 依据源码推断，未设备验证 | `readConfig` |
+| 横向拖动跟手（拖动过程中页面跟着手指位移） | `feature/reader/ReaderCanvasSurface.kt:1586-1602`（COVER 的 `clipRect` 随 `displayOffset` 变）、`:1304-1330` | `entry/src/main/ets/pages/ReaderPage.ets:2001`（`updateHorizontalPageDrag` 逐帧写 `turnTransition` 并重绘）、`:2050`（`finishHorizontalPageDrag` 从当前位置续到目标） | 已接 | 越过 touch-slop 后页面开始跟着手指走，折页模式下纸角也跟着触点卷；松手时从当前位置续到目标位置，不再「拖到一半松手像没反应」。 | 慢慢拖动页面但先不松手，看页面是否跟着移动 | 依据源码推断，未设备验证。`uitest` 注入输入抓不到拖动中间帧（慢拖会触发长按选词、快拖截不到），只能确认 `onActionUpdate` 每帧都进（hilog 实测 94~143 条 `offsetX` 单调变化） | `readConfig` |
 | 拖动阈值（`pageTouchSlop`，默认 36） | `feature/reader/core/gesture/ReaderGestureSettingsPolicy.kt:5-7` | `entry/src/main/ets/pages/ReaderPage.ets:4620`（`slop = pageTouchSlop > 0 ? pageTouchSlop : 36`） | 已接 | 一致：默认 36。 | 极轻地横划一下，看是否翻页 | 依据源码推断，未设备验证 | `readConfig` |
-| 松手判定（`commitProgress` 0.35 / 甩动 900 px/s） | `feature/reader/core/transition/ReaderPageTransition.kt:156-181` | `entry/src/main/ets/pages/ReaderPage.ets:4620-4624`（只按 `offsetX` 与 slop 判，**不判速度**） | 未接 | 本地**不支持甩动翻页**：快速轻甩（位移不足 slop）不会翻页。上游甩一下就能翻。 | 快速轻甩一下，看是否翻页 | 依据源码推断，未设备验证 | `readConfig` |
+| 松手判定（`commitProgress` 0.35 / 甩动 900 px/s） | `feature/reader/core/transition/ReaderPageTransition.kt:156-181` | `entry/src/main/ets/pages/ReaderPage.ets:2050`（`finishHorizontalPageDrag` → `ReaderPageTransitionPolicy.release(transition, velocityPxPerSecond)`）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:180-204` | 已接 | 位移过 35% 或甩动过 900 px/s 都翻页，两个都不满足就回弹到原位。快速轻甩现在能翻页，不用再拖满小半屏。 | 快速轻甩一下，看是否翻页 | 依据源码推断，未设备验证。`event.velocityX` 单位是 vp/s（SDK `gesture.d.ts:863`） | `readConfig` |
 | 翻页手势与拖选解耦（拖选阈值独立） | `feature/reader/core/gesture/ReaderGestureSettingsPolicy.kt:16-19` | `entry/src/main/ets/pages/ReaderPage.ets:4544-4650`（`GestureGroup` 并行，先判 `canvasHandleHit` 抓把手） | 已接 | 一致：抓到把手时只拖把手，不翻页。 | 长按出选区后拖把手，看是否翻页 | 依据源码推断，未设备验证 | `readConfig` |
 
 ### D3 滚动手势
 
 | 上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 滚动拖拽逐帧跟手 | `feature/reader/ReaderCanvasSurface.kt:1414` 分支（`scrollDrag`） | `entry/src/main/ets/pages/ReaderPage.ets`（工作区未提交版：`scrollDragLastY` 逐帧 delta 调 `applyReaderScrollDelta`） | 未接 | **正在由另一会话修。** 本表只登记上游应有行为：滚动模式下手指拖动，正文应逐帧跟随位移。 | 滚动模式下拖动正文，看文字是否跟着手指走 | 依据源码推断，未设备验证。任务书已知项 | `readConfig` |
-| 滚动跨页（拖过页边界直接进下一章，不需松手） | `feature/reader/ReaderCanvasSurface.kt:1414` 分支 | `entry/src/main/ets/pages/ReaderPage.ets`（工作区未提交版注释「拖拽期就会跨页」） | 未接 | 同上，**正在由另一会话修**。上游应有行为：拖到章末继续拖，无缝进入下一章。 | 滚动到章末继续拖，看是否进入下一章 | 依据源码推断，未设备验证 | `readConfig` |
+| 滚动拖拽逐帧跟手 | `feature/reader/ReaderCanvasSurface.kt:1414` 分支（`scrollDrag`） | `entry/src/main/ets/pages/ReaderPage.ets:4958`（纵向 `PanGesture.onActionUpdate` 逐帧算 delta 调 `applyReaderScrollDelta`） | 已接 | 滚动模式下手指拖动正文逐帧跟随，松手停在原地不跳回。 | 滚动模式下拖动正文，看文字是否跟着手指走 | 已设备验证（hilog 每 16ms 一条 `offsetY` 递增） | `readConfig` |
+| 滚动跨页（拖过页边界直接进下一章，不需松手） | `feature/reader/ReaderCanvasSurface.kt:1414` 分支 | `entry/src/main/ets/pages/ReaderPage.ets:4958`、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:325`（`apply` 返回 crossing 时换窗口） | 已接 | 拖到章末继续拖，会无缝接上下一章正文，不需要松手再翻一次。 | 滚动到章末继续拖，看是否进入下一章 | 已设备验证 | `readConfig` |
 | 滚动边界钳制（到顶/到底不再跟手） | `feature/reader/core/transition/ReaderScrollState.kt:109-114` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:325-340`（`apply` 的 `hitBoundary`） | 已接 | 一致。 | 滚到全书第一页继续往上拖，看是否停住 | 依据源码推断，未设备验证 | `readConfig` |
 | 滚动动画开关 | `feature/reader/core/gesture/ReaderGestureSettingsPolicy.kt:27` | `entry/src/main/ets/pages/ReaderPage.ets:1860` | 已接 | 一致。 | 关掉滚动动画后点翻页，看是否瞬移 | 依据源码推断，未设备验证 | `readConfig` |
 
@@ -375,7 +375,7 @@
 
 | 上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **菜单默认贴选区下沿**，让开末端选择柄（预留 14dp 净空）；下方不够且上方够才翻到上方 | `ui/book/read/TextActionSelectionMenu.kt:674-735` | `entry/src/main/ets/pages/ReaderPage.ets:3945-3965`（`refreshCanvasSelectionMenuAnchor`：`topVp > 56 ? topVp - 48 : bottomVp + 12`） | 未接 | **本地与上游方向相反**：本地优先弹在选区**上方**，上方放不下才挪到下方。手指停在选区附近时，上方弹出的菜单离手指更远没问题，但**选区在页面顶部时菜单会盖住页眉**，且用户习惯往下找菜单时会先看到手指。 | 选中页面顶部的一段文字，看菜单弹在选区上方还是下方 | 依据源码推断，未设备验证 | `readConfig` |
+| **菜单默认贴选区下沿**，让开末端选择柄（预留 14dp 净空）；下方不够且上方够才翻到上方 | `ui/book/read/TextActionSelectionMenu.kt:674-735` | `entry/src/main/ets/pages/ReaderPage.ets:4252`（`refreshCanvasSelectionMenuAnchor`：默认 `bottomVp + 14 + 12`，下方放不下且上方放得下才翻上，最后夹进屏幕） | 已接 | 菜单默认出现在选区下方，并给末端选择柄留 14vp 净空，手指不会挡住菜单；只有下方放不下、上方又放得下时才翻到上方。 | 选中页面顶部的一段文字，看菜单是否仍弹在选区下方（或翻到上方但不越界） | 已设备验证（选区在第 13~14 行时菜单落在第 17 行下方） | `readConfig` |
 | 菜单卡片（圆角 12dp、最大宽 = 屏宽 − 32dp、展开态阴影 12dp / 快捷态 6dp） | `ui/book/read/TextActionSelectionMenu.kt:178-221` | `entry/src/main/ets/pages/ReaderPage.ets:3257-3277`（`backgroundColor('#242127')`、`borderRadius(12)`） | 已接 | 一致：圆角 12、深色底。本地无阴影。 | 看菜单卡片圆角与底色 | 依据源码推断，未设备验证 | `readConfig` |
 | 折叠态一行横向滚动快捷条（首项左距 16dp、项间 10dp、右端分隔线 + 三点钮） | `ui/book/read/TextActionSelectionMenu.kt:167-265` | `entry/src/main/ets/pages/ReaderPage.ets:3257`（`Flex(wrap: expandTextMenu ? Wrap : NoWrap)`） | 未接 | 本地折叠态是**一行不滚动的 Flex**，项多了会被挤压或溢出屏幕；上游是一行可横向滚动。 | 开 8 个菜单项，看折叠态是否能横向滑动 | 依据源码推断，未设备验证 | `readConfig` |
 | 「更多」二级弹层：主卡缩到 0.96、透明度 0.82（400ms/360ms），二级卡从三点钮向下展开，列表最高 240dp 可竖滚，底部「编辑菜单项」 | `ui/book/read/TextActionSelectionMenu.kt:196-272`、`:621-655` | `entry/src/main/ets/pages/ReaderPage.ets:3257-3277`（点「更多」在同一张卡片下方就地展开，`selectionMenuMoreVisible`） | 未接 | 本地**没有二级弹层**：点「更多」后是**整张卡片变高**、所有项一起显示（代码注释自认「本地没有 Popup 层」）。卡片会盖住大半个屏幕，且没有「编辑菜单项」入口。 | 点划词菜单的「更多」，看是弹出新卡片还是卡片原地变高 | 依据源码推断，未设备验证 | `readConfig` |
@@ -787,10 +787,10 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 17 | 13 | 1 |
-| B 引擎层（TXT 与 EPUB 共用） | 54 | 34 | 19 | 1 |
+| B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
 | C 界面层 | 78 | 46 | 27 | 5 |
-| D 交互层 | 48 | 25 | 22 | 1 |
-| **合计** | **211** | **122** | **81** | **8** |
+| D 交互层 | 48 | 30 | 17 | 1 |
+| **合计** | **211** | **132** | **71** | **8** |
 
 数字核对脚本（**注意**：表里有两行图例 `| 状态 | 已接 | 未接 | 不适用 |`，直接 `grep -c` 会各多算 2，所以要先排除图例行；含 `\|` 转义的行也必须按转义分列，否则少算 3 行）：
 
@@ -807,35 +807,36 @@ for l in lines:
     cells = re.split(r'(?<!\\)\|', s)
     if len(cells) == 8 and cells[3].strip() in n:
         n[cells[3].strip()] += 1
-print(n, sum(n.values()))   # {'已接': 122, '未接': 81, '不适用': 8} 211
+print(n, sum(n.values()))   # {'已接': 132, '未接': 71, '不适用': 8} 211
 PY
 
 # 表格行内不得出现第四种状态词
-grep -nE '^\|.*\|\s*(部分|基本|待定)' docs/parity/TXT-READER.md   # 只命中本行说明，无表格行
+grep -nE '^\|.*\|\s*(部[分]|基[本]|待[定])' docs/parity/TXT-READER.md   # 用字符类写，避免本行自己命中
 ```
 
 ### 一句话结论
 
-**本地 TXT 阅读的「能读」已经齐了，但「读得舒服」还差一层**——分页与翻页的骨架（四页预取、五种转场、35%/900 判定、翻页速度四档）与上游数值级对齐，可手感上缺三样硬东西：**拖拽不跟手**、**没有抬手惯性**、**中文没有避头尾**。
+**本地 TXT 阅读的手感骨架已经补齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）落地后，翻页与滚动的核心手感与上游数值级对齐；剩下 71 行未接主要在**界面层**（顶栏底栏动作数、目录页分卷与字数、各二级面板的字段与形态）与**绘制细节**（分层绘制、6 种下划线、九宫格、覆盖阴影）。
 
-### 对阅读手感影响最大的前 5 条
+### 对阅读手感影响最大的前 5 条（剩余未接行中）
 
-1. **拖拽不跟手**（D2）—— 上游 `ReaderCanvasSurface.kt:1586-1602` 拖动时页面随手指位移，本地 `ReaderPage.ets:4620-4624` 只在松手时判方向。用户拖到一半松手，看起来像「没反应」。这是**每翻一页都会遇到**的差异，影响面 100%。
-2. **中文没有避头尾**（B1）—— 上游 `ChineseLineBreaker.kt` 232 行专门处理标点悬挂与回退断行，本地 `LocalReaderPaginator.ets:46-57` 只按空格断词，`useZhLayout` 开关只进分页签名、排版链路零消费。中文书**每屏都会出现行首逗号句号**，是视觉上最刺眼的差异。
-3. **滚动模式没有抬手惯性**（B5）—— 上游 `ReaderCanvasSurface.kt:1423` 的 `animateDecay`，本地没有。抬手即停，滚动读长章时手指要一直蹭屏幕。
-4. **图片尺寸解出后重排跳版**（B2）—— 上游 `ReadBookController.kt:239-248` 只重绘不重排，本地 `ReaderPage.ets:1416` 重新分页。图文混排的书**每张图加载完正文都会跳一下**，阅读节奏被打断。
-5. **划词菜单弹在选区上方**（D5）—— 上游 `TextActionSelectionMenu.kt:674-735` 默认贴选区下沿并让开选择柄，本地 `ReaderPage.ets:3945-3965` 优先弹上方。选中页面顶部的文字时**菜单会盖住页眉**，且与用户「往下找菜单」的习惯相反。
+> 第一批十行已落地，下面这份榜单只从**尚未接的 71 行**里挑，避免拿已修好的项占位。
+
+1. **绘制不分层，下划线被选区盖住**（B4）—— 上游 `ReaderCanvasSurface.kt:2767-2869` 分四层画（文字背景色带 / 正文 / contentRules / styledUnderlines / overlayRules），本地 `ReaderCanvasSurface.ets:1183-1222` 跟着每个 box 一起画。选中一段带下划线的文字时**下划线被选区灰块压掉**，overlay 规则也盖不到文字之上。
+2. **下划线只有系统线型**（B4）—— 上游 6 种手绘线型（虚线 10-10、双线、波浪振幅 3dp/波长 12dp、SVG、半高线），本地只有系统 `TextDecorationType`。高亮规则里选「波浪下划线」画出来是**一条直线**，高亮规则的表达力差一大截。
+3. **文字背景图完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**。
+4. **顶栏 6 个动作只剩 2 个**（C2）—— 上游默认 6 个（下载/刷新/换源/TXT 目录规则/编码/更多），本地默认只显示其中 2 个可用项，另 4 个走「暂未支持」面板。老用户升级后**找不到换源和编码入口**。
+5. **章边界无「加载中」占位页、无第三槽提示**（D6）—— 上游 `ReaderPageNavigator.kt:82-92`、`:101-102` 有加载中占位页与「继续滑动以加载下一章…」，本地直接换章。长章加载慢时用户看到上一章最后一页停在那里，**像是卡住了**。
 
 ### 次一级（值得排期但影响面小）
 
-- 顶部 6 个动作只剩 2 个（C2）
+- 目录页分卷折叠、字数卡、粘性卷头（C5）
 - 点标题胶囊不进书籍详情（C2）
-- 章边界无「加载中」占位页（D6）
-- 无「继续滑动以加载下一章」第三槽（D6）
 - 底栏「正文处理」无生效规则数角标（C3）
 - 自动翻页无顶部 1px 进度提示（B4）
 - 高亮规则只有 6 个字段、无实时预览（C7）
-- 文字背景图完全不支持（B7）
+- 覆盖转场交界处无 36dp 阴影（B4）
+- 淡入转场提交阈值未降为 0.1（B4）
 
 ## 维护
 

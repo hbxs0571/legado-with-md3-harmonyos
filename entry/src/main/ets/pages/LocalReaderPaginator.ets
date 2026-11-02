@@ -1,4 +1,5 @@
 import { LocalSemanticDocument, LocalSemanticParagraph } from '../data/LocalTextSemantics';
+import { ChineseLineBreaker } from '../reader/ChineseLineBreaker';
 
 export interface LocalReaderLineItem {
   kind: 'text' | 'image';
@@ -54,6 +55,19 @@ export class LocalReaderPaginator {
     if (boundary <= 0) { return -1; }
     const nextWord = text.substring(boundary + 1) + nextCharacter;
     return measureTextWidth(nextWord) <= contentWidth ? boundary : -1;
+  }
+
+  /** 把一行文本切成 codePoint 序列，供避头尾判定（代理对算一个 cluster）。 */
+  private static toClusters(text: string): string[] {
+    const clusters: string[] = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+      const codePoint = text.codePointAt(cursor);
+      const step = codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1;
+      clusters.push(text.substring(cursor, cursor + step));
+      cursor += step;
+    }
+    return clusters;
   }
 
   static paginate(
@@ -223,6 +237,42 @@ export class LocalReaderPaginator {
                 lineLastTextPartIndex = partIndex;
                 cursor = nextCursor;
                 continue;
+              }
+              // 中文避头尾：上游 `ReaderPaginator.kt:559` 无条件用 ChineseLineBreaker，
+              // 溢出时把本行末尾的标点/开引号一起搬到下一行，避免行首出现「，。！》」，
+              // 也避免行尾挂一个开引号。找不到合法断点时才硬断。
+              if (mergePrevious && lastItem !== undefined && lastItem.kind === 'text') {
+                const carried = ChineseLineBreaker.resolve(LocalReaderPaginator.toClusters(lastText), character);
+                if (carried > 0) {
+                  const parts = ChineseLineBreaker.splitTail(lastText, carried);
+                  const prefix = parts[0] ?? '';
+                  const tail = parts[1] ?? '';
+                  if (prefix.length === 0) {
+                    lineItems.pop();
+                    lineWidth = lineWidth - lastTextWidth;
+                  } else {
+                    const prefixWidth = measureTextWidth(prefix);
+                    lineItems[lineItems.length - 1] = {
+                      kind: 'text', value: prefix, width: prefixWidth, height: lineHeight,
+                      startPosition: lastItem.startPosition, endPosition: lastItem.startPosition + prefix.length,
+                      leadingIndent: lastItem.leadingIndent
+                    };
+                    lineWidth = lineWidth - lastTextWidth + prefixWidth;
+                  }
+                  appendLine(lastItem.startPosition + prefix.length, true);
+                  // 被搬下来的标点与本字符一起成为下一行行首
+                  const carriedText = tail + character;
+                  const carriedWidth = measureTextWidth(carriedText);
+                  lineItems.push({
+                    kind: 'text', value: carriedText, width: carriedWidth, height: lineHeight,
+                    startPosition: lastItem.startPosition + prefix.length, endPosition: finalPosition,
+                    leadingIndent: false
+                  });
+                  lineWidth = carriedWidth;
+                  lineLastTextPartIndex = partIndex;
+                  cursor = nextCursor;
+                  continue;
+                }
               }
               appendLine(undefined, true);
               continue;
