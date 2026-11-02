@@ -524,13 +524,26 @@ export class ReaderCanvasDrawRequest {
   handleStrokeWidthPx: number = 0;
   handleFillArgb: number = 0xFFFFFFFF;
   handleStrokeArgb: number = 0xFF2E7CF6;
-  /** 绘制后回填：选区首/末矩形与两个把手位置（px），调用方拿来给菜单定位。 */
+  /**
+   * 两个把手各自的透明度（0..1）。
+   *
+   * 上游用 `animateFloatAsState` 做「拖动哪个就把哪个淡出、松手再淡入」：
+   * 拖动中该把手淡出 90ms（`SelectionHandleFadeOutMillis`），松手淡入 140ms
+   * （`SelectionHandleFadeInMillis`）。本地由 `ReaderPage` 用 `createAnimator`
+   * 逐帧写这两个值，画布只按值绘制，不做动画。
+   */
+  handleStartAlpha: number = 1;
+  handleEndAlpha: number = 1;
+  /** 绘制后回填：选区首/末矩形与两个把手位置（px），调用方拿来给菜单定位与命中判定。 */
   selectionStartX: number = 0;
   selectionStartY: number = 0;
   selectionEndX: number = 0;
   selectionEndY: number = 0;
   selectionTopY: number = 0;
   selectionBottomY: number = 0;
+  /** 回填：两个把手竖线的上端（矩形 top），把手是「竖线 + 圆柄」的胶囊形。 */
+  selectionStartTopY: number = 0;
+  selectionEndTopY: number = 0;
   /**
    * 折页（SIMULATION）的触点与角点，单位 px。
    *
@@ -768,6 +781,7 @@ export class ReaderCanvasRenderer {
   draw(canvas: drawing.Canvas, request: ReaderCanvasDrawRequest): void {
     const window = request.window;
     const transforms = request.transforms;
+
     // 先铺一层不透明底色，再判断有没有当前页。
     // 「没有当前页」在上游是 `pages.current ?: return`（直接不绘制，不换排版兜底），
     // 但底色必须照铺：Canvas 是透明的，不铺就会露出下层的自定义背景图，
@@ -801,15 +815,16 @@ export class ReaderCanvasRenderer {
     // 不能简单地「按方向前后颠倒」：PREVIOUS 时 currentOnTop=false，
     // previous 必须画在 current 之上（它才是滑进来的那一页）。
     if (transforms.currentOnTop && transforms.drawsNext) {
-      this.drawSlot(canvas, window.next, transforms.next, request);
+      this.drawSlot(canvas, window.next, transforms.next, request, false, false);
     }
-    this.drawSlot(canvas, window.current, transforms.current, request);
+    this.drawSlot(canvas, window.current, transforms.current, request, true, true);
     if (transforms.drawsPrevious) {
-      this.drawSlot(canvas, window.previous, transforms.previous, request);
+      this.drawSlot(canvas, window.previous, transforms.previous, request, false, false);
     }
     if (!transforms.currentOnTop && transforms.drawsNext) {
-      this.drawSlot(canvas, window.next, transforms.next, request);
+      this.drawSlot(canvas, window.next, transforms.next, request, false, false);
     }
+
   }
 
   /**
@@ -830,23 +845,24 @@ export class ReaderCanvasRenderer {
     if (window.previous !== undefined) {
       this.drawScrollSlot(canvas, window.previous,
         offset - this.pageScrollExtent(window.previous.page, window.previous.pageIndex, request),
-        request);
+        request, false, false);
     }
-    this.drawScrollSlot(canvas, current, offset, request);
+    this.drawScrollSlot(canvas, current, offset, request, true, true);
     if (window.next !== undefined) {
       const nextOffset = offset + currentExtent;
-      this.drawScrollSlot(canvas, window.next, nextOffset, request);
+      this.drawScrollSlot(canvas, window.next, nextOffset, request, false, false);
       if (window.nextPlus !== undefined) {
         this.drawScrollSlot(canvas, window.nextPlus,
           nextOffset + this.pageScrollExtent(window.next.page, window.next.pageIndex, request),
-          request);
+          request, false, false);
       }
     }
   }
 
   /** 滚动栈里的一页：按 stackOffset 平移后整页画，超出视口的部分裁掉。 */
   private drawScrollSlot(canvas: drawing.Canvas, slot: ReaderCanvasPage,
-    stackOffsetY: number, request: ReaderCanvasDrawRequest): void {
+    stackOffsetY: number, request: ReaderCanvasDrawRequest,
+    recordGeometry: boolean, drawSelection: boolean): void {
     const layout = request.layout;
     canvas.save();
     // 滚动栈天然会画出视口之外（上一页还在上面、下一页还在下面），必须裁
@@ -857,7 +873,7 @@ export class ReaderCanvasRenderer {
     if (request.pageSurfaceOpaque) {
       this.fillPageSurface(canvas, request, layout.viewportWidthPx, layout.viewportHeightPx);
     }
-    this.drawPage(canvas, slot.page, slot.pageIndex, request);
+    this.drawPage(canvas, slot.page, slot.pageIndex, request, recordGeometry, drawSelection);
     canvas.restore();
   }
 
@@ -931,7 +947,8 @@ export class ReaderCanvasRenderer {
   }
 
   private drawSlot(canvas: drawing.Canvas, slot: ReaderCanvasPage | undefined,
-    transform: ReaderPageTransform, request: ReaderCanvasDrawRequest): void {
+    transform: ReaderPageTransform, request: ReaderCanvasDrawRequest,
+    recordGeometry: boolean, drawSelection: boolean): void {
     if (slot === undefined) {
       return;
     }
@@ -953,7 +970,7 @@ export class ReaderCanvasRenderer {
       canvas.saveLayer(null, brush);
       layerPushed = true;
     }
-    this.drawPage(canvas, slot.page, slot.pageIndex, request);
+    this.drawPage(canvas, slot.page, slot.pageIndex, request, recordGeometry, drawSelection);
     if (layerPushed) {
       canvas.restore();
     }
@@ -985,7 +1002,7 @@ export class ReaderCanvasRenderer {
     const revealSlot = isPrevious ? window.current : window.next;
     if (baseSlot === undefined || revealSlot === undefined) {
       // 邻页还没排好：换成水平平移兜底，保持目标页可见（上游 frame == null 的同款处理）
-      this.drawSlot(canvas, revealSlot, new ReaderPageTransform(), request);
+      this.drawSlot(canvas, revealSlot, new ReaderPageTransform(), request, true, true);
       return;
     }
     const touchX = ReaderCurlTouchPolicy.revealX(isPrevious, request.curlTouchX, width,
@@ -997,23 +1014,23 @@ export class ReaderCanvasRenderer {
       // 折页几何退化（返回 null）时只剩底页，新页会整整一帧不见：用便宜的
       // 水平平移兜底，保持目标页可见，等下一帧有效折页几何再恢复。
       this.fillPageSurface(canvas, request, width, height);
-      this.drawPage(canvas, revealSlot.page, revealSlot.pageIndex, request);
+      this.drawPage(canvas, revealSlot.page, revealSlot.pageIndex, request, true, false);
       canvas.save();
       canvas.translate(isPrevious ? -width : 0, 0);
-      this.drawPage(canvas, baseSlot.page, baseSlot.pageIndex, request);
+      this.drawPage(canvas, baseSlot.page, baseSlot.pageIndex, request, false, false);
       canvas.restore();
       return;
     }
     const paths = this.curlPaths.update(frame, width, height);
     // 1) 底页整页：月牙区靠它兜底，必须先铺纸面再画字（见 pageSurfaceArgb 注释）
     this.fillPageSurface(canvas, request, width, height);
-    this.drawPage(canvas, baseSlot.page, baseSlot.pageIndex, request);
+    this.drawPage(canvas, baseSlot.page, baseSlot.pageIndex, request, true, false);
     // 2) 折页下方露出的下一页 + 背面阴影
     canvas.save();
     canvas.clipPath(paths.front, drawing.ClipOp.INTERSECT, true);
     canvas.clipPath(paths.reveal, drawing.ClipOp.INTERSECT, true);
     this.fillPageSurface(canvas, request, width, height);
-    this.drawPage(canvas, revealSlot.page, revealSlot.pageIndex, request);
+    this.drawPage(canvas, revealSlot.page, revealSlot.pageIndex, request, false, false);
     this.drawCurlBackShadow(canvas, frame, width, height);
     canvas.restore();
     // 3) 翻起的纸背（镜像的底页）+ 折缝阴影
@@ -1028,7 +1045,7 @@ export class ReaderCanvasRenderer {
     canvas.clipRect({ left: 0, top: 0, right: width, bottom: height },
       drawing.ClipOp.INTERSECT, true);
     canvas.setMatrix(paths.mirror);
-    this.drawPage(canvas, baseSlot.page, baseSlot.pageIndex, request);
+    this.drawPage(canvas, baseSlot.page, baseSlot.pageIndex, request, false, false);
     canvas.restore();
     canvas.resetMatrix();
     this.drawCurlFolderShadow(canvas, frame, width, height);
@@ -1163,9 +1180,20 @@ export class ReaderCanvasRenderer {
    * 上游顺序是「先画字，再把选区块压上去」（ReaderCanvasSurface.kt legacySelectionFill 注释）。
    */
   private drawPage(canvas: drawing.Canvas, page: LocalReaderPage, pageIndex: number,
-    request: ReaderCanvasDrawRequest): void {
+    request: ReaderCanvasDrawRequest, recordGeometry: boolean, drawSelection: boolean): void {
+    // Paragraph.paint() 内部会 push 不配对的裁剪层且不恢复：逐框 save/restore 之后
+    // 画布栈仍会比进入时多出几层，后面自绘的选区底色/把手就全落在残留 clip 里被裁掉
+    // （表现为「drawRect 被调用但一个像素都不落」）。这里记下进入时的栈深，
+    // 画选区前统一归位。
+    const entrySaveCount = canvas.getSaveCount();
     const geometry = this.layoutPage(page, pageIndex, request);
-    this.geometry = geometry;
+    // 只有「手指正在操作的那一页」才把几何记成命中测试的依据。
+    // 四页窗口是一次绘制里按 z 序画完的，若每页都覆盖 this.geometry，
+    // 最后画的邻页会顶掉当前页的坐标，长按选词就会选到邻页的字符区间，
+    // 选区也被画到邻页的平移位置上（表现为「选区跑偏到屏幕外」）。
+    if (recordGeometry) {
+      this.geometry = geometry;
+    }
     for (const box of geometry.boxes) {
       if (box.item === undefined) {
         continue;
@@ -1184,7 +1212,10 @@ export class ReaderCanvasRenderer {
         }
       }
     }
-    this.drawSelection(canvas, geometry, request);
+    canvas.restoreToCount(entrySaveCount);
+    if (drawSelection) {
+      this.drawSelection(canvas, geometry, request);
+    }
   }
 
   /**
@@ -1387,32 +1418,64 @@ export class ReaderCanvasRenderer {
     if (firstRect === undefined || lastRect === undefined) {
       return;
     }
+    // 把手几何照上游 drawPinHandle：竖线贴矩形左右边从 top 画到 bottom，
+    // 圆柄圆心在 bottom + radius（不是矩形竖直中心）。命中判定用的就是这两个圆心。
+    const radius = Math.max(0, request.handleRadiusPx);
     request.selectionStartX = firstRect.left;
-    request.selectionStartY = (firstRect.top + firstRect.bottom) / 2;
+    request.selectionStartTopY = firstRect.top;
+    request.selectionStartY = firstRect.bottom + radius;
     request.selectionEndX = lastRect.right;
-    request.selectionEndY = (lastRect.top + lastRect.bottom) / 2;
+    request.selectionEndTopY = lastRect.top;
+    request.selectionEndY = lastRect.bottom + radius;
     request.selectionTopY = Math.min(firstRect.top, lastRect.top);
     request.selectionBottomY = Math.max(firstRect.bottom, lastRect.bottom);
-    // 把手：上游 SelectionHandleRadius = 7.dp、SelectionHandleStrokeWidth = 2.dp
-    const radius = Math.max(0, request.handleRadiusPx);
     if (radius <= 0) {
       return;
     }
-    const handleBrush = new drawing.Brush();
-    handleBrush.setColor(readerCanvasColor(request.handleFillArgb));
-    handleBrush.setAntiAlias(true);
-    canvas.attachBrush(handleBrush);
-    canvas.drawCircle(request.selectionStartX, request.selectionStartY, radius);
-    canvas.drawCircle(request.selectionEndX, request.selectionEndY, radius);
-    canvas.detachBrush();
     const strokeWidth = Math.max(1, request.handleStrokeWidthPx);
+    // 上游竖线只画到矩形 bottom（`Offset(lineX, lineBottom)`），圆柄另画在
+    // bottom + radius 处；画到圆心会让竖线多出一段穿过行间的尾巴。
+    this.drawPinHandle(canvas, request.selectionStartX, request.selectionStartTopY,
+      request.selectionStartY - radius, request.selectionStartY, radius, strokeWidth,
+      request.handleStartAlpha, request.handleFillArgb, request.handleStrokeArgb);
+    this.drawPinHandle(canvas, request.selectionEndX, request.selectionEndTopY,
+      request.selectionEndY - radius, request.selectionEndY, radius, strokeWidth,
+      request.handleEndAlpha, request.handleFillArgb, request.handleStrokeArgb);
+  }
+
+  /**
+   * 单个把手：竖线 + 圆柄，同一支笔的圆角描边（上游 `StrokeCap.Round`）。
+   * 透明度为 0 时整支跳过，避免淡出后还留一道边。
+   */
+  private drawPinHandle(canvas: drawing.Canvas, x: number, lineTop: number, lineBottom: number,
+    centerY: number, radius: number, strokeWidth: number, alpha: number,
+    fillArgb: number, strokeArgb: number): void {
+    if (alpha <= 0.001) {
+      return;
+    }
+    const stroke = readerCanvasAlphaColor(strokeArgb, alpha);
+    // 竖线：从矩形上沿画到圆心，与圆柄拼成一个胶囊
     const pen = new drawing.Pen();
-    pen.setColor(readerCanvasColor(request.handleStrokeArgb));
+    pen.setColor(stroke);
     pen.setStrokeWidth(strokeWidth);
     pen.setAntiAlias(true);
+    pen.setCapStyle(drawing.CapStyle.ROUND_CAP);
     canvas.attachPen(pen);
-    canvas.drawCircle(request.selectionStartX, request.selectionStartY, radius);
-    canvas.drawCircle(request.selectionEndX, request.selectionEndY, radius);
+    canvas.drawLine(x, lineTop, x, lineBottom);
+    canvas.detachPen();
+    // 圆柄：先填色再描边
+    const fill = new drawing.Brush();
+    fill.setColor(readerCanvasAlphaColor(fillArgb, alpha));
+    fill.setAntiAlias(true);
+    canvas.attachBrush(fill);
+    canvas.drawCircle(x, centerY, radius);
+    canvas.detachBrush();
+    const ring = new drawing.Pen();
+    ring.setColor(stroke);
+    ring.setStrokeWidth(strokeWidth);
+    ring.setAntiAlias(true);
+    canvas.attachPen(ring);
+    canvas.drawCircle(x, centerY, radius);
     canvas.detachPen();
   }
 
@@ -1439,6 +1502,13 @@ export class ReaderCanvasRenderer {
     if (bestLine === undefined || bestLineDistance > bestLine.heightPx) {
       return undefined;
     }
+    {
+      const dump: string[] = [];
+      for (const lb of this.geometry.lines) {
+        const n = this.geometry.boxes.filter((b) => b.lineIndex === lb.lineIndex).length;
+        dump.push(`${lb.lineIndex}:${lb.top.toFixed(0)}/${lb.heightPx.toFixed(0)}x${n}`);
+      }
+    }
     let best: ReaderCanvasItemBox | undefined = undefined;
     let bestDistance = Number.MAX_VALUE;
     for (const box of this.geometry.boxes) {
@@ -1460,6 +1530,63 @@ export class ReaderCanvasRenderer {
   }
 
   /** 盒内字形偏移：屏幕点先换算成段落局部坐标，再问 Paragraph。 */
+  /**
+   * 把页面坐标换算成章节正文位置（上游 `ReaderSelectionPolicy.start(page, x, y)` 的等价物）。
+   *
+   * 分页器把一行切成很多小元素（标点、样式变化各起一个），单个元素只有几个字。
+   * 若只在命中的那个元素里取字形偏移，拖到元素右边界外就被 clamp 在元素末尾，
+   * 选区再也扩不出去 —— 表现为「拖把手不动」。这里在同一行的所有元素间继续推进：
+   * 落在某个元素内就取它的字形偏移，超出最后一个元素就取行尾位置。
+   */
+  positionAt(x: number, y: number, style: ReaderCanvasStyle): number {
+    const line = this.nearestLine(y);
+    if (line === undefined) {
+      return -1;
+    }
+    let lastEnd = -1;
+    let firstStart = -1;
+    for (const box of this.geometry.boxes) {
+      const item = box.item;
+      if (item === undefined || item.kind !== 'text' || box.lineIndex !== line.lineIndex) {
+        continue;
+      }
+      if (firstStart < 0 || item.startPosition < firstStart) {
+        firstStart = item.startPosition;
+      }
+      if (item.endPosition > lastEnd) {
+        lastEnd = item.endPosition;
+      }
+      if (x <= box.left + box.widthPx) {
+        if (x <= box.left) {
+          return item.startPosition;
+        }
+        return item.startPosition + this.glyphOffsetAt(box, x, y, style);
+      }
+    }
+    if (lastEnd >= 0) {
+      return lastEnd;
+    }
+    return firstStart;
+  }
+
+  /** 找纵向最近的行盒；超出一行高度就返回 undefined（手指离文字太远）。 */
+  private nearestLine(y: number): ReaderCanvasLineBox | undefined {
+    let best: ReaderCanvasLineBox | undefined = undefined;
+    let bestDistance = Number.MAX_VALUE;
+    for (const lineBox of this.geometry.lines) {
+      const center = lineBox.top + lineBox.heightPx / 2;
+      const distance = Math.abs(y - center);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = lineBox;
+      }
+    }
+    if (best === undefined || bestDistance > best.heightPx) {
+      return undefined;
+    }
+    return best;
+  }
+
   glyphOffsetAt(box: ReaderCanvasItemBox, x: number, y: number,
     style: ReaderCanvasStyle): number {
     const item = box.item;

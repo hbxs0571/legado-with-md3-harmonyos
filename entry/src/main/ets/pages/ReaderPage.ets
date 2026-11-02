@@ -431,6 +431,9 @@ export struct ReaderPage {
   private pageTurnTimer: number = -1;
   // 分页输入防抖：几十个 @Prop 的 @Watch 会连续触发，合并成一帧后再排一次
   private static readonly PAGINATION_DEBOUNCE_MILLIS: number = 16;
+  // 把手淡出的比淡入快：上游 SelectionHandleFadeOutMillis / SelectionHandleFadeInMillis
+  private static readonly CANVAS_HANDLE_FADE_OUT_MILLIS: number = 90;
+  private static readonly CANVAS_HANDLE_FADE_IN_MILLIS: number = 140;
   private paginationRebuildTimer: number = -1;
   // 本轮分页是否用了「图片尺寸未就绪」的占位高度；尺寸到达后要再排一次
   private paginationUsesImagePlaceholder: boolean = false;
@@ -480,8 +483,22 @@ export struct ReaderPage {
   private canvasHandleStartY: number = 0;
   private canvasHandleEndX: number = 0;
   private canvasHandleEndY: number = 0;
+  // 竖线顶端：命中判定要把「竖线 + 圆柄」当一个胶囊，缺了顶端就只能按圆算，热区偏小。
+  private canvasHandleStartTopY: number = 0;
+  private canvasHandleEndTopY: number = 0;
+  // 抓手时手指相对圆心的二维偏移。拖动过程中端点必须跟着「把手」走，不能用手指
+  // 原样去 hit-test —— 圆心在行底下方一个 radius 处，手指天然落在文字行之外，
+  // 直接取最近行会串到下一行（上游 selectionDragHandleCenter 就是同一个道理）。
+  private canvasHandleGrabOffsetX: number = 0;
+  private canvasHandleGrabOffsetY: number = 0;
+  // 两个把手各自的透明度：拖动哪个就把哪个淡出，松手再淡入（上游 animateFloatAsState）
+  private canvasHandleStartAlpha: number = 1;
+  private canvasHandleEndAlpha: number = 1;
+  private canvasHandleAnimator: AnimatorResult | undefined = undefined;
   /** 画布相对外层 Stack 的纵向偏移（vp），给选区菜单定位。 */
   private readerCanvasOffsetYVp: number = 0;
+  private static readonly CANVAS_ID: string = 'reader_canvas';
+  private static readonly STACK_ID: string = 'reader_root_stack';
   // 当前正在播放的转场；NONE 表示没有转场（只画 current）。
   private turnTransition: ReaderPageTransition = new ReaderPageTransition();
   private turnAnimator: AnimatorResult | undefined = undefined;
@@ -3688,9 +3705,12 @@ export struct ReaderPage {
     // 上游 SelectionHandleRadius = 7.dp、SelectionHandleStrokeWidth = 2.dp
     request.handleRadiusPx = context.vp2px(7);
     request.handleStrokeWidthPx = context.vp2px(2);
-    request.handleFillArgb = this.getReadingTextColor().length > 0
-      ? this.readerCanvasArgb(this.getReadingTextColor(), 0xFFFFFFFF) : 0xFFFFFFFF;
-    request.handleStrokeArgb = this.readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
+    // 上游 handleColor = selectionColor.copy(alpha = 1f)：竖线与圆柄同一支灰色，
+    // 不再是「白圆 + 纸色描边」——纸色描边在深色纸上等于没有边，圆柄会糊成一团。
+    request.handleFillArgb = request.selectionColorArgb | 0xFF000000;
+    request.handleStrokeArgb = request.selectionColorArgb | 0xFF000000;
+    request.handleStartAlpha = this.canvasHandleStartAlpha;
+    request.handleEndAlpha = this.canvasHandleEndAlpha;
     return request;
   }
 
@@ -3930,6 +3950,8 @@ export struct ReaderPage {
     this.canvasHandleStartY = request.selectionStartY;
     this.canvasHandleEndX = request.selectionEndX;
     this.canvasHandleEndY = request.selectionEndY;
+    this.canvasHandleStartTopY = request.selectionStartTopY;
+    this.canvasHandleEndTopY = request.selectionEndTopY;
     if (this.canvasSelectionMenuVisible) {
       this.refreshCanvasSelectionMenuAnchor(request);
     }
@@ -3966,6 +3988,8 @@ export struct ReaderPage {
     this.canvasSelectionStart = -1;
     this.canvasSelectionEnd = -1;
     this.canvasSelectionDragging = 0;
+    this.canvasHandleStartAlpha = 1;
+    this.canvasHandleEndAlpha = 1;
     this.canvasSelectionMenuVisible = false;
     this.selectionMenuMoreVisible = false;
     this.pendingMarkingRanges.clear();
@@ -4006,7 +4030,11 @@ export struct ReaderPage {
       end = item.startPosition + word.end;
     }
     if (end <= start) {
-      // 空词（标点、空白）退化成单字，避免长按没反应
+      // 空词（标点、空白）退化成单字，避免长按没反应。
+      // 若偏移已经贴到元素末尾，start 就等于 item.endPosition，直接 +1 会被 min 夹回去，
+      // 得到 start === end 的零长选区：drawSelection 拿不到任何矩形，两个把手也就无处可放
+      // （表现为「长按有菜单但看不见选区、也抓不到把手」）。这种情况向前退一格。
+      start = Math.max(item.startPosition, start - 1);
       end = Math.min(item.endPosition, start + 1);
     }
     this.canvasSelectionStart = start;
@@ -4023,17 +4051,20 @@ export struct ReaderPage {
    * 拖把手：按抓到的把手把另一端点固定，只移动被抓的那一端。
    * 上游是 grabbingStart/grabbingEnd + handleGrabOffset，本地等价于「锁定另一端」。
    */
-  private dragCanvasSelectionTo(xpx: number, ypx: number): void {
+  private dragCanvasSelectionTo(fingerXpx: number, fingerYpx: number): void {
     if (this.canvasSelectionDragging === 0 || this.canvasSelectionStart < 0) {
       return;
     }
-    const box = this.readerCanvasRenderer.hitTestTextBox(xpx, ypx);
-    if (box === undefined || box.item === undefined) {
+    // 把手逻辑位置 = 手指 − 抓取偏移；圆心在行底下方一个 radius，减掉 radius 才回到行底。
+    // 上游 selectionDragHandleCenter 之后再用 `y - selectionHandleRadiusPx` 做 hit-test。
+    const radius = this.getUIContext().vp2px(7);
+    const xpx = fingerXpx - this.canvasHandleGrabOffsetX;
+    const ypx = fingerYpx - this.canvasHandleGrabOffsetY - radius;
+    const style = this.buildReaderCanvasStyle();
+    const position = this.readerCanvasRenderer.positionAt(xpx, ypx, style);
+    if (position < 0) {
       return;
     }
-    const style = this.buildReaderCanvasStyle();
-    const offset = this.readerCanvasRenderer.glyphOffsetAt(box, xpx, ypx, style);
-    const position = box.item.startPosition + offset;
     if (this.canvasSelectionDragging === 1) {
       this.canvasSelectionStart = Math.min(position, this.canvasSelectionEnd - 1);
     } else {
@@ -4092,24 +4123,144 @@ export struct ReaderPage {
   }
 
   /** 是否抓到了把手（上游 handleHitRadius 判定）。 */
+  /**
+   * 把手指的画布内视口坐标换成「内容坐标」。
+   *
+   * 版面几何（`hitTestTextBox` / `glyphOffsetAt` / 选区矩形）都是内容坐标：
+   * 滚动模式下 `drawScrollSlot` 用 `canvas.translate(0, scrollOffsetPx)` 把整栈平移，
+   * 几何本身没有平移。手指给的是视口坐标，所以要补回同一个偏移才能对上，
+   * 否则长按选中的是别处、把手命中差出整整一个 scrollOffset（表现为「把手抓不住」）。
+   */
+  /**
+   * 手指在画布视口内的 y（px）。
+   *
+   * 手势挂在最外层 Stack 上，`finger.localY` 相对 Stack；画布顶边用窗口坐标取，
+   * 再减掉 Stack 自己在窗口里的顶边，得到「画布视口内」的像素偏移。
+   */
+  private canvasViewportY(context: UIContext, localYVp: number): number {
+    // 手指 localY 相对外层 Stack，画布顶边相对 Stack 的距离要自己求：
+    // 两者都用 getRectangleById 的 windowOffset（同一套屏幕坐标），相减时状态栏高度自动抵消。
+    // 只减 `Area.position.y` 会漏掉父容器的标题栏/页眉占位（实测差 180px）。
+    const canvasTop = this.componentWindowTopPx(ReaderPage.CANVAS_ID);
+    const stackTop = this.componentWindowTopPx(ReaderPage.STACK_ID);
+    const topPx = canvasTop - stackTop;
+    return Math.max(0, context.vp2px(localYVp) - topPx);
+  }
+
+  /** 组件在屏幕上的顶边（px）；取不到时返回 0。 */
+  private componentWindowTopPx(id: string): number {
+    try {
+      const rect = this.getUIContext().getComponentUtils().getRectangleById(id);
+      if (rect !== undefined && rect.windowOffset !== undefined) {
+        return rect.windowOffset.y;
+      }
+    } catch (error) {
+      // 组件还没上树时取不到
+    }
+    return 0;
+  }
+
+  private canvasContentY(viewportYpx: number): number {
+    if (!this.usesCanvasScroll()) {
+      return viewportYpx;
+    }
+    // drawScrollSlot 里是 `canvas.translate(0, scrollOffsetPx)`，即
+    // 屏幕 y = 内容 y + scrollOffsetPx，反过来内容 y = 屏幕 y − scrollOffsetPx。
+    return viewportYpx - this.getUIContext().vp2px(this.scrollOffset);
+  }
+
+  /**
+   * 命中判定照上游 `ReaderCanvasSurface.kt:1028`：热区 28vp，且把「竖线 + 圆柄」当作
+   * 一个胶囊形手柄，求手指到「竖线顶端—圆心」中轴线的最短距离，而不是到圆心的直线距离。
+   * 圆心本身在矩形 bottom 下方一个 radius 处，所以手指按在圆下方一点也能抓住。
+   */
   private canvasHandleHit(xpx: number, ypx: number): number {
     if (this.canvasSelectionStart < 0 || this.canvasSelectionEnd <= this.canvasSelectionStart) {
       return 0;
     }
-    const radius = this.getUIContext().vp2px(7) + this.getUIContext().vp2px(10);
-    const startDistance = Math.sqrt(
-      (xpx - this.canvasHandleStartX) * (xpx - this.canvasHandleStartX) +
-      (ypx - this.canvasHandleStartY) * (ypx - this.canvasHandleStartY));
-    const endDistance = Math.sqrt(
-      (xpx - this.canvasHandleEndX) * (xpx - this.canvasHandleEndX) +
-      (ypx - this.canvasHandleEndY) * (ypx - this.canvasHandleEndY));
-    if (startDistance <= radius && startDistance <= endDistance) {
+    const hitRadius = this.getUIContext().vp2px(28);
+    const startDistance = this.canvasHandleDistance(xpx, ypx, this.canvasHandleStartX,
+      this.canvasHandleStartTopY, this.canvasHandleStartY);
+    const endDistance = this.canvasHandleDistance(xpx, ypx, this.canvasHandleEndX,
+      this.canvasHandleEndTopY, this.canvasHandleEndY);
+    if (startDistance <= hitRadius && startDistance <= endDistance) {
       return 1;
     }
-    if (endDistance <= radius) {
+    if (endDistance <= hitRadius) {
       return 2;
     }
     return 0;
+  }
+
+  /** 手指到「竖线顶端—圆心」中轴线的最短距离。 */
+  private canvasHandleDistance(xpx: number, ypx: number, lineX: number, lineTopY: number,
+    centerY: number): number {
+    const nearestY = Math.min(Math.max(ypx, lineTopY), centerY);
+    const dx = xpx - lineX;
+    const dy = ypx - nearestY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /**
+   * 把手淡入淡出：拖哪个就把哪个淡出，松手一起淡入。
+   *
+   * 上游 `animateFloatAsState` + tween，淡出 90ms（`SelectionHandleFadeOutMillis`）、
+   * 淡入 140ms（`SelectionHandleFadeInMillis`）—— 淡出快、淡入慢，拖动手感才不糊。
+   * 画布只读透明度，所以这里用 createAnimator 逐帧写字段并重绘。
+   */
+  private animateCanvasHandleTo(targetStart: number, targetEnd: number, duration: number): void {
+    if (this.canvasHandleAnimator !== undefined) {
+      try {
+        this.canvasHandleAnimator.cancel();
+      } catch (_) {
+      }
+      this.canvasHandleAnimator = undefined;
+    }
+    const fromStart = this.canvasHandleStartAlpha;
+    const fromEnd = this.canvasHandleEndAlpha;
+    if (duration <= 0) {
+      this.canvasHandleStartAlpha = targetStart;
+      this.canvasHandleEndAlpha = targetEnd;
+      this.paintReaderCanvas();
+      return;
+    }
+    const animator = this.getUIContext().createAnimator({
+      duration: duration,
+      easing: 'ease-out',
+      delay: 0,
+      fill: 'forwards',
+      direction: 'normal',
+      iterations: 1,
+      begin: 0,
+      end: 1
+    });
+    animator.onFrame = (progress: number) => {
+      this.canvasHandleStartAlpha = fromStart + (targetStart - fromStart) * progress;
+      this.canvasHandleEndAlpha = fromEnd + (targetEnd - fromEnd) * progress;
+      this.paintReaderCanvas();
+    };
+    animator.onFinish = () => {
+      this.canvasHandleStartAlpha = targetStart;
+      this.canvasHandleEndAlpha = targetEnd;
+      this.canvasHandleAnimator = undefined;
+      this.paintReaderCanvas();
+    };
+    this.canvasHandleAnimator = animator;
+    animator.play();
+  }
+
+  /** 拖住一个把手时：该把手淡出，另一个保持可见（淡出 90ms，上游 SelectionHandleFadeOutMillis）。 */
+  private fadeCanvasHandleForDrag(dragging: number): void {
+    if (dragging === 1) {
+      this.animateCanvasHandleTo(0, 1, ReaderPage.CANVAS_HANDLE_FADE_OUT_MILLIS);
+    } else if (dragging === 2) {
+      this.animateCanvasHandleTo(1, 0, ReaderPage.CANVAS_HANDLE_FADE_OUT_MILLIS);
+    }
+  }
+
+  /** 松手：两个把手都恢复显示。 */
+  private restoreCanvasHandleAlpha(): void {
+    this.animateCanvasHandleTo(1, 1, ReaderPage.CANVAS_HANDLE_FADE_IN_MILLIS);
   }
 
 
@@ -4344,6 +4495,7 @@ export struct ReaderPage {
             // 正文：单个 Canvas 逐行绘制（对齐上游 ReaderCanvasSurface）。
             // 四页窗口按 z 序画进同一张画布，因此不能有多个 Canvas 抢同一个 context。
             Canvas(this.readerCanvasContext)
+              .id(ReaderPage.CANVAS_ID)
               .width('100%')
               .layoutWeight(1)
               .onReady(() => {
@@ -4399,6 +4551,7 @@ export struct ReaderPage {
             .position({ x: this.canvasSelectionMenuX, y: this.canvasSelectionMenuY })
           }
         }
+        .id(ReaderPage.STACK_ID)
         .width('100%')
         .height('100%')
         // 有自定义背景图片时这层不能压不透明底色，否则图片被盖住。
@@ -4420,7 +4573,8 @@ export struct ReaderPage {
               const context = this.getUIContext();
               this.canvasLongPressX = context.vp2px(finger.localX);
               // 手势挂在最外层 Stack 上，文字画布的局部坐标 = 手指坐标 - 画布自身偏移
-              this.canvasLongPressY = context.vp2px(Math.max(0, finger.localY - this.readerCanvasOffsetYVp));
+              this.canvasLongPressY = this.canvasContentY(
+                this.canvasViewportY(context, finger.localY));
               this.startCanvasSelectionAt(this.canvasLongPressX, this.canvasLongPressY);
               this.canvasSuppressTap = true;
             }),
@@ -4452,8 +4606,21 @@ export struct ReaderPage {
               if (finger === undefined) {
                 return;
               }
-              this.canvasSelectionDragging = this.canvasHandleHit(context.vp2px(finger.localX),
-                context.vp2px(Math.max(0, finger.localY - this.readerCanvasOffsetYVp)));
+              const hitX = context.vp2px(finger.localX);
+              const hitY = this.canvasContentY(this.canvasViewportY(context, finger.localY));
+              this.canvasSelectionDragging = this.canvasHandleHit(hitX, hitY);
+              if (this.canvasSelectionDragging !== 0) {
+                const fingerX = context.vp2px(finger.localX);
+                const fingerY = this.canvasContentY(
+                  this.canvasViewportY(context, finger.localY));
+                const centerX = this.canvasSelectionDragging === 1
+                  ? this.canvasHandleStartX : this.canvasHandleEndX;
+                const centerY = this.canvasSelectionDragging === 1
+                  ? this.canvasHandleStartY : this.canvasHandleEndY;
+                this.canvasHandleGrabOffsetX = fingerX - centerX;
+                this.canvasHandleGrabOffsetY = fingerY - centerY;
+                this.fadeCanvasHandleForDrag(this.canvasSelectionDragging);
+              }
             })
             .onActionUpdate((event: GestureEvent) => {
               if (this.canvasSelectionDragging === 0) {
@@ -4466,11 +4633,13 @@ export struct ReaderPage {
                 return;
               }
               this.dragCanvasSelectionTo(context.vp2px(finger.localX),
-                context.vp2px(Math.max(0, finger.localY - this.readerCanvasOffsetYVp)));
+                this.canvasContentY(this.canvasViewportY(context, finger.localY)));
             })
             .onActionEnd((event: GestureEvent) => {
               if (this.canvasSelectionDragging !== 0) {
                 this.canvasSelectionDragging = 0;
+                this.restoreCanvasHandleAlpha();
+                this.paintReaderCanvas();
                 return;
               }
               // 上游 pageTouchSlop：配了正数就用配置值，0 表示用平台默认阈值 36vp
