@@ -1,4 +1,6 @@
-import { ReaderBackgroundStyle, READER_BACKGROUND_STYLES } from '../data/ReaderSettingsRepository';
+import {
+  ReaderBackgroundStyle, READER_BACKGROUND_STYLES, READER_STYLE_PRESET_COUNT
+} from '../data/ReaderSettingsRepository';
 import { ReaderFontEntry, ReaderFontRepository } from '../data/ReaderFontRepository';
 import { READER_COLUMN_MODE_TITLES, readerColumnModeTitle } from '../data/ReaderColumnMode';
 import {
@@ -120,6 +122,8 @@ export struct ReaderSettingsPage {
   @Prop textFullJustify: boolean = true;
   @Prop textBottomJustify: boolean = true;
   @Prop paperIndex: number = 2;
+  /** 背景样式表，前 READER_STYLE_PRESET_COUNT 份是内置预设、其后是自建；paperIndex 是它的下标。 */
+  @Prop backgroundStyles: ReaderBackgroundStyle[] = READER_BACKGROUND_STYLES;
   @Prop shareLayout: boolean = false;
   @Prop readerNightMode: boolean = true;
   @Prop eyeProtectionActive: boolean = false;
@@ -321,6 +325,11 @@ export struct ReaderSettingsPage {
   @State fontTarget: ReaderFontTarget = 'body';
   @State fontEntries: ReaderFontEntry[] = [];
   @State detailCustomText: string = '';
+  /** 「编辑背景样式」草稿：打开详情页时从当前样式灌入，保存时才回写。 */
+  @State editingStyleIndex: number = 0;
+  @State editingStyleName: string = '';
+  @State editingStyleDayColor: string = '';
+  @State editingStyleNightColor: string = '';
   @State selectedClickRegionIndex: number = 4;
   @State previousPageKeys: string = '';
   @State nextPageKeys: string = '';
@@ -372,6 +381,15 @@ export struct ReaderSettingsPage {
   onLetterSpacingChange: (value: number) => void = (_value: number) => {};
   onParagraphIndentCountChange: (count: number) => void = (_count: number) => {};
   onPaperChange: (paperIndex: number) => void = () => {};
+  /** 新增样式，返回新下标（调用方据此切过去）。 */
+  onAddBackgroundStyle: () => number = () => 0;
+  /** 改某个样式的名字与日/夜背景色。 */
+  onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string) => void =
+    (_index: number, _name: string, _dayColor: string, _nightColor: string) => {};
+  /** 删掉一个自建样式。 */
+  onRemoveBackgroundStyle: (index: number) => void = (_index: number) => {};
+  /** 把自建样式从 from 挪到 to。 */
+  onMoveBackgroundStyle: (from: number, to: number) => void = (_from: number, _to: number) => {};
   onShareLayoutChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onToggleNightMode: () => void = () => {};
   onEyeProtectionToggle: () => void = () => {};
@@ -756,13 +774,25 @@ export struct ReaderSettingsPage {
           Row() {
             BackgroundShareOption({ selected: this.shareLayout })
               .margin({ right: 8 }).onClick(() => this.onShareLayoutChange(!this.shareLayout))
-            ForEach(READER_BACKGROUND_STYLES, (style: ReaderBackgroundStyle, styleIndex: number) => {
+            ForEach(this.backgroundStyles, (style: ReaderBackgroundStyle, styleIndex: number) => {
               BackgroundOption({
-                label: style.name,
+                label: this.getBackgroundStyleLabel(style),
                 color: this.readerNightMode ? style.nightColor : style.dayColor,
                 selected: this.paperIndex === styleIndex
-              }).margin({ right: 8 }).onClick(() => this.onPaperChange(styleIndex))
-            }, (style: ReaderBackgroundStyle) => style.name)
+              }).margin({ right: 8 })
+                .onClick(() => this.onPaperChange(styleIndex))
+                .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                  // 长按进「改这一份样式」，对齐上游 StyleCard 的 onLongClick → onOpenBgTextConfig。
+                  this.editingStyleIndex = styleIndex;
+                  this.openDetailSheet('编辑背景样式', '修改这一份样式的名字与日间、夜间背景颜色');
+                }))
+            }, (style: ReaderBackgroundStyle) => `${style.id}|${style.name}|${style.dayColor}|${style.nightColor}`)
+            BackgroundStyleActionCard({
+              icon: $r('app.media.app_add'), selected: false
+            }).margin({ right: 8 }).onClick(() => this.onAddBackgroundStyle())
+            BackgroundStyleActionCard({
+              icon: $r('app.media.reader_arrow_forward'), selected: false
+            }).onClick(() => this.openDetailSheet('主题列表', '管理全部背景样式：新增、删除、排序'))
           }.height(56)
         }.width('100%').height(56).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
 
@@ -1772,6 +1802,15 @@ export struct ReaderSettingsPage {
     if (title === '选中文字菜单') {
       this.syncTextMenuEntriesFromConfig();
     }
+    // 「编辑背景样式」用长按那一份当草稿，关闭不保存就丢弃。
+    if (title === '编辑背景样式') {
+      const index = Math.max(0, Math.min(this.backgroundStyles.length - 1, this.editingStyleIndex));
+      const current = this.backgroundStyles[index];
+      this.editingStyleIndex = index;
+      this.editingStyleName = current === undefined ? '' : current.name;
+      this.editingStyleDayColor = current === undefined ? '' : current.dayColor;
+      this.editingStyleNightColor = current === undefined ? '' : current.nightColor;
+    }
     if (title === '排版设置') {
       this.detailSelectedOption = '正文';
     } else if (title === '页边距') {
@@ -1859,6 +1898,14 @@ export struct ReaderSettingsPage {
   /** 亮度条位置的回显文案，对齐上游 brightness_bar_left/right。 */
   private getBrightnessPositionDetail(): string {
     return this.brightnessVwPos === '0' ? '左侧' : '右侧';
+  }
+
+  /**
+   * 样式卡上的名字。新建样式的名字是空的（上游 `asNewStyle()` 把 name 清空留给用户起），
+   * 卡片上回落成「背景样式」，与上游 `StyleCard` 的 `config.name.ifBlank { "背景样式" }` 一致。
+   */
+  private getBackgroundStyleLabel(style: ReaderBackgroundStyle): string {
+    return style.name.length > 0 ? style.name : '背景样式';
   }
 
   private getDetailChoices(title: string): string[] {
@@ -2085,6 +2132,76 @@ export struct ReaderSettingsPage {
                 onChange: (color: string) => this.onTextAccentColorChange(color, true)
               })
               Text('强调色用于链接、搜索结果与朗读中的段落；背景透明度只作用于背景图片。')
+                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
+            }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+          }.height(460).scrollBar(BarState.Off)
+        } else if (this.detailSheetTitle === '编辑背景样式') {
+          Scroll() {
+            Column() {
+              Text('样式名称').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 6, bottom: 6 })
+              TextInput({ text: this.editingStyleName, placeholder: '给这份样式起个名字' })
+                .fontSize(13).fontColor('#E5E6EB').placeholderColor(this.themeColorTextTertiary)
+                .backgroundColor('#292A31').borderRadius(10).padding(12)
+                .onChange((value: string) => this.editingStyleName = value)
+              MenuSettingPalette({
+                title: '日间背景颜色',
+                colors: READER_BACKGROUND_COLORS,
+                selectedColor: this.editingStyleDayColor,
+                onChange: (color: string) => this.editingStyleDayColor = color
+              }).margin({ top: 12 })
+              MenuSettingPalette({
+                title: '夜间背景颜色',
+                colors: READER_BACKGROUND_COLORS,
+                selectedColor: this.editingStyleNightColor,
+                onChange: (color: string) => this.editingStyleNightColor = color
+              }).margin({ top: 12 })
+              Text('改名与改色只影响这一份样式；其余样式与自定义背景图不受影响。')
+                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
+              Text('保存').fontSize(13).fontColor('#ECEEF4').textAlign(TextAlign.Center)
+                .width('100%').padding({ top: 11, bottom: 11 })
+                .backgroundColor(this.themeColorAccent).borderRadius(10)
+                .onClick(() => {
+                  this.onUpdateBackgroundStyle(this.editingStyleIndex, this.editingStyleName,
+                    this.editingStyleDayColor, this.editingStyleNightColor);
+                  this.detailSheetVisible = false;
+                })
+            }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+          }.height(460).scrollBar(BarState.Off)
+        } else if (this.detailSheetTitle === '主题列表') {
+          // 对齐上游 ThemeListContent：预设那几份钉死不可删，自建的可以删、可以上下挪。
+          Scroll() {
+            Column() {
+              ForEach(this.backgroundStyles, (style: ReaderBackgroundStyle, styleIndex: number) => {
+                Row() {
+                  Stack({ alignContent: Alignment.Center }) {
+                    Text(this.getBackgroundStyleLabel(style)).fontSize(11).maxLines(2).textAlign(TextAlign.Center)
+                      .fontColor('#3E3D3B')
+                  }.width(44).height(56)
+                    .backgroundColor(this.readerNightMode ? style.nightColor : style.dayColor)
+                    .borderRadius(9).clip(true)
+                    .border({
+                      width: this.paperIndex === styleIndex ? 2 : 1,
+                      color: this.paperIndex === styleIndex ? this.themeColorAccent : '#33343C'
+                    })
+                    .onClick(() => this.onPaperChange(styleIndex))
+                  Column() {
+                    // layoutWeight 要放在 Column 上，放到 Text 上会把 Column 撑高、名字与标签被拉开一大截。
+                    Text(this.getBackgroundStyleLabel(style)).fontSize(13).fontColor('#E5E6EB')
+                    Text(styleIndex < READER_STYLE_PRESET_COUNT ? '预设' : '自建')
+                      .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                  }.alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Center)
+                    .layoutWeight(1).margin({ left: 12 })
+                  if (styleIndex >= READER_STYLE_PRESET_COUNT) {
+                    Image($r('app.media.reader_arrow_forward')).width(16).height(16)
+                      .fillColor('#9EA0AA').rotate({ angle: 270 })
+                      .onClick(() => this.onMoveBackgroundStyle(styleIndex, styleIndex - 1))
+                    Image($r('app.media.profile_delete')).width(16).height(16)
+                      .fillColor('#D98A8A').margin({ left: 12 })
+                      .onClick(() => this.onRemoveBackgroundStyle(styleIndex))
+                  }
+                }.width('100%').padding({ top: 8, bottom: 8 })
+              }, (style: ReaderBackgroundStyle) => `${style.id}|${style.name}|${style.dayColor}|${style.nightColor}`)
+              Text('前 5 份是内置预设，不能删除也不能移动；自建样式可以删掉、可以上移。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(460).scrollBar(BarState.Off)
@@ -2600,10 +2717,15 @@ export struct ReaderSettingsPage {
                   .backgroundColor('#C6D3FF').borderRadius(18).alignSelf(ItemAlign.End)
                   .onClick(() => this.saveCustomInfoTip())
               }
-              if (this.getDetailChoices(this.detailSheetTitle).length === 0) {
+              if (this.getDetailChoices(this.detailSheetTitle).length === 0 &&
+                this.detailSheetTitle !== '自定义阅读背景' &&
+                this.detailSheetTitle !== '编辑背景样式' &&
+                this.detailSheetTitle !== '主题列表') {
                 Text('此配置项的实际操作尚未迁移。').fontSize(12).fontColor('#A9ABB5').width('100%').padding(12)
               }
               Text(this.detailSheetTitle === '自定义阅读背景' ||
+                this.detailSheetTitle === '编辑背景样式' ||
+                this.detailSheetTitle === '主题列表' ||
                 this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
                 this.detailSheetTitle === '横屏双页' ||
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '滑动条显示样式' ||
@@ -2985,6 +3107,23 @@ struct BackgroundShareOption {
   }
 }
 
+/** 样式行末尾的纯动作卡：「+」新增样式与「>」进主题列表，两者都不代表某个具体样式。 */
+@Component
+struct BackgroundStyleActionCard {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @Prop icon: Resource = $r('app.media.app_add');
+  @Prop selected: boolean = false;
+
+  build() {
+    Column() {
+      Image(this.icon).width(18).height(18).fillColor('#E4E5EA')
+    }.width(40).height(56).justifyContent(FlexAlign.Center)
+      .backgroundColor('#15161B')
+      .borderRadius(9)
+      .border({ width: 1, color: '#33343C' })
+  }
+}
+
 @Component
 struct MenuSettingIconStyle {
   @Prop value: number = 1;
@@ -3314,14 +3453,23 @@ struct BackgroundOption {
   @Prop selected: boolean = false;
 
   build() {
+    // 选中态对齐上游 `StyleCard`（GlobalThemePage.kt:540-560）：不是卡片下方挂个勾，
+    // 而是底部一条满宽横带，勾画在横带里。横带用 secondaryContainer 色、勾用 onSecondaryContainer。
     Column() {
-      Text(this.label).fontSize(10).fontColor(
-        this.color.toLowerCase() === '#000000' || this.color.toLowerCase() === '#3c3f43'
-          ? '#E4E5EA' : '#585963')
+      Stack({ alignContent: Alignment.Center }) {
+        Text(this.label).fontSize(10).maxLines(2).textAlign(TextAlign.Center)
+          .fontColor(this.color.toLowerCase() === '#000000' || this.color.toLowerCase() === '#3c3f43'
+            ? '#E4E5EA' : '#585963')
+          .padding({ left: 2, right: 2 })
+      }.width('100%').layoutWeight(1)
       if (this.selected) {
-        Image($r('app.media.app_check')).width(12).height(12).fillColor('#C6D3FF').margin({ top: 6 })
+        Column() {
+          Image($r('app.media.app_check')).width(10).height(10).fillColor('#1B1D25')
+        }.width('100%').height(12).justifyContent(FlexAlign.Center)
+          .backgroundColor('#C6D3FF')
       }
     }.width(44).height(56).justifyContent(FlexAlign.Center).backgroundColor(this.color)
-      .borderRadius(11).border({ width: this.selected ? 2 : 1, color: this.selected ? this.themeColorAccent : '#33343C' })
+      .borderRadius(11).clip(true)
+      .border({ width: this.selected ? 2 : 1, color: this.selected ? this.themeColorAccent : '#33343C' })
   }
 }

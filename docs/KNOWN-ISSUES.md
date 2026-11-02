@@ -287,6 +287,33 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 - 观感差异仅在于宿主绘制 API 不同（上游 Compose `drawRect(Brush.horizontalGradient(...))`，本地 `drawing.Brush.setShaderEffect(drawing.ShaderEffect.createLinearGradient(...))` + `canvas.rotate()`），`drawCurlBackShadow` / `drawCurlFolderShadow` / `drawCurlFrontShadows` 三个函数的几何参数已与上游同构。基准包 `android-reader-animation-simulation-frame-during.png`（1080×2400）里折页是右上角一条细暗带，与本机抓到的折页中间帧方向、位置一致。
 
+### KI-STYLE1 背景样式区与上游的五处差异 —— 已对齐（含样式可增删）
+
+全局设置页「背景」样式卡行原先与上游 `GlobalThemePage.kt` 的背景样式区有 5 处差异，本轮全部对齐：
+
+| # | 差异 | 修法 |
+|---|---|---|
+| 1 | 选中态是卡片下方的小勾图标 | 改成**底部满宽横带 + 勾**（`ReaderSettingsPage.ets` 的 `BackgroundOption`：外层 `Column` 内分两段，下半段 `height(12).backgroundColor('#C6D3FF')` 里放 10×10 的勾），对齐上游 `StyleCard` 的 `Box(align BottomCenter, fillMaxWidth, height 12.dp)` |
+| 2 | 没有「+」新增样式卡 | `ForEach` 之后追加 `BackgroundStyleActionCard($r('app.media.app_add'))` → `onAddBackgroundStyle()` |
+| 3 | 没有最右侧主题列表入口卡 | 追加 `BackgroundStyleActionCard($r('app.media.reader_arrow_forward'))` → `openDetailSheet('主题列表', ...)`（本仓没有 chevron_right 图标，用等价的右箭头） |
+| 4 | 样式卡只有 `onClick` | 加 `LongPressGesture({ duration: 500 })` → 选中该份 + `openDetailSheet('编辑背景样式', ...)`，对齐上游 `StyleCard.onLongClick → onOpenBgTextConfig` |
+| 5 | `READER_BACKGROUND_STYLES` 是硬编码 6 条常量，不可增删 | 改成持久化的样式表（见下） |
+
+**样式表模型**：`ReaderSettingsSnapshot` 新增 `backgroundStyles: ReaderBackgroundStyle[]`，随 `legado_reader_settings` 一起存（键 `backgroundStyles`，值是 JSON 字符串）。`ReaderBackgroundStyle` 在原有 `name`/`dayColor`/`nightColor` 之外补了 `id`。
+
+- 上游 `ReadStyleItem` 还带 `bgType` / `textColor` / 三个 `*EInk` 字段，本地**故意不搬**：本地背景类型（`bgType`/`bgTypeNight`）与文字颜色是全局单份，不随样式独立，搬过来会让同一份状态有两个来源。
+- `READER_STYLE_PRESET_COUNT = 5`（对齐上游 `ReadStyleState.kt:41`）。默认表仍是 6 条（上游 `readConfig.json` 就是 6 条），所以第 6 份「预设5」与上游一致地算**自建、可删可移**。
+- `paperIndex` / `dayPaperIndex` / `nightPaperIndex` 的语义从「6 个内置方案的下标」扩成「样式表下标」，原来写死 `Math.min(5, ...)` 的四处（`ReaderSettingsRepository.save()` 三处、`clampStyleIndex`、`Index.setReaderPaperIndex`、`Index.getPaperColor`）都改成按 `backgroundStyles.length - 1` 夹取。
+- 新增样式的背景**整组回默认纯色**（日间 `#EEEEEE`、夜间 `#000000`，即上游 `ReadBookConfig.Config()` 的构造默认值）、名字留空，对齐上游 `ReadBookConfig.asNewStyle()` 的「复刻排版但不继承背景图」；空名字在卡片上回落显示「背景样式」（上游 `StyleCard` 的 `ifBlank`）。
+- 增删排序语义全部照上游：`removeReaderBackgroundStyle` 只允许 `index >= READER_STYLE_PRESET_COUNT`，删后 `paperIndex` 按「删的那份取前一份、之后的左移一位」修正；`moveReaderBackgroundStyle` 只在自建区内生效，下标按上游 `shiftIndexAfterMove` 的 `index==from→to; from<index<=to→index-1; to<=index<from→index+1` 修正。
+
+**踩到的两个坑（已修，留作记录）**：
+
+- `ForEach` 的 key 一开始用 `style.id`，于是**改名/改色后卡片不刷新**（id 没变，ArkUI 认为子项未变，界面一直显示旧名字，要重启才更新）。改成 `${style.id}|${style.name}|${style.dayColor}|${style.nightColor}` 后即时生效。
+- 主题列表行里把 `.layoutWeight(1)` 写在名字 `Text` 上，会把 `Column` 撑高、名字与「预设/自建」标签被拉开一大截。`layoutWeight(1)` 要放在 `Column` 上并配 `justifyContent(FlexAlign.Center)`。
+
+**验收（第 3 级）**：①选中态横带+勾 ✔（截图 crop `(100,2150,1280,2400)`）②「+」卡 ✔ ③「>」卡 ✔ ④长按开「编辑背景样式」✔ ⑤新增样式（卡片显示「背景样式」）✔ 删除自建样式 ✔ 上移排序 ✔ 改名后卡片即时更新 ✔ 冷启动后样式表与选中项保持（preferences 里 `backgroundStyles` 7 条、`paperIndex` 指向自建那份）✔。
+
 ## 关系型存储迁移第五批（r284）遗留
 
 本节登记 2026-10-30 第五批（preferences 老数据清理）设备验收后仍待处理的三项。**第 1 项已于 r290 修掉，保留记录备查；第 2、3 项仍未处理。**

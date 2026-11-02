@@ -208,6 +208,51 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 用 `git diff` 生成的 patch 只挑本会话的 5 个文件（`.gitignore`、`ReaderPage.ets`、`Index.ets`、`BookRepository.ets`、`BackupRepository.ets`），没有 `git add -A`；一次性改写脚本 `scripts/tmp-add-catch-logs.py` 已删除，未入库。
 
+## 2026-11-02 N 端阅读设置背景样式区对齐上游（KI-STYLE1）
+
+目标：全局设置页「背景」样式卡行与上游 `GlobalThemePage.kt` 的背景样式区对齐——选中态、新增卡、主题列表入口卡、长按编辑，以及样式表从硬编码常量改成可增删并持久化。登记见 [KNOWN-ISSUES.md](KNOWN-ISSUES.md) 的 KI-STYLE1。
+
+### 源码接入
+
+| 文件 | 改动 |
+| --- | --- |
+| `entry/src/main/ets/data/ReaderSettingsRepository.ets` | `ReaderBackgroundStyle` 补 `id`；新增 `READER_STYLE_PRESET_COUNT = 5`、`READER_STYLE_NEW_DAY_COLOR = '#EEEEEE'`、`READER_STYLE_NEW_NIGHT_COLOR = '#000000'`、`copyReaderBackgroundStyles()`；`ReaderSettingsSnapshot` 新增 `backgroundStyles`；`load`/`save` 增 `backgroundStyles` 键（JSON 字符串），四处写死 `Math.min(5, ...)` 的夹取改成按表长夹取；新增 `encodeBackgroundStyles` / `decodeBackgroundStyles` |
+| `entry/src/main/ets/pages/Index.ets` | 新增 `@State backgroundStyles`；`getPaperColor` / `setReaderPaperIndex` 改按表长取；`persistReaderSettings` 与两处设置恢复都带上 `backgroundStyles`；新增 `addReaderBackgroundStyle` / `updateReaderBackgroundStyle` / `removeReaderBackgroundStyle` / `moveReaderBackgroundStyle`；`ReaderSettingsPage` 四处调用点同步补参数 |
+| `entry/src/main/ets/pages/ReaderSettingsPage.ets` | `BackgroundOption` 选中态改成底部满宽横带+勾；样式行 `ForEach` 改遍历 `backgroundStyles`、补长按手势、追加「+」与「>」两张 `BackgroundStyleActionCard`；新增「编辑背景样式」「主题列表」两个 `detailSheet` 分支；新增 `getBackgroundStyleLabel()` 处理空名字回落 |
+| `entry/src/main/ets/data/BackupRepository.ets` | `toAndroidReadConfig` 与 `paperIndexFromAndroidConfig` 改从 `settings.backgroundStyles` 取色 / 找下标，不再读常量表 |
+
+### 构建通过
+
+`bash scripts/build-hap.sh` → `BUILD SUCCESSFUL`（最后一次增量 37 s 349 ms）。期间遇到并修掉一个编译错误：`Property 'justifyContent' does not exist on type 'StackAttribute'`——ArkUI 的 `Stack` 没有 `justifyContent`，改用外层 `Column().justifyContent(FlexAlign.Center)` 包内层 `Stack({ alignContent: Alignment.Center })`。`hdc install -r` 覆盖安装成功。
+
+### 设备验收
+
+设备 `127.0.0.1:5555`（API 26 模拟器），包 `io.legado.harmony`。入口：书架点书 → 正文中部 `(640,1400)` 唤出菜单 → 右下齿轮 `(1100,2532)`。样式卡行在 y `2180-2376`，横向滚动**必须用 `uitest uiInput fling`**（`drag` 在这条 `Scroll` 上完全滚不动）。
+
+| 验收项 | 证据 | 结论 |
+| --- | --- | --- |
+| ① 选中态 = 底部满宽横带 + 勾 | 截图 crop `(100,2150,1280,2400)`：选中卡「微信读书」底部整条浅紫横带，带内深色勾 | **通过** |
+| ② 「+」新增样式卡 | 滚到右端后同口径截图可见「预设3 预设4 预设5 ＋ →」 | **通过** |
+| ③ 「>」主题列表入口卡 | 同上，右箭头卡在最右；点击打开标题为「主题列表」的详情页 | **通过** |
+| ④ 长按进「编辑背景样式」 | `uitest uiInput longClick` 500 ms 打开详情页，显示「样式名称 / 日间背景颜色 / 夜间背景颜色 / 保存」 | **通过** |
+| ⑤ 新增样式 | 点「+」后样式表新增一条，卡片显示回落名「背景样式」，选中态跟到新卡 | **通过** |
+| ⑥ 删除自建样式 | 主题列表里删掉一条自建样式，行数减一，`预设5` 与另一条自建样式保留 | **通过** |
+| ⑦ 上移排序 | 点自建行的上箭头，该行与 `预设5` 交换位置（dumpLayout 里 `背景样式` 的 y 从 1910 变 1658、`预设5` 从 1429 变 1933） | **通过** |
+| ⑧ 改名即时生效 | 改名保存后卡片立刻显示新名字（不再需要重启） | **通过** |
+| ⑨ 冷启动保持 | `aa force-stop` 后重启：preferences 里 `backgroundStyles` 存了 7 条（6 条预设 + 1 条自建），自建那条 `id=style-…-7`、`name`/`dayColor` 均为用户设定值；重开设置页选中项仍指向自建那份 | **通过** |
+
+### 边界与教训
+
+- 上游 `ReadStyleItem` 的 `bgType` / `textColor` / `*EInk` 字段没有搬过来：本地背景类型与文字颜色是全局单份，搬过来会出现「同一份状态两个来源」。因此本地样式条目只有名字与日/夜背景色，属于**有意的模型裁剪**，不是漏做。
+- 主题列表页按上游 `ThemeListContent` 的「列表」形态实现（预览卡 + 名字 + 预设/自建标签 + 上移/删除），没有做网格布局、搜索、批量勾选、置顶置底与拖动排序——这些是上游那一页的完整能力，本轮目标是「样式可增删 + 能在设置页管理」，其余留待需要时再对齐。
+- `ForEach` 的 key 必须带上会被就地改动的字段（名字与两个颜色）。只按 `id` 做 key 时，改名/改色后 ArkUI 认为子项未变，卡片一直显示旧值，要重启才更新——这个坑在验收 ⑧ 之前踩到过。
+- `layoutWeight(1)` 放在 `Text` 上会把外层 `Column` 撑高，导致名字与副标签被拉开；要放在 `Column` 上并配 `justifyContent(FlexAlign.Center)`。
+- 模拟器上 `uitest uiInput text` 是**追加**而不是替换，`inputText` 需要坐标且对已聚焦输入框不生效；清空输入框要用 `uitest uiInput keyEvent 2055`（`KEYCODE_DEL`）连按，`keyEvent 2072` 无效。
+
+### 提交
+
+用 `git diff` 生成的 patch 只挑本会话的 4 个文件（`ReaderSettingsRepository.ets`、`Index.ets`、`ReaderSettingsPage.ets`、`BackupRepository.ets`）加两份文档，没有 `git add -A`。
+
 ## 2026-11-02 N 端阅读进度与目录 ANR（KI-PROG1–KI-PROG5）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`，1280×2832。

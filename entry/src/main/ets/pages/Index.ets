@@ -101,6 +101,8 @@ import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { EyeProtection } from '../data/EyeProtection';
 import {
   ReaderBottomActionConfig, ReaderSettingsRepository, ReaderSettingsSnapshot, READER_BACKGROUND_STYLES,
+  ReaderBackgroundStyle, READER_STYLE_PRESET_COUNT, copyReaderBackgroundStyles,
+  READER_STYLE_NEW_DAY_COLOR, READER_STYLE_NEW_NIGHT_COLOR,
   READER_CLICK_REGION_DEFAULTS,
   READER_LOCAL_BOTTOM_ACTION_DEFAULTS, READER_LOCAL_TOP_ACTION_DEFAULTS,
   ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, copyReaderInfoSettings, updateReaderInfoSettings,
@@ -237,6 +239,11 @@ struct Index {
   @State paperIndex: number = 0;
   @State dayPaperIndex: number = 0;
   @State nightPaperIndex: number = 0;
+  /**
+   * 背景样式表，对应上游 `ReadStyleState.items`。前 `READER_STYLE_PRESET_COUNT` 份是内置预设，
+   * 其后是用户自建、可增删排序；上面三个 paperIndex 都是这张表的下标。
+   */
+  @State backgroundStyles: ReaderBackgroundStyle[] = copyReaderBackgroundStyles(READER_BACKGROUND_STYLES);
   /**
    * 阅读页当前是否夜间。
    *
@@ -3381,6 +3388,7 @@ struct Index {
       this.paperIndex = settings.paperIndex;
       this.dayPaperIndex = settings.dayPaperIndex;
       this.nightPaperIndex = settings.nightPaperIndex;
+      this.backgroundStyles = copyReaderBackgroundStyles(settings.backgroundStyles);
       // readerNightMode 不再从阅读设置里读：它的唯一来源是全局 themeMode（见 applyThemeMode），
       // 这里只按全局值补一次投影，并据此选定当前纸色。
       this.readerNightMode = ThemeModeResolver.isDarkTheme(this.themeMode,
@@ -3650,6 +3658,7 @@ struct Index {
         paperIndex: this.paperIndex,
         dayPaperIndex: this.dayPaperIndex,
         nightPaperIndex: this.nightPaperIndex,
+        backgroundStyles: copyReaderBackgroundStyles(this.backgroundStyles),
         readerNightMode: this.readerNightMode,
         shareLayout: this.shareReaderStyleLayout,
         showBottomActionText: this.showReaderBottomActionText,
@@ -3926,7 +3935,7 @@ struct Index {
   }
 
   private setReaderPaperIndex(paperIndex: number): void {
-    this.paperIndex = Math.max(0, Math.min(5, paperIndex));
+    this.paperIndex = Math.max(0, Math.min(this.backgroundStyles.length - 1, paperIndex));
     if (this.readerNightMode) {
       this.nightPaperIndex = this.paperIndex;
       if (this.shareReaderStyleLayout) { this.dayPaperIndex = this.paperIndex; }
@@ -3934,6 +3943,93 @@ struct Index {
       this.dayPaperIndex = this.paperIndex;
       if (this.shareReaderStyleLayout) { this.nightPaperIndex = this.paperIndex; }
     }
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  /**
+   * 新增一个背景样式，返回它在表里的下标。
+   *
+   * 对齐上游 `ReadBookConfig.asNewStyle()`（`ReadBookConfig.kt:967-987`）：新样式的**背景整组
+   * 清回默认**（`Config()` 的 `bgStr = "#EEEEEE"`、`bgStrNight = "#000000"`），名字也清空
+   * 留给用户起（空名字在卡片上显示成「背景样式」，见上游 `StyleCard` 的 `ifBlank`）。
+   * 本地样式条目只有名字与日/夜背景色两项，其余排版仍是全局单份，所以这里只重置这两色。
+   */
+  private addReaderBackgroundStyle(): number {
+    const styles: ReaderBackgroundStyle[] = copyReaderBackgroundStyles(this.backgroundStyles);
+    const nextIndex = styles.length;
+    styles.push({
+      // 用时间戳做 id：本机不需要跨设备同步，只要在本进程与重启后都稳定唯一即可。
+      id: `style-${Date.now()}-${nextIndex}`,
+      name: '',
+      dayColor: READER_STYLE_NEW_DAY_COLOR,
+      nightColor: READER_STYLE_NEW_NIGHT_COLOR
+    });
+    this.backgroundStyles = styles;
+    this.setReaderPaperIndex(nextIndex);
+    return nextIndex;
+  }
+
+  /** 改一个样式的名字与日/夜背景色。预设那几份允许改，与上游一致（上游只锁增删排序）。 */
+  private updateReaderBackgroundStyle(index: number, name: string,
+    dayColor: string, nightColor: string): void {
+    if (index < 0 || index >= this.backgroundStyles.length) { return; }
+    const styles: ReaderBackgroundStyle[] = copyReaderBackgroundStyles(this.backgroundStyles);
+    const current = styles[index];
+    styles[index] = {
+      id: current.id,
+      name: name.length > 0 ? name : current.name,
+      dayColor: dayColor.length > 0 ? dayColor : current.dayColor,
+      nightColor: nightColor.length > 0 ? nightColor : current.nightColor
+    };
+    this.backgroundStyles = styles;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  /**
+   * 删掉一个自建样式。预设那 `READER_STYLE_PRESET_COUNT` 份不能删（上游 `deleteConfigAt`
+   * 同样要求 `size > READ_STYLE_PRESET_COUNT`），否则 `paperIndex` 的预设下标语义就断了。
+   */
+  private removeReaderBackgroundStyle(index: number): void {
+    if (index < READER_STYLE_PRESET_COUNT || index >= this.backgroundStyles.length) { return; }
+    const styles: ReaderBackgroundStyle[] = copyReaderBackgroundStyles(this.backgroundStyles);
+    styles.splice(index, 1);
+    this.backgroundStyles = styles;
+    // 删掉的那份之前的下标不变；之后的下标整体左移一位。
+    const shift = (value: number): number => {
+      if (value === index) { return Math.max(0, index - 1); }
+      return value > index ? value - 1 : value;
+    };
+    this.paperIndex = Math.max(0, Math.min(styles.length - 1, shift(this.paperIndex)));
+    this.dayPaperIndex = Math.max(0, Math.min(styles.length - 1, shift(this.dayPaperIndex)));
+    this.nightPaperIndex = Math.max(0, Math.min(styles.length - 1, shift(this.nightPaperIndex)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  /**
+   * 把自建样式从 from 拖到 to。只在自建区（下标 >= `READER_STYLE_PRESET_COUNT`）内生效，
+   * 与上游 `ReadStyleConfigStore.moveStyle()` 的 `isCustomIndex` 判定一致。
+   */
+  private moveReaderBackgroundStyle(from: number, to: number): void {
+    const count = this.backgroundStyles.length;
+    if (from < READER_STYLE_PRESET_COUNT || to < READER_STYLE_PRESET_COUNT) { return; }
+    if (from >= count || to >= count || from === to) { return; }
+    const styles: ReaderBackgroundStyle[] = copyReaderBackgroundStyles(this.backgroundStyles);
+    const moved = styles.splice(from, 1)[0];
+    styles.splice(to, 0, moved);
+    this.backgroundStyles = styles;
+    // 与上游 shiftIndexAfterMove 同语义：index==from→to；from<index<=to→index-1；to<=index<from→index+1。
+    const shift = (value: number): number => {
+      if (value === from) { return to; }
+      if (from < value && value <= to) { return value - 1; }
+      if (to <= value && value < from) { return value + 1; }
+      return value;
+    };
+    this.paperIndex = shift(this.paperIndex);
+    this.dayPaperIndex = shift(this.dayPaperIndex);
+    this.nightPaperIndex = shift(this.nightPaperIndex);
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
@@ -5123,6 +5219,7 @@ struct Index {
       this.paperIndex = result.settings.paperIndex;
       this.dayPaperIndex = result.settings.dayPaperIndex;
       this.nightPaperIndex = result.settings.nightPaperIndex;
+      this.backgroundStyles = copyReaderBackgroundStyles(result.settings.backgroundStyles);
       // 与 `loadReaderSettings`（:1999-2003）同一口径：readerNightMode 不再是独立来源，
       // 恢复时也按全局 themeMode 重新投影，否则备份里的旧布尔会把刚恢复的模式冲掉。
       this.readerNightMode = ThemeModeResolver.isDarkTheme(this.themeMode,
@@ -5508,7 +5605,7 @@ struct Index {
     const custom = this.readerNightMode ? this.readerBgStrNight : this.readerBgStr;
     const customType = this.readerNightMode ? this.readerBgTypeNight : this.readerBgType;
     if (customType === 0 && custom.length > 0) { return custom; }
-    const style = READER_BACKGROUND_STYLES[Math.max(0, Math.min(5, this.paperIndex))];
+    const style = this.backgroundStyles[Math.max(0, Math.min(this.backgroundStyles.length - 1, this.paperIndex))];
     return style === undefined ? '#000000' : (this.readerNightMode ? style.nightColor : style.dayColor);
   }
   /** 当前生效的正文颜色；上游 `textColor`/`textColorNight`。 */
@@ -6786,6 +6883,7 @@ struct Index {
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
               paperIndex: this.paperIndex,
+              backgroundStyles: this.backgroundStyles,
               shareLayout: this.shareReaderStyleLayout,
               readerNightMode: this.readerNightMode,
               eyeProtectionActive: this.isEyeProtectionActive(),
@@ -7058,6 +7156,11 @@ struct Index {
               onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
               onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
               onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
+              onAddBackgroundStyle: (): number => this.addReaderBackgroundStyle(),
+              onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
+                this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
+              onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
+              onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
               onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
             })
           } else if (this.route === AppRoute.READ_ALOUD_SETTINGS) {
@@ -7536,6 +7639,7 @@ struct Index {
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
             paperIndex: this.paperIndex,
+            backgroundStyles: this.backgroundStyles,
             shareLayout: this.shareReaderStyleLayout,
             readerNightMode: this.readerNightMode,
             eyeProtectionActive: this.isEyeProtectionActive(),
@@ -7804,6 +7908,11 @@ struct Index {
             onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
             onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
             onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
+            onAddBackgroundStyle: (): number => this.addReaderBackgroundStyle(),
+            onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
+              this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
+            onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
+            onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
             onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_ALOUD_SETTINGS) {
@@ -7890,6 +7999,7 @@ struct Index {
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
             paperIndex: this.paperIndex,
+            backgroundStyles: this.backgroundStyles,
             shareLayout: this.shareReaderStyleLayout,
             readerNightMode: this.readerNightMode,
             eyeProtectionActive: this.isEyeProtectionActive(),
@@ -8148,6 +8258,11 @@ struct Index {
             onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
             onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
             onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
+            onAddBackgroundStyle: (): number => this.addReaderBackgroundStyle(),
+            onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
+              this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
+            onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
+            onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
             onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
           })
         }
@@ -8181,6 +8296,7 @@ struct Index {
         textFullJustify: this.readerTextFullJustify,
         textBottomJustify: this.readerTextBottomJustify,
           paperIndex: this.paperIndex,
+          backgroundStyles: this.backgroundStyles,
           shareLayout: this.shareReaderStyleLayout,
           readerNightMode: this.readerNightMode,
           eyeProtectionActive: this.isEyeProtectionActive(),
@@ -8435,6 +8551,11 @@ struct Index {
           onLetterSpacingChange: (value: number) => this.setReaderLetterSpacing(value),
           onParagraphIndentCountChange: (count: number) => this.setReaderParagraphIndentCount(count),
           onPaperChange: (paperIndex: number) => this.setReaderPaperIndex(paperIndex),
+          onAddBackgroundStyle: (): number => this.addReaderBackgroundStyle(),
+          onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
+            this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
+          onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
+          onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
           onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
         })
         }

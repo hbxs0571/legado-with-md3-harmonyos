@@ -176,6 +176,12 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   paperIndex: number;
   dayPaperIndex: number;
   nightPaperIndex: number;
+  /**
+   * 背景样式列表，对应上游 `ReadStyleState.items`（`ReadStyleState.kt:6`）。
+   * 前 `READER_STYLE_PRESET_COUNT` 份是钉死的预设，其后的都是用户自建、可增删排序。
+   * `paperIndex`/`dayPaperIndex`/`nightPaperIndex` 就是这张表的下标。
+   */
+  backgroundStyles: ReaderBackgroundStyle[];
   readerNightMode: boolean;
   shareLayout: boolean;
   showBottomActionText: boolean;
@@ -704,21 +710,57 @@ export const READER_LOCAL_TOP_ACTION_DEFAULTS: ReaderBottomActionConfig[] = READ
   })
 );
 
+/**
+ * 一个阅读背景样式，对应上游 `ReadStyleItem`（`domain/model/settings/ReadStyleState.kt:21`）里
+ * 与背景有关的那几个字段。
+ *
+ * 上游的 `ReadStyleItem` 还带 `bgType`/`textColor`/`*EInk` 等字段：本地 `bgType` 与文字颜色
+ * 是全局单份（`bgStr`/`bgType`/`textColor`，见 `ReaderSettingsSnapshot`），不随样式独立，
+ * 因此这里只保留「名字 + 日间色 + 夜间色」，避免同一份状态有两个来源。
+ */
 export interface ReaderBackgroundStyle {
+  /** 稳定身份。拖动排序、删除后选中项要跟着走，靠名字会认错（允许重名）。 */
+  id: string;
   name: string;
   dayColor: string;
   nightColor: string;
 }
 
+/**
+ * 前这么多份是内置预设：不可删、不可拖、不可勾选。
+ * 对齐上游 `READ_STYLE_PRESET_COUNT`（`ReadStyleState.kt:41`）——预设是「配置缺斤少两时的补齐来源」，
+ * 位置与数量都不能变。注意默认列表是 6 份（`readConfig.json` 就是 6 条），
+ * 所以第 6 份「预设5」在上游也算自建、可删，这里保持一致。
+ */
+export const READER_STYLE_PRESET_COUNT: number = 5;
+
+/**
+ * 新建样式的默认背景色。取上游 `ReadBookConfig.Config()` 的构造默认值
+ * （`ReadBookConfig.kt:537-539`：`bgStr = "#EEEEEE"`、`bgStrNight = "#000000"`），
+ * `asNewStyle()` 就是靠「回到构造默认值」实现「新样式不继承任何背景」的。
+ */
+export const READER_STYLE_NEW_DAY_COLOR: string = '#EEEEEE';
+export const READER_STYLE_NEW_NIGHT_COLOR: string = '#000000';
+
 // 来源于 Android 原项目 assets/defaultData/readConfig.json 的六个默认阅读样式。
 export const READER_BACKGROUND_STYLES: ReaderBackgroundStyle[] = [
-  { name: '微信读书', dayColor: '#FFC0EDC6', nightColor: '#000000' },
-  { name: '预设1', dayColor: '#FFFFFF', nightColor: '#000000' },
-  { name: '预设2', dayColor: '#DDC090', nightColor: '#3C3F43' },
-  { name: '预设3', dayColor: '#C2D8AA', nightColor: '#3C3F43' },
-  { name: '预设4', dayColor: '#DBB8E2', nightColor: '#3C3F43' },
-  { name: '预设5', dayColor: '#ABCEE0', nightColor: '#3C3F43' }
+  { id: 'preset-0', name: '微信读书', dayColor: '#FFC0EDC6', nightColor: '#000000' },
+  { id: 'preset-1', name: '预设1', dayColor: '#FFFFFF', nightColor: '#000000' },
+  { id: 'preset-2', name: '预设2', dayColor: '#DDC090', nightColor: '#3C3F43' },
+  { id: 'preset-3', name: '预设3', dayColor: '#C2D8AA', nightColor: '#3C3F43' },
+  { id: 'preset-4', name: '预设4', dayColor: '#DBB8E2', nightColor: '#3C3F43' },
+  { id: 'preset-5', name: '预设5', dayColor: '#ABCEE0', nightColor: '#3C3F43' }
 ];
+
+/** 复制一份样式列表，避免 @State 直接持有常量数组实例后被就地改写。 */
+export function copyReaderBackgroundStyles(styles: ReaderBackgroundStyle[]): ReaderBackgroundStyle[] {
+  return styles.map((style: ReaderBackgroundStyle): ReaderBackgroundStyle => ({
+    id: style.id,
+    name: style.name,
+    dayColor: style.dayColor,
+    nightColor: style.nightColor
+  }));
+}
 
 export class ReaderSettingsRepository {
   private static readonly preferenceName: string = 'legado_reader_settings';
@@ -783,6 +825,8 @@ export class ReaderSettingsRepository {
       paperIndex: 2,
       dayPaperIndex: 0,
       nightPaperIndex: 0,
+      // 首次启动用内置六份样式；用户之后增删的结果会整表存进 preferences。
+      backgroundStyles: copyReaderBackgroundStyles(READER_BACKGROUND_STYLES),
       readerNightMode: true,
       shareLayout: false,
       showBottomActionText: false,
@@ -970,6 +1014,8 @@ export class ReaderSettingsRepository {
       const textBottomJustifyValue = await store.get('textBottomJustify', defaults.textBottomJustify);
       const paperIndexValue = await store.get('paperIndex', defaults.paperIndex);
       const styleVersionValue = await store.get('paperStyleVersion', 0);
+      const backgroundStylesValue = await store.get('backgroundStyles',
+        ReaderSettingsRepository.encodeBackgroundStyles(defaults.backgroundStyles));
       const dayPaperIndexValue = await store.get('dayPaperIndex', paperIndexValue);
       const nightPaperIndexValue = await store.get('nightPaperIndex', paperIndexValue);
       const nightModeValue = await store.get('readerNightMode', defaults.readerNightMode);
@@ -1189,17 +1235,21 @@ export class ReaderSettingsRepository {
         ? textFullJustifyValue : defaults.textFullJustify;
       const textBottomJustify = typeof textBottomJustifyValue === 'boolean'
         ? textBottomJustifyValue : defaults.textBottomJustify;
+      const backgroundStyles = ReaderSettingsRepository.decodeBackgroundStyles(
+        backgroundStylesValue, defaults.backgroundStyles);
       const storedPaperIndex = typeof paperIndexValue === 'number' && Number.isInteger(paperIndexValue)
-        ? Math.max(0, Math.min(5, paperIndexValue)) : defaults.paperIndex;
+        ? Math.max(0, Math.min(backgroundStyles.length - 1, paperIndexValue)) : defaults.paperIndex;
       const styleVersion = typeof styleVersionValue === 'number' ? styleVersionValue : 0;
       const initialPaperIndex = styleVersion >= 1
         ? storedPaperIndex : ReaderSettingsRepository.migrateLegacyPaperIndex(storedPaperIndex);
       const dayPaperIndex = styleVersion >= 1 && typeof dayPaperIndexValue === 'number' &&
         Number.isInteger(dayPaperIndexValue)
-        ? ReaderSettingsRepository.clampStyleIndex(dayPaperIndexValue, initialPaperIndex) : initialPaperIndex;
+        ? ReaderSettingsRepository.clampStyleIndex(dayPaperIndexValue, initialPaperIndex,
+          backgroundStyles.length) : initialPaperIndex;
       const nightPaperIndex = styleVersion >= 1 && typeof nightPaperIndexValue === 'number' &&
         Number.isInteger(nightPaperIndexValue)
-        ? ReaderSettingsRepository.clampStyleIndex(nightPaperIndexValue, initialPaperIndex) : initialPaperIndex;
+        ? ReaderSettingsRepository.clampStyleIndex(nightPaperIndexValue, initialPaperIndex,
+          backgroundStyles.length) : initialPaperIndex;
       const readerNightMode = typeof nightModeValue === 'boolean' ? nightModeValue : defaults.readerNightMode;
       const shareLayout = typeof shareLayoutValue === 'boolean' ? shareLayoutValue : defaults.shareLayout;
       const paperIndex = readerNightMode ? nightPaperIndex : dayPaperIndex;
@@ -1213,6 +1263,7 @@ export class ReaderSettingsRepository {
         await store.flush();
       }
       return {
+        backgroundStyles: backgroundStyles,
         paddingSettings: {
           paddingTop: ReaderSettingsRepository.normalizeInteger(paddingTopValue, 0, 300, defaults.paddingSettings.paddingTop),
           paddingBottom: ReaderSettingsRepository.normalizeInteger(paddingBottomValue, 0, 300, defaults.paddingSettings.paddingBottom),
@@ -1538,9 +1589,12 @@ export class ReaderSettingsRepository {
       await store.put('footerPaddingBottom', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.footerPaddingBottom))));
       await store.put('footerPaddingLeft', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.footerPaddingLeft))));
       await store.put('footerPaddingRight', Math.max(0, Math.min(300, Math.round(settings.paddingSettings.footerPaddingRight))));
-      await store.put('paperIndex', Math.max(0, Math.min(5, Math.round(settings.paperIndex))));
-      await store.put('dayPaperIndex', Math.max(0, Math.min(5, Math.round(settings.dayPaperIndex))));
-      await store.put('nightPaperIndex', Math.max(0, Math.min(5, Math.round(settings.nightPaperIndex))));
+      await store.put('backgroundStyles',
+        ReaderSettingsRepository.encodeBackgroundStyles(settings.backgroundStyles));
+      const styleUpperBound = Math.max(0, settings.backgroundStyles.length - 1);
+      await store.put('paperIndex', Math.max(0, Math.min(styleUpperBound, Math.round(settings.paperIndex))));
+      await store.put('dayPaperIndex', Math.max(0, Math.min(styleUpperBound, Math.round(settings.dayPaperIndex))));
+      await store.put('nightPaperIndex', Math.max(0, Math.min(styleUpperBound, Math.round(settings.nightPaperIndex))));
       await store.put('readerNightMode', settings.readerNightMode);
       await store.put('shareLayout', settings.shareLayout);
       await store.put('showBottomActionText', settings.showBottomActionText);
@@ -1845,8 +1899,66 @@ export class ReaderSettingsRepository {
     return Math.max(lower, Math.min(upper, value));
   }
 
-  private static clampStyleIndex(value: number, fallback: number): number {
-    return typeof value === 'number' && Number.isInteger(value) ? Math.max(0, Math.min(5, value)) : fallback;
+  private static clampStyleIndex(value: number, fallback: number, styleCount: number): number {
+    if (typeof value !== 'number' || !Number.isInteger(value)) { return fallback; }
+    return Math.max(0, Math.min(Math.max(0, styleCount - 1), value));
+  }
+
+  /**
+   * 样式表编码成 preferences 字符串。用 JSON 而不是 `id,name,color;` 这种自造格式，
+   * 是因为名字里可能出现任何字符（包括分隔符），JSON 不用管转义。
+   */
+  private static encodeBackgroundStyles(styles: ReaderBackgroundStyle[]): string {
+    return JSON.stringify(styles);
+  }
+
+  /**
+   * 解码样式表。存量设备上这个键还不存在，会拿到默认值；键存在但内容坏掉时也回落到默认，
+   * 不让一份坏数据把设置页整个卡死。
+   *
+   * 落盘后 `READER_STYLE_PRESET_COUNT` 以内的条目理论上不会变，但为防外部改坏，
+   * 这里只做「至少要有预设那么多条」的兜底补齐，不强行覆盖用户改名。
+   */
+  private static decodeBackgroundStyles(
+    value: number | boolean | string | bigint | Uint8Array | object,
+    fallback: ReaderBackgroundStyle[]
+  ): ReaderBackgroundStyle[] {
+    if (typeof value !== 'string' || value.length === 0) {
+      return copyReaderBackgroundStyles(fallback);
+    }
+    let parsed: ReaderBackgroundStyle[];
+    try {
+      parsed = JSON.parse(value) as ReaderBackgroundStyle[];
+    } catch (error) {
+      console.warn(`[ReaderSettings] 解析背景样式失败: ${error}`);
+      return copyReaderBackgroundStyles(fallback);
+    }
+    if (!Array.isArray(parsed)) {
+      return copyReaderBackgroundStyles(fallback);
+    }
+    const styles: ReaderBackgroundStyle[] = [];
+    for (let index = 0; index < parsed.length; index++) {
+      const item = parsed[index];
+      if (item === null || item === undefined) { continue; }
+      const id = typeof item.id === 'string' && item.id.length > 0 ? item.id : `style-${index}`;
+      const name = typeof item.name === 'string' ? item.name : '';
+      const dayColor = ReaderSettingsRepository.normalizeHexColor(item.dayColor,
+        READER_BACKGROUND_STYLES[0].dayColor);
+      const nightColor = ReaderSettingsRepository.normalizeHexColor(item.nightColor,
+        READER_BACKGROUND_STYLES[0].nightColor);
+      styles.push({ id: id, name: name, dayColor: dayColor, nightColor: nightColor });
+    }
+    // 预设不足时用内置表补齐，保证 paperIndex 的 0..PRESET_COUNT-1 语义始终成立。
+    for (let index = styles.length; index < READER_STYLE_PRESET_COUNT; index++) {
+      const preset = READER_BACKGROUND_STYLES[Math.min(index, READER_BACKGROUND_STYLES.length - 1)];
+      styles.push({
+        id: preset.id,
+        name: preset.name,
+        dayColor: preset.dayColor,
+        nightColor: preset.nightColor
+      });
+    }
+    return styles;
   }
 
   /**

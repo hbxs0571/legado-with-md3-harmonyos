@@ -13,7 +13,8 @@ import { BookGroupRepository } from './BookGroupRepository';
 import { BookshelfLayoutRepository } from './BookshelfLayoutRepository';
 import { BookshelfLayoutSettings, copyBookshelfLayout } from '../model/BookshelfLayout';
 import {
-  READER_BACKGROUND_STYLES, ReaderSettingsRepository, ReaderSettingsSnapshot, ReaderBottomActionConfig
+  READER_BACKGROUND_STYLES, ReaderBackgroundStyle, ReaderSettingsRepository, ReaderSettingsSnapshot,
+  ReaderBottomActionConfig
 } from './ReaderSettingsRepository';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
 import { ReplaceRuleImporter } from './ReplaceRuleImporter';
@@ -1193,10 +1194,13 @@ export class BackupRepository {
   }
 
   private static toAndroidReadConfig(settings: ReaderSettingsSnapshot): AndroidReadConfigBackupRecord {
-    const dayStyle = READER_BACKGROUND_STYLES[Math.max(0, Math.min(5, settings.dayPaperIndex))] ??
-      READER_BACKGROUND_STYLES[Math.max(0, Math.min(5, settings.paperIndex))] ??
+    // 样式表可增删，下标上界跟着表长度走；表至少会补齐到预设条数，所以不会是空数组。
+    const styles = settings.backgroundStyles;
+    const lastIndex = Math.max(0, styles.length - 1);
+    const dayStyle = styles[Math.max(0, Math.min(lastIndex, settings.dayPaperIndex))] ??
+      styles[Math.max(0, Math.min(lastIndex, settings.paperIndex))] ??
       READER_BACKGROUND_STYLES[0];
-    const nightStyle = READER_BACKGROUND_STYLES[Math.max(0, Math.min(5, settings.nightPaperIndex))] ?? dayStyle;
+    const nightStyle = styles[Math.max(0, Math.min(lastIndex, settings.nightPaperIndex))] ?? dayStyle;
     return {
       name: dayStyle.name,
       textSize: Math.max(15, Math.min(30, Math.round(settings.fontSize))),
@@ -1376,11 +1380,13 @@ export class BackupRepository {
     const fontSizeValue = BackupRepository.readJsonNumber(selected, 'textSize');
     const dayPaperIndex = BackupRepository.paperIndexFromAndroidConfig(
       BackupRepository.readJsonNumber(selected, 'bgType') ?? 0,
-      BackupRepository.readJsonString(selected, 'bgStr') ?? ''
+      BackupRepository.readJsonString(selected, 'bgStr') ?? '',
+      current.backgroundStyles
     );
     const nightPaperIndex = BackupRepository.paperIndexFromAndroidConfig(
       BackupRepository.readJsonNumber(selected, 'bgTypeNight') ?? 0,
-      BackupRepository.readJsonString(selected, 'bgStrNight') ?? ''
+      BackupRepository.readJsonString(selected, 'bgStrNight') ?? '',
+      current.backgroundStyles
     );
     const shareLayout = BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'shareLayout') ??
       current.shareLayout;
@@ -1446,6 +1452,10 @@ export class BackupRepository {
       titleSegFlag: BackupRepository.readJsonString(selected, 'titleSegFlag') ?? current.titleSegFlag,
       readerNightMode: current.readerNightMode,
       shareLayout: shareLayout,
+      // Android 备份里 readConfig.json 的每条就是一份样式（上游 ReadStyleState.items），
+      // 这里只把「当前选中那一份」的颜色映射回本机下标，样式表本身保留本机现状：
+      // 上游导入备份也不覆盖已有样式列表，只改选中项。
+      backgroundStyles: current.backgroundStyles,
       systemTypefaces: Math.max(0, Math.min(2,
         BackupRepository.readXmlInteger(`${directory}/config.xml`, 'system_typefaces') ?? current.systemTypefaces)),
       // Android 字体路径属于 Android 私有目录；没有随 ZIP 附带可验证字体文件时保留本机选择。
@@ -2321,14 +2331,21 @@ export class BackupRepository {
     return valueMatch?.trim();
   }
 
-  private static paperIndexFromAndroidConfig(type: number, background: string): number {
+  /**
+   * 从 Android 备份的 `bgType`/`bgStr` 反查本机样式下标。
+   * 先在本机现有样式表里按日间色找（用户自建样式可能就是从别的设备导进来的，颜色能对上就直接复用）；
+   * 找不到再回落到内置预设的固定颜色别名。
+   */
+  private static paperIndexFromAndroidConfig(type: number, background: string,
+    styles: ReaderBackgroundStyle[]): number {
     if (type !== 0) { return 0; }
     const value = background.toLowerCase();
-    const styleIndex = READER_BACKGROUND_STYLES.findIndex((style) => style.dayColor.toLowerCase() === value);
-    if (styleIndex >= 0) { return styleIndex; }
+    const lastIndex = Math.max(0, styles.length - 1);
+    const styleIndex = styles.findIndex((style) => style.dayColor.toLowerCase() === value);
+    if (styleIndex >= 0) { return Math.max(0, Math.min(lastIndex, styleIndex)); }
     if (value === '#000000' || value === '#000' || value === 'black') { return 0; }
-    if (value === '#e5eade' || value === '#e5eafd') { return 3; }
-    if (value === '#f3efe4' || value === '#f2eee2') { return 1; }
+    if (value === '#e5eade' || value === '#e5eafd') { return Math.max(0, Math.min(lastIndex, 3)); }
+    if (value === '#f3efe4' || value === '#f2eee2') { return Math.max(0, Math.min(lastIndex, 1)); }
     return 0;
   }
 
