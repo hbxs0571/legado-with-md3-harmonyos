@@ -5618,7 +5618,10 @@ struct Index {
     }
     this.readerReturnRoute = this.route;
     this.discardReaderAnchor();
-    this.readerStartAtChapterBeginning = true;
+    // 普通开书不强制回到章首：startAtChapterBeginning 的语义是「用户主动要求从本章开头重读」，
+    // 只有书签跳转/选章那几处才置 false 以外的分支。这里曾经置 true，导致每次开书都停在第 1 页，
+    // 完全忽略 book.androidCharacterPosition 里存的阅读位置。
+    this.readerStartAtChapterBeginning = false;
     this.selectedBook = openedBook;
     this.readerReplaceEnabled = ReplaceRuleRepository.isBookEnabled(openedBook);
     this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(openedBook);

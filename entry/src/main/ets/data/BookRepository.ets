@@ -23,6 +23,15 @@ interface StoredReadConfig {
   fixedType?: boolean;
   /** 对应上游 Book.config.useReplaceRule；缺省表示跟随全局默认。 */
   useReplaceRule?: boolean;
+  /**
+   * 章内百分比（0-100），对应 Book.chapterProgress。
+   *
+   * durChapterPos 只有一列，现在存的是**章内字符位置**（androidCharacterPosition），
+   * 百分比没有列可放，所以随阅读配置一起塞进 readConfig。
+   * 两者语义不同，不能共用一个数：百分比要乘章长才是字符位置，反过来除章长才是百分比，
+   * 而 readBookRow 是同步函数，拿不到章长，只能靠存两份。
+   */
+  chapterProgress?: number;
 }
 
 interface ChapterTextRange {
@@ -709,8 +718,16 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       groupNames: groupNames,
       groupName: groupNames.length > 0 ? groupNames[0] : '',
       chapterIndex: RdbCodec.integer(resultSet, 5, 0),
-      // 本地 chapterProgress 是章内百分比，直接落在 durChapterPos 上（已定决策）。
-      chapterProgress: RdbCodec.integer(resultSet, 6, 0),
+      // durChapterPos 现在存章内**字符位置**（与 Index.updateReadingProgress 的写入侧一致），
+      // 上游 ReaderPage 也按字符位置定位，不是百分比。这里过去整段漏了回填，
+      // 导致开书时 androidCharacterPosition 恒为 undefined、每次都停在第 1 页。
+      //
+      // 兼容存量：readConfig 里有 chapterProgress 才是新格式（两者同时写）；
+      // 没有这个键的是旧行，durChapterPos 那时存的是百分比，不能当字符位置用，
+      // 否则会把 2% 读成「第 2 个字符」。旧行留 undefined，渲染侧仍按百分比定位。
+      androidCharacterPosition: config.chapterProgress === undefined
+        ? undefined : RdbCodec.integer(resultSet, 6, 0),
+      chapterProgress: config.chapterProgress ?? RdbCodec.integer(resultSet, 6, 0),
       lastChapter: RdbCodec.text(resultSet, 7),
       chapterCount: RdbCodec.integer(resultSet, 8, 0).toString(),
       progress: 0,
@@ -1160,7 +1177,9 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       imageStyle: book.imageStyle,
       reSegment: book.reSegment === true,
       fixedType: book.fixedType === true,
-      useReplaceRule: book.useReplaceRule
+      useReplaceRule: book.useReplaceRule,
+      // 章内百分比没有独立列，与阅读配置一起存；读回时 readBookRow 从同一处取。
+      chapterProgress: Math.max(0, Math.min(100, book.chapterProgress ?? 0))
     };
     const totalChapterNum = Number(book.chapterCount ?? '0');
     const lastChapter = book.lastChapter.length > 0 ? book.lastChapter : null;
@@ -1189,7 +1208,9 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       Number.isFinite(totalChapterNum) ? Math.max(0, Math.trunc(totalChapterNum)) : 0,
       lastChapter,
       Math.max(0, Math.trunc(book.chapterIndex ?? 0)),
-      Math.max(0, Math.trunc(book.chapterProgress ?? 0)),
+      // durChapterPos 只有一列，存章内字符位置（上游 ReaderPage 按字符位置定位）；
+      // 章内百分比在 readConfig 里，见上面的 StoredReadConfig.chapterProgress。
+      Math.max(0, Math.trunc(book.androidCharacterPosition ?? 0)),
       book.durChapterTime ?? 0,
       null,
       1,

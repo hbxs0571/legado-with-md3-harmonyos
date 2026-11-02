@@ -203,6 +203,70 @@ this.pageTurnTimer = setTimeout(() => {
 
 原记录点名的 `ReaderPage.ets` 分支 `if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) { ReaderPageTextLines } else { ReaderPageTextJoined }` 与 `textBottomJustify` 默认 true 导致每页新建 400-900 个 Span 节点的代价，**已随 Span 渲染分支整体删除而消失**：现在一页的绘制成本与行数线性相关，与默认值无关。`textBottomJustify` 的语义仍保留（画布下表现为 `ReaderCanvasLayout.bottomJustifyGapPx` 按行 y 摊分）。
 
+## 阅读进度与章首定位
+
+本节登记 2026-11-02 修复的四个阅读缺陷：**阅读进度不落库（开书回章首）**、**目录跳章自激循环**、**带图章节图片尺寸到达后整章重排 N 次**、**折页阴影偏移疑点**。前三项已改并设备验收（见各条「验收」），第四项经比对上游源码判定**不是缺陷、不改**。
+
+### KI-PROG1 每次开书都回到章首，读到的页数不记录 —— 已修
+
+两处叠加，缺一不可：
+
+1. **`Index.ets` 的 `openBook()` 无条件把「从本章开头读」置真**。该标志 `readerStartAtChapterBeginning` 的语义应是「用户主动要求从本章开头重读」，`Index.ets` 里书签跳转（`:1718`、`:1952`）与 `selectChapter`（`:6163`）都赋 `false`，只有 `openBook()` 赋了 `true`，于是每次进书都强制丢掉章内进度。改为 `false`。
+2. **`BookRepository.ets` 的 `readBookRow()` 漏读 `androidCharacterPosition`**。`books` 表第 7 列（索引 6，`durChapterPos`）存的是章内字符位置，`readBookRow()` 却把它读进 `chapterProgress`，导致 `ReaderPage.ets:1602` 的 `const savedPosition = Math.max(0, this.book.androidCharacterPosition ?? 0);` 恒为 0。写入侧 `Index.ets:5980` 的 `updateReadingProgress` 一直是好的，坏在 `toBookArgs()` 第 25 列写的是 `chapterProgress`（章内百分比 0-100），把两个语义不同的量塞进了同一列。
+
+修法：`StoredReadConfig` 加 `chapterProgress?: number`，百分比随 `readConfig` JSON 一起存（`durChapterPos` 只有一列，`readBookRow` 是同步函数拿不到章长、算不出百分比）；`durChapterPos` 回归字符位置。**兼容存量**：`readConfig` 里有 `chapterProgress` 键的才是新格式，没有的是旧行（那时 `durChapterPos` 存的是百分比，当字符位置用会把 2% 读成「第 2 个字符」），旧行留 `undefined`、渲染侧仍按百分比定位。
+
+- 验收：设备 the-metamorphosis 翻到 `5/17 2.3%` → 退出 → 重开仍是 `5/17 2.3%`（修前是 `1/9 0.1%`）；zh-book 翻到 `3/10 2.7%` → `aa force-stop` 杀进程 → 冷启动 → 仍是 `3/10 2.7%` 标题「第15章 对练」。**通过**（三级口径第 3 级）。
+
+### KI-PROG2 从目录跳章自激循环 —— 已修
+
+完整链路（`@Watch` 互相触发，`titleGeneration` 只挡 `displayChapterTitle` 赋值，挡不住 `onReplaceRulesRefresh` 本身）：
+
+```
+onChapterTitleChanged()
+  → refreshDisplayChapterTitle()
+    → onReplaceRulesRefresh()
+      → Index.ets:6674  this.replaceRules = ReplaceRuleRepository.getAll()
+        → ReplaceRuleRepository.ets:97-99  cachedRules.map(copyRule)   // 每次都是新数组引用
+          → @Prop @Watch('onReplaceRulesChanged') replaceRules（ReaderPage.ets:156）
+            → onReplaceRulesChanged()
+              → refreshDisplayChapterTitle()   // 回到起点
+```
+
+修法两处：`refreshDisplayChapterTitle()` 里删掉 `this.onReplaceRulesRefresh();`；`onChapterTitleChanged()` 里删掉 `this.rebuildReaderPages();`（末尾 `refreshDisplayChapterTitle()` 赋值 `displayChapterTitle` 会触发 `onDisplayChapterTitleChanged()` 再排一次，两处都排就是同一章排两遍）。
+
+- 验收：13 章的 the-metamorphosis 连续从目录跳第 8–13 章，每次标题正确、`pidof` 恒为同一进程未变。**通过**（三级口径第 3 级）。
+- **边界**：`replace_rules` 表 0 条时 `getAll()` 返回空数组、`applyTitle` 是 `async` 会让出事件循环，所以这个自激循环在当前数据下不会真卡死 —— A/B 对照（stash 改动后重新构建装机）在 13 章书上跳章同样正常。改动去掉的是确定存在的自激回路，**「跳章卡死」这个现象本身在本机复现不出来**。
+- **另有一处既有缺陷不算在本条**：zh-book 有 572 章，打开目录页必 ANR（`/data/log/faultlog/faultlogger/` 里 `appfreeze-...` 全部 `Reason:THREAD_BLOCK_6S`，主线程栈只有 `BCStub_HandleLdaV8StwCopy` / `BCStub_HandleMovV4V4StwCopy`）。基线（stash 改动）同样 ANR，根因是 `CatalogPage.ets:281 loadChapterWordCounts()` → `BookRepository.forEachChapter()`（`BookRepository.ets:1447`，逐章 `applyChapterContentAsync` 全文处理）在 572 章上的全量遍历。**本次未改**。
+
+### KI-PROG3 带图章节图片尺寸到达后整章重排 N 次 —— 已修
+
+`loadContentImageSizes()` 原本每读到一张图的尺寸就调一次 `rebuildReaderPages()`，而 `rebuildReaderPages()` 每次都做 `LocalTextSemantics.parse(全章)` + `ReaderHighlightRuleEngine.findBodyRanges(全章)` + 全量分页。带 N 张图的章节就是 N 次全章解析 + N 次全量分页。
+
+修法：`rebuildReaderPages(forceProgressCommit = false, onlyImageSizesChanged = false)`，第二个参数为真时复用 `this.localSemanticDocument`、跳过语义解析与高亮区间重算，只重排；`loadContentImageSizes()` 改为走新增的 `scheduleImageSizesPaginationRebuild()`（100ms 防抖，复用 `scheduleReaderPaginationRebuild()` 的定时器，`paginationRebuildDelayMillis` 用后复位成 16ms），一批尺寸一起到达只重排一次。
+
+- 验收：带图 EPUB（`古神？这分明是白发兽耳小萝莉`，1378 章）开书到可读时间，改后 3645 / 4046 / 3981 ms，基线 3982 / 4131 / 4029 ms，**在测量噪声内、无可测退化**。**通过**（三级口径第 3 级，口径是「不退化」而非「变快」——这本 EPUB 全书只有 1 张图，N=1 的路径本来就只重排一次，收益体现在多图章节，本机没有可用样本）。
+
+### KI-PROG4 折页阴影 `25 * 1.414` 疑点 —— 经比对上游源码，不是缺陷，不改
+
+`entry/src/main/ets/reader/ReaderPageCurl.ets:340-341`：
+
+```typescript
+const shadowX = frame.touch.x + 25 * 1.414 * Math.cos(angle);
+const shadowY = frame.touch.y + (reverse ? 1 : -1) * 25 * 1.414 * Math.sin(angle);
+```
+
+**上游逐字原值**，不是本地自拟：`N:\HarmonyProjects\legado-with-MD3\app\src\main\java\io\legado\app\feature\reader\ReaderCanvasSurface.kt:2583-2585` 写的就是
+
+```kotlin
+val shadowX = (frame.touch.x + 25f * 1.414f * cos(angle)).toFloat()
+val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(angle)).toFloat()
+```
+
+同一类里其余也逐行一致：`reverse` 判据、`angle` 的 `PI/4 - atan2(...)`、`front` / `reveal` / `back` 三个路径的顶点序列、`mirror` 的 scaleX/skewX/skewY/scaleY/translateX/translateY 公式、`frontShadowHorizontal` / `frontShadowVertical` 的楔形顶点。阴影色也一致（上游 `PageCurlGeometry.kt:47-49` 的 `0x99111111` / `0x4D111111` / `0x73333333` ↔ 本地 `ReaderPageCurl.ets:68-70` 的 `BACK_SHADOW_DARK_ARGB` / `FRONT_SHADOW_DARK_ARGB` / `FOLDER_SHADOW_DARK_ARGB`）。**结论：不改。**
+
+- 观感差异仅在于宿主绘制 API 不同（上游 Compose `drawRect(Brush.horizontalGradient(...))`，本地 `drawing.Brush.setShaderEffect(drawing.ShaderEffect.createLinearGradient(...))` + `canvas.rotate()`），`drawCurlBackShadow` / `drawCurlFolderShadow` / `drawCurlFrontShadows` 三个函数的几何参数已与上游同构。基准包 `android-reader-animation-simulation-frame-during.png`（1080×2400）里折页是右上角一条细暗带，与本机抓到的折页中间帧方向、位置一致。
+
 ## 关系型存储迁移第五批（r284）遗留
 
 本节登记 2026-10-30 第五批（preferences 老数据清理）设备验收后仍待处理的三项。**第 1 项已于 r290 修掉，保留记录备查；第 2、3 项仍未处理。**

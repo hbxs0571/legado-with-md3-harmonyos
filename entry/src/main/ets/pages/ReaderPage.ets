@@ -452,10 +452,16 @@ export struct ReaderPage {
   private pageTurnTimer: number = -1;
   // 分页输入防抖：几十个 @Prop 的 @Watch 会连续触发，合并成一帧后再排一次
   private static readonly PAGINATION_DEBOUNCE_MILLIS: number = 16;
+  // 图片尺寸是一张张异步量出来的，窗口给长一点，让同一章的尺寸尽量聚成一批只排一次
+  private static readonly IMAGE_SIZES_DEBOUNCE_MILLIS: number = 100;
   // 把手淡出的比淡入快：上游 SelectionHandleFadeOutMillis / SelectionHandleFadeInMillis
   private static readonly CANVAS_HANDLE_FADE_OUT_MILLIS: number = 90;
   private static readonly CANVAS_HANDLE_FADE_IN_MILLIS: number = 140;
   private paginationRebuildTimer: number = -1;
+  // 本轮待排的重排是否只由图片尺寸变化触发；true 时跳过语义解析与高亮匹配，只重分页
+  private imageSizesRebuildPending: boolean = false;
+  // 防抖窗口长度：布局类输入合并一帧即可，图片尺寸要给足窗口让一批尺寸聚齐
+  private paginationRebuildDelayMillis: number = ReaderPage.PAGINATION_DEBOUNCE_MILLIS;
   // 本轮分页是否用了「图片尺寸未就绪」的占位高度；尺寸到达后要再排一次
   private paginationUsesImagePlaceholder: boolean = false;
   // 画布渲染：四页窗口 + 逐行绘制（对齐上游 ReaderCanvasSurface）。
@@ -1286,7 +1292,9 @@ export struct ReaderPage {
     this.sliderProgressIndex = this.getChapterIndex();
     this.restoredProgressPosition = false;
     this.scrollOffset = 0;
-    this.rebuildReaderPages();
+    // 这里不再 rebuildReaderPages()：标题定稿后会赋值 displayChapterTitle，
+    // 触发 onDisplayChapterTitleChanged() 再排一次，那才是标题真正落定的时机。
+    // 两处都排就是同一章排两遍，换章时白白多一次全章测量。
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
   }
@@ -1338,7 +1346,9 @@ export struct ReaderPage {
     const title = this.chapterTitle;
     const bookId = this.book.id;
     const displayTitle = await ReplaceRuleRepository.applyTitle(this.book, title);
-    this.onReplaceRulesRefresh();
+    // 这里不再 onReplaceRulesRefresh()：它会经 Index 刷新 replaceRules，
+    // 而 ReplaceRuleRepository.getAll() 每次都 map 出新数组引用，必然触发
+    // @Prop @Watch('onReplaceRulesChanged') → 本方法，形成自激循环（从目录跳章卡死）。
     if (generation === this.titleGeneration && bookId === this.book.id && title === this.chapterTitle) {
       this.displayChapterTitle = displayTitle;
     }
@@ -1384,10 +1394,30 @@ export struct ReaderPage {
     if (this.paginationRebuildTimer >= 0) {
       clearTimeout(this.paginationRebuildTimer);
     }
+    const delay = this.paginationRebuildDelayMillis;
+    this.paginationRebuildDelayMillis = ReaderPage.PAGINATION_DEBOUNCE_MILLIS;
     this.paginationRebuildTimer = setTimeout(() => {
       this.paginationRebuildTimer = -1;
-      this.rebuildReaderPages();
-    }, ReaderPage.PAGINATION_DEBOUNCE_MILLIS);
+      // 这一轮如果只有图片尺寸变了，语义解析与高亮结果都没变，跳过那两步只重分页。
+      const incremental = this.imageSizesRebuildPending;
+      this.imageSizesRebuildPending = false;
+      this.rebuildReaderPages(false, incremental);
+    }, delay);
+  }
+
+  /**
+   * 图片尺寸陆续到达时的专用防抖入口。
+   *
+   * 一本 20 张图的章节，尺寸是一张张异步量出来的；每张都走一次全章重排
+   * （LocalTextSemantics.parse + findBodyRanges + 全量分页）就是 20 次全章测量，
+   * 这是「图片章节开书慢、翻页卡」的主因。这里只标记「这轮是尺寸变化」，
+   * 由统一的防抖定时器在窗口末尾排一次增量重排。
+   */
+  private scheduleImageSizesPaginationRebuild(): void {
+    this.imageSizesRebuildPending = true;
+    // 窗口取两者较大：布局输入和尺寸变化撞在一起时，按尺寸的窗口等，保证一批尺寸都到齐再排。
+    this.paginationRebuildDelayMillis = ReaderPage.IMAGE_SIZES_DEBOUNCE_MILLIS;
+    this.scheduleReaderPaginationRebuild();
   }
 
   private cancelPendingPaginationRebuild(): void {
@@ -1508,7 +1538,18 @@ export struct ReaderPage {
   // 绝不因为一张图没就绪就把整章分页作废。
   // -------------------------------------------------------------------------
 
-  private rebuildReaderPages(forceProgressCommit: boolean = false): void {
+  /**
+   * 重排当前章。
+   *
+   * @param forceProgressCommit 排版完成后立即上报进度（书签跳转等需要落位时用）。
+   * @param onlyImageSizesChanged 本次重排只因为图片尺寸到齐。
+   *   为 true 时跳过 `LocalTextSemantics.parse` 与 `ReaderHighlightRuleEngine.findBodyRanges`
+   *   这两步全章扫描，直接复用上一次的结果，只重跑分页。
+   *   正文与高亮规则都没变，这两步的产物必然一样，重算纯属浪费——
+   *   一本 20 张图的章节，尺寸一张张到齐会走 20 次，全章解析就是 20 遍。
+   */
+  private rebuildReaderPages(forceProgressCommit: boolean = false,
+    onlyImageSizesChanged: boolean = false): void {
     if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
       this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
       this.localReaderPages = [];
@@ -1530,14 +1571,21 @@ export struct ReaderPage {
       : Math.max(lineHeight, formulaPageHeight);
     // Android 段距范围为 0–20，每一档按行高的十分之一计算。
     const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
-    const document = LocalTextSemantics.parse(this.content, this.paragraphIndent, this.adaptSpecialStyle);
-    this.localSemanticContent = document.content;
-    const nextRanges = ReaderHighlightRuleEngine.findBodyRanges(document.content, this.readerHighlightRules);
-    if (nextRanges.length !== this.readerHighlightRanges.length) {
-      this.readerContentRevision++;
+    // 只有图片尺寸到齐时，语义解析与高亮匹配的输入完全没变，直接复用上一轮结果。
+    // 复用的前提是上一轮真的解析过（paragraphs 非空），否则退回全量。
+    const reuseSemantic = onlyImageSizesChanged && this.localSemanticDocument.paragraphs.length > 0;
+    const document = reuseSemantic
+      ? this.localSemanticDocument
+      : LocalTextSemantics.parse(this.content, this.paragraphIndent, this.adaptSpecialStyle);
+    if (!reuseSemantic) {
+      this.localSemanticContent = document.content;
+      const nextRanges = ReaderHighlightRuleEngine.findBodyRanges(document.content, this.readerHighlightRules);
+      if (nextRanges.length !== this.readerHighlightRanges.length) {
+        this.readerContentRevision++;
+      }
+      this.readerHighlightRanges = nextRanges;
+      this.localSemanticDocument = document;
     }
-    this.readerHighlightRanges = nextRanges;
-    this.localSemanticDocument = document;
     // 图片尺寸是异步量的，开书那一两秒里通常还没到齐。
     // 旧实现只要有一张缺尺寸就整章分页作废、退回「整章滚动」，等尺寸到了再切回分页，
     // 带图章节因此要经历两轮排版切换。上游 ReaderChapterBlockMeasurer.kt:457-462 的处理是
@@ -3644,7 +3692,9 @@ export struct ReaderPage {
     }
     if (changed) {
       this.imageSizes = nextSizes;
-        this.rebuildReaderPages();
+      // 不在这里直接重排：尺寸是一张张异步到齐的，20 张图就会排 20 次全章。
+      // 交给防抖窗口，窗口末尾只排一次，且这一轮跳过语义解析与高亮匹配。
+      this.scheduleImageSizesPaginationRebuild();
     }
   }
 
