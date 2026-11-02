@@ -545,7 +545,7 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 **已知差异**
 - **窗口亮度的视觉效果无法在模拟器取证**：`setWindowBrightness()` 是真实调用（`-1` 表示恢复系统亮度，与上游 `BRIGHTNESS_OVERRIDE_NONE` 等价），但模拟器截图不叠加窗口亮度 —— `brightness=20` 与 `brightness=100` 两次全屏截图的平均亮度都是 36.16。故本组的验收只到「四键落库 + 面板回显 + 可见性联动 + 代码路径核对」。
-- 亮度条上没有「自动亮度」按钮，自动亮度目前只能由备份恢复或面板外写入 `brightnessAuto`。上游该按钮是 `BrightnessBar` 的 `onToggleAuto`，本地 `ReaderBrightnessBar` 尚未加，属于后续 E 块统一做菜单外观时的收尾项。
+- ~~亮度条上没有「自动亮度」按钮~~ —— **2026-11-02 已接**。`ReaderPage.ets` 的 `ReaderBrightnessBar` 重写为竖排 `Column` 宽 56（上「跟随系统」40×40 + 滑块高 168 + 下「左右位置」40×40 + 当前亮度数值），横排 `Row` 同款按钮 + 滑块 + 数值；两个按钮分别调 `onBrightnessAutoChange` / `onBrightnessVwPosChange`，由 `Index.ets:6770-6771` 接到 `setReaderBrightnessAuto` / `setReaderBrightnessVwPos`。竖排亮度条也从底栏 Column 挪成独立浮层（贴左/贴右靠边 8vp），否则会被底栏撑成通栏贴不到边。验收：模拟器上左侧/右侧两种贴边、两枚按钮点击均生效（截图 `tmp/shots/b2-vbar2.jpeg`、`b2-vbar-right.jpeg`、`b2-vbar-fix.jpeg`）。
 - 上游拖动滑块会绕开 `brightnessAuto` 直接写窗口亮度；本地滑块只调 `onReadBrightnessChange` 落库，`applyReaderBrightness()` 在 `brightnessAuto` 为真时仍用 `-1`，因此**自动亮度开着时拖滑块不会立刻变亮**。这是本轮的简化，已在 VALIDATION 记明。
 
 **KI-A10 主题网格列数（不接）** —— 覆盖 A-18（`themeGridColumns`，`ReadSettings.kt:40`，默认 4）。
@@ -741,7 +741,7 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 已按上游语义接上：
 - **D-06**：存储键 `pageTouchSlop`，`ReaderSettingsRepository.ets:175` 字段 / `:423` 默认 0 / `:493` 读 / `:816` 写（夹 0–1000）；面板 `ReaderSettingsPage.ets:854-861` 的 `MenuSettingSlider`（0–1000 步长 10）；消费点 `ReaderPage.ets:2947-2948`，`pageTouchSlop > 0` 时用它，否则回落原来的 36vp 平台默认值——与上游 `ReaderGestureSettingsPolicy.touchSlopPx(platformTouchSlopPx, configuredTouchSlopPx)` 同口径。上游刻意让选择拖选阈值（`selectionDragSlopPx`）不受此配置影响，本地保持解耦。
-- **D-07**：上游 `readSliderMode` 的语义是**显示 / 不显示**（`ReadBookMenuBarBottom.kt:161` `AnimatedVisibility(visible = readSliderMode != "1")`），不是形态切换。存储键 `readSliderMode`，`ReaderSettingsRepository.ets:174` / `:422` / `:492` / `:815`；面板「底栏布局」tab 首项 `ReaderSettingsPage.ets:424-430`（详情面板选项「常驻」/「不显示」）；消费点 `ReaderPage.ets:3109` 把整行「上一章 / 滑块 / 下一章」包进 `if (this.readSliderMode !== '1')`。
+- **D-07**：上游 `readSliderMode` 的语义是**显示 / 不显示**（`ReadBookMenuBarBottom.kt:161` `AnimatedVisibility(visible = readSliderMode != "1")`），不是形态切换。存储键 `readSliderMode`，`ReaderSettingsRepository.ets:174` / `:422` / `:492` / `:815`；面板「底栏布局」tab 首项 `ReaderSettingsPage.ets:424-430`（详情面板选项「常驻」/「不显示」）；消费点 `ReaderPage.ets:5211` 只把中间 `Stack{Slider}` 包进 `if (this.readSliderMode !== '1')`，两侧「上一章 / 下一章」按钮在条件外保留（对齐上游 `ReadBookMenuBarBottom.kt:161-196` 的 `AnimatedVisibility` 只包 Slider）。
 - 顺带纠正历史错位：该面板位置原先挂的是本地 `progressBehavior`（页码/章节），与上游 `readSliderMode` 不是一回事，现在两者分别由「滑动条显示样式」和「进度条行为」承担。
 - 备份：两个键都不在 `BackupConfig.readPrefKeys` 忽略清单里，属「无条件随 config.xml 备份」，本地已在 `BackupRepository.ets:561-566`（导出）与 `:1176-1185`（恢复）对齐。
 

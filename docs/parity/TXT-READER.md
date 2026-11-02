@@ -57,10 +57,10 @@
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 17 | 13 | 1 |
-| B 引擎层（TXT 与 EPUB 共用） | 54 | 34 | 19 | 1 |
-| C 界面层 | 78 | 46 | 27 | 5 |
-| D 交互层 | 48 | 25 | 22 | 1 |
-| 合计 | 211 | 122 | 81 | 8 |
+| B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
+| C 界面层 | 78 | 55 | 18 | 5 |
+| D 交互层 | 48 | 30 | 17 | 1 |
+| 合计 | 211 | 141 | 62 | 8 |
 
 （统计口径与核对脚本见文末「小结」；数字随表更新，改行后重跑。）
 
@@ -232,11 +232,11 @@
 | 顶栏骨架：左圆形返回钮 + 中间标题 + 右动作按钮，水平内边距 16dp | `ui/book/read/ReadBookMenuBarTitle.kt:174-193`、`:228` | `entry/src/main/ets/pages/ReaderPage.ets:4687-4720`（返回 40×40 → 标题 → `Blank()` → `readerTopActionGroup`） | 已接 | 一致。 | 点屏幕中央开菜单，看顶栏三段布局 | 依据源码推断，未设备验证 | `readConfig` |
 | 标题栏模式四值（`0` 应用栏上显示 / `1` 独立行（默认）/ `2` 仅标题 / `3` 不显示） | `ui/book/read/ReadBookMenuBarTitle.kt:198-270`、`res/values/array_values.xml:146-151` | `entry/src/main/ets/pages/ReaderPage.ets:2300-2318`（四个 `*Visible()` 判定）、`:276`（默认 `'1'`） | 已接 | 一致：四档判定与上游等价，默认独立行。 | 逐个切四档标题模式，看顶栏形态变化 | 依据源码推断，未设备验证 | `readConfig` |
 | 标题胶囊（40dp 高、圆角 50、书名 + 章名两行，章名 70% 透明） | `ui/book/read/ReadBookMenuBarTitle.kt:492-590` | `entry/src/main/ets/pages/ReaderPage.ets:2287-2290`（书名 14 号 Medium + 章名 11 号 alpha B3）、圆角 20 | 已接 | 一致：胶囊形态与两行内容都在。圆角 20 与上游 50 视觉接近。 | 开标题胶囊，看是否显示书名 + 章名两行 | 依据源码推断，未设备验证 | `readConfig` |
-| **点标题胶囊进书籍详情，长按进编辑** | `ui/book/read/ReadBookMenuBarTitle.kt:548-579` | `entry/src/main/ets/pages/ReaderPage.ets:2287-2290`（`Text` 无 `onClick`/`onLongClick`） | 未接 | 本地**标题是死的**：点书名、点章名都没有任何反应。用户想从阅读页看书籍详情（简介、目录信息）必须先退出再进，多两步。 | 点一下顶栏书名，看是否打开书籍详情 | 依据源码推断，未设备验证 | `readConfig` |
+| **点标题胶囊进书籍详情，长按进编辑** | `ui/book/read/ReadBookMenuBarTitle.kt:492-600` | `entry/src/main/ets/pages/ReaderPage.ets:2546-2549`（胶囊）、`:5143-5145`（行内书名）、`:5157-5159`（独占一行书名）；回调 `onOpenBookInfo` → `Index.ets:6769` → `openBookInfo` | 已接 | 一致：三种标题形态（胶囊/行内/独占一行）点一下都进书籍详情页，长按同样进（本地没有上游「阅读信息 Sheet」这个中间态，两种手势都落到整页 `AppRoute.BOOK_INFO`）。 | 点顶栏书名，应跳到书籍详情页（有「查看目录/阅读记录/书籍信息」） | 设备已验证：点胶囊中心 `(468,251)` 打开 np-test 详情页 | `readConfig` |
 | 标题胶囊右端书源圆点（8dp，热区 24dp×满高）→ 登录/付费/编辑书源/禁用书源 | `ui/book/read/ReadBookMenuBarTitle.kt:596-688` | 无 | 不适用 | 本地只有本地书，没有书源概念。 | — | 平台/范围差异：本地 TXT 无书源 | `不备份` |
-| 合并按钮组（40dp 高胶囊，按钮间 1dp×20dp 分隔线） | `ui/book/read/ReadBookMenuBarTitle.kt:749-756`、`:825-900` | `entry/src/main/ets/pages/ReaderPage.ets:2239-2266`（`readerTopActionGroup`） | 未接 | 本地顶栏按钮**是各自独立的圆形图标**，没有合并成胶囊，也没有分隔线。上游合并后顶栏更紧凑，本地图标一多就挤。 | 顶栏配 4 个以上动作，看是否合并成一个胶囊 | 依据源码推断，未设备验证 | `readConfig` |
-| 顶栏动作上限 6 个，超出按配置顺序截断；「精简顶部按钮」后只剩「更多操作」 | `ui/book/read/ReadMenuActionDefs.kt:76`、`:493-516` | `entry/src/main/ets/pages/ReaderPage.ets:2239-2266`（合并模式最多 2 个 + 溢出「more」） | 未接 | 本地顶栏**最多显示 2 个动作**，其余全塞进溢出菜单。配 6 个动作的用户会看到 2 个图标 + 一个「更多」，每次都要多点一次。 | 顶栏配 5 个动作，数顶栏实际显示几个图标 | 依据源码推断，未设备验证 | `readConfig` |
-| 顶栏底色透明度 = 模糊透明度/100（默认 85%），拖滑块时压到 ≤30% 预览、松手 200ms 回弹 | `ui/book/read/ReadBookMenuBarTitle.kt:95-166`、`ReadBookMenuBarShared.kt:31-68` | `entry/src/main/ets/pages/ReaderPage.ets:4716-4718`（`.backgroundColor(readerTopBarFillColor())` + `.backdropBlur(readerMenuBlurRadiusVp())`） | 未接 | 本地**没有拖滑块时的实时预览**（压到 30% 看效果），调模糊半径要反复进出设置页才看得出效果。 | 拖模糊半径滑块，看顶栏是否实时变化 | 依据源码推断，未设备验证 | `readConfig` |
+| 合并按钮组（40dp 高胶囊，按钮间 1dp×20dp 分隔线） | `ui/book/read/ReadBookMenuBarTitle.kt:747-756`、`:823-900` | `entry/src/main/ets/pages/ReaderPage.ets:2488-2515`（`readerTopActionGroup`：合并模式 `Row` 逐按钮插分隔线；非合并 `ForEach` 独立排列）、`:2517-2522`（`readerMergedGlassDivider` 宽 1 / 高 20 / 前景色 26 alpha） | 已接 | 一致：打开「合并标题栏按钮」后顶栏动作收进一个圆角胶囊，相邻按钮之间有竖直细线；关掉后各按钮独立成圆。 | 设置里开「合并标题栏按钮」，看顶栏按钮是否变成一个胶囊且中间有细线 | 设备已验证（截图 `b2-merge-on2.jpeg`，裁剪 `crop-merged.png`） | `readConfig` |
+| 顶栏动作上限 6 个，超出按配置顺序截断；「精简顶部按钮」后只剩「更多操作」 | `ui/book/read/ReadMenuActionDefs.kt:76`、`:493-517` | `entry/src/main/ets/pages/ReaderPage.ets:144`（`MAX_TITLE_BAR_ACTIONS = 6`）、`:2437-2452`（`getVisibleTopActions`：精简模式只返回 `more_actions`；否则按配置顺序 `slice(0, 6)`） | 已接 | 一致：顶栏最多排 6 个动作，第 7 个起按配置顺序丢弃；开「精简顶部按钮」后只剩一个「更多」。本地原先只有「2 个 + 溢出菜单」，溢出菜单已按上游口径删除。 | 顶栏配 7 个动作，数顶栏实际显示几个图标（应为 6）；再开「精简顶部按钮」看是否只剩一个 | 设备已验证：配 3 个动作时三个图标全显示、无溢出菜单 | `readConfig` |
+| 顶栏底色透明度 = 模糊透明度/100（默认 85%），拖滑块时压到 ≤30% 预览、松手 200ms 回弹 | `ui/book/read/ReadBookMenuBarTitle.kt:95-101`、`ReadBookMenuBar.kt:481-497`、`TinySettingItems.kt:75-95` | `entry/src/main/ets/pages/ReaderPage.ets:1264` 起（`readerMenuTintAlphaString`：`menuSliderDragging` 时把透明度压到 `Math.min(30, …)`）、`ReaderSettingsPage.ets:3151` 起（`MenuSettingSlider` 的 `Slider.onTouch` 写 `AppStorage('readerMenuSliderDragging')`） | 已接 | 一致：拖「菜单模糊透明度」滑块时顶栏/底栏实时变透（压到 30%），松手恢复目标值，不用反复进出设置页试效果。 | 打开设置拖「菜单模糊透明度」滑块，看背后正文是否在拖动过程中透出来 | 设备已验证顶栏变透；未逐帧取证回弹动画，回弹按源码推断 | `readConfig` |
 | 顶栏长按二级菜单（长按换源 → 换源/更换本章源；长按刷新 → 刷新本章/刷新后续） | `ui/book/read/ReadBookMenuBarTitle.kt:796-819` | 无 | 不适用 | 本地无书源，换源与刷新都不存在。 | — | 范围差异：本地 TXT 无书源 | `不备份` |
 | 浮动图标行（图标 20dp、位置四选一左上/右上/左下/右下、左右 16dp） | `ui/book/read/ReadBookMenuBarFloating.kt:61-131`、`SystemMenuPage.kt:503-552` | `entry/src/main/ets/pages/ReaderPage.ets:2347`（顶）、`:2352`（底）、`:4722`/`:4741`（挂载）、`:326`（默认 `titleBarIconPosition = 3`） | 已接 | 一致：四档位置，默认右下。 | 切浮动图标位置四档，看图标是否换到四个角 | 依据源码推断，未设备验证 | `readConfig` |
 | 快速动作图标行（5 个 36×36：搜索/自动翻页/目录/朗读/设置） | `ui/book/read/ReadBookFloatingActionBar.kt`（153 行） | `entry/src/main/ets/pages/ReaderPage.ets:4730-4736` | 已接 | 一致：五个快捷动作。 | 开菜单后看是否出现一排小图标 | 依据源码推断，未设备验证 | `readConfig` |
@@ -248,12 +248,12 @@
 | 底栏图标行：每行默认 5 个（可 2..8），默认 1 行（可 1..2），按钮宽 40dp，行内两端对齐 | `ui/book/read/ReadBookMenuBarBottom.kt:237-282` | `entry/src/main/ets/pages/ReaderPage.ets:2155`（`getBottomActionPages`）、`:4796-4836`（`Swiper`，高 `(showBottomActionText?64:48) * clamp(bottomRowCount,1,2) + 21`） | 已接 | 一致：2..8 个/行、1..2 行、多页左右滑。 | 底栏配 10 个动作，看是否分成两页可左右滑 | 依据源码推断，未设备验证 | `readConfig` |
 | 底栏浮动（默认浮动，左右 16dp、底部 16dp + 导航栏高，圆角默认 32dp） | `ui/book/read/ReadBookMenuBar.kt:417-421`、`ReadBookMenuBarBottom.kt:211` | `entry/src/main/ets/pages/ReaderPage.ets:4837` 起（悬浮时宽 92%、`margin bottom 16`；非悬浮 100%、只圆上两角） | 已接 | 一致：默认悬浮，圆角取 `readMenuBottomCornerRadius`。 | 开关「底栏悬浮」，看底栏是否离底边 | 依据源码推断，未设备验证 | `readConfig` |
 | 底栏图标下方文字（隔 2dp 一行小字，带 12dp 模糊 + 12% 黑阴影） | `ui/book/read/ReadBookMenuBarTool.kt:373-387` | `entry/src/main/ets/pages/ReaderPage.ets:4796` 起（`showBottomActionText` 控制高 64/48） | 已接 | 一致：有图标下文字。 | 开关「底栏显示文字」，看按钮高度是否变化 | 依据源码推断，未设备验证 | `readConfig` |
-| 底栏「正文处理」按钮右上角红色数字角标 = 当前生效规则条数，0 不显示 | `ui/book/read/ReadBookMenuBarTool.kt:330-339`、`:410-431` | 无（底栏按钮无角标） | 未接 | 本地**看不到有多少条替换规则正在生效**，要进文本处理面板才知道。用户在排查「为什么这段字被改了」时没有线索。 | 开 3 条替换规则后看底栏「正文处理」按钮上是否有数字 | 依据源码推断，未设备验证 | `readConfig` |
+| 底栏「正文处理」按钮右上角红色数字角标 = 当前生效规则条数，0 不显示 | `ui/book/read/ReadBookMenuBarTool.kt:337`、`:410-431` | `entry/src/main/ets/pages/ReaderPage.ets:2594`（`getBottomActionBadgeCount`，只给 `replace_badge`）、`ReaderBottomAction` 的 `@Prop badgeCount` + 右上角 `#B3261E` 圆角 8 角标 | 已接 | 一致：本章被替换规则真正改过几条，底栏「正文处理」按钮右上角就显示那个数字；0 条不显示角标。用户排查「这段字为什么被改了」时能直接看到有几条规则命中。 | 本章命中 3 条替换规则时，看底栏「正文处理」按钮右上角是否有「3」 | 口径同上游 `ContentProcessor.kt:180-215`：只有正文真的被改动才计数，不是「已启用条数」；设备未构造出多规则命中场景，角标渲染按源码推断 | `readConfig` |
 | 底栏进度条按「页」时拖过程逐格即时跳页，按「章」时松手才跳 | `ui/book/read/ReadBookMenuBarBottom.kt:84-127`、`ReadBookViewModel.kt:2506-2518` | `entry/src/main/ets/pages/ReaderPage.ets:4756`（`Slider`，`stepSize 3`）、分页模式拖过程即时改 `currentPageIndex` | 已接 | 一致：页模式即时跳、章模式松手跳。 | 拖进度条，看正文是否跟着变 | 依据源码推断，未设备验证 | `readConfig` |
-| 底栏进度条滚动模式停下 250ms 后才刷新进度值 | `ReadBookViewModel.kt:2506-2518` | `entry/src/main/ets/pages/ReaderPage.ets:4756`（无节流） | 未接 | 本地滚动时进度条**跟着手指实时抖**，数字一直在变看不清；上游停手 250ms 才更新，读起来稳定。 | 滚动模式下拖进度条，看数字是否一直跳 | 依据源码推断，未设备验证 | `readConfig` |
-| 底栏进度条无障碍文案「第 x / 共 y 页」/「第 x / 共 y 章」 | `ReadBookMenuBarBottom.kt:84-127` | 无 | 未接 | 本地进度条没有无障碍描述，读屏软件只会念「滑块」。 | 开读屏，焦点移到进度条，听是否念页码 | 依据源码推断，未设备验证 | `readConfig` |
-| 底栏亮度条（横向贴底 / 竖向贴边宽 56dp、滑块高 168dp，上下各一枚按钮切自动亮度与左右位置） | `ui/book/read/ReadBookMenuBarBottom.kt:138-158`、`:376-459` | `entry/src/main/ets/pages/ReaderPage.ets:3175-3200`（`ReaderBrightnessBar`：横排 = 图标 18 + Slider + 数值 11 号；竖排 = 只有 Slider）、`:4748` | 未接 | 本地亮度条**没有「切自动亮度」与「左右位置」两个按钮**，竖排时也看不到当前数值。用户在竖排亮度条下无法确认当前亮度值。 | 切竖向亮度条，看是否有自动亮度按钮与数值 | 依据源码推断，未设备验证 | `readConfig` |
-| 底栏 `readSliderMode` 隐藏后整条进度消失，只剩上下章按钮 | `ui/book/read/ReadBookMenuBarBottom.kt:84-127` | `entry/src/main/ets/pages/ReaderPage.ets:4750`（`readSliderMode !== '1'` 时整行不渲染） | 未接 | 本地隐藏进度条时**上下章按钮也一起消失**；上游保留两个按钮。用户隐藏进度条后就只剩点屏幕边缘换章。 | 进度条设「不显示」，看换章按钮是否还在 | 依据源码推断，未设备验证 | `readConfig` |
+| 底栏进度条滚动模式停下 250ms 后才刷新进度值 | `ReadBookViewModel.kt:108`、`:2506-2518` | `entry/src/main/ets/pages/ReaderPage.ets:3857`（`updateProgress`：分页模式立即 `applyScrollProgress`，滚动模式写 `pendingScrollProgress` + 250ms 定时器）、`:3882`（`applyScrollProgress`）、常量 `SCROLL_PROGRESS_THROTTLE_MS = 250` | 已接 | 一致：连续滚动时进度数字不再跟着手指每帧抖，停手 250ms 后才刷新一次；翻页模式仍即时更新。 | 连续滚动模式下快速上下滑动，看底部百分比是否只在停手后跳一次 | 依据源码推断，未设备验证（滚动时数字不抖可肉眼观察，但节流时序无法用截图取证） | `readConfig` |
+| 底栏进度条无障碍文案「第 x / 共 y 页」/「第 x / 共 y 章」 | `ui/book/read/ReadBookMenuBarBottom.kt:84-95` | `entry/src/main/ets/pages/ReaderPage.ets:2578`（`getProgressAccessibilityText`）、`:5228`（`Slider.accessibilityText(...)`） | 已接 | 一致：进度条按「页」模式念「第 x / 共 y 页」，按「章」模式念「第 x / 共 y 章」，不再只念「滑块」。 | 开读屏，焦点移到进度条，听是否念「第 x / 共 y 页」 | 依据源码推断，未设备验证——`uitest dumpLayout` 不导出 `accessibilityText`，设备上无法直接取证 | `readConfig` |
+| 底栏亮度条（横向贴底 / 竖向贴边宽 56dp、滑块高 168dp，上下各一枚按钮切自动亮度与左右位置） | `ui/book/read/ReadBookMenuBarBottom.kt:138-158`、`:376-459`、`ReadBookMenuBar.kt:249-270` | `entry/src/main/ets/pages/ReaderPage.ets:3460`（`ReaderBrightnessBar`）、`ReaderBrightnessButton`（40×40，`profile_auto_awesome` / `app_swap`）、`ReaderBrightnessSlider` 竖排高 168 | 已接 | 一致：竖排亮度条宽 56、贴左/贴右靠边 8、上端「跟随系统」下端「左右位置」两枚按钮，滑块高 168，底部显示当前亮度数值；点「左右位置」整条换边，点「跟随系统」切自动亮度并收起菜单。 | 设置里切「竖排」亮度视图，看是否上下各有一枚按钮、点「左右位置」整条是否换边 | 设备已验证：左侧/右侧两种贴边、两枚按钮点击生效（截图 `b2-vbar2.jpeg`、`b2-vbar-right.jpeg`、`b2-vbar-fix.jpeg`） | `readConfig` |
+| 底栏 `readSliderMode` 隐藏后整条进度消失，只剩上下章按钮 | `ui/book/read/ReadBookMenuBarBottom.kt:161-196` | `entry/src/main/ets/pages/ReaderPage.ets:5211`（`if (this.readSliderMode !== '1')` 只包中间 `Stack{Slider}`，左右两个换章按钮在条件外） | 已接 | 一致：进度条设「不显示」后中间滑块消失，左侧「上一章」、右侧「下一章」两个按钮仍在，用户仍能一键换章。 | 进度条设「不显示」，看底栏是否还剩左右两个换章箭头 | 设备已验证（截图 `b2-reader-noslider.jpeg`：只剩 `←` `→`） | `readConfig` |
 
 ### C4 快捷面板
 
@@ -788,9 +788,9 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 17 | 13 | 1 |
 | B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
-| C 界面层 | 78 | 46 | 27 | 5 |
+| C 界面层 | 78 | 55 | 18 | 5 |
 | D 交互层 | 48 | 30 | 17 | 1 |
-| **合计** | **211** | **132** | **71** | **8** |
+| **合计** | **211** | **141** | **62** | **8** |
 
 数字核对脚本（**注意**：表里有两行图例 `| 状态 | 已接 | 未接 | 不适用 |`，直接 `grep -c` 会各多算 2，所以要先排除图例行；含 `\|` 转义的行也必须按转义分列，否则少算 3 行）：
 
@@ -807,7 +807,7 @@ for l in lines:
     cells = re.split(r'(?<!\\)\|', s)
     if len(cells) == 8 and cells[3].strip() in n:
         n[cells[3].strip()] += 1
-print(n, sum(n.values()))   # {'已接': 132, '未接': 71, '不适用': 8} 211
+print(n, sum(n.values()))   # {'已接': 141, '未接': 62, '不适用': 8} 211
 PY
 
 # 表格行内不得出现第四种状态词
@@ -816,23 +816,22 @@ grep -nE '^\|.*\|\s*(部[分]|基[本]|待[定])' docs/parity/TXT-READER.md   # 
 
 ### 一句话结论
 
-**本地 TXT 阅读的手感骨架已经补齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）落地后，翻页与滚动的核心手感与上游数值级对齐；剩下 71 行未接主要在**界面层**（顶栏底栏动作数、目录页分卷与字数、各二级面板的字段与形态）与**绘制细节**（分层绘制、6 种下划线、九宫格、覆盖阴影）。
+**翻页、滚动与阅读页顶底栏都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）落地后，日常阅读的**翻页手感与菜单操作**已经不需要再回上游；剩下 62 行未接集中在**目录页与各二级面板的字段/形态**（分卷折叠、字数卡、粘性卷头、高亮规则编辑器的 6 个字段与预览）与**绘制细节**（分层绘制、6 种下划线、九宫格、覆盖阴影）。
 
 ### 对阅读手感影响最大的前 5 条（剩余未接行中）
 
-> 第一批十行已落地，下面这份榜单只从**尚未接的 71 行**里挑，避免拿已修好的项占位。
+> 前两批已落地，下面这份榜单只从**尚未接的 62 行**里挑，避免拿已修好的项占位。
 
 1. **绘制不分层，下划线被选区盖住**（B4）—— 上游 `ReaderCanvasSurface.kt:2767-2869` 分四层画（文字背景色带 / 正文 / contentRules / styledUnderlines / overlayRules），本地 `ReaderCanvasSurface.ets:1183-1222` 跟着每个 box 一起画。选中一段带下划线的文字时**下划线被选区灰块压掉**，overlay 规则也盖不到文字之上。
 2. **下划线只有系统线型**（B4）—— 上游 6 种手绘线型（虚线 10-10、双线、波浪振幅 3dp/波长 12dp、SVG、半高线），本地只有系统 `TextDecorationType`。高亮规则里选「波浪下划线」画出来是**一条直线**，高亮规则的表达力差一大截。
 3. **文字背景图完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**。
-4. **顶栏 6 个动作只剩 2 个**（C2）—— 上游默认 6 个（下载/刷新/换源/TXT 目录规则/编码/更多），本地默认只显示其中 2 个可用项，另 4 个走「暂未支持」面板。老用户升级后**找不到换源和编码入口**。
+4. **目录页看不出「现在在哪一卷」**（C5）—— 上游卷名滚动超过 24 就吸顶、章节行按 `tocLevel` 每级缩进 10dp（最多 6 级）；本地卷名滚过去就没了、章节只有两级缩进。572 章的书往下滑到一半，**用户分不清自己在第几卷、哪一章属于哪一卷**。
 5. **章边界无「加载中」占位页、无第三槽提示**（D6）—— 上游 `ReaderPageNavigator.kt:82-92`、`:101-102` 有加载中占位页与「继续滑动以加载下一章…」，本地直接换章。长章加载慢时用户看到上一章最后一页停在那里，**像是卡住了**。
 
 ### 次一级（值得排期但影响面小）
 
-- 目录页分卷折叠、字数卡、粘性卷头（C5）
-- 点标题胶囊不进书籍详情（C2）
-- 底栏「正文处理」无生效规则数角标（C3）
+- 目录搜索会把卷名一起过滤掉（C5）、目录页无多选浮层（C5）
+- 底栏动作配置页的分组与拖拽排序形态（C3）
 - 自动翻页无顶部 1px 进度提示（B4）
 - 高亮规则只有 6 个字段、无实时预览（C7）
 - 覆盖转场交界处无 36dp 阴影（B4）

@@ -3166,6 +3166,16 @@ struct MenuSettingSlider {
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: this.stepValue, style: SliderStyle.InSet })
         .width('100%').selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
         .showSteps(true).stepColor(this.themeColorAccent).stepSize(3)
+        // 拖动期把「滑块正在拖」广播到 AppStorage，阅读页据此把顶栏/底栏压到 30% 以下，
+        // 让用户能看见背后正文的实时变化（上游 `TinySettingItems.kt:349-356` 的
+        // `LocalSliderDragState.startDragging/stopDragging` 同口径）。
+        .onTouch((event: TouchEvent) => {
+          if (event.type === TouchType.Down) {
+            AppStorage.setOrCreate('readerMenuSliderDragging', true);
+          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+            AppStorage.setOrCreate('readerMenuSliderDragging', false);
+          }
+        })
         .onChange((value: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
             this.onChange(Math.max(this.minValue, Math.min(this.maxValue, Math.round(value))));

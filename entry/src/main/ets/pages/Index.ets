@@ -6766,6 +6766,9 @@ struct Index {
               this.catalogReturnRoute = AppRoute.READER;
               this.route = AppRoute.CATALOG;
             },
+            onOpenBookInfo: () => this.openBookInfo(this.selectedBook),
+            onBrightnessAutoChange: (auto: boolean) => this.setReaderBrightnessAuto(auto),
+            onBrightnessVwPosChange: (position: string) => this.setReaderBrightnessVwPos(position),
             onImageStyleChange: (imageStyle: string) => this.setReaderImageStyle(imageStyle),
             onOpenSettings: () => this.openReaderSettings(),
             onOpenBottomActionConfig: () => this.openReaderSettings(true),
