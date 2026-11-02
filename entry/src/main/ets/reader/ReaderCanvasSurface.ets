@@ -926,7 +926,7 @@ export class ReaderCanvasRenderer {
     for (const line of page.lines) {
       used += (line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter) * vp;
     }
-    if (page.titleOnly && used <= 0) {
+    if ((page.titleOnly || page.messageText !== undefined) && used <= 0) {
       used = Math.max(1, request.layout.bodyHeightPx);
     }
     let extent = Math.max(1, used);
@@ -1221,6 +1221,13 @@ export class ReaderCanvasRenderer {
     // （表现为「drawRect 被调用但一个像素都不落」）。这里记下进入时的栈深，
     // 画选区前统一归位。
     const entrySaveCount = canvas.getSaveCount();
+    // 占位页：整屏居中的一行提示，没有正文几何。
+    // 对齐上游 centeredReaderMessagePage（ReadBookController.kt:3051-3100）。
+    if (page.messageText !== undefined) {
+      this.drawMessagePage(canvas, page, request);
+      canvas.restoreToCount(entrySaveCount);
+      return;
+    }
     const geometry = this.layoutPage(page, pageIndex, request);
     // 只有「手指正在操作的那一页」才把几何记成命中测试的依据。
     // 四页窗口是一次绘制里按 z 序画完的，若每页都覆盖 this.geometry，
@@ -1375,6 +1382,34 @@ export class ReaderCanvasRenderer {
     built.paragraph.paint(canvas, box.left, box.top);
     canvas.restore();
     this.drawMarkingUnderlines(canvas, item, built, box.left, box.top, request);
+  }
+
+  /**
+   * 占位页：把一行提示画在正文区正中。
+   *
+   * 上游 `centeredReaderMessagePage` 用 `StaticLayout` 单段，`blockTop =
+   * contentTop + ((contentBottom - contentTop - layout.height) / 2f).coerceAtLeast(0f)`
+   * 且逐行横向居中（`ReadBookController.kt:3080-3095`）。
+   */
+  private drawMessagePage(canvas: drawing.Canvas, page: LocalReaderPage,
+    request: ReaderCanvasDrawRequest): void {
+    const text = page.messageText;
+    if (text === undefined || text.length === 0) {
+      return;
+    }
+    const layout = request.layout;
+    const built = this.getParagraph(text, request.style, layout.bodyWidthPx, 0, []);
+    if (built === undefined) {
+      return;
+    }
+    const top = layout.originYpx +
+      Math.max(0, (layout.bodyHeightPx - built.heightPx) / 2);
+    // 上游逐行 `x = contentLeft + ((contentWidth - lineWidth) / 2f)`，单行时等价于整行横向居中
+    const lineWidth = built.paragraph.getLongestLine();
+    const left = layout.originXpx + Math.max(0, (layout.bodyWidthPx - lineWidth) / 2);
+    canvas.save();
+    built.paragraph.paint(canvas, left, top);
+    canvas.restore();
   }
 
   /** 图片元素：解不开时画灰底占位（上游 Color.Gray.copy(alpha = .18f)）。 */

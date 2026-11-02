@@ -77,6 +77,8 @@
 - 阅读记录真实跨午夜持久化、损坏数据扫描/修复提示、阅读字数采集和书籍别名合并仍未完成或未验。
 - TXT 目录规则完整 CRUD/批量组合和含非空规则的应用备份恢复仍需补测。
 - 替换规则的同步正则未受 `timeoutMillisecond` 限时；异步并发保存覆盖风险、完整恢复提示仍待验证。
+- **全文搜索的正则模式已加 500ms 单章预算**（TXT-READER 批次 3）：`data/ReaderSearchRegex.ets` 用 `taskpool.Task` + `Promise.race` 做截止时间，超时 `taskpool.cancel` 后跳过该章并计入 `timedOutChapterCount`（`pages/ReaderSearchPage.ets:224-226`）。这是**搜索链路**，与上面这条「替换规则同步正则未限时」是两条不同的正则，后者仍未限时。
+- **章边界占位页已接通**（TXT-READER 批次 3）：分页模式在章末再翻一页会整屏居中显示「加载数据中…」，滚动模式给「继续滑动以加载下一章…」，新章正文到达后自动撤（`pages/ReaderPage.ets:4186-4203`、`reader/ReaderCanvasSurface.ets:1394-1417`）。设备用 hilog 验过绘制与撤销时序；该中间态只有约 690ms，`snapshot_display` 抓不到截图。
 - 在线 URL 规则导入、在线书源抓取、RSS、TTS、AI、WebDAV、云同步和 Web 服务未接入。
 
 ### 书签与标注（r268–r276 盘点遗留）
@@ -87,7 +89,7 @@
 
 2. **划词菜单缺「行内快速标记」模式**。上游按 `MarkingUiState.inlineMode` 在 `MarkingSelectionMenu`（行内预览、当场应用上次样式）与 `TextActionSelectionMenu`（完整动作条）之间切换，对应意图 `ReadBookContract.kt:870 OpenQuickMarking`、`:871 OpenQuickMarkingEdit`、`:872 ApplyQuickMarking`、`:875 DismissQuickMarking`，行内态还带 `previewStyle`/`inlineDirty` 两个状态位。本地 `entry/src/main/ets/pages/ReaderPage.ets` 的选区菜单只有 sheet 一条路径（r273 已补「复制」「书签」两项），没有行内预览态。
 
-3. **目录页书签/笔记缺多选与批量操作**。上游 `app/src/main/java/io/legado/app/ui/book/toc/TocScreen.kt:325 selectionSecondaryActions` 提供反选、选中后续、批量加书签、批量去分组、批量删音频；本地 `entry/src/main/ets/pages/CatalogPage.ets` 的书签条目（`:487-489`）与笔记条目（`:545-546`）只有单击与长按，章节行同样无选择模式。
+3. **目录页书签/笔记缺多选与批量操作**。上游 `app/src/main/java/io/legado/app/ui/book/toc/TocScreen.kt:325 selectionSecondaryActions` 提供反选、选中后续、批量加书签、批量去分组、批量删音频；本地 `entry/src/main/ets/pages/CatalogPage.ets` 的书签条目与笔记条目只有单击与长按。**章节行的多选已在 TXT-READER 批次 3 接通**（长按进多选、勾选圈、工具条「已选 N 章 / 操作 / 完成」、菜单全选/反选/加书签/取消选择，`CatalogPage.ets:430-500`），本项现在只剩书签与笔记两个列表没有多选。
 
 4. **目录页缺反序**。上游 `TocScreen.kt:447 reverse_toc` 提供章节与书签列表的倒序开关；本地无排序方向开关，恒按 `chapterIndex` 升序（`CatalogPage.ets:185-200`）。
 

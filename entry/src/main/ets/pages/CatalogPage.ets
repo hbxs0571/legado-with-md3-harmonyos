@@ -11,6 +11,8 @@ interface CatalogChapter {
   index: number;
   isVolume: boolean;
   isInVolume: boolean;
+  /** 目录层级：卷标题 0、卷内章节 1，与上游 `tocLevel` 同口径，用于多级缩进。 */
+  tocLevel: number;
 }
 
 @Component
@@ -37,6 +39,12 @@ export struct CatalogPage {
   @State wordCountsLoading: boolean = false;
   /** 已折叠的卷头章节下标。 */
   @State collapsedVolumes: Set<number> = new Set<number>();
+  /** 吸顶显示的卷名；空串表示不显示。对齐上游 `stickyVolume`。 */
+  @State stickyVolumeTitle: string = '';
+  /** 列表首个可见项下标，吸顶判定要用。 */
+  private stickyFirstVisibleIndex: number = 0;
+  /** 首个可见项已滚出的距离，用于判断卷头是否已滚出 24vp。 */
+  private stickyVolumeScrollOffset: number = 0;
   private chapterScroller: Scroller = new Scroller();
   /** 书签列表滚动器，用于打开时定位到当前章节。 */
   private bookmarkScroller: Scroller = new Scroller();
@@ -61,6 +69,15 @@ export struct CatalogPage {
   /** 打开本地 TXT 目录规则，对应上游目录页「本地书籍选项 · 目录规则」。 */
   onOpenTxtTocRules: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 批量为选中的章节各加一条书签，对应上游多选浮层的「加书签」。 */
+  onAddBookmarksForChapters: (chapterIndexes: number[]) => void = (_indexes: number[]) => {};
+
+  /** 多选模式：长按章节行进入，选中项显示勾选圈。 */
+  @State selectionMode: boolean = false;
+  /** 已选中的章节下标（对应 `chapterRows` 下标）。 */
+  @State selectedChapterIndexes: Set<number> = new Set<number>();
+  /** 多选浮层是否展开（对齐上游 `fabExpanded`）。 */
+  @State selectionMenuExpanded: boolean = false;
 
   /** 目录行，打开页面时从 chapters 表读一次；章节已不在 Book 上。 */
   @State chapterRows: BookChapter[] = [];
@@ -122,9 +139,14 @@ export struct CatalogPage {
         else if (insideCollapsedVolume) { continue; }
       }
       const displayTitle = this.useTitleReplacement ? ReplaceRuleRepository.applyTitle(this.book, row.title) : row.title;
-      if (displayTitle.includes(keyword)) {
+      // 搜索时卷名永远保留（上游 TocViewModel.filterData：`it.displayTitle.contains(key, true) || it.chapter.isVolume`），
+      // 否则搜卷内某一章时，结果里看不出这章属于哪一卷。
+      // 忽略大小写同样对齐上游的 `contains(key, true)`，英文书名/章节名才搜得到。
+      const matched = displayTitle.toLowerCase().includes(keyword.toLowerCase());
+      if (matched || (searching && isVolume)) {
         chapters.push({ title: displayTitle, index: index, isVolume: isVolume,
-          isInVolume: !isVolume && this.isInsideAnyVolume(index, rows) });
+          isInVolume: !isVolume && this.isInsideAnyVolume(index, rows),
+          tocLevel: row.tocLevel });
       }
     }
     if (this.ascending) { return chapters; }
@@ -293,6 +315,49 @@ export struct CatalogPage {
     return wordCount.toString() + '字';
   }
 
+  /**
+   * 粘性卷头：对齐上游 `TocScreen.kt:270-295` 的 `stickyVolume`。
+   *
+   * 上游判定是「首个可见项不是卷标题」或「就是卷标题但已滚出 24」，
+   * 且该卷未折叠时，才把卷名吸在列表顶部。ArkUI 的 List 没有内建 sticky header，
+   * 这里用一层覆盖在列表上的浮层实现同样的观感。
+   */
+  private updateStickyVolume(firstVisibleIndex: number): void {
+    if (this.selectedTab !== 1) { this.stickyVolumeTitle = ''; return; }
+    const chapters = this.getChapters();
+    if (firstVisibleIndex < 0 || firstVisibleIndex >= chapters.length) {
+      this.stickyVolumeTitle = '';
+      return;
+    }
+    const firstItem = chapters[firstVisibleIndex];
+    if (firstItem === undefined) { this.stickyVolumeTitle = ''; return; }
+    let volumeIndex = -1;
+    if (firstItem.isVolume) {
+      // 卷标题自己贴顶时，只有已经滚出 24vp 才显示浮层，否则会和列表里的那一行重叠成两层。
+      if (this.stickyVolumeScrollOffset > 24) { volumeIndex = firstVisibleIndex; }
+    } else {
+      for (let index = firstVisibleIndex - 1; index >= 0; index--) {
+        const candidate = chapters[index];
+        if (candidate !== undefined && candidate.isVolume) { volumeIndex = index; break; }
+      }
+    }
+    if (volumeIndex < 0) { this.stickyVolumeTitle = ''; return; }
+    const volumeItem = chapters[volumeIndex];
+    if (volumeItem === undefined || this.collapsedVolumes.has(volumeItem.index)) {
+      this.stickyVolumeTitle = '';
+      return;
+    }
+    this.stickyVolumeTitle = volumeItem.title;
+  }
+
+  /** 点击吸顶卷名滚回该卷开头。 */
+  private scrollToStickyVolume(): void {
+    const chapters = this.getChapters();
+    const index = chapters.findIndex((chapter: CatalogChapter) => chapter.title === this.stickyVolumeTitle &&
+      chapter.isVolume);
+    if (index >= 0) { this.chapterScroller.scrollToIndex(index, true); }
+  }
+
   private async loadChapterWordCounts(): Promise<void> {
     if (this.book.contentPath === undefined || BookRepository.isBodyMissing(this.book) || this.wordCountsLoading) { return; }
     const generation = ++this.wordCountGeneration;
@@ -357,9 +422,75 @@ export struct CatalogPage {
     }
   }
 
-  /** 当前书是否为可重新识别目录的本地 TXT。 */
-  private isLocalTxt(): boolean {
+  /** 当前书是否为可重新识别目录的本地 TXT。 */  private isLocalTxt(): boolean {
     return this.book.isLocal && this.book.format === 'txt' && this.book.contentPath !== undefined;
+  }
+
+  /** 长按章节行进入多选，并把该行选中（对齐上游 `ReaderBookSheet.kt:678-740` 的多选入口）。 */
+  private enterSelectionMode(chapterIndex: number): void {
+    this.selectionMode = true;
+    const next = new Set<number>(this.selectedChapterIndexes);
+    next.add(chapterIndex);
+    this.selectedChapterIndexes = next;
+  }
+
+  private toggleChapterSelection(chapterIndex: number): void {
+    const next = new Set<number>(this.selectedChapterIndexes);
+    if (next.has(chapterIndex)) { next.delete(chapterIndex); } else { next.add(chapterIndex); }
+    this.selectedChapterIndexes = next;
+    if (next.size === 0) { this.selectionMode = false; }
+  }
+
+  private clearChapterSelection(): void {
+    this.selectionMode = false;
+    this.selectionMenuExpanded = false;
+    this.selectedChapterIndexes = new Set<number>();
+  }
+
+  private selectAllChapters(): void {
+    const next = new Set<number>();
+    this.getChapters().forEach((chapter: CatalogChapter) => {
+      if (!chapter.isVolume) { next.add(chapter.index); }
+    });
+    this.selectedChapterIndexes = next;
+    this.selectionMode = next.size > 0;
+  }
+
+  private invertChapterSelection(): void {
+    const next = new Set<number>();
+    this.getChapters().forEach((chapter: CatalogChapter) => {
+      if (!chapter.isVolume && !this.selectedChapterIndexes.has(chapter.index)) { next.add(chapter.index); }
+    });
+    this.selectedChapterIndexes = next;
+    this.selectionMode = next.size > 0;
+  }
+
+  /** 选中的章节各加一条书签，对齐上游 `TocIntent.AddBookmarksForSelected`。 */
+  private addBookmarksForSelection(): void {
+    const indexes: number[] = [];
+    this.selectedChapterIndexes.forEach((index: number) => indexes.push(index));
+    if (indexes.length === 0) { return; }
+    indexes.sort((a: number, b: number) => a - b);
+    this.onAddBookmarksForChapters(indexes);
+    this.clearChapterSelection();
+  }
+
+  /**
+   * 多选浮层。
+   *
+   * 上游 `ReaderBookSheet.kt:678-740` 的 `fabItems` 共 7 项：全选 / 反选 / 加书签 /
+   * 下载选中 / 删除角色分配 / 删除朗读音频 / 取消选择。后三项属于下载与朗读链路，
+   * 本地 TXT 离线阅读没有这两个功能，所以只保留其余四项。
+   */
+  @Builder
+  private ChapterSelectionMenu() {
+    Menu() {
+      MenuItem({ content: '全选' }).height(44).onClick(() => this.selectAllChapters())
+      MenuItem({ content: '反选' }).height(44).onClick(() => this.invertChapterSelection())
+      MenuItem({ content: `加书签（${this.selectedChapterIndexes.size}）` }).height(44)
+        .onClick(() => this.addBookmarksForSelection())
+      MenuItem({ content: '取消选择' }).height(44).onClick(() => this.clearChapterSelection())
+    }
   }
 
   @Builder
@@ -417,16 +548,49 @@ export struct CatalogPage {
             .fontSize(10).fontColor('#AEB0B9')
         }.padding({ left: 16, right: 16, bottom: 7 })
 
+        // 多选工具条：长按章节行后出现，对齐上游 `ReaderBookSheet.kt:678-740` 的多选浮层
+        if (this.selectionMode) {
+          Row() {
+            Text(`已选 ${this.selectedChapterIndexes.size} 章`)
+              .fontSize(11).fontColor('#DCDDE4').layoutWeight(1)
+            Text('操作')
+              .fontSize(11).fontColor('#C4D1FF')
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+              .borderRadius(8)
+              .backgroundColor(this.themeColorSurfaceSecondary)
+              .bindMenu(this.ChapterSelectionMenu, { placement: Placement.BottomRight })
+            Text('完成')
+              .fontSize(11).fontColor('#C4D1FF')
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+              .onClick(() => this.clearChapterSelection())
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, bottom: 7 })
+        }
+
         if (this.getChapters().length === 0) {
           Column() {
             Text(this.query.trim().length > 0 ? '没有找到相关章节' : '暂无目录')
               .fontSize(13).fontColor('#AEB0B9')
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         } else {
+          Stack({ alignContent: Alignment.TopStart }) {
           List({ scroller: this.chapterScroller }) {
             ForEach(this.getChapters(), (chapter: CatalogChapter) => {
               ListItem() {
                 Row() {
+                  // 多选态：卷行不参与批量操作，只有章节行显示勾选圈
+                  if (this.selectionMode && !chapter.isVolume) {
+                    Stack({ alignContent: Alignment.Center }) {
+                      Column()
+                        .width(18).height(18).borderRadius(9)
+                        .backgroundColor(this.selectedChapterIndexes.has(chapter.index) ? '#C4D1FF' : '#00000000')
+                        .border({ width: 1.5, color: this.selectedChapterIndexes.has(chapter.index) ? '#C4D1FF' : '#7A7D88' })
+                      if (this.selectedChapterIndexes.has(chapter.index)) {
+                        AppGlyph({ name: 'profileCheck', glyphSize: 12, tint: '#1A1B21' })
+                      }
+                    }.width(26).margin({ right: 2 })
+                  }
                   if (chapter.isVolume) {
                     Image($r('app.media.profile_expand_more')).width(14).height(14)
                       .fillColor('#AEB0B9')
@@ -446,16 +610,55 @@ export struct CatalogPage {
                   }
                 }
                 .width('100%')
-                .padding({ left: chapter.isInVolume ? 26 : 12, right: 12, top: 11, bottom: 11 })
+                // 多级缩进对齐上游 ReaderBookSheet.kt:890-935：行内基础 12dp + tocLevel×10dp，最多 6 级。
+                .padding({ left: 12 + Math.min(6, Math.max(0, chapter.tocLevel)) * 10, right: 12, top: 11, bottom: 11 })
                 .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : this.themeColorSurfaceSecondary)
                 .borderRadius(10)
-                .onClick(() => chapter.isVolume ? this.toggleVolume(chapter.index) : this.onSelectChapter(chapter.index))
+                .onClick(() => {
+                  if (this.selectionMode && !chapter.isVolume) {
+                    this.toggleChapterSelection(chapter.index);
+                    return;
+                  }
+                  if (chapter.isVolume) { this.toggleVolume(chapter.index); }
+                  else { this.onSelectChapter(chapter.index); }
+                })
+                // 长按章节行进入多选（上游 ReaderBookSheet 多选入口）；卷行长按无动作
+                .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                  if (!chapter.isVolume) { this.enterSelectionMode(chapter.index); }
+                }))
               }.margin({ left: 12, right: 12, bottom: 6 })
             }, (chapter: CatalogChapter) => `${chapter.index}_${chapter.isVolume ? 1 : 0}_${chapter.isInVolume ? 1 : 0}_${this.collapsedVolumes.has(chapter.index) ? 1 : 0}`)
           }
           .layoutWeight(1)
           .scrollBar(BarState.Off)
+          .onScrollIndex((first: number, _last: number, _center: number) => {
+            // 首个可见项变了，偏移从零重新累计。
+            this.stickyFirstVisibleIndex = first;
+            this.stickyVolumeScrollOffset = 0;
+            this.updateStickyVolume(first);
+          })
+          .onDidScroll((scrollOffset: number, _state: ScrollState) => {
+            // 卷标题自己贴顶时，靠累计偏移判断是否已滚出 24vp（上游 `firstVisibleItemScrollOffset > 24`）。
+            const before = this.stickyVolumeScrollOffset;
+            this.stickyVolumeScrollOffset += Math.abs(scrollOffset);
+            if (before <= 24 && this.stickyVolumeScrollOffset > 24) {
+              this.updateStickyVolume(this.stickyFirstVisibleIndex);
+            }
+          })
           .onAreaChange(() => this.scrollToCurrentChapter())
+
+          // 吸顶卷头：盖在列表顶部，样式对齐上游 TextCard（圆角 8、内边距 8/6）。
+          if (this.stickyVolumeTitle.length > 0) {
+            Text(this.stickyVolumeTitle)
+              .fontSize(11).fontColor('#DCDDE4').maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+              .backgroundColor(this.themeColorSurfaceSecondary)
+              .borderRadius(8)
+              .margin({ left: 16, top: 4 })
+              .onClick(() => this.scrollToStickyVolume())
+          }
+          }
         }
       }
       .width('100%')

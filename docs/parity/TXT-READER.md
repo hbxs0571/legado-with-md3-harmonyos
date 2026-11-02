@@ -272,14 +272,15 @@
 | 目录页四页签（信息 / 目录 / 书签 / 笔记） | `ui/book/read/sheet/ReaderBookSheet.kt`（`ReaderBookSheetTab {Information, Toc, Bookmarks, Marks}`） | `entry/src/main/ets/pages/CatalogPage.ets:158`（`getTabLabel`）、`:629` | 已接 | 一致：四个 tab。 | 打开目录页看 tab 数 | 依据源码推断，未设备验证 | `readConfig` |
 | 目录头部：40dp 封面 + 书名 2 行 + 章名跑马灯 + 「当前/总数」 | `ui/book/read/sheet/ReaderBookSheet.kt:369-450` | `entry/src/main/ets/pages/CatalogPage.ets`（目录页头部） | 已接 | 一致。 | 看目录页顶部是否有封面与书名 | 依据源码推断，未设备验证 | `readConfig` |
 | 目录工具行：搜索框 + 3 个方形按钮 + ⋮ 菜单 | `ui/book/read/sheet/ReaderBookSheet.kt:654-800` | `entry/src/main/ets/pages/CatalogPage.ets:385`（`TextInput` 搜索章节）、`:401`（正/倒序切换）、`:345`（`CatalogMoreMenu`：更新目录/替换规则/本地 TXT 目录规则） | 已接 | 一致：搜索 + 排序 + 更多菜单。 | 看目录页顶部工具行 | 依据源码推断，未设备验证 | `readConfig` |
-| 目录搜索忽略大小写、**卷名永远保留** | `ui/book/toc/TocViewModel.kt:581-594` | `entry/src/main/ets/pages/CatalogPage.ets:114-136`（`searching` 过滤） | 未接 | 本地搜索**会把卷名一起过滤掉**：搜「番外」时，包含该章的那个卷头不显示，结果列表里看不出这章属于哪一卷。 | 搜一个卷内章名，看卷头是否还在列表里 | 依据源码推断，未设备验证 | `readConfig` |
-| 章节行按 `tocLevel` 多级缩进（每级 10dp，最多 6 级） | `ui/book/read/sheet/ReaderBookSheet.kt:890-935` | `entry/src/main/ets/pages/CatalogPage.ets:449`（`chapter.isInVolume ? 26 : 12`） | 未接 | 本地只有两级缩进，与 A2 块「目录层级」同一缺口。 | 见 A2 块同名行 | 依据源码推断，未设备验证 | `readConfig` |
-| 粘性卷头（滚动超过 24 时卷名吸顶） | `ui/book/toc/TocScreen.kt:705-730` | 无（`CatalogPage.ets` 无吸顶卷头） | 未接 | 本地长目录滚动时**卷名滚过去就没了**，用户看不出当前在哪个卷里。 | 在长目录里往下滚，看卷名是否吸在顶部 | 依据源码推断，未设备验证 | `readConfig` |
+| 目录搜索忽略大小写、**卷名永远保留** | `ui/book/toc/TocViewModel.kt:581-594` | `entry/src/main/ets/pages/CatalogPage.ets:145`（`displayTitle.toLowerCase().includes(keyword.toLowerCase())`）、`:146`（`matched \|\| (searching && isVolume)`） | 已接 | 搜索框里大小写混写都能命中；搜索期间**卷标题行始终留在列表里**，结果仍按卷分组，用户能看出命中的章属于哪一卷。 | 目录页搜索框输入大小写混写的关键词，看是否命中；在分卷书里搜卷内章名，看卷头是否还在 | 照抄上游 `TocViewModel.filterData` 的 `contains(key, true) \|\| it.chapter.isVolume`；依据源码推断，未设备验证 | `readConfig` |
+| 章节行按 `tocLevel` 多级缩进（每级 10dp，最多 6 级） | `ui/book/read/sheet/ReaderBookSheet.kt:890-935` | `entry/src/main/ets/pages/CatalogPage.ets:614`（`left: 12 + Math.min(6, Math.max(0, chapter.tocLevel)) * 10`） | 已接 | 目录里卷内章节比卷标题**右缩 10vp**，层级最多压到 6 级（60vp）；原来只有「卷内 26 / 卷外 12」两档，多级目录看不出深浅。 | 在分卷书目录里看卷标题与卷内章节的左边距是否不同 | `tocLevel` 数据来源 `BookRepository.ets:1469-1489`（卷 0、卷内 1）；依据源码推断，未设备验证 | `readConfig` |
+| 粘性卷头（滚动超过 24 时卷名吸顶） | `ui/book/toc/TocScreen.kt:705-730` | `entry/src/main/ets/pages/CatalogPage.ets:325-361`（`updateStickyVolume` / `scrollToStickyVolume`）、`:43`（`stickyVolumeTitle`） | 已接 | 目录往下滚过卷标题 24vp 后，**卷名吸在列表顶部**成一枚小胶囊，滚出这个卷才换；点它跳回该卷第一行。原来卷名滚过去就没了。 | 在分卷长目录里往下滚，看顶部是否浮出卷名；点它看是否回到卷首 | 判定逐条照抄上游（首项是卷且偏移 > 24 才吸，折叠卷不吸）；依据源码推断，未设备验证（现有本地书均未分卷，无卷可验） | `readConfig` |
 | 卷折叠（点卷头收起/展开卷内章节） | `ui/book/toc/TocScreen.kt`、`TocHierarchy.kt`（86 行） | `entry/src/main/ets/pages/CatalogPage.ets:39`（`collapsedVolumes`）、`:147-150`（`toggleVolume`） | 已接 | 一致。 | 点卷头看卷内章节是否收起 | 依据源码推断，未设备验证 | `readConfig` |
 | 首次进目录自动滚到当前章（偏移 `-viewportEndOffset/4`，delay 100ms） | `ui/book/toc/TocScreen.kt:363-377` | `entry/src/main/ets/pages/CatalogPage.ets:276`（`scrollToCurrentChapter`） | 已接 | 一致：自动定位到当前章。 | 读到第 50 章时打开目录，看是否自动停在第 50 章附近 | 依据源码推断，未设备验证 | `readConfig` |
 | 章节右侧状态图标（字数卡 / 定位 / 下载中 / 成功 / 失败 / 本地空占位），切换 fade 200ms + scale 0.8 | `ui/book/toc/TocScreen.kt:960-1000` | 无（本地无下载状态，字数直接显示在行内） | 不适用 | 本地 TXT 全离线，不存在下载状态图标。 | — | 范围差异：本地无在线下载 | `不备份` |
 | 目录页 FAB 四项（更新目录 / 替换规则 / TXT 目录规则 / 书签导出） | `ui/book/toc/TocScreen.kt:612-634` | `entry/src/main/ets/pages/CatalogPage.ets:345`（`CatalogMoreMenu`）、`:334`（`BookmarkExportMenu`） | 已接 | 一致：四项都在，本地收在 ⋮ 菜单里而非 FAB。 | 点目录页 ⋮，看是否有这四项 | 依据源码推断，未设备验证 | `readConfig` |
-| 目录 ⋮ 多选浮层 7 项 | `ui/book/read/sheet/ReaderBookSheet.kt:678-740` | 无 | 未接 | 本地目录页**没有多选模式**，无法批量操作章节（如批量导出、批量标记）。 | 长按章节行，看是否进多选 | 依据源码推断，未设备验证 | `readConfig` |
+| 目录多选（全选 / 反选 / 加书签 / 取消选择） | `ui/book/read/sheet/ReaderBookSheet.kt:678-740` | `entry/src/main/ets/pages/CatalogPage.ets:430-500`（`enterSelectionMode` / `toggleChapterSelection` / `selectAllChapters` / `invertChapterSelection` / `addBookmarksForSelection` / `ChapterSelectionMenu`）、`:73`（`onAddBookmarksForChapters` 回调） | 已接 | 长按任意章节行进入多选：每行左侧出现勾选圈，顶部多一条「已选 N 章 / 操作 / 完成」；点「操作」弹出四项菜单，选「加书签（N）」后弹出「已为 N 章添加书签」。原来目录页完全不能批量操作。 | 长按章节行 → 看是否出现勾选圈与工具条 → 点「操作」→ 点「加书签」→ 看书签 tab 里是否多出 N 条 | 设备验证 ✔（`tmp3/shots/f.jpeg` 已选 1 章 + 工具条、`g.jpeg` 四项菜单、`h.jpeg` 加书签完成）；上游 7 项里另 3 项见下一行 | `readConfig` |
+| 目录多选里的「下载选中 / 删除角色分配 / 删除朗读音频」 | `ui/book/read/sheet/ReaderBookSheet.kt:678-740` | 不做 | 不适用 | 上游这三项分别属于章节下载、朗读角色分配、朗读音频，本地 TXT 阅读没有下载与朗读链路，界面里也不该出现这三项，否则点了没有去处。 | 长按章节行打开「操作」菜单，确认只有四项 | 平台差异：本地无下载器、无 TTS 角色系统（范围外，见 `docs/PROJECT.md`） | `不备份` |
 | 书签导出默认文件名 `书名_yyyyMMdd_HHmm.json/.md` | `ui/book/read/sheet/ReaderBookSheet.kt:1117-1176` | `entry/src/main/ets/pages/CatalogPage.ets:334`（`BookmarkExportMenu`，JSON / Markdown 两种） | 已接 | 一致：两种格式。 | 导出书签，看默认文件名格式 | 依据源码推断，未设备验证 | `bookmark` |
 | 笔记页：行间距 6dp、单击编辑、长按跳转 | `ui/book/read/sheet/ReaderBookSheet.kt:1303-1341` | `entry/src/main/ets/pages/CatalogPage.ets`（笔记 tab） | 已接 | 一致。 | 在笔记 tab 单击/长按一条笔记，看是否分别编辑/跳转 | 依据源码推断，未设备验证 | `bookmark` |
 
@@ -389,12 +390,12 @@
 | 下拉加书签（80dp 上膛、最多跟 60% 页高） | `feature/reader/core/gesture/PullBookmarkGesture.kt:12-19`、`:58-78` | `entry/src/main/ets/pages/ReaderPage.ets:1811`（`updateBookmarkPull`：`offsetY >= 80`、钳到 `viewportHeight*0.6`） | 已接 | 一致：80dp 与 60%。 | 在页面上往下拉 80dp，看是否出现「松手以添加书签」 | 依据源码推断，未设备验证 | `readConfig` |
 | 下拉提示气泡（14sp、`0xA0000000`、圆角 24dp、淡入 120ms） | `feature/reader/ReaderCanvasSurface.kt:1840-1864`、`PullBookmarkGesture.kt:16-19` | `entry/src/main/ets/pages/ReaderPage.ets:4651-4660`（`backgroundColor('#A0000000')`、`borderRadius(24)`、`margin top 72`） | 已接 | 一致：底色与圆角相同。 | 下拉时看提示气泡样式 | 依据源码推断，未设备验证 | `readConfig` |
 | 本页已有书签时下拉**删除**最近一条并提示「已移除书签」 | `ui/book/read/ReadBookmarkDelegate.kt:99-137` | `entry/src/main/ets/pages/ReaderPage.ets:1811-1822`（`bookmarkWillRemove` → 「松手以取消书签」） | 已接 | 一致：提示文案不同（「松手以取消书签」vs「已移除书签」），行为相同。 | 在有书签的页下拉，看提示是否为取消 | 依据源码推断，未设备验证 | `readConfig` |
-| 书签跳转校验（书源指纹 + 章节标题都对直接跳，否则弹「仍然跳转」确认） | `ui/book/read/ReadBookmarkNavigateDelegate.kt:42-95` | 无（本地书签跳转不校验） | 未接 | 改了目录规则后旧书签会指错章，本地**直接跳过去不提示**，用户会落到错误章节。上游会先确认。 | 改编码或目录规则后点一条旧书签，看是否弹确认 | 依据源码推断，未设备验证 | `bookmark` |
+| 书签跳转校验（书源指纹 + 章节标题都对直接跳，否则弹「仍然跳转」确认） | `ui/book/read/ReadBookmarkNavigateDelegate.kt:42-95` | `entry/src/main/ets/data/ReaderBookmarkTarget.ets:39-60`（`verify` 返回 `match`/`sourceChanged`/`titleMismatch`）、`entry/src/main/ets/pages/Index.ets:1745`（`askJumpAnyway` 确认弹层）、`:1795-1830`（`openReaderBookmark` 走校验） | 已接 | 改过目录规则或换过编码后点一条旧书签，本地**会先核对章节标题**，对不上就弹「位置可能已偏移 / 取消 / 仍跳转」，不会闷头跳到错误章节。 | 改一次目录规则，再点改动前存下的书签，看是否弹确认 | 该能力提交 `883e95d` 早于本表首次落盘，属**本表漏记**而非本轮新做；依据源码推断，未设备验证 | `bookmark` |
 | 进度条换章按钮（左右各一枚 40×40） | `ui/book/read/ReadBookMenuBarBottom.kt` | `entry/src/main/ets/pages/ReaderPage.ets:4750-4793`（左 40×40 换章 + Slider + 右 40×40 换章） | 已接 | 一致。 | 看进度条左右是否有换章按钮 | 依据源码推断，未设备验证 | `readConfig` |
-| 进度条页码显示（`第 x / 共 y 页`） | `ui/book/read/ReadBookMenuBarBottom.kt:84-127` | `entry/src/main/ets/pages/ReaderPage.ets:2887-2891`（`getWholeBookPageText`）、`:2893-2898`（`getReaderFooterProgress`，**全仓 0 调用**） | 未接 | 本地进度条**不显示页码文字**，只有一个滑块和左右换章按钮；上游滑块旁有「第 3 / 共 12 页」。用户拖动时不知道拖到哪。 | 看进度条旁是否有页码文字 | 依据源码推断，未设备验证 | `readConfig` |
+| 进度条页码无障碍值（`第 x 页，共 y 页` / `第 x 章，共 y 章`） | `ui/book/read/ReadBookMenuBarBottom.kt:84-95`、`:193`（`accessibilityValue`） | `entry/src/main/ets/pages/ReaderPage.ets:2578`（`getProgressAccessibilityText`）、`:5334`（`Slider.accessibilityText`） | 已接 | 读屏用户在进度条上听到「第 8 页，共 15 页」或「第 8 章，共 572 章」，与上游同一句。**注意：上游与本地都没有可见的页码文字**，滑块旁本来就不印字，本行只盘无障碍值。 | 开读屏（TalkBack/屏幕朗读）聚焦进度条，听是否念出页码 | 原差异说明「上游滑块旁有第 3 / 共 12 页」经复核有误：`ReadBookMenuBarBottom.kt` 全文无可见 `Text` 页码，只有 `accessibilityValue`；`uitest dumpLayout` 不导出 `accessibilityText`，未设备验证 | `readConfig` |
 | 跨章边界：到章末继续翻进入下一章 | `feature/reader/core/navigation/ReaderPageNavigator.kt:121-126`、`ReaderPartialPagePolicy.kt:94-103` | `entry/src/main/ets/pages/ReaderIndex.ets`→`Index.ets:6815-6825`（`onTurnChapterBoundary` 直接 `selectChapter`） | 已接 | 一致：翻到章末自动进下一章。 | 翻到一章最后一页再翻，看是否进入下一章 | 依据源码推断，未设备验证 | `readConfig` |
-| 章边界「加载中」占位页 | `feature/reader/core/navigation/ReaderPageNavigator.kt:82-92` | 无（本地直接换章，无占位页） | 未接 | 本地换章时**没有任何加载态**，长章加载慢时用户看到的是上一章的最后一页停在那里，像是卡住了。 | 在一本大书里快速翻到章末，看是否有「加载中」 | 依据源码推断，未设备验证 | `readConfig` |
-| 第三槽「继续滑动以加载下一章…」提示页 | `feature/reader/core/navigation/ReaderPageNavigator.kt:101-102` | 无 | 未接 | 本地翻到本章最后一页后**再翻就直接跳走**，没有「继续滑加载下一章」这一屏。 | 翻到章末最后一页，看是否出现提示页 | 依据源码推断，未设备验证 | `readConfig` |
+| 章边界「加载中」占位页 | `feature/reader/core/navigation/ReaderPageNavigator.kt:82-92`、`ui/book/read/ReadBookController.kt:3009-3027` | `entry/src/main/ets/pages/ReaderPage.ets:4186-4203`（`showChapterBoundaryMessage`）、`:4166-4171`（`appendBoundaryPlaceholders`）、`:4173-4177`（`messagePlaceholderPage`）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:1394-1417`（`drawMessagePage`） | 已接 | 在章末再翻一页，正文区**整屏居中亮出「加载数据中…」**，新章正文到达后自动撤掉；5 秒没等到就自行清空，不会把提示页永远留在屏幕上。 | 翻到本章最后一页再点下一页，看是否出现居中的「加载数据中…」 | 设备验证 ✔（hilog `[Boundary] show` → `[BoundaryDraw] 加载数据中…` → 换章后 `[Boundary] clear`，`tmp3/h3.txt`）；居中口径照抄上游 `centeredReaderMessagePage`（整块垂直居中） | `readConfig` |
+| 连续滚动到章末的「继续滑动以加载下一章…」提示页 | `feature/reader/core/navigation/ReaderPageNavigator.kt:101-102`、`ui/book/read/ReadBookController.kt:3029-3037` | `entry/src/main/ets/pages/ReaderPage.ets:4186-4203`（同一入口按 `usesCanvasScroll()` 换文案）、`:2009-2014`（`applyReaderScrollDelta` 章末分支） | 已接 | 连续滚动模式滑到本章最底，屏幕上**浮出「继续滑动以加载下一章…」**，告诉用户还能继续往下而不是到头了。分页模式同一处给的是「加载数据中…」。 | 切到「滚动」翻页动画，一直往下滑到章末，看是否出现提示页 | 设备验证 ✔（同上一条日志；文案按 `usesCanvasScroll()` 二选一，与上游 `keep_swipe_tip` / `data_loading` 对应） | `readConfig` |
 | 越界提示（第一页往前/最后一页往后） | `feature/reader/core/navigation/ReaderPageNavigator.kt:104-108`（页码钳制 `hitBoundary`） | `entry/src/main/ets/pages/Index.ets:6815-6825`（提示「没有上一页」/「没有下一页」） | 已接 | 一致：都有越界提示。 | 在全书第一页往前翻，看是否提示 | 依据源码推断，未设备验证 | `readConfig` |
 | 按章内位置定位（`ReaderPartialPagePolicy`：恢复进度时回到章内偏移） | `feature/reader/core/navigation/ReaderPageNavigator.kt:134-139`、`:180-186` | `entry/src/main/ets/pages/ReaderPage.ets:3527`（`updateProgress`）、`:3563`（`seekToProgress`）、`:1290`（`pendingBookmarkTargetPosition`） | 已接 | 一致：退出重进能回到原来的章内位置。 | 读到一章中间退出，重进看是否回到原位置 | 依据源码推断，未设备验证。BOOKSHELF C 块已盘记录侧 | `readRecord` |
 | 章节内页码缓存（二分查页） | `feature/reader/core/navigation/ReaderChapterPaginationSnapshot.kt:12-21` | `entry/src/main/ets/pages/LocalReaderPaginator.ets:321`（`countPagesIncrementally`） | 已接 | 一致：都是增量/二分。 | 在长章里快速拖动进度条，看是否卡 | 依据源码推断，未设备验证 | `不备份` |
@@ -406,11 +407,11 @@
 | 点章目跳转到该章第一页 | `ui/book/toc/TocScreen.kt`、`TocViewModel.kt` | `entry/src/main/ets/pages/CatalogPage.ets`（章节行点击 → `selectChapter`） | 已接 | 一致。 | 点目录里第 10 章，看是否跳到第 10 章开头 | 依据源码推断，未设备验证 | `readConfig` |
 | 跨章定位（从书签/搜索/笔记跳到指定章内偏移） | `feature/reader/core/navigation/ReaderPageNavigator.kt:134-139` | `entry/src/main/ets/pages/ReaderPage.ets:1290`（`onBookmarkTargetChanged` → `pendingBookmarkTargetPosition` → `rebuildReaderPages(true)`） | 已接 | 一致。 | 从书签列表点一条，看是否跳到该位置 | 依据源码推断，未设备验证 | `bookmark` |
 | 目录跳转加载态 | `ui/book/toc/TocScreen.kt`（下载中转圈 20dp） | 无 | 不适用 | 本地全离线，章节内容从本地文件读，无下载态。 | — | 范围差异：本地无在线下载 | `不备份` |
-| 全文搜索（逐章搜索、命中上限 200 条、正则模式） | `feature/reader/core/selection/ReaderSearchMatcher.kt:22-41`、`:49-58`（500ms 预算） | `entry/src/main/ets/pages/ReaderSearchPage.ets:196`（`loadChaptersAndSearch`，上限 200 条） | 未接 | 本地**正则搜索没有 500ms 超时预算**：一条灾难性回溯的正则会**卡死搜索页**且无法中断。上游超时后放弃该章。 | 用 `(a+)+$` 这类正则搜全书，看是否卡死 | 依据源码推断，未设备验证 | `不备份` |
+| 全文搜索（逐章搜索、命中上限 200 条、正则模式带 500ms 预算） | `feature/reader/core/selection/ReaderSearchMatcher.kt:22-41`、`:49-58`（`REGEX_MATCH_TIMEOUT_MILLIS = 500`）、`utils/RegexDeadlineSequence.kt` | `entry/src/main/ets/pages/ReaderSearchPage.ets:224`（调 `ReaderSearchRegex.run`）、`:226`（`timedOutChapterCount++` 后跳过该章）、`entry/src/main/ets/data/ReaderSearchRegex.ets:47`（`MATCH_TIMEOUT_MILLIS = 500`）、`:68`（`Promise.race` 超时） | 已接 | 正则搜索**单章超过 500ms 就放弃该章继续往下搜**，`(a+)+$` 这类灾难性回溯不会再把搜索页卡死；非法正则仍提示「正则表达式无效」。 | 用 `(a+)+$` 搜一本大书，看搜索是否还能走完、是否只是跳过若干章 | ArkTS 拿不到上游那种逐字符回调，改用 taskpool worker + `Promise.race` 做同等预算；依据源码推断，未设备验证 | `不备份` |
 | 搜索结果高亮摘录（命中前后各 12 字符） | `feature/reader/core/selection/ReaderSearchMatcher.kt:94-107` | `entry/src/main/ets/pages/ReaderSearchPage.ets:275`（`highlightedExcerpt`） | 已接 | 一致。 | 搜一个词，看结果里是否高亮 | 依据源码推断，未设备验证 | `不备份` |
-| 搜索左右箭头（正文两侧悬浮圆钮，还有前后结果时才出现） | `ui/book/read/ReadBookSearchBar.kt:1-92` | 无 | 未接 | 本地搜索结果跳转后**没有「上一个/下一个」按钮**，要回搜索页重新点。 | 从搜索结果跳进正文，看左右是否有箭头 | 依据源码推断，未设备验证 | `不备份` |
-| 搜索底部结果条（「当前/总数 + 百分比 + 章名」+ 三枚按钮 2:1:0.55） | `ui/book/read/ReadBookMenuBarSearch.kt:1-201` | 无 | 未接 | 本地搜索结果跳转后**正文里没有任何「第 3/共 12 个结果」提示**，用户不知道还有几个。 | 见上行 | 依据源码推断，未设备验证 | `不备份` |
-| 搜索收起优先级（点遮罩时先收搜索条） | `ui/book/read/ReadBookMenuBar.kt:126-167` | 无 | 未接 | 本地搜索页是独立页面，无遮罩层逻辑。 | — | 依据源码推断，未设备验证 | `不备份` |
+| 搜索左右箭头（正文两侧悬浮圆钮，还有前后结果时才出现） | `ui/book/read/ReadBookSearchBar.kt:24-95` | `entry/src/main/ets/pages/ReaderPage.ets:5451-5478`（两侧 44×44 圆钮，`searchNavIndex > 0` / `< length - 1` 才显示） | 已接 | 从搜索结果跳进正文后，**屏幕左右边缘各有一枚圆形箭头**，点一下就跳到上/下一个命中并自动定位到那一页；已经是第一个/最后一个时对应箭头消失。 | 从搜索结果跳进正文，看左右是否有箭头；点右箭头看是否到下一个命中、页码与结果条是否同步 | 设备验证 ✔（`tmp3/shots/al.jpeg` 左侧箭头 + 底部结果条；点右箭头后 `1 / 200` → `2 / 200`、章名 `第1章` → `第4章`） | `不备份` |
+| 搜索底部结果条（「当前/总数 + 百分比 + 章名」+ 三枚按钮 2:1:0.55） | `ui/book/read/ReadBookMenuBarSearch.kt`（`SearchBottomMenuContent`） | `entry/src/main/ets/pages/ReaderPage.ets:5480-5532`（信息 pill + 三枚按钮）、`:5449`（`searchResultOverlayVisible`） | 已接 | 搜索结果跳进正文后，**屏幕底部浮出一条胶囊**：左边「1 / 200」、中间「1%」小标签、竖分隔线、右边当前章名；下面一行三枚按钮「所有结果 / ⋮ / ✕」。原来跳进正文后完全不知道还有几个结果。 | 见上行；另看底部 pill 的数字是否随箭头变化 | 设备验证 ✔（`tmp3/shots/al.jpeg`：`1 / 200`、`1%`、`第1章 盗神林川`、`所有结果`）；三按钮权重 2 : 1 : 0.55 照抄上游 | `不备份` |
+| 搜索收起优先级（点遮罩时先收搜索条，再点才收主菜单） | `ui/book/read/ReadBookMenuBar.kt:126-167`（`ReaderMenuDismissLayer`） | 无 | 不适用 | 本地没有「阅读页内的搜索浮层」这层结构：搜索是独立页面（`AppRoute.READER_SEARCH`），结果条只在正文上浮一层、和主菜单互斥显示（`searchResultOverlayVisible` 要求 `!controlsVisible`），点遮罩先收菜单是唯一合理的顺序，不存在「先收搜索条」这一步。 | 打开菜单后再点遮罩，确认菜单直接收起、搜索条不受影响 | 平台/架构差异：本地搜索结果条不是与主菜单同级的浮层，没有两级 dismiss 可排；行为上用户感知不到差别 | `不备份` |
 
 ## 覆盖证明
 
@@ -788,9 +789,9 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 17 | 13 | 1 |
 | B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
-| C 界面层 | 78 | 55 | 18 | 5 |
-| D 交互层 | 48 | 30 | 17 | 1 |
-| **合计** | **211** | **141** | **62** | **8** |
+| C 界面层 | 79 | 59 | 14 | 6 |
+| D 交互层 | 48 | 37 | 9 | 2 |
+| **合计** | **212** | **152** | **50** | **10** |
 
 数字核对脚本（**注意**：表里有两行图例 `| 状态 | 已接 | 未接 | 不适用 |`，直接 `grep -c` 会各多算 2，所以要先排除图例行；含 `\|` 转义的行也必须按转义分列，否则少算 3 行）：
 
@@ -807,7 +808,7 @@ for l in lines:
     cells = re.split(r'(?<!\\)\|', s)
     if len(cells) == 8 and cells[3].strip() in n:
         n[cells[3].strip()] += 1
-print(n, sum(n.values()))   # {'已接': 141, '未接': 62, '不适用': 8} 211
+print(n, sum(n.values()))   # {'已接': 152, '未接': 50, '不适用': 10} 212
 PY
 
 # 表格行内不得出现第四种状态词
@@ -816,26 +817,27 @@ grep -nE '^\|.*\|\s*(部[分]|基[本]|待[定])' docs/parity/TXT-READER.md   # 
 
 ### 一句话结论
 
-**翻页、滚动与阅读页顶底栏都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）落地后，日常阅读的**翻页手感与菜单操作**已经不需要再回上游；剩下 62 行未接集中在**目录页与各二级面板的字段/形态**（分卷折叠、字数卡、粘性卷头、高亮规则编辑器的 6 个字段与预览）与**绘制细节**（分层绘制、6 种下划线、九宫格、覆盖阴影）。
+**翻页、滚动、阅读页顶底栏、目录页与搜索结果条都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）+ 第三批十二行（目录搜索保留卷名、`tocLevel` 多级缩进、粘性卷头、目录多选、书签跳转校验复核、进度条无障碍值复核、章边界「加载数据中…」占位页、滚动章末提示页、正则 500ms 预算、搜索左右箭头、底部结果条、搜索收起优先级）落地后，**从打开一本书到翻目录、搜正文、跳结果的整条路径**都能对着上游用；剩下 50 行未接集中在**各二级面板的字段/形态**（排版页七子页、页眉页脚 21 种 tip、高亮规则编辑器、主题列表、文本处理面板）与**绘制细节**（分层绘制、6 种下划线、九宫格、文字背景图、覆盖阴影）。
 
 ### 对阅读手感影响最大的前 5 条（剩余未接行中）
 
-> 前两批已落地，下面这份榜单只从**尚未接的 62 行**里挑，避免拿已修好的项占位。
+> 前三批已落地，下面这份榜单只从**尚未接的 50 行**里挑，避免拿已修好的项占位。
 
 1. **绘制不分层，下划线被选区盖住**（B4）—— 上游 `ReaderCanvasSurface.kt:2767-2869` 分四层画（文字背景色带 / 正文 / contentRules / styledUnderlines / overlayRules），本地 `ReaderCanvasSurface.ets:1183-1222` 跟着每个 box 一起画。选中一段带下划线的文字时**下划线被选区灰块压掉**，overlay 规则也盖不到文字之上。
 2. **下划线只有系统线型**（B4）—— 上游 6 种手绘线型（虚线 10-10、双线、波浪振幅 3dp/波长 12dp、SVG、半高线），本地只有系统 `TextDecorationType`。高亮规则里选「波浪下划线」画出来是**一条直线**，高亮规则的表达力差一大截。
 3. **文字背景图完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**。
-4. **目录页看不出「现在在哪一卷」**（C5）—— 上游卷名滚动超过 24 就吸顶、章节行按 `tocLevel` 每级缩进 10dp（最多 6 级）；本地卷名滚过去就没了、章节只有两级缩进。572 章的书往下滑到一半，**用户分不清自己在第几卷、哪一章属于哪一卷**。
-5. **章边界无「加载中」占位页、无第三槽提示**（D6）—— 上游 `ReaderPageNavigator.kt:82-92`、`:101-102` 有加载中占位页与「继续滑动以加载下一章…」，本地直接换章。长章加载慢时用户看到上一章最后一页停在那里，**像是卡住了**。
+4. **排版页只有一页，上游有七个子页**（C6）—— 上游 `TypographyPage.kt:55-345` 把排版拆成「排版 2 / 信息 2 / 边距 3」共 7 页，字重、下划线、标题位置与分段方式、页眉页脚字号都在里面；本地只有一个排版入口。想调「标题分段方式」或「副标题缩放」的用户**在本地找不到任何入口**。
+5. **页眉页脚只能选 20 种固定组合，上游是 21 种 tip 自由拼**（C6）—— 上游 `TypographyTabs.kt:1234-1250` 的 tip 类型有 21 种，左中右三槽可任意组合、可自定义模板；本地是 type 1..20 的固定枚举。想要「左：书名 / 中：章名 / 右：电量+时间」这种组合**拼不出来**。
 
 ### 次一级（值得排期但影响面小）
 
-- 目录搜索会把卷名一起过滤掉（C5）、目录页无多选浮层（C5）
-- 底栏动作配置页的分组与拖拽排序形态（C3）
-- 自动翻页无顶部 1px 进度提示（B4）
-- 高亮规则只有 6 个字段、无实时预览（C7）
-- 覆盖转场交界处无 36dp 阴影（B4）
-- 淡入转场提交阈值未降为 0.1（B4）
+- 更多操作面板 28 项 id 与「带更多箭头的条目」（C4）
+- 高亮规则编辑只有 6 个字段、无实时预览与九宫格编辑器（C7）
+- 划线样式面板的 16 个预设色与 7 种效果（C7）
+- 主题列表的网格列数/管理态 7 个动作/前 5 个内置不可删（C7）
+- 下划线配置面板 8 项（C7）、文字背景透明度 0~100（B7）
+- 自动翻页无顶部 1px 进度提示（B4）、覆盖转场无 36dp 阴影（B4）、淡入阈值未降为 0.1（B4）
+- 菜单折叠态一行横向滚动快捷条 + 「更多」二级弹层与出入场动画（D5）
 
 ## 维护
 

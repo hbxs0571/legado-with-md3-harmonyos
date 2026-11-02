@@ -49,6 +49,7 @@ import {
 import {
   ReaderMoreActionConfig, READER_MORE_ACTION_DEFAULTS
 } from '../data/ReaderMoreActionsRepository';
+import { ReaderSearchNavItem } from '../model/ReaderSearchNav';
 
 interface ReaderMoreAction {
   id: string;
@@ -637,6 +638,16 @@ export struct ReaderPage {
   onOpenSettings: () => void = () => {};
   onCharsetChange: (charset: string) => void = (_charset: string) => {};
   onOpenSearchContent: () => void = () => {};
+  /**
+   * 搜索结果集：从搜索页跳进来时由 `Index.ets` 传下来，正文两侧的「上一个/下一个」
+   * 与底部结果条都读它（上游 `ReadBookState.searchResultIndex` 同用途）。
+   */
+  @Prop searchNavItems: ReaderSearchNavItem[] = [];
+  @Prop @Watch('onSearchNavIndexChanged') searchNavIndex: number = -1;
+  /** 跳到另一个搜索结果；`Index.ets` 负责重新读章与定位。 */
+  onOpenSearchNavItem: (index: number) => void = (_index: number) => {};
+  /** 收起搜索结果条（上游 `HideSearchMenu`）。 */
+  onCloseSearchResult: () => void = () => {};
   onOpenReadAloud: () => void = () => {};
   onOpenImagePreview: (uri: string) => void = (_uri: string) => {};
   onCloseImagePreview: () => void = () => {};
@@ -666,6 +677,9 @@ export struct ReaderPage {
   onContentProcessDelete: (id: string) => void = (_id: string) => {};
   onSelectChapterIndex: (chapterIndex: number) => void = () => {};
   onTurnChapterBoundary: (delta: number) => void = (_delta: number) => {};
+  /** 章边界提示文案；非空时当前页整屏只显示这一行（上游 `centeredReaderMessagePage`）。 */
+  @State boundaryMessage: string = '';
+  private boundaryMessageTimer: number = -1;
   onAutoReadSpeedChange: (seconds: number) => void = (_seconds: number) => {};
   onReadSessionStart: () => void = () => {};
   onReadSessionPulse: () => void = () => {};
@@ -725,6 +739,10 @@ export struct ReaderPage {
     if (this.scrollProgressTimer >= 0) {
       clearTimeout(this.scrollProgressTimer);
       this.scrollProgressTimer = -1;
+    }
+    if (this.boundaryMessageTimer >= 0) {
+      clearTimeout(this.boundaryMessageTimer);
+      this.boundaryMessageTimer = -1;
     }
     // 退出阅读页时释放画布缓存：clear() 会逐个 pixelMap.release()，不释放则带图 EPUB 反复进出会线性涨内存。
     // 换章复用缓存，那条路径只走 clearParagraphs()，不要改到这里来。
@@ -1410,6 +1428,8 @@ export struct ReaderPage {
   onReaderContentChanged(): void {
     this.resetPageTurnTransition();
     this.refreshContentProcesses();
+    // 新章正文到了，章边界提示页必须撤掉，否则会一直停在「加载数据中…」
+    this.clearBoundaryMessage();
     this.readerContentRevision++;
     this.imageSizes = new Map<string, ReaderIntrinsicImageSize>();
     this.scrollOffset = 0;
@@ -1986,8 +2006,10 @@ export struct ReaderPage {
       viewportExtentPx, window.previous !== undefined, window.next !== undefined);
     if (result.crossing === ReaderScrollCrossing.NEXT) {
       if (this.currentPageIndex + 1 >= pages.length) {
-        // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示
+        // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示。
+        // 但章末要先亮「继续滑动以加载下一章…」提示页，否则用户以为滚到头了。
         this.scrollOffset = context.px2vp(result.offsetPx);
+        this.showChapterBoundaryMessage(1);
         this.paintReaderCanvas();
         return true;
       }
@@ -2192,6 +2214,7 @@ export struct ReaderPage {
     if (nextPageIndex < 0 || nextPageIndex >= this.localReaderPages.length) {
       this.resetCanvasSelectionState();
       this.paintReaderCanvas();
+      this.showChapterBoundaryMessage(isPrevious ? -1 : 1);
       this.onTurnChapterBoundary(isPrevious ? -1 : 1);
       return;
     }
@@ -2211,6 +2234,7 @@ export struct ReaderPage {
     const nextPageIndex = this.currentPageIndex + delta;
     this.resolveStartPosition();
     if (nextPageIndex < 0 || nextPageIndex >= this.localReaderPages.length) {
+      this.showChapterBoundaryMessage(delta);
       this.onTurnChapterBoundary(delta);
       return;
     }
@@ -2624,6 +2648,27 @@ export struct ReaderPage {
   /** 顶栏区的浮动图标行只在位置 0/1 出现。 */
   private readerFloatingIconTopVisible(): boolean {
     return this.showTitleBarIcons && this.titleBarIconPosition <= 1;
+  }
+
+  /**
+   * 搜索结果浮层是否显示。上游 `ReadBookSearchBar.kt:24-95`：
+   * `isShowingSearchResult && searchMenuVisible && !menuVisible` ——
+   * 打开了主菜单就把搜索结果条让出去，收起菜单再回来。
+   */
+  private searchResultOverlayVisible(): boolean {
+    return this.searchNavItems.length > 0 && this.searchNavIndex >= 0 &&
+      this.searchNavIndex < this.searchNavItems.length && !this.controlsVisible;
+  }
+
+  /** 当前搜索结果所在章名；越界时给空串。 */
+  private currentSearchNavTitle(): string {
+    const item = this.searchNavItems[this.searchNavIndex];
+    return item === undefined ? '' : item.chapterTitle;
+  }
+
+  /** 结果集换了（比如跳到了另一个结果），浮层要跟着重画。 */
+  private onSearchNavIndexChanged(): void {
+    this.paintReaderCanvas();
   }
 
   /** 菜单浮层区的浮动图标行只在位置 2/3 出现。 */
@@ -4110,9 +4155,68 @@ export struct ReaderPage {
    * 位移/透明度的口径：`ReaderPageTransitionPolicy.transforms()` 全部按 px 计算，
    * 所以这里把 vp 的布局量统一换成 px，画布 context 也用 LengthMetricsUnit.PX。
    */
+  /**
+   * 章边界占位页（上游 `ReadBookController.kt:900-945` 的窗口装配）。
+   *
+   * 上游在两个位置给整屏居中的提示页：邻章还在读盘时给「加载数据中…」，
+   * 连续滚动到章末时给「继续滑动以加载下一章…」。两者在本地都由
+   * `boundaryMessage` 一个状态驱动——它是「当前页临时替换成提示页」，
+   * 换章成功、正文到达后自动清空。
+   */
+  private appendBoundaryPlaceholders(window: ReaderCanvasWindow): void {
+    if (this.boundaryMessage.length === 0) { return; }
+    window.current = new ReaderCanvasPage(this.messagePlaceholderPage(this.boundaryMessage),
+      this.currentPageIndex);
+  }
+
+  /** 占位页：`lines` 为空、只带一行居中文案，不进正文页数统计。 */
+  private messagePlaceholderPage(text: string): LocalReaderPage {
+    return {
+      lines: [], startPosition: 0, endPosition: 0, titleOnly: false, lineColumns: [], messageText: text
+    };
+  }
+
+  /**
+   * 翻到章边界时先亮提示页，再交给换章回调。
+   *
+   * 连续滚动给「继续滑动以加载下一章…」（上游 `keep_swipe_tip`），
+   * 分页翻页给「加载数据中…」（上游 `data_loading`）——两者都是整屏居中的提示页。
+   * 目标章不存在（全书第一页/最后一页）时不显示，越界提示仍由上层 toast 负责。
+   */
+  private showChapterBoundaryMessage(delta: number): void {
+    const target = this.getChapterIndex() + delta;
+    if (target < 0 || target >= this.getChapterCount()) { return; }
+    const text = this.usesCanvasScroll() ? '继续滑动以加载下一章…' : '加载数据中…';
+    this.boundaryMessage = text;
+    this.paintReaderCanvas();
+    // 兜底：换章失败（读盘报错、目标章缺失）时不能把提示页永远留在屏幕上
+    if (this.boundaryMessageTimer >= 0) {
+      clearTimeout(this.boundaryMessageTimer);
+    }
+    this.boundaryMessageTimer = setTimeout(() => {
+      this.boundaryMessageTimer = -1;
+      if (this.boundaryMessage.length > 0) {
+        this.boundaryMessage = '';
+        this.paintReaderCanvas();
+      }
+    }, 5000);
+  }
+
+  private clearBoundaryMessage(): void {
+    if (this.boundaryMessageTimer >= 0) {
+      clearTimeout(this.boundaryMessageTimer);
+      this.boundaryMessageTimer = -1;
+    }
+    if (this.boundaryMessage.length > 0) {
+      this.boundaryMessage = '';
+      this.paintReaderCanvas();
+    }
+  }
+
   private buildReaderCanvasRequest(transforms: ReaderTransitionTransforms): ReaderCanvasDrawRequest {
     const request = new ReaderCanvasDrawRequest();
     request.window = ReaderCanvasWindow.of(this.localReaderPages, this.currentPageIndex);
+    this.appendBoundaryPlaceholders(request.window);
     request.transforms = transforms;
     request.layout = this.buildReaderCanvasLayout();
     request.style = this.buildReaderCanvasStyle();
@@ -5337,6 +5441,100 @@ export struct ReaderPage {
         }
         .width('100%')
         .height('100%')
+      }
+
+      // 搜索结果浮层：正文两侧的「上一个/下一个」+ 底部结果条。
+      // 上游 `ReadBookSearchBar.kt:24-95`（箭头）与 `ReadBookMenuBarSearch.kt`
+      // （底部 pill：当前/总数 + 百分比 + 竖分隔线 + 章名，下面一行三枚按钮 2:1:0.55）。
+      if (this.searchResultOverlayVisible()) {
+        Row() {
+          if (this.searchNavIndex > 0) {
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
+            }
+            .width(44).height(44).borderRadius(22)
+            .backgroundColor(this.readerBottomBarFillColor())
+            .border(this.readerMenuBorderSettings())
+            .onClick(() => this.onOpenSearchNavItem(this.searchNavIndex - 1))
+          }
+          Blank().layoutWeight(1)
+          if (this.searchNavIndex < this.searchNavItems.length - 1) {
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
+            }
+            .width(44).height(44).borderRadius(22)
+            .backgroundColor(this.readerBottomBarFillColor())
+            .border(this.readerMenuBorderSettings())
+            .onClick(() => this.onOpenSearchNavItem(this.searchNavIndex + 1))
+          }
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 16, right: 16 })
+        .alignItems(VerticalAlign.Center)
+        .hitTestBehavior(HitTestMode.Transparent)
+
+        // 结果条贴屏幕底部（上游 SearchBottomMenuContent 在底栏位置），
+        // 所以外面套一层满高 Column + Blank 把内容推到底，不能靠 alignSelf 居中。
+        Column() {
+          Blank().layoutWeight(1)
+          Column() {
+            // 信息 pill：上游高 40、圆角 16、surfaceContainerLow 底、横向内边距 12。
+            Row() {
+            Text((this.searchNavIndex + 1).toString() + ' / ' + this.searchNavItems.length.toString())
+              .fontSize(13).fontColor(this.readerMenuForeground())
+            Blank().width(8)
+            Text(Math.round((this.searchNavIndex + 1) * 100 / this.searchNavItems.length).toString() + '%')
+              .fontSize(11).fontColor(this.readerMenuAccentTint())
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .backgroundColor(this.readerMenuForegroundAlpha('1A')).borderRadius(8)
+            Blank().width(16)
+            Column().width(1).height(8).backgroundColor(this.readerMenuForegroundAlpha('33'))
+            Blank().width(16)
+            Text(this.currentSearchNavTitle())
+              .fontSize(12).fontColor(this.readerMenuForeground()).maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+          }
+          .width('100%').height(40).padding({ left: 12, right: 12 })
+          .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+          .border(this.readerMenuBorderSettings())
+
+          // 三枚按钮：权重 2 : 1 : 0.55（上游 SearchBottomMenuContent）。
+          Row({ space: 8 }) {
+            Row({ space: 6 }) {
+              Image($r('app.media.app_search')).width(16).height(16).fillColor(this.readerMenuForeground())
+              Text('所有结果').fontSize(12).fontColor(this.readerMenuForeground()).maxLines(1)
+            }
+            .layoutWeight(2).height(40).justifyContent(FlexAlign.Center)
+            .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+            .border(this.readerMenuBorderSettings())
+            .onClick(() => this.onOpenSearchContent())
+
+            Row() {
+              Image($r('app.media.app_more')).width(16).height(16).fillColor(this.readerMenuForeground())
+            }
+            .layoutWeight(1).height(40).justifyContent(FlexAlign.Center)
+            .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+            .border(this.readerMenuBorderSettings())
+            .onClick(() => { this.controlsVisible = true; })
+
+            Row() {
+              AppGlyph({ name: 'profileClose', glyphSize: 16, tint: this.readerMenuForeground() })
+            }
+            .layoutWeight(0.55).height(40).justifyContent(FlexAlign.Center)
+            .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+            .border(this.readerMenuBorderSettings())
+            .onClick(() => this.onCloseSearchResult())
+          }
+          .width('100%').margin({ top: 8 })
+          }
+          .width('88%')
+          .alignSelf(ItemAlign.Center)
+          .margin({ bottom: 24 })
+        }
+        .width('100%').height('100%')
+        .alignItems(HorizontalAlign.Center)
+        .hitTestBehavior(HitTestMode.Transparent)
       }
 
       if (this.readingAnchorAvailable && this.readingAnchorEnabled && !this.controlsVisible &&

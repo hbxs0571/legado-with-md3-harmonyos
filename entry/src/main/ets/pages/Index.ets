@@ -115,6 +115,7 @@ import {
 } from '../data/BackupRepository';
 import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
+import { ReaderSearchNavItem } from '../model/ReaderSearchNav';
 import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
 import { sensor } from '@kit.SensorServiceKit';
@@ -209,6 +210,12 @@ struct Index {
   @State markingEditorIsNew: boolean = true;
   @State readerBookmarkTargetPosition: number = -1;
   @State readerBookmarkTargetRevision: number = 0;
+  /**
+   * 从搜索页跳进正文时带过来的结果集与当前下标。
+   * 阅读页用它画两侧箭头与底部结果条（上游 `ReadBookState.searchResultIndex` 同用途）。
+   */
+  @State readerSearchNavItems: ReaderSearchNavItem[] = [];
+  @State readerSearchNavIndex: number = -1;
   /** 跳转校验未通过时挂在这里，弹「仍要跳转吗」确认框。 */
   @State pendingBookmarkTarget: PendingBookmarkTarget | undefined = undefined;
   @State readerContent: string = '';
@@ -1541,8 +1548,50 @@ struct Index {
     this.bookmarkEditorIsNew = true;
   }
 
-  private toggleReaderBookmarkForPage(startPosition: number, endPosition: number, pageText: string): Promise<void> {
-    const operation = this.readerBookmarkToggleQueue.then(async (): Promise<void> => {
+  /**
+   * 目录页多选「加书签」：给每个选中章各加一条章首书签。
+   *
+   * 对齐上游 `TocIntent.AddBookmarksForSelected`（`ReaderBookSheet.kt:678-740`）。
+   */
+  private async addReaderBookmarksForChapters(chapterIndexes: number[]): Promise<void> {
+    if (chapterIndexes.length === 0) { return; }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问书签存储');
+      return;
+    }
+    const titles: string[] = BookRepository.cachedChapterTitles(this.selectedBook);
+    const bookUrl = this.selectedBook.androidOriginalPath ?? this.selectedBook.contentPath ?? this.selectedBook.id;
+    const now = Date.now();
+    const added: ReaderBookmark[] = [];
+    for (let i = 0; i < chapterIndexes.length; i++) {
+      const chapterIndex = chapterIndexes[i];
+      if (chapterIndex === undefined) { continue; }
+      added.push({
+        id: `${this.selectedBook.id}-${now + i}`,
+        bookId: this.selectedBook.id,
+        bookName: this.selectedBook.title,
+        bookAuthor: this.selectedBook.author,
+        bookUrl: bookUrl,
+        chapterIndex: chapterIndex,
+        chapterName: titles[chapterIndex] ?? '',
+        chapterPosition: 0,
+        bookText: '',
+        content: '',
+        createdAt: now + i
+      });
+    }
+    const nextBookmarks = added.concat(this.readerBookmarks);
+    try {
+      await ReaderBookmarkRepository.save(context, nextBookmarks);
+      this.readerBookmarks = nextBookmarks;
+      this.showUnavailableAction(`已为 ${added.length} 章添加书签`);
+    } catch (_) {
+      this.showUnavailableAction('书签保存失败，请重试');
+    }
+  }
+
+  private toggleReaderBookmarkForPage(startPosition: number, endPosition: number, pageText: string): Promise<void> {    const operation = this.readerBookmarkToggleQueue.then(async (): Promise<void> => {
       if (!this.selectedBook.isLocal || this.selectedBook.contentPath === undefined) { return; }
       const chapterTitles: string[] = BookRepository.cachedChapterTitles(this.selectedBook);
       const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ??
@@ -1910,8 +1959,13 @@ struct Index {
     this.finishTargetJump(true);
   }
 
-  private async openReaderSearchResult(chapterIndex: number, chapterPosition: number): Promise<void> {
+  private async openReaderSearchResult(chapterIndex: number, chapterPosition: number,
+    items: ReaderSearchNavItem[], index: number): Promise<void> {
     const targetBook = this.selectedBook;
+    // 结果集随跳转一起带进阅读页：搜索页随后会被卸载，正文里的
+    // 「上一个/下一个」与底部结果条只能靠这份快照（上游 ReadBookState 常驻）。
+    this.readerSearchNavItems = items;
+    this.readerSearchNavIndex = index;
     if (targetBook.contentPath === undefined) {
       this.showUnavailableAction('这本书没有可搜索的本地正文');
       return;
@@ -1970,6 +2024,27 @@ struct Index {
    * 上游 AllBookmarkViewModel 的 books 由书签与笔记共同聚合，两侧都计入；
    * 本地按 bookId 归并，因此同一本书的书签数与笔记数分别累计。
    */
+  /**
+   * 跳到结果集里的另一个结果。上游 `NavigateSearchResultByOffset`：
+   * 只换定位点，不换章节时也走同一条定位通路。
+   */
+  private async openReaderSearchNavItem(index: number): Promise<void> {
+    const item = this.readerSearchNavItems[index];
+    if (item === undefined) { return; }
+    this.readerSearchNavIndex = index;
+    const jumped = await this.jumpToReaderTarget(
+      this.selectedBook, item.chapterIndex, item.chapterTitle, item.position, '搜索结果');
+    if (jumped) {
+      this.route = AppRoute.READER;
+    }
+  }
+
+  /** 收起搜索结果条（上游 `HideSearchMenu`）；结果集留着，下次搜索会整体替换。 */
+  private closeReaderSearchNav(): void {
+    this.readerSearchNavItems = [];
+    this.readerSearchNavIndex = -1;
+  }
+
   private getBookmarkBookSummaries(): BookmarkBookSummary[] {
     const summaries: BookmarkBookSummary[] = [];
     for (let index = 0; index < this.readerBookmarks.length; index++) {
@@ -6774,6 +6849,10 @@ struct Index {
             onOpenBottomActionConfig: () => this.openReaderSettings(true),
             onCharsetChange: (charset: string) => this.setReaderCharset(charset),
             onOpenSearchContent: () => this.openReaderSearch(),
+            searchNavItems: this.readerSearchNavItems,
+            searchNavIndex: this.readerSearchNavIndex,
+            onOpenSearchNavItem: (index: number) => this.openReaderSearchNavItem(index),
+            onCloseSearchResult: () => this.closeReaderSearchNav(),
             onOpenReadAloud: () => this.openReadAloudSettings(),
             onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULES),
             onToggleNightMode: () => this.toggleReaderNightMode(),
@@ -6860,6 +6939,7 @@ struct Index {
               onOpenReplaceRules: (): void => this.openProfileDetail(ProfileRoute.REPLACE_RULES),
               onOpenTxtTocRules: (): void => this.openProfileDetail(ProfileRoute.TXT_TOC_RULES),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+              onAddBookmarksForChapters: (indexes: number[]) => this.addReaderBookmarksForChapters(indexes),
               onSelectChapter: (chapterIndex: number) => {
               const chapterTitle = BookRepository.cachedChapterTitles(this.selectedBook)[chapterIndex];
               if (chapterTitle !== undefined) {
@@ -7208,8 +7288,9 @@ struct Index {
           bookTitle: this.selectedBook.title,
           onReplaceRulesChanged: () => this.replaceRules = ReplaceRuleRepository.getAll(),
           onBack: () => this.route = AppRoute.READER,
-          onOpenResult: (chapterIndex: number, position: number) =>
-            this.openReaderSearchResult(chapterIndex, position),
+          onOpenResult: (chapterIndex: number, position: number,
+            items: ReaderSearchNavItem[], index: number) =>
+            this.openReaderSearchResult(chapterIndex, position, items, index),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         } else if (this.route === AppRoute.SEARCH) {

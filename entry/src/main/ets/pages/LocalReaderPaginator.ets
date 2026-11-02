@@ -35,6 +35,12 @@ export interface LocalReaderPage {
    * 两列都满才 `finishPage()`，即「一个 page 装两列」。单页模式下全为 0。
    */
   lineColumns: number[];
+  /**
+   * 整屏居中的提示文案（「加载数据中…」/「继续滑动以加载下一章…」）。
+   * 有值即占位页：不排正文，`lines` 为空，绘制时整屏居中画这一行字。
+   * 对齐上游 `ReadBookController.centeredReaderMessagePage`（`ReadBookController.kt:3051-3100`）。
+   */
+  messageText?: string;
 }
 
 export interface LocalReaderImageSize {

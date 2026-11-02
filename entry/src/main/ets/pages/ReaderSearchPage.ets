@@ -4,6 +4,8 @@ import { BookRepository } from '../data/BookRepository';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReaderSearchHistoryRepository } from '../data/ReaderSearchHistoryRepository';
+import { ReaderSearchRegex } from '../data/ReaderSearchRegex';
+import { ReaderSearchNavItem } from '../model/ReaderSearchNav';
 import { AppGlyph } from '../components/AppGlyph';
 
 interface ReaderSearchHit {
@@ -38,7 +40,13 @@ export struct ReaderSearchPage {
   @Prop bookTitle: string = '';
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onReplaceRulesChanged: () => void = () => {};
-  onOpenResult: (chapterIndex: number, position: number) => void = (_index: number, _position: number) => {};
+  /**
+   * 打开一条搜索结果。除了章号与位置，还把整份结果集与当前下标一并交出去：
+   * 跳进正文后搜索页会被卸载，正文两侧的「上一个/下一个」与底部结果条要靠它。
+   */
+  onOpenResult: (chapterIndex: number, position: number,
+    items: ReaderSearchNavItem[], index: number) => void =
+    (_index: number, _position: number, _items: ReaderSearchNavItem[], _at: number) => {};
   @State query: string = '';
   @State matches: ReaderSearchMatch[] = [];
   @State searchHistory: ReaderSearchHistoryEntry[] = [];
@@ -48,6 +56,8 @@ export struct ReaderSearchPage {
   @State historyOnlyThisBook: boolean = true;
   @State searchProgress: number = 0;
   @State searchError: string = '';
+  /** 因正则超时被跳过的章节数；搜索结束后提示「N 章因正则超时已跳过」。 */
+  @State timedOutChapterCount: number = 0;
   onBack: () => void = () => {};
   private searchGeneration: number = 0;
   private searchTimer: number = -1;
@@ -176,6 +186,7 @@ export struct ReaderSearchPage {
     this.matches = [];
     this.searchProgress = 0;
     this.searchError = '';
+    this.timedOutChapterCount = 0;
     const keyword = value.trim();
     if (keyword.length === 0) {
       this.searching = false;
@@ -207,16 +218,19 @@ export struct ReaderSearchPage {
           const chapterMatches: ReaderSearchMatch[] = [];
           const hits: ReaderSearchHit[] = [];
           if (this.regexMode) {
+            // 正则匹配丢到 worker 线程并带 500ms 预算（上游 REGEX_MATCH_TIMEOUT_MILLIS）：
+            // 灾难性回溯的正则最多卡这一章 500ms，界面不冻，超时就跳过本章继续搜。
             try {
-              const matcher = new RegExp(keyword, 'g');
-              let match = matcher.exec(semanticContent);
-              while (match !== null && hits.length + results.length < 200) {
-                const length = match[0].length;
-                if (length > 0) {
-                  hits.push({ position: match.index, length: length });
-                }
-                if (length === 0) { matcher.lastIndex++; }
-                match = matcher.exec(semanticContent);
+              const regexResult = await ReaderSearchRegex.run(semanticContent, keyword, 200 - results.length);
+              if (regexResult.timedOut) {
+                this.timedOutChapterCount++;
+                this.searchProgress = chapterIndex + 1;
+                return generation === this.searchGeneration && results.length < 200;
+              }
+              for (let hitIndex = 0; hitIndex < regexResult.hits.length; hitIndex++) {
+                const hit = regexResult.hits[hitIndex];
+                if (hit === undefined) { continue; }
+                hits.push({ position: hit.position, length: hit.length });
               }
             } catch (_) {
               this.searching = false;
@@ -425,7 +439,7 @@ export struct ReaderSearchPage {
       } else {
         Stack({ alignContent: Alignment.BottomEnd }) {
           List({ scroller: this.resultScroller }) {
-            ForEach(this.matches, (match: ReaderSearchMatch) => {
+            ForEach(this.matches, (match: ReaderSearchMatch, matchIndex: number) => {
               ListItem() {
                 Column() {
                   Row() {
@@ -448,7 +462,14 @@ export struct ReaderSearchPage {
                 .padding(14)
                 .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))
                 .borderRadius(12)
-                .onClick(() => this.onOpenResult(match.chapterIndex, match.position))
+                .onClick(() => this.onOpenResult(match.chapterIndex, match.position,
+                  this.matches.map((item: ReaderSearchMatch): ReaderSearchNavItem => {
+                    return {
+                      chapterIndex: item.chapterIndex,
+                      position: item.position,
+                      chapterTitle: item.chapterTitle
+                    } as ReaderSearchNavItem;
+                  }), matchIndex))
               }
               .margin({ left: 16, right: 16, bottom: 8 })
             }, (match: ReaderSearchMatch) => match.key)
