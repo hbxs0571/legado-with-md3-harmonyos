@@ -27,6 +27,11 @@ import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
 import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator } from './LocalReaderPaginator';
 import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
 import {
+  readerCanvasArgb, readerCanvasHandleDistance, readerCanvasHighlightDecoration,
+  readerCanvasMarkingBackgroundArgb, readerCanvasMarkingDecoration, readerLengthToNumber,
+  readerTextGlyphCount,
+} from '../reader/ReaderCanvasStyleCodec';
+import {
   ReaderCanvasDrawRequest, ReaderCanvasItemBox, ReaderCanvasLayout, ReaderCanvasMarking, ReaderCanvasPage,
   ReaderCanvasRenderer, ReaderCanvasStyle, ReaderCanvasStyleRange, ReaderCanvasWindow, ReaderPageTransform,
   ReaderPageTransition,
@@ -116,6 +121,22 @@ interface ReaderMarkingRange {
   end: number;
 }
 
+/**
+ * 阅读页。
+ *
+ * 文件按四块排列，改动时先认块再找函数（行号会漂，按块名 + 函数名搜）：
+ *
+ * 1. **画布渲染**（`buildReaderCanvas*` / `paintReaderCanvas` / `ReaderCanvasStyleCodec`）
+ *    —— 正文只由 `Canvas` 逐行绘制，绘制主体在 `reader/ReaderCanvasSurface.ets`；
+ *    这里只负责把页面状态拼成 `ReaderCanvasDrawRequest`。
+ * 2. **分页**（`rebuildReaderPages` / `scheduleReaderPaginationRebuild` /
+ *    `calculateReaderBottomJustifyGap`）—— 尺寸驱动 + 防抖，产出 `localReaderPages`。
+ * 3. **手势**（`build()` 里的 `LongPressGesture` / `PanGesture` /
+ *    `startCanvasSelectionAt` / `dragCanvasSelectionTo` / `canvasHandleHit`）
+ *    —— 选区坐标三口径都在这一块，见 `KNOWN-ISSUES` 的 KI-EXP3。
+ * 4. **菜单**（顶栏/底栏 `@Builder`、`readerMarkingSelectionMenu`、
+ *    `runSelectionMenuAction`）—— 纯 ArkUI，不进画布。
+ */
 @Component
 export struct ReaderPage {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
@@ -1471,6 +1492,15 @@ export struct ReaderPage {
     this.charsetOptionsExpanded = false;
     this.onCharsetChange(this.charsetInput);
   }
+
+  // -------------------------------------------------------------------------
+  // 分页
+  //
+  // 尺寸驱动：`readerContentWidth` / `viewportHeight` 到位才分页，且分页输入变化走
+  // 防抖调度（`scheduleReaderPaginationRebuild`），避免 40 个 @Prop 各触发一次全量重排。
+  // 图片缺尺寸时用占位高度参与分页（对齐上游 ReaderChapterBlockMeasurer），
+  // 绝不因为一张图没就绪就把整章分页作废。
+  // -------------------------------------------------------------------------
 
   private rebuildReaderPages(forceProgressCommit: boolean = false): void {
     if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
@@ -2828,17 +2858,6 @@ export struct ReaderPage {
     return `${current}/${total}  ${this.getWholeBookProgress().toFixed(1)}%`;
   }
 
-  private toDimension(value: Length): number {
-    if (typeof value === 'number') {
-      return value;
-    }
-    if (typeof value === 'string') {
-      const parsed = Number.parseFloat(value);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    }
-    return 0;
-  }
-
   // 上游 ReaderColumnMode.kt 的 columnCount()：'1' 恒双页（滚动模式也生效），
   // '2' 只在横屏且非滚动时双页，'3' 放宽到平板，其余单页。
   private resolveReaderColumnCount(): number {
@@ -2915,20 +2934,8 @@ export struct ReaderPage {
     return context.px2vp(context.fp2px(this.getReaderLetterSpacingFp(fontSize)));
   }
 
-  // 按 codePoint 数字形：代理对算一个字形，字间距是按字形数摊的。
-  private getReaderTextGlyphCount(value: string): number {
-    let count = 0;
-    let cursor = 0;
-    while (cursor < value.length) {
-      const codePoint = value.codePointAt(cursor);
-      cursor += codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1;
-      count++;
-    }
-    return count;
-  }
-
   private getReaderTextLetterSpacingWidth(value: string, fontSize: number): number {
-    return this.getReaderTextGlyphCount(value) * this.getReaderLetterSpacingVp(fontSize);
+    return readerTextGlyphCount(value) * this.getReaderLetterSpacingVp(fontSize);
   }
 
   private createMarkingFromCurrentSelection(): void {
@@ -2959,28 +2966,6 @@ export struct ReaderPage {
       }
     }
     return undefined;
-  }
-
-  private getMarkingBackground(marking: ReaderMarking | undefined): string {
-    if (marking === undefined || (marking.effect !== 'highlight' && marking.effect !== 'background')) {
-      return 'transparent';
-    }
-    return marking.color.startsWith('#') && marking.color.length === 7
-      ? `#44${marking.color.substring(1)}` : marking.color;
-  }
-
-  private getMarkingDecorationType(marking: ReaderMarking | undefined): TextDecorationType {
-    if (marking === undefined) { return TextDecorationType.None; }
-    if (marking.effect === 'strike') { return TextDecorationType.LineThrough; }
-    if (marking.effect === 'solid' || marking.effect === 'dashed' ||
-      marking.effect === 'wave') { return TextDecorationType.Underline; }
-    return TextDecorationType.None;
-  }
-
-  private getMarkingDecorationStyle(marking: ReaderMarking | undefined): TextDecorationStyle {
-    if (marking?.effect === 'dashed') { return TextDecorationStyle.DASHED; }
-    if (marking?.effect === 'wave') { return TextDecorationStyle.WAVY; }
-    return TextDecorationStyle.SOLID;
   }
 
   private getReaderFontWeight(): number {
@@ -3225,6 +3210,10 @@ export struct ReaderPage {
    *     上游其余 11 项本地没有对应能力，塞进来就是点了没反应的假按钮（`README`/KNOWN-ISSUES 口径）。
    *   - 隐藏（showState 2）的条目不出现；`expandTextMenu` 决定折叠项是与一级同排还是收进「更多」。
    */
+  // -------------------------------------------------------------------------
+  // 菜单（纯 ArkUI，不进画布）
+  // -------------------------------------------------------------------------
+
   @Builder
   private readerMarkingSelectionMenu() {
     Column() {
@@ -3681,7 +3670,7 @@ export struct ReaderPage {
     request.highlights = this.buildReaderCanvasHighlights();
     request.pageBackgroundArgb = this.readerCanvasPageBackgroundArgb();
     // 纸面底色始终不透明：折页时每页要先铺自己的纸，否则两页文字互相透出
-    request.pageSurfaceArgb = this.readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
+    request.pageSurfaceArgb = readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
     // 有自定义背景图时不铺纸面，否则背景图被纸色盖住
     request.pageSurfaceOpaque = this.readerBackgroundImage.length === 0;
     // 仿真折页：触点逐帧写入，绘制期只读；只有 SIMULATION 才走折页分支
@@ -3742,14 +3731,14 @@ export struct ReaderPage {
   private buildReaderCanvasStyle(): ReaderCanvasStyle {
     const style = new ReaderCanvasStyle();
     const context = this.getUIContext();
-    style.colorArgb = this.readerCanvasArgb(this.getReadingTextColor(), 0xFF000000);
+    style.colorArgb = readerCanvasArgb(this.getReadingTextColor(), 0xFF000000);
     style.fontFamilies = [this.readerBodyFontFamily];
     style.fontSizePx = context.fp2px(this.fontSize * 1.05);
     style.fontWeight = this.getReaderFontWeight();
     style.italic = this.textItalic;
     style.letterSpacingPx = context.vp2px(this.getReaderLetterSpacingVp(this.fontSize * 1.05));
     style.underline = this.underline;
-    style.underlineColorArgb = this.readerCanvasArgb(this.getReaderUnderlineColor(), 0xFF3E3D3B);
+    style.underlineColorArgb = readerCanvasArgb(this.getReaderUnderlineColor(), 0xFF3E3D3B);
     style.underlineWidthPx = context.vp2px(this.resolveUnderlineWidthVp());
     style.underlineOffsetPx = context.vp2px(this.resolveUnderlineOffsetVp());
     style.underlineExtend = this.underlineExtend;
@@ -3776,9 +3765,9 @@ export struct ReaderPage {
       const item = new ReaderCanvasMarking();
       item.start = marking.chapterPosition;
       item.end = marking.endPosition;
-      item.backgroundArgb = this.readerCanvasMarkingBackgroundArgb(marking);
-      item.decoration = this.readerCanvasMarkingDecoration(marking);
-      item.decorationArgb = this.readerCanvasArgb(marking.color, 0xFF000000);
+      item.backgroundArgb = readerCanvasMarkingBackgroundArgb(marking);
+      item.decoration = readerCanvasMarkingDecoration(marking);
+      item.decorationArgb = readerCanvasArgb(marking.color, 0xFF000000);
       list.push(item);
     }
     return list;
@@ -3813,7 +3802,7 @@ export struct ReaderPage {
       item.end = range.endExclusive;
       item.textColorArgb = rule.textColor ?? 0;
       item.backgroundArgb = rule.bgColor ?? 0;
-      item.decoration = this.readerCanvasHighlightDecoration(rule.underlineMode);
+      item.decoration = readerCanvasHighlightDecoration(rule.underlineMode);
       item.decorationArgb = rule.underlineColor ?? rule.textColor ?? 0;
       if (item.textColorArgb === 0 && item.backgroundArgb === 0 && item.decoration === 0) {
         continue;
@@ -3833,7 +3822,7 @@ export struct ReaderPage {
       const item = new ReaderCanvasStyleRange();
       item.start = marking.chapterPosition;
       item.end = marking.endPosition;
-      item.textColorArgb = this.readerCanvasArgb(marking.color, 0);
+      item.textColorArgb = readerCanvasArgb(marking.color, 0);
       list.push(item);
     }
     this.canvasHighlightSignature = signature;
@@ -3841,71 +3830,12 @@ export struct ReaderPage {
     return list;
   }
 
-  /** HighlightRule.underlineMode → 画布 decoration 口径（与 TextDecorationType 对齐）。 */
-  private readerCanvasHighlightDecoration(mode: number): number {
-    if (mode === 6) { return 6; }
-    if (mode >= 1 && mode <= 4) { return mode; }
-    return 0;
-  }
-
-  private readerCanvasMarkingBackgroundArgb(marking: ReaderMarking): number {
-    if (marking.effect !== 'highlight' && marking.effect !== 'background') {
-      return 0;
-    }
-    // 与 getMarkingBackground 同口径：#44RRGGBB
-    const base = this.readerCanvasArgb(marking.color, 0x00000000);
-    const alpha = (base >>> 24) & 0xFF;
-    if (alpha !== 0) {
-      return base;
-    }
-    return 0x44000000 | (base & 0x00FFFFFF);
-  }
-
-  private readerCanvasMarkingDecoration(marking: ReaderMarking): number {
-    if (marking.effect === 'solid') { return 1; }
-    if (marking.effect === 'dashed') { return 2; }
-    if (marking.effect === 'wave') { return 3; }
-    return 0;
-  }
-
   private readerCanvasPageBackgroundArgb(): number {
     // 有自定义背景图时画布不压底色（否则图片被盖住），由下层的 Image 兜底
     if (this.readerBackgroundImage.length > 0) {
       return 0x00000000;
     }
-    return this.readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
-  }
-
-  /** #RGB / #RRGGBB / #AARRGGBB / 'transparent' → 0xAARRGGBB。解析失败用 fallback。 */
-  private readerCanvasArgb(value: string, fallback: number): number {
-    if (value.length === 0) {
-      return fallback;
-    }
-    if (value === 'transparent') {
-      return 0x00000000;
-    }
-    if (value.startsWith('#')) {
-      const hex = value.substring(1);
-      if (hex.length === 3) {
-        const r = Number.parseInt(`${hex[0]}${hex[0]}`, 16);
-        const g = Number.parseInt(`${hex[1]}${hex[1]}`, 16);
-        const b = Number.parseInt(`${hex[2]}${hex[2]}`, 16);
-        if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
-          return (0xFF << 24) | (r << 16) | (g << 8) | b;
-        }
-      } else if (hex.length === 6) {
-        const parsed = Number.parseInt(hex, 16);
-        if (!Number.isNaN(parsed)) {
-          return (0xFF000000 | parsed) >>> 0;
-        }
-      } else if (hex.length === 8) {
-        const parsed = Number.parseInt(hex, 16);
-        if (!Number.isNaN(parsed)) {
-          return parsed >>> 0;
-        }
-      }
-    }
-    return fallback;
+    return readerCanvasArgb(this.paperColor, 0xFFFFFFFF);
   }
 
   /** 没有转场时的绘制：只画 current，屏幕不空靠 renderer 铺底色兜底。 */
@@ -3958,6 +3888,16 @@ export struct ReaderPage {
   }
 
   /** 菜单锚点：选区上方一排，放不下就挪到下方（上游 ReaderSelectionMenuAnchor）。 */
+  // -------------------------------------------------------------------------
+  // 手势与选区
+  //
+  // 三套坐标口径必须各自对齐，缺一条就会「选区跑到屏幕外」或「抓不到把手」：
+  //   1. 四页窗口只对当前页记几何与画选区；
+  //   2. 手指坐标用 canvasViewportY() 把 localY 换算到画布视口；
+  //   3. 滚动模式再减 scrollOffset（canvasContentY）。
+  // 拖动取位用 renderer.positionAt()（跨元素），端点跟把手走（canvasHandleGrabOffset）。
+  // -------------------------------------------------------------------------
+
   private refreshCanvasSelectionMenuAnchor(request: ReaderCanvasDrawRequest): void {
     const context = this.getUIContext();
     // 选区坐标是画布局部 px，菜单定位在外层 Stack 里，所以要加上画布自身在 Stack 中的偏移
@@ -4179,9 +4119,9 @@ export struct ReaderPage {
       return 0;
     }
     const hitRadius = this.getUIContext().vp2px(28);
-    const startDistance = this.canvasHandleDistance(xpx, ypx, this.canvasHandleStartX,
+    const startDistance = readerCanvasHandleDistance(xpx, ypx, this.canvasHandleStartX,
       this.canvasHandleStartTopY, this.canvasHandleStartY);
-    const endDistance = this.canvasHandleDistance(xpx, ypx, this.canvasHandleEndX,
+    const endDistance = readerCanvasHandleDistance(xpx, ypx, this.canvasHandleEndX,
       this.canvasHandleEndTopY, this.canvasHandleEndY);
     if (startDistance <= hitRadius && startDistance <= endDistance) {
       return 1;
@@ -4190,15 +4130,6 @@ export struct ReaderPage {
       return 2;
     }
     return 0;
-  }
-
-  /** 手指到「竖线顶端—圆心」中轴线的最短距离。 */
-  private canvasHandleDistance(xpx: number, ypx: number, lineX: number, lineTopY: number,
-    centerY: number): number {
-    const nearestY = Math.min(Math.max(ypx, lineTopY), centerY);
-    const dx = xpx - lineX;
-    const dy = ypx - nearestY;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**
@@ -4504,8 +4435,8 @@ export struct ReaderPage {
               })
               .onAreaChange((oldArea: Area, newArea: Area) => {
                 // 菜单要定位在外层 Stack 里，记下画布自己的纵向偏移（Area 的 position 单位是 vp）
-                this.readerCanvasOffsetYVp = this.toDimension(newArea.position.y ?? 0);
-                this.syncReaderCanvasBodyHeight(this.toDimension(newArea.height));
+                this.readerCanvasOffsetYVp = readerLengthToNumber(newArea.position.y ?? 0);
+                this.syncReaderCanvasBodyHeight(readerLengthToNumber(newArea.height));
                 this.paintReaderCanvas();
               })
             if (this.isReaderFooterVisible()) {
@@ -4557,8 +4488,8 @@ export struct ReaderPage {
         // 有自定义背景图片时这层不能压不透明底色，否则图片被盖住。
         .backgroundColor(this.readerBackgroundImage.length > 0 ? '#00000000' : this.paperColor)
         .onAreaChange((oldArea: Area, newArea: Area) => {
-          this.readerContentWidth = this.toDimension(newArea.width);
-          this.viewportHeight = this.toDimension(newArea.height);
+          this.readerContentWidth = readerLengthToNumber(newArea.width);
+          this.viewportHeight = readerLengthToNumber(newArea.height);
           this.rebuildReaderPages();
         })
         .gesture(GestureGroup(GestureMode.Parallel,

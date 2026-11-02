@@ -53,7 +53,8 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 - 改动文件：
   - 新增 `entry/src/main/ets/reader/ReaderCanvasSurface.ets`（1892 行，画布绘制主体：页面窗口、逐行排版、五种转场策略、滚动模型、选区自绘、高亮样式分段、图片预取）。
   - 新增 `entry/src/main/ets/reader/ReaderPageCurl.ets`（390 行，折页几何与触点策略，照上游 `PageCurlGeometry.kt` / `ReaderCurlTouchPolicy`）。
-  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5322 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支与整章 `Scroll` 分支）。
+  - 改 `entry/src/main/ets/pages/ReaderPage.ets`（5358 → 5253 行：接入画布、翻页改逐帧动画、删掉全部 Span 渲染分支与整章 `Scroll` 分支；末尾按「画布渲染 / 分页 / 手势 / 菜单」四块加了分区横幅与文件头索引）。
+  - 新增 `entry/src/main/ets/reader/ReaderCanvasStyleCodec.ets`（124 行，画布样式的纯函数编解码：颜色串转 ARGB、标记/规则效果转画布 decoration 口径、把手命中距离、长度量归一、字形计数）。
   - 改 `entry/src/main/ets/pages/Index.ets`（17 行：阅读页渲染门控）。
   - 新增 `scripts/build-hap.sh`（构建封装，导出 `JAVA_HOME=$DEVECO_ROOT/jbr`）。
 
@@ -86,6 +87,8 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 **验收④五种转场各连翻 20 页**：每改一次 `pageAnimation` 都 `aa force-stop` → `aa start` → 点书架进书，再连点右侧翻页 20 次。COVER(`0`) 到第 16 章 5/10；SLIDE(`1`) 到第 18 章 1/10；折页(`2`) 到第 18 章；FADE(`4`) 到第 20 章 2/10；滚动(`3`) 到第 22 章 8/9 `4.0%`。全程每帧都有完整正文，无整页空白、无末行裁切、无两页文字互相透出。滚动模式另验跨章：连点 12 次从第 4 章滚到第 5 章，`scrollOffset` 越界时正确换页并清选区。**通过。**
 
 滚动模式修复前实测到两个真实缺陷（均已在画布侧修掉）：① 底部对齐位移让「当前页末行与下一页首行叠在同一处」；② `scrollOffset` 是相对当前页的偏移，进度条每换一页就打回 0。
+
+**验收⑤阶段 D 拆分与死代码清理**：`ReaderPage.ets` 里 `getMarkingBackground` / `getMarkingDecorationType` / `getMarkingDecorationStyle` 三个只被 Span 分支用过的标记样式 helper 已删除；`readerCanvasArgb`、`readerCanvasHighlightDecoration`、`readerCanvasMarkingBackgroundArgb`、`readerCanvasMarkingDecoration`、`canvasHandleDistance`、`toDimension`、`getReaderTextGlyphCount` 七个纯函数搬到新建的 `ReaderCanvasStyleCodec.ets`（不再挂在 `this` 上）。文件按四块加分区横幅（画布渲染 / 分页 / 手势 / 菜单）并在 struct 顶部写明索引。`onTextSelectionChange` / `copyOption` / `ReaderGlyphSpan` / `ReaderPageTextLine` / `getReaderTextGlyphs` 的命中数全为 0，`bindSelectionMenu` 只剩一条解释历史行为的注释，确认无两套渲染并存。装机后 `uitest dumpLayout` 仍是 `Canvas=1`、无 `Scroll` 节点；长按选词 + 拖把手跨行复验通过。**通过。**
 
 **未验 / 已知差异**：
 - 折页在程序化翻页（点击翻页，非手势拖拽）下触点轨迹全程近水平，曲线弧度很浅，视觉上接近「左右半屏分界」；与上游 `programmaticX/Y` 同款轨迹，未额外调参。
