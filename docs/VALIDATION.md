@@ -49,6 +49,137 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-03 N 端 r322 阅读设置默认值对齐上游「无数据」层（readConfig.json[0]）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
+- 构建：`bash scripts/build-hap.sh` 两次 `BUILD SUCCESSFUL`（`1 min 75 ms` / `12 s 626 ms`），`hdc install -r` 覆盖安装成功，产物 `entry/build/default/outputs/default/entry-default-unsigned.hap` 12012594 字节，`find entry/src/main/ets -name '*.ets' -newer <hap>` 为空。
+
+### 为什么改这一批
+
+上游有两层互不相同的默认值，本地此前对齐错了层：
+
+- **A 构造默认**：`help/config/ReadBookConfig.kt` 的 `data class Config(` 字段初始值（`bgStr = "#EEEEEE"`、`textColor = "#3E3D3B"`、`textSize = 20`、`paddingLeft = 16`、`paragraphSpacing = 2`、`textBold = 500`）。
+- **B 运行时无数据**：`assets/defaultData/readConfig.json` 第 0 份「微信读书」预设。
+
+新装用户看到的是 **B**，证据链：`ReadBookConfig.kt:50` `var durConfig get() = configStore.configAt(styleSelect)` → `ReadBookConfig.kt:98` `val styleSelect get() = ... readStyleSelect` → `domain/model/settings/ReadSettings.kt:65` `val readStyleSelect: Int = 0` → `data/repository/ReadStyleRepository.kt:38-49`（配置文件不存在 → `return DefaultData.readConfigs`）→ `help/DefaultData.kt:55-62`（读 `assets/defaultData/${ReadBookConfig.configFileName}`）。A 那套只在样式列表不足 5 份时兜底（`data/repository/ReadStyleConfigStore.kt:49-50`）。
+
+### 逐项改动与上游依据
+
+本地主体是 `entry/src/main/ets/data/ReaderSettingsRepository.ets`：`static async load()` 里的 `const defaults: ReaderSettingsSnapshot = {`，以及 `DEFAULT_READER_PADDING_SETTINGS`（:126）、`DEFAULT_READER_INFO_SETTINGS`（:602）。「上游依据」列若无特别说明，均指 `legado-with-MD3/app/src/main/assets/defaultData/readConfig.json` 的 `[0]`。
+
+| 项 | 本地字段（行号） | 改前值 | 改后值 | 上游依据 |
+| --- | --- | --- | --- | --- |
+| 字号 | `fontSize`（:809） | 20 | 24 | `readConfig.json[0].textSize` |
+| 行距 | `lineSpacing`（:811） | 12 | 10 | `lineSpacingExtra` |
+| 字间距 | `letterSpacing`（:812） | 0.1 | 0 | `letterSpacing` |
+| 段距 | `paragraphSpacing`（:810） | 2 | 6 | `paragraphSpacing` |
+| 字重 | `textBold`（:818） | 500 | 0 | `textBold`（上游 0=常规 → `resolveWeight` 给 400，见 `feature/reader/legacy/LegacyReaderPaginationStyleFactory.kt:113-118`） |
+| 正文日间色 | `textColor`（:958） | `#38383B` | `#ff0b0b0b` | `textColor` |
+| 正文夜间色 | `textColorNight`（:959） | `#D8D8DC` | `#ADADAD` | `textColorNight` |
+| 日间背景 | `bgStr`（:964） | `''` | `#ffc0edc6` | `bgStr` |
+| 夜间背景 | `bgStrNight`（:965） | `''` | `#000000` | `bgStrNight` |
+| 样式下标 | `paperIndex`（:836） | 2 | 0 | 上游 `readStyleSelect` 默认 0（`ReadSettings.kt:65`） |
+| 日间样式下标 | `dayPaperIndex`（:837） | 0 | 0（不变） | 同上 |
+| 夜间样式下标 | `nightPaperIndex`（:838） | 0 | 0（不变） | 同上 |
+| 上边距 | `paddingTop`（:127） | 6 | 5 | `paddingTop` |
+| 下边距 | `paddingBottom`（:127） | 6 | 4 | `paddingBottom` |
+| 左边距 | `paddingLeft`（:127） | 16 | 22 | `paddingLeft` |
+| 右边距 | `paddingRight`（:127） | 16 | 22 | `paddingRight` |
+| 页眉上内边距 | `headerPaddingTop`（:128） | 0 | 10 | `headerPaddingTop` |
+| 页眉下内边距 | `headerPaddingBottom`（:128） | 0 | 0（不变） | `headerPaddingBottom` = 0 |
+| 页眉左内边距 | `headerPaddingLeft`（:128） | 16 | 19 | `headerPaddingLeft` |
+| 页眉右内边距 | `headerPaddingRight`（:128） | 16 | 16（不变） | `headerPaddingRight` = 16 |
+| 页脚上内边距 | `footerPaddingTop`（:129） | 6 | 0 | `footerPaddingTop` |
+| 页脚下内边距 | `footerPaddingBottom`（:129） | 6 | 10 | `footerPaddingBottom` |
+| 页脚左内边距 | `footerPaddingLeft`（:129） | 16 | 13 | `footerPaddingLeft` |
+| 页脚右内边距 | `footerPaddingRight`（:129） | 16 | 17 | `footerPaddingRight` |
+| 页眉左栏 | `tipHeaderLeft`（:607） | 2（时间） | 1（章名） | `tipHeaderLeft` = `ReadTipType.tipChapterTitle`（`constant/ReadTipType.kt`） |
+| 页眉中栏 | `tipHeaderMiddle`（:608） | 0 | 0（不变） | `tipHeaderMiddle` = `tipNone` |
+| 页眉右栏 | `tipHeaderRight`（:609） | 3（电量） | 2（时间） | `tipHeaderRight` = `tipTime` |
+| 页脚左栏 | `tipFooterLeft`（:610） | 1（章名） | 7（书名） | `tipFooterLeft` = `tipBookName` |
+| 页脚中栏 | `tipFooterMiddle`（:611） | 0 | 0（不变） | `tipFooterMiddle` = `tipNone` |
+| 页脚右栏 | `tipFooterRight`（:612） | 6 | 6（不变） | `tipFooterRight` = `tipPageAndTotal` |
+| 页眉分割线 | `showHeaderLine`（:605） | `false` | `true` | `showHeaderLine` = true |
+| 页脚分割线 | `showFooterLine`（:606） | `true` | `true`（不变） | `showFooterLine` = true |
+
+`textBold = 0` 的本地等价实现：`entry/src/main/ets/pages/ReaderPage.ets:3674-3679` `private getReaderFontWeight(): number { if (this.textBold === 0) { return 400; } if (this.textBold === 1) { return 900; } if (this.textBold === 2) { return 300; } return Math.max(100, Math.min(900, this.textBold)); }`，与上游 `resolveWeight` 同口径。
+
+### 背景色模型：bgStr 与 paperIndex 一起改
+
+本地原先是「`bgStr` 空串 + `paperIndex` 兜底六个内置方案」，上游是「`bgStr` 本身就是颜色值」。`entry/src/main/ets/pages/Index.ets:5706` `private getPaperColor(): string` 的优先级是 `if (customType === 0 && custom.length > 0) { return custom; }` 再回落 `backgroundStyles[paperIndex]`，与上游 `ui/book/read/sheet/BgTextConfigSheet.kt:74-80`（`val dayBgColor = if (styleConfig.bgType == 0) { runCatching { styleConfig.bgStr.toColorInt() }...`、`val dayBgImage = if (styleConfig.bgType != 0) styleConfig.bgStr else null`）同语义，因此两项一起改。
+
+- `READER_BACKGROUND_STYLES[0].dayColor` 由 `'#FFC0EDC6'` 统一写成小写 `'#ffc0edc6'`（:759），与上游等价、避免后续比对误报。调色板选中态比较是 `toUpperCase()`（`ReaderSettingsPage.ets:3712`），大小写不敏感，不受影响。
+- `READER_STYLE_PRESET_COUNT = 5`（:745）与上游 `READ_STYLE_PRESET_COUNT = 5` 一致；`READER_BACKGROUND_STYLES` 6 条（:757-764）与 `readConfig.json` 6 条对齐。两者都不动。
+
+### 顺带修掉的新装缺陷：paperIndex 被迁移表推到 1
+
+清数据全新安装后 `legado_reader_settings` 落盘 `paperIndex = 1`、`dayPaperIndex = 1`、`nightPaperIndex = 1`，默认样式不是第 0 份「微信读书」。根因是 `ReaderSettingsRepository.ets:1026` 的 `store.get('paperIndex', defaults.paperIndex)` 分不清「从没存过」与「存过 0」，随后 `const initialPaperIndex = styleVersion >= 1 ? storedPaperIndex : ReaderSettingsRepository.migrateLegacyPaperIndex(storedPaperIndex);` 在首启（`paperStyleVersion` 缺失 → `styleVersion = 0`）时把 0 按旧索引表（`:1801-1806` `if (index === 0) { return 1; }`）映射成 1。
+
+修法：读取处加 `const hasStoredPaperIndex = await store.has('paperIndex');`（:1029），判断改成 `const initialPaperIndex = styleVersion >= 1 || !hasStoredPaperIndex ? storedPaperIndex : ReaderSettingsRepository.migrateLegacyPaperIndex(storedPaperIndex);`（:1259）。修后清数据重装，落盘 `paperIndex 0 / dayPaperIndex 0 / nightPaperIndex 0 / paperStyleVersion 1`，阅读界面「全局」页背景行高亮的是「微信读书」。
+
+### 旧观感注释与兜底同步删改
+
+| 文件 | 位置 | 改动 |
+| --- | --- | --- |
+| `entry/src/main/ets/data/ReaderSettingsRepository.ets` | :956-957 | 删「默认值与 ReaderPage 原本硬编码的 #38383B / #D8D8DC 一致，保持旧观感不变。」，换成「正文颜色取上游无数据层的 readConfig.json[0]」 |
+| `entry/src/main/ets/pages/Index.ets` | :457-458 | `readerTextColor` `#38383B` → `#ff0b0b0b`、`readerTextColorNight` `#D8D8DC` → `#ADADAD` |
+| `entry/src/main/ets/pages/ReaderPage.ets` | :5463-5467 | `getReadingTextColor()` 空串兜底 `'#D8D8DC' : '#38383B'` → `'#ADADAD' : '#ff0b0b0b'` |
+| `entry/src/main/ets/pages/ReaderSettingsPage.ets` | :179-180 | `@Prop textColor` / `textColorNight` 同上改新值 |
+
+`entry/src/main/ets/pages/ReaderSettingsPage.ets:36` 的 `READER_TITLE_COLORS` 保留 `'#38383B'` 与 `'#D8D8DC'`——那是标题调色板的可选项，不是默认值，不动。grep `38383B|D8D8DC` 在 `entry/src/main/ets` 下现在只剩这一处。
+
+### 页面声明默认值一并改（不是离题）
+
+设置装载完成前会先渲染一帧，`@State`/`@Prop` 的声明默认值就是那一帧的生效值，所以同步改了：
+
+| 文件 | 项 | 改前 | 改后 |
+| --- | --- | --- | --- |
+| `entry/src/main/ets/pages/Index.ets:224-227` / `:233` | `readerFontSize` / `readerParagraphSpacing` / `readerLineSpacing` / `readerLetterSpacing` / `readerTextBold` | 20 / 2 / 12 / 0.1 / 500 | 24 / 6 / 10 / 0 / 0 |
+| `entry/src/main/ets/pages/Index.ets:467-468` | `readerBgStr` / `readerBgStrNight` | `''` / `''` | `#ffc0edc6` / `#000000` |
+| `entry/src/main/ets/pages/ReaderPage.ets:170-173` / `:179` | `fontSize` / `paragraphSpacing` / `lineSpacing` / `letterSpacing` / `textBold` | 19 / 2 / 12 / 0.1 / 500 | 24 / 6 / 10 / 0 / 0 |
+| `entry/src/main/ets/pages/ReaderSettingsPage.ets:90-93` / `:99` / `:132` | 同上五项 + `paperIndex` | 19 / 2 / 12 / 0.1 / 500 / 2 | 24 / 6 / 10 / 0 / 0 / 0 |
+| `entry/src/main/ets/pages/ReaderSettingsPage.ets:189-190` | `bgStr` / `bgStrNight` | `''` / `''` | `#ffc0edc6` / `#000000` |
+
+传递链已核：`entry/src/main/ets/pages/Index.ets:6752` 的 `ReaderPage({...})` 显式传 `fontSize`/`paragraphSpacing`/`lineSpacing`/`letterSpacing`/`textBold`；`ReaderSettingsPage` 在 `Index.ets` 的 4 处实例化（:7043 / :7808 / :8173 / :8470）都显式传 `fontSize` 与 `paperIndex`，:7238 / :8003 / :8363 / :8660 传 `bgStr` / `bgType`；padding 与 info 两块在 `Index.ets:310`、`:508`、`ReaderPage.ets:383-384`、`ReaderSettingsPage.ets:317-319` 都直接引用仓储常量，改常量即全站跟随。
+
+### 设备验收
+
+**前置：必须清应用数据。** 改 `defaults` 不影响老用户已落盘值——preferences 里已有的键原样保留。清数据前后从备份 `N:\HarmonyProjects\tmp3\clean-verify-backup\preferences\legado_reader_settings` 提取的「改前基线」是：`paragraphSpacing 2`、`lineSpacingExtra 12`、`letterSpacing 0.1`、`textBold 500`、`textColor #38383B`、`textColorNight #D8D8DC`、`paperIndex 5`、`paddingLeft 16`、`paddingRight 16`、`tipHeaderLeft 2`、`tipHeaderRight 13`、`tipFooterLeft 1`、`showHeaderLine false`。不清数据会一直看到这套旧值，误以为改动没生效。
+
+操作序列：`bm clean -n io.legado.harmony -d` → `hdc install -r entry-default-unsigned.hap` → `aa start -a EntryAbility -b io.legado.harmony` → onboarding 四步（用户协议 / 备份与恢复 / 书籍文件夹 / 主题样式）→ 书架「⋮ → 添加本地」导入 `the-metamorphosis.txt` → 点书卡进阅读页。
+
+| 观感 | 预期 | 实测证据 | 结论 |
+| --- | --- | --- | --- |
+| 背景淡绿 | `#ffc0edc6` | 截图 `v6.jpeg` 采样 5 点（`(640,300)` / `(640,1400)` / `(50,700)` / `(1270,700)` / `(640,2400)`）全为 RGB `(192,237,198)` = `#c0edc6`（去 alpha）。证明 `bgStr` 非空且 `bgType=0` 时优先于 `paperIndex` | 通过 |
+| 字号明显大于改前 | 24 | 同章由改前的 `1/17 0.5%` 变 `1/18 0.4%`（同章页数增加），`第1章(1)` 标题与正文均显著放大；阅读界面「全局」页字号显示 24 | 通过 |
+| 左右留白更宽 | `paddingLeft/Right = 22` | 正文左沿众数 x=83、右沿众数 x=1183（屏宽 1280）。22vp × 3.5 = 77px，加字形侧留白即 83；改前 16vp = 56px | 通过 |
+| 行距 | `lineSpacingExtra = 10` | 正文 20 个行段的行间距 pitches `[95,112,101,109,104,104,103,105,104,104]`，众数 104px。本地 `entry/src/main/ets/pages/ReaderPage.ets:1742-1743` `lineHeight = Math.max(1, baseLineHeight * this.lineSpacing / 10)`；改前 `lineSpacing = 12` 时应约 125px | 通过 |
+| 正文颜色 | `#ff0b0b0b` | 字形最暗像素落在 `(0,4,0)`–`(0,12,0)` 区间（近黑；`#0B0B0B` = 11，采样抖动来自抗锯齿与 JPEG 压缩） | 通过 |
+| 页脚左书名 / 右页码 | `tipFooterLeft = 7` / `tipFooterRight = 6` | 页脚左下 `the-metamorphosis`（bounds `[45,2619][426,2668]`）、右下 `1/18 0.4%`（bounds `[1020,2619][1221,2668]`），页脚下沿另有一条横贯分割线（`showFooterLine = true`） | 通过 |
+| 页眉左章名 / 右时间 | `tipHeaderLeft = 1` / `tipHeaderRight = 2` | `headerMode = 0` 下不可见，单独取证见下 | 通过（需 headerMode=1 才可见） |
+| 页眉分割线 | `showHeaderLine = true` | 同上 | 通过（同上） |
+
+**`headerMode = 0` 下的页眉观测限制（重要）**：本地 `entry/src/main/ets/pages/ReaderPage.ets:5482-5485` `private isReaderHeaderVisible(): boolean { // HOS 目前保留系统状态栏；Android 模式0在状态栏显示时隐藏页眉。 return this.infoSettings.headerMode === 1; }`。上游 `feature/reader/legacy/LegacyReaderPageDecorationFactory.kt:333-338` 是 `private fun headerVisible(): Boolean = when (ReadBookConfig.headerMode) { 1 -> true; 2 -> false; else -> ReadBookConfig.hideStatusBar }`，而 `domain/model/settings/ReadSettings.kt:9` `val hideStatusBar: Boolean = false`、本地 `ReaderSettingsRepository.ets:861` `hideStatusBar: false` 也一致——上游在 `headerMode = 0` + `hideStatusBar = false` 时同样**不显示页眉**，本地 `=== 1` 是等价实现，不是缺陷。新装默认值下页眉本来就不出现。
+
+为验证 `showHeaderLine` / `tipHeaderLeft` / `tipHeaderRight` 三项确实生效，单独把页眉模式临时改成「显示」取证：阅读界面 → 信息 → 页眉行右侧下拉 → 选「显示」→ 重开书，截图 `hdr_day2.jpeg`：页眉左侧 `第1章(1)`（x 起 64）、右侧 `22:00`（x 止 1223），页眉分割线横贯 y=258–261、跨 x=64–1223，页眉文字 y=200–247。三项全部生效。取证后已改回「状态栏显示时隐藏」。
+
+信息面板逐项复核（截图 `v7.jpeg` 页眉页、`v9.jpeg` 页脚页）：页眉「状态栏显示时隐藏 / 左：标题 / 中：无 / 右：时间 / 显示分割线 开」，页脚「显示 / 左：书名 / 中：无 / 右：页数及进度 / 显示分割线 开」，与 `readConfig.json[0]` 的 `headerMode 0 / tipHeaderLeft 1 / tipHeaderMiddle 0 / tipHeaderRight 2 / footerMode 0 / tipFooterLeft 7 / tipFooterMiddle 0 / tipFooterRight 6 / showHeaderLine true / showFooterLine true` 逐项一致。
+
+落盘复核（`N:\HarmonyProjects\tmp3\p6\prefs\legado_reader_settings`）：`readerNightMode false`、`headerMode 0.000000`、`footerMode 0.000000`、`paperIndex 0.000000`、`fontSize 24.000000`、`bgStr #ffc0edc6`、`bgStrNight #000000`、`textColor #FF0B0B0B`、`textColorNight #ADADAD`、`showHeaderLine true`、`tipHeaderLeft 1`、`tipHeaderRight 2`、`tipFooterLeft 7`、`tipFooterRight 6`。颜色落盘成大写是 `normalizeHexColor`（`ReaderSettingsRepository.ets:1851` / `:1862` 用 `value.trim().toUpperCase()`）的既定行为，与上游小写写法等价。
+
+**未验**：夜间分支（`bgStrNight #000000` / `textColorNight #ADADAD`）只在深色截图 `v1.jpeg` 里目视确认过黑底灰字，未做像素采样；`paddingTop 5` / `paddingBottom 4` / `headerPadding*` / `footerPadding*` 只通过页眉页脚面板数值与版面留白间接确认，未与上游成对截图做像素差；`textBold 0` 的 400 字重未与上游同字号截图比对笔画粗细。
+
+**复原**：取证期间临时改过的 `headerMode` 回 `0.000000`、`readerNightMode` 回 `false`（已复核）。
+
+### 另两块设置的盘点结论（本轮不改）
+
+- **书架**：`entry/src/main/ets/model/BookshelfLayout.ets:69` 的 `DEFAULT_BOOKSHELF_LAYOUT` 13 个字段逐项等于上游 `domain/model/settings/BookshelfSettings.kt` 的构造默认值，这块没问题。但上游该 data class 有 **51 个字段**（本地 `docs/parity/BOOKSHELF.md:161` 记的也是 51），另外 38 项散落在各页面 `@State` 与仓储之外，**没有集中默认值来源**：其中 10 项（`showUnread` / `showUnreadNew` / `showBookCount` / `showLastUpdateTime` / `showBookIntro` / `showWaitUpCount` / `showBookshelfFastScroller` / `bookshelfLayoutModeLandscape` / `autoRefreshBook` / `saveTabPosition`）在 `entry/src/main/ets` 下零命中，另 28 项只出现在 `data/BackupRepository.ets:360-377` 的备份键白名单里（备份会带走、本地没有对应界面与默认值）。本轮只记录这条事实，不逐个去改。
+- **封面**：`entry/src/main/ets/data/CoverSettingsRepository.ets:51` 的 `DEFAULT_COVER_SETTINGS` 12 个字段逐项等于上游 `domain/model/settings/CoverSettings.kt`，这块没问题。上游另有 6 项（`loadOnlyOnWifi` / `useDefaultCover` / `restrictCoverRatio` / `exploreFilterState` / `defaultCover` / `defaultCoverDark`）本地未声明，属未接，不在本轮。
+
+### 提交
+
+`git diff` 只挑本会话的 4 个源码文件（`ReaderSettingsRepository.ets`、`Index.ets`、`ReaderPage.ets`、`ReaderSettingsPage.ets`）加两份文档，没有 `git add -A`。
+
 ## 2026-11-02 Android 阅读界面基准包核对（纯取证，无代码改动）
 
 **这批证据的用途**：与 HarmonyOS 端做**私下视觉对照**，补上「上游界面到底长什么样」这一层。此前 `PARITY-RULES.md` 第四节写的「与上游成对核实」有两种形态，实际只能用形态二（按源码参数逐项核对），因为本机无 Android 运行时、上游截图存量仅 43 张且阅读相关只有 7 张。本包把形态一（成对截图）解锁了。

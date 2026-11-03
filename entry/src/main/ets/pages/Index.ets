@@ -220,16 +220,17 @@ struct Index {
   /** 跳转校验未通过时挂在这里，弹「仍要跳转吗」确认框。 */
   @State pendingBookmarkTarget: PendingBookmarkTarget | undefined = undefined;
   @State readerContent: string = '';
-  @State readerFontSize: number = 20;
-  @State readerParagraphSpacing: number = 2;
-  @State readerLineSpacing: number = 12;
-  @State readerLetterSpacing: number = 0.1;
+  // 正文排版初值对齐上游「无数据」层 readConfig.json[0]（设置装载完成前的一帧也用这套值）。
+  @State readerFontSize: number = 24;
+  @State readerParagraphSpacing: number = 6;
+  @State readerLineSpacing: number = 10;
+  @State readerLetterSpacing: number = 0;
   @State readerParagraphIndent: string = '　　';
   @State readerTextFont: string = '';
   @State readerTitleFont: string = '';
   @State readerSystemTypefaces: number = 0;
   @State readerTextItalic: boolean = false;
-  @State readerTextBold: number = 500;
+  @State readerTextBold: number = 0;
   @State readerTextShadow: boolean = false;
   @State readerShadowRadius: number = 16;
   @State readerShadowDx: number = 1;
@@ -452,15 +453,19 @@ struct Index {
    * 上游 ReadSettings.kt:118 chineseConverterType，设置项在排版面板。
    */
   @State readerChineseConverterType: number = 0;
-  /** 正文日间/夜间颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight。 */
-  @State readerTextColor: string = '#38383B';
-  @State readerTextColorNight: string = '#D8D8DC';
+  /** 正文日间/夜间颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight，默认取 readConfig.json[0]。 */
+  @State readerTextColor: string = '#ff0b0b0b';
+  @State readerTextColorNight: string = '#ADADAD';
   /** 正文强调色；上游 ReadBookConfig.kt:62 textAccentColor，用于链接/搜索结果/朗读段落。 */
   @State readerTextAccentColor: string = '#834E00';
   @State readerTextAccentColorNight: string = '#FE4D55';
-  /** 自定义背景；空串表示沿用 paperIndex 指向的六个内置方案。上游 ReadBookConfig.kt:537-551。 */
-  @State readerBgStr: string = '';
-  @State readerBgStrNight: string = '';
+  /**
+   * 自定义背景；上游 ReadBookConfig.kt:537-551。
+   * 默认取上游「无数据」层 readConfig.json[0]：bgStr 本身就是颜色值（#ffc0edc6 / #000000），
+   * 非空且 bgType=0 时优先于 paperIndex 指向的内置方案。
+   */
+  @State readerBgStr: string = '#ffc0edc6';
+  @State readerBgStrNight: string = '#000000';
   @State readerBgType: number = 0;
   @State readerBgTypeNight: number = 0;
   @State readerBgAlpha: number = 100;

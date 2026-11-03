@@ -117,10 +117,16 @@ const PALETTE_STYLE_VALUES: string[] = [
   'tonalSpot', 'neutral', 'vibrant', 'expressive', 'rainbow', 'fruitSalad', 'monochrome', 'fidelity', 'content'
 ];
 
+/**
+ * 内边距默认值取上游「无数据」那一层：`assets/defaultData/readConfig.json` 第 0 份预设
+ * （「微信读书」）。注意不是 `ReadBookConfig.kt:609-620` 的构造默认值——新装用户走的是
+ * `ReadStyleRepository.kt:38-49` 的「配置文件不存在 → DefaultData.readConfigs」分支，
+ * 见表头说明。
+ */
 export const DEFAULT_READER_PADDING_SETTINGS: ReaderPaddingSettings = {
-  paddingTop: 6, paddingBottom: 6, paddingLeft: 16, paddingRight: 16,
-  headerPaddingTop: 0, headerPaddingBottom: 0, headerPaddingLeft: 16, headerPaddingRight: 16,
-  footerPaddingTop: 6, footerPaddingBottom: 6, footerPaddingLeft: 16, footerPaddingRight: 16
+  paddingTop: 5, paddingBottom: 4, paddingLeft: 22, paddingRight: 22,
+  headerPaddingTop: 10, headerPaddingBottom: 0, headerPaddingLeft: 19, headerPaddingRight: 16,
+  footerPaddingTop: 0, footerPaddingBottom: 10, footerPaddingLeft: 13, footerPaddingRight: 17
 };
 
 export function copyReaderPaddingSettings(settings: ReaderPaddingSettings): ReaderPaddingSettings {
@@ -588,15 +594,20 @@ export interface ReaderBottomActionConfig {
   enabled: boolean;
 }
 
+/**
+ * 页眉/页脚默认值取上游「无数据」那一层：`assets/defaultData/readConfig.json` 第 0 份预设。
+ * 即左侧章名(1)、右侧时间(2)、页脚左侧书名(7)、页脚右侧页码/总数(6)，且页眉有分割线。
+ * 上游 ReadTipType 取值见 `constant/ReadTipType.kt`。
+ */
 export const DEFAULT_READER_INFO_SETTINGS: ReaderInfoSettings = {
   headerMode: 0,
   footerMode: 0,
-  showHeaderLine: false,
+  showHeaderLine: true,
   showFooterLine: true,
-  tipHeaderLeft: 2,
+  tipHeaderLeft: 1,
   tipHeaderMiddle: 0,
-  tipHeaderRight: 3,
-  tipFooterLeft: 1,
+  tipHeaderRight: 2,
+  tipFooterLeft: 7,
   tipFooterMiddle: 0,
   tipFooterRight: 6,
   customTipHeaderLeft: '',
@@ -744,7 +755,7 @@ export const READER_STYLE_NEW_NIGHT_COLOR: string = '#000000';
 
 // 来源于 Android 原项目 assets/defaultData/readConfig.json 的六个默认阅读样式。
 export const READER_BACKGROUND_STYLES: ReaderBackgroundStyle[] = [
-  { id: 'preset-0', name: '微信读书', dayColor: '#FFC0EDC6', nightColor: '#000000' },
+  { id: 'preset-0', name: '微信读书', dayColor: '#ffc0edc6', nightColor: '#000000' },
   { id: 'preset-1', name: '预设1', dayColor: '#FFFFFF', nightColor: '#000000' },
   { id: 'preset-2', name: '预设2', dayColor: '#DDC090', nightColor: '#3C3F43' },
   { id: 'preset-3', name: '预设3', dayColor: '#C2D8AA', nightColor: '#3C3F43' },
@@ -795,16 +806,16 @@ export class ReaderSettingsRepository {
       tipFooterColor: DEFAULT_READER_INFO_SETTINGS.tipFooterColor,
       tipFooterColorNight: DEFAULT_READER_INFO_SETTINGS.tipFooterColorNight,
       tipDividerColor: DEFAULT_READER_INFO_SETTINGS.tipDividerColor,
-      fontSize: 20,
-      paragraphSpacing: 2,
-      lineSpacing: 12,
-      letterSpacing: 0.1,
+      fontSize: 24,
+      paragraphSpacing: 6,
+      lineSpacing: 10,
+      letterSpacing: 0,
       paragraphIndent: '　　',
       textFont: '',
       titleFont: '',
       systemTypefaces: 0,
       textItalic: false,
-      textBold: 500,
+      textBold: 0,
       textShadow: false,
       shadowRadius: 16,
       shadowDx: 1,
@@ -822,7 +833,7 @@ export class ReaderSettingsRepository {
       dottedRatio: 6,
       textFullJustify: true,
       textBottomJustify: true,
-      paperIndex: 2,
+      paperIndex: 0,
       dayPaperIndex: 0,
       nightPaperIndex: 0,
       // 首次启动用内置六份样式；用户之后增删的结果会整表存进 preferences。
@@ -943,15 +954,15 @@ export class ReaderSettingsRepository {
       selectVibrator: false,
       // 上游 ReadSettings.chineseConverterType 默认 0（不转换）。
       chineseConverterType: 0,
-      // 默认值与 ReaderPage 原本硬编码的 #38383B / #D8D8DC 一致，保持旧观感不变。
-      textColor: '#38383B',
-      textColorNight: '#D8D8DC',
+      // 正文颜色取上游无数据层的 readConfig.json[0]（#ff0b0b0b / #ADADAD）。
+      textColor: '#ff0b0b0b',
+      textColorNight: '#ADADAD',
       // 上游 ReadBookConfig.kt:558-559 的默认强调色。
       textAccentColor: '#834E00',
       textAccentColorNight: '#FE4D55',
-      // 空串表示沿用 paperIndex 的六个内置方案，不改变既有行为。
-      bgStr: '',
-      bgStrNight: '',
+      // 上游无数据层的背景色本身就是颜色值（readConfig.json[0]）；bgStr 非空时优先于 paperIndex。
+      bgStr: '#ffc0edc6',
+      bgStrNight: '#000000',
       bgType: 0,
       bgTypeNight: 0,
       // 上游 ReadBookConfig.kt:548 默认 100（完全不透明）。
@@ -1013,6 +1024,9 @@ export class ReaderSettingsRepository {
       const textFullJustifyValue = await store.get('textFullJustify', defaults.textFullJustify);
       const textBottomJustifyValue = await store.get('textBottomJustify', defaults.textBottomJustify);
       const paperIndexValue = await store.get('paperIndex', defaults.paperIndex);
+      // 区分「从没存过」与「存过 0」：前者是全新安装，应当直接用默认样式下标 0；
+      // 后者才需要走下面的旧索引迁移，否则新装的用户会被迁移表推到 1。
+      const hasStoredPaperIndex = await store.has('paperIndex');
       const styleVersionValue = await store.get('paperStyleVersion', 0);
       const backgroundStylesValue = await store.get('backgroundStyles',
         ReaderSettingsRepository.encodeBackgroundStyles(defaults.backgroundStyles));
@@ -1241,7 +1255,8 @@ export class ReaderSettingsRepository {
       const storedPaperIndex = typeof paperIndexValue === 'number' && Number.isInteger(paperIndexValue)
         ? Math.max(0, Math.min(backgroundStyles.length - 1, paperIndexValue)) : defaults.paperIndex;
       const styleVersion = typeof styleVersionValue === 'number' ? styleVersionValue : 0;
-      const initialPaperIndex = styleVersion >= 1
+      // 有旧数据（存过 paperIndex）且没做过迁移时才走旧索引映射；全新安装直接用默认下标。
+      const initialPaperIndex = styleVersion >= 1 || !hasStoredPaperIndex
         ? storedPaperIndex : ReaderSettingsRepository.migrateLegacyPaperIndex(storedPaperIndex);
       const dayPaperIndex = styleVersion >= 1 && typeof dayPaperIndexValue === 'number' &&
         Number.isInteger(dayPaperIndexValue)

@@ -163,6 +163,15 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 本地 `pages/BookshelfPage.ets:495-497` 自述「只迁移当前项目已有数据模型能支撑的项……留待后续轮次」。
 
+> **默认值来源盘点（r322，2026-11-03）**
+>
+> 上游 `domain/model/settings/BookshelfSettings.kt` 共 **51 个字段**。本地有集中默认值来源的只有 13 项——`model/BookshelfLayout.ets:69` 的 `DEFAULT_BOOKSHELF_LAYOUT`，逐项等于上游构造默认值，并由 `data/BookshelfLayoutRepository.ets:17-60` 按同名键读写、缺项回落该常量。**另外 38 项没有集中默认值来源**：
+>
+> - 10 项在 `entry/src/main/ets` 下零命中，即完全未接：`showUnread`、`showUnreadNew`、`showBookCount`、`showLastUpdateTime`、`showBookIntro`、`showWaitUpCount`、`showBookshelfFastScroller`、`bookshelfLayoutModeLandscape`、`autoRefreshBook`、`saveTabPosition`。
+> - 28 项只出现在 `data/BackupRepository.ets:360-377` 的 bookshelfLayout 备份键白名单里（备份会带走、本地无对应界面与默认值）：`bookshelfShowIntro` / `bookshelfShowTag` / `bookshelfShowCustomTags` / `bookshelfShowSourceTags` / `bookshelfShowWordCount` / `bookshelfShowLatestChapter` / `bookshelfIntroMaxLines` / `shouldShowExpandButton` / `bookshelfRefreshingLimit` / `bookshelfLayoutPageLandscape` / `bookshelfLayoutListLandscape` / `bookshelfFolder*`（六项）/ `bookshelfGridLayout` / `bookshelfLayoutCompact` / `bookshelfListCoverCenter` / `bookshelfListIntroBelowContent` / `bookshelfShowDivider` / `bookshelfCardColor` / `bookshelfCardColorDark` / `bookshelfGroupListStyle` / `bookshelfGroupCoverCount` / `bookshelfSearchActionDirectToSearch`。
+>
+> 所以本表里标「未接」的行，除了界面缺失，还缺一个可对照的本地默认值来源；真要逐项对齐默认值，得先把这些字段接进 `BookshelfLayoutSettings`，不是改一个常量能解决的。同理见封面对照表：`data/CoverSettingsRepository.ets:51` 的 `DEFAULT_COVER_SETTINGS` 12 项与上游 `CoverSettings.kt` 逐项相等，但上游另有 6 项（`loadOnlyOnWifi` / `useDefaultCover` / `restrictCoverRatio` / `exploreFilterState` / `defaultCover` / `defaultCoverDark`）本地未声明。
+
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 分组样式选择 | `BookshelfConfigSheet.kt:85` | `pages/BookshelfPage.ets:510-512` | 已接 | 本地是开关「隐藏分组页签」，只有两档，缺「文件夹」 | 开关切换后页签栏出现与消失 | 第三档见 A1 | — |

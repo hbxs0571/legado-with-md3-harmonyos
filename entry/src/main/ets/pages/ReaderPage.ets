@@ -166,16 +166,17 @@ export struct ReaderPage {
   @State @Watch('onDisplayChapterTitleChanged') displayChapterTitle: string = '';
   @Prop @Watch('onReplaceRulesChanged') replaceRules: ReplaceRule[] = [];
   @Prop @Watch('onReaderContentChanged') content: string = '';
-  @Prop @Watch('onPaginationInputsChanged') fontSize: number = 19;
-  @Prop @Watch('onPaginationInputsChanged') paragraphSpacing: number = 2;
-  @Prop @Watch('onPaginationInputsChanged') lineSpacing: number = 12;
-  @Prop @Watch('onPaginationInputsChanged') letterSpacing: number = 0.1;
+  // 正文排版声明默认对齐上游「无数据」层 readConfig.json[0]，实例化时由 Index.ets 显式传值覆盖。
+  @Prop @Watch('onPaginationInputsChanged') fontSize: number = 24;
+  @Prop @Watch('onPaginationInputsChanged') paragraphSpacing: number = 6;
+  @Prop @Watch('onPaginationInputsChanged') lineSpacing: number = 10;
+  @Prop @Watch('onPaginationInputsChanged') letterSpacing: number = 0;
   @Prop @Watch('onPaginationInputsChanged') paragraphIndent: string = '　　';
   @Prop @Watch('onPaginationInputsChanged') textFontPath: string = '';
   @Prop @Watch('onPaginationInputsChanged') titleFontPath: string = '';
   @Prop @Watch('onPaginationInputsChanged') systemTypefaces: number = 0;
   @Prop @Watch('onPaginationInputsChanged') textItalic: boolean = false;
-  @Prop @Watch('onPaginationInputsChanged') textBold: number = 500;
+  @Prop @Watch('onPaginationInputsChanged') textBold: number = 0;
   // 标题排版十四个字段，对齐上游 help/config/ReadBookConfig.kt:596-608。
   // 全部进分页输入，改标题样式要重算分页（上游 titleStyle 参与排版度量）。
   @Prop @Watch('onPaginationInputsChanged') titleMode: number = 0;
@@ -5460,10 +5461,10 @@ export struct ReaderPage {
 
   private getReadingTextColor(): string {
     // 有配置色就用配置色（上游 textColor/textColorNight 可配任意色）；
-    // 空串说明还没装载过设置，回落到原有硬编码，保持旧观感。
+    // 空串说明还没装载过设置，回落到上游无数据层 readConfig.json[0] 的正文色。
     if (this.readingTextColor.length > 0) { return this.readingTextColor; }
     return this.paperColor === '#000000' || this.paperColor === '#343832' || this.paperColor === '#3C3F43'
-      ? '#D8D8DC' : '#38383B';
+      ? '#ADADAD' : '#ff0b0b0b';
   }
 
   /** 背景图片的 `file://` URI；空串时返回空串，由调用方判断是否渲染。 */

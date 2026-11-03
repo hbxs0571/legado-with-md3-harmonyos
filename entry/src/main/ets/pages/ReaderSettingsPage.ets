@@ -86,16 +86,17 @@ export struct ReaderSettingsPage {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @Prop fontSize: number = 19;
-  @Prop paragraphSpacing: number = 2;
-  @Prop lineSpacing: number = 12;
-  @Prop letterSpacing: number = 0.1;
+  // 正文排版声明默认对齐上游「无数据」层 readConfig.json[0]，实例化时由 Index.ets 显式传值覆盖。
+  @Prop fontSize: number = 24;
+  @Prop paragraphSpacing: number = 6;
+  @Prop lineSpacing: number = 10;
+  @Prop letterSpacing: number = 0;
   @Prop paragraphIndent: string = '　　';
   @Prop textFont: string = '';
   @Prop titleFont: string = '';
   @Prop systemTypefaces: number = 0;
   @Prop textItalic: boolean = false;
-  @Prop textBold: number = 500;
+  @Prop textBold: number = 0;
   @Prop textShadow: boolean = false;
   @Prop shadowRadius: number = 16;
   @Prop shadowDx: number = 1;
@@ -128,7 +129,7 @@ export struct ReaderSettingsPage {
   onDottedRatioChange: (value: number) => void = (_value: number) => {};
   @Prop textFullJustify: boolean = true;
   @Prop textBottomJustify: boolean = true;
-  @Prop paperIndex: number = 2;
+  @Prop paperIndex: number = 0;
   /** 背景样式表，前 READER_STYLE_PRESET_COUNT 份是内置预设、其后是自建；paperIndex 是它的下标。 */
   @Prop backgroundStyles: ReaderBackgroundStyle[] = READER_BACKGROUND_STYLES;
   @Prop shareLayout: boolean = false;
@@ -174,15 +175,19 @@ export struct ReaderSettingsPage {
   @Prop selectVibrator: boolean = false;
   /** 中文简繁体转换档位：0 = 不转换、1 = 繁转简、2 = 简转繁。上游 ReadSettings.kt:118。 */
   @Prop chineseConverterType: number = 0;
-  /** 正文日间/夜间颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight。 */
-  @Prop textColor: string = '#38383B';
-  @Prop textColorNight: string = '#D8D8DC';
+  /** 正文日间/夜间颜色；上游 ReadBookConfig.kt:55-56 textColor / textColorNight，默认取 readConfig.json[0]。 */
+  @Prop textColor: string = '#ff0b0b0b';
+  @Prop textColorNight: string = '#ADADAD';
   /** 正文强调色；上游 ReadBookConfig.kt:62 textAccentColor。 */
   @Prop textAccentColor: string = '#834E00';
   @Prop textAccentColorNight: string = '#FE4D55';
-  /** 自定义背景；空串表示沿用内置六方案。上游 ReadBookConfig.kt:537-551。 */
-  @Prop bgStr: string = '';
-  @Prop bgStrNight: string = '';
+  /**
+   * 自定义背景；上游 ReadBookConfig.kt:537-551。bgType=0 且非空时 bgStr 本身就是颜色值
+   * （上游「无数据」层 readConfig.json[0] 即 #ffc0edc6 / #000000），优先于 paperIndex。
+   * 声明默认对齐该层，实例化时由 Index.ets 显式传值覆盖。
+   */
+  @Prop bgStr: string = '#ffc0edc6';
+  @Prop bgStrNight: string = '#000000';
   @Prop bgType: number = 0;
   @Prop bgTypeNight: number = 0;
   @Prop bgAlpha: number = 100;
