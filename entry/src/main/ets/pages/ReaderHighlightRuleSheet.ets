@@ -19,6 +19,11 @@ export struct ReaderHighlightRuleSheet {
   @State editBackgroundColor: string = '';
   @State editUnderlineColor: string = '';
   @State editUnderlineMode: number = 0;
+  /** 作用范围：0 全部 / 1 标题 / 2 正文（上游 HighlightRuleEditSheet 的范围下拉）。 */
+  @State editTargetScope: number = 2;
+  @State editEnabled: boolean = true;
+  /** 预览卡里用的示例文字。 */
+  @State editSample: string = '这是一行示例正文，命中规则的部分会即时套用样式。';
   @State errorMessage: string = '';
   @State pendingDeleteId: string = '';
   @State saving: boolean = false;
@@ -65,6 +70,8 @@ export struct ReaderHighlightRuleSheet {
     this.editBackgroundColor = '';
     this.editUnderlineColor = '';
     this.editUnderlineMode = 0;
+    this.editTargetScope = 2;
+    this.editEnabled = true;
     this.errorMessage = '';
     this.editorVisible = true;
   }
@@ -77,12 +84,15 @@ export struct ReaderHighlightRuleSheet {
     this.editBackgroundColor = this.colorInput(rule.bgColor);
     this.editUnderlineColor = this.colorInput(rule.underlineColor);
     this.editUnderlineMode = rule.underlineMode;
+    this.editTargetScope = rule.targetScope;
+    this.editEnabled = rule.enabled;
     this.errorMessage = '';
     this.editorVisible = true;
   }
 
+  /** 下划线档位，顺序对齐上游 HighlightRuleEditSheet.kt:477-493 的 7 种。 */
   private cycleUnderlineMode(): void {
-    const modes: number[] = [0, 1, 2, 3, 4, 6];
+    const modes: number[] = [0, 1, 2, 3, 4, 5, 6, 7];
     const index = modes.indexOf(this.editUnderlineMode);
     this.editUnderlineMode = modes[(index + 1) % modes.length] ?? 0;
   }
@@ -91,9 +101,50 @@ export struct ReaderHighlightRuleSheet {
     if (this.editUnderlineMode === 1) { return '实线下划线'; }
     if (this.editUnderlineMode === 2) { return '虚线下划线'; }
     if (this.editUnderlineMode === 3) { return '波浪下划线'; }
-    if (this.editUnderlineMode === 4) { return '双下划线'; }
+    if (this.editUnderlineMode === 4) { return '双线下划线'; }
+    if (this.editUnderlineMode === 5) { return 'SVG 下划线'; }
     if (this.editUnderlineMode === 6) { return '删除线'; }
+    if (this.editUnderlineMode === 7) { return '荧光下划线'; }
     return '无下划线';
+  }
+
+  private targetScopeLabel(): string {
+    if (this.editTargetScope === 0) { return '全部'; }
+    if (this.editTargetScope === 1) { return '仅标题'; }
+    return '仅正文';
+  }
+
+  private cycleTargetScope(): void {
+    this.editTargetScope = (this.editTargetScope + 1) % 3;
+  }
+
+  /** 预览卡用的示例文字：没填就用默认示例。 */
+  private previewSample(): string {
+    const sample = this.editSample.trim();
+    return sample.length > 0 ? sample : '这是一行示例正文';
+  }
+
+  private previewTextColor(): string {
+    return this.editTextColor.trim().length > 0 ? this.editTextColor.trim() : '#E5E6EB';
+  }
+
+  private previewBackgroundColor(): string {
+    return this.editBackgroundColor.trim().length > 0 ? this.editBackgroundColor.trim() : Color.Transparent.toString();
+  }
+
+  /** 上游 HighlightRuleEditSheet 的 SectionTitle：整宽、居中、上下 8dp。 */
+  @Builder
+  private SectionTitle(label: string) {
+    Text(label).fontSize(12).fontColor('#9AA0B2').width('100%')
+      .textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 }).margin({ bottom: 4 })
+  }
+
+  /** 预览卡的下划线装饰：只映射系统支持的线型。 */
+  private previewDecorationType(): TextDecorationType {
+    if (this.editUnderlineMode === 2) { return TextDecorationType.Underline; }
+    if (this.editUnderlineMode === 6) { return TextDecorationType.LineThrough; }
+    if (this.editUnderlineMode === 0) { return TextDecorationType.None; }
+    return TextDecorationType.Underline;
   }
 
   private async commit(next: ReaderHighlightRule[]): Promise<void> {
@@ -150,7 +201,8 @@ export struct ReaderHighlightRuleSheet {
     } : this.copyRule(existing);
     rule.name = name;
     rule.pattern = pattern;
-    rule.targetScope = existing?.targetScope ?? 2;
+    rule.targetScope = this.editTargetScope;
+    rule.enabled = this.editEnabled;
     rule.textColor = textColor;
     rule.bgColor = bgColor;
     rule.underlineMode = this.editUnderlineMode;
@@ -360,6 +412,8 @@ export struct ReaderHighlightRuleSheet {
         } else {
           Scroll() {
             Column() {
+              // 分区 1：规则信息（上游 HighlightRuleEditSheet.kt:363-418）
+              this.SectionTitle('规则信息')
               Text('规则名称').fontSize(12).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editName, placeholder: '例如：对话高亮' })
                 .onChange((value: string) => this.editName = value)
@@ -370,6 +424,21 @@ export struct ReaderHighlightRuleSheet {
                 .fontSize(14).margin({ top: 6, bottom: 6 })
               Text('使用 HOS RegExp 子集；最长 256 字符，拒绝常见高回溯结构；没有硬超时。')
                 .fontSize(11).fontColor('#AEB0BA').width('100%').margin({ bottom: 12 })
+              Row() {
+                Text('作用范围').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+                Text(this.targetScopeLabel()).fontSize(13).fontColor('#B9C6FF')
+                  .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .backgroundColor('#303139').borderRadius(12).onClick(() => this.cycleTargetScope())
+              }.width('100%').margin({ bottom: 10 })
+              Row() {
+                Text('启用').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+                Toggle({ type: ToggleType.Switch, isOn: this.editEnabled })
+                  .selectedColor('#B9C6FF')
+                  .onChange((isOn: boolean) => this.editEnabled = isOn)
+              }.width('100%').margin({ bottom: 4 })
+
+              // 分区 2：样式设置（上游 :422-673，本地只取渲染支持的色/线型）
+              this.SectionTitle('样式设置')
               Text('字色（可空）').fontSize(12).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editTextColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editTextColor = value)
@@ -379,7 +448,7 @@ export struct ReaderHighlightRuleSheet {
                 .onChange((value: string) => this.editBackgroundColor = value)
                 .fontSize(14).margin({ top: 6, bottom: 12 })
               Row() {
-                Text('下划线样式').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text('下划线样式').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
                 Text(this.underlineLabel()).fontSize(13).fontColor('#B9C6FF')
                   .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .backgroundColor('#303139').borderRadius(12).onClick(() => this.cycleUnderlineMode())
@@ -388,8 +457,27 @@ export struct ReaderHighlightRuleSheet {
               TextInput({ text: this.editUnderlineColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editUnderlineColor = value)
                 .fontSize(14).margin({ top: 6, bottom: 12 })
-              Text('作用范围：当前仅支持正文；默认及按排版绑定规则保留原数据但不套用。')
-                .fontSize(11).fontColor('#AEB0BA').width('100%').margin({ bottom: 12 })
+
+              // 分区 3：预览效果（上游 :796-813）
+              this.SectionTitle('预览效果')
+              TextInput({ text: this.editSample, placeholder: '输入示例文字' })
+                .onChange((value: string) => this.editSample = value)
+                .fontSize(14).margin({ bottom: 8 })
+              Row() {
+                Text(this.previewSample())
+                  .fontSize(15).maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .fontColor(this.previewTextColor())
+                  .backgroundColor(this.previewBackgroundColor())
+                  .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+                  .borderRadius(6)
+                  .decoration({
+                    type: this.previewDecorationType(),
+                    color: this.editUnderlineColor.trim().length > 0 ? this.editUnderlineColor.trim() : '#B9C6FF'
+                  })
+              }.width('100%').height(72).alignItems(VerticalAlign.Center)
+              .padding(10).backgroundColor('#24252C').borderRadius(16).margin({ bottom: 12 })
+              Text('九宫格切图与背景图需要画布支持后才能配置，此处暂不提供；表格里的对应行仍记为未接。')
+                .fontSize(11).fontColor('#AEB0BA').width('100%').margin({ bottom: 4 })
             }.width('100%')
           }.layoutWeight(1).scrollBar(BarState.Off)
           Row() {

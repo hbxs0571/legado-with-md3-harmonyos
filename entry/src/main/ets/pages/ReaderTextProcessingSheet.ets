@@ -4,6 +4,8 @@ import { BookCover } from '../components/BookCover';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { BookContentProcess, ContentProcessDisplayItem, toContentProcessDisplayItem } from '../model/BookContentProcess';
 
+/** 规则行高度（含 7dp 下间距），拖拽换位按这个步长判定。 */
+const RULE_ROW_HEIGHT: number = 67;
 const READER_REPLACE_FILTERS: string[] = ['全部', '已启用', '已停用', '当前有效'];
 
 @Component
@@ -28,6 +30,12 @@ export struct ReaderTextProcessingSheet {
   @State activeTab: number = 0;
   @State replaceQuery: string = '';
   @State contentQuery: string = '';
+  /** 正在拖动的规则行下标（-1 表示没在拖）。 */
+  @State dragRuleIndex: number = -1;
+  /** 拖动已消费的纵向位移，用于「每半行换一次位」复位。 */
+  @State dragRuleOffset: number = 0;
+  /** 拖拽期间的规则 id 草稿顺序；空数组表示跟随 rules 原顺序。 */
+  @State ruleOrderDraft: number[] = [];
   @State replaceFilter: string = '当前有效';
   @State viewedProcess: ContentProcessDisplayItem | undefined = undefined;
   @State deleteProcess: ContentProcessDisplayItem | undefined = undefined;
@@ -36,6 +44,8 @@ export struct ReaderTextProcessingSheet {
   onReplaceEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onReplaceResetToDefault: () => void = () => {};
   onRuleEnabledChange: (id: number, enabled: boolean) => void = (_id: number, _enabled: boolean) => {};
+  /** 拖拽松手后回传新的规则顺序（按规则 id）；上游对应 MoveReplaceRule。 */
+  onRuleReorder: (orderedIds: number[]) => void = (_orderedIds: number[]) => {};
   onContentProcessToggle: (id: string, enabled: boolean) => void = (_id: string, _enabled: boolean) => {};
   onContentProcessDelete: (id: string) => void = (_id: string) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -62,17 +72,49 @@ export struct ReaderTextProcessingSheet {
     this.onOpenReplaceRules();
   }
 
+  /** 行标题：分组非空时「名称 (分组)」，与上游 TextProcessingSheet.kt:574-575 一致。 */
+  private ruleTitle(rule: ReplaceRule): string {
+    const name = rule.name.length > 0 ? rule.name : rule.pattern;
+    return rule.group.length > 0 ? `${name} (${rule.group})` : name;
+  }
+
   private getVisibleRules(): ReplaceRule[] {
-    return this.rules.filter((rule: ReplaceRule) => {
+    // 拖拽期间按草稿顺序渲染，松手落库后才回到 rules 的权威顺序。
+    const visible: ReplaceRule[] = this.rules.filter((rule: ReplaceRule) => {
       const query = this.replaceQuery.trim().toLowerCase();
+      // 上游 TextProcessingSheet.kt:570-572 的搜索同时匹配分组名。
       const matchesQuery = query.length === 0 || rule.name.toLowerCase().includes(query) ||
-        rule.pattern.toLowerCase().includes(query) || rule.replacement.toLowerCase().includes(query);
+        rule.pattern.toLowerCase().includes(query) || rule.replacement.toLowerCase().includes(query) ||
+        rule.group.toLowerCase().includes(query);
       const matchesFilter = this.replaceFilter === '全部' ||
         (this.replaceFilter === '已启用' && rule.isEnabled) ||
         (this.replaceFilter === '已停用' && !rule.isEnabled) ||
         (this.replaceFilter === '当前有效' && this.replaceEnabled && rule.isEnabled && this.effectiveRuleIds.includes(rule.id));
       return matchesQuery && matchesFilter;
     });
+    if (this.ruleOrderDraft.length === 0) { return visible; }
+    const ordered: ReplaceRule[] = [];
+    this.ruleOrderDraft.forEach((id: number) => {
+      const found = visible.find((rule: ReplaceRule) => rule.id === id);
+      if (found !== undefined) { ordered.push(found); }
+    });
+    visible.forEach((rule: ReplaceRule) => {
+      if (!ordered.includes(rule)) { ordered.push(rule); }
+    });
+    return ordered;
+  }
+
+  /** 草稿内换位（拖拽用）：成功返回 true，越界返回 false。 */
+  private swapDraftRule(from: number, delta: number): boolean {
+    const to: number = from + delta;
+    if (from < 0 || from >= this.ruleOrderDraft.length) { return false; }
+    if (to < 0 || to >= this.ruleOrderDraft.length) { return false; }
+    const next: number[] = this.ruleOrderDraft.slice();
+    const moved: number[] = next.splice(from, 1);
+    if (moved.length === 0) { return false; }
+    next.splice(to, 0, moved[0]);
+    this.ruleOrderDraft = next;
+    return true;
   }
 
   private getVisibleContentProcesses(): ContentProcessDisplayItem[] {
@@ -185,18 +227,55 @@ export struct ReaderTextProcessingSheet {
                   .onClick(() => this.openFullReplaceRules())
                 Blank().layoutWeight(1)
               } else {
-                ForEach(this.getVisibleRules(), (rule: ReplaceRule) => {
+                ForEach(this.getVisibleRules(), (rule: ReplaceRule, index: number) => {
                   Row() {
+                    // 上游 ReorderableConfigList.kt:239-249 的把手是 32×32，draggableHandle() 直接可拖、
+                    // 不需要长按；拖动行本身不抬升（:350）。
+                    Stack({ alignContent: Alignment.Center }) {
+                      AppGlyph({ name: 'more', glyphSize: 18, tint: '#A9ABB4' })
+                    }.width(32).height(32).margin({ right: 6 })
+                      .gesture(
+                        PanGesture({ direction: PanDirection.Vertical })
+                          .onActionStart(() => {
+                            this.dragRuleIndex = index;
+                            this.dragRuleOffset = 0;
+                            this.ruleOrderDraft = this.getVisibleRules().map((item: ReplaceRule) => item.id);
+                          })
+                          .onActionUpdate((event: GestureEvent) => {
+                            const offset: number = event.offsetY;
+                            // 每越过半行换一次位；已消费的位移扣掉，避免一次拖动跳多格。
+                            while (offset - this.dragRuleOffset > RULE_ROW_HEIGHT / 2) {
+                              if (!this.swapDraftRule(this.dragRuleIndex, 1)) { break; }
+                              this.dragRuleIndex = this.dragRuleIndex + 1;
+                              this.dragRuleOffset = this.dragRuleOffset + RULE_ROW_HEIGHT;
+                            }
+                            while (offset - this.dragRuleOffset < -RULE_ROW_HEIGHT / 2) {
+                              if (!this.swapDraftRule(this.dragRuleIndex, -1)) { break; }
+                              this.dragRuleIndex = this.dragRuleIndex - 1;
+                              this.dragRuleOffset = this.dragRuleOffset - RULE_ROW_HEIGHT;
+                            }
+                          })
+                          .onActionEnd(() => {
+                            // 松手才落库（上游 MoveReplaceRule 在 onDragEnd 才发）。
+                            const order: number[] = this.ruleOrderDraft;
+                            this.dragRuleIndex = -1;
+                            this.dragRuleOffset = 0;
+                            this.ruleOrderDraft = [];
+                            if (order.length > 0) { this.onRuleReorder(order); }
+                          })
+                      )
                     Column() {
-                      Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(13)
+                      Text(this.ruleTitle(rule)).fontSize(13)
                         .fontColor(this.themeColorTextPrimary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                       Text(`${rule.pattern} → ${rule.replacement}`).fontSize(11).fontColor('#999BA5')
                         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
                       .onChange((enabled: boolean) => this.onRuleEnabledChange(rule.id, enabled))
-                  }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                  }.width('100%').padding({ left: 2, right: 12, top: 10, bottom: 10 })
                     .backgroundColor('#202127').borderRadius(10).margin({ bottom: 7 })
+                    // 停用态整行 alpha 0.38（上游 TextProcessingSheet 行禁用态口径）。
+                    .opacity(rule.isEnabled ? 1 : 0.38)
                 }, (rule: ReplaceRule) => replaceRuleRowKey(rule))
               }
             }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })

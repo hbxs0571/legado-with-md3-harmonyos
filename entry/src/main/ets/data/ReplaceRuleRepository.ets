@@ -726,6 +726,37 @@ export class ReplaceRuleRepository {
   }
 
   /**
+   * 按给定的 id 顺序重排。
+   * 与上游 MoveReplaceRule 一致：先按 id 序列重排内存副本，再按数组下标重写 order。
+   * 传入的 id 只覆盖部分规则时，未列出的规则保持原相对顺序追加在后面。
+   * 返回 false 表示最终顺序与原顺序一致，界面不必刷新。
+   */
+  static async reorder(context: Context, orderedIds: number[]): Promise<boolean> {
+    if (orderedIds.length === 0) {
+      return false;
+    }
+    const rules = ReplaceRuleRepository.cachedRules;
+    const next: ReplaceRule[] = [];
+    orderedIds.forEach((id: number) => {
+      const found = rules.find((rule: ReplaceRule) => rule.id === id);
+      if (found !== undefined && !next.includes(found)) {
+        next.push(found);
+      }
+    });
+    rules.forEach((rule: ReplaceRule) => {
+      if (!next.includes(rule)) {
+        next.push(rule);
+      }
+    });
+    const changed = next.some((rule: ReplaceRule, index: number) => rules[index]?.id !== rule.id);
+    if (!changed) {
+      return false;
+    }
+    await ReplaceRuleRepository.writeOrders(context, next);
+    return true;
+  }
+
+  /**
    * 单条移到一端。
    * 与上游 toTop/toBottom 一致：不改动其他规则，只把本条的 order 设成
    * 全表最小 - 1（移到数组头部）或全表最大 + 1（移到数组尾部），

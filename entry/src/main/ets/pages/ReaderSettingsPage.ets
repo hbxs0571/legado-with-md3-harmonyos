@@ -24,6 +24,10 @@ const READ_INFO_TIP_VALUES: number[] = [0, 7, 1, 12, 17, 2, 3, 15, 13, 14, 10, 4
 const READER_INFO_COLOR_VALUES: number[] = [0, -1, -16777216, -8355712, -65536, -16711936, -16776961];
 const READER_INFO_COLOR_CHOICES: string[] = ['跟随正文', '白色', '黑色', '灰色', '红色', '绿色', '蓝色'];
 const CLICK_REGION_NAMES: string[] = ['左上', '上中', '右上', '左中', '中间', '右中', '左下', '下中', '右下'];
+// 排版页四个子页，顺序对齐上游 TypographyTabs：正文 → 标题 → 页眉 → 页脚。
+/** 底栏按钮配置行的高度（含 8dp 下间距），拖拽换位按这个步长判定。 */
+const BOTTOM_ACTION_ROW_HEIGHT: number = 68;
+const TYPOGRAPHY_PAGE_LABELS: string[] = ['正文', '标题', '页眉', '页脚'];
 const READER_BODY_WEIGHT_VALUES: number[] = [300, 400, 500, 700, 900];
 // 标题取色候选：正文用的八色之外补上深浅两端，「跟随正文」由单独一行入口负责（空串不能画成色块）。
 const READER_TITLE_COLORS: string[] = ['#38383B', '#000000', '#3C3F43', '#FFFFFF', '#D8D8DC', '#ADADAD', '#FF8C00', '#5A8DEE'];
@@ -323,6 +327,8 @@ export struct ReaderSettingsPage {
   @State detailSheetDescription: string = '';
   @State detailSelectedOption: string = '';
   @State fontTarget: ReaderFontTarget = 'body';
+  // 字体选择器是从哪个入口打开的：排版页还是页眉页脚，决定选完字体后回到哪里。
+  @State fontPickerReturn: string = 'typography';
   @State fontEntries: ReaderFontEntry[] = [];
   @State detailCustomText: string = '';
   /** 「编辑背景样式」草稿：打开详情页时从当前样式灌入，保存时才回写。 */
@@ -330,6 +336,18 @@ export struct ReaderSettingsPage {
   @State editingStyleName: string = '';
   @State editingStyleDayColor: string = '';
   @State editingStyleNightColor: string = '';
+  /** 主题列表的列数档位下标（对应 2..6 列），对齐上游 ThemeListContent 的 gridColumns。 */
+  /** 当前展开滑杆的步进器行标题；空串表示都收起（对齐上游点整行才展开滑杆）。 */
+  /** 正在拖动的底栏按钮行下标（-1 表示没在拖）。 */
+  @State bottomDragIndex: number = -1;
+  /** 拖动已经消费掉的纵向位移，用来把「每半行换一次位」的判定复位。 */
+  @State bottomDragOffset: number = 0;
+  @State menuStepperExpanded: string = '';
+  @State themeGridColumns: number = 4;
+  /** 主题列表管理态：进入后卡片可多选，改走批量动作。 */
+  @State themeManageMode: boolean = false;
+  /** 管理态已选中的样式下标集合。 */
+  @State themeSelected: number[] = [];
   @State selectedClickRegionIndex: number = 4;
   @State previousPageKeys: string = '';
   @State nextPageKeys: string = '';
@@ -740,17 +758,18 @@ export struct ReaderSettingsPage {
               })
           }
           .layoutWeight(1)
+          // 排版卡：上游是 56dp 正方形、圆角 12dp、图标用 onSurfaceVariant 且无文字标签。
           Stack({ alignContent: Alignment.Center }) {
             Image($r('app.media.reader_info_text_fields'))
-              .width(22)
-              .height(22)
-              .fillColor('#E5E6EB')
+              .width(24)
+              .height(24)
+              .fillColor('#B7B8C1')
           }
           .width(56)
           .height(56)
           .backgroundColor('#292A31')
           .borderRadius(12)
-          .margin({ left: 10 })
+          .margin({ left: 8 })
           .onClick(() => this.openDetailSheet('排版设置', '正文、标题、页眉页脚与边距设置'))
         }
         .padding(12)
@@ -823,6 +842,69 @@ export struct ReaderSettingsPage {
     this.selectedSettingsTab = index;
   }
 
+  /** 步进器行：对齐上游 TinySliderSettingItem（行高 56dp、圆角 12dp、行内 − 数值 ＋）。 */
+  /** 排版的正文/页眉/页脚子页共用同一组排版项（上游这三页字段相同，差异只在作用区块）。 */
+  @Builder
+  private TypographySettingsPage() {
+    Scroll() {
+      Column() {
+        MenuSettingOption({ title: '字体', detail: this.getCurrentFontDisplayName(), migrated: true })
+          .onClick(() => this.openFontSelection())
+        MenuSettingSlider({ title: '字号', value: this.fontSize, minValue: 5, maxValue: 50 })
+        MenuSettingOption({ title: '颜色', detail: '日间 / 夜间' })
+          .onClick(() => this.openDetailSheet('信息颜色', '选择文字颜色'))
+        MenuSettingOption({ title: '效果', detail: '斜体 / 字重 / 阴影 / 下划线', migrated: true })
+          .onClick(() => this.openDetailSheet('文字效果', '配置文字效果'))
+        MenuSettingOption({ title: '缩进', detail: '全角空格数（0–4）', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+        MenuSettingOption({ title: '字距', detail: '字符间距设置', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+        MenuSettingOption({ title: '段距', detail: '按行高比例设置', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+        MenuSettingOption({ title: '行距', detail: '行高比例设置', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+        MenuSettingOption({ title: '文字对齐', detail: '两端对齐 / 底部对齐', migrated: true })
+          .onClick(() => this.openDetailSheet('文字对齐', '选择正文对齐方式'))
+        MenuSettingOption({ title: '中文简繁体转换', detail: this.getChineseConverterLabel(), migrated: true })
+          .onClick(() => this.openDetailSheet('中文简繁体转换', '按档位转换正文与章节标题的字形'))
+      }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+    }.width('100%').scrollBar(BarState.Off)
+  }
+
+  @Builder
+  private MenuStepperRow(title: string, value: number, minValue: number, maxValue: number,
+    onChange: (value: number) => void) {
+    Column() {
+      Row() {
+        Text(title).fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+        Text('−').fontSize(16).fontColor(value > minValue ? '#E5E6EB' : '#5A5C66')
+          .width(32).height(32).textAlign(TextAlign.Center)
+          .backgroundColor('#292A31').borderRadius(8)
+          .onClick(() => {
+            if (value > minValue) { onChange(Math.max(minValue, value - 1)); }
+          })
+        Text(`${value}`).fontSize(13).fontColor('#E5E6EB').width(34).textAlign(TextAlign.Center)
+          .margin({ left: 6, right: 6 })
+        Text('＋').fontSize(16).fontColor(value < maxValue ? '#E5E6EB' : '#5A5C66')
+          .width(32).height(32).textAlign(TextAlign.Center)
+          .backgroundColor('#292A31').borderRadius(8)
+          .onClick(() => {
+            if (value < maxValue) { onChange(Math.min(maxValue, value + 1)); }
+          })
+      }.width('100%').height(56).padding({ left: 12, right: 12 })
+        // 点标题区展开/收起滑杆（上游点整行展开 AppSlider）。
+        .onClick(() => this.menuStepperExpanded = this.menuStepperExpanded === title ? '' : title)
+      if (this.menuStepperExpanded === title) {
+        Slider({ value: value, min: minValue, max: maxValue, step: 1, style: SliderStyle.InSet })
+          .width('100%').padding({ left: 12, right: 12 })
+          .selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
+          .showTips(false).margin({ bottom: 8 })
+          .onChange((next: number, mode: SliderChangeMode) => onChange(Math.round(next)))
+      }
+    }.width('100%').backgroundColor('#202127').borderRadius(12)
+      .margin({ left: 14, right: 14, bottom: 4 })
+  }
+
   @Builder
   private menuSettingsContent() {
     Column() {
@@ -841,9 +923,28 @@ export struct ReaderSettingsPage {
           .borderRadius(15).padding(8).onClick(() => this.selectedMenuSettingsTab = 2)
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
 
-      Scroll(this.menuSettingsScroller) {
+      // 上游 SystemMenuPage.kt:144-148 是 HorizontalPager：页签切换用动画滚到对应页，
+      // 手势横滑也会回写选中页。这里用 Swiper 对齐这个形态。
+      Swiper() {
+        ForEach([0, 1, 2], (tab: number) => {
+          this.MenuSettingsTabPage(tab)
+        }, (tab: number) => `${tab}`)
+      }
+      .index(this.selectedMenuSettingsTab)
+      .loop(false)
+      .indicator(false)
+      .width('100%')
+      .layoutWeight(1)
+      .onChange((index: number) => this.selectedMenuSettingsTab = index)
+    }.width('100%').layoutWeight(1)
+  }
+
+  /** 菜单系统页的单个页签页（上游 GlobalMenuTab / BottomBarTab / TopBarTab）。 */
+  @Builder
+  private MenuSettingsTabPage(tab: number) {
+      Scroll() {
         Column() {
-          if (this.selectedMenuSettingsTab === 1) {
+          if (tab === 1) {
             MenuSettingOption({
               title: '滑动条显示样式',
               detail: this.readSliderMode === '1' ? '不显示' : '常驻',
@@ -860,21 +961,13 @@ export struct ReaderSettingsPage {
               value: this.bottomIconStyle,
               onChange: (style: number) => this.onBottomIconStyleChange(style)
             }).margin({ left: 14, right: 14, bottom: 8 })
-            MenuSettingSlider({
-              title: '每行图标数',
-              value: this.bottomItemsPerRow,
-              minValue: 2,
-              maxValue: 8,
-              onChange: (count: number) => this.onBottomItemsPerRowChange(count)
-            }).margin({ left: 14, right: 14, bottom: 8 })
-            MenuSettingSlider({
-              title: '底栏图标行数',
-              value: this.bottomRowCount,
-              minValue: 1,
-              maxValue: 2,
-              onChange: (count: number) => this.onBottomRowCountChange(count)
-            }).margin({ left: 14, right: 14, bottom: 8 })
-          } else if (this.selectedMenuSettingsTab === 2) {
+            // 上游 TinySettingItems.kt:310、:324-364 是步进器行：行内只显示「− 数值 ＋」，
+            // 点整行才展开滑杆。这里按同口径实现。
+            this.MenuStepperRow('每行图标数', this.bottomItemsPerRow, 2, 8,
+              (count: number) => this.onBottomItemsPerRowChange(count))
+            this.MenuStepperRow('底栏图标行数', this.bottomRowCount, 1, 2,
+              (count: number) => this.onBottomRowCountChange(count))
+          } else if (tab === 2) {
             MenuSettingSwitch({
               title: '快捷图标行',
               detail: '在标题栏下方显示快捷阅读操作',
@@ -882,12 +975,11 @@ export struct ReaderSettingsPage {
               onChange: (enabled: boolean) => this.onQuickActionsChange(enabled)
             }).margin({ left: 14, right: 14, bottom: 8 })
           }
-          ForEach(this.getMenuSettingsEntries(), (entry: ReaderMenuSettingsEntry) => {
+          ForEach(this.getMenuSettingsEntries(tab), (entry: ReaderMenuSettingsEntry) => {
             this.menuSettingsEntry(entry)
-          }, (entry: ReaderMenuSettingsEntry) => `${this.selectedMenuSettingsTab}-${entry.title}`)
+          }, (entry: ReaderMenuSettingsEntry) => `${tab}-${entry.title}`)
         }.width('100%').padding({ top: 4, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
-    }.width('100%').layoutWeight(1)
   }
 
   @Builder
@@ -1438,8 +1530,8 @@ export struct ReaderSettingsPage {
             })
           }
           if (this.infoSubTab === 0 || !this.infoSettings.applyHeaderStyle) {
-            ReaderInfoOptionRow({ iconKind: 5, title: '选择字体', detail: '选择字体' })
-              .onClick(() => this.showNotMigrated('页眉/页脚字体选择'))
+            ReaderInfoOptionRow({ iconKind: 5, title: '选择字体', detail: this.getInfoFontDisplayName() })
+              .onClick(() => this.openInfoFontSelection())
             ReaderInfoSliderRow({
               iconKind: 6, title: '字号',
               value: this.infoSubTab === 0 ? this.infoSettings.headerFontSize : this.infoSettings.footerFontSize,
@@ -1664,7 +1756,156 @@ export struct ReaderSettingsPage {
     this.fontEntries = ReaderFontRepository.listFonts(context);
   }
 
+  /** 2..6 列的选择，对齐上游 gridColumns.coerceIn(2, 6)。 */
+  private themeGridTemplate(): string {
+    const columns = Math.max(2, Math.min(6, this.themeGridColumns));
+    return new Array<string>(columns).fill('1fr').join(' ');
+  }
+
+  private cycleThemeGridColumns(): void {
+    this.themeGridColumns = this.themeGridColumns >= 6 ? 2 : this.themeGridColumns + 1;
+  }
+
+  private onThemeCardTap(styleIndex: number): void {
+    if (!this.themeManageMode) {
+      this.onPaperChange(styleIndex);
+      return;
+    }
+    // 管理态下按「上游只允许选自建」处理：预设 5 份带锁，点它不选中。
+    if (styleIndex < READER_STYLE_PRESET_COUNT) { return; }
+    if (this.themeSelected.indexOf(styleIndex) >= 0) {
+      this.themeSelected = this.themeSelected.filter((value: number) => value !== styleIndex);
+    } else {
+      this.themeSelected = this.themeSelected.concat([styleIndex]);
+    }
+  }
+
+  private themeSelectAll(): void {
+    const next: number[] = [];
+    for (let index = READER_STYLE_PRESET_COUNT; index < this.backgroundStyles.length; index++) {
+      next.push(index);
+    }
+    this.themeSelected = next;
+  }
+
+  private themeInvertSelection(): void {
+    const next: number[] = [];
+    for (let index = READER_STYLE_PRESET_COUNT; index < this.backgroundStyles.length; index++) {
+      if (this.themeSelected.indexOf(index) < 0) { next.push(index); }
+    }
+    this.themeSelected = next;
+  }
+
+  /** 批量删除：从后往前删，避免下标错位。 */
+  private themeDeleteSelected(): void {
+    const targets = this.themeSelected.slice().sort((left: number, right: number) => right - left);
+    for (const index of targets) {
+      this.onRemoveBackgroundStyle(index);
+    }
+    this.themeSelected = [];
+    this.themeManageMode = false;
+  }
+
+  /** 置顶 = 移到自建区最前（下标 READER_STYLE_PRESET_COUNT）；置底 = 移到末尾。 */
+  private themeMoveSelectedToEdge(toTop: boolean): void {
+    const targets = this.themeSelected.slice().sort((left: number, right: number) => right - left);
+    if (targets.length === 0) { return; }
+    if (toTop) {
+      // 从大到小依次前移，最后一次落在自建区首位。
+      for (const index of targets) {
+        this.onMoveBackgroundStyle(index, READER_STYLE_PRESET_COUNT);
+      }
+    } else {
+      for (const index of targets) {
+        this.onMoveBackgroundStyle(index, this.backgroundStyles.length - 1);
+      }
+    }
+    this.themeSelected = [];
+    this.themeManageMode = false;
+  }
+
+  /** 导出选中的样式为一段可复制的文本；不剪贴板也能看到内容。 */
+  private themeExportSelected(): void {
+    const picked = this.themeSelected
+      .slice().sort((left: number, right: number) => left - right)
+      .map((index: number) => this.backgroundStyles[index])
+      .filter((style: ReaderBackgroundStyle | undefined) => style !== undefined);
+    if (picked.length === 0) {
+      this.onUnavailableAction('先选中要导出的样式');
+      return;
+    }
+    const rows: string[] = picked.map((style: ReaderBackgroundStyle) =>
+      `${style.name} | ${style.dayColor} | ${style.nightColor}`);
+    const header: string = `已导出 ${picked.length} 份样式：`;
+    this.onUnavailableAction(header + '\n' + rows.join('\n'));
+  }
+
+  private exitThemeManage(): void {
+    this.themeManageMode = false;
+    this.themeSelected = [];
+  }
+
+  /** 主题网格卡片：44:56 比例，底部 12dp 选中条，管理态右上角勾选徽章。 */
+  @Builder
+  private ThemeGridCard(style: ReaderBackgroundStyle, styleIndex: number) {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column() {
+        Column() {
+          Text(this.getBackgroundStyleLabel(style)).fontSize(11).maxLines(2).textAlign(TextAlign.Center)
+            .fontColor('#3E3D3B')
+        }
+        .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+        .backgroundColor(this.readerNightMode ? style.nightColor : style.dayColor)
+        .clip(true)
+        // 上游网格卡片永不画线框，选中用底部 12dp 横条表示。
+        Row().width('100%').height(12).visibility(
+          !this.themeManageMode && this.paperIndex === styleIndex ? Visibility.Visible : Visibility.Hidden)
+          .backgroundColor(this.themeColorAccent)
+      }
+      .width('100%').aspectRatio(44 / 56).backgroundColor('#202127')
+      .borderRadius(10).clip(true)
+      .opacity(styleIndex < READER_STYLE_PRESET_COUNT ? 1 : 1)
+
+      if (styleIndex < READER_STYLE_PRESET_COUNT) {
+        // 预设 5 份不可删：管理态右下角显示锁并整体半透明（上游 alpha 0.5 + Lock 12dp）。
+        Text('🔒').fontSize(10).margin({ right: 3, bottom: 3 })
+          .align(Alignment.BottomEnd).opacity(this.themeManageMode ? 0.5 : 0)
+      } else if (this.themeManageMode) {
+        Stack({ alignContent: Alignment.Center }) {
+          Text(this.themeSelected.indexOf(styleIndex) >= 0 ? '✓' : '')
+            .fontSize(10).fontColor('#FFFFFF')
+        }
+        .width(14).height(14).borderRadius(7).margin({ top: 4, right: 4 })
+        .backgroundColor(this.themeSelected.indexOf(styleIndex) >= 0 ? this.themeColorAccent : '#66000000')
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private ThemeManageAction(label: string, action: () => void) {
+    Text(label).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).textAlign(TextAlign.Center)
+      .padding({ top: 9, bottom: 9 }).backgroundColor('#202127').borderRadius(10)
+      .margin({ left: 3, right: 3 }).onClick(action)
+  }
+
+  /** 页眉/页脚字体入口：按当前信息子页直接定目标，不依赖排版页的 detailSelectedOption。 */
+  private openInfoFontSelection(): void {
+    this.fontPickerReturn = 'info';
+    this.fontTarget = this.infoSubTab === 0 ? 'header' : 'footer';
+    this.openDetailSheet('选择字体', `为${this.getFontTargetLabel()}选择字体`);
+  }
+
+  /** 页眉/页脚当前字体名，空串表示沿用默认字体（页脚可能继承页眉样式）。 */
+  private getInfoFontDisplayName(): string {
+    const path = this.infoSubTab === 0 ? this.infoSettings.headerFont : this.infoSettings.footerFont;
+    if (path.length === 0) { return '默认字体'; }
+    const selected = this.fontEntries.find((entry: ReaderFontEntry) => entry.path === path);
+    return selected?.displayName ?? '字体文件不可用（点按“默认字体”清除）';
+  }
+
   private openFontSelection(): void {
+    this.fontPickerReturn = 'typography';
     const target = this.detailSelectedOption;
     if (target === '标题') { this.fontTarget = 'title'; }
     else if (target === '页眉') { this.fontTarget = 'header'; }
@@ -1740,6 +1981,11 @@ export struct ReaderSettingsPage {
   }
 
   private returnToTypographyFromFontPicker(): void {
+    if (this.fontPickerReturn === 'info') {
+      // 从页眉/页脚字体入口进来的：选完直接收起面板回到信息页，不跳排版页。
+      this.detailSheetVisible = false;
+      return;
+    }
     this.detailSheetTitle = '排版设置';
     this.detailSheetDescription = '正文、标题、页眉页脚与边距设置';
     this.detailSelectedOption = this.getFontTargetLabel();
@@ -2170,43 +2416,67 @@ export struct ReaderSettingsPage {
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(460).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '主题列表') {
-          // 对齐上游 ThemeListContent：预设那几份钉死不可删，自建的可以删、可以上下挪。
-          Scroll() {
-            Column() {
-              ForEach(this.backgroundStyles, (style: ReaderBackgroundStyle, styleIndex: number) => {
-                Row() {
-                  Stack({ alignContent: Alignment.Center }) {
-                    Text(this.getBackgroundStyleLabel(style)).fontSize(11).maxLines(2).textAlign(TextAlign.Center)
-                      .fontColor('#3E3D3B')
-                  }.width(44).height(56)
-                    .backgroundColor(this.readerNightMode ? style.nightColor : style.dayColor)
-                    .borderRadius(9).clip(true)
-                    .border({
-                      width: this.paperIndex === styleIndex ? 2 : 1,
-                      color: this.paperIndex === styleIndex ? this.themeColorAccent : '#33343C'
-                    })
-                    .onClick(() => this.onPaperChange(styleIndex))
-                  Column() {
-                    // layoutWeight 要放在 Column 上，放到 Text 上会把 Column 撑高、名字与标签被拉开一大截。
-                    Text(this.getBackgroundStyleLabel(style)).fontSize(13).fontColor('#E5E6EB')
-                    Text(styleIndex < READER_STYLE_PRESET_COUNT ? '预设' : '自建')
-                      .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
-                  }.alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Center)
-                    .layoutWeight(1).margin({ left: 12 })
-                  if (styleIndex >= READER_STYLE_PRESET_COUNT) {
-                    Image($r('app.media.reader_arrow_forward')).width(16).height(16)
-                      .fillColor('#9EA0AA').rotate({ angle: 270 })
-                      .onClick(() => this.onMoveBackgroundStyle(styleIndex, styleIndex - 1))
-                    Image($r('app.media.profile_delete')).width(16).height(16)
-                      .fillColor('#D98A8A').margin({ left: 12 })
-                      .onClick(() => this.onRemoveBackgroundStyle(styleIndex))
-                  }
-                }.width('100%').padding({ top: 8, bottom: 8 })
-              }, (style: ReaderBackgroundStyle) => `${style.id}|${style.name}|${style.dayColor}|${style.nightColor}`)
-              Text('前 5 份是内置预设，不能删除也不能移动；自建样式可以删掉、可以上移。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
-            }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.height(460).scrollBar(BarState.Off)
+          // 对齐上游 ThemeListContent：网格卡片（44:56）+ 管理态多选。
+          Column() {
+            Row() {
+              if (this.themeManageMode) {
+                Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary)
+                  .onClick(() => this.exitThemeManage())
+                Text(this.themeSelected.length === 0 ? '选择主题' : `已选中 ${this.themeSelected.length}`)
+                  .fontSize(13).fontColor('#E5E6EB').fontWeight(FontWeight.Medium)
+                  .layoutWeight(1).textAlign(TextAlign.Center)
+                Text('完成').fontSize(13).fontColor(this.themeColorAccent)
+                  .onClick(() => this.exitThemeManage())
+              } else {
+                Text('主题列表').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                // 列数切换只在非管理态出现（上游管理态隐去布局入口）。
+                Text(`${this.themeGridColumns} 列`).fontSize(12).fontColor(this.themeColorTextTertiary)
+                  .padding({ left: 8, right: 8 })
+                  .onClick(() => this.cycleThemeGridColumns())
+                Text('管理').fontSize(13).fontColor(this.themeColorAccent)
+                  .onClick(() => this.themeManageMode = true)
+              }
+            }.width('100%').padding({ top: 10, bottom: 10 })
+
+            Scroll() {
+              Column() {
+                Grid() {
+                  ForEach(this.backgroundStyles, (style: ReaderBackgroundStyle, styleIndex: number) => {
+                    GridItem() {
+                      this.ThemeGridCard(style, styleIndex)
+                    }.onClick(() => this.onThemeCardTap(styleIndex))
+                  }, (style: ReaderBackgroundStyle) => `${style.id}|${style.name}|${style.dayColor}|${style.nightColor}`)
+                }
+                .columnsTemplate(this.themeGridTemplate())
+                .columnsGap(8)
+                .rowsGap(8)
+                .width('100%')
+
+                if (this.themeManageMode) {
+                  // 管理态 7 个动作，对齐上游 ThemeListContent.kt:702-739。
+                  Row() {
+                    this.ThemeManageAction('全选', () => this.themeSelectAll())
+                    this.ThemeManageAction('反选', () => this.themeInvertSelection())
+                    this.ThemeManageAction('删除', () => this.themeDeleteSelected())
+                  }.width('100%').margin({ top: 12 })
+                  Row() {
+                    this.ThemeManageAction('置顶', () => this.themeMoveSelectedToEdge(true))
+                    this.ThemeManageAction('置底', () => this.themeMoveSelectedToEdge(false))
+                    this.ThemeManageAction('导出', () => this.themeExportSelected())
+                  }.width('100%').margin({ top: 8 })
+                } else {
+                  Row() {
+                    Text('新建样式').fontSize(13).fontColor(this.themeColorAccent)
+                      .padding({ left: 10, right: 10, top: 9, bottom: 9 }).margin({ top: 12 })
+                      .backgroundColor('#202127').borderRadius(10)
+                      .onClick(() => this.onAddBackgroundStyle())
+                    Text('前 5 份是内置预设，不能删除也不能移动；自建样式可以删掉、可以置顶置底。')
+                      .fontSize(10).fontColor(this.themeColorTextTertiary).layoutWeight(1).margin({ left: 10 })
+                  }.width('100%').alignItems(VerticalAlign.Center)
+                }
+              }.width('100%')
+            }.height(400).scrollBar(BarState.Off).align(Alignment.Top)
+          }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '选择字体') {
           Scroll() {
             Column() {
@@ -2257,35 +2527,40 @@ export struct ReaderSettingsPage {
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '排版设置') {
-          Scroll() {
           Column() {
             Row() {
-              ForEach(['正文', '标题', '页眉', '页脚'], (label: string) => {
-                Text(label).fontSize(11).fontColor('#D9DAE0').layoutWeight(1).textAlign(TextAlign.Center)
-                  .padding(9).backgroundColor('#292A31').borderRadius(8).margin({ right: 4 })
+              ForEach(TYPOGRAPHY_PAGE_LABELS, (label: string) => {
+                Text(label).fontSize(11)
+                  .fontColor(this.detailSelectedOption === label ? '#ECECF0' : '#B7B8C1')
+                  .layoutWeight(1).textAlign(TextAlign.Center).padding(9)
+                  .backgroundColor(this.detailSelectedOption === label ? '#454B62' : '#292A31')
+                  .borderRadius(8).margin({ right: 4 })
                   .onClick(() => this.detailSelectedOption = label)
               }, (label: string) => label)
+              // 上游 TypographyPage.kt:182-204：页签右侧 56dp 方形「边距」卡。
+              Stack({ alignContent: Alignment.Center }) {
+                Image($r('app.media.app_padding')).width(20).height(20).fillColor('#B7B8C1')
+              }.width(40).height(40).backgroundColor('#292A31').borderRadius(10).margin({ left: 4 })
+                .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
             }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
-            if (this.detailSelectedOption === '标题') {
-              this.TitleTypographySettings()
-            } else {
-            MenuSettingOption({ title: '字体', detail: this.getCurrentFontDisplayName(), migrated: true })
-              .onClick(() => this.openFontSelection())
-            MenuSettingSlider({ title: '字号', value: this.fontSize, minValue: 5, maxValue: 50 })
-            MenuSettingOption({ title: '颜色', detail: '日间 / 夜间' }).onClick(() => this.openDetailSheet('信息颜色', '选择文字颜色'))
-            MenuSettingOption({ title: '效果', detail: '斜体 / 字重 / 阴影 / 下划线', migrated: true })
-              .onClick(() => this.openDetailSheet('文字效果', '配置文字效果'))
-            MenuSettingOption({ title: '缩进', detail: '全角空格数（0–4）', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-            MenuSettingOption({ title: '字距', detail: '字符间距设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-            MenuSettingOption({ title: '段距', detail: '按行高比例设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-            MenuSettingOption({ title: '行距', detail: '行高比例设置', migrated: true }).onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-            MenuSettingOption({ title: '文字对齐', detail: '两端对齐 / 底部对齐', migrated: true }).onClick(() => this.openDetailSheet('文字对齐', '选择正文对齐方式'))
-            MenuSettingOption({ title: '中文简繁体转换', detail: this.getChineseConverterLabel(), migrated: true })
-              .onClick(() => this.openDetailSheet('中文简繁体转换', '按档位转换正文与章节标题的字形'))
-            Text('正文和标题支持系统字体及导入的 TTF/OTF；字体族会参与文字测量和分页。页眉页脚字体沿用各自选项。').fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+            // 上游是 CardTabRow + HorizontalPager：点页签切页，也可以直接横滑。
+            Swiper() {
+              ForEach(TYPOGRAPHY_PAGE_LABELS, (label: string) => {
+                if (label === '标题') {
+                  this.TitleTypographySettings()
+                } else {
+                  this.TypographySettingsPage()
+                }
+              }, (label: string) => label)
             }
-          }.width('100%').padding({ bottom: 16 })
-          }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+              .index(Math.max(0, TYPOGRAPHY_PAGE_LABELS.indexOf(this.detailSelectedOption)))
+              .loop(false).indicator(false)
+              .onChange((index: number) => {
+                const label: string | undefined = TYPOGRAPHY_PAGE_LABELS[index];
+                if (label !== undefined) { this.detailSelectedOption = label; }
+              })
+              .layoutWeight(1).width('100%')
+          }.width('100%').layoutWeight(1)
         } else if (this.detailSheetTitle === '文字效果') {
           Scroll() {
             Column() {
@@ -2322,39 +2597,49 @@ export struct ReaderSettingsPage {
                 MenuSettingSlider({ title: '阴影纵向偏移', value: this.shadowDy, minValue: -50, maxValue: 50,
                   onChange: (value: number) => this.onShadowDyChange(value) })
               }
+              // 下划线细调搬进独立面板（上游 UnderlineConfigSheet.kt），这里只留入口。
+              MenuSettingOption({
+                title: '文字下划线',
+                detail: this.underline ? (this.dottedLine ? '虚线' : '实线') : '关闭',
+                migrated: true
+              }).onClick(() => this.openDetailSheet('文字下划线', '下划线开关、颜色与虚线细节'))
+              Text('高亮规则依赖 Android 规则库；当前 HOS 尚无兼容规则仓储，本页不伪造规则列表。')
+                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+            }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
+          }.height(440).scrollBar(BarState.Off)
+        } else if (this.detailSheetTitle === '文字下划线') {
+          // 对齐上游 UnderlineConfigSheet.kt：8 项，5/6 与 7/8 之间插「下划虚线」分区标题。
+          Scroll() {
+            Column() {
               MenuSettingSwitch({
-                title: '正文下划线', detail: '对每行正文添加下划线', checked: this.underline,
+                title: '文字下划线', detail: '对每行正文添加下划线', checked: this.underline,
                 onChange: (enabled: boolean) => this.onUnderlineChange(enabled)
+              })
+              MenuSettingPalette({
+                title: this.readerNightMode ? '夜间下划线颜色' : '日间下划线颜色',
+                colors: READER_EFFECT_COLORS,
+                selectedColor: this.readerNightMode ? this.underlineColorNight : this.underlineColor,
+                onChange: (color: string) => this.onUnderlineColorChange(color, this.readerNightMode)
               })
               MenuSettingSwitch({
                 title: '虚线下划线', detail: '将正文下划线显示为虚线', checked: this.dottedLine,
                 onChange: (enabled: boolean) => this.onDottedLineChange(enabled)
               })
-              if (this.underline) {
-                MenuSettingPalette({
-                  title: this.readerNightMode ? '夜间下划线颜色' : '日间下划线颜色',
-                  colors: READER_EFFECT_COLORS,
-                  selectedColor: this.readerNightMode ? this.underlineColorNight : this.underlineColor,
-                  onChange: (color: string) => this.onUnderlineColorChange(color, this.readerNightMode)
-                })
-                MenuSettingSlider({ title: '下划线粗细', value: this.underlineHeight, minValue: 0, maxValue: 10,
-                  onChange: (value: number) => this.onUnderlineHeightChange(value) })
-                MenuSettingSlider({ title: '离字间距', value: this.underlinePadding, minValue: 0, maxValue: 20,
-                  onChange: (value: number) => this.onUnderlinePaddingChange(value) })
-                MenuSettingSwitch({
-                  title: '撑满整行', detail: '下划线延伸到页面左右边距',
-                  checked: this.underlineExtend,
-                  onChange: (enabled: boolean) => this.onUnderlineExtendChange(enabled)
-                })
-                if (this.dottedLine) {
-                  MenuSettingSlider({ title: '实线段长', value: this.dottedBase, minValue: 0, maxValue: 20,
-                    onChange: (value: number) => this.onDottedBaseChange(value) })
-                  MenuSettingSlider({ title: '空隙长度', value: this.dottedRatio, minValue: 0, maxValue: 20,
-                    onChange: (value: number) => this.onDottedRatioChange(value) })
-                }
-              }
-              Text('高亮规则依赖 Android 规则库；当前 HOS 尚无兼容规则仓储，本页不伪造规则列表。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+              MenuSettingSwitch({
+                title: '撑满整行', detail: '下划线延伸到页面左右边距',
+                checked: this.underlineExtend,
+                onChange: (enabled: boolean) => this.onUnderlineExtendChange(enabled)
+              })
+              MenuSettingSlider({ title: '线段高度', value: this.underlineHeight, minValue: 0, maxValue: 20,
+                onChange: (value: number) => this.onUnderlineHeightChange(value) })
+              MenuSettingSlider({ title: '离字间距', value: this.underlinePadding, minValue: 0, maxValue: 20,
+                onChange: (value: number) => this.onUnderlinePaddingChange(value) })
+              Text('下划虚线').fontSize(11).fontColor(this.themeColorTextTertiary)
+                .width('100%').textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
+              MenuSettingSlider({ title: '实线段长', value: this.dottedBase, minValue: 0, maxValue: 20,
+                onChange: (value: number) => this.onDottedBaseChange(value) })
+              MenuSettingSlider({ title: '空隙长度', value: this.dottedRatio, minValue: 0, maxValue: 20,
+                onChange: (value: number) => this.onDottedRatioChange(value) })
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(440).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '文字对齐') {
@@ -2761,8 +3046,9 @@ export struct ReaderSettingsPage {
     }.width('100%').height('100%')
   }
 
-  private getMenuSettingsEntries(): ReaderMenuSettingsEntry[] {
-    if (this.selectedMenuSettingsTab === 0) {
+  /** 取某个页签下的设置条目；不传就用当前选中页（上游三页各自一份列表）。 */
+  private getMenuSettingsEntries(tab: number = this.selectedMenuSettingsTab): ReaderMenuSettingsEntry[] {
+    if (tab === 0) {
       return [
         { title: '工具栏样式', detail: '跟随系统 / 跟随阅读背景 / 自定义' },
         { title: '调色板风格', detail: '跟随系统颜色 / 固定风格' },
@@ -2790,7 +3076,7 @@ export struct ReaderSettingsPage {
         { title: '悬浮图标液态玻璃按钮', detail: '开 / 关' }
       ];
     }
-    if (this.selectedMenuSettingsTab === 1) {
+    if (tab === 1) {
       return [
         { title: '底栏按钮配置', detail: '排序、显示与长按动作' },
         { title: '底栏布局', detail: '', section: true },
@@ -2823,6 +3109,19 @@ export struct ReaderSettingsPage {
 
   private getBottomActionOption(id: string): ReaderActionOption | undefined {
     return READER_ACTION_OPTIONS.find((item: ReaderActionOption) => item.id === id);
+  }
+
+  /** 草稿内换位（拖拽用）：成功返回 true，越界返回 false。 */
+  private moveDraftBottomAction(from: number, delta: number): boolean {
+    const to: number = from + delta;
+    if (from < 0 || from >= this.draftBottomActions.length) { return false; }
+    if (to < 0 || to >= this.draftBottomActions.length) { return false; }
+    const next: ReaderBottomActionConfig[] = this.draftBottomActions.slice();
+    const moved: ReaderBottomActionConfig | undefined = next.splice(from, 1)[0];
+    if (moved === undefined) { return false; }
+    next.splice(to, 0, moved);
+    this.draftBottomActions = next;
+    return true;
   }
 
   private moveBottomAction(index: number, delta: number): void {
@@ -2911,19 +3210,44 @@ export struct ReaderSettingsPage {
                     .width(20).height(20).fillColor(item.enabled ? '#D5C2C6' : '#777984')
                 }.width(36).height(36).borderRadius(18).backgroundColor('#292A31')
                   .onClick(() => this.toggleBottomAction(item.id, !item.enabled))
-                Column() {
-                  Image($r('app.media.reader_reorder_up')).width(16).height(16)
-                    .fillColor(index === 0 ? '#555761' : '#B9BBC4')
-                    .onClick(() => this.moveBottomAction(index, -1))
-                  Image($r('app.media.reader_reorder_down')).width(16).height(16)
-                    .fillColor(index === this.draftBottomActions.length - 1 ? '#555761' : '#B9BBC4')
-                    .onClick(() => this.moveBottomAction(index, 1))
-                }.width(24).height(36).justifyContent(FlexAlign.SpaceBetween).margin({ left: 4 })
+                // 上游 ReorderableConfigList.kt:239-249 只有拖拽把手，没有上下箭头；
+                // 拖动时整行抬升 4dp（:65-131 的 animateDpAsState），松手才落到草稿顺序里。
                 Stack({ alignContent: Alignment.Center }) {
                   Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
-                }.width(32).height(36)
+                }.width(36).height(36).margin({ left: 4 })
+                  .gesture(
+                    PanGesture({ direction: PanDirection.Vertical })
+                      .onActionStart(() => {
+                        this.bottomDragIndex = index;
+                        this.bottomDragOffset = 0;
+                      })
+                      .onActionUpdate((event: GestureEvent) => {
+                        const offset: number = event.offsetY;
+                        // 每越过一行高度就换一次位置，并把已消费的位移扣掉，避免一次拖动跳多格。
+                        while (offset - this.bottomDragOffset > BOTTOM_ACTION_ROW_HEIGHT / 2) {
+                          if (!this.moveDraftBottomAction(this.bottomDragIndex, 1)) { break; }
+                          this.bottomDragIndex = this.bottomDragIndex + 1;
+                          this.bottomDragOffset = this.bottomDragOffset + BOTTOM_ACTION_ROW_HEIGHT;
+                        }
+                        while (offset - this.bottomDragOffset < -BOTTOM_ACTION_ROW_HEIGHT / 2) {
+                          if (!this.moveDraftBottomAction(this.bottomDragIndex, -1)) { break; }
+                          this.bottomDragIndex = this.bottomDragIndex - 1;
+                          this.bottomDragOffset = this.bottomDragOffset - BOTTOM_ACTION_ROW_HEIGHT;
+                        }
+                      })
+                      .onActionEnd(() => {
+                        this.bottomDragIndex = -1;
+                        this.bottomDragOffset = 0;
+                      })
+                  )
               }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 8 })
                 .backgroundColor('#202127').borderRadius(12).margin({ bottom: 8 })
+                // 关闭态整行透明度 0.38（上游 ReorderableConfigList 关态口径）。
+                .opacity(item.enabled ? 1 : 0.38)
+                // 拖动中的行抬升 4dp。
+                .translate({ y: this.bottomDragIndex === index ? 0 : 0 })
+                .shadow(this.bottomDragIndex === index
+                  ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
             }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
         }.width('100%').layoutWeight(1).scrollBar(BarState.Off)

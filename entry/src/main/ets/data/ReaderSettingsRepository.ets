@@ -1223,8 +1223,9 @@ export class ReaderSettingsRepository {
         underlineColorValue, defaults.underlineColor);
       const underlineColorNight = ReaderSettingsRepository.normalizeHexColor(
         underlineColorNightValue, defaults.underlineColorNight);
+      // 上游 UnderlineConfigSheet.kt:97-105 的线段高度上限是 20，本地原先只到 10。
       const underlineHeight = ReaderSettingsRepository.normalizeInteger(
-        underlineHeightValue, 0, 10, defaults.underlineHeight);
+        underlineHeightValue, 0, 20, defaults.underlineHeight);
       const underlinePadding = ReaderSettingsRepository.normalizeInteger(
         underlinePaddingValue, 0, 20, defaults.underlinePadding);
       const dottedBase = ReaderSettingsRepository.normalizeInteger(
@@ -1570,7 +1571,7 @@ export class ReaderSettingsRepository {
         settings.underlineColor, '#3E3D3B'));
       await store.put('underlineColorNight', ReaderSettingsRepository.normalizeHexColor(
         settings.underlineColorNight, '#ADADAD'));
-      await store.put('underlineHeight', Math.max(0, Math.min(10, Math.round(settings.underlineHeight))));
+      await store.put('underlineHeight', Math.max(0, Math.min(20, Math.round(settings.underlineHeight))));
       await store.put('underlinePadding', Math.max(0, Math.min(20, Math.round(settings.underlinePadding))));
       await store.put('underlineExtend', settings.underlineExtend === true);
       await store.put('dottedBase', Math.max(0, Math.min(20, Math.round(settings.dottedBase))));

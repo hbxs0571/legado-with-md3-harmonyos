@@ -12,13 +12,13 @@ const READER_MARKING_LABELS: string[] = [
   '实线下划线', '虚线下划线', '波浪下划线', '删除线', '强调线', '背景高亮', '文字颜色'
 ];
 /**
- * 预设颜色，逐条对齐上游 MarkingSheet.kt:449-464 的 MarkingPresetColors（15 个）。
+ * 预设颜色，逐条对齐上游 MarkingSheet.kt:449-464 的 MarkingPresetColors（16 个）。
  * 上游用 ARGB int，这里统一用 #RRGGBB；#63C37D 与其 DEFAULT_COLOR(0xFF63C37D) 一致，
- * 所以新建标记的默认色保持不变。
+ * 所以新建标记的默认色保持不变。末尾 #111111 是上游的纯黑预设。
  */
 const READER_MARKING_COLORS: string[] = [
   '#F44848', '#FF7417', '#FFC107', '#FFEB3B', '#9CCC65', '#22C55E', '#18B5A4', '#26C6DA',
-  '#3B82F6', '#5C6BC0', '#9C27B0', '#A855F7', '#EC4899', '#9A4D0F', '#607D8B'
+  '#3B82F6', '#5C6BC0', '#9C27B0', '#A855F7', '#EC4899', '#9A4D0F', '#607D8B', '#111111'
 ];
 
 /** 色板的行数（明度梯度），对齐上游 ColorPickerSheet 的 rows = 8。 */
@@ -477,25 +477,22 @@ export struct ReaderMarkingEditor {
             // 横向手势会被遮罩吃掉，所以改成换行排列，与上方「样式」的排布一致。
             Flex({ wrap: FlexWrap.Wrap }) {
               ForEach(READER_MARKING_COLORS, (item: string) => {
+                // 色格口径对齐上游 MarkingSheet.kt:288-296：32dp 圆形 + 2dp 描边标记选中。
                 Stack() {
-                  Row().width(28).height(28).backgroundColor(item).borderRadius(14)
-                  if (item === this.color) {
-                    Text('✓').fontSize(14).fontColor('#171820').fontWeight(FontWeight.Bold)
-                  }
-                }.width(34).height(34).margin({ right: 7, bottom: 4 })
+                  Row().width(32).height(32).backgroundColor(item).borderRadius(16)
+                    .border({ width: item === this.color ? 2 : 0, color: '#E7E9F5' })
+                }.width(38).height(38).margin({ right: 7, bottom: 4 })
                   .onClick(() => this.pickColor(item))
               }, (item: string) => item)
               // 尾部自定义色：对齐上游 MarkingSheet.kt:305-310，未选自定义色时显示取色图标
               Stack() {
-                Row().width(28).height(28).borderRadius(14)
+                Row().width(32).height(32).borderRadius(16)
                   .backgroundColor(this.isCustomColor() ? this.color : '#292A31')
-                  .border({ width: 1, color: this.isCustomColor() ? this.themeColorAccent : '#4A4C56' })
-                if (this.isCustomColor()) {
-                  Text('✓').fontSize(14).fontColor('#171820').fontWeight(FontWeight.Bold)
-                } else {
+                  .border({ width: this.isCustomColor() ? 2 : 1, color: this.isCustomColor() ? '#E7E9F5' : '#4A4C56' })
+                if (!this.isCustomColor()) {
                   Text('+').fontSize(15).fontColor('#B9BBC5')
                 }
-              }.width(34).height(34).margin({ bottom: 4 })
+              }.width(38).height(38).margin({ bottom: 4 })
                 .onClick(() => {
                   this.colorInput = this.color;
                   this.colorPickerVisible = !this.colorPickerVisible;

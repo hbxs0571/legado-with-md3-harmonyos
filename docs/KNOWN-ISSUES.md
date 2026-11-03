@@ -84,6 +84,8 @@
 - **全文搜索的正则模式已加 500ms 单章预算**（TXT-READER 批次 3）：`data/ReaderSearchRegex.ets` 用 `taskpool.Task` + `Promise.race` 做截止时间，超时 `taskpool.cancel` 后跳过该章并计入 `timedOutChapterCount`（`pages/ReaderSearchPage.ets:224-226`）。这是**搜索链路**，与上面这条「替换规则同步正则未限时」是两条不同的正则，后者仍未限时。
 - **章边界占位页已接通**（TXT-READER 批次 3）：分页模式在章末再翻一页会整屏居中显示「加载数据中…」，滚动模式给「继续滑动以加载下一章…」，新章正文到达后自动撤（`pages/ReaderPage.ets:4186-4203`、`reader/ReaderCanvasSurface.ets:1394-1417`）。设备用 hilog 验过绘制与撤销时序；该中间态只有约 690ms，`snapshot_display` 抓不到截图。
 - 在线 URL 规则导入、在线书源抓取、RSS、TTS、AI、WebDAV、云同步和 Web 服务未接入。
+- **各二级面板已按上游补齐形态**（TXT-READER 批次 5，十四行）：①菜单系统页改成三页签 + `Swiper` 横滑（`pages/ReaderSettingsPage.ets:851`、`MenuSettingsTabPage()` `:869`），「每行图标数」「图标行数」换成「− 数值 ＋」步进器行、点整行才展开滑杆（对齐上游 `TinySliderSettingItem`）；②字号滑杆右侧 56×56 排版方卡（`:718`，图标 24×24 `#B7B8C1`、无文字）；③更多操作面板改成 4 列正方形 + 每页 8 格 `Swiper` + 底部圆点（`pages/ReaderPage.ets:5690-5740`），换源 / 刷新 / 自定义按钮三格带向下箭头；④`image_style` 与 `page_anim` 点一下直接展开单选（翻页动画六档：覆盖 / 滑动 / 仿真 / 滚动 / 淡入淡出 / 无动画）；⑤排版页拆出「正文 / 标题 / 页眉 / 页脚」四个子页签 + 右侧边距方卡（`ReaderSettingsPage.ets:2327`）；⑥页眉页脚补图形型 tip（电池外框、框内电池、纯图标、胶囊五种，用基础形状画）与「同一 tip 只显示首个位置」去重（`ReaderPage.ets:5085 ReaderInfoBattery`、`:5119 ReaderInfoSlot`）；⑦页眉页脚字体从「未迁移」提示改成真正打开字体选择器（`ReaderSettingsPage.ets:1441 openInfoFontSelection`）；⑧高亮规则编辑改成「规则信息 / 样式设置 / 预览效果」三分区 + 作用范围按钮 + 启用开关 + 实时预览卡，下划线档位扩到 7 档；⑨划线面板预设色补到 16 个（含纯黑 `#111111`）、色格改 32dp 圆 + 2dp 描边；⑩主题列表改成网格（2..6 列可切）+ 管理态（全选 / 反选 / 删除 / 置顶 / 置底 / 导出，前 5 份内置带锁不可选）；⑪下划线细调搬进独立「文字下划线」面板、线段高度上限从 10 提到 20；⑫文本处理面板搜索匹配 `group`、行标题显示「名称 (分组)」、规则行加拖拽把手并能真拖动落库（`data/ReplaceRuleRepository.ets:749 reorder`）；⑬底栏按钮配置的拖拽把手从装饰改成真拖动（`ReaderSettingsPage.ets:3196-3252`）。**仍缺**：顶栏图标与标题栏动作按钮两处配置面板（上游三处共用一个面板）、高亮规则的命中排版 / 应用排版 / 字体替换 / 九宫格切图四块（画布不支持按规则换字体与背景图）。
+
 
 ### 书签与标注（r268–r276 盘点遗留）
 

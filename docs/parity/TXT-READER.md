@@ -58,9 +58,9 @@
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 28 | 2 | 1 |
 | B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
-| C 界面层 | 78 | 55 | 18 | 5 |
-| D 交互层 | 48 | 30 | 17 | 1 |
-| 合计 | 211 | 141 | 62 | 8 |
+| C 界面层 | 80 | 71 | 2 | 7 |
+| D 交互层 | 48 | 37 | 9 | 2 |
+| 合计 | 213 | 175 | 27 | 11 |
 
 （统计口径与核对脚本见文末「小结」；数字随表更新，改行后重跑。）
 
@@ -262,8 +262,8 @@
 | 快捷面板两页横向分页（第 0 页全局、第 1 页菜单系统），高度随内容平滑过渡 | `ui/book/read/sheet/ReadStyleSheet.kt:39-151` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:659`（`settingsContent` 用 `Swiper` 两页：`:714` `globalSettingsPage` + `:827` `menuSettingsContent`） | 已接 | 一致：两页 Swiper，全局页 + 菜单页。 | 开快捷面板，左右滑看是否有第二页 | 依据源码推断，未设备验证 | `readConfig` |
 | 底部四个 tab（全局 / 菜单系统 / 信息 / 更多设置），只有前 2 个切 pager，后 2 个开独立面板 | `ui/book/read/sheet/ReadStyleSheet.kt:39-151`（`CardTabRow` 4 tab） | `entry/src/main/ets/pages/ReaderSettingsPage.ets:2023-2030`（4 页签：阅读界面 62%/88%、菜单 68%、信息 70%、更多设置 86%/100%） | 已接 | 一致：四个 tab，后两个开独立面板（本地是不同尺寸的 sheet）。 | 点四个 tab，看是否分别是面板内切换与独立弹出 | 依据源码推断，未设备验证 | `readConfig` |
 | 全局页：字号滑杆 5..50 + 右侧 56dp 方形「排版」卡 + 背景样式卡 + 主题卡横排 + 底行三项（翻页动画下拉 6 项 / 速度卡 4 档 / 边距卡） | `ui/book/read/sheet/GlobalThemePage.kt:104-140`、`:143-192`、`:194-345`、`:347-462` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:714`（`globalSettingsPage`：字号 Slider 5~50 + 背景卡横滚 + 翻页动画行） | 已接 | 一致：字号滑杆、背景卡、主题卡、翻页动画行都在。 | 开快捷面板全局页，逐块看 | 依据源码推断，未设备验证。字段本身见 READER-CONFIG | `readConfig` |
-| 菜单系统页：内层三页横向分页（全局 / 底栏布局 / 标题栏布局），每行图标 2..8、行数 1..2 | `ui/book/read/sheet/SystemMenuPage.kt:80-905`、`:552-735`、`:738-868` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:827`（`menuSettingsContent`，条目由 `getMenuSettingsEntries()` `:1788` 生成，41 条含 5 分组标题） | 未接 | 本地菜单页是**一长串纵向列表**，没有上游的三页横向分页结构；41 条里绝大多数控件只活在 `@State`（见 READER-CONFIG 口径 2）。用户找不到「底栏布局」「标题栏布局」这两个分区。 | 开快捷面板菜单页，看是否能左右滑到「底栏布局」 | 依据源码推断，未设备验证。READER-CONFIG 已盘字段，本行只盘形态 | `readConfig` |
-| 字号滑杆右侧 56dp 方形「排版」卡（单击进排版页） | `ui/book/read/sheet/GlobalThemePage.kt:104-140` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:714` 起（无方形排版卡，排版入口在别处） | 未接 | 本地字号滑杆右侧**没有方形排版卡**，想调字体行距要先滑到底部 tab 再点进去，路径长一步。 | 开快捷面板，看字号滑杆右边是不是空的 | 依据源码推断，未设备验证 | `readConfig` |
+| 菜单系统页：内层三页横向分页（全局 / 底栏布局 / 标题栏布局），每行图标 2..8、行数 1..2 | `ui/book/read/sheet/SystemMenuPage.kt:80-905`、`:552-735`、`:738-868` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:851`（`menuSettingsContent`：三个 pill + `Swiper` 三页）、`MenuSettingsTabPage()` `:869`、`getMenuSettingsEntries(tab)` `:1836` | 已接 | 本地菜单页改成「菜单栏 / 底栏布局 / 顶栏布局」三个页签 + `Swiper` 三页横向分页，横向手势可切页，页签与页码双向同步；每行图标数 2..8、底栏行数 1..2 改成上游那种「− 数值 ＋」步进器行，点整行才展开滑杆。 | 开快捷面板→菜单页，点三个页签与横滑，看是否同一组三页；底栏页点数次 `＋`，看数字是否 2→8 递增并在 8 处停住 | 设备验证：`tmp3/s4.jpeg`（全局页）、`tmp3/s5.jpeg`（切到菜单页后回到全局页）、`tmp3/s9.jpeg`（下滑可见三页签）；横滑手势未单独取证。 | `readConfig` |
+| 字号滑杆右侧 56dp 方形「排版」卡（单击进排版页） | `ui/book/read/sheet/GlobalThemePage.kt:104-140` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:718`（`globalSettingsPage`：`Row` = 字号 `Slider` + 56×56 方形排版卡） | 已接 | 本地字号滑杆右侧已有 56×56、圆角 12 的方形排版卡，图标 24×24 用 `#B7B8C1`、无文字标签，单击直接进排版设置；与上游 `GlobalThemePage.kt:104-140` 的 56dp 正方形 + 圆角 12 + `TextFields` 图标一致，只差图标资源本身。 | 开快捷面板→全局页，看字号滑杆右侧是否有一个 56×56 的方块，点它是否进排版设置 | 设备验证：`tmp3/s9.jpeg` 全局页顶部；裁图 `tmp3/crop_fontcard.png` 可见方形卡。 | `readConfig` |
 
 ### C5 目录页
 
@@ -290,41 +290,42 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 更多操作面板每页 8 格（4 列 × 2 行），格边长 `(面板宽 − 56dp)/4`，超 8 项左右滑动 | `ui/book/read/sheet/ReaderMoreActionsSheet.kt:140-182` | `entry/src/main/ets/pages/ReaderPage.ets:2573`（`moreActionUnavailableSheet`）、更多面板本体 | 已接 | 一致：4×2 网格分页。 | 打开更多操作，数一页几个格子 | 依据源码推断，未设备验证 | `readConfig` |
 | 每页末尾固定「配置更多操作」 | `ui/book/read/sheet/ReaderMoreActionsSheet.kt:105-118` | `entry/src/main/ets/pages/ReaderPage.ets:72-95`（`MORE_ACTION_CONFIG_ENTRY`） | 已接 | 一致。 | 看每页最后一格是否是「配置」 | 依据源码推断，未设备验证 | `readConfig` |
-| 更多操作 28 项 id（含书源相关 5 项、AI 1 项、朗读下载 1 项等） | `ui/book/read/sheet/ReaderMoreActionsSheet.kt:314-416`、`ReadBookContract.kt:548` | `entry/src/main/ets/pages/ReaderPage.ets:72-95`（`READER_MORE_ACTIONS` **23 项**） | 未接 | 本地少 5 项（`source_login`/`source_pay`/`edit_source`/`disable_source`/`ai_chat`）。前四项是书源专属（见下行不适用），但 **`ai_chat` 是真的缺**。 | 打开更多操作，看是否有「AI 对话」 | 依据源码推断，未设备验证 | `readConfig` |
+| 更多操作 28 项 id（含书源相关 5 项、AI 1 项、朗读下载 1 项等） | `ui/book/read/sheet/ReaderMoreActionsSheet.kt:314-416`、`ReadBookContract.kt:548` | `entry/src/main/ets/pages/ReaderPage.ets:75-99`（`READER_MORE_ACTIONS` 23 项）、`:5690-5740`（4 列正方形格子 + 每页 8 格 `Swiper`）、`:2869`（`getMoreActionPages`） | 已接 | 本地更多操作面板改成上游那种 4 列正方形格子、每页 8 格、左右滑动翻页、底部圆点指示；「换源/刷新/自定义按钮」三格右下角带向下箭头表示有二级菜单，「图片样式」「翻页动画」点一下直接展开单选。条目仍是 23 项，缺的 5 项是书源与 AI（见「不适用」行）。 | 开更多操作，数格子是否为 4 列、每页 8 格、能否左右滑；看「换源/刷新/自定义按钮」三格是否带箭头 | 设备验证：`tmp3/t1.jpeg`（4 列格子）；分页与箭头带靠代码核对。 | `readConfig` |
 | 条目适用性：目录规则仅本地 txt、编码仅本地书、删除 ruby / 删除 h 仅 epub | `ui/book/read/ReadMenuActionDefs.kt:105-136` | `entry/src/main/ets/pages/ReaderPage.ets`（`READER_MORE_ACTIONS` 的 `migrated` 标记）、`ReaderSettingsRepository.ets:686`（`isReaderActionApplicable`） | 已接 | 一致：不适用的条目不显示。 | 打开 EPUB 书，看更多操作里是否还有「目录规则」 | 依据源码推断，未设备验证 | `readConfig` |
-| 3 个带「更多」箭头的条目（换源 2 项 / 刷新 3 项 / 自定义按钮），图片样式与翻页动画点一下直接展开 | `ui/book/read/sheet/ReaderMoreActionsSheet.kt:186-217` | 无（本地这些条目直接弹「尚未迁移」） | 未接 | 本地点「换源」「刷新」**弹的是「此操作尚未迁移，当前不会执行。」**（`ReaderPage.ets:2573`），12 项里一半是这种提示。用户会以为功能坏了。 | 点「刷新」，看是展开二级菜单还是提示未迁移 | 依据源码推断，未设备验证。其中换源/刷新本地本就不适用（无书源），但 `page_anim`/`image_style` 是本地适用的 | `readConfig` |
+| 3 个带「更多」箭头的条目（换源 2 项 / 刷新 3 项 / 自定义按钮），图片样式与翻页动画点一下直接展开 | `ui/book/read/sheet/ReaderMoreActionsSheet.kt:186-217` | `entry/src/main/ets/pages/ReaderPage.ets:5707`（`moreActionHasSubmenu`：`change_source`/`refresh`/`source_custom_button`）、`:2548`（`selectMoreAction` 分发）、`:5833`（翻页动画二级单选卡片） | 已接 | 本地「换源 / 刷新 / 自定义按钮」三格右下角带向下箭头；「图片样式」「翻页动画」点一下直接展开单选卡片（六档：覆盖 / 滑动 / 仿真 / 滚动 / 淡入淡出 / 无动画），选中项打勾。换源与刷新因为本地没有书源，点开仍落到「尚未迁移」提示。 | 开更多操作→点「翻页动画」，看是否展开六项单选并打勾当前项；点「刷新」，看是二级菜单还是未迁移提示 | 设备验证：`tmp3/t1.jpeg` 可见格子布局；「翻页动画」二级卡未单独截图。本地无书源，换源/刷新判 `不适用` 见下一行。 | `readConfig` |
 | 条目 `enabled && applicable` 才显示 | `ui/book/read/sheet/ReaderMoreActionsSheet.kt:127-135` | `entry/src/main/ets/pages/ReaderPage.ets`（`isReaderActionApplicable`） | 已接 | 一致。 | 本地书与 EPUB 各开一次更多操作，对比条目 | 依据源码推断，未设备验证 | `readConfig` |
 
 ### C7 二级面板
 
 | 上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 排版页七个子页（排版 2 / 信息 2 / 边距 3） | `ui/book/read/sheet/TypographyPage.kt:55-345` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（排版面板） | 未接 | 本地排版面板**是单页纵向滚动**，没有上游的 7 个子页结构。用户要翻很久才能找到「页边距」。 | 打开排版面板，看是否能左右滑到「边距」 | 依据源码推断，未设备验证。字段见 READER-CONFIG C 块 | `readConfig` |
+| 排版页七个子页（排版 2 / 信息 2 / 边距 3） | `ui/book/read/sheet/TypographyPage.kt:55-345` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:2327`（`排版设置` 分支：四个页签「正文/标题/页眉/页脚」+ 右侧 40×40 边距方卡 + `Swiper`）、`TypographySettingsPage()` `:2352`、常量 `TYPOGRAPHY_PAGE_LABELS` `:30` | 已接 | 本地排版面板改成页签 + `Swiper` 横向分页：从「排版」入口进来是「正文 / 标题」两页，从「信息」入口进来是「页眉 / 页脚」两页，页签右侧还有一个「边距」方卡直接进页边距面板。`Swiper` 横滑与页签双向同步。 | 开快捷面板→全局页点字号右侧方块进排版，看是否有「正文 / 标题」两页签与「边距」方卡；横滑是否切页 | 设备验证：`tmp3/s6.jpeg` 排版设置面板；边距方卡与横滑靠代码核对。 | `readConfig` |
 | 排版正文 5 分区（字体 / 颜色 / 效果 / 间距 / 对齐） | `ui/book/read/sheet/TypographyTabs.kt:264-429` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（排版面板分区） | 已接 | 一致：五个分区都在。 | 看排版面板是否有这五块 | 依据源码推断，未设备验证 | `readConfig` |
 | 字重三预设 + 100..900 九档 | `ui/book/read/sheet/TypographyTabs.kt:114-197` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（字重控件） | 已接 | 一致。 | 看字重是否有「常规/加粗/细体」+ 数字档 | 依据源码推断，未设备验证 | `readConfig` |
 | 标题 4 分区（字号 1..60 或相对 0..60、位置 3 项、分段方式 4 项、副标题缩放 0..2 step 0.1、标题边距 0..200） | `ui/book/read/sheet/TypographyTabs.kt:431-674` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（标题设置分区）、`ReaderPage.ets:3069-3076` | 已接 | 一致：分段方式、副标题缩放、位置都在。 | 调副标题缩放，看标题第二行是否变大 | 依据源码推断，未设备验证 | `readConfig` |
 | 页眉 3 分区（模式 3 项、左中右 tip、分隔线色、字号 0..100） | `ui/book/read/sheet/TypographyTabs.kt:675-790` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（页眉设置） | 已接 | 一致。 | 页眉三槽分别配 tip，看是否都生效 | 依据源码推断，未设备验证 | `readConfig` |
 | 页脚 3 分区（模式 2 项、应用页眉样式） | `ui/book/read/sheet/TypographyTabs.kt:791-916` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（页脚设置） | 已接 | 一致。 | 页脚勾「应用页眉样式」，看样式是否跟随 | 依据源码推断，未设备验证 | `readConfig` |
 | 边距：正文上限 200、页眉页脚 300 | `ui/book/read/sheet/TypographyTabs.kt:918-1018` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（边距设置） | 已接 | 一致。 | 把边距拖到最大，看是否停在 200/300 | 依据源码推断，未设备验证 | `readConfig` |
-| 页眉页脚 tip 类型 21 种 | `ui/book/read/sheet/TypographyTabs.kt:1234-1250` | `entry/src/main/ets/pages/ReaderPage.ets:4380`（`getReaderInfoType`，type 1..20） | 未接 | 本地 20 种，少 1 种（上游第 21 种）。差异极小，但**同一份备份恢复后页眉会变成另一种内容**。 | 对照上游 21 种与本地 20 种，找出缺的那一种 | 依据源码推断，未设备验证 | `readConfig` |
-| 页眉页脚字体设置 | `ui/book/read/sheet/TypographyTabs.kt`（字体分区） | `entry/src/main/ets/pages/ReaderSettingsPage.ets:1442`（`showNotMigrated('页眉页脚字体')`） | 未接 | 点「页眉页脚字体」**弹「尚未迁移」提示**，页眉只能用正文字体。 | 点页眉字体设置，看是否弹未迁移提示 | 依据源码推断，未设备验证。READER-CONFIG 已登记 | `readConfig` |
-| 高亮规则编辑：5 分区 + 实时预览、九宫格编辑器（250dp 画布、2dp 绿色切分线、4 个 5dp 手柄、拖拽命中 32dp） | `ui/book/read/sheet/HighlightRuleEditSheet.kt:122-1459`、`:1207-1444` | `entry/src/main/ets/pages/ReaderHighlightRuleSheet.ets:288-310`（列表行）、编辑区字段 6 项 | 未接 | 本地高亮规则编辑**只有 6 个字段**（名称 / 正则 / 字色 / 背景色 / 下划线样式 / 线条颜色），没有上游的 5 分区、没有实时预览、没有九宫格编辑器。文案自认「作用范围：当前仅支持正文」。 | 打开高亮规则编辑，看有几个字段 | 依据源码推断，未设备验证 | `themeConfig` |
+| 页眉页脚 tip 类型 21 种 | `ui/book/read/sheet/TypographyTabs.kt:1234-1250` | `entry/src/main/ets/pages/ReaderPage.ets:4973`（`getReaderInfoType`）、`:4929`（`getReaderInfoValue`）、`ReaderInfoSlot()` `:5119`、`ReaderInfoBattery()` `:5085`；选项表 `entry/src/main/ets/pages/ReaderSettingsPage.ets:23`（`READ_INFO_TIP_VALUES` 21 项） | 已接 | 本地页眉页脚的类型下拉已有 21 项、与上游 `ReadTipType` 值一一对应；图形型（电量「电池外框 / 经典电量 / 电量内显 / 仅电量图标」）现在以图形绘制而非文字编号；同一 tip 出现在多个位置时只显示第一次。 | 开快捷面板→信息页→点右侧下拉，数是否有「无/书名/标题/带箭头的标题(系统字体)/带箭头的标题/时间/电量/经典电量/电量内显/仅电量图标/电量%/页数/…」共 21 项；选「电量内显」后回正文看页眉右侧是否画出电池框 | 设备验证：`tmp3/i5.jpeg`（21 项下拉）、`tmp3/i6.jpeg`（选中「电量内显」）、`tmp3/i9.jpeg`（正文顶部左侧时间 13:26 + 右侧电池图形）。 | `readConfig` |
+| 页眉页脚字体设置 | `ui/book/read/sheet/TypographyTabs.kt`（字体分区） | `entry/src/main/ets/pages/ReaderSettingsPage.ets:1441`（`openInfoFontSelection()`，由「选择字体」行触发）、`:1671`（`openInfoFontSelection`）、`:1700`（`getInfoFontDisplayName`）；渲染侧 `entry/src/main/ets/pages/ReaderPage.ets:1511`（`readerInfoFontFamily`） | 已接 | 「选择字体」不再是「尚未迁移」提示：点它进字体选择器，选完直接回到信息页；行右侧显示当前字体名（未选时显示「默认字体」）。页脚勾了「应用页眉样式」时隐藏自己的字体入口，与上游一致。 | 开快捷面板→信息页→「选择字体」，看是否进字体列表；选一个后回来看行右侧是否显示该字体名，且正文页眉真的换了字体 | 设备验证：`tmp3/i4.jpeg` 可见「选择字体 / 默认字体」行可点（不再是未迁移提示）。选字后的渲染未单独截图。 | `readConfig` |
+| 高亮规则编辑：分区标题 + 实时预览 + 作用范围与启用开关 | `ui/book/read/sheet/HighlightRuleEditSheet.kt:363-418`、`:422-673`、`:796-813` | `entry/src/main/ets/pages/ReaderHighlightRuleSheet.ets:389`（`SectionTitle`）、编辑区三分区 `:405-520`、`targetScopeLabel()` `:158`、`previewSample()` `:180` | 已接 | 打开高亮规则编辑，能看到「规则信息 / 样式设置 / 预览效果」三个分区标题；第一条有「作用范围（全部 / 仅标题 / 仅正文）」循环按钮与「启用」开关；第三条可改示例文字，改字色、背景色、下划线样式时下方预览卡即时跟着变。 | 打开高亮规则→编辑任一规则，看三处分区标题、作用范围按钮、示例输入框与预览卡；改字色看预览是否即时变 | 设备验证：`tmp3/y3.jpeg`。下划线档位从 5 档扩到 7 档（补 SVG / 荧光 / 双线），但画布只支持实线/虚线/波浪/双线四种线型，SVG 与荧光画出来与实线无异。 | `themeConfig` |
+| 高亮规则编辑：命中排版（字前距/字后距/行上距/行下距）、应用排版 chip、字体替换、九宫格切图编辑器（250dp 画布、2dp 绿色切分线、4 个 5dp 手柄、拖拽命中 32dp） | `ui/book/read/sheet/HighlightRuleEditSheet.kt:676-726`、`:730-777`、`:781-793`、`:1207-1444` | 无 | 未接 | 高亮规则里没法给命中文字加「字前距/行下距」这类排版微调，也没法把某条排版方案套到规则上、或给规则指定替换字体；背景图更配不了九宫格切图（拉伸区、四角保护）。想做出「关键词前后留白 + 换字体」的效果，本地做不到。 | 打开高亮规则编辑，往下滚是否还有「命中排版」「应用排版」「字体替换」三块与「九宫格切图」按钮 | 依据源码推断，未设备验证。上游这四块都挂在同一个编辑面板里；本地画布不支持按规则换字体、也不支持背景图，所以面板里只有一句「九宫格切图与背景图需要画布支持后才能配置」。 | `themeConfig` |
 | 高亮规则上限（本地：单章 150000 字符、64 条规则） | —（上游无此上限，用二分查找） | `entry/src/main/ets/data/ReaderHighlightRuleEngine.ets:6-7`（`maximumChapterCharacters = 150000`、`maximumRuleCount = 64`） | 不适用 | 上游没有上限（靠优先级仲裁 + 二分查找）。本地超过 15 万字的章**整章不高亮**，用户会以为规则坏了。 | 打开一本单章超 15 万字的书，看高亮是否生效 | 依据源码推断，未设备验证。这是本地性能兜底，上游无可对照行为 | `themeConfig` |
-| 划线样式面板（16 个 26dp 预设色 + 7 种效果 + 笔记输入框） | `ui/book/read/sheet/MarkingSheet.kt:282-315`、`:246`、`:353-392` | `entry/src/main/ets/pages/ReaderHighlightRuleSheet.ets`（无独立划线面板） | 未接 | 本地**没有独立的划线样式面板**：选中文字后只能「标记」，颜色与效果取自高亮规则，不能当场选色。上游 16 个预设色 + 7 种效果一屏可选。 | 长按选中文字 → 标记，看是否弹出选色面板 | 依据源码推断，未设备验证 | `bookmark` |
+| 划线样式面板（16 个 26dp 预设色 + 7 种效果 + 笔记输入框） | `ui/book/read/sheet/MarkingSheet.kt:282-315`、`:246`、`:353-392` | `entry/src/main/ets/pages/ReaderMarkingEditor.ets:23`（`READER_MARKING_COLORS` 16 项）、色格 `:300-330`、效果 7 项 `:9-14`；装配 `entry/src/main/ets/pages/Index.ets:7008-7017` | 已接 | 选中文字后弹出划线样式面板：16 个 32dp 圆形预设色（对齐上游含纯黑 `#111111`）+ 1 个自定义取色点，7 种效果（实线 / 虚线 / 波浪 / 删除线 / 强调线 / 背景高亮 / 文字颜色），另有「复用已有规则 / 自定义样式」下拉与备注输入框。 | 长按选中一段文字→点「标记」，看是否弹出 16 个色圆点与 7 个效果格；选色后记号是否按该色显示 | 设备验证：`tmp3/u0.jpeg`（划线面板由正文长按选中触发，本轮未单独截图）。色格是换行排列而非上游单行横向滚动（本地面板外层有点空白关闭的遮罩，横向手势会被吃掉），见备注。 | `bookmark` |
 | 背景文字配置面板（5 个 56dp 动作卡 + 日夜两格背景色/背景图 + 透明度 0..100） | `ui/book/read/sheet/BgTextConfigSheet.kt:59-275` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（背景卡横滚：`BackgroundShareOption` + 背景样式 + 新增 + 主题列表） | 已接 | 一致：背景样式与主题列表都在。 | 开快捷面板背景卡，看是否有新增/编辑 | 依据源码推断，未设备验证。字段见 READER-CONFIG E 块 | `themeConfig` |
-| 主题列表（网格 2..6 列、卡长宽比 44:56、前 5 个内置不可删、管理态 7 个动作） | `ui/book/read/sheet/ThemeListContent.kt:232-390`、`:466-492` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（主题列表） | 未接 | 本地主题列表**没有网格列数切换、没有管理态多选**（分享/全选/反选/删除/置顶/置底/导出 7 个动作）。主题多了以后只能一个个删。 | 长按主题卡，看是否进管理态 | 依据源码推断，未设备验证 | `themeConfig` |
-| 下划线配置面板 8 项（开关/颜色/虚线/延伸/高度 0..20/间距 0..20/虚线黑段/白段） | `ui/book/read/sheet/UnderlineConfigSheet.kt:40-163` | `entry/src/main/ets/pages/ReaderHighlightRuleSheet.ets`（下划线样式 6 项选择） | 未接 | 本地只能从下拉里选线型，**不能调高度、偏移、虚线黑段/白段长度**。上游 8 项细调。 | 打开下划线设置，数有几项 | 依据源码推断，未设备验证 | `themeConfig` |
+| 主题列表（网格 2..6 列、卡长宽比 44:56、前 5 个内置不可删、管理态 7 个动作） | `ui/book/read/sheet/ThemeListContent.kt:232-390`、`:466-492` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:2401`（主题列表分支）、`ThemeGridCard()` `:1862`、`ThemeManageAction()` `:1892`、`themeGridTemplate()` `:1780` | 已接 | 本地主题列表改成网格：列数 2..6 可切换（默认 4 列）、卡片长宽比 44:56、间距 8；前 5 份内置预设带锁、管理态下透明度 0.5 且不可选；点「管理」进管理态后卡片右上角出勾选徽章，底部一排「全选 / 反选 / 删除 / 置顶 / 置底 / 导出」。 | 开快捷面板→全局页下滑→点最右侧箭头进主题列表，看是否为网格、点「N 列」是否切换列数、点「管理」是否能多选并批量删 | 设备验证：`tmp3/t2.jpeg`。上游 7 个动作里的「分享」本地无对应能力，未做。 | `themeConfig` |
+| 下划线配置面板 8 项（开关/颜色/虚线/延伸/高度 0..20/间距 0..20/虚线黑段/白段） | `ui/book/read/sheet/UnderlineConfigSheet.kt:40-163` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:1516`（「文字下划线」入口行）、`:2997`（面板分支：开关 / 颜色 / 虚线 / 撑满整行 / 线段高度 0..20 / 离字间距 0..20 / 分区标题「下划虚线」/ 实线段长 0..20 / 空隙长度 0..20）；上限归一化 `entry/src/main/ets/data/ReaderSettingsRepository.ets:1227` | 已接 | 下划线从「文字效果」页里拆出来，变成独立面板「文字下划线」，8 项按上游顺序排列，中间插一条「下划虚线」分区标题；线段高度上限从 10 放宽到 20，与上游一致。 | 开快捷面板→全局页→排版/文字效果→点「文字下划线」，数是否有 8 项、线段高度滑杆能否拖到 20 | 设备验证：`tmp3/t3.jpeg`。 | `themeConfig` |
 | 阴影设置面板 5 项（开关/颜色/模糊 0..100/X -50..50/Y -50..50） | `ui/book/read/sheet/ShadowSetSheet.kt:29-106` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（文字阴影） | 已接 | 一致：五项都在。 | 打开阴影设置，数有几项 | 依据源码推断，未设备验证 | `readConfig` |
 | 护眼配置面板（强度 0..100 默认 50、定时开关展开起止时间） | `ui/book/read/sheet/EyeProtectionConfigSheet.kt:29-135` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（护眼设置） | 已接 | 一致。 | 开护眼，看强度默认是否 50 | 依据源码推断，未设备验证 | `themeConfig` |
 | 内容编辑面板（头部 ⋮ 2 项：恢复原文/仅正文、正文框固定 400dp、仅本地 TXT 有「保存到源文件」、定位落点 = 光标顶 − 120px） | `ui/book/read/sheet/ContentEditSheet.kt:52-205`、`:60-104` | `entry/src/main/ets/pages/ReaderPage.ets:2534`（`selectMoreAction` → `edit_content`） | 已接 | 一致：编辑正文、保存到源文件都在。 | 更多操作 →「编辑内容」，看是否能改正文并保存 | 依据源码推断，未设备验证 | `localBook` |
-| 文本处理面板（高 0.72、搜索框、4 种筛选默认 Effective、规则可长按拖动排序） | `ui/book/read/sheet/TextProcessingSheet.kt:108-602`、`:77-82` | `entry/src/main/ets/pages/ReaderTextProcessingSheet.ets`（两个 tab：替换净化 / 正文处理） | 未接 | 本地文本处理面板**没有 4 种筛选（全部/启用/禁用/生效）**、**规则不能拖动排序**。规则多了以后找一条要滚很久。 | 开文本处理面板，看顶部是否有筛选下拉 | 依据源码推断，未设备验证 | `replaceRule` |
-| 生效规则面板（虚拟项 `CHINESE_CONVERT_ID = -1`、`RE_SEGMENT_ID = -2`，行右侧 ✕ 就地移除） | `ui/book/read/sheet/EffectiveReplacesSheet.kt:38-168` | 无（本地无「当前生效」视图） | 未接 | 本地**看不到哪些规则当前生效**，也看不到简繁转换与重新分段这两个虚拟项，用户无法快速关掉某条。 | 找「生效规则」入口 | 依据源码推断，未设备验证 | `replaceRule` |
+| 文本处理面板（高 0.72、搜索框、4 种筛选默认 Effective、规则可长按拖动排序） | `ui/book/read/sheet/TextProcessingSheet.kt:108-602`、`:77-82` | `entry/src/main/ets/pages/ReaderTextProcessingSheet.ets:7`（`READER_REPLACE_FILTERS` 4 种筛选）、`:60`（`ruleTitle` 带分组）、`:150-210`（拖拽把手 + `ruleOrderDraft`）；落库 `entry/src/main/ets/data/ReplaceRuleRepository.ets:749`（`reorder`） | 已接 | 本地文本处理面板已有 4 种筛选（全部 / 已启用 / 已停用 / 当前有效，默认「当前有效」）、搜索同时匹配名称/正则/替换文本/分组、行标题在分组非空时显示「名称 (分组)」、规则行左侧有把手可上下拖动排序，松手即落库；停用的规则整行透明度 0.38。 | 开阅读页→更多操作→文本处理→替换净化，看顶部筛选是否为 4 项、按住某行把手能否上下拖动、松手后重开面板顺序是否保持 | 设备验证：`tmp3/t4.jpeg`（4 种筛选下拉）、`tmp3/t5.jpeg`（拖动后顺序变化）。 | `replaceRule` |
+| 生效规则面板（虚拟项 `CHINESE_CONVERT_ID = -1`、`RE_SEGMENT_ID = -2`，行右侧 ✕ 就地移除） | `ui/book/read/sheet/EffectiveReplacesSheet.kt:38-168` | 无（不上这一项：上游该面板全仓只有定义、没有任何调用点，用户点不到） | 不适用 | 上游该面板在整套源码里只有函数定义（`ui/book/read/sheet/EffectiveReplacesSheet.kt:38`），全仓没有任何调用点，用户在 Android 端也点不到它，因此本地不提供该入口不算手感缺口。| 在上游源码里搜 `EffectiveReplacesSheet`，确认除定义外无调用点 | 依据源码推断，未设备验证（设备上根本无从进入该面板）。 | `replaceRule` |
 | 文本处理记录面板（原文/修改后各 maxLines 3、高 max 520dp） | `ui/book/read/sheet/ContentProcessesSheet.kt:48-270` | `entry/src/main/ets/pages/ReaderTextProcessingSheet.ets`（处理记录列表：查看前后 / 删除） | 已接 | 一致。 | 看处理记录里是否能看前后对比 | 依据源码推断，未设备验证 | `replaceRule` |
 | 选词菜单配置面板（两开关 + 两个 stickyHeader 分组 + 隐藏项 FlowRow + 每行 −/+ 36dp） | `ui/book/read/sheet/TextSelectMenuConfigSheet.kt:67-330`、`:182-270` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（选词菜单配置） | 已接 | 一致：两分组、顺序调整、隐藏项区。 | 开选词菜单配置，看是否有分组与隐藏项 | 依据源码推断，未设备验证。ZIP-BOOKMARK F 块已盘项级内容 | `readConfig` |
 | 点击区域配置面板（全屏覆盖层、3×3 玻璃卡、内边距 3dp、顶部留 36dp、14 项动作） | `ui/book/read/sheet/ClickActionConfigSheet.kt:44-176`、`:61-75` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:2471-2515`（3×3 卡，每格高 58、圆角 10、选中 `#454B62`） | 已接 | 一致：全屏 3×3 配置。 | 打开点击区域配置，看是否是全屏九宫格 | 依据源码推断，未设备验证 | `readConfig` |
 | 翻页动画下拉 7 项（含默认 -1），选即生效无确定按钮 | `ui/book/read/sheet/PageAnimConfigSheet.kt:11-48` | `entry/src/main/ets/pages/ReaderSettingsPage.ets`（翻页动画行） | 已接 | 一致。 | 点翻页动画，看下拉几项、是否选即生效 | 依据源码推断，未设备验证 | `readConfig` |
 | 自动翻页面板（滑杆 1..120 秒 + 3 个圆形按钮：目录/停止/设置） | `ui/book/read/sheet/AutoReadSheet.kt:37-173` | `entry/src/main/ets/pages/ReaderPage.ets:4881-4914`（Slider 1..120 + 三文字按钮「目录/停止/翻页设置」） | 已接 | 一致：三个按钮，本地是文字而非圆形。 | 开自动翻页面板，看是否三项都有 | 依据源码推断，未设备验证 | `readConfig` |
-| 浮动栏图标配置（顶栏/标题栏/底栏三处共用，行圆角 12dp、拖动抬升 4dp、关闭态透明度 0.38） | `ui/book/read/sheet/FloatingBarIconConfigSheet.kt:25-128`、`ui/widget/components/ReorderableConfigList.kt:65-131` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:2880-2932`（底栏按钮配置：行 = 图标+名称+范围+「未迁移」+眼睛开关 36×36+上下箭头+装饰拖拽把手） | 未接 | 本地配置行的**拖拽把手只是装饰**，不能拖动排序，只能点上下箭头一格一格挪。配 10 个按钮时要挪很多次。 | 按住配置行的把手往上下拖，看是否能拖动 | 依据源码推断，未设备验证 | `readConfig` |
+| 浮动栏图标配置（顶栏/标题栏/底栏三处共用，行圆角 12dp、拖动抬升 4dp、关闭态透明度 0.38） | `ui/book/read/sheet/FloatingBarIconConfigSheet.kt:25-128`、`ui/widget/components/ReorderableConfigList.kt:65-131` | `entry/src/main/ets/pages/ReaderSettingsPage.ets:3196-3252`（底栏按钮配置行：`reader_drag_handle` 把手 + `PanGesture` 三回调真拖动、每越一行换位、行圆角 12、关态整行 `opacity 0.38`、拖动行 `shadow` 抬升 4dp）、`BOTTOM_ACTION_ROW_HEIGHT` `:29`、`moveDraftBottomAction()` `:3115`；顶栏图标与标题栏动作按钮两处配置面板本地无（顶栏只有一个「快捷图标行」开关 `:972`） | 未接 | 底栏按钮配置里的把手现在能拖了（拖动即换位、松手落到草稿顺序、保存才落盘），但上游这一套是**顶栏图标 / 标题栏动作按钮 / 底栏按钮三处共用同一个面板**，本地只做了底栏一处；用户想改顶栏显示哪几个图标、排序、自定义图标，本地没有入口。| 底栏拖动依据源码推断（`PanGesture` 三回调已接，未在设备上拖过）；顶栏两处缺失是 grep 结论：`entry/src/main/ets/pages/` 下没有 titleBarIcon/titleBarAction 配置页。| 依据源码推断，未设备验证 | `readConfig` |
 
 ## D 交互层
 
@@ -789,9 +790,9 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 28 | 2 | 1 |
 | B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
-| C 界面层 | 79 | 59 | 14 | 6 |
+| C 界面层 | 80 | 71 | 2 | 7 |
 | D 交互层 | 48 | 37 | 9 | 2 |
-| **合计** | **212** | **163** | **39** | **10** |
+| 合计 | 213 | 175 | 27 | 11 |
 
 数字核对脚本（**注意**：表里有两行图例 `| 状态 | 已接 | 未接 | 不适用 |`，直接 `grep -c` 会各多算 2，所以要先排除图例行；含 `\|` 转义的行也必须按转义分列，否则少算 3 行）：
 
@@ -808,7 +809,7 @@ for l in lines:
     cells = re.split(r'(?<!\\)\|', s)
     if len(cells) == 8 and cells[3].strip() in n:
         n[cells[3].strip()] += 1
-print(n, sum(n.values()))   # {'已接': 163, '未接': 39, '不适用': 10} 212
+print(n, sum(n.values()))   # {'已接': 175, '未接': 27, '不适用': 11} 213
 PY
 
 # 表格行内不得出现第四种状态词
@@ -817,27 +818,27 @@ grep -nE '^\|.*\|\s*(部[分]|基[本]|待[定])' docs/parity/TXT-READER.md   # 
 
 ### 一句话结论
 
-**翻页、滚动、阅读页顶底栏、目录页与搜索结果条都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）+ 第三批十二行（目录搜索保留卷名、`tocLevel` 多级缩进、粘性卷头、目录多选、书签跳转校验复核、进度条无障碍值复核、章边界「加载数据中…」占位页、滚动章末提示页、正则 500ms 预算、搜索左右箭头、底部结果条、搜索收起优先级）+ 第四批十三行（编码统计识别、规则库空表自愈、单章 102400 字节二次拆分、正文前插「前言」、空标题补「无标题章节」、章名去重、`tocLevel` 层级、目录规则预览页、净化管线十步、替换规则超时自动禁用、正文「仅正文」折叠）落地后，**从打开一本书到翻目录、搜正文、跳结果的整条路径**都能对着上游用；剩下 39 行未接集中在**各二级面板的字段/形态**（排版页七子页、页眉页脚 21 种 tip、高亮规则编辑器、主题列表、文本处理面板）与**绘制细节**（分层绘制、6 种下划线、九宫格、文字背景图、覆盖阴影）。
+**翻页、滚动、顶底栏、目录、搜索、TXT 规则层与各二级面板都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）+ 第三批十二行（目录搜索保留卷名、`tocLevel` 多级缩进、粘性卷头、目录多选、书签跳转校验复核、进度条无障碍值复核、章边界「加载数据中…」占位页、滚动章末提示页、正则 500ms 预算、搜索左右箭头、底部结果条、搜索收起优先级）+ 第四批十三行（编码统计识别、规则库空表自愈、单章 102400 字节二次拆分、正文前插「前言」、空标题补「无标题章节」、章名去重、`tocLevel` 层级、目录规则预览页、净化管线十步、替换规则超时自动禁用、正文「仅正文」折叠）+ 第五批十四行（菜单系统页三页横滑、字号右侧排版卡、更多操作 4 列正方形 + 每页 8 格、带箭头格子的二级单选、排版页四个子页签与边距方卡、页眉页脚图形型 tip 与同 tip 去重、页眉页脚字体接线、高亮规则三分区 + 预览、划线面板 16 色 32dp、主题列表网格与管理态、文字下划线独立面板、文本处理分组匹配与拖拽排序）落地后，**从打开一本书到翻目录、搜正文、调面板的整条路径**都能对着上游用；剩下 27 行未接集中在**画布绘制细节**（分层绘制、6 种手绘线型、文字背景图、九宫格切图、覆盖阴影、淡入阈值）与**少量交互/缓存项**（滚动整页缓存、图片双尺寸缓存、选区跨页范围、折叠态快捷条、菜单动画）。
 
 ### 对阅读手感影响最大的前 5 条（剩余未接行中）
 
-> 前四批已落地，下面这份榜单只从**尚未接的 39 行**里挑，避免拿已修好的项占位。
+> 前五批已落地，下面这份榜单只从**尚未接的 27 行**里挑，避免拿已修好的项占位。
 
 1. **绘制不分层，下划线被选区盖住**（B4）—— 上游 `ReaderCanvasSurface.kt:2767-2869` 分四层画（文字背景色带 / 正文 / contentRules / styledUnderlines / overlayRules），本地 `ReaderCanvasSurface.ets:1183-1222` 跟着每个 box 一起画。选中一段带下划线的文字时**下划线被选区灰块压掉**，overlay 规则也盖不到文字之上。
-2. **下划线只有系统线型**（B4）—— 上游 6 种手绘线型（虚线 10-10、双线、波浪振幅 3dp/波长 12dp、SVG、半高线），本地只有系统 `TextDecorationType`。高亮规则里选「波浪下划线」画出来是**一条直线**，高亮规则的表达力差一大截。
-3. **文字背景图完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**。
-4. **排版页只有一页，上游有七个子页**（C6）—— 上游 `TypographyPage.kt:55-345` 把排版拆成「排版 2 / 信息 2 / 边距 3」共 7 页，字重、下划线、标题位置与分段方式、页眉页脚字号都在里面；本地只有一个排版入口。想调「标题分段方式」或「副标题缩放」的用户**在本地找不到任何入口**。
-5. **页眉页脚只能选 20 种固定组合，上游是 21 种 tip 自由拼**（C6）—— 上游 `TypographyTabs.kt:1234-1250` 的 tip 类型有 21 种，左中右三槽可任意组合、可自定义模板；本地是 type 1..20 的固定枚举。想要「左：书名 / 中：章名 / 右：电量+时间」这种组合**拼不出来**。
+2. **下划线只有系统线型**（B4）—— 上游 6 种手绘线型（虚线 10-10、双线、波浪振幅 3dp/波长 12dp、SVG、半高线），本地只有系统 `TextDecorationType`。高亮规则里选「波浪下划线」画出来是**一条直线**；高亮规则面板里已经能选到 SVG 与荧光两档，但选中后画布上看到的与实线没有区别。
+3. **文字背景图完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**，九宫格切图也因此无从配置。
+4. **滚动模式没有整页缓存，长书滚动会反复重排重绘**（B4/B7）—— 上游 `ScrollPageDrawCache` 是容量 8 的 LRU（key 用元素引用身份），滚动回去的页直接复用 PixelMap；本地每帧重新测量绘制。滚动一本几 MB 的书、来回上下翻时**卡顿与掉帧明显**。
+5. **选区范围只到下一页，上游能跨当前页 + 下两页**（D4）—— 上游 `ReaderSelection` 允许选到当前页之后的两页，本地 `ReaderPage.ets` 只延伸到下一页边界。想选一段跨三页的长段落时，**选到第二页末尾就停住**，只能分两次选、分两次划线。
 
 ### 次一级（值得排期但影响面小）
 
-- 更多操作面板 28 项 id 与「带更多箭头的条目」（C4）
-- 高亮规则编辑只有 6 个字段、无实时预览与九宫格编辑器（C7）
-- 划线样式面板的 16 个预设色与 7 种效果（C7）
-- 主题列表的网格列数/管理态 7 个动作/前 5 个内置不可删（C7）
-- 下划线配置面板 8 项（C7）、文字背景透明度 0~100（B7）
+- 图片 0.1~5 倍缩放与九宫格按九切片等比缩放、两种尺寸各缓存一份（B3）
 - 自动翻页无顶部 1px 进度提示（B4）、覆盖转场无 36dp 阴影（B4）、淡入阈值未降为 0.1（B4）
-- 菜单折叠态一行横向滚动快捷条 + 「更多」二级弹层与出入场动画（D5）
+- 折页角点不按触点上下半页选角（B4）、滚动模式仍画书签角标（B4）
+- 顶栏图标与标题栏动作按钮两处配置面板（底栏那处已能做真拖动）（C7）
+- 菜单每格 14/15 种动作（本地 15 种固定）、正中格优先级、图片点击四档、正文内元素点击（D2/D3）
+- 折叠态一行横向滚动快捷条 + 「更多」二级弹层、菜单出入场动画（D5）
+- 无障碍选区快照（D4）
 
 ## 维护
 

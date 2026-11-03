@@ -100,6 +100,8 @@ const READER_MORE_ACTIONS: ReaderMoreAction[] = [
 const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
   id: 'configure_more_actions', label: '配置更多操作', glyph: 'settings', scopeLabel: '', migrated: true
 };
+// 翻页动画六档，顺序与上游 GlobalThemePage.kt:353-360 的 cover/slide/simulation/scroll/fade/none 一致。
+const READER_PAGE_ANIMATION_LABELS: string[] = ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画'];
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
 interface ReaderContentSegment {
@@ -424,6 +426,10 @@ export struct ReaderPage {
   @State imagePreviewUri: string = '';
   @State overflowVisible: boolean = false;
   @State imageStyleMenuVisible: boolean = false;
+  /** 「翻页动画」条目的二级菜单：上游点一下直接展开 6 项单选，不弹「未迁移」。 */
+  /** 更多操作面板当前页（每页 8 格，对齐上游 chunked(8)）。 */
+  @State moreActionPage: number = 0;
+  @State pageAnimMenuVisible: boolean = false;
   @State moreActionConfigVisible: boolean = false;
   @State moreActionShellVisible: boolean = false;
   @State moreActionShellTitle: string = '';
@@ -668,6 +674,7 @@ export struct ReaderPage {
   onOpenBottomActionConfig: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onImageStyleChange: (imageStyle: string) => void = (_imageStyle: string) => {};
+  onPageAnimationChange: (animation: number) => void = (_animation: number) => {};
   onProgressChange: (bookId: string, chapterIndex: number, progress: number,
     chapterPosition: number, androidCoordinate: boolean) => void = () => {};
   onAddBookmark: (chapterPosition: number, pageText: string) => void = (_position: number, _pageText: string) => {};
@@ -681,6 +688,8 @@ export struct ReaderPage {
   onReplaceEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onReplaceResetToDefault: () => void = () => {};
   onRuleEnabledChange: (id: number, enabled: boolean) => void = (_id: number, _enabled: boolean) => {};
+  /** 文本处理面板拖拽松手后回传新的规则顺序；上游对应 MoveReplaceRule。 */
+  onRuleReorder: (orderedIds: number[]) => void = (_orderedIds: number[]) => {};
   onContentProcessToggle: (id: string, enabled: boolean) => void = (_id: string, _enabled: boolean) => {};
   onContentProcessDelete: (id: string) => void = (_id: string) => {};
   onSelectChapterIndex: (chapterIndex: number) => void = () => {};
@@ -2811,6 +2820,21 @@ export struct ReaderPage {
     return true;
   }
 
+  /** 更多操作分页：每页 8 格（2 行 × 4 列），对齐上游 ReaderMoreActionsSheet.kt 的 chunked(8)。 */
+  private getMoreActionPages(): ReaderMoreAction[][] {
+    const visible: ReaderMoreAction[] = this.getVisibleMoreActions();
+    const pages: ReaderMoreAction[][] = [];
+    for (let index = 0; index < visible.length; index += 8) {
+      pages.push(visible.slice(index, index + 8));
+    }
+    return pages.length > 0 ? pages : [[]];
+  }
+
+  /** 格子底部是否画展开箭头：上游只有换源 / 刷新 / 自定义按钮三项有二级菜单。 */
+  private moreActionHasSubmenu(id: string): boolean {
+    return id === 'change_source' || id === 'refresh' || id === 'source_custom_button';
+  }
+
   private getVisibleMoreActions(): ReaderMoreAction[] {
     const actions: ReaderMoreAction[] = [];
     this.moreActions.forEach((config: ReaderMoreActionConfig) => {
@@ -2916,6 +2940,9 @@ export struct ReaderPage {
       this.onOpenTocRule();
     } else if (action.id === 'image_style') {
       this.imageStyleMenuVisible = true;
+    } else if (action.id === 'page_anim') {
+      // 上游 ReaderMoreActionsSheet.kt:207-211：page_anim 点一下直接展开单选菜单。
+      this.pageAnimMenuVisible = true;
     } else if (action.id === 'read_style') {
       this.onOpenSettings();
     } else if (action.id === 'highlight_rule') {
@@ -4972,24 +4999,77 @@ export struct ReaderPage {
     return this.infoSettings.customTipFooterRight;
   }
 
+  /** 图形型 tip：只在页眉页脚画图标/电池，不画文字（上游 LegacyReaderPageDecorationFactory.kt:253-263）。 */
+  private isReaderInfoGraphic(type: number): boolean {
+    return type === 3 || type === 8 || type === 13 || type === 14 || type === 15 || type === 16;
+  }
+
+  /** 图形型 tip 里仍带文字的那几种（时间、章节名），其余图形型只画图标。 */
+  private readerInfoGraphicKeepsText(type: number): boolean {
+    return type === 8 || type === 16;
+  }
+
+  /**
+   * 同一种 tip 只显示在最靠前的位置（上游 LegacyReaderPageDecorationFactory.kt:241-245）。
+   * 这样左中右三栏重复选中同一项时，不会三处都显示同一段文字。
+   */
+  private isReaderInfoDuplicated(isHeader: boolean, position: number): boolean {
+    const type = this.getReaderInfoType(isHeader, position);
+    if (type === 0) { return false; }
+    const template = this.getReaderInfoTemplate(isHeader, position);
+    for (let index = 0; index < position; index++) {
+      if (this.getReaderInfoType(isHeader, index) !== type) { continue; }
+      // 自定义模板要连模板一起比：同是「自定义」但模板不同的两处都该显示。
+      if (type === 18 && this.getReaderInfoTemplate(isHeader, index) !== template) { continue; }
+      return true;
+    }
+    return false;
+  }
+
+  /** 电池图形（上游 tipBattery / tipBatteryClassic 的形态，用基础形状画，不引额外资源）。 */
+  @Builder
+  private ReaderInfoBattery(type: number, tint: string) {
+    if (type === 3 || type === 8) {
+      // 电池外框 + 内部填充。
+      Row() {
+        Stack({ alignContent: Alignment.Start }) {
+          Row().width(`${Math.max(4, Math.min(100, this.readerInfoBatteryPercent()))}%`.toString())
+            .height('100%').backgroundColor(tint).borderRadius(1)
+        }.width(22).height(11).border({ width: 1, color: tint, radius: 2 })
+        Column().width(2).height(5).backgroundColor(tint).borderRadius(1).margin({ left: 1 })
+      }.height(12).justifyContent(FlexAlign.Center)
+    } else if (type === 13) {
+      // 电量内显：电池框里再叠一个百分比数字由外层文字负责，这里只画框与填充。
+      Stack({ alignContent: Alignment.Start }) {
+        Row().width(`${Math.max(4, Math.min(100, this.readerInfoBatteryPercent()))}%`.toString())
+          .height('100%').backgroundColor(tint).borderRadius(1)
+      }.width(26).height(12).border({ width: 1, color: tint, radius: 2 })
+    } else if (type === 14) {
+      // 仅电量图标：只画一段电量条。
+      Stack({ alignContent: Alignment.Start }) {
+        Row().width(`${Math.max(4, Math.min(100, this.readerInfoBatteryPercent()))}%`.toString())
+          .height('100%').backgroundColor(tint).borderRadius(1)
+      }.width(22).height(10).backgroundColor('#33FFFFFF').borderRadius(2)
+    } else {
+      // 经典电量：实心胶囊 + 百分比由外层文字负责，这里只画胶囊。
+      Stack({ alignContent: Alignment.Start }) {
+        Row().width(`${Math.max(6, Math.min(100, this.readerInfoBatteryPercent()))}%`.toString())
+          .height('100%').backgroundColor(tint).borderRadius(2)
+      }.width(24).height(9).backgroundColor('#33FFFFFF').borderRadius(2)
+    }
+  }
+
+  private readerInfoBatteryPercent(): number {
+    return Math.max(0, Math.min(100, batteryInfo.batterySOC));
+  }
+
   @Builder
   private ReaderInfoRow(isHeader: boolean) {
     Column() {
       Row() {
-        Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 0), this.getReaderInfoTemplate(isHeader, 0)))
-          .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
-          .fontColor(this.getReaderInfoColor(isHeader))
-          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-        Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 1), this.getReaderInfoTemplate(isHeader, 1)))
-          .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
-          .fontColor(this.getReaderInfoColor(isHeader))
-          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          .textAlign(TextAlign.Center).layoutWeight(1)
-        Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, 2), this.getReaderInfoTemplate(isHeader, 2)))
-          .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
-          .fontColor(this.getReaderInfoColor(isHeader))
-          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          .textAlign(TextAlign.End).layoutWeight(1)
+        this.ReaderInfoSlot(isHeader, 0, TextAlign.Start)
+        this.ReaderInfoSlot(isHeader, 1, TextAlign.Center)
+        this.ReaderInfoSlot(isHeader, 2, TextAlign.End)
       }.width('100%').height(18)
       if ((isHeader && this.infoSettings.showHeaderLine) || (!isHeader && this.infoSettings.showFooterLine)) {
         Column().width('100%').height(1).backgroundColor(this.getReaderInfoDividerColor())
@@ -5000,6 +5080,33 @@ export struct ReaderPage {
       top: 2 + (isHeader ? this.paddingSettings.headerPaddingTop : this.paddingSettings.footerPaddingTop),
       bottom: 2 + (isHeader ? this.paddingSettings.headerPaddingBottom : this.paddingSettings.footerPaddingBottom)
     })
+  }
+
+  /** 页眉页脚的单栏内容：图形型 tip 画图标，文字型画文字，重复的 tip 留空。 */
+  @Builder
+  private ReaderInfoSlot(isHeader: boolean, position: number, align: TextAlign) {
+    Row() {
+      if (this.isReaderInfoGraphic(this.getReaderInfoType(isHeader, position)) &&
+        !this.isReaderInfoDuplicated(isHeader, position)) {
+        this.ReaderInfoBattery(this.getReaderInfoType(isHeader, position), this.getReaderInfoColor(isHeader))
+        if (this.readerInfoGraphicKeepsText(this.getReaderInfoType(isHeader, position))) {
+          Text(this.getReaderInfoValue(this.getReaderInfoType(isHeader, position),
+            this.getReaderInfoTemplate(isHeader, position)))
+            .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
+            .fontColor(this.getReaderInfoColor(isHeader)).margin({ left: 4 })
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      } else {
+        Text(this.isReaderInfoDuplicated(isHeader, position) ? ''
+          : this.getReaderInfoValue(this.getReaderInfoType(isHeader, position),
+            this.getReaderInfoTemplate(isHeader, position)))
+          .fontSize(this.getReaderInfoFontSize(isHeader)).fontFamily(this.readerInfoFontFamily(isHeader))
+          .fontColor(this.getReaderInfoColor(isHeader))
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+    }.layoutWeight(1).height('100%')
+      .justifyContent(align === TextAlign.Start ? FlexAlign.Start
+        : align === TextAlign.Center ? FlexAlign.Center : FlexAlign.End)
   }
 
   build() {
@@ -5648,33 +5755,48 @@ export struct ReaderPage {
                 .fontSize(11).fontColor('#E5E6EB').padding({ left: 10, right: 10, top: 7, bottom: 7 })
                 .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(16)
             }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
-            Grid() {
-              ForEach(this.getVisibleMoreActions(), (action: ReaderMoreAction) => {
-                GridItem() {
-                  Column() {
-                    if (this.showMenuIcon) {
-                      // 「展示菜单项图标」（上游 showMenuIcon，ReadSettings.kt:119，默认 false）：
-                      // 上游 ReadBookMenuBarFloating.kt:174-186 的 OverflowDropdownMenu 只在 showIcon 为真时
-                      // 给 RoundDropdownMenuItem 传 leadingIcon；本地「更多」是网格面板，对应地整块隐藏图标。
-                      AppGlyph({ name: action.glyph,
-                        tint: action.id === 're_segment' && this.book.reSegment === true ? this.readerMenuAccentTint() : this.readerMenuForeground(),
-                        glyphSize: 22 }).margin({ bottom: 8 })
+            // 上游 ReaderMoreActionsSheet.kt:314-416：4 列正方形格子，每页 chunked(8) 分页。
+            Swiper() {
+              ForEach(this.getMoreActionPages(), (page: ReaderMoreAction[], pageIndex: number) => {
+                Grid() {
+                  ForEach(page, (action: ReaderMoreAction) => {
+                    GridItem() {
+                      Column() {
+                        if (this.showMenuIcon) {
+                          AppGlyph({ name: action.glyph,
+                            tint: action.id === 're_segment' && this.book.reSegment === true ? this.readerMenuAccentTint() : this.readerMenuForeground(),
+                            glyphSize: 22 }).margin({ bottom: 8 })
+                        }
+                        Text(action.id === 're_segment' && this.book.reSegment === true
+                          ? '重新分段（已启用）' : action.label)
+                          .fontSize(11).fontColor('#E1DADD').textAlign(TextAlign.Center)
+                          .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                        if (!action.migrated) {
+                          Text('未迁移').fontSize(9).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                        }
+                        // 上游 ReaderMenuActionSquare.kt:72-84：格子底部 16dp 点击带 + 12dp 展开箭头，
+                        // 只有需要二次选择的条目才有（换源 / 刷新 / 自定义按钮）。
+                        if (this.moreActionHasSubmenu(action.id)) {
+                          Row() {
+                            AppGlyph({ name: 'profileExpandMore', tint: this.readerMenuForeground(), glyphSize: 12 })
+                          }.width('100%').height(16).justifyContent(FlexAlign.Center)
+                        }
+                      }.width('100%').aspectRatio(1).justifyContent(FlexAlign.Center)
+                        .backgroundColor('#202127').borderRadius(16)
+                        .onClick(() => this.selectMoreAction(action))
                     }
-                    Text(action.id === 're_segment' && this.book.reSegment === true
-                      ? '重新分段（已启用）' : action.label)
-                      .fontSize(11).fontColor('#E1DADD').textAlign(TextAlign.Center)
-                      .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    if (!action.migrated) {
-                      Text('未迁移').fontSize(9).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
-                    }
-                  }.width('100%').height(100).justifyContent(FlexAlign.Center)
-                    .backgroundColor('#202127').borderRadius(16)
-                    .onClick(() => this.selectMoreAction(action))
-                }
-              }, (action: ReaderMoreAction) => action.id)
-            }.columnsTemplate('1fr 1fr 1fr 1fr').rowsGap(8).columnsGap(8)
-              .width('100%').padding({ left: 16, right: 16, bottom: 16 }).layoutWeight(1)
-              .scrollBar(BarState.Off)
+                  }, (action: ReaderMoreAction) => action.id)
+                }.columnsTemplate('1fr 1fr 1fr 1fr').rowsGap(8).columnsGap(8).width('100%')
+              }, (page: ReaderMoreAction[], pageIndex: number) => `page-${pageIndex}`)
+            }.loop(false).indicator(false)
+              .onChange((index: number) => this.moreActionPage = index)
+              .width('100%').layoutWeight(1)
+            Row() {
+              ForEach(this.getMoreActionPages(), (page: ReaderMoreAction[], pageIndex: number) => {
+                Row().width(6).height(6).borderRadius(3).margin({ right: 5 })
+                  .backgroundColor(pageIndex === this.moreActionPage ? '#E5E6EB' : '#5A5C66')
+              }, (page: ReaderMoreAction[], pageIndex: number) => `dot-${pageIndex}`)
+            }.width('100%').justifyContent(FlexAlign.Center).padding({ bottom: 12 })
           }
           .width('100%').height('52%').backgroundColor(this.themeColorSurfaceSecondary)
           .borderRadius({ topLeft: 26, topRight: 26 })
@@ -5703,6 +5825,34 @@ export struct ReaderPage {
                 .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
                 .onClick(() => this.chooseImageStyle(style.id))
             }, (style: ReaderImageStyleOption) => style.id)
+          }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
+        }.width('100%').height('100%')
+      }
+
+      if (this.pageAnimMenuVisible) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column().width('100%').height('100%').backgroundColor('#88000000')
+            .onClick(() => this.pageAnimMenuVisible = false)
+          Column() {
+            Row() {
+              Text('翻页动画').fontSize(17).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
+              Blank()
+              Text('关闭').fontSize(13).fontColor('#C7C9D1')
+                .onClick(() => this.pageAnimMenuVisible = false)
+            }.width('100%').padding({ bottom: 12 })
+            ForEach(READER_PAGE_ANIMATION_LABELS, (label: string, index: number) => {
+              Row() {
+                Text(label).fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
+                if (this.pageAnimation === index) {
+                  AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
+                }
+              }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
+                .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+                .onClick(() => {
+                  this.onPageAnimationChange(index);
+                  this.pageAnimMenuVisible = false;
+                })
+            }, (label: string) => label)
           }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
         }.width('100%').height('100%')
       }
@@ -5786,6 +5936,7 @@ export struct ReaderPage {
           onReplaceEnabledChange: (enabled: boolean) => this.onReplaceEnabledChange(enabled),
           onReplaceResetToDefault: () => this.onReplaceResetToDefault(),
           onRuleEnabledChange: (id: number, enabled: boolean) => this.onRuleEnabledChange(id, enabled),
+          onRuleReorder: (orderedIds: number[]) => this.onRuleReorder(orderedIds),
           onContentProcessToggle: (id: string, enabled: boolean) => this.onContentProcessToggle(id, enabled),
           onContentProcessDelete: (id: string) => this.onContentProcessDelete(id),
           onClose: () => this.textProcessingVisible = false,

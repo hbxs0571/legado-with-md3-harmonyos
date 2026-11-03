@@ -961,6 +961,26 @@ struct Index {
     }
   }
 
+  /**
+   * 按给定的 id 顺序重排替换规则并落库。
+   * 与上游 MoveReplaceRule 一致：只有序号真的变了才写库，写完刷新内存副本。
+   */
+  private async reorderReplaceRules(orderedIds: number[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const applied: boolean = await ReplaceRuleRepository.reorder(context, orderedIds);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+      if (applied && this.route === AppRoute.READER) {
+        await this.reloadSelectedChapter();
+      }
+    } catch (_) {
+      this.showUnavailableAction('替换规则排序保存失败');
+    }
+  }
+
   private async setReplaceRuleEnabled(id: number, enabled: boolean): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -6902,6 +6922,7 @@ struct Index {
             onBrightnessAutoChange: (auto: boolean) => this.setReaderBrightnessAuto(auto),
             onBrightnessVwPosChange: (position: string) => this.setReaderBrightnessVwPos(position),
             onImageStyleChange: (imageStyle: string) => this.setReaderImageStyle(imageStyle),
+            onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
             onOpenSettings: () => this.openReaderSettings(),
             onOpenBottomActionConfig: () => this.openReaderSettings(true),
             onCharsetChange: (charset: string) => this.setReaderCharset(charset),
@@ -6936,6 +6957,7 @@ struct Index {
             onReplaceEnabledChange: (enabled: boolean) => this.setReaderReplaceEnabled(enabled),
             onReplaceResetToDefault: () => this.resetReaderReplaceToDefault(),
             onRuleEnabledChange: (id: number, enabled: boolean) => this.setReplaceRuleEnabled(id, enabled),
+            onRuleReorder: (orderedIds: number[]) => this.reorderReplaceRules(orderedIds),
             onContentProcessToggle: (id: string, enabled: boolean) => this.setReaderContentProcessEnabled(id, enabled),
             onContentProcessDelete: (id: string) => this.deleteReaderContentProcess(id),
             bookmarkTargetPosition: this.readerBookmarkTargetPosition,
