@@ -5,6 +5,9 @@ import {
   CurlPoint, PageCurlFrame, PageCurlGeometry, ReaderCurlRenderPaths, ReaderCurlTouchPolicy,
   ReaderCurlVisualPolicy
 } from './ReaderPageCurl';
+import {
+  isNinePatchSource, ReaderNineSliceLayout, ReaderTextBackgroundImage, ReaderTextBackgroundRun
+} from './ReaderTextBackground';
 
 /**
  * 画布正文渲染层（阶段 A）。
@@ -551,6 +554,36 @@ export class ReaderCanvasStyleRange {
   /** 0 无 / 1 实线 / 2 虚线 / 3 波浪 / 4 双线 / 6 删除线（对齐 TextDecorationType）。 */
   decoration: number = 0;
   decorationArgb: number = 0;
+  /** 文字背景图（气泡图）源路径，空串表示无。 */
+  bgImage: string = '';
+  /** 0 平铺 / 1 等比内缩居中裁剪 / 2 等比填充居中 / 3 九宫格。 */
+  bgImageFit: number = 0;
+  /** 图片大小 0.1~5。 */
+  bgImageScale: number = 1;
+  npLeft: number = 0.1;
+  npRight: number = 0.1;
+  npTop: number = 0.1;
+  npBottom: number = 0.1;
+  /** 九宫格左右偏移（vp，画布换算 px），可负。 */
+  bgLengthOffsetLeft: number = 0;
+  bgLengthOffsetRight: number = 0;
+  /**
+   * 命中排版：规则自带的字体族。空数组表示沿用正文默认字体。
+   *
+   * 上游 `LegacyReaderStyleRangeMapper.kt:210-300` 把 `fontPath` 解析成 family 后挂到
+   * `ReaderCharacterStyle`，绘制时逐段换字体。
+   */
+  fontFamilies: string[] = [];
+  /** 命中排版：字重 0 表示不覆盖；非 0 用 100..900 口径。 */
+  fontWeightValue: number = 0;
+  /** 命中排版：0 不覆盖 / 1 强制斜体 / -1 强制不斜。 */
+  italicOverride: number = 0;
+  /** 命中排版：字号偏移（px，规则里是 sp/dp 口径，注入时已换算）。 */
+  fontSizeOffsetPx: number = 0;
+  /** 命中排版：命中首字之前多出的间距（px）。 */
+  letterSpacingBeforePx: number = 0;
+  /** 命中排版：命中末字之后多出的间距（px）。 */
+  letterSpacingAfterPx: number = 0;
 }
 
 export class ReaderCanvasMarking {
@@ -772,11 +805,15 @@ export class ReaderCanvasRenderer {
   private paragraphCache: Map<string, ReaderCanvasParagraph> = new Map<string, ReaderCanvasParagraph>();
   private imageCache: Map<string, image.PixelMap> = new Map<string, image.PixelMap>();
   private imageLoading: Set<string> = new Set<string>();
+  /** 文字背景图（气泡图）缓存：与正文图片分开，`.9.png` 必须按原尺寸解，否则引导边被降采样吃掉。 */
+  private bgImageCache: Map<string, image.PixelMap> = new Map<string, image.PixelMap>();
+  private bgImageLoading: Set<string> = new Set<string>();
   /** 折页五条路径与镜像矩阵，逐帧复用（Path.rewind 清形不换对象）。 */
   private curlPaths: ReaderCurlRenderPaths = new ReaderCurlRenderPaths();
 
   private static readonly PARAGRAPH_CACHE_LIMIT: number = 1024;
   private static readonly IMAGE_CACHE_LIMIT: number = 32;
+  private static readonly BG_IMAGE_CACHE_LIMIT: number = 16;
 
   /**
    * 预取：把窗口里四页用到的图片全部解进 LRU。
@@ -835,6 +872,60 @@ export class ReaderCanvasRenderer {
     }
   }
 
+  /**
+   * 预取文字背景图：规则里的 bgImage 源，`.9.png` 按原尺寸解，其余按 density 降采样。
+   * 上游在排版期就预热（LegacyReaderStyleRangeMapper 遍历 runs 逐个 load），
+   * 否则气泡会晚一两帧才出现。
+   */
+  async prefetchBackgrounds(sources: string[]): Promise<void> {
+    for (const source of sources) {
+      if (source.length === 0) {
+        continue;
+      }
+      if (this.bgImageCache.has(source) || this.bgImageLoading.has(source)) {
+        continue;
+      }
+      await this.loadBackgroundImage(source);
+    }
+  }
+
+  private async loadBackgroundImage(source: string): Promise<void> {
+    this.bgImageLoading.add(source);
+    try {
+      const imageSource = image.createImageSource(source);
+      const info = await imageSource.getImageInfo();
+      const isNinePatch = isNinePatchSource(source);
+      const density = info.density > 0 ? info.density / 160 : 1;
+      // 九宫格引导边只有 1px，降采样会吃掉切线，必须原尺寸解出
+      const pixelMap = await imageSource.createPixelMap(isNinePatch
+        ? { editable: false }
+        : {
+          desiredSize: {
+            width: Math.max(1, Math.round(info.size.width / density)),
+            height: Math.max(1, Math.round(info.size.height / density))
+          }
+        });
+      this.bgImageCache.set(source, pixelMap);
+      imageSource.release();
+    } catch (error) {
+      console.warn(`[ReaderCanvas] 文字背景图预取失败: ${error}`);
+    } finally {
+      this.bgImageLoading.delete(source);
+    }
+    if (this.bgImageCache.size > ReaderCanvasRenderer.BG_IMAGE_CACHE_LIMIT) {
+      let firstKey: string = '';
+      for (const key of this.bgImageCache.keys()) {
+        firstKey = key;
+        break;
+      }
+      if (firstKey.length > 0) {
+        const dropped = this.bgImageCache.get(firstKey);
+        this.bgImageCache.delete(firstKey);
+        dropped?.release();
+      }
+    }
+  }
+
   clear(): void {
     this.paragraphCache.clear();
     for (const pixelMap of this.imageCache.values()) {
@@ -842,6 +933,11 @@ export class ReaderCanvasRenderer {
     }
     this.imageCache.clear();
     this.imageLoading.clear();
+    for (const pixelMap of this.bgImageCache.values()) {
+      pixelMap.release();
+    }
+    this.bgImageCache.clear();
+    this.bgImageLoading.clear();
   }
 
   /** 只清段落缓存（字体、字号、颜色、对齐等样式变更时调用）。 */
@@ -1340,6 +1436,19 @@ export class ReaderCanvasRenderer {
     if (recordGeometry) {
       this.geometry = geometry;
     }
+    // 分层绘制，对齐上游 `ReaderCanvasSurface.kt:2767-2869` 的绘制顺序：
+    // 第一层文字背景（色带 + 半高高亮）→ 第二层正文与图片 → 第三层选区 →
+    // 第四层下划线（标记下划线 + 规则下划线）。上游把下划线放在 `selectedTextBounds`
+    // 之后画，所以选区盖不住下划线；本地原先每个文字框「底色→字形→下划线」一口气画完，
+    // 选区最后再压上去，会把下划线整条盖掉。
+    for (const box of geometry.boxes) {
+      if (box.item !== undefined && box.item.kind === 'text') {
+        this.drawTextBoxBackground(canvas, box, request);
+      }
+    }
+    // 文字背景图（气泡图）：上游顺序在「色带之后、字形之前」（textBackgroundBands → textBackgrounds → 正文）。
+    // 色块画完再铺气泡，气泡画在字形下面，所以必须整页收集合并成 run 后统一画。
+    this.drawTextBackgrounds(canvas, geometry, request);
     for (const box of geometry.boxes) {
       if (box.item === undefined) {
         continue;
@@ -1347,10 +1456,10 @@ export class ReaderCanvasRenderer {
       if (box.item.kind === 'image') {
         this.drawImageBox(canvas, box, request);
       } else {
-        this.drawTextBox(canvas, box, request);
+        this.drawTextBoxText(canvas, box, request);
       }
     }
-    // 行下划线最后画，压住文字下缘（与改造前的绘制顺序一致）
+    // 整页文字下划线（style.underline）：压住文字下缘。
     if (request.style.underline) {
       for (const lineBox of geometry.lines) {
         if (lineBox.line !== undefined) {
@@ -1361,6 +1470,12 @@ export class ReaderCanvasRenderer {
     canvas.restoreToCount(entrySaveCount);
     if (drawSelection) {
       this.drawSelection(canvas, geometry, request);
+    }
+    // 第四层：所有下划线统一压在选区之上。
+    for (const box of geometry.boxes) {
+      if (box.item !== undefined && box.item.kind === 'text') {
+        this.drawTextBoxUnderlines(canvas, box, request);
+      }
     }
   }
 
@@ -1467,8 +1582,12 @@ export class ReaderCanvasRenderer {
     canvas.detachPen();
   }
 
-  /** 文字元素：标记底色 → 字形 → 标记下划线（上游同序）。 */
-  private drawTextBox(canvas: drawing.Canvas, box: ReaderCanvasItemBox,
+  /**
+   * 文字元素的第一层：高亮规则的色带与标记的半高底色，都在字形之下。
+   * 上游把这批底色整页铺完再画正文（`textBackgroundBands` → `halfHighlights` → 正文），
+   * 逐框画也没问题——它们本来就都落在字形下缘以下。
+   */
+  private drawTextBoxBackground(canvas: drawing.Canvas, box: ReaderCanvasItemBox,
     request: ReaderCanvasDrawRequest): void {
     const item = box.item;
     if (item === undefined) {
@@ -1479,14 +1598,45 @@ export class ReaderCanvasRenderer {
     if (built === undefined) {
       return;
     }
-    // 高亮规则的文字底色先画：它是最底一层，标记底色与字形都压在它上面。
     this.drawBackgroundBands(canvas, item, built, box.left, box.top, request);
     this.drawMarkingBackgrounds(canvas, item, built, box.left, box.top, request);
+  }
+
+  /** 文字元素的第二层：字形本身。 */
+  private drawTextBoxText(canvas: drawing.Canvas, box: ReaderCanvasItemBox,
+    request: ReaderCanvasDrawRequest): void {
+    const item = box.item;
+    if (item === undefined) {
+      return;
+    }
+    const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx,
+      this.styleRangesForItem(item, request));
+    if (built === undefined) {
+      return;
+    }
     // Paragraph.paint 会改动 canvas 的画笔/裁剪状态且不恢复，
     // 后面还要用同一块画布画选区，所以这里必须 save/restore 兜住。
     canvas.save();
     built.paragraph.paint(canvas, box.left, box.top);
     canvas.restore();
+  }
+
+  /**
+   * 文字元素的第四层：标记下划线 + 高亮规则下划线。
+   * 上游在选区之后画（`dynamicEmphasisUnderlineRuns` → `contentRules` → `styledUnderlines`），
+   * 所以即使整段被选中，下划线仍然清晰可见。
+   */
+  private drawTextBoxUnderlines(canvas: drawing.Canvas, box: ReaderCanvasItemBox,
+    request: ReaderCanvasDrawRequest): void {
+    const item = box.item;
+    if (item === undefined) {
+      return;
+    }
+    const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx,
+      this.styleRangesForItem(item, request));
+    if (built === undefined) {
+      return;
+    }
     this.drawMarkingUnderlines(canvas, item, built, box.left, box.top, request);
     this.drawStyledUnderlines(canvas, item, built, box.left, box.top, request);
   }
@@ -1542,6 +1692,225 @@ export class ReaderCanvasRenderer {
       bottom: box.top + box.heightPx
     };
     canvas.drawImageRect(pixelMap, rect);
+  }
+
+  /**
+   * 文字背景图（气泡图）：整页收集各文字元素里命中背景图规则的矩形，按
+   * 「同图 + 同行 + 相邻」合并成 run，再逐 run 按四种 fit 模式绘制。
+   * 上游 `ReaderTextBackgroundRun.textBackgroundRuns()`。
+   */
+  private drawTextBackgrounds(canvas: drawing.Canvas, geometry: ReaderCanvasPageGeometry,
+    request: ReaderCanvasDrawRequest): void {
+    if (request.highlights.length === 0) {
+      return;
+    }
+    // 收集候选：每个命中区间一段矩形，带图描述；单位都是画布 px。
+    const candidates: ReaderTextBackgroundRun[] = [];
+    const vpScale = Math.max(0.0001, request.layout.vpScale);
+    for (const box of geometry.boxes) {
+      if (box.item === undefined || box.item.kind !== 'text') {
+        continue;
+      }
+      const item = box.item;
+      const ranges = this.styleRangesForItem(item, request);
+      if (ranges.length === 0) {
+        continue;
+      }
+      const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx, ranges);
+      if (built === undefined) {
+        continue;
+      }
+      for (const range of ranges) {
+        if (range.bgImage.length === 0) {
+          continue;
+        }
+        const boxes = built.paragraph.getRectsForRange(
+          { start: range.start, end: range.end },
+          text.RectWidthStyle.TIGHT,
+          text.RectHeightStyle.TIGHT
+        );
+        for (const rectBox of boxes) {
+          const run = new ReaderTextBackgroundRun();
+          run.image.source = range.bgImage;
+          run.image.fit = range.bgImageFit;
+          run.image.scale = range.bgImageScale;
+          run.image.ninePatchLeft = range.npLeft;
+          run.image.ninePatchRight = range.npRight;
+          run.image.ninePatchTop = range.npTop;
+          run.image.ninePatchBottom = range.npBottom;
+          // 规则里的左右偏移是 dp，画布层统一 px
+          run.image.lengthOffsetLeftPx = range.bgLengthOffsetLeft * vpScale;
+          run.image.lengthOffsetRightPx = range.bgLengthOffsetRight * vpScale;
+          run.contentLeft = box.left + rectBox.rect.left;
+          run.contentTop = box.top + rectBox.rect.top;
+          run.contentRight = box.left + rectBox.rect.right;
+          run.contentBottom = box.top + rectBox.rect.bottom;
+          run.frameLeft = run.contentLeft;
+          run.frameTop = run.contentTop;
+          run.frameRight = run.contentRight;
+          run.frameBottom = run.contentBottom;
+          candidates.push(run);
+        }
+      }
+    }
+    if (candidates.length === 0) {
+      return;
+    }
+    const runs = ReaderCanvasRenderer.mergeTextBackgroundRuns(candidates);
+    for (const run of runs) {
+      const pixelMap = this.bgImageCache.get(run.image.source);
+      if (pixelMap === undefined) {
+        // 还没解出来就异步补一帧，下一帧重绘后再画，避免首帧空气泡
+        if (!this.bgImageLoading.has(run.image.source)) {
+          this.loadBackgroundImage(run.image.source);
+        }
+        continue;
+      }
+      this.drawTextBackground(canvas, pixelMap, run);
+    }
+  }
+
+  /** 同图背景矩形合并：同图描述 + 同行（top 差 < 0.5）+ 相邻（间隙 < 1px）。 */
+  private static mergeTextBackgroundRuns(runs: ReaderTextBackgroundRun[]): ReaderTextBackgroundRun[] {
+    const sorted = runs.slice();
+    sorted.sort((a: ReaderTextBackgroundRun, b: ReaderTextBackgroundRun): number => {
+      if (Math.abs(a.contentTop - b.contentTop) > 0.5) {
+        return a.contentTop - b.contentTop;
+      }
+      return a.contentLeft - b.contentLeft;
+    });
+    const merged: ReaderTextBackgroundRun[] = [];
+    for (const run of sorted) {
+      const previous = merged.length > 0 ? merged[merged.length - 1] : undefined;
+      if (previous !== undefined && previous.image.source === run.image.source &&
+        previous.image.fit === run.image.fit && previous.image.scale === run.image.scale &&
+        previous.image.ninePatchLeft === run.image.ninePatchLeft &&
+        previous.image.ninePatchRight === run.image.ninePatchRight &&
+        previous.image.ninePatchTop === run.image.ninePatchTop &&
+        previous.image.ninePatchBottom === run.image.ninePatchBottom &&
+        previous.image.lengthOffsetLeftPx === run.image.lengthOffsetLeftPx &&
+        previous.image.lengthOffsetRightPx === run.image.lengthOffsetRightPx &&
+        Math.abs(previous.contentTop - run.contentTop) < 0.5 &&
+        Math.abs(previous.contentBottom - run.contentBottom) < 0.5 &&
+        run.contentLeft - previous.contentRight < 1) {
+        previous.contentRight = Math.max(previous.contentRight, run.contentRight);
+        previous.frameRight = previous.contentRight;
+        previous.frameBottom = Math.max(previous.frameBottom, run.frameBottom);
+        continue;
+      }
+      merged.push(run);
+    }
+    return merged;
+  }
+
+  /**
+   * 画一条背景图 run。四种 fit 照上游 `ReaderCanvasSurface.kt drawTextBackground`：
+   * 1 内缩居中裁剪 / 2 等比填充居中 / 3 九宫格 / else（0）平铺。
+   */
+  private drawTextBackground(canvas: drawing.Canvas, pixelMap: image.PixelMap,
+    run: ReaderTextBackgroundRun): void {
+    const info = pixelMap.getImageInfoSync();
+    const bitmapWidth = info.size.width;
+    const bitmapHeight = info.size.height;
+    if (bitmapWidth <= 0 || bitmapHeight <= 0) {
+      return;
+    }
+    // 拿位图尺寸回填四条切线厚度与中间带高（只对九宫格生效）
+    const imageDesc = run.image.withBitmapSize(bitmapWidth, bitmapHeight);
+    const scale = imageDesc.sizeFactor();
+    const lineHeightPx = run.contentHeight();
+    const frameTop = run.contentTop - imageDesc.frameTopPx(lineHeightPx);
+    const frameBottom = run.contentBottom + imageDesc.frameBottomPx(lineHeightPx);
+    const frameLeft = run.contentLeft - imageDesc.frameLeftPx(lineHeightPx);
+    const frameRight = run.contentRight + imageDesc.frameRightPx(lineHeightPx);
+    const sampling = new drawing.SamplingOptions(drawing.FilterMode.FILTER_MODE_LINEAR);
+    const entrySaveCount = canvas.getSaveCount();
+    if (imageDesc.fit === 1) {
+      // 等比内缩居中裁剪：图不放大，只按 scale 缩放后居中截取覆盖内容区
+      const width = (run.contentRight - run.contentLeft) * scale;
+      const height = width * bitmapHeight / bitmapWidth;
+      const left = run.contentLeft + (run.contentWidth() - width) / 2;
+      const top = run.contentTop + (run.contentHeight() - height) / 2;
+      const destination: common2D.Rect = {
+        left: left,
+        top: top,
+        right: left + width,
+        bottom: top + height
+      };
+      canvas.save();
+      canvas.clipRect(destination);
+      canvas.drawImageRect(pixelMap, destination, sampling);
+      canvas.restoreToCount(entrySaveCount);
+      return;
+    }
+    if (imageDesc.fit === 2) {
+      // 等比填充居中：放大到刚好盖满内容区，超出部分裁掉
+      const fitScale = Math.max(
+        run.contentWidth() / bitmapWidth,
+        run.contentHeight() / bitmapHeight
+      ) * scale;
+      const width = bitmapWidth * fitScale;
+      const height = bitmapHeight * fitScale;
+      const left = run.contentLeft + (run.contentWidth() - width) / 2;
+      const top = run.contentTop + (run.contentHeight() - height) / 2;
+      const destination: common2D.Rect = {
+        left: left,
+        top: top,
+        right: left + width,
+        bottom: top + height
+      };
+      canvas.save();
+      canvas.clipRect(destination);
+      canvas.drawImageRect(pixelMap, destination, sampling);
+      canvas.restoreToCount(entrySaveCount);
+      return;
+    }
+    if (imageDesc.fit === 3) {
+      // 九宫格：逐格 clipRect(destination) + drawImageRectWithSrc(painted)
+      const cells = ReaderNineSliceLayout.cells(
+        bitmapWidth, bitmapHeight,
+        run.contentLeft, run.contentTop, run.contentRight, run.contentBottom,
+        frameLeft, frameTop, frameRight, frameBottom, imageDesc
+      );
+      for (const cell of cells) {
+        const clip: common2D.Rect = {
+          left: cell.destLeft,
+          top: cell.destTop,
+          right: cell.destRight,
+          bottom: cell.destBottom
+        };
+        const src: common2D.Rect = {
+          left: cell.sourceLeft,
+          top: cell.sourceTop,
+          right: cell.sourceRight,
+          bottom: cell.sourceBottom
+        };
+        const painted: common2D.Rect = {
+          left: cell.paintLeft,
+          top: cell.paintTop,
+          right: cell.paintRight,
+          bottom: cell.paintBottom
+        };
+        const cellSaveCount = canvas.getSaveCount();
+        canvas.save();
+        canvas.clipRect(clip);
+        canvas.drawImageRectWithSrc(pixelMap, src, painted, sampling, drawing.SrcRectConstraint.FAST);
+        canvas.restoreToCount(cellSaveCount);
+      }
+      return;
+    }
+    // fit 0：平铺。ImageShader(REPEAT) + 缩放 + 平移到内容区左上角。
+    const matrix = new drawing.Matrix();
+    matrix.setScale(scale, scale, 0, 0);
+    matrix.postTranslate(run.contentLeft, run.contentTop);
+    const shader = drawing.ShaderEffect.createImageShader(
+      pixelMap, drawing.TileMode.REPEAT, drawing.TileMode.REPEAT, sampling, matrix);
+    const brush = new drawing.Brush();
+    brush.setShaderEffect(shader);
+    canvas.attachBrush(brush);
+    canvas.drawRect(run.contentLeft, run.contentTop, run.contentRight, run.contentBottom);
+    canvas.detachBrush();
+    canvas.restoreToCount(entrySaveCount);
   }
 
   /**
@@ -2110,7 +2479,11 @@ export class ReaderCanvasRenderer {
     let out = '';
     for (const range of ranges) {
       out += `${range.start}-${range.end}-${range.textColorArgb}-${range.backgroundArgb}-` +
-        `${range.decoration}-${range.decorationArgb};`;
+        `${range.decoration}-${range.decorationArgb}-${range.bgImage}-${range.bgImageFit}-` +
+        `${range.bgImageScale}-${range.npLeft}-${range.npRight}-${range.npTop}-${range.npBottom}-` +
+        `${range.bgLengthOffsetLeft}-${range.bgLengthOffsetRight}-` +
+        `${range.fontFamilies.join(',')}-${range.fontWeightValue}-${range.italicOverride}-` +
+        `${range.fontSizeOffsetPx}-${range.letterSpacingBeforePx}-${range.letterSpacingAfterPx};`;
     }
     return out;
   }
@@ -2164,12 +2537,20 @@ export class ReaderCanvasRenderer {
     if (range === undefined) {
       return base;
     }
+    // 命中排版：字体族 / 字重 / 斜体 / 字号偏移逐项覆盖，规则里为 0 或空表示不覆盖。
+    const baseFontSize: number = typeof base.fontSize === 'number' ? base.fontSize : 0;
+    const baseLetterSpacing: number = typeof base.letterSpacing === 'number' ? base.letterSpacing : 0;
     const out: text.TextStyle = {
-      fontFamilies: base.fontFamilies,
-      fontSize: base.fontSize,
-      fontWeight: base.fontWeight,
-      fontStyle: base.fontStyle,
-      letterSpacing: base.letterSpacing,
+      fontFamilies: range.fontFamilies.length > 0 ? range.fontFamilies : base.fontFamilies,
+      fontSize: range.fontSizeOffsetPx !== 0
+        ? Math.max(1, baseFontSize + range.fontSizeOffsetPx) : base.fontSize,
+      fontWeight: range.fontWeightValue > 0
+        ? readerCanvasFontWeight(range.fontWeightValue) : base.fontWeight,
+      fontStyle: range.italicOverride > 0 ? text.FontStyle.ITALIC
+        : (range.italicOverride < 0 ? text.FontStyle.NORMAL : base.fontStyle),
+      // 命中字距：上游把一次命中拆成首/中/尾三段，只有首字带 before、尾字带 after。
+      // 走到这里的每段都只覆盖一个字，所以直接叠进 letterSpacing 就落在该字上。
+      letterSpacing: baseLetterSpacing + range.letterSpacingBeforePx + range.letterSpacingAfterPx,
       color: range.textColorArgb !== 0 ? readerCanvasColor(range.textColorArgb) : base.color
     };
     // 底色不交给系统 backgroundRect：那是逐段铺色、相邻段之间会留缝。
@@ -2231,6 +2612,24 @@ export class ReaderCanvasRenderer {
       local.backgroundArgb = range.backgroundArgb;
       local.decoration = range.decoration;
       local.decorationArgb = range.decorationArgb;
+      local.underlineWidthVp = range.underlineWidthVp;
+      local.underlineOffsetVp = range.underlineOffsetVp;
+      local.bgImage = range.bgImage;
+      local.bgImageFit = range.bgImageFit;
+      local.bgImageScale = range.bgImageScale;
+      local.npLeft = range.npLeft;
+      local.npRight = range.npRight;
+      local.npTop = range.npTop;
+      local.npBottom = range.npBottom;
+      local.bgLengthOffsetLeft = range.bgLengthOffsetLeft;
+      local.bgLengthOffsetRight = range.bgLengthOffsetRight;
+      // 命中排版与字体替换：逐字段抄下来，漏一个就画不出来
+      local.fontFamilies = range.fontFamilies;
+      local.fontWeightValue = range.fontWeightValue;
+      local.italicOverride = range.italicOverride;
+      local.fontSizeOffsetPx = range.fontSizeOffsetPx;
+      local.letterSpacingBeforePx = range.letterSpacingBeforePx;
+      local.letterSpacingAfterPx = range.letterSpacingAfterPx;
       out.push(local);
     }
     return out;

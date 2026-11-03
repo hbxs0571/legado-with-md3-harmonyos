@@ -2,6 +2,9 @@ import {
   ReaderBackgroundStyle, READER_BACKGROUND_STYLES, READER_STYLE_PRESET_COUNT
 } from '../data/ReaderSettingsRepository';
 import { ReaderFontEntry, ReaderFontRepository } from '../data/ReaderFontRepository';
+import { ReaderSettingsRepository } from '../data/ReaderSettingsRepository';
+import { fileIo, picker } from '@kit.CoreFileKit';
+import { Context } from '@kit.AbilityKit';
 import { READER_COLUMN_MODE_TITLES, readerColumnModeTitle } from '../data/ReaderColumnMode';
 import {
   defaultReaderSelectionMenuItems,
@@ -339,6 +342,9 @@ export struct ReaderSettingsPage {
   /** 主题列表的列数档位下标（对应 2..6 列），对齐上游 ThemeListContent 的 gridColumns。 */
   /** 当前展开滑杆的步进器行标题；空串表示都收起（对齐上游点整行才展开滑杆）。 */
   /** 正在拖动的底栏按钮行下标（-1 表示没在拖）。 */
+  /** 顶栏按钮/浮动图标配置面板的拖动行下标与已消费位移（与底栏那套同口径）。 */
+  @State topDragIndex: number = -1;
+  @State topDragOffset: number = 0;
   @State bottomDragIndex: number = -1;
   /** 拖动已经消费掉的纵向位移，用来把「每半行换一次位」的判定复位。 */
   @State bottomDragOffset: number = 0;
@@ -2603,7 +2609,9 @@ export struct ReaderSettingsPage {
                 detail: this.underline ? (this.dottedLine ? '虚线' : '实线') : '关闭',
                 migrated: true
               }).onClick(() => this.openDetailSheet('文字下划线', '下划线开关、颜色与虚线细节'))
-              Text('高亮规则依赖 Android 规则库；当前 HOS 尚无兼容规则仓储，本页不伪造规则列表。')
+              // 上游把高亮规则入口放在「更多操作」面板（ReaderMoreActionsSheet 的 highlight_rule），
+              // 不在阅读界面设置里；这里只留指路文案，不伪造第二个入口。
+              Text('高亮规则在阅读页底栏的「更多操作」面板里，与上游一致；本页不重复放入口。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.height(440).scrollBar(BarState.Off)
@@ -3149,25 +3157,53 @@ export struct ReaderSettingsPage {
     return this.getBottomActionLabel(id);
   }
 
-  private moveTopAction(index: number, delta: number): void {
+  private moveTopAction(index: number, delta: number): boolean {
     const target = index + delta;
-    if (target < 0 || target >= this.draftTopActions.length) { return; }
+    if (index < 0 || index >= this.draftTopActions.length) { return false; }
+    if (target < 0 || target >= this.draftTopActions.length) { return false; }
     const updated = this.draftTopActions.map(
       (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
     );
-    const current = updated[index];
-    const neighbor = updated[target];
-    if (current === undefined || neighbor === undefined) { return; }
-    updated[index] = neighbor;
-    updated[target] = current;
+    const moved = updated.splice(index, 1)[0];
+    if (moved === undefined) { return false; }
+    updated.splice(target, 0, moved);
     this.draftTopActions = updated;
+    return true;
   }
 
   private toggleTopAction(id: string, enabled: boolean): void {
-    this.draftTopActions = this.draftTopActions.map((item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({
+    const toggled = this.draftTopActions.map((item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({
       id: item.id,
       enabled: item.id === id ? enabled : item.enabled
     }));
+    // 上游 ReorderableConfigList.toggleEnabled(reorderEnabledFirst = true)：打开的把这一项
+    // 挪到「最后一个已启用项」的后面，关闭的挪到第一个未启用项之前，列表始终启用项在前。
+    this.draftTopActions = this.reorderEnabledFirst(toggled, id);
+  }
+
+  /** 启用项排前面（上游 ReorderableConfigList.kt:265-290）。 */
+  private reorderEnabledFirst(items: ReaderBottomActionConfig[], movedId: string): ReaderBottomActionConfig[] {
+    const index = items.findIndex((item: ReaderBottomActionConfig) => item.id === movedId);
+    if (index < 0) { return items; }
+    const moved = items[index];
+    if (moved === undefined) { return items; }
+    const rest: ReaderBottomActionConfig[] = items.filter((item: ReaderBottomActionConfig) => item.id !== movedId);
+    if (moved.enabled) {
+      let insert = 0;
+      for (let i = 0; i < rest.length; i++) {
+        const candidate = rest[i];
+        if (candidate !== undefined && candidate.enabled) { insert = i + 1; }
+      }
+      rest.splice(insert, 0, moved);
+    } else {
+      let insert = -1;
+      for (let i = 0; i < rest.length; i++) {
+        const candidate = rest[i];
+        if (candidate !== undefined && !candidate.enabled) { insert = i; break; }
+      }
+      rest.splice(insert < 0 ? rest.length : insert, 0, moved);
+    }
+    return rest;
   }
 
   @Builder
@@ -3215,8 +3251,9 @@ export struct ReaderSettingsPage {
                 Stack({ alignContent: Alignment.Center }) {
                   Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
                 }.width(36).height(36).margin({ left: 4 })
+                  .hitTestBehavior(HitTestMode.Block)
                   .gesture(
-                    PanGesture({ direction: PanDirection.Vertical })
+                    PanGesture({ direction: PanDirection.Vertical, distance: 1 })
                       .onActionStart(() => {
                         this.bottomDragIndex = index;
                         this.bottomDragOffset = 0;
@@ -3305,6 +3342,70 @@ export struct ReaderSettingsPage {
     }
   }
 
+  /** 该按钮是否已设置自定义图标（上游 ConfigListEntry.hasCustomIcon）。 */
+  private hasButtonCustomIcon(id: string): boolean {
+    const icons: Map<string, string> =
+      ReaderSettingsRepository.decodeCustomIconMap(this.titleBarCustomIcons);
+    const path: string | undefined = icons.get(id);
+    return path !== undefined && path.length > 0;
+  }
+
+  /**
+   * 编辑某一项的自定义图标：已设置就清掉，未设置就选一张图并复制进应用沙箱。
+   * 上游同一个按钮两态（Add / Close），见 `ReorderableConfigList.kt:203-228`。
+   */
+  private async editButtonCustomIcon(id: string): Promise<void> {
+    if (this.hasButtonCustomIcon(id)) {
+      this.applyButtonCustomIcon(id, '');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const uri = await this.pickCustomIconUri(context);
+      if (uri.length === 0) { return; }
+      this.applyButtonCustomIcon(id, uri);
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? error.message : '选择图标失败');
+    }
+  }
+
+  /** 选一张图并复制到沙箱：上游 AsyncImage 直接吃 uri，本地画布/图标行只认文件路径。 */
+  private async pickCustomIconUri(context: Context): Promise<string> {
+    const options = new picker.DocumentSelectOptions();
+    options.fileSuffixFilters = ['图片|.png,.jpg,.jpeg,.webp,.svg'];
+    options.maxSelectNumber = 1;
+    const uris: string[] = await new picker.DocumentViewPicker(context).select(options);
+    const uri: string | undefined = uris[0];
+    if (uri === undefined) { return ''; }
+    const folder = `${context.filesDir}/reader-icons`;
+    try { fileIo.mkdirSync(folder); } catch (_) {}
+    const rawName = uri.substring(uri.lastIndexOf('/') + 1);
+    const extension = rawName.indexOf('.') >= 0 ? rawName.substring(rawName.lastIndexOf('.') + 1).toLowerCase() : 'png';
+    const targetPath = `${folder}/icon-${Date.now().toString(36)}.${extension}`;
+    const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    try {
+      fileIo.copyFileSync(source.fd, targetPath);
+    } finally {
+      fileIo.closeSync(source);
+    }
+    return targetPath;
+  }
+
+  /** 把某个按钮的自定义图标写回 `id,path;` 编码串（上游 titleBarCustomIcons）。 */
+  private applyButtonCustomIcon(id: string, path: string): void {
+    const icons: Map<string, string> =
+      ReaderSettingsRepository.decodeCustomIconMap(this.titleBarCustomIcons);
+    if (path.length === 0) {
+      icons.delete(id);
+    } else {
+      icons.set(id, path);
+    }
+    const pieces: string[] = [];
+    icons.forEach((value: string, key: string) => { pieces.push(`${key},${value}`); });
+    this.onTitleBarCustomIconsChange(pieces.join(';'));
+  }
+
   /** 关闭按钮配置面板：顶栏操作按钮与浮动图标共用一个 sheet，两个标志一起复位。 */
   private closeButtonConfigSheet(): void {
     this.topActionConfigVisible = false;
@@ -3354,23 +3455,60 @@ export struct ReaderSettingsPage {
                   Text('未迁移').fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                 }
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+              // 自定义图标：启用态才出现，未设置显示「+」、已设置显示「×」（上游
+              // ReorderableConfigList.kt:203-228 的 SmallTonalButton / SmallPlainButton）。
+              if (item.enabled) {
+                Stack({ alignContent: Alignment.Center }) {
+                  Image(this.hasButtonCustomIcon(item.id)
+                    ? $r('app.media.profile_close') : $r('app.media.app_add'))
+                    .width(16).height(16).fillColor('#D5C2C6')
+                }.width(32).height(32).borderRadius(16).backgroundColor('#292A31').margin({ right: 6 })
+                  .onClick(() => { this.editButtonCustomIcon(item.id); })
+              }
               Stack({ alignContent: Alignment.Center }) {
                 Image(item.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
                   .width(20).height(20).fillColor(item.enabled ? '#D5C2C6' : '#777984')
               }.width(36).height(36).borderRadius(18).backgroundColor('#292A31')
                 .onClick(() => this.toggleTopAction(item.id, !item.enabled))
-              Column() {
-                Image($r('app.media.reader_reorder_up')).width(16).height(16)
-                  .fillColor(index === 0 ? '#555761' : '#B9BBC4')
-                  .onClick(() => this.moveTopAction(index, -1))
-                Image($r('app.media.reader_reorder_down')).width(16).height(16)
-                  .fillColor(index === this.draftTopActions.length - 1 ? '#555761' : '#B9BBC4')
-                  .onClick(() => this.moveTopAction(index, 1))
-              }.width(24).height(36).justifyContent(FlexAlign.SpaceBetween).margin({ left: 4 })
-              Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
-                .width(32).height(36).margin({ left: 4 })
+              // 上游 ReorderableConfigList.kt:239-249 只有拖拽把手，没有上下箭头；
+              // 拖动时整行抬升 4dp（:65-131），松手才落进草稿顺序。
+              Stack({ alignContent: Alignment.Center }) {
+                Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
+              }.width(36).height(36).margin({ left: 4 })
+                .hitTestBehavior(HitTestMode.Block)
+                // distance 用 1vp：把手很窄，默认阈值在细长把手上经常量不到位移，
+                // 拖动会整个被外层 Scroll 吃掉，表现为「怎么拖都不动」。
+                .gesture(
+                  PanGesture({ direction: PanDirection.Vertical, distance: 1 })
+                    .onActionStart(() => {
+                      this.topDragIndex = index;
+                      this.topDragOffset = 0;
+                    })
+                    .onActionUpdate((event: GestureEvent) => {
+                      const offset: number = event.offsetY;
+                      while (offset - this.topDragOffset > BOTTOM_ACTION_ROW_HEIGHT / 2) {
+                        if (!this.moveTopAction(this.topDragIndex, 1)) { break; }
+                        this.topDragIndex = this.topDragIndex + 1;
+                        this.topDragOffset = this.topDragOffset + BOTTOM_ACTION_ROW_HEIGHT;
+                      }
+                      while (offset - this.topDragOffset < -BOTTOM_ACTION_ROW_HEIGHT / 2) {
+                        if (!this.moveTopAction(this.topDragIndex, -1)) { break; }
+                        this.topDragIndex = this.topDragIndex - 1;
+                        this.topDragOffset = this.topDragOffset - BOTTOM_ACTION_ROW_HEIGHT;
+                      }
+                    })
+                    .onActionEnd(() => {
+                      this.topDragIndex = -1;
+                      this.topDragOffset = 0;
+                    })
+                )
             }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 8 })
               .backgroundColor('#202127').borderRadius(12).margin({ bottom: 8 })
+              // 关闭态整行透明度 0.38（上游 ReorderableConfigList 关态口径）。
+              .opacity(item.enabled ? 1 : 0.38)
+              // 拖动中的行抬升 4dp。
+              .shadow(this.topDragIndex === index
+                ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
           }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
         }.width('100%').layoutWeight(1).scrollBar(BarState.Off)

@@ -1,3 +1,4 @@
+import { fileIo, picker } from '@kit.CoreFileKit';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
 import { ReaderHighlightRulePresets } from '../data/ReaderHighlightRulePresets';
@@ -30,6 +31,29 @@ export struct ReaderHighlightRuleSheet {
   @State presetVisible: boolean = false;
   /** 预设面板里已勾选的规则 id；用数组是因为 ArkTS 的 @State 不追踪 Set/Map 的内部变更。 */
   @State presetSelectedIds: string[] = [];
+  // 命中排版四值（上游 HighlightRuleEditSheet.kt:676-726），单位 dp
+  @State editLetterSpacingBefore: number = 0;
+  @State editLetterSpacingAfter: number = 0;
+  @State editLineSpacingTop: number = 0;
+  @State editLineSpacingBottom: number = 0;
+  // 字体替换（上游 :781-793）：路径 + 字重 + 斜体 + 字号偏移（sp）
+  @State editFontPath: string = '';
+  @State editFontWeight: number = 400;
+  @State editItalic: boolean = false;
+  @State editFontSizeOffset: number = 0;
+  // 文字背景图（上游 :551-673）：图源、四种填充、缩放、左右偏移
+  @State editBgImage: string = '';
+  @State editBgImageFit: number = 0;
+  @State editBgImageScale: number = 1;
+  @State editBgLengthOffsetLeft: number = 0;
+  @State editBgLengthOffsetRight: number = 0;
+  // 九宫格四条切线（0..1）与是否手调，对齐上游自动边框/手动切图两态
+  @State editNpLeft: number = 0.1;
+  @State editNpRight: number = 0.1;
+  @State editNpTop: number = 0.1;
+  @State editNpBottom: number = 0.1;
+  @State editManualNineSlice: boolean = false;
+  @State ninePatchVisible: boolean = false;
   onDismiss: () => void = () => {};
   onSave: (rules: ReaderHighlightRule[]) => Promise<ReaderHighlightRule[]> =
     async (rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> => rules;
@@ -72,6 +96,24 @@ export struct ReaderHighlightRuleSheet {
     this.editUnderlineMode = 0;
     this.editTargetScope = 2;
     this.editEnabled = true;
+    this.editLetterSpacingBefore = 0;
+    this.editLetterSpacingAfter = 0;
+    this.editLineSpacingTop = 0;
+    this.editLineSpacingBottom = 0;
+    this.editFontPath = '';
+    this.editFontWeight = 400;
+    this.editItalic = false;
+    this.editFontSizeOffset = 0;
+    this.editBgImage = '';
+    this.editBgImageFit = 0;
+    this.editBgImageScale = 1;
+    this.editBgLengthOffsetLeft = 0;
+    this.editBgLengthOffsetRight = 0;
+    this.editNpLeft = 0.1;
+    this.editNpRight = 0.1;
+    this.editNpTop = 0.1;
+    this.editNpBottom = 0.1;
+    this.editManualNineSlice = false;
     this.errorMessage = '';
     this.editorVisible = true;
   }
@@ -86,6 +128,24 @@ export struct ReaderHighlightRuleSheet {
     this.editUnderlineMode = rule.underlineMode;
     this.editTargetScope = rule.targetScope;
     this.editEnabled = rule.enabled;
+    this.editLetterSpacingBefore = rule.letterSpacingBefore ?? 0;
+    this.editLetterSpacingAfter = rule.letterSpacingAfter ?? 0;
+    this.editLineSpacingTop = rule.lineSpacingTop ?? 0;
+    this.editLineSpacingBottom = rule.lineSpacingBottom ?? 0;
+    this.editFontPath = rule.fontPath ?? '';
+    this.editFontWeight = rule.fontWeight ?? 400;
+    this.editItalic = rule.isItalic === true;
+    this.editFontSizeOffset = rule.fontSizeOffset ?? 0;
+    this.editBgImage = rule.bgImage ?? '';
+    this.editBgImageFit = rule.bgImageFit ?? 0;
+    this.editBgImageScale = rule.bgImageScale ?? 1;
+    this.editBgLengthOffsetLeft = rule.bgLengthOffsetLeft ?? 0;
+    this.editBgLengthOffsetRight = rule.bgLengthOffsetRight ?? 0;
+    this.editNpLeft = rule.npLeft ?? 0.1;
+    this.editNpRight = rule.npRight ?? 0.1;
+    this.editNpTop = rule.npTop ?? 0.1;
+    this.editNpBottom = rule.npBottom ?? 0.1;
+    this.editManualNineSlice = rule.manualNineSlice === true;
     this.errorMessage = '';
     this.editorVisible = true;
   }
@@ -137,6 +197,127 @@ export struct ReaderHighlightRuleSheet {
   private SectionTitle(label: string) {
     Text(label).fontSize(12).fontColor('#9AA0B2').width('100%')
       .textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 }).margin({ bottom: 4 })
+  }
+
+  /** 数值步进行：点整行的 −/＋ 改值，用于命中排版四间距与字号偏移。 */
+  @Builder
+  private StepperRow(label: string, value: string, onDelta: (delta: number) => void) {
+    Row() {
+      Text(label).fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+      Text('−').fontSize(16).fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
+        .backgroundColor('#303139').borderRadius(10).onClick(() => onDelta(-1))
+      Text(value).fontSize(13).fontColor('#E5E6EB').width(64).textAlign(TextAlign.Center)
+      Text('＋').fontSize(16).fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
+        .backgroundColor('#303139').borderRadius(10).onClick(() => onDelta(1))
+    }.width('100%').margin({ bottom: 8 })
+  }
+
+  /** 多档切换行：点右侧按钮循环档位（对齐上游下拉/分段）。 */
+  @Builder
+  private CycleRow(label: string, value: string, onCycle: () => void) {
+    Row() {
+      Text(label).fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+      Text(value).fontSize(13).fontColor('#B9C6FF')
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .backgroundColor('#303139').borderRadius(12).onClick(() => onCycle())
+    }.width('100%').margin({ bottom: 8 })
+  }
+
+  /** 开关行。 */
+  @Builder
+  private ToggleRow(label: string, checked: boolean, onToggle: (next: boolean) => void) {
+    Row() {
+      Text(label).fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: checked })
+        .selectedColor('#B9C6FF')
+        .onChange((isOn: boolean) => onToggle(isOn))
+    }.width('100%').margin({ bottom: 8 })
+  }
+
+  private imageFitLabel(): string {
+    if (this.editBgImageFit === 1) { return '拉伸铺满'; }
+    if (this.editBgImageFit === 2) { return '平铺'; }
+    if (this.editBgImageFit === 3) { return '九宫格'; }
+    return '默认';
+  }
+
+  private cycleImageFit(): void {
+    this.editBgImageFit = (this.editBgImageFit + 1) % 4;
+  }
+
+  private weightLabel(): string {
+    if (this.editFontWeight === 300) { return '细体'; }
+    if (this.editFontWeight === 500) { return '中等'; }
+    if (this.editFontWeight === 700) { return '粗体'; }
+    if (this.editFontWeight === 900) { return '特粗'; }
+    return '常规';
+  }
+
+  private cycleWeight(): void {
+    const weights: number[] = [300, 400, 500, 700, 900];
+    const index = weights.indexOf(this.editFontWeight);
+    this.editFontWeight = weights[(index + 1) % weights.length] ?? 400;
+  }
+
+  /** 选一张本地图片当文字背景图；复制进沙箱，避免文档选择器的临时授权失效。 */
+  private async pickBackgroundImage(): Promise<void> {
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) { return; }
+      const options = new picker.DocumentSelectOptions();
+      options.maxSelectNumber = 1;
+      options.fileSuffixFilters = ['图片|.png,.jpg,.jpeg,.webp,.svg'];
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris.length > 0 ? uris[0] : undefined;
+      if (uri === undefined || uri.length === 0) { return; }
+      const folder = context.filesDir + '/reader-bg-images';
+      if (!fileIo.accessSync(folder)) { fileIo.mkdirSync(folder, true); }
+      const dot = uri.lastIndexOf('.');
+      const extension = dot >= 0 ? uri.substring(dot).toLowerCase() : '.png';
+      const target = folder + '/bg-' + Date.now().toString(36) + extension;
+      const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      const destination = fileIo.openSync(target, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
+      fileIo.copyFileSync(source.fd, destination.fd);
+      fileIo.closeSync(source);
+      fileIo.closeSync(destination);
+      this.editBgImage = target;
+    } catch (_) {
+      this.errorMessage = '没有选到图片，或图片无法读取';
+    }
+  }
+
+  /** 选一个本地字体文件给这条规则用。 */
+  private async pickRuleFont(): Promise<void> {
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) { return; }
+      const options = new picker.DocumentSelectOptions();
+      options.maxSelectNumber = 1;
+      options.fileSuffixFilters = ['字体|.ttf,.otf,.ttc'];
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris.length > 0 ? uris[0] : undefined;
+      if (uri === undefined || uri.length === 0) { return; }
+      const folder = context.filesDir + '/reader-rule-fonts';
+      if (!fileIo.accessSync(folder)) { fileIo.mkdirSync(folder, true); }
+      const dot = uri.lastIndexOf('.');
+      const extension = dot >= 0 ? uri.substring(dot).toLowerCase() : '.ttf';
+      const target = folder + '/font-' + Date.now().toString(36) + extension;
+      const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      const destination = fileIo.openSync(target, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
+      fileIo.copyFileSync(source.fd, destination.fd);
+      fileIo.closeSync(source);
+      fileIo.closeSync(destination);
+      this.editFontPath = target;
+    } catch (_) {
+      this.errorMessage = '没有选到字体，或字体无法读取';
+    }
+  }
+
+  private fontDisplayName(): string {
+    const path = this.editFontPath;
+    if (path.length === 0) { return '未选择'; }
+    const slash = path.lastIndexOf('/');
+    return slash >= 0 ? path.substring(slash + 1) : path;
   }
 
   /** 预览卡的下划线装饰：只映射系统支持的线型。 */
@@ -207,6 +388,27 @@ export struct ReaderHighlightRuleSheet {
     rule.bgColor = bgColor;
     rule.underlineMode = this.editUnderlineMode;
     rule.underlineColor = underlineColor;
+    // 命中排版与字体替换：上游四个 dp 间距、sp 字号偏移与字体路径
+    rule.letterSpacingBefore = this.editLetterSpacingBefore;
+    rule.letterSpacingAfter = this.editLetterSpacingAfter;
+    rule.lineSpacingTop = this.editLineSpacingTop;
+    rule.lineSpacingBottom = this.editLineSpacingBottom;
+    rule.fontPath = this.editFontPath.length > 0 ? this.editFontPath : null;
+    rule.fontWeight = this.editFontWeight;
+    rule.isItalic = this.editItalic;
+    rule.fontSizeOffset = this.editFontSizeOffset;
+    // 文字背景图：图源为空就整块清掉，避免留下指向已删文件的悬空路径
+    const bgImage = this.editBgImage.trim();
+    rule.bgImage = bgImage.length > 0 ? bgImage : null;
+    rule.bgImageFit = this.editBgImageFit;
+    rule.bgImageScale = this.editBgImageScale;
+    rule.bgLengthOffsetLeft = this.editBgLengthOffsetLeft;
+    rule.bgLengthOffsetRight = this.editBgLengthOffsetRight;
+    rule.npLeft = this.editNpLeft;
+    rule.npRight = this.editNpRight;
+    rule.npTop = this.editNpTop;
+    rule.npBottom = this.editNpBottom;
+    rule.manualNineSlice = this.editManualNineSlice;
     const next = this.editId.length > 0
       ? this.draftRules.map((item: ReaderHighlightRule) => item.id === rule.id ? rule : item)
       : [...this.draftRules, rule];
@@ -476,8 +678,116 @@ export struct ReaderHighlightRuleSheet {
                   })
               }.width('100%').height(72).alignItems(VerticalAlign.Center)
               .padding(10).backgroundColor('#24252C').borderRadius(16).margin({ bottom: 12 })
-              Text('九宫格切图与背景图需要画布支持后才能配置，此处暂不提供；表格里的对应行仍记为未接。')
-                .fontSize(11).fontColor('#AEB0BA').width('100%').margin({ bottom: 4 })
+              // 分区 4：命中排版（上游 :676-726 四个间距滑杆，dp 口径）
+              this.SectionTitle('命中排版')
+              this.StepperRow('字前距 ' + this.editLetterSpacingBefore.toFixed(1) + ' dp',
+                this.editLetterSpacingBefore.toFixed(1), (delta: number) => {
+                  this.editLetterSpacingBefore =
+                    Math.min(40, Math.max(0, this.editLetterSpacingBefore + delta * 0.5));
+                })
+              this.StepperRow('字后距 ' + this.editLetterSpacingAfter.toFixed(1) + ' dp',
+                this.editLetterSpacingAfter.toFixed(1), (delta: number) => {
+                  this.editLetterSpacingAfter =
+                    Math.min(40, Math.max(0, this.editLetterSpacingAfter + delta * 0.5));
+                })
+              this.StepperRow('行上距 ' + this.editLineSpacingTop.toFixed(1) + ' dp',
+                this.editLineSpacingTop.toFixed(1), (delta: number) => {
+                  this.editLineSpacingTop =
+                    Math.min(40, Math.max(0, this.editLineSpacingTop + delta * 0.5));
+                })
+              this.StepperRow('行下距 ' + this.editLineSpacingBottom.toFixed(1) + ' dp',
+                this.editLineSpacingBottom.toFixed(1), (delta: number) => {
+                  this.editLineSpacingBottom =
+                    Math.min(40, Math.max(0, this.editLineSpacingBottom + delta * 0.5));
+                })
+
+              // 分区 5：字体替换（上游 :781-793 自定义字体开关 + 选择行）
+              this.SectionTitle('字体替换')
+              Row() {
+                Text('自定义字体').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+                Text(this.fontDisplayName()).fontSize(13).fontColor('#B9C6FF')
+                  .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .backgroundColor('#303139').borderRadius(12)
+                  .onClick(() => this.pickRuleFont())
+              }.width('100%').margin({ bottom: 6 })
+              if (this.editFontPath.length > 0) {
+                Text('清除自定义字体').fontSize(12).fontColor('#FFB4AB').width('100%')
+                  .padding({ top: 4, bottom: 8 })
+                  .onClick(() => this.editFontPath = '')
+              }
+              this.CycleRow('字重 ' + this.weightLabel(), this.weightLabel(),
+                () => this.cycleWeight())
+              this.ToggleRow('斜体', this.editItalic, (next: boolean) => this.editItalic = next)
+              this.StepperRow('字号偏移 ' + this.editFontSizeOffset + ' sp',
+                '' + this.editFontSizeOffset, (delta: number) => {
+                  this.editFontSizeOffset = Math.min(10, Math.max(-10, this.editFontSizeOffset + delta));
+                })
+
+              // 分区 6：文字背景图与九宫格（上游 :551-673、:1207-1444）
+              this.SectionTitle('文字背景图')
+              Row() {
+                Text('背景图').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+                Text(this.editBgImage.length > 0 ? '已选择' : '未选择').fontSize(13)
+                  .fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .backgroundColor('#303139').borderRadius(12)
+                  .onClick(() => this.pickBackgroundImage())
+              }.width('100%').margin({ bottom: 6 })
+              if (this.editBgImage.length > 0) {
+                Text('清除背景图').fontSize(12).fontColor('#FFB4AB').width('100%')
+                  .padding({ top: 4, bottom: 8 })
+                  .onClick(() => this.editBgImage = '')
+              }
+              this.CycleRow('填充方式 ' + this.imageFitLabel(), this.imageFitLabel(),
+                () => this.cycleImageFit())
+              this.StepperRow('缩放 ' + this.editBgImageScale.toFixed(1) + ' 倍',
+                this.editBgImageScale.toFixed(1), (delta: number) => {
+                  this.editBgImageScale =
+                    Math.min(5, Math.max(0.1, this.editBgImageScale + delta * 0.1));
+                })
+              this.StepperRow('左伸出 ' + this.editBgLengthOffsetLeft + ' dp',
+                '' + this.editBgLengthOffsetLeft, (delta: number) => {
+                  this.editBgLengthOffsetLeft =
+                    Math.min(40, Math.max(-40, this.editBgLengthOffsetLeft + delta));
+                })
+              this.StepperRow('右伸出 ' + this.editBgLengthOffsetRight + ' dp',
+                '' + this.editBgLengthOffsetRight, (delta: number) => {
+                  this.editBgLengthOffsetRight =
+                    Math.min(40, Math.max(-40, this.editBgLengthOffsetRight + delta));
+                })
+              if (this.editBgImageFit === 3) {
+                this.ToggleRow('手动切图（关闭则按图片自动识别边框）',
+                  this.editManualNineSlice, (next: boolean) => this.editManualNineSlice = next)
+                Row() {
+                  Text(this.editManualNineSlice ? '四条切线按下面数值拉伸' : '四条切线按图片自动识别')
+                    .fontSize(11).fontColor('#AEB0BA').layoutWeight(1)
+                  Text('切图').fontSize(12).fontColor('#B9C6FF')
+                    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                    .backgroundColor('#303139').borderRadius(10)
+                    .onClick(() => this.ninePatchVisible = !this.ninePatchVisible)
+                }.width('100%').margin({ bottom: 8 })
+                if (this.ninePatchVisible) {
+                  this.StepperRow('左 ' + (this.editNpLeft * 100).toFixed(0) + '%',
+                    (this.editNpLeft * 100).toFixed(0), (delta: number) => {
+                      this.editNpLeft = Math.min(0.9, Math.max(0, this.editNpLeft + delta * 0.01));
+                      this.editManualNineSlice = true;
+                    })
+                  this.StepperRow('右 ' + (this.editNpRight * 100).toFixed(0) + '%',
+                    (this.editNpRight * 100).toFixed(0), (delta: number) => {
+                      this.editNpRight = Math.min(0.9, Math.max(0, this.editNpRight + delta * 0.01));
+                      this.editManualNineSlice = true;
+                    })
+                  this.StepperRow('上 ' + (this.editNpTop * 100).toFixed(0) + '%',
+                    (this.editNpTop * 100).toFixed(0), (delta: number) => {
+                      this.editNpTop = Math.min(0.9, Math.max(0, this.editNpTop + delta * 0.01));
+                      this.editManualNineSlice = true;
+                    })
+                  this.StepperRow('下 ' + (this.editNpBottom * 100).toFixed(0) + '%',
+                    (this.editNpBottom * 100).toFixed(0), (delta: number) => {
+                      this.editNpBottom = Math.min(0.9, Math.max(0, this.editNpBottom + delta * 0.01));
+                      this.editManualNineSlice = true;
+                    })
+                }
+              }
             }.width('100%')
           }.layoutWeight(1).scrollBar(BarState.Off)
           Row() {

@@ -24,7 +24,9 @@ import { batteryInfo, pasteboard, settings } from '@kit.BasicServicesKit';
 import { AnimatorResult, window } from '@kit.ArkUI';
 import { LengthMetricsUnit } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
-import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator } from './LocalReaderPaginator';
+import {
+  LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator, LocalReaderSizeOffset
+} from './LocalReaderPaginator';
 import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
 import { HiddenSpan, scanHiddenSpans, toBodyOnly, toRawText } from '../reader/ReaderBodyOnlyFilter';
 import {
@@ -385,6 +387,8 @@ export struct ReaderPage {
   @State contentProcesses: BookContentProcess[] = [];
   @State readerHighlightRules: ReaderHighlightRule[] = [];
   @State readerHighlightRanges: ReaderHighlightRange[] = [];
+  // 命中排版（字号偏移 + 行上下距）的分页度量表，跟着 readerHighlightRanges 一起重算。
+  private readerSizeOffsets: LocalReaderSizeOffset[] = [];
   @State highlightRuleSheetVisible: boolean = false;
   @State effectiveReplaceRuleIds: number[] = [];
   @Prop @Watch('onBookmarkTargetChanged') bookmarkTargetPosition: number = -1;
@@ -1611,6 +1615,14 @@ export struct ReaderPage {
     return ReaderFontRepository.resolveFamily(context, path, this.systemTypefaces);
   }
 
+  // 高亮规则自带的字体（上游 fontPath → family）：空路径返回空数组表示沿用正文
+  private highlightRuleFontFamilies(path: string | null | undefined): string[] {
+    if (path === undefined || path === null || path.length === 0) { return []; }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return []; }
+    return [ReaderFontRepository.resolveFamily(context, path, this.systemTypefaces)];
+  }
+
   onProgressBehaviorChanged(): void {
     this.sliderProgressIndex = this.pageAnimation === 3
       ? this.readerProgress
@@ -1750,6 +1762,7 @@ export struct ReaderPage {
         this.readerContentRevision++;
       }
       this.readerHighlightRanges = nextRanges;
+      this.readerSizeOffsets = this.buildReaderSizeOffsets();
       this.localSemanticDocument = document;
     }
     // 图片尺寸是异步量的，开书那一两秒里通常还没到齐。
@@ -1793,7 +1806,8 @@ export struct ReaderPage {
         this.getReaderLetterSpacingVp(fontSize)),
       this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines,
       this.textFullJustify,
-      this.resolveReaderColumnCount()
+      this.resolveReaderColumnCount(),
+      this.readerSizeOffsets
     );
     const nextPages: LocalReaderPage[] = [];
     const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible();
@@ -1982,6 +1996,55 @@ export struct ReaderPage {
         .height(this.bookmarkBadgeSize * 2)
         .objectFit(ImageFit.Fill)
     }
+  }
+
+  /**
+   * 当前页可朗读的正文（上游 `ReaderAccessibilityPolicy.snapshot` 的 `text = current.text`，
+   * 即当前页可见内容整段）。图片元素跳过，行间用换行分隔。
+   */
+  private getCurrentPageAccessibilityText(): string {
+    const page = this.localReaderPages[this.currentPageIndex];
+    if (page === undefined) { return ''; }
+    if (page.messageText !== undefined && page.messageText.length > 0) { return page.messageText; }
+    const lines: string[] = [];
+    for (let index = 0; index < page.lines.length; index++) {
+      const line = page.lines[index];
+      if (line === undefined) { continue; }
+      let text = '';
+      for (let itemIndex = 0; itemIndex < line.items.length; itemIndex++) {
+        const item = line.items[itemIndex];
+        if (item === undefined || item.kind !== 'text') { continue; }
+        text += item.value;
+      }
+      if (text.length > 0) { lines.push(text); }
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * 画布的无障碍描述：正文 + 章节 + 翻页可用性。
+   * 上游在 `Box.clearAndSetSemantics` 里一次性给出这几项（`ReaderCanvasSurface.kt:922-980`）：
+   * `text`、书签状态、`verticalScrollAxisRange`（能否前后翻）、两个自定义动作（上一页/下一页）。
+   */
+  private getCanvasAccessibilityDescription(): string {
+    const pageText = this.getCurrentPageAccessibilityText();
+    const parts: string[] = [];
+    if (pageText.length > 0) { parts.push(pageText); }
+    parts.push(`第 ${this.getChapterIndex() + 1} 章 ${this.chapterTitle}`);
+    return parts.join('\n');
+  }
+
+  /** 无障碍状态描述：书签状态 + 能否前后翻（上游 accessibilityPage 的 stateDescription 与滚动轴范围）。 */
+  private getCanvasAccessibilityStateDescription(): string {
+    const states: string[] = [];
+    states.push(this.hasBookmarkOnCurrentPage() ? '本页已加书签' : '本页未加书签');
+    states.push(`第 ${this.currentPageIndex + 1} 页，共 ${this.localReaderPages.length} 页`);
+    return states.join('，');
+  }
+
+  /** 无障碍翻页：越界不动（上游 accessibilityPageTurn 的守卫）。 */
+  private accessibilityTurnPage(forward: boolean): void {
+    this.turnReaderPage(forward ? 1 : -1);
   }
 
   private hasBookmarkOnCurrentPage(): boolean {
@@ -3415,7 +3478,8 @@ export struct ReaderPage {
           context.px2vp(80),
           inlineImageWidth,
           this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines,
-          this.resolveReaderColumnCount()
+          this.resolveReaderColumnCount(),
+          this.readerSizeOffsets
         );
       // titleMode 为 2 时标题整块隐藏，上游也不为它单独留一页。
       const titlePageCount = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible() && displayTitle.length > 0 ? 1 : 0;
@@ -4152,6 +4216,7 @@ export struct ReaderPage {
     const rules = await ReaderHighlightRuleRepository.load(context);
     this.readerHighlightRules = rules;
     this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(this.localSemanticContent, rules);
+    this.readerSizeOffsets = this.buildReaderSizeOffsets();
     // 滚动模式的内容 ForEach 以 readerContentRevision 为 key，规则变化必须递增才会重建 Span。
     this.readerContentRevision++;
     this.rebuildReaderPages();
@@ -4167,6 +4232,7 @@ export struct ReaderPage {
     const saved = await ReaderHighlightRuleRepository.save(context, rules);
     this.readerHighlightRules = saved;
     this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(this.localSemanticContent, saved);
+    this.readerSizeOffsets = this.buildReaderSizeOffsets();
     this.readerContentRevision++;
     this.rebuildReaderPages();
     return saved;
@@ -4767,6 +4833,50 @@ export struct ReaderPage {
    * 结果按 `readerContentRevision + 规则条数 + 划线条数` 缓存：翻页动画每帧都会构造
    * request，不缓存会每帧重建上千个对象。
    */
+  /**
+   * 命中排版对分页的影响（上游 `ReaderChapterBlockMeasurer.kt:376-392` 的测量口径）：
+   * 字体、字重、斜体、颜色、下划线都不改行高，只有字号偏移与行上/下距会。
+   * 这里把每条规则的整段命中位置转成分页器能用的度量表，`paginate` 与
+   * `countPagesIncrementally` 共用，两边的页数才对得上。
+   */
+  private buildReaderSizeOffsets(): LocalReaderSizeOffset[] {
+    const list: LocalReaderSizeOffset[] = [];
+    if (this.readerHighlightRanges.length === 0) {
+      return list;
+    }
+    const uiContext = this.getUIContext();
+    const vpScale = uiContext.vp2px(1);
+    const spScale = uiContext.fp2px(1);
+    for (let index = 0; index < this.readerHighlightRanges.length; index++) {
+      const range = this.readerHighlightRanges[index];
+      if (range === undefined) {
+        continue;
+      }
+      const rule = range.rule;
+      // 上游对 <=0 一律当「没配」，行距不会被负值吃掉。
+      const padTop = Math.max(0, rule.lineSpacingTop ?? 0) * vpScale;
+      const padBottom = Math.max(0, rule.lineSpacingBottom ?? 0) * vpScale;
+      const extraHeight = (rule.fontSizeOffset ?? 0) * spScale;
+      if (padTop === 0 && padBottom === 0 && extraHeight === 0) {
+        continue;
+      }
+      list.push({
+        start: range.start,
+        endExclusive: range.endExclusive,
+        extraHeight: extraHeight,
+        padTop: padTop,
+        padBottom: padBottom
+      });
+    }
+    // 分页器用单调游标扫这张表，必须按起点升序；同起点时长的在前，
+    // 保证短区间不会被长区间整段跳过。
+    list.sort((left: LocalReaderSizeOffset, right: LocalReaderSizeOffset): number => {
+      if (left.start !== right.start) { return left.start - right.start; }
+      return right.endExclusive - left.endExclusive;
+    });
+    return list;
+  }
+
   private buildReaderCanvasHighlights(): ReaderCanvasStyleRange[] {
     const signature = `${this.readerContentRevision}|${this.readerHighlightRanges.length}|` +
       `${this.markings.length}|${this.getChapterIndex()}`;
@@ -4780,20 +4890,72 @@ export struct ReaderPage {
         continue;
       }
       const rule = range.rule;
-      const item = new ReaderCanvasStyleRange();
-      item.start = range.start;
-      item.end = range.endExclusive;
-      item.textColorArgb = rule.textColor ?? 0;
-      item.backgroundArgb = rule.bgColor ?? 0;
-      item.decoration = readerCanvasHighlightDecoration(rule.underlineMode);
-      item.decorationArgb = rule.underlineColor ?? rule.textColor ?? 0;
-      // 规则自带的下划线粗细/偏移（dp），画布按 vp 口径逐行手绘时用
-      item.underlineWidthVp = rule.underlineWidth ?? 0;
-      item.underlineOffsetVp = rule.underlineOffset ?? 0;
-      if (item.textColorArgb === 0 && item.backgroundArgb === 0 && item.decoration === 0) {
+      // 命中排版四值：上游对 <=0 一律当「没配」（LegacyReaderStyleRangeMapper.kt:210-216），
+      // 负值不能变负间距，否则后续字形会往回叠。
+      const uiContext = this.getUIContext();
+      const vpScale = uiContext.vp2px(1);
+      const spScale = uiContext.fp2px(1);
+      const spaceBeforePx = Math.max(0, rule.letterSpacingBefore ?? 0) * vpScale;
+      const spaceAfterPx = Math.max(0, rule.letterSpacingAfter ?? 0) * vpScale;
+      const sizeOffsetPx = Math.round((rule.fontSizeOffset ?? 0) * spScale);
+      // 上游把 400 当「不覆盖」：它是 View 读者的持久化默认值，
+      // 当成显式覆盖会把正文粗体拉回常规（LegacyReaderStyleRangeMapper.kt:352-358）。
+      const weight = rule.fontWeight ?? 400;
+      const overrideWeight = weight === 400 ? 0 : weight;
+      // 上游 italic 非空 Boolean，false 就是显式「不斜体」，两个方向都要覆盖。
+      const overrideItalic = rule.isItalic === true ? 1 : -1;
+      const families = this.highlightRuleFontFamilies(rule.fontPath);
+      const hasBase = (rule.textColor ?? 0) !== 0 || (rule.bgColor ?? 0) !== 0 ||
+        readerCanvasHighlightDecoration(rule.underlineMode) !== 0 || (rule.bgImage ?? '').length > 0;
+      const hasType = families.length > 0 || sizeOffsetPx !== 0 || overrideWeight !== 0;
+      const hasSpace = spaceBeforePx > 0 || spaceAfterPx > 0;
+      if (!hasBase && !hasType && !hasSpace) {
+        // 整条规则什么都没配（只剩 italic=false 的默认值），画出来也没有区别。
         continue;
       }
-      list.push(item);
+      const build = (from: number, to: number, withBefore: boolean,
+        withAfter: boolean): ReaderCanvasStyleRange => {
+        const item = new ReaderCanvasStyleRange();
+        item.start = from;
+        item.end = to;
+        item.textColorArgb = rule.textColor ?? 0;
+        item.backgroundArgb = rule.bgColor ?? 0;
+        item.decoration = readerCanvasHighlightDecoration(rule.underlineMode);
+        item.decorationArgb = rule.underlineColor ?? rule.textColor ?? 0;
+        // 规则自带的下划线粗细/偏移（dp），画布按 vp 口径逐行手绘时用
+        item.underlineWidthVp = rule.underlineWidth ?? 0;
+        item.underlineOffsetVp = rule.underlineOffset ?? 0;
+        // 文字背景图（气泡图）：source/fit/scale 与九宫格四条切线、左右偏移
+        item.bgImage = rule.bgImage ?? '';
+        item.bgImageFit = rule.bgImageFit ?? 0;
+        item.bgImageScale = rule.bgImageScale ?? 1;
+        item.npLeft = rule.npLeft ?? 0.1;
+        item.npRight = rule.npRight ?? 0.1;
+        item.npTop = rule.npTop ?? 0.1;
+        item.npBottom = rule.npBottom ?? 0.1;
+        item.bgLengthOffsetLeft = rule.bgLengthOffsetLeft ?? 0;
+        item.bgLengthOffsetRight = rule.bgLengthOffsetRight ?? 0;
+        // 字体替换与字号偏移（上游 spToPx，已按 fp 换算）
+        item.fontFamilies = families;
+        item.fontWeightValue = overrideWeight;
+        item.italicOverride = overrideItalic;
+        item.fontSizeOffsetPx = sizeOffsetPx;
+        // 命中字距：只有首字带「字前距」、只有末字带「字后距」，
+        // 段内一个字都不加——段内也加调的就是整段字号了。
+        item.letterSpacingBeforePx = withBefore ? spaceBeforePx : 0;
+        item.letterSpacingAfterPx = withAfter ? spaceAfterPx : 0;
+        return item;
+      };
+      if (range.endExclusive - range.start <= 1) {
+        // 单字命中：它既是首字也是末字，两边都让。
+        list.push(build(range.start, range.endExclusive, true, true));
+      } else {
+        list.push(build(range.start, range.start + 1, true, false));
+        if (range.start + 1 < range.endExclusive - 1) {
+          list.push(build(range.start + 1, range.endExclusive - 1, false, false));
+        }
+        list.push(build(range.endExclusive - 1, range.endExclusive, false, true));
+      }
     }
     const chapterIndex = this.getChapterIndex();
     for (let index = 0; index < this.markings.length; index++) {
@@ -5274,6 +5436,18 @@ export struct ReaderPage {
     this.readerCanvasRenderer.prefetch(window).catch((error: Error) => {
       console.warn(`[ReaderCanvas] 预取失败: ${error.message}`);
     });
+    // 文字背景图（气泡图）也要随窗口预热，否则气泡晚一两帧才出现
+    const sources: string[] = [];
+    for (const highlight of this.buildReaderCanvasHighlights()) {
+      if (highlight.bgImage.length > 0 && !sources.includes(highlight.bgImage)) {
+        sources.push(highlight.bgImage);
+      }
+    }
+    if (sources.length > 0) {
+      this.readerCanvasRenderer.prefetchBackgrounds(sources).catch((error: Error) => {
+        console.warn(`[ReaderCanvas] 文字背景图预取失败: ${error.message}`);
+      });
+    }
   }
 
   private onReaderContentAreaChanged(oldArea: Area, newArea: Area): void {
@@ -5562,6 +5736,21 @@ export struct ReaderPage {
               .id(ReaderPage.CANVAS_ID)
               .width('100%')
               .layoutWeight(1)
+              // 画布是纯绘制、自身没有任何文字节点，读屏软件原本读不到正文。
+              // 上游用 `clearAndSetSemantics` 把整页文本、书签状态、翻页动作一次性挂上去
+              // （`ReaderCanvasSurface.kt:922-980`），这里同样把描述、状态与两个自定义动作挂在画布上。
+              .accessibilityText(this.getCanvasAccessibilityDescription())
+              .accessibilityStateDescription(this.getCanvasAccessibilityStateDescription())
+              .accessibilityCustomActions([
+                {
+                  name: '上一页',
+                  onAction: () => { this.accessibilityTurnPage(false); }
+                },
+                {
+                  name: '下一页',
+                  onAction: () => { this.accessibilityTurnPage(true); }
+                }
+              ])
               .onReady(() => {
                 this.readerCanvasReady = true;
                 this.paintReaderCanvas();

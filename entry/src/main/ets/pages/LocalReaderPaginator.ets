@@ -48,6 +48,19 @@ export interface LocalReaderImageSize {
   height: number;
 }
 
+/**
+ * 命中排版对排版的唯一影响（上游 `ReaderChapterBlockMeasurer.kt:376-392`）：
+ * 只有字号偏移会改行高，行上/下距是行级留白；颜色、下划线、字重、斜体都只影响绘制。
+ * 数值与 `lineHeight` 同单位（vp）。
+ */
+export interface LocalReaderSizeOffset {
+  start: number;
+  endExclusive: number;
+  extraHeight: number;
+  padTop: number;
+  padBottom: number;
+}
+
 /** 按设备字体度量分页，保留 Android 字符坐标，并对齐默认正文的非末行字距。 */
 export class LocalReaderPaginator {
   private static findWordBreakIndex(
@@ -89,7 +102,8 @@ export class LocalReaderPaginator {
     inlineImageWidth: number,
     firstPageReservedLines: number,
     fullJustify: boolean = true,
-    columnCount: number = 1
+    columnCount: number = 1,
+    sizeOffsets: LocalReaderSizeOffset[] = []
   ): LocalReaderPage[] {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) {
@@ -107,6 +121,31 @@ export class LocalReaderPaginator {
     let lineWidth = 0;
     let currentLineHeight = lineHeight;
     let lineLastTextPartIndex: number = -1;
+    // 命中排版的字号偏移与行上下距：只有落在命中区里的字才抬高本行、加留白。
+    let currentLinePadTop = 0;
+    let currentLinePadBottom = 0;
+    let charHeight = lineHeight;
+    let charPadTop = 0;
+    let charPadBottom = 0;
+    // 字符位置单调递增，命中区间也用同一个游标向前走，不必每个字都从头找。
+    let offsetCursor = 0;
+    const metricsAt = (position: number): void => {
+      charHeight = lineHeight;
+      charPadTop = 0;
+      charPadBottom = 0;
+      while (offsetCursor < sizeOffsets.length) {
+        const span = sizeOffsets[offsetCursor];
+        if (span === undefined) { break; }
+        if (position < span.start) { return; }
+        if (position < span.endExclusive) {
+          charHeight = Math.max(1, lineHeight + span.extraHeight);
+          charPadTop = span.padTop;
+          charPadBottom = span.padBottom;
+          return;
+        }
+        offsetCursor++;
+      }
+    };
 
     const currentPageCapacity = (): number => Math.max(lineHeight,
       contentHeight - (pages.length === 0 ? Math.max(0, firstPageReservedLines) * lineHeight : 0));
@@ -169,16 +208,17 @@ export class LocalReaderPaginator {
         ? Math.max(0, (contentWidth - naturalWidth) / stretchableGaps) : 0;
       if (pageBreakBefore && pageLines.length > 0) { flushPage(); }
       if (pageLines.length > 0 &&
-        pageUsedHeight + verticalSpaceBefore + currentLineHeight > currentPageCapacity()) {
+        pageUsedHeight + verticalSpaceBefore + currentLinePadTop + currentLineHeight +
+          currentLinePadBottom > currentPageCapacity()) {
         advanceColumn();
       }
       if (pageLines.length === 0) { pageStart = lineStart; }
       const line: LocalReaderLine = {
         items: lineItems,
         height: currentLineHeight,
-        paragraphSpacingAfter: spacingAfter,
+        paragraphSpacingAfter: spacingAfter + currentLinePadBottom,
         imageOnly: lineItems.length === 1 && lineItems[0]?.kind === 'image',
-        verticalSpaceBefore: verticalSpaceBefore,
+        verticalSpaceBefore: verticalSpaceBefore + currentLinePadTop,
         startPosition: lineStart,
         endPosition: lineEnd,
         justifyGap: justifyGap,
@@ -186,11 +226,14 @@ export class LocalReaderPaginator {
       };
       pageLines.push(line);
       pageColumns.push(columnIndex);
-      pageUsedHeight += verticalSpaceBefore + currentLineHeight + spacingAfter;
+      pageUsedHeight += verticalSpaceBefore + currentLinePadTop + currentLineHeight +
+        currentLinePadBottom + spacingAfter;
       pageEnd = lineEnd;
       lineItems = [];
       lineWidth = 0;
       currentLineHeight = lineHeight;
+      currentLinePadTop = 0;
+      currentLinePadBottom = 0;
       lineLastTextPartIndex = -1;
       if (pageBreakAfter) { flushPage(); }
     };
@@ -205,6 +248,8 @@ export class LocalReaderPaginator {
             const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
             const character = part.value.substring(cursor, nextCursor);
             const position = part.startPosition + cursor;
+            // 该字若落在高亮规则命中区里，本行要按规则的字号偏移与行上下距排版。
+            metricsAt(position);
             const finalPosition = part.startPosition + nextCursor;
             const lastItem = lineItems[lineItems.length - 1];
             const mergePrevious = lastItem?.kind === 'text' && lineLastTextPartIndex === partIndex;
@@ -296,6 +341,9 @@ export class LocalReaderPaginator {
                 leadingIndent: part.leadingIndent
               });
             }
+            currentLineHeight = Math.max(currentLineHeight, charHeight);
+            currentLinePadTop = Math.max(currentLinePadTop, charPadTop);
+            currentLinePadBottom = Math.max(currentLinePadBottom, charPadBottom);
             lineLastTextPartIndex = partIndex;
             lineWidth = nextLineWidth;
             cursor = nextCursor;
@@ -386,7 +434,8 @@ export class LocalReaderPaginator {
     standaloneImageThreshold: number,
     inlineImageWidth: number,
     firstPageReservedLines: number,
-    columnCount: number = 1
+    columnCount: number = 1,
+    sizeOffsets: LocalReaderSizeOffset[] = []
   ): Promise<number> {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) { return 1; }
@@ -399,6 +448,31 @@ export class LocalReaderPaginator {
     let lineWidth = 0;
     let currentLineHeight = lineHeight;
     let lineLastTextPartIndex: number = -1;
+    // 命中排版的字号偏移与行上下距：只有落在命中区里的字才抬高本行、加留白。
+    let currentLinePadTop = 0;
+    let currentLinePadBottom = 0;
+    let charHeight = lineHeight;
+    let charPadTop = 0;
+    let charPadBottom = 0;
+    // 字符位置单调递增，命中区间也用同一个游标向前走，不必每个字都从头找。
+    let offsetCursor = 0;
+    const metricsAt = (position: number): void => {
+      charHeight = lineHeight;
+      charPadTop = 0;
+      charPadBottom = 0;
+      while (offsetCursor < sizeOffsets.length) {
+        const span = sizeOffsets[offsetCursor];
+        if (span === undefined) { break; }
+        if (position < span.start) { return; }
+        if (position < span.endExclusive) {
+          charHeight = Math.max(1, lineHeight + span.extraHeight);
+          charPadTop = span.padTop;
+          charPadBottom = span.padBottom;
+          return;
+        }
+        offsetCursor++;
+      }
+    };
     let measuredCharacterCount = 0;
 
     const currentPageCapacity = (): number => Math.max(lineHeight,
@@ -427,14 +501,18 @@ export class LocalReaderPaginator {
       if (lineItems.length === 0) { return; }
       if (pageBreakBefore && pageLineCount > 0) { flushPage(); }
       if (pageLineCount > 0 &&
-        pageUsedHeight + verticalSpaceBefore + currentLineHeight > currentPageCapacity()) {
+        pageUsedHeight + verticalSpaceBefore + currentLinePadTop + currentLineHeight +
+          currentLinePadBottom > currentPageCapacity()) {
         advanceColumn();
       }
       pageLineCount++;
-      pageUsedHeight += verticalSpaceBefore + currentLineHeight + spacingAfter;
+      pageUsedHeight += verticalSpaceBefore + currentLinePadTop + currentLineHeight +
+        currentLinePadBottom + spacingAfter;
       lineItems = [];
       lineWidth = 0;
       currentLineHeight = lineHeight;
+      currentLinePadTop = 0;
+      currentLinePadBottom = 0;
       lineLastTextPartIndex = -1;
       if (pageBreakAfter) { flushPage(); }
     };
@@ -452,6 +530,8 @@ export class LocalReaderPaginator {
             const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
             const character = part.value.substring(cursor, nextCursor);
             const position = part.startPosition + cursor;
+            // 该字若落在高亮规则命中区里，本行要按规则的字号偏移与行上下距排版。
+            metricsAt(position);
             const finalPosition = part.startPosition + nextCursor;
             const lastItem = lineItems[lineItems.length - 1];
             const mergePrevious = lastItem?.kind === 'text' && lineLastTextPartIndex === partIndex;
@@ -506,6 +586,9 @@ export class LocalReaderPaginator {
                 startPosition: position, endPosition: finalPosition, leadingIndent: part.leadingIndent
               });
             }
+            currentLineHeight = Math.max(currentLineHeight, charHeight);
+            currentLinePadTop = Math.max(currentLinePadTop, charPadTop);
+            currentLinePadBottom = Math.max(currentLinePadBottom, charPadBottom);
             lineLastTextPartIndex = partIndex;
             lineWidth = nextLineWidth;
             cursor = nextCursor;
