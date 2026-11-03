@@ -8,6 +8,7 @@ import { SubscriptionFavoritesPage, SubscriptionRulesPage, SubscriptionSourceMan
 import { ProfilePage } from './ProfilePage';
 import { ReaderPage } from './ReaderPage';
 import { CatalogPage } from './CatalogPage';
+import { TxtTocRulePreviewPage } from './TxtTocRulePreviewPage';
 import { ReaderSettingsPage } from './ReaderSettingsPage';
 import { SearchPage } from './SearchPage';
 import {
@@ -5751,6 +5752,56 @@ struct Index {
     const chapterCount = result.chapters.length;
     this.showUnavailableAction(`更新目录完成：共 ${chapterCount} 章`);
   }
+
+  /**
+   * 应用「目录规则预览页」选中的规则：写回 Book.tocRule 并按这条规则重切目录。
+   *
+   * 对齐上游 `TocViewModel.saveTocRegex`（`ui/book/toc/TocViewModel.kt:802-814`）：
+   * 上游写 `book.tocUrl = newRegex` 后调 `replaceChaptersAndUpdateBook` 重算章节。
+   * 本地对应 `BookRepository.refreshToc(..., forcedRule)`，它会把新规则写进 `Book.tocRule`。
+   *
+   * 与「更新目录」的区别只在规则来源：这里用用户挑定的那条，不再按规则库自动选。
+   */
+  private async applyTocRule(chapterRule: string, ruleName: string): Promise<void> {
+    const book = this.selectedBook;
+    if (!book.isLocal || book.format !== 'txt' || book.contentPath === undefined) {
+      this.showUnavailableAction('仅本地 TXT 书籍支持应用目录规则');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，规则未应用');
+      return;
+    }
+    let result: TocRefreshResult;
+    try {
+      result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc, [], chapterRule);
+    } catch (_) {
+      this.showUnavailableAction('读取正文失败，规则未应用');
+      return;
+    }
+    const nextBook = result.book;
+    const updatedBooks = this.books.map((item: Book) => item.id === nextBook.id ? nextBook : item);
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((item: Book) => BookRepository.isPersistableBook(item)));
+      if (result.changed) {
+        await BookRepository.saveChapters(context, nextBook.contentPath ?? '', result.chapters);
+      }
+    } catch (_) {
+      this.showUnavailableAction('规则已应用，但保存失败，重新打开后可能回到旧目录');
+      return;
+    }
+    this.books = updatedBooks;
+    this.selectedBook = nextBook;
+    if (!result.changed) {
+      // 规则没变或切出来的目录完全一致：上游同样会提示 success（它只区分失败），
+      // 这里给更具体的一句话，免得用户以为没生效。
+      this.showUnavailableAction(`已应用「${ruleName}」，目录无变化`);
+      return;
+    }
+    this.showUnavailableAction(`已应用「${ruleName}」：共 ${result.chapters.length} 章`);
+  }
   private async openBook(book: Book): Promise<void> {
     if (book.contentPath === undefined) {
       this.showUnavailableAction(BookRepository.isBodyMissing(book)
@@ -5763,6 +5814,12 @@ struct Index {
     try {
       const noTocRefresh = BookRepository.refreshNoTocBook(book, this.readerMaxLengthWithNoToc);
       openedBook = noTocRefresh.book;
+      // 先把章节行读进缓存再取正文：readChapter 拿不到章节行时会退化成「整本重切一遍」，
+      // 几 MB 的书要两秒以上，主线程会被 watchdog 判成 THREAD_BLOCK_6S。
+      const chapterContext = this.getUIContext().getHostContext();
+      if (chapterContext !== undefined) {
+        await BookRepository.loadChapters(chapterContext, openedBook);
+      }
       content = await BookRepository.readChapter(openedBook, openedBook.lastChapter,
         openedBook.chapterIndex, noTocRefresh.content.length > 0 ? noTocRefresh.content : undefined);
       this.replaceRules = ReplaceRuleRepository.getAll();
@@ -6854,7 +6911,7 @@ struct Index {
             onOpenSearchNavItem: (index: number) => this.openReaderSearchNavItem(index),
             onCloseSearchResult: () => this.closeReaderSearchNav(),
             onOpenReadAloud: () => this.openReadAloudSettings(),
-            onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULES),
+            onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULE_PREVIEW),
             onToggleNightMode: () => this.toggleReaderNightMode(),
             onToggleEyeProtection: () => this.toggleEyeProtection(),
             onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => this.setReaderMoreActions(actions),
@@ -6937,7 +6994,7 @@ struct Index {
               onExportBookmarks: (isMarkdown: boolean) => this.exportReaderBookmarks(isMarkdown),
               onRefreshToc: (): void => { this.refreshCurrentToc(); },
               onOpenReplaceRules: (): void => this.openProfileDetail(ProfileRoute.REPLACE_RULES),
-              onOpenTxtTocRules: (): void => this.openProfileDetail(ProfileRoute.TXT_TOC_RULES),
+              onOpenTxtTocRules: (): void => this.openProfileDetail(ProfileRoute.TXT_TOC_RULE_PREVIEW),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
               onAddBookmarksForChapters: (indexes: number[]) => this.addReaderBookmarksForChapters(indexes),
               onSelectChapter: (chapterIndex: number) => {
@@ -7349,6 +7406,14 @@ struct Index {
             groups: this.replaceRuleGroups(),
             onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
             onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+          })
+        } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULE_PREVIEW) {
+          TxtTocRulePreviewPage({
+            book: this.selectedBook,
+            onBack: () => this.route = this.profileDetailReturnRoute,
+            onApplyRule: (chapterRule: string, ruleName: string) => this.applyTocRule(chapterRule, ruleName),
+            onOpenManagePage: () => this.profileSubpage = ProfileRoute.TXT_TOC_RULES,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULES) {

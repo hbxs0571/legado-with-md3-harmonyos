@@ -49,6 +49,8 @@ interface ChapterSplit {
   titles: string[];
   offsets: number[];
   volumes: boolean[];
+  /** 第一个标题前的正文（上游「前言」章的正文），没有则 undefined。 */
+  intro?: string;
 }
 
 /** 新导入一本书的结果：书目与它的章节行必须一起落库。 */
@@ -96,6 +98,23 @@ export interface TocRefreshResult {
   newBodyOffsets: number[];
 }
 
+/**
+ * 单条目录规则的预览结果。
+ * `chapterTitles` 只是前 500 条样本（够用户在预览页看出这条规则切出的章名长什么样），
+ * `totalCount` 是全书命中总数，预览卡片上的「N 章」徽章用它。
+ */
+export interface TocRulePreviewResult {
+  chapterTitles: string[];
+  totalCount: number;
+}
+
+/** 目录规则预览的分片扫描结果：本次扫到哪一行、命中几条；`aborted` 表示规则坏了不用再扫。 */
+export interface TocRulePreviewChunk {
+  matched: number;
+  nextIndex: number;
+  aborted: boolean;
+}
+
 export class BookRepository {
   /**
    * 简繁转换档位，由 Index 在装载/变更阅读设置时注入（对齐上游 ReadSettings.chineseConverterType）。
@@ -121,6 +140,12 @@ export class BookRepository {
   private static chapterCache: Map<string, BookChapter[]> = new Map<string, BookChapter[]>();
   /** 规则匹配只扫描文件开头，与 Android 只读首个缓冲区识别目录的行为一致。 */
   private static readonly tocSampleSize: number = 65536;
+  /** 单章允许的最大字节数，超过就二次拆分；与上游 TextFile.kt:66 的 maxLengthWithToc 同值。 */
+  private static readonly maxLengthWithToc: number = 102400;
+  /** 目录规则预览最多列出这么多章标题，超出只计数不再收集；与上游 preview 同值。 */
+  static readonly previewChapterLimit: number = 500;
+  /** 编码识别只看文件头这么多字节：16K 足够判断 GBK/UTF-8/Big5，又不至于让打开大书时卡首帧。 */
+  private static readonly encodingSampleSize: number = 16384;
 
   /** 按 index 升序读一本书的全部章节；start/end 是字节偏移。 */
   private static readonly selectChaptersByBookUrl: string =
@@ -1320,7 +1345,15 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     }
     const encoding = book.format === 'txt' ? book.charset : undefined;
     const content = contentOverride ?? BookRepository.readTextFile(book.contentPath, encoding);
-    const rows = chapters.length > 0 ? chapters : BookRepository.deriveChapters(book, content);
+    // 章节行已经是落库的权威数据，能用就用：deriveChapters 要把整本正文重切一遍
+    // 并逐章折算字节长度，几 MB 的书在主线程上要两秒以上（会触发 THREAD_BLOCK_6S）。
+    let rows = chapters;
+    if (rows.length === 0) {
+      rows = BookRepository.cachedChapters(book);
+    }
+    if (rows.length === 0) {
+      rows = BookRepository.deriveChapters(book, content);
+    }
     if (rows.length === 0) {
       return await BookRepository.applyChapterContentAsync(book, chapterTitle,
         content.substring(0, 50000), book.chapterIndex ?? 0);
@@ -1732,10 +1765,25 @@ private static async applyChapterContentAsync(
     requestedChapterIndex?: number,
     useReplaceRules: boolean = true
   ): Promise<string> {
-    const segmented = BookRepository.applyChapterReSegment(book, chapterTitle, body);
+    // ① 去重复标题：正文首行如果又抄了一遍章节名（常见于 TXT 转码工具），先剥掉，
+    //    否则正文第一段会和页眉/标题重复出现。对齐上游 ContentProcessor.kt:126-155。
+    const deduped = BookRepository.removeDuplicateChapterTitle(book, chapterTitle, body);
+    // ② 重新分段（按书开关）。
+    const segmented = BookRepository.applyChapterReSegment(book, chapterTitle, deduped);
+    // ③ 简繁转换：上游 ContentProcessor.kt:161-171 把它放在 reSegment 之后、HTML 占位之前，
+    //    所以替换规则匹配的是转换后的字形（用户写「后」的规则也能命中「後」）。
+    const converted = ChineseTextConverter.convert(segmented, BookRepository.chineseConverterType);
+    // ④ 特殊样式占位：`<usehtml>…</usehtml>` 在跑替换规则之前先换成占位符，
+    //    避免用户写的 `。`→``、`<`→`` 这类规则把富文本标签拆坏；⑥ 之后再原样还原。
+    //    对齐上游 ContentProcessor.kt:157-166（AppPattern.useHtmlRegex + useHtmlMap）。
+    const htmlMap: Map<string, string> = new Map<string, string>();
+    const protectedText = BookRepository.maskSpecialStyle(converted, htmlMap);
+    // ⑤ 替换净化：正则规则进 worker 计时，单条超时自动停用（上游 RegexTimeoutException 口径）。
     const ruleResult = useReplaceRules
-      ? ReplaceRuleRepository.applyContentWithResult(book, chapterTitle, segmented)
+      ? await ReplaceRuleRepository.applyContentWithResultAsync(book, chapterTitle, protectedText)
       : undefined;
+    // ⑥ 还原特殊样式。
+    const restored = BookRepository.unmaskSpecialStyle(ruleResult?.text ?? protectedText, htmlMap);
     // 章节下标由调用方给出（它已经从 chapters 行拿到了 index），不再靠标题反查
     const chapterIndex = requestedChapterIndex ?? book.chapterIndex ?? 0;
     if (ruleResult !== undefined) {
@@ -1743,11 +1791,95 @@ private static async applyChapterContentAsync(
     }
     await BookContentProcessRepository.waitUntilLoaded();
     const records = BookContentProcessRepository.getForChapter(book.id, chapterIndex);
-    const processed = BookContentProcessEngine.apply(ruleResult?.text ?? segmented, records).text;
-    // 简繁转换放在正文处理链末端，对应上游 ContentProcessor.kt:161-171 在 reSegment 与
-    // 净化之后、HTML 占位之前的位置：先按简体/繁体原文做锚点匹配，再统一转字形。
-    return ChineseTextConverter.convert(processed, BookRepository.chineseConverterType);
+    // ⑦ 书内净化与用户标记；⑩ 逐行 trim 去空行（对齐上游 ContentProcessor.kt:247-259）。
+    const processed = BookContentProcessEngine.apply(restored, records).text;
+    const trimmed = BookRepository.trimChapterParagraphs(processed);
+    // ⑧ 拼回标题由渲染层负责（本地章节标题单独排版，不再塞回正文），
+    //    这与上游 `includeTitle` 的口径差异已在 TXT-READER 表 A3 记录。
+    // ⑨ `\u00A0` → 空格只在 Android 8 上做（上游 `isAndroid8`），HarmonyOS 无此步骤。
+    return trimmed;
   }
+
+  /**
+   * 剥掉正文开头重复出现的章节标题。
+   *
+   * 上游 `ContentProcessor.kt:131-153` 的正则是
+   * `^(\s|\p{P}|书名)*标题(\s)*`，即允许标题前有空白、标点、书名；标题内部的空格
+   * 按 `\s*` 放宽。这里用等价写法：把标题按空白拆开逐段拼进正则，容忍任意空白。
+   */
+  private static removeDuplicateChapterTitle(book: Book, chapterTitle: string, body: string): string {
+    const title = chapterTitle.trim();
+    if (title.length === 0 || body.length === 0) { return body; }
+    const titlePattern = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+    const bookPattern = book.title.trim().length > 0
+      ? book.title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+    const prefix = bookPattern.length > 0
+      ? `^([\\s\\u3000\\p{P}]|${bookPattern})*${titlePattern}[\\s\\u3000]*`
+      : `^[\\s\\u3000\\p{P}]*${titlePattern}[\\s\\u3000]*`;
+    try {
+      const match = new RegExp(prefix, 'u').exec(body);
+      if (match !== null && match[0].length > 0) {
+        return body.substring(match[0].length);
+      }
+    } catch (_) {
+      // 书名/标题里有正则不接受的字符时放弃去重，正文原样返回。
+    }
+    return body;
+  }
+
+  /**
+   * 把 `<usehtml>…</usehtml>` 换成不会撞上替换规则的字面占位符。
+   *
+   * 占位符刻意不含标点、字母和汉字，只由私用区字符和序号组成，
+   * 用户的净化规则（大多是标点/字母类）几乎不可能命中它。
+   */
+  private static maskSpecialStyle(text: string, map: Map<string, string>): string {
+    if (!text.includes('<usehtml>')) { return text; }
+    let counter = 0;
+    return text.replace(/<usehtml>[\s\S]*?<\/usehtml>/g, (matched: string) => {
+      const placeholder = `\uE000${counter}\uE001`;
+      map.set(placeholder, matched);
+      counter++;
+      return placeholder;
+    });
+  }
+
+  /** 把占位符换回真正的富文本块；占位符在替换规则里被改坏时保持原样，不丢内容。 */
+  private static unmaskSpecialStyle(text: string, map: Map<string, string>): string {
+    if (map.size === 0) { return text; }
+    let result = text;
+    map.forEach((original: string, placeholder: string) => {
+      result = result.split(placeholder).join(original);
+    });
+    return result;
+  }
+
+  /**
+   * 逐行 trim 后丢弃空行，用 `\n` 重新拼段。
+   *
+   * 对齐上游 `ContentProcessor.kt:247-259`：`str.trim { it.code <= 0x20 || it == '　' }`，
+   * 空行不进入正文。首行不加缩进的事由渲染层按「段首是否为首段」处理。
+   */
+  private static trimChapterParagraphs(text: string): string {
+    const paragraphs: string[] = [];
+    const lines = text.split('\n');
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      let start = 0;
+      let end = line.length;
+      while (start < end && ((line.charCodeAt(start) <= 0x20) || line[start] === '　')) {
+        start++;
+      }
+      while (end > start && ((line.charCodeAt(end - 1) <= 0x20) || line[end - 1] === '　')) {
+        end--;
+      }
+      if (end > start) {
+        paragraphs.push(line.substring(start, end));
+      }
+    }
+    return paragraphs.join('\n');
+  }
+
   private static buildNoTocChapterLayout(
     content: string, maxLengthWithNoToc: number, charset?: string
   ): NoTocChapterLayout {
@@ -1789,12 +1921,15 @@ private static async applyChapterContentAsync(
 
   /** 重新匹配当前启用的 TXT 目录规则，并把阅读位置映射到新章节。 */
   static refreshToc(book: Book, maxLengthWithNoToc: number = 3000,
-    chapters: BookChapter[] = []): TocRefreshResult {
+    chapters: BookChapter[] = [], forcedRule: string = ''): TocRefreshResult {
     if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
       return { book: book, chapters: [], content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
     }
     const content = BookRepository.readTextFile(book.contentPath, book.charset);
-    const chapterRule = BookRepository.resolveChapterRule(undefined, content);
+    // forcedRule 来自「目录规则预览页」：用户已经挑定一条规则，这里不再自动选。
+    // 传空串时退回旧行为（按规则库重新挑一次），也就是目录页「更新目录」的语义。
+    const chapterRule = forcedRule.trim().length > 0
+      ? forcedRule.trim() : BookRepository.resolveChapterRule(undefined, content);
     let chapterTitles: string[] = [];
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
@@ -2101,13 +2236,93 @@ private static decodeTextBytes(bytes: Uint8Array, encoding?: string): string {
     if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
       return BookRepository.decodeWithEncoding(bytes.slice(2), 'utf-16be');
     }
-    const utf8 = BookRepository.tryDecodeWithEncoding(bytes, 'utf-8');
-    if (utf8 !== undefined) { return utf8; }
-    const gb18030 = BookRepository.tryDecodeWithEncoding(bytes, 'gb18030');
-    if (gb18030 !== undefined) { return gb18030; }
-    const big5 = BookRepository.tryDecodeWithEncoding(bytes, 'big5');
-    if (big5 !== undefined) { return big5; }
-    throw new Error('TXT 编码无法识别，请使用 UTF-8、GBK/GB18030 或 Big5 格式');
+    // 没有 BOM：按文件头统计打分选编码，而不是「第一个能解通的编码」。
+    const detected = BookRepository.detectTextEncoding(bytes);
+    const decoded = BookRepository.tryDecodeWithEncoding(bytes, detected);
+    if (decoded !== undefined) { return decoded; }
+    // 统计判定出来的编码仍然解不通（样本区恰好含坏字节），退回 UTF-8，
+    // 对齐上游 EncodingDetect 失败兜底 "UTF-8" 的行为：书能打开，用户可手动改编码。
+    return BookRepository.decodeWithEncoding(bytes, 'utf-8');
+  }
+
+  /**
+   * 按文件头统计判定编码，对齐上游 `utils/EncodingDetect.kt:55-58` 的
+   * `CharsetDetector().setText(bytes).detect()?.name ?: "UTF-8"`：
+   * 只看文件头一小段（UTF-8 快路径 + 候选打分），按「像不像正文」取最高分，
+   * 而不是「第一个能解通的编码」——GB18030 几乎是任意字节序列的超集，
+   * 先试 GB 会让 Big5 的繁体书整本解成生僻字。
+   *
+   * 打分口径：CJK 汉字、CJK 标点、全角符号、ASCII 可打印字符算正分；
+   * 私用区、替换符、控制字符、生僻扩展区算负分。全部候选都解不通时回落 UTF-8，
+   * 与上游一样不抛错——书能打开，用户再手动指定编码。
+   */
+  private static detectTextEncoding(bytes: Uint8Array): string {
+    const sampleLength = Math.min(bytes.length, BookRepository.encodingSampleSize);
+    // UTF-8 快路径：严格解码能整段通过，且解出来没有替换符，就认定是 UTF-8。
+    // 绝大多数 TXT 都是 UTF-8，走这条能省掉 GB18030 / Big5 两次全量解码，
+    // 也避免探测阶段往日志里刷满「解码失败」（刷日志本身会拖住主线程）。
+    const utf8Sample = BookRepository.tryDecodeSample(bytes, sampleLength, 'utf-8', true);
+    if (utf8Sample !== undefined && utf8Sample.indexOf('\uFFFD') < 0 &&
+      BookRepository.scoreDecodedText(utf8Sample) > 0) {
+      return 'utf-8';
+    }
+    let bestEncoding = 'utf-8';
+    let bestScore = Number.NEGATIVE_INFINITY;
+    const candidates: string[] = ['utf-8', 'gb18030', 'big5'];
+    for (let index = 0; index < candidates.length; index++) {
+      const encoding = candidates[index];
+      const decoded = BookRepository.tryDecodeSample(bytes, sampleLength, encoding, true);
+      if (decoded === undefined) { continue; }
+      const score = BookRepository.scoreDecodedText(decoded);
+      // 同分时保留先试的编码（utf-8 优先），与上游按 ICU 置信度取首个最高的口径一致。
+      if (score > bestScore) {
+        bestScore = score;
+        bestEncoding = encoding;
+      }
+    }
+    return bestEncoding;
+  }
+
+  /**
+   * 解码样本区；样本边界可能把一个多字节字符切开，导致 fatal 解码整段失败，
+   * 所以按 0~3 字节回退重试，最多四次。
+   */
+  private static tryDecodeSample(bytes: Uint8Array, sampleLength: number,
+    encoding: string, quiet: boolean = false): string | undefined {
+    for (let trim = 0; trim <= 3; trim++) {
+      const length = sampleLength - trim;
+      if (length <= 0) { return undefined; }
+      const decoded = BookRepository.tryDecodeWithEncoding(bytes.subarray(0, length), encoding, quiet);
+      if (decoded !== undefined) { return decoded; }
+    }
+    return undefined;
+  }
+
+  /** 给一段解码结果打「像不像中文正文」的分，用于在多个候选编码之间择优。 */
+  private static scoreDecodedText(text: string): number {
+    if (text.length === 0) { return 0; }
+    let positive = 0;
+    let negative = 0;
+    for (let index = 0; index < text.length; index++) {
+      const code = text.charCodeAt(index);
+      if (code === 0xFFFD) {
+        negative += 4;
+      } else if (code < 0x20 && code !== 0x0A && code !== 0x0D && code !== 0x09) {
+        negative += 3;
+      } else if (code >= 0xE000 && code <= 0xF8FF) {
+        negative += 2;
+      } else if (code >= 0x3400 && code <= 0x4DBF) {
+        negative += 1;
+      } else if ((code >= 0x4E00 && code <= 0x9FFF) ||
+        (code >= 0x3000 && code <= 0x303F) ||
+        (code >= 0xFF00 && code <= 0xFFEF) ||
+        (code >= 0x0A && code <= 0x0D)) {
+        positive += 2;
+      } else if (code >= 0x20 && code <= 0x7E) {
+        positive += 1;
+      }
+    }
+    return (positive - negative) / text.length;
   }
 
 private static decodeWithEncoding(bytes: Uint8Array, encoding: string): string {
@@ -2118,12 +2333,17 @@ private static decodeWithEncoding(bytes: Uint8Array, encoding: string): string {
     return text;
   }
 
-private static tryDecodeWithEncoding(bytes: Uint8Array, encoding: string): string | undefined {
+private static tryDecodeWithEncoding(bytes: Uint8Array, encoding: string,
+    quiet: boolean = false): string | undefined {
     try {
       const decoder = util.TextDecoder.create(encoding, { fatal: true, ignoreBOM: true });
       return decoder.decodeToString(bytes);
     } catch (error) {
-      console.error(`[BookRepository] 按编码解码失败: ${error}`);
+      // 编码探测阶段会故意试错多种候选编码，这些失败是正常的，不能打日志：
+      // 打印本身要写 hilog socket，书籍打开时可能一次刷出十几条，主线程会被拖住。
+      if (!quiet) {
+        console.error(`[BookRepository] 按编码解码失败: ${error}`);
+      }
       return undefined;
     }
   }
@@ -2162,32 +2382,200 @@ private static getTitle(fileName: string): string {
     return fileName.length > 0 ? fileName : '本地书籍';
   }
 
-/** 选择 TXT 章节规则；无用户规则命中时保留旧版默认识别，避免升级后旧书突然变成整本一章。 */
+  /**
+   * 读整本正文，供目录规则预览页按规则扫标题。
+   *
+   * 预览是一次性动作（用户挑规则时才点开），不做窗口缓存；
+   * 读不到或不是本地 TXT 时返回空串，由预览页展示 0 章。
+   */
+  static readBookContentForPreview(book: Book): string {
+    if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
+      return '';
+    }
+    try {
+      return BookRepository.readTextFile(book.contentPath, book.charset);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /**
+   * 用一条章节正则扫整本正文，返回命中行样本与命中总数。
+   *
+   * 供「目录规则预览页」使用：用户挑规则时先看到「这条规则能切出几章、前几百章长什么样」，
+   * 不用先保存再回目录页试。口径对齐上游 `TxtTocRulePreviewViewModel.analyzeWithPattern`：
+   * 只收前 `previewChapterLimit`（500）条标题，`totalCount` 全量计数。
+   *
+   * 与上游的差别只有一处：上游边读边扫 512KB 字节块，本地整本已在内存里，直接按行扫。
+   */
+  static previewTocMatches(content: string, chapterRule: string): TocRulePreviewResult {
+    const lines = BookRepository.splitPreviewLines(content);
+    const titles: string[] = [];
+    let totalCount = 0;
+    let index = 0;
+    // 同步版给「只算一条」的场景用；预览页几十条规则要整体挪到 worker 里跑，
+    // 走 `TocRulePreviewEngine.countAll`，不在主线程扫。
+    while (index < lines.length) {
+      const chunk = BookRepository.scanTocMatchesPreview(lines, chapterRule, index, titles);
+      if (chunk.aborted) {
+        return { chapterTitles: [], totalCount: 0 };
+      }
+      totalCount += chunk.matched;
+      index = chunk.nextIndex;
+    }
+    return { chapterTitles: titles, totalCount: totalCount };
+  }
+
+  /** 预览扫描按行切片：一次扫这么多行就让出一帧，避免几十条规则把主线程占满。 */
+  static readonly previewScanChunkLines: number = 4000;
+
+  /** 把整本正文按行切开：预览页几十条规则共用一份行数组，不必每条规则都 split 一遍。 */
+  static splitPreviewLines(content: string): string[] {
+    return content.split('\n');
+  }
+
+  /**
+   * 从 `fromIndex` 起最多扫 `previewScanChunkLines` 行，命中标题追加进 `chapterTitles`。
+   *
+   * 预览页有几十条规则、每条都要扫全书，一次性算完会让主线程被 watchdog 判成
+   * THREAD_BLOCK_6S，所以调用方按帧推进：每次只扫一片，再 `setTimeout` 接着扫。
+   */
+  static scanTocMatchesPreview(lines: string[], chapterRule: string, fromIndex: number,
+    chapterTitles: string[]): TocRulePreviewChunk {
+    const pattern = chapterRule.trim();
+    if (pattern.length === 0) {
+      return { matched: 0, nextIndex: lines.length, aborted: true };
+    }
+    let regex: RegExp;
+    try {
+      regex = TxtTocRuleRepository.compileRegex(pattern, 'm');
+    } catch (_) {
+      // 正则写坏时不抛，预览页显示 0 章（上游 PatternSyntaxException 同样只给 totalCount = 0）。
+      return { matched: 0, nextIndex: lines.length, aborted: true };
+    }
+    const end = Math.min(lines.length, fromIndex + BookRepository.previewScanChunkLines);
+    let matched = 0;
+    for (let index = fromIndex; index < end; index++) {
+      const line = (lines[index] ?? '').replace(/\r$/, '');
+      if (line.trim().length === 0) {
+        continue;
+      }
+      regex.lastIndex = 0;
+      if (!regex.test(line)) {
+        continue;
+      }
+      matched += 1;
+      if (chapterTitles.length < BookRepository.previewChapterLimit) {
+        chapterTitles.push(line.trim());
+      }
+    }
+    return { matched: matched, nextIndex: end, aborted: false };
+  }
+
+  /** 选择 TXT 章节规则；无用户规则命中时保留旧版默认识别，避免升级后旧书突然变成整本一章。 */
   private static resolveChapterRule(cachedRule: string | undefined, content: string): string {
     if (cachedRule !== undefined && cachedRule.length > 0) { return cachedRule; }
     const sample = content.length > BookRepository.tocSampleSize
       ? content.substring(0, BookRepository.tocSampleSize) : content;
     const selected = TxtTocRuleRepository.selectForSample(sample).rule;
-    return selected?.chapterRule ?? '^(第.{1,18}[章节回卷篇]|序章|楔子|番外)';
+    // 兜底正则对齐上游内置首位默认规则的章节部分：带 `节(?!课)`、`集(?![合和])`、`正文(?!完|结)`
+    // 三处前瞻排除，避免「第1节课」「第3集合」「正文完」被当成章节标题。
+    return selected?.chapterRule ?? BookRepository.fallbackChapterRule;
   }
+
+  /**
+   * 没有任何规则达到命中门槛时的兜底切章正则。
+   * 形制取自内置规则「目录」（serialNumber 1）：允许行首 0~4 个空格或全角空格，
+   * 标题以 `.{0,30}$` 收尾，逐行匹配时等价于「整行就是标题」。
+   */
+  private static readonly fallbackChapterRule: string =
+    '^[ 　\\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|' +
+      '第\\s{0,4}[\\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+?\\s{0,4}' +
+      '(?:章|节(?!课)|卷|集(?![合和]))).{0,30}$';
 
   /** 标题、起点与卷标记来自同一次匹配，确保阅读偏移和目录显示对齐。 */
   private static splitChapters(content: string, chapterRule: string): ChapterSplit {
     const resolvedRule = chapterRule.trim().length > 0
       ? chapterRule : BookRepository.resolveChapterRule(undefined, content);
     const starts = TxtTocRuleRepository.splitChapterStarts(content, resolvedRule);
+    const volumeRule = TxtTocRuleRepository.resolveVolumeRule(resolvedRule);
     const titles: string[] = [];
-    starts.forEach((start: number) => {
+    const offsets: number[] = [];
+    const volumes: boolean[] = [];
+    // 第一个标题之前的正文单独成「前言」章，对齐上游 TextFile.kt:237-252：
+    // 书名页、内容简介、作者的话都写在第 1 章之前，不单独成章就永远读不到。
+    let intro: string | undefined = undefined;
+    if (starts.length > 0 && starts[0] > 0) {
+      const head = content.substring(0, starts[0]);
+      if (head.trim().length > 0) {
+        titles.push('前言');
+        offsets.push(0);
+        volumes.push(false);
+        intro = head.length <= 500 ? head : head.substring(0, 500);
+      }
+    }
+    for (let index = 0; index < starts.length; index++) {
+      const start = starts[index];
+      const end = index + 1 < starts.length ? starts[index + 1] : content.length;
       const lineEnd = content.indexOf('\n', start);
       const rawLine = lineEnd >= 0 ? content.substring(start, lineEnd) : content.substring(start);
-      titles.push(rawLine.replace(/\r$/, '').trim().substring(0, 80));
-    });
-    const volumeRule = TxtTocRuleRepository.resolveVolumeRule(resolvedRule);
-    return {
-      titles: titles,
-      offsets: starts,
-      volumes: TxtTocRuleRepository.markVolumeTitles(titles, volumeRule)
-    };
+      const title = rawLine.replace(/\r$/, '').trim().substring(0, 80);
+      BookRepository.appendChapterRange(content, start, end, title, resolvedRule,
+        titles, offsets, volumes);
+    }
+    // 卷标记按最终标题重新判定：长章拆出的子章标题带 `(1)` 后缀，仍应沿用原章的卷归属。
+    const flags = TxtTocRuleRepository.markVolumeTitles(titles, volumeRule);
+    return { titles: titles, offsets: offsets, volumes: flags, intro: intro };
+  }
+
+  /**
+   * 追加一章；单章超过 maxLengthWithToc 时按上游 TextFile.kt:66、`:208-226` 二次拆分。
+   *
+   * 拆出的子章标题是 `原章名(1)`、`原章名(2)`：上游把整段（含标题行）交给子章，
+   * 并把原章从目录里去掉，避免留下读不出正文的零长度空壳章。
+   */
+  private static appendChapterRange(content: string, start: number, end: number, title: string,
+    chapterRule: string, titles: string[], offsets: number[], volumes: boolean[]): void {
+    const safeTitle = title.length > 0 ? title : '无标题章节';
+    const byteLength = BookRepository.sliceByteLength(content, start, end, undefined);
+    if (byteLength <= BookRepository.maxLengthWithToc || end <= start) {
+      titles.push(safeTitle);
+      offsets.push(start);
+      volumes.push(false);
+      return;
+    }
+    const slice = content.substring(start, end);
+    const subStarts = TxtTocRuleRepository.splitChapterStarts(slice, chapterRule);
+    if (subStarts.length === 0) {
+      // 段内再没有标题：按无目录分章的长度阈值切开，标题仍用原章名加序号。
+      const layout = BookRepository.buildNoTocChapterLayout(slice, 3000, undefined);
+      for (let index = 0; index < layout.offsets.length; index++) {
+        titles.push(`${safeTitle}(${index + 1})`);
+        offsets.push(start + (layout.offsets[index] ?? 0));
+        volumes.push(false);
+      }
+      return;
+    }
+    for (let index = 0; index < subStarts.length; index++) {
+      titles.push(`${safeTitle}(${index + 1})`);
+      offsets.push(start + (subStarts[index] ?? 0));
+      volumes.push(false);
+    }
+  }
+
+  /** 字符区间按指定编码折算成字节数；用于判断单章是否超过 maxLengthWithToc。 */
+  private static sliceByteLength(content: string, start: number, end: number,
+    encoding: string | undefined): number {
+    const normalized = BookRepository.normalizeEncoding(encoding);
+    const safeEnd = Math.min(content.length, Math.max(start, end));
+    let bytes = 0;
+    let index = start;
+    while (index < safeEnd) {
+      const width = BookRepository.charByteWidth(content, index, normalized);
+      bytes += width;
+      index += width === 4 ? 2 : 1;
+    }
+    return bytes;
   }
 
 }

@@ -130,6 +130,8 @@ export enum ProfileRoute {
   REPLACE_RULE_EDIT = 'replaceRuleEdit',
   DICTIONARY_RULE_EDIT = 'dictionaryRuleEdit',
   TXT_TOC_RULES = 'txtTocRules',
+  /** 目录规则预览页：挑一条规则看它能切出多少章，选中后直接应用到当前书。 */
+  TXT_TOC_RULE_PREVIEW = 'txtTocRulePreview',
   DICTIONARY_RULES = 'dictionaryRules',
   HIGHLIGHT_TAG_RULE_EDIT = 'highlightTagRuleEdit',
   HIGHLIGHT_TAG_RULES = 'highlightTagRules',

@@ -26,6 +26,7 @@ import { LengthMetricsUnit } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
 import { LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator } from './LocalReaderPaginator';
 import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
+import { HiddenSpan, scanHiddenSpans, toBodyOnly, toRawText } from '../reader/ReaderBodyOnlyFilter';
 import {
   readerCanvasArgb, readerCanvasHandleDistance, readerCanvasHighlightDecoration,
   readerCanvasMarkingBackgroundArgb, readerCanvasMarkingDecoration, readerLengthToNumber,
@@ -583,6 +584,13 @@ export struct ReaderPage {
   @State contentEditVisible: boolean = false;
   @State contentEditTitle: string = '';
   @State contentEditBody: string = '';
+  /**
+   * 编辑弹层的「仅正文」折叠开关，对齐上游 `ReadContentEditDelegate` 的 `bodyOnly`。
+   * 折叠只改编辑框里显示的文字，保存时按占位标记把原始片段插回。
+   */
+  @State contentEditBodyOnly: boolean = false;
+  /** 打开编辑弹层那一刻扫描到的非正文片段，折叠与插回共用同一份。 */
+  @State contentEditHiddenSpans: HiddenSpan[] = [];
   @State textProcessingVisible: boolean = false;
   @State currentBottomActionPage: number = 0;
   @Prop autoReadSpeedSeconds: number = 10;
@@ -2383,9 +2391,7 @@ export struct ReaderPage {
     if (action === '上一章') { this.turnReaderChapter(-1); return; }
     if (action === '添加书签') { this.addCurrentPageBookmark(); return; }
     if (action === '编辑内容') {
-      this.contentEditTitle = this.chapterTitle;
-      this.contentEditBody = this.content;
-      this.contentEditVisible = true;
+      this.openContentEditor();
       return;
     }
     if (action === '替换(启用/禁用)') { this.onReplaceEnabledChange(!this.replaceEnabled); return; }
@@ -2752,6 +2758,34 @@ export struct ReaderPage {
     else { this.onUnavailableAction(this.getBottomActionLabel(kind) + '功能尚未迁移'); }
   }
 
+  /**
+   * 打开「编辑内容」弹层。
+   *
+   * 打开时先按当前 `adaptSpecialStyle` 扫一遍非正文片段（`<img>`、`<usehtml>` 整段、
+   * `[newpage]`），折叠开关与保存时的插回都复用这同一份扫描结果——上游
+   * `ReadContentEditDelegate.adopt()` 也是打开时扫一次、之后不再重扫。
+   */
+  private openContentEditor(): void {
+    this.contentEditTitle = this.chapterTitle;
+    this.contentEditBody = this.content;
+    this.contentEditHiddenSpans = scanHiddenSpans(this.content, this.adaptSpecialStyle);
+    this.contentEditBodyOnly = false;
+    this.contentEditVisible = true;
+  }
+
+  /** 切换「仅正文」：只改编辑框显示的文字，不动 `contentEditBody` 保存时的还原依据。 */
+  private setContentEditBodyOnly(enabled: boolean): void {
+    if (enabled === this.contentEditBodyOnly) {
+      return;
+    }
+    if (enabled) {
+      this.contentEditBody = toBodyOnly(this.contentEditBody, this.contentEditHiddenSpans);
+    } else {
+      this.contentEditBody = toRawText(this.contentEditBody, this.contentEditHiddenSpans);
+    }
+    this.contentEditBodyOnly = enabled;
+  }
+
   private addCurrentPageBookmark(): void {
     const page = this.localReaderPages[this.currentPageIndex];
     if (page === undefined) {
@@ -2864,9 +2898,7 @@ export struct ReaderPage {
     } else if (action.id === 'add_bookmark') {
       this.addCurrentPageBookmark();
     } else if (action.id === 'edit_content') {
-      this.contentEditTitle = this.chapterTitle;
-      this.contentEditBody = this.content;
-      this.contentEditVisible = true;
+      this.openContentEditor();
     } else if (action.id === 'reverse_content') {
       const page = this.localReaderPages[this.currentPageIndex];
       this.pendingBookmarkTargetPosition = page?.startPosition ?? 0;
@@ -5693,6 +5725,19 @@ export struct ReaderPage {
               Blank()
               Text('取消').fontSize(14).fontColor('#C8C9D0').onClick(() => this.contentEditVisible = false)
             }.width('100%').padding({ bottom: 14 })
+            // 「仅正文」开关：把 <img>/<usehtml>/[newpage] 折叠成〔图片1〕这类占位，
+            // 对齐上游 ReadContentEditDelegate 的 bodyOnly 开关（ReaderBodyOnlyFilter）。
+            Row() {
+              Column() {
+                Text('仅正文').fontSize(14).fontColor('#ECEEF2')
+                Text('折叠图片、富文本与分页标记，避免误删源码')
+                  .fontSize(11).fontColor('#9A9CA6').margin({ top: 2 })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              Toggle({ type: ToggleType.Switch, isOn: this.contentEditBodyOnly })
+                .selectedColor('#B9C6FF')
+                .onChange((isOn: boolean) => this.setContentEditBodyOnly(isOn))
+            }
+            .width('100%').padding({ top: 4, bottom: 10 })
             TextInput({ text: this.contentEditTitle, placeholder: '章节名称' })
               .width('100%').height(48).fontSize(15).fontColor('#ECEEF2')
               .backgroundColor('#292A31').borderRadius(10).padding({ left: 12, right: 12 })
@@ -5705,15 +5750,21 @@ export struct ReaderPage {
             Row() {
               Text('还原').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
                 .onClick(() => {
+                  // 还原也回到「折叠态」：与刚打开弹层时看到的一致，
+                  // 用户点还原后再关掉「仅正文」仍能拿回完整正文。
                   this.contentEditTitle = this.chapterTitle;
-                  this.contentEditBody = this.content;
+                  this.contentEditBody = this.contentEditBodyOnly
+                    ? toBodyOnly(this.content, this.contentEditHiddenSpans) : this.content;
                 })
               Text('保存').fontSize(14).fontColor('#101116').textAlign(TextAlign.Center)
                 .width(84).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(18)
                 .onClick(() => {
                   const currentPage = this.localReaderPages[this.currentPageIndex];
                   this.pendingBookmarkTargetPosition = currentPage?.startPosition ?? 0;
-                  this.onSaveChapterContent(this.getChapterIndex(), this.contentEditTitle, this.contentEditBody);
+                  // 折叠态保存：按占位标记把原始片段插回，图片/富文本/分页标记不会丢。
+                  const savedBody = this.contentEditBodyOnly
+                    ? toRawText(this.contentEditBody, this.contentEditHiddenSpans) : this.contentEditBody;
+                  this.onSaveChapterContent(this.getChapterIndex(), this.contentEditTitle, savedBody);
                   this.contentEditVisible = false;
                 })
             }.width('100%').padding({ top: 14 })

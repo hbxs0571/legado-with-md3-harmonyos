@@ -115,7 +115,26 @@ export class TxtTocRuleRepository {
       console.error(`目录规则读取失败：${error instanceof Error ? error.message : String(error)}`);
       TxtTocRuleRepository.cachedRules = [];
     }
+    // 规则表为空时自动灌入内置规则库，对齐上游 TextFile.getTocRules()：
+    // 用户把规则删空后，下一次开书仍按内置规则切章，而不是退回按字数硬切。
+    if (TxtTocRuleRepository.cachedRules.length === 0) {
+      await TxtTocRuleRepository.seedBuiltinRules(context);
+    }
     return TxtTocRuleRepository.getAll();
+  }
+
+  /**
+   * 表为空时灌内置规则，只在 load 读到空表时调用一次。
+   * 灌完不弹提示：这是自愈行为，不是用户发起的导入。
+   */
+  private static async seedBuiltinRules(context: Context): Promise<void> {
+    try {
+      const builtin = TxtTocRuleRepository.loadBuiltinRules(context);
+      if (builtin.length === 0) { return; }
+      await TxtTocRuleRepository.importRules(context, builtin);
+    } catch (error) {
+      console.error(`内置目录规则灌入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /** 从 preferences 老键读一次，只作为搬迁来源与 DB 读失败时的兜底。 */

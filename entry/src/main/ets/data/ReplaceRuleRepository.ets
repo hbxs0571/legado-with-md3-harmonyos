@@ -1,12 +1,18 @@
 import { preferences, relationalStore } from '@kit.ArkData';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
+import { taskpool } from '@kit.ArkTS';
 import { Book } from '../model/Book';
 import { ReplaceRule } from '../model/ReplaceRule';
 import { RdbCodec } from './RdbCodec';
 import { RdbSchema } from './RdbSchema';
 import { RdbStore } from './RdbStore';
 import { ChineseTextConverter } from './ChineseTextConverter';
+import {
+  applyReplaceRulesInWorker,
+  ReplaceRuleWorkerInput,
+  ReplaceRuleWorkerResult
+} from './ReplaceRuleEngine';
 
 interface ReplaceRuleApplyResult {
   text: string;
@@ -58,6 +64,8 @@ export class ReplaceRuleRepository {
   private static cachedRules: ReplaceRule[] = [];
   private static defaultEnabled: boolean = true;
   private static sortMode: string = 'desc';
+  /** 最近一次 load 拿到的 Context；超时规则要落库停用，正文管线是静态方法拿不到它。 */
+  private static injectedContext: Context | undefined = undefined;
 
   /** 全量读取：sortOrder 升序，与上游 flowAllAsc 一致。 */
   private static readonly selectAll: string =
@@ -99,6 +107,7 @@ export class ReplaceRuleRepository {
   }
 
   static async load(context: Context): Promise<ReplaceRule[]> {
+    ReplaceRuleRepository.injectedContext = context;
     let needsMigrate = false;
     try {
       // 只有两个纯设置项留在 preferences：它们不是表数据，上游也放在 PreferKey 里。
@@ -868,7 +877,11 @@ export class ReplaceRuleRepository {
   }
 
   static applyContent(book: Book, chapterTitle: string, content: string): string {
-    return ReplaceRuleRepository.applyContentWithResult(book, chapterTitle, content).text;
+    // 同步入口只跑非正则规则：正则要进 worker 计时，走 applyContentWithResultAsync。
+    if (!ReplaceRuleRepository.isBookEnabled(book)) {
+      return content;
+    }
+    return ReplaceRuleRepository.applyContentForLength(book, content);
   }
 
   /**
@@ -933,6 +946,60 @@ export class ReplaceRuleRepository {
     }
     return { text: result, effectiveRuleIds: effectiveRuleIds };
   }
+  static async applyContentWithResultAsync(book: Book, chapterTitle: string, content: string):
+    Promise<ReplaceRuleApplyResult> {
+    if (!ReplaceRuleRepository.isBookEnabled(book)) {
+      return { text: content, effectiveRuleIds: [] };
+    }
+    const rules = ReplaceRuleRepository.cachedRules.filter((rule: ReplaceRule) =>
+      rule.isEnabled && rule.scopeContent && ReplaceRuleRepository.matchesBook(rule, book));
+    if (rules.length === 0) {
+      return { text: ReplaceRuleRepository.normalizeLines(content), effectiveRuleIds: [] };
+    }
+    const payload: ReplaceRuleWorkerInput[] = rules.map((rule: ReplaceRule) => {
+      const input: ReplaceRuleWorkerInput = {
+        id: rule.id,
+        name: rule.name,
+        pattern: rule.pattern,
+        replacement: rule.replacement,
+        isRegex: rule.isRegex,
+        timeoutMillisecond: rule.timeoutMillisecond
+      };
+      return input;
+    });
+    let outcome: ReplaceRuleWorkerResult;
+    try {
+      const task = new taskpool.Task(applyReplaceRulesInWorker, content, payload);
+      outcome = await taskpool.execute(task) as ReplaceRuleWorkerResult;
+    } catch (error) {
+      // worker 起不来（极旧设备或线程池打满）：退回同步口径，保证正文能显示。
+      console.error(`[ReplaceRuleRepository] 替换净化 worker 执行失败: ${error}`);
+      return ReplaceRuleRepository.applyContentWithResult(book, chapterTitle, content);
+    }
+    if (outcome.timedOutRuleIds.length > 0) {
+      // 超时的规则自动停用并落库，对齐上游 ContentProcessor.kt:206-210。
+      await ReplaceRuleRepository.disableTimedOutRules(outcome.timedOutRuleIds);
+    }
+    return { text: outcome.text, effectiveRuleIds: outcome.effectiveRuleIds };
+  }
+
+  /** 把超时规则停用并写库；没有注入 Context（如后台任务）时只改内存，下次启动按库里的旧值。 */
+  private static async disableTimedOutRules(ids: number[]): Promise<void> {
+    const context = ReplaceRuleRepository.injectedContext;
+    for (const id of ids) {
+      if (context !== undefined) {
+        try {
+          await ReplaceRuleRepository.setEnabled(context, id, false);
+          continue;
+        } catch (error) {
+          console.error(`[ReplaceRuleRepository] 停用超时规则失败: ${error}`);
+        }
+      }
+      ReplaceRuleRepository.cachedRules = ReplaceRuleRepository.cachedRules.map((rule: ReplaceRule) =>
+        rule.id === id ? ReplaceRuleRepository.withEnabled(rule, false) : rule);
+    }
+  }
+
   static applyContentForLength(book: Book, content: string): string {
     if (!ReplaceRuleRepository.isBookEnabled(book)) {
       return content;
