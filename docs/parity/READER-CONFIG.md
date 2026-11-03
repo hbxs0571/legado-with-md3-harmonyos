@@ -849,6 +849,31 @@ bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG
 
 这三个文件都是靠「类别键名字面量 / 字段名」而非配置类名被捞到的，正是 [KEYWORDS.md](KEYWORDS.md) 存储层维度要解决的漏检。`BackupConfig.kt` 与 `PreferKey.kt` 此前从未出现在 `readConfig` 的覆盖证明里，但它们分别是该类别忽略开关与偏好键的唯一定义处。
 
+### 4.9 渲染管线与目录页：r323 补关键词后新进接触面（12 个）
+
+这批文件是 2026-11-03 补 `ReaderPageWindow`/`ReaderPaginator`/`ReaderChapterBlockMeasurer`/`ReaderPaginationSession`/`ReaderPartialPagePolicy`/`ScrollPageDrawCache`/`TocScreen`/`TocHierarchy`/`TocViewModel` 九个关键词后才进接触面的。补词的原因与逐文件证据见 [KEYWORDS.md](KEYWORDS.md) 的「为什么原关键词漏掉渲染管线与目录页」节。
+
+**它们不在本表开行，落点在 [TXT-READER.md](TXT-READER.md)。** 本表盘的是配置项（「哪个设置字段接了没有」），这批文件盘的是**排版快照的消费端与界面状态**——它们读的是已经算好的 `ReaderPageWindow`、`ReaderChapterPaginationStyle`、`TocUiState`，**不出现任何配置类全名、也不出现配置字段名**。同一个配置项（如标题字号）的「有没有这个设置」在本表 C 块已有行，「设了之后排版流怎么用它」在 TXT-READER.md B9 块。
+
+| 上游文件 | 行数 | 为什么不进本表 | TXT-READER.md 落点 |
+| --- | --- | --- | --- |
+| `feature/reader/core/layout/ReaderChapterBlockMeasurer.kt` | 800 | 读排版期快照 `ReaderChapterPaginationStyle`（把配置翻译成快照的工厂 `LegacyReaderPaginationStyleFactory.kt` 在 4.2 已排除） | B1 全部测量行 + B2 图片三档 + **B9 全部 10 行** |
+| `feature/reader/core/navigation/ReaderPageNavigator.kt` | 214 | 页窗口导航，读 `ReaderPageWindow`，无配置 | B3「四页预取窗口」+ B8 ⑨ + D7「跨章定位」 |
+| `feature/reader/core/navigation/ReaderPartialPagePolicy.kt` | 60 | 流式页发布策略，读页位置不读配置 | B8 ⑪「增量发布策略」 |
+| `feature/reader/core/model/ReaderPageContentClip.kt` | 88 | 绘制裁剪，读已算好的 bounds | B4「绘制顺序」「覆盖阴影」 |
+| `feature/reader/core/accessibility/ReaderAccessibilityPolicy.kt` | 102 | 无障碍补偿，读视口不读配置 | C1「隐藏状态栏后正文默认留白」 |
+| `feature/reader/core/gesture/ReaderPageViewportLayout.kt` | 141 | 视口分区，读尺寸不读配置 | B1「视口≤0 不排版」+ D2 翻页手势视口分区 |
+| `feature/reader/core/readaloud/ReaderVisibleTextPositionPolicy.kt` | 76 | 朗读高亮定位，业务属 `httpTTS` | B6「页眉页脚与角标绘制」的可见文本定位 |
+| `feature/reader/ScrollPageDrawCache.kt` | 71 | 整页 PixelMap LRU 缓存 | B3「滚动模式整页 PixelMap 缓存（容量 8 的 LRU）」 |
+| `ui/book/read/ReaderRenderUiState.kt` | 54 | 首帧保护状态，无配置字段 | C1「首帧保护」 |
+| `ui/book/read/sheet/ReaderBookSheet.kt` | 1400 | 阅读页内的目录/书签/笔记四页签面板 | C5 全部 16 行 + 新增 6 行 |
+| `ui/book/toc/TocScreen.kt` | 1259 | 全屏目录页 | C5「粘性卷头」「自动滚到当前章」「FAB 四项」+ 新增「目录列表惰性加载」 |
+| `ui/book/toc/TocHierarchy.kt` | 86 | 卷层级与反序算法 | C5「卷折叠」+ 新增「反序在数据源层一次反转」 |
+
+**排除理由**：与 4.2 同性质——上游把配置读在管线内部，本地读在页面里，同一批配置项在 A–G 块已有行；这些文件带来的**新问题**（跨章闪烁、标题与正文分离、目录慢）不是配置问题，已按 [PARITY-RULES](../PARITY-RULES.md) 第四节「盘点单位是界面」在 TXT-READER.md 新开 B8/B9 两块与 C5 六行登记。
+
+**本轮接触面变化的完整账**：关键词 105 → 122（+17 个文件，其中 12 个落本表 4.9、5 个落 4.1/4.2 已有清单：`feature/reader/ReaderCanvasSurface.kt`、`core/model/ReaderPage.kt`、`ui/book/read/ReadBookController.kt`、`ReadBookRouteScreen.kt`、`ui/book/read/sheet/HighlightRuleEditSheet.kt`），加白名单 2 个 = **124**。实跑：`上游接触面 124 / 已分配 124 / 未分配 0 / 通过`。
+
 ---
 
 ## 维护

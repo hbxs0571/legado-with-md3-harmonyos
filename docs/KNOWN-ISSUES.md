@@ -7,12 +7,16 @@
 0.1.0 开发预览发布时用户报了五条体验问题。**代码一行未改**，派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。
 
 **KI-REL1 滚动阅读跳章闪烁** —— 换章时整章重新分页，重排期间画布空着。入口 `entry/src/main/ets/pages/ReaderPage.ets:1531 onReaderContentChanged()`（清 `localReaderPages` + `scrollOffset = 0` 后 `rebuildReaderPages()`），`:5706-5712` 注释说明照上游 `ReaderCanvasSurface.kt:254` 不用滚动兜底。补法：跨章增量追加，或重排期保留上一章尾页作过渡帧；**不要**改两套排版兜底。
+> 已盘点，见 [TXT-READER.md](parity/TXT-READER.md) B8「跨章换页与页窗口拼接」第 222 行起（11 行，222–232；根因行 222）。上游那一层共 11 个能力，本地只接住 2 个（页窗口同步换装、四页纵向堆叠绘制）。
 
 **KI-REL2 标题与正文分离** —— 标题画在正文之外的独立 ArkUI 组件里，不是画布画的。`ReaderPage.ets:5712-5733` 的 `else if (currentPageIndex === 0)` 分支，`Canvas` 在其下；`ReaderCanvasSurface.ets` 全文只有 `:1129` 用到 `titleOnly`（算页高）。上游把标题当正文块流里的 `isTitle` 块（`ReaderChapterBlockMeasurer.kt:260-320`）。补法：标题作首行块交给画布，删画布外的标题分支与 `measureTitleReservedLines()`。
+> 已盘点，见 [TXT-READER.md](parity/TXT-READER.md) B9「标题块在排版流里」第 242 行起（10 行，242–251；结构根因行 242，行为偏差行 247）。`titlePageBreakAfter`/`titlePageCenterVertical` 不是用户开关，取值由「本章正文是否为空」×「是否单图模式」四种组合派生；本地只实现其中 D 一档（第 249 行）。
 
 **KI-REL3 目录打开慢、滑动卡** —— 慢：`pages/CatalogPage.ets:85-92` 在 `showWordCount`（默认 true）时先 `loadChapterWordCounts()`（`:361-385`）整本逐章算字数。卡：`:578` 用 `ForEach` 而非 `LazyForEach`，`getChapters()`（`:127-159`）每帧全量重算。补法：关字数时不触发算字数、字数惰性/缓存、列表换 `LazyForEach`。
+> 已盘点，见 [TXT-READER.md](parity/TXT-READER.md) C5「目录页」第 326 行起（6 行，326–331）+ A4 第 119 行。上游字数是 `BookChapter.wordCount` 预存字段、目录页永不读正文（第 326 行）；列表 `FastScrollLazyColumn` 惰性 + 数据源 `flowOn(Dispatchers.Default)` 不逐帧重算（327/328 行）；反序在数据源层一次反转，本地在渲染期倒序复制导致卷名跑到子章后面（329 行，本轮唯一确定行为偏差）；多选缺「从最后起选」（330 行）。
 
 **KI-REL4 同名同作者的第二本书加不进书架** —— `pages/Index.ets:5602-5617` 按 `format` + `title` + `author` 判重，上游 `model/localBook/LocalBook.kt:249 importFile(uri)` 按 `bookUrl` 判重（`:260-266` 另有失效记录接回）。补法：判重键改 `bookUrl`，再补接回分支。
+> 已盘点，见 [BOOKSHELF.md](parity/BOOKSHELF.md) F「本地书导入与判重」第 533 行起（7 行，533–539；根因行 533）。上游四条链路四个判重键（`bookUrl` / `originName` / `hasFile` / `bookUrl`+`name+author`），本地只有第四种；另缺失效接回（534 行）、接回判据（535 行）、多选导入与「已上架」标记（537/538 行）、文件名解析书名作者（539 行——本地 `author` 恒空，是判重键失效的上游原因）。
 
 **KI-REL5 浅色模式适配差** —— 深色模式的适配明显好于浅色，浅色模式配色未打磨。根因：r300–r317 的深色模式改造集中在夜间配色与主题包，日间配色基本沿用改造前的旧值，`entry/src/main/resources/base/element/color.json` 里的 `theme_*` 日间色没重新对齐上游浅色方案。补法：按上游 `ThemeConfigScreen.kt` 的浅色档逐项对齐日间色，与深色同一套 token。
 

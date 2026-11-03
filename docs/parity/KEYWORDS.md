@@ -33,7 +33,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 | 类别键名 | 上游检索关键词（ERE） | 命中数 | 上游代表文件 |
 | --- | --- | --- | --- |
-| `localBook` | `BookDao\|bookshelf\.json\|Book\.kt\|"localBook"\|BookRestorePlan\|LocalBookLocationStatus\|isRelocatedCopyOf\|normalizeLocalBookLocation` | 29 | `data/entities/Book.kt`、`data/dao/BookDao.kt`、`help/storage/BookRestorePlanner.kt` |
+| `localBook` | `BookDao\|bookshelf\.json\|Book\.kt\|"localBook"\|BookRestorePlan\|LocalBookLocationStatus\|isRelocatedCopyOf\|normalizeLocalBookLocation\|LocalBookImport` | 31 | `data/entities/Book.kt`、`data/dao/BookDao.kt`、`help/storage/BookRestorePlanner.kt`、`model/localBook/LocalBook.kt` |
 | `bookmark` | `Bookmark\|BookMarking\|"bookmark"` | 64 | `data/entities/Bookmark.kt`、`data/entities/BookMarking.kt` |
 | `bookGroup` | `BookGroup\|"bookGroup"` | 41 | `data/entities/BookGroup.kt`、`ui/book/bookshelf/` |
 | `bookSource` | `BookSource\|BookSourcePart\|"bookSource"` | 146 | `data/entities/BookSource.kt`、`ui/book/source/` |
@@ -60,7 +60,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 | 类别键名 | 上游检索关键词（ERE） | 命中数 | 上游开关 | 本地键组 |
 | --- | --- | --- | --- | --- |
-| `readConfig` | `ReadBookConfig\|ReadSettings\|ReadMenuConfig\|"readConfig"\|menuConfig\|ReadPreferences\|ReadBookStyleConfig\|ReadSheetConfigUiState\|expandTextMenu\|showSelectMenuIcon\|lastMarkingStyle` | 105 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
+| `readConfig` | `ReadBookConfig\|ReadSettings\|ReadMenuConfig\|"readConfig"\|menuConfig\|ReadPreferences\|ReadBookStyleConfig\|ReadSheetConfigUiState\|expandTextMenu\|showSelectMenuIcon\|lastMarkingStyle\|ReaderPageWindow\|ReaderPaginator\|ReaderChapterBlockMeasurer\|ReaderPaginationSession\|ReaderPartialPagePolicy\|ScrollPageDrawCache\|TocScreen\|TocHierarchy\|TocViewModel` | 122 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
 | `themeConfig` | `backupIgnoreThemeConfig\|"themeConfig"\|colorPrimary\|colorPrimaryNight\|backgroundImage\|backgroundImageBlurring\|backgroundImageNight\|backgroundImageNightBlurring\|colorMD3Primary\|colorMD3Secondary\|colorMD3PrimaryNight\|colorMD3SecondaryNight\|paletteStyle\|materialVersion\|composeEngine\|customContrast\|customMode\|useMiuixMonet\|containerOpacity\|topBarOpacity\|bottomBarOpacity\|enableBlur\|enableProgressiveBlur\|topBarBlurRadius\|bottomBarBlurRadius\|topBarBlurAlpha\|bottomBarBlurAlpha\|bottomBarLensRadius\|useFlexibleTopAppBar\|topBarButtonStyle\|mergeTopBarActions\|bookInfoFollowCoverColor\|bookInfoBackgroundBlur\|bookInfoNetworkCoverBackground\|bookInfoDefaultCoverBackground\|bookInfoAuthorSearchFallback\|colorBackground\|colorBottomBackground\|colorBackgroundNight\|colorBottomBackgroundNight\|enableDeepPersonalization\|colorMD3OnSurface\|colorMD3OnPrimaryContainer\|colorMD3Background\|colorMD3SurfaceContainerLow\|colorMD3OnSurfaceNight\|colorMD3OnPrimaryContainerNight\|colorMD3BackgroundNight\|colorMD3SurfaceContainerLowNight\|eyeProtectionEnabled\|colorTemperature\|eyeProtectionAutoNight\|eyeProtectionSchedule\|eyeProtectionStartTime\|eyeProtectionEndTime` | 132 | `backupIgnoreThemeConfig` | `themeConfig` |
 | `coverConfig` | `backupIgnoreCoverConfig\|"coverConfig"` | 3 | `backupIgnoreCoverConfig` | `coverConfig` |
 | `themeMode` | `themeMode\|"themeMode"\|isNightMode\|isDarkTheme\|isSystemDarkTheme\|setDefaultNightMode\|NIGHT_MASK\|DayNight\|isNightTheme\|uiMode\|UI_MODE\|isAmoled\|amoled\|isPureBlack\|pureBlack` | 80 | 无独立开关 | `themeMode` |
@@ -80,6 +80,32 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 - `ReadPreferences` — `data/repository/ReadSettingsRepository.kt:21` 的 `typealias ReadPreferences = ReadSettings`，设置页拿的是这个别名；漏了它会丢掉 `sheet/GlobalThemePage.kt` 与 `sheet/ReadStyleSheet.kt` 两个设置面板（这两个是主题与排版设置页，不是渲染管线）。**+3 → 94**。
 - `ReadBookStyleConfig` / `ReadSheetConfigUiState` — `ReadBookContract.kt:74` 与 `:121` 两个 data class，是**另外两个只在界面层流动的配置载体**（样式可观察状态 / 弹层面板只读快照）。参数类型既不叫 `ReadMenuConfig` 也不叫 `menuConfig`，字段名与 `ReadSettings` 大量重名却一个配置类名都不出现。**+6 → 100**。
 - `expandTextMenu` / `showSelectMenuIcon` / `lastMarkingStyle` — 三个字段名在界面层当**参数名**一路传递，宿主读取点已被前几轮覆盖，但接收端（两个选择菜单、`sheet/TextSelectMenuConfigSheet.kt`、`ui/config/readConfig/ReadConfigContract.kt`、`constant/PreferKey.kt`）此前完全不在接触面里。**+5 → 105**。
+- `ReaderPageWindow` / `ReaderPaginator` / `ReaderChapterBlockMeasurer` / `ReaderPaginationSession` / `ReaderPartialPagePolicy` / `ScrollPageDrawCache` / `TocScreen` / `TocHierarchy` / `TocViewModel` — **第七轮，补的是「渲染管线与目录页」这一整类盲区**，详见下一节。**+17 → 122**。
+
+### 为什么原关键词漏掉渲染管线与目录页
+
+前六轮补的都是「配置怎么被界面读到」：配置类全名、配置载体 data class、配置字段名。这条路有一个**系统性盲区**：一旦某个文件既不出现配置类全名、也不出现任何配置字段名，它就永远进不了接触面，哪怕它是整个阅读链路的核心。
+
+r323 盘点四条已知问题（KI-REL1 滚动跳章闪烁、KI-REL2 标题与正文分离、KI-REL3 目录页慢、KI-REL4 同名书加不进书架）时撞上了这个盲区——任务点名的五个上游文件，有四个在 `readConfig` 关键词下**命中 0 行**：
+
+| 文件 | 它在链路里的位置 | 为什么旧关键词一个都命中不到 |
+| --- | --- | --- |
+| `feature/reader/ReaderCanvasSurface.kt` | 画布本体：四页堆叠绘制、转场、滚动换窗 | 只吃已算好的 `ReaderPageWindow` 与 `ReaderTextStyle`，颜色/字号/行高都是别人算完传进来的，文件里没有 `ReadBookConfig` 也没有配置字段名 |
+| `feature/reader/core/layout/ReaderChapterBlockMeasurer.kt` | 块测量：标题块测高、图片块断页 | 同上。它读的是 `ReaderChapterPaginationStyle` 这个**排版期快照**，而该快照由 `LegacyReaderPaginationStyleFactory` 从配置转出来——工厂在接触面里，消费端不在 |
+| `feature/reader/core/layout/ReaderPaginator.kt` | 分页器：y 游标、换页判定、垂直居中 | 同上 |
+| `ui/book/toc/TocScreen.kt` | 全屏目录页 | 只读 `TocUiState`，字数/层级/折叠全是 ViewModel 算好给的 |
+
+这不是「关键词选少了」而是「选词维度少了」：**前六轮只认「配置的声明与读取」，不认「排版快照与界面状态的消费」**。排版快照（`ReaderChapterPaginationStyle`、`ReaderPaginationConfig`）与界面状态（`TocUiState`）恰好是把配置翻译成几何量的那一层，也是 KI-REL1/KI-REL2 的 bug 真正发生的地方——漏掉它们，覆盖证明会显示通过，但这两条问题所在的那一层从未被检查过。
+
+补的九个词按「谁被谁引用」分三组：
+
+- **排版快照与分页器**（`ReaderPaginator`、`ReaderChapterBlockMeasurer`、`ReaderPaginationSession`）— 覆盖 `feature/reader/core/layout/` 与 `feature/reader/legacy/`。命中的 4 个文件里 3 个此前不在接触面：`ReaderPaginator.kt`、`ReaderChapterBlockMeasurer.kt`、`LegacyReaderChapterPaginator.kt`（后者本来靠别的词勉强在，但它的 `titlePageBreakAfter` 赋值点一直没被盘过）。
+- **页窗口与绘制**（`ReaderPageWindow`、`ReaderPartialPagePolicy`、`ScrollPageDrawCache`）— 覆盖画布与窗口装配。`ReaderCanvasSurface.kt` 靠 `ReaderPageWindow`（12 个文件里它是其中一个）进接触面；`ScrollPageDrawCache.kt` 是 B3 那条「滚动模式整页缓存」未接行的上游位置，此前它自己都不在接触面。
+- **目录页**（`TocScreen`、`TocHierarchy`、`TocViewModel`）— 覆盖 `ui/book/toc/` 全部 10 个文件。此前该目录只有 `ReaderBookSheet.kt`（阅读页内的目录 sheet）在接触面，**全屏目录页 `TocScreen.kt` 从来没被盘过**——KI-REL3「目录慢与滑动卡」就出在这里。
+
+**为什么不用文件名 glob。** 与「不做目录级 glob」同一个理由：`feature/reader/` 有 68 个文件，整目录纳入会让 20 多个纯绘制/纯数据类文件凭空进接触面而不经过逐个人工判断。这九个词是逐个核过命中的 33 个文件、确认每一个都能落到表里已有行之后才加进去的（实测：加上这九个词后接触面 105 → 122，未分配数保持 35 不变，即没有一个新文件是「没人认领」的）。
+
+**`LocalBook.kt` 在 `localBook` 类别下命中 0 的原因。** 这是另一类漏法：`localBook` 的关键词里有 `Book\.kt`，本意是捞 `data/entities/Book.kt`，但它是**正则子串匹配**——`LocalBook.kt` 的文件内容里如果出现字面量 `Book.kt` 本该命中。实测命中 0，因为该文件里没有任何一处写出 `Book.kt` 这五个字符（它 import 的是 `io.legado.app.data.entities.Book`，不带扩展名）。所以 `model/localBook/` 目录下 9 个文件里，只有 `TextFile.kt` 等少数几个靠别的词进了接触面，**`LocalBook.kt`（649 行，整个本地书导入链路的主类）自己不在**。补 `LocalBookImport` 把它和 `LocalBookImportPlanner.kt` 一起捞进来（**+2 → 31**），后者正是 KI-REL4「失效记录接回」的判据所在。
 
 ### 界面白名单
 
@@ -96,7 +122,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 
 两个都是逐个人工判断后确认「无配置字段引用、但属于菜单/文字菜单渲染端」才点名的。判断方法：拿 `ReadSettings.kt` + `ReadBookConfig.kt` 声明的全部字段名做词边界匹配，两个文件各命中 0 个与 1 个（`ReadBookMenuBarSearch.kt` 唯一命中是 `background`，实为 `androidx.compose.foundation.background` 导入；`SelectionMenuMotion.kt` 是 0）。
 
-关键词 105 + 白名单净新增 2 = **107 个**，就是 `ReadBookConfig|ReadSettings|ReadMenuConfig|"readConfig"|menuConfig|ReadPreferences|ReadBookStyleConfig|ReadSheetConfigUiState|expandTextMenu|showSelectMenuIcon|lastMarkingStyle` 与上述 2 个文件的并集。
+关键词 122 + 白名单净新增 2 = **124 个**，就是 `ReadBookConfig|ReadSettings|ReadMenuConfig|"readConfig"|menuConfig|ReadPreferences|ReadBookStyleConfig|ReadSheetConfigUiState|expandTextMenu|showSelectMenuIcon|lastMarkingStyle|ReaderPageWindow|ReaderPaginator|ReaderChapterBlockMeasurer|ReaderPaginationSession|ReaderPartialPagePolicy|ScrollPageDrawCache|TocScreen|TocHierarchy|TocViewModel` 与上述 2 个文件的并集。
 
 **为什么白名单只剩 2 个**：`ui/book/read` 目录共 114 个 `.kt`。除了这 2 个，其余被前五轮关键词全部覆盖；而目录里剩下的 `pageestimate/`、`config/*Span.kt`、`MarkingContract.kt` 等文件要么只吃已算好的参数、要么是纯绘制实现，把整目录纳入只会多出待解释条目，不是真缺口。
 

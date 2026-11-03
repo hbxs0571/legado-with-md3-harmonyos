@@ -62,9 +62,10 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | C 阅读进度与记录 | 35 | 17 | 18 | 0 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 13 | 3 | 9 | 1 |
-| 合计 | 328 | 85 | 241 | 2 |
+| F 本地书导入与判重（整界面，r323 新增） | 7 | 0 | 7 | 0 |
+| 合计 | 335 | 85 | 248 | 2 |
 
-A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 13 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行。全表状态三值，无 `待定`。
+A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 13 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
 ---
 
@@ -413,7 +414,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 分组筛选菜单 | `BookCacheManageScreen.kt:171-186` | `pages/ProfileSubPages.ets:3407-3412`、`:3490-3508` | 已接 | 本地 `CacheGroupMenu` 列出「全部/无分组 + 各分组」 | 点筛选图标弹出分组列表，选中项打勾 | — | — |
 | 分组过滤生效 | `BookCacheManageScreen.kt:118-127` | — | 未接 | 本地 `selectedCacheGroup` 只影响「未在书架」区的显隐（`:3452`），不影响书籍列表（因为列表是空态） | 选某分组后列表只剩该分组书 | — | — |
 | 刷新按钮 | `BookCacheManageScreen.kt:160` | `pages/ProfileSubPages.ets:3421-3423` | 未接 | 本地 `onUnavailableAction('缓存数据仓储尚未接入，未刷新缓存')` | 点刷新后缓存统计重算 | — | — |
-| 两个分区（书架内 / 未在书架） | `BookCacheManageScreen.kt:343-346`、`:355-358` | `pages/ProfileSubPages.ets:3449-3458` | 已接（仅空态） | 本地两个 `CacheEmptySection`，只画空态文案 | 有缓存时两区各自列出书籍 | 正文列表整体未接 | — |
+| 两个分区（书架内 / 未在书架） | `BookCacheManageScreen.kt:343-346`、`:355-358` | `pages/ProfileSubPages.ets:3449-3458` | 已接 | 两个 `CacheEmptySection` 分区结构在（**仅空态**），只画空态文案；正文列表整体未接 | 有缓存时两区各自列出书籍 | 正文列表整体未接 | — |
 
 ### D2 缓存管理页 · 书籍卡片与章节（`BookCacheManageScreen.kt`）
 
@@ -511,11 +512,48 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 - **也不属本块**：`config.xml` 的 28 个类别各自忽略哪个键——那是 [ZIP 类别的键表差异](../BACKUP-RESTORE.md#偏好键对齐差异待移除) 一节的事。
 
 
+## F 本地书导入与判重（整界面，r323 新增）
+
+本块是 r323 的 KI-REL4「同名同作者加不进书架」盘出来的上游完整形态。选题理由：A1–E 五块都在盘「书已经在书架上之后，界面怎么用这些书」，但**一本书是怎么进到书架上来的**这一整层，此前一行都没有——A1 盘书架主屏与卡片，B 盘详情页，C 盘阅读进度，D 盘缓存，E 盘备份恢复；`LocalBook.kt`（649 行，本地书导入主类）只在覆盖证明里作为「已排除：本地书与导出，界面由别的模块承载」出现过一次，从未被盘过。
+
+`localBook` 类别的旧关键词 `BookDao|bookshelf\.json|Book\.kt|"localBook"|BookRestorePlan|LocalBookLocationStatus|isRelocatedCopyOf|normalizeLocalBookLocation` 在 `model/localBook/LocalBook.kt` 上命中 **0**：该文件里没有任何一处写出字面量 `Book.kt`（import 的是 `io.legado.app.data.entities.Book`，不带扩展名）。所以 `--coverage localBook` 报 29/29 全过时，**本地书导入的主类根本不在接触面里**。r323 补 `LocalBookImport` 一词后接触面 29 → **31**（`LocalBook.kt` 与 `LocalBookImportPlanner.kt`），补词理由见 [KEYWORDS.md](KEYWORDS.md) 的「为什么原关键词漏掉渲染管线与目录页」节。
+
+**判重键的完整图谱**（本块最重要的一张对照，四条链路四个键，互不相同）：
+
+| 链路 | 判重键 | 上游位置 |
+| --- | --- | --- |
+| 本地书导入 | `bookUrl`（= 文件的 `toString()`） | `model/localBook/LocalBook.kt:255` `appDb.bookDao.getBook(bookUrl)`；`data/dao/BookDao.kt:705-706` |
+| 失效记录接回 | `originName`（文件名） | `LocalBook.kt:302-313` `getBookByFileName(fileName)`；`BookDao.kt:702-703` |
+| 导入页「已上架」标记 | `originName` 或 `origin` 含文件名 | `LocalBook.kt:568-572`；`BookDao.kt:805-809` |
+| 在线书加入书架 | `bookUrl`，未命中再 `name + author` 合并 | `domain/usecase/AddBookUseCase.kt:30`/`:59`；`BookDao.kt:759-760` |
+
+本地只有第四种（`format + title + author`），前三种一个都没有。
+
+| 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 导入本地书以 `bookUrl` 判重：命中即「更新」语义（删旧目录、`latestChapterTime = 0` 触发重解析、`update`）；未命中才新建 | `model/localBook/LocalBook.kt:255`（`var book = appDb.bookDao.getBook(bookUrl)`）、`:249-259`（`bookUrl` 由 `FileDoc.fromUri(uri, false).apply { ... bookUrl = toString() }` 生成，`utils/FileDocExtensions.kt:30-32`）、`:280-289`（更新分支：`deleteBook(book, false)` → `book.latestChapterTime = 0` → `appDb.bookChapterDao.delByBook(bookUrl)` → `appDb.bookDao.update(book)`）、`data/dao/BookDao.kt:705-706`（`@Query("SELECT * FROM books WHERE bookUrl = :bookUrl")`） | `entry/src/main/ets/pages/Index.ets:5602-5605`（`const duplicate = [...this.books, ...importedBooks].find((item: Book) => BookRepository.isPersistableBook(item) && item.format === importedBook.format && item.title === importedBook.title && item.author === importedBook.author);`）、`entry/src/main/ets/model/Book.ets`（`id` 由路径派生，无独立 `bookUrl` 列） | 未接 | **判重键不同**：上游是**文件路径**（同一文件重复导入 = 更新同一本书），本地是 `format + title + author`（同一文件改名后导入 = 判不重、新建第二本；不同文件同名同作者 = 判重、被拒）。屏幕现象：把 `斗破苍穹.txt` 复制一份改名为 `斗破苍穹(1).txt` 再导入，上游得到一条记录（更新），本地得到两条同名书；反过来，两份内容不同的同名文件，上游两条都在，本地第二份被拒并提示「这本书已在书架中」。**这是 KI-REL4 的根因行**。 | 同一本书改文件名后再导入一次，看书架是一条还是两条 | 依据源码推断，未设备验证。上游 `bookUrl` 是 `@PrimaryKey`（`data/entities/Book.kt:42-45`），本地主键是派生 `id` | `localBook` |
+| 失效记录接回：源文件被外部删掉后重新导入同名文件，把旧记录迁到新文件上而不是新建一条 | `model/localBook/LocalBook.kt:260-266`（`val reusableBook = findReusableStaleLocalBook(bookUrl, fileName); if (reusableBook != null) { return rebindLocalBook(reusableBook, bookUrl, fileName) }`）、`:302-313`（`findReusableStaleLocalBook`：`if (fileName.isBlank()) return null; val existingBook = appDb.bookDao.getBookByFileName(fileName) ?: return null; return planLocalBookImportReuse(existingBook, isBookFileReadable(existingBook), fileName, importedBookUrl)`）、`:319-324`（`isBookFileReadable`：`val stream = book.bookUrl.parseToUri().inputStream(appCtx).getOrNull() ?: return false; stream.use { }; return true`，注释说明刻意不做 `getLocalUri` 兜底搜索——探测不应有副作用）、`:328-345`（`rebindLocalBook`：`deleteBook(oldBook, false)` → `oldBook.copy(bookUrl = newBookUrl, originName = fileName)` → `latestChapterTime = 0` → `upBookInfo`/`upKind` → `appDb.runInTransaction { bookChapterDao.delByBook(oldBook.bookUrl); bookDao.replace(oldBook, reboundBook); BookHelp.updateCacheFolder(oldBook, reboundBook) }` → 两侧 `removeLocalUriCache()`） | 无（本地无接回逻辑，缺正文记录只能靠用户手动移出） | 未接 | 上游有**三个前提**才接回：①旧记录的文件确实读不到（`isBookFileReadable` 为 false）②文件名完全相同 ③来源是普通本地文件（非压缩包、非 webDav）。三个都满足才改 `bookUrl` 保留分组与阅读进度。本地没有这一层：文件被删后记录留在书架上（`isBodyMissing` 判定为「缺正文」），重新导入同名文件时被 `format+title+author` 判重挡下，提示「书架中已有同名缺正文记录，请先移出该记录再导入正文」——**要用户手动移出再导入，且移出即丢分组与进度**。屏幕现象：上游重新导入后书直接能读、进度还在；本地必须先移出（进度清零）再导入。 | 删掉正文文件 → 重启看到「缺正文」标记 → 重新导入同名文件，看能否直接恢复阅读且进度还在 | 依据源码推断，未设备验证。本地提示语见 `Index.ets:5613-5615`，是**已知的替代方案**而非等价实现 | `localBook` |
+| 接回判据 `planLocalBookImportReuse`：四条否决（无旧记录 / 同路径 / 旧文件仍可读 / 文件名不同或不满足本地来源），全部通过才复用 | `model/localBook/LocalBookImportPlanner.kt:24-35`（`val book = existingBook ?: return null; if (book.bookUrl == importedBookUrl) return null; if (existingFileReadable) return null; if (!book.matchesImportedFile(importedFileName)) return null; return book`）、`:37-42`（`private fun Book.matchesImportedFile(importedFileName: String) = isLocal && !isArchive && origin == BookType.localTag && originName.isNotBlank() && originName == importedFileName`）、文件头注释 `:16-20` 三条不复用理由 | 无 | 未接 | 这是上一行的判据本体，单列是为了让「什么时候**不该**接回」也有据可查：旧文件仍可读时不接回（用户确实另有一份同名文件，两份各自成书）；压缩包与 webDav 来源不接回（文件可重新解压/下载，「当前读不到」不代表记录失效）。本地完全没有这层判断——**本地是「一律不接回」**，所以不会误接，但也接不回来。 | 造两个同名文件 A、B（都在），导入 A 后再导入 B，确认变成两条而不是接回 | 依据源码推断，未设备验证。本行是本块唯一「上游有明确否决条件」的行，实现时照抄这四条即可 | `localBook` |
+| 重复导入同一文件时的提示：**无提示**，静默走更新分支 | `model/localBook/LocalBook.kt:280-289`（更新分支无任何 Toast/提示，直接 `update` 后 `return book`）、`ui/book/import/local/ImportBookViewModel.kt:584-595`（`importPickedBookFiles` 无论新旧一律 `ShowToast("添加书架成功")`） | `entry/src/main/ets/pages/Index.ets:5606-5617`（命中判重后 `BookRepository.discardImportedCopy(importedBook)` + `this.showUnavailableAction(BookRepository.isBodyMissing(duplicate) ? '书架中已有同名缺正文记录，请先移出该记录再导入正文' : '这本书已在书架中')`） | 未接 | 两边都「没有『已存在，已更新』这种明确提示」，但**原因与后果不同**：上游是**当成更新做掉了**（提示「添加书架成功」，书确实更新了）；本地是**拒绝并丢弃**（提示「这本书已在书架中」，导入的副本被删）。屏幕现象：同一个文件导入两次，上游第二次也提示成功且书能正常读，本地第二次提示「这本书已在书架中」且什么都没变。 | 同一个 TXT 连续导入两次，看第二次的提示文案与书是否可读 | 依据源码推断，未设备验证。上游 `ImportBookViewModel.kt:577-578`/`:592-593`/`:604-605` 三处成功 Toast 都是硬编码 `"添加书架成功"`，无「已存在」分支 | `localBook` |
+| 多选导入：一次选多个文件，逐个导入，**部分失败不打断、只有全部失败才报错** | `ui/book/import/local/ImportBookScreen.kt:258-267`（`val selectBookFiles = rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenMultipleDocuments()) { uris -> viewModel.dispatch(ImportBookIntent.BookFilesPicked(uris)) }`）、`:332-341`（MIME 白名单 `text/plain`/`application/epub+zip`/`application/pdf`/`application/x-mobipocket-ebook`/`application/vnd.amazon.ebook`/`application/zip`/`application/x-rar-compressed`/`application/x-7z-compressed`/`application/octet-stream`）、`model/localBook/LocalBook.kt:427-441`（`fun importFiles(uris: List<Uri>) { var errorCount = 0; uris.forEach { uri -> ... kotlin.runCatching { importFiles(uri) }.onFailure { AppLog.put(...); errorCount += 1 } }; if (errorCount == uris.size) { throw NoStackTraceException("ImportFiles Error:\nAll input files occur error") } }`） | `entry/src/main/ets/data/BookRepository.ets:428-435`（`const options = new picker.DocumentSelectOptions(); options.fileSuffixFilters = ['TXT 文本|.txt', 'EPUB 电子书|.epub']; options.maxSelectNumber = 1;`） | 未接 | 上游 `OpenMultipleDocuments` 一次可选任意多个文件，`importFiles(uris)` 串行逐个导入，中间某个失败只记日志继续，全部失败才抛；本地 `maxSelectNumber = 1`，**一次只能选一个文件**，且只支持 TXT 与 EPUB 两种后缀（上游还支持 PDF/MOBI/AZW3/ZIP/RAR/7Z）。屏幕现象：本地导入入口点开系统选择器只能选一个文件；上游可以框选一批。 | 点导入后尝试在系统选择器里多选两个文件 | 依据源码推断，未设备验证。本地无「导入页」这个界面（只有书架的导入按钮直开系统选择器），所以也没有上游那套 `selectedIds`/`SelectAll`/`SelectInvert` 多选工具条 | `localBook` |
+| 导入页「已上架」标记：列表里每本书标出是否已在书架，已上架的不能再加 | `model/localBook/LocalBook.kt:568-572`（`fun isOnBookShelf(fileName: String): Boolean = appDb.bookDao.hasFile(fileName)`）、`data/dao/BookDao.kt:805-809`（`@Query("select count(*) > 0 from books where originName = :fileName or (origin != :localTag and origin like '%' || :fileName)")`）、`ui/book/import/local/ImportBook.kt:8`（`val isOnBookShelf: Boolean`）、`ImportBookViewModel.kt:602-603`（`if (item.isDir \|\| item.isOnBookShelf) return`） | 无（本地无导入页，无「已上架」标记） | 未接 | 上游的导入页是一个**浏览文件夹的列表页**：显示目录里的每个文件、标出哪个已上架、支持多选与批量添加。本地是「点导入 → 系统选择器 → 直接进书架」一步到位，没有中间列表页，所以既没有「已上架」标记也没有「先看再选」的机会。屏幕现象：本地导入前无法知道这本书是不是已经在书架上。 | 点导入，看是否有中间列表页并标出已上架的书 | 依据源码推断，未设备验证。判 `未接` 是因为**整个界面缺失**，不是某个字段缺失 | `localBook` |
+| 书名/作者从文件名解析：用户脚本规则 → 内置 `nameAuthorPatterns` 正则 → `BookHelp.formatBookName`/`formatBookAuthor` 兜底 | `model/localBook/LocalBook.kt:446-480`（`private fun analyzeNameAuthor(fileName: String): Pair<String, String>`：`:450-467` 跑用户脚本 `bookImportFileName` 并捕获 `author`/`name`，`:469-478` 逐个 `nameAuthorPatterns` 正则匹配，`:479-480` 兜底 `name = BookHelp.formatBookName(tempFileName); author = BookHelp.formatBookAuthor(tempFileName.replace(name, ""))`）、调用点 `:267-279` | `entry/src/main/ets/data/BookRepository.ets:2377-2383`（`private static getTitle(fileName: string): string { const lowerName = fileName.toLowerCase(); if (lowerName.endsWith('.txt')) { return fileName.substring(0, fileName.length - 4); } return fileName.length > 0 ? fileName : '本地书籍'; }`）—— **作者恒为空串** | 未接 | 上游能从 `《斗破苍穹》作者：天蚕土豆.txt` 这类文件名里解析出书名与作者，解析规则还包括用户自定义脚本；本地只是把 `.txt` 后缀去掉，**作者永远是空**。屏幕现象：导入 `某某书 作者名.txt`，上游书架显示「某某书 / 作者名」，本地显示「某某书 作者名 / 未知」。这也是上一条判重键失效的**上游原因**——本地 `author` 恒空，`format+title+author` 三元组里有一元恒为空。 | 导入一个文件名带「作者：」的书，看书架上的作者字段 | 依据源码推断，未设备验证。与 A1 的「作者行显示」不重复：那行盘**显示**，本行盘**从哪来** | `localBook` |
+
+### 这一块与其余五块的边界
+
+- **属本块**：一本书从「用户在系统选择器里选了文件」到「书架多了一条记录」之间的全部判断——判重键、接回、提示文案、多选批量、文件名解析。
+- **不属本块，仍在 A1**：书架主屏上那条卡片长什么样、点了之后去哪。
+- **不属本块，仍在 B**：详情页的元数据编辑（书名/作者可以在详情页手改，那是 B 块的事）。
+- **不属本块，仍在 E**：`bookshelf.json` 恢复时的本地书重定位（`BookRestorePlanner` 的 `isRelocatedCopyOf` 与三态定位）——那条链路是「从备份 ZIP 恢复」，本块是「从文件选择器导入」，两者判据不同（E 块按 `bookUrl` + 文件名 + 书名作者三重比对，本块按 `bookUrl`）。
+- **也不属本块**：导入时选 TXT 章节正则（`Book.tocRule`）——那是目录规则，见 [TXT-READER.md](TXT-READER.md) A2 块。
+
 ## 小结
 
-**全表合计 328 条：已接 85、未接 241、不适用 2，无 `待定`。**（A1–C 259 条 + C 块 r286 新增 3 条别名行 + D 块 53 条 + E 块 13 条；A2 原 48 行删去 1 行重复）
+**全表合计 335 条：已接 85、未接 248、不适用 2，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 35 + D 53 + E 13 + F 7）
 
-按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 97 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制）。**28 类里有 19 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
+按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制），F 块 7 行全部落 `localBook`。**28 类里有 19 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
+
+分块口径：A1 78 + A2 47 + A3 22 + B 80 + C 35 + D 53（D 块总述 1 + D1 6 + D2 13 + D3 29 + D4 4）+ E 13 + **F 7（r323 新增，全部 `未接`）** = 335。
 
 五处需要特别注意：
 
@@ -535,7 +573,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 ## 覆盖证明
 
-本表对应四类 ZIP 类别（`localBook` 29 / `bookGroup` 41 / `readRecord` 64 / `bookshelfLayout` 10）。四类关键词并集按 [KEYWORDS.md](KEYWORDS.md) 检索出 **115 个上游 `.kt` 文件**，本节把它们逐个分配：要么落到上面某个块的具体行，要么写明排除理由。判定可复跑：
+本表对应四类 ZIP 类别（`localBook` **31** / `bookGroup` 41 / `readRecord` 64 / `bookshelfLayout` 10）。四类关键词并集按 [KEYWORDS.md](KEYWORDS.md) 检索出 **117 个上游 `.kt` 文件**（r323 给 `localBook` 补 `LocalBookImport` 一词后，`localBook` 接触面 29 → 31，多出 `model/localBook/LocalBook.kt` 与 `model/localBook/LocalBookImportPlanner.kt`），本节把它们逐个分配：要么落到上面某个块的具体行，要么写明排除理由。判定可复跑：
 
 ```bash
 bash scripts/upstream-surface.sh --coverage localBook docs/parity/BOOKSHELF.md <上游根>
