@@ -57,10 +57,10 @@
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 28 | 2 | 1 |
-| B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
+| B 引擎层（TXT 与 EPUB 共用） | 54 | 46 | 7 | 1 |
 | C 界面层 | 80 | 71 | 2 | 7 |
 | D 交互层 | 48 | 37 | 9 | 2 |
-| 合计 | 213 | 175 | 27 | 11 |
+| 合计 | 213 | 182 | 20 | 11 |
 
 （统计口径与核对脚本见文末「小结」；数字随表更新，改行后重跑。）
 
@@ -163,10 +163,10 @@
 | 每页先铺纸面底色，再画内容 | `feature/reader/ReaderCanvasSurface.kt:2767-2769` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:779-830`（`drawRect` 铺 `pageBackgroundArgb`）、`drawSlot` `:949-978`（`pageSurfaceOpaque` 时先铺纸面） | 已接 | 一致：纸面在内容之下。 | 半透明背景主题下看是否有透底 | 依据源码推断，未设备验证 | `themeConfig` |
 | 绘制顺序：背景图 → 裁剪 → 文字背景色带 → 文字背景图 → 选区预览 → 半高高亮 → 正文 → 选区高亮 → contentRules → styledUnderlines → overlayRules → 页眉页脚（裁剪外） | `feature/reader/ReaderCanvasSurface.kt:2767-2869` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1183-1222`（`drawPage`：记栈深 → `layoutPage` → 逐 box → 下划线 → `restoreToCount` → `drawSelection`） | 未接 | 本地**没有分层绘制**：文字背景、下划线、高亮都跟着每个 box 一起画，不是独立四层。后果是**下划线会压在选区高亮之下**（选区遮住下划线）、**overlay 规则无法盖在文字之上**。 | 选中一段带下划线的高亮文字，看下划线是否被选区灰块盖住 | 依据源码推断，未设备验证 | `themeConfig` |
 | 文字背景下划线合并成连续段（相邻同色背景合并成色带） | `feature/reader/core/style/ReaderBackgroundBounds.kt:31-83`、`ReaderUnderlineRun.kt:11-38` | 无（本地逐 box 独立画 `backgroundRect`） | 未接 | 本地每个文字片段各画各的底色块，**相邻同色块的接缝处会露出细线**（尤其在半透明背景色下）；上游把相邻同色合并成一条连续色带。 | 给一段连续文字加半透明背景色，放大看块与块之间是否有缝 | 依据源码推断，未设备验证 | `themeConfig` |
-| 下划线 6 种线型（实线 / 虚线 10-10 / 双线间距 3dp / 波浪振幅 3dp 波长 12dp / SVG 100×50 基准 / 半高线） | `feature/reader/platform/ReaderPageDecorationDrawCache.kt:58-152`、`ui/book/read/config/` 7 文件 | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1778-1800`（`decorationType` 只映射 `LINE_THROUGH` 与 `UNDERLINE`，线型靠 `decorationLineStyle`） | 未接 | 本地只有系统 `TextDecorationType` 提供的线型，**没有手绘虚线/波浪/双线/SVG/半高线**。高亮规则里选「波浪下划线」，本地画出来是系统默认的一条直线。 | 给一条规则配波浪下划线，看是否为波浪 | 依据源码推断，未设备验证 | `themeConfig` |
+| 下划线 6 种线型（实线 / 虚线 10-10 / 双线间距 3dp / 波浪振幅 3dp 波长 12dp / SVG 100×50 基准 / 半高线） | `feature/reader/platform/ReaderPageDecorationDrawCache.kt:58-152`、`ui/book/read/config/` 7 文件 | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1830`（`drawStyledUnderlines`）、`:1858`（`drawOneStyledUnderline`）、`:1475`（`drawTextBox` 里调用）、`:1952`（`segmentStyle` 只让系统画 1 实线）、`entry/src/main/ets/pages/ReaderPage.ets:4547-4549`（把规则的粗细/偏移带进样式区间） | 已接 | 高亮规则里选虚线/波浪/双线/删除线/荧光，画布按上游参数逐行手绘：虚线 8vp 实 5vp 空、波浪振幅 3vp 波长 12vp、双线第二条在线下 3vp+线宽、删除线画在行盒 52% 高、荧光填行盒下半截。1 实线仍交给系统段落绘制。**SVG 线型（mode 5）本地画成实线**——高亮规则模型有 `underlineSvgPath` 字段但面板没有入口，且 ArkUI 没有 SVG path 解析器，这一档按实线兜底。 | 给一条规则配波浪下划线，看是否为波浪；再换双线/删除线/荧光各看一次 | 依据源码推断，未设备验证；SVG 档按实线兜底 | `themeConfig` |
 | 五种转场：覆盖（COVER）/ 滑动（SLIDE）/ 仿真（SIMULATION）/ 滚动（SCROLL）/ 淡入（FADE），其余无动画 | `feature/reader/core/transition/ReaderPageTransition.kt:15-22` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:28`（`ReaderTransitionMode`）、`:44`（`readerTransitionModeFromPageAnim`）、`:132-230`（`ReaderPageTransitionPolicy`） | 已接 | 一致：五种转场 + NONE。 | 逐个切翻页动画，看五种效果是否都在 | 依据源码推断，未设备验证 | `readConfig` |
-| 覆盖转场尾部阴影（宽 36dp、色 `0x30111111`） | `feature/reader/core/transition/ReaderPageTransition.kt:28-38`、`ReaderCanvasSurface.kt:1664-1682` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:132-230`（`transforms` 只给 translationX / alpha） | 未接 | 本地覆盖翻页时**两页交界处没有阴影**，翻起来像两块纸板平移；上游有一条 36dp 的半透明渐变，有「纸叠起来」的立体感。 | 用覆盖动画翻页，看交界处是否有阴影 | 依据源码推断，未设备验证 | `readConfig` |
-| 淡入转场提交阈值 0.1（其余 0.35），收尾时长始终满额 | `feature/reader/core/transition/ReaderPageTransition.kt:115-121`、`:156-181` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:132-160`（`COMMIT_PROGRESS = 0.35` 单一阈值） | 未接 | 本地淡入转场也按 0.35 判，**淡入翻页要比上游多拖一倍距离才翻得过去**，手指松开时回弹更频繁。 | 用淡入动画，只拖 1/5 屏宽后松手，看是否翻页 | 依据源码推断，未设备验证 | `readConfig` |
+| 覆盖转场尾部阴影（宽 36dp、色 `0x30111111`） | `feature/reader/core/transition/ReaderPageTransition.kt:28-38`、`ReaderCanvasSurface.kt:1664-1682` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:141`（`COVER_SHADOW_WIDTH_DP = 36`、`COVER_SHADOW_ARGB = 0x30111111`）、`:897`（`draw()` 里按 `coverShadowEdgePx` 调用）、`:912`（`drawCoverShadow`：`createLinearGradient` 向右渐变）、`entry/src/main/ets/pages/ReaderPage.ets:4301-4313`（按转场方向算阴影起点） | 已接 | 覆盖转场时移动页尾部外侧铺一条 36dp 的水平渐变（`0x30111111` → 透明），位移为 0 的那一帧不画。页滑动时尾部有一道逐渐加深的投影，与上游 `ReaderCoverShadowPolicy` 同口径。 | 选「覆盖」翻页动画，横向慢拖，看移动页尾部是否有一条渐变投影 | 依据源码推断，未设备验证 | `readConfig` |
+| 淡入转场提交阈值 0.1（其余 0.35），收尾时长始终满额 | `feature/reader/core/transition/ReaderPageTransition.kt:115-121`、`:156-181` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:137`（`FADE_COMMIT_PROGRESS = 0.1`）、`:219`（`release()` 加 `commitProgress` 参数）、`entry/src/main/ets/pages/ReaderPage.ets:2139-2148`（淡入时阈值传 0.1、速度传 0） | 已接 | 淡入转场松手只需过 10% 就翻页，且不看甩动速度（其余四种仍是 35% + 900px/s）。淡入本来就没有方向位移感，用 35% 会让人觉得「明明淡了一半却被弹回去」。 | 选「淡入淡出」翻页动画，横向轻拖到约 1/5 屏就松手，应翻页而不是弹回 | 依据源码推断，未设备验证 | `readConfig` |
 | 松手判定：拖动进度 ≥35% 翻页；甩动速度 ≥900 px/s 也翻页；最后一段反向拖动回弹 | `feature/reader/core/transition/ReaderPageTransition.kt:156-181`、`:166-169`、`:170-175` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:132-230`（`COMMIT_PROGRESS = 0.35`、`FLING_VELOCITY_PX_PER_SECOND = 900`、`release`） | 已接 | 一致：35% 与 900 px/s 两个数值相同。 | 轻轻快甩一下，看是否翻页 | 依据源码推断，未设备验证 | `readConfig` |
 | 无邻页时拖动回弹（不翻过去） | `feature/reader/core/transition/ReaderPageTransition.kt:135-154` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:132-230`（`transforms` 按 `drawsNext`/`drawsPrevious` 决定） | 已接 | 一致：没有下一页时拖不动。 | 在最后一页往左拖，看是否回弹 | 依据源码推断，未设备验证 | `readConfig` |
 | 折页转场三道阴影（`0x99111111` / `0x4D111111` / `0x73333333`） | `feature/reader/core/transition/PageCurlGeometry.kt:46-50` | `entry/src/main/ets/reader/ReaderPageCurl.ets:67-71`（`ReaderCurlVisualPolicy` 三个常量） | 已接 | 一致：三个 ARGB 完全相同。 | 用仿真翻页，看卷起处是否有三层阴影 | 依据源码推断，未设备验证 | `readConfig` |
@@ -174,7 +174,7 @@
 | 折页起始吸附：拖动不足页宽 4% 时吸附回原位 | `feature/reader/core/transition/PageCurlGeometry.kt:86-98` | `entry/src/main/ets/reader/ReaderPageCurl.ets:82`（`DRAG_SNAP_FRACTION = 0.04`）、`:107-118` `dragX` | 已接 | 一致。 | 极轻地拖一下再松手，看是否纹丝不动 | 依据源码推断，未设备验证 | `readConfig` |
 | 折页角点选择（按触点落在上半/下半页决定从哪个角卷起） | `feature/reader/core/transition/PageCurlGeometry.kt:130-155` | `entry/src/main/ets/reader/ReaderPageCurl.ets:143-155`（`cornerY`/`settledY`）、`entry/src/main/ets/pages/ReaderPage.ets:2001`（拖动时每帧按触点重算 `curlCornerY`/`curlTouchX`/`curlTouchY`） | 未接 | 代码通路已接：拖动时每帧按触点上下半页重算卷起角与触点位置。但**纸张卷曲形状是否真的跟着手指同步**还没在真机上确认——模拟器 `snapshot_display` 抓不到拖动中间帧（连拍 8 张字节数全等），只能证明回调每帧都进，证明不了画面。按「已接必须指到屏幕位置」的口径，仍判未接。 | 真机上用仿真动画慢慢拖，看纸张卷起角是否跟着触点在上半页/下半页之间切换 | 依据源码推断，未设备验证。任务书已知项「折页手势拖拽跟手需真机验证」 | `readConfig` |
 | 翻页速度四档 240 / 300 / 360 / 540ms，基准统一 360 | `feature/reader/core/transition/ReaderPageTurnSpeed.kt:19-32`、`:41-43`、`:46` | `entry/src/main/ets/pages/ReaderPage.ets:1966-1967`（`durationBySpeed = [240,300,360,540]`）、`:364`（`animationSpeed` 默认 2） | 已接 | 一致：四档数值相同、默认第 3 档（360ms）。 | 速度切到最快档与最慢档，感受差别 | 依据源码推断，未设备验证 | `readConfig` |
-| 自动翻页顶部 1px 进度指示条；墨水屏整页跳变、普通屏逐行揭示 | `feature/reader/core/transition/ReaderAutoPagePolicy.kt:10-11`、`:16-18`、`ReaderCanvasSurface.kt:1683-1722` | `entry/src/main/ets/pages/ReaderPage.ets:1256-1272`（`setInterval` 到点直接 `turnReaderPage(1)`） | 未接 | 本地自动翻页是**到点直接翻整页**，没有顶部 1px 进度条提示「还剩多久翻」，也没有逐行揭示。用户在等待时会不确定是不是卡住了。 | 开自动翻页，看顶部是否有细进度条 | 依据源码推断，未设备验证 | `readConfig` |
+| 自动翻页顶部 1px 进度指示条；墨水屏整页跳变、普通屏逐行揭示 | `feature/reader/core/transition/ReaderAutoPagePolicy.kt:10-11`、`:16-18`、`ReaderCanvasSurface.kt:1683-1722` | `entry/src/main/ets/pages/ReaderPage.ets:1353`（`startAutoPageTurn`，`createAnimator` 逐帧推进）、`:1376`（写 `autoPageRevealVp`）、`:785`（菜单开合时暂停/恢复）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:906`（`drawAutoPageReveal`：`clipRect(bottom=reveal)` 内画下一页 + 揭示线下沿 1px 指示线）、`:894`（`draw()` 里调用） | 已接 | 自动翻页不再是「到点整页跳」：分页模式下按阅读速度逐帧把下一页从顶部揭开，揭示线下沿画一条 1px 指示线（颜色取界面强调色），整屏揭完再翻页。滚动模式下同样匀速推进 `scrollOffset`，且到书末不自动关闭（与上游一致）。**墨水屏的整页跳变分支本地没有**——ArkUI 侧没有 e-ink 检测，HarmonyOS 设备也不走这条路径。 | 开自动翻页（读速设 5 秒），看正文是否从顶部逐渐揭开、揭示线是否跟着下移 | 依据源码推断，未设备验证；墨水屏 DISCRETE 分支不适用 | `readConfig` |
 
 ### B5 滚动
 
@@ -198,7 +198,7 @@
 | 页眉页脚颜色 0 = 跟随正文色 | `feature/reader/core/model/ReaderTipColor.kt:4-5` | `entry/src/main/ets/pages/ReaderPage.ets:4335` 起（`getReaderInfoValue` 取色） | 已接 | 一致。 | 页眉色设为默认，换主题后看页眉是否跟着变 | 依据源码推断，未设备验证 | `readConfig` |
 | 书签角标：宽 = 尺寸×密度、高 = 宽×2、距右内边距 6dp、从正文顶边起不压页眉 | `feature/reader/core/model/ReaderBookmarkBadge.kt:16-39`、`feature/reader/platform/ReaderBookmarkBadgeRenderer.kt:76-96` | `entry/src/main/ets/pages/ReaderPage.ets:1783-1798`（`BookmarkBadgeRibbon`）、`:4509-4520`（挂载与 margin） | 已接 | 一致：`margin { top: paddingTop + (页眉可见 ? reserve : 0), right: paddingRight + 6 }`，高 `size*2`。 | 给当前页加书签，看右上角是否出现书签带 | 依据源码推断，未设备验证 | `—` |
 | 书签角标尺寸 0 时隐藏但书签保留 | `feature/reader/core/model/ReaderBookmarkBadge.kt:28` | `entry/src/main/ets/pages/ReaderPage.ets`（`shouldShowBookmarkBadge()` 判尺寸） | 已接 | 一致。 | 角标尺寸设 0，看是否还有书签带但书签列表里还在 | 依据源码推断，未设备验证 | `—` |
-| 滚动翻页模式下不画书签角标 | `ui/book/read/BookmarkBadgeDelegate.kt:35-70` | `entry/src/main/ets/pages/ReaderPage.ets:4508`（`if (this.shouldShowBookmarkBadge())`，条件未排除滚动模式） | 未接 | 滚动模式下本地**仍然画书签角标**，它悬在正文右上角不动，与滚动的文字脱节，看着像个贴纸。 | 滚动模式下给当前页加书签，看右上角是否出现静止的角标 | 依据源码推断，未设备验证 | `—` |
+| 滚动翻页模式下不画书签角标 | `ui/book/read/BookmarkBadgeDelegate.kt:35-70` | `entry/src/main/ets/pages/ReaderPage.ets:1934`（`shouldShowBookmarkBadge`）、`:1937`（`if (this.pageAnimation === 3) { return false; }`）、`:5289`（绘制处按它判断） | 已接 | 滚动模式（`pageAnimation === 3`）下右上角书签角标不画，与上游 `BookmarkBadgeDelegate` 的条件一致；分页模式仍然显示。 | 滚动模式下给当前页加书签，右上角不应出现角标；切回分页模式应出现 | 依据源码推断，未设备验证 | `—` |
 | 没有自定义角标图时画 12×24 琥珀黄丝带 Path | `feature/reader/platform/ReaderBookmarkBadgeRenderer.kt:76-96` | `entry/src/main/ets/pages/ReaderPage.ets:1783-1798`（否则回落 `$r('app.media.app_bookmark_badge')`） | 已接 | 一致：都有一张默认图/丝带。本地是预置位图资源而非 Path 绘制，视觉等价。 | 角标图片清空后看是否显示默认书签带 | 依据源码推断，未设备验证 | `—` |
 
 ### B7 文字背景与高亮样式
@@ -206,8 +206,8 @@
 | 上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 文字背景图（气泡图）异步加载，排版期预热避免首帧空气泡 | `feature/reader/platform/ReaderTextBackgroundLoader.kt`（156 行）、`feature/reader/legacy/LegacyReaderStyleRangeMapper.kt:420-427` | 无（`grep -rn "TextBackgroundLoader\|textBackgroundImage" entry/src/main/ets/` 零命中） | 未接 | 本地**不支持文字背景图**，只有纯色 `backgroundRect`（`ReaderCanvasSurface.ets:1764-1772`）。给规则配气泡背景图后本地不显示任何东西，用户以为规则没生效。 | 给一条高亮规则配背景图，看正文是否出现气泡 | 依据源码推断，未设备验证 | `themeConfig` |
-| 文字背景透明度 0~100 | `feature/reader/core/model/ReaderBackgroundAlpha.kt:4` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1764-1772`（`backgroundArgb` 直接取色，无独立透明度通道） | 未接 | 本地只能靠改颜色的 alpha 值调，没有独立的透明度滑杆；上游 0~100 与颜色解耦。 | 高亮规则面板找透明度滑杆 | 依据源码推断，未设备验证 | `themeConfig` |
-| 高亮命中同位置多条规则时高优先级赢、同优先级后者赢 | `feature/reader/core/style/ReaderCharacterStyle.kt:44-79`、`:92-112`（二分查找） | `entry/src/main/ets/data/ReaderHighlightRuleEngine.ets`（按规则列表顺序叠加，上限 64 条 / 15 万字符） | 未接 | 本地是**按顺序叠加**而非优先级仲裁：两条规则命中同一段字时，后一条的颜色会覆盖前一条，但**下划线与背景色会叠加显示**，出现「红字 + 蓝波浪线 + 黄底」的混乱组合；上游只保留一条。 | 建两条都命中「第一章」的规则（一条改色、一条加下划线），看是否两种效果同时出现 | 依据源码推断，未设备验证 | `themeConfig` |
+| 文字背景透明度 0~100 | `feature/reader/core/model/ReaderBackgroundAlpha.kt:4` | `entry/src/main/ets/pages/ReaderPage.ets:4995`（`backgroundImageAlpha`：`backgroundAlpha / 100` 归一）、`:5220`（`.opacity(this.backgroundImageAlpha())`） | 已接 | 上游 `ReaderBackgroundAlpha.kt` 这一行管的其实是**整页背景图的透明度**（唯一调用点 `ReadBookRouteScreen.kt:692`/`:712` 传的是 `styleConfig.bgAlpha`），不是高亮规则的文字底色。本地 `backgroundAlpha` 0~100 已直接折成背景图 opacity，可感知行为一致。 | 设一张自定义背景图，把「背景透明度」从 100 调到 30，看背景图是否变淡 | 依据源码推断，未设备验证；表内此行原名有误导，已按上游实际语义更正 | `themeConfig` |
+| 高亮命中同位置多条规则时高优先级赢、同优先级后者赢 | `feature/reader/core/style/ReaderCharacterStyle.kt:44-79`、`:92-112`（二分查找） | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1952`（`splitStyledSegments`：区间顺序即优先级，后出现的整段覆盖先前）、`entry/src/main/ets/pages/ReaderPage.ets:4542`（`buildReaderCanvasHighlights` 先 push 规则、再 push 用户划线字色） | 已接 | 同一段字被多条规则命中时，画布按区间边界切段后**只取最后命中的那一条**（`winner` 覆盖赋值），字色/底色/下划线只保留一套，不会出现「红字 + 蓝波浪 + 黄底」叠加。用户划线的字色压在高亮规则之上，顺序与上游 `priority = 10_000 + index` 的可感知结果一致。 | 建两条都命中「第一章」的规则（一条改色、一条加下划线），看这段字是否只显示一套样式 | 依据源码推断，未设备验证；上游用数值 priority，本地用区间顺序，可感知结果一致 | `themeConfig` |
 | 换主题时正文内已上色的高亮即时换色（`ReaderPageColorTransform`） | `feature/reader/core/model/ReaderPageColorTransform.kt:15-71` | `entry/src/main/ets/pages/ReaderPage.ets:3106`（标题 key 含 `titleColor`/`titleColorNight`，会触发重建） | 已接 | 一致：换主题后高亮颜色跟着变。 | 日间/夜间来回切，看高亮颜色是否跟着变 | 依据源码推断，未设备验证 | `themeConfig` |
 
 ## C 界面层
@@ -789,10 +789,10 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 28 | 2 | 1 |
-| B 引擎层（TXT 与 EPUB 共用） | 54 | 39 | 14 | 1 |
+| B 引擎层（TXT 与 EPUB 共用） | 54 | 46 | 7 | 1 |
 | C 界面层 | 80 | 71 | 2 | 7 |
 | D 交互层 | 48 | 37 | 9 | 2 |
-| 合计 | 213 | 175 | 27 | 11 |
+| 合计 | 213 | 182 | 20 | 11 |
 
 数字核对脚本（**注意**：表里有两行图例 `| 状态 | 已接 | 未接 | 不适用 |`，直接 `grep -c` 会各多算 2，所以要先排除图例行；含 `\|` 转义的行也必须按转义分列，否则少算 3 行）：
 
@@ -809,7 +809,7 @@ for l in lines:
     cells = re.split(r'(?<!\\)\|', s)
     if len(cells) == 8 and cells[3].strip() in n:
         n[cells[3].strip()] += 1
-print(n, sum(n.values()))   # {'已接': 175, '未接': 27, '不适用': 11} 213
+print(n, sum(n.values()))   # {'已接': 182, '未接': 20, '不适用': 11} 213
 PY
 
 # 表格行内不得出现第四种状态词
@@ -818,22 +818,22 @@ grep -nE '^\|.*\|\s*(部[分]|基[本]|待[定])' docs/parity/TXT-READER.md   # 
 
 ### 一句话结论
 
-**翻页、滚动、顶底栏、目录、搜索、TXT 规则层与各二级面板都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）+ 第三批十二行（目录搜索保留卷名、`tocLevel` 多级缩进、粘性卷头、目录多选、书签跳转校验复核、进度条无障碍值复核、章边界「加载数据中…」占位页、滚动章末提示页、正则 500ms 预算、搜索左右箭头、底部结果条、搜索收起优先级）+ 第四批十三行（编码统计识别、规则库空表自愈、单章 102400 字节二次拆分、正文前插「前言」、空标题补「无标题章节」、章名去重、`tocLevel` 层级、目录规则预览页、净化管线十步、替换规则超时自动禁用、正文「仅正文」折叠）+ 第五批十四行（菜单系统页三页横滑、字号右侧排版卡、更多操作 4 列正方形 + 每页 8 格、带箭头格子的二级单选、排版页四个子页签与边距方卡、页眉页脚图形型 tip 与同 tip 去重、页眉页脚字体接线、高亮规则三分区 + 预览、划线面板 16 色 32dp、主题列表网格与管理态、文字下划线独立面板、文本处理分组匹配与拖拽排序）落地后，**从打开一本书到翻目录、搜正文、调面板的整条路径**都能对着上游用；剩下 27 行未接集中在**画布绘制细节**（分层绘制、6 种手绘线型、文字背景图、九宫格切图、覆盖阴影、淡入阈值）与**少量交互/缓存项**（滚动整页缓存、图片双尺寸缓存、选区跨页范围、折叠态快捷条、菜单动画）。
+**翻页、滚动、顶底栏、目录、搜索、TXT 规则层与各二级面板都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）+ 第三批十二行（目录搜索保留卷名、`tocLevel` 多级缩进、粘性卷头、目录多选、书签跳转校验复核、进度条无障碍值复核、章边界「加载数据中…」占位页、滚动章末提示页、正则 500ms 预算、搜索左右箭头、底部结果条、搜索收起优先级）+ 第四批十三行（编码统计识别、规则库空表自愈、单章 102400 字节二次拆分、正文前插「前言」、空标题补「无标题章节」、章名去重、`tocLevel` 层级、目录规则预览页、净化管线十步、替换规则超时自动禁用、正文「仅正文」折叠）+ 第五批十四行（菜单系统页三页横滑、字号右侧排版卡、更多操作 4 列正方形 + 每页 8 格、带箭头格子的二级单选、排版页四个子页签与边距方卡、页眉页脚图形型 tip 与同 tip 去重、页眉页脚字体接线、高亮规则三分区 + 预览、划线面板 16 色 32dp、主题列表网格与管理态、文字下划线独立面板、文本处理分组匹配与拖拽排序）落地后，**从打开一本书到翻目录、搜正文、调面板的整条路径**都能对着上游用；剩下 22 行未接集中在**画布绘制细节**（分层绘制、文字背景图与九宫格切图、文字背景色带合并）与**少量交互/缓存项**（滚动整页缓存、图片双尺寸缓存、选区跨页范围、折叠态快捷条、菜单动画）。第六批五行（6 种手绘线型、自动翻页逐帧揭示 + 1px 指示线、滚动模式不画书签角标、背景透明度按上游语义更正、同位置高亮只保留一套样式）落地后，画布上「字怎么长出来」这一层也基本齐了。
 
 ### 对阅读手感影响最大的前 5 条（剩余未接行中）
 
-> 前五批已落地，下面这份榜单只从**尚未接的 27 行**里挑，避免拿已修好的项占位。
+> 前六批已落地，下面这份榜单只从**尚未接的 20 行**里挑，避免拿已修好的项占位。
 
 1. **绘制不分层，下划线被选区盖住**（B4）—— 上游 `ReaderCanvasSurface.kt:2767-2869` 分四层画（文字背景色带 / 正文 / contentRules / styledUnderlines / overlayRules），本地 `ReaderCanvasSurface.ets:1183-1222` 跟着每个 box 一起画。选中一段带下划线的文字时**下划线被选区灰块压掉**，overlay 规则也盖不到文字之上。
-2. **下划线只有系统线型**（B4）—— 上游 6 种手绘线型（虚线 10-10、双线、波浪振幅 3dp/波长 12dp、SVG、半高线），本地只有系统 `TextDecorationType`。高亮规则里选「波浪下划线」画出来是**一条直线**；高亮规则面板里已经能选到 SVG 与荧光两档，但选中后画布上看到的与实线没有区别。
-3. **文字背景图完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**，九宫格切图也因此无从配置。
+2. **文字背景图（气泡图）完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**，九宫格切图也因此无从配置。
+3. **文字背景色带没有合并**（B4）—— 相邻两段同色背景在本地是**两个独立色块**，中间留一条细缝（每个 box 自己 `drawRect`，`getRectsForRange` 的矩形之间不接边）；上游把相邻同色背景并成一条连续色带。整段高亮一句话时，缝在正常字号下不明显，字号调大或行距调松就能看到一格一格的断口。
 4. **滚动模式没有整页缓存，长书滚动会反复重排重绘**（B4/B7）—— 上游 `ScrollPageDrawCache` 是容量 8 的 LRU（key 用元素引用身份），滚动回去的页直接复用 PixelMap；本地每帧重新测量绘制。滚动一本几 MB 的书、来回上下翻时**卡顿与掉帧明显**。
 5. **选区范围只到下一页，上游能跨当前页 + 下两页**（D4）—— 上游 `ReaderSelection` 允许选到当前页之后的两页，本地 `ReaderPage.ets` 只延伸到下一页边界。想选一段跨三页的长段落时，**选到第二页末尾就停住**，只能分两次选、分两次划线。
 
 ### 次一级（值得排期但影响面小）
 
 - 图片 0.1~5 倍缩放与九宫格按九切片等比缩放、两种尺寸各缓存一份（B3）
-- 自动翻页无顶部 1px 进度提示（B4）、覆盖转场无 36dp 阴影（B4）、淡入阈值未降为 0.1（B4）
+- 折页手势跟手（真机待验）、覆盖转场 36dp 阴影与淡入 0.1 的观感（已接，未设备验证）
 - 折页角点不按触点上下半页选角（B4）、滚动模式仍画书签角标（B4）
 - 顶栏图标与标题栏动作按钮两处配置面板（底栏那处已能做真拖动）（C7）
 - 菜单每格 14/15 种动作（本地 15 种固定）、正中格优先级、图片点击四档、正文内元素点击（D2/D3）

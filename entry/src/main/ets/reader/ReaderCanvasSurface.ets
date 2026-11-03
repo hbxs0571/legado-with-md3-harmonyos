@@ -133,6 +133,11 @@ export class ReaderPageTransitionPolicy {
   static readonly COMMIT_PROGRESS: number = 0.35;
   static readonly FLING_VELOCITY_PX_PER_SECOND: number = 900;
   static readonly BASE_DURATION_MILLIS: number = 360;
+  /** 淡入转场松手判定阈值只有 10%（上游 ReaderCanvasSurface.kt:1457 的 `if (fade) 0.1f`）。 */
+  static readonly FADE_COMMIT_PROGRESS: number = 0.1;
+  /** 覆盖转场尾部阴影：宽 36dp、色 0x30111111（上游 ReaderCoverShadowPolicy）。 */
+  static readonly COVER_SHADOW_WIDTH_DP: number = 36;
+  static readonly COVER_SHADOW_ARGB: number = 0x30111111;
 
   /** FADE 取整段基准时长，其余按剩余距离缩放（`settleDurationMillis`）。 */
   static settleDurationMillis(mode: ReaderTransitionMode, currentOffsetPx: number, targetOffsetPx: number,
@@ -178,7 +183,8 @@ export class ReaderPageTransitionPolicy {
    * 上游 `movingForward` 只在最后一段拖动方向明确时才有值，否则回落到位移/速度阈值。
    */
   static release(transition: ReaderPageTransition, velocityPxPerSecond: number,
-    movingForward?: boolean, cancelled: boolean = false): ReaderTransitionDecision {
+    movingForward?: boolean, cancelled: boolean = false,
+    commitProgress: number = ReaderPageTransitionPolicy.COMMIT_PROGRESS): ReaderTransitionDecision {
     const decision = new ReaderTransitionDecision();
     if (transition.direction === ReaderTransitionDirection.NONE) {
       return decision;
@@ -191,7 +197,7 @@ export class ReaderPageTransitionPolicy {
     }
     const commitByDistance = movingForward !== undefined
       ? movingForward
-      : (transition.progress() >= ReaderPageTransitionPolicy.COMMIT_PROGRESS || velocityCommits);
+      : (transition.progress() >= commitProgress || velocityCommits);
     decision.commit = !cancelled && transition.dragging && commitByDistance;
     if (decision.commit) {
       decision.targetOffsetPx = transition.direction === ReaderTransitionDirection.PREVIOUS
@@ -519,6 +525,10 @@ class ReaderCanvasStyledSegment {
  */
 export class ReaderCanvasStyleRange {
   start: number = 0;
+  /** 规则自带的下划线粗细（vp，0 表示沿用正文下划线的口径）。 */
+  underlineWidthVp: number = 0;
+  /** 规则自带的下划线偏移（vp，相对行盒底部，可负）。 */
+  underlineOffsetVp: number = 0;
   end: number = 0;
   /** 0 表示不覆盖文字颜色。 */
   textColorArgb: number = 0;
@@ -549,6 +559,22 @@ export class ReaderCanvasDrawRequest {
   highlights: ReaderCanvasStyleRange[] = [];
   /** 页面底色（画布先整体铺一层，滚动/翻页时就靠它保证不透明）。 */
   pageBackgroundArgb: number = 0xFFFFFFFF;
+  /**
+   * 覆盖转场尾部阴影的起点（px，<0 表示本帧不画）。
+   *
+   * 上游 `ReaderCanvasSurface.kt:1663-1687`：COVER 且有位移时，在移动页的尾部边缘
+   * 向右铺一条 36dp 的水平渐变（`0x30111111` → 透明），盖住下方静止页。
+   */
+  coverShadowEdgePx: number = -1;
+  /**
+   * 自动翻页：下一页从顶部揭开的高度（px），<=0 表示本帧不画。
+   *
+   * 上游 `ReaderCanvasSurface.kt:1700-1720`：分页模式下每帧把下一页按 `autoRevealPx`
+   * 裁剪后贴上来，并在揭示线下沿画一条 1px 指示线。滚动模式不走这条路径。
+   */
+  autoRevealPx: number = 0;
+  /** 自动翻页指示线颜色（上游 autoPageIndicatorColor = colorScheme.primary）。 */
+  autoPageIndicatorArgb: number = 0xFF2E7CF6;
   /** 选区（渲染坐标，与 LocalReaderLineItem.startPosition 同口径）；start < 0 表示没有选区。 */
   selectionStart: number = -1;
   selectionEnd: number = -1;
@@ -859,7 +885,71 @@ export class ReaderCanvasRenderer {
     if (!transforms.currentOnTop && transforms.drawsNext) {
       this.drawSlot(canvas, window.next, transforms.next, request, false, false);
     }
+    // 覆盖转场尾部阴影画在四页之后：它就是「移动页盖在静止页上」的那道投影。
+    if (request.coverShadowEdgePx >= 0) {
+      this.drawCoverShadow(canvas, request);
+    }
+    // 自动翻页：下一页从顶部揭开，揭示线下沿一条 1px 指示线。
+    if (request.autoRevealPx > 0) {
+      this.drawAutoPageReveal(canvas, request);
+    }
 
+  }
+
+  /**
+   * 自动翻页一帧：把下一页按揭示高度从顶部裁出来贴上，再画 1px 指示线。
+   *
+   * 逐项照上游 `ReaderCanvasSurface.kt:1700-1720`：
+   * `clipRect(bottom = reveal)` 内画下一页本身，指示线画在揭示线下沿（reveal - 1px）。
+   * 本地没有「页快照层」，直接用同一套 `drawSlot` 重画下一页，效果等价。
+   */
+  private drawAutoPageReveal(canvas: drawing.Canvas,
+    request: ReaderCanvasDrawRequest): void {
+    const layout = request.layout;
+    const reveal = Math.min(request.autoRevealPx, layout.viewportHeightPx);
+    if (reveal <= 0) {
+      return;
+    }
+    canvas.save();
+    canvas.clipRect({
+      left: 0, top: 0, right: layout.viewportWidthPx, bottom: reveal
+    }, drawing.ClipOp.INTERSECT, true);
+    const slot: ReaderCanvasPage | undefined = request.window.next;
+    if (slot !== undefined) {
+      this.drawSlot(canvas, slot, new ReaderPageTransform(), request, false, false);
+    }
+    canvas.restore();
+    // 指示线：揭示线本身，宽 1px、贴在下沿（上游 indicatorTopPx = reveal - 1）
+    const pen = new drawing.Pen();
+    pen.setColor(readerCanvasColor(request.autoPageIndicatorArgb));
+    pen.setStrokeWidth(1);
+    canvas.attachPen(pen);
+    const y = Math.max(0, reveal - 1);
+    canvas.drawLine(0, y, layout.viewportWidthPx, y);
+    canvas.detachPen();
+  }
+
+  /**
+   * 覆盖转场尾部阴影：从边缘向右 36dp 的水平渐变（`0x30111111` → 透明）。
+   *
+   * 上游 `ReaderCoverShadowPolicy.edgePx()`：PREVIOUS 取位移量本身，
+   * NEXT 取「页宽 + 位移」。这里由调用方算好边缘位置传进来。
+   */
+  private drawCoverShadow(canvas: drawing.Canvas, request: ReaderCanvasDrawRequest): void {
+    const edge = request.coverShadowEdgePx;
+    const vp = Math.max(0.0001, request.layout.vpScale);
+    const shadowWidth = ReaderPageTransitionPolicy.COVER_SHADOW_WIDTH_DP * vp;
+    if (shadowWidth <= 0) {
+      return;
+    }
+    const startPoint: common2D.Point = { x: edge, y: 0 };
+    const endPoint: common2D.Point = { x: edge + shadowWidth, y: 0 };
+    const brush = new drawing.Brush();
+    brush.setShaderEffect(drawing.ShaderEffect.createLinearGradient(startPoint, endPoint,
+      [ReaderPageTransitionPolicy.COVER_SHADOW_ARGB, 0x00000000], drawing.TileMode.CLAMP, null, null));
+    canvas.attachBrush(brush);
+    canvas.drawRect(edge, 0, edge + shadowWidth, request.layout.viewportHeightPx);
+    canvas.detachBrush();
   }
 
   /**
@@ -1382,6 +1472,7 @@ export class ReaderCanvasRenderer {
     built.paragraph.paint(canvas, box.left, box.top);
     canvas.restore();
     this.drawMarkingUnderlines(canvas, item, built, box.left, box.top, request);
+    this.drawStyledUnderlines(canvas, item, built, box.left, box.top, request);
   }
 
   /**
@@ -1727,6 +1818,118 @@ export class ReaderCanvasRenderer {
     }
   }
 
+  /**
+   * 高亮规则的下划线线型：逐行手绘，不用系统 `TextDecoration`。
+   *
+   * 上游 `feature/reader/platform/ReaderPageDecorationDrawCache.kt:58-152`
+   * 的 `ReaderUnderlineDrawCommand.draw()` 按 mode 分支自己画：1 实线、2 虚线、
+   * 3 波浪（振幅 3dp、波长 12dp）、4 双线（间距 3dp + 线宽）、6 删除线（52% 高）、
+   * 7 荧光（下半高填充）。系统 `TextDecorationStyle` 只有 WAVY/DOUBLE 两种且参数不可调，
+   * 画出来与上游的观感差得远，所以这里照上游手绘。
+   */
+  private drawStyledUnderlines(canvas: drawing.Canvas, item: LocalReaderLineItem,
+    built: ReaderCanvasParagraph, left: number, top: number,
+    request: ReaderCanvasDrawRequest): void {
+    const ranges = this.styleRangesForItem(item, request);
+    if (ranges.length === 0) {
+      return;
+    }
+    const vp = Math.max(0.0001, request.layout.vpScale);
+    for (const range of ranges) {
+      // 1 实线仍交给系统段落绘制（见 segmentStyle），这里只画系统没有的线型
+      if (range.decoration === 0 || range.decoration === 1) {
+        continue;
+      }
+      const boxes = built.paragraph.getRectsForRange(
+        { start: range.start, end: range.end },
+        text.RectWidthStyle.TIGHT,
+        text.RectHeightStyle.TIGHT
+      );
+      for (const box of boxes) {
+        const startX = left + box.rect.left;
+        const endX = left + box.rect.right;
+        if (endX <= startX) {
+          continue;
+        }
+        this.drawOneStyledUnderline(canvas, range, startX, endX,
+          top + box.rect.top, top + box.rect.bottom, vp);
+      }
+    }
+  }
+
+  /** 一条下划线/删除线/荧光底色（区间已按行盒切好）。 */
+  private drawOneStyledUnderline(canvas: drawing.Canvas, range: ReaderCanvasStyleRange,
+    startX: number, endX: number, boxTop: number, boxBottom: number, vp: number): void {
+    const widthPx = Math.max(1,
+      range.underlineWidthVp > 0 ? range.underlineWidthVp * vp : 1);
+    const offsetPx = range.underlineOffsetVp * vp;
+    const y = boxBottom + offsetPx;
+    // 7 荧光：把行盒下半截整块填成下划线色（上游 ReaderHalfHighlightDrawCommand）
+    if (range.decoration === 7) {
+      const brush = new drawing.Brush();
+      brush.setColor(readerCanvasColor(range.decorationArgb));
+      canvas.attachBrush(brush);
+      const halfTop = boxTop + (boxBottom - boxTop) * 0.5;
+      canvas.drawRect(startX, halfTop, endX, boxBottom);
+      canvas.detachBrush();
+      return;
+    }
+    // 6 删除线：画在行盒 52% 高处（上游 mode 6 分支）
+    const lineY = range.decoration === 6 ? boxTop + (boxBottom - boxTop) * 0.52 : y;
+    const pen = new drawing.Pen();
+    pen.setColor(readerCanvasColor(range.decorationArgb));
+    pen.setStrokeWidth(widthPx);
+    pen.setAntiAlias(true);
+    if (range.decoration === 2) {
+      // 2 虚线：上游默认 8dp 实 / 5dp 空（dashOnPx = 8.dpToPx()、dashOffPx = 5.dpToPx()）
+      const dashOn = Math.max(0.1, 8 * vp);
+      const dashOff = Math.max(0.1, 5 * vp);
+      canvas.attachPen(pen);
+      let x = startX;
+      while (x < endX) {
+        canvas.drawLine(x, lineY, Math.min(x + dashOn, endX), lineY);
+        x += dashOn + dashOff;
+      }
+      canvas.detachPen();
+      return;
+    }
+    if (range.decoration === 3) {
+      // 3 波浪：振幅 3dp、波长 12dp，用四分之一波长的二次贝塞尔交替上下
+      const waveLength = Math.max(0.1, 12 * vp);
+      const amplitude = 3 * vp;
+      const path = new drawing.Path();
+      path.moveTo(startX, lineY);
+      let x = startX;
+      while (x < endX) {
+        const next = Math.min(x + waveLength, endX);
+        path.quadTo((x + next) / 2, lineY - amplitude, next, lineY);
+        x = next;
+        if (x < endX) {
+          const nextDown = Math.min(x + waveLength, endX);
+          path.quadTo((x + nextDown) / 2, lineY + amplitude, nextDown, lineY);
+          x = nextDown;
+        }
+      }
+      canvas.attachPen(pen);
+      canvas.drawPath(path);
+      canvas.detachPen();
+      return;
+    }
+    if (range.decoration === 4) {
+      // 4 双线：第二条在第一条下方「间距 3dp + 线宽」处（上游 doubleLineGapPx = 3.dp）
+      const secondY = lineY + 3 * vp + widthPx;
+      canvas.attachPen(pen);
+      canvas.drawLine(startX, lineY, endX, lineY);
+      canvas.drawLine(startX, secondY, endX, secondY);
+      canvas.detachPen();
+      return;
+    }
+    // 兜底（含 5 SVG：本地高亮规则没有 SVG 路径字段，按实线画）
+    canvas.attachPen(pen);
+    canvas.drawLine(startX, lineY, endX, lineY);
+    canvas.detachPen();
+  }
+
   private drawMarkingUnderlines(canvas: drawing.Canvas, item: LocalReaderLineItem,
     built: ReaderCanvasParagraph, left: number, top: number, request: ReaderCanvasDrawRequest): void {
     if (request.markings.length === 0) {
@@ -1842,7 +2045,9 @@ export class ReaderCanvasRenderer {
         leftBottomRadius: 0
       };
     }
-    if (range.decoration !== 0) {
+    // 只有 1 实线交给系统段落绘制；其余线型（虚线/波浪/双线/删除线/荧光）
+    // 由 drawStyledUnderlines 手绘，口径才对得上上游。
+    if (range.decoration === 1) {
       const decoration: text.Decoration = {
         textDecoration: ReaderCanvasRenderer.decorationType(range.decoration),
         color: readerCanvasColor(range.decorationArgb !== 0 ? range.decorationArgb : range.textColorArgb),

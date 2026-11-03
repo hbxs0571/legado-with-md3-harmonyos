@@ -601,6 +601,9 @@ export struct ReaderPage {
   @State currentBottomActionPage: number = 0;
   @Prop autoReadSpeedSeconds: number = 10;
   private autoPageTimer: number = -1;
+  /** 自动翻页的逐帧揭示高度（vp），0 表示没有在揭示。 */
+  private autoPageRevealVp: number = 0;
+  private autoPageTurnAnimator: AnimatorResult | undefined = undefined;
   private titleGeneration: number = 0;
   private readerSystemBarRequestId: number = 0;
   /** 状态栏图标色的请求序号：连续改色时只认最后一次，避免异步返回乱序。 */
@@ -774,6 +777,14 @@ export struct ReaderPage {
   onControlsVisibilityChanged(): void {
     this.syncReaderSystemBars();
     this.syncVolumeKeyPage();
+    // 自动翻页在菜单打开期间挂起（上游 autoPagePaused），关掉菜单再从整页重新计时
+    if (this.autoPageActive) {
+      if (this.controlsVisible) {
+        this.cancelAutoPageTurn();
+      } else {
+        this.startAutoPageTurn();
+      }
+    }
   }
 
   onVolumeKeyPageChanged(): void {
@@ -1318,6 +1329,82 @@ export struct ReaderPage {
       clearInterval(this.autoPageTimer);
       this.autoPageTimer = -1;
     }
+    this.cancelAutoPageTurn();
+  }
+
+  private cancelAutoPageTurn(): void {
+    if (this.autoPageTurnAnimator !== undefined) {
+      this.autoPageTurnAnimator.cancel();
+      this.autoPageTurnAnimator = undefined;
+    }
+    if (this.autoPageRevealVp !== 0) {
+      this.autoPageRevealVp = 0;
+      this.paintReaderCanvas();
+    }
+  }
+
+  /**
+   * 自动翻页的一个整页周期：逐帧推进，而不是整页跳。
+   *
+   * 上游 `ReaderCanvasSurface.kt:890-920`：分页模式每帧 `autoRevealPx += viewport / 时长 * 帧间隔`，
+   * 满一屏就翻页并把 `autoRevealPx` 归零；滚动模式则把同样的速度摊到 `scrollOffset` 上。
+   * 本地用 `createAnimator` 逐帧回调代替 `withFrameNanos` 循环。
+   */
+  private startAutoPageTurn(): void {
+    this.cancelAutoPageTurn();
+    if (!this.autoPageActive || this.controlsVisible || this.autoPageSettingsVisible ||
+      this.autoPageWaitingForChapter) {
+      return;
+    }
+    const context = this.getUIContext();
+    const duration = Math.max(1, Math.round(this.autoReadSpeedSeconds * 1000));
+    const scrollMode = this.usesCanvasScroll();
+    const viewportPx = context.vp2px(Math.max(1, this.viewportHeight));
+    let appliedPx = 0;
+    const animator = context.createAnimator({
+      duration, easing: 'linear', delay: 0, fill: 'forwards', direction: 'normal', iterations: 1, begin: 0, end: 1
+    });
+    animator.onFrame = (progress: number) => {
+      const clamped = Math.max(0, Math.min(1, progress));
+      if (scrollMode) {
+        // 滚动模式没有「下一页」，整段时间匀速推进一屏（上游 SCROLL 分支同口径）
+        const target = viewportPx * clamped;
+        this.applyReaderScrollDelta(target - appliedPx);
+        appliedPx = target;
+        return;
+      }
+      this.autoPageRevealVp = context.px2vp(viewportPx * clamped);
+      this.paintReaderCanvas();
+    };
+    animator.onFinish = () => {
+      this.autoPageTurnAnimator = undefined;
+      if (!scrollMode && this.autoPageRevealVp !== 0) {
+        this.autoPageRevealVp = 0;
+      }
+      if (!this.autoPageActive) {
+        this.paintReaderCanvas();
+        return;
+      }
+      if (!this.canTurnToNext()) {
+        // 上游在分页模式翻到头就停；滚动模式不自动关（由用户停）
+        if (!scrollMode) {
+          this.autoPageActive = false;
+          this.paintReaderCanvas();
+          return;
+        }
+        this.startAutoPageTurn();
+        return;
+      }
+      if (this.currentPageIndex + 1 < this.localReaderPages.length) {
+        this.turnReaderPage(1);
+      } else {
+        this.autoPageWaitingForChapter = true;
+        this.onTurnChapterBoundary(1);
+      }
+      this.startAutoPageTurn();
+    };
+    this.autoPageTurnAnimator = animator;
+    animator.play();
   }
 
   private toggleAutoPage(): void {
@@ -1328,22 +1415,7 @@ export struct ReaderPage {
     this.autoPageActive = true;
     this.autoPageSecondsRemaining = this.autoReadSpeedSeconds;
     this.stopAutoPageTimer();
-    this.autoPageTimer = setInterval(() => {
-      if (!this.autoPageActive || this.controlsVisible || this.autoPageSettingsVisible ||
-        this.autoPageWaitingForChapter) { return; }
-      this.autoPageSecondsRemaining = Math.max(0, this.autoPageSecondsRemaining - 1);
-      if (this.autoPageSecondsRemaining <= 0) {
-        if (this.localReaderPages.length > 0 && this.currentPageIndex < this.localReaderPages.length - 1) {
-          this.turnReaderPage(1);
-        } else if (this.getChapterIndex() < this.getChapterCount() - 1) {
-          this.autoPageWaitingForChapter = true;
-          this.onTurnChapterBoundary(1);
-        } else {
-          this.autoPageActive = false;
-        }
-        this.autoPageSecondsRemaining = this.autoReadSpeedSeconds;
-      }
-    }, 1000);
+    this.startAutoPageTurn();
   }
 
   private setAutoPageSpeed(seconds: number): void {
@@ -2132,9 +2204,16 @@ export struct ReaderPage {
     // ArkUI 的 velocityX 单位是 vp/s，正方向「左→右」，与 offsetX 同号
     const velocityPxPerSecond = context.vp2px(event.velocityX ?? 0);
     const transition = this.turnTransition;
-    const decision = ReaderPageTransitionPolicy.release(transition, velocityPxPerSecond);
-    const isPrevious = transition.direction === ReaderTransitionDirection.PREVIOUS;
     const mode = readerTransitionModeFromPageAnim(this.pageAnimation);
+    // 淡入转场松手判定只要求过 10%，而且不看甩动速度：上游
+    // ReaderCanvasSurface.kt:1455-1462 在 fade 时把 velocityPxPerSecond 传 0、
+    // commitProgress 传 0.1f。否则屏幕上刚淡了一点的手势会被当成「没翻」弹回去。
+    const fadeTurn = mode === ReaderTransitionMode.FADE;
+    const decision = ReaderPageTransitionPolicy.release(transition, fadeTurn ? 0 : velocityPxPerSecond,
+      undefined, false,
+      fadeTurn ? ReaderPageTransitionPolicy.FADE_COMMIT_PROGRESS
+        : ReaderPageTransitionPolicy.COMMIT_PROGRESS);
+    const isPrevious = transition.direction === ReaderTransitionDirection.PREVIOUS;
     const targetOffsetPx = decision.targetOffsetPx;
     const currentOffsetPx = context.vp2px(startOffsetVp);
     const baseDuration = [240, 300, 360, 540][this.animationSpeed] ?? 360;
@@ -4277,6 +4356,24 @@ export struct ReaderPage {
     request.window = ReaderCanvasWindow.of(this.localReaderPages, this.currentPageIndex);
     this.appendBoundaryPlaceholders(request.window);
     request.transforms = transforms;
+    // 覆盖转场：移动页尾部外侧 36dp 的渐变阴影（上游 ReaderCanvasSurface.kt:1663-1687）。
+    // 位移为 0 时不画——那正是「两页重合」的那一帧。
+    if (this.turnMode === ReaderTransitionMode.COVER) {
+      const pageWidthPx = this.getUIContext().vp2px(Math.max(1, this.readerContentWidth));
+      const offsetPx = transforms.currentOnTop
+        ? transforms.current.translationX
+        : transforms.previous.translationX + pageWidthPx;
+      if (offsetPx !== 0) {
+        request.coverShadowEdgePx = transforms.currentOnTop
+          ? pageWidthPx + offsetPx
+          : offsetPx;
+      }
+    }
+    // 自动翻页：分页模式下把「下一页揭开多少」带给画布，滚动模式不画（上游 else 分支）
+    if (this.autoPageRevealVp > 0 && !this.usesCanvasScroll()) {
+      request.autoRevealPx = this.getUIContext().vp2px(this.autoPageRevealVp);
+      request.autoPageIndicatorArgb = readerCanvasArgb(this.readerMenuAccentTint(), 0xFF2E7CF6);
+    }
     request.layout = this.buildReaderCanvasLayout();
     request.style = this.buildReaderCanvasStyle();
     request.markings = this.buildReaderCanvasMarkings();
@@ -4428,6 +4525,9 @@ export struct ReaderPage {
       item.backgroundArgb = rule.bgColor ?? 0;
       item.decoration = readerCanvasHighlightDecoration(rule.underlineMode);
       item.decorationArgb = rule.underlineColor ?? rule.textColor ?? 0;
+      // 规则自带的下划线粗细/偏移（dp），画布按 vp 口径逐行手绘时用
+      item.underlineWidthVp = rule.underlineWidth ?? 0;
+      item.underlineOffsetVp = rule.underlineOffset ?? 0;
       if (item.textColorArgb === 0 && item.backgroundArgb === 0 && item.decoration === 0) {
         continue;
       }
