@@ -2,17 +2,19 @@
 
 更新：2026-11-03。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
 
-## 发布版四条已知问题（r323，均已定位根因、均未修）
+## 发布版五条已知问题（r323，均未修）
 
-0.1.0 开发预览发布时用户报了四条体验问题。四条都已读到代码级根因并写进 [修改记录](../CHANGELOG.md)，**代码一行未改**。派活时按编号引用，不要重新定位。
+0.1.0 开发预览发布时用户报了五条体验问题。**代码一行未改**，派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。
 
-**KI-REL1 滚动阅读跳章闪烁（未修）** —— `entry/src/main/ets/pages/ReaderPage.ets:1531 onReaderContentChanged()` 换章时清空 `localReaderPages`、清语义缓存、`scrollOffset = 0`，再整章 `rebuildReaderPages()`；重排期间画布 `current == null` 不绘制，露出底色。`:5706-5712` 的注释说明这是刻意照上游 `ReaderCanvasSurface.kt:254 val current = pages.current ?: return`，不用「整章连续滚动」兜底。补法方向：滚动模式下跨章做增量追加而不是整章重排（上游滚动跨章不重排整章），或重排期间保留上一章尾页作为过渡帧。**不要**改成两套排版兜底，那会引出新的跳版。
+**KI-REL1 滚动阅读跳章闪烁** —— 换章时整章重新分页，重排期间画布空着。入口 `entry/src/main/ets/pages/ReaderPage.ets:1531 onReaderContentChanged()`（清 `localReaderPages` + `scrollOffset = 0` 后 `rebuildReaderPages()`），`:5706-5712` 注释说明照上游 `ReaderCanvasSurface.kt:254` 不用滚动兜底。补法：跨章增量追加，或重排期保留上一章尾页作过渡帧；**不要**改两套排版兜底。
 
-**KI-REL2 标题与正文分离（未修）** —— 标题是画布外的 ArkUI 组件，不是画布画的：`ReaderPage.ets:5712-5733` 的 `else if (this.currentPageIndex === 0) { this.ReaderTitleSegments(false) }`，`Canvas` 在其下 `layoutWeight(1)`；`reader/ReaderCanvasSurface.ets` 全文只有 `:1129` 一处提到 `titleOnly`，用途是算页高。`usesCanvasScroll()` 的 16 处消费点没有一处影响标题分支，所以滚动模式下标题固定在画布上方、不随正文滚走。上游把标题当正文块流里的一个 `isTitle` 块（`feature/reader/core/layout/ReaderChapterBlockMeasurer.kt:260-320`、`:318 emphasized = isTitle`、`:101 titlePageBreakAfter = false`）。补法方向：把标题作为首行块交给画布绘制，删掉画布外的 ArkUI 标题分支与 `measureTitleReservedLines()` 预留逻辑。
+**KI-REL2 标题与正文分离** —— 标题画在正文之外的独立 ArkUI 组件里，不是画布画的。`ReaderPage.ets:5712-5733` 的 `else if (currentPageIndex === 0)` 分支，`Canvas` 在其下；`ReaderCanvasSurface.ets` 全文只有 `:1129` 用到 `titleOnly`（算页高）。上游把标题当正文块流里的 `isTitle` 块（`ReaderChapterBlockMeasurer.kt:260-320`）。补法：标题作首行块交给画布，删画布外的标题分支与 `measureTitleReservedLines()`。
 
-**KI-REL3 目录打开慢、滑动卡（未修）** —— 慢：`pages/CatalogPage.ets:85-92` 在 `showWordCount`（默认 true）时先 `loadChapterRows()` 再 `loadChapterWordCounts()`，后者 `:361-385` 用 `BookRepository.forEachChapter(...)` 把整本书读进来逐章算字数。卡：`:578` 用 `List` + `ForEach(this.getChapters(), ...)` 而非 `LazyForEach`，一次建全部行；`getChapters()`（`:127-159`）每次调用全量遍历 `chapterRows`、逐行 `ReplaceRuleRepository.applyTitle()` 再过滤重建。补法方向：`showWordCount` 关掉时不得触发 `loadChapterWordCounts`；字数改成可视区域惰性计算或缓存到章节行；`ForEach` 换 `LazyForEach` 并把 `getChapters()` 结果缓进 `@State` 而不是每帧重算。
+**KI-REL3 目录打开慢、滑动卡** —— 慢：`pages/CatalogPage.ets:85-92` 在 `showWordCount`（默认 true）时先 `loadChapterWordCounts()`（`:361-385`）整本逐章算字数。卡：`:578` 用 `ForEach` 而非 `LazyForEach`，`getChapters()`（`:127-159`）每帧全量重算。补法：关字数时不触发算字数、字数惰性/缓存、列表换 `LazyForEach`。
 
-**KI-REL4 同名同作者的第二本书加不进书架（未修）** —— `pages/Index.ets:5602-5617` 按 `format` + `title` + `author` 判重，命中即 `BookRepository.discardImportedCopy()` 并提示「这本书已在书架中」。上游 `model/localBook/LocalBook.kt:249 importFile(uri)` 按 `bookUrl`（文件路径）判重，同名同作者的另一个文件可正常加入；`:260-266` 的 `findReusableStaleLocalBook` / `rebindLocalBook` 负责把失效记录接回（注释「直接 insert 会再裂出一条同名书」）。补法方向：判重键改成 `bookUrl`，再补「同路径失效记录接回」那条分支。
+**KI-REL4 同名同作者的第二本书加不进书架** —— `pages/Index.ets:5602-5617` 按 `format` + `title` + `author` 判重，上游 `model/localBook/LocalBook.kt:249 importFile(uri)` 按 `bookUrl` 判重（`:260-266` 另有失效记录接回）。补法：判重键改 `bookUrl`，再补接回分支。
+
+**KI-REL5 浅色模式适配差** —— 深色模式的适配明显好于浅色，浅色模式配色未打磨。根因：r300–r317 的深色模式改造集中在夜间配色与主题包，日间配色基本沿用改造前的旧值，`entry/src/main/resources/base/element/color.json` 里的 `theme_*` 日间色没重新对齐上游浅色方案。补法：按上游 `ThemeConfigScreen.kt` 的浅色档逐项对齐日间色，与深色同一套 token。
 
 ## 书架与分组
 

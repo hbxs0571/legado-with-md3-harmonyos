@@ -1,28 +1,18 @@
 # 修改记录
 
-## 2026-11-03 发布 0.1.0 开发预览，四条已知问题定位（r323）
+## 2026-11-03 发布 0.1.0 开发预览，五条已知问题（r323）
 
-首个对外构建。产物是**未签名 HAP**，安装方式见[自述文件](README.md)的「安装」一节（推荐用小白安装助手自动签名）。本轮**只做发布与问题定位，四条问题的代码修复都留到下一轮**，下面写的是根因，不是「已修」。
+首个对外构建。产物是**未签名 HAP**，安装方式见[自述文件](README.md)的「安装」一节（推荐用小白安装助手自动签名）。本轮**只做发布，下面五条问题都还没修**。
 
-### 四条已知问题（用户报告，均已定位根因）
+### 五条已知问题
 
-1. **滚动阅读跳章时明显闪一下。**
-   `entry/src/main/ets/pages/ReaderPage.ets:1531 onReaderContentChanged()` 换章时先 `this.localReaderPages = []` 清空分页、清 `localSemanticContent` / `localSemanticDocument`、`scrollOffset = 0`，再 `rebuildReaderPages()` 整章重排。重排完成前画布 `current == null` 直接不画（`:5706-5712` 注释写明这是照上游 `ReaderCanvasSurface.kt:254 val current = pages.current ?: return` 的行为，不换「整章连续滚动」兜底），中间会露出底色。上游滚动模式跨章不重排整章，本地是整章重排，空窗更长。**未修。**
+1. **滚动阅读跳章时会明显闪一下。** 换章时整章重新分页，重排期间画布空着。
+2. **标题单独出现在屏幕上方，与正文分离。** 标题目前是画在正文之外的独立组件，上游是跟正文排在一起的。
+3. **打开目录要等一会，上下滑动也很卡。** 打开时默认会先算整本书的字数；列表也没做惰性加载。
+4. **书架里已有同名同作者的书，就加不进第二个文件。** 本地按书名+作者判重，上游按文件路径判重。
+5. **浅色模式适配较差。** 深色模式的适配明显更好，浅色模式的配色还没打磨。
 
-2. **标题单独出现在屏幕上方，与正文分离。**
-   标题不是画布画的，是画布外的 ArkUI 组件：`ReaderPage.ets:5712-5733` 里 `if (titleOnly) { Column(){...}.layoutWeight(1) } else if (currentPageIndex === 0) { ReaderTitleSegments(false) }`，`Canvas` 在它下面 `layoutWeight(1)`；`ReaderCanvasSurface.ets` 全文只有 `:1129` 一处提到 `titleOnly`，用途是算页高，**画布本身不画标题**。上游把标题当正文块流里的一个 `isTitle` 块（`feature/reader/core/layout/ReaderChapterBlockMeasurer.kt:260-320`、`:318 emphasized = isTitle`、`:101 titlePageBreakAfter = false` 默认不分页），标题与正文同属一个排版流。`usesCanvasScroll()` 的 16 处消费点里没有任何一处影响标题渲染分支，所以滚动模式下标题仍固定贴在画布上方，不随正文滚走。**未修。**
-
-3. **打开目录要等一会，上下滑动也很卡。**
-   两件事叠在一起：
-   - 等：`entry/src/main/ets/pages/CatalogPage.ets:85-92 aboutToAppear()` 在 `showWordCount` 为 true 时先 `loadChapterRows()` 再 `loadChapterWordCounts()`；`showWordCount` 默认 true（`Index.ets:501`、`ReaderSettingsRepository.ets:858 tocShowWordCount: true`）。`loadChapterWordCounts()`（`:361-385`）要 `BookRepository.forEachChapter(...)` 把整本书读进来逐章算字数，上千章的书必然要等。
-   - 卡：列表是 `List` + `ForEach(this.getChapters(), ...)`（`:578`），不是 `LazyForEach`，一次性建全部行；`getChapters()`（`:127-159`）每次调用都全量遍历 `chapterRows`、对每行 `ReplaceRuleRepository.applyTitle()` 再过滤重建数组，`ForEach` 每帧重算一遍。**未修。**
-
-4. **书架里已有同名同作者的书，就加不进第二个文件。**
-   本地 `entry/src/main/ets/pages/Index.ets:5602-5617` 按 `format` + `title` + `author` 判重，命中就 `discardImportedCopy()` 并提示「这本书已在书架中」。上游 `model/localBook/LocalBook.kt:249 importFile(uri)` 按 `bookUrl`（文件路径）判重，同名同作者的另一个文件可以正常加入；`:260-266` 还有 `findReusableStaleLocalBook` / `rebindLocalBook` 把失效记录接回来（注释「直接 insert 会再裂出一条同名书」）。**本地判重比上游严，属真实缺陷，未修。**
-
-### 后续方向
-
-深色模式是下一阶段的主要投入，浅色模式的配色尚未打磨。
+根因与补法方向已登记到[已知问题](docs/KNOWN-ISSUES.md)的 KI-REL 组，下一轮直接按编号派活即可。
 
 ## 2026-10-29 登记书签与标注盘点遗留的 5 项缺口（只记不改，r277）
 
