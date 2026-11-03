@@ -27,6 +27,18 @@ Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/Hap
 
 在线书源抓取、在线搜索、RSS、TTS、AI、WebDAV、云同步和 Web 服务尚未接入。界面或备份中出现相关入口或数据类别，不代表对应服务可用。
 
+## 📦 安装
+
+本仓库的构建产物是**未签名 HAP**，不能直接双击安装到设备上，需要先按设备生成签名。两条路：
+
+**推荐：小白安装助手**（[likuai2010/auto-installer](https://github.com/likuai2010/auto-installer)）。把 `entry-default-unsigned.hap` 拖进去，它会读取已连接设备的 UDID 自动生成 Profile 并完成签名安装，不需要配证书、不需要 DevEco Studio。这是本项目目前最省事的试用方式。
+
+**备选：DevEco Studio 自动签名**。用 DevEco Studio 打开工程，`File → Project Structure → Signing Configs` 勾选「Automatically generate signature」并登录华为账号，然后运行到设备。
+
+- 构建命令与产物路径见[构建说明](docs/BUILDING.md)。
+- 未签名 HAP 只能装进模拟器或已加入 Profile 的设备，发行范围见[开源与发行范围](docs/RELEASE.md)。
+- 小白安装助手是第三方工具，本项目未参与其开发，请自行确认来源与许可后再使用。
+
 ## ⚠️ 注意事项
 
 - 当前为开发预览，不是稳定发行版；仓库未配置正式签名，也不提供正式发行安装包。
