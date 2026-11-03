@@ -8,6 +8,7 @@
 
 **KI-REL1 滚动阅读跳章闪烁** —— 换章时整章重新分页，重排期间画布空着。入口 `entry/src/main/ets/pages/ReaderPage.ets:1531 onReaderContentChanged()`（清 `localReaderPages` + `scrollOffset = 0` 后 `rebuildReaderPages()`），`:5706-5712` 注释说明照上游 `ReaderCanvasSurface.kt:254` 不用滚动兜底。补法：跨章增量追加，或重排期保留上一章尾页作过渡帧；**不要**改两套排版兜底。
 > 已盘点，见 [TXT-READER.md](parity/TXT-READER.md) B8「跨章换页与页窗口拼接」第 222 行起（11 行，222–232；根因行 222）。上游那一层共 11 个能力，本地只接住 2 个（页窗口同步换装、四页纵向堆叠绘制）。
+> **r325 已修（现象层）**：换章不再清空页表（`chapterHandoffPending` 保留上一章页作过渡帧）、向上翻章落章末（`chapterHandoffUpward`）、拖动到章末即换章（`PanGesture.onActionUpdate` 改用 `applyReaderScrollDelta` 的返回值 + `scrollDragBoundaryTurned` 防连跳）、换书作废交接标记（`chapterHandoffBookId`）、提示页只在真没有当前页时顶上（`appendBoundaryPlaceholders`）。设备验收见 [VALIDATION.md](VALIDATION.md)「r325 KI-REL1」节：分页模式第 2 章末换第 3 章无空窗，滚动模式两向换章均正常。**仍未做**：跨章滚动偏移延续（上游延续余量，本地归零）与「占位页装进页窗口」，故 B8 第 227/229 行状态仍为 `未接`。
 
 **KI-REL2 标题与正文分离** —— 标题画在正文之外的独立 ArkUI 组件里，不是画布画的。`ReaderPage.ets:5712-5733` 的 `else if (currentPageIndex === 0)` 分支，`Canvas` 在其下；`ReaderCanvasSurface.ets` 全文只有 `:1129` 用到 `titleOnly`（算页高）。上游把标题当正文块流里的 `isTitle` 块（`ReaderChapterBlockMeasurer.kt:260-320`）。补法：标题作首行块交给画布，删画布外的标题分支与 `measureTitleReservedLines()`。
 > 已盘点，见 [TXT-READER.md](parity/TXT-READER.md) B9「标题块在排版流里」第 242 行起（10 行，242–251；结构根因行 242，行为偏差行 247）。`titlePageBreakAfter`/`titlePageCenterVertical` 不是用户开关，取值由「本章正文是否为空」×「是否单图模式」四种组合派生；本地只实现其中 D 一档（第 249 行）。

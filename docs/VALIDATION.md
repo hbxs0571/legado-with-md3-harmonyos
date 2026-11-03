@@ -49,6 +49,36 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-04 N 端 r325 KI-REL1 滚动阅读跳章闪烁
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
+- 构建：`node "<DevEco>/tools/hvigor/hvigor/bin/hvigor.js" --no-daemon --mode module -p product=default -p module=entry@default assembleHap` 两次 `BUILD SUCCESSFUL`（49 s 740 ms / 43 s 837 ms），`hdc install -r` 覆盖安装成功。
+- 目标操作：翻页模式翻到章末再翻一页；切滚动模式滚到章末继续滚；两向各做一次。
+- 为什么改：换章时 `onReaderContentChanged()` 先清空 `localReaderPages` 再整章重排，重排期间画布没有当前页 → 整屏空白，即「跳章闪烁」。上游靠「换章先发布已有页、再补新页」保证画布任何时刻都有 `pages.current`（`ReadBookController.kt:2949-2965`）。
+- 改动（`entry/src/main/ets/pages/ReaderPage.ets`）：
+  1. `:470-478` 新增 `chapterHandoffPending` / `chapterHandoffUpward` / `chapterHandoffBookId` 三个私有字段。
+  2. `onReaderContentChanged()` `:1560-1580`：删掉 `scrollOffset = 0` / `currentPageIndex = 0` / `localReaderPages = []`；改为记录换章方向并置交接标记；换书（`book.id` 变了）时仍清空。
+  3. `rebuildReaderPages()` `:1772`：提前返回分支里清空页表改为 `if (!this.chapterHandoffPending)`。
+  4. `rebuildReaderPages()` `:1888-1898`：向上翻章时从尾到头取最后一个非 `titleOnly` 页；`isChapterHandoff` 时 `scrollOffset = 0`。
+  5. `appendBoundaryPlaceholders()` `:4698`：加 `if (window.current !== undefined) { return; }`。
+  6. `PanGesture.onActionUpdate` `:6000-6015`：改用 `applyReaderScrollDelta` 的返回值触发换章，加 `scrollDragBoundaryTurned` 防连跳；`onActionStart` 复位该标记。
+  7. `onBookChanged()` `:1486-1491`：换书作废交接标记。
+
+### 设备验收
+
+| 操作 | 预期 | 实测证据 | 结论 |
+| --- | --- | --- | --- |
+| 分页模式：第 2 章末 `16/16 15.4%` 点下一页 | 换章瞬间屏幕上仍有正文 | 点击后立即截图 `s6.jpeg` = 仍是第 2 章末页正文（「It was only a minor discourtesy…」），无空白、无整屏「加载数据中…」 | 通过 |
+| 同上，2 秒后 | 第 3 章第 1 页 | `s7.jpeg` = 标题「第3章(1)」+ 正文，底栏 `1/18 15.8%`，出现「返回原阅读位置 / 关闭」提示条 | 通过 |
+| 分页模式：第 3 章第 1 页点左侧 | 落到上一章末页 | `16/16 15.4%`（第 2 章末页），验证「向上翻章落章末」 | 通过 |
+| 滚动模式：慢速拖到章末 `16/17` 后继续拖 | 换到下一章且有正文 | 落到第 2 章 `1/16 7.7%`，标题「第2章(1)」+ 正文正常（`r9.json` / `r10.jpeg`） | 通过 |
+| 滚动模式：第 2 章第 1 页反向拖 | 回到上一章末页 | `16/17 7.0%`（第 1 章末页，`r13.json`） | 通过 |
+| 滚动模式：章内连续滑动（第 3 章 15/17 → 16/17） | 每帧都有正文 | `n4.jpeg`（15/17）/ `n5.jpeg`（16/17）连续两帧均正常正文 | 通过 |
+
+**边界**：跨章后滚动偏移仍归零（新章从页顶开始），上游是延续余量——这条没做，对照表 B8 第 229 行仍判 `未接`。另外「占位页装进页窗口」这个上游形态本地也没有（本地是「有页就画页」），B8 第 227 行同样判 `未接`。
+
+**未验**：EPUB 格式、带图章节、章末不足一屏（`hitBoundary` 钳回）的跨章表现；向上翻章在滚动模式下的偏移落点。
+
 ## 2026-11-03 N 端 r322 阅读设置默认值对齐上游「无数据」层（readConfig.json[0]）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。

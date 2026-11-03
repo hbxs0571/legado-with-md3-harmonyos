@@ -459,6 +459,23 @@ export struct ReaderPage {
   @State lastReportedProgress: number = -1;
   @State restoredProgressPosition: boolean = false;
   @State startPositionPending: boolean = false;
+  /**
+   * 换章交接标记（KI-REL1）。
+   *
+   * 上游换章是「先发布已有页、再补新页」，画布任何时刻都有 `pages.current`
+   * （`ReadBookController.kt:2949-2965`）；本地是整章重排，所以用这个标记让
+   * `onReaderContentChanged()` 保留上一章的页表当过渡帧，新页排好后再整表替换。
+   * `chapterHandoffUpward` 记录这次换章是向上翻（落章末）还是向下翻（落章首）。
+   */
+  private chapterHandoffPending: boolean = false;
+  private chapterHandoffUpward: boolean = false;
+  /**
+   * 上一次交接记的是哪本书。
+   *
+   * 换书时 `content` 同样会变，若不区分就会把上一本书的页表当过渡帧画出来。
+   * 只有 book.id 没变才算「换章」，换书仍按原路径清空。
+   */
+  private chapterHandoffBookId: string = '';
   @State localReaderPages: LocalReaderPage[] = [];
   @State readerBottomJustifyGap: number = 0;
   @State fullBookPageCounts: number[] = [];
@@ -577,6 +594,8 @@ export struct ReaderPage {
   private curlRevealProgress: number = 1;
   /** 滚动拖拽上一帧的累计 offsetY（vp），用于把累计量换算成逐帧 delta。 */
   private scrollDragLastY: number = 0;
+  /** 本次拖动是否已经因到章边界而转过章（一次拖动只转一次，避免连跳）。 */
+  private scrollDragBoundaryTurned: boolean = false;
   /**
    * 横向拖动翻页的状态（上游 `ReaderHorizontalDrag`）。
    * 方向在越过 touch-slop 那一刻锁定，此后位移从锁定点算起——
@@ -1467,6 +1486,10 @@ export struct ReaderPage {
   }
 
   onBookChanged(): void {
+    // 换书不是换章：作废交接标记，下一次正文到达按「换书」处理（清空页表）。
+    this.chapterHandoffBookId = '';
+    this.chapterHandoffPending = false;
+    this.chapterHandoffUpward = false;
     this.onReadSessionStart();
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
@@ -1541,10 +1564,23 @@ export struct ReaderPage {
     this.clearBoundaryMessage();
     this.readerContentRevision++;
     this.imageSizes = new Map<string, ReaderIntrinsicImageSize>();
-    this.scrollOffset = 0;
+    // KI-REL1：换章不再清空 `localReaderPages` / `currentPageIndex` / `scrollOffset`。
+    // 上游换章是「先发布已有页、再补新页」（ReadBookController.kt:2949-2965），画布任何
+    // 时刻都有 pages.current；本地是整章重排，一旦重建提前返回（视口为 0、格式不符，
+    // 见 rebuildReaderPages 开头），空数组就让画布整屏空白。保留上一章页作过渡帧，
+    // 新页排好后由 rebuildReaderPages() 整表替换，中间不留无内容的帧。
+    // KI-REL1：换章方向在这里定：chapterProgress 由上层在换章时写成 0（向下）或 100（向上）。
+    // 只有同一本书内换章才走交接；换书必须清空，否则会把上一本书的页画出来。
+    const sameBook = this.chapterHandoffBookId === this.book.id;
+    this.chapterHandoffUpward = sameBook && (this.book.chapterProgress ?? 0) >= 99;
+    this.chapterHandoffPending = sameBook;
+    if (!sameBook) {
+      this.localReaderPages = [];
+      this.currentPageIndex = 0;
+      this.scrollOffset = 0;
+    }
+    this.chapterHandoffBookId = this.book.id;
     this.restoredProgressPosition = false;
-    this.currentPageIndex = 0;
-    this.localReaderPages = [];
     this.localSemanticContent = '';
     this.localSemanticDocument = { paragraphs: [], content: '', sourceLength: 0, sourcePositionMap: [0] };
     // 换章后同样先同步量一次：否则新章的图会先按行高占位排一遍，再被尺寸到达推一遍
@@ -1731,8 +1767,14 @@ export struct ReaderPage {
     onlyImageSizesChanged: boolean = false): void {
     if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
       this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
-      this.localReaderPages = [];
-      this.readerBottomJustifyGap = 0;
+      // KI-REL1：换章交接期间不清空页表。上游任何时刻都有 pages.current
+      // （`ReaderCanvasSurface.kt:254` 的 `pages.current ?: return` 只是「没有就不画」），
+      // 本地若在这里清空，视口一时为 0 就会让画布整屏空白——那正是闪烁。
+      // 保留上一章的页当过渡帧，等视口就绪后这次重排会重跑并整表替换。
+      if (!this.chapterHandoffPending) {
+        this.localReaderPages = [];
+        this.readerBottomJustifyGap = 0;
+      }
       return;
     }
     const context = this.getUIContext();
@@ -1842,8 +1884,27 @@ export struct ReaderPage {
         pageIndex = index;
       }
     }
+    // KI-REL1：向上翻章时落到新章最后一页，与上游「往回翻落章末」一致
+    // （ReadBookController.kt:1387-1389 注释：往回翻时邻章排好的页直接接上）。
+    // 只在换章那一次生效，设置变化引起的重排仍按阅读位置定位。
+    const isChapterHandoff = this.chapterHandoffPending;
+    if (this.chapterHandoffUpward && this.pendingBookmarkTargetPosition < 0 && !this.startPositionPending) {
+      for (let index = nextPages.length - 1; index >= 0; index--) {
+        const page = nextPages[index];
+        if (page === undefined || page.titleOnly) { continue; }
+        pageIndex = index;
+        break;
+      }
+    }
+    this.chapterHandoffUpward = false;
+    this.chapterHandoffPending = false;
     this.localReaderPages = nextPages;
     this.currentPageIndex = pageIndex;
+    // KI-REL1：换章后滚动偏移归零。连续滚动的偏移是「当前页之前的页高之和 + 页内偏移」，
+    // 页表换了之后旧偏移对新章没有意义，不清掉新章一开篇就停在中间。
+    if (!this.usesCanvasScroll() || isChapterHandoff) {
+      this.scrollOffset = 0;
+    }
     this.readerBottomJustifyPageHeight = pageHeight;
     this.readerBottomJustifyLineHeight = lineHeight;
     this.readerBottomJustifyTitleLines = titleReservedLines;
@@ -4632,6 +4693,11 @@ export struct ReaderPage {
    */
   private appendBoundaryPlaceholders(window: ReaderCanvasWindow): void {
     if (this.boundaryMessage.length === 0) { return; }
+    // KI-REL1：提示页只在「真的没有当前页」时顶上（开书第一帧、视口还没就绪）。
+    // 上游 `ReaderCanvasSurface.kt:254` 的 `pages.current ?: return` 意味着有页就画页；
+    // 本地旧实现无条件用提示页替换当前页，换章等待期间整屏只剩一行「加载数据中…」，
+    // 那正是用户看到的空窗。现在有页就继续画页，正文始终在屏幕上。
+    if (window.current !== undefined) { return; }
     window.current = new ReaderCanvasPage(this.messagePlaceholderPage(this.boundaryMessage),
       this.currentPageIndex);
   }
@@ -5929,6 +5995,7 @@ export struct ReaderPage {
               this.cancelTurnAnimator();
               this.pageTurnAnimating = false;
               this.scrollDragLastY = 0;
+              this.scrollDragBoundaryTurned = false;
             })
             .onActionUpdate((event: GestureEvent) => {
               // ArkUI 的 offsetY 是相对手势起点的累计量，apply 要的是逐帧 delta
@@ -5937,7 +6004,20 @@ export struct ReaderPage {
                 return;
               }
               this.scrollDragLastY = event.offsetY;
-              this.applyReaderScrollDelta(this.getUIContext().vp2px(deltaVp));
+              // KI-REL1：拖动期到达章末就要换章。此前这里丢掉返回值，章末只亮
+              // 「继续滑动以加载下一章…」提示页而不换章；慢速拖到章末再松手时速度不足
+              // 8vp，惯性直接 return，于是永远停在本章末页——这正是「跳章」的另一半。
+              // 与分页翻页（:2167）、惯性滚动（:2431）同口径：命中边界就转成换章。
+              // 一次拖动只转一次：换章是异步的，后续帧仍会命中边界，不设闸门会连跳数章。
+              if (this.scrollDragBoundaryTurned) {
+                return;
+              }
+              if (this.applyReaderScrollDelta(this.getUIContext().vp2px(deltaVp))) {
+                this.scrollDragBoundaryTurned = true;
+                this.cancelTurnAnimator();
+                this.updateProgress();
+                this.onTurnChapterBoundary(deltaVp < 0 ? 1 : -1);
+              }
             })
             .onActionEnd((event: GestureEvent) => {
               this.updateProgress();
