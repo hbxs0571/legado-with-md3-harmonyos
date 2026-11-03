@@ -422,6 +422,8 @@ export struct ReaderPage {
   @State @Watch('onControlsVisibilityChanged') controlsVisible: boolean = false;
   /** 划词菜单「更多」是否就地展开；每次菜单重新弹出前由 onMenuShow 复位。 */
   @State selectionMenuMoreVisible: boolean = false;
+  /** 上次点图片的时间戳：`clickImgWay === '4'` 的双击判定窗口 300ms。 */
+  private imageTapTimestamp: number = 0;
   @State imagePreviewVisible: boolean = false;
   @State imagePreviewUri: string = '';
   @State overflowVisible: boolean = false;
@@ -517,8 +519,19 @@ export struct ReaderPage {
   @State canvasSelectionDragging: number = 0;
   /** 选区菜单是否显示，以及菜单锚点（vp，相对阅读页 Stack）。 */
   @State canvasSelectionMenuVisible: boolean = false;
+  /**
+   * 划词菜单的进出场动画进度（0..1）。
+   *
+   * 上游 `ui/book/read/SelectionMenuMotion.kt:21-49`：入场淡入 360ms + 0.94→1 缩放 400ms，
+   * 退场淡出 320ms + 1→0.96 缩放 280ms。本地用一个 Animator 同时推这两个量。
+   */
+  private canvasSelectionMenuAnimator: AnimatorResult | undefined = undefined;
+  @State canvasSelectionMenuProgress: number = 0;
   @State canvasSelectionMenuX: number = 0;
   @State canvasSelectionMenuY: number = 0;
+  /** 菜单卡实测宽高（vp）：锚点要靠它把卡片夹进屏幕，否则宽卡会顶出右边界。 */
+  @State canvasSelectionMenuWidthVp: number = 0;
+  @State canvasSelectionMenuHeightVp: number = 0;
   /** 长按计时器与按下点（px）。 */
   // 长按起选之后紧跟的那次抬手会再触发一次 TapGesture，
   // 上游用 suppressTap 吞掉它（ReaderCanvasSurface.kt:1035-1080），
@@ -681,6 +694,8 @@ export struct ReaderPage {
   onProgressChange: (bookId: string, chapterIndex: number, progress: number,
     chapterPosition: number, androidCoordinate: boolean) => void = () => {};
   onAddBookmark: (chapterPosition: number, pageText: string) => void = (_position: number, _pageText: string) => {};
+  /** 点正文里的划线文字：打开这条笔记的编辑面板（上游 onMarkingClick）。 */
+  onOpenMarking: (markingId: string) => void = (_markingId: string) => {};
   onCreateMarking: (chapterPosition: number, endPosition: number, selectedText: string) => void =
     (_position: number, _endPosition: number, _selectedText: string) => {};
   onSaveChapterContent: (chapterIndex: number, title: string, body: string) => void =
@@ -2454,17 +2469,137 @@ export struct ReaderPage {
     this.handleReaderTapAt(event.x, event.y);
   }
 
+  /**
+   * 点正文里的划线文字 = 打开该条笔记。
+   *
+   * 上游 `ui/book/read/ReadBookController.kt:591-620 onComposeReaderElementClick`：命中
+   * `ReaderElement.Text` 时先看 `markingId != null` → `onMarkingClick(markingId)`；本地等价于
+   * 「手指位置落在哪条划线的字符范围里」，用画布的 `positionAt` 拿到字符下标再比区间。
+   *
+   * 返回 true 表示这次点击已经被笔记消费掉，不再走分区动作。
+   */
+  private handleMarkingTap(x: number, y: number): boolean {
+    if (this.markings.length === 0) {
+      return false;
+    }
+    const context = this.getUIContext();
+    const xpx = context.vp2px(x);
+    const ypx = this.canvasContentY(this.canvasViewportY(context, y));
+    const position = this.readerCanvasRenderer.positionAt(xpx, ypx, this.buildReaderCanvasStyle());
+    if (position < 0) {
+      return false;
+    }
+    const chapterIndex = this.getChapterIndex();
+    for (let index = this.markings.length - 1; index >= 0; index--) {
+      const marking = this.markings[index];
+      if (marking === undefined || !marking.enabled || marking.chapterIndex !== chapterIndex) {
+        continue;
+      }
+      if (marking.chapterPosition <= position && marking.endPosition > position) {
+        this.onOpenMarking(marking.id);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 点击正文里的图片：四档行为照上游 `ReadBookController.kt:674-693 handleComposeImageClick`。
+   *
+   * - `0`（默认）：单击开大图
+   * - `1`：直接开大图
+   * - `2`：只把图片动作交给书源处理；本地没有在线书源动作，等价于不响应
+   * - `3`：不响应
+   * - `4`：双击才开大图（双击窗口 300ms）
+   *
+   * 返回 true 表示这次点击已经被图片消费掉。
+   */
+  private handleImageTap(x: number, y: number): boolean {
+    const way = this.clickImageBehavior;
+    if (way === '3') {
+      return false;
+    }
+    const context = this.getUIContext();
+    const xpx = context.vp2px(x);
+    const ypx = this.canvasContentY(this.canvasViewportY(context, y));
+    const box = this.readerCanvasRenderer.hitTestImageBox(xpx, ypx);
+    if (box === undefined || box.item === undefined) {
+      return false;
+    }
+    const uri = box.item.value;
+    if (uri.length === 0) {
+      return false;
+    }
+    const now = Date.now();
+    const debounced = now - this.imageTapTimestamp < 300;
+    this.imageTapTimestamp = now;
+    if (way === '2') {
+      // 上游只有在「在线 TXT + 有 action」时才执行；本地没有图片动作来源，等同不响应。
+      return false;
+    }
+    if (way === '4') {
+      // 双击才执行：第一次点击只记账，第二次落在窗口内才开图。
+      if (!debounced) {
+        return true;
+      }
+      this.openReaderImagePreview(uri);
+      return true;
+    }
+    // `0` 与 `1` 都是单击开大图（上游 `1` 无条件开、默认分支忽略 300ms 去抖）。
+    this.openReaderImagePreview(uri);
+    return true;
+  }
+
+  /** 打开图片大图预览（上游 `ReadBookSheet.Photo`）。 */
+  private openReaderImagePreview(uri: string): void {
+    if (uri.length === 0) {
+      return;
+    }
+    this.imagePreviewUri = uri;
+    this.imagePreviewVisible = true;
+  }
+
   private handleReaderTapAt(x: number, y: number): void {
     const now = Date.now();
     if (now - this.lastReaderTapTimestamp < 90) { return; }
     this.lastReaderTapTimestamp = now;
     if (this.readerContentWidth <= 0 || this.viewportHeight <= 0) { return; }
+    // 点划线文字优先于分区动作：命中了就打开那条笔记（上游 markingId 分支排在最前）。
+    if (this.handleMarkingTap(x, y)) { return; }
+    // 其次看图：命中图片就按 clickImgWay 四档处理（上游 onComposeReaderElementClick 的 Image 分支）。
+    if (this.handleImageTap(x, y)) { return; }
     const column = Math.max(0, Math.min(2, Math.floor(x / this.readerContentWidth * 3)));
     const row = Math.max(0, Math.min(2, Math.floor(y / this.viewportHeight * 3)));
     this.performReaderTapAction(row * 3 + column);
   }
 
+  /**
+   * 正中格的临时优先级：自动翻页面板 / 搜索条收起，各自抢在用户配置的动作之前。
+   *
+   * 上游 `ui/book/read/ReadBookController.kt:626-634` 的 `showComposeActionMenu()` 用 `when`
+   * 依次判「朗读中 → 自动翻页中 → 搜索结果显示中 → 主菜单」。本地没有朗读，搜索条是独立路由，
+   * 所以只保留自动翻页这一档，其余交给用户配置的动作。
+   *
+   * 返回 true 表示这次点击已被优先级分支消费掉。
+   */
+  private shouldUseCenterPriorityTap(): boolean {
+    if (!this.autoPageActive) {
+      return false;
+    }
+    // 自动翻页进行中点正中：先开自动翻页面板（让用户能调速/关掉），而不是开主菜单。
+    if (!this.autoPageSettingsVisible) {
+      this.autoPageSettingsVisible = true;
+      return true;
+    }
+    return false;
+  }
+
   private performReaderTapAction(index: number): void {
+    // 正中格有状态优先级：自动翻页中先开自动翻页面板、搜索条显示中先收起搜索条，
+    // 否则才走用户配置的动作（上游 ReadBookController.kt:626-634 showComposeActionMenu）。
+    if (index === 4 && this.shouldUseCenterPriorityTap()) {
+      return;
+    }
     const action = this.clickRegionActions[index] ?? '无操作';
     if (action === '无操作') { return; }
     if (action === '菜单') {
@@ -3763,24 +3898,137 @@ export struct ReaderPage {
   @Builder
   private readerMarkingSelectionMenu() {
     Column() {
-      Flex({ wrap: this.expandTextMenu ? FlexWrap.Wrap : FlexWrap.NoWrap, justifyContent: FlexAlign.Center }) {
-        ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
-          Row() {
-            if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
-            Text(item.title).fontSize(14).fontColor('#E5E6EB').margin({ left: this.showSelectMenuIcon ? 6 : 0 })
+      if (this.expandTextMenu) {
+        // 展开态：多行平铺卡片（上游 MultiLineMenuView）。
+        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
+          ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
+            Row() {
+              if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
+              Text(item.title).fontSize(14).fontColor('#E5E6EB').margin({ left: this.showSelectMenuIcon ? 6 : 0 })
+            }
+            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+            .onClick(() => this.runSelectionMenuAction(item.id))
+          }, (item: ReaderSelectionMenuItem) =>
+            `${item.id}-${this.showSelectMenuIcon}-${this.expandTextMenu}-${this.selectionMenuMoreVisible}`)
+        }.backgroundColor('#242127').borderRadius(12)
+      } else {
+        // 折叠态：一行可横向滚动的快捷条 + 右端分隔线 + 三点钮
+        // （上游 TextActionSelectionMenu.kt:355-415 QuickMenuView）。
+        Row() {
+          Scroll() {
+            Row() {
+              ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem, index: number) => {
+                Row() {
+                  if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
+                  Text(item.title).fontSize(14).fontColor('#E5E6EB')
+                    .margin({ left: this.showSelectMenuIcon ? 6 : 0 })
+                }
+                // 上游首项左距 16dp、其余 10dp，右端统一 8dp（QuickMenuView 的 itemsIndexed）。
+                .padding({ left: index === 0 ? 16 : 10, right: 8, top: 10, bottom: 10 })
+                .onClick(() => this.runSelectionMenuAction(item.id))
+              }, (item: ReaderSelectionMenuItem) =>
+                `${item.id}-${this.showSelectMenuIcon}-${this.expandTextMenu}-${this.selectionMenuMoreVisible}`)
+            }
           }
-          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-          .onClick(() => this.runSelectionMenuAction(item.id))
-        }, (item: ReaderSelectionMenuItem) => `${item.id}-${this.showSelectMenuIcon}-${this.expandTextMenu}-${this.selectionMenuMoreVisible}`)
-      }.backgroundColor('#242127').borderRadius(12)
-      // 未展开且存在折叠项时，上游是一行 + 「更多」弹层（TextActionSelectionMenu.kt:245）；
-      // 本地没有 Popup 层，改成在同一张卡片下方就地展开折叠项，语义等价。
-      if (this.hasCollapsedSelectionMenuItem() && !this.selectionMenuMoreVisible) {
-        Text('更多').fontSize(13).fontColor('#AEB0B9')
-          .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-          .onClick(() => { this.selectionMenuMoreVisible = true; })
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .align(Alignment.Start)
+          // 折叠态一行：条目区吃掉剩余宽度，条目多了在内部横向滚动。
+          .layoutWeight(1)
+          if (this.resolveSelectionMenuItems().length > 0) {
+            // 右端分隔线：高 20dp、宽 1dp、40% 透明（上游 VerticalDivider）
+            Row().width(1).height(20).backgroundColor('#4A4C5666')
+          }
+          Row() {
+            AppGlyph({
+              name: this.hasCollapsedSelectionMenuItem() ? 'more' : 'settings',
+              glyphSize: 16,
+              tint: '#E5E6EB'
+            })
+          }
+          // 有折叠项时点开更多，否则去菜单管理（上游 onMoreClick / onSettingsClick）
+          .padding({ left: 12, right: 16, top: 12, bottom: 12 })
+          .onClick(() => {
+            if (this.hasCollapsedSelectionMenuItem()) {
+              this.selectionMenuMoreVisible = true;
+            } else {
+              this.onOpenSettings();
+            }
+          })
+        }
+        .backgroundColor('#242127')
+        .borderRadius(12)
+        // 卡片按内容自适应宽度，但必须夹进视口：外层 Column 没有参照宽度，
+        // 百分比 maxWidth 在这里不生效，只能用正文宽度算具体数值。
+        .constraintSize({ maxWidth: Math.max(200, this.readerContentWidth * 0.92) })
+        // 二级弹层打开时主卡缩到 0.96、透明度 0.82（上游 quickMenuScale/quickMenuAlpha，
+        // 锚点在右端中点 TransformOrigin(1f, 0.5f)）
+        .scale({
+          x: this.selectionMenuMoreVisible ? 0.96 : 1,
+          y: this.selectionMenuMoreVisible ? 0.96 : 1,
+          centerX: '100%',
+          centerY: '50%'
+        })
+        .opacity(this.selectionMenuMoreVisible ? 0.82 : 1)
+        .animation({ duration: 400, curve: Curve.EaseOut })
+      }
+      if (!this.expandTextMenu && this.selectionMenuMoreVisible) {
+        this.readerSelectionMoreMenu()
       }
     }
+  }
+
+  /**
+   * 「更多」二级弹层（上游 `TextActionSelectionMenu.kt:469-547 MoreMenuView`）。
+   *
+   * 结构：顶部返回箭头行 → 0.8 宽分隔线 → 折叠项列表（最高 240dp，可竖滚）→
+   * 0.8 宽分隔线 → 「编辑菜单项」行（进菜单管理）。
+   */
+  @Builder
+  private readerSelectionMoreMenu() {
+    Column() {
+      Row() {
+        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#E5E6EB')
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Start)
+      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
+      .onClick(() => { this.selectionMenuMoreVisible = false; })
+      Row().width('80%').height(1).backgroundColor('#4A4C5666')
+      Scroll() {
+        Column() {
+          ForEach(this.collapsedSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
+            Row() {
+              if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
+              Text(item.title).fontSize(14).fontColor('#E5E6EB')
+                .margin({ left: this.showSelectMenuIcon ? 12 : 0 })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .onClick(() => this.runSelectionMenuAction(item.id))
+          }, (item: ReaderSelectionMenuItem) => `more-${item.id}-${this.showSelectMenuIcon}`)
+        }
+      }
+      .scrollable(ScrollDirection.Vertical)
+      .scrollBar(BarState.Off)
+      .constraintSize({ maxHeight: 240 })
+      .align(Alignment.Top)
+      Row().width('80%').height(1).backgroundColor('#4A4C5666')
+      Row() {
+        AppGlyph({ name: 'settings', glyphSize: 20, tint: '#E5E6EB' })
+        Text('编辑菜单项').fontSize(13).fontColor('#E5E6EB').margin({ left: 12 })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 12 })
+      .onClick(() => {
+        this.selectionMenuMoreVisible = false;
+        this.onOpenSettings();
+      })
+    }
+    .backgroundColor('#242127')
+    .borderRadius(12)
+    .constraintSize({ maxWidth: '92%' })
+    .margin({ top: 6 })
   }
 
   /**
@@ -3803,16 +4051,29 @@ export struct ReaderPage {
       }
     }
     // expandTextMenu 为真时折叠项与一级同排（上游 activeMultiItems = showState 0 或 1）；
-    // 为假时折叠项留在「更多」里，点开后同样拼进来（上游是弹层，本地是就地展开）。
-    if (this.expandTextMenu || this.selectionMenuMoreVisible) {
+    // 为假时折叠项只出现在「更多」二级弹层里，主卡始终只放一级项。
+    if (this.expandTextMenu) {
       return visible.concat(collapsed);
     }
     return visible;
   }
 
+  /** 折叠项（只给「更多」二级弹层用）。 */
+  private collapsedSelectionMenuItems(): ReaderSelectionMenuItem[] {
+    const items = parseReaderSelectionMenuConfig(this.textSelectMenuConfig);
+    const collapsed: ReaderSelectionMenuItem[] = [];
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      if (item === undefined || item.group !== 1) { continue; }
+      if (!READER_SELECTION_MENU_SUPPORTED.includes(item.id)) { continue; }
+      collapsed.push(item);
+    }
+    return collapsed;
+  }
+
   /** 未展开时是否还有折叠项被收起来（决定要不要提示「更多」，本地不做弹层）。 */
   private hasCollapsedSelectionMenuItem(): boolean {
-    if (this.expandTextMenu || this.selectionMenuMoreVisible) { return false; }
+    if (this.expandTextMenu) { return false; }
     const items = parseReaderSelectionMenuConfig(this.textSelectMenuConfig);
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
@@ -3841,6 +4102,7 @@ export struct ReaderPage {
     // 老路径的 bindSelectionMenu 会在点中条目后自动收起菜单，画布上得自己收：
     // 只藏菜单、保留选区色块，与 ArkUI 点完菜单仍保持选中的行为一致。
     this.canvasSelectionMenuVisible = false;
+    this.animateCanvasSelectionMenu(false);
     this.paintReaderCanvas();
     if (id === 'menu_copy') { this.copyCurrentSelection(); return; }
     if (id === 'menu_bookmark') { this.bookmarkCurrentSelection(); return; }
@@ -4611,6 +4873,40 @@ export struct ReaderPage {
     }
   }
 
+  /**
+   * 划词菜单进出场：进度 0→1 淡入 + 缩放 0.94→1；关闭时 1→0 淡出 + 缩放 1→0.96。
+   *
+   * 时长与比例照上游 `SelectionMenuMotion.kt`：入场淡入 360ms、缩放 400ms（整段统一按 400ms
+   * 跑完，透明度先到 1）、退场淡出 320ms、缩放 280ms（整段按 320ms）。
+   */
+  private animateCanvasSelectionMenu(show: boolean): void {
+    if (this.canvasSelectionMenuAnimator !== undefined) {
+      this.canvasSelectionMenuAnimator.cancel();
+      this.canvasSelectionMenuAnimator = undefined;
+    }
+    const context = this.getUIContext();
+    const duration = show ? 400 : 320;
+    const startProgress = this.canvasSelectionMenuProgress;
+    const endProgress = show ? 1 : 0;
+    if (startProgress === endProgress) {
+      return;
+    }
+    const animator = context.createAnimator({
+      duration, easing: 'ease-out', delay: 0, fill: 'forwards', direction: 'normal',
+      iterations: 1, begin: 0, end: 1
+    });
+    animator.onFrame = (progress: number) => {
+      const value = Math.max(0, Math.min(1, progress));
+      this.canvasSelectionMenuProgress = startProgress + (endProgress - startProgress) * value;
+    };
+    animator.onFinish = () => {
+      this.canvasSelectionMenuProgress = endProgress;
+      this.canvasSelectionMenuAnimator = undefined;
+    };
+    this.canvasSelectionMenuAnimator = animator;
+    animator.play();
+  }
+
   /** 菜单锚点：选区上方一排，放不下就挪到下方（上游 ReaderSelectionMenuAnchor）。 */
   // -------------------------------------------------------------------------
   // 手势与选区
@@ -4636,11 +4932,21 @@ export struct ReaderPage {
     const topVp = offsetVp + context.px2vp(Math.max(0, request.selectionTopY));
     const bottomVp = offsetVp + context.px2vp(Math.max(0, request.selectionBottomY));
     const centerVp = context.px2vp((request.selectionStartX + request.selectionEndX) / 2);
-    const menuX = Math.max(0, centerVp - 80);
+    // 菜单卡宽度是内容自适应（折叠态带「更多」、展开态多行），所以用实测宽度把卡片居中于
+    // 选区再夹进屏幕；还没测得宽度时退回老的「中心 - 80」估算。
+    const availableVp = Math.max(120, this.readerContentWidth > 0 ? this.readerContentWidth : 360);
+    const menuWidthVp = this.canvasSelectionMenuWidthVp > 0
+      ? Math.min(this.canvasSelectionMenuWidthVp, availableVp * 0.92)
+      : 160;
+    const preferredX = centerVp - menuWidthVp / 2;
+    const maxXVp = Math.max(4, availableVp - menuWidthVp - 4);
+    const menuX = Math.max(4, Math.min(maxXVp, preferredX));
     // 选择柄净空 14vp（柄圆心在行底 +7dp、直径 14dp），再留 12vp 垂直边距
     const handleClearanceVp: number = 14;
     const verticalMarginVp: number = 12;
-    const menuHeightVp: number = 44;
+    const menuHeightVp = this.canvasSelectionMenuHeightVp > 0
+      ? Math.min(this.canvasSelectionMenuHeightVp, Math.max(44, this.viewportHeight * 0.5))
+      : 44;
     const belowY = bottomVp + handleClearanceVp + verticalMarginVp;
     const aboveY = topVp - verticalMarginVp - menuHeightVp;
     const spaceBelow = this.viewportHeight - belowY;
@@ -4675,6 +4981,7 @@ export struct ReaderPage {
     this.canvasHandleStartAlpha = 1;
     this.canvasHandleEndAlpha = 1;
     this.canvasSelectionMenuVisible = false;
+    this.canvasSelectionMenuProgress = 0;
     this.selectionMenuMoreVisible = false;
     this.pendingMarkingRanges.clear();
     this.pendingMarkingStart = -1;
@@ -4726,6 +5033,7 @@ export struct ReaderPage {
     this.canvasSelectionDragging = 0;
     this.canvasSelectionMenuVisible = true;
     this.selectionMenuMoreVisible = false;
+    this.animateCanvasSelectionMenu(true);
     ReaderHaptics.selectionStart(this.selectVibrator);
     this.syncCanvasSelectionToPending();
     this.paintReaderCanvas();
@@ -5300,11 +5608,29 @@ export struct ReaderPage {
             .opacity(this.pageTurnOpacity)
           }
           // 画布选区菜单：浮在选区上方（放不下就挪到下方），复用老路径同一套菜单项
-          if (this.canvasSelectionMenuVisible && this.canvasSelectionStart >= 0) {
+          if ((this.canvasSelectionMenuVisible || this.canvasSelectionMenuProgress > 0.01) &&
+            this.canvasSelectionStart >= 0) {
             Column() {
               this.readerMarkingSelectionMenu()
             }
             .position({ x: this.canvasSelectionMenuX, y: this.canvasSelectionMenuY })
+            // 进出场：透明度线性走，缩放从 0.94 长到 1（退场收到 0.96）
+            .opacity(this.canvasSelectionMenuProgress)
+            .scale({
+              x: 0.94 + 0.06 * this.canvasSelectionMenuProgress,
+              y: 0.94 + 0.06 * this.canvasSelectionMenuProgress
+            })
+            // 卡片是按内容自适应宽高的，锚点需要实测尺寸才能把它夹进屏幕
+            .onAreaChange((_oldArea: Area, newArea: Area) => {
+              const widthVp = Number(newArea.width);
+              const heightVp = Number(newArea.height);
+              if (Math.abs(widthVp - this.canvasSelectionMenuWidthVp) > 0.5) {
+                this.canvasSelectionMenuWidthVp = widthVp;
+              }
+              if (Math.abs(heightVp - this.canvasSelectionMenuHeightVp) > 0.5) {
+                this.canvasSelectionMenuHeightVp = heightVp;
+              }
+            })
           }
         }
         .id(ReaderPage.STACK_ID)

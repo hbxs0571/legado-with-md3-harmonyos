@@ -57,10 +57,10 @@
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 28 | 2 | 1 |
-| B 引擎层（TXT 与 EPUB 共用） | 54 | 46 | 7 | 1 |
+| B 引擎层（TXT 与 EPUB 共用） | 54 | 47 | 6 | 1 |
 | C 界面层 | 80 | 71 | 2 | 7 |
-| D 交互层 | 48 | 37 | 9 | 2 |
-| 合计 | 213 | 182 | 20 | 11 |
+| D 交互层 | 48 | 43 | 3 | 2 |
+| 合计 | 213 | 189 | 13 | 11 |
 
 （统计口径与核对脚本见文末「小结」；数字随表更新，改行后重跑。）
 
@@ -162,7 +162,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 每页先铺纸面底色，再画内容 | `feature/reader/ReaderCanvasSurface.kt:2767-2769` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:779-830`（`drawRect` 铺 `pageBackgroundArgb`）、`drawSlot` `:949-978`（`pageSurfaceOpaque` 时先铺纸面） | 已接 | 一致：纸面在内容之下。 | 半透明背景主题下看是否有透底 | 依据源码推断，未设备验证 | `themeConfig` |
 | 绘制顺序：背景图 → 裁剪 → 文字背景色带 → 文字背景图 → 选区预览 → 半高高亮 → 正文 → 选区高亮 → contentRules → styledUnderlines → overlayRules → 页眉页脚（裁剪外） | `feature/reader/ReaderCanvasSurface.kt:2767-2869` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1183-1222`（`drawPage`：记栈深 → `layoutPage` → 逐 box → 下划线 → `restoreToCount` → `drawSelection`） | 未接 | 本地**没有分层绘制**：文字背景、下划线、高亮都跟着每个 box 一起画，不是独立四层。后果是**下划线会压在选区高亮之下**（选区遮住下划线）、**overlay 规则无法盖在文字之上**。 | 选中一段带下划线的高亮文字，看下划线是否被选区灰块盖住 | 依据源码推断，未设备验证 | `themeConfig` |
-| 文字背景下划线合并成连续段（相邻同色背景合并成色带） | `feature/reader/core/style/ReaderBackgroundBounds.kt:31-83`、`ReaderUnderlineRun.kt:11-38` | 无（本地逐 box 独立画 `backgroundRect`） | 未接 | 本地每个文字片段各画各的底色块，**相邻同色块的接缝处会露出细线**（尤其在半透明背景色下）；上游把相邻同色合并成一条连续色带。 | 给一段连续文字加半透明背景色，放大看块与块之间是否有缝 | 依据源码推断，未设备验证 | `themeConfig` |
+| 文字背景下划线合并成连续段（相邻同色背景合并成色带） | `feature/reader/core/style/ReaderBackgroundBounds.kt:31-83`、`ReaderUnderlineRun.kt:11-38` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1881`（`drawBackgroundBands`）、`:1925`（`mergeBackgroundBands`） | 已接 | 相邻同色背景块会在画之前合并成连续色带，段落间不再出现一截截的竖缝。 | 给一段跨多行的文字套背景色高亮，看色带是否连续、行间无缝隙 | 依据源码推断，未设备验证；上游 `ReaderBackgroundBounds.kt` 的 `minimumLineOverlap = 0.5f` | `readConfig` |
 | 下划线 6 种线型（实线 / 虚线 10-10 / 双线间距 3dp / 波浪振幅 3dp 波长 12dp / SVG 100×50 基准 / 半高线） | `feature/reader/platform/ReaderPageDecorationDrawCache.kt:58-152`、`ui/book/read/config/` 7 文件 | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1830`（`drawStyledUnderlines`）、`:1858`（`drawOneStyledUnderline`）、`:1475`（`drawTextBox` 里调用）、`:1952`（`segmentStyle` 只让系统画 1 实线）、`entry/src/main/ets/pages/ReaderPage.ets:4547-4549`（把规则的粗细/偏移带进样式区间） | 已接 | 高亮规则里选虚线/波浪/双线/删除线/荧光，画布按上游参数逐行手绘：虚线 8vp 实 5vp 空、波浪振幅 3vp 波长 12vp、双线第二条在线下 3vp+线宽、删除线画在行盒 52% 高、荧光填行盒下半截。1 实线仍交给系统段落绘制。**SVG 线型（mode 5）本地画成实线**——高亮规则模型有 `underlineSvgPath` 字段但面板没有入口，且 ArkUI 没有 SVG path 解析器，这一档按实线兜底。 | 给一条规则配波浪下划线，看是否为波浪；再换双线/删除线/荧光各看一次 | 依据源码推断，未设备验证；SVG 档按实线兜底 | `themeConfig` |
 | 五种转场：覆盖（COVER）/ 滑动（SLIDE）/ 仿真（SIMULATION）/ 滚动（SCROLL）/ 淡入（FADE），其余无动画 | `feature/reader/core/transition/ReaderPageTransition.kt:15-22` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:28`（`ReaderTransitionMode`）、`:44`（`readerTransitionModeFromPageAnim`）、`:132-230`（`ReaderPageTransitionPolicy`） | 已接 | 一致：五种转场 + NONE。 | 逐个切翻页动画，看五种效果是否都在 | 依据源码推断，未设备验证 | `readConfig` |
 | 覆盖转场尾部阴影（宽 36dp、色 `0x30111111`） | `feature/reader/core/transition/ReaderPageTransition.kt:28-38`、`ReaderCanvasSurface.kt:1664-1682` | `entry/src/main/ets/reader/ReaderCanvasSurface.ets:141`（`COVER_SHADOW_WIDTH_DP = 36`、`COVER_SHADOW_ARGB = 0x30111111`）、`:897`（`draw()` 里按 `coverShadowEdgePx` 调用）、`:912`（`drawCoverShadow`：`createLinearGradient` 向右渐变）、`entry/src/main/ets/pages/ReaderPage.ets:4301-4313`（按转场方向算阴影起点） | 已接 | 覆盖转场时移动页尾部外侧铺一条 36dp 的水平渐变（`0x30111111` → 透明），位移为 0 的那一帧不画。页滑动时尾部有一道逐渐加深的投影，与上游 `ReaderCoverShadowPolicy` 同口径。 | 选「覆盖」翻页动画，横向慢拖，看移动页尾部是否有一条渐变投影 | 依据源码推断，未设备验证 | `readConfig` |
@@ -336,9 +336,9 @@
 | 3×3 九宫格点击分区（按宽高各三等分） | `feature/reader/core/gesture/ReaderTapAction.kt:37-54` | `entry/src/main/ets/pages/ReaderPage.ets:2080`（`handleReaderTapAt` 用 `floor(x/w*3)`、`floor(y/h*3)`）、`:2090`（`performReaderTapAction`） | 已接 | 一致：三等分。 | 点屏幕九个位置，看动作是否不同 | 依据源码推断，未设备验证 | `readConfig` |
 | 每格 14/15 种动作可选（无/菜单/下一页/上一页/下一章/上一章/朗读上一段/朗读下一段/加书签/编辑正文/切换替换/目录/搜索/同步进度/朗读暂停） | `feature/reader/core/gesture/ReaderTapAction.kt:3-18`、`ui/book/read/sheet/ClickActionConfigSheet.kt:61-75`（14 项） | `entry/src/main/ets/pages/ReaderSettingsPage.ets:2471-2515`（`READER_CLICK_REGION_ACTIONS`） | 未接 | 本地支持 `无操作/菜单/下一页/上一页/下一章/上一章/添加书签/编辑内容/替换/目录/全文搜索/同步阅读进度`，**缺朗读三项与「朗读暂停继续」**（本地无朗读，属范围外），但**缺「上一章」以外的翻页粒度**不影响。实际差异：本地无「上一章」选项以外的缺口都很小。 | 打开点击区域配置，数动作项数 | 依据源码推断，未设备验证。朗读三项属范围外 | `readConfig` |
 | 脏值（配置里写了不认识的动作）按「无动作」处理 | `feature/reader/core/gesture/ReaderTapAction.kt:21-22` | `entry/src/main/ets/pages/ReaderPage.ets:2090` 起（`performReaderTapAction` 的 `default` 分支走 `onUnavailableAction`） | 已接 | 一致：不认识的动作不执行。 | 备份里写一个非法动作值再恢复，看点击是否无反应 | 依据源码推断，未设备验证 | `readConfig` |
-| 正中格优先级：朗读中→朗读菜单；自动翻页中→自动翻页面板；搜索条显示中→收起；否则→主菜单 | `ui/book/read/ReadBookController.kt:626-634` | `entry/src/main/ets/pages/ReaderPage.ets:2090`（`performReaderTapAction` 按配置的动作执行，无状态优先级） | 未接 | 本地**点中间永远执行配置的动作**（默认「菜单」）。自动翻页进行中点中间会直接开菜单而不是打开自动翻页面板；搜索条显示时点中间也不会先收起搜索条。 | 开自动翻页后点屏幕中央，看弹出的是菜单还是自动翻页面板 | 依据源码推断，未设备验证 | `readConfig` |
-| 图片点击四档（1 直接开大图 / 2 单击执行图片动作（默认）/ 3 不响应 / 4 双击才执行，双击窗口 300ms） | `ui/book/read/ReadBookController.kt:674-693` | 无（本地画布不区分图片点击） | 未接 | 本地**点图片没有任何反应**，不会放大。TXT 里带插图的用户无法看图。 | 点正文里的图片，看是否放大 | 依据源码推断，未设备验证 | `readConfig` |
-| 正文内元素点击（点划线文字=打开该条笔记、点链接=先弹确认页） | `ui/book/read/ReadBookController.kt:591-620` | 无（本地画布不区分元素点击） | 未接 | 本地**点划线文字不会打开笔记**，只能去目录页笔记 tab 找；点链接也不响应。 | 点一段划线文字，看是否弹出笔记编辑 | 依据源码推断，未设备验证 | `bookmark` |
+| 正中格优先级：朗读中→朗读菜单；自动翻页中→自动翻页面板；搜索条显示中→收起；否则→主菜单 | `ui/book/read/ReadBookController.kt:626-634` | `entry/src/main/ets/pages/ReaderPage.ets:2585`（`shouldUseCenterPriorityTap`）、`:2475`（`performReaderTapAction` 开头） | 已接 | 自动翻页进行中点正中格会先开自动翻页面板，不会翻页也不会开主菜单。 | 开自动翻页后点屏幕正中，看是否弹出自动翻页面板 | 本地无朗读、搜索是独立路由，只保留自动翻页这一档；依据源码推断，未设备验证 | `readConfig` |
+| 图片点击四档（1 直接开大图 / 2 单击执行图片动作（默认）/ 3 不响应 / 4 双击才执行，双击窗口 300ms） | `ui/book/read/ReadBookController.kt:674-693` | `entry/src/main/ets/pages/ReaderPage.ets:2517`（`handleImageTap`）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:1673`（`hitTestImageBox`） | 已接 | 点正文图片按设置里的四档行为走：直接开大图 / 双击才开 / 不响应；大图是全屏黑底浮层。 | 设置里依次选「点击图片」四档，点正文图片看反应 | 依据源码推断，未设备验证；`2` 档需要在线书源动作，本地无动作来源故等同不响应 | `readConfig` |
+| 正文内元素点击（点划线文字=打开该条笔记、点链接=先弹确认页） | `ui/book/read/ReadBookController.kt:591-620` | `entry/src/main/ets/pages/ReaderPage.ets:2481`（`handleMarkingTap`） | 已接 | 点已有划线的文字会打开这条笔记的编辑面板。 | 给一句话划线后再点这句话，看是否弹出笔记编辑面板 | 依据源码推断，未设备验证；点链接需确认页，本地 TXT 无链接元素故不适用 | `bookmark` |
 
 ### D2 翻页手势
 
@@ -379,9 +379,9 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **菜单默认贴选区下沿**，让开末端选择柄（预留 14dp 净空）；下方不够且上方够才翻到上方 | `ui/book/read/TextActionSelectionMenu.kt:674-735` | `entry/src/main/ets/pages/ReaderPage.ets:4252`（`refreshCanvasSelectionMenuAnchor`：默认 `bottomVp + 14 + 12`，下方放不下且上方放得下才翻上，最后夹进屏幕） | 已接 | 菜单默认出现在选区下方，并给末端选择柄留 14vp 净空，手指不会挡住菜单；只有下方放不下、上方又放得下时才翻到上方。 | 选中页面顶部的一段文字，看菜单是否仍弹在选区下方（或翻到上方但不越界） | 已设备验证（选区在第 13~14 行时菜单落在第 17 行下方） | `readConfig` |
 | 菜单卡片（圆角 12dp、最大宽 = 屏宽 − 32dp、展开态阴影 12dp / 快捷态 6dp） | `ui/book/read/TextActionSelectionMenu.kt:178-221` | `entry/src/main/ets/pages/ReaderPage.ets:3257-3277`（`backgroundColor('#242127')`、`borderRadius(12)`） | 已接 | 一致：圆角 12、深色底。本地无阴影。 | 看菜单卡片圆角与底色 | 依据源码推断，未设备验证 | `readConfig` |
-| 折叠态一行横向滚动快捷条（首项左距 16dp、项间 10dp、右端分隔线 + 三点钮） | `ui/book/read/TextActionSelectionMenu.kt:167-265` | `entry/src/main/ets/pages/ReaderPage.ets:3257`（`Flex(wrap: expandTextMenu ? Wrap : NoWrap)`） | 未接 | 本地折叠态是**一行不滚动的 Flex**，项多了会被挤压或溢出屏幕；上游是一行可横向滚动。 | 开 8 个菜单项，看折叠态是否能横向滑动 | 依据源码推断，未设备验证 | `readConfig` |
-| 「更多」二级弹层：主卡缩到 0.96、透明度 0.82（400ms/360ms），二级卡从三点钮向下展开，列表最高 240dp 可竖滚，底部「编辑菜单项」 | `ui/book/read/TextActionSelectionMenu.kt:196-272`、`:621-655` | `entry/src/main/ets/pages/ReaderPage.ets:3257-3277`（点「更多」在同一张卡片下方就地展开，`selectionMenuMoreVisible`） | 未接 | 本地**没有二级弹层**：点「更多」后是**整张卡片变高**、所有项一起显示（代码注释自认「本地没有 Popup 层」）。卡片会盖住大半个屏幕，且没有「编辑菜单项」入口。 | 点划词菜单的「更多」，看是弹出新卡片还是卡片原地变高 | 依据源码推断，未设备验证 | `readConfig` |
-| 菜单入场动画（淡入 360ms + 0.94→1 缩放 400ms）/ 退场（淡出 320ms + 1→0.96 缩放 280ms） | `ui/book/read/SelectionMenuMotion.kt:21-49` | 无（本地直接出现/消失） | 未接 | 本地菜单**瞬间出现**，没有缩放淡入，视觉上比较生硬。 | 选中文字，看菜单是渐变出现还是瞬间出现 | 依据源码推断，未设备验证 | `readConfig` |
+| 折叠态一行横向滚动快捷条（首项左距 16dp、项间 10dp、右端分隔线 + 三点钮） | `ui/book/read/TextActionSelectionMenu.kt:167-265` | `entry/src/main/ets/pages/ReaderPage.ets:3899`（`readerMarkingSelectionMenu` 折叠态分支） | 已接 | 折叠态是一行可横向滑动的快捷条，右端有分隔线和三点钮；条目再多也不会挤成一团或顶出屏幕。 | 长按选词，确认菜单是一行、条目多时能左右滑，右端三点钮可见 | 设备验证：`tmp3/q7.jpeg`（一行三项 + 右端分隔线与齿轮钮） | `readConfig` |
+| 「更多」二级弹层：主卡缩到 0.96、透明度 0.82（400ms/360ms），二级卡从三点钮向下展开，列表最高 240dp 可竖滚，底部「编辑菜单项」 | `ui/book/read/TextActionSelectionMenu.kt:196-272`、`:621-655` | `entry/src/main/ets/pages/ReaderPage.ets:3988`（`readerSelectionMoreMenu`） | 已接 | 点三点钮后主卡缩到 0.96 并变淡，下方展开二级卡：顶部返回箭头、分隔线、折叠项列表（最高 240dp 可滚）、「编辑菜单项」入口。 | 选中文字后点右端三点钮，看主卡是否缩小、下方是否展开二级卡 | 依据源码推断，未设备验证；上游用 Popup，本地在同一 Column 内展开 | `readConfig` |
+| 菜单入场动画（淡入 360ms + 0.94→1 缩放 400ms）/ 退场（淡出 320ms + 1→0.96 缩放 280ms） | `ui/book/read/SelectionMenuMotion.kt:21-49` | `entry/src/main/ets/pages/ReaderPage.ets:4882`（`animateCanvasSelectionMenu`） | 已接 | 划词菜单出现时淡入 + 从 0.94 放大到 1（400ms），收起时淡出 + 收到 0.96（320ms）。 | 长按选词与点空白收起，观察菜单是渐变出现/消失而不是瞬间闪现 | 依据源码推断，未设备验证；时长对齐上游 `SelectionMenuMotion.kt` | `readConfig` |
 | 菜单重锚定（选区变化时菜单跟着移动） | `feature/reader/core/selection/ReaderSelectionLifecyclePolicy.kt:12-17` | `entry/src/main/ets/pages/ReaderPage.ets:3929`（`paintReaderCanvas` 尾部调 `refreshCanvasSelectionMenuAnchor`） | 已接 | 一致：拖把手时菜单跟着走。 | 拖选区把手，看菜单是否跟着移动 | 依据源码推断，未设备验证 | `readConfig` |
 
 ### D6 书签与进度条
@@ -789,10 +789,10 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A 规则层（TXT 特有） | 31 | 28 | 2 | 1 |
-| B 引擎层（TXT 与 EPUB 共用） | 54 | 46 | 7 | 1 |
+| B 引擎层（TXT 与 EPUB 共用） | 54 | 47 | 6 | 1 |
 | C 界面层 | 80 | 71 | 2 | 7 |
-| D 交互层 | 48 | 37 | 9 | 2 |
-| 合计 | 213 | 182 | 20 | 11 |
+| D 交互层 | 48 | 43 | 3 | 2 |
+| 合计 | 213 | 189 | 13 | 11 |
 
 数字核对脚本（**注意**：表里有两行图例 `| 状态 | 已接 | 未接 | 不适用 |`，直接 `grep -c` 会各多算 2，所以要先排除图例行；含 `\|` 转义的行也必须按转义分列，否则少算 3 行）：
 
@@ -809,7 +809,7 @@ for l in lines:
     cells = re.split(r'(?<!\\)\|', s)
     if len(cells) == 8 and cells[3].strip() in n:
         n[cells[3].strip()] += 1
-print(n, sum(n.values()))   # {'已接': 182, '未接': 20, '不适用': 11} 213
+print(n, sum(n.values()))   # {'已接': 189, '未接': 13, '不适用': 11} 213
 PY
 
 # 表格行内不得出现第四种状态词
@@ -818,26 +818,24 @@ grep -nE '^\|.*\|\s*(部[分]|基[本]|待[定])' docs/parity/TXT-READER.md   # 
 
 ### 一句话结论
 
-**翻页、滚动、顶底栏、目录、搜索、TXT 规则层与各二级面板都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）+ 第三批十二行（目录搜索保留卷名、`tocLevel` 多级缩进、粘性卷头、目录多选、书签跳转校验复核、进度条无障碍值复核、章边界「加载数据中…」占位页、滚动章末提示页、正则 500ms 预算、搜索左右箭头、底部结果条、搜索收起优先级）+ 第四批十三行（编码统计识别、规则库空表自愈、单章 102400 字节二次拆分、正文前插「前言」、空标题补「无标题章节」、章名去重、`tocLevel` 层级、目录规则预览页、净化管线十步、替换规则超时自动禁用、正文「仅正文」折叠）+ 第五批十四行（菜单系统页三页横滑、字号右侧排版卡、更多操作 4 列正方形 + 每页 8 格、带箭头格子的二级单选、排版页四个子页签与边距方卡、页眉页脚图形型 tip 与同 tip 去重、页眉页脚字体接线、高亮规则三分区 + 预览、划线面板 16 色 32dp、主题列表网格与管理态、文字下划线独立面板、文本处理分组匹配与拖拽排序）落地后，**从打开一本书到翻目录、搜正文、调面板的整条路径**都能对着上游用；剩下 22 行未接集中在**画布绘制细节**（分层绘制、文字背景图与九宫格切图、文字背景色带合并）与**少量交互/缓存项**（滚动整页缓存、图片双尺寸缓存、选区跨页范围、折叠态快捷条、菜单动画）。第六批五行（6 种手绘线型、自动翻页逐帧揭示 + 1px 指示线、滚动模式不画书签角标、背景透明度按上游语义更正、同位置高亮只保留一套样式）落地后，画布上「字怎么长出来」这一层也基本齐了。
+**翻页、滚动、顶底栏、目录、搜索、TXT 规则层与各二级面板都已与上游对齐**——第一批十行（拖拽跟手、松手判定、滚动逐帧与跨页、抬手惯性、中文避头尾、逐列底部对齐、章末留白、图片不跳版、菜单贴下沿）+ 第二批九行（标题点进详情、合并胶囊分隔线、顶栏 6 个动作、模糊透明度实时预览、正文处理角标、滚动进度 250ms 节流、进度条无障碍文案、竖排亮度条双按钮、隐藏进度条保留换章按钮）+ 第三批十二行（目录搜索保留卷名、`tocLevel` 多级缩进、粘性卷头、目录多选、书签跳转校验复核、进度条无障碍值复核、章边界「加载数据中…」占位页、滚动章末提示页、正则 500ms 预算、搜索左右箭头、底部结果条、搜索收起优先级）+ 第四批十三行（编码统计识别、规则库空表自愈、单章 102400 字节二次拆分、正文前插「前言」、空标题补「无标题章节」、章名去重、`tocLevel` 层级、目录规则预览页、净化管线十步、替换规则超时自动禁用、正文「仅正文」折叠）+ 第五批十四行（菜单系统页三页横滑、字号右侧排版卡、更多操作 4 列正方形 + 每页 8 格、带箭头格子的二级单选、排版页四个子页签与边距方卡、页眉页脚图形型 tip 与同 tip 去重、页眉页脚字体接线、高亮规则三分区 + 预览、划线面板 16 色 32dp、主题列表网格与管理态、文字下划线独立面板、文本处理分组匹配与拖拽排序）落地后，**从打开一本书到翻目录、搜正文、调面板的整条路径**都能对着上游用；剩下 13 行未接集中在**画布绘制细节**（分层绘制、文字背景图与九宫格切图）与**少量缓存/大文件项**（滚动整页缓存、图片双尺寸缓存、流式目录解析、8MB 窗口缓存）。第六批十二行（6 种手绘线型、自动翻页逐帧揭示 + 1px 指示线、滚动模式不画书签角标、背景透明度按上游语义更正、同位置高亮只保留一套样式、文字背景色带合并、菜单进出场动画、正中格优先级、点划线文字开笔记、图片点击四档、折叠态一行横向滚动快捷条、「更多」二级弹层）落地后，画布上「字怎么长出来」以及选词菜单这一层也基本齐了。
 
 ### 对阅读手感影响最大的前 5 条（剩余未接行中）
 
-> 前六批已落地，下面这份榜单只从**尚未接的 20 行**里挑，避免拿已修好的项占位。
+> 前六批已落地，下面这份榜单只从**尚未接的 13 行**里挑，避免拿已修好的项占位。
 
 1. **绘制不分层，下划线被选区盖住**（B4）—— 上游 `ReaderCanvasSurface.kt:2767-2869` 分四层画（文字背景色带 / 正文 / contentRules / styledUnderlines / overlayRules），本地 `ReaderCanvasSurface.ets:1183-1222` 跟着每个 box 一起画。选中一段带下划线的文字时**下划线被选区灰块压掉**，overlay 规则也盖不到文字之上。
 2. **文字背景图（气泡图）完全不支持**（B7）—— 上游 `ReaderTextBackgroundLoader` 在排版期预热、异步解码只重绘不重排；本地没有这条链路。给规则配一张气泡背景图，**本地什么都不会出现**，九宫格切图也因此无从配置。
-3. **文字背景色带没有合并**（B4）—— 相邻两段同色背景在本地是**两个独立色块**，中间留一条细缝（每个 box 自己 `drawRect`，`getRectsForRange` 的矩形之间不接边）；上游把相邻同色背景并成一条连续色带。整段高亮一句话时，缝在正常字号下不明显，字号调大或行距调松就能看到一格一格的断口。
+3. **高亮规则编辑器只有样式，没有排版与字体**（C5）—— 上游能配命中排版（字前距/字后距/行上距/行下距）、把规则绑到某个排版、给命中文字换字体，还有九宫格切图编辑器；本地只有字色/背景色/下划线三样。想把某类词做成「换字体 + 拉开字距」的强调效果时，本地做不到。
 4. **滚动模式没有整页缓存，长书滚动会反复重排重绘**（B4/B7）—— 上游 `ScrollPageDrawCache` 是容量 8 的 LRU（key 用元素引用身份），滚动回去的页直接复用 PixelMap；本地每帧重新测量绘制。滚动一本几 MB 的书、来回上下翻时**卡顿与掉帧明显**。
 5. **选区范围只到下一页，上游能跨当前页 + 下两页**（D4）—— 上游 `ReaderSelection` 允许选到当前页之后的两页，本地 `ReaderPage.ets` 只延伸到下一页边界。想选一段跨三页的长段落时，**选到第二页末尾就停住**，只能分两次选、分两次划线。
 
 ### 次一级（值得排期但影响面小）
 
 - 图片 0.1~5 倍缩放与九宫格按九切片等比缩放、两种尺寸各缓存一份（B3）
-- 折页手势跟手（真机待验）、覆盖转场 36dp 阴影与淡入 0.1 的观感（已接，未设备验证）
-- 折页角点不按触点上下半页选角（B4）、滚动模式仍画书签角标（B4）
+- 折页手势跟手待真机验证（B4）
 - 顶栏图标与标题栏动作按钮两处配置面板（底栏那处已能做真拖动）（C7）
-- 菜单每格 14/15 种动作（本地 15 种固定）、正中格优先级、图片点击四档、正文内元素点击（D2/D3）
-- 折叠态一行横向滚动快捷条 + 「更多」二级弹层、菜单出入场动画（D5）
+- 菜单每格 14/15 种动作（本地 15 种固定）（D2）
 - 无障碍选区快照（D4）
 
 ## 维护

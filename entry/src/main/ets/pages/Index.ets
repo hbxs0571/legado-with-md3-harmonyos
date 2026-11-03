@@ -6941,6 +6941,7 @@ struct Index {
               position: number, androidCoordinate: boolean) =>
               this.acceptReaderProgress(bookId, chapterIndex, progress, position, androidCoordinate),
             onAddBookmark: (position: number, pageText: string) => this.requestAddReaderBookmark(position, pageText),
+            onOpenMarking: (markingId: string) => { this.editReaderMarking(markingId); },
             onCreateMarking: (position: number, endPosition: number, text: string) =>
               this.requestCreateReaderMarking(position, endPosition, text),
             onToggleCurrentPageBookmark: (start: number, end: number, pageText: string) =>

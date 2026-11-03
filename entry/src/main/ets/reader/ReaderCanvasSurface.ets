@@ -508,6 +508,20 @@ export class ReaderCanvasStyle {
   imagePlaceholderArgb: number = 0x2E808080;
 }
 
+/**
+ * 一块待合并的文字底色矩形（画布坐标）。
+ *
+ * 上游 `feature/reader/core/style/ReaderBackgroundBounds.kt` 会把同一视觉行上相邻同色的
+ * 底色块并成一条连续色带，否则排版按样式段切分后逐段铺色，字与字之间会留缝。
+ */
+class ReaderCanvasBackgroundRect {
+  left: number = 0;
+  top: number = 0;
+  right: number = 0;
+  bottom: number = 0;
+  colorArgb: number = 0;
+}
+
 /** 一条高亮 / 笔记标记，start/end 是渲染坐标（与 LocalReaderLineItem 同口径）。 */
 /** 分段后的「文本 + 生效样式」，供 ParagraphBuilder 逐段 pushStyle。 */
 class ReaderCanvasStyledSegment {
@@ -1465,6 +1479,8 @@ export class ReaderCanvasRenderer {
     if (built === undefined) {
       return;
     }
+    // 高亮规则的文字底色先画：它是最底一层，标记底色与字形都压在它上面。
+    this.drawBackgroundBands(canvas, item, built, box.left, box.top, request);
     this.drawMarkingBackgrounds(canvas, item, built, box.left, box.top, request);
     // Paragraph.paint 会改动 canvas 的画笔/裁剪状态且不恢复，
     // 后面还要用同一块画布画选区，所以这里必须 save/restore 兜住。
@@ -1692,6 +1708,43 @@ export class ReaderCanvasRenderer {
     return best;
   }
 
+  /**
+   * 按屏幕点找命中的图片元素盒（上游 `ReaderElement.Image` 的命中）。
+   *
+   * 图片盒在图内直接返回；容差一行高度以内取最近的，避免细图点不中。
+   */
+  hitTestImageBox(x: number, y: number): ReaderCanvasItemBox | undefined {
+    let best: ReaderCanvasItemBox | undefined = undefined;
+    let bestDistance = Number.MAX_VALUE;
+    for (const box of this.geometry.boxes) {
+      const item = box.item;
+      if (item === undefined || item.kind !== 'image') {
+        continue;
+      }
+      const right = box.left + box.widthPx;
+      const bottom = box.top + box.heightPx;
+      if (x >= box.left && x <= right && y >= box.top && y <= bottom) {
+        return box;
+      }
+      const dx = x < box.left ? box.left - x : (x > right ? x - right : 0);
+      const dy = y < box.top ? box.top - y : (y > bottom ? y - bottom : 0);
+      const distance = dx + dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = box;
+      }
+    }
+    // 容差：超过一个行高就算没点中，避免点正文空白处误开图。
+    if (best === undefined) {
+      return undefined;
+    }
+    const tolerance = best.heightPx > 0 ? Math.max(best.heightPx, best.widthPx) * 0.5 : 24;
+    if (bestDistance > tolerance) {
+      return undefined;
+    }
+    return best;
+  }
+
   /** 盒内字形偏移：屏幕点先换算成段落局部坐标，再问 Paragraph。 */
   /**
    * 把页面坐标换算成章节正文位置（上游 `ReaderSelectionPolicy.start(page, x, y)` 的等价物）。
@@ -1816,6 +1869,90 @@ export class ReaderCanvasRenderer {
       }
       canvas.detachBrush();
     }
+  }
+
+  /**
+   * 高亮规则的文字底色：收集本元素的底色矩形后按「同行 + 同色 + 间隙容差」合并成色带。
+   *
+   * 上游 `ReaderBackgroundBounds.mergeBackgroundBounds(minimumLineOverlap = 0.5f)`：
+   * 垂直重叠 >= 较矮者高度的 50% 视为同一视觉行；水平间隙 <= 较矮者高度的 50% 视为连续。
+   * 不合并的话，排版按样式段切分后每段各铺一次色，字与字之间会看到一格一格的断口。
+   */
+  private drawBackgroundBands(canvas: drawing.Canvas, item: LocalReaderLineItem,
+    built: ReaderCanvasParagraph, left: number, top: number,
+    request: ReaderCanvasDrawRequest): void {
+    if (request.highlights.length === 0) {
+      return;
+    }
+    const ranges = this.styleRangesForItem(item, request);
+    if (ranges.length === 0) {
+      return;
+    }
+    const rects: ReaderCanvasBackgroundRect[] = [];
+    for (const range of ranges) {
+      if (range.backgroundArgb === 0) {
+        continue;
+      }
+      const boxes = built.paragraph.getRectsForRange(
+        { start: range.start, end: range.end },
+        text.RectWidthStyle.TIGHT,
+        text.RectHeightStyle.TIGHT
+      );
+      for (const box of boxes) {
+        const rect = new ReaderCanvasBackgroundRect();
+        rect.left = left + box.rect.left;
+        rect.top = top + box.rect.top;
+        rect.right = left + box.rect.right;
+        rect.bottom = top + box.rect.bottom;
+        rect.colorArgb = range.backgroundArgb;
+        rects.push(rect);
+      }
+    }
+    if (rects.length === 0) {
+      return;
+    }
+    const bands = ReaderCanvasRenderer.mergeBackgroundBands(rects);
+    const brush = new drawing.Brush();
+    canvas.attachBrush(brush);
+    for (const band of bands) {
+      brush.setColor(readerCanvasColor(band.colorArgb));
+      canvas.drawRect(band.left, band.top, band.right, band.bottom);
+    }
+    canvas.detachBrush();
+  }
+
+  /** 同色矩形合并：按上游 `mergeBackgroundBounds` 的两条判定（同行重叠 + 间隙容差）。 */
+  private static mergeBackgroundBands(rects: ReaderCanvasBackgroundRect[]): ReaderCanvasBackgroundRect[] {
+    const sorted = rects.slice();
+    // 先按视觉行（top）再按 left 排，保证同一行的块挨在一起
+    sorted.sort((a: ReaderCanvasBackgroundRect, b: ReaderCanvasBackgroundRect): number => {
+      if (Math.abs(a.top - b.top) > 0.5) {
+        return a.top - b.top;
+      }
+      return a.left - b.left;
+    });
+    const bands: ReaderCanvasBackgroundRect[] = [];
+    for (const rect of sorted) {
+      const previous = bands.length > 0 ? bands[bands.length - 1] : undefined;
+      if (previous === undefined) {
+        bands.push(rect);
+        continue;
+      }
+      const overlap = Math.min(previous.bottom, rect.bottom) - Math.max(previous.top, rect.top);
+      const minHeight = Math.min(previous.bottom - previous.top, rect.bottom - rect.top);
+      const sameLine = minHeight > 0 && overlap >= minHeight * 0.5;
+      const joinGap = minHeight * 0.5;
+      const horizontalGap = Math.max(rect.left - previous.right, previous.left - rect.right, 0);
+      if (sameLine && previous.colorArgb === rect.colorArgb && horizontalGap <= joinGap) {
+        previous.left = Math.min(previous.left, rect.left);
+        previous.top = Math.min(previous.top, rect.top);
+        previous.right = Math.max(previous.right, rect.right);
+        previous.bottom = Math.max(previous.bottom, rect.bottom);
+      } else {
+        bands.push(rect);
+      }
+    }
+    return bands;
   }
 
   /**
@@ -2035,16 +2172,8 @@ export class ReaderCanvasRenderer {
       letterSpacing: base.letterSpacing,
       color: range.textColorArgb !== 0 ? readerCanvasColor(range.textColorArgb) : base.color
     };
-    if (range.backgroundArgb !== 0) {
-      // RectStyle 的四个圆角是必填项（API 12），底色块照老路径 textBackgroundStyle 画直角
-      out.backgroundRect = {
-        color: readerCanvasColor(range.backgroundArgb),
-        leftTopRadius: 0,
-        rightTopRadius: 0,
-        rightBottomRadius: 0,
-        leftBottomRadius: 0
-      };
-    }
+    // 底色不交给系统 backgroundRect：那是逐段铺色、相邻段之间会留缝。
+    // 底色统一由 drawBackgroundBands 收集后合并成连续色带再画（上游 mergeBackgroundBounds）。
     // 只有 1 实线交给系统段落绘制；其余线型（虚线/波浪/双线/删除线/荧光）
     // 由 drawStyledUnderlines 手绘，口径才对得上上游。
     if (range.decoration === 1) {
