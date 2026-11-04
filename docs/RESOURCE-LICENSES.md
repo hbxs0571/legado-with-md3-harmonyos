@@ -162,3 +162,11 @@
 ## 内置 TXT 目录规则数据
 
 `entry/src/main/resources/rawfile/txttoc/builtin-rules.json` 包含 27 条内置 TXT 目录规则。该文件与 [HapeLee/legado-with-MD3 的默认规则 JSON](https://github.com/HapeLee/legado-with-MD3/blob/main/app/src/main/assets/defaultData/txtTocRule.json) 逐字节一致；对应上游项目按 GPL-3.0 发布，本仓库随 GPL-3.0 许可分发。来源文件与本仓库文件的 SHA-256 均为 `a9b612ea996485bb99f67b3e25792602a8354d4abbc4fa74537395dc38375394`。
+
+## 正文排版引擎的算法来源
+
+`entry/src/main/ets/reader/ReaderTextLayoutEngine.ets` 的「建段落 → `layoutSync(width)` → 逐行取 `getLineMetrics(i)` 累高切页」这套算法参考 [wip3l/qingye-reader](https://github.com/wip3l/qingye-reader) 的 `entry/src/main/ets/core/reader/ReaderV2Paginator.ets`（`buildParagraph()` 建 `ParagraphBuilder`、`lineBottom()` = `topHeight + height`、逐行累 `y` 超界切页）。
+
+- 许可：该参考工程以 GPL-3.0 发布，与本仓库许可兼容，按 GPL-3.0 条款使用。
+- 使用方式：**只借鉴算法思路并按本地接口重写**，没有把参考工程任何文件整份复制进本仓库；本地文件用 `@kit.ArkGraphics2D` 的 `text` 命名导出（参考工程用 `@ohos.graphics.text` 默认导出），并受本地 API 12 基线约束（不使用 `ParagraphStyle.lineSpacing`（since 21）、`includeFontPadding`（since 23）、`trailingSpaceOptimized` / `autoSpace` / `verticalAlign`（since 20））。
+- 未引入：参考工程的对外页面类型（`ReaderV2PageLayout` / `ReaderV2PageFragment`）、`reader*` 偏好键、标题分段、正则字体气泡与 `imageMinHeightPx` 混合页、`FrameNode.onDraw` 渲染通道，以及它对 `@legado/sourceengine` 子模块的依赖。

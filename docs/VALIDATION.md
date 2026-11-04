@@ -49,6 +49,62 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-04 N 端 r329 正文排版改系统原生断行（`@ohos.graphics.text`）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。`targetSdkVersion 5.0.0(12)` 未改，构建按 API 12 基线走。
+- 构建：`bash scripts/build-hap.sh` 多次 `BUILD SUCCESSFUL`（首次 51 s / 行尾回收后 34 s 227 ms / 增量 10 s），`hdc -t 127.0.0.1:5555 install -r entry/build/default/outputs/default/entry-default-unsigned.hap` 每次覆盖安装成功。
+- 目标操作：同书同字号打开 `the-metamorphosis` 与《失明的她遇上盗神的我》，读页脚分母；再开中英混排自建样本、含图片 EPUB、切「全局双页」各截图；最后老代码重装一次取基线做页码对比。
+- 为什么改：本地正文排版原来是**逐字自量**——`ReaderFontRepository.measureTextWidthForPagination()` 按 codePoint 逐个测字形宽再相加，行高、断点、两端对齐全靠自己拼。上游 Android 的排版能力来自 `StaticLayout`（系统原生断行 + 禁则 + 两端对齐），底座就不一样，所以 `docs/parity/TXT-READER.md` B1「中文无避头尾」一直挂着 `未接`，行高与对齐终点也永远差零点几 px。
+
+### 改动
+
+1. **新建 `entry/src/main/ets/reader/ReaderTextLayoutEngine.ets`**（约 370 行）：把一段连续文本交给 `text.ParagraphBuilder` → `layoutSync(widthPx)` → `getLineCount()` / `getLineMetrics(i)`，只取每行的 `startIndex`/`endIndex` 作为断点。`wordBreak: text.WordBreak.BREAK_WORD`、`breakStrategy: text.BreakStrategy.GREEDY`、`locale: 'zh-Hans'`。文件头写明单位口径与 API 12 禁用清单。系统引擎抛异常时退回逐 cluster 自量并打一次 `console.error`。
+2. **`entry/src/main/ets/pages/LocalReaderPaginator.ets` 整文件重写**（842→752 行）：对外接口 `LocalReaderLineItem` / `LocalReaderLine` / `LocalReaderPage` 与 `paginate()` 的形参顺序**全部保持原样**，只在末尾加一个可选参 `textStyle`。`addParagraph()` 改成「先把连续 text part 攒成一段交给引擎，遇到图片或段尾再落地」；`appendLine()` 的行高、段距、换行判定、`justifyGap` 公式一字未动。段首缩进（`　　`）保护为 `leadingIndent` item，不参与两端对齐拉伸。
+3. **`entry/src/main/ets/pages/ReaderPage.ets`**：`:1859` 与 `:3554` 两个调用点各补一个实参 `this.buildReaderTextLayoutStyle(fontSize)`；新增该方法返回 `{ fontFamilies, fontSizeFp, letterSpacingVp, fontWeight, vpScalePx, fpScalePx }`，口径与 `buildReaderCanvasStyle()` 一致（否则断行与绘制行宽对不上）。
+4. **删 `entry/src/main/ets/reader/ChineseLineBreaker.ets`**（117 行）：全仓已无 import，避头尾改由系统断行承担。
+5. **行尾空格回收**（`ReaderTextLayoutEngine.reclaimTrailingSpaces()`）：`targetSdk 12` 没有 `ParagraphStyle.trailingSpaceOptimized`（since 20），系统 `layoutSync` 会把行尾那一个空格算进行宽，西文因此比上游 `StaticLayout` 少排一个词。修法是在 `breakRanges()` 取完行区间后，逐相邻行对判断「行尾是 `0x20`」，把「空格 + 紧随的一个完整词」整词搬到上一行（条件：搬完的行宽 ≤ `contentWidth`）。
+
+### 页码差异对比（任务书 ≤ 5% 验收项）
+
+做法：`git stash push -u` 收起本次全部改动 → 构建旧实现装设备 → 读页脚分母 → `git stash pop` → 重建新实现 → 同书同字号重读。字号 24、行距/段距为默认值、两版都从全书起点打开。
+
+| 书 | 旧实现 | 新实现 | 差异 |
+| --- | --- | --- | --- |
+| 《失明的她遇上盗神的我》（中文，427 章） | `1/18` | `1/18` | **0%** |
+| `the-metamorphosis`（英文，13 章） | `1/17` | `1/17` | **0%** |
+
+第一次对比英文是 `17 → 18`（+5.9%，超线）。根因就是上面第 5 条的行尾空格，补上 `reclaimTrailingSpaces()` 后回到 17。**中文从头到尾没漂**——中文行尾不带空格，`trailingSpaceOptimized` 缺失对 CJK 无影响。
+
+### 设备验收
+
+| 操作 | 预期 | 实测证据 | 结论 |
+| --- | --- | --- | --- |
+| 中文书打开第 3 章第 1 页 | 行首无标点、段首 `　　` 缩进、满行右缘齐平 | 页脚 `1/18 0.5%`；抽查 p1/p2/p3/pend/last/ch3end 六张截图，行首无「，」「。」「？」 | 通过 |
+| 中文书翻到章末最后一页 | 末行完整可读、不丢字 | `18/18 0.7%`，末行「内脏器官乃至心跳，在他眼中是完全透明的。」完整 | 通过 |
+| 中英混排自建样本（含 `HarmonyOS`/`ParagraphBuilder`/`don't`/`1280×2832`/ISO 时间戳/英文整段） | 英文整词不被劈开、全角标点不与西文粘连、右缘齐平 | 页脚 `1/3 33.3%`，英文单词整词换行，行首无标点 | 通过 |
+| 含图片 EPUB（`[Shade]我的妹妹是幽灵`，每章 `<img>`） | 图片块前后文字完整、不丢字 | 第 1 章第 1 页：独立图片块居中在「澡」标题与「作者的话」之间，下方正文完整，末行 `https://afdian.net/@shade1` 未丢；页脚 `1/17 7.5%` | 通过 |
+| 切「全局双页」看中文书 | 左右两栏各自换行、行首无标点、右缘齐平 | 页脚 `1/18 → 16/16 0.5%`（双列页数变少，符合预期）；两栏各约 5 字/行，缩进正确 | 通过 |
+| 同书切回「全局单页」 | 恢复单列页数 | 页脚回到 `17/17` | 通过 |
+
+### 双列「稀疏首行」不是缺陷（留证，避免以后误判）
+
+双列截图里段首行看起来「只有 2–3 个字、字距极大」，一度被判成断行偏窄。打印引擎原始行区间后确认是**正确的 CJK 避头尾**：
+
+```
+[LAYR] w=486.0 n=10  #0[0,4)□□临走  #1[4,9)前，江琉璃  #2[9,14)的脚步忽然
+[LAYR] w=486.0 n=10  #0[0,4)□□“那   #1[4,9)个……你看   #2[9,14)到我铃铛的
+```
+
+（`□` 是全角空格 U+3000。）系统把「，」「…」挪到下一行是正确的禁则处理；「缩进 2 格 + 正文 3 格 = 满 5 字格」，只是全角空格不可见才显稀疏。满行基准 `w0=440.9px`（5 字）、`layoutWidthPx=486`（`contentWidthVp 138.9 × vpScalePx 3.5`）、`fontSizePx=88.2`（字号 24 × 1.05 × 3.5），换算口径正确。**不要为了「看起来满」去改 `wordBreak`。**
+
+### 边界与未验
+
+- `useZhLayout`（「使用自定义中文分行」）现在**没有任何实现支撑**：上游本来就只有唯一断行器、开关只进 `PageEstimateConfig.kt:61` 的布局签名；本地原来那套自造断行已删，开关仍只参与布局 key、有效果但不改变断行算法，与上游语义一致。`docs/parity/READER-CONFIG.md` 对应行的「本地无分支」描述需要按此更新。
+- 标题块**不走**系统引擎（各段字号按 `fontSizeScale` 缩放、字体族是 `readerTitleFontFamily`，与正文样式不是一套）。`docs/parity/TXT-READER.md` B9「标题与正文共用同一个折行器」保持 `未接`。
+- 上游 `ChineseLineBreaker.kt` 额外处理「」「」` 连打这类 `StaticLayout` 不做的情况，本地没有对应实现，极满的行上可能出现两个标点连在行首。B1 仍按「已接但缺这一半」记录。
+- API 12 缺 `includeFontPadding`（since 23）：本次实测 CJK 首行墨迹**没有被 `Paragraph` 裁掉**（每页首行字形完整），因为本地行盒高度由 `lineHeight`（vp）施加、绘制另走 `maxLines:1` 的独立 `Paragraph` 且 `layoutSync` 宽度留了一个字号余量（`ReaderCanvasSurface.ets` 的 `getParagraph()`）。故本轮不需要顶部留白补偿。
+- 折页手势拖拽跟手（B4）、fling（B5）、滚动拖拽方向（D2）走的是渲染与手势通道，本次一行未改，状态不变。
+
 ## 2026-11-04 N 端 r328 KI-REL4 同名同作者加不进书架
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
