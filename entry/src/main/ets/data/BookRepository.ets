@@ -437,7 +437,11 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
 const uri = uris[0];
     if (uri === undefined) { return undefined; }
     const fileName = BookRepository.getFileName(uri);
-    const bookId = `local-${Date.now()}`;
+    // 正文文件名由**源文件 uri** 派生，不取当前时间：上游 LocalBook.kt:252-259 里
+    // `bookUrl = FileDoc.fromUri(uri).toString()`，即本地书的 bookUrl 就是源文件路径，
+    // 同一文件重复导入得到同一个 bookUrl，判重才可能命中（见 LocalBook.kt:259）。
+    // 旧实现用 `local-${Date.now()}`，每次导入都是一个新主键，任何按文件路径的判重都会失效。
+    const bookId = `local-${BookRepository.md5Encode16(uri)}`;
     if (fileName.toLowerCase().endsWith('.epub')) {
       const imported = await EpubRepository.importFromUri(context, uri, fileName, bookId);
       // EPUB 写出的正文是 UTF-8，章节偏移按字符给，这里统一转成字节偏移的章节行。
@@ -458,6 +462,9 @@ return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, max
     let content: string = '';
     try {
       BookRepository.ensureDirectory(booksDirectory);
+      // 同一源文件重复导入会落到同一个 contentPath 上：先把上一份删掉再拷，
+      // 否则 copyFileSync 在目标已存在时会失败。上游不存副本（直接读源 uri），没有这一步。
+      if (fileIo.accessSync(contentPath)) { fileIo.unlinkSync(contentPath); }
       const sourceFile = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
       try {
         fileIo.copyFileSync(sourceFile.fd, contentPath);

@@ -5599,21 +5599,39 @@ struct Index {
     const importedBook = created.book;
     const importedChapters = created.chapters;
     const importedBooks = await BookRepository.loadImportedBooks(context);
-    const duplicate = [...this.books, ...importedBooks].find((item: Book) =>
-      BookRepository.isPersistableBook(item) && item.format === importedBook.format &&
-      item.title === importedBook.title && item.author === importedBook.author
-    );
-    if (duplicate !== undefined) {
+    const importedBookUrl = importedBook.contentPath ?? '';
+    // 判重键是 bookUrl（本地书就是正文文件路径），对应上游 LocalBook.kt:259
+    // `appDb.bookDao.getBook(bookUrl)`。上游同一 bookUrl 再导入走的是「更新」分支
+    // （LocalBook.kt:280-288）：删旧目录、重置 latestChapterTime、更新这条记录，
+    // **不新增第二条**。原来这里按 `format + title + author` 判重并直接拒绝导入，
+    // 结果是「同名同作者的另一本书加不进书架」——正是 KI-REL4。
+    const existing = importedBookUrl.length > 0
+      ? [...this.books, ...importedBooks].find((item: Book) =>
+        BookRepository.isPersistableBook(item) && (item.contentPath ?? '') === importedBookUrl)
+      : undefined;
+    if (existing !== undefined) {
+      // 书目行沿用原记录（id、分组、阅读进度、书签归属都不动），只把目录换成这次解析的结果。
+      const updatedBook: Book = BookRepository.copyBook(existing);
+      updatedBook.chapterCount = importedBook.chapterCount;
+      updatedBook.lastChapter = importedBook.lastChapter;
+      updatedBook.tocRule = importedBook.tocRule;
+      // 与上游一致：latestChapterTime 归零触发「本地文件已更新」，正文重新分页。
+      updatedBook.latestChapterTime = 0;
+      const booksToSave = this.books
+        .map((item: Book) => (item.contentPath ?? '') === importedBookUrl ? updatedBook : item)
+        .filter((item: Book) => BookRepository.isPersistableBook(item));
       try {
-        BookRepository.discardImportedCopy(importedBook);
-      } catch (_) {
-        this.showUnavailableAction('书籍已在书架中，重复副本清理失败');
+        await BookRepository.saveImportedBooks(context, booksToSave);
+        // 同一 bookUrl 的旧章节行整本重建（上游 `delByBook` + 重新解析）。
+        await BookRepository.saveChapters(context, importedBookUrl, importedChapters);
+      } catch (error) {
+        this.showUnavailableAction(error instanceof Error ? error.message : '更新书目失败');
         return undefined;
       }
-      this.showUnavailableAction(BookRepository.isBodyMissing(duplicate)
-        ? '书架中已有同名缺正文记录，请先移出该记录再导入正文'
-        : '这本书已在书架中');
-      return undefined;
+      this.books = this.books.map((item: Book) =>
+        (item.contentPath ?? '') === importedBookUrl ? updatedBook : item);
+      this.showUnavailableAction(`这本书之前导入过，已更新《${updatedBook.title}》的目录`);
+      return updatedBook;
     }
     const booksToSave = [...this.books, importedBook]
       .filter((item: Book) => BookRepository.isPersistableBook(item));

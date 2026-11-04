@@ -21,6 +21,8 @@
 > 已盘点，见 [TXT-READER.md](parity/TXT-READER.md) C5「目录页」第 326 行起（6 行，326–331）+ A4 第 119 行。上游字数是 `BookChapter.wordCount` 预存字段、目录页永不读正文（第 326 行）；列表 `FastScrollLazyColumn` 惰性 + 数据源 `flowOn(Dispatchers.Default)` 不逐帧重算（327/328 行）；反序在数据源层一次反转，本地在渲染期倒序复制导致卷名跑到子章后面（329 行，本轮唯一确定行为偏差）；多选缺「从最后起选」（330 行）。
 
 **KI-REL4 同名同作者的第二本书加不进书架** —— `pages/Index.ets:5602-5617` 按 `format` + `title` + `author` 判重，上游 `model/localBook/LocalBook.kt:249 importFile(uri)` 按 `bookUrl` 判重（`:260-266` 另有失效记录接回）。补法：判重键改 `bookUrl`，再补接回分支。
+
+> **r328 已修（判重键）**：把判重键换成 `bookUrl`，并让 `bookUrl` 真正由文件路径派生——`BookRepository.importLocalBook` 的正文文件名从 `local-${Date.now()}.txt` 改成 `local-${md5Encode16(uri)}.txt`（对齐上游 `LocalBook.kt:252-259` 的 `bookUrl = FileDoc.fromUri(uri).toString()`）。`Index.ets` 的判重整段重写：命中同一个 `contentPath` 时按上游 `:280-288` 走「更新」分支（书目行沿用原记录，只换 `chapterCount`/`lastChapter`/`tocRule`，`latestChapterTime = 0` 触发重新分页，`saveChapters` 整本重建目录），不再 `discardImportedCopy` + 拒绝；未命中才新增。设备验收见 [VALIDATION.md](VALIDATION.md)「r328 KI-REL4」节：书架 1 本 `the-metamorphosis` 时导入同名同作者的第二个 `the-metamorphosis.txt` → 变 2 本；紧接着再导入同一个文件 → 仍 2 本。**仍未做**：失效记录接回（`planLocalBookImportReuse` / `rebindLocalBook`，对照表 F 块第 2、3 行仍 `未接`）、多选导入、导入页「已上架」标记、从文件名解析作者。**迁移后果**：本改动前导入的书用时间戳命名，`bookUrl` 与新键对不上，那本同名书会被当成另一本书再新增一次。
 > 已盘点，见 [BOOKSHELF.md](parity/BOOKSHELF.md) F「本地书导入与判重」第 533 行起（7 行，533–539；根因行 533）。上游四条链路四个判重键（`bookUrl` / `originName` / `hasFile` / `bookUrl`+`name+author`），本地只有第四种；另缺失效接回（534 行）、接回判据（535 行）、多选导入与「已上架」标记（537/538 行）、文件名解析书名作者（539 行——本地 `author` 恒空，是判重键失效的上游原因）。
 
 **KI-REL5 浅色模式适配差** —— 深色模式的适配明显好于浅色，浅色模式配色未打磨。根因：r300–r317 的深色模式改造集中在夜间配色与主题包，日间配色基本沿用改造前的旧值，`entry/src/main/resources/base/element/color.json` 里的 `theme_*` 日间色没重新对齐上游浅色方案。补法：按上游 `ThemeConfigScreen.kt` 的浅色档逐项对齐日间色，与深色同一套 token。

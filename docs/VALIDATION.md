@@ -49,6 +49,31 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-04 N 端 r328 KI-REL4 同名同作者加不进书架
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
+- 构建：`node "<DevEco>/tools/hvigor/hvigor/bin/hvigor.js" --no-daemon --mode module -p product=default -p module=entry@default assembleHap` → `BUILD SUCCESSFUL in 44 s 652 ms`，`hdc install -r` 覆盖安装成功。
+- 目标操作：书架右上 ⋮ →「添加本地」→ 系统文件选择器「浏览」→「我的手机」→ 选 `the-m...sis.txt` →「完成」；等待落库后再做一次同样的导入。
+- 为什么改：原来 `pages/Index.ets:5602-5617` 按 `format + title + author` 判重，命中就 `discardImportedCopy()` 丢弃本次导入并提示「这本书已在书架中」——于是「同名同作者的另一本书」永远加不进来。而上游判重键是 `bookUrl`（`LocalBook.kt:259` 的 `appDb.bookDao.getBook(bookUrl)`，其中 `bookUrl = FileDoc.fromUri(uri).toString()` 就是源文件路径），命中时走的是**更新**分支（`:280-288`：`deleteBook(book, false)` → `latestChapterTime = 0` → `delByBook(bookUrl)` → `update(book)`），不是拒绝。本地还有一层隐藏前提缺失：正文文件名原来用 `local-${Date.now()}`，每次导入都产生新路径，`bookUrl` 根本不稳定，任何「按文件路径判重」都不可能命中。
+- 改动：
+  1. `entry/src/main/ets/data/BookRepository.ets:437-443`：`bookId` 由 `local-${Date.now()}` 改为 `local-${md5Encode16(uri)}`，正文路径随源文件稳定（TXT 与 EPUB 都走这个 id）。
+  2. `BookRepository.ets` `importTxtFromUri` 拷贝前加 `if (fileIo.accessSync(contentPath)) { fileIo.unlinkSync(contentPath); }`：同一路径重复导入时先删旧副本，否则 `copyFileSync` 目标已存在会失败。
+  3. `entry/src/main/ets/pages/Index.ets:5602-5637`：判重键改 `contentPath`（即 `bookUrl`）；命中时用 `BookRepository.copyBook(existing)` 复制原记录，只覆盖 `chapterCount` / `lastChapter` / `tocRule` 并置 `latestChapterTime = 0`，然后 `saveImportedBooks` + `saveChapters`（整本重建目录），提示「这本书之前导入过，已更新《X》的目录」；未命中才走原来的新增路径。
+
+### 设备验收
+
+| 操作 | 预期 | 实测证据 | 结论 |
+| --- | --- | --- | --- |
+| 书架只有 1 本 `the-metamorphosis` 时，添加本地 → 选 `the-m...sis.txt` → 完成 | 新增成功（不再被「已在书架中」挡住），书架 2 本 | `r1.jpeg`：书架出现**两本**同名同作者（`the-metamorphosis` / 本地 TXT / 13 章）的书卡 | 通过 |
+| 紧接着再导入**同一个** `the-m...sis.txt` | 不新增第三条记录 | `r2.jpeg`、`r3.jpeg`：书架仍是 **2 本**，没有出现第三本 | 通过 |
+| 检查落盘路径（判重键是不是文件路径） | 两条正文文件名一个来自旧时间戳命名、一个来自 `md5(源 uri)` | `hdc shell ls /data/app/el2/100/base/io.legado.harmony/haps/entry/files/books` → `local-00af08b6bceffeab.txt`、`local-1793713951683.txt` | 通过 |
+
+**边界 1（迁移后果）**：第二本书之所以能被加进来，除了判重键变了，还因为**老记录的 bookUrl 是时间戳命名**（`local-1793713951683.txt`），与新键（`local-00af08b6bceffeab.txt`）对不上。换句话说，改动前导入的书不认识新键，同名那本会被当成另一本书再新增一次；改完之后再导入同一文件才会命中更新分支（上表第 2 行验证的就是这一点）。上游因为 `bookUrl` 一直是源文件路径，不存在这个迁移问题。
+
+**边界 2（接回未做）**：上游 `LocalBook.kt:260-266` 那条「源文件被删后重新导入同名文件 → 把旧记录接到新文件上」（`planLocalBookImportReuse` + `rebindLocalBook`）本轮**没有实现**，对照表 F 块第 2、3 行仍是 `未接`。所以「删掉正文文件 → 重新导入同名文件」在本地仍会新增一条，而不是接回旧记录。
+
+**未验**：EPUB 走同一 `bookId` 规则，但本轮只用 TXT 验过；多选导入（本地 `maxSelectNumber = 1`，未改）。
+
 ## 2026-11-04 N 端 r327 KI-REL3 目录打开慢、滑动卡
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
