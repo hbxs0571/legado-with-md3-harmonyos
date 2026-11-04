@@ -28,6 +28,7 @@ import {
   LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator, LocalReaderSizeOffset,
   LocalReaderTitleBlock, LocalReaderTitleSegment
 } from './LocalReaderPaginator';
+import { ReaderTextLayoutStyle } from '../reader/ReaderTextLayoutEngine';
 import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
 import { HiddenSpan, scanHiddenSpans, toBodyOnly, toRawText } from '../reader/ReaderBodyOnlyFilter';
 import {
@@ -1855,7 +1856,9 @@ export struct ReaderPage {
       this.textFullJustify,
       this.resolveReaderColumnCount(),
       this.readerSizeOffsets,
-      titleBlock
+      titleBlock,
+      // 断行交给系统原生文本引擎，样式必须与绘制正文同一套。
+      this.buildReaderTextLayoutStyle(fontSize)
     );
     const nextPages: LocalReaderPage[] = [];
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {
@@ -3548,7 +3551,9 @@ export struct ReaderPage {
           0,
           this.resolveReaderColumnCount(),
           this.readerSizeOffsets,
-          titleBlock
+          titleBlock,
+          // 与当页排版同一套样式，否则全书画布页数会和实际翻页数对不上。
+          this.buildReaderTextLayoutStyle(fontSize)
         );
       // 标题页已由分页器的 titlePageBreakAfter 产出，不再额外 +1。
       pageCounts.push(pageCount);
@@ -3706,6 +3711,26 @@ export struct ReaderPage {
 
   private getReaderTextLetterSpacingWidth(value: string, fontSize: number): number {
     return readerTextGlyphCount(value) * this.getReaderLetterSpacingVp(fontSize);
+  }
+
+  /**
+   * 断行引擎用的正文样式。
+   *
+   * 必须与绘制正文的 `buildReaderCanvasStyle()` 同一套口径（同一字体族、字号、
+   * 字重、字间距），否则系统断出来的行宽与画出来的行宽会不一致：
+   * 断行时说放得下、绘制时却超出去，表现为最后一个字被裁或两端对齐缝隙不对。
+   */
+  private buildReaderTextLayoutStyle(fontSize: number): ReaderTextLayoutStyle {
+    const context = this.getUIContext();
+    return {
+      fontFamilies: [this.readerBodyFontFamily],
+      fontSizeFp: fontSize,
+      letterSpacingVp: this.getReaderLetterSpacingVp(fontSize),
+      fontWeight: this.getReaderFontWeight(),
+      // layoutSync 只认 px，换算比例由这里带进去，引擎侧不再调用全局 vp2px / fp2px。
+      vpScalePx: context.vp2px(1),
+      fpScalePx: context.fp2px(1)
+    };
   }
 
   private createMarkingFromCurrentSelection(): void {

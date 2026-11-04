@@ -1,5 +1,10 @@
-import { LocalSemanticDocument, LocalSemanticParagraph } from '../data/LocalTextSemantics';
-import { ChineseLineBreaker } from '../reader/ChineseLineBreaker';
+import { LocalSemanticDocument, LocalSemanticParagraph, LocalSemanticPart } from '../data/LocalTextSemantics';
+import {
+  ReaderTextLayoutEngine,
+  ReaderTextLayoutLine,
+  ReaderTextLayoutPart,
+  ReaderTextLayoutStyle
+} from '../reader/ReaderTextLayoutEngine';
 
 export interface LocalReaderLineItem {
   kind: 'text' | 'image';
@@ -119,22 +124,23 @@ export interface LocalReaderSizeOffset {
   padBottom: number;
 }
 
-/** 按设备字体度量分页，保留 Android 字符坐标，并对齐默认正文的非末行字距。 */
-export class LocalReaderPaginator {
-  private static findWordBreakIndex(
-    text: string,
-    nextCharacter: string,
-    measureTextWidth: (text: string) => number,
-    contentWidth: number
-  ): number {
-    if (!/^[\x21-\x7E]$/.test(nextCharacter)) { return -1; }
-    const boundary = Math.max(text.lastIndexOf(' '), text.lastIndexOf('\t'));
-    if (boundary <= 0) { return -1; }
-    const nextWord = text.substring(boundary + 1) + nextCharacter;
-    return measureTextWidth(nextWord) <= contentWidth ? boundary : -1;
-  }
+/** 一行命中排版折算出的行高与上下留白（内部用）。 */
+interface LocalReaderLineMetrics {
+  height: number;
+  padTop: number;
+  padBottom: number;
+}
 
-  /** 把一行文本切成 codePoint 序列，供避头尾判定（代理对算一个 cluster）。 */
+/**
+ * 按设备字体度量分页，保留 Android 字符坐标，并对齐默认正文的非末行字距。
+ *
+ * 断行交给系统原生文本引擎（`reader/ReaderTextLayoutEngine.ets` → `@ohos.graphics.text`），
+ * 与上游 Android 的 `StaticLayout` 同一底座：中文避头尾、中西文混排断点、字距都按系统
+ * 语言惯例处理。本类只负责「行落在哪一列、行高多少、切到哪一页」。
+ */
+export class LocalReaderPaginator {
+
+  /** 把一行文本切成 codePoint 序列，供章标题折行（代理对算一个 cluster）。 */
   private static toClusters(text: string): string[] {
     const clusters: string[] = [];
     let cursor = 0;
@@ -145,6 +151,28 @@ export class LocalReaderPaginator {
       cursor += step;
     }
     return clusters;
+  }
+
+  /**
+   * 按行区间扫一遍命中排版，求该行需要抬到多高、上下各留多少白。
+   *
+   * 旧实现逐字推进游标；改成按行算之后，判据变成「行区间与命中区间是否相交」，
+   * 一行里只要有一个字落在命中区，整行就按该区的字号偏移抬高——与逐字取 `max` 等价。
+   */
+  private static metricsForRange(startPosition: number, endPosition: number, lineHeight: number,
+    sizeOffsets: LocalReaderSizeOffset[]): LocalReaderLineMetrics {
+    let height = lineHeight;
+    let padTop = 0;
+    let padBottom = 0;
+    for (let index = 0; index < sizeOffsets.length; index++) {
+      const span = sizeOffsets[index];
+      if (span === undefined) { continue; }
+      if (span.endExclusive <= startPosition || span.start >= endPosition) { continue; }
+      height = Math.max(height, Math.max(1, lineHeight + span.extraHeight));
+      padTop = Math.max(padTop, span.padTop);
+      padBottom = Math.max(padBottom, span.padBottom);
+    }
+    return { height: height, padTop: padTop, padBottom: padBottom };
   }
 
   static paginate(
@@ -162,12 +190,15 @@ export class LocalReaderPaginator {
     fullJustify: boolean = true,
     columnCount: number = 1,
     sizeOffsets: LocalReaderSizeOffset[] = [],
-    titleBlock: LocalReaderTitleBlock | undefined = undefined
+    titleBlock: LocalReaderTitleBlock | undefined = undefined,
+    textStyle: ReaderTextLayoutStyle | undefined = undefined
   ): LocalReaderPage[] {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) {
       return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false, lineColumns: [] }];
     }
+    // 断行交给系统引擎；没有字体样式时引擎退回逐 cluster 自量（老口径）。
+    const engine = new ReaderTextLayoutEngine(contentWidth, textStyle, measureTextWidth);
     const pages: LocalReaderPage[] = [];
     let pageLines: LocalReaderLine[] = [];
     let pageColumns: number[] = [];
@@ -179,32 +210,9 @@ export class LocalReaderPaginator {
     let lineItems: LocalReaderLineItem[] = [];
     let lineWidth = 0;
     let currentLineHeight = lineHeight;
-    let lineLastTextPartIndex: number = -1;
     // 命中排版的字号偏移与行上下距：只有落在命中区里的字才抬高本行、加留白。
     let currentLinePadTop = 0;
     let currentLinePadBottom = 0;
-    let charHeight = lineHeight;
-    let charPadTop = 0;
-    let charPadBottom = 0;
-    // 字符位置单调递增，命中区间也用同一个游标向前走，不必每个字都从头找。
-    let offsetCursor = 0;
-    const metricsAt = (position: number): void => {
-      charHeight = lineHeight;
-      charPadTop = 0;
-      charPadBottom = 0;
-      while (offsetCursor < sizeOffsets.length) {
-        const span = sizeOffsets[offsetCursor];
-        if (span === undefined) { break; }
-        if (position < span.start) { return; }
-        if (position < span.endExclusive) {
-          charHeight = Math.max(1, lineHeight + span.extraHeight);
-          charPadTop = span.padTop;
-          charPadBottom = span.padBottom;
-          return;
-        }
-        offsetCursor++;
-      }
-    };
 
     const currentPageCapacity = (): number => Math.max(lineHeight,
       contentHeight - (pages.length === 0 ? Math.max(0, firstPageReservedLines) * lineHeight : 0));
@@ -298,174 +306,124 @@ export class LocalReaderPaginator {
       currentLineHeight = lineHeight;
       currentLinePadTop = 0;
       currentLinePadBottom = 0;
-      lineLastTextPartIndex = -1;
       if (pageBreakAfter) { flushPage(); }
     };
+    /**
+     * 把系统引擎给出的一行落进当前行缓冲。
+     *
+     * `keepOpen` 为真时不落地，只把片段推进 `lineItems`——行内图片要接着排在同一行，
+     * 必须先留着这一行的空位（上游 `TEXT` 图片样式与文字同排）。
+     */
+    const applyTextLine = (layoutLine: ReaderTextLayoutLine, lineEndPosition: number,
+      justify: boolean, spacingAfter: number, keepOpen: boolean): void => {
+      if (layoutLine.items.length === 0) { return; }
+      const metrics = LocalReaderPaginator.metricsForRange(layoutLine.startPosition,
+        layoutLine.endPosition, lineHeight, sizeOffsets);
+      for (let itemIndex = 0; itemIndex < layoutLine.items.length; itemIndex++) {
+        const layoutItem = layoutLine.items[itemIndex];
+        if (layoutItem === undefined) { continue; }
+        lineItems.push({
+          kind: 'text', value: layoutItem.value, width: layoutItem.width, height: lineHeight,
+          startPosition: layoutItem.startPosition, endPosition: layoutItem.endPosition,
+          leadingIndent: layoutItem.leadingIndent
+        });
+      }
+      lineWidth += layoutLine.width;
+      currentLineHeight = Math.max(currentLineHeight, metrics.height);
+      currentLinePadTop = Math.max(currentLinePadTop, metrics.padTop);
+      currentLinePadBottom = Math.max(currentLinePadBottom, metrics.padBottom);
+      if (keepOpen) { return; }
+      appendLine(lineEndPosition, justify, spacingAfter);
+    };
     const addParagraph = (paragraph: LocalSemanticParagraph): void => {
+      // 连续文本 part 先攒成一段再交给系统引擎断行：断点要跨 part 连续，
+      // 逐 part 单独断行会在 part 边界人为制造换行（行内图片、富文本块都会切 part）。
+      let runParts: ReaderTextLayoutPart[] = [];
+      const flushRun = (finalEndPosition: number, keepLastLine: boolean, lastJustify: boolean,
+        lastSpacing: number): void => {
+        if (runParts.length === 0) { return; }
+        const pendingParts: ReaderTextLayoutPart[] = runParts;
+        runParts = [];
+        // 行内图片已经占满整行时先换行，否则这一段文字会挤在同一行里。
+        if (lineItems.length > 0 && lineWidth >= contentWidth) { appendLine(undefined, true); }
+        // 首行剩余宽度 = 内容宽 - 当前行已排掉的宽度（只有行内图片会是非零）。
+        const firstLineWidth = lineItems.length > 0 ? lineWidth : 0;
+        const layoutLines = engine.layout(pendingParts, firstLineWidth);
+        for (let index = 0; index < layoutLines.length; index++) {
+          const layoutLine = layoutLines[index];
+          if (layoutLine === undefined) { continue; }
+          const isLastLine = index === layoutLines.length - 1;
+          const lineEnd = isLastLine
+            ? Math.max(finalEndPosition, layoutLine.endPosition) : layoutLine.endPosition;
+          applyTextLine(layoutLine, lineEnd, isLastLine ? lastJustify : true,
+            isLastLine ? lastSpacing : 0, isLastLine && keepLastLine);
+        }
+      };
       for (let partIndex = 0; partIndex < paragraph.parts.length; partIndex++) {
         const part = paragraph.parts[partIndex];
         if (part === undefined) { continue; }
         if (part.kind === 'text') {
-          let cursor = 0;
-          while (cursor < part.value.length) {
-            const codePoint = part.value.codePointAt(cursor);
-            const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
-            const character = part.value.substring(cursor, nextCursor);
-            const position = part.startPosition + cursor;
-            // 该字若落在高亮规则命中区里，本行要按规则的字号偏移与行上下距排版。
-            metricsAt(position);
-            const finalPosition = part.startPosition + nextCursor;
-            const lastItem = lineItems[lineItems.length - 1];
-            const mergePrevious = lastItem?.kind === 'text' && lineLastTextPartIndex === partIndex;
-            const lastTextWidth = mergePrevious ? lastItem?.width ?? 0 : 0;
-            const lastText = mergePrevious ? lastItem?.value ?? '' : '';
-            const candidateText = lastText + character;
-            const candidateWidth = measureTextWidth(candidateText);
-            const nextLineWidth = lineWidth - lastTextWidth + candidateWidth;
-            if (lineItems.length > 0 && nextLineWidth > contentWidth) {
-              if (character === ' ' || character === '\t') {
-                appendLine(position + nextCursor - cursor, true);
-                cursor = nextCursor;
-                continue;
-              }
-              const wordBreak = mergePrevious
-                ? LocalReaderPaginator.findWordBreakIndex(lastText, character, measureTextWidth, contentWidth) : -1;
-              if (wordBreak >= 0 && lastItem !== undefined && lastItem.kind === 'text') {
-                const prefix = lastText.substring(0, wordBreak);
-                const prefixWidth = measureTextWidth(prefix);
-                const nextWord = lastText.substring(wordBreak + 1) + character;
-                const nextWordWidth = measureTextWidth(nextWord);
-                const nextWordStart = lastItem.startPosition + wordBreak + 1;
-                lineItems[lineItems.length - 1] = {
-                  kind: 'text', value: prefix, width: prefixWidth, height: lineHeight,
-                  startPosition: lastItem.startPosition, endPosition: nextWordStart,
-                  leadingIndent: lastItem.leadingIndent
-                };
-                lineWidth = lineWidth - lastTextWidth + prefixWidth;
-                appendLine(nextWordStart, true);
-                lineItems.push({
-                  kind: 'text', value: nextWord, width: nextWordWidth, height: lineHeight,
-                  startPosition: nextWordStart, endPosition: finalPosition,
-                  leadingIndent: part.leadingIndent
-                });
-                lineWidth = nextWordWidth;
-                lineLastTextPartIndex = partIndex;
-                cursor = nextCursor;
-                continue;
-              }
-              // 中文避头尾：上游 `ReaderPaginator.kt:559` 无条件用 ChineseLineBreaker，
-              // 溢出时把本行末尾的标点/开引号一起搬到下一行，避免行首出现「，。！》」，
-              // 也避免行尾挂一个开引号。找不到合法断点时才硬断。
-              if (mergePrevious && lastItem !== undefined && lastItem.kind === 'text') {
-                const carried = ChineseLineBreaker.resolve(LocalReaderPaginator.toClusters(lastText), character);
-                if (carried > 0) {
-                  const parts = ChineseLineBreaker.splitTail(lastText, carried);
-                  const prefix = parts[0] ?? '';
-                  const tail = parts[1] ?? '';
-                  if (prefix.length === 0) {
-                    lineItems.pop();
-                    lineWidth = lineWidth - lastTextWidth;
-                  } else {
-                    const prefixWidth = measureTextWidth(prefix);
-                    lineItems[lineItems.length - 1] = {
-                      kind: 'text', value: prefix, width: prefixWidth, height: lineHeight,
-                      startPosition: lastItem.startPosition, endPosition: lastItem.startPosition + prefix.length,
-                      leadingIndent: lastItem.leadingIndent
-                    };
-                    lineWidth = lineWidth - lastTextWidth + prefixWidth;
-                  }
-                  appendLine(lastItem.startPosition + prefix.length, true);
-                  // 被搬下来的标点与本字符一起成为下一行行首
-                  const carriedText = tail + character;
-                  const carriedWidth = measureTextWidth(carriedText);
-                  lineItems.push({
-                    kind: 'text', value: carriedText, width: carriedWidth, height: lineHeight,
-                    startPosition: lastItem.startPosition + prefix.length, endPosition: finalPosition,
-                    leadingIndent: false
-                  });
-                  lineWidth = carriedWidth;
-                  lineLastTextPartIndex = partIndex;
-                  cursor = nextCursor;
-                  continue;
-                }
-              }
-              appendLine(undefined, true);
-              continue;
-            }
-            if (mergePrevious && lastItem !== undefined && lastItem.kind === 'text') {
-              lineItems[lineItems.length - 1] = {
-                kind: 'text', value: candidateText, width: candidateWidth, height: lineHeight,
-                startPosition: lastItem.startPosition, endPosition: finalPosition,
-                leadingIndent: part.leadingIndent
-              };
-            } else {
-              lineItems.push({
-                kind: 'text', value: character, width: candidateWidth, height: lineHeight,
-                startPosition: position, endPosition: finalPosition,
-                leadingIndent: part.leadingIndent
-              });
-            }
-            currentLineHeight = Math.max(currentLineHeight, charHeight);
-            currentLinePadTop = Math.max(currentLinePadTop, charPadTop);
-            currentLinePadBottom = Math.max(currentLinePadBottom, charPadBottom);
-            lineLastTextPartIndex = partIndex;
-            lineWidth = nextLineWidth;
-            cursor = nextCursor;
-          }
-        } else {
-          const intrinsic = imageSizes.get(part.value);
-          const sourceWidth = intrinsic?.width ?? 0;
-          const sourceHeight = intrinsic?.height ?? 0;
-          if (sourceWidth <= 0 || sourceHeight <= 0) { continue; }
-          const normalizedImageStyle = imageStyle.toUpperCase();
-          const inlineStyle = normalizedImageStyle === 'TEXT' ||
-            (normalizedImageStyle === 'DEFAULT' &&
-              sourceWidth < standaloneImageThreshold && sourceHeight < standaloneImageThreshold);
-          if (inlineStyle) {
-            const width = Math.max(1, inlineImageWidth);
-            const height = width * sourceHeight / sourceWidth;
-            if (lineItems.length > 0 && lineWidth + width > contentWidth) { appendLine(undefined, true); }
-            currentLineHeight = Math.max(currentLineHeight, height);
-            lineItems.push({
-              kind: 'image', value: part.value, width: width, height: height,
-              startPosition: part.startPosition, endPosition: part.endPosition,
-              leadingIndent: false
-            });
-            lineWidth += width;
-            continue;
-          }
-
-          const singlePage = normalizedImageStyle === 'SINGLE';
-          const fullWidth = normalizedImageStyle === 'FULL';
-          if (lineItems.length > 0) { appendLine(undefined, true, paragraphSpacing); }
-          if (singlePage && pageLines.length > 0) { flushPage(); }
-          let availablePageHeight = currentPageCapacity();
-          let scale = singlePage || fullWidth
-            ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
-            : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
-          let width = sourceWidth * scale;
-          let height = sourceHeight * scale;
-          if (pageLines.length > 0 && pageUsedHeight + height > currentPageCapacity()) {
-            flushPage();
-            availablePageHeight = currentPageCapacity();
-            scale = singlePage || fullWidth
-              ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
-              : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
-            width = sourceWidth * scale;
-            height = sourceHeight * scale;
-          }
-          const verticalSpaceBefore = singlePage ? Math.max(0, (availablePageHeight - height) / 2) : 0;
-          currentLineHeight = height;
+          runParts.push({
+            value: part.value, startPosition: part.startPosition, leadingIndent: part.leadingIndent
+          });
+          continue;
+        }
+        const intrinsic = imageSizes.get(part.value);
+        const sourceWidth = intrinsic?.width ?? 0;
+        const sourceHeight = intrinsic?.height ?? 0;
+        // 尺寸还没到（应当极少见）：当成不存在，后面这段文字继续接着排。
+        if (sourceWidth <= 0 || sourceHeight <= 0) { continue; }
+        const normalizedImageStyle = imageStyle.toUpperCase();
+        const inlineStyle = normalizedImageStyle === 'TEXT' ||
+          (normalizedImageStyle === 'DEFAULT' &&
+            sourceWidth < standaloneImageThreshold && sourceHeight < standaloneImageThreshold);
+        if (inlineStyle) {
+          // 行内图片与文字同排：把文字流的末行留着不落地，图片接在同一行后面。
+          flushRun(part.startPosition, true, false, 0);
+          const width = Math.max(1, inlineImageWidth);
+          const height = width * sourceHeight / sourceWidth;
+          if (lineItems.length > 0 && lineWidth + width > contentWidth) { appendLine(undefined, true); }
+          currentLineHeight = Math.max(currentLineHeight, height);
           lineItems.push({
             kind: 'image', value: part.value, width: width, height: height,
             startPosition: part.startPosition, endPosition: part.endPosition,
             leadingIndent: false
           });
-          lineWidth = width;
-          appendLine(part.endPosition, false, paragraphSpacing, verticalSpaceBefore, singlePage, singlePage);
+          lineWidth += width;
+          continue;
         }
+
+        const singlePage = normalizedImageStyle === 'SINGLE';
+        const fullWidth = normalizedImageStyle === 'FULL';
+        // 块级图片独占整行：先把前面的文字收掉，末行按上游口径继续参与拉伸。
+        flushRun(part.startPosition, false, true, paragraphSpacing);
+        if (singlePage && pageLines.length > 0) { flushPage(); }
+        let availablePageHeight = currentPageCapacity();
+        let scale = singlePage || fullWidth
+          ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
+          : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
+        let width = sourceWidth * scale;
+        let height = sourceHeight * scale;
+        if (pageLines.length > 0 && pageUsedHeight + height > currentPageCapacity()) {
+          flushPage();
+          availablePageHeight = currentPageCapacity();
+          scale = singlePage || fullWidth
+            ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
+            : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
+          width = sourceWidth * scale;
+          height = sourceHeight * scale;
+        }
+        const verticalSpaceBefore = singlePage ? Math.max(0, (availablePageHeight - height) / 2) : 0;
+        currentLineHeight = height;
+        lineItems.push({
+          kind: 'image', value: part.value, width: width, height: height,
+          startPosition: part.startPosition, endPosition: part.endPosition,
+          leadingIndent: false
+        });
+        lineWidth = width;
+        appendLine(part.endPosition, false, paragraphSpacing, verticalSpaceBefore, singlePage, singlePage);
       }
-      appendLine(paragraph.endPosition, false, paragraphSpacing);
+      flushRun(paragraph.endPosition, false, false, paragraphSpacing);
     };
 
     /**
@@ -474,6 +432,10 @@ export class LocalReaderPaginator {
      *
      * 间距口径对齐上游 `ReaderPaginator.processBlock`（`:411`、`:425-430`）：
      * 首段之前加 `titleTopSpacingPx`，每段之后加「下一段还是标题 → 分段间距，否则 → 章标题下间距」。
+     *
+     * 标题不走系统断行引擎：各段字号按 `fontSizeScale` 缩放、字体族与正文不同
+     * （`readerTitleFontFamily`），而 `textStyle` 只描述正文一套。断行仍按 cluster 折，
+     * 与旧实现一致。
      */
     const addTitleBlock = (block: LocalReaderTitleBlock): void => {
       for (let segmentIndex = 0; segmentIndex < block.segments.length; segmentIndex++) {
@@ -484,16 +446,15 @@ export class LocalReaderPaginator {
         const spacingAfter = isLastSegment
           ? Math.max(0, block.bottomSpacing)
           : Math.max(0, segment.spacingAfter);
-        // 逐字断行：标题比正文宽时同样要折行，上游标题走同一个 ChineseLineBreaker。
         const clusters = LocalReaderPaginator.toClusters(segment.text);
         let lineClusters: string[] = [];
-        let lineWidth = 0;
+        let titleLineWidth = 0;
         let emittedLine = 0;
         const flushTitleLine = (spacing: number): void => {
           if (lineClusters.length === 0) { return; }
           lineItems = [{
             kind: 'text', value: lineClusters.join(''),
-            width: lineWidth, height: segmentLineHeight,
+            width: titleLineWidth, height: segmentLineHeight,
             startPosition: 0, endPosition: 0, leadingIndent: false,
             titleFontScale: segment.fontSizeScale
           }];
@@ -504,16 +465,16 @@ export class LocalReaderPaginator {
             block.centered ? 1 : 0);
           emittedLine++;
           lineClusters = [];
-          lineWidth = 0;
+          titleLineWidth = 0;
         };
         for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
           const cluster = clusters[clusterIndex] as string;
           const clusterWidth = block.measureWidth(cluster, segment.fontSizeScale);
-          if (lineClusters.length > 0 && lineWidth + clusterWidth > contentWidth) {
+          if (lineClusters.length > 0 && titleLineWidth + clusterWidth > contentWidth) {
             flushTitleLine(0);
           }
           lineClusters.push(cluster);
-          lineWidth += clusterWidth;
+          titleLineWidth += clusterWidth;
         }
         flushTitleLine(spacingAfter);
       }
@@ -552,7 +513,11 @@ export class LocalReaderPaginator {
     return pages;
   }
 
-  /** 按同一排版规则计页；逐字测量时定期让出 UI 线程，不构造整书页面对象。 */
+  /**
+   * 按同一排版规则计页；不构造整书页面对象，定期让出 UI 线程。
+   *
+   * 断行同样走 `ReaderTextLayoutEngine`，保证全书画布页数与当页排版用的是同一套断点。
+   */
   static async countPagesIncrementally(
     document: LocalSemanticDocument,
     contentWidth: number,
@@ -567,10 +532,12 @@ export class LocalReaderPaginator {
     firstPageReservedLines: number,
     columnCount: number = 1,
     sizeOffsets: LocalReaderSizeOffset[] = [],
-    titleBlock: LocalReaderTitleBlock | undefined = undefined
+    titleBlock: LocalReaderTitleBlock | undefined = undefined,
+    textStyle: ReaderTextLayoutStyle | undefined = undefined
   ): Promise<number> {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) { return 1; }
+    const engine = new ReaderTextLayoutEngine(contentWidth, textStyle, measureTextWidth);
     let pageCount = 0;
     let pageLineCount = 0;
     let pageUsedHeight = 0;
@@ -579,33 +546,11 @@ export class LocalReaderPaginator {
     let lineItems: LocalReaderLineItem[] = [];
     let lineWidth = 0;
     let currentLineHeight = lineHeight;
-    let lineLastTextPartIndex: number = -1;
     // 命中排版的字号偏移与行上下距：只有落在命中区里的字才抬高本行、加留白。
     let currentLinePadTop = 0;
     let currentLinePadBottom = 0;
-    let charHeight = lineHeight;
-    let charPadTop = 0;
-    let charPadBottom = 0;
-    // 字符位置单调递增，命中区间也用同一个游标向前走，不必每个字都从头找。
-    let offsetCursor = 0;
-    const metricsAt = (position: number): void => {
-      charHeight = lineHeight;
-      charPadTop = 0;
-      charPadBottom = 0;
-      while (offsetCursor < sizeOffsets.length) {
-        const span = sizeOffsets[offsetCursor];
-        if (span === undefined) { break; }
-        if (position < span.start) { return; }
-        if (position < span.endExclusive) {
-          charHeight = Math.max(1, lineHeight + span.extraHeight);
-          charPadTop = span.padTop;
-          charPadBottom = span.padBottom;
-          return;
-        }
-        offsetCursor++;
-      }
-    };
-    let measuredCharacterCount = 0;
+    // 每排 8 行让一次 UI 线程，替代原先「每 256 个字让一次」的节流。
+    let emittedLineCount = 0;
 
     const currentPageCapacity = (): number => Math.max(lineHeight,
       contentHeight - (pageCount === 0 ? Math.max(0, firstPageReservedLines) * lineHeight : 0));
@@ -645,7 +590,6 @@ export class LocalReaderPaginator {
       currentLineHeight = lineHeight;
       currentLinePadTop = 0;
       currentLinePadBottom = 0;
-      lineLastTextPartIndex = -1;
       if (pageBreakAfter) { flushPage(); }
     };
     const addTitleBlock = (block: LocalReaderTitleBlock): void => {
@@ -659,12 +603,12 @@ export class LocalReaderPaginator {
           : Math.max(0, segment.spacingAfter);
         const clusters = LocalReaderPaginator.toClusters(segment.text);
         let lineClusters = 0;
-        let lineWidth = 0;
+        let titleLineWidth = 0;
         let emittedLine = 0;
         const flushTitleLine = (spacing: number): void => {
           if (lineClusters === 0) { return; }
           lineItems = [{
-            kind: 'text', value: ' ', width: lineWidth, height: segmentLineHeight,
+            kind: 'text', value: ' ', width: titleLineWidth, height: segmentLineHeight,
             startPosition: 0, endPosition: 0, leadingIndent: false,
             titleFontScale: segment.fontSizeScale
           }];
@@ -673,16 +617,16 @@ export class LocalReaderPaginator {
           appendLine(spacing, verticalSpaceBefore);
           emittedLine++;
           lineClusters = 0;
-          lineWidth = 0;
+          titleLineWidth = 0;
         };
         for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
           const cluster = clusters[clusterIndex] as string;
           const clusterWidth = block.measureWidth(cluster, segment.fontSizeScale);
-          if (lineClusters > 0 && lineWidth + clusterWidth > contentWidth) {
+          if (lineClusters > 0 && titleLineWidth + clusterWidth > contentWidth) {
             flushTitleLine(0);
           }
           lineClusters++;
-          lineWidth += clusterWidth;
+          titleLineWidth += clusterWidth;
         }
         flushTitleLine(spacingAfter);
       }
@@ -698,131 +642,98 @@ export class LocalReaderPaginator {
       await new Promise<void>((resolve: () => void) => setTimeout(resolve, 0));
     };
     const addParagraph = async (paragraph: LocalSemanticParagraph): Promise<void> => {
+      let runParts: ReaderTextLayoutPart[] = [];
+      const flushRun = async (keepLastLine: boolean, lastSpacing: number): Promise<void> => {
+        if (runParts.length === 0) { return; }
+        const pendingParts: ReaderTextLayoutPart[] = runParts;
+        runParts = [];
+        if (lineItems.length > 0 && lineWidth >= contentWidth) { appendLine(); }
+        const firstLineWidth = lineItems.length > 0 ? lineWidth : 0;
+        const layoutLines = engine.layout(pendingParts, firstLineWidth);
+        for (let index = 0; index < layoutLines.length; index++) {
+          const layoutLine = layoutLines[index];
+          if (layoutLine === undefined || layoutLine.items.length === 0) { continue; }
+          const isLastLine = index === layoutLines.length - 1;
+          const metrics = LocalReaderPaginator.metricsForRange(layoutLine.startPosition,
+            layoutLine.endPosition, lineHeight, sizeOffsets);
+          for (let itemIndex = 0; itemIndex < layoutLine.items.length; itemIndex++) {
+            const layoutItem = layoutLine.items[itemIndex];
+            if (layoutItem === undefined) { continue; }
+            lineItems.push({
+              kind: 'text', value: layoutItem.value, width: layoutItem.width, height: lineHeight,
+              startPosition: layoutItem.startPosition, endPosition: layoutItem.endPosition,
+              leadingIndent: layoutItem.leadingIndent
+            });
+          }
+          lineWidth += layoutLine.width;
+          currentLineHeight = Math.max(currentLineHeight, metrics.height);
+          currentLinePadTop = Math.max(currentLinePadTop, metrics.padTop);
+          currentLinePadBottom = Math.max(currentLinePadBottom, metrics.padBottom);
+          if (isLastLine && keepLastLine) { continue; }
+          appendLine(isLastLine ? lastSpacing : 0);
+          emittedLineCount++;
+          if (emittedLineCount % 8 === 0) { await yieldToUi(); }
+        }
+      };
       for (let partIndex = 0; partIndex < paragraph.parts.length; partIndex++) {
-        const part = paragraph.parts[partIndex];
+        const part: LocalSemanticPart | undefined = paragraph.parts[partIndex];
         if (part === undefined) { continue; }
         if (part.kind === 'text') {
-          let cursor = 0;
-          while (cursor < part.value.length) {
-            const codePoint = part.value.codePointAt(cursor);
-            const nextCursor = cursor + (codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1);
-            const character = part.value.substring(cursor, nextCursor);
-            const position = part.startPosition + cursor;
-            // 该字若落在高亮规则命中区里，本行要按规则的字号偏移与行上下距排版。
-            metricsAt(position);
-            const finalPosition = part.startPosition + nextCursor;
-            const lastItem = lineItems[lineItems.length - 1];
-            const mergePrevious = lastItem?.kind === 'text' && lineLastTextPartIndex === partIndex;
-            const lastTextWidth = mergePrevious ? lastItem?.width ?? 0 : 0;
-            const lastText = mergePrevious ? lastItem?.value ?? '' : '';
-            const candidateText = lastText + character;
-            const candidateWidth = measureTextWidth(candidateText);
-            measuredCharacterCount++;
-            const nextLineWidth = lineWidth - lastTextWidth + candidateWidth;
-            if (lineItems.length > 0 && nextLineWidth > contentWidth) {
-              if (character === ' ' || character === '\t') {
-                appendLine(0, 0, false, false);
-                cursor = nextCursor;
-                continue;
-              }
-              const wordBreak = mergePrevious
-                ? LocalReaderPaginator.findWordBreakIndex(lastText, character, measureTextWidth, contentWidth) : -1;
-              if (wordBreak >= 0 && lastItem !== undefined && lastItem.kind === 'text') {
-                const prefix = lastText.substring(0, wordBreak);
-                const prefixWidth = measureTextWidth(prefix);
-                const nextWord = lastText.substring(wordBreak + 1) + character;
-                const nextWordWidth = measureTextWidth(nextWord);
-                const nextWordStart = lastItem.startPosition + wordBreak + 1;
-                lineItems[lineItems.length - 1] = {
-                  kind: 'text', value: prefix, width: prefixWidth, height: lineHeight,
-                  startPosition: lastItem.startPosition, endPosition: nextWordStart,
-                  leadingIndent: lastItem.leadingIndent
-                };
-                lineWidth = lineWidth - lastTextWidth + prefixWidth;
-                appendLine(0, 0, false, false);
-                lineItems.push({
-                  kind: 'text', value: nextWord, width: nextWordWidth, height: lineHeight,
-                  startPosition: nextWordStart, endPosition: finalPosition, leadingIndent: part.leadingIndent
-                });
-                lineWidth = nextWordWidth;
-                lineLastTextPartIndex = partIndex;
-                cursor = nextCursor;
-                continue;
-              }
-              appendLine(0, 0, false, false);
-              continue;
-            }
-            if (mergePrevious && lastItem !== undefined && lastItem.kind === 'text') {
-              lineItems[lineItems.length - 1] = {
-                kind: 'text', value: candidateText, width: candidateWidth, height: lineHeight,
-                startPosition: lastItem.startPosition, endPosition: finalPosition,
-                leadingIndent: part.leadingIndent
-              };
-            } else {
-              lineItems.push({
-                kind: 'text', value: character, width: candidateWidth, height: lineHeight,
-                startPosition: position, endPosition: finalPosition, leadingIndent: part.leadingIndent
-              });
-            }
-            currentLineHeight = Math.max(currentLineHeight, charHeight);
-            currentLinePadTop = Math.max(currentLinePadTop, charPadTop);
-            currentLinePadBottom = Math.max(currentLinePadBottom, charPadBottom);
-            lineLastTextPartIndex = partIndex;
-            lineWidth = nextLineWidth;
-            cursor = nextCursor;
-            if (measuredCharacterCount % 256 === 0) { await yieldToUi(); }
-          }
-        } else {
-          const intrinsic = imageSizes.get(part.value);
-          const sourceWidth = intrinsic?.width ?? 0;
-          const sourceHeight = intrinsic?.height ?? 0;
-          if (sourceWidth <= 0 || sourceHeight <= 0) { continue; }
-          const normalizedImageStyle = imageStyle.toUpperCase();
-          const inlineStyle = normalizedImageStyle === 'TEXT' ||
-            (normalizedImageStyle === 'DEFAULT' &&
-              sourceWidth < standaloneImageThreshold && sourceHeight < standaloneImageThreshold);
-          if (inlineStyle) {
-            const width = Math.max(1, inlineImageWidth);
-            const height = width * sourceHeight / sourceWidth;
-            if (lineItems.length > 0 && lineWidth + width > contentWidth) { appendLine(); }
-            currentLineHeight = Math.max(currentLineHeight, height);
-            lineItems.push({
-              kind: 'image', value: part.value, width: width, height: height,
-              startPosition: part.startPosition, endPosition: part.endPosition, leadingIndent: false
-            });
-            lineWidth += width;
-            continue;
-          }
-          const singlePage = normalizedImageStyle === 'SINGLE';
-          const fullWidth = normalizedImageStyle === 'FULL';
-          if (lineItems.length > 0) { appendLine(paragraphSpacing); }
-          if (singlePage && pageLineCount > 0) { flushPage(); }
-          let availablePageHeight = currentPageCapacity();
-          let scale = singlePage || fullWidth
-            ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
-            : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
-          let width = sourceWidth * scale;
-          let height = sourceHeight * scale;
-          if (pageLineCount > 0 && pageUsedHeight + height > currentPageCapacity()) {
-            flushPage();
-            availablePageHeight = currentPageCapacity();
-            scale = singlePage || fullWidth
-              ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
-              : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
-            width = sourceWidth * scale;
-            height = sourceHeight * scale;
-          }
-          const verticalSpaceBefore = singlePage ? Math.max(0, (availablePageHeight - height) / 2) : 0;
-          currentLineHeight = height;
+          runParts.push({
+            value: part.value, startPosition: part.startPosition, leadingIndent: part.leadingIndent
+          });
+          continue;
+        }
+        const intrinsic = imageSizes.get(part.value);
+        const sourceWidth = intrinsic?.width ?? 0;
+        const sourceHeight = intrinsic?.height ?? 0;
+        if (sourceWidth <= 0 || sourceHeight <= 0) { continue; }
+        const normalizedImageStyle = imageStyle.toUpperCase();
+        const inlineStyle = normalizedImageStyle === 'TEXT' ||
+          (normalizedImageStyle === 'DEFAULT' &&
+            sourceWidth < standaloneImageThreshold && sourceHeight < standaloneImageThreshold);
+        if (inlineStyle) {
+          await flushRun(true, 0);
+          const width = Math.max(1, inlineImageWidth);
+          const height = width * sourceHeight / sourceWidth;
+          if (lineItems.length > 0 && lineWidth + width > contentWidth) { appendLine(); }
+          currentLineHeight = Math.max(currentLineHeight, height);
           lineItems.push({
             kind: 'image', value: part.value, width: width, height: height,
             startPosition: part.startPosition, endPosition: part.endPosition, leadingIndent: false
           });
-          lineWidth = width;
-          appendLine(paragraphSpacing, verticalSpaceBefore, singlePage, singlePage);
+          lineWidth += width;
+          continue;
         }
+        const singlePage = normalizedImageStyle === 'SINGLE';
+        const fullWidth = normalizedImageStyle === 'FULL';
+        await flushRun(false, paragraphSpacing);
+        if (singlePage && pageLineCount > 0) { flushPage(); }
+        let availablePageHeight = currentPageCapacity();
+        let scale = singlePage || fullWidth
+          ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
+          : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
+        let width = sourceWidth * scale;
+        let height = sourceHeight * scale;
+        if (pageLineCount > 0 && pageUsedHeight + height > currentPageCapacity()) {
+          flushPage();
+          availablePageHeight = currentPageCapacity();
+          scale = singlePage || fullWidth
+            ? Math.min(contentWidth / sourceWidth, availablePageHeight / sourceHeight)
+            : Math.min(1, contentWidth / sourceWidth, availablePageHeight / sourceHeight);
+          width = sourceWidth * scale;
+          height = sourceHeight * scale;
+        }
+        const verticalSpaceBefore = singlePage ? Math.max(0, (availablePageHeight - height) / 2) : 0;
+        currentLineHeight = height;
+        lineItems.push({
+          kind: 'image', value: part.value, width: width, height: height,
+          startPosition: part.startPosition, endPosition: part.endPosition, leadingIndent: false
+        });
+        lineWidth = width;
+        appendLine(paragraphSpacing, verticalSpaceBefore, singlePage, singlePage);
       }
-      appendLine(paragraphSpacing);
+      await flushRun(false, paragraphSpacing);
       await yieldToUi();
     };
 
