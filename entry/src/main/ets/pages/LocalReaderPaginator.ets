@@ -9,6 +9,14 @@ export interface LocalReaderLineItem {
   startPosition: number;
   endPosition: number;
   leadingIndent: boolean;
+  /**
+   * 章标题字号的相对倍数（0 或未设置表示正文元素）。
+   *
+   * 上游标题是排版流里的普通文本块，只是带 `isTitle` 标记、字号按段缩放
+   * （`ReaderChapterSource.kt:8-14`、`ReaderChapterBlockMeasurer.kt:260-270`）。
+   * 绘制层据此换用标题样式，而不是另起一套画布外组件。
+   */
+  titleFontScale?: number;
 }
 
 export interface LocalReaderLine {
@@ -22,6 +30,48 @@ export interface LocalReaderLine {
   justifyGap: number;
   /** 该行未拉伸时的文字实际宽度，供自绘下划线决定线段右端。 */
   contentWidth: number;
+  /** 1 = 本行水平居中（标题段），0 或未设置 = 按正文对齐。 */
+  titleAlign?: number;
+  /** 本行是章标题行：不参与两端对齐，也不落正文命中样式。 */
+  titleLine?: boolean;
+}
+
+/** 一段章标题（按 `titleSegType` 切段后的结果）。 */
+export interface LocalReaderTitleSegment {
+  text: string;
+  /** 相对标题基准字号的倍数（副标题段由 `titleSegScaling` 缩放）。 */
+  fontSizeScale: number;
+  /**
+   * 该段的行高（vp）。
+   *
+   * 上游首段与副标题段用不同的行距倍率（`titleLineSpacingExtra` / `titleLineSpacingSub`，
+   * 见 `LegacyReaderPaginationStyleFactory.kt:98-101`），所以行高按段算好带进来，
+   * 分页器不自己推。
+   */
+  lineHeightVp: number;
+  /** 该段之后的分段间距（vp）。 */
+  spacingAfter: number;
+}
+
+/**
+ * 章标题块：上游把标题当普通文本块排进块流，与正文共用同一个 `y` 游标与
+ * 同一条「`y + 行高 > contentBottom` 就换页」判定（`ReaderPaginator.kt:1112-1116`）。
+ * 这里同样按块交给分页器，标题因此会跟着正文一起翻页、一起滚动。
+ */
+export interface LocalReaderTitleBlock {
+  segments: LocalReaderTitleSegment[];
+  /** 标题块上间距（vp，上游 `titleTopSpacingPx`）。 */
+  topSpacing: number;
+  /** 标题排完、后面接正文时的下间距（vp，上游 `titleBottomSpacingPx`）。 */
+  bottomSpacing: number;
+  /** 标题是否水平居中（上游 `titleAlignment`）。 */
+  centered: boolean;
+  /** 标题排完后强制断页（上游 `titlePageBreakAfter`）。 */
+  pageBreakAfter: boolean;
+  /** 首页只有标题时整页垂直居中（上游 `titlePageCenterVertical`）。 */
+  centerVertical: boolean;
+  /** 按段内相对字号倍率测量文字宽度（vp）。 */
+  measureWidth: (text: string, fontSizeScale: number) => number;
 }
 
 export interface LocalReaderPage {
@@ -41,6 +91,14 @@ export interface LocalReaderPage {
    * 对齐上游 `ReadBookController.centeredReaderMessagePage`（`ReadBookController.kt:3051-3100`）。
    */
   messageText?: string;
+  /**
+   * 整页内容垂直居中。
+   *
+   * 上游 `titlePageCenterVertical`：页成型后回改第一页，把整页元素按 `delta` 平移
+   * （`ReaderPaginator.kt:50-51`、`:369-389`）。判据是「页内全是 `emphasized` 的 Text」，
+   * 即本页只有标题。
+   */
+  centerVertical?: boolean;
 }
 
 export interface LocalReaderImageSize {
@@ -103,7 +161,8 @@ export class LocalReaderPaginator {
     firstPageReservedLines: number,
     fullJustify: boolean = true,
     columnCount: number = 1,
-    sizeOffsets: LocalReaderSizeOffset[] = []
+    sizeOffsets: LocalReaderSizeOffset[] = [],
+    titleBlock: LocalReaderTitleBlock | undefined = undefined
   ): LocalReaderPage[] {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) {
@@ -175,7 +234,9 @@ export class LocalReaderPaginator {
       spacingAfter: number = 0,
       verticalSpaceBefore: number = 0,
       pageBreakBefore: boolean = false,
-      pageBreakAfter: boolean = false
+      pageBreakAfter: boolean = false,
+      titleLine: boolean = false,
+      titleAlign: number = 0
     ): void => {
       if (lineItems.length === 0) { return; }
       const lineStart = lineItems[0]?.startPosition ?? 0;
@@ -203,8 +264,9 @@ export class LocalReaderPaginator {
         }
       }
       // 对齐 Android 正文两端对齐：首行缩进间距不拉伸，段末行不走这条分支。
+      // 标题行同样不拉伸——上游标题块 `bodyAlignment` 只作用在正文，标题按自己的对齐排。
       const stretchableGaps = Math.max(0, itemCount - 1 - Math.max(0, leadingIndentCount));
-      const justifyGap = justify && fullJustify && stretchableGaps > 0
+      const justifyGap = justify && fullJustify && !titleLine && stretchableGaps > 0
         ? Math.max(0, (contentWidth - naturalWidth) / stretchableGaps) : 0;
       if (pageBreakBefore && pageLines.length > 0) { flushPage(); }
       if (pageLines.length > 0 &&
@@ -222,7 +284,9 @@ export class LocalReaderPaginator {
         startPosition: lineStart,
         endPosition: lineEnd,
         justifyGap: justifyGap,
-        contentWidth: naturalWidth
+        contentWidth: naturalWidth,
+        titleAlign: titleAlign,
+        titleLine: titleLine
       };
       pageLines.push(line);
       pageColumns.push(columnIndex);
@@ -404,6 +468,64 @@ export class LocalReaderPaginator {
       appendLine(paragraph.endPosition, false, paragraphSpacing);
     };
 
+    /**
+     * 章标题块：按段排成标题行，走与正文完全相同的 `appendLine` / `advanceColumn` 通道，
+     * 因此标题会跟着正文一起翻页、一起滚动，不会被挤到画布外面去。
+     *
+     * 间距口径对齐上游 `ReaderPaginator.processBlock`（`:411`、`:425-430`）：
+     * 首段之前加 `titleTopSpacingPx`，每段之后加「下一段还是标题 → 分段间距，否则 → 章标题下间距」。
+     */
+    const addTitleBlock = (block: LocalReaderTitleBlock): void => {
+      for (let segmentIndex = 0; segmentIndex < block.segments.length; segmentIndex++) {
+        const segment = block.segments[segmentIndex];
+        if (segment === undefined || segment.text.length === 0) { continue; }
+        const isLastSegment = segmentIndex === block.segments.length - 1;
+        const segmentLineHeight = Math.max(1, segment.lineHeightVp);
+        const spacingAfter = isLastSegment
+          ? Math.max(0, block.bottomSpacing)
+          : Math.max(0, segment.spacingAfter);
+        // 逐字断行：标题比正文宽时同样要折行，上游标题走同一个 ChineseLineBreaker。
+        const clusters = LocalReaderPaginator.toClusters(segment.text);
+        let lineClusters: string[] = [];
+        let lineWidth = 0;
+        let emittedLine = 0;
+        const flushTitleLine = (spacing: number): void => {
+          if (lineClusters.length === 0) { return; }
+          lineItems = [{
+            kind: 'text', value: lineClusters.join(''),
+            width: lineWidth, height: segmentLineHeight,
+            startPosition: 0, endPosition: 0, leadingIndent: false,
+            titleFontScale: segment.fontSizeScale
+          }];
+          currentLineHeight = segmentLineHeight;
+          // 标题上间距只加在整个标题块的第一行上（上游 `if (isTitle && index == 0) y += titleTopSpacingPx`）。
+          const verticalSpaceBefore = emittedLine === 0 ? Math.max(0, block.topSpacing) : 0;
+          appendLine(undefined, false, spacing, verticalSpaceBefore, false, false, true,
+            block.centered ? 1 : 0);
+          emittedLine++;
+          lineClusters = [];
+          lineWidth = 0;
+        };
+        for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
+          const cluster = clusters[clusterIndex] as string;
+          const clusterWidth = block.measureWidth(cluster, segment.fontSizeScale);
+          if (lineClusters.length > 0 && lineWidth + clusterWidth > contentWidth) {
+            flushTitleLine(0);
+          }
+          lineClusters.push(cluster);
+          lineWidth += clusterWidth;
+        }
+        flushTitleLine(spacingAfter);
+      }
+      // 上游 titlePageBreakAfter：标题段排版结束后立即断页，让章标题独占一页。
+      if (block.pageBreakAfter && pageLines.length > 0) { flushPage(); }
+    };
+
+    // 标题块恒在块流最前（上游 `ReaderChapterSource.kt:109-111`：titles + body）。
+    if (titleBlock !== undefined && titleBlock.segments.length > 0) {
+      addTitleBlock(titleBlock);
+    }
+
     for (let index = 0; index < document.paragraphs.length; index++) {
       const paragraph = document.paragraphs[index];
       if (paragraph === undefined) { continue; }
@@ -417,6 +539,15 @@ export class LocalReaderPaginator {
     flushPage();
     if (pages.length === 0) {
       return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false, lineColumns: [] }];
+    }
+    // 上游 titlePageCenterVertical：第一页只有标题时整页垂直居中
+    // （`ReaderPaginator.kt:369-389` 按「页内全是 emphasized 的 Text」判定）。
+    if (titleBlock !== undefined && titleBlock.centerVertical) {
+      const first = pages[0];
+      if (first !== undefined && first.lines.length > 0 &&
+        first.lines.every((line: LocalReaderLine) => line.titleLine === true)) {
+        first.centerVertical = true;
+      }
     }
     return pages;
   }
@@ -435,7 +566,8 @@ export class LocalReaderPaginator {
     inlineImageWidth: number,
     firstPageReservedLines: number,
     columnCount: number = 1,
-    sizeOffsets: LocalReaderSizeOffset[] = []
+    sizeOffsets: LocalReaderSizeOffset[] = [],
+    titleBlock: LocalReaderTitleBlock | undefined = undefined
   ): Promise<number> {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) { return 1; }
@@ -516,6 +648,52 @@ export class LocalReaderPaginator {
       lineLastTextPartIndex = -1;
       if (pageBreakAfter) { flushPage(); }
     };
+    const addTitleBlock = (block: LocalReaderTitleBlock): void => {
+      for (let segmentIndex = 0; segmentIndex < block.segments.length; segmentIndex++) {
+        const segment = block.segments[segmentIndex];
+        if (segment === undefined || segment.text.length === 0) { continue; }
+        const isLastSegment = segmentIndex === block.segments.length - 1;
+        const segmentLineHeight = Math.max(1, segment.lineHeightVp);
+        const spacingAfter = isLastSegment
+          ? Math.max(0, block.bottomSpacing)
+          : Math.max(0, segment.spacingAfter);
+        const clusters = LocalReaderPaginator.toClusters(segment.text);
+        let lineClusters = 0;
+        let lineWidth = 0;
+        let emittedLine = 0;
+        const flushTitleLine = (spacing: number): void => {
+          if (lineClusters === 0) { return; }
+          lineItems = [{
+            kind: 'text', value: ' ', width: lineWidth, height: segmentLineHeight,
+            startPosition: 0, endPosition: 0, leadingIndent: false,
+            titleFontScale: segment.fontSizeScale
+          }];
+          currentLineHeight = segmentLineHeight;
+          const verticalSpaceBefore = emittedLine === 0 ? Math.max(0, block.topSpacing) : 0;
+          appendLine(spacing, verticalSpaceBefore);
+          emittedLine++;
+          lineClusters = 0;
+          lineWidth = 0;
+        };
+        for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
+          const cluster = clusters[clusterIndex] as string;
+          const clusterWidth = block.measureWidth(cluster, segment.fontSizeScale);
+          if (lineClusters > 0 && lineWidth + clusterWidth > contentWidth) {
+            flushTitleLine(0);
+          }
+          lineClusters++;
+          lineWidth += clusterWidth;
+        }
+        flushTitleLine(spacingAfter);
+      }
+      if (block.pageBreakAfter && pageLineCount > 0) { flushPage(); }
+    };
+
+    // 标题块恒在块流最前（上游 `ReaderChapterSource.kt:109-111`：titles + body）。
+    if (titleBlock !== undefined && titleBlock.segments.length > 0) {
+      addTitleBlock(titleBlock);
+    }
+
     const yieldToUi = async (): Promise<void> => {
       await new Promise<void>((resolve: () => void) => setTimeout(resolve, 0));
     };

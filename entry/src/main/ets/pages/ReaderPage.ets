@@ -25,7 +25,8 @@ import { AnimatorResult, window } from '@kit.ArkUI';
 import { LengthMetricsUnit } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
 import {
-  LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator, LocalReaderSizeOffset
+  LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator, LocalReaderSizeOffset,
+  LocalReaderTitleBlock, LocalReaderTitleSegment
 } from './LocalReaderPaginator';
 import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
 import { HiddenSpan, scanHiddenSpans, toBodyOnly, toRawText } from '../reader/ReaderBodyOnlyFilter';
@@ -36,8 +37,8 @@ import {
 } from '../reader/ReaderCanvasStyleCodec';
 import {
   ReaderCanvasDrawRequest, ReaderCanvasItemBox, ReaderCanvasLayout, ReaderCanvasMarking, ReaderCanvasPage,
-  ReaderCanvasRenderer, ReaderCanvasStyle, ReaderCanvasStyleRange, ReaderCanvasWindow, ReaderPageTransform,
-  ReaderPageTransition,
+  ReaderCanvasRenderer, ReaderCanvasStyle, ReaderCanvasStyleRange, ReaderCanvasTitleStyle, ReaderCanvasWindow,
+  ReaderPageTransform, ReaderPageTransition,
   ReaderPageTransitionPolicy, ReaderScrollCrossing, ReaderScrollDecay, ReaderScrollPolicy, ReaderScrollResult,
   ReaderTransitionDirection, ReaderTransitionMode, ReaderTransitionTransforms,
   captureReaderDragDirection,
@@ -1828,9 +1829,11 @@ export struct ReaderPage {
       }
     }
     this.paginationUsesImagePlaceholder = placeholderUsed;
-    // 标题占位按实际配置算：字号走 resolveTitleSizeFp，间距走 titleTopSpacing/titleBottomSpacing，
-    // 分段标题逐段累加（对齐上游 LegacyReaderPaginationStyleFactory 的标题样式与分段块）。
-    const titleReservedLines = this.measureTitleReservedLines(context, width, lineHeight);
+    // 章标题进块流（上游标题是带 `isTitle` 的普通文本块，`ReaderPaginator.kt:1112-1116`）。
+    // 标题不再是「首屏预留几行」——预留会让标题脱离排版流，滚动模式下不跟着滚（KI-REL2）。
+    const singleImageStyle = this.activeImageStyle === 'SINGLE';
+    const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
+      document.content.length, singleImageStyle);
     const paginatedPages = LocalReaderPaginator.paginate(
       document,
       width,
@@ -1847,16 +1850,14 @@ export struct ReaderPage {
       context.px2vp(80),
       (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
         this.getReaderLetterSpacingVp(fontSize)),
-      this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines,
+      // 标题已进流，首屏不再预留任何行。
+      0,
       this.textFullJustify,
       this.resolveReaderColumnCount(),
-      this.readerSizeOffsets
+      this.readerSizeOffsets,
+      titleBlock
     );
     const nextPages: LocalReaderPage[] = [];
-    const titlePageInserted = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible();
-    if (titlePageInserted) {
-      nextPages.push({ lines: [], startPosition: 0, endPosition: 0, titleOnly: true, lineColumns: [] });
-    }
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {
       const page = paginatedPages[pageIndex];
       if (page !== undefined) { nextPages.push(page); }
@@ -1876,7 +1877,11 @@ export struct ReaderPage {
       }
     }
     let pageIndex = 0;
-    if (!(titlePageInserted && targetPosition === 0)) {
+    // 阅读位置 0% 就该落在本章第一页——单图模式下第一页是标题页，
+    // 不能被下面的 startPosition 比较跳过（标题页与正文首页的 startPosition 都是 0）。
+    if (targetPosition <= 0) {
+      pageIndex = 0;
+    } else {
       for (let index = 0; index < nextPages.length; index++) {
         const page = nextPages[index];
         if (page === undefined || page.titleOnly) { continue; }
@@ -1907,8 +1912,9 @@ export struct ReaderPage {
     }
     this.readerBottomJustifyPageHeight = pageHeight;
     this.readerBottomJustifyLineHeight = lineHeight;
-    this.readerBottomJustifyTitleLines = titleReservedLines;
-    this.readerBottomJustifyGap = this.calculateReaderBottomJustifyGap(pageHeight, lineHeight, titleReservedLines);
+    // 标题已进块流、算进页容量，底部对齐不再需要额外扣掉标题预留。
+    this.readerBottomJustifyTitleLines = 0;
+    this.readerBottomJustifyGap = this.calculateReaderBottomJustifyGap(pageHeight, lineHeight, 0);
     // 排版结果变了，画布要按新页重画，并把四页窗口里会用到的图先解进缓存。
     // 上游 ReaderCanvasSurface.kt:414-430 在翻页前就把 current/next/previous/nextPlus 的图全部预载，
     // 注释原文「翻页前先把 LRU 解好，绘制期直读必然命中，新页就不会出现『有字无气泡』的那一两帧」。
@@ -1966,10 +1972,8 @@ export struct ReaderPage {
         lastImageOnly = line.imageOnly;
       }
       if (columnLines <= 1 || lastImageOnly) { result.push(0); continue; }
-      // 首页的标题占位只压在第一列上（分页器把 titleReservedLines 记在首屏容量里）
-      const reserved = column === 0 && this.currentPageIndex === 0 && this.activeImageStyle !== 'SINGLE'
-        ? Math.max(0, titleReservedLines) * lineHeight : 0;
-      const surplus = pageHeight - reserved - usedHeight;
+      // 标题已进块流，页容量里已经扣过标题高度，这里不再二次扣预留。
+      const surplus = pageHeight - usedHeight;
       // 上游两条提前返回：剩余高度还够一行（或为负）就不摊分
       if (surplus <= 0 || surplus >= lastHeight + lineHeight) { result.push(0); continue; }
       result.push(surplus / (columnLines - 1));
@@ -3525,7 +3529,8 @@ export struct ReaderPage {
       const document = LocalTextSemantics.parse(chapterContent, this.paragraphIndent, this.adaptSpecialStyle);
       await cacheDocumentGlyphWidths(document);
       await this.loadImageSizesForDocument(document, imageSizes);
-      const titleReservedLines = this.measureTitleReservedLines(context, width, lineHeight, displayTitle);
+      const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
+        document.content.length, this.activeImageStyle === 'SINGLE', displayTitle);
       const pageCount = chapterIndex === this.getChapterIndex() && this.localReaderPages.length > 0
         ? this.localReaderPages.length
         : await LocalReaderPaginator.countPagesIncrementally(
@@ -3539,13 +3544,14 @@ export struct ReaderPage {
           this.activeImageStyle,
           context.px2vp(80),
           inlineImageWidth,
-          this.activeImageStyle === 'SINGLE' ? 0 : titleReservedLines,
+          // 标题已进块流，首屏不再预留行。
+          0,
           this.resolveReaderColumnCount(),
-          this.readerSizeOffsets
+          this.readerSizeOffsets,
+          titleBlock
         );
-      // titleMode 为 2 时标题整块隐藏，上游也不为它单独留一页。
-      const titlePageCount = this.activeImageStyle === 'SINGLE' && this.isReaderTitleVisible() && displayTitle.length > 0 ? 1 : 0;
-      pageCounts.push(pageCount + titlePageCount);
+      // 标题页已由分页器的 titlePageBreakAfter 产出，不再额外 +1。
+      pageCounts.push(pageCount);
       return true;
     });
     const expectedChapterCount = Math.max(1, BookRepository.cachedChapterTitles(this.book).length);
@@ -3791,8 +3797,7 @@ export struct ReaderPage {
   }
 
   /** 标题分段结果；titleSegType 为 0 时上游也走「整行为一段」，行为不变。 */
-  private resolveTitleSegments(): ReaderTitleSegment[] {
-    const title = this.displayChapterTitle;
+  private resolveTitleSegments(title: string = this.displayChapterTitle): ReaderTitleSegment[] {
     if (title.length === 0) { return []; }
     return segmentReaderTitle(title, {
       type: this.titleSegType,
@@ -3868,6 +3873,72 @@ export struct ReaderPage {
     return Math.ceil((total + this.titleTopSpacing + this.titleBottomSpacing) / lineHeight);
   }
 
+
+  /**
+   * 构造章标题块，交给分页器排进块流。
+   *
+   * 上游标题是带 `isTitle` 标记的普通文本块，与正文共用同一个 `y` 游标和同一条换页判定
+   * （`ReaderPaginator.kt:1112-1116`），所以标题会跟着正文一起翻页、一起滚动。
+   * 本地旧实现把标题留在画布外当 ArkUI 组件，滚动模式下标题不跟着滚，就成了 KI-REL2。
+   *
+   * 三个开关的口径照抄上游唯一生产赋值处 `LegacyReaderChapterPaginator.kt:291`、`:321-326`：
+   * - `titlePageBreakAfter = singleImage && content.textList.isNotEmpty()`
+   *   —— 只有单图模式且本章有正文，标题才独占一页；空正文的单图章不插纯标题页。
+   * - `titlePageCenterVertical = content.textList.isEmpty() || singleImage`
+   *   —— 空正文或单图模式时首页整页垂直居中。
+   * - `titleAlignment = CENTER` 当 `titleMode == 1 || isVolume || 空正文 || singleImage`。
+   *
+   * @param contentLength 本章正文的字符数（用于判断「有没有正文」）
+   * @param singleImage 当前是否单图模式（`activeImageStyle === 'SINGLE'`）
+   */
+  private buildReaderTitleBlock(context: UIContext, width: number, lineHeight: number,
+    contentLength: number, singleImage: boolean, title: string = this.displayChapterTitle): LocalReaderTitleBlock | undefined {
+    if (this.titleMode === 2 || title.length === 0) { return undefined; }
+    const segments = this.resolveTitleSegments(title);
+    if (segments.length === 0) { return undefined; }
+    const baseSize = this.resolveTitleSizeFp();
+    const hasBody = contentLength > 0;
+    const isVolume = this.isCurrentChapterVolume();
+    const titleSegments: LocalReaderTitleSegment[] = [];
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index] as ReaderTitleSegment;
+      const segmentSize = Math.max(1, baseSize * segment.fontSizeScale);
+      const baseHeight = ReaderFontRepository.measureLineHeight(context, this.readerTitleFontFamily, segmentSize);
+      const segmentLineHeight = Math.max(1, baseHeight * (1 + this.resolveTitleLineSpacingFactor(segment.isSubtitle)));
+      // 段间距：上游 `processBlock` 里「下一段还是标题 → titleSegmentSpacingPx × titleSpacingScale」，
+      // 这里下一段是副标题就用副标题段距，否则用正文段距的同等口径。
+      const nextSegment = index + 1 < segments.length ? segments[index + 1] as ReaderTitleSegment : undefined;
+      const spacingAfter = nextSegment === undefined ? 0
+        : Math.max(1, baseSize * (nextSegment.fontSizeScale)) * this.resolveTitleLineSpacingFactor(nextSegment.isSubtitle);
+      titleSegments.push({
+        text: segment.text,
+        fontSizeScale: segment.fontSizeScale,
+        lineHeightVp: segmentLineHeight,
+        spacingAfter: spacingAfter
+      });
+    }
+    return {
+      segments: titleSegments,
+      topSpacing: this.resolveTitleTopSpacing(),
+      bottomSpacing: this.resolveTitleBottomSpacing(),
+      centered: this.titleMode === 1 || isVolume || !hasBody || singleImage,
+      pageBreakAfter: singleImage && hasBody,
+      centerVertical: !hasBody || singleImage,
+      measureWidth: (text: string, fontSizeScale: number): number => {
+        const size = Math.max(1, baseSize * fontSizeScale);
+        return ReaderFontRepository.measureTextWidth(context, text, this.readerTitleFontFamily, size,
+          this.resolveTitleWeight()) + this.getReaderTextLetterSpacingWidth(text, size);
+      }
+    };
+  }
+
+  /** 当前章是不是分卷标题行（上游 `chapter.isVolume`）。 */
+  private isCurrentChapterVolume(): boolean {
+    const rows = BookRepository.cachedChapters(this.book);
+    const chapterIndex = this.getChapterIndex();
+    const row = rows[chapterIndex];
+    return row !== undefined && row.isVolume === true;
+  }
 
   private getReaderUnderlineColor(): string {
     return this.readerNightMode ? this.underlineColorNight : this.underlineColor;
@@ -4771,6 +4842,7 @@ export struct ReaderPage {
     }
     request.layout = this.buildReaderCanvasLayout();
     request.style = this.buildReaderCanvasStyle();
+    request.titleStyle = this.buildReaderCanvasTitleStyle();
     request.markings = this.buildReaderCanvasMarkings();
     request.highlights = this.buildReaderCanvasHighlights();
     request.pageBackgroundArgb = this.readerCanvasPageBackgroundArgb();
@@ -4842,6 +4914,24 @@ export struct ReaderPage {
     layout.viewportWidthPx = context.vp2px(Math.max(1, this.readerContentWidth));
     layout.viewportHeightPx = context.vp2px(Math.max(1, this.viewportHeight));
     return layout;
+  }
+
+  /**
+   * 章标题的绘制样式。上游标题与正文是两套 paint
+   * （`LegacyReaderPaginationStyleFactory.kt:99-113`），字号、字重、字色都分开配。
+   * 元素实际字号 = 这里的基准字号 × `LocalReaderLineItem.titleFontScale`。
+   */
+  private buildReaderCanvasTitleStyle(): ReaderCanvasTitleStyle {
+    const style = new ReaderCanvasTitleStyle();
+    const context = this.getUIContext();
+    style.colorArgb = readerCanvasArgb(this.resolveTitleColor(), 0xFF000000);
+    style.fontFamilies = [this.readerTitleFontFamily];
+    style.fontSizePx = context.fp2px(this.resolveTitleSizeFp());
+    style.fontWeight = this.resolveTitleWeight();
+    // 上游 titlePaint 不带 letterSpacing；本地标题也按 0 画，保持与分页器测量一致。
+    style.letterSpacingPx = 0;
+    style.align = this.resolveTitleAlign() === TextAlign.Center ? 1 : 0;
+    return style;
   }
 
   private buildReaderCanvasStyle(): ReaderCanvasStyle {
@@ -5065,9 +5155,8 @@ export struct ReaderPage {
     if (heightVp <= 0) {
       return;
     }
-    if (this.currentPageIndex === 0 && this.isReaderTitleVisible()) {
-      return;
-    }
+    // 标题已进画布、不再占用画布外的纵向空间，首页与其余页的画布高度是同一个，
+    // 不需要再对首页特殊处理（旧实现在首页跳过，是因为标题在画布之上）。
     if (Math.abs(heightVp - this.readerCanvasBodyHeightVp) < 1) {
       return;
     }
@@ -5786,17 +5875,10 @@ export struct ReaderPage {
                   right: this.resolveReaderColumnCount() > 1 ? this.paddingSettings.paddingRight : 0
                 })
             }
-            if (this.localReaderPages[this.currentPageIndex]?.titleOnly === true) {
-              // 独立的标题页：上游这里垂直居中，对齐方式仍按 titleMode 走。
-              Column() {
-                this.ReaderTitleSegments(true)
-              }
-              .width('100%')
-              .layoutWeight(1)
-              .justifyContent(FlexAlign.Center)
-            } else if (this.currentPageIndex === 0) {
-              this.ReaderTitleSegments(false)
-            }
+            // 章标题不再是画布外的 ArkUI 组件：它已经作为带 `titleFontScale` 的标题行
+            // 排进块流，跟着正文一起翻页、一起滚动（上游 `ReaderPaginator.kt:1112-1116`）。
+            // 旧实现在这里插 `ReaderTitleSegments`，滚动模式下标题不参与滚动栈平移，
+            // 就是 KI-REL2「标题与正文分离」。
             // 正文：单个 Canvas 逐行绘制（对齐上游 ReaderCanvasSurface）。
             // 四页窗口按 z 序画进同一张画布，因此不能有多个 Canvas 抢同一个 context。
             Canvas(this.readerCanvasContext)

@@ -49,6 +49,39 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-04 N 端 r326 KI-REL2 标题与正文分离
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
+- 构建：`node "<DevEco>/tools/hvigor/hvigor/bin/hvigor.js" --no-daemon --mode module -p product=default -p module=entry@default assembleHap` 两次 `BUILD SUCCESSFUL`（33 s 706 ms / 增量重编），`hdc install -r` 覆盖安装成功。
+- 目标操作：分页模式打开第 1 章第 1 页；切「翻页动画 = 滚动」上滑一屏；把「图片样式」改成「单页」再看第 1 章第 1 页。
+- 为什么改：章标题原来画在 `Canvas` 之外的 ArkUI `@Builder ReaderTitleSegments()` 里，正文画布只是按 `measureTitleReservedLines()` 算出的行数**让出位置**。上游标题是块流里带 `isTitle` 标记的普通文本块（`ReaderChapterSource.kt:8-14`、`ReaderPaginator.kt:411`/`:425-430`），与正文共用同一个 `y` 游标与同一条换页判定。两套引擎的直接后果就是「标题与正文分离」：滚动模式标题不参与滚动栈平移（滚走的是正文），单图模式的断页条件也与上游不同（本地少了「本章有正文」）。
+- 改动（`entry/src/main/ets/pages/LocalReaderPaginator.ets` / `entry/src/main/ets/reader/ReaderCanvasSurface.ets` / `entry/src/main/ets/pages/ReaderPage.ets`）：
+  1. `LocalReaderPaginator` 新增 `LocalReaderTitleSegment` / `LocalReaderTitleBlock` 两个导出接口；`LocalReaderLine` 加 `titleAlign` / `titleLine`，`LocalReaderLineItem` 加 `titleFontScale`，`LocalReaderPage` 加 `centerVertical`。
+  2. `paginate()` 与 `countPagesIncrementally()` 各加第 15 参 `titleBlock`；新增 `addTitleBlock()` 把标题段逐 cluster 折成真实 line，走同一个 `appendLine` / `advanceColumn` / `flushPage`；`pageBreakAfter` 为真时标题段排完立即 `flushPage()`。
+  3. `paginate()` 收尾：`centerVertical` 且首页全是标题行时给 `pages[0].centerVertical = true`。
+  4. `ReaderCanvasSurface` 新增 `ReaderCanvasTitleStyle` 与 `ReaderCanvasDrawRequest.titleStyle`；新增 `titleParagraphStyle()` / `itemTextStyle()` / `itemStyleRanges()` / `pageCenterOffset()`；`layoutPage()` 按 `line.titleAlign === 1` 把行折进 `box.left` 居中、按 `centerOffset` 整页下移；5 处 `getParagraph()` 全部改走 `itemTextStyle` / `itemStyleRanges`；`drawLineUnderline()` 对标题行直接 return。
+  5. `ReaderPage.buildReaderTitleBlock()` 新增：算每段 `lineHeightVp` 与 `spacingAfter`，三个派生条件逐条对齐上游 —— `centered: titleMode === 1 || isVolume || !hasBody || singleImage`、`pageBreakAfter: singleImage && hasBody`、`centerVertical: !hasBody || singleImage`（`LegacyReaderChapterPaginator.kt:291`、`:326`、`:321-325`）。
+  6. `rebuildReaderPages()` 与全文分页估算都改为传 `titleBlock`，`paginate` 的第 11 参（原首列预留行数）固定传 `0`；删掉 `titlePageInserted` 与往页表 push `titleOnly` 页。
+  7. `rebuildReaderPages()` 定位页：`targetPosition <= 0` 时直接取 `pageIndex = 0`（标题页与正文首页 `startPosition` 都是 0，原来的「取最后一个 ≤ target」会跳过标题页）。
+  8. `build()` 画布分支删掉画布外的 `ReaderTitleSegments` 两段（`titleOnly` 页 / `currentPageIndex === 0`）；`syncReaderCanvasBodyHeight()` 删掉首页不采信画布高度那条。
+
+### 设备验收
+
+| 操作 | 预期 | 实测证据 | 结论 |
+| --- | --- | --- | --- |
+| 分页模式（覆盖）+ 默认图片样式，第 1 章第 1 页 | 标题与正文首行同屏连排，中间无整屏空白 | `k21.jpeg` / `k62.jpeg`：顶部「第1章(1)」，紧接「One morning, when Gregor Samsa woke from troubled dreams…」，底栏 `1/17 0.5%` | 通过 |
+| 同上，翻几页再翻回章首 | 不出现纯标题页 | `k29.jpeg` / `k35.jpeg` 均为正文页，页数 17 | 通过 |
+| 翻页动画改「滚动」，第 1 章第 1 页上滑 | 标题跟着正文一起上移、被裁掉上半截 | `k30.jpeg` / `k32.jpeg` / `k33.jpeg` / `k34.jpeg`：「第1章(1)」被裁掉上半截、正文继续上移 | 通过 |
+| 图片样式改「单页」，第 1 章第 1 页 | 纯标题页，标题水平+垂直居中 | `k53.jpeg`：「第1章(1)」在屏幕正中，正文不在这一页，底栏 `1/18 0.4%` | 通过 |
+| 同上，杀进程重启后重进 | 仍从 0% 落在标题页 | `k57.jpeg`：`1/18 0.4%`，标题页 | 通过 |
+| 单图模式下翻到第 2 页 | 是正文、不再重复标题 | `k44.jpeg` / `k47.jpeg`：`2/18 0.5%`，正文首行「One morning, when…」 | 通过 |
+
+运行期日志（验证时临时加的 `console.info('[KI-REL2] ...')`，验证后已删除并重新构建）：`pages=18 p0lines=1 p0title=true style=SINGLE pageBreakAfter=true` —— 18 页 = 1 张标题页 + 17 张正文页，标题页由分页器的 `pageBreakAfter` 产出而不是页表外插。
+
+**边界**：标题折行仍是逐 cluster 硬切、不走正文的 `findWordBreakIndex()` 按词断行，所以「标题与正文共用折行器」这行仍判 `未接`（对照表 B9 第 252 行）；副标题行距用 `measureLineHeight` 的行高而非上游的 `fontBounds.heightPx` 实测字框，肉眼不可辨但口径略有差异。单图模式 + 滚动动画这个组合下 `centerVertical` 的位移没有计入页 extent，标题页与正文页会在滚动栈里重叠——本轮未处理（KI-REL2 的目标是分页模式连排 + 单图模式标题独占页，两者都已成立）。
+
+**未验**：空正文的纯图片章（`hasBody === false`）在单图模式下不插标题页这一支只有代码依据，没有真设备用例；分卷章的 `isVolume` 居中、`titleMode = 1` 居中也未单独走一遍。
+
 ## 2026-11-04 N 端 r325 KI-REL1 滚动阅读跳章闪烁
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。

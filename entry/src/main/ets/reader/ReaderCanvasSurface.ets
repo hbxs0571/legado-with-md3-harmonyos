@@ -512,6 +512,26 @@ export class ReaderCanvasStyle {
 }
 
 /**
+ * 章标题样式（全部 px）。
+ *
+ * 上游标题是排版流里的普通文本块，只是换了一套 paint
+ * （`LegacyReaderPaginationStyleFactory.kt:99-113` 的 titleStyle/titlePaint）：
+ * 字号、字重、字色、字距、行距倍率都跟正文分开。本地因此不能复用 `ReaderCanvasStyle`，
+ * 否则标题会被当成正文画。
+ */
+export class ReaderCanvasTitleStyle {
+  colorArgb: number = 0xFF000000;
+  fontFamilies: string[] = [];
+  /** 标题基准字号（px）；元素实际字号 = 它 × `LocalReaderLineItem.titleFontScale`。 */
+  fontSizePx: number = 16;
+  fontWeight: number = 400;
+  /** 标题字距（px）。上游 titlePaint 不带 letterSpacing，默认 0。 */
+  letterSpacingPx: number = 0;
+  /** 1 = 水平居中（上游 `titleAlignment == CENTER`），0 = 起始对齐。 */
+  align: number = 0;
+}
+
+/**
  * 一块待合并的文字底色矩形（画布坐标）。
  *
  * 上游 `feature/reader/core/style/ReaderBackgroundBounds.kt` 会把同一视觉行上相邻同色的
@@ -601,6 +621,11 @@ export class ReaderCanvasDrawRequest {
   transforms: ReaderTransitionTransforms = new ReaderTransitionTransforms();
   layout: ReaderCanvasLayout = new ReaderCanvasLayout();
   style: ReaderCanvasStyle = new ReaderCanvasStyle();
+  /**
+   * 章标题样式。标题行（`LocalReaderLine.titleLine === true`）按它绘制，
+   * 不走 `style`——上游标题与正文是两套 paint（`LegacyReaderPaginationStyleFactory.kt:99-113`）。
+   */
+  titleStyle: ReaderCanvasTitleStyle = new ReaderCanvasTitleStyle();
   markings: ReaderCanvasMarking[] = [];
   /** 高亮规则命中的正文样式区间（底色/字色/下划线），与 markings 一起参与逐元素绘制。 */
   highlights: ReaderCanvasStyleRange[] = [];
@@ -1502,12 +1527,16 @@ export class ReaderCanvasRenderer {
     // 底部对齐：上游 justifyColumnBottom() 是**逐列**独立摊分（两列的行数不同，
     // 剩余高度也不同），所以这里按列取各自的位移，不能用全页一个值。
     const gaps = layout.bottomJustifyGapByColumn;
+    // 标题页垂直居中（上游 titlePageCenterVertical，`ReaderPaginator.kt:369-389`）：
+    // 页成型后按「整页内容高度」算一次平移量，把元素整体下移半个剩余高度。
+    const centerVertical = page.centerVertical === true;
+    const centerOffset = centerVertical ? this.pageCenterOffset(page, request) : 0;
     for (let index = 0; index < page.lines.length; index++) {
       const line = page.lines[index];
       const column = page.lineColumns.length > index ? page.lineColumns[index] : 0;
       const safeColumn = Math.min(columnCount - 1, Math.max(0, column));
       const columnGap = gaps.length > safeColumn ? (gaps[safeColumn] ?? 0) : layout.bottomJustifyGapPx;
-      const top = layout.originYpx + used[safeColumn] + line.verticalSpaceBefore * vp +
+      const top = layout.originYpx + centerOffset + used[safeColumn] + line.verticalSpaceBefore * vp +
         columnGap * lineCount[safeColumn];
       const left = layout.originXpx + safeColumn * stride;
       const lineBox = new ReaderCanvasLineBox();
@@ -1517,6 +1546,9 @@ export class ReaderCanvasRenderer {
       lineBox.top = top;
       lineBox.heightPx = Math.max(1, line.height * vp);
       geometry.lines.push(lineBox);
+      // 标题行水平居中：上游在排版期就把对齐折进 bounds.left
+      // （`ReaderPaginator.kt:870`），这里同样在版面阶段算好起点。
+      const titleCentered = line.titleAlign === 1;
       let cursor = left;
       for (let itemIndex = 0; itemIndex < line.items.length; itemIndex++) {
         const item = line.items[itemIndex];
@@ -1539,11 +1571,16 @@ export class ReaderCanvasRenderer {
           const extraSpacingPx = line.justifyGap > 0 && !item.leadingIndent ? line.justifyGap * vp : 0;
           box.extraSpacingPx = extraSpacingPx;
           box.widthPx = Math.max(1, item.width * vp + extraSpacingPx * Math.max(0, item.value.length - 1));
-          const built = this.getParagraph(item.value, request.style, box.widthPx, extraSpacingPx,
-            this.styleRangesForItem(item, request));
+          const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
+            extraSpacingPx, this.itemStyleRanges(request, item));
           const builtHeight = built !== undefined ? built.heightPx : line.height * vp;
           box.top = top + Math.max(0, (line.height * vp - builtHeight) / 2);
           box.heightPx = builtHeight;
+          // 标题行水平居中：上游在排版期就把对齐折进 bounds.left（`ReaderPaginator.kt:870`）。
+          if (titleCentered) {
+            const columnWidthPx = columnCount > 1 ? stride : layout.bodyWidthPx;
+            box.left = left + Math.max(0, (columnWidthPx - box.widthPx) / 2);
+          }
         }
         geometry.boxes.push(box);
         // 行内推进：leadingIndent 与末项之后不加 justifyGap（对齐 getReaderLineGapAfter）
@@ -1562,6 +1599,10 @@ export class ReaderCanvasRenderer {
     request: ReaderCanvasDrawRequest): void {
     const line = lineBox.line;
     if (line === undefined || line.imageOnly) {
+      return;
+    }
+    // 章标题不画正文下划线：上游标题走 titlePaint，没有 pageUnderline。
+    if (line.titleLine === true) {
       return;
     }
     const layout = request.layout;
@@ -1593,8 +1634,8 @@ export class ReaderCanvasRenderer {
     if (item === undefined) {
       return;
     }
-    const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx,
-      this.styleRangesForItem(item, request));
+    const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
+      box.extraSpacingPx, this.itemStyleRanges(request, item));
     if (built === undefined) {
       return;
     }
@@ -1609,8 +1650,8 @@ export class ReaderCanvasRenderer {
     if (item === undefined) {
       return;
     }
-    const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx,
-      this.styleRangesForItem(item, request));
+    const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
+      box.extraSpacingPx, this.itemStyleRanges(request, item));
     if (built === undefined) {
       return;
     }
@@ -1632,8 +1673,8 @@ export class ReaderCanvasRenderer {
     if (item === undefined) {
       return;
     }
-    const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx,
-      this.styleRangesForItem(item, request));
+    const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
+      box.extraSpacingPx, this.itemStyleRanges(request, item));
     if (built === undefined) {
       return;
     }
@@ -1712,11 +1753,12 @@ export class ReaderCanvasRenderer {
         continue;
       }
       const item = box.item;
-      const ranges = this.styleRangesForItem(item, request);
+      const ranges = this.itemStyleRanges(request, item);
       if (ranges.length === 0) {
         continue;
       }
-      const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx, ranges);
+      const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
+        box.extraSpacingPx, ranges);
       if (built === undefined) {
         continue;
       }
@@ -1934,7 +1976,8 @@ export class ReaderCanvasRenderer {
       if (end <= start) {
         continue;
       }
-      const built = this.getParagraph(item.value, request.style, box.widthPx, box.extraSpacingPx);
+      const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
+        box.extraSpacingPx);
       if (built === undefined) {
         continue;
       }
@@ -2633,6 +2676,75 @@ export class ReaderCanvasRenderer {
       out.push(local);
     }
     return out;
+  }
+
+  /**
+   * 章标题行用的段落：字号按 `titleFontScale` 缩放，字重/字色取标题样式。
+   *
+   * 上游标题与正文共用同一套 `StaticLayout` 排版通道，只是喂进去的是 titlePaint
+   * （`LegacyReaderPaginationStyleFactory.kt:99-113`、`ReaderChapterBlockMeasurer.kt:259-262`）。
+   * 这里同理：折进一个 `ReaderCanvasStyle` 后交给同一个 `getParagraph`，
+   * 段落缓存与字形渲染都与正文一致，只是参数不同。
+   */
+  private titleParagraphStyle(request: ReaderCanvasDrawRequest, fontScale: number): ReaderCanvasStyle {
+    const titleStyle = request.titleStyle;
+    const scale = fontScale > 0 ? fontScale : 1;
+    const style = new ReaderCanvasStyle();
+    style.colorArgb = titleStyle.colorArgb;
+    style.fontFamilies = titleStyle.fontFamilies;
+    style.fontSizePx = Math.max(1, titleStyle.fontSizePx * scale);
+    style.fontWeight = titleStyle.fontWeight;
+    style.italic = false;
+    style.letterSpacingPx = titleStyle.letterSpacingPx;
+    // 标题不参与正文的下划线/标记下划线，这里全部关掉。
+    style.underline = false;
+    style.underlineExtend = false;
+    style.dashIntervals = [];
+    style.imagePlaceholderArgb = request.style.imagePlaceholderArgb;
+    return style;
+  }
+
+  /**
+   * 元素该用哪套样式：标题元素走 `titleStyle`，其余走正文 `style`。
+   * 上游标题与正文是两套 paint，但共用同一条排版通道
+   * （`LegacyReaderPaginationStyleFactory.kt:99-113`）。
+   */
+  private itemTextStyle(request: ReaderCanvasDrawRequest, item: LocalReaderLineItem): ReaderCanvasStyle {
+    const scale = item.titleFontScale;
+    if (scale === undefined) {
+      return request.style;
+    }
+    return this.titleParagraphStyle(request, scale);
+  }
+
+  /**
+   * 元素该带哪些命中样式区间：标题不带。
+   * 标题字符不在正文坐标里（`startPosition/endPosition` 都是 0），套用正文区间会错位。
+   */
+  private itemStyleRanges(request: ReaderCanvasDrawRequest, item: LocalReaderLineItem): ReaderCanvasStyleRange[] {
+    if (item.titleFontScale !== undefined) {
+      return [];
+    }
+    return this.styleRangesForItem(item, request);
+  }
+
+  /**
+   * 标题页垂直居中时整页元素要下移多少（px）。
+   *
+   * 上游 `ReaderPaginator.kt:369-389`：页成型后量出本页元素总高，按
+   * `(contentBottom - contentTop - pageHeight) / 2` 平移。这里同样只对
+   * `page.centerVertical` 的页生效（上游由 `titlePageCenterVertical` 决定）。
+   */
+  private pageCenterOffset(page: LocalReaderPage, request: ReaderCanvasDrawRequest): number {
+    const layout = request.layout;
+    const vp = Math.max(0.0001, layout.vpScale);
+    let total = 0;
+    for (let index = 0; index < page.lines.length; index++) {
+      const line = page.lines[index];
+      if (line === undefined) { continue; }
+      total += (line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter) * vp;
+    }
+    return Math.max(0, (layout.bodyHeightPx - total) / 2);
   }
 
   private getParagraph(value: string, style: ReaderCanvasStyle, widthPx: number,
