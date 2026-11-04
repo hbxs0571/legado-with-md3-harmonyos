@@ -70,7 +70,7 @@
 | `server` | `servers.json` | — | — | — | **零行** |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（90 已接 / 97 `未接` / 2 不适用）；97 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
-| `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | **零行** |
+| `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（25 已接 / 39 `未接` / 2 不适用，r330 建表；接触面 83 个 `.kt` 全部已分配）。39 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
 | `themeMode` | `config.xml` | ✗ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 0 `未接` / 2 不适用，A8 的图标切换按 `themeConfig` 类计不适用；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
 | `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（38 已接 / 81 `未接` / 3 不适用，r327 建表；接触面 24 个 `.kt` 全部已分配）。81 条 `未接` 按 `**要接**`（40）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
 | `showRss` | `config.xml` | ✗ | ✗ | ? | **零行** |
@@ -125,6 +125,7 @@
 | [书签对照](ZIP-BOOKMARK.md) | A–E | `bookmark` |
 | [阅读配置总账](READER-CONFIG.md) | A–G | `readConfig`、`themeConfig` |
 | [深色模式总账](ZIP-THEME.md) | A–F（r298 新增，r300 阶段一落地） | `themeMode`、`themeConfig` |
+| [封面设置总账](ZIP-COVER.md) | A–E（r330 新增） | `coverConfig`。A 块是设置页 18 条，B 块是默认封面相册，C 块是封面规则，D 块是封面渲染（跨全部用到封面组件的界面），E 块是备份归属。该表表头另加第五档 `不进备份`，用于相册目录这类连 ZIP 都进不去的数据 |
 
 上表「涉及行」列给出每类在这几张表里落在哪一块、多少行。**「零行」表示该类目前没有任何界面级盘点**——不是已完成，而是还没盘。这一类要动之前先按[对照关键词](KEYWORDS.md)取出上游接触面、新开块，不要拿「表里没这一行」当「本地没有这个功能」。
 

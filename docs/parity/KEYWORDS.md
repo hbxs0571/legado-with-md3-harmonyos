@@ -62,7 +62,7 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 | --- | --- | --- | --- | --- |
 | `readConfig` | `ReadBookConfig\|ReadSettings\|ReadMenuConfig\|"readConfig"\|menuConfig\|ReadPreferences\|ReadBookStyleConfig\|ReadSheetConfigUiState\|expandTextMenu\|showSelectMenuIcon\|lastMarkingStyle\|ReaderPageWindow\|ReaderPaginator\|ReaderChapterBlockMeasurer\|ReaderPaginationSession\|ReaderPartialPagePolicy\|ScrollPageDrawCache\|TocScreen\|TocHierarchy\|TocViewModel` | 122 | `backupIgnoreReadConfig` | `readConfig`（约 85 键） |
 | `themeConfig` | `backupIgnoreThemeConfig\|"themeConfig"\|colorPrimary\|colorPrimaryNight\|backgroundImage\|backgroundImageBlurring\|backgroundImageNight\|backgroundImageNightBlurring\|colorMD3Primary\|colorMD3Secondary\|colorMD3PrimaryNight\|colorMD3SecondaryNight\|paletteStyle\|materialVersion\|composeEngine\|customContrast\|customMode\|useMiuixMonet\|containerOpacity\|topBarOpacity\|bottomBarOpacity\|enableBlur\|enableProgressiveBlur\|topBarBlurRadius\|bottomBarBlurRadius\|topBarBlurAlpha\|bottomBarBlurAlpha\|bottomBarLensRadius\|useFlexibleTopAppBar\|topBarButtonStyle\|mergeTopBarActions\|bookInfoFollowCoverColor\|bookInfoBackgroundBlur\|bookInfoNetworkCoverBackground\|bookInfoDefaultCoverBackground\|bookInfoAuthorSearchFallback\|colorBackground\|colorBottomBackground\|colorBackgroundNight\|colorBottomBackgroundNight\|enableDeepPersonalization\|colorMD3OnSurface\|colorMD3OnPrimaryContainer\|colorMD3Background\|colorMD3SurfaceContainerLow\|colorMD3OnSurfaceNight\|colorMD3OnPrimaryContainerNight\|colorMD3BackgroundNight\|colorMD3SurfaceContainerLowNight\|eyeProtectionEnabled\|colorTemperature\|eyeProtectionAutoNight\|eyeProtectionSchedule\|eyeProtectionStartTime\|eyeProtectionEndTime` | 132 | `backupIgnoreThemeConfig` | `themeConfig` |
-| `coverConfig` | `backupIgnoreCoverConfig\|"coverConfig"` | 3 | `backupIgnoreCoverConfig` | `coverConfig` |
+| `coverConfig` | `CoverSettings\|CoverSettingsGateway\|coverPrefKeys\|coverConfig\|CoverConfig\|BookCover\|CoilBookCover\|CoverAlbum\|CoverRule\|coverRule\|CoverImageView\|BookshelfCover\|CoverBlurBackdrop\|CoverTextOverlay` | 83 | `backupIgnoreCoverConfig` | `coverConfig` |
 | `themeMode` | `themeMode\|"themeMode"\|isNightMode\|isDarkTheme\|isSystemDarkTheme\|setDefaultNightMode\|NIGHT_MASK\|DayNight\|isNightTheme\|uiMode\|UI_MODE\|isAmoled\|amoled\|isPureBlack\|pureBlack` | 80 | 无独立开关 | `themeMode` |
 | `bookshelfLayout` | `bookGroupStyle\|hideEmptyGroups\|bookshelfSort\|showUnread\|showTip\|showBookCount\|showLastUpdateTime\|showBookIntro\|bookshelfShowIntro\|bookshelfShowTag\|bookshelfShowCustomTags\|bookshelfShowSourceTags\|bookshelfShowWordCount\|bookshelfShowLatestChapter\|bookshelfIntroMaxLines\|showWaitUpCount\|showBookshelfFastScroller\|shouldShowExpandButton\|bookshelfRefreshingLimit\|bookshelfLayout\|bookshelfFolderLayout\|bookshelfGridLayout\|bookshelfLayoutCompact\|bookshelfListCoverCenter\|bookshelfListIntroBelowContent\|bookshelfShowDivider\|bookshelfTitleSmallFont\|bookshelfTitleCenter\|bookshelfTitleMaxLines\|bookshelfCoverShadow\|bookshelfCardColor\|bookshelfGroupListStyle\|bookshelfGroupCoverCount\|bookshelfListCoverWidth\|bookshelfGridCoverWidth\|bookshelfSearchActionDirectToSearch\|autoRefreshBook\|saveTabPosition` | 24 | 无独立开关 | `bookshelfLayout` |
 | `showRss` | `showRss\|"showRss"` | 12 | 无独立开关 | `showRss` |
@@ -81,6 +81,25 @@ grep -rlE "<关键词>" app/src/main/java --include=*.kt
 - `ReadBookStyleConfig` / `ReadSheetConfigUiState` — `ReadBookContract.kt:74` 与 `:121` 两个 data class，是**另外两个只在界面层流动的配置载体**（样式可观察状态 / 弹层面板只读快照）。参数类型既不叫 `ReadMenuConfig` 也不叫 `menuConfig`，字段名与 `ReadSettings` 大量重名却一个配置类名都不出现。**+6 → 100**。
 - `expandTextMenu` / `showSelectMenuIcon` / `lastMarkingStyle` — 三个字段名在界面层当**参数名**一路传递，宿主读取点已被前几轮覆盖，但接收端（两个选择菜单、`sheet/TextSelectMenuConfigSheet.kt`、`ui/config/readConfig/ReadConfigContract.kt`、`constant/PreferKey.kt`）此前完全不在接触面里。**+5 → 105**。
 - `ReaderPageWindow` / `ReaderPaginator` / `ReaderChapterBlockMeasurer` / `ReaderPaginationSession` / `ReaderPartialPagePolicy` / `ScrollPageDrawCache` / `TocScreen` / `TocHierarchy` / `TocViewModel` — **第七轮，补的是「渲染管线与目录页」这一整类盲区**，详见下一节。**+17 → 122**。
+
+### `coverConfig` 的关键词为什么从 3 涨到 83
+
+旧关键词 `backupIgnoreCoverConfig|"coverConfig"` 只命中 3 个文件——`help/storage/Backup.kt`、`help/storage/BackupConfig.kt`、`ui/config/ConfigTag.kt`。**这三个文件里恰好就有类别名常量与两个忽略开关，等于自证成功**：关键词命中了、类别也认出来了，可 `ui/config/coverConfig/` 那 9 个文件一个都没进来，封面设置页在本轮之前从未被盘过，兼容总账里它记的是「零行」。
+
+换成 14 个词之后命中 83 个文件（脚本口径，只扫 `app/src/main/java`）。逐轮增量：
+
+| 轮 | 追加的词 | 命中 | 增量 | 新增的是什么 |
+| --- | --- | --- | --- | --- |
+| 0 | `backupIgnoreCoverConfig\|"coverConfig"` | 3 | — | 只有存储层 |
+| 1 | `coverConfig`、`CoverConfig` | 13 / 10 | +11 | `ui/config/coverConfig/` 整目录 9 文件 + 弃用门面 `CoverConfig.kt` |
+| 2 | `CoverSettings`、`CoverSettingsGateway`、`coverPrefKeys` | 17 / 13 / 1 | +12 | 设置模型、gateway、仓储、组合根、`AppConfig` 读取入口 |
+| 3 | `CoverAlbum` | 17 | +9 | 相册模型、gateway、usecase、仓储、主题包导入导出、管理页路由 |
+| 4 | `CoverRule`、`coverRule` | 7 / 5 | +2 | 规则面板与 `DefaultData.coverRule`（规则本体挂在 `model/BookCover.kt`） |
+| 5 | `BookCover`、`CoilBookCover`、`BookshelfCover`、`CoverBlurBackdrop`、`CoverTextOverlay`、`CoverImageView` | 53 / 21 / 6 / 2 / 1 / 1 | +48 | 渲染层三件套 + **全部 20 余个调用点** |
+
+前两轮补的是「设置怎么被读写」，后三轮补的是「设置改的东西最终去了哪里」。80 个新增文件里只有轮 1 的 9 个属于设置页这个界面本身，其余 71 个是数据层、渲染管线与把封面组件当零件用的其它界面——所以 [封面设置对照表](ZIP-COVER.md) 分了 A-E 五块而不是只写一页设置项。
+
+**分母是 83 不是 95。** 在仓库根跑同一组合式会得 95，多出的 12 个全是 `app/src/test/java` 下的单测（`BookMorphTest`、`PlayerMorphHostInteractionTest`、`Phase2SettingsMappingTest` 等）。`scripts/upstream-surface.sh` 的 `SRC_DIR` 只到 `app/src/main/java`，覆盖证明的分母必须与脚本一致，否则 `--coverage` 永远不可能通过；测试文件也不该占表里的行。
 
 ### 为什么原关键词漏掉渲染管线与目录页
 

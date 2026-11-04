@@ -119,7 +119,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 | 2 | `readConfig` | 阅读界面 | `readConfig.json`、`shareReadConfig.json`、`config.xml` | 12 / 96 键 / 370 项 | 阅读配置有原生模型与持久化 | **部分接入**：读入 46 个 `config.xml` 键；`shareReadConfig` 未转多套方案 | ZIP 映射 2 |
 | 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`）与全局主题网关（`data/ThemeSettingsRepository.ets` / `data/ThemeModeResolver.ets`） | **已接入（r303）**：备份时把全局 `themeMode` 写进 `config.xml`（值域归一成 `"0"/"1"/"2"`），恢复时读回并 `applyThemeMode` 真正改全 App 配色；备份/恢复两侧的忽略开关都接上真实效果。全表 19 行（13 已接 / 4 未接 / 2 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A1/C/D/F | ZIP 映射 4 |
 | 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验且 r301 起有真实渲染（色温覆盖层）；`themeConfig.json` 仍不生成（需要先有本地主题包数据结构，见 B 块），Android 配色/透明度 JSON 未映射；界面侧主题设置页 46 个条目里 39 个仍走 `onUnavailableAction`，主题包管理整块缺失。全表 72 行（16 已接 / 55 未接 / 1 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A/B/D/E/F | ZIP 映射 5 |
-| 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，149 行，3 处 `onUnavailableAction`） | **未接入**：14 个键读写均未接 | 待接 |
+| 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，252 行，15 条设置项，3 处 `onUnavailableAction`） | **未接入（r330 重核）**：14 个键读写均未接，本类别 66 行里 25 行已接、39 行未接、2 行不适用，逐行见[封面设置总账](parity/ZIP-COVER.md)。r330 起「界面已接」的那 25 行（`showShadow`/`showStroke`/`useDefaultColor`/`infoOrientation`/日间四色两开关/夜间两色，以及渲染块 D 的 15 行）能改值并在书架页看见效果，但**这些值仍不写进 `config.xml`**——本地 `config.xml` 是白名单式逐键写出（`data/BackupRepository.ets:776-793`），14 个封面键不在白名单里；恢复侧也不过封面键（`grep coverSettings` 在 `data/BackupRepository.ets` 零命中）。另有两点此前未记：本地落盘用的是裸字段名（`showName`/`textColor`…），与上游 `coverShowName`/`coverTextColor` 不同名；`coverRule.json` 只是文件清单里的一个名字（`data/BackupRepository.ets:403`、`:411`），本地既没有生成也没有读取它的代码 | 待接；相册目录另计 `不进备份` |
 | 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`），界面面板 12 条目（`pages/BookshelfPage.ets:573-637`） | **部分接入（r327 重核）**：写出 13 键（`data/BackupRepository.ets:594-606`，原记 9 键漏了 `bookshelfTitleCenter`/`bookshelfTitleSmallFont`/`bookshelfGridCoverWidth`/`bookshelfListCoverWidth`），读入 13 键（`entry/src/main/ets/data/BackupRepository.ets:1328-1332` 九整型 + `:1339` 四布尔）；界面级 122 行里 38 已接 / 81 未接 / 3 不适用，逐行见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) | ZIP 映射 6 |
 | 7 | `showRss` | 显示订阅 | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **未接入**：`showRss` 键读写都未接 | 待接 |
 | 8 | `threadCount` | 线程数 | `config.xml` | 370 项内 1 键 | **无对应概念**（HOS 无并发线程数设置） | **未接入**：键读写都未接 | 安全兼容 |
@@ -227,7 +227,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 按「数据落在哪」判会把这类跨类项严重低估：同一批行换判据，跨类从 3 行涨到 13 行。
 
-**二、四档取值，`—` 与 `不备份` 不是一回事。**
+**二、五档取值，`—`、`不备份`、`不进备份` 三者互不相同。**
 
 | 取值 | 含义 | 派活影响 |
 | --- | --- | --- |
@@ -235,16 +235,19 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 | `A / B` | 跨类，改得动两边 | 派活时两边都要看，别只派一边 |
 | `—` | **参与备份，但不受任何忽略开关控制** | 不属任何 28 类，按类别名派活**永远覆盖不到**，必须单独派 |
 | `不备份` | 连 `config.xml` 都进不去 | 同上，且与备份兼容无关，属本地私有状态 |
+| `不进备份` | **连 ZIP 都进不去**（r330 新增） | 数据既不是数据库表、也不在任何打包文件清单里，备份/恢复两侧都无对应物；与「备份兼容」无关，接它等于新做一套存储 |
 
 `—` 的判定依据是上游 `help/storage/BackupConfig.kt:413 fun keyIsNotIgnore(key: String, isBackup: Boolean = false)` 的 `else -> true` 分支：不在五个类别数组里的键照样写进 `config.xml`，只是取消任何类别勾选都不会删掉它。真正永不备份的是 `alwaysIgnoredPreferenceKeys`（`BackupConfig.kt:11-30`，24 项，含 `PRIVATE_PASSWORD_SALT`/`PRIVATE_PASSWORD_VERIFIER` 等私密凭据）。
 
 `不备份` 的判定依据是本地两个 DataStore 不相通：`data/local/preferences/LocalPreferences.kt:11` 的 `local_ui_status` 里的键，`help/storage/Backup.kt:258 val configMap = AppConfigStore.preferences.asMap()` 根本读不到（它只读 `settings`）。
 
+**新增 `不进备份` 的理由**：`不备份`（`LocalPreferences.kt:11` 那套）说的是「键在 `local_ui_status` 里，`config.xml` 读不到」，它仍然是**一个键**的问题。而封面相册走的是 `getExternalFilesDir()/cover_albums/` 整个目录（`data/repository/CoverAlbumRepository.kt:49-53`）：不在 `help/storage/Backup.kt:156-220` 的任何 `dbIsNotIgnored` 分支里、`cover_albums` 不在 `BackupConfig.kt:96-102` 的 19 类 `dbIgnoreKeys` 里、`Backup.kt:85-98` 的 `backupFileNames` 里也没有 `albums.json`——**整个目录连 ZIP 都不进**。这两类的验收方式完全不同：前者验「`config.xml` 里有没有这个键」，后者验「解压 ZIP 后有没有这个目录」。混成一档会出现「以为相册跟着备份走了」这种误判。
+
 **把这两档混为一谈是本项目返工最多的地方**：写成同一档会导致「以为某个设置跟着备份走了」或「以为某个设置需要兼容上游」。典型是选词菜单整个 F 块（[书签对照](parity/ZIP-BOOKMARK.md) 34 行）——`textSelectMenuConfig`、`expandTextMenu`、`showSelectMenuIcon` 三键在 `BackupConfig.kt` 全文零命中，属 `—`，按「实现书签」派活一行都覆盖不到。
 
 **三、「零行」是「还没盘」，不是「已完成」，也不是「本地没有这个功能」。**
 
-[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 17 类标为**零行**（`rssSource`、`rssStar`、`replaceRule`、`searchHistory`、`sourceSub`、`txtTocRule`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightRule`、`server`、`coverConfig`、`themeMode`、`showRss`、`mangaConfig`）。`bookmark` 与 `themeConfig` 虽在 [书籍总账](parity/BOOKSHELF.md) 里零行，但分别归 [书签对照](parity/ZIP-BOOKMARK.md) A–E 与 [阅读配置总账](parity/READER-CONFIG.md) F，不算零行。
+[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 16 类标为**零行**（`rssSource`、`rssStar`、`replaceRule`、`searchHistory`、`sourceSub`、`txtTocRule`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightRule`、`server`、`themeMode`、`showRss`、`mangaConfig`）。`bookmark` 与 `themeConfig` 虽在 [书籍总账](parity/BOOKSHELF.md) 里零行，但分别归 [书签对照](parity/ZIP-BOOKMARK.md) A–E 与 [阅读配置总账](parity/READER-CONFIG.md) F，不算零行；`coverConfig` 在 r330 建表后也已离开这份清单（[封面设置总账](parity/ZIP-COVER.md) 66 行）。
 
 派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[盘点规约](PARITY-RULES.md)第二节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
 
@@ -269,6 +272,8 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 | `bookshelfLayout` | 39 | 41 | **2** | 0 |
 | `mangaConfig` | 32 | 32 | 0 | 0 |
 | `coverConfig` | 14 | 14 | 0 | 0 |
+
+`coverConfig` 这一行的 0/0 只说明**类别清单本身**对齐了（`data/BackupRepository.ets:387-391` 的 14 个常量与 `BackupConfig.kt:396-411` 逐键相同），不代表这些键真的被读写。r330 核实：这份清单在本地**只用于过滤**（`data/BackupRepository.ets:2103-2127` 的 `filterAndroidConfigXml` 把 14 个键当排除项），而 `config.xml` 的写出是白名单式逐键（`data/BackupRepository.ets:776-793`），封面 14 键不在写出列表里；恢复侧 `grep coverSettings` 在 `data/BackupRepository.ets` 零命中。另有一层不一致：本地落盘用的是裸字段名（`showName`/`textColor`/`infoOrientation`…，见 `data/CoverSettingsRepository.ets:135-146`），与这份常量里的 `coverShowName`/`coverTextColor`/`coverInfoOrientation` 不同名——所以即便将来把 14 键加进白名单，也要先解决键名映射。逐行结论见[封面设置总账](parity/ZIP-COVER.md) E 块。
 
 `readConfig` 多出的 25 个分两类：
 
