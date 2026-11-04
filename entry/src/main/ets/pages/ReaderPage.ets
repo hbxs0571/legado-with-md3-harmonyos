@@ -29,6 +29,11 @@ import {
   LocalReaderTitleBlock, LocalReaderTitleSegment
 } from './LocalReaderPaginator';
 import { ReaderTextLayoutStyle } from '../reader/ReaderTextLayoutEngine';
+// 页身份与跨章页表定位的纯函数（页层批次 3 建、批次 4 补全）。
+import {
+  ReaderChapterPagePosition, canTurnNext, canTurnPrevious, chapterPosition,
+  locateChapterPage, locateOrNull, rebasePageIndex
+} from '../reader/ReaderPageIdentity';
 import { ReaderCurlTouchPolicy } from '../reader/ReaderPageCurl';
 import { HiddenSpan, scanHiddenSpans, toBodyOnly, toRawText } from '../reader/ReaderBodyOnlyFilter';
 import {
@@ -486,6 +491,16 @@ export struct ReaderPage {
   private localSemanticDocument: LocalSemanticDocument = {
     paragraphs: [], content: '', sourceLength: 0, sourcePositionMap: [0]
   };
+  /**
+   * 当前页在「窗口页表」里的数组下标。
+   *
+   * 页层批次 4 后 `localReaderPages` 是跨章窗口页表（当前章 ±1 章 + 显示章），
+   * 所以这个下标**不是全书下标，也不是章内下标**——只是 `localReaderPages[index]`
+   * 的位置。要显示「本章第几页 / 共几页」或换算章内位置，一律用
+   * `chapterPosition(this.localReaderPages, this.currentPageIndex)` 现算，
+   * 不要拿这个数当章内页号用。页表插入 / 删除 / 换章后旧下标失效，
+   * 定位由 `rebasePageIndex` / `locateOrNull` / `locateChapterPage` 按页身份重查。
+   */
   @State currentPageIndex: number = 0;
   @State pageTurnOffsetX: number = 0;
   @State pageTurnOffsetY: number = 0;
@@ -1436,7 +1451,8 @@ export struct ReaderPage {
         this.startAutoPageTurn();
         return;
       }
-      if (this.currentPageIndex + 1 < this.localReaderPages.length) {
+      const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
+      if (position !== undefined && position.pageIndex + 1 < position.pageCount) {
         this.turnReaderPage(1);
       } else {
         this.autoPageWaitingForChapter = true;
@@ -1577,6 +1593,8 @@ export struct ReaderPage {
     this.chapterHandoffUpward = sameBook && (this.book.chapterProgress ?? 0) >= 99;
     this.chapterHandoffPending = sameBook;
     if (!sameBook) {
+      // 页层批次 4：整窗清空。换书不能留上一本书的窗口表（含邻章缓存页），
+      // 页表内下标与滚动偏移一并归位。
       this.localReaderPages = [];
       this.currentPageIndex = 0;
       this.scrollOffset = 0;
@@ -1666,7 +1684,7 @@ export struct ReaderPage {
     this.sliderProgressIndex = this.pageAnimation === 3
       ? this.readerProgress
       : (this.progressBehavior === 'page' && this.localReaderPages.length > 0
-        ? this.currentPageIndex : this.getChapterIndex());
+        ? this.currentChapterPageIndex() : this.getChapterIndex());
   }
 
 
@@ -1765,6 +1783,54 @@ export struct ReaderPage {
    *   正文与高亮规则都没变，这两步的产物必然一样，重算纯属浪费——
    *   一本 20 张图的章节，尺寸一张张到齐会走 20 次，全章解析就是 20 遍。
    */
+  /**
+   * 拼跨章窗口页表（对应上游 `retainChapterWindow`，
+   * `ReaderPageNavigator.kt:36-43`）：保留当前章 ±1 章的页，当前章一律用本次
+   * 新排的页，邻章页来自换章时 `onReaderContentChanged` 保留下来的旧页
+   * （本轮不预取、不流式发布、不做增量分页）。
+   *
+   * 上游还保留 `it.id.chapterIndex == displayedChapterIndex` 的显示章；本地
+   * displayedChapterIndex 恒等于当前章，已落在 ±1 范围内，故不另设参数。
+   * 结果按 (chapterIndex, pageIndex) 升序，保证 `ReaderCanvasWindow.of()` 的
+   * previous/current/next 连续、`locateOrNull` 的 break 成立。
+   * `retainChapterWindow` 按任务书不单独暴露，就地写在这里。
+   */
+  private mergeChapterPages(
+    currentChapterPages: LocalReaderPage[], chapterIndex: number): LocalReaderPage[] {
+    const windowPages: LocalReaderPage[] = [];
+    for (const page of this.localReaderPages) {
+      const pageChapter = page.chapterIndex ?? 0;
+      // 当前章用新排的页，旧页表里同章的页一律丢弃，避免新旧页混用。
+      if (pageChapter === chapterIndex) { continue; }
+      if (pageChapter < chapterIndex - 1 || pageChapter > chapterIndex + 1) { continue; }
+      windowPages.push(page);
+    }
+    for (const page of currentChapterPages) {
+      windowPages.push(page);
+    }
+    windowPages.sort((left: LocalReaderPage, right: LocalReaderPage): number => {
+      const chapterDelta = (left.chapterIndex ?? 0) - (right.chapterIndex ?? 0);
+      if (chapterDelta !== 0) { return chapterDelta; }
+      return (left.pageIndex ?? 0) - (right.pageIndex ?? 0);
+    });
+    return windowPages;
+  }
+
+  /** 当前页的章内位置（窗口页表下标 → 章身份 + 章内页号 + 本章页数）。 */
+  private currentChapterPosition(): ReaderChapterPagePosition | undefined {
+    return chapterPosition(this.localReaderPages, this.currentPageIndex);
+  }
+
+  /** 当前页的章内页号（0 起），用于页码显示与进度条；窗口表未就绪时退回页表下标。 */
+  private currentChapterPageIndex(): number {
+    return this.currentChapterPosition()?.pageIndex ?? this.currentPageIndex;
+  }
+
+  /** 本章页数，用于页码分母；窗口表未就绪时退回页表长度。 */
+  private currentChapterPageCount(): number {
+    return this.currentChapterPosition()?.pageCount ?? this.localReaderPages.length;
+  }
+
   private rebuildReaderPages(forceProgressCommit: boolean = false,
     onlyImageSizesChanged: boolean = false): void {
     if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
@@ -1774,7 +1840,11 @@ export struct ReaderPage {
       // 本地若在这里清空，视口一时为 0 就会让画布整屏空白——那正是闪烁。
       // 保留上一章的页当过渡帧，等视口就绪后这次重排会重跑并整表替换。
       if (!this.chapterHandoffPending) {
+        // 页层批次 4：整窗清空——`localReaderPages` 是跨章窗口表，
+        // 换书 / 非交接的早返回要把邻章缓存页一并丢弃，并把页表内下标归位，
+        // 否则旧下标会落在新页表之外的空位上。
         this.localReaderPages = [];
+        this.currentPageIndex = 0;
         this.readerBottomJustifyGap = 0;
       }
       return;
@@ -1867,6 +1937,10 @@ export struct ReaderPage {
       const page = paginatedPages[pageIndex];
       if (page !== undefined) { nextPages.push(page); }
     }
+    // 页层批次 4：拼跨章窗口页表（当前章 ±1 章 + 当前章新排页），
+    // 邻章页来自换章时保留的旧页；后续定位一律在窗口表上按页身份查下标。
+    const chapterIndex = this.getChapterIndex();
+    const mergedPages = this.mergeChapterPages(nextPages, chapterIndex);
     const percentPosition = Math.round(this.localSemanticContent.length * (this.book.chapterProgress ?? 0) / 100);
     let targetPosition = percentPosition;
     if (this.pendingBookmarkTargetPosition >= 0) {
@@ -1881,34 +1955,33 @@ export struct ReaderPage {
         targetPosition = LocalTextSemantics.toRenderPosition(this.localSemanticDocument, savedPosition);
       }
     }
-    let pageIndex = 0;
-    // 阅读位置 0% 就该落在本章第一页——单图模式下第一页是标题页，
-    // 不能被下面的 startPosition 比较跳过（标题页与正文首页的 startPosition 都是 0）。
-    if (targetPosition <= 0) {
-      pageIndex = 0;
-    } else {
-      for (let index = 0; index < nextPages.length; index++) {
-        const page = nextPages[index];
-        if (page === undefined || page.titleOnly) { continue; }
-        if (page.startPosition > targetPosition) { break; }
-        pageIndex = index;
-      }
+    // 阅读位置 0% 落本章第一页——单图模式下第一页是标题页，
+    // 不能被 startPosition 比较跳过（标题页与正文首页的 startPosition 都是 0）。
+    // `locateOrNull` 只在当前章页范围内扫，返回的是窗口页表下标。
+    let pageIndex = locateChapterPage(mergedPages, chapterIndex, 0);
+    if (targetPosition > 0) {
+      const located = locateOrNull(mergedPages, chapterIndex, targetPosition);
+      if (located >= 0) { pageIndex = located; }
+    }
+    // 页表插入 / 删除 / 换章后旧下标失效：定位没命中时按旧页身份重查一次
+    // （`rebasePageIndex`，`ReaderPageNavigator.kt:32-33`），仍找不到才落章首。
+    if (pageIndex < 0) {
+      const previousPage = this.localReaderPages[this.currentPageIndex];
+      const rebased = previousPage === undefined ? -1
+        : rebasePageIndex(mergedPages, previousPage.chapterIndex ?? 0, previousPage.pageIndex ?? 0);
+      pageIndex = rebased >= 0 ? rebased : 0;
     }
     // KI-REL1：向上翻章时落到新章最后一页，与上游「往回翻落章末」一致
     // （ReadBookController.kt:1387-1389 注释：往回翻时邻章排好的页直接接上）。
-    // 只在换章那一次生效，设置变化引起的重排仍按阅读位置定位。
+    // `locateChapterPage` 内部 coerceIn，传窗口表长度即钳到本章末页。
     const isChapterHandoff = this.chapterHandoffPending;
     if (this.chapterHandoffUpward && this.pendingBookmarkTargetPosition < 0 && !this.startPositionPending) {
-      for (let index = nextPages.length - 1; index >= 0; index--) {
-        const page = nextPages[index];
-        if (page === undefined || page.titleOnly) { continue; }
-        pageIndex = index;
-        break;
-      }
+      const last = locateChapterPage(mergedPages, chapterIndex, mergedPages.length);
+      if (last >= 0) { pageIndex = last; }
     }
     this.chapterHandoffUpward = false;
     this.chapterHandoffPending = false;
-    this.localReaderPages = nextPages;
+    this.localReaderPages = mergedPages;
     this.currentPageIndex = pageIndex;
     // KI-REL1：换章后滚动偏移归零。连续滚动的偏移是「当前页之前的页高之和 + 页内偏移」，
     // 页表换了之后旧偏移对新章没有意义，不清掉新章一开篇就停在中间。
@@ -1932,7 +2005,7 @@ export struct ReaderPage {
       this.reportReaderPageProgress();
     } else if (this.pageAnimation !== 3) {
       this.sliderProgressIndex = this.progressBehavior === 'page'
-        ? this.currentPageIndex : this.getChapterIndex();
+        ? this.currentChapterPageIndex() : this.getChapterIndex();
     }
     this.requestFullBookPagination();
     if (consumedBookmarkTarget) { this.onBookmarkTargetConsumed(); }
@@ -2001,7 +2074,7 @@ export struct ReaderPage {
     if (page === undefined) { return; }
     this.resolveStartPosition();
     this.sliderProgressIndex = this.progressBehavior === 'page'
-      ? this.currentPageIndex : this.getChapterIndex();
+      ? this.currentChapterPageIndex() : this.getChapterIndex();
     const renderPosition = Math.max(0, Math.min(this.localSemanticContent.length, page.startPosition));
     const position = LocalTextSemantics.toSourcePosition(this.localSemanticDocument, renderPosition);
     const progress = this.localSemanticDocument.sourceLength > 0
@@ -2109,7 +2182,7 @@ export struct ReaderPage {
   private getCanvasAccessibilityStateDescription(): string {
     const states: string[] = [];
     states.push(this.hasBookmarkOnCurrentPage() ? '本页已加书签' : '本页未加书签');
-    states.push(`第 ${this.currentPageIndex + 1} 页，共 ${this.localReaderPages.length} 页`);
+    states.push(`第 ${this.currentChapterPageIndex() + 1} 页，共 ${this.currentChapterPageCount()} 页`);
     return states.join('，');
   }
 
@@ -2239,11 +2312,23 @@ export struct ReaderPage {
     const currentExtentPx = this.readerCanvasRenderer.pageScrollExtent(current.page, current.pageIndex, request);
     const previousExtentPx = window.previous === undefined ? 0
       : this.readerCanvasRenderer.pageScrollExtent(window.previous.page, window.previous.pageIndex, request);
+    // 页层批次 4：滚动越界的「有上/下一页」按本章判断，窗口表里的邻章页
+    // 不参与本章滚动边界（`apply` 的钳位与 crossing 口径不变）。
+    const scrollPosition = chapterPosition(pages, this.currentPageIndex);
+    const hasPreviousInChapter = scrollPosition !== undefined && scrollPosition.pageIndex > 0;
+    const hasNextInChapter = scrollPosition !== undefined &&
+      scrollPosition.pageIndex + 1 < scrollPosition.pageCount;
     const result: ReaderScrollResult = ReaderScrollPolicy.apply(
       context.vp2px(this.scrollOffset), deltaPx, previousExtentPx, currentExtentPx,
-      viewportExtentPx, window.previous !== undefined, window.next !== undefined);
+      viewportExtentPx, hasPreviousInChapter, hasNextInChapter);
     if (result.crossing === ReaderScrollCrossing.NEXT) {
-      if (this.currentPageIndex + 1 >= pages.length) {
+      // 页层批次 4：窗口页表跨章后 `pages.length` 不再是本章页数，章末边界
+      // 由 `chapterPosition()` 现算；`canTurnNext` 表达上游「页表有下一页或还有
+      // 下一章」的放行语义（跨章窗口下 next 恒为邻章页，真正的边界看章内页号）。
+      const position = chapterPosition(pages, this.currentPageIndex);
+      const hasNextChapter = this.getChapterIndex() + 1 < this.getChapterCount();
+      if (position === undefined || position.pageIndex + 1 >= position.pageCount ||
+        !canTurnNext(pages, this.currentPageIndex, hasNextChapter)) {
         // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示。
         // 但章末要先亮「继续滑动以加载下一章…」提示页，否则用户以为滚到头了。
         this.scrollOffset = context.px2vp(result.offsetPx);
@@ -2251,15 +2336,20 @@ export struct ReaderPage {
         this.paintReaderCanvas();
         return true;
       }
-      this.currentPageIndex = this.currentPageIndex + 1;
+      this.currentPageIndex = locateChapterPage(
+        pages, position.chapterIndex, position.pageIndex + 1);
       this.resetCanvasSelectionState();
     } else if (result.crossing === ReaderScrollCrossing.PREVIOUS) {
-      if (this.currentPageIndex === 0) {
+      const position = chapterPosition(pages, this.currentPageIndex);
+      const hasPreviousChapter = this.getChapterIndex() > 0;
+      if (position === undefined || position.pageIndex <= 0 ||
+        !canTurnPrevious(pages, this.currentPageIndex, hasPreviousChapter)) {
         this.scrollOffset = context.px2vp(result.offsetPx);
         this.paintReaderCanvas();
         return true;
       }
-      this.currentPageIndex = this.currentPageIndex - 1;
+      this.currentPageIndex = locateChapterPage(
+        pages, position.chapterIndex, position.pageIndex - 1);
       this.resetCanvasSelectionState();
     }
     this.scrollOffset = context.px2vp(result.offsetPx);
@@ -2268,15 +2358,15 @@ export struct ReaderPage {
     return result.hitBoundary;
   }
 
-  /** 当前页还能不能往回翻：非首页，或上一章存在。 */
+  /** 当前页还能不能往回翻（上游 `canTurnPrevious`：窗口有上一页或还有上一章）。 */
   private canTurnToPrevious(): boolean {
-    return this.currentPageIndex > 0 || this.getChapterIndex() > 0;
+    return canTurnPrevious(this.localReaderPages, this.currentPageIndex, this.getChapterIndex() > 0);
   }
 
-  /** 当前页还能不能往后翻：非末页，或下一章存在。 */
+  /** 当前页还能不能往后翻（上游 `canTurnNext`：窗口有下一页或还有下一章）。 */
   private canTurnToNext(): boolean {
-    return this.currentPageIndex + 1 < this.localReaderPages.length ||
-      this.getChapterIndex() + 1 < this.getChapterCount();
+    return canTurnNext(this.localReaderPages, this.currentPageIndex,
+      this.getChapterIndex() + 1 < this.getChapterCount());
   }
 
   /**
@@ -2455,14 +2545,17 @@ export struct ReaderPage {
   }
 
   /** 拖动翻页落地：改索引并重绘；到章边界就交给换章回调。 */  private commitDraggedPageTurn(isPrevious: boolean): void {
-    const nextPageIndex = this.currentPageIndex + (isPrevious ? -1 : 1);
-    if (nextPageIndex < 0 || nextPageIndex >= this.localReaderPages.length) {
+    // 页层批次 4：章内 ±1 页换算成窗口页表下标，章边界按 `chapterPosition` 判。
+    const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
+    const localNext = position === undefined ? -1 : position.pageIndex + (isPrevious ? -1 : 1);
+    if (position === undefined || localNext < 0 || localNext >= position.pageCount) {
       this.resetCanvasSelectionState();
       this.paintReaderCanvas();
       this.showChapterBoundaryMessage(isPrevious ? -1 : 1);
       this.onTurnChapterBoundary(isPrevious ? -1 : 1);
       return;
     }
+    const nextPageIndex = locateChapterPage(this.localReaderPages, position.chapterIndex, localNext);
     this.currentPageIndex = nextPageIndex;
     this.resetCanvasSelectionState();
     this.refreshReaderBottomJustifyGap();
@@ -2476,9 +2569,14 @@ export struct ReaderPage {
       this.turnReaderScrollPage(delta);
       return;
     }
-    const nextPageIndex = this.currentPageIndex + delta;
+    // 页层批次 4：`delta` 是章内翻页数，先按 `chapterPosition` 换算成章内页号，
+    // 再 `locateChapterPage` 换回窗口页表下标；越出本章就交给换章回调。
+    const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
+    const localNext = position === undefined ? -1 : position.pageIndex + delta;
+    const nextPageIndex = position === undefined ? -1
+      : locateChapterPage(this.localReaderPages, position.chapterIndex, localNext);
     this.resolveStartPosition();
-    if (nextPageIndex < 0 || nextPageIndex >= this.localReaderPages.length) {
+    if (position === undefined || localNext < 0 || localNext >= position.pageCount || nextPageIndex < 0) {
       this.showChapterBoundaryMessage(delta);
       this.onTurnChapterBoundary(delta);
       return;
@@ -2764,7 +2862,8 @@ export struct ReaderPage {
 
   private getProgressSliderMaximum(): number {
     if (this.pageAnimation === 3) { return 100; }
-    return this.isPageProgressMode() ? this.localReaderPages.length - 1 : this.getChapterCount() - 1;
+    // 页层批次 4：滑块上限是本章页数（窗口表还含邻章页），不是页表长度。
+    return this.isPageProgressMode() ? this.currentChapterPageCount() - 1 : this.getChapterCount() - 1;
   }
 
   private getProgressSliderThumbRatio(): number {
@@ -3362,11 +3461,14 @@ export struct ReaderPage {
     const chapterCount = this.getChapterCount();
     const chapterIndex = this.getChapterIndex();
     if (this.pageAnimation !== 3) {
-      const pageCount = this.localReaderPages.length;
+      // 页层批次 4：分母与分子都取当前章（窗口表还含邻章页，不能拿 length 当章页数）。
+      const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
+      const pageCount = position?.pageCount ?? this.localReaderPages.length;
+      const localPageIndex = position?.pageIndex ?? this.currentPageIndex;
       if (pageCount === 0 && chapterIndex === 0) { return 0; }
-      const chapterProgress = pageCount > 0 ? (this.currentPageIndex + 1) / pageCount : 1;
+      const chapterProgress = pageCount > 0 ? (localPageIndex + 1) / pageCount : 1;
       let progress = (chapterIndex + chapterProgress) / chapterCount * 100;
-      if (progress >= 100 && (chapterIndex + 1 !== chapterCount || this.currentPageIndex + 1 !== pageCount)) {
+      if (progress >= 100 && (chapterIndex + 1 !== chapterCount || localPageIndex + 1 !== pageCount)) {
         progress = 99.9;
       }
       return Math.max(0, Math.min(100, progress));
@@ -3537,7 +3639,7 @@ export struct ReaderPage {
       const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
         document.content.length, this.activeImageStyle === 'SINGLE', displayTitle);
       const pageCount = chapterIndex === this.getChapterIndex() && this.localReaderPages.length > 0
-        ? this.localReaderPages.length
+        ? this.currentChapterPageCount()
         : await LocalReaderPaginator.countPagesIncrementally(
           document,
           width,
@@ -3606,7 +3708,9 @@ export struct ReaderPage {
     if (!this.fullBookPaginationReady || this.pageAnimation === 3) { return -1; }
     const chapterIndex = this.getChapterIndex();
     if (chapterIndex < 0 || chapterIndex >= this.fullBookPageCounts.length) { return -1; }
-    let pageIndex = this.currentPageIndex + 1;
+    // 页层批次 4：全书页码累加的是本章页号，不是窗口表下标。
+    let pageIndex = (chapterPosition(this.localReaderPages, this.currentPageIndex)?.pageIndex
+      ?? this.currentPageIndex) + 1;
     for (let index = 0; index < chapterIndex; index++) {
       pageIndex += this.fullBookPageCounts[index] ?? 0;
     }
@@ -3630,8 +3734,9 @@ export struct ReaderPage {
 
   private getReaderFooterProgress(): string {
     const usesPageProgress = this.isPageProgressMode();
-    const current = usesPageProgress ? this.currentPageIndex + 1 : this.getChapterIndex() + 1;
-    const total = usesPageProgress ? this.localReaderPages.length : this.getChapterCount();
+    // 页层批次 4：页码与本章页数一律按当前章现算（窗口表含邻章页）。
+    const current = usesPageProgress ? this.currentChapterPageIndex() + 1 : this.getChapterIndex() + 1;
+    const total = usesPageProgress ? this.currentChapterPageCount() : this.getChapterCount();
     return `${current}/${total}  ${this.getWholeBookProgress().toFixed(1)}%`;
   }
 
@@ -4429,14 +4534,22 @@ export struct ReaderPage {
     if (pages.length === 0) {
       return Math.max(0, this.viewportHeight);
     }
+    // 页层批次 4：滚动进度是「本章」的进度，窗口表里的邻章页不能算进本章可滚高度，
+    // 否则分母偏大、进度条与跳百分比都会漂移（B8 第 8 行偏移延续本轮仍不做）。
+    const current = pages[this.currentPageIndex];
+    const currentChapter = current?.chapterIndex ?? this.getChapterIndex();
     const endPadding = 20;
     const bodyHeight = this.getBodyContentHeight(
       this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0,
       this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0);
     let total = 0;
+    let lastChapterPage = false;
     for (let index = 0; index < pages.length; index++) {
       const page = pages[index];
       if (page === undefined) {
+        continue;
+      }
+      if ((page.chapterIndex ?? 0) !== currentChapter) {
         continue;
       }
       let used = 0;
@@ -4447,9 +4560,11 @@ export struct ReaderPage {
         used = Math.max(1, bodyHeight);
       }
       total += Math.max(1, used);
-      if (index === pages.length - 1) {
-        total += endPadding;
-      }
+      lastChapterPage = true;
+    }
+    // 章末页再加 chapterEndPadding：只有本章真的有页时才加。
+    if (lastChapterPage) {
+      total += endPadding;
     }
     // 内容不足一屏时也要能停在一屏的高度上，与上游 minOf(0, viewport - extent) 同口径
     return Math.max(1, total);
@@ -4473,10 +4588,15 @@ export struct ReaderPage {
    */
   private readerScrollAbsoluteOffset(): number {
     const pages = this.localReaderPages;
+    // 页层批次 4：只累加「本章、当前页之前」的页 extent，窗口表里排在前面的
+    // 上一章页不算进本章绝对位移。
+    const current = pages[this.currentPageIndex];
+    const currentChapter = current?.chapterIndex ?? this.getChapterIndex();
     let before = 0;
     for (let index = 0; index < this.currentPageIndex && index < pages.length; index++) {
       const page = pages[index];
       if (page === undefined) { continue; }
+      if ((page.chapterIndex ?? 0) !== currentChapter) { continue; }
       let used = 0;
       for (const line of page.lines) {
         used += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
@@ -4497,11 +4617,22 @@ export struct ReaderPage {
     if (pages.length === 0) {
       return;
     }
+    // 页层批次 4：只在本章页里还原「当前页索引 + 页内偏移」，
+    // 窗口表里的邻章页不参与，落点 `index` 仍是窗口页表下标。
+    const current = pages[this.currentPageIndex];
+    const currentChapter = current?.chapterIndex ?? this.getChapterIndex();
+    const chapterIndexes: number[] = [];
+    for (let index = 0; index < pages.length; index++) {
+      const page = pages[index];
+      if (page === undefined) { continue; }
+      if ((page.chapterIndex ?? 0) === currentChapter) { chapterIndexes.push(index); }
+    }
     const footerReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
     const headerReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
     const bodyHeight = this.getBodyContentHeight(headerReserve, footerReserve);
     let remaining = Math.max(0, target);
-    for (let index = 0; index < pages.length; index++) {
+    for (let order = 0; order < chapterIndexes.length; order++) {
+      const index = chapterIndexes[order] ?? -1;
       const page = pages[index];
       if (page === undefined) { continue; }
       let used = 0;
@@ -4510,7 +4641,7 @@ export struct ReaderPage {
       }
       if (page.titleOnly && used <= 0) { used = Math.max(1, bodyHeight); }
       const extent = Math.max(1, used);
-      if (remaining < extent || index === pages.length - 1) {
+      if (remaining < extent || order === chapterIndexes.length - 1) {
         this.currentPageIndex = index;
         this.scrollOffset = Math.min(remaining, Math.max(0, extent - 1));
         return;
@@ -4890,7 +5021,13 @@ export struct ReaderPage {
     request.scrollActive = this.usesCanvasScroll();
     request.scrollOffsetPx = this.getUIContext().vp2px(this.scrollOffset);
     request.scrollEndPaddingPx = this.getUIContext().vp2px(20);
-    request.scrollLastPageIndex = this.localReaderPages.length - 1;
+    // 页层批次 4：章末 20dp padding 只加给「当前章末页」在窗口表里的下标。
+    // 单章页表时 length-1 就是章末；跨章窗口下 length-1 是下一章末页，
+    // 直接沿用会把 padding 加错页、让本章滚动 extent 与进度条分母不一致。
+    const scrollCurrent = this.localReaderPages[this.currentPageIndex];
+    const scrollChapter = scrollCurrent?.chapterIndex ?? this.getChapterIndex();
+    request.scrollLastPageIndex = locateChapterPage(
+      this.localReaderPages, scrollChapter, this.localReaderPages.length);
     // 选区：渲染坐标直接来自长按/拖把手，画布按元素切分后用 getRectsForRange 出高亮条带。
     request.selectionStart = this.canvasSelectionStart;
     request.selectionEnd = this.canvasSelectionEnd;
@@ -5706,7 +5843,9 @@ export struct ReaderPage {
   private getReaderInfoValue(type: number, customTemplate: string): string {
     const currentPage = this.localReaderPages[this.currentPageIndex];
     const chapterCount = this.getChapterCount();
-    const pageCount = this.localReaderPages.length;
+    // 页层批次 4：页码 / 本章页数按当前章现算，窗口表含邻章页不能直接用 length。
+    const pageCount = this.currentChapterPageCount();
+    const localPageIndex = this.currentChapterPageIndex() + 1;
     const chapterTitle = this.displayChapterTitle;
     const time = new Date();
     const timeText = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
@@ -5715,15 +5854,15 @@ export struct ReaderPage {
     const fullPageIndex = this.getWholeBookPageIndex();
     const fullPageCount = this.getWholeBookPageCount();
     // Android 的自定义占位符在整本页数暂不可用时回退到本章页码和页数。
-    const customFullPageIndex = fullPageIndex > 0 ? `${fullPageIndex}` : `${this.currentPageIndex + 1}`;
+    const customFullPageIndex = fullPageIndex > 0 ? `${fullPageIndex}` : `${localPageIndex}`;
     const customFullPageCount = fullPageCount > 0 ? `${fullPageCount}` : `${Math.max(1, pageCount)}`;
     let value = '';
     if (type === 1) { value = chapterTitle; }
     else if (type === 2) { value = timeText; }
     else if (type === 3 || type === 10 || type === 13 || type === 14 || type === 15) { value = `${batteryPercent}%`; }
-    else if (type === 4) { value = `${this.currentPageIndex + 1}/${pageCount > 0 ? pageCount : '-'}`; }
+    else if (type === 4) { value = `${localPageIndex}/${pageCount > 0 ? pageCount : '-'}`; }
     else if (type === 5) { value = progressText; }
-    else if (type === 6) { value = `${this.currentPageIndex + 1}/${pageCount > 0 ? pageCount : '-' }  ${progressText}`; }
+    else if (type === 6) { value = `${localPageIndex}/${pageCount > 0 ? pageCount : '-' }  ${progressText}`; }
     else if (type === 7) { value = this.book.title; }
     else if (type === 8 || type === 9 || type === 16) { value = `${timeText} ${batteryPercent}%`; }
     else if (type === 11) { value = `${this.getChapterIndex() + 1}/${chapterCount}`; }
@@ -5736,9 +5875,9 @@ export struct ReaderPage {
         .replaceAll('{BatteryPercent}', `${batteryPercent}%`)
         .replaceAll('{ChapterIndex}', `${this.getChapterIndex() + 1}`)
         .replaceAll('{ChapterSize}', `${chapterCount}`)
-        .replaceAll('{PageIndex}', `${this.currentPageIndex + 1}`)
+        .replaceAll('{PageIndex}', `${localPageIndex}`)
         .replaceAll('{PageSize}', `${pageCount > 0 ? pageCount : '-'}`)
-        .replaceAll('{PageRemaining}', `${pageCount > 0 ? Math.max(0, pageCount - this.currentPageIndex - 1) : '-'}`)
+        .replaceAll('{PageRemaining}', `${pageCount > 0 ? Math.max(0, pageCount - localPageIndex) : '-'}`)
         .replaceAll('{ReadProgress}', progressText)
         .replaceAll('{FullPageIndex}', customFullPageIndex)
         .replaceAll('{FullPageSize}', customFullPageCount);
@@ -6289,7 +6428,10 @@ export struct ReaderPage {
                           this.seekToProgress(index);
                         }
                       } else if (this.isPageProgressMode()) {
-                        this.currentPageIndex = index;
+                        // 页层批次 4：滑块 value 是章内页号，换算成窗口页表下标。
+                        const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
+                        this.currentPageIndex = position === undefined ? index
+                          : locateChapterPage(this.localReaderPages, position.chapterIndex, index);
                         this.reportReaderPageProgress();
                         // 同上：页码没有 @Watch，改完必须显式重绘画布，否则拖进度条屏幕停在旧页。
                         this.paintReaderCanvas();
