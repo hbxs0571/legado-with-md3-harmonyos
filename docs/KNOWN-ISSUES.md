@@ -1294,6 +1294,194 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 4. 恢复排除项打开「深色模式」→ 恢复含 `themeMode=2` 的 ZIP → prefs 仍为 `"1"`（实测通过）。
 5. **F5（r316 实测通过）**：改一套配色 → 备份 → 解压得到 `themeConfig.json` 304 字节，内容是 `[{"themeName":"MD3-Day","isNightTheme":false,"primaryColor":"#FF8800","accentColor":"#5C5C5C","backgroundColor":"#FFCC00","bottomBackground":"#F7F3F2"},{"themeName":"MD3-Night","isNightTheme":true,"primaryColor":"#00FF88","accentColor":"#C7C6C6","backgroundColor":"#141313","bottomBackground":"#1C1B1B"}]`，与当前配色一致；恢复该 ZIP → `files/themeConfig.json` 落盘 304 字节、预览列表显示「themeConfig.json 2 条」。
 
+## 书架布局行登记（ZIP-BOOKSHELF-LAYOUT.md 的未接行）
+
+本节登记 [书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) A–F 块里 81 行 `未接` 的「接不接、怎么接」。编号 `KI-SL-<块><序号>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行号（行号为 ZIP-BOOKSHELF-LAYOUT.md 的行号）。**本节只登记，不改 `.ets` 代码。**
+
+**判定口径**：按 [PROJECT.md](PROJECT.md) 「范围之外」段（`:24-26`）与 PARITY-RULES.md 第三节。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
+
+**与对照表状态的关系**：ZIP-BOOKSHELF-LAYOUT.md 只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态。全表 122 行 = 38 已接 / 81 未接 / 3 不适用；81 行未接 = 40 `要接` + 41 `不接`。
+
+**排期分布**：40 条 `要接` 集中在四个主题——①分组样式第三档与文件夹视图 7 条、②列表模式（封面宽度 / 详情 / 版式）6 条、③卡片外观扩展（网格样式、紧凑模式、底色、分组列表样式）9 条、④横屏与布局矩阵 10 条；其余 8 条是搜索分流、快速滚动条、记住分组、空态搜索按钮、字段全集与备份归类。41 条 `不接` 里 11 条依赖「列表模式」这一不存在的前提，10 条是角标与提示类，其余分散在标签体系、标签配色、分组卡片增强、批量更新、加载态与锁定书。
+
+**全局前置（不做完这三件，`要接` 组都落不了地）**：
+
+1. **列表模式**：本地 `entry/src/main/ets/pages/BookshelfPage.ets:735` 恒为 `Grid`，`:769` 用 `columnsTemplate()`（`:419-427`），`bookshelfLayoutModePortrait === 0` 只是把列数换成 `bookshelfLayoutListPortrait`（1 列），渲染容器仍是 `GridItem`（`:737`）。上游列表是另一套卡片（`BookItem.kt:846` `BookshelfListItem`）。**不解这一层，②③里所有列表相关行都无从接线**。
+2. **横竖屏取值**：本地 0 个 Landscape 键、0 处横竖屏判断（`entry/src/main/module.json5` 里 `orientation` 零命中，`entry/src/main/ets` 全目录 `isLandscape` 零命中）。平台具备该能力——阅读页已在调 `targetWindow.setPreferredOrientation()`（`entry/src/main/ets/pages/ReaderPage.ets:1003`，定义起点 `:987`），但本地全仓 `getDefaultDisplay` / `windowRect` 零命中，**书架侧需要新建窗口尺寸读取入口**。
+3. **分组样式第三档**：本地 `entry/src/main/ets/pages/BookshelfPage.ets:587` 写 `hidden ? 1 : 0`，`entry/src/main/ets/model/BookshelfLayout.ets:43-46` 的 `BOOK_GROUP_STYLE_OPTIONS` 只有两项，第 2 档「文件夹」无任何入口，也无对应视图。
+
+---
+
+### A/B/E 的未接行（11 组要接 / 9 组不接）
+
+**KI-SL-A1 分组样式三档与文件夹视图** —— 覆盖 A 块 `:40`、`:44`、`:45`、`:46`、`:48`、`:49`，E 块 `:179`（共 7 行）
+
+- **上游口径**：`bookGroupStyle` 三档（`BookshelfConfigSheet.kt:84-90`，`values-zh-rCN/arrays.xml:24-28` = 标签 / 隐藏标签 / 文件夹）；第 2 档出现后，`BookshelfScreen.kt:983` `if (bookGroupStyle == 2 && isRoot …)` 改走文件夹网格，`:1023` 再按 `bookshelfFolderLayoutMode` 决定 `BookGroupItemList` 还是网格；配置面板随之展开文件夹的布局模式（`:143`）、网格列数（`:164`）、列表列数（`:186`）、列表样式（`:220`）、横排封面数（`:230`）。
+- **本地现状**：`entry/src/main/ets/pages/BookshelfPage.ets:585-587` 只有一个开关，写值只有 0/1；`entry/src/main/ets/model/BookshelfLayout.ets:43-46` 选项数组两项；无文件夹根视图、无 `bookshelfFolderLayoutMode*` / `bookshelfFolderLayoutGrid*` / `bookshelfFolderLayoutList*` / `bookshelfGroupListStyle` / `bookshelfGroupCoverCount` 字段。
+- **补法**：`BookshelfLayout.ets` 先补 8 个字段，并在 `entry/src/main/ets/data/BookshelfLayoutRepository.ets` 的 `load`（`:30-66`）/ `save`（`:69-93`）/ `mergeFromAndroidValues`（`:101-133`）/ `toAndroidValues`（`:136-152`）四处同步键名（键名照 `entry/src/main/ets/data/BackupRepository.ets:360-375` 的 41 键数组）；面板把 `LayoutSwitchRow` 换成三档 `LayoutMenuRow`；渲染层在 `BookshelfPage.ets:719-733`（页签区）与 `:734-799`（卡片区）之间插入文件夹根视图分支。
+- **验收**：面板选「文件夹」后，书架根层显示分组卡片（每张卡显示组内前 N 个封面），点进去是该组的书；返回回到根层；横竖屏各一套列数。
+
+**KI-SL-A2 网格样式与紧凑模式** —— 覆盖 A 块 `:51`、`:59`，B 块 `:98`、`:122`（共 4 行）
+
+- **上游口径**：`bookshelfGridLayout` 三档「标准 / 紧凑 / 仅封面」（`BookshelfConfigSheet.kt:273`，`values-zh-rCN/arrays.xml:249-253`），只在 `layoutMode == 1`（网格）时出现（`:267`）；`BookItem.kt:110` 在 `gridStyle == 1` 时把标题画在封面内（白字），`:135` 在 `gridStyle == 0` 时画在封面下方。`bookshelfLayoutCompact`（`:388` `compact_details`）进入 `BookItem.kt:230` 与 `:738`，控制卡片是否渲染作者 / 简介等副信息。
+- **本地现状**：无 `bookshelfGridLayout`、无 `bookshelfLayoutCompact`；网格卡片恒为「封面 + 封面下方的书名」（`BookshelfPage.ets:738-755`），书名位置写死。
+- **补法**：两字段进 `BookshelfLayout.ets` + 仓储四处；渲染层在 `BookshelfPage.ets:749-754` 外面加 `gridStyle` 分支（1 → 书名移进 `BookCover` 上叠层，2 → 不渲染 `Text`）；`compact_details` 打开时补渲染作者行。
+- **验收**：选「仅封面」后网格卡片不再显示书名；选「紧凑」后书名变封面内白字；开「精简详情」后卡片只留封面与书名。
+
+**KI-SL-A3 分组列表样式与横排封面数** —— 覆盖 B 块 `:109`、`:110`（共 2 行）
+
+- **上游口径**：`bookshelfGroupListStyle` 三档「分组 / 紧凑列表 / 横排封面数量」（`BookshelfConfigSheet.kt:220-226`，`entryValues` `"0"`/`"1"`/`"2"`）；`BookItem.kt:504` 在 `== 2` 时走 `BookGroupItemHorizontalCovers`，`:530` 在 `== 1` 时置 `isCompact = true`；`bookshelfGroupCoverCount` 由 `:627-628` `previewBooks.take(coverCount)` 消费，`:657` 不足时补 `Spacer`，面板入口在 `BookshelfConfigSheet.kt:230`（仅 `bookshelfGroupListStyle == 2` 时出现，`:229`）。
+- **本地现状**：无这两个字段；分组从不以卡片形式出现在书架网格里。
+- **补法**：随 KI-SL-A1 一起补字段与仓储；`BookGroupItemHorizontalCovers` 在本地需要新建分组卡片组件，横排封面数取 `bookshelfGroupCoverCount`。
+- **验收**：选「横排封面数量」并把数量改为 6 后，分组卡片一行 6 个封面，不足 6 本时右侧留空。
+
+**KI-SL-A4 卡片背景色（日 / 夜）** —— 覆盖 A 块 `:57`、`:58`，B 块 `:105`（共 3 行）
+
+- **上游口径**：`bookshelfCardColor` / `bookshelfCardColorDark`（`BookshelfConfigSheet.kt:346` 日间、`:367` 夜间，写回 `:680` / `:689`），消费在 `BookItem.kt:176`、`:570`；ZIP 类别按「会动到哪个类别」判为 `bookshelfLayout / themeConfig`（两色键同时进主题导出：`data/repository/ThemePackageSettingsRepository.kt:76-77`、`domain/model/settings/ThemeExportData.kt:62-63`）。
+- **本地现状**：卡片底色取自主题，无这两个字段。
+- **补法**：字段 + 仓储四处；卡片外层容器按 `isNight` 取对应色，未设（0）时回落主题色。
+- **验收**：日间色改为米色后亮色模式卡片底色变米色、暗色模式仍取夜间色；两色都设为 0 时与现在一致。
+
+**KI-SL-A5 列表封面宽度** —— 覆盖 A 块 `:60`，B 块 `:100`（共 2 行）
+
+- **上游口径**：`bookshelfListCoverWidth` **只在列表分支被读**——`BookItem.kt:965`（`BookshelfListItem` 调用处）、`:549`（分组列表）、`:1041`（锁定书列表分支），网格分支 `:825-843` 不读。
+- **本地现状**：面板有条目（`entry/src/main/ets/pages/BookshelfPage.ets:629-631`）、仓储读写（`entry/src/main/ets/data/BookshelfLayoutRepository.ets:58-59` / `:86` / `:130` / `:150`）、备份带出（`entry/src/main/ets/data/BackupRepository.ets:606` / `:1331`），但**没有任何渲染代码读它**：`:745` 传给 `BookCover` 的 `maxWidth` 来自 `bookshelfCoverWidthLimit()`，该函数只用 `bookshelfGridCoverWidth`（`:462`）。
+- **补法**：**与列表模式一起做**（见全局前置 1）。本地当前只有网格，即使把该字段接到 `:745` 也不会改变外观——上游网格分支本来就不读它。
+- **验收**：切到列表模式后调该项，列表封面宽度随之变化；网格模式下调该项外观不变（与上游一致）。
+
+**KI-SL-A6 列表详情（简介 / 最新章节）** —— 覆盖 A 块 `:64`、`:65`，B 块 `:112`、`:120`（共 4 行）
+
+- **上游口径**：`bookshelfShowLatestChapter`（`BookshelfConfigSheet.kt:447`，消费 `BookItem.kt:942`）；`bookshelfShowIntro`（`:456`，消费 `:739`）；总开关 `showListDetails = layoutMode == 0 && !isCompact && settings.showBookIntro`（`:738`）。
+- **本地现状**：两字段都没有；卡片唯一副信息是封面上的章节数角标（`entry/src/main/ets/components/BookCover.ets:193-200`），不是章节名。
+- **补法**：随列表模式一起做，`BookItem.kt:738-760` 的详情区在本地按 `Column` + 两行 `Text` 还原；章节名取书籍模型里的最新章节名。
+- **验收**：开「显示最新章节」后列表卡片出现章节名一行；开「显示简介」后出现简介段落。
+
+**KI-SL-A7 搜索按钮点击 / 长按分流** —— 覆盖 A 块 `:80`，D 块 `:166`（共 2 行）
+
+- **上游口径**：`bookshelfSearchActionDirectToSearch`（`BookshelfConfigSheet.kt:616`）；`BookshelfScreen.kt:570` 与 `:577` 两处手势按该布尔互换（点击搜索 / 长按筛选），`:1343` `val searchFirst = uiState.settings.bookshelfSearchActionDirectToSearch`。
+- **本地现状**：无该字段；搜索按钮单击即进搜索，无长按分流（`BookshelfPage.ets` 里未查到搜索分流代码，`:756-765` 是卡片手势）。
+- **补法**：字段 + 仓储；搜索按钮加长按手势，按字段决定点击与长按各自的动作。
+- **验收**：开启后单击搜索按钮直接进搜索页、长按先进筛选；关闭后两者互换。
+
+**KI-SL-A8 快速滚动条** —— 覆盖 A 块 `:81`，E 块 `:181`（共 2 行）
+
+- **上游口径**：`showBookshelfFastScroller`（`BookshelfConfigSheet.kt:626`）；`BookshelfScreen.kt:1723` `val showFastScroll = uiState.settings.showBookshelfFastScroller`，`:1752` 传给 `FastScrollLazyVerticalGrid`，文件夹侧 `:1004`、`:987` 同型。是**带字母索引的快速滚动条**，不是系统滚动条。
+- **本地现状**：无该字段；`entry/src/main/ets/pages/BookshelfPage.ets:772` `scrollBar(BarState.Off)` 写死。
+- **补法**：字段 + 仓储；`Grid` 改 `scrollBar(BarState.On)` 只是最小形态，上游的字母索引需要另做叠层（ArkUI 无现成控件）。
+- **验收**：开启后书架右侧出现可拖动滚动条，拖动时显示当前分组 / 索引。
+
+**KI-SL-A9 记住上次所在分组** —— 覆盖 E 块 `:186`（共 1 行）
+
+- **上游口径**：`saveTabPosition`（`BookshelfViewModel.kt:110` 读、`:955` `changeGroup` 写、`:734` / `:763-764` 恢复）；落盘键名是 `bookshelfSelectedGroupId`（`constant/PreferKey.kt:73`），另读 `rawPrefValue(PreferKey.saveTabPosition)`（`:72`）。
+- **本地现状**：无该字段，进书架恒落「全部」（`BookshelfPage.ets:131-134` `activeFilter()` 只在选中组被隐藏时回落）。
+- **补法**：字段 + 仓储；`activeFilter` 初始化时读该值，页签切换时写回。
+- **验收**：切到某分组后退出再进书架，仍停在该分组；该分组被删或隐藏时回落「全部」。
+
+**KI-SL-A10 空态里的「全局搜索」按钮** —— 覆盖 E 块 `:189`（共 1 行）
+
+- **上游口径**：`BookshelfScreen.kt:1675-1683`，`:1673` `if (uiState.isSearch)` 时显示按钮，文案 `bookshelf_empty_global_search`，点击跳全局搜索。
+- **本地现状**：`entry/src/main/ets/pages/BookshelfPage.ets:795` 只把文案换成「没有匹配的书籍」，无按钮、无跳转。
+- **补法**：`BookshelfPage.ets:788-799` 的空态分支加一个按钮，走现有的全局搜索路由。
+- **验收**：搜索无结果时显示按钮，点它跳到全局搜索页。
+
+**KI-SL-A11 字段全集与备份归类** —— 覆盖 F 块 `:198`、`:206`（共 2 行）
+
+- **上游口径**：`domain/model/settings/BookshelfSettings.kt:6-56` 共 51 字段；分类数组 `help/storage/BackupConfig.kt:319-359` 39 键；`bookGroupStyle`（`constant/PreferKey.kt:13`）与 `hideEmptyGroups`（`:14`）不在 39 键内，走 `keyIsNotIgnore` 的 `else -> true`（`help/storage/BackupConfig.kt:413`），即不受任何类别开关控制。
+- **本地现状**：`entry/src/main/ets/model/BookshelfLayout.ets:7-34` 只有 13 字段（本地 13 个名字在上游 51 名单里全部存在，无本地独有字段；上游另有 38 个名字本地未声明）；本地把这两个键收进了 `bookshelfLayout` 数组（`entry/src/main/ets/data/BackupRepository.ets:360-361`），且写出时包在 `if (!ignoredCategories.includes('bookshelfLayout'))` 块内（`:592-594`），取消勾选时一并不写出。
+- **补法**：字段按 KI-SL-A1~A10 分批补；两个归类错位的键从 `bookshelfLayout` 数组移出，改为无条件写出。
+- **验收**：备份勾选里取消「书架布局」后，`config.xml` 仍含 `bookGroupStyle` 与 `hideEmptyGroups` 两项。
+
+**KI-SL-N1 列表专属版式与详情微调（不接）** —— 覆盖 A 块 `:47`、`:56`、`:62`、`:63`、`:66`、`:67`，B 块 `:106`、`:107`、`:111`、`:113`、`:114`（共 11 行）
+
+- **判定理由**：这 11 行的前提都是「列表卡片」或「卡片副信息区」，本地既无列表模式（全局前置 1）也无详情区。判 `不接` 是**范围结论，不是上游无此行为**——逐行的上游依据都保留在对照表「上游位置」列，日后补列表模式时可原样复用。
+- **特别说明**：`:47`（文件夹区列表封面宽度）与 `:60`（书籍区列表封面宽度）在上游是**同一字段** `bookshelfListCoverWidth` 的两个显示位置（`BookshelfConfigSheet.kt:202` 与 `:399`），所以书籍区那行判 `要接`（KI-SL-A5）、文件夹区这行判 `不接`，避免同一字段排两次。
+- **验收**：本组无独立验收，随 KI-SL-A1 / A5 / A6 的验收一并覆盖。
+
+**KI-SL-N2 标签体系（不接）** —— 覆盖 A 块 `:68`、`:69`，B 块 `:118`、`:119`（共 4 行）
+
+- **判定理由**：标题标签依赖 `kindList`（`BookItem.kt:878-885`、`:888`），本地卡片无标签行、无标签数据源；`bookshelfShowTag` / `bookshelfShowCustomTags` / `bookshelfShowSourceTags` / `bookshelfShowWordCount` 四个字段本地都没有。上游这三个勾选项还在二级弹层里（`BookshelfConfigSheet.kt:695-742` 的 `BookshelfTagContentDialog`），本地面板无二级弹层结构。判 `不接`：标签属于卡片信息密度扩展，先补列表模式与紧凑模式（KI-SL-A2 / A6）再看是否需要。
+- **验收**：无。
+
+**KI-SL-N3 标签配色（不接）** —— 覆盖 A 块 `:70`、`:71`（共 2 行）
+
+- **判定理由**：ZIP 类别是 `themeConfig` 不是 `bookshelfLayout`——`custom_tag_colors`（`BookshelfConfigSheet.kt:517`）与 `manage_tag_colors`（`:524`）改的是标签色板，落在主题体系（[ZIP-THEME.md](parity/ZIP-THEME.md)）里，本类别只借用入口。判 `不接`，转 ZIP-THEME.md 的 KI-TH 组处理。
+- **验收**：无（归 ZIP-THEME.md）。
+
+**KI-SL-N4 角标与提示信息（不接）** —— 覆盖 A 块 `:74`、`:75`、`:76`、`:77`、`:78`、`:79`，B 块 `:115`、`:116`、`:117`、`:121`（共 10 行）
+
+- **判定理由**：`showUnread`（`BookItem.kt:752`）、`showUnreadNew`（`:753`）、`showTip`（`:754`）、`showBookCount`（`BookshelfScreen.kt:1011`）、`showLastUpdateTime`（`BookItem.kt:944`）、`showWaitUpCount`（`BookshelfViewModel.kt:1289`）这 6 个字段**都不在 bookshelfPrefKeys 39 键内**（`help/storage/BackupConfig.kt:319-359`），对照表里 ZIP 类别标 `—`；但它们对应的可视元素是未读数 / 红点 / 类型标签 / 分组计数 / 更新时间，本地卡片都没有。判 `不接`：这些是信息密度扩展，且本地封面角标已有「章节数 + 书签 + 缺正文红标」三件（`entry/src/main/ets/components/BookCover.ets:187-211`），再加未读角标会与章节数抢同一位置。
+- **验收**：无。
+
+**KI-SL-N5 二级弹层三项（不接）** —— 覆盖 A 块 `:84`、`:85`、`:86`（共 3 行）
+
+- **判定理由**：这是 `BookshelfTagContentDialog`（`BookshelfConfigSheet.kt:695-742`）里的三个 `CheckboxItem`（`:711` / `:716` / `:721`），是 KI-SL-N2 的二级面板形态，本地既无标签行也无弹层。判 `不接`：与 KI-SL-N2 同因，随标签体系一起排期。
+- **验收**：无。
+
+**KI-SL-N6 分组卡片增强（不接）** —— 覆盖 A 块 `:82`，B 块 `:108`，E 块 `:180`、`:182`（共 4 行）
+
+- **判定理由**：`shouldShowExpandButton`（`BookshelfScreen.kt:806-821`，「更多分组」按钮）、分组封面阴影（`BookItem.kt:349`）、分组根目录书籍数量（`BookshelfScreen.kt:1011`）三个都以「分组卡片在书架网格里」为前提，本地分组只在页签栏出现（`entry/src/main/ets/pages/BookshelfPage.ets:719-733`）。判 `不接`：等 KI-SL-A1 落地后再评估。
+- **验收**：无。
+
+**KI-SL-N7 批量更新与后台任务（不接）** —— 覆盖 A 块 `:83`，E 块 `:183`、`:184`、`:185`（共 4 行）
+
+- **判定理由**：`bookshelfRefreshingLimit`（`BookshelfViewModel.kt:1114-1115`、`:1165-1166`）、`showWaitUpCount`（`:1289`）、`autoRefreshBook`（`:786`，键名 `auto_refresh`，`constant/PreferKey.kt:146`）三者都是「批量更新书籍目录」的配套。本地没有在线书源，目录刷新无对象——[PROJECT.md](PROJECT.md) `:24-26` 把「在线书源抓取」列在范围之外。判 `不接`。
+- **验收**：无。
+
+**KI-SL-N8 加载态与分页（不接）** —— 覆盖 E 块 `:187`、`:190`（共 2 行）
+
+- **判定理由**：加载对话框（`BookshelfScreen.kt:1575-1602`，`if (uiState.isLoading)`）与分页惰性渲染（`:1669`，`!isCurrentPage` 时 return）都不由 bookshelfLayout 字段驱动，是主屏骨架行为，归 [BOOKSHELF.md](parity/BOOKSHELF.md) A1 的界面完整性。就本类别而言判 `不接`，不因此从对照表删行。
+- **验收**：无。
+
+**KI-SL-N9 锁定书卡片（不接）** —— 覆盖 B 块 `:123`（共 1 行）
+
+- **判定理由**：`PrivateLockedBookItem`（`BookItem.kt:979`）的网格 / 列表两分支（`:1012` / `:1031`）读各自封面宽度（`:1025` / `:1041`）。本地无隐私书架锁定书卡片，无对应渲染分支。判 `不接`。
+- **验收**：无。
+
+---
+
+### C 布局矩阵（3 组要接）
+
+**KI-SL-C1 书籍横屏三项** —— 覆盖 C 块 `:136`、`:137`、`:138`（共 3 行）
+
+- **上游口径**：`BookshelfScreen.kt:1698-1699` 取 `isLandscape`，`:1700-1701` / `:1705-1706` / `:1710-1711` 分别按横竖屏取 `bookshelfLayoutMode*` / `bookshelfLayoutGrid*` / `bookshelfLayoutList*`，`:1715` 统一成 `columns`。
+- **本地现状**：字段只有竖屏三键（`entry/src/main/ets/model/BookshelfLayout.ets:17`、`:19`、`:21`）；无横竖屏判断（全局前置 2）。
+- **补法**：先建窗口尺寸读取入口（HOS 用 `window.getLastWindow` 取窗口矩形或 `display.getDefaultDisplaySync()`，**不是** Android 的 `LocalConfiguration`），再补 3 个 Landscape 字段与仓储，`BookshelfPage.ets:419-427` 的 `bookshelfColumnsTemplate()` 按方向取不同值。
+- **验收**：同一台设备横屏后网格列数变为横屏设置值，转回竖屏恢复竖屏值。
+
+**KI-SL-C2 文件夹六项** —— 覆盖 C 块 `:139`、`:140`、`:141`、`:142`、`:143`、`:144`（共 6 行）
+
+- **上游口径**：`BookshelfScreen.kt:526-539` 按横竖屏取 6 个 `bookshelfFolderLayout*` 值，`:985` `folderColumns = if (bookshelfFolderLayoutMode == 0) bookshelfFolderLayoutList else bookshelfFolderLayoutGrid`，`:988` `GridCells.Fixed(folderColumns.coerceAtLeast(1))`。
+- **本地现状**：6 个字段全无，且无文件夹视图（KI-SL-A1）。
+- **补法**：随 KI-SL-A1 一起做；取值分支照 `:985` 的两级判断。
+- **验收**：开文件夹样式后，竖屏改网格列数为 4、横屏为 6，两种方向各生效。
+
+**KI-SL-C3 首屏封面预加载列数** —— 覆盖 C 块 `:145`（共 1 行）
+
+- **上游口径**：`ui/main/bookshelf/BookshelfCoverPreloader.kt:261-280` `resolveFirstScreenLayout`：列表时 1 列，网格时按横竖屏取 `bookshelfLayoutGrid*`，`:278` 乘预估可见行数并夹在 `MAX_PRELOAD_BOOKS` 内。
+- **本地现状**：本地无预加载器，封面图由各卡片自行加载（`entry/src/main/ets/components/BookCover.ets`）。
+- **补法**：随 KI-SL-C1 一起做（要先有横竖屏取值）；预加载数量按列数 × 可见行数算，超上限截断。
+- **验收**：首屏滚动时封面不出现空窗，且预加载数量不超过列数 × 可见行数。
+
+### 不接行归属核对
+
+上节只对 `要接` 组给了补法与验收；41 条 `不接` 行同样逐行登记在上文 K 组（KI-SL-N1 ~ N9），覆盖关系如下，**没有一行 `不接` 缺少落点**：
+
+| 组 | 覆盖行 | 行数 | 归属 |
+| --- | --- | --- | --- |
+| KI-SL-N1 列表专属版式与详情微调 | A `:47`、`:56`、`:62`、`:63`、`:66`、`:67`；B `:106`、`:107`、`:111`、`:113`、`:114` | 11 | 随列表模式（前置 1） |
+| KI-SL-N2 标签体系 | A `:68`、`:69`；B `:118`、`:119` | 4 | 随列表模式与紧凑模式 |
+| KI-SL-N3 标签配色 | A `:70`、`:71` | 2 | 转 [ZIP-THEME.md](parity/ZIP-THEME.md) |
+| KI-SL-N4 角标与提示信息 | A `:74`~`:79`；B `:115`、`:116`、`:117`、`:121` | 10 | 信息密度扩展，暂不做 |
+| KI-SL-N5 二级弹层三项 | A `:84`、`:85`、`:86` | 3 | 随标签体系 |
+| KI-SL-N6 分组卡片增强 | A `:82`；B `:108`；E `:180`、`:182` | 4 | 等 KI-SL-A1 |
+| KI-SL-N7 批量更新与后台任务 | A `:83`；E `:183`、`:184`、`:185` | 4 | 范围之外（在线书源） |
+| KI-SL-N8 加载态与分页 | E `:187`、`:190` | 2 | 归 BOOKSHELF.md A1 |
+| KI-SL-N9 锁定书卡片 | B `:123` | 1 | 无隐私书架 |
+
+合计 41 行，与对照表 `**不接**` 计数一致。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。

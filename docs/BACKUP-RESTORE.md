@@ -43,7 +43,7 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 
 **这个样本缺 9 个条目**：`bookMarking.json`、`rssStar.json`、`sourceSub.json`、`homepageModules.json`、`highlightRule.json`、`highlightTagRule.json`、`tagGroupRule.json`、`coverRule.json`、`directLinkUploadRule.json`。所以凡属这 9 类的「待往返验收」都不能拿本样本当完成依据——要么另找一份带这些条目的备份，要么在设备上先造数据再导出。
 
-`config.xml` 的 370 个偏好项里，本地真正读写的只有一小部分：**写出侧 35 个键**（`upsertAndroidPreference` 去重后），分三段——`bookshelfLayout` 段 9 个（`bookGroupStyle`、`hideEmptyGroups`、`bookshelfSort`、`bookshelfSortOrder`、`bookshelfLayoutPortrait`、`bookshelfLayoutGridPortrait`、`bookshelfLayoutListPortrait`、`bookshelfTitleMaxLines`、`bookshelfCoverShadow`）、`readConfig` 段的阅读外观与菜单键、`themeConfig` 段的护眼 6 键；**读入侧 47 个键**（`readXmlInteger` / `readXmlBoolean` / `readXmlString` 去重），其中 24 个只在读入侧出现、写出侧没有。两者并集 **59 个键**。其余 311 个键既不读也不写，恢复时随 `copyPreservedEntries` 原样归档。这就是「ZIP 里有 370 项、本地只认 59 项」的直接来源，逐类缺口见下文 28 类清单。
+`config.xml` 的 370 个偏好项里，本地真正读写的只有一小部分：**写出侧 69 个键**（`upsertAndroidPreference` 去重后），分三段——`bookshelfLayout` 段 13 个（`bookGroupStyle`、`hideEmptyGroups`、`bookshelfSort`、`bookshelfSortOrder`、`bookshelfLayoutPortrait`、`bookshelfLayoutGridPortrait`、`bookshelfLayoutListPortrait`、`bookshelfTitleMaxLines`、`bookshelfCoverShadow`、`bookshelfTitleCenter`、`bookshelfTitleSmallFont`、`bookshelfGridCoverWidth`、`bookshelfListCoverWidth`，`entry/src/main/ets/data/BackupRepository.ets:594-606`）、`readConfig` 段的阅读外观与菜单键、`themeConfig` 段的护眼 6 键与 `themeMode`；**读入侧 75 个键**（`readXmlInteger` / `readXmlBoolean` / `readXmlString` 去重），其中若干只在读入侧出现、写出侧没有。其余键既不读也不写，恢复时随 `copyPreservedEntries` 原样归档。这就是「ZIP 里有 370 项、本地只认其中一部分」的直接来源，逐类缺口见下文 28 类清单。（r327 复核：原文记「写出侧 35 键、`bookshelfLayout` 段 9 键、读入侧 47 键、并集 59 键」，与实际代码不符——写出侧实为 69 键、`bookshelfLayout` 段实为 13 键、读入侧实为 75 键。）
 
 阅读配置的 Android `config.xml` 映射包含 `tocUiUseReplace` 与 `tocCountWords` 两个目录偏好键；导入时仅恢复到本地阅读设置，不执行归档中的脚本或规则。该映射尚待实际 ZIP 往返验收。
 
@@ -120,7 +120,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 | 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`）与全局主题网关（`data/ThemeSettingsRepository.ets` / `data/ThemeModeResolver.ets`） | **已接入（r303）**：备份时把全局 `themeMode` 写进 `config.xml`（值域归一成 `"0"/"1"/"2"`），恢复时读回并 `applyThemeMode` 真正改全 App 配色；备份/恢复两侧的忽略开关都接上真实效果。全表 19 行（13 已接 / 4 未接 / 2 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A1/C/D/F | ZIP 映射 4 |
 | 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验且 r301 起有真实渲染（色温覆盖层）；`themeConfig.json` 仍不生成（需要先有本地主题包数据结构，见 B 块），Android 配色/透明度 JSON 未映射；界面侧主题设置页 46 个条目里 39 个仍走 `onUnavailableAction`，主题包管理整块缺失。全表 72 行（16 已接 / 55 未接 / 1 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A/B/D/E/F | ZIP 映射 5 |
 | 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，149 行，3 处 `onUnavailableAction`） | **未接入**：14 个键读写均未接 | 待接 |
-| 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`） | **部分接入**：写出 9 键已接；读入侧未接 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A2 |
+| 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`），界面面板 12 条目（`pages/BookshelfPage.ets:573-637`） | **部分接入（r327 重核）**：写出 13 键（`data/BackupRepository.ets:594-606`，原记 9 键漏了 `bookshelfTitleCenter`/`bookshelfTitleSmallFont`/`bookshelfGridCoverWidth`/`bookshelfListCoverWidth`），读入 13 键（`entry/src/main/ets/data/BackupRepository.ets:1328-1332` 九整型 + `:1339` 四布尔）；界面级 122 行里 38 已接 / 81 未接 / 3 不适用，逐行见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) | ZIP 映射 6 |
 | 7 | `showRss` | 显示订阅 | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **未接入**：`showRss` 键读写都未接 | 待接 |
 | 8 | `threadCount` | 线程数 | `config.xml` | 370 项内 1 键 | **无对应概念**（HOS 无并发线程数设置） | **未接入**：键读写都未接 | 安全兼容 |
 | 9 | `mangaConfig` | 漫画设置 | `config.xml` | 370 项内 32 键 | 仅设置页有漫画相关条目文字，无漫画阅读 | **未接入**：32 个键读写都未接 | 安全兼容；漫画业务候选 |
@@ -206,7 +206,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 3. 该类在 `config.xml` 里的键名清单（`preferenceKeysByCategory` 有的话直接指过去，没有就现列）
 4. 验收方式：**必须走真实样本 `测试\backup2026-10-22.zip` 的往返**，不是只看代码。样本缺该类条目时先造数据，别拿「代码写了」当验收
 
-**一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 46 个、写出 9 + 阅读外观/护眼两组。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
+**一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 75 个、写出 69 个（r327 复核，原记「读入 46、写出 9 + 阅读外观/护眼两组」为旧值）。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
 
 ### 三张对照表的「ZIP 类别」列怎么读
 
@@ -304,7 +304,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 | `underline` | `ui/widget/components/text/HtmlContent.kt:696 underline = "underline" in value.lowercase()` 的 HTML 样式字面量 |
 | `textItalic`、`textShadow`、`shadowRadius`、`shadowDx`、`shadowDy`、`shadowColor`、`shadowColorN`、`underlineHeight`、`underlineColorNight`、`dottedLine` | 全仓字面量命中 0（既非 `PreferKey`、也非 `LocalPreferences`、也非任何 JSON 键） |
 
-**三、`bookshelfLayout` 多出的 2 个**：`bookGroupStyle`（`PreferKey.kt:13`）、`hideEmptyGroups`（`PreferKey.kt:14`）——与上游同样落在 `else -> true` 的无类别分支，本地收进了 `bookshelfLayout` 数组，属上述第一类问题。
+**三、`bookshelfLayout` 多出的 2 个**：`bookGroupStyle`（`PreferKey.kt:13`）、`hideEmptyGroups`（`PreferKey.kt:14`）——与上游同样落在 `else -> true` 的无类别分支，本地收进了 `bookshelfLayout` 数组（`entry/src/main/ets/data/BackupRepository.ets:360-361`），属上述第一类问题。**但这两个键在写出侧的后果已查清**：它们被写在 `if (!ignoredCategories.includes('bookshelfLayout'))` 块内（`entry/src/main/ets/data/BackupRepository.ets:592-594`），取消「书架布局」勾选时这两个键一并不写出；按上游口径它们本应始终写出（`help/storage/BackupConfig.kt:413` 的 `keyIsNotIgnore` 对这两个键落 `else -> true`）。界面侧见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) 的 F 块。
 
 **四、`themeConfig` 缺失的 1 个**：`bookInfoAuthorSearchFallback`（`PreferKey.kt:252`，在上游 `themePrefKeys` 内）。本地未收，导致取消「主题配置」勾选时这个键不会被忽略——与上游不一致。**已在 r292 补进 `BackupRepository.ets` 的 `themeConfig` 数组**（现 53 = 上游 53）。
 
