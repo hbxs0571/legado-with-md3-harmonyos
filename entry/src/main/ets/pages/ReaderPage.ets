@@ -5396,7 +5396,13 @@ export struct ReaderPage {
     const xpx = fingerXpx - this.canvasHandleGrabOffsetX;
     const ypx = fingerYpx - this.canvasHandleGrabOffsetY - radius;
     const style = this.buildReaderCanvasStyle();
-    const position = this.readerCanvasRenderer.positionAt(xpx, ypx, style);
+    // 滚动模式选区要能跨 current + next + nextPlus（上游 ReaderPageWindow
+    // .selectionPages()，last = 2）：窗口四页按 extent 堆叠，手指传进来的 ypx 已经是
+    // canvasContentY() 换算的内容坐标，交给窗口命中按「落在哪一页内容区间」选 geometry。
+    // 翻页模式仍走单页 positionAt（上游 extend 翻页 last = 0，只选当前页）。
+    const position = this.usesCanvasScroll()
+      ? this.readerCanvasRenderer.positionAtScrollWindow(xpx, ypx, style)
+      : this.readerCanvasRenderer.positionAt(xpx, ypx, style);
     if (position < 0) {
       return;
     }

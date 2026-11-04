@@ -817,6 +817,14 @@ export class ReaderCanvasPageGeometry {
   pageIndex: number = -1;
   boxes: ReaderCanvasItemBox[] = [];
   lines: ReaderCanvasLineBox[] = [];
+  /**
+   * 连续滚动窗口里该页顶边相对 current 页顶的偏移（px，内容坐标系）。
+   * 页内 boxes/lines 始终是「页内绝对坐标」不含滚动偏移；命中测试要把
+   * 内容坐标 y 先减去这个值才是该页的页内坐标。非滚动绘制恒为 0。
+   */
+  scrollContentTopPx: number = 0;
+  /** 该页在滚动栈里占的高度（px），与 scrollContentTopPx 一起界定内容坐标区间。 */
+  scrollExtentPx: number = 0;
 }
 
 interface ReaderCanvasParagraph {
@@ -831,6 +839,16 @@ interface ReaderCanvasParagraph {
 export class ReaderCanvasRenderer {
   /** 最近一次绘制产出的版面几何（订阅选区命中用）。 */
   private geometry: ReaderCanvasPageGeometry = new ReaderCanvasPageGeometry();
+  /**
+   * 连续滚动窗口里 current + next + nextPlus 三页的版面几何（key = pageIndex）。
+   * 上游 `ReaderPageWindow.selectionPages()` 就是这三页、不含 previous。
+   * 只在选区激活（selectionStart >= 0）期间登记：positionAt 是手势热路径，
+   * 这里复用 draw 期已经算好的 geometry，不在命中时重新 layout。
+   */
+  private scrollWindowGeometry: Map<number, ReaderCanvasPageGeometry> =
+    new Map<number, ReaderCanvasPageGeometry>();
+  /** 上一帧是否处于「滚动 + 选区激活」态：只在状态切换时清空 Map，避免每帧重建。 */
+  private scrollWindowSelectionActive: boolean = false;
   private paragraphCache: Map<string, ReaderCanvasParagraph> = new Map<string, ReaderCanvasParagraph>();
   private imageCache: Map<string, image.PixelMap> = new Map<string, image.PixelMap>();
   private imageLoading: Set<string> = new Set<string>();
@@ -1106,19 +1124,55 @@ export class ReaderCanvasRenderer {
     }
     const offset = request.scrollOffsetPx;
     const currentExtent = this.pageScrollExtent(current.page, current.pageIndex, request);
+    // 选区激活期间才登记窗口几何供跨页命中（上游 ReaderPageWindow.selectionPages()
+    // = current + next + nextPlus，不含 previous）。positionAt 是手势热路径：
+    // 这里直接复用 draw 期已经算好的 geometry（layoutPage 已经在 drawPage 里跑完），
+    // 命中时绝不重新 layout；每帧覆盖登记只是几次 Map.set，不是重建 Map。
+    // 必须每帧覆盖：拖选区到底缘会触发自动滚动，current 页会换，若只登记一次，
+    // 旧的 scrollContentTopPx（相对旧 current 顶）就会把命中算到错误的页。
+    const selectionActive = request.selectionStart >= 0;
+    if (!selectionActive && this.scrollWindowSelectionActive) {
+      // 选区刚结束：清一次即可，之后每帧都不再碰 Map。
+      this.scrollWindowGeometry.clear();
+    }
+    if (selectionActive) {
+      this.scrollWindowGeometry.clear();
+    }
+    this.scrollWindowSelectionActive = selectionActive;
     if (window.previous !== undefined) {
       this.drawScrollSlot(canvas, window.previous,
         offset - this.pageScrollExtent(window.previous.page, window.previous.pageIndex, request),
         request, false, false);
     }
-    this.drawScrollSlot(canvas, current, offset, request, true, true);
+    // current 仍是唯一回填把手坐标的一页（recordGeometry=true → reportHandles=true）。
+    const currentGeom = this.drawScrollSlot(canvas, current, offset, request, true, true);
+    if (selectionActive && currentGeom !== undefined) {
+      currentGeom.scrollContentTopPx = 0;
+      currentGeom.scrollExtentPx = currentExtent;
+      this.scrollWindowGeometry.set(current.pageIndex, currentGeom);
+    }
     if (window.next !== undefined) {
+      const nextExtent = this.pageScrollExtent(window.next.page, window.next.pageIndex, request);
       const nextOffset = offset + currentExtent;
-      this.drawScrollSlot(canvas, window.next, nextOffset, request, false, false);
+      // next / nextPlus 也画选区高亮，让选区能跨过页交界；但 recordGeometry=false，
+      // 于是 reportHandles=false——邻页只画条带、不回填把手、不顶掉 current 的 this.geometry。
+      const nextGeom = this.drawScrollSlot(canvas, window.next, nextOffset, request,
+        false, selectionActive);
+      if (selectionActive && nextGeom !== undefined) {
+        nextGeom.scrollContentTopPx = currentExtent;
+        nextGeom.scrollExtentPx = nextExtent;
+        this.scrollWindowGeometry.set(window.next.pageIndex, nextGeom);
+      }
       if (window.nextPlus !== undefined) {
-        this.drawScrollSlot(canvas, window.nextPlus,
-          nextOffset + this.pageScrollExtent(window.next.page, window.next.pageIndex, request),
-          request, false, false);
+        const nextPlusExtent = this.pageScrollExtent(window.nextPlus.page,
+          window.nextPlus.pageIndex, request);
+        const nextPlusGeom = this.drawScrollSlot(canvas, window.nextPlus,
+          nextOffset + nextExtent, request, false, selectionActive);
+        if (selectionActive && nextPlusGeom !== undefined) {
+          nextPlusGeom.scrollContentTopPx = currentExtent + nextExtent;
+          nextPlusGeom.scrollExtentPx = nextPlusExtent;
+          this.scrollWindowGeometry.set(window.nextPlus.pageIndex, nextPlusGeom);
+        }
       }
     }
   }
@@ -1126,7 +1180,7 @@ export class ReaderCanvasRenderer {
   /** 滚动栈里的一页：按 stackOffset 平移后整页画，超出视口的部分裁掉。 */
   private drawScrollSlot(canvas: drawing.Canvas, slot: ReaderCanvasPage,
     stackOffsetY: number, request: ReaderCanvasDrawRequest,
-    recordGeometry: boolean, drawSelection: boolean): void {
+    recordGeometry: boolean, drawSelection: boolean): ReaderCanvasPageGeometry | undefined {
     const layout = request.layout;
     canvas.save();
     // 滚动栈天然会画出视口之外（上一页还在上面、下一页还在下面），必须裁
@@ -1137,8 +1191,12 @@ export class ReaderCanvasRenderer {
     if (request.pageSurfaceOpaque) {
       this.fillPageSurface(canvas, request, layout.viewportWidthPx, layout.viewportHeightPx);
     }
-    this.drawPage(canvas, slot.page, slot.pageIndex, request, recordGeometry, drawSelection);
+    // 只有 recordGeometry 的那一页（current）回填选区把手坐标：
+    // 邻页也画高亮条带，但整段选区只有一对端点，不能让邻页的页内坐标顶掉它们。
+    const geometry = this.drawPage(canvas, slot.page, slot.pageIndex, request,
+      recordGeometry, drawSelection, recordGeometry);
     canvas.restore();
+    return geometry;
   }
 
   /**
@@ -1444,7 +1502,8 @@ export class ReaderCanvasRenderer {
    * 上游顺序是「先画字，再把选区块压上去」（ReaderCanvasSurface.kt legacySelectionFill 注释）。
    */
   private drawPage(canvas: drawing.Canvas, page: LocalReaderPage, pageIndex: number,
-    request: ReaderCanvasDrawRequest, recordGeometry: boolean, drawSelection: boolean): void {
+    request: ReaderCanvasDrawRequest, recordGeometry: boolean,
+    drawSelection: boolean, reportHandles: boolean = true): ReaderCanvasPageGeometry | undefined {
     // Paragraph.paint() 内部会 push 不配对的裁剪层且不恢复：逐框 save/restore 之后
     // 画布栈仍会比进入时多出几层，后面自绘的选区底色/把手就全落在残留 clip 里被裁掉
     // （表现为「drawRect 被调用但一个像素都不落」）。这里记下进入时的栈深，
@@ -1455,7 +1514,7 @@ export class ReaderCanvasRenderer {
     if (page.messageText !== undefined) {
       this.drawMessagePage(canvas, page, request);
       canvas.restoreToCount(entrySaveCount);
-      return;
+      return undefined;
     }
     const geometry = this.layoutPage(page, pageIndex, request);
     // 只有「手指正在操作的那一页」才把几何记成命中测试的依据。
@@ -1498,7 +1557,9 @@ export class ReaderCanvasRenderer {
     }
     canvas.restoreToCount(entrySaveCount);
     if (drawSelection) {
-      this.drawSelection(canvas, geometry, request);
+      // 滚动窗口里 current / next / nextPlus 三页都要画高亮；只有 recordGeometry
+      // 的那一页（current）回填把手坐标，避免邻页的页内坐标顶掉端点位置。
+      this.drawSelection(canvas, geometry, request, reportHandles);
     }
     // 第四层：所有下划线统一压在选区之上。
     for (const box of geometry.boxes) {
@@ -1506,6 +1567,8 @@ export class ReaderCanvasRenderer {
         this.drawTextBoxUnderlines(canvas, box, request);
       }
     }
+    // 把版面几何交回调用方：滚动窗口要按页登记，供 positionAtScrollWindow 跨页命中。
+    return geometry;
   }
 
   /**
@@ -1964,10 +2027,13 @@ export class ReaderCanvasRenderer {
    * 上游注释「先画字，再把选区块压上去」，所以这一步必须在所有元素之后。
    */
   private drawSelection(canvas: drawing.Canvas, geometry: ReaderCanvasPageGeometry,
-    request: ReaderCanvasDrawRequest): void {
+    request: ReaderCanvasDrawRequest, reportHandles: boolean = true): void {
     if (request.selectionStart < 0 || request.selectionEnd <= request.selectionStart) {
       return;
     }
+    // 滚动窗口里邻页也画高亮条带，但高亮矩形与把手都落在「页内绝对坐标」上，
+    // 绘制时该页的 canvas 已经 translate 过 stackOffsetY，所以这里不再加偏移。
+    // 只有 current 页回填到 request 的把手/锚点坐标。
     let firstRect: common2D.Rect | undefined = undefined;
     let lastRect: common2D.Rect | undefined = undefined;
     for (const box of geometry.boxes) {
@@ -2011,6 +2077,13 @@ export class ReaderCanvasRenderer {
       }
     }
     if (firstRect === undefined || lastRect === undefined) {
+      return;
+    }
+    // 邻页（next / nextPlus）只负责把落在自己身上的高亮条带画出来：
+    // 整段选区只有一对端点，回填到 request 的把手坐标会顶掉 current 页的，
+    // 且邻页 canvas 已 translate 过 stackOffsetY，页内坐标与视口内容坐标差一整段
+    // extent，回填出去会让菜单和 handle hit-test 跑偏。端点仍由 current 页统一回填。
+    if (!reportHandles) {
       return;
     }
     // 把手几何照上游 drawPinHandle：竖线贴矩形左右边从 top 画到 bottom，
@@ -2171,13 +2244,63 @@ export class ReaderCanvasRenderer {
    * 落在某个元素内就取它的字形偏移，超出最后一个元素就取行尾位置。
    */
   positionAt(x: number, y: number, style: ReaderCanvasStyle): number {
-    const line = this.nearestLine(y);
+    return this.positionAtGeometry(x, y, style, this.geometry);
+  }
+
+  /**
+   * 滚动模式跨页命中（上游 `ReaderPageWindow.selectionPages()` = current + next
+   * + nextPlus，不含 previous）。
+   *
+   * y 是 `ReaderPage.ets` 的 `canvasContentY()` 换算出的「内容坐标」，即相对窗口
+   * current 页顶的偏移；drawScroll 登记窗口几何时给每页写了 scrollContentTopPx
+   * （relative content top）与 scrollExtentPx，于是三页的内容区间分别是
+   * [0,e1)、[e1,e1+e2)、[e1+e2,e1+e2+e3)。y 落在哪一页区间，就用那一页的
+   * geometry 并把 y 减去该页 top 还原成页内坐标，再走同一套找行/取字形偏移逻辑。
+   * 位置返回值始终是章内全局 startPosition，跨页选区 [start,end] 才能连续。
+   *
+   * 几何来自 draw 期已算好的 Map（每帧覆盖登记），这里绝不重新 layout：
+   * 拖把手是手势热路径，每次都建新 Paragraph 会掉帧。
+   */
+  positionAtScrollWindow(x: number, y: number, style: ReaderCanvasStyle): number {
+    if (this.scrollWindowGeometry.size === 0) {
+      // 选区刚起、滚动帧还没登记过窗口几何：退回单页，行为与改动前一致。
+      return this.positionAt(x, y, style);
+    }
+    let nearest: ReaderCanvasPageGeometry | undefined = undefined;
+    let nearestTop = 0;
+    let nearestDistance = Number.MAX_VALUE;
+    for (const geometry of this.scrollWindowGeometry.values()) {
+      const top = geometry.scrollContentTopPx;
+      const bottom = top + geometry.scrollExtentPx;
+      if (y >= top && y < bottom) {
+        return this.positionAtGeometry(x, y - top, style, geometry);
+      }
+      // 拖出三页窗口时（往回拖到 previous 方向，或越过 nextPlus 尾部）别让端点
+      // 突然变成 -1：记下最近的一页，用钳到该页内的坐标继续找行。
+      const distance = y < top ? top - y : y - bottom;
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = geometry;
+        nearestTop = top;
+      }
+    }
+    if (nearest === undefined) {
+      return this.positionAt(x, y, style);
+    }
+    const localY = Math.max(0, Math.min(nearest.scrollExtentPx, y - nearestTop));
+    return this.positionAtGeometry(x, localY, style, nearest);
+  }
+
+  /** 在指定页的 geometry 里取位置（positionAt 与 positionAtScrollWindow 共用）。 */
+  private positionAtGeometry(x: number, y: number, style: ReaderCanvasStyle,
+    geometry: ReaderCanvasPageGeometry): number {
+    const line = this.nearestLineIn(geometry, y);
     if (line === undefined) {
       return -1;
     }
     let lastEnd = -1;
     let firstStart = -1;
-    for (const box of this.geometry.boxes) {
+    for (const box of geometry.boxes) {
       const item = box.item;
       if (item === undefined || item.kind !== 'text' || box.lineIndex !== line.lineIndex) {
         continue;
@@ -2202,10 +2325,11 @@ export class ReaderCanvasRenderer {
   }
 
   /** 找纵向最近的行盒；超出一行高度就返回 undefined（手指离文字太远）。 */
-  private nearestLine(y: number): ReaderCanvasLineBox | undefined {
+  private nearestLineIn(geometry: ReaderCanvasPageGeometry,
+    y: number): ReaderCanvasLineBox | undefined {
     let best: ReaderCanvasLineBox | undefined = undefined;
     let bestDistance = Number.MAX_VALUE;
-    for (const lineBox of this.geometry.lines) {
+    for (const lineBox of geometry.lines) {
       const center = lineBox.top + lineBox.heightPx / 2;
       const distance = Math.abs(y - center);
       if (distance < bestDistance) {
