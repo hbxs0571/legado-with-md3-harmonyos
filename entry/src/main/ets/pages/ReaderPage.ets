@@ -1858,7 +1858,9 @@ export struct ReaderPage {
       this.readerSizeOffsets,
       titleBlock,
       // 断行交给系统原生文本引擎，样式必须与绘制正文同一套。
-      this.buildReaderTextLayoutStyle(fontSize)
+      this.buildReaderTextLayoutStyle(fontSize),
+      // 页身份的章号（页层批次 3）：单章页表只填字段、不改行为。
+      this.getChapterIndex()
     );
     const nextPages: LocalReaderPage[] = [];
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {

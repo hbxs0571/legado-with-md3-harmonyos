@@ -218,6 +218,8 @@
 > 一句话：上游把换章做成了**页表拼接**（正文三槽常驻 + 按章并行预排 ±1 + 换章先发布占位页 + 章末只加 20dp 不收口），本地做成了**整章重排**（`ReaderPage.ets:1531 onReaderContentChanged` 先清空 `localReaderPages` 再 `rebuildReaderPages()` 全量重排），中间那段空窗就是闪烁。
 >
 > **r325 已落地的部分（状态列按「上游那条能力有没有」判，不按「现象好了没有」判）**：换章不再清空页表（`chapterHandoffPending` 保留上一章页作过渡帧）、向上翻章落章末（`chapterHandoffUpward`）、拖动到章末即换章（`PanGesture.onActionUpdate` 改用返回值 + `scrollDragBoundaryTurned` 防连跳）、换书作废交接标记（`chapterHandoffBookId`）。这四处对应的是第 227/229 两行的**屏幕现象**，不是那两行盘的上游能力本身，所以状态仍判 `未接`；已设备验证的记录写在这两行的「验收方式」列。
+>
+> **页层批次 3（结构第一步，不改本块任何状态）**：`LocalReaderPage`（`LocalReaderPaginator.ets:82`）加可选身份字段 `chapterIndex` / `pageIndex`（对齐上游 `ReaderPageId`），`paginate()` 末尾加可选末参 `chapterIndex = 0` 给每页填 `pageIndex = 本批内 0..n-1`；新建 `reader/ReaderPageIdentity.ets` 只放纯函数 `rebasePageIndex(pages, prevChapterIndex, prevPageIndex): number`（按身份重查新页表下标，找不到返回 -1，对应上游 `ReaderPageNavigator.kt:32-33` 的 `.takeIf { it >= 0 }`）。本批页表仍单章、`currentPageIndex` 语义不变、行为零变化，B8 十一行状态一律不动；页表跨章拼接（本块判 `未接` 的能力）留到页层批次 4。
 
 | 上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |

@@ -104,6 +104,17 @@ export interface LocalReaderPage {
    * 即本页只有标题。
    */
   centerVertical?: boolean;
+  /**
+   * 页身份：本页属于第几章（对齐上游 `ReaderPageId.chapterIndex`，`ReaderPage.kt:5`）。
+   * 可选是为了不一次改崩下游 52 处 `currentPageIndex` 引用；页层批次 3 只补身份、不改行为，
+   * 页层批次 4 页表跨章后由各章 `paginate()` 结果拼窗口表时按此字段筛章。
+   */
+  chapterIndex?: number;
+  /**
+   * 章内页号（对齐上游 `ReaderPageId.pageIndex`）：本页在本章页序列里的 0..n-1。
+   * 注意它不是页表内下标——页表跨章后两者不同；章内页号由身份字段现算，不复用数组下标。
+   */
+  pageIndex?: number;
 }
 
 export interface LocalReaderImageSize {
@@ -191,11 +202,15 @@ export class LocalReaderPaginator {
     columnCount: number = 1,
     sizeOffsets: LocalReaderSizeOffset[] = [],
     titleBlock: LocalReaderTitleBlock | undefined = undefined,
-    textStyle: ReaderTextLayoutStyle | undefined = undefined
+    textStyle: ReaderTextLayoutStyle | undefined = undefined,
+    // 页身份的章号：放最后、可选，不动已有形参顺序。页层批次 3 只补身份、不改行为；
+    // 单章页表时调用方不传即为 0，页层批次 4 拼窗口表时各章传各章的 chapterIndex。
+    chapterIndex: number = 0
   ): LocalReaderPage[] {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) {
-      return [{ lines: [], startPosition: 0, endPosition: document.content.length, titleOnly: false, lineColumns: [] }];
+      return [{ lines: [], startPosition: 0, endPosition: document.content.length,
+        titleOnly: false, lineColumns: [], chapterIndex: chapterIndex, pageIndex: 0 }];
     }
     // 断行交给系统引擎；没有字体样式时引擎退回逐 cluster 自量（老口径）。
     const engine = new ReaderTextLayoutEngine(contentWidth, textStyle, measureTextWidth);
@@ -225,7 +240,9 @@ export class LocalReaderPaginator {
         pageLines.every((line: LocalReaderLine) => line.titleLine === true);
       pages.push({
         lines: pageLines, startPosition: pageStart, endPosition: pageEnd,
-        titleOnly: pageIsTitleOnly, lineColumns: pageColumns
+        titleOnly: pageIsTitleOnly, lineColumns: pageColumns,
+        // 章内页号就是本批内的 0..n-1；页层批次 4 页表跨章后它不等于数组下标。
+        chapterIndex: chapterIndex, pageIndex: pages.length
       });
       pageLines = [];
       pageColumns = [];
