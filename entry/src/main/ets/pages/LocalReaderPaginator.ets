@@ -218,9 +218,14 @@ export class LocalReaderPaginator {
       contentHeight - (pages.length === 0 ? Math.max(0, firstPageReservedLines) * lineHeight : 0));
     const flushPage = (): void => {
       if (pageLines.length === 0) { return; }
+      // 标题页判定：本页所有行都是标题行（titleLine===true）。
+      // 与上游 ReaderPaginator 把标题当普通文本块排进同一 y 游标、靠 titleLine 标记区分一致；
+      // 之前这里硬编码 false，导致下游 9 处 titleOnly 分支全成死代码（见 layer2-decision §2A）。
+      const pageIsTitleOnly = pageLines.length > 0 &&
+        pageLines.every((line: LocalReaderLine) => line.titleLine === true);
       pages.push({
         lines: pageLines, startPosition: pageStart, endPosition: pageEnd,
-        titleOnly: false, lineColumns: pageColumns
+        titleOnly: pageIsTitleOnly, lineColumns: pageColumns
       });
       pageLines = [];
       pageColumns = [];

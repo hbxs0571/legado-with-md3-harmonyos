@@ -377,7 +377,11 @@ export class ReaderScrollPolicy {
  * `Animatable(0f).animateDecay(velocity, scrollDecay)`）。
  *
  * 上游用的是 Compose 的 spline-based decay（`rememberSplineBasedDecay`，
- * 摩擦系数 0.015），本质是指数衰减：v(t) = v0·e^(-λt)，总位移 v0/λ。
+ * 见 `feature/reader/ReaderCanvasSurface.kt:17`/`:261`），**源码无显式摩擦常数**——
+ * 摩擦系数随设备 density 实时由 Compose 的 spline 曲线算出，无法逐位对齐。
+ * 本地自定的 `DECAY_RATE_PER_SECOND = 3.3` / `DURATION_MILLIS = 1200` 是经验值，
+ * 只保证同形（本质都是指数衰减：v(t) = v0·e^(-λt)，总位移 v0/λ），
+ * 不追求与上游数值一致。
  * ArkUI 没有 animateDecay，这里把同一条曲线拆成「总位移 + 剩余比例」两个纯函数，
  * 由调用方按帧驱动，保证首帧速度与手指抬起速度连续、末端自然停住。
  */
