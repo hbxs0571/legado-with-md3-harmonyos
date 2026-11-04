@@ -301,6 +301,17 @@ export class ReaderTextLayoutEngine {
         if (this.measureWidth(value.substring(current.start, wordEnd)) > this.contentWidthVp) {
           break;
         }
+        // 抽词是把下一行的首词挪上来，下一行因此变短。若变短后明显不满一行，
+        // 两端对齐会把这一行的词距拉开（实测中英混排出现「b r e a k i n g .」与
+        // 「本　章　英　文」被撑满，以及「t h e  p a r a g r a p h」被拉开），
+        // 放弃这次回收。阈值取四分之三：只有下一行仍接近排满时才值得抽词。
+        let restStart = wordEnd;
+        while (restStart < next.end && this.isBlankCode(value.charCodeAt(restStart))) {
+          restStart++;
+        }
+        if (this.measureWidth(value.substring(restStart, next.end)) < this.contentWidthVp * 0.75) {
+          break;
+        }
         cursor = wordEnd;
         current.end = wordEnd;
         next.start = wordEnd;
