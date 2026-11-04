@@ -13,6 +13,50 @@ interface CatalogChapter {
   isInVolume: boolean;
   /** 目录层级：卷标题 0、卷内章节 1，与上游 `tocLevel` 同口径，用于多级缩进。 */
   tocLevel: number;
+  /**
+   * 本章字数，直接取自 chapters 表的 `wordCount` 预存字段（切章时已算好），
+   * 对齐上游 `BookChapter.wordCount`——目录页永不读正文。空串表示该章没有预存字数。
+   */
+  wordCount: string;
+}
+
+/**
+ * 目录列表的惰性数据源。
+ *
+ * 对齐上游 `TocScreen.kt:763` 的 `FastScrollLazyColumn` + 逐项 `item(key =)`：
+ * 屏幕外的行不组合，滚动时只组合进入视口的那些行。原来用 `ForEach` 一次性组合
+ * 全部章节，1378 章的书一打开就要给每一章建节点，滑动自然卡。
+ *
+ * 数据只在 `rebuildChapterView()` 里整批换一次（`onDataReloaded()`），
+ * 不做逐帧重算——对齐上游 `TocViewModel.filterData` 是 `uiState` 派生值、
+ * 不是每次读取都重算。
+ */
+class CatalogChapterDataSource implements IDataSource {
+  private items: CatalogChapter[] = [];
+  private listeners: DataChangeListener[] = [];
+
+  totalCount(): number {
+    return this.items.length;
+  }
+
+  getData(index: number): CatalogChapter {
+    return this.items[index];
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {
+    if (this.listeners.indexOf(listener) < 0) { this.listeners.push(listener); }
+  }
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {
+    const position = this.listeners.indexOf(listener);
+    if (position >= 0) { this.listeners.splice(position, 1); }
+  }
+
+  /** 整批换数据：通知所有监听者重新读取，而不是逐项 diff。 */
+  setItems(items: CatalogChapter[]): void {
+    this.items = items;
+    this.listeners.forEach((listener: DataChangeListener) => listener.onDataReloaded());
+  }
 }
 
 @Component
@@ -28,17 +72,19 @@ export struct CatalogPage {
   @Prop selectedChapter: string = '';
   @Prop bookmarks: ReaderBookmark[] = [];
   @Prop markings: ReaderMarking[] = [];
-  @Prop useTitleReplacement: boolean = false;
+  @Prop @Watch('onChapterViewInputChanged') useTitleReplacement: boolean = false;
   @Prop showWordCount: boolean = true;
-  @State ascending: boolean = true;
+  @State @Watch('onChapterViewInputChanged') ascending: boolean = true;
   @State selectedTab: number = 1;
-  @State query: string = '';
+  @State @Watch('onChapterViewInputChanged') query: string = '';
   /** 书签/笔记页共用的搜索词，对应上游 `TocActionState.searchKey`。 */
   @State markQuery: string = '';
-  @State chapterWordCounts: Map<number, string> = new Map<number, string>();
-  @State wordCountsLoading: boolean = false;
+  /** 目录行的派生结果：按搜索词、折叠态、排序算一次，绘制时直接读。 */
+  @State chapterView: CatalogChapter[] = [];
+  /** 目录行的惰性数据源，与 chapterView 同步整批替换。 */
+  private chapterDataSource: CatalogChapterDataSource = new CatalogChapterDataSource();
   /** 已折叠的卷头章节下标。 */
-  @State collapsedVolumes: Set<number> = new Set<number>();
+  @State @Watch('onChapterViewInputChanged') collapsedVolumes: Set<number> = new Set<number>();
   /** 吸顶显示的卷名；空串表示不显示。对齐上游 `stickyVolume`。 */
   @State stickyVolumeTitle: string = '';
   /** 列表首个可见项下标，吸顶判定要用。 */
@@ -51,7 +97,6 @@ export struct CatalogPage {
   private hasAutoScrolledCurrentChapter: boolean = false;
   /** 书签列表只自动定位一次，之后由用户自己滚动。 */
   private hasAutoScrolledBookmarks: boolean = false;
-  private wordCountGeneration: number = 0;
   onBack: () => void = () => {};
   onSelectChapter: (chapterIndex: number) => void = () => {};
   onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
@@ -83,27 +128,12 @@ export struct CatalogPage {
   @State chapterRows: BookChapter[] = [];
 
   aboutToAppear(): void {
-    // 字数统计依赖 chapterRows，所以只在需要统计时串起来等；不统计时单独加载章节行。
-    if (this.showWordCount) {
-      this.loadChapterWordCountsAfterRows();
-    } else {
-      this.loadChapterRows();
-    }
-  }
-
-  /** 先等章节行加载完，再统计字数。 */
-  private async loadChapterWordCountsAfterRows(): Promise<void> {
-    try {
-      await this.loadChapterRows();
-    } catch (_) {
-      return;
-    }
-    if (this.chapterRows.length === 0) { return; }
-    await this.loadChapterWordCounts();
+    // 只读章节行：字数在切章时已经写进 chapters 表的 wordCount 字段，
+    // 目录页不再逐章读正文重算（上游 BookChapter.wordCount 同口径）。
+    this.loadChapterRows();
   }
 
   aboutToDisappear(): void {
-    this.wordCountGeneration++;
   }
 
   private async loadChapterRows(): Promise<void> {
@@ -114,6 +144,7 @@ export struct CatalogPage {
     } catch (_) {
       this.chapterRows = [];
     }
+    this.rebuildChapterView();
   }
 
   private getAllChapters(): string[] {
@@ -124,7 +155,15 @@ export struct CatalogPage {
     return titles;
   }
 
-  private getChapters(): CatalogChapter[] {
+  /**
+   * 重算目录行：只在「章节行变了 / 搜索词变了 / 折叠态变了 / 排序变了」时调一次。
+   *
+   * 原来是 `getChapters()` 在 `build()` 里被调用两次、且在吸顶判定与滚动定位里各调一次，
+   * 每一次都要对全书跑一遍标题替换正则 + 过滤 + 逆序，等于每帧重算一遍整张表——
+   * 这就是「目录滑动卡」的主因。对齐上游 `TocViewModel.filterData`：
+   * 它是 `uiState` 的派生值，输入不变就不重算。
+   */
+  private rebuildChapterView(): void {
     const keyword = this.query.trim();
     const rows = this.chapterRows;
     const chapters: CatalogChapter[] = [];
@@ -146,16 +185,67 @@ export struct CatalogPage {
       if (matched || (searching && isVolume)) {
         chapters.push({ title: displayTitle, index: index, isVolume: isVolume,
           isInVolume: !isVolume && this.isInsideAnyVolume(index, rows),
-          tocLevel: row.tocLevel });
+          tocLevel: row.tocLevel,
+          // 预存字段直接用，不在这里读正文：上游 BookChapter.wordCount 同口径。
+          wordCount: row.wordCount ?? '' });
       }
     }
-    if (this.ascending) { return chapters; }
-    const reversed: CatalogChapter[] = [];
-    for (let index = chapters.length - 1; index >= 0; index--) {
-      const chapter = chapters[index];
-      if (chapter !== undefined) { reversed.push(chapter); }
+    if (this.ascending) {
+      this.setChapterView(chapters);
+      return;
     }
+    this.setChapterView(this.reverseTocHierarchy(chapters, rows));
+  }
+
+  /**
+   * 逆序：保「父在子前」。
+   *
+   * 上游 `TocHierarchy.kt:56-86` 的 `reverseTocHierarchy()` 是先把章节按卷分组、
+   * 整组倒排、组内章节再倒排，所以倒序后卷标题仍排在它的子章之前。
+   * 原来只把整个数组 `for (i = len-1; i >= 0; i--)` 翻一遍，卷标题会掉到子章后面。
+   */
+  private reverseTocHierarchy(chapters: CatalogChapter[], rows: BookChapter[]): CatalogChapter[] {
+    const reversed: CatalogChapter[] = [];
+    let volumeHead: CatalogChapter | undefined = undefined;
+    let buffer: CatalogChapter[] = [];
+    const flush = (): void => {
+      if (volumeHead !== undefined) { reversed.push(volumeHead); }
+      for (let index = buffer.length - 1; index >= 0; index--) {
+        const item = buffer[index];
+        if (item !== undefined) { reversed.push(item); }
+      }
+      volumeHead = undefined;
+      buffer = [];
+    };
+    for (let index = 0; index < chapters.length; index++) {
+      const chapter = chapters[index];
+      if (chapter === undefined) { continue; }
+      if (chapter.isVolume) {
+        flush();
+        volumeHead = chapter;
+        buffer = [];
+        continue;
+      }
+      const row = rows[chapter.index];
+      if (row !== undefined && row.isVolume) { flush(); }
+      buffer.push(chapter);
+    }
+    flush();
     return reversed;
+  }
+
+  /** 写回派生结果并通知惰性列表整批刷新。 */
+  private setChapterView(chapters: CatalogChapter[]): void {
+    this.chapterView = chapters;
+    this.chapterDataSource.setItems(chapters);
+  }
+
+  /**
+   * 派生输入变了就重算一次目录行（搜索词 / 排序 / 折叠态 / 标题替换开关）。
+   * 这样 `build()` 里可以直接读 `chapterView`，不再每帧调 `getChapters()`。
+   */
+  private onChapterViewInputChanged(): void {
+    this.rebuildChapterView();
   }
 
   /** 卷内判断：往上找最近的一个卷标题，与上游 tocLevel 的语义一致。 */
@@ -298,7 +388,7 @@ export struct CatalogPage {
   private scrollToCurrentChapter(): void {
     if (this.selectedTab !== 1 || this.hasAutoScrolledCurrentChapter) { return; }
     const currentChapterIndex = this.book.chapterIndex ?? this.getAllChapters().indexOf(this.selectedChapter);
-    const visibleIndex = this.getChapters().findIndex((chapter: CatalogChapter) =>
+    const visibleIndex = this.chapterView.findIndex((chapter: CatalogChapter) =>
       chapter.index === currentChapterIndex);
     if (visibleIndex < 0) { return; }
     this.hasAutoScrolledCurrentChapter = true;
@@ -316,6 +406,18 @@ export struct CatalogPage {
   }
 
   /**
+   * 切换字数显示。
+   *
+   * 上游这里只是改一个开关：字数本来就存在 `BookChapter.wordCount` 里，
+   * 打开目录时不用为它做任何事。原来本地打开开关会触发 `loadChapterWordCounts()`
+   * 把全书每章正文读一遍再 `content.length`——1378 章的书要 6 秒以上，
+   * 这就是「打开目录慢」的根因。现在切换只改显示。
+   */
+  private toggleShowWordCount(): void {
+    this.onShowWordCountChange(!this.showWordCount);
+  }
+
+  /**
    * 粘性卷头：对齐上游 `TocScreen.kt:270-295` 的 `stickyVolume`。
    *
    * 上游判定是「首个可见项不是卷标题」或「就是卷标题但已滚出 24」，
@@ -324,7 +426,7 @@ export struct CatalogPage {
    */
   private updateStickyVolume(firstVisibleIndex: number): void {
     if (this.selectedTab !== 1) { this.stickyVolumeTitle = ''; return; }
-    const chapters = this.getChapters();
+    const chapters = this.chapterView;
     if (firstVisibleIndex < 0 || firstVisibleIndex >= chapters.length) {
       this.stickyVolumeTitle = '';
       return;
@@ -352,48 +454,11 @@ export struct CatalogPage {
 
   /** 点击吸顶卷名滚回该卷开头。 */
   private scrollToStickyVolume(): void {
-    const chapters = this.getChapters();
+    const chapters = this.chapterView;
     const index = chapters.findIndex((chapter: CatalogChapter) => chapter.title === this.stickyVolumeTitle &&
       chapter.isVolume);
     if (index >= 0) { this.chapterScroller.scrollToIndex(index, true); }
   }
-
-  private async loadChapterWordCounts(): Promise<void> {
-    if (this.book.contentPath === undefined || BookRepository.isBodyMissing(this.book) || this.wordCountsLoading) { return; }
-    const generation = ++this.wordCountGeneration;
-    this.wordCountsLoading = true;
-    const counts = new Map<number, string>();
-    try {
-      // 必须把已加载的 chapterRows 传进去：不传时 forEachChapter 会退回 deriveChapters()，
-      // 对全书正文再跑一遍目录规则正则（1378 章的书要 6 秒以上，直接把界面线程卡死）。
-      await BookRepository.forEachChapter(
-        this.book,
-        async (content: string, chapterIndex: number): Promise<boolean> => {
-          if (generation !== this.wordCountGeneration) { return false; }
-          counts.set(chapterIndex, this.formatWordCount(content.length));
-          return true;
-        },
-        false,
-        this.chapterRows
-      );
-      if (generation === this.wordCountGeneration) { this.chapterWordCounts = counts; }
-    } catch (_) {
-      if (generation === this.wordCountGeneration) { this.onUnavailableAction('无法读取本地章节字数'); }
-    } finally {
-      if (generation === this.wordCountGeneration) { this.wordCountsLoading = false; }
-    }
-  }
-
-  private toggleShowWordCount(): void {
-    const enabled = !this.showWordCount;
-    this.onShowWordCountChange(enabled);
-    if (enabled && this.chapterWordCounts.size === 0) { this.loadChapterWordCounts(); }
-    else if (!enabled) {
-      this.wordCountGeneration++;
-      this.wordCountsLoading = false;
-    }
-  }
-
   /** 书签页「更多」菜单，对应上游 TocScreen 的书签导出两项。 */
   @Builder
   private BookmarkExportMenu() {
@@ -449,7 +514,7 @@ export struct CatalogPage {
 
   private selectAllChapters(): void {
     const next = new Set<number>();
-    this.getChapters().forEach((chapter: CatalogChapter) => {
+    this.chapterView.forEach((chapter: CatalogChapter) => {
       if (!chapter.isVolume) { next.add(chapter.index); }
     });
     this.selectedChapterIndexes = next;
@@ -458,7 +523,7 @@ export struct CatalogPage {
 
   private invertChapterSelection(): void {
     const next = new Set<number>();
-    this.getChapters().forEach((chapter: CatalogChapter) => {
+    this.chapterView.forEach((chapter: CatalogChapter) => {
       if (!chapter.isVolume && !this.selectedChapterIndexes.has(chapter.index)) { next.add(chapter.index); }
     });
     this.selectedChapterIndexes = next;
@@ -541,7 +606,7 @@ export struct CatalogPage {
         .padding({ left: 12, right: 12, bottom: 8 })
 
         Row() {
-          Text(this.wordCountsLoading ? '正在统计章节字数' : this.ascending ? '正序' : '倒序')
+          Text(this.ascending ? '正序' : '倒序')
             .fontSize(10).fontColor('#AEB0B9')
           Blank()
           Text('共 ' + this.getAllChapters().length.toString() + ' 章')
@@ -568,7 +633,7 @@ export struct CatalogPage {
           .padding({ left: 16, right: 16, bottom: 7 })
         }
 
-        if (this.getChapters().length === 0) {
+        if (this.chapterView.length === 0) {
           Column() {
             Text(this.query.trim().length > 0 ? '没有找到相关章节' : '暂无目录')
               .fontSize(13).fontColor('#AEB0B9')
@@ -576,7 +641,9 @@ export struct CatalogPage {
         } else {
           Stack({ alignContent: Alignment.TopStart }) {
           List({ scroller: this.chapterScroller }) {
-            ForEach(this.getChapters(), (chapter: CatalogChapter) => {
+            // 惰性列表：屏幕外的章节不组合。对齐上游 TocScreen.kt:763 的 FastScrollLazyColumn
+            // + 逐项 item(key =)，key 用章节下标与标题，保证折叠/排序变化时能正确复用节点。
+            LazyForEach(this.chapterDataSource, (chapter: CatalogChapter) => {
               ListItem() {
                 Row() {
                   // 多选态：卷行不参与批量操作，只有章节行显示勾选圈
@@ -601,8 +668,9 @@ export struct CatalogPage {
                     .fontWeight(chapter.isVolume ? FontWeight.Medium : FontWeight.Normal)
                     .fontColor(this.isChapterSelected(chapter.index) ? '#F0F1F5' : (chapter.isVolume ? '#DCDDE4' : '#D4D5DB'))
                     .layoutWeight(1).maxLines(1)
-                  if (this.showWordCount && this.chapterWordCounts.has(chapter.index)) {
-                    Text(this.chapterWordCounts.get(chapter.index) ?? '')
+                  // 字数直接读预存字段：上游 TocScreen 的章节行也是读 chapter.wordCount，不读正文。
+                  if (this.showWordCount && chapter.wordCount.length > 0) {
+                    Text(chapter.wordCount)
                       .fontSize(10).fontColor('#AEB0B9').margin({ right: 8 })
                   }
                   if (this.isChapterSelected(chapter.index)) {
@@ -627,7 +695,7 @@ export struct CatalogPage {
                   if (!chapter.isVolume) { this.enterSelectionMode(chapter.index); }
                 }))
               }.margin({ left: 12, right: 12, bottom: 6 })
-            }, (chapter: CatalogChapter) => `${chapter.index}_${chapter.isVolume ? 1 : 0}_${chapter.isInVolume ? 1 : 0}_${this.collapsedVolumes.has(chapter.index) ? 1 : 0}`)
+            }, (chapter: CatalogChapter) => `${chapter.index}`)
           }
           .layoutWeight(1)
           .scrollBar(BarState.Off)

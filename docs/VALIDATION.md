@@ -49,6 +49,39 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-04 N 端 r327 KI-REL3 目录打开慢、滑动卡
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
+- 构建：`node "<DevEco>/tools/hvigor/hvigor/bin/hvigor.js" --no-daemon --mode module -p product=default -p module=entry@default assembleHap` 两次 `BUILD SUCCESSFUL`（50 s 992 ms / 2 s 74 ms 复核），`hdc install -r` 覆盖安装成功。
+- 目标操作：阅读页底栏「目录」进目录页；连续上滑三屏；点排序图标切倒序；搜索框输入 `3`；点字数图标关/开字数。
+- 为什么改：目录页原来做三件上游不做的事——`aboutToAppear()` 一进来就 `loadChapterWordCounts()` 用 `BookRepository.forEachChapter()` **逐章读正文**再 `content.length`（代码注释自认「1378 章的书要 6 秒以上，直接把界面线程卡死」）；列表是 `ForEach` 一次性建出全部 `ListItem`；`getChapters()` 在 `build()` 里被调两次、吸顶判定与滚动定位里各调一次，每次都遍历全表跑标题替换正则与 `toLowerCase()`。上游三处都不是这样：字数是切章时写进 `BookChapter.wordCount` 的预存字段（`TextFile.kt:317-325`，读取点 `TocViewModel.kt:628-633`），列表是 `LazyColumn` + 逐项 `item(key=)`（`TocScreen.kt:763`/`:769`/`:797`），派生值是 `uiState` 的 `filterData`、输入不变不重算（`TocViewModel.kt:586-594`）。
+- 改动（`entry/src/main/ets/pages/CatalogPage.ets`）：
+  1. `CatalogChapter` 加 `wordCount: string`，派生目录行时直接取 `row.wordCount ?? ''`。
+  2. 新增 `class CatalogChapterDataSource implements IDataSource`（`totalCount` / `getData` / `registerDataChangeListener` / `unregisterDataChangeListener` / `setItems` → `onDataReloaded()`）。
+  3. `@State chapterView: CatalogChapter[]` 缓存派生结果；`getChapters()` 改名 `rebuildChapterView()`，只在输入变化时调；`setChapterView()` 同时写 `chapterView` 与数据源。
+  4. `@Watch('onChapterViewInputChanged')` 挂在 `query` / `ascending` / `useTitleReplacement` / `collapsedVolumes` 上。
+  5. `List` 内 `ForEach(this.getChapters(), ...)` 换 `LazyForEach(this.chapterDataSource, ...)`，key 改 `chapter.index`。
+  6. 删除 `loadChapterWordCounts()` / `loadChapterWordCountsAfterRows()` / `wordCountsLoading` / `wordCountGeneration` / `formatWordCount()`；`aboutToAppear()` 只 `loadChapterRows()`；`toggleShowWordCount()` 只改开关。
+  7. 状态行由 `Text(this.wordCountsLoading ? '正在统计章节字数' : ...)` 改成 `Text(this.ascending ? '正序' : '倒序')`。
+  8. 章节行字数由 `this.chapterWordCounts.has(index)` 改成 `chapter.wordCount.length > 0`。
+  9. `reverseTocHierarchy()` 新增：按卷分组、卷标题先入结果、组内章节倒排（等价上游 `TocHierarchy.kt:56-86` 的 `asReversed()`）。
+
+### 设备验收
+
+| 操作 | 预期 | 实测证据 | 结论 |
+| --- | --- | --- | --- |
+| 阅读页点底栏「目录」进目录页 | 列表与字数同帧出现，不再有「正在统计章节字数」 | `m12.jpeg`（点击后 1 秒）：13 行全部带字数（`9329字` `8878字` `9993字` `1.3万字`…），状态行只有「正序共 13 章」 | 通过 |
+| 目录内连续上滑三屏 | 行内容与字数正确、无白块 | `m13.jpeg`：滚到第 5~12 章，每行都带字数，无空白行 | 通过 |
+| 点排序图标切倒序 | 整表立即反转、状态行变「倒序」 | `m14.jpeg`：状态行「倒序共 13 章」，顺序变 第9→第8→第7…（滚动位置保留） | 通过 |
+| 搜索框输入 `3` | 只剩命中项、出现清除按钮 | `m16.jpeg`：只剩「第3章(1) 9993字」，搜索框内是 `3`，右侧出现 × | 通过 |
+| 点 × 清搜索 | 恢复全部 13 章 | `m17.jpeg`：回到「正序共 13 章」，首行「第1章(1)」 | 通过 |
+| 点字数图标关字数 | 行内字数消失、无重新统计 | `m17.jpeg`：第1章行只剩标题与定位图标，没有字数，状态行仍是「正序共 13 章」 | 通过 |
+| 再点开字数 | 字数立即回来，不再等统计 | `m18.jpeg`：`9329字` 立刻出现在第1章行 | 通过 |
+
+**边界**：测试书 `the-metamorphosis` 只有 13 章且**没有分卷**，所以「1378 章书打开目录快多少」这个量级差异没有量化证据，只有机制证据（打开目录时不再调用 `forEachChapter`，全文没有「正在统计章节字数」这个状态可显示）；反序的「卷标题排在子章之前」也只有代码依据，屏幕上看不到（对照表 C5 该行因此维持 `未接`）。
+
+**未验**：分卷书的倒序形态；1000 章以上长目录的滚动帧率；多选次级菜单（本轮未动）。
+
 ## 2026-11-04 N 端 r326 KI-REL2 标题与正文分离
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
