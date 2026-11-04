@@ -55,6 +55,7 @@ Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/Hap
 
 - [HapeLee/legado-with-MD3](https://github.com/HapeLee/legado-with-MD3)：上游界面与功能参考。
 - [gedoor/legado](https://github.com/gedoor/legado)：原始开源项目及阅读功能基础。
+- [wip3l/qingye-reader](https://github.com/wip3l/qingye-reader)：正文排版引擎的段落构建与逐行切页算法参考（GPL-3.0，按本地接口重写，未整文件复制）。
 - 第三方图标和资源来源见[资源许可清单](docs/RESOURCE-LICENSES.md)。
 
 ## ⚠️ 用户协议与免责声明
