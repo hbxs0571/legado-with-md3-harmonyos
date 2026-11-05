@@ -1155,6 +1155,25 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 **复原**：`backgroundImage` 清空、`backgroundImageBlurring` 回 `0.000000`、`themeMode` 保持 `"1"`、`pureBlack` 保持 `false`。
 
+## 2026-11-05 N 端 r331 书架布局实现段·批次 1：字段与仓储地基（零行为变化）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`bash scripts/build-hap.sh` → `> hvigor BUILD SUCCESSFUL in 43 s 781 ms`（`build-batch1.log:1530`）；`BUILD_EXIT=0`（`:1533`）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12091010 字节（改前 12056230 字节）。
+- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。截图与原始输出在 `N:\HarmonyProjects\tmp\sl-shots\`。
+
+本批只补字段与仓储、不改任何渲染，因此预检核对三项静态与一项视觉：
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| `git diff --stat` 范围 | 改完后 `git diff --stat` | 只三个文件（model / repository / BackupRepository） | `3 files changed, 301 insertions(+), 4 deletions(-)`，即 `data/BackupRepository.ets`、`data/BookshelfLayoutRepository.ets`、`model/BookshelfLayout.ets`，未涉及页面与组件 |
+| 字段与读写次数对齐 | 逐个静态点数 `interface` / `DEFAULT` / `copy` / `load` 的 `read` / `merge` 段 / `toAndroidValues` 的 `set` / `store.put` / 备份写出 upsert | 八处计数一致（原 13 + 新增 26） | 八处均为 39（`BookshelfLayout.ets` 字段 39、`BookshelfLayoutRepository.ets` 读 39 写 39、`BackupRepository.ets` 写出 39 条 upsert） |
+| 界面与改前一致 | 装包后 `aa force-stop` + `aa start`，截书架首屏 | 与改前同一屏一致 | `before-bookshelf.png`(146972B, 状态栏 01:05) 与 `after-batch1.png`(147062B, 状态栏 01:06) 同为「书架」标题、页签「全部 / 本地未分组」（全部选中）、单本 `titleonly-test` 文字封面带角标、底部五项导航（书架选中）；唯一可见差别是状态栏时钟 |
+| 对照图剔除 | 检查目录里的其他截图 | 只用同一屏对照 | `base.png`(482926B) 是别的会话遗留的阅读页（`'titleonly-test' 1/3 11.1%`），不是书架，未用作对照 |
+
+**复原**：本批未改任何面板值，无需复原。
+
+**未验**：本批零行为变化，除上述静态点数与单屏对照外没有其他取证；26 个新增字段的备份导出 / 导入闭环留待批次 2 的 A11 与后续验收段。
+
 ## 2026-11-05 N 端 r331 书架布局实现段·批次 2：七个独立小件（KI-SL-A2/A4/A7/A8/A9/A10/A11）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
