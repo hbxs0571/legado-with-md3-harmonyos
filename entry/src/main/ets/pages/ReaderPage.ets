@@ -2832,10 +2832,14 @@ export struct ReaderPage {
       return [{ id: 'more_actions', enabled: true }];
     }
     if (actions.length > 0) {
-      // ArkUI 顶栏 Row 中后插入的配置项靠左，因此反转数据以保持视觉顺序与配置列表一致。
       // 上游 `ReadMenuActionDefs.kt:76` `MAX_TITLE_BAR_ACTIONS = 6`，`:493-517` 用 `take(6)`
       // 直接丢弃第 7 个及之后的动作（上游没有溢出菜单概念），这里按同一口径截断。
-      return actions.reverse().slice(0, ReaderPage.MAX_TITLE_BAR_ACTIONS);
+      // 顺序即配置顺序：上游 `ReadMenuActionDefs.kt:493-518` 是
+      // `.filter { enabled }.mapNotNull { defs }.filter { applicable }.take(6)`，不反转。
+      // 原先这里写了 `reverse()`，依据是「Row 中后插入靠左」——该前提在本页不成立：
+      // `readerTopActionGroup()`（`:2875`）两个分支都用 `ForEach(this.getVisibleTopActions(), …)`
+      // 正序渲染，第一个元素就是最左，反转只会把「更多」顶到最左。
+      return actions.slice(0, ReaderPage.MAX_TITLE_BAR_ACTIONS);
     }
     return [{ id: 'more_actions', enabled: true }];
   }
@@ -6990,7 +6994,9 @@ struct ReaderControlGlyph {
     } else if (this.kind === 'change_source') {
       Image($r('app.media.app_swap')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'toc_rule') {
-      Image($r('app.media.profile_rule')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
+      // 上游 `ReadMenuActionDefs.kt:156-159` 用 `Icons.AutoMirrored.Filled.Toc`（目录列表形）。
+      // `profile_rule` 是「规则/订阅」图标，语义不符，改用与目录按钮共用的 `reader_toc`。
+      Image($r('app.media.reader_toc')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'ai_summary' || this.kind === 'ai_cast') {
       Image($r('app.media.profile_auto_awesome')).width(this.glyphSize).height(this.glyphSize).fillColor(this.menuForeground)
     } else if (this.kind === 'ai_rewrite') {
