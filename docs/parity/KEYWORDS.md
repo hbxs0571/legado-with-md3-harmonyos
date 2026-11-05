@@ -6,7 +6,7 @@
 
 ## 用法
 
-**`<上游根>` 的定义**（下文与本目录三张对照表的复现命令都用这个占位符）：本地 Android 源码根，即包含 `app/src/main/java` 的那一级目录，目录名 `legado-with-MD3`，**不含 `app/`**。
+**`<上游根>` 的定义**（下文与本目录各对照表的复现命令都用这个占位符）：本地 Android 源码根，即包含 `app/src/main/java` 的那一级目录，目录名 `legado-with-MD3`，**不含 `app/`**。
 
 ```
 <上游根>/app/src/main/java      ← 检索起点
