@@ -31,6 +31,58 @@ export interface BookshelfLayoutSettings {
   bookshelfGridCoverWidth: number;
   /** 列表封面宽度（vp）。对应上游 PreferKey.bookshelfListCoverWidth，默认 84。 */
   bookshelfListCoverWidth: number;
+  /** 网格样式：0 标准，1 紧凑（标题进封面），2 仅封面。对应上游 PreferKey 字符串值 bookshelfGridLayout。 */
+  bookshelfGridLayout: number;
+  /** 精简详情，开启后卡片只留封面与书名。对应上游 PreferKey 字符串值 bookshelfLayoutCompact。 */
+  bookshelfLayoutCompact: boolean;
+  /** 日间卡片底色，0 为跟随主题。对应上游 PreferKey 字符串值 bookshelfCardColor。 */
+  bookshelfCardColor: number;
+  /** 夜间卡片底色，0 为跟随主题。对应上游 PreferKey 字符串值 bookshelfCardColorDark。 */
+  bookshelfCardColorDark: number;
+  /** 列表模式显示分隔线。对应上游 PreferKey 字符串值 bookshelfShowDivider。 */
+  bookshelfShowDivider: boolean;
+  /** 列表模式封面垂直居中。对应上游 PreferKey 字符串值 bookshelfListCoverCenter。 */
+  bookshelfListCoverCenter: boolean;
+  /** 列表模式简介显示在书名下方。对应上游 PreferKey 字符串值 bookshelfListIntroBelowContent。 */
+  bookshelfListIntroBelowContent: boolean;
+  /** 列表模式显示简介。对应上游 PreferKey 字符串值 bookshelfShowIntro。 */
+  bookshelfShowIntro: boolean;
+  /** 列表模式显示最新章节。对应上游 PreferKey 字符串值 bookshelfShowLatestChapter。 */
+  bookshelfShowLatestChapter: boolean;
+  /** 列表模式简介最大行数，0 为不限制。对应上游 PreferKey 字符串值 bookshelfIntroMaxLines。 */
+  bookshelfIntroMaxLines: number;
+  /** 搜索按钮点击直接进搜索页（关闭则点击先进筛选）。对应上游 PreferKey 字符串值 bookshelfSearchActionDirectToSearch。 */
+  bookshelfSearchActionDirectToSearch: boolean;
+  /** 书架显示快速滚动条。对应上游 PreferKey 字符串值 showBookshelfFastScroller。 */
+  showBookshelfFastScroller: boolean;
+  /** 进书架时自动刷新目录，上游键名为 auto_refresh。对应上游 PreferKey 字符串值 auto_refresh。 */
+  autoRefreshBook: boolean;
+  /** 记住上次所在分组，上游写入键为 bookshelfSelectedGroupId。对应上游 PreferKey 字符串值 bookshelfSelectedGroupId。 */
+  saveTabPosition: string;
+  /** 横屏布局模式：0 列表，1 网格，上游键名为 bookshelf_layout_landscape。对应上游 PreferKey 字符串值 bookshelf_layout_landscape。 */
+  bookshelfLayoutModeLandscape: number;
+  /** 横屏网格列数。对应上游 PreferKey 字符串值 bookshelfLayoutGridLandscape。 */
+  bookshelfLayoutGridLandscape: number;
+  /** 横屏列表每屏行数。对应上游 PreferKey 字符串值 bookshelfLayoutListLandscape。 */
+  bookshelfLayoutListLandscape: number;
+  /** 文件夹竖屏布局模式。对应上游 PreferKey 字符串值 bookshelfFolderLayoutModePortrait。 */
+  bookshelfFolderLayoutModePortrait: number;
+  /** 文件夹横屏布局模式。对应上游 PreferKey 字符串值 bookshelfFolderLayoutModeLandscape。 */
+  bookshelfFolderLayoutModeLandscape: number;
+  /** 文件夹竖屏网格列数。对应上游 PreferKey 字符串值 bookshelfFolderLayoutGridPortrait。 */
+  bookshelfFolderLayoutGridPortrait: number;
+  /** 文件夹横屏网格列数。对应上游 PreferKey 字符串值 bookshelfFolderLayoutGridLandscape。 */
+  bookshelfFolderLayoutGridLandscape: number;
+  /** 文件夹竖屏列表行数。对应上游 PreferKey 字符串值 bookshelfFolderLayoutListPortrait。 */
+  bookshelfFolderLayoutListPortrait: number;
+  /** 文件夹横屏列表行数。对应上游 PreferKey 字符串值 bookshelfFolderLayoutListLandscape。 */
+  bookshelfFolderLayoutListLandscape: number;
+  /** 分组列表样式：0 分组，1 紧凑列表，2 横排封面数量。对应上游 PreferKey 字符串值 bookshelfGroupListStyle。 */
+  bookshelfGroupListStyle: number;
+  /** 分组卡片横排封面数量。对应上游 PreferKey 字符串值 bookshelfGroupCoverCount。 */
+  bookshelfGroupCoverCount: number;
+  /** 批量更新数量限制，0 为不限制。对应上游 PreferKey 字符串值 bookshelfRefreshingLimit。 */
+  bookshelfRefreshingLimit: number;
 }
 
 /** 下拉选项的通用结构。 */
@@ -39,10 +91,11 @@ export interface BookshelfLayoutOption {
   label: string;
 }
 
-/** 分组样式选项，对应上游 R.array.group_style 的前两项。 */
+/** 分组样式选项，对应上游 R.array.group_style 三档（标签 / 隐藏标签 / 文件夹）。 */
 export const BOOK_GROUP_STYLE_OPTIONS: BookshelfLayoutOption[] = [
   { value: 0, label: '页签' },
-  { value: 1, label: '隐藏页签' }
+  { value: 1, label: '隐藏页签' },
+  { value: 2, label: '文件夹' }
 ];
 
 /** 布局模式选项，对应上游 R.string.layout_mode_list / layout_mode_grid。 */
@@ -55,6 +108,19 @@ export const BOOKSHELF_LAYOUT_MODE_OPTIONS: BookshelfLayoutOption[] = [
 export const BOOKSHELF_SORT_ORDER_OPTIONS: BookshelfLayoutOption[] = [
   { value: 0, label: '升序' },
   { value: 1, label: '降序' }
+];
+
+/** 文件夹布局模式选项，对应上游 BOOKSHELF_LAYOUT_MODE_OPTIONS 的列表 / 网格。 */
+export const BOOKSHELF_FOLDER_LAYOUT_MODE_OPTIONS: BookshelfLayoutOption[] = [
+  { value: 0, label: '列表' },
+  { value: 1, label: '网格' }
+];
+
+/** 文件夹列表样式三档，对应上游 BookshelfConfigSheet.kt:220-226 的 entryValues "0"/"1"/"2"。 */
+export const BOOKSHELF_GROUP_LIST_STYLE_OPTIONS: BookshelfLayoutOption[] = [
+  { value: 0, label: '分组' },
+  { value: 1, label: '紧凑列表' },
+  { value: 2, label: '横排封面数量' }
 ];
 
 /**
@@ -79,7 +145,33 @@ export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   bookshelfTitleCenter: true,
   bookshelfTitleSmallFont: false,
   bookshelfGridCoverWidth: 120,
-  bookshelfListCoverWidth: 84
+  bookshelfListCoverWidth: 84,
+  bookshelfGridLayout: 0,
+  bookshelfLayoutCompact: false,
+  bookshelfCardColor: 0,
+  bookshelfCardColorDark: 0,
+  bookshelfShowDivider: true,
+  bookshelfListCoverCenter: true,
+  bookshelfListIntroBelowContent: false,
+  bookshelfShowIntro: true,
+  bookshelfShowLatestChapter: true,
+  bookshelfIntroMaxLines: 0,
+  bookshelfSearchActionDirectToSearch: true,
+  showBookshelfFastScroller: false,
+  autoRefreshBook: false,
+  saveTabPosition: '全部',
+  bookshelfLayoutModeLandscape: 1,
+  bookshelfLayoutGridLandscape: 7,
+  bookshelfLayoutListLandscape: 1,
+  bookshelfFolderLayoutModePortrait: 1,
+  bookshelfFolderLayoutModeLandscape: 1,
+  bookshelfFolderLayoutGridPortrait: 3,
+  bookshelfFolderLayoutGridLandscape: 7,
+  bookshelfFolderLayoutListPortrait: 1,
+  bookshelfFolderLayoutListLandscape: 1,
+  bookshelfGroupListStyle: 0,
+  bookshelfGroupCoverCount: 4,
+  bookshelfRefreshingLimit: 0,
 };
 
 /** 按值取文案，未知值返回空串由调用方兜底。 */
@@ -103,6 +195,32 @@ export function copyBookshelfLayout(settings: BookshelfLayoutSettings): Bookshel
     bookshelfTitleCenter: settings.bookshelfTitleCenter,
     bookshelfTitleSmallFont: settings.bookshelfTitleSmallFont,
     bookshelfGridCoverWidth: settings.bookshelfGridCoverWidth,
-    bookshelfListCoverWidth: settings.bookshelfListCoverWidth
+    bookshelfListCoverWidth: settings.bookshelfListCoverWidth,
+    bookshelfGridLayout: settings.bookshelfGridLayout,
+    bookshelfLayoutCompact: settings.bookshelfLayoutCompact,
+    bookshelfCardColor: settings.bookshelfCardColor,
+    bookshelfCardColorDark: settings.bookshelfCardColorDark,
+    bookshelfShowDivider: settings.bookshelfShowDivider,
+    bookshelfListCoverCenter: settings.bookshelfListCoverCenter,
+    bookshelfListIntroBelowContent: settings.bookshelfListIntroBelowContent,
+    bookshelfShowIntro: settings.bookshelfShowIntro,
+    bookshelfShowLatestChapter: settings.bookshelfShowLatestChapter,
+    bookshelfIntroMaxLines: settings.bookshelfIntroMaxLines,
+    bookshelfSearchActionDirectToSearch: settings.bookshelfSearchActionDirectToSearch,
+    showBookshelfFastScroller: settings.showBookshelfFastScroller,
+    autoRefreshBook: settings.autoRefreshBook,
+    saveTabPosition: settings.saveTabPosition,
+    bookshelfLayoutModeLandscape: settings.bookshelfLayoutModeLandscape,
+    bookshelfLayoutGridLandscape: settings.bookshelfLayoutGridLandscape,
+    bookshelfLayoutListLandscape: settings.bookshelfLayoutListLandscape,
+    bookshelfFolderLayoutModePortrait: settings.bookshelfFolderLayoutModePortrait,
+    bookshelfFolderLayoutModeLandscape: settings.bookshelfFolderLayoutModeLandscape,
+    bookshelfFolderLayoutGridPortrait: settings.bookshelfFolderLayoutGridPortrait,
+    bookshelfFolderLayoutGridLandscape: settings.bookshelfFolderLayoutGridLandscape,
+    bookshelfFolderLayoutListPortrait: settings.bookshelfFolderLayoutListPortrait,
+    bookshelfFolderLayoutListLandscape: settings.bookshelfFolderLayoutListLandscape,
+    bookshelfGroupListStyle: settings.bookshelfGroupListStyle,
+    bookshelfGroupCoverCount: settings.bookshelfGroupCoverCount,
+    bookshelfRefreshingLimit: settings.bookshelfRefreshingLimit,
   };
 }

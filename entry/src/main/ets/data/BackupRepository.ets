@@ -358,7 +358,6 @@ export class BackupRepository {
       'eyeProtectionEndTime'
     ],
     bookshelfLayout: [
-      'bookGroupStyle', 'hideEmptyGroups',
       'bookshelfLayout', 'bookshelfLayoutPortrait', 'bookshelf_layout_landscape', 'bookshelfLayoutCompact',
       'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowDivider',
       'bookshelfGridLayout', 'bookshelfSort', 'bookshelfSortOrder', 'bookshelfLayoutGridLandscape',
@@ -589,10 +588,15 @@ export class BackupRepository {
           "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n</map>");
       }
 
+      // bookGroupStyle / hideEmptyGroups 不在上游 bookshelfPrefKeys 39 键内，
+      // 走 keyIsNotIgnore 的 else -> true，不受任何类别开关控制（KI-SL-A11）。
+      let unconditionalText = fileIo.readTextSync(configPath);
+      unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'int', 'bookGroupStyle', `${bookshelfLayout.bookGroupStyle}`);
+      unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'boolean', 'hideEmptyGroups', `${bookshelfLayout.hideEmptyGroups}`);
+      BackupRepository.writeTextFile(configPath, unconditionalText);
+
       if (!ignoredCategories.includes('bookshelfLayout')) {
         let configText = fileIo.readTextSync(configPath);
-        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookGroupStyle', `${bookshelfLayout.bookGroupStyle}`);
-        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'hideEmptyGroups', `${bookshelfLayout.hideEmptyGroups}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfSort', `${bookshelfLayout.bookshelfSort}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfSortOrder', `${bookshelfLayout.bookshelfSortOrder}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutPortrait', `${bookshelfLayout.bookshelfLayoutModePortrait}`);
@@ -604,6 +608,32 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfTitleSmallFont', `${bookshelfLayout.bookshelfTitleSmallFont}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGridCoverWidth', `${bookshelfLayout.bookshelfGridCoverWidth}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfListCoverWidth', `${bookshelfLayout.bookshelfListCoverWidth}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGridLayout', `${bookshelfLayout.bookshelfGridLayout}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfLayoutCompact', `${bookshelfLayout.bookshelfLayoutCompact}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfCardColor', `${bookshelfLayout.bookshelfCardColor}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfCardColorDark', `${bookshelfLayout.bookshelfCardColorDark}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfShowDivider', `${bookshelfLayout.bookshelfShowDivider}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfListCoverCenter', `${bookshelfLayout.bookshelfListCoverCenter}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfListIntroBelowContent', `${bookshelfLayout.bookshelfListIntroBelowContent}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfShowIntro', `${bookshelfLayout.bookshelfShowIntro}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfShowLatestChapter', `${bookshelfLayout.bookshelfShowLatestChapter}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfIntroMaxLines', `${bookshelfLayout.bookshelfIntroMaxLines}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfSearchActionDirectToSearch', `${bookshelfLayout.bookshelfSearchActionDirectToSearch}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showBookshelfFastScroller', `${bookshelfLayout.showBookshelfFastScroller}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'auto_refresh', `${bookshelfLayout.autoRefreshBook}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'string', 'bookshelfSelectedGroupId', `${bookshelfLayout.saveTabPosition}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelf_layout_landscape', `${bookshelfLayout.bookshelfLayoutModeLandscape}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutGridLandscape', `${bookshelfLayout.bookshelfLayoutGridLandscape}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutListLandscape', `${bookshelfLayout.bookshelfLayoutListLandscape}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfFolderLayoutModePortrait', `${bookshelfLayout.bookshelfFolderLayoutModePortrait}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfFolderLayoutModeLandscape', `${bookshelfLayout.bookshelfFolderLayoutModeLandscape}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfFolderLayoutGridPortrait', `${bookshelfLayout.bookshelfFolderLayoutGridPortrait}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfFolderLayoutGridLandscape', `${bookshelfLayout.bookshelfFolderLayoutGridLandscape}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfFolderLayoutListPortrait', `${bookshelfLayout.bookshelfFolderLayoutListPortrait}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfFolderLayoutListLandscape', `${bookshelfLayout.bookshelfFolderLayoutListLandscape}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGroupListStyle', `${bookshelfLayout.bookshelfGroupListStyle}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGroupCoverCount', `${bookshelfLayout.bookshelfGroupCoverCount}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfRefreshingLimit', `${bookshelfLayout.bookshelfRefreshingLimit}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
 
@@ -1328,7 +1358,8 @@ export class BackupRepository {
     const integerKeys = [
       'bookGroupStyle', 'bookshelfSort', 'bookshelfSortOrder', 'bookshelfLayoutPortrait',
       'bookshelfLayoutGridPortrait', 'bookshelfLayoutListPortrait', 'bookshelfTitleMaxLines',
-      'bookshelfGridCoverWidth', 'bookshelfListCoverWidth'
+      'bookshelfGridCoverWidth', 'bookshelfListCoverWidth',
+      'bookshelfGridLayout', 'bookshelfCardColor', 'bookshelfCardColorDark', 'bookshelfIntroMaxLines', 'bookshelf_layout_landscape', 'bookshelfLayoutGridLandscape', 'bookshelfLayoutListLandscape', 'bookshelfFolderLayoutModePortrait', 'bookshelfFolderLayoutModeLandscape', 'bookshelfFolderLayoutGridPortrait', 'bookshelfFolderLayoutGridLandscape', 'bookshelfFolderLayoutListPortrait', 'bookshelfFolderLayoutListLandscape', 'bookshelfGroupListStyle', 'bookshelfGroupCoverCount', 'bookshelfRefreshingLimit'
     ];
     for (let index = 0; index < integerKeys.length; index++) {
       const key = integerKeys[index];
@@ -1336,13 +1367,16 @@ export class BackupRepository {
       const value = BackupRepository.readXmlInteger(`${directory}/config.xml`, key);
       if (value !== undefined) { values.set(key, value.toString()); }
     }
-    const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow', 'bookshelfTitleCenter', 'bookshelfTitleSmallFont'];
+    const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow', 'bookshelfTitleCenter', 'bookshelfTitleSmallFont',
+      'bookshelfLayoutCompact', 'bookshelfShowDivider', 'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSearchActionDirectToSearch', 'showBookshelfFastScroller', 'auto_refresh'];
     for (let index = 0; index < booleanKeys.length; index++) {
       const key = booleanKeys[index];
       if (key === undefined) { continue; }
       const value = BackupRepository.readXmlBoolean(`${directory}/config.xml`, key);
       if (value !== undefined) { values.set(key, value.toString()); }
     }
+    const saveTabPositionValue = BackupRepository.readXmlString(`${directory}/config.xml`, 'bookshelfSelectedGroupId');
+    if (saveTabPositionValue !== undefined) { values.set('bookshelfSelectedGroupId', saveTabPositionValue); }
     return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
   }
 

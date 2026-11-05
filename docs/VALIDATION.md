@@ -1155,4 +1155,79 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 **复原**：`backgroundImage` 清空、`backgroundImageBlurring` 回 `0.000000`、`themeMode` 保持 `"1"`、`pureBlack` 保持 `false`。
 
+## 2026-11-05 N 端 r331 书架布局实现段·批次 2：七个独立小件（KI-SL-A2/A4/A7/A8/A9/A10/A11）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`bash scripts/build-hap.sh` → `> hvigor BUILD SUCCESSFUL in 43 s 622 ms`（`build-batch2.log:1533`）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12119625 字节；`bm install -r -w 180 -p` → `install bundle successfully.`（覆盖安装成功）。
+- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。截图与组件树 JSON 在 `N:\HarmonyProjects\tmp\sl-shots\`。
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| A2 网格样式三态 | 更多 → 布局设置把「网格样式」依次选「标准 / 紧凑 / 仅封面」 | 三态卡片渲染不同 | 覆盖安装成功；三张截图 `b2-default.png`（封面下书名 + 作者行）、`a2-compact.png`（封面内底部白字）、`a2-coveronly.png`（仅封面）；`b2-top.json` 读回当前值 `仅封面` |
+| A4 日/夜卡片底色 | 日间填 `#3A5BA0`、夜间填 `#7A2E4B` → 完成 → 杀进程重进 | 卡片底色按深浅色取对应值且重启保持 | `b2-restart.json` 读回日间 `TextInput.text=#3A5BA0`、夜间 `#7A2E4B`；`b2-colors-applied.png` 显示紫红边生效；`b2-colors-applied.png` 系重启后拍摄 |
+| A7 搜索按钮分流 | 面板开/关「搜索按钮优先打开搜索页」 | 单击与长按动作按字段对调 | 覆盖安装成功；`b2-restart.json` 读回该 `Toggle checked=false`；点击/长按分流代码在 `BookshelfPage.ets:800-816`（手势结果未单独逐分支截图） |
+| A8 快速滚动条 | 面板开「显示快速滚动条」 | 书架出现系统滚动条且重启保持 | `b2-restart.json` 读回该 `Toggle checked=true`；滚动条渲染在 `BookshelfPage.ets:915`（未单独拍滚动条特写） |
+| A9 记住分组 | 切到某分组 → 杀进程重进 | 页签仍停在记住的分组 | 覆盖安装成功；`selectGroup` 写回与 `onLayoutChanged` 恢复代码在 `BookshelfPage.ets:132-148`（该组未单独上机走闭环，见「未验」） |
+| A10 空态全局搜索按钮 | 书架内搜索框输入无匹配词 | 空态出现「全局搜索」按钮 | 覆盖安装成功；按钮代码在 `BookshelfPage.ets:942-946`（该组未单独上机走闭环，见「未验」） |
+| A11 备份归类 | 导出备份时取消勾选「书架布局」 | `config.xml` 仍含 `bookGroupStyle` / `hideEmptyGroups` | 覆盖安装成功；无条件写出块在 `BackupRepository.ets:592-596`、类别数组移出两键在 `:360-361`（备份导出闭环未单独上机，见「未验」） |
+| 持久化读回 | `aa force-stop` + `aa start` 后 `uitest dumpLayout` 读 6 条新面板条目 | 6 条值全部保持 | `b2-restart.json`：网格样式 `仅封面`、精简详情 `checked=true`、日间 `#3A5BA0`、夜间 `#7A2E4B`、搜索优先 `checked=false`、快速滚动条 `checked=true`，与提交前一致 |
+
+**复原**：预检把 6 条值改成非默认（仅封面 / 精简 true / 日间 `#3A5BA0` / 夜间 `#7A2E4B` / 搜索优先 false / 快滚 true），收尾时在设备上逐条改回上游默认值，见证据包「复原」段与 `b2-restored-default.png`。
+
+**未验**：A7 点击/长按两分支、A8 字母索引快速跳转（上游 `FastScrollLazyVerticalGrid`）、A9 分组重启闭环、A10 全局搜索跳转闭环、A11 备份导出闭环，本批只做了构建 + 面板持久化读回的客观取证，实现段不自行宣布功能正确。
+
+## 2026-11-05 N 端 r331 书架布局实现段·批次 3：横屏取值（KI-SL-C1 / KI-SL-C3）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`bash scripts/build-hap.sh` → `> hvigor BUILD SUCCESSFUL in 44 s 586 ms`（`build-batch3.log:1533`）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12125920 字节；`bm install -r -w 180 -p` → `install bundle successfully.`（覆盖安装成功）。
+- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| C1 横屏取值代码落点 | `grep -n 'isLandscape\|activeLayoutMode\|activeGridColumns\|activeListColumns' entry/src/main/ets/pages/BookshelfPage.ets` | 三处取值按 `isLandscape` 在 Portrait/Landscape 间取 | `BookshelfPage.ets:97`、`:157-170`、`:515-530`、`:533-549`、`:971` 命中；`aboutToDisappear`（`:145-150`）解绑订阅，`:982-986` 容器 `onAreaChange` 兜底 |
+| C3 无预加载器按 0 处理 | `grep -rni preload entry/src/main/ets`；`grep -n 'BOOKSHELF_FIRST_SCREEN_PRELOAD_COLUMNS' entry/src/main/ets/pages/BookshelfPage.ets` | 无预加载器，按 0 处理且不新建系统 | `grep -rni preload` 零命中；`BookshelfPage.ets:20-26` 常量 `= 0` 与中文注释；未新建预加载系统 |
+| 批次 3 预检：模拟器旋转后列数变化 | 尝试设备旋转后 `snapshot_display` 取横屏截图 | 横屏书架列数变化、转回竖屏恢复 | **未做到**：本机 DevEco 模拟器无可用旋转入口（设备命令 / `param set` / `aa` 窗口参数 / `QemuParams` / 宿主快捷键 `keybd_event` 与 `SendInput` 两套 / hover 浮动工具栏 / QEMU console 端口 / 阅读页 `setPreferredOrientation` 全部试过），`snapshot_display` 恒输出 `width: 1280, height: 2832`；仅取到竖屏基线 `b3-portrait.png`，无第二张横屏截图；卡点见证据包第 4 节 |
+
+**复原**：本批未改设备上任何书架设置值（批次 2 收尾已复原 6 条默认值）；只覆盖安装批次 3 的 HAP，书架界面竖屏基线 `b3-portrait.png` 与批次 2 复原后书架一致。
+
+**未验**：C1 三行的横屏屏幕行为（旋转后列数变化、转回竖屏恢复）因模拟器无法旋转未验；按任务书 `:200`「某行做不完就留 `未接`」处置，C 块 `:136`~`:138` 与 `:145` 均留 `未接`，需验收段换可旋转设备或提供旋转方式复现。实现段不自行宣布功能正确。
+
+## 2026-11-05 N 端 r331 书架布局实现段·批次 4：列表模式（KI-SL-A5 / KI-SL-A6）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`bash scripts/build-hap.sh` → `> hvigor BUILD SUCCESSFUL in 33 s 273 ms`（`build-batch4.log:1533`）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12138081 字节；`bm install -r -w 180 -p` → `install bundle successfully.`（覆盖安装成功）。
+- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| 列表 / 网格两张 | 布局面板把「布局模式」切到列表 → 完成 → 截图；再切回网格 | 两种模式卡片形态明显不同 | `b4-list-default.png` 为左封面右信息（书名 + `第一章　风起于青萍之末`），`b4-grid-default.png` 为封面下书名 + 作者；`b4-aftermode.json` 组件树里 `GridItem` 内是 `Row` 布局 |
+| 调列表封面宽度前后 | 列表模式下把「列表封面宽度」84→114 → 完成 → 截图 | 列表封面变宽 | `b4-list-width-after.png` 封面明显宽于 `b4-list-default.png`；`b4-verify.json` 读回 `114`（`b4-w114.json` 系点击生效前抓的旧值 `84`，见「未做到」） |
+| 网格下宽度不变 | 切回网格并把列表封面宽度调到 144 → 截图 | 网格外观不变 | `b4-grid-width-unchanged.png` 与 `b4-grid-default.png` 一致；`b4-gridmode.json` 读回布局模式 `网格` |
+| 列表详情开关 | 列表模式下关「（列表模式）显示简介」「（列表模式）显示最新章节」→ 截图 | 右侧章节名行消失 | `b4-list-no-details.png` 只剩书名，`b4-nodetails.json` 组件树不再含「第一章　风起于青萍之末」 |
+| 代码落点 | `grep -n 'displayWidth: this.layout.bookshelfListCoverWidth\|book.description\|book.lastChapter' entry/src/main/ets/pages/BookshelfPage.ets` | 列表宽度 / 简介 / 最新章节各自接线 | `:936`、`:953`、`:960` 命中；网格分支 `bookshelfCoverWidthLimit()`（`:576`）仍只用 `bookshelfGridCoverWidth` |
+
+**复原**：收尾把「布局模式」改回 `网格`、「列表封面宽度」改回 `84`、两个列表详情开关改回 `true`（`b4-restore-top.json` 读回网格、`b4-restore2.json` 读回 `84`、`b4-restore1.json` 读回两 Toggle `checked=true`），书架复原图 `b4-restored-default.png`。
+
+**未做到 / 存疑**：① 样本书 `titleonly-test` 的 `Book.description` 为空，关「显示简介」前后视觉无差别，`b4-list-no-details.png` 只能证明章节名开关，简介开关的可见效果需验收段换一本有简介的书复现；② `b4-w114.json` 是点击生效前抓的旧值 `84`，实际提交值以重开面板读回的 `b4-verify.json`（`114`）为准，原始输出不删除；③ 批次 4 做完让 KI-SL-N1 那 11 行「不接」的前提（无列表模式）消失，但 N1 是范围结论，恢复成「要接」需判断段重判，本轮一行未碰，此事实在证据包第 4 节登记；④ 简介行数固定 2 行属版式常量，未接 `bookshelfIntroMaxLines`（N1 范围）。实现段不自行宣布功能正确。
+
+## 2026-11-05 N 端 r331 书架布局实现段·批次 5：分组第三档与文件夹视图（KI-SL-A1 / KI-SL-A3 / KI-SL-C2）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
+- 构建：`bash scripts/build-hap.sh` → `> hvigor BUILD SUCCESSFUL in 55 s 570 ms`（`build-batch5.log:1533`，`33 tasks in total: 17 executed, 16 up-to-date`，`:1529` `WARN: No signingConfig found for product default`）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12195321 字节；`ERROR|ArkTS:ERROR` 0，`ArkTS:WARN` 494 与批次 4 逐条 diff 无新增无消失；`bm install -r -w 180 -p` → `install bundle successfully.`（覆盖安装成功）。
+- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| 三档下拉与面板展开 | 布局设置 →「分组样式」当前值点开 → 三档菜单；选「文件夹」 | 菜单三档、面板展开文件夹六项 + 列表样式 | `b5-gsmenu.json` 三档坐标（页签 / 隐藏页签 / 文件夹），`b5-gspanel.json` 竖屏 6 项 + 横屏 6 项 + 列表样式标题，`b5-panel-expanded.png` 分区全展开 |
+| 文件夹根层分组卡片 | 选「文件夹」提交 → 截图 | 根层显示分组卡片 | `b5-folder-root.png` 两张分组卡「全部 1 本」「本地未分组 1 本」，顶部「文件夹（点卡片进入分组）」；`b5-root.json` 节点含「分组」「共 1 本」 |
+| 点进分组 | 点「全部」卡片 | 显示该组的书 + 返回入口 | `b5-folder-inside.png` 见「‹ 返回文件夹」「当前分组：全部」+ `titleonly-test` + `本地 TXT`；`b5-inside.json` 同上 |
+| 返回根层 | 点「‹ 返回文件夹」 | 回到根层分组卡 | `b5-back.json` 无返回入口、两张分组卡在 |
+| 横排封面数量 6 | 列表样式选「横排封面数量」→ 数量 4→6 → 提交 → 截图 | 一行 6 封面、不足右侧留空 | `b5-folder-covercount6.png` 每张卡 1 封面 + 右侧留空（样本每组仅 1 本）；`b5-cc6.json` 节点统计 Canvas 2 / Blank 5 / GridItem 2；`b5-reopen.json` 重开面板读回数量 `6` |
+| 竖屏文件夹网格列数 | 选「文件夹」→「文件夹网格列数·竖屏」3→4 → 提交 → 截图 | 分组卡片变窄 | `b5-folder-col4.png` 卡片明显变窄；`b5-col4v.json` 重开读回 `4` |
+| 代码落点 | `grep -n 'activeFolderLayoutMode\|folderColumnsTemplate\|BookGroupCard\|emptySlots' entry/src/main/ets/pages/BookshelfPage.ets entry/src/main/ets/components/BookGroupCard.ets` | 六值按方向取、根层卡片、空位补齐各自接线 | `BookshelfPage.ets:569-585`（三取值）/`:591-601`（模板）/`:1033-1053`（根层）/`:1050`（`.columnsTemplate`）、`BookGroupCard.ets:28-40`/`:51-72` 命中 |
+
+**复原**：收尾把「竖屏网格列数」4→3、「横排封面数量」6→4（重开 `b5-restore1.json` 读回 3 / 4）、「文件夹列表样式」改回「分组」、「分组样式」改回「页签」→ 提交 → `aa force-stop` + `aa start` → 重开面板 `b5-restore-final.json` 读回分组样式当前值 `页签`、文件夹分区随条件消失 → 点完成关面板拍 `b5-restored-default.png`（书架回页签 + 网格默认态，与批次 1 基线一致）。
+
+**未做到 / 存疑**：① 横屏三项 C 块 `:142`/`:143`/`:144` 与 KI-SL-C1 同型，代码已落地（横屏模式 / 网格列数 / 列表列数字段 + 按 `isLandscape` 取 Landscape 值），但本机 DevEco 模拟器无可用旋转入口（旋转手段在批次 3 已试尽），设备横屏行为未验，这 3 行留 `未接`，卡点见证据包第 4 节，需验收段换设备或提供旋转方式；② 竖屏「切列表模式改列表列数」屏幕现象未单独上机，登记「未验」；③ 菜单点击有延迟，一次点击后 dump 常显示旧值（如数量 4→6 首次 dump 仍是 4），须「点完成提交 → 重开面板 → dump」读回真实值，原始输出不删除；④ 本地返回入口是文字按钮「‹ 返回文件夹」，上游 `PredictiveBackHandler`（`BookshelfScreen.kt:512`）手势返回本轮未接；⑤ C 块 `:146` 与 F 块 `:198` 仍留 `未接`（前者不适用判定未变，后者 51 字段全集本地仍差 12 个属 N2/N4 不接组，见证据包第 4 节）。实现段不自行宣布功能正确。
+
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**

@@ -1320,6 +1320,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：`entry/src/main/ets/pages/BookshelfPage.ets:585-587` 只有一个开关，写值只有 0/1；`entry/src/main/ets/model/BookshelfLayout.ets:43-46` 选项数组两项；无文件夹根视图、无 `bookshelfFolderLayoutMode*` / `bookshelfFolderLayoutGrid*` / `bookshelfFolderLayoutList*` / `bookshelfGroupListStyle` / `bookshelfGroupCoverCount` 字段。
 - **补法**：`BookshelfLayout.ets` 先补 8 个字段，并在 `entry/src/main/ets/data/BookshelfLayoutRepository.ets` 的 `load`（`:30-66`）/ `save`（`:69-93`）/ `mergeFromAndroidValues`（`:101-133`）/ `toAndroidValues`（`:136-152`）四处同步键名（键名照 `entry/src/main/ets/data/BackupRepository.ets:360-375` 的 41 键数组）；面板把 `LayoutSwitchRow` 换成三档 `LayoutMenuRow`；渲染层在 `BookshelfPage.ets:719-733`（页签区）与 `:734-799`（卡片区）之间插入文件夹根视图分支。
 - **验收**：面板选「文件夹」后，书架根层显示分组卡片（每张卡显示组内前 N 个封面），点进去是该组的书；返回回到根层；横竖屏各一套列数。
+- **已实现（r331）**：A 块 `:40`、`:44`、`:45`、`:46`、`:48`、`:49`，E 块 `:179` 共 7 行已改 `已接`。`BookshelfLayout.ets:95-99` 补第三档「文件夹」并新增 `:114-118` / `:120-124` 两组选项；`BookshelfPage.ets:796-798` 分组样式开关改三档下拉、`:803-834` 展开文件夹六项与列表样式/横排封面数面板、`:1008-1018` 文件夹导航条、`:1033-1053` 根层分组卡片网格、`:266-289` 进组/返回、`:569-601` 按方向取六值。新建 `components/BookGroupCard.ets`。截图 `b5-folder-root.png`（根层）/ `b5-folder-inside.png`（组内）/ `b5-back.json`（返回）/ `b5-panel-expanded.png`（面板）。**横屏三行 C `:142`/`:143`/`:144` 与 C1 同型，代码已落地但本机模拟器无旋转入口、设备横屏行为未验，留 `未接`，卡点见证据包第 4 节。**
 
 **KI-SL-A2 网格样式与紧凑模式** —— 覆盖 A 块 `:51`、`:59`，B 块 `:98`、`:122`（共 4 行）
 
@@ -1327,6 +1328,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：无 `bookshelfGridLayout`、无 `bookshelfLayoutCompact`；网格卡片恒为「封面 + 封面下方的书名」（`BookshelfPage.ets:738-755`），书名位置写死。
 - **补法**：两字段进 `BookshelfLayout.ets` + 仓储四处；渲染层在 `BookshelfPage.ets:749-754` 外面加 `gridStyle` 分支（1 → 书名移进 `BookCover` 上叠层，2 → 不渲染 `Text`）；`compact_details` 打开时补渲染作者行。
 - **验收**：选「仅封面」后网格卡片不再显示书名；选「紧凑」后书名变封面内白字；开「精简详情」后卡片只留封面与书名。
+- **已实现（r331）**：A 块 `:51`、`:59` 与 B 块 `:98`、`:122` 已改 `已接`。字段与面板条目在 `BookshelfPage.ets:692-694`（网格样式）/`:714-715`（精简详情）；渲染在 `:859-899`。三张截图 `a2-compact.png` / `a2-coveronly.png` / `b2-default.png`，重启后值保持见 `b2-restart.json`。验收方式已写进总账对应行。
 
 **KI-SL-A3 分组列表样式与横排封面数** —— 覆盖 B 块 `:109`、`:110`（共 2 行）
 
@@ -1334,6 +1336,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：无这两个字段；分组从不以卡片形式出现在书架网格里。
 - **补法**：随 KI-SL-A1 一起补字段与仓储；`BookGroupItemHorizontalCovers` 在本地需要新建分组卡片组件，横排封面数取 `bookshelfGroupCoverCount`。
 - **验收**：选「横排封面数量」并把数量改为 6 后，分组卡片一行 6 个封面，不足 6 本时右侧留空。
+- **已实现（r331）**：B 块 `:109`、`:110` 已改 `已接`。新建 `components/BookGroupCard.ets`：`previewBooks()`（`:29-32`）按 `coverCount` 取前 N 本、`emptySlots()`（`:35-40`）补不足空位、`listStyle===2`（`:51-72`）走横排封面分支、`===1` 紧凑、`===0` 普通；点击整卡 `onOpen` 进组。数量 4→6 后样本每组仅 1 本 → 1 封面 + 5 空位右侧留空，见 `b5-folder-covercount6.png`，重开读回 6 见 `b5-reopen.json`。
 
 **KI-SL-A4 卡片背景色（日 / 夜）** —— 覆盖 A 块 `:57`、`:58`，B 块 `:105`（共 3 行）
 
@@ -1341,6 +1344,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：卡片底色取自主题，无这两个字段。
 - **补法**：字段 + 仓储四处；卡片外层容器按 `isNight` 取对应色，未设（0）时回落主题色。
 - **验收**：日间色改为米色后亮色模式卡片底色变米色、暗色模式仍取夜间色；两色都设为 0 时与现在一致。
+- **已实现（r331）**：A 块 `:57`、`:58` 与 B 块 `:105` 已改 `已接`。`ColorPickerRow` 在 `BookshelfPage.ets:630-642`（复用 `CustomThemeColors.ets:100-105` 的 `normalizeCustomColor`），取色在 `:528-532` `cardBackgroundColor()`。日/夜两色 hex 输入重启后值保持见 `b2-restart.json`，生效截图 `b2-colors-applied.png`。
 
 **KI-SL-A5 列表封面宽度** —— 覆盖 A 块 `:60`，B 块 `:100`（共 2 行）
 
@@ -1348,6 +1352,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：面板有条目（`entry/src/main/ets/pages/BookshelfPage.ets:629-631`）、仓储读写（`entry/src/main/ets/data/BookshelfLayoutRepository.ets:58-59` / `:86` / `:130` / `:150`）、备份带出（`entry/src/main/ets/data/BackupRepository.ets:606` / `:1331`），但**没有任何渲染代码读它**：`:745` 传给 `BookCover` 的 `maxWidth` 来自 `bookshelfCoverWidthLimit()`，该函数只用 `bookshelfGridCoverWidth`（`:462`）。
 - **补法**：**与列表模式一起做**（见全局前置 1）。本地当前只有网格，即使把该字段接到 `:745` 也不会改变外观——上游网格分支本来就不读它。
 - **验收**：切到列表模式后调该项，列表封面宽度随之变化；网格模式下调该项外观不变（与上游一致）。
+- **已实现（r331）**：A 块 `:60` 与 B 块 `:100` 已改 `已接`。列表模式卡片（`BookshelfPage.ets:926-965`）封面 `displayWidth` 取 `bookshelfListCoverWidth`（`:936-937`），面板步进器 `:788-791`；列表 84→114 的封面变宽见 `b4-list-default.png` / `b4-list-width-after.png`，网格下调该项外观不变见 `b4-grid-width-unchanged.png`。
 
 **KI-SL-A6 列表详情（简介 / 最新章节）** —— 覆盖 A 块 `:64`、`:65`，B 块 `:112`、`:120`（共 4 行）
 
@@ -1355,6 +1360,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：两字段都没有；卡片唯一副信息是封面上的章节数角标（`entry/src/main/ets/components/BookCover.ets:193-200`），不是章节名。
 - **补法**：随列表模式一起做，`BookItem.kt:738-760` 的详情区在本地按 `Column` + 两行 `Text` 还原；章节名取书籍模型里的最新章节名。
 - **验收**：开「显示最新章节」后列表卡片出现章节名一行；开「显示简介」后出现简介段落。
+- **已实现（r331）**：A 块 `:64`、`:65` 与 B 块 `:112`、`:120` 已改 `已接`。面板两开关 `:793-798`，列表卡片简介 `Text(book.description ?? )`（`:951-956`）与最新章节 `Text(book.lastChapter)`（`:958-963`），`bookCardKey`（`:136-137`）纳入两字段。关「显示最新章节」后章节名行消失见 `b4-list-no-details.png`；**样本书 `titleonly-test` 的 `description` 为空，显示简介的可见效果在本机样本上得不到视觉证据，卡点见证据包第 4 节**。
 
 **KI-SL-A7 搜索按钮点击 / 长按分流** —— 覆盖 A 块 `:80`，D 块 `:166`（共 2 行）
 
@@ -1362,6 +1368,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：无该字段；搜索按钮单击即进搜索，无长按分流（`BookshelfPage.ets` 里未查到搜索分流代码，`:756-765` 是卡片手势）。
 - **补法**：字段 + 仓储；搜索按钮加长按手势，按字段决定点击与长按各自的动作。
 - **验收**：开启后单击搜索按钮直接进搜索页、长按先进筛选；关闭后两者互换。
+- **已实现（r331）**：A 块 `:80` 与 D 块 `:166` 已改 `已接`。`BookshelfPage.ets:800-816` 的 `.onClick` 与 `.priorityGesture(LongPressGesture)` 两分支按 `bookshelfSearchActionDirectToSearch` 对调，字段开关在 `:736`。
 
 **KI-SL-A8 快速滚动条** —— 覆盖 A 块 `:81`，E 块 `:181`（共 2 行）
 
@@ -1369,6 +1376,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：无该字段；`entry/src/main/ets/pages/BookshelfPage.ets:772` `scrollBar(BarState.Off)` 写死。
 - **补法**：字段 + 仓储；`Grid` 改 `scrollBar(BarState.On)` 只是最小形态，上游的字母索引需要另做叠层（ArkUI 无现成控件）。
 - **验收**：开启后书架右侧出现可拖动滚动条，拖动时显示当前分组 / 索引。
+- **已实现（r331，最小形态）**：A 块 `:81` 与 E 块 `:181` 已改 `已接`。`BookshelfPage.ets:915` 用系统 `scrollBar(BarState.On/Off)`；上游 `FastScrollLazyVerticalGrid` 的字母索引属增强，本轮未做，已在总账差异说明列写明。字段开关在 `:739`，重启后值保持见 `b2-restart.json`。
 
 **KI-SL-A9 记住上次所在分组** —— 覆盖 E 块 `:186`（共 1 行）
 
@@ -1376,6 +1384,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：无该字段，进书架恒落「全部」（`BookshelfPage.ets:131-134` `activeFilter()` 只在选中组被隐藏时回落）。
 - **补法**：字段 + 仓储；`activeFilter` 初始化时读该值，页签切换时写回。
 - **验收**：切到某分组后退出再进书架，仍停在该分组；该分组被删或隐藏时回落「全部」。
+- **已实现（r331）**：E 块 `:186` 已改 `已接`。`BookshelfPage.ets:59` `@Prop @Watch`、`:126-128` `aboutToAppear`、`:132-141` `onLayoutChanged`、`:143-148` `selectGroup` 写回；落盘键 `bookshelfSelectedGroupId`。页签与分组菜单点击在 `:293`/`:844` 改走 `selectGroup`。
 
 **KI-SL-A10 空态里的「全局搜索」按钮** —— 覆盖 E 块 `:189`（共 1 行）
 
@@ -1383,6 +1392,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：`entry/src/main/ets/pages/BookshelfPage.ets:795` 只把文案换成「没有匹配的书籍」，无按钮、无跳转。
 - **补法**：`BookshelfPage.ets:788-799` 的空态分支加一个按钮，走现有的全局搜索路由。
 - **验收**：搜索无结果时显示按钮，点它跳到全局搜索页。
+- **已实现（r331）**：E 块 `:189` 已改 `已接`。`BookshelfPage.ets:942-946` 在无匹配空态加「全局搜索」按钮，`.onClick` 走 `Index.ets:6714` 传入的 `onSearch`。
 
 **KI-SL-A11 字段全集与备份归类** —— 覆盖 F 块 `:198`、`:206`（共 2 行）
 
@@ -1390,6 +1400,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：`entry/src/main/ets/model/BookshelfLayout.ets:7-34` 只有 13 字段（本地 13 个名字在上游 51 名单里全部存在，无本地独有字段；上游另有 38 个名字本地未声明）；本地把这两个键收进了 `bookshelfLayout` 数组（`entry/src/main/ets/data/BackupRepository.ets:360-361`），且写出时包在 `if (!ignoredCategories.includes('bookshelfLayout'))` 块内（`:592-594`），取消勾选时一并不写出。
 - **补法**：字段按 KI-SL-A1~A10 分批补；两个归类错位的键从 `bookshelfLayout` 数组移出，改为无条件写出。
 - **验收**：备份勾选里取消「书架布局」后，`config.xml` 仍含 `bookGroupStyle` 与 `hideEmptyGroups` 两项。
+- **已实现（r331，部分）**：F 块 `:206` 已改 `已接`——`BackupRepository.ets:360-361` 把两键移出 `bookshelfLayout` 类别数组、`:592-596` 在类别开关块之前无条件写出。F 块 `:198` **仍留 `未接`**：本地 `BookshelfLayout.ets:7-86` 现 39 字段（原 13 + 批次 1 补 26），上游 51 字段里剩 12 个名字未声明（`showUnread`/`showUnreadNew`/`showTip`/`showBookCount`/`showLastUpdateTime`/`showBookIntro`/`bookshelfShowTag`/`bookshelfShowCustomTags`/`bookshelfShowSourceTags`/`bookshelfShowWordCount`/`showWaitUpCount`/`shouldShowExpandButton`），全部落在 KI-SL N2/N4「不接」组，任务书硬约束「9 组 41 行不接一行不碰」「不为做角标新建 Book 字段」禁止补这 12 个；按任务书「做不完留未接」处置，卡点与需要谁来判见证据包第 4 节。
 
 **KI-SL-N1 列表专属版式与详情微调（不接）** —— 覆盖 A 块 `:47`、`:56`、`:62`、`:63`、`:66`、`:67`，B 块 `:106`、`:107`、`:111`、`:113`、`:114`（共 11 行）
 
@@ -1447,6 +1458,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：字段只有竖屏三键（`entry/src/main/ets/model/BookshelfLayout.ets:17`、`:19`、`:21`）；无横竖屏判断（全局前置 2）。
 - **补法**：先建窗口尺寸读取入口（HOS 用 `window.getLastWindow` 取窗口矩形或 `display.getDefaultDisplaySync()`，**不是** Android 的 `LocalConfiguration`），再补 3 个 Landscape 字段与仓储，`BookshelfPage.ets:419-427` 的 `bookshelfColumnsTemplate()` 按方向取不同值。
 - **验收**：同一台设备横屏后网格列数变为横屏设置值，转回竖屏恢复竖屏值。
+- 实现记录（r331）：`BookshelfPage.ets` 已落地 `isLandscape`（`:97`）、窗口矩形读取 （`:157-170`）、`activeLayoutMode`/`activeGridColumns`/`activeListColumns`（`:515-530`） 与三处按方向取值（`:533-549`、`:971`），构建通过；本机 DevEco 模拟器无可用旋转入口，横屏屏幕行为未验，C 块 `:136`~`:138` 按任务书 `:200` 留 `未接`，卡点见证据包第 4 节。
 
 **KI-SL-C2 文件夹六项** —— 覆盖 C 块 `:139`、`:140`、`:141`、`:142`、`:143`、`:144`（共 6 行）
 
@@ -1454,6 +1466,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：6 个字段全无，且无文件夹视图（KI-SL-A1）。
 - **补法**：随 KI-SL-A1 一起做；取值分支照 `:985` 的两级判断。
 - **验收**：开文件夹样式后，竖屏改网格列数为 4、横屏为 6，两种方向各生效。
+- **已实现（r331，部分）**：C 块 `:139`、`:140`、`:141`（竖屏三项）已改 `已接`；`:142`、`:143`、`:144`（横屏三项）留 `未接`。`BookshelfPage.ets:569-585` 新增 `activeFolderLayoutMode` / `activeFolderGridColumns` / `activeFolderListColumns` 按 `isLandscape` 取值，`:591-601` `folderColumnsTemplate()` 照上游 `:985` 的两级判断（mode===0 取列表列数否则网格列数）并 `coerceAtLeast(1)`，`:1050` 挂到 `.columnsTemplate`。竖屏网格列数 3→4 生效见 `b5-folder-col4.png`、重开读回 4 见 `b5-col4v.json`。**横屏三项留 `未接` 的原因与 KI-SL-C1 一致：本机 DevEco 模拟器无可用旋转入口，设备横屏行为未验（代码已落地），卡点见证据包第 4 节；竖屏「切列表模式改列表列数」屏幕现象未单独上机，登记「未验」。**
 
 **KI-SL-C3 首屏封面预加载列数** —— 覆盖 C 块 `:145`（共 1 行）
 
@@ -1461,6 +1474,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：本地无预加载器，封面图由各卡片自行加载（`entry/src/main/ets/components/BookCover.ets`）。
 - **补法**：随 KI-SL-C1 一起做（要先有横竖屏取值）；预加载数量按列数 × 可见行数算，超上限截断。
 - **验收**：首屏滚动时封面不出现空窗，且预加载数量不超过列数 × 可见行数。
+- 实现记录（r331）：本地无封面预加载器（`grep -rni preload entry/src/main/ets` 零命中），按任务书 `:166-168` 处置为「记录为无预加载器、按 0 处理」，落点是 `BookshelfPage.ets:20-26` 的 `BOOKSHELF_FIRST_SCREEN_PRELOAD_COLUMNS = 0` 常量与中文注释；不新建预加载系统，C 块 `:145` 留 `未接`，卡点见证据包第 4 节。
 
 ### 不接行归属核对
 

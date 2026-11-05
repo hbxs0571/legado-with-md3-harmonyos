@@ -57,6 +57,58 @@ export class BookshelfLayoutRepository {
         store, 'bookshelfGridCoverWidth', settings.bookshelfGridCoverWidth);
       settings.bookshelfListCoverWidth = await BookshelfLayoutRepository.readInt(
         store, 'bookshelfListCoverWidth', settings.bookshelfListCoverWidth);
+      settings.bookshelfGridLayout = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfGridLayout', settings.bookshelfGridLayout);
+      settings.bookshelfLayoutCompact = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfLayoutCompact', settings.bookshelfLayoutCompact);
+      settings.bookshelfCardColor = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfCardColor', settings.bookshelfCardColor);
+      settings.bookshelfCardColorDark = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfCardColorDark', settings.bookshelfCardColorDark);
+      settings.bookshelfShowDivider = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfShowDivider', settings.bookshelfShowDivider);
+      settings.bookshelfListCoverCenter = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfListCoverCenter', settings.bookshelfListCoverCenter);
+      settings.bookshelfListIntroBelowContent = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfListIntroBelowContent', settings.bookshelfListIntroBelowContent);
+      settings.bookshelfShowIntro = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfShowIntro', settings.bookshelfShowIntro);
+      settings.bookshelfShowLatestChapter = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfShowLatestChapter', settings.bookshelfShowLatestChapter);
+      settings.bookshelfIntroMaxLines = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfIntroMaxLines', settings.bookshelfIntroMaxLines);
+      settings.bookshelfSearchActionDirectToSearch = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfSearchActionDirectToSearch', settings.bookshelfSearchActionDirectToSearch);
+      settings.showBookshelfFastScroller = await BookshelfLayoutRepository.readBoolean(
+        store, 'showBookshelfFastScroller', settings.showBookshelfFastScroller);
+      settings.autoRefreshBook = await BookshelfLayoutRepository.readBoolean(
+        store, 'auto_refresh', settings.autoRefreshBook);
+      settings.saveTabPosition = await BookshelfLayoutRepository.readString(
+        store, 'bookshelfSelectedGroupId', settings.saveTabPosition);
+      settings.bookshelfLayoutModeLandscape = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelf_layout_landscape', settings.bookshelfLayoutModeLandscape);
+      settings.bookshelfLayoutGridLandscape = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfLayoutGridLandscape', settings.bookshelfLayoutGridLandscape);
+      settings.bookshelfLayoutListLandscape = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfLayoutListLandscape', settings.bookshelfLayoutListLandscape);
+      settings.bookshelfFolderLayoutModePortrait = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfFolderLayoutModePortrait', settings.bookshelfFolderLayoutModePortrait);
+      settings.bookshelfFolderLayoutModeLandscape = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfFolderLayoutModeLandscape', settings.bookshelfFolderLayoutModeLandscape);
+      settings.bookshelfFolderLayoutGridPortrait = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfFolderLayoutGridPortrait', settings.bookshelfFolderLayoutGridPortrait);
+      settings.bookshelfFolderLayoutGridLandscape = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfFolderLayoutGridLandscape', settings.bookshelfFolderLayoutGridLandscape);
+      settings.bookshelfFolderLayoutListPortrait = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfFolderLayoutListPortrait', settings.bookshelfFolderLayoutListPortrait);
+      settings.bookshelfFolderLayoutListLandscape = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfFolderLayoutListLandscape', settings.bookshelfFolderLayoutListLandscape);
+      settings.bookshelfGroupListStyle = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfGroupListStyle', settings.bookshelfGroupListStyle);
+      settings.bookshelfGroupCoverCount = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfGroupCoverCount', settings.bookshelfGroupCoverCount);
+      settings.bookshelfRefreshingLimit = await BookshelfLayoutRepository.readInt(
+        store, 'bookshelfRefreshingLimit', settings.bookshelfRefreshingLimit);
     } catch (_) {
       // 读失败时保持默认值：书架能用比抛错中断启动更重要。
     }
@@ -84,6 +136,32 @@ export class BookshelfLayoutRepository {
       await store.put('bookshelfTitleSmallFont', snapshot.bookshelfTitleSmallFont);
       await store.put('bookshelfGridCoverWidth', snapshot.bookshelfGridCoverWidth);
       await store.put('bookshelfListCoverWidth', snapshot.bookshelfListCoverWidth);
+      await store.put('bookshelfGridLayout', snapshot.bookshelfGridLayout);
+      await store.put('bookshelfLayoutCompact', snapshot.bookshelfLayoutCompact);
+      await store.put('bookshelfCardColor', snapshot.bookshelfCardColor);
+      await store.put('bookshelfCardColorDark', snapshot.bookshelfCardColorDark);
+      await store.put('bookshelfShowDivider', snapshot.bookshelfShowDivider);
+      await store.put('bookshelfListCoverCenter', snapshot.bookshelfListCoverCenter);
+      await store.put('bookshelfListIntroBelowContent', snapshot.bookshelfListIntroBelowContent);
+      await store.put('bookshelfShowIntro', snapshot.bookshelfShowIntro);
+      await store.put('bookshelfShowLatestChapter', snapshot.bookshelfShowLatestChapter);
+      await store.put('bookshelfIntroMaxLines', snapshot.bookshelfIntroMaxLines);
+      await store.put('bookshelfSearchActionDirectToSearch', snapshot.bookshelfSearchActionDirectToSearch);
+      await store.put('showBookshelfFastScroller', snapshot.showBookshelfFastScroller);
+      await store.put('auto_refresh', snapshot.autoRefreshBook);
+      await store.put('bookshelfSelectedGroupId', snapshot.saveTabPosition);
+      await store.put('bookshelf_layout_landscape', snapshot.bookshelfLayoutModeLandscape);
+      await store.put('bookshelfLayoutGridLandscape', snapshot.bookshelfLayoutGridLandscape);
+      await store.put('bookshelfLayoutListLandscape', snapshot.bookshelfLayoutListLandscape);
+      await store.put('bookshelfFolderLayoutModePortrait', snapshot.bookshelfFolderLayoutModePortrait);
+      await store.put('bookshelfFolderLayoutModeLandscape', snapshot.bookshelfFolderLayoutModeLandscape);
+      await store.put('bookshelfFolderLayoutGridPortrait', snapshot.bookshelfFolderLayoutGridPortrait);
+      await store.put('bookshelfFolderLayoutGridLandscape', snapshot.bookshelfFolderLayoutGridLandscape);
+      await store.put('bookshelfFolderLayoutListPortrait', snapshot.bookshelfFolderLayoutListPortrait);
+      await store.put('bookshelfFolderLayoutListLandscape', snapshot.bookshelfFolderLayoutListLandscape);
+      await store.put('bookshelfGroupListStyle', snapshot.bookshelfGroupListStyle);
+      await store.put('bookshelfGroupCoverCount', snapshot.bookshelfGroupCoverCount);
+      await store.put('bookshelfRefreshingLimit', snapshot.bookshelfRefreshingLimit);
       await store.flush();
       BookshelfLayoutRepository.cached = copyBookshelfLayout(snapshot);
       BookshelfLayoutRepository.loaded = true;
@@ -129,6 +207,58 @@ export class BookshelfLayoutRepository {
     if (gridCoverWidth !== undefined) { merged.bookshelfGridCoverWidth = gridCoverWidth; }
     const listCoverWidth = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfListCoverWidth'));
     if (listCoverWidth !== undefined) { merged.bookshelfListCoverWidth = listCoverWidth; }
+    const bookshelfGridLayout = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfGridLayout'));
+    if (bookshelfGridLayout !== undefined) { merged.bookshelfGridLayout = bookshelfGridLayout; }
+    const bookshelfLayoutCompact = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfLayoutCompact'));
+    if (bookshelfLayoutCompact !== undefined) { merged.bookshelfLayoutCompact = bookshelfLayoutCompact; }
+    const bookshelfCardColor = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfCardColor'));
+    if (bookshelfCardColor !== undefined) { merged.bookshelfCardColor = bookshelfCardColor; }
+    const bookshelfCardColorDark = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfCardColorDark'));
+    if (bookshelfCardColorDark !== undefined) { merged.bookshelfCardColorDark = bookshelfCardColorDark; }
+    const bookshelfShowDivider = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfShowDivider'));
+    if (bookshelfShowDivider !== undefined) { merged.bookshelfShowDivider = bookshelfShowDivider; }
+    const bookshelfListCoverCenter = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfListCoverCenter'));
+    if (bookshelfListCoverCenter !== undefined) { merged.bookshelfListCoverCenter = bookshelfListCoverCenter; }
+    const bookshelfListIntroBelowContent = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfListIntroBelowContent'));
+    if (bookshelfListIntroBelowContent !== undefined) { merged.bookshelfListIntroBelowContent = bookshelfListIntroBelowContent; }
+    const bookshelfShowIntro = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfShowIntro'));
+    if (bookshelfShowIntro !== undefined) { merged.bookshelfShowIntro = bookshelfShowIntro; }
+    const bookshelfShowLatestChapter = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfShowLatestChapter'));
+    if (bookshelfShowLatestChapter !== undefined) { merged.bookshelfShowLatestChapter = bookshelfShowLatestChapter; }
+    const bookshelfIntroMaxLines = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfIntroMaxLines'));
+    if (bookshelfIntroMaxLines !== undefined) { merged.bookshelfIntroMaxLines = bookshelfIntroMaxLines; }
+    const bookshelfSearchActionDirectToSearch = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfSearchActionDirectToSearch'));
+    if (bookshelfSearchActionDirectToSearch !== undefined) { merged.bookshelfSearchActionDirectToSearch = bookshelfSearchActionDirectToSearch; }
+    const showBookshelfFastScroller = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showBookshelfFastScroller'));
+    if (showBookshelfFastScroller !== undefined) { merged.showBookshelfFastScroller = showBookshelfFastScroller; }
+    const autoRefreshBook = BookshelfLayoutRepository.parseAndroidBoolean(values.get('auto_refresh'));
+    if (autoRefreshBook !== undefined) { merged.autoRefreshBook = autoRefreshBook; }
+    const saveTabPosition = values.get('bookshelfSelectedGroupId');
+    if (saveTabPosition !== undefined) { merged.saveTabPosition = saveTabPosition; }
+    const bookshelfLayoutModeLandscape = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelf_layout_landscape'));
+    if (bookshelfLayoutModeLandscape !== undefined) { merged.bookshelfLayoutModeLandscape = bookshelfLayoutModeLandscape; }
+    const bookshelfLayoutGridLandscape = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfLayoutGridLandscape'));
+    if (bookshelfLayoutGridLandscape !== undefined) { merged.bookshelfLayoutGridLandscape = bookshelfLayoutGridLandscape; }
+    const bookshelfLayoutListLandscape = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfLayoutListLandscape'));
+    if (bookshelfLayoutListLandscape !== undefined) { merged.bookshelfLayoutListLandscape = bookshelfLayoutListLandscape; }
+    const bookshelfFolderLayoutModePortrait = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfFolderLayoutModePortrait'));
+    if (bookshelfFolderLayoutModePortrait !== undefined) { merged.bookshelfFolderLayoutModePortrait = bookshelfFolderLayoutModePortrait; }
+    const bookshelfFolderLayoutModeLandscape = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfFolderLayoutModeLandscape'));
+    if (bookshelfFolderLayoutModeLandscape !== undefined) { merged.bookshelfFolderLayoutModeLandscape = bookshelfFolderLayoutModeLandscape; }
+    const bookshelfFolderLayoutGridPortrait = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfFolderLayoutGridPortrait'));
+    if (bookshelfFolderLayoutGridPortrait !== undefined) { merged.bookshelfFolderLayoutGridPortrait = bookshelfFolderLayoutGridPortrait; }
+    const bookshelfFolderLayoutGridLandscape = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfFolderLayoutGridLandscape'));
+    if (bookshelfFolderLayoutGridLandscape !== undefined) { merged.bookshelfFolderLayoutGridLandscape = bookshelfFolderLayoutGridLandscape; }
+    const bookshelfFolderLayoutListPortrait = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfFolderLayoutListPortrait'));
+    if (bookshelfFolderLayoutListPortrait !== undefined) { merged.bookshelfFolderLayoutListPortrait = bookshelfFolderLayoutListPortrait; }
+    const bookshelfFolderLayoutListLandscape = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfFolderLayoutListLandscape'));
+    if (bookshelfFolderLayoutListLandscape !== undefined) { merged.bookshelfFolderLayoutListLandscape = bookshelfFolderLayoutListLandscape; }
+    const bookshelfGroupListStyle = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfGroupListStyle'));
+    if (bookshelfGroupListStyle !== undefined) { merged.bookshelfGroupListStyle = bookshelfGroupListStyle; }
+    const bookshelfGroupCoverCount = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfGroupCoverCount'));
+    if (bookshelfGroupCoverCount !== undefined) { merged.bookshelfGroupCoverCount = bookshelfGroupCoverCount; }
+    const bookshelfRefreshingLimit = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfRefreshingLimit'));
+    if (bookshelfRefreshingLimit !== undefined) { merged.bookshelfRefreshingLimit = bookshelfRefreshingLimit; }
     return merged;
   }
 
@@ -148,6 +278,32 @@ export class BookshelfLayoutRepository {
     values.set('bookshelfTitleSmallFont', `${settings.bookshelfTitleSmallFont}`);
     values.set('bookshelfGridCoverWidth', `${settings.bookshelfGridCoverWidth}`);
     values.set('bookshelfListCoverWidth', `${settings.bookshelfListCoverWidth}`);
+    values.set('bookshelfGridLayout', `${settings.bookshelfGridLayout}`);
+    values.set('bookshelfLayoutCompact', `${settings.bookshelfLayoutCompact}`);
+    values.set('bookshelfCardColor', `${settings.bookshelfCardColor}`);
+    values.set('bookshelfCardColorDark', `${settings.bookshelfCardColorDark}`);
+    values.set('bookshelfShowDivider', `${settings.bookshelfShowDivider}`);
+    values.set('bookshelfListCoverCenter', `${settings.bookshelfListCoverCenter}`);
+    values.set('bookshelfListIntroBelowContent', `${settings.bookshelfListIntroBelowContent}`);
+    values.set('bookshelfShowIntro', `${settings.bookshelfShowIntro}`);
+    values.set('bookshelfShowLatestChapter', `${settings.bookshelfShowLatestChapter}`);
+    values.set('bookshelfIntroMaxLines', `${settings.bookshelfIntroMaxLines}`);
+    values.set('bookshelfSearchActionDirectToSearch', `${settings.bookshelfSearchActionDirectToSearch}`);
+    values.set('showBookshelfFastScroller', `${settings.showBookshelfFastScroller}`);
+    values.set('auto_refresh', `${settings.autoRefreshBook}`);
+    values.set('bookshelfSelectedGroupId', `${settings.saveTabPosition}`);
+    values.set('bookshelf_layout_landscape', `${settings.bookshelfLayoutModeLandscape}`);
+    values.set('bookshelfLayoutGridLandscape', `${settings.bookshelfLayoutGridLandscape}`);
+    values.set('bookshelfLayoutListLandscape', `${settings.bookshelfLayoutListLandscape}`);
+    values.set('bookshelfFolderLayoutModePortrait', `${settings.bookshelfFolderLayoutModePortrait}`);
+    values.set('bookshelfFolderLayoutModeLandscape', `${settings.bookshelfFolderLayoutModeLandscape}`);
+    values.set('bookshelfFolderLayoutGridPortrait', `${settings.bookshelfFolderLayoutGridPortrait}`);
+    values.set('bookshelfFolderLayoutGridLandscape', `${settings.bookshelfFolderLayoutGridLandscape}`);
+    values.set('bookshelfFolderLayoutListPortrait', `${settings.bookshelfFolderLayoutListPortrait}`);
+    values.set('bookshelfFolderLayoutListLandscape', `${settings.bookshelfFolderLayoutListLandscape}`);
+    values.set('bookshelfGroupListStyle', `${settings.bookshelfGroupListStyle}`);
+    values.set('bookshelfGroupCoverCount', `${settings.bookshelfGroupCoverCount}`);
+    values.set('bookshelfRefreshingLimit', `${settings.bookshelfRefreshingLimit}`);
     return values;
   }
 
@@ -163,6 +319,13 @@ export class BookshelfLayoutRepository {
   ): Promise<boolean> {
     const value = await store.get(key, fallback);
     return typeof value === 'boolean' ? value : fallback;
+  }
+
+  private static async readString(
+    store: preferences.Preferences, key: string, fallback: string
+  ): Promise<string> {
+    const value = await store.get(key, fallback);
+    return typeof value === 'string' ? value : fallback;
   }
 
   private static parseAndroidInt(raw: string | undefined): number | undefined {
