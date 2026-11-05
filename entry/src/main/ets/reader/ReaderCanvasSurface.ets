@@ -620,6 +620,61 @@ export class ReaderCanvasMarking {
   decorationArgb: number = 0;
 }
 
+/**
+ * 页眉页脚里单个槽位的内容（与上游 `ReaderPageTip` 同构）。
+ *
+ * 走画布绘制而不是 ArkUI 组件之后，槽位内容只能是「字符串 + 图形类型」这种纯数据：
+ * 取数仍由 ReaderPage 负责（`getReaderInfoValue` / `isReaderInfoGraphic`），
+ * 本类只描述怎么画。
+ */
+export class ReaderCanvasDecorationTip {
+  /** 文字内容。图形型里 `BATTERY_INNER` / `BATTERY_CLASSIC` / `ARROW` 会把它画在图标旁边。 */
+  text: string = '';
+  /** 0 = 左、1 = 中、2 = 右（上游 `ReaderTipAlignment.START/CENTER/END`）。 */
+  alignment: number = 0;
+  /**
+   * 0 = 纯文字；其余是本地图形型 tip 的编号（3/8/13/14/15/16，见 isReaderInfoGraphic）。
+   * 直接沿用本地编号而不是另立一套枚举：绘制端照 ReaderInfoBattery 的四形态画，
+   * 少一层映射就少一处「同一个 tip 在 ArkUI 与画布里长得不一样」的偏差。
+   */
+  visual: number = 0;
+  batteryPercent: number = 0;
+}
+
+/**
+ * 一整行页眉或页脚（与上游 `ReaderTipRow` 同构）。
+ *
+ * 纵向构成必须与分页器预留的那段高度逐项相等，否则分页按 A 排、画布按 B 画，
+ * 末行会被页脚压住或留出一条空带：内容行 `lineHeightPx` + 分隔线 1px（可选）
+ * + `paddingTopPx` + `paddingBottomPx`。
+ */
+export class ReaderCanvasDecorationRow {
+  visible: boolean = false;
+  tips: ReaderCanvasDecorationTip[] = [];
+  colorArgb: number = 0xFF000000;
+  fontSizePx: number = 0;
+  fontFamilies: string[] = [];
+  /** 内容行高（px）。ArkUI 版是固定的 18vp，搬进画布后按同一值换算，保持视觉不变。 */
+  lineHeightPx: number = 0;
+  paddingLeftPx: number = 0;
+  paddingRightPx: number = 0;
+  paddingTopPx: number = 0;
+  paddingBottomPx: number = 0;
+  /** 分隔线颜色；`< 0` 表示不画（上游 `dividerColorArgb?.let { ... }`）。 */
+  dividerColorArgb: number = -1;
+  /**
+   * 分隔线厚度（px）。
+   * 必须由调用方给出而不是画布里随手取 vpScale：分页器预留的是「1vp」，
+   * 画布取整后如果与它不等，正文末行与分隔线之间会多出或少掉那一像素。
+   */
+  dividerThicknessPx: number = 0;
+  /**
+   * 整行在画布坐标系里的纵向起点（px）。
+   * 页眉贴画布顶（0），页脚贴画布底，由调用方算好——画布不知道视口外还有多少内边距。
+   */
+  originYpx: number = 0;
+}
+
 export class ReaderCanvasDrawRequest {
   window: ReaderCanvasWindow = new ReaderCanvasWindow();
   transforms: ReaderTransitionTransforms = new ReaderTransitionTransforms();
@@ -724,6 +779,17 @@ export class ReaderCanvasDrawRequest {
   curlRevealProgress: number = 1;
   /** 折页方向：true 表示上一页（从右往左翻回来），与 ReaderTransitionDirection 同义。 */
   curlPrevious: boolean = false;
+  /**
+   * 页眉装饰。第 5 批只搬页脚：页眉仍是画布之外的 ArkUI 节点（搬页眉要改
+   * `layout.originYpx`，会牵动滚动模式的 pageStep 坐标系，留到页脚稳定后单独做），
+   * 所以这一行恒为 `visible === false`，画布里不画页眉。
+   */
+  headerDecoration: ReaderCanvasDecorationRow = new ReaderCanvasDecorationRow();
+  /**
+   * 页脚装饰。`originYpx` 由调用方按正文区底边算（`layout.bodyHeightPx`），
+   * 使内容行与分隔线占掉的高度正好等于 `getReaderInfoReserve(false)` 的预留。
+   */
+  footerDecoration: ReaderCanvasDecorationRow = new ReaderCanvasDecorationRow();
 }
 
 // ---------------------------------------------------------------------------
@@ -850,6 +916,9 @@ export class ReaderCanvasRenderer {
   /** 上一帧是否处于「滚动 + 选区激活」态：只在状态切换时清空 Map，避免每帧重建。 */
   private scrollWindowSelectionActive: boolean = false;
   private paragraphCache: Map<string, ReaderCanvasParagraph> = new Map<string, ReaderCanvasParagraph>();
+  /** 页眉页脚文字单独缓存：带省略号、按槽宽排版，与正文段落的排版口径不同，不能共用一把 key。 */
+  private decorationParagraphCache: Map<string, ReaderCanvasParagraph> =
+    new Map<string, ReaderCanvasParagraph>();
   private imageCache: Map<string, image.PixelMap> = new Map<string, image.PixelMap>();
   private imageLoading: Set<string> = new Set<string>();
   /** 文字背景图（气泡图）缓存：与正文图片分开，`.9.png` 必须按原尺寸解，否则引导边被降采样吃掉。 */
@@ -990,6 +1059,8 @@ export class ReaderCanvasRenderer {
   /** 只清段落缓存（字体、字号、颜色、对齐等样式变更时调用）。 */
   clearParagraphs(): void {
     this.paragraphCache.clear();
+    // 页眉页脚文字也按字号/字体族缓存，样式一变同样要失效，否则会继续用旧字形画。
+    this.decorationParagraphCache.clear();
   }
 
   /**
@@ -1011,6 +1082,8 @@ export class ReaderCanvasRenderer {
     canvas.detachBrush();
     if (window.current === undefined) {
       // 没有当前页就不画正文，绝不回落到「整章连续滚动」那套排版
+      // 页眉页脚与正文无关，空帧也要照常画，否则底部会闪一下空白。
+      this.drawPageDecoration(canvas, request);
       return;
     }
     // 仿真折页走独立合成路径（上游 SimulationPageStack）：
@@ -1018,11 +1091,13 @@ export class ReaderCanvasRenderer {
     // 覆盖整页自绘，不能用任何 slot 平移近似。
     if (request.curlActive) {
       this.drawCurl(canvas, request);
+      this.drawPageDecoration(canvas, request);
       return;
     }
     // 连续滚动：四页按 extent 首尾堆叠、整栈平移（上游 ScrollPageStack）
     if (request.scrollActive) {
       this.drawScroll(canvas, request);
+      this.drawPageDecoration(canvas, request);
       return;
     }
     // z 序严格照上游 ReaderCanvasSurface.kt:1643-1663：
@@ -1050,7 +1125,265 @@ export class ReaderCanvasRenderer {
     if (request.autoRevealPx > 0) {
       this.drawAutoPageReveal(canvas, request);
     }
+    // 装饰统一在正文之后画：折页/滚动分支各自 return，画在它们内部会丢；
+    // 固定在视口而不随翻页/滚动平移，是本批的取舍（见证据包）。
+    this.drawPageDecoration(canvas, request);
 
+  }
+
+  /**
+   * 页眉页脚装饰：正文槽画完之后统一画一次，固定在视口。
+   *
+   * 折页/滚动两条分支在 draw() 里各自 return，装饰不能画进它们内部（会被丢），
+   * 所以四个出口都在 draw() 里、正文绘制之后调本方法。装饰不随翻页/滚动平移，
+   * 是本批的取舍（上游折页/滚动下装饰也固定在视口，见证据包）。
+   */
+  private drawPageDecoration(canvas: drawing.Canvas, request: ReaderCanvasDrawRequest): void {
+    this.drawDecorationRow(canvas, request, request.headerDecoration);
+    this.drawDecorationRow(canvas, request, request.footerDecoration);
+  }
+
+  /**
+   * 画一行装饰：三个槽位按上游 drawTipRow 的 barrier 规则分配宽度，
+   * 再逐槽画文字或图形，最后在内容行下方补分隔线。
+   *
+   * 纵向构成复刻 ArkUI 版 ReaderInfoRow：paddingTop + 内容行 18vp + 分隔线（可选）
+   * + paddingBottom；整行高与 getReaderInfoReserve() 的预留逐项相等，
+   * 否则分页按 A 排、画布按 B 画，开书时会二次重排（第 3 批的抖动）。
+   */
+  private drawDecorationRow(canvas: drawing.Canvas, request: ReaderCanvasDrawRequest,
+    row: ReaderCanvasDecorationRow): void {
+    if (!row.visible) {
+      return;
+    }
+    const width = request.layout.viewportWidthPx;
+    const leftEdge = row.paddingLeftPx;
+    const rightEdge = Math.max(leftEdge, width - row.paddingRightPx);
+    const contentTop = row.originYpx + row.paddingTopPx;
+    const fullWidth = Math.max(1, rightEdge - leftEdge);
+
+    // 先按整行可用宽给每个槽排版一次，拿到自然宽（上游用 measureText 干这件事）。
+    const paragraphs: Array<ReaderCanvasParagraph | undefined> = [];
+    const naturalWidths: number[] = [];
+    for (let i = 0; i < row.tips.length; i++) {
+      const tip = row.tips[i];
+      if (tip.visual !== 0) {
+        paragraphs.push(undefined);
+        naturalWidths.push(this.decorationGraphicWidth(request, row, tip));
+      } else {
+        const built = this.getDecorationParagraph(tip.text, row, fullWidth);
+        paragraphs.push(built);
+        naturalWidths.push(built !== undefined ? built.paragraph.getLongestLine() : 0);
+      }
+    }
+
+    // 中/右槽起点挤出的左边界：上游 drawTipRow 的 barrierStart，只有 START 槽受它限制。
+    let barrierStart = rightEdge;
+    for (let i = 0; i < row.tips.length; i++) {
+      const tip = row.tips[i];
+      if (tip.alignment === 1) {
+        barrierStart = Math.min(barrierStart, width / 2 - naturalWidths[i] / 2);
+      } else if (tip.alignment === 2) {
+        barrierStart = Math.min(barrierStart, rightEdge - naturalWidths[i]);
+      }
+    }
+    barrierStart = Math.max(leftEdge, barrierStart);
+
+    for (let i = 0; i < row.tips.length; i++) {
+      const tip = row.tips[i];
+      const available = tip.alignment === 0
+        ? Math.max(0, barrierStart - leftEdge)
+        : Math.max(0, rightEdge - leftEdge);
+      let x = leftEdge;
+      if (tip.alignment === 1) {
+        x = width / 2 - naturalWidths[i] / 2;
+      } else if (tip.alignment === 2) {
+        x = rightEdge - naturalWidths[i];
+      }
+      if (tip.visual !== 0) {
+        this.drawDecorationGraphic(canvas, request, row, tip, x, contentTop, available);
+      } else {
+        let paragraph = paragraphs[i];
+        // START 槽被中/右槽挤窄时按真实可用宽重排一次，让省略号落在正确位置。
+        if (tip.alignment === 0 && naturalWidths[i] > available + 0.5) {
+          paragraph = this.getDecorationParagraph(tip.text, row, available);
+        }
+        if (paragraph !== undefined) {
+          const textTop = contentTop + Math.max(0, (row.lineHeightPx - paragraph.heightPx) / 2);
+          canvas.save();
+          paragraph.paragraph.paint(canvas, x, textTop);
+          canvas.restore();
+        }
+      }
+    }
+    this.drawDecorationDivider(canvas, request, row, contentTop + row.lineHeightPx);
+  }
+
+  /** 图形型槽位的自然宽（图标 + 可选文字 + 4vp 间隙），逐项复刻 ReaderInfoBattery。 */
+  private decorationGraphicWidth(request: ReaderCanvasDrawRequest, row: ReaderCanvasDecorationRow,
+    tip: ReaderCanvasDecorationTip): number {
+    const vp = Math.max(0.0001, request.layout.vpScale);
+    let iconWidth = 24 * vp;
+    if (tip.visual === 3 || tip.visual === 8) {
+      iconWidth = 25 * vp; // 22 外框 + 1 间隙 + 2 右极
+    } else if (tip.visual === 13) {
+      iconWidth = 26 * vp;
+    } else if (tip.visual === 14) {
+      iconWidth = 22 * vp;
+    }
+    if (tip.text.length > 0) {
+      const built = this.getDecorationParagraph(tip.text, row, request.layout.viewportWidthPx);
+      iconWidth += 4 * vp + (built !== undefined ? built.paragraph.getLongestLine() : 0);
+    }
+    return iconWidth;
+  }
+
+  /**
+   * 画图形型槽位：电池外框/实心底 + 电量填充 + 右极，8/16 再在右侧补文字。
+   * 尺寸与配色照 ReaderInfoBattery 的 ArkUI 形态，避免搬进画布后外观变化。
+   */
+  private drawDecorationGraphic(canvas: drawing.Canvas, request: ReaderCanvasDrawRequest,
+    row: ReaderCanvasDecorationRow, tip: ReaderCanvasDecorationTip,
+    left: number, contentTop: number, available: number): void {
+    const vp = Math.max(0.0001, request.layout.vpScale);
+    const tint = readerCanvasColor(row.colorArgb);
+    let boxW = 24 * vp;
+    let boxH = 9 * vp;
+    let pole = false;
+    let solid = false;
+    if (tip.visual === 3 || tip.visual === 8) {
+      boxW = 22 * vp;
+      boxH = 11 * vp;
+      pole = true;
+    } else if (tip.visual === 13) {
+      boxW = 26 * vp;
+      boxH = 12 * vp;
+    } else if (tip.visual === 14) {
+      boxW = 22 * vp;
+      boxH = 10 * vp;
+      solid = true;
+    } else {
+      solid = true; // 15/16
+    }
+    const top = contentTop + Math.max(0, (row.lineHeightPx - boxH) / 2);
+    const radius = Math.max(1, 2 * vp);
+    const frame: common2D.Rect = { left: left, top: top, right: left + boxW, bottom: top + boxH };
+    if (solid) {
+      // 14/15/16 的底是固定的半透明白，与文字色无关（复刻 ArkUI 的 #33FFFFFF）。
+      const back = new drawing.Brush();
+      const translucent: common2D.Color = { alpha: 0x33, red: 0xFF, green: 0xFF, blue: 0xFF };
+      back.setColor(translucent);
+      canvas.attachBrush(back);
+      canvas.drawRoundRect(new drawing.RoundRect(frame, radius, radius));
+      canvas.detachBrush();
+    } else {
+      const pen = new drawing.Pen();
+      pen.setColor(tint);
+      pen.setStrokeWidth(Math.max(1, vp));
+      pen.setAntiAlias(true);
+      canvas.attachPen(pen);
+      canvas.drawRoundRect(new drawing.RoundRect(frame, radius, radius));
+      canvas.detachPen();
+    }
+    // 电量填充：最小宽 4vp（描边框）/6vp（实心底），其余按百分比。
+    const minFill = solid ? 6 * vp : 4 * vp;
+    const pct = Math.max(0, Math.min(100, tip.batteryPercent));
+    const fillW = Math.max(minFill, (boxW - 2 * vp) * pct / 100);
+    const fillRect: common2D.Rect = {
+      left: left + vp, top: top + vp,
+      right: left + vp + fillW, bottom: top + boxH - vp
+    };
+    const fill = new drawing.Brush();
+    fill.setColor(tint);
+    canvas.attachBrush(fill);
+    canvas.drawRoundRect(new drawing.RoundRect(fillRect, Math.max(1, vp), Math.max(1, vp)));
+    canvas.detachBrush();
+    if (pole) {
+      const poleRect: common2D.Rect = {
+        left: left + boxW + vp, top: top + (boxH - 5 * vp) / 2,
+        right: left + boxW + 3 * vp, bottom: top + (boxH + 5 * vp) / 2
+      };
+      const poleBrush = new drawing.Brush();
+      poleBrush.setColor(tint);
+      canvas.attachBrush(poleBrush);
+      canvas.drawRoundRect(new drawing.RoundRect(poleRect, Math.max(1, vp), Math.max(1, vp)));
+      canvas.detachBrush();
+    }
+    // 8/16 保留「时间 电量%」文字，画在图标右侧（ReaderInfoSlot 的 keepsText 分支）。
+    if (tip.text.length > 0) {
+      const built = this.getDecorationParagraph(tip.text, row, Math.max(1, available));
+      if (built !== undefined) {
+        const textLeft = left + boxW + (pole ? 3 * vp : 4 * vp);
+        const textTop = contentTop + Math.max(0, (row.lineHeightPx - built.heightPx) / 2);
+        canvas.save();
+        built.paragraph.paint(canvas, textLeft, textTop);
+        canvas.restore();
+      }
+    }
+  }
+
+  /** 分隔线画在内容行下方，厚度由调用方给的 vp 值换算后取整，避免高 DPI 上消失。 */
+  private drawDecorationDivider(canvas: drawing.Canvas, request: ReaderCanvasDrawRequest,
+    row: ReaderCanvasDecorationRow, dividerY: number): void {
+    if (row.dividerColorArgb < 0) {
+      return;
+    }
+    const thickness = Math.max(1, Math.round(row.dividerThicknessPx));
+    const brush = new drawing.Brush();
+    brush.setColor(readerCanvasColor(row.dividerColorArgb));
+    canvas.attachBrush(brush);
+    canvas.drawRect(row.paddingLeftPx, dividerY,
+      request.layout.viewportWidthPx - row.paddingRightPx, dividerY + thickness);
+    canvas.detachBrush();
+  }
+
+  /**
+   * 装饰文字的 Paragraph：带 ellipsis、按槽宽精确排版，与正文 getParagraph 分开缓存。
+   * 正文那份排版宽度留了一个字号的余量（防止 letterSpacing 丢字），装饰不需要拉伸，
+   * 按精确宽度排版才能让省略号落在正确位置。
+   */
+  private getDecorationParagraph(value: string, row: ReaderCanvasDecorationRow,
+    widthPx: number): ReaderCanvasParagraph | undefined {
+    if (value.length === 0) {
+      return undefined;
+    }
+    const width = Math.max(1, Math.round(widthPx));
+    const key = `${row.fontFamilies.join(',')}|${row.fontSizePx}|${row.colorArgb}|${width}|${value}`;
+    const cached = this.decorationParagraphCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let built: ReaderCanvasParagraph | undefined = undefined;
+    try {
+      const textStyle: text.TextStyle = {
+        fontFamilies: row.fontFamilies.length > 0 ? row.fontFamilies : undefined,
+        fontSize: row.fontSizePx,
+        color: readerCanvasColor(row.colorArgb),
+        // SDK 里 ellipsis 属于 TextStyle 而非 ParagraphStyle：默认空串即系统 …（U+2026），
+        // 这里显式给出并配 END，让 START 槽被挤窄时省略号落在末尾。
+        ellipsis: '…',
+        ellipsisMode: text.EllipsisMode.END
+      };
+      const paragraphStyle: text.ParagraphStyle = {
+        textStyle: textStyle,
+        align: text.TextAlign.START,
+        maxLines: 1
+      };
+      const builder = new text.ParagraphBuilder(paragraphStyle, text.FontCollection.getGlobalInstance());
+      builder.pushStyle(textStyle);
+      builder.addText(value);
+      const paragraph = builder.build();
+      paragraph.layoutSync(width);
+      built = { paragraph: paragraph, heightPx: paragraph.getHeight() };
+    } catch (error) {
+      console.warn(`[ReaderCanvas] 页脚段落构建失败: ${error}`);
+      return undefined;
+    }
+    if (this.decorationParagraphCache.size >= ReaderCanvasRenderer.PARAGRAPH_CACHE_LIMIT) {
+      this.decorationParagraphCache.clear();
+    }
+    this.decorationParagraphCache.set(key, built);
+    return built;
   }
 
   /**
