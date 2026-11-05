@@ -5699,7 +5699,10 @@ export struct ReaderPage {
   }
 
   private getReaderInfoDividerColor(): string {
-    if (this.infoSettings.tipDividerColor === -1) { return '#66666A'; }
+    // `-1` 是「跟随主题」的默认值。上游 `LegacyReaderPageDecorationFactory.kt:152` 取
+    // `R.color.divider`，`app/src/main/res/values/colors.xml:591` 为 `#66666666`（alpha 0x66）。
+    // 本地原先返回不带 alpha 的 6 位不透明深灰，比上游实心得多，页脚那道线才会抢注意力。
+    if (this.infoSettings.tipDividerColor === -1) { return '#66666666'; }
     if (this.infoSettings.tipDividerColor === 0) { return this.getReadingTextColor(); }
     const unsignedColor = this.infoSettings.tipDividerColor < 0
       ? this.infoSettings.tipDividerColor + 4294967296 : this.infoSettings.tipDividerColor;
