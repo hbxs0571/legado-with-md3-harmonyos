@@ -117,10 +117,10 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `localBook` | 本地书籍 | `bookshelf.json` | **658** | 书架、TXT/EPUB 阅读、进度保存 | **部分接入**：书目/进度/缺正文标记可映射；恢复期冲突处理已接（`data/LocalBookRestorePlanner.ets` 移植上游 `BookRestorePlanner.kt` 的删重复书 / 重定位识别 / 三态定位）；不打包正文 | ZIP 映射 1 |
 | 2 | `readConfig` | 阅读界面 | `readConfig.json`、`shareReadConfig.json`、`config.xml` | 12 / 96 键 / 370 项 | 阅读配置有原生模型与持久化 | **部分接入**：读入 46 个 `config.xml` 键；`shareReadConfig` 未转多套方案 | ZIP 映射 2 |
-| 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`）与全局主题网关（`data/ThemeSettingsRepository.ets` / `data/ThemeModeResolver.ets`） | **已接入（r303）**：备份时把全局 `themeMode` 写进 `config.xml`（值域归一成 `"0"/"1"/"2"`），恢复时读回并 `applyThemeMode` 真正改全 App 配色；备份/恢复两侧的忽略开关都接上真实效果。全表 19 行（13 已接 / 4 未接 / 2 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A1/C/D/F | ZIP 映射 4 |
-| 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验且 r301 起有真实渲染（色温覆盖层）；`themeConfig.json` 仍不生成（需要先有本地主题包数据结构，见 B 块），Android 配色/透明度 JSON 未映射；界面侧主题设置页 46 个条目里 39 个仍走 `onUnavailableAction`，主题包管理整块缺失。全表 72 行（16 已接 / 55 未接 / 1 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A/B/D/E/F | ZIP 映射 5 |
-| 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，252 行，15 条设置项，3 处 `onUnavailableAction`） | **未接入（r330 重核）**：14 个键读写均未接，本类别 66 行里 25 行已接、39 行未接、2 行不适用，逐行见[封面设置总账](parity/ZIP-COVER.md)。r330 起「界面已接」的那 25 行（`showShadow`/`showStroke`/`useDefaultColor`/`infoOrientation`/日间四色两开关/夜间两色，以及渲染块 D 的 15 行）能改值并在书架页看见效果，但**这些值仍不写进 `config.xml`**——本地 `config.xml` 是白名单式逐键写出（`data/BackupRepository.ets:776-793`），14 个封面键不在白名单里；恢复侧也不过封面键（`grep coverSettings` 在 `data/BackupRepository.ets` 零命中）。另有两点此前未记：本地落盘用的是裸字段名（`showName`/`textColor`…），与上游 `coverShowName`/`coverTextColor` 不同名；`coverRule.json` 只是文件清单里的一个名字（`data/BackupRepository.ets:403`、`:411`），本地既没有生成也没有读取它的代码 | 待接；相册目录另计 `不进备份` |
-| 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`），界面面板 12 条目（`pages/BookshelfPage.ets:573-637`） | **部分接入（r327 重核）**：写出 13 键（`data/BackupRepository.ets:594-606`，原记 9 键漏了 `bookshelfTitleCenter`/`bookshelfTitleSmallFont`/`bookshelfGridCoverWidth`/`bookshelfListCoverWidth`），读入 13 键（`entry/src/main/ets/data/BackupRepository.ets:1328-1332` 九整型 + `:1339` 四布尔）；界面级 122 行里 38 已接 / 81 未接 / 3 不适用，逐行见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) | ZIP 映射 6 |
+| 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`）与全局主题网关（`data/ThemeSettingsRepository.ets` / `data/ThemeModeResolver.ets`） | **已接入（r303）**：备份时把全局 `themeMode` 写进 `config.xml`（值域归一成 `"0"/"1"/"2"`），恢复时读回并 `applyThemeMode` 真正改全 App 配色；备份/恢复两侧的忽略开关都接上真实效果。该类别在界面级表里是 19 行（17 已接 / 0 未接 / 2 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A1/C/D/F | ZIP 映射 4 |
+| 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验且 r301 起有真实渲染（色温覆盖层）；`themeConfig.json` 仍不生成（需要先有本地主题包数据结构，见 B 块），Android 配色/透明度 JSON 未映射；界面侧主题设置页 46 个条目里 39 个仍走 `onUnavailableAction`，主题包管理整块缺失。该类别在界面级表里是 72 行（64 已接 / 6 未接 / 2 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A/B/D/E/F | ZIP 映射 5 |
+| 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，729 行，14 条设置项，2 处 `onUnavailableAction`） | **部分接入（r334 实现段收口）**：14 个封面键已双向接进 `config.xml`（写出 `data/BackupRepository.ets:806-810`，恢复 `:1423-1455` 的 `restoreCoverSettings`，调用点 `:1155-1157`），键名与上游 PreferKey 一致；本类别 66 行里 57 行已接、7 行未接、2 行不适用，逐行见[封面设置总账](parity/ZIP-COVER.md)。7 行未接分别是 A1 仅 WiFi（`:86`）、A10 网络书籍角标（`:95`）、B15 旧版默认封面迁移（`:131`）、C6 规则求值（`:146`）、C8 `coverRule.json` 备份（`:148`）、C9 备份开关（`:149`）、D18 预加载（`:180`）——A1、A10 受本机无网络图片加载限制，B15 缺迁移对象（`CoverSettings.defaultCover` 全仓无人写值），C6、C8、C9、D18 随规则引擎与预加载；`coverRule.json` 目前仍只是文件清单里的一个名字（`data/BackupRepository.ets:403`、`:411`），本地既没有生成也没有读取它的代码 | 待接；相册目录另计 `不进备份` |
+| 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`），界面面板 12 条目（`pages/BookshelfPage.ets:573-637`） | **部分接入（r327 重核）**：写出 13 键（`data/BackupRepository.ets:594-606`，原记 9 键漏了 `bookshelfTitleCenter`/`bookshelfTitleSmallFont`/`bookshelfGridCoverWidth`/`bookshelfListCoverWidth`），读入 13 键（`entry/src/main/ets/data/BackupRepository.ets:1328-1332` 九整型 + `:1339` 四布尔）；界面级 122 行里 76 已接 / 43 未接 / 3 不适用（r331/r332 落地 38 行后），逐行见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) | ZIP 映射 6 |
 | 7 | `showRss` | 显示订阅 | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **未接入**：`showRss` 键读写都未接 | 待接 |
 | 8 | `threadCount` | 线程数 | `config.xml` | 370 项内 1 键 | **无对应概念**（HOS 无并发线程数设置） | **未接入**：键读写都未接 | 安全兼容 |
 | 9 | `mangaConfig` | 漫画设置 | `config.xml` | 370 项内 32 键 | 仅设置页有漫画相关条目文字，无漫画阅读 | **未接入**：32 个键读写都未接 | 安全兼容；漫画业务候选 |
@@ -148,12 +148,12 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 | 档位 | 类数 | 类别 |
 | --- | --- | --- |
-| 已接入 | **5** | `bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule` |
-| 部分接入 | **4** | `localBook`、`readConfig`、`themeConfig`、`bookshelfLayout` |
-| 未接入（本地有页面，ZIP 键读写都没接） | **5** | `themeMode`、`coverConfig`、`showRss`、`threadCount`、`mangaConfig` |
+| 已接入 | **6** | `bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule`、`themeMode` |
+| 部分接入 | **5** | `localBook`、`readConfig`、`themeConfig`、`bookshelfLayout`、`coverConfig` |
+| 未接入（本地有页面，ZIP 键读写都没接） | **3** | `showRss`、`threadCount`、`mangaConfig` |
 | 仅归档 | **14** | `bookSource`、`rssSource`、`rssStar`、`readRecord`、`searchHistory`、`sourceSub`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule`、`server` |
 
-「未接入」与「仅归档」的区别只在本地有没有那页 UI：前 5 类本地有设置页可改值，只是那些值既不写进 `config.xml`、也不从 `config.xml` 读回；后 14 类连页面都没有。两者对 Android 用户的实际结果一样——换到 HarmonyOS 后这些设置不生效。
+「未接入」与「仅归档」的区别只在本地有没有那页 UI：前 3 类本地有设置页可改值，只是那些值既不写进 `config.xml`、也不从 `config.xml` 读回；后 14 类连页面都没有。两者对 Android 用户的实际结果一样——换到 HarmonyOS 后这些设置不生效。
 
 **与 r257 旧版的差异**：旧版 18 行用的全是中文功能名（「书架、书籍元数据与进度」「通用偏好设置」「替换净化规则」），新版改用代码键名。两版的数据没有丢，只是切法变了，对应关系如下：
 
@@ -208,9 +208,9 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 **一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 75 个、写出 69 个（r327 复核，原记「读入 46、写出 9 + 阅读外观/护眼两组」为旧值）。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
 
-### 三张对照表的「ZIP 类别」列怎么读
+### 对照表的「ZIP 类别」列怎么读
 
-按类别派活时必然要查的三张表（[书籍总账](parity/BOOKSHELF.md)、[书签对照](parity/ZIP-BOOKMARK.md)、[阅读配置总账](parity/READER-CONFIG.md)）都标了 `ZIP 类别`。任务书里引用这些行之前，先把下面五条读清，否则会从错误的基数起步。
+按类别派活时必然要查的几张表（[书籍总账](parity/BOOKSHELF.md)、[书签对照](parity/ZIP-BOOKMARK.md)、[阅读配置总账](parity/READER-CONFIG.md)、[TXT 阅读总账](parity/TXT-READER.md)、[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md)、[封面设置总账](parity/ZIP-COVER.md)、[深色模式总账](parity/ZIP-THEME.md)）都标了 `ZIP 类别`。任务书里引用这些行之前，先把下面五条读清，否则会从错误的基数起步。
 
 **一、判据是「会动到哪个类别」，不是「数据落在哪」。**
 
@@ -253,7 +253,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 **四、未复核边界：老行是迁移前证据。**
 
-三张表里 `r277`–`r280` 写下的行——[书籍总账](parity/BOOKSHELF.md) A1–C 259 行、[阅读配置总账](parity/READER-CONFIG.md) A–G 189 行、[书签对照](parity/ZIP-BOOKMARK.md) A–E 83 行——是**迁移前证据，未逐行复核**（表头逐份写明）。重盘这些块要按块重新核对，不要在旧行上直接改状态，否则等于在未验数据上盖新章。
+当时的三张表里 `r277`–`r280` 写下的行——[书籍总账](parity/BOOKSHELF.md) A1–C 259 行、[阅读配置总账](parity/READER-CONFIG.md) A–G 189 行、[书签对照](parity/ZIP-BOOKMARK.md) A–E 83 行——是**迁移前证据，未逐行复核**（表头逐份写明）。重盘这些块要按块重新核对，不要在旧行上直接改状态，否则等于在未验数据上盖新章。
 
 **五、有一整块 12 行全是 `—`，那不代表可以不管。**
 

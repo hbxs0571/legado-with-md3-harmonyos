@@ -1512,7 +1512,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **排期分布**：39 条 `要接` 集中在四件事——①默认封面相册整块（19 条，KI-COVER3）、②封面规则（11 条，KI-COVER2）、③三个缺失字段开关（5 条，KI-COVER1 / KI-COVER4 / KI-COVER5）、④夜间两个开关（2 条，KI-COVER8）；其余 2 条是预加载与备份键读写（KI-COVER1 的 D18、KI-COVER9）。
 
-**全局前置（不做完这两件，多数组都落不了地）**：
+**全局前置（r334 已全部完成，保留作为当初的排期依据）**：
 
 1. **`CoverSettings` 字段补齐与键名映射**：本地 `entry/src/main/ets/data/CoverSettingsRepository.ets:11-41` 只有 12 字段，缺 `loadOnlyOnWifi` / `useDefaultCover` / `restrictCoverRatio` / `exploreFilterState` / `defaultCover` / `defaultCoverDark` 六个（上游 `domain/model/settings/CoverSettings.kt:3-26` 是 18 个）。同时落盘键用的是裸字段名（`:135-146`，`showName`/`textColor`…），而备份侧常量用的是上游 PreferKey 名（`entry/src/main/ets/data/BackupRepository.ets:387-391`，`coverShowName`/`coverTextColor`…），两处不同名——将来把封面键加进 `config.xml` 白名单前，必须先定一张双向映射表。
 2. **`config.xml` 白名单**：本地写出是白名单式逐键写出（`entry/src/main/ets/data/BackupRepository.ets:776-793`），14 个封面键不在其中；恢复侧对封面键零命中（`grep coverSettings` 在 `data/BackupRepository.ets` 无结果）。**这层不补，KI-COVER1 / 4 / 5 / 9 就算把 UI 和渲染都接上，备份里也永远看不到这些值。**
@@ -1524,55 +1524,55 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 **KI-COVER1 仅 WiFi 下载封面 / 使用默认封面 / 封面预加载** —— 覆盖 A 块 `:86`（A1）、`:88`（A3）、D 块 `:180`（D18），共 3 行
 
 - **上游口径**：三个开关串成一条取图链路。`useDefaultCover` 打开时 `model/BookCover.kt:125` 直接返回默认封面图并 `centerCrop()`；`loadOnlyOnWifi` 经 `OkHttpModelLoader.loadOnlyWifiOption`（`model/BookCover.kt:129`）挂到每个图片请求上，消费点还有 `CoilBookCover.kt:227`、`ui/main/bookshelf/BookshelfCoverPreloader.kt:183`、`ui/book/info/BookInfoViewModel.kt:852`、`:2151`、`ui/book/readaloud/player/PlayerThemeOverride.kt:52`；预加载器 `ui/main/bookshelf/BookshelfCoverPreloader.kt:125` 在 `MainActivity.kt:341` 起，`preloadCurrentGroupFirstScreen()`（`:149`）按首屏可见量批量入队。
-- **本地现状**：三个字段都不在 `CoverSettings`（`entry/src/main/ets/data/CoverSettingsRepository.ets:11-41`）；设置页无对应条目（`pages/AppCoverSettingsPage.ets:58-131` 共 15 条）；预加载在 `entry/src/main/ets` 全目录 `preload|预加载` 零命中，封面由各卡片自行加载（`components/BookCover.ets:154-161` 直接 `Image(this.book.coverUri)`）。
+- **本地现状（写于 r330 建表时，r334 之后已部分变化，见下「实现记录」）**：三个字段都不在 `CoverSettings`（`entry/src/main/ets/data/CoverSettingsRepository.ets:11-41`）；设置页无对应条目（`pages/AppCoverSettingsPage.ets:58-131` 共 15 条）；预加载在 `entry/src/main/ets` 全目录 `preload|预加载` 零命中，封面由各卡片自行加载（`components/BookCover.ets:154-161` 直接 `Image(this.book.coverUri)`）。
 - **补法**：先在 `CoverSettingsRepository.ets` 补 `loadOnlyOnWifi` / `useDefaultCover` 两字段（键名照 `entry/src/main/ets/data/BackupRepository.ets:387-391` 取 `loadCoverOnlyWifi` / `useDefaultCover`）；`useDefaultCover` 的分支加在 `components/BookCover.ets:154` 之前，为真时不渲染 `Image` 而走占位路径（等价上游 `finalPath = null`）；`loadOnlyOnWifi` 需要先确认本地图片加载是否走 `@ohos.net.http`——若是，在请求前读一次网络类型；预加载（D18）单独排期，用 `List` 的可见区回调取首屏条目，不要照搬上游的行列算法（本地没有横竖屏取值）。
 - **验收**：断 WiFi 用蜂窝网络进书架，开着「仅 WiFi 下载封面」时封面显示书本图标占位、不发起请求；接上 WiFi 后封面加载出来。打开「使用默认封面」后书架所有书封面变成默认封面图，关掉后真实封面回来。
 
 **KI-COVER2 封面规则（UI + 求值 + 存储 + 备份）** —— 覆盖 A 块 `:87`（A2），C 块 `:141`、`:142`、`:143`、`:144`、`:145`、`:146`、`:147`、`:148`、`:149`（C1–C9），共 10 行
 
 - **上游口径**：入口在设置页 `ui/config/coverConfig/CoverConfigScreen.kt:105-109`，sheet 是 `ui/config/coverConfig/CoverRuleConfigSheet.kt:25-83`（勾选 `:61-65`、搜索 URL `:67-72`、规则表达式 `:74-80`、恢复默认 `:35-43`、保存 `:44-52`）。保存校验 `ui/config/coverConfig/CoverConfigViewModel.kt:130-133`（URL 或规则为空时 toast `cover_rule_fields_required` 并 return）。运行期存 `CacheManager` 键 `legadoCoverRuleConfig`（`model/BookCover.kt:51`，读 `:246-249`、写 `:276-278`、删 `:280-282`），`coverRule.json`（`:52`）只用于备份写出（`help/storage/Backup.kt:251-256`）与恢复读入（`help/storage/Restore.kt:339-346`）。求值 `model/BookCover.kt:251-269`：未启用/空 URL/空规则返回 null，否则 `AnalyzeUrl` + `getStrResponseAwait()` + `AnalyzeRule.getString(coverRule, isUrl = true)`；唯一调用点 `ui/book/info/BookInfoViewModel.kt:1275`，前置条件 `:1274` 是 `coverUrl` 与 `customCoverUrl` 都为空。
-- **本地现状**：入口是灰色动作 `pages/AppCoverSettingsPage.ets:59`（`onUnavailableAction('封面规则编辑尚未迁移')`）；无 sheet、无 `CoverRule` 模型、无 `CacheManager` 等价物；`coverRule` 字面量只出现在备份清单（`data/BackupRepository.ets:403`、`:411`），既没有生成也没有读取 `coverRule.json` 的代码。
+- **本地现状（写于 r330 建表时，r334 之后已部分变化，见下「实现记录」）**：入口是灰色动作 `pages/AppCoverSettingsPage.ets:59`（`onUnavailableAction('封面规则编辑尚未迁移')`）；无 sheet、无 `CoverRule` 模型、无 `CacheManager` 等价物；`coverRule` 字面量只出现在备份清单（`data/BackupRepository.ets:403`、`:411`），既没有生成也没有读取 `coverRule.json` 的代码。
 - **补法**：**拆成两段**。①UI + 存储（C1–C5、C7、C9）是纯本地：按 `CoverRule` 9 字段（`model/BookCover.kt:286-294`）建模型，存到 preferences（本地没有 `caches` 表，用独立 prefs 文件更贴近现有做法），sheet 照 `CoverRuleConfigSheet.kt` 三段布局。②求值（C6）与 `coverRule.json` 的备份读写（C8）**随规则引擎一起接**——默认规则 `app/src/main/assets/defaultData/coverRule.json` 的 `coverRule` 是一段 `@js:` 脚本，里面用 `java.base64Encode`、`java.ajaxAll`、`com.jayway.jsonpath.JsonPath` 这些 Java 桥接口，终点是 `https://pre-api.tuishujun.com/...` 与 `http://m.ypshuo.com/...` 两个在线搜索接口，没有规则引擎与 JS 运行时就是死代码。注意 PROJECT.md「范围之外」列的是「在线书源抓取」，封面规则求值走的是同一套 `AnalyzeUrl`/`AnalyzeRule` 管线，按同一口径处理。
 - **验收**：①UI 段——设置页点「封面规则」弹 sheet，勾「启用」、填 URL 与表达式，点保存后退出重进内容还在；URL 或表达式留空时点保存弹「请填写必填项」且不落盘；点「恢复默认」后两个输入框变默认脚本。②求值段——书详情页对一本 coverUrl 与 customCoverUrl 都为空的网络书，规则命中后封面自动变成搜索结果图。
 
 **KI-COVER3 默认封面相册（整块）** —— 覆盖 A 块 `:89`（A4），B 块 `:117`、`:118`、`:119`、`:120`、`:121`、`:122`、`:123`、`:124`、`:125`、`:126`、`:127`、`:128`、`:129`、`:130`、`:131`（B1–B15），E 块 `:193`（E4）、`:194`（E5）、`:195`（E6），共 19 行
 
 - **上游口径**：数据层 `data/repository/CoverAlbumRepository.kt`（508 行）——根目录 `:49-53` `File(context.getExternalFilesDir(null) ?: context.filesDir, "cover_albums")`，索引 `albums.json`（`:43`），`FORMAT_VERSION = 2`（`:41`），迁移遗留相册 id `"default-cover"`（`:44`）；JSON 只存文件名（`:357-358`），图片按 SHA-256 命名（`:325-326`），写入走临时文件 + `ATOMIC_MOVE`（`:349-380`）。三个选择键在 `data/local/preferences/LocalPreferences.kt:61-63`（`selected_cover_album_id` / `selected_light_cover_album_id` / `selected_dark_cover_album_id`），读取 `CoverAlbumRepository.kt:55-70`，优先链 `albumId ?: lightAlbumId ?: darkAlbumId`（`:75-81`）。日夜两套图是 `CoverAlbum.lightImages` / `darkImages`（`domain/model/CoverAlbum.kt:8-9`），取用 `:90-96`。UI 两块：选择 sheet `ui/config/coverConfig/CoverAlbumSelectSheet.kt`（164 行，「无」项 `:61-71`，相册项 `:72-85`，条目组件 `:90-164`）与管理页 `ui/config/coverConfig/CoverAlbumManageScreen.kt`（449 行，顶栏新建 `:135-139`，空态 `:144-166`，卡片 `:215-297`，编辑器 `:299-381`，对话框 `:383-418`，命名框 `:420-449`）。空相册行为：选「无」时 `onSelect(null)`（`CoverAlbumSelectSheet.kt:67-70`），相册本身为空时管理页显示 `cover_album_empty` 空态（`:161-164`）。迁移 `CoverAlbumRepository.kt:231-284`：读 `PreferKey.defaultCover` / `defaultCoverDark` 逗号串，合并进 `default-cover` 相册并 `distinctBy { it.id }`（`:266-273`），写 `COVER_ALBUM_MIGRATED = true`（`:281`）。
-- **本地现状**：`entry/src/main/ets/pages/` 39 个页面里没有相册页；无相册仓储、无 `albums.json`、`CoverSettings` 无 `defaultCover` / `defaultCoverDark`；设置页那一行 detail 写死「未选择封面相册」（`pages/AppCoverSettingsPage.ets:60`）。本地封面来源只有两个：EPUB 内嵌封面（`data/EpubRepository.ets:109` `coverUri = 'file://${coverPath}'`）与手动选图（`pages/Index.ets:6151-6166 chooseBookCover()` / `:6168-6176 restoreBookCover()`，落 `data/BookRepository.ets:605-607 copyWithCover`）。
+- **本地现状（写于 r330 建表时，r334 之后已部分变化，见下「实现记录」）**：`entry/src/main/ets/pages/` 39 个页面里没有相册页；无相册仓储、无 `albums.json`、`CoverSettings` 无 `defaultCover` / `defaultCoverDark`；设置页那一行 detail 写死「未选择封面相册」（`pages/AppCoverSettingsPage.ets:60`）。本地封面来源只有两个：EPUB 内嵌封面（`data/EpubRepository.ets:109` `coverUri = 'file://${coverPath}'`）与手动选图（`pages/Index.ets:6151-6166 chooseBookCover()` / `:6168-6176 restoreBookCover()`，落 `data/BookRepository.ets:605-607 copyWithCover`）。
 - **补法**：这是一整块新功能，按上游四件套复刻——①仓储（根目录用 `context.filesDir + '/cover_albums'`，本地没有 `getExternalFilesDir` 等价物，改 `filesDir` 会进备份范围，需同时确认是否要在 `entry/src/main/ets/data/BackupRepository.ets` 里显式排除）；②两页 UI（选择 sheet + 管理页，管理页可照 `pages/AppCoverSettingsPage.ets` 的 `CollapsingSettingsHeader` 骨架）；③`CoverSettings` 补 `defaultCover` / `defaultCoverDark` 两字段；④渲染侧在 `components/BookCover.ets:111` 的占位分支之后接「从相册取图」（上游是 `BookCoverModel.getRandomDefaultPath(seed, isNight)`，`CoilBookCover.kt:321-326`）。B15 的迁移本地可以不做——本地没有旧版 `defaultCover` 字符串，没有要迁的数据。
 - **验收**：设置页「默认封面」→ 弹相册选择 sheet 看到「无」与自建相册；新建一个相册、白天加 3 张图、夜间加 2 张；返回设置页该行摘要变成「相册名 · 日 3 / 夜 2」；书架页无封面的书显示相册里的图，切到夜间模式后换成夜间那 2 张；杀掉进程重进相册还在。
 
 **KI-COVER4 限制封面比例** —— 覆盖 A 块 `:93`（A8）、E 块 `:191`（E2），共 2 行
 
 - **上游口径**：设置项 `ui/config/coverConfig/CoverConfigScreen.kt:158-165`（`checked = settings.restrictCoverRatio`，`:161`）；字段 `domain/model/settings/CoverSettings.kt:10`（默认 `true`，注释「开启（默认）时搜索/发现/详情页封面固定 5:7」）；消费点两处——`ui/book/info/BookInfoScreen.kt:1169` 与 `ui/widget/components/book/SearchBookItem.kt:85`，都是 `!LocalAppUiConfiguration.current.cover.restrictCoverRatio` 决定封面用固定 5:7 还是按图片真实宽高比。键不在 14 个 `coverPrefKeys` 里（`help/storage/BackupConfig.kt:396-411`），也不在 `alwaysIgnoredPreferenceKeys`（`:11-33`），所以参与备份但不受忽略开关控制。
-- **本地现状**：`CoverSettings` 无此字段；设置页无此条目；封面比例写死在组件里——`components/BookCover.ets:248-253 coverHeight()`（`maxWidth` 时 `round(maxWidth*7/5)`）与 `:234-239 coverWidth()`。
+- **本地现状（写于 r330 建表时，r334 之后已部分变化，见下「实现记录」）**：`CoverSettings` 无此字段；设置页无此条目；封面比例写死在组件里——`components/BookCover.ets:248-253 coverHeight()`（`maxWidth` 时 `round(maxWidth*7/5)`）与 `:234-239 coverWidth()`。
 - **补法**：`CoverSettingsRepository.ets` 补 `restrictCoverRatio`（默认 `true`，与上游一致——CODE-CONVENTIONS.md 第四节要求默认值以上游为准）；设置页在「书架显示」组加一条 Switch；渲染侧把 `BookCover.ets:248-253` 的 `7/5` 改成条件：关掉时读图片实际宽高比。注意上游这个开关只作用于**搜索/发现/详情页**，书架页封面恒为固定比例，本地若照搬要先把「哪几个界面的封面吃这个开关」定清楚。
 - **验收**：关掉「限制封面比例」后，搜索结果页与书籍详情页的封面按图片原始宽高比显示（宽图变宽、窄图变窄），书架页封面形状不变；重开后回到 5:7。
 
 **KI-COVER5 网络书籍角标（发现页筛选）** —— 覆盖 A 块 `:95`（A10）、E 块 `:192`（E3），共 2 行
 
 - **上游口径**：设置项 `ui/config/coverConfig/CoverConfigScreen.kt:184-197`，四档 `entryValues = arrayOf("0","1","2","3")`（全部 / 书架内隐藏 / 同名同作者隐藏 / 只显示不在书架内的）；字段 `CoverSettings.kt:23` 默认 `0`；唯一消费点 `ui/book/explore/ExploreShowViewModel.kt:249` `filterStateId = coverSettings.exploreFilterState`。键名是 **`explore_filter_state`**（`constant/PreferKey.kt:429`），不是字段名 `exploreFilterState`——按字段名 grep 会误判成 0 命中。不在 14 个 `coverPrefKeys`、不在 `alwaysIgnoredPreferenceKeys`。
-- **本地现状**：`CoverSettings` 无此字段，`entry/src/main/ets` 全目录 `exploreFilterState|filterState` 零命中；设置页 `pages/AppCoverSettingsPage.ets:86` 是灰色动作（`onUnavailableAction('网络书籍角标设置尚未迁移')`）；发现页 `pages/DiscoverPage.ets` 只有本地示范数据过滤（`:62` `this.sources.filter(...)`），不读任何封面设置字段。
+- **本地现状（写于 r330 建表时，r334 之后已部分变化，见下「实现记录」）**：`CoverSettings` 无此字段，`entry/src/main/ets` 全目录 `exploreFilterState|filterState` 零命中；设置页 `pages/AppCoverSettingsPage.ets:86` 是灰色动作（`onUnavailableAction('网络书籍角标设置尚未迁移')`）；发现页 `pages/DiscoverPage.ets` 只有本地示范数据过滤（`:62` `this.sources.filter(...)`），不读任何封面设置字段。
 - **补法**：**取决于发现页本身**——本地发现页是 183 行的示范数据页（`pages/DiscoverPage.ets`），没有真实书源列表，「按是否在书架内筛选」没有筛选对象。建议排在发现页接真实数据之后：先补字段与设置项（四档 Dropdown），筛选逻辑跟着发现页的数据源一起写。这里不判「不接」，因为发现页在 PROJECT.md 范围之外那条里没有列名。
 - **验收**：发现页出现书籍列表后，设置页把「网络书籍角标」切到「书架内隐藏」，发现页里已在书架的书消失；切回「全部」后重新出现。
 
 **KI-COVER8 夜间·显示书名 / 显示作者** —— 覆盖 A 块 `:102`（A17）、`:103`（A18），共 2 行
 
 - **上游口径**：`ui/widget/components/image/cover/CoilBookCover.kt:518-520` 按 `isNight` 分叉选字段（`if (isNight) coverSettings.showNameDark else coverSettings.showName`），`:522` `if (!showName && !showAuthor) return`；设置页两项 `CoverConfigScreen.kt:306-313` 与 `:315-323`，后者 `enabled = settings.showNameDark`（`:319`）。
-- **本地现状**：字段在（`data/CoverSettingsRepository.ets:11-41` 有 `showNameDark` / `showAuthorDark`），开关能落盘（`pages/AppCoverSettingsPage.ets:112-130`，`CoverSettingsRepository.ets:136`），**但渲染层不读它们**：`components/CoverTextLayout.ets:76-77` 只有 `const showName = settings.showName; const showAuthor = settings.showAuthor && showName`，全程无 `isNight` 分支。本地还留着两个按日夜分叉的函数 `components/BookCover.ets:56-58 effectiveShowName()` 与 `:60-64 effectiveShowAuthor()`，全仓 grep 只命中定义处、**零调用点**。所以夜间关掉「显示书名」，字仍在。
+- **本地现状（r334 已接）**：字段在（`data/CoverSettingsRepository.ets:11-47` 有 `showNameDark` / `showAuthorDark`），开关能落盘，**渲染层也已读**——`components/CoverTextLayout.ets:68` 签名带 `isNight: boolean = false`，`:77 const showName = isNight ? settings.showNameDark : settings.showName;`、`:78 const showAuthor = (isNight ? settings.showAuthorDark : settings.showAuthor) && showName;`；`components/BookCover.ets:48 @Prop isNight`、`:154` 传进 `buildCoverTextLayout`；`pages/BookshelfPage.ets:1153`/`:1182`/`:1242` 传 `readerNightMode`。旧描述里提到的 `effectiveShowName()`/`effectiveShowAuthor()` 两个中间函数已被删掉（全仓 0 命中）。原描述保留在下方，说明 r331 之前的形态：前者只有 `const showName = settings.showName; const showAuthor = settings.showAuthor && showName`，全程无 `isNight` 分支。本地还留着两个按日夜分叉的函数 `components/BookCover.ets:56-58 effectiveShowName()` 与 `:60-64 effectiveShowAuthor()`，全仓 grep 只命中定义处、**零调用点**。所以夜间关掉「显示书名」，字仍在。
 - **补法**：把 `isNight` 传进排版函数——`components/BookCover.ets:112-113` 调用 `buildCoverTextLayout(widthVp, heightVp, title, author, this.coverSettings, 1.2)` 时多传一个 `this.isNight`，`components/CoverTextLayout.ets:76-77` 改成 `settings.showName` / `settings.showAuthor` 的三元式（或直接调 `effectiveShowName()` / `effectiveShowAuthor()` 这两个已有函数，避免再写一遍）。另外补齐上游的 `enabled` 联动：夜间「显示作者」在「显示书名」关闭时置灰。
 - **验收**：书架页任一无封面书籍，切到夜间模式后关掉「夜间·显示书名」，卡片上的书名与作者一起消失（白天模式下仍显示）；再打开后恢复；关掉夜间「显示书名」时夜间「显示作者」那一行置灰不可点。
 
 **KI-COVER9 14 个 `coverPrefKeys` 的读写** —— 覆盖 E 块 `:190`（E1），共 1 行
 
 - **上游口径**：`help/storage/BackupConfig.kt:396-411` 列了 14 个键（`useDefaultCover`、`loadCoverOnlyWifi`、`coverShowName`、`coverShowAuthor`、`coverShowNameN`、`coverShowAuthorN`、`coverShowShadow`、`coverShowStroke`、`coverTextColor`、`coverTextColorN`、`coverShadowColor`、`coverShadowColorN`、`coverDefaultColor`、`coverInfoOrientation`）；写出在 `help/storage/Backup.kt:258`（`AppConfigStore.preferences.asMap()` 全量导出后按忽略规则过滤），恢复在 `help/storage/Restore.kt` 的 config.xml 分支。样本 `N:\HarmonyProjects\测试\backup2026-10-22\config.xml` 里 14 个键全在（`:227`、`:228`、`:229`、`:231`、`:233`、`:236`、`:238`、`:240`、`:242`、`:245`、`:247`、`:249`、`:251`、`:252`）。
-- **本地现状**：14 键清单常量在（`entry/src/main/ets/data/BackupRepository.ets:387-391`，与上游逐键一致），**但只被当作过滤名单用**——`entry/src/main/ets/data/BackupRepository.ets:2103-2127 filterAndroidConfigXml` 把它并进 `excludedKeys`，用于从上游备份里剥掉这些键。本地自己的 `config.xml` 是白名单式逐键写出（`:776-793`），封面 14 键不在白名单里；恢复侧对封面键零命中。再加上键名不一致（本地落盘是裸字段名 `showName`/`textColor`，`data/CoverSettingsRepository.ets:135-146`），清单常量与本地实际存储的键对不上。
+- **本地现状**：14 键清单常量在（`entry/src/main/ets/data/BackupRepository.ets:387-391`，与上游逐键一致），**r334 之前只被当作过滤名单用**——`entry/src/main/ets/data/BackupRepository.ets:2103-2127 filterAndroidConfigXml` 把它并进 `excludedKeys`，用于从上游备份里剥掉这些键。本地自己的 `config.xml` 是白名单式逐键写出（`:776-793`），封面 14 键不在白名单里；恢复侧对封面键零命中。再加上键名不一致（本地落盘是裸字段名 `showName`/`textColor`，`data/CoverSettingsRepository.ets:135-146`），清单常量与本地实际存储的键对不上。
 - **补法**：先做上面「全局前置 1」的键名映射表（本地 `showName` ↔ `coverShowName`、`showNameDark` ↔ `coverShowNameN`、`textColor` ↔ `coverTextColor`、`textColorDark` ↔ `coverTextColorN`、`infoOrientation` ↔ `coverInfoOrientation`，其余同理）；再在 `entry/src/main/ets/data/BackupRepository.ets:776-793` 的白名单里加这 14 键（值从 `CoverSettingsRepository` 读、按映射转成上游键名）；恢复侧在 config.xml 分支里加同样的反向映射。**注意**：白名单一开，上游备份里这 14 个键就会真的落进本地，届时 `data/CoverSettingsRepository.ets:4-10` 那句「字段名与 Android PreferKey 保持一致，备份写 config.xml 时可直接同名读写」的注释要么改实现去符合它，要么改注释——现在是注释与实现不符。
 - **验收**：把「显示字体描边」关掉 → 备份 → 解压 `config.xml` 里有 `<boolean name="coverShowStroke">false</boolean>`；把本地值改回 `true` → 恢复该 ZIP → 设置页「显示字体描边」变回关、书架页描边消失。
 
-### 已接行上的残留差异（不属于上面 39 行未接，单独登记）
+### 已接行上的残留差异（不属于上面 7 行未接，单独登记）
 
-这两组在对照表里对应的行状态是 `已接`，功能可用、能看见屏幕效果，只是与上游的呈现方式不同。写在这里是为了让「改哪边算数」有落点，**不计入 39 行未接**。
+这两组在对照表里对应的行状态是 `已接`，功能可用、能看见屏幕效果，只是与上游的呈现方式不同。写在这里是为了让「改哪边算数」有落点，**不计入 7 行未接**。
 
 **KI-COVER6 取色面板：任意取色 vs 6 个预置色轮换** —— 关联 A 块 `:96`（A11）、`:97`（A12）、`:100`（A15）、`:101`（A16）
 
@@ -1584,8 +1584,8 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 **KI-COVER7 开关联动置灰：`enabled = showName`** —— 关联 A 块 `:99`（A14）、`:103`（A18）
 
 - **上游口径**：`CoverConfigScreen.kt:256` `enabled = settings.showName`（日间作者）/ `:319` `enabled = settings.showNameDark`（夜间作者）——书名关掉时作者那一行置灰不可点。
-- **本地现状**：`pages/AppCoverSettingsPage.ets:104-108` 只在 detail 写了文案「关闭书名显示时不生效」，开关本身仍可点、仍能落盘；夜间那条（`:128-130`）连文案都没有。语义本身两边一致（`components/CoverTextLayout.ets:77` 的 `&& showName`）。
-- **补法**：`CoverSettingsSwitch` 加一个 `disabled` 参数（同文件 `:163-176`），日间作者行传 `disabled: !this.settings.showName`，夜间作者行传 `disabled: !this.settings.showNameDark`；与上游一致，disabled 时保留原值不重置。
+- **本地现状（r334 已接）**：`pages/AppCoverSettingsPage.ets:343` 日间作者行传 `disabled: !this.settings.showName`、`:365` 夜间作者行传 `disabled: !this.settings.showNameDark`；`CoverSettingsSwitch`（`AppCoverSettingsPage.ets:637`，`:645 @Prop disabled: boolean = false`）里 `.enabled(!this.disabled)` + `.opacity(this.disabled ? 0.4 : 1)`，disabled 时保留原值不重置，与上游一致。语义本身两边也一致（`components/CoverTextLayout.ets:77` 的 `&& showName`）。
+- **补法**：~~`CoverSettingsSwitch` 加一个 `disabled` 参数~~ **已完成**——参数在 `:645`，两个调用点已传参（`:343`/`:365`）。
 - **验收**：关掉「显示书名」后「显示作者」那一行变灰点不动；重开书名后恢复可点。
 
 ### 未接行归属核对
