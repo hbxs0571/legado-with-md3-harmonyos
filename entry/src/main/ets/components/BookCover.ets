@@ -3,6 +3,8 @@ import { BookRepository } from '../data/BookRepository';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { buildCoverTextLayout } from './CoverTextLayout';
 import { AppGlyph } from './AppGlyph';
+import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
+import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 
 /** 无封面文字的绘制上下文；每个 BookCover 各持一份，避免多本共享导致互相覆盖。 */
 const COVER_TEXT_CANVAS_SETTINGS: RenderingContextSettings = new RenderingContextSettings(true);
@@ -41,15 +43,63 @@ export struct BookCover {
    * 由页面把 CoverSettingsRepository.get() 的结果传下来；不传时用默认值，
    * 保证详情页、目录页这些次要调用点不用改也能正常显示书名。
    */
-  @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
+  @Prop @Watch('onCoverSourceChanged') coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   /** 当前是否夜间，决定用哪一套文字色与显示开关。 */
   @Prop isNight: boolean = false;
+  /**
+   * 是否按 A8「限制封面比例」推导高度。
+   *
+   * 上游只在搜索/发现/书籍详情页生效（CoverSettings.kt:6-10 的注释），书架网格恒固定 5:7，
+   * 所以只有那几处调用点传 true，书架页不传、沿用默认值 false。
+   */
+  @Prop applyAspectRatio: boolean = false;
   @State imageFailed: boolean = false;
+  /** 封面原图宽高比（width / height）；异步读图后回填，0 表示读不到或不需要。 */
+  @State coverAspectRatio: number = 0;
   /** 无封面文字的绘制上下文。 */
   private coverTextContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(COVER_TEXT_CANVAS_SETTINGS);
 
+  aboutToAppear(): void {
+    this.refreshCoverAspectRatio();
+  }
+
+  /** coverSettings 变化（例如刚在设置页关掉 A8）或异步恢复完成后重算一次比例。 */
+  private onCoverSourceChanged(): void {
+    this.refreshCoverAspectRatio();
+  }
+
+  /** A8 关闭且调用点受该开关约束时，异步读原图宽高比；读不到就回落固定 5:7。 */
+  private refreshCoverAspectRatio(): void {
+    if (!this.applyAspectRatio || this.coverSettings.restrictCoverRatio) {
+      this.coverAspectRatio = 0;
+      return;
+    }
+    const uri = this.effectiveCoverUri();
+    if (uri.length === 0) {
+      this.coverAspectRatio = 0;
+      return;
+    }
+    ImageSeedColorExtractor.coverAspectRatio(uri).then((ratio: number) => {
+      this.coverAspectRatio = ratio;
+    });
+  }
+
+  /**
+   * 实际要显示的封面图路径。
+   *
+   * A3「使用默认封面」打开时改取选中相册的默认图（对齐 model/BookCover.kt:125 的
+   * useDefaultCover 分支），没有相册图就返回空串、走文字占位；关闭时用书籍自带图。
+   */
+  private effectiveCoverUri(): string {
+    if (this.coverSettings.useDefaultCover) {
+      return CoverAlbumRepository.defaultCoverPath(this.isNight);
+    }
+    const uri = this.book.coverUri;
+    return uri === undefined ? '' : uri;
+  }
+
   private hasCoverImage(): boolean {
-    return this.book.coverUri !== undefined && this.book.coverUri.length > 0 && !this.imageFailed;
+    return this.effectiveCoverUri().length > 0 && !this.imageFailed;
   }
 
   // 夜间书名/作者开关由 CoverTextLayout.buildCoverTextLayout 按 isNight 取 *Dark 一组判断。
@@ -142,8 +192,8 @@ export struct BookCover {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      if (this.hasCoverImage() && this.book.coverUri !== undefined) {
-        Image(this.book.coverUri)
+      if (this.hasCoverImage()) {
+        Image(this.effectiveCoverUri())
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Cover)
@@ -237,6 +287,14 @@ export struct BookCover {
    * 由外层 aspectRatio 兜住比例。
    */
   private coverHeight(): Length {
+    // A8「限制封面比例」关闭时，搜索/详情/发现页按原图宽高比推导高度。
+    // 读不到原图比例（coverAspectRatio === 0）时回落到下面的固定 5:7，与上游读图失败一致。
+    if (this.applyAspectRatio && !this.coverSettings.restrictCoverRatio && this.coverAspectRatio > 0) {
+      const width = this.coverWidth();
+      if (typeof width === 'number') {
+        return Math.round(width / this.coverAspectRatio);
+      }
+    }
     if (!this.fillWidth) {
       return this.displayHeight > 0 ? this.displayHeight : this.mini ? 68 : this.compact ? 100 : 128;
     }

@@ -30,6 +30,10 @@ import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking } from '../model/ReaderMarking';
 import { LocalBookRestorePlanner } from './LocalBookRestorePlanner';
 import { ThemeSettingsRepository } from './ThemeSettingsRepository';
+import {
+  CoverSettings, CoverSettingsRepository, copyCoverSettings,
+  coverSettingsToAndroid, applyAndroidCoverPreferences
+} from './CoverSettingsRepository';
 
 /** 解析 highlightRule.json 的结果：可用规则与因形态不符被跳过的条数。 */
 interface HighlightRuleParseOutcome {
@@ -72,6 +76,8 @@ export interface RestoreResult {
   books: Book[];
   settings: ReaderSettingsSnapshot;
   bookshelfLayout: BookshelfLayoutSettings;
+  /** 从 config.xml 的 coverConfig 键组恢复出来的封面设置。 */
+  coverSettings: CoverSettings;
   /** 恢复出来的全局主题模式（`"0"`/`"1"`/`"2"`）；备份里没有该键时为 undefined。 */
   themeMode: string | undefined;
   preservedEntryCount: number;
@@ -590,10 +596,15 @@ export class BackupRepository {
 
       // bookGroupStyle / hideEmptyGroups / showBookIntro 不在上游 bookshelfPrefKeys 39 键内，
       // 走 keyIsNotIgnore 的 else -> true，不受任何类别开关控制（KI-SL-A11 / KI-SL-B1）。
+      // coverRestrictRatio / explore_filter_state 同理：不在 14 个 coverPrefKeys 里、也不在
+      // alwaysIgnoredPreferenceKeys，所以随 config.xml 无条件导出（ZIP-COVER E2 / E3 判 `—`）。
+      const coverSettings = CoverSettingsRepository.get();
       let unconditionalText = fileIo.readTextSync(configPath);
       unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'int', 'bookGroupStyle', `${bookshelfLayout.bookGroupStyle}`);
       unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'boolean', 'hideEmptyGroups', `${bookshelfLayout.hideEmptyGroups}`);
       unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'boolean', 'showBookIntro', `${bookshelfLayout.showBookIntro}`);
+      unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'boolean', 'coverRestrictRatio', `${coverSettings.restrictCoverRatio}`);
+      unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'int', 'explore_filter_state', `${coverSettings.exploreFilterState}`);
       BackupRepository.writeTextFile(configPath, unconditionalText);
 
       if (!ignoredCategories.includes('bookshelfLayout')) {
@@ -791,6 +802,16 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'menuAlpha', `${Math.max(0, Math.min(100, Math.round(settings.menuAlpha)))}`);
         BackupRepository.writeTextFile(configPath, configText);
+      }
+      // coverConfig 的 14 个 coverPrefKeys 受 coverConfig 忽略开关控制
+      // （上游 BackupConfig.kt:419 if (!backupIgnoreCoverConfig)），值按唯一映射表转成上游键名与类型。
+      if (!ignoredCategories.includes('coverConfig')) {
+        let coverText = fileIo.readTextSync(configPath);
+        for (const preference of coverSettingsToAndroid(coverSettings)) {
+          coverText = BackupRepository.upsertAndroidPreference(
+            coverText, preference.type, preference.key, preference.value);
+        }
+        BackupRepository.writeTextFile(configPath, coverText);
       }
       if (!ignoredCategories.includes('themeConfig')) {
         let configText = fileIo.readTextSync(configPath);
@@ -1131,6 +1152,12 @@ export class BackupRepository {
       selection.stagingDirectory, currentBookshelfLayout, ignoredCategories
     );
     await BookshelfLayoutRepository.save(context, bookshelfLayout);
+    // coverConfig 的 14 键 + 2 个无条件键从 config.xml 反向映射回本地封面设置，
+    // 与写出侧 coverSettingsToAndroid / 无条件区一一对应。
+    const coverSettings = BackupRepository.restoreCoverSettings(
+      selection.stagingDirectory, CoverSettingsRepository.get(), ignoredCategories
+    );
+    await CoverSettingsRepository.save(context, coverSettings);
     const updated = await BackupRepository.restoreMatchingLocalProgress(
       context,
       selection.stagingDirectory,
@@ -1145,6 +1172,7 @@ export class BackupRepository {
       books: updated.books,
       settings: settings,
       bookshelfLayout: bookshelfLayout,
+      coverSettings: coverSettings,
       themeMode: restoredThemeMode,
       preservedEntryCount: preservedEntryCount,
       updatedLocalBookCount: updated.updatedCount,
@@ -1387,6 +1415,47 @@ export class BackupRepository {
     if (saveTabPositionValue !== undefined) { values.set('bookshelfSelectedGroupId', saveTabPositionValue); }
     if (unconditionalIntro !== undefined) { values.set('showBookIntro', unconditionalIntro.toString()); }
     return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
+  }
+
+  /**
+   * 从 config.xml 反向恢复封面设置。
+   *
+   * 14 个 coverPrefKeys 受 coverConfig 忽略开关控制；coverRestrictRatio / explore_filter_state
+   * 属无条件键，取消 coverConfig 勾选也照样恢复（ZIP-COVER E2 / E3 判 `—`）。
+   */
+  private static restoreCoverSettings(
+    directory: string,
+    current: CoverSettings,
+    ignoredCategories: string[]
+  ): CoverSettings {
+    const merged = copyCoverSettings(current);
+    const configPath = `${directory}/config.xml`;
+    const unconditionalRatio = BackupRepository.readXmlBoolean(configPath, 'coverRestrictRatio');
+    const unconditionalFilter = BackupRepository.readXmlInteger(configPath, 'explore_filter_state');
+    if (ignoredCategories.includes('coverConfig')) {
+      if (unconditionalRatio !== undefined) { merged.restrictCoverRatio = unconditionalRatio; }
+      if (unconditionalFilter !== undefined) { merged.exploreFilterState = unconditionalFilter; }
+      return merged;
+    }
+    const values = new Map<string, string>();
+    // 键表与写出侧 coverSettingsToAndroid 共用：按 type 选读取函数，值统一转字符串。
+    for (const preference of coverSettingsToAndroid(current)) {
+      let value: string | undefined;
+      if (preference.type === 'boolean') {
+        const parsed = BackupRepository.readXmlBoolean(configPath, preference.key);
+        value = parsed === undefined ? undefined : `${parsed}`;
+      } else if (preference.type === 'int') {
+        const parsed = BackupRepository.readXmlInteger(configPath, preference.key);
+        value = parsed === undefined ? undefined : `${parsed}`;
+      } else {
+        value = BackupRepository.readXmlString(configPath, preference.key);
+      }
+      if (value !== undefined) { values.set(preference.key, value); }
+    }
+    const restored = applyAndroidCoverPreferences(current, values);
+    if (unconditionalRatio !== undefined) { restored.restrictCoverRatio = unconditionalRatio; }
+    if (unconditionalFilter !== undefined) { restored.exploreFilterState = unconditionalFilter; }
+    return restored;
   }
 
   private static applyEyeProtection(

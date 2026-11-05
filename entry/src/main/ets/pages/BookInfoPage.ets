@@ -6,6 +6,7 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { BookInfoBackdropStyle, resolveBookInfoBackdropStyleFor } from '../data/BookInfoBackdropStyle';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
+import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 
 @Component
 export struct BookInfoPage {
@@ -28,6 +29,8 @@ export struct BookInfoPage {
   @Prop networkCoverBackground: string = 'on';
   /** 默认封面背景模式，对齐上游 `bookInfoDefaultCoverBackground`。 */
   @Prop defaultCoverBackground: string = 'on';
+  /** 封面文字设置，从 Index 下发；详情页封面受 A8「限制封面比例」约束。 */
+  @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   onBack: () => void = () => {};
   onRead: () => void = () => {};
   onOpenCatalog: () => void = () => {};
@@ -209,7 +212,7 @@ export struct BookInfoPage {
             Blank().height(66)
 
             Row() {
-              BookCover({ book: this.book, displayWidth: 112, displayHeight: 157 })
+              BookCover({ book: this.book, displayWidth: 112, displayHeight: 157, coverSettings: this.coverSettings, applyAspectRatio: true })
               Column() {
                 Text(this.book.title).fontSize(23).fontWeight(FontWeight.Bold).fontColor('#F1F2F6')
                   .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -350,7 +353,7 @@ export struct BookInfoPage {
             Scroll() {
               Column() {
                 Row() {
-                  BookCover({ book: this.book, displayWidth: 58, displayHeight: 82, cornerRadius: 7 })
+                  BookCover({ book: this.book, displayWidth: 58, displayHeight: 82, cornerRadius: 7, coverSettings: this.coverSettings })
                     .width(58).height(82)
                   Column() {
                     Text('封面').fontSize(15).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')

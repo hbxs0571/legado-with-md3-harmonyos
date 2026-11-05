@@ -82,6 +82,25 @@ export class CoverAlbumRepository {
     return '';
   }
 
+  /**
+   * 当前选中相册的默认封面图路径（A3「使用默认封面」用）。
+   *
+   * 白天优先 lightImages、夜间优先 darkImages，取首张；对应一套为空时回落到另一套，
+   * 与上游 CoverAlbumRepository.kt:90-96 selectedImagePaths(isDark) 的取图方向一致。
+   * 未选相册或相册无图时返回空串，调用方据此走文字占位。
+   */
+  static defaultCoverPath(isNight: boolean): string {
+    const selected = CoverAlbumRepository.cachedSelection;
+    if (selected.length === 0) { return ''; }
+    const album = CoverAlbumRepository.cachedAlbums.find((item: CoverAlbumItem) => item.id === selected);
+    if (album === undefined) { return ''; }
+    const preferred = isNight ? album.darkImages : album.lightImages;
+    if (preferred.length > 0) { return preferred[0].path; }
+    const fallback = isNight ? album.lightImages : album.darkImages;
+    if (fallback.length > 0) { return fallback[0].path; }
+    return '';
+  }
+
   private static rootDir(context: Context): string {
     return `${context.filesDir}/${CoverAlbumRepository.directoryName}`;
   }

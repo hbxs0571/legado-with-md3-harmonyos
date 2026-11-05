@@ -3,6 +3,7 @@ import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
+import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 
 @Component
 export struct SearchPage {
@@ -22,6 +23,8 @@ export struct SearchPage {
   @Prop selectedGroup: string = '全部书籍';
   @Prop sourceScope: boolean = false;
   @Prop exactMatch: boolean = false;
+  /** 封面文字设置，从 Index 下发；搜索结果封面受 A8「限制封面比例」约束。 */
+  @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   @State showScopePanel: boolean = false;
   @State collapsedHeader: boolean = false;
   /** 顶栏底色（含不透明度与模糊透明度），由 `Index.publishTopBottomBarStyle()` 广播。 */
@@ -156,7 +159,7 @@ export struct SearchPage {
                 SearchEmptyState({ title: '书架暂无书籍', detail: '导入 TXT 或 EPUB 后，可在此搜索书名和作者。' })
               } else {
                 ForEach(this.getLocalBooks(), (book: Book) => {
-                  SearchBookRow({ book: book, onSelect: () => this.onOpenBook(book) })
+                  SearchBookRow({ book: book, coverSettings: this.coverSettings, onSelect: () => this.onOpenBook(book) })
                 }, (book: Book) => book.id)
               }
               Row() {
@@ -195,7 +198,7 @@ export struct SearchPage {
               Scroll(this.resultsScroller) {
                 Column() {
                   ForEach(this.getResults(), (book: Book) => {
-                    SearchBookRow({ book: book, onSelect: () => this.onOpenBook(book) })
+                    SearchBookRow({ book: book, coverSettings: this.coverSettings, onSelect: () => this.onOpenBook(book) })
                   }, (book: Book) => book.id)
                 }.padding({ bottom: 12 })
               }.layoutWeight(1).scrollBar(BarState.Off)
@@ -245,11 +248,13 @@ struct SearchBookRow {
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
+  /** 封面文字设置，由 SearchPage 透传；搜索行封面受 A8「限制封面比例」约束。 */
+  @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   onSelect: () => void = () => {};
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   build() {
     Row() {
-      BookCover({ book: this.book, compact: true })
+      BookCover({ book: this.book, compact: true, coverSettings: this.coverSettings, applyAspectRatio: true })
       Column() {
         Text(this.book.title).fontSize(17).fontColor(this.themeColorTextPrimary).maxLines(1)
         Text(this.book.author).fontSize(14).fontColor('#AEB0BA').margin({ top: 5 }).maxLines(1)

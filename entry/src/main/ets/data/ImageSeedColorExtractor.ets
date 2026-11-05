@@ -51,6 +51,29 @@ export class ImageSeedColorExtractor {
     }
   }
 
+  /**
+   * 读取封面原图的宽高比（width / height）。
+   *
+   * A8「限制封面比例」关闭时，搜索/详情页按真实比例推导封面高度
+   * （上游 CoverSettings.kt:6-10）；读不到或尺寸无效时返回 0，调用方回落到固定 5:7。
+   */
+  static async coverAspectRatio(uri: string): Promise<number> {
+    if (uri.length === 0) { return 0; }
+    let source: image.ImageSource | undefined = undefined;
+    try {
+      source = image.createImageSource(uri);
+      const info = await source.getImageInfo();
+      if (info.size.width <= 0 || info.size.height <= 0) { return 0; }
+      return info.size.width / info.size.height;
+    } catch (_) {
+      return 0;
+    } finally {
+      if (source !== undefined) {
+        try { await source.release(); } catch (_) {}
+      }
+    }
+  }
+
   /** 取缩略图所有像素的均值，再按上游口径提饱和度，避免灰扑扑的封面给出无彩主色。 */
   private static averageColor(pixelMap: image.PixelMap): string {
     const info: image.ImageInfo = pixelMap.getImageInfoSync();

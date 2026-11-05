@@ -5303,6 +5303,8 @@ struct Index {
       this.books = result.books;
       this.bookGroups = BookGroupRepository.getAll();
       this.bookshelfLayout = copyBookshelfLayout(result.bookshelfLayout);
+      // 封面设置随 config.xml 的 coverConfig 键组恢复，刷回 @State 后下发各页。
+      this.coverSettings = copyCoverSettings(result.coverSettings);
       // 全局深色模式：归档里没有该键（或该类被忽略）时保留当前值，不硬覆盖。
       if (result.themeMode !== undefined && result.themeMode !== this.themeMode) {
         await this.applyThemeMode(context, result.themeMode, this.themePaletteIndex, true);
@@ -6744,6 +6746,7 @@ struct Index {
           followCoverColor: this.bookInfoFollowCoverColor,
           networkCoverBackground: this.bookInfoNetworkCoverBackground,
           defaultCoverBackground: this.bookInfoDefaultCoverBackground,
+          coverSettings: this.coverSettings,
           onBack: () => this.route = this.bookInfoReturnRoute,
           onRead: () => this.openBook(this.selectedBook),
           onOpenCatalog: () => this.openCatalogFromBookInfo(),
@@ -7411,6 +7414,7 @@ struct Index {
           selectedGroup: this.searchPageGroup,
           sourceScope: this.searchPageSourceScope,
           exactMatch: this.searchPageExactMatch,
+          coverSettings: this.coverSettings,
           onBack: () => this.route = this.searchReturnRoute,
           onOpenBook: (book: Book) => this.openBook(book),
           onOpenSourceManage: () => this.openProfileDetail(ProfileRoute.BOOK_SOURCE_MANAGE),

@@ -272,7 +272,17 @@ export struct AppCoverSettingsPage {
       Scroll(this.settingsScroller) {
         Column() {
           CoverSettingsSection({ title: '通用' }) {
+            CoverSettingsSwitch({
+              title: '仅 WiFi 下载封面', detail: '蜂窝网络下不加载网络封面',
+              value: this.settings.loadOnlyOnWifi,
+              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.loadOnlyOnWifi = value; })
+            })
             CoverSettingsAction({ title: '封面规则', detail: '编辑按规则获取封面用的搜索源与规则表达式', onSelect: () => this.openRuleSheet() })
+            CoverSettingsSwitch({
+              title: '使用默认封面', detail: '忽略书籍自带封面，统一显示默认封面',
+              value: this.settings.useDefaultCover,
+              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultCover = value; })
+            })
             CoverSettingsAction({ title: '默认封面', detail: this.albumSummary(), onSelect: () => this.openAlbumSelect() })
             CoverSettingsSwitch({
               title: '显示字体阴影', detail: '给书名与作者加一层阴影',
@@ -299,7 +309,18 @@ export struct AppCoverSettingsPage {
                 draft.infoOrientation = index === 1 ? '1' : '0';
               })
             })
-            CoverSettingsAction({ title: '网络书籍角标', detail: '网络书籍角标尚未迁移', onSelect: () => this.onUnavailableAction('网络书籍角标设置尚未迁移') })
+            CoverSettingsSwitch({
+              title: '限制封面比例', detail: '开启时搜索/详情封面固定 5:7，关闭后按原图比例',
+              value: this.settings.restrictCoverRatio,
+              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.restrictCoverRatio = value; })
+            })
+            CoverSettingsChoice({
+              title: '网络书籍角标', options: ['全部显示', '隐藏书架内', '隐藏同名同作者', '仅显示书架外'],
+              selectedIndex: this.settings.exploreFilterState,
+              onSelect: (index: number) => this.applyChange((draft: CoverSettings) => {
+                draft.exploreFilterState = index;
+              })
+            })
           }
 
           CoverSettingsSection({ title: '日间封面' }) {
@@ -345,7 +366,7 @@ export struct AppCoverSettingsPage {
               onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthorDark = value; })
             })
           }
-          Text('有灰色动作提示的条目尚未迁移；其余开关、封面规则与默认封面相册改动即时生效。')
+          Text('仅 WiFi 下载封面、网络书籍角标随网络封面与在线书源一起接入；其余改动即时生效。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
