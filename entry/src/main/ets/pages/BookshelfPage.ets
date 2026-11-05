@@ -565,6 +565,24 @@ export struct BookshelfPage {
       ? this.layout.bookshelfLayoutListLandscape : this.layout.bookshelfLayoutListPortrait;
   }
 
+  /** 面板草稿里当前方向生效的布局模式：面板未提交前只读草稿，不读已保存值。 */
+  private activeDraftLayoutMode(): number {
+    return this.isLandscape
+      ? this.layoutDraft.bookshelfLayoutModeLandscape : this.layoutDraft.bookshelfLayoutModePortrait;
+  }
+
+  /** 面板草稿里当前方向生效的网格列数。 */
+  private activeDraftGridColumns(): number {
+    return this.isLandscape
+      ? this.layoutDraft.bookshelfLayoutGridLandscape : this.layoutDraft.bookshelfLayoutGridPortrait;
+  }
+
+  /** 面板草稿里当前方向生效的列表列数。 */
+  private activeDraftListColumns(): number {
+    return this.isLandscape
+      ? this.layoutDraft.bookshelfLayoutListLandscape : this.layoutDraft.bookshelfLayoutListPortrait;
+  }
+
   /** 文件夹视图：当前方向下生效的布局模式（1 网格 / 0 列表）。 */
   private activeFolderLayoutMode(): number {
     return this.isLandscape
@@ -591,8 +609,8 @@ export struct BookshelfPage {
   private folderColumnsTemplate(): string {
     const mode = this.activeFolderLayoutMode();
     const configured = mode === 1 ? this.activeFolderGridColumns() : this.activeFolderListColumns();
-    const maximum = mode === 1 ? 8 : 5;
-    const columns = Math.max(1, Math.min(maximum, Math.round(configured)));
+    // 上限只留 1，对齐上游 BookshelfScreen.kt:988 的 folderColumns.coerceAtLeast(1)。
+    const columns = Math.max(1, Math.round(configured));
     const template: string[] = [];
     for (let index = 0; index < columns; index += 1) { template.push('1fr'); }
     return template.join(' ');
@@ -602,8 +620,8 @@ export struct BookshelfPage {
   private bookshelfColumnsTemplate(): string {
     const mode = this.activeLayoutMode();
     const configuredColumns = mode === 1 ? this.activeGridColumns() : this.activeListColumns();
-    const maximum = mode === 1 ? 6 : 5;
-    const columns = Math.max(1, Math.min(maximum, Math.round(configuredColumns)));
+    // 上限只留 1，对齐上游 BookshelfScreen.kt:1753 的 columns.coerceAtLeast(1)。
+    const columns = Math.max(1, Math.round(configuredColumns));
     const template: string[] = [];
     for (let index = 0; index < columns; index += 1) { template.push('1fr'); }
     return template.join(' ');
@@ -613,8 +631,7 @@ export struct BookshelfPage {
   private bookshelfColumnCount(): number {
     const mode = this.activeLayoutMode();
     const configuredColumns = mode === 1 ? this.activeGridColumns() : this.activeListColumns();
-    const maximum = mode === 1 ? 6 : 5;
-    return Math.max(1, Math.min(maximum, Math.round(configuredColumns)));
+    return Math.max(1, Math.round(configuredColumns));
   }
 
   /**
@@ -806,22 +823,38 @@ export struct BookshelfPage {
               this.layoutDraft.bookshelfFolderLayoutModePortrait,
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutModePortrait = value; }); })
             this.LayoutStepperRow('文件夹网格列数·竖屏', '网格模式下分组卡片每行个数',
-              this.layoutDraft.bookshelfFolderLayoutGridPortrait, 1, 8,
-              (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutGridPortrait += delta; }); })
+              this.layoutDraft.bookshelfFolderLayoutGridPortrait, 1, 15,
+              (delta: number) => {
+                this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                  draft.bookshelfFolderLayoutGridPortrait = Math.max(1, Math.min(15, draft.bookshelfFolderLayoutGridPortrait + delta));
+                });
+              })
             this.LayoutStepperRow('文件夹列表列数·竖屏', '列表模式下分组卡片每行个数',
               this.layoutDraft.bookshelfFolderLayoutListPortrait, 1, 5,
-              (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutListPortrait += delta; }); })
+              (delta: number) => {
+                this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                  draft.bookshelfFolderLayoutListPortrait = Math.max(1, Math.min(5, draft.bookshelfFolderLayoutListPortrait + delta));
+                });
+              })
 
             this.LayoutSectionHeader('文件夹（横屏）')
             this.LayoutMenuRow('文件夹布局模式·横屏', '列表 / 网格', BOOKSHELF_FOLDER_LAYOUT_MODE_OPTIONS,
               this.layoutDraft.bookshelfFolderLayoutModeLandscape,
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutModeLandscape = value; }); })
             this.LayoutStepperRow('文件夹网格列数·横屏', '网格模式下分组卡片每行个数',
-              this.layoutDraft.bookshelfFolderLayoutGridLandscape, 1, 8,
-              (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutGridLandscape += delta; }); })
+              this.layoutDraft.bookshelfFolderLayoutGridLandscape, 1, 15,
+              (delta: number) => {
+                this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                  draft.bookshelfFolderLayoutGridLandscape = Math.max(1, Math.min(15, draft.bookshelfFolderLayoutGridLandscape + delta));
+                });
+              })
             this.LayoutStepperRow('文件夹列表列数·横屏', '列表模式下分组卡片每行个数',
               this.layoutDraft.bookshelfFolderLayoutListLandscape, 1, 5,
-              (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutListLandscape += delta; }); })
+              (delta: number) => {
+                this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                  draft.bookshelfFolderLayoutListLandscape = Math.max(1, Math.min(5, draft.bookshelfFolderLayoutListLandscape + delta));
+                });
+              })
 
             this.LayoutSectionHeader('文件夹列表样式')
             this.LayoutMenuRow('文件夹列表样式', '分组 / 紧凑列表 / 横排封面数量', BOOKSHELF_GROUP_LIST_STYLE_OPTIONS,
@@ -829,8 +862,12 @@ export struct BookshelfPage {
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGroupListStyle = value; }); })
             if (this.layoutDraft.bookshelfGroupListStyle === 2) {
               this.LayoutStepperRow('横排封面数量', '分组卡片一行显示的封面数，不足右侧留空',
-                this.layoutDraft.bookshelfGroupCoverCount, 1, 8,
-                (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGroupCoverCount += delta; }); })
+                this.layoutDraft.bookshelfGroupCoverCount, 1, 10,
+                (delta: number) => {
+                  this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                    draft.bookshelfGroupCoverCount = Math.max(1, Math.min(10, draft.bookshelfGroupCoverCount + delta));
+                  });
+                })
             }
           }
 
@@ -841,32 +878,55 @@ export struct BookshelfPage {
             (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfSortOrder = value; }); })
 
           this.LayoutSectionHeader('布局')
-          if (this.layoutDraft.bookshelfLayoutModePortrait === 0) {
-            this.LayoutMenuRow('布局模式', '竖屏下的书架呈现方式',
-              BOOKSHELF_LAYOUT_MODE_OPTIONS, 0,
-              (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfLayoutModePortrait = value; }); })
-          } else {
-            this.LayoutMenuRow('布局模式', '竖屏下的书架呈现方式',
-              BOOKSHELF_LAYOUT_MODE_OPTIONS, 1,
-              (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfLayoutModePortrait = value; }); })
-          }
-          if (this.layoutDraft.bookshelfLayoutModePortrait === 1) {
+          // 布局模式按当前方向读写：横屏写 bookshelfLayoutModeLandscape，对齐上游
+          // BookshelfConfigSheet.kt:247-265（同一个下拉按 isLandscape 分支写两个字段）。
+          this.LayoutMenuRow('布局模式', this.isLandscape ? '横屏下的书架呈现方式' : '竖屏下的书架呈现方式',
+            BOOKSHELF_LAYOUT_MODE_OPTIONS, this.activeDraftLayoutMode(),
+            (value: number) => {
+              this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                if (this.isLandscape) { draft.bookshelfLayoutModeLandscape = value; }
+                else { draft.bookshelfLayoutModePortrait = value; }
+              });
+            })
+          if (this.activeDraftLayoutMode() === 1) {
             this.LayoutMenuRow('网格样式', '标准 / 紧凑（书名进封面）/ 仅封面',
               BOOKSHELF_GRID_STYLE_OPTIONS, this.layoutDraft.bookshelfGridLayout,
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGridLayout = value; }); })
           }
-          if (this.layoutDraft.bookshelfLayoutModePortrait === 1) {
+          // 列数上限对齐上游 BookshelfConfigSheet.kt:288（valueRange = 1f..15f）与 :412（1f..5f）；
+          // 夹取写在回调里，因为 LayoutStepperRow 的 value<maximum 守卫在连点时会读到旧值。
+          if (this.activeDraftLayoutMode() === 1) {
             this.LayoutStepperRow('网格列数', '每行显示的书封数量',
-              this.layoutDraft.bookshelfLayoutGridPortrait, 1, 6,
-              (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfLayoutGridPortrait += delta; }); })
+              this.activeDraftGridColumns(), 1, 15,
+              (delta: number) => {
+                this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                  if (this.isLandscape) {
+                    draft.bookshelfLayoutGridLandscape = Math.max(1, Math.min(15, draft.bookshelfLayoutGridLandscape + delta));
+                  } else {
+                    draft.bookshelfLayoutGridPortrait = Math.max(1, Math.min(15, draft.bookshelfLayoutGridPortrait + delta));
+                  }
+                });
+              })
           } else {
             this.LayoutStepperRow('列表列数', '每行显示的书封数量',
-              this.layoutDraft.bookshelfLayoutListPortrait, 1, 5,
-              (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfLayoutListPortrait += delta; }); })
+              this.activeDraftListColumns(), 1, 5,
+              (delta: number) => {
+                this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                  if (this.isLandscape) {
+                    draft.bookshelfLayoutListLandscape = Math.max(1, Math.min(5, draft.bookshelfLayoutListLandscape + delta));
+                  } else {
+                    draft.bookshelfLayoutListPortrait = Math.max(1, Math.min(5, draft.bookshelfLayoutListPortrait + delta));
+                  }
+                });
+              })
           }
           this.LayoutStepperRow('书名行数', '书封下方标题最多显示几行',
             this.layoutDraft.bookshelfTitleMaxLines, 1, 5,
-            (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfTitleMaxLines += delta; }); })
+            (delta: number) => {
+              this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                draft.bookshelfTitleMaxLines = Math.max(1, Math.min(5, draft.bookshelfTitleMaxLines + delta));
+              });
+            })
           this.LayoutSwitchRow('标题居中', '关闭后书名左对齐', this.layoutDraft.bookshelfTitleCenter,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfTitleCenter = value; }); })
           this.LayoutSwitchRow('标题小字号', '书名用 11 号字，默认 13 号', this.layoutDraft.bookshelfTitleSmallFont,

@@ -1458,7 +1458,10 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：字段只有竖屏三键（`entry/src/main/ets/model/BookshelfLayout.ets:17`、`:19`、`:21`）；无横竖屏判断（全局前置 2）。
 - **补法**：先建窗口尺寸读取入口（HOS 用 `window.getLastWindow` 取窗口矩形或 `display.getDefaultDisplaySync()`，**不是** Android 的 `LocalConfiguration`），再补 3 个 Landscape 字段与仓储，`BookshelfPage.ets:419-427` 的 `bookshelfColumnsTemplate()` 按方向取不同值。
 - **验收**：同一台设备横屏后网格列数变为横屏设置值，转回竖屏恢复竖屏值。
-- 实现记录（r331）：`BookshelfPage.ets` 已落地 `isLandscape`（`:97`）、窗口矩形读取 （`:157-170`）、`activeLayoutMode`/`activeGridColumns`/`activeListColumns`（`:515-530`） 与三处按方向取值（`:533-549`、`:971`），构建通过；本机 DevEco 模拟器无可用旋转入口，横屏屏幕行为未验，C 块 `:136`~`:138` 按任务书 `:200` 留 `未接`，卡点见证据包第 4 节。
+- 实现记录（r331）：`BookshelfPage.ets` 已落地 `isLandscape`（`:100`）、窗口矩形读取（`:160-177`）、`activeLayoutMode`/`activeGridColumns`/`activeListColumns`（`:551-565`）与三处按方向取值（`:1216`）。
+- **已补横屏面板入口（r332）**：修复前面板布局模式的两个分支都写竖屏字段（`draft.bookshelfLayoutModePortrait`），横屏下改不了横屏值。现改为 `activeDraftLayoutMode()`/`activeDraftGridColumns()`/`activeDraftListColumns()`（`:569-585`）按 `isLandscape` 读写，标签随之变为「横屏下的书架呈现方式」（`:883-890`），对齐上游 `BookshelfConfigSheet.kt:247-265`、`:284-300`、`:412-424` 的 `it.copy(...Landscape = value)`。
+- **已补列数上限（r332）**：`bookshelfColumnsTemplate()`/`bookshelfColumnCount()`（`:620-638`）原 `maximum = mode === 1 ? 6 : 5` 把横屏默认 7 压成 6，现改为渲染处只设下限 `Math.max(1, Math.round(configured))`，步进器上限改网格 1..15、列表 1..5，对齐上游 `BookshelfConfigSheet.kt:288`（`1f..15f`）与 `:412`（`1f..5f`）。
+- **设备横屏已验（r332）**：模拟器实例 `config.ini` 的 `hw.lcd.single.width/height` 对调冷启动即得横屏 2832×1280（`hw.lcd.phy.*` 同步对调），C 块 `:136`/`:137`/`:138` 三行已改 `已接`，证据 `land-list.jpeg`、`land-after4.json`、`land-modemenu.json`。
 
 **KI-SL-C2 文件夹六项** —— 覆盖 C 块 `:139`、`:140`、`:141`、`:142`、`:143`、`:144`（共 6 行）
 
@@ -1466,7 +1469,9 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **本地现状**：6 个字段全无，且无文件夹视图（KI-SL-A1）。
 - **补法**：随 KI-SL-A1 一起做；取值分支照 `:985` 的两级判断。
 - **验收**：开文件夹样式后，竖屏改网格列数为 4、横屏为 6，两种方向各生效。
-- **已实现（r331，部分）**：C 块 `:139`、`:140`、`:141`（竖屏三项）已改 `已接`；`:142`、`:143`、`:144`（横屏三项）留 `未接`。`BookshelfPage.ets:569-585` 新增 `activeFolderLayoutMode` / `activeFolderGridColumns` / `activeFolderListColumns` 按 `isLandscape` 取值，`:591-601` `folderColumnsTemplate()` 照上游 `:985` 的两级判断（mode===0 取列表列数否则网格列数）并 `coerceAtLeast(1)`，`:1050` 挂到 `.columnsTemplate`。竖屏网格列数 3→4 生效见 `b5-folder-col4.png`、重开读回 4 见 `b5-col4v.json`。**横屏三项留 `未接` 的原因与 KI-SL-C1 一致：本机 DevEco 模拟器无可用旋转入口，设备横屏行为未验（代码已落地），卡点见证据包第 4 节；竖屏「切列表模式改列表列数」屏幕现象未单独上机，登记「未验」。**
+- **已实现（r331）**：C 块 `:139`、`:140`、`:141`（竖屏三项）改 `已接`。`BookshelfPage.ets:587-603` 的 `activeFolderLayoutMode` / `activeFolderGridColumns` / `activeFolderListColumns` 按 `isLandscape` 取值，`:609-618` `folderColumnsTemplate()` 照上游 `:985` 的两级判断（mode===0 取列表列数否则网格列数）并只设下限，`:1110` 挂到 `.columnsTemplate`。竖屏网格列数 3→4 生效见 `b5-folder-col4.png`、重开读回 4 见 `b5-col4v.json`。
+- **横屏三项已验（r332）**：C 块 `:142`、`:143`、`:144` 改 `已接`。横屏下分组样式选「文件夹」后面板展开「文件夹（横屏）」分区（`:841-857`），实测：网格列数 7→15 后根层两张分组卡宽 159≈2832/15（`land-c15.json`）；模式切「列表」后单卡铺满整行（`land-flist.json`）；列表列数 1→3 后两张卡横向并排、各宽 907≈2832/3（`land-flc3.json`、`land-flc3.jpeg`）。
+- **顺带修掉的一处缺陷（r332）**：`文件夹列表列数·竖屏/横屏` 与 `书名行数` 三个步进器的回调原先直接 `+= delta` 不夹取，实测把横屏列表列数减到了 **-22**；现三处都改为 `Math.max(下限, Math.min(上限, 值 + delta))`，与其余步进器一致。
 
 **KI-SL-C3 首屏封面预加载列数** —— 覆盖 C 块 `:145`（共 1 行）
 

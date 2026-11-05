@@ -1249,4 +1249,35 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 **未做到 / 存疑**：① 横屏三项 C 块 `:142`/`:143`/`:144` 与 KI-SL-C1 同型，代码已落地（横屏模式 / 网格列数 / 列表列数字段 + 按 `isLandscape` 取 Landscape 值），但本机 DevEco 模拟器无可用旋转入口（旋转手段在批次 3 已试尽），设备横屏行为未验，这 3 行留 `未接`，卡点见证据包第 4 节，需验收段换设备或提供旋转方式；② 竖屏「切列表模式改列表列数」屏幕现象未单独上机，登记「未验」；③ 菜单点击有延迟，一次点击后 dump 常显示旧值（如数量 4→6 首次 dump 仍是 4），须「点完成提交 → 重开面板 → dump」读回真实值，原始输出不删除；④ 本地返回入口是文字按钮「‹ 返回文件夹」，上游 `PredictiveBackHandler`（`BookshelfScreen.kt:512`）手势返回本轮未接；⑤ C 块 `:146` 与 F 块 `:198` 仍留 `未接`（前者不适用判定未变，后者 51 字段全集本地仍差 12 个属 N2/N4 不接组，见证据包第 4 节）。实现段不自行宣布功能正确。
 
+## 2026-11-05 N 端 r332 书架布局横屏补验（KI-SL-C1 / KI-SL-C2 横屏六行）
+
+**设备**：DevEco 模拟器 `Mate 90 Pro`（`127.0.0.1:5555`），横屏 2832×1280。横屏取值方式：把实例 `config.ini` 的 `hw.lcd.single.width/height`（原 1280/2832）与 `hw.lcd.phy.width/height`（原 72/156）对调后冷启动；只改 `hardware-qemu.ini` 的 `hw.lcd.width/height` 无效（实测仍是 1280×2832）。收尾已换回备份 `config.ini.orig`（md5 `c8a86878f08b926fb20332248690e6f6`）冷启动回竖屏 1280×2832。
+
+**构建**：`bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 29 s 353 ms`，`BUILD_EXIT=0`，`ERROR` 计数 0；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12196952 字节；`bm install -r` → `install bundle successfully.`
+
+**等级说明**：本节按 `docs/VALIDATION.md:1-40` 的第 2 级记「构建通过 / 覆盖安装成功」+ 客观取证，不写「通过」，不对功能正确性下结论。
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| C `:136` 横屏布局模式 | 横屏开布局面板 → 布局模式切「列表」→ 提交 → 截图 → 重开面板 | 卡片变列表形态、面板读回「列表」 | `land-list.jpeg`；`land-list.json` `GridItem [28,688][935,971]`（宽 935≈2832/3），卡内三行 序号/书名/最新章节；`land-verify.json` 重开读回「列表」+ 列表列数 3 |
+| C `:137` 横屏网格列数 | 横屏网格列数 7→4 → 提交 → 截图 → 重开面板 | 列数变化、面板读回 4 | 修复前 `GridItem [28,688][401,971]`（宽 401≈2832/7）；改后 `[28,688][701,971]`（宽 701≈2832/4）；`land-after4.json`、`land-modemenu.json` 读回 4；`land-col4.jpeg` |
+| C `:138` 横屏列表列数 | 横屏布局模式切「列表」→ 列表列数 1→3 → 提交 | 每行 3 本、面板读回 3 | `land-listpanel.json` 面板值 1；`land-verify.json` 读回 3；`land-list.jpeg` 每行 3 本 |
+| C `:142` 文件夹横屏模式 | 横屏+分组样式「文件夹」→ 文件夹布局模式·横屏 切「列表」→ 提交 → 截图 | 根层分组卡片按列表列数铺排 | `land-flist.json` 单卡 `GridItem [28,619][2804,971]` 铺满整行；`land-flist.jpeg` |
+| C `:143` 文件夹横屏网格列数 | 文件夹网格列数·横屏 7→15 → 提交 → dump | 卡片明显变窄 | `land-c15.json` 两张卡 `[28,619][187,971]`、`[215,619][374,971]`（宽 159≈2832/15） |
+| C `:144` 文件夹横屏列表列数 | 文件夹列表列数·横屏 1→3 → 提交 → dump | 两张分组卡横向并排 | `land-flc3.json` `[28,619][935,971]` 与 `[963,619][1870,971]`（宽 907≈2832/3），各自「全部 1 本」/「本地未分组 1 本」；`land-flc3.jpeg` |
+| 三处步进器夹取 | 复位时观察非法值 | 值不越界 | 修复前把 `文件夹列表列数·横屏` 减到 **-22**（回调体直接 `+= delta`，无夹取）；补夹取后实测可把 -22 逐次点回 1 |
+
+**本轮修复的三处缺陷**（`entry/src/main/ets/pages/BookshelfPage.ets`）：
+1. 面板布局段原先两个分支都写 `bookshelfLayoutModePortrait`，网格/列表列数恒读写 Portrait 字段 → 横屏下无入口；改为 `activeDraftLayoutMode()`/`activeDraftGridColumns()`/`activeDraftListColumns()`（`:569-585`）按 `isLandscape` 读写，对齐上游 `BookshelfConfigSheet.kt:247-265`/`:284-300`/`:412-424`。
+2. `bookshelfColumnsTemplate()`/`bookshelfColumnCount()`（`:620-638`）原 `maximum = mode === 1 ? 6 : 5`，把横屏默认 7 压成 6 → 改为渲染处只设下限 `Math.max(1, Math.round(configured))`，步进器上限改网格 1..15、列表 1..5，对齐上游 `BookshelfConfigSheet.kt:288`（`1f..15f`）与 `:412`（`1f..5f`）。
+3. `文件夹列表列数·竖屏/横屏`、`书名行数` 三个步进器回调直接 `+= delta` 不夹取（`LayoutStepperRow` 的 `value < maximum` 守卫在连点时读到旧值）→ 三处改为 `Math.max(下限, Math.min(上限, 值 + delta))`。
+
+**复原**：模拟器 `config.ini` 换回 `config.ini.orig` 冷启动回竖屏 1280×2832；面板逐项恢复上游默认并提交，最终落盘 prefs 校验 **16 项差异数 0**（`bookGroupStyle=0`、`hideEmptyGroups=true`、`bookshelfLayoutGridPortrait=3`、`bookshelfLayoutGridLandscape=7`、`bookshelfLayoutListLandscape=1`、`bookshelf_layout_landscape=1`、`bookshelfFolderLayoutModeLandscape=1`、`bookshelfFolderLayoutGridLandscape=7`、`bookshelfFolderLayoutListLandscape=1`、`bookshelfGridCoverWidth=120` 等）；竖屏书架 `portrait-restored.jpeg`（`GridItem [28,688][417,1318]`，3 列）。
+
+**未做到 / 存疑**：
+1. 面板步进器/数字文本点击后不随 `@State layoutDraft` 刷新（UI 显示滞后），一次点击后 dump 常读到旧值；因此本轮所有取值一律以落盘 prefs 为准，不采信屏幕数字。该现象本身是否为缺陷未定性，登记存疑。
+2. 横屏只能在实例 `config.ini` 层面改（冷启动生效），设备内 `settings`/`wm`/`param set *rotation*` 全不可用（`errNum is:1001!`）；真机横屏行为未验。
+3. 本轮只验「列数/模式生效」，未验旋转过程中 `windowSizeChange` 回调的实时切换（本机是冷启动即横屏，不是旋转过渡）。
+4. C 块 `:145`、F 块 `:198` 两行仍留 `未接`，原因不变，见证据包第 4 节。
+
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**
