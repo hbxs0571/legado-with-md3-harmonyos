@@ -43,6 +43,7 @@ import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import { CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository } from '../data/CoverSettingsRepository';
 import { CoverRuleRepository } from '../data/CoverRuleRepository';
+import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
 import {
   BookshelfLayoutSettings, DEFAULT_BOOKSHELF_LAYOUT, copyBookshelfLayout
 } from '../model/BookshelfLayout';
@@ -704,6 +705,9 @@ struct Index {
     this.coverSettings = await CoverSettingsRepository.load(context);
     // 封面规则单独一份 preferences，进设置页前先灌进缓存（aboutToAppear 从 get() 读）
     await CoverRuleRepository.load(context);
+    // 相册索引与选择态也先灌缓存：设置页 A4 摘要与选择 sheet 首帧读 getAlbums()/getSelection()
+    await CoverAlbumRepository.load(context);
+    await CoverAlbumRepository.loadSelection(context);
   }
 
   private async restoreReadTimeRecords(context: Context): Promise<void> {
