@@ -81,6 +81,9 @@ export interface BookshelfLayoutSettings {
   bookshelfGroupListStyle: number;
   /** 分组卡片横排封面数量。对应上游 PreferKey 字符串值 bookshelfGroupCoverCount。 */
   bookshelfGroupCoverCount: number;
+  /** 列表模式显示详情区总开关（封面垂直居中/最新章节/简介/简介行数四项的外层）。
+   *  对应上游 PreferKey.showBookIntro，默认 false；不在 bookshelfPrefKeys 39 键内，备份时无条件写出。 */
+  showBookIntro: boolean;
   /** 批量更新数量限制，0 为不限制。对应上游 PreferKey 字符串值 bookshelfRefreshingLimit。 */
   bookshelfRefreshingLimit: number;
 }
@@ -171,6 +174,7 @@ export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   bookshelfFolderLayoutListLandscape: 1,
   bookshelfGroupListStyle: 0,
   bookshelfGroupCoverCount: 4,
+  showBookIntro: false,
   bookshelfRefreshingLimit: 0,
 };
 
@@ -221,6 +225,7 @@ export function copyBookshelfLayout(settings: BookshelfLayoutSettings): Bookshel
     bookshelfFolderLayoutListLandscape: settings.bookshelfFolderLayoutListLandscape,
     bookshelfGroupListStyle: settings.bookshelfGroupListStyle,
     bookshelfGroupCoverCount: settings.bookshelfGroupCoverCount,
+    showBookIntro: settings.showBookIntro,
     bookshelfRefreshingLimit: settings.bookshelfRefreshingLimit,
   };
 }

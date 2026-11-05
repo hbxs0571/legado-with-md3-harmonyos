@@ -1280,4 +1280,40 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 3. 本轮只验「列数/模式生效」，未验旋转过程中 `windowSizeChange` 回调的实时切换（本机是冷启动即横屏，不是旋转过渡）。
 4. C 块 `:145`、F 块 `:198` 两行仍留 `未接`，原因不变，见证据包第 4 节。
 
+## 2026-11-05 N 端 r333 书架列表详情补 `showBookIntro` 总开关（B 案）
+
+**设备**：DevEco 模拟器 `Mate 90 Pro`（`127.0.0.1:5555`），竖屏 1280×2832，包名 `io.legado.harmony`。
+
+**构建**：`bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 51 s 251 ms`（`build-b1.log:1533`），`BUILD_EXIT=0`，`ERROR` / `ArkTS:ERROR` 计数 0，`ArkTS:WARN` 494（与 r332 同数，无新增）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12213571 字节（r332 收尾为 12196952）；`bm install -r` → `install bundle successfully.`。
+
+**等级说明**：本节按 `docs/VALIDATION.md:1-40` 的第 2 级记「构建通过 / 覆盖安装成功」+ 客观取证，不写「通过」，不对功能正确性下结论。
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| 列表默认不显示详情 | 布局模式切「列表」，`showBookIntro` 保持默认 | 卡片只有封面 + 书名，无简介、无章节行 | `b1-list-default.jpeg`（88638B）只有封面 + 书名；落盘 `showBookIntro` 默认 `false` |
+| 打开总开关后出现详情 | 面板开「显示更多信息」→ 完成 → 截图 | 出现章节行 | `b1-list-intro.jpeg`（92106B）出现「第一章　风起于青萍之末」；落盘 `<bool key="showBookIntro" value="true"/>` |
+| 显示分隔线（默认 on） | 关该项 → 完成 → 截图；再开回 | 卡片底部细横线消失 / 回来 | 默认态 `b1-list-default.jpeg` 有细横线；关后 `b1-nodivider.jpeg`（90852B）消失；落盘 `<bool key="bookshelfShowDivider" value="false"/>`（已复原为 `true`） |
+| 封面垂直居中 | 关该项 → 完成 → 截图 | 封面上移与文字顶部对齐 | `b1-cover-top.jpeg`（90843B）；落盘 `<bool key="bookshelfListCoverCenter" value="false"/>`（已复原为 `true`） |
+| 简介在封面和信息下方 | 开该项 → 完成 → 读落盘 | 落盘值变 true | 落盘 `<bool key="bookshelfListIntroBelowContent" value="true"/>`；**屏幕效果未取到视觉证据**（样本书简介为空），见下方存疑 2 |
+| 简介行数 | 面板 `+` 两次 → 完成 → 读落盘；再 `−` 两次复原 | 0→2→0，面板文案同步 | 落盘 `<double key="bookshelfIntroMaxLines" value="2.000000"/>`；面板副标题 `'简介最多显示几行，0 表示显示全部（当前最多 2 行）' [56,1952][867,2042]`（`last.json`）；复原后落盘回 `0.000000`、文案回「当前显示全部」 |
+| 面板只在列表模式出现 | 布局模式切「网格」→ 打开面板 | 「显示分隔线 / 显示更多信息」一组不出现 | 代码条件 `BookshelfPage.ets:941` `if (this.activeDraftLayoutMode() !== 1)`，对齐上游 `BookshelfConfigSheet.kt:332` |
+| 网格分支未受影响 | 装包后直接看默认网格态 | 与改前同形（书名 + 作者在封面下方） | `b1-launch.jpeg`（89819B）；网格分支代码 `BookshelfPage.ets:1232` 起一行未改 |
+
+**代码落点**（`entry/src/main/ets/`，全中文注释）：
+- `model/BookshelfLayout.ets:86` 字段 `showBookIntro: boolean;`；`:177` 默认 `false`；`:228` `copyBookshelfLayout` 同步。字段数 39→40。
+- `data/BookshelfLayoutRepository.ets:80-81`（load）、`:151`（save）、`:233-234`（merge）、`:296`（`toAndroidValues`）。
+- `data/BackupRepository.ets:596` 无条件写出块（在 `ignoredCategories.includes('bookshelfLayout')` 判断之前）；`:1357-1362` 忽略判断前单独读入并写入早退分支；`:1388` 非早退分支合入。`preferenceKeysByCategory.bookshelfLayout`（`:357`）**未加**该键。
+- `pages/BookshelfPage.ets:568-570` `showsListDetails()`、`:573-575` `introMaxLines()`、`:578-581` `introMaxLinesDescription()`；`:939-976` 面板详情区（含 `:960` 与 `:966` 两个额外条件）；`:1005-1010` 外观组删掉原两条列表开关。
+- `pages/BookshelfPage.ets:1171-1230` 列表卡片：外层 `Column`、`:1193-1200` 右列简介、`:1203-1210` 章节行、`:1214` 封面对齐、`:1216-1224` 底部简介、`:1226-1230` 分隔线。
+
+**复原**：收尾把面板「显示分隔线」开、「封面垂直居中」开、「简介在封面和信息下方」关、「显示更多信息」关、「简介行数」2→0、布局模式回「网格」，逐项提交；`python N:/HarmonyProjects/tmp/restore_ui2.py status` 输出「无差异」；复原后截图 `b1-restored.jpeg`（89797B，页签 + 网格默认态）。模拟器全程竖屏，未改 `config.ini`。
+
+**未做到 / 存疑**：
+1. 任务书 `m03109` 第 5 节（列表卡片渲染 `:1119-1160`）在 `introMaxLines()` 方法处截断，后续渲染改法没有给出。按任务书「八条上游事实（逐条照做）」第 5–8 条落地：总门（`BookItem.kt:738`）、章节行双重约束（`:942`）、简介两处位置（`:918`/`:925`）、封面垂直居中（`:194`）、分隔线（`:253-260`）。下方简介容器用普通 `Column` + `Text`（上游是 `GlassCard`），分隔线用 `Divider()`（上游是 `HorizontalDivider`）——这两处形态由实现方自行确定，需判断段或用户确认。
+2. 样本书 `titleonly-test` 的 `Book.description` 为空字符串，「显示简介」「简介在封面和信息下方」「简介行数」三项的**文字可见效果**取不到视觉证据；只核到面板项出现/消失、落盘值、代码落点。与 r331/r332 两轮登记一致。
+3. `showBookIntro` 的备份写出/恢复语义**未上机验证**（本机未跑「导出备份 → 取消 bookshelfLayout 勾选 → 恢复」这一串）；只在样本 `N:\HarmonyProjects\测试\backup2026-10-22\config.xml:190` 核到 `<boolean name="showBookIntro" value="false" />` 键存在、值为上游默认。
+4. `introMaxLines()` 用 `999` 代替上游的 `Int.MAX_VALUE`（`BookItem.kt:1058`）；极端长简介下两者是否表现一致未验。
+5. 任务书给的第 5 处行号 `:1119-1160` 在改动前已漂移到 `:1168-1231`，实际按代码结构改，未按行号。
+6. ZIP 表 A 块 `:56`/`:62`/`:63`/`:66`/`:67` 与 B 块 `:106`/`:107`/`:111`/`:113`/`:114` 共 10 行（同属 KI-SL-N1）的**状态值本轮一行未改，仍为 `未接`**；按 `docs/PARITY-RULES.md` 第五节，状态属判断段产出，本段不下结论。已在 `docs/KNOWN-ISSUES.md` 的 KI-SL-N1 组里追加一条「前提已变化，状态未重判」的事实记录。
+
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**

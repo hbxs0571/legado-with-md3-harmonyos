@@ -588,11 +588,12 @@ export class BackupRepository {
           "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n</map>");
       }
 
-      // bookGroupStyle / hideEmptyGroups 不在上游 bookshelfPrefKeys 39 键内，
-      // 走 keyIsNotIgnore 的 else -> true，不受任何类别开关控制（KI-SL-A11）。
+      // bookGroupStyle / hideEmptyGroups / showBookIntro 不在上游 bookshelfPrefKeys 39 键内，
+      // 走 keyIsNotIgnore 的 else -> true，不受任何类别开关控制（KI-SL-A11 / KI-SL-B1）。
       let unconditionalText = fileIo.readTextSync(configPath);
       unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'int', 'bookGroupStyle', `${bookshelfLayout.bookGroupStyle}`);
       unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'boolean', 'hideEmptyGroups', `${bookshelfLayout.hideEmptyGroups}`);
+      unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'boolean', 'showBookIntro', `${bookshelfLayout.showBookIntro}`);
       BackupRepository.writeTextFile(configPath, unconditionalText);
 
       if (!ignoredCategories.includes('bookshelfLayout')) {
@@ -1353,7 +1354,14 @@ export class BackupRepository {
     current: BookshelfLayoutSettings,
     ignoredCategories: string[]
   ): BookshelfLayoutSettings {
-    if (ignoredCategories.includes('bookshelfLayout')) { return copyBookshelfLayout(current); }
+    // showBookIntro 不在上游 bookshelfPrefKeys 39 键内，走 keyIsNotIgnore 的 else -> true，
+    // 取消 bookshelfLayout 勾选也照样恢复，所以在忽略判断之前单独读（KI-SL-B1）。
+    const unconditionalIntro = BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'showBookIntro');
+    if (ignoredCategories.includes('bookshelfLayout')) {
+      const unchanged = copyBookshelfLayout(current);
+      if (unconditionalIntro !== undefined) { unchanged.showBookIntro = unconditionalIntro; }
+      return unchanged;
+    }
     const values = new Map<string, string>();
     const integerKeys = [
       'bookGroupStyle', 'bookshelfSort', 'bookshelfSortOrder', 'bookshelfLayoutPortrait',
@@ -1377,6 +1385,7 @@ export class BackupRepository {
     }
     const saveTabPositionValue = BackupRepository.readXmlString(`${directory}/config.xml`, 'bookshelfSelectedGroupId');
     if (saveTabPositionValue !== undefined) { values.set('bookshelfSelectedGroupId', saveTabPositionValue); }
+    if (unconditionalIntro !== undefined) { values.set('showBookIntro', unconditionalIntro.toString()); }
     return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
   }
 

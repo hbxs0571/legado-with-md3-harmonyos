@@ -565,6 +565,22 @@ export struct BookshelfPage {
       ? this.layout.bookshelfLayoutListLandscape : this.layout.bookshelfLayoutListPortrait;
   }
 
+  /** 列表详情区是否渲染：对齐上游 BookItem.kt:738 的 showListDetails（列表模式 + 非精简 + 总开关）。 */
+  private showsListDetails(): boolean {
+    return this.activeLayoutMode() === 0 && !this.layout.bookshelfLayoutCompact && this.layout.showBookIntro;
+  }
+
+  /** 简介最大行数：上游 0 表示不限（BookItem.kt:1058 用 Int.MAX_VALUE 兜底）。 */
+  private introMaxLines(): number {
+    return this.layout.bookshelfIntroMaxLines > 0 ? this.layout.bookshelfIntroMaxLines : 999;
+  }
+
+  /** 简介行数的描述文案：0 时显示全部，否则显示「最多 N 行」。 */
+  private introMaxLinesDescription(): string {
+    const lines = this.layoutDraft.bookshelfIntroMaxLines;
+    return lines === 0 ? '显示全部' : `最多 ${lines} 行`;
+  }
+
   /** 面板草稿里当前方向生效的布局模式：面板未提交前只读草稿，不读已保存值。 */
   private activeDraftLayoutMode(): number {
     return this.isLandscape
@@ -920,6 +936,44 @@ export struct BookshelfPage {
                 });
               })
           }
+          // 列表详情区：对齐上游 BookshelfConfigSheet.kt:332 的 AnimatedVisibility(layoutMode != 1)，
+          // 整串只在列表模式下出现；内部结构照 :338 / :425 / :434-488 的顺序与嵌套。
+          if (this.activeDraftLayoutMode() !== 1) {
+            this.LayoutSwitchRow('显示分隔线', '列表卡片之间显示一条细横线',
+              this.layoutDraft.bookshelfShowDivider,
+              (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowDivider = value; }); })
+            // 显示详情区总开关（上游 R.string.show_more_info，默认 false）：本地下面的四项都它的子项。
+            this.LayoutSwitchRow('显示更多信息', '列表卡片展开简介、最新章节等详情',
+              this.layoutDraft.showBookIntro,
+              (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.showBookIntro = value; }); })
+            if (this.layoutDraft.showBookIntro) {
+              this.LayoutSwitchRow('封面垂直居中', '关闭后列表封面与文字顶部对齐',
+                this.layoutDraft.bookshelfListCoverCenter,
+                (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfListCoverCenter = value; }); })
+              this.LayoutSwitchRow('显示最新章节', '列表卡片显示最后阅读的章节名',
+                this.layoutDraft.bookshelfShowLatestChapter,
+                (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowLatestChapter = value; }); })
+              this.LayoutSwitchRow('显示简介', '列表卡片显示书籍简介',
+                this.layoutDraft.bookshelfShowIntro,
+                (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowIntro = value; }); })
+              // 上游 :465 的额外条件是 settings.bookshelfShowIntro && layoutMode == 0。
+              if (this.layoutDraft.bookshelfShowIntro && this.activeDraftLayoutMode() === 0) {
+                this.LayoutSwitchRow('简介在封面和信息下方', '开启后简介单独铺在卡片底部',
+                  this.layoutDraft.bookshelfListIntroBelowContent,
+                  (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfListIntroBelowContent = value; }); })
+              }
+              // 上游 :477 的额外条件是 settings.bookshelfShowIntro；valueRange 0f..10f，0 表示显示全部。
+              if (this.layoutDraft.bookshelfShowIntro) {
+                this.LayoutStepperRow('简介行数', `简介最多显示几行，0 表示显示全部（当前${this.introMaxLinesDescription()}）`,
+                  this.layoutDraft.bookshelfIntroMaxLines, 0, 10,
+                  (delta: number) => {
+                    this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+                      draft.bookshelfIntroMaxLines = Math.max(0, Math.min(10, draft.bookshelfIntroMaxLines + delta));
+                    });
+                  })
+              }
+            }
+          }
           this.LayoutStepperRow('书名行数', '书封下方标题最多显示几行',
             this.layoutDraft.bookshelfTitleMaxLines, 1, 5,
             (delta: number) => {
@@ -951,13 +1005,8 @@ export struct BookshelfPage {
           this.LayoutStepperRow('列表封面宽度', '列表模式下书封宽度',
             this.layoutDraft.bookshelfListCoverWidth, 40, 200,
             (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfListCoverWidth = Math.max(40, Math.min(200, draft.bookshelfListCoverWidth + delta * 10)); }); })
-          // 列表模式详情开关：只在列表卡片里被读，网格分支不读。
-          this.LayoutSwitchRow('（列表模式）显示简介', '列表卡片右侧显示书籍简介',
-            this.layoutDraft.bookshelfShowIntro,
-            (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowIntro = value; }); })
-          this.LayoutSwitchRow('（列表模式）显示最新章节', '列表卡片右侧显示最新章节名',
-            this.layoutDraft.bookshelfShowLatestChapter,
-            (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowLatestChapter = value; }); })
+          // 列表模式的「显示简介 / 显示最新章节」已移进「布局」组的详情区（受 showBookIntro 总开关约束），
+          // 这里不再重复。
           this.LayoutSwitchRow('书封阴影', '', this.layoutDraft.bookshelfCoverShadow,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfCoverShadow = value; }); })
 
@@ -1119,45 +1168,67 @@ export struct BookshelfPage {
                 if (this.activeLayoutMode() === 0) {
                   // 列表模式卡片：左封面右信息（上游 BookItem.kt:846 BookshelfListItem）。
                   // 封面宽度只认 bookshelfListCoverWidth；网格封面宽度不参与本分支。
-                  Row() {
-                    BookCover({
-                      book: book,
-                      compact: true,
-                      showChapterBadge: true,
-                      shadowEnabled: this.layout.bookshelfCoverShadow,
-                      fillWidth: false,
-                      displayWidth: this.layout.bookshelfListCoverWidth,
-                      displayHeight: Math.round(this.layout.bookshelfListCoverWidth * 7 / 5),
-                      coverSettings: this.coverSettings,
-                      isNight: this.readerNightMode
-                    })
-                    Column() {
-                      Text(book.title)
-                        .fontSize(this.bookshelfTitleFontSize())
-                        .fontColor(this.themeColorTextSecondary)
-                        .maxLines(this.layout.bookshelfTitleMaxLines)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Column() {
+                    Row() {
+                      BookCover({
+                        book: book,
+                        compact: true,
+                        showChapterBadge: true,
+                        shadowEnabled: this.layout.bookshelfCoverShadow,
+                        fillWidth: false,
+                        displayWidth: this.layout.bookshelfListCoverWidth,
+                        displayHeight: Math.round(this.layout.bookshelfListCoverWidth * 7 / 5),
+                        coverSettings: this.coverSettings,
+                        isNight: this.readerNightMode
+                      })
+                      Column() {
+                        Text(book.title)
+                          .fontSize(this.bookshelfTitleFontSize())
+                          .fontColor(this.themeColorTextSecondary)
+                          .maxLines(this.layout.bookshelfTitleMaxLines)
+                          .textOverflow({ overflow: TextOverflow.Ellipsis })
+                          .width('100%')
+                          .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
+                        // 简介在右列：需详情总门 + 显示简介开关 + 未开启「简介在下方」三个条件（上游 BookItem.kt:918）。
+                        if (this.showsListDetails() && this.layout.bookshelfShowIntro
+                          && !this.layout.bookshelfListIntroBelowContent) {
+                          Text(book.description ?? '')
+                            .fontSize(11).fontColor(this.themeColorTextTertiary)
+                            .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
+                            .width('100%')
+                            .textAlign(TextAlign.Start)
+                            .padding({ top: 4, bottom: 4 })
+                        }
+                        // 章节行受总门与自身开关双重约束（上游 BookItem.kt:942）。
+                        if (this.showsListDetails() && this.layout.bookshelfShowLatestChapter) {
+                          Text(book.lastChapter)
+                            .fontSize(11).fontColor(this.themeColorTextTertiary)
+                            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                            .width('100%')
+                            .textAlign(TextAlign.Start)
+                        }
+                      }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                        .padding({ left: 8, right: 4 })
+                    }.width('100%')
+                      // 封面垂直居中（上游 BookItem.kt:194 的 bookshelfListCoverCenter）。
+                      .alignItems(this.layout.bookshelfListCoverCenter ? VerticalAlign.Center : VerticalAlign.Top)
+                    // 简介铺在卡片底部（上游 BookItem.kt:925 的 bottomContent）。
+                    if (this.showsListDetails() && this.layout.bookshelfShowIntro
+                      && this.layout.bookshelfListIntroBelowContent) {
+                      Text(book.description ?? '')
+                        .fontSize(11).fontColor(this.themeColorTextTertiary)
+                        .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
                         .width('100%')
-                        .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
-                      // 列表详情：精简模式下整块不渲染（对齐上游 BookItem.kt:230 的 !isCompact）。
-                      // 简介行数固定 2 行作版式常量，不读 bookshelfIntroMaxLines（该字段属 KI-SL-N1 不接范围）。
-                      if (!this.layout.bookshelfLayoutCompact && this.layout.bookshelfShowIntro) {
-                        Text(book.description ?? '')
-                          .fontSize(11).fontColor(this.themeColorTextTertiary)
-                          .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                          .width('100%')
-                          .textAlign(TextAlign.Start)
-                      }
-                      if (!this.layout.bookshelfLayoutCompact && this.layout.bookshelfShowLatestChapter) {
-                        Text(book.lastChapter)
-                          .fontSize(11).fontColor(this.themeColorTextTertiary)
-                          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                          .width('100%')
-                          .textAlign(TextAlign.Start)
-                      }
-                    }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-                      .padding({ left: 8, right: 4 })
-                  }.width('100%').alignItems(VerticalAlign.Top)
+                        .textAlign(TextAlign.Start)
+                        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                    }
+                    // 列表卡片之间的细横线（上游 BookItem.kt:253-260 的 HorizontalDivider，0.5dp、水平留白 16dp）。
+                    if (this.layout.bookshelfShowDivider) {
+                      Column() {
+                        Divider().strokeWidth(0.5).color(this.themeColorTextTertiary).opacity(0.5).width('100%')
+                      }.width('100%').padding({ left: 16, right: 16 })
+                    }
+                  }.width('100%')
                 } else {
                 Stack({ alignContent: Alignment.Bottom }) {
                   BookCover({

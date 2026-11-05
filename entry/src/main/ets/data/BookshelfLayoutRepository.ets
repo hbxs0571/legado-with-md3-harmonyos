@@ -77,6 +77,8 @@ export class BookshelfLayoutRepository {
         store, 'bookshelfShowLatestChapter', settings.bookshelfShowLatestChapter);
       settings.bookshelfIntroMaxLines = await BookshelfLayoutRepository.readInt(
         store, 'bookshelfIntroMaxLines', settings.bookshelfIntroMaxLines);
+      settings.showBookIntro = await BookshelfLayoutRepository.readBoolean(
+        store, 'showBookIntro', settings.showBookIntro);
       settings.bookshelfSearchActionDirectToSearch = await BookshelfLayoutRepository.readBoolean(
         store, 'bookshelfSearchActionDirectToSearch', settings.bookshelfSearchActionDirectToSearch);
       settings.showBookshelfFastScroller = await BookshelfLayoutRepository.readBoolean(
@@ -146,6 +148,7 @@ export class BookshelfLayoutRepository {
       await store.put('bookshelfShowIntro', snapshot.bookshelfShowIntro);
       await store.put('bookshelfShowLatestChapter', snapshot.bookshelfShowLatestChapter);
       await store.put('bookshelfIntroMaxLines', snapshot.bookshelfIntroMaxLines);
+      await store.put('showBookIntro', snapshot.showBookIntro);
       await store.put('bookshelfSearchActionDirectToSearch', snapshot.bookshelfSearchActionDirectToSearch);
       await store.put('showBookshelfFastScroller', snapshot.showBookshelfFastScroller);
       await store.put('auto_refresh', snapshot.autoRefreshBook);
@@ -227,6 +230,8 @@ export class BookshelfLayoutRepository {
     if (bookshelfShowLatestChapter !== undefined) { merged.bookshelfShowLatestChapter = bookshelfShowLatestChapter; }
     const bookshelfIntroMaxLines = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfIntroMaxLines'));
     if (bookshelfIntroMaxLines !== undefined) { merged.bookshelfIntroMaxLines = bookshelfIntroMaxLines; }
+    const showBookIntro = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showBookIntro'));
+    if (showBookIntro !== undefined) { merged.showBookIntro = showBookIntro; }
     const bookshelfSearchActionDirectToSearch = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfSearchActionDirectToSearch'));
     if (bookshelfSearchActionDirectToSearch !== undefined) { merged.bookshelfSearchActionDirectToSearch = bookshelfSearchActionDirectToSearch; }
     const showBookshelfFastScroller = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showBookshelfFastScroller'));
@@ -288,6 +293,7 @@ export class BookshelfLayoutRepository {
     values.set('bookshelfShowIntro', `${settings.bookshelfShowIntro}`);
     values.set('bookshelfShowLatestChapter', `${settings.bookshelfShowLatestChapter}`);
     values.set('bookshelfIntroMaxLines', `${settings.bookshelfIntroMaxLines}`);
+    values.set('showBookIntro', `${settings.showBookIntro}`);
     values.set('bookshelfSearchActionDirectToSearch', `${settings.bookshelfSearchActionDirectToSearch}`);
     values.set('showBookshelfFastScroller', `${settings.showBookshelfFastScroller}`);
     values.set('auto_refresh', `${settings.autoRefreshBook}`);
