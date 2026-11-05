@@ -42,6 +42,7 @@ import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import { CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository } from '../data/CoverSettingsRepository';
+import { CoverRuleRepository } from '../data/CoverRuleRepository';
 import {
   BookshelfLayoutSettings, DEFAULT_BOOKSHELF_LAYOUT, copyBookshelfLayout
 } from '../model/BookshelfLayout';
@@ -701,6 +702,8 @@ struct Index {
     this.bookshelfLayout = await BookshelfLayoutRepository.load(context);
     // 封面文字设置与书架布局一起恢复：书架首帧就要按它决定画书名还是首字
     this.coverSettings = await CoverSettingsRepository.load(context);
+    // 封面规则单独一份 preferences，进设置页前先灌进缓存（aboutToAppear 从 get() 读）
+    await CoverRuleRepository.load(context);
   }
 
   private async restoreReadTimeRecords(context: Context): Promise<void> {

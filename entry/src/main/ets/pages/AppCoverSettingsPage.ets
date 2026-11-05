@@ -2,17 +2,27 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 import {
   CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository
 } from '../data/CoverSettingsRepository';
+import {
+  CoverRule, DEFAULT_COVER_RULE, copyCoverRule, isDefaultCoverRule, CoverRuleRepository
+} from '../data/CoverRuleRepository';
 
 /**
  * 封面设置页。
  *
- * 只接本轮落地的那几项（显示书名/作者、描边、阴影、默认颜色、文字色、信息方向），
- * 其余上游项（网络封面、封面规则、默认封面相册、网络书籍角标）尚未迁移，
+ * 文字封面那几项（显示书名/作者、描边、阴影、默认颜色、文字色、信息方向）
+ * 改完立即落盘并同步给书架；封面规则单独用一个 bindSheet 编辑，
+ * 走 CoverRuleRepository 的 9 字段存储（对齐上游 CacheManager 里的 CoverRule）。
+ * 其余上游项（网络封面、默认封面相册、网络书籍角标）本轮尚未迁移，
  * 仍按「未迁移」提示处理，避免出现看起来能改、实际不生效的开关。
  */
 @Component
 export struct AppCoverSettingsPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -22,10 +32,78 @@ export struct AppCoverSettingsPage {
   @State collapsedHeader: boolean = false;
   /** 当前生效的封面设置；改动后立即落盘并同步给书架。 */
   @State settings: CoverSettings = copyCoverSettings(DEFAULT_COVER_SETTINGS);
+  /**
+   * 同一节点只挂一个 bindSheet，用 activeSheet 分支切内容（项目踩过多个
+   * bindSheet 只生效最后一个的坑）。封面规则 sheet 用 'rule' 这个值。
+   */
+  @State activeSheet: string = '';
+  /**
+   * 规则 sheet 的三项输入草稿拆成 @State 基本类型：ArkUI V1 的 @State 观察不到
+   * 普通对象内部属性的就地修改，照项目既有做法（applyChange 整份替换）用标量。
+   * 其余 6 个 BaseSource 字段不在 sheet 上编辑，保存时按默认值重建。
+   */
+  @State ruleEnabled: boolean = DEFAULT_COVER_RULE.enable;
+  @State ruleSearchUrl: string = DEFAULT_COVER_RULE.searchUrl;
+  @State ruleExpression: string = DEFAULT_COVER_RULE.coverRule;
   private settingsScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.settings = copyCoverSettings(CoverSettingsRepository.get());
+    this.loadRuleIntoDraft(CoverRuleRepository.get());
+  }
+
+  /** 把仓储里的规则拆进三项草稿，编辑不落库。 */
+  private loadRuleIntoDraft(rule: CoverRule): void {
+    this.ruleEnabled = rule.enable;
+    this.ruleSearchUrl = rule.searchUrl;
+    this.ruleExpression = rule.coverRule;
+  }
+
+  /** 用 UIContext 的 promptAction 弹一条短提示；未查到独立 toast 工具函数。 */
+  private showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    } catch (_) {}
+  }
+
+  /** 打开规则 sheet：把仓储里的当前值复制进草稿，编辑不落库。 */
+  private openRuleSheet(): void {
+    this.loadRuleIntoDraft(CoverRuleRepository.get());
+    this.activeSheet = 'rule';
+  }
+
+  /** 上游「恢复默认」只改 UI 状态、不落库（CoverConfigViewModel.kt:102-110）。 */
+  private restoreDefaultRule(): void {
+    this.loadRuleIntoDraft(DEFAULT_COVER_RULE);
+    this.showToast('已恢复默认规则，点保存后生效');
+  }
+
+  /**
+   * 保存：先做空值校验（CoverConfigViewModel.kt:130-133），不通过则 toast 且不关 sheet；
+   * 与默认规则相同就删缓存回退默认（delCoverRule），否则整份写库（saveCoverRule）。
+   * 对齐上游 CoverConfigViewModel.kt:135：用 3 个 UI 字段构造全新 CoverRule，
+   * 其余 6 个 BaseSource 字段不带入编辑态，按默认重建。
+   */
+  private async saveRule(): Promise<void> {
+    if (this.ruleSearchUrl.trim().length === 0 || this.ruleExpression.trim().length === 0) {
+      this.showToast('搜索 URL 与规则不能为空');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('封面规则保存失败，当前值未更改');
+      return;
+    }
+    const draft = copyCoverRule(DEFAULT_COVER_RULE);
+    draft.enable = this.ruleEnabled;
+    draft.searchUrl = this.ruleSearchUrl;
+    draft.coverRule = this.ruleExpression;
+    if (isDefaultCoverRule(draft)) {
+      await CoverRuleRepository.del(context);
+    } else {
+      await CoverRuleRepository.save(context, draft);
+    }
+    this.activeSheet = '';
   }
 
   private updateHeader(): void {
@@ -56,7 +134,7 @@ export struct AppCoverSettingsPage {
       Scroll(this.settingsScroller) {
         Column() {
           CoverSettingsSection({ title: '通用' }) {
-            CoverSettingsAction({ title: '封面规则', detail: '进入详情页时按规则重新获取封面', onSelect: () => this.onUnavailableAction('封面规则编辑尚未迁移') })
+            CoverSettingsAction({ title: '封面规则', detail: '编辑按规则获取封面用的搜索源与规则表达式', onSelect: () => this.openRuleSheet() })
             CoverSettingsAction({ title: '默认封面', detail: '未选择封面相册', onSelect: () => this.onUnavailableAction('默认封面相册选择尚未迁移') })
             CoverSettingsSwitch({
               title: '显示字体阴影', detail: '给书名与作者加一层阴影',
@@ -103,7 +181,7 @@ export struct AppCoverSettingsPage {
             })
             CoverSettingsSwitch({
               title: '显示作者', detail: '关闭书名显示时不生效',
-              value: this.settings.showAuthor,
+              value: this.settings.showAuthor, disabled: !this.settings.showName,
               onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthor = value; })
             })
           }
@@ -125,15 +203,69 @@ export struct AppCoverSettingsPage {
             })
             CoverSettingsSwitch({
               title: '显示作者', detail: '关闭书名显示时不生效',
-              value: this.settings.showAuthorDark,
+              value: this.settings.showAuthorDark, disabled: !this.settings.showNameDark,
               onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthorDark = value; })
             })
           }
-          Text('网络封面、封面规则与默认封面相册尚未迁移；其余项改动即时生效。')
+          Text('有灰色动作提示的条目尚未迁移；其余开关与封面规则改动即时生效。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
+      .bindSheet(this.activeSheet.length > 0, this.CoverSettingsSheetContent(), {
+        height: 620,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: this.themeColorSurfaceElevated,
+        onDisappear: () => this.activeSheet = ''
+      })
+  }
+
+  /** 一个 bindSheet 承载所有设置页 sheet；当前只有 'rule' 分支，后续批次在此追加。 */
+  @Builder
+  private CoverSettingsSheetContent() {
+    Column() {
+      if (this.activeSheet === 'rule') {
+        Row() {
+          Text('封面规则').fontSize(18).fontWeight(FontWeight.Medium)
+            .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text('恢复默认').fontSize(14).fontColor(this.themeColorAccent)
+            .onClick(() => this.restoreDefaultRule())
+          Text('保存').fontSize(14).fontColor(this.themeColorAccent).margin({ left: 18 })
+            .onClick(() => { this.saveRule(); })
+        }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 12 })
+
+        Scroll() {
+          Column() {
+            Row() {
+              Text('启用').fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+              Toggle({ type: ToggleType.Checkbox, isOn: this.ruleEnabled })
+                .onChange((value: boolean) => this.ruleEnabled = value)
+            }.width('100%').padding({ top: 8, bottom: 8 })
+
+            Column() {
+              Text('搜索 URL').fontSize(13).fontColor(this.themeColorTextTertiary)
+                .alignSelf(ItemAlign.Start).margin({ bottom: 6 })
+              TextInput({ text: this.ruleSearchUrl, placeholder: '搜索 URL' })
+                .fontSize(14).fontColor(this.themeColorTextPrimary)
+                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : this.themeColorSurfacePrimary)
+                .borderRadius(8).padding(10)
+                .onChange((value: string) => this.ruleSearchUrl = value)
+            }.width('100%').margin({ bottom: 12 })
+
+            Column() {
+              Text('规则表达式').fontSize(13).fontColor(this.themeColorTextTertiary)
+                .alignSelf(ItemAlign.Start).margin({ bottom: 6 })
+              TextArea({ text: this.ruleExpression, placeholder: '规则表达式' })
+                .width('100%').height(300).fontSize(12).fontColor(this.themeColorTextPrimary)
+                .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : this.themeColorSurfacePrimary)
+                .borderRadius(8).padding(10)
+                .onChange((value: string) => this.ruleExpression = value)
+            }.width('100%')
+          }.width('100%').padding({ left: 16, right: 16, top: 4 })
+        }.layoutWeight(1).scrollBar(BarState.Off)
+      }
+    }.width('100%').height('100%').padding({ top: 8 })
   }
 }
 
@@ -168,16 +300,20 @@ struct CoverSettingsSwitch {
   @Prop detail: string = '';
   /** 由父组件传入当前值，组件本身不再持有状态，避免与持久化数据不同步。 */
   @Prop value: boolean = false;
+  /** 上游语义：显示作者依赖显示书名，书名关闭时本行置灰且不可改（保留原值）。 */
+  @Prop disabled: boolean = false;
   onToggle: (value: boolean) => void = (_value: boolean) => {};
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
+        Text(this.title).fontSize(18)
+          .fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
         if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.value })
+        .enabled(!this.disabled)
         .onChange((value: boolean) => this.onToggle(value))
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 })
+    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).opacity(this.disabled ? 0.4 : 1)
   }
 }
 
