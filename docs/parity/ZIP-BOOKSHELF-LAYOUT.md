@@ -29,6 +29,22 @@
    - `BOOKSHELF.md:163`「本地 `pages/BookshelfPage.ets:503-556`（9 项）、`model/BookshelfLayout.ets`（9 字段）」是旧数字：实为面板 `:573-637`、**12 个逻辑条目**（14 处调用）、**13 字段**（`entry/src/main/ets/model/BookshelfLayout.ets:7-34`）。
    - `BOOKSHELF.md:221` 把「书架更新线程数」的 ZIP 类别写成 `threadCount`：上游 `bookshelfRefreshingLimit` 在 `help/storage/BackupConfig.kt:351` 属 `bookshelfPrefKeys`，类别应为 `bookshelfLayout`。本表 A 块该行已按 39 键标。
 
+## 盘面
+
+| 块 | 条数 | 已接 | 未接 | 不适用 |
+| --- | --- | --- | --- | --- |
+| A 设置面板 | 47 | 26 | 21 | 0 |
+| B 卡片渲染 | 26 | 13 | 13 | 0 |
+| C 布局矩阵 | 14 | 12 | 1 | 1 |
+| D 排序与筛选 | 12 | 12 | 0 | 0 |
+| E 书架主屏 | 14 | 7 | 7 | 0 |
+| F 字段全集与备份链路 | 9 | 6 | 1 | 2 |
+| 合计 | 122 | 76 | 43 | 3 |
+
+> 盘面数字按「状态列前缀匹配」（`已接（…）` 这类变体计入 `已接`）、只数 `## A`–`## F` 正文块下的数据行复算，不是手数。r331/r332 接了 38 行后本节补建（原先本表没有盘面节，数字只散在 `KNOWN-ISSUES.md` 的书架布局行登记里，且已过时）。
+>
+> `未接` 43 行按备注列分：`**要接**` 2 行（首屏封面预加载列数、书架设置字段全集 51 字段）、`**不接**` 41 行。全表 `**要接**` 共 40 行，其中 `已接` 38。
+
 ---
 
 ## A 设置面板（`ui/main/bookshelf/BookshelfConfigSheet.kt` 742 行）

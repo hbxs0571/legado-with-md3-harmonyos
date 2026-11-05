@@ -13,7 +13,7 @@
 > 3. **三张表各补「覆盖证明」节**，逐个分配上游接触面文件，未分配为 0：`bookmark` 63/63、`readConfig` 76/76、`localBook` 27/27、`bookGroup` 40/40、`readRecord` 63/63、`bookshelfLayout` 10/10。（r294 补上类别键名字面量后复算：`bookmark` 64/64、`readConfig` 78/78、`localBook` 28/28、`bookGroup` 41/41、`readRecord` 64/64、`bookshelfLayout` 10/10，仍全部为 0 未分配。r296 再给 `localBook` 补 `BookRestorePlan`/`LocalBookLocationStatus`/`isRelocatedCopyOf`/`normalizeLocalBookLocation` 四个词把 `BookRestorePlanner.kt` 纳入接触面，复算为 `localBook` 29/29；同时把界面白名单改为按类别门控。r297 给 `readConfig` 分五轮补关键词 `ReadMenuConfig`/`menuConfig`/`ReadPreferences`/`ReadBookStyleConfig`/`ReadSheetConfigUiState`/`expandTextMenu`/`showSelectMenuIcon`/`lastMarkingStyle`，接触面 78 → 105，再按精确文件名点名 2 个无配置引用的渲染端，复算为 `readConfig` **107/107**，增量清单见 [READER-CONFIG.md](READER-CONFIG.md) 的「接触面是怎么从 78 涨到 107 的」节。**r327 换掉 `bookshelfLayout` 的旧三关键词：旧词 `bookshelfLayout|BookshelfLayout|"bookshelfLayout"` 命中 10 个，但漏掉 `ui/main/bookshelf/BookItem.kt`（1090 行，卡片主渲染器）、`BookshelfViewModel.kt`（1436 行）、`BookshelfUiState.kt`（186 行）；换成 38 项字段前缀名后接触面 10 → 24，复算 `bookshelfLayout` **24/24**，见 [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md)。**）
 > 4. **`KEYWORDS.md` 的 `readConfig` 关键词修正**：`backupIgnoreReadConfig` 只命中 2 个文件（等于自证成功），改为 `ReadBookConfig|ReadSettings`（76 个）。（r294 又补上键名字面量 `"readConfig"`，复算为 78/78，见 `KEYWORDS.md` 的「存储层维度」一节。r297 补到 11 个词后为 105 个，逐词增量与漏检形态见 `KEYWORDS.md` 的「`readConfig` 行的关键词」节。）
 >
-> **未做的部分，读表时注意**：`BOOKSHELF.md` A1–C 的 263 行、`READER-CONFIG.md` A–G 的 189 行、`ZIP-BOOKMARK.md` A–E 的 83 行，都是 r277–r280 写下的**迁移前证据，未逐行复核**。表头已逐份写明这一边界。要当当前事实用，需按上游目录分派逐块重核——那时按 `scripts/upstream-surface.sh --coverage` 的未分配清单验收，不靠「表里没有 `待定`」结案。（r297 已对 `READER-CONFIG.md` 做完这一步：189 行逐块重核为 90 已接 / 97 `未接` / 2 不适用，97 条 `未接` 逐行登记进 `KNOWN-ISSUES.md`；其余两份表仍待重核。）
+> **未做的部分，读表时注意**：`BOOKSHELF.md` A1–C 的 263 行、`READER-CONFIG.md` A–G 的 189 行、`ZIP-BOOKMARK.md` A–E 的 83 行，都是 r277–r280 写下的**迁移前证据，未逐行复核**。表头已逐份写明这一边界。要当当前事实用，需按上游目录分派逐块重核——那时按 `scripts/upstream-surface.sh --coverage` 的未分配清单验收，不靠「表里没有 `待定`」结案。（r297 已对 `READER-CONFIG.md` 做完这一步：189 行逐块重核，97 条 `未接` 逐行登记进 `KNOWN-ISSUES.md`；r300–r316 逐批落地后现为 176 已接 / 11 `未接` / 2 不适用；其余两份表仍待重核。）
 >
 > 解冻不影响 `KEYWORDS.md`（检索词表）——它是生成接触面清单的依据，改关键词等于改口径，改前先看该文件末尾的说明。
 
@@ -68,11 +68,11 @@
 | `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) B = **1 行** |
 | `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
 | `server` | `servers.json` | — | — | — | **零行** |
-| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（90 已接 / 97 `未接` / 2 不适用）；97 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
+| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（176 已接 / 11 `未接` / 2 不适用）；11 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
-| `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（25 已接 / 39 `未接` / 2 不适用，r330 建表；接触面 83 个 `.kt` 全部已分配）。39 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
+| `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（57 已接 / 7 `未接` / 2 不适用，r330 建表、r334 实现段收口；接触面 83 个 `.kt` 全部已分配）。7 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
 | `themeMode` | `config.xml` | ✗ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 0 `未接` / 2 不适用，A8 的图标切换按 `themeConfig` 类计不适用；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
-| `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（38 已接 / 81 `未接` / 3 不适用，r327 建表；接触面 24 个 `.kt` 全部已分配）。81 条 `未接` 按 `**要接**`（40）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
+| `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（76 已接 / 43 `未接` / 3 不适用，r327 建表、r331/r332 落地 38 行；接触面 24 个 `.kt` 全部已分配）。43 条 `未接` 按 `**要接**`（2）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
 | `showRss` | `config.xml` | ✗ | ✗ | ? | **零行** |
 | `threadCount` | `config.xml` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
 | `mangaConfig` | `config.xml` | ✗ | ✗ | ? | **零行** |
@@ -93,7 +93,7 @@
 | `:783` | `highlightRule.json` | `ReaderHighlightRuleRepository`（合并语义，见[备份恢复](../BACKUP-RESTORE.md)） |
 | `:797` | `bookmark.json`、`bookMarking.json` | `ReaderBookmarkImporter.mergeBookmarks` / `mergeMarkings`，两份合并完再统一落盘 |
 
-其余条目走 `:822` 的兜底 `fileIo.copyFile`，只进保留目录，不落原生仓储。因此 `readRecord`、`searchHistory`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule`、`coverConfig` 判 `✗`，不是「没查」，而是「查过、确认未接」。
+其余条目走 `:822` 的兜底 `fileIo.copyFile`，只进保留目录，不落原生仓储。因此 `readRecord`、`searchHistory`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` 判 `✗`，不是「没查」，而是「查过、确认未接」。（`coverConfig` 原先也在这条清单里，r334 实现段已把 14 个封面键双向接通、66 行里 57 行已接，因此它现在是「部分接入」，不再属于「确认未接」一组。）。
 
 ### 判 `—` 的六类
 
@@ -124,6 +124,7 @@
 | [书籍总账](BOOKSHELF.md) | E（r295 新增） | 无——备份恢复流程本身不受任何类别的忽略开关控制，12 行全记 `—` |
 | [书签对照](ZIP-BOOKMARK.md) | A–E | `bookmark` |
 | [阅读配置总账](READER-CONFIG.md) | A–G | `readConfig`、`themeConfig` |
+| [TXT 阅读总账](TXT-READER.md) | A–D（217 个上游文件的主体） | `readConfig`、`localBook`、`themeConfig` 里与 TXT 阅读链路相关的行 |
 | [深色模式总账](ZIP-THEME.md) | A–F（r298 新增，r300 阶段一落地） | `themeMode`、`themeConfig` |
 | [封面设置总账](ZIP-COVER.md) | A–E（r330 新增） | `coverConfig`。A 块是设置页 18 条，B 块是默认封面相册，C 块是封面规则，D 块是封面渲染（跨全部用到封面组件的界面），E 块是备份归属。该表表头另加第五档 `不进备份`，用于相册目录这类连 ZIP 都进不去的数据 |
 
@@ -137,7 +138,7 @@ E 块是个例外：它承载的是**对 28 类关键词全部隐身**的那 21 
 
 最后一列是 2026-10-30（r292）新增的，判据、取值与「怎么读」见各表表头的说明。
 
-状态只允许 `已接` / `未接` / `不适用` / `待定` 四值。`不适用` 必须写理由，`待定` 必须写阻塞项，**盘点结束时不得残留 `待定`**。
+状态只允许 `已接` / `未接` / `不适用` 三值，不设「部分接」「基本完成」，也不设 `待定`——`不适用` 必须写理由，盘点结束前必须判完。口径与[盘点规约](../PARITY-RULES.md)第二节一致。
 
 ## 维护
 
