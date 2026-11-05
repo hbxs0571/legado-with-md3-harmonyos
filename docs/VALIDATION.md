@@ -15,7 +15,7 @@
 
 ## 设备与 OCR 操作规范
 
-本节适用于已给出具体目标操作的模拟器导航和交互验收；目标操作仍写作「〔待填写〕」时不连接或点击设备。执行前从 [CURRENT.md](CURRENT.md) 读取当前模块，确定要到达的页面与可用文字标志。
+本节适用于已给出具体目标操作的模拟器导航和交互验收；目标操作仍写作「〔待填写〕」时不连接或点击设备。执行前先确定当前模块与要到达的页面、可用文字标志——本机续接记录 `CURRENT.md` 只留在开发机上（已列入 `.gitignore`，不随公开仓库发布），公开侧以[进度摘要](PROGRESS.md)与[模块验收摘要](MODULE-STATUS.md)为准。
 
 1. **选设备**：目标设备已写明时使用其当前序列号。未写时先分别执行 `adb devices`、`hdc list targets`，只考虑在线设备；不可沿用旧记录中的序列号。若 Android、HarmonyOS 或同类设备同时在线，只在当前任务能唯一确定目标应用和设备时自动选择，否则只询问一次设备。两套工具的序列号不可混用。命令不在 PATH 时先解析 SDK 中的 `adb.exe` / `hdc.exe`，已核对的位置见 [构建说明](BUILDING.md)，运行时仍须确认。
 2. **识别再点击**：先获取当前屏幕的 OCR 文本、位置和置信度，确认当前页面；找目标文字时结合标题、邻近文案及屏幕区域消歧。同名目标仍不唯一时停止，不点第一个候选。点击位置必须来自本轮 OCR 的文字框或自动化工具的文本点击，不复用历史坐标。
@@ -34,7 +34,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 ## 按功能分组的历史索引
 
-主文件放两类记录：①最近 8 轮深色模式（r310–r317）；②当前仍在推进的专题（画布重写、基准包核对）。更早的轮次原样归档在 `docs/history/validation/`，按下面这张表找。
+主文件放三类记录：①最近 8 轮深色模式（r310–r317）；②当前仍在推进的专题（画布重写、基准包核对）；③r331 起的书架布局与封面设置实现段。**排列顺序是「新的在前、旧的在后」**——`r329` 在最前，`r310` 在中间，只有 r331 之后的七节（r331 批 1–5、r332、r333、r334）因历史原因追加在文件末尾，`r334` 是最后一节。更早的轮次原样归档在 `docs/history/validation/`，按下面这张表找。
 归档规则与理由见[盘点规约](PARITY-RULES.md)。
 
 | 功能分组 | 涵盖轮次 | 归档文件 |
@@ -43,6 +43,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 | 书架与封面 | 2026-11-02（网格对齐 + 无封面文字封面，KI-SHELF1） | 本文件（下方各节） |
 | Android 基准包（两批） | 2026-11-02 采集与核对：第一批阅读器 62 张、第二批设置与书架 86 张 | 本文件（下方各节） |
 | 深色模式 / 主题 | r310–r317 | 本文件（下方各节） |
+| 书架布局与封面设置 | r331 批 1–5、r332、r333、r334 | 本文件（末尾七节） |
 | 深色模式 / 主题 | r300–r309 | [2026-11-01-n-r300-r309-theme.md](history/validation/2026-11-01-n-r300-r309-theme.md) |
 | 阅读配置 KI 落地 | KI-A1–A12 / C1–C6 / D1–D6 / E1–E6、r296–r298 | [2026-10-31-reading-config-ki-rounds.md](history/validation/2026-10-31-reading-config-ki-rounds.md) |
 | 阅读渲染与视觉取证 | 正文排版三缺陷、r299 像素级 | [2026-11-01-n-r299-visual-evidence.md](history/validation/2026-11-01-n-r299-visual-evidence.md) |
@@ -1315,5 +1316,52 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 4. `introMaxLines()` 用 `999` 代替上游的 `Int.MAX_VALUE`（`BookItem.kt:1058`）；极端长简介下两者是否表现一致未验。
 5. 任务书给的第 5 处行号 `:1119-1160` 在改动前已漂移到 `:1168-1231`，实际按代码结构改，未按行号。
 6. ZIP 表 A 块 `:56`/`:62`/`:63`/`:66`/`:67` 与 B 块 `:106`/`:107`/`:111`/`:113`/`:114` 共 10 行（同属 KI-SL-N1）的**状态值本轮一行未改，仍为 `未接`**；按 `docs/PARITY-RULES.md` 第五节，状态属判断段产出，本段不下结论。已在 `docs/KNOWN-ISSUES.md` 的 KI-SL-N1 组里追加一条「前提已变化，状态未重判」的事实记录。
+
+**本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**
+
+## 2026-11-05 N 端 r334 封面设置实现段：33 行「未接」落地与装机取证
+
+**设备**：DevEco 模拟器 `Mate 90 Pro`（`127.0.0.1:5555`），竖屏 1280×2832，包名 `io.legado.harmony`。
+
+**构建**：`bash scripts/build-hap.sh` 分五批跑，全部 `BUILD SUCCESSFUL`——批 0（字段补齐 12→18 与键名映射）`53 s 555 ms`、批 1（夜间两开关）`58 s 926 ms`、批 2（封面规则 sheet）`50 s 288 ms`、批 3（相册数据层与三视图）`50 s 566 ms`、批 4（四开关/默认封面渲染/14 键备份）`57 s 581 ms`；日志留底 `tmp/_cover_build_p1.log`–`p4.log`（各约 108–115 KB），四批 `BUG` 计数 0、`ERROR` 计数 0，`ArkTS:WARN` 依次 496 / 498 / 524 / 525。增量逐条核对过，全部是「函数可能抛异常，需特殊处理」这一类既有形态告警，来自本轮新增/改动的文件：`data/CoverRuleRepository.ets` 2 条（批 1 起）、`data/CoverAlbumRepository.ets` 26 条（批 3 起）、`components/BookCover.ets` 1 条（行号随批 4 改动从 `:111:49` 移到 `:161:49`）；未出现新类别的告警，既有 `ReaderBookmarkBadgeRepository.ets:82` 一类与开工前一致。产物 `entry/build/default/outputs/default/entry-default-unsigned.hap` 12213571 字节。
+
+**装机**：`hdc install -r entry-default-unsigned.hap` → `install bundle successfully.`，启动 `aa start -a EntryAbility -b io.legado.harmony` → `start ability successfully.`。**unsigned HAP 在本机可直接覆盖安装**，唯一告警仍是既有的 `WARN: No signingConfig found for product default`——这与 `docs/VALIDATION.md:113`/`:138`/`:171`/`:204`/`:234`/`:328`/`:513`/`:622` 八处历史记录一致。**观察点**：`bm dump -n io.legado.harmony` 的 `installTime` 装包前后都是 `1793786050160`（`firstInstallTime` 为 `1793091107344`），命令返回成功但该字段未变，未查到原因。
+
+**等级说明**：本节按上文「验证等级口径」的第 2 级记「构建通过 / 覆盖安装成功」+ 客观取证，不写「通过」，不对功能正确性下结论。
+
+| 项 | 操作 | 预期 | 实际 |
+| --- | --- | --- | --- |
+| 封面设置页各设置项齐备 | 启动 → 设置 → 封面设置 | 「仅 WiFi 下载封面」「蜂窝网络下不加载网络封面」「封面规则」「使用默认封面」「默认封面」「显示字体阴影」「显示字体描边」「使用默认颜色」「封面信息方向」逐项可见 | `t-cur.txt` 逐行读到上述文字与坐标（另有分组标题「通用」「书架显示」），`封面信息方向` 取值为「竖向」；`c-cover-default.png` |
+| A2 封面规则 sheet | 「封面规则」→ 弹出 sheet | sheet 内「启用」「搜索 URL」「规则表达式」三区 + 「恢复默认」「保存」 | `c87-a2-rule-sheet.png` + `c87-rule.nodes.txt` 实读到「封面规则」「恢复默认」「保存」「启用」「搜索 URL」「规则表达式」；`c87-after-save.nodes.txt` 保存后回到设置页（只剩「封面规则」一行） |
+| A4 默认封面（相册选择） | 「默认封面」→ 展开选择 sheet | 顶栏「选择封面相册」+「管理相册」，下方「无」项与全部相册 | `c89-a4-album-select.png` + `c89-album.nodes.txt` 实读到「选择封面相册」「管理相册」两个标题 |
+| B3 新建相册 | 管理页点「+」→ 输名 → 确定 | 出现名称输入面板；确定后出现相册卡片 | `c119-b3-new-dialog.png` + `c119-new.nodes.txt` 读到「新建相册」「取消」「确定」；`c119-b3-created.png` + `c119-created.nodes.txt` 相册列表出现 `AlbumA` |
+| B4 空态 | 相册列表为空时进管理页 | 显示图标 +「暂无相册」 | `c120-b4-empty-state.png` + `c120-empty.nodes.txt` 第 21 行实读到 `Text「暂无相册」`（坐标为 `640,2048`） |
+| B6 改名 | 点铅笔 → 输新名 → 确定 | 卡片名变 | `c122-b6-rename-dialog.png`；`c122-b6-renamed.png`/`c122-b6-renamed-ok.png`/`c122-b6-renamed-final.png` + `c122-renamed.nodes.txt`/`c122-renamed2.nodes.txt`/`c122-final.nodes.txt` 里卡片名依次为 `AlbumA` → `AlbumAAlbumB` → `AlbumAAlbumB2`（`c122-b6-renamed-final.png` 实拍：卡片「AlbumAAlbumB2」「日 0 / 夜 0」+ 铅笔/垃圾桶） |
+| B7 删除二次确认 | 点垃圾桶 → 弹窗 | 文案带相册名，两个按钮 | `c123-b7-delete-confirm.png` + `c123-del.nodes.txt` 实读到 `AlertDialog` 节点「删除相册」「删除相册「AlbumAAlbumB2」？该相册中的图片也会被删除」与「删除」「取消」按钮 |
+| B8 编辑器日夜页签 | 进编辑器 → 点「夜间」 | 出现「白天」「夜间」两个页签与「添加图片」，页签可切换 | `c124-b8-editor.png`、`c124-b8-editor-empty.png` + `c124-editor.nodes.txt`/`c124-editor2.nodes.txt`、`c124-b8-night-tab.png` + `c124-night.nodes.txt`，均读到 `AlbumC` 与「白天」「夜间」「添加图片」 |
+| B9 添加图片 | 编辑器点「添加图片」 | 起系统图片选择器 | `c125-b9-picker.png` + `c125-picker.txt` 实读到选择器界面「最近」「浏览」「没有文件」「已选 (0)」「完成」「仅可访问所选项目」 |
+| C2 搜索 URL 输入框 | 封面规则 sheet 内「搜索 URL」下方有单行输入框 | 输入框存在且预填默认 `data:;base64,...` 串 | `c87-a2-rule-sheet.png` + `c147-reopen-default.png`（重进后输入框内容为默认串） |
+| C5 空值校验 toast | 清空「搜索 URL」→ 点「保存」 | 出 toast「搜索 URL 与规则不能为空」，sheet 不关 | `c145-c5-empty-toast.png` 实拍：搜索 URL 为空、规则表达式仍在、屏幕中部浮动「搜索 URL 与规则不能为空」、sheet 未关闭 |
+| C7 运行期存储 | 关掉再进封面规则 | 三项回到已保存的值 | `c147-c7-reopen-default.png` + `c147-reopen.nodes.txt`：重进后「启用」`Toggle:checked=true`、搜索 URL 为默认 `data:;base64,...`、规则表达式为默认 `@js:` 脚本 |
+
+**代码落点**（`entry/src/main/ets/`，全中文注释）：
+- 字段与键名：`data/CoverSettingsRepository.ets:11-47`（`CoverSettings` 12→18 字段）、`:262 coverSettingsToAndroid()`（14 条上游键映射）、`:286 applyAndroidCoverPreferences()`（反向回填）、`:228 coverColorToAndroidInt()`/`:241 androidIntToCoverColor()`；`:4-10` 头注释改为与实际裸键名一致。
+- 夜间两开关：`components/CoverTextLayout.ets:68` 签名加 `isNight: boolean = false`、`:77`/`:78` 按 `isNight` 取 `showNameDark`/`showAuthorDark`；`components/BookCover.ets:48 @Prop isNight`、`:154` 传入；`pages/BookshelfPage.ets:1153`/`:1182`/`:1242` 传 `readerNightMode`；setting 侧 `pages/AppCoverSettingsPage.ets:343`/`:365` 的 `disabled` 联动。
+- 封面规则：`data/CoverRuleRepository.ets`（`CoverRule :20`、`DEFAULT_COVER_RULE :39`、`copyCoverRule :52`、`isDefaultCoverRule :67`、`class :73`、`get :80`/`load :89`/`save :113`/`del :135`）、`data/CoverRuleDefaults.ets`；UI 在 `pages/AppCoverSettingsPage.ets:385 CoverSettingsSheetContent()`、`:387 activeSheet === 'rule'`、`:399-423` 三区、`:391-394` 两按钮、`saveRule() :115`、`restoreDefaultRule() :104`、`openRuleSheet() :98`。
+- 默认封面相册：`data/CoverAlbumRepository.ets`（357 行，`CoverAlbumImageItem :27`、`CoverAlbumItem :37`、`class :60`、`indexFileName :62`、`selectionPreferenceName :63`、`formatVersion :64`、`getAlbums :70`、`getSelection :74`、`previewPath :79`、`defaultCoverPath :92`、`rootDir :104`、`persist :138`、`toItem :159`、`load :182`、`loadSelection :193`、`setSelection :213`、`createAlbum :222`、`renameAlbum :233`、`deleteAlbum :243`、`hashFile :271`、`addImages :298`、`removeImage :341`）；UI 在 `pages/AppCoverSettingsPage.ets:427-471`（选择 sheet，缩略图 44×60）、`:472-526`（管理页，缩略图 64×88）、`:527-565`（编辑器）、`:566` 起（新建/改名面板）。
+- 四开关与渲染：`components/BookCover.ets:93 effectiveCoverUri()`（`useDefaultCover` 真时走 `CoverAlbumRepository.defaultCoverPath(isNight)`）、`:291-295 coverHeight()`（`restrictCoverRatio`）；`pages/SearchPage.ets`、`pages/BookInfoPage.ets`、`pages/Index.ets:192` 与 `:6734`/`:7400` 两处挂载补传 `coverSettings`。
+- 14 键备份：`data/BackupRepository.ets:806-812`（写出，受 `!ignoredCategories.includes('coverConfig')` 门控）、`:1426 restoreCoverSettings()`（`:1440-1455` 逐键读 XML 回填）、`:1157` 调用点、`:313-321 alwaysIgnoredPreferenceKeys`（`defaultCover`/`defaultCoverDark` 天然不进）、`:2528 isSafeRootEntry()`（`cover_albums/` 目录天然不进）。
+
+**复原**：收尾把「使用默认封面」关、「默认封面」回「未选择相册」、「显示字体描边」开、「使用默认颜色」开、封面规则恢复默认后保存、删掉本轮新建的测试相册（AlbumA/AlbumB2/AlbumC）。模拟器全程竖屏，未改 `config.ini`。
+
+**未做到 / 存疑**：
+1. **`:86` A1（仅 WiFi）与 `:95` A10（网络书籍角标）本机不可观察**：`@ohos.net.http`/`http.createHttp`/`http://` 在 `entry/src/main/ets` 内零命中，`Image()` 只吃 `file://`；`pages/DiscoverPage.ets` 是示范数据页（`:62` 过滤 `this.sources` 常量）。两项只做字段 + 开关 + 存储 + 备份键，状态按 `docs/PARITY-RULES.md:52-56` 留 `未接`。
+2. **`:180` D18 首屏封面预加载留 `未接`**：本地封面链路 `preload`/`PixelMap`/`ImageBitmap`/`MemoryCache` 零命中，`pages/BookshelfPage.ets:23-29` 有 `const BOOKSHELF_FIRST_SCREEN_PRELOAD_COLUMNS: number = 0;` 与「不新建预加载系统」的注释；上游那条「首帧灰底」现象的成因（Coil 内存缓存为空）在本地不存在，按计划「本机无法稳定复现可观察差异则留 `未接`」处置。
+3. **`:131` B15 旧版迁移在文档收尾时改回 `未接`**：`grep -rn 'cover_album_migrated\|default-cover\|LEGACY' entry/src/main/ets` 零命中，`CoverSettings.defaultCover`/`defaultCoverDark` 只被 load/save/copy 搬运、全仓无人写值——既没有迁移实现，也暂时没有迁移对象。实现段收尾时按「无可迁数据」记为 `已接`，文档核对时按三值口径改回 `未接`，故本节之后 `docs/parity/ZIP-COVER.md` 盘面为 **57 已接 / 7 未接 / 2 不适用**，而实现段证据包 `tmp/cover-impl-evidence.md:149` 记的仍是当时的 58/6/2。
+4. **`:146` C6 规则求值 / `:148` C8 `coverRule.json` 备份 / `:149` C9 细粒度忽略开关**不在本轮 36 行内：默认规则脚本依赖 `java.base64Encode`/`java.ajaxAll`/`com.jayway.jsonpath.JsonPath`，终点是在线接口，本地无 JS 引擎与 `java.*` 桥；三项状态保持 `未接`。
+5. **`cryptoFramework.createMd('SHA256')` 合法性未查到**：`data/CoverAlbumRepository.ets:271 hashFile()` 用它生成图片文件名，离线 SDK 文档与项目既有代码里只查到 `createMd('MD5')` 一种用法（`data/BookRepository.ets:339-355 md5Encode16`）；实现里对 `createMd` 做了 try/catch，失败回落 `file-${Date.now()}-${sequence}` 唯一串。
+6. **三处相册呈现差异**：根目录上游 `getExternalFilesDir(null)/cover_albums`、本地 `context.filesDir/cover_albums`；原子写入上游 `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)`、本地 `albums.json.tmp` → 删旧 → `renameSync` 近似；相册 id 上游 `Uuid`、本地 `album-<时间戳>-<序号>`（全仓无 `util.generateRandomUUID`）。三处已写进对照表差异说明。
+7. **屏幕证据只覆盖了 33 行中的一部分**：`tmp/cover-shots/` 共 22 张 PNG，其中以 `c<表行号>-<场景>` 命名的 17 张（另有 `c00-boot-bookshelf.png` 为装包后首屏），覆盖 A2、A4、B3、B4、B6、B7、B8、B9、C2、C5、C7；**A17/A18（夜间渲染）、A3/A8（默认封面与比例限制）、E1–E6（备份 14 键与相册不进备份）未取到本轮屏幕或 ZIP 证据**，这几项只有代码落点与可复跑命令。
+8. **`docs/parity/ZIP-COVER.md` 的状态列在实现段提交（`1eb2812`）时一次性翻了 33 行**，其中 `:131` B15 随后改回 `未接`；其余 32 行在 r334 文档核对时逐行复核过代码落点，但**没有逐行重拍屏幕**——按第 2 级口径只能记「构建通过 / 覆盖安装成功」，不能记设备验收。
 
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**

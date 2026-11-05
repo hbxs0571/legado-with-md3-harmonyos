@@ -6,10 +6,9 @@
 | --- | --- |
 | 功能优先顺序与边界 | [项目队列](PROJECT.md) |
 | 当前公开进度 | [进度摘要](PROGRESS.md) |
-| 双机协作（历史，已失效，仅存档） | [双机 N 端执行说明](DUAL-MACHINE-HANDOFF.md) |
 | 模块边界（哪些验过、哪些没验） | [模块验收摘要](MODULE-STATUS.md) |
 | 编码规约与已踩缺陷 | [编码规约](CODE-CONVENTIONS.md) |
-| 盘点方法、验收等级与取证 / 判断 / 实现三段分工（验收须换人跑） | [盘点规约](PARITY-RULES.md) |
+| 盘点方法、验收等级与取证 / 判断 / 实现三段分工（验收只看输入干不干净） | [盘点规约](PARITY-RULES.md) |
 | 移交前协作教训 | [E 端会话教训](E-SESSION-LESSONS.md) |
 | 已知问题与验收边界 | [已知问题](KNOWN-ISSUES.md) |
 | 模块入口与责任范围 | [模块概览](MODULES.md) |
@@ -17,12 +16,14 @@
 | Android ZIP 兼容范围 | [备份恢复](BACKUP-RESTORE.md) |
 | ZIP 兼容度总账与盘点方法 | [ZIP 兼容总账](parity/STATUS.md)、[对照关键词](parity/KEYWORDS.md) |
 | 书架 / 元数据 / 进度对照 | [书架对照表](parity/BOOKSHELF.md) |
+| 书架布局对照 | [书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) |
 | 书签 / 划线 / 笔记对照 | [书签对照表](parity/ZIP-BOOKMARK.md) |
 | 阅读配置字段对照 | [阅读配置总账](parity/READER-CONFIG.md) |
+| TXT 阅读链路对照 | [TXT 阅读总账](parity/TXT-READER.md) |
+| 封面设置对照 | [封面设置总账](parity/ZIP-COVER.md) |
 | 深色模式 / 主题设置对照 | [深色模式对照表](parity/ZIP-THEME.md) |
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
 | 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
-| 存储层迁移计划 | [关系型存储迁移计划](RELATIONAL-STORE-MIGRATION.md) |
 | 构建和验证记录 | [构建说明](BUILDING.md)、[验证记录](VALIDATION.md) |
 | Hypium / UI 自动化测试 | [测试目标与运行说明](HYPIUM-UI-TEST.md) |
 | 资源许可与来源 | [资源许可清单](RESOURCE-LICENSES.md)、[来源哈希表](RESOURCE-SOURCES-SHA256-2026-10-26.csv) |

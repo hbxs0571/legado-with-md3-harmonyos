@@ -36,20 +36,12 @@
     "sha256": "3749a256dca5a899f26a68be686e5677d9cbb4399c456360b6564a7ba6cca025"
   },
   {
-    "path": "docs/BACKUP-RESTORE-r250.md",
-    "sha256": "b41d3509d98db0d7d0514d463ccaf93f6919d5f3ba30b407f1ce5479a22ee47f"
-  },
-  {
     "path": "docs/BACKUP-RESTORE.md",
     "sha256": "11d2df4396d8318ee168c0fe2d4d682e1a607f533b7b89833cff4600b58ea745"
   },
   {
     "path": "docs/BUILDING.md",
     "sha256": "a659fd113519e66a114e9000af04f374f0e52f0cbb7e5530131e724e9d2c30f9"
-  },
-  {
-    "path": "docs/DUAL-MACHINE-HANDOFF.md",
-    "sha256": "cb748b7acc444fbb47ff0f95bcc2716704c3f76caba86da03474c69cd8f28114"
   },
   {
     "path": "docs/GLOSSARY.md",

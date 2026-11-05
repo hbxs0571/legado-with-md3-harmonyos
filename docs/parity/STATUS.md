@@ -4,7 +4,7 @@
 >
 > `STATUS.md`、`BOOKSHELF.md`、`ZIP-BOOKMARK.md`、`READER-CONFIG.md` 四份对照表可编辑。
 >
-> **解冻依据**：[关系型存储迁移计划](../RELATIONAL-STORE-MIGRATION.md) 五个阶段全部完工（基础设施与前三批仓储 r281–r283，preferences 清理 r284），字段结构已定稿。原先的冲突——`book_marks` 的 7 个平铺列（`chapterPosition`、`endPosition`、`selectedText`、`contextBefore`、`contextAfter`、`effect`、`color`）要被合并成 `anchorJson` 与 `styleJson`——已经落地。
+> **解冻依据**：关系型存储迁移计划（原 `docs/RELATIONAL-STORE-MIGRATION.md`，r281–r284 五个阶段全部完工并已归档至 `docs/history/`，不随公开仓库发布）的基础设施与前三批仓储 r281–r283、preferences 清理 r284 均已落地，字段结构已定稿。原先的冲突——`book_marks` 的 7 个平铺列（`chapterPosition`、`endPosition`、`selectedText`、`contextBefore`、`contextAfter`、`effect`、`color`）要被合并成 `anchorJson` 与 `styleJson`——已经落地。
 >
 > **重盘范围与边界（r286，2026-10-30）**：三张表做的是**结构性重盘**，不是逐行重核。已做四件事：
 >
