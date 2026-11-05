@@ -8,7 +8,7 @@
 
 - 盘点日期：2026-11-04
 - 上游基线：`legado-with-MD3` HEAD `bba5c64df32bcc9d23ac2b3f2f717b00b0ea01b9`（`<上游根>` 指法见[对照关键词](KEYWORDS.md)的用法节）。主要文件：`ui/config/coverConfig/`（9 文件 1546 行）、`ui/widget/components/image/cover/`（`CoilBookCover.kt` 698 行、`BookshelfCover.kt` 138 行、`CoverBlurBackdrop.kt` 47 行）、`ui/widget/image/CoverImageView.kt` 326 行、`model/BookCover.kt` 306 行、`data/repository/CoverAlbumRepository.kt` 508 行
-- 本地实现：`entry/src/main/ets/pages/AppCoverSettingsPage.ets`（252 行）、`components/BookCover.ets`（254 行）、`components/CoverTextLayout.ets`（173 行）、`data/CoverSettingsRepository.ets`（168 行），消费端 `pages/BookshelfPage.ets`、`pages/Index.ets`
+- 本地实现：`entry/src/main/ets/pages/AppCoverSettingsPage.ets`（729 行）、`components/BookCover.ets`（303 行）、`components/CoverTextLayout.ets`（174 行）、`data/CoverSettingsRepository.ets`（359 行），消费端 `pages/BookshelfPage.ets`、`pages/Index.ets`
 - 对应 ZIP 类别：`coverConfig`
 
 ## 这张表覆盖什么、不覆盖什么
@@ -48,7 +48,7 @@ D 块（封面渲染）与 BOOKSHELF A1 有交叠：两边都会提到 `CoilBook
 - **BOOKSHELF A1 保留「封面在别的界面上长什么样」的行**，例如「书封渲染（含占位与灰底）」「书封阴影开关」「封面无障碍描述」——这些是书架界面自己的可见单元，BOOKSHELF 是它们的主表。
 - **ZIP-COVER D 块收纳「封面组件本身的可视元素与它消费的 coverConfig 字段」**，例如字号怎么由封面宽度推出、描边宽度、横竖排判定、默认封面图的四条取图路径。这些是封面组件内部的行为，改的是 `coverConfig` 的字段或渲染算法，不是书架布局。
 - **两边都提到同一个文件时，以「改了哪张表的行」为准**：改 `bookshelfCoverShadow`（书架布局键）→ 改 BOOKSHELF A2；改 `showShadow`（封面设置键）→ 改本表 D12。两者在本地恰好都作用到 `BookCover.ets:223` 的同一个 `.shadow(...)`，但传进来的是两个不同来源的参数，本表 D12 的差异说明里写清了这一点。
-- **BOOKSHELF :75 写的本地主体「`components/BookCover.ets`（85 行）」是旧值**，实际 254 行；本表 D 块按 254 行盘。BOOKSHELF 那一行本轮未改（不在本轮授权范围内），留在「未复核边界」里。
+- **BOOKSHELF :75 写的本地主体「`components/BookCover.ets`（85 行）」是旧值**，实际 303 行；本表 D 块按 303 行盘。BOOKSHELF 那一行本轮未改（不在本轮授权范围内），留在「未复核边界」里。
 
 ## 盘面
 
@@ -79,7 +79,7 @@ D 块（封面渲染）与 BOOKSHELF A1 有交叠：两边都会提到 `CoilBook
 
 上游主体：`ui/config/coverConfig/CoverConfigScreen.kt`（373 行）。`LazyColumn` 从 `:87` 起，五个 `SplicedColumnGroup` 分组：G1 `:95`（无 title，95-166）、G2 `:168`（无 title，168-181）、G3 `:183`（`title = R.string.network_book_badge_setting`，183-198）、G4 `:200`（`title = R.string.day`，200-261）、G5 `:263`（`title = R.string.night`，263-325）。18 个设置项的控件类型分布：`SwitchSettingItem` 10 处、`ClickableSettingItem` 6 处、`DropdownListSettingItem` 2 处，其中 4 个颜色项带 28dp 圆形色块 `trailingContent`（`:211-219`、`:232-240`、`:274-282`、`:295-303`）。
 
-本地主体：`entry/src/main/ets/pages/AppCoverSettingsPage.ets`（252 行）。四组：`'通用'`（`:58`）、`'书架显示'`（`:78`）、`'日间封面'`（`:89`）、`'夜间封面'`（`:111`），共 15 个可见条目。**上游 G1 与 G2 在本地被合并成「通用」+「书架显示」两组**，上游 G3 的标题项在本地被拆进「书架显示」组。条目数 18 → 15，差的 3 条是 A1、A3、A8 三个 Switch（本地页面里没有这三个条目本身，不是灰掉）。
+本地主体：`entry/src/main/ets/pages/AppCoverSettingsPage.ets`（729 行）。四组：`'通用'`（`:274`）、`'书架显示'`（`:304`）、`'日间封面'`（`:326`）、`'夜间封面'`（`:348`），共 18 个可见条目（`CoverSettingsSwitch`/`Action`/`Choice`/`Color` 调用实测 18 处，另有 4 个 `CoverSettingsSection` 分组标题）。**上游 18 条 → 本地 18 条，条数已齐**：r334 批 4 补上了 A1（仅 WiFi 下载封面）、A3（使用默认封面）、A8（限制封面比例）、A10（网络书籍角标）四个条目，原来「18 → 15，差的 3 条是 A1/A3/A8」的说法已不成立。**上游 G1 与 G2 在本地被合并成「通用」+「书架显示」两组**，上游 G3 的标题项在本地被拆进「书架显示」组。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |

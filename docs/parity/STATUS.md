@@ -55,7 +55,7 @@
 | `rssSource` | `rssSources.json` | — | — | — | **零行** |
 | `rssStar` | `rssStar.json` | — | — | — | **零行** |
 | `replaceRule` | `replaceRule.json` | ✓ | ✓ | ? | **零行** |
-| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) C 23 / B 5 = **28 行** |
+| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) C 23 / B 5 = **28 行**（r334 判断段复核：11 已接 / 16 `未接` / 1 不适用；16 行未接 = B 块 3 行 `:272`/`:280`/`:307` + C 块 13 行） |
 | `searchHistory` | `searchHistory.json` | ✗ | ✗ | ? | **零行** |
 | `sourceSub` | `sourceSub.json` | — | — | — | **零行** |
 | `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | ? | **零行** |
