@@ -1,48 +1,58 @@
 # Legado with MD3 for HarmonyOS
 
-简体中文
+Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/HapeLee/legado-with-MD3) 与 [Legado（阅读）](https://github.com/gedoor/legado) 的 HarmonyOS 原生移植工程，使用 ArkTS、ArkUI 与 Stage 模型开发。本项目处于开发预览阶段，持续迁移本地阅读、阅读设置与书架功能；它与上游项目及华为、Google 均无隶属关系，也未获其官方认证或背书。
 
-## 📖 介绍
+## 📦 获取与安装
 
-Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/HapeLee/legado-with-MD3) 与 [Legado（阅读）](https://github.com/gedoor/legado) 的 HarmonyOS 原生移植工程，使用 ArkTS、ArkUI 和 Stage 模型开发。
+最新构建是 [0.1.0 开发预览](https://github.com/hbxs0571/legado-with-md3-harmonyos/releases/tag/v0.1.0)（Pre-release），附件 `legado-harmonyos-0.1.0-unsigned.hap`。本仓库发布的是**未签名 HAP**，未上架应用市场，也不提供签名后的正式发行包。
 
-本项目处于开发预览阶段，持续迁移本地阅读、阅读设置与书架功能。它与上游项目及华为、Google 均无隶属关系，也未获其官方认证或背书。
+未签名 HAP **不能用文件管理器双击安装**——Windows 没有 HAP 关联程序，这不是包本身的问题。安装方式有三种：
 
-## ✨ 分支特性
-
-- HarmonyOS 原生界面与书架，支持本地 TXT、EPUB、分组、列表/网格布局和排序设置。
-- 阅读器包含目录、阅读进度、书签、阅读记录、正文处理、文本选择和部分排版设置。
-- 可选择系统字体；源码也支持导入本地 TTF/OTF 字体文件，真实字体文件导入和 EPUB 字体兼容仍待设备验证。
-- Android ZIP 兼容按 **28 个数据类别**逐类盘点，清单见[备份恢复说明](docs/BACKUP-RESTORE.md)：已接入 6 类、部分接入 5 类、未接入 3 类、仅归档 14 类。它不等同于完整 Android 数据库迁移。
-- 逐界面的上游对照与「哪一块还没盘」见[ZIP 兼容总账](docs/parity/STATUS.md)与七张对照表（[书架](docs/parity/BOOKSHELF.md)、[书签](docs/parity/ZIP-BOOKMARK.md)、[阅读配置](docs/parity/READER-CONFIG.md)、[TXT 阅读](docs/parity/TXT-READER.md)、[书架布局](docs/parity/ZIP-BOOKSHELF-LAYOUT.md)、[封面设置](docs/parity/ZIP-COVER.md)、[深色模式](docs/parity/ZIP-THEME.md)）。
-- 设备验证范围和遗留问题见[当前进度](docs/PROGRESS.md)、[验证记录](docs/VALIDATION.md)、[备份恢复说明](docs/BACKUP-RESTORE.md)和[已知问题](docs/KNOWN-ISSUES.md)。
-
-## 🛠️ 核心功能
-
-1. **本地阅读：** 支持 TXT、EPUB、目录与阅读进度管理。
-2. **阅读设置：** 接入字体、间距、对齐、文字效果和部分护眼设置；各设置的验证范围以文档为准。
-3. **书架管理：** 支持分组及部分布局、筛选和排序设置；私有标记与分组刷新目前不控制实际权限或更新行为。
-4. **数据兼容：** 对 Android ZIP 的 28 个数据类别逐类处理：已接入的 6 类双向映射，部分接入的 5 类只映射了其中一部分字段，其余 17 类做预览或安全归档保留、不导入原生功能。各类的读写状态与差异见[备份恢复说明](docs/BACKUP-RESTORE.md)。注意本地有自己的阅读记录三层仓储，但 Android ZIP 里的 `readRecord.json` 属仅归档，不导入这套原生记录。
-5. **开源：** 项目采用 GPL-3.0；第三方资源来源和许可见[资源清单](docs/RESOURCE-LICENSES.md)。
-
-在线书源抓取、在线搜索、RSS、TTS、AI、WebDAV、云同步和 Web 服务尚未接入。界面或备份中出现相关入口或数据类别，不代表对应服务可用。
-
-## 📦 安装
-
-本仓库的构建产物是**未签名 HAP**，不能直接双击安装到设备上，需要先按设备生成签名。两条路：
-
-**推荐：小白安装助手**（[likuai2010/auto-installer](https://github.com/likuai2010/auto-installer)）。把 `entry-default-unsigned.hap` 拖进去，它会读取已连接设备的 UDID 自动生成 Profile 并完成签名安装，不需要配证书、不需要 DevEco Studio。这是本项目目前最省事的试用方式。
+**推荐：小白安装助手**（[likuai2010/auto-installer](https://github.com/likuai2010/auto-installer)）。把 `legado-harmonyos-0.1.0-unsigned.hap` 拖进去，它读取已连接设备的 UDID 自动生成 Profile 并完成签名安装，不需要配证书、不需要 DevEco Studio。这是目前最省事的试用方式。
 
 **备选：DevEco Studio 自动签名**。用 DevEco Studio 打开工程，`File → Project Structure → Signing Configs` 勾选「Automatically generate signature」并登录华为账号，然后运行到设备。
 
-- 构建命令与产物路径见[构建说明](docs/BUILDING.md)。
-- 未签名 HAP 只能装进模拟器或已加入 Profile 的设备，发行范围见[开源与发行范围](docs/RELEASE.md)。
-- 小白安装助手是第三方工具，本项目未参与其开发，请自行确认来源与许可后再使用。
+**备选：命令行直接装进模拟器**。模拟器可以覆盖安装未签名包，不需要任何签名配置：
+
+```bash
+hdc install -r legado-harmonyos-0.1.0-unsigned.hap
+```
+
+真机则需要先按设备生成签名（走上面两条路）；无论签名与否，包都只能装进已加入 Profile 的设备。自行构建的命令与产物路径见[构建说明](docs/BUILDING.md)，发行范围与签名要求见[开源与发行范围](docs/RELEASE.md)。
+
+小白安装助手是第三方工具，本项目未参与其开发，请自行确认来源与许可后再使用。
+
+## ✨ 已实现
+
+- **本地阅读**：TXT 与 EPUB，目录、阅读进度、书签、阅读记录，正文处理与文本选择。
+- **阅读设置**：字体（系统字体，以及本地 TTF/OTF 字体文件与整个字体文件夹的导入）、间距、对齐、文字效果、部分护眼设置。各项的验证范围以文档为准。
+- **书架**：分组方式三档（页签 / 隐藏页签 / 文件夹），网格与列表两套布局，**横屏与竖屏各自独立的布局模式与列数**，以及封面宽度、卡片底色、分组样式与排序。
+- **外观与主题**：**14 套调色板**（日间/夜间各一套语义配色）、纯黑深色模式、全 App 背景图片与虚化度、容器圆角/边框/分隔线共 16 项、应用界面字体、自定义主题配色，以及**主题包的导入与导出**。
+- **数据兼容**：按 **28 个 Android ZIP 数据类别**逐类盘点——已接入 6 类双向映射，部分接入 5 类（只映射了其中一部分字段），未接入 3 类，仅归档 14 类（做预览或安全归档保留、不导入原生功能）。它不等同于完整 Android 数据库迁移，逐类的读写状态与差异见[备份恢复说明](docs/BACKUP-RESTORE.md)。
+
+在线书源抓取、在线搜索、RSS、TTS、AI、WebDAV、云同步与 Web 服务尚未接入。界面或备份中出现相关入口或数据类别，不代表对应服务可用。
+
+## 📊 完成度
+
+按上游界面逐块盘点的七张对照表合计 **1162 行**：已接 **770**、未接 **361**、不适用 **31**。「未接」不等于都该做——其中不少经判断后登记为「不接」（上游有、本项目不做，或平台无对应能力），逐行理由写在表内备注与[已知问题](docs/KNOWN-ISSUES.md)里。
+
+| 对照表 | 行数 | 已接 | 未接 | 不适用 |
+| --- | --- | --- | --- | --- |
+| [书架](docs/parity/BOOKSHELF.md) | 335 | 87 | 245 | 3 |
+| [TXT 阅读](docs/parity/TXT-READER.md) | 242 | 210 | 19 | 13 |
+| [阅读配置](docs/parity/READER-CONFIG.md) | 189 | 176 | 11 | 2 |
+| [书架布局](docs/parity/ZIP-BOOKSHELF-LAYOUT.md) | 122 | 76 | 43 | 3 |
+| [书签](docs/parity/ZIP-BOOKMARK.md) | 117 | 83 | 30 | 4 |
+| [深色模式](docs/parity/ZIP-THEME.md) | 91 | 81 | 6 | 4 |
+| [封面设置](docs/parity/ZIP-COVER.md) | 66 | 57 | 7 | 2 |
+
+「哪一块还没盘」的总览见 [ZIP 兼容总账](docs/parity/STATUS.md)；设备验证范围与遗留问题见[当前进度](docs/PROGRESS.md)、[验证记录](docs/VALIDATION.md)和[已知问题](docs/KNOWN-ISSUES.md)。
 
 ## ⚠️ 注意事项
 
-- 当前为开发预览，不是稳定发行版；仓库未配置正式签名，也不提供正式发行安装包。
+- 当前为开发预览，不是稳定发行版；仓库未配置正式签名，也没有应用市场上架版本。[0.1.0 开发预览](https://github.com/hbxs0571/legado-with-md3-harmonyos/releases/tag/v0.1.0) 登记的五条已知问题都还没修。
 - 兼容/目标版本配置为 `5.0.0(12)`，尚无 API 12 真机验收结论。
+- 字体方面：应用界面字体（含本地字体文件导入）已在模拟器上验收；**阅读器正文的自定义字体导入虽已实现，但还没有设备验证记录**。
 - 书籍正文保存在设备本地，备份 ZIP 不包含正文；请另行保管原始 TXT/EPUB。
 - 备份可能含账号、Cookie、请求头或令牌等敏感信息。公开提交前请检查并清除个人数据。
 - 用户导入或配置的内容由用户自行判断来源、许可和使用方式，并遵守适用法律与服务条款。
