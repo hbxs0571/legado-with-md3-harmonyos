@@ -520,8 +520,8 @@ export struct ReaderPage {
   private readerCanvasReady: boolean = false;
   /**
    * 画布实测正文区高度（vp）。分页按公式算的 pageHeight 与画布真实可分高度并不等值：
-   * 页脚实际占位比 getReaderInfoReserve(false) 的预留更大，公式会多算出几十 px，
-   * 结果分页认为放得下、画到画布上时最后一行被下边缘裁掉半行。
+   * 实测值与 `getReaderInfoReserve()` 的公式值来自两条不同的路径（ArkUI 测量 vs 手算），
+   * 二者一旦不等，分页就会认为放得下、画到画布上时最后一行被下边缘裁掉半行。
    * 这里记下画布量到的真实高度，分页以「公式值」与「实测值」的较小者为准。
    */
   private readerCanvasBodyHeightVp: number = 0;
@@ -3695,10 +3695,19 @@ export struct ReaderPage {
       this.paddingSettings.paddingBottom - headerReserve - footerReserve - this.readerCutoutBottomInset());
   }
 
+  /**
+   * 页眉页脚在正文之外占掉的纵向高度。
+   *
+   * 必须与 `ReaderInfoRow()` 的真实布局逐项对上，否则会多排一次版：
+   * 公式算高了 → 画布实测更矮 → `syncReaderCanvasBodyHeight` 触发 `rebuildReaderPages()`，
+   * 用户看到开书时正文跳一下。真实占位 = 内容行 18 + 分隔线 1（可选）+ padding 上下各 2。
+   * 上游 `ReaderCanvasSurface.kt:3035` 的页脚也是这个构成（18 + divider + padding）。
+   */
   private getReaderInfoReserve(isHeader: boolean): number {
     const top = isHeader ? this.paddingSettings.headerPaddingTop : this.paddingSettings.footerPaddingTop;
     const bottom = isHeader ? this.paddingSettings.headerPaddingBottom : this.paddingSettings.footerPaddingBottom;
-    return 22 + top + bottom;
+    const showLine = isHeader ? this.infoSettings.showHeaderLine : this.infoSettings.showFooterLine;
+    return 18 + (showLine ? 1 : 0) + 4 + top + bottom;
   }
 
   private getReaderLineGapAfter(line: LocalReaderLine, itemIndex: number, item: LocalReaderLineItem): number {
@@ -5188,7 +5197,8 @@ export struct ReaderPage {
     }
     // 标题已进画布、不再占用画布外的纵向空间，首页与其余页的画布高度是同一个，
     // 不需要再对首页特殊处理（旧实现在首页跳过，是因为标题在画布之上）。
-    if (Math.abs(heightVp - this.readerCanvasBodyHeightVp) < 1) {
+    // 亚像素（0.x vp）的测量差是正常噪声，不值得整章重排一次；1.5vp 以上才是真差异。
+    if (Math.abs(heightVp - this.readerCanvasBodyHeightVp) < 1.5) {
       return;
     }
     this.readerCanvasBodyHeightVp = heightVp;
