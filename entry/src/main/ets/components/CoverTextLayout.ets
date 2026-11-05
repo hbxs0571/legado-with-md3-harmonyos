@@ -65,16 +65,17 @@ export function isCoverTextHorizontal(title: string, settings: CoverSettings): b
  */
 export function buildCoverTextLayout(
   widthPx: number, heightPx: number, title: string, author: string,
-  settings: CoverSettings, charHeightRatio: number
+  settings: CoverSettings, charHeightRatio: number, isNight: boolean = false
 ): CoverTextLayout {
   const glyphs: CoverTextGlyph[] = [];
   const horizontal = isCoverTextHorizontal(title, settings);
   if (widthPx <= 0 || heightPx <= 0) {
     return { glyphs: glyphs, horizontal: horizontal };
   }
-  // 上游：showAuthor 在 showName 关闭时无效（CoilBookCover.kt:519-520）
-  const showName = settings.showName;
-  const showAuthor = settings.showAuthor && showName;
+  // 上游：showAuthor 在 showName 关闭时无效（CoilBookCover.kt:519-520）；
+  // 夜间取 *Dark 一组开关，与上游 CoverTextOverlay(name, author, isNight) 一致。
+  const showName = isNight ? settings.showNameDark : settings.showName;
+  const showAuthor = (isNight ? settings.showAuthorDark : settings.showAuthor) && showName;
   const ratio = charHeightRatio > 0 ? charHeightRatio : 1.2;
 
   if (showName && title.length > 0) {

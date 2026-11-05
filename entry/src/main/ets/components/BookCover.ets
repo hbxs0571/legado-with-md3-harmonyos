@@ -52,16 +52,7 @@ export struct BookCover {
     return this.book.coverUri !== undefined && this.book.coverUri.length > 0 && !this.imageFailed;
   }
 
-  /** 当前生效的显示开关：夜间取 *Dark 版本，与上游 CoverTextOverlay 一致。 */
-  private effectiveShowName(): boolean {
-    return this.isNight ? this.coverSettings.showNameDark : this.coverSettings.showName;
-  }
-
-  private effectiveShowAuthor(): boolean {
-    // 上游 CoilBookCover.kt:519-520：showAuthor 在 showName 关闭时无效
-    const authorOn = this.isNight ? this.coverSettings.showAuthorDark : this.coverSettings.showAuthor;
-    return authorOn && this.effectiveShowName();
-  }
+  // 夜间书名/作者开关由 CoverTextLayout.buildCoverTextLayout 按 isNight 取 *Dark 一组判断。
 
   /**
    * 无封面文字的颜色。
@@ -110,7 +101,7 @@ export struct BookCover {
     context.clearRect(0, 0, widthVp, heightVp);
     if (this.hasCoverImage()) { return; }
     const layout = buildCoverTextLayout(
-      widthVp, heightVp, this.book.title, this.book.author, this.coverSettings, 1.2);
+      widthVp, heightVp, this.book.title, this.book.author, this.coverSettings, 1.2, this.isNight);
     if (layout.glyphs.length === 0) { return; }
     const fillColor = this.coverTextColor();
     context.textAlign = 'center';
