@@ -4,6 +4,9 @@ import {
   themeConfigsToJson, upThemeConfig
 } from './ThemeConfigStore';
 import { CustomThemeSnapshot, defaultCustomThemeSnapshot } from './CustomThemeColors';
+import {
+  CoverRule, CoverRuleRepository, copyCoverRule, isDefaultCoverRule, DEFAULT_COVER_RULE
+} from './CoverRuleRepository';
 import { preferences } from '@kit.ArkData';
 import zlib from '@ohos.zlib';
 import { Book } from '../model/Book';
@@ -812,6 +815,14 @@ export class BackupRepository {
             coverText, preference.type, preference.key, preference.value);
         }
         BackupRepository.writeTextFile(configPath, coverText);
+        // 上游 Backup.kt:251-256 在同一个 `if (!backupIgnoreCoverConfig)` 里写 coverRule.json，
+        // 但用 `BookCover.getConfig()?.let` 包着——没改过规则就不出这个文件。
+        // 本地等价口径：与默认规则完全一致时不写，避免给上游塞一份它本来不会产出的文件。
+        const coverRule: CoverRule = await CoverRuleRepository.load(context);
+        if (!isDefaultCoverRule(coverRule)) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/coverRule.json`,
+            JSON.stringify(coverRule));
+        }
       }
       if (!ignoredCategories.includes('themeConfig')) {
         let configText = fileIo.readTextSync(configPath);
