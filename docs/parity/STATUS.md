@@ -56,10 +56,10 @@
 | `rssStar` | `rssStar.json` | — | — | — | **零行** |
 | `replaceRule` | `replaceRule.json` | ✓ | ✓ | ? | **零行** |
 | `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) C 23 / B 5 = **28 行**（r334 判断段复核：11 已接 / 16 `未接` / 1 不适用；16 行未接 = B 块 3 行 `:272`/`:280`/`:307` + C 块 13 行） |
-| `searchHistory` | `searchHistory.json` | ✗ | ✗ | ? | **零行** |
+| `searchHistory` | `searchHistory.json` | ✗ | ✗ | ? | **零行**；语义错配：上游 `searchHistory.json` 装的是 `SearchKeyword`（全局搜索关键词池，表 `search_keywords`），本地 `ReaderSearchHistoryRepository` 对应的是上游 `SearchContentHistory`（书内搜索，表 `search_content_history`），而上游不备份后者——本地与上游的 `searchHistory` 是两个东西 |
 | `sourceSub` | `sourceSub.json` | — | — | — | **零行** |
 | `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | ? | **零行** |
-| `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | — | — | — | **零行** |
+| `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | — | — | — | **零行**；`httpTtsVoices.json` 写空数组 `[]`，`httpTTS.json` 不写（批 3：`[]` 承载上游「确实没有音色」语义，透传件存在时不覆盖） |
 | `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ✓ | [书籍总账](BOOKSHELF.md) E = **6 行**（r336 判断段建行，E 块由 13 行增至 19 行；面板级见 E `:507`，类别级见 E 新增 6 行） |
 | `dictRule` | `dictRule.json` | ✗ | ✗ | ? | **零行** |
 | `homepageModules` | `homepageModules.json` | ✗ | ✗ | ? | **零行** |
@@ -70,7 +70,7 @@
 | `server` | `servers.json` | — | — | — | **零行** |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（176 已接 / 11 `未接` / 2 不适用）；11 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
-| `coverConfig` | `coverRule.json`、`config.xml` | ✗ | ✗ | ? | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（57 已接 / 7 `未接` / 2 不适用，r330 建表、r334 实现段收口；接触面 83 个 `.kt` 全部已分配）。7 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
+| `coverConfig` | `coverRule.json`、`config.xml` | ✓ | ✓ | ? | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（57 已接 / 7 `未接` / 2 不适用，r330 建表、r334 实现段收口；接触面 83 个 `.kt` 全部已分配）。7 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
 | `themeMode` | `config.xml` | ✗ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 0 `未接` / 2 不适用，A8 的图标切换按 `themeConfig` 类计不适用；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
 | `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（76 已接 / 43 `未接` / 3 不适用，r327 建表、r331/r332 落地 38 行；接触面 24 个 `.kt` 全部已分配）。43 条 `未接` 按 `**要接**`（2）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
 | `showRss` | `config.xml` | ✗ | ✗ | ? | **零行** |

@@ -15,7 +15,9 @@ import {
  * 上游运行期把规则存进 CacheManager 的 `legadoCoverRuleConfig` 键；
  * 本地没有 caches 表，用独立 preferences 文件 `legado_cover_rule` 承载，
  * 与 CoverSettingsRepository 的落盘方式保持一致。
- * coverRule.json 只在上游备份/恢复时读写，本地不接（KI-COVER2 第二段）。
+ * coverRule.json 的备份读写已接（r336 批 1/批 2）：写出见 BackupRepository.createBackup
+ * 的 coverConfig 段，恢复见 restore 的 coverRule.json 分支。上游用 `BookCover.getConfig()?.let`
+ * 保证"没改过规则就不出文件"，本地按 isDefaultCoverRule 判同一条。
  */
 export interface CoverRule {
   enable: boolean;
