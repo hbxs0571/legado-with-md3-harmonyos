@@ -43,6 +43,7 @@
 - 书架布局类别已有九字段写入/恢复路径，但没有用九个不同哨兵值逐项验证。真实 Android ZIP 的完整兼容范围尚未验收。
 - 阅读记录会话、按日明细和按书汇总已由原生本地仓储承载；Android ZIP 中的 `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` 仍仅作兼容归档保留，不导入原生阅读记录。
 - ZIP 兼容不代表完整 Android 数据库迁移、跨类别事务回滚、凭据恢复或正文打包。
+- `keyboardAssists`：本地无该表（`data/RdbSchema.ets` 13 张 `CREATE TABLE` 无此项），恢复时该条目只进保留目录（`data/BackupRepository.ets:1172`），备份时仅当保留目录存有副本才原样拷出（`:2256`）。上游该表的业务消费方为零（`grep -rn 'keyboardAssistsDao' --include=*.kt app/src/main/java` 恰 4 行，全在备份/恢复与建表/DI）。忽略项一侧本地有效，但跳的是 ZIP 条目而非数据库行。
 
 ### 本地书籍行登记（BOOKSHELF.md 的 localBook 未接行）
 
