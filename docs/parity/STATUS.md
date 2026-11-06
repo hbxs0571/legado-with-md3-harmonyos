@@ -60,7 +60,7 @@
 | `sourceSub` | `sourceSub.json` | — | — | — | **零行** |
 | `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | ? | **零行** |
 | `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | — | — | — | **零行** |
-| `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ? | **零行** |
+| `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ✓ | [书籍总账](BOOKSHELF.md) E = **6 行**（r336 判断段建行，E 块由 13 行增至 19 行；面板级见 E `:507`，类别级见 E 新增 6 行） |
 | `dictRule` | `dictRule.json` | ✗ | ✗ | ? | **零行** |
 | `homepageModules` | `homepageModules.json` | ✗ | ✗ | ? | **零行** |
 | `homepageCustomSets` | `homepageCustomSets.json` | ✗ | ✗ | ? | **零行** |
@@ -121,7 +121,7 @@
 | --- | --- | --- |
 | [书籍总账](BOOKSHELF.md) | A1 / A2 / A3 / B / C / D | `localBook`、`bookshelfLayout`、`bookGroup`、`bookSource`、`readRecord`、`readConfig`、`threadCount`、`highlightTagRule`、`tagGroupRule` |
 | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) | A–F（r327 新增） | `bookshelfLayout`、`themeConfig`（A 块两个卡片底色行）。A1/A2 里与本表重叠的行以本表为准，A1/A2 其余行不受影响 |
-| [书籍总账](BOOKSHELF.md) | E（r295 新增） | 无——备份恢复流程本身不受任何类别的忽略开关控制，12 行全记 `—` |
+| [书籍总账](BOOKSHELF.md) | E（r295 新增） | `localBook`（`:510`）、`keyboardAssists`（r336 追加 6 行）；其余 12 行记 `—` |
 | [书签对照](ZIP-BOOKMARK.md) | A–E | `bookmark` |
 | [阅读配置总账](READER-CONFIG.md) | A–G | `readConfig`、`themeConfig` |
 | [TXT 阅读总账](TXT-READER.md) | A–D（217 个上游文件的主体） | `readConfig`、`localBook`、`themeConfig` 里与 TXT 阅读链路相关的行 |
