@@ -38,7 +38,7 @@
 | `—` | 不适用，理由必写（通常是[项目队列](../PROJECT.md)的范围之外） |
 | `?` | 未盘，尚未逐个文件核对 |
 
-**本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。
+**本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支当时只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。**2026-11-06 复核：现为 10 组具名分支**（新增 `themeConfig.json`、readRecord 三份、`coverRule.json`）。
 
 本次核实把原先 4 个 `?`（`themeMode`、`showRss`、`threadCount`、`mangaConfig`）全部落定为 `✗`：`config.xml` 写出侧只 upsert 三段（`bookshelfLayout` 9 键、`readConfig` 阅读外观、`themeConfig` 护眼 6 键），读入侧 46 键，这 4 类的键既不在写出列表也不在读入列表。**「读」列的 `✗` 表示该类的 ZIP 条目恢复时不进原生功能，但条目本身仍会被原样归档**——归档不等于支持。
 
