@@ -138,6 +138,11 @@ export class BookRepository {
   private static saveQueue: Promise<void> = Promise.resolve();
   /** 章节行缓存：bookUrl → 章节行，供页面上的同步访问器读取。 */
   private static chapterCache: Map<string, BookChapter[]> = new Map<string, BookChapter[]>();
+  /** 当前书正文缓存：换章整本重读解码太慢，只留当前这一本，key = contentPath|编码。 */
+  private static cachedBookContentKey: string = '';
+  private static cachedBookContent: string = '';
+  /** 正文缓存体积上限（按解码后 UTF-16 占用估算）：超过就不缓存。 */
+  private static readonly bookContentCacheLimitBytes: number = 32 * 1024 * 1024;
   /** 规则匹配只扫描文件开头，与 Android 只读首个缓冲区识别目录的行为一致。 */
   private static readonly tocSampleSize: number = 65536;
   /** 单章允许的最大字节数，超过就二次拆分；与上游 TextFile.kt:66 的 maxLengthWithToc 同值。 */
@@ -465,6 +470,8 @@ return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, max
       // 同一源文件重复导入会落到同一个 contentPath 上：先把上一份删掉再拷，
       // 否则 copyFileSync 在目标已存在时会失败。上游不存副本（直接读源 uri），没有这一步。
       if (fileIo.accessSync(contentPath)) { fileIo.unlinkSync(contentPath); }
+      // 同名文件重新导入仍是同一个 contentPath，缓存 key 不变；不清掉会一直读旧正文。
+      BookRepository.invalidateBookContent(contentPath);
       const sourceFile = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
       try {
         fileIo.copyFileSync(sourceFile.fd, contentPath);
@@ -1338,6 +1345,33 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     return next;
   }
 
+  /** 读整本正文，命中当前书缓存就复用；key 含编码，换书/换编码自然失效。 */
+  private static readBookContent(path: string, encoding: string | undefined): string {
+    const key = `${path}|${encoding ?? ''}`;
+    if (BookRepository.cachedBookContentKey === key && BookRepository.cachedBookContent.length > 0) {
+      return BookRepository.cachedBookContent;
+    }
+    const content = BookRepository.readTextFile(path, encoding);
+    // 按解码后字符串的 UTF-16 占用估算（每单元 2 字节）：超过 32MB 就不缓存，
+    // 免得把几十 MB 的解码结果常驻在低内存设备上。大文件直接读、直接扔。
+    if (content.length * 2 <= BookRepository.bookContentCacheLimitBytes) {
+      BookRepository.cachedBookContentKey = key;
+      BookRepository.cachedBookContent = content;
+    } else {
+      BookRepository.cachedBookContentKey = '';
+      BookRepository.cachedBookContent = '';
+    }
+    return content;
+  }
+
+  /** 文件被改写后让正文缓存失效：下次 readChapter 必须重新读盘。 */
+  private static invalidateBookContent(path: string | undefined): void {
+    if (path !== undefined && BookRepository.cachedBookContentKey.startsWith(`${path}|`)) {
+      BookRepository.cachedBookContentKey = '';
+      BookRepository.cachedBookContent = '';
+    }
+  }
+
   /**
    * 读一章正文。
    *
@@ -1351,7 +1385,14 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       throw new Error('本地书籍路径无效');
     }
     const encoding = book.format === 'txt' ? book.charset : undefined;
-    const content = contentOverride ?? BookRepository.readTextFile(book.contentPath, encoding);
+    // 换章会反复进来，正文缓存把整本读盘+解码从「每章一次」压成「每本一次」；
+    // contentOverride 是调用方现算好的正文（重新分段/换字符集），不查也不写缓存。
+    const contentStartedAt = Date.now();
+    const content = contentOverride ?? BookRepository.readBookContent(book.contentPath, encoding);
+    // 性能观测打点：验收要对比同书连读里取正文那段耗时，缓存命中后应显著下降。
+    if (contentOverride === undefined) {
+      console.info(`[ReaderBench] readChapter contentMs=${Date.now() - contentStartedAt} title=${chapterTitle}`);
+    }
     // 章节行已经是落库的权威数据，能用就用：deriveChapters 要把整本正文重切一遍
     // 并逐章折算字节长度，几 MB 的书在主线程上要两秒以上（会触发 THREAD_BLOCK_6S）。
     let rows = chapters;
@@ -1626,6 +1667,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       if (fileIo.accessSync(backupPath)) { fileIo.unlinkSync(backupPath); }
       fileIo.renameSync(book.contentPath, backupPath);
       fileIo.renameSync(temporaryPath, book.contentPath);
+      // 正文文件已被改写，紧接着 saveReaderChapterContent 会再 readChapter；清缓存才不会读回旧正文。
+      BookRepository.invalidateBookContent(book.contentPath);
       try {
         fileIo.unlinkSync(backupPath);
       } catch (error) {
