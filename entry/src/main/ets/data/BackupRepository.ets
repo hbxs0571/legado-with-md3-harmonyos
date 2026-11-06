@@ -1123,6 +1123,20 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'coverRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复封面规则`);
+        }
+        // 上游 Restore.kt:337-342 把整段字符串直接塞进 saveCoverRule，不做结构校验；
+        // 本地 CoverRuleRepository.save 要结构体，所以这里解析后按 9 个字段补齐默认值，
+        // 坏 JSON 不抛错、回退默认（对齐上游 runCatching 的容错姿态）。
+        const parsed: CoverRule = BackupRepository.parseCoverRule(text);
+        await CoverRuleRepository.save(context, parsed);
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
     }
@@ -2208,6 +2222,32 @@ export class BackupRepository {
         throw new Error(`无法保留 Android 备份条目 ${name}：${detail}`);
       }
     }
+  }
+
+  /**
+   * 解析归档里的 coverRule.json。
+   * 上游恢复是整段字符串直塞，本地要结构体，所以逐字段取、缺项补默认；
+   * 坏 JSON 回退默认规则，不抛错（对齐上游 runCatching 的容错姿态）。
+   */
+  private static parseCoverRule(text: string): CoverRule {
+    const rule: CoverRule = copyCoverRule(DEFAULT_COVER_RULE);
+    try {
+      const raw = JSON.parse(text) as Record<string, Object>;
+      if (typeof raw.enable === 'boolean') { rule.enable = raw.enable as boolean; }
+      if (typeof raw.searchUrl === 'string') { rule.searchUrl = raw.searchUrl as string; }
+      if (typeof raw.coverRule === 'string') { rule.coverRule = raw.coverRule as string; }
+      if (typeof raw.concurrentRate === 'string') { rule.concurrentRate = raw.concurrentRate as string; }
+      if (typeof raw.loginUrl === 'string') { rule.loginUrl = raw.loginUrl as string; }
+      if (typeof raw.loginUi === 'string') { rule.loginUi = raw.loginUi as string; }
+      if (typeof raw.header === 'string') { rule.header = raw.header as string; }
+      if (typeof raw.jsLib === 'string') { rule.jsLib = raw.jsLib as string; }
+      if (typeof raw.enabledCookieJar === 'boolean') {
+        rule.enabledCookieJar = raw.enabledCookieJar as boolean;
+      }
+    } catch (error) {
+      console.error(`[BackupRepository] 解析 coverRule.json 失败，回退默认规则: ${error}`);
+    }
+    return rule;
   }
 
   private static isIgnored(fileName: string, ignored: string[]): boolean {
