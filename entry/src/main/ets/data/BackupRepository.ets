@@ -860,6 +860,17 @@ export class BackupRepository {
         BackupRepository.writeTextFile(`${stagingDirectory}/${THEME_CONFIG_FILE_NAME}`,
           themeConfigsToJson(generated));
       }
+      // 上游 Backup.kt:193 无条件写这一份，注释原文「空数组也要写出，用来区分
+      // 旧备份未保存音色与确实没有音色」。本地没有音色数据源（无 HttpTTS 实体与仓储），
+      // 所以写的必然是 []——但正是 [] 承载了「确实没有音色」这个语义。
+      // 已存在透传件时不覆盖：copyPreservedEntries（:570）刚把上次从 Android 导进来的
+      // 真音色拷进来，覆盖掉会丢数据。
+      if (!ignoredCategories.includes('httpTTS')) {
+        const voicesPath = `${stagingDirectory}/httpTtsVoices.json`;
+        if (!fileIo.accessSync(voicesPath)) {
+          BackupRepository.writeTextFile(voicesPath, '[]');
+        }
+      }
       const files = fileIo.listFileSync(stagingDirectory)
         .filter((name: string) => BackupRepository.isSafeRootEntry(name))
         .map((name: string) => `${stagingDirectory}/${name}`);
