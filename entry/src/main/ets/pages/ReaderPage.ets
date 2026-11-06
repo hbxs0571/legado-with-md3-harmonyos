@@ -2240,9 +2240,15 @@ export struct ReaderPage {
     const currentExtentPx = this.readerCanvasRenderer.pageScrollExtent(current.page, current.pageIndex, request);
     const previousExtentPx = window.previous === undefined ? 0
       : this.readerCanvasRenderer.pageScrollExtent(window.previous.page, window.previous.pageIndex, request);
+    // 章末判据不能只看页表窗口：localReaderPages 只装当前这一章，末页的
+    // window.next 恒为 undefined。对齐上游 ReaderCanvasSurface.kt:1343-1355
+    // canTurnNext(window, latestHasNextChapter())：窗口有下一页，或书里还有下一章，
+    // 都允许产生 NEXT crossing，否则章末永远滚不进下一章。
+    const hasPrevious = window.previous !== undefined || this.getChapterIndex() > 0;
+    const hasNext = window.next !== undefined || this.getChapterIndex() + 1 < this.getChapterCount();
     const result: ReaderScrollResult = ReaderScrollPolicy.apply(
       context.vp2px(this.scrollOffset), deltaPx, previousExtentPx, currentExtentPx,
-      viewportExtentPx, window.previous !== undefined, window.next !== undefined);
+      viewportExtentPx, hasPrevious, hasNext);
     if (result.crossing === ReaderScrollCrossing.NEXT) {
       if (this.currentPageIndex + 1 >= pages.length) {
         // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示。
