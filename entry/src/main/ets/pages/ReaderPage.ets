@@ -4924,7 +4924,9 @@ export struct ReaderPage {
     request.handleStrokeArgb = request.selectionColorArgb | 0xFF000000;
     request.handleStartAlpha = this.canvasHandleStartAlpha;
     request.handleEndAlpha = this.canvasHandleEndAlpha;
-    // 页脚搬进画布后，槽位内容与纵向尺寸都由这里喂给渲染层（取数口径仍走 ReaderInfoSlot 那套）。
+    // 页眉页脚都搬进画布：两行装饰的取数与纵向尺寸各自喂给渲染层，
+    // 取数口径仍走 ReaderInfoSlot 那套，页眉页脚共用一处，改一处两边都坏。
+    request.headerDecoration = this.buildReaderHeaderDecoration(request);
     request.footerDecoration = this.buildReaderFooterDecoration(request);
     return request;
   }
@@ -4984,6 +4986,61 @@ export struct ReaderPage {
     return row;
   }
 
+  /**
+   * 把页眉槽位从 ArkUI 组件翻译成画布可画的纯数据。
+   *
+   * 与页脚版同一套口径，只是取数换成页眉那一侧：页眉贴画布顶（originYpx = 0），
+   * 正文由 layout.originYpx 让出 headerReserve。各项都用 vp2px 换算，逐项对齐
+   * getReaderInfoReserve(true) 的预留，分页与绘制才不会各算一套。
+   */
+  private buildReaderHeaderDecoration(request: ReaderCanvasDrawRequest): ReaderCanvasDecorationRow {
+    const row = new ReaderCanvasDecorationRow();
+    row.visible = this.isReaderHeaderVisible();
+    if (!row.visible) {
+      return row;
+    }
+    const context = this.getUIContext();
+    // 页眉贴画布顶：正文从 layout.originYpx 处开始画，页眉占住它上面那一条。
+    row.originYpx = 0;
+    row.lineHeightPx = context.vp2px(18);
+    row.fontSizePx = context.vp2px(this.getReaderInfoFontSize(true));
+    row.fontFamilies = [this.readerInfoFontFamily(true)];
+    row.colorArgb = readerCanvasArgb(this.getReaderInfoColor(true), 0xFF000000);
+    const twoColumns = this.resolveReaderColumnCount() > 1;
+    row.paddingLeftPx = context.vp2px(this.paddingSettings.headerPaddingLeft +
+      (twoColumns ? this.paddingSettings.paddingLeft : 0));
+    row.paddingRightPx = context.vp2px(this.paddingSettings.headerPaddingRight +
+      (twoColumns ? this.paddingSettings.paddingRight : 0));
+    row.paddingTopPx = context.vp2px(2 + this.paddingSettings.headerPaddingTop);
+    row.paddingBottomPx = context.vp2px(2 + this.paddingSettings.headerPaddingBottom);
+    if (this.infoSettings.showHeaderLine) {
+      row.dividerColorArgb = readerCanvasArgb(this.getReaderInfoDividerColor(), -1);
+      row.dividerThicknessPx = context.vp2px(1);
+    }
+    for (let position = 0; position < 3; position++) {
+      const type = this.getReaderInfoType(true, position);
+      const duplicated = this.isReaderInfoDuplicated(true, position);
+      const graphic = this.isReaderInfoGraphic(type) && !duplicated;
+      const value = this.getReaderInfoValue(type, this.getReaderInfoTemplate(true, position));
+      const tip = new ReaderCanvasDecorationTip();
+      tip.alignment = position;
+      tip.batteryPercent = this.readerInfoBatteryPercent();
+      if (graphic) {
+        tip.visual = type;
+        tip.text = this.readerInfoGraphicKeepsText(type) ? value : '';
+      } else {
+        tip.visual = 0;
+        tip.text = duplicated ? '' : value;
+      }
+      // 空槽整条丢弃：与页脚同口径，避免占位挤压中/右槽。
+      if (tip.visual === 0 && tip.text.length === 0) {
+        continue;
+      }
+      row.tips.push(tip);
+    }
+    return row;
+  }
+
   private buildReaderCanvasLayout(): ReaderCanvasLayout {
     const layout = new ReaderCanvasLayout();
     const context = this.getUIContext();
@@ -4996,11 +5053,12 @@ export struct ReaderPage {
       this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0,
       this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0));
     // 列起点：第一列带左内边距与刘海内缩，第二列再偏移一个 stride。
-    // 纵向原点必须是 0：Canvas 在 Column 里排在页眉/标题之后，已经自带那段偏移，
-    // 这里再减一次 paddingTop + 页眉高度就会把正文整体往下推两遍。
     const leftPadding = context.vp2px(this.paddingSettings.paddingLeft + this.readerCutoutLeftInset());
     layout.originXpx = leftPadding;
-    layout.originYpx = 0;
+    const headerReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
+    // 页眉搬进画布后 Canvas 顶到 Column 顶部，原来由 ArkUI 页眉节点撑开的那段偏移
+    // 没有了，正文纵向原点要自己补回来；漏补会让正文顶到页眉上，滚动坐标系也跟着错。
+    layout.originYpx = context.vp2px(headerReserve);
     layout.bottomJustifyGapPx = context.vp2px(this.readerBottomJustifyGap);
     // 双页模式按列各算一份（上游 justifyColumnBottom 逐列摊分）
     if (columnCount > 1) {
@@ -5981,14 +6039,8 @@ export struct ReaderPage {
       if (this.usesReaderCanvas()) {
         Stack({ alignContent: Alignment.TopEnd }) {
           Column() {
-            if (this.isReaderHeaderVisible()) {
-              Column() { this.ReaderInfoRow(true) }
-                .width('100%')
-                .padding({
-                  left: this.resolveReaderColumnCount() > 1 ? this.paddingSettings.paddingLeft : 0,
-                  right: this.resolveReaderColumnCount() > 1 ? this.paddingSettings.paddingRight : 0
-                })
-            }
+            // 页眉也搬进画布（见 headerDecoration）：这里不再放 ArkUI 节点，
+            // 否则 Canvas 会被压矮一整条页眉，正文原点又会与 layout.originYpx 重复偏移。
             // 章标题不再是画布外的 ArkUI 组件：它已经作为带 `titleFontScale` 的标题行
             // 排进块流，跟着正文一起翻页、一起滚动（上游 `ReaderPaginator.kt:1112-1116`）。
             // 旧实现在这里插 `ReaderTitleSegments`，滚动模式下标题不参与滚动栈平移，
@@ -6021,9 +6073,11 @@ export struct ReaderPage {
               .onAreaChange((oldArea: Area, newArea: Area) => {
                 // 菜单要定位在外层 Stack 里，记下画布自己的纵向偏移（Area 的 position 单位是 vp）
                 this.readerCanvasOffsetYVp = readerLengthToNumber(newArea.position.y ?? 0);
-                // 页脚搬进画布后 Canvas 长高了 footerReserve，仍按「正文区高」传给重排口径，
-                // 否则实测值比公式多一整条页脚，会误触发 rebuildReaderPages()。
+                // 页眉页脚都搬进画布后 Canvas 实测高度里同时含这两段预留，都要扣掉才是
+                // 「正文区高」；漏一段就会让实测值比公式多一整条装饰，
+                // syncReaderCanvasBodyHeight 再触发 rebuildReaderPages()，批 3 的抖动就回来了。
                 this.syncReaderCanvasBodyHeight(readerLengthToNumber(newArea.height) -
+                  (this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0) -
                   (this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0));
                 this.paintReaderCanvas();
               })
