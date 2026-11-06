@@ -1590,6 +1590,11 @@ export struct ReaderPage {
     this.primeContentImageSizesSync();
     this.loadContentImageSizes();
     this.rebuildReaderPages();
+    // 换章交接完成、新章页表已就位才放开拖动闸门：await readChapter 读盘期间
+    // scrollDragBoundaryTurned 一直立着挡住章末后续帧（防一次拖动连跳数章），正文
+    // 到了还不清，手指未抬起的剩余位移会被 onActionUpdate 全部 return 吃掉，
+    // 用户只好松手再按一次。放在页表替换之后，避免闸门先开、页表仍是旧章末页。
+    this.scrollDragBoundaryTurned = false;
   }
 
   onPaginationInputsChanged(): void {
@@ -6255,7 +6260,8 @@ export struct ReaderPage {
               // 「继续滑动以加载下一章…」提示页而不换章；慢速拖到章末再松手时速度不足
               // 8vp，惯性直接 return，于是永远停在本章末页——这正是「跳章」的另一半。
               // 与分页翻页（:2167）、惯性滚动（:2431）同口径：命中边界就转成换章。
-              // 一次拖动只转一次：换章是异步的，后续帧仍会命中边界，不设闸门会连跳数章。
+              // 一次拖动读到章末就发换章请求，闸门挡住异步读盘期间的后续帧防连跳；
+              // 它在 onReaderContentChanged 页表落定后清掉，换章完成后剩余帧接着滚，不必松手再按。
               if (this.scrollDragBoundaryTurned) {
                 return;
               }
