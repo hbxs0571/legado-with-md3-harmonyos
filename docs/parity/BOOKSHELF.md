@@ -58,12 +58,12 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | A1 书架主屏与卡片 | 78 | 15 | 63 | 0 |
 | A2 书架设置面板 | 47 | 9 | 38 | 0 |
 | A3 分组管理 | 22 | 13 | 9 | 0 |
-| B 书籍详情页与元数据 | 80 | 22 | 57 | 1 |
-| C 阅读进度与记录 | 35 | 17 | 17 | 1 |
+| B 书籍详情页与元数据 | 80 | 24 | 55 | 1 |
+| C 阅读进度与记录 | 39 | 33 | 5 | 1 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
-| E 备份恢复（整界面，r295 新增，r296 补 1 行） | 13 | 3 | 9 | 1 |
+| E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 3 | 14 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
-| 合计 | 335 | 87 | 245 | 3 |
+| 合计 | 345 | 105 | 236 | 4 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 13 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -559,11 +559,11 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 ## 小结
 
-**全表合计 335 条：已接 87、未接 245、不适用 3，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 35 + D 53 + E 13 + F 7）
+**全表合计 345 条：已接 105、未接 236、不适用 4，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）
 
-按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制），F 块 7 行全部落 `localBook`。**28 类里有 19 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`keyboardAssists`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
+按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
-分块口径：A1 78 + A2 47 + A3 22 + B 80 + C 35 + D 53（D 块总述 1 + D1 6 + D2 13 + D3 29 + D4 4）+ E 13 + **F 7（r323 新增，全部 `未接`）** = 335。
+分块口径：A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53（D 块总述 1 + D1 6 + D2 13 + D3 29 + D4 4）+ E 19 + **F 7（r323 新增，全部 `未接`）** = 345。
 
 五处需要特别注意：
 
