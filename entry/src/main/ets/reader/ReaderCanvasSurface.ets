@@ -1516,9 +1516,14 @@ export class ReaderCanvasRenderer {
     recordGeometry: boolean, drawSelection: boolean): ReaderCanvasPageGeometry | undefined {
     const layout = request.layout;
     canvas.save();
-    // 滚动栈天然会画出视口之外（上一页还在上面、下一页还在下面），必须裁
+    // 滚动栈天然会画出视口之外（上一页还在上面、下一页还在下面），必须裁。
+    // 裁剪边界是「正文区」而不是整屏：页眉页脚搬进画布后，正文区上下各有一条
+    // 装饰带（页眉 0..originYpx、页脚 originYpx+bodyHeightPx..），正文画进那两条
+    // 会和页眉页脚文字叠在一起（用户截图里页脚两行压在正文最后一行上就是这个）。
+    const bodyTopPx = layout.originYpx;
+    const bodyBottomPx = layout.originYpx + layout.bodyHeightPx;
     canvas.clipRect({
-      left: 0, top: 0, right: layout.viewportWidthPx, bottom: layout.viewportHeightPx
+      left: 0, top: bodyTopPx, right: layout.viewportWidthPx, bottom: bodyBottomPx
     }, drawing.ClipOp.INTERSECT, true);
     canvas.translate(0, stackOffsetY);
     if (request.pageSurfaceOpaque) {
