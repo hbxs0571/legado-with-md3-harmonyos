@@ -472,6 +472,15 @@ export struct ReaderPage {
    */
   private chapterHandoffPending: boolean = false;
   private chapterHandoffUpward: boolean = false;
+  // 跨章续接的位移（vp）。章末越过页界的那一小段负余量在这里暂存，
+  // 等新章页表在 rebuildReaderPages 里落定后当作新章首页的初始偏移，
+  // 对齐上游「换章时 scrollOffset 直接续写」。不存的话换章重排会把这段位移丢掉，
+  // 手指没抬起的后续位移就断了，用户必须松手再滑一次才能继续。
+  private pendingChapterScrollVp: number = 0;
+  // 章界交接进行中：实测换章时 book / chapterTitle / content 三个 @Watch 会依次触发
+  // （selectChapter 换 selectedBook 引用还会触发 onBookChanged 把交接标记作废），
+  // 任何一个清零点在这段窗口动手都会吃掉余量，所以用它挡住清零，直到页表落定消费。
+  private chapterBoundaryContinuation: boolean = false;
   /**
    * 上一次交接记的是哪本书。
    *
@@ -771,6 +780,7 @@ export struct ReaderPage {
     if (this.startPositionPending) {
       this.restoredProgressPosition = false;
       this.scrollOffset = 0;
+      if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
       this.rebuildReaderPages();
     }
     this.loadContentImageSizes();
@@ -844,6 +854,7 @@ export struct ReaderPage {
     this.sliderProgressIndex = 0;
     this.restoredProgressPosition = false;
     this.scrollOffset = 0;
+    if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
     this.rebuildReaderPages();
   }
 
@@ -1481,6 +1492,7 @@ export struct ReaderPage {
     this.sliderProgressIndex = this.getChapterIndex();
     this.restoredProgressPosition = false;
     this.scrollOffset = 0;
+    if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
     // 这里不再 rebuildReaderPages()：标题定稿后会赋值 displayChapterTitle，
     // 触发 onDisplayChapterTitleChanged() 再排一次，那才是标题真正落定的时机。
     // 两处都排就是同一章排两遍，换章时白白多一次全章测量。
@@ -1581,6 +1593,7 @@ export struct ReaderPage {
       this.localReaderPages = [];
       this.currentPageIndex = 0;
       this.scrollOffset = 0;
+      if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
     }
     this.chapterHandoffBookId = this.book.id;
     this.restoredProgressPosition = false;
@@ -1692,6 +1705,7 @@ export struct ReaderPage {
     this.restoredProgressPosition = false;
     if (this.pageAnimation === 3) {
       this.scrollOffset = 0;
+      if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
     } else {
       this.rebuildReaderPages();
     }
@@ -1783,6 +1797,8 @@ export struct ReaderPage {
         this.localReaderPages = [];
         this.readerBottomJustifyGap = 0;
       }
+      // 视口还没就绪就早退，这帧不排页；交接进行中余量要留到下一次重排消费。
+      if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
       return;
     }
     const context = this.getUIContext();
@@ -1918,9 +1934,28 @@ export struct ReaderPage {
     this.currentPageIndex = pageIndex;
     // KI-REL1：换章后滚动偏移归零。连续滚动的偏移是「当前页之前的页高之和 + 页内偏移」，
     // 页表换了之后旧偏移对新章没有意义，不清掉新章一开篇就停在中间。
-    if (!this.usesCanvasScroll() || isChapterHandoff) {
+    // 但滚动到章界触发的交接是例外：越界那点余量本来就是「该往新章推多远」，
+    // 归零等于把手指还没抬起的位移丢掉，用户就得松手重滑（对齐上游直接续写 scrollOffset）。
+    if (!this.usesCanvasScroll()) {
       this.scrollOffset = 0;
+    } else if (isChapterHandoff || this.chapterBoundaryContinuation) {
+      // 落点是新章某页，余量必须钳在「这一页自己能滚的范围」内。快速甩动时
+      // 一帧的 delta 可能比整页还高，不钳就会滚过页底露出空白（此时页表里没有
+      // 下一页可接，因为 localReaderPages 只装本章）。
+      const landingPage = this.localReaderPages[this.currentPageIndex];
+      if (landingPage !== undefined) {
+        const landingRequest = this.buildReaderCanvasRequest(new ReaderTransitionTransforms());
+        const landingExtent = this.readerCanvasRenderer.pageScrollExtent(
+          landingPage, this.currentPageIndex, landingRequest);
+        // pageScrollExtent 按 layout.vpScale 算的是 px，余量存的是 vp；
+        // 不换算就把 px 当 vp 钳会让钳位形同虚设，快速甩动时越过页底露白。
+        const landingExtentVp = context.px2vp(landingExtent);
+        this.scrollOffset = Math.max(-landingExtentVp, Math.min(0, this.pendingChapterScrollVp));
+      }
+      console.info(`[ReaderBench] handoff landed scrollOffset=${this.scrollOffset} pending=${this.pendingChapterScrollVp}`);
     }
+    this.pendingChapterScrollVp = 0;
+    this.chapterBoundaryContinuation = false;
     this.readerBottomJustifyPageHeight = pageHeight;
     this.readerBottomJustifyLineHeight = lineHeight;
     // 标题已进块流、算进页容量，底部对齐不再需要额外扣掉标题预留。
@@ -2258,7 +2293,13 @@ export struct ReaderPage {
       if (this.currentPageIndex + 1 >= pages.length) {
         // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示。
         // 但章末要先亮「继续滑动以加载下一章…」提示页，否则用户以为滚到头了。
-        this.scrollOffset = context.px2vp(result.offsetPx);
+        const overshootVp = context.px2vp(result.offsetPx);
+        this.scrollOffset = overshootVp;
+        // 这笔负值是「已越过末页底边多少」，也是「该往新章推进多远」。换章是
+        // 异步重排，不把它带到新章页表就会在落定时丢掉，手指没抬也得松手重滑。
+        this.pendingChapterScrollVp = overshootVp;
+        this.chapterBoundaryContinuation = true;
+        console.info(`[ReaderBench] handoff store overshootVp=${overshootVp} pageIdx=${this.currentPageIndex}`);
         this.showChapterBoundaryMessage(1);
         this.paintReaderCanvas();
         return true;
@@ -4518,6 +4559,7 @@ export struct ReaderPage {
 
   /** 把章内绝对位移还原成「当前页索引 + 页内偏移」。 */
   private seekReaderScrollAbsolute(target: number): void {
+    if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
     const pages = this.localReaderPages;
     if (pages.length === 0) {
       return;
