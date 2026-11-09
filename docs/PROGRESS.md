@@ -7,7 +7,7 @@
 ## 规模
 
 - 129 个 `.ets` 文件 / 65,434 行 / 38 个页面（`find entry/src/main/ets -name '*.ets'` 实测）。
-- 七张界面级对照表：书架 341 行、书签 117 行、阅读配置 189 行、TXT 阅读 242 行、书架布局 122 行、封面设置 66 行、深色模式 91 行，合计 1168 行（已接 770 / 未接 366 / 不适用 32）。（截至 `c8811eb`，按 `scripts/parity-rows.py` 对 `git show HEAD:` 导出的表实跑；表内统计见 `docs/parity/BOOKSHELF.md` 盘面节，本句的合计取自 `scripts/parity-rows.py` 实跑）
+- 七张界面级对照表：书架 345 行、书签 117 行、阅读配置 189 行、TXT 阅读 242 行、书架布局 122 行、封面设置 66 行、深色模式 91 行，合计 1172 行（已接 810 / 未接 330 / 不适用 32）。（截至 `c8811eb`，按 `scripts/parity-rows.py` 对 `git show HEAD:` 导出的表实跑；表内统计见 `docs/parity/BOOKSHELF.md` 盘面节，本句的合计取自 `scripts/parity-rows.py` 实跑）
 - 28 个 Android ZIP 数据类别：已接入 6、部分接入 5、未接入 3、仅归档 14。
 
 ## 已接入并有设备验收
