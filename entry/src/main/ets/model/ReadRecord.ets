@@ -78,3 +78,27 @@ export interface ReadTimeRecord {
   endTime: number;
   durationMs: number;
 }
+
+/** 详情页面板里的一行会话，字段已在 Index 侧格式化好，详情页不碰数据层。 */
+export interface BookReadRecordSession {
+  /** 结束时间 HH:mm。 */
+  timeLabel: string;
+  /** 会话时长（四段口径）。 */
+  durationLabel: string;
+  /** 章节标签，无章节时为空串。 */
+  chapterLabel: string;
+}
+
+/** 详情页面板里按天分组的一组会话。 */
+export interface BookReadRecordDay {
+  /** 友好日期：今天/昨天/N天前，或 yyyy-MM-dd。 */
+  dateLabel: string;
+  sessions: BookReadRecordSession[];
+}
+
+/** 详情页面板的全部展示数据，由 Index 调批 0 两个方法组装。 */
+export interface BookReadRecordPanel {
+  /** 累计阅读时长（四段口径）。 */
+  totalLabel: string;
+  days: BookReadRecordDay[];
+}

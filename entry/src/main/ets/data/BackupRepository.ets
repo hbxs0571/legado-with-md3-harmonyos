@@ -37,6 +37,19 @@ import {
   CoverSettings, CoverSettingsRepository, copyCoverSettings,
   coverSettingsToAndroid, applyAndroidCoverPreferences
 } from './CoverSettingsRepository';
+import { ReadRecordDetail, ReadRecordSession, ReadRecordSummary } from '../model/ReadRecord';
+import { ReadRecordRepository } from './ReadRecordRepository';
+
+/** 上游 readRecordSession.json 的字段：words 对应本地 chapterIndex。 */
+interface AndroidReadRecordSessionRecord {
+  deviceId: string;
+  bookName: string;
+  bookAuthor: string;
+  bookUrl: string;
+  startTime: number;
+  endTime: number;
+  words: number;
+}
 
 /** 解析 highlightRule.json 的结果：可用规则与因形态不符被跳过的条数。 */
 interface HighlightRuleParseOutcome {
@@ -684,6 +697,27 @@ export class BackupRepository {
           ReaderBookmarkExporter.toAndroidMarkingArray(markings));
       }
 
+      // 阅读记录三张表：字段名与上游 Room 实体一致，会话的 words 对应本地 chapterIndex。
+      // 三个 load* 都是 async，所以这一段要 await；分类被忽略时整段不写。
+      if (!ignoredCategories.includes('readRecord')) {
+        const snapshot = await ReadRecordRepository.exportForBackup(context);
+        BackupRepository.writeTextFile(`${stagingDirectory}/readRecord.json`,
+          JSON.stringify(snapshot.summaries));
+        BackupRepository.writeTextFile(`${stagingDirectory}/readRecordDetail.json`,
+          JSON.stringify(snapshot.details));
+        const sessionLines: AndroidReadRecordSessionRecord[] = [];
+        for (const item of snapshot.sessions) {
+          const row: AndroidReadRecordSessionRecord = {
+            deviceId: item.deviceId, bookName: item.bookName, bookAuthor: item.bookAuthor,
+            bookUrl: item.bookUrl, startTime: item.startTime, endTime: item.endTime,
+            words: item.chapterIndex
+          };
+          sessionLines.push(row);
+        }
+        BackupRepository.writeTextFile(`${stagingDirectory}/readRecordSession.json`,
+          JSON.stringify(sessionLines));
+      }
+
       if (!ignoredCategories.includes('readConfig')) {
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1004,6 +1038,10 @@ export class BackupRepository {
     // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
     // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
     let restoredThemeConfigCount: number = 0;
+    // 恢复分支里逐份暂存，循环结束后统一写库，对应上游 Restore.kt 的读入分支。
+    let pendingSummaries: ReadRecordSummary[] | undefined = undefined;
+    let pendingDetails: ReadRecordDetail[] | undefined = undefined;
+    let pendingSessions: ReadRecordSession[] | undefined = undefined;
     let pendingBookmarks: ReaderBookmark[] | undefined = undefined;
     let pendingMarkings: ReaderMarking[] | undefined = undefined;
     const bookmarkOutcome: BookmarkImportOutcome = { added: 0, updated: 0, skipped: 0 };
@@ -1134,6 +1172,25 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'readRecord.json' || entry.name === 'readRecordDetail.json' ||
+        entry.name === 'readRecordSession.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复阅读记录`);
+        }
+        // 三个文件逐份暂存，循环结束后统一写库，避免单文件分支互相覆盖。
+        const parsed = BackupRepository.parseReadRecordArray(text);
+        if (entry.name === 'readRecord.json') {
+          pendingSummaries = BackupRepository.toReadRecordSummaries(parsed);
+        } else if (entry.name === 'readRecordDetail.json') {
+          pendingDetails = BackupRepository.toReadRecordDetails(parsed);
+        } else {
+          pendingSessions = BackupRepository.toReadRecordSessions(parsed);
+        }
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       if (entry.name === 'coverRule.json') {
         const text = fileIo.readTextSync(sourcePath);
         if (text.length > BackupRepository.maximumJsonTextBytes) {
@@ -1150,6 +1207,12 @@ export class BackupRepository {
       }
       await fileIo.copyFile(sourcePath, targetPath);
       preservedEntryCount += 1;
+    }
+
+    // 三份 JSON 全部收齐之后，按会话重算明细与汇总，再写进关系库。
+    if (pendingSummaries !== undefined || pendingDetails !== undefined || pendingSessions !== undefined) {
+      await ReadRecordRepository.restoreFromBackup(context,
+        pendingSummaries ?? [], pendingDetails ?? [], pendingSessions ?? []);
     }
 
     // 归档里的 themeConfig.json 已经落进私有目录，这里补一次装载，
@@ -2233,6 +2296,73 @@ export class BackupRepository {
         throw new Error(`无法保留 Android 备份条目 ${name}：${detail}`);
       }
     }
+  }
+
+  /** 解析阅读记录 JSON 数组：坏文件按空数组处理，不中断整包导入。 */
+  private static parseReadRecordArray(text: string): Object[] {
+    try {
+      const parsed = JSON.parse(text) as Object;
+      if (Array.isArray(parsed)) { return parsed as Object[]; }
+    } catch (error) {
+      console.error(`[BackupRepository] 解析阅读记录失败: ${error}`);
+    }
+    return [];
+  }
+
+  /** 上游 readRecord.json 逐字段转成本地 ReadRecordSummary。 */
+  private static toReadRecordSummaries(rows: Object[]): ReadRecordSummary[] {
+    const result: ReadRecordSummary[] = [];
+    for (const row of rows) {
+      const record = row as Record<string, Object>;
+      const item: ReadRecordSummary = {
+        deviceId: BackupRepository.readString(record, 'deviceId'),
+        bookName: BackupRepository.readString(record, 'bookName'),
+        bookAuthor: BackupRepository.readString(record, 'bookAuthor'),
+        readTime: BackupRepository.readNumber(record, 'readTime', 0),
+        lastRead: BackupRepository.readNumber(record, 'lastRead', 0)
+      };
+      result.push(item);
+    }
+    return result;
+  }
+
+  /** 上游 readRecordDetail.json 逐字段转成本地 ReadRecordDetail。 */
+  private static toReadRecordDetails(rows: Object[]): ReadRecordDetail[] {
+    const result: ReadRecordDetail[] = [];
+    for (const row of rows) {
+      const record = row as Record<string, Object>;
+      const item: ReadRecordDetail = {
+        deviceId: BackupRepository.readString(record, 'deviceId'),
+        bookName: BackupRepository.readString(record, 'bookName'),
+        bookAuthor: BackupRepository.readString(record, 'bookAuthor'),
+        date: BackupRepository.readString(record, 'date'),
+        readTime: BackupRepository.readNumber(record, 'readTime', 0),
+        readWords: BackupRepository.readNumber(record, 'readWords', 0),
+        firstReadTime: BackupRepository.readNumber(record, 'firstReadTime', 0),
+        lastReadTime: BackupRepository.readNumber(record, 'lastReadTime', 0)
+      };
+      result.push(item);
+    }
+    return result;
+  }
+
+  /** 上游 readRecordSession.json 的 words 改名成本地 chapterIndex。 */
+  private static toReadRecordSessions(rows: Object[]): ReadRecordSession[] {
+    const result: ReadRecordSession[] = [];
+    for (const row of rows) {
+      const record = row as Record<string, Object>;
+      const item: ReadRecordSession = {
+        deviceId: BackupRepository.readString(record, 'deviceId'),
+        bookName: BackupRepository.readString(record, 'bookName'),
+        bookAuthor: BackupRepository.readString(record, 'bookAuthor'),
+        bookUrl: BackupRepository.readString(record, 'bookUrl'),
+        startTime: BackupRepository.readNumber(record, 'startTime', 0),
+        endTime: BackupRepository.readNumber(record, 'endTime', 0),
+        chapterIndex: BackupRepository.readNumber(record, 'words', 0)
+      };
+      result.push(item);
+    }
+    return result;
   }
 
   /**

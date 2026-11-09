@@ -11,6 +11,13 @@ interface ReadRecordDerived {
   summaries: ReadRecordSummary[];
 }
 
+/** 备份写出/恢复用的三张表快照，字段名与上游 Room 实体一致。 */
+export interface ReadRecordBackupSnapshot {
+  summaries: ReadRecordSummary[];
+  details: ReadRecordDetail[];
+  sessions: ReadRecordSession[];
+}
+
 /**
  * 阅读记录仓储，对应上游 io.legado.app.data.repository.ReadRecordRepository。
  *
@@ -31,6 +38,12 @@ export class ReadRecordRepository {
   private static readonly enabledKey: string = 'enabled';
   /** 老版本的会话文本键，只在搬迁时读一次。 */
   private static readonly legacySessionsKey: string = 'sessions_v1';
+  /** 删除确认「不再提醒」长期档，键名与上游 READ_RECORD_SKIP_DELETE_CONFIRM 一致。 */
+  private static readonly skipDeleteConfirmKey: string = 'readRecordSkipDeleteConfirm';
+  /** 作者为空的旧记录归属决定，键名与上游 READ_RECORD_ALIAS_DECISIONS 一致。 */
+  private static readonly aliasDecisionsKey: string = 'readRecordAliasDecisions';
+  /** 归属决定里 key 与 MERGE/KEEP 的分隔符，与上游 ReadRecordAliasDecision.SEPARATOR 一致。 */
+  private static readonly aliasDecisionSeparator: string = '\u0001';
 
   private static readonly selectSessions: string =
     'SELECT `deviceId`, `bookName`, `bookAuthor`, `bookUrl`, `startTime`, `endTime`, `words` ' +
@@ -60,11 +73,28 @@ export class ReadRecordRepository {
     'DELETE FROM `readRecordDetail` WHERE `bookName` = ? AND `bookAuthor` = ?';
   private static readonly deleteSummaryByBook: string =
     'DELETE FROM `readRecord` WHERE `bookName` = ? AND `bookAuthor` = ?';
+  /** 按会话的完整复合键删一条会话（选择模式的时间线条目）。 */
+  private static readonly deleteSessionByExactKey: string =
+    'DELETE FROM `readRecordSession` WHERE `bookName` = ? AND `bookAuthor` = ? ' +
+    'AND `bookUrl` = ? AND `startTime` = ? AND `endTime` = ?';
+  /**
+   * 按「设备 + 书名 + 作者 + 自然日」删该日的会话（选择模式的汇总条目）。
+   * 日期口径与上游 ReadRecordDao.kt:355-366 一致：用 localtime 把 startTime 转成 yyyy-MM-dd 后比较。
+   */
+  private static readonly deleteSessionsByBookAndDate: string =
+    'DELETE FROM `readRecordSession` WHERE `deviceId` = ? AND `bookName` = ? AND `bookAuthor` = ? ' +
+    "AND STRFTIME('%Y-%m-%d', datetime(`startTime` / 1000, 'unixepoch', 'localtime')) = ?";
+  /** 单独禁用判定：取精确命中行与全部禁用行，由调用方按文件名派生规则比对。 */
+  private static readonly selectDisableReadRecord: string =
+    'SELECT `bookUrl`, `disableReadRecord` FROM `books` ' +
+    'WHERE `bookUrl` = ? OR `disableReadRecord` = 1';
 
   /** 一次阅读不足这个时长就不记账，对应上游 ReadBook.MIN_READ_DURATION。 */
   static readonly minimumReadDurationMs: number = 10 * 1000;
   /** 自动提交间隔，对应上游 ReadBook.AUTO_SAVE_INTERVAL。 */
   static readonly autoSaveIntervalMs: number = 120 * 1000;
+  /** 连续会话合并阈值，对应上游 CONTINUOUS_READ_SESSION_GAP_MILLIS。 */
+  static readonly continuousSessionGapMs: number = 20 * 60 * 1000;
 
   private static saveQueue: Promise<void> = Promise.resolve();
 
@@ -255,6 +285,200 @@ export class ReadRecordRepository {
     return records;
   }
 
+  // ---------------------------------------------------------------- 展示辅助
+
+  /** 时长四段格式化：天/小时/分钟/秒任意非零都拼，全零返回「0秒」。 */
+  static formatDuration(millis: number): string {
+    const days = Math.floor(millis / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((millis % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((millis % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((millis % (1000 * 60)) / 1000);
+    const d = days > 0 ? `${days}天` : '';
+    const h = hours > 0 ? `${hours}小时` : '';
+    const m = minutes > 0 ? `${minutes}分钟` : '';
+    const s = seconds > 0 ? `${seconds}秒` : '';
+    const text = `${d}${h}${m}${s}`;
+    return text.length === 0 ? '0秒' : text;
+  }
+
+  /** 复制一条会话；ArkTS 不支持对象展开，逐字段构造。 */
+  private static cloneSession(session: ReadRecordSession, endTime: number): ReadRecordSession {
+    return {
+      deviceId: session.deviceId,
+      bookName: session.bookName,
+      bookAuthor: session.bookAuthor,
+      bookUrl: session.bookUrl,
+      startTime: session.startTime,
+      endTime: endTime,
+      chapterIndex: session.chapterIndex
+    };
+  }
+
+  /**
+   * 合并相邻的同书会话，对应上游 mergeContinuousSessions。
+   * 只看相邻两条，间隔不超过 continuousSessionGapMs 就延长上一条的结束时间。
+   */
+  static mergeContinuousSessions(sessions: ReadRecordSession[]): ReadRecordSession[] {
+    const merged: ReadRecordSession[] = [];
+    for (const current of sessions) {
+      const last = merged.length > 0 ? merged[merged.length - 1] : undefined;
+      if (last !== undefined && current.bookName === last.bookName &&
+        current.bookAuthor === last.bookAuthor &&
+        (current.startTime - last.endTime) <= ReadRecordRepository.continuousSessionGapMs) {
+        merged[merged.length - 1] = ReadRecordRepository.cloneSession(last, current.endTime);
+      } else {
+        merged.push(ReadRecordRepository.cloneSession(current, current.endTime));
+      }
+    }
+    return merged;
+  }
+
+  /** 日期友好化：今天/昨天/N天前（2~5 天），其余原样返回 yyyy-MM-dd。 */
+  static formatFriendlyDate(dateKey: string): string {
+    const todayMidnight = ReadRecordRepository.midnightOf(ReadRecordRepository.toDateKey(Date.now()));
+    const inputMidnight = ReadRecordRepository.midnightOf(dateKey);
+    if (inputMidnight === 0) { return dateKey; }
+    const daysBetween = Math.round((todayMidnight - inputMidnight) / (1000 * 60 * 60 * 24));
+    if (daysBetween === 0) { return '今天'; }
+    if (daysBetween === 1) { return '昨天'; }
+    if (daysBetween >= 2 && daysBetween <= 5) { return `${daysBetween}天前`; }
+    return dateKey;
+  }
+
+  // ---------------------------------------------------------------- 本书维度
+
+  /** 按（书名, 作者）取一本书的累计汇总，对应上游 getBookReadTime。 */
+  static async loadBookSummaries(context: Context, bookName: string, bookAuthor: string): Promise<ReadRecordSummary> {
+    const summaries = await ReadRecordRepository.loadSummaries(context);
+    const matched = summaries.find((item: ReadRecordSummary) =>
+      item.bookName === bookName && item.bookAuthor === bookAuthor);
+    if (matched !== undefined) { return matched; }
+    return { deviceId: '', bookName: bookName, bookAuthor: bookAuthor, readTime: 0, lastRead: 0 };
+  }
+
+  /**
+   * 按副本取本书会话并按自然日分组：日倒序、天内按开始时间倒序。
+   * 对应上游 toTimelineDays；bookUrl 为空的历史记录退回按（书名, 作者）匹配。
+   */
+  static async loadBookTimelineDays(
+    context: Context, bookUrl: string, bookName: string, bookAuthor: string
+  ): Promise<ReadRecordSession[][]> {
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    const groups: Map<string, ReadRecordSession[]> = new Map<string, ReadRecordSession[]>();
+    for (const session of sessions) {
+      const matched = bookUrl.length > 0 ? session.bookUrl === bookUrl :
+        (session.bookName === bookName && session.bookAuthor === bookAuthor);
+      if (!matched) { continue; }
+      const dateKey = ReadRecordRepository.toDateKey(session.startTime);
+      const day = groups.get(dateKey);
+      if (day === undefined) { groups.set(dateKey, [session]); }
+      else { day.push(session); }
+    }
+    const dateKeys: string[] = Array.from(groups.keys()).sort(
+      (left: string, right: string) => right.localeCompare(left));
+    const days: ReadRecordSession[][] = [];
+    for (const dateKey of dateKeys) {
+      const day = groups.get(dateKey) ?? [];
+      day.sort((left: ReadRecordSession, right: ReadRecordSession) => right.startTime - left.startTime);
+      days.push(day);
+    }
+    return days;
+  }
+
+  // ---------------------------------------------------------------- 删除
+
+  /** 删会话行并按剩余会话整体重算明细与汇总；会话是权威源，删派生行会被重算写回。 */
+  private static async deleteSessionsAndRebuild(
+    context: Context, sql: string, args: relationalStore.ValueType[]
+  ): Promise<void> {
+    await ReadRecordRepository.saveQueue;
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    store.beginTransaction();
+    try {
+      await store.executeSql(sql, args);
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`删除阅读记录失败：${(error as Error).message}`);
+    }
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    await ReadRecordRepository.rebuildDetailsAndSummaries(context, sessions);
+  }
+
+  /** 单条删除：时间线条目按会话复合键定位。 */
+  static async deleteSessionById(context: Context, session: ReadRecordSession): Promise<void> {
+    await ReadRecordRepository.deleteSessionsAndRebuild(context, ReadRecordRepository.deleteSessionByExactKey, [
+      session.bookName, session.bookAuthor, session.bookUrl, session.startTime, session.endTime
+    ]);
+  }
+
+  /** 单条删除：汇总条目按（设备, 书名, 作者, 日期）删该日的底层会话。 */
+  static async deleteDetailByIdKey(
+    context: Context, deviceId: string, bookName: string, bookAuthor: string, date: string
+  ): Promise<void> {
+    await ReadRecordRepository.deleteSessionsAndRebuild(context, ReadRecordRepository.deleteSessionsByBookAndDate, [
+      deviceId, bookName, bookAuthor, date
+    ]);
+  }
+
+  /** 单条删除：最后阅读条目按（书名, 作者）删这本书的全部会话。 */
+  static async deleteSummaryByKey(context: Context, bookName: string, bookAuthor: string): Promise<void> {
+    await ReadRecordRepository.deleteSessionsAndRebuild(context, ReadRecordRepository.deleteSessionsByBook, [
+      bookName, bookAuthor
+    ]);
+  }
+
+  // ---------------------------------------------------------------- 单书禁用
+
+  /**
+   * 由 books.bookUrl 派生 Book.id，规则与 BookRepository.bookIdFromUrl 一致：
+   * 按 / 取文件名、解百分号编码、去掉最后一个扩展名。
+   */
+  private static idFromBookUrl(bookUrl: string): string {
+    const separator = bookUrl.lastIndexOf('/');
+    const rawName = separator >= 0 ? bookUrl.substring(separator + 1) : bookUrl;
+    let fileName = rawName;
+    try {
+      fileName = decodeURIComponent(rawName);
+    } catch (_) {
+      // 不是合法百分号编码时按原样处理
+    }
+    const dotIndex = fileName.lastIndexOf('.');
+    return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+  }
+
+  /**
+   * 查某本书是否单独关闭了阅读记录。
+   * 会话的 bookUrl 是 Book.id（文件名），books 表 bookUrl 列存完整路径，
+   * 因此把精确命中行与全部禁用行一起取出，再按文件名派生规则比对。
+   */
+  static async isBookReadRecordDisabled(context: Context, bookUrl: string): Promise<boolean> {
+    if (bookUrl.length === 0) { return false; }
+    try {
+      const store = await RdbStore.getStore(context);
+      await RdbSchema.ensure(store);
+      const resultSet = await store.querySql(ReadRecordRepository.selectDisableReadRecord, [bookUrl]);
+      try {
+        const urlIndex = RdbCodec.column(resultSet, 'bookUrl');
+        const disabledIndex = RdbCodec.column(resultSet, 'disableReadRecord');
+        while (resultSet.goToNextRow()) {
+          if (!RdbCodec.boolean(resultSet, disabledIndex, false)) { continue; }
+          const path = RdbCodec.text(resultSet, urlIndex);
+          // 会话的 bookUrl 是 Book.id（文件名去扩展名），books 列存完整路径，
+          // 两边按同一套派生规则比对，避免前缀同名书误命中。
+          if (path === bookUrl || ReadRecordRepository.idFromBookUrl(path) === bookUrl) { return true; }
+        }
+        return false;
+      } finally {
+        resultSet.close();
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
+
   // ---------------------------------------------------------------- 会话
 
   /**
@@ -336,6 +560,8 @@ export class ReadRecordRepository {
    */
   static async saveSession(context: Context, session: ReadRecordSession): Promise<boolean> {
     if (!ReadRecordRepository.isEnabled()) { return false; }
+    // 单独为某本书关掉记录时只跳过这本书，其他书照常；对齐上游 saveReadSession 的判定。
+    if (await ReadRecordRepository.isBookReadRecordDisabled(context, session.bookUrl)) { return false; }
     if (session.endTime <= session.startTime) { return false; }
     const normalized: ReadRecordSession = {
       deviceId: session.deviceId,
@@ -575,6 +801,114 @@ export class ReadRecordRepository {
     await store.flush();
   }
 
+  /** 读删除确认「不再提醒」长期档；读失败按未勾选处理。 */
+  static async loadSkipDeleteConfirm(context: Context): Promise<boolean> {
+    try {
+      const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
+      const value = await store.get(ReadRecordRepository.skipDeleteConfirmKey, '0');
+      return value !== '0';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** 写删除确认「不再提醒」长期档；动作单的「恢复删除确认」把它写回 false。 */
+  static async setSkipDeleteConfirm(context: Context, skip: boolean): Promise<void> {
+    const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
+    await store.put(ReadRecordRepository.skipDeleteConfirmKey, skip ? '1' : '0');
+    await store.flush();
+  }
+
+  // ---------------------------------------------------------------- 合并与归属
+
+  /**
+   * 合并候选：同书名、不同作者的其他汇总行。
+   * 对应上游 getMergeCandidates（ReadRecordRepository.kt:339-346）的同书名优先口径。
+   */
+  static async loadMergeCandidates(context: Context, target: ReadRecordSummary): Promise<ReadRecordSummary[]> {
+    const summaries = await ReadRecordRepository.loadSummaries(context);
+    return summaries.filter((item: ReadRecordSummary) =>
+      item.bookName === target.bookName && item.bookAuthor !== target.bookAuthor);
+  }
+
+  /**
+   * 把 sources 的会话整体改判为 target 的（书名，作者），再按会话重算派生表。
+   * 会话是唯一权威源，绝不把 readTime 直接相加（上游 mergeIndependentReadRecords 同口径）。
+   */
+  static async mergeReadRecords(context: Context, target: ReadRecordSummary,
+    sources: ReadRecordSummary[]): Promise<void> {
+    if (sources.length === 0) { return; }
+    await ReadRecordRepository.saveQueue;
+    const sourceKeys: Set<string> = new Set<string>();
+    for (const source of sources) {
+      sourceKeys.add(`${source.bookName}\u0000${source.bookAuthor}`);
+    }
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    const merged: ReadRecordSession[] = sessions.map((item: ReadRecordSession) => {
+      if (sourceKeys.has(`${item.bookName}\u0000${item.bookAuthor}`)) {
+        return {
+          deviceId: item.deviceId, bookName: target.bookName, bookAuthor: target.bookAuthor,
+          bookUrl: item.bookUrl, startTime: item.startTime, endTime: item.endTime,
+          chapterIndex: item.chapterIndex
+        };
+      }
+      return item;
+    });
+    await ReadRecordRepository.replaceSessions(context, merged);
+    await ReadRecordRepository.rebuildDetailsAndSummaries(context, merged);
+  }
+
+  /** 同书名且作者为空的旧汇总行，对应上游 getUnknownAuthorRecords。 */
+  static async loadUnknownAuthorRecords(context: Context, bookName: string): Promise<ReadRecordSummary[]> {
+    const summaries = await ReadRecordRepository.loadSummaries(context);
+    return summaries.filter((item: ReadRecordSummary) =>
+      item.bookName === bookName && item.bookAuthor.length === 0);
+  }
+
+  /** 归属决定的稳定键：书名 + 空字符 + 作者，与施工图口径一致。 */
+  static aliasKey(bookName: string, author: string): string {
+    return `${bookName}\u0000${author}`;
+  }
+
+  private static async loadAliasDecisionText(context: Context): Promise<string> {
+    try {
+      const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
+      const value = await store.get(ReadRecordRepository.aliasDecisionsKey, '');
+      return value as string;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /** 读某本书的归属决定：MERGE / KEEP / 空串（未决定）。 */
+  static async loadAliasDecision(context: Context, key: string): Promise<string> {
+    const text = await ReadRecordRepository.loadAliasDecisionText(context);
+    const prefix = `${key}${ReadRecordRepository.aliasDecisionSeparator}`;
+    for (const line of text.split('\n')) {
+      if (line.startsWith(prefix)) { return line.slice(prefix.length); }
+    }
+    return '';
+  }
+
+  /** 记住归属决定：先移除同 key 的旧行，再追加新行。 */
+  static async saveAliasDecision(context: Context, key: string, merge: boolean): Promise<void> {
+    const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
+    const old = await ReadRecordRepository.loadAliasDecisionText(context);
+    const prefix = `${key}${ReadRecordRepository.aliasDecisionSeparator}`;
+    const kept: string[] = old.split('\n').filter((line: string) =>
+      line.length > 0 && !line.startsWith(prefix));
+    kept.push(`${prefix}${merge ? 'MERGE' : 'KEEP'}`);
+    await store.put(ReadRecordRepository.aliasDecisionsKey, kept.join('\n'));
+    await store.flush();
+  }
+
+  /** 清除全部归属决定，对应上游 ReadRecordAliasDelegate.clearDecisions。 */
+  static async clearAliasDecisions(context: Context): Promise<void> {
+    const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
+    await store.put(ReadRecordRepository.aliasDecisionsKey, '');
+    await store.flush();
+  }
+
   // ---------------------------------------------------------------- 维护
 
   /** 清空全部阅读记录（会话、明细、汇总一起清）。 */
@@ -722,6 +1056,155 @@ export class ReadRecordRepository {
     await ReadRecordRepository.replaceSessions(context, normalized);
     await ReadRecordRepository.rebuildDetailsAndSummaries(context, normalized);
     return report;
+  }
+
+  // ---------------------------------------------------------------- 备份与恢复
+
+  /**
+   * 恢复备份里的三张表：合并进现有库后按会话重算派生层。
+   * 对应上游 Restore.kt:425-487 的导入口径 + ReadRecordRepository.kt:961 的重算口径。
+   * 会话按完整身份跳过已有副本；汇总/明细取「现有值与导入值取较大」保证重复导入幂等；
+   * 最后由会话整体重算明细与汇总，仅对没有会话支撑的历史行保留导入值。
+   */
+  static async restoreFromBackup(
+    context: Context,
+    summaries: ReadRecordSummary[],
+    details: ReadRecordDetail[],
+    sessions: ReadRecordSession[]
+  ): Promise<void> {
+    await ReadRecordRepository.saveQueue;
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    store.beginTransaction();
+    try {
+      // 汇总：与现有行合并，取较大时长/最后阅读时间。
+      const existingSummaries = await store.querySql(ReadRecordRepository.selectSummaries);
+      let summaryRows: ReadRecordSummary[] = [];
+      try {
+        summaryRows = ReadRecordRepository.readSummaries(existingSummaries);
+      } finally {
+        existingSummaries.close();
+      }
+      const mergedSummaries: Map<string, ReadRecordSummary> = new Map<string, ReadRecordSummary>();
+      for (const item of summaryRows) {
+        mergedSummaries.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}`, item);
+      }
+      for (const item of summaries) {
+        const key = `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}`;
+        const found = mergedSummaries.get(key);
+        if (found === undefined) {
+          mergedSummaries.set(key, item);
+        } else {
+          mergedSummaries.set(key, {
+            deviceId: found.deviceId, bookName: found.bookName, bookAuthor: found.bookAuthor,
+            readTime: Math.max(found.readTime, item.readTime),
+            lastRead: Math.max(found.lastRead, item.lastRead)
+          });
+        }
+      }
+
+      // 明细：与现有行合并，四个统计值取较大/较小正数值。
+      const existingDetails = await store.querySql(ReadRecordRepository.selectDetails);
+      let detailRows: ReadRecordDetail[] = [];
+      try {
+        detailRows = ReadRecordRepository.readDetails(existingDetails);
+      } finally {
+        existingDetails.close();
+      }
+      const mergedDetails: Map<string, ReadRecordDetail> = new Map<string, ReadRecordDetail>();
+      for (const item of detailRows) {
+        mergedDetails.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000${item.date}`, item);
+      }
+      for (const item of details) {
+        const key = `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000${item.date}`;
+        const found = mergedDetails.get(key);
+        if (found === undefined) {
+          mergedDetails.set(key, item);
+        } else {
+          mergedDetails.set(key, {
+            deviceId: found.deviceId, bookName: found.bookName, bookAuthor: found.bookAuthor,
+            date: found.date,
+            readTime: Math.max(found.readTime, item.readTime),
+            readWords: Math.max(found.readWords, item.readWords),
+            firstReadTime: ReadRecordRepository.minPositive(found.firstReadTime, item.firstReadTime),
+            lastReadTime: Math.max(found.lastReadTime, item.lastReadTime)
+          });
+        }
+      }
+
+      // 会话：按完整身份跳过已有副本。
+      const existingSessions = await store.querySql(ReadRecordRepository.selectSessions);
+      let sessionRows: ReadRecordSession[] = [];
+      try {
+        sessionRows = ReadRecordRepository.readSessions(existingSessions);
+      } finally {
+        existingSessions.close();
+      }
+      const seen: Set<string> = new Set<string>();
+      const mergedSessions: ReadRecordSession[] = [];
+      for (const item of sessionRows) {
+        seen.add(ReadRecordRepository.sessionIdentity(item));
+        mergedSessions.push(item);
+      }
+      for (const item of sessions) {
+        const key = ReadRecordRepository.sessionIdentity(item);
+        if (seen.has(key)) { continue; }
+        seen.add(key);
+        mergedSessions.push(item);
+      }
+
+      // 派生层由会话重算；没有会话支撑的历史汇总/明细沿用导入值（对齐上游 reconcile）。
+      const derived = ReadRecordRepository.computeDerived(mergedSessions);
+      const finalDetails: Map<string, ReadRecordDetail> = new Map<string, ReadRecordDetail>(mergedDetails);
+      for (const item of derived.details) {
+        finalDetails.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000${item.date}`, item);
+      }
+      const finalSummaries: Map<string, ReadRecordSummary> = new Map<string, ReadRecordSummary>(mergedSummaries);
+      for (const item of derived.summaries) {
+        finalSummaries.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}`, item);
+      }
+      const detailList: ReadRecordDetail[] = Array.from(finalDetails.values());
+      const summaryList: ReadRecordSummary[] = Array.from(finalSummaries.values());
+
+      await store.executeSql(ReadRecordRepository.deleteSessions);
+      for (const item of mergedSessions) {
+        await store.executeSql(ReadRecordRepository.insertSession, [
+          item.deviceId, item.bookName, item.bookAuthor, item.bookUrl,
+          item.startTime, item.endTime, item.chapterIndex
+        ]);
+      }
+      await store.executeSql(ReadRecordRepository.deleteDetails);
+      for (const item of detailList) {
+        await store.executeSql(ReadRecordRepository.insertDetail, [
+          item.deviceId, item.bookName, item.bookAuthor, item.date,
+          item.readTime, item.readWords, item.firstReadTime, item.lastReadTime
+        ]);
+      }
+      await store.executeSql(ReadRecordRepository.deleteSummaries);
+      for (const item of summaryList) {
+        await store.executeSql(ReadRecordRepository.insertSummary, [
+          item.deviceId, item.bookName, item.bookAuthor, item.readTime, item.lastRead
+        ]);
+      }
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`阅读记录恢复失败：${(error as Error).message}`);
+    }
+  }
+
+  /** 会话的完整身份，与上游 getSession 的七个字段一致（words = 本地 chapterIndex）。 */
+  private static sessionIdentity(item: ReadRecordSession): string {
+    return `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000` +
+      `${item.bookUrl}\u0000${item.startTime}\u0000${item.endTime}\u0000${item.chapterIndex}`;
+  }
+
+  /** 备份写出用：三张表的当前内容，字段名与上游实体一致。 */
+  static async exportForBackup(context: Context): Promise<ReadRecordBackupSnapshot> {
+    const summaries = await ReadRecordRepository.loadSummaries(context);
+    const details = await ReadRecordRepository.loadDetails(context);
+    const sessions = await ReadRecordRepository.loadSessions(context);
+    return { summaries: summaries, details: details, sessions: sessions };
   }
 
   // ---------------------------------------------------------------- 迁移

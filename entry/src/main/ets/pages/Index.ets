@@ -17,6 +17,7 @@ import {
   AllBookmarksPage, ReadRecordsPage, CacheManagementPage,
   AboutAppPage, AiChatPage, AppSettingsHomePage, BookmarkBookSummary, BookmarkEntrySummary, RuleListEntry
 } from './ProfileSubPages';
+import { ReadRecordOverviewPage } from './ReadRecordOverviewPage';
 import { ReaderSearchPage } from './ReaderSearchPage';
 import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
 import { BookInfoPage } from './BookInfoPage';
@@ -146,7 +147,7 @@ import { ReplaceRule } from '../model/ReplaceRule';
 import { LocalTextSemantics } from '../data/LocalTextSemantics';
 import { ReaderBookmarkEditor } from './ReaderBookmarkEditor';
 import { ReaderMarkingEditor } from './ReaderMarkingEditor';
-import { ReadRecordDetail, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
+import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession, ReadRecordDetail, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
 import { ReadRecordRepository } from '../data/ReadRecordRepository';
 
 const EMPTY_BOOK: Book = {
@@ -722,6 +723,56 @@ struct Index {
     this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
     this.readRecordDetails = await ReadRecordRepository.loadDetails(context);
     this.readRecordSummaries = await ReadRecordRepository.loadSummaries(context);
+  }
+
+  /** 详情页面板数据：调批 0 两个方法取汇总与按天会话，在 Index 侧格式化好再下发。 */
+  private async loadBookReadRecordPanel(book: Book): Promise<BookReadRecordPanel> {
+    const empty: BookReadRecordPanel = { totalLabel: '0秒', days: [] };
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return empty; }
+    const summary = await ReadRecordRepository.loadBookSummaries(context, book.title, book.author);
+    const groups = await ReadRecordRepository.loadBookTimelineDays(context, book.id, book.title, book.author);
+    const days: BookReadRecordDay[] = [];
+    for (const group of groups) {
+      const rows: BookReadRecordSession[] = [];
+      for (const session of group) {
+        const end = new Date(session.endTime);
+        const clock = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`;
+        const row: BookReadRecordSession = {
+          timeLabel: clock,
+          durationLabel: ReadRecordRepository.formatDuration(session.endTime - session.startTime),
+          chapterLabel: session.chapterIndex > 0 ? `第 ${session.chapterIndex} 章` : ''
+        };
+        rows.push(row);
+      }
+      const dateLabel = group.length > 0
+        ? ReadRecordRepository.formatFriendlyDate(ReadRecordRepository.toDateKey(group[0].startTime)) : '';
+      const day: BookReadRecordDay = { dateLabel: dateLabel, sessions: rows };
+      days.push(day);
+    }
+    const panel: BookReadRecordPanel = {
+      totalLabel: ReadRecordRepository.formatDuration(summary.readTime), days: days
+    };
+    return panel;
+  }
+
+  /** 切某本书的禁用标记：写库后同步刷新 books 与 selectedBook，让 @Prop book 更新动作卡文案。 */
+  private async toggleBookDisableReadRecord(book: Book, disabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，阅读记录开关未保存');
+      return;
+    }
+    const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
+    try {
+      await BookRepository.setDisableReadRecord(context, bookUrl, disabled);
+      const updatedBook: Book = BookRepository.copyBook(book);
+      updatedBook.disableReadRecord = disabled;
+      this.selectedBook = updatedBook;
+      this.books = this.books.map((item: Book) => item.id === updatedBook.id ? updatedBook : item);
+    } catch (_) {
+      this.showUnavailableAction('阅读记录开关保存失败');
+    }
   }
 
   private getTotalReadTimeMs(): number {
@@ -5854,7 +5905,61 @@ struct Index {
     }
     this.showUnavailableAction(`已应用「${ruleName}」：共 ${result.chapters.length} 章`);
   }
+  /**
+   * 打开书籍前检查「同书名 + 作者为空」的旧阅读记录归属。
+   * 决定持久化在 readRecordAliasDecisions；同名多副本时不沿用旧决定，重新确认。
+   * 对应上游 ReadRecordAliasDelegate.check / resolve，弹窗在独立协程里进行，不阻塞开书。
+   */
+  private checkReadRecordAlias(book: Book): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || book.author.trim().length === 0) { return; }
+    ReadRecordRepository.loadUnknownAuthorRecords(context, book.title).then(
+      async (sources: ReadRecordSummary[]): Promise<void> => {
+        if (sources.length === 0) { return; }
+        const key = ReadRecordRepository.aliasKey(book.title, book.author);
+        const decision = await ReadRecordRepository.loadAliasDecision(context, key);
+        const shelfCopies = this.books.filter((item: Book) =>
+          item.title === book.title && item.author === book.author).length;
+        const ambiguous = shelfCopies > 1;
+        if (!ambiguous && decision === 'KEEP') { return; }
+        if (!ambiguous && decision === 'MERGE') {
+          const target: ReadRecordSummary = {
+            deviceId: '', bookName: book.title, bookAuthor: book.author,
+            readTime: 0, lastRead: 0
+          };
+          await ReadRecordRepository.mergeReadRecords(context, target, sources);
+          await this.reloadReadRecordData(context);
+          return;
+        }
+        const totalMs = sources.reduce((total: number, item: ReadRecordSummary) => total + item.readTime, 0);
+        const merge = await this.askReadRecordAlias(book.title, ReadRecordRepository.formatDuration(totalMs));
+        await ReadRecordRepository.saveAliasDecision(context, key, merge);
+        if (merge) {
+          const target: ReadRecordSummary = {
+            deviceId: '', bookName: book.title, bookAuthor: book.author,
+            readTime: 0, lastRead: 0
+          };
+          await ReadRecordRepository.mergeReadRecords(context, target, sources);
+          await this.reloadReadRecordData(context);
+        }
+      });
+  }
+
+  /** 「合并还是保留」弹窗；选完由 checkReadRecordAlias 记住决定。 */
+  private askReadRecordAlias(bookTitle: string, totalLabel: string): Promise<boolean> {
+    return new Promise<boolean>((resolve: (value: boolean) => void) => {
+      this.getUIContext().showAlertDialog({
+        title: '合并还是保留',
+        message: `《${bookTitle}》存在作者为空的旧阅读记录（累计 ${totalLabel}）。是否合并到当前作者？`,
+        autoCancel: false,
+        primaryButton: { value: '保留', action: () => resolve(false) },
+        secondaryButton: { value: '合并', action: () => resolve(true) }
+      });
+    });
+  }
+
   private async openBook(book: Book): Promise<void> {
+    this.checkReadRecordAlias(book);
     if (book.contentPath === undefined) {
       this.showUnavailableAction(BookRepository.isBodyMissing(book)
         ? '已恢复书目和阅读位置；备份不含正文，请重新选择原书文件后阅读'
@@ -6751,6 +6856,8 @@ struct Index {
           onRead: () => this.openBook(this.selectedBook),
           onOpenCatalog: () => this.openCatalogFromBookInfo(),
           onOpenReadRecords: () => this.openProfileDetail(ProfileRoute.READ_RECORDS),
+          onLoadBookReadRecord: (book: Book) => this.loadBookReadRecordPanel(book),
+          onToggleDisableReadRecord: (book: Book, disabled: boolean) => this.toggleBookDisableReadRecord(book, disabled),
           onRemoveFromShelf: () => this.removeLocalBookFromShelf(this.selectedBook),
           onChooseCover: () => this.chooseBookCover(),
           onRestoreCover: () => this.restoreBookCover(),
@@ -7523,9 +7630,21 @@ struct Index {
             summaries: this.readRecordSummaries,
             onBack: () => this.route = this.profileDetailReturnRoute,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            onOpenOverview: () => this.openProfileDetail(ProfileRoute.READ_RECORD_OVERVIEW),
             onRecordsChanged: async () => {
               const context = this.getUIContext().getHostContext();
               if (context !== undefined) { await this.reloadReadRecordData(context); }
+            }
+          })
+        } else if (this.profileSubpage === ProfileRoute.READ_RECORD_OVERVIEW) {
+          ReadRecordOverviewPage({
+            details: this.readRecordDetails,
+            summaries: this.readRecordSummaries,
+            books: this.books,
+            onBack: () => this.route = this.profileDetailReturnRoute,
+            onOpenBook: (name: string, author: string) => {
+              const hit = this.books.find((item: Book) => item.title === name && item.author === author);
+              if (hit !== undefined) { this.openBook(hit); }
             }
           })
         } else if (this.profileSubpage === ProfileRoute.CACHE_MANAGEMENT) {

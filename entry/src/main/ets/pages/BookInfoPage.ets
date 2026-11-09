@@ -7,6 +7,7 @@ import { BookCover } from '../components/BookCover';
 import { BookInfoBackdropStyle, resolveBookInfoBackdropStyleFor } from '../data/BookInfoBackdropStyle';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
+import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession } from '../model/ReadRecord';
 
 @Component
 export struct BookInfoPage {
@@ -35,6 +36,14 @@ export struct BookInfoPage {
   onRead: () => void = () => {};
   onOpenCatalog: () => void = () => {};
   onOpenReadRecords: () => void = () => {};
+  /** 本书阅读记录面板的数据由 Index 组装，详情页不直接 import 仓储。 */
+  onLoadBookReadRecord: (book: Book) => Promise<BookReadRecordPanel> =
+    async (_book: Book): Promise<BookReadRecordPanel> => {
+      const empty: BookReadRecordPanel = { totalLabel: '0秒', days: [] };
+      return empty;
+    };
+  /** 切禁用标记；Index 写库后刷新 books 与 selectedBook，@Prop book 随之更新。 */
+  onToggleDisableReadRecord: (book: Book, disabled: boolean) => void = (_book: Book, _disabled: boolean) => {};
   onRemoveFromShelf: () => void = () => {};
   onChooseCover: () => void = () => {};
   onRestoreCover: () => void = () => {};
@@ -58,6 +67,9 @@ export struct BookInfoPage {
   @State metadataFixedType: boolean = false;
   /** 从封面提取出的主色，空串表示尚未取到或取色失败。 */
   @State coverSeedColor: string = '';
+  /** 本书阅读记录面板显隐与数据，照 F12 自绘全屏遮罩范式。 */
+  @State readRecordPanelVisible: boolean = false;
+  @State readRecordPanel: BookReadRecordPanel = { totalLabel: '0秒', days: [] };
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
@@ -133,6 +145,12 @@ export struct BookInfoPage {
   private getReadChapterNumber(): number {
     if (this.book.progress <= 0 && (this.book.chapterProgress ?? 0) <= 0) { return 0; }
     return (this.book.chapterIndex ?? 0) + 1;
+  }
+
+  /** 动作卡「阅读记录」：先取数再显示自绘面板，避免异步期间闪空态。 */
+  private async openReadRecordPanel(): Promise<void> {
+    this.readRecordPanel = await this.onLoadBookReadRecord(this.book);
+    this.readRecordPanelVisible = true;
   }
 
   private confirmRemoveFromShelf(): void {
@@ -251,7 +269,12 @@ export struct BookInfoPage {
             })
             BookInfoAction({ icon: 'list', label: '查看目录', onSelect: () => this.onOpenCatalog() })
             BookInfoAction({ icon: 'swap', label: '换源', onSelect: () => this.onUnavailableAction('在线换源将在 P5 接入') })
-            BookInfoAction({ icon: 'clock', label: '阅读记录', onSelect: () => this.onOpenReadRecords() })
+            BookInfoAction({ icon: 'clock', label: '阅读记录', onSelect: () => this.openReadRecordPanel() })
+            BookInfoAction({
+              icon: 'clock',
+              label: this.book.disableReadRecord === true ? '启用阅读记录' : '禁用阅读记录',
+              onSelect: () => this.onToggleDisableReadRecord(this.book, !(this.book.disableReadRecord === true))
+            })
           }.width('100%').padding({ left: 12, right: 12, top: 14, bottom: 16 })
 
           Column() {
@@ -430,6 +453,67 @@ export struct BookInfoPage {
           .width('90%').height('78%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(22)
           .onClick(() => {})
         }.width('100%').height('100%').zIndex(1000)
+      }
+
+      if (this.readRecordPanelVisible) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column().width('100%').height('100%').backgroundColor('#99000000')
+            .onClick(() => this.readRecordPanelVisible = false)
+          Column() {
+            Row() {
+              Text('阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
+              Text('关闭').fontSize(14).fontColor('#C5C7D0').padding(8)
+                .onClick(() => this.readRecordPanelVisible = false)
+            }.width('100%').padding({ bottom: 12 })
+            Column() {
+              Text('累计阅读').fontSize(13).fontColor(this.themeColorTextSecondary)
+              Text(this.readRecordPanel.totalLabel).fontSize(28).fontWeight(FontWeight.Bold)
+                .fontColor(this.themeColorAccent).margin({ top: 6 })
+            }.width('100%').padding(16).backgroundColor('#292A31').borderRadius(14)
+              .alignItems(HorizontalAlign.Start)
+            if (this.readRecordPanel.days.length === 0) {
+              Text('暂无阅读记录').fontSize(14).fontColor('#AEB0BA')
+                .width('100%').textAlign(TextAlign.Center).margin({ top: 28, bottom: 28 })
+            } else {
+              Scroll() {
+                Column() {
+                  ForEach(this.readRecordPanel.days, (day: BookReadRecordDay) => {
+                    Column() {
+                      Text(day.dateLabel).fontSize(14).fontWeight(FontWeight.Medium)
+                        .fontColor(this.themeColorTextPrimary).alignSelf(ItemAlign.Start)
+                        .margin({ top: 14, bottom: 8 })
+                      ForEach(day.sessions, (session: BookReadRecordSession, sessionIndex: number) => {
+                        Stack({ alignContent: Alignment.TopStart }) {
+                          Column().width(2).height(48).backgroundColor('#3A3C46').margin({ left: 11 })
+                          Column().width(8).height(8).borderRadius(4)
+                            .backgroundColor(this.themeColorAccent).margin({ left: 8, top: 8 })
+                          Column() {
+                            Text(`${session.timeLabel} · ${session.durationLabel}`).fontSize(14)
+                              .fontColor(this.themeColorTextPrimary)
+                            if (session.chapterLabel.length > 0) {
+                              Text(session.chapterLabel).fontSize(12)
+                                .fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+                            }
+                          }.width('100%').alignItems(HorizontalAlign.Start)
+                            .padding({ left: 28, top: 6, bottom: 10 })
+                        }.width('100%')
+                      }, (session: BookReadRecordSession, sessionIndex: number) =>
+                        `${day.dateLabel}-${sessionIndex}-${session.timeLabel}-${session.durationLabel}`)
+                    }.width('100%').alignItems(HorizontalAlign.Start)
+                  }, (day: BookReadRecordDay, dayIndex: number) => `${dayIndex}-${day.dateLabel}`)
+                }.width('100%')
+              }.layoutWeight(1).scrollBar(BarState.Off)
+            }
+            Text('查看全部').fontSize(14).fontColor('#B9C6FF').textAlign(TextAlign.Center)
+              .width('100%').padding({ top: 14, bottom: 4 })
+              .onClick(() => {
+                this.readRecordPanelVisible = false;
+                this.onOpenReadRecords();
+              })
+          }.width('90%').height('72%').padding(18)
+            .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(22)
+            .onClick(() => {})
+        }.width('100%').height('100%').zIndex(1001)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }

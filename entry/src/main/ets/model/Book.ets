@@ -58,6 +58,8 @@ export interface Book {
   durChapterTime?: number;
   /** 手动排序序号，对应上游 Book.order；按「手动排序」时使用。 */
   order?: number;
+  /** 单独为这本书关闭阅读记录，对应上游 Book.disableReadRecord。 */
+  disableReadRecord?: boolean;
   isLocal: boolean;
 }
 
@@ -152,6 +154,8 @@ export enum ProfileRoute {
   APP_LAB_SETTINGS = 'appLabSettings',
   ALL_BOOKMARKS = 'allBookmarks',
   READ_RECORDS = 'readRecords',
+  /** 阅读记录总览页：跨书统计、排行、热力图、读书日历。 */
+  READ_RECORD_OVERVIEW = 'readRecordOverview',
   CACHE_MANAGEMENT = 'cacheManagement',
   FILE_MANAGER = 'fileManager',
   PRIVACY_NOTICE = 'privacyNotice',

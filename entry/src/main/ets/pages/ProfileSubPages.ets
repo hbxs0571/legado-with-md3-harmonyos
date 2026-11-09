@@ -2,6 +2,7 @@
 import { bundleManager } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { ReadRecordHeatmap } from '../components/ReadRecordHeatmap';
 import { BookCover } from '../components/BookCover';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
@@ -15,7 +16,7 @@ import {
 import { ProfileRoute } from '../model/Book';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { ReplaceRulePreviewLine, ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
-import { ReadRecordDetail, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
+import { ReadRecordDetail, ReadRecordSession, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
 import { ReadRecordRepository } from '../data/ReadRecordRepository';
 import { TxtTocRule } from '../model/TxtTocRule';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
@@ -3024,6 +3025,8 @@ export struct ReadRecordsPage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** 扫描/修复/清空改变了数据后通知 Index 重读会话，避免页面仍显示旧列表。 */
   onRecordsChanged: () => void = () => {};
+  /** 顶栏更多菜单里的「阅读总览」入口，由 Index 切到总览页。 */
+  onOpenOverview: () => void = () => {};
   @Prop records: ReadTimeRecord[] = [];
   @Prop details: ReadRecordDetail[] = [];
   @Prop summaries: ReadRecordSummary[] = [];
@@ -3036,9 +3039,34 @@ export struct ReadRecordsPage {
   @State showCalendarSheet: boolean = false;
   @State showClearConfirm: boolean = false;
   @State selectedCalendarDay: number = 0;
+  /** 热力图选中的日期，非空时三视图只看这一天；对应上游 SelectDate。 */
+  @State selectedDateKey: string = '';
+  /** 选择模式：三种条目的稳定 key 集合，非空即处于选择模式。 */
+  @State selectedKeys: Set<string> = new Set<string>();
+  /** 删除确认面板，单条与批量共用，文案按待删条数切换。 */
+  @State showDeleteConfirm: boolean = false;
+  /** 删除确认「本页不再提醒」临时档，对应上游 skipDeleteConfirmTemp。 */
+  @State skipDeleteConfirmForPage: boolean = false;
+  /** 删除确认「不再提醒」长期档，键名与上游 READ_RECORD_SKIP_DELETE_CONFIRM 一致。 */
+  @State skipDeleteConfirm: boolean = false;
+  /** 确认框里的两档勾选项，点「删除」时才生效。 */
+  @State skipDeleteConfirmPageDraft: boolean = false;
+  @State skipDeleteConfirmLongTermDraft: boolean = false;
+  /** 合并对话框：目标汇总行、候选、多选集合与搜索词。 */
+  @State showMergeSheet: boolean = false;
+  @State mergeTarget: ReadRecordSummary | undefined = undefined;
+  @State mergeCandidates: ReadRecordSummary[] = [];
+  @State mergeSelectedKeys: Set<string> = new Set<string>();
+  @State mergeSearchQuery: string = '';
 
   aboutToAppear(): void {
     this.recordEnabled = ReadRecordRepository.isEnabled();
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      ReadRecordRepository.loadSkipDeleteConfirm(context).then((value: boolean) => {
+        this.skipDeleteConfirm = value;
+      });
+    }
   }
 
   private getModeLabel(): string {
@@ -3062,23 +3090,21 @@ export struct ReadRecordsPage {
     return this.formatRecordDate(timestamp).substring(0, 10);
   }
 
-  /** 汇总视图按跨午夜拆分后的自然日明细分组；搜索仍匹配书名与作者。 */
+  /** 汇总视图按跨午夜拆分后的自然日明细分组；搜索只作用于时间线，汇总不过滤。 */
   private getSummaryDateKeys(): string[] {
-    const query = this.searchQuery.trim().toLocaleLowerCase();
     const keys: string[] = [];
     for (const detail of this.details) {
-      if (query.length > 0 && !detail.bookName.toLocaleLowerCase().includes(query) &&
-        !detail.bookAuthor.toLocaleLowerCase().includes(query)) { continue; }
       if (!keys.includes(detail.date)) { keys.push(detail.date); }
     }
-    return keys.sort((left: string, right: string) => right.localeCompare(left));
+    const ordered = keys.sort((left: string, right: string) => right.localeCompare(left));
+    if (this.selectedDateKey.length > 0) {
+      return ordered.filter((key: string) => key === this.selectedDateKey);
+    }
+    return ordered;
   }
 
   private getSummaryDetailsForDate(dateKey: string): ReadRecordDetail[] {
-    const query = this.searchQuery.trim().toLocaleLowerCase();
-    return this.details.filter((detail: ReadRecordDetail) => detail.date === dateKey &&
-      (query.length === 0 || detail.bookName.toLocaleLowerCase().includes(query) ||
-        detail.bookAuthor.toLocaleLowerCase().includes(query)));
+    return this.details.filter((detail: ReadRecordDetail) => detail.date === dateKey);
   }
 
   private getDistinctSummaryBooksForDate(dateKey: string): ReadRecordDetail[] {
@@ -3110,11 +3136,46 @@ export struct ReadRecordsPage {
       const key = this.getDateKey(record.startTime);
       if (!keys.includes(key)) { keys.push(key); }
     }
-    return keys.sort((left: string, right: string) => right.localeCompare(left));
+    const ordered = keys.sort((left: string, right: string) => right.localeCompare(left));
+    if (this.selectedDateKey.length > 0) {
+      return ordered.filter((key: string) => key === this.selectedDateKey);
+    }
+    return ordered;
   }
 
+  /**
+   * 时间线当天条目：先把 20 分钟内的连续会话合并（F9），再按开始时间倒序。
+   * 合并条目的身份沿用该连续段首条原始记录，保证选择/删除能定位回原会话；
+   * 显示时长用合并后的整段时长。日期分组仍按 startTime，先过滤当天再合并，天然不跨天。
+   */
   private getRecordsForDate(dateKey: string): ReadTimeRecord[] {
-    return this.getVisibleRecords().filter((record: ReadTimeRecord) => this.getDateKey(record.startTime) === dateKey);
+    const originals = this.getVisibleRecords().filter((record: ReadTimeRecord) =>
+      this.getDateKey(record.startTime) === dateKey);
+    const sessions: ReadRecordSession[] = [];
+    for (const record of originals) {
+      const session: ReadRecordSession = {
+        deviceId: '', bookName: record.bookName, bookAuthor: record.bookAuthor,
+        bookUrl: record.bookId, startTime: record.startTime, endTime: record.endTime,
+        chapterIndex: 0
+      };
+      sessions.push(session);
+    }
+    // mergeContinuousSessions 要求输入按 startTime 升序；this.records 原是 endTime 倒序。
+    sessions.sort((left: ReadRecordSession, right: ReadRecordSession) => left.startTime - right.startTime);
+    const merged = ReadRecordRepository.mergeContinuousSessions(sessions);
+    const result: ReadTimeRecord[] = [];
+    for (const session of merged) {
+      const first = originals.find((item: ReadTimeRecord) =>
+        item.startTime === session.startTime && item.bookId === session.bookUrl);
+      if (first === undefined) { continue; }
+      const row: ReadTimeRecord = {
+        id: first.id, bookId: first.bookId, bookName: first.bookName, bookAuthor: first.bookAuthor,
+        startTime: first.startTime, endTime: first.endTime,
+        durationMs: session.endTime - session.startTime
+      };
+      result.push(row);
+    }
+    return result.sort((left: ReadTimeRecord, right: ReadTimeRecord) => right.startTime - left.startTime);
   }
 
   private getDistinctBooks(records: ReadTimeRecord[]): ReadTimeRecord[] {
@@ -3126,9 +3187,12 @@ export struct ReadRecordsPage {
   }
 
   private getLatestRecords(): ReadTimeRecord[] {
-    const ordered = [...this.getVisibleRecords()].sort((left: ReadTimeRecord, right: ReadTimeRecord) =>
+    const ordered = [...this.records].sort((left: ReadTimeRecord, right: ReadTimeRecord) =>
       right.endTime - left.endTime);
-    return this.getDistinctBooks(ordered);
+    const filtered = this.selectedDateKey.length > 0
+      ? ordered.filter((record: ReadTimeRecord) => this.getDateKey(record.startTime) === this.selectedDateKey)
+      : ordered;
+    return this.getDistinctBooks(filtered);
   }
 
   private getTotalDuration(records: ReadTimeRecord[]): number {
@@ -3158,11 +3222,8 @@ export struct ReadRecordsPage {
     const month = (today.getMonth() + 1).toString().padStart(2, '0');
     const date = day.toString().padStart(2, '0');
     const dateKey = `${year}-${month}-${date}`;
-    const query = this.searchQuery.trim().toLocaleLowerCase();
     return this.details
-      .filter((detail: ReadRecordDetail) => detail.date === dateKey &&
-        (query.length === 0 || detail.bookName.toLocaleLowerCase().includes(query) ||
-          detail.bookAuthor.toLocaleLowerCase().includes(query)))
+      .filter((detail: ReadRecordDetail) => detail.date === dateKey)
       .reduce((total: number, detail: ReadRecordDetail) => total + detail.readTime, 0);
   }
 
@@ -3174,12 +3235,197 @@ export struct ReadRecordsPage {
     return this.summaries.reduce((total: number, summary: ReadRecordSummary) => total + summary.readTime, 0);
   }
 
+  /** 热力图按日次数：details 按 date 分组的个数，对应上游 dailyReadCounts。 */
+  private buildDailyReadCounts(): Map<string, number> {
+    const result = new Map<string, number>();
+    for (const detail of this.details) {
+      result.set(detail.date, (result.get(detail.date) ?? 0) + 1);
+    }
+    return result;
+  }
+
+  /** 热力图按日时长：details 按 date 累加 readTime，对应上游 dailyReadTimes。 */
+  private buildDailyReadTimes(): Map<string, number> {
+    const result = new Map<string, number>();
+    for (const detail of this.details) {
+      result.set(detail.date, (result.get(detail.date) ?? 0) + detail.readTime);
+    }
+    return result;
+  }
+
+  /** 汇总条目 key：类型 + 书名 + 作者 + 日期（分隔符用上游 selectionKey 的空字符）。 */
+  private aggregateKey(detail: ReadRecordDetail, dateKey: string): string {
+    return `D\u0000${detail.bookName}\u0000${detail.bookAuthor}\u0000${dateKey}`;
+  }
+
+  /** 时间线条目 key：类型 + 书名 + 作者 + 起止时间。 */
+  private timelineKey(record: ReadTimeRecord): string {
+    return `T\u0000${record.bookName}\u0000${record.bookAuthor}\u0000${record.startTime}\u0000${record.endTime}`;
+  }
+
+  /** 最后阅读条目 key：类型 + 书名 + 作者。 */
+  private latestKey(record: ReadTimeRecord): string {
+    return `L\u0000${record.bookName}\u0000${record.bookAuthor}`;
+  }
+
+  private isInSelectionMode(): boolean {
+    return this.selectedKeys.size > 0;
+  }
+
+  private clearSelection(): void {
+    this.selectedKeys = new Set<string>();
+  }
+
+  /** 长按单条：进入选择模式并选中该条，对应上游 onEnterSelection。 */
+  private enterSelectionWith(key: string): void {
+    const next = new Set<string>(this.selectedKeys);
+    next.add(key);
+    this.selectedKeys = next;
+  }
+
+  /** 选择模式下单击条目切换选中。 */
+  private toggleSelectionKey(key: string): void {
+    const next = new Set<string>(this.selectedKeys);
+    if (next.has(key)) { next.delete(key); } else { next.add(key); }
+    this.selectedKeys = next;
+  }
+
+  /** 顶栏返回：优先退选择模式，对应上游 BackHandler(enabled = inSelectionMode)。 */
+  private handleReadRecordBack(): void {
+    if (this.isInSelectionMode()) { this.clearSelection(); return; }
+    this.onBack();
+  }
+
+  /** 点顶栏删除按钮：已勾不再提醒就直接删，否则弹两档确认。 */
+  private requestDeleteSelected(): void {
+    if (!this.isInSelectionMode()) { return; }
+    if (this.skipDeleteConfirmForPage || this.skipDeleteConfirm) {
+      this.performDeleteSelected();
+      return;
+    }
+    this.skipDeleteConfirmPageDraft = false;
+    this.skipDeleteConfirmLongTermDraft = false;
+    this.showDeleteConfirm = true;
+  }
+
+  /** 确认框点删除：应用两档，长期档写 preferences，然后逐条删。 */
+  private async confirmDeleteSelected(): Promise<void> {
+    this.showDeleteConfirm = false;
+    this.skipDeleteConfirmForPage = this.skipDeleteConfirmPageDraft || this.skipDeleteConfirmLongTermDraft;
+    if (this.skipDeleteConfirmLongTermDraft) {
+      const context = this.hostContext();
+      if (context !== undefined) { await ReadRecordRepository.setSkipDeleteConfirm(context, true); }
+      this.skipDeleteConfirm = true;
+    }
+    await this.performDeleteSelected();
+  }
+
+  /** 逐条走批 0 的删除方法，删完清空选择并通知 Index 重读三表。 */
+  private async performDeleteSelected(): Promise<void> {
+    const context = this.hostContext();
+    if (context === undefined) { return; }
+    const keys: string[] = [];
+    this.selectedKeys.forEach((key: string) => keys.push(key));
+    for (const key of keys) {
+      const parts = key.split('\u0000');
+      if (parts[0] === 'D') {
+        const hit = this.details.find((item: ReadRecordDetail) =>
+          item.bookName === parts[1] && item.bookAuthor === parts[2] && item.date === parts[3]);
+        await ReadRecordRepository.deleteDetailByIdKey(context,
+          hit !== undefined ? hit.deviceId : '', parts[1], parts[2], parts[3]);
+      } else if (parts[0] === 'T') {
+        const startTime = Number(parts[3]);
+        const endTime = Number(parts[4]);
+        const hit = this.records.find((item: ReadTimeRecord) =>
+          item.bookName === parts[1] && item.bookAuthor === parts[2] &&
+          item.startTime === startTime && item.endTime === endTime);
+        if (hit !== undefined) {
+          const session: ReadRecordSession = {
+            deviceId: '', bookName: parts[1], bookAuthor: parts[2], bookUrl: hit.bookId,
+            startTime: startTime, endTime: endTime, chapterIndex: 0
+          };
+          await ReadRecordRepository.deleteSessionById(context, session);
+        }
+      } else if (parts[0] === 'L') {
+        await ReadRecordRepository.deleteSummaryByKey(context, parts[1], parts[2]);
+      }
+    }
+    this.clearSelection();
+    this.onRecordsChanged();
+  }
+
+  /** 动作单「恢复删除确认」：把长期档与临时档都清掉。 */
+  private restoreDeleteConfirm(): void {
+    const context = this.hostContext();
+    if (context !== undefined) { ReadRecordRepository.setSkipDeleteConfirm(context, false); }
+    this.skipDeleteConfirm = false;
+    this.skipDeleteConfirmForPage = false;
+    this.showActionsSheet = false;
+    this.onUnavailableAction('已恢复删除确认');
+  }
+
+  /** 打开合并对话框：以最后阅读视图点中的那条为目标取候选。 */
+  private async openMergeSheetForRecord(record: ReadTimeRecord): Promise<void> {
+    const context = this.hostContext();
+    if (context === undefined) { return; }
+    let target: ReadRecordSummary | undefined = this.summaries.find((item: ReadRecordSummary) =>
+      item.bookName === record.bookName && item.bookAuthor === record.bookAuthor);
+    if (target === undefined) {
+      target = {
+        deviceId: '', bookName: record.bookName, bookAuthor: record.bookAuthor,
+        readTime: 0, lastRead: 0
+      };
+    }
+    const candidates = await ReadRecordRepository.loadMergeCandidates(context, target);
+    this.mergeTarget = target;
+    this.mergeCandidates = candidates;
+    this.mergeSelectedKeys = new Set<string>();
+    this.mergeSearchQuery = '';
+    this.showActionsSheet = false;
+    this.showMergeSheet = true;
+  }
+
+  private mergeCandidateKey(item: ReadRecordSummary): string {
+    return `${item.bookName}\u0000${item.bookAuthor}`;
+  }
+
+  private getFilteredMergeCandidates(): ReadRecordSummary[] {
+    const query = this.mergeSearchQuery.trim();
+    if (query.length === 0) { return this.mergeCandidates; }
+    return this.mergeCandidates.filter((item: ReadRecordSummary) =>
+      item.bookName.includes(query) || item.bookAuthor.includes(query));
+  }
+
+  private toggleMergeCandidate(key: string): void {
+    const next = new Set<string>(this.mergeSelectedKeys);
+    if (next.has(key)) { next.delete(key); } else { next.add(key); }
+    this.mergeSelectedKeys = next;
+  }
+
+  /** 确认合并：把勾选的候选会话改判到目标，再通知 Index 重读三表。 */
+  private async confirmMerge(): Promise<void> {
+    const context = this.hostContext();
+    const target = this.mergeTarget;
+    if (context === undefined || target === undefined) { return; }
+    const sources = this.mergeCandidates.filter((item: ReadRecordSummary) =>
+      this.mergeSelectedKeys.has(this.mergeCandidateKey(item)));
+    if (sources.length === 0) { return; }
+    await ReadRecordRepository.mergeReadRecords(context, target, sources);
+    this.showMergeSheet = false;
+    this.mergeTarget = undefined;
+    this.onRecordsChanged();
+  }
+
+  /** 清除归属决定：清掉 openBook 时「合并还是保留」记住的选择。 */
+  private clearAliasDecisions(): void {
+    const context = this.hostContext();
+    if (context !== undefined) { ReadRecordRepository.clearAliasDecisions(context); }
+    this.showActionsSheet = false;
+    this.onUnavailableAction('已清除归属决定');
+  }
+
   private formatRecordDuration(durationMs: number): string {
-    const minutes = Math.floor(durationMs / 60000);
-    const hours = Math.floor(minutes / 60);
-    if (hours > 0) { return `${hours} 小时 ${minutes % 60} 分钟`; }
-    if (minutes > 0) { return `${minutes} 分钟`; }
-    return `${Math.max(1, Math.floor(durationMs / 1000))} 秒`;
+    return ReadRecordRepository.formatDuration(durationMs);
   }
 
   private formatRecordDate(timestamp: number): string {
@@ -3271,29 +3517,43 @@ export struct ReadRecordsPage {
   build() {
     Column() {
       Row() {
-        Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-        }.width(40).height(40).onClick(() => this.onBack())
+        if (this.isInSelectionMode()) {
+          Text('清空选择').fontSize(13).fontColor(this.themeColorAccent)
+            .height(40).padding({ left: 4, right: 4 }).onClick(() => this.clearSelection())
+        } else {
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
+          }.width(40).height(40).onClick(() => this.handleReadRecordBack())
+        }
         Column() {
-          Text('阅读记录').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
-          Text(this.getModeLabel()).fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          Text(this.isInSelectionMode() ? `${this.selectedKeys.size} 项已选` : '阅读记录')
+            .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
+          Text(this.isInSelectionMode() ? '点条目切换选中' : this.getModeLabel())
+            .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 2 })
-        Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-          AppGlyph({ name: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'), glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).onClick(() => this.cycleDisplayMode())
-        Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).onClick(() => {
-          this.showSearch = !this.showSearch;
-          if (!this.showSearch) { this.searchQuery = ''; }
-        })
-        Stack({ alignContent: Alignment.Center }) {
-          Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).onClick(() => this.showActionsSheet = true)
+        if (this.isInSelectionMode()) {
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: 'delete', glyphSize: 20, tint: this.themeColorTextSecondary })
+          }.width(40).height(40).onClick(() => this.requestDeleteSelected())
+        } else {
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'), glyphSize: 20, tint: this.themeColorTextSecondary })
+          }.width(40).height(40).onClick(() => this.cycleDisplayMode())
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
+          }.width(40).height(40).onClick(() => {
+            this.showSearch = !this.showSearch;
+            if (!this.showSearch) { this.searchQuery = ''; }
+          })
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
+          }.width(40).height(40).onClick(() => this.showActionsSheet = true)
+        }
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
       if (this.showSearch) {
@@ -3308,6 +3568,18 @@ export struct ReadRecordsPage {
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+      }
+
+      if (this.selectedDateKey.length > 0) {
+        Row() {
+          Text(`只看 ${ReadRecordRepository.formatFriendlyDate(this.selectedDateKey)} 的记录`)
+            .fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+          Text('查看全部').fontSize(13).fontColor(this.themeColorAccent)
+            .onClick(() => { this.selectedDateKey = ''; })
+        }.width('calc(100% - 32vp)').padding({ left: 14, right: 14, top: 10, bottom: 10 })
+          .margin({ left: 16, right: 16, top: 8 })
+          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))
+          .borderRadius(12)
       }
 
       if (this.getVisibleRecords().length === 0) {
@@ -3329,7 +3601,7 @@ export struct ReadRecordsPage {
               ForEach(this.getSummaryDateKeys(), (dateKey: string) => {
                 Column() {
                   Row() {
-                    Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
+                    Text(ReadRecordRepository.formatFriendlyDate(dateKey)).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
                     Blank()
                     Text(this.formatRecordDuration(this.getSummaryDurationForDate(dateKey)))
                       .fontSize(13).fontColor(this.themeColorAccent)
@@ -3344,14 +3616,22 @@ export struct ReadRecordsPage {
                         .fontSize(13).fontColor(this.themeColorAccent)
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                       .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
-                  }, (detail: ReadRecordDetail) => `${dateKey}-${detail.bookName}-${detail.bookAuthor}`)
+                      .backgroundColor(this.selectedKeys.has(this.aggregateKey(detail, dateKey)) ? '#48577D' : Color.Transparent)
+                      .onClick(() => {
+                        if (this.isInSelectionMode()) { this.toggleSelectionKey(this.aggregateKey(detail, dateKey)); }
+                      })
+                      .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                        this.enterSelectionWith(this.aggregateKey(detail, dateKey));
+                      }))
+                  }, (detail: ReadRecordDetail) =>
+                    `${dateKey}-${detail.bookName}-${detail.bookAuthor}-${this.selectedKeys.has(this.aggregateKey(detail, dateKey))}`)
                 }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
             } else if (this.displayMode === 1) {
               ForEach(this.getDateKeys(), (dateKey: string) => {
                 Column() {
-                  Text(dateKey).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
+                  Text(ReadRecordRepository.formatFriendlyDate(dateKey)).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
                     .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
                   ForEach(this.getRecordsForDate(dateKey), (record: ReadTimeRecord) => {
                     Row() {
@@ -3364,7 +3644,14 @@ export struct ReadRecordsPage {
                       Text(this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                       .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
-                  }, (record: ReadTimeRecord) => record.id)
+                      .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
+                      .onClick(() => {
+                        if (this.isInSelectionMode()) { this.toggleSelectionKey(this.timelineKey(record)); }
+                      })
+                      .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                        this.enterSelectionWith(this.timelineKey(record));
+                      }))
+                  }, (record: ReadTimeRecord) => `${record.id}-${this.selectedKeys.has(this.timelineKey(record))}`)
                 }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
@@ -3378,12 +3665,21 @@ export struct ReadRecordsPage {
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     Text(this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
                       .fontSize(13).fontColor(this.themeColorAccent)
+                    Text('合并').fontSize(12).fontColor(this.themeColorAccent)
+                      .padding({ left: 10, right: 2 })
+                      .onClick(() => { this.openMergeSheetForRecord(record); })
                   }.width('100%')
-                  Text(`最后阅读 ${this.formatRecordDate(record.endTime)}`)
+                  Text(`最后阅读 ${ReadRecordRepository.formatFriendlyDate(this.getDateKey(record.endTime))} ${this.formatRecordDate(record.endTime).substring(11)}`)
                     .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
-                }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
+                }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
                   .margin({ left: 16, right: 16, bottom: 8 })
-              }, (record: ReadTimeRecord) => record.bookId)
+                  .onClick(() => {
+                    if (this.isInSelectionMode()) { this.toggleSelectionKey(this.latestKey(record)); }
+                  })
+                  .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                    this.enterSelectionWith(this.latestKey(record));
+                  }))
+              }, (record: ReadTimeRecord) => `${record.bookId}-${this.selectedKeys.has(this.latestKey(record))}`)
             }
           }.width('100%').padding({ top: 8, bottom: 16 })
         }.layoutWeight(1).scrollBar(BarState.Off)
@@ -3393,12 +3689,15 @@ export struct ReadRecordsPage {
       // 三个半模态共用一个 bindSheet：同一节点链式挂多个 bindSheet 时，
       // 任一状态变化都会让刚打开的 sheet 立即 onDisappear（实测 0.6s 内被顶掉），
       // 所以用互斥条件 + 单一入口。
-      .bindSheet(this.showActionsSheet || this.showCalendarSheet || this.showClearConfirm, this.ReadRecordSheetContent(), {
-        height: this.showClearConfirm ? SheetSize.FIT_CONTENT : (this.showCalendarSheet ? 570 : 500),
-        dragBar: !this.showClearConfirm,
+      .bindSheet(this.showActionsSheet || this.showCalendarSheet || this.showClearConfirm || this.showDeleteConfirm || this.showMergeSheet, this.ReadRecordSheetContent(), {
+        height: (this.showClearConfirm || this.showDeleteConfirm) ? SheetSize.FIT_CONTENT : (this.showCalendarSheet ? 570 : 500),
+        dragBar: !(this.showClearConfirm || this.showDeleteConfirm),
         showClose: false,
         backgroundColor: this.themeColorSurfaceElevated,
-        onDisappear: () => { this.showActionsSheet = false; this.showCalendarSheet = false; this.showClearConfirm = false; }
+        onDisappear: () => {
+          this.showActionsSheet = false; this.showCalendarSheet = false;
+          this.showClearConfirm = false; this.showDeleteConfirm = false; this.showMergeSheet = false;
+        }
       })
   }
 
@@ -3424,43 +3723,119 @@ export struct ReadRecordsPage {
 
   @Builder
   private ReadRecordSheetContent() {
-    if (this.showClearConfirm) { this.ReadRecordClearConfirmSheet() }
+    if (this.showMergeSheet) { this.ReadRecordMergeSheet() }
+    else if (this.showDeleteConfirm) { this.ReadRecordDeleteConfirmSheet() }
+    else if (this.showClearConfirm) { this.ReadRecordClearConfirmSheet() }
     else if (this.showCalendarSheet) { this.ReadRecordCalendarSheet() }
     else { this.ReadRecordOptionsSheet() }
   }
 
+  /** 合并阅读记录：顶部搜索、候选多选、无候选提示。 */
+  @Builder
+  private ReadRecordMergeSheet() {
+    Column() {
+      Text('合并阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%').textAlign(TextAlign.Center).padding({ top: 20 })
+      Text('把勾选的记录并入目标书籍，按阅读会话重算，不直接相加时长。')
+        .fontSize(13).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
+        .padding({ left: 24, right: 24, top: 8, bottom: 14 })
+      TextInput({ text: this.mergeSearchQuery, placeholder: '按书名或作者搜索候选' })
+        .width('calc(100% - 48vp)').height(44).margin({ bottom: 8 })
+        .onChange((value: string) => { this.mergeSearchQuery = value; })
+      if (this.getFilteredMergeCandidates().length === 0) {
+        Text('没有可合并的候选').fontSize(14).fontColor(this.themeColorTextTertiary)
+          .width('100%').textAlign(TextAlign.Center).padding({ top: 28, bottom: 28 })
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.getFilteredMergeCandidates(), (item: ReadRecordSummary) => {
+              Row() {
+                Column() {
+                  Text(item.bookName).fontSize(15).fontColor(this.themeColorTextPrimary)
+                  Text(item.bookAuthor.length > 0 ? item.bookAuthor : '（作者为空）')
+                    .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                Text(this.mergeSelectedKeys.has(this.mergeCandidateKey(item)) ? '已选' : '选择')
+                  .fontSize(13).fontColor(this.themeColorAccent)
+              }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
+                .backgroundColor(this.mergeSelectedKeys.has(this.mergeCandidateKey(item)) ? '#48577D' : Color.Transparent)
+                .onClick(() => this.toggleMergeCandidate(this.mergeCandidateKey(item)))
+            }, (item: ReadRecordSummary) => `${this.mergeCandidateKey(item)}-${this.mergeSelectedKeys.has(this.mergeCandidateKey(item))}`)
+          }.width('100%')
+        }.height(240).scrollBar(BarState.Off)
+      }
+      Row() {
+        Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
+          .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
+          .onClick(() => this.showMergeSheet = false)
+        Text('合并').fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
+          .layoutWeight(1).height(48).backgroundColor(this.themeColorAccent).borderRadius(24).margin({ left: 12 })
+          .onClick(() => { this.confirmMerge(); })
+      }.width('100%').padding({ left: 28, right: 28, top: 12, bottom: 24 })
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
+  }
+
+  /** 删除确认面板：1 条是单条删除，多条是批量删除；两档「不再提醒」与上游一致。 */
+  @Builder
+  private ReadRecordDeleteConfirmSheet() {
+    Column() {
+      Text(this.selectedKeys.size === 1 ? '删除这条记录' : `删除 ${this.selectedKeys.size} 条记录`)
+        .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%').textAlign(TextAlign.Center).padding({ top: 22 })
+      Text(this.selectedKeys.size === 1 ? '确定删除这条阅读记录？删除后不可恢复。' :
+        `确定删除选中的 ${this.selectedKeys.size} 条阅读记录？删除后不可恢复。`)
+        .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
+        .padding({ left: 28, right: 28, top: 12, bottom: 16 })
+      Row() {
+        Text('本页不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.skipDeleteConfirmPageDraft })
+          .onChange((value: boolean) => { this.skipDeleteConfirmPageDraft = value; })
+      }.width('100%').padding({ left: 28, right: 28, bottom: 8 })
+      Row() {
+        Text('以后都不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.skipDeleteConfirmLongTermDraft })
+          .onChange((value: boolean) => { this.skipDeleteConfirmLongTermDraft = value; })
+      }.width('100%').padding({ left: 28, right: 28, bottom: 16 })
+      Row() {
+        Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
+          .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
+          .onClick(() => this.showDeleteConfirm = false)
+        Text('删除').fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
+          .layoutWeight(1).height(48).backgroundColor('#D95656').borderRadius(24).margin({ left: 12 })
+          .onClick(() => { this.confirmDeleteSelected(); })
+      }.width('100%').padding({ left: 28, right: 28, bottom: 24 })
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
+  }
+
+  /** 主页阅读热力图：年度按周网格，取代原 42 格月历；月历移到批 4 总览页。 */
   @Builder
   private ReadRecordCalendarSheet() {
     Column() {
       Row() {
-        Text('阅读日历').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('阅读热力图').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text('关闭').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.showCalendarSheet = false)
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
-      Text(`${new Date().getFullYear()} 年 ${new Date().getMonth() + 1} 月`)
-        .fontSize(16).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center).margin({ bottom: 18 })
-      Row() {
-        ForEach(['日', '一', '二', '三', '四', '五', '六'], (weekday: string) => {
-          Text(weekday).fontSize(12).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
-        }, (weekday: string) => weekday)
-      }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
-      Grid() {
-        ForEach(this.getCalendarCells(), (day: number, index: number) => {
-          GridItem() {
-            if (day > 0) {
-              Text(day.toString()).fontSize(13).fontColor(this.selectedCalendarDay === day ? this.themeColorSurfacePrimary : this.themeColorTextSecondary)
-                .width(36).height(36).textAlign(TextAlign.Center)
-                .backgroundColor(this.selectedCalendarDay === day ? this.themeColorAccent :
-                  this.getCalendarDayDuration(day) > 0 ? '#48577D' : '#292B33')
-                .borderRadius(8).onClick(() => this.selectedCalendarDay = day)
-            }
-          }.height(42)
-        }, (_day: number, index: number) => index.toString())
-      }.columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr').rowsGap(4).width('100%')
-        .padding({ left: 16, right: 16 })
-      Text(this.selectedCalendarDay > 0 ?
-        `${this.selectedCalendarDay} 日 · ${this.formatRecordDuration(this.getCalendarDayDuration(this.selectedCalendarDay))}` :
-        '选择日期查看当天阅读时长')
-        .fontSize(13).fontColor(this.themeColorAccent).width('100%').textAlign(TextAlign.Center).margin({ top: 16 })
+      if (this.selectedDateKey.length > 0) {
+        Row() {
+          Text(`只看 ${ReadRecordRepository.formatFriendlyDate(this.selectedDateKey)}`)
+            .fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+          Text('查看全部').fontSize(13).fontColor(this.themeColorAccent)
+            .onClick(() => { this.selectedDateKey = ''; })
+        }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
+      }
+      ReadRecordHeatmap({
+        dailyReadCounts: this.buildDailyReadCounts(),
+        dailyReadTimes: this.buildDailyReadTimes(),
+        selectedDate: this.selectedDateKey,
+        mode: 1,
+        onDateSelected: (date: string) => {
+          this.selectedDateKey = date;
+          this.showCalendarSheet = false;
+        }
+      })
+      Text('点格子只看当天，再点「查看全部」恢复')
+        .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%')
+        .textAlign(TextAlign.Center).margin({ top: 12 })
     }.width('100%').padding({ bottom: 20 })
   }
 
@@ -3469,7 +3844,7 @@ export struct ReadRecordsPage {
     Column() {
       Text('阅读记录选项').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 18, right: 16, top: 12, bottom: 14 })
-      ReadRecordOptionRow({ icon: 'clock', title: '显示阅读日历', detail: '按日期查看阅读记录', onSelect: () => {
+      ReadRecordOptionRow({ icon: 'chart', title: '显示阅读热力图', detail: '按周网格查看近一年阅读', onSelect: () => {
         this.showActionsSheet = false;
         this.showCalendarSheet = true;
       } })
@@ -3485,6 +3860,14 @@ export struct ReadRecordsPage {
         onSelect: (): void => { this.runRepair(); } })
       ReadRecordOptionRow({ icon: 'delete', title: '清空阅读记录', detail: '删除本地阅读历史',
         onSelect: (): void => { this.showActionsSheet = false; this.requestClearAll(); } })
+      if (this.skipDeleteConfirm) {
+        ReadRecordOptionRow({ icon: 'profileRefresh', title: '恢复删除确认', detail: '删除前重新弹出确认框',
+          onSelect: (): void => { this.restoreDeleteConfirm(); } })
+      }
+      ReadRecordOptionRow({ icon: 'profileRefresh', title: '清除归属决定', detail: '重新询问作者为空的旧记录归属',
+        onSelect: (): void => { this.clearAliasDecisions(); } })
+      ReadRecordOptionRow({ icon: 'profileTimeline', title: '阅读总览', detail: '跨书统计、排行与读书日历',
+        onSelect: (): void => { this.showActionsSheet = false; this.onOpenOverview(); } })
     }.width('100%').padding({ bottom: 16 })
   }
 }

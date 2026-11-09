@@ -184,7 +184,7 @@ export class BookRepository {
     'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
     '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
-    '`durChapterTime`, `order` FROM `books` ORDER BY `durChapterTime` DESC';
+    '`durChapterTime`, `order`, `disableReadRecord` FROM `books` ORDER BY `durChapterTime` DESC';
 
   /** 写入或覆盖一行书目。35 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
@@ -407,6 +407,7 @@ export class BookRepository {
       latestChapterTime: book.latestChapterTime,
       durChapterTime: book.durChapterTime,
       order: book.order,
+      disableReadRecord: book.disableReadRecord,
       isLocal: book.isLocal
     };
   }
@@ -788,6 +789,7 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       latestChapterTime: RdbCodec.optionalInteger(resultSet, 19),
       durChapterTime: RdbCodec.optionalInteger(resultSet, 20),
       order: RdbCodec.optionalInteger(resultSet, 21),
+      disableReadRecord: RdbCodec.boolean(resultSet, 22, false),
       isLocal: true
     };
     book.progress = BookRepository.readProgress(book);
@@ -1124,6 +1126,15 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     BookRepository.chapterCache.delete(bookUrl);
   }
 
+  /** 单独为某本书开/关阅读记录，对应上游 BookDao.setReadRecordDisabled。 */
+  static async setDisableReadRecord(context: Context, bookUrl: string, disabled: boolean): Promise<void> {
+    if (bookUrl.length === 0) { return; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const args: relationalStore.ValueType[] = [disabled ? 1 : 0, bookUrl];
+    await store.executeSql('UPDATE `books` SET `disableReadRecord` = ? WHERE `bookUrl` = ?', args);
+  }
+
   /**
    * 删除一本书：先删章节行，再删 books 行。
    *
@@ -1253,7 +1264,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       book.durChapterTime ?? 0,
       null,
       1,
-      0,
+      book.disableReadRecord === true ? 1 : 0,
       Math.trunc(book.order ?? 0),
       0,
       null,
