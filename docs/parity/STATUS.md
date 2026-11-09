@@ -35,7 +35,7 @@
 | --- | --- |
 | `✓` | 该类**有具名映射链路**，数据落原生功能；不表示该类全部键/字段都接了，键级明细看 [Android ZIP 备份兼容](../BACKUP-RESTORE.md) 的 28 类清单 |
 | `✗` | 该类**完全没有映射**，ZIP 条目仅由 `copyPreservedEntries` 原样归档，不进原生功能 |
-| `—` | 不适用，理由必写（通常是[项目队列](../PROJECT.md)的范围之外） |
+| `—` | 不适用，理由必写（`docs/PARITY-RULES.md` 第三节四类依据之一：上游无此行为、平台无此能力、[项目队列](../PROJECT.md)的范围之外、数据层无独立界面） |
 | `?` | 未盘，尚未逐个文件核对（本表总账 2026-11-09 起不再用它作单元格值，改按下节判据逐类落文字） |
 
 ### 忽略项列的等价判据（2026-11-09 逐类核对）
@@ -61,15 +61,15 @@
 | `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) A1 29 / B 51 / C 4 / D3 13 / E 1 = **98 行**（72 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) 逐条登记） |
 | `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | 等价（类别级） | [书签对照](ZIP-BOOKMARK.md) A–E = **83 行** |
 | `bookGroup` | `bookGroup.json` | ✓ | ✓ | 等价（类别级） | [书籍总账](BOOKSHELF.md) A3 18 / A1 11 / D3 6 / B 3 = **38 行** |
-| `bookSource` | `bookSource.json` | — | — | — | [书籍总账](BOOKSHELF.md) B 19 / D3 5 = **24 行** |
-| `rssSource` | `rssSources.json` | — | — | — | **零行** |
-| `rssStar` | `rssStar.json` | — | — | — | **零行** |
+| `bookSource` | `bookSource.json` | ✗ | ✗ | 未接 | [书籍总账](BOOKSHELF.md) B 19 / D3 5 = **24 行** |
+| `rssSource` | `rssSources.json` | ✗ | ✗ | 未接 | **零行** |
+| `rssStar` | `rssStar.json` | ✗ | ✗ | 未接 | **零行** |
 | `replaceRule` | `replaceRule.json` | ✓ | ✓ | 等价（类别级） | [TXT 阅读总账](TXT-READER.md) = **6 行**（`:104`、`:105`、`:106`、`:381`、`:382`、`:383`）；`grep -c replaceRule` 实测 7，多的 1 行是 `:965` 的「ZIP 类别取值」表头说明同时列了两词，非数据行 |
 | `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | 等价（类别级） | [书籍总账](BOOKSHELF.md) C 23 / B 5 = **28 行**（r334 判断段复核：11 已接 / 16 `未接` / 1 不适用；16 行未接 = B 块 3 行 `:272`/`:280`/`:307` + C 块 13 行） |
 | `searchHistory` | `searchHistory.json` | ✗ | ✗ | 未接（语义错配，待批 4 重判） | **零行**；语义错配：上游 `searchHistory.json` 装的是 `SearchKeyword`（全局搜索关键词池，表 `search_keywords`），本地 `ReaderSearchHistoryRepository` 对应的是上游 `SearchContentHistory`（书内搜索，表 `search_content_history`），而上游不备份后者——本地与上游的 `searchHistory` 是两个东西 |
-| `sourceSub` | `sourceSub.json` | — | — | — | **零行** |
+| `sourceSub` | `sourceSub.json` | ✗ | ✗ | 未接 | **零行** |
 | `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | 等价（类别级） | [TXT 阅读总账](TXT-READER.md) = **5 行**（`:84`、`:85`、`:86`、`:93`、`:95`）；`grep -c txtTocRule` 实测 6，多的 1 行是 `:965` 的「ZIP 类别取值」表头说明同时列了两词，非数据行 |
-| `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | — | — | — | **零行**；`httpTtsVoices.json` 写空数组 `[]`，`httpTTS.json` 不写（批 3：`[]` 承载上游「确实没有音色」语义，透传件存在时不覆盖） |
+| `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | ✗ | ✗ | 未接 | **零行**；`httpTtsVoices.json` 写空数组 `[]`，`httpTTS.json` 不写（批 3：`[]` 承载上游「确实没有音色」语义，透传件存在时不覆盖） |
 | `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ✓ | [书籍总账](BOOKSHELF.md) E = **6 行**（r336 判断段建行，E 块由 13 行增至 19 行；面板级见 E `:507`，类别级见 E 新增 6 行） |
 | `dictRule` | `dictRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
 | `homepageModules` | `homepageModules.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
@@ -77,11 +77,11 @@
 | `highlightRule` | `highlightRule.json` | ✓ | ✓ | 等价（类别级） | **零行** |
 | `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | [书籍总账](BOOKSHELF.md) B = **1 行** |
 | `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
-| `server` | `servers.json` | — | — | — | **零行** |
+| `server` | `servers.json` | ✗ | ✗ | 未接 | **零行** |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（83 键） | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（176 已接 / 11 `未接` / 2 不适用）；11 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（54 键） | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（14 键） | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（57 已接 / 7 `未接` / 2 不适用，r330 建表、r334 实现段收口；接触面 83 个 `.kt` 全部已分配）。7 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
-| `themeMode` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 0 `未接` / 2 不适用，A8 的图标切换按 `themeConfig` 类计不适用；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
+| `themeMode` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 1 `未接` / 1 不适用，A8 的图标切换按 `themeConfig` 类计不适用；D4 主题列表页的日夜切换按钮 2026-11-09 由 `不适用` 改判 `未接`，本地无主题列表页；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
 | `bookshelfLayout` | `config.xml` | ✓ | ✓ | 类别级等价，键级不等价（39 键） | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（76 已接 / 43 `未接` / 3 不适用，r327 建表、r331/r332 落地 38 行；接触面 24 个 `.kt` 全部已分配）。43 条 `未接` 按 `**要接**`（2）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
 | `showRss` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | **零行** |
 | `threadCount` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
@@ -105,9 +105,16 @@
 
 其余条目走 `:822` 的兜底 `fileIo.copyFile`，只进保留目录，不落原生仓储。因此 `readRecord`、`searchHistory`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` 判 `✗`，不是「没查」，而是「查过、确认未接」。（`coverConfig` 原先也在这条清单里，r334 实现段已把 14 个封面键双向接通、66 行里 57 行已接，因此它现在是「部分接入」，不再属于「确认未接」一组。）。
 
-### 判 `—` 的六类
+### 原判 `—`、现改判 `✗` 的六类（2026-11-09 范围调整）
 
-`bookSource`、`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server` 判不适用，理由统一：在线书源抓取、RSS 拉取、TTS 服务、WebDAV 在[项目队列](../PROJECT.md)的「范围之外」，明确写了「不因出现在页面或备份归档中而视为已实现」。这些条目仍会被原样归档（`copyPreservedEntries`），但**归档保留不等于功能兼容**。
+`bookSource`、`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server` 六类此前判 `—`，依据是[项目队列](../PROJECT.md)的「范围之外」。**2026-11-09 起，在线书源抓取、RSS 拉取、TTS 服务、WebDAV 已移出「范围之外」**，改列入 `PROJECT.md` 的「在线服务（已纳入范围，尚未排期）」一节，因此这六类不再具备判 `—` 的依据，按 `docs/PARITY-RULES.md` 第三节「一条依据都写不出，就不能判不适用——降级为未接」降级为 `✗`：
+
+- **读 / 写**：两侧都 `✗`，条目只经 `copyPreservedEntries` 原样归档，本地没有对应原生仓储可落。
+- **忽略项**：判 `未接`。`categoryOptions` 里虽然登记了这六类的类别键名（勾选后确实能把条目挡在保留目录之外），但该类没有原生功能可落，门控「跳过的是什么」无从等价——按上节「三档取值」的口径，这类只能记 `未接`，等读写接通后回填。
+- **涉及行**：`bookSource` 在 [书籍总账](BOOKSHELF.md) B 19 / D3 5 = 24 行；其余五类仍零行（`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server`）。**零行不等于不做**：这六类的界面块要等排期后按 `docs/PARITY-RULES.md` 的盘点单位（整个界面）重新建块，届时行数会从 0 涨起来。
+- **`httpTTS` 的例外**：本地写出侧确实会写 `httpTtsVoices.json` 的空数组 `[]`（`!accessSync` 才写，避免覆盖透传的真音色），但这是「承载上游『确实没有音色』语义」的占位，不是 TTS 功能本身，故读写仍判 `✗`。
+
+**归档保留不等于功能兼容**：这六类的条目仍会随备份往返，但本地既不解析也不应用，恢复后用户看不到任何效果。
 
 ### 判 `?` 的四类与 `themeConfig` 写的复核
 

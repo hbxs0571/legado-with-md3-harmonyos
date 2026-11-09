@@ -34,16 +34,16 @@ hdc install -r legado-harmonyos-0.1.0-unsigned.hap
 
 ## 📊 完成度
 
-按上游界面逐块盘点的七张对照表合计 **1172 行**：已接 **810**、未接 **330**、不适用 **32**。「未接」不等于都该做——其中不少经判断后登记为「不接」（上游有、本项目不做，或平台无对应能力），逐行理由写在表内备注与[已知问题](docs/KNOWN-ISSUES.md)里。
+按上游界面逐块盘点的七张对照表合计 **1172 行**：已接 **810**、未接 **338**、不适用 **24**。「未接」不等于都该做——其中不少经判断后登记为「不接」（上游有、本项目不做，或平台无对应能力），逐行理由写在表内备注与[已知问题](docs/KNOWN-ISSUES.md)里。
 
 | 对照表 | 行数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| [书架](docs/parity/BOOKSHELF.md) | 345 | 127 | 214 | 4 |
-| [TXT 阅读](docs/parity/TXT-READER.md) | 242 | 210 | 19 | 13 |
+| [书架](docs/parity/BOOKSHELF.md) | 345 | 127 | 215 | 3 |
+| [TXT 阅读](docs/parity/TXT-READER.md) | 242 | 210 | 25 | 7 |
 | [阅读配置](docs/parity/READER-CONFIG.md) | 189 | 176 | 11 | 2 |
 | [书架布局](docs/parity/ZIP-BOOKSHELF-LAYOUT.md) | 122 | 76 | 43 | 3 |
 | [书签](docs/parity/ZIP-BOOKMARK.md) | 117 | 83 | 30 | 4 |
-| [深色模式](docs/parity/ZIP-THEME.md) | 91 | 81 | 6 | 4 |
+| [深色模式](docs/parity/ZIP-THEME.md) | 91 | 81 | 7 | 3 |
 | [封面设置](docs/parity/ZIP-COVER.md) | 66 | 57 | 7 | 2 |
 
 「哪一块还没盘」的总览见 [ZIP 兼容总账](docs/parity/STATUS.md)；设备验证范围与遗留问题见[当前进度](docs/PROGRESS.md)、[验证记录](docs/VALIDATION.md)和[已知问题](docs/KNOWN-ISSUES.md)。

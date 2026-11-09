@@ -47,7 +47,7 @@
 
 ### 本地书籍行登记（BOOKSHELF.md 的 localBook 未接行）
 
-本节登记 [书籍总账](parity/BOOKSHELF.md) 里 `localBook` 名下 **72 行 `未接`** 的「为什么不修」。编号 `KI-LB<n>` 与对照表「备注」列的标记一一对应。判定口径按 [PROJECT.md](PROJECT.md)「范围之外」段：只有上游存在、且属于本地书籍这条链路的能力才补；依赖尚未迁移的体系（WebDAV、书源、私密）或纯视觉差异的，登记不修。
+本节登记 [书籍总账](parity/BOOKSHELF.md) 里 `localBook` 名下 **72 行 `未接`** 的「为什么不修」。编号 `KI-LB<n>` 与对照表「备注」列的标记一一对应。判定口径按 [PROJECT.md](PROJECT.md)：只有上游存在、且属于本地书籍这条链路的能力才补；依赖尚未迁移的体系或纯视觉差异的，登记不修。**2026-11-09 起 WebDAV 与在线书源已纳入范围（`PROJECT.md:24-44`，尚未排期）**，依赖它们的两类不再按「范围之外」处理，改为「要接，待排期」；仍在[范围之外](PROJECT.md)（`PROJECT.md:46-48`）的是 AI 在线服务、云同步与额外设备形态。
 
 **KI-LB1 书架卡片信息行（16 行，属 bookshelfLayout 视觉差异，本轮不修）** —— 覆盖卡片副标题作者行、紧凑模式「作者 · N 未读」副标题、列表卡片描述行显示当前章、标题区未读徽标叠加更新图标、封面无障碍描述、未读章节数角标、更新小红点、更新中进度指示、书籍类型标签、来源标签（搜索模式）、自定义标签行、列表模式简介、最后更新时间、最新章节、字数统计、等待更新数。
 上游 `ui/main/bookshelf/BookItem.kt:865`（`subTitle`）、`:870`（`desc`）、`:855-864`（`TextCard` 未读徽标）、`:754-765`（`bookTypeLabel`）、`:765-773`（`matchedSourceLabel`）、`:888`（`bookshelfShowTag`）、`:919`（`BookItemIntro`）、`:944-951`（最后更新时间）、`:952-959`（最新章节）、`:814`/`:838`（`accessibilityLabel`）；计数来源 `BookShelfItem.kt:48`（`isNew` = `lastCheckCount > 0`）、`:50`（`getUnreadChapterNum` = `max(totalChapterNum - durChapterIndex - 1, 0)`）；开关 `BookshelfConfigSheet.kt:511`（标签内容二级面板）、`:579`（等待更新数）、`:703`/`:734`（`bookshelfShowWordCount`）。
@@ -113,7 +113,7 @@
 - **TXT 目录解析仍是整本读入**（TXT-READER 批次 4 未接的两行）：`BookRepository.readTextFile` 一次性 `new ArrayBuffer(fileSize)`，`readTextFileAsync` 虽按 512KB 分块但仍拼成一个整串；切章、`deriveChapters`、`forEachChapter` 全部基于整本字符串。上游 `TextFile.kt` 是 512000 字节/块扫标题 + 正文 8MB 窗口缓存。50MB 以上 TXT 本地会先卡住再出目录，低内存设备长时间阅读有被系统杀后台的风险。
 - **全文搜索的正则模式已加 500ms 单章预算**（TXT-READER 批次 3）：`data/ReaderSearchRegex.ets` 用 `taskpool.Task` + `Promise.race` 做截止时间，超时 `taskpool.cancel` 后跳过该章并计入 `timedOutChapterCount`（`pages/ReaderSearchPage.ets:224-226`）。这是**搜索链路**，与上面这条「替换规则同步正则未限时」是两条不同的正则，后者仍未限时。
 - **章边界占位页已接通**（TXT-READER 批次 3）：分页模式在章末再翻一页会整屏居中显示「加载数据中…」，滚动模式给「继续滑动以加载下一章…」，新章正文到达后自动撤（`pages/ReaderPage.ets:4186-4203`、`reader/ReaderCanvasSurface.ets:1394-1417`）。设备用 hilog 验过绘制与撤销时序；该中间态只有约 690ms，`snapshot_display` 抓不到截图。
-- 在线 URL 规则导入、在线书源抓取、RSS、TTS、AI、WebDAV、云同步和 Web 服务未接入。
+- 在线 URL 规则导入、在线书源抓取、RSS、TTS、WebDAV 未接入，但**自 2026-11-09 起已纳入项目范围、尚未排期**（[PROJECT.md](PROJECT.md) `:24-44`）；AI、云同步与 Web 服务仍未接入且**仍在[范围之外](PROJECT.md)**（`PROJECT.md:46-48`）。
 - **画布绘制细节已按上游补齐一批**（TXT-READER 批次 6，七行）：①高亮规则的下划线线型改成逐行手绘（`reader/ReaderCanvasSurface.ets:1830 drawStyledUnderlines`、`:1858 drawOneStyledUnderline`）：虚线 8vp 实 5vp 空、波浪振幅 3vp 波长 12vp、双线第二条在线下 3vp+线宽、删除线画在行盒 52% 高、荧光填行盒下半截，1 实线仍交给系统段落；**SVG 档（mode 5）本地没有路径解析器，按实线兜底**。②自动翻页从「到点整页跳」改成逐帧揭示（`pages/ReaderPage.ets:1353 startAutoPageTurn` 用 `createAnimator`；`reader/ReaderCanvasSurface.ets:906 drawAutoPageReveal` 按 `clipRect(bottom=reveal)` 贴下一页并在揭示线下沿画 1px 指示线），滚动模式匀速推进 `scrollOffset` 且到书末不自动关闭；**墨水屏 DISCRETE 分支不做**（ArkUI 侧无 e-ink 检测）。③滚动模式（`pageAnimation === 3`）不画书签角标（`pages/ReaderPage.ets:1937`）。④覆盖转场补 36dp 尾部渐变阴影（`reader/ReaderCanvasSurface.ets:912 drawCoverShadow`、`pages/ReaderPage.ets:4301-4313` 算起点）。⑤淡入转场松手阈值降到 10% 且不看速度（`reader/ReaderCanvasSurface.ets:137 FADE_COMMIT_PROGRESS`、`:219 release()` 新增 `commitProgress` 参数）。⑥「文字背景透明度 0~100」这一行此前判为未接是**误判**：上游 `ReaderBackgroundAlpha.kt` 唯一调用点（`ReadBookRouteScreen.kt:692`/`:712`）传的是 `styleConfig.bgAlpha`，管的是整页背景图透明度，本地 `pages/ReaderPage.ets:4995 backgroundImageAlpha` + `:5220 .opacity(...)` 早已等价，已按上游实际语义改判 `已接`。⑦「同位置多条高亮规则」复核后改判 `已接`：画布按区间边界切段时 `winner` 覆盖赋值（`reader/ReaderCanvasSurface.ets:1952 splitStyledSegments`），同一段字只保留最后命中的那一套样式，不会出现「字色 + 下划线 + 底色」叠加。**第七批补齐**：分层绘制（`drawPage` 拆成底色层 / 背景图层 / 字形层 / 选区层 / 下划线层，选区不再压住下划线）、文字背景图与九宫格切图、相邻同色背景合并成色带、无障碍选区快照。**仍缺**：滚动整页 PixelMap 缓存、图片双尺寸缓存、选区跨下两页（页层批次 2 已落地代码路径，见 KI-EXP3；此处历史清单不删，完成态待验收方判定）。
 - **各二级面板已按上游补齐形态**（TXT-READER 批次 5，十四行）：①菜单系统页改成三页签 + `Swiper` 横滑（`pages/ReaderSettingsPage.ets:851`、`MenuSettingsTabPage()` `:869`），「每行图标数」「图标行数」换成「− 数值 ＋」步进器行、点整行才展开滑杆（对齐上游 `TinySliderSettingItem`）；②字号滑杆右侧 56×56 排版方卡（`:718`，图标 24×24 `#B7B8C1`、无文字）；③更多操作面板改成 4 列正方形 + 每页 8 格 `Swiper` + 底部圆点（`pages/ReaderPage.ets:5690-5740`），换源 / 刷新 / 自定义按钮三格带向下箭头；④`image_style` 与 `page_anim` 点一下直接展开单选（翻页动画六档：覆盖 / 滑动 / 仿真 / 滚动 / 淡入淡出 / 无动画）；⑤排版页拆出「正文 / 标题 / 页眉 / 页脚」四个子页签 + 右侧边距方卡（`ReaderSettingsPage.ets:2327`）；⑥页眉页脚补图形型 tip（电池外框、框内电池、纯图标、胶囊五种，用基础形状画）与「同一 tip 只显示首个位置」去重（`ReaderPage.ets:5085 ReaderInfoBattery`、`:5119 ReaderInfoSlot`）；⑦页眉页脚字体从「未迁移」提示改成真正打开字体选择器（`ReaderSettingsPage.ets:1441 openInfoFontSelection`）；⑧高亮规则编辑改成「规则信息 / 样式设置 / 预览效果」三分区 + 作用范围按钮 + 启用开关 + 实时预览卡，下划线档位扩到 7 档；⑨划线面板预设色补到 16 个（含纯黑 `#111111`）、色格改 32dp 圆 + 2dp 描边；⑩主题列表改成网格（2..6 列可切）+ 管理态（全选 / 反选 / 删除 / 置顶 / 置底 / 导出，前 5 份内置带锁不可选）；⑪下划线细调搬进独立「文字下划线」面板、线段高度上限从 10 提到 20；⑫文本处理面板搜索匹配 `group`、行标题显示「名称 (分组)」、规则行加拖拽把手并能真拖动落库（`data/ReplaceRuleRepository.ets:749 reorder`）；⑬底栏按钮配置的拖拽把手从装饰改成真拖动（`ReaderSettingsPage.ets:3196-3252`）。**第七批补齐**：顶栏图标与标题栏动作按钮两处配置面板（连底栏共三处，行内都有自定义图标、眼睛开关、拖拽把手，启用项自动排前）；高亮规则的命中排版 / 字体替换 / 文字背景图（含九宫格切线与手动切图）三块。**仍缺**：高亮规则的「应用排版 chip」——本地没有「命名排版方案」这个实体（`READER_BACKGROUND_STYLES` 只有日夜两色，无完整排版参数），chip 无数据源可列。
 
@@ -422,7 +422,7 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 >
 > **2026-11-05 拆分**：本节原来把 30 个 KI 组全放在这里（含 22 个已实现组，516 行），占掉了整份文件的三分之一。现在只留 8 个仍未接的组（A4/A5/A8/A10/A11/A12/C6/D3），22 个已实现组的全文移到了 [阅读配置 KI 组落地记录](history/known-issues/reader-config-landed.md)（本机归档，不随公开仓库发布）。组的编号、标题、正文一字未改；对照表「备注」列的 `KI-xx` 标记仍指向本节——组标题不是标题级元素，从来没有独立锚点，所以搬迁不影响任何链接。
 
-判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS 朗读、WebDAV、AI、云同步与额外设备形态，不因开关已上屏而算已实现；上游没有的行为不补。凡上游行为在本地已有等价实现、或上游分支在本平台根本不存在，直接记「不接」；其余记「要接，待排期」并写补法。
+判定口径按[项目范围](PROJECT.md)：**在线书源抓取、RSS、TTS 朗读、WebDAV 自 2026-11-09 起已纳入范围、尚未排期**（见 `PROJECT.md:24-44` 的「在线服务」节），依赖它们的上游行为记「**要接，待排期**」而不记「不接」；仍在[范围之外](PROJECT.md)（`PROJECT.md:46-48`）的是 AI 在线服务、云同步与额外设备形态，这些不因开关已上屏而算已实现，记「不接」。上游没有的行为一律不补。凡上游行为在本地已有等价实现、或上游分支在本平台根本不存在，直接记「不接」；其余记「要接，待排期」并写补法。
 
 与字段口径的关系：本节按 **A–G 明细表的行**登记（现 11 行）。对照表 §一 1.5 按**上游声明名**判定的 112 项里，另有 9 项判「不接」但不对应任何 KI 组，理由直接写在 1.5 表内，不在此重复——`menuBgColor`、`menuBgColorNight`、`menuAcColor`、`menuAcColorNight`、`menuBottomCornerRadius`、`menuBottomHorizontalMargin`、`menuBottomBottomMargin`（都是上游 `Config` 里 `@Transient` 的主题包承载字段，上游没有用户设置入口）、`readStyleSelect`、`comicStyleSelect`（图片书/漫画，本地无该内容形态，明细表 A 块已判 `不适用`）。两个口径不可相加。
 
@@ -432,9 +432,9 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 上游这条只在 `feature/reader/legacy/LegacyReaderPaginationStyleFactory.kt:49` 的 `Build.VERSION.SDK_INT <= Q`（Android 10 及以下）分支里生效，是给老设备减少渲染开销的兼容路径。HOS 没有对应的老渲染管线，接了也没有可切换的实现。**不补**；设置页该条保留占位文案，不假装生效。
 
-**KI-A5 朗读与在线书源三项（不接，范围之外）** —— 覆盖 A-09 朗读悬浮窗分离提醒（`readAloudDetachReminderEnabled`，`ReadBookConfig.kt:80`）、A-10 自动切换书源（`autoChangeSource`，`ReadSettings.kt:42`，含 `defaultSourceChangeAll:15`）、A-11 换源结果应用于全部书籍。
+**KI-A5 朗读与在线书源三项（要接，待排期）** —— 覆盖 A-09 朗读悬浮窗分离提醒（`readAloudDetachReminderEnabled`，`ReadBookConfig.kt:80`）、A-10 自动切换书源（`autoChangeSource`，`ReadSettings.kt:42`，含 `defaultSourceChangeAll:15`）、A-11 换源结果应用于全部书籍。
 
-朗读（TTS）与在线书源抓取都在[项目范围](PROJECT.md)之外；因开关已上屏，判 `未接` 而非 `不适用`。补法：随对应子系统接入，本轮不动。
+朗读（TTS）与在线书源抓取自 2026-11-09 起**已纳入范围、尚未排期**（[PROJECT.md](PROJECT.md) `:24-44`）；因开关已上屏，判 `未接`。补法：随对应子系统接入。
 
 **KI-A8 使用新版目录（不接）** —— 覆盖 A-14（`useNewTocSheet`，`ReadSettings.kt:37`）。
 
@@ -444,13 +444,13 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 本地背景/主题是 `READER_BACKGROUND_STYLES` 六个内置方案的自绘列表（`entry/src/main/ets/data/ReaderSettingsRepository.ets:339-346`，入口 `ReaderSettingsPage.ets:1281`），不是网格布局，该字段没有消费面。**不补**；将来若把面板改成网格，再一并接。
 
-**KI-A11 预下载两项（不接，范围之外）** —— 覆盖 A-19 向后预下载章节数（`preDownloadNum`，`ReadSettings.kt:58`，默认 10）、A-20 向前预下载章节数（`preDownloadNumPrev`，`:59`，默认 0）。
+**KI-A11 预下载两项（要接，待排期）** —— 覆盖 A-19 向后预下载章节数（`preDownloadNum`，`ReadSettings.kt:58`，默认 10）、A-20 向前预下载章节数（`preDownloadNumPrev`，`:59`，默认 0）。
 
-依赖离线缓存/预下载子系统；本地 `AppDownloadCacheSettingsPage.ets:31` 是预览页，没有缓存实现。补法：随下载缓存子系统接入。
+依赖离线缓存/预下载子系统；本地 `AppDownloadCacheSettingsPage.ets:31` 是预览页，没有缓存实现。预下载服务于在线书源，后者自 2026-11-09 起**已纳入范围、尚未排期**（[PROJECT.md](PROJECT.md) `:24-44`），故记「要接，待排期」。补法：随下载缓存子系统与在线书源一起接入。
 
-**KI-A12 在浏览器打开（不接，范围之外）** —— 覆盖 A-21（`readUrlInBrowser`，`ReadSettings.kt:64`）。
+**KI-A12 在浏览器打开（要接，待排期）** —— 覆盖 A-21（`readUrlInBrowser`，`ReadSettings.kt:64`）。打开的是书源页面，随在线书源一起做。
 
-需要外部应用跳转（`module.json5` 的 browser skill），属跨应用能力而非配置接线。补法：加 browser skill 后用 `startAbility(ACTION_VIEW)` 打开；本轮不动。
+需要外部应用跳转（`module.json5` 的 browser skill），属跨应用能力而非配置接线。补法：加 browser skill 后用 `startAbility(ACTION_VIEW)` 打开。打开的是书源页面，随在线书源一起排期（[PROJECT.md](PROJECT.md) `:24-44`）。
 
 ### C 正文排版
 
@@ -460,7 +460,7 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 ### D 翻页与手势交互
 
-**KI-D3 朗读时允许音量键翻页（不接，范围之外）** —— 覆盖 D-04（`volumeKeyPageOnPlay`，`ReadSettings.kt:30`）。朗读子系统未接入，随 TTS 一起做。
+**KI-D3 朗读时允许音量键翻页（要接，待排期）** —— 覆盖 D-04（`volumeKeyPageOnPlay`，`ReadSettings.kt:30`）。朗读子系统未接入，随 TTS 一起做。
 
 ### E 菜单与主题外观
 
@@ -476,7 +476,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 本节登记 [深色模式对照表](parity/ZIP-THEME.md) A–F 块里 **6 行 `未接`**（r298 建表时是 83 行，r300–r316 逐批落地后降到 6 行；22 个 KI 组里 18 个已实现的全文已移到 [深色模式 KI 组落地记录](history/known-issues/theme-landed.md)，本机归档、不随公开仓库发布）的「接不接、怎么接」。编号 `KI-TH-<块><组>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行。**本节只登记，除阶段一（r300）已落地者外不改 `.ets` 代码。**
 
-判定口径按[项目范围](PROJECT.md)「范围之外」段：在线书源抓取、RSS、TTS、WebDAV、AI、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
+判定口径按[项目范围](PROJECT.md)：**在线书源抓取、RSS、TTS、WebDAV 自 2026-11-09 起已纳入范围、尚未排期**（`PROJECT.md:24-44`），依赖它们的上游行为记「要接，待排期」；仍在[范围之外](PROJECT.md)（`PROJECT.md:46-48`）的 AI 在线服务、云同步与**额外设备形态适配**不因开关已上屏而算已实现；上游没有的行为不补；上游机制在本平台根本不存在的不照抄。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：对照表状态只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态——只有真正落地并验证过才改 `已接`。
 
@@ -562,7 +562,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 本节登记 [书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) A–F 块里 43 行 `未接` 的「接不接、怎么接」。编号 `KI-SL-<块><序号>` 与对照表「备注」列的 `**要接**` / `**不接**` 标记一一对应，组内逐行列出覆盖的对照表行号（行号为 ZIP-BOOKSHELF-LAYOUT.md 的行号）。**本节只登记，不改 `.ets` 代码。**
 
-**判定口径**：按 [PROJECT.md](PROJECT.md) 「范围之外」段（`:24-26`）与 PARITY-RULES.md 第三节。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
+**判定口径**：按 [PROJECT.md](PROJECT.md) 与 PARITY-RULES.md 第三节。在线书源抓取自 2026-11-09 起已纳入范围（`PROJECT.md:24-44`，尚未排期），依赖它的行记「要接，待排期」；仍在[范围之外](PROJECT.md)（`PROJECT.md:46-48`）的只有 AI 在线服务、云同步与额外设备形态。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：ZIP-BOOKSHELF-LAYOUT.md 只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的 `要接` 是排期结论，`不接` 是范围结论，两者都不改变对照表的 `未接` 状态。全表 122 行 = 76 已接 / 43 未接 / 3 不适用（r331/r332 落 38 行后）；43 行未接 = 2 `要接` + 41 `不接`。
 
@@ -696,9 +696,9 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **判定理由**：`shouldShowExpandButton`（`BookshelfScreen.kt:806-821`，「更多分组」按钮）、分组封面阴影（`BookItem.kt:349`）、分组根目录书籍数量（`BookshelfScreen.kt:1011`）三个都以「分组卡片在书架网格里」为前提，本地分组只在页签栏出现（`entry/src/main/ets/pages/BookshelfPage.ets:719-733`）。判 `不接`：等 KI-SL-A1 落地后再评估。
 - **验收**：无。
 
-**KI-SL-N7 批量更新与后台任务（不接）** —— 覆盖 A 块 `:83`，E 块 `:183`、`:184`、`:185`（共 4 行）
+**KI-SL-N7 批量更新与后台任务（要接，待排期）** —— 覆盖 A 块 `:83`，E 块 `:183`、`:184`、`:185`（共 4 行）
 
-- **判定理由**：`bookshelfRefreshingLimit`（`BookshelfViewModel.kt:1114-1115`、`:1165-1166`）、`showWaitUpCount`（`:1289`）、`autoRefreshBook`（`:786`，键名 `auto_refresh`，`constant/PreferKey.kt:146`）三者都是「批量更新书籍目录」的配套。本地没有在线书源，目录刷新无对象——[PROJECT.md](PROJECT.md) `:24-26` 把「在线书源抓取」列在范围之外。判 `不接`。
+- **判定理由**：`bookshelfRefreshingLimit`（`BookshelfViewModel.kt:1114-1115`、`:1165-1166`）、`showWaitUpCount`（`:1289`）、`autoRefreshBook`（`:786`，键名 `auto_refresh`，`constant/PreferKey.kt:146`）三者都是「批量更新书籍目录」的配套。本地目前没有在线书源，目录刷新无对象；但**在线书源抓取自 2026-11-09 起已纳入范围**（[PROJECT.md](PROJECT.md) `:24-44` 的「在线服务」节，尚未排期），故改判「**要接，待排期**」——等书源接通后再补这三项，补法：`auto_refresh` 先做成开关，`bookshelfRefreshingLimit` 与 `showWaitUpCount` 随批量更新一起接。
 - **验收**：无。
 
 **KI-SL-N8 加载态与分页（不接）** —— 覆盖 E 块 `:187`、`:190`（共 2 行）
@@ -756,7 +756,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 | KI-SL-N4 角标与提示信息 | A `:74`~`:79`；B `:115`、`:116`、`:117`、`:121` | 10 | 信息密度扩展，暂不做 |
 | KI-SL-N5 二级弹层三项 | A `:84`、`:85`、`:86` | 3 | 随标签体系 |
 | KI-SL-N6 分组卡片增强 | A `:82`；B `:108`；E `:180`、`:182` | 4 | 等 KI-SL-A1 |
-| KI-SL-N7 批量更新与后台任务 | A `:83`；E `:183`、`:184`、`:185` | 4 | 范围之外（在线书源） |
+| KI-SL-N7 批量更新与后台任务 | A `:83`；E `:183`、`:184`、`:185` | 4 | 要接，随在线书源排期 |
 | KI-SL-N8 加载态与分页 | E `:187`、`:190` | 2 | 归 BOOKSHELF.md A1 |
 | KI-SL-N9 锁定书卡片 | B `:123` | 1 | 无隐私书架 |
 
@@ -768,7 +768,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 本节登记 [封面设置总账](parity/ZIP-COVER.md) A–E 块里 7 行 `未接` 的「接不接、怎么接」。编号 `KI-COVER<序号>` 与对照表「备注」列的 `KI-COVERn` 标记一一对应，组内先列覆盖的对照表行号（行号为 ZIP-COVER.md 的行号），再给上游口径、本地现状、补法或理由、验收。**本节只登记，不改 `.ets` 代码。**
 
-**判定口径**：按 [PROJECT.md](PROJECT.md) 「范围之外」段（`:24-26`）与 PARITY-RULES.md 第三节。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
+**判定口径**：按 [PROJECT.md](PROJECT.md) 与 PARITY-RULES.md 第三节。在线书源抓取自 2026-11-09 起已纳入范围（`PROJECT.md:24-44`，尚未排期），依赖它的封面规则求值（C6）与网络封面（A10）等记「要接，待排期」；仍在[范围之外](PROJECT.md)（`PROJECT.md:46-48`）的只有 AI 在线服务、云同步与额外设备形态。判「不接」的**不删行、不改状态**，对照表里仍按 `未接` 计，只在备注与本节点明理由。
 
 **与对照表状态的关系**：ZIP-COVER.md 只有 `已接 / 未接 / 不适用` 三值，不设「部分接」。本节的「要接」是排期结论，「不接」是范围结论，两者都不改变对照表的 `未接` 状态。全表 66 行 = 57 已接 / 7 未接 / 2 不适用（r334 实现段收口后）；7 行未接分别是 A1 仅 WiFi（`:86`）、A10 网络书籍角标（`:95`）、B15 旧版默认封面迁移（`:131`）、C6 规则求值（`:146`）、C8 `coverRule.json` 备份（`:148`）、C9 备份开关（`:149`）、D18 预加载（`:180`）。
 
@@ -794,7 +794,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 - **上游口径**：入口在设置页 `ui/config/coverConfig/CoverConfigScreen.kt:105-109`，sheet 是 `ui/config/coverConfig/CoverRuleConfigSheet.kt:25-83`（勾选 `:61-65`、搜索 URL `:67-72`、规则表达式 `:74-80`、恢复默认 `:35-43`、保存 `:44-52`）。保存校验 `ui/config/coverConfig/CoverConfigViewModel.kt:130-133`（URL 或规则为空时 toast `cover_rule_fields_required` 并 return）。运行期存 `CacheManager` 键 `legadoCoverRuleConfig`（`model/BookCover.kt:51`，读 `:246-249`、写 `:276-278`、删 `:280-282`），`coverRule.json`（`:52`）只用于备份写出（`help/storage/Backup.kt:251-256`）与恢复读入（`help/storage/Restore.kt:339-346`）。求值 `model/BookCover.kt:251-269`：未启用/空 URL/空规则返回 null，否则 `AnalyzeUrl` + `getStrResponseAwait()` + `AnalyzeRule.getString(coverRule, isUrl = true)`；唯一调用点 `ui/book/info/BookInfoViewModel.kt:1275`，前置条件 `:1274` 是 `coverUrl` 与 `customCoverUrl` 都为空。
 - **本地现状（写于 r330 建表时，r334 之后已部分变化，见下「实现记录」）**：入口是灰色动作 `pages/AppCoverSettingsPage.ets:59`（`onUnavailableAction('封面规则编辑尚未迁移')`）；无 sheet、无 `CoverRule` 模型、无 `CacheManager` 等价物；`coverRule` 字面量只出现在备份清单（`data/BackupRepository.ets:403`、`:411`），既没有生成也没有读取 `coverRule.json` 的代码。
-- **补法**：**拆成两段**。①UI + 存储（C1–C5、C7、C9）是纯本地：按 `CoverRule` 9 字段（`model/BookCover.kt:286-294`）建模型，存到 preferences（本地没有 `caches` 表，用独立 prefs 文件更贴近现有做法），sheet 照 `CoverRuleConfigSheet.kt` 三段布局。②求值（C6）与 `coverRule.json` 的备份读写（C8）**随规则引擎一起接**——默认规则 `app/src/main/assets/defaultData/coverRule.json` 的 `coverRule` 是一段 `@js:` 脚本，里面用 `java.base64Encode`、`java.ajaxAll`、`com.jayway.jsonpath.JsonPath` 这些 Java 桥接口，终点是 `https://pre-api.tuishujun.com/...` 与 `http://m.ypshuo.com/...` 两个在线搜索接口，没有规则引擎与 JS 运行时就是死代码。注意 PROJECT.md「范围之外」列的是「在线书源抓取」，封面规则求值走的是同一套 `AnalyzeUrl`/`AnalyzeRule` 管线，按同一口径处理。
+- **补法**：**拆成两段**。①UI + 存储（C1–C5、C7、C9）是纯本地：按 `CoverRule` 9 字段（`model/BookCover.kt:286-294`）建模型，存到 preferences（本地没有 `caches` 表，用独立 prefs 文件更贴近现有做法），sheet 照 `CoverRuleConfigSheet.kt` 三段布局。②求值（C6）与 `coverRule.json` 的备份读写（C8）**随规则引擎一起接**——默认规则 `app/src/main/assets/defaultData/coverRule.json` 的 `coverRule` 是一段 `@js:` 脚本，里面用 `java.base64Encode`、`java.ajaxAll`、`com.jayway.jsonpath.JsonPath` 这些 Java 桥接口，终点是 `https://pre-api.tuishujun.com/...` 与 `http://m.ypshuo.com/...` 两个在线搜索接口，没有规则引擎与 JS 运行时就是死代码。注意封面规则求值走的是同一套 `AnalyzeUrl`/`AnalyzeRule` 管线，在线书源抓取自 2026-11-09 起**已纳入范围、尚未排期**（[PROJECT.md](PROJECT.md) `:24-44`），所以这一条不是「不接」，而是「要接，随规则引擎与在线书源一起做」。
 - **验收**：①UI 段——设置页点「封面规则」弹 sheet，勾「启用」、填 URL 与表达式，点保存后退出重进内容还在；URL 或表达式留空时点保存弹「请填写必填项」且不落盘；点「恢复默认」后两个输入框变默认脚本。②求值段——书详情页对一本 coverUrl 与 customCoverUrl 都为空的网络书，规则命中后封面自动变成搜索结果图。
 
 **KI-COVER3 默认封面相册（整块）** —— 覆盖 A 块 `:89`（A4），B 块 `:117`、`:118`、`:119`、`:120`、`:121`、`:122`、`:123`、`:124`、`:125`、`:126`、`:127`、`:128`、`:129`、`:130`、`:131`（B1–B15），E 块 `:193`（E4）、`:194`（E5）、`:195`（E6），共 19 行
@@ -815,7 +815,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 - **上游口径**：设置项 `ui/config/coverConfig/CoverConfigScreen.kt:184-197`，四档 `entryValues = arrayOf("0","1","2","3")`（全部 / 书架内隐藏 / 同名同作者隐藏 / 只显示不在书架内的）；字段 `CoverSettings.kt:23` 默认 `0`；唯一消费点 `ui/book/explore/ExploreShowViewModel.kt:249` `filterStateId = coverSettings.exploreFilterState`。键名是 **`explore_filter_state`**（`constant/PreferKey.kt:429`），不是字段名 `exploreFilterState`——按字段名 grep 会误判成 0 命中。不在 14 个 `coverPrefKeys`、不在 `alwaysIgnoredPreferenceKeys`。
 - **本地现状（写于 r330 建表时，r334 之后已部分变化，见下「实现记录」）**：`CoverSettings` 无此字段，`entry/src/main/ets` 全目录 `exploreFilterState|filterState` 零命中；设置页 `pages/AppCoverSettingsPage.ets:86` 是灰色动作（`onUnavailableAction('网络书籍角标设置尚未迁移')`）；发现页 `pages/DiscoverPage.ets` 只有本地示范数据过滤（`:62` `this.sources.filter(...)`），不读任何封面设置字段。
-- **补法**：**取决于发现页本身**——本地发现页是 183 行的示范数据页（`pages/DiscoverPage.ets`），没有真实书源列表，「按是否在书架内筛选」没有筛选对象。建议排在发现页接真实数据之后：先补字段与设置项（四档 Dropdown），筛选逻辑跟着发现页的数据源一起写。这里不判「不接」，因为发现页在 PROJECT.md 范围之外那条里没有列名。
+- **补法**：**取决于发现页本身**——本地发现页是 183 行的示范数据页（`pages/DiscoverPage.ets`），没有真实书源列表，「按是否在书架内筛选」没有筛选对象。建议排在发现页接真实数据之后：先补字段与设置项（四档 Dropdown），筛选逻辑跟着发现页的数据源一起写。这里不判「不接」，因为发现页本身不在任何「范围之外」条目里；在线书源抓取自 2026-11-09 起已纳入范围（[PROJECT.md](PROJECT.md) `:24-44`，尚未排期），发现页接真实数据后可随之排期。
 - **验收**：发现页出现书籍列表后，设置页把「网络书籍角标」切到「书架内隐藏」，发现页里已在书架的书消失；切回「全部」后重新出现。
 
 **KI-COVER8 夜间·显示书名 / 显示作者** —— 覆盖 A 块 `:102`（A17）、`:103`（A18），共 2 行
