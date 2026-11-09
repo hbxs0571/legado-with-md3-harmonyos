@@ -50,7 +50,7 @@
 
 **本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支当时只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。**2026-11-06 复核：现为 10 组具名分支**（新增 `themeConfig.json`、readRecord 三份、`coverRule.json`）。
 
-本次核实把原先 4 个 `?`（`themeMode`、`showRss`、`threadCount`、`mangaConfig`）全部落定为 `✗`：`config.xml` 写出侧只 upsert 三段（`bookshelfLayout` 9 键、`readConfig` 阅读外观、`themeConfig` 护眼 6 键），读入侧 46 键，这 4 类的键既不在写出列表也不在读入列表。**「读」列的 `✗` 表示该类的 ZIP 条目恢复时不进原生功能，但条目本身仍会被原样归档**——归档不等于支持。
+批 1 把原先 4 个 `?`（`themeMode`、`showRss`、`threadCount`、`mangaConfig`）落定为 `✗`：当时 `config.xml` 写出侧只 upsert 三段（`bookshelfLayout` 9 键、`readConfig` 阅读外观、`themeConfig` 护眼 6 键），读入侧 46 键，这 4 类的键既不在写出列表也不在读入列表。**「读」列的 `✗` 表示该类的 ZIP 条目恢复时不进原生功能，但条目本身仍会被原样归档**——归档不等于支持。批 2（2026-11-09）复核后 `showRss` 已补写出与恢复链路、读写列改 `✓`（见下方「批 2」节），`threadCount`／`mangaConfig` 因无数据源判未接，`themeMode` 的代码链路确认存在但该行状态列属既有判定、本批未动。
 
 逐类的「本地有无原生页面」需要另看 [Android ZIP 备份兼容](../BACKUP-RESTORE.md) 的 28 类清单，那里有样本条数与本地页面状态；本表只管 ZIP 读写通不通。
 
@@ -83,9 +83,9 @@
 | `coverConfig` | `coverRule.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（14 键） | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（57 已接 / 7 `未接` / 2 不适用，r330 建表、r334 实现段收口；接触面 83 个 `.kt` 全部已分配）。7 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
 | `themeMode` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 1 `未接` / 1 不适用，A8 的图标切换按 `themeConfig` 类计不适用；D4 主题列表页的日夜切换按钮 2026-11-09 由 `不适用` 改判 `未接`，本地无主题列表页；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
 | `bookshelfLayout` | `config.xml` | ✓ | ✓ | 类别级等价，键级不等价（39 键） | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（76 已接 / 43 `未接` / 3 不适用，r327 建表、r331/r332 落地 38 行；接触面 24 个 `.kt` 全部已分配）。43 条 `未接` 按 `**要接**`（2）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
-| `showRss` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | **零行** |
-| `threadCount` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
-| `mangaConfig` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（32 键） | **零行** |
+| `showRss` | `config.xml` | ✓ | ✓ | 类别级等价，键级不等价（1 键） | 批 2 接通：写出 `BackupRepository.ets:906`–`:912` 按运行时 `ThemeSettingsRepository.load` 真值 upsert `showRss` 布尔键，恢复 `:531`–`:537` `restoreShowRss` 经 `RestoreResult.showRss`（`:100`）落 `Index.ets:5360` 起的 `ThemeSettingsRepository.save`；真包往返见下方「批 2」节（备份 `grep -c showRss` = 1、恢复后 `legado_theme` 的 `showRss` 由 true 变 false、底部 RSS tab 由 5 变 4）。明细表仍**零行**未盘，读写以本节代码与往返证据为准 |
+| `threadCount` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [书籍总账](BOOKSHELF.md) A2 = **1 行**；批 2 判**未接**：`grep -rn threadCount entry/src/main/ets --include=*.ets` 除 `BackupRepository.ets` 键分组表外零命中，本地无并发消费方（上游默认 16 用于书源检测／换源／导入并发），按硬约束不硬造默认值、整条跳过 |
+| `mangaConfig` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（32 键） | **零行**；批 2 判**未接**：`grep -rn mangaConfig entry/src/main/ets --include=*.ets` 除 `BackupRepository.ets` 键分组表外零命中，本地无漫画功能与 32 键消费方，按硬约束不硬造 32 个假值、整条跳过 |
 
 ## 状态依据
 
@@ -128,12 +128,23 @@
 
 行号口径说明：任务文案引用的 `:858`–`:862` / `:1123` / `:1187`–`:1190` 以及「HEAD 2676 行、工作区 2806 行（多 130 行 readRecord）」是更早状态；实测当前 HEAD 与工作区均为 2806 行、两者 `git diff --numstat` 为空，readRecord 三份已在 HEAD 内。本表行号一律按 `git show HEAD:entry/src/main/ets/data/BackupRepository.ets` 实测填写。
 
+### 批 2（2026-11-09）G1 六类读写补齐的结论
+
+任务批 2 只做 G1 六类，结论由代码事实与真包往返决定，状态列不随主观意愿改：
+
+- **`themeConfig` / `bookshelfLayout`**：批 1 已按事实 A 把写 / 读列由 `✗` 改 `✓`，本批只确认、不改（写出 `BackupRepository.ets:892`–`:895`、恢复 `:1161`、布局 `:1245`–`:1253`）。
+- **`themeMode`**：任务批 2 第 2 点要求「确认即可」。代码写出 `:898`–`:903`（`!ignoredCategories.includes('themeMode')` 门控）与恢复 `:510`–`:521`（`restoreThemeMode` → `RestoreResult.themeMode` → `Index.ets:5360` `applyThemeMode`）链路确实存在（`git show HEAD:...` 复核）；但总账表该行读写列与散文 121 仍是 `✗` 的旧判定，且该行「涉及行」刚由别人 `7f74954` 维护，本批不越界改它，**如实登记为遗留待核**（表格与代码事实不符，非本批代码缺失）。
+- **`showRss`**：本批唯一补齐的写出侧真活。写出 `:906`–`:912` 照 `themeMode` 范式补 `boolean` 键 `showRss`，真值取 `ThemeSettingsRepository.load(context).showRss`（运行时设置、非写死默认值）；恢复 `:531`–`:537` 新增 `restoreShowRss`（`readXmlBoolean`），`RestoreResult` 加 `showRss: boolean | undefined`（`:100`），`Index.ets:5360` 起先刷 `@State themeShowRss` 再经 `saveThemeSettings` 整份落盘，避免 `applyThemeMode` 触发的整份写用旧内存值盖回。总账表读写列 `✗` → `✓`。
+- **`threadCount` / `mangaConfig`**：`grep -rn -E "threadCount|mangaConfig" entry/src/main/ets --include=*.ets` 排除 `BackupRepository.ets` 后零命中，本地既无并发／漫画消费方也无真值来源。按硬约束「不许硬造默认值」整条跳过、不写任何 `config.xml` 键，判**未接**；备份包 `config.xml` 实测 `grep -c threadCount` = 0、`manga` 相关键 0。读写列保持 `✗`。
+
+真包往返（`showRss`，设备 `127.0.0.1:5555`，HAP 构建 `BUILD SUCCESSFUL` / 0 ERROR 后 `bm install`）：备份 `backup2026-11-09.zip` → `unzip -l` 含 `config.xml`（6153 bytes）、`unzip -p config.xml | grep -c showRss` = **1**、键为 `<boolean name="showRss" value="true" />`；造 `showRss=false` 对照包 `b2_restore_false.zip` 推到设备走「从本地恢复」→「导入此 ZIP」，恢复后 `legado_theme` 的 `showRss` 由 `true` 变 `false`，主界面底部导航由 5 个 tab 变 4 个（RSS 入口消失）。完整原始命令行输出见证据包 `N:\HarmonyProjects\tmp\zip-ledger-io-evidence.md` 第五节。注意 `scripts/build-hap.sh` 直接 `exec hvigorw`，构建尾部**没有**任务文案写的 `COMPILE RESULT: SUCCESSFUL`／`ERROR 0` 字样，实测等价事实为 `BUILD SUCCESSFUL in 53 s 188 ms`、`ArkTS:WARN` 545 行、`error:`/`ERROR`/`BUILD FAILED` 0 行。
+
 ### 忽略项列逐类核对结论（2026-11-09）
 
 上节判据逐类落到总账表后，忽略项列 20 个 `?` 全部落文字（状态由代码事实决定，不随读/写列改动）：
 
 - `等价（类别级）` 6 类：`bookmark`、`bookGroup`、`replaceRule`、`readRecord`、`txtTocRule`、`highlightRule` —— 都有独立 JSON 文件 + 恢复侧具名分支，`isIgnored` 反查 `categoryOptions.files` 生效。
-- `类别级等价，键级不等价（N 键）` 8 类：`readConfig`（83）、`themeConfig`（54）、`bookshelfLayout`（39）、`mangaConfig`（32）、`coverConfig`（14）、`themeMode`（1）、`showRss`（1）、`threadCount`（1）—— 键数取自 `BackupRepository.ets:328` 的 `preferenceKeysByCategory`，这 8 类正是 `preferenceKeysForCategory`（`:510`）if 链覆盖的全部类别。其中 `showRss`/`threadCount`/`mangaConfig` 读/写列仍为 `✗`（写出侧未 upsert，见批 2），但忽略项列只判门控语义。
+- `类别级等价，键级不等价（N 键）` 8 类：`readConfig`（83）、`themeConfig`（54）、`bookshelfLayout`（39）、`mangaConfig`（32）、`coverConfig`（14）、`themeMode`（1）、`showRss`（1）、`threadCount`（1）—— 键数取自 `BackupRepository.ets:328` 的 `preferenceKeysByCategory`，这 8 类正是 `preferenceKeysForCategory`（`:510`）if 链覆盖的全部类别。其中 `showRss` 读/写列批 2 已改判 `✓`（写出侧补了 upsert，见下方「批 2」节），`threadCount`／`mangaConfig` 仍为 `✗` 且批 2 判未接；但忽略项列只判门控语义、不随读写列改动。
 - `未接` 5 类（G2，批 3 之后回填）：`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` —— 本地零原生存储，忽略开关无原生功能可落。
 - `未接（语义错配，待批 4 重判）` 1 类：`searchHistory` —— 上游装 `SearchKeyword`（全局搜索关键词池），本地 `search_content_history` 对应上游 `SearchContentHistory`（书内搜索，上游不备份），两者不是同一件事，见批 4。
 - 既有判定不动：`localBook` = `—`（上游由 `backupIgnoreLocalBook` 单独控制，本地走 `localBook` 键过滤本地书）；`keyboardAssists` = `✓` 是「`isIgnored` 能跳过该文件」的既有判定，批 3 将按「上游仅存储无界面」复核为 `不适用`，本批不改。任务文案说「22 个 `?`」，实测总账表忽略项列为 `?` 的恰是上述 20 个，另两类本就不是 `?`。

@@ -5356,9 +5356,19 @@ struct Index {
       this.bookshelfLayout = copyBookshelfLayout(result.bookshelfLayout);
       // 封面设置随 config.xml 的 coverConfig 键组恢复，刷回 @State 后下发各页。
       this.coverSettings = copyCoverSettings(result.coverSettings);
+      // 订阅入口开关先刷回 @State：紧随的 applyThemeMode 会整份写主题设置，
+      // 若这里不更新内存值，saveThemeSettings 会用旧 showRss 把刚恢复的值盖回。
+      let showRssChanged = false;
+      if (result.showRss !== undefined && result.showRss !== this.themeShowRss) {
+        this.themeShowRss = result.showRss;
+        showRssChanged = true;
+      }
       // 全局深色模式：归档里没有该键（或该类被忽略）时保留当前值，不硬覆盖。
       if (result.themeMode !== undefined && result.themeMode !== this.themeMode) {
         await this.applyThemeMode(context, result.themeMode, this.themePaletteIndex, true);
+      } else if (showRssChanged) {
+        // themeMode 没变时 applyThemeMode 不会被调用，单独整份落盘一次把 showRss 写回。
+        await this.saveThemeSettings(context);
       }
       this.readerFontSize = result.settings.fontSize;
       this.readerParagraphSpacing = result.settings.paragraphSpacing;

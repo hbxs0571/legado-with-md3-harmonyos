@@ -96,6 +96,8 @@ export interface RestoreResult {
   coverSettings: CoverSettings;
   /** 恢复出来的全局主题模式（`"0"`/`"1"`/`"2"`）；备份里没有该键时为 undefined。 */
   themeMode: string | undefined;
+  /** 从 config.xml 的 showRss 布尔键恢复的订阅入口开关；归档里没有该键或该类被忽略时为 undefined。 */
+  showRss: boolean | undefined;
   preservedEntryCount: number;
   updatedLocalBookCount: number;
   createdMissingBodyBookCount: number;
@@ -520,6 +522,20 @@ export class BackupRepository {
     return undefined;
   }
 
+  /**
+   * 从 `config.xml` 读回订阅入口开关，形态与 `restoreThemeMode` 一致。
+   *
+   * 上游 `BackupConfig.keyIsNotIgnore` 对 `showRss` 是单键门控；本地按类别整组剔键，
+   * 勾了忽略（或归档里根本没有该键）就返回 undefined，让调用方保留当前值，不硬造默认值。
+   */
+  private static restoreShowRss(
+    directory: string,
+    ignoredCategories: string[]
+  ): boolean | undefined {
+    if (ignoredCategories.includes('showRss')) { return undefined; }
+    return BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'showRss');
+  }
+
   private static preferenceKeysForCategory(key: string): string[] | undefined {
     if (key === 'readConfig') { return BackupRepository.preferenceKeysByCategory.readConfig; }
     if (key === 'themeConfig') { return BackupRepository.preferenceKeysByCategory.themeConfig; }
@@ -885,6 +901,15 @@ export class BackupRepository {
           configText, 'string', 'themeMode', BackupRepository.normalizeThemeModeForBackup(themeMode));
         BackupRepository.writeTextFile(configPath, configText);
       }
+      // 订阅入口开关：上游 `keyIsNotIgnore` 对 `showRss` 单键门控，本地白名单式逐键写出，
+      // 所以显式补一条。真值取运行时主题设置而非写死默认值——用户改过开关后写死值会把旧状态带出去。
+      if (!ignoredCategories.includes('showRss')) {
+        const themeSnapshot = await ThemeSettingsRepository.load(context);
+        let configText = fileIo.readTextSync(configPath);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'showRss', themeSnapshot.showRss ? 'true' : 'false');
+        BackupRepository.writeTextFile(configPath, configText);
+      }
       // 主题配色清单：上游 `Backup.kt:241-246` 在未忽略 themeConfig 时把
       // `ThemeConfigStore.configList` 整份 GSON 写进 `themeConfig.json`。
       // 本地没有内存清单，按当前调色板/自定义配色现算日/夜两套再写，
@@ -1247,6 +1272,11 @@ export class BackupRepository {
     const restoredThemeMode = BackupRepository.restoreThemeMode(
       selection.stagingDirectory, ignoredCategories
     );
+    // showRss 与 themeMode 同属 config.xml 派生设置：单独读、单独回传，落盘交给 Index.ets
+    // 的 saveThemeSettings 整份写，避免与随后 applyThemeMode 的整份写互相覆盖。
+    const restoredShowRss = BackupRepository.restoreShowRss(
+      selection.stagingDirectory, ignoredCategories
+    );
     const bookshelfLayout = BackupRepository.restoreBookshelfLayout(
       selection.stagingDirectory, currentBookshelfLayout, ignoredCategories
     );
@@ -1273,6 +1303,7 @@ export class BackupRepository {
       bookshelfLayout: bookshelfLayout,
       coverSettings: coverSettings,
       themeMode: restoredThemeMode,
+      showRss: restoredShowRss,
       preservedEntryCount: preservedEntryCount,
       updatedLocalBookCount: updated.updatedCount,
       createdMissingBodyBookCount: updated.createdMissingBodyCount,
