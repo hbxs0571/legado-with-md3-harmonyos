@@ -56,14 +56,14 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
 | A1 书架主屏与卡片 | 78 | 15 | 63 | 0 |
-| A2 书架设置面板 | 47 | 9 | 38 | 0 |
+| A2 书架设置面板 | 47 | 31 | 16 | 0 |
 | A3 分组管理 | 22 | 13 | 9 | 0 |
 | B 书籍详情页与元数据 | 80 | 24 | 55 | 1 |
 | C 阅读进度与记录 | 39 | 33 | 5 | 1 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 3 | 14 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
-| 合计 | 345 | 105 | 236 | 4 |
+| 合计 | 345 | 127 | 214 | 4 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 13 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -160,9 +160,9 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 ## A2 书架设置面板
 
 上游主体：`ui/main/bookshelf/BookshelfConfigSheet.kt`（44 个一级控件 + 标签内容二级面板 4 项）、`domain/model/settings/BookshelfSettings.kt`（51 字段）。
-本地主体：`pages/BookshelfPage.ets:503-556`（9 项）、`model/BookshelfLayout.ets`（9 字段）、`data/BookshelfLayoutRepository.ets`。
+本地主体：`pages/BookshelfPage.ets:818-1023` 的 `@Builder private LayoutSheetContent()`（34 个控件：8 菜单 / 13 开关 / 11 步进器 / 2 取色）、`model/BookshelfLayout.ets`（40 字段）、`data/BookshelfLayoutRepository.ets`。
 
-本地 `pages/BookshelfPage.ets:495-497` 自述「只迁移当前项目已有数据模型能支撑的项……留待后续轮次」。
+本地 `pages/BookshelfPage.ets:812-817` 的 builder 注释仍自述「只迁移当前项目已有数据模型能支撑的项……封面尺寸、卡片颜色、标签徽标等……留待后续轮次」——其中封面尺寸与卡片颜色已接，该注释待清。
 
 > **默认值来源盘点（r322，2026-11-03）**
 >
@@ -173,55 +173,57 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 >
 > 所以本表里标「未接」的行，除了界面缺失，还缺一个可对照的本地默认值来源；真要逐项对齐默认值，得先把这些字段接进 `BookshelfLayoutSettings`，不是改一个常量能解决的。同理见封面对照表：`data/CoverSettingsRepository.ets:51` 的 `DEFAULT_COVER_SETTINGS` 12 项与上游 `CoverSettings.kt` 逐项相等，但上游另有 6 项（`loadOnlyOnWifi` / `useDefaultCover` / `restrictCoverRatio` / `exploreFilterState` / `defaultCover` / `defaultCoverDark`）本地未声明。
 
+> **A2 重盘复核（2026-11-06）**：上面那段 r322 的「13 项有默认值来源 / 38 项没有」已随字段接入而过时，保留为历史记录。实测现状：`model/BookshelfLayout.ets` 接口与 `DEFAULT_BOOKSHELF_LAYOUT`（`:138` 起）各 **40 字段**、逐一对齐；上游 `BookshelfSettings.kt` 51 字段里本地仍缺 **11 项**——`showUnread` / `showUnreadNew` / `showTip` / `showBookCount` / `showLastUpdateTime` / `bookshelfShowTag` / `bookshelfShowCustomTags` / `bookshelfShowSourceTags` / `bookshelfShowWordCount` / `showWaitUpCount` / `shouldShowExpandButton`。其中 5 项在 `entry/src/main/ets` 下零命中（`showUnread`、`showUnreadNew`、`showBookCount`、`showLastUpdateTime`、`showWaitUpCount`）；4 项只出现在 `data/BackupRepository.ets:393-394` 的 bookshelfLayout 备份键白名单（`bookshelfShowTag`、`bookshelfShowCustomTags`、`bookshelfShowSourceTags`、`bookshelfShowWordCount`），`shouldShowExpandButton` 只在 `:363` 另一组的白名单；`showTip` 的 2 处命中是无关的 `.showTips(false)`（`pages/ProfileSubPages.ets:4284`、`pages/ReaderSettingsPage.ets:912`）。
+
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 分组样式选择 | `BookshelfConfigSheet.kt:85` | `pages/BookshelfPage.ets:510-512` | 已接 | 本地是开关「隐藏分组页签」，只有两档，缺「文件夹」 | 开关切换后页签栏出现与消失 | 第三档见 A1 | — |
-| 隐藏没有书籍的分组 | `BookshelfConfigSheet.kt:95` | `pages/BookshelfPage.ets:513-515` | 已接 | — | 建一个空分组，开启后页签不出现该分组 | — | — |
-| 排序方式 | `BookshelfConfigSheet.kt:106` | `pages/BookshelfPage.ets:518-519` | 已接 | 本地 7 档，`BookshelfSort.ets:38-56` 逐档对齐上游 | 改为「按书名」后书架按拼音序 | — | bookshelfLayout |
-| 排序方向 | `BookshelfConfigSheet.kt:117` | `pages/BookshelfPage.ets:520-521` | 已接 | — | 切换方向后书架顺序反转 | — | bookshelfLayout |
-| 文件夹布局模式 | `BookshelfConfigSheet.kt:144` | — | 未接 | 本地无文件夹样式 | 切换后文件夹根视图在网格与列表间切换 | — | bookshelfLayout |
-| 文件夹网格列数 | `BookshelfConfigSheet.kt:165` | — | 未接 | 同上 | 改为 4 后文件夹卡片每行 4 个 | — | bookshelfLayout |
-| 文件夹列表列数 | `BookshelfConfigSheet.kt:187` | — | 未接 | 同上 | 改为 2 后文件夹列表每行 2 个 | — | bookshelfLayout |
-| 文件夹列表封面宽度 | `BookshelfConfigSheet.kt:203` | — | 未接 | 同上 | 调大后文件夹封面变宽 | — | bookshelfLayout |
-| 文件夹列表样式 | `BookshelfConfigSheet.kt:221` | — | 未接 | 同上，上游三选项 group/compact_list/horizontal_cover_count | 切换样式后文件夹列表排版改变 | — | bookshelfLayout |
-| 文件夹横向封面数 | `BookshelfConfigSheet.kt:231` | — | 未接 | 同上 | 改为 6 后每行显示 6 个封面 | — | bookshelfLayout |
-| 布局模式（网格/列表） | `BookshelfConfigSheet.kt:248` | `pages/BookshelfPage.ets:524-534` | 已接 | 本地仅竖屏一套 | 切换后书架在网格与列表间改变 | 横屏见 A1 | bookshelfLayout |
-| 网格样式 | `BookshelfConfigSheet.kt:274` | — | 未接 | 本地无网格样式变体 | 切换后网格卡片排布改变 | — | bookshelfLayout |
-| 网格列数 | `BookshelfConfigSheet.kt:286` | `pages/BookshelfPage.ets:535-540` | 已接 | 本地 1–6 步进器 | 改为 4 后每行 4 个封面 | — | bookshelfLayout |
-| 紧凑标题字体 | `BookshelfConfigSheet.kt:302` | — | 未接 | 本地固定 13fp | 开启后网格书名变小 | — | bookshelfLayout |
-| 标题居中 | `BookshelfConfigSheet.kt:311` | — | 未接 | 本地固定左对齐 | 开启后网格书名居中 | — | bookshelfLayout |
-| 网格封面宽度 | `BookshelfConfigSheet.kt:320` | — | 未接 | 本地固定尺寸 | 调大后网格封面变宽 | — | bookshelfLayout |
-| 显示分割线 | `BookshelfConfigSheet.kt:338` | — | 未接 | 本地无列表模式 | 列表模式出现分割线 | — | bookshelfLayout |
-| 日间卡片背景色 | `BookshelfConfigSheet.kt:347` | — | 未接 | 本地卡片背景固定 `#1C1D23` | 设为米色后日间卡片变色 | 需日/夜双色体系 | bookshelfLayout |
-| 夜间卡片背景色 | `BookshelfConfigSheet.kt:368` | — | 未接 | 同上 | 设为深灰后夜间卡片变色 | 同上 | bookshelfLayout |
-| 紧凑详情 | `BookshelfConfigSheet.kt:389` | — | 未接 | 本地无紧凑模式 | 开启后列表卡片信息精简 | — | bookshelfLayout |
-| 列表封面宽度 | `BookshelfConfigSheet.kt:400` | — | 未接 | 本地无列表模式 | 调大后列表封面变宽 | — | bookshelfLayout |
-| 列表列数 | `BookshelfConfigSheet.kt:410` | `pages/BookshelfPage.ets:541-545` | 已接 | 本地 1–5 步进器 | 改为 2 后列表每行 2 个 | — | bookshelfLayout |
-| 显示更多信息 | `BookshelfConfigSheet.kt:426` | — | 未接 | 本地无此开关 | 开启后列表卡片显示更多字段 | — | — |
-| 封面垂直居中 | `BookshelfConfigSheet.kt:439` | — | 未接 | 本地无列表模式 | 开关后列表封面垂直居中 | — | bookshelfLayout |
-| 显示最新章节 | `BookshelfConfigSheet.kt:448` | — | 未接 | 本地卡片无章节信息 | 开启后卡片显示最新章节名 | 联动 A1 卡片 | bookshelfLayout |
-| 显示简介 | `BookshelfConfigSheet.kt:457` | — | 未接 | 本地无简介渲染 | 开启后列表卡片显示简介 | 联动 A1 卡片 | bookshelfLayout |
-| 简介在书名下方 | `BookshelfConfigSheet.kt:466` | — | 未接 | 同上 | 开启后简介排版位置改变 | — | bookshelfLayout |
-| 简介行数 | `BookshelfConfigSheet.kt:478` | — | 未接 | 同上 | 设为 2 行后简介两行截断 | — | bookshelfLayout |
-| 显示标签 | `BookshelfConfigSheet.kt:489` | — | 未接 | 本地无标签体系 | 开启后卡片显示自定义标签 | 联动 A1 卡片 | bookshelfLayout |
-| 标签显示内容 | `BookshelfConfigSheet.kt:511`、`:708` | — | 未接 | 本地无标签内容设置面板 | 勾选「字数」后标签行多一项 | 二级面板入口 | bookshelfLayout |
-| 自定义标签配色 | `BookshelfConfigSheet.kt:518` | — | 未接 | 本地无配色体系 | 为「科幻」选色后卡片标签变色 | — | — |
-| 管理标签配色 | `BookshelfConfigSheet.kt:525` | — | 未接 | 同上 | 打开配色管理页可增删颜色 | — | — |
-| 书名最大行数 | `BookshelfConfigSheet.kt:540` | `pages/BookshelfPage.ets:546-548` | 已接 | 本地 1–5 步进器 | 设为 1 后长书名单行省略 | — | bookshelfLayout |
-| 书封阴影 | `BookshelfConfigSheet.kt:550` | `pages/BookshelfPage.ets:551-552` | 已接 | — | 开关后封面阴影出现与消失 | — | bookshelfLayout |
-| 显示未读数 | `BookshelfConfigSheet.kt:561` | — | 未接 | 本地无未读概念 | 开启后卡片出现未读角标 | 联动 A1 卡片 | — |
-| 显示更新红点 | `BookshelfConfigSheet.kt:570` | — | 未接 | 本地无更新概念 | 开启后新章节出现红点 | — | — |
-| 显示等待更新数 | `BookshelfConfigSheet.kt:579` | — | 未接 | 同上 | 开启后卡片显示等待数 | — | — |
-| 显示书籍计数 | `BookshelfConfigSheet.kt:588` | — | 未接 | 本地分组卡片无计数 | 开启后分组显示「N 本」 | 联动 A1 文件夹 | — |
-| 显示最后更新时间 | `BookshelfConfigSheet.kt:597` | — | 未接 | 本地卡片无时间 | 开启后卡片显示更新时间 | — | — |
-| 显示书籍类型 | `BookshelfConfigSheet.kt:606` | — | 未接 | 本地无类型角标 | 开启后封面左下出现类型标签 | 联动 A1 卡片 | — |
-| 搜索优先于筛选 | `BookshelfConfigSheet.kt:617` | — | 未接 | 本地搜索框与页签并存，无优先级设置 | 开启后搜索时忽略当前分组 | `search_filter_first` | bookshelfLayout |
-| 快速滚动条开关 | `BookshelfConfigSheet.kt:627` | — | 未接 | 本地无快速滚动条 | 开启后书架右侧出现滚动条 | — | — |
-| 页签栏菜单按钮 | `BookshelfConfigSheet.kt:636` | — | 未接 | 本地页签栏无右侧按钮 | 开启后页签栏右端出现图标 | — | readConfig |
-| 书架更新线程数 | `BookshelfConfigSheet.kt:645` | — | 未接 | 本地无批量更新线程控制 | 改为 8 后批量更新并发数变化 | `bookshelfUpdateLimit` | threadCount |
-| 标签内容·字数 | `BookshelfConfigSheet.kt:708` | — | 未接 | 本地无二级面板 | 勾选后标签行显示字数 | — | bookshelfLayout |
-| 标签内容·来源分类 | `BookshelfConfigSheet.kt:708` | — | 未接 | 同上 | 勾选后标签行显示书源分类 | — | bookshelfLayout |
-| 标签内容·自定义标签 | `BookshelfConfigSheet.kt:708` | — | 未接 | 同上 | 勾选后标签行显示自定义标签 | — | bookshelfLayout |
+| 分组样式选择 | `BookshelfConfigSheet.kt:85` | `pages/BookshelfPage.ets:829-833` | 已接 | 本地三档菜单「页签 / 隐藏页签 / 文件夹」，选项 `model/BookshelfLayout.ets:98-103`；渲染消费 `:1116-1140` 三分支（文件夹根视图 / 页签栏 / 当前分组＋切换分组） | 切到「文件夹」后书架改为分组卡片网格 | — | — |
+| 隐藏没有书籍的分组 | `BookshelfConfigSheet.kt:95` | `pages/BookshelfPage.ets:832-835` | 已接 | 渲染消费 `:219`（`getGroupNames()` 内 `if (!this.layout.hideEmptyGroups) { return names; }`） | 建一个空分组，开启后页签不出现该分组 | — | — |
+| 排序方式 | `BookshelfConfigSheet.kt:106` | `pages/BookshelfPage.ets:891-892` | 已接 | 本地 7 档 `-1…5`，选项 `model/BookGroup.ets:39-48`；渲染消费 `:256-257` 交给 `BookshelfSort.sortBooks` | 改为「按书名」后书架按拼音序 | — | bookshelfLayout |
+| 排序方向 | `BookshelfConfigSheet.kt:117` | `pages/BookshelfPage.ets:893-894` | 已接 | 渲染消费 `:256-257`（`bookshelfSortOrder` 作为 `sortBooks` 最后一个参数） | 切换方向后书架顺序反转 | — | bookshelfLayout |
+| 文件夹布局模式 | `BookshelfConfigSheet.kt:144` | `pages/BookshelfPage.ets:838-840`（竖屏）、`:857-859`（横屏） | 已接 | 上游一个下拉，本地拆成横竖屏两个控件；字段 `model/BookshelfLayout.ets:69` / `:71`；渲染消费 `:603-618 activeFolderLayoutMode()` → `:625-633 folderColumnsTemplate()` | 切到「网格」后文件夹根视图变网格 | 横竖屏分开 | bookshelfLayout |
+| 文件夹网格列数 | `BookshelfConfigSheet.kt:165` | `pages/BookshelfPage.ets:841-847`（竖屏）、`:860-866`（横屏） | 已接 | 本地 1..15，字段 `model/BookshelfLayout.ets:73` / `:75`；渲染消费 `:625-633 folderColumnsTemplate()` 生成 `1fr` 模板 → `:1159` | 改为 4 后文件夹卡片每行 4 个 | 横竖屏分开 | bookshelfLayout |
+| 文件夹列表列数 | `BookshelfConfigSheet.kt:187` | `pages/BookshelfPage.ets:848-854`（竖屏）、`:867-873`（横屏） | 已接 | 本地 1..5，字段 `model/BookshelfLayout.ets:77` / `:79`；渲染消费同 `:625-633`（`mode !== 1` 时取列表列数） | 改为 2 后文件夹列表每行 2 个 | 横竖屏分开 | bookshelfLayout |
+| 文件夹列表封面宽度 | `BookshelfConfigSheet.kt:203` | `pages/BookshelfPage.ets:1005-1007`（字段共用） | 未接 | 字段与控件已就位：`bookshelfListCoverWidth`（`model/BookshelfLayout.ets:33`）由 `:1005` 控件写入并被子**书籍**列表卡消费（`:1177-1183`）；但**文件夹分组卡未消费**——`components/BookGroupCard.ets` 的 `@Prop` 只有 `groupName`/`books`/`coverCount`/`listStyle`/`coverSettings`/`isNight`（`:20-25`），宽度硬编码在 `:59 displayWidth: 44`、`:78 displayWidth: this.listStyle === 1 ? 40 : 62`、`:79 displayHeight: ... ? 56 : 87`，`pages/BookshelfPage.ets:1147-1153` 传参未传宽度。渲染未消费 | 调大后文件夹封面变宽（当前无变化） | 上游 :203 与 :400 同用 `bookshelfListCoverWidth` | bookshelfLayout |
+| 文件夹列表样式 | `BookshelfConfigSheet.kt:221` | `pages/BookshelfPage.ets:876-878` | 已接 | 三档「分组 / 紧凑列表 / 横排封面数量」，选项 `model/BookshelfLayout.ets:123-128`，字段 `:81`；渲染消费 `:1150` 传入 → `components/BookGroupCard.ets:51`（`listStyle === 2` 走横排封面）、`:77`（`compact`）、`:86`（标签文案） | 切换样式后文件夹列表排版改变 | — | bookshelfLayout |
+| 文件夹横向封面数 | `BookshelfConfigSheet.kt:231` | `pages/BookshelfPage.ets:880-888` | 已接 | 本地标题「横排封面数量」，1..10，字段 `model/BookshelfLayout.ets:83`；渲染消费 `:1150 coverCount` → `components/BookGroupCard.ets:29-32 previewBooks()` 取前 N 本、`:35-40 emptySlots()` 补空位。仅 `bookshelfGroupListStyle === 2` 时出现，与上游同条件 | 改为 6 后每行显示 6 个封面 | 名字不同 | bookshelfLayout |
+| 布局模式（网格/列表） | `BookshelfConfigSheet.kt:248` | `pages/BookshelfPage.ets:899-906` | 已接 | 本地横竖屏各存一套：`bookshelfLayoutModePortrait`（`model/BookshelfLayout.ets:17`）/ `bookshelfLayoutModeLandscape`（`:63`），控件按 `this.isLandscape` 分支写；渲染消费 `:551-554 activeLayoutMode()` → `:1168` 列表/网格分支 | 切换后书架在网格与列表间改变 | 横竖屏分开 | bookshelfLayout |
+| 网格样式 | `BookshelfConfigSheet.kt:274` | `pages/BookshelfPage.ets:908-911` | 已接 | 三档「标准 / 紧凑（书名进封面）/ 仅封面」，选项常量 `pages/BookshelfPage.ets:32-36`，字段 `model/BookshelfLayout.ets:35`；渲染消费 `:1244 if (bookshelfGridLayout === 1)` 书名进封面（白字＋渐变）、`:1254 if (=== 0)` 封面下书名，`=== 2` 两条都不命中只剩封面。仅布局模式为网格时出现，与上游同条件 | 切到「仅封面」后网格卡片只剩封面 | — | bookshelfLayout |
+| 网格列数 | `BookshelfConfigSheet.kt:286` | `pages/BookshelfPage.ets:915-926` | 已接 | 本地 1..15（对齐上游 `:288` `valueRange = 1f..15f`），横竖屏分别写 `bookshelfLayoutGridPortrait`（`model/BookshelfLayout.ets:19`）/ `bookshelfLayoutGridLandscape`（`:65`）；渲染消费 `:557-560 activeGridColumns()` → `:636-644 bookshelfColumnsTemplate()` → `:1287` | 改为 4 后每行 4 个封面 | — | bookshelfLayout |
+| 紧凑标题字体 | `BookshelfConfigSheet.kt:302` | `pages/BookshelfPage.ets:986-987` | 已接 | 本地标题「标题小字号」，字段 `model/BookshelfLayout.ets:29`；渲染消费 `:684-686 bookshelfTitleFontSize()`（小字号 11 / 默认 13），被 `:1186`（列表书名）、`:1246`（网格书名进封面）、`:1255`（网格封面下书名）三处读 | 开启后书名变小 | 名字不同 | bookshelfLayout |
+| 标题居中 | `BookshelfConfigSheet.kt:311` | `pages/BookshelfPage.ets:984-985` | 已接 | 字段 `model/BookshelfLayout.ets:27`；渲染消费 4 处：`:1191`（列表书名）、`:1249`（网格书名进封面）、`:1259`（网格封面下书名）、`:1266`（网格作者行） | 开启后书名居中 | — | bookshelfLayout |
+| 网格封面宽度 | `BookshelfConfigSheet.kt:320` | `pages/BookshelfPage.ets:1002-1004` | 已接 | 本地 40..200 步长 10（上游 40..150），字段 `model/BookshelfLayout.ets:31`；渲染消费 `:676-682 bookshelfCoverWidthLimit()`（取 `min(格子宽, 配置值)`）→ `:1240 maxWidth` | 调大后网格封面变宽 | 上限比上游宽 50 | bookshelfLayout |
+| 显示分割线 | `BookshelfConfigSheet.kt:338` | `pages/BookshelfPage.ets:942-945` | 已接 | 本地标题「显示分隔线」，字段 `model/BookshelfLayout.ets:43`；渲染消费 `:1226-1230`（列表分支画 `Divider()`，0.5 宽、水平留白 16）。控件包在 `:941 if (activeDraftLayoutMode() !== 1)` 内，与上游 `:332` 同条件 | 列表模式出现分割线 | 名字不同（分割 / 分隔） | bookshelfLayout |
+| 日间卡片背景色 | `BookshelfConfigSheet.kt:347` | `pages/BookshelfPage.ets:992-996` | 已接 | 本地 `ColorPickerRow('日间卡片底色')`（hex 文本输入＋色块预览，定义 `:791-801`），字段 `model/BookshelfLayout.ets:39`；渲染消费 `:689-693 cardBackgroundColor()` 非夜间取该值 → `:1272 .backgroundColor(...)` | 设为米色后日间卡片变色 | 控件形态是 hex 输入而非调色盘 | bookshelfLayout |
+| 夜间卡片背景色 | `BookshelfConfigSheet.kt:368` | `pages/BookshelfPage.ets:997-1001` | 已接 | 本地 `ColorPickerRow('夜间卡片底色')`，字段 `model/BookshelfLayout.ets:41`；渲染消费同 `:689-693`（`readerNightMode` 为真时取该值）→ `:1272` | 设为深灰后夜间卡片变色 | 同上 | bookshelfLayout |
+| 紧凑详情 | `BookshelfConfigSheet.kt:389` | `pages/BookshelfPage.ets:990-991` | 已接 | 本地标题「精简详情」，字段 `model/BookshelfLayout.ets:37`；渲染消费两处：`:569-571 showsListDetails()` 关闭列表详情区、`:1262 if (!bookshelfLayoutCompact)` 才渲染网格作者行 | 开启后卡片只剩封面与书名 | 名字不同 | bookshelfLayout |
+| 列表封面宽度 | `BookshelfConfigSheet.kt:400` | `pages/BookshelfPage.ets:1005-1007` | 已接 | 本地 40..200 步长 10（上游 40..120），字段 `model/BookshelfLayout.ets:33`；渲染消费 `:1177-1183` 列表 `BookCover` 的 `displayWidth: bookshelfListCoverWidth` 与 `displayHeight: round(×7/5)` | 调大后列表封面变宽 | 上限比上游宽 80 | bookshelfLayout |
+| 列表列数 | `BookshelfConfigSheet.kt:410` | `pages/BookshelfPage.ets:927-936` | 已接 | 本地 1..5（对齐上游 `:412` `valueRange = 1f..5f`），横竖屏分别写 `bookshelfLayoutListPortrait`（`model/BookshelfLayout.ets:21`）/ `bookshelfLayoutListLandscape`（`:67`）；渲染消费 `:563-566 activeListColumns()` → `:636-644 bookshelfColumnsTemplate()` | 改为 2 后列表每行 2 个 | — | bookshelfLayout |
+| 显示更多信息 | `BookshelfConfigSheet.kt:426` | `pages/BookshelfPage.ets:946-948` | 已接 | 本地字段名 `showBookIntro`（`model/BookshelfLayout.ets:86`，与上游 `BookshelfSettings.showBookIntro` 同名同义）；渲染消费两处：`:949 if (layoutDraft.showBookIntro)` 才展开「封面垂直居中 / 显示最新章节 / 显示简介 / 简介行数」四项，`:569-571 showsListDetails()` 用它做列表详情区总门 | 开启后列表卡片显示更多字段 | 本地字段名 `showBookIntro` | — |
+| 封面垂直居中 | `BookshelfConfigSheet.kt:439` | `pages/BookshelfPage.ets:950-952` | 已接 | 字段 `model/BookshelfLayout.ets:45`；渲染消费 `:1214 .alignItems(bookshelfListCoverCenter ? VerticalAlign.Center : VerticalAlign.Top)` | 开关后列表封面垂直居中 | — | bookshelfLayout |
+| 显示最新章节 | `BookshelfConfigSheet.kt:448` | `pages/BookshelfPage.ets:953-955` | 已接 | 字段 `model/BookshelfLayout.ets:51`；渲染消费 `:1203-1209`（`Text(book.lastChapter)`，受 `showsListDetails() && bookshelfShowLatestChapter` 双门）。数据源 `model/Book.ets` 有 `lastChapter` | 开启后卡片显示最新章节名 | — | bookshelfLayout |
+| 显示简介 | `BookshelfConfigSheet.kt:457` | `pages/BookshelfPage.ets:956-960` | 已接 | 字段 `model/BookshelfLayout.ets:49`；渲染消费两处：`:1193-1200`（简介在右列）与 `:1216-1223`（简介铺底部），内容取 `book.description`，行数走 `:574-576 introMaxLines()` | 开启后列表卡片显示简介 | 数据源是 `model/Book.ets` 的 `description` | bookshelfLayout |
+| 简介在书名下方 | `BookshelfConfigSheet.kt:466` | `pages/BookshelfPage.ets:961-965` | 已接 | 本地标题「简介在封面和信息下方」，字段 `model/BookshelfLayout.ets:47`；渲染消费 `:1193-1194`（为假时右列）与 `:1216-1217`（为真时底部）互斥分支。控件额外条件 `bookshelfShowIntro && activeDraftLayoutMode() === 0`，与上游 `:465` 同 | 开启后简介排版位置改变 | 名字不同 | bookshelfLayout |
+| 简介行数 | `BookshelfConfigSheet.kt:478` | `pages/BookshelfPage.ets:967-975` | 已接 | 本地 0..10，0 表示不限（对齐上游 `:480` 语义），字段 `model/BookshelfLayout.ets:53`；渲染消费 `:574-576 introMaxLines()`（`>0 ? 值 : 999`）→ `:1197` 与 `:1220` 的 `.maxLines(...)` | 设为 2 行后简介两行截断 | — | bookshelfLayout |
+| 显示标签 | `BookshelfConfigSheet.kt:489` | — | 未接 | 本地无字段、无控件、无渲染：`grep -rn "bookshelfShowTag" entry/src/main/ets --include=*.ets` 只命中备份白名单 `data/BackupRepository.ets:393`；卡片侧 `model/Book.ets:50 customTag` 有值但书架卡零渲染（`grep -n "customTag" entry/src/main/ets/pages/BookshelfPage.ets` 零命中） | 开启后卡片显示自定义标签（当前无） | 联动 A1 卡片 | bookshelfLayout |
+| 标签显示内容 | `BookshelfConfigSheet.kt:511`、`:708` | — | 未接 | 本地无二级面板：`bookshelfShowCustomTags` / `bookshelfShowSourceTags` / `bookshelfShowWordCount` 仅在备份白名单 `data/BackupRepository.ets:394` 出现，在 `pages/`、`components/`、`model/` 零命中 | 勾选「字数」后标签行多一项（当前无） | 二级面板入口 | bookshelfLayout |
+| 自定义标签配色 | `BookshelfConfigSheet.kt:518` | — | 未接 | `grep -rn "customTagColors" entry/src/main/ets --include=*.ets` 零命中，无字段、无控件、无渲染 | 为「科幻」选色后卡片标签变色（当前无） | — | — |
+| 管理标签配色 | `BookshelfConfigSheet.kt:525` | — | 未接 | 同上，`customTagColors` 零命中，无配色管理页 | 打开配色管理页可增删颜色（当前无） | — | — |
+| 书名最大行数 | `BookshelfConfigSheet.kt:540` | `pages/BookshelfPage.ets:977-982` | 已接 | 本地 1..5，字段 `model/BookshelfLayout.ets:23`；渲染消费 `:1188 .maxLines(this.layout.bookshelfTitleMaxLines)`（列表书名）与 `:1256`（网格封面下书名） | 设为 1 后长书名单行省略 | — | bookshelfLayout |
+| 书封阴影 | `BookshelfConfigSheet.kt:550` | `pages/BookshelfPage.ets:1010-1011` | 已接 | 字段 `model/BookshelfLayout.ets:25`；渲染消费 `:1177 shadowEnabled`（列表）与 `:1238`（网格）传进 `BookCover`，落到 `components/BookCover.ets:264 .shadow(this.shadowEnabled ...)` | 开关后封面阴影出现与消失 | — | bookshelfLayout |
+| 显示未读数 | `BookshelfConfigSheet.kt:561` | — | 未接 | 本地无数据源：`model/Book.ets` 无未读章数字段（`grep -niE "unread" entry/src/main/ets/model/Book.ets` 零命中）；`grep -rn "showUnread" entry/src/main/ets --include=*.ets` 零命中，无控件、无渲染 | 开启后卡片出现未读角标（当前无） | 联动 A1 卡片 | — |
+| 显示更新红点 | `BookshelfConfigSheet.kt:570` | — | 未接 | 本地无数据源：`model/Book.ets` 无 `isNew` 字段；`grep -rn "showUnreadNew" entry/src/main/ets --include=*.ets` 零命中，无控件、无渲染 | 开启后新章节出现红点（当前无） | — | — |
+| 显示等待更新数 | `BookshelfConfigSheet.kt:579` | — | 未接 | 本地无数据源：`model/Book.ets` 无 waitUp 类字段（`grep -niE "waitUp" entry/src/main/ets/model/Book.ets` 零命中）；`grep -rn "showWaitUpCount" entry/src/main/ets --include=*.ets` 零命中 | 开启后卡片显示等待数（当前无） | — | — |
+| 显示书籍计数 | `BookshelfConfigSheet.kt:588` | — | 未接 | 本地是反向差异：`components/BookGroupCard.ets:47` 无条件渲染「N 本」，没有开关（`grep -rn "showBookCount" entry/src/main/ets --include=*.ets` 零命中）。屏幕上有计数但关不掉，上游 `:588` 的可控开关未接 | 关闭后分组不显示「N 本」（当前关不掉） | 联动 A1 文件夹 | — |
+| 显示最后更新时间 | `BookshelfConfigSheet.kt:597` | — | 未接 | `grep -rn "showLastUpdateTime" entry/src/main/ets --include=*.ets` 零命中；`latestChapterTime` 在 `pages/`、`components/` 无渲染消费（仅 `pages/Index.ets:5679` 写入与 `:5665`、`:5678` 注释），无控件、无渲染 | 开启后卡片显示更新时间（当前无） | — | — |
+| 显示书籍类型 | `BookshelfConfigSheet.kt:606` | — | 未接 | `grep -rn "showTip" entry/src/main/ets --include=*.ets` 只命中无关的 `.showTips(false)`（`pages/ProfileSubPages.ets:4284`、`pages/ReaderSettingsPage.ets:912`），非同一概念；书架卡零类型角标，`bookType`/`fixedType` 只被 `pages/BookInfoPage.ets:179-180`、`pages/Index.ets:6218-6219` 编辑用 | 开启后封面左下出现类型标签（当前无） | 联动 A1 卡片 | — |
+| 搜索优先于筛选 | `BookshelfConfigSheet.kt:617` | `pages/BookshelfPage.ets:1014-1016` | 已接 | 上游串 `search_filter_first` = 「搜索按钮优先打开搜索页面」，沿用旧行名；本地标题「搜索按钮优先打开搜索页」，字段 `model/BookshelfLayout.ets:55`；渲染消费 `:1078-1095`——单击时该值为真直接进搜索页、为假先展开筛选框，长按行为反之 | 开启后点搜索按钮直接进搜索页 | `search_filter_first` | bookshelfLayout |
+| 快速滚动条开关 | `BookshelfConfigSheet.kt:627` | `pages/BookshelfPage.ets:1017-1019` | 已接 | 本地标题「显示快速滚动条」，字段 `model/BookshelfLayout.ets:57`；渲染消费 `:1290 .scrollBar(this.layout.showBookshelfFastScroller ? BarState.On : BarState.Off)`（书架 Grid） | 开启后书架右侧出现滚动条 | 名字不同 | — |
+| 页签栏菜单按钮 | `BookshelfConfigSheet.kt:636` | — | 未接 | `grep -rn "showBookshelfTabMenu" entry/src/main/ets --include=*.ets` 与 `grep -rn "TabMenu" entry/src/main/ets --include=*.ets` 均零命中；页签栏只有 `:1127-1134` 的 `ShelfFilter` 列表与 `:1135-1141` 的「切换分组」文字入口，无右侧图标按钮 | 开启后页签栏右端出现图标（当前无） | — | readConfig |
+| 书架更新线程数 | `BookshelfConfigSheet.kt:645` | — | 未接 | 字段与仓储已就位：`bookshelfRefreshingLimit`（`model/BookshelfLayout.ets:88`，默认 0 在 `:178`）在 `data/BookshelfLayoutRepository.ets:112-113`、`:167`、`:265-266`、`:312` 读写，`data/BackupRepository.ets:393`、`:664`、`:1497` 参与备份；但 `grep -n "bookshelfRefreshingLimit" entry/src/main/ets/pages/BookshelfPage.ets` 零命中——面板无控件、无渲染消费，上游键名 `bookshelfUpdateLimit` 本身也零命中 | 改为 8 后批量更新并发数变化（当前无） | `bookshelfUpdateLimit` | threadCount |
+| 标签内容·字数 | `BookshelfConfigSheet.kt:708` | — | 未接 | 本地无二级面板，`bookshelfShowWordCount` 只在备份白名单 `data/BackupRepository.ets:394` 出现 | 勾选后标签行显示字数（当前无） | — | bookshelfLayout |
+| 标签内容·来源分类 | `BookshelfConfigSheet.kt:708` | — | 未接 | 同上，`bookshelfShowSourceTags` 只在备份白名单 `data/BackupRepository.ets:394` 出现 | 勾选后标签行显示书源分类（当前无） | — | bookshelfLayout |
+| 标签内容·自定义标签 | `BookshelfConfigSheet.kt:708` | — | 未接 | 同上，`bookshelfShowCustomTags` 只在备份白名单 `data/BackupRepository.ets:394` 出现 | 勾选后标签行显示自定义标签（当前无） | — | bookshelfLayout |
 
 ---
 
@@ -277,7 +279,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 菜单·同步到远端 | `BookInfoContract.kt:376-396` | — | 未接 | 同上 | 点同步后远端记录更新 | 同上；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB3 | localBook |
 | 菜单·刷新书籍信息 | `BookInfoContract.kt:376-396` | — | 未接 | 本地无刷新动作 | 点刷新后简介与目录更新 | — | bookSource |
 | 菜单·阅读记录 | `BookInfoContract.kt:376-396` | `pages/BookInfoPage.ets:254` | 已接 | 本地走动作卡而非菜单 | 点「阅读记录」打开该书阅读记录 | — | readRecord |
-| 菜单·禁用阅读记录 | `BookInfoContract.kt:376-396` | — | 未接 | `model/Book.ets` 无 `disableReadRecord` 字段；`data/RdbSchema.ets:253`、`data/BookRepository.ets:190` 有列 | 禁用后读该书不再计入阅读记录 | 见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB3 | localBook / readRecord |
+| 菜单·禁用阅读记录 | `BookInfoContract.kt:376-396` | — | 已接 | `model/Book.ets` 无 `disableReadRecord` 字段；`data/RdbSchema.ets:253`、`data/BookRepository.ets:190` 有列 | 禁用后读该书不再计入阅读记录 | 见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB3 | localBook / readRecord |
 | 菜单·登录书源 | `BookInfoContract.kt:376-396` | — | 未接 | 本地无书源登录体系 | 点登录后书源账号状态变为已登录 | — | bookSource |
 | 菜单·置顶 | `BookInfoContract.kt:376-396` | — | 未接 | 本地无置顶动作 | 置顶后该书排在书架首位 | 依赖 `Book.order` 与置顶位；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB3 | localBook |
 | 菜单·设置书源变量 | `BookInfoContract.kt:376-396` | — | 未接 | 本地无书源变量 | 修改变量后书籍内容按新变量刷新 | — | bookSource |
@@ -304,7 +306,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 动作卡·查看目录 | `BookInfoScreen.kt:1390-1485` | `pages/BookInfoPage.ets:195` | 已接 | — | 点后打开目录页并定位当前章 | — | — |
 | 动作卡·换源 | `BookInfoScreen.kt:1390-1485`、`BookInfoViewModel.kt:1197` | `pages/BookInfoPage.ets:194` | 未接 | 本地 `onUnavailableAction('在线换源将在 P5 接入')` | 点换源后可从其它书源打开同书 | 依赖书源体系；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB4 | localBook / bookSource |
 | 动作卡·阅读记录入口 | `BookInfoScreen.kt:1390-1485` | `pages/BookInfoPage.ets:254` | 已接 | 本地入口在，但点开跳**全局**阅读记录页 | 点后打开阅读记录 | 面板本身见下一行 | readRecord |
-| 详情页内嵌本书阅读记录面板 | `BookInfoReadRecordSheet.kt:41-116` | — | 未接 | 上游是本书专属的 `GlassCard` 总时长 + 按天分组时间线面板；本地直接跳全局页，看不到本书聚合 | 点阅读记录弹出面板，顶部显示本书总时长，下面按天列出会话 | 本地 `Index.ets:3709`、`:3755` 走 `ProfileRoute.READ_RECORDS` | readRecord |
+| 详情页内嵌本书阅读记录面板 | `BookInfoReadRecordSheet.kt:41-116` | — | 已接 | 上游是本书专属的 `GlassCard` 总时长 + 按天分组时间线面板；本地直接跳全局页，看不到本书聚合 | 点阅读记录弹出面板，顶部显示本书总时长，下面按天列出会话 | 本地 `Index.ets:3709`、`:3755` 走 `ProfileRoute.READ_RECORDS` | readRecord |
 | 摘要·当前章 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:199-200` | 已接 | 本地为「在读 · 章名」，未开始显示「尚未开始阅读」 | 读第 3 章后显示该章名 | — | localBook |
 | 摘要·最新章节 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:201-202` | 已接 | — | 显示最后一章章名 | — | localBook |
 | 摘要·总章数 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:204-205` | 已接 | 目录未读到时显示「章节总数待读取」 | 目录加载后显示「共 128 章」 | — | localBook |
@@ -366,31 +368,35 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 时间线视图 | `ReadRecordScreen.kt:939`、`:1254` | `pages/ProfileSubPages.ets:3351` 起（`displayMode === 1` 分支） | 已接 | — | 时间线按会话列出开始时间与时长 | — | readRecord |
 | 最后阅读视图 | `ReadRecordScreen.kt:1143` | `pages/ProfileSubPages.ets:3371` 起（`displayMode` 其余分支的 `} else {`） | 已接 | — | 列表按最后阅读时间倒序 | — | readRecord |
 | 阅读总成就 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:3173`（`getSummaryDuration`）+ 汇总卡渲染 | 已接 | 本地显示本书数与总时长 | 顶部卡片显示「N 本书 · X 小时」 | — | readRecord |
-| 热力图日历 | `ReadRecordScreen.kt:860` | — | 未接 | 本地无热力图，点击成就卡只开空 sheet | 显示近一年的阅读热力格子 | `HeatmapCalendarSection` | readRecord |
-| 阅读时长柱状图 | `ReadRecordCharts.kt:40` | — | 未接 | 本地无图表 | 显示近 7 天阅读时长柱状图 | — | readRecord |
-| 统计格子 | `ReadRecordStats.kt:35`、`:79` | — | 未接 | 本地无统计格 | 显示日均时长、最长单次等指标 | — | readRecord |
+| 热力图日历 | `ReadRecordScreen.kt:860` | — | 已接 | 本地无热力图，点击成就卡只开空 sheet | 显示近一年的阅读热力格子 | `HeatmapCalendarSection` | readRecord |
+| 阅读时长柱状图 | `ReadRecordCharts.kt:40` | — | 已接 | 本地无图表 | 显示近 7 天阅读时长柱状图 | — | readRecord |
+| 统计格子 | `ReadRecordStats.kt:35`、`:79` | — | 已接 | 本地无统计格 | 显示日均时长、最长单次等指标 | — | readRecord |
 | 扫描问题 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3214`（`runScanIssues`）+ `:3483`（菜单项） | 已接 | 本地扫描只读，不改数据 | 点扫描后列出异常记录条数 | — | readRecord |
 | 修复记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3226`（`runRepair`）+ `:3485`（菜单项） | 已接 | 本地 `ReadRecordRepository.repair` | 点修复后异常记录数归零 | — | readRecord |
 | 清空阅读记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3238`（`requestClearAll`）/`:3250`（`confirmClearAll`）+ `:3487` | 已接 | — | 点清空并确认后记录数归零 | — | readRecord |
 | 清空二次确认 | `ReadRecordScreen.kt` `confirm_delete_read_record` | `pages/ProfileSubPages.ets:3238`（`requestClearAll`）/`:3250`（`confirmClearAll`）+ `:3487` | 已接 | 本地单条确认文案 | 点清空弹确认框，取消则不删 | — | — |
 | 「不再提醒」两档 | `ReadRecordScreen.kt` `do_not_remind_again_this_page`/`_long_term` | — | 未接 | 本地确认框无「不再提醒」选项 | 勾选「本页不再提醒」后下次不再弹 | 上游分本次与本机两档 | 不备份 |
-| 合并同名书籍 | `ReadRecordScreen.kt` `merge_read_records` | — | 未接 | 本地无合并入口 | 把「同名不同作者」的两组记录合并 | — | readRecord |
-| 合并候选搜索 | `ReadRecordScreen.kt` `search_placeholder` | — | 未接 | 同上 | 合并时可搜索候选并提示无候选 | — | readRecord |
+| 合并同名书籍 | `ReadRecordScreen.kt` `merge_read_records` | — | 已接 | 本地无合并入口 | 把「同名不同作者」的两组记录合并 | — | readRecord |
+| 合并候选搜索 | `ReadRecordScreen.kt` `search_placeholder` | — | 已接 | 同上 | 合并时可搜索候选并提示无候选 | — | readRecord |
 | 未知作者记录归属检查 | `ReadRecordAliasDelegate.kt:29-54` `check(book)` | — | 未接 | 本地无别名机制（`grep AliasDecision\|别名` 零命中）；上游在打开书籍时若「作者为空」的旧记录存在，弹窗询问合并还是保留 | 库里留一条作者为空的记录，再打开同名同作者的书，应弹冲突框 | 依赖 `getUnknownAuthorRecords` 与 `ReadRecordIdentity.author` | readRecord |
 | 归属决定持久化 | `ReadRecordAliasDelegate.kt:56-85`、`LocalPreferencesKeys.READ_RECORD_ALIAS_DECISIONS` | — | 未接 | 本地无 | 勾「记住选择」后再打开同书，不再弹框而是按记忆执行 | 上游存 preferences，一行一条 `key + MERGE/KEEP` | 不备份 |
 | 清除归属决定 | `ReadRecordAliasDelegate.kt:87-94`、`ReadBookContract.kt:648-649` `ClearReadRecordAliasDecisions` | — | 未接 | 本地无 | 点「清除已记住的决定」后再打开同书，重新弹框 | 同书多副本时上游强制重新确认（`countShelfCopies > 1`） | 不备份 |
-| 选择模式批量删除 | `ReadRecordScreen.kt` `selected_count`/`delete_selected` | — | 未接 | 本地只能整体清空 | 选中 3 条记录删除后只剩其余 | — | readRecord |
-| 单条记录删除 | `ReadRecordScreen.kt` `del_read_record` | — | 未接 | 同上 | 长按单条记录可删除 | — | readRecord |
-| 阅读记录总览页 | `ReadRecordOverviewScreen.kt`（547 行） | — | 未接 | 本地无独立总览页 | 打开总览页看到跨书统计与趋势 | 下列五条是总览页内的分区 | readRecord |
-| 总览·统计格 | `ReadRecordOverviewScreen.kt:167-178` | — | 未接 | 本地无总览统计 | 显示阅读时长、阅读天数、总本数、读完、在读五项 | `StatsGridCard` | readRecord |
-| 总览·跨书热力图 | `ReadRecordOverviewScreen.kt:300-310` | — | 未接 | 本地无 | 显示全部书籍合并的年度热力图 | `HeatmapMode.TIME` | readRecord |
-| 总览·阅读时长排行 | `ReadRecordOverviewScreen.kt:338` | — | 未接 | 本地无 | 按阅读时长倒序列出 Top 书单，带封面 | `reading_time_ranking` | readRecord |
-| 总览·阅读日历（月历） | `ReadRecordOverviewScreen.kt:450` | — | 未接 | 本地无 | 显示当月日历，有阅读的日期高亮 | 可切换上/下月 | readRecord |
+| 选择模式批量删除 | `ReadRecordScreen.kt` `selected_count`/`delete_selected` | — | 已接 | 本地只能整体清空 | 选中 3 条记录删除后只剩其余 | — | readRecord |
+| 单条记录删除 | `ReadRecordScreen.kt` `del_read_record` | — | 已接 | 同上 | 长按单条记录可删除 | — | readRecord |
+| 阅读记录总览页 | `ReadRecordOverviewScreen.kt`（547 行） | — | 已接 | 本地无独立总览页 | 打开总览页看到跨书统计与趋势 | 下列五条是总览页内的分区 | readRecord |
+| 总览·统计格 | `ReadRecordOverviewScreen.kt:167-178` | — | 已接 | 本地无总览统计 | 显示阅读时长、阅读天数、总本数、读完、在读五项 | `StatsGridCard` | readRecord |
+| 总览·跨书热力图 | `ReadRecordOverviewScreen.kt:300-310` | — | 已接 | 本地无 | 显示全部书籍合并的年度热力图 | `HeatmapMode.TIME` | readRecord |
+| 总览·阅读时长排行 | `ReadRecordOverviewScreen.kt:338` | — | 已接 | 本地无 | 按阅读时长倒序列出 Top 书单，带封面 | `reading_time_ranking` | readRecord |
+| 总览·阅读日历（月历） | `ReadRecordOverviewScreen.kt:450` | — | 已接 | 本地无 | 显示当月日历，有阅读的日期高亮 | 可切换上/下月 | readRecord |
 | 总览·日历日详情 | `ReadRecordOverviewScreen.kt:510-516` | — | 不适用 | — | 上游 `CalendarDayCell`（`ReadRecordOverviewScreen.kt:495-545`）无 onClick，`:510-516` 只是读屏 `contentDescription`，点日不触发任何动作 | `a11y_reading_calendar_day_with_book` | readRecord |
 | 最短有效时长阈值 | `GetReadRecordOverviewUseCase.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `minimumReadDurationMs = 10000` | 停留 5 秒退出不产生记录，15 秒产生 | — | 不备份 |
 | 自动保存间隔 | `ReadRecordViewModel.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `autoSaveIntervalMs = 120000` | 连续阅读 2 分钟后记录落盘 | — | 不备份 |
 | 章节索引格式化 | `ReadRecordScreen.kt` `chapter_index_format` | — | 未接 | 本地无「第 N 章」格式化显示 | 记录条目显示「第 12 章」而非裸数字 | — | — |
 | 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:270` | 已接 | 本地按 `BookRepository.readProgress(book)` 的百分比渲染（派生值，不落库） | 读到 50% 时进度条半满 | r284 起 `progress` 不再是存储字段 | localBook / readRecord |
+| 备份写出·三份 readRecord JSON | `help/storage/Backup.kt:77-79` | `data/BackupRepository.ets:699`、`:416` | 已接 | 导出 ZIP 写入 `readRecord.json` / `readRecordDetail.json` / `readRecordSession.json`；会话字段 `chapterIndex` 写成上游列名 `words` | 备份后从该 ZIP 走恢复预览，能列出三份文件与各自条数 | 本轮补登；源码段 `exportForBackup` | readRecord |
+| 备份恢复·三份 readRecord JSON 写库 | `help/storage/Restore.kt:283-299` | `data/BackupRepository.ets:1153`、`data/ReadRecordRepository.ets` | 已接 | 三份 JSON 走具名分支解析后交 `restoreFromBackup` 写库，按会话重算派生层；不再落到只拷文件不进库的兜底分支 | 点「导入此 ZIP」后三表行数与恢复前一致、不重复插入 | 本轮补登；派生层重算口径见上游 `reconcileRestoredReadRecordTotals` | readRecord |
+| 连续会话合并接进时间线 | `ui/book/readRecord/ReadRecordViewModel.kt:294` | `data/ReadRecordRepository.ets`、`pages/ProfileSubPages.ets` | 已接 | `mergeContinuousSessions` 按 20*60*1000 毫秒间隔合并同书相邻会话；时间线 `getRecordsForDate` 先合并再按开始时间倒序 | 时间线视图里相邻短会话按合并整段时长列出 | 本轮补登；F9 纯函数落在批 0 | readRecord |
+| 友好日期接进三视图 | `utils/StringUtils.kt:109` | `data/ReadRecordRepository.ets`、`pages/ProfileSubPages.ets`、`pages/Index.ets` | 已接 | `formatFriendlyDate` 今天 / 昨天 / 2..5 天前 / 否则原日期串，接进汇总、时间线、最后阅读三处日期头与详情页面板 | 汇总视图日期头显示「今天」「昨天」「2天前」 | 本轮补登；F10 落在批 0 | readRecord |
 
 ---
 
@@ -559,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 ## 小结
 
-**全表合计 345 条：已接 105、未接 236、不适用 4，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）
+**全表合计 345 条：已接 127、未接 214、不适用 4，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
