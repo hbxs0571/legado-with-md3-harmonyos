@@ -5544,6 +5544,16 @@ struct Index {
         result.bookmarkAdded, result.bookmarkUpdated, result.bookmarkSkipped
       );
       if (bookmarkSummary.length > 0) { details.push(bookmarkSummary); }
+      const g2DictRule = this.describeG2RuleRestore('字典规则', result.dictRuleAdded, result.dictRuleUpdated, result.dictRuleSkipped);
+      if (g2DictRule.length > 0) { details.push(g2DictRule); }
+      const g2HomepageModule = this.describeG2RuleRestore('首页模块', result.homepageModulesAdded, result.homepageModulesUpdated, result.homepageModulesSkipped);
+      if (g2HomepageModule.length > 0) { details.push(g2HomepageModule); }
+      const g2HomepageCustomSet = this.describeG2RuleRestore('首页自定义集', result.homepageCustomSetsAdded, result.homepageCustomSetsUpdated, result.homepageCustomSetsSkipped);
+      if (g2HomepageCustomSet.length > 0) { details.push(g2HomepageCustomSet); }
+      const g2HighlightTagRule = this.describeG2RuleRestore('标签高亮规则', result.highlightTagRuleAdded, result.highlightTagRuleUpdated, result.highlightTagRuleSkipped);
+      if (g2HighlightTagRule.length > 0) { details.push(g2HighlightTagRule); }
+      const g2TagGroupRule = this.describeG2RuleRestore('标签分组规则', result.tagGroupRuleAdded, result.tagGroupRuleUpdated, result.tagGroupRuleSkipped);
+      if (g2TagGroupRule.length > 0) { details.push(g2TagGroupRule); }
       this.backupStatusMessage = details.length > 0
         ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
@@ -5606,6 +5616,19 @@ struct Index {
     if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
     if (skipped > 0) { parts.push(`跳过 ${skipped} 条无对应书籍或无效`); }
     return `书签与笔记${parts.join('、')}。`;
+  }
+
+  /**
+   * G2 五类规则（字典／首页模块／首页自定义集／标签高亮／标签分组）共用一份计数说明。
+   * 恢复走合并语义，三项都为 0 时返回空串，不在提示里加没有信息量的一句话。
+   */
+  private describeG2RuleRestore(label: string, added: number, updated: number, skipped: number): string {
+    if (added === 0 && updated === 0 && skipped === 0) { return ''; }
+    const parts: string[] = [];
+    if (added > 0) { parts.push(`新增 ${added} 条`); }
+    if (updated > 0) { parts.push(`覆盖 ${updated} 条`); }
+    if (skipped > 0) { parts.push(`跳过 ${skipped} 条无效规则`); }
+    return `${label}${parts.join('、')}。`;
   }
 
   private cancelLocalBackupRestore(): void {

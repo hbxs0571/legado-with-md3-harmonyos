@@ -46,7 +46,7 @@
 - **本地是「这次备份不勾 X」**：`BackupRepository.ets` 的 `ignoredCategories` 来自本次备份/恢复的勾选、不持久；`isIgnored`（HEAD 版 `:2264`，旧文记 `:1539` 已漂）对 `bookshelf.json`/`config.xml` 恒 `false`，其余按 `categoryOptions.files` 反查类别键名再查 `ignored.includes(key)`；config.xml 派生类别由 `filterAndroidConfigXml` 按 `preferenceKeysForCategory(key)` **整组剔键**，用户不能只勾「忽略某一个键」。
 - **等价点**：两者都能让「某一类不出现在备份包里」，恢复时也都能跳过该类的 ZIP 条目 —— 在「用户能不能让某一类不出现在包里」这一点上等价。
 - **不等价点**：① 作用域：上游全局持久、单次配置长期生效；本地每次备份重新勾选、不持久。② 粒度：上游有键级门控（含 `alwaysIgnoredPreferenceKeys` 逐键），本地 `filterAndroidConfigXml` 只能按类别整组剔键。故 config.xml 派生的 8 类记「类别级等价，键级不等价」，括号里列出该类别 `preferenceKeysByCategory` 登记的键数 —— 这些键本地只能整类开关，不能逐键。
-- **三档取值**：`等价（类别级）` = 本地有该类的 `categoryOptions` 开关且恢复时 `isIgnored` 能跳过对应独立 JSON 文件；`类别级等价，键级不等价（N 键）` = 类别开关有、但上游可逐键而本地只能整组剔 N 个键；`未接` = `categoryOptions` 虽登记了类别键名，但该类读写两侧都走 `copyPreservedEntries`、没有原生仓储可落，勾了忽略也只是不进保留目录，语义上无从等价（G2，批 3 接通后回填）。忽略项列只判门控语义，**与读/写列是否接通无关** —— 读写 `✗` 的类只要门控能跳过条目，忽略项仍可判等价。`—`/`✓` 为既有判定，不属本次 20 个 `?` 的范围。
+- **三档取值**：`等价（类别级）` = 本地有该类的 `categoryOptions` 开关且恢复时 `isIgnored` 能跳过对应独立 JSON 文件；`类别级等价，键级不等价（N 键）` = 类别开关有、但上游可逐键而本地只能整组剔 N 个键；`未接` = `categoryOptions` 虽登记了类别键名，但该类读写两侧都走 `copyPreservedEntries`、没有原生仓储可落，勾了忽略也只是不进保留目录，语义上无从等价（G2 五类原属此档，批 3 接通后已回填为 `等价（类别级）`，见下方「批 3」节）。忽略项列只判门控语义，**与读/写列是否接通无关** —— 读写 `✗` 的类只要门控能跳过条目，忽略项仍可判等价。`—`/`✓` 为既有判定，不属本次 20 个 `?` 的范围。
 
 **本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支当时只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。**2026-11-06 复核：现为 10 组具名分支**（新增 `themeConfig.json`、readRecord 三份、`coverRule.json`）。
 
@@ -70,13 +70,13 @@
 | `sourceSub` | `sourceSub.json` | ✗ | ✗ | 未接 | **零行** |
 | `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | 等价（类别级） | [TXT 阅读总账](TXT-READER.md) = **5 行**（`:84`、`:85`、`:86`、`:93`、`:95`）；`grep -c txtTocRule` 实测 6，多的 1 行是 `:965` 的「ZIP 类别取值」表头说明同时列了两词，非数据行 |
 | `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | ✗ | ✗ | 未接 | **零行**；`httpTtsVoices.json` 写空数组 `[]`，`httpTTS.json` 不写（批 3：`[]` 承载上游「确实没有音色」语义，透传件存在时不覆盖） |
-| `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ✓ | [书籍总账](BOOKSHELF.md) E = **6 行**（r336 判断段建行，E 块由 13 行增至 19 行；面板级见 E `:507`，类别级见 E 新增 6 行） |
-| `dictRule` | `dictRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
-| `homepageModules` | `homepageModules.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
-| `homepageCustomSets` | `homepageCustomSets.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
+| `keyboardAssists` | `keyboardAssists.json` | — | — | — | 批 3 判 **不适用**：上游 `ui/` 零命中、`keyboardAssistsDao.` 仅 `Backup.kt:196` / `Restore.kt:253` 两处消费（DAO 8 方法多数零引用），本地 `grep -rn keyboardAssists entry/src/main/ets --include=*.ets` 仅 2 行白名单 / `categoryOptions`、无仓储无界面；依据 [盘点规约](../PARITY-RULES.md) 第三节「代码里有但从未接线 / 数据层无独立界面」，[书籍总账](BOOKSHELF.md) E `:516` 已同样判不适用。详见下方「批 3」节，不假接空表 |
+| `dictRule` | `dictRule.json` | ✓ | ✓ | 等价（类别级） | 批 3 接通：建表 `RdbSchema.ets:354`、写出 `BackupRepository.ets:736`、恢复具名分支 `:1253`、`RestoreResult` 计数 `:137`；真包往返见下方「批 3」节（明细表仍**零行**未盘，读写以本节代码与往返证据为准） |
+| `homepageModules` | `homepageModules.json` | ✓ | ✓ | 等价（类别级） | 批 3 接通：建表 `RdbSchema.ets:364`（16 列、7 个可空 TEXT）、写出 `BackupRepository.ets:745`、恢复具名分支 `:1271`、`RestoreResult` 计数 `:141`；真包往返见下方「批 3」节（明细表仍**零行**未盘） |
+| `homepageCustomSets` | `homepageCustomSets.json` | ✓ | ✓ | 等价（类别级） | 批 3 接通：建表 `RdbSchema.ets:385`、写出 `BackupRepository.ets:754`、恢复具名分支 `:1289`、`RestoreResult` 计数 `:145`；真包往返见下方「批 3」节（明细表仍**零行**未盘） |
 | `highlightRule` | `highlightRule.json` | ✓ | ✓ | 等价（类别级） | **零行** |
-| `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | [书籍总账](BOOKSHELF.md) B = **1 行** |
-| `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
+| `highlightTagRule` | `highlightTagRule.json` | ✓ | ✓ | 等价（类别级） | 批 3 接通：建表 `RdbSchema.ets:393`、写出 `BackupRepository.ets:763`、恢复具名分支 `:1307`、`RestoreResult` 计数 `:149`；真包往返见下方「批 3」节（原 [书籍总账](BOOKSHELF.md) B = **1 行** 仍是界面盘点，读写以本节代码与往返证据为准） |
+| `tagGroupRule` | `tagGroupRule.json` | ✓ | ✓ | 等价（类别级） | 批 3 接通：建表 `RdbSchema.ets:403`、写出 `BackupRepository.ets:772`、恢复具名分支 `:1325`、`RestoreResult` 计数 `:153`；真包往返见下方「批 3」节（原 [书籍总账](BOOKSHELF.md) A3 = **4 行** 仍是界面盘点，读写以本节代码与往返证据为准） |
 | `server` | `servers.json` | ✗ | ✗ | 未接 | **零行** |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（83 键） | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（176 已接 / 11 `未接` / 2 不适用）；11 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（54 键） | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
@@ -103,7 +103,7 @@
 | `:783` | `highlightRule.json` | `ReaderHighlightRuleRepository`（合并语义，见[备份恢复](../BACKUP-RESTORE.md)） |
 | `:797` | `bookmark.json`、`bookMarking.json` | `ReaderBookmarkImporter.mergeBookmarks` / `mergeMarkings`，两份合并完再统一落盘 |
 
-其余条目走 `:822` 的兜底 `fileIo.copyFile`，只进保留目录，不落原生仓储。因此 `readRecord`、`searchHistory`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` 判 `✗`，不是「没查」，而是「查过、确认未接」。（`coverConfig` 原先也在这条清单里，r334 实现段已把 14 个封面键双向接通、66 行里 57 行已接，因此它现在是「部分接入」，不再属于「确认未接」一组。）。
+其余条目走 `:822` 的兜底 `fileIo.copyFile`，只进保留目录，不落原生仓储。因此 `readRecord`、`searchHistory` 判 `✗`，不是「没查」，而是「查过、确认未接」；`keyboardAssists` 批 3 复核为 `—`（上游仅存储无界面）。`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` 原也在此清单里，批 3 已为它们补出 5 张新表、5 套仓储／导入器与恢复侧具名分支并接通写出侧，读写两列改判 `✓`（见下方「批 3」节），不再走兜底。（`coverConfig` 原先也在这条清单里，r334 实现段已把 14 个封面键双向接通、66 行里 57 行已接，因此它现在是「部分接入」，不再属于「确认未接」一组。）。
 
 ### 原判 `—`、现改判 `✗` 的六类（2026-11-09 范围调整）
 
@@ -139,15 +139,30 @@
 
 真包往返（`showRss`，设备 `127.0.0.1:5555`，HAP 构建 `BUILD SUCCESSFUL` / 0 ERROR 后 `bm install`）：备份 `backup2026-11-09.zip` → `unzip -l` 含 `config.xml`（6153 bytes）、`unzip -p config.xml | grep -c showRss` = **1**、键为 `<boolean name="showRss" value="true" />`；造 `showRss=false` 对照包 `b2_restore_false.zip` 推到设备走「从本地恢复」→「导入此 ZIP」，恢复后 `legado_theme` 的 `showRss` 由 `true` 变 `false`，主界面底部导航由 5 个 tab 变 4 个（RSS 入口消失）。完整原始命令行输出见证据包 `N:\HarmonyProjects\tmp\zip-ledger-io-evidence.md` 第五节。注意 `scripts/build-hap.sh` 直接 `exec hvigorw`，构建尾部**没有**任务文案写的 `COMPILE RESULT: SUCCESSFUL`／`ERROR 0` 字样，实测等价事实为 `BUILD SUCCESSFUL in 53 s 188 ms`、`ArkTS:WARN` 545 行、`error:`/`ERROR`/`BUILD FAILED` 0 行。
 
+### 批 3（2026-11-09）G2 五类新开表 + 读写桥的结论
+
+任务批 3 标题写「七类新开表」、正文写「剩下 6 类」，但 3.2 节点名的模型文件只有 5 个（`DictRule.ets`、`HomepageModule.ets`、`HomepageCustomSet.ets`、`HighlightTagRule.ets`、`TagGroupRule.ets`），`SearchKeyword` 明说归批 4，且上游 `Backup.kt` 可写的 G2 JSON 也正好 5 个（`dictRule.json`、`homepageModules.json`、`homepageCustomSets.json`、`highlightTagRule.json`、`tagGroupRule.json`）。另 `keyboardAssists` 按本节末复核判 `不适用`。**故批 3 实际接通 5 类**，数量口径差异如实登记。
+
+- **建表**：`entry/src/main/ets/data/RdbSchema.ets:17` `static readonly version: number = 4;`（原 3）；`:354`–`:410` 追加 5 段 `static readonly createXxx`、`:440`–`:444` 追加进 `allStatements`。列名逐字对齐上游 Room 实体（`app/src/main/java/io/legado/app/data/entities/` 下 5 个 `.kt`），让 Gson 写出的 JSON 能直接互认；`order` 是 SQL 关键字、列名加反引号；7 个可空 TEXT 列不带 NOT NULL。设备侧 `sqlite3 ...legado.db '.tables'` 实测 5 张表建成、`.schema` 与建表语句一致。
+- **模型 / 导入器 / 仓储**：5 个 `entry/src/main/ets/model/*Rule.ets`（CRLF）、5 个 `entry/src/main/ets/data/*Importer.ets`（CRLF，照 `TxtTocRuleImporter.ets`，单条坏不连累整批）、5 个 `entry/src/main/ets/data/*Repository.ets`（LF，照 `ReaderHighlightRuleRepository.ets`，`INSERT OR REPLACE` + 事务 + `RdbCodec`）。`HomepageModule` 的 7 个可空字符串列读写走 `RdbCodec.optionalText()`，不把 `null` 变 `''`。
+- **写出侧**：`BackupRepository.ets:736`–`:780` 按类别门控补 5 段，照上游 `Backup.kt:359` `writeListToJson` 的「list 非空才建文件」语义，空表不写、不覆盖上次透传件 —— 与现有 `replaceRule` 的「始终写空数组」不同，差异如实登记。
+- **恢复侧**：`:1253`–`:1342` 补 5 个 `entry.name ===` 具名分支，照 `replaceRule` 形态，每个分支在 `importRules` 前先 `await XxxRepository.load(context)`（避免空缓存被整表重写抹掉），末尾照抄 `copyFile` + `preservedEntryCount += 1` 两行。本表 `:52` 记的「2026-11-06 复核现为 10 组具名分支」是历史时点结论，批 3 之后另加这 5 组。
+- **`RestoreResult` / 界面显示**：`BackupRepository.ets:137`–`:155` 为每类加 `xxxAdded`/`xxxUpdated`/`xxxSkipped` 三计数，返回对象 `:1504` 起同步；`Index.ets:5547`–`:5556` 与 `:5625` 新增 `describeG2RuleRestore` 把计数拼进「导入完成」提示。
+- **真包往返**（设备 `127.0.0.1:5555`，`BUILD SUCCESSFUL` / 0 ERROR 后 `bm install`）：造 `b3_g2_seed.zip`（21 根条目，5 份 G2 JSON 带 `b3-verify-*` 标记）走「从本地恢复」→「导入此 ZIP」，恢复前 5 张表 `count(*)` 全 0、恢复后 `dictRules|2`、`homepage_modules|1`、`homepage_custom_sets|1`、`highlight_tag_rules|1`、`tag_group_rules|1`，且 `homepage_modules` 的 3 个 `null` 可空列 `typeof` 仍为 `null`（`optionalText` 语义保持）；提示串显示「字典规则新增 2 条。首页模块新增 1 条。首页自定义集新增 1 条。标签高亮规则新增 1 条。标签分组规则新增 1 条。」写出侧先 `rm -f` 保留目录里 5 个透传源再备份，`b3_roundtrip.zip`（21 根条目 / 250231 bytes）仍含 5 个 G2 JSON 且内容来自仓储（带 `b3-verify-*` 标记），证明非空写出分支真执行。完整原始命令行输出见证据包 `N:\HarmonyProjects\tmp\zip-ledger-io-evidence.md` 第五节。
+- **`keyboardAssists` 判 `不适用`**：依据 [盘点规约](../PARITY-RULES.md) 第三节「上游无此行为 / 代码里有但从未接线」与「数据层无独立界面」：上游 `ui/` 目录 `grep -rln -i keyboardAssist ... | wc -l` = 0，`keyboardAssistsDao.` 全仓仅 `Backup.kt:196`（`all`）与 `Restore.kt:253`（`insert`）两处消费，DAO 8 个方法里 `update`/`delete`/`flowByType`/`maxSerialNo` 零引用；本地 `grep -rn keyboardAssists entry/src/main/ets --include=*.ets` 仅 2 行（`BackupRepository.ets:453` 白名单、`:480` `categoryOptions`），无仓储、无界面。[书籍总账](BOOKSHELF.md) E `:516` 已按同一依据判 `不适用`。本地无按键映射功能，不假接空表；总账表该行读 / 写 / 忽略项三列由 `✗` / `✗` / `✓` 改 `—`。
+- **界面接线不在本批**：`ProfileSubPages.ets` 的 `DictionaryRulesPage`（`:1928`）/ `DictionaryRuleEditPage`（`:2167`）保存按钮 `:2062` / `:2268` 与 `HighlightTagRulesPage`（`:2309`）/ `HighlightTagRuleEditPage`（`:2533`）的 `:2448` / `:2599` 仍走 `onUnavailableAction`（「字典规则／标签规则存储尚未接入，规则未保存」）。**存储侧与备份桥已可用，界面仍会提示未接入** —— 接线要动 `Index.ets` 路由，留到下一批，避免下一个人误以为做完了。
+- **覆盖证明**：`scripts/upstream-surface.sh --coverage <类别> <表格路径> N:/HarmonyProjects/legado-with-MD3` 对 5 类 × 8 张表实测「未分配」均不为 0（逐组数字见证据包第六节）—— 判据是上游每个 `.kt` 基名是否出现在表格里，而 G2 五类的上游接触面（`DictRuleScreen.kt`、`HomepageModule*.kt` 等）从未在七张明细表里逐文件盘过。按 [盘点规约](../PARITY-RULES.md) 第二节，逐文件收口属明细表盘点工作、且本批明确不接界面，**不为凑「未分配 0」去改明细表**，如实留到批 4 收口。
+- 构建尾部同样**没有**任务文案写的 `COMPILE RESULT: SUCCESSFUL`／`ERROR 0` 字面串，实测等价事实为 `BUILD SUCCESSFUL in 1 min 16 s 786 ms`、`ArkTS:WARN` 570 行、`error:`/`ERROR`/`BUILD FAILED` 0 行（全量干净重建 1763 行日志）。
+
 ### 忽略项列逐类核对结论（2026-11-09）
 
 上节判据逐类落到总账表后，忽略项列 20 个 `?` 全部落文字（状态由代码事实决定，不随读/写列改动）：
 
 - `等价（类别级）` 6 类：`bookmark`、`bookGroup`、`replaceRule`、`readRecord`、`txtTocRule`、`highlightRule` —— 都有独立 JSON 文件 + 恢复侧具名分支，`isIgnored` 反查 `categoryOptions.files` 生效。
 - `类别级等价，键级不等价（N 键）` 8 类：`readConfig`（83）、`themeConfig`（54）、`bookshelfLayout`（39）、`mangaConfig`（32）、`coverConfig`（14）、`themeMode`（1）、`showRss`（1）、`threadCount`（1）—— 键数取自 `BackupRepository.ets:328` 的 `preferenceKeysByCategory`，这 8 类正是 `preferenceKeysForCategory`（`:510`）if 链覆盖的全部类别。其中 `showRss` 读/写列批 2 已改判 `✓`（写出侧补了 upsert，见下方「批 2」节），`threadCount`／`mangaConfig` 仍为 `✗` 且批 2 判未接；但忽略项列只判门控语义、不随读写列改动。
-- `未接` 5 类（G2，批 3 之后回填）：`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` —— 本地零原生存储，忽略开关无原生功能可落。
+- `等价（类别级）` 5 类（G2，批 3 回填）：`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` —— 批 3 接出独立 JSON 文件 + `categoryOptions` 开关 + `isIgnored` 跳过 + 恢复侧具名分支，判据与第一档一致，见下方「批 3」节。
 - `未接（语义错配，待批 4 重判）` 1 类：`searchHistory` —— 上游装 `SearchKeyword`（全局搜索关键词池），本地 `search_content_history` 对应上游 `SearchContentHistory`（书内搜索，上游不备份），两者不是同一件事，见批 4。
-- 既有判定不动：`localBook` = `—`（上游由 `backupIgnoreLocalBook` 单独控制，本地走 `localBook` 键过滤本地书）；`keyboardAssists` = `✓` 是「`isIgnored` 能跳过该文件」的既有判定，批 3 将按「上游仅存储无界面」复核为 `不适用`，本批不改。任务文案说「22 个 `?`」，实测总账表忽略项列为 `?` 的恰是上述 20 个，另两类本就不是 `?`。
+- 既有判定：`localBook` = `—`（上游由 `backupIgnoreLocalBook` 单独控制，本地走 `localBook` 键过滤本地书）；`keyboardAssists` 原 `✓` 是「`isIgnored` 能跳过该文件」的判定，批 3 已按「上游仅存储无界面」复核为 `—`（见下方「批 3」节）。任务文案说「22 个 `?`」，实测总账表忽略项列为 `?` 的恰是上述 20 个，另两类本就不是 `?`。
 
 机制核实修正（当前 HEAD `60bbba2` 实测）：旧文记 `isIgnored` 在 `:1539`，HEAD 版实为 `entry/src/main/ets/data/BackupRepository.ets:2264`；对 `bookshelf.json`/`config.xml` 恒 `false` 的行为不变。config.xml 派生类别的门控落在紧随其后的 `filterAndroidConfigXml`，按 `preferenceKeysForCategory(key)` 整组把键从 XML 剔除。
 

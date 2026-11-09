@@ -39,6 +39,16 @@ import {
 } from './CoverSettingsRepository';
 import { ReadRecordDetail, ReadRecordSession, ReadRecordSummary } from '../model/ReadRecord';
 import { ReadRecordRepository } from './ReadRecordRepository';
+import { DictRuleRepository } from './DictRuleRepository';
+import { DictRuleImporter } from './DictRuleImporter';
+import { HomepageModuleRepository } from './HomepageModuleRepository';
+import { HomepageModuleImporter } from './HomepageModuleImporter';
+import { HomepageCustomSetRepository } from './HomepageCustomSetRepository';
+import { HomepageCustomSetImporter } from './HomepageCustomSetImporter';
+import { HighlightTagRuleRepository } from './HighlightTagRuleRepository';
+import { HighlightTagRuleImporter } from './HighlightTagRuleImporter';
+import { TagGroupRuleRepository } from './TagGroupRuleRepository';
+import { TagGroupRuleImporter } from './TagGroupRuleImporter';
 
 /** 上游 readRecordSession.json 的字段：words 对应本地 chapterIndex。 */
 interface AndroidReadRecordSessionRecord {
@@ -123,6 +133,26 @@ export interface RestoreResult {
   bookmarkAdded: number;
   bookmarkUpdated: number;
   bookmarkSkipped: number;
+  /** 恢复字典规则的新增、覆盖和跳过数量（合并语义，本地独有规则保留）。 */
+  dictRuleAdded: number;
+  dictRuleUpdated: number;
+  dictRuleSkipped: number;
+  /** 恢复首页模块的新增、覆盖和跳过数量（合并语义，本地独有规则保留）。 */
+  homepageModulesAdded: number;
+  homepageModulesUpdated: number;
+  homepageModulesSkipped: number;
+  /** 恢复首页自定义集的新增、覆盖和跳过数量（合并语义，本地独有规则保留）。 */
+  homepageCustomSetsAdded: number;
+  homepageCustomSetsUpdated: number;
+  homepageCustomSetsSkipped: number;
+  /** 恢复标签高亮规则的新增、覆盖和跳过数量（合并语义，本地独有规则保留）。 */
+  highlightTagRuleAdded: number;
+  highlightTagRuleUpdated: number;
+  highlightTagRuleSkipped: number;
+  /** 恢复标签分组规则的新增、覆盖和跳过数量（合并语义，本地独有规则保留）。 */
+  tagGroupRuleAdded: number;
+  tagGroupRuleUpdated: number;
+  tagGroupRuleSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -701,6 +731,51 @@ export class BackupRepository {
         BackupRepository.writeTextFile(`${stagingDirectory}/highlightRule.json`,
           ReaderHighlightRuleRepository.exportRules(highlightRules));
       }
+      // G2 字典规则：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
+      // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
+      if (!ignoredCategories.includes('dictRule')) {
+        const rules = await DictRuleRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/dictRule.json`,
+            DictRuleRepository.exportRules(rules));
+        }
+      }
+      // G2 首页模块：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
+      // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
+      if (!ignoredCategories.includes('homepageModules')) {
+        const rules = await HomepageModuleRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/homepageModules.json`,
+            HomepageModuleRepository.exportRules(rules));
+        }
+      }
+      // G2 首页自定义集：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
+      // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
+      if (!ignoredCategories.includes('homepageCustomSets')) {
+        const rules = await HomepageCustomSetRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/homepageCustomSets.json`,
+            HomepageCustomSetRepository.exportRules(rules));
+        }
+      }
+      // G2 标签高亮规则：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
+      // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
+      if (!ignoredCategories.includes('highlightTagRule')) {
+        const rules = await HighlightTagRuleRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/highlightTagRule.json`,
+            HighlightTagRuleRepository.exportRules(rules));
+        }
+      }
+      // G2 标签分组规则：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
+      // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
+      if (!ignoredCategories.includes('tagGroupRule')) {
+        const rules = await TagGroupRuleRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/tagGroupRule.json`,
+            TagGroupRuleRepository.exportRules(rules));
+        }
+      }
       // 书签与笔记同样只存在 preferences 里。上游 Backup.kt 在 bookmark 分类下
       // 一次写出 bookmark.json 与 bookMarking.json 两份，这里保持同名同结构，
       // 让 Android 版恢复时能直接 insert 进 bookmarks / book_marks 两张表。
@@ -1060,6 +1135,21 @@ export class BackupRepository {
     let bookmarkAdded: number = 0;
     let bookmarkUpdated: number = 0;
     let bookmarkSkipped: number = 0;
+    let dictRuleAdded: number = 0;
+    let dictRuleUpdated: number = 0;
+    let dictRuleSkipped: number = 0;
+    let homepageModulesAdded: number = 0;
+    let homepageModulesUpdated: number = 0;
+    let homepageModulesSkipped: number = 0;
+    let homepageCustomSetsAdded: number = 0;
+    let homepageCustomSetsUpdated: number = 0;
+    let homepageCustomSetsSkipped: number = 0;
+    let highlightTagRuleAdded: number = 0;
+    let highlightTagRuleUpdated: number = 0;
+    let highlightTagRuleSkipped: number = 0;
+    let tagGroupRuleAdded: number = 0;
+    let tagGroupRuleUpdated: number = 0;
+    let tagGroupRuleSkipped: number = 0;
     // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
     // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
     let restoredThemeConfigCount: number = 0;
@@ -1156,6 +1246,96 @@ export class BackupRepository {
         highlightRuleAdded += outcome.added;
         highlightRuleUpdated += outcome.updated;
         highlightRuleSkipped += parsed.skipped + outcome.skipped;
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'dictRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复字典规则`);
+        }
+        const parsed = DictRuleImporter.parse(text);
+        // 先从库里读出本地已有规则，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await DictRuleRepository.load(context);
+        const outcome = await DictRuleRepository.importRules(context, parsed.rules);
+        dictRuleAdded += outcome.added;
+        dictRuleUpdated += outcome.updated;
+        dictRuleSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'homepageModules.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复首页模块`);
+        }
+        const parsed = HomepageModuleImporter.parse(text);
+        // 先从库里读出本地已有规则，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await HomepageModuleRepository.load(context);
+        const outcome = await HomepageModuleRepository.importRules(context, parsed.rules);
+        homepageModulesAdded += outcome.added;
+        homepageModulesUpdated += outcome.updated;
+        homepageModulesSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'homepageCustomSets.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复首页自定义集`);
+        }
+        const parsed = HomepageCustomSetImporter.parse(text);
+        // 先从库里读出本地已有规则，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await HomepageCustomSetRepository.load(context);
+        const outcome = await HomepageCustomSetRepository.importRules(context, parsed.rules);
+        homepageCustomSetsAdded += outcome.added;
+        homepageCustomSetsUpdated += outcome.updated;
+        homepageCustomSetsSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'highlightTagRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复标签高亮规则`);
+        }
+        const parsed = HighlightTagRuleImporter.parse(text);
+        // 先从库里读出本地已有规则，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await HighlightTagRuleRepository.load(context);
+        const outcome = await HighlightTagRuleRepository.importRules(context, parsed.rules);
+        highlightTagRuleAdded += outcome.added;
+        highlightTagRuleUpdated += outcome.updated;
+        highlightTagRuleSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'tagGroupRule.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复标签分组规则`);
+        }
+        const parsed = TagGroupRuleImporter.parse(text);
+        // 先从库里读出本地已有规则，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await TagGroupRuleRepository.load(context);
+        const outcome = await TagGroupRuleRepository.importRules(context, parsed.rules);
+        tagGroupRuleAdded += outcome.added;
+        tagGroupRuleUpdated += outcome.updated;
+        tagGroupRuleSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
         await fileIo.copyFile(sourcePath, targetPath);
         preservedEntryCount += 1;
         continue;
@@ -1321,7 +1501,22 @@ export class BackupRepository {
       highlightRuleSkipped: highlightRuleSkipped,
       bookmarkAdded: bookmarkAdded,
       bookmarkUpdated: bookmarkUpdated,
-      bookmarkSkipped: bookmarkSkipped
+      bookmarkSkipped: bookmarkSkipped,
+      dictRuleAdded: dictRuleAdded,
+      dictRuleUpdated: dictRuleUpdated,
+      dictRuleSkipped: dictRuleSkipped,
+      homepageModulesAdded: homepageModulesAdded,
+      homepageModulesUpdated: homepageModulesUpdated,
+      homepageModulesSkipped: homepageModulesSkipped,
+      homepageCustomSetsAdded: homepageCustomSetsAdded,
+      homepageCustomSetsUpdated: homepageCustomSetsUpdated,
+      homepageCustomSetsSkipped: homepageCustomSetsSkipped,
+      highlightTagRuleAdded: highlightTagRuleAdded,
+      highlightTagRuleUpdated: highlightTagRuleUpdated,
+      highlightTagRuleSkipped: highlightTagRuleSkipped,
+      tagGroupRuleAdded: tagGroupRuleAdded,
+      tagGroupRuleUpdated: tagGroupRuleUpdated,
+      tagGroupRuleSkipped: tagGroupRuleSkipped
     };
   }
 

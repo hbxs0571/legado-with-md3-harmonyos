@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。第三批追加五张表后升到 3。 */
-  static readonly version: number = 3;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；老库靠 ensure() 里的 IF NOT EXISTS 补齐。 */
+  static readonly version: number = 4;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -347,6 +347,68 @@ export class RdbSchema {
     '`words` INTEGER NOT NULL' +
     ')';
 
+  // 第四批（ZIP 兼容总账批 3）：G2 五类新表。列名逐字对齐上游 Room 实体，
+  // 让 Gson 写出的 JSON 能直接互认；不带 COLLATE LOCALES，因为这些表按整数
+  // sortOrder/order 列排序、不需要中文拼音序，避开「未设 locale 时 ORDER BY
+  // COLLATE LOCALES 静默返回空结果集」的坑。order 是 SQL 关键字，列名一律加反引号。
+  static readonly createDictRules: string =
+    'CREATE TABLE IF NOT EXISTS `dictRules` (' +
+    '`name` TEXT NOT NULL, ' +
+    '`urlRule` TEXT NOT NULL, ' +
+    '`showRule` TEXT NOT NULL, ' +
+    '`enabled` INTEGER NOT NULL DEFAULT 1, ' +
+    '`sortNumber` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`name`)' +
+    ')';
+
+  static readonly createHomepageModules: string =
+    'CREATE TABLE IF NOT EXISTS `homepage_modules` (' +
+    '`id` TEXT NOT NULL, ' +
+    '`sourceUrl` TEXT NOT NULL, ' +
+    '`moduleKey` TEXT NOT NULL, ' +
+    '`type` TEXT NOT NULL, ' +
+    '`title` TEXT NOT NULL, ' +
+    '`args` TEXT, ' +
+    '`layoutConfig` TEXT, ' +
+    '`url` TEXT, ' +
+    '`isEnabled` INTEGER NOT NULL DEFAULT 1, ' +
+    '`sortOrder` INTEGER NOT NULL DEFAULT 0, ' +
+    '`customSetId` TEXT, ' +
+    '`isUserCreated` INTEGER NOT NULL DEFAULT 0, ' +
+    '`customTitle` TEXT, ' +
+    '`customSetTitle` TEXT, ' +
+    '`sourceJsonHash` TEXT, ' +
+    '`syncedAt` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
+  static readonly createHomepageCustomSets: string =
+    'CREATE TABLE IF NOT EXISTS `homepage_custom_sets` (' +
+    '`id` TEXT NOT NULL, ' +
+    '`name` TEXT NOT NULL, ' +
+    '`sortOrder` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
+  static readonly createHighlightTagRules: string =
+    'CREATE TABLE IF NOT EXISTS `highlight_tag_rules` (' +
+    '`id` INTEGER NOT NULL, ' +
+    '`title` TEXT NOT NULL, ' +
+    '`pattern` TEXT NOT NULL, ' +
+    '`enabled` INTEGER NOT NULL DEFAULT 1, ' +
+    '`order` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
+  static readonly createTagGroupRules: string =
+    'CREATE TABLE IF NOT EXISTS `tag_group_rules` (' +
+    '`id` INTEGER NOT NULL, ' +
+    '`pattern` TEXT NOT NULL, ' +
+    '`groupName` TEXT NOT NULL, ' +
+    '`order` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
   /** 全部建表语句，按依赖顺序排列。 */
   private static readonly allStatements: string[] = [
     RdbSchema.createBookmarks,
@@ -373,7 +435,13 @@ export class RdbSchema {
     RdbSchema.createChaptersIndexBookUrlIndex,
     RdbSchema.createReadRecord,
     RdbSchema.createReadRecordDetail,
-    RdbSchema.createReadRecordSession
+    RdbSchema.createReadRecordSession,
+    // 第四批（ZIP 兼容总账批 3）：G2 五类新表，无外键依赖，追加在末尾即可
+    RdbSchema.createDictRules,
+    RdbSchema.createHomepageModules,
+    RdbSchema.createHomepageCustomSets,
+    RdbSchema.createHighlightTagRules,
+    RdbSchema.createTagGroupRules
   ];
 
   /**
