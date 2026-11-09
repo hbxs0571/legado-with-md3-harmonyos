@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；老库靠 ensure() 里的 IF NOT EXISTS 补齐。 */
-  static readonly version: number = 4;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐。 */
+  static readonly version: number = 5;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -409,6 +409,52 @@ export class RdbSchema {
     'PRIMARY KEY(`id`)' +
     ')';
 
+  // 第五批（httpTTS 数据层）：两张表 + 一个唯一索引。列名逐字对齐上游 Room 实体，
+  // 让 Gson 写出的 httpTTS.json / httpTtsVoices.json 能直接互认。httpTTS.id 上游
+  // 是 Long，用 INTEGER；read_aloud_voices.id 上游是 String，用 TEXT——两处不同，
+  // 别抄成一样。唯一索引对齐上游 Index(["engineType","engineId","speakerId"], unique = true)。
+  static readonly createHttpTts: string =
+    'CREATE TABLE IF NOT EXISTS `httpTTS` (' +
+    '`id` INTEGER NOT NULL, ' +
+    '`name` TEXT NOT NULL, ' +
+    '`url` TEXT NOT NULL, ' +
+    '`contentType` TEXT, ' +
+    '`concurrentRate` TEXT, ' +
+    '`loginUrl` TEXT, ' +
+    '`loginUi` TEXT, ' +
+    '`header` TEXT, ' +
+    '`jsLib` TEXT, ' +
+    '`enabledCookieJar` INTEGER NOT NULL DEFAULT 0, ' +
+    '`loginCheckJs` TEXT, ' +
+    '`speed` INTEGER, ' +
+    '`synthesisThreadCount` INTEGER NOT NULL DEFAULT 1, ' +
+    '`lastUpdateTime` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
+  static readonly createReadAloudVoices: string =
+    'CREATE TABLE IF NOT EXISTS `read_aloud_voices` (' +
+    '`id` TEXT NOT NULL, ' +
+    '`engineType` TEXT NOT NULL, ' +
+    '`engineId` TEXT NOT NULL DEFAULT \'\', ' +
+    '`speakerId` TEXT NOT NULL DEFAULT \'\', ' +
+    '`displayName` TEXT NOT NULL, ' +
+    '`traitsJson` TEXT NOT NULL DEFAULT \'[]\', ' +
+    '`emotionCatalogJson` TEXT NOT NULL DEFAULT \'[]\', ' +
+    '`managedBy` TEXT NOT NULL DEFAULT \'user\', ' +
+    '`enabled` INTEGER NOT NULL DEFAULT 1, ' +
+    '`available` INTEGER NOT NULL DEFAULT 1, ' +
+    '`excluded` INTEGER NOT NULL DEFAULT 0, ' +
+    '`revision` INTEGER NOT NULL DEFAULT 0, ' +
+    '`createdAt` INTEGER NOT NULL DEFAULT 0, ' +
+    '`updatedAt` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
+  static readonly createReadAloudVoicesUniqueIndex: string =
+    'CREATE UNIQUE INDEX IF NOT EXISTS `index_read_aloud_voices_engine` ' +
+    'ON `read_aloud_voices` (`engineType`, `engineId`, `speakerId`)';
+
   /** 全部建表语句，按依赖顺序排列。 */
   private static readonly allStatements: string[] = [
     RdbSchema.createBookmarks,
@@ -441,7 +487,11 @@ export class RdbSchema {
     RdbSchema.createHomepageModules,
     RdbSchema.createHomepageCustomSets,
     RdbSchema.createHighlightTagRules,
-    RdbSchema.createTagGroupRules
+    RdbSchema.createTagGroupRules,
+    // 第五批（httpTTS 数据层）：索引必须排在表之后，其余无外键依赖，追加在末尾即可
+    RdbSchema.createHttpTts,
+    RdbSchema.createReadAloudVoices,
+    RdbSchema.createReadAloudVoicesUniqueIndex
   ];
 
   /**
