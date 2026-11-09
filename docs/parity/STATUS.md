@@ -36,7 +36,17 @@
 | `✓` | 该类**有具名映射链路**，数据落原生功能；不表示该类全部键/字段都接了，键级明细看 [Android ZIP 备份兼容](../BACKUP-RESTORE.md) 的 28 类清单 |
 | `✗` | 该类**完全没有映射**，ZIP 条目仅由 `copyPreservedEntries` 原样归档，不进原生功能 |
 | `—` | 不适用，理由必写（通常是[项目队列](../PROJECT.md)的范围之外） |
-| `?` | 未盘，尚未逐个文件核对 |
+| `?` | 未盘，尚未逐个文件核对（本表总账 2026-11-09 起不再用它作单元格值，改按下节判据逐类落文字） |
+
+### 忽略项列的等价判据（2026-11-09 逐类核对）
+
+「忽略项」列判的不是「读写通不通」，而是「上游该类的忽略开关在本地有没有对应语义」。上游与本地名字像、机制不同，逐类判据如下：
+
+- **上游是「全局永不备份 X」**：`BackupConfig.kt:129`–`:132` 的 `dbIsNotIgnored(key, isBackup)` 读 `backupDbIgnoreConfig`（备份侧）/ `dbIgnoreConfig`（恢复侧）两份**独立、默认都空**的持久 JSON，`return config[key] != true`；用户在备份配置页勾一次，此后每次备份/恢复都跳过该类。`dbIgnoreKeys`（`:96`–`:102`）19 个、`backupIgnoreKeys`（`:171`–`:181`）9 个是这两类开关的键全集。另 `keyIsNotIgnore`（`:417`–`:424`）写 config.xml 时做**逐键**门控：`alwaysIgnoredPreferenceKeys` 逐键排除、按 `readPrefKeys`/`themePrefKeys`/`coverPrefKeys`/`bookshelfPrefKeys`/`mangaPrefKeys` 分组门控，以及 `themeMode`/`showRss`/`threadCount` 三个单键开关。
+- **本地是「这次备份不勾 X」**：`BackupRepository.ets` 的 `ignoredCategories` 来自本次备份/恢复的勾选、不持久；`isIgnored`（HEAD 版 `:2264`，旧文记 `:1539` 已漂）对 `bookshelf.json`/`config.xml` 恒 `false`，其余按 `categoryOptions.files` 反查类别键名再查 `ignored.includes(key)`；config.xml 派生类别由 `filterAndroidConfigXml` 按 `preferenceKeysForCategory(key)` **整组剔键**，用户不能只勾「忽略某一个键」。
+- **等价点**：两者都能让「某一类不出现在备份包里」，恢复时也都能跳过该类的 ZIP 条目 —— 在「用户能不能让某一类不出现在包里」这一点上等价。
+- **不等价点**：① 作用域：上游全局持久、单次配置长期生效；本地每次备份重新勾选、不持久。② 粒度：上游有键级门控（含 `alwaysIgnoredPreferenceKeys` 逐键），本地 `filterAndroidConfigXml` 只能按类别整组剔键。故 config.xml 派生的 8 类记「类别级等价，键级不等价」，括号里列出该类别 `preferenceKeysByCategory` 登记的键数 —— 这些键本地只能整类开关，不能逐键。
+- **三档取值**：`等价（类别级）` = 本地有该类的 `categoryOptions` 开关且恢复时 `isIgnored` 能跳过对应独立 JSON 文件；`类别级等价，键级不等价（N 键）` = 类别开关有、但上游可逐键而本地只能整组剔 N 个键；`未接` = `categoryOptions` 虽登记了类别键名，但该类读写两侧都走 `copyPreservedEntries`、没有原生仓储可落，勾了忽略也只是不进保留目录，语义上无从等价（G2，批 3 接通后回填）。忽略项列只判门控语义，**与读/写列是否接通无关** —— 读写 `✗` 的类只要门控能跳过条目，忽略项仍可判等价。`—`/`✓` 为既有判定，不属本次 20 个 `?` 的范围。
 
 **本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支当时只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。**2026-11-06 复核：现为 10 组具名分支**（新增 `themeConfig.json`、readRecord 三份、`coverRule.json`）。
 
@@ -49,33 +59,33 @@
 | 类别键名 | 条目 | 读 | 写 | 忽略项 | 涉及行 |
 | --- | --- | --- | --- | --- | --- |
 | `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) A1 29 / B 51 / C 4 / D3 13 / E 1 = **98 行**（72 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) 逐条登记） |
-| `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | ? | [书签对照](ZIP-BOOKMARK.md) A–E = **83 行** |
-| `bookGroup` | `bookGroup.json` | ✓ | ✓ | ? | [书籍总账](BOOKSHELF.md) A3 18 / A1 11 / D3 6 / B 3 = **38 行** |
+| `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | 等价（类别级） | [书签对照](ZIP-BOOKMARK.md) A–E = **83 行** |
+| `bookGroup` | `bookGroup.json` | ✓ | ✓ | 等价（类别级） | [书籍总账](BOOKSHELF.md) A3 18 / A1 11 / D3 6 / B 3 = **38 行** |
 | `bookSource` | `bookSource.json` | — | — | — | [书籍总账](BOOKSHELF.md) B 19 / D3 5 = **24 行** |
 | `rssSource` | `rssSources.json` | — | — | — | **零行** |
 | `rssStar` | `rssStar.json` | — | — | — | **零行** |
-| `replaceRule` | `replaceRule.json` | ✓ | ✓ | ? | **零行** |
-| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) C 23 / B 5 = **28 行**（r334 判断段复核：11 已接 / 16 `未接` / 1 不适用；16 行未接 = B 块 3 行 `:272`/`:280`/`:307` + C 块 13 行） |
-| `searchHistory` | `searchHistory.json` | ✗ | ✗ | ? | **零行**；语义错配：上游 `searchHistory.json` 装的是 `SearchKeyword`（全局搜索关键词池，表 `search_keywords`），本地 `ReaderSearchHistoryRepository` 对应的是上游 `SearchContentHistory`（书内搜索，表 `search_content_history`），而上游不备份后者——本地与上游的 `searchHistory` 是两个东西 |
+| `replaceRule` | `replaceRule.json` | ✓ | ✓ | 等价（类别级） | [TXT 阅读总账](TXT-READER.md) = **6 行**（`:104`、`:105`、`:106`、`:381`、`:382`、`:383`）；`grep -c replaceRule` 实测 7，多的 1 行是 `:965` 的「ZIP 类别取值」表头说明同时列了两词，非数据行 |
+| `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✗ | ✗ | 等价（类别级） | [书籍总账](BOOKSHELF.md) C 23 / B 5 = **28 行**（r334 判断段复核：11 已接 / 16 `未接` / 1 不适用；16 行未接 = B 块 3 行 `:272`/`:280`/`:307` + C 块 13 行） |
+| `searchHistory` | `searchHistory.json` | ✗ | ✗ | 未接（语义错配，待批 4 重判） | **零行**；语义错配：上游 `searchHistory.json` 装的是 `SearchKeyword`（全局搜索关键词池，表 `search_keywords`），本地 `ReaderSearchHistoryRepository` 对应的是上游 `SearchContentHistory`（书内搜索，表 `search_content_history`），而上游不备份后者——本地与上游的 `searchHistory` 是两个东西 |
 | `sourceSub` | `sourceSub.json` | — | — | — | **零行** |
-| `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | ? | **零行** |
+| `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | 等价（类别级） | [TXT 阅读总账](TXT-READER.md) = **5 行**（`:84`、`:85`、`:86`、`:93`、`:95`）；`grep -c txtTocRule` 实测 6，多的 1 行是 `:965` 的「ZIP 类别取值」表头说明同时列了两词，非数据行 |
 | `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | — | — | — | **零行**；`httpTtsVoices.json` 写空数组 `[]`，`httpTTS.json` 不写（批 3：`[]` 承载上游「确实没有音色」语义，透传件存在时不覆盖） |
 | `keyboardAssists` | `keyboardAssists.json` | ✗ | ✗ | ✓ | [书籍总账](BOOKSHELF.md) E = **6 行**（r336 判断段建行，E 块由 13 行增至 19 行；面板级见 E `:507`，类别级见 E 新增 6 行） |
-| `dictRule` | `dictRule.json` | ✗ | ✗ | ? | **零行** |
-| `homepageModules` | `homepageModules.json` | ✗ | ✗ | ? | **零行** |
-| `homepageCustomSets` | `homepageCustomSets.json` | ✗ | ✗ | ? | **零行** |
-| `highlightRule` | `highlightRule.json` | ✓ | ✓ | ? | **零行** |
-| `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) B = **1 行** |
-| `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
+| `dictRule` | `dictRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
+| `homepageModules` | `homepageModules.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
+| `homepageCustomSets` | `homepageCustomSets.json` | ✗ | ✗ | 未接（批 3 之后回填） | **零行** |
+| `highlightRule` | `highlightRule.json` | ✓ | ✓ | 等价（类别级） | **零行** |
+| `highlightTagRule` | `highlightTagRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | [书籍总账](BOOKSHELF.md) B = **1 行** |
+| `tagGroupRule` | `tagGroupRule.json` | ✗ | ✗ | 未接（批 3 之后回填） | [书籍总账](BOOKSHELF.md) A3 = **4 行** |
 | `server` | `servers.json` | — | — | — | **零行** |
-| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | ? | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（176 已接 / 11 `未接` / 2 不适用）；11 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
-| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
-| `coverConfig` | `coverRule.json`、`config.xml` | ✓ | ✓ | ? | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（57 已接 / 7 `未接` / 2 不适用，r330 建表、r334 实现段收口；接触面 83 个 `.kt` 全部已分配）。7 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
-| `themeMode` | `config.xml` | ✗ | ✗ | ? | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 0 `未接` / 2 不适用，A8 的图标切换按 `themeConfig` 类计不适用；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
-| `bookshelfLayout` | `config.xml` | ✗ | ✓ | ? | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（76 已接 / 43 `未接` / 3 不适用，r327 建表、r331/r332 落地 38 行；接触面 24 个 `.kt` 全部已分配）。43 条 `未接` 按 `**要接**`（2）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
-| `showRss` | `config.xml` | ✗ | ✗ | ? | **零行** |
-| `threadCount` | `config.xml` | ✗ | ✗ | ? | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
-| `mangaConfig` | `config.xml` | ✗ | ✗ | ? | **零行** |
+| `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（83 键） | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（176 已接 / 11 `未接` / 2 不适用）；11 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
+| `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（54 键） | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
+| `coverConfig` | `coverRule.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（14 键） | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（57 已接 / 7 `未接` / 2 不适用，r330 建表、r334 实现段收口；接触面 83 个 `.kt` 全部已分配）。7 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
+| `themeMode` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [深色模式总账](ZIP-THEME.md) A 1 / C 5 / D 7 / F 6 = **19 行**（17 已接 / 0 `未接` / 2 不适用，A8 的图标切换按 `themeConfig` 类计不适用；A1/C4/D2/F1/F2/F3/F10 已接，r300 落地；D7 已接，r302 落地；F9、F11 已接，r303 落地；C1 向导第 4 页深色模式点选即写全局并立刻换肤、C2 向导调色板选择落盘 `paletteIndex` 已接，r305 落地；D3 三值派生布尔、D8 阅读菜单日夜配色 r306 复查改判已接）；另 A2/A4 的界面也受 `themeMode` 影响，主类别记在 `themeConfig` |
+| `bookshelfLayout` | `config.xml` | ✓ | ✓ | 类别级等价，键级不等价（39 键） | [书架布局总账](ZIP-BOOKSHELF-LAYOUT.md) A 47 / B 26 / C 14 / D 12 / E 14 / F 9 = **122 行**（76 已接 / 43 `未接` / 3 不适用，r327 建表、r331/r332 落地 38 行；接触面 24 个 `.kt` 全部已分配）。43 条 `未接` 按 `**要接**`（2）/ `**不接**`（41）逐行登记进 [KNOWN-ISSUES](../KNOWN-ISSUES.md) 的「书架布局行登记」。BOOKSHELF.md 的 A2 33 / A1 20 里与本表重叠的行，以本表为准 |
+| `showRss` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | **零行** |
+| `threadCount` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（1 键） | [书籍总账](BOOKSHELF.md) A2 = **1 行** |
+| `mangaConfig` | `config.xml` | ✗ | ✗ | 类别级等价，键级不等价（32 键） | **零行** |
 
 ## 状态依据
 
@@ -99,15 +109,29 @@
 
 `bookSource`、`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server` 判不适用，理由统一：在线书源抓取、RSS 拉取、TTS 服务、WebDAV 在[项目队列](../PROJECT.md)的「范围之外」，明确写了「不因出现在页面或备份归档中而视为已实现」。这些条目仍会被原样归档（`copyPreservedEntries`），但**归档保留不等于功能兼容**。
 
-### 判 `?` 的四类与一处待补
+### 判 `?` 的四类与 `themeConfig` 写的复核
 
 `themeMode`、`showRss`、`threadCount`、`mangaConfig` 只有 `preferenceKeysByCategory` 的键分组，没有独立的备份或恢复分支，实际效果取决于 `config.xml` 的整体搬运路径，需逐个键核对才能定论。其中 `themeMode` 已在 [深色模式总账](ZIP-THEME.md) F9 逐行核实：`createBackup` 的 `config.xml` 写出清单不含该键，恢复侧 `filterAndroidConfigXml` 只是原样保留，故读写两侧都判 `✗`，界面侧另见该表 C/D/F 三块。
 
-`themeConfig` 的「写」也标 `?`：`createBackup` 里没有为它单独写 `themeConfig.json` 的分支，只有恢复侧 `:1041` 的忽略判断，是否需要补写出要看过上游 `ThemeConfigStore.configFileName` 的语义再定。**这一条已在 [深色模式总账](ZIP-THEME.md) F5 定论**：上游 `help/storage/Backup.kt:241-246` 明确用 `backupIgnoreThemeConfig` 门控写出 `ThemeConfigStore.configFileName`，本地应补写出分支，当前判 `未接`。
+`themeConfig` 的「写」列 2026-11-09 复核为**已实现**，总账表由 `✗` 改 `✓`：当前 HEAD（`60bbba2`）的 `createBackup` 在 config.xml 段之后有 `!ignoredCategories.includes('themeConfig')` 门控分支（`entry/src/main/ets/data/BackupRepository.ets:892`–`:895`，实测 `git show HEAD:... | grep -n buildCurrentThemeConfigs`），内调 `buildCurrentThemeConfigs(paletteIndex, customTheme)` → `themeConfigsToJson` → `writeTextFile` 写出 `themeConfig.json`；恢复侧 `:1161` 有 `if (entry.name === THEME_CONFIG_FILE_NAME)` 具名分支走 `parseThemeConfigs` + `saveThemeConfigs`。[深色模式总账](ZIP-THEME.md) F5 原记「应补写出、当前判未接」，是补写前的判断段，现已被上述代码落地覆盖，结论以本节与总账表为准。
 
-### 忽略项一列普遍为 `?`
+`bookshelfLayout` 的「读」列 2026-11-09 复核为**已恢复**，总账表由 `✗` 改 `✓`：当前 HEAD `:1245`–`:1253` 在恢复主循环之后调用 `BackupRepository.restoreBookshelfLayout(selection.stagingDirectory, currentBookshelfLayout, ignoredCategories)` 并 `await BookshelfLayoutRepository.save(context, bookshelfLayout)`，函数定义在 `:1479`，数据落 `BookshelfLayoutRepository` 原生仓储，符合本表「读」的定义。
 
-本地 `isIgnored`（`:1539`）对 `bookshelf.json`、`config.xml` 恒返回 `false`，其余条目按 `categoryOptions.files` 反查类别键名。这个机制存在，但**每个类别的忽略语义是否与上游 `dbIsNotIgnored` 等价，尚未逐类核对**。`—` 只出现在三类：`localBook`（上游由 `backupIgnoreLocalBook` 单独控制，本地走 `localBook` 键过滤本地书）与两类无独立开关的配置项。
+`replaceRule` / `txtTocRule` 的「涉及行」原记「零行」，实测 [TXT 阅读总账](TXT-READER.md) 各有 6 / 5 行数据行，出处行号已回填总账表。`grep -c` 实测 7 / 6，各比数据行多 1，多出的是 `:965` 的「ZIP 类别取值」表头说明行同时列举了这两个词、不是数据行；`grep -c highlightRule docs/parity/TXT-READER.md` 实测 `0`，只有 `highlightRule` 是真「零行」。
+
+行号口径说明：任务文案引用的 `:858`–`:862` / `:1123` / `:1187`–`:1190` 以及「HEAD 2676 行、工作区 2806 行（多 130 行 readRecord）」是更早状态；实测当前 HEAD 与工作区均为 2806 行、两者 `git diff --numstat` 为空，readRecord 三份已在 HEAD 内。本表行号一律按 `git show HEAD:entry/src/main/ets/data/BackupRepository.ets` 实测填写。
+
+### 忽略项列逐类核对结论（2026-11-09）
+
+上节判据逐类落到总账表后，忽略项列 20 个 `?` 全部落文字（状态由代码事实决定，不随读/写列改动）：
+
+- `等价（类别级）` 6 类：`bookmark`、`bookGroup`、`replaceRule`、`readRecord`、`txtTocRule`、`highlightRule` —— 都有独立 JSON 文件 + 恢复侧具名分支，`isIgnored` 反查 `categoryOptions.files` 生效。
+- `类别级等价，键级不等价（N 键）` 8 类：`readConfig`（83）、`themeConfig`（54）、`bookshelfLayout`（39）、`mangaConfig`（32）、`coverConfig`（14）、`themeMode`（1）、`showRss`（1）、`threadCount`（1）—— 键数取自 `BackupRepository.ets:328` 的 `preferenceKeysByCategory`，这 8 类正是 `preferenceKeysForCategory`（`:510`）if 链覆盖的全部类别。其中 `showRss`/`threadCount`/`mangaConfig` 读/写列仍为 `✗`（写出侧未 upsert，见批 2），但忽略项列只判门控语义。
+- `未接` 5 类（G2，批 3 之后回填）：`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` —— 本地零原生存储，忽略开关无原生功能可落。
+- `未接（语义错配，待批 4 重判）` 1 类：`searchHistory` —— 上游装 `SearchKeyword`（全局搜索关键词池），本地 `search_content_history` 对应上游 `SearchContentHistory`（书内搜索，上游不备份），两者不是同一件事，见批 4。
+- 既有判定不动：`localBook` = `—`（上游由 `backupIgnoreLocalBook` 单独控制，本地走 `localBook` 键过滤本地书）；`keyboardAssists` = `✓` 是「`isIgnored` 能跳过该文件」的既有判定，批 3 将按「上游仅存储无界面」复核为 `不适用`，本批不改。任务文案说「22 个 `?`」，实测总账表忽略项列为 `?` 的恰是上述 20 个，另两类本就不是 `?`。
+
+机制核实修正（当前 HEAD `60bbba2` 实测）：旧文记 `isIgnored` 在 `:1539`，HEAD 版实为 `entry/src/main/ets/data/BackupRepository.ets:2264`；对 `bookshelf.json`/`config.xml` 恒 `false` 的行为不变。config.xml 派生类别的门控落在紧随其后的 `filterAndroidConfigXml`，按 `preferenceKeysForCategory(key)` 整组把键从 XML 剔除。
 
 ### 一处已知的上游差异
 
