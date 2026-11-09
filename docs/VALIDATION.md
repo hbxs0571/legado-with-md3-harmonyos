@@ -26,6 +26,8 @@ Android 使用 `adb-screen-detection` 技能的截屏、OCR 查找和点击脚�
 
 HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创建 `Driver(serial)`；先用 OCR 识别当前界面，再按文本消歧并点击，最后用等待文本或再次识别判断是否到达。文本点击返回成功只说明找到了文字并发出点击，不能代替目标状态验证。
 
+模拟器的启停、探活与截图统一走 `bash scripts/emu.sh`，不手工敲 `Emulator.exe` / `hdc file recv`。它会等设备真正可连（`dumpLayout` 在刚启动时会报 `need connect-key`），并自检系统密度 —— 密度从 3.5 掉到 1.5 时视口变成 853×1888vp，整屏 UI 偏小，容易被误判成应用写死了尺寸。成因与已排除的排查路径见[模拟器使用说明](EMULATOR.md)。
+
 每次源码或资源变更后，按风险执行一次必要构建；设备可用时安装到明确的目标设备，保存关键截图或录像。设备不可用时记录「未验」，不能补写通过。文本与文档重组后检查链接、空白和引用路径。
 
 **测试书优先取现成真实书籍**：`N:\HarmonyProjects\测试\Book\`（仓库外）有 `txt/` 71 本、`epub/` 75 本，覆盖 GB18030 / UTF-8 / UTF-8-BOM 三种编码，体积 21 KB 到 102 MB，19 本带卷。该目录 `README.md` 有按测试目的分类的推荐档（TXT-极小 / TXT-标准 / TXT-超大章 / TXT-多卷 / EPUB-大 等别名），`MANIFEST.tsv` 有逐本的字节数、编码、章节标记数。**能挑到合适的书就不要现场合成**——合成既费时间，也测不出真实排版与真实章节结构；只有「必须精确构造一种畸形输入」时才合成（缺正文占位书、单条 `bookshelf.json` 的备份 ZIP、坏编码、超长单章）。
@@ -353,7 +355,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 ### 另两块设置的盘点结论（本轮不改）
 
-- **书架**：`entry/src/main/ets/model/BookshelfLayout.ets:69` 的 `DEFAULT_BOOKSHELF_LAYOUT` 13 个字段逐项等于上游 `domain/model/settings/BookshelfSettings.kt` 的构造默认值，这块没问题。但上游该 data class 有 **51 个字段**（本地 `docs/parity/BOOKSHELF.md:161` 记的也是 51），另外 38 项散落在各页面 `@State` 与仓储之外，**没有集中默认值来源**：其中 10 项（`showUnread` / `showUnreadNew` / `showBookCount` / `showLastUpdateTime` / `showBookIntro` / `showWaitUpCount` / `showBookshelfFastScroller` / `bookshelfLayoutModeLandscape` / `autoRefreshBook` / `saveTabPosition`）在 `entry/src/main/ets` 下零命中，另 28 项只出现在 `data/BackupRepository.ets:360-377` 的备份键白名单里（备份会带走、本地没有对应界面与默认值）。本轮只记录这条事实，不逐个去改。
+- **书架**：`entry/src/main/ets/model/BookshelfLayout.ets:69` 的 `DEFAULT_BOOKSHELF_LAYOUT` 13 个字段逐项等于上游 `domain/model/settings/BookshelfSettings.kt` 的构造默认值，这块没问题。但上游该 data class 有 **51 个字段**（本地 `docs/parity/BOOKSHELF.md:161` 记的也是 51），另外 38 项散落在各页面 `@State` 与仓储之外，**没有集中默认值来源**：其中 10 项（`showUnread` / `showUnreadNew` / `showBookCount` / `showLastUpdateTime` / `showBookIntro` / `showWaitUpCount` / `showBookshelfFastScroller` / `bookshelfLayoutModeLandscape` / `autoRefreshBook` / `saveTabPosition`）在 `entry/src/main/ets` 下零命中，另 28 项只出现在 `data/BackupRepository.ets:424`-`:438` 的备份键白名单里（备份会带走、本地没有对应界面与默认值）。本轮只记录这条事实，不逐个去改。
 - **封面**：`entry/src/main/ets/data/CoverSettingsRepository.ets:51` 的 `DEFAULT_COVER_SETTINGS` 12 个字段逐项等于上游 `domain/model/settings/CoverSettings.kt`，这块没问题。上游另有 6 项（`loadOnlyOnWifi` / `useDefaultCover` / `restrictCoverRatio` / `exploreFilterState` / `defaultCover` / `defaultCoverDark`）本地未声明，属未接，不在本轮。
 
 ### 提交
@@ -526,7 +528,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 缺陷一的边界按任务书守住：`clear()` 只加在 `aboutToDisappear()`，**没有**加进 `onReaderContentChanged()`——换章要复用缓存，那条路径仍然只走 `clearParagraphs()`。
 
-批量改 catch 时用花括号深度跟踪脚本查过一遍变量遮蔽：唯一真嵌套在 `entry/src/main/ets/data/BackupRepository.ets:2338`（`ensureDirectory()` 的内层 try），已改名 `catch (probeError)`，外层 `if (error instanceof Error) { throw error; }` 语义恢复。改后三文件 `grep -c "catch (_)"` 全为 0。
+批量改 catch 时用花括号深度跟踪脚本查过一遍变量遮蔽：唯一真嵌套在 `entry/src/main/ets/data/BackupRepository.ets` 的 `ensureDirectory` 内层 try（定义 `:2961`），已改名 `catch (probeError)`，外层 `if (error instanceof Error) { throw error; }` 语义恢复。改后三文件 `grep -c "catch (_)"` 全为 0。
 
 ### 缺陷二 设备验收通过
 
@@ -1189,7 +1191,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 | A8 快速滚动条 | 面板开「显示快速滚动条」 | 书架出现系统滚动条且重启保持 | `b2-restart.json` 读回该 `Toggle checked=true`；滚动条渲染在 `BookshelfPage.ets:915`（未单独拍滚动条特写） |
 | A9 记住分组 | 切到某分组 → 杀进程重进 | 页签仍停在记住的分组 | 覆盖安装成功；`selectGroup` 写回与 `onLayoutChanged` 恢复代码在 `BookshelfPage.ets:132-148`（该组未单独上机走闭环，见「未验」） |
 | A10 空态全局搜索按钮 | 书架内搜索框输入无匹配词 | 空态出现「全局搜索」按钮 | 覆盖安装成功；按钮代码在 `BookshelfPage.ets:942-946`（该组未单独上机走闭环，见「未验」） |
-| A11 备份归类 | 导出备份时取消勾选「书架布局」 | `config.xml` 仍含 `bookGroupStyle` / `hideEmptyGroups` | 覆盖安装成功；无条件写出块在 `BackupRepository.ets:592-596`、类别数组移出两键在 `:360-361`（备份导出闭环未单独上机，见「未验」） |
+| A11 备份归类 | 导出备份时取消勾选「书架布局」 | `config.xml` 仍含 `bookGroupStyle` / `hideEmptyGroups` | 覆盖安装成功；无条件写出块在 `BackupRepository.ets:674`-`:680`（两键在 `:675`/`:676`，位于类别门控 `:682` 之前）、`bookshelfLayout` 键组 `:424`-`:438` 不含两键（备份导出闭环未单独上机，见「未验」） |
 | 持久化读回 | `aa force-stop` + `aa start` 后 `uitest dumpLayout` 读 6 条新面板条目 | 6 条值全部保持 | `b2-restart.json`：网格样式 `仅封面`、精简详情 `checked=true`、日间 `#3A5BA0`、夜间 `#7A2E4B`、搜索优先 `checked=false`、快速滚动条 `checked=true`，与提交前一致 |
 
 **复原**：预检把 6 条值改成非默认（仅封面 / 精简 true / 日间 `#3A5BA0` / 夜间 `#7A2E4B` / 搜索优先 false / 快滚 true），收尾时在设备上逐条改回上游默认值，见证据包「复原」段与 `b2-restored-default.png`。
@@ -1303,7 +1305,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 **代码落点**（`entry/src/main/ets/`，全中文注释）：
 - `model/BookshelfLayout.ets:86` 字段 `showBookIntro: boolean;`；`:177` 默认 `false`；`:228` `copyBookshelfLayout` 同步。字段数 39→40。
 - `data/BookshelfLayoutRepository.ets:80-81`（load）、`:151`（save）、`:233-234`（merge）、`:296`（`toAndroidValues`）。
-- `data/BackupRepository.ets:596` 无条件写出块（在 `ignoredCategories.includes('bookshelfLayout')` 判断之前）；`:1357-1362` 忽略判断前单独读入并写入早退分支；`:1388` 非早退分支合入。`preferenceKeysByCategory.bookshelfLayout`（`:357`）**未加**该键。
+- `data/BackupRepository.ets:677` 无条件写出块（在类别门控 `:682` 之前）；`:1786` 忽略判断前单独读入 `showBookIntro` 并在早退分支 `:1789` 写回；`:1815` 非早退分支合入。`preferenceKeysByCategory.bookshelfLayout`（`:424`-`:438`）**`bookshelfShowIntro` 与 `showBookIntro` 都未加**（`:435` 的 `bookshelfShowIntro` 是另一个上游键）。
 - `pages/BookshelfPage.ets:568-570` `showsListDetails()`、`:573-575` `introMaxLines()`、`:578-581` `introMaxLinesDescription()`；`:939-976` 面板详情区（含 `:960` 与 `:966` 两个额外条件）；`:1005-1010` 外观组删掉原两条列表开关。
 - `pages/BookshelfPage.ets:1171-1230` 列表卡片：外层 `Column`、`:1193-1200` 右列简介、`:1203-1210` 章节行、`:1214` 封面对齐、`:1216-1224` 底部简介、`:1226-1230` 分隔线。
 
@@ -1350,15 +1352,15 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 - 封面规则：`data/CoverRuleRepository.ets`（`CoverRule :20`、`DEFAULT_COVER_RULE :39`、`copyCoverRule :52`、`isDefaultCoverRule :67`、`class :73`、`get :80`/`load :89`/`save :113`/`del :135`）、`data/CoverRuleDefaults.ets`；UI 在 `pages/AppCoverSettingsPage.ets:385 CoverSettingsSheetContent()`、`:387 activeSheet === 'rule'`、`:399-423` 三区、`:391-394` 两按钮、`saveRule() :115`、`restoreDefaultRule() :104`、`openRuleSheet() :98`。
 - 默认封面相册：`data/CoverAlbumRepository.ets`（357 行，`CoverAlbumImageItem :27`、`CoverAlbumItem :37`、`class :60`、`indexFileName :62`、`selectionPreferenceName :63`、`formatVersion :64`、`getAlbums :70`、`getSelection :74`、`previewPath :79`、`defaultCoverPath :92`、`rootDir :104`、`persist :138`、`toItem :159`、`load :182`、`loadSelection :193`、`setSelection :213`、`createAlbum :222`、`renameAlbum :233`、`deleteAlbum :243`、`hashFile :271`、`addImages :298`、`removeImage :341`）；UI 在 `pages/AppCoverSettingsPage.ets:427-471`（选择 sheet，缩略图 44×60）、`:472-526`（管理页，缩略图 64×88）、`:527-565`（编辑器）、`:566` 起（新建/改名面板）。
 - 四开关与渲染：`components/BookCover.ets:93 effectiveCoverUri()`（`useDefaultCover` 真时走 `CoverAlbumRepository.defaultCoverPath(isNight)`）、`:291-295 coverHeight()`（`restrictCoverRatio`）；`pages/SearchPage.ets`、`pages/BookInfoPage.ets`、`pages/Index.ets:192` 与 `:6734`/`:7400` 两处挂载补传 `coverSettings`。
-- 14 键备份：`data/BackupRepository.ets:806-812`（写出，受 `!ignoredCategories.includes('coverConfig')` 门控）、`:1426 restoreCoverSettings()`（`:1440-1455` 逐键读 XML 回填）、`:1157` 调用点、`:313-321 alwaysIgnoredPreferenceKeys`（`defaultCover`/`defaultCoverDark` 天然不进）、`:2528 isSafeRootEntry()`（`cover_albums/` 目录天然不进）。
+- 14 键备份：`data/BackupRepository.ets:946`-`:951`（写出，受 `:946` 的 `!ignoredCategories.includes('coverConfig')` 门控）、`restoreCoverSettings()` 定义 `:1825`（`:1825`-`:1839` 逐键读 XML 回填）、`:1535` 调用点、`:377`-`:382 alwaysIgnoredPreferenceKeys`（`defaultCover`/`defaultCoverDark` 天然不进）、`isSafeRootEntry()` 定义 `:3089`（`cover_albums/` 目录天然不进）。
 
 **复原**：收尾把「使用默认封面」关、「默认封面」回「未选择相册」、「显示字体描边」开、「使用默认颜色」开、封面规则恢复默认后保存、删掉本轮新建的测试相册（AlbumA/AlbumB2/AlbumC）。模拟器全程竖屏，未改 `config.ini`。
 
 **未做到 / 存疑**：
 1. **`:86` A1（仅 WiFi）与 `:95` A10（网络书籍角标）本机不可观察**：`@ohos.net.http`/`http.createHttp`/`http://` 在 `entry/src/main/ets` 内零命中，`Image()` 只吃 `file://`；`pages/DiscoverPage.ets` 是示范数据页（`:62` 过滤 `this.sources` 常量）。两项只做字段 + 开关 + 存储 + 备份键，状态按 `docs/PARITY-RULES.md:52-56` 留 `未接`。
 2. **`:180` D18 首屏封面预加载留 `未接`**：本地封面链路 `preload`/`PixelMap`/`ImageBitmap`/`MemoryCache` 零命中，`pages/BookshelfPage.ets:23-29` 有 `const BOOKSHELF_FIRST_SCREEN_PRELOAD_COLUMNS: number = 0;` 与「不新建预加载系统」的注释；上游那条「首帧灰底」现象的成因（Coil 内存缓存为空）在本地不存在，按计划「本机无法稳定复现可观察差异则留 `未接`」处置。
-3. **`:131` B15 旧版迁移在文档收尾时改回 `未接`**：`grep -rn 'cover_album_migrated\|default-cover\|LEGACY' entry/src/main/ets` 零命中，`CoverSettings.defaultCover`/`defaultCoverDark` 只被 load/save/copy 搬运、全仓无人写值——既没有迁移实现，也暂时没有迁移对象。实现段收尾时按「无可迁数据」记为 `已接`，文档核对时按三值口径改回 `未接`，故本节之后 `docs/parity/ZIP-COVER.md` 盘面为 **57 已接 / 7 未接 / 2 不适用**，而实现段证据包 `tmp/cover-impl-evidence.md:149` 记的仍是当时的 58/6/2。
-4. **`:146` C6 规则求值 / `:148` C8 `coverRule.json` 备份 / `:149` C9 细粒度忽略开关**不在本轮 36 行内：默认规则脚本依赖 `java.base64Encode`/`java.ajaxAll`/`com.jayway.jsonpath.JsonPath`，终点是在线接口，本地无 JS 引擎与 `java.*` 桥；三项状态保持 `未接`。
+3. **`:131` B15 旧版迁移在文档收尾时改回 `未接`**：`grep -rn 'cover_album_migrated\|default-cover\|LEGACY' entry/src/main/ets` 零命中，`CoverSettings.defaultCover`/`defaultCoverDark` 只被 load/save/copy 搬运、全仓无人写值——既没有迁移实现，也暂时没有迁移对象。实现段收尾时按「无可迁数据」记为 `已接`，文档核对时按三值口径改回 `未接`，故本节之后 `docs/parity/ZIP-COVER.md` 盘面一度为 **57 已接 / 7 未接 / 2 不适用**（实现段证据包 `tmp/cover-impl-evidence.md:149` 记的是收尾前的 58/6/2）。**2026-11-09 起 C8 `coverRule.json` 的 ZIP 读写按实际代码改判 `已接`**（写出 `data/BackupRepository.ets:956`-`:960`、恢复 `:1468`-`:1481`），现盘面为 **58 已接 / 6 未接 / 2 不适用**，B15 仍是 `未接`。
+4. **`:146` C6 规则求值 / `:149` C9 细粒度忽略开关**不在本轮 36 行内：默认规则脚本依赖 `java.base64Encode`/`java.ajaxAll`/`com.jayway.jsonpath.JsonPath`，终点是在线接口，本地无 JS 引擎与 `java.*` 桥，两项状态保持 `未接`。`:148` C8 `coverRule.json` 的备份读写已单独接通（写出 `BackupRepository.ets:956`-`:960`、恢复 `:1468`-`:1481`），不需要 JS 引擎——它读写的只是 `CoverRule` 9 字段的 JSON，已于 2026-11-09 改判 `已接`。
 5. **`cryptoFramework.createMd('SHA256')` 合法性未查到**：`data/CoverAlbumRepository.ets:271 hashFile()` 用它生成图片文件名，离线 SDK 文档与项目既有代码里只查到 `createMd('MD5')` 一种用法（`data/BookRepository.ets:339-355 md5Encode16`）；实现里对 `createMd` 做了 try/catch，失败回落 `file-${Date.now()}-${sequence}` 唯一串。
 6. **三处相册呈现差异**：根目录上游 `getExternalFilesDir(null)/cover_albums`、本地 `context.filesDir/cover_albums`；原子写入上游 `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)`、本地 `albums.json.tmp` → 删旧 → `renameSync` 近似；相册 id 上游 `Uuid`、本地 `album-<时间戳>-<序号>`（全仓无 `util.generateRandomUUID`）。三处已写进对照表差异说明。
 7. **屏幕证据只覆盖了 33 行中的一部分**：`tmp/cover-shots/` 共 22 张 PNG，其中以 `c<表行号>-<场景>` 命名的 17 张（另有 `c00-boot-bookshelf.png` 为装包后首屏），覆盖 A2、A4、B3、B4、B6、B7、B8、B9、C2、C5、C7；**A17/A18（夜间渲染）、A3/A8（默认封面与比例限制）、E1–E6（备份 14 键与相册不进备份）未取到本轮屏幕或 ZIP 证据**，这几项只有代码落点与可复跑命令。

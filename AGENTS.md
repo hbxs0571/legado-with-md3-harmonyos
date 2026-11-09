@@ -12,7 +12,7 @@
 - 每次只做一个明确模块。先读迁移计划和当前模块文件，用限定路径的符号搜索定位源码；不重复扫描整个 Android 项目。复用已有证据，按风险做最小充分验证。
 - 每次源码改动后必须执行一次 `assembleHap`，未跑构建不得交付。列表、存储、备份与序列化改动的必查项见 `docs/CODE-CONVENTIONS.md`；「上游没有某实现」这类断言必须附检索证据。
 - 改文件时同一文件不要混用脚本与编辑器（会报 `file changed since it was read`）；定位片段只取一到两行，大段替换用整份写入；脚本整份重写必须沿用原换行符。详见 `docs/CODE-CONVENTIONS.md` 第六节。
-- 模拟器交互先 OCR 识别当前界面和目标文字，点击后再 OCR 验证；Android 用 `adb-screen-detection`，HarmonyOS 用 HMNextAuto。中间截图不发给用户，失败时才展示并说明；设备选择、依赖与完整步骤见 `docs/VALIDATION.md`。
+- 模拟器交互先 OCR 识别当前界面和目标文字，点击后再 OCR 验证；Android 用 `adb-screen-detection`，HarmonyOS 用 HMNextAuto。中间截图不发给用户，失败时才展示并说明；设备选择、依赖与完整步骤见 `docs/VALIDATION.md`。模拟器启停、探活与截图一律走 `bash scripts/emu.sh`（`start`/`stop`/`restart`/`status`/`cap`），它每次启动都自检密度；密度从 3.5 掉到 1.5 会让整屏 UI 变小的成因与排查记录见 `docs/EMULATOR.md`。
 - **测试用书优先取现成真实书籍**：`N:\HarmonyProjects\测试\Book\`（仓库外，`txt/` 71 本 + `epub/` 75 本，覆盖 GB18030 / UTF-8 / UTF-8-BOM 三种编码，含无卷、单卷、数百卷多种结构）。该目录 `README.md` 有选书指引、`MANIFEST.tsv` 有逐本编码与章节标记数。**能挑到合适的书就不要现场合成**——合成既费 token，也测不出真实排版与真实章节结构。只有「必须精确构造一种畸形输入」时才合成，例如缺正文的占位书、单条 `bookshelf.json` 的备份 ZIP、坏编码、超长单章。
 - 候选模块不自动展开；保持真实业务与“未迁移”标记，保留现有本地数据能力。
 - 源码备份仅在危险修改之前、关键兼容里程碑完成或用户明确要求时创建；普通页面微调、构建和小修订不创建连续备份。资源、截图和样本只使用 `N:\HarmonyProjects\project-resources\legado-with-MD3`，不得再读取或写入旧开发目录。

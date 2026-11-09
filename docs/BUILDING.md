@@ -8,6 +8,7 @@
 
 Windows PowerShell 示例（将工具安装路径替换为本机实际位置）：
 
+```powershell
 $devecoRoot = $env:DEVECO_STUDIO_HOME
 if (-not $devecoRoot) { throw '请先设置 DEVECO_STUDIO_HOME' }
 $env:DEVECO_SDK_HOME = Join-Path $devecoRoot 'sdk'
@@ -15,6 +16,8 @@ $env:JAVA_HOME = Join-Path $devecoRoot 'jbr'
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 & (Join-Path $devecoRoot 'tools\hvigor\bin\hvigorw.bat') --no-daemon --mode module -p product=default -p module=entry@default assembleHap
 ```
+
+也可直接跑仓库里的 `scripts/build-hap.sh`（Git Bash，读 `DEVECO_STUDIO_HOME`）。设备侧工具不在 PATH 时先解析 SDK 中的路径：`hdc.exe` 与 `adb.exe` 都在 `<DEVECO_STUDIO_HOME>/sdk/default/openharmony/toolchains/` 下。
 
 产物通常位于 entry/build/default/outputs/default/entry-default-unsigned.hap。当前没有 signingConfigs，未签名包不是面向普通用户直接安装的正式发行物。自行安装须按自己的设备和开发者配置完成匹配签名；不要把私钥、密码或 Profile 提交到 Git。
 

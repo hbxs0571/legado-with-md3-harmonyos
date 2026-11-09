@@ -43,7 +43,7 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 
 **这个样本缺 9 个条目**：`bookMarking.json`、`rssStar.json`、`sourceSub.json`、`homepageModules.json`、`highlightRule.json`、`highlightTagRule.json`、`tagGroupRule.json`、`coverRule.json`、`directLinkUploadRule.json`。所以凡属这 9 类的「待往返验收」都不能拿本样本当完成依据——要么另找一份带这些条目的备份，要么在设备上先造数据再导出。
 
-`config.xml` 的 370 个偏好项里，本地真正读写的只有一小部分：**写出侧 69 个键**（`upsertAndroidPreference` 去重后），分三段——`bookshelfLayout` 段 13 个（`bookGroupStyle`、`hideEmptyGroups`、`bookshelfSort`、`bookshelfSortOrder`、`bookshelfLayoutPortrait`、`bookshelfLayoutGridPortrait`、`bookshelfLayoutListPortrait`、`bookshelfTitleMaxLines`、`bookshelfCoverShadow`、`bookshelfTitleCenter`、`bookshelfTitleSmallFont`、`bookshelfGridCoverWidth`、`bookshelfListCoverWidth`，`entry/src/main/ets/data/BackupRepository.ets:594-606`）、`readConfig` 段的阅读外观与菜单键、`themeConfig` 段的护眼 6 键与 `themeMode`；**读入侧 75 个键**（`readXmlInteger` / `readXmlBoolean` / `readXmlString` 去重），其中若干只在读入侧出现、写出侧没有。其余键既不读也不写，恢复时随 `copyPreservedEntries` 原样归档。这就是「ZIP 里有 370 项、本地只认其中一部分」的直接来源，逐类缺口见下文 28 类清单。（r327 复核：原文记「写出侧 35 键、`bookshelfLayout` 段 9 键、读入侧 47 键、并集 59 键」，与实际代码不符——写出侧实为 69 键、`bookshelfLayout` 段实为 13 键、读入侧实为 75 键。）
+`config.xml` 的 370 个偏好项里，本地真正读写的只有一小部分。**写出侧 113 个去重键**（`upsertAndroidPreference` 共 100 次调用：99 处字面量键 + `:949` 一处 `coverSettingsToAndroid` 循环覆盖 14 键），分段如下：无条件区 5 键（`BackupRepository.ets:675`-`:679`，`bookGroupStyle`、`hideEmptyGroups`、`showBookIntro`、`coverRestrictRatio`、`explore_filter_state`）、`bookshelfLayout` 段 37 键（门控 `:682`，`:684`-`:720`）、`readConfig` 段 49 键（门控 `:822`，`:824`-`:941`）、`coverConfig` 段 14 键（门控 `:946`，`coverSettingsToAndroid` 循环 `:948`-`:951` + `:950`）、`themeConfig` 护眼 6 键（`:964`-`:975`）、`themeMode` 1 键（`:985`-`:986`）、`showRss` 1 键（`:994`-`:995`）。**读入侧 137 个去重键**（`readXmlInteger` / `readXmlBoolean` / `readXmlString` / `readXmlFloat` 字面量键 85 个 + `bookshelfLayout` 键组 38 键 + `coverConfig` 键组 14 键），其中 24 键只在读入侧出现（`readStyleSelect`、`shareLayout`、`readMenuIcon*`、`progressBarBehavior`、`tocUiUseReplace`、`tocCountWords`、`clickImgWay`、9 个 `clickAction*`、`paragraphSpacing`、`lineSpacingExtra`、`maxLengthWithNoToc`、`hideStatusBar`、`hideNavigationBar`），写出侧 113 键**全部**在读入侧有对应读取（不存在单向键）；`shadowRadius`、`shadowDx`、`shadowDy`、`dottedBase`、`dottedRatio` 五个 float 键走「先 `readJsonNumber`（readConfig.json）后 `readXmlFloat`（config.xml）兜底」的双路读法（`:1988`-`:1993`、`:2136`-`:2140`）。读写并集 **137 键**。其余键既不读也不写，恢复时随 `copyPreservedEntries` 原样归档。这就是「ZIP 里有 370 项、本地只认其中一部分」的直接来源，逐类缺口见下文 28 类清单。（2026-11-09 复核：原文先记「写出侧 69 键、`bookshelfLayout` 段 13 键、读入侧 75 键」，后改记「读入侧 132 键、另有 5 键只在写出侧」，两版都与代码不符。实测口径——`upsertAndroidPreference` 共 100 次调用（99 处字面量键 + `:949` 一处 `coverSettingsToAndroid` 循环覆盖 14 键），加 `coverSettingsToAndroid` 的 14 键去重后**写出 113 键**；`readXml*` 共 89 次调用（85 处字面量键 + `:1802`/`:1810`/`:1844`/`:1847`/`:1850` 五处变量键），加 `bookshelfLayout` 键组 38 键（`:1793`-`:1798` 的 25 整型 + `:1805`-`:1806` 的 13 布尔）与 `coverConfig` 键组 14 键去重后**读入 137 键**；只在读入侧的 24 键已在上文列全，只在写出侧的 0 键。）
 
 阅读配置的 Android `config.xml` 映射包含 `tocUiUseReplace` 与 `tocCountWords` 两个目录偏好键；导入时仅恢复到本地阅读设置，不执行归档中的脚本或规则。该映射尚待实际 ZIP 往返验收。
 
@@ -67,7 +67,7 @@ TXT 目录规则使用根级 `txtTocRule.json`，其字段为 `chapterRule`、`v
 2. **当前没有原生业务的安全兼容**：字典规则 → 书源 → RSS 订阅源 → 书架分组 → 首页自定义分组 → 键盘辅助、在线朗读源及服务端配置。每类单独记录预览、忽略或原样保留结果，不把归档数据显示为可用功能。
 3. **跨类别收口**：验证合并/覆盖、冲突、异常 ZIP、资源上限、重启后状态和实际往返；受影响的 TXT/EPUB、进度、记录、书签及设置做定向回归。
 
-Android 归档中的 `readRecord.json`、`readRecordDetail.json` 与 `readRecordSession.json` 当前仅按兼容归档保留，不导入原生会话/日明细/按书汇总仓储。**注意区分两件事**：这是「ZIP 导入没接」；而本机旧格式记录（`legado_read_time_records` 的扁平 `records` 键）的搬迁已在 r283 接进 `RdbMigration` 第三批，两者不是同一件事，后者不代表 ZIP 映射已接。
+Android 归档中的 `readRecord.json`、`readRecordDetail.json` 与 `readRecordSession.json` **已映射进原生三层仓储**：恢复侧 `entry/src/main/ets/data/BackupRepository.ets:1449`/`:1450` 具名解析出三份 pending 数据，主循环末尾 `:1487`-`:1490` 交给 `ReadRecordRepository.restoreFromBackup(context, …)`，函数体在 `entry/src/main/ets/data/ReadRecordRepository.ets:1069`，在 `store.beginTransaction()` 内按「取较长时间、较晚时间」合并写库。**注意区分两件事**：以上是「ZIP 导入」；本机旧格式记录（`legado_read_time_records` 的扁平 `records` 键）的搬迁是另一条路，已在 r283 接进 `RdbMigration` 第三批，两者不是同一件事。
 
 TTS、WebDAV 服务、在线书源抓取、RSS 抓取和查词业务均不随本轮自动启动。WebDAV 服务器凭据需要单独解决解密密钥和跨设备安全；服务端配置条目的存在不表示可迁移服务。
 
@@ -105,23 +105,25 @@ grep -cE '^\| [0-9]+ \| `' docs/BACKUP-RESTORE.md
 grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 ```
 
-「ZIP 接入」判据只有三档，与 [ZIP 兼容总账](parity/STATUS.md) 的三级兼容度一致：
+「ZIP 接入」按五档判定，与 [ZIP 兼容总账](parity/STATUS.md) 的三级取值对应（`✓` 覆盖「已接入」与「部分接入」两个档，`✗` 覆盖「未接入」与「仅归档」，`—` 对应「不适用」）：
 
 - **已接入**：恢复时有具名分支，数据落到原生仓储/表；且已过设备往返验证，或至少写出侧已实现
 - **部分接入**：恢复侧有分支但只映射了该类的一部分键/字段，或只在合成 ZIP 上验过、真实归档未验
 - **仅归档**：恢复时由 `copyPreservedEntries` 原样保存，不解析、不落原生功能（这类条目在归档里存在 ≠ 该功能已支持）
+- **未接入**：本地有对应界面或概念，但 ZIP 条目既不写出、也不读回，键值完全没接
+- **不适用**：上游有此行为、本地按 [盘点规约](./PARITY-RULES.md) 第三节判无对应依据（理由必写在表格备注或[已知问题](./KNOWN-ISSUES.md)里）
 
-恢复侧具名分支实测只有这 8 个 `entry.name ===` 判断：`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`，其余全部走 `copyPreservedEntries`。（此 8 个清单是 r287 快照，之后新增的具名分支未纳入本表重盘。）
+恢复侧具名分支实测为 **21 处 `entry.name ===` 判断、19 个条目名**（`entry/src/main/ets/data/BackupRepository.ets`，2026-11-09 HEAD 版，该文件 3106 行、与工作区一致）：`bookshelf.json` `:1192`、`config.xml` `:1211`、`bookGroup.json` `:1222`、`replaceRule.json` `:1232`、`txtTocRule.json` `:1249`、`highlightRule.json` `:1263`、`dictRule.json` `:1277`、`httpTTS.json` `:1295`、`homepageModules.json` `:1340`、`homepageCustomSets.json` `:1358`、`highlightTagRule.json` `:1376`、`tagGroupRule.json` `:1394`、`bookmark.json` 与 `bookMarking.json` `:1412`/`:1424`、`themeConfig.json`（常量 `THEME_CONFIG_FILE_NAME`）`:1435`、`readRecord.json`/`readRecordDetail.json`/`readRecordSession.json` `:1449`/`:1450`、`coverRule.json` `:1468`。其余条目走 `copyPreservedEntries` 原样归档。另有 2 处 `entry.name ===` 不在恢复主循环：`:1101` 的 bookshelf 计数段、`:2502`/`:2509` 的忽略项段。
 
 | # | 类别键名 | 上游中文名 | ZIP 条目 | 样本条数 | 本地原生功能 | ZIP 接入 | 队列位置 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `localBook` | 本地书籍 | `bookshelf.json` | **658** | 书架、TXT/EPUB 阅读、进度保存 | **部分接入**：书目/进度/缺正文标记可映射；恢复期冲突处理已接（`data/LocalBookRestorePlanner.ets` 移植上游 `BookRestorePlanner.kt` 的删重复书 / 重定位识别 / 三态定位）；不打包正文 | ZIP 映射 1 |
 | 2 | `readConfig` | 阅读界面 | `readConfig.json`、`shareReadConfig.json`、`config.xml` | 12 / 96 键 / 370 项 | 阅读配置有原生模型与持久化 | **部分接入**：读入 46 个 `config.xml` 键；`shareReadConfig` 未转多套方案 | ZIP 映射 2 |
-| 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`）与全局主题网关（`data/ThemeSettingsRepository.ets` / `data/ThemeModeResolver.ets`） | **已接入（r303）**：备份时把全局 `themeMode` 写进 `config.xml`（值域归一成 `"0"/"1"/"2"`），恢复时读回并 `applyThemeMode` 真正改全 App 配色；备份/恢复两侧的忽略开关都接上真实效果。该类别在界面级表里是 19 行（17 已接 / 0 未接 / 2 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A1/C/D/F | ZIP 映射 4 |
-| 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题页 + 护眼设置 | **部分接入**：护眼 6 键双向已验且 r301 起有真实渲染（色温覆盖层）；`themeConfig.json` 仍不生成（需要先有本地主题包数据结构，见 B 块），Android 配色/透明度 JSON 未映射；界面侧主题设置页 46 个条目里 39 个仍走 `onUnavailableAction`，主题包管理整块缺失。该类别在界面级表里是 72 行（64 已接 / 6 未接 / 2 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A/B/D/E/F | ZIP 映射 5 |
-| 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，729 行，14 条设置项，2 处 `onUnavailableAction`） | **部分接入（r334 实现段收口）**：14 个封面键已双向接进 `config.xml`（写出 `data/BackupRepository.ets:806-810`，恢复 `:1423-1455` 的 `restoreCoverSettings`，调用点 `:1155-1157`），键名与上游 PreferKey 一致；本类别 66 行里 57 行已接、7 行未接、2 行不适用，逐行见[封面设置总账](parity/ZIP-COVER.md)。7 行未接分别是 A1 仅 WiFi（`:86`）、A10 网络书籍角标（`:95`）、B15 旧版默认封面迁移（`:131`）、C6 规则求值（`:146`）、C8 `coverRule.json` 备份（`:148`）、C9 备份开关（`:149`）、D18 预加载（`:180`）——A1、A10 受本机无网络图片加载限制，B15 缺迁移对象（`CoverSettings.defaultCover` 全仓无人写值），C6、C8、C9、D18 随规则引擎与预加载；`coverRule.json` 的 ZIP 读写由批 1 / 批 2 接上：写出在 `data/BackupRepository.ets` 的 coverConfig 段（`CoverRuleRepository.load` 后按 `isDefaultCoverRule` 判断，改过规则才写，沿用上游 `BookCover.getConfig()?.let` 的口径），恢复在 restore 的 `coverRule.json` 分支（`parseCoverRule` 逐字段补齐 9 字段后 `CoverRuleRepository.save` 落私有存储）；上方 7 行未接里的 C8 沿用界面级盘点口径，本批未改 `parity/ZIP-COVER.md` 那份表 | 待接；相册目录另计 `不进备份` |
-| 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`），界面面板 12 条目（`pages/BookshelfPage.ets:573-637`） | **部分接入（r327 重核）**：写出 13 键（`data/BackupRepository.ets:594-606`，原记 9 键漏了 `bookshelfTitleCenter`/`bookshelfTitleSmallFont`/`bookshelfGridCoverWidth`/`bookshelfListCoverWidth`），读入 13 键（`entry/src/main/ets/data/BackupRepository.ets:1328-1332` 九整型 + `:1339` 四布尔）；界面级 122 行里 76 已接 / 43 未接 / 3 不适用（r331/r332 落地 38 行后），逐行见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) | ZIP 映射 6 |
-| 7 | `showRss` | 显示订阅 | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **未接入**：`showRss` 键读写都未接 | 待接 |
+| 3 | `themeMode` | 深色模式 | `config.xml` | 370 项内 1 键 | 有主题设置页（`pages/ThemeSettingsPage.ets`）与全局主题网关（`data/ThemeSettingsRepository.ets` / `data/ThemeModeResolver.ets`） | **已接入（r303）**：备份时把全局 `themeMode` 写进 `config.xml`（值域归一成 `"0"/"1"/"2"`，写出 `BackupRepository.ets:983`-`:987`，恢复 `restoreThemeMode` 定义 `:552`、读键 `:558`），恢复时读回并 `applyThemeMode` 真正改全 App 配色（回传 `:1554`）；备份/恢复两侧的忽略开关都接上真实效果 | ZIP 映射 4 |
+| 4 | `themeConfig` | 主题配置 | `themeConfig.json`、`config.xml` | 8 / 370 项内 52 键 | 主题设置页（`pages/ThemeSettingsPage.ets`，1070 行）+ 主题管理页（`pages/ThemeManagePage.ets`，441 行，`Index.ets:7979` 挂载）+ 护眼设置 | **部分接入**：护眼 6 键双向已验且 r301 起有真实渲染（色温覆盖层）；`themeConfig.json` 已双向接通 —— 写出在 `BackupRepository.ets:1004`（`buildCurrentThemeConfigs` 现算日夜两套 → `themeConfigsToJson` → `writeTextFile`），恢复在 `:1435`-`:1443`（`parseThemeConfigs` → `saveThemeConfigs` 整份覆盖），恢复后另补一次 `upThemeConfig` 装载。仍未映射的是 Android 配色/透明度 JSON 的逐项字段。界面侧只剩 4 处 `onUnavailableAction`（`ThemeSettingsPage.ets:548` 主题风格、`:550` 切换图标、`:724` 导航布局、`:726` 多窗布局），主题包管理已不是缺口。该类别在界面级表里是 91 行（81 已接 / 7 未接 / 3 不适用），逐行见[深色模式对照表](parity/ZIP-THEME.md) A/B/C/D/E/F | ZIP 映射 5 |
+| 5 | `coverConfig` | 封面设置 | `coverRule.json`、`config.xml` | **样本缺** | 有封面设置页（`pages/AppCoverSettingsPage.ets`，729 行，14 条设置项，2 处 `onUnavailableAction`） | **部分接入（r334 实现段收口）**：14 个封面键已双向接进 `config.xml`（写出 `data/BackupRepository.ets:946`-`:951`（`coverSettingsToAndroid` 循环覆盖 14 键），恢复 `restoreCoverSettings` 定义 `:1825`（`:1825`-`:1839`），调用点 `:1535`），键名与上游 PreferKey 一致；本类别 66 行里 58 行已接、6 行未接、2 行不适用，逐行见[封面设置总账](parity/ZIP-COVER.md)。6 行未接分别是 A1 仅 WiFi（`:86`）、A10 网络书籍角标（`:95`）、B15 旧版默认封面迁移（`:131`）、C6 规则求值（`:146`）、C9 备份开关（`:149`）、D18 预加载（`:180`）——A1、A10 受本机无网络图片加载限制，B15 缺迁移对象（`CoverSettings.defaultCover` 全仓无人写值），C6、C9、D18 随规则引擎与预加载；`coverRule.json` 的 ZIP 读写由批 1 / 批 2 接上：写出在 `data/BackupRepository.ets` 的 coverConfig 段（`CoverRuleRepository.load` 后按 `isDefaultCoverRule` 判断，改过规则才写，沿用上游 `BookCover.getConfig()?.let` 的口径），恢复在 restore 的 `coverRule.json` 分支（`parseCoverRule` 逐字段补齐 9 字段后 `CoverRuleRepository.save` 落私有存储）；C8 这一行已于 2026-11-09 在 `parity/ZIP-COVER.md` 一并改判 `已接` | 待接；相册目录另计 `不进备份` |
+| 6 | `bookshelfLayout` | 书架布局 | `config.xml` | 370 项内 41 键 | 书架布局有完整仓储（`data/BookshelfLayoutRepository.ets`），界面面板 12 条目（`pages/BookshelfPage.ets:573-637`） | **部分接入（r327 重核）**：写出 37 键（`data/BackupRepository.ets:682` 门控、`:684`-`:720`，原记 9 键与 13 键都远少于实际），读入 38 键（`entry/src/main/ets/data/BackupRepository.ets:1793`-`:1798` 25 整型 + `:1805`-`:1806` 13 布尔）+ `bookshelfSelectedGroupId`（`:1813`）；界面级 122 行里 76 已接 / 43 未接 / 3 不适用（r331/r332 落地 38 行后），逐行见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) | ZIP 映射 6 |
+| 7 | `showRss` | 显示订阅 | `config.xml` | 370 项内 1 键 | 订阅页 UI 已有 | **已接入（批 2）**：写出 `BackupRepository.ets:991`-`:996` 按运行时真值 upsert 布尔键、恢复 `restoreShowRss` 定义 `:571`、读键 `:576` `readXmlBoolean`、回传 `:1555`，设备真包往返已验；界面侧接线待排期 | 待接界面侧 |
 | 8 | `threadCount` | 线程数 | `config.xml` | 370 项内 1 键 | **无对应概念**（HOS 无并发线程数设置） | **未接入**：键读写都未接 | 安全兼容 |
 | 9 | `mangaConfig` | 漫画设置 | `config.xml` | 370 项内 32 键 | 仅设置页有漫画相关条目文字，无漫画阅读 | **未接入**：32 个键读写都未接 | 安全兼容；漫画业务候选 |
 | 10 | `bookmark` | 书签 | `bookmark.json`、`bookMarking.json` | 344 / **样本缺 `bookMarking`** | 原生书签与标注仓储、阅读入口 | **已接入**：N 端双向验证通过（新增 1、覆盖 1），合并语义 | ZIP 映射 3 |
@@ -130,30 +132,31 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 | 13 | `rssSource` | 订阅源 | `rssSources.json` | 28 | 订阅页 UI 已有，抓取未迁移 | **仅归档** | 安全兼容 12；抓取业务候选 |
 | 14 | `rssStar` | RSS 收藏 | `rssStar.json` | **样本缺** | **无**（`grep rssStar` 零命中） | **仅归档** | 安全兼容 |
 | 15 | `replaceRule` | 替换规则 | `replaceRule.json` | 40 | 规则模型/仓储 + 阅读时替换链路 | **已接入**：写出根级 JSON、恢复逐条导入；非空应用备份往返待验 | ZIP 映射 7 |
-| 16 | `readRecord` | 阅读记录 | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | 575 / 313 / **39376** | 原生会话、日明细、按书汇总三层已接通 | **仅归档**：三个条目都不导入原生仓储 | ZIP 映射 6 |
-| 17 | `searchHistory` | 搜索历史 | `searchHistory.json` | 737 | 阅读器搜索历史有原生仓储（`search_content_history` 表） | **仅归档**：未导入 | ZIP 映射 8 |
+| 16 | `readRecord` | 阅读记录 | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | 575 / 313 / **39376** | 原生会话、日明细、按书汇总三层已接通 | **已接入**：三条链路 `:1449`/`:1450` 具名解析，末尾 `:1487`-`:1490` 交 `ReadRecordRepository.restoreFromBackup`，事务内合并写库（定义 `data/ReadRecordRepository.ets:1069`） | ZIP 映射 6 |
+| 17 | `searchHistory` | 搜索历史 | `searchHistory.json` | 737 | 阅读器搜索历史有原生仓储（`search_content_history` 表），但那是**书内搜索**，与上游此条目的全局关键词池不是同一件事 | **不适用**：上游 `searchHistory.json` 装 `SearchKeyword`（全局搜索关键词池，表 `search_keywords`），本地无此入口、无此表；判据见 [ZIP 兼容总账](parity/STATUS.md) 批 4 节 | ZIP 映射 8；语义错配，待上游口径 |
 | 18 | `sourceSub` | 书源订阅 | `sourceSub.json` | **样本缺** | 有页面壳 | **仅归档** | 安全兼容 |
 | 19 | `txtTocRule` | TXT 目录规则 | `txtTocRule.json` | 40 | 规则仓储、管理页、切章、分卷、书架更新目录 | **已接入**：合成 ZIP 单条恢复与空规则备份有记录；非空应用备份往返待验 | ZIP 映射 9 |
-| 20 | `httpTTS` | HTTP TTS | `httpTTS.json`、`httpTtsVoices.json` | 1 / 1 | 朗读设置界面存在，TTS 服务未迁移 | **仅归档**：不调用服务 | 安全兼容；TTS 业务候选 |
-| 21 | `keyboardAssists` | 键盘辅助 | `keyboardAssists.json` | 32 | **无**（`grep keyboardAssists` 零命中） | **仅归档** | 安全兼容；键位业务候选 |
-| 22 | `dictRule` | 字典规则 | `dictRule.json` | 28 | 列表与编辑 UI 有壳（`pages/ProfileSubPages.ets`），存储与查词未迁移 | **仅归档** | 安全兼容 10；字典业务候选 |
-| 23 | `homepageModules` | 首页模块 (JSON) | `homepageModules.json` | **样本缺** | 首页基础组件已实现，模块管理未迁移 | **仅归档** | 安全兼容 |
-| 24 | `homepageCustomSets` | 首页自定义 | `homepageCustomSets.json` | 1 | 自定义集合管理未迁移 | **仅归档** | 安全兼容；自定义业务候选 |
+| 20 | `httpTTS` | HTTP TTS | `httpTTS.json`、`httpTtsVoices.json` | 1 / 1 | 朗读设置界面存在，TTS 服务与播放未迁移；数据层已有 `httpTTS` / `read_aloud_voices` 两张表与仓储 | **已接入（数据层）**：恢复 `:1295` `HttpTtsImporter.parseSources` → `HttpTtsRepository.importSources`，随后读同目录 `httpTtsVoices.json` → `ReadAloudVoiceRepository.replaceHttpVoices`（坏 JSON 只计 skipped、不清库）；写出 `:1015`/`:1019`。不连服务、不播放 | 安全兼容；TTS 业务候选 |
+| 21 | `keyboardAssists` | 键盘辅助 | `keyboardAssists.json` | 32 | **无**（`grep keyboardAssists` 零命中） | **不适用**：上游只有存储无业务（`keyboardAssistsDao` 8 个方法里 6 个零引用、`ui/` 零命中），本地无对应能力可接；判据见 [ZIP 兼容总账](parity/STATUS.md) 批 3 节 | 安全兼容；键位业务候选 |
+| 22 | `dictRule` | 字典规则 | `dictRule.json` | 28 | 列表页与编辑页有壳（`pages/ProfileSubPages.ets:1928` `DictionaryRulesPage`、`:2167` `DictionaryRuleEditPage`），界面未接线；数据层有 `dictRules` 表与 `DictRuleRepository` | **已接入（数据层，批 3）**：恢复 `:1277` → `DictRuleRepository.importRules`，写出 `:749` | 安全兼容 10；字典业务候选 |
+| 23 | `homepageModules` | 首页模块 (JSON) | `homepageModules.json` | **样本缺** | 首页基础组件已实现，模块管理界面未迁移；数据层有 `homepage_modules` 表与 `HomepageModuleRepository` | **已接入（数据层，批 3）**：恢复 `:1340` → `HomepageModuleRepository.importRules`，写出 `:758` | 安全兼容 |
+| 24 | `homepageCustomSets` | 首页自定义 | `homepageCustomSets.json` | 1 | 自定义集合管理界面未迁移；数据层有 `homepage_custom_sets` 表与 `HomepageCustomSetRepository` | **已接入（数据层，批 3）**：恢复 `:1358` → `HomepageCustomSetRepository.importRules`，写出 `:767` | 安全兼容；自定义业务候选 |
 | 25 | `highlightRule` | 高亮规则 | `highlightRule.json` | **样本缺** | 规则模型、`highlightRules` 表、正则匹配、分页/滚动两渲染 | **已接入**：N 端双向验证通过；合并语义，与上游 `replaceAll` 不同 | ZIP 映射已验 |
-| 26 | `highlightTagRule` | 标签规则 | `highlightTagRule.json` | **样本缺** | 有列表页与编辑页（`pages/ProfileSubPages.ets:2244` 起 207 行），**13 处 `onUnavailableAction`，无仓储** | **仅归档** | 安全兼容 |
-| 27 | `tagGroupRule` | 标签分组规则 | `tagGroupRule.json` | **样本缺** | **无**（`grep tagGroup` 零命中） | **仅归档** | 安全兼容 |
+| 26 | `highlightTagRule` | 标签规则 | `highlightTagRule.json` | **样本缺** | 列表页与编辑页有壳（`pages/ProfileSubPages.ets:2309` `HighlightTagRulesPage`、`:2533` `HighlightTagRuleEditPage`），界面未接线；数据层有 `highlight_tag_rules` 表与 `HighlightTagRuleRepository` | **已接入（数据层，批 3）**：恢复 `:1376` → `HighlightTagRuleRepository.importRules`，写出 `:776` | 安全兼容 |
+| 27 | `tagGroupRule` | 标签分组规则 | `tagGroupRule.json` | **样本缺** | 无独立界面；数据层有 `tag_group_rules` 表与 `TagGroupRuleRepository` | **已接入（数据层，批 3）**：恢复 `:1394` → `TagGroupRuleRepository.importRules`，写出 `:785` | 安全兼容 |
 | 28 | `server` | 服务器配置 | `servers.json` | 空文件 | WebDAV/服务端同步未迁移 | **仅归档**：数据不透明，不尝试解密或连接 | 安全兼容；WebDAV 业务候选 |
 
-**统计（四档，合计 28）**：
+**统计（五档，合计 28）**：
 
 | 档位 | 类数 | 类别 |
 | --- | --- | --- |
-| 已接入 | **6** | `bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule`、`themeMode` |
-| 部分接入 | **5** | `localBook`、`readConfig`、`themeConfig`、`bookshelfLayout`、`coverConfig` |
-| 未接入（本地有页面，ZIP 键读写都没接） | **3** | `showRss`、`threadCount`、`mangaConfig` |
-| 仅归档 | **14** | `bookSource`、`rssSource`、`rssStar`、`readRecord`、`searchHistory`、`sourceSub`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule`、`server` |
+| 已接入 | **14** | `themeMode`、`bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule`、`showRss`、`readRecord`、`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` |
+| 部分接入 | **5** | `localBook`、`readConfig`、`themeConfig`、`coverConfig`、`bookshelfLayout` |
+| 未接入（本地有页面或概念，ZIP 键读写都没接） | **2** | `threadCount`、`mangaConfig` |
+| 不适用（上游有、本地按规约判无对应依据） | **2** | `searchHistory`、`keyboardAssists` |
+| 仅归档 | **5** | `bookSource`、`rssSource`、`rssStar`、`sourceSub`、`server` |
 
-「未接入」与「仅归档」的区别只在本地有没有那页 UI：前 3 类本地有设置页可改值，只是那些值既不写进 `config.xml`、也不从 `config.xml` 读回；后 14 类连页面都没有。两者对 Android 用户的实际结果一样——换到 HarmonyOS 后这些设置不生效。
+「未接入」与「仅归档」的区别：前者本地有页面或概念、只是键值没接；后者连本地功能都没有，条目仅原样归档。两者对 Android 用户的实际结果一样 —— 换到 HarmonyOS 后这些设置不生效。`不适用` 是第三件事：不是「没做」，而是按 [盘点规约](./PARITY-RULES.md) 第三节判过、上游行为在本地没有对应依据。
 
 **与 r257 旧版的差异**：旧版 18 行用的全是中文功能名（「书架、书籍元数据与进度」「通用偏好设置」「替换净化规则」），新版改用代码键名。两版的数据没有丢，只是切法变了，对应关系如下：
 
@@ -183,7 +186,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 旧版之所以只有 18 行，是因为它把 `config.xml` 里的 6 类偏好合并成了一个「通用偏好设置」；新版拆开，是因为它们在代码里是 6 个独立的 `categoryOptions` 项，**各自可以单独勾选忽略**，合成一行就没法派活。
 
-状态修正：`bookGroup.json` 已列入原生分组映射，而不是“没有原生分组功能”；本地阅读记录三层仓储已接入，但 Android ZIP 历史仍未映射。r255 在 E 端验证 `readConfig × themeConfig` 四种包含/忽略组合；这不代表所有阅读/主题字段或外部 Android ZIP 已完整往返。
+状态修正：`bookGroup.json` 已列入原生分组映射，而不是“没有原生分组功能”；本地阅读记录三层仓储已接入，Android ZIP 历史也已在 `BackupRepository.ets:1487`-`:1490` 映射进这三层（见 28 类表第 16 行）。r255 在 E 端验证 `readConfig × themeConfig` 四种包含/忽略组合；这不代表所有阅读/主题字段或外部 Android ZIP 已完整往返。
 
 ## 按清单派活的依据
 
@@ -206,7 +209,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 3. 该类在 `config.xml` 里的键名清单（`preferenceKeysByCategory` 有的话直接指过去，没有就现列）
 4. 验收方式：**必须走真实样本 `测试\backup2026-10-22.zip` 的往返**，不是只看代码。样本缺该类条目时先造数据，别拿「代码写了」当验收
 
-**一个已知的口径陷阱**：`config.xml` 有 370 个偏好项，本地读入 75 个、写出 69 个（r327 复核，原记「读入 46、写出 9 + 阅读外观/护眼两组」为旧值）。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
+**一个已知的口径陷阱**：样本 `config.xml` 有 370 个偏好项，本地写出 113 个去重键、读入 137 个去重键（口径与分段见上文「写出侧 / 读入侧」两段）。按样本逐键比对，本地写出的 113 键里 **83 个**在样本中存在、**30 个**不在；读入的 137 键里 **104 个**在样本中存在、**33 个**不在。那 30/33 个不在样本 `config.xml` 里的键分两种：17 个（`textBold`、`textItalic`、`textShadow`、`underline*`、`shadow*`、`dotted*`）在上游是 `ReadBookConfig` 的字段、走 `readConfig.json` 而不是 `config.xml` 存（`help/config/ReadBookConfig.kt:760` 的 `"textBold" to textBold` 序列化段），本地为了少一份文件把它们也写进了 `config.xml`；另 13 个（`bookmarkBadgeImage`、`moreActionsConfig`、`titleBarCompact`、`swipeToAddBookmark` 等）是上游 `PreferKey` 有定义、但该设备的 `config.xml` 里还没被写过默认值。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
 
 ### 对照表的「ZIP 类别」列怎么读
 
@@ -247,7 +250,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 **三、「零行」是「还没盘」，不是「已完成」，也不是「本地没有这个功能」。**
 
-[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 16 类标为**零行**（`rssSource`、`rssStar`、`replaceRule`、`searchHistory`、`sourceSub`、`txtTocRule`、`httpTTS`、`keyboardAssists`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightRule`、`server`、`themeMode`、`showRss`、`mangaConfig`）。`bookmark` 与 `themeConfig` 虽在 [书籍总账](parity/BOOKSHELF.md) 里零行，但分别归 [书签对照](parity/ZIP-BOOKMARK.md) A–E 与 [阅读配置总账](parity/READER-CONFIG.md) F，不算零行；`coverConfig` 在 r330 建表后也已离开这份清单（[封面设置总账](parity/ZIP-COVER.md) 66 行）。
+[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 11 类标为**零行**，分两种：**整个界面级盘点零行** 6 类（`rssSource`、`rssStar`、`sourceSub`、`server`、`highlightRule`、`mangaConfig`）；**读写已接通、只是界面明细尚未盘点** 5 类（`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`showRss`，单元格里写的是「明细仍零行」）。`bookmark`、`themeConfig`、`coverConfig` 各自归 [书签对照](parity/ZIP-BOOKMARK.md) A–E（83 行）、[阅读配置总账](parity/READER-CONFIG.md) F、[封面设置总账](parity/ZIP-COVER.md)（66 行）盘点，不计入本清单；`replaceRule`（6 行）、`txtTocRule`（5 行）、`themeMode`（19 行）已随总账逐轮复核补出行数，同样不在本清单里。（2026-11-09 复核：此前记的是「16 类零行」，把上述三类与 `searchHistory`、`keyboardAssists`（现判不适用、理由已写）一并算了进去。）
 
 派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[盘点规约](PARITY-RULES.md)第二节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
 
@@ -263,7 +266,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 ## 偏好键对齐差异（待移除）
 
-本地 `entry/src/main/ets/data/BackupRepository.ets:233 preferenceKeysByCategory` 与上游 `help/storage/BackupConfig.kt` 的五个类别数组逐键比对（可复跑：拿 `PreferKey.kt` 常量值换算后求差集）：
+本地 `entry/src/main/ets/data/BackupRepository.ets:383` 的 `preferenceKeysByCategory` 与上游 `help/storage/BackupConfig.kt` 的五个类别数组逐键比对（可复跑：拿 `PreferKey.kt` 常量值换算后求差集）：
 
 | 类别 | 上游 | 本地 | 多出 | 缺失 |
 | --- | --- | --- | --- | --- |
@@ -273,7 +276,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 | `mangaConfig` | 32 | 32 | 0 | 0 |
 | `coverConfig` | 14 | 14 | 0 | 0 |
 
-`coverConfig` 这一行的 0/0 只说明**类别清单本身**对齐了（`data/BackupRepository.ets:387-391` 的 14 个常量与 `BackupConfig.kt:396-411` 逐键相同），不代表这些键真的被读写。r330 核实：这份清单在本地**只用于过滤**（`data/BackupRepository.ets:2103-2127` 的 `filterAndroidConfigXml` 把 14 个键当排除项），而 `config.xml` 的写出是白名单式逐键（`data/BackupRepository.ets:776-793`），封面 14 键不在写出列表里；恢复侧 `grep coverSettings` 在 `data/BackupRepository.ets` 零命中。另有一层不一致：本地落盘用的是裸字段名（`showName`/`textColor`/`infoOrientation`…，见 `data/CoverSettingsRepository.ets:135-146`），与这份常量里的 `coverShowName`/`coverTextColor`/`coverInfoOrientation` 不同名——所以即便将来把 14 键加进白名单，也要先解决键名映射。逐行结论见[封面设置总账](parity/ZIP-COVER.md) E 块。
+`coverConfig` 这一行的 0/0 只说明**类别清单本身**对齐了（`data/BackupRepository.ets:450`-`:454` 的 14 个常量与 `BackupConfig.kt:396-411` 逐键相同），不代表这些键真的被读写。r330 核实：这份清单在本地**只用于过滤**（`data/BackupRepository.ets:2703` 的 `filterAndroidConfigXml` 把 14 个键当排除项）。**2026-11-09 复核后此段已被代码推翻**：`config.xml` 的写出已改为逐键 `upsertAndroidPreference`（`data/BackupRepository.ets:723`-`:942` 为 `readConfig` 段、`:946`-`:951` 为封面段），封面 14 键现在**确实在写出列表里**；恢复侧 `restoreCoverSettings` 定义在 `data/BackupRepository.ets:1825` 并复用 `coverSettingsToAndroid`（`:1841`）、调用点 `:1535`。另有一层不一致：本地落盘用的是裸字段名（`showName`/`textColor`/`infoOrientation`…，见 `data/CoverSettingsRepository.ets:135-146`），与这份常量里的 `coverShowName`/`coverTextColor`/`coverInfoOrientation` 不同名——所以即便将来把 14 键加进白名单，也要先解决键名映射。逐行结论见[封面设置总账](parity/ZIP-COVER.md) E 块。
 
 `readConfig` 多出的 25 个分两类：
 
@@ -309,7 +312,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 | `underline` | `ui/widget/components/text/HtmlContent.kt:696 underline = "underline" in value.lowercase()` 的 HTML 样式字面量 |
 | `textItalic`、`textShadow`、`shadowRadius`、`shadowDx`、`shadowDy`、`shadowColor`、`shadowColorN`、`underlineHeight`、`underlineColorNight`、`dottedLine` | 全仓字面量命中 0（既非 `PreferKey`、也非 `LocalPreferences`、也非任何 JSON 键） |
 
-**三、`bookshelfLayout` 多出的 2 个**：`bookGroupStyle`（`PreferKey.kt:13`）、`hideEmptyGroups`（`PreferKey.kt:14`）——与上游同样落在 `else -> true` 的无类别分支，本地收进了 `bookshelfLayout` 数组（`entry/src/main/ets/data/BackupRepository.ets:360-361`），属上述第一类问题。**但这两个键在写出侧的后果已查清**：它们被写在 `if (!ignoredCategories.includes('bookshelfLayout'))` 块内（`entry/src/main/ets/data/BackupRepository.ets:592-594`），取消「书架布局」勾选时这两个键一并不写出；按上游口径它们本应始终写出（`help/storage/BackupConfig.kt:413` 的 `keyIsNotIgnore` 对这两个键落 `else -> true`）。界面侧见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) 的 F 块。
+**三、`bookshelfLayout` 多出的 2 个**：`bookGroupStyle`（`PreferKey.kt:13`）、`hideEmptyGroups`（`PreferKey.kt:14`）——与上游同样落在 `else -> true` 的无类别分支，本地收进了 `bookshelfLayout` 键组（`entry/src/main/ets/data/BackupRepository.ets:424`-`:438` 的 `preferenceKeysByCategory.bookshelfLayout`，并在恢复侧 `:1794`/`:1805` 的键组里各出现一次），属上述第一类问题。**这两个键在写出侧的后果已于 2026-11-09 复核修正**：它们与 `showBookIntro`、`coverRestrictRatio`、`explore_filter_state` 一起被写在**无条件区**（`entry/src/main/ets/data/BackupRepository.ets:675`-`:679`，位于 `:682` 的 `if (!ignoredCategories.includes('bookshelfLayout'))` 门控**之前**），所以**取消「书架布局」勾选时这两个键照样写出**——与上游 `help/storage/BackupConfig.kt:413` 的 `keyIsNotIgnore` 落 `else -> true` 一致。旧文记「被写在门控块内、取消勾选一并不写出」，与现行代码相反，已作废。界面侧见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) 的 F 块。
 
 **四、`themeConfig` 缺失的 1 个**：`bookInfoAuthorSearchFallback`（`PreferKey.kt:252`，在上游 `themePrefKeys` 内）。本地未收，导致取消「主题配置」勾选时这个键不会被忽略——与上游不一致。**已在 r292 补进 `BackupRepository.ets` 的 `themeConfig` 数组**（现 53 = 上游 53）。
 

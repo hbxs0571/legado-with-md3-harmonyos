@@ -25,7 +25,10 @@
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
 | 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
 | 构建和验证记录 | [构建说明](BUILDING.md)、[验证记录](VALIDATION.md) |
-| 核对脚本（七表计数、竖线体检、链接体检、锚点校验、证据包 lint） | `scripts/parity-rows.py`、`scripts/parity-pipes.py`、`scripts/doc-links.py`、`scripts/anchor-check.py`、`scripts/evidence-lint.py`（说明见 [盘点规约](PARITY-RULES.md) 第六节） |
+| 模拟器启停 / 探活 / 截图（含密度掉档排查） | [模拟器使用说明](EMULATOR.md)、`scripts/emu.sh` |
+| 核对脚本（七表计数、竖线体检、链接体检、锚点校验、证据包 lint、上游接触面） | `scripts/parity-rows.py`、`scripts/parity-pipes.py`、`scripts/doc-links.py`、`scripts/anchor-check.py`、`scripts/evidence-lint.py`、`scripts/upstream-surface.sh`（说明见 [盘点规约](PARITY-RULES.md) 第六节） |
+| 阅读配置盘点辅助脚本 | `scripts/reader-config-annotate.py`、`scripts/reader-config-diff.py`、`scripts/reader-config-pending.py` |
+| 构建与设备脚本 | `scripts/build-hap.sh`、`scripts/emu.sh` |
 | Hypium / UI 自动化测试 | [测试目标与运行说明](HYPIUM-UI-TEST.md) |
 | 资源许可与来源 | [资源许可清单](RESOURCE-LICENSES.md)、[来源哈希表](RESOURCE-SOURCES-SHA256-2026-10-26.csv) |
 | 资源公开范围 | [素材说明](ASSETS.md) |

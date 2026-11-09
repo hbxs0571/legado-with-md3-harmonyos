@@ -1,6 +1,6 @@
 # 版权、来源与修改说明
 
-Legado with MD3 for HarmonyOS 是由 hbxs0571 维护的社区独立原生移植。上游为 HapeLee/legado-with-MD3（本地参考提交 `67970a10b16f90d3cdaf50b487a31bf75950f938`），其上游为 gedoor/legado。原有作品版权归各自作者和贡献者所有；未声称原 Android 项目由本项目创作。
+Legado with MD3 for HarmonyOS 是由 hbxs0571 维护的社区独立原生移植。上游为 HapeLee/legado-with-MD3（r258 移交点 `67970a10b16f90d3cdaf50b487a31bf75950f938`，当前对照基线 `bba5c64`，比移交点新 26 个提交），其上游为 gedoor/legado。原有作品版权归各自作者和贡献者所有；未声称原 Android 项目由本项目创作。
 
 自 2026-10-22 起新增/改写的 ArkTS、ArkUI、Stage 工程、本地阅读及 Android ZIP 兼容实现作为 GPL-3.0 衍生工程提供，完整文本见 LICENSE。此次 2026-10-24 公开快照整理了独立工程结构、公开文档与资源来源；不会附带私人开发历史、用户内容和凭据。各修改文件中的通知及资源清单说明转换方式。
 

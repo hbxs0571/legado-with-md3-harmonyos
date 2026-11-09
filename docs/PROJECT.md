@@ -38,10 +38,10 @@
 
 | 项 | 上游接触面 | 依赖的本地缺口 |
 | --- | --- | --- |
-| 在线书源抓取 | `model/webBook/`（6 个 `.kt`，`WebBook.kt` 509 行）、`service/`（13 个） | 网络层、书源规则解析（JS/正则）、书源管理页（现为 164 行空壳，5 处 `onUnavailableAction`） |
+| 在线书源抓取 | `model/webBook/`（6 个 `.kt`，`WebBook.kt` 509 行）、`service/`（13 个） | 网络层、书源规则解析（JS/正则）、书源管理页（现为 162 行空壳，5 处 `onUnavailableAction` 调用，`pages/ProfileSubPages.ets:25`-`:186`） |
 | TTS 服务 | `HttpReadAloudService.kt` 等朗读链路 15 个文件 | 网络层、音频播放、前台服务；阅读器侧入口现有 8 处「朗读播放尚未迁移」占位 |
 | RSS 拉取 | `model/rss/`（3 个 `.kt`，`Rss.kt` 160 行） | 网络层、订阅源管理与筛选（现有 4 处「订阅源筛选尚未迁移」占位） |
-| WebDAV | 12 个含 `webdav` 的文件，含 `WebDavBackupRepository.kt` | 网络层、备份包上传/下载/列举；现有 2 处「WebDAV 备份尚未迁移」占位 |
+| WebDAV | 12 个文件名含 `webdav` 的 `.kt`（按内容计则 62 个），含 `WebDavBackupRepository.kt` | 网络层、备份包上传/下载/列举；现有 3 处「WebDAV 备份尚未迁移」占位 |
 
 ## 范围之外
 

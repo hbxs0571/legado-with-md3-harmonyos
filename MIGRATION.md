@@ -2,7 +2,7 @@
 
 工程路径：`N:\HarmonyProjects\legado-with-md3-harmonyos`。
 
-1. 先读 [当前续接记录](docs/CURRENT.md)。
+1. 先读本机的当前续接记录 `docs/CURRENT.md`（该文件在 .gitignore 里，仅供本机续接，不随仓库发布；clone 后没有这个文件）。
 2. 再从 [文档索引](docs/INDEX.md) 进入当前页面或能力的活动说明。
 3. 只有追溯来源、旧验证或历史决策时，才读取 `docs/history/`。
 

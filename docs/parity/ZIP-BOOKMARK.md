@@ -96,7 +96,7 @@
 | 恢复默认角标 | `BookmarkBadgeDelegate.kt:51 clearBadgeImage` | `ReaderBookmarkBadgeRepository.ets:68 removeImage` | 已接 | 清空路径即回默认丝带 | 点「恢复默认」角标变丝带 | — |
 | 角标尺寸设置 | `MoreConfigSheet.kt:309-325`；`ReadConfigUpdateDelegate.kt:649` | `ReaderSettingsRepository.ets:192,438`、`ReaderSettingsPage.ets:1655` | 已接 | 滑块 0–N dp，0 表示不显示 | 调小到 0 角标消失 | 上游默认 10dp，本地同 |
 | 下滑添加书签（手势开关） | `PullBookmarkGesture.kt`（整文件）；`MoreConfigSheet.kt:304`；`PreferKey.kt:204` | `ReaderPage.ets:164`、`:1006`、`:2926`、`:3023`；`ReaderSettingsPage.ets:854` | 已接 | 阈值 80dp、纵向占优 1.5、提示「松手以添加书签」 | 开启后下拉一段见提示，松手生成书签 | 手势常量按上游取值 |
-| 书签加入备份 ZIP | `Restore.kt:157`（`bookmark.json`）、`BackupConfig.kt:76` | `BackupRepository.ets:299`、`:712` | 已接 | 读写两侧都走 `ReaderBookmarkImporter`/导出 | 备份 ZIP 含 `bookmark.json`，恢复后书签还在 | 见 [ZIP 兼容总账](STATUS.md) |
+| 书签加入备份 ZIP | `Restore.kt:157`（`bookmark.json`）、`BackupConfig.kt:76` | `BackupRepository.ets:795`（`writeTextFile`，门控 `:792`） | 已接 | 读写两侧都走 `ReaderBookmarkImporter`/导出 | 备份 ZIP 含 `bookmark.json`，恢复后书签还在 | 见 [ZIP 兼容总账](STATUS.md) |
 | 书签无障碍播报 | `ReaderAccessibilityPolicy.kt:19`（`isBookmarked`） | — | 未接 | 本地无阅读页无障碍策略层，`entry/src/main/ets` 全仓只有一处 `accessibilityText`（`ProfileSubPages.ets:3579`，与阅读无关） | 读屏软件播报「已加书签」 | 上游在 `feature/reader/core/accessibility`，本地无对应模块 |
 
 ## B 阅读页划线 / 笔记
@@ -123,7 +123,7 @@
 | **标记渲染前校验锚点文本** | `BookContentProcessEngine.kt:25-46`（`findTargetRange` 为空则不计入）、`:101-131`（三级退让重定位） | `ReaderPage.ets:1999 getMarkingForTextRange` | 未接 | 本地只判 `chapterPosition < end && endPosition > start` 相交，**完全不看 `selectedText`**；等价能力 `BookContentProcessEngine.ets:93 findTargetRange` 已存在但没接到标记渲染 | 把正文改动后标记应重定位或不渲染，本地仍按旧偏移渲染 | **已设备取证**；见 [已知问题](../KNOWN-ISSUES.md) |
 | 目录页标记按章节序定位 | `TocViewModel.kt:375 markingUiList`、`BookMarkingDao.kt:70` | `CatalogPage.ets:194-200` | 已接 | 本地按 `chapterIndex` 再按 `createdAt` 排 | 目录页笔记 tab 顺序与正文一致 | r272 补齐 |
 | 标记所属书源标记（其他书源红字） | `ReaderBookSheet.kt:1320`（`isOtherSource`）、`:1346` | `CatalogPage.ets:227-231`、`ProfileSubPages.ets:2886` | 已接 | `bookUrl` 与当前书不同则标红「其他书源」 | 导入他书标记后见红字 | — |
-| 标记加入备份 ZIP | `Restore.kt:163`（`bookMarking.json`）、`BackupConfig.kt:76` | `BackupRepository.ets:299`、`:797` | 已接 | `mergeMarkings` 合并后落盘 | 备份 ZIP 含 `bookMarking.json`，恢复后标记还在 | 见 [ZIP 兼容总账](STATUS.md) |
+| 标记加入备份 ZIP | `Restore.kt:163`（`bookMarking.json`）、`BackupConfig.kt:76` | `BackupRepository.ets:797`（`writeTextFile`，门控 `:792`） | 已接 | `mergeMarkings` 合并后落盘 | 备份 ZIP 含 `bookMarking.json`，恢复后标记还在 | 见 [ZIP 兼容总账](STATUS.md) |
 | **划词菜单「行内快速标记」模式** | `ReadBookRouteScreen.kt`（按 `MarkingUiState.inlineMode` 切换）；`ReadBookContract.kt:870 OpenQuickMarking`、`:871 OpenQuickMarkingEdit`、`:872 ApplyQuickMarking`、`:875 DismissQuickMarking` | — | 未接 | 本地只有 sheet 一条路径，无 inline 预览态（`previewStyle` / `inlineDirty` 未建模） | 划词后当场应用上次样式，不弹面板 | 见 [已知问题](../KNOWN-ISSUES.md) |
 | 标记启用开关 | `BookMarkingRepository.kt:38 setEnabled`、`BookMarking.enabled` | `ReaderMarkingRepository.ets:52`（`enabled` 字段） | 已接 | 字段存盘、渲染门控读它 | 停用的标记不在正文显示 | 本地面板不提供开关，与上游 UI 同 |
 
@@ -168,7 +168,7 @@
 | 搜索时只保留有匹配笔记的书 | `AllBookmarkViewModel.kt:170-186`（`filter { selectedBook != null \|\| query.isBlank() \|\| matchedMarkingId != null }`） | `ProfileSubPages.ets:2638` | 已接 | 同口径 | 搜一个只在笔记里存在的词，只列该书的笔记 | r274 收口 |
 | 「包含匹配笔记」主色提示 | `AllBookmarkScreen.kt:356-410`（`feature_bookmarks_match_hint`） | `ProfileSubPages.ets:2841` 起 | 已接 | 命中时卡片显示该行 | 搜索命中笔记的卡片见提示 | r274 |
 | 书籍卡片封面（52dp 宽） | `AllBookmarkScreen.kt:356-410`（`CoilBookCover`） | `ProfileSubPages.ets:2841` 起（`BookCover`） | 已接 | 复用 `components/BookCover.ets`，无封面时首字占位 | 卡片右侧出现封面 | r274 |
-| 计数行「N 个书签 · N 个笔记」 | `AllBookmarksScreen.kt:356-410`（`feature_bookmarks_counts`） | `ProfileSubPages.ets:2841` 起 | 已接 | 文案与上游一致（r275 由「条」改为「个」） | 卡片见「1 个书签 · 0 个笔记」 | — |
+| 计数行「N 个书签 · N 个笔记」 | `ui/book/bookmark/AllBookmarkScreen.kt:356-410`（`feature_bookmarks_counts`） | `ProfileSubPages.ets:2841` 起 | 已接 | 文案与上游一致（r275 由「条」改为「个」） | 卡片见「1 个书签 · 0 个笔记」 | — |
 | 两 tab：书签 / 笔记 | `AllBookmarkScreen.kt:75-78`（`BOOKMARK_TAB`/`NOTE_TAB`） | `ProfileSubPages.ets:2781` | 已接 | tab 标签带计数 `书签 N` / `笔记 N` | 切换 tab 列表内容变化 | — |
 | 条目合并后按章节序 | `AllBookmarkViewModel.kt:200-216`（`compareBy(chapterIndex, chapterPosition)`） | `ProfileSubPages.ets:2646` | 已接 | 同口径 | 书签 tab 顺序与正文章节一致 | — |
 | 条目正文最多 3 行 | `AllBookmarkScreen.kt:75-78`（`DETAIL_TEXT_MAX_LINES = 3`） | `ProfileSubPages.ets:2876` 起 | 已接 | `maxLines(3)` | 长条目截为 3 行 | — |
@@ -183,13 +183,13 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 书签实体字段 | `data/entities/Bookmark.kt` | `model/ReaderBookmark.ets` | 已接 | 11 字段与上游一致 | 导出的 `bookmark.json` 能被上游读回 | — |
 | 标记实体字段 | `data/entities/BookMarking.kt:11-30` | `model/ReaderMarking.ets`、`data/ReaderMarkingRepository.ets:118 toAnchorJson` / `:136 toStyleJson` | 已接 | 存储为 `anchorJson` + `styleJson` 两段 JSON（与上游同名同构），`id`/`bookUrl`/`chapterIndex`/`note`/`enabled`/`createdAt`/`updatedAt` 为普通列。模型仍 20 字段，`bookId` 与 `endPosition` 不落库 | 导出到 Android 时两者互转 | r284 迁移后与上游存储结构一致；`book_marks` 共 12 列 |
-| 恢复 `bookmark.json` | `Restore.kt:157`、`help/storage/Backup.kt` | `BackupRepository.ets:797`、`ReaderBookmarkImporter.ets:34 mergeBookmarks` | 已接 | 按 `(bookName, bookAuthor)` 找本地书 | 导入 Android 备份后书签出现 | — |
-| 恢复 `bookMarking.json` | `Restore.kt:163` | `BackupRepository.ets:797`、`ReaderBookmarkImporter.ets:79 mergeMarkings` | 已接 | `resolveEffect` 把 `styleJson` 换算成 effect + color | 导入后划线样式正确 | — |
+| 恢复 `bookmark.json` | `Restore.kt:157`、`help/storage/Backup.kt` | `BackupRepository.ets:1412`（具名分支）、`:1424`-`:1426`（`mergeBookmarks`）、`ReaderBookmarkImporter.ets:34 mergeBookmarks` | 已接 | 按 `(bookName, bookAuthor)` 找本地书 | 导入 Android 备份后书签出现 | — |
+| 恢复 `bookMarking.json` | `Restore.kt:163` | `BackupRepository.ets:1412`（具名分支）、`:1427`-`:1429`（`mergeMarkings`）、`ReaderBookmarkImporter.ets:79 mergeMarkings` | 已接 | `resolveEffect` 把 `styleJson` 换算成 effect + color | 导入后划线样式正确 | — |
 | 写出 `bookmark.json` | `help/storage/Backup.kt`（`dbKeyBookmark`） | `ReaderBookmarkExporter.ets:189`、`BackupRepository.ets` | 已接 | 字段与上游一致，含 `chapterPos` | Android 能读回本地导出的 ZIP | — |
 | 写出 `bookMarking.json` | `help/storage/Backup.kt` | `ReaderBookmarkExporter.ets:196`、`:224 toAndroidMarking` | 已接 | 生成 `anchorJson`（含 `normalizedTextHash` md5）与 `styleJson` | Android 读回后划线位置正确 | — |
 | 书签导出 Markdown | `BookmarkExporter.kt:13 formatToMarkdown` | `ReaderBookmarkExporter.ets:83 toMarkdown` | 已接 | 本书书签清单 | 导出后 Markdown 可读 | — |
 | 书签导出 JSON 文件名带时间 | — | `ReaderBookmarkExporter.ets:117 buildFileName` | 已接 | `书名_yyyyMMdd_HHmm.json` | 文件名含时间戳 | 上游 `ReaderBookSheet.kt:1117` 同格式 |
-| 恢复忽略项 `bookmark` | `BackupConfig.kt:76`（`dbKeyBookmark`）、`:97` | `BackupRepository.ets:322`、`:1539 isIgnored` | 已接 | 忽略该类别时两个条目都跳过 | 勾选忽略后恢复不带书签 | — |
+| 恢复忽略项 `bookmark` | `BackupConfig.kt:76`（`dbKeyBookmark`）、`:97` | `BackupRepository.ets:2694`-`:2701`（`isIgnored` 定义）、`:1189`（恢复主循环调用）、`:2580`（保留目录拷贝调用） | 已接 | 忽略该类别时两个条目都跳过 | 勾选忽略后恢复不带书签 | — |
 | 标记数据随书籍删除清理 | `BookmarkRepository.kt:42 deleteAll`、`:50 delete` | `Index.ets:3127` 段 | 不适用 | 上游「移出书架」不清书签（`removeLocalBookFromShelf` 不碰书签表），本地同；专门的 `deleteAll` 本地无对应入口 | 移出书架后书签仍在 | 与上游一致，故不设行 |
 | AI 工具检索书签 | `data/repository/AiToolRepository.kt:80 TOOL_SEARCH_BOOKMARKS`、`:267-283 searchBookmarks` | — | 不适用 | 本地无 AI 能力（[项目队列](../PROJECT.md)范围之外） | — | 理由：AI 助手整体未迁移 |
 | 阅读页书签状态全局单例 | `model/ReaderBookmarkState.kt:16`（`object ReaderBookmarkState`）、`ReadBookmarkDelegate.kt:64 start` | `Index.ets:120`（`@State readerBookmarks`） | 已接 | 本地用页面级 `@State` 数组，上游用进程级单例 + Flow | 翻页时角标判定即时更新 | 本地随 `Index.ets` 生命周期 |
