@@ -1,6 +1,6 @@
 # 已知问题与验收边界
 
-更新：2026-11-03。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
+更新：2026-11-10。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
 
 ## 发布版五条已知问题（r323，前四条已修、第五条未修）
 
@@ -90,6 +90,7 @@
 
 ## 阅读与规则
 
+- **本地 EPUB 重开被当 TXT（已补 `books.format` 列；存量书需重新导入）** —— `books` 表原先没有 format 列，落库时只存了 EPUB 抽出的 `.txt` 副本路径（`contentPath`），回读时按 `bookUrl` 后缀猜格式、恒判 `txt`，于是杀进程重开后顶栏多出「目录规则」等只对该类书有意义的动作、正文分章与替换规则走错分支。`fd4e56c` 给 `books` 表补 `format TEXT NOT NULL DEFAULT ''` 并在 `RdbSchema.ensure()` 里加幂等 ALTER，`be096c4` 把 `format` 接进 `selectBooksSql`/`upsertBookSql`/`toBookArgs`/`readBookRow`（新增 `normalizeFormat`）。**已知限制**：补列前已导入的存量 EPUB，其 `format` 列是建列时的默认空串，`normalizeFormat` 对空串退回按路径后缀判（仍是 `.txt` 副本 → `txt`），所以存量 EPUB 不会自动修好；**怎么修：删掉重导**——重新导入会走 `upsertBookSql`，`format` 从内存 `Book` 对象带进去。
 - 阅读设置尚未逐控件完成回归。系统字体选择已检查；自定义 TTF/OTF 实际导入、CJK fallback、EPUB 字体和多设备排版仍待验证。
 - r258 阅读正文高亮规则已在 N 端 HOS 模拟器完成面板可达、创建、命中、停用、冷启读回、滚动模式与删除七项闭环；E 端交接时面板打不开的问题在 N 端未复现。HOS `RegExp` 只覆盖 Android Java Pattern 的安全兼容子集，规则长度、章正文长度和规则条数分别限 256/150000/64，且没有执行超时保证。
 - 高亮规则还差三样：**按排版 `configName` 绑定**（`data/ReaderHighlightRuleEngine.ets:54` 对 `configName` 非空的规则直接跳过）、**标题规则不执行**（同处只接受 `targetScope` 0 与 2，`targetTitle=1` 跳过）、**SVG 线型画不出来**（模型与库表有 `underlineSvgPath`、面板 `pages/ReaderHighlightRuleSheet.ets:269` 连 `.svg` 都能选，但没有任何入口填 path，ArkUI 也无 SVG path 解析器，这一档按实线兜底）。图片背景、九宫格切线、字体替换、字距行距**已经接通**（`pages/ReaderPage.ets:5273`/`:5291`-`:5293`、`reader/ReaderCanvasSurface.ets:3062`/`:2171`-`:2187`），详见下一条。`highlightRule.json` 的备份写出与 ZIP 恢复已接入并在 N 端设备双向验证，恢复采用合并语义（本地独有规则保留），与上游 `replaceAll` 全量替换不同。Android 默认规则预设导入已在 r260 接入，但与上游有 3 处已注明的差异：`bracket_note_default` 补转义、`date_time_default` 由 314 裁到 179 字符、`title_emphasis_default` 只导入不执行。
