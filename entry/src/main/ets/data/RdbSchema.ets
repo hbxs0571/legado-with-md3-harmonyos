@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐。 */
-  static readonly version: number = 5;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6。 */
+  static readonly version: number = 6;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -257,6 +257,7 @@ export class RdbSchema {
     '`readConfig` TEXT, ' +
     '`syncTime` INTEGER NOT NULL DEFAULT 0, ' +
     '`listIntro` TEXT, ' +
+    "`format` TEXT NOT NULL DEFAULT '', " +
     'PRIMARY KEY(`bookUrl`)' +
     ')';
 
@@ -504,6 +505,13 @@ export class RdbSchema {
       const statement = RdbSchema.allStatements[index];
       if (statement === undefined) { continue; }
       await store.executeSql(statement);
+    }
+    // books.format 是后加的列：CREATE TABLE IF NOT EXISTS 不会给老库补列，
+    // 必须单独 ALTER；ensure() 会被反复调用，所以只能靠吞「duplicate column」做到幂等。
+    try {
+      await store.executeSql("ALTER TABLE books ADD COLUMN format TEXT NOT NULL DEFAULT ''");
+    } catch (_) {
+      // 列已存在（duplicate column name）是正常路径，不记错误
     }
     if (store.version !== RdbSchema.version) {
       store.version = RdbSchema.version;
