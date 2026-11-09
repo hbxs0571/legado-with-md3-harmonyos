@@ -59,11 +59,11 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | A2 书架设置面板 | 47 | 31 | 16 | 0 |
 | A3 分组管理 | 22 | 13 | 9 | 0 |
 | B 书籍详情页与元数据 | 80 | 24 | 56 | 0 |
-| C 阅读进度与记录 | 39 | 33 | 5 | 1 |
+| C 阅读进度与记录 | 39 | 37 | 1 | 1 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 3 | 14 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
-| 合计 | 345 | 127 | 215 | 3 |
+| 合计 | 345 | 131 | 211 | 3 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 13 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -375,12 +375,12 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 | 修复记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3472`（`runRepair`）+ `:3859`（菜单项） | 已接 | 本地 `ReadRecordRepository.repair` | 点修复后异常记录数归零 | — | readRecord |
 | 清空阅读记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3484`（`requestClearAll`）/`:3496`（`confirmClearAll`）+ `:3861`（菜单项） | 已接 | — | 点清空并确认后记录数归零 | — | readRecord |
 | 清空二次确认 | `ReadRecordScreen.kt` `confirm_delete_read_record` | `pages/ProfileSubPages.ets:3484`（`requestClearAll`）/`:3496`（`confirmClearAll`）+ `:3861` | 已接 | 本地单条确认文案 | 点清空弹确认框，取消则不删 | — | — |
-| 「不再提醒」两档 | `ReadRecordScreen.kt` `do_not_remind_again_this_page`/`_long_term` | — | 未接 | 本地确认框无「不再提醒」选项 | 勾选「本页不再提醒」后下次不再弹 | 上游分本次与本机两档 | 不备份 |
+| 「不再提醒」两档 | `ReadRecordScreen.kt` `do_not_remind_again_this_page`/`_long_term` | `pages/ProfileSubPages.ets:3049`（`skipDeleteConfirmForPage`，本页档）/`:3051`（`skipDeleteConfirm`，长期档）、`:3780`（`ReadRecordDeleteConfirmSheet`，两个 `Toggle` 在 `:3791`/`:3796`）、`:3302`（已勾则跳过确认）、`:3314`-`:3318`（应用两档）；仓储 `data/ReadRecordRepository.ets:805`（`loadSkipDeleteConfirm`）/`:815`（`setSkipDeleteConfirm`） | 已接 | 长期档写 preferences 键 `readRecordSkipDeleteConfirm` 并跨启动保持；动作单 `:3863`-`:3864`「恢复删除确认」可清掉两档 | 勾选「本页不再提醒」后下次不再弹 | 上游分本次与本机两档 | 不备份 |
 | 合并同名书籍 | `ReadRecordScreen.kt` `merge_read_records` | `data/ReadRecordRepository.ets:828`（`loadMergeCandidates`）、`:838`（`mergeReadRecords`）；`pages/ProfileSubPages.ets:3368`（`openMergeSheetForRecord`）、`:3406`（`confirmMerge`）、`:3735`（`ReadRecordMergeSheet`） | 已接 | 无候选时面板提示「没有可合并的候选」（`:3745`） | 把「同名不同作者」的两组记录合并 | — | readRecord |
 | 合并候选搜索 | `ReadRecordScreen.kt` `search_placeholder` | `pages/ProfileSubPages.ets:3388`（`mergeCandidateKey`）、`:3392`（`getFilteredMergeCandidates`） | 已接 | 按书名或作者 `includes` 过滤 | 合并时可搜索候选并提示无候选 | — | readRecord |
-| 未知作者记录归属检查 | `ReadRecordAliasDelegate.kt:29-54` `check(book)` | — | 未接 | 本地无别名机制（`grep AliasDecision\|别名` 零命中）；上游在打开书籍时若「作者为空」的旧记录存在，弹窗询问合并还是保留 | 库里留一条作者为空的记录，再打开同名同作者的书，应弹冲突框 | 依赖 `getUnknownAuthorRecords` 与 `ReadRecordIdentity.author` | readRecord |
-| 归属决定持久化 | `ReadRecordAliasDelegate.kt:56-85`、`LocalPreferencesKeys.READ_RECORD_ALIAS_DECISIONS` | — | 未接 | 本地无 | 勾「记住选择」后再打开同书，不再弹框而是按记忆执行 | 上游存 preferences，一行一条 `key + MERGE/KEEP` | 不备份 |
-| 清除归属决定 | `ReadRecordAliasDelegate.kt:87-94`、`ReadBookContract.kt:648-649` `ClearReadRecordAliasDecisions` | — | 未接 | 本地无 | 点「清除已记住的决定」后再打开同书，重新弹框 | 同书多副本时上游强制重新确认（`countShelfCopies > 1`） | 不备份 |
+| 未知作者记录归属检查 | `ReadRecordAliasDelegate.kt:29-54` `check(book)` | `pages/Index.ets:5946`（`checkReadRecordAlias`）、`:5995`（`openBook` 开头调用）、`:5982`（`askReadRecordAlias` 弹窗「合并还是保留」）；仓储 `data/ReadRecordRepository.ets:862`（`loadUnknownAuthorRecords`）、`:869`（`aliasKey`） | 已接 | 打开书籍时若存在「同名 + 作者为空」的旧记录，弹窗询问合并还是保留；同名多副本（`shelfCopies > 1`）时强制重新确认 | 库里留一条作者为空的记录，再打开同名同作者的书，应弹冲突框 | 依赖 `getUnknownAuthorRecords` 与 `ReadRecordIdentity.author` | readRecord |
+| 归属决定持久化 | `ReadRecordAliasDelegate.kt:56-85`、`LocalPreferencesKeys.READ_RECORD_ALIAS_DECISIONS` | `data/ReadRecordRepository.ets:894`（`saveAliasDecision`）、`:884`（`loadAliasDecision`）、`:44`（`aliasDecisionsKey = 'readRecordAliasDecisions'`）；调用 `pages/Index.ets:5953`（读）/`:5969`（写） | 已接 | 决定按 `aliasKey(书名, 作者)` 一行一条存进 preferences，`MERGE`/`KEEP` 两种取值 | 勾「记住选择」后再打开同书，不再弹框而是按记忆执行 | 上游存 preferences，一行一条 `key + MERGE/KEEP` | 不备份 |
+| 清除归属决定 | `ReadRecordAliasDelegate.kt:87-94`、`ReadBookContract.kt:648-649` `ClearReadRecordAliasDecisions` | `pages/ProfileSubPages.ets:3420`（`clearAliasDecisions`）、`:3867`-`:3868`（动作单「清除归属决定」）；仓储 `data/ReadRecordRepository.ets:906` | 已接 | 清空整份 `readRecordAliasDecisions` 后提示「已清除归属决定」 | 点「清除已记住的决定」后再打开同书，重新弹框 | 同书多副本时上游强制重新确认（`countShelfCopies > 1`） | 不备份 |
 | 选择模式批量删除 | `ReadRecordScreen.kt` `selected_count`/`delete_selected` | `pages/ProfileSubPages.ets:3045`（`selectedKeys`）、`:3272`（`isInSelectionMode`）、`:3300`（`requestDeleteSelected`）、`:3312`（`confirmDeleteSelected`）、`:3539`（顶栏删除按钮） | 已接 | 长按进选择模式，顶栏显示「N 项已选」 | 选中 3 条记录删除后只剩其余 | — | readRecord |
 | 单条记录删除 | `ReadRecordScreen.kt` `del_read_record` | 与上行共用 `ReadRecordDeleteConfirmSheet`（`pages/ProfileSubPages.ets:3780`），文案按 `selectedKeys.size` 切单条/多条 | 已接 | 与批量删除同一套确认面板 | 长按单条记录可删除 | — | readRecord |
 | 阅读记录总览页 | `ReadRecordOverviewScreen.kt`（547 行） | `pages/ReadRecordOverviewPage.ets:335`（519 行）；`pages/Index.ets:20`（import）、`:7673`（挂载）；入口 `pages/ProfileSubPages.ets:3869`-`:3870` | 已接 | 周期选择日/周/月/年/总 + 日期导航 | 打开总览页看到跨书统计与趋势 | 下列五条是总览页内的分区 | readRecord |
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 ## 小结
 
-**全表合计 345 条：已接 127、未接 215、不适用 3，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）
+**全表合计 345 条：已接 131、未接 211、不适用 3，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
