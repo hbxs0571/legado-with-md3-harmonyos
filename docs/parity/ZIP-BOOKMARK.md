@@ -73,7 +73,7 @@
 
 ## A 阅读页书签
 
-上游主体：`ui/book/read/ReadBookmarkDelegate.kt`（180 行）、`ui/widget/components/bookmark/BookmarkEditSheet.kt`、`ui/book/read/BookmarkBadgeDelegate.kt`、`feature/reader/core/model/ReaderBookmarkState.kt`。
+上游主体：`ui/book/read/ReadBookmarkDelegate.kt`（187 行）、`ui/widget/components/bookmark/BookmarkEditSheet.kt`、`ui/book/read/BookmarkBadgeDelegate.kt`、`feature/reader/core/model/ReaderBookmarkState.kt`。
 本地主体：`entry/src/main/ets/pages/ReaderPage.ets`、`pages/ReaderBookmarkEditor.ets`、`pages/Index.ets`（书签域方法）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
@@ -132,7 +132,7 @@
 ## C 目录页信息 / 书签 / 笔记三 tab
 
 上游主体：`ui/book/read/sheet/ReaderBookSheet.kt`（`:1117 ReaderBookBookmarksPage`、`:1179`、`:1225`、`:1320`、`:1346`）、`ui/book/toc/TocScreen.kt`（`:666`、`:1005 BookmarkListContent`、`:1070 MarkingListContent`）、`ui/book/toc/TocViewModel.kt`（`:96 TocBookmarkItemUi`、`:108 TocMarkingItemUi`、`:338`、`:375`）。
-本地主体：`entry/src/main/ets/pages/CatalogPage.ets`（560 行）。
+本地主体：`entry/src/main/ets/pages/CatalogPage.ets`（967 行）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -201,7 +201,7 @@
 
 > 本块是 2026-10-30 重盘新增，依据 [盘点规约](../PARITY-RULES.md) 第二节「盘点单位是界面，不是按钮」。此前的 A、B 块只记了「与本功能相关的那几项」（书签一项、划线一项、其余 8 项压成一行），把同一界面上的配置页、图标、形态切换、持久化全部漏掉了。本块把整个界面列全，A/B 块对应的行保留但改为指向本块。
 
-上游主体：`ui/book/read/ReadBookController.kt`（`:2133-2155` 项定义、`:2179-2206` 按配置排序、`:2219-2230` 保存）、`ui/book/read/TextActionSelectionMenu.kt`（585 行；`:161`/`:178` 形态分派、`:585-600` 图标映射）、`ui/book/read/sheet/TextSelectMenuConfigSheet.kt`（460 行）。
+上游主体：`ui/book/read/ReadBookController.kt`（`:2133-2155` 项定义、`:2179-2206` 按配置排序、`:2219-2230` 保存）、`ui/book/read/TextActionSelectionMenu.kt`（725 行；`:161`/`:178` 形态分派、`:585-600` 图标映射）、`ui/book/read/sheet/TextSelectMenuConfigSheet.kt`（460 行）。
 本地主体：`pages/ReaderPage.ets:2085 readerMarkingSelectionMenu`（阅读页实弹菜单）、`pages/ReaderSettingsPage.ets:27-42` + `:1433-1524`（配置页）。
 
 ### F1 菜单项本体（14 个内置项）

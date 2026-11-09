@@ -72,7 +72,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 ## A1 书架主屏与卡片
 
 上游主体：`ui/main/bookshelf/BookshelfScreen.kt`（1872 行）、`BookItem.kt`（1090 行）、`BookShelfItem.kt`。
-本地主体：`pages/BookshelfPage.ets`（729 行）、`components/BookCover.ets`（85 行）。
+本地主体：`pages/BookshelfPage.ets`（1357 行）、`components/BookCover.ets`（303 行）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -230,7 +230,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 ## A3 分组管理
 
 上游主体：`ui/main/bookshelf/GroupManageSheet.kt`（377 行）、`ui/book/group/GroupEditSheet.kt`（386 行）、`ui/main/bookshelf/autoGroup/AiAutoGroupSheet.kt`（734 行）。
-本地主体：`pages/BookshelfPage.ets:219-277`（管理网格）、`:280-378`（编辑表单）、`model/BookGroup.ets`、`data/BookGroupRepository.ets`（400 行）。
+本地主体：`pages/BookshelfPage.ets:219-277`（管理网格）、`:280-378`（编辑表单）、`model/BookGroup.ets`、`data/BookGroupRepository.ets`（534 行）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -262,7 +262,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 ## B 书籍详情页与元数据
 
 上游主体：`ui/book/info/BookInfoScreen.kt`（2479 行）、`BookInfoViewModel.kt`（2164 行）、`BookInfoContract.kt:376-396`（20 项 `BookInfoMenuAction`）、`edit/BookInfoEditScreen.kt`（578 行）、`domain/model/Book.kt`（30 个持久字段）。
-本地主体：`pages/BookInfoPage.ets`（430 行）、`model/Book.ets`（33 字段）。
+本地主体：`pages/BookInfoPage.ets`（577 行）、`model/Book.ets`（33 字段）。
 
 本地 `model/Book.ets` 缺 `isPrivate`、`canUpdate`、`disableReadRecord`、`splitLongChapter`、`deleteAlert`、`totalChapterNum`、`latestChapterTitle`，这七项是本块多条「未接」的直接原因：其中 `isPrivate`、`canUpdate`、`disableReadRecord`、`totalChapterNum`、`latestChapterTitle` 在 `data/RdbSchema.ets` 的 `books` 表 DDL 里已有同名列，缺的是 `data/BookRepository.ets:127-131` 的 `selectBooksSql` 没查它们、`:674-717` 的 `readBookRow` 也没读它们；`splitLongChapter`、`deleteAlert` 两列全仓 0 命中。
 
@@ -354,45 +354,45 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 ## C 阅读进度与记录
 
 上游主体：`ui/book/readRecord/ReadRecordScreen.kt`（1663 行）、`ReadRecordViewModel.kt`（385 行）、`ReadRecordCharts.kt`（181 行）、`ReadRecordStats.kt`（109 行）、`ReadRecordOverviewScreen.kt`（547 行）。
-本地主体：`pages/ProfileSubPages.ets:3013`–`:3490`（`ReadRecordsPage`，r334 复核：旧记的 `:2907` 是书签页的 `ForEach`，已漂移）、`data/ReadRecordRepository.ets`（850 行）、`model/ReadRecord.ets`（80 行）。
+本地主体：`pages/ProfileSubPages.ets:3013`–`:3490`（`ReadRecordsPage`，r334 复核：旧记的 `:2907` 是书签页的 `ForEach`，已漂移）、`data/ReadRecordRepository.ets`（1333 行）、`model/ReadRecord.ets`（104 行）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 阅读进度写入 | `Book.kt:45-138` | `model/Book.ets:17-18`、`:57-58` | 已接 | 本地 `chapterIndex`（落 `durChapterIndex`）`chapterProgress`（落 `durChapterPos`）`durChapterTime`；进度百分比不落库，由 `BookRepository.readProgress` 现算（`data/BookRepository.ets:242`） | 读 3 章后退出，书架排序按最后阅读更新 | r284 起 `progress` 改为派生（上游 Book 表无此列） | localBook / readRecord |
 | 进度恢复（打开即定位） | `ReadBookConfig.kt` | `pages/ReaderPage.ets` | 已接 | — | 关掉 App 重开，点该书回到上次章节与位置 | — | localBook |
 | 章节内位置记忆 | `Book.kt:45-138` | `model/Book.ets:18` | 已接 | 本地 `chapterProgress` 是章内百分比，直接落在上游 `durChapterPos` 列上（`data/BookRepository.ets:689-690`） | 在同一章内滚动后退出再进，停在原位 | r284 起 `readerPositionVersion` 已删除（上游无此列）；`androidCharacterPosition` 仍保留在 `model/Book.ets:52`，被 26 处代码读写（导出侧 `toAndroidBookRecord` 取它落 `durChapterPos`），迁移时按章内字符位置换算百分比 | localBook |
-| 阅读记录开关 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3204`（`toggleRecordEnabled`）+ `:3477-3481`（开关项） | 已接 | — | 关掉后读书不再产生记录 | — | 不备份 |
-| 阅读记录三视图切换 | `ReadRecordScreen.kt:939` | `pages/ProfileSubPages.ets:3050`（`cycleDisplayMode`）+ `:3285`（图标按钮） | 已接 | 本地 `cycleDisplayMode()` 轮换 0 汇总/1 时间线/2 最后阅读 | 点视图图标在三种视图间轮换 | 上游为图标按钮组 | — |
-| 阅读记录搜索 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:3054`（`getVisibleRecords`）+ `:3299`（`showSearch` 搜索框） | 已接 | 本地按书名与作者过滤 | 输入书名后列表只剩该书记录 | — | — |
-| 汇总视图 | `ReadRecordScreen.kt:813` | `pages/ProfileSubPages.ets:3328` 起（`displayMode === 0` 分支） | 已接 | 本地按日期分组、按书聚合时长 | 汇总视图按日期显示各书阅读时长 | — | readRecord |
-| 时间线视图 | `ReadRecordScreen.kt:939`、`:1254` | `pages/ProfileSubPages.ets:3351` 起（`displayMode === 1` 分支） | 已接 | — | 时间线按会话列出开始时间与时长 | — | readRecord |
-| 最后阅读视图 | `ReadRecordScreen.kt:1143` | `pages/ProfileSubPages.ets:3371` 起（`displayMode` 其余分支的 `} else {`） | 已接 | — | 列表按最后阅读时间倒序 | — | readRecord |
-| 阅读总成就 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:3173`（`getSummaryDuration`）+ 汇总卡渲染 | 已接 | 本地显示本书数与总时长 | 顶部卡片显示「N 本书 · X 小时」 | — | readRecord |
-| 热力图日历 | `ReadRecordScreen.kt:860` | — | 已接 | 本地无热力图，点击成就卡只开空 sheet | 显示近一年的阅读热力格子 | `HeatmapCalendarSection` | readRecord |
-| 阅读时长柱状图 | `ReadRecordCharts.kt:40` | — | 已接 | 本地无图表 | 显示近 7 天阅读时长柱状图 | — | readRecord |
-| 统计格子 | `ReadRecordStats.kt:35`、`:79` | — | 已接 | 本地无统计格 | 显示日均时长、最长单次等指标 | — | readRecord |
-| 扫描问题 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3214`（`runScanIssues`）+ `:3483`（菜单项） | 已接 | 本地扫描只读，不改数据 | 点扫描后列出异常记录条数 | — | readRecord |
-| 修复记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3226`（`runRepair`）+ `:3485`（菜单项） | 已接 | 本地 `ReadRecordRepository.repair` | 点修复后异常记录数归零 | — | readRecord |
-| 清空阅读记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3238`（`requestClearAll`）/`:3250`（`confirmClearAll`）+ `:3487` | 已接 | — | 点清空并确认后记录数归零 | — | readRecord |
-| 清空二次确认 | `ReadRecordScreen.kt` `confirm_delete_read_record` | `pages/ProfileSubPages.ets:3238`（`requestClearAll`）/`:3250`（`confirmClearAll`）+ `:3487` | 已接 | 本地单条确认文案 | 点清空弹确认框，取消则不删 | — | — |
+| 阅读记录开关 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3450`（`toggleRecordEnabled`）+ `:3850`-`:3855`（动作单开关项） | 已接 | — | 关掉后读书不再产生记录 | — | 不备份 |
+| 阅读记录三视图切换 | `ReadRecordScreen.kt:939` | `pages/ProfileSubPages.ets:3078`（`cycleDisplayMode`）+ `:3543`-`:3544`（图标按钮） | 已接 | 本地 `cycleDisplayMode()` 轮换 0 汇总/1 时间线/2 最后阅读 | 点视图图标在三种视图间轮换 | 上游为图标按钮组 | — |
+| 阅读记录搜索 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:3082`（`getVisibleRecords`）+ `:3560`-`:3570`（`showSearch` 搜索框） | 已接 | 本地按书名与作者过滤 | 输入书名后列表只剩该书记录 | — | — |
+| 汇总视图 | `ReadRecordScreen.kt:813` | `pages/ProfileSubPages.ets:3600` 起（`displayMode === 0` 分支） | 已接 | 本地按日期分组、按书聚合时长 | 汇总视图按日期显示各书阅读时长 | — | readRecord |
+| 时间线视图 | `ReadRecordScreen.kt:939`、`:1254` | `pages/ProfileSubPages.ets:3631` 起（`displayMode === 1` 分支） | 已接 | — | 时间线按会话列出开始时间与时长 | — | readRecord |
+| 最后阅读视图 | `ReadRecordScreen.kt:1143` | `pages/ProfileSubPages.ets:3658` 起（`displayMode` 其余分支的 `} else {`） | 已接 | — | 列表按最后阅读时间倒序 | — | readRecord |
+| 阅读总成就 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:3234`（`getSummaryDuration`）+ `:3591`（汇总卡「阅读总成就」） | 已接 | 本地显示本书数与总时长 | 顶部卡片显示「N 本书 · X 小时」 | — | readRecord |
+| 热力图日历 | `ReadRecordScreen.kt:860` | `pages/ProfileSubPages.ets:3811`-`:3812`（`ReadRecordCalendarSheet`）、`:3826`（挂 `ReadRecordHeatmap`）；组件 `components/ReadRecordHeatmap.ets:9`（210 行，`@Prop mode` `:17`） | 已接 | 年度按周网格热力格子，点成就卡（`:3599`）打开该 sheet | 显示近一年的阅读热力格子 | `HeatmapCalendarSection` | readRecord |
+| 阅读时长柱状图 | `ReadRecordCharts.kt:40` | `pages/ReadRecordOverviewPage.ets:44`（`ReadTimeBarChartCard`）、`:478`（挂载） | 已接 | 总览页内，周期为「总」时整卡不渲染 | 显示近 7 天阅读时长柱状图 | — | readRecord |
+| 统计格子 | `ReadRecordStats.kt:35`、`:79` | `pages/ReadRecordOverviewPage.ets:133`（`StatsGridCard`）、`:481`（挂载） | 已接 | 五项：阅读时长 / 阅读天数 / 总本数 / 读完 / 在读 | 显示日均时长、最长单次等指标 | — | readRecord |
+| 扫描问题 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3460`（`runScanIssues`）+ `:3857`（菜单项） | 已接 | 本地扫描只读，不改数据 | 点扫描后列出异常记录条数 | — | readRecord |
+| 修复记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3472`（`runRepair`）+ `:3859`（菜单项） | 已接 | 本地 `ReadRecordRepository.repair` | 点修复后异常记录数归零 | — | readRecord |
+| 清空阅读记录 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3484`（`requestClearAll`）/`:3496`（`confirmClearAll`）+ `:3861`（菜单项） | 已接 | — | 点清空并确认后记录数归零 | — | readRecord |
+| 清空二次确认 | `ReadRecordScreen.kt` `confirm_delete_read_record` | `pages/ProfileSubPages.ets:3484`（`requestClearAll`）/`:3496`（`confirmClearAll`）+ `:3861` | 已接 | 本地单条确认文案 | 点清空弹确认框，取消则不删 | — | — |
 | 「不再提醒」两档 | `ReadRecordScreen.kt` `do_not_remind_again_this_page`/`_long_term` | — | 未接 | 本地确认框无「不再提醒」选项 | 勾选「本页不再提醒」后下次不再弹 | 上游分本次与本机两档 | 不备份 |
-| 合并同名书籍 | `ReadRecordScreen.kt` `merge_read_records` | — | 已接 | 本地无合并入口 | 把「同名不同作者」的两组记录合并 | — | readRecord |
-| 合并候选搜索 | `ReadRecordScreen.kt` `search_placeholder` | — | 已接 | 同上 | 合并时可搜索候选并提示无候选 | — | readRecord |
+| 合并同名书籍 | `ReadRecordScreen.kt` `merge_read_records` | `data/ReadRecordRepository.ets:828`（`loadMergeCandidates`）、`:838`（`mergeReadRecords`）；`pages/ProfileSubPages.ets:3368`（`openMergeSheetForRecord`）、`:3406`（`confirmMerge`）、`:3735`（`ReadRecordMergeSheet`） | 已接 | 无候选时面板提示「没有可合并的候选」（`:3745`） | 把「同名不同作者」的两组记录合并 | — | readRecord |
+| 合并候选搜索 | `ReadRecordScreen.kt` `search_placeholder` | `pages/ProfileSubPages.ets:3388`（`mergeCandidateKey`）、`:3392`（`getFilteredMergeCandidates`） | 已接 | 按书名或作者 `includes` 过滤 | 合并时可搜索候选并提示无候选 | — | readRecord |
 | 未知作者记录归属检查 | `ReadRecordAliasDelegate.kt:29-54` `check(book)` | — | 未接 | 本地无别名机制（`grep AliasDecision\|别名` 零命中）；上游在打开书籍时若「作者为空」的旧记录存在，弹窗询问合并还是保留 | 库里留一条作者为空的记录，再打开同名同作者的书，应弹冲突框 | 依赖 `getUnknownAuthorRecords` 与 `ReadRecordIdentity.author` | readRecord |
 | 归属决定持久化 | `ReadRecordAliasDelegate.kt:56-85`、`LocalPreferencesKeys.READ_RECORD_ALIAS_DECISIONS` | — | 未接 | 本地无 | 勾「记住选择」后再打开同书，不再弹框而是按记忆执行 | 上游存 preferences，一行一条 `key + MERGE/KEEP` | 不备份 |
 | 清除归属决定 | `ReadRecordAliasDelegate.kt:87-94`、`ReadBookContract.kt:648-649` `ClearReadRecordAliasDecisions` | — | 未接 | 本地无 | 点「清除已记住的决定」后再打开同书，重新弹框 | 同书多副本时上游强制重新确认（`countShelfCopies > 1`） | 不备份 |
-| 选择模式批量删除 | `ReadRecordScreen.kt` `selected_count`/`delete_selected` | — | 已接 | 本地只能整体清空 | 选中 3 条记录删除后只剩其余 | — | readRecord |
-| 单条记录删除 | `ReadRecordScreen.kt` `del_read_record` | — | 已接 | 同上 | 长按单条记录可删除 | — | readRecord |
-| 阅读记录总览页 | `ReadRecordOverviewScreen.kt`（547 行） | — | 已接 | 本地无独立总览页 | 打开总览页看到跨书统计与趋势 | 下列五条是总览页内的分区 | readRecord |
-| 总览·统计格 | `ReadRecordOverviewScreen.kt:167-178` | — | 已接 | 本地无总览统计 | 显示阅读时长、阅读天数、总本数、读完、在读五项 | `StatsGridCard` | readRecord |
-| 总览·跨书热力图 | `ReadRecordOverviewScreen.kt:300-310` | — | 已接 | 本地无 | 显示全部书籍合并的年度热力图 | `HeatmapMode.TIME` | readRecord |
-| 总览·阅读时长排行 | `ReadRecordOverviewScreen.kt:338` | — | 已接 | 本地无 | 按阅读时长倒序列出 Top 书单，带封面 | `reading_time_ranking` | readRecord |
-| 总览·阅读日历（月历） | `ReadRecordOverviewScreen.kt:450` | — | 已接 | 本地无 | 显示当月日历，有阅读的日期高亮 | 可切换上/下月 | readRecord |
+| 选择模式批量删除 | `ReadRecordScreen.kt` `selected_count`/`delete_selected` | `pages/ProfileSubPages.ets:3045`（`selectedKeys`）、`:3272`（`isInSelectionMode`）、`:3300`（`requestDeleteSelected`）、`:3312`（`confirmDeleteSelected`）、`:3539`（顶栏删除按钮） | 已接 | 长按进选择模式，顶栏显示「N 项已选」 | 选中 3 条记录删除后只剩其余 | — | readRecord |
+| 单条记录删除 | `ReadRecordScreen.kt` `del_read_record` | 与上行共用 `ReadRecordDeleteConfirmSheet`（`pages/ProfileSubPages.ets:3780`），文案按 `selectedKeys.size` 切单条/多条 | 已接 | 与批量删除同一套确认面板 | 长按单条记录可删除 | — | readRecord |
+| 阅读记录总览页 | `ReadRecordOverviewScreen.kt`（547 行） | `pages/ReadRecordOverviewPage.ets:335`（519 行）；`pages/Index.ets:20`（import）、`:7673`（挂载）；入口 `pages/ProfileSubPages.ets:3869`-`:3870` | 已接 | 周期选择日/周/月/年/总 + 日期导航 | 打开总览页看到跨书统计与趋势 | 下列五条是总览页内的分区 | readRecord |
+| 总览·统计格 | `ReadRecordOverviewScreen.kt:167-178` | `pages/ReadRecordOverviewPage.ets:133`（`StatsGridCard`）、`:481`（挂载） | 已接 | 五项齐 | 显示阅读时长、阅读天数、总本数、读完、在读五项 | `StatsGridCard` | readRecord |
+| 总览·跨书热力图 | `ReadRecordOverviewScreen.kt:300-310` | `pages/ReadRecordOverviewPage.ets:492`（`ReadRecordHeatmap`，`mode: 1`） | 已接 | 跨书合并热力图；总览页里不可点（空回调） | 显示全部书籍合并的年度热力图 | `HeatmapMode.TIME` | readRecord |
+| 总览·阅读时长排行 | `ReadRecordOverviewScreen.kt:338` | `pages/ReadRecordOverviewPage.ets:502`（`TopReadingListCard`） | 已接 | — | 按阅读时长倒序列出 Top 书单，带封面 | `reading_time_ranking` | readRecord |
+| 总览·阅读日历（月历） | `ReadRecordOverviewScreen.kt:450` | `pages/ReadRecordOverviewPage.ets:508`（`ReadingCalendarCard`） | 已接 | — | 显示当月日历，有阅读的日期高亮 | 可切换上/下月 | readRecord |
 | 总览·日历日详情 | `ReadRecordOverviewScreen.kt:510-516` | — | 不适用 | — | 上游 `CalendarDayCell`（`ReadRecordOverviewScreen.kt:495-545`）无 onClick，`:510-516` 只是读屏 `contentDescription`，点日不触发任何动作 | `a11y_reading_calendar_day_with_book` | readRecord |
 | 最短有效时长阈值 | `GetReadRecordOverviewUseCase.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `minimumReadDurationMs = 10000` | 停留 5 秒退出不产生记录，15 秒产生 | — | 不备份 |
 | 自动保存间隔 | `ReadRecordViewModel.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `autoSaveIntervalMs = 120000` | 连续阅读 2 分钟后记录落盘 | — | 不备份 |
-| 章节索引格式化 | `ReadRecordScreen.kt` `chapter_index_format` | — | 未接 | 本地无「第 N 章」格式化显示 | 记录条目显示「第 12 章」而非裸数字 | — | — |
-| 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:270` | 已接 | 本地按 `BookRepository.readProgress(book)` 的百分比渲染（派生值，不落库） | 读到 50% 时进度条半满 | r284 起 `progress` 不再是存储字段 | localBook / readRecord |
+| 章节索引格式化 | `ReadRecordScreen.kt` `chapter_index_format` | `pages/BookInfoPage.ets:493`-`:494`（详情页阅读记录面板）；字段 `model/ReadRecord.ets:89`，生成处 `pages/Index.ets:744` | 未接 | 书籍详情页的阅读记录面板有「第 N 章」（`chapterLabel`），阅读记录列表三视图没有（`ReadTimeRecord` 无章名字段） | 记录条目显示「第 12 章」而非裸数字 | — | — |
+| 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:281`（文案）、`:293`（进度条 Row） | 已接 | 本地按 `BookRepository.readProgress(book)` 的百分比渲染（派生值，不落库） | 读到 50% 时进度条半满 | r284 起 `progress` 不再是存储字段 | localBook / readRecord |
 | 备份写出·三份 readRecord JSON | `help/storage/Backup.kt:77-79` | `data/BackupRepository.ets:805`、`:807`、`:818`（三份 `writeTextFile`，门控 `:803`） | 已接 | 导出 ZIP 写入 `readRecord.json` / `readRecordDetail.json` / `readRecordSession.json`；会话字段 `chapterIndex` 写成上游列名 `words` | 备份后从该 ZIP 走恢复预览，能列出三份文件与各自条数 | 本轮补登；源码段 `exportForBackup` | readRecord |
 | 备份恢复·三份 readRecord JSON 写库 | `help/storage/Restore.kt:283-299` | `data/BackupRepository.ets:1449`（具名分支；内层 `:1457`/`:1459`）、`:1488`（`restoreFromBackup` 调用）、`data/ReadRecordRepository.ets:1069`（定义） | 已接 | 三份 JSON 走具名分支解析后交 `restoreFromBackup` 写库，按会话重算派生层；不再落到只拷文件不进库的兜底分支 | 点「导入此 ZIP」后三表行数与恢复前一致、不重复插入 | 本轮补登；派生层重算口径见上游 `reconcileRestoredReadRecordTotals` | readRecord |
 | 连续会话合并接进时间线 | `ui/book/readRecord/ReadRecordViewModel.kt:294` | `data/ReadRecordRepository.ets`、`pages/ProfileSubPages.ets` | 已接 | `mergeContinuousSessions` 按 20*60*1000 毫秒间隔合并同书相邻会话；时间线 `getRecordsForDate` 先合并再按开始时间倒序 | 时间线视图里相邻短会话按合并整段时长列出 | 本轮补登；F9 纯函数落在批 0 | readRecord |
@@ -408,7 +408,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 - **书架管理页**：`ui/book/manage/BookshelfManageScreen.kt`（**1777 行**）+ `BookshelfManageScreenViewModel.kt`（**1136 行**），导航键 `MainRouteCache(val groupId: Long)`（`ui/main/MainNavKey.kt:145`），入口是书架页更多菜单「书架管理」（`ui/main/bookshelf/BookshelfScreen.kt:747-754`）。
 - **缓存管理页**：`ui/book/cache/manage/BookCacheManageScreen.kt`（**685 行**）+ `BookCacheManageViewModel.kt`（**892 行**），导航键 `MainRouteBookCacheManage`（`ui/main/MainNavKey.kt:148`），入口是「我的」页「缓存管理」（`ui/main/my/MyScreen.kt:221-226` → `PrefClickEvent.OpenBookCacheManage` → `ui/main/MainScreen.kt:652`）。
 
-**本地现状**：只有一个页面 `pages/ProfileSubPages.ets:3383 CacheManagementPage`（通「我的」页 `pages/ProfilePage.ets:81` 进入，路由 `model/Book.ets:151 ProfileRoute.CACHE_MANAGEMENT`），形态与**上游缓存管理页**对得上，但正文是空态占位；**书架管理页本地完全不存在**（`pages/BookshelfPage.ets:594-595` 的菜单项直接 `onUnavailableAction('书架管理尚未迁移')`）。另有一个 `pages/AppDownloadCacheSettingsPage.ets`（141 行）是**设置页**，不是这两个页面中的任何一个。
+**本地现状**：只有一个页面 `pages/ProfileSubPages.ets:3383 CacheManagementPage`（通「我的」页 `pages/ProfilePage.ets:81` 进入，路由 `model/Book.ets:151 ProfileRoute.CACHE_MANAGEMENT`），形态与**上游缓存管理页**对得上，但正文是空态占位；**书架管理页本地完全不存在**（`pages/BookshelfPage.ets:594-595` 的菜单项直接 `onUnavailableAction('书架管理尚未迁移')`）。另有一个 `pages/AppDownloadCacheSettingsPage.ets`（162 行）是**设置页**，不是这两个页面中的任何一个。
 
 ### D1 缓存管理页 · 框架（`BookCacheManageScreen.kt`）
 

@@ -65,7 +65,7 @@
 ## A 阅读界面基础
 
 上游主体：`legado-with-MD3/app/src/main/java/io/legado/app/help/config/ReadBookConfig.kt`（1054 行）、`app/src/main/java/io/legado/app/domain/model/settings/ReadSettings.kt`（122 行）。
-本地主体：`entry/src/main/ets/data/ReaderSettingsRepository.ets`（966 行）、`entry/src/main/ets/pages/ReaderSettingsPage.ets`（2444 行）。
+本地主体：`entry/src/main/ets/data/ReaderSettingsRepository.ets`（2085 行）、`entry/src/main/ets/pages/ReaderSettingsPage.ets`（3954 行）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -140,7 +140,7 @@
 
 ## C 正文排版
 
-本地主体：`ReaderSettingsRepository.ets:138-161`、渲染侧 `entry/src/main/ets/pages/ReaderPage.ets`（3562 行）。
+本地主体：`ReaderSettingsRepository.ets:138-161`、渲染侧 `entry/src/main/ets/pages/ReaderPage.ets`（7194 行）。
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -752,7 +752,7 @@ bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG
 
 ### 4.2 已排除：渲染与分页管线，无独立界面（8 个）
 
-`feature/reader/legacy/LegacyReaderChapterPaginator.kt`（403 行，`:132` `titleMode: Int = ReadBookConfig.titleMode`）、`LegacyReaderPageDecorationFactory.kt`（340 行）、`LegacyReaderPaginationStyleFactory.kt`（119 行）、`LegacyReaderStyleRangeMapper.kt`（421 行，`:337` 注释「即 `ReadBookConfig.textColor`，不是写死的主题绿」）、`model/FullBookPaginator.kt`（97 行，`:48` `tipHeaderLeft`）、`model/ReadSessionState.kt`（45 行，`:32` `durConfig.curBgDrawable`）、`domain/model/settings/ReadStyleState.kt`（29 行，`:10` 只投影排版底座）、`model/ReadBook.kt`（在 4.1 已分配，此处单列说明它是阅读页模型）。
+`feature/reader/legacy/LegacyReaderChapterPaginator.kt`（406 行，`:132` `titleMode: Int = ReadBookConfig.titleMode`）、`LegacyReaderPageDecorationFactory.kt`（340 行）、`LegacyReaderPaginationStyleFactory.kt`（119 行）、`LegacyReaderStyleRangeMapper.kt`（428 行，`:337` 注释「即 `ReadBookConfig.textColor`，不是写死的主题绿」）、`model/FullBookPaginator.kt`（97 行，`:48` `tipHeaderLeft`）、`model/ReadSessionState.kt`（45 行，`:32` `durConfig.curBgDrawable`）、`domain/model/settings/ReadStyleState.kt`（42 行，`:10` 只投影排版底座）、`model/ReadBook.kt`（在 4.1 已分配，此处单列说明它是阅读页模型）。
 
 **排除理由**：这些是 Compose 自绘管线的分页与装饰实现，本地对应物是 `pages/ReaderPage.ets` 的 ArkUI 声明式渲染（无「分页器」「装饰工厂」这种中间层）。上游把配置读在管线内部，本地读在页面里，**同一批配置项在 A–G 块已有行**，此处不重复列行。
 
@@ -774,11 +774,11 @@ bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG
 
 漫画 3 个：`ui/book/manga/MangaReaderViewModel.kt`（1500 行）、`ui/book/manga/MangaSettingsPanel.kt`（862 行）、`data/repository/manga/MangaReaderActionRepository.kt`（259 行）。归 `mangaConfig` 类别。
 
-其余 3 个：`ui/main/MainNavGraph.kt`（2017 行，`:1063` `initReadBookConfig(initRequest)` 只是导航参数传递，归导航）；`model/webBook/BookChapterList.kt`、`model/webBook/BookContent.kt`（网络书内容加载，归 `bookSource`）。
+其余 3 个：`ui/main/MainNavGraph.kt`（2041 行，`:1063` `initReadBookConfig(initRequest)` 只是导航参数传递，归导航）；`model/webBook/BookChapterList.kt`、`model/webBook/BookContent.kt`（网络书内容加载，归 `bookSource`）。
 
 ### 4.5 已排除：本地书与导出，界面由别的模块承载（6 个）
 
-`model/localBook/LocalBook.kt`（649 行）、`model/localBook/TextFile.kt`（519 行）、`help/book/ContentProcessor.kt`（297 行）、`service/ExportBookService.kt`（1010 行）、`help/DefaultData.kt`（130 行，`:55` `readConfigs` 默认配置预设）、`help/JsExtensions.kt`（1220 行，`:1191` `getReadBookConfig()` 是书源脚本接口）。
+`model/localBook/LocalBook.kt`（649 行）、`model/localBook/TextFile.kt`（519 行）、`help/book/ContentProcessor.kt`（297 行）、`service/ExportBookService.kt`（1010 行）、`help/DefaultData.kt`（143 行，`:55` `readConfigs` 默认配置预设）、`help/JsExtensions.kt`（1220 行，`:1191` `getReadBookConfig()` 是书源脚本接口）。
 
 **排除理由**：本地书导入/导出归 `localBook` 类别（见 [BOOKSHELF.md](BOOKSHELF.md)）；书源脚本接口归 `bookSource`；备份恢复归备份模块。它们读 `ReadBookConfig` 只是为了拿当前配置的副本，没有配置界面。
 
@@ -844,7 +844,7 @@ bash scripts/upstream-surface.sh --coverage readConfig docs/parity/READER-CONFIG
 补记的 3 个是靠「类别键名字面量」与「字段名」而非配置类名进接触面的文件：
 
 - `help/storage/BackupConfig.kt`（489 行，`:69` `private const val readConfigKey = "readConfig"`、`:146`/`:172` 进 `ignoreKeys`/`backupIgnoreKeys`、`:442`/`:461` 两个 `backupIgnoreReadConfig` 取值器）——**该类忽略开关的定义处**。整份 `config.xml` 的忽略语义都在这里，本地对应 `entry/src/main/ets/data/BackupRepository.ets` 的 `preferenceKeysByCategory` 与 `ignoreKeys` 判定。归「备份恢复」块（见 [BACKUP-RESTORE.md](../BACKUP-RESTORE.md)），不在本表的阅读界面行里。
-- `ui/config/ConfigTag.kt`（15 行，`const val READ_CONFIG = "readConfig"`，同类还有 `THEME_CONFIG`/`COVER_CONFIG`/`BACKUP_CONFIG` 等 6 个）——**配置页面的路由标签常量**，不是备份逻辑。本地对应 `pages/` 下各设置页的路由名，无独立界面。
+- `ui/config/ConfigTag.kt`（11 行，`const val READ_CONFIG = "readConfig"`，同类还有 `THEME_CONFIG`/`COVER_CONFIG`/`BACKUP_CONFIG` 等 6 个）——**配置页面的路由标签常量**，不是备份逻辑。本地对应 `pages/` 下各设置页的路由名，无独立界面。
 - `constant/PreferKey.kt`（521 行）——靠三个界面字段名关键词进接触面：`:498` `object ReadMenuBlurMode`、`:504` `object ReadMenuBlurStyle` 两个枚举在这里定义（E 块「顶栏模糊样式」「底栏模糊样式」的取值域），`expandTextMenu`/`showSelectMenuIcon`/`lastMarkingStyle` 三个 `const val` 键常量也在这里。**它是 readConfig 全部偏好键的常量表**，本表 A–G 各行的「上游位置」列凡是引用 `PreferKey.xxx` 的都落在这里。
 
 这三个文件都是靠「类别键名字面量 / 字段名」而非配置类名被捞到的，正是 [KEYWORDS.md](KEYWORDS.md) 存储层维度要解决的漏检。`BackupConfig.kt` 与 `PreferKey.kt` 此前从未出现在 `readConfig` 的覆盖证明里，但它们分别是该类别忽略开关与偏好键的唯一定义处。
