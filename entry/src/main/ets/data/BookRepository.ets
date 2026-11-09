@@ -184,17 +184,17 @@ export class BookRepository {
     'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
     '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
-    '`durChapterTime`, `order`, `disableReadRecord` FROM `books` ORDER BY `durChapterTime` DESC';
+    '`durChapterTime`, `order`, `disableReadRecord`, `format` FROM `books` ORDER BY `durChapterTime` DESC';
 
-  /** 写入或覆盖一行书目。35 列全部给值，主键冲突时整行覆盖。 */
+  /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
     'INSERT OR REPLACE INTO `books` (`bookUrl`, `tocUrl`, `origin`, `originName`, `name`, `author`, ' +
     '`kind`, `customTag`, `coverUrl`, `customCoverUrl`, `intro`, `customIntro`, `remark`, `charset`, ' +
     '`type`, `group`, `isPrivate`, `latestChapterTitle`, `latestChapterTime`, `lastCheckTime`, ' +
     '`lastCheckCount`, `totalChapterNum`, `durChapterTitle`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTime`, `wordCount`, `canUpdate`, `disableReadRecord`, `order`, `originOrder`, ' +
-    '`variable`, `readConfig`, `syncTime`, `listIntro`) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    '`variable`, `readConfig`, `syncTime`, `listIntro`, `format`) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
   /**
    * 读一本书的章节列表。章节已从 Book 里拆出来，页面在 aboutToAppear 时调这里查表。
@@ -776,7 +776,7 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       bookType: bookTypeValue === 64 ? 'image' : bookTypeValue === 32 ? 'audio' : 'text',
       fixedType: config.fixedType === true,
       contentPath: bookUrl.length > 0 ? bookUrl : undefined,
-      format: bookUrl.toLowerCase().endsWith('.epub') ? 'epub' : 'txt',
+      format: BookRepository.normalizeFormat(RdbCodec.optionalText(resultSet, 23), bookUrl),
       imageStyle: config.imageStyle,
       reSegment: config.reSegment === true,
       useReplaceRule: config.useReplaceRule,
@@ -794,6 +794,18 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     };
     book.progress = BookRepository.readProgress(book);
     return book;
+  }
+
+  /**
+   * 归一化书的格式。
+   * 优先信库里的 format 列；老库该列为空串时退回按路径后缀判，
+   * 与 format 列落地之前的行为保持一致，避免存量书目全变 txt。
+   */
+  private static normalizeFormat(stored: string | undefined, bookUrl: string): 'txt' | 'epub' {
+    if (stored === 'epub' || stored === 'txt') {
+      return stored;
+    }
+    return bookUrl.toLowerCase().endsWith('.epub') ? 'epub' : 'txt';
   }
 
   /** 解析 readConfig JSON，只关心本地有对应字段的三项。 */
@@ -1216,7 +1228,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     return volumes;
   }
 
-  /** 把一本书摊成 books 表的 35 个绑定值，顺序必须与 upsertBookSql 一致。 */
+  /** 把一本书摊成 books 表的 36 个绑定值，顺序必须与 upsertBookSql 一致。 */
   private static toBookArgs(book: Book): relationalStore.ValueType[] {
     const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
     const originName = book.androidOriginalPath ?? BookRepository.getFileName(bookUrl);
@@ -1270,7 +1282,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       null,
       JSON.stringify(readConfig),
       0,
-      null
+      null,
+      book.format ?? ''
     ];
   }
 
