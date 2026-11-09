@@ -584,7 +584,7 @@ print(len(cf), len(gf), len(cf | gf), len(rs), len(cf | gf | rs), len(lo))
 
 | 字段 | 判定 | 理由与去处 |
 | --- | --- | --- |
-| `readAloudDetachReminderEnabled` | 不接 | 朗读（TTS）在[项目范围](../PROJECT.md)之外，无朗读即无「分离提醒」可提醒；开关已上屏，明细表 A 块按 `未接` 登记（KI-A5） |
+| `readAloudDetachReminderEnabled` | 不接 | 朗读（TTS）自 2026-11-09 起已纳入[项目范围](../PROJECT.md)、尚未排期（`PROJECT.md:24-44`）；朗读播放链路未落地，无「分离提醒」可提醒；开关已上屏，明细表 A 块按 `未接` 登记（KI-A5） |
 
 #### 1.5.13 高亮规则（独立仓储，1 项）：已接 1
 
