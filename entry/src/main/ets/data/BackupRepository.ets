@@ -49,6 +49,9 @@ import { HighlightTagRuleRepository } from './HighlightTagRuleRepository';
 import { HighlightTagRuleImporter } from './HighlightTagRuleImporter';
 import { TagGroupRuleRepository } from './TagGroupRuleRepository';
 import { TagGroupRuleImporter } from './TagGroupRuleImporter';
+import { HttpTtsRepository } from './HttpTtsRepository';
+import { ReadAloudVoiceRepository } from './ReadAloudVoiceRepository';
+import { HttpTtsImporter } from './HttpTtsImporter';
 
 /** 上游 readRecordSession.json 的字段：words 对应本地 chapterIndex。 */
 interface AndroidReadRecordSessionRecord {
@@ -153,6 +156,13 @@ export interface RestoreResult {
   tagGroupRuleAdded: number;
   tagGroupRuleUpdated: number;
   tagGroupRuleSkipped: number;
+  /** 恢复在线朗读源的新增、覆盖和跳过数量（按 id 合并）。 */
+  httpTtsSourcesAdded: number;
+  httpTtsSourcesUpdated: number;
+  httpTtsSourcesSkipped: number;
+  /** 恢复 http 音色的落库条数与跳过条数；损坏文件按跳过计且不覆盖本地音色。 */
+  httpTtsVoicesRestored: number;
+  httpTtsVoicesSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -994,15 +1004,24 @@ export class BackupRepository {
         BackupRepository.writeTextFile(`${stagingDirectory}/${THEME_CONFIG_FILE_NAME}`,
           themeConfigsToJson(generated));
       }
-      // 上游 Backup.kt:193 无条件写这一份，注释原文「空数组也要写出，用来区分
-      // 旧备份未保存音色与确实没有音色」。本地没有音色数据源（无 HttpTTS 实体与仓储），
-      // 所以写的必然是 []——但正是 [] 承载了「确实没有音色」这个语义。
-      // 已存在透传件时不覆盖：copyPreservedEntries（:570）刚把上次从 Android 导进来的
-      // 真音色拷进来，覆盖掉会丢数据。
+      // 上游 Backup.kt:359 的 writeListToJson 里是 if (list.isNotEmpty())，
+      // 源为空时根本不建文件；httpTtsVoices.json 相反，Backup.kt:193 无条件写，
+      // 注释原文「空数组也要写出，用来区分旧备份未保存音色与确实没有音色」。
+      // 两份条目的空判因此不能合并成一个条件。
       if (!ignoredCategories.includes('httpTTS')) {
+        const sources = await HttpTtsRepository.load(context);
+        if (sources.length > 0) {
+          // 本地真值，要覆盖 copyPreservedEntries 带进来的透传件，所以不加 !accessSync。
+          BackupRepository.writeTextFile(`${stagingDirectory}/httpTTS.json`,
+            HttpTtsRepository.exportSources(sources));
+        }
+        const voices = await ReadAloudVoiceRepository.loadHttpVoices(context);
         const voicesPath = `${stagingDirectory}/httpTtsVoices.json`;
+        // 这一侧保留 !accessSync：copyPreservedEntries（定义 :2573、调用 :629）刚把上次
+        // 从 Android 导进来的真音色拷进来，本地还读不懂它的新版 schema 时覆盖会丢数据。
+        // 与上面的 httpTTS.json 不对称是刻意的，不是漏写。
         if (!fileIo.accessSync(voicesPath)) {
-          BackupRepository.writeTextFile(voicesPath, '[]');
+          BackupRepository.writeTextFile(voicesPath, ReadAloudVoiceRepository.exportVoices(voices));
         }
       }
       const files = fileIo.listFileSync(stagingDirectory)
@@ -1150,6 +1169,11 @@ export class BackupRepository {
     let tagGroupRuleAdded: number = 0;
     let tagGroupRuleUpdated: number = 0;
     let tagGroupRuleSkipped: number = 0;
+    let httpTtsSourcesAdded: number = 0;
+    let httpTtsSourcesUpdated: number = 0;
+    let httpTtsSourcesSkipped: number = 0;
+    let httpTtsVoicesRestored: number = 0;
+    let httpTtsVoicesSkipped: number = 0;
     // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
     // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
     let restoredThemeConfigCount: number = 0;
@@ -1263,6 +1287,51 @@ export class BackupRepository {
         dictRuleAdded += outcome.added;
         dictRuleUpdated += outcome.updated;
         dictRuleSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'httpTTS.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复在线朗读源`);
+        }
+        const parsed = HttpTtsImporter.parseSources(text);
+        // 先读出本地已有源，importSources 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await HttpTtsRepository.load(context);
+        const sourceOutcome = await HttpTtsRepository.importSources(context, parsed.sources);
+        httpTtsSourcesAdded += sourceOutcome.added;
+        httpTtsSourcesUpdated += sourceOutcome.updated;
+        httpTtsSourcesSkipped += parsed.skipped + sourceOutcome.skipped;
+        // 音色必须在源之后恢复：read_aloud_voices.engineId 指向 httpTTS.id。
+        // 单独出现（没有 httpTTS.json）的 httpTtsVoices.json 是孤儿音色，不在这里恢复。
+        const voicesPath = `${selection.stagingDirectory}/httpTtsVoices.json`;
+        if (fileIo.accessSync(voicesPath)) {
+          const voicesText = fileIo.readTextSync(voicesPath);
+          const voicesTrimmed = voicesText.trim();
+          // 坏 JSON 不能当成旧备份忽略，更不能拿解析出的空数组去 replaceHttpVoices——
+          // 那样会静默清掉本地 excluded 状态；先独立验结构，损坏就只计 skipped、不清库。
+          let wellFormed = false;
+          if (voicesTrimmed.startsWith('[') || voicesTrimmed.startsWith('{')) {
+            try {
+              const probe: Object = JSON.parse(voicesTrimmed);
+              wellFormed = probe !== null;
+            } catch (_) {
+              wellFormed = false;
+            }
+          }
+          if (wellFormed) {
+            const voiceParsed = HttpTtsImporter.parseVoices(voicesText);
+            await ReadAloudVoiceRepository.replaceHttpVoices(context, voiceParsed.voices);
+            httpTtsVoicesRestored += voiceParsed.voices.length;
+            httpTtsVoicesSkipped += voiceParsed.skipped;
+          } else {
+            httpTtsVoicesSkipped += 1;
+            console.error('httpTtsVoices.json 无法解析，保留本地 http 音色未覆盖');
+          }
+        }
         // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
         await fileIo.copyFile(sourcePath, targetPath);
         preservedEntryCount += 1;
@@ -1516,7 +1585,12 @@ export class BackupRepository {
       highlightTagRuleSkipped: highlightTagRuleSkipped,
       tagGroupRuleAdded: tagGroupRuleAdded,
       tagGroupRuleUpdated: tagGroupRuleUpdated,
-      tagGroupRuleSkipped: tagGroupRuleSkipped
+      tagGroupRuleSkipped: tagGroupRuleSkipped,
+      httpTtsSourcesAdded: httpTtsSourcesAdded,
+      httpTtsSourcesUpdated: httpTtsSourcesUpdated,
+      httpTtsSourcesSkipped: httpTtsSourcesSkipped,
+      httpTtsVoicesRestored: httpTtsVoicesRestored,
+      httpTtsVoicesSkipped: httpTtsVoicesSkipped
     };
   }
 
