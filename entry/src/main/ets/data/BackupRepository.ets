@@ -101,6 +101,14 @@ export interface BackupCategoryOption {
   preferenceKeys?: string[];
 }
 
+/** 透传缓存里一条 Android config.xml 首选项：type 为 XML 标签名，value 为原值文本。 */
+export interface XmlPreferenceEntry {
+  /** XML 标签名，六选一：string / int / long / float / boolean / set。 */
+  type: string;
+  /** 原值文本，不做 .trim() / 反转义，原样存、原样写，避免 &amp; 之类被双重转义。 */
+  value: string;
+}
+
 export interface RestoreResult {
   books: Book[];
   settings: ReaderSettingsSnapshot;
@@ -379,6 +387,47 @@ export class BackupRepository {
     'launcherIcon', 'bitmapCacheSize', 'webServiceWakeLock', 'readAloudWakeLock', 'audioPlayWakeLock',
     'PASSWORD', 'MIGRATED_TO_SETTINGS', 'PRIVATE_PASSWORD_SALT', 'PRIVATE_PASSWORD_VERIFIER',
     'PRIVATE_BIOMETRIC_ENABLED', 'PRIVATE_BIOMETRIC_ENVELOPE', 'PRIVATE_BIOMETRIC_IV'
+  ]);
+  /** 透传缓存专用 preferences store，与 ignoreLists 分仓，避免互相污染。 */
+  private static readonly passthroughPreferenceName: string = 'legado_backup_passthrough';
+  private static readonly passthroughCacheKey: string = 'androidConfigPassthrough';
+  /** 透传缓存业务闸门：2000 键 / 1 MB（preferences 单值上限 16 MB，按业务量自设，字符串长度近似字节）。 */
+  private static readonly maximumPassthroughKeys: number = 2000;
+  private static readonly maximumPassthroughBytes: number = 1024 * 1024;
+  /**
+   * 已知写出键集 = upsertAndroidPreference 的 91 个 config.xml 字面量键
+   * + coverSettingsToAndroid 的 14 个封面键 = 105 键（两集合无交集）。
+   * 做成常量数组，不「遍历 XML 看有没有」：那份 XML 是 copyPreservedEntries 带进来的，
+   * 会出现「上次写过所以这次跳过」，一旦用户删了某项就永远写不回去。
+   */
+  private static readonly writtenPreferenceKeys: Set<string> = new Set<string>([
+    'adaptSpecialStyle', 'autoSuggestDayNight', 'auto_refresh', 'bookGroupStyle',
+    'bookmarkBadgeImage', 'bookmarkBadgeSize', 'bookshelfCardColor', 'bookshelfCardColorDark',
+    'bookshelfCoverShadow', 'bookshelfFolderLayoutGridLandscape', 'bookshelfFolderLayoutGridPortrait', 'bookshelfFolderLayoutListLandscape',
+    'bookshelfFolderLayoutListPortrait', 'bookshelfFolderLayoutModeLandscape', 'bookshelfFolderLayoutModePortrait', 'bookshelfGridCoverWidth',
+    'bookshelfGridLayout', 'bookshelfGroupCoverCount', 'bookshelfGroupListStyle', 'bookshelfIntroMaxLines',
+    'bookshelfLayoutCompact', 'bookshelfLayoutGridLandscape', 'bookshelfLayoutGridPortrait', 'bookshelfLayoutListLandscape',
+    'bookshelfLayoutListPortrait', 'bookshelfLayoutPortrait', 'bookshelfListCoverCenter', 'bookshelfListCoverWidth',
+    'bookshelfListIntroBelowContent', 'bookshelfRefreshingLimit', 'bookshelfSearchActionDirectToSearch', 'bookshelfSelectedGroupId',
+    'bookshelfShowDivider', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSort',
+    'bookshelfSortOrder', 'bookshelfTitleCenter', 'bookshelfTitleMaxLines', 'bookshelfTitleSmallFont',
+    'bookshelf_layout_landscape', 'brightness', 'brightnessAuto', 'chineseConverterType',
+    'clickImgWay', 'colorTemperature', 'coverDefaultColor', 'coverInfoOrientation',
+    'coverRestrictRatio', 'coverShadowColor', 'coverShadowColorN', 'coverShowAuthor',
+    'coverShowAuthorN', 'coverShowName', 'coverShowNameN', 'coverShowShadow',
+    'coverShowStroke', 'coverTextColor', 'coverTextColorN', 'disableReturnKey',
+    'dottedBase', 'dottedRatio', 'doubleHorizontalPage', 'expandTextMenu',
+    'explore_filter_state', 'eyeProtectionAutoNight', 'eyeProtectionEnabled', 'eyeProtectionEndTime',
+    'eyeProtectionSchedule', 'eyeProtectionStartTime', 'hideEmptyGroups', 'lastMarkingStyle',
+    'loadCoverOnlyWifi', 'maxLengthWithNoToc', 'menuAlpha', 'moreActionsConfig',
+    'mouseWheelPage', 'nextKeyCodes', 'paddingDisplayCutouts', 'pageTouchSlop',
+    'prevKeyCodes', 'progressBarBehavior', 'readBodyToLh', 'readSliderMode',
+    'readingAnchorEnabled', 'selectVibrator', 'showBookIntro', 'showBookshelfFastScroller',
+    'showReadTitleAddition', 'showRss', 'showSelectMenuIcon', 'sliderVibrator',
+    'swipeToAddBookmark', 'system_typefaces', 'textBottomJustify', 'textFullJustify',
+    'textSelectMenuConfig', 'themeMode', 'titleBarCompact', 'tocCountWords',
+    'tocUiUseReplace', 'underlineExtend', 'underlinePadding', 'useDefaultCover',
+    'useZhLayout'
   ]);
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
     // 与上游 BackupConfig.kt:197-262 的 readPrefKeys 逐键一致（60 个）。
@@ -987,6 +1036,22 @@ export class BackupRepository {
           configText, 'boolean', 'showRss', themeSnapshot.showRss ? 'true' : 'false');
         BackupRepository.writeTextFile(configPath, configText);
       }
+      // 透传：copyPreservedEntries 带进来的 config.xml 里，凡是本地读不懂的键，
+      // 这次原样写回去，避免「从 Android 恢复 → 本地备份 → 上游键全丢」。
+      // 判据与上游 keyIsNotIgnore 的 else -> true 对齐：不在已知写出键集、不在忽略键里，就保留。
+      // 门控取 readConfig：透传键横跨 readConfig / themeConfig / 无组三类，而 config.xml 在
+      // categoryOptions 里首要归属 readConfig；若用户勾选忽略「阅读配置」，整份 config.xml 本来
+      // 也不该出现本地写出的键，故透传一并停下。
+      // 已知边界：全新安装、从未从 Android 恢复过的设备缓存为空，此处无键可透传；
+      // 上游 Backup.kt:266-275 的 3 个旧键回填逻辑（bookshelfSelectedGroupId ← saveTabPosition、
+      // readBrightnessMode ← showBrightnessView、readBrightnessControlPosition ← brightnessVwPos）
+      // 本地没有对应旧键，不实现。
+      if (!ignoredCategories.includes('readConfig')) {
+        let passthroughText = fileIo.readTextSync(configPath);
+        passthroughText = await BackupRepository.applyPassthroughPreferences(
+          context, passthroughText, ignoredCategories);
+        BackupRepository.writeTextFile(configPath, passthroughText);
+      }
       // 主题配色清单：上游 `Backup.kt:241-246` 在未忽略 themeConfig 时把
       // `ThemeConfigStore.configList` 整份 GSON 写进 `themeConfig.json`。
       // 本地没有内存清单，按当前调色板/自定义配色现算日/夜两套再写，
@@ -1208,6 +1273,11 @@ export class BackupRepository {
           throw new Error(`${entry.name} 超过 32 MB，未恢复该配置`);
         }
         BackupRepository.writeTextFile(targetPath, content);
+        // 把 config.xml 里本地不认识的键存进透传缓存，供下次备份原样带出。
+        // 新增键数只用于日志，不进 RestoreResult（界面不需要多一个数字）。
+        const passthroughAdded = await BackupRepository.savePassthroughFromConfigXml(
+          context, content, ignoredCategories);
+        console.info(`[BackupRepository] config.xml 透传缓存新增 ${passthroughAdded} 键`);
         preservedEntryCount += 1;
         continue;
       }
@@ -2720,6 +2790,204 @@ export class BackupRepository {
     return filtered.replace(/\r?\n[ \t]*\r?\n/g, '\n');
   }
 
+
+  /**
+   * 解析整份 config.xml，保留标签类型。不认识的标签由正则天然跳过。
+   * 正则与 filterAndroidConfigXml 同源（已支持 long / set）：
+   * 自闭合标签取 value 属性文本；成对标签取开闭标签之间的原文，不 .trim()、不反转义；
+   * set 标签取整段内层 XML，原样存进 value。
+   */
+  private static parseAndroidConfigXml(text: string): Map<string, XmlPreferenceEntry> {
+    const result: Map<string, XmlPreferenceEntry> = new Map<string, XmlPreferenceEntry>();
+    const pattern = /<(string|int|long|float|boolean|set)\b[^>]*\bname=["']([^"']+)["'][^>]*(?:\/>|>[\s\S]*?<\/\1>)/gi;
+    let match: RegExpExecArray | null = pattern.exec(text);
+    while (match !== null) {
+      const tag = match[1] ?? '';
+      const key = match[2] ?? '';
+      const element = match[0];
+      let value = '';
+      if (element.indexOf('</') < 0) {
+        // 自闭合：<int name="x" value="1" />
+        const valueMatch = /\bvalue=["']([^"']*)["']/i.exec(element);
+        value = valueMatch?.[1] ?? '';
+      } else {
+        // 成对：<string name="x">v</string> 或 <set name="x">内层 XML</set>
+        const openEnd = element.indexOf('>');
+        const closeStart = element.lastIndexOf('</');
+        if (openEnd >= 0 && closeStart > openEnd) {
+          value = element.substring(openEnd + 1, closeStart);
+        }
+      }
+      const entry: XmlPreferenceEntry = { type: tag, value: value };
+      result.set(key, entry);
+      match = pattern.exec(text);
+    }
+    return result;
+  }
+
+  /**
+   * 按缓存里的 XML 标签类型落标签，不走 upsertAndroidPreference（它无 long / set，还会把 & 写坏）。
+   * 缩进 4 空格，与上游 Backup.kt:299-306 对齐（本地旧方法 2 空格是历史问题）。
+   * 覆盖同名的任意类型标签，避免同键出现两个类型标签让上游按标签名分派时取错。
+   */
+  private static upsertXmlPreference(xml: string, key: string, entry: XmlPreferenceEntry): string {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(
+      `<(string|int|long|float|boolean|set)\\b[^>]*\\bname=["']${escapedKey}["'][^>]*(?:\\/>|>[\\s\\S]*?<\\/\\1>)`, 'i');
+    let element = '';
+    if (entry.type === 'string') {
+      element = `<string name="${key}">${entry.value}</string>`;
+    } else if (entry.type === 'set') {
+      element = `<set name="${key}">${entry.value}</set>`;
+    } else {
+      element = `<${entry.type} name="${key}" value="${entry.value}" />`;
+    }
+    // 用函数回调替换，避免 value 里的 $& / $1 被当成替换模式。
+    if (pattern.test(xml)) { return xml.replace(pattern, (_matched: string) => element); }
+    const mapEnd = xml.indexOf('</map>');
+    if (mapEnd < 0) { throw new Error('Android config.xml 缺少 map 根节点'); }
+    return `${xml.substring(0, mapEnd)}    ${element}\n${xml.substring(mapEnd)}`;
+  }
+
+  /**
+   * 从 preferences 读透传缓存。坏 JSON / 非字符串按「空缓存」回退（与 loadIgnoreLists 同姿态）。
+   * 已知边界：全新安装、从未从 Android 恢复过的设备缓存为空，此时透传无键可带出。
+   */
+  private static async loadPassthrough(context: Context): Promise<Map<string, XmlPreferenceEntry>> {
+    const empty: Map<string, XmlPreferenceEntry> = new Map<string, XmlPreferenceEntry>();
+    try {
+      const store = await preferences.getPreferences(context, BackupRepository.passthroughPreferenceName);
+      const raw = await store.get(BackupRepository.passthroughCacheKey, '');
+      if (typeof raw !== 'string' || raw.length === 0) { return empty; }
+      const parsed = JSON.parse(raw) as Record<string, Object>;
+      const keys = Object.keys(parsed);
+      const result: Map<string, XmlPreferenceEntry> = new Map<string, XmlPreferenceEntry>();
+      for (let index = 0; index < keys.length; index++) {
+        const key = keys[index];
+        const rawItem = parsed[key];
+        // 逐项守卫：单个坏条目（null / 非对象）只跳过自己，不让整份缓存作废。
+        if (rawItem === null || typeof rawItem !== 'object') { continue; }
+        const item = rawItem as Record<string, Object>;
+        const type = item['t'];
+        const value = item['v'];
+        if (typeof type === 'string' && typeof value === 'string') {
+          const entry: XmlPreferenceEntry = { type: type, value: value };
+          result.set(key, entry);
+        }
+      }
+      return result;
+    } catch (error) {
+      console.error(`[BackupRepository] 读取 config.xml 透传缓存失败: ${error}`);
+      return empty;
+    }
+  }
+
+  /**
+   * 把透传缓存写进 preferences。值是一条 JSON 字符串，形如 {"K":{"t":"int","v":"1"}}。
+   * 用字符串拼接 + JSON.stringify(string) 生成（与 replaceJsonString 同款），避开 ArkTS 对
+   * 「无明确 interface 类型的对象字面量」的限制。按 2000 键 / 1 MB 截断并 warn，不抛异常。
+   */
+  private static async savePassthrough(
+    context: Context,
+    value: Map<string, XmlPreferenceEntry>
+  ): Promise<void> {
+    const ordered: string[] = [];
+    value.forEach((_entry: XmlPreferenceEntry, key: string) => { ordered.push(key); });
+    let json = '{';
+    let estimated = 2; // 外层大括号
+    let kept = 0;
+    let dropped = 0;
+    for (let index = 0; index < ordered.length; index++) {
+      const key = ordered[index];
+      if (key === undefined) { continue; }
+      const entry = value.get(key);
+      if (entry === undefined) { continue; }
+      if (kept >= BackupRepository.maximumPassthroughKeys) { dropped += 1; continue; }
+      const fragment = `${JSON.stringify(key)}:{"t":${JSON.stringify(entry.type)},"v":${JSON.stringify(entry.value)}}`;
+      // 用字符串长度近似字节数（中文按 UTF-16 高估，留足余量，不会让实际值超 16 MB 单值上限）。
+      const comma = kept > 0 ? 1 : 0;
+      if (estimated + comma + fragment.length > BackupRepository.maximumPassthroughBytes) {
+        dropped += 1;
+        continue;
+      }
+      if (comma > 0) { json += ','; }
+      json += fragment;
+      estimated += comma + fragment.length;
+      kept += 1;
+    }
+    json += '}';
+    if (dropped > 0) {
+      console.warn(`[BackupRepository] config.xml 透传缓存超出上限，截断丢弃 ${dropped} 键`);
+    }
+    const store = await preferences.getPreferences(context, BackupRepository.passthroughPreferenceName);
+    await store.put(BackupRepository.passthroughCacheKey, json);
+    await store.flush();
+  }
+
+  /**
+   * 备份侧：把缓存里「已知写出键集 / alwaysIgnored / ignoredCategories」之外的全部键 upsert 进 config.xml。
+   * 判据与上游 BackupConfig.kt:412 keyIsNotIgnore 的 else -> true 等价；类别展开复用 preferenceKeysForCategory。
+   */
+  private static async applyPassthroughPreferences(
+    context: Context,
+    xml: string,
+    ignored: string[]
+  ): Promise<string> {
+    const cached = await BackupRepository.loadPassthrough(context);
+    if (cached.size === 0) { return xml; }
+    const excludedKeys: Set<string> = new Set<string>(BackupRepository.alwaysIgnoredPreferenceKeys);
+    for (let index = 0; index < ignored.length; index++) {
+      const preferenceKeys = BackupRepository.preferenceKeysForCategory(ignored[index] ?? '');
+      if (preferenceKeys !== undefined) {
+        for (let keyIndex = 0; keyIndex < preferenceKeys.length; keyIndex++) {
+          const preferenceKey = preferenceKeys[keyIndex];
+          if (preferenceKey !== undefined) { excludedKeys.add(preferenceKey); }
+        }
+      }
+    }
+    let result = xml;
+    cached.forEach((entry: XmlPreferenceEntry, key: string) => {
+      if (!BackupRepository.writtenPreferenceKeys.has(key) && !excludedKeys.has(key)) {
+        result = BackupRepository.upsertXmlPreference(result, key, entry);
+      }
+    });
+    return result;
+  }
+
+  /**
+   * 恢复侧：把 config.xml 里本地不认识的键存进透传缓存。
+   * 105 个已知写出键由既有恢复分支负责，进缓存只会打架；alwaysIgnored / ignoredCategories 剔除的键也不进。
+   * 与旧缓存合并而不是覆盖：用户可能连续恢复两个不同来源的包。
+   * 返回本次新增键数，只供日志用，不进 RestoreResult（界面不需要多一个数字）。
+   */
+  private static async savePassthroughFromConfigXml(
+    context: Context,
+    text: string,
+    ignored: string[]
+  ): Promise<number> {
+    const parsed = BackupRepository.parseAndroidConfigXml(text);
+    const excludedKeys: Set<string> = new Set<string>(BackupRepository.alwaysIgnoredPreferenceKeys);
+    for (let index = 0; index < ignored.length; index++) {
+      const preferenceKeys = BackupRepository.preferenceKeysForCategory(ignored[index] ?? '');
+      if (preferenceKeys !== undefined) {
+        for (let keyIndex = 0; keyIndex < preferenceKeys.length; keyIndex++) {
+          const preferenceKey = preferenceKeys[keyIndex];
+          if (preferenceKey !== undefined) { excludedKeys.add(preferenceKey); }
+        }
+      }
+    }
+    const existing = await BackupRepository.loadPassthrough(context);
+    const merged: Map<string, XmlPreferenceEntry> = new Map<string, XmlPreferenceEntry>(existing);
+    let added = 0;
+    parsed.forEach((entry: XmlPreferenceEntry, key: string) => {
+      if (!BackupRepository.writtenPreferenceKeys.has(key) && !excludedKeys.has(key)) {
+        if (!existing.has(key)) { added += 1; }
+        merged.set(key, entry);
+      }
+    });
+    await BackupRepository.savePassthrough(context, merged);
+    return added;
+  }
 
   private static mergeAndroidBookshelf(existingJson: string, importedJson: string): string {
     const existingRows = BackupRepository.splitJsonArray(existingJson);
