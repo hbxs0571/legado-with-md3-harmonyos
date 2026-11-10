@@ -827,28 +827,10 @@ export class BackupRepository {
           configText, 'boolean', 'textFullJustify', `${settings.textFullJustify}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'textBottomJustify', `${settings.textBottomJustify}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'boolean', 'textItalic', `${settings.textItalic}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'int', 'textBold', `${settings.textBold}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'boolean', 'textShadow', `${settings.textShadow}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'float', 'shadowRadius', `${settings.shadowRadius}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'float', 'shadowDx', `${settings.shadowDx}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'float', 'shadowDy', `${settings.shadowDy}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'boolean', 'underline', `${settings.underline}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'boolean', 'dottedLine', `${settings.dottedLine}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'string', 'shadowColor', settings.textShadowColor);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'string', 'shadowColorN', settings.textShadowColorN);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'int', 'underlineHeight', `${settings.underlineHeight}`);
+        // 文字样式（textBold / textItalic / textShadow / shadow* / underline* / dottedLine 共 13 项）
+        // 不写进 config.xml：上游这些不是 PreferKey 常量，属 ReadBookConfig 的字段域，
+        // 它们的家是上面 readConfig.json 的 toAndroidReadConfig。
+        // 恢复侧仍然双读（JSON 优先、config.xml 兜底），删这里不丢能力。
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'underlinePadding', `${settings.underlinePadding}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -895,10 +877,7 @@ export class BackupRepository {
           configText, 'float', 'dottedBase', `${settings.dottedBase}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'float', 'dottedRatio', `${settings.dottedRatio}`);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'string', 'underlineColor', settings.underlineColor);
-        configText = BackupRepository.upsertAndroidPreference(
-          configText, 'string', 'underlineColorNight', settings.underlineColorNight);
+        // underlineColor / underlineColorNight 同属上面 13 项文字样式，家在 readConfig.json，不写进 config.xml。
         // 上游把书签角标的两项存在 AppConfigStore 偏好里，随 config.xml 一起备份。
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'readingAnchorEnabled', `${settings.readingAnchorEnabled}`);
