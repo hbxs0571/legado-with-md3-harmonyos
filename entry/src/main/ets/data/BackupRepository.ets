@@ -381,12 +381,12 @@ export class BackupRepository {
     'PRIVATE_BIOMETRIC_ENABLED', 'PRIVATE_BIOMETRIC_ENVELOPE', 'PRIVATE_BIOMETRIC_IV'
   ]);
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
+    // 与上游 BackupConfig.kt:197-262 的 readPrefKeys 逐键一致（60 个）。
+    // 上游 keyIsNotIgnore(:413) 对不在任何类别数组里的键落 else -> true，「取消该类别勾选」
+    // 并不影响它们；这类键不能收进本数组，否则本地取消勾选会剔掉上游不剔的键。
     readConfig: [
-      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar', 'readingAnchorEnabled', 'swipeToAddBookmark', 'bookmarkBadgeSize', 'bookmarkBadgeImage', 'maxLengthWithNoToc', 'system_typefaces',
-      'autoReadSpeed', 'progressBarBehavior', 'tocUiUseReplace', 'tocCountWords', 'clickImgWay',
-      'textFullJustify', 'textBottomJustify', 'textItalic', 'textBold', 'textShadow', 'shadowRadius',
-      'shadowDx', 'shadowDy', 'shadowColor', 'shadowColorN', 'underline', 'underlineHeight',
-      'underlineColor', 'underlineColorNight', 'dottedLine',
+      'readStyleSelect', 'comicStyleSelect', 'shareLayout', 'hideStatusBar', 'hideNavigationBar',
+      'autoReadSpeed',
       'readBrightnessMode',
       'readBrightnessControlPosition', 'clickActionTopLeft',
       'clickActionTopCenter', 'clickActionTopRight', 'clickActionMiddleLeft', 'clickActionMiddleCenter',
