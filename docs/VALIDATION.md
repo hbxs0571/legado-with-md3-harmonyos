@@ -54,6 +54,30 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **为什么这么分**：验证记录的价值分两种——「最近发生了什么」（决定下一步做什么）与「当时怎么验的」（事后追溯）。前者要短，后者要全。混在一个 1690 行的文件里，前者被后者淹没。
 
+## 2026-11-10 滚动模式跨章首尾相连（页层批次 4，`99d616e`）
+
+- 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。
+- 构建：`bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 36 s 885 ms`；`hdc install -r entry/build/default/outputs/default/entry-default-unsigned.hap`。
+- 目标操作：滚动模式（`pageAnimation = 3`）下手指不抬，从本章末页连续滚进下一章；向上同理。
+- 为什么改：用户实测否决了批次 4 的验收结论——「滚动到下一章还是会跳，有些时候还能看到『继续滚动到下一张』，完全不是首尾相连」。复查后确认三个真根因（详见 [KNOWN-ISSUES.md](KNOWN-ISSUES.md) KI-REL1「页层批次 4 收口」段）：按本章页号判章末而从不推进 `currentPageIndex`；`@Prop` 首赋不触发 `@Watch` 导致守位标记被误清；换章时有四处按宿主整章百分比覆盖位置。
+- 改动（`entry/src/main/ets/pages/ReaderPage.ets`）：`applyReaderScrollDelta` `:2806` 的 NEXT/PREVIOUS 分支改按页表判、跨章时置 `scrollDrivenHandoffChapter` 不归零；`rebuildReaderPages` `:2241` 增 `scrollDrivenHandoff` / `keepScrollPosition` 与「滚动驱动时位置一个像素都不动」的落点分支；`onBookChanged` `:1613` 改用 `observedBookId` 并配 `aboutToAppear` 初始化；`onChapterTitleChanged` / `onReaderContentChanged` / `restoreProgressPosition` 三处不再清滚动位置；`resolvePaginationTitle` `:4616` 统一邻章预排与真页重排的标题口径；`insertBoundaryPlaceholders` `:2030` 的章末承接页文案清空；邻章预读加 1.5s 在途超时重发。
+
+### 设备验收
+
+| 操作 | 预期 | 实测证据 | 结论 |
+| --- | --- | --- | --- |
+| 向下：第 2 章末 `18/18 66.7%` 长拖（`uinput -T -g 640 2400 640 200 600 4000`），手势内连拍 14 帧页脚 | 手指不抬即跨进第 3 章，画面连续 | 页脚序列 `18/18 66.7%` ×5 → `1/6 66.7%` ×9，无中间态、无提示文字 | 通过 |
+| 同上，跨章那一帧的整屏 | 同一屏内既有上一章末句又有下一章标题与正文 | 上半「…这……算了，一不做二不休！」、下半 `第3章(1)` 标题与正文 | 通过 |
+| 向上：第 3 章 `1/6 66.7%` 反向长拖（`-g 640 300 640 2400 600 4000`）连拍 14 帧 | 手指不抬即回到上一章，画面连续 | `1/6 66.7%` ×3 → `18/18 66.7%` ×11；整屏显示 `第3章(1)` 正文与下方「…接赤足从高空中飞回了魔王城…」同屏堆叠 | 通过 |
+| 一次手势是否连跳两章 | 只跨一章 | 上述两组连拍里页脚只发生一次章节变化 | 通过 |
+| 章内短滑 6 次（`-g 640 2400 640 500 600 1200`，每次间隔 1.6s） | 页码单调、无回退 | `1/6 66.7%` → `2/6 68.3%` → `3/6 74.0%` → `5/6 93.7%` → `6/6 100.0%` | 通过 |
+| 换章前后两次 `rebuildReaderPages` 的落点 | 同一落点，不因重排而回跳 | hilog `[ReaderBench] scrollDriven land pageIdx=18 scrollOffset=-15.826105608259045` 出现两次（同一个值） | 通过 |
+
+**边界**：①向上换章落点精度未做——越界位移被钳成正值，落点钳位 `Math.min(0, …)` 会把它抹成 0，于是停在上一章末页顶部而不是「接着往回滚的位置」，已登记 KI-REL6。②跨章瞬间页脚整本进度仍有首帧 `0.0%` 的短暂闪动（`readerProgress` 尚未回填，稳定后立即回到正确值）。③正文三槽常驻、流式页流出、整本书串成无限长页表本轮不做（任务书明令）。④上游那套是滚动驱动章节切换（`ReadBookController`），本轮做的是「换章不打断手势」，不是一回事，不宣称对齐上游。
+
+**未验**：EPUB 格式、带图章节、章末不足一屏（`hitBoundary` 钳回）的跨章表现；连续跨 3 章以上的长滚动；模拟器以外的真机。
+
+
 ## 2026-11-04 N 端 r329 正文排版改系统原生断行（`@ohos.graphics.text`）
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。`targetSdkVersion 5.0.0(12)` 未改，构建按 API 12 基线走。
