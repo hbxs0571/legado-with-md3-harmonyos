@@ -266,23 +266,23 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 ## 偏好键对齐差异（待移除）
 
-本地 `entry/src/main/ets/data/BackupRepository.ets:383` 的 `preferenceKeysByCategory` 与上游 `help/storage/BackupConfig.kt` 的五个类别数组逐键比对（可复跑：拿 `PreferKey.kt` 常量值换算后求差集）：
+本地 `entry/src/main/ets/data/BackupRepository.ets:383` 的 `preferenceKeysByCategory` 与上游 `help/storage/BackupConfig.kt` 的五个类别数组逐键比对（可复跑：拿 `PreferKey.kt` 常量值换算后求差集）。下表是批 1–3 改完后的实测值，不再是改前的盘点数：
 
 | 类别 | 上游 | 本地 | 多出 | 缺失 |
 | --- | --- | --- | --- | --- |
-| `readConfig` | 60 | 85 | **25** | 0 |
-| `themeConfig` | 53 | **53** | 0 | 0（r292 已补 `bookInfoAuthorSearchFallback`） |
-| `bookshelfLayout` | 39 | 41 | **2** | 0 |
+| `readConfig` | 60 | 60 | 0 | 0 |
+| `themeConfig` | 53 | 53 | 0 | 0（r292 已补 `bookInfoAuthorSearchFallback`） |
+| `bookshelfLayout` | 39 | 39 | 0 | 0 |
 | `mangaConfig` | 32 | 32 | 0 | 0 |
 | `coverConfig` | 14 | 14 | 0 | 0 |
 
 `coverConfig` 这一行的 0/0 只说明**类别清单本身**对齐了（`data/BackupRepository.ets:450`-`:454` 的 14 个常量与 `BackupConfig.kt:396-411` 逐键相同），不代表这些键真的被读写。r330 核实：这份清单在本地**只用于过滤**（`data/BackupRepository.ets:2703` 的 `filterAndroidConfigXml` 把 14 个键当排除项）。**2026-11-09 复核后此段已被代码推翻**：`config.xml` 的写出已改为逐键 `upsertAndroidPreference`（`data/BackupRepository.ets:723`-`:942` 为 `readConfig` 段、`:946`-`:951` 为封面段），封面 14 键现在**确实在写出列表里**；恢复侧 `restoreCoverSettings` 定义在 `data/BackupRepository.ets:1825` 并复用 `coverSettingsToAndroid`（`:1841`）、调用点 `:1535`。另有一层不一致：本地落盘用的是裸字段名（`showName`/`textColor`/`infoOrientation`…，见 `data/CoverSettingsRepository.ets:135-146`），与这份常量里的 `coverShowName`/`coverTextColor`/`coverInfoOrientation` 不同名——所以即便将来把 14 键加进白名单，也要先解决键名映射。逐行结论见[封面设置总账](parity/ZIP-COVER.md) E 块。
 
-`readConfig` 多出的 25 个分两类：
+`readConfig` 原先多出的 25 个键已从类别数组移除（批 1，85 → 60），按性质分两类：
 
-**一、上游有常量、但不在任何类别数组（14 个）——照样参与备份，本地不该把它们收进类别数组**
+**一、上游有 `PreferKey` 常量、但不在任何类别数组（12 个）**
 
-判定依据：上游 `help/storage/BackupConfig.kt:413 fun keyIsNotIgnore` 里不在任何类别数组的键走 `else -> true`，照样写进 `config.xml`。换句话说，**取消「阅读界面」勾选时上游不会删这 14 个键，本地却会删**——这是与上游的行为不一致。
+判定依据：上游 `help/storage/BackupConfig.kt:413 fun keyIsNotIgnore` 里不在任何类别数组的键走 `else -> true`，照样写进 `config.xml`。换句话说，取消「阅读界面」勾选时上游不会剔除这 12 个键，本地却因收进类别数组而剔除——与上游行为相反。这 12 个是：
 
 | 键 | `PreferKey.kt` 行 |
 | --- | --- |
@@ -297,24 +297,19 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 | `clickImgWay` | `:202` |
 | `textFullJustify` | `:105` |
 | `textBottomJustify` | `:106` |
-| `bookGroupStyle` | `:13` |
-| `hideEmptyGroups` | `:14` |
-| `system_typefaces` | `:103`（常量名是 `systemTypefaces`，值是 `system_typefaces`；同时还是 `R.array.system_typefaces` 资源名，**不是偏好键**） |
+| `system_typefaces` | `:103`（常量名 `systemTypefaces`，值 `system_typefaces`） |
 
-最后一项 `system_typefaces` 情况特殊：它在 `PreferKey` 里有常量，但全仓无人读写（只被 `R.array.system_typefaces` 资源引用），本地收进 `readConfig` 属误收，应删。
+其中 `system_typefaces` 旧文记「全仓无人读写（只被 `R.array.system_typefaces` 资源引用）」是错的：`app/src/main/java/io/legado/app/data/repository/ReadSettingsRepository.kt:176` 有 `settingsRepository.putInt(PreferKey.systemTypefaces, value)`、`:546` 有 `intPreferencesKey(PreferKey.systemTypefaces)`、`:680` 有 `PreferKey.systemTypefaces to systemTypefaces`；消费者还有 `LegacyReaderPageDecorationFactory.kt`、`LegacyReaderPaginationStyleFactory.kt`、`ReadBookScreen.kt`、`ReadStyleDelegate.kt`、`TypographyTabs.kt` 等。它是真在用的偏好键。
 
-**二、上游全仓不存在（13 个）——误把 JSON 结构字段名当成 `config.xml` 键，必须删**
+**二、不是 `PreferKey` 常量（13 个）**
 
-| 键 | 上游真身 |
-| --- | --- |
-| `textBold` | `help/config/ReadBookConfig.kt:573 val textBold: Int = 500` 的**字段名**；`:760 "textBold" to textBold` 是 `shareReadConfig` JSON 的键，不是 `config.xml` 键 |
-| `underlineColor` | `data/entities/HighlightRule.kt:21 var underlineColor: Int? = null` 的字段名；`ReadBookConfig.kt:800` 里作为 `highlightRules` 内嵌 JSON 的键 |
-| `underline` | `ui/widget/components/text/HtmlContent.kt:696 underline = "underline" in value.lowercase()` 的 HTML 样式字面量 |
-| `textItalic`、`textShadow`、`shadowRadius`、`shadowDx`、`shadowDy`、`shadowColor`、`shadowColorN`、`underlineHeight`、`underlineColorNight`、`dottedLine` | 全仓字面量命中 0（既非 `PreferKey`、也非 `LocalPreferences`、也非任何 JSON 键） |
+`textItalic`、`textBold`、`textShadow`、`shadowRadius`、`shadowDx`、`shadowDy`、`shadowColor`、`shadowColorN`、`underline`、`underlineHeight`、`underlineColor`、`underlineColorNight`、`dottedLine`。判据是「**不是 `PreferKey` 常量**」，不是「全仓零命中」——实测 `textBold`、`underline`、`underlineColor` 在上游各有 1 处带引号字面量命中（分别见 `ReadBookConfig.kt`、`HtmlContent.kt`、`HighlightRule.kt` 的字段/样式名），其余 10 个 0；但它们没有一个在 `PreferKey.kt` 里被声明为 `const val … = "…"`。它们真正的家是 `readConfig.json`（上游 `ReadBookConfig.kt` 的 `Config` 数据类字段域），本地 `toAndroidReadConfig` 已经写对；恢复侧对这 13 个键保持 JSON 优先、`config.xml` 兜底的双读。批 2 删掉的是本地往 `config.xml` 多写的 13 行，不动 JSON 支路与双读结构。
 
-**三、`bookshelfLayout` 多出的 2 个**：`bookGroupStyle`（`PreferKey.kt:13`）、`hideEmptyGroups`（`PreferKey.kt:14`）——与上游同样落在 `else -> true` 的无类别分支，本地收进了 `bookshelfLayout` 键组（`entry/src/main/ets/data/BackupRepository.ets:424`-`:438` 的 `preferenceKeysByCategory.bookshelfLayout`，并在恢复侧 `:1794`/`:1805` 的键组里各出现一次），属上述第一类问题。**这两个键在写出侧的后果已于 2026-11-09 复核修正**：它们与 `showBookIntro`、`coverRestrictRatio`、`explore_filter_state` 一起被写在**无条件区**（`entry/src/main/ets/data/BackupRepository.ets:675`-`:679`，位于 `:682` 的 `if (!ignoredCategories.includes('bookshelfLayout'))` 门控**之前**），所以**取消「书架布局」勾选时这两个键照样写出**——与上游 `help/storage/BackupConfig.kt:413` 的 `keyIsNotIgnore` 落 `else -> true` 一致。旧文记「被写在门控块内、取消勾选一并不写出」，与现行代码相反，已作废。界面侧见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) 的 F 块。
+**三、`bookshelfLayout` 39 = 39、多 0，无需改动**
 
-**四、`themeConfig` 缺失的 1 个**：`bookInfoAuthorSearchFallback`（`PreferKey.kt:252`，在上游 `themePrefKeys` 内）。本地未收，导致取消「主题配置」勾选时这个键不会被忽略——与上游不一致。**已在 r292 补进 `BackupRepository.ets` 的 `themeConfig` 数组**（现 53 = 上游 53）。
+`bookGroupStyle`（`PreferKey.kt:13`）与 `hideEmptyGroups`（`PreferKey.kt:14`）不在本地 `bookshelfLayout` 数组里，也不在上游 `bookshelfPrefKeys` 里；它们写在 `entry/src/main/ets/data/BackupRepository.ets:675`/`:676` 的无条件区（在 `bookshelfLayout` 门控之前），走的是上游 `else -> true` 的同一语义。实测本地 39 键与上游 39 键逐键完全一致，旧文「多 2 个」是错误断言，代码一行未动。界面侧见[书架布局总账](parity/ZIP-BOOKSHELF-LAYOUT.md) 的 F 块。
 
-> **现状**：`themeConfig` 已对齐；`readConfig` 多 25、`bookshelfLayout` 多 2 **尚未改动代码**，仅记录。修法：第一类 14 个键从类别数组移除（改为「无类别」处理，即不出现在任何 `keysForCategory` 返回的列表里），第二类 13 个直接删，`bookshelfLayout` 那 2 个同样移除。判断口径见 `docs/parity/BOOKSHELF.md` 表头「ZIP 类别」列的取值说明（`—` = 参与备份但不受任何忽略开关控制）。
+**四、`themeConfig` 缺失的 1 个**：`bookInfoAuthorSearchFallback`（`PreferKey.kt:252`，在上游 `themePrefKeys` 内）。r292 已补进 `BackupRepository.ets` 的 `themeConfig` 数组（现 53 = 上游 53），本任务未再动。
+
+> **现状**（2026-11-10 批 1–3 后）：`themeConfig` 53=53；`readConfig` 已按批 1 从 85 删到 60，与上游 `readPrefKeys` 映射后逐键一致；`config.xml` 写出已删 13 个非 `PreferKey` 文字样式键（批 2）、补了 5 个漏写的 `PreferKey`（`progressBarBehavior` / `tocUiUseReplace` / `tocCountWords` / `clickImgWay` / `maxLengthWithNoToc`，批 3）；`bookshelfLayout` 39=39、代码未改。`underlinePadding` / `underlineExtend` / `dottedBase` / `dottedRatio` 四个键**仍未判定**：本地仍往 `config.xml` 写出（真包里 `grep -c` 各 1）、上游 `PreferKey` 无此常量、真 Android 样本 `config.xml` 里 `grep -c` 全 0；本任务按范围未扩大到它们，明确留待另开一轮。判断口径见 `docs/parity/BOOKSHELF.md` 表头「ZIP 类别」列的取值说明（`—` = 参与备份但不受任何忽略开关控制）。
 
