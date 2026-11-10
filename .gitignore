@@ -52,3 +52,6 @@ screenshots/
 # 仅供本机对照的 E 端文档快照与开发计划，含设备地址、书名与 E 盘路径
 docs/e-reference/
 docs/dev/
+
+# 会话临时证据目录（设备截图、布局树、一次性脚本），与 screenshots/ project-resources/ 同性质
+tmp3/
