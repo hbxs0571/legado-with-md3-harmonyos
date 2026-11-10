@@ -6593,6 +6593,7 @@ struct Index {
     this.route = AppRoute.READER;
   }
   private async selectChapter(title: string, requestedIndex?: number, initialProgress: number = 0): Promise<void> {
+    const selectStartedAt = Date.now();
     const cachedTitles = BookRepository.cachedChapterTitles(this.selectedBook);
     const chapterTitles = cachedTitles.length > 0 ? cachedTitles : [title];
     const titleIndex = chapterTitles.indexOf(title);
@@ -6614,6 +6615,7 @@ struct Index {
       (chapterIndex + Math.max(0, Math.min(100, initialProgress)) / 100) / chapterCount * 100;
     updatedBook.androidCharacterPosition = 0;
     let content: string = '';
+    const readStartedAt = Date.now();
     try {
       content = await BookRepository.readChapter(updatedBook, title);
       this.replaceRules = ReplaceRuleRepository.getAll();
@@ -6641,6 +6643,8 @@ struct Index {
     this.books = updatedBooks;
     this.readerContent = content;
     this.route = AppRoute.READER;
+    console.info(`[ReaderBench] selectChapter readMs=${Date.now() - readStartedAt} ` +
+      `totalMs=${Date.now() - selectStartedAt} title=${title}`);
   }
   private async saveReaderChapterContent(chapterIndex: number, title: string, body: string): Promise<void> {
     const context = this.getUIContext().getHostContext();

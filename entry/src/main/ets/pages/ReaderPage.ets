@@ -1573,6 +1573,7 @@ export struct ReaderPage {
   }
 
   onReaderContentChanged(): void {
+    const changedAt = Date.now();
     this.resetPageTurnTransition();
     this.refreshContentProcesses();
     // 新章正文到了，章边界提示页必须撤掉，否则会一直停在「加载数据中…」
@@ -1608,6 +1609,8 @@ export struct ReaderPage {
     // 到了还不清，手指未抬起的剩余位移会被 onActionUpdate 全部 return 吃掉，
     // 用户只好松手再按一次。放在页表替换之后，避免闸门先开、页表仍是旧章末页。
     this.scrollDragBoundaryTurned = false;
+    console.info(`[ReaderBench] contentChanged totalMs=${Date.now() - changedAt} ` +
+      `pages=${this.localReaderPages.length}`);
   }
 
   onPaginationInputsChanged(): void {
@@ -1787,6 +1790,7 @@ export struct ReaderPage {
    */
   private rebuildReaderPages(forceProgressCommit: boolean = false,
     onlyImageSizesChanged: boolean = false): void {
+    const startedAt = Date.now();
     if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
       this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
       // KI-REL1：换章交接期间不清空页表。上游任何时刻都有 pages.current
@@ -1818,6 +1822,7 @@ export struct ReaderPage {
     const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
     // 只有图片尺寸到齐时，语义解析与高亮匹配的输入完全没变，直接复用上一轮结果。
     // 复用的前提是上一轮真的解析过（paragraphs 非空），否则退回全量。
+    const semanticsStartedAt = Date.now();
     const reuseSemantic = onlyImageSizesChanged && this.localSemanticDocument.paragraphs.length > 0;
     const document = reuseSemantic
       ? this.localSemanticDocument
@@ -1857,6 +1862,7 @@ export struct ReaderPage {
     const singleImageStyle = this.activeImageStyle === 'SINGLE';
     const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
       document.content.length, singleImageStyle);
+    const paginateStartedAt = Date.now();
     const paginatedPages = LocalReaderPaginator.paginate(
       document,
       width,
@@ -1889,6 +1895,7 @@ export struct ReaderPage {
       const page = paginatedPages[pageIndex];
       if (page !== undefined) { nextPages.push(page); }
     }
+    const positionStartedAt = Date.now();
     const percentPosition = Math.round(this.localSemanticContent.length * (this.book.chapterProgress ?? 0) / 100);
     let targetPosition = percentPosition;
     if (this.pendingBookmarkTargetPosition >= 0) {
@@ -1967,6 +1974,15 @@ export struct ReaderPage {
     this.readerCanvasRenderer.clearParagraphs();
     this.prefetchReaderCanvasWindow();
     this.paintReaderCanvas();
+    // 批 1 计时：只取时间戳 + 打日志，不改任何分支。positionMs 含定位/钳位/预解图/重绘，
+    // 正是要观察的渲染开销。任务模板的 paginateMs 实为「语义解析段」，故另补 paginatorMs
+    // 标出真正的 LocalReaderPaginator.paginate 耗时，便于判定最大项。
+    console.info(`[ReaderBench] rebuild semanticsMs=${semanticsStartedAt - startedAt} ` +
+      `paginateMs=${paginateStartedAt - semanticsStartedAt} ` +
+      `positionMs=${Date.now() - paginateStartedAt} ` +
+      `pages=${this.localReaderPages.length} onlyImages=${onlyImageSizesChanged} ` +
+      `reuseSemantic=${reuseSemantic} paginatorMs=${positionStartedAt - paginateStartedAt} ` +
+      `renderMs=${Date.now() - positionStartedAt}`);
     const consumedBookmarkTarget = this.pendingBookmarkTargetPosition >= 0;
     this.pendingBookmarkTargetPosition = -1;
     if (this.pageAnimation !== 3 && forceProgressCommit) {

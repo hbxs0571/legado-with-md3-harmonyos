@@ -1427,13 +1427,19 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       rows = BookRepository.deriveChapters(book, content);
     }
     if (rows.length === 0) {
-      return await BookRepository.applyChapterContentAsync(book, chapterTitle,
+      const applyStartedAt = Date.now();
+      const fallbackContent = await BookRepository.applyChapterContentAsync(book, chapterTitle,
         content.substring(0, 50000), book.chapterIndex ?? 0);
+      console.info(`[ReaderBench] readChapter applyMs=${Date.now() - applyStartedAt} fallback=true title=${chapterTitle}`);
+      return fallbackContent;
     }
     const selectedIndex = BookRepository.resolveChapterIndex(rows, chapterTitle, requestedChapterIndex, book);
     const chapter = rows[selectedIndex];
     const body = BookRepository.chapterBody(book, content, chapter, encoding);
-    return await BookRepository.applyChapterContentAsync(book, chapter.title, body, chapter.index);
+    const applyStartedAt = Date.now();
+    const applied = await BookRepository.applyChapterContentAsync(book, chapter.title, body, chapter.index);
+    console.info(`[ReaderBench] readChapter applyMs=${Date.now() - applyStartedAt} fallback=false title=${chapter.title}`);
+    return applied;
   }
 
   /**
