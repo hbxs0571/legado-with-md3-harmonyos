@@ -487,6 +487,16 @@ export struct ReaderPage {
   // 任何一个清零点在这段窗口动手都会吃掉余量，所以用它挡住清零，直到页表落定消费。
   private chapterBoundaryContinuation: boolean = false;
   /**
+   * 正在向宿主请求的邻章章号，-1 表示没有在途请求。
+   *
+   * 每次 `rebuildReaderPages` 收尾都会检查邻章页是否齐备；没有它的话同一个
+   * 请求会在每次重排（换章两遍、图片尺寸到达、设置变更都触发）里重复发出，
+   * 宿主侧就变成反复读盘。
+   */
+  private pendingAdjacentChapter: number = -1;
+  /** 已经成功下发并排进页表的邻章章号，-1 表示还没有；防止同一章反复要。 */
+  private deliveredAdjacentChapter: number = -1;
+  /**
    * 上一次交接记的是哪本书。
    *
    * 换书时 `content` 同样会变，若不区分就会把上一本书的页表当过渡帧画出来。
@@ -763,6 +773,26 @@ export struct ReaderPage {
   onContentProcessDelete: (id: string) => void = (_id: string) => {};
   onSelectChapterIndex: (chapterIndex: number) => void = () => {};
   onTurnChapterBoundary: (delta: number) => void = (_delta: number) => {};
+  /**
+   * 请求宿主预读某一章正文（滚动模式邻章预排用）。
+   *
+   * 正文通道原本是单向的：宿主把整章通过 `@Prop content` 一次性下发，阅读页
+   * 没有任何办法自己去要邻章。预排邻章必须先由阅读页开口，宿主读完再经
+   * `adjacentChapterPayload` 送回来。
+   */
+  onRequestAdjacentChapter: (chapterIndex: number) => void = (_chapterIndex: number) => {};
+  /**
+   * 宿主预读到的邻章正文，编码为 `章号 \u0000 正文`；空串表示没有。
+   *
+   * 章号与正文必须**一次赋值**送达。用两个 `@Prop` 分开发会在两次赋值之间
+   * 各触发一次 Watch，中间帧要么「新章号 + 旧正文」要么「旧章号 + 新正文」，
+   * 两种都会按错的章号排错页。合成一份字符串就没有这个中间态。
+   *
+   * 邻章正文只用一次（parse → paginate → 页进页表），之后只剩页。
+   * 不复用 `this.content` 装它：`this.content` 的使用点全是「当前章正文」语义，
+   * 混用会让页码、进度、书签全部错位。
+   */
+  @Prop @Watch('onAdjacentChapterChanged') adjacentChapterPayload: string = '';
   /** 章边界提示文案；非空时当前页整屏只显示这一行（上游 `centeredReaderMessagePage`）。 */
   @State boundaryMessage: string = '';
   private boundaryMessageTimer: number = -1;
@@ -1848,6 +1878,186 @@ export struct ReaderPage {
     return chapterPosition(this.localReaderPages, this.currentPageIndex);
   }
 
+  /**
+   * 把某一章的页换进窗口页表（页层批次 4，邻章预排专用）。
+   *
+   * 与 `mergeChapterPages` 的区别：那个是「当前章整章替换」——新页属于
+   * `chapterIndex`，同章的旧页一律丢弃。邻章预排的新页**不属于当前章**，
+   * 用它会把当前章页删光。这里只替换 `chapterIndex` 那一章的旧页，
+   * 其余章原样保留，当前章的页与下标一个都不动。
+   *
+   * 结果同样按 (chapterIndex, pageIndex) 升序，保证窗口四页连续。
+   */
+  private mergeAdjacentChapterPages(
+    chapterPages: LocalReaderPage[], chapterIndex: number): LocalReaderPage[] {
+    const merged: LocalReaderPage[] = [];
+    for (const page of this.localReaderPages) {
+      if ((page.chapterIndex ?? 0) === chapterIndex) { continue; }
+      merged.push(page);
+    }
+    for (const page of chapterPages) {
+      merged.push(page);
+    }
+    merged.sort((left: LocalReaderPage, right: LocalReaderPage): number => {
+      const chapterDelta = (left.chapterIndex ?? 0) - (right.chapterIndex ?? 0);
+      if (chapterDelta !== 0) { return chapterDelta; }
+      return (left.pageIndex ?? 0) - (right.pageIndex ?? 0);
+    });
+    return merged;
+  }
+
+  /**
+   * 页表里有没有某一章的页。
+   *
+   * 窗口表最多装「当前章 ±1」，所以这里只要判断该章有没有被排进来过。
+   * 占位页不参与这个判断——占位页是「等着被替换」的记号，不是「已经有正文」。
+   */
+  private hasChapterPages(chapterIndex: number): boolean {
+    for (const page of this.localReaderPages) {
+      if ((page.chapterIndex ?? 0) === chapterIndex && page.messageText === undefined) { return true; }
+    }
+    return false;
+  }
+
+  /**
+   * 向宿主请求预排邻章正文（页层批次 4）。
+   *
+   * 只在滚动模式做：分页模式翻章是「整表替换」，预排邻章只会白占内存。
+   * 一次只请求一章，优先下一章——向下读是主路径。
+   *
+   * 三种情况不请求：已在途（`pendingAdjacentChapter`）、已经下发过且页还在
+   * （`deliveredAdjacentChapter` + `hasChapterPages`）、目标章越界。
+   */
+  private prefetchAdjacentChapters(): void {
+    if (!this.usesCanvasScroll()) { return; }
+    const currentChapter = this.getChapterIndex();
+    const nextChapter = currentChapter + 1;
+    const previousChapter = currentChapter - 1;
+    const needsNext = nextChapter < this.getChapterCount() && !this.hasChapterPages(nextChapter);
+    const needsPrevious = previousChapter >= 0 && !this.hasChapterPages(previousChapter);
+    if (!needsNext && !needsPrevious) { return; }
+    const target = needsNext ? nextChapter : previousChapter;
+    if (this.pendingAdjacentChapter === target) { return; }
+    if (this.deliveredAdjacentChapter === target && this.hasChapterPages(target)) { return; }
+    this.pendingAdjacentChapter = target;
+    this.onRequestAdjacentChapter(target);
+  }
+
+  /**
+   * 宿主预读回来的邻章正文：排成页并并进窗口页表（页层批次 4）。
+   *
+   * 这里是本轮唯一「排完不动阅读位置」的排版入口，四条纪律：
+   * 不改 `currentPageIndex`、不改 `scrollOffset`、不调 `updateProgress()`，
+   * 除了最后一次 `paintReaderCanvas()` 之外不产生任何副作用。邻章页只给绘制层
+   * 提供可堆叠的画面、给换章提供已就绪的页，阅读位置始终停在当前章。
+   *
+   * 排版必须在 UI 线程同步做：测宽回调 `measureTextWidthForPagination` 依赖
+   * `getUIContext()`，进不了 taskpool。这段会有一帧可见的卡顿，但发生在章末
+   * 之前，不影响正在读的这屏。
+   */
+  private onAdjacentChapterChanged(): void {
+    // 载荷是「章号 \u0000 正文」，一次赋值送达，不存在「新章号 + 旧正文」的中间帧。
+    const payload = this.adjacentChapterPayload;
+    const separator = payload.indexOf('\u0000');
+    if (separator <= 0) { return; }
+    const adjacentChapter = Number.parseInt(payload.substring(0, separator), 10);
+    const content = payload.substring(separator + 1);
+    if (!Number.isFinite(adjacentChapter) || adjacentChapter < 0 || content.length === 0) { return; }
+    const currentChapter = this.getChapterIndex();
+    // 翻了两章以上的旧结果直接丢：窗口表只保留 ±1，排进来也会被 mergeChapterPages 丢掉。
+    if (Math.abs(adjacentChapter - currentChapter) !== 1) {
+      if (this.pendingAdjacentChapter === adjacentChapter) { this.pendingAdjacentChapter = -1; }
+      return;
+    }
+    if (this.pendingAdjacentChapter === adjacentChapter) { this.pendingAdjacentChapter = -1; }
+    // 两个 @Prop 会各触发一次 Watch（先章号、再正文），同一章可能被送进来两次；
+    // 已经排过且页还在就不再重排，否则每章白排两遍。
+    if (this.deliveredAdjacentChapter === adjacentChapter && this.hasChapterPages(adjacentChapter)) {
+      return;
+    }
+    // 视口/正文宽度没就绪时排出来的页是错的，等下一次 rebuild 再请求。
+    if (this.readerContentWidth <= 0 || this.viewportHeight <= 0 ||
+      this.book.format !== 'txt' && this.book.format !== 'epub') {
+      return;
+    }
+    const startedAt = Date.now();
+    const context = this.getUIContext();
+    // 排版输入必须与 rebuildReaderPages 完全一致，否则邻章页的行高/页高与本章不同，
+    // 堆叠起来就会出现「跨章那一跳高度突变」。
+    const fontSize = this.fontSize * 1.05;
+    const width = this.getBodyContentWidth();
+    const baseLineHeight = ReaderFontRepository.measureLineHeight(
+      context, this.readerBodyFontFamily, fontSize);
+    const lineHeight = Math.max(1, baseLineHeight * this.lineSpacing / 10);
+    const infoHeaderReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
+    const infoFooterReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
+    const formulaPageHeight = this.getBodyContentHeight(infoHeaderReserve, infoFooterReserve);
+    const pageHeight = this.readerCanvasBodyHeightVp > 0
+      ? Math.max(lineHeight, Math.min(formulaPageHeight, this.readerCanvasBodyHeightVp))
+      : Math.max(lineHeight, formulaPageHeight);
+    const paragraphSpacing = baseLineHeight * this.paragraphSpacing / 10;
+    const document = LocalTextSemantics.parse(content, this.paragraphIndent, this.adaptSpecialStyle);
+    // 邻章图片尺寸这里拿不到（`imageSizes` 是本章的，键是 path），一律按行高占位。
+    // 邻章页本来就只用于「跨章那几帧」，等真换过去时 `loadContentImageSizes` 会重排一次。
+    const adjacentImageSizes = new Map<string, ReaderIntrinsicImageSize>();
+    const placeholderExtent = Math.max(1, lineHeight);
+    for (let paragraphIndex = 0; paragraphIndex < document.paragraphs.length; paragraphIndex++) {
+      const paragraph = document.paragraphs[paragraphIndex];
+      if (paragraph === undefined) { continue; }
+      for (let partIndex = 0; partIndex < paragraph.parts.length; partIndex++) {
+        const part = paragraph.parts[partIndex];
+        if (part?.kind === 'image' && !adjacentImageSizes.has(part.value)) {
+          adjacentImageSizes.set(part.value, { width: placeholderExtent, height: placeholderExtent });
+        }
+      }
+    }
+    const singleImageStyle = this.activeImageStyle === 'SINGLE';
+    // 标题块传空串：邻章标题此刻还没进 `displayChapterTitle`，用当前章标题会把
+    // 上一章的标题块排进邻章首页。等真换章过去时那次 rebuild 会带上正确标题。
+    const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
+      document.content.length, singleImageStyle, '');
+    const pages = LocalReaderPaginator.paginate(
+      document,
+      width,
+      pageHeight,
+      lineHeight,
+      paragraphSpacing,
+      (text: string): number => {
+        return ReaderFontRepository.measureTextWidthForPagination(
+          context, text, this.readerBodyFontFamily, fontSize, this.getReaderFontWeight()) +
+          this.getReaderTextLetterSpacingWidth(text, fontSize);
+      },
+      adjacentImageSizes,
+      this.activeImageStyle,
+      context.px2vp(80),
+      (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
+        this.getReaderLetterSpacingVp(fontSize)),
+      0,
+      this.textFullJustify,
+      this.resolveReaderColumnCount(),
+      this.readerSizeOffsets,
+      titleBlock,
+      this.buildReaderTextLayoutStyle(fontSize),
+      adjacentChapter
+    );
+    // 当前页身份必须在 merge 之前取：merge 会重排页表，下标会变。
+    const currentPage = this.localReaderPages[this.currentPageIndex];
+    const currentPageChapter = currentPage?.chapterIndex ?? currentChapter;
+    const currentPageChapterIndex = currentPage?.pageIndex ?? 0;
+    // 不能用 mergeChapterPages：它的语义是「用新页替换 chapterIndex 那一章的旧页」，
+    // 而这里的 pages 属于邻章，传邻章号会把当前章的页整章丢掉、把邻章页算进
+    // 当前章页码（实测页码变成 18/24）。邻章合并只换邻章那一章。
+    this.localReaderPages = this.mergeAdjacentChapterPages(pages, adjacentChapter);
+    // 页表重排后当前页下标会漂，按页身份重新定位一次；找不到才退回原下标。
+    const rebased = rebasePageIndex(this.localReaderPages, currentPageChapter, currentPageChapterIndex);
+    if (rebased >= 0 && rebased !== this.currentPageIndex) { this.currentPageIndex = rebased; }
+    this.deliveredAdjacentChapter = adjacentChapter;
+    this.readerCanvasRenderer.clearParagraphs();
+    this.paintReaderCanvas();
+    console.info(`[ReaderBench] adjacentPaginated chapter=${adjacentChapter} ` +
+      `pages=${pages.length} ms=${Date.now() - startedAt}`);
+  }
+
   /** 当前页的章内页号（0 起），用于页码显示与进度条；窗口表未就绪时退回页表下标。 */
   private currentChapterPageIndex(): number {
     return this.currentChapterPosition()?.pageIndex ?? this.currentPageIndex;
@@ -2051,6 +2261,9 @@ export struct ReaderPage {
     this.readerCanvasRenderer.clearParagraphs();
     this.prefetchReaderCanvasWindow();
     this.paintReaderCanvas();
+    // 页层批次 4：本章页表已就位，看看邻章页齐不齐；缺哪侧就向宿主开口要一章。
+    // 放在 paintReaderCanvas 之后：预读是纯副作用，不能挡住本帧的重绘。
+    this.prefetchAdjacentChapters();
     // 批 1 计时：只取时间戳 + 打日志，不改任何分支。positionMs 含定位/钳位/预解图/重绘，
     // 正是要观察的渲染开销。任务模板的 paginateMs 实为「语义解析段」，故另补 paginatorMs
     // 标出真正的 LocalReaderPaginator.paginate 耗时，便于判定最大项。

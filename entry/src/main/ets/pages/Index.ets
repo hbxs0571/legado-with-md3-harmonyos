@@ -223,6 +223,17 @@ struct Index {
   /** 跳转校验未通过时挂在这里，弹「仍要跳转吗」确认框。 */
   @State pendingBookmarkTarget: PendingBookmarkTarget | undefined = undefined;
   @State readerContent: string = '';
+  /**
+   * 邻章预读结果（页层批次 4）：阅读页在章末前先要一章，宿主读完经这一项送回。
+   *
+   * 编码成 `章号 \u0000 正文` 一次赋值。用两个 `@State` 分开发会让阅读页的
+   * `@Watch` 各触发一次，中间帧章号与正文对不上，会按错的章号排错页。
+   */
+  @State readerAdjacentChapterPayload: string = '';
+  /** 正在读盘的邻章章号，-1 表示没有在途请求；同一章重复请求直接忽略。 */
+  private readerAdjacentChapterPending: number = -1;
+  /** 已经下发过的邻章章号，-1 表示没有；防止同一章反复读盘。 */
+  private readerAdjacentChapterDelivered: number = -1;
   // 正文排版初值对齐上游「无数据」层 readConfig.json[0]（设置装载完成前的一帧也用这套值）。
   @State readerFontSize: number = 24;
   @State readerParagraphSpacing: number = 6;
@@ -6646,6 +6657,43 @@ struct Index {
     console.info(`[ReaderBench] selectChapter readMs=${Date.now() - readStartedAt} ` +
       `totalMs=${Date.now() - selectStartedAt} title=${title}`);
   }
+  /**
+   * 阅读页要邻章正文时调用（页层批次 4，滚动模式邻章预排）。
+   *
+   * `readChapter` 不依赖 UIContext，任意上下文可调；它会走
+   * `applyChapterContentAsync`（含一次 taskpool 往返替换规则），单章几十到几百毫秒。
+   * 三道去重：同一章在途、已是当前章、已经下发过，直接返回，避免每次重排都读一遍盘。
+   *
+   * 期间用户可能已经手动换章过去：读盘回来要重新核对章号，
+   * 过期结果直接丢，不写 `readerAdjacentChapterPayload`。
+   */
+  private async requestAdjacentChapter(chapterIndex: number): Promise<void> {
+    if (chapterIndex < 0 || chapterIndex === this.selectedBook.chapterIndex) { return; }
+    if (this.readerAdjacentChapterPending === chapterIndex) { return; }
+    if (this.readerAdjacentChapterDelivered === chapterIndex) { return; }
+    const chapters = BookRepository.cachedChapterTitles(this.selectedBook);
+    const title = chapters[chapterIndex];
+    if (title === undefined) { return; }
+    this.readerAdjacentChapterPending = chapterIndex;
+    const startedAt = Date.now();
+    let content = '';
+    try {
+      content = await BookRepository.readChapter(this.selectedBook, title, chapterIndex);
+    } catch (_) {
+      // 邻章读不到不影响本章阅读，静默放弃；下次重排会再试。
+      this.readerAdjacentChapterPending = -1;
+      return;
+    }
+    this.readerAdjacentChapterPending = -1;
+    // 读盘期间已经换过去了：这一章现在就是正文章，不能再当邻章下发。
+    if (chapterIndex === this.selectedBook.chapterIndex) { return; }
+    // 章号与正文编在一份载荷里一次赋值，阅读页不会看到「新章号 + 旧正文」的中间帧。
+    this.readerAdjacentChapterPayload = `${chapterIndex}\u0000${content}`;
+    this.readerAdjacentChapterDelivered = chapterIndex;
+    console.info(`[ReaderBench] adjacentRead chapter=${chapterIndex} ms=${Date.now() - startedAt} ` +
+      `length=${content.length}`);
+  }
+
   private async saveReaderChapterContent(chapterIndex: number, title: string, body: string): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -7161,6 +7209,12 @@ struct Index {
               } else {
                 this.showUnavailableAction(delta < 0 ? '没有上一页' : '没有下一页');
               }
+            },
+            // 页层批次 4：滚动模式邻章预排。阅读页在章末之前先要一章，
+            // 宿主读完经 adjacentChapterPayload（章号 \u0000 正文）一次送回。
+            adjacentChapterPayload: this.readerAdjacentChapterPayload,
+            onRequestAdjacentChapter: (chapterIndex: number) => {
+              this.requestAdjacentChapter(chapterIndex);
             }
           })
           } else {
