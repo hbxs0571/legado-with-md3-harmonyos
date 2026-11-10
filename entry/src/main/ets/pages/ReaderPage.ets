@@ -1569,6 +1569,8 @@ export struct ReaderPage {
     }
   }
   onDisplayChapterTitleChanged(): void {
+    // 标题替换规则定稿后赋值 displayChapterTitle 会走到这里；这是换章帧第二次全量排版的真实来源。
+    console.info(`[ReaderBench] titleChangedRebuild title=${this.displayChapterTitle}`);
     this.rebuildReaderPages();
   }
 
@@ -1632,6 +1634,8 @@ export struct ReaderPage {
       // 这一轮如果只有图片尺寸变了，语义解析与高亮结果都没变，跳过那两步只重分页。
       const incremental = this.imageSizesRebuildPending;
       this.imageSizesRebuildPending = false;
+      // 批 3 确认打点：标记这次 rebuild 来自防抖合并回调（@Prop 批量更新）。
+      console.info(`[ReaderBench] debouncedRebuild incremental=${incremental}`);
       this.rebuildReaderPages(false, incremental);
     }, delay);
   }
@@ -4787,6 +4791,8 @@ export struct ReaderPage {
       // 交给防抖窗口，窗口末尾只排一次，且这一轮跳过语义解析与高亮匹配。
       this.scheduleImageSizesPaginationRebuild();
     }
+    // 批 3 确认打点：异步图片尺寸是否变化、是否会调度第二次 rebuild。
+    console.info(`[ReaderBench] imageSizesReloaded rebuildAgain=${changed}`);
   }
 
   /**
@@ -5396,6 +5402,8 @@ export struct ReaderPage {
     if (Math.abs(heightVp - this.readerCanvasBodyHeightVp) < 1.5) {
       return;
     }
+    // 批 3 确认打点：区分「第二次 rebuild 来自画布高度同步」而非图片路径。
+    console.info(`[ReaderBench] canvasHeightRebuild deltaVp=${(heightVp - this.readerCanvasBodyHeightVp).toFixed(1)}`);
     this.readerCanvasBodyHeightVp = heightVp;
     this.rebuildReaderPages();
   }
