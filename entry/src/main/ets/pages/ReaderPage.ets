@@ -158,6 +158,14 @@ export struct ReaderPage {
   private static readonly MAX_TITLE_BAR_ACTIONS: number = 6;
   /** 滚动模式进度刷新的节流窗口；上游 `ReadBookViewModel.kt:108` `READER_SYNC_MIN_INTERVAL_MS = 250L`。 */
   private static readonly SCROLL_PROGRESS_THROTTLE_MS: number = 250;
+  /**
+   * 邻章预读请求的在途超时。超过这个时间还没拿到邻章正文，就允许重新请求。
+   *
+   * 宿主侧对同一章有「在途 / 已下发」两道去重，但对「这一章刚刚变成正文」
+   * 这类情况会静默不回应；阅读页若把「已请求」当永久状态，邻章就再也排不出来，
+   * 章末只能滚进空白承接页。1.5 秒足够覆盖一次正常的读盘 + 排版往返。
+   */
+  private static readonly ADJACENT_REQUEST_TIMEOUT_MS: number = 1500;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -487,6 +495,19 @@ export struct ReaderPage {
   // 任何一个清零点在这段窗口动手都会吃掉余量，所以用它挡住清零，直到页表落定消费。
   private chapterBoundaryContinuation: boolean = false;
   /**
+   * 这一次「滚动跨章」的目标章号，-1 表示没有。
+   *
+   * 与 `chapterHandoffPending` 的区别是**谁决定位置**：后者只看书号没变，
+   * 由 `onReaderContentChanged` 置位，位置仍按 `book.androidCharacterPosition`
+   * 字符坐标重定位；本字段为真（等于当前章号）时位置**已经由 `currentPageIndex`
+   * 表达**——用户就是这么滚过来的——重建必须按页身份接回同一页。
+   *
+   * 存章号而不是布尔：从滚进邻章到宿主把正文送到，中间可能夹着几次
+   * 「仍是旧章」的重建（图片尺寸、标题定稿）。布尔会被它们吃掉，
+   * 章号只有等真正重建到那一章时才消费并清零。
+   */
+  private scrollDrivenHandoffChapter: number = -1;
+  /**
    * 正在向宿主请求的邻章章号，-1 表示没有在途请求。
    *
    * 每次 `rebuildReaderPages` 收尾都会检查邻章页是否齐备；没有它的话同一个
@@ -494,6 +515,8 @@ export struct ReaderPage {
    * 宿主侧就变成反复读盘。
    */
   private pendingAdjacentChapter: number = -1;
+  /** 上一次预读请求的时刻（毫秒），用于给在途请求超时重发。 */
+  private pendingAdjacentChapterAt: number = 0;
   /** 已经成功下发并排进页表的邻章章号，-1 表示还没有；防止同一章反复要。 */
   private deliveredAdjacentChapter: number = -1;
   /**
@@ -503,6 +526,17 @@ export struct ReaderPage {
    * 只有 book.id 没变才算「换章」，换书仍按原路径清空。
    */
   private chapterHandoffBookId: string = '';
+  /**
+   * 上一次 `book` @Prop 指向的书 id，用来区分「换书」与「同书换章/进度回写」。
+   *
+   * `onBookChanged` 每次 `selectedBook` 重新赋值都会触发——不只是换书换章，
+   * 滚动模式每 250ms 回写一次阅读进度也会触发。早前这里比的是
+   * `chapterHandoffBookId`（只在正文送达时才写），首次进书它还是空串，
+   * 于是每一帧滚动都被当成「换书」处理，把刚置上的 `scrollDrivenHandoffChapter`
+   * 抹掉——跨章守位因此从来没生效过。用独立字段记录「上一次看到的是哪本书」，
+   * 与交接状态解耦。
+   */
+  private observedBookId: string = '';
   @State localReaderPages: LocalReaderPage[] = [];
   @State readerBottomJustifyGap: number = 0;
   @State fullBookPageCounts: number[] = [];
@@ -817,6 +851,16 @@ export struct ReaderPage {
   onStartAtChapterBeginningResolved: () => void = () => {};
 
   aboutToAppear(): void {
+    // `@Prop` 的**首次赋值不触发 @Watch**，`onBookChanged` 第一次真正跑到是在
+    // `book` 被重新赋值的时候——而滚动模式下第一次重新赋值恰好就是换章那一帧。
+    // 不在这里先记下书 id，`observedBookId` 会一直是空串，那次被误判成「换书」，
+    // 把刚由 `applyReaderScrollDelta` 置上的 `scrollDrivenHandoffChapter` 清掉，
+    // 跨章守位直接失效（设备日志里 `bookChanged clearHandoff` + `keepPos sd=-1`）。
+    this.observedBookId = this.book.id;
+    // 同理：`onReaderContentChanged` 用 `chapterHandoffBookId` 区分「换书」与「换章」，
+    // 而它只在正文送达时才写。首次进书正文是首赋（同样不触发 @Watch），这个字段
+    // 会一直是空串，第一次换章就被判成「换书」把页表整窗清掉。这里一并落上。
+    this.chapterHandoffBookId = this.book.id;
     this.refreshReaderFontFamilies();
     this.loadChapterRows();
     this.readerWindowActive = true;
@@ -1549,9 +1593,16 @@ export struct ReaderPage {
     this.readerProgress = this.book.chapterProgress ?? 0;
     this.lastReportedProgress = this.readerProgress;
     this.sliderProgressIndex = this.getChapterIndex();
-    this.restoredProgressPosition = false;
-    this.scrollOffset = 0;
-    if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
+    // 页层批次 4：滚动驱动换章时标题变化**不是**「换章完成、位置归零」的信号。
+    // 用户是一路滚进来的，`currentPageIndex + scrollOffset` 就是眼睛正看着的位置；
+    // 这里把它清零等于在换章瞬间把画面拍回页顶——又一处「跳」。
+    if (this.usesCanvasScroll() && this.scrollDrivenHandoffChapter >= 0) {
+      this.chapterBoundaryContinuation = true;
+    } else {
+      this.restoredProgressPosition = false;
+      this.scrollOffset = 0;
+      if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
+    }
     // 这里不再 rebuildReaderPages()：标题定稿后会赋值 displayChapterTitle，
     // 触发 onDisplayChapterTitleChanged() 再排一次，那才是标题真正落定的时机。
     // 两处都排就是同一章排两遍，换章时白白多一次全章测量。
@@ -1560,11 +1611,29 @@ export struct ReaderPage {
   }
 
   onBookChanged(): void {
-    // 换书不是换章：作废交接标记，下一次正文到达按「换书」处理（清空页表）。
-    this.chapterHandoffBookId = '';
-    this.chapterHandoffPending = false;
-    this.chapterHandoffUpward = false;
-    this.onReadSessionStart();
+    // 关键：**换章也会走到这里**。宿主换章时会给 `book` 重新赋值
+    // （`selectedBook` 变了），`@Prop` 引用一变这个 Watch 就触发，而此时的
+    // `chapterHandoffBookId` 还停在上一轮交接记下的同一本书 id 上。
+    //
+    // 早前这里无条件清 `chapterHandoffBookId` / `scrollDrivenHandoffChapter`，
+    // 于是滚动跨章那一刻，守位标记刚由 `applyReaderScrollDelta` 置上就被这里
+    // 抹掉，`rebuildReaderPages` 只能退回按宿主回传的字符坐标定位——画面从
+    // 邻章页被拽回新章首页，用户看到的就是「跨章那一下跳」。这也解释了为什么
+    // 设备日志里 `keepPos sdChapter=-1`：标记从来没活到重建那一步。
+    //
+    // 只有 book.id 真的变了才当作换书处理；同书换章保留交接标记。
+    const sameBook = this.observedBookId.length > 0 && this.observedBookId === this.book.id;
+    this.observedBookId = this.book.id;
+    if (!sameBook) {
+      // 换书不是换章：作废交接标记，下一次正文到达按「换书」处理（清空页表）。
+      this.chapterHandoffBookId = '';
+      this.chapterHandoffPending = false;
+      this.chapterHandoffUpward = false;
+      // 换书必须作废滚动驱动标记：它是「哪一章的位置由滚动决定」，
+      // 换了书之后那个章号指向的是另一本书的章。
+      this.scrollDrivenHandoffChapter = -1;
+      this.onReadSessionStart();
+    }
     this.refreshDisplayChapterTitle();
     this.refreshContentProcesses();
   }
@@ -1660,7 +1729,17 @@ export struct ReaderPage {
       if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
     }
     this.chapterHandoffBookId = this.book.id;
-    this.restoredProgressPosition = false;
+    // 页层批次 4：滚动驱动换章时**不重置** `restoredProgressPosition`。
+    //
+    // 重置它的后果是：`onReaderContentAreaChanged` 紧接着会调
+    // `restoreProgressPosition()`，那里按宿主回传的 `book.chapterProgress`
+    // 做一次绝对位移 seek。滚动驱动换章时用户位置已经由
+    // `currentPageIndex + scrollOffset` 精确表达，再按滞后的整章百分比 seek
+    // 一次，向下就拽回新章章首、向上就拽到新章章末 —— 设备上看到的「回跳」
+    // 正是它。换章之后不再需要这个 seek。
+    if (!(this.usesCanvasScroll() && this.scrollDrivenHandoffChapter >= 0)) {
+      this.restoredProgressPosition = false;
+    }
     this.localSemanticContent = '';
     this.localSemanticDocument = { paragraphs: [], content: '', sourceLength: 0, sourcePositionMap: [0] };
     // 换章后同样先同步量一次：否则新章的图会先按行高占位排一遍，再被尺寸到达推一遍
@@ -1953,12 +2032,18 @@ export struct ReaderPage {
     const nextChapter = chapterIndex + 1;
     if (nextChapter < this.getChapterCount() && !this.hasChapterPagesIn(pages, nextChapter) &&
       !this.hasPlaceholderIn(pages, nextChapter)) {
-      pages.push(this.boundaryPlaceholderPage('继续滑动以加载下一章…', nextChapter));
+      // 文案留空：这是一张**空白承接页**，不是提示屏。
+      // 页层批次 4 复盘（用户实测反馈「有些时候还能看到继续滚动到下一张」）：
+      // 画一行「继续滑动以加载下一章…」等于把加载态怼到用户脸上，与「首尾相连」
+      // 的目标正相反。留空的占位页仍然进页表、仍然参与滚动几何（`pageScrollExtent`
+      // 对 `messageText !== undefined` 的页按一整屏算），手指滚过去是干净的一屏空白，
+      // 预读追上后它会被邻章真页按章整体替换掉。
+      pages.push(this.boundaryPlaceholderPage('', nextChapter));
     }
     const previousChapter = chapterIndex - 1;
     if (previousChapter >= 0 && !this.hasChapterPagesIn(pages, previousChapter) &&
       !this.hasPlaceholderIn(pages, previousChapter)) {
-      pages.unshift(this.boundaryPlaceholderPage('继续滑动以加载上一章…', previousChapter));
+      pages.unshift(this.boundaryPlaceholderPage('', previousChapter));
     }
   }
 
@@ -2009,9 +2094,20 @@ export struct ReaderPage {
     const needsPrevious = previousChapter >= 0 && !this.hasChapterPages(previousChapter);
     if (!needsNext && !needsPrevious) { return; }
     const target = needsNext ? nextChapter : previousChapter;
-    if (this.pendingAdjacentChapter === target) { return; }
+    // 请求只在路上，不是永久放弃：宿主可能因为「这一章刚刚变成正文」、
+    // 章节标题还没读出来等原因静默不回应，回应对阅读页就是永不到达。
+    // 早前只比章号，一旦这种静默发生，`pendingAdjacentChapter` 会一直停在
+    // 那个章号上，之后每次 rebuild 都被这一句挡掉，邻章再也排不出来——
+    // 章末就只能滚进一张空白承接页，跨章那一下自然不是首尾相连。
+    // 这里给在途请求设一个超时窗口，过了就允许重发。
+    if (this.pendingAdjacentChapter === target &&
+      Date.now() - this.pendingAdjacentChapterAt < ReaderPage.ADJACENT_REQUEST_TIMEOUT_MS) {
+      return;
+    }
     if (this.deliveredAdjacentChapter === target && this.hasChapterPages(target)) { return; }
     this.pendingAdjacentChapter = target;
+    this.pendingAdjacentChapterAt = Date.now();
+    console.info(`[ReaderBench] adjacentRequest chapter=${target} from=${currentChapter}`);
     this.onRequestAdjacentChapter(target);
   }
 
@@ -2084,10 +2180,12 @@ export struct ReaderPage {
       }
     }
     const singleImageStyle = this.activeImageStyle === 'SINGLE';
-    // 标题块传空串：邻章标题此刻还没进 `displayChapterTitle`，用当前章标题会把
-    // 上一章的标题块排进邻章首页。等真换章过去时那次 rebuild 会带上正确标题。
+    // 标题块必须用**邻章自己的标题**：之前传空串，邻章首页就没有标题块，
+    // 与换章后宿主送来的真页（带标题）排版不一致——页表整表替换时正文会整体
+    // 位移一截，用户看到的就是跨章那一下「跳」。章标题从章节缓存里取，同步可得。
+    const adjacentTitle = this.resolvePaginationTitle(adjacentChapter);
     const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
-      document.content.length, singleImageStyle, '');
+      document.content.length, singleImageStyle, adjacentTitle);
     const pages = LocalReaderPaginator.paginate(
       document,
       width,
@@ -2127,7 +2225,7 @@ export struct ReaderPage {
     this.readerCanvasRenderer.clearParagraphs();
     this.paintReaderCanvas();
     console.info(`[ReaderBench] adjacentPaginated chapter=${adjacentChapter} ` +
-      `pages=${pages.length} ms=${Date.now() - startedAt}`);
+      `pages=${pages.length} ms=${Date.now() - startedAt} title=[${adjacentTitle}]`);
   }
 
   /** 当前页的章内页号（0 起），用于页码显示与进度条；窗口表未就绪时退回页表下标。 */
@@ -2216,8 +2314,15 @@ export struct ReaderPage {
     // 章标题进块流（上游标题是带 `isTitle` 的普通文本块，`ReaderPaginator.kt:1112-1116`）。
     // 标题不再是「首屏预留几行」——预留会让标题脱离排版流，滚动模式下不跟着滚（KI-REL2）。
     const singleImageStyle = this.activeImageStyle === 'SINGLE';
+    // 页层批次 4：正文标题块必须走 `resolvePaginationTitle`，与邻章预排同一口径。
+    //
+    // 之前这里吃默认参数 `displayChapterTitle`：换章时 `content` 先到、标题是异步
+    // `ReplaceRuleRepository.applyTitle` 之后才赋值，于是第一次重排用的是**上一章的
+    // 标题**，第二次重排才换成新标题。而邻章预排用的是章节缓存里的真标题。
+    // 两边标题不同 → 标题块宽度/行数不同 → 页数不同（实测第 3 章预排 6 页、真页 7 页），
+    // 页表整表替换时正文整体错位，用户看到的跨章那一下「跳」就是它。
     const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
-      document.content.length, singleImageStyle);
+      document.content.length, singleImageStyle, this.resolvePaginationTitle(this.getChapterIndex()));
     const paginateStartedAt = Date.now();
     const paginatedPages = LocalReaderPaginator.paginate(
       document,
@@ -2286,10 +2391,28 @@ export struct ReaderPage {
     // 所以滚动模式在没有外部跳转意图时一律按页身份保持当前页；一旦有书签跳转、
     // 章首待处理、换章交接，仍走下面那套按目标位置的定位。
     const previousPage = this.localReaderPages[this.currentPageIndex];
-    const keepScrollPosition = this.usesCanvasScroll() && !this.chapterHandoffPending &&
-      !this.chapterBoundaryContinuation && this.pendingBookmarkTargetPosition < 0 &&
-      !this.startPositionPending && previousPage !== undefined &&
-      (previousPage.chapterIndex ?? 0) === chapterIndex;
+    // 滚动驱动换章：位置已经由 `currentPageIndex` 表达（用户就是这么滚进来的），
+    // 重建后必须按页身份接回同一页，否则会落回新章首页，视觉上倒跳。
+    // 标记存章号：从「滚进邻章页」到「宿主把该章正文送到」之间可能还夹着几次
+    // 仍是旧章的重建，那几次也必须按页身份守住位置，不能把下标拽回旧章。
+    const previousPageChapter = previousPage?.chapterIndex ?? 0;
+    // 外部跳转意图（书签跳转、章首待处理）拥有位置决定权，滚动驱动标记让位。
+    // 标记**不在正文送达后立刻清**：换章之后还会夹着若干次重排（图片尺寸到达、
+    // 正文区尺寸变化），那几次也必须守住位置，否则每一次都会按宿主回传的整章
+    // 百分比把画面拽回去——设备上的「回跳」就是这么来的。真正的清零点有三个：
+    // 换书（`onBookChanged`）、滚进别的一章（下面按章号改写）、外部跳转意图（这里）。
+    if (this.scrollDrivenHandoffChapter >= 0 &&
+      (this.pendingBookmarkTargetPosition >= 0 || this.startPositionPending)) {
+      this.scrollDrivenHandoffChapter = -1;
+    }
+    const scrollDrivenHandoff = this.usesCanvasScroll() && this.scrollDrivenHandoffChapter >= 0 &&
+      previousPage !== undefined && previousPageChapter === this.scrollDrivenHandoffChapter;
+    const keepScrollPosition = this.usesCanvasScroll() &&
+      this.pendingBookmarkTargetPosition < 0 && !this.startPositionPending &&
+      previousPage !== undefined &&
+      (scrollDrivenHandoff ||
+        (previousPageChapter === chapterIndex &&
+          !this.chapterHandoffPending && !this.chapterBoundaryContinuation));
     let pageIndex = keepScrollPosition
       ? rebasePageIndex(mergedPages, previousPage?.chapterIndex ?? 0, previousPage?.pageIndex ?? 0)
       : -1;
@@ -2325,6 +2448,12 @@ export struct ReaderPage {
     // 归零等于把手指还没抬起的位移丢掉，用户就得松手重滑（对齐上游直接续写 scrollOffset）。
     if (!this.usesCanvasScroll()) {
       this.scrollOffset = 0;
+    } else if (scrollDrivenHandoff) {
+      // 滚动驱动换章：`currentPageIndex` 已经指到邻章那一页，`scrollOffset` 也是
+      // 相对那一页顶边的真实位移，两者一起构成用户看到的位置。这里**什么都不动**，
+      // 重建后画面就停在原处——这是「首尾相连」的关键。
+      console.info(`[ReaderBench] scrollDriven land pageIdx=${this.currentPageIndex} ` +
+        `scrollOffset=${this.scrollOffset}`);
     } else if (isChapterHandoff || this.chapterBoundaryContinuation) {
       // 落点是新章某页，余量必须钳在「这一页自己能滚的范围」内。快速甩动时
       // 一帧的 delta 可能比整页还高，不钳就会滚过页底露出空白（此时页表里没有
@@ -2365,7 +2494,9 @@ export struct ReaderPage {
       `positionMs=${Date.now() - paginateStartedAt} ` +
       `pages=${this.localReaderPages.length} onlyImages=${onlyImageSizesChanged} ` +
       `reuseSemantic=${reuseSemantic} paginatorMs=${positionStartedAt - paginateStartedAt} ` +
-      `renderMs=${Date.now() - positionStartedAt}`);
+      `renderMs=${Date.now() - positionStartedAt} ` +
+      `title=[${this.resolvePaginationTitle(this.getChapterIndex())}] ` +
+      `contentLen=${document.content.length} chPages=${this.currentChapterPageCount()}`);
     const consumedBookmarkTarget = this.pendingBookmarkTargetPosition >= 0;
     this.pendingBookmarkTargetPosition = -1;
     if (this.pageAnimation !== 3 && forceProgressCommit) {
@@ -2452,7 +2583,16 @@ export struct ReaderPage {
   }
 
   private emitReaderProgress(progress: number, chapterPosition: number, androidCoordinate: boolean): void {
-    this.onProgressChange(this.book.id, this.getChapterIndex(), progress, chapterPosition, androidCoordinate);
+    // 滚动模式跨章后，可见页可能已经落在邻章（手指滚过去的），而 `book.chapterIndex`
+    // 要等换章请求往返才更新。进度几何（`readerScrollContentHeight` /
+    // `readerScrollAbsoluteOffset`）一律按**当前页所属章**算，这里报的章号必须同口径，
+    // 否则宿主会把「下一章的百分比」记到上一章上。
+    // 宿主那侧有章号闸门（`acceptReaderProgress` 发现章号不符就丢弃），
+    // 短暂的不一致只会丢一帧进度，不会写坏数据。
+    const pageChapter = this.usesCanvasScroll()
+      ? (this.currentChapterPosition()?.chapterIndex ?? this.getChapterIndex())
+      : this.getChapterIndex();
+    this.onProgressChange(this.book.id, pageChapter, progress, chapterPosition, androidCoordinate);
   }
 
   private getCurrentPageBookmarkRange(): ReaderBookmarkPageRange | undefined {
@@ -2695,43 +2835,52 @@ export struct ReaderPage {
       context.vp2px(this.scrollOffset), deltaPx, previousExtentPx, currentExtentPx,
       viewportExtentPx, hasPreviousPage, hasNextPage);
     if (result.crossing === ReaderScrollCrossing.NEXT) {
-      // 页层批次 4：窗口页表跨章后 `pages.length` 不再是本章页数，章末边界
-      // 由 `chapterPosition()` 现算；`canTurnNext` 表达上游「页表有下一页或还有
-      // 下一章」的放行语义（跨章窗口下 next 恒为邻章页，真正的边界看章内页号）。
-      const position = chapterPosition(pages, this.currentPageIndex);
-      const hasNextChapter = this.getChapterIndex() + 1 < this.getChapterCount();
-      if (position === undefined || position.pageIndex + 1 >= position.pageCount ||
-        !canTurnNext(pages, this.currentPageIndex, hasNextChapter)) {
-        // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示。
-        // 但章末要先亮「继续滑动以加载下一章…」提示页，否则用户以为滚到头了。
-        //
-        // 页层批次 4：这里**不用** `result.offsetPx`（crossing 的残差口径）。
-        // crossing 的残差是「相对下一张页顶边」算的：`next + currentExtent`，
-        // 越过之后残差归零，画面会被拽回章末页 —— 手指在动、画面却在原地打转，
-        // 那正是「必须抬手重滑」的观感来源。改成带上下限的单调位移：
-        // 下限 `-currentExtentVp`（本章末页刚好滚出屏幕、下一张页顶到屏幕顶），
-        // 上限 0。占位页只有一屏，推到底就钳住；反向也能原路退回。
+      // 页层批次 4 修正（2026-11-10）：**页表里有下一页就推进过去，不再按「本章
+      // 是否还有页」判章末**。
+      //
+      // 旧写法用 `position.pageIndex + 1 >= position.pageCount` 判章末：窗口页表
+      // 跨章之后，本章末页的下一页明明是邻章真页，这个条件却照样为真，于是走到
+      // 下面那条「钳住 + 等异步换章」的分支——手指还在动、画面却钉在章末页不动，
+      // 要等 `rebuildReaderPages` 整表重排才重新落点，用户看到的就是一次跳跃。
+      // 那正是「不是首尾相连」的直接来源。
+      //
+      // 现在只有页表**真的没有下一页**（全书末页，或邻章还没预排到）才钳住；
+      // 有下一页一律推进，跨到邻章页也照常推进，画面首尾相接。
+      if (!hasNextPage) {
+        // 页表里没有下一页：这里是真边界。把位移钳在「本页刚好滚出屏幕」之内，
+        // 记进 `pendingChapterScrollVp` 供换章落点消费，再让调用方发换章请求。
+        // 用 `result.offsetPx` 的 crossing 残差不行——残差越过即归零，画面会被
+        // 拽回原页，所以用带上限的单调位移。
         const currentExtentVp = context.px2vp(currentExtentPx);
         const rawOffsetVp = this.scrollOffset + context.px2vp(deltaPx);
         const clampedOffsetVp = Math.max(-currentExtentVp, Math.min(0, rawOffsetVp));
         this.scrollOffset = clampedOffsetVp;
-        // 这笔负值是「已越过末页底边多少」，也是「该往新章推进多远」。换章是
-        // 异步重排，不把它带到新章页表就会在落定时丢掉，手指没抬也得松手重滑。
         this.pendingChapterScrollVp = clampedOffsetVp;
         this.chapterBoundaryContinuation = true;
-        console.info(`[ReaderBench] handoff store overshootVp=${clampedOffsetVp} pageIdx=${this.currentPageIndex}`);
-        this.showChapterBoundaryMessage(1);
         this.paintReaderCanvas();
+        // 后面还有下一章才需要换章；全书末页就只是滚到头。
+        return this.getChapterIndex() + 1 < this.getChapterCount();
+      }
+      // 推进到下一页：下标 +1 即视觉上的下一页（页表按 (chapterIndex, pageIndex) 升序）。
+      this.currentPageIndex = this.currentPageIndex + 1;
+      this.resetCanvasSelectionState();
+      // 位移照常落到新页上（`result.offsetPx` 是相对新页顶边的残差）。
+      this.scrollOffset = context.px2vp(result.offsetPx);
+      this.refreshReaderBottomJustifyGap();
+      this.paintReaderCanvas();
+      // 滚进邻章的页：位置已经落在邻章正文上，但宿主 `book.chapterIndex` /
+      // `content` 还停在旧章。这里只标记「这次换章是滚动驱动的」，让重建时
+      // 按页身份保住位置（见 `rebuildReaderPages` 的 `scrollDrivenChapterHandoff`），
+      // 再由调用方发 `onTurnChapterBoundary` 让正文跟上。位置一秒都不动。
+      const landed = chapterPosition(pages, this.currentPageIndex);
+      if (landed !== undefined && landed.chapterIndex !== this.getChapterIndex()) {
+        this.scrollDrivenHandoffChapter = landed.chapterIndex;
+        this.chapterBoundaryContinuation = true;
         return true;
       }
-      this.currentPageIndex = locateChapterPage(
-        pages, position.chapterIndex, position.pageIndex + 1);
-      this.resetCanvasSelectionState();
+      return result.hitBoundary;
     } else if (result.crossing === ReaderScrollCrossing.PREVIOUS) {
-      const position = chapterPosition(pages, this.currentPageIndex);
-      const hasPreviousChapter = this.getChapterIndex() > 0;
-      if (position === undefined || position.pageIndex <= 0 ||
-        !canTurnPrevious(pages, this.currentPageIndex, hasPreviousChapter)) {
+      if (!hasPreviousPage) {
         // 章首：向上换章的镜像分支。
         // 与章末同一套：把「越过首页顶边多少」带进新章，否则落定后会跳回顶部。
         //
@@ -2750,14 +2899,22 @@ export struct ReaderPage {
         this.scrollOffset = clampedOffsetVp;
         this.pendingChapterScrollVp = clampedOffsetVp;
         this.chapterBoundaryContinuation = true;
-        console.info(`[ReaderBench] handoff store overshootVp=${clampedOffsetVp} pageIdx=${this.currentPageIndex}`);
-        this.showChapterBoundaryMessage(-1);
         this.paintReaderCanvas();
+        return this.getChapterIndex() > 0;
+      }
+      // 推进到上一页（镜像）：跨进上一章的页同样只标记、不改阅读位置。
+      this.currentPageIndex = this.currentPageIndex - 1;
+      this.resetCanvasSelectionState();
+      this.scrollOffset = context.px2vp(result.offsetPx);
+      this.refreshReaderBottomJustifyGap();
+      this.paintReaderCanvas();
+      const landed = chapterPosition(pages, this.currentPageIndex);
+      if (landed !== undefined && landed.chapterIndex !== this.getChapterIndex()) {
+        this.scrollDrivenHandoffChapter = landed.chapterIndex;
+        this.chapterBoundaryContinuation = true;
         return true;
       }
-      this.currentPageIndex = locateChapterPage(
-        pages, position.chapterIndex, position.pageIndex - 1);
-      this.resetCanvasSelectionState();
+      return result.hitBoundary;
     }
     this.scrollOffset = context.px2vp(result.offsetPx);
     this.refreshReaderBottomJustifyGap();
@@ -3890,8 +4047,13 @@ export struct ReaderPage {
       }
       return Math.max(0, Math.min(100, progress));
     }
+    // 页层批次 4：滚动模式的分母章节取「可见页所属章」，不是宿主章号。
+    // 跨章瞬间宿主的 `book.chapterIndex` 要等 `selectChapter` 落盘才更新，
+    // 而页表与 `readerProgress` 已经按新章算了；两边不同源就会在页脚上闪一次
+    // 「33.3% → 0.0% → 33.3%」（用户看到的整本进度回跳）。
+    const visibleChapter = this.currentChapterPosition()?.chapterIndex ?? chapterIndex;
     return Math.max(0, Math.min(100,
-      (chapterIndex + this.readerProgress / 100) / chapterCount * 100));
+      (visibleChapter + this.readerProgress / 100) / chapterCount * 100));
   }
 
   private needsFullBookPageData(): boolean {
@@ -4441,6 +4603,22 @@ export struct ReaderPage {
     return Math.ceil((total + this.titleTopSpacing + this.titleBottomSpacing) / lineHeight);
   }
 
+
+  /**
+   * 排版本题块用的章标题。
+   *
+   * 章节缓存（`BookRepository.cachedChapterTitles`，同步可读）是唯一来源：
+   * 邻章预排时当前章标题还没切过去，真页重排时 `displayChapterTitle` 又滞后于
+   * `applyTitle`，只有章节缓存两处都能立刻拿到**同一个**字符串。标题块参与排版流
+   * （会占行、会决定首页断页），两边只要差一个字，排出来的页数和页内断点就不同，
+   * 页表整表替换时必然错位。显示层的替换规则效果留在页眉，不进排版。
+   */
+  private resolvePaginationTitle(chapterIndex: number): string {
+    const titles = BookRepository.cachedChapterTitles(this.book);
+    const cached = titles[chapterIndex];
+    if (cached !== undefined && cached.length > 0) { return cached; }
+    return this.displayChapterTitle;
+  }
 
   /**
    * 构造章标题块，交给分页器排进块流。
@@ -5130,6 +5308,12 @@ export struct ReaderPage {
     if (this.usesLocalPagination()) { return; }
     if (this.startPositionPending) { return; }
     if (this.restoredProgressPosition) {
+      return;
+    }
+    // 页层批次 4：滚动驱动换章进行中不走绝对位移还原。
+    // 这里还有一套位置（页表下标 + 页内偏移）是用户眼睛正看着的，
+    // 用宿主的整章百分比覆盖它就是一次回跳。
+    if (this.usesCanvasScroll() && this.scrollDrivenHandoffChapter >= 0) {
       return;
     }
     const totalScrollHeight = this.readerScrollTotalHeight();
