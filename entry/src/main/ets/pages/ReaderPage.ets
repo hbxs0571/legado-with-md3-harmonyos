@@ -1920,6 +1920,64 @@ export struct ReaderPage {
   }
 
   /**
+   * 章边界占位页：把「还没有正文的那一侧」变成页表里的一张真页（页层批次 4）。
+   *
+   * 批 2 让「已经排进页表的邻章」有画面，但首次进章、预读还没回来的时候，
+   * 章末之外仍然什么都没有——滚到头就没有页可以承接。这里在页表两端各补一张，
+   * 让滚动位移算得到它、画布堆得下它。
+   *
+   * **章的归属是整件事的关键**：占位页的 `chapterIndex` 填「目标章」章号，
+   * 不是当前章。填当前章会让 `chapterPosition()` 把它算进本章页数（页码变成
+   * 「第 N 页 / 共 N+1 页」、进度分母偏大）；填目标章则让 `chapterPosition`
+   * 按章过滤时绕开它，而 `mergeChapterPages` / `mergeAdjacentChapterPages`
+   * 在真页到达时按章整体丢弃，占位页自动清理。
+   *
+   * 只补真缺的那一侧：已有真页就不补，免得真页和占位页同时存在。
+   */
+  private insertBoundaryPlaceholders(pages: LocalReaderPage[], chapterIndex: number): void {
+    if (!this.usesCanvasScroll()) { return; }
+    const nextChapter = chapterIndex + 1;
+    if (nextChapter < this.getChapterCount() && !this.hasChapterPagesIn(pages, nextChapter) &&
+      !this.hasPlaceholderIn(pages, nextChapter)) {
+      pages.push(this.boundaryPlaceholderPage('继续滑动以加载下一章…', nextChapter));
+    }
+    const previousChapter = chapterIndex - 1;
+    if (previousChapter >= 0 && !this.hasChapterPagesIn(pages, previousChapter) &&
+      !this.hasPlaceholderIn(pages, previousChapter)) {
+      pages.unshift(this.boundaryPlaceholderPage('继续滑动以加载上一章…', previousChapter));
+    }
+  }
+
+  /** 指定页表里有没有某一章的真页（不含占位页）。 */
+  private hasChapterPagesIn(pages: LocalReaderPage[], chapterIndex: number): boolean {
+    for (const page of pages) {
+      if ((page.chapterIndex ?? 0) === chapterIndex && page.messageText === undefined) { return true; }
+    }
+    return false;
+  }
+
+  /** 指定页表里有没有某一章的占位页。 */
+  private hasPlaceholderIn(pages: LocalReaderPage[], chapterIndex: number): boolean {
+    for (const page of pages) {
+      if ((page.chapterIndex ?? 0) === chapterIndex && page.messageText !== undefined) { return true; }
+    }
+    return false;
+  }
+
+  /**
+   * 章边界占位页：`lines` 为空、只带一行居中文案，`chapterIndex` 填目标章。
+   *
+   * `pageScrollExtent` 里 `messageText !== undefined && used <= 0` 会让它退成一屏
+   * 高度，所以它能在堆叠里占一屏、被滚进去。
+   */
+  private boundaryPlaceholderPage(text: string, chapterIndex: number): LocalReaderPage {
+    return {
+      lines: [], startPosition: 0, endPosition: 0, titleOnly: false,
+      lineColumns: [], messageText: text, chapterIndex: chapterIndex, pageIndex: 0
+    };
+  }
+
+  /**
    * 向宿主请求预排邻章正文（页层批次 4）。
    *
    * 只在滚动模式做：分页模式翻章是「整表替换」，预排邻章只会白占内存。
@@ -2183,6 +2241,8 @@ export struct ReaderPage {
     // 邻章页来自换章时保留的旧页；后续定位一律在窗口表上按页身份查下标。
     const chapterIndex = this.getChapterIndex();
     const mergedPages = this.mergeChapterPages(nextPages, chapterIndex);
+    // 页层批次 4：还没排出来的那一侧补一张占位页进页表，让手指不抬也能滚过去。
+    this.insertBoundaryPlaceholders(mergedPages, chapterIndex);
     const positionStartedAt = Date.now();
     const percentPosition = Math.round(this.localSemanticContent.length * (this.book.chapterProgress ?? 0) / 100);
     let targetPosition = percentPosition;
@@ -2586,15 +2646,21 @@ export struct ReaderPage {
     const currentExtentPx = this.readerCanvasRenderer.pageScrollExtent(current.page, current.pageIndex, request);
     const previousExtentPx = window.previous === undefined ? 0
       : this.readerCanvasRenderer.pageScrollExtent(window.previous.page, window.previous.pageIndex, request);
-    // 页层批次 4：滚动越界的「有上/下一页」按本章判断，窗口表里的邻章页
-    // 不参与本章滚动边界（`apply` 的钳位与 crossing 口径不变）。
-    const scrollPosition = chapterPosition(pages, this.currentPageIndex);
-    const hasPreviousInChapter = scrollPosition !== undefined && scrollPosition.pageIndex > 0;
-    const hasNextInChapter = scrollPosition !== undefined &&
-      scrollPosition.pageIndex + 1 < scrollPosition.pageCount;
+    // 页层批次 4：滚动越界的「有上/下一页」按**页表**判断，不是按本章。
+    //
+    // 章末端口按本章算的话，章末那一下 `hasNext` 恒为 false，`apply` 只会返回
+    // `hitBoundary`、永远不会返回 crossing NEXT —— 下面那段「章末把越界位移记进
+    // `pendingChapterScrollVp`」就成了死代码，换章位移必然丢失（c33d815 修的问题
+    // 被回退）。页表跨章之后，章末的下一页就是邻章页（真页或占位页），
+    // crossing 能正常触达章末分支，位移带着走。
+    //
+    // `apply` 里 `!hasNext` 的「章末不够一屏钳回」分支随之不再触发：
+    // 章末之后有占位页承接，钳位由章末分支的 `scrollOffset = overshootVp` 接管。
+    const hasPreviousPage = this.currentPageIndex > 0;
+    const hasNextPage = this.currentPageIndex + 1 < pages.length;
     const result: ReaderScrollResult = ReaderScrollPolicy.apply(
       context.vp2px(this.scrollOffset), deltaPx, previousExtentPx, currentExtentPx,
-      viewportExtentPx, hasPreviousInChapter, hasNextInChapter);
+      viewportExtentPx, hasPreviousPage, hasNextPage);
     if (result.crossing === ReaderScrollCrossing.NEXT) {
       // 页层批次 4：窗口页表跨章后 `pages.length` 不再是本章页数，章末边界
       // 由 `chapterPosition()` 现算；`canTurnNext` 表达上游「页表有下一页或还有
@@ -2624,7 +2690,18 @@ export struct ReaderPage {
       const hasPreviousChapter = this.getChapterIndex() > 0;
       if (position === undefined || position.pageIndex <= 0 ||
         !canTurnPrevious(pages, this.currentPageIndex, hasPreviousChapter)) {
-        this.scrollOffset = context.px2vp(result.offsetPx);
+        // 章首：向上换章的镜像分支。
+        // 与章末同一套：把「越过首页顶边多少」带进新章，否则落定后会跳回顶部。
+        // 注意符号是正的（向上滚 `scrollOffset` 为正），而落点钳位是
+        // `Math.min(0, pendingChapterScrollVp)`，正向值会被抹成 0 —— 向上换章的
+        // 落点本轮不追求精确，允许落在上一章末页顶部，这个取舍写在
+        // `docs/KNOWN-ISSUES.md` 里。
+        const overshootVp = context.px2vp(result.offsetPx);
+        this.scrollOffset = overshootVp;
+        this.pendingChapterScrollVp = overshootVp;
+        this.chapterBoundaryContinuation = true;
+        console.info(`[ReaderBench] handoff store overshootVp=${overshootVp} pageIdx=${this.currentPageIndex}`);
+        this.showChapterBoundaryMessage(-1);
         this.paintReaderCanvas();
         return true;
       }
@@ -5213,43 +5290,16 @@ export struct ReaderPage {
   }
 
   /**
-   * 构造一帧的绘制输入。
-   *
-   * 位移/透明度的口径：`ReaderPageTransitionPolicy.transforms()` 全部按 px 计算，
-   * 所以这里把 vp 的布局量统一换成 px，画布 context 也用 LengthMetricsUnit.PX。
-   */
-  /**
-   * 章边界占位页（上游 `ReadBookController.kt:900-945` 的窗口装配）。
-   *
-   * 上游在两个位置给整屏居中的提示页：邻章还在读盘时给「加载数据中…」，
-   * 连续滚动到章末时给「继续滑动以加载下一章…」。两者在本地都由
-   * `boundaryMessage` 一个状态驱动——它是「当前页临时替换成提示页」，
-   * 换章成功、正文到达后自动清空。
-   */
-  private appendBoundaryPlaceholders(window: ReaderCanvasWindow): void {
-    if (this.boundaryMessage.length === 0) { return; }
-    // KI-REL1：提示页只在「真的没有当前页」时顶上（开书第一帧、视口还没就绪）。
-    // 上游 `ReaderCanvasSurface.kt:254` 的 `pages.current ?: return` 意味着有页就画页；
-    // 本地旧实现无条件用提示页替换当前页，换章等待期间整屏只剩一行「加载数据中…」，
-    // 那正是用户看到的空窗。现在有页就继续画页，正文始终在屏幕上。
-    if (window.current !== undefined) { return; }
-    window.current = new ReaderCanvasPage(this.messagePlaceholderPage(this.boundaryMessage),
-      this.currentPageIndex);
-  }
-
-  /** 占位页：`lines` 为空、只带一行居中文案，不进正文页数统计。 */
-  private messagePlaceholderPage(text: string): LocalReaderPage {
-    return {
-      lines: [], startPosition: 0, endPosition: 0, titleOnly: false, lineColumns: [], messageText: text
-    };
-  }
-
-  /**
-   * 翻到章边界时先亮提示页，再交给换章回调。
+   * 翻到章边界时先记下提示文案，再交给换章回调。
    *
    * 连续滚动给「继续滑动以加载下一章…」（上游 `keep_swipe_tip`），
-   * 分页翻页给「加载数据中…」（上游 `data_loading`）——两者都是整屏居中的提示页。
+   * 分页翻页给「加载数据中…」（上游 `data_loading`）。
    * 目标章不存在（全书第一页/最后一页）时不显示，越界提示仍由上层 toast 负责。
+   *
+   * 页层批次 4 起，滚动模式的提示页**进页表**（`insertBoundaryPlaceholders`
+   * 在章末补一张 `messageText` 页），不再把当前槽整张替换成提示文字——旧实现
+   * 的前提是页表只有本章、章外没有可画的东西，页表跨章之后这个前提不成立了。
+   * 这里只负责记文案与 5 秒兜底清空，`boundaryMessage` 不再参与画面装配。
    */
   private showChapterBoundaryMessage(delta: number): void {
     const target = this.getChapterIndex() + delta;
@@ -5284,7 +5334,6 @@ export struct ReaderPage {
   private buildReaderCanvasRequest(transforms: ReaderTransitionTransforms): ReaderCanvasDrawRequest {
     const request = new ReaderCanvasDrawRequest();
     request.window = ReaderCanvasWindow.of(this.localReaderPages, this.currentPageIndex);
-    this.appendBoundaryPlaceholders(request.window);
     request.transforms = transforms;
     // 覆盖转场：移动页尾部外侧 36dp 的渐变阴影（上游 ReaderCanvasSurface.kt:1663-1687）。
     // 位移为 0 时不画——那正是「两页重合」的那一帧。
@@ -5332,8 +5381,10 @@ export struct ReaderPage {
     // 直接沿用会把 padding 加错页、让本章滚动 extent 与进度条分母不一致。
     const scrollCurrent = this.localReaderPages[this.currentPageIndex];
     const scrollChapter = scrollCurrent?.chapterIndex ?? this.getChapterIndex();
+    // 第三参取一个必然超出章内页数的值，`locateChapterPage` 内部会钳到该章末页。
+    // 用 MAX_SAFE_INTEGER 而不是 `length`，免得依赖「表长必然大于本章页数」这个隐含前提。
     request.scrollLastPageIndex = locateChapterPage(
-      this.localReaderPages, scrollChapter, this.localReaderPages.length);
+      this.localReaderPages, scrollChapter, Number.MAX_SAFE_INTEGER);
     // 选区：渲染坐标直接来自长按/拖把手，画布按元素切分后用 getRectsForRange 出高亮条带。
     request.selectionStart = this.canvasSelectionStart;
     request.selectionEnd = this.canvasSelectionEnd;
