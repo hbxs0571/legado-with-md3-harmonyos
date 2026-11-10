@@ -3506,7 +3506,14 @@ export struct ReaderPage {
   }
 
   private requestFullBookPagination(): void {
-    if (!this.needsFullBookPageData() || !this.book.isLocal || this.book.contentPath === undefined) {
+    // 批 2 验收打点：needs=1 说明页脚确实配了「全文页数」类占位符，
+    // skipScroll=1 说明本次是滚动模式、全书分页被跳过（改前会照跑不误）。
+    console.info(`[ReaderBench] fullBookPagination skipScroll=${this.pageAnimation === 3 ? 1 : 0} needs=${this.needsFullBookPageData() ? 1 : 0}`);
+    // 滚动模式的进度不走页数（getWholeBookPageIndex / getWholeBookPageCount 直接返回 -1），
+    // 全书逐章分页算完没人读，却会占住排版线程，是换章顿挫的来源之一。
+    // 并入早退：既不再启动，也借现有代际清理打断正在跑的任务并清掉已算结果。
+    if (!this.needsFullBookPageData() || !this.book.isLocal || this.book.contentPath === undefined ||
+      this.pageAnimation === 3) {
       if (this.fullBookPaginationKey !== '' || this.fullBookPageCounts.length > 0) {
         this.fullBookPaginationGeneration++;
         this.fullBookPaginationKey = '';
@@ -3532,6 +3539,7 @@ export struct ReaderPage {
   }
 
   private async paginateFullBookPages(key: string, generation: number): Promise<void> {
+    console.info(`[ReaderBench] fullBookPagination started gen=${generation}`);
     const context = this.getUIContext();
     const measureUtils = context.getMeasureUtils();
     const fontSize = this.fontSize * 1.05;
@@ -3597,7 +3605,9 @@ export struct ReaderPage {
       chapterContent: string,
       chapterIndex: number
     ): Promise<boolean> => {
-      if (generation !== this.fullBookPaginationGeneration || key !== this.getFullBookPaginationLayoutKey()) {
+      // 切到滚动模式后逐章检查一次，及时打断已在跑的全书分页（沿用现有循环返回，不另造取消机制）。
+      if (this.pageAnimation === 3 || generation !== this.fullBookPaginationGeneration ||
+        key !== this.getFullBookPaginationLayoutKey()) {
         return false;
       }
       const chapterRows = BookRepository.cachedChapters(this.book);
