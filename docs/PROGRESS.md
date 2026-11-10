@@ -1,6 +1,6 @@
 # 当前进度
 
-更新：2026-11-09，对应 r336 后（盘面数字按当前工作区实跑）。
+更新：2026-11-11，对应 A 组四类数据层接通后（盘面数字按当前工作区实跑）。
 
 本文件只写「现在能确认什么、哪些还没验」。逐行状态在七张对照表里，逐轮取证在[验证记录](VALIDATION.md)，不要在这里重复。
 
@@ -8,7 +8,7 @@
 
 - 152 个 `.ets` 文件 / 70,915 行 / 39 个页面（`find entry/src/main/ets -name '*.ets'` 与 `ls entry/src/main/ets/pages/*.ets` 实测）。
 - 七张界面级对照表：书架 345 行、书签 117 行、阅读配置 189 行、TXT 阅读 242 行、书架布局 122 行、封面设置 66 行、深色模式 91 行，合计 1172 行（已接 818 / 未接 329 / 不适用 25）。（按 `scripts/parity-rows.py` 对当前工作区实跑；表内统计见 `docs/parity/BOOKSHELF.md` 盘面节，本句的合计取自 `scripts/parity-rows.py` 实跑）
-- 28 个 Android ZIP 数据类别：已接入 14、部分接入 5、未接入 2（`threadCount`、`mangaConfig`）、不适用 2（`searchHistory`、`keyboardAssists`）、仅归档 5（书源、RSS 源、RSS 收藏、订阅源、Web 服务）。见[备份恢复](BACKUP-RESTORE.md)的 28 类表。
+- 28 个 Android ZIP 数据类别：已接入 18、部分接入 5、未接入 2（`threadCount`、`mangaConfig`）、不适用 2（`searchHistory`、`keyboardAssists`）、仅归档 1（Web 服务）。见[备份恢复](BACKUP-RESTORE.md)的 28 类表。
 
 ## 已接入并有设备验收
 

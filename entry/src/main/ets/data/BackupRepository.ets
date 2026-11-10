@@ -52,6 +52,14 @@ import { TagGroupRuleImporter } from './TagGroupRuleImporter';
 import { HttpTtsRepository } from './HttpTtsRepository';
 import { ReadAloudVoiceRepository } from './ReadAloudVoiceRepository';
 import { HttpTtsImporter } from './HttpTtsImporter';
+import { BookSourceRepository } from './BookSourceRepository';
+import { BookSourceImporter } from './BookSourceImporter';
+import { RssSourceRepository } from './RssSourceRepository';
+import { RssSourceImporter } from './RssSourceImporter';
+import { RssStarRepository } from './RssStarRepository';
+import { RssStarImporter } from './RssStarImporter';
+import { RuleSubRepository } from './RuleSubRepository';
+import { RuleSubImporter } from './RuleSubImporter';
 
 /** 上游 readRecordSession.json 的字段：words 对应本地 chapterIndex。 */
 interface AndroidReadRecordSessionRecord {
@@ -171,6 +179,22 @@ export interface RestoreResult {
   /** 恢复 http 音色的落库条数与跳过条数；损坏文件按跳过计且不覆盖本地音色。 */
   httpTtsVoicesRestored: number;
   httpTtsVoicesSkipped: number;
+  /** 恢复书源的新增、覆盖和跳过数量（合并语义，本地独有条目保留）。 */
+  bookSourceAdded: number;
+  bookSourceUpdated: number;
+  bookSourceSkipped: number;
+  /** 恢复 RSS 订阅源的新增、覆盖和跳过数量（合并语义，本地独有条目保留）。 */
+  rssSourceAdded: number;
+  rssSourceUpdated: number;
+  rssSourceSkipped: number;
+  /** 恢复 RSS 收藏的新增、覆盖和跳过数量（合并语义，跨 origin+link 判重）。 */
+  rssStarAdded: number;
+  rssStarUpdated: number;
+  rssStarSkipped: number;
+  /** 恢复规则订阅的新增、覆盖和跳过数量（合并语义，按 id 判重）。 */
+  sourceSubAdded: number;
+  sourceSubUpdated: number;
+  sourceSubSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -741,6 +765,38 @@ export class BackupRepository {
       if (!ignoredCategories.includes('bookGroup')) {
         BackupRepository.writeTextFile(`${stagingDirectory}/bookGroup.json`, BookGroupRepository.exportAndroidGroups());
       }
+      // 书源：上游 Backup.kt:163-164 的 writeListToJson 只在 list 非空时建文件，本地照抄。
+      if (!ignoredCategories.includes('bookSource')) {
+        const rules = await BookSourceRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/bookSource.json`,
+            BookSourceRepository.exportRules(rules));
+        }
+      }
+      // RSS 订阅源：同上。
+      if (!ignoredCategories.includes('rssSource')) {
+        const rules = await RssSourceRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/rssSources.json`,
+            RssSourceRepository.exportRules(rules));
+        }
+      }
+      // RSS 收藏：同上。
+      if (!ignoredCategories.includes('rssStar')) {
+        const rules = await RssStarRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/rssStar.json`,
+            RssStarRepository.exportRules(rules));
+        }
+      }
+      // 规则订阅：上游 Backup.kt:183-185 写出 sourceSub.json，内容来自 ruleSubs 表。
+      if (!ignoredCategories.includes('sourceSub')) {
+        const rules = await RuleSubRepository.load(context);
+        if (rules.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/sourceSub.json`,
+            RuleSubRepository.exportRules(rules));
+        }
+      }
 
       if (!ignoredCategories.includes('readConfig')) {
         const config = BackupRepository.toAndroidReadConfig(settings);
@@ -1290,6 +1346,18 @@ export class BackupRepository {
     let httpTtsSourcesSkipped: number = 0;
     let httpTtsVoicesRestored: number = 0;
     let httpTtsVoicesSkipped: number = 0;
+    let bookSourceAdded: number = 0;
+    let bookSourceUpdated: number = 0;
+    let bookSourceSkipped: number = 0;
+    let rssSourceAdded: number = 0;
+    let rssSourceUpdated: number = 0;
+    let rssSourceSkipped: number = 0;
+    let rssStarAdded: number = 0;
+    let rssStarUpdated: number = 0;
+    let rssStarSkipped: number = 0;
+    let sourceSubAdded: number = 0;
+    let sourceSubUpdated: number = 0;
+    let sourceSubSkipped: number = 0;
     // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
     // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
     let restoredThemeConfigCount: number = 0;
@@ -1347,6 +1415,78 @@ export class BackupRepository {
         }
         await fileIo.copyFile(sourcePath, targetPath);
         await BookGroupRepository.importAndroidFile(context, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'bookSource.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复书源`);
+        }
+        const parsed = BookSourceImporter.parse(text);
+        // 先从库里读出本地已有条目，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await BookSourceRepository.load(context);
+        const outcome = await BookSourceRepository.importRules(context, parsed.rules);
+        bookSourceAdded += outcome.added;
+        bookSourceUpdated += outcome.updated;
+        bookSourceSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'rssSources.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复RSS 订阅源`);
+        }
+        const parsed = RssSourceImporter.parse(text);
+        // 先从库里读出本地已有条目，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await RssSourceRepository.load(context);
+        const outcome = await RssSourceRepository.importRules(context, parsed.rules);
+        rssSourceAdded += outcome.added;
+        rssSourceUpdated += outcome.updated;
+        rssSourceSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'rssStar.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复RSS 收藏`);
+        }
+        const parsed = RssStarImporter.parse(text);
+        // 先从库里读出本地已有条目，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await RssStarRepository.load(context);
+        const outcome = await RssStarRepository.importRules(context, parsed.rules);
+        rssStarAdded += outcome.added;
+        rssStarUpdated += outcome.updated;
+        rssStarSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'sourceSub.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复规则订阅`);
+        }
+        const parsed = RuleSubImporter.parse(text);
+        // 先从库里读出本地已有条目，importRules 的合并语义才有真实基线；
+        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
+        await RuleSubRepository.load(context);
+        const outcome = await RuleSubRepository.importRules(context, parsed.rules);
+        sourceSubAdded += outcome.added;
+        sourceSubUpdated += outcome.updated;
+        sourceSubSkipped += parsed.skipped + outcome.skipped;
+        // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
         preservedEntryCount += 1;
         continue;
       }
@@ -1711,7 +1851,19 @@ export class BackupRepository {
       httpTtsSourcesUpdated: httpTtsSourcesUpdated,
       httpTtsSourcesSkipped: httpTtsSourcesSkipped,
       httpTtsVoicesRestored: httpTtsVoicesRestored,
-      httpTtsVoicesSkipped: httpTtsVoicesSkipped
+      httpTtsVoicesSkipped: httpTtsVoicesSkipped,
+      bookSourceAdded: bookSourceAdded,
+      bookSourceUpdated: bookSourceUpdated,
+      bookSourceSkipped: bookSourceSkipped,
+      rssSourceAdded: rssSourceAdded,
+      rssSourceUpdated: rssSourceUpdated,
+      rssSourceSkipped: rssSourceSkipped,
+      rssStarAdded: rssStarAdded,
+      rssStarUpdated: rssStarUpdated,
+      rssStarSkipped: rssStarSkipped,
+      sourceSubAdded: sourceSubAdded,
+      sourceSubUpdated: sourceSubUpdated,
+      sourceSubSkipped: sourceSubSkipped
     };
   }
 

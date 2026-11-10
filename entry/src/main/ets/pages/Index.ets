@@ -5565,6 +5565,14 @@ struct Index {
       if (g2HighlightTagRule.length > 0) { details.push(g2HighlightTagRule); }
       const g2TagGroupRule = this.describeG2RuleRestore('标签分组规则', result.tagGroupRuleAdded, result.tagGroupRuleUpdated, result.tagGroupRuleSkipped);
       if (g2TagGroupRule.length > 0) { details.push(g2TagGroupRule); }
+      const aGroupBookSource = this.describeG2RuleRestore('书源', result.bookSourceAdded, result.bookSourceUpdated, result.bookSourceSkipped);
+      if (aGroupBookSource.length > 0) { details.push(aGroupBookSource); }
+      const aGroupRssSource = this.describeG2RuleRestore('RSS 订阅源', result.rssSourceAdded, result.rssSourceUpdated, result.rssSourceSkipped);
+      if (aGroupRssSource.length > 0) { details.push(aGroupRssSource); }
+      const aGroupRssStar = this.describeG2RuleRestore('RSS 收藏', result.rssStarAdded, result.rssStarUpdated, result.rssStarSkipped);
+      if (aGroupRssStar.length > 0) { details.push(aGroupRssStar); }
+      const aGroupSourceSub = this.describeG2RuleRestore('规则订阅', result.sourceSubAdded, result.sourceSubUpdated, result.sourceSubSkipped);
+      if (aGroupSourceSub.length > 0) { details.push(aGroupSourceSub); }
       this.backupStatusMessage = details.length > 0
         ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;

@@ -48,7 +48,7 @@
 - **不等价点**：① 作用域：上游全局持久、单次配置长期生效；本地每次备份重新勾选、不持久。② 粒度：上游有键级门控（含 `alwaysIgnoredPreferenceKeys` 逐键），本地 `filterAndroidConfigXml` 只能按类别整组剔键。故 config.xml 派生的 8 类记「类别级等价，键级不等价」，括号里列出该类别 `preferenceKeysByCategory` 登记的键数 —— 这些键本地只能整类开关，不能逐键。
 - **三档取值**：`等价（类别级）` = 本地有该类的 `categoryOptions` 开关且恢复时 `isIgnored` 能跳过对应独立 JSON 文件；`类别级等价，键级不等价（N 键）` = 类别开关有、但上游可逐键而本地只能整组剔 N 个键；`未接` = `categoryOptions` 虽登记了类别键名，但该类读写两侧都走 `copyPreservedEntries`、没有原生仓储可落，勾了忽略也只是不进保留目录，语义上无从等价（G2 五类原属此档，批 3 接通后已回填为 `等价（类别级）`，见下方「批 3」节）。忽略项列只判门控语义，**与读/写列是否接通无关** —— 读写 `✗` 的类只要门控能跳过条目，忽略项仍可判等价。`—`/`✓` 为既有判定，不属本次 20 个 `?` 的范围。
 
-**本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支当时只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。**2026-11-09 复核：现为 21 处判断、19 个条目名**（清单与行号见下方「恢复侧具名分支实测」一节，本节不再重复维护计数）。
+**本表是骨架，不是盘点结论。** 状态依据来自 2026-10-30（r287）对 `entry/src/main/ets/data/BackupRepository.ets` 的代码核实：恢复侧具名分支当时只有 8 个 `entry.name ===` 判断（`bookshelf.json`、`config.xml`、`bookGroup.json`、`replaceRule.json`、`txtTocRule.json`、`highlightRule.json`、`bookmark.json`、`bookMarking.json`），对应 7 个类别；其余全部走 `copyPreservedEntries` 原样归档。**2026-11-11 复核（A 组四类接通后）：主循环内 26 处判断、23 个条目名**（清单与行号见下方「恢复侧具名分支实测」一节，本节不再重复维护计数）。
 
 批 1 把原先 4 个 `?`（`themeMode`、`showRss`、`threadCount`、`mangaConfig`）落定为 `✗`：当时 `config.xml` 写出侧只 upsert 三段（`bookshelfLayout` 9 键、`readConfig` 阅读外观、`themeConfig` 护眼 6 键），读入侧 46 键，这 4 类的键既不在写出列表也不在读入列表。**「读」列的 `✗` 表示该类的 ZIP 条目恢复时不进原生功能，但条目本身仍会被原样归档**——归档不等于支持。批 2（2026-11-09）复核后 `showRss` 已补写出与恢复链路、读写列改 `✓`（见下方「批 2」节），`threadCount`／`mangaConfig` 因无数据源判未接，`themeMode` 的代码链路确认存在但该行状态列属既有判定、本批未动。 本轮（2026-11-10，批 1 透传 + 批 2 补写）复核：`threadCount`／`mangaConfig` 的键从 Android 恢复时按 XML 原标签原值存进 `legado_backup_passthrough` preferences 缓存，下次备份由 `applyPassthroughPreferences` 原样回写 `config.xml`，读写两列据此按任务书 5.1 指令均改记 `✓`。**此处 `✓` 是「备份往返等价」口径、不等于上表 `:36` 的「数据落原生功能」**：本地仍无并发／漫画消费方，键值只随备份原样往返、仅供上游读回（详见 [备份恢复](../BACKUP-RESTORE.md) 的透传档说明）。
 
@@ -61,13 +61,13 @@
 | `localBook` | `bookshelf.json` | ✓ | ✓ | — | [书籍总账](BOOKSHELF.md) A1 29 / B 51 / C 4 / D3 13 / E 1 = **98 行**（72 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) 逐条登记） |
 | `bookmark` | `bookmark.json`、`bookMarking.json` | ✓ | ✓ | 等价（类别级） | [书签对照](ZIP-BOOKMARK.md) A–E = **83 行** |
 | `bookGroup` | `bookGroup.json` | ✓ | ✓ | 等价（类别级） | [书籍总账](BOOKSHELF.md) A3 18 / A1 11 / D3 6 / B 3 = **38 行** |
-| `bookSource` | `bookSource.json` | ✗ | ✗ | 未接 | [书籍总账](BOOKSHELF.md) B 19 / D3 5 = **24 行** |
-| `rssSource` | `rssSources.json` | ✗ | ✗ | 未接 | **零行** |
-| `rssStar` | `rssStar.json` | ✗ | ✗ | 未接 | **零行** |
+| `bookSource` | `bookSource.json` | ✓ | ✓ | 等价（类别级） | A 组接通：建表 `RdbSchema.ets:462`、写出 `BackupRepository.ets:772`、恢复具名分支 `:1421`、`RestoreResult` 计数 `:183`；真包往返见第 8 节验收记录。[书籍总账](BOOKSHELF.md) B 19 / D3 5 = **24 行** 仍是界面盘点，读写以本节代码与往返证据为准 |
+| `rssSource` | `rssSources.json` | ✓ | ✓ | 等价（类别级） | A 组接通：建表 `RdbSchema.ets:474`、写出 `BackupRepository.ets:780`、恢复具名分支 `:1439`、`RestoreResult` 计数 `:187`；真包往返见第 8 节验收记录。涉及行仍**零行**（界面级盘点口径不变），读写以本节代码与往返证据为准 |
+| `rssStar` | `rssStar.json` | ✓ | ✓ | 等价（类别级） | A 组接通：建表 `RdbSchema.ets:485`、写出 `BackupRepository.ets:788`、恢复具名分支 `:1457`、`RestoreResult` 计数 `:191`；真包往返见第 8 节验收记录。涉及行仍**零行**（界面级盘点口径不变），读写以本节代码与往返证据为准 |
 | `replaceRule` | `replaceRule.json` | ✓ | ✓ | 等价（类别级） | [TXT 阅读总账](TXT-READER.md) = **6 行**（`:104`、`:105`、`:106`、`:381`、`:382`、`:383`）；`grep -c replaceRule` 实测 7，多的 1 行是 `:965` 的「ZIP 类别取值」表头说明同时列了两词，非数据行 |
 | `readRecord` | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | ✓ | ✓ | 等价（类别级） | [书籍总账](BOOKSHELF.md) **28 行**（`ZIP 类别` 列精确等于 `readRecord` 的 28 行，实跑：**27 已接 / 1 不适用**；不适用为 C 块 `:391` 总览·日历日详情（上游 `CalendarDayCell` 无点击））。读写链路：恢复 `entry/src/main/ets/data/BackupRepository.ets:1449`/`:1450` 具名解析三份 JSON，末尾 `:1487`-`:1490` 交 `ReadRecordRepository.restoreFromBackup`（定义 `data/ReadRecordRepository.ets:1069`，事务内合并）；写出 `:805`/`:807`/`:818` |
 | `searchHistory` | `searchHistory.json` | — | — | — | 批 4 按任务 4.1 推荐判 **不适用**：上游 `Backup.kt:180`–`:181` / `Restore.kt:213`–`:216` 的 `searchHistory.json` 装 `SearchKeyword`（全局搜索关键词池，表 `search_keywords`），本地无此入口、无此表、无 `SearchKeyword` 实体；本地 `search_content_history` 对齐上游 `SearchContentHistory`，而该表在上游 `Backup.kt` / `Restore.kt` 零命中、根本不备份。故这一类别在本地没有可落地的读写对象，不新建 `search_keywords` 表与全局搜索关键词池功能；`searchHistory.json` 仍只由 `copyPreservedEntries` 原样归档。详见下方「批 4」节 |
-| `sourceSub` | `sourceSub.json` | ✗ | ✗ | 未接 | **零行** |
+| `sourceSub` | `sourceSub.json` | ✓ | ✓ | 等价（类别级） | A 组接通：建表 `RdbSchema.ets:499`、写出 `BackupRepository.ets:796`、恢复具名分支 `:1475`、`RestoreResult` 计数 `:195`；真包往返见第 8 节验收记录。涉及行仍**零行**（界面级盘点口径不变），读写以本节代码与往返证据为准 |
 | `txtTocRule` | `txtTocRule.json` | ✓ | ✓ | 等价（类别级） | [TXT 阅读总账](TXT-READER.md) = **5 行**（`:84`、`:85`、`:86`、`:93`、`:95`）；`grep -c txtTocRule` 实测 6，多的 1 行是 `:965` 的「ZIP 类别取值」表头说明同时列了两词，非数据行 |
 | `httpTTS` | `httpTTS.json`、`httpTtsVoices.json` | ✓ | ✓ | 等价（类别级） | 源 + 音色双向（批 1 建表、批 2 仓储、批 3 备份桥）：写出 `BackupRepository.ets:1015`/`:1019`，恢复 `:1295` → `HttpTtsRepository.importSources`，随后同目录 `httpTtsVoices.json` → `ReadAloudVoiceRepository.replaceHttpVoices`（坏 JSON 只计 skipped、不清库）。界面明细仍**零行**未盘 |
 | `keyboardAssists` | `keyboardAssists.json` | — | — | — | 批 3 判 **不适用**：上游 `ui/` 零命中、`keyboardAssistsDao.` 仅 `Backup.kt:196` / `Restore.kt:253` 两处消费（DAO 8 方法多数零引用），本地 `grep -rn keyboardAssists entry/src/main/ets --include=*.ets` 仅 2 行白名单 / `categoryOptions`、无仓储无界面；依据 [盘点规约](../PARITY-RULES.md) 第三节「代码里有但从未接线 / 数据层无独立界面」，[书籍总账](BOOKSHELF.md) E `:516` 已同样判不适用。详见下方「批 3」节，不假接空表 |
@@ -89,15 +89,19 @@
 
 ## 状态依据
 
-### 已核实的具名分支（21 处判断、19 个条目名）
+### 已核实的具名分支（主循环内 26 处判断、23 个条目名）
 
-`entry/src/main/ets/data/BackupRepository.ets` 的恢复主循环里，`entry.name` 具名分支实测 **21 处判断、19 个条目名**（2026-11-09 HEAD 版，`BackupRepository.ets` 3106 行、与工作区一致）：
+`entry/src/main/ets/data/BackupRepository.ets` 的恢复主循环里，`entry.name` 具名分支实测 **主循环内 26 处判断、23 个条目名**（测量口径：恢复主循环 `:1371`-`:1745` 区间内 `entry.name ===` 的出现次数；全文出现 29 次、命中 27 行；2026-11-11 工作区 3640 行）：下表 `:1192`-`:1468` 一组行号是 2026-11-09 旧版实测、现已漂，仅 A 组新增四行按当前工作区实测填写。
 
 | 行 | 条目 | 落地方式 |
 | --- | --- | --- |
 | `:1192` | `bookshelf.json` | `mergeAndroidBookshelf` 合并后落 `android-backup-entries/`，再经 `restoreMatchingLocalProgress` 更新本地书籍进度 |
 | `:1211` | `config.xml` | `filterAndroidConfigXml` 按忽略项剔键后归档，键值经 `restoreReaderSettings`、`restoreBookshelfLayout`、`restoreShowRss`、`restoreThemeMode` 落到各仓储 |
 | `:1222` | `bookGroup.json` | `BookGroupRepository.importAndroidFile` |
+| `:1421` | `bookSource.json` | `BookSourceImporter.parse` → `BookSourceRepository.importRules` |
+| `:1439` | `rssSources.json` | `RssSourceImporter.parse` → `RssSourceRepository.importRules` |
+| `:1457` | `rssStar.json` | `RssStarImporter.parse` → `RssStarRepository.importRules` |
+| `:1475` | `sourceSub.json` | `RuleSubImporter.parse` → `RuleSubRepository.importRules` |
 | `:1232` | `replaceRule.json` | `ReplaceRuleImporter.parse` → `ReplaceRuleRepository.importRules` |
 | `:1249` | `txtTocRule.json` | `TxtTocRuleImporter` → `TxtTocRuleRepository` |
 | `:1263` | `highlightRule.json` | `ReaderHighlightRuleRepository`（合并语义，见[备份恢复](../BACKUP-RESTORE.md)） |
@@ -114,16 +118,16 @@
 
 其余条目走主循环末尾 `:1482`–`:1483` 的兜底 `fileIo.copyFile` + `preservedEntryCount += 1`，只进保留目录，不落原生仓储。因此 `readRecord` 原判 `✗`，不是「没查」，而是「当时查过、确认未接」；2026-11-09 恢复侧补齐具名分支（`:1449`/`:1450` 收三份 JSON，`:1487`-`:1490` 交 `ReadRecordRepository.restoreFromBackup` 事务内合并），读写两列随之改判 `✓`；`searchHistory` 批 4 复核后改判 `—`（上游 `searchHistory.json` 装的是本地没有的 `SearchKeyword` 全局关键词池，本地 `search_content_history` 对应的 `SearchContentHistory` 上游本就不备份，见下方「批 4」节），已不属于「确认未接」一组；`keyboardAssists` 批 3 复核为 `—`（上游仅存储无界面）。`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` 原也在此清单里，批 3 已为它们补出 5 张新表、5 套仓储／导入器与恢复侧具名分支并接通写出侧，读写两列改判 `✓`（见下方「批 3」节），不再走兜底。（`coverConfig` 原先也在这条清单里，r334 实现段已把 14 个封面键双向接通、66 行里 57 行已接，因此它现在是「部分接入」，不再属于「确认未接」一组。）。
 
-### 原判 `—`、现改判 `✗` 的五类（2026-11-09 范围调整；`httpTTS` 已接通，见下）
+### 原判 `—`、现改判 `✗` 的一类（2026-11-11 收口；`httpTTS` 与 A 组四类已接通，见上表）
 
-`bookSource`、`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server` 六类此前判 `—`，依据是[项目队列](../PROJECT.md)的「范围之外」。**2026-11-09 起，在线书源抓取、RSS 拉取、TTS 服务、WebDAV 已移出「范围之外」**，改列入 `PROJECT.md` 的「在线服务（已纳入范围，尚未排期）」一节，因此六类都不再具备判 `—` 的依据，按 `docs/PARITY-RULES.md` 第三节「一条依据都写不出，就不能判不适用——降级为未接」降级为 `✗`。其中 **`httpTTS` 随后已在批 1–3 接通数据层读写**（写出 `BackupRepository.ets:1015`/`:1019`，恢复 `:1295` → `HttpTtsRepository.importSources` + `ReadAloudVoiceRepository.replaceHttpVoices`），两列已改判 `✓`，故本节只覆盖剩下五类：
+`bookSource`、`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server` 六类此前判 `—`，依据是[项目队列](../PROJECT.md)的「范围之外」。**2026-11-09 起，在线书源抓取、RSS 拉取、TTS 服务、WebDAV 已移出「范围之外」**，改列入 `PROJECT.md` 的「在线服务（已纳入范围，尚未排期）」一节，因此六类都不再具备判 `—` 的依据，按 `docs/PARITY-RULES.md` 第三节「一条依据都写不出，就不能判不适用——降级为未接」降级为 `✗`。其中 **`httpTTS` 随后已在批 1–3 接通数据层读写**（写出 `BackupRepository.ets:1015`/`:1019`，恢复 `:1295` → `HttpTtsRepository.importSources` + `ReadAloudVoiceRepository.replaceHttpVoices`），两列已改判 `✓`；**A 组四类（`bookSource`、`rssSource`、`rssStar`、`sourceSub`）已在 2026-11-11 接通数据层读写**（建表 `RdbSchema.ets:462`-`:499`、写出 `BackupRepository.ets:772`/`:780`/`:788`/`:796`、恢复具名分支 `:1421`/`:1439`/`:1457`/`:1475`），四行读 / 写 / 忽略项三列已改判 `✓ | ✓ | 等价（类别级）`，见上表。故本节只覆盖剩下的 `server` 一类（另四类的数据层已在 A 组接通，见上表）：
 
-- **读 / 写**：两侧都 `✗`，条目只经 `copyPreservedEntries` 原样归档，本地没有对应原生仓储可落。
-- **忽略项**：判 `未接`。`categoryOptions` 里虽然登记了这五类的类别键名（勾选后确实能把条目挡在保留目录之外），但该类没有原生功能可落，门控「跳过的是什么」无从等价——按上节「三档取值」的口径，这类只能记 `未接`，等读写接通后回填。
-- **涉及行**：`bookSource` 在 [书籍总账](BOOKSHELF.md) B 19 / D3 5 = 24 行；其余四类仍零行（`rssSource`、`rssStar`、`sourceSub`、`server`）。**零行不等于不做**：这五类的界面块要等排期后按 `docs/PARITY-RULES.md` 的盘点单位（整个界面）重新建块，届时行数会从 0 涨起来。
+- **读 / 写**：两侧都 `✗`，条目只经 `copyPreservedEntries` 原样归档，本地没有对应原生仓储可落（`servers.json` 是 AES 密文，本地零解密能力）。
+- **忽略项**：判 `未接`。`categoryOptions` 里虽然登记了 `server` 的类别键名（勾选后确实能把条目挡在保留目录之外），但该类没有原生功能可落，门控「跳过的是什么」无从等价——按上节「三档取值」的口径，这类只能记 `未接`，等读写接通后回填。
+- **涉及行**：`bookSource` 的 24 行归 [书籍总账](BOOKSHELF.md)（读写已接，界面明细仍零行），其余四类中 `rssSource` / `rssStar` / `sourceSub` 读写已接、界面明细零行，`server` 读写未接、零行。**零行不等于不做**：`server` 的界面块要等排期后按 `docs/PARITY-RULES.md` 的盘点单位（整个界面）重新建块，届时行数会从 0 涨起来。
 - **`httpTTS` 已不在此列**：批 1–3 之前它只写 `httpTtsVoices.json` 的空数组 `[]`（`!accessSync` 才写，避免覆盖透传的真音色），那只是占位；批 1–3 补出源与音色两个方向的真实解析与仓储写入后，两列已改判 `✓`，不再是「归档保留」。
 
-**归档保留不等于功能兼容**：这五类的条目仍会随备份往返，但本地既不解析也不应用，恢复后用户看不到任何效果。
+**归档保留不等于功能兼容**：`server` 的条目仍会随备份往返，但本地既不解析也不应用，恢复后用户看不到任何效果。
 
 ### 判 `?` 的四类与 `themeConfig` 写的复核
 

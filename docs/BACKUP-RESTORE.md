@@ -105,6 +105,8 @@ grep -cE '^\| [0-9]+ \| `' docs/BACKUP-RESTORE.md
 grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 ```
 
+> 上游 `backupFileNames`（`Backup.kt:69`-`:98`）实为 30 条，比本表 28 行多两条：`directLinkUploadRule.json`（上游走 ACache，不落 Room 表）与 `bookMarking.json`（本表并入 `bookmark` 一行）。本地 `fileNames` 白名单（`BackupRepository.ets:577` 起 30 条）与之逐条对应；`categoryOptions` 28 项与本表 28 行一致，故上面的 `grep -c "{ key: '"` 应等于 28 而不是 30。
+
 「ZIP 接入」按五档判定，与 [ZIP 兼容总账](parity/STATUS.md) 的三级取值对应（`✓` 覆盖「已接入」与「部分接入」两个档，`✗` 覆盖「未接入」与「仅归档」，`—` 对应「不适用」）：
 
 - **已接入**：恢复时有具名分支，数据落到原生仓储/表；且已过设备往返验证，或至少写出侧已实现
@@ -115,7 +117,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 （2026-11-10 批 1 补记）**「透传」不是第六档**，而是 `config.xml` 未知键在「未接入」档内的补充口径：从 Android 恢复进来的 `config.xml` 里本地读不懂的键，按 XML 原标签（含 `long` / `set`）原值存进 `legado_backup_passthrough` preferences（键 `androidConfigPassthrough`，2000 键 / 1 MB 上限），下次备份由 `applyPassthroughPreferences` 原样写回 `config.xml`，判据与上游 `keyIsNotIgnore` 的 `else -> true` 对齐（排除已知写出 105 键、本地真值 97 键、alwaysIgnored 17 键、被忽略类别）。`threadCount` / `mangaConfig` 等无本地消费方的键走这条链路原样往返，故 [ZIP 兼容总账](parity/STATUS.md) 的读写列可按「备份往返等价」记，但**本地仍不落原生功能、档位维持「未接入」**，值仅供上游读回。透传缓存只覆盖「从 Android 恢复过」的设备，全新安装首次备份无透传数据。
 
-恢复侧具名分支实测为 **21 处 `entry.name ===` 判断、19 个条目名**（`entry/src/main/ets/data/BackupRepository.ets`，2026-11-09 HEAD 版，该文件 3106 行、与工作区一致）：`bookshelf.json` `:1192`、`config.xml` `:1211`、`bookGroup.json` `:1222`、`replaceRule.json` `:1232`、`txtTocRule.json` `:1249`、`highlightRule.json` `:1263`、`dictRule.json` `:1277`、`httpTTS.json` `:1295`、`homepageModules.json` `:1340`、`homepageCustomSets.json` `:1358`、`highlightTagRule.json` `:1376`、`tagGroupRule.json` `:1394`、`bookmark.json` 与 `bookMarking.json` `:1412`/`:1424`、`themeConfig.json`（常量 `THEME_CONFIG_FILE_NAME`）`:1435`、`readRecord.json`/`readRecordDetail.json`/`readRecordSession.json` `:1449`/`:1450`、`coverRule.json` `:1468`。其余条目走 `copyPreservedEntries` 原样归档。另有 2 处 `entry.name ===` 不在恢复主循环：`:1101` 的 bookshelf 计数段、`:2502`/`:2509` 的忽略项段。
+恢复侧具名分支实测为 **主循环内 26 处 `entry.name ===` 判断、23 个条目名**（`entry/src/main/ets/data/BackupRepository.ets`，2026-11-11 工作区 3640 行、A 组四类接通后；测量口径为恢复主循环 `:1371`-`:1745` 区间内 `entry.name ===` 的出现次数）。四种计数口径：主循环内出现 **26**、全文出现（`grep -o "entry.name ===" … | wc -l`）**29**、全文命中行（`grep -c "entry.name ===" …`）**27**、条目名去重 **23**。清单（行号按当前工作区实测）：`bookshelf.json` `:1376`、`config.xml` `:1395`、`bookGroup.json` `:1411`、`bookSource.json` `:1421`、`rssSources.json` `:1439`、`rssStar.json` `:1457`、`sourceSub.json` `:1475`（以上四类为 A 组新增，顺序照上游 `Restore.kt:171`-`:198`）、`replaceRule.json` `:1493`、`txtTocRule.json` `:1510`、`highlightRule.json` `:1524`、`dictRule.json` `:1538`、`httpTTS.json` `:1556`、`homepageModules.json` `:1601`、`homepageCustomSets.json` `:1619`、`highlightTagRule.json` `:1637`、`tagGroupRule.json` `:1655`、`bookmark.json` 与 `bookMarking.json` `:1673`/`:1685`、`themeConfig.json`（常量 `THEME_CONFIG_FILE_NAME`）`:1696`、`readRecord.json`/`readRecordDetail.json`/`readRecordSession.json` `:1710`/`:1711`/`:1718`/`:1720`、`coverRule.json` `:1729`。其余条目走主循环末尾 `:1743`-`:1744` 的兜底 `fileIo.copyFile` + `preservedEntryCount += 1`，只进保留目录。另有 3 处 `entry.name ===` 不在恢复主循环：`:1273` 的 bookshelf 计数段（`entry !== undefined && entry.name === 'bookshelf.json'`）、`:2777` 与 `:2784`（都在 `buildRestoredEntrySummary` 里，不是「忽略项段」）。
 
 | # | 类别键名 | 上游中文名 | ZIP 条目 | 样本条数 | 本地原生功能 | ZIP 接入 | 队列位置 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -130,13 +132,13 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 | 9 | `mangaConfig` | 漫画设置 | `config.xml` | 370 项内 32 键 | 仅设置页有漫画相关条目文字，无漫画阅读 | **未接入**（批 1 起走透传原样往返）：32 个键随 `config.xml` 原标签原值备份往返、仍不落原生功能，值仅供上游读回 | 安全兼容；漫画业务候选 |
 | 10 | `bookmark` | 书签 | `bookmark.json`、`bookMarking.json` | 344 / **样本缺 `bookMarking`** | 原生书签与标注仓储、阅读入口 | **已接入**：N 端双向验证通过（新增 1、覆盖 1），合并语义 | ZIP 映射 3 |
 | 11 | `bookGroup` | 书架分组 | `bookGroup.json` | 28 | 原生分组模型、管理、编辑与筛选 | **已接入**：根级 JSON 可导出导入；外部 ZIP 冲突合并待验 | 已盘，见[书架对照表](parity/BOOKSHELF.md) A3 |
-| 12 | `bookSource` | 书源 | `bookSource.json` | 904 | 有页面壳，规则解释与抓取未迁移 | **仅归档**：不执行规则 | 安全兼容 11；抓取业务候选 |
-| 13 | `rssSource` | 订阅源 | `rssSources.json` | 28 | 订阅页 UI 已有，抓取未迁移 | **仅归档** | 安全兼容 12；抓取业务候选 |
-| 14 | `rssStar` | RSS 收藏 | `rssStar.json` | **样本缺** | **无**（`grep rssStar` 零命中） | **仅归档** | 安全兼容 |
+| 12 | `bookSource` | 书源 | `bookSource.json` | 904 | 数据层有 `book_sources` 表（`RdbSchema.ets:462`）与 `BookSourceRepository`；规则解释与抓取未迁移 | **已接入（数据层）**：恢复 `:1421` → `BookSourceImporter.parse` → `BookSourceRepository.importRules`（合并语义）；写出 `:772`。不执行规则、不联网 | 安全兼容 11；抓取业务候选 |
+| 13 | `rssSource` | 订阅源 | `rssSources.json` | 28 | 数据层有 `rssSources` 表（`RdbSchema.ets:474`）与 `RssSourceRepository`；订阅页 UI 已有，抓取未迁移 | **已接入（数据层）**：恢复 `:1439` → `RssSourceImporter.parse` → `RssSourceRepository.importRules`（合并语义）；写出 `:780`。不执行规则、不联网 | 安全兼容 12；抓取业务候选 |
+| 14 | `rssStar` | RSS 收藏 | `rssStar.json` | **样本缺** | 数据层有 `rssStars` 表（`RdbSchema.ets:485`）与 `RssStarRepository`；无界面 | **已接入（数据层）**：恢复 `:1457` → `RssStarImporter.parse` → `RssStarRepository.importRules`（合并语义，跨 origin+link 判重）；写出 `:788`。不联网 | 安全兼容 |
 | 15 | `replaceRule` | 替换规则 | `replaceRule.json` | 40 | 规则模型/仓储 + 阅读时替换链路 | **已接入**：写出根级 JSON、恢复逐条导入；非空应用备份往返待验 | ZIP 映射 7 |
 | 16 | `readRecord` | 阅读记录 | `readRecord.json`、`readRecordDetail.json`、`readRecordSession.json` | 575 / 313 / **39376** | 原生会话、日明细、按书汇总三层已接通 | **已接入**：三条链路 `:1449`/`:1450` 具名解析，末尾 `:1487`-`:1490` 交 `ReadRecordRepository.restoreFromBackup`，事务内合并写库（定义 `data/ReadRecordRepository.ets:1069`） | ZIP 映射 6 |
 | 17 | `searchHistory` | 搜索历史 | `searchHistory.json` | 737 | 阅读器搜索历史有原生仓储（`search_content_history` 表），但那是**书内搜索**，与上游此条目的全局关键词池不是同一件事 | **不适用**：上游 `searchHistory.json` 装 `SearchKeyword`（全局搜索关键词池，表 `search_keywords`），本地无此入口、无此表；判据见 [ZIP 兼容总账](parity/STATUS.md) 批 4 节 | ZIP 映射 8；语义错配，待上游口径 |
-| 18 | `sourceSub` | 书源订阅 | `sourceSub.json` | **样本缺** | 有页面壳 | **仅归档** | 安全兼容 |
+| 18 | `sourceSub` | 书源订阅 | `sourceSub.json` | **样本缺** | 数据层有 `ruleSubs` 表（`RdbSchema.ets:499`）与 `RuleSubRepository`；有页面壳 | **已接入（数据层）**：恢复 `:1475` → `RuleSubImporter.parse` → `RuleSubRepository.importRules`（合并语义，按 id 判重）；写出 `:796`。不联网、不做 import 分流 | 安全兼容 |
 | 19 | `txtTocRule` | TXT 目录规则 | `txtTocRule.json` | 40 | 规则仓储、管理页、切章、分卷、书架更新目录 | **已接入**：合成 ZIP 单条恢复与空规则备份有记录；非空应用备份往返待验 | ZIP 映射 9 |
 | 20 | `httpTTS` | HTTP TTS | `httpTTS.json`、`httpTtsVoices.json` | 1 / 1 | 朗读设置界面存在，TTS 服务与播放未迁移；数据层已有 `httpTTS` / `read_aloud_voices` 两张表与仓储 | **已接入（数据层）**：恢复 `:1295` `HttpTtsImporter.parseSources` → `HttpTtsRepository.importSources`，随后读同目录 `httpTtsVoices.json` → `ReadAloudVoiceRepository.replaceHttpVoices`（坏 JSON 只计 skipped、不清库）；写出 `:1015`/`:1019`。不连服务、不播放 | 安全兼容；TTS 业务候选 |
 | 21 | `keyboardAssists` | 键盘辅助 | `keyboardAssists.json` | 32 | **无**（`grep keyboardAssists` 零命中） | **不适用**：上游只有存储无业务（`keyboardAssistsDao` 8 个方法里 6 个零引用、`ui/` 零命中），本地无对应能力可接；判据见 [ZIP 兼容总账](parity/STATUS.md) 批 3 节 | 安全兼容；键位业务候选 |
@@ -152,11 +154,11 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 
 | 档位 | 类数 | 类别 |
 | --- | --- | --- |
-| 已接入 | **14** | `themeMode`、`bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule`、`showRss`、`readRecord`、`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule` |
+| 已接入 | **18** | `themeMode`、`bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule`、`showRss`、`readRecord`、`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule`、`bookSource`、`rssSource`、`rssStar`、`sourceSub` |
 | 部分接入 | **5** | `localBook`、`readConfig`、`themeConfig`、`coverConfig`、`bookshelfLayout` |
 | 未接入（本地有页面或概念，ZIP 键读写都没接） | **2** | `threadCount`、`mangaConfig` |
 | 不适用（上游有、本地按规约判无对应依据） | **2** | `searchHistory`、`keyboardAssists` |
-| 仅归档 | **5** | `bookSource`、`rssSource`、`rssStar`、`sourceSub`、`server` |
+| 仅归档 | **1** | `server` |
 
 「未接入」与「仅归档」的区别：前者本地有页面或概念、只是键值没接；后者连本地功能都没有，条目仅原样归档。两者对 Android 用户的实际结果一样 —— 换到 HarmonyOS 后这些设置不生效。`不适用` 是第三件事：不是「没做」，而是按 [盘点规约](./PARITY-RULES.md) 第三节判过、上游行为在本地没有对应依据。
 
@@ -252,7 +254,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 **三、「零行」是「还没盘」，不是「已完成」，也不是「本地没有这个功能」。**
 
-[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 11 类标为**零行**，分两种：**整个界面级盘点零行** 6 类（`rssSource`、`rssStar`、`sourceSub`、`server`、`highlightRule`、`mangaConfig`）；**读写已接通、只是界面明细尚未盘点** 5 类（`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`showRss`，单元格里写的是「明细仍零行」）。`bookmark`、`themeConfig`、`coverConfig` 各自归 [书签对照](parity/ZIP-BOOKMARK.md) A–E（83 行）、[阅读配置总账](parity/READER-CONFIG.md) F、[封面设置总账](parity/ZIP-COVER.md)（66 行）盘点，不计入本清单；`replaceRule`（6 行）、`txtTocRule`（5 行）、`themeMode`（19 行）已随总账逐轮复核补出行数，同样不在本清单里。（2026-11-09 复核：此前记的是「16 类零行」，把上述三类与 `searchHistory`、`keyboardAssists`（现判不适用、理由已写）一并算了进去。） （2026-11-10 批 1 补记：`threadCount` / `mangaConfig` 现经 `config.xml` 未知键透传原样往返，属备份链路等价、不新增界面明细，故 `mangaConfig` 仍留在「整个界面级盘点零行」6 类内、不出列，`threadCount` 仍归 [书籍总账](parity/BOOKSHELF.md) A2 的 1 行、本就不在本清单。）
+[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 11 类标为**零行**，分两种：**整个界面级盘点零行** 3 类（`server`、`highlightRule`、`mangaConfig`）；**读写已接通、只是界面明细尚未盘点** 8 类（`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`showRss`、`rssSource`、`rssStar`、`sourceSub`，单元格里写的是「明细仍零行」）。`bookmark`、`themeConfig`、`coverConfig` 各自归 [书签对照](parity/ZIP-BOOKMARK.md) A–E（83 行）、[阅读配置总账](parity/READER-CONFIG.md) F、[封面设置总账](parity/ZIP-COVER.md)（66 行）盘点，不计入本清单；`replaceRule`（6 行）、`txtTocRule`（5 行）、`themeMode`（19 行）已随总账逐轮复核补出行数，同样不在本清单里。（2026-11-09 复核：此前记的是「16 类零行」，把上述三类与 `searchHistory`、`keyboardAssists`（现判不适用、理由已写）一并算了进去。） （2026-11-10 批 1 补记：`threadCount` / `mangaConfig` 现经 `config.xml` 未知键透传原样往返，属备份链路等价、不新增界面明细，故 `mangaConfig` 仍留在「整个界面级盘点零行」3 类内、不出列，`threadCount` 仍归 [书籍总账](parity/BOOKSHELF.md) A2 的 1 行、本就不在本清单。）
 
 派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[盘点规约](PARITY-RULES.md)第二节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
 

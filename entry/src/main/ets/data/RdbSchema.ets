@@ -456,6 +456,58 @@ export class RdbSchema {
     'CREATE UNIQUE INDEX IF NOT EXISTS `index_read_aloud_voices_engine` ' +
     'ON `read_aloud_voices` (`engineType`, `engineId`, `speakerId`)';
 
+  // 第六批（ZIP 总账 A 组四类）：无外键依赖，追加在末尾即可。
+  // 四张表都存 sourceJson（整条条目的 JSON 文本）做往返真值，
+  // 前面几列是它的派生列，只供 SQL 排序与筛选，不单独写。
+  static readonly createBookSources: string =
+    'CREATE TABLE IF NOT EXISTS `book_sources` (' +
+    '`bookSourceUrl` TEXT NOT NULL, ' +
+    '`bookSourceName` TEXT NOT NULL DEFAULT \'\', ' +
+    '`bookSourceGroup` TEXT, ' +
+    '`bookSourceType` INTEGER NOT NULL DEFAULT 0, ' +
+    '`enabled` INTEGER NOT NULL DEFAULT 1, ' +
+    '`customOrder` INTEGER NOT NULL DEFAULT 0, ' +
+    '`sourceJson` TEXT NOT NULL DEFAULT \'\', ' +
+    'PRIMARY KEY(`bookSourceUrl`)' +
+    ')';
+
+  static readonly createRssSources: string =
+    'CREATE TABLE IF NOT EXISTS `rssSources` (' +
+    '`sourceUrl` TEXT NOT NULL, ' +
+    '`sourceName` TEXT NOT NULL DEFAULT \'\', ' +
+    '`sourceGroup` TEXT, ' +
+    '`enabled` INTEGER NOT NULL DEFAULT 1, ' +
+    '`customOrder` INTEGER NOT NULL DEFAULT 0, ' +
+    '`sourceJson` TEXT NOT NULL DEFAULT \'\', ' +
+    'PRIMARY KEY(`sourceUrl`)' +
+    ')';
+
+  static readonly createRssStars: string =
+    'CREATE TABLE IF NOT EXISTS `rssStars` (' +
+    '`origin` TEXT NOT NULL, ' +
+    '`link` TEXT NOT NULL, ' +
+    '`title` TEXT NOT NULL DEFAULT \'\', ' +
+    '`groupName` TEXT NOT NULL DEFAULT \'默认分组\', ' +
+    '`sort` TEXT NOT NULL DEFAULT \'\', ' +
+    '`starTime` INTEGER NOT NULL DEFAULT 0, ' +
+    '`type` INTEGER NOT NULL DEFAULT 0, ' +
+    '`durPos` INTEGER NOT NULL DEFAULT 0, ' +
+    '`sourceJson` TEXT NOT NULL DEFAULT \'\', ' +
+    'PRIMARY KEY(`origin`, `link`)' +
+    ')';
+
+  static readonly createRuleSubs: string =
+    'CREATE TABLE IF NOT EXISTS `ruleSubs` (' +
+    '`id` INTEGER NOT NULL, ' +
+    '`name` TEXT NOT NULL DEFAULT \'\', ' +
+    '`url` TEXT NOT NULL DEFAULT \'\', ' +
+    '`type` INTEGER NOT NULL DEFAULT 0, ' +
+    '`customOrder` INTEGER NOT NULL DEFAULT 0, ' +
+    '`autoUpdate` INTEGER NOT NULL DEFAULT 0, ' +
+    '`sourceJson` TEXT NOT NULL DEFAULT \'\', ' +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
   /** 全部建表语句，按依赖顺序排列。 */
   private static readonly allStatements: string[] = [
     RdbSchema.createBookmarks,
@@ -492,7 +544,12 @@ export class RdbSchema {
     // 第五批（httpTTS 数据层）：索引必须排在表之后，其余无外键依赖，追加在末尾即可
     RdbSchema.createHttpTts,
     RdbSchema.createReadAloudVoices,
-    RdbSchema.createReadAloudVoicesUniqueIndex
+    RdbSchema.createReadAloudVoicesUniqueIndex,
+    // 第六批（A 组四类数据层）：无外键依赖，追加在末尾即可
+    RdbSchema.createBookSources,
+    RdbSchema.createRssSources,
+    RdbSchema.createRssStars,
+    RdbSchema.createRuleSubs
   ];
 
   /**
