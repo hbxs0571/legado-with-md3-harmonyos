@@ -918,6 +918,19 @@ export class BackupRepository {
           configText, 'boolean', 'showReadTitleAddition', settings.showReadTitleAddition ? 'true' : 'false');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'menuAlpha', `${Math.max(0, Math.min(100, Math.round(settings.menuAlpha)))}`);
+        // 补写 5 个 config.xml 键：progressBarBehavior / tocUiUseReplace / tocCountWords /
+        // clickImgWay / maxLengthWithNoToc。恢复侧只读这些键，写出侧此前未写。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'progressBarBehavior', settings.progressBehavior);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'tocUiUseReplace', settings.tocUseReplace ? 'true' : 'false');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'tocCountWords', settings.tocShowWordCount ? 'true' : 'false');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'string', 'clickImgWay', settings.clickImageBehavior);
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'int', 'maxLengthWithNoToc',
+          `${Math.max(3000, Math.min(100000, Math.round(settings.maxLengthWithNoToc)))}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
       // coverConfig 的 14 个 coverPrefKeys 受 coverConfig 忽略开关控制
