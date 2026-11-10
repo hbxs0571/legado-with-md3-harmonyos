@@ -631,8 +631,21 @@ export struct ReaderPage {
   private curlRevealProgress: number = 1;
   /** 滚动拖拽上一帧的累计 offsetY（vp），用于把累计量换算成逐帧 delta。 */
   private scrollDragLastY: number = 0;
-  /** 本次拖动是否已经因到章边界而转过章（一次拖动只转一次，避免连跳）。 */
+  /**
+   * 本次拖动是否已经因为滚到章边界而发过换章请求。
+   *
+   * 页层批次 4 起它的职责收窄为「一次拖动只发一次换章请求」的**去重闸门**，
+   * 不再负责把手势停住：帧照常喂给 `applyReaderScrollDelta`，占位页在页表里，
+   * 位移能继续往前走。旧语义是发请求后丢弃所有后续帧、直到换章页表落定，
+   * 读盘那段时间手指还在动、画面却不动 —— 那正是「必须抬手重新滑」的来源。
+   *
+   * 只在 `PanGesture.onActionStart` 复位，**不再**在 `onReaderContentChanged`
+   * 里复位：换章页表落定时手指可能还按着，此时复位会让同一次拖动再发一次
+   * 换章请求，连跳两章。
+   */
   private scrollDragBoundaryTurned: boolean = false;
+  /** 抬手惯性里是否已经发过换章请求（一次惯性只发一次，避免连跳）。 */
+  private scrollFlingBoundaryTurned: boolean = false;
   /**
    * 横向拖动翻页的状态（上游 `ReaderHorizontalDrag`）。
    * 方向在越过 touch-slop 那一刻锁定，此后位移从锁定点算起——
@@ -1654,11 +1667,12 @@ export struct ReaderPage {
     this.primeContentImageSizesSync();
     this.loadContentImageSizes();
     this.rebuildReaderPages();
-    // 换章交接完成、新章页表已就位才放开拖动闸门：await readChapter 读盘期间
-    // scrollDragBoundaryTurned 一直立着挡住章末后续帧（防一次拖动连跳数章），正文
-    // 到了还不清，手指未抬起的剩余位移会被 onActionUpdate 全部 return 吃掉，
-    // 用户只好松手再按一次。放在页表替换之后，避免闸门先开、页表仍是旧章末页。
-    this.scrollDragBoundaryTurned = false;
+    // 页层批次 4：这里不再清 `scrollDragBoundaryTurned`。
+    //
+    // 旧语义下它是「换章期间丢弃所有帧」的闸门，所以必须在页表落定时打开；
+    // 新语义下它只是「一次拖动只发一次换章请求」的去重标记，复位点是
+    // `PanGesture.onActionStart`。换章页表落定时手指往往还按着，若在这里复位，
+    // 同一次拖动会再发一次换章请求，一次长甩连跳两章。
     console.info(`[ReaderBench] contentChanged totalMs=${Date.now() - changedAt} ` +
       `pages=${this.localReaderPages.length}`);
   }
@@ -2260,16 +2274,35 @@ export struct ReaderPage {
     }
     // 阅读位置 0% 落本章第一页——单图模式下第一页是标题页，
     // 不能被 startPosition 比较跳过（标题页与正文首页的 startPosition 都是 0）。
-    // `locateOrNull` 只在当前章页范围内扫，返回的是窗口页表下标。
-    let pageIndex = locateChapterPage(mergedPages, chapterIndex, 0);
-    if (targetPosition > 0) {
-      const located = locateOrNull(mergedPages, chapterIndex, targetPosition);
-      if (located >= 0) { pageIndex = located; }
+    // 页层批次 4：滚动模式下「重排不能动阅读位置」。
+    //
+    // 滚动模式的权威位置是 `currentPageIndex + scrollOffset`（每帧由手势直接改），
+    // 而下面按 `book.androidCharacterPosition` 的定位走的是**宿主回传的进度**，
+    // 那条链路有 250ms 节流（`updateProgress`），天然比手势滞后。只要滚动途中发生
+    // 一次重排（图片尺寸异步到达、`displayChapterTitle` 定稿、正文区尺寸变化都会触发），
+    // 就会拿几百毫秒前的旧字符坐标把画面拽回上一页——用户看到的就是「页码在一张
+    // 之内来回跳几次才真正翻过去」。
+    //
+    // 所以滚动模式在没有外部跳转意图时一律按页身份保持当前页；一旦有书签跳转、
+    // 章首待处理、换章交接，仍走下面那套按目标位置的定位。
+    const previousPage = this.localReaderPages[this.currentPageIndex];
+    const keepScrollPosition = this.usesCanvasScroll() && !this.chapterHandoffPending &&
+      !this.chapterBoundaryContinuation && this.pendingBookmarkTargetPosition < 0 &&
+      !this.startPositionPending && previousPage !== undefined &&
+      (previousPage.chapterIndex ?? 0) === chapterIndex;
+    let pageIndex = keepScrollPosition
+      ? rebasePageIndex(mergedPages, previousPage?.chapterIndex ?? 0, previousPage?.pageIndex ?? 0)
+      : -1;
+    if (pageIndex < 0) {
+      pageIndex = locateChapterPage(mergedPages, chapterIndex, 0);
+      if (targetPosition > 0) {
+        const located = locateOrNull(mergedPages, chapterIndex, targetPosition);
+        if (located >= 0) { pageIndex = located; }
+      }
     }
     // 页表插入 / 删除 / 换章后旧下标失效：定位没命中时按旧页身份重查一次
     // （`rebasePageIndex`，`ReaderPageNavigator.kt:32-33`），仍找不到才落章首。
     if (pageIndex < 0) {
-      const previousPage = this.localReaderPages[this.currentPageIndex];
       const rebased = previousPage === undefined ? -1
         : rebasePageIndex(mergedPages, previousPage.chapterIndex ?? 0, previousPage.pageIndex ?? 0);
       pageIndex = rebased >= 0 ? rebased : 0;
@@ -2671,13 +2704,22 @@ export struct ReaderPage {
         !canTurnNext(pages, this.currentPageIndex, hasNextChapter)) {
         // 章末：上游 reportScrollBoundary 在滚动模式下静默，这里也不弹提示。
         // 但章末要先亮「继续滑动以加载下一章…」提示页，否则用户以为滚到头了。
-        const overshootVp = context.px2vp(result.offsetPx);
-        this.scrollOffset = overshootVp;
+        //
+        // 页层批次 4：这里**不用** `result.offsetPx`（crossing 的残差口径）。
+        // crossing 的残差是「相对下一张页顶边」算的：`next + currentExtent`，
+        // 越过之后残差归零，画面会被拽回章末页 —— 手指在动、画面却在原地打转，
+        // 那正是「必须抬手重滑」的观感来源。改成带上下限的单调位移：
+        // 下限 `-currentExtentVp`（本章末页刚好滚出屏幕、下一张页顶到屏幕顶），
+        // 上限 0。占位页只有一屏，推到底就钳住；反向也能原路退回。
+        const currentExtentVp = context.px2vp(currentExtentPx);
+        const rawOffsetVp = this.scrollOffset + context.px2vp(deltaPx);
+        const clampedOffsetVp = Math.max(-currentExtentVp, Math.min(0, rawOffsetVp));
+        this.scrollOffset = clampedOffsetVp;
         // 这笔负值是「已越过末页底边多少」，也是「该往新章推进多远」。换章是
         // 异步重排，不把它带到新章页表就会在落定时丢掉，手指没抬也得松手重滑。
-        this.pendingChapterScrollVp = overshootVp;
+        this.pendingChapterScrollVp = clampedOffsetVp;
         this.chapterBoundaryContinuation = true;
-        console.info(`[ReaderBench] handoff store overshootVp=${overshootVp} pageIdx=${this.currentPageIndex}`);
+        console.info(`[ReaderBench] handoff store overshootVp=${clampedOffsetVp} pageIdx=${this.currentPageIndex}`);
         this.showChapterBoundaryMessage(1);
         this.paintReaderCanvas();
         return true;
@@ -2692,15 +2734,23 @@ export struct ReaderPage {
         !canTurnPrevious(pages, this.currentPageIndex, hasPreviousChapter)) {
         // 章首：向上换章的镜像分支。
         // 与章末同一套：把「越过首页顶边多少」带进新章，否则落定后会跳回顶部。
-        // 注意符号是正的（向上滚 `scrollOffset` 为正），而落点钳位是
+        //
+        // 位移口径同样换成带上下限的单调值：向上滚 `scrollOffset` 为正，
+        // 上限是「上一张页刚好顶到屏幕顶」= `previousExtentVp`，下限 0。
+        // 这样手指向上时上一张页（邻章真页或占位页）会真的从上面滑进来，
+        // 而不是靠 crossing 残差把画面拽回去。
+        //
+        // 落点取舍：`pendingChapterScrollVp` 是正值，而落点钳位是
         // `Math.min(0, pendingChapterScrollVp)`，正向值会被抹成 0 —— 向上换章的
-        // 落点本轮不追求精确，允许落在上一章末页顶部，这个取舍写在
-        // `docs/KNOWN-ISSUES.md` 里。
-        const overshootVp = context.px2vp(result.offsetPx);
-        this.scrollOffset = overshootVp;
-        this.pendingChapterScrollVp = overshootVp;
+        // 落点本轮**不追求精确**，允许落在上一章末页顶部。这个取舍登记在
+        // `docs/KNOWN-ISSUES.md`，不是漏做。
+        const previousExtentVp = context.px2vp(previousExtentPx);
+        const rawOffsetVp = this.scrollOffset + context.px2vp(deltaPx);
+        const clampedOffsetVp = Math.max(0, Math.min(previousExtentVp, rawOffsetVp));
+        this.scrollOffset = clampedOffsetVp;
+        this.pendingChapterScrollVp = clampedOffsetVp;
         this.chapterBoundaryContinuation = true;
-        console.info(`[ReaderBench] handoff store overshootVp=${overshootVp} pageIdx=${this.currentPageIndex}`);
+        console.info(`[ReaderBench] handoff store overshootVp=${clampedOffsetVp} pageIdx=${this.currentPageIndex}`);
         this.showChapterBoundaryMessage(-1);
         this.paintReaderCanvas();
         return true;
@@ -2863,6 +2913,8 @@ export struct ReaderPage {
    */
   private startReaderScrollFling(velocityYVpPerSecond: number): void {
     if (!this.usesCanvasScroll()) { return; }
+    // 页层批次 4：每次抬手惯性重置换章去重标记（防连跳的粒度是「一次惯性」）。
+    this.scrollFlingBoundaryTurned = false;
     const context = this.getUIContext();
     const velocityPxPerSecond = context.vp2px(velocityYVpPerSecond);
     const totalPx = ReaderScrollDecay.totalDistance(velocityPxPerSecond);
@@ -2886,9 +2938,13 @@ export struct ReaderPage {
       const step = target - applied;
       applied = target;
       if (step === 0) { return; }
-      if (this.applyReaderScrollDelta(step)) {
-        // 到章边界：惯性结束，把这一下转成翻章（与点击翻页同口径）
-        this.cancelTurnAnimator();
+      // 页层批次 4：命中章边界后**不结束惯性**。旧实现在这里 `cancelTurnAnimator()`
+      // 直接掐掉动画，视觉上就是「甩到章末突然停住」，正是要修掉的那一半。
+      // 现在惯性继续把位移喂给页表：章末之后是占位页或已排好的邻章页，
+      // 能一直推到底，换章请求只发一次（`scrollFlingBoundaryTurned` 去重）。
+      const hitBoundary = this.applyReaderScrollDelta(step);
+      if (hitBoundary && !this.scrollFlingBoundaryTurned) {
+        this.scrollFlingBoundaryTurned = true;
         this.updateProgress();
         this.onTurnChapterBoundary(step < 0 ? 1 : -1);
       }
@@ -6732,13 +6788,16 @@ export struct ReaderPage {
               // KI-REL1：拖动期到达章末就要换章。此前这里丢掉返回值，章末只亮
               // 「继续滑动以加载下一章…」提示页而不换章；慢速拖到章末再松手时速度不足
               // 8vp，惯性直接 return，于是永远停在本章末页——这正是「跳章」的另一半。
-              // 与分页翻页（:2167）、惯性滚动（:2431）同口径：命中边界就转成换章。
-              // 一次拖动读到章末就发换章请求，闸门挡住异步读盘期间的后续帧防连跳；
-              // 它在 onReaderContentChanged 页表落定后清掉，换章完成后剩余帧接着滚，不必松手再按。
-              if (this.scrollDragBoundaryTurned) {
-                return;
-              }
-              if (this.applyReaderScrollDelta(this.getUIContext().vp2px(deltaVp))) {
+              // 与分页翻页、惯性滚动同口径：命中边界就转成换章。
+              //
+              // 页层批次 4：这里**不再**在发过请求后丢弃后续帧。旧实现一命中边界就把
+              // `scrollDragBoundaryTurned` 当闸门、`return` 掉所有帧，而换章要
+              // `await readChapter` 读盘，那段时间手指还在动、画面却完全不动 ——
+              // 用户只能松手再滑一次。现在帧照常喂给 `applyReaderScrollDelta`：
+              // 章末之后是占位页/邻章页，位移能继续往前走，画面跟着手指走。
+              // 闸门只负责「一次拖动只发一次换章请求」，防连跳。
+              const hitBoundary = this.applyReaderScrollDelta(this.getUIContext().vp2px(deltaVp));
+              if (hitBoundary && !this.scrollDragBoundaryTurned) {
                 this.scrollDragBoundaryTurned = true;
                 this.cancelTurnAnimator();
                 this.updateProgress();
