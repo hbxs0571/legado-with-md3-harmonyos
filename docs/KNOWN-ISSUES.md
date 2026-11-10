@@ -244,6 +244,24 @@ this.pageTurnTimer = setTimeout(() => {
 
 原记录点名的 `ReaderPage.ets` 分支 `if (this.currentPageContainsImages() || this.readerBottomJustifyGap > 0) { ReaderPageTextLines } else { ReaderPageTextJoined }` 与 `textBottomJustify` 默认 true 导致每页新建 400-900 个 Span 节点的代价，**已随 Span 渲染分支整体删除而消失**：现在一页的绘制成本与行数线性相关，与默认值无关。`textBottomJustify` 的语义仍保留（画布下表现为 `ReaderCanvasLayout.bottomJustifyGapPx` 按行 y 摊分）。
 
+### 滚动模式跨章换页顿挫：先量再削（2026-11-10 计时与取舍）
+
+用户报 `pageAnimation = 3` 下滚到章末继续下滑进下一章时会顿一下。本轮先补 `[ReaderBench]` 计时（提交 `75ee736`），再按测量结果决定两处削减（提交 `8cde93c`、`ccad0cc`），逐场景耗时与原始 hilog 见仓库外 `N:/HarmonyProjects/tmp/reader-handoff-evidence.md`。
+
+**时间花在哪**：三个场景（首次进下一章 / 同一章末第二次 / 往回上一章末页定位）各测 3 轮取中位数，真 `LocalReaderPaginator.paginate`（日志字段 `paginatorMs`）为 57 / 60 / 48 ms，分别占 `contentChanged totalMs` 77 / 79 / 57 的约 75%；`contentMs`（整本正文缓存读盘）= 0、`applyMs`（替换规则 taskpool 往返）= 0~1、`semanticsMs`（语义解析 + 高亮扫描）= 0~1、`renderMs`（定位 + 钳位 + 预解图 + 重绘）= 7~16。任务给的日志模板里 `paginateMs` 实为语义段（1~2 ms），`positionMs` 才是含真 paginate 的大头，故另补 `paginatorMs` / `renderMs` 两个字段判定——按模板字面 `paginateMs` 不是最大项，按「整章同步排版是大头」的意图成立。
+
+**批 2（滚动模式不启动全书分页）**：默认配置下 `needsFullBookPageData()` 恒 false（`DEFAULT_READER_INFO_SETTINGS` 六个页眉页脚值 1,0,2,7,0,6 都不是 19/20/18，设备 prefs 无覆盖），全书分页本就不启动，该改动对默认配置是 no-op。注入 `<double key="tipFooterRight" value="20.000000"/>` 构造触发配置后：滚动模式 `fullBookPagination skipScroll=1 needs=1` 且无 `started`；分页模式 `skipScroll=0 needs=1` 且出现 `started gen=...`，底部 `17/41 33.3%`，进度条数值未坏。三场景 `contentChanged totalMs` 由批 1 的 77 / 79 / 57 到批 2 的 70 / 72 / 51，差在冷启动与调度抖动范围内，不构成可测下降。
+
+**批 3（换章不重复排版）—— 判定「不需要做」，理由**：任务假设「`loadContentImageSizes()` 回来触发 `rebuildReaderPages(true, true)`，含图章整章排两遍」。实测不成立：`primeContentImageSizesSync()`（`ReaderPage.ets:1604`）在首次排版前已用 `getImageInfoSync()` 同步量好本章图片尺寸，注释 `:4792-4802` 明写「排版期就用真实尺寸，不再有二次重排」；`loadContentImageSizes()` 只在有未量到尺寸的新图片段时 `changed=true` 才走 100ms 防抖重排，纯文字书与含图书实测都是 `imageSizesReloaded rebuildAgain=false`。含图书（`爱情潮湿`，含 2 个 `[[EPUB_IMAGE:...]]` 段、1 章）与纯文字书（`yushen`）各测一次，结论一致：不存在由图片尺寸触发的 `onlyImageSizesChanged=true` 二次重排，故按任务 3.2「若没有触发，这一批直接标不需要做」不做等待 150ms 的改动。
+
+**与任务断言不符处（如实登记，不是「未做」）**：换章确有 2 次全量 `rebuildReaderPages()`（两次都 `onlyImages=false reuseSemantic=false`），但来源不是图片尺寸路径——实测 `imageSizesReloaded rebuildAgain=false`、无 `canvasHeightRebuild`、无 `debouncedRebuild`，且 `titleChangedRebuild` 恰好紧跟在第 2 次 rebuild 之前。链路是 `Index.selectChapter` 一次性赋多个 `@Prop`：`content` 的 `@Watch` 触发 `onReaderContentChanged()` 首排（第 1 次），`chapterTitle` 的 `@Watch` 经 `refreshDisplayChapterTitle()` 异步定稿后赋 `displayChapterTitle`，其 `@Watch` `onDisplayChapterTitleChanged()` 无条件再排一次（第 2 次）。`onChapterTitleChanged():1496-1498` 的注释已点明「两处都排就是同一章排两遍」。消除它要改标题块定稿与页表一致性，风险超出本批「图片尺寸等待」的授权范围，本批未改；真 paginate 与这 2 次 rebuild 都仍在。
+
+**主观判断（三档之一）**：设备上做 5 次换章观测，每次 `contentChanged totalMs` 为 70 / 68 / 69 / 73 / 101 ms，每次仍是 2 次全量 rebuild。**改善不明显**——换章那一帧的真 paginate（约 48~60 ms）与第 2 次 rebuild 都未被削掉。实测手数：5 次换章。
+
+**测量手法偏离**：任务要求用「滚到章末继续下滑」的手势触发。`uinput -T -g 640 2400 640 200 600 9000`（press=600）触发 `LongPressGesture` 选区菜单；改 press=500 与 `uitest uiInput swipe` 都进不了 ArkUI `PanGesture.onActionUpdate` 逐帧通道，滚不到章末。改用向 prefs 注入 `bottomActions` 打开 `prev_chapter` / `next_chapter` 按钮，点按钮走 `onTurnChapterBoundary(±1)` → `selectChapter(..., delta < 0 ? 100 : 0)`，与滚过章末是同一条 `selectChapter → onReaderContentChanged → rebuildReaderPages` 同步链路，且能覆盖场景 3 的 `initialProgress = 100` 末页定位分支。运行时确认是滚动模式（prefs `pageAnimation=3.000000`、设置面板「滚动」高亮、底部 `33.3%` 符合 `getWholeBookProgress()` 滚动分支）。
+
+**文档改判结论**：`grep -rn "顿挫\|换章\|跨章" docs/parity/TXT-READER.md docs/KNOWN-ISSUES.md` 命中的行讲的是 KI-REL1 空窗/闪烁、B8 增量分页能力、跨章边界占位页与跨章定位，没有描述「换章那一帧排版耗时」且状态因本轮改变的行；B8「增量分页 / 正文三槽 / 邻章页直接发布」等行判 `未接`，本轮未实现这些能力，状态一律不改判。按任务 4.3「没有相关行就不要硬加」不动 TXT-READER.md 表格状态列（避免破坏 parity-pipes / parity-rows），只在本文件追加本条如实记录。
+
 ## 阅读进度与章首定位
 
 本节登记 2026-11-02 修复的四个阅读缺陷：**阅读进度不落库（开书回章首）**、**目录跳章自激循环**、**带图章节图片尺寸到达后整章重排 N 次**、**折页阴影偏移疑点**。前三项已改并设备验收（见各条「验收」），第四项经比对上游源码判定**不是缺陷、不改**。
