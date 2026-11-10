@@ -35,7 +35,7 @@ import { LocalBookRestorePlanner } from './LocalBookRestorePlanner';
 import { ThemeSettingsRepository } from './ThemeSettingsRepository';
 import {
   CoverSettings, CoverSettingsRepository, copyCoverSettings,
-  coverSettingsToAndroid, applyAndroidCoverPreferences
+  coverSettingsToAndroid, applyAndroidCoverPreferences, coverColorToAndroidInt
 } from './CoverSettingsRepository';
 import { ReadRecordDetail, ReadRecordSession, ReadRecordSummary } from '../model/ReadRecord';
 import { ReadRecordRepository } from './ReadRecordRepository';
@@ -421,13 +421,58 @@ export class BackupRepository {
     'eyeProtectionSchedule', 'eyeProtectionStartTime', 'hideEmptyGroups', 'lastMarkingStyle',
     'loadCoverOnlyWifi', 'maxLengthWithNoToc', 'menuAlpha', 'moreActionsConfig',
     'mouseWheelPage', 'nextKeyCodes', 'paddingDisplayCutouts', 'pageTouchSlop',
-    'prevKeyCodes', 'progressBarBehavior', 'readBodyToLh', 'readSliderMode',
+    'prevKeyCodes', 'progressBarBehavior', 'readBodyToLh', 'read_slider_mode',
     'readingAnchorEnabled', 'selectVibrator', 'showBookIntro', 'showBookshelfFastScroller',
     'showReadTitleAddition', 'showRss', 'showSelectMenuIcon', 'sliderVibrator',
     'swipeToAddBookmark', 'system_typefaces', 'textBottomJustify', 'textFullJustify',
     'textSelectMenuConfig', 'themeMode', 'titleBarCompact', 'tocCountWords',
     'tocUiUseReplace', 'underlineExtend', 'underlinePadding', 'useDefaultCover',
     'useZhLayout'
+  ]);
+  /**
+   * 97 个本地有真值、但从不写进 config.xml 的键，对应的上游 XML 标签类型。
+   * 类型取自上游声明（PreferKey / domain-model settings 的各 Settings.kt），
+   * 不是从样本 config.xml 反推——样本那台设备有 20 个键没设过。
+   * 键集口径：四个 settings store 的 store.get/store.put 字面量键 ∩ PreferKey 去重值
+   *   ∖ 已知写出 105 键 ∖ alwaysIgnoredPreferenceKeys。
+   * 14 个颜色键本地存 "#RRGGBB" 字符串、上游是 int，这里类型标 "color"，
+   * 写出前用 coverColorToAndroidInt 转 int（单独标一种，不与 int 混用）。
+   * 本地 128 个自有键与 PreferKey 零撞名，故判据只需「在不在本表里」。
+   */
+  private static readonly missingPreferenceTypes: Map<string, string> = new Map<string, string>([
+    ['shareLayout', 'boolean'], ['hideStatusBar', 'boolean'], ['hideNavigationBar', 'boolean'],
+    ['readMenuFloatingBottomBar', 'boolean'], ['readMenuBottomBarLiquidGlassButtons', 'boolean'], ['readMenuTopBarTitleCapsule', 'boolean'],
+    ['readMenuTopBarLiquidGlassButtons', 'boolean'], ['readMenuTopBarMergeButtons', 'boolean'], ['showTitleBarIcons', 'boolean'],
+    ['readMenuFloatingIconLiquidGlass', 'boolean'], ['readBarStyleFollowPage', 'boolean'], ['showMenuIcon', 'boolean'],
+    ['volumeKeyPage', 'boolean'], ['keyPageOnLongPress', 'boolean'], ['noAnimScrollPage', 'boolean'],
+    ['selectText', 'boolean'], ['bookInfoFollowCoverColor', 'boolean'], ['enableBlur', 'boolean'],
+    ['enableProgressiveBlur', 'boolean'], ['useFlexibleTopAppBar', 'boolean'], ['mergeTopBarActions', 'boolean'],
+    ['showStatusBar', 'boolean'], ['swipeAnimation', 'boolean'], ['disableSplicedColumnGroupCornerRadius', 'boolean'],
+    ['overrideBaseCardCornerRadius', 'boolean'], ['overrideBaseCardBorder', 'boolean'], ['enableItemDivider', 'boolean'],
+    ['enableContainerBackgroundImage', 'boolean'], ['showHome', 'boolean'], ['showDiscovery', 'boolean'],
+    ['showBottomView', 'boolean'], ['useFloatingBottomBar', 'boolean'], ['useFloatingBottomBarLiquidGlass', 'boolean'],
+    ['autoReadSpeed', 'int'], ['readMenuBottomCornerRadius', 'int'], ['readMenuBottomBarBlurMode', 'int'],
+    ['readMenuBottomBarBlurStyle', 'int'], ['readMenuBlurAlpha', 'int'], ['titleBarIconStyle', 'int'],
+    ['readMenuTopBarBlurMode', 'int'], ['readMenuTopBarBlurStyle', 'int'], ['readBarStyle', 'int'],
+    ['readMenuColorMode', 'int'], ['readMenuBgColor', 'color'], ['readMenuBgColorNight', 'color'],
+    ['readMenuContainerColor', 'color'], ['readMenuContainerColorNight', 'color'], ['readMenuAccentColor', 'color'],
+    ['readMenuAccentColorNight', 'color'], ['readMenuBorderWidth', 'int'], ['readMenuBorderColor', 'color'],
+    ['readMenuBorderColorNight', 'color'], ['readMenuBlurRadius', 'int'], ['readMenuTextColor', 'color'],
+    ['readMenuTextColorNight', 'color'], ['readMenuBlurColor', 'color'], ['readMenuBlurColorNight', 'color'],
+    ['titleBarIconPosition', 'int'], ['containerOpacity', 'int'], ['backgroundImageBlurring', 'int'],
+    ['backgroundImageNightBlurring', 'int'], ['topBarBlurRadius', 'int'], ['bottomBarBlurRadius', 'int'],
+    ['topBarBlurAlpha', 'int'], ['bottomBarBlurAlpha', 'int'], ['topBarOpacity', 'int'],
+    ['bottomBarOpacity', 'int'], ['fontScale', 'int'], ['baseCardBorderColorNight', 'color'],
+    ['itemDividerColor', 'color'], ['readMenuLensRadius', 'float'], ['bottomBarLensRadius', 'float'],
+    ['baseCardCornerRadius', 'float'], ['baseCardBorderWidth', 'float'], ['itemDividerWidth', 'float'],
+    ['itemDividerLength', 'float'], ['titleBarMode', 'string'], ['readMenuPaletteStyle', 'string'],
+    ['bookInfoNetworkCoverBackground', 'string'], ['bookInfoDefaultCoverBackground', 'string'], ['topBarButtonStyle', 'string'],
+    ['screenOrientation', 'string'], ['largeContainerBackgroundImageLight', 'string'], ['largeContainerBackgroundImageDark', 'string'],
+    ['itemBackgroundImageLight', 'string'], ['itemBackgroundImageDark', 'string'], ['defaultHomePage', 'string'],
+    ['mainNavigationOrder', 'string'], ['labelVisibilityMode', 'string'], ['appFontPath', 'string'],
+    ['readBrightnessMode', 'string'], ['readBrightnessControlPosition', 'string'], ['backgroundImage', 'string'],
+    ['backgroundImageNight', 'string'], ['keep_light', 'string'], ['titleBarCustomIcons', 'string'],
+    ['readMenuCustomIcons', 'string']
   ]);
   private static readonly preferenceKeysByCategory: AndroidPreferenceKeyGroups = {
     // 与上游 BackupConfig.kt:197-262 的 readPrefKeys 逐键一致（60 个）。
@@ -754,7 +799,7 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfSearchActionDirectToSearch', `${bookshelfLayout.bookshelfSearchActionDirectToSearch}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showBookshelfFastScroller', `${bookshelfLayout.showBookshelfFastScroller}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'auto_refresh', `${bookshelfLayout.autoRefreshBook}`);
-        configText = BackupRepository.upsertAndroidPreference(configText, 'string', 'bookshelfSelectedGroupId', `${bookshelfLayout.saveTabPosition}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'long', 'bookshelfSelectedGroupId', `${bookshelfLayout.saveTabPosition}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelf_layout_landscape', `${bookshelfLayout.bookshelfLayoutModeLandscape}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutGridLandscape', `${bookshelfLayout.bookshelfLayoutGridLandscape}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfLayoutListLandscape', `${bookshelfLayout.bookshelfLayoutListLandscape}`);
@@ -936,10 +981,11 @@ export class BackupRepository {
           configText, 'int', 'bookmarkBadgeSize', `${Math.max(0, Math.min(50, Math.round(settings.bookmarkBadgeSize)))}`);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'bookmarkBadgeImage', settings.bookmarkBadgeImage);
-        // 上游 readSliderMode / pageTouchSlop 不在 BackupConfig.readPrefKeys 忽略清单里，
-        // 属于「无条件随 config.xml 备份」的键，这里按同样口径导出。
+        // 上游 PreferKey.read_slider_mode（带下划线）/ pageTouchSlop 不在
+        // BackupConfig.readPrefKeys 忽略清单里，属于「无条件随 config.xml 备份」的键，
+        // 这里按同样口径导出。本地 preferences 内部字段仍叫 readSliderMode，不改键名。
         configText = BackupRepository.upsertAndroidPreference(
-          configText, 'string', 'readSliderMode', settings.readSliderMode === '1' ? '1' : '0');
+          configText, 'string', 'read_slider_mode', settings.readSliderMode === '1' ? '1' : '0');
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'pageTouchSlop', `${Math.max(0, Math.min(1000, Math.round(settings.pageTouchSlop)))}`);
         configText = BackupRepository.upsertAndroidPreference(
@@ -1035,6 +1081,19 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'showRss', themeSnapshot.showRss ? 'true' : 'false');
         BackupRepository.writeTextFile(configPath, configText);
+      }
+      // 本地真值补写：97 个本地有真值、但历史白名单从不写出的键，按上游 PreferKey
+      // 声明的 XML 类型写进 config.xml。必须排在透传之前——透传缓存里可能存着同一键的旧值，
+      // 本地改了设置后本地值必须赢（两处判据已额外排除 missingPreferenceTypes）。
+      // 整段 try/catch：读 preferences 失败只记日志，不拖垮整次备份（与 loadIgnoreLists 同姿态）。
+      if (!ignoredCategories.includes('readConfig')) {
+        try {
+          let missingText = fileIo.readTextSync(configPath);
+          missingText = await BackupRepository.applyMissingPreferences(context, missingText);
+          BackupRepository.writeTextFile(configPath, missingText);
+        } catch (error) {
+          console.error(`[BackupRepository] 补写 config.xml 本地真值键失败，已跳过: ${error}`);
+        }
       }
       // 透传：copyPreservedEntries 带进来的 config.xml 里，凡是本地读不懂的键，
       // 这次原样写回去，避免「从 Android 恢复 → 本地备份 → 上游键全丢」。
@@ -1872,7 +1931,7 @@ export class BackupRepository {
       const value = BackupRepository.readXmlBoolean(`${directory}/config.xml`, key);
       if (value !== undefined) { values.set(key, value.toString()); }
     }
-    const saveTabPositionValue = BackupRepository.readXmlString(`${directory}/config.xml`, 'bookshelfSelectedGroupId');
+    const saveTabPositionValue = BackupRepository.readXmlLong(`${directory}/config.xml`, 'bookshelfSelectedGroupId');
     if (saveTabPositionValue !== undefined) { values.set('bookshelfSelectedGroupId', saveTabPositionValue); }
     if (unconditionalIntro !== undefined) { values.set('showBookIntro', unconditionalIntro.toString()); }
     return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
@@ -2218,8 +2277,10 @@ export class BackupRepository {
         ? 'chapter' : 'page',
       readSliderMode: (() => {
         // 备份里没有这个键就保留当前值，有则按 "1"/"0" 归一
+        // readConfig.json 通道字段仍叫 readSliderMode（本地既有口径不动，且
+        // toAndroidReadConfig 本就不写该字段）；config.xml 里上游键名是 read_slider_mode。
         const rawMode = BackupRepository.readJsonString(selected, 'readSliderMode') ??
-          BackupRepository.readXmlString(`${directory}/config.xml`, 'readSliderMode');
+          BackupRepository.readXmlString(`${directory}/config.xml`, 'read_slider_mode');
         if (rawMode === undefined) { return current.readSliderMode; }
         return rawMode === '1' ? '1' : '0';
       })(),
@@ -2947,7 +3008,9 @@ export class BackupRepository {
     }
     let result = xml;
     cached.forEach((entry: XmlPreferenceEntry, key: string) => {
-      if (!BackupRepository.writtenPreferenceKeys.has(key) && !excludedKeys.has(key)) {
+      // 本地真值键由 applyMissingPreferences（排在透传之前）写出，透传缓存旧值必须让位。
+      if (!BackupRepository.writtenPreferenceKeys.has(key) &&
+        !BackupRepository.missingPreferenceTypes.has(key) && !excludedKeys.has(key)) {
         result = BackupRepository.upsertXmlPreference(result, key, entry);
       }
     });
@@ -2980,13 +3043,59 @@ export class BackupRepository {
     const merged: Map<string, XmlPreferenceEntry> = new Map<string, XmlPreferenceEntry>(existing);
     let added = 0;
     parsed.forEach((entry: XmlPreferenceEntry, key: string) => {
-      if (!BackupRepository.writtenPreferenceKeys.has(key) && !excludedKeys.has(key)) {
+      // 本地真值键由 applyMissingPreferences（排在透传之前）写出，透传缓存旧值必须让位。
+      if (!BackupRepository.writtenPreferenceKeys.has(key) &&
+        !BackupRepository.missingPreferenceTypes.has(key) && !excludedKeys.has(key)) {
         if (!existing.has(key)) { added += 1; }
         merged.set(key, entry);
       }
     });
     await BackupRepository.savePassthrough(context, merged);
     return added;
+  }
+
+  /**
+   * 补写本地有真值、但历史白名单从不写进 config.xml 的 97 个键，按上游 PreferKey 声明的
+   * XML 标签类型落标签。用 preferences.getAll() 一次拿四个 store 的全量，判据只有
+   * 「这个键在不在 missingPreferenceTypes 里」——本地自有键与 PreferKey 零撞名，天然不在表里。
+   * 顺序上排在透传之前：透传缓存里可能存着同一键的旧值，本地改了设置后本地值必须赢。
+   */
+  private static async applyMissingPreferences(context: Context, xml: string): Promise<string> {
+    const storeNames: string[] = [
+      'legado_reader_settings', 'legado_theme', 'legado_bookshelf_layout', 'legado_cover_settings'
+    ];
+    const allValues: Map<string, Object> = new Map<string, Object>();
+    for (let index = 0; index < storeNames.length; index++) {
+      const store = await preferences.getPreferences(context, storeNames[index]);
+      const loaded = await store.getAll();
+      const record = loaded as Record<string, Object>;
+      const keys = Object.keys(record);
+      for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+        const key = keys[keyIndex];
+        allValues.set(key, record[key]);
+      }
+    }
+    let result = xml;
+    BackupRepository.missingPreferenceTypes.forEach((declaredType: string, key: string) => {
+      const value = allValues.get(key);
+      let textValue: string | undefined = undefined;
+      if (typeof value === 'boolean') {
+        textValue = value ? 'true' : 'false';
+      } else if (typeof value === 'number') {
+        // float 保留小数，int/long 取整；颜色键是字符串，不会走到这里。
+        textValue = declaredType === 'float' ? String(value) : String(Math.round(value));
+      } else if (typeof value === 'string') {
+        // 14 个颜色键本地是 '#RRGGBB'、上游是 int，用与封面键相同的转换。
+        textValue = declaredType === 'color' ? String(coverColorToAndroidInt(value)) : value;
+      }
+      // 值缺失或非 string/boolean/number 时跳过（本地没改过就允许不写出）。
+      if (textValue !== undefined) {
+        const type = declaredType === 'color' ? 'int' : declaredType;
+        const entry: XmlPreferenceEntry = { type: type, value: textValue };
+        result = BackupRepository.upsertXmlPreference(result, key, entry);
+      }
+    });
+    return result;
   }
 
   private static mergeAndroidBookshelf(existingJson: string, importedJson: string): string {
@@ -3164,7 +3273,7 @@ export class BackupRepository {
 
   private static upsertAndroidPreference(
     xml: string,
-    type: 'boolean' | 'int' | 'float' | 'string',
+    type: 'boolean' | 'int' | 'float' | 'string' | 'long',
     key: string,
     value: string
   ): string {
@@ -3189,6 +3298,19 @@ export class BackupRepository {
       .exec(text)?.[1];
     if (valueMatch === undefined) { return undefined; }
     return valueMatch.toLowerCase() === 'true';
+  }
+
+  /**
+   * 读回 <long name="K" value="V" /> 的原始文本，不做数值转换（本地 saveTabPosition 是 string）。
+   * 存量备份里若仍是旧的 <string> 标签，这里读不到，值保持本地当前值——重新备份后才有 long。
+   */
+  private static readXmlLong(path: string, key: string): string | undefined {
+    if (!fileIo.accessSync(path)) { return undefined; }
+    const text = fileIo.readTextSync(path);
+    const name = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const valueMatch = new RegExp(`<long\\b[^>]*name=["']${name}["'][^>]*value=["']([^"']*)["']`, 'i')
+      .exec(text)?.[1];
+    return valueMatch;
   }
 
   private static readXmlString(path: string, key: string): string | undefined {
