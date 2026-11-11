@@ -60,6 +60,8 @@ import { RssStarRepository } from './RssStarRepository';
 import { RssStarImporter } from './RssStarImporter';
 import { RuleSubRepository } from './RuleSubRepository';
 import { RuleSubImporter } from './RuleSubImporter';
+import { aesEcbEncryptToBase64, aesEcbDecryptFromBase64, aesEcKeyFromPassword } from './BackupCrypto';
+import { ServerRepository } from './ServerRepository';
 
 /** 上游 readRecordSession.json 的字段：words 对应本地 chapterIndex。 */
 interface AndroidReadRecordSessionRecord {
@@ -195,6 +197,10 @@ export interface RestoreResult {
   sourceSubAdded: number;
   sourceSubUpdated: number;
   sourceSubSkipped: number;
+  /** 恢复服务器配置的新增、覆盖和跳过数量（按 id 判重）。 */
+  serverAdded: number;
+  serverUpdated: number;
+  serverSkipped: number;
 }
 
 interface AndroidBookBackupRecord {
@@ -729,6 +735,11 @@ export class BackupRepository {
     await store.flush();
   }
 
+  /**
+   * 生成本地备份：先生成 ZIP 到缓存，再由系统 picker 拷到用户选的位置。
+   * 「生成」与「picker」分离，是为了让 WebDAV 备份复用同一份归档（见 buildBackupArchive）。
+   * 用户取消 picker 时返回 false，不抛异常。
+   */
   static async createBackup(
     context: Context,
     books: Book[],
@@ -739,9 +750,52 @@ export class BackupRepository {
     paletteIndex: number,
     customTheme: CustomThemeSnapshot
   ): Promise<boolean> {
+    const zipPath = await BackupRepository.buildBackupArchive(context, books, settings,
+      bookshelfLayout, ignoredCategories, themeMode, paletteIndex, customTheme);
+    try {
+      const options = new picker.DocumentSaveOptions();
+      options.newFileNames = [`backup${BackupRepository.currentDate()}.zip`];
+      options.fileSuffixChoices = ['Legado Android 兼容备份|.zip'];
+      const uris = await new picker.DocumentViewPicker(context).save(options);
+      const uri = uris[0];
+      if (uri === undefined) { return false; }
+      const input = fileIo.openSync(zipPath, fileIo.OpenMode.READ_ONLY);
+      try {
+        const output = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+        try {
+          fileIo.copyFileSync(input.fd, output.fd);
+        } finally {
+          fileIo.closeSync(output);
+        }
+      } finally {
+        fileIo.closeSync(input);
+      }
+      return true;
+    } finally {
+      try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
+    }
+  }
+
+  /**
+   * 生成 Android 兼容备份 ZIP 到缓存目录，返回其路径。
+   * 调用方负责删除返回的 zip（本地备份 picker 拷走后删、WebDAV 备份上传后删）；
+   * staging 工作目录在本方法内部清理。生成失败时未交出的临时 zip 也在这里兜底删除。
+   * 公开（非 private）以便 pages/Index.ets 的 WebDAV 备份路径直接调用。
+   */
+  static async buildBackupArchive(
+    context: Context,
+    books: Book[],
+    settings: ReaderSettingsSnapshot,
+    bookshelfLayout: BookshelfLayoutSettings,
+    ignoredCategories: string[],
+    themeMode: string,
+    paletteIndex: number,
+    customTheme: CustomThemeSnapshot
+  ): Promise<string> {
     const stagingDirectory = `${context.cacheDir}/legado-android-backup-${Date.now()}`;
     const zipPath = `${context.cacheDir}/legado-android-backup-${Date.now()}.zip`;
     BackupRepository.ensureDirectory(stagingDirectory);
+    let handedOff = false;
     try {
       await BookGroupRepository.load(context);
       await BackupRepository.copyPreservedEntries(context, stagingDirectory, ignoredCategories);
@@ -795,6 +849,25 @@ export class BackupRepository {
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/sourceSub.json`,
             RuleSubRepository.exportRules(rules));
+        }
+      }
+
+      // 服务器配置：上游 Backup.kt:220-229 是 GSON 序列化后 aes.encryptBase64 写出。
+      // 这里同样加密，但加密失败时回退写明文 —— 上游用的是
+      // aes.runCatching { encryptBase64(it) }.getOrDefault(it)，语义就是「加密环境坏了也别丢备份」。
+      // 注意：copyPreservedEntries 会先把保留目录里的旧 servers.json 拷进 staging，
+      // 这里表非空时用 writeTextFile(TRUNC) 覆盖；表空则不写，让旧密文原样带走。
+      if (!ignoredCategories.includes('server')) {
+        const servers = await ServerRepository.load(context);
+        if (servers.length > 0) {
+          const plain = ServerRepository.exportServers(servers);
+          let payload = plain;
+          try {
+            payload = aesEcbEncryptToBase64(plain, aesEcKeyFromPassword(''));
+          } catch (error) {
+            console.error(`[BackupRepository] 服务器配置加密失败，回退明文写出: ${error}`);
+          }
+          BackupRepository.writeTextFile(`${stagingDirectory}/servers.json`, payload);
         }
       }
 
@@ -1203,31 +1276,17 @@ export class BackupRepository {
         throw new Error('Android 兼容备份没有可写入条目或条目数量过多');
       }
       await zlib.compressFiles(files, zipPath, {});
-
-      const options = new picker.DocumentSaveOptions();
-      options.newFileNames = [`backup${BackupRepository.currentDate()}.zip`];
-      options.fileSuffixChoices = ['Legado Android 兼容备份|.zip'];
-      const uris = await new picker.DocumentViewPicker(context).save(options);
-      const uri = uris[0];
-      if (uri === undefined) { return false; }
-      const input = fileIo.openSync(zipPath, fileIo.OpenMode.READ_ONLY);
-      try {
-        const output = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
-        try {
-          fileIo.copyFileSync(input.fd, output.fd);
-        } finally {
-          fileIo.closeSync(output);
-        }
-      } finally {
-        fileIo.closeSync(input);
-      }
-      return true;
+      handedOff = true;
+      return zipPath;
     } finally {
       await EpubRepository.removeBackupWorkDirectory(stagingDirectory);
-      try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
+      if (!handedOff) {
+        try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
+      }
     }
   }
 
+  /** 本地选择：picker 选一个 zip 拷到缓存，再交给 prepareBackupArchive。取消返回 undefined。 */
   static async selectBackup(context: Context, currentBooks: Book[]): Promise<BackupSelection | undefined> {
     const options = new picker.DocumentSelectOptions();
     options.fileSuffixFilters = ['Legado Android 备份|.zip'];
@@ -1236,17 +1295,46 @@ export class BackupRepository {
     const uri = uris[0];
     if (uri === undefined) { return undefined; }
 
-    const stagingDirectory = `${context.cacheDir}/legado-android-restore-${Date.now()}`;
     const zipPath = `${context.cacheDir}/legado-android-restore-${Date.now()}.zip`;
+    try {
+      // 只负责把 uri 原样拷到缓存 zip；大小校验与校验失败文案统一交给 prepareBackupArchive。
+      // 拷贝阶段单独包一层，与原 selectBackup 的错误前缀「Android ZIP 备份校验失败：」对齐；
+      // prepareBackupArchive 已自带同前缀的包装，这里不再二次包装它的结果。
+      try {
+        const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+        try {
+          fileIo.copyFileSync(source.fd, zipPath);
+        } finally {
+          fileIo.closeSync(source);
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : '未知错误';
+        throw new Error(`Android ZIP 备份校验失败：${detail}`);
+      }
+      return await BackupRepository.prepareBackupArchive(context, zipPath, currentBooks);
+    } finally {
+      try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
+    }
+  }
+
+  /**
+   * 校验并解压一份已经落到本地的备份 ZIP，返回可供 restore 使用的工作目录与预览。
+   * 调用方负责删除传入的 zipPath；staging 由 restore 结束时清理（与原行为一致）。
+   */
+  static async prepareBackupArchive(
+    context: Context,
+    zipPath: string,
+    currentBooks: Book[]
+  ): Promise<BackupSelection> {
+    const stagingDirectory = `${context.cacheDir}/legado-android-restore-${Date.now()}`;
     BackupRepository.ensureDirectory(stagingDirectory);
     try {
-      const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      const source = fileIo.openSync(zipPath, fileIo.OpenMode.READ_ONLY);
       try {
         const compressedSize = fileIo.statSync(source.fd).size;
         if (compressedSize <= 0 || compressedSize > BackupRepository.maximumCompressedBytes) {
           throw new Error('ZIP 备份为空或超过 64 MB');
         }
-        fileIo.copyFileSync(source.fd, zipPath);
       } finally {
         fileIo.closeSync(source);
       }
@@ -1297,9 +1385,12 @@ export class BackupRepository {
       await EpubRepository.removeBackupWorkDirectory(stagingDirectory);
       const detail = error instanceof Error ? error.message : '未知错误';
       throw new Error(`Android ZIP 备份校验失败：${detail}`);
-    } finally {
-      try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
     }
+  }
+
+  /** WebDAV 选择：zip 已经在缓存目录，直接交给 prepareBackupArchive。 */
+  static async selectBackupFromPath(context: Context, zipPath: string, currentBooks: Book[]): Promise<BackupSelection> {
+    return await BackupRepository.prepareBackupArchive(context, zipPath, currentBooks);
   }
 
   static async restore(
@@ -1358,6 +1449,9 @@ export class BackupRepository {
     let sourceSubAdded: number = 0;
     let sourceSubUpdated: number = 0;
     let sourceSubSkipped: number = 0;
+    let serverAdded: number = 0;
+    let serverUpdated: number = 0;
+    let serverSkipped: number = 0;
     // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
     // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
     let restoredThemeConfigCount: number = 0;
@@ -1486,6 +1580,42 @@ export class BackupRepository {
         sourceSubUpdated += outcome.updated;
         sourceSubSkipped += parsed.skipped + outcome.skipped;
         // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === 'servers.json') {
+        const text = fileIo.readTextSync(sourcePath).trim();
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复服务器配置`);
+        }
+        // 上游 Restore.kt:301-316 的判据：先看是不是 JSON 数组，不是就当密文解。
+        // 顺序不能反 —— 明文数组拿去解密会抛异常，密文拿去 JSON.parse 会失败。
+        let plain = text;
+        let decryptFailed = false;
+        if (!plain.startsWith('[')) {
+          try {
+            plain = aesEcbDecryptFromBase64(plain, aesEcKeyFromPassword(''));
+          } catch (error) {
+            decryptFailed = true;
+            console.error(`[BackupRepository] servers.json 解密失败（可能是设过备份密码的包）: ${error}`);
+          }
+        }
+        if (decryptFailed) {
+          // 解不开不等于文件坏了：样本以外的真实备份常常设了密码。
+          // 只归档、不报错、不动库，原文留在 android-backup-entries 里，
+          // 下次备份会原样带走，用户回 Android 端仍能读出。
+          await fileIo.copyFile(sourcePath, targetPath);
+          preservedEntryCount += 1;
+          serverSkipped += 1;
+          continue;
+        }
+        const parsed = ServerRepository.parseServers(plain);
+        await ServerRepository.load(context);
+        const outcome = await ServerRepository.importServers(context, parsed.servers);
+        serverAdded += outcome.added;
+        serverUpdated += outcome.updated;
+        serverSkipped += parsed.skipped + outcome.skipped;
         await fileIo.copyFile(sourcePath, targetPath);
         preservedEntryCount += 1;
         continue;
@@ -1863,7 +1993,10 @@ export class BackupRepository {
       rssStarSkipped: rssStarSkipped,
       sourceSubAdded: sourceSubAdded,
       sourceSubUpdated: sourceSubUpdated,
-      sourceSubSkipped: sourceSubSkipped
+      sourceSubSkipped: sourceSubSkipped,
+      serverAdded: serverAdded,
+      serverUpdated: serverUpdated,
+      serverSkipped: serverSkipped
     };
   }
 
@@ -3631,7 +3764,7 @@ export class BackupRepository {
     return value.split('\n').filter((item: string) => options.includes(item));
   }
 
-  private static currentDate(): string {
+  static currentDate(): string {
     const date = new Date();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');

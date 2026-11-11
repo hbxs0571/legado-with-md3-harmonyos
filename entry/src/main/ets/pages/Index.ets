@@ -34,6 +34,8 @@ import { AppTranslationSettingsPage } from './AppTranslationSettingsPage';
 import { AppPrivacySettingsPage } from './AppPrivacySettingsPage';
 import { AppLabSettingsPage } from './AppLabSettingsPage';
 import { AppBackupSettingsPage } from './AppBackupSettingsPage';
+import { WebDavSettings, defaultWebDavSettings, WebDavConfigStore, isWebDavConfigured } from '../lib/WebDavConfig';
+import { WebDavSync } from '../lib/WebDavSync';
 import { PrivacyNoticePage } from './PrivacyNoticePage';
 import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
@@ -531,6 +533,9 @@ struct Index {
   @State backupIgnoreKeys: string[] = [];
   @State restoreIgnoreKeys: string[] = [];
   @State backupCategoryOptions: BackupCategoryOption[] = BackupRepository.categoryOptionsList();
+  @State webDavSettings: WebDavSettings = defaultWebDavSettings();
+  @State webDavTesting: boolean = false;
+  @State webDavBackupNames: string[] = [];
   @State onboardingLoaded: boolean = false;
   @State onboardingComplete: boolean = false;
   /**
@@ -701,6 +706,7 @@ struct Index {
     this.restoreTxtTocRules(context);
     this.restoreBookContentProcesses(context);
     this.restoreBackupIgnoreLists(context);
+    this.restoreWebDavSettings(context);
     this.loadRestoredAndroidEntries(context);
   }
 
@@ -3734,6 +3740,11 @@ struct Index {
     this.restoreIgnoreKeys = options.restore;
   }
 
+  /** WebDAV 设置随启动恢复，与备份忽略列表一样是独立 fire-and-forget 的 preferences 读取。 */
+  private async restoreWebDavSettings(context: Context): Promise<void> {
+    this.webDavSettings = await WebDavConfigStore.load(context);
+  }
+
   private async persistReaderSettings(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
@@ -5315,15 +5326,138 @@ struct Index {
     if (context === undefined || this.backupBusy) { return; }
     this.backupBusy = true;
     this.backupStatusMessage = '';
+    let zipPath = '';
+    let savedLocally = false;
     try {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const settings = await ReaderSettingsRepository.load(context);
       const bookshelfLayout = await BookshelfLayoutRepository.load(context);
-      const created = await BackupRepository.createBackup(context, localBooks, settings, bookshelfLayout, this.backupIgnoreKeys, this.themeMode, this.themePaletteIndex, this.themeCustomColors);
-      this.backupStatusMessage = created ? 'Android 兼容 ZIP 已保存到你选择的位置。' : '';
+      zipPath = await BackupRepository.buildBackupArchive(context, localBooks, settings,
+        bookshelfLayout, this.backupIgnoreKeys, this.themeMode, this.themePaletteIndex, this.themeCustomColors);
+      const options = new picker.DocumentSaveOptions();
+      options.newFileNames = [`backup${BackupRepository.currentDate()}.zip`];
+      options.fileSuffixChoices = ['Legado Android 兼容备份|.zip'];
+      const uris = await new picker.DocumentViewPicker(context).save(options);
+      const uri = uris[0];
+      if (uri !== undefined) {
+        const input = fileIo.openSync(zipPath, fileIo.OpenMode.READ_ONLY);
+        try {
+          const output = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+          try {
+            fileIo.copyFileSync(input.fd, output.fd);
+          } finally {
+            fileIo.closeSync(output);
+          }
+        } finally {
+          fileIo.closeSync(input);
+        }
+        savedLocally = true;
+        this.backupStatusMessage = 'Android 兼容 ZIP 已保存到你选择的位置。';
+      }
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `创建备份失败：${error.message}` : '创建备份失败';
     } finally {
+      if (zipPath.length > 0) {
+        // 先本地后 WebDAV：本地 picker 可能被取消，反过来先传远端会留下「远端有、本地没有」的备份。
+        // 同步模式 both 且已配置凭据时，本地成功后顺手上传同一份 zip；未配置则静默跳过，
+        // 避免每次本地备份都弹一条「账号或密码为空」的失败提示。
+        if (savedLocally && this.webDavSettings.backupSyncMode === 'both' &&
+          isWebDavConfigured(this.webDavSettings)) {
+          try {
+            await WebDavSync.uploadBackup(context, zipPath, `backup${BackupRepository.currentDate()}.zip`);
+          } catch (error) {
+            // 上游 Backup.kt:322 的 both 分支同样只记日志、不外抛：本地成功不该被 WebDAV 失败判为失败。
+            console.error(`[Index] WebDAV 上传失败: ${error}`);
+            this.backupStatusMessage = `${this.backupStatusMessage} WebDAV 上传失败：${error instanceof Error ? error.message : String(error)}`;
+          }
+        }
+        try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[Index] 清理临时 zip 失败: ${error}`); }
+      }
+      this.backupBusy = false;
+    }
+  }
+
+  private async saveWebDavSettings(next: WebDavSettings): Promise<void> {
+    this.webDavSettings = next;
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      await WebDavConfigStore.save(context, next);
+    } catch (error) {
+      this.showUnavailableAction(`WebDAV 设置保存失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async testWebDav(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || this.webDavTesting) { return; }
+    this.webDavTesting = true;
+    try {
+      const result = await WebDavSync.test(context);
+      this.showUnavailableAction(result.message);
+      if (result.ok) {
+        this.webDavBackupNames = await WebDavSync.listBackups(context);
+      }
+    } catch (error) {
+      this.showUnavailableAction(`WebDAV 测试失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.webDavTesting = false;
+    }
+  }
+
+  private async backupToWebDav(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || this.backupBusy) { return; }
+    this.backupBusy = true;
+    this.backupStatusMessage = '';
+    let zipPath = '';
+    try {
+      const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
+      const settings = await ReaderSettingsRepository.load(context);
+      const bookshelfLayout = await BookshelfLayoutRepository.load(context);
+      zipPath = await BackupRepository.buildBackupArchive(context, localBooks, settings,
+        bookshelfLayout, this.backupIgnoreKeys, this.themeMode, this.themePaletteIndex, this.themeCustomColors);
+      const fileName = `backup${BackupRepository.currentDate()}.zip`;
+      await WebDavSync.uploadBackup(context, zipPath, fileName);
+      this.backupStatusMessage = `已上传 ${fileName} 到 WebDAV。`;
+    } catch (error) {
+      this.backupStatusMessage = error instanceof Error ? `上传 WebDAV 失败：${error.message}` : '上传 WebDAV 失败';
+    } finally {
+      if (zipPath.length > 0) {
+        try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[Index] 清理临时 zip 失败: ${error}`); }
+      }
+      this.backupBusy = false;
+    }
+  }
+
+  private async restoreFromWebDav(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || this.backupBusy) { return; }
+    this.backupBusy = true;
+    this.backupStatusMessage = '';
+    this.backupPreview = undefined;
+    this.pendingBackup = undefined;
+    let zipPath = '';
+    try {
+      const latest = await WebDavSync.latestBackup(context);
+      if (latest === undefined) {
+        this.backupStatusMessage = 'WebDAV 上没有找到备份文件。';
+        return;
+      }
+      zipPath = `${context.cacheDir}/legado-webdav-restore-${Date.now()}.zip`;
+      await WebDavSync.downloadBackup(context, latest.name, zipPath);
+      const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
+      const selection = await BackupRepository.selectBackupFromPath(context, zipPath, localBooks);
+      this.pendingBackup = selection;
+      // 预览卡渲染依赖 backupPreview（:151），必须和 selectLocalBackup 一样同时设。
+      this.backupPreview = selection.preview;
+      this.backupStatusMessage = `已下载 ${latest.name}，请确认预览后导入。`;
+    } catch (error) {
+      this.backupStatusMessage = error instanceof Error ? `从 WebDAV 恢复失败：${error.message}` : '从 WebDAV 恢复失败';
+    } finally {
+      if (zipPath.length > 0) {
+        try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[Index] 清理临时 zip 失败: ${error}`); }
+      }
       this.backupBusy = false;
     }
   }
@@ -5573,6 +5707,11 @@ struct Index {
       if (aGroupRssStar.length > 0) { details.push(aGroupRssStar); }
       const aGroupSourceSub = this.describeG2RuleRestore('规则订阅', result.sourceSubAdded, result.sourceSubUpdated, result.sourceSubSkipped);
       if (aGroupSourceSub.length > 0) { details.push(aGroupSourceSub); }
+      const serverSummary = this.describeG2RuleRestore(
+        '服务器配置', result.serverAdded, result.serverUpdated, result.serverSkipped);
+      if (serverSummary.length > 0) {
+        details.push(serverSummary);
+      }
       this.backupStatusMessage = details.length > 0
         ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
@@ -8408,13 +8547,21 @@ struct Index {
             restoreIgnoreKeys: this.restoreIgnoreKeys,
             statusMessage: this.backupStatusMessage,
             busy: this.backupBusy,
+            webDavSettings: this.webDavSettings,
+            webDavTesting: this.webDavTesting,
+            webDavConfigured: isWebDavConfigured(this.webDavSettings),
+            webDavBackupNames: this.webDavBackupNames,
             onCreateBackup: () => this.createLocalBackup(),
             onSelectRestore: () => this.selectLocalBackup(),
             onApplyRestore: () => this.restoreLocalBackup(),
             onCancelRestore: () => this.cancelLocalBackupRestore(),
             onToggleBackupIgnore: (key: string, ignored: boolean) => this.toggleBackupIgnore(key, ignored),
             onToggleRestoreIgnore: (key: string, ignored: boolean) => this.toggleRestoreIgnore(key, ignored),
-            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            onWebDavSettingsChange: (settings: WebDavSettings) => this.saveWebDavSettings(settings),
+            onTestWebDav: () => this.testWebDav(),
+            onBackupToWebDav: () => this.backupToWebDav(),
+            onRestoreFromWebDav: () => this.restoreFromWebDav()
           })
         } else if (this.profileSubpage === ProfileRoute.APP_LAB_SETTINGS) {
           AppLabSettingsPage({

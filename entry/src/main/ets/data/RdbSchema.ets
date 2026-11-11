@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6。 */
-  static readonly version: number = 6;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7。 */
+  static readonly version: number = 7;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -508,6 +508,24 @@ export class RdbSchema {
     'PRIMARY KEY(`id`)' +
     ')';
 
+  // 第七批（server 类）：servers.json 的 AES 往返需要落库；无外键依赖，追加在末尾即可。
+  // id 不加 AUTOINCREMENT：上游由客户端 System.currentTimeMillis() 生成，恢复备份要保留原值，
+  // 重新分配会让同一台设备的多条记录互相覆盖。config 不带 NOT NULL：上游是 String?，null 表示尚未配置。
+  static readonly createServers: string =
+    'CREATE TABLE IF NOT EXISTS `servers` (' +
+    '`id` INTEGER NOT NULL, ' +
+    "`name` TEXT NOT NULL DEFAULT '', " +
+    '`type` INTEGER NOT NULL DEFAULT 0, ' +
+    '`config` TEXT, ' +
+    '`sortNumber` INTEGER NOT NULL DEFAULT 0, ' +
+    "`sourceJson` TEXT NOT NULL DEFAULT '', " +
+    'PRIMARY KEY(`id`)' +
+    ')';
+
+  static readonly createServersSortIndex: string =
+    'CREATE INDEX IF NOT EXISTS `index_servers_sortNumber` ' +
+    'ON `servers` (`sortNumber`)';
+
   /** 全部建表语句，按依赖顺序排列。 */
   private static readonly allStatements: string[] = [
     RdbSchema.createBookmarks,
@@ -549,7 +567,10 @@ export class RdbSchema {
     RdbSchema.createBookSources,
     RdbSchema.createRssSources,
     RdbSchema.createRssStars,
-    RdbSchema.createRuleSubs
+    RdbSchema.createRuleSubs,
+    // 第七批（server 类）：无外键依赖，追加在末尾即可
+    RdbSchema.createServers,
+    RdbSchema.createServersSortIndex
   ];
 
   /**
