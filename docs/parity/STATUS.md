@@ -77,7 +77,7 @@
 | `highlightRule` | `highlightRule.json` | ✓ | ✓ | 等价（类别级） | **零行** |
 | `highlightTagRule` | `highlightTagRule.json` | ✓ | ✓ | 等价（类别级） | 批 3 接通：建表 `RdbSchema.ets:394`、写出 `BackupRepository.ets:926`、恢复具名分支 `:1637`、`RestoreResult` 计数 `:168`；真包往返见下方「批 3」节（原 [书籍总账](BOOKSHELF.md) B = **1 行** 仍是界面盘点，读写以本节代码与往返证据为准） |
 | `tagGroupRule` | `tagGroupRule.json` | ✓ | ✓ | 等价（类别级） | 批 3 接通：建表 `RdbSchema.ets:404`、写出 `BackupRepository.ets:935`、恢复具名分支 `:1655`、`RestoreResult` 计数 `:172`；真包往返见下方「批 3」节（原 [书籍总账](BOOKSHELF.md) A3 = **4 行** 仍是界面盘点，读写以本节代码与往返证据为准） |
-| `server` | `servers.json` | ✗ | ✗ | 未接 | **零行** |
+| `server` | `servers.json` | ✓ | ✓ | 等价（类别级） | **零行**（界面级盘点尚未建块）。读写：建表 `RdbSchema.ets:514`、写出 `BackupRepository.ets:860`（AES 加密）、恢复具名分支 `:1587`、`RestoreResult` 计数 `:201`；设备侧真包往返未做，仅主机等价复现，见下方「WebDAV 与 `server` 类」节 |
 | `readConfig` | `readConfig.json`、`shareReadConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（60 键） | [阅读配置总账](READER-CONFIG.md) A–G = **189 行**（176 已接 / 11 `未接` / 2 不适用）；11 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#阅读配置行登记reader-configmd-的未接行) 逐条登记；另 [书籍总账](BOOKSHELF.md) A2 1 / D4 1 |
 | `themeConfig` | `themeConfig.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（53 键） | [深色模式总账](ZIP-THEME.md) A 46 / B 12 / D 1 / E 7 / F 6 = **72 行**（已接 64 / `未接` 6 / 不适用 2）。r300–r316 十七批的逐批落地过程与每行改判理由见 [深色模式总账](ZIP-THEME.md) 的「盘面」节，本节只记结果。剩余 6 行均已判「不接」（A3 Miuix 动态取色、A7 主题引擎切换、A18 平板界面、A19 多窗布局、E7 提醒 intent 链路、A23 作者搜索回退），判「不接」不删行不改状态，仍按 `未接` 计。另 [阅读配置总账](READER-CONFIG.md) F = **7 行**（护眼字段，阅读设置页那一套） |
 | `coverConfig` | `coverRule.json`、`config.xml` | ✓ | ✓ | 类别级等价，键级不等价（14 键） | [封面设置总账](ZIP-COVER.md) A 18 / B 15 / C 9 / D 18 / E 6 = **66 行**（58 已接 / 6 `未接` / 2 不适用，r330 建表、r334 实现段收口、C8 于 2026-11-09 改判 `已接`；接触面 83 个 `.kt` 全部已分配）。6 条 `未接` 已在 [已知问题](../KNOWN-ISSUES.md#封面配置行登记zip-covermd-的未接行) 按 KI-COVER1..9 逐行登记。旧关键词 `backupIgnoreCoverConfig\|"coverConfig"` 只命中 3 个文件，本轮换成 14 词组合式后接触面 3 → 83，该类别此前记「零行」正是自证成功的结果 |
@@ -120,14 +120,20 @@
 
 ### 原判 `—`、现改判 `✗` 的一类（2026-11-11 收口；`httpTTS` 与 A 组四类已接通，见上表）
 
-`bookSource`、`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server` 六类此前判 `—`，依据是[项目队列](../PROJECT.md)的「范围之外」。**2026-11-09 起，在线书源抓取、RSS 拉取、TTS 服务、WebDAV 已移出「范围之外」**，改列入 `PROJECT.md` 的「在线服务（已纳入范围，尚未排期）」一节，因此六类都不再具备判 `—` 的依据，按 `docs/PARITY-RULES.md` 第三节「一条依据都写不出，就不能判不适用——降级为未接」降级为 `✗`。其中 **`httpTTS` 随后已在批 1–3 接通数据层读写**（写出 `BackupRepository.ets:1187`/`:1196`，恢复 `:1556` → `HttpTtsRepository.importSources` + `ReadAloudVoiceRepository.replaceHttpVoices`），两列已改判 `✓`；**A 组四类（`bookSource`、`rssSource`、`rssStar`、`sourceSub`）已在 2026-11-11 接通数据层读写**（建表 `RdbSchema.ets:462`-`:499`、写出 `BackupRepository.ets:772`/`:780`/`:788`/`:796`、恢复具名分支 `:1421`/`:1439`/`:1457`/`:1475`），四行读 / 写 / 忽略项三列已改判 `✓ | ✓ | 等价（类别级）`，见上表。故本节只覆盖剩下的 `server` 一类（另四类的数据层已在 A 组接通，见上表）：
+`bookSource`、`rssSource`、`rssStar`、`sourceSub`、`httpTTS`、`server` 六类此前判 `—`，依据是[项目队列](../PROJECT.md)的「范围之外」。**2026-11-09 起，在线书源抓取、RSS 拉取、TTS 服务、WebDAV 已移出「范围之外」**，改列入 `PROJECT.md` 的「在线服务（已纳入范围，尚未排期）」一节，因此六类都不再具备判 `—` 的依据，按 `docs/PARITY-RULES.md` 第三节「一条依据都写不出，就不能判不适用——降级为未接」降级为 `✗`。其中 **`httpTTS` 随后已在批 1–3 接通数据层读写**（写出 `BackupRepository.ets:1187`/`:1196`，恢复 `:1556` → `HttpTtsRepository.importSources` + `ReadAloudVoiceRepository.replaceHttpVoices`），两列已改判 `✓`；**A 组四类（`bookSource`、`rssSource`、`rssStar`、`sourceSub`）已在 2026-11-11 接通数据层读写**（建表 `RdbSchema.ets:462`-`:499`、写出 `BackupRepository.ets:772`/`:780`/`:788`/`:796`、恢复具名分支 `:1421`/`:1439`/`:1457`/`:1475`），四行读 / 写 / 忽略项三列已改判 `✓ | ✓ | 等价（类别级）`，见上表。**六类现已全部接通数据层读写**：`httpTTS` 见「批 1–3」节，A 组四类（`bookSource`、`rssSource`、`rssStar`、`sourceSub`）见 2026-11-11 记录，`server` 见下方「WebDAV 与 `server` 类」节。本节不再有「读写仍 ✗」的类别。
 
-- **读 / 写**：两侧都 `✗`，条目只经 `copyPreservedEntries` 原样归档，本地没有对应原生仓储可落（`servers.json` 是 AES 密文，本地零解密能力）。
-- **忽略项**：判 `未接`。`categoryOptions` 里虽然登记了 `server` 的类别键名（勾选后确实能把条目挡在保留目录之外），但该类没有原生功能可落，门控「跳过的是什么」无从等价——按上节「三档取值」的口径，这类只能记 `未接`，等读写接通后回填。
-- **涉及行**：`bookSource` 的 24 行归 [书籍总账](BOOKSHELF.md)（读写已接，界面明细仍零行），其余四类中 `rssSource` / `rssStar` / `sourceSub` 读写已接、界面明细零行，`server` 读写未接、零行。**零行不等于不做**：`server` 的界面块要等排期后按 `docs/PARITY-RULES.md` 的盘点单位（整个界面）重新建块，届时行数会从 0 涨起来。
+### WebDAV 与 `server` 类（2026-11-11 接通）
+
+- **读 / 写**：两侧都 `✓`。`servers.json` 是 AES-128-ECB 密文，key 取 md5(备份密码) 的十六进制串前 16 个 ASCII 字符，空密码即 `d41d8cd98f00b204`；本地已能解密、解析成 `Server` 数组并落 `servers` 表，写出侧反向加密。**密码固定按空串处理**——本地没有「备份密码」入口，设过密码的包解不开，走归档兜底（见下条）。
+- **忽略项**：改判 `等价（类别级）`。`categoryOptions` 里 `server` 的勾选现在确实能挡掉一个会落库的类别，与上游 `dbIsNotIgnored(server)` 的语义一致。
+- **涉及行**：`bookSource` 的 24 行归 [书籍总账](BOOKSHELF.md)（读写已接，界面明细仍零行），其余四类中 `rssSource` / `rssStar` / `sourceSub` 读写已接、界面明细零行，`server` 读写已接、界面明细仍零行。**零行不等于不做**：`server` 的界面块要等排期后按 `docs/PARITY-RULES.md` 的盘点单位（整个界面）重新建块，届时行数会从 0 涨起来。
 - **`httpTTS` 已不在此列**：批 1–3 之前它只写 `httpTtsVoices.json` 的空数组 `[]`（`!accessSync` 才写，避免覆盖透传的真音色），那只是占位；批 1–3 补出源与音色两个方向的真实解析与仓储写入后，两列已改判 `✓`，不再是「归档保留」。
 
-**归档保留不等于功能兼容**：`server` 的条目仍会随备份往返，但本地既不解析也不应用，恢复后用户看不到任何效果。
+**能解开不等于能连上**：`server` 条目恢复后是 `servers` 表里的数据行，本地没有任何界面读取它——WebDAV 备份用的是设置页里手填的账号密码（`web_dav_*` 键），不读这张表。也就是说，从 Android 恢复过来的服务器配置**不会自动变成可用的 WebDAV 配置**。这是有意的：上游 `Server` 表的 `config` 字段里存的是用户存过的凭据，自动拿来联网属于「静默使用归档中的凭据」，与 `docs/PROJECT.md` 的「凭据按不可信数据对待」相冲突。
+
+**设过备份密码的包仍然只能归档**：本地没有「备份密码」入口（见 [已知问题](../KNOWN-ISSUES.md)），解密一律按空密码试；解不开时不抛错，条目原样进保留目录并在恢复提示里计一条「服务器配置跳过 N 条」。
+
+验证口径：`servers.json` 的 AES 往返已由主机等价脚本跑通，设备侧 `servers` 表 / `index_servers_sortNumber` 索引 / `user_version=7` 已实跑确认；**设备侧 ZIP 真包往返与 WebDAV 联网自测本轮未做**，故本节不填「真包往返」证据行。
 
 ### 判 `?` 的四类与 `themeConfig` 写的复核
 

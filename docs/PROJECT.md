@@ -24,13 +24,13 @@
 ## 在线服务（已纳入范围，尚未排期）
 
 在线书源抓取、RSS 拉取、TTS 服务、WebDAV 属于本项目范围之内，但排在上面 6 项本地链路之后，**尚未排期**。
-纳入范围只表示「要做」，不表示「已经做了」：截至本文件更新时尚无任何一项落地，页面上相关入口仍显示未迁移占位。
-排期时的顺序建议取「在线书源抓取 → TTS 服务 → RSS 拉取 → WebDAV 备份」，理由是书源是阅读链路的直接上游，TTS 与阅读器耦合最紧，RSS 相对独立，WebDAV 只服务备份。
+纳入范围只表示「要做」，不表示「已经做了」：截至本文件更新时 **WebDAV 备份已落地**（上传、下载、远端列表与凭据设置，走 `rcp`，见 `entry/src/main/ets/lib/WebDav.ets`），在线书源抓取、RSS 拉取、TTS 服务三项仍未排期，页面上相关入口仍是未迁移占位。
+WebDAV 备份已落地（2026-11-11）；在线书源抓取 → TTS 服务 → RSS 拉取 三项仍未排期，理由是书源是阅读链路的直接上游，TTS 与阅读器耦合最紧，RSS 相对独立。
 
 ### 落地前提（四项共用）
 
-- **网络层从零起**：`entry/src/main/ets` 下 `@ohos.net.http` / `@kit.NetworkKit` / `http.createHttp` 目前**零命中**，ArkWeb 零命中，`module.json5` 的 `requestPermissions` 零项。四项都先要一层带超时、重试、并发上限与 Cookie 的 HTTP 客户端。
-- **凭据按不可信数据对待**：备份里带的脚本与凭据照旧不执行、不连接外部服务；用户输入的账号密码要落到本机凭据存储，不进备份明文。
+- **网络层**：`rcp`（RemoteCommunicationKit）已引入并落地在 `lib/WebDav.ets`，但它只覆盖 WebDAV 动词，书源/RSS 需要的通用 HTTP（重试、并发上限、Cookie）仍未建，`@ohos.net.http` 也可以直接用于这两项。
+- **凭据按不可信数据对待**：备份里带的脚本与凭据照旧不执行、不连接外部服务；用户输入的账号密码要落到本机凭据存储，不进备份明文。WebDAV 账号密码目前明文存 preferences，属已知限制。
 - **API 基线不变**：四项都可以在 `5.0.0(12)` 上做，不需要抬 `compatibleSdkVersion`。
 - **每项都要有独立的收发证明**：能抓一本书的目录与正文、能播一段 TTS、能拉到一篇文章、能备份并还原一次，才算接完。
 
@@ -41,7 +41,7 @@
 | 在线书源抓取 | `model/webBook/`（6 个 `.kt`，`WebBook.kt` 509 行）、`service/`（13 个） | 网络层、书源规则解析（JS/正则）、书源管理页（现为 162 行空壳，5 处 `onUnavailableAction` 调用，`pages/ProfileSubPages.ets:25`-`:186`） |
 | TTS 服务 | `HttpReadAloudService.kt` 等朗读链路 15 个文件 | 网络层、音频播放、前台服务；阅读器侧入口现有 8 处「朗读播放尚未迁移」占位 |
 | RSS 拉取 | `model/rss/`（3 个 `.kt`，`Rss.kt` 160 行） | 网络层、订阅源管理与筛选（现有 4 处「订阅源筛选尚未迁移」占位） |
-| WebDAV | 12 个文件名含 `webdav` 的 `.kt`（按内容计则 62 个），含 `WebDavBackupRepository.kt` | 网络层、备份包上传/下载/列举；现有 3 处「WebDAV 备份尚未迁移」占位 |
+| WebDAV | 12 个文件名含 `webdav` 的 `.kt`（按内容计则 62 个），含 `WebDavBackupRepository.kt` | **已无缺口**（2026-11-11 落地）：lib/WebDav.ets + lib/WebDavSync.ets + lib/WebDavConfig.ets，设置页 `onUnavailableAction` 从 14 处降到 3 处（清掉 11 处调用，保留旧版数据导入、备份目录两处与属性声明本身） |
 
 ## 范围之外
 

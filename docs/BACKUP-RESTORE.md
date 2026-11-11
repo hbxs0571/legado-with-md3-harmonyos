@@ -39,7 +39,7 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 | `readRecordDetail.json` | 313 | `readConfig.json` | 12 |
 | `readRecordSession.json` | 39376 | `shareReadConfig.json` | 96 键（对象） |
 | `themeConfig.json` | 8 | `config.xml` | 20132 字节 / 370 个偏好项 |
-| `servers.json` | 空文件（非 JSON） | | |
+| `servers.json` | AES-128-ECB 密文的 base64 文本（空列表时为 `bF6sxj5FCEbxFyh1WJYCrQ==`） | | |
 
 **这个样本缺 9 个条目**：`bookMarking.json`、`rssStar.json`、`sourceSub.json`、`homepageModules.json`、`highlightRule.json`、`highlightTagRule.json`、`tagGroupRule.json`、`coverRule.json`、`directLinkUploadRule.json`。所以凡属这 9 类的「待往返验收」都不能拿本样本当完成依据——要么另找一份带这些条目的备份，要么在设备上先造数据再导出。
 
@@ -69,7 +69,7 @@ TXT 目录规则使用根级 `txtTocRule.json`，其字段为 `chapterRule`、`v
 
 Android 归档中的 `readRecord.json`、`readRecordDetail.json` 与 `readRecordSession.json` **已映射进原生三层仓储**：恢复侧 `entry/src/main/ets/data/BackupRepository.ets:1710`/`:1711`/`:1718`/`:1720` 具名解析出三份 pending 数据，主循环末尾 `:1748`-`:1749` 交给 `ReadRecordRepository.restoreFromBackup(context, …)`，函数体在 `entry/src/main/ets/data/ReadRecordRepository.ets:1069`，在 `store.beginTransaction()` 内按「取较长时间、较晚时间」合并写库。**注意区分两件事**：以上是「ZIP 导入」；本机旧格式记录（`legado_read_time_records` 的扁平 `records` 键）的搬迁是另一条路，已在 r283 接进 `RdbMigration` 第三批，两者不是同一件事。
 
-TTS、WebDAV 服务、在线书源抓取、RSS 抓取和查词业务均不随本轮自动启动。WebDAV 服务器凭据需要单独解决解密密钥和跨设备安全；服务端配置条目的存在不表示可迁移服务。
+TTS、WebDAV 服务、在线书源抓取、RSS 抓取和查词业务均不随本轮自动启动。WebDAV 备份的上传、下载与远端列表已落地，凭据由用户在备份设置页手填、存在本机 preferences（明文，见已知问题）；`servers.json` 里的服务器配置能解密落库，但**不会被自动用来联网**，也不会自动变成可用的 WebDAV 配置。
 
 归档中出现书源、RSS、在线朗读源、服务端或键盘规则，不代表相关业务已经接入。细节和当前状态见 [进度摘要](PROGRESS.md) 与 [验证记录](VALIDATION.md)。
 
@@ -148,19 +148,20 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 | 25 | `highlightRule` | 高亮规则 | `highlightRule.json` | **样本缺** | 规则模型、`highlightRules` 表、正则匹配、分页/滚动两渲染 | **已接入**：N 端双向验证通过；合并语义，与上游 `replaceAll` 不同 | ZIP 映射已验 |
 | 26 | `highlightTagRule` | 标签规则 | `highlightTagRule.json` | **样本缺** | 列表页与编辑页有壳（`pages/ProfileSubPages.ets:2309` `HighlightTagRulesPage`、`:2533` `HighlightTagRuleEditPage`），界面未接线；数据层有 `highlight_tag_rules` 表与 `HighlightTagRuleRepository` | **已接入（数据层，批 3）**：恢复 `:1637` → `HighlightTagRuleRepository.importRules`，写出 `:926` | 安全兼容 |
 | 27 | `tagGroupRule` | 标签分组规则 | `tagGroupRule.json` | **样本缺** | 无独立界面；数据层有 `tag_group_rules` 表与 `TagGroupRuleRepository` | **已接入（数据层，批 3）**：恢复 `:1655` → `TagGroupRuleRepository.importRules`，写出 `:935` | 安全兼容 |
-| 28 | `server` | 服务器配置 | `servers.json` | 空文件 | WebDAV/服务端同步未迁移 | **仅归档**：数据不透明，不尝试解密或连接 | 安全兼容；WebDAV 业务候选 |
+| 28 | `server` | 服务器配置 | `servers.json` | AES 密文 | 数据层有 `servers` 表与 `ServerRepository`；WebDAV 备份的上传/下载/列举已落地，但用的是设置页手填的账号，不读这张表 | **已接入（数据层）**：恢复解密后 `ServerRepository.importServers`（按 `id` 合并），写出反向加密；空密码解不开时归档兜底。不自动使用归档中的凭据 | 安全兼容 |
 
 **统计（五档，合计 28）**：
 
 | 档位 | 类数 | 类别 |
 | --- | --- | --- |
-| 已接入 | **18** | `themeMode`、`bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule`、`showRss`、`readRecord`、`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule`、`bookSource`、`rssSource`、`rssStar`、`sourceSub` |
+| 已接入 | **19** | `themeMode`、`bookmark`、`bookGroup`、`replaceRule`、`txtTocRule`、`highlightRule`、`showRss`、`readRecord`、`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`highlightTagRule`、`tagGroupRule`、`bookSource`、`rssSource`、`rssStar`、`sourceSub`、`server` |
 | 部分接入 | **5** | `localBook`、`readConfig`、`themeConfig`、`coverConfig`、`bookshelfLayout` |
 | 未接入（本地有页面或概念，ZIP 键读写都没接） | **2** | `threadCount`、`mangaConfig` |
 | 不适用（上游有、本地按规约判无对应依据） | **2** | `searchHistory`、`keyboardAssists` |
-| 仅归档 | **1** | `server` |
 
-「未接入」与「仅归档」的区别：前者本地有页面或概念、只是键值没接；后者连本地功能都没有，条目仅原样归档。两者对 Android 用户的实际结果一样 —— 换到 HarmonyOS 后这些设置不生效。`不适用` 是第三件事：不是「没做」，而是按 [盘点规约](./PARITY-RULES.md) 第三节判过、上游行为在本地没有对应依据。
+28 类里现在没有落在「仅归档」档的类别——`server` 于 2026-11-11 接通数据层读写后，最后一类也出了这一档。
+
+「未接入」与「仅归档」的区别（「仅归档」现已无类别，定义保留以备将来新条目）：前者本地有页面或概念、只是键值没接；后者连本地功能都没有，条目仅原样归档。两者对 Android 用户的实际结果一样 —— 换到 HarmonyOS 后这些设置不生效。`不适用` 是第三件事：不是「没做」，而是按 [盘点规约](./PARITY-RULES.md) 第三节判过、上游行为在本地没有对应依据。
 
 **与 r257 旧版的差异**：旧版 18 行用的全是中文功能名（「书架、书籍元数据与进度」「通用偏好设置」「替换净化规则」），新版改用代码键名。两版的数据没有丢，只是切法变了，对应关系如下：
 
@@ -254,7 +255,7 @@ if (settings.bookshelfShowTag && kindList.isNotEmpty())
 
 **三、「零行」是「还没盘」，不是「已完成」，也不是「本地没有这个功能」。**
 
-[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 11 类标为**零行**，分两种：**整个界面级盘点零行** 3 类（`server`、`highlightRule`、`mangaConfig`）；**读写已接通、只是界面明细尚未盘点** 8 类（`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`showRss`、`rssSource`、`rssStar`、`sourceSub`，单元格里写的是「明细仍零行」）。`bookmark`、`themeConfig`、`coverConfig` 各自归 [书签对照](parity/ZIP-BOOKMARK.md) A–E（83 行）、[阅读配置总账](parity/READER-CONFIG.md) F、[封面设置总账](parity/ZIP-COVER.md)（66 行）盘点，不计入本清单；`replaceRule`（6 行）、`txtTocRule`（5 行）、`themeMode`（19 行）已随总账逐轮复核补出行数，同样不在本清单里。（2026-11-09 复核：此前记的是「16 类零行」，把上述三类与 `searchHistory`、`keyboardAssists`（现判不适用、理由已写）一并算了进去。） （2026-11-10 批 1 补记：`threadCount` / `mangaConfig` 现经 `config.xml` 未知键透传原样往返，属备份链路等价、不新增界面明细，故 `mangaConfig` 仍留在「整个界面级盘点零行」3 类内、不出列，`threadCount` 仍归 [书籍总账](parity/BOOKSHELF.md) A2 的 1 行、本就不在本清单。）
+[ZIP 兼容总账](parity/STATUS.md) 的「涉及行」列有 11 类标为**零行**，分两种：**整个界面级盘点零行** 3 类（`server`、`highlightRule`、`mangaConfig`）；**读写已接通、只是界面明细尚未盘点** 8 类（`httpTTS`、`dictRule`、`homepageModules`、`homepageCustomSets`、`showRss`、`rssSource`、`rssStar`、`sourceSub`，单元格里写的是「明细仍零行」）。`bookmark`、`themeConfig`、`coverConfig` 各自归 [书签对照](parity/ZIP-BOOKMARK.md) A–E（83 行）、[阅读配置总账](parity/READER-CONFIG.md) F、[封面设置总账](parity/ZIP-COVER.md)（66 行）盘点，不计入本清单；`replaceRule`（6 行）、`txtTocRule`（5 行）、`themeMode`（19 行）已随总账逐轮复核补出行数，同样不在本清单里。（2026-11-09 复核：此前记的是「16 类零行」，把上述三类与 `searchHistory`、`keyboardAssists`（现判不适用、理由已写）一并算了进去。） （2026-11-10 批 1 补记：`threadCount` / `mangaConfig` 现经 `config.xml` 未知键透传原样往返，属备份链路等价、不新增界面明细，故 `mangaConfig` 仍留在「整个界面级盘点零行」3 类内、不出列，`threadCount` 仍归 [书籍总账](parity/BOOKSHELF.md) A2 的 1 行、本就不在本清单。） （`server` 的读写已于 2026-11-11 接通，零行只表示界面明细尚未盘点，不是「没做」。）
 
 派这类活时，正确做法是先用 `bash scripts/upstream-surface.sh <类别键名> <上游根>` 取出上游接触面清单，按「盘点单位是界面」（[盘点规约](PARITY-RULES.md)第二节）新开块，**不要**让执行方拿「表里没有这一行」当成「本地没有这个功能」或「已兼容」。
 
