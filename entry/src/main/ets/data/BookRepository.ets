@@ -3,6 +3,7 @@ import { preferences, relationalStore } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { Book, BookChapter, BookMediaType, bookCoverColor, bookCoverMark } from '../model/Book';
+import { AppLog } from '../lib/AppLog';
 import { EpubRepository } from './EpubRepository';
 import { LocalTextSemantics } from './LocalTextSemantics';
 import { LocalTextReSegmenter } from './LocalTextReSegmenter';
@@ -259,7 +260,7 @@ export class BookRepository {
     try {
       return !fileIo.accessSync(book.contentPath);
     } catch (error) {
-      console.error(`[BookRepository] 检查正文文件是否存在失败: ${error}`);
+      AppLog.put(`[BookRepository] 检查正文文件是否存在失败: ${error}`);
       return true;
     }
   }
@@ -354,7 +355,7 @@ export class BookRepository {
       if (hex.length < 24) { return hex; }
       return hex.substring(8, 24);
     } catch (error) {
-      console.error(`[BookRepository] 计算内容摘要失败: ${error}`);
+      AppLog.put(`[BookRepository] 计算内容摘要失败: ${error}`);
       return '';
     }
   }
@@ -487,7 +488,7 @@ return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, max
       try {
         fileIo.unlinkSync(contentPath);
       } catch (error) {
-        console.error(`[BookRepository] 删除损坏的正文文件失败: ${error}`);
+        AppLog.put(`[BookRepository] 删除损坏的正文文件失败: ${error}`);
       }
       if (error instanceof Error) { throw error; }
       throw new Error('读取 TXT 文件失败');
@@ -507,7 +508,7 @@ private static parseGroupNames(value: string): string[] {
       return parsed.filter((name: string) => typeof name === 'string' && name.trim().length > 0)
         .map((name: string) => name.trim());
     } catch (error) {
-      console.error(`[BookRepository] 解析分组名失败: ${error}`);
+      AppLog.put(`[BookRepository] 解析分组名失败: ${error}`);
       return [];
     }
   }
@@ -517,7 +518,7 @@ private static isGroupNamesField(value: string | undefined): boolean {
       const parsed: string[] = JSON.parse(decodeURIComponent(value ?? ''));
       return Array.isArray(parsed) && parsed.every((name: string) => typeof name === 'string');
     } catch (error) {
-      console.error(`[BookRepository] 判断分组名字段失败: ${error}`);
+      AppLog.put(`[BookRepository] 判断分组名字段失败: ${error}`);
       return false;
     }
   }

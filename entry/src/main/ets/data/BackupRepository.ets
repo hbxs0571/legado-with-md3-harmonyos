@@ -941,6 +941,7 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGroupListStyle', `${bookshelfLayout.bookshelfGroupListStyle}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGroupCoverCount', `${bookshelfLayout.bookshelfGroupCoverCount}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfRefreshingLimit', `${bookshelfLayout.bookshelfRefreshingLimit}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'shouldShowExpandButton', `${bookshelfLayout.showBookshelfTabMenu}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
 
@@ -2209,7 +2210,7 @@ export class BackupRepository {
       if (value !== undefined) { values.set(key, value.toString()); }
     }
     const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow', 'bookshelfTitleCenter', 'bookshelfTitleSmallFont',
-      'bookshelfLayoutCompact', 'bookshelfShowDivider', 'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSearchActionDirectToSearch', 'showBookshelfFastScroller', 'auto_refresh'];
+      'bookshelfLayoutCompact', 'bookshelfShowDivider', 'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSearchActionDirectToSearch', 'showBookshelfFastScroller', 'auto_refresh', 'shouldShowExpandButton'];
     for (let index = 0; index < booleanKeys.length; index++) {
       const key = booleanKeys[index];
       if (key === undefined) { continue; }

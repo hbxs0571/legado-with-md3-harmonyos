@@ -5905,6 +5905,24 @@ struct Index {
   }
 
   /**
+   * 导入书单：BookshelfListTransfer 解析出的「缺正文」书目合并落库并刷新书架。
+   * 与 importLocalBook 的区别是这些条目没有正文文件，只落一条书目记录。
+   */
+  private async importBookList(books: Book[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const booksToSave = [...this.books, ...books]
+      .filter((item: Book) => BookRepository.isPersistableBook(item));
+    try {
+      await BookRepository.saveImportedBooks(context, booksToSave);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '书单落库失败');
+      return;
+    }
+    this.books = [...this.books, ...books];
+  }
+
+  /**
    * 重新识别书架里所有本地 TXT 的目录，对应上游书架的「更新目录」。
    *
    * 导入时选中的章节正则会固定在 Book.tocRule 上，规则调整后已有书的目录不会变，
@@ -7059,6 +7077,7 @@ struct Index {
           onOpenBookInfo: (book: Book) => this.openBookInfo(book),
           onSearch: () => this.openSearch(),
           onImportBook: () => this.importLocalBook(),
+          onImportBookList: (books: Book[]) => this.importBookList(books),
           onRefreshToc: () => this.refreshAllToc(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })

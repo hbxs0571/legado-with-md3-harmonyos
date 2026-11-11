@@ -111,6 +111,8 @@ export class BookshelfLayoutRepository {
         store, 'bookshelfGroupCoverCount', settings.bookshelfGroupCoverCount);
       settings.bookshelfRefreshingLimit = await BookshelfLayoutRepository.readInt(
         store, 'bookshelfRefreshingLimit', settings.bookshelfRefreshingLimit);
+      settings.showBookshelfTabMenu = await BookshelfLayoutRepository.readBoolean(
+        store, 'shouldShowExpandButton', settings.showBookshelfTabMenu);
     } catch (_) {
       // 读失败时保持默认值：书架能用比抛错中断启动更重要。
     }
@@ -165,6 +167,7 @@ export class BookshelfLayoutRepository {
       await store.put('bookshelfGroupListStyle', snapshot.bookshelfGroupListStyle);
       await store.put('bookshelfGroupCoverCount', snapshot.bookshelfGroupCoverCount);
       await store.put('bookshelfRefreshingLimit', snapshot.bookshelfRefreshingLimit);
+      await store.put('shouldShowExpandButton', snapshot.showBookshelfTabMenu);
       await store.flush();
       BookshelfLayoutRepository.cached = copyBookshelfLayout(snapshot);
       BookshelfLayoutRepository.loaded = true;
@@ -264,6 +267,8 @@ export class BookshelfLayoutRepository {
     if (bookshelfGroupCoverCount !== undefined) { merged.bookshelfGroupCoverCount = bookshelfGroupCoverCount; }
     const bookshelfRefreshingLimit = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfRefreshingLimit'));
     if (bookshelfRefreshingLimit !== undefined) { merged.bookshelfRefreshingLimit = bookshelfRefreshingLimit; }
+    const shouldShowExpandButton = BookshelfLayoutRepository.parseAndroidBoolean(values.get('shouldShowExpandButton'));
+    if (shouldShowExpandButton !== undefined) { merged.showBookshelfTabMenu = shouldShowExpandButton; }
     return merged;
   }
 
@@ -310,6 +315,7 @@ export class BookshelfLayoutRepository {
     values.set('bookshelfGroupListStyle', `${settings.bookshelfGroupListStyle}`);
     values.set('bookshelfGroupCoverCount', `${settings.bookshelfGroupCoverCount}`);
     values.set('bookshelfRefreshingLimit', `${settings.bookshelfRefreshingLimit}`);
+    values.set('shouldShowExpandButton', `${settings.showBookshelfTabMenu}`);
     return values;
   }
 

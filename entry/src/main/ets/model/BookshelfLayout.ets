@@ -86,6 +86,8 @@ export interface BookshelfLayoutSettings {
   showBookIntro: boolean;
   /** 批量更新数量限制，0 为不限制。对应上游 PreferKey 字符串值 bookshelfRefreshingLimit。 */
   bookshelfRefreshingLimit: number;
+  /** 页签栏右端分组管理按钮是否显示。上游键名 shouldShowExpandButton，默认 true。 */
+  showBookshelfTabMenu: boolean;
 }
 
 /** 下拉选项的通用结构。 */
@@ -176,6 +178,7 @@ export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   bookshelfGroupCoverCount: 4,
   showBookIntro: false,
   bookshelfRefreshingLimit: 0,
+  showBookshelfTabMenu: true,
 };
 
 /** 按值取文案，未知值返回空串由调用方兜底。 */
@@ -227,5 +230,6 @@ export function copyBookshelfLayout(settings: BookshelfLayoutSettings): Bookshel
     bookshelfGroupCoverCount: settings.bookshelfGroupCoverCount,
     showBookIntro: settings.showBookIntro,
     bookshelfRefreshingLimit: settings.bookshelfRefreshingLimit,
+    showBookshelfTabMenu: settings.showBookshelfTabMenu,
   };
 }
