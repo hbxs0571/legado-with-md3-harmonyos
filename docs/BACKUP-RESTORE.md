@@ -17,12 +17,12 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 
 ## 测试样本
 
-本机有一份真实的 Android 备份，用作 ZIP 往返验收的样本。**文件名与条数公开，样本文件本身不入库、不上传**——它含真实书目与阅读记录，只留本机。
+本机有两份真实的 Android 备份，是同一批数据两个时间点的导出，用作 ZIP 往返验收的样本。**文件名与条数公开，样本文件本身不入库、不上传**——它含真实书目与阅读记录，只留本机。
 
-- 压缩包：`测试/backup2026-10-22.zip`（3.0 MB）
-- 解压目录：`测试/backup2026-10-22/`（21 个条目，逐条已核对）
+- 压缩包：`测试/backup.zip`（2026-11-11，3,086,209 字节，**优先用它**）与 `测试/backup2026-10-22.zip`（2026-10-22，3,051,437 字节）
+- 解压目录：`测试/backup2026-10-22/`（21 个条目，逐条已核对）；`backup.zip` 的条目集合与之完全相同
 - 位置：与仓库根同级目录 `测试/`；`.gitignore` 已含 `*.zip` / `*.epub`，`git ls-files` 查不到任何样本
-- 导出时间：2026-10-22；解压时间 2026-10-27
+- 导出时间：2026-10-22 与 2026-11-11；前者解压于 2026-10-27
 - 同目录另有 3 本测试书（TXT 3.8 MB、EPUB 5.2 MB、TXT 116 KB），可作本地导入测试书；文件名同样不入库
 
 **样本内容与条数**（2026-10-30 逐条统计）：
@@ -41,9 +41,13 @@ HarmonyOS 工程读取 Android ZIP 备份时，按归档数据处理，不把导
 | `themeConfig.json` | 8 | `config.xml` | 20132 字节 / 370 个偏好项 |
 | `servers.json` | AES-128-ECB 密文的 base64 文本（空列表时为 `bF6sxj5FCEbxFyh1WJYCrQ==`） | | |
 
-**这个样本缺 9 个条目**：`bookMarking.json`、`rssStar.json`、`sourceSub.json`、`homepageModules.json`、`highlightRule.json`、`highlightTagRule.json`、`tagGroupRule.json`、`coverRule.json`、`directLinkUploadRule.json`。所以凡属这 9 类的「待往返验收」都不能拿本样本当完成依据——要么另找一份带这些条目的备份，要么在设备上先造数据再导出。
+**两份包的差异**（2026-11-11 实测）：条目集合一致，只有四个条目与 `config.xml` 变了——`readRecord.json` 575 → 580、`readRecordDetail.json` 313 → 330、`readRecordSession.json` 39376 → 41629、`txtTocRule.json` 40 → 41，`config.xml` 370 → 372 个偏好项（新增 `read_aloud_capsule_offset_x`、`read_aloud_capsule_offset_y`）。`bookSource.json`、`themeConfig.json`、`readConfig.json` 三份逐字节相同。**上表按 2026-10-22 那份记**，用新包时以新数字为准。
 
-`config.xml` 的 370 个偏好项里，本地真正读写的只有一部分。**写出侧 105 个去重键**（`upsertAndroidPreference` 共 92 处调用：91 处字面量键 + `:1092` 一处 `coverSettingsToAndroid` 循环覆盖 14 键），分段如下：无条件区 5 键（`BackupRepository.ets:825`-`:829`，`bookGroupStyle`、`hideEmptyGroups`、`showBookIntro`、`coverRestrictRatio`、`explore_filter_state`）、`bookshelfLayout` 段 37 键（门控 `:832`，`:834`-`:870`）、`readConfig` 段 41 键（门控 `:972`，`:974`-`:1082`）、`coverConfig` 段 14 键（门控 `:1089`，`coverSettingsToAndroid` 循环 `:1092`）、`themeConfig` 护眼 6 键（`:1107`-`:1118`）、`themeMode` 1 键（`:1128`）、`showRss` 1 键（`:1137`）。**读入侧 137 个去重键**（`readXmlInteger` / `readXmlBoolean` / `readXmlString` / `readXmlFloat` 字面量键 85 个 + `bookshelfLayout` 键组 39 键（25 整型 + 13 布尔 + 1 长整型）+ `coverConfig` 键组 14 键），其中 32 键只在读入侧出现（`readStyleSelect`、`shareLayout`、`readMenuIcon*`、`progressBarBehavior`、`tocUiUseReplace`、`tocCountWords`、`clickImgWay`、9 个 `clickAction*`、`paragraphSpacing`、`lineSpacingExtra`、`hideStatusBar`、`hideNavigationBar`，另加 `textBold`/`textItalic`/`textShadow`/`shadow*`/`underline*`/`dottedLine` 等写进 readConfig.json 的字段），写出侧 105 键**全部**在读入侧有对应读取（不存在单向键）；`shadowRadius`、`shadowDx`、`shadowDy`、`dottedBase`、`dottedRatio` 五个 float 键走「先 `readJsonNumber`（readConfig.json）后 `readXmlFloat`（config.xml）兜底」的双路读法（`:2261`-`:2266`、`:2408`-`:2413`）。读写并集 **137 键**。其余键既不读也不写，恢复时随 `copyPreservedEntries` 原样归档。这就是「ZIP 里有 370 项、本地只认其中一部分」的直接来源，逐类缺口见下文 28 类清单。（2026-11-09 复核：原文先记「写出侧 69 键、`bookshelfLayout` 段 13 键、读入侧 75 键」，后改记「读入侧 132 键、另有 5 键只在写出侧」，两版都与代码不符。2026-11-11 按工作区 3640 行版本重测：`upsertAndroidPreference` 共 92 处调用（91 处字面量键 + `:1092` 一处循环覆盖 14 键），加 `coverSettingsToAndroid` 的 14 键去重后**写出 105 键**；`readXml*` 共 90 处调用（85 处字面量键 + `:2075`/`:2083`/`:2117`/`:2120`/`:2123` 五处变量键），加 `bookshelfLayout` 键组 39 键（`:2066`-`:2072` 的 25 整型 + `:2078`-`:2080` 的 13 布尔 + `:2086` 的 `bookshelfSelectedGroupId`）与 `coverConfig` 键组 14 键去重后**读入 137 键**；只在读入侧的 32 键已在上文列全，只在写出侧的 0 键。）
+两份的 `bookshelf.json` 里 `bookUrl` 全是 Android 侧来源（`content://`、`data:`、在线书源 URL），没有本地应用导入书才用的 `local-` 命名——**验收走的是真实的 Android 数据往返，不是自己导自己**。
+
+**两份样本都缺这 9 个条目**：`bookMarking.json`、`rssStar.json`、`sourceSub.json`、`homepageModules.json`、`highlightRule.json`、`highlightTagRule.json`、`tagGroupRule.json`、`coverRule.json`、`directLinkUploadRule.json`。所以凡属这 9 类的「待往返验收」都不能拿本样本当完成依据——要么另找一份带这些条目的备份，要么在设备上先造数据再导出。
+
+`config.xml` 的 370 个偏好项里（2026-11-11 那份是 372），本地真正读写的只有一部分。**写出侧 105 个去重键**（`upsertAndroidPreference` 共 92 处调用：91 处字面量键 + `:1092` 一处 `coverSettingsToAndroid` 循环覆盖 14 键），分段如下：无条件区 5 键（`BackupRepository.ets:825`-`:829`，`bookGroupStyle`、`hideEmptyGroups`、`showBookIntro`、`coverRestrictRatio`、`explore_filter_state`）、`bookshelfLayout` 段 37 键（门控 `:832`，`:834`-`:870`）、`readConfig` 段 41 键（门控 `:972`，`:974`-`:1082`）、`coverConfig` 段 14 键（门控 `:1089`，`coverSettingsToAndroid` 循环 `:1092`）、`themeConfig` 护眼 6 键（`:1107`-`:1118`）、`themeMode` 1 键（`:1128`）、`showRss` 1 键（`:1137`）。**读入侧 137 个去重键**（`readXmlInteger` / `readXmlBoolean` / `readXmlString` / `readXmlFloat` 字面量键 85 个 + `bookshelfLayout` 键组 39 键（25 整型 + 13 布尔 + 1 长整型）+ `coverConfig` 键组 14 键），其中 32 键只在读入侧出现（`readStyleSelect`、`shareLayout`、`readMenuIcon*`、`progressBarBehavior`、`tocUiUseReplace`、`tocCountWords`、`clickImgWay`、9 个 `clickAction*`、`paragraphSpacing`、`lineSpacingExtra`、`hideStatusBar`、`hideNavigationBar`，另加 `textBold`/`textItalic`/`textShadow`/`shadow*`/`underline*`/`dottedLine` 等写进 readConfig.json 的字段），写出侧 105 键**全部**在读入侧有对应读取（不存在单向键）；`shadowRadius`、`shadowDx`、`shadowDy`、`dottedBase`、`dottedRatio` 五个 float 键走「先 `readJsonNumber`（readConfig.json）后 `readXmlFloat`（config.xml）兜底」的双路读法（`:2261`-`:2266`、`:2408`-`:2413`）。读写并集 **137 键**。其余键既不读也不写，恢复时随 `copyPreservedEntries` 原样归档。这就是「ZIP 里有 370 项、本地只认其中一部分」的直接来源，逐类缺口见下文 28 类清单。（2026-11-09 复核：原文先记「写出侧 69 键、`bookshelfLayout` 段 13 键、读入侧 75 键」，后改记「读入侧 132 键、另有 5 键只在写出侧」，两版都与代码不符。2026-11-11 按工作区 3640 行版本重测：`upsertAndroidPreference` 共 92 处调用（91 处字面量键 + `:1092` 一处循环覆盖 14 键），加 `coverSettingsToAndroid` 的 14 键去重后**写出 105 键**；`readXml*` 共 90 处调用（85 处字面量键 + `:2075`/`:2083`/`:2117`/`:2120`/`:2123` 五处变量键），加 `bookshelfLayout` 键组 39 键（`:2066`-`:2072` 的 25 整型 + `:2078`-`:2080` 的 13 布尔 + `:2086` 的 `bookshelfSelectedGroupId`）与 `coverConfig` 键组 14 键去重后**读入 137 键**；只在读入侧的 32 键已在上文列全，只在写出侧的 0 键。）
 
 阅读配置的 Android `config.xml` 映射包含 `tocUiUseReplace` 与 `tocCountWords` 两个目录偏好键；导入时仅恢复到本地阅读设置，不执行归档中的脚本或规则。该映射尚待实际 ZIP 往返验收。
 
@@ -212,7 +216,7 @@ grep -c "{ key: '" entry/src/main/ets/data/BackupRepository.ets
 1. 类别键名（如 `themeMode`）与对应 ZIP 条目（`config.xml` 的 `themeMode` 键）
 2. 本文表格里该类的「ZIP 接入」档位与「本地原生功能」现状——决定要不要先补本地页面
 3. 该类在 `config.xml` 里的键名清单（`preferenceKeysByCategory` 有的话直接指过去，没有就现列）
-4. 验收方式：**必须走真实样本 `测试\backup2026-10-22.zip` 的往返**，不是只看代码。样本缺该类条目时先造数据，别拿「代码写了」当验收
+4. 验收方式：**必须走真实样本 `测试\backup.zip`（或 `backup2026-10-22.zip`）的往返**，不是只看代码。样本缺该类条目时先造数据，别拿「代码写了」当验收
 
 **一个已知的口径陷阱**：样本 `config.xml` 有 370 个偏好项，本地写出 105 个去重键、读入 137 个去重键（口径与分段见上文「写出侧 / 读入侧」两段）。按样本逐键比对，本地写出的 105 键里 **88 个**在样本中存在、**17 个**不在；读入的 137 键里 **105 个**在样本中存在、**32 个**不在。那 17/32 个不在样本 `config.xml` 里的键分两种：17 个（`textBold`、`textItalic`、`textShadow`、`underline*`、`shadow*`、`dotted*`）在上游是 `ReadBookConfig` 的字段、走 `readConfig.json` 而不是 `config.xml` 存（`help/config/ReadBookConfig.kt:760` 的 `"textBold" to textBold` 序列化段），本地为了少一份文件把它们也写进了 `config.xml`；另 13 个（`bookmarkBadgeImage`、`moreActionsConfig`、`titleBarCompact`、`swipeToAddBookmark` 等）是上游 `PreferKey` 有定义、但该设备的 `config.xml` 里还没被写过默认值。**「`config.xml` 已接入」不等于「370 项都接了」**，派活时说清是接哪几个键。各类别的**上游键数**为：`readConfig` 60、`themeConfig` 53、`bookshelfLayout` 39、`mangaConfig` 32、`coverConfig` 14，5 类合计 198 个键（另有 `themeMode`、`showRss`、`threadCount` 三个单键类别，28 类合计 201 个键），本地实际接了不到一半。详见下节。
 
