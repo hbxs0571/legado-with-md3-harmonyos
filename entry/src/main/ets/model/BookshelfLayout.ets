@@ -88,6 +88,26 @@ export interface BookshelfLayoutSettings {
   bookshelfRefreshingLimit: number;
   /** 页签栏右端分组管理按钮是否显示。上游键名 shouldShowExpandButton，默认 true。 */
   showBookshelfTabMenu: boolean;
+  /** 是否显示书籍标签行；上游键名 bookshelfShowTag，默认 true。 */
+  bookshelfShowTag: boolean;
+  /** 标签行是否含自定义标签；上游键名 bookshelfShowCustomTags，默认 true。 */
+  bookshelfShowCustomTags: boolean;
+  /** 标签行是否含来源分类；上游键名 bookshelfShowSourceTags，默认 true。 */
+  bookshelfShowSourceTags: boolean;
+  /** 标签行是否含字数；上游键名 bookshelfShowWordCount，默认 true。 */
+  bookshelfShowWordCount: boolean;
+  /** 是否显示未读章节数；上游键名 showUnread，默认 true。 */
+  showUnread: boolean;
+  /** 是否显示更新红点（与 showUnread 耦合）；上游键名 showUnreadNew，默认 true。 */
+  showUnreadNew: boolean;
+  /** 是否显示标题级待更新数；上游键名 showWaitUpCount，默认 false。 */
+  showWaitUpCount: boolean;
+  /** 分组卡是否显示书籍计数；上游键名 showBookCount，默认 true。 */
+  showBookCount: boolean;
+  /** 是否显示最后更新时间；上游键名 showLastUpdateTime，默认 false。 */
+  showLastUpdateTime: boolean;
+  /** 是否显示书籍类型标签；上游键名 showTip，默认 false。 */
+  showTip: boolean;
 }
 
 /** 下拉选项的通用结构。 */
@@ -179,6 +199,16 @@ export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   showBookIntro: false,
   bookshelfRefreshingLimit: 0,
   showBookshelfTabMenu: true,
+  bookshelfShowTag: true,
+  bookshelfShowCustomTags: true,
+  bookshelfShowSourceTags: true,
+  bookshelfShowWordCount: true,
+  showUnread: true,
+  showUnreadNew: true,
+  showWaitUpCount: false,
+  showBookCount: true,
+  showLastUpdateTime: false,
+  showTip: false,
 };
 
 /** 按值取文案，未知值返回空串由调用方兜底。 */
@@ -231,5 +261,15 @@ export function copyBookshelfLayout(settings: BookshelfLayoutSettings): Bookshel
     showBookIntro: settings.showBookIntro,
     bookshelfRefreshingLimit: settings.bookshelfRefreshingLimit,
     showBookshelfTabMenu: settings.showBookshelfTabMenu,
+    bookshelfShowTag: settings.bookshelfShowTag,
+    bookshelfShowCustomTags: settings.bookshelfShowCustomTags,
+    bookshelfShowSourceTags: settings.bookshelfShowSourceTags,
+    bookshelfShowWordCount: settings.bookshelfShowWordCount,
+    showUnread: settings.showUnread,
+    showUnreadNew: settings.showUnreadNew,
+    showWaitUpCount: settings.showWaitUpCount,
+    showBookCount: settings.showBookCount,
+    showLastUpdateTime: settings.showLastUpdateTime,
+    showTip: settings.showTip,
   };
 }

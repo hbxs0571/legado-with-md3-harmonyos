@@ -558,7 +558,9 @@ export class BackupRepository {
       'bookshelfGroupListStyle', 'bookshelfGroupCoverCount', 'bookshelfListCoverWidth',
       'bookshelfGridCoverWidth', 'bookshelfRefreshingLimit', 'bookshelfShowIntro', 'bookshelfShowTag',
       'bookshelfShowCustomTags', 'bookshelfShowSourceTags', 'bookshelfShowWordCount',
-      'bookshelfShowLatestChapter', 'bookshelfIntroMaxLines'
+      'bookshelfShowLatestChapter', 'bookshelfIntroMaxLines',
+      'showUnread', 'showUnreadNew', 'showWaitUpCount', 'showBookCount',
+      'showLastUpdateTime', 'showTip', 'bookshelfUpdateLimit'
     ],
     mangaConfig: [
       'showMangaUi', 'mangaScrollMode', 'webtoonSidePaddingDp', 'mangaPreDownloadNum',
@@ -942,6 +944,17 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfGroupCoverCount', `${bookshelfLayout.bookshelfGroupCoverCount}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfRefreshingLimit', `${bookshelfLayout.bookshelfRefreshingLimit}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'shouldShowExpandButton', `${bookshelfLayout.showBookshelfTabMenu}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfShowTag', `${bookshelfLayout.bookshelfShowTag}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfShowCustomTags', `${bookshelfLayout.bookshelfShowCustomTags}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfShowSourceTags', `${bookshelfLayout.bookshelfShowSourceTags}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'bookshelfShowWordCount', `${bookshelfLayout.bookshelfShowWordCount}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showUnread', `${bookshelfLayout.showUnread}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showUnreadNew', `${bookshelfLayout.showUnreadNew}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showWaitUpCount', `${bookshelfLayout.showWaitUpCount}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showBookCount', `${bookshelfLayout.showBookCount}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showLastUpdateTime', `${bookshelfLayout.showLastUpdateTime}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showTip', `${bookshelfLayout.showTip}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfUpdateLimit', `${bookshelfLayout.bookshelfRefreshingLimit}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
 
@@ -2201,7 +2214,7 @@ export class BackupRepository {
       'bookGroupStyle', 'bookshelfSort', 'bookshelfSortOrder', 'bookshelfLayoutPortrait',
       'bookshelfLayoutGridPortrait', 'bookshelfLayoutListPortrait', 'bookshelfTitleMaxLines',
       'bookshelfGridCoverWidth', 'bookshelfListCoverWidth',
-      'bookshelfGridLayout', 'bookshelfCardColor', 'bookshelfCardColorDark', 'bookshelfIntroMaxLines', 'bookshelf_layout_landscape', 'bookshelfLayoutGridLandscape', 'bookshelfLayoutListLandscape', 'bookshelfFolderLayoutModePortrait', 'bookshelfFolderLayoutModeLandscape', 'bookshelfFolderLayoutGridPortrait', 'bookshelfFolderLayoutGridLandscape', 'bookshelfFolderLayoutListPortrait', 'bookshelfFolderLayoutListLandscape', 'bookshelfGroupListStyle', 'bookshelfGroupCoverCount', 'bookshelfRefreshingLimit'
+      'bookshelfGridLayout', 'bookshelfCardColor', 'bookshelfCardColorDark', 'bookshelfIntroMaxLines', 'bookshelf_layout_landscape', 'bookshelfLayoutGridLandscape', 'bookshelfLayoutListLandscape', 'bookshelfFolderLayoutModePortrait', 'bookshelfFolderLayoutModeLandscape', 'bookshelfFolderLayoutGridPortrait', 'bookshelfFolderLayoutGridLandscape', 'bookshelfFolderLayoutListPortrait', 'bookshelfFolderLayoutListLandscape', 'bookshelfGroupListStyle', 'bookshelfGroupCoverCount', 'bookshelfRefreshingLimit', 'bookshelfUpdateLimit'
     ];
     for (let index = 0; index < integerKeys.length; index++) {
       const key = integerKeys[index];
@@ -2210,7 +2223,7 @@ export class BackupRepository {
       if (value !== undefined) { values.set(key, value.toString()); }
     }
     const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow', 'bookshelfTitleCenter', 'bookshelfTitleSmallFont',
-      'bookshelfLayoutCompact', 'bookshelfShowDivider', 'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSearchActionDirectToSearch', 'showBookshelfFastScroller', 'auto_refresh', 'shouldShowExpandButton'];
+      'bookshelfLayoutCompact', 'bookshelfShowDivider', 'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSearchActionDirectToSearch', 'showBookshelfFastScroller', 'auto_refresh', 'shouldShowExpandButton', 'bookshelfShowTag', 'bookshelfShowCustomTags', 'bookshelfShowSourceTags', 'bookshelfShowWordCount', 'showUnread', 'showUnreadNew', 'showWaitUpCount', 'showBookCount', 'showLastUpdateTime', 'showTip'];
     for (let index = 0; index < booleanKeys.length; index++) {
       const key = booleanKeys[index];
       if (key === undefined) { continue; }

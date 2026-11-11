@@ -23,6 +23,8 @@ export struct BookGroupCard {
   @Prop listStyle: number = 0;
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   @Prop isNight: boolean = false;
+  /** 列表封面宽度，来自书架布局 bookshelfListCoverWidth（:187）。 */
+  @Prop listCoverWidth: number = 84;
   onOpen: () => void = () => {};
 
   /** 取前 coverCount 本作预览封面，与上游 previewBooks.take(coverCount) 一致。 */
@@ -56,8 +58,8 @@ export struct BookGroupCard {
               BookCover({
                 book: book,
                 compact: true,
-                displayWidth: 44,
-                displayHeight: 62,
+                displayWidth: Math.round(this.listCoverWidth * 44 / 84),
+                displayHeight: Math.round(this.listCoverWidth * 62 / 84),
                 cornerRadius: 4,
                 coverSettings: this.coverSettings,
                 isNight: this.isNight
@@ -75,8 +77,8 @@ export struct BookGroupCard {
             BookCover({
               book: this.books[0],
               compact: this.listStyle === 1,
-              displayWidth: this.listStyle === 1 ? 40 : 62,
-              displayHeight: this.listStyle === 1 ? 56 : 87,
+              displayWidth: this.listCoverWidth,
+              displayHeight: Math.round(this.listCoverWidth * 7 / 5),
               cornerRadius: 5,
               coverSettings: this.coverSettings,
               isNight: this.isNight

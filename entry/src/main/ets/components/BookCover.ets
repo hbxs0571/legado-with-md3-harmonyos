@@ -20,6 +20,10 @@ export struct BookCover {
   @Prop displayHeight: number = 0;
   @Prop cornerRadius: number = 7;
   @Prop showChapterBadge: boolean = false;
+  /** 未读章节数角标文字（网格卡专属，:118）。 */
+  @Prop badgeText: string = '';
+  /** 更新小红点（:119）。 */
+  @Prop showBadgeDot: boolean = false;
   /** 书封阴影，对应上游 bookshelfCoverShadow。 */
   @Prop shadowEnabled: boolean = false;
   /**
@@ -223,7 +227,8 @@ export struct BookCover {
         AppGlyph({ name: 'book', tint: '#8B90A0', glyphSize: this.coverIconSize() })
       }
       Column() {
-        if (this.showChapterBadge || BookRepository.isBodyMissing(this.book)) {
+        if (this.showChapterBadge || BookRepository.isBodyMissing(this.book)
+          || this.badgeText.length > 0 || this.showBadgeDot) {
           Row() {
             if (BookRepository.isBodyMissing(this.book)) {
               Text('缺正文').fontSize(8).fontColor('#FFE0DC')
@@ -231,7 +236,14 @@ export struct BookCover {
                 .backgroundColor('#8B3A3A').borderRadius(5)
             }
             Blank()
-            if (this.showChapterBadge && this.book.chapterCount !== undefined) {
+            if (this.badgeText.length > 0) {
+              Text(this.badgeText)
+                .fontSize(8)
+                .fontColor('#FFFFFFFF')
+                .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                .backgroundColor('#C0504D')
+                .borderRadius(5)
+            } else if (this.showChapterBadge && this.book.chapterCount !== undefined) {
               Text(this.book.chapterCount)
                 .fontSize(8)
                 .fontColor('#E6E7EC')
@@ -244,10 +256,16 @@ export struct BookCover {
         // 上下两个 Blank 把书签图标压到底部，与上游 SpaceBetween 的效果一致
         Blank()
         Blank()
-        if (this.showChapterBadge) {
+        if (this.showChapterBadge || this.showBadgeDot) {
           Row() {
-            AppGlyph({ name: 'bookmark', tint: '#C4C9D7', glyphSize: 16 })
+            if (this.showChapterBadge) {
+              AppGlyph({ name: 'bookmark', tint: '#C4C9D7', glyphSize: 16 })
+            }
             Blank()
+            if (this.showBadgeDot) {
+              Row().width(8).height(8).backgroundColor('#E5484D').borderRadius(4)
+                .margin({ right: 2 })
+            }
           }.width('100%').height(16)
         }
       }

@@ -190,6 +190,8 @@ struct Index {
   @State readerStartAtChapterBeginning: boolean = false;
   @State selectedChapter: string = '';
   @State books: Book[] = [];
+  /** 正在刷新目录的书主键集合，传给 BookshelfPage 显示更新中状态（:120）。 */
+  @State refreshingBookIds: string[] = [];
   @State bookGroups: BookGroup[] = [];
   /** 书架布局设置，与 BookshelfLayoutRepository 的持久化值保持同步。 */
   @State bookshelfLayout: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
@@ -5951,23 +5953,27 @@ struct Index {
         updatedBooks.push(book);
         continue;
       }
+      const refreshingKey = book.contentPath ?? book.androidOriginalPath ?? '';
+      this.refreshingBookIds = [...this.refreshingBookIds, refreshingKey];
       try {
         const result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
-        if (!result.changed) {
+        if (result.changed) {
+          // 目录重算会重建整份章节行；books 行本来就在，先把 chapters 表覆盖掉。
+          await BookRepository.saveChapters(context, result.book.contentPath ?? '', result.chapters);
+          updatedBooks.push(result.book);
+          updatedCount += 1;
+          if (this.selectedBook.id === result.book.id) {
+            this.selectedBook = result.book;
+          }
+        } else {
           updatedBooks.push(book);
-          continue;
-        }
-        // 目录重算会重建整份章节行；books 行本来就在，先把 chapters 表覆盖掉。
-        await BookRepository.saveChapters(context, result.book.contentPath ?? '', result.chapters);
-        updatedBooks.push(result.book);
-        updatedCount += 1;
-        if (this.selectedBook.id === result.book.id) {
-          this.selectedBook = result.book;
         }
       } catch (_) {
         // 单本书读不出来不该让整批失败，其余书照常更新。
         failedCount += 1;
         updatedBooks.push(book);
+      } finally {
+        this.refreshingBookIds = this.refreshingBookIds.filter((key: string) => key !== refreshingKey);
       }
     }
     if (updatedCount === 0 && failedCount === 0) {
@@ -6215,6 +6221,23 @@ struct Index {
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? '打开失败：' + error.message : '本地书籍文件无法读取');
       return;
+    }
+    // 打开书即清零 lastCheckCount，让「有更新」红点消失（上游 ReadBook.kt:1879）。
+    if ((openedBook.lastCheckCount ?? 0) > 0) {
+      const clearContext = this.getUIContext().getHostContext();
+      if (clearContext !== undefined) {
+        const cleared: Book = BookRepository.copyBook(openedBook);
+        cleared.lastCheckCount = 0;
+        openedBook = cleared;
+        try {
+          await BookRepository.saveImportedBooks(clearContext,
+            this.books.map((item: Book) => item.id === cleared.id ? cleared : item)
+              .filter((item: Book) => BookRepository.isPersistableBook(item)));
+          this.books = this.books.map((item: Book) => item.id === cleared.id ? cleared : item);
+        } catch (_) {
+          // 清零落库失败不妨碍阅读，红点下次刷新会重新计算。
+        }
+      }
     }
     this.readerReturnRoute = this.route;
     this.discardReaderAnchor();
@@ -7063,6 +7086,7 @@ struct Index {
           layout: this.bookshelfLayout,
           coverSettings: this.coverSettings,
           readerNightMode: this.readerNightMode,
+          refreshingBookIds: this.refreshingBookIds,
           onSaveLayout: (settings: BookshelfLayoutSettings) => this.saveBookshelfLayout(settings),
           onAddGroup: (name: string) => this.addBookshelfGroup(name),
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),

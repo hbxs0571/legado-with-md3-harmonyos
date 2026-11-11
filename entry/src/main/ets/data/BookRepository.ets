@@ -185,7 +185,7 @@ export class BookRepository {
     'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
     '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
-    '`durChapterTime`, `order`, `disableReadRecord`, `format` FROM `books` ORDER BY `durChapterTime` DESC';
+    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount` FROM `books` ORDER BY `durChapterTime` DESC';
 
   /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
@@ -372,6 +372,18 @@ export class BookRepository {
     return `${words}字`;
   }
 
+  /** 全书字数：以正文字符数估算，复用 wordCountFormat 格式化成「12.3万字」这类字符串。 */
+  private static totalWordCount(content: string): string {
+    return BookRepository.wordCountFormat(content.trim().length);
+  }
+
+  /** 书架卡「未读章节数」：总章数 - 当前章序号 - 1，不小于 0（上游 BookShelfItem 同款算法）。 */
+  static unreadOf(book: Book): number {
+    const total = Number(book.chapterCount ?? '0');
+    const index = book.chapterIndex ?? 0;
+    return Math.max(total - index - 1, 0);
+  }
+
   /**
    * 整份复制 Book，供调用方在副本上改字段。
    * ArkTS 不支持对象展开（...book），字段又只剩三十个，所以统一收在这里，
@@ -409,6 +421,9 @@ export class BookRepository {
       durChapterTime: book.durChapterTime,
       order: book.order,
       disableReadRecord: book.disableReadRecord,
+      latestChapterTitle: book.latestChapterTitle,
+      lastCheckCount: book.lastCheckCount,
+      wordCount: book.wordCount,
       isLocal: book.isLocal
     };
   }
@@ -791,6 +806,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       durChapterTime: RdbCodec.optionalInteger(resultSet, 20),
       order: RdbCodec.optionalInteger(resultSet, 21),
       disableReadRecord: RdbCodec.boolean(resultSet, 22, false),
+      latestChapterTitle: RdbCodec.optionalText(resultSet, 24),
+      lastCheckCount: RdbCodec.integer(resultSet, 25, 0),
+      wordCount: RdbCodec.optionalText(resultSet, 26),
       isLocal: true
     };
     book.progress = BookRepository.readProgress(book);
@@ -1246,6 +1264,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     };
     const totalChapterNum = Number(book.chapterCount ?? '0');
     const lastChapter = book.lastChapter.length > 0 ? book.lastChapter : null;
+    const latestChapterTitle = book.latestChapterTitle ?? lastChapter;
     return [
       bookUrl,
       book.tocRule ?? '',
@@ -1264,10 +1283,10 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       BookRepository.bookTypeMask(book),
       BookGroupRepository.maskFromNames(groupNames),
       0,
-      lastChapter,
+      latestChapterTitle,
       book.latestChapterTime ?? 0,
       0,
-      0,
+      book.lastCheckCount ?? 0,
       Number.isFinite(totalChapterNum) ? Math.max(0, Math.trunc(totalChapterNum)) : 0,
       lastChapter,
       Math.max(0, Math.trunc(book.chapterIndex ?? 0)),
@@ -1275,7 +1294,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       // 章内百分比在 readConfig 里，见上面的 StoredReadConfig.chapterProgress。
       Math.max(0, Math.trunc(book.androidCharacterPosition ?? 0)),
       book.durChapterTime ?? 0,
-      null,
+      book.wordCount ?? null,
       1,
       book.disableReadRecord === true ? 1 : 0,
       Math.trunc(book.order ?? 0),
@@ -1361,6 +1380,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     nextBook.tocRule = chapterRule.length > 0 ? chapterRule : undefined;
     const nextChapters = BookRepository.buildChapterRows(book.contentPath, chapterTitles, chapterOffsets,
       chapterVolumes, content, nextBook.charset);
+    nextBook.wordCount = BookRepository.totalWordCount(content);
+    nextBook.latestChapterTitle = chapterTitles.length > 0 ? chapterTitles[chapterTitles.length - 1] : undefined;
     return { book: nextBook, chapters: nextChapters };
   }
 
@@ -1731,6 +1752,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     // 正文长度变了，全书的字节偏移都得重算，所以整批章节行重新生成后交给调用方落库。
     const nextChapters = BookRepository.buildChapterRows(book.contentPath, titles, offsets, volumes,
       updatedContent, nextCharset);
+    nextBook.wordCount = BookRepository.totalWordCount(updatedContent);
+    nextBook.latestChapterTitle = titles.length > 0 ? titles[titles.length - 1] : undefined;
     return { book: nextBook, chapters: nextChapters };
   }
 
@@ -2081,6 +2104,10 @@ private static async applyChapterContentAsync(
     refreshedBook.tocRule = chapterRule.length > 0 ? chapterRule : undefined;
     // 更新目录会刷新 latestChapterTime，但阅读时间与手动序号由 copyBook 原样带回。
     refreshedBook.latestChapterTime = Date.now();
+    // 上游 BookShelfItem.isNew = lastCheckCount > 0，无 isLocal 门；本地书刷新目录有新增章节也要亮红点。
+    refreshedBook.lastCheckCount = Math.max(chapterTitles.length - oldTitles.length, 0);
+    refreshedBook.wordCount = BookRepository.totalWordCount(content);
+    refreshedBook.latestChapterTitle = chapterTitles.length > 0 ? chapterTitles[chapterTitles.length - 1] : undefined;
     const refreshedChapters = BookRepository.buildChapterRows(book.contentPath, chapterTitles,
       chapterOffsets, chapterVolumes, content, book.charset);
     return { book: refreshedBook, chapters: refreshedChapters, content: content, changed: true,
@@ -2160,6 +2187,8 @@ static refreshNoTocBook(book: Book, maxLengthWithNoToc: number,
     refreshedBook.androidCharacterPosition = chapterPosition;
     const refreshedChapters = BookRepository.buildChapterRows(book.contentPath, layout.titles,
       layout.offsets, [], content, book.charset);
+    refreshedBook.wordCount = BookRepository.totalWordCount(content);
+    refreshedBook.latestChapterTitle = layout.titles.length > 0 ? layout.titles[layout.titles.length - 1] : undefined;
     return {
       book: refreshedBook,
       chapters: refreshedChapters,
@@ -2238,7 +2267,10 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
       format: 'txt',
       charset: charset,
       reSegment: false,
-      isLocal: true
+      isLocal: true,
+      wordCount: BookRepository.totalWordCount(content),
+      latestChapterTitle: chapterTitles.length > 0 ? chapterTitles[chapterTitles.length - 1] : undefined,
+      lastCheckCount: 0
     };
     // 章节行随书一起返回，调用方写库时两表一起落。
     const chapters = BookRepository.buildChapterRows(contentPath, chapterTitles, chapterOffsets,

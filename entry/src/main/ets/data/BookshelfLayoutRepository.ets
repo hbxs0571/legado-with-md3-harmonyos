@@ -113,6 +113,26 @@ export class BookshelfLayoutRepository {
         store, 'bookshelfRefreshingLimit', settings.bookshelfRefreshingLimit);
       settings.showBookshelfTabMenu = await BookshelfLayoutRepository.readBoolean(
         store, 'shouldShowExpandButton', settings.showBookshelfTabMenu);
+      settings.bookshelfShowTag = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfShowTag', settings.bookshelfShowTag);
+      settings.bookshelfShowCustomTags = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfShowCustomTags', settings.bookshelfShowCustomTags);
+      settings.bookshelfShowSourceTags = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfShowSourceTags', settings.bookshelfShowSourceTags);
+      settings.bookshelfShowWordCount = await BookshelfLayoutRepository.readBoolean(
+        store, 'bookshelfShowWordCount', settings.bookshelfShowWordCount);
+      settings.showUnread = await BookshelfLayoutRepository.readBoolean(
+        store, 'showUnread', settings.showUnread);
+      settings.showUnreadNew = await BookshelfLayoutRepository.readBoolean(
+        store, 'showUnreadNew', settings.showUnreadNew);
+      settings.showWaitUpCount = await BookshelfLayoutRepository.readBoolean(
+        store, 'showWaitUpCount', settings.showWaitUpCount);
+      settings.showBookCount = await BookshelfLayoutRepository.readBoolean(
+        store, 'showBookCount', settings.showBookCount);
+      settings.showLastUpdateTime = await BookshelfLayoutRepository.readBoolean(
+        store, 'showLastUpdateTime', settings.showLastUpdateTime);
+      settings.showTip = await BookshelfLayoutRepository.readBoolean(
+        store, 'showTip', settings.showTip);
     } catch (_) {
       // 读失败时保持默认值：书架能用比抛错中断启动更重要。
     }
@@ -168,6 +188,16 @@ export class BookshelfLayoutRepository {
       await store.put('bookshelfGroupCoverCount', snapshot.bookshelfGroupCoverCount);
       await store.put('bookshelfRefreshingLimit', snapshot.bookshelfRefreshingLimit);
       await store.put('shouldShowExpandButton', snapshot.showBookshelfTabMenu);
+      await store.put('bookshelfShowTag', snapshot.bookshelfShowTag);
+      await store.put('bookshelfShowCustomTags', snapshot.bookshelfShowCustomTags);
+      await store.put('bookshelfShowSourceTags', snapshot.bookshelfShowSourceTags);
+      await store.put('bookshelfShowWordCount', snapshot.bookshelfShowWordCount);
+      await store.put('showUnread', snapshot.showUnread);
+      await store.put('showUnreadNew', snapshot.showUnreadNew);
+      await store.put('showWaitUpCount', snapshot.showWaitUpCount);
+      await store.put('showBookCount', snapshot.showBookCount);
+      await store.put('showLastUpdateTime', snapshot.showLastUpdateTime);
+      await store.put('showTip', snapshot.showTip);
       await store.flush();
       BookshelfLayoutRepository.cached = copyBookshelfLayout(snapshot);
       BookshelfLayoutRepository.loaded = true;
@@ -269,6 +299,28 @@ export class BookshelfLayoutRepository {
     if (bookshelfRefreshingLimit !== undefined) { merged.bookshelfRefreshingLimit = bookshelfRefreshingLimit; }
     const shouldShowExpandButton = BookshelfLayoutRepository.parseAndroidBoolean(values.get('shouldShowExpandButton'));
     if (shouldShowExpandButton !== undefined) { merged.showBookshelfTabMenu = shouldShowExpandButton; }
+    const bookshelfShowTag = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfShowTag'));
+    if (bookshelfShowTag !== undefined) { merged.bookshelfShowTag = bookshelfShowTag; }
+    const bookshelfShowCustomTags = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfShowCustomTags'));
+    if (bookshelfShowCustomTags !== undefined) { merged.bookshelfShowCustomTags = bookshelfShowCustomTags; }
+    const bookshelfShowSourceTags = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfShowSourceTags'));
+    if (bookshelfShowSourceTags !== undefined) { merged.bookshelfShowSourceTags = bookshelfShowSourceTags; }
+    const bookshelfShowWordCount = BookshelfLayoutRepository.parseAndroidBoolean(values.get('bookshelfShowWordCount'));
+    if (bookshelfShowWordCount !== undefined) { merged.bookshelfShowWordCount = bookshelfShowWordCount; }
+    const showUnread = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showUnread'));
+    if (showUnread !== undefined) { merged.showUnread = showUnread; }
+    const showUnreadNew = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showUnreadNew'));
+    if (showUnreadNew !== undefined) { merged.showUnreadNew = showUnreadNew; }
+    const showWaitUpCount = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showWaitUpCount'));
+    if (showWaitUpCount !== undefined) { merged.showWaitUpCount = showWaitUpCount; }
+    const showBookCount = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showBookCount'));
+    if (showBookCount !== undefined) { merged.showBookCount = showBookCount; }
+    const showLastUpdateTime = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showLastUpdateTime'));
+    if (showLastUpdateTime !== undefined) { merged.showLastUpdateTime = showLastUpdateTime; }
+    const showTip = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showTip'));
+    if (showTip !== undefined) { merged.showTip = showTip; }
+    const bookshelfUpdateLimit = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfUpdateLimit'));
+    if (bookshelfUpdateLimit !== undefined) { merged.bookshelfRefreshingLimit = bookshelfUpdateLimit; }
     return merged;
   }
 
@@ -316,6 +368,17 @@ export class BookshelfLayoutRepository {
     values.set('bookshelfGroupCoverCount', `${settings.bookshelfGroupCoverCount}`);
     values.set('bookshelfRefreshingLimit', `${settings.bookshelfRefreshingLimit}`);
     values.set('shouldShowExpandButton', `${settings.showBookshelfTabMenu}`);
+    values.set('bookshelfShowTag', `${settings.bookshelfShowTag}`);
+    values.set('bookshelfShowCustomTags', `${settings.bookshelfShowCustomTags}`);
+    values.set('bookshelfShowSourceTags', `${settings.bookshelfShowSourceTags}`);
+    values.set('bookshelfShowWordCount', `${settings.bookshelfShowWordCount}`);
+    values.set('showUnread', `${settings.showUnread}`);
+    values.set('showUnreadNew', `${settings.showUnreadNew}`);
+    values.set('showWaitUpCount', `${settings.showWaitUpCount}`);
+    values.set('showBookCount', `${settings.showBookCount}`);
+    values.set('showLastUpdateTime', `${settings.showLastUpdateTime}`);
+    values.set('showTip', `${settings.showTip}`);
+    values.set('bookshelfUpdateLimit', `${settings.bookshelfRefreshingLimit}`);
     return values;
   }
 

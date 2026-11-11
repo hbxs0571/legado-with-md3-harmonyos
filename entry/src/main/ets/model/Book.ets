@@ -54,6 +54,12 @@ export interface Book {
   tocRule?: string;
   /** 最近一次更新目录的时间戳，对应上游 Book.latestChapterTime。 */
   latestChapterTime?: number;
+  /** 最新章节标题，对应上游 Book.latestChapterTitle。 */
+  latestChapterTitle?: string;
+  /** 刷新目录发现的新章数，对应上游 Book.lastCheckCount。 */
+  lastCheckCount?: number;
+  /** 全书字数（格式化字符串），对应上游 Book.wordCount。 */
+  wordCount?: string;
   /** 最后阅读这本书的时间戳，对应上游 Book.durChapterTime。 */
   durChapterTime?: number;
   /** 手动排序序号，对应上游 Book.order；按「手动排序」时使用。 */
