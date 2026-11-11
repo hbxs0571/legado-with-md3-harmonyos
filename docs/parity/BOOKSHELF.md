@@ -65,7 +65,7 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
 | 合计 | 345 | 131 | 211 | 3 |
 
-A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 13 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
+A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），**是迁移前证据，未逐行复核**；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
 ---
 
@@ -491,7 +491,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 `grep -cE "Bookmark|BookMarking" help/storage/Backup.kt` = **0**：导出主文件里一个实体类名都不出现，19 个类别全以 `dbIsNotIgnored("bookmark")` 这种小写键名引用。所以按实体类名选词的本表，此前从未把这一层纳入接触面——**覆盖证明显示通过，但这一层从未被检查过**。
 
-本块 13 行覆盖该层 21 个文件里最关键的 13 个。剩余 8 个纯数据类/空壳实现（`domain/model/WebDavBackup.kt`、`domain/gateway/*.kt` 三个接口、`domain/model/settings/BackupSettings.kt`、`BackupConfig.kt` 的 `@Deprecated` 门面、`BackupRestoreLock.kt`、`BackupAES.kt`）由本块各行在其「上游位置」列一并引用，不单独占行。
+本块 19 行覆盖该层 21 个文件里最关键的部分（r336 追加的 `keyboardAssists` 6 行同指该表那一处，不按文件数计）。剩余 8 个纯数据类/空壳实现（`domain/model/WebDavBackup.kt`、`domain/gateway/*.kt` 三个接口、`domain/model/settings/BackupSettings.kt`、`BackupConfig.kt` 的 `@Deprecated` 门面、`BackupRestoreLock.kt`、`BackupAES.kt`）由本块各行在其「上游位置」列一并引用，不单独占行。
 
 `help/storage/BookRestorePlanner.kt` 原本连关键词都捞不到（它对 `localBook` 的旧关键词 `BookDao|bookshelf\.json|Book\.kt` 命中 0），r296 给 `localBook` 补了 `BookRestorePlan`、`LocalBookLocationStatus`、`isRelocatedCopyOf`、`normalizeLocalBookLocation` 四个词才把它纳入接触面，随后落在本块最后一行。
 
@@ -567,7 +567,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），*
 
 **全表合计 345 条：已接 131、未接 211、不适用 3，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）
 
-按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 28 行、`bookSource` 24 行、`不备份` 7 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 13 行全部落 `—`（备份流程本身不受任何类别的忽略开关控制），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
+按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
 分块口径：A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53（D 块总述 1 + D1 6 + D2 13 + D3 29 + D4 4）+ E 19 + **F 7（r323 新增，全部 `未接`）** = 345。
 
