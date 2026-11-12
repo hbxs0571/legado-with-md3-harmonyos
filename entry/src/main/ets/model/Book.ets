@@ -134,6 +134,8 @@ export enum AppRoute {
   BOOK_INFO = 'bookInfo',
   READ_ALOUD_SETTINGS = 'readAloudSettings',
   SEARCH = 'search',
+  /** 本地书多选后的导入确认页（批 10 的 :555）。 */
+  LOCAL_BOOK_IMPORT = 'localBookImport',
   PROFILE_SUBPAGE = 'profileSubpage'
 }
 

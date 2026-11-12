@@ -29,6 +29,8 @@ import { OtherSettingsPage } from './OtherSettingsPage';
 import { AppReadAloudSettingsPage } from './AppReadAloudSettingsPage';
 import { AppCoverSettingsPage } from './AppCoverSettingsPage';
 import { AppDownloadCacheSettingsPage } from './AppDownloadCacheSettingsPage';
+import { ImportCandidate, LocalBookImportPage } from './LocalBookImportPage';
+import { planLocalBookImportReuse } from '../data/LocalBookImportPlanner';
 import { BookshelfManagePage } from './BookshelfManagePage';
 import { CacheSettingsRepository } from '../data/CacheSettingsRepository';
 import { AppAiSettingsPage } from './AppAiSettingsPage';
@@ -194,8 +196,10 @@ struct Index {
   @State profileDetailReturnRoute: AppRoute = AppRoute.PROFILE;
   @State profileSubpage: ProfileRoute = ProfileRoute.BOOK_SOURCE_MANAGE;
   @State profileSettingsReturn: ProfileRoute = ProfileRoute.APP_SETTINGS;
-  /** 进书架管理页时带上的分组名（:482）；空串表示全部。 */
+  /** 书架管理整页时带上的分组名（:482），空串表示全部。 */
   @State bookshelfManageGroupName: string = '';
+  /** 本地书多选后的候选列表；非空表示停在导入确认页（批 10 的 :555）。 */
+  @State localBookImportCandidates: ImportCandidate[] = [];
   @State selectedTab: number = 0;
   @State selectedBook: Book = EMPTY_BOOK;
   @State readerStartAtChapterBeginning: boolean = false;
@@ -5855,14 +5859,98 @@ struct Index {
     }
   }
 
+  /**
+   * 添加本地书：先弹系统选择器选文件，再进确认页（批 10 的 :554 / :555）。
+   *
+   * 上游的导入页是「浏览文件夹的列表、逐项标已上架」；鸿蒙的 DocumentViewPicker
+   * 只回 uri 列表、没有目录枚举能力，所以本地做成「多选之后的确认页」：
+   * 列出这次选中的文件、标出已在书架的、可取消勾选、点导入。
+   * 回归值是「导入完成的书」——确认页里可能一本都没选，那时返回 undefined。
+   */
   private async importLocalBook(): Promise<Book | undefined> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return undefined;
+    }
+    let uris: string[] = [];
+    try {
+      uris = await BookRepository.pickLocalBookUris(context);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `选择文件失败：${error.message}` : '选择文件失败');
+      return undefined;
+    }
+    if (uris.length === 0) {
+      return undefined;
+    }
+    const candidates: ImportCandidate[] = [];
+    for (let index = 0; index < uris.length; index += 1) {
+      const uri = uris[index];
+      if (uri === undefined) {
+        continue;
+      }
+      const fileName = BookRepository.getFileName(uri);
+      const candidate: ImportCandidate = {
+        uri: uri,
+        fileName: fileName,
+        sizeLabel: '',
+        onShelf: BookRepository.isFileOnShelf(this.books, fileName),
+        selected: true
+      };
+      candidates.push(candidate);
+    }
+    this.localBookImportCandidates = candidates;
+    this.route = AppRoute.LOCAL_BOOK_IMPORT;
+    return undefined;
+  }
+
+  /** 确认页点「导入」：逐本导入并走「更新 / 接回 / 新建」三分支。 */
+  private async importSelectedLocalBooks(uris: string[]): Promise<void> {
+    this.localBookImportCandidates = [];
+    let importedCount = 0;
+    for (let index = 0; index < uris.length; index += 1) {
+      const uri = uris[index];
+      if (uri === undefined) {
+        continue;
+      }
+      const imported = await this.importOneLocalBook(uri);
+      if (imported !== undefined) {
+        importedCount += 1;
+      }
+    }
+    if (importedCount === 0) {
+      this.showUnavailableAction('没有导入任何书籍');
+      return;
+    }
+    // 导入完成后回书架，并重读书目以反映新增 / 接回的书
+    await this.reloadBooksAfterImport();
+    this.localBookImportCandidates = [];
+    this.route = AppRoute.BOOKSHELF;
+    this.showUnavailableAction(`已导入 ${importedCount} 本书`);
+  }
+
+  /** 重读书目：导入（含接回）会新增或改写记录，书架需要重新取一次。 */
+  private async reloadBooksAfterImport(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const reloaded = await BookRepository.loadImportedBooks(context);
+      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '重读书目失败');
+    }
+  }
+
+  /** 导入单个已选定的 uri；接回、更新、新建三条分支都在这里判定。 */
+  private async importOneLocalBook(uri: string): Promise<Book | undefined> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       return undefined;
     }
     let created: CreatedLocalBook | undefined;
     try {
-      created = await BookRepository.importLocalBook(context, this.readerMaxLengthWithNoToc);
+      created = await BookRepository.importSingleUri(context, uri, this.readerMaxLengthWithNoToc);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：文件格式不受支持');
       return undefined;
@@ -5906,6 +5994,54 @@ struct Index {
         (item.contentPath ?? '') === importedBookUrl ? updatedBook : item);
       this.showUnavailableAction(`这本书之前导入过，已更新《${updatedBook.title}》的目录`);
       return updatedBook;
+    }
+    // 接回（批 10 的 :551）：源文件被外部删掉后重新导入同名文件时，书架里那条记录
+    // 只是文件位置失效；直接新增会再裂出一条同名书——旧记录读不了、新记录没有进度。
+    // 判据见 data/LocalBookImportPlanner.planLocalBookImportReuse。
+    const importedFileName = created.fileName ?? BookRepository.getFileName(uri);
+    const reusable = this.books.find((item: Book) => {
+      if (!BookRepository.isPersistableBook(item)) {
+        return false;
+      }
+      const readable = !BookRepository.isBodyMissing(item);
+      return planLocalBookImportReuse(item, readable, importedFileName, importedBookUrl) !== undefined;
+    });
+    if (reusable !== undefined) {
+      // 旧主键下的章节行随记录一起废弃，避免留下查不到的脏行。
+      const oldBookUrl = BookRepository.bookUrlOf(reusable);
+      try {
+        if (oldBookUrl.length > 0) {
+          await BookRepository.deleteChapters(context, oldBookUrl);
+        }
+        const rebound: Book = BookRepository.copyBook(reusable);
+        rebound.contentPath = importedBook.contentPath;
+        rebound.format = importedBook.format;
+        rebound.title = importedBook.title;
+        rebound.author = importedBook.author;
+        rebound.chapterCount = importedBook.chapterCount;
+        rebound.lastChapter = importedBook.lastChapter;
+        rebound.latestChapterTitle = importedBook.latestChapterTitle;
+        rebound.wordCount = importedBook.wordCount;
+        rebound.tocRule = importedBook.tocRule;
+        // 新目录的正文偏移对旧进度没有意义，回到第 1 章；latestChapterTime 归零触发重新解析。
+        rebound.chapterIndex = 0;
+        rebound.chapterProgress = 0;
+        rebound.androidCharacterPosition = 0;
+        rebound.latestChapterTime = 0;
+        // 主键变了，派生的 id 必须跟着重算（book.id 由 bookUrl 派生）。
+        rebound.id = BookRepository.bookIdFromUrl(BookRepository.bookUrlOf(rebound));
+        const booksToSave = this.books
+          .map((item: Book) => BookRepository.bookUrlOf(item) === oldBookUrl ? rebound : item)
+          .filter((item: Book) => BookRepository.isPersistableBook(item));
+        await BookRepository.saveImportedBooks(context, booksToSave);
+        await BookRepository.saveChapters(context, BookRepository.bookUrlOf(rebound), created.chapters);
+        this.books = booksToSave;
+        this.showUnavailableAction(`已把《${rebound.title}》接回新文件，原分组与进度保留`);
+        return rebound;
+      } catch (error) {
+        this.showUnavailableAction(error instanceof Error ? error.message : '接回书籍失败');
+        return undefined;
+      }
     }
     const booksToSave = [...this.books, importedBook]
       .filter((item: Book) => BookRepository.isPersistableBook(item));
@@ -7234,6 +7370,11 @@ struct Index {
       this.route = this.bookInfoReturnRoute;
       return true;
     }
+    if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {
+      this.localBookImportCandidates = [];
+      this.route = AppRoute.BOOKSHELF;
+      return true;
+    }
     if (this.route === AppRoute.SUBSCRIPTION_RULES || this.route === AppRoute.SUBSCRIPTION_FAVORITES ||
       this.route === AppRoute.SUBSCRIPTION_SOURCE_MANAGE) {
       this.route = AppRoute.SUBSCRIPTIONS;
@@ -7412,6 +7553,15 @@ struct Index {
             remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
             this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+        })
+        } else if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {
+        LocalBookImportPage({
+          candidates: this.localBookImportCandidates,
+          onBack: () => {
+            this.localBookImportCandidates = [];
+            this.route = AppRoute.BOOKSHELF;
+          },
+          onImportSelected: (uris: string[]) => this.importSelectedLocalBooks(uris)
         })
         } else if (this.route === AppRoute.SUBSCRIPTION_RULES) {
         SubscriptionRulesPage({

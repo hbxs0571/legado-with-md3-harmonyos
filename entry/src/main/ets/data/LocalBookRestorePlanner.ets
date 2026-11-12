@@ -331,8 +331,14 @@ export class LocalBookRestorePlanner {
    * 本地书的 contentPath 是应用内副本，androidOriginalPath 是 Android 原始路径；
    * 只有从 Android 备份恢复的占位书才只有后者。
    */
+  /**
+   * 取书目主键路径。
+   *
+   * 实现已挪到 BookRepository.bookUrlOf（批 10）：导入判重与接回也要用同一个键，
+   * 这里保留一层转调，避免既有 8 处调用点全改。
+   */
   static bookUrlOf(book: Book): string {
-    return book.contentPath ?? book.androidOriginalPath ?? '';
+    return BookRepository.bookUrlOf(book);
   }
 
   /** 取本地书的来源名（文件名，含扩展名），对应上游 Book.originName。 */

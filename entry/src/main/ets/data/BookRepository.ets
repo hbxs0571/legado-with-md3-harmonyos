@@ -59,6 +59,20 @@ interface ChapterSplit {
 export interface CreatedLocalBook {
   book: Book;
   chapters: BookChapter[];
+  /**
+   * 这次导入的文件名（含扩展名）。
+   *
+   * 接回判据要比对「同名」——上游用 originName，本地 originName 落的是
+   * local-<md5>.txt，只有把源文件名一路带出来才能做等价判断（批 10 的 :552）。
+   * 存量搬迁与 withCharset 两条构造路径不带它，所以是可选字段。
+   */
+  fileName?: string;
+}
+
+/** 从文件名解析出的书名与作者（批 10 的 :556）。 */
+export interface ParsedBookName {
+  title: string;
+  author: string;
 }
 
 /** 改写某一章正文的结果：正文变了，全书章节的字节偏移都要重算。 */
@@ -465,37 +479,95 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       }
     }
   }
+  /**
+   * 弹系统选择器选一个本地文件并导入。
+   *
+   * 保留这条单文件入口给「没有确认页」的调用方；导入页的多选链路走 importLocalBooks。
+   * maxSelectNumber 由 1 改成 500（批 10 的 :554）：SDK 声明里 0 没有「不限」语义，
+   * 写 500 在基线 12 上安全，在 API 21+ 等价于不限。
+   * 后缀仍限 .txt / .epub —— 本地没有 PDF / MOBI / AZW3 / ZIP 的解析器，
+   * 放开后缀只会让用户导进来一堆打不开的书。
+   */
   static async importLocalBook(context: Context,
     maxLengthWithNoToc: number = 3000): Promise<CreatedLocalBook | undefined> {
+    const uris = await BookRepository.pickLocalBookUris(context);
+    const uri = uris[0];
+    if (uri === undefined) { return undefined; }
+    return await BookRepository.importSingleUri(context, uri, maxLengthWithNoToc);
+  }
+
+  /** 弹系统选择器，返回用户选中的 uri 列表；取消时返回空数组。 */
+  static async pickLocalBookUris(context: Context): Promise<string[]> {
     const options = new picker.DocumentSelectOptions();
     options.fileSuffixFilters = ['TXT 文本|.txt', 'EPUB 电子书|.epub'];
-    options.maxSelectNumber = 1;
+    options.maxSelectNumber = 500;
     const documentPicker = new picker.DocumentViewPicker(context);
-    const uris = await documentPicker.select(options);
-    if (uris.length === 0) { return undefined; }
+    return await documentPicker.select(options);
+  }
 
-const uri = uris[0];
-    if (uri === undefined) { return undefined; }
+  /**
+   * 导入一个已选定的 uri。EPUB 与 TXT 两条解析路径都在这里分流。
+   *
+   * 正文文件名由**源文件 uri** 派生，不取当前时间：上游 LocalBook.kt:252-259 里
+   * `bookUrl = FileDoc.fromUri(uri).toString()`，即本地书的 bookUrl 就是源文件路径，
+   * 同一文件重复导入得到同一个 bookUrl，判重才可能命中（见 LocalBook.kt:259）。
+   * 旧实现用 `local-${Date.now()}`，每次导入都是一个新主键，任何按文件路径的判重都会失效。
+   */
+  static async importSingleUri(context: Context, uri: string,
+    maxLengthWithNoToc: number = 3000): Promise<CreatedLocalBook> {
     const fileName = BookRepository.getFileName(uri);
-    // 正文文件名由**源文件 uri** 派生，不取当前时间：上游 LocalBook.kt:252-259 里
-    // `bookUrl = FileDoc.fromUri(uri).toString()`，即本地书的 bookUrl 就是源文件路径，
-    // 同一文件重复导入得到同一个 bookUrl，判重才可能命中（见 LocalBook.kt:259）。
-    // 旧实现用 `local-${Date.now()}`，每次导入都是一个新主键，任何按文件路径的判重都会失效。
     const bookId = `local-${BookRepository.md5Encode16(uri)}`;
+    let created: CreatedLocalBook;
     if (fileName.toLowerCase().endsWith('.epub')) {
       const imported = await EpubRepository.importFromUri(context, uri, fileName, bookId);
       // EPUB 写出的正文是 UTF-8，章节偏移按字符给，这里统一转成字节偏移的章节行。
       const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
         imported.titles, imported.offsets, [], imported.content, undefined);
-      return { book: imported.book, chapters: chapters };
+      created = { book: imported.book, chapters: chapters };
+    } else {
+      created = await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
     }
+    created.fileName = fileName;
+    return created;
+  }
 
-return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
+  /**
+   * 一次导入多个文件（批 10 的 :554）。
+   *
+   * 逐个导入，部分失败不打断，全部失败才抛——与上游 LocalBook.importFiles 同语义：
+   * 选 5 个文件里有 1 个坏的不该让另外 4 个也进不了书架。
+   */
+  static async importLocalBooks(context: Context, uris: string[],
+    maxLengthWithNoToc: number = 3000): Promise<CreatedLocalBook[]> {
+    const results: CreatedLocalBook[] = [];
+    let errorCount = 0;
+    let lastError: string = '';
+    for (let index = 0; index < uris.length; index += 1) {
+      const uri = uris[index];
+      if (uri === undefined) {
+        errorCount += 1;
+        continue;
+      }
+      try {
+        const created = await BookRepository.importSingleUri(context, uri, maxLengthWithNoToc);
+        results.push(created);
+      } catch (error) {
+        errorCount += 1;
+        lastError = error instanceof Error ? error.message : String(error);
+        AppLog.put(`[BookRepository] 导入 ${uri} 失败: ${lastError}`);
+      }
+    }
+    if (uris.length > 0 && errorCount === uris.length) {
+      throw new Error(`导入失败：${lastError.length > 0 ? lastError : '所有文件都无法读取'}`);
+    }
+    return results;
   }
 
   static async importTxtFromUri(context: Context, uri: string, fileName: string, bookId: string,
     maxLengthWithNoToc: number = 3000): Promise<CreatedLocalBook> {
-    const title = BookRepository.getTitle(fileName);
+    // 书名与作者一起从文件名解析（批 10 的 :556），title 与 getTitle 的语义保持一致。
+    const parsedName = BookRepository.parseNameAuthor(fileName);
+    const title = parsedName.title;
     await TxtTocRuleRepository.load(context);
     const booksDirectory = `${context.filesDir}/books`;
     const contentPath = `${booksDirectory}/${bookId}.txt`;
@@ -526,7 +598,8 @@ return await BookRepository.importTxtFromUri(context, uri, fileName, bookId, max
       if (error instanceof Error) { throw error; }
       throw new Error('读取 TXT 文件失败');
     }
-    return BookRepository.createLocalBook(bookId, title, contentPath, 0, 0, content, undefined, maxLengthWithNoToc);
+    return BookRepository.createLocalBook(bookId, title, contentPath, 0, 0, content, undefined,
+      maxLengthWithNoToc, parsedName.author);
   }
 
 static discardImportedCopy(book: Book): void {
@@ -860,7 +933,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
   }
 
   /** 由 bookUrl（本地书就是文件路径）派生书籍 id：取文件名去掉扩展名。 */
-  private static bookIdFromUrl(bookUrl: string): string {
+  /** 由 bookUrl 派生书目 id。接回后主键变了，id 必须跟着重算（批 10 的 :551）。 */
+  static bookIdFromUrl(bookUrl: string): string {
     const fileName = BookRepository.getFileName(bookUrl);
     const dotIndex = fileName.lastIndexOf('.');
     return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
@@ -2345,7 +2419,8 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     chapterProgress: number,
     importedContent?: string,
     charset?: string,
-    maxLengthWithNoToc: number = 3000
+    maxLengthWithNoToc: number = 3000,
+    parsedAuthor: string = ''
   ): CreatedLocalBook {
     let content: string = '';
     try {
@@ -2377,7 +2452,9 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     const book: Book = {
       id: id,
       title: title,
-      author: '本地 TXT',
+      // 作者从文件名解析（批 10 的 :556），解析不到才回落「未知作者」。
+      // 原来写死的 '本地 TXT' 是分类不是作者，摆在书架卡作者位会让人以为书名写错了。
+      author: parsedAuthor.length > 0 ? parsedAuthor : '未知作者',
       category: '本地',
       groupName: '本地未分组',
       groupNames: [],
@@ -2619,6 +2696,100 @@ private static getTitle(fileName: string): string {
       return fileName.substring(0, fileName.length - 4);
     }
     return fileName.length > 0 ? fileName : '本地书籍';
+  }
+
+  /**
+   * 取书目的主键路径，与 deleteBook / saveBookOrder 同口径（contentPath 优先）。
+   *
+   * 从 LocalBookRestorePlanner.bookUrlOf 挪过来（批 10）：导入判重与接回也要用同一个键，
+   * 两处各写一遍迟早会漂。
+   */
+  static bookUrlOf(book: Book): string {
+    return book.contentPath ?? book.androidOriginalPath ?? '';
+  }
+
+  /** 去掉已知电子书后缀，得到默认书名；供导入判重与接回比对共用。 */
+  static localTitleFromFileName(fileName: string): string {
+    const lowerName = fileName.toLowerCase();
+    const suffixes: string[] = ['.txt', '.epub'];
+    for (let index = 0; index < suffixes.length; index += 1) {
+      const suffix = suffixes[index];
+      if (suffix !== undefined && lowerName.endsWith(suffix)) {
+        return fileName.substring(0, fileName.length - suffix.length);
+      }
+    }
+    return fileName.length > 0 ? fileName : '本地书籍';
+  }
+
+  /**
+   * 从文件名解析书名与作者，对应上游 LocalBook.analyzeNameAuthor 的兜底分支。
+   *
+   * 四个内置正则与上游 LocalBook.kt 的 nameAuthorPatterns 一致；
+   * 用户自定义脚本（bookImportFileName）不做——那是 JS 引擎能力，本地没有脚本运行时。
+   */
+  static parseNameAuthor(fileName: string): ParsedBookName {
+    const stem = BookRepository.localTitleFromFileName(fileName);
+    const patterns: RegExp[] = [
+      /^(.*?)《([^《》]+)》.*?作者[：:](.*)$/,
+      /^(.*?)《([^《》]+)》(.*)$/,
+      // 后两条与上游一样用空捕获组占位，保证第 2 组始终是书名、第 3 组是作者；
+      // 少了这个空组会把书名和作者解析反（实测「某某书 作者：某某人」曾颠倒）。
+      /^()(.+?) 作者[：:](.+)$/,
+      /^()(.+?) by (.+)$/
+    ];
+    for (let index = 0; index < patterns.length; index += 1) {
+      const pattern = patterns[index];
+      if (pattern === undefined) {
+        continue;
+      }
+      const matched = pattern.exec(stem);
+      if (matched === null) {
+        continue;
+      }
+      const title = (matched[2] ?? '').trim();
+      if (title.length === 0) {
+        continue;
+      }
+      const author = BookRepository.formatBookAuthor(
+        (matched[1] ?? '') + (matched[3] ?? ''));
+      return { title: title, author: author };
+    }
+    const title = BookRepository.formatBookName(stem);
+    // 兜底：书名去掉夹带的「作者：X」「X 著」，剩下那段当作作者。
+    const rest = stem.replace(title, '');
+    const author = BookRepository.formatBookAuthor(rest);
+    return { title: title.length > 0 ? title : stem, author: author.length > 0 ? author : '' };
+  }
+
+  /** 去掉文件名里夹带的「作者：X」「X 著」等片段。 */
+  private static formatBookName(name: string): string {
+    return name.replace(/\s+作\s*者.*|\s+\S+\s+著/g, '').trim();
+  }
+
+  private static formatBookAuthor(author: string): string {
+    return author.replace(/^\s*作\s*者[:：\s]+|\s+著/g, '').trim();
+  }
+
+  /**
+   * 判断某个待导入文件是否已在书架（批 10 的 :555）。
+   *
+   * 上游用 originName = 文件名（BookDao.hasFile）；本地 originName 落的是
+   * local-<md5>.txt，所以改用 title，与 planLocalBookImportReuse 是同一条等价关系。
+   *
+   * **比对用的书名必须走 parseNameAuthor**：导入时写库的 title 就是它解析出来的，
+   * 用 localTitleFromFileName（只去后缀）会与「某某书 作者：某某人.txt」这类文件名对不上，
+   * 确认页就会把已在书架的书显示成「未上架」。
+   *
+   * **故意要求正文不缺失**：正文缺失的同名记录应当显示为「可接回」而不是「已上架」，
+   * 否则用户在确认页看到「已上架」就不会导入，接回功能永远触发不了。
+   * 这一点与上游 hasFile（只看记录在不在）不同。
+   */
+  static isFileOnShelf(books: Book[], fileName: string): boolean {
+    const targetTitle = BookRepository.parseNameAuthor(fileName).title;
+    return books.some((book: Book) =>
+      BookRepository.isPersistableBook(book)
+      && !BookRepository.isBodyMissing(book)
+      && book.title === targetTitle);
   }
 
   /**

@@ -2034,8 +2034,9 @@ export struct BookshelfPage {
         .onClick(() => this.onUnavailableAction('远程书籍导入尚未迁移'))
       MenuItem({ startIcon: $r('app.media.menu_save'), content: '添加本地' }).height(48)
         .onClick(async () => {
-          const imported = await this.onImportBook();
-          if (imported !== undefined) { this.selectedFilter = '全部'; }
+          // 多选后先进确认页（批 10 的 :555）——真正导入在 Index 的确认页回调里，
+          // 这里拿到的一定是 undefined，不再按返回值切分组。
+          await this.onImportBook();
         })
       MenuItem({ startIcon: $r('app.media.app_refresh'), content: '更新目录' }).height(48)
         .onClick(async () => { await this.onRefreshToc(); })

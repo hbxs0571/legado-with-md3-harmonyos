@@ -157,9 +157,11 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **边界 1（迁移后果）**：第二本书之所以能被加进来，除了判重键变了，还因为**老记录的 bookUrl 是时间戳命名**（`local-1793713951683.txt`），与新键（`local-00af08b6bceffeab.txt`）对不上。换句话说，改动前导入的书不认识新键，同名那本会被当成另一本书再新增一次；改完之后再导入同一文件才会命中更新分支（上表第 2 行验证的就是这一点）。上游因为 `bookUrl` 一直是源文件路径，不存在这个迁移问题。
 
-**边界 2（接回未做）**：上游 `LocalBook.kt:260-266` 那条「源文件被删后重新导入同名文件 → 把旧记录接到新文件上」（`planLocalBookImportReuse` + `rebindLocalBook`）本轮**没有实现**，对照表 F 块第 2、3 行仍是 `未接`。所以「删掉正文文件 → 重新导入同名文件」在本地仍会新增一条，而不是接回旧记录。
+**边界 2（接回已落地，r341）**：上游 `LocalBook.kt:260-266` 那条「源文件被删后重新导入同名文件 → 把旧记录接到新文件上」由 `data/LocalBookImportPlanner.ets` 的 `planLocalBookImportReuse` 与 `pages/Index.ets` 的 `importOneLocalBook` 落地：删旧 `bookUrl` 的 `chapters` 行、`copyBook` 后换 `contentPath` 与目录字段、`chapterIndex`/`chapterProgress` 归零、`latestChapterTime` 归零触发重解析、按新 `bookUrl` 重算 `id`，分组与阅读记录保留。**与上游的差异**：判据里的「文件名相同」改用 `title`（本地 `originName` 落的是 `local-<md5>.txt`，不是文件名），所以手工改过书名的记录接不回，只能移出后重导。设备实证：删掉 `local-5625ca49a90451ef.txt` 后重启显示「缺正文」，重新导入 `《书名三》前缀 后置.txt` → 书架仍 1 本、角标消失、点击直接读出正文；反向实证：把一本记录手工改名为「手工改名测试」、删正文、再导入原文件名 → 书架新增一条，不接回，与该差异一致。
 
-**未验**：EPUB 走同一 `bookId` 规则，但本轮只用 TXT 验过；多选导入（本地 `maxSelectNumber = 1`，未改）。
+**多选导入（r341）**：`BookRepository.pickLocalBookUris` 已设 `maxSelectNumber = 500`，`importLocalBooks` 串行导入、部分失败不打断、全部失败才抛。**但本设备（API 26，1280×2832）的系统 `DocumentViewPicker` 单击即完成并直接返回调用方**：picker 底部虽显示「已选 (N)」与「完成」，实测长按、同点慢滑、点条目左上角、点顶栏按钮都进不了多选态，`DocumentSelectOptions` 也没有多选开关（`multiAuthMode`/`multiUriArray` 是批量授权，不是多选 UI）。因此「框选多个文件」只做了代码与确认页的间接验证，未在设备上端到端跑通。
+
+**未验**：EPUB 走同一 `bookId` 规则，本轮只用 TXT 验过。
 
 ## 2026-11-04 N 端 r327 KI-REL3 目录打开慢、滑动卡
 
