@@ -60,10 +60,10 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | A3 分组管理 | 22 | 21 | 0 | 1 |
 | B 书籍详情页与元数据 | 80 | 42 | 37 | 1 |
 | C 阅读进度与记录 | 39 | 37 | 1 | 1 |
-| D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
+| D 缓存管理页（整界面，r286 新增） | 53 | 16 | 37 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 9 | 8 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
-| 合计 | 345 | 233 | 107 | 5 |
+| 合计 | 345 | 243 | 97 | 5 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），原本是迁移前证据、未逐行复核，**r340 已逐行复核**（结论见 `## r340 复核结论`，其中 26 行改判 `已接`、2 行新增 `不适用`、174 行标 `**要接**`、9 行标 `**不接**`）；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -416,29 +416,29 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 顶栏标题「缓存管理」 | `BookCacheManageScreen.kt:158` | `pages/ProfileSubPages.ets:3428` | 已接 | 本地大标题样式，无折叠 | 进入页面看到标题 | — | — |
 | 搜索开关 | `BookCacheManageScreen.kt:162` | `pages/ProfileSubPages.ets:3413-3417` | 已接 | 本地内联展开输入框 | 点搜索图标出现输入框 | — | — |
-|  搜索过滤书名/作者  |  `BookCacheManageScreen.kt:118-126`  |  `pages/ProfileSubPages.ets:3434`  | 未接 |  输入框绑了 `searchQuery` 但**没有任何过滤逻辑**，`@State searchQuery` 只在 `onChange` 里写自己  |  输入书名后列表只剩该书  |  本地过滤函数缺失 ；**要接**：补过滤逻辑（书名/作者/分组），searchQuery 状态已有 |  —  |
+|  搜索过滤书名/作者  |  `BookCacheManageScreen.kt:118-126`  |  `pages/ProfileSubPages.ets:3434`  | 已接 |  输入框绑了 `searchQuery` 但**没有任何过滤逻辑**，`@State searchQuery` 只在 `onChange` 里写自己 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；pages/ProfileSubPages.ets 的 CacheManagementPage 新增 filteredCacheBooks()，按 searchQuery 对 title/author 做 toLowerCase 包含匹配；搜索框 onChange 写 searchQuery 后列表随之收窄  |  缓存页顶栏点搜索图标展开输入框，输入书名或作者片段后列表只剩匹配书，清空后恢复全量  |  本地过滤函数缺失 |  —  |
 | 分组筛选菜单 | `BookCacheManageScreen.kt:171-186` | `pages/ProfileSubPages.ets:3407-3412`、`:3490-3508` | 已接 | 本地 `CacheGroupMenu` 列出「全部/无分组 + 各分组」 | 点筛选图标弹出分组列表，选中项打勾 | — | — |
-|  分组过滤生效  |  `BookCacheManageScreen.kt:118-127`  |  —  | 未接 |  本地 `selectedCacheGroup` 只影响「未在书架」区的显隐（`:3452`），不影响书籍列表（因为列表是空态）  |  选某分组后列表只剩该分组书  |  — ；**要接**：补过滤逻辑（书名/作者/分组），searchQuery 状态已有 |  —  |
-|  刷新按钮  |  `BookCacheManageScreen.kt:160`  |  `pages/ProfileSubPages.ets:3421-3423`  | 未接 |  本地 `onUnavailableAction('缓存数据仓储尚未接入，未刷新缓存')`  |  点刷新后缓存统计重算  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
+|  分组过滤生效  |  `BookCacheManageScreen.kt:118-127`  |  —  | 已接 |  本地 `selectedCacheGroup` 只影响「未在书架」区的显隐（`:3452`），不影响书籍列表（因为列表是空态） ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；Index.ets 的 cacheManagementGroups() 改成遍历全量 books 的 groupNames（原来只收非本地书、本地全 isLocal=true 故为空）；filteredCacheBooks() 用 groupNames.includes 判定分组，「无分组」判 groupNames.length === 0，与上游位与判定是本地差异  |  点筛选图标选某分组 → 列表只剩该分组书；选「无分组」只剩没分组的书；选「全部」恢复  |  — |  —  |
+|  刷新按钮  |  `BookCacheManageScreen.kt:160`  |  `pages/ProfileSubPages.ets:3421-3423`  | 已接 |  本地 `onUnavailableAction('缓存数据仓储尚未接入，未刷新缓存')` ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；顶栏刷新按钮由 onUnavailableAction 占位改调 refreshCacheStats()，整批替换 @State cacheStats Map（CacheStatsRepository.load 逐本重算章节数/是否导入/占用）  |  点顶栏刷新图标 → 每本书的 n/total 与占用重新计算，列表不报错、统计刷新  |  — |  —  |
 | 两个分区（书架内 / 未在书架） | `BookCacheManageScreen.kt:343-346`、`:355-358` | `pages/ProfileSubPages.ets:3449-3458` | 已接 | 两个 `CacheEmptySection` 分区结构在（**仅空态**），只画空态文案；正文列表整体未接 | 有缓存时两区各自列出书籍 | 正文列表整体未接 | — |
 
 ### D2 缓存管理页 · 书籍卡片与章节（`BookCacheManageScreen.kt`）
 
 | 上游能力 | 上游位置 | 本地位置 | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-|  书籍缓存卡片  |  `BookCacheManageScreen.kt:392-530` `BookCacheBookCard`  |  —  | 未接 |  本地无卡片  |  列出每本书的封面、书名、缓存进度  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  卡片缓存进度文字 `n/total`  |  `BookCacheManageScreen.kt:474`  |  —  | 未接 |  同上  |  卡片显示 `12/240`  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  卡片进度条  |  `BookCacheManageScreen.kt:477-495`  |  —  | 未接 |  同上  |  进度条按 `cachedCount/totalCount` 填充  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  卡片状态摘要  |  `BookCacheManageScreen.kt:406-420` `cache_download_status_summary`  |  —  | 未接 |  同上  |  卡片显示「下载中 / 已暂停 / 等待重试」  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  卡片展开/收起箭头  |  `BookCacheManageScreen.kt:443-460`  |  —  | 未接 |  同上  |  点卡片展开章节列表  |  `a11y_collapsed`/`a11y_expanded` ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  卡片下载/停止按钮  |  `BookCacheManageScreen.kt:499-518`  |  —  | 未接 |  同上  |  点下载开始缓存全书，再点停止  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  卡片删除缓存按钮  |  `BookCacheManageScreen.kt:521-529`  |  —  | 未接 |  同上  |  点删除弹确认框，确认后缓存清零  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  章节行（下载状态）  |  `BookCacheManageScreen.kt:531-626` `BookCacheChapterRow`  |  —  | 未接 |  本地无章节级缓存视图  |  展开书籍后逐章列出状态  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  章节状态六档文字  |  `BookCacheManageScreen.kt:627-650` `chapterStatusText`  |  —  | 未接 |  上游六档：下载中/失败待重试/等待/暂停/失败/已缓存  |  不同状态的章节显示对应文字  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  章节下载/暂停/删除  |  `BookCacheManageScreen.kt:590-620`  |  —  | 未接 |  同上  |  单章可下载、暂停、删除  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  删除整书缓存确认框  |  `BookCacheManageScreen.kt:652-668` `DeleteBookCacheDialog`  |  —  | 未接 |  本地无  |  确认框写明书名，取消则不删  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  删除章节缓存确认框  |  `BookCacheManageScreen.kt:670-684` `DeleteChapterCacheDialog`  |  —  | 未接 |  本地无  |  确认框写明章节名，取消则不删  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
-|  长按卡片进选择  |  `BookCacheManageViewModel.kt`  |  —  | 未接 |  本地无选择模式  |  长按选中后可批量删缓存  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
+|  书籍缓存卡片  |  `BookCacheManageScreen.kt:392-530` `BookCacheBookCard`  |  —  | 已接 |  本地无卡片 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；新建 data/CacheStatsRepository.ets 与 pages/ProfileSubPages.ets 的 CacheBookCard 组件，把原来两段 CacheEmptySection 空态换成逐本 ForEach 列表；卡片传书名/作者/章节数/是否导入/占用  |  进缓存管理页看到书架里的书逐本列出，不再是两个「没有缓存」空块  |  — |  —  |
+|  卡片缓存进度文字 `n/total`  |  `BookCacheManageScreen.kt:474`  |  —  | 已接 |  同上 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；CacheBookCard 头行右侧显示 ${imported ? chapterCount : 0}/${chapterCount}；本地整本导入，imported 为真时已缓存章节数恒等于章节总数（本地事实，非算错），删缓存后变 0/total  |  每张卡显示 1378/1378 这类 n/total；删缓存后变 0/1378  |  — |  —  |
+|  卡片进度条  |  `BookCacheManageScreen.kt:477-495`  |  —  | 已接 |  同上 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；Progress({ value: chapterCount === 0 ? 0 : (imported ? 100 : 0), total: 100, type: ProgressType.Linear })，与 n/total 同源  |  整本导入的书进度条满格；未导入或缺正文的书进度条为 0  |  — |  —  |
+|  卡片状态摘要  |  `BookCacheManageScreen.kt:406-420` `cache_download_status_summary`  |  —  | 已接 |  同上 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；底行显示「章节 N、已导入或未导入、占用 X」，占用由 fileIo.statSync(contentPath).size 格式化；本地没有下载器，上游「下载中/等待/暂停/失败」四档无对应语义，状态摘要换成本地真实三量  |  每张卡显示「章节 1378、已导入、占用 8.0 MB」；缺正文书显示「未导入、占用 0 B」  |  — |  —  |
+|  卡片展开/收起箭头  |  `BookCacheManageScreen.kt:443-460`  |  —  | 已接 |  同上 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；CacheBookCard 头行 .onClick(toggleExpand)、箭头 AppGlyph(profileExpandMore) .rotate({ angle: expanded ? 90 : 0 })；展开态追加一行「正文已在应用内导入，缓存即整本文件。」（章节级内容本批未做）  |  点卡片头行 → 箭头转 90° 并出现一行说明；再点收起 → 说明消失  |  `a11y_collapsed`/`a11y_expanded` |  —  |
+|  卡片下载/停止按钮  |  `BookCacheManageScreen.kt:499-518`  |  —  | 未接 |  同上 ；**复核（r341）**：本批未做，原因 本地正文就是磁盘上那一个整本文件，没有「下载」这个动作；依赖在线书源逐章可下载，本批未做  |  点下载开始缓存全书，再点停止  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
+|  卡片删除缓存按钮  |  `BookCacheManageScreen.kt:521-529`  |  —  | 已接 |  同上 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；confirmDeleteCache(book) 用 getUIContext().showAlertDialog 确认后调 BookRepository.discardImportedCopy(book) 删应用内导入副本（不复用 deleteBook，书目与阅读进度保留），再 refreshCacheStats()  |  点「删除缓存」弹确认框，确认后该卡从「1378/1378 已导入」变「0/1378 未导入」  |  — |  —  |
+|  章节行（下载状态）  |  `BookCacheManageScreen.kt:531-626` `BookCacheChapterRow`  |  —  | 未接 |  本地无章节级缓存视图 ；**复核（r341）**：本批未做，原因 需要逐章缓存才有意义，本地整本导入、章节级无独立状态；依赖在线书源，本批未做  |  展开书籍后逐章列出状态  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
+|  章节状态六档文字  |  `BookCacheManageScreen.kt:627-650` `chapterStatusText`  |  —  | 未接 |  上游六档：下载中/失败待重试/等待/暂停/失败/已缓存 ；**复核（r341）**：本批未做，原因 上游章节状态档位（ChapterCacheStatus.kt）全部依赖下载器状态，本地无下载器；本批未做  |  不同状态的章节显示对应文字  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
+|  章节下载/暂停/删除  |  `BookCacheManageScreen.kt:590-620`  |  —  | 未接 |  同上 ；**复核（r341）**：本批未做，原因 同上，依赖逐章可下载；本批未做  |  单章可下载、暂停、删除  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
+|  删除整书缓存确认框  |  `BookCacheManageScreen.kt:652-668` `DeleteBookCacheDialog`  |  —  | 已接 |  本地无 ；**实现（r341）**：本地意义的缓存页（≠ 上游在线章节下载管理器：上游 BookCacheManageViewModel.kt:244 把 isLocal 书过滤掉，本地书正文本来就在磁盘上）；确认框标题「删除缓存？」、说明「会删除应用内的正文副本，书目与阅读进度保留。原始文件如需找回，可用『恢复本地书』。」、取消/删除两按钮；action 里调 discardImportedCopy 而非 deleteBook  |  点「删除缓存」出现带说明的确认框，点「取消」不删、点「删除」才清零；回书架该书封面出现「缺正文」角标  |  — |  —  |
+|  删除章节缓存确认框  |  `BookCacheManageScreen.kt:670-684` `DeleteChapterCacheDialog`  |  —  | 未接 |  本地无 ；**复核（r341）**：本批未做，原因 同上，依赖逐章缓存；本批未做  |  确认框写明章节名，取消则不删  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
+|  长按卡片进选择  |  `BookCacheManageViewModel.kt`  |  —  | 未接 |  本地无选择模式 ；**复核（r341）**：本批未做，原因 上游选择模式用于批量下载/换源/清缓存，本地无下载无换源，批量只剩「删除」且与书架选择模式（批 5）重复；本批未做  |  长按选中后可批量删缓存  |  — ；**要接**：缓存管理页主体需磁盘章节缓存；现有 chapterCache 是内存 Map（data/BookRepository.ets:140），先落磁盘缓存表再给卡片与章节行 |  —  |
 
 ### D3 书架管理页（`BookshelfManageScreen.kt`，本地整页缺失）
 
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 ## 小结
 
-**全表合计 345 条：已接 233、未接 107、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 107 行按备注列分：`**要接**` 97 行、`**不接**` 10 行，逐行判断见上一节。
+**全表合计 345 条：已接 243、未接 97、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 97 行按备注列分：`**要接**` 87 行、`**不接**` 10 行，逐行判断见上一节。
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
@@ -665,7 +665,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 5 选择模式、拖拽与动作 | 15 | `:87` `:106` `:107` `:113` `:114` `:138` `:142`–`:144` `:146`–`:151` | books 表已有 order 列支撑拖拽重排；全选/反选依赖选中集合。**实现（r341）**：本批实际交付 12 行（`:87` `:95` `:106` `:107` `:114` `:138` `:142`–`:144` `:146` `:148` `:149`）；`:113` 因触发条件在本地不存在改判 `**不接**`；`:147` `:150` `:151` 依赖私密体系，移到批 6 |
 | 6 私密体系 | 3 | `:257` `:294` `:325` | **实现（r341）**：本批实际交付 6 行（原 3 行 + 从批 5 移入 `:147` `:150` `:151`）。「books 表需加 isPrivate 列」这句判断段的记述不成立——建表早在 `data/RdbSchema.ets:241`，缺的是 model 字段与三处读取（`toBookArgs` 该位原先写死 0）。密码走 PBKDF2，指纹未做。 |
 | 7 详情页交互与本地动作 | 35 | `:273` `:274` `:277`–`:280` `:284` `:287`–`:293` `:296`–`:299` `:301`–`:303` `:305` `:313`–`:315` `:332` `:337`–`:344` `:350` | 头部文本行加点击/长按、菜单动作、简介三种标记解析、编辑面板、在线换封面。**实现（r341）**：本批实际交付 16 行（`:274` `:280` `:284` `:291` `:296`–`:299` `:301` `:302` `:313` `:315` `:332` `:337`–`:339`）；`:340` 独立分组多选面板未做、保持未接；7k 表 18 行按收尾要求保持未接并逐行写复核理由；上机验收 13 点除读屏播报与「已读完」分支未能造数据外全部实测通过  |
-| 8 缓存管理页 | 16 | `:419` `:421` `:422` `:429`–`:441` | 前置：先落磁盘章节缓存表。现有 data/BookRepository.ets:140 的 chapterCache 是内存 Map，重启即空 |
+| 8 缓存管理页 | 16 | `:419` `:421` `:422` `:429`–`:441` | 前置：先落磁盘章节缓存表。现有 data/BookRepository.ets:140 的 chapterCache 是内存 Map，重启即空。**实现（r341）**：本批实际交付 10 行（`:419` `:421` `:422` `:429`–`:433` `:435` `:439`），做的是「本地意义的缓存页」而非上游在线章节下载管理器（上游把 isLocal 书过滤掉、照搬会做成空壳）；新建 data/CacheStatsRepository.ets 与 CacheBookCard，页面补搜索/分组/刷新过滤、逐本 n/total 与进度条、状态摘要、展开收起、删缓存确认框；6 行（`:434` `:436`–`:438` `:440` `:441`）依赖在线书源逐章下载，保持未接并逐行写复核理由；上机验收 9 点全部实测通过  |
 | 9 书架管理页整页 | 31 | `:447`–`:475` `:482` `:484` | 按上游 BookshelfManageScreen 建页；入口已在 pages/BookshelfPage.ets:594-595 |
 | 10 导入判重与多选 | 5 | `:551` `:552` `:554`–`:556` | data/BookRepository.ets:428-435 的 maxSelectNumber = 1 是硬卡点；导入页需先建中间页 |
 | 11 阅读记录与备份开关 | 5 | `:394` `:504` `:505` `:510` `:511` | 章名字段直接补；进度同步与自动检查需后台任务；旧版数据要旧格式 JSON 解析器 |

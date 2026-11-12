@@ -1034,9 +1034,11 @@ struct Index {
 
   private cacheManagementGroups(): string[] {
     const groups: string[] = [];
-    this.books.filter((book: Book) => !book.isLocal).forEach((book: Book) => {
-      const group = book.groupName?.trim() ?? '';
-      if (group.length > 0 && !groups.includes(group)) { groups.push(group); }
+    this.books.forEach((book: Book) => {
+      (book.groupNames ?? []).forEach((name: string) => {
+        const group = name.trim();
+        if (group.length > 0 && !groups.includes(group)) { groups.push(group); }
+      });
     });
     return groups;
   }
@@ -8174,6 +8176,7 @@ struct Index {
         } else if (this.profileSubpage === ProfileRoute.CACHE_MANAGEMENT) {
           CacheManagementPage({
             groups: this.cacheManagementGroups(),
+            books: this.books,
             onBack: () => this.route = this.profileDetailReturnRoute,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })

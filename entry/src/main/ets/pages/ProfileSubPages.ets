@@ -13,7 +13,10 @@ import {
   PROFILE_ROW_TITLE_SIZE,
   PROFILE_ROW_VERTICAL_PADDING
 } from '../components/ProfileUiMetrics';
-import { ProfileRoute } from '../model/Book';
+import { Book, ProfileRoute } from '../model/Book';
+import { BookCacheStat, CacheStatsRepository } from '../data/CacheStatsRepository';
+import { BookRepository } from '../data/BookRepository';
+import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { ReplaceRulePreviewLine, ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReadRecordDetail, ReadRecordSession, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
@@ -3885,9 +3888,99 @@ export struct CacheManagementPage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
+  @Prop books: Book[] = [];
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State selectedCacheGroup: string = '全部';
+  @State cacheStats: Map<string, BookCacheStat> = new Map<string, BookCacheStat>();
+  @State expandedBookKeys: Set<string> = new Set<string>();
+
+  aboutToAppear(): void {
+    this.refreshCacheStats();
+  }
+
+  /** 刷新统计：整批替换 Map，@State 对 Map 原地 set 不触发刷新。 */
+  private async refreshCacheStats(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    this.cacheStats = await CacheStatsRepository.load(context, this.books);
+  }
+
+  /**
+   * 缓存页的书籍过滤，语义照上游 BookCacheManageScreen.kt:118-133：
+   * 搜索只比书名与作者且不区分大小写。
+   * 本地 Book 没有掩码，groupNames 是名字数组，所以用 includes 而不是位与——
+   * 这是本地与上游的实质差异。
+   */
+  private filteredCacheBooks(): Book[] {
+    const keyword = this.searchQuery.trim().toLowerCase();
+    return this.books.filter((book: Book) => {
+      const groupNames = book.groupNames ?? [];
+      let matchesGroup = true;
+      if (this.selectedCacheGroup === '无分组') {
+        matchesGroup = groupNames.length === 0;
+      } else if (this.selectedCacheGroup !== '全部') {
+        matchesGroup = groupNames.includes(this.selectedCacheGroup);
+      }
+      const matchesSearch = keyword.length === 0 ||
+        book.title.toLowerCase().includes(keyword) ||
+        book.author.toLowerCase().includes(keyword);
+      return matchesGroup && matchesSearch;
+    });
+  }
+
+  private bookKey(book: Book): string {
+    return LocalBookRestorePlanner.bookUrlOf(book);
+  }
+
+  private chapterCountOf(book: Book): number {
+    const stat = this.cacheStats.get(this.bookKey(book));
+    return stat !== undefined ? stat.chapterCount : Number(book.chapterCount ?? '0');
+  }
+
+  private importedOf(book: Book): boolean {
+    const stat = this.cacheStats.get(this.bookKey(book));
+    return stat !== undefined ? stat.imported : false;
+  }
+
+  private sizeLabelOf(book: Book): string {
+    const stat = this.cacheStats.get(this.bookKey(book));
+    return this.formatSize(stat !== undefined ? stat.sizeBytes : 0);
+  }
+
+  private formatSize(bytes: number): string {
+    if (bytes >= 1024 * 1024) { return `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
+    if (bytes >= 1024) { return `${(bytes / 1024).toFixed(1)} KB`; }
+    return `${bytes} B`;
+  }
+
+  private isExpanded(book: Book): boolean {
+    return this.expandedBookKeys.has(this.bookKey(book) + '_' + book.id);
+  }
+
+  private toggleExpand(book: Book): void {
+    const key = this.bookKey(book) + '_' + book.id;
+    const next = new Set<string>(this.expandedBookKeys);
+    if (next.has(key)) { next.delete(key); } else { next.add(key); }
+    this.expandedBookKeys = next;
+  }
+
+  /** 删缓存只清应用内导入副本，保留书目与进度；不复用 deleteBook（那会连书目一起删）。 */
+  private confirmDeleteCache(book: Book): void {
+    this.getUIContext().showAlertDialog({
+      title: '删除缓存？',
+      message: '会删除应用内的正文副本，书目与阅读进度保留。原始文件如需找回，可用『恢复本地书』。',
+      autoCancel: true,
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '删除',
+        action: () => {
+          BookRepository.discardImportedCopy(book);
+          this.refreshCacheStats();
+        }
+      }
+    });
+  }
 
   private cacheGroupOptions(): string[] {
     const options: string[] = ['全部', '无分组'];
@@ -3931,7 +4024,7 @@ export struct CacheManagementPage {
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'profileRefresh', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).onClick(() => this.onUnavailableAction('缓存数据仓储尚未接入，未刷新缓存'))
+        }.width(40).height(40).onClick(() => this.refreshCacheStats())
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
 
       Text('缓存管理').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
@@ -3950,19 +4043,38 @@ export struct CacheManagementPage {
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
       }
 
-      Column() {
-        CacheEmptySection({
-          title: '书架书籍',
-          message: '没有书架内书籍缓存或下载任务'
-        })
-        if (this.selectedCacheGroup === '全部') {
+      if (this.filteredCacheBooks().length === 0) {
+        Column() {
           CacheEmptySection({
-            title: '未在书架',
-            message: '没有未在书架的书籍下载状态'
+            title: '书架书籍',
+            message: this.books.length === 0 ? '书架里还没有书' : '没有符合当前筛选条件的书籍'
           })
-        }
-      }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 8, bottom: 18 })
-        .layoutWeight(1)
+          if (this.selectedCacheGroup === '全部') {
+            CacheEmptySection({
+              title: '未在书架',
+              message: '本地导入的书都在书架里，没有独立的下载队列'
+            })
+          }
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 8, bottom: 18 })
+          .layoutWeight(1)
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.filteredCacheBooks(), (book: Book) => {
+              CacheBookCard({
+                bookTitle: book.title,
+                bookAuthor: book.author,
+                chapterCount: this.chapterCountOf(book),
+                imported: this.importedOf(book),
+                sizeLabel: this.sizeLabelOf(book),
+                expanded: this.isExpanded(book),
+                onToggleExpand: () => this.toggleExpand(book),
+                onDeleteCache: () => this.confirmDeleteCache(book)
+              })
+            }, (book: Book) => this.bookKey(book) + '_' + book.id)
+          }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 18 })
+        }.layoutWeight(1).scrollBar(BarState.Off)
+      }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
@@ -4003,6 +4115,56 @@ struct CacheEmptySection {
       Text(this.message).fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start)
         .padding({ left: 12, right: 12, top: 12, bottom: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(8)
     }.width('100%').margin({ bottom: 14 })
+  }
+}
+
+/** 缓存页的书籍卡：本地整本导入，n/total 与进度恒 100%，状态摘要写章节/导入/占用。 */
+@Component
+struct CacheBookCard {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @Prop bookTitle: string = '';
+  @Prop bookAuthor: string = '';
+  @Prop chapterCount: number = 0;
+  @Prop imported: boolean = false;
+  @Prop sizeLabel: string = '';
+  @Prop expanded: boolean = false;
+  onToggleExpand: () => void = () => {};
+  onDeleteCache: () => void = () => {};
+
+  build() {
+    Column() {
+      Row() {
+        AppGlyph({ name: 'profileExpandMore', glyphSize: 18, tint: this.themeColorAccent })
+          .rotate({ angle: this.expanded ? 90 : 0 }).margin({ right: 8 })
+        Column() {
+          Text(this.bookTitle).fontSize(14).fontColor(this.themeColorTextPrimary).maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.bookAuthor.length > 0 ? this.bookAuthor : '作者未知').fontSize(11)
+            .fontColor(this.themeColorTextTertiary).maxLines(1).margin({ top: 2 })
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Text(`${this.imported ? this.chapterCount : 0}/${this.chapterCount}`)
+          .fontSize(12).fontColor(this.themeColorAccent)
+      }.width('100%').onClick(() => this.onToggleExpand())
+      Progress({
+        value: this.chapterCount === 0 ? 0 : (this.imported ? 100 : 0),
+        total: 100,
+        type: ProgressType.Linear
+      }).height(3).color(this.themeColorAccent).backgroundColor('#E4E0D7').margin({ top: 9 })
+      Row() {
+        Text(`章节 ${this.chapterCount} | ${this.imported ? '已导入' : '未导入'} | 占用 ${this.sizeLabel}`)
+          .fontSize(11).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+        Text('删除缓存').fontSize(12).fontColor('#FF6B6B')
+          .padding({ left: 8, top: 4, bottom: 4 }).onClick(() => this.onDeleteCache())
+      }.width('100%').margin({ top: 8 })
+      if (this.expanded) {
+        Text(this.imported ? '正文已在应用内导入，缓存即整本文件。' : '应用内正文副本已删除，可用「恢复本地书」找回。')
+          .fontSize(11).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
+      }
+    }.width('100%').padding(12).backgroundColor(this.themeColorSurfaceSecondary)
+      .borderRadius(8).margin({ bottom: 12 })
   }
 }
 
