@@ -25,7 +25,11 @@ export struct BookGroupCard {
   @Prop isNight: boolean = false;
   /** 列表封面宽度，来自书架布局 bookshelfListCoverWidth（:187）。 */
   @Prop listCoverWidth: number = 84;
+  /** 是否显示书籍计数（：106）；对应书架布局 showBookCount，关闭后两处「N 本」都不画。 */
+  @Prop showCount: boolean = true;
   onOpen: () => void = () => {};
+  /** 长按分组卡直接进该分组的编辑面板（:107，上游 GroupEditSheet 入口）。 */
+  onLongPress: (groupName: string) => void = (_groupName: string) => {};
 
   /** 取前 coverCount 本作预览封面，与上游 previewBooks.take(coverCount) 一致。 */
   private previewBooks(): Book[] {
@@ -46,7 +50,9 @@ export struct BookGroupCard {
       Row() {
         Text(this.groupName).fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(`${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
+        if (this.showCount) {
+          Text(`${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
+        }
         Text('›').fontSize(16).fontColor(this.themeColorAccent).margin({ left: 4 })
       }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
 
@@ -86,7 +92,9 @@ export struct BookGroupCard {
           }
           Column() {
             Text(this.listStyle === 1 ? '紧凑列表' : '分组').fontSize(11).fontColor(this.themeColorTextTertiary)
-            Text(`共 ${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
+            if (this.showCount) {
+              Text(`共 ${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
+            }
           }.alignItems(HorizontalAlign.Start).layoutWeight(1).padding({ left: 10 })
         }.width('100%').alignItems(VerticalAlign.Top).padding({ left: 8, right: 8, bottom: 10 })
       }
@@ -96,5 +104,6 @@ export struct BookGroupCard {
     .backgroundColor(this.themeColorSurfaceElevated)
     .borderRadius(8)
     .onClick(() => { this.onOpen(); })
+    .gesture(LongPressGesture({ duration: 500 }).onAction(() => { this.onLongPress(this.groupName); }))
   }
 }

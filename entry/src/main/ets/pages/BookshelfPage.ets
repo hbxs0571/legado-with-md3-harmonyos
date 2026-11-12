@@ -18,6 +18,7 @@ import { AppLog } from '../lib/AppLog';
 import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
 import { window } from '@kit.ArkUI';
 import { toTimeAgo } from '../lib/TimeAgo';
+import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { argbToColorHex, hexToArgb, deriveTagBgColor, baseHueFromHex, generateTagColors } from '../lib/TagColorUtils';
 import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
 import { TagGroupRule } from '../model/TagGroupRule';
@@ -135,6 +136,19 @@ export struct BookshelfPage {
   @State draftRulePattern: string = '';
   /** 「粘贴」需先弹 PasteButton 授权层，不能直接读剪贴板（ProfileSubPages.ets:1394）。 */
   @State showRulePasteAuthorization: boolean = false;
+  /** 选择模式（:87 / :142-144）。进入后卡片点击改勾选，顶栏换关闭按钮。 */
+  @State selectionMode: boolean = false;
+  /**
+   * 已选书籍的键集合（:142-144）。
+   * 键一律用 bookUrl（contentPath 优先），不用 book.id —— id 是文件名去扩展名派生的，
+   * 同名但不同目录的两本书会撞键，而 books 表主键是 bookUrl。
+   * ArkTS 的 @State 不认识 Set 的原地增删，全部改用 new Set(...) 整体赋值。
+   */
+  @State selectedBookKeys: Set<string> = new Set<string>();
+  /** 批量删除确认面板（:148 / :149）；与布局/日志/分组面板共用同一个 bindSheet。 */
+  @State showBatchDeleteSheet: boolean = false;
+  /** 批量删除时是否同时删掉应用内导入副本（:149）；每次打开面板都从未勾选起步。 */
+  @State batchDeleteSource: boolean = false;
   /** 记住上次分组只灌一次，避免后续设置对象刷新覆盖用户主动选择的页签。 */
   private tabPositionRestored: boolean = false;
   /** 书架窗口引用与尺寸回调，aboutToDisappear 时解绑，避免订阅泄漏。 */
@@ -171,6 +185,14 @@ export struct BookshelfPage {
   onImportBookList: (books: Book[]) => Promise<void> = async (_books: Book[]) => {};
   /** 全量应用标签匹配规则，交给 Index 落库并刷新书架（:241）。 */
   onApplyTagGroupRules: () => Promise<void> = async () => {};
+  /** 把若干本书挪到指定分组（:146）；走替换语义，空串表示移回未分组。 */
+  onSetBooksGroup: (bookKeys: string[], groupName: string) => Promise<void> =
+    async (_bookKeys: string[], _groupName: string) => {};
+  /** 批量删书（:148 / :149）；deleteSource 只决定要不要清应用内导入副本。 */
+  onDeleteBooks: (books: Book[], deleteSource: boolean) => Promise<void> =
+    async (_books: Book[], _deleteSource: boolean) => {};
+  /** 拖拽重排后把新顺序交给 Index 落库并同步内存（:138）。 */
+  onMoveBooks: (ordered: Book[]) => Promise<void> = async (_ordered: Book[]) => {};
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
   private bookCardKey(book: Book): string {
@@ -310,6 +332,9 @@ export struct BookshelfPage {
    * 本地暂无选择模式（批 5），本批只做搜索态一支；返回空串表示不显示。
    */
   private bookshelfSubtitle(): string {
+    if (this.selectionMode) {
+      return `已选 ${this.selectedBookKeys.size} 本 · 本组共 ${this.getVisibleBooks().length} 本`;
+    }
     if (this.showSearch) {
       return `共 ${this.getVisibleBooks().length} 本`;
     }
@@ -509,6 +534,165 @@ export struct BookshelfPage {
       this.layout.bookshelfSort, this.layout.bookshelfSortOrder);
   }
 
+  /** 书籍的稳定键：与 books 表主键同口径（contentPath 优先），不用 book.id。 */
+  private bookKey(book: Book): string {
+    return LocalBookRestorePlanner.bookUrlOf(book);
+  }
+
+  private isBookSelected(book: Book): boolean {
+    return this.selectedBookKeys.has(this.bookKey(book));
+  }
+
+  /** 进/出选择模式（:87 / :142）；退出时清空选中集合。 */
+  private toggleSelectionMode(): void {
+    if (this.selectionMode) {
+      this.clearSelection();
+      return;
+    }
+    this.selectionMode = true;
+    this.selectedBookKeys = new Set<string>();
+  }
+
+  /** 退出选择模式并清空选中（:87 顶栏关闭按钮与工具条「完成」都走这里）。 */
+  private clearSelection(): void {
+    this.selectionMode = false;
+    this.selectedBookKeys = new Set<string>();
+  }
+
+  /** 单本切换选中（:142）；选中集合清空时自动退出选择模式，与 CatalogPage 同口径。 */
+  private toggleBookSelection(book: Book): void {
+    const key = this.bookKey(book);
+    const next = new Set<string>(this.selectedBookKeys);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    this.selectedBookKeys = next;
+    if (next.size === 0) {
+      this.selectionMode = false;
+    }
+  }
+
+  /** 全选当前可见书（:143）；只看 getVisibleBooks()，不是全库，上游方法名就叫 SelectAllVisible。 */
+  private selectAllVisible(): void {
+    const next = new Set<string>(this.selectedBookKeys);
+    this.getVisibleBooks().forEach((book: Book) => { next.add(this.bookKey(book)); });
+    this.selectedBookKeys = next;
+  }
+
+  /** 反选当前可见书（:144）；只翻转可见那批，不可见的选中保持不变。 */
+  private invertVisibleSelection(): void {
+    const next = new Set<string>(this.selectedBookKeys);
+    this.getVisibleBooks().forEach((book: Book) => {
+      const key = this.bookKey(book);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+    });
+    this.selectedBookKeys = next;
+    if (next.size === 0) {
+      this.selectionMode = false;
+    }
+  }
+
+  /** 已选中的书籍对象，顺序按书架当前排序。 */
+  private selectedBooks(): Book[] {
+    return this.books.filter((book: Book) => this.selectedBookKeys.has(this.bookKey(book)));
+  }
+
+  /** 把选中的书挪到目标分组（:146）；'本地未分组' 传空串让掩码变成 0。 */
+  private async moveSelectedToGroup(groupName: string): Promise<void> {
+    const keys: string[] = [];
+    this.selectedBooks().forEach((book: Book) => { keys.push(this.bookKey(book)); });
+    if (keys.length === 0) { return; }
+    const target = groupName === '本地未分组' ? '' : groupName;
+    await this.onSetBooksGroup(keys, target);
+    this.onUnavailableAction(`已移动 ${keys.length} 本到${target.length > 0 ? target : '未分组'}`);
+    this.clearSelection();
+  }
+
+  /** 删除选中的书（:148 / :149）；面板里才有「同时删除应用内副本」的勾选。 */
+  private async executeBatchDelete(): Promise<void> {
+    const books = this.selectedBooks();
+    if (books.length === 0) { return; }
+    this.showBatchDeleteSheet = false;
+    try {
+      await this.onDeleteBooks(books, this.batchDeleteSource);
+    } finally {
+      this.batchDeleteSource = false;
+      this.clearSelection();
+    }
+  }
+
+  /**
+   * 拖拽重排是否可用（:138）：只有当前生效的排序方式是「手动」（bookSort === 3）才有意义。
+   * BookshelfSort.compareBySort 六档里只有手动那档读 order，其它排序下拖完屏幕不会有变化，
+   * 这是上游行为，不是没生效。
+   */
+  private canReorderBooks(): boolean {
+    const group = this.groups.find((item: BookGroup) =>
+      item.groupId > 0 && item.groupName === this.activeFilter());
+    const sort = group !== undefined && group.bookSort >= 0 ? group.bookSort : this.layout.bookshelfSort;
+    return sort === 3;
+  }
+
+  /** 把第 from 本拖到第 to 本的位置（:138）；内存顺序与落库都交给 Index。 */
+  private async moveBook(from: number, to: number): Promise<void> {
+    const visible = this.getVisibleBooks();
+    if (from < 0 || to < 0 || from >= visible.length || to >= visible.length || from === to) { return; }
+    const reordered: Book[] = visible.slice();
+    const moved = reordered.splice(from, 1)[0];
+    if (moved === undefined) { return; }
+    reordered.splice(to, 0, moved);
+    await this.onMoveBooks(reordered);
+  }
+
+  /** 选择模式工具条里的「移动」菜单：列自定义分组再加「未分组」。 */
+  @Builder
+  private SelectionGroupMenu() {
+    Menu() {
+      ForEach(this.getGroupNames().filter((name: string) => name !== '全部'), (groupName: string) => {
+        MenuItem({ content: groupName === '本地未分组' ? '未分组' : groupName }).height(44)
+          .onClick(async () => { await this.moveSelectedToGroup(groupName); })
+      }, (groupName: string) => `sel_group_${groupName}`)
+    }.backgroundColor(this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)
+      .fontColor(this.themeColorTextPrimary).radius(20)
+  }
+
+  /** 批量删除确认面板（:148 / :149）。 */
+  @Builder
+  private BatchDeleteSheet() {
+    Column() {
+      Row() {
+        Text('删除所选书籍').fontSize(19).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
+      Column() {
+        Text(`将删除 ${this.selectedBookKeys.size} 本书，删除后无法恢复。`)
+          .fontSize(13).fontColor(this.themeColorTextSecondary).width('100%')
+        if (this.selectedBooks().some((book: Book) => book.isLocal)) {
+          Row() {
+            Checkbox()
+              .select(this.batchDeleteSource)
+              .onChange((checked: boolean) => { this.batchDeleteSource = checked; })
+            // 本地能删的只有应用内导入副本（book.contentPath），用户原始文件不由应用删除。
+            Text('同时删除应用内副本').fontSize(13).fontColor(this.themeColorTextSecondary)
+          }.width('100%').margin({ top: 12 })
+        }
+      }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
+      Row() {
+        Text('取消').fontSize(14).fontColor(this.themeColorTextTertiary).padding(10)
+          .onClick(() => { this.showBatchDeleteSheet = false; this.batchDeleteSource = false; })
+        Blank()
+        Text('删除').fontSize(14).fontColor('#FF6B6B').padding(10)
+          .onClick(async () => { await this.executeBatchDelete(); })
+      }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+    }.width('100%').alignItems(HorizontalAlign.Start)
+  }
+
   /** 只列自定义分组，按 order 升序，与上游 GroupManageSheet 一致。 */
   private getUserGroups(): BookGroup[] {
     return this.groups.filter((group: BookGroup) => group.groupId > 0)
@@ -577,6 +761,9 @@ export struct BookshelfPage {
         }
       }
     }
+    // 长按文件夹视图的分组卡也会走到这里，此时分组管理面板还没打开；
+    // bindSheet 的开关条件是 showGroupManager，所以要一并置真，否则面板不弹出。
+    this.showGroupManager = true;
     this.showGroupEditor = true;
   }
 
@@ -1513,7 +1700,9 @@ export struct BookshelfPage {
    */
   @Builder
   private ShelfSheetContent() {
-    if (this.showTagColorPage) {
+    if (this.showBatchDeleteSheet) {
+      this.BatchDeleteSheet()
+    } else if (this.showTagColorPage) {
       this.TagColorSheet()
     } else if (this.showLayoutSheet) {
       this.LayoutSheetContent()
@@ -1666,7 +1855,7 @@ export struct BookshelfPage {
       MenuItem({ startIcon: $r('app.media.menu_link'), content: '添加网址' }).height(48)
         .onClick(() => this.onUnavailableAction('网址导入尚未迁移'))
       MenuItem({ startIcon: $r('app.media.app_pencil'), content: '选择模式' }).height(48)
-        .onClick(() => this.onUnavailableAction('书架选择模式尚未迁移'))
+        .onClick(() => this.toggleSelectionMode())
       MenuItem({ startIcon: $r('app.media.menu_bookmarks'), content: '书架管理' }).height(48)
         .onClick(() => this.onUnavailableAction('书架管理尚未迁移'))
       MenuItem({ startIcon: $r('app.media.menu_upload_file'), content: '导出书单' }).height(48)
@@ -1685,6 +1874,13 @@ export struct BookshelfPage {
           Text(this.bookshelfTitle()).fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         }
         Blank()
+        if (this.selectionMode) {
+          // 选择模式顶栏：只留关闭按钮，搜索与更多暂时收起（:87）。
+          Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'profileClose', glyphSize: 18 }) }
+            .width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
+            .onClick(() => this.clearSelection())
+        }
+        if (!this.selectionMode) {
         Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 20 }) }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(20)
           .onClick(() => {
             if (this.layout.bookshelfSearchActionDirectToSearch) {
@@ -1705,6 +1901,7 @@ export struct BookshelfPage {
         Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
           .width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(20).margin({ left: 8 })
           .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+        }
       }.width('100%').height(56).padding({ left: 16, right: 16, top: 10, bottom: 0 })
       Column() {
         Text(this.bookshelfTitle()).fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
@@ -1767,6 +1964,23 @@ export struct BookshelfPage {
             .bindMenu(this.GroupFilterMenu())
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       }
+      if (this.selectionMode) {
+        // 选择模式工具条（:142-144 / :146 / :148）。
+        Row() {
+          Text(`已选 ${this.selectedBookKeys.size} 本`).fontSize(12)
+            .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text('全选').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+            .onClick(() => this.selectAllVisible())
+          Text('反选').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+            .onClick(() => this.invertVisibleSelection())
+          Text('移动').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+            .bindMenu(this.SelectionGroupMenu)
+          Text('删除').fontSize(12).fontColor('#FF6B6B').padding(6)
+            .onClick(() => { this.batchDeleteSource = false; this.showBatchDeleteSheet = true; })
+          Text('完成').fontSize(12).fontColor(this.themeColorTextTertiary).padding(6)
+            .onClick(() => this.clearSelection())
+        }.width('100%').padding({ left: 16, right: 12, bottom: 8 })
+      }
       if (this.layout.bookGroupStyle === 2 && this.folderViewGroup.length === 0) {
         // 文件夹根层：分组卡片网格，列数按横竖屏各取一套（KI-SL-C2）。
         Grid() {
@@ -1780,7 +1994,13 @@ export struct BookshelfPage {
                 coverSettings: this.coverSettings,
                 isNight: this.readerNightMode,
                 listCoverWidth: this.layout.bookshelfListCoverWidth,
-                onOpen: () => { this.openFolderGroup(groupName); }
+                showCount: this.layout.showBookCount,
+                onOpen: () => { this.openFolderGroup(groupName); },
+                // 长按分组卡直接进该分组的编辑面板（:107，上游 GroupEditSheet 入口）。
+                onLongPress: (name: string) => {
+                  const target = this.groups.find((item: BookGroup) => item.groupName === name);
+                  if (target !== undefined) { this.openGroupEditor(target); }
+                }
               })
             }
           }, (groupName: string) => `folder_${groupName}_${this.getFolderPreviewBooks(groupName).length}_${this.layout.bookshelfGroupCoverCount}_${this.layout.bookshelfGroupListStyle}_${this.activeLayoutMode()}`)
@@ -1793,6 +2013,7 @@ export struct BookshelfPage {
         Grid(this.bookshelfScroller) {
           ForEach(this.getVisibleBooks(), (book: Book) => {
             GridItem() {
+              Stack({ alignContent: Alignment.TopEnd }) {
               Column() {
                 if (this.activeLayoutMode() === 0) {
                   // 列表模式卡片：左封面右信息（上游 BookItem.kt:846 BookshelfListItem）。
@@ -1808,7 +2029,9 @@ export struct BookshelfPage {
                         displayWidth: this.layout.bookshelfListCoverWidth,
                         displayHeight: Math.round(this.layout.bookshelfListCoverWidth * 7 / 5),
                         coverSettings: this.coverSettings,
-                        isNight: this.readerNightMode
+                        isNight: this.readerNightMode,
+                        a11yText: [book.title, book.author, book.lastChapter]
+                          .filter((value: string) => value.length > 0).join('，')
                       })
                       Column() {
                         Row() {
@@ -1892,7 +2115,9 @@ export struct BookshelfPage {
                     fillWidth: true,
                     maxWidth: this.bookshelfCoverWidthLimit(),
                     coverSettings: this.coverSettings,
-                    isNight: this.readerNightMode
+                    isNight: this.readerNightMode,
+                    a11yText: [book.title, book.author, book.lastChapter]
+                      .filter((value: string) => value.length > 0).join('，')
                   })
                   if (this.layout.bookshelfGridLayout === 1) {
                     // 紧凑样式：书名移进封面内底部，白字配渐变黑底（上游 BookItem.kt:110-133）
@@ -1938,22 +2163,52 @@ export struct BookshelfPage {
                 .backgroundColor(this.cardBackgroundColor())
                 .borderRadius(8)
                 .onClick(() => {
+                  // 选择模式下点击=切换选中，不打开书（:142 验收第 12 条）。
+                  if (this.selectionMode) { this.toggleBookSelection(book); return; }
                   if (BookRepository.isBodyMissing(book)) {
                     this.onOpenBookInfo(book);
                   } else {
                     this.onOpenBook(book);
                   }
                 })
-                .priorityGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+                // 手动排序下 Grid 的 onMove 拖拽同样靠长按启动，卡片这层必须先让位：
+                // onGestureJudgeBegin 在判定阶段否决卡片长按，拖拽才能交给父级 Grid。
+                // 其它排序方式 Grid 不启用 editMode，长按仍是「进详情」，行为不变。
+                .onGestureJudgeBegin((info: GestureInfo, _event: BaseGestureEvent): GestureJudgeResult => {
+                  if (this.canReorderBooks() && info.type === GestureControl.GestureType.LONG_PRESS_GESTURE) {
+                    return GestureJudgeResult.REJECT;
+                  }
+                  return GestureJudgeResult.CONTINUE;
+                })
+                .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+                  if (this.selectionMode) { this.toggleBookSelection(book); return; }
                   this.onOpenBookInfo(book);
                 }))
+              if (this.selectionMode) {
+                // 勾选圈样式照 CatalogPage.ets:648-660：18×18 圆、选中底 #C4D1FF、1.5 边框。
+                Stack({ alignContent: Alignment.Center }) {
+                  Column().width(18).height(18).borderRadius(9)
+                    .backgroundColor(this.isBookSelected(book) ? '#C4D1FF' : '#00000000')
+                    .border({ width: 1.5, color: this.isBookSelected(book) ? '#C4D1FF' : '#7A7D88' })
+                  if (this.isBookSelected(book)) {
+                    AppGlyph({ name: 'profileCheck', glyphSize: 12, tint: '#1A1B21' })
+                  }
+                }.width(26).height(26).margin({ top: 4, right: 4 })
+              }
+              }
             }
           }, (book: Book) => this.bookCardKey(book))
+            .onMove((from: number, to: number) => {
+              // 拖拽重排只在「手动」排序下看得见效果（:138）。
+              this.moveBook(from, to);
+            })
         }
         .columnsTemplate(this.bookshelfColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
         .layoutWeight(1).scrollBar(this.layout.showBookshelfFastScroller ? BarState.On : BarState.Off)
+          // editMode(true) 是 ForEach.onMove 生效的前提，与分组网格同一套写法（:138）。
+          .editMode(this.canReorderBooks())
           .onAreaChange((_oldArea: Area, newArea: Area) => {
             // 记下网格可用宽度，封面宽度按格子宽度换算（见 bookshelfCoverSlotWidth）
             const width = parseFloat(String(newArea.width));
@@ -1995,9 +2250,9 @@ export struct BookshelfPage {
         }.layoutWeight(1).width('100%').padding({ bottom: 104 }).justifyContent(FlexAlign.Center)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage, this.ShelfSheetContent(), {
+      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showBatchDeleteSheet, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E',
-        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; }
+        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; }
       })
   }
 }

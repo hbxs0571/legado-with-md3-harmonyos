@@ -57,6 +57,8 @@ export struct BookCover {
    * 所以只有那几处调用点传 true，书架页不传、沿用默认值 false。
    */
   @Prop applyAspectRatio: boolean = false;
+  /** 无障碍朗读文本（：114）。不传时空串，读屏不播报这张封面。 */
+  @Prop a11yText: string = '';
   @State imageFailed: boolean = false;
   /** 封面原图宽高比（width / height）；异步读图后回填，0 表示读不到或不需要。 */
   @State coverAspectRatio: number = 0;
@@ -282,6 +284,7 @@ export struct BookCover {
     .shadow(this.shadowEnabled
       ? { radius: 6, color: '#66000000', offsetX: 0, offsetY: 2 }
       : { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 })
+    .accessibilityText(this.a11yText)
   }
 
   /**

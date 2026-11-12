@@ -1167,6 +1167,69 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /**
+   * 批量把若干本书挪到指定分组（批 5 的 :146）。
+   *
+   * 走「替换」语义：书的 group 列被整体覆盖成目标分组，与批 4 的规则同步（只加不减）相反。
+   * group 列是位掩码不是名字，必须走 maskFromNames；掩码在本地是加法累加
+   * （BookGroupRepository.maskFromNames 里 `mask += group.groupId`），不能用位或——
+   * ArkTS 的 `|` 只保留低 32 位，而本地 groupId 会到 2^52 量级。
+   * 传空 groupName 表示移回「本地未分组」（掩码 0）。
+   */
+  static async setBooksGroup(context: Context, bookKeys: string[], groupName: string): Promise<void> {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const groupMask = BookGroupRepository.maskFromNames(groupName.length > 0 ? [groupName] : []);
+    for (let index = 0; index < bookKeys.length; index += 1) {
+      const key = bookKeys[index];
+      if (key === undefined || key.length === 0) { continue; }
+      await store.executeSql('UPDATE `books` SET `group` = ? WHERE `bookUrl` = ?', [groupMask, key]);
+    }
+  }
+
+  /**
+   * 批量删书（批 5 的 :148 / :149）。逐本走 deleteBook，保证章节表一起清。
+   * deleteSource 只决定删完后要不要清应用内导入副本（book.contentPath），
+   * 用户的原始文件从来不由应用删除。
+   */
+  static async deleteBooks(context: Context, books: Book[], deleteSource: boolean): Promise<void> {
+    for (let index = 0; index < books.length; index += 1) {
+      const book = books[index];
+      if (book === undefined) { continue; }
+      await BookRepository.deleteBook(context, book);
+      if (deleteSource) {
+        try {
+          BookRepository.discardImportedCopy(book);
+        } catch (error) {
+          // 副本清理失败不影响书目删除，避免整批中断。
+          AppLog.put(`清理导入副本失败: ${book.title}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * 拖拽重排后重写 order（批 5 的 :138）。
+   *
+   * 公式与上游 BookshelfViewModel.saveBookOrder 一致：倒序时 maxOrder - index，否则 index + 1。
+   * 注意：本地只有「手动」排序（bookSort === 3）会读 order 列，其它排序方式下
+   * 拖完屏幕不会有变化，这是上游行为（BookshelfSort.compareBySort 六档里只手动那档读 order），
+   * 不是没生效；order 仍然必须落库，切回手动排序时才看得出顺序。
+   */
+  static async saveBookOrder(context: Context, ordered: Book[], descending: boolean): Promise<void> {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const maxOrder = ordered.length;
+    for (let index = 0; index < ordered.length; index += 1) {
+      const book = ordered[index];
+      if (book === undefined) { continue; }
+      const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
+      if (bookUrl.length === 0) { continue; }
+      const value = descending ? maxOrder - index : index + 1;
+      await store.executeSql('UPDATE `books` SET `order` = ? WHERE `bookUrl` = ?', [value, bookUrl]);
+    }
+  }
+
+  /**
    * 删除一本书：先删章节行，再删 books 行。
    *
    * 照上游 DeleteBooksUseCase：外键 CASCADE 在 relationalStore 里实测不生效，

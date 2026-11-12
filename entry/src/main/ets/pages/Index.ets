@@ -6327,6 +6327,62 @@ struct Index {
     }
   }
 
+  /** 把若干本书挪到指定分组（批 5 的 :146）；走替换语义，空 groupName 表示移回未分组。 */
+  private async setBooksGroupByKeys(bookKeys: string[], groupName: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架');
+      return;
+    }
+    try {
+      await BookRepository.setBooksGroup(context, bookKeys, groupName);
+      const reloaded = await BookRepository.loadImportedBooks(context);
+      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '移动分组失败');
+    }
+  }
+
+  /** 批量删书（批 5 的 :148 / :149）。deleteSource 只清应用内导入副本，原始文件不动。 */
+  private async deleteBooksFromShelf(books: Book[], deleteSource: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架');
+      return;
+    }
+    if (books.length === 0) { return; }
+    try {
+      await BookRepository.deleteBooks(context, books, deleteSource);
+      const removed: Set<string> = new Set<string>();
+      books.forEach((book: Book) => { removed.add(book.contentPath ?? book.androidOriginalPath ?? ''); });
+      this.books = this.books.filter((book: Book) =>
+        !removed.has(book.contentPath ?? book.androidOriginalPath ?? ''));
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '批量删除失败');
+    }
+  }
+
+  /**
+   * 拖拽重排后落库（批 5 的 :138）。
+   * 只有「手动」排序（bookSort === 3）会读 order 列，其它排序下拖完屏幕不会有变化，
+   * 这是上游行为；order 仍然落库，切回手动排序才看得出顺序。
+   */
+  private async moveBooksInShelf(ordered: Book[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架');
+      return;
+    }
+    try {
+      const descending = this.bookshelfLayout.bookshelfSortOrder === 1;
+      await BookRepository.saveBookOrder(context, ordered, descending);
+      const reloaded = await BookRepository.loadImportedBooks(context);
+      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '保存排序失败');
+    }
+  }
+
   private async removeBookshelfGroup(groupId: number): Promise<void> {
     const context = this.getUIContext().getHostContext();
     const group = this.bookGroups.find((item: BookGroup) => item.groupId === groupId);
@@ -7153,6 +7209,9 @@ struct Index {
           onImportBookList: (books: Book[]) => this.importBookList(books),
           onRefreshToc: () => this.refreshAllToc(),
           onApplyTagGroupRules: () => this.applyTagGroupRules(),
+          onSetBooksGroup: (bookKeys: string[], groupName: string) => this.setBooksGroupByKeys(bookKeys, groupName),
+          onDeleteBooks: (books: Book[], deleteSource: boolean) => this.deleteBooksFromShelf(books, deleteSource),
+          onMoveBooks: (ordered: Book[]) => this.moveBooksInShelf(ordered),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         DiscoverPage({ onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
