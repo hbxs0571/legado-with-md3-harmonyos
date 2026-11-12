@@ -14,6 +14,7 @@ import { ChineseTextConverter } from './ChineseTextConverter';
 import { RdbCodec } from './RdbCodec';
 import { RdbSchema } from './RdbSchema';
 import { RdbStore } from './RdbStore';
+import { CacheSettingsRepository } from './CacheSettingsRepository';
 import { BookGroupRepository } from './BookGroupRepository';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
 
@@ -142,8 +143,7 @@ export class BookRepository {
   /** 当前书正文缓存：换章整本重读解码太慢，只留当前这一本，key = contentPath|编码。 */
   private static cachedBookContentKey: string = '';
   private static cachedBookContent: string = '';
-  /** 正文缓存体积上限（按解码后 UTF-16 占用估算）：超过就不缓存。 */
-  private static readonly bookContentCacheLimitBytes: number = 32 * 1024 * 1024;
+  // 正文缓存体积上限改由「下载与缓存」设置页落盘（:484），见 readBookContent 里的 CacheSettingsRepository.get()。
   /** 规则匹配只扫描文件开头，与 Android 只读首个缓冲区识别目录的行为一致。 */
   private static readonly tocSampleSize: number = 65536;
   /** 单章允许的最大字节数，超过就二次拆分；与上游 TextFile.kt:66 的 maxLengthWithToc 同值。 */
@@ -1510,15 +1510,23 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /** 读整本正文，命中当前书缓存就复用；key 含编码，换书/换编码自然失效。 */
+  /** 清缓存：逐本丢弃应用内正文副本后，把内存里的章节行与当前书正文缓存一并清掉（:484）。 */
+  static clearChapterCache(): void {
+    BookRepository.chapterCache = new Map<string, BookChapter[]>();
+    BookRepository.cachedBookContentKey = '';
+    BookRepository.cachedBookContent = '';
+  }
+
   private static readBookContent(path: string, encoding: string | undefined): string {
     const key = `${path}|${encoding ?? ''}`;
     if (BookRepository.cachedBookContentKey === key && BookRepository.cachedBookContent.length > 0) {
       return BookRepository.cachedBookContent;
     }
     const content = BookRepository.readTextFile(path, encoding);
-    // 按解码后字符串的 UTF-16 占用估算（每单元 2 字节）：超过 32MB 就不缓存，
+    // 按解码后字符串的 UTF-16 占用估算（每单元 2 字节）：超过设置里的上限就不缓存，
     // 免得把几十 MB 的解码结果常驻在低内存设备上。大文件直接读、直接扔。
-    if (content.length * 2 <= BookRepository.bookContentCacheLimitBytes) {
+    // 上限来自「下载与缓存」设置页（:484），默认 32MB，改动即落盘。
+    if (content.length * 2 <= CacheSettingsRepository.get().bookContentCacheBytes) {
       BookRepository.cachedBookContentKey = key;
       BookRepository.cachedBookContent = content;
     } else {

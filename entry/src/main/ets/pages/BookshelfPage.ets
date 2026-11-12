@@ -219,6 +219,8 @@ export struct BookshelfPage {
   /** 批量设/取消单本私密标记（:294 / :147）；由 Index 落库后刷新 books。 */
   onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => Promise<void> =
     async (_bookKeys: string[], _isPrivate: boolean) => {};
+  /** 进书架管理页（:482）：带上当前生效的分组名，空串表示全部。 */
+  onOpenBookshelfManage: (groupName: string) => void = (_groupName: string) => {};
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
   private bookCardKey(book: Book): string {
@@ -1147,7 +1149,7 @@ export struct BookshelfPage {
                 Text(group.groupName).fontSize(14).fontColor(this.themeColorTextPrimary).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 10 }).width('100%')
-                Text(`${this.countBooksInGroup(group.groupName)} 本 · ${bookSortLabel(group.bookSort)}${group.isPrivate ? ' · 私有标记未生效' : ''}`)
+                Text(`${this.countBooksInGroup(group.groupName)} 本 · ${bookSortLabel(group.bookSort)}${group.isPrivate ? ' · 私有' : ''}`)
                   .fontSize(11).fontColor(this.themeColorTextTertiary).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 4 }).width('100%')
@@ -2046,7 +2048,7 @@ export struct BookshelfPage {
       MenuItem({ startIcon: $r('app.media.app_pencil'), content: '选择模式' }).height(48)
         .onClick(() => this.toggleSelectionMode())
       MenuItem({ startIcon: $r('app.media.menu_bookmarks'), content: '书架管理' }).height(48)
-        .onClick(() => this.onUnavailableAction('书架管理尚未迁移'))
+        .onClick(() => this.onOpenBookshelfManage(this.activeFilter()))
       MenuItem({ startIcon: $r('app.media.menu_upload_file'), content: '导出书单' }).height(48)
         .onClick(async () => { await this.exportBookList(); })
       MenuItem({ startIcon: $r('app.media.app_cloud_download'), content: '导入书单' }).height(48)

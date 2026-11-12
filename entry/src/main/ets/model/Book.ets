@@ -168,6 +168,7 @@ export enum ProfileRoute {
   /** 阅读记录总览页：跨书统计、排行、热力图、读书日历。 */
   READ_RECORD_OVERVIEW = 'readRecordOverview',
   CACHE_MANAGEMENT = 'cacheManagement',
+  BOOKSHELF_MANAGE = 'bookshelfManage',
   FILE_MANAGER = 'fileManager',
   PRIVACY_NOTICE = 'privacyNotice',
   OPEN_SOURCE_LICENSE = 'openSourceLicense',

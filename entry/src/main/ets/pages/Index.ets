@@ -29,6 +29,8 @@ import { OtherSettingsPage } from './OtherSettingsPage';
 import { AppReadAloudSettingsPage } from './AppReadAloudSettingsPage';
 import { AppCoverSettingsPage } from './AppCoverSettingsPage';
 import { AppDownloadCacheSettingsPage } from './AppDownloadCacheSettingsPage';
+import { BookshelfManagePage } from './BookshelfManagePage';
+import { CacheSettingsRepository } from '../data/CacheSettingsRepository';
 import { AppAiSettingsPage } from './AppAiSettingsPage';
 import { AppTranslationSettingsPage } from './AppTranslationSettingsPage';
 import { AppPrivacySettingsPage } from './AppPrivacySettingsPage';
@@ -192,6 +194,8 @@ struct Index {
   @State profileDetailReturnRoute: AppRoute = AppRoute.PROFILE;
   @State profileSubpage: ProfileRoute = ProfileRoute.BOOK_SOURCE_MANAGE;
   @State profileSettingsReturn: ProfileRoute = ProfileRoute.APP_SETTINGS;
+  /** 进书架管理页时带上的分组名（:482）；空串表示全部。 */
+  @State bookshelfManageGroupName: string = '';
   @State selectedTab: number = 0;
   @State selectedBook: Book = EMPTY_BOOK;
   @State readerStartAtChapterBeginning: boolean = false;
@@ -723,6 +727,7 @@ struct Index {
     this.restorePrivateAccess(context);
     this.restoreBookInfoSettings(context);
     this.restoreHighlightTagRules(context);
+    this.restoreCacheSettings(context);
     this.loadRestoredAndroidEntries(context);
   }
 
@@ -7151,6 +7156,27 @@ struct Index {
     const parentIndex = filesDirectory.lastIndexOf('/');
     return parentIndex > 0 ? filesDirectory.substring(0, parentIndex) : filesDirectory;
   }
+  /** 书架管理页入口（:482）：带上当前分组名，空串表示全部。 */
+  private openBookshelfManage(groupName: string): void {
+    this.bookshelfManageGroupName = groupName;
+    this.profileDetailReturnRoute = this.route;
+    this.profileSubpage = ProfileRoute.BOOKSHELF_MANAGE;
+    this.route = AppRoute.PROFILE_SUBPAGE;
+  }
+
+  /** 书架管理页批量改动后重载书架（:463 移入分组、:465/:475 删除都走这里）。 */
+  private async reloadLibraryAfterBulkChange(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.showUnavailableAction('无法访问本地书架'); return; }
+    const reloaded = await BookRepository.loadImportedBooks(context);
+    this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+  }
+
+  /** 下载与缓存设置（:484）：启动时把偏好读进内存，供 BookRepository 的正文缓存上限取值。 */
+  private async restoreCacheSettings(context: Context): Promise<void> {
+    await CacheSettingsRepository.load(context);
+  }
+
   private openProfileDetail(destination: ProfileRoute): void {
     this.profileDetailReturnRoute = this.route;
     this.profileSubpage = destination;
@@ -7340,6 +7366,7 @@ struct Index {
           onDeleteBooks: (books: Book[], deleteSource: boolean) => this.deleteBooksFromShelf(books, deleteSource),
           onMoveBooks: (ordered: Book[]) => this.moveBooksInShelf(ordered),
           onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => this.setBooksPrivateByKeys(bookKeys, isPrivate),
+          onOpenBookshelfManage: (groupName: string) => this.openBookshelfManage(groupName),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         DiscoverPage({ onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
@@ -8180,6 +8207,16 @@ struct Index {
             onBack: () => this.route = this.profileDetailReturnRoute,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        } else if (this.profileSubpage === ProfileRoute.BOOKSHELF_MANAGE) {
+          BookshelfManagePage({
+            books: this.books,
+            groups: this.bookGroups,
+            initialGroupName: this.bookshelfManageGroupName,
+            onBack: () => this.route = this.profileDetailReturnRoute,
+            onOpenBookInfo: (book: Book) => this.openBookInfo(book),
+            onLibraryChanged: () => this.reloadLibraryAfterBulkChange(),
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+          })
         } else if (this.profileSubpage === ProfileRoute.FILE_MANAGER) {
           FileManagerPage({
             rootPath: this.getAppFileManagerRootDirectory(),
@@ -8807,6 +8844,7 @@ struct Index {
           })
         } else if (this.profileSubpage === ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS) {
           AppDownloadCacheSettingsPage({
+            books: this.books,
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
