@@ -8,6 +8,8 @@ import { BookInfoBackdropStyle, resolveBookInfoBackdropStyleFor } from '../data/
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession } from '../model/ReadRecord';
+import { HighlightTagRule } from '../model/HighlightTagRule';
+import { HighlightedTag, matchHighlightTags } from '../data/HighlightTagMatcher';
 
 @Component
 export struct BookInfoPage {
@@ -32,6 +34,12 @@ export struct BookInfoPage {
   @Prop defaultCoverBackground: string = 'on';
   /** 封面文字设置，从 Index 下发；详情页封面受 A8「限制封面比例」约束。 */
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
+  /** 全书架书目，删除面板用它找同名副本（批 7 的 `:338`）。 */
+  @Prop books: Book[] = [];
+  /** 高亮标签规则，从 Index 启动时 load 一次下发；详情页自己 await 会让首帧空。 */
+  @Prop highlightTagRules: HighlightTagRule[] = [];
+  /** 移出书架前是否二次确认（批 7 的 `:291`）。 */
+  @Prop deleteAlertEnabled: boolean = true;
   onBack: () => void = () => {};
   onRead: () => void = () => {};
   onOpenCatalog: () => void = () => {};
@@ -44,7 +52,17 @@ export struct BookInfoPage {
     };
   /** 切禁用标记；Index 写库后刷新 books 与 selectedBook，@Prop book 随之更新。 */
   onToggleDisableReadRecord: (book: Book, disabled: boolean) => void = (_book: Book, _disabled: boolean) => {};
-  onRemoveFromShelf: () => void = () => {};
+  /** deleteSource 为真时才清应用内导入副本；用户原始文件从不删。 */
+  onRemoveFromShelf: (deleteSource: boolean) => void = (_deleteSource: boolean) => {};
+  /** 置顶（:284）；Index 写 order 与 durChapterTime。 */
+  onTopBook: () => void = () => {};
+  /** 刷新书籍信息（:280）；返回是否真的换过目录，提示文案在 Index 侧给出。 */
+  onRefreshBookInfo: (book: Book) => Promise<boolean> =
+    async (_book: Book): Promise<boolean> => false;
+  /** 翻转「删除前先确认」（:291）。 */
+  onToggleDeleteAlert: () => void = () => {};
+  /** 头部书名/作者点击后带关键词进搜索页（:296 `:297`）。 */
+  onSearchKeyword: (keyword: string) => void = (_keyword: string) => {};
   /** 单本私密标记（:294）；Index 落库后刷新 books 与 selectedBook。 */
   onSetPrivate: (book: Book, isPrivate: boolean) => void = (_book: Book, _isPrivate: boolean) => {};
   onChooseCover: () => void = () => {};
@@ -72,11 +90,33 @@ export struct BookInfoPage {
   /** 本书阅读记录面板显隐与数据，照 F12 自绘全屏遮罩范式。 */
   @State readRecordPanelVisible: boolean = false;
   @State readRecordPanel: BookReadRecordPanel = { totalLabel: '0秒', days: [] };
+  /** 书名是否展开（:296 长按菜单里的「展开/收起」）。 */
+  @State titleExpanded: boolean = false;
+  /** 命中高亮规则的标签块，aboutToAppear 算一次。 */
+  @State highlightedTags: HighlightedTag[] = [];
+  /** 标签编辑器的 chip 列表（:332）；保存时 join 成 customTag。 */
+  @State metadataTags: string[] = [];
+  @State metadataTagInput: string = '';
+  @State metadataTagEditing: boolean = false;
+  /** 移出书架面板（:337）。 */
+  @State deleteSheetVisible: boolean = false;
+  /** 面板里「同时删除应用内副本」的勾选；每次打开都复位成未勾（:339）。 */
+  @State deleteSourceChecked: boolean = false;
+  /** 封面长按看大图（:301）。 */
+  @State photoPreviewVisible: boolean = false;
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadFileSize();
     this.loadCoverSeedColor();
+    this.refreshHighlightedTags();
+  }
+
+  /** 匹配源只有自定义标签与分类两路：本地没有书源标签，不硬造（:299）。 */
+  private refreshHighlightedTags(): void {
+    const labels: string[] = this.getCustomTags();
+    if (this.book.category.length > 0) { labels.push(this.book.category); }
+    this.highlightedTags = matchHighlightTags(labels, this.highlightTagRules);
   }
 
   /**
@@ -138,6 +178,104 @@ export struct BookInfoPage {
       .map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0);
   }
 
+  /** 第三行左段：状态。本地没有书源，这段永远不点击（:298）。 */
+  private statusLabel(): string {
+    if (BookRepository.isBodyMissing(this.book)) { return 'Android 备份 · 正文缺失'; }
+    return this.book.isLocal ? '本地书籍' : '书籍详情';
+  }
+
+  /**
+   * 第三行右段：来源。
+   *
+   * 上游 `originName` 是书源名；本地没有书源，只能落到 `androidOriginalPath`
+   * （Android 迁移过来的原始路径），再退一步给「本地文件」。
+   */
+  private sourceLabel(): string {
+    if (this.book.isLocal) { return '本地文件'; }
+    const path = this.book.androidOriginalPath ?? '';
+    return path.length > 0 ? path : '未知来源';
+  }
+
+  /**
+   * 点来源：上游进书源详情页，本地没有书源体系。
+   *
+   * 本地书按上游口径直接 return（点击没有任何反应）；非本地缺正文记录则把
+   * 记录的原始路径提示出来，不假装能打开书源编辑页。
+   */
+  private onOriginClick(): void {
+    if (this.book.isLocal) { return; }
+    this.onUnavailableAction(`来源：${this.sourceLabel()}`);
+  }
+
+  /** 摘要已读状态三分支（:313）。顺序与上游一致：未读 → 已读完 → 已读 N 章。 */
+  private readStateLabel(): string {
+    const chapterIndex = this.book.chapterIndex ?? 0;
+    const chapterPosition = this.book.chapterProgress ?? 0;
+    if (chapterIndex === 0 && chapterPosition <= 0) { return '未读'; }
+    const total = this.getChapterTotal();
+    if (total > 0 && chapterIndex + 1 >= total) { return '已读完'; }
+    return `已读 ${chapterIndex + 1} 章`;
+  }
+
+  /** 同名副本（:338）。上游按书名+作者判冲突，本地书目没有稳定的 bookUrl 分组，按书名比对。 */
+  private sameNameCopies(): Book[] {
+    return this.books.filter((item: Book) =>
+      item.id !== this.book.id && item.title === this.book.title);
+  }
+
+  /**
+   * 打开移出书架面板（:337）。关掉「删除前先确认」时直接移出，不弹面板（:291）。
+   * 勾选框每次打开都从未勾选起步（:339）。
+   */
+  private requestRemoveFromShelf(): void {
+    if (!this.deleteAlertEnabled) {
+      this.onRemoveFromShelf(true);
+      return;
+    }
+    this.deleteSourceChecked = false;
+    this.deleteSheetVisible = true;
+  }
+
+  /** 封面长按看大图（:301）。两个路径都空时不打开，给提示。 */
+  private openPhotoPreview(): void {
+    const uri = this.book.customCoverUri ?? this.book.coverUri ?? '';
+    if (uri.length === 0) {
+      this.onUnavailableAction('这本书没有封面');
+      return;
+    }
+    this.photoPreviewVisible = true;
+  }
+
+  /** 书名点击：带书名进搜索页（:296）。 */
+  private searchByTitle(): void {
+    if (this.book.title.length === 0) { return; }
+    this.onSearchKeyword(this.book.title);
+  }
+
+  /** 作者点击：带作者进搜索页；作者为空时给提示，不静默（:297）。 */
+  private searchByAuthor(): void {
+    const author = this.book.author.trim();
+    if (author.length === 0) {
+      this.onUnavailableAction('作者未知，无法搜索作者');
+      return;
+    }
+    this.onSearchKeyword(author);
+  }
+
+  /** 标签编辑器里加一个标签（:332）；重名忽略，不重复加。 */
+  private addMetadataTag(): void {
+    const value = this.metadataTagInput.trim();
+    this.metadataTagInput = '';
+    this.metadataTagEditing = false;
+    if (value.length === 0) { return; }
+    if (this.metadataTags.includes(value)) { return; }
+    this.metadataTags = [...this.metadataTags, value];
+  }
+
+  private removeMetadataTag(tag: string): void {
+    this.metadataTags = this.metadataTags.filter((item: string) => item !== tag);
+  }
+
   private getChapterTotal(): number {
     // chapterTitles 已随迁移删除：章节数一律取 books 行的 totalChapterNum。
     const savedCount = Number(this.book.chapterCount ?? '0');
@@ -155,19 +293,69 @@ export struct BookInfoPage {
     this.readRecordPanelVisible = true;
   }
 
-  private confirmRemoveFromShelf(): void {
-    this.getUIContext().showAlertDialog({
-      title: '移出书架？',
-      message: BookRepository.isBodyMissing(this.book)
+  /**
+   * 自绘移出书架面板（:337），替代原来的系统确认框。
+   *
+   * 与上游 `ShelfDeleteSheet.kt` 的差异：上游勾选叫「删除源文件」，本地能删的只有
+   * `BookRepository.discardImportedCopy` 清掉的 `book.contentPath`（应用内副本），
+   * 用户选的原始文件应用无权删除，所以文案写「应用内副本」。
+   */
+  @Builder
+  private DeleteSheet() {
+    Column() {
+      Text('移出书架？').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+        .width('100%').margin({ bottom: 8 })
+      Text(BookRepository.isBodyMissing(this.book)
         ? '移出后只删除这条缺正文书目记录；Android 兼容归档和原始文件不会更改。'
-        : '移出后会清理应用内的导入副本，原始文件会保留。',
-      autoCancel: true,
-      primaryButton: { value: '取消', action: () => {} },
-      secondaryButton: {
-        value: '移出书架',
-        action: () => this.onRemoveFromShelf()
+        : '移出后会清理应用内的导入副本，原始文件会保留。')
+        .fontSize(14).lineHeight(21).fontColor('#AEB0BA').width('100%')
+      if (this.sameNameCopies().length > 0) {
+        Text(this.sameNameCopies().length === 1
+          ? `书架里还有 1 本同名书：${this.book.title}`
+          : `书架里还有 ${this.sameNameCopies().length} 本同名书：${this.book.title}`)
+          .fontSize(13).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 12 })
       }
-    });
+      if (this.book.isLocal) {
+        Row() {
+          Toggle({ type: ToggleType.Checkbox, isOn: this.deleteSourceChecked })
+            .onChange((value: boolean) => this.deleteSourceChecked = value)
+          Text('同时删除应用内副本').fontSize(14).fontColor('#D0D2DB').margin({ left: 8 })
+        }.width('100%').margin({ top: 12 })
+      }
+      Row() {
+        Text('取消').fontSize(15).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+          .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
+          .onClick(() => this.deleteSheetVisible = false)
+        Text('移出书架').fontSize(15).fontColor('#101116').textAlign(TextAlign.Center)
+          .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
+          .margin({ left: 10 }).onClick(() => {
+            this.deleteSheetVisible = false;
+            this.onRemoveFromShelf(this.deleteSourceChecked);
+          })
+      }.width('100%').margin({ top: 20 })
+    }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
+  }
+
+  /** 书名长按菜单（:296）：搜索书名 + 展开/收起。 */
+  @Builder
+  private TitleMenu() {
+    Menu() {
+      MenuItem({ content: '搜索书名' }).height(48).onClick(() => this.searchByTitle())
+      MenuItem({ content: this.titleExpanded ? '收起' : '展开' }).height(48)
+        .onClick(() => this.titleExpanded = !this.titleExpanded)
+    }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
+  }
+
+  /** 封面全屏预览（:301）：点任意处关闭。 */
+  @Builder
+  private PhotoPreview() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column().width('100%').height('100%').backgroundColor('#000000')
+      Image(this.book.customCoverUri ?? this.book.coverUri ?? '')
+        .objectFit(ImageFit.Contain).width('100%').height('100%')
+      Column().width('100%').height('100%').backgroundColor('#01000000')
+        .onClick(() => this.photoPreviewVisible = false)
+    }.width('100%').height('100%').zIndex(1002)
   }
 
   /** 顶栏「更多」菜单（:294）。只放能真做的项，不放点了没反应的占位。 */
@@ -176,6 +364,12 @@ export struct BookInfoPage {
     Menu() {
       MenuItem({ content: this.book.isPrivate === true ? '取消私密' : '设为私密' }).height(48)
         .onClick(() => this.onSetPrivate(this.book, this.book.isPrivate !== true))
+      MenuItem({ content: '置顶' }).height(48).onClick(() => this.onTopBook())
+      MenuItem({ content: '刷新书籍信息' }).height(48).onClick(async () => {
+        await this.onRefreshBookInfo(this.book);
+      })
+      MenuItem({ content: this.deleteAlertEnabled ? '删除时不再确认' : '删除前先确认' })
+        .height(48).onClick(() => this.onToggleDeleteAlert())
     }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
   }
 
@@ -186,6 +380,9 @@ export struct BookInfoPage {
     this.metadataDescription = this.book.description ?? '';
     this.metadataRemark = this.book.remark ?? '';
     this.metadataCustomTag = this.book.customTag ?? '';
+    this.metadataTags = this.getCustomTags();
+    this.metadataTagInput = '';
+    this.metadataTagEditing = false;
     this.metadataGroupNames = [...(this.book.groupNames ?? [])];
     this.metadataBookType = this.book.bookType ?? 'text';
     this.metadataFixedType = this.book.fixedType === true;
@@ -204,7 +401,7 @@ export struct BookInfoPage {
       this.metadataCategory.trim(),
       this.metadataDescription.trim(),
       this.metadataRemark.trim(),
-      this.metadataCustomTag.trim(),
+      this.metadataTags.join(','),
       this.metadataGroupNames,
       this.metadataBookType,
       this.metadataFixedType
@@ -241,14 +438,56 @@ export struct BookInfoPage {
             Blank().height(66)
 
             Row() {
-              BookCover({ book: this.book, displayWidth: 112, displayHeight: 157, coverSettings: this.coverSettings, applyAspectRatio: true })
+              // 封面：点击换封面、长按看大图（:301）。容器在调用处包，BookCover 内部加
+              // onClick 会吞掉书架整卡的点击。
+              Stack({ alignContent: Alignment.Center }) {
+                BookCover({ book: this.book, displayWidth: 112, displayHeight: 157, coverSettings: this.coverSettings, applyAspectRatio: true })
+              }
+                // 长按与短按必须互斥：onClick 与 gesture 并存时长按会顺带触发点击，
+                // 实测表现为长按打开换封面选择器。用 Exclusive 手势组，长按优先。
+                .gesture(
+                  GestureGroup(GestureMode.Exclusive,
+                    LongPressGesture({ duration: 500 }).onAction(() => this.openPhotoPreview()),
+                    TapGesture({ count: 1 }).onAction(() => this.onChooseCover())
+                  )
+                )
+                .accessibilityText(`${this.book.title}，封面。点击更换封面，长按查看大图`)
               Column() {
+                // 书名：点击进搜索、长按弹「搜索书名 / 展开收起」（:296）。
                 Text(this.book.title).fontSize(23).fontWeight(FontWeight.Bold).fontColor('#F1F2F6')
-                  .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .maxLines(this.titleExpanded ? 20 : 3).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .onClick(() => this.searchByTitle())
+                  .bindContextMenu(this.TitleMenu, ResponseType.LongPress,
+                    { placement: Placement.BottomLeft })
+                // 作者：点击进作者搜索（:297）。上游长按走另一分支，本地不做长按。
                 Text(this.book.author.length > 0 ? this.book.author : '作者未知')
                   .fontSize(17).fontColor('#D0D2DB').margin({ top: 8 })
-                Text(BookRepository.isBodyMissing(this.book) ? 'Android 备份 · 正文缺失' : this.book.isLocal ? '本地书籍' : '书籍详情')
-                  .fontSize(14).fontColor('#B9C8FF').margin({ top: 8 })
+                  .onClick(() => this.searchByAuthor())
+                // 第三行拆两段：状态段不可点，来源段可点（:298）。
+                Row() {
+                  Text(this.statusLabel()).fontSize(14).fontColor('#B9C8FF')
+                  Text(' · ').fontSize(14).fontColor('#777B88')
+                  Text(this.sourceLabel()).fontSize(14).fontColor('#9FA6C8')
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                    .onClick(() => this.onOriginClick())
+                }.width('100%').margin({ top: 8 })
+                // 高亮标签行（:299）：在作者/来源行之后、普通标签行之前。
+                if (this.highlightedTags.length > 0) {
+                  Row() {
+                    ForEach(this.highlightedTags, (item: HighlightedTag, index: number) => {
+                      if (index > 0) {
+                        Divider().vertical(true).height(18).strokeWidth(0.5).color('#6A6D77')
+                          .margin({ left: 6, right: 6 })
+                      }
+                      Column() {
+                        Text(item.title).fontSize(12).fontColor('#E8C56B').maxLines(1)
+                          .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        Text(item.matchedLabels.join('、')).fontSize(11).fontColor('#A99258')
+                          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                      }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                    }, (item: HighlightedTag, index: number) => `${index}-${item.title}`)
+                  }.width('100%').margin({ top: 8 })
+                }
               }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 16 })
             }.width('100%').alignItems(VerticalAlign.Center).padding({ left: 18, right: 18, bottom: 18 })
 
@@ -276,7 +515,7 @@ export struct BookInfoPage {
             BookInfoAction({
               icon: 'bookmark',
               label: BookRepository.isBodyMissing(this.book) ? '移出缺正文记录' : '已在书架',
-              onSelect: () => this.confirmRemoveFromShelf()
+              onSelect: () => this.requestRemoveFromShelf()
             })
             BookInfoAction({ icon: 'list', label: '查看目录', onSelect: () => this.onOpenCatalog() })
             BookInfoAction({ icon: 'swap', label: '换源', onSelect: () => this.onUnavailableAction('在线换源将在 P5 接入') })
@@ -297,7 +536,7 @@ export struct BookInfoPage {
               Text(this.getChapterTotal() > 0 ? `共 ${this.getChapterTotal()} 章` : '章节总数待读取')
                 .fontSize(14).fontColor(this.themeColorAccent)
               Text('  |  ').fontSize(14).fontColor('#777B88')
-              Text(this.getReadChapterNumber() > 0 ? `已读 ${this.getReadChapterNumber()} 章` : '未读')
+              Text(this.readStateLabel())
                 .fontSize(14).fontColor(this.themeColorAccent)
             }.margin({ top: 8 })
             Row() {
@@ -336,10 +575,13 @@ export struct BookInfoPage {
                 .margin({ top: 6 })
             }
             if ((this.book.remark ?? '').trim().length > 0) {
-              Text('备注').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-                .alignSelf(ItemAlign.Start).margin({ top: 16 })
-              Text(this.book.remark ?? '').fontSize(14).lineHeight(21).fontColor('#BFC1CB')
-                .alignSelf(ItemAlign.Start).margin({ top: 6 })
+              // 备注卡可点：整块进元数据面板（:315），不单给正文加点击区。
+              Column() {
+                Text('备注').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                  .alignSelf(ItemAlign.Start).margin({ top: 16 })
+                Text(this.book.remark ?? '').fontSize(14).lineHeight(21).fontColor('#BFC1CB')
+                  .alignSelf(ItemAlign.Start).margin({ top: 6 })
+              }.width('100%').onClick(() => this.openMetadataEditor())
             }
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
@@ -443,10 +685,37 @@ export struct BookInfoPage {
                   .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
                   .padding({ left: 12, right: 12 }).margin({ top: 10 })
                   .onChange((value: string) => this.metadataCategory = value)
-                TextInput({ text: this.metadataCustomTag, placeholder: '自定义标签（用逗号分隔）' }).width('100%').height(48)
-                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
-                  .padding({ left: 12, right: 12 }).margin({ top: 10 })
-                  .onChange((value: string) => this.metadataCustomTag = value)
+                // 标签编辑器改成 chip 行（:332）：逐个增删。不做拖拽——标签顺序只影响
+                // 这一行的排布，对其它界面没有意义。
+                Column() {
+                  Text('自定义标签').fontSize(14).fontColor('#ECEEF2').margin({ top: 10, bottom: 8 })
+                  Flex({ wrap: FlexWrap.Wrap }) {
+                    ForEach(this.metadataTags, (tag: string) => {
+                      Row() {
+                        Text(tag).fontSize(13).fontColor('#ECEEF2')
+                        Stack({ alignContent: Alignment.Center }) {
+                          AppGlyph({ name: 'profileClose', glyphSize: 11, tint: '#9AA0B4' })
+                        }.width(20).height(20).margin({ left: 4 })
+                          .onClick(() => this.removeMetadataTag(tag))
+                      }.padding({ left: 10, right: 6, top: 6, bottom: 6 })
+                        .backgroundColor('#33353D').borderRadius(14).margin({ right: 8, bottom: 8 })
+                    }, (tag: string) => tag)
+                    Text('＋').fontSize(15).fontColor('#B9C6FF')
+                      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                      .backgroundColor('#293A5C').borderRadius(14).margin({ bottom: 8 })
+                      .onClick(() => this.metadataTagEditing = true)
+                  }.width('100%')
+                  if (this.metadataTagEditing) {
+                    Row() {
+                      TextInput({ text: this.metadataTagInput, placeholder: '输入标签后点添加' })
+                        .layoutWeight(1).height(44).fontSize(14).fontColor('#ECEEF2')
+                        .backgroundColor('#33353D').borderRadius(10).padding({ left: 12, right: 12 })
+                        .onChange((value: string) => this.metadataTagInput = value)
+                      Text('添加').fontSize(13).fontColor('#B9C6FF').padding(10)
+                        .onClick(() => this.addMetadataTag())
+                    }.width('100%')
+                  }
+                }.width('100%').alignItems(HorizontalAlign.Start)
                 TextArea({ text: this.metadataDescription, placeholder: '小说简介' }).width('100%').height(180)
                   .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
                   .padding(12).margin({ top: 10 })
@@ -529,7 +798,21 @@ export struct BookInfoPage {
             .onClick(() => {})
         }.width('100%').height('100%').zIndex(1001)
       }
+      if (this.photoPreviewVisible) {
+        this.PhotoPreview()
+      }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
+      .bindSheet(this.deleteSheetVisible, this.DeleteSheet(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: '#17181E',
+        onDisappear: () => {
+          this.deleteSheetVisible = false;
+          // 每次打开都从未勾选起步（:339）。
+          this.deleteSourceChecked = false;
+        }
+      })
   }
 }
 

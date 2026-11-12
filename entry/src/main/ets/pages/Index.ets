@@ -46,6 +46,9 @@ import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
 import { PrivateAccessRepository, PRIVATE_STORE_UNLOCKED } from '../data/PrivateAccessRepository';
+import { BookInfoSettingsRepository } from '../data/BookInfoSettings';
+import { HighlightTagRuleRepository } from '../data/HighlightTagRuleRepository';
+import { HighlightTagRule } from '../model/HighlightTagRule';
 import { TagGroupRule } from '../model/TagGroupRule';
 import { TagGroupRuleSync } from '../data/TagGroupRuleSync';
 import { CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository } from '../data/CoverSettingsRepository';
@@ -209,6 +212,10 @@ struct Index {
   @State replaceRules: ReplaceRule[] = [];
   /** TXT 目录规则列表，与仓储缓存同步。 */
   @State txtTocRules: TxtTocRule[] = [];
+  /** 高亮标签规则，启动时 load 一次；详情页按 @Prop 拿快照自己算匹配（:299）。 */
+  @State highlightTagRules: HighlightTagRule[] = [];
+  /** 移出书架是否二次确认（:291），跟 BookInfoSettingsRepository 同步。 */
+  @State bookInfoDeleteAlert: boolean = true;
   /** 当前正在编辑的替换规则；为空表示新建。 */
   @State editingReplaceRule: ReplaceRule | undefined = undefined;
   /** 替换规则列表的排序模式，与 Repository 中的持久化值保持同步。 */
@@ -714,6 +721,8 @@ struct Index {
     this.restoreBackupIgnoreLists(context);
     this.restoreWebDavSettings(context);
     this.restorePrivateAccess(context);
+    this.restoreBookInfoSettings(context);
+    this.restoreHighlightTagRules(context);
     this.loadRestoredAndroidEntries(context);
   }
 
@@ -6038,26 +6047,35 @@ struct Index {
    * 与上游一致，书签与划线/笔记按原章节号保留，不随新目录重映射。
    */
   private async refreshCurrentToc(): Promise<void> {
-    const book = this.selectedBook;
+    await this.refreshBookInfo(this.selectedBook);
+  }
+
+  /**
+   * 刷新书籍信息（批 7 的 `:280`）：重扫正文重切目录。
+   *
+   * 与「更新目录」是同一条链路，只是能指定书；返回是否真的换了目录。
+   * 三条提示文案与更新目录保持一致，不另起措辞。
+   */
+  private async refreshBookInfo(book: Book): Promise<boolean> {
     if (!book.isLocal || book.format !== 'txt' || book.contentPath === undefined) {
       this.showUnavailableAction('仅本地 TXT 书籍支持更新目录');
-      return;
+      return false;
     }
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       this.showUnavailableAction('无法访问本地书架，未更新目录');
-      return;
+      return false;
     }
     let result: TocRefreshResult;
     try {
       result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
     } catch (_) {
       this.showUnavailableAction('读取正文失败，目录未更新');
-      return;
+      return false;
     }
     if (!result.changed) {
       this.showUnavailableAction('目录没有变化');
-      return;
+      return false;
     }
     const nextBook = result.book;
     const updatedBooks = this.books.map((item: Book) => item.id === nextBook.id ? nextBook : item);
@@ -6068,12 +6086,54 @@ struct Index {
       await BookRepository.saveChapters(context, nextBook.contentPath ?? '', result.chapters);
     } catch (_) {
       this.showUnavailableAction('目录已更新，但保存失败，重新打开后可能回到旧目录');
-      return;
+      return false;
     }
     this.books = updatedBooks;
     this.selectedBook = nextBook;
     const chapterCount = result.chapters.length;
     this.showUnavailableAction(`更新目录完成：共 ${chapterCount} 章`);
+    return true;
+  }
+
+  /** 置顶（批 7 的 `:284`）：order 落到最小值的更前一位。 */
+  private async topSelectedBook(book: Book): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架');
+      return;
+    }
+    try {
+      await BookRepository.topBook(context, book);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '置顶失败');
+      return;
+    }
+    const reloaded = await BookRepository.loadImportedBooks(context);
+    this.books = reloaded.filter((item: Book) => BookRepository.isPersistableBook(item));
+    const updated = this.books.find((item: Book) => item.id === book.id);
+    if (updated !== undefined) { this.selectedBook = updated; }
+    this.showUnavailableAction('已置顶');
+  }
+
+  /** 翻转「删除前先确认」（批 7 的 `:291`）。 */
+  private async toggleBookInfoDeleteAlert(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const next: boolean = !this.bookInfoDeleteAlert;
+    try {
+      await BookInfoSettingsRepository.save(context, { deleteAlert: next });
+    } catch (_) {
+      this.showUnavailableAction('删除确认设置保存失败');
+      return;
+    }
+    this.bookInfoDeleteAlert = next;
+    this.showUnavailableAction(next ? '移出书架前会先确认' : '移出书架不再确认');
+  }
+
+  /** 详情页书名/作者点击：预填关键词并进搜索页（批 7 的 `:296` `:297`）。 */
+  private openSearchWithKeyword(keyword: string): void {
+    this.searchPageQuery = keyword;
+    this.openSearch();
   }
 
   /**
@@ -6308,6 +6368,14 @@ struct Index {
   }
 
   /** 启动时读私密设置（批6）。解锁态本来就不落盘，load 出来恒为锁定。 */
+  private async restoreBookInfoSettings(context: Context): Promise<void> {
+    this.bookInfoDeleteAlert = (await BookInfoSettingsRepository.load(context)).deleteAlert;
+  }
+
+  private async restoreHighlightTagRules(context: Context): Promise<void> {
+    this.highlightTagRules = await HighlightTagRuleRepository.load(context);
+  }
+
   private async restorePrivateAccess(context: Context): Promise<void> {
     await PrivateAccessRepository.load(context);
   }
@@ -6683,7 +6751,7 @@ struct Index {
     await this.persistCoverUpdate(updatedBook, oldCoverPath);
   }
 
-  private async removeLocalBookFromShelf(book: Book): Promise<void> {
+  private async removeLocalBookFromShelf(book: Book, deleteSource: boolean = true): Promise<void> {
     if (book.contentPath === undefined && !BookRepository.isBodyMissing(book)) {
       this.showUnavailableAction('这本书没有可清理的本地导入副本');
       return;
@@ -6705,7 +6773,8 @@ struct Index {
     }
     this.books = remainingBooks;
     this.route = this.bookInfoReturnRoute;
-    if (book.contentPath !== undefined) {
+    // deleteSource 未勾选时保留应用内副本（批 7 的 `:339`）；原始文件两种情况都不动。
+    if (deleteSource && book.contentPath !== undefined) {
       try {
         BookRepository.discardImportedCopy(book);
       } catch (_) {
@@ -7289,6 +7358,9 @@ struct Index {
         BookInfoPage({
           book: this.selectedBook,
           groups: this.bookGroups,
+          books: this.books,
+          highlightTagRules: this.highlightTagRules,
+          deleteAlertEnabled: this.bookInfoDeleteAlert,
           followCoverColor: this.bookInfoFollowCoverColor,
           networkCoverBackground: this.bookInfoNetworkCoverBackground,
           defaultCoverBackground: this.bookInfoDefaultCoverBackground,
@@ -7299,7 +7371,11 @@ struct Index {
           onOpenReadRecords: () => this.openProfileDetail(ProfileRoute.READ_RECORDS),
           onLoadBookReadRecord: (book: Book) => this.loadBookReadRecordPanel(book),
           onToggleDisableReadRecord: (book: Book, disabled: boolean) => this.toggleBookDisableReadRecord(book, disabled),
-          onRemoveFromShelf: () => this.removeLocalBookFromShelf(this.selectedBook),
+          onRemoveFromShelf: (deleteSource: boolean) => this.removeLocalBookFromShelf(this.selectedBook, deleteSource),
+          onTopBook: () => this.topSelectedBook(this.selectedBook),
+          onRefreshBookInfo: (book: Book) => this.refreshBookInfo(book),
+          onToggleDeleteAlert: () => this.toggleBookInfoDeleteAlert(),
+          onSearchKeyword: (keyword: string) => this.openSearchWithKeyword(keyword),
           onSetPrivate: (book: Book, isPrivate: boolean) => this.setBookPrivate(book, isPrivate),
           onChooseCover: () => this.chooseBookCover(),
           onRestoreCover: () => this.restoreBookCover(),

@@ -1178,6 +1178,40 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     BookRepository.chapterCache.delete(bookUrl);
   }
 
+  /**
+   * 取当前最小 order，供置顶（批 7 的 `:284`）算新序号；空表返回 0。
+   * 上游 BookDao.getMinOrder 同样是 min(order) ?: 0。
+   */
+  static async getMinOrder(context: Context): Promise<number> {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const resultSet = await store.querySql('SELECT MIN(`order`) AS `minOrder` FROM `books`');
+    try {
+      if (!resultSet.goToFirstRow()) { return 0; }
+      return RdbCodec.optionalInteger(resultSet, 0) ?? 0;
+    } finally {
+      resultSet.close();
+    }
+  }
+
+  /**
+   * 置顶：order 落到比现有最小值更小，并把 durChapterTime 刷成当前时间。
+   *
+   * 对齐上游 `BookRepository.topBook`。注意只有「手动排序」档读 order、
+   * 「按最近阅读」档读 durChapterTime，其它排序档下点了置顶屏幕上看不出变化——
+   * 那是上游行为（order 已落库，切回手动排序就能看到它在最前），不要为了
+   * 「看起来有效」去改排序设置。
+   */
+  static async topBook(context: Context, book: Book): Promise<void> {
+    const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
+    if (bookUrl.length === 0) { return; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const minOrder = await BookRepository.getMinOrder(context);
+    const args: relationalStore.ValueType[] = [minOrder - 1, Date.now(), bookUrl];
+    await store.executeSql('UPDATE `books` SET `order` = ?, `durChapterTime` = ? WHERE `bookUrl` = ?', args);
+  }
+
   /** 单独为某本书开/关阅读记录，对应上游 BookDao.setReadRecordDisabled。 */
   static async setDisableReadRecord(context: Context, bookUrl: string, disabled: boolean): Promise<void> {
     if (bookUrl.length === 0) { return; }
