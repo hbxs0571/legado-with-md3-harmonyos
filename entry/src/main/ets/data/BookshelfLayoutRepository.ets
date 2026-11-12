@@ -133,6 +133,10 @@ export class BookshelfLayoutRepository {
         store, 'showLastUpdateTime', settings.showLastUpdateTime);
       settings.showTip = await BookshelfLayoutRepository.readBoolean(
         store, 'showTip', settings.showTip);
+      settings.customTagColorsJson = await BookshelfLayoutRepository.readString(
+        store, 'customTagColors', settings.customTagColorsJson);
+      settings.enableCustomTagColors = await BookshelfLayoutRepository.readBoolean(
+        store, 'enableCustomTagColors', settings.enableCustomTagColors);
     } catch (_) {
       // 读失败时保持默认值：书架能用比抛错中断启动更重要。
     }
@@ -198,6 +202,8 @@ export class BookshelfLayoutRepository {
       await store.put('showBookCount', snapshot.showBookCount);
       await store.put('showLastUpdateTime', snapshot.showLastUpdateTime);
       await store.put('showTip', snapshot.showTip);
+      await store.put('customTagColors', snapshot.customTagColorsJson);
+      await store.put('enableCustomTagColors', snapshot.enableCustomTagColors);
       await store.flush();
       BookshelfLayoutRepository.cached = copyBookshelfLayout(snapshot);
       BookshelfLayoutRepository.loaded = true;
@@ -319,6 +325,10 @@ export class BookshelfLayoutRepository {
     if (showLastUpdateTime !== undefined) { merged.showLastUpdateTime = showLastUpdateTime; }
     const showTip = BookshelfLayoutRepository.parseAndroidBoolean(values.get('showTip'));
     if (showTip !== undefined) { merged.showTip = showTip; }
+    const customTagColors = values.get('customTagColors');
+    if (customTagColors !== undefined) { merged.customTagColorsJson = customTagColors; }
+    const enableCustomTagColors = BookshelfLayoutRepository.parseAndroidBoolean(values.get('enableCustomTagColors'));
+    if (enableCustomTagColors !== undefined) { merged.enableCustomTagColors = enableCustomTagColors; }
     const bookshelfUpdateLimit = BookshelfLayoutRepository.parseAndroidInt(values.get('bookshelfUpdateLimit'));
     if (bookshelfUpdateLimit !== undefined) { merged.bookshelfRefreshingLimit = bookshelfUpdateLimit; }
     return merged;
@@ -379,6 +389,8 @@ export class BookshelfLayoutRepository {
     values.set('showLastUpdateTime', `${settings.showLastUpdateTime}`);
     values.set('showTip', `${settings.showTip}`);
     values.set('bookshelfUpdateLimit', `${settings.bookshelfRefreshingLimit}`);
+    values.set('customTagColors', settings.customTagColorsJson);
+    values.set('enableCustomTagColors', `${settings.enableCustomTagColors}`);
     return values;
   }
 

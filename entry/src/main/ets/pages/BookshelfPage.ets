@@ -5,7 +5,7 @@ import {
   BOOKSHELF_LAYOUT_MODE_OPTIONS, BOOKSHELF_SORT_ORDER_OPTIONS,
   BOOK_GROUP_STYLE_OPTIONS, BOOKSHELF_FOLDER_LAYOUT_MODE_OPTIONS,
   BOOKSHELF_GROUP_LIST_STYLE_OPTIONS,
-  bookshelfLayoutOptionLabel, copyBookshelfLayout
+  bookshelfLayoutOptionLabel, copyBookshelfLayout, TagColorPair, parseTagColors
 } from '../model/BookshelfLayout';
 import { BookshelfSort } from '../data/BookshelfSort';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
@@ -18,6 +18,7 @@ import { AppLog } from '../lib/AppLog';
 import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
 import { window } from '@kit.ArkUI';
 import { toTimeAgo } from '../lib/TimeAgo';
+import { argbToColorHex, hexToArgb, deriveTagBgColor, baseHueFromHex, generateTagColors } from '../lib/TagColorUtils';
 
 /** 网格左右内边距，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
 const BOOKSHELF_GRID_PADDING: number = 8;
@@ -114,6 +115,18 @@ export struct BookshelfPage {
   @State logEntries: string[] = [];
   /** 「标签显示内容」三复选是否展开（:209 / :224-226）。 */
   @State showTagSources: boolean = false;
+  /** 标签行取色缓存：总开关关掉时为空数组，卡片侧统一回落主题色（:124）。 */
+  @State cachedTagColors: TagColorPair[] = [];
+  /** 配色管理页是否展开；与布局/日志/分组面板共用同一个 bindSheet。 */
+  @State showTagColorPage: boolean = false;
+  /** 配色管理页编辑中的配色数组，整体替换才触发 @State 刷新。 */
+  @State tagColorsDraft: TagColorPair[] = [];
+  /** 取色器（hex 输入行）是否展开。 */
+  @State showTagColorPicker: boolean = false;
+  /** 取色器正在编辑的配色下标。 */
+  @State tagColorEditIndex: number = -1;
+  /** 取色器输入的文字色 hex。 */
+  @State tagColorPickerHex: string = '';
   /** 记住上次分组只灌一次，避免后续设置对象刷新覆盖用户主动选择的页签。 */
   private tabPositionRestored: boolean = false;
   /** 书架窗口引用与尺寸回调，aboutToDisappear 时解绑，避免订阅泄漏。 */
@@ -160,6 +173,7 @@ export struct BookshelfPage {
     this.onLayoutChanged();
     this.resolveWindowOrientation();
     AppLog.put(`书架已显示 ${this.books.length} 本书`);
+    this.refreshCachedTagColors();
   }
 
   aboutToDisappear(): void {
@@ -191,6 +205,8 @@ export struct BookshelfPage {
 
   /** layout 异步恢复完成后，把记住的分组灌进当前筛选（只在拿到具体分组名时锁定）。 */
   private onLayoutChanged(): void {
+    // 布局异步恢复完成后重新解析标签配色缓存（:124 的渲染总开关在这里生效）。
+    this.refreshCachedTagColors();
     // 离开「文件夹」分组样式后清掉组内导航，避免下次切回时残留子视图。
     if (this.layout.bookGroupStyle !== 2 && this.folderViewGroup.length > 0) {
       this.folderViewGroup = '';
@@ -298,6 +314,96 @@ export struct BookshelfPage {
     if (this.layoutDraft.bookshelfShowWordCount) { selected.push('字数'); }
     return selected.length > 0 ? selected.join(' · ') : '无';
   }
+  /** 标签行取色缓存：总开关关掉时传空数组，卡片侧统一回落主题色（:124）。 */
+  private refreshCachedTagColors(): void {
+    this.cachedTagColors = this.layout.enableCustomTagColors
+      ? parseTagColors(this.layout.customTagColorsJson) : [];
+  }
+
+  /** 标签行第 index 个标签的文字色；配色为空或该项为 0 时回落主题强调色。 */
+  private tagTextColor(index: number): string {
+    if (this.cachedTagColors.length === 0) { return this.themeColorAccent; }
+    const pair = this.cachedTagColors[index % this.cachedTagColors.length];
+    return pair !== undefined && pair.textColor !== 0 ? argbToColorHex(pair.textColor) : this.themeColorAccent;
+  }
+
+  /** 标签行第 index 个标签的背景色；两个 0 都回落主题次级底色，避免画纯黑块。 */
+  private tagBgColor(index: number): string {
+    if (this.cachedTagColors.length === 0) { return this.themeColorSurfaceTertiary; }
+    const pair = this.cachedTagColors[index % this.cachedTagColors.length];
+    return pair !== undefined && pair.bgColor !== 0 ? argbToColorHex(pair.bgColor) : this.themeColorSurfaceTertiary;
+  }
+
+  /** 「管理标签配色」入口的描述：当前布局草稿里有几组配色。 */
+  private tagColorsCount(): number {
+    return parseTagColors(this.layoutDraft.customTagColorsJson).length;
+  }
+
+  /** 打开配色管理页：草稿从当前布局草稿解析，容错非法 JSON。 */
+  private openTagColorPage(): void {
+    this.tagColorsDraft = parseTagColors(this.layoutDraft.customTagColorsJson);
+    this.showTagColorPicker = false;
+    this.showTagColorPage = true;
+  }
+
+  /**
+   * 配色页每次改动都即时落库：草稿序列化回 layoutDraft，经 onSaveLayout 写盘，
+   * 同时刷新标签行取色缓存，不依赖布局面板「完成」才生效。
+   */
+  private async persistTagColors(): Promise<void> {
+    const next = copyBookshelfLayout(this.layoutDraft);
+    next.customTagColorsJson = JSON.stringify(this.tagColorsDraft);
+    this.layoutDraft = copyBookshelfLayout(next);
+    await this.onSaveLayout(copyBookshelfLayout(next));
+    this.cachedTagColors = next.enableCustomTagColors ? parseTagColors(next.customTagColorsJson) : [];
+  }
+
+  /** 「生成」：按主题色相整组替换成 8 组（上游 TagColorGenerator 口径）。 */
+  private async generateTagColors(): Promise<void> {
+    this.tagColorsDraft = generateTagColors(baseHueFromHex(this.themeColorAccent));
+    await this.persistTagColors();
+  }
+
+  /** 「添加」：追加一组 (0,0) 并立刻打开取色器编辑它。 */
+  private async addTagColor(): Promise<void> {
+    const empty: TagColorPair = { textColor: 0, bgColor: 0 };
+    const next: TagColorPair[] = [...this.tagColorsDraft, empty];
+    this.tagColorsDraft = next;
+    await this.persistTagColors();
+    this.openTagColorPicker(next.length - 1);
+  }
+
+  /** 删除第 index 组配色。 */
+  private async removeTagColor(index: number): Promise<void> {
+    const next: TagColorPair[] = this.tagColorsDraft.slice();
+    next.splice(index, 1);
+    this.tagColorsDraft = next;
+    await this.persistTagColors();
+  }
+
+  /** 打开取色器：带出该项文字色，输入 hex 后由背景色按 HSL 推导。 */
+  private openTagColorPicker(index: number): void {
+    this.tagColorEditIndex = index;
+    const pair = this.tagColorsDraft[index];
+    this.tagColorPickerHex = pair !== undefined && pair.textColor !== 0 ? argbToColorHex(pair.textColor) : '';
+    this.showTagColorPicker = true;
+  }
+
+  /** 取色器确定：只取文字色，背景色由 deriveTagBgColor 推导（同色相低饱和高亮）。 */
+  private async confirmTagColor(): Promise<void> {
+    const color = hexToArgb(this.tagColorPickerHex);
+    if (color === 0) { this.onUnavailableAction('颜色格式不对，请输入 #RRGGBB'); return; }
+    const next: TagColorPair[] = this.tagColorsDraft.slice();
+    const index = this.tagColorEditIndex;
+    if (index >= 0 && index < next.length) {
+      const updated: TagColorPair = { textColor: color, bgColor: deriveTagBgColor(color) };
+      next[index] = updated;
+    }
+    this.tagColorsDraft = next;
+    this.showTagColorPicker = false;
+    await this.persistTagColors();
+  }
+
 
   /** 未读章节数角标文字：showUnread 且未读>0 才有值（上游 BookItem.kt:752）。 */
   private unreadTextOf(book: Book): string {
@@ -355,16 +461,19 @@ export struct BookshelfPage {
     return this.refreshingBookIds.indexOf(key) >= 0;
   }
 
-  /** 横向可滚动标签行；批 2 固定用主题色，批 3 再接 customTagColors 取色（:124）。 */
+  /**
+   * 横向可滚动标签行。标签按索引取 customTagColors 里的配色（index % size），
+   * 两个 0 都回落主题色；总开关由 refreshCachedTagColors 控制（:124）。
+   */
   @Builder
   private BookTagRow(book: Book) {
     if (this.displayTagsOf(book).length > 0) {
       Scroll() {
         Row({ space: 4 }) {
-          ForEach(this.displayTagsOf(book), (tag: string) => {
-            Text(tag).fontSize(9).fontColor(this.themeColorAccent)
+          ForEach(this.displayTagsOf(book), (tag: string, index: number) => {
+            Text(tag).fontSize(9).fontColor(this.tagTextColor(index))
               .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-              .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(4)
+              .backgroundColor(this.tagBgColor(index)).borderRadius(4)
           }, (tag: string) => tag)
         }
       }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
@@ -863,6 +972,8 @@ export struct BookshelfPage {
   private async submitLayout(): Promise<void> {
     this.showLayoutSheet = false;
     await this.onSaveLayout(copyBookshelfLayout(this.layoutDraft));
+    // 布局提交后刷新标签配色缓存，卡片不用等 @Watch 回来再变色。
+    this.refreshCachedTagColors();
     // 隐藏空分组或隐藏当前分组后，选中页签可能已不存在，回落到「全部」。
     if (!this.getGroupNames().includes(this.selectedFilter)) { this.selectedFilter = '全部'; }
   }
@@ -1146,6 +1257,19 @@ export struct BookshelfPage {
                 this.layoutDraft.bookshelfShowCustomTags,
                 (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowCustomTags = value; }); })
             }
+            this.LayoutSwitchRow('自定义标签配色', '开启后按下面的配色给标签行取色',
+              this.layoutDraft.enableCustomTagColors,
+              (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.enableCustomTagColors = value; }); })
+            if (this.layoutDraft.enableCustomTagColors) {
+              Row() {
+                Column() {
+                  Text('管理标签配色').fontSize(14).fontColor(this.themeColorTextSecondary)
+                  Text(`${this.tagColorsCount()} 组配色`).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                AppGlyph({ name: 'profileExpandMore', glyphSize: 16 })
+              }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                .onClick(() => { this.openTagColorPage(); })
+            }
           }
           this.LayoutSectionHeader('徽标')
           this.LayoutSwitchRow('显示未读数', '在封面角标与标题右侧显示未读章节数',
@@ -1232,7 +1356,9 @@ export struct BookshelfPage {
    */
   @Builder
   private ShelfSheetContent() {
-    if (this.showLayoutSheet) {
+    if (this.showTagColorPage) {
+      this.TagColorSheet()
+    } else if (this.showLayoutSheet) {
       this.LayoutSheetContent()
     } else if (this.showLogSheet) {
       this.LogSheetContent()
@@ -1264,6 +1390,63 @@ export struct BookshelfPage {
             }.padding({ left: 16, right: 16, top: 4, bottom: 4 })
           }, (line: string) => line)
         }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+      }
+    }.width('100%').height('100%').backgroundColor('#17181E')
+  }
+
+  /**
+   * 配色管理页（:211）。上游是独立底部弹层 LabelColorManageSheet.kt，本地复用书架
+   * 的同一个 bindSheet，避免同组件挂多个 sheet 只有最后一个生效。
+   */
+  @Builder
+  private TagColorSheet() {
+    Column() {
+      Row() {
+        Text('‹ 返回').fontSize(14).fontColor(this.themeColorAccent).padding(6)
+          .onClick(() => { this.showTagColorPage = false; })
+        Text('管理标签配色').fontSize(18).fontWeight(FontWeight.Bold)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
+        Text('生成').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+          .onClick(async () => { await this.generateTagColors(); })
+        Text('添加').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+          .onClick(async () => { await this.addTagColor(); })
+      }.width('100%').padding({ left: 12, right: 12, top: 16, bottom: 12 })
+
+      if (this.tagColorsDraft.length === 0) {
+        Column() {
+          Text('暂无配色，点「生成」创建 8 组').fontSize(13).fontColor(this.themeColorTextTertiary)
+        }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.tagColorsDraft, (pair: TagColorPair, index: number) => {
+              Row() {
+                Text(`颜色 ${index + 1}`).fontSize(12)
+                  .fontColor(pair.textColor !== 0 ? argbToColorHex(pair.textColor) : this.themeColorTextPrimary)
+                  .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+                  .backgroundColor(pair.bgColor !== 0 ? argbToColorHex(pair.bgColor) : this.themeColorSurfaceTertiary)
+                  .borderRadius(6)
+                Blank()
+                Text('编辑').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+                  .onClick(() => { this.openTagColorPicker(index); })
+                Text('删除').fontSize(13).fontColor('#D99AA5').padding(6)
+                  .onClick(async () => { await this.removeTagColor(index); })
+              }.width('100%').padding({ left: 16, right: 12, top: 6, bottom: 6 })
+            }, (pair: TagColorPair, index: number) => `${index}_${pair.textColor}_${pair.bgColor}`)
+          }
+        }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+      }
+
+      if (this.showTagColorPicker) {
+        Row() {
+          TextInput({ text: this.tagColorPickerHex, placeholder: '#RRGGBB 文字色' })
+            .layoutWeight(1).fontSize(12).fontColor(this.themeColorTextPrimary)
+            .onChange((value: string) => { this.tagColorPickerHex = value; })
+          Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary).padding(6)
+            .onClick(() => { this.showTagColorPicker = false; })
+          Text('确定').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+            .onClick(async () => { await this.confirmTagColor(); })
+        }.width('100%').padding({ left: 16, right: 12, top: 8, bottom: 16 })
       }
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
@@ -1655,9 +1838,9 @@ export struct BookshelfPage {
         }.layoutWeight(1).width('100%').padding({ bottom: 104 }).justifyContent(FlexAlign.Center)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet, this.ShelfSheetContent(), {
+      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E',
-        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; }
+        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; }
       })
   }
 }

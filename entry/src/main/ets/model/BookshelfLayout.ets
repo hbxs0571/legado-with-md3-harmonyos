@@ -108,6 +108,27 @@ export interface BookshelfLayoutSettings {
   showLastUpdateTime: boolean;
   /** 是否显示书籍类型标签；上游键名 showTip，默认 false。 */
   showTip: boolean;
+  /** 自定义标签配色 JSON，与上游 customTagColors 偏好键同形：'[{"textColor":n,"bgColor":n}]'。 */
+  customTagColorsJson: string;
+  /** 是否按 customTagColorsJson 给标签取色；上游键名 enableCustomTagColors，默认 false。 */
+  enableCustomTagColors: boolean;
+}
+
+/** 自定义标签配色对；两个 int 均为 ARGB，0 表示「没设」，渲染时回落主题色。 */
+export interface TagColorPair {
+  textColor: number;
+  bgColor: number;
+}
+
+/** 解析 customTagColorsJson，任何异常都回落空数组（对齐上游 parseTagColors 的 try/catch）。 */
+export function parseTagColors(json: string): TagColorPair[] {
+  try {
+    const arr = JSON.parse(json) as TagColorPair[];
+    if (!Array.isArray(arr)) { return []; }
+    return arr.filter((it: TagColorPair) => typeof it.textColor === 'number' && typeof it.bgColor === 'number');
+  } catch (_) {
+    return [];
+  }
 }
 
 /** 下拉选项的通用结构。 */
@@ -209,6 +230,8 @@ export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   showBookCount: true,
   showLastUpdateTime: false,
   showTip: false,
+  customTagColorsJson: '[]',
+  enableCustomTagColors: false,
 };
 
 /** 按值取文案，未知值返回空串由调用方兜底。 */
@@ -271,5 +294,7 @@ export function copyBookshelfLayout(settings: BookshelfLayoutSettings): Bookshel
     showBookCount: settings.showBookCount,
     showLastUpdateTime: settings.showLastUpdateTime,
     showTip: settings.showTip,
+    customTagColorsJson: settings.customTagColorsJson,
+    enableCustomTagColors: settings.enableCustomTagColors,
   };
 }

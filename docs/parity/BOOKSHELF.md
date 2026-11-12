@@ -55,15 +55,15 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A1 书架主屏与卡片 | 78 | 53 | 25 | 0 |
-| A2 书架设置面板 | 47 | 45 | 2 | 0 |
+| A1 书架主屏与卡片 | 78 | 54 | 24 | 0 |
+| A2 书架设置面板 | 47 | 47 | 0 | 0 |
 | A3 分组管理 | 22 | 16 | 5 | 1 |
 | B 书籍详情页与元数据 | 80 | 24 | 55 | 1 |
 | C 阅读进度与记录 | 39 | 37 | 1 | 1 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 9 | 8 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
-| 合计 | 345 | 192 | 148 | 5 |
+| 合计 | 345 | 195 | 145 | 5 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），原本是迁移前证据、未逐行复核，**r340 已逐行复核**（结论见 `## r340 复核结论`，其中 26 行改判 `已接`、2 行新增 `不适用`、174 行标 `**要接**`、9 行标 `**不接**`）；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -121,7 +121,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 书籍类型标签 | `BookItem.kt:754-765`、`:794` | — | 已接 | **实现（r341）**：bookTypeLabel() 按 showTip 给类型，只做本地 / EPUB 两档（epub→EPUB、其余→本地）；**音频 / 漫画 / 网络文件三档未接，等本地有该形态的书再补** | 开「显示书籍类型」后 TXT 显示「本地」、EPUB 显示「EPUB」，关掉全消失 | 见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB1 | localBook |
 |  来源标签（搜索模式）  |  `BookItem.kt:766-774`  |  —  | 未接 |  本地书架无搜索模式下的来源命中高亮  |  搜索书名时卡片左下显示命中的书源名  |  仅在 `isSearchMode` 下；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB1 ；**要接**：依赖在线书源与网址导入；书源已纳入范围未排期（docs/PROJECT.md:24-44），随该模块做 |  localBook / bookshelfLayout  |
 | 自定义标签行 | `BookItem.kt:888-918` | — | 已接 | **实现（r341）**：BookTagRow() 横向 Scroll 渲染标签，displayTagsOf 按 customTag→category(去重)→wordCount 拼接，三开关各控一段；本批固定主题色（取色见 :124） | 书卡下方出现 TXT / 618.4万字 / 本地 标签行，关「显示标签」整行消失 | 见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB1 | localBook / bookshelfLayout |
-|  标签按 `customTagColors` 取色  |  `BookItem.kt:888-918`  |  —  | 未接 |  本地无自定义标签配色体系。**顺延（r341）**：标签行已用固定主题色渲染（:123 交付），按 customTagColors 取色依赖批 3 的配色字段与配色管理页（:210 / :211），随批 3 一起做  |  为「科幻」选色后卡片标签变色（顺延批 3，随 customTagColors 字段做）  |  与 A2 标签内容设置联动 ；**要接**：先补 model/Book.ets 字段（未读数可由 chapterCount-chapterIndex-1 推导，isNew 可由 lastCheckCount 推导），再落卡片渲染与 A2 开关 |  —  |
+|  标签按 `customTagColors` 取色  |  `BookItem.kt:888-918`  |  `pages/BookshelfPage.ets:318-333`、`:474-476`  | 已接 |  本地原只用固定主题色渲染标签行。**实现（r341）**：批 3 新增 customTagColorsJson 与 parseTagColors（model/BookshelfLayout.ets）、lib/TagColorUtils.ets；BookTagRow 按索引取模取色，textColor/bgColor 为 0 回落主题色，关开关传空数组；生成 8 组后书卡 TXT/字数/本地各取不同色，关开关回统一主题色  |  生成 8 组配色后书卡标签各取不同色；关「自定义标签配色」后回统一主题色  |  与 A2 标签内容设置联动 |  —  |
 |  列表模式简介  |  `BookItem.kt:919-941`  |  —  | 已接 |  本地卡片无简介 。**复核（r340）**：pages/BookshelfPage.ets:568-569 showsListDetails() 把关，:1185-1193 渲染简介 | 列表模式下书名下方出现简介文字； 列表模式且开启「显示简介」后卡片显示简介文本  |  需 Jsoup 等价富文本处理；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB1  |  localBook / bookshelfLayout  |
 |  简介排版在书名下方  |  `BookItem.kt:919-941`  |  —  | 已接 |  同上 。**复核（r340）**：pages/BookshelfPage.ets:1209-1214 按 bookshelfListIntroBelowContent 把简介排到书名下方 | 打开「简介在下方」后简介从右侧栏移到书名下方； 开启「简介在书名下方」后排版位置改变  |  `bookshelfListIntroBelowContent`  |  bookshelfLayout  |
 | 最后更新时间 | `BookItem.kt:944-951` | — | 已接 | **实现（r341）**：新建 `lib/TimeAgo.ets` 的 toTimeAgo()，列表卡按 showLastUpdateTime && !book.isLocal 渲染；本地书恒不显示，网络书相对时间待在线书源模块 | 开「显示最后更新时间」后非本地书显示「N 天前」，本地书不显示 | 见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB1 | localBook |
@@ -207,8 +207,8 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 简介行数 | `BookshelfConfigSheet.kt:478` | `pages/BookshelfPage.ets:967-975` | 已接 | 本地 0..10，0 表示不限（对齐上游 `:480` 语义），字段 `model/BookshelfLayout.ets:53`；渲染消费 `:574-576 introMaxLines()`（`>0 ? 值 : 999`）→ `:1197` 与 `:1220` 的 `.maxLines(...)` | 设为 2 行后简介两行截断 | — | bookshelfLayout |
 | 显示标签 | `BookshelfConfigSheet.kt:489` | — | 已接 | **实现（r341）**：布局面板「标签」段 LayoutSwitchRow 绑 bookshelfShowTag（默认 true），卡片 displayTagsOf 用它做总门 | 开「显示标签」书卡出现标签行，关掉整行消失 | 联动 A1 卡片 | bookshelfLayout |
 | 标签显示内容 | `BookshelfConfigSheet.kt:511`、`:708` | — | 已接 | **实现（r341）**：「标签显示内容」可点行 + 展开三复选（字数 / 来源分类 / 自定义标签），描述串 tagSourcesLabel() 显示开着项、全关显示「无」；三复选即 :224–:226，与 :209 同一对话框一次做完 | 点「标签显示内容」展开三复选，描述显示「自定义 · 来源分类 · 字数」，取消项描述随之变 | 二级面板入口（:224–:226 随本行做完） | bookshelfLayout |
-|  自定义标签配色  |  `BookshelfConfigSheet.kt:518`  |  —  | 未接 |  `grep -rn "customTagColors" entry/src/main/ets --include=*.ets` 零命中，无字段、无控件、无渲染  |  为「科幻」选色后卡片标签变色（当前无）  |  — ；**要接**：需新增 customTagColors 字段、配色管理页与标签行取色 |  —  |
-|  管理标签配色  |  `BookshelfConfigSheet.kt:525`  |  —  | 未接 |  同上，`customTagColors` 零命中，无配色管理页  |  打开配色管理页可增删颜色（当前无）  |  — ；**要接**：需新增 customTagColors 字段、配色管理页与标签行取色 |  —  |
+|  自定义标签配色  |  `BookshelfConfigSheet.kt:518`  |  `pages/BookshelfPage.ets` 标签段  | 已接 |  原 grep customTagColors 零命中、无字段无控件。**实现（r341）**：布局面板「标签」段新增「自定义标签配色」开关，绑 enableCustomTagColors（model/BookshelfLayout.ets、data/BookshelfLayoutRepository.ets）；开启后标签行按配色取色、关闭回主题色，开关随 config.xml 写出与读回  |  开启开关后书卡标签按配色变色、关闭后回统一主题色；重启后开关状态保留  |  — |  —  |
+|  管理标签配色  |  `BookshelfConfigSheet.kt:525`  |  `pages/BookshelfPage.ets:1402`  | 已接 |  原无配色管理页。**实现（r341）**：开配色后布局面板出现「管理标签配色」入口，点开 TagColorSheet 可生成 8 组、添加、编辑、删除、取色；lib/TagColorUtils.ets 提供 HSL↔ARGB 与 deriveTagBgColor 推背景，草稿经 onSaveLayout 即时落盘  |  点「管理标签配色」打开配色页，生成 8 组、添加选红出现红字淡红底、删除后不崩  |  — |  —  |
 | 书名最大行数 | `BookshelfConfigSheet.kt:540` | `pages/BookshelfPage.ets:977-982` | 已接 | 本地 1..5，字段 `model/BookshelfLayout.ets:23`；渲染消费 `:1188 .maxLines(this.layout.bookshelfTitleMaxLines)`（列表书名）与 `:1256`（网格封面下书名） | 设为 1 后长书名单行省略 | — | bookshelfLayout |
 | 书封阴影 | `BookshelfConfigSheet.kt:550` | `pages/BookshelfPage.ets:1010-1011` | 已接 | 字段 `model/BookshelfLayout.ets:25`；渲染消费 `:1177 shadowEnabled`（列表）与 `:1238`（网格）传进 `BookCover`，落到 `components/BookCover.ets:264 .shadow(this.shadowEnabled ...)` | 开关后封面阴影出现与消失 | — | bookshelfLayout |
 | 显示未读数 | `BookshelfConfigSheet.kt:561` | — | 已接 | **实现（r341）**：「徽标」段 LayoutSwitchRow 绑 showUnread（默认 true），卡片 unreadTextOf / showBadgeDotOf 消费 | 关「显示未读数」后红色未读角标消失 | 联动 A1 卡片 | — |
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 ## 小结
 
-**全表合计 345 条：已接 192、未接 148、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 148 行按备注列分：`**要接**` 139 行、`**不接**` 9 行，逐行判断见上一节。
+**全表合计 345 条：已接 195、未接 145、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 145 行按备注列分：`**要接**` 136 行、`**不接**` 9 行，逐行判断见上一节。
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
@@ -660,7 +660,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | --- | --- | --- | --- |
 | 1 顶栏与纯 UI 入口 | 13 | `:82`–`:84` `:86` `:95`–`:99` `:101` `:222` `:252` `:255` | 无数据依赖：顶栏标题分支与副标题、五个菜单项、页签栏菜单按钮、删除分组二次确认、分组行书籍数。**实现（r341）**：本批实际交付 11 行，`:95` 选择模式留批 5、`:96` 书架管理留批 9；标题 `(N)` 尾巴因本地无待更新队列未接（见 `:83` 差异说明） |
 | 2 Book 补字段后落卡片 | 22 | `:110` `:112` `:118`–`:121` `:123` `:124` `:127`–`:130` `:187` `:208` `:209` `:214`–`:219` `:223` | 先在 model/Book.ets 补 totalChapterNum、latestChapterTitle、isNew；未读数可由 chapterCount - chapterIndex - 1 推导。**实现（r341）**：本批实际交付 24 行（22 行清单 + `:224`–`:226` 随 `:209` 三复选一次做完）；`:124` 按 customTagColors 取色顺延批 3（与 `:210` / `:211` 一起做）；`:130` 表描述更正为标题级 (N)，本地无待更新队列故 (N) 尾巴随在线书源模块（见 `:83`） |
-| 3 标签体系 | 5 | `:210` `:211` `:224`–`:226` | 新增 customTagColors 字段 + 配色管理页 + 标签行取色；自定义标签数据已有、渲染侧零消费。**调整（r341）**：`:224`–`:226` 已随批 2 的 `:209` 三复选对话框一次做完（本批不再做），批 3 实际只剩 `:210` `:211` 两行 + 认领从批 2 顺延的 `:124`（标签行按 customTagColors 取色，见 `:124` 差异说明的顺延标注） |
+| 3 标签体系 | 5 | `:210` `:211` `:224`–`:226` | 新增 customTagColors 字段 + 配色管理页 + 标签行取色；自定义标签数据已有、渲染侧零消费。**调整（r341）**：`:224`–`:226` 已随批 2 的 `:209` 三复选对话框一次做完（本批不再做），批 3 实际只剩 `:210` `:211` 两行 + 认领从批 2 顺延的 `:124`（标签行按 customTagColors 取色，见 `:124` 差异说明的顺延标注）。**实现（r341）**：本批实际交付 3 行（`:210` `:211` `:124`）；`:224`–`:226` 已在批 2 做完；新增 TagColorPair/parseTagColors 数据层、lib/TagColorUtils.ets（HSL↔ARGB 与背景推导）、配色管理子页（生成/添加/编辑/删除/取色）与标签行按索引取模取色；config.xml 写出并读回 customTagColors / enableCustomTagColors |
 | 4 标签匹配规则面板 | 4 | `:240` `:241` `:249` `:250` | tag_group_rules 表与 TagGroupRuleRepository/Importer 都已在，只缺分组管理面板里的编辑控件 |
 | 5 选择模式、拖拽与动作 | 15 | `:87` `:106` `:107` `:113` `:114` `:138` `:142`–`:144` `:146`–`:151` | books 表已有 order 列支撑拖拽重排；全选/反选依赖选中集合 |
 | 6 私密体系 | 3 | `:257` `:294` `:325` | books 表需加 isPrivate 列（现只有 book_groups 有）；详情页加设为私密与锁定内容页 |

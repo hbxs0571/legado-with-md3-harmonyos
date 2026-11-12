@@ -457,7 +457,7 @@ export class BackupRepository {
     'swipeToAddBookmark', 'system_typefaces', 'textBottomJustify', 'textFullJustify',
     'textSelectMenuConfig', 'themeMode', 'titleBarCompact', 'tocCountWords',
     'tocUiUseReplace', 'underlineExtend', 'underlinePadding', 'useDefaultCover',
-    'useZhLayout'
+    'useZhLayout', 'customTagColors', 'enableCustomTagColors'
   ]);
   /**
    * 97 个本地有真值、但从不写进 config.xml 的键，对应的上游 XML 标签类型。
@@ -560,7 +560,7 @@ export class BackupRepository {
       'bookshelfShowCustomTags', 'bookshelfShowSourceTags', 'bookshelfShowWordCount',
       'bookshelfShowLatestChapter', 'bookshelfIntroMaxLines',
       'showUnread', 'showUnreadNew', 'showWaitUpCount', 'showBookCount',
-      'showLastUpdateTime', 'showTip', 'bookshelfUpdateLimit'
+      'showLastUpdateTime', 'showTip', 'bookshelfUpdateLimit', 'customTagColors', 'enableCustomTagColors'
     ],
     mangaConfig: [
       'showMangaUi', 'mangaScrollMode', 'webtoonSidePaddingDp', 'mangaPreDownloadNum',
@@ -955,6 +955,8 @@ export class BackupRepository {
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showLastUpdateTime', `${bookshelfLayout.showLastUpdateTime}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'showTip', `${bookshelfLayout.showTip}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfUpdateLimit', `${bookshelfLayout.bookshelfRefreshingLimit}`);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'string', 'customTagColors', bookshelfLayout.customTagColorsJson);
+        configText = BackupRepository.upsertAndroidPreference(configText, 'boolean', 'enableCustomTagColors', `${bookshelfLayout.enableCustomTagColors}`);
         BackupRepository.writeTextFile(configPath, configText);
       }
 
@@ -2223,7 +2225,7 @@ export class BackupRepository {
       if (value !== undefined) { values.set(key, value.toString()); }
     }
     const booleanKeys = ['hideEmptyGroups', 'bookshelfCoverShadow', 'bookshelfTitleCenter', 'bookshelfTitleSmallFont',
-      'bookshelfLayoutCompact', 'bookshelfShowDivider', 'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSearchActionDirectToSearch', 'showBookshelfFastScroller', 'auto_refresh', 'shouldShowExpandButton', 'bookshelfShowTag', 'bookshelfShowCustomTags', 'bookshelfShowSourceTags', 'bookshelfShowWordCount', 'showUnread', 'showUnreadNew', 'showWaitUpCount', 'showBookCount', 'showLastUpdateTime', 'showTip'];
+      'bookshelfLayoutCompact', 'bookshelfShowDivider', 'bookshelfListCoverCenter', 'bookshelfListIntroBelowContent', 'bookshelfShowIntro', 'bookshelfShowLatestChapter', 'bookshelfSearchActionDirectToSearch', 'showBookshelfFastScroller', 'auto_refresh', 'shouldShowExpandButton', 'bookshelfShowTag', 'bookshelfShowCustomTags', 'bookshelfShowSourceTags', 'bookshelfShowWordCount', 'showUnread', 'showUnreadNew', 'showWaitUpCount', 'showBookCount', 'showLastUpdateTime', 'showTip', 'enableCustomTagColors'];
     for (let index = 0; index < booleanKeys.length; index++) {
       const key = booleanKeys[index];
       if (key === undefined) { continue; }
@@ -2233,6 +2235,8 @@ export class BackupRepository {
     const saveTabPositionValue = BackupRepository.readXmlLong(`${directory}/config.xml`, 'bookshelfSelectedGroupId');
     if (saveTabPositionValue !== undefined) { values.set('bookshelfSelectedGroupId', saveTabPositionValue); }
     if (unconditionalIntro !== undefined) { values.set('showBookIntro', unconditionalIntro.toString()); }
+    const customTagColors = BackupRepository.readXmlString(`${directory}/config.xml`, 'customTagColors');
+    if (customTagColors !== undefined) { values.set('customTagColors', customTagColors); }
     return BookshelfLayoutRepository.mergeFromAndroidValues(current, values);
   }
 
