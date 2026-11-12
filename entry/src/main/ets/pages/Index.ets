@@ -783,7 +783,8 @@ struct Index {
         const row: BookReadRecordSession = {
           timeLabel: clock,
           durationLabel: ReadRecordRepository.formatDuration(session.endTime - session.startTime),
-          chapterLabel: session.chapterIndex > 0 ? `第 ${session.chapterIndex} 章` : ''
+          // 与阅读记录页同一口径：chapterIndex 是 0 基，显示要 +1；0 按「未知」留空。
+          chapterLabel: session.chapterIndex > 0 ? `第 ${session.chapterIndex + 1} 章` : ''
         };
         rows.push(row);
       }

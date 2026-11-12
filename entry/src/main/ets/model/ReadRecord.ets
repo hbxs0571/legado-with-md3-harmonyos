@@ -77,6 +77,8 @@ export interface ReadTimeRecord {
   startTime: number;
   endTime: number;
   durationMs: number;
+  /** 本次会话所在章节序号（0 基）。0 表示未知：旧记录与会话重建路径都写 0。 */
+  chapterIndex?: number;
 }
 
 /** 详情页面板里的一行会话，字段已在 Index 侧格式化好，详情页不碰数据层。 */

@@ -279,7 +279,8 @@ export class ReadRecordRepository {
         bookAuthor: session.bookAuthor,
         startTime: session.startTime,
         endTime: session.endTime,
-        durationMs: session.endTime - session.startTime
+        durationMs: session.endTime - session.startTime,
+        chapterIndex: session.chapterIndex
       });
     }
     return records;

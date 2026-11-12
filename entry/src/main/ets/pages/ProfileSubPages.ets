@@ -3159,7 +3159,7 @@ export struct ReadRecordsPage {
       const session: ReadRecordSession = {
         deviceId: '', bookName: record.bookName, bookAuthor: record.bookAuthor,
         bookUrl: record.bookId, startTime: record.startTime, endTime: record.endTime,
-        chapterIndex: 0
+        chapterIndex: record.chapterIndex ?? 0
       };
       sessions.push(session);
     }
@@ -3174,11 +3174,33 @@ export struct ReadRecordsPage {
       const row: ReadTimeRecord = {
         id: first.id, bookId: first.bookId, bookName: first.bookName, bookAuthor: first.bookAuthor,
         startTime: first.startTime, endTime: first.endTime,
-        durationMs: session.endTime - session.startTime
+        durationMs: session.endTime - session.startTime,
+        chapterIndex: first.chapterIndex
       };
       result.push(row);
     }
     return result.sort((left: ReadTimeRecord, right: ReadTimeRecord) => right.startTime - left.startTime);
+  }
+
+  /**
+   * 章号文案。与上游 ReadRecordScreen 的 chapter_index_format 同口径，但本地固定用「第 N 章」，
+   * 不去 chapters 表查真实标题：换过目录的书 chapterIndex 对不上当时的标题，查出来的标题反而是错的，
+   * 而且每条记录查一次表，记录一多就是 N 次查询。
+   *
+   * chapterIndex 为 0 时按「未知」返回空串而不是「第 1 章」：0 是「第一章」与「未知」共用的值，
+   * 本地没有别的信息能区分，宁可不说。
+   */
+  private chapterLabelOf(record: ReadTimeRecord): string {
+    const index = record.chapterIndex ?? 0;
+    return index > 0 ? `第 ${index + 1} 章` : '';
+  }
+
+  /** 「最后阅读 <日期> <时间>」一行；有章名时拼在后面，没有章名不留多余的分隔符。 */
+  private latestReadLineOf(record: ReadTimeRecord): string {
+    const timeText = `${ReadRecordRepository.formatFriendlyDate(this.getDateKey(record.endTime))} `
+      + this.formatRecordDate(record.endTime).substring(11);
+    const label = this.chapterLabelOf(record);
+    return label.length > 0 ? `最后阅读 ${timeText} · ${label}` : `最后阅读 ${timeText}`;
   }
 
   private getDistinctBooks(records: ReadTimeRecord[]): ReadTimeRecord[] {
@@ -3643,6 +3665,9 @@ export struct ReadRecordsPage {
                       Column() {
                         Text(record.bookName).fontSize(16).fontColor(this.themeColorTextPrimary)
                         Text(record.bookAuthor).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                        if (this.chapterLabelOf(record).length > 0) {
+                          Text(this.chapterLabelOf(record)).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                        }
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                       Text(this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -3672,7 +3697,7 @@ export struct ReadRecordsPage {
                       .padding({ left: 10, right: 2 })
                       .onClick(() => { this.openMergeSheetForRecord(record); })
                   }.width('100%')
-                  Text(`最后阅读 ${ReadRecordRepository.formatFriendlyDate(this.getDateKey(record.endTime))} ${this.formatRecordDate(record.endTime).substring(11)}`)
+                  Text(this.latestReadLineOf(record))
                     .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
                 }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
                   .margin({ left: 16, right: 16, bottom: 8 })

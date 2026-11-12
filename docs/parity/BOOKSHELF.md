@@ -59,11 +59,11 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | A2 书架设置面板 | 47 | 47 | 0 | 0 |
 | A3 分组管理 | 22 | 21 | 0 | 1 |
 | B 书籍详情页与元数据 | 80 | 42 | 37 | 1 |
-| C 阅读进度与记录 | 39 | 37 | 1 | 1 |
+| C 阅读进度与记录 | 39 | 38 | 0 | 1 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 36 | 17 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 9 | 8 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 7 | 0 | 0 |
-| 合计 | 345 | 268 | 72 | 5 |
+| 合计 | 345 | 269 | 71 | 5 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），原本是迁移前证据、未逐行复核，**r340 已逐行复核**（结论见 `## r340 复核结论`，其中 26 行改判 `已接`、2 行新增 `不适用`、174 行标 `**要接**`、9 行标 `**不接**`）；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -391,7 +391,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 总览·日历日详情 | `ReadRecordOverviewScreen.kt:510-516` | — | 不适用 | — | 上游 `CalendarDayCell`（`ReadRecordOverviewScreen.kt:495-545`）无 onClick，`:510-516` 只是读屏 `contentDescription`，点日不触发任何动作 | `a11y_reading_calendar_day_with_book` | readRecord |
 | 最短有效时长阈值 | `GetReadRecordOverviewUseCase.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `minimumReadDurationMs = 10000` | 停留 5 秒退出不产生记录，15 秒产生 | — | 不备份 |
 | 自动保存间隔 | `ReadRecordViewModel.kt` | `data/ReadRecordRepository.ets` | 已接 | 本地 `autoSaveIntervalMs = 120000` | 连续阅读 2 分钟后记录落盘 | — | 不备份 |
-|  章节索引格式化  |  `ReadRecordScreen.kt` `chapter_index_format`  |  `pages/BookInfoPage.ets:493`-`:494`（详情页阅读记录面板）；字段 `model/ReadRecord.ets:89`，生成处 `pages/Index.ets:744`  | 未接 |  书籍详情页的阅读记录面板有「第 N 章」（`chapterLabel`），阅读记录列表三视图没有（`ReadTimeRecord` 无章名字段）  |  记录条目显示「第 12 章」而非裸数字  |  — ；**要接**：ReadTimeRecord 补章名字段，pages/Index.ets:744 生成处已有 chapterLabel，只差透传 |  —  |
+|  章节索引格式化  |  `ReadRecordScreen.kt` `chapter_index_format`  |  `pages/BookInfoPage.ets:493`-`:494`（详情页阅读记录面板）；字段 `model/ReadRecord.ets:89`，生成处 `pages/Index.ets:744`  | 已接 |  书籍详情页的阅读记录面板有「第 N 章」（`chapterLabel`），阅读记录列表三视图没有（`ReadTimeRecord` 无章名字段） ；**实现（r341，11a）**：`model/ReadRecord.ets` 的 `ReadTimeRecord` 补 `chapterIndex?`，「`data/ReadRecordRepository.ets`」的 `toTimelineRecords` 透传会话章号，`pages/ProfileSubPages.ets` 的 `getRecordsForDate` 恢复会话与重组行时都带上章号；新增 `chapterLabelOf` 统一按 `chapterIndex + 1` 显示「第 N 章」（0 按未知留空，不显示「第 1 章」），时间线视图在作者下方加一行 11fp，最后阅读视图拼在时间之后（无章号不留分隔符）。固定用「第 N 章」不查章节标题；按日汇总视图不显示章名（`ReadRecordDetail.readWords` 是章号按天累加，不是章号本身，要改汇总写入口径，不在本行范围） | 时间线视图每条记录在作者下方显示「第 7 章」「第 1154 章」；最后阅读视图显示「最后阅读 昨天 15:07 · 第 7 章」，无章号的记录不带多余分隔符；切到汇总视图（按日）不显示章名；`chapterIndex` 为 0 的记录不显示「第 1 章」 |  —|  —  |
 | 详情页进度条 | `BookInfoScreen.kt:1533-1625` | `pages/BookInfoPage.ets:281`（文案）、`:293`（进度条 Row） | 已接 | 本地按 `BookRepository.readProgress(book)` 的百分比渲染（派生值，不落库） | 读到 50% 时进度条半满 | r284 起 `progress` 不再是存储字段 | localBook / readRecord |
 | 备份写出·三份 readRecord JSON | `help/storage/Backup.kt:77-79` | `data/BackupRepository.ets:805`、`:807`、`:818`（三份 `writeTextFile`，门控 `:803`） | 已接 | 导出 ZIP 写入 `readRecord.json` / `readRecordDetail.json` / `readRecordSession.json`；会话字段 `chapterIndex` 写成上游列名 `words` | 备份后从该 ZIP 走恢复预览，能列出三份文件与各自条数 | 本轮补登；源码段 `exportForBackup` | readRecord |
 | 备份恢复·三份 readRecord JSON 写库 | `help/storage/Restore.kt:283-299` | `data/BackupRepository.ets:1449`（具名分支；内层 `:1457`/`:1459`）、`:1488`（`restoreFromBackup` 调用）、`data/ReadRecordRepository.ets:1069`（定义） | 已接 | 三份 JSON 走具名分支解析后交 `restoreFromBackup` 写库，按会话重算派生层；不再落到只拷文件不进库的兜底分支 | 点「导入此 ZIP」后三表行数与恢复前一致、不重复插入 | 本轮补登；派生层重算口径见上游 `reconcileRestoredReadRecordTotals` | readRecord |
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 ## 小结
 
-**全表合计 345 条：已接 268、未接 72、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 77 行按备注列分：`**要接**` 56 行、`**不接**` 16 行，逐行判断见上一节。
+**全表合计 345 条：已接 269、未接 71、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 71 行按备注列分：`**要接**` 55 行、`**不接**` 16 行，逐行判断见上一节。
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
@@ -668,7 +668,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 8 缓存管理页 | 16 | `:419` `:421` `:422` `:429`–`:441` | 前置：先落磁盘章节缓存表。现有 data/BookRepository.ets:140 的 chapterCache 是内存 Map，重启即空。**实现（r341）**：本批实际交付 10 行（`:419` `:421` `:422` `:429`–`:433` `:435` `:439`），做的是「本地意义的缓存页」而非上游在线章节下载管理器（上游把 isLocal 书过滤掉、照搬会做成空壳）；新建 data/CacheStatsRepository.ets 与 CacheBookCard，页面补搜索/分组/刷新过滤、逐本 n/total 与进度条、状态摘要、展开收起、删缓存确认框；6 行（`:434` `:436`–`:438` `:440` `:441`）依赖在线书源逐章下载，保持未接并逐行写复核理由；上机验收 9 点全部实测通过  |
 | 9 书架管理页整页 | 31 | `:447`–`:475` `:482` `:484` | 按上游 BookshelfManageScreen 建页；入口已在 pages/BookshelfPage.ets:594-595。**实现（r341）**：本批实际交付 20 行（`:447`–`:449` `:451` `:453` `:455`–`:460` `:463` `:465` `:467`–`:469` `:471` `:475` `:482` `:484`）；新建 BookshelfManagePage.ets 整页与 CacheSettingsRepository.ets 偏好落盘，BookshelfPage 更多菜单接线、Index 分支链挂载、AppDownloadCacheSettingsPage 六滑块一开关与清理缓存/压缩数据库真做；6 行（`:450` `:452` `:454` `:461` `:464` `:466`）本地无对应语义改判 **不接** 并逐行写理由；5 行（`:462` `:470` `:472`–`:474`）依赖在线书源或 EPUB 打包器，顺延批 13；顺手把分组卡副标题「私有标记未生效」改成「私有」。上机验收 16 点：13 代码确认（模板 UI 删不掉已有文本未端到端），其余全部实测通过  |
 | 10 导入判重与多选 | 5 | `:551` `:552` `:554`–`:556` | data/BookRepository.ets:428-435 的 maxSelectNumber = 1 是硬卡点；导入页需先建中间页。**实现（r341）**：5 行全部交付——新建 data/LocalBookImportPlanner.ets 与 pages/LocalBookImportPage.ets，BookRepository 拆出 pickLocalBookUris / importSingleUri / importLocalBooks 并补 parseNameAuthor / isFileOnShelf / localTitleFromFileName / bookUrlOf，Index 的 importLocalBook 改为「选文件 → 确认页 → 逐本导入」三步并在导入后回书架重读书目。三处与判断段不同：接回判据改用 title（本地 originName 不是文件名）、只放开多选未放开后缀（无 PDF/MOBI/AZW3/ZIP 解析器）、确认页而非目录列表页（鸿蒙无目录枚举）。上机验收 12 点：1、2、4、6、7、8、10、11 实测通过；3 与 5 因设备系统选择器无法进入多选态改间接验证；9（接回后书签仍保留）无可用造数路径未验证；12 重装重跑通过 |
-| 11 阅读记录与备份开关 | 5 | `:394` `:504` `:505` `:510` `:511` | 章名字段直接补；进度同步与自动检查需后台任务；旧版数据要旧格式 JSON 解析器 |
+| 11 阅读记录与备份开关 | 5 | `:394` `:504` `:505` `:510` `:511` | 章名字段直接补；进度同步与自动检查需后台任务；旧版数据要旧格式 JSON 解析器。**实现（r341，11a）**：`ReadTimeRecord` 补 `chapterIndex`，`toTimelineRecords` 与 `getRecordsForDate` 透传，时间线与最后阅读两视图显示「第 N 章」；按日汇总不做（`readWords` 是章号累加，非章号本身）。验收：时间线显示「第 7 章」「第 1154 章」，最后阅读显示「· 第 7 章」，汇总视图无章名（11a 部分；11b 四行另计）  |
 | 12 性能 | 2 | `:154` `:156` | ForEach 改 LazyForEach + cachedCount；加载态用现有 LoadingProgress |
 | 13 随在线书源模块 | 18 | `:89` `:94` `:122` `:145` `:275` `:283` `:285` `:286` `:307` `:317`–`:319` `:324` `:345` `:347`–`:349` `:515` | 书源已纳入范围但未排期（docs/PROJECT.md:24-44）。:145 批量下载即批量缓存在线章节，同批 |
 
