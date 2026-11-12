@@ -55,15 +55,15 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A1 书架主屏与卡片 | 78 | 66 | 12 | 0 |
+| A1 书架主屏与卡片 | 78 | 69 | 9 | 0 |
 | A2 书架设置面板 | 47 | 47 | 0 | 0 |
-| A3 分组管理 | 22 | 20 | 1 | 1 |
-| B 书籍详情页与元数据 | 80 | 24 | 55 | 1 |
+| A3 分组管理 | 22 | 21 | 0 | 1 |
+| B 书籍详情页与元数据 | 80 | 26 | 53 | 1 |
 | C 阅读进度与记录 | 39 | 37 | 1 | 1 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 9 | 8 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
-| 合计 | 345 | 211 | 129 | 5 |
+| 合计 | 345 | 217 | 123 | 5 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），原本是迁移前证据、未逐行复核，**r340 已逐行复核**（结论见 `## r340 复核结论`，其中 26 行改判 `已接`、2 行新增 `不适用`、174 行标 `**要接**`、9 行标 `**不接**`）；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -144,11 +144,11 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 |  反选  |  `BookshelfScreen.kt:621`  |  `pages/BookshelfPage.ets` 的 `invertVisibleSelection()`  | 已接 |  同上 ；**实现（r341）**：只对可见集合逐个翻转，翻转后集合为空时自动退出编辑态  |  点「反选」后当前列表的勾选状态整体翻转，一个都不剩时自动退出选择模式  |  —  |  —  |
 |  批量下载  |  `BookshelfScreen.kt:632`  |  —  | 未接 |  同上  |  选中 3 本点下载，三本依次缓存全部章节  |  — ；**要接**：批量下载即批量缓存章节，需要在线章节内容；书源已纳入范围未排期（docs/PROJECT.md:24-44），随该模块做 |  —  |
 |  移动到分组  |  `BookshelfScreen.kt:643`  |  `pages/BookshelfPage.ets`、`data/BookRepository.ets` 的 `setBooksGroup()`  | 已接 |  同上 ；**实现（r341）**：工具条「移动」挂 `SelectionGroupMenu()`（列 `getGroupNames()` 去掉「全部」），选中即执行；落库新增 `setBooksGroup()`，走 `BookGroupRepository.maskFromNames()` 写 `books.group`，**替换语义**（与批 4 规则同步的「只加不减」相反）；掩码用加法不用位或，因 ArkTS `\|` 只保留低 32 位而分组 id 会到 2^52 量级  |  选中两本 → 移动 → 选「完结」，分组管理里静候 210→208 本、完结 22→23 本（原来在静候的两本不再留在静候）  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2  |  localBook / bookGroup  |
-|  批量私密标记  |  `BookshelfScreen.kt:655-668`  |  —  | 未接 |  同上，且本地无私密体系  |  选中书籍标记私密后封面模糊  |  仅设密码后显示该按钮；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2 ；**要接**：动作/手势/私密体系，纯本地可做；books 表已有 order 列支撑拖拽重排 |  localBook  |
+|  批量私密标记  |  `BookshelfScreen.kt:655-668`  |  `pages/BookshelfPage.ets` 选择模式工具条  | 已接 |  **实现（r341）**：选择模式工具条在「移动」与「删除」之间加私密按钮，只在设过本地密码（`privateHasPassword`）时出现；文案按「全都没标」翻转成「设为私密」，只要有一本已标就是「取消私密」；落库走 `BookRepository.setBooksPrivate` 窄 UPDATE。  |  设过密码后进选择模式出现「设为私密」，选中两本未标私密的点击后两本封面都出锁遮罩，再点变「取消私密」解锁  |  — |  localBook  |
 |  批量删除  |  `BookshelfScreen.kt:679`  |  `pages/BookshelfPage.ets`、`data/BookRepository.ets` 的 `deleteBooks()`  | 已接 |  本地只能在详情页单本移出 ；**实现（r341）**：工具条「删除」弹自绘 `BatchDeleteSheet()`（`bindSheet`，不是系统 `showAlertDialog`），标题「删除所选书籍」、正文「将删除 N 本书，删除后无法恢复。」；落库新增 `deleteBooks()` 逐本走 `deleteBook()` 保证章节表一起清  |  选中 N 本点「删除」出确认面板，确认后书架少 N 本  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2  |  localBook  |
 |  删除时勾选删除源文件  |  `BookshelfScreen.kt:1540-1572`、`:1552-1563`  |  `pages/BookshelfPage.ets`、`data/BookRepository.ets` 的 `deleteBooks()`  | 已接 |  本地无删除确认对话框 ；**实现（r341）**：删除面板里 `if (selectedBooks().some(b => b.isLocal))` 才显示勾选行「同时删除应用内副本」，每次打开都从未勾选起步；勾选时调 `discardImportedCopy(book)` 删 `book.contentPath` 那份导入副本。**文案与上游不同**：本地删的是应用内副本，用户的原始文件从不由应用删除，所以不写「删除源文件」  |  选中有本地书的几本 → 删除 → 勾选后书架少书且应用目录对应文件消失；不勾选则原文还在  |  仅 `hasLocalBook` 时显示；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2  |  localBook  |
-|  私密分组锁定页  |  `BookshelfScreen.kt:1619-1646`  |  —  | 未接 |  本地 `isPrivate` 只存字段，UI 无锁定态  |  进入私密分组先显示锁页  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2 ；**要接**：动作/手势/私密体系，纯本地可做；books 表已有 order 列支撑拖拽重排 |  localBook / bookGroup  |
-|  私密解锁（密码 + 生物识别）  |  `BookshelfScreen.kt:1435-1458`、`:261`  |  —  | 未接 |  本地无密码与生物识别  |  输密码或指纹后进入私密分组  |  — ；**要接**：动作/手势/私密体系，纯本地可做；books 表已有 order 列支撑拖拽重排 |  不备份  |
+|  私密分组锁定页  |  `BookshelfScreen.kt:1619-1646`  |  `pages/BookshelfPage.ets` `PrivateGroupLockedPanel`  | 已接 |  **实现（r341）**：`activeGroupLocked()` 为真时只替换卡片区，顶栏与分组页签不动（照上游注释「别把分页容器也换掉，否则用户卡在锁定页切不走」）。两种文案分开：设过密码给「验证后查看」，没设过给「设置本地密码」。  |  切到私密分组显示锁图标 + 「这个分组已锁定 / 验证后可以查看组内书籍」，页签仍在且能切到相邻分组  |  — |  localBook / bookGroup  |
+|  私密解锁（密码 + 生物识别）  |  `BookshelfScreen.kt:1435-1458`、`:261`  |  `pages/BookshelfPage.ets` `PasswordSheet` + `data/PrivateAccessRepository.ets`  | 已接 |  **实现（r341）**：只做了密码，**指纹未做**（要 ACCESS_BIOMETRIC 权限与真机指纹硬件，模拟器上跑不出验收，且本表无对应行）。密码用 PBKDF2-SHA256 / 210000 次 / 32 字节派生校验值，salt 16 字节随机，比较走定长比较；只存 salt + verifier，不存明文，也不进备份。校验失败只提示「密码错误」。三种解锁有效期都实现（每次都验证按书/分组分别授权、应用会话内、切后台失效）。  |  输错密码停在书架并提示「密码错误」，输对进阅读器；切后台再回来按所选有效期决定是否重新要求验证  |  — |  不备份  |
 | 空态文案与表情切换 | `BookshelfScreen.kt:1647` | `pages/BookshelfPage.ets:691-702` | 已接 | 本地 7 个表情轮换，三种文案 | 清空书架后显示表情与提示，点表情可切换 | 上游为单张插图 | — |
 |  搜索无结果空态与「全局搜索」按钮  |  `BookshelfScreen.kt:1675-1683`  |  `pages/BookshelfPage.ets:699-701`  | 已接 |  本地只把文案换成「没有匹配的书籍」，无跳全局搜索的按钮 。**复核（r340）**：pages/BookshelfPage.ets:1319-1328 空态文案 + Text(全局搜索) 的 onClick | 搜索无结果时出现「全局搜索」按钮，点击跳到全局搜索； 搜索无结果时显示「书架里没有，去全局搜索」，点按钮跳搜索页  |  `bookshelf_empty_global_search` + `global_search`  |  —  |
 |  分页惰性渲染  |  `BookshelfScreen.kt:1669`  |  —  | 未接 |  本地整屏一次性渲染  |  非当前分组的书不参与渲染，滚动不掉帧  |  `!isCurrentPage` 时直接 return ；**要接**：ForEach 改 LazyForEach + cachedCount；加载态用现有 LoadingProgress |  —  |
@@ -254,7 +254,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 分组拖拽排序 | `GroupManageSheet.kt:207-262` | `pages/BookshelfPage.ets:265-272` | 已接 | 本地 `onMove` 重排后整体写回 | 拖动分组卡片换位后书架页签顺序同步 | — | bookGroup |
 |  分组书籍计数  |  `GroupManageSheet.kt:207-262`  |  `pages/BookshelfPage.ets` 的 `GroupManagerGrid()`  | 已接 |  **实现（r341）**：分组卡副标题改成 「N 本 · 排序方式」形式（N 用 countBooksInGroup(group.groupName) 真算），count 真算；顺带去掉「分组刷新未接入」占位假话（「私有标记未生效」留批 6）  | 分组管理面板「静候 2 本 · 默认」「完结 22 本 · 默认」「番茄 3 本 · 默认」各不相同  |  —  |  bookGroup  |
 |  分组四宫格预览  |  `BookItem.kt:361-432`  |  —  | 已接 |  本地卡片只显示单封面 。**复核（r340）**：components/BookGroupCard.ets:29-32 previewBooks() + :51-70 多封面；coverCount 由 pages/BookshelfPage.ets:1150 传入 | 分组卡显示 coverCount 张预览封面，不足时右侧留空位； 分组卡片显示前 4 本书封面拼图  |  与 A1 文件夹同一组件  |  bookGroup  |
-|  分组私密锁定显示  |  `BookshelfScreen.kt:1619-1646`  |  —  | 未接 |  本地无锁定态  |  私密分组卡片显示锁图标而非封面  |  — ；**要接**：分组卡显示锁定态图标，与私密体系同批 |  bookGroup  |
+|  分组私密锁定显示  |  `BookshelfScreen.kt:1619-1646`  |  `components/BookGroupCard.ets` `locked`  | 已接 |  **实现（r341）**：`locked` 为真时三件事同时做——不画封面预览（`previewBooks()` 返回空、`emptySlots()` 按 0 可见算）、计数角标不显示（`showCount && !locked`）、组名旁加锁图标。判定与私密体系同一套（`isGroupLocked`）。  |  把分组标为私有后，文件夹根层的该分组卡显示锁图标、「N 本 / 共 N 本」都不出现  |  — |  bookGroup  |
 | 分组内书籍排序覆盖 | `BookshelfRepository.kt` sortBooks | `data/BookshelfSort.ets:26` | 已接 | 分组 `bookSort >= 0` 覆盖全局 | 全局按时间、某组按书名，进该组顺序不同 | 逻辑完整对齐 | bookGroup |
 
 ---
@@ -291,7 +291,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 |  菜单·删除确认  |  `BookInfoContract.kt:376-396`  |  —  | 未接 |  `deleteAlert` 全仓 0 命中  |  关掉后移出书架不再弹确认  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB3 ；**要接**：纯本地动作：刷新书籍信息走 BookRepository 重扫、置顶用 order 列、复制链接用剪贴板、删除确认与清缓存已有基础 |  localBook  |
 |  菜单·清除缓存  |  `BookInfoContract.kt:376-396`  |  —  | 未接 |  本地无章节缓存体系  |  点清除后缓存章节数归零  |  — ；**要接**：纯本地动作：刷新书籍信息走 BookRepository 重扫、置顶用 order 列、复制链接用剪贴板、删除确认与清缓存已有基础 |  —  |
 |  菜单·显示日志  |  `BookInfoContract.kt:376-396`  |  —  | 未接 |  本地无日志页  |  打开该书相关日志  |  — ；**要接**：纯本地动作：刷新书籍信息走 BookRepository 重扫、置顶用 order 列、复制链接用剪贴板、删除确认与清缓存已有基础 |  —  |
-|  菜单·设为私密  |  `BookInfoContract.kt:376-396`  |  —  | 未接 |  `Book.ets` 缺 `isPrivate` 字段  |  标记后封面在书架模糊  |  与 A1 私密体系同一缺口；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB3 ；**要接**：私密体系：books 表需加 isPrivate 列，详情页加设为私密与锁定内容页 |  localBook  |
+|  菜单·设为私密  |  `BookInfoContract.kt:376-396`  |  `pages/BookInfoPage.ets` `BookInfoMoreMenu`  | 已接 |  **实现（r341）**：判断段写的「books 表需加 isPrivate 列」不成立——`data/RdbSchema.ets:241` 建表早有该列，缺的是 `model/Book.ets` 字段 + `selectBooksSql` 取列 + `readBookRow` 索引 + `toBookArgs` 该位原先写死 0（所以每次整行保存都会冲回 0），四处已补齐。顶栏「更多」菜单加一项，文案在「设为私密 / 取消私密」之间翻转。没设过本地密码时点击给提示而不是静默失败。  |  — |  详情页更多菜单点「设为私密」→ 回书架该卡封面出现锁图标与「已加密」，重启后保持；再点「取消私密」遮罩消失  |  localBook  |
 | 头部封面 | `BookInfoScreen.kt:1144` | `pages/BookInfoPage.ets:155-157` | 已接 | 本地 112×157 | 详情页顶部显示大封面 | — | localBook |
 |  头部书名（含长按菜单）  |  `BookInfoScreen.kt:1298-1320`  |  `pages/BookInfoPage.ets:158-159`  | 未接 |  本地为纯 `Text`，不可点、无长按菜单  |  长按书名弹出「搜索 / 展开」，选展开后书名不再截断  |  `AnimatedTextLine` + `RoundDropdownMenu`；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB4 ；**要接**：头部文本行与封面加 onClick/LongPress 与 accessibilityText；来源行取 originName/androidOriginalPath |  localBook  |
 |  头部作者行（点击 / 长按）  |  `BookInfoScreen.kt:1326`  |  `pages/BookInfoPage.ets:160-161`  | 未接 |  本地为纯 `Text`，无点击与长按  |  点作者跳作者搜索结果，长按走另一分支  |  `author_show` + `AuthorClick(longClick)`；见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB4 ；**要接**：头部文本行与封面加 onClick/LongPress 与 accessibilityText；来源行取 originName/androidOriginalPath |  localBook  |
@@ -322,7 +322,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 |  知识卡  |  `BookInfoScreen.kt:2324`、`:2373`  |  —  | 未接 |  本地无知识条目体系  |  显示知识条目卡片  |  — ；**不接**：知识卡依赖 AI 生成，本地无实体、无生成链路 |  bookSource  |
 |  事件卡  |  `BookInfoScreen.kt:2401`、`:2453`  |  —  | 未接 |  本地无事件体系  |  显示剧情事件时间线  |  — ；**不接**：事件卡同 :322 |  bookSource  |
 |  相关书籍横幅  |  `BookInfoScreen.kt:2124`  |  —  | 未接 |  本地无相关书籍推荐  |  详情页底部出现相关书籍横排  |  — ；**要接**：依赖在线书源（登录、变量、换源、回调、简介标记）；书源已纳入范围未排期，随该模块做 |  bookSource  |
-|  私密锁定内容页  |  `BookInfoScreen.kt:664`  |  —  | 未接 |  本地无锁定态  |  私密书详情页默认显示锁定内容  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB4 ；**要接**：私密体系：books 表需加 isPrivate 列，详情页加设为私密与锁定内容页 |  localBook  |
+|  私密锁定内容页  |  `BookInfoScreen.kt:664`  |  `components/BookCover.ets` `locked` + `pages/BookshelfPage.ets` 打开前校验  | 已接 |  **实现（r341）**：同样「需加列」不成立（列早在）。本地阅读器是独立页面，所以两处都做——书架封面叠锁遮罩（`BookCover` 的 `locked`），以及点开时的密码校验（书架卡 onClick 与长按都先过 `requestPrivateUnlock`，未解锁不进阅读器）。  |  锁着的书封面盖「已加密」；点它弹「验证本地密码」，输错留在书架，输对才进阅读器  |  — |  localBook  |
 | 编辑·书名 | `edit/BookInfoEditScreen.kt:238` | `pages/BookInfoPage.ets:339-341` | 已接 | — | 改名保存后书架同步 | — | localBook |
 | 编辑·作者 | `edit/BookInfoEditScreen.kt:246` | `pages/BookInfoPage.ets:342-345` | 已接 | — | 改作者保存后详情页同步 | — | localBook |
 | 编辑·分类 | `edit/BookInfoEditScreen.kt:262` | `pages/BookInfoPage.ets:346-349` | 已接 | — | 改分类保存后持久化 | — | localBook |
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 ## 小结
 
-**全表合计 345 条：已接 211、未接 129、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 129 行按备注列分：`**要接**` 119 行、`**不接**` 10 行，逐行判断见上一节。
+**全表合计 345 条：已接 217、未接 123、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 129 行按备注列分：`**要接**` 113 行、`**不接**` 10 行，逐行判断见上一节。
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
@@ -663,7 +663,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 3 标签体系 | 5 | `:210` `:211` `:224`–`:226` | 新增 customTagColors 字段 + 配色管理页 + 标签行取色；自定义标签数据已有、渲染侧零消费。**调整（r341）**：`:224`–`:226` 已随批 2 的 `:209` 三复选对话框一次做完（本批不再做），批 3 实际只剩 `:210` `:211` 两行 + 认领从批 2 顺延的 `:124`（标签行按 customTagColors 取色，见 `:124` 差异说明的顺延标注）。**实现（r341）**：本批实际交付 3 行（`:210` `:211` `:124`）；`:224`–`:226` 已在批 2 做完；新增 TagColorPair/parseTagColors 数据层、lib/TagColorUtils.ets（HSL↔ARGB 与背景推导）、配色管理子页（生成/添加/编辑/删除/取色）与标签行按索引取模取色；config.xml 写出并读回 customTagColors / enableCustomTagColors |
 | 4 标签匹配规则面板 | 4 | `:240` `:241` `:249` `:250` | tag_group_rules 表与 TagGroupRuleRepository/Importer 都已在，只缺分组管理面板里的编辑控件。**实现（r341）**：本批实际交付 4 行（全改已接）；新建 `entry/src/main/ets/data/TagGroupRuleSync.ets`（掩码用加法不用位运算、只加不减；所有规则读点显式 `await TagGroupRuleRepository.load(context)`，因启动 restoreStartupState 不 load、getAll() 缓存恒空），BookshelfPage.ets 分组管理顶栏三项菜单 + 分组编辑面板规则开关/多行输入/复制粘贴/正则前置拦截 + Index.ets 重命名改规则名、删除分组联动删规则、同步回调；`:240` 未做独立规则编辑面板（由分组编辑面板内开关承担）；上机验收 10 点全部实测通过，备份 ZIP 的 tagGroupRule.json 与规则表一致 |
 | 5 选择模式、拖拽与动作 | 15 | `:87` `:106` `:107` `:113` `:114` `:138` `:142`–`:144` `:146`–`:151` | books 表已有 order 列支撑拖拽重排；全选/反选依赖选中集合。**实现（r341）**：本批实际交付 12 行（`:87` `:95` `:106` `:107` `:114` `:138` `:142`–`:144` `:146` `:148` `:149`）；`:113` 因触发条件在本地不存在改判 `**不接**`；`:147` `:150` `:151` 依赖私密体系，移到批 6 |
-| 6 私密体系 | 3 | `:257` `:294` `:325` | books 表需加 isPrivate 列（现只有 book_groups 有）；详情页加设为私密与锁定内容页 |
+| 6 私密体系 | 3 | `:257` `:294` `:325` | **实现（r341）**：本批实际交付 6 行（原 3 行 + 从批 5 移入 `:147` `:150` `:151`）。「books 表需加 isPrivate 列」这句判断段的记述不成立——建表早在 `data/RdbSchema.ets:241`，缺的是 model 字段与三处读取（`toBookArgs` 该位原先写死 0）。密码走 PBKDF2，指纹未做。 |
 | 7 详情页交互与本地动作 | 35 | `:273` `:274` `:277`–`:280` `:284` `:287`–`:293` `:296`–`:299` `:301`–`:303` `:305` `:313`–`:315` `:332` `:337`–`:344` `:350` | 头部文本行加点击/长按、菜单动作、简介三种标记解析、编辑面板、在线换封面 |
 | 8 缓存管理页 | 16 | `:419` `:421` `:422` `:429`–`:441` | 前置：先落磁盘章节缓存表。现有 data/BookRepository.ets:140 的 chapterCache 是内存 Map，重启即空 |
 | 9 书架管理页整页 | 31 | `:447`–`:475` `:482` `:484` | 按上游 BookshelfManageScreen 建页；入口已在 pages/BookshelfPage.ets:594-595 |

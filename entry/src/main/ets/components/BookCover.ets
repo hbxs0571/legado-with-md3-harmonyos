@@ -24,6 +24,12 @@ export struct BookCover {
   @Prop badgeText: string = '';
   /** 更新小红点（:119）。 */
   @Prop showBadgeDot: boolean = false;
+  /**
+   * 私密锁定（:325）：为真时在封面上叠一层「锁 + 已加密」蒙层，遮住封面本身。
+   * 判定（单本标记 ∪ 所属私密分组）留在调用方，组件只负责画：
+   * 书架、详情页、目录页都在用这个组件，判定逻辑只能有一处。
+   */
+  @Prop locked: boolean = false;
   /** 书封阴影，对应上游 bookshelfCoverShadow。 */
   @Prop shadowEnabled: boolean = false;
   /**
@@ -276,6 +282,15 @@ export struct BookCover {
       .padding({ left: 5, right: 5, top: 5, bottom: 5 })
       .alignItems(HorizontalAlign.Center)
       .justifyContent(FlexAlign.SpaceBetween)
+      if (this.locked) {
+        // 私密遮罩盖在封面与角标之上（:325）：锁图标 +「已加密」，不是单纯压暗。
+        Column() {
+          AppGlyph({ name: 'lock', glyphSize: 20, tint: '#E6E7EC' })
+          Text('已加密').fontSize(8).fontColor('#C4C9D7').margin({ top: 3 })
+        }.width('100%').height('100%')
+        .backgroundColor('#D915161B')
+        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+      }
     }
     .width(this.coverWidth())
     .height(this.coverHeight())

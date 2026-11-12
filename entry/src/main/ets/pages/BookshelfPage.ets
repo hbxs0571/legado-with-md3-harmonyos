@@ -23,6 +23,9 @@ import { argbToColorHex, hexToArgb, deriveTagBgColor, baseHueFromHex, generateTa
 import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
 import { TagGroupRule } from '../model/TagGroupRule';
 import { pasteboard } from '@kit.BasicServicesKit';
+import {
+  PRIVATE_UNLOCK_EVERY_TIME, PrivateAccessRepository, isPrivateBook, requiresPrivateUnlock
+} from '../data/PrivateAccessRepository';
 
 /** 网格左右内边距，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
 const BOOKSHELF_GRID_PADDING: number = 8;
@@ -149,6 +152,26 @@ export struct BookshelfPage {
   @State showBatchDeleteSheet: boolean = false;
   /** 批量删除时是否同时删掉应用内导入副本（:149）；每次打开面板都从未勾选起步。 */
   @State batchDeleteSource: boolean = false;
+  /**
+   * 私密体系状态（批6）。@StorageProp 直接订阅 AppStorage：
+   * PrivateAccessRepository 每次 publish 后这三个值都会重建，不需要自己传回调。
+   */
+  @StorageProp('privateEnabled') privateEnabled: boolean = false;
+  @StorageProp('privateHasPassword') privateHasPassword: boolean = false;
+  @StorageProp('privateUnlocked') privateUnlocked: boolean = false;
+  /**
+   * 「每次都验证」档的单独授权集合。必须用 @StorageProp 订阅：该档解锁只调
+   * PrivateAccessRepository.grant()，改的是 AppStorage 里的这两个数组，
+   * 没有订阅的话输对密码后 build 没有依赖变化，锁定页不会换成内容。
+   */
+  @StorageProp('privateGrantedBookKeys') privateGrantedBookKeys: string[] = [];
+  @StorageProp('privateGrantedGroupIds') privateGrantedGroupIds: number[] = [];
+  /** 密码输入面板（:151）；pending* 记录这一次是为哪个分组/哪本书解锁。 */
+  @State showPasswordPanel: boolean = false;
+  @State passwordInput: string = '';
+  @State passwordError: string = '';
+  @State pendingUnlockGroupId: number = 0;
+  @State pendingUnlockBookKey: string = '';
   /** 记住上次分组只灌一次，避免后续设置对象刷新覆盖用户主动选择的页签。 */
   private tabPositionRestored: boolean = false;
   /** 书架窗口引用与尺寸回调，aboutToDisappear 时解绑，避免订阅泄漏。 */
@@ -193,11 +216,16 @@ export struct BookshelfPage {
     async (_books: Book[], _deleteSource: boolean) => {};
   /** 拖拽重排后把新顺序交给 Index 落库并同步内存（:138）。 */
   onMoveBooks: (ordered: Book[]) => Promise<void> = async (_ordered: Book[]) => {};
+  /** 批量设/取消单本私密标记（:294 / :147）；由 Index 落库后刷新 books。 */
+  onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => Promise<void> =
+    async (_bookKeys: string[], _isPrivate: boolean) => {};
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
   private bookCardKey(book: Book): string {
     // 列表模式卡片会展示最新章节名与简介，这两个字段变化时也要让卡片重建。
-    return `${book.id}_${book.chapterCount ?? ''}_${book.chapterIndex ?? 0}_${book.chapterProgress ?? 0}_${bookCoverMark(book)}_${BookRepository.isBodyMissing(book) ? 1 : 0}_${book.lastChapter}_${book.description ?? ''}`;
+    // 后两位是私密标记与当前锁定态（:325）：ArkUI 的 ForEach 在 key 不变时直接复用旧节点，
+    // 把这两项漏在 key 外面，改「设为私密」或重启后解锁态变化都不会重画锁遮罩。
+    return `${book.id}_${book.chapterCount ?? ''}_${book.chapterIndex ?? 0}_${book.chapterProgress ?? 0}_${bookCoverMark(book)}_${BookRepository.isBodyMissing(book) ? 1 : 0}_${book.lastChapter}_${book.description ?? ''}_${book.isPrivate === true ? 1 : 0}_${this.isBookLocked(book) ? 1 : 0}`;
   }
 
   aboutToAppear(): void {
@@ -690,6 +718,165 @@ export struct BookshelfPage {
         Text('删除').fontSize(14).fontColor('#FF6B6B').padding(10)
           .onClick(async () => { await this.executeBatchDelete(); })
       }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+    }.width('100%').alignItems(HorizontalAlign.Start)
+  }
+
+  /** 当前所有私密分组的 id（:150 / :257）。分组上的 isPrivate 标记早就有，这里只是取出来用。 */
+  private privateGroupIds(): number[] {
+    return this.getUserGroups()
+      .filter((group: BookGroup) => group.isPrivate === true)
+      .map((group: BookGroup) => group.groupId);
+  }
+
+  /** 这本书命中的第一个私密分组 id，没有则 0；单独授权时用它。 */
+  private privateGroupIdOf(book: Book): number {
+    const names = book.groupNames ?? [];
+    const hit = this.getUserGroups().find((group: BookGroup) =>
+      group.isPrivate === true && names.includes(group.groupName));
+    return hit === undefined ? 0 : hit.groupId;
+  }
+
+  /**
+   * 这本书现在要不要锁（:325）：单本标记并上所属私密分组，再看解锁有效期。
+   *
+   * 这里必须真的读一下 privateEnabled / privateUnlocked：`requiresPrivateUnlock` 读的是
+   * AppStorage 静态快照，那次读取不会被 ArkUI 当成重绘依赖；只有 build 期间读过的
+   * @StorageProp 才算。少了这两句，输对密码后书架不会重画，锁定页会一直停在原样。
+   */
+  private isBookLocked(book: Book): boolean {
+    if (this.privateEnabled !== true) { return false; }
+    if (!isPrivateBook(book, this.privateGroupIds())) { return false; }
+    if (PrivateAccessRepository.get().unlockScope === PRIVATE_UNLOCK_EVERY_TIME) {
+      // 读一下订阅到的授权集合，让 grant() 之后能触发重绘。
+      const key = this.bookKey(book);
+      const groupId = this.privateGroupIdOf(book);
+      const granted = this.privateGrantedBookKeys.indexOf(key) >= 0
+        || (groupId > 0 && this.privateGrantedGroupIds.indexOf(groupId) >= 0);
+      return !granted;
+    }
+    if (this.privateUnlocked) { return false; }
+    return requiresPrivateUnlock(this.bookKey(book), this.privateGroupIdOf(book));
+  }
+
+  /** 某个分组卡是否该画成锁定态（:257）。读 privateEnabled / privateUnlocked 的理由同 isBookLocked。 */
+  private isGroupLocked(groupName: string): boolean {
+    if (this.privateEnabled !== true) { return false; }
+    if (groupName === '全部' || groupName === '本地未分组') { return false; }
+    const group = this.getUserGroups().find((item: BookGroup) => item.groupName === groupName);
+    if (group === undefined || group.isPrivate !== true) { return false; }
+    if (PrivateAccessRepository.get().unlockScope === PRIVATE_UNLOCK_EVERY_TIME) {
+      const granted = this.privateGrantedGroupIds.indexOf(group.groupId) >= 0;
+      return !granted;
+    }
+    if (this.privateUnlocked) { return false; }
+    return requiresPrivateUnlock('', group.groupId);
+  }
+
+  /** 当前分组是不是「锁着的私密分组」：是就把整块内容换成锁定页（:150）。 */
+  private activeGroupLocked(): boolean {
+    return this.isGroupLocked(this.activeFilter());
+  }
+
+  /** 弹密码面板；bookKey 为空串表示只解这个分组。 */
+  private requestPrivateUnlock(groupId: number, bookKey: string): void {
+    if (!this.privateHasPassword) {
+      // 没设过密码时不能假装能验证，直接引导去设置页（上游 private_content_no_password 口径）。
+      this.onUnavailableAction('还没有设置本地密码，请到「我的 → 设置 → 隐私设置」设置后再查看');
+      return;
+    }
+    this.pendingUnlockGroupId = groupId;
+    this.pendingUnlockBookKey = bookKey;
+    this.passwordInput = '';
+    this.passwordError = '';
+    this.showPasswordPanel = true;
+  }
+
+  /** 校验密码；通过后按当前解锁有效期授权这一次并关面板（:151）。 */
+  private async submitPassword(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const ok = await PrivateAccessRepository.verifyPassword(context, this.passwordInput);
+    if (!ok) {
+      // 失败只报「密码错误」，不区分「没设过」与「不对」，避免泄露状态。
+      this.passwordError = '密码错误';
+      return;
+    }
+    if (PrivateAccessRepository.get().unlockScope === PRIVATE_UNLOCK_EVERY_TIME) {
+      PrivateAccessRepository.grant(this.pendingUnlockBookKey, this.pendingUnlockGroupId);
+    } else {
+      PrivateAccessRepository.unlock();
+    }
+    this.showPasswordPanel = false;
+    this.passwordInput = '';
+    this.passwordError = '';
+    this.pendingUnlockGroupId = 0;
+    this.pendingUnlockBookKey = '';
+  }
+
+  /** 选择模式里的私密按钮文案：全都没标才是「设为私密」（:147）。 */
+  private selectionTargetPrivate(): boolean {
+    return this.selectedBooks().every((book: Book) => book.isPrivate !== true);
+  }
+
+  /** 批量设/取消私密标记（:147）。 */
+  private async toggleSelectedPrivate(): Promise<void> {
+    const keys: string[] = [];
+    this.selectedBookKeys.forEach((key: string) => { keys.push(key); });
+    if (keys.length === 0) { return; }
+    await this.onSetBooksPrivate(keys, this.selectionTargetPrivate());
+  }
+
+  /**
+   * 私密分组锁定页（:150）。
+   * 只替换「这个分组自己的内容」，顶栏与分组页签保持不动——否则用户会被卡在锁定页里，
+   * 连相邻分组都切不过去（上游 PrivateGroupLockedPage 的注释）。
+   * 两种文案分开：设过密码给「验证后查看」，没设过给「设置本地密码」。
+   */
+  @Builder
+  private PrivateGroupLockedPanel() {
+    Column() {
+      AppGlyph({ name: 'lock', glyphSize: 34, tint: this.themeColorTextTertiary })
+      Text(this.privateHasPassword ? '这个分组已锁定' : '这个分组是私密分组')
+        .fontSize(15).fontColor(this.themeColorTextPrimary).margin({ top: 12 })
+      Text(this.privateHasPassword ? '验证后可以查看组内书籍' : '先在隐私设置里设置本地密码，才能查看组内书籍')
+        .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 6 })
+      Text(this.privateHasPassword ? '验证后查看' : '设置本地密码')
+        .fontSize(13).fontColor(this.themeColorAccent).padding({ left: 18, right: 18, top: 8, bottom: 8 })
+        .backgroundColor(this.themeColorSurfaceElevated).borderRadius(16).margin({ top: 16 })
+        .onClick(() => {
+          if (!this.privateHasPassword) {
+            this.onUnavailableAction('请到「我的 → 设置 → 隐私设置」设置本地密码');
+            return;
+          }
+          const group = this.getUserGroups().find((item: BookGroup) => item.groupName === this.activeFilter());
+          this.requestPrivateUnlock(group === undefined ? 0 : group.groupId, '');
+        })
+    }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+  }
+
+  /** 密码输入面板（:151）。校验失败只提示「密码错误」。 */
+  @Builder
+  private PasswordSheet() {
+    Column() {
+      Text('验证本地密码').fontSize(16).fontColor(this.themeColorTextPrimary)
+        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
+      TextInput({ text: this.passwordInput, placeholder: '本地密码' })
+        .type(InputType.Password).fontSize(14).height(44).margin({ left: 18, right: 18 })
+        .onChange((value: string) => { this.passwordInput = value; })
+      if (this.passwordError.length > 0) {
+        Text(this.passwordError).fontSize(12).fontColor('#FF6B6B').padding({ left: 18, top: 8 })
+      }
+      Row() {
+        Text('取消').fontSize(14).fontColor(this.themeColorTextTertiary).padding(10)
+          .onClick(() => {
+            this.showPasswordPanel = false;
+            this.passwordInput = '';
+            this.passwordError = '';
+          })
+        Blank()
+        Text('解锁').fontSize(14).fontColor(this.themeColorAccent).padding(10)
+          .onClick(async () => { await this.submitPassword(); })
+      }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
@@ -1700,7 +1887,9 @@ export struct BookshelfPage {
    */
   @Builder
   private ShelfSheetContent() {
-    if (this.showBatchDeleteSheet) {
+    if (this.showPasswordPanel) {
+      this.PasswordSheet()
+    } else if (this.showBatchDeleteSheet) {
       this.BatchDeleteSheet()
     } else if (this.showTagColorPage) {
       this.TagColorSheet()
@@ -1975,6 +2164,13 @@ export struct BookshelfPage {
             .onClick(() => this.invertVisibleSelection())
           Text('移动').fontSize(12).fontColor(this.themeColorAccent).padding(6)
             .bindMenu(this.SelectionGroupMenu)
+          // 批量私密标记（:147）：上游的可见条件是「编辑态且已设过本地密码」，
+          // 没密码时不显示，免得留一个点了只能弹「请先设置密码」的按钮。
+          if (this.privateHasPassword) {
+            Text(this.selectionTargetPrivate() ? '设为私密' : '取消私密')
+              .fontSize(12).fontColor(this.themeColorAccent).padding(6)
+              .onClick(async () => { await this.toggleSelectedPrivate(); })
+          }
           Text('删除').fontSize(12).fontColor('#FF6B6B').padding(6)
             .onClick(() => { this.batchDeleteSource = false; this.showBatchDeleteSheet = true; })
           Text('完成').fontSize(12).fontColor(this.themeColorTextTertiary).padding(6)
@@ -1995,6 +2191,8 @@ export struct BookshelfPage {
                 isNight: this.readerNightMode,
                 listCoverWidth: this.layout.bookshelfListCoverWidth,
                 showCount: this.layout.showBookCount,
+                // 私密分组锁定态（:257）：锁定时不画预览、不显示计数、组名旁加锁图标。
+                locked: this.isGroupLocked(groupName),
                 onOpen: () => { this.openFolderGroup(groupName); },
                 // 长按分组卡直接进该分组的编辑面板（:107，上游 GroupEditSheet 入口）。
                 onLongPress: (name: string) => {
@@ -2009,6 +2207,8 @@ export struct BookshelfPage {
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
         .layoutWeight(1).scrollBar(BarState.Off)
+      } else if (this.activeGroupLocked()) {
+        this.PrivateGroupLockedPanel()
       } else if (this.getVisibleBooks().length > 0) {
         Grid(this.bookshelfScroller) {
           ForEach(this.getVisibleBooks(), (book: Book) => {
@@ -2030,6 +2230,8 @@ export struct BookshelfPage {
                         displayHeight: Math.round(this.layout.bookshelfListCoverWidth * 7 / 5),
                         coverSettings: this.coverSettings,
                         isNight: this.readerNightMode,
+                        // 私密书封面盖一层锁遮罩（:325）。
+                        locked: this.isBookLocked(book),
                         a11yText: [book.title, book.author, book.lastChapter]
                           .filter((value: string) => value.length > 0).join('，')
                       })
@@ -2116,6 +2318,8 @@ export struct BookshelfPage {
                     maxWidth: this.bookshelfCoverWidthLimit(),
                     coverSettings: this.coverSettings,
                     isNight: this.readerNightMode,
+                    // 私密书封面盖一层锁遮罩（:325）。
+                    locked: this.isBookLocked(book),
                     a11yText: [book.title, book.author, book.lastChapter]
                       .filter((value: string) => value.length > 0).join('，')
                   })
@@ -2165,6 +2369,11 @@ export struct BookshelfPage {
                 .onClick(() => {
                   // 选择模式下点击=切换选中，不打开书（:142 验收第 12 条）。
                   if (this.selectionMode) { this.toggleBookSelection(book); return; }
+                  // 锁着的私密书不进阅读器，先验密码（:325 的「打开前校验」）。
+                  if (this.isBookLocked(book)) {
+                    this.requestPrivateUnlock(this.privateGroupIdOf(book), this.bookKey(book));
+                    return;
+                  }
                   if (BookRepository.isBodyMissing(book)) {
                     this.onOpenBookInfo(book);
                   } else {
@@ -2182,6 +2391,10 @@ export struct BookshelfPage {
                 })
                 .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
                   if (this.selectionMode) { this.toggleBookSelection(book); return; }
+                  if (this.isBookLocked(book)) {
+                    this.requestPrivateUnlock(this.privateGroupIdOf(book), this.bookKey(book));
+                    return;
+                  }
                   this.onOpenBookInfo(book);
                 }))
               if (this.selectionMode) {
@@ -2250,9 +2463,9 @@ export struct BookshelfPage {
         }.layoutWeight(1).width('100%').padding({ bottom: 104 }).justifyContent(FlexAlign.Center)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showBatchDeleteSheet, this.ShelfSheetContent(), {
+      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showBatchDeleteSheet || this.showPasswordPanel, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E',
-        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; }
+        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; this.showPasswordPanel = false; }
       })
   }
 }

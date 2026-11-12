@@ -1,4 +1,4 @@
-export type AppGlyphName = 'home' | 'bookshelf' | 'discover' | 'subscription' | 'profile' | 'search' | 'searchPrecisionOn' | 'searchPrecisionOff' | 'more' | 'settings' | 'swap' | 'add' | 'goal' | 'book' | 'bookmark' | 'cloud' | 'cloudSync' | 'cloudUpload' | 'cloudDownload' | 'edit' | 'pencil' | 'delete' | 'share' | 'star' | 'ruleSubscription' | 'favoriteStar' | 'navHomeFilled' | 'navHomeOutlined' | 'navBookshelfFilled' | 'navBookshelfOutlined' | 'navExploreFilled' | 'navExploreOutlined' | 'navRss' | 'navProfileFilled' | 'navProfileOutlined' | 'profileWeb' | 'profileSource' | 'profileFindReplace' | 'profileRule' | 'profileSell' | 'profileAutoAwesome' | 'profileSettings' | 'profileBookmark' | 'profileHistory' | 'profileDownload' | 'profileFolder' | 'profileInfo' | 'profileExitToApp' | 'profileClose' | 'profileNoteAdd' | 'profileContentPaste' | 'profileRunningWithErrors' | 'profileSave' | 'profileCheck' | 'profileExpandMore' | 'profileTimeline' | 'profileFilterAlt' | 'profileRefresh' | 'clock' | 'accessTime' | 'chart' | 'folder' | 'tag' | 'list' | 'download' | 'info' | 'sparkles' | 'logout' | 'web' | 'locate';
+export type AppGlyphName = 'home' | 'bookshelf' | 'discover' | 'subscription' | 'profile' | 'search' | 'searchPrecisionOn' | 'searchPrecisionOff' | 'more' | 'settings' | 'swap' | 'add' | 'goal' | 'book' | 'bookmark' | 'cloud' | 'cloudSync' | 'cloudUpload' | 'cloudDownload' | 'edit' | 'pencil' | 'delete' | 'share' | 'star' | 'ruleSubscription' | 'favoriteStar' | 'navHomeFilled' | 'navHomeOutlined' | 'navBookshelfFilled' | 'navBookshelfOutlined' | 'navExploreFilled' | 'navExploreOutlined' | 'navRss' | 'navProfileFilled' | 'navProfileOutlined' | 'profileWeb' | 'profileSource' | 'profileFindReplace' | 'profileRule' | 'profileSell' | 'profileAutoAwesome' | 'profileSettings' | 'profileBookmark' | 'profileHistory' | 'profileDownload' | 'profileFolder' | 'profileInfo' | 'profileExitToApp' | 'profileClose' | 'profileNoteAdd' | 'profileContentPaste' | 'profileRunningWithErrors' | 'profileSave' | 'profileCheck' | 'lock' | 'profileExpandMore' | 'profileTimeline' | 'profileFilterAlt' | 'profileRefresh' | 'clock' | 'accessTime' | 'chart' | 'folder' | 'tag' | 'list' | 'download' | 'info' | 'sparkles' | 'logout' | 'web' | 'locate';
 
 @Component
 export struct AppGlyph {
@@ -117,6 +117,8 @@ export struct AppGlyph {
       Image($r('app.media.profile_save')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else if (this.name === 'profileCheck') {
       Image($r('app.media.app_check')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+    } else if (this.name === 'lock') {
+      Image($r('app.media.app_lock')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else if (this.name === 'profileExpandMore') {
       Image($r('app.media.profile_expand_more')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else if (this.name === 'profileTimeline') {

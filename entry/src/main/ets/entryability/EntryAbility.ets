@@ -5,6 +5,7 @@ import { RdbMigration } from '../data/RdbMigration';
 import { RdbCleanup } from '../data/RdbCleanup';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { ThemeSettingsRepository, THEME_MODE_DARK } from '../data/ThemeSettingsRepository';
+import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
 
 /** 系统栏颜色资源名，供深浅色两套资源目录各取一值。 */
 const SYSTEM_BAR_LIGHT: string = '#F6F4F0';
@@ -58,6 +59,8 @@ export default class EntryAbility extends UIAbility {
 
   onBackground(): void {
     this.context.eventHub.emit('pauseReadSession');
+    // 解锁有效期选「离开应用前有效」时，切后台即回到锁定态（批6，对齐上游 PrivateUnlockScope.UntilBackground）。
+    PrivateAccessRepository.lockIfUntilBackground();
   }
 
   onForeground(): void {

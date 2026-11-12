@@ -185,7 +185,7 @@ export class BookRepository {
     'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
     '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
-    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount` FROM `books` ORDER BY `durChapterTime` DESC';
+    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount`, `isPrivate` FROM `books` ORDER BY `durChapterTime` DESC';
 
   /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
@@ -389,6 +389,23 @@ export class BookRepository {
    * ArkTS 不支持对象展开（...book），字段又只剩三十个，所以统一收在这里，
    * 各处「改一个字段」的逻辑复制后改，避免每个函数重复列一遍全部字段。
    */
+  /**
+   * 批量设/取消单本私密标记（批6 的 :294 / :147）。
+   * 走窄 UPDATE 只动 isPrivate 一列，不用 saveImportedBooks 整行覆盖——
+   * 那条路径会把没填的字段冲成默认值。
+   */
+  static async setBooksPrivate(context: Context, bookKeys: string[], isPrivate: boolean): Promise<void> {
+    if (bookKeys.length === 0) { return; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const value = isPrivate ? 1 : 0;
+    for (let index = 0; index < bookKeys.length; index += 1) {
+      const key = bookKeys[index];
+      if (key === undefined || key.length === 0) { continue; }
+      await store.executeSql('UPDATE `books` SET `isPrivate` = ? WHERE `bookUrl` = ?', [value, key]);
+    }
+  }
+
   static copyBook(book: Book): Book {
     return {
       id: book.id,
@@ -424,6 +441,7 @@ export class BookRepository {
       latestChapterTitle: book.latestChapterTitle,
       lastCheckCount: book.lastCheckCount,
       wordCount: book.wordCount,
+      isPrivate: book.isPrivate,
       isLocal: book.isLocal
     };
   }
@@ -809,6 +827,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       latestChapterTitle: RdbCodec.optionalText(resultSet, 24),
       lastCheckCount: RdbCodec.integer(resultSet, 25, 0),
       wordCount: RdbCodec.optionalText(resultSet, 26),
+      // 单本私密标记（:294）。这列建表起就在，过去一直没进 SELECT，
+      // 导致 toBookArgs 每次把它写回 0，手工改库也会被下次保存冲掉。
+      isPrivate: RdbCodec.boolean(resultSet, 27, false),
       isLocal: true
     };
     book.progress = BookRepository.readProgress(book);
@@ -1345,7 +1366,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       book.charset === undefined ? null : book.charset,
       BookRepository.bookTypeMask(book),
       BookGroupRepository.maskFromNames(groupNames),
-      0,
+      book.isPrivate === true ? 1 : 0,
       latestChapterTitle,
       book.latestChapterTime ?? 0,
       0,

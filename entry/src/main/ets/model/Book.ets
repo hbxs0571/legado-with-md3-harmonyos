@@ -58,6 +58,11 @@ export interface Book {
   latestChapterTitle?: string;
   /** 刷新目录发现的新章数，对应上游 Book.lastCheckCount。 */
   lastCheckCount?: number;
+  /**
+   * 单本私密标记，对应上游 Book.isPrivate（books 表 isPrivate 列，:294）。
+   * 分组级私密标记在 BookGroup 上，两者取并集判定，见 PrivateAccessRepository.isPrivateBook。
+   */
+  isPrivate?: boolean;
   /** 全书字数（格式化字符串），对应上游 Book.wordCount。 */
   wordCount?: string;
   /** 最后阅读这本书的时间戳，对应上游 Book.durChapterTime。 */

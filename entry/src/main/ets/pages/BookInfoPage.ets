@@ -45,6 +45,8 @@ export struct BookInfoPage {
   /** 切禁用标记；Index 写库后刷新 books 与 selectedBook，@Prop book 随之更新。 */
   onToggleDisableReadRecord: (book: Book, disabled: boolean) => void = (_book: Book, _disabled: boolean) => {};
   onRemoveFromShelf: () => void = () => {};
+  /** 单本私密标记（:294）；Index 落库后刷新 books 与 selectedBook。 */
+  onSetPrivate: (book: Book, isPrivate: boolean) => void = (_book: Book, _isPrivate: boolean) => {};
   onChooseCover: () => void = () => {};
   onRestoreCover: () => void = () => {};
   onSaveMetadata: (title: string, author: string, category: string, description: string,
@@ -166,6 +168,15 @@ export struct BookInfoPage {
         action: () => this.onRemoveFromShelf()
       }
     });
+  }
+
+  /** 顶栏「更多」菜单（:294）。只放能真做的项，不放点了没反应的占位。 */
+  @Builder
+  private BookInfoMoreMenu() {
+    Menu() {
+      MenuItem({ content: this.book.isPrivate === true ? '取消私密' : '设为私密' }).height(48)
+        .onClick(() => this.onSetPrivate(this.book, this.book.isPrivate !== true))
+    }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
   }
 
   private openMetadataEditor(): void {
@@ -347,7 +358,10 @@ export struct BookInfoPage {
         Blank().layoutWeight(1)
         BookInfoIconButton({ icon: 'edit', onSelect: () => this.openMetadataEditor() })
         BookInfoIconButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
-        BookInfoIconButton({ icon: 'more', onSelect: () => this.onUnavailableAction('书籍更多操作尚未迁移') })
+        // 「更多」改成真实菜单（:294）。批7 会把置顶/刷新书籍信息/删除确认陆续接进来。
+        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 19, tint: '#F1F2F6' }) }
+          .width(40).height(40).backgroundColor('#171820').borderRadius(20).margin({ left: 8 })
+          .bindMenu(this.BookInfoMoreMenu, { placement: Placement.BottomRight })
       }.width('100%').height(56).padding({ left: 16, right: 16, top: 8, bottom: 8 })
         .backgroundColor(this.collapsedHeader ? this.themeColorSurfacePrimary : '#00000000')
         .animation({ duration: 220, curve: Curve.EaseInOut })

@@ -45,6 +45,7 @@ import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
+import { PrivateAccessRepository, PRIVATE_STORE_UNLOCKED } from '../data/PrivateAccessRepository';
 import { TagGroupRule } from '../model/TagGroupRule';
 import { TagGroupRuleSync } from '../data/TagGroupRuleSync';
 import { CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository } from '../data/CoverSettingsRepository';
@@ -712,6 +713,7 @@ struct Index {
     this.restoreBookContentProcesses(context);
     this.restoreBackupIgnoreLists(context);
     this.restoreWebDavSettings(context);
+    this.restorePrivateAccess(context);
     this.loadRestoredAndroidEntries(context);
   }
 
@@ -6305,6 +6307,60 @@ struct Index {
     }
   }
 
+  /** 启动时读私密设置（批6）。解锁态本来就不落盘，load 出来恒为锁定。 */
+  private async restorePrivateAccess(context: Context): Promise<void> {
+    await PrivateAccessRepository.load(context);
+  }
+
+  /** 单本私密标记（:294）：窄 UPDATE 只动 isPrivate 一列，写完重读整行。 */
+  private async setBookPrivate(book: Book, isPrivate: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架');
+      return;
+    }
+    const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
+    if (bookUrl.length === 0) { return; }
+    // 没设过本地密码就标私密，这本书会立刻被锁住又没有解锁入口（上游的私密按钮
+    // 同样只在 hasPassword 时出现）。这里挡在前面给提示，不留一个锁死的书。
+    if (isPrivate && PrivateAccessRepository.get().hasPassword !== true) {
+      this.showUnavailableAction('请先到「我的 → 设置 → 隐私设置」设置本地密码');
+      return;
+    }
+    try {
+      await BookRepository.setBooksPrivate(context, [bookUrl], isPrivate);
+      const updated = BookRepository.copyBook(book);
+      updated.isPrivate = isPrivate;
+      this.books = this.books.map((item: Book) => item.id === book.id ? updated : item);
+      if (this.selectedBook.id === book.id) { this.selectedBook = updated; }
+      this.showUnavailableAction(isPrivate ? '已设为私密' : '已取消私密');
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '私密标记保存失败');
+    }
+  }
+
+  /** 批量私密标记（:147）。 */
+  private async setBooksPrivateByKeys(bookKeys: string[], isPrivate: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架');
+      return;
+    }
+    if (bookKeys.length === 0) { return; }
+    if (isPrivate && PrivateAccessRepository.get().hasPassword !== true) {
+      this.showUnavailableAction('请先到「我的 → 设置 → 隐私设置」设置本地密码');
+      return;
+    }
+    try {
+      await BookRepository.setBooksPrivate(context, bookKeys, isPrivate);
+      const reloaded = await BookRepository.loadImportedBooks(context);
+      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+      this.showUnavailableAction(isPrivate ? `已把 ${bookKeys.length} 本设为私密` : `已取消 ${bookKeys.length} 本的私密标记`);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '私密标记保存失败');
+    }
+  }
+
   /** 全量应用标签匹配规则（:241）：规则表 load 一次，算出被改动的书落库并刷新书架。 */
   private async applyTagGroupRules(): Promise<void> {
     const context = this.getUIContext().getHostContext();
@@ -7212,6 +7268,7 @@ struct Index {
           onSetBooksGroup: (bookKeys: string[], groupName: string) => this.setBooksGroupByKeys(bookKeys, groupName),
           onDeleteBooks: (books: Book[], deleteSource: boolean) => this.deleteBooksFromShelf(books, deleteSource),
           onMoveBooks: (ordered: Book[]) => this.moveBooksInShelf(ordered),
+          onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => this.setBooksPrivateByKeys(bookKeys, isPrivate),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         DiscoverPage({ onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
@@ -7243,6 +7300,7 @@ struct Index {
           onLoadBookReadRecord: (book: Book) => this.loadBookReadRecordPanel(book),
           onToggleDisableReadRecord: (book: Book, disabled: boolean) => this.toggleBookDisableReadRecord(book, disabled),
           onRemoveFromShelf: () => this.removeLocalBookFromShelf(this.selectedBook),
+          onSetPrivate: (book: Book, isPrivate: boolean) => this.setBookPrivate(book, isPrivate),
           onChooseCover: () => this.chooseBookCover(),
           onRestoreCover: () => this.restoreBookCover(),
           onSaveMetadata: (title: string, author: string, category: string, description: string,

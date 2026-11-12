@@ -1,6 +1,7 @@
 import { Book } from '../model/Book';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { BookCover } from './BookCover';
+import { AppGlyph } from './AppGlyph';
 
 /**
  * 分组卡片：书架「文件夹」样式根层每个分组一张卡。
@@ -27,19 +28,28 @@ export struct BookGroupCard {
   @Prop listCoverWidth: number = 84;
   /** 是否显示书籍计数（：106）；对应书架布局 showBookCount，关闭后两处「N 本」都不画。 */
   @Prop showCount: boolean = true;
+  /**
+   * 私密锁定（:257）：锁定时三件事同时做——不画封面预览、不显示计数、组名旁加锁图标。
+   * 上游 countText 的条件正是 `showBookCount && !groupLocked`，所以计数两处都要与它取与。
+   */
+  @Prop locked: boolean = false;
   onOpen: () => void = () => {};
   /** 长按分组卡直接进该分组的编辑面板（:107，上游 GroupEditSheet 入口）。 */
   onLongPress: (groupName: string) => void = (_groupName: string) => {};
 
   /** 取前 coverCount 本作预览封面，与上游 previewBooks.take(coverCount) 一致。 */
   private previewBooks(): Book[] {
+    // 锁定时一份预览都不给：从封面缩略图上认出是哪本书，等于没锁（:257）。
+    if (this.locked) { return []; }
     const count = Math.max(0, Math.round(this.coverCount));
     return this.books.slice(0, count);
   }
 
   /** 不足 coverCount 时空位个数，上游用 repeat + Spacer 补右侧留空。 */
   private emptySlots(): number[] {
-    const count = Math.max(0, Math.round(this.coverCount) - this.books.length);
+    // 锁定时可见预览为 0，空位也补 0：一排空框本身就宣告了「这个分组有几本书」。
+    const visible = this.locked ? 0 : this.books.length;
+    const count = Math.max(0, Math.round(this.coverCount) - visible);
     const slots: number[] = [];
     for (let index = 0; index < count; index += 1) { slots.push(index); }
     return slots;
@@ -48,9 +58,12 @@ export struct BookGroupCard {
   build() {
     Column() {
       Row() {
+        if (this.locked) {
+          AppGlyph({ name: 'lock', glyphSize: 13, tint: this.themeColorTextTertiary }).margin({ right: 4 })
+        }
         Text(this.groupName).fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        if (this.showCount) {
+        if (this.showCount && !this.locked) {
           Text(`${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
         }
         Text('›').fontSize(16).fontColor(this.themeColorAccent).margin({ left: 4 })
@@ -79,7 +92,7 @@ export struct BookGroupCard {
       } else {
         // 普通分组 / 紧凑列表：单张封面 + 分组样式说明 + 书籍数。
         Row() {
-          if (this.books.length > 0) {
+          if (this.books.length > 0 && !this.locked) {
             BookCover({
               book: this.books[0],
               compact: this.listStyle === 1,
@@ -92,7 +105,7 @@ export struct BookGroupCard {
           }
           Column() {
             Text(this.listStyle === 1 ? '紧凑列表' : '分组').fontSize(11).fontColor(this.themeColorTextTertiary)
-            if (this.showCount) {
+            if (this.showCount && !this.locked) {
               Text(`共 ${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
             }
           }.alignItems(HorizontalAlign.Start).layoutWeight(1).padding({ left: 10 })
