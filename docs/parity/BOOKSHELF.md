@@ -57,13 +57,13 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | --- | --- | --- | --- | --- |
 | A1 书架主屏与卡片 | 78 | 54 | 24 | 0 |
 | A2 书架设置面板 | 47 | 47 | 0 | 0 |
-| A3 分组管理 | 22 | 16 | 5 | 1 |
+| A3 分组管理 | 22 | 20 | 1 | 1 |
 | B 书籍详情页与元数据 | 80 | 24 | 55 | 1 |
 | C 阅读进度与记录 | 39 | 37 | 1 | 1 |
 | D 缓存管理页（整界面，r286 新增） | 53 | 6 | 47 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 9 | 8 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 2 | 5 | 0 |
-| 合计 | 345 | 195 | 145 | 5 |
+| 合计 | 345 | 199 | 141 | 5 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），原本是迁移前证据、未逐行复核，**r340 已逐行复核**（结论见 `## r340 复核结论`，其中 26 行改判 `已接`、2 行新增 `不适用`、174 行标 `**要接**`、9 行标 `**不接**`）；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -237,8 +237,8 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 分组管理面板标题 | `GroupManageSheet.kt:131` | `pages/BookshelfPage.ets:221-225` | 已接 | 本地标题为「分组管理」+ 新建/完成 | 打开面板可见标题与新建按钮 | — | bookGroup |
 | 新建分组 | `GroupManageSheet.kt:157` | `pages/BookshelfPage.ets:221-225` | 已接 | 本地先建空分组再编辑 | 点新建后出现空分组并进入编辑表单 | — | bookGroup |
 |  AI 自动分组  |  `GroupManageSheet.kt:167`、`autoGroup/AiAutoGroupSheet.kt:734`  |  —  | 不适用 |  本地 `aiAuto`/`autoGroup` 全仓 0 命中 。**判不适用（r340）**：上游这一项调用 AI 做语义分组；AI 在线服务在项目范围之外（docs/PROJECT.md:48），属「范围之外」一类证据。本地也没有可据以分组的语义数据 | — |  四阶段流程，需模型接入  |  bookGroup  |
-|  添加标签匹配规则  |  `GroupManageSheet.kt:176`、`:266-283`  |  —  | 未接 |  本地 `tagRule` 0 命中，无规则表  |  添加规则「科幻」后，书名含该词的书自动入组  |  依赖 `tagGroupRule.json` 读写 ；**要接**：tag_group_rules 表与 TagGroupRuleRepository/Importer 已在，缺分组管理面板里的规则编辑控件 |  tagGroupRule  |
-|  同步标签分组  |  `GroupManageSheet.kt:185`  |  —  | 未接 |  同上  |  点同步后按已有规则重算分组归属  |  — ；**要接**：tag_group_rules 表与 TagGroupRuleRepository/Importer 已在，缺分组管理面板里的规则编辑控件 |  tagGroupRule  |
+|  添加标签匹配规则  |  `GroupManageSheet.kt:176`、`:266-283`  |  —  | 已接 |  本地 `tagRule` 0 命中，无规则表 ；**实现（r341）**：pages/BookshelfPage.ets 分组管理顶栏「新建」改三项菜单（新建分组 / 添加标签匹配规则 / 同步标签分组），规则编辑由分组编辑面板内的开关承担（未做独立面板，两条路径写同一张表），写入 data/TagGroupRuleRepository  |  点分组管理顶栏「新建」出三项菜单，选「添加标签匹配规则」进分组编辑面板并设置规则表达式  |  依赖 `tagGroupRule.json` 读写  |  tagGroupRule  |
+|  同步标签分组  |  `GroupManageSheet.kt:185`  |  —  | 已接 |  同上 ；**实现（r341）**：同步实现为 data/TagGroupRuleSync.ets，掩码用加法不用位运算（ArkTS 位或只保留低 32 位会截断 2^52 组 id），只加不减；实测点同步后「静候」分组由 2 本变 210 本、其余分组书数不变  |  点「同步标签分组」后按规则把命中的书补进对应分组，原手动分在别组的书不掉出去  |  —  |  tagGroupRule  |
 | 分组卡片网格 | `GroupManageSheet.kt:207-262` | `pages/BookshelfPage.ets:243-264` | 已接 | 本地固定两列 `1fr 1fr`，上游 `Adaptive(GroupCardMinWidth)` | 打开面板看到分组卡片网格 | — | bookGroup |
 | 分组显隐开关 | `GroupManageSheet.kt:207-262` | `pages/BookshelfPage.ets:247-251` | 已接 | 本地 Toggle 直接改 `show` | 关掉某分组后书架页签不再出现它 | — | bookGroup |
 | 分组封面 | `GroupEditSheet.kt:154-164` | `pages/BookshelfPage.ets:291-320` | 已接 | 本地点击选图、长按清除 | 选图后分组卡片显示该封面 | — | bookGroup |
@@ -246,8 +246,8 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 分组排序方式 | `GroupEditSheet.kt:180-190` | `pages/BookshelfPage.ets:332-337` | 已接 | 本地 `BookshelfSort.ets:26` 按组覆盖全局 | 设某组为「按书名」，该组内按拼音序 | — | bookGroup |
 | 分组下拉刷新 | `GroupEditSheet.kt:196-199` | `pages/BookshelfPage.ets:339-346` | 已接 | 本地仅存字段，注释自认「当前不控制实际更新」 | 关掉某组的下拉刷新后，该组下拉不再刷新 | 字段已接、行为未接 | bookGroup |
 | 分组私有 | `GroupEditSheet.kt:205-215` | `pages/BookshelfPage.ets:348-355` | 已接 | 本地仅存字段，注释自认「当前不限制跨分组显示」 | 标记私密后该组内容需解锁才可见 | 字段已接、行为未接，见 A1 | bookGroup |
-|  标签匹配规则开关  |  `GroupEditSheet.kt:221-228`  |  —  | 未接 |  本地编辑表单无此项  |  开启后出现规则输入框  |  — ；**要接**：tag_group_rules 表与 TagGroupRuleRepository/Importer 已在，缺分组管理面板里的规则编辑控件 |  tagGroupRule  |
-|  标签匹配规则输入  |  `GroupEditSheet.kt:231-240`  |  —  | 未接 |  同上  |  输入「科幻」保存后书自动入组  |  — ；**要接**：tag_group_rules 表与 TagGroupRuleRepository/Importer 已在，缺分组管理面板里的规则编辑控件 |  tagGroupRule  |
+|  标签匹配规则开关  |  `GroupEditSheet.kt:221-228`  |  —  | 已接 |  本地编辑表单无此项 ；**实现（r341）**：pages/BookshelfPage.ets 分组编辑面板「私有分组」行之后加「标签匹配规则」开关，默认关，开后显示多行规则输入框与「复制」「粘贴」（粘贴走 PasteButton 授权）  |  进分组编辑面板可见开关默认关，打开后出现多行输入框与「复制」「粘贴」，说明文案在「自动匹配 / 手动管理」间切换  |  —  |  tagGroupRule  |
+|  标签匹配规则输入  |  `GroupEditSheet.kt:231-240`  |  —  | 已接 |  同上 ；**实现（r341）**：分组编辑面板用 TextArea（多行）输入规则，保存前 new RegExp 校验、非法正则提示「正则表达式不合法」不落库，保存后立刻全量同步且重开 App 规则仍在  |  输入表达式保存后命中的书自动入组、重开 App 规则仍在；输入非法正则弹「正则表达式不合法」且面板不关  |  —  |  tagGroupRule  |
 | 删除分组 | `GroupManageSheet.kt:134-148` | `pages/BookshelfPage.ets:357-382` | 已接 | 本地二次确认（点两次），上游为独立确认面板 | 点删除两次后分组消失，书回到未分组 | — | bookGroup |
 |  删除分组时书籍去向提示  |  `GroupManageSheet.kt:134-148`  |  `pages/BookshelfPage.ets` 的 `GroupEditorContent()`  | 已接 |  **实现（r341）**：在 `onRemoveGroup` 前用 `getUIContext().showAlertDialog` 弹确认框，N=`this.books.filter(b=>(b.groupNames??[]).includes(removed.groupName)).length` 真算，标题「删除分组」、正文「该分组下的 N 本书会移出到未分组」、按钮「取消」「删除」  | 删除含 2 本书的「静候」分组前弹框「该分组下的 2 本书会移出到未分组」，与分组卡「2 本」一致  |  原有「点两次」确认仍在  |  bookGroup  |
 | 重置分组封面 | `GroupManageSheet.kt:197` | `pages/BookshelfPage.ets:310-317` | 已接 | 本地为「清除」按钮 | 点清除后分组封面恢复默认 | — | bookGroup |
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 ## 小结
 
-**全表合计 345 条：已接 195、未接 145、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 145 行按备注列分：`**要接**` 136 行、`**不接**` 9 行，逐行判断见上一节。
+**全表合计 345 条：已接 199、未接 141、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 141 行按备注列分：`**要接**` 132 行、`**不接**` 9 行，逐行判断见上一节。
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
@@ -661,7 +661,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 1 顶栏与纯 UI 入口 | 13 | `:82`–`:84` `:86` `:95`–`:99` `:101` `:222` `:252` `:255` | 无数据依赖：顶栏标题分支与副标题、五个菜单项、页签栏菜单按钮、删除分组二次确认、分组行书籍数。**实现（r341）**：本批实际交付 11 行，`:95` 选择模式留批 5、`:96` 书架管理留批 9；标题 `(N)` 尾巴因本地无待更新队列未接（见 `:83` 差异说明） |
 | 2 Book 补字段后落卡片 | 22 | `:110` `:112` `:118`–`:121` `:123` `:124` `:127`–`:130` `:187` `:208` `:209` `:214`–`:219` `:223` | 先在 model/Book.ets 补 totalChapterNum、latestChapterTitle、isNew；未读数可由 chapterCount - chapterIndex - 1 推导。**实现（r341）**：本批实际交付 24 行（22 行清单 + `:224`–`:226` 随 `:209` 三复选一次做完）；`:124` 按 customTagColors 取色顺延批 3（与 `:210` / `:211` 一起做）；`:130` 表描述更正为标题级 (N)，本地无待更新队列故 (N) 尾巴随在线书源模块（见 `:83`） |
 | 3 标签体系 | 5 | `:210` `:211` `:224`–`:226` | 新增 customTagColors 字段 + 配色管理页 + 标签行取色；自定义标签数据已有、渲染侧零消费。**调整（r341）**：`:224`–`:226` 已随批 2 的 `:209` 三复选对话框一次做完（本批不再做），批 3 实际只剩 `:210` `:211` 两行 + 认领从批 2 顺延的 `:124`（标签行按 customTagColors 取色，见 `:124` 差异说明的顺延标注）。**实现（r341）**：本批实际交付 3 行（`:210` `:211` `:124`）；`:224`–`:226` 已在批 2 做完；新增 TagColorPair/parseTagColors 数据层、lib/TagColorUtils.ets（HSL↔ARGB 与背景推导）、配色管理子页（生成/添加/编辑/删除/取色）与标签行按索引取模取色；config.xml 写出并读回 customTagColors / enableCustomTagColors |
-| 4 标签匹配规则面板 | 4 | `:240` `:241` `:249` `:250` | tag_group_rules 表与 TagGroupRuleRepository/Importer 都已在，只缺分组管理面板里的编辑控件 |
+| 4 标签匹配规则面板 | 4 | `:240` `:241` `:249` `:250` | tag_group_rules 表与 TagGroupRuleRepository/Importer 都已在，只缺分组管理面板里的编辑控件。**实现（r341）**：本批实际交付 4 行（全改已接）；新建 `entry/src/main/ets/data/TagGroupRuleSync.ets`（掩码用加法不用位运算、只加不减；所有规则读点显式 `await TagGroupRuleRepository.load(context)`，因启动 restoreStartupState 不 load、getAll() 缓存恒空），BookshelfPage.ets 分组管理顶栏三项菜单 + 分组编辑面板规则开关/多行输入/复制粘贴/正则前置拦截 + Index.ets 重命名改规则名、删除分组联动删规则、同步回调；`:240` 未做独立规则编辑面板（由分组编辑面板内开关承担）；上机验收 10 点全部实测通过，备份 ZIP 的 tagGroupRule.json 与规则表一致 |
 | 5 选择模式、拖拽与动作 | 15 | `:87` `:106` `:107` `:113` `:114` `:138` `:142`–`:144` `:146`–`:151` | books 表已有 order 列支撑拖拽重排；全选/反选依赖选中集合 |
 | 6 私密体系 | 3 | `:257` `:294` `:325` | books 表需加 isPrivate 列（现只有 book_groups 有）；详情页加设为私密与锁定内容页 |
 | 7 详情页交互与本地动作 | 35 | `:273` `:274` `:277`–`:280` `:284` `:287`–`:293` `:296`–`:299` `:301`–`:303` `:305` `:313`–`:315` `:332` `:337`–`:344` `:350` | 头部文本行加点击/长按、菜单动作、简介三种标记解析、编辑面板、在线换封面 |

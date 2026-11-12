@@ -19,6 +19,9 @@ import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
 import { window } from '@kit.ArkUI';
 import { toTimeAgo } from '../lib/TimeAgo';
 import { argbToColorHex, hexToArgb, deriveTagBgColor, baseHueFromHex, generateTagColors } from '../lib/TagColorUtils';
+import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
+import { TagGroupRule } from '../model/TagGroupRule';
+import { pasteboard } from '@kit.BasicServicesKit';
 
 /** 网格左右内边距，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
 const BOOKSHELF_GRID_PADDING: number = 8;
@@ -127,6 +130,11 @@ export struct BookshelfPage {
   @State tagColorEditIndex: number = -1;
   /** 取色器输入的文字色 hex。 */
   @State tagColorPickerHex: string = '';
+  /** 分组编辑面板内的标签匹配规则开关与表达式（:249 / :250）。 */
+  @State draftRuleEnabled: boolean = false;
+  @State draftRulePattern: string = '';
+  /** 「粘贴」需先弹 PasteButton 授权层，不能直接读剪贴板（ProfileSubPages.ets:1394）。 */
+  @State showRulePasteAuthorization: boolean = false;
   /** 记住上次分组只灌一次，避免后续设置对象刷新覆盖用户主动选择的页签。 */
   private tabPositionRestored: boolean = false;
   /** 书架窗口引用与尺寸回调，aboutToDisappear 时解绑，避免订阅泄漏。 */
@@ -161,6 +169,8 @@ export struct BookshelfPage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** 把导入书单解析出的新书交给 Index 落库并刷新书架。 */
   onImportBookList: (books: Book[]) => Promise<void> = async (_books: Book[]) => {};
+  /** 全量应用标签匹配规则，交给 Index 落库并刷新书架（:241）。 */
+  onApplyTagGroupRules: () => Promise<void> = async () => {};
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
   private bookCardKey(book: Book): string {
@@ -536,8 +546,11 @@ export struct BookshelfPage {
     return `${group.groupId}_${group.groupName}_${group.show ? 1 : 0}_${group.order}_${group.bookSort}_${group.isPrivate ? 1 : 0}_${group.cover ?? ''}`;
   }
 
-  /** 打开分组编辑面板，把当前属性灌进草稿。 */
-  private openGroupEditor(group: BookGroup | undefined): void {
+  /** 打开分组编辑面板，把当前属性与标签匹配规则一并灌进草稿。 */
+  private async openGroupEditor(group: BookGroup | undefined): Promise<void> {
+    this.draftRuleEnabled = false;
+    this.draftRulePattern = '';
+    this.showRulePasteAuthorization = false;
     if (group === undefined) {
       this.editingGroupId = -1;
       this.draftName = '';
@@ -552,14 +565,34 @@ export struct BookshelfPage {
       this.draftRefresh = group.enableRefresh;
       this.draftPrivate = group.isPrivate;
       this.draftCover = group.cover ?? '';
+      // 规则按分组名关联。规则表启动时不 load（全仓只有备份链路 load），这里显式
+      // load 一次拿权威数组，避免 getAll() 读到空缓存导致已有规则显示不出来。
+      const context = this.getUIContext().getHostContext();
+      if (context !== undefined) {
+        const rules = await TagGroupRuleRepository.load(context);
+        const matched = rules.find((rule: TagGroupRule) => rule.groupName === group.groupName);
+        if (matched !== undefined) {
+          this.draftRuleEnabled = true;
+          this.draftRulePattern = matched.pattern;
+        }
+      }
     }
     this.showGroupEditor = true;
   }
 
-  /** 提交分组编辑面板；名称冲突等错误由调用方回传提示。 */
+  /** 提交分组编辑面板；名称冲突等错误由调用方回传提示。规则一并写回并触发全量同步。 */
   private async submitGroupDraft(): Promise<void> {
     const name = this.draftName.trim();
     if (name.length === 0) { this.onUnavailableAction('分组名称不能为空'); return; }
+    const pattern = this.draftRulePattern.trim();
+    // 保存前校验正则，非法整笔不写：上游 BookGroupMutationRepository.saveGroup
+    // 首行就是 Regex(ruleToSave.pattern)（不合法直接抛、事务不提交），本地同款前置拦截。
+    if (this.draftRuleEnabled && pattern.length > 0) {
+      try { new RegExp(pattern); } catch (error) {
+        this.onUnavailableAction('正则表达式不合法');
+        return;
+      }
+    }
     const draft: BookGroupDraft = {
       groupName: name,
       enableRefresh: this.draftRefresh,
@@ -576,7 +609,63 @@ export struct BookshelfPage {
     } else {
       await this.onAddGroupDraft(draft);
     }
+    await this.saveDraftRule(name, pattern);
     this.showGroupEditor = false;
+    // 规则写完后立刻全量同步一次（规则个位数、书几百本，几十毫秒级，不用做增量）。
+    await this.onApplyTagGroupRules();
+  }
+
+  /** 把面板里的规则草稿写回规则表。规则按保存后的分组名关联：编辑改名时
+   *  Index.updateBookshelfGroup 已先把旧名规则同步成新名，这里只按 name 找。 */
+  private async saveDraftRule(name: string, pattern: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const rules = await TagGroupRuleRepository.load(context);
+    const index = rules.findIndex((rule: TagGroupRule) => rule.groupName === name);
+    if (this.draftRuleEnabled && pattern.length > 0) {
+      if (index >= 0) {
+        const existing = rules[index];
+        rules[index] = { id: existing.id, pattern: pattern, groupName: name, order: existing.order };
+      } else {
+        rules.push({ id: Date.now(), pattern: pattern, groupName: name, order: rules.length });
+      }
+    } else if (index >= 0) {
+      rules.splice(index, 1);
+    } else {
+      return;
+    }
+    await TagGroupRuleRepository.save(context, rules);
+  }
+
+  /** 复制规则，形状与上游 GSON.toJson(rule) 一致：{id,pattern,groupName,order}。 */
+  private async copyGroupRule(): Promise<void> {
+    const rule: TagGroupRule = {
+      id: 0, pattern: this.draftRulePattern,
+      groupName: this.draftName.trim(), order: 0
+    };
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, JSON.stringify(rule));
+      await pasteboard.getSystemPasteboard().setData(data);
+      this.onUnavailableAction('规则已复制');
+    } catch (error) {
+      this.onUnavailableAction('规则复制失败');
+    }
+  }
+
+  /** 粘贴规则：由 PasteButton 授权后读剪贴板，只回填表达式。 */
+  private async pasteGroupRule(result: PasteButtonOnClickResult): Promise<void> {
+    if (result !== PasteButtonOnClickResult.SUCCESS) {
+      this.onUnavailableAction('未获得剪贴板授权');
+      return;
+    }
+    try {
+      const data = await pasteboard.getSystemPasteboard().getData();
+      if (data.getRecordCount() === 0) { this.onUnavailableAction('剪贴板为空'); return; }
+      const parsed = JSON.parse(data.getRecord(0).toPlainText()) as TagGroupRule;
+      if (typeof parsed.pattern === 'string') { this.draftRulePattern = parsed.pattern; }
+    } catch (error) {
+      this.onUnavailableAction('粘贴的规则格式不正确');
+    }
   }
 
   /** 分组排序方式菜单，选项来自 BOOK_SORT_OPTIONS。 */
@@ -616,6 +705,35 @@ export struct BookshelfPage {
     }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
+  /** 分组管理顶栏「＋」菜单（上游 GroupManageSheet.kt:150 的四项里，AI 自动分组
+   *  对应本表 :239 已判不适用，不做）。
+   *
+   *  「添加标签匹配规则」在本地不另建独立面板（上游 TagGroupRuleEditSheet.kt）：
+   *  规则段就放在分组编辑面板里（:249 / :250），两条路径写的是同一张 tag_group_rules 表，
+   *  做一套就够，两套反而要维护两条写入路径。这里直接打开一个已有分组的编辑面板，
+   *  让用户在里面录表达式。 */
+  @Builder
+  private GroupManageMoreMenu() {
+    Menu() {
+      MenuItem({ content: '新建分组' }).height(44)
+        .onClick(() => { this.openGroupEditor(undefined); })
+      MenuItem({ content: '添加标签匹配规则' }).height(44)
+        .onClick(() => {
+          const candidates = this.getUserGroups();
+          let target: BookGroup | undefined = this.groups.find((group: BookGroup) =>
+            group.groupId > 0 && group.groupName === this.activeFilter());
+          if (target === undefined && candidates.length > 0) { target = candidates[0]; }
+          if (target === undefined) {
+            this.onUnavailableAction('请先新建一个分组，再为它添加标签匹配规则');
+            return;
+          }
+          this.openGroupEditor(target);
+        })
+      MenuItem({ content: '同步标签分组' }).height(44)
+        .onClick(async () => { await this.onApplyTagGroupRules(); })
+    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+  }
+
   /** 分组管理：自适应网格卡片，对应上游 LazyVerticalGrid(GridCells.Adaptive(160.dp))。 */
   @Builder
   private GroupManagerGrid() {
@@ -623,7 +741,7 @@ export struct BookshelfPage {
       Row() {
         Text('分组管理').fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text('新建').fontSize(14).fontColor('#B9C8FF').padding(8)
-          .onClick(() => this.openGroupEditor(undefined))
+          .bindMenu(this.GroupManageMoreMenu())
         Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Row() {
@@ -661,7 +779,7 @@ export struct BookshelfPage {
                   .margin({ top: 4 }).width('100%')
               }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
                 .alignItems(HorizontalAlign.Start)
-                .onClick(() => this.openGroupEditor(group))
+                .onClick(() => { this.openGroupEditor(group); })
             }
           }, (group: BookGroup) => this.groupCardKey(group))
             .onMove((from: number, to: number) => {
@@ -750,6 +868,45 @@ export struct BookshelfPage {
             Toggle({ type: ToggleType.Switch, isOn: this.draftPrivate })
               .onChange((enabled: boolean) => this.draftPrivate = enabled)
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+
+          // 标签匹配规则（:249 / :250）：本地不另建独立规则面板，开关与多行输入框
+          // 直接放在分组编辑面板里，对应上游 GroupEditSheet.kt:221-238。
+          Row() {
+            Column() {
+              Text('标签匹配规则').fontSize(14).fontColor(this.themeColorTextSecondary)
+              Text(this.draftRuleEnabled ? '启用后分组将根据书籍标签自动匹配' : '关闭后分组为手动管理')
+                .fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.draftRuleEnabled })
+              .onChange((enabled: boolean) => this.draftRuleEnabled = enabled)
+          }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+
+          if (this.draftRuleEnabled) {
+            Column() {
+              TextArea({ placeholder: '匹配标签的正则表达式', text: this.draftRulePattern })
+                .fontSize(14).fontColor(this.themeColorTextPrimary)
+                .placeholderColor(this.themeColorTextTertiary)
+                .height(96).backgroundColor('#22232A').borderRadius(9).padding(10)
+                .width('100%')
+                .onChange((value: string) => this.draftRulePattern = value)
+              Row() {
+                Text('复制').fontSize(13).fontColor(this.themeColorAccent).padding({ right: 16 })
+                  .onClick(() => { this.copyGroupRule(); })
+                Text('粘贴').fontSize(13).fontColor(this.themeColorAccent)
+                  .onClick(() => this.showRulePasteAuthorization = true)
+                Blank()
+              }.width('100%').padding({ top: 8 })
+              // 读剪贴板需要 PasteButton 授权，不能裸调 getData()（ProfileSubPages.ets:1394）。
+              if (this.showRulePasteAuthorization) {
+                PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
+                  .onClick(async (_event: ClickEvent, result: PasteButtonOnClickResult) => {
+                    await this.pasteGroupRule(result);
+                    this.showRulePasteAuthorization = false;
+                  })
+              }
+            }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 10 })
+              .alignItems(HorizontalAlign.Start)
+          }
 
           if (this.editingGroupId > 0) {
             Row() {
@@ -1840,7 +1997,7 @@ export struct BookshelfPage {
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E',
-        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; }
+        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; }
       })
   }
 }

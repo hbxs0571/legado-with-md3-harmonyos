@@ -44,6 +44,9 @@ import { BookRepository } from '../data/BookRepository';
 import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
+import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
+import { TagGroupRule } from '../model/TagGroupRule';
+import { TagGroupRuleSync } from '../data/TagGroupRuleSync';
 import { CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository } from '../data/CoverSettingsRepository';
 import { CoverRuleRepository } from '../data/CoverRuleRepository';
 import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
@@ -6302,6 +6305,28 @@ struct Index {
     }
   }
 
+  /** 全量应用标签匹配规则（:241）：规则表 load 一次，算出被改动的书落库并刷新书架。 */
+  private async applyTagGroupRules(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const rules = await TagGroupRuleRepository.load(context);
+      const changed = await TagGroupRuleSync.apply(this.books, rules);
+      if (changed.length > 0) {
+        await BookRepository.saveImportedBooks(context, changed);
+        this.books = this.books.map((book: Book): Book => {
+          const key = book.contentPath ?? book.androidOriginalPath ?? '';
+          const hit = changed.find((item: Book) =>
+            (item.contentPath ?? item.androidOriginalPath ?? '') === key);
+          return hit !== undefined ? hit : book;
+        });
+      }
+      this.showUnavailableAction('同步完成');
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '标签分组同步失败');
+    }
+  }
+
   private async removeBookshelfGroup(groupId: number): Promise<void> {
     const context = this.getUIContext().getHostContext();
     const group = this.bookGroups.find((item: BookGroup) => item.groupId === groupId);
@@ -6314,6 +6339,14 @@ struct Index {
     try {
       await BookRepository.saveImportedBooks(context, nextBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
       await BookGroupRepository.remove(context, groupId);
+      // 删分组时把绑定该分组名的规则一并删掉（上游 BookGroupMutationRepository:85-91）。
+      try {
+        const rules = await TagGroupRuleRepository.load(context);
+        const kept = rules.filter((rule: TagGroupRule) => rule.groupName !== group.groupName);
+        if (kept.length !== rules.length) { await TagGroupRuleRepository.save(context, kept); }
+      } catch (ruleError) {
+        console.error(`[Index] 删除分组同步标签规则失败: ${ruleError}`);
+      }
       this.books = nextBooks;
       this.bookGroups = BookGroupRepository.getAll();
     } catch (error) {
@@ -6385,6 +6418,22 @@ struct Index {
       } catch (error) {
         this.showUnavailableAction(error instanceof Error ? error.message : '重命名分组失败');
         return;
+      }
+    }
+    // 规则按分组名关联：分组改名时把绑定旧名的规则一并改成新名（4d 硬约束，
+    // 上游 BookGroupMutationRepository.saveGroup / deleteGroup 同款联动）。
+    if (nextName !== oldName) {
+      try {
+        const rules = await TagGroupRuleRepository.load(context);
+        let renamed = false;
+        const nextRules = rules.map((rule: TagGroupRule): TagGroupRule => {
+          if (rule.groupName !== oldName) { return rule; }
+          renamed = true;
+          return { id: rule.id, pattern: rule.pattern, groupName: nextName, order: rule.order };
+        });
+        if (renamed) { await TagGroupRuleRepository.save(context, nextRules); }
+      } catch (ruleError) {
+        console.error(`[Index] 分组改名同步标签规则失败: ${ruleError}`);
       }
     }
     try {
@@ -7103,6 +7152,7 @@ struct Index {
           onImportBook: () => this.importLocalBook(),
           onImportBookList: (books: Book[]) => this.importBookList(books),
           onRefreshToc: () => this.refreshAllToc(),
+          onApplyTagGroupRules: () => this.applyTagGroupRules(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         DiscoverPage({ onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
