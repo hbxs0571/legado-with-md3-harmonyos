@@ -21,6 +21,8 @@ export interface WebDavSettings {
   autoCheckNewBackup: boolean;    // 默认 true
   onlyLatestBackup: boolean;      // 默认 true
   backupSyncMode: string;         // 'both' | 'local' | 'webdav'
+  backupPath: string;            // 本地备份目录（空串=每次弹系统 picker）
+  lastBackupTime: number;        // 最近一次成功备份的时间戳，供启动时比对远端
 }
 
 /** 上游 AppWebDav.kt 的默认坚果云地址。 */
@@ -38,7 +40,9 @@ export function defaultWebDavSettings(): WebDavSettings {
     syncBookProgressPlus: false,
     autoCheckNewBackup: true,
     onlyLatestBackup: true,
-    backupSyncMode: 'both'
+    backupSyncMode: 'both',
+    backupPath: '',
+    lastBackupTime: 0
   };
 }
 
@@ -54,7 +58,9 @@ export function cloneWebDavSettings(source: WebDavSettings): WebDavSettings {
     syncBookProgressPlus: source.syncBookProgressPlus,
     autoCheckNewBackup: source.autoCheckNewBackup,
     onlyLatestBackup: source.onlyLatestBackup,
-    backupSyncMode: source.backupSyncMode
+    backupSyncMode: source.backupSyncMode,
+    backupPath: source.backupPath,
+    lastBackupTime: source.lastBackupTime
   };
 }
 
@@ -152,6 +158,10 @@ export class WebDavConfigStore {
       const v = record[key];
       return typeof v === 'boolean' ? v as boolean : def;
     };
+    const num = (key: string, def: number): number => {
+      const v = record[key];
+      return typeof v === 'number' && Number.isFinite(v) ? v as number : def;
+    };
     return {
       url: str('url', fallback.url),
       account: str('account', fallback.account),
@@ -162,7 +172,9 @@ export class WebDavConfigStore {
       syncBookProgressPlus: bool('syncBookProgressPlus', fallback.syncBookProgressPlus),
       autoCheckNewBackup: bool('autoCheckNewBackup', fallback.autoCheckNewBackup),
       onlyLatestBackup: bool('onlyLatestBackup', fallback.onlyLatestBackup),
-      backupSyncMode: str('backupSyncMode', fallback.backupSyncMode)
+      backupSyncMode: str('backupSyncMode', fallback.backupSyncMode),
+      backupPath: str('backupPath', fallback.backupPath),
+      lastBackupTime: num('lastBackupTime', fallback.lastBackupTime)
     };
   }
 }

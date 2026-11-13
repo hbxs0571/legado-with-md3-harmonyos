@@ -38,6 +38,16 @@ export struct AppBackupSettingsPage {
   onTestWebDav: () => void = () => {};
   onBackupToWebDav: () => void = () => {};
   onRestoreFromWebDav: () => void = () => {};
+  /** 同时备份：本地保存后无条件上传，不看 backupSyncMode。 */
+  onCreateBackupBoth: () => void = () => {};
+  /** 选择本地备份目录（DocumentViewPicker 的 FOLDER 模式 + 持久授权）。 */
+  onChooseBackupPath: () => void = () => {};
+  /** 直接把应用内 backups 目录设为固定备份目录（目录选择器在部分设备上选不出可写目录时的等价入口）。 */
+  onUseDownloadDir: () => void = () => {};
+  /** 清掉已记住的备份目录，回到每次弹 picker。 */
+  onClearBackupPath: () => void = () => {};
+  /** 导入旧版本 myBookShelf.json。 */
+  onImportOldShelf: () => void = () => {};
   @State activeSheet: string = '';
   @State inputTitle: string = '';
   @State inputDraft: string = '';
@@ -106,7 +116,8 @@ export struct AppBackupSettingsPage {
               detail: this.webDavTesting ? '正在测试…' : '检查 WebDAV 连接',
               disabled: this.webDavTesting, onSelect: () => this.onTestWebDav() })
             ThemeItemDivider()
-            BackupPreviewSwitchRow({ title: '同步书籍进度', detail: '仅保存设置值，阅读进度同步尚未接入',
+            BackupPreviewSwitchRow({ title: '同步书籍进度',
+              detail: '停止阅读时把进度写进 WebDAV 的 bookProgress 目录',
               checked: this.webDavSettings.syncBookProgress, onChange: (value: boolean) => {
                 const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
                 next.syncBookProgress = value;
@@ -114,7 +125,8 @@ export struct AppBackupSettingsPage {
               } })
             ThemeItemDivider()
             if (this.webDavSettings.syncBookProgress) {
-              BackupPreviewSwitchRow({ title: '增强进度同步', detail: '仅保存设置值，增强进度同步尚未接入',
+              BackupPreviewSwitchRow({ title: '增强进度同步',
+                detail: '打开书时比对远端进度，比本地新就提示跳转',
                 checked: this.webDavSettings.syncBookProgressPlus, onChange: (value: boolean) => {
                   const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
                   next.syncBookProgressPlus = value;
@@ -122,7 +134,8 @@ export struct AppBackupSettingsPage {
                 } }).transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
             ThemeItemDivider()
-            BackupPreviewSwitchRow({ title: '自动检查新备份', detail: '仅保存设置值，后台定时检查尚未接入',
+            BackupPreviewSwitchRow({ title: '自动检查新备份',
+              detail: '启动时检查一次远端是否有更新的备份',
               checked: this.webDavSettings.autoCheckNewBackup, onChange: (value: boolean) => {
                 const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
                 next.autoCheckNewBackup = value;
@@ -137,7 +150,9 @@ export struct AppBackupSettingsPage {
           Text('备份与恢复').fontSize(14).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
-            BackupActionRow({ icon: 'folder', title: '备份路径', detail: '选择本地备份目录',
+            BackupActionRow({ icon: 'folder', title: '备份路径',
+              detail: this.webDavSettings.backupPath.trim().length === 0 ? '未选择（每次弹系统保存框）'
+                : '已选目录，备份直接写入',
               onSelect: () => this.activeSheet = 'path', disabled: this.busy })
             ThemeItemDivider()
             BackupActionRow({
@@ -160,10 +175,12 @@ export struct AppBackupSettingsPage {
               detail: `当前排除 ${this.backupIgnoreKeys.length} 个数据类别`,
               onSelect: () => this.activeSheet = 'ignoreBackup', disabled: this.busy })
             ThemeItemDivider()
-            BackupActionRow({ icon: 'download', title: '导入旧版数据', detail: '从旧版本文件迁移',
-              onSelect: () => this.onUnavailableAction('旧版数据导入尚未迁移') })
+            BackupActionRow({ icon: 'download', title: '导入旧版数据',
+              detail: '从 myBookShelf.json 迁移书架书目与进度',
+              onSelect: () => this.onImportOldShelf(), disabled: this.busy })
             ThemeItemDivider()
-            BackupPreviewSwitchRow({ title: '只保留最新备份', detail: '仅保存设置值，自动清理备份尚未接入',
+            BackupPreviewSwitchRow({ title: '只保留最新备份',
+              detail: '备份成功后删掉旧的 backup 文件（本地目录与 WebDAV 各清一次）',
               checked: this.webDavSettings.onlyLatestBackup, onChange: (value: boolean) => {
                 const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
                 next.onlyLatestBackup = value;
@@ -258,7 +275,7 @@ export struct AppBackupSettingsPage {
         BackupSheetOption({ title: '备份到 WebDAV', detail: '仅上传到 WebDAV',
           onSelect: () => { this.activeSheet = ''; this.onBackupToWebDav(); } })
         BackupSheetOption({ title: '同时备份到本地和 WebDAV', detail: '先保存到本地，再上传到 WebDAV',
-          onSelect: () => { this.activeSheet = ''; this.onCreateBackup(); } })
+          onSelect: () => { this.activeSheet = ''; this.onCreateBackupBoth(); } })
       } else if (this.activeSheet === 'restore') {
         BackupSheetOption({ title: '从本地恢复', detail: '选择 Android 阅读 ZIP 并预览',
           onSelect: () => { this.activeSheet = ''; this.onSelectRestore(); } })
@@ -296,8 +313,16 @@ export struct AppBackupSettingsPage {
           this.activeSheet = '';
         })
       } else if (this.activeSheet === 'path') {
-        BackupSheetOption({ title: '选择系统目录', detail: '本地备份目录选择尚未迁移',
-          onSelect: () => this.onUnavailableAction('备份目录选择尚未迁移') })
+        BackupSheetOption({ title: '选择系统目录',
+          detail: this.webDavSettings.backupPath.trim().length === 0 ? '当前未选择，备份时弹系统保存框'
+            : '重新选一个目录并记住授权',
+          onSelect: () => { this.activeSheet = ''; this.onChooseBackupPath(); } })
+        BackupSheetOption({ title: '使用应用备份目录',
+          detail: '固定写入应用内 backups，之后不再弹保存框',
+          onSelect: () => { this.activeSheet = ''; this.onUseDownloadDir(); } })
+        BackupSheetOption({ title: '清除已选目录', detail: '回到每次弹系统保存框',
+          disabled: this.webDavSettings.backupPath.trim().length === 0,
+          onSelect: () => { this.activeSheet = ''; this.onClearBackupPath(); } })
       } else if (this.activeSheet === 'syncMode') {
         BackupSheetOption({ title: '仅本地',
           detail: this.webDavSettings.backupSyncMode === 'local' ? '当前：仅本地' : '只保存到用户选择的位置',
@@ -308,10 +333,18 @@ export struct AppBackupSettingsPage {
             this.activeSheet = '';
           } })
         BackupSheetOption({ title: '本地与 WebDAV',
-          detail: this.webDavSettings.backupSyncMode !== 'local' ? '当前：本地与 WebDAV' : '本地保存后顺手上传同一份 ZIP',
+          detail: this.webDavSettings.backupSyncMode === 'both' ? '当前：本地与 WebDAV' : '本地保存后顺手上传同一份 ZIP',
           onSelect: () => {
             const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
             next.backupSyncMode = 'both';
+            this.onWebDavSettingsChange(next);
+            this.activeSheet = '';
+          } })
+        BackupSheetOption({ title: '仅 WebDAV',
+          detail: this.webDavSettings.backupSyncMode === 'webdav' ? '当前：仅 WebDAV' : '只上传到 WebDAV，不保存本地文件',
+          onSelect: () => {
+            const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+            next.backupSyncMode = 'webdav';
             this.onWebDavSettingsChange(next);
             this.activeSheet = '';
           } })

@@ -750,13 +750,14 @@ export class BackupRepository {
     ignoredCategories: string[],
     themeMode: string,
     paletteIndex: number,
-    customTheme: CustomThemeSnapshot
+    customTheme: CustomThemeSnapshot,
+    onlyLatest: boolean = false
   ): Promise<boolean> {
     const zipPath = await BackupRepository.buildBackupArchive(context, books, settings,
       bookshelfLayout, ignoredCategories, themeMode, paletteIndex, customTheme);
     try {
       const options = new picker.DocumentSaveOptions();
-      options.newFileNames = [`backup${BackupRepository.currentDate()}.zip`];
+      options.newFileNames = [BackupRepository.backupFileName(onlyLatest)];
       options.fileSuffixChoices = ['Legado Android 兼容备份|.zip'];
       const uris = await new picker.DocumentViewPicker(context).save(options);
       const uri = uris[0];
@@ -3780,6 +3781,15 @@ export class BackupRepository {
   private static parseIgnoreList(value: string): string[] {
     const options = BackupRepository.categoryOptions.map((item: BackupCategoryOption) => item.key);
     return value.split('\n').filter((item: string) => options.includes(item));
+  }
+
+  /**
+   * 备份包文件名。
+   * 只保留最新备份时用固定名 backup.zip 覆盖（上行 Backup.kt:308-312 同款）；
+   * 否则带日期。注意系统保存框对同名文件会自动加序号，覆盖只在固定目录下才真正成立。
+   */
+  static backupFileName(onlyLatest: boolean): string {
+    return onlyLatest ? 'backup.zip' : `backup${BackupRepository.currentDate()}.zip`;
   }
 
   static currentDate(): string {

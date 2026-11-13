@@ -1,4 +1,6 @@
+import { fileIo } from '@kit.CoreFileKit';
 import { WebDav, WebDavError, WebDavEntry } from './WebDav';
+import { BookProgress, bookProgressFileName, parseBookProgress, serializeBookProgress } from '../model/BookProgress';
 import {
   WebDavConfigStore,
   buildWebDavRootUrl,
@@ -157,6 +159,97 @@ export class WebDavSync {
         return undefined;
       }
       return { name: bestName, lastModified: bestTime };
+    } catch (error) {
+      throw wrapError(error);
+    } finally {
+      dav.close();
+    }
+  }
+
+  /**
+   * 上传一本书的阅读进度到 bookProgress/<书名>@<作者>.json（照上游 AppWebDav.upProgress）。
+   * 先写本地临时文件再走 WebDav.upload：rcp 的 UploadFromFile 只收文件路径，
+   * 不能直接把字符串塞进 body（fetch 的 body 默认上限 50MB 且这里没走 fetch）。
+   */
+  static async uploadBookProgress(context: Context, progress: BookProgress): Promise<void> {
+    const settings = await WebDavConfigStore.load(context);
+    if (!isWebDavConfigured(settings)) {
+      throw new WebDavError('账号或密码为空，请先在设置里填写', 0);
+    }
+    const root = buildWebDavRootUrl(settings);
+    const dir = buildBookProgressUrl(root);
+    const tempPath = `${context.cacheDir}/legado-progress-${Date.now()}.json`;
+    const dav = new WebDav(root, settings.account, settings.password);
+    try {
+      // 写字符串由底层按 UTF-8 编码；先 encodeInto 再 writeSync 在模拟器上会报 13900020。
+      const target = fileIo.openSync(tempPath, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE |
+        fileIo.OpenMode.TRUNC);
+      try {
+        fileIo.writeSync(target.fd, serializeBookProgress(progress));
+      } finally {
+        fileIo.closeSync(target);
+      }
+      await dav.makeAsDir(dir);
+      await dav.upload(tempPath, dir + bookProgressFileName(progress.name, progress.author),
+        'application/json');
+    } catch (error) {
+      throw wrapError(error);
+    } finally {
+      dav.close();
+      try { if (fileIo.accessSync(tempPath)) { fileIo.unlinkSync(tempPath); } } catch (error) {
+        console.error(`[WebDavSync] 清理进度临时文件失败: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  /** 拉某本书的远端进度。远端没有这个文件（404）时返回 undefined，不算失败。 */
+  static async downloadBookProgress(context: Context, name: string, author: string): Promise<BookProgress | undefined> {
+    const settings = await WebDavConfigStore.load(context);
+    if (!isWebDavConfigured(settings)) {
+      throw new WebDavError('账号或密码为空，请先在设置里填写', 0);
+    }
+    const root = buildWebDavRootUrl(settings);
+    const remoteUrl = buildBookProgressUrl(root) + bookProgressFileName(name, author);
+    const tempPath = `${context.cacheDir}/legado-progress-pull-${Date.now()}.json`;
+    const dav = new WebDav(root, settings.account, settings.password);
+    try {
+      if (!await dav.exists(remoteUrl)) {
+        return undefined;
+      }
+      await dav.downloadTo(remoteUrl, tempPath);
+      return parseBookProgress(fileIo.readTextSync(tempPath));
+    } catch (error) {
+      throw wrapError(error);
+    } finally {
+      dav.close();
+      try { if (fileIo.accessSync(tempPath)) { fileIo.unlinkSync(tempPath); } } catch (error) {
+        console.error(`[WebDavSync] 清理进度临时文件失败: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  /**
+   * 「只保留最新备份」：删掉远端除 keep 之外所有 backup 开头的文件。
+   * 名字不带 backup 前缀的一律不碰 —— 用户可能把别的文件放在同一个目录里。
+   */
+  static async deleteOtherBackups(context: Context, keep: string): Promise<number> {
+    const settings = await WebDavConfigStore.load(context);
+    if (!isWebDavConfigured(settings)) {
+      throw new WebDavError('账号或密码为空，请先在设置里填写', 0);
+    }
+    const root = buildWebDavRootUrl(settings);
+    const dav = new WebDav(root, settings.account, settings.password);
+    let removed = 0;
+    try {
+      const entries: WebDavEntry[] = await dav.listFiles(root);
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index];
+        if (entry === undefined || entry.isDirectory) { continue; }
+        if (!entry.displayName.startsWith('backup') || entry.displayName === keep) { continue; }
+        await dav.delete(root + entry.displayName);
+        removed += 1;
+      }
+      return removed;
     } catch (error) {
       throw wrapError(error);
     } finally {

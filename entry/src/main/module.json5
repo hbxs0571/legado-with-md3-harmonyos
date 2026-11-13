@@ -11,6 +11,10 @@
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"
+      },
+      {
+        // 记住用户选过的备份目录授权，重启后仍能直接往里写（fileshare.persistPermission）。
+        "name": "ohos.permission.FILE_ACCESS_PERSIST"
       }
     ],
     "abilities": [

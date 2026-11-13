@@ -31,6 +31,8 @@ import { AppCoverSettingsPage } from './AppCoverSettingsPage';
 import { AppDownloadCacheSettingsPage } from './AppDownloadCacheSettingsPage';
 import { ImportCandidate, LocalBookImportPage } from './LocalBookImportPage';
 import { planLocalBookImportReuse } from '../data/LocalBookImportPlanner';
+import { OldBookShelfImporter } from '../data/OldBookShelfImporter';
+import { BookProgress, createBookProgress } from '../model/BookProgress';
 import { BookshelfManagePage } from './BookshelfManagePage';
 import { CacheSettingsRepository } from '../data/CacheSettingsRepository';
 import { AppAiSettingsPage } from './AppAiSettingsPage';
@@ -38,7 +40,7 @@ import { AppTranslationSettingsPage } from './AppTranslationSettingsPage';
 import { AppPrivacySettingsPage } from './AppPrivacySettingsPage';
 import { AppLabSettingsPage } from './AppLabSettingsPage';
 import { AppBackupSettingsPage } from './AppBackupSettingsPage';
-import { WebDavSettings, defaultWebDavSettings, WebDavConfigStore, isWebDavConfigured } from '../lib/WebDavConfig';
+import { WebDavSettings, defaultWebDavSettings, WebDavConfigStore, cloneWebDavSettings, isWebDavConfigured } from '../lib/WebDavConfig';
 import { WebDavSync } from '../lib/WebDavSync';
 import { PrivacyNoticePage } from './PrivacyNoticePage';
 import { OpenSourceLicensePage } from './OpenSourceLicensePage';
@@ -137,7 +139,7 @@ import { ReaderBookmarkRepository } from '../data/ReaderBookmarkRepository';
 import { ReaderBookmarkExporter } from '../data/ReaderBookmarkExporter';
 import { sensor } from '@kit.SensorServiceKit';
 import { window } from '@kit.ArkUI';
-import { fileIo, picker } from '@kit.CoreFileKit';
+import { Environment, fileIo, fileShare, picker } from '@kit.CoreFileKit';
 import { ReaderBackgroundImageRepository } from '../data/ReaderBackgroundImageRepository';
 import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
@@ -733,6 +735,8 @@ struct Index {
     this.restoreHighlightTagRules(context);
     this.restoreCacheSettings(context);
     this.loadRestoredAndroidEntries(context);
+    // 不 await：远端探测要走网络，不能拖住首帧（上游 MainActivity.kt:1092-1116 也是启动时查一次）。
+    this.checkNewWebDavBackup(context);
   }
 
   aboutToDisappear(): void {
@@ -851,6 +855,25 @@ struct Index {
     if (context === undefined) { return; }
     await ReadRecordRepository.commit(context);
     await this.reloadReadRecordData(context);
+    await this.pushBookProgress(this.selectedBook, context);
+  }
+
+  /**
+   * 把一本书的阅读进度写到 WebDAV 的 bookProgress 目录。
+   * 照上游 backupSync 的思路：只上传进度、不参与 ZIP；失败只记日志，不打断阅读。
+   */
+  private async pushBookProgress(book: Book, context: Context): Promise<void> {
+    if (!this.webDavSettings.syncBookProgress || !isWebDavConfigured(this.webDavSettings)) {
+      return;
+    }
+    if (book.title.length === 0) { return; }
+    try {
+      const progress: BookProgress = createBookProgress(book.title, book.author,
+        book.chapterIndex ?? 0, book.chapterProgress ?? 0, Date.now(), book.lastChapter);
+      await WebDavSync.uploadBookProgress(context, progress);
+    } catch (error) {
+      console.error(`[Index] 上传阅读进度失败: ${error}`);
+    }
   }
 
   private async restoreReplaceRules(context: Context): Promise<void> {
@@ -5356,17 +5379,47 @@ struct Index {
     this.backupStatusMessage = '';
     let zipPath = '';
     let savedLocally = false;
+    // 提到 try 外：finally 里的上传与清理要用同一个名字，避免跨零点算出两个文件名。
+    const fileName = BackupRepository.backupFileName(this.webDavSettings.onlyLatestBackup);
     try {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const settings = await ReaderSettingsRepository.load(context);
       const bookshelfLayout = await BookshelfLayoutRepository.load(context);
       zipPath = await BackupRepository.buildBackupArchive(context, localBooks, settings,
         bookshelfLayout, this.backupIgnoreKeys, this.themeMode, this.themePaletteIndex, this.themeCustomColors);
-      const options = new picker.DocumentSaveOptions();
-      options.newFileNames = [`backup${BackupRepository.currentDate()}.zip`];
-      options.fileSuffixChoices = ['Legado Android 兼容备份|.zip'];
-      const uris = await new picker.DocumentViewPicker(context).save(options);
-      const uri = uris[0];
+      // 已记住备份目录时直接写进去，不再弹系统保存框（对齐上游固定备份路径）。
+      const backupDir = this.webDavSettings.backupPath.trim();
+      let uri: string | undefined = undefined;
+      if (backupDir.length > 0) {
+        const directPath = backupDir.endsWith('/') ? `${backupDir}${fileName}` : `${backupDir}/${fileName}`;
+        try {
+          const input = fileIo.openSync(zipPath, fileIo.OpenMode.READ_ONLY);
+          try {
+            // 带 TRUNC：固定目录下同名文件要整体覆盖，否则新包比旧包短会留下旧尾部。
+            const output = fileIo.openSync(directPath,
+              fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+            try {
+              fileIo.copyFileSync(input.fd, output.fd);
+            } finally {
+              fileIo.closeSync(output);
+            }
+          } finally {
+            fileIo.closeSync(input);
+          }
+          savedLocally = true;
+          this.backupStatusMessage = `Android 兼容 ZIP 已保存到 ${fileName}。`;
+        } catch (error) {
+          // 目录授权失效（换机、清数据、用户删目录）时回落到系统保存框，不让备份直接失败。
+          console.error(`[Index] 写入备份目录失败，回落到保存框: ${error}`);
+        }
+      }
+      if (!savedLocally) {
+        const options = new picker.DocumentSaveOptions();
+        options.newFileNames = [fileName];
+        options.fileSuffixChoices = ['Legado Android 兼容备份|.zip'];
+        const uris = await new picker.DocumentViewPicker(context).save(options);
+        uri = uris[0];
+      }
       if (uri !== undefined) {
         const input = fileIo.openSync(zipPath, fileIo.OpenMode.READ_ONLY);
         try {
@@ -5382,6 +5435,9 @@ struct Index {
         savedLocally = true;
         this.backupStatusMessage = 'Android 兼容 ZIP 已保存到你选择的位置。';
       }
+      if (savedLocally) {
+        await this.markBackupDone(context);
+      }
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `创建备份失败：${error.message}` : '创建备份失败';
     } finally {
@@ -5389,10 +5445,13 @@ struct Index {
         // 先本地后 WebDAV：本地 picker 可能被取消，反过来先传远端会留下「远端有、本地没有」的备份。
         // 同步模式 both 且已配置凭据时，本地成功后顺手上传同一份 zip；未配置则静默跳过，
         // 避免每次本地备份都弹一条「账号或密码为空」的失败提示。
-        if (savedLocally && this.webDavSettings.backupSyncMode === 'both' &&
+        // 判据从「等于 both」放宽到「不是 local」：新增的『仅 WebDAV』档也要在本地保存后上传。
+        if (savedLocally && this.webDavSettings.backupSyncMode !== 'local' &&
           isWebDavConfigured(this.webDavSettings)) {
           try {
-            await WebDavSync.uploadBackup(context, zipPath, `backup${BackupRepository.currentDate()}.zip`);
+            await WebDavSync.uploadBackup(context, zipPath, fileName);
+            await this.markBackupDone(context);
+            await this.cleanupOldBackups(fileName);
           } catch (error) {
             // 上游 Backup.kt:322 的 both 分支同样只记日志、不外抛：本地成功不该被 WebDAV 失败判为失败。
             console.error(`[Index] WebDAV 上传失败: ${error}`);
@@ -5403,6 +5462,293 @@ struct Index {
       }
       this.backupBusy = false;
     }
+  }
+
+  /** 记录最近一次成功备份的时间戳，供启动时的「自动检查新备份」比对。 */
+  private async markBackupDone(context: Context): Promise<void> {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.lastBackupTime = Date.now();
+    this.webDavSettings = next;
+    try {
+      await WebDavConfigStore.save(context, next);
+    } catch (error) {
+      console.error(`[Index] 记录备份时间失败: ${error}`);
+    }
+  }
+
+  /**
+   * 只保留最新备份：开着开关时清掉除 keep 之外的 backup 文件。
+   * 远端一定清；本地只在用户显式选过备份目录时清（那是我们自己的目录），
+   * picker 保存的位置不属于我们，绝不删用户文件。
+   */
+  private async cleanupOldBackups(keep: string): Promise<void> {
+    if (!this.webDavSettings.onlyLatestBackup) { return; }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      if (isWebDavConfigured(this.webDavSettings)) {
+        await WebDavSync.deleteOtherBackups(context, keep);
+      }
+    } catch (error) {
+      console.error(`[Index] 清理远端旧备份失败: ${error}`);
+    }
+    const backupDir = this.webDavSettings.backupPath.trim();
+    if (backupDir.length === 0) { return; }
+    try {
+      const names = fileIo.listFileSync(backupDir);
+      for (const name of names) {
+        // 只认我们自己生成的 backup*.zip，目录里别的文件一律不碰。
+        if (name === keep || !name.startsWith('backup') || !name.endsWith('.zip')) { continue; }
+        try { fileIo.unlinkSync(`${backupDir}/${name}`); } catch (error) {
+          console.error(`[Index] 删除旧备份 ${name} 失败: ${error}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Index] 列出备份目录失败: ${error}`);
+    }
+  }
+
+  /** 同时备份：本地保存成功后无条件上传，不看 backupSyncMode（上游的「两者都备」是显式动作）。 */
+  private async createLocalBackupBoth(): Promise<void> {
+    const before = this.webDavSettings.backupSyncMode;
+    // temporarily 设为 both 复用同一条流水线；结束后恢复用户设置。
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.backupSyncMode = 'both';
+    this.webDavSettings = next;
+    try {
+      await this.createLocalBackup();
+    } finally {
+      const restore: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+      restore.backupSyncMode = before;
+      this.webDavSettings = restore;
+    }
+  }
+
+  /**
+   * 选一个目录作为固定备份位置。
+   * 鸿蒙的目录授权是一次性的，必须 persistPermission 才能重启后继续写；
+   * 权限声明在 module.json5（ohos.permission.FILE_ACCESS_PERSIST 是 system_grant，不弹框）。
+   */
+  /**
+ * 目录实际能不能被应用写入：在目录下开一个探针文件再删掉。
+ *
+ * 不能用「picker 返回了 uri」当依据：系统目录选择器给的是 docs uri，
+ * fileIo 只有部分 uri 能直接打开，实测在 Download 上写入报 13900002。
+ */
+private canWriteInto(dir: string): boolean {
+    if (dir.length === 0) { return false; }
+    const probePath = dir.endsWith('/') ? `${dir}legado-probe-${Date.now()}.txt` : `${dir}/legado-probe-${Date.now()}.txt`;
+    try {
+      const probe = fileIo.openSync(probePath,
+        fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+      try {
+        fileIo.writeSync(probe.fd, 'probe');
+      } finally {
+        fileIo.closeSync(probe);
+      }
+      fileIo.unlinkSync(probePath);
+      return true;
+    } catch (error) {
+      console.error(`[Index] 目录不可写 ${dir}: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * 选固定备份目录。
+   *
+   * 两条路：用户选的目录若能直接写就用它；写不了（系统目录选择器给的 docs uri 应用侧
+   * 常常只能读不能建文件）就退到「用户下载目录」——Environment.getUserDownloadDir()
+   * 给出的是应用可写的沙箱路径，需要 READ_WRITE_DOWNLOAD_DIRECTORY 授权。
+   * 两条都写不了时不编造成功，如实提示「仍会弹系统保存框」，备份流程自然回落。
+   */
+  private async chooseBackupPath(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.selectMode = picker.DocumentSelectMode.FOLDER;
+      options.maxSelectNumber = 1;
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris[0];
+      if (uri === undefined) { return; }
+      try {
+        await fileShare.persistPermission([{ uri: uri, operationMode: fileShare.OperationMode.READ_MODE |
+          fileShare.OperationMode.WRITE_MODE }]);
+      } catch (error) {
+        // 授权失败仍可本次使用，只是重启后失效；不阻断用户。
+        console.error(`[Index] 记住目录授权失败: ${error}`);
+      }
+      const writable = this.canWriteInto(uri);
+      const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+      next.backupPath = writable ? uri : '';
+      await this.saveWebDavSettings(next);
+      this.backupStatusMessage = writable ? '已记住备份目录，之后备份直接写入这里。'
+        : '这个目录应用写不进去，已忽略；可改用「使用应用备份目录」。';
+    } catch (error) {
+      this.backupStatusMessage = error instanceof Error ? `选择备份目录失败：${error.message}` : '选择备份目录失败';
+    }
+  }
+
+  /**
+   * 把应用内的固定备份目录设为备份位置。
+   *
+   * 为什么不是系统「下载」目录：`Environment.getUserDownloadDir()` 要求
+   * READ_WRITE_DOWNLOAD_DIRECTORY，而该权限在 HarmonyOS NEXT 的模拟器/部分设备上
+   * 被系统直接判「not support」（实测 hilog：
+   * `[SPC][PermissionDialog][Model] ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY not support`），
+   * 拿不到授权。应用内 `filesDir/backups` 不需要任何权限，能稳定落盘，
+   * 备份不再弹系统保存框——代价是文件在应用沙箱里，需要时用系统「文件」的
+   * 应用目录入口或 WebDAV 取回。
+   */
+  private async useDownloadDirAsBackupPath(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const dir = `${context.filesDir}/backups`;
+      if (fileIo.accessSync(dir) === false) {
+        fileIo.mkdirSync(dir);
+      }
+      if (!this.canWriteInto(dir)) {
+        this.backupStatusMessage = '应用备份目录不可写，备份仍会弹系统保存框。';
+        return;
+      }
+      const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+      next.backupPath = dir;
+      await this.saveWebDavSettings(next);
+      this.backupStatusMessage = '已把备份目录设为应用内的 backups 目录，之后备份直接写入这里。';
+    } catch (error) {
+      this.backupStatusMessage = error instanceof Error ? `设置备份目录失败：${error.message}` : '设置备份目录失败';
+    }
+  }
+
+  private async clearBackupPath(): Promise<void> {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.backupPath = '';
+    await this.saveWebDavSettings(next);
+    this.backupStatusMessage = '已清除备份目录，之后每次备份都会弹系统保存框。';
+  }
+
+  /**
+   * 导入旧版 myBookShelf.json。
+   * 上游同时导书源与替换规则，本地只做书架：另外两份格式与本地模型差异更大，不在本批范围。
+   */
+  private async importOldBookShelf(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || this.backupBusy) { return; }
+    this.backupBusy = true;
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.fileSuffixFilters = ['JSON 文件|.json'];
+      options.maxSelectNumber = 1;
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris[0];
+      if (uri === undefined) { return; }
+      // 选择器给的是 file uri，readTextSync 只认沙箱路径，先落到 filesDir 再读（同 BookshelfListTransfer）。
+      const tempPath = `${context.filesDir}/old-shelf-${Date.now()}.json`;
+      let text = '';
+      try {
+        const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+        try {
+          fileIo.copyFileSync(source.fd, tempPath);
+        } finally {
+          fileIo.closeSync(source);
+        }
+        text = fileIo.readTextSync(tempPath);
+      } finally {
+        if (fileIo.accessSync(tempPath)) { fileIo.unlinkSync(tempPath); }
+      }
+      // 按 bookUrl 判重：旧版书落库时 bookUrl 就是 noteUrl，读回来也是它。
+      const existing = new Set<string>();
+      const current = await BookRepository.loadImportedBooks(context);
+      for (const book of current) { existing.add(BookRepository.bookUrlOf(book)); }
+      const parsed = OldBookShelfImporter.parse(text, existing);
+      if (parsed.books.length === 0) {
+        this.backupStatusMessage = parsed.skipped > 0
+          ? `没有可导入的旧版书目（跳过 ${parsed.skipped} 条：缺地址或已在书架）`
+          : '没有可导入的旧版书目';
+        return;
+      }
+      const merged = current.concat(parsed.books);
+      await BookRepository.saveImportedBooks(context, merged);
+      await this.reloadBooksAfterImport();
+      this.backupStatusMessage = parsed.skipped > 0
+        ? `已导入 ${parsed.books.length} 本旧版书目，跳过 ${parsed.skipped} 条；这些书只有书目与进度，需重新选择原文件才能阅读。`
+        : `已导入 ${parsed.books.length} 本旧版书目；这些书只有书目与进度，需重新选择原文件才能阅读。`;
+    } catch (error) {
+      this.backupStatusMessage = error instanceof Error ? `导入旧版数据失败：${error.message}` : '导入旧版数据失败';
+    } finally {
+      this.backupBusy = false;
+    }
+  }
+
+  /**
+   * 启动时查一次远端是否有比本地记录更新的备份（对齐上游 backupSync）。
+   * 只提示、不自动下载：自动覆盖本地进度的风险比省一次点击大得多。
+   */
+  private async checkNewWebDavBackup(context: Context): Promise<void> {
+    if (!this.webDavSettings.autoCheckNewBackup || !isWebDavConfigured(this.webDavSettings)) { return; }
+    try {
+      const latest = await WebDavSync.latestBackup(context);
+      if (latest === undefined) { return; }
+      if (latest.lastModified > this.webDavSettings.lastBackupTime) {
+        this.showUnavailableAction(`WebDAV 上有更新的备份（${latest.name}），可在「备份与恢复」里恢复`);
+      }
+    } catch (error) {
+      console.error(`[Index] 检查远端备份失败: ${error}`);
+    }
+  }
+
+  /**
+   * 增强进度同步：打开书时比对远端进度，远端更靠后就问一句要不要跳过去。
+   * 上游 ReadBook.syncProgress 是双向合并；本地只做「远端更新则提示跳转」这半边，
+   * 本地进度回传那半由 syncBookProgress 在退出阅读时完成（见 stopReaderSession）。
+   * 返回 undefined 表示不改进度，返回更新后的书表示用户选了跳转。
+   */
+  private async warnNewerRemoteProgress(book: Book): Promise<Book | undefined> {
+    if (!this.webDavSettings.syncBookProgress || !this.webDavSettings.syncBookProgressPlus ||
+      !isWebDavConfigured(this.webDavSettings) || book.title.length === 0) { return undefined; }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return undefined; }
+    let fetched: BookProgress | undefined = undefined;
+    try {
+      fetched = await WebDavSync.downloadBookProgress(context, book.title, book.author);
+    } catch (error) {
+      console.error(`[Index] 读取远端进度失败: ${error}`);
+      return undefined;
+    }
+    if (fetched === undefined) { return undefined; }
+    const remote: BookProgress = fetched;
+    if (remote.durChapterIndex <= (book.chapterIndex ?? 0)) { return undefined; }
+    const jump = await new Promise<boolean>((resolve: (value: boolean) => void) => {
+      this.getUIContext().showAlertDialog({
+        title: '发现更新的阅读进度',
+        message: `WebDAV 上这本书读到第 ${remote.durChapterIndex + 1} 章，比本地更靠后。`,
+        autoCancel: true,
+        primaryButton: {
+          value: '取消',
+          action: () => { resolve(false); }
+        },
+        secondaryButton: {
+          value: '跳转',
+          action: () => { resolve(true); }
+        }
+      });
+    });
+    if (!jump) { return undefined; }
+    const next: Book = BookRepository.copyBook(book);
+    next.chapterIndex = remote.durChapterIndex;
+    next.chapterProgress = remote.durChapterPos;
+    if (remote.durChapterTitle.length > 0) { next.lastChapter = remote.durChapterTitle; }
+    try {
+      const books = this.books.map((item: Book) => item.id === next.id ? next : item);
+      await BookRepository.saveImportedBooks(context, books);
+      this.books = books;
+    } catch (error) {
+      // 写回失败不阻断阅读：跳转至少这次生效，下次会再问一次
+      console.error(`[Index] 写回远端进度失败: ${error}`);
+    }
+    return next;
   }
 
   private async saveWebDavSettings(next: WebDavSettings): Promise<void> {
@@ -5445,8 +5791,10 @@ struct Index {
       const bookshelfLayout = await BookshelfLayoutRepository.load(context);
       zipPath = await BackupRepository.buildBackupArchive(context, localBooks, settings,
         bookshelfLayout, this.backupIgnoreKeys, this.themeMode, this.themePaletteIndex, this.themeCustomColors);
-      const fileName = `backup${BackupRepository.currentDate()}.zip`;
+      const fileName = BackupRepository.backupFileName(this.webDavSettings.onlyLatestBackup);
       await WebDavSync.uploadBackup(context, zipPath, fileName);
+      await this.markBackupDone(context);
+      await this.cleanupOldBackups(fileName);
       this.backupStatusMessage = `已上传 ${fileName} 到 WebDAV。`;
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `上传 WebDAV 失败：${error.message}` : '上传 WebDAV 失败';
@@ -6384,6 +6732,8 @@ struct Index {
 
   private async openBook(book: Book): Promise<void> {
     this.checkReadRecordAlias(book);
+    const progressSynced = await this.warnNewerRemoteProgress(book);
+    if (progressSynced !== undefined) { book = progressSynced; }
     if (book.contentPath === undefined) {
       this.showUnavailableAction(BookRepository.isBodyMissing(book)
         ? '已恢复书目和阅读位置；备份不含正文，请重新选择原书文件后阅读'
@@ -9039,7 +9389,12 @@ struct Index {
             onWebDavSettingsChange: (settings: WebDavSettings) => this.saveWebDavSettings(settings),
             onTestWebDav: () => this.testWebDav(),
             onBackupToWebDav: () => this.backupToWebDav(),
-            onRestoreFromWebDav: () => this.restoreFromWebDav()
+            onRestoreFromWebDav: () => this.restoreFromWebDav(),
+            onCreateBackupBoth: () => this.createLocalBackupBoth(),
+            onChooseBackupPath: () => this.chooseBackupPath(),
+            onUseDownloadDir: () => this.useDownloadDirAsBackupPath(),
+            onClearBackupPath: () => this.clearBackupPath(),
+            onImportOldShelf: () => this.importOldBookShelf()
           })
         } else if (this.profileSubpage === ProfileRoute.APP_LAB_SETTINGS) {
           AppLabSettingsPage({
