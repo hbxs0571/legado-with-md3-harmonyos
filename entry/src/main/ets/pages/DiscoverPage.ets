@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
 
 interface DiscoverSourceDemo {
@@ -148,10 +149,10 @@ export struct DiscoverPage {
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
                   Image($r('app.media.reader_next')).width(20).height(20).fillColor(this.expandedSourceName === source.name ? this.themeColorAccent : '#C5C7D0')
                     .rotate({ angle: this.expandedSourceName === source.name ? 90 : 0 })
-                    .animation({ duration: 200, curve: Curve.EaseInOut })
+                    .animation({ curve: curves.springMotion(0.35, 0.86) })
                 }.width('100%').padding({ left: 14, right: 12, top: 14, bottom: 14 })
                   .onClick(() => {
-                    animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
+                    this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
                       this.expandedSourceName = this.expandedSourceName === source.name ? '' : source.name;
                       this.showSearch = false;
                     });

@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
 
 @Component
@@ -49,7 +50,8 @@ export struct SubscriptionPage {
 
   private setCollapsedHeader(collapsed: boolean): void {
     if (this.collapsedHeader === collapsed) { return; }
-    animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+    // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
+    this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
       this.collapsedHeader = collapsed;
     });
   }

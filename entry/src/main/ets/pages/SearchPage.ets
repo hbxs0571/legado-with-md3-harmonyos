@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { Book } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
@@ -96,7 +97,10 @@ export struct SearchPage {
   private updateHeader(offset: number): void {
     const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
-      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+      // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
+      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+        this.collapsedHeader = shouldCollapse;
+      });
     }
   }
 

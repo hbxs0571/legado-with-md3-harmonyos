@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { AppRoute, Book, BookChapter, bookCoverColor, bookCoverMark, BookMediaType, ProfileRoute } from '../model/Book';
 import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { HomePage } from './HomePage';
@@ -3030,7 +3031,7 @@ struct Index {
   private readerRouteTransition(): TransitionEffect {
     const fade = TransitionEffect.OPACITY.animation({ duration: 220 });
     if (!this.themeReaderSharedElement) { return fade; }
-    return fade.combine(TransitionEffect.scale({ x: 0.92, y: 0.92 }).animation({ duration: 220 }));
+    return fade.combine(TransitionEffect.scale({ x: 0.92, y: 0.92 }).animation({ curve: curves.springMotion(0.3, 0.85) }));
   }
 
   /** 阅读界面共享元素动画开关。上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */

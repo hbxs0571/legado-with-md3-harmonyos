@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 
@@ -21,7 +22,10 @@ export struct AppLabSettingsPage {
     const offset = this.settingsScroller.currentOffset().yOffset;
     const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
-      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+      // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
+      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+        this.collapsedHeader = shouldCollapse;
+      });
     }
   }
 

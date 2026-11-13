@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { Book, bookCoverMark } from '../model/Book';
 import { BookGroup, BookGroupDraft, BOOK_SORT_OPTIONS, BookSortOption, bookSortLabel } from '../model/BookGroup';
 import {
@@ -2186,7 +2187,7 @@ export struct BookshelfPage {
           }
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
           .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 1, y: 0.6 })).animation({ duration: 220, curve: Curve.EaseInOut }))
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 1, y: 0.6 })).animation({ curve: curves.springMotion(0.3, 0.85) }))
       }
 
       // 分组样式为「文件夹」时：根层显示分组卡片，点进分组后顶部给一条返回入口。
@@ -2511,7 +2512,8 @@ export struct BookshelfPage {
           .onScroll(() => {
             const shouldCollapse = Math.abs(this.bookshelfScroller.currentOffset().yOffset) > 60;
             if (this.collapsedHeader !== shouldCollapse) {
-              animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+              // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
+              this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
                 this.collapsedHeader = shouldCollapse;
               });
             }

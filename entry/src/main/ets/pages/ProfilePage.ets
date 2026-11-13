@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import {
   PROFILE_PAGE_TITLE_SIZE,
@@ -96,7 +97,8 @@ export struct ProfilePage {
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.profileScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) {
-          animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+          // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
+          this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
             this.collapsedHeader = shouldCollapse;
           });
         }

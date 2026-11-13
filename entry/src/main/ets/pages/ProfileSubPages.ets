@@ -1,4 +1,5 @@
 /** “我的”菜单下与 Android 页面结构对应的二级页面。 */
+import curves from '@ohos.curves';
 import { bundleManager } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
@@ -4216,7 +4217,10 @@ export struct AboutAppPage {
     const offset = this.aboutScroller.currentOffset().yOffset;
     const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
-      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+      // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
+      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+        this.collapsedHeader = shouldCollapse;
+      });
     }
   }
 
@@ -4325,7 +4329,10 @@ export struct AppSettingsHomePage {
     const offset = this.settingsScroller.currentOffset().yOffset;
     const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
-      animateTo({ duration: 220, curve: Curve.EaseInOut }, () => this.collapsedHeader = shouldCollapse);
+      // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
+      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+        this.collapsedHeader = shouldCollapse;
+      });
     }
   }
   @StorageProp('themeCardRadius') themeCardRadius: number = 16;
