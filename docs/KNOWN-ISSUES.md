@@ -58,12 +58,12 @@
 
 ### 本地书籍行登记（BOOKSHELF.md 的 localBook 未接行）
 
-本节登记 [书籍总账](parity/BOOKSHELF.md) 里 `localBook` 名下 **72 行 `未接`** 的「为什么不修」。编号 `KI-LB<n>` 与对照表「备注」列的标记一一对应。判定口径按 [PROJECT.md](PROJECT.md)：只有上游存在、且属于本地书籍这条链路的能力才补；依赖尚未迁移的体系或纯视觉差异的，登记不修。**2026-11-09 起 WebDAV 与在线书源已纳入范围（`PROJECT.md:24-44`，尚未排期）**，依赖它们的两类不再按「范围之外」处理，改为「要接，待排期」；仍在[范围之外](PROJECT.md)（`PROJECT.md:46-48`）的是 AI 在线服务、云同步与额外设备形态。
+本节登记 [书籍总账](parity/BOOKSHELF.md) 里 `localBook` 名下 **72 行 `未接`** 的「为什么不修」。编号 `KI-LB<n>` 与对照表「备注」列的标记一一对应。判定口径按 [PROJECT.md](PROJECT.md)：只有上游存在、且属于本地书籍这条链路的能力才补；依赖尚未迁移的体系或纯视觉差异的，登记不修。**2026-11-09 起 WebDAV 与在线书源已纳入范围（`PROJECT.md:24-44`，尚未排期）**，依赖它们的两类不再按「范围之外」处理，改为「要接，待排期」；仍在[范围之外](PROJECT.md)（`PROJECT.md:46-48`）的是 AI 在线服务、云同步与额外设备形态。 **r341 收口按语（2026-11-13）**：下面 KI-LB1–LB6 与「附注」是 **r323 当时的历史登记**——当时 `localBook` 名下有 72 行 `未接`，这些段落写的是「为什么不修 / 补法」的快照，其中的本地代码行号、`selectBooksSql` 列数、「全仓 0 命中」等断言**已随 r341 批 1–12 落地而过时**。现状以 [书籍总账](parity/BOOKSHELF.md) 的 `scripts/parity-rows.py` 实跑为准：批 2 补齐书籍卡片信息行与 `latestChapterTitle`/`lastCheckCount`/`wordCount` 等字段读取、批 5 接通选择模式与批量动作、批 6 接通私密体系（`isPrivate` 从库里读出并参与访问控制）、批 7 接通详情页更多菜单/头部三行/封面手势/摘要三分支/chip 标签编辑/自绘删除面板、批 9 新建书架管理整页。下列标「r341 已接」的行即已被推翻者；仍依赖在线书源、逐章下载器、EPUB 打包器的部分维持 `**要接**`，逐行阻塞原因见 [BOOKSHELF.md](parity/BOOKSHELF.md) 的 `## r340 复核结论` 收口说明。下面把几处最扎眼的「本地现状」断言就地改为 r341 现状（标 `r341 已接`）；「为什么不修 / 补法」等 r323 规划文字保留供追溯，不再逐句改写。
 
 **KI-LB1 书架卡片信息行（16 行，属 bookshelfLayout 视觉差异，本轮不修）** —— 覆盖卡片副标题作者行、紧凑模式「作者 · N 未读」副标题、列表卡片描述行显示当前章、标题区未读徽标叠加更新图标、封面无障碍描述、未读章节数角标、更新小红点、更新中进度指示、书籍类型标签、来源标签（搜索模式）、自定义标签行、列表模式简介、最后更新时间、最新章节、字数统计、等待更新数。
 上游 `ui/main/bookshelf/BookItem.kt:865`（`subTitle`）、`:870`（`desc`）、`:855-864`（`TextCard` 未读徽标）、`:754-765`（`bookTypeLabel`）、`:765-773`（`matchedSourceLabel`）、`:888`（`bookshelfShowTag`）、`:919`（`BookItemIntro`）、`:944-951`（最后更新时间）、`:952-959`（最新章节）、`:814`/`:838`（`accessibilityLabel`）；计数来源 `BookShelfItem.kt:48`（`isNew` = `lastCheckCount > 0`）、`:50`（`getUnreadChapterNum` = `max(totalChapterNum - durChapterIndex - 1, 0)`）；开关 `BookshelfConfigSheet.kt:511`（标签内容二级面板）、`:579`（等待更新数）、`:703`/`:734`（`bookshelfShowWordCount`）。
-本地：`pages/BookshelfPage.ets:655-675` 的卡片只有 `BookCover` + 书名 `Text`，没有任何副标题/描述/徽标；`components/BookCover.ets:43-50` 的角标显示的是**总章数**，不是未读数。
-为什么不修：这些全是书架卡片的**排版层**，改这一行动的是 `bookshelfLayout` 类别的键与视觉，不是 `localBook` 的数据映射，按本轮范围（不含 A1/A2 里属于 bookshelfLayout 的视觉差异）排除。另外 `unread`、`isNew`、`showTip`、`bookshelfShowWordCount`、`bookshelfShowTag` 在本地全仓命中为 0 或只有无关同名，要先补整套计数与开关才有显示对象，属于 `bookshelfLayout` 的独立排期。
+本地（r341 已接）：批 2 已在书籍卡片上补齐作者/紧凑「作者 · N 未读」、未读角标与更新红点、书籍类型标签、横向标签行、最新章节、最后更新时间、列表标题右侧未读徽标；r323 此处写的「只有 `BookCover` + 书名 `Text`」「封面角标是总章数」已不成立。
+为什么不修（r323 历史结论，r341 已被推翻）：批 2 已按 `bookshelfLayout` 补齐整套计数与开关（`showUnread`/`showUnreadNew`/`showTip`/`bookshelfShowTag`/`bookshelfShowWordCount` 等 10 个键）并落卡片渲染；本节「全仓命中为 0」的断言已过时。其余排版层仍以 bookshelfLayout 独立排期项的形态登记。
 补法：先补 `lastCheckCount` / `totalChapterNum` 的读出（见 KI-LB1 附注），再按 `bookshelfLayout` 单独立项做卡片信息行。
 
 **KI-LB2 书架菜单与批量操作（9 行）** —— 覆盖更多菜单·添加网址、导出书单、导入书单、拖拽重排书架、移动到分组、批量私密标记、批量删除、删除时勾选删除源文件、私密分组锁定页。
@@ -74,13 +74,13 @@
 
 **KI-LB3 详情页顶栏与更多菜单（10 行）** —— 覆盖顶栏更多菜单（18 项）及其中的上传书籍、同步到远端、禁用阅读记录、置顶、设置书籍变量、允许更新、长按分章、删除确认、设为私密。
 上游：`ui/book/info/BookInfoScreen.kt:1033-1141`（更多菜单）、`ui/book/info/BookInfoContract.kt:376-396`（菜单项定义）。
-本地：`pages/BookInfoPage.ets:268` 的 more 按钮直接 `onUnavailableAction('书籍更多操作尚未迁移')`，整组 18 项没有入口。
+本地（r341 已接）：批 7 把详情页「更多」按钮从 `onUnavailableAction` 占位改成 `BookInfoMoreMenu()` （置顶、刷新书籍信息、删除确认开关），批 6 补上「设为私密/取消私密」，批 7 还接通置顶 `topBook` 与刷新 `refreshBookInfo`；r323 此处写的「整组 18 项没有入口」已不成立（其余仍依赖在线书源）。
 为什么不修：其中「上传书籍」「同步到远端」依赖 WebDAV（本表 E 块已登记 WebDAV 四行未接）；「禁用阅读记录」「允许更新」「设为私密」需要 `books` 表的 `disableReadRecord`/`canUpdate`/`isPrivate` 三列——DDL 里有（`data/RdbSchema.ets:253`、`:252`、`:91`），但 `data/BookRepository.ets:127-131` 的 `selectBooksSql` 只 SELECT 22 列、`:674-717` 的 `readBookRow` 也没读它们，属于「列在库里但读不出来」；「长按分章」需要 `splitLongChapter`，本地全仓 0 命中。
 补法：先把上述三列加进 `selectBooksSql` 与 `readBookRow`，再逐项接菜单；`splitLongChapter` 要单独设计存储（上游内嵌在 `ReadConfig`）。
 
 **KI-LB4 详情页头部与摘要（13 行）** —— 覆盖移出书架后「点击移出」提示、头部书名（含长按菜单）、头部作者行（点击/长按）、头部来源行、封面点击与长按、封面无障碍描述、加入书架（含冲突提示）、长按加入书架选分组、动作卡·换源、摘要·已读状态三分支、摘要·目录加载失败提示、摘要·备注卡片可点编辑、私密锁定内容页。
 上游：`ui/book/info/BookInfoScreen.kt:1405-1416`/`:1425`（`click_to_remove`/`long_press_group` 两段轮播提示）、`:1298-1320`（书名 `AnimatedTextLine` + `combinedClickable`）、`:1326`（作者）、`:1335-1339`（来源行）、`:1144`（封面点击/长按）、`:1164`（封面无障碍）、`:1390-1485`（加入书架与冲突提示）、`:1533-1625`（摘要）、`:664`（私密锁定内容页）。
-本地：`pages/BookInfoPage.ets:158-163` 书名/作者/来源全是纯 `Text`，无点击与长按；`:156` 封面不可点；`:188-192` 的动作卡是「移出书架」而非「加入书架」（本地只有书架内路径）；`:207-208` 只有「已读 N 章 / 未读」两分支，缺上游「已读完」第三分支（判定 `durChapterIndex + 1 == totalChapterNum`，需要 `totalChapterNum` 读出）；`:245-250` 备注只读无 `onClick`。
+本地（r341 已接）：批 7 已给书名加点击进搜索 + 长按「搜索/展开收起」菜单、作者点击进搜索、封面点击换封面 + 长按全屏看图 + 无障碍描述、备注块可点进编辑、摘要第三段改成「未读/已读完/已读 N 章」三分支；r323 此处写的「全是纯 `Text`、封面不可点、两分支、备注只读」已不成立。
 为什么不修：「加入书架/长按选分组」依赖搜索进详情的路径（本地还没有在线书源搜索）；「动作卡·换源」依赖书源体系；「私密锁定内容页」依赖 KI-LB2 的私密体系；其余是交互与无障碍细节，属独立排期。
 补法：「已读三分支」可随 `totalChapterNum` 读出一起补；备注可点编辑可复用已有的元数据编辑面板。
 
@@ -93,11 +93,11 @@
 **KI-LB6 书架管理页（13 行，整页未迁移）** —— 覆盖整个页面（`BookshelfManageScreen.kt` 1777 行 + `BookshelfManageScreenViewModel.kt` 1136 行）及其顶栏标题随分组名变化、分组筛选按钮、书籍行、行内加分组、行内更多菜单、选择模式·批量换源、选择模式·移入分组、选择模式·删除、书源选择面板、换源预览面板、其它书源选项、删除确认框。
 上游：`ui/book/manage/BookshelfManageScreen.kt`（全文件）与同名 ViewModel。
 本地：批 9（r341）已新建 `pages/BookshelfManagePage.ets` 整页；`pages/BookshelfPage.ets:2117`–`:2118` 的「书架管理」菜单项已改调 `onOpenBookshelfManage(activeFilter())`，不再是 `onUnavailableAction('书架管理尚未迁移')`。
-为什么不修：这是**整页未迁移**，不是 `localBook` 备份链路的缺口。它盘的是「书架管理」这个界面，其中 5 行（批量换源、书源选择面板、换源预览面板、其它书源选项）还依赖书源体系。
+为什么不修（r323 历史结论，r341 已被推翻）：批 9 已新建 `pages/BookshelfManagePage.ets` 整页并接通标题/分组筛选/书籍行/行内加分组/行内更多/移入分组/删除/删除确认框（见上一行）；仅 5 行（批量换源、书源选择面板、换源预览面板、其它书源选项）仍依赖书源体系、维持 `**要接**`。
 补法：整页单独立项，先做不依赖书源的 8 行（标题、分组筛选、书籍行、行内加分组、行内更多菜单、移入分组、删除、删除确认框）。
 
-**附注：`localBook` 五个「列在库里但读不出来」的字段**
-`data/RdbSchema.ets` 的 `books` 表 DDL 已有 `isPrivate`（`:91`）、`latestChapterTitle`（`:242`）、`canUpdate`（`:252`）、`disableReadRecord`（`:253`）、`totalChapterNum`（`:246`）、`lastCheckCount`（`:245`）六列，但 `data/BookRepository.ets:127-131` 的 `selectBooksSql` 只 SELECT 22 列，`:674-717` 的 `readBookRow` 也没读它们，`model/Book.ets` 里也就没有对应字段。上面 KI-LB1/LB3/LB4 多条「未接」的直接原因都是这一处，而不是能力本身做不了。`splitLongChapter`、`deleteAlert` 两列全仓 0 命中，是真的没有。
+**附注：`localBook` 六个「列在库里」的字段（r341 已补进 `selectBooksSql` / `readBookRow`）**
+`data/RdbSchema.ets` 的 `books` 表 DDL 早有 `isPrivate`/`latestChapterTitle`/`canUpdate`/`disableReadRecord`/`totalChapterNum`/`lastCheckCount` 六列。r323 时这些列「在库里但 `selectBooksSql` 不 SELECT、`readBookRow` 不读、`model/Book.ets` 无字段」；**r341 已改**：批 2 把 `latestChapterTitle`/`lastCheckCount`/`wordCount` 追加进 `selectBooksSql`（末尾索引 24/25/26）与 `readBookRow`/`toBookArgs`，批 6 同样补 `isPrivate` 三处读取并参与访问控制。本节「六列读不出来」的直接原因已消除；`splitLongChapter`/`deleteAlert` 另有处理（`deleteAlert` 由批 7 新建 `data/BookInfoSettings.ets` 落盘）。
 
 ## 阅读与规则
 
