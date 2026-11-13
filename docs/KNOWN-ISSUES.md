@@ -45,7 +45,7 @@
 - 书架布局九字段的 Android ZIP 差异值往返、外部 Android ZIP 分组导入导出尚未完成 E 端设备验收。
 - r256 已验证隐藏页签后从分组管理切换到“本地未分组”并在冷启动后保留；没有自定义分组的设备场景未覆盖自定义筛选项。
 - 分组卡片的拖拽排序、封面实际选择/冷启动读回仍未验。
-- `isPrivate` 只保存兼容标记，不提供访问保护；`enableRefresh` 不控制分组更新。r257 已将这两项 UI 文案明确为未生效/未接入。
+- `isPrivate` 已不再是纯标记：批 6（r341）接通密码校验（PBKDF2）、解锁授权集、私密分组锁定页与封面遮罩；`**不接**` 的是指纹解锁。`enableRefresh` 仍不控制分组更新（分组刷新未接入）。
 
 ## Android ZIP 兼容
 
@@ -68,8 +68,8 @@
 
 **KI-LB2 书架菜单与批量操作（9 行）** —— 覆盖更多菜单·添加网址、导出书单、导入书单、拖拽重排书架、移动到分组、批量私密标记、批量删除、删除时勾选删除源文件、私密分组锁定页。
 上游：`ui/main/bookshelf/BookshelfScreen.kt:729`（添加网址）、`:756`（导出书单）、`:764`（导入书单）、`:1743-1748`/`:1795-1800`（`rememberReorderableLazyGridState` 拖拽）、`:643`（移动到分组）、`:655-668`（批量私密）、`:679`（批量删除）、`:1540-1572`/`:1552-1563`（删除时勾选删源文件）、`:1619-1646`（私密分组锁定页）。
-本地：`pages/BookshelfPage.ets:590-599` 四个 `MenuItem` 全部走 `onUnavailableAction`（「网址导入尚未迁移」「书单导出尚未迁移」「书单导入尚未迁移」）；`批量` 全仓 0 命中；拖拽只实现在分组管理面板（`pages/BookshelfPage.ets:266` `.onMove`、`:274` `.editMode(true)`），书架网格没有 `onMove`。
-为什么不修：网址导入与书单导入导出是**独立能力**（要解析 `bookshelf.json` 之外的书单格式），不是 `localBook` 备份链路的缺口；批量操作与私密体系都依赖 `Book.isPrivate`（本地只有分组级 `BookGroup.isPrivate`，语义不同，`pages/BookshelfPage.ets:257` 的文案已注明「私有标记未生效」）。
+- 本地：`pages/BookshelfPage.ets` 的「更多」菜单里「导出书单 / 导入书单 / 日志」三项已于 r341 批 1 接通（书单 JSON 落盘与导入、AppLog 日志页）；「网址导入」仍是占位（`onUnavailableAction`），随在线书源模块；批量操作已于 r341 批 5 接通。
+为什么不修：网址导入依赖在线书源模块（要解析远端网址），不在 r341 范围内；「书单导入导出」与「批量/私密」曾登记为缺口，现已分别由 r341 批 1 / 批 5 / 批 6 接通（`Book.isPrivate` 已补字段与三处读取，`pages/BookshelfPage.ets` 的「私有标记未生效」占位文案已去掉）。
 补法：书单导入导出与网址导入各自单独立项；私密体系要先把书级 `isPrivate` 从 `books` 表读出来（`data/BookRepository.ets:127-131` 的 `selectBooksSql` 目前不 SELECT 该列）。
 
 **KI-LB3 详情页顶栏与更多菜单（10 行）** —— 覆盖顶栏更多菜单（18 项）及其中的上传书籍、同步到远端、禁用阅读记录、置顶、设置书籍变量、允许更新、长按分章、删除确认、设为私密。
@@ -92,7 +92,7 @@
 
 **KI-LB6 书架管理页（13 行，整页未迁移）** —— 覆盖整个页面（`BookshelfManageScreen.kt` 1777 行 + `BookshelfManageScreenViewModel.kt` 1136 行）及其顶栏标题随分组名变化、分组筛选按钮、书籍行、行内加分组、行内更多菜单、选择模式·批量换源、选择模式·移入分组、选择模式·删除、书源选择面板、换源预览面板、其它书源选项、删除确认框。
 上游：`ui/book/manage/BookshelfManageScreen.kt`（全文件）与同名 ViewModel。
-本地：无此页；`pages/BookshelfPage.ets:594-595` 的「书架管理」菜单项直接 `onUnavailableAction('书架管理尚未迁移')`。
+本地：批 9（r341）已新建 `pages/BookshelfManagePage.ets` 整页；`pages/BookshelfPage.ets:2117`–`:2118` 的「书架管理」菜单项已改调 `onOpenBookshelfManage(activeFilter())`，不再是 `onUnavailableAction('书架管理尚未迁移')`。
 为什么不修：这是**整页未迁移**，不是 `localBook` 备份链路的缺口。它盘的是「书架管理」这个界面，其中 5 行（批量换源、书源选择面板、换源预览面板、其它书源选项）还依赖书源体系。
 补法：整页单独立项，先做不依赖书源的 8 行（标题、分组筛选、书籍行、行内加分组、行内更多菜单、移入分组、删除、删除确认框）。
 

@@ -55,7 +55,7 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A1 书架主屏与卡片 | 78 | 71 | 7 | 0 |
+| A1 书架主屏与卡片 | 78 | 72 | 6 | 0 |
 | A2 书架设置面板 | 47 | 47 | 0 | 0 |
 | A3 分组管理 | 22 | 21 | 0 | 1 |
 | B 书籍详情页与元数据 | 80 | 42 | 37 | 1 |
@@ -63,7 +63,7 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | D 缓存管理页（整界面，r286 新增） | 53 | 36 | 17 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 13 | 4 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 7 | 0 | 0 |
-| 合计 | 345 | 275 | 65 | 5 |
+| 合计 | 345 | 276 | 64 | 5 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），原本是迁移前证据、未逐行复核，**r340 已逐行复核**（结论见 `## r340 复核结论`，其中 26 行改判 `已接`、2 行新增 `不适用`、174 行标 `**要接**`、9 行标 `**不接**`）；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -93,7 +93,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 更多菜单·分组管理 | `BookshelfScreen.kt:721` | `pages/BookshelfPage.ets:588` | 已接 | 打开同一 sheet 的分组面板 | 点后弹出分组管理网格 | — | bookGroup |
 |  更多菜单·添加网址  |  `BookshelfScreen.kt:729`  |  `pages/BookshelfPage.ets:590`  | 未接 |  本地 `onUnavailableAction('网址导入尚未迁移')`  |  粘贴网址后成功建立书籍条目  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2 ；**要接**：依赖在线书源与网址导入；书源已纳入范围未排期（docs/PROJECT.md:24-44），随该模块做 |  localBook  |
 |  更多菜单·选择模式  |  `BookshelfScreen.kt:737`  |  `pages/BookshelfPage.ets` 的 `MoreMenu()`  | 已接 |  本地 `onUnavailableAction('书架选择模式尚未迁移')` ；**实现（r341）**：`MoreMenu()` 的「选择模式」项改调 `toggleSelectionMode()`，进出编辑态由 `selectionMode` 驱动（批 1 时该项已判为「只差选择模式本体」，本批补齐）  |  书架「更多」菜单点「选择模式」进入编辑态，顶栏副标题变「已选 0 本 · 本组共 210 本」  |  缺口见本块下方七条  |  —  |
-|  更多菜单·书架管理  |  `BookshelfScreen.kt:745`  |  `pages/BookshelfPage.ets:594`  | 未接 |  本地 `onUnavailableAction('书架管理尚未迁移')`  |  打开书架管理页并可批量清理  |  — ；**要接**：菜单项与页签按钮是纯 UI 入口，目标页/动作已存在或在 D 块排期内 |  —  |
+|  更多菜单·书架管理  |  `BookshelfScreen.kt:745`  |  `pages/BookshelfPage.ets:2117`、`:2118`、`pages/BookshelfManagePage.ets`  | 已接 |  判断段写「本地 `onUnavailableAction('书架管理尚未迁移')`」已过时：批 9 已把菜单项改调 `onOpenBookshelfManage(activeFilter())` 并交付整页（顶栏/分组筛选/书籍行/选择工具条/批量删除/导出）；**实现（r341，收口补改）**：菜单项与整页都在，判断段与各批均漏回填这一行  |  书架「更多」菜单点「书架管理」进入整页，标题随当前分组名变，能多选后批量删除、能逐本导出；从「全部」进时标题「离线缓存」  |  菜单项与页签按钮是纯 UI 入口，目标页已在 D 块交付  |  —  |
 |  更多菜单·导出书单  |  `BookshelfScreen.kt:756`  |  `data/BookshelfListTransfer.ets`、`pages/BookshelfPage.ets` 的 `exportBookList()`  | 已接 |  **实现（r341）**：`BookshelfListTransfer.exportList()` 用 `DocumentViewPicker.save()` 写 `bookshelf.json`，格式照上游 `ExportBookshelfUseCase.kt:20-79` 的 `[{name,author,intro}]`（`title→name`、`description→intro`）；更多菜单项由占位改真动作  | 点「导出书单」弹系统保存框（默认名 `bookshelf.json`），保存后 toast「已导出 210 本书到 bookshelf.json」，下载管理器里能看到该文件  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2  |  localBook  |
 |  更多菜单·导入书单  |  `BookshelfScreen.kt:764`  |  `data/BookshelfListTransfer.ets`、`pages/BookshelfPage.ets` 的 `importBookList()`  | 已接 |  **实现（r341）**：`selectAndParse()` 用 `DocumentViewPicker.select()` 限 `.json`/`.txt`，解析 `[{name,author,intro}]`；`toBooks()` 按 `title+author` 判重后构造缺正文占位书，经 `onImportBookList` 回调交 `Index` 用 `saveImportedBooks` 落库。与批 10 `:554` 选书文件（TXT/EPUB）不是一回事  | 选刚导出的 `bookshelf.json` 导入，toast「书单里没有可导入的新书（可能都已存在）」、书架仍「共 210 本」  |  见 [已知问题](../KNOWN-ISSUES.md#本地书籍行登记bookshelfmd-的-localbook-未接行) KI-LB2  |  localBook  |
 |  更多菜单·日志  |  `BookshelfScreen.kt:772`  |  `lib/AppLog.ets`、`pages/BookshelfPage.ets` 的 `LogSheetContent()`  | 已接 |  **实现（r341）**：新建 `lib/AppLog.ets`（500 条环形内存缓冲 `put/getAll/clear`），把 `BookRepository` 5 处 `console.error` 换成 `AppLog.put`；日志页做成 `bindSheet` 第三分支（`List+ForEach` 等宽小字 + 底部「清空」），菜单项由占位改真动作  | 点「日志」打开日志页，有「书架已显示 210 本书」等条目；点「清空」后显示「暂无日志」  |  进程内存日志，重启即空  |  —  |
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 ## 小结
 
-**全表合计 345 条：已接 275、未接 65、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 65 行按备注列分：`**要接**` 49 行、`**不接**` 16 行，逐行判断见上一节。
+**全表合计 345 条：已接 276、未接 64、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 64 行按备注列分：`**要接**` 48 行、`**不接**` 16 行，逐行判断见上一节。
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
@@ -589,7 +589,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 上面 211 行 `未接` 已逐行复核（取证材料 19,774 行：每行带上游原文、本地 `文件:行`、「定义处 / 消费处」两处行号）。复核结论落在三处：**改判 `已接`** 的写进「差异说明」末尾加「验收方式」的屏幕现象；**判 `不适用`** 的写进「差异说明」末尾并把「验收方式」改 `—`；**维持 `未接`** 的在「备注」列写 `**要接**：<理由>` 或 `**不接**：<理由>`。块划分、行数、ZIP 类别列都没动。
 
-结果：**改判 `已接` 26 行、判 `不适用` 5 行（其中 2 行本轮新增）、维持 `未接` 183 行**（`**不接**` 9 行、`**要接**` 174 行）。
+结果：**改判 `已接` 26 行、判 `不适用` 5 行（其中 2 行本轮新增）、维持 `未接` 183 行**（`**不接**` 9 行、`**要接**` 174 行）。**r341 实现段收口（批 1–12 全部完成后按 `scripts/parity-rows.py` 实跑）**：这 174 行 `**要接**` 是判断段「该做」的结论，不是「已做完」的承诺——实现段做完的改 `已接`，依赖未到或本批砍掉的仍留 `**要接**` 并逐行写阻塞原因，不为凑数字改状态。去向：**119 行改 `已接`**（批 1–12 交付 118 行 + 收口补改 `:96` 1 行，删 `**要接**` 标记、验收列改屏幕现象）、**7 行改判 `**不接**`**（状态仍 `未接`，逐行写「不做什么、为什么」）、**48 行仍 `**要接**`** 且差异说明/备注里逐行有阻塞原因，按阻塞分：33 行等在线书源 / 网络文件模块（含书源回调、简介标记、换源、分享、RemoteBook、`:350` SAF 目录平台差异）、8 行等磁盘章节缓存与逐章下载器（`:145` `:292` `:434` `:436`–`:438` `:440` `:441`）、5 行等其它前置（`:290` 阅读器域、`:293` 日志设施、`:303`/`:305` 非书架来源进详情、`:470` EPUB 打包器）、2 行本批砍掉（`:314` 本地详情页无目录加载状态、`:340` 独立 GroupSelectSheet 未做）。`:96`「更多菜单·书架管理」判断段与各批均漏回填，收口时按「代码早已有」补改 `已接`。`**不接**` 实跑 16 行 = 判断段原有 9 + 各批改判 7；5 行 `不适用` 逐行有四类证据之一。**全表实跑 345 行 = 已接 276 / 未接 64 / 不适用 5**，`**要接**` 48 行、`**不接**` 16 行；`**要接**` 剩余行数就是「未实现的该做行数」，不是 0。
 
 ### 一、改判 `已接` 的 26 行
 
