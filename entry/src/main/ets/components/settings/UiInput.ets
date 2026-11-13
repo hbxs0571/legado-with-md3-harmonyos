@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { AppGlyph } from '../AppGlyph';
 import {
   EXPAND_BUTTONS_BOTTOM, EXPAND_BUTTONS_TOP, EXPAND_PADDING_BOTTOM, FONT_INPUT,
@@ -56,13 +57,18 @@ export struct UiInput {
         .alignItems(HorizontalAlign.Start)
 
         AppGlyph({ name: 'profileExpandMore', glyphSize: 22, tint: this.themeColorTextTertiary })
+          .rotate({ angle: this.expanded ? 180 : 0 })
+          .animation({ curve: curves.springMotion(0.35, 0.9) });
       }
       .width('100%')
       .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
       .onClick(() => {
         // 展开瞬间把当前值灌进去，否则会看到上一次编辑残留（上游 LaunchedEffect 同口径）。
         this.editValue = this.value;
-        this.expanded = !this.expanded;
+        // 进入动画作用域后再改状态，否则 if 分支的增删是瞬时的（弹簧不吃 duration）。
+        this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.9) }, () => {
+          this.expanded = !this.expanded;
+        });
       })
 
       if (this.expanded) {
@@ -98,7 +104,11 @@ export struct UiInput {
           .padding({ top: EXPAND_BUTTONS_TOP, bottom: EXPAND_BUTTONS_BOTTOM });
         }
         .width('100%')
-        .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, bottom: EXPAND_PADDING_BOTTOM });
+        .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, bottom: EXPAND_PADDING_BOTTOM })
+        .transition(TransitionEffect.asymmetric(
+          TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })),
+          TransitionEffect.OPACITY
+        ));
       }
     }
     .width('100%')

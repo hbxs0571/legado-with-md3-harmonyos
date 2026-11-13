@@ -273,7 +273,7 @@ export struct HomePage {
       }.layoutWeight(1).refreshOffset(64).onRefreshing(() => this.handlePullToRefresh())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showHomeOptions, this.homeOptionsSheetContent(), {
-        height: 410,
+        height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: this.themeColorSurfaceElevated,

@@ -1,3 +1,4 @@
+import curves from '@ohos.curves';
 import { AppGlyph } from '../AppGlyph';
 import {
   FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, RADIUS_MENU, ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4
@@ -26,6 +27,9 @@ export struct UiDropdown {
   /** 值→显示文案。默认原样返回，给「options 里本来就是中文」的页面用。 */
   labelOf: (value: string) => string = (value: string) => value;
   onSelect: (value: string) => void = (_value: string) => {};
+
+  /** 菜单开闭状态，驱动右侧箭头旋转（bindMenu 的 onAppear/onDisappear 写它）。 */
+  @State menuVisible: boolean = false;
 
   @Builder
   OptionMenu() {
@@ -67,9 +71,15 @@ export struct UiDropdown {
       .alignItems(HorizontalAlign.Start)
 
       AppGlyph({ name: 'profileExpandMore', glyphSize: 22, tint: this.themeColorTextTertiary })
+        .rotate({ angle: this.menuVisible ? 180 : 0 })
+        .animation({ curve: curves.springMotion(0.35, 0.9) });
     }
     .width('100%')
     .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
-    .bindMenu(this.OptionMenu, { placement: Placement.Bottom })
+    .bindMenu(this.OptionMenu, {
+      placement: Placement.Bottom,
+      onAppear: () => { this.menuVisible = true; },
+      onDisappear: () => { this.menuVisible = false; }
+    })
   }
 }

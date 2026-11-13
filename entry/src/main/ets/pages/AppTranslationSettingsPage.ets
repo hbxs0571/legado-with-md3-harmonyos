@@ -105,7 +105,7 @@ struct TranslationSettingsChoice {
               .onClick(() => { this.onSelect(index); this.showOptions = false; })
           }, (option: string, index: number) => `${index}-${option}`)
         }
-      }.height(440).scrollBar(BarState.Off)
+      }.constraintSize({ maxHeight: 440 }).scrollBar(BarState.Off)
     }.width('100%').padding({ bottom: 16 })
   }
   build() {
@@ -115,7 +115,7 @@ struct TranslationSettingsChoice {
       Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.showOptions = true)
       .bindSheet(this.showOptions, this.ChoiceSheet(), {
-        height: Math.min(520, 90 + this.options.length * 54),
+        height: SheetSize.FIT_CONTENT,
         dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceSecondary,
         onDisappear: () => this.showOptions = false
       })

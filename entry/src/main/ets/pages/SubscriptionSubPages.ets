@@ -130,7 +130,7 @@ struct SubscriptionListPage {
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet.length > 0, this.subscriptionSheet(), {
-        height: this.activeSheet === 'ruleEditor' ? 460 : 320,
+        height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: this.themeColorSurfaceSecondary,

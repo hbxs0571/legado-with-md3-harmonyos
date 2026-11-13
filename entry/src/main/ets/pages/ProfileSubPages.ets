@@ -4556,7 +4556,7 @@ export struct AiChatPage {
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showReasoningSheet, this.ReasoningSheet(), {
-        height: SheetSize.MEDIUM,
+        height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: '#17181E',
