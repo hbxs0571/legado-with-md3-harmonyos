@@ -1,3 +1,8 @@
+import { UiSection } from '../components/settings/UiSection';
+import { UiDropdown } from '../components/settings/UiDropdown';
+import { UiSwitch } from '../components/settings/UiSwitch';
+import { UiAction } from '../components/settings/UiAction';
+import { UiInput } from '../components/settings/UiInput';
 import { AppGlyph } from '../components/AppGlyph';
 
 @Component
@@ -74,51 +79,51 @@ export struct OtherSettingsPage {
 
       Scroll(this.settingsScroller) {
         Column() {
-          OtherSettingsSection() {
-            OtherSettingsDropdown({
+          UiSection() {
+            UiDropdown({
               title: '语言', option: this.language,
               options: ['跟随系统', '简体中文', '繁体中文', '英文'],
               onSelect: (value: string) => this.language = value
             })
-            OtherSettingsDropdown({
+            UiDropdown({
               title: '检查更新查找版本', detail: '检查更新时查找其他签名版本', option: this.variant,
               options: ['正式版', '测试版', '全部版本', '共存版'],
               onSelect: (value: string) => this.variant = value
             })
-            OtherSettingsSwitch({ title: '启动时自动检测更新', detail: '仅在应用进程完全重新启动时检测，从后台返回不会触发', value: this.autoCheckUpdate, onChange: (value: boolean) => this.autoCheckUpdate = value })
-            OtherSettingsSwitch({ title: '启动应用时打开Web服务', value: this.webAutoStart, onChange: (value: boolean) => this.webAutoStart = value })
+            UiSwitch({ title: '启动时自动检测更新', detail: '仅在应用进程完全重新启动时检测，从后台返回不会触发', value: this.autoCheckUpdate, onChange: (value: boolean) => this.autoCheckUpdate = value })
+            UiSwitch({ title: '启动应用时打开Web服务', value: this.webAutoStart, onChange: (value: boolean) => this.webAutoStart = value })
           }
 
-          OtherSettingsSection({ title: '主界面' }) {
-            OtherSettingsSwitch({ title: '自动刷新', detail: '打开软件时自动更新书籍', value: this.autoRefresh, onChange: (value: boolean) => this.autoRefresh = value })
-            OtherSettingsSwitch({ title: '自动跳转最近阅读', detail: '默认打开书架', value: this.defaultToRead, onChange: (value: boolean) => this.defaultToRead = value })
+          UiSection({ title: '主界面' }) {
+            UiSwitch({ title: '自动刷新', detail: '打开软件时自动更新书籍', value: this.autoRefresh, onChange: (value: boolean) => this.autoRefresh = value })
+            UiSwitch({ title: '自动跳转最近阅读', detail: '默认打开书架', value: this.defaultToRead, onChange: (value: boolean) => this.defaultToRead = value })
           }
 
-          OtherSettingsSection({ title: '阅读' }) {
-            OtherSettingsAction({ title: '书籍保存位置', detail: '', onSelect: () => this.activeSheet = 'folderPicker' })
-            OtherSettingsSwitch({ title: '抗锯齿', detail: '绘制图片时抗锯齿', value: this.antiAlias, onChange: (value: boolean) => this.antiAlias = value })
-            OtherSettingsSwitch({ title: '默认启用替换净化', detail: '新加入书架的书是否启用替换净化', value: this.replaceEnableDefault, onChange: (value: boolean) => this.onReplaceEnableDefaultChange(value) })
-            OtherSettingsSwitch({ title: '全程响应耳机按键', detail: '即使退出软件也响应耳机按键', value: this.mediaButtonOnExit, onChange: (value: boolean) => this.mediaButtonOnExit = value })
-            OtherSettingsSwitch({ title: '耳机按键启动朗读', detail: '通过耳机按键来启动朗读', value: this.readAloudByMediaButton, onChange: (value: boolean) => this.readAloudByMediaButton = value })
-            OtherSettingsSwitch({ title: '忽略音频焦点', detail: '允许与其他应用同时播放音频', value: this.ignoreAudioFocus, onChange: (value: boolean) => this.ignoreAudioFocus = value })
-            OtherSettingsSwitch({ title: '自动清除过期搜索数据', detail: '超过一天的搜索数据', value: this.autoClearExpired, onChange: (value: boolean) => this.autoClearExpired = value })
-            OtherSettingsSwitch({ title: '返回时提示放入书架', detail: '阅读未放入书架的书籍在返回时提示放入书架', value: this.showAddToShelfAlert, onChange: (value: boolean) => this.showAddToShelfAlert = value })
-            OtherSettingsSwitch({ title: '漫画浏览', value: this.showMangaUi, onChange: (value: boolean) => this.showMangaUi = value })
+          UiSection({ title: '阅读' }) {
+            UiAction({ title: '书籍保存位置', detail: '', onSelect: () => this.activeSheet = 'folderPicker' })
+            UiSwitch({ title: '抗锯齿', detail: '绘制图片时抗锯齿', value: this.antiAlias, onChange: (value: boolean) => this.antiAlias = value })
+            UiSwitch({ title: '默认启用替换净化', detail: '新加入书架的书是否启用替换净化', value: this.replaceEnableDefault, onChange: (value: boolean) => this.onReplaceEnableDefaultChange(value) })
+            UiSwitch({ title: '全程响应耳机按键', detail: '即使退出软件也响应耳机按键', value: this.mediaButtonOnExit, onChange: (value: boolean) => this.mediaButtonOnExit = value })
+            UiSwitch({ title: '耳机按键启动朗读', detail: '通过耳机按键来启动朗读', value: this.readAloudByMediaButton, onChange: (value: boolean) => this.readAloudByMediaButton = value })
+            UiSwitch({ title: '忽略音频焦点', detail: '允许与其他应用同时播放音频', value: this.ignoreAudioFocus, onChange: (value: boolean) => this.ignoreAudioFocus = value })
+            UiSwitch({ title: '自动清除过期搜索数据', detail: '超过一天的搜索数据', value: this.autoClearExpired, onChange: (value: boolean) => this.autoClearExpired = value })
+            UiSwitch({ title: '返回时提示放入书架', detail: '阅读未放入书架的书籍在返回时提示放入书架', value: this.showAddToShelfAlert, onChange: (value: boolean) => this.showAddToShelfAlert = value })
+            UiSwitch({ title: '漫画浏览', value: this.showMangaUi, onChange: (value: boolean) => this.showMangaUi = value })
           }
 
-          OtherSettingsSection({ title: '高级' }) {
-            OtherSettingsAction({ title: '后台保活与电池优化', detail: '未开启无限制，后台可能被系统终止', onSelect: () => this.openBatteryGuide() })
-            OtherSettingsSwitch({ title: 'WebService 唤醒锁', detail: '开启 Web 服务的时候启用唤醒锁，有些手机开启唤醒锁会被杀后台', value: this.webServiceWakeLock, onChange: (value: boolean) => this.webServiceWakeLock = value })
-            OtherSettingsInput({ title: '源编辑框最大行数', value: '2147483647', onConfirm: () => this.onUnavailableAction('源编辑框最大行数尚未保存') })
-            OtherSettingsAction({ title: '直链上传规则', detail: '用于导出书源书单时生成直链 URL', onSelect: () => this.activeSheet = 'directLink' })
-            OtherSettingsInput({ title: 'Web 端口', value: '1122', onConfirm: () => this.onUnavailableAction('Web 端口尚未保存') })
-            OtherSettingsAction({ title: '清除 WebView 数据', detail: '清除内置浏览器所有数据', onSelect: () => this.confirmClearWebView() })
-            OtherSettingsSwitch({ title: '阻止书源打开内置浏览器', detail: '开启后，书源无法通过 java.startBrowser 等接口弹出内置浏览器，等待网页结果的调用会直接报错', value: this.blockSourceBrowser, onChange: (value: boolean) => this.blockSourceBrowser = value })
-            OtherSettingsSwitch({ title: '文字操作显示搜索', detail: '长按文字在操作菜单中显示阅读 · 搜索', value: this.processText, onChange: (value: boolean) => this.processText = value })
-            OtherSettingsSwitch({ title: '记录日志', detail: '记录调试日志', value: this.recordLog, onChange: (value: boolean) => this.recordLog = value })
-            OtherSettingsSwitch({ title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
+          UiSection({ title: '高级' }) {
+            UiAction({ title: '后台保活与电池优化', detail: '未开启无限制，后台可能被系统终止', onSelect: () => this.openBatteryGuide() })
+            UiSwitch({ title: 'WebService 唤醒锁', detail: '开启 Web 服务的时候启用唤醒锁，有些手机开启唤醒锁会被杀后台', value: this.webServiceWakeLock, onChange: (value: boolean) => this.webServiceWakeLock = value })
+            UiInput({ title: '源编辑框最大行数', value: '2147483647', defaultValue: '2147483647', onConfirm: () => this.onUnavailableAction('源编辑框最大行数尚未保存') })
+            UiAction({ title: '直链上传规则', detail: '用于导出书源书单时生成直链 URL', onSelect: () => this.activeSheet = 'directLink' })
+            UiInput({ title: 'Web 端口', value: '1122', defaultValue: '1122', onConfirm: () => this.onUnavailableAction('Web 端口尚未保存') })
+            UiAction({ title: '清除 WebView 数据', detail: '清除内置浏览器所有数据', onSelect: () => this.confirmClearWebView() })
+            UiSwitch({ title: '阻止书源打开内置浏览器', detail: '开启后，书源无法通过 java.startBrowser 等接口弹出内置浏览器，等待网页结果的调用会直接报错', value: this.blockSourceBrowser, onChange: (value: boolean) => this.blockSourceBrowser = value })
+            UiSwitch({ title: '文字操作显示搜索', detail: '长按文字在操作菜单中显示阅读 · 搜索', value: this.processText, onChange: (value: boolean) => this.processText = value })
+            UiSwitch({ title: '记录日志', detail: '记录调试日志', value: this.recordLog, onChange: (value: boolean) => this.recordLog = value })
+            UiSwitch({ title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
           }
-        }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 120 })
+        }.width('100%').padding({ top: 4, bottom: 120 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.settingsScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
@@ -233,148 +238,6 @@ export struct OtherSettingsPage {
         }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 22 })
       }
     }.width('100%').height('100%').padding({ top: 8 })
-  }
-}
-
-@Component
-struct OtherSettingsSection {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @Prop title: string = '';
-  @BuilderParam content: () => void = this.emptyContent;
-  @Builder emptyContent() {}
-
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
-  build() {
-    Column() {
-      if (this.title.length > 0) {
-        Text(this.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-          .alignSelf(ItemAlign.Start).padding({ left: 12, top: 14, bottom: 8 })
-      }
-      Column() {
-        this.content()
-      }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-    }.width('100%').margin({ bottom: 8 })
-  }
-}
-
-@Component
-struct OtherSettingsDropdown {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
-  @StorageProp('themeAppBackground') themeAppBackground: string = '';
-  @StorageProp('themePureBlack') themePureBlack: boolean = false;
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  @Prop option: string = '';
-  @Prop options: string[] = [];
-  onSelect: (value: string) => void = (_value: string) => {};
-
-  @Builder
-  private OptionMenu() {
-    Menu() {
-      ForEach(this.options, (value: string) => {
-        MenuItem({ content: value }).height(48).onClick(() => this.onSelect(value))
-      }, (value: string) => value)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(16)
-  }
-
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(16).fontColor(this.themeColorTextPrimary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(12).fontColor('#AEB0BA').margin({ top: 3 }) }
-        Text(this.option).fontSize(14).fontColor(this.themeColorAccent).margin({ top: 4 })
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      AppGlyph({ name: 'profileExpandMore', glyphSize: 22, tint: '#AEB0BA' })
-    }.width('100%').padding({ left: 16, right: 14, top: 14, bottom: 14 })
-      .bindMenu(this.OptionMenu, { placement: Placement.Bottom })
-  }
-}
-
-@Component
-struct OtherSettingsSwitch {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  @Prop value: boolean = false;
-  onChange: (value: boolean) => void = (_value: boolean) => {};
-
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(16).fontColor(this.themeColorTextPrimary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(14).fontColor('#AEB0BA').margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.value }).onChange((value: boolean) => this.onChange(value))
-    }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
-  }
-}
-
-@Component
-struct OtherSettingsAction {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  onSelect: () => void = () => {};
-
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(16).fontColor(this.themeColorTextPrimary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(14).fontColor('#AEB0BA').margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(18).height(18).fillColor('#AEB0BA')
-    }.width('100%').padding({ left: 16, right: 14, top: 14, bottom: 14 }).onClick(() => this.onSelect())
-  }
-}
-
-@Component
-struct OtherSettingsInput {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
-  @StorageProp('themeAppBackground') themeAppBackground: string = '';
-  @StorageProp('themePureBlack') themePureBlack: boolean = false;
-  @Prop title: string = '';
-  @Prop value: string = '';
-  onConfirm: () => void = () => {};
-  @State expanded: boolean = false;
-  @State editValue: string = '';
-
-  build() {
-    Column() {
-      Row() {
-        Column() {
-          Text(this.title).fontSize(16).fontColor(this.themeColorTextPrimary)
-          Text(this.value).fontSize(14).fontColor(this.themeColorAccent).margin({ top: 4 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        AppGlyph({ name: 'profileExpandMore', glyphSize: 22, tint: '#AEB0BA' })
-      }.width('100%').padding({ left: 16, right: 14, top: 14, bottom: 14 }).onClick(() => {
-        this.editValue = this.value;
-        this.expanded = !this.expanded;
-      })
-      if (this.expanded) {
-        Column() {
-          TextInput({ text: this.editValue, placeholder: this.title }).onChange((value: string) => this.editValue = value)
-            .fontSize(14).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(8)
-          Row() {
-            Text('默认').fontSize(14).fontColor(this.themeColorTextSecondary).onClick(() => this.expanded = false)
-            Blank()
-            Text('确定').fontSize(14).fontColor(this.themeColorAccent).onClick(() => {
-              this.onConfirm();
-              this.expanded = false;
-            })
-          }.width('100%').padding({ top: 12, bottom: 8 })
-        }.padding({ left: 16, right: 16, bottom: 12 })
-      }
-    }.width('100%')
   }
 }
 

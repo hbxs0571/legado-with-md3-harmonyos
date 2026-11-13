@@ -1,3 +1,7 @@
+import { UiSection } from '../components/settings/UiSection';
+import { UiAction } from '../components/settings/UiAction';
+import { UiSlider } from '../components/settings/UiSlider';
+import { UiSwitch } from '../components/settings/UiSwitch';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { Book } from '../model/Book';
 import { BookRepository } from '../data/BookRepository';
@@ -66,103 +70,34 @@ export struct AppDownloadCacheSettingsPage {
 
       Scroll(this.settingsScroller) {
         Column() {
-          CacheSettingsSection({ title: 'HTTP 缓存' }) {
-            CacheSettingsAction({ title: '封面缓存', detail: '本地书籍封面即时生成', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
-            CacheSettingsAction({ title: '漫画缓存', detail: '本地无漫画形态', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
+          UiSection({ title: 'HTTP 缓存' }) {
+            UiAction({ title: '封面缓存', detail: '本地书籍封面即时生成', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
+            UiAction({ title: '漫画缓存', detail: '本地无漫画形态', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
           }
-          CacheSettingsSection({ title: '下载设置' }) {
-            CacheSettingsSlider({ title: '更新和搜索线程', detail: '控制请求并发数量', value: this.cacheSettings.updateSearchThreads, min: 1, max: 256, onValueChange: (v: number) => { this.cacheSettings.updateSearchThreads = v; this.saveSettings(); } })
-            CacheSettingsSlider({ title: '书籍缓存下载线程', detail: '并发越高越不稳定', value: this.cacheSettings.bookDownloadThreads, min: 1, max: 8, onValueChange: (v: number) => { this.cacheSettings.bookDownloadThreads = v; this.saveSettings(); } })
-            CacheSettingsSlider({ title: '向后预下载', detail: '预先下载后续章节', value: this.cacheSettings.preloadBehind, min: 0, max: 100, onValueChange: (v: number) => { this.cacheSettings.preloadBehind = v; this.saveSettings(); } })
-            CacheSettingsSlider({ title: '向前预下载', detail: '预先下载前面的章节', value: this.cacheSettings.preloadAhead, min: 0, max: 100, onValueChange: (v: number) => { this.cacheSettings.preloadAhead = v; this.saveSettings(); } })
-            CacheSettingsSlider({ title: '整本正文内存缓存上限', detail: '单位 MB；超过就不缓存整本正文', value: this.cacheSettings.bookContentCacheMb, min: 1, max: 512, onValueChange: (v: number) => { this.cacheSettings.bookContentCacheMb = v; this.saveSettings(); } })
+          UiSection({ title: '下载设置' }) {
+            UiSlider({ title: '更新和搜索线程', detail: '控制请求并发数量', value: this.cacheSettings.updateSearchThreads, minValue: 1, maxValue: 256, onChange: (v: number) => { this.cacheSettings.updateSearchThreads = v; this.saveSettings(); } })
+            UiSlider({ title: '书籍缓存下载线程', detail: '并发越高越不稳定', value: this.cacheSettings.bookDownloadThreads, minValue: 1, maxValue: 8, onChange: (v: number) => { this.cacheSettings.bookDownloadThreads = v; this.saveSettings(); } })
+            UiSlider({ title: '向后预下载', detail: '预先下载后续章节', value: this.cacheSettings.preloadBehind, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadBehind = v; this.saveSettings(); } })
+            UiSlider({ title: '向前预下载', detail: '预先下载前面的章节', value: this.cacheSettings.preloadAhead, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadAhead = v; this.saveSettings(); } })
+            UiSlider({ title: '整本正文内存缓存上限', detail: '单位 MB；超过就不缓存整本正文', value: this.cacheSettings.bookContentCacheMb, minValue: 1, maxValue: 512, onChange: (v: number) => { this.cacheSettings.bookContentCacheMb = v; this.saveSettings(); } })
           }
-          CacheSettingsSection({ title: '图片缓存' }) {
-            CacheSettingsSlider({ title: '图片绘制缓存', detail: '最大缓存大小（MB）', value: this.cacheSettings.imageDrawCacheMb, min: 1, max: 2047, onValueChange: (v: number) => { this.cacheSettings.imageDrawCacheMb = v; this.saveSettings(); } })
-            CacheSettingsSlider({ title: '漫画保留数量', detail: '保留已读章节数量', value: this.cacheSettings.comicKeepCount, min: 0, max: 100, onValueChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
+          UiSection({ title: '图片缓存' }) {
+            UiSlider({ title: '图片绘制缓存', detail: '最大缓存大小（MB）', value: this.cacheSettings.imageDrawCacheMb, minValue: 1, maxValue: 2047, onChange: (v: number) => { this.cacheSettings.imageDrawCacheMb = v; this.saveSettings(); } })
+            UiSlider({ title: '漫画保留数量', detail: '保留已读章节数量', value: this.cacheSettings.comicKeepCount, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
           }
-          CacheSettingsSection({ title: '网络' }) {
+          UiSection({ title: '网络' }) {
             CacheSettingsInput({ title: '用户代理', value: this.cacheSettings.userAgent, onValueChange: (v: string) => { this.cacheSettings.userAgent = v; this.saveSettings(); } })
-            CacheSettingsSwitch({ title: 'Cronet', detail: '使用 Cronet 网络组件', checkedValue: this.cacheSettings.cronetEnabled, onToggle: (v: boolean) => { this.cacheSettings.cronetEnabled = v; this.saveSettings(); } })
+            UiSwitch({ title: 'Cronet', detail: '使用 Cronet 网络组件', value: this.cacheSettings.cronetEnabled, onChange: (v: boolean) => { this.cacheSettings.cronetEnabled = v; this.saveSettings(); } })
           }
-          CacheSettingsSection({ title: '其它' }) {
-            CacheSettingsAction({ title: '清理缓存', detail: '清应用内正文副本与章节缓存', onSelect: () => this.clearBookCache() })
-            CacheSettingsAction({ title: '压缩数据库', detail: '整理本地数据库空间', onSelect: () => { this.vacuumDatabase(); } })
+          UiSection({ title: '其它' }) {
+            UiAction({ title: '清理缓存', detail: '清应用内正文副本与章节缓存', onSelect: () => this.clearBookCache() })
+            UiAction({ title: '压缩数据库', detail: '整理本地数据库空间', onSelect: () => { this.vacuumDatabase(); } })
           }
           Text('滑块与开关改动即落盘；清理缓存与压缩数据库已接入，封面/漫画缓存本地即时生成无独立缓存。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-  }
-}
-
-@Component
-struct CacheSettingsSection {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @Prop title: string = '';
-  @BuilderParam content: () => void = this.emptyContent;
-  @Builder
-  emptyContent() {
-  }
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
-  build() {
-    Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-    }
-  }
-}
-
-@Component
-struct CacheSettingsAction {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  onSelect: () => void = () => {};
-  build() {
-    Row() {
-      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-      if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ right: 8 }) }
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary)
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.onSelect())
-  }
-}
-
-@Component
-struct CacheSettingsSlider {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  @Prop value: number = 0;
-  @Prop min: number = 0;
-  @Prop max: number = 100;
-  /** 值变化时把新值交给页面落盘（:484）。 */
-  onValueChange: (value: number) => void = () => {};
-  @State currentValue: number = 0;
-  aboutToAppear(): void { this.currentValue = this.value; }
-  build() {
-    Column() {
-      Row() {
-        Column() {
-          Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
-          if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Text(`${Math.round(this.currentValue)}`).fontSize(12).fontColor(this.themeColorAccent)
-      }
-      Slider({ value: this.currentValue, min: this.min, max: this.max, step: 1 })
-        .selectedColor(this.themeColorAccent).trackColor('#454750')
-        .onChange((value: number) => { this.currentValue = value; this.onValueChange(value); })
-    }.padding({ left: 14, right: 14, top: 9, bottom: 9 })
   }
 }
 
@@ -186,29 +121,5 @@ struct CacheSettingsInput {
         .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).width(130).borderRadius(8)
         .onChange((value: string) => { this.currentValue = value; this.onValueChange(value); })
     }.padding({ left: 14, right: 14, top: 10, bottom: 10 })
-  }
-}
-
-@Component
-struct CacheSettingsSwitch {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  /** 页面传进来的持久化初值。 */
-  @Prop checkedValue: boolean = false;
-  /** 开关改动后落盘（:484）。 */
-  onToggle: (value: boolean) => void = () => {};
-  @State toggleValue: boolean = false;
-  aboutToAppear(): void { this.toggleValue = this.checkedValue; }
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.toggleValue })
-        .onChange((value: boolean) => { this.toggleValue = value; this.onToggle(value); })
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 })
   }
 }

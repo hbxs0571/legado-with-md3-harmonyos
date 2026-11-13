@@ -1,3 +1,4 @@
+import { UiSection } from '../components/settings/UiSection';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 
 @Component
@@ -32,11 +33,11 @@ export struct AppTranslationSettingsPage {
 
       Scroll(this.settingsScroller) {
         Column() {
-          TranslationSettingsSection({ title: '翻译提供商' }) {
+          UiSection({ title: '翻译提供商' }) {
             TranslationSettingsChoice({ title: '提供商', options: this.providers, selected: this.providerIndex, onSelect: (index: number) => this.providerIndex = index })
           }
 
-          TranslationSettingsSection({ title: '翻译选项' }) {
+          UiSection({ title: '翻译选项' }) {
             TranslationSettingsChoice({ title: '目标语言', options: this.languages, selected: this.languageIndex, onSelect: (index: number) => this.languageIndex = index })
             Column() {
               Row() {
@@ -51,7 +52,7 @@ export struct AppTranslationSettingsPage {
 
           if (this.providerIndex === 1) {
             Column() {
-              TranslationSettingsSection({ title: '应用 AI 接口' }) {
+              UiSection({ title: '应用 AI 接口' }) {
                 Row() {
                   Column() {
                     Text('使用应用 AI 接口').fontSize(18).fontColor(this.themeColorTextSecondary)
@@ -67,29 +68,6 @@ export struct AppTranslationSettingsPage {
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-  }
-}
-
-@Component
-struct TranslationSettingsSection {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @Prop title: string = '';
-  @BuilderParam content: () => void = this.emptyContent;
-  @Builder
-  emptyContent() {
-  }
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
-  build() {
-    Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-    }
   }
 }
 

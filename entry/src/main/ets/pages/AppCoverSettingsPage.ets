@@ -1,3 +1,7 @@
+import { UiSection } from '../components/settings/UiSection';
+import { UiSwitch } from '../components/settings/UiSwitch';
+import { UiAction } from '../components/settings/UiAction';
+import { UiChoice } from '../components/settings/UiChoice';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { AppGlyph } from '../components/AppGlyph';
 import {
@@ -271,50 +275,50 @@ export struct AppCoverSettingsPage {
 
       Scroll(this.settingsScroller) {
         Column() {
-          CoverSettingsSection({ title: '通用' }) {
-            CoverSettingsSwitch({
+          UiSection({ title: '通用' }) {
+            UiSwitch({
               title: '仅 WiFi 下载封面', detail: '蜂窝网络下不加载网络封面',
               value: this.settings.loadOnlyOnWifi,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.loadOnlyOnWifi = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.loadOnlyOnWifi = value; })
             })
-            CoverSettingsAction({ title: '封面规则', detail: '编辑按规则获取封面用的搜索源与规则表达式', onSelect: () => this.openRuleSheet() })
-            CoverSettingsSwitch({
+            UiAction({ title: '封面规则', detail: '编辑按规则获取封面用的搜索源与规则表达式', onSelect: () => this.openRuleSheet() })
+            UiSwitch({
               title: '使用默认封面', detail: '忽略书籍自带封面，统一显示默认封面',
               value: this.settings.useDefaultCover,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultCover = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultCover = value; })
             })
-            CoverSettingsAction({ title: '默认封面', detail: this.albumSummary(), onSelect: () => this.openAlbumSelect() })
-            CoverSettingsSwitch({
+            UiAction({ title: '默认封面', detail: this.albumSummary(), onSelect: () => this.openAlbumSelect() })
+            UiSwitch({
               title: '显示字体阴影', detail: '给书名与作者加一层阴影',
               value: this.settings.showShadow,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showShadow = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showShadow = value; })
             })
-            CoverSettingsSwitch({
+            UiSwitch({
               title: '显示字体描边', detail: '深色封面上描白边，默认开启',
               value: this.settings.showStroke,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showStroke = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showStroke = value; })
             })
-            CoverSettingsSwitch({
+            UiSwitch({
               title: '使用默认颜色', detail: '关闭后用下面日间/夜间封面里选的颜色',
               value: this.settings.useDefaultColor,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultColor = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultColor = value; })
             })
           }
 
-          CoverSettingsSection({ title: '书架显示' }) {
-            CoverSettingsChoice({
+          UiSection({ title: '书架显示' }) {
+            UiChoice({
               title: '封面信息方向', options: ['竖向', '横向'],
               selectedIndex: this.settings.infoOrientation === '1' ? 1 : 0,
               onSelect: (index: number) => this.applyChange((draft: CoverSettings) => {
                 draft.infoOrientation = index === 1 ? '1' : '0';
               })
             })
-            CoverSettingsSwitch({
+            UiSwitch({
               title: '限制封面比例', detail: '开启时搜索/详情封面固定 5:7，关闭后按原图比例',
               value: this.settings.restrictCoverRatio,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.restrictCoverRatio = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.restrictCoverRatio = value; })
             })
-            CoverSettingsChoice({
+            UiChoice({
               title: '网络书籍角标', options: ['全部显示', '隐藏书架内', '隐藏同名同作者', '仅显示书架外'],
               selectedIndex: this.settings.exploreFilterState,
               onSelect: (index: number) => this.applyChange((draft: CoverSettings) => {
@@ -323,7 +327,7 @@ export struct AppCoverSettingsPage {
             })
           }
 
-          CoverSettingsSection({ title: '日间封面' }) {
+          UiSection({ title: '日间封面' }) {
             CoverSettingsColor({
               title: '文字颜色', colors: AppCoverSettingsPage.TEXT_COLOR_OPTIONS,
               color: this.settings.textColor, disabled: this.settings.useDefaultColor,
@@ -334,18 +338,18 @@ export struct AppCoverSettingsPage {
               color: this.settings.shadowColor, disabled: !this.settings.showShadow,
               onPick: (color: string) => this.applyChange((draft: CoverSettings) => { draft.shadowColor = color; })
             })
-            CoverSettingsSwitch({
+            UiSwitch({
               title: '显示书名', value: this.settings.showName,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showName = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showName = value; })
             })
-            CoverSettingsSwitch({
+            UiSwitch({
               title: '显示作者', detail: '关闭书名显示时不生效',
               value: this.settings.showAuthor, disabled: !this.settings.showName,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthor = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthor = value; })
             })
           }
 
-          CoverSettingsSection({ title: '夜间封面' }) {
+          UiSection({ title: '夜间封面' }) {
             CoverSettingsColor({
               title: '文字颜色', colors: AppCoverSettingsPage.TEXT_COLOR_OPTIONS,
               color: this.settings.textColorDark, disabled: this.settings.useDefaultColor,
@@ -356,14 +360,14 @@ export struct AppCoverSettingsPage {
               color: this.settings.shadowColorDark, disabled: !this.settings.showShadow,
               onPick: (color: string) => this.applyChange((draft: CoverSettings) => { draft.shadowColorDark = color; })
             })
-            CoverSettingsSwitch({
+            UiSwitch({
               title: '显示书名', value: this.settings.showNameDark,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showNameDark = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showNameDark = value; })
             })
-            CoverSettingsSwitch({
+            UiSwitch({
               title: '显示作者', detail: '关闭书名显示时不生效',
               value: this.settings.showAuthorDark, disabled: !this.settings.showNameDark,
-              onToggle: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthorDark = value; })
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthorDark = value; })
             })
           }
           Text('仅 WiFi 下载封面、网络书籍角标随网络封面与在线书源一起接入；其余改动即时生效。')
@@ -607,98 +611,6 @@ struct CoverAlbumThumb {
         AppGlyph({ name: 'folder', glyphSize: 28, tint: this.themeColorTextTertiary })
       }
     }.width(this.w).height(this.h).borderRadius(8).backgroundColor('#2A2B32').clip(true)
-  }
-}
-
-@Component
-struct CoverSettingsSection {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @Prop title: string = '';
-  @BuilderParam content: () => void = this.emptyContent;
-  @Builder
-  emptyContent() {
-  }
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
-  build() {
-    Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-    }
-  }
-}
-
-@Component
-struct CoverSettingsSwitch {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  /** 由父组件传入当前值，组件本身不再持有状态，避免与持久化数据不同步。 */
-  @Prop value: boolean = false;
-  /** 上游语义：显示作者依赖显示书名，书名关闭时本行置灰且不可改（保留原值）。 */
-  @Prop disabled: boolean = false;
-  onToggle: (value: boolean) => void = (_value: boolean) => {};
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(18)
-          .fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.value })
-        .enabled(!this.disabled)
-        .onChange((value: boolean) => this.onToggle(value))
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).opacity(this.disabled ? 0.4 : 1)
-  }
-}
-
-@Component
-struct CoverSettingsAction {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  onSelect: () => void = () => {};
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.onSelect())
-  }
-}
-
-@Component
-struct CoverSettingsChoice {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @Prop title: string = '';
-  @Prop options: string[] = [];
-  @Prop selectedIndex: number = 0;
-  onSelect: (index: number) => void = (_index: number) => {};
-  private getSelectedLabel(): string {
-    if (this.options.length === 0) { return ''; }
-    return this.options[Math.min(this.selectedIndex, this.options.length - 1)];
-  }
-  build() {
-    Row() {
-      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-      Text(this.getSelectedLabel()).fontSize(12).fontColor(this.themeColorAccent)
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => {
-      if (this.options.length > 0) {
-        this.onSelect((this.selectedIndex + 1) % this.options.length);
-      }
-    })
   }
 }
 

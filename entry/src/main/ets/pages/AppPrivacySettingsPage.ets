@@ -1,3 +1,7 @@
+import { UiSection } from '../components/settings/UiSection';
+import { UiSwitch } from '../components/settings/UiSwitch';
+import { UiAction } from '../components/settings/UiAction';
+import { UiChoice } from '../components/settings/UiChoice';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
 
@@ -81,37 +85,36 @@ export struct AppPrivacySettingsPage {
 
       Scroll(this.settingsScroller) {
         Column() {
-          PrivacySettingsSection({ title: '私密凭据' }) {
-            PrivacySettingsSwitch({
+          UiSection({ title: '私密凭据' }) {
+            UiSwitch({
               title: '启用私密功能',
               detail: '关闭后不验证、不脱敏；已有密码和标记会保留',
-              controlled: true,
-              checkedValue: this.privateEnabled,
-              onToggle: (value: boolean) => { void this.applyPrivateEnabled(value); }
+              value: this.privateEnabled,
+              onChange: (value: boolean) => { void this.applyPrivateEnabled(value); }
             })
-            PrivacySettingsAction({
+            UiAction({
               title: this.privateHasPassword ? '修改本地密码' : '设置本地密码',
               detail: '本地密码用于私密内容验证；只存 PBKDF2 校验值，不保存明文',
               onSelect: () => this.openPasswordPanel()
             })
-            PrivacySettingsSwitch({ title: '生物识别快捷解锁', detail: '需要设备支持且先设置本地密码' })
+            UiSwitch({ title: '生物识别快捷解锁', detail: '需要设备支持且先设置本地密码', preview: true })
           }
 
-          PrivacySettingsSection({ title: '验证时机' }) {
-            PrivacySettingsSwitch({ title: '进入私密分组时验证' })
-            PrivacySettingsSwitch({ title: '打开私密书籍时验证' })
-            PrivacySettingsSwitch({ title: '应用启动时验证' })
-            PrivacySettingsChoice({ title: '解锁有效期', options: ['每次都验证', '应用会话内有效', '离开应用前有效'], selected: this.unlockScopeIndex, onSelect: (index: number) => this.unlockScopeIndex = index })
+          UiSection({ title: '验证时机' }) {
+            UiSwitch({ title: '进入私密分组时验证', preview: true })
+            UiSwitch({ title: '打开私密书籍时验证', preview: true })
+            UiSwitch({ title: '应用启动时验证', preview: true })
+            UiChoice({ title: '解锁有效期', options: ['每次都验证', '应用会话内有效', '离开应用前有效'], selectedIndex: this.unlockScopeIndex, onSelect: (index: number) => this.unlockScopeIndex = index })
             if (this.unlockScopeIndex === 2) {
-              PrivacySettingsChoice({ title: '切到后台后的宽限期', options: ['立即失效', '30 秒', '2 分钟', '3 分钟', '5 分钟'], selected: 0, onSelect: (_index: number) => this.onUnavailableAction('宽限期暂为界面预览') })
+              UiChoice({ title: '切到后台后的宽限期', options: ['立即失效', '30 秒', '2 分钟', '3 分钟', '5 分钟'], selectedIndex: 0, onSelect: (_index: number) => this.onUnavailableAction('宽限期暂为界面预览') })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
             }
           }
 
-          PrivacySettingsSection({ title: '权限与数据' }) {
-            PrivacySettingsAction({ title: '通知权限', detail: '用于显示必要的应用通知', onSelect: () => this.onUnavailableAction('通知权限申请尚未接入') })
-            PrivacySettingsAction({ title: '后台运行权限', detail: '查看电池优化状态', onSelect: () => this.onUnavailableAction('系统后台权限尚未接入') })
-            PrivacySettingsSwitch({ title: 'Firebase 服务', detail: '此开关当前仅展示设置项，不会更改服务状态' })
+          UiSection({ title: '权限与数据' }) {
+            UiAction({ title: '通知权限', detail: '用于显示必要的应用通知', onSelect: () => this.onUnavailableAction('通知权限申请尚未接入') })
+            UiAction({ title: '后台运行权限', detail: '查看电池优化状态', onSelect: () => this.onUnavailableAction('系统后台权限尚未接入') })
+            UiSwitch({ title: 'Firebase 服务', detail: '此开关当前仅展示设置项，不会更改服务状态', preview: true })
           }
           Text('说明：本地密码以 PBKDF2 校验值存储，不保存明文，也不进备份。生物识别与验证时机细项仍是界面预览。')
             .fontSize(12).fontColor('#D9A6A0').margin({ left: 18, right: 18, top: 6, bottom: 22 })
@@ -152,98 +155,5 @@ export struct AppPrivacySettingsPage {
         }.width('100%').margin({ top: 12 })
       }.width('90%').padding(18).backgroundColor('#1D1E26').borderRadius(18)
     }.width('100%').height('100%')
-  }
-}
-
-@Component
-struct PrivacySettingsSection {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @Prop title: string = '';
-  @BuilderParam content: () => void = this.emptyContent;
-  @Builder
-  emptyContent() {
-  }
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
-  build() {
-    Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
-      Column() { this.content() }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-    }
-  }
-}
-
-@Component
-struct PrivacySettingsSwitch {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  /** 受控模式：由外部给值并收回调；不开时保留原来的本地预览行为。 */
-  @Prop controlled: boolean = false;
-  @Prop checkedValue: boolean = false;
-  onToggle: (value: boolean) => void = (_value: boolean) => {};
-  @State toggleValue: boolean = false;
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.controlled ? this.checkedValue : this.toggleValue })
-        .onChange((value: boolean) => {
-          this.toggleValue = value;
-          if (this.controlled) { this.onToggle(value); }
-        })
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 })
-  }
-}
-
-@Component
-struct PrivacySettingsAction {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  onSelect: () => void = () => {};
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary)
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.onSelect())
-  }
-}
-
-@Component
-struct PrivacySettingsChoice {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @Prop title: string = '';
-  @Prop options: string[] = [];
-  @Prop selected: number = 0;
-  onSelect: (index: number) => void = (_index: number) => {};
-  private getSelectedLabel(): string {
-    if (this.options.length === 0) { return ''; }
-    return this.options[Math.min(this.selected, this.options.length - 1)];
-  }
-  build() {
-    Row() {
-      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-      Text(this.getSelectedLabel()).fontSize(12).fontColor(this.themeColorAccent)
-      Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => {
-      if (this.options.length > 0) {
-        this.onSelect((this.selected + 1) % this.options.length);
-      }
-    })
   }
 }

@@ -1,3 +1,4 @@
+import { UiSwitch } from '../components/settings/UiSwitch';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 
 @Component
@@ -36,14 +37,14 @@ export struct AppLabSettingsPage {
       Scroll(this.settingsScroller) {
         Column() {
           Column() {
-            LabSettingsSwitch({ title: '启用实验室', detail: '开启后显示实验性功能，可能不稳定', value: this.labEnabled, onChange: (value: boolean) => this.labEnabled = value })
+            UiSwitch({ title: '启用实验室', detail: '开启后显示实验性功能，可能不稳定', value: this.labEnabled, onChange: (value: boolean) => this.labEnabled = value })
           }.margin({ left: 16, right: 16, top: 12 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           if (this.labEnabled) {
             Text('显示').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
               .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
             Column() {
-              LabSettingsSwitch({ title: '墨水屏显示', detail: '在平板界面显示墨水屏选项', value: this.eInkEnabled, onChange: (value: boolean) => this.eInkEnabled = value })
+              UiSwitch({ title: '墨水屏显示', detail: '在平板界面显示墨水屏选项', value: this.eInkEnabled, onChange: (value: boolean) => this.eInkEnabled = value })
               if (this.eInkEnabled) {
                 Text('可在“主题 → 显示”中调整墨水屏设置')
                   .fontSize(12).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, bottom: 12 })
@@ -71,25 +72,5 @@ export struct AppLabSettingsPage {
         }.width('100%').padding({ top: 6 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-  }
-}
-
-@Component
-struct LabSettingsSwitch {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop detail: string = '';
-  @Prop value: boolean = false;
-  onChange: (value: boolean) => void = (_value: boolean) => {};
-  build() {
-    Row() {
-      Column() {
-        Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
-        if (this.detail.length > 0) { Text(this.detail).fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.value })
-        .onChange((value: boolean) => this.onChange(value))
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 })
   }
 }
