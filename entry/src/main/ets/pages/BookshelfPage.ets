@@ -46,6 +46,41 @@ const BOOKSHELF_GRID_STYLE_OPTIONS: BookshelfLayoutOption[] = [
   { value: 2, label: '仅封面' }
 ];
 
+/**
+ * 书架卡片 Grid 的数据源（:154）。
+ *
+ * 与 pages/CatalogPage.ets 的 CatalogChapterDataSource 同一套写法：数据整批换
+ * （onDataReloaded），不做逐项 diff。getVisibleBooks() 要过一遍筛选 + 排序，
+ * 绝不能在 getData(index) 里再算一次——getData 会被逐项调用，放进去就是 O(n²)。
+ */
+class BookshelfBookDataSource implements IDataSource {
+  private items: Book[] = [];
+  private listeners: DataChangeListener[] = [];
+
+  totalCount(): number {
+    return this.items.length;
+  }
+
+  getData(index: number): Book {
+    return this.items[index];
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {
+    if (this.listeners.indexOf(listener) < 0) { this.listeners.push(listener); }
+  }
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {
+    const position = this.listeners.indexOf(listener);
+    if (position >= 0) { this.listeners.splice(position, 1); }
+  }
+
+  /** 整批换数据：通知所有监听者重新读取。 */
+  setItems(items: Book[]): void {
+    this.items = items;
+    this.listeners.forEach((listener: DataChangeListener) => listener.onDataReloaded());
+  }
+}
+
 /** 卡片底色十六进制转 ARGB 整数；空串或非法值返回 0（= 跟随主题）。 */
 function bookshelfCardHexToInt(hex: string): number {
   const normalized = normalizeCustomColor(hex);
@@ -75,7 +110,8 @@ export struct BookshelfPage {
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
-  @Prop books: Book[] = [];
+  /** 书目：变化时重算 LazyForEach 数据源（:154）。 */
+  @Prop @Watch('onBookshelfDataDirty') books: Book[] = [];
   @Prop groups: BookGroup[] = [];
   /** 书架布局设置，来自 Index 的持久化状态。异步恢复完成后由 onLayoutChanged 灌入记住的分组。 */
   @Prop @Watch('onLayoutChanged') layout: BookshelfLayoutSettings = DEFAULT_BOOKSHELF_LAYOUT;
@@ -88,7 +124,7 @@ export struct BookshelfPage {
   @State showLayoutSheet: boolean = false;
   /** 布局面板编辑中的草稿；打开面板时从 layout 复制，确认后整体提交。 */
   @State layoutDraft: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
-  @State selectedFilter: string = '全部';
+  @State @Watch('onBookshelfDataDirty') selectedFilter: string = '全部';
   @State showGroupManager: boolean = false;
   @State showGroupEditor: boolean = false;
   @State editingGroupId: number = -1;
@@ -99,7 +135,7 @@ export struct BookshelfPage {
   @State draftCover: string = '';
   @State pendingDeleteGroupId: number = -1;
   @State showSearch: boolean = false;
-  @State searchQuery: string = '';
+  @State @Watch('onBookshelfDataDirty') searchQuery: string = '';
   @State collapsedHeader: boolean = false;
   @State emptyFace: string = '(；′⌒`)';
   /**
@@ -223,6 +259,19 @@ export struct BookshelfPage {
   onOpenBookshelfManage: (groupName: string) => void = (_groupName: string) => {};
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
+  /** 书卡 Grid 的数据源（:154）；只覆盖书卡，分组卡 Grid 仍是 ForEach。 */
+  private bookshelfData: BookshelfBookDataSource = new BookshelfBookDataSource();
+  /**
+   * 非空时显示全屏加载遮罩，内容即提示文案；空串不显示（:156）。
+   * 上游那个对话框不可取消（Dialog(onDismissRequest = {})），本地同样不可取消。
+   */
+  @State busyText: string = '';
+
+  /** 数据源脏了：整批重算一次可见书（:154）。LazyForEach 不会自己跟着 build 重算。 */
+  private onBookshelfDataDirty(): void {
+    this.bookshelfData.setItems(this.getVisibleBooks());
+  }
+
   private bookCardKey(book: Book): string {
     // 列表模式卡片会展示最新章节名与简介，这两个字段变化时也要让卡片重建。
     // 后两位是私密标记与当前锁定态（:325）：ArkUI 的 ForEach 在 key 不变时直接复用旧节点，
@@ -236,6 +285,7 @@ export struct BookshelfPage {
     this.resolveWindowOrientation();
     AppLog.put(`书架已显示 ${this.books.length} 本书`);
     this.refreshCachedTagColors();
+    this.onBookshelfDataDirty();
   }
 
   aboutToDisappear(): void {
@@ -280,6 +330,8 @@ export struct BookshelfPage {
       this.tabPositionRestored = true;
       this.selectedFilter = remembered;
     }
+    // layout 里带着排序方式与排序方向，换排序就是换可见书的顺序（:154）。
+    this.onBookshelfDataDirty();
   }
 
   /** 切换分组并写回「记住上次所在分组」。 */
@@ -2036,10 +2088,24 @@ export struct BookshelfPage {
         .onClick(async () => {
           // 多选后先进确认页（批 10 的 :555）——真正导入在 Index 的确认页回调里，
           // 这里拿到的一定是 undefined，不再按返回值切分组。
-          await this.onImportBook();
+          // 解析整本正文 + 建目录 + 写库期间屏幕没有任何变化，用户会以为点漏了（:156）。
+          this.busyText = '正在导入，请稍候…';
+          try {
+            await this.onImportBook();
+          } finally {
+            // finally 不能省：导入抛异常时遮罩必须撤掉，否则书架永久卡在一层黑纱上。
+            this.busyText = '';
+          }
         })
       MenuItem({ startIcon: $r('app.media.app_refresh'), content: '更新目录' }).height(48)
-        .onClick(async () => { await this.onRefreshToc(); })
+        .onClick(async () => {
+          this.busyText = '正在重新识别目录…';
+          try {
+            await this.onRefreshToc();
+          } finally {
+            this.busyText = '';
+          }
+        })
       MenuItem({ startIcon: $r('app.media.menu_grid'), content: '布局设置' }).height(48)
         .onClick(() => this.openLayoutSheet())
       MenuItem({ startIcon: $r('app.media.menu_carousel'), content: '分组管理' }).height(48)
@@ -2060,6 +2126,7 @@ export struct BookshelfPage {
   }
 
   build() {
+    Stack({ alignContent: Alignment.Center }) {
     Column() {
       Row() {
         if (this.collapsedHeader) {
@@ -2212,9 +2279,10 @@ export struct BookshelfPage {
         .layoutWeight(1).scrollBar(BarState.Off)
       } else if (this.activeGroupLocked()) {
         this.PrivateGroupLockedPanel()
-      } else if (this.getVisibleBooks().length > 0) {
+      } else if (this.bookshelfData.totalCount() > 0) {
         Grid(this.bookshelfScroller) {
-          ForEach(this.getVisibleBooks(), (book: Book) => {
+          // :154：LazyForEach 只创建视口内 + cachedCount 的项，ForEach 是首帧全量建。
+          LazyForEach(this.bookshelfData, (book: Book) => {
             GridItem() {
               Stack({ alignContent: Alignment.TopEnd }) {
               Column() {
@@ -2422,6 +2490,8 @@ export struct BookshelfPage {
         .columnsTemplate(this.bookshelfColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
+        // 缓存半屏：一屏约 15 张卡，cachedCount(20) 就等于没省钱。
+        .cachedCount(6)
         .layoutWeight(1).scrollBar(this.layout.showBookshelfFastScroller ? BarState.On : BarState.Off)
           // editMode(true) 是 ForEach.onMove 生效的前提，与分组网格同一套写法（:138）。
           .editMode(this.canReorderBooks())
@@ -2470,6 +2540,33 @@ export struct BookshelfPage {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E',
         onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; this.showPasswordPanel = false; }
       })
+
+      // 全屏加载态（:156）。上游 BookshelfScreen.kt:1575-1602 是一层不可取消的 Dialog，
+      // 本地不走 CustomDialog（全仓零先例），改成页面内遮罩：同样的视觉，同样的不可取消。
+      if (this.busyText.length > 0) {
+        Column() {
+          Column() {
+            LoadingProgress().width(40).height(40).color(this.themeColorAccent)
+            Text(this.busyText).fontSize(13).fontColor(this.themeColorTextSecondary)
+              .margin({ top: 16 }).textAlign(TextAlign.Center).maxLines(2)
+          }
+          .padding(24).borderRadius(12)
+          .backgroundColor(this.themeColorSurfaceElevated)
+          .alignItems(HorizontalAlign.Center).constraintSize({ maxWidth: 260 })
+        }
+        .width('100%').height('100%')
+        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+        .backgroundColor('#66000000')
+        // 吃掉点击：不加这一行，手指会穿到底下的卡片上把书打开。
+        // 也不要写成 onClick(() => this.busyText = '')——上游那个对话框不可取消。
+        // 光有 onClick 不够：实测遮罩期间点空白区域仍会穿透到下层书卡，
+        // HitTestMode.Block 让这一层自己独占命中测试，事件不再往下分发。
+        .hitTestBehavior(HitTestMode.Block)
+        .onClick(() => {})
+        .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseInOut }))
+      }
+    }
+    .width('100%').height('100%')
   }
 }
 

@@ -55,7 +55,7 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A1 书架主屏与卡片 | 78 | 69 | 9 | 0 |
+| A1 书架主屏与卡片 | 78 | 71 | 7 | 0 |
 | A2 书架设置面板 | 47 | 47 | 0 | 0 |
 | A3 分组管理 | 22 | 21 | 0 | 1 |
 | B 书籍详情页与元数据 | 80 | 42 | 37 | 1 |
@@ -63,7 +63,7 @@ r279 版 220 行仍是按「用户可感知的操作」取粒度，漏掉的是*
 | D 缓存管理页（整界面，r286 新增） | 53 | 36 | 17 | 0 |
 | E 备份恢复（整界面，r295 新增，r296 补 1 行） | 19 | 13 | 4 | 2 |
 | F 本地书导入与判重（整界面，r323 新增） | 7 | 7 | 0 | 0 |
-| 合计 | 345 | 273 | 67 | 5 |
+| 合计 | 345 | 275 | 65 | 5 |
 
 A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），原本是迁移前证据、未逐行复核，**r340 已逐行复核**（结论见 `## r340 复核结论`，其中 26 行改判 `已接`、2 行新增 `不适用`、174 行标 `**要接**`、9 行标 `**不接**`）；D 块 53 行是 r286 按「整界面」新盘的；E 块 19 行是 r295 按「存储层对 28 类关键词全部隐身」新盘的，r296 补入本地书恢复期冲突规划一行、r336 追加 `keyboardAssists` 类别级 6 行；F 块 7 行是 r323 按 KI-REL4 新盘的。全表状态三值，无 `待定`。
 
@@ -151,9 +151,9 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 |  私密解锁（密码 + 生物识别）  |  `BookshelfScreen.kt:1435-1458`、`:261`  |  `pages/BookshelfPage.ets` `PasswordSheet` + `data/PrivateAccessRepository.ets`  | 已接 |  **实现（r341）**：只做了密码，**指纹未做**（要 ACCESS_BIOMETRIC 权限与真机指纹硬件，模拟器上跑不出验收，且本表无对应行）。密码用 PBKDF2-SHA256 / 210000 次 / 32 字节派生校验值，salt 16 字节随机，比较走定长比较；只存 salt + verifier，不存明文，也不进备份。校验失败只提示「密码错误」。三种解锁有效期都实现（每次都验证按书/分组分别授权、应用会话内、切后台失效）。  |  输错密码停在书架并提示「密码错误」，输对进阅读器；切后台再回来按所选有效期决定是否重新要求验证  |  — |  不备份  |
 | 空态文案与表情切换 | `BookshelfScreen.kt:1647` | `pages/BookshelfPage.ets:691-702` | 已接 | 本地 7 个表情轮换，三种文案 | 清空书架后显示表情与提示，点表情可切换 | 上游为单张插图 | — |
 |  搜索无结果空态与「全局搜索」按钮  |  `BookshelfScreen.kt:1675-1683`  |  `pages/BookshelfPage.ets:699-701`  | 已接 |  本地只把文案换成「没有匹配的书籍」，无跳全局搜索的按钮 。**复核（r340）**：pages/BookshelfPage.ets:1319-1328 空态文案 + Text(全局搜索) 的 onClick | 搜索无结果时出现「全局搜索」按钮，点击跳到全局搜索； 搜索无结果时显示「书架里没有，去全局搜索」，点按钮跳搜索页  |  `bookshelf_empty_global_search` + `global_search`  |  —  |
-|  分页惰性渲染  |  `BookshelfScreen.kt:1669`  |  —  | 未接 |  本地整屏一次性渲染  |  非当前分组的书不参与渲染，滚动不掉帧  |  `!isCurrentPage` 时直接 return ；**要接**：ForEach 改 LazyForEach + cachedCount；加载态用现有 LoadingProgress |  —  |
+|  分页惰性渲染  |  `BookshelfScreen.kt:1669`  |  —  | 已接 |  本地整屏一次性渲染；**实现（r341）**：`pages/BookshelfPage.ets` 书卡 Grid 由 ForEach 换成 LazyForEach（新增 `BookshelfBookDataSource`，`books`/`layout`/`selectedFilter`/`searchQuery` 四个输入接 @Watch 后 setItems），并加 `.cachedCount(6)`。首帧时间与内存：本机只有 217 本、无 300+ 样本，改前改后冷启动各 3 次未做，**未实测**  |  切分组页签只显示该组的书；搜索框输入关键字实时收窄、清空恢复全量；布局面板改列表列数后网格列数跟着变且卡片不错位；三种分组样式（页签/隐藏页签/文件夹）都正常显示  |  `!isCurrentPage` 时直接 return；**已接（r341）**：ForEach 换 LazyForEach + cachedCount(6)；只覆盖书卡 Grid，分组卡 Grid 仍是 ForEach  |  —  |
 |  横竖屏分别布局  |  `BookshelfScreen.kt:1700-1722`  |  `pages/BookshelfPage.ets:395-404`  | 已接 |  本地只读竖屏三键，横屏无独立设置 。**复核（r340）**：pages/BookshelfPage.ets:551/557/563/603/609/615 六个 active* 方法全部按 isLandscape 分叉 | 横屏后书架列数与列表/网格模式按横屏设置生效，与竖屏不同； 横屏后书架列数改用横屏设置值  |  上游四组键，本地两组  |  —  |
-|  加载中对话框  |  `BookshelfScreen.kt:1575-1602`  |  —  | 未接 |  本地无全屏加载态  |  导入大文件时出现加载对话框并可取消  |  — ；**要接**：ForEach 改 LazyForEach + cachedCount；加载态用现有 LoadingProgress |  —  |
+|  加载中对话框  |  `BookshelfScreen.kt:1575-1602`  |  —  | 已接 |  本地无全屏加载态；**实现（r341）**：`pages/BookshelfPage.ets` 加 `@State busyText` 与全屏 `#66000000` 遮罩（LoadingProgress 40×40 + 文案），挂「添加本地」与「更新目录」两个入口，try/finally 保证异常也撤掉；遮罩加 `.hitTestBehavior(HitTestMode.Block)`，实测期间点下层卡片不再穿透、点遮罩中央不消失（不可取消，对齐上游 `Dialog(onDismissRequest = {})` 空实现）  |  点「更新目录」立刻出现「正在重新识别目录…」全屏遮罩，完成后自动撤掉；期间点遮罩或下层卡片都无反应（不可取消、不可穿透）  |  —；**已接（r341）**：全屏不可取消加载遮罩（busyText + HitTestMode.Block），导入与更新目录两个入口共用  |  —  |
 
 ---
 
@@ -565,7 +565,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 
 ## 小结
 
-**全表合计 345 条：已接 273、未接 67、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 67 行按备注列分：`**要接**` 51 行、`**不接**` 16 行，逐行判断见上一节。
+**全表合计 345 条：已接 275、未接 65、不适用 5，无 `待定`。**（A1 78 + A2 47 + A3 22 + B 80 + C 39 + D 53 + E 19 + F 7）未接 65 行按备注列分：`**要接**` 49 行、`**不接**` 16 行，逐行判断见上一节。
 
 按 `ZIP 类别` 列汇总（含跨类重复计数）：`localBook` 105 行、`—` 101 行、`bookshelfLayout` 53 行、`bookGroup` 38 行、`readRecord` 32 行、`bookSource` 24 行、`不备份` 7 行、`keyboardAssists` 6 行、`tagGroupRule` 4 行、`readConfig` 2 行、`threadCount` 1 行、`highlightTagRule` 1 行。E 块 19 行里 12 行落 `—`（备份流程本身不受任何类别的忽略开关控制）、1 行落 `localBook`（`:512` 本地书恢复期冲突规划）、6 行落 `keyboardAssists`（`:513`-`:518`），F 块 7 行全部落 `localBook`。**28 类里有 18 类在本表零行**（`bookmark`、`rssSource`、`rssStar`、`sourceSub`、`homepageModules`、`homepageCustomSets`、`server`、`httpTTS`、`dictRule`、`highlightRule`、`themeMode`、`themeConfig`、`coverConfig`、`showRss`、`mangaConfig`、`txtTocRule`、`replaceRule`、`searchHistory`），其中 `bookmark` 归 [书签对照](ZIP-BOOKMARK.md)、`themeConfig` 归 [阅读配置总账](READER-CONFIG.md)，其余归 [ZIP 兼容总账](STATUS.md) 的对应行。
 
@@ -669,7 +669,7 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 9 书架管理页整页 | 31 | `:447`–`:475` `:482` `:484` | 按上游 BookshelfManageScreen 建页；入口已在 pages/BookshelfPage.ets:594-595。**实现（r341）**：本批实际交付 20 行（`:447`–`:449` `:451` `:453` `:455`–`:460` `:463` `:465` `:467`–`:469` `:471` `:475` `:482` `:484`）；新建 BookshelfManagePage.ets 整页与 CacheSettingsRepository.ets 偏好落盘，BookshelfPage 更多菜单接线、Index 分支链挂载、AppDownloadCacheSettingsPage 六滑块一开关与清理缓存/压缩数据库真做；6 行（`:450` `:452` `:454` `:461` `:464` `:466`）本地无对应语义改判 **不接** 并逐行写理由；5 行（`:462` `:470` `:472`–`:474`）依赖在线书源或 EPUB 打包器，顺延批 13；顺手把分组卡副标题「私有标记未生效」改成「私有」。上机验收 16 点：13 代码确认（模板 UI 删不掉已有文本未端到端），其余全部实测通过  |
 | 10 导入判重与多选 | 5 | `:551` `:552` `:554`–`:556` | data/BookRepository.ets:428-435 的 maxSelectNumber = 1 是硬卡点；导入页需先建中间页。**实现（r341）**：5 行全部交付——新建 data/LocalBookImportPlanner.ets 与 pages/LocalBookImportPage.ets，BookRepository 拆出 pickLocalBookUris / importSingleUri / importLocalBooks 并补 parseNameAuthor / isFileOnShelf / localTitleFromFileName / bookUrlOf，Index 的 importLocalBook 改为「选文件 → 确认页 → 逐本导入」三步并在导入后回书架重读书目。三处与判断段不同：接回判据改用 title（本地 originName 不是文件名）、只放开多选未放开后缀（无 PDF/MOBI/AZW3/ZIP 解析器）、确认页而非目录列表页（鸿蒙无目录枚举）。上机验收 12 点：1、2、4、6、7、8、10、11 实测通过；3 与 5 因设备系统选择器无法进入多选态改间接验证；9（接回后书签仍保留）无可用造数路径未验证；12 重装重跑通过 |
 | 11 阅读记录与备份开关 | 5 | `:394` `:504` `:505` `:510` `:511` | 章名字段直接补；进度同步与自动检查需后台任务；旧版数据要旧格式 JSON 解析器。**实现（r341，11a）**：`ReadTimeRecord` 补 `chapterIndex`，`toTimelineRecords` 与 `getRecordsForDate` 透传，时间线与最后阅读两视图显示「第 N 章」；按日汇总不做（`readWords` 是章号累加，非章号本身）。**实现（r341，11b）**：本批实际交付 5 行（11a 的 `:394` + 11b 的 `:504` `:505` `:510` `:511`）。`:504` 补消费面（阅读收尾上传 bookProgress、开书前比对远端并弹跳转框、启动查一次远端新备份、同步模式补第三档）；`:505` 用应用内 `files/backups` 作固定目录（系统目录 picker 无法确认目录、`READ_WRITE_DOWNLOAD_DIRECTORY` 本机不可授予）；`:510` 照上游改用固定文件名 `backup.zip` 覆盖并在备份后清理；`:511` 新建 `data/OldBookShelfImporter.ets` 只迁移 myBookShelf.json。上机验收：进度上传与跳转（远端 bookProgress JSON + 弹框截图 + 数据库进度写回）、只留最新（远端两旧包被删而 keepme.txt 保留）、导入旧版（217→219 本并提示跳过 1 条）、固定目录备份不再弹框且只剩一份 backup.zip 全部实测通过 |
-| 12 性能 | 2 | `:154` `:156` | ForEach 改 LazyForEach + cachedCount；加载态用现有 LoadingProgress |
+| 12 性能 | 2 | `:154` `:156` | ForEach 改 LazyForEach + cachedCount；加载态用现有 LoadingProgress。**实现（r341）**：2 行全部交付——`:154` 书卡 Grid 换 LazyForEach + cachedCount(6)，四个 @Watch 输入接 setItems（分组卡 Grid 仍留 ForEach），页签/搜索/列数/三档分组样式上机验收通过，首帧优化未实测；`:156` 加 busyText 全屏遮罩 + HitTestMode.Block 修掉穿透，导入与更新目录两入口 try/finally 撤罩，不可取消/不可穿透实测通过。两行备注列原串成同一句话，已各归各重写；`:156` 验收列「可取消」改为「不可取消」 |
 | 13 随在线书源模块 | 18 | `:89` `:94` `:122` `:145` `:275` `:283` `:285` `:286` `:307` `:317`–`:319` `:324` `:345` `:347`–`:349` `:515` | 书源已纳入范围但未排期（docs/PROJECT.md:24-44）。:145 批量下载即批量缓存在线章节，同批 |
 
 批 1–12 合计 **156 行**，批 13 的 18 行等书源模块（书源已纳入范围但未排期，见 `docs/PROJECT.md:24-44`）。
