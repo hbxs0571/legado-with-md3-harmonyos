@@ -2403,6 +2403,7 @@ struct Index {
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
     this.publishTopBottomBarStyle();
+    this.publishTopBarSwitches();
     this.applyThemeMode(context, patch.themeMode, patch.paletteIndex, true).catch(() => {
       this.showUnavailableAction('主题已应用，但保存失败，请重试');
     });
@@ -2575,6 +2576,7 @@ struct Index {
     this.applyThemeStatusBar(context);
     this.publishThemeCardStyle();
     this.publishTopBottomBarStyle();
+    this.publishTopBarSwitches();
     if (!hasStored && state.completed) {
       const mode = ThemeSettingsRepository.fromModeNumber(state.themeMode);
       await this.applyThemeMode(context, mode, state.paletteIndex, true);
@@ -2906,6 +2908,17 @@ struct Index {
     AppStorage.setOrCreate('themeBottomBarRadius', resolveBottomBarCornerRadius(snapshot));
   }
 
+  /**
+   * 把三个顶栏开关广播给 `components/TopBar.ets`。
+   * 上游这三个值是 `ThemeSettings` 的一部分，靠 CompositionLocal 随处可取；
+   * ArkUI 没有等价物，沿用 `publishThemeCardStyle()` / `publishTopBottomBarStyle()` 的做法走 AppStorage。
+   */
+  private publishTopBarSwitches(): void {
+    AppStorage.setOrCreate('themeUseFlexibleTopAppBar', this.themeUseFlexibleTopAppBar);
+    AppStorage.setOrCreate('themeTopBarButtonStyle', this.themeTopBarButtonStyle);
+    AppStorage.setOrCreate('themeMergeTopBarActions', this.themeMergeTopBarActions);
+  }
+
   private selectThemeEnableBlur(context: Context, enabled: boolean): void {
     this.themeEnableBlur = enabled;
     this.publishTopBottomBarStyle();
@@ -2924,6 +2937,7 @@ struct Index {
 
   private selectThemeUseFlexibleTopAppBar(context: Context, enabled: boolean): void {
     this.themeUseFlexibleTopAppBar = enabled;
+    this.publishTopBarSwitches();
     this.saveThemeSettings(context).catch(() => {
       this.showUnavailableAction('折叠应用栏设置保存失败，请重试');
     });
@@ -2931,6 +2945,7 @@ struct Index {
 
   private selectThemeTopBarButtonStyle(context: Context, value: string): void {
     this.themeTopBarButtonStyle = normalizeTopBarButtonStyle(value);
+    this.publishTopBarSwitches();
     this.saveThemeSettings(context).catch(() => {
       this.showUnavailableAction('顶栏按钮样式保存失败，请重试');
     });
@@ -2938,6 +2953,7 @@ struct Index {
 
   private selectThemeMergeTopBarActions(context: Context, enabled: boolean): void {
     this.themeMergeTopBarActions = enabled;
+    this.publishTopBarSwitches();
     this.saveThemeSettings(context).catch(() => {
       this.showUnavailableAction('合并顶栏按钮设置保存失败，请重试');
     });
