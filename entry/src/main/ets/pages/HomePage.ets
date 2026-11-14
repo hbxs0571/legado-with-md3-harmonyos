@@ -3,6 +3,7 @@ import { Book } from '../model/Book';
 import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { HomeDashboardSection, HOME_DASHBOARD_SECTIONS } from '../data/HomeDashboardSettingsRepository';
 
 @Component
@@ -28,10 +29,6 @@ export struct HomePage {
   @State showHomeOptions: boolean = false;
   @State refreshing: boolean = false;
   @State collapsedHeader: boolean = false;
-  /** 顶栏底色（含不透明度与模糊透明度），由 `Index.publishTopBottomBarStyle()` 广播。 */
-  @StorageProp('themeTopBarBackground') themeTopBarBackground: string = '';
-  /** 顶栏模糊半径；0 表示不模糊。 */
-  @StorageProp('themeTopBarBlurRadius') themeTopBarBlurRadius: number = 0;
   private homeScroller: Scroller = new Scroller();
 
   private handlePullToRefresh(): void {
@@ -55,6 +52,15 @@ export struct HomePage {
       MenuItem({ content: '首页组件' }).height(48)
         .onClick(() => this.showHomeOptions = true)
     }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+  }
+
+  @Builder homeTopActions() {
+    TopBarButton({
+      icon: 'settings',
+      showDivider: false,
+      onSelect: () => { this.showHomeOptions = !this.showHomeOptions; }
+    })
+    TopBarButton({ icon: 'more', menuMode: true }).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
   }
 
   private getLocalBooks(): Book[] {
@@ -132,26 +138,11 @@ export struct HomePage {
 
   build() {
     Column() {
-      Column() {
-        Row() {
-          Text('首页').fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-            .opacity(this.collapsedHeader ? 1 : 0)
-          Blank()
-          Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'settings', glyphSize: 20 }) }
-            .width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(22)
-            .onClick(() => this.showHomeOptions = !this.showHomeOptions)
-          Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
-            .width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(22).margin({ left: 8 })
-            .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-        }.width('100%').height(64).padding({ left: 16, right: 12 })
-        Text('首页').fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-          .width('100%').height(72).padding({ left: 16, bottom: 14 })
-          .opacity(this.collapsedHeader ? 0 : 1)
-      }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
-        .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
-          : (this.themeAppBackground.length > 0 ? Color.Transparent
-            : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)))
-        .backdropBlur(this.themeTopBarBlurRadius)
+      AppTopBar({
+        title: '首页',
+        collapsed: this.collapsedHeader,
+        actions: () => { this.homeTopActions() }
+      })
       Refresh({ refreshing: this.refreshing }) {
         Scroll(this.homeScroller) {
         Column() {

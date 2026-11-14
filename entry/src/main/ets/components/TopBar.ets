@@ -216,6 +216,11 @@ export struct TopBarButton {
    * 所以改成显式参数（与 `UiSection` 系列组件的 `showDivider` 同一套做法）。
    */
   @Prop showDivider: boolean = true;
+  /**
+   * 菜单模式：该按钮由外层 `bindMenu` 打开菜单。置 true 时组件内不注册 onClick，
+   * 否则内层点击手势会抢掉 bindMenu 的点击，菜单弹不出来（实测结论）。
+   */
+  @Prop menuMode: boolean = false;
   onSelect: () => void = () => {};
 
   private merged(): boolean {
@@ -247,32 +252,51 @@ export struct TopBarButton {
     return this.themePureBlack ? '#121212' : this.themeColorSurfaceSecondary;
   }
 
-  build() {
-    Stack({ alignContent: Alignment.Center }) {
-      // 合并态的分隔竖线：高度 40%、纵向居中（对应上游 30%→70%）。
-      if (this.merged() && this.showDivider) {
-        Column()
-          .width(1)
-          .height(this.buttonSize() * 0.4)
-          .backgroundColor(this.themeColorTextTertiary)
-          .opacity(0.15)
-          .position({ x: 0, y: this.buttonSize() * 0.3 })
-      }
-      AppGlyph({ name: this.icon, glyphSize: this.iconSize(), tint: this.contentColor() })
+  /** 按钮内容：合并态分隔竖线 + 图标，两种模式共用。 */
+  @Builder buttonContent() {
+    // 合并态的分隔竖线：高度 40%、纵向居中（对应上游 30%→70%）。
+    if (this.merged() && this.showDivider) {
+      Column()
+        .width(1)
+        .height(this.buttonSize() * 0.4)
+        .backgroundColor(this.themeColorTextTertiary)
+        .opacity(0.15)
+        .position({ x: 0, y: this.buttonSize() * 0.3 })
     }
-    .width(this.buttonSize())
-    .height(this.buttonSize())
-    .borderRadius(this.buttonSize() / 2)
-    .backgroundColor(this.containerColor())
-    .border({
-      width: !this.merged() && this.themeTopBarButtonStyle === 'outlined' ? 1 : 0,
-      color: this.themeColorTextTertiary
-    })
-    .opacity(this.disabled ? 0.38 : 1)
-    .enabled(!this.disabled)
-    .onClick(() => {
-      if (!this.disabled) { this.onSelect(); }
-    })
+    AppGlyph({ name: this.icon, glyphSize: this.iconSize(), tint: this.contentColor() })
+  }
+
+  build() {
+    if (this.menuMode) {
+      // 不注册 onClick：bindMenu 的可点击节点落在自定义组件外层，内层 Stack 一旦 clickable
+      // 就会抢走点击手势，菜单弹不出来（对照：未迁移发现页的原版 Stack 无 onClick，可正常弹出）。
+      Stack({ alignContent: Alignment.Center }) { this.buttonContent() }
+        .width(this.buttonSize())
+        .height(this.buttonSize())
+        .borderRadius(this.buttonSize() / 2)
+        .backgroundColor(this.containerColor())
+        .border({
+          width: !this.merged() && this.themeTopBarButtonStyle === 'outlined' ? 1 : 0,
+          color: this.themeColorTextTertiary
+        })
+        .opacity(this.disabled ? 0.38 : 1)
+        .enabled(!this.disabled)
+    } else {
+      Stack({ alignContent: Alignment.Center }) { this.buttonContent() }
+        .width(this.buttonSize())
+        .height(this.buttonSize())
+        .borderRadius(this.buttonSize() / 2)
+        .backgroundColor(this.containerColor())
+        .border({
+          width: !this.merged() && this.themeTopBarButtonStyle === 'outlined' ? 1 : 0,
+          color: this.themeColorTextTertiary
+        })
+        .opacity(this.disabled ? 0.38 : 1)
+        .enabled(!this.disabled)
+        .onClick(() => {
+          if (!this.disabled) { this.onSelect(); }
+        })
+    }
   }
 }
 
