@@ -1,4 +1,5 @@
 import { AppGlyph } from '../components/AppGlyph';
+import { AppTopBar, TopBarButton, TopBarBackButton } from '../components/TopBar';
 
 const SUBSCRIPTION_EMPTY_FACES: string[] = [
   '(；′⌒`)', '(つ﹏⊂)', '(•̀ᴗ•́)و', '(๑•́ ₃ •̀๑)', '(눈‸눈)', '(ಥ﹏ಥ)', '(｡•́︿•̀｡)'
@@ -76,29 +77,32 @@ struct SubscriptionListPage {
   }
 
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
+  @State collapsedHeader: boolean = false;
+
+  @Builder subNavSlot() {
+    TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
+  @Builder subTopActions() {
+    TopBarButton({
+      icon: 'search',
+      showDivider: false,
+      onSelect: () => { this.searchVisible = !this.searchVisible; }
+    })
+    TopBarButton({ icon: 'more', menuMode: true })
+      .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+  }
+
   build() {
     Column() {
-      Row() {
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).onClick(() => this.onBack())
-        Blank().layoutWeight(1)
-        Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
-          .onClick(() => this.searchVisible = !this.searchVisible)
-        Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-          .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-      }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 2 })
-
-      Column() {
-        Text(this.title).fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-        if (this.subtitle.length > 0) {
-          Text(this.subtitle).fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
-        }
-      }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 5, bottom: 12 })
+      AppTopBar({
+        title: this.title,
+        subtitle: this.subtitle,
+        collapsed: this.collapsedHeader,
+        hasNavigation: true,
+        navigationIcon: () => { this.subNavSlot() },
+        actions: () => { this.subTopActions() }
+      })
 
       if (this.searchVisible) {
         Row() {
@@ -205,27 +209,32 @@ export struct SubscriptionSourceManagePage {
   }
 
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
+  @State collapsedHeader: boolean = false;
+
+  @Builder subNavSlot() {
+    TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
+  @Builder subTopActions() {
+    TopBarButton({
+      icon: 'search',
+      showDivider: false,
+      onSelect: () => { this.searchVisible = !this.searchVisible; }
+    })
+    TopBarButton({ icon: 'more', menuMode: true })
+      .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+  }
+
   build() {
     Column() {
-      Row() {
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).onClick(() => this.onBack())
-        Blank().layoutWeight(1)
-        Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
-          .onClick(() => this.searchVisible = !this.searchVisible)
-        Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-          .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-      }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 2 })
-
-      Column() {
-        Text('订阅源').fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-        Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
-      }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 5, bottom: 12 })
+      AppTopBar({
+        title: '订阅源',
+        subtitle: '全部',
+        collapsed: this.collapsedHeader,
+        hasNavigation: true,
+        navigationIcon: () => { this.subNavSlot() },
+        actions: () => { this.subTopActions() }
+      })
 
       if (this.searchVisible) {
         Row() {
