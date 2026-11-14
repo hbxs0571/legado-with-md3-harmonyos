@@ -4,6 +4,7 @@ import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
+import { AppTopBar, TopBarButton, TopBarBackButton } from '../components/TopBar';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 
 @Component
@@ -28,10 +29,6 @@ export struct SearchPage {
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   @State showScopePanel: boolean = false;
   @State collapsedHeader: boolean = false;
-  /** 顶栏底色（含不透明度与模糊透明度），由 `Index.publishTopBottomBarStyle()` 广播。 */
-  @StorageProp('themeTopBarBackground') themeTopBarBackground: string = '';
-  /** 顶栏模糊半径；0 表示不模糊。 */
-  @StorageProp('themeTopBarBlurRadius') themeTopBarBlurRadius: number = 0;
   private suggestionScroller: Scroller = new Scroller();
   private resultsScroller: Scroller = new Scroller();
   onBack: () => void = () => {};
@@ -104,39 +101,34 @@ export struct SearchPage {
     }
   }
 
+  @Builder searchNavSlot() {
+    TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
+  @Builder searchTopActions() {
+    TopBarButton({ icon: 'settings', showDivider: false, onSelect: () => this.onUnavailableAction('搜索设置将在在线书源搜索接入后提供') })
+    TopBarButton({
+      icon: this.exactMatch ? 'searchPrecisionOn' : 'searchPrecisionOff',
+      tint: this.exactMatch ? this.themeColorAccent : '',
+      onSelect: () => this.onExactMatchChange(!this.exactMatch)
+    })
+    TopBarButton({
+      icon: 'profileFilterAlt',
+      tint: this.sourceScope || this.selectedGroup !== '全部书籍' ? this.themeColorAccent : '',
+      onSelect: () => { this.showScopePanel = true; }
+    })
+  }
+
   build() {
     Stack() {
       Column() {
-        Column() {
-          Row() {
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextPrimary)
-              .width(40).height(40).onClick(() => this.onBack())
-            Text('搜索').fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-              .opacity(this.collapsedHeader ? 1 : 0)
-            Blank()
-            Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'settings', glyphSize: 20, tint: this.themeColorTextSecondary })
-            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
-              .onClick(() => this.onUnavailableAction('搜索设置将在在线书源搜索接入后提供'))
-            Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: this.exactMatch ? 'searchPrecisionOn' : 'searchPrecisionOff', glyphSize: 20,
-                tint: this.exactMatch ? this.themeColorAccent : this.themeColorTextSecondary })
-            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-              .onClick(() => this.onExactMatchChange(!this.exactMatch))
-            Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'profileFilterAlt', glyphSize: 20,
-                tint: this.sourceScope || this.selectedGroup !== '全部书籍' ? this.themeColorAccent : this.themeColorTextSecondary })
-            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-              .onClick(() => this.showScopePanel = true)
-          }.width('100%').height(64).padding({ left: 12, right: 12 })
-          Text('搜索').fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-            .width('100%').height(72).padding({ left: 16, bottom: 14 })
-            .opacity(this.collapsedHeader ? 0 : 1)
-        }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
-        .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
-          : (this.themeAppBackground.length > 0 ? Color.Transparent
-            : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)))
-        .backdropBlur(this.themeTopBarBlurRadius)
+        AppTopBar({
+          title: '搜索',
+          collapsed: this.collapsedHeader,
+          hasNavigation: true,
+          navigationIcon: () => { this.searchNavSlot() },
+          actions: () => { this.searchTopActions() }
+        })
 
         Row() {
           AppGlyph({ name: 'search', glyphSize: 19, tint: '#C5C7D0' }).margin({ right: 9 })
