@@ -3614,60 +3614,80 @@ export struct ReaderSettingsPage {
 
 @Component
 struct BackgroundShareOption {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetSelectedBg') rsetSelectedBg: string = '#454B62';
+  @StorageProp('rsetChipBg') rsetChipBg: string = '#15161B';
+  @StorageProp('rsetTrack') rsetTrack: string = '#454751';
   @Prop selected: boolean = false;
 
   build() {
     Column() {
-      Image($r('app.media.menu_grid')).width(20).height(20).fillColor('#E4E5EA')
+      Image($r('app.media.menu_grid')).width(20).height(20).fillColor(this.rsetTextPrimary)
     }.width(40).height(56).justifyContent(FlexAlign.Center)
-      .backgroundColor(this.selected ? '#34394C' : '#15161B')
+      .backgroundColor(this.selected ? this.rsetSelectedBg : this.rsetChipBg)
       .borderRadius(9)
-      .border({ width: this.selected ? 2 : 1, color: this.selected ? this.themeColorAccent : '#33343C' })
+      .border({ width: this.selected ? 2 : 1, color: this.selected ? this.rsetAccent : this.rsetTrack })
   }
 }
 
 /** 样式行末尾的纯动作卡：「+」新增样式与「>」进主题列表，两者都不代表某个具体样式。 */
 @Component
 struct BackgroundStyleActionCard {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetChipBg') rsetChipBg: string = '#15161B';
+  @StorageProp('rsetTrack') rsetTrack: string = '#454751';
   @Prop icon: Resource = $r('app.media.app_add');
   @Prop selected: boolean = false;
 
   build() {
     Column() {
-      Image(this.icon).width(18).height(18).fillColor('#E4E5EA')
+      Image(this.icon).width(18).height(18).fillColor(this.rsetTextPrimary)
     }.width(40).height(56).justifyContent(FlexAlign.Center)
-      .backgroundColor('#15161B')
+      .backgroundColor(this.rsetChipBg)
       .borderRadius(9)
-      .border({ width: 1, color: '#33343C' })
+      .border({ width: 1, color: this.rsetTrack })
   }
 }
 
 @Component
 struct MenuSettingIconStyle {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetSelectedText') rsetSelectedText: string = '#ECECF0';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetSelectedBg') rsetSelectedBg: string = '#454B62';
+  @StorageProp('rsetChipBg') rsetChipBg: string = '#15161B';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop value: number = 1;
   onChange: (style: number) => void = (_style: number) => {};
 
   build() {
     Column() {
-      Text('底栏图标样式').fontSize(13).fontColor('#E2E3E8').width('100%').margin({ bottom: 10 })
+      Text('底栏图标样式').fontSize(13).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 10 })
       Row() {
         ForEach(['纯色', '色调', '描边'], (label: string, index: number) => {
-          Text(label).fontSize(11).fontColor(this.value === index ? '#ECECF0' : '#B7B8C1')
+          Text(label).fontSize(11).fontColor(this.value === index ? this.rsetSelectedText : this.rsetTextTertiary)
             .layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor(this.value === index ? '#454B62' : '#15161B')
+            .backgroundColor(this.value === index ? this.rsetSelectedBg : this.rsetChipBg)
             .borderRadius(11).padding(9).margin({ left: index === 0 ? 0 : 6 })
             .onClick(() => this.onChange(index))
         }, (label: string) => label)
       }.width('100%')
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct MenuSettingSlider {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetTrack') rsetTrack: string = '#454751';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop value: number = 5;
   @Prop minValue: number = 1;
@@ -3678,12 +3698,12 @@ struct MenuSettingSlider {
   build() {
     Column() {
       Row() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-        Text(`${this.value}`).fontSize(12).fontColor('#D3D4DC')
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(`${this.value}`).fontSize(12).fontColor(this.rsetTextSecondary)
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: this.stepValue, style: SliderStyle.InSet })
-        .width('100%').selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
-        .showSteps(true).stepColor(this.themeColorAccent).stepSize(3)
+        .width('100%').selectedColor(this.rsetAccent).trackColor(this.rsetTrack).blockColor(this.rsetAccent)
+        .showSteps(true).stepColor(this.rsetAccent).stepSize(3)
         // 拖动期把「滑块正在拖」广播到 AppStorage，阅读页据此把顶栏/底栏压到 30% 以下，
         // 让用户能看见背后正文的实时变化（上游 `TinySettingItems.kt:349-356` 的
         // `LocalSliderDragState.startDragging/stopDragging` 同口径）。
@@ -3699,35 +3719,46 @@ struct MenuSettingSlider {
             this.onChange(Math.max(this.minValue, Math.min(this.maxValue, Math.round(value))));
           }
         })
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct MenuSettingChoice {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetSelectedText') rsetSelectedText: string = '#ECECF0';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetSelectedBg') rsetSelectedBg: string = '#454B62';
+  @StorageProp('rsetChipBg') rsetChipBg: string = '#15161B';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop value: string = 'page';
   onChange: (value: string) => void = (_value: string) => {};
 
   build() {
     Column() {
-      Text(this.title).fontSize(13).fontColor('#E2E3E8').width('100%').margin({ bottom: 10 })
+      Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 10 })
       Row() {
-        Text('页码').fontSize(11).fontColor(this.value === 'page' ? '#ECECF0' : '#B7B8C1')
+        Text('页码').fontSize(11).fontColor(this.value === 'page' ? this.rsetSelectedText : this.rsetTextTertiary)
           .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.value === 'page' ? '#454B62' : '#15161B')
+          .backgroundColor(this.value === 'page' ? this.rsetSelectedBg : this.rsetChipBg)
           .borderRadius(11).padding(9).onClick(() => this.onChange('page'))
-        Text('章节').fontSize(11).fontColor(this.value === 'chapter' ? '#ECECF0' : '#B7B8C1')
+        Text('章节').fontSize(11).fontColor(this.value === 'chapter' ? this.rsetSelectedText : this.rsetTextTertiary)
           .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.value === 'chapter' ? '#454B62' : '#15161B')
+          .backgroundColor(this.value === 'chapter' ? this.rsetSelectedBg : this.rsetChipBg)
           .borderRadius(11).padding(9).margin({ left: 8 }).onClick(() => this.onChange('chapter'))
       }.width('100%')
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct MenuSettingSwitch {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop checked: boolean = false;
@@ -3736,18 +3767,22 @@ struct MenuSettingSwitch {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8')
-        Text(this.detail).fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .onChange((enabled: boolean) => this.onChange(enabled))
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct MenuSettingPalette {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop colors: string[] = [];
   @Prop selectedColor: string = '';
@@ -3756,8 +3791,8 @@ struct MenuSettingPalette {
   build() {
     Column() {
       Row() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-        Text(this.selectedColor).fontSize(10).fontColor('#AEB0B9')
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(this.selectedColor).fontSize(10).fontColor(this.rsetTextTertiary)
       }.width('100%').margin({ bottom: 10 })
       Row() {
         ForEach(this.colors, (color: string) => {
@@ -3765,28 +3800,35 @@ struct MenuSettingPalette {
             Circle().width(27).height(27).fill(color)
             if (this.selectedColor.toUpperCase() === color.toUpperCase()) {
               Circle().width(33).height(33).fill(Color.Transparent)
-                .stroke(this.themeColorAccent).strokeWidth(2)
+                .stroke(this.rsetAccent).strokeWidth(2)
             }
           }.width(38).height(38).onClick(() => this.onChange(color))
         }, (color: string) => color)
       }.width('100%').justifyContent(FlexAlign.SpaceBetween)
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct MenuSettingSection {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
   @Prop title: string = '';
 
   build() {
-    Text(this.title).fontSize(12).fontColor(this.themeColorAccent).width('100%')
+    Text(this.title).fontSize(12).fontColor(this.rsetAccent).width('100%')
       .padding({ left: 4, top: 10, bottom: 4 })
   }
 }
 
 @Component
 struct MenuSettingSegments {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetInnerBg') rsetInnerBg: string = '#292A31';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop choices: string[] = [];
   @Prop selectedIndex: number = 0;
@@ -3794,18 +3836,24 @@ struct MenuSettingSegments {
 
   build() {
     Row() {
-      Text(this.title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1).maxLines(1)
+      Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1).maxLines(1)
       Text(this.choices[this.selectedIndex] ?? this.choices[0] ?? '')
-        .fontSize(11).fontColor('#D3D4DC').padding({ left: 10, right: 10, top: 6, bottom: 6 })
-        .backgroundColor('#292A31').borderRadius(8)
-      Text('⌄').fontSize(15).fontColor('#A7A9B3').margin({ left: 4 })
-    }.width('100%').height(46).padding(8).backgroundColor('#202127').borderRadius(12)
+        .fontSize(11).fontColor(this.rsetTextSecondary).padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .backgroundColor(this.rsetInnerBg).borderRadius(8)
+      Text('⌄').fontSize(15).fontColor(this.rsetTextTertiary).margin({ left: 4 })
+    }.width('100%').height(46).padding(8).backgroundColor(this.rsetCardBg).borderRadius(12)
       .onClick(() => this.onSelect(this.selectedIndex))
   }
 }
 
 @Component
 struct ReaderInfoSettingRow {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetInnerBg') rsetInnerBg: string = '#292A31';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop iconKind: number = 0;
   @Prop title: string = '';
   @Prop choices: string[] = [];
@@ -3815,26 +3863,31 @@ struct ReaderInfoSettingRow {
   build() {
     Row() {
       if (this.iconKind === 0) {
-        Image($r('app.media.reader_info_heading')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+        Image($r('app.media.reader_info_heading')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       } else if (this.iconKind === 1) {
-        Image($r('app.media.reader_info_align_left')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+        Image($r('app.media.reader_info_align_left')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       } else if (this.iconKind === 2) {
-        Image($r('app.media.reader_info_align_center')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+        Image($r('app.media.reader_info_align_center')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       } else {
-        Image($r('app.media.reader_info_align_right')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+        Image($r('app.media.reader_info_align_right')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       }
-      Text(this.title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1).maxLines(1)
+      Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1).maxLines(1)
       Text(this.choices[this.selectedIndex] ?? this.choices[0] ?? '')
-        .fontSize(11).fontColor('#D3D4DC').padding({ left: 10, right: 10, top: 6, bottom: 6 })
-        .backgroundColor('#292A31').borderRadius(8)
-      Text('⌄').fontSize(15).fontColor('#A7A9B3').margin({ left: 4 })
-    }.width('100%').height(50).padding(10).backgroundColor('#202127').borderRadius(12)
+        .fontSize(11).fontColor(this.rsetTextSecondary).padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .backgroundColor(this.rsetInnerBg).borderRadius(8)
+      Text('⌄').fontSize(15).fontColor(this.rsetTextTertiary).margin({ left: 4 })
+    }.width('100%').height(50).padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
       .onClick(() => this.onSelect(this.selectedIndex))
   }
 }
 
 @Component
 struct ReaderInfoColorRow {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop iconKind: number = 4;
   @Prop title: string = '';
   @Prop detail: string = '';
@@ -3842,25 +3895,30 @@ struct ReaderInfoColorRow {
   build() {
     Row() {
       if (this.iconKind === 4) {
-        Image($r('app.media.reader_info_palette')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+        Image($r('app.media.reader_info_palette')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       } else {
-        Image($r('app.media.reader_info_color_text')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+        Image($r('app.media.reader_info_color_text')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       }
       Column() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8')
-        Text(this.detail).fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Row() {
         Column().width(22).height(22).backgroundColor('#E6E1E7').borderRadius(11)
         Column().width(22).height(22).backgroundColor('#3D3D46').borderRadius(11).margin({ left: 5 })
       }
-      Text('›').fontSize(20).fontColor('#A7A9B3').margin({ left: 8 })
-    }.width('100%').padding(10).backgroundColor('#202127').borderRadius(12)
+      Text('›').fontSize(20).fontColor(this.rsetTextTertiary).margin({ left: 8 })
+    }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct ReaderInfoSwitchRow {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop checked: boolean = false;
@@ -3868,38 +3926,48 @@ struct ReaderInfoSwitchRow {
 
   build() {
     Row() {
-      Image($r('app.media.reader_info_minimize')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+      Image($r('app.media.reader_info_minimize')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       Column() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8')
-        Text(this.detail).fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .onChange((enabled: boolean) => this.onChange(enabled))
-    }.width('100%').padding(10).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct ReaderInfoOptionRow {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop iconKind: number = 5;
   @Prop title: string = '';
   @Prop detail: string = '';
 
   build() {
     Row() {
-      Image($r('app.media.reader_info_text_fields')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
+      Image($r('app.media.reader_info_text_fields')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       Column() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8')
-        Text(this.detail).fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('›').fontSize(20).fontColor('#A7A9B3')
-    }.width('100%').padding(10).backgroundColor('#202127').borderRadius(12)
+      Text('›').fontSize(20).fontColor(this.rsetTextTertiary)
+    }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct ReaderInfoSliderRow {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTrack') rsetTrack: string = '#454751';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop iconKind: number = 6;
   @Prop title: string = '';
   @Prop value: number = 16;
@@ -3910,23 +3978,28 @@ struct ReaderInfoSliderRow {
   build() {
     Column() {
       Row() {
-        Image($r('app.media.reader_info_format_size')).width(20).height(20).fillColor('#D9DAE0').margin({ right: 14 })
-        Text(this.title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-        Text(`${this.value}`).fontSize(12).fontColor('#D3D4DC')
+        Image($r('app.media.reader_info_format_size')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(`${this.value}`).fontSize(12).fontColor(this.rsetTextSecondary)
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: 1, style: SliderStyle.InSet })
-        .width('100%').selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
+        .width('100%').selectedColor(this.rsetAccent).trackColor(this.rsetTrack).blockColor(this.rsetAccent)
         .onChange((value: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
             this.onChange(Math.max(this.minValue, Math.min(this.maxValue, Math.round(value))));
           }
         })
-    }.width('100%').padding(10).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct MenuSettingColor {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetTrack') rsetTrack: string = '#454751';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop detail: string = '';
   /** 日间色；空串表示上游「0 = 未设置」，显示成占位灰。 */
@@ -3937,26 +4010,30 @@ struct MenuSettingColor {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8')
-        Text(this.detail).fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Row() {
         Column().width(22).height(22)
           .backgroundColor(this.dayColor.length > 0 ? this.dayColor : '#3D3D46')
-          .border({ width: this.dayColor.length > 0 ? 0 : 1, color: '#5A5C66' })
+          .border({ width: this.dayColor.length > 0 ? 0 : 1, color: this.rsetTrack })
           .borderRadius(11)
         Column().width(22).height(22)
           .backgroundColor(this.nightColor.length > 0 ? this.nightColor : '#E6E1E7')
-          .border({ width: this.nightColor.length > 0 ? 0 : 1, color: '#5A5C66' })
+          .border({ width: this.nightColor.length > 0 ? 0 : 1, color: this.rsetTrack })
           .borderRadius(11).margin({ left: 5 })
       }
-      Text('›').fontSize(20).fontColor('#A7A9B3').margin({ left: 8 })
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+      Text('›').fontSize(20).fontColor(this.rsetTextTertiary).margin({ left: 8 })
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct MenuSettingOption {
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop migrated: boolean = false;
@@ -3964,20 +4041,22 @@ struct MenuSettingOption {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(13).fontColor('#E2E3E8')
-        Text(this.detail).fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       if (!this.migrated) {
-        Text('尚未迁移').fontSize(9).fontColor('#898B95').margin({ right: 8 })
+        Text('尚未迁移').fontSize(9).fontColor(this.rsetTextTertiary).margin({ right: 8 })
       }
-      Text('›').fontSize(20).fontColor('#A7A9B3')
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+      Text('›').fontSize(20).fontColor(this.rsetTextTertiary)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
 
 @Component
 struct BackgroundOption {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
+  @StorageProp('rsetTrack') rsetTrack: string = '#454751';
   @Prop label: string = '';
   @Prop color: string = '#000000';
   @Prop selected: boolean = false;
@@ -3996,10 +4075,10 @@ struct BackgroundOption {
         Column() {
           Image($r('app.media.app_check')).width(10).height(10).fillColor('#1B1D25')
         }.width('100%').height(12).justifyContent(FlexAlign.Center)
-          .backgroundColor('#C6D3FF')
+          .backgroundColor(this.rsetAccent)
       }
     }.width(44).height(56).justifyContent(FlexAlign.Center).backgroundColor(this.color)
       .borderRadius(11).clip(true)
-      .border({ width: this.selected ? 2 : 1, color: this.selected ? this.themeColorAccent : '#33343C' })
+      .border({ width: this.selected ? 2 : 1, color: this.selected ? this.rsetAccent : this.rsetTrack })
   }
 }
