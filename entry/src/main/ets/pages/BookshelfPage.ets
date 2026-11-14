@@ -14,6 +14,7 @@ import { BookRepository } from '../data/BookRepository';
 import { BookCover } from '../components/BookCover';
 import { BookGroupCard } from '../components/BookGroupCard';
 import { AppGlyph } from '../components/AppGlyph';
+import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { normalizeCustomColor } from '../data/CustomThemeColors';
 import { AppLog } from '../lib/AppLog';
 import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
@@ -2126,53 +2127,42 @@ export struct BookshelfPage {
     }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
   }
 
+  @Builder bookshelfTopActions() {
+    if (this.selectionMode) {
+      TopBarButton({ icon: 'profileClose', showDivider: false, onSelect: () => this.clearSelection() })
+    } else {
+      TopBarButton({
+        icon: 'search',
+        showDivider: false,
+        onSelect: () => {
+          if (this.layout.bookshelfSearchActionDirectToSearch) {
+            this.onSearch();
+          } else {
+            this.showSearch = !this.showSearch;
+            if (!this.showSearch) { this.searchQuery = ''; }
+          }
+        }
+      }).priorityGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+        if (this.layout.bookshelfSearchActionDirectToSearch) {
+          this.showSearch = !this.showSearch;
+          if (!this.showSearch) { this.searchQuery = ''; }
+        } else {
+          this.onSearch();
+        }
+      }))
+      TopBarButton({ icon: 'more', menuMode: true }).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.Center }) {
     Column() {
-      Row() {
-        if (this.collapsedHeader) {
-          Text(this.bookshelfTitle()).fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-        }
-        Blank()
-        if (this.selectionMode) {
-          // 选择模式顶栏：只留关闭按钮，搜索与更多暂时收起（:87）。
-          Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'profileClose', glyphSize: 18 }) }
-            .width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
-            .onClick(() => this.clearSelection())
-        }
-        if (!this.selectionMode) {
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'search', glyphSize: 20 }) }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(20)
-          .onClick(() => {
-            if (this.layout.bookshelfSearchActionDirectToSearch) {
-              this.onSearch();
-            } else {
-              this.showSearch = !this.showSearch;
-              if (!this.showSearch) { this.searchQuery = ''; }
-            }
-          })
-          .priorityGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
-            if (this.layout.bookshelfSearchActionDirectToSearch) {
-              this.showSearch = !this.showSearch;
-              if (!this.showSearch) { this.searchQuery = ''; }
-            } else {
-              this.onSearch();
-            }
-          }))
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 20 }) }
-          .width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(20).margin({ left: 8 })
-          .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-        }
-      }.width('100%').height(56).padding({ left: 16, right: 16, top: 10, bottom: 0 })
-      Column() {
-        Text(this.bookshelfTitle()).fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-        if (this.bookshelfSubtitle().length > 0) {
-          Text(this.bookshelfSubtitle()).fontSize(12).fontColor(this.themeColorTextTertiary)
-        }
-      }.alignItems(HorizontalAlign.Start)
-        .width('100%').height(this.collapsedHeader ? 0 : 58)
-        .padding({ left: 16, right: 16, bottom: this.collapsedHeader ? 0 : 18 })
-        .opacity(this.collapsedHeader ? 0 : 1)
-        .animation({ duration: 220, curve: Curve.EaseInOut })
+      AppTopBar({
+        title: this.bookshelfTitle(),
+        subtitle: this.bookshelfSubtitle(),
+        collapsed: this.collapsedHeader,
+        actions: () => { this.bookshelfTopActions() }
+      })
 
       if (this.showSearch) {
         Row() {
