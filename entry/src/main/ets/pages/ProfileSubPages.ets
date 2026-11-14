@@ -6,6 +6,7 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ReadRecordHeatmap } from '../components/ReadRecordHeatmap';
 import { BookCover } from '../components/BookCover';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+import { AppTopBar, TopBarBackButton } from '../components/TopBar';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import {
   PROFILE_PAGE_SUBTITLE_SIZE,
@@ -4376,25 +4377,23 @@ export struct AppSettingsHomePage {
 
 @Component
 struct SettingsPageHeader {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop title: string = '';
   @Prop collapsed: boolean = false;
   onBack: () => void = () => {};
+
+  @Builder navSlot() {
+    TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
   build() {
-    Column() {
-      Row() {
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-        }.width(40).height(40).onClick(() => this.onBack())
-        Text(this.title).fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-          .opacity(this.collapsed ? 1 : 0)
-        Blank()
-      }.width('100%').height(64).padding({ left: 12, right: 16 })
-      Text(this.title).fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-        .width('100%').height(72).padding({ left: 16, bottom: 14 })
-        .opacity(this.collapsed ? 0 : 1)
-    }.width('100%').height(this.collapsed ? 64 : 136).clip(true)
+    AppTopBar({
+      title: this.title,
+      collapsed: this.collapsed,
+      hasNavigation: true,
+      // @BuilderParam 一律箭头包装：直接传方法引用会把 builder 的 this 重绑到 AppTopBar，
+      // 导致 navSlot 内 this.onBack 为 undefined，点返回即崩溃（批3 实测）。
+      navigationIcon: () => { this.navSlot() }
+    })
   }
 }
 
