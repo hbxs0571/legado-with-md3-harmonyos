@@ -1,5 +1,6 @@
 import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
+import { AppTopBar, TopBarButton } from '../components/TopBar';
 
 interface DiscoverSourceDemo {
   name: string;
@@ -23,6 +24,8 @@ export struct DiscoverPage {
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State showExploreContent: boolean = false;
+  @State collapsedHeader: boolean = false;
+  private discoverScroller: Scroller = new Scroller();
   @State expandedSourceName: string = '';
   @State selectedGroup: string = '';
   @State currentEmptyFace: string = '(つ﹏⊂)';
@@ -37,6 +40,41 @@ export struct DiscoverPage {
   private pickEmptyFace(): string {
     const faceIndex = Math.floor(Math.random() * this.emptyFaces.length);
     return this.emptyFaces[faceIndex] ?? this.emptyFaces[0];
+  }
+
+  /** 折叠由本页 Scroll 的累计偏移驱动，阈值与弹簧收尾和其它页一致。 */
+  private updateHeader(offset: number): void {
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse === this.collapsedHeader) { return; }
+    this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+      this.collapsedHeader = shouldCollapse;
+    });
+  }
+
+  /** 动作区照现有代码逐个映射：搜索（条件）、切换、更多菜单。 */
+  @Builder discoverTopActions() {
+    if (!this.showExploreContent) {
+      TopBarButton({
+        icon: 'search',
+        showDivider: false,
+        onSelect: () => {
+          this.showSearch = !this.showSearch;
+          if (!this.showSearch) { this.searchQuery = ''; }
+        }
+      })
+    }
+    TopBarButton({
+      icon: 'swap',
+      showDivider: !this.showExploreContent,
+      onSelect: () => {
+        this.showExploreContent = !this.showExploreContent;
+        this.expandedSourceName = '';
+        this.showSearch = false;
+        this.searchQuery = '';
+      }
+    })
+    TopBarButton({ icon: 'more', menuMode: true })
+      .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
   }
 
   @Builder
@@ -70,40 +108,12 @@ export struct DiscoverPage {
 
   build() {
     Column() {
-      Row() {
-        Blank()
-        if (!this.showExploreContent) {
-          Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'search', glyphSize: 20 })
-          }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
-            .onClick(() => {
-              this.showSearch = !this.showSearch;
-              if (!this.showSearch) {
-                this.searchQuery = '';
-              }
-            })
-        }
-        Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'swap', glyphSize: 20 })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-          .onClick(() => {
-            this.showExploreContent = !this.showExploreContent;
-            this.expandedSourceName = '';
-            this.showSearch = false;
-            this.searchQuery = '';
-          })
-        Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'more', glyphSize: 20 })
-        }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-          .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
-      }.width('100%').height(48).padding({ left: 18, right: 18 })
-
-      Column() {
-        Text('发现').fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-        if (!this.showExploreContent) {
-          Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
-        }
-      }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 18, right: 18 })
+      AppTopBar({
+        title: '发现',
+        subtitle: this.showExploreContent ? '' : '全部',
+        collapsed: this.collapsedHeader,
+        actions: () => { this.discoverTopActions() }
+      })
 
       if (this.showSearch) {
         Row() {
@@ -140,7 +150,7 @@ export struct DiscoverPage {
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
           .offset({ y: this.showSearch ? -35 : 0 })
       } else {
-        Scroll() {
+        Scroll(this.discoverScroller) {
           Column() {
             ForEach(this.getVisibleSources(), (source: DiscoverSourceDemo) => {
               Column() {
@@ -177,6 +187,9 @@ export struct DiscoverPage {
             }
           }.padding({ left: 16, right: 16, bottom: 16 }).constraintSize({ minHeight: '100%' })
         }.layoutWeight(1).scrollBar(BarState.Off)
+          .onDidScroll((_xOffset: number, _yOffset: number) => {
+            this.updateHeader(this.discoverScroller.currentOffset().yOffset);
+          })
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
