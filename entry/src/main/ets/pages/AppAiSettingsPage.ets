@@ -1,10 +1,10 @@
+import curves from '@ohos.curves';
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { UiSection } from '../components/settings/UiSection';
 import { UiAction } from '../components/settings/UiAction';
 
 @Component
 export struct AppAiSettingsPage {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
@@ -13,26 +13,19 @@ export struct AppAiSettingsPage {
   @State collapsedHeader: boolean = false;
   private settingsScroller: Scroller = new Scroller();
 
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+        this.collapsedHeader = shouldCollapse;
+      });
+    }
+  }
+
   build() {
     Column() {
-      if (this.collapsedHeader) {
-        Row() {
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-            .width(40).height(40).onClick(() => this.onBack())
-          Text('AI 设置').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).margin({ left: 8 })
-        }.width('100%').height(56).padding({ left: 12, right: 16, top: 8, bottom: 8 })
-          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      } else {
-        Column() {
-          Row() {
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-              .width(40).height(40).onClick(() => this.onBack())
-            Blank()
-          }.width('100%')
-          Text('AI 设置').fontSize(24).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-            .alignSelf(ItemAlign.Start).margin({ top: 18, left: 8 })
-        }.width('100%').padding({ left: 12, right: 16, top: 8, bottom: 10 })
-      }
+      CollapsingSettingsHeader({ title: 'AI 设置', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
       Scroll(this.settingsScroller) {
         Column() {
@@ -54,10 +47,7 @@ export struct AppAiSettingsPage {
             UiAction({showDivider: false,  title: '新建 Skill', onSelect: () => this.onUnavailableAction('AI Skill 尚未迁移') })
           }
         }.width('100%').padding({ top: 6, bottom: 120 })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
-        const shouldCollapse = Math.abs(this.settingsScroller.currentOffset().yOffset) > 70;
-        if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
-      })
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }

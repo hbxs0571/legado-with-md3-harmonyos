@@ -1,3 +1,4 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
 import { UiAction } from '../components/settings/UiAction';
 import { UiDropdown } from '../components/settings/UiDropdown';
@@ -257,10 +258,6 @@ export struct ThemeSettingsPage {
   /** 「顶栏与底栏」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
   @State topBottomBarExpanded: boolean = false;
   @State collapsedHeader: boolean = false;
-  /** 顶栏底色（含不透明度与模糊透明度），由 `Index.publishTopBottomBarStyle()` 广播。 */
-  @StorageProp('themeTopBarBackground') themeTopBarBackground: string = '';
-  /** 顶栏模糊半径；0 表示不模糊。 */
-  @StorageProp('themeTopBarBlurRadius') themeTopBarBlurRadius: number = 0;
   private themeScroller: Scroller = new Scroller();
 
   private updateHeader(): void {
@@ -458,24 +455,7 @@ export struct ThemeSettingsPage {
   @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
-      Column() {
-        Row() {
-          Stack({ alignContent: Alignment.Center }) {
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-          }.width(40).height(40).onClick(() => this.onBack())
-          Text('外观').fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-            .opacity(this.collapsedHeader ? 1 : 0)
-          Blank()
-        }.width('100%').height(64).padding({ left: 12, right: 16 })
-        Text('外观').fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-          .width('100%').height(72).padding({ left: 16, bottom: 14 })
-          .opacity(this.collapsedHeader ? 0 : 1)
-      }.width('100%').height(this.collapsedHeader ? 64 : 136).clip(true)
-        .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
-          : (this.themeAppBackground.length > 0 ? Color.Transparent
-            : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)))
-        .backdropBlur(this.themeTopBarBlurRadius)
-
+      CollapsingSettingsHeader({ title: '外观', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
       Scroll(this.themeScroller) {
         Column() {
           Column() {

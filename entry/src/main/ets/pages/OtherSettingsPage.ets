@@ -1,3 +1,5 @@
+import curves from '@ohos.curves';
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { UiSection } from '../components/settings/UiSection';
 import { UiDropdown } from '../components/settings/UiDropdown';
 import { UiSwitch } from '../components/settings/UiSwitch';
@@ -54,28 +56,20 @@ export struct OtherSettingsPage {
     this.activeDialog = 'clearWebView';
   }
 
+  private updateHeader(): void {
+    const offset = this.settingsScroller.currentOffset().yOffset;
+    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+        this.collapsedHeader = shouldCollapse;
+      });
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.Center }) {
       Column() {
-      if (this.collapsedHeader) {
-        Row() {
-          Stack({ alignContent: Alignment.Center }) {
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-          }.width(40).height(40).onClick(() => this.onBack())
-          Text('高级').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).margin({ left: 8 })
-        }.width('100%').height(56).padding({ left: 12, right: 16, top: 8, bottom: 8 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      } else {
-        Column() {
-          Row() {
-            Stack({ alignContent: Alignment.Center }) {
-              Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-            }.width(40).height(40).onClick(() => this.onBack())
-            Blank()
-          }.width('100%')
-          Text('高级').fontSize(24).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-            .alignSelf(ItemAlign.Start).margin({ top: 18, left: 8 })
-        }.width('100%').padding({ left: 12, right: 16, top: 8, bottom: 10 })
-      }
+      CollapsingSettingsHeader({ title: '高级', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
       Scroll(this.settingsScroller) {
         Column() {
@@ -124,10 +118,7 @@ export struct OtherSettingsPage {
             UiSwitch({showDivider: false,  title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
           }
         }.width('100%').padding({ top: 4, bottom: 120 })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
-        const shouldCollapse = Math.abs(this.settingsScroller.currentOffset().yOffset) > 70;
-        if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
-      })
+      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
 
       if (this.activeDialog.length > 0) {

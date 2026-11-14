@@ -1,3 +1,4 @@
+import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
@@ -89,7 +90,7 @@ export struct AppBackupSettingsPage {
   @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
-      BackupHeader({ collapsed: this.collapsedHeader, onBack: () => this.onBack() })
+      CollapsingSettingsHeader({ title: '备份与恢复', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
       Scroll(this.backupScroller) {
         Column() {
           Text('WebDAV 设置').fontSize(14).fontColor(this.themeColorAccent)
@@ -357,27 +358,7 @@ export struct AppBackupSettingsPage {
   }
 }
 
-@Component
-struct BackupHeader {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @Prop collapsed: boolean = false;
-  onBack: () => void = () => {};
-  build() {
-    Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-          .width(40).height(40).onClick(() => this.onBack())
-        Text('备份与恢复').fontSize(22).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-          .opacity(this.collapsed ? 1 : 0)
-        Blank()
-      }.width('100%').height(64).padding({ left: 12, right: 16 })
-      Text('备份与恢复').fontSize(28).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-        .width('100%').height(72).padding({ left: 16, bottom: 14 })
-        .opacity(this.collapsed ? 0 : 1)
-    }.width('100%').height(this.collapsed ? 64 : 136).clip(true)
-  }
-}
+
 
 @Component
 struct BackupSheetOption {
