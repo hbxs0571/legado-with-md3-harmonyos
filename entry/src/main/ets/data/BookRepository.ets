@@ -530,8 +530,9 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
     if (format === 'epub') {
       const imported = await EpubRepository.importFromUri(context, uri, fileName, bookId);
       // EPUB 写出的正文是 UTF-8，章节偏移按字符给，这里统一转成字节偏移的章节行。
+      // 目录树给出的卷标记与任意层级一并交给 buildChapterRows，写入 chapters.isVolume / tocLevel。
       const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
-        imported.titles, imported.offsets, [], imported.content, undefined);
+        imported.titles, imported.offsets, imported.volumes, imported.content, undefined, imported.tocLevels);
       created = { book: imported.book, chapters: chapters };
     } else if (format === 'pdf') {
       // PDF 解析器在批 7 接入；先给可读提示，交给导入流程的失败分支，避免落一本空书。
@@ -1827,7 +1828,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
    * tocLevel 照抄上游：卷标题自己为 0，卷内章节为 1。
    */
   private static buildChapterRows(bookUrl: string, titles: string[], offsets: number[],
-    volumes: boolean[], content: string, encoding: string | undefined): BookChapter[] {
+    volumes: boolean[], content: string, encoding: string | undefined,
+    tocLevels?: number[]): BookChapter[] {
     const rows: BookChapter[] = [];
     if (titles.length === 0) { return rows; }
     const byteOffsets = BookRepository.charOffsetsToByteOffsets(content, offsets, encoding);
@@ -1838,6 +1840,11 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       const title = titles[index] ?? '';
       const isVolume = volumes[index] === true;
       if (isVolume) { tocLevel = 0; }
+      // 目录树给出任意层级时优先采用传入值；未给出则沿用「卷 0 / 卷内 1」的两级推导。
+      let effectiveTocLevel = tocLevel;
+      if (tocLevels !== undefined) {
+        effectiveTocLevel = tocLevels[index] ?? tocLevel;
+      }
       const charStart = offsets[index] ?? 0;
       const charEnd = offsets[index + 1] ?? content.length;
       const words = content.substring(charStart, charEnd).trim().length;
@@ -1845,7 +1852,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
         url: BookRepository.md5Encode16(`${originName}${index}${title}`),
         title: title,
         isVolume: isVolume,
-        tocLevel: tocLevel,
+        tocLevel: effectiveTocLevel,
         bookUrl: bookUrl,
         index: index,
         wordCount: BookRepository.wordCountFormat(words),

@@ -13,6 +13,10 @@ export interface EpubImportResult {
   titles: string[];
   offsets: number[];
   content: string;
+  /** 每章是否为卷标题，供 buildChapterRows 写入 chapters.isVolume。 */
+  volumes: boolean[];
+  /** 目录树的递归深度，供 buildChapterRows 写入 chapters.tocLevel（任意层级）。 */
+  tocLevels: number[];
 }
 
 interface EpubManifestItem {
@@ -21,14 +25,49 @@ interface EpubManifestItem {
   mediaType: string;
 }
 
+/** 目录树节点：NCX 的 navPoint 或 nav.xhtml 的 li，children 为空表示普通章节。 */
+interface EpubTocEntry {
+  title: string;
+  /** 相对 OPF 的 href，含 #片段；纯目录项（无资源）为空串。 */
+  href: string;
+  /** 递归深度，从 0 开始。 */
+  level: number;
+  children: EpubTocEntry[];
+}
+
+/** spine 中一个 XHTML 资源及其转好的纯文本，按目录建章与退回平铺共用。 */
+interface EpubSpineResource {
+  href: string;
+  relativePath: string;
+  fullPath: string;
+  /** 现有逻辑推断的章名（封面 / h1 / 文件名 / 第N章）。 */
+  title: string;
+  /** markup 里的 <title>/h1/h2，卷首页优先用它。 */
+  heading: string;
+  text: string;
+  isCoverPage: boolean;
+}
+
 interface EpubChapterText {
   title: string;
   text: string;
+  /** 本章对应的资源路径（相对 OPF 解压根），纯目录项为空串。 */
+  resourceHref: string;
+  /** 是否为卷标题（有子项，或纯目录项）。 */
+  isVolume: boolean;
+  /** 递归深度。 */
+  tocLevel: number;
 }
 
 interface EpubMarkupConversion {
   text: string;
   imageCount: number;
+}
+
+/** nav.xhtml 解析时的栈帧：一个 <ol> 的条目列表与层级。 */
+interface EpubNavFrame {
+  list: EpubTocEntry[];
+  level: number;
 }
 
 
@@ -124,6 +163,8 @@ export class EpubRepository {
 
       const chapterTitles: string[] = [];
       const chapterOffsets: number[] = [];
+      const chapterVolumes: boolean[] = [];
+      const chapterTocLevels: number[] = [];
       const contentSegments: string[] = [];
       let contentLength = 0;
       for (let index = 0; index < chapters.length; index++) {
@@ -131,6 +172,8 @@ export class EpubRepository {
         if (chapter === undefined) { continue; }
         chapterTitles.push(chapter.title);
         chapterOffsets.push(contentLength);
+        chapterVolumes.push(chapter.isVolume);
+        chapterTocLevels.push(chapter.tocLevel);
         const section = `${chapter.title}\n\n${chapter.text}\n\n`;
         contentSegments.push(section);
         contentLength += section.length;
@@ -167,7 +210,9 @@ export class EpubRepository {
         book: book,
         titles: chapterTitles,
         offsets: chapterOffsets,
-        content: contentSegments.join('')
+        content: contentSegments.join(''),
+        volumes: chapterVolumes,
+        tocLevels: chapterTocLevels
       };
     } catch (error) {
       try {
@@ -205,7 +250,10 @@ export class EpubRepository {
     }
     return '';
   }
-  private static readChapters(packageText: string, packageDirectory: string, extractedDirectory: string, context: Context, bookId: string, coverResourcePath: string, coverUri: string | undefined): EpubChapterText[] {
+  /** 按 spine 顺序收集 XHTML 资源并转成纯文本，作为目录建章与退回平铺共用的正文来源。 */
+  private static buildSpineResources(packageText: string, packageDirectory: string,
+    extractedDirectory: string, context: Context, bookId: string,
+    coverResourcePath: string, coverUri: string | undefined): EpubSpineResource[] {
     const manifest: Map<string, EpubManifestItem> = new Map<string, EpubManifestItem>();
     const itemPattern: RegExp = /<item\b([^>]*?)\/?\s*>/gi;
     let itemMatch: RegExpExecArray | null = itemPattern.exec(packageText);
@@ -228,7 +276,7 @@ export class EpubRepository {
     const spineText = packageText.substring(spineStart, spineEnd);
     const spinePattern: RegExp = /<itemref\b([^>]*?)\/?\s*>/gi;
     let spineMatch: RegExpExecArray | null = spinePattern.exec(spineText);
-    const chapters: EpubChapterText[] = [];
+    const resources: EpubSpineResource[] = [];
     let totalTextCharacters = 0;
     let imageIndex = 0;
     while (spineMatch !== null) {
@@ -263,21 +311,297 @@ export class EpubRepository {
         if (text.length > 0) {
           const nameFromMarkup = EpubRepository.readHeading(markup);
           const pathName = EpubRepository.fileTitle(item.href);
-          const chapterTitle = pathName.toLowerCase() === 'cover' ? '封面' : nameFromMarkup || pathName || `第${chapters.length + 1}章`;
+          const chapterTitle = pathName.toLowerCase() === 'cover' ? '封面' : nameFromMarkup || pathName || `第${resources.length + 1}章`;
           const chapterBody = EpubRepository.removeDuplicateHeading(text, chapterTitle);
           totalTextCharacters += chapterBody.length;
           if (totalTextCharacters > EpubRepository.maximumTextCharacters) {
             throw new Error('EPUB 正文过大，超过本地阅读处理上限');
           }
-          if (chapters.length >= EpubRepository.maximumChapters) {
+          if (resources.length >= EpubRepository.maximumChapters) {
             throw new Error('EPUB 章节数超过支持上限');
           }
-          chapters.push({ title: chapterTitle, text: chapterBody });
+          resources.push({
+            href: item.href,
+            relativePath: chapterRelativePath,
+            fullPath: chapterPath,
+            title: chapterTitle,
+            heading: nameFromMarkup,
+            text: chapterBody,
+            isCoverPage: isCoverPage
+          });
         }
       }
       spineMatch = spinePattern.exec(spineText);
     }
+    return resources;
+  }
+
+  /** 目录优先：NCX/nav 解析成功就按树建章，失败才退回 spine 平铺。 */
+  private static readChapters(packageText: string, packageDirectory: string,
+    extractedDirectory: string, context: Context, bookId: string,
+    coverResourcePath: string, coverUri: string | undefined): EpubChapterText[] {
+    const resources = EpubRepository.buildSpineResources(packageText, packageDirectory,
+      extractedDirectory, context, bookId, coverResourcePath, coverUri);
+    const toc = EpubRepository.parseTocEntries(packageText, packageDirectory, extractedDirectory);
+    return toc.length > 0
+      ? EpubRepository.chaptersFromToc(toc, resources, packageDirectory, extractedDirectory)
+      : EpubRepository.chaptersFromSpine(resources);
+  }
+
+  /** spine 平铺：无目录（或目录解析失败）时，每个 XHTML 资源一章，无卷、层级全 0。 */
+  private static chaptersFromSpine(resources: EpubSpineResource[]): EpubChapterText[] {
+    const chapters: EpubChapterText[] = [];
+    for (const resource of resources) {
+      chapters.push({
+        title: resource.title,
+        text: resource.text,
+        resourceHref: resource.relativePath,
+        isVolume: false,
+        tocLevel: 0
+      });
+    }
     return chapters;
+  }
+
+  /** 按目录树建章：卷首页 + 目录项，带 isVolume / tocLevel。 */
+  private static chaptersFromToc(toc: EpubTocEntry[], resources: EpubSpineResource[],
+    packageDirectory: string, extractedDirectory: string): EpubChapterText[] {
+    const flat: EpubTocEntry[] = [];
+    EpubRepository.flattenToc(toc, flat);
+    const byPath: Map<string, EpubSpineResource> = new Map<string, EpubSpineResource>();
+    for (const resource of resources) {
+      byPath.set(resource.fullPath, resource);
+    }
+    const matched: (EpubSpineResource | undefined)[] = [];
+    const tocResourcePaths: Set<string> = new Set<string>();
+    for (const entry of flat) {
+      const resource = EpubRepository.matchTocResource(entry.href, packageDirectory,
+        extractedDirectory, byPath, resources);
+      matched.push(resource);
+      if (resource !== undefined) { tocResourcePaths.add(resource.fullPath); }
+    }
+    // 目录项一个都匹配不到 spine 资源时，按目录建章只会得到一堆空章，退回平铺更稳。
+    if (tocResourcePaths.size === 0) {
+      return EpubRepository.chaptersFromSpine(resources);
+    }
+    let firstTocIndex = -1;
+    for (let index = 0; index < resources.length; index++) {
+      const resource = resources[index];
+      if (resource !== undefined && tocResourcePaths.has(resource.fullPath)) {
+        firstTocIndex = index;
+        break;
+      }
+    }
+
+    const chapters: EpubChapterText[] = [];
+    const claimed: Set<string> = new Set<string>();
+    // 目录第一项之前、且不在目录里的资源，按顺序补成卷首页；封面页仍优先判「封面」。
+    const prefixEnd = firstTocIndex < 0 ? 0 : firstTocIndex;
+    for (let index = 0; index < prefixEnd; index++) {
+      const resource = resources[index];
+      if (resource === undefined || tocResourcePaths.has(resource.fullPath)) { continue; }
+      const volumeTitle = resource.isCoverPage ? '封面'
+        : (resource.heading.length > 0 ? resource.heading : '--卷首--');
+      chapters.push({
+        title: volumeTitle,
+        text: resource.text,
+        resourceHref: resource.relativePath,
+        isVolume: false,
+        tocLevel: 0
+      });
+      claimed.add(resource.fullPath);
+    }
+    for (let index = 0; index < flat.length; index++) {
+      const entry = flat[index];
+      const resource = matched[index];
+      if (entry === undefined) { continue; }
+      const isVolume = entry.children.length > 0 || entry.href.length === 0;
+      const title = entry.title.length > 0 ? entry.title
+        : (resource !== undefined ? resource.title : '目录');
+      let text = '';
+      let resourceHref = '';
+      // 同一资源被多个目录项引用时（老式 EPUB2 一页多章），片段切分是批 3 的活；
+      // 本批只让第一个目录项取全文，避免整本正文重复拼进 .txt 触发上限。
+      if (resource !== undefined && !claimed.has(resource.fullPath)) {
+        text = EpubRepository.removeDuplicateHeading(resource.text, title);
+        resourceHref = resource.relativePath;
+        claimed.add(resource.fullPath);
+      }
+      chapters.push({
+        title: title,
+        text: text,
+        resourceHref: resourceHref,
+        isVolume: isVolume,
+        tocLevel: entry.level
+      });
+    }
+    return chapters;
+  }
+
+  /** 目录树深度优先展开，卷标题节点也保留成章。 */
+  private static flattenToc(entries: EpubTocEntry[], out: EpubTocEntry[]): void {
+    for (const entry of entries) {
+      out.push(entry);
+      if (entry.children.length > 0) {
+        EpubRepository.flattenToc(entry.children, out);
+      }
+    }
+  }
+
+  /** 目录 href -> spine 资源：先按 OPF 相对路径精确匹配，再按文件名兜底。 */
+  private static matchTocResource(href: string, packageDirectory: string,
+    extractedDirectory: string, byPath: Map<string, EpubSpineResource>,
+    resources: EpubSpineResource[]): EpubSpineResource | undefined {
+    if (href.length === 0) { return undefined; }
+    const clean = href.split('#')[0] ?? href;
+    try {
+      const full = EpubRepository.resolveEpubPath(extractedDirectory,
+        EpubRepository.joinRelative(packageDirectory, clean));
+      const exact = byPath.get(full);
+      if (exact !== undefined) { return exact; }
+    } catch (_) {
+    }
+    const base = clean.substring(clean.lastIndexOf('/') + 1).toLowerCase();
+    for (const resource of resources) {
+      const resourceBase = resource.relativePath
+        .substring(resource.relativePath.lastIndexOf('/') + 1).toLowerCase();
+      if (resourceBase === base) { return resource; }
+    }
+    return undefined;
+  }
+
+  /** 解析 NCX / nav.xhtml 成目录树；任何异常都返回空数组，交由调用方退回 spine 平铺。 */
+  private static parseTocEntries(packageText: string, packageDirectory: string,
+    extractedDirectory: string): EpubTocEntry[] {
+    try {
+      const itemPattern: RegExp = /<item\b([^>]*?)\/?\s*>/gi;
+      let navHref = '';
+      let ncxHref = '';
+      const tocId = EpubRepository.readAttributeValue(packageText, 'spine', 'toc');
+      let itemMatch: RegExpExecArray | null = itemPattern.exec(packageText);
+      while (itemMatch !== null) {
+        const attributes = itemMatch[1] ?? '';
+        const id = EpubRepository.readAttribute(attributes, 'id');
+        const href = EpubRepository.readAttribute(attributes, 'href');
+        const mediaType = EpubRepository.readAttribute(attributes, 'media-type');
+        const properties = EpubRepository.readAttribute(attributes, 'properties');
+        if (properties.split(/\s+/).indexOf('nav') >= 0 && navHref.length === 0) {
+          navHref = href;
+        }
+        if (id.length > 0 && id === tocId && href.length > 0 && ncxHref.length === 0) {
+          ncxHref = href;
+        }
+        if (mediaType === 'application/x-dtbncx+xml' && ncxHref.length === 0) {
+          ncxHref = href;
+        }
+        itemMatch = itemPattern.exec(packageText);
+      }
+      // EPUB3 的 nav.xhtml 优先；属性取值一律走 readAttribute，不假设顺序。
+      if (navHref.length > 0) {
+        const navPath = EpubRepository.resolveEpubPath(extractedDirectory,
+          EpubRepository.joinRelative(packageDirectory, navHref));
+        const navEntries = EpubRepository.parseNav(fileIo.readTextSync(navPath));
+        if (navEntries.length > 0) { return navEntries; }
+      }
+      if (ncxHref.length > 0) {
+        const ncxPath = EpubRepository.resolveEpubPath(extractedDirectory,
+          EpubRepository.joinRelative(packageDirectory, ncxHref));
+        const ncxEntries = EpubRepository.parseNcx(fileIo.readTextSync(ncxPath));
+        if (ncxEntries.length > 0) { return ncxEntries; }
+      }
+    } catch (_) {
+    }
+    return [];
+  }
+
+  /** EPUB2 NCX：扫描 navPoint 开闭标签用栈维护层级，navLabel 取标题、content 取 src。 */
+  private static parseNcx(ncxText: string): EpubTocEntry[] {
+    const root: EpubTocEntry[] = [];
+    const stack: EpubTocEntry[] = [];
+    const tokenPattern: RegExp = /<navPoint\b[^>]*>|<\/navPoint\s*>|<navLabel\b[^>]*>([\s\S]*?)<\/navLabel\s*>|<content\b([^>]*?)\/?\s*>/gi;
+    let match: RegExpExecArray | null = tokenPattern.exec(ncxText);
+    while (match !== null) {
+      const token = match[0].toLowerCase();
+      if (token.startsWith('<navpoint')) {
+        const entry: EpubTocEntry = { title: '', href: '', level: stack.length, children: [] };
+        const parent = stack[stack.length - 1];
+        if (parent !== undefined) { parent.children.push(entry); } else { root.push(entry); }
+        // 自闭 <navPoint .../> 不入栈；其余等 </navPoint> 出栈。
+        if (!/\/\s*>$/.test(match[0])) { stack.push(entry); }
+      } else if (token.startsWith('</navpoint')) {
+        stack.pop();
+      } else if (token.startsWith('<navlabel')) {
+        const current = stack[stack.length - 1];
+        if (current !== undefined) {
+          current.title = EpubRepository.htmlToText(match[1] ?? '').replace(/\s+/g, ' ').trim();
+        }
+      } else if (token.startsWith('<content')) {
+        const current = stack[stack.length - 1];
+        if (current !== undefined) {
+          current.href = EpubRepository.readAttribute(match[2] ?? '', 'src');
+        }
+      }
+      match = tokenPattern.exec(ncxText);
+    }
+    return root;
+  }
+
+  /** EPUB3 nav.xhtml：取 <nav epub:type="toc">，按 <ol>/<li> 栈维护层级，<a> 取标题与 href。 */
+  private static parseNav(navText: string): EpubTocEntry[] {
+    let inner = '';
+    const navPattern: RegExp = /<nav\b([^>]*)>([\s\S]*?)<\/nav\s*>/gi;
+    let navMatch: RegExpExecArray | null = navPattern.exec(navText);
+    while (navMatch !== null) {
+      if (inner.length === 0) { inner = navMatch[2] ?? ''; }
+      const attributes = navMatch[1] ?? '';
+      if (EpubRepository.readAttribute(attributes, 'type').toLowerCase() === 'toc' ||
+        EpubRepository.readAttribute(attributes, 'epub:type').toLowerCase() === 'toc') {
+        inner = navMatch[2] ?? '';
+        break;
+      }
+      navMatch = navPattern.exec(navText);
+    }
+    if (inner.length === 0) { return []; }
+    const root: EpubTocEntry[] = [];
+    const stack: EpubNavFrame[] = [];
+    let currentLi: EpubTocEntry | undefined = undefined;
+    const tokenPattern: RegExp = /<ol\b[^>]*>|<\/ol\s*>|<li\b[^>]*>|<\/li\s*>|<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
+    let match: RegExpExecArray | null = tokenPattern.exec(inner);
+    while (match !== null) {
+      const token = match[0].toLowerCase();
+      if (token.startsWith('<ol') && !token.startsWith('</')) {
+        let list: EpubTocEntry[] = root;
+        let level: number = 0;
+        if (stack.length === 0) {
+          list = root;
+          level = 0;
+        } else {
+          const parentFrame = stack[stack.length - 1];
+          list = currentLi !== undefined ? currentLi.children : root;
+          level = parentFrame !== undefined ? parentFrame.level + 1 : 1;
+        }
+        const frame: EpubNavFrame = { list: list, level: level };
+        stack.push(frame);
+      } else if (token.startsWith('</ol')) {
+        stack.pop();
+      } else if (token.startsWith('<li') && !token.startsWith('</')) {
+        const frame = stack[stack.length - 1];
+        if (frame !== undefined) {
+          const entry: EpubTocEntry = { title: '', href: '', level: frame.level, children: [] };
+          frame.list.push(entry);
+          currentLi = entry;
+        }
+      } else if (token.startsWith('</li')) {
+        currentLi = undefined;
+      } else if (token.startsWith('<a')) {
+        if (currentLi !== undefined) {
+          currentLi.href = EpubRepository.readAttribute(match[1] ?? '', 'href');
+          currentLi.title = EpubRepository.htmlToText(match[2] ?? '').replace(/\s+/g, ' ').trim();
+        }
+      }
+      match = tokenPattern.exec(inner);
+    }
+    return root;
   }
 
   private static readAttribute(attributes: string, name: string): string {
