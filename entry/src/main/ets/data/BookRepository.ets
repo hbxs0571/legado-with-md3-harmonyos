@@ -6,6 +6,7 @@ import { Book, BookChapter, BookMediaType, LocalBookFormat, bookCoverColor, book
 import { AppLog } from '../lib/AppLog';
 import { EpubRepository, EpubChapterMeta } from './EpubRepository';
 import { UmdRepository } from './UmdRepository';
+import { PdfRepository } from './PdfRepository';
 import { LocalTextSemantics } from './LocalTextSemantics';
 import { LocalTextReSegmenter } from './LocalTextReSegmenter';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
@@ -566,8 +567,13 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
         imported.tocLevels, imported.chapterMeta);
       created = { book: imported.book, chapters: chapters };
     } else if (format === 'pdf') {
-      // PDF 解析器在批 7 接入；先给可读提示，交给导入流程的失败分支，避免落一本空书。
-      throw new Error('PDF 解析器未实现，暂时无法导入 .pdf');
+      // 书名用导入时拿到的原文件名去后缀（批 1 已扩 .pdf），不能照抄上游 originName.replace。
+      const imported = await PdfRepository.importFromUri(context, uri, fileName, bookId,
+        BookRepository.localTitleFromFileName(fileName));
+      // PDF 正文是每章 10 个图片标记，落盘为 UTF-8，章节偏移按字符给，走同一条 buildChapterRows。
+      const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
+        imported.titles, imported.offsets, imported.volumes, imported.content, undefined);
+      created = { book: imported.book, chapters: chapters };
     } else if (format === 'mobi') {
       // MOBI / AZW3 解析器在批 10-12 接入。
       throw new Error('MOBI / AZW3 解析器未实现，暂时无法导入');
@@ -1454,18 +1460,20 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       throw new Error('删除书籍失败');
     }
     BookRepository.chapterCache.delete(bookUrl);
-    // 删书时同步清掉这本书落盘的 EPUB 内嵌图（批 5）；非 EPUB 书没有该目录，clearAssets 静默返回。
+    // 删书时同步清掉这本书落盘的 EPUB 内嵌图与 PDF 页图（批 5 / 批 7）；非该格式没有对应目录，clearAssets 静默返回。
     EpubRepository.clearAssets(context, BookRepository.bookIdFromUrl(bookUrl));
+    PdfRepository.clearAssets(context, BookRepository.bookIdFromUrl(bookUrl));
   }
 
-  /** 启动清扫 epub-assets 下不属于任何在架书的孤儿目录（批 5）。异步，不阻塞启动。 */
-  static async clearOrphanEpubAssets(context: Context): Promise<void> {
+  /** 启动清扫 epub-assets 与 pdf-pages 下不属于任何在架书 id 的孤儿目录（批 5 / 批 7）。异步，不阻塞启动。 */
+  static async clearOrphanLocalAssets(context: Context): Promise<void> {
     const books = await BookRepository.loadImportedBooks(context);
     const ids: string[] = [];
     for (const item of books) {
       ids.push(item.id);
     }
     await EpubRepository.clearOrphanAssets(context, ids);
+    await PdfRepository.clearOrphanAssets(context, ids);
   }
 
   /**

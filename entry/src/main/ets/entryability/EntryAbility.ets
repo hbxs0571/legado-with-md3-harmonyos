@@ -56,9 +56,9 @@ function applySystemBar(context: Context, isDark: boolean): void {
 export default class EntryAbility extends UIAbility {
   onCreate(): void {
     // 存量搬迁不在这里做：它必须和首屏加载串行，见 onWindowStageCreate。
-    // 启动清扫 epub-assets 孤儿目录（批 5）：fire-and-forget，不阻塞首屏；
-    // 读不到在架书（搬迁未完）时 clearOrphanEpubAssets 内部空集合会直接返回，不会误删在用的图。
-    BookRepository.clearOrphanEpubAssets(this.context).catch(() => {});
+    // 启动清扫 epub-assets 与 pdf-pages 两个目录下的孤儿目录（批 5 / 批 7）：fire-and-forget，不阻塞首屏；
+    // 读不到在架书（搬迁未完）时 clearOrphanLocalAssets 内部空集合会直接返回，不会误删在用的图。
+    BookRepository.clearOrphanLocalAssets(this.context).catch(() => {});
   }
 
   onBackground(): void {
