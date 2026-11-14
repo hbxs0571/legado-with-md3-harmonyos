@@ -17,6 +17,20 @@ export interface EpubImportResult {
   volumes: boolean[];
   /** 目录树的递归深度，供 buildChapterRows 写入 chapters.tocLevel（任意层级）。 */
   tocLevels: number[];
+  /** 每章的片段/nextUrl 几何信息，供 buildChapterRows 写入 chapters 对应列（批 3 E3/E4）。 */
+  chapterMeta: EpubChapterMeta[];
+}
+
+/** 目录项的章节几何信息，写入 chapters.resourceUrl / startFragmentId / endFragmentId / variable。 */
+export interface EpubChapterMeta {
+  /** 本章对应的资源路径（相对 OPF 解压根），纯目录项为空串。 */
+  resourceUrl: string;
+  /** 本章正文的起始片段 id；无片段时为 undefined。 */
+  startFragmentId?: string;
+  /** 本章正文的结束片段 id（下一章的起始片段）；无则为 undefined。 */
+  endFragmentId?: string;
+  /** 下一章的 url（相对 OPF，含 #片段）；最后一章为 undefined。 */
+  nextUrl?: string;
 }
 
 interface EpubManifestItem {
@@ -45,6 +59,8 @@ interface EpubSpineResource {
   /** markup 里的 <title>/h1/h2，卷首页优先用它。 */
   heading: string;
   text: string;
+  /** 图片已替换成 EPUB_IMAGE 标记、但仍保留标签与 id 的中间态 markup，供按 #片段 切片。 */
+  markup: string;
   isCoverPage: boolean;
 }
 
@@ -57,11 +73,19 @@ interface EpubChapterText {
   isVolume: boolean;
   /** 递归深度。 */
   tocLevel: number;
+  /** 本章正文的起始片段 id；无片段时为 undefined。 */
+  startFragmentId?: string;
+  /** 本章正文的结束片段 id；无则为 undefined。 */
+  endFragmentId?: string;
+  /** 下一章的 url；最后一章为 undefined。 */
+  nextUrl?: string;
 }
 
 interface EpubMarkupConversion {
   text: string;
   imageCount: number;
+  /** 图片替换后、htmlToText 之前的中间态 markup，保留 id 供片段切片。 */
+  markup: string;
 }
 
 /** nav.xhtml 解析时的栈帧：一个 <ol> 的条目列表与层级。 */
@@ -165,6 +189,7 @@ export class EpubRepository {
       const chapterOffsets: number[] = [];
       const chapterVolumes: boolean[] = [];
       const chapterTocLevels: number[] = [];
+      const chapterMeta: EpubChapterMeta[] = [];
       const contentSegments: string[] = [];
       let contentLength = 0;
       for (let index = 0; index < chapters.length; index++) {
@@ -174,6 +199,12 @@ export class EpubRepository {
         chapterOffsets.push(contentLength);
         chapterVolumes.push(chapter.isVolume);
         chapterTocLevels.push(chapter.tocLevel);
+        chapterMeta.push({
+          resourceUrl: chapter.resourceHref,
+          startFragmentId: chapter.startFragmentId,
+          endFragmentId: chapter.endFragmentId,
+          nextUrl: chapter.nextUrl
+        });
         const section = `${chapter.title}\n\n${chapter.text}\n\n`;
         contentSegments.push(section);
         contentLength += section.length;
@@ -212,7 +243,8 @@ export class EpubRepository {
         offsets: chapterOffsets,
         content: contentSegments.join(''),
         volumes: chapterVolumes,
-        tocLevels: chapterTocLevels
+        tocLevels: chapterTocLevels,
+        chapterMeta: chapterMeta
       };
     } catch (error) {
       try {
@@ -302,7 +334,8 @@ export class EpubRepository {
         const isCoverPage = normalizedHref.includes('cover') || normalizedHref.includes('titlepage.xhtml');
         let conversion: EpubMarkupConversion;
         if (isCoverPage && coverUri !== undefined) {
-          conversion = { text: `[[EPUB_IMAGE:${coverUri}]]`, imageCount: 0 };
+          const coverMarkup = `[[EPUB_IMAGE:${coverUri}]]`;
+          conversion = { text: coverMarkup, imageCount: 0, markup: coverMarkup };
         } else {
           conversion = EpubRepository.htmlToReaderText(markup, chapterDirectory, extractedDirectory, context, bookId, coverResourcePath, coverUri, imageIndex);
         }
@@ -327,6 +360,7 @@ export class EpubRepository {
             title: chapterTitle,
             heading: nameFromMarkup,
             text: chapterBody,
+            markup: conversion.markup,
             isCoverPage: isCoverPage
           });
         }
@@ -363,7 +397,51 @@ export class EpubRepository {
     return chapters;
   }
 
-  /** 按目录树建章：卷首页 + 目录项，带 isVolume / tocLevel。 */
+  /** 取 href 的 # 之后部分（片段 id）；无片段返回空串。 */
+  private static fragmentOf(href: string): string {
+    const hash = href.indexOf('#');
+    return hash < 0 ? '' : href.substring(hash + 1);
+  }
+
+  /** 找 id 为 targetId 的元素在 markup 里的起始下标；找不到返回 -1。属性顺序不固定，按 id 属性匹配。 */
+  private static findElementStartByFragment(html: string, targetId: string): number {
+    if (targetId.length === 0) { return -1; }
+    const pattern: RegExp = /<([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?\bid\s*=\s*["']([^"']*)["'][^>]*>/g;
+    let match: RegExpExecArray | null = pattern.exec(html);
+    while (match !== null) {
+      if ((match[2] ?? '') === targetId) { return match.index; }
+      match = pattern.exec(html);
+    }
+    return -1;
+  }
+
+  /** 同一 markup 被多章引用时按 #片段 顺序切片；首章可无片段（从文件头 0 开始），任一定位失败返回空数组，由调用方退回整篇。 */
+  private static sliceMarkupByFragments(markup: string, fragments: string[]): string[] {
+    const positions: number[] = [];
+    for (let i = 0; i < fragments.length; i++) {
+      const fragment = fragments[i] ?? '';
+      if (i === 0 && fragment.length === 0) {
+        // 上游 getBody 首章 startFragmentId 为 null：正文从文件头开始
+        positions.push(0);
+        continue;
+      }
+      const pos = EpubRepository.findElementStartByFragment(markup, fragment);
+      if (pos < 0) { return []; }
+      positions.push(pos);
+    }
+    for (let i = 1; i < positions.length; i++) {
+      if ((positions[i] ?? 0) <= (positions[i - 1] ?? 0)) { return []; }
+    }
+    const slices: string[] = [];
+    for (let i = 0; i < positions.length; i++) {
+      const start = positions[i] ?? 0;
+      const end = i + 1 < positions.length ? (positions[i + 1] ?? markup.length) : markup.length;
+      slices.push(markup.substring(start, end));
+    }
+    return slices;
+  }
+
+  /** 按目录树建章：卷首页 + 目录项，带 isVolume / tocLevel / 片段几何信息。 */
   private static chaptersFromToc(toc: EpubTocEntry[], resources: EpubSpineResource[],
     packageDirectory: string, extractedDirectory: string): EpubChapterText[] {
     const flat: EpubTocEntry[] = [];
@@ -393,10 +471,52 @@ export class EpubRepository {
       }
     }
 
+    // 老式 EPUB2 把整卷塞进一个 XHTML、章节只是文件里的 #锚点：同一资源被多个
+    // 目录项引用时，在保留 id 的 markup 上按各章片段切片，每章只拿自己那一段，
+    // 不再整本重复拼进 .txt（情形 A：导入阶段切好，chapterBody 仍按字节偏移取）。
+    const slicedText: Map<number, string> = new Map<number, string>();
+    const groupKeys: string[] = [];
+    const groupIndices: number[][] = [];
+    for (let index = 0; index < flat.length; index++) {
+      const resource = matched[index];
+      if (resource === undefined) { continue; }
+      let gi = groupKeys.indexOf(resource.fullPath);
+      if (gi < 0) {
+        groupKeys.push(resource.fullPath);
+        groupIndices.push([]);
+        gi = groupKeys.length - 1;
+      }
+      const group = groupIndices[gi];
+      if (group !== undefined) { group.push(index); }
+    }
+    for (let gi = 0; gi < groupKeys.length; gi++) {
+      const indices = groupIndices[gi] ?? [];
+      const fullPath = groupKeys[gi] ?? '';
+      if (indices.length < 2) { continue; }
+      const resource = byPath.get(fullPath);
+      if (resource === undefined) { continue; }
+      const fragments: string[] = [];
+      for (const idx of indices) {
+        fragments.push(EpubRepository.fragmentOf(flat[idx]?.href ?? ''));
+      }
+      const slices = EpubRepository.sliceMarkupByFragments(resource.markup, fragments);
+      // 任一片段定位失败就退回整篇：上游 getElementById 拿到 null 也是退化处理，不抛异常。
+      if (slices.length !== indices.length) { continue; }
+      for (let k = 0; k < indices.length; k++) {
+        const idx = indices[k];
+        const entry = flat[idx];
+        const title = entry !== undefined && entry.title.length > 0 ? entry.title : resource.title;
+        const text = EpubRepository.removeDuplicateHeading(
+          EpubRepository.htmlToText(slices[k] ?? ''), title);
+        slicedText.set(idx, text);
+      }
+    }
+
     const chapters: EpubChapterText[] = [];
     const claimed: Set<string> = new Set<string>();
     // 目录第一项之前、且不在目录里的资源，按顺序补成卷首页；封面页仍优先判「封面」。
     const prefixEnd = firstTocIndex < 0 ? 0 : firstTocIndex;
+    const firstHref = flat[0]?.href ?? '';
     for (let index = 0; index < prefixEnd; index++) {
       const resource = resources[index];
       if (resource === undefined || tocResourcePaths.has(resource.fullPath)) { continue; }
@@ -407,7 +527,8 @@ export class EpubRepository {
         text: resource.text,
         resourceHref: resource.relativePath,
         isVolume: false,
-        tocLevel: 0
+        tocLevel: 0,
+        nextUrl: firstHref.length > 0 ? firstHref : undefined
       });
       claimed.add(resource.fullPath);
     }
@@ -418,11 +539,20 @@ export class EpubRepository {
       const isVolume = entry.children.length > 0 || entry.href.length === 0;
       const title = entry.title.length > 0 ? entry.title
         : (resource !== undefined ? resource.title : '目录');
+      const startFragment = EpubRepository.fragmentOf(entry.href);
+      const startFragmentId = startFragment.length > 0 ? startFragment : undefined;
+      const nextEntry = flat[index + 1];
+      const nextHref = nextEntry?.href ?? '';
+      const nextFragment = EpubRepository.fragmentOf(nextHref);
+      const endFragmentId = nextFragment.length > 0 ? nextFragment : undefined;
+      const nextUrl = nextHref.length > 0 ? nextHref : undefined;
       let text = '';
       let resourceHref = '';
-      // 同一资源被多个目录项引用时（老式 EPUB2 一页多章），片段切分是批 3 的活；
-      // 本批只让第一个目录项取全文，避免整本正文重复拼进 .txt 触发上限。
-      if (resource !== undefined && !claimed.has(resource.fullPath)) {
+      const sliced = slicedText.get(index);
+      if (sliced !== undefined) {
+        text = sliced;
+        resourceHref = resource !== undefined ? resource.relativePath : '';
+      } else if (resource !== undefined && !claimed.has(resource.fullPath)) {
         text = EpubRepository.removeDuplicateHeading(resource.text, title);
         resourceHref = resource.relativePath;
         claimed.add(resource.fullPath);
@@ -432,7 +562,10 @@ export class EpubRepository {
         text: text,
         resourceHref: resourceHref,
         isVolume: isVolume,
-        tocLevel: entry.level
+        tocLevel: entry.level,
+        startFragmentId: startFragmentId,
+        endFragmentId: endFragmentId,
+        nextUrl: nextUrl
       });
     }
     return chapters;
@@ -691,7 +824,11 @@ export class EpubRepository {
       match = imagePattern.exec(markup);
     }
     convertedMarkup += markup.substring(cursor);
-    return { text: EpubRepository.htmlToText(convertedMarkup), imageCount: imageIndex - startImageIndex };
+    return {
+      text: EpubRepository.htmlToText(convertedMarkup),
+      imageCount: imageIndex - startImageIndex,
+      markup: convertedMarkup
+    };
   }
 
   private static htmlToText(markup: string): string {

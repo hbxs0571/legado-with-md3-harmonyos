@@ -97,6 +97,14 @@ export interface BookChapter {
   end?: number;
   /** 格式化后的字数，如「1.2万字」「850字」。 */
   wordCount?: string;
+  /** 本章对应的资源路径（相对解压根），纯目录项为空串；写入 chapters.resourceUrl。 */
+  resourceUrl?: string;
+  /** 本章正文在资源里的起始片段 id（url 的 # 之后部分）；undefined 表示从文件头开始。 */
+  startFragmentId?: string;
+  /** 本章正文的结束片段 id，由下一章的 startFragmentId 反向写入。 */
+  endFragmentId?: string;
+  /** 下一章的 url（上游 putVariable("nextUrl", …)）；最后一章为 undefined。 */
+  nextUrl?: string;
 }
 
 /**

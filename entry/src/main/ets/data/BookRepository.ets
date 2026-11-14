@@ -4,7 +4,7 @@ import { util } from '@kit.ArkTS';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { Book, BookChapter, BookMediaType, LocalBookFormat, bookCoverColor, bookCoverMark } from '../model/Book';
 import { AppLog } from '../lib/AppLog';
-import { EpubRepository } from './EpubRepository';
+import { EpubRepository, EpubChapterMeta } from './EpubRepository';
 import { LocalTextSemantics } from './LocalTextSemantics';
 import { LocalTextReSegmenter } from './LocalTextReSegmenter';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
@@ -169,7 +169,8 @@ export class BookRepository {
 
   /** 按 index 升序读一本书的全部章节；start/end 是字节偏移。 */
   private static readonly selectChaptersByBookUrl: string =
-    'SELECT `url`, `title`, `isVolume`, `tocLevel`, `bookUrl`, `index`, `wordCount`, `start`, `end` ' +
+    'SELECT `url`, `title`, `isVolume`, `tocLevel`, `bookUrl`, `index`, `wordCount`, `start`, `end`, ' +
+    '`resourceUrl`, `startFragmentId`, `endFragmentId`, `variable` ' +
     'FROM `chapters` WHERE `bookUrl` = ? ORDER BY `index` ASC';
 
   /** 查某本书的章节行数，用于判断目录是否需要重建。 */
@@ -211,6 +212,17 @@ export class BookRepository {
     '`variable`, `readConfig`, `syncTime`, `listIntro`, `format`) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
+  /** variable 列存的是上游 putVariable 的键值串（本批只写 nextUrl），这里把它读回来。 */
+  private static nextUrlFromVariable(variable: string | undefined): string | undefined {
+    if (variable === undefined || variable.length === 0) { return undefined; }
+    try {
+      const parsed = JSON.parse(variable) as Record<string, string>;
+      return parsed['nextUrl'];
+    } catch (error) {
+      return undefined;
+    }
+  }
+
   /**
    * 读一本书的章节列表。章节已从 Book 里拆出来，页面在 aboutToAppear 时调这里查表。
    */
@@ -231,7 +243,12 @@ export class BookRepository {
           index: RdbCodec.integer(resultSet, RdbCodec.column(resultSet, 'index'), 0),
           wordCount: RdbCodec.optionalText(resultSet, RdbCodec.column(resultSet, 'wordCount')),
           start: RdbCodec.optionalInteger(resultSet, RdbCodec.column(resultSet, 'start')),
-          end: RdbCodec.optionalInteger(resultSet, RdbCodec.column(resultSet, 'end'))
+          end: RdbCodec.optionalInteger(resultSet, RdbCodec.column(resultSet, 'end')),
+          resourceUrl: RdbCodec.optionalText(resultSet, RdbCodec.column(resultSet, 'resourceUrl')),
+          startFragmentId: RdbCodec.optionalText(resultSet, RdbCodec.column(resultSet, 'startFragmentId')),
+          endFragmentId: RdbCodec.optionalText(resultSet, RdbCodec.column(resultSet, 'endFragmentId')),
+          nextUrl: BookRepository.nextUrlFromVariable(
+            RdbCodec.optionalText(resultSet, RdbCodec.column(resultSet, 'variable')))
         };
         chapters.push(chapter);
       }
@@ -532,7 +549,8 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       // EPUB 写出的正文是 UTF-8，章节偏移按字符给，这里统一转成字节偏移的章节行。
       // 目录树给出的卷标记与任意层级一并交给 buildChapterRows，写入 chapters.isVolume / tocLevel。
       const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
-        imported.titles, imported.offsets, imported.volumes, imported.content, undefined, imported.tocLevels);
+        imported.titles, imported.offsets, imported.volumes, imported.content, undefined,
+        imported.tocLevels, imported.chapterMeta);
       created = { book: imported.book, chapters: chapters };
     } else if (format === 'pdf') {
       // PDF 解析器在批 7 接入；先给可读提示，交给导入流程的失败分支，避免落一本空书。
@@ -1552,14 +1570,14 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       chapter.index,
       0,
       0,
-      null,
+      chapter.resourceUrl === undefined ? null : chapter.resourceUrl,
       null,
       chapter.wordCount === undefined ? null : chapter.wordCount,
       chapter.start === undefined ? null : chapter.start,
       chapter.end === undefined ? null : chapter.end,
-      null,
-      null,
-      null,
+      chapter.startFragmentId === undefined ? null : chapter.startFragmentId,
+      chapter.endFragmentId === undefined ? null : chapter.endFragmentId,
+      chapter.nextUrl === undefined ? null : `{"nextUrl":${JSON.stringify(chapter.nextUrl)}}`,
       null
     ];
   }
@@ -1829,7 +1847,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
    */
   private static buildChapterRows(bookUrl: string, titles: string[], offsets: number[],
     volumes: boolean[], content: string, encoding: string | undefined,
-    tocLevels?: number[]): BookChapter[] {
+    tocLevels?: number[], chapterMeta?: EpubChapterMeta[]): BookChapter[] {
     const rows: BookChapter[] = [];
     if (titles.length === 0) { return rows; }
     const byteOffsets = BookRepository.charOffsetsToByteOffsets(content, offsets, encoding);
@@ -1848,6 +1866,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       const charStart = offsets[index] ?? 0;
       const charEnd = offsets[index + 1] ?? content.length;
       const words = content.substring(charStart, charEnd).trim().length;
+      const meta = chapterMeta !== undefined ? chapterMeta[index] : undefined;
       const row: BookChapter = {
         url: BookRepository.md5Encode16(`${originName}${index}${title}`),
         title: title,
@@ -1857,7 +1876,11 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
         index: index,
         wordCount: BookRepository.wordCountFormat(words),
         start: byteOffsets[index] ?? 0,
-        end: byteOffsets[index + 1] ?? totalBytes
+        end: byteOffsets[index + 1] ?? totalBytes,
+        resourceUrl: meta?.resourceUrl,
+        startFragmentId: meta?.startFragmentId,
+        endFragmentId: meta?.endFragmentId,
+        nextUrl: meta?.nextUrl
       };
       rows.push(row);
       if (isVolume) { tocLevel = 1; }
