@@ -767,14 +767,15 @@ export class EpubRepository {
     return '';
   }
 
-  static removeDuplicateHeading(text: string, title: string): string {
+  static removeDuplicateHeading(text: string, title: string, maxLines: number = 3): string {
     const body = text.trim();
     const normalizedTitle = title.replace(/\s+/g, '');
     if (normalizedTitle.length === 0) { return body; }
     const lines = body.split('\n');
     let heading = '';
     // EPUB 标题可能由 h2 内的 br 拆成两行，须按完整标题去重。
-    for (let index = 0; index < Math.min(3, lines.length); index++) {
+    // 默认扫前 3 行（导入期）；批 4 的 h 标签开关传 10，放宽到跨空行的多层标题。
+    for (let index = 0; index < Math.min(maxLines, lines.length); index++) {
       const line = (lines[index] ?? '').trim();
       if (line.length === 0) { continue; }
       if (line.includes('[[EPUB_IMAGE:')) { break; }
@@ -788,16 +789,40 @@ export class EpubRepository {
   }
 
   private static htmlToReaderText(markup: string, chapterDirectory: string, extractedDirectory: string, context: Context, bookId: string, coverResourcePath: string, coverUri: string | undefined, startImageIndex: number): EpubMarkupConversion {
+    // E9：Calibre 旧书用 <svg><image xlink:href="..."/></svg> 包图，本地只认 <img>。
+    // 先把每个 <image> 改写成等价的 <img src="...">，直接复用下面的既有 <img> 循环，不另起一套逻辑。
+    const svgPattern: RegExp = /<image\b([^>]*?)\/?\s*>/gi;
+    let normalized = '';
+    let svgCursor = 0;
+    let svgMatch: RegExpExecArray | null = svgPattern.exec(markup);
+    while (svgMatch !== null) {
+      normalized += markup.substring(svgCursor, svgMatch.index);
+      const href = EpubRepository.readAttribute(svgMatch[1] ?? '', 'xlink:href');
+      normalized += href.length > 0 ? `<img src="${href}"/>` : ' ';
+      svgCursor = svgMatch.index + svgMatch[0].length;
+      svgMatch = svgPattern.exec(markup);
+    }
+    normalized += markup.substring(svgCursor);
     const imagePattern: RegExp = /<img\b([^>]*?)\/?\s*>/gi;
-    let match: RegExpExecArray | null = imagePattern.exec(markup);
+    let match: RegExpExecArray | null = imagePattern.exec(normalized);
     let cursor = 0;
     let imageIndex = startImageIndex;
     let convertedMarkup = '';
+    // E5：cover.jpeg 在正文里可能重复出现，只保留第一次，后续整张跳过（上游 img[src=cover.jpeg] 从第二个起删）。
+    let seenCover = false;
     while (match !== null) {
-      convertedMarkup += markup.substring(cursor, match.index);
+      convertedMarkup += normalized.substring(cursor, match.index);
       const attributes = match[1] ?? '';
       const source = EpubRepository.readAttribute(attributes, 'src');
       if (source.length > 0) {
+        if (source.toLowerCase().includes('cover.jpeg')) {
+          if (seenCover) {
+            cursor = match.index + match[0].length;
+            match = imagePattern.exec(normalized);
+            continue;
+          }
+          seenCover = true;
+        }
         try {
           const sourcePath = EpubRepository.resolveEpubPath(extractedDirectory,
             EpubRepository.joinRelative(chapterDirectory, source));
@@ -821,9 +846,9 @@ export class EpubRepository {
         }
       }
       cursor = match.index + match[0].length;
-      match = imagePattern.exec(markup);
+      match = imagePattern.exec(normalized);
     }
-    convertedMarkup += markup.substring(cursor);
+    convertedMarkup += normalized.substring(cursor);
     return {
       text: EpubRepository.htmlToText(convertedMarkup),
       imageCount: imageIndex - startImageIndex,
@@ -837,6 +862,10 @@ export class EpubRepository {
     return EpubRepository.decodeXml(body
       .replace(/<!--[\s\S]*?-->/g, ' ')
       .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+      // E5：删 <title> 元素与 display:none 块。后者是有意近似：只认「开标签带 style 属性、
+      // 有对应闭标签」的最常见形态，嵌套 / 自闭合 / 属性里换行都认不全，与上游 Jsoup 同量级。
+      .replace(/<title\b[^>]*>[\s\S]*?<\/title\s*>/gi, ' ')
+      .replace(/<[a-zA-Z][a-zA-Z0-9]*\b[^>]*style\s*=\s*["'][^"']*display\s*:\s*none[^"']*["'][^>]*>[\s\S]*?<\/[a-zA-Z][a-zA-Z0-9]*\s*>/gi, ' ')
       .replace(/&(nbsp|ensp|emsp);/gi, ' ')
       .replace(/&(thinsp|zwnj|zwj);/gi, '')
       .replace(/<br\b[^>]*\/?\s*>/gi, '\n')

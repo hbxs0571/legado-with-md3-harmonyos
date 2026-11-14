@@ -7429,6 +7429,43 @@ private canWriteInto(dir: string): boolean {
     this.showUnavailableAction(enabled ? '已开启重新分段' : '已关闭重新分段');
   }
 
+  /** 按位切换 EPUB 正文净化开关；落 books.variable，重取正文让屏幕立即生效。 */
+  private async setReaderDelTag(tag: number, enabled: boolean): Promise<void> {
+    const current = (this.selectedBook.delTag ?? 0) & tag;
+    if ((current !== 0) === enabled || this.selectedBook.contentPath === undefined) { return; }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法保存正文净化设置');
+      return;
+    }
+    const updatedBook = BookRepository.withDelTag(this.selectedBook, tag, enabled);
+    const chapterTitles = BookRepository.cachedChapterTitles(updatedBook);
+    const chapterIndex = Math.max(0, Math.min(Math.max(0, chapterTitles.length - 1),
+      updatedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter)));
+    const chapterTitle = chapterTitles[chapterIndex] ?? this.selectedChapter;
+    let updatedContent: string;
+    try {
+      updatedContent = await BookRepository.readChapter(updatedBook, chapterTitle, chapterIndex);
+      this.replaceRules = ReplaceRuleRepository.getAll();
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `正文净化失败：${error.message}` : '正文净化失败');
+      return;
+    }
+    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    try {
+      await BookRepository.saveImportedBooks(context,
+        updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '正文净化设置保存失败');
+      return;
+    }
+    this.selectedBook = updatedBook;
+    this.books = updatedBooks;
+    this.selectedChapter = chapterTitle;
+    this.readerContent = updatedContent;
+    this.showUnavailableAction(enabled ? '已开启正文净化' : '已关闭正文净化');
+  }
+
   private async setReaderCharset(charset: string): Promise<void> {
     if (this.selectedBook.contentPath === undefined) {
       this.showUnavailableAction('备份只恢复了书目，缺少正文文件，无法设置字符集');
@@ -8156,6 +8193,7 @@ private canWriteInto(dir: string): boolean {
               this.saveReaderChapterContent(chapterIndex, title, body);
             },
             onToggleReSegment: (enabled: boolean) => this.setReaderReSegment(enabled),
+            onToggleDelTag: (tag: number, enabled: boolean) => this.setReaderDelTag(tag, enabled),
             onOpenReplaceRules: () => this.openProfileDetail(ProfileRoute.REPLACE_RULES),
             onReplaceRulesRefresh: () => this.replaceRules = ReplaceRuleRepository.getAll(),
             replaceEnabled: this.readerReplaceEnabled,

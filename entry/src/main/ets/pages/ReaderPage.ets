@@ -93,8 +93,8 @@ const READER_MORE_ACTIONS: ReaderMoreAction[] = [
   { id: 'text_processing', label: '文本处理', glyph: 'profileFindReplace', scopeLabel: '', migrated: true },
   { id: 'reverse_content', label: '反转内容', glyph: 'swap', scopeLabel: '', migrated: true },
   { id: 're_segment', label: '重新分段', glyph: 'list', scopeLabel: '', migrated: true },
-  { id: 'del_ruby', label: '删除ruby标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: false },
-  { id: 'del_h', label: '删除h标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: false },
+  { id: 'del_ruby', label: '删除ruby标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: true },
+  { id: 'del_h', label: '删除h标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: true },
   { id: 'toc_rule', label: 'TXT目录规则', glyph: 'profileRule', scopeLabel: '仅本地TXT', migrated: true },
   { id: 'charset', label: '设置编码', glyph: 'info', scopeLabel: '仅本地书', migrated: true },
   { id: 'image_style', label: '图片样式', glyph: 'book', scopeLabel: '', migrated: true },
@@ -809,6 +809,7 @@ export struct ReaderPage {
   onSaveChapterContent: (chapterIndex: number, title: string, body: string) => void =
     (_chapterIndex: number, _title: string, _body: string) => {};
   onToggleReSegment: (enabled: boolean) => void = (_enabled: boolean) => {};
+  onToggleDelTag: (tag: number, enabled: boolean) => void = (_tag: number, _enabled: boolean) => {};
   onOpenReplaceRules: () => void = () => {};
   onReplaceRulesRefresh: () => void = () => {};
   onReplaceEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
@@ -3953,6 +3954,12 @@ export struct ReaderPage {
       const page = this.localReaderPages[this.currentPageIndex];
       this.pendingBookmarkTargetPosition = page?.startPosition ?? 0;
       this.onToggleReSegment(this.book.reSegment !== true);
+    } else if (action.id === 'del_ruby' || action.id === 'del_h') {
+      const tag = action.id === 'del_ruby' ? 4 : 2;
+      const enabled = ((this.book.delTag ?? 0) & tag) === 0;
+      const page = this.localReaderPages[this.currentPageIndex];
+      this.pendingBookmarkTargetPosition = page?.startPosition ?? 0;
+      this.onToggleDelTag(tag, enabled);
     } else if (action.id === 'text_processing') {
       this.textProcessingVisible = true;
     } else if (action.id === 'charset') {

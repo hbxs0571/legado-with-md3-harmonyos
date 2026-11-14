@@ -200,7 +200,7 @@ export class BookRepository {
     'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
     '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
-    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount`, `isPrivate` FROM `books` ORDER BY `durChapterTime` DESC';
+    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount`, `isPrivate`, `variable` FROM `books` ORDER BY `durChapterTime` DESC';
 
   /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
@@ -220,6 +220,17 @@ export class BookRepository {
       return parsed['nextUrl'];
     } catch (error) {
       return undefined;
+    }
+  }
+
+  /** books.variable 存 {"delTag":6}；chapters.variable 存的是批 3 的 nextUrl，两表互不冲突。 */
+  private static delTagFromVariable(variable: string | undefined): number {
+    if (variable === undefined || variable.length === 0) { return 0; }
+    try {
+      const parsed = JSON.parse(variable) as Record<string, number>;
+      return parsed['delTag'] ?? 0;
+    } catch (error) {
+      return 0;
     }
   }
 
@@ -473,7 +484,8 @@ export class BookRepository {
       lastCheckCount: book.lastCheckCount,
       wordCount: book.wordCount,
       isPrivate: book.isPrivate,
-      isLocal: book.isLocal
+      isLocal: book.isLocal,
+      delTag: book.delTag
     };
   }
 
@@ -943,7 +955,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       // 单本私密标记（:294）。这列建表起就在，过去一直没进 SELECT，
       // 导致 toBookArgs 每次把它写回 0，手工改库也会被下次保存冲掉。
       isPrivate: RdbCodec.boolean(resultSet, 27, false),
-      isLocal: true
+      isLocal: true,
+      delTag: BookRepository.delTagFromVariable(RdbCodec.optionalText(resultSet, 28))
     };
     book.progress = BookRepository.readProgress(book);
     return book;
@@ -1544,7 +1557,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       book.disableReadRecord === true ? 1 : 0,
       Math.trunc(book.order ?? 0),
       0,
-      null,
+      book.delTag === undefined ? null : `{"delTag":${book.delTag}}`,
       JSON.stringify(readConfig),
       0,
       null,
@@ -1633,6 +1646,13 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   static withReSegment(book: Book, enabled: boolean): Book {
     const next = BookRepository.copyBook(book);
     next.reSegment = enabled;
+    return next;
+  }
+
+  /** 按位开关 delTag（hTag=2 / rubyTag=4）；tag 只有 2/4，位运算无 32 位截断风险。 */
+  static withDelTag(book: Book, tag: number, enabled: boolean): Book {
+    const next = BookRepository.copyBook(book);
+    next.delTag = enabled ? (book.delTag ?? 0) | tag : (book.delTag ?? 0) & ~tag;
     return next;
   }
 
@@ -1812,7 +1832,24 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const section = content.substring(startChar, Math.max(startChar, endChar));
     const bodyStart = BookRepository.chapterBodyStart(section, chapter.title);
     const body = section.substring(bodyStart).trim();
-    return book.format === 'epub' ? EpubRepository.removeDuplicateHeading(body, chapter.title) : body;
+    return BookRepository.applyDelTags(body, book, chapter.title);
+  }
+
+  /**
+   * 运行时正文净化开关（delTag 位掩码）：导入阶段正文已转纯文本，开关放这里才能反复切换。
+   * hTag=2：放宽「删重复章名」的扫描行数（3→10，允许中间隔空行），复用 removeDuplicateHeading。
+   * rubyTag=4：本地正文导入时已转纯文本、<rp>/<rt> 不存在，只能退化成「删连续假名字符」。
+   * 这是字符级近似，对日语注音有效；中文注音书会留下汉字+拉丁字母残形，不是标签级精确删除。
+   */
+  private static applyDelTags(body: string, book: Book, chapterTitle: string): string {
+    const tags = book.delTag ?? 0;
+    if (book.format !== 'epub') { return body; }
+    let text = EpubRepository.removeDuplicateHeading(body, chapterTitle, (tags & 2) !== 0 ? 10 : 3);
+    // rubyTag=4：删掉连续假名（平假名 / 片假名 / 半角片假名）。
+    if ((tags & 4) !== 0) {
+      text = text.replace(/[\u3040-\u309F\u30A0-\u30FF\uFF66-\uFF9D]+/g, '');
+    }
+    return text;
   }
 
   /** 没拿到章节行时，按目录规则现算一份（不落库）。 */

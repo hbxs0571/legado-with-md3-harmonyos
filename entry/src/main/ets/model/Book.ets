@@ -39,6 +39,8 @@ export interface Book {
   imageStyle?: string;
   /** 与 Android Book.config.reSegment 对应，按书启用正文重分段。 */
   reSegment?: boolean;
+  /** 上游 Book.delTag 位掩码：hTag=2、rubyTag=4，按书启用 EPUB 正文净化开关。 */
+  delTag?: number;
   /**
    * 与 Android Book.config.useReplaceRule 对应，按书覆盖正文净化开关。
    * 不在 readConfig 里存这个字段即为「跟随全局默认」（上游存 null 同理）。
