@@ -6,6 +6,7 @@ import { RdbCleanup } from '../data/RdbCleanup';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { ThemeSettingsRepository, THEME_MODE_DARK } from '../data/ThemeSettingsRepository';
 import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
+import { BookRepository } from '../data/BookRepository';
 
 /** 系统栏颜色资源名，供深浅色两套资源目录各取一值。 */
 const SYSTEM_BAR_LIGHT: string = '#F6F4F0';
@@ -55,6 +56,9 @@ function applySystemBar(context: Context, isDark: boolean): void {
 export default class EntryAbility extends UIAbility {
   onCreate(): void {
     // 存量搬迁不在这里做：它必须和首屏加载串行，见 onWindowStageCreate。
+    // 启动清扫 epub-assets 孤儿目录（批 5）：fire-and-forget，不阻塞首屏；
+    // 读不到在架书（搬迁未完）时 clearOrphanEpubAssets 内部空集合会直接返回，不会误删在用的图。
+    BookRepository.clearOrphanEpubAssets(this.context).catch(() => {});
   }
 
   onBackground(): void {

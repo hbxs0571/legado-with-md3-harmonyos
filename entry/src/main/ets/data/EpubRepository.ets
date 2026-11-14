@@ -114,6 +114,40 @@ export class EpubRepository {
     await EpubRepository.removeTreeAsync(path);
   }
 
+  /**
+   * 清掉一本书落盘的 EPUB 内嵌图。删书、重导入两个时机调用；
+   * 目录不存在时 removeTree 静默返回，对所有格式调用都安全。
+   */
+  static clearAssets(context: Context, bookId: string): void {
+    EpubRepository.removeTree(`${context.filesDir}/epub-assets/${bookId}`);
+  }
+
+  /**
+   * 启动清扫孤儿目录：epub-assets 下凡不是任何在架书 id 的子目录都删。
+   * liveBookIds 由调用方从 books 表读出后传入，避免这里反向 import BookRepository。
+   * 空集合不删任何东西——防止搬迁未完成时 books 读空把在用目录误删。
+   * 走 removeTreeAsync 异步删除，不阻塞启动。
+   */
+  static async clearOrphanAssets(context: Context, liveBookIds: string[]): Promise<void> {
+    if (liveBookIds.length === 0) { return; }
+    const assetsRoot = `${context.filesDir}/epub-assets`;
+    let names: string[] = [];
+    try {
+      names = fileIo.listFileSync(assetsRoot);
+    } catch (_) {
+      return;
+    }
+    const live: Set<string> = new Set<string>();
+    for (const id of liveBookIds) {
+      live.add(id);
+    }
+    for (const name of names) {
+      const dirName = name.startsWith('/') ? name.substring(1) : name;
+      if (dirName.length === 0 || live.has(dirName)) { continue; }
+      await EpubRepository.removeTreeAsync(`${assetsRoot}/${dirName}`);
+    }
+  }
+
   static async importFromUri(context: Context, uri: string, fileName: string,
     bookId: string): Promise<EpubImportResult> {
     const stagingDirectory = `${context.filesDir}/epub-import/${bookId}`;
@@ -125,6 +159,8 @@ export class EpubRepository {
     let coverResourcePath: string = '';
 
     try {
+      // 重复导入先清掉上一轮落盘的页图，避免 epub-assets/<bookId> 体积逐次叠加（批 5）。
+      EpubRepository.clearAssets(context, bookId);
       EpubRepository.ensureDirectory(stagingDirectory);
       EpubRepository.ensureDirectory(booksDirectory);
       const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);

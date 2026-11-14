@@ -1450,6 +1450,18 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       throw new Error('删除书籍失败');
     }
     BookRepository.chapterCache.delete(bookUrl);
+    // 删书时同步清掉这本书落盘的 EPUB 内嵌图（批 5）；非 EPUB 书没有该目录，clearAssets 静默返回。
+    EpubRepository.clearAssets(context, BookRepository.bookIdFromUrl(bookUrl));
+  }
+
+  /** 启动清扫 epub-assets 下不属于任何在架书的孤儿目录（批 5）。异步，不阻塞启动。 */
+  static async clearOrphanEpubAssets(context: Context): Promise<void> {
+    const books = await BookRepository.loadImportedBooks(context);
+    const ids: string[] = [];
+    for (const item of books) {
+      ids.push(item.id);
+    }
+    await EpubRepository.clearOrphanAssets(context, ids);
   }
 
   /**
