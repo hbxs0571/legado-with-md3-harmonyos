@@ -86,6 +86,27 @@ export struct ReaderSettingsPage {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  // 阅读设置页的两种形态共用同一批行组件：阅读器内浮层（asSheet=true，压在纸面上，
+  // 保持深色）与设置里的全屏页（asSheet=false，跟随应用主题）。解析后的颜色由
+  // publishReaderSetColors() 广播进 AppStorage，子 struct 用 @StorageProp 读。
+  // 默认值一律等于改造前的深色字面量，发布函数没跑时外观不变。
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+  @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetTextDisabled') rsetTextDisabled: string = '#777984';
+  @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
+  @StorageProp('rsetCardBg') rsetCardBg: string = '#202127';
+  @StorageProp('rsetInnerBg') rsetInnerBg: string = '#292A31';
+  @StorageProp('rsetChipBg') rsetChipBg: string = '#15161B';
+  @StorageProp('rsetChipBgAlt') rsetChipBgAlt: string = '#1E1F25';
+  @StorageProp('rsetSelectedBg') rsetSelectedBg: string = '#454B62';
+  @StorageProp('rsetSelectedText') rsetSelectedText: string = '#ECECF0';
+  @StorageProp('rsetTrack') rsetTrack: string = '#454751';
+  @StorageProp('rsetHandle') rsetHandle: string = '#C5C6CD';
   // 正文排版声明默认对齐上游「无数据」层 readConfig.json[0]，实例化时由 Index.ets 显式传值覆盖。
   @Prop fontSize: number = 24;
   @Prop paragraphSpacing: number = 6;
@@ -321,7 +342,7 @@ export struct ReaderSettingsPage {
   @Prop infoSettings: ReaderInfoSettings = DEFAULT_READER_INFO_SETTINGS;
   @Prop paddingSettings: ReaderPaddingSettings = DEFAULT_READER_PADDING_SETTINGS;
   @Prop showQuickActions: boolean = false;
-  @Prop asSheet: boolean = false;
+  @Prop @Watch('onAsSheetChanged') asSheet: boolean = false;
   @Prop openBottomActionConfigOnAppear: boolean = false;
   @State selectedSettingsTab: number = 0;
   @State previousMainSettingsTab: number = 0;
@@ -385,7 +406,37 @@ export struct ReaderSettingsPage {
   // 一律读 @Prop（readBarStyle / readMenuColorMode / readMenuPaletteStyle）的真值。
   // 浮动图标显示开关改为读 @Prop showTitleBarIcons（上游 showTitleBarIcons 字段）。
 
+  /**
+   * 把「按形态解析后的 13 个颜色」广播进 AppStorage，供本 struct 与 17 个私有行组件读取。
+   * 口径与 pages/Index.ets 的 publishThemeCardStyle() 一致。
+   * asSheet 为真时一律取改造前的深色字面量——阅读器内浮层压在纸面上，深色是它对的位置；
+   * 只有全屏形态（设置 → 阅读界面）跟随应用主题。
+   */
+  private publishReaderSetColors(): void {
+    const isSheet = this.asSheet;
+    const cardBg = this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary;
+    AppStorage.setOrCreate('rsetTextPrimary', isSheet ? '#E5E6EB' : this.themeColorTextPrimary);
+    AppStorage.setOrCreate('rsetTextSecondary', isSheet ? '#D9DAE0' : this.themeColorTextSecondary);
+    AppStorage.setOrCreate('rsetTextTertiary', isSheet ? '#AEB0B9' : this.themeColorTextTertiary);
+    AppStorage.setOrCreate('rsetTextDisabled', isSheet ? '#777984' : this.themeColorTextTertiary);
+    AppStorage.setOrCreate('rsetAccent', isSheet ? '#C6D3FF' : this.themeColorAccent);
+    AppStorage.setOrCreate('rsetCardBg', isSheet ? '#202127' : cardBg);
+    AppStorage.setOrCreate('rsetInnerBg', isSheet ? '#292A31' : this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetChipBg', isSheet ? '#15161B' : this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetChipBgAlt', isSheet ? '#1E1F25' : this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetSelectedBg', isSheet ? '#454B62' : this.themeColorAccent);
+    AppStorage.setOrCreate('rsetSelectedText', isSheet ? '#ECECF0' : '#FFFFFF');
+    AppStorage.setOrCreate('rsetTrack', isSheet ? '#454751' : this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetHandle', isSheet ? '#C5C6CD' : this.themeColorTextTertiary);
+  }
+
+  // asSheet 是 @Prop，父组件切形态时 aboutToAppear 不会再跑，必须靠 watch 重算。
+  onAsSheetChanged(): void {
+    this.publishReaderSetColors();
+  }
+
   aboutToAppear(): void {
+    this.publishReaderSetColors();
     this.syncTextMenuEntriesFromConfig();
     this.loadReaderFontEntries();
     if (this.openBottomActionConfigOnAppear) {
@@ -552,21 +603,21 @@ export struct ReaderSettingsPage {
   private BackgroundImageRow(title: string, night: boolean) {
     Row() {
       Column() {
-        Text(title).fontSize(13).fontColor('#E2E3E8')
+        Text(title).fontSize(13).fontColor(this.rsetTextPrimary)
         Text(this.getBackgroundImageOf(night).length > 0 ? '已选择图片' : '未选择图片')
-          .fontSize(10).fontColor('#9A9CA5').margin({ top: 4 })
+          .fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('选择').fontSize(11).fontColor('#C6D3FF')
+      Text('选择').fontSize(11).fontColor(this.rsetAccent)
         .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-        .backgroundColor('#292A31').borderRadius(8)
+        .backgroundColor(this.rsetInnerBg).borderRadius(8)
         .onClick(() => this.onPickBackgroundImage(night))
       if (this.getBackgroundImageOf(night).length > 0) {
-        Text('清除').fontSize(11).fontColor('#C6D3FF')
+        Text('清除').fontSize(11).fontColor(this.rsetAccent)
           .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-          .backgroundColor('#292A31').borderRadius(8).margin({ left: 8 })
+          .backgroundColor(this.rsetInnerBg).borderRadius(8).margin({ left: 8 })
           .onClick(() => this.onBackgroundImageChange('', night))
       }
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 
   /** 三段式选择器：点一次弹一个内联选择条，选中就落库。标题的对齐与字重都用它。 */
@@ -574,20 +625,20 @@ export struct ReaderSettingsPage {
   private TitleChoiceRow(title: string, choices: string[], selectedIndex: number, onSelect: (index: number) => void) {
     Column() {
       Row() {
-        Text(title).fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-        Text(choices[selectedIndex] ?? choices[0] ?? '').fontSize(11).fontColor('#D3D4DC')
+        Text(title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(choices[selectedIndex] ?? choices[0] ?? '').fontSize(11).fontColor(this.rsetTextSecondary)
       }.width('100%')
       Row() {
         ForEach(choices, (label: string, index: number) => {
           Text(label).fontSize(11)
-            .fontColor(selectedIndex === index ? '#ECECF0' : '#B7B8C1')
+            .fontColor(selectedIndex === index ? this.rsetSelectedText : this.rsetTextTertiary)
             .layoutWeight(1).textAlign(TextAlign.Center).padding(8)
-            .backgroundColor(selectedIndex === index ? '#454B62' : '#15161B').borderRadius(8)
+            .backgroundColor(selectedIndex === index ? this.rsetSelectedBg : this.rsetChipBg).borderRadius(8)
             .margin({ right: 4 })
             .onClick(() => onSelect(index))
         }, (label: string, index: number) => `${title}-${index}-${label}-${selectedIndex}`)
       }.width('100%').margin({ top: 8 })
-    }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+    }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 
   /** 标题排版：十四个字段全部可配，对齐上游 TypographyTabs 的标题页。 */
@@ -647,12 +698,12 @@ export struct ReaderSettingsPage {
         onChange: (color: string) => this.onTitleColorChange(color, true)
       })
       Row() {
-        Text('标题颜色跟随正文').fontSize(11).fontColor('#C6D3FF')
+        Text('标题颜色跟随正文').fontSize(11).fontColor(this.rsetAccent)
           .onClick(() => {
             this.onTitleColorChange('', false);
             this.onTitleColorChange('', true);
           })
-      }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+      }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
       // 分段：上游把标题切成多段，首段正常字号、后续段按缩放（ReaderTitleSegmentation.kt）。
       this.TitleChoiceRow(`标题分段（${this.getTitleSegTypeLabel()}）`, ['不分段', '按字数', '按分隔符', '按正则'],
         Math.max(0, Math.min(3, this.titleSegType)), (index: number) => this.onTitleSegTypeChange(index))
@@ -663,8 +714,8 @@ export struct ReaderSettingsPage {
         })
       } else if (this.titleSegType !== 0) {
         TextInput({ text: this.titleSegFlag, placeholder: this.titleSegType === 2 ? '分隔符，多个用英文逗号分隔' : '正则表达式' })
-          .width('100%').height(44).backgroundColor('#202127').borderRadius(12)
-          .fontSize(12).fontColor('#E5E6EB').margin({ bottom: 8 })
+          .width('100%').height(44).backgroundColor(this.rsetCardBg).borderRadius(12)
+          .fontSize(12).fontColor(this.rsetTextPrimary).margin({ bottom: 8 })
           .onChange((value: string) => this.onTitleSegFlagChange(value))
       }
       if (this.titleSegType !== 0) {
@@ -688,18 +739,18 @@ export struct ReaderSettingsPage {
   private settingsContent(showHandle: boolean) {
     Column() {
       if (showHandle) {
-        Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4).margin({ top: 10, bottom: 14 })
+        Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
       }
       Row() {
         Row() {
-          Image($r('app.media.reader_back')).width(22).height(22).fillColor('#E5E6EB')
+          Image($r('app.media.reader_back')).width(22).height(22).fillColor(this.rsetTextPrimary)
         }.width(38).height(38).justifyContent(FlexAlign.Center)
-          .backgroundColor('#292A31').borderRadius(19).onClick(() => {
+          .backgroundColor(this.rsetInnerBg).borderRadius(19).onClick(() => {
             if (this.selectedSettingsTab >= 2) { this.selectedSettingsTab = this.previousMainSettingsTab; }
             else { this.onBack(); }
           })
         Text(this.selectedSettingsTab === 2 ? '信息' : this.selectedSettingsTab === 3 ? '更多设置' : '阅读界面')
-          .fontSize(17).fontColor('#E5E6EB').margin({ left: 10 })
+          .fontSize(17).fontColor(this.rsetTextPrimary).margin({ left: 10 })
         Blank()
       }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
 
@@ -722,16 +773,16 @@ export struct ReaderSettingsPage {
 
       if (this.selectedSettingsTab < 2) {
         Row() {
-          Text('全局').fontSize(10).fontColor('#E7E8ED').layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor(this.selectedSettingsTab === 0 ? '#454B62' : '#1E1F25')
+          Text('全局').fontSize(10).fontColor(this.rsetSelectedText).layoutWeight(1).textAlign(TextAlign.Center)
+            .backgroundColor(this.selectedSettingsTab === 0 ? this.rsetSelectedBg : this.rsetChipBgAlt)
             .borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(0))
-          Text('菜单').fontSize(10).fontColor('#C1C2CA').layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor(this.selectedSettingsTab === 1 ? '#454B62' : '#1E1F25')
+          Text('菜单').fontSize(10).fontColor(this.rsetTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
+            .backgroundColor(this.selectedSettingsTab === 1 ? this.rsetSelectedBg : this.rsetChipBgAlt)
             .borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(1))
-          Text('信息').fontSize(10).fontColor('#C1C2CA').layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor('#1E1F25').borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(2))
-          Text('更多').fontSize(10).fontColor('#C1C2CA').layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor('#1E1F25').borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(3))
+          Text('信息').fontSize(10).fontColor(this.rsetTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
+            .backgroundColor(this.rsetChipBgAlt).borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(2))
+          Text('更多').fontSize(10).fontColor(this.rsetTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
+            .backgroundColor(this.rsetChipBgAlt).borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(3))
         }.padding({ left: 14, right: 14, top: 10, bottom: 16 })
       }
     }.width('100%').height('100%')
@@ -748,8 +799,8 @@ export struct ReaderSettingsPage {
         Row() {
           Column() {
             Row() {
-              Text('字号').fontSize(14).fontColor('#D9DAE0').layoutWeight(1)
-              Text(this.fontSize.toString()).fontSize(12).fontColor('#E5E6EB')
+              Text('字号').fontSize(14).fontColor(this.rsetTextSecondary).layoutWeight(1)
+              Text(this.fontSize.toString()).fontSize(12).fontColor(this.rsetTextPrimary)
             }
             Slider({
               value: this.fontSize,
@@ -758,9 +809,9 @@ export struct ReaderSettingsPage {
               step: 1,
               style: SliderStyle.OutSet
             })
-              .selectedColor('#B9C6FF')
-              .trackColor('#4B4D59')
-              .blockColor('#B9C6FF')
+              .selectedColor(this.rsetAccent)
+              .trackColor(this.rsetTrack)
+              .blockColor(this.rsetAccent)
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click ||
                   mode === SliderChangeMode.End) {
@@ -774,31 +825,31 @@ export struct ReaderSettingsPage {
             Image($r('app.media.reader_info_text_fields'))
               .width(24)
               .height(24)
-              .fillColor('#B7B8C1')
+              .fillColor(this.rsetTextTertiary)
           }
           .width(56)
           .height(56)
-          .backgroundColor('#292A31')
+          .backgroundColor(this.rsetInnerBg)
           .borderRadius(12)
           .margin({ left: 8 })
           .onClick(() => this.openDetailSheet('排版设置', '正文、标题、页眉页脚与边距设置'))
         }
         .padding(12)
-        .backgroundColor('#202127')
+        .backgroundColor(this.rsetCardBg)
         .borderRadius(13)
 
         Row() {
-          Text('背景').fontSize(14).fontColor('#D9DAE0').layoutWeight(1)
-          Text('长按自定义').fontSize(10).fontColor('#8F929D')
+          Text('背景').fontSize(14).fontColor(this.rsetTextSecondary).layoutWeight(1)
+          Text('长按自定义').fontSize(10).fontColor(this.rsetTextTertiary)
             .onClick(() => this.openDetailSheet('自定义阅读背景', '背景图片、背景颜色与文字颜色设置'))
           Image($r('app.media.app_visibility')).width(18).height(18)
-            .fillColor(this.eyeProtectionActive ? '#C6D3FF' : '#D9DAE0').margin({ left: 10 })
+            .fillColor(this.eyeProtectionActive ? this.rsetAccent : this.rsetTextSecondary).margin({ left: 10 })
             .onClick(() => this.onEyeProtectionToggle())
             .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
               this.openDetailSheet('护眼设置', '护眼模式与色温参数');
             }))
           Image(this.readerNightMode ? $r('app.media.app_moon') : $r('app.media.app_daynight'))
-            .width(18).height(18).fillColor('#D9DAE0').margin({ left: 9 })
+            .width(18).height(18).fillColor(this.rsetTextSecondary).margin({ left: 9 })
             .onClick(() => this.onToggleNightMode())
         }.margin({ top: 13, bottom: 8 })
 
@@ -829,15 +880,15 @@ export struct ReaderSettingsPage {
         }.width('100%').height(56).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
 
         Row() {
-          Text('翻页动画').fontSize(12).fontColor('#D9DAE0').layoutWeight(1)
-          Text(this.getPageAnimationLabel()).fontSize(11).fontColor('#D9DAE0').padding(8)
-            .backgroundColor('#292A31').borderRadius(8)
+          Text('翻页动画').fontSize(12).fontColor(this.rsetTextSecondary).layoutWeight(1)
+          Text(this.getPageAnimationLabel()).fontSize(11).fontColor(this.rsetTextSecondary).padding(8)
+            .backgroundColor(this.rsetInnerBg).borderRadius(8)
             .onClick(() => this.openDetailSheet('翻页动画', '覆盖、滑动、仿真、滚动、淡入淡出、无动画'))
-          Image($r('app.media.app_anim_speed')).width(20).height(20).fillColor('#D9DAE0').margin({ left: 12 })
+          Image($r('app.media.app_anim_speed')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 12 })
           .onClick(() => this.openDetailSheet('翻页动画速度', `当前：${this.getAnimationSpeedLabel()}；可选极速、快速、适中、优雅`))
-          Image($r('app.media.app_padding')).width(20).height(20).fillColor('#D9DAE0').margin({ left: 14 })
+          Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 14 })
             .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
-        }.padding(13).backgroundColor('#202127').borderRadius(13).margin({ top: 13 })
+        }.padding(13).backgroundColor(this.rsetCardBg).borderRadius(13).margin({ top: 13 })
       }.width('100%').padding({ left: 14, right: 14, bottom: 14 })
     }
     .width('100%')
@@ -887,18 +938,18 @@ export struct ReaderSettingsPage {
     onChange: (value: number) => void) {
     Column() {
       Row() {
-        Text(title).fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
-        Text('−').fontSize(16).fontColor(value > minValue ? '#E5E6EB' : '#5A5C66')
+        Text(title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text('−').fontSize(16).fontColor(value > minValue ? this.rsetTextPrimary : this.rsetTextDisabled)
           .width(32).height(32).textAlign(TextAlign.Center)
-          .backgroundColor('#292A31').borderRadius(8)
+          .backgroundColor(this.rsetInnerBg).borderRadius(8)
           .onClick(() => {
             if (value > minValue) { onChange(Math.max(minValue, value - 1)); }
           })
-        Text(`${value}`).fontSize(13).fontColor('#E5E6EB').width(34).textAlign(TextAlign.Center)
+        Text(`${value}`).fontSize(13).fontColor(this.rsetTextPrimary).width(34).textAlign(TextAlign.Center)
           .margin({ left: 6, right: 6 })
-        Text('＋').fontSize(16).fontColor(value < maxValue ? '#E5E6EB' : '#5A5C66')
+        Text('＋').fontSize(16).fontColor(value < maxValue ? this.rsetTextPrimary : this.rsetTextDisabled)
           .width(32).height(32).textAlign(TextAlign.Center)
-          .backgroundColor('#292A31').borderRadius(8)
+          .backgroundColor(this.rsetInnerBg).borderRadius(8)
           .onClick(() => {
             if (value < maxValue) { onChange(Math.min(maxValue, value + 1)); }
           })
@@ -908,11 +959,11 @@ export struct ReaderSettingsPage {
       if (this.menuStepperExpanded === title) {
         Slider({ value: value, min: minValue, max: maxValue, step: 1, style: SliderStyle.InSet })
           .width('100%').padding({ left: 12, right: 12 })
-          .selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
+          .selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
           .showTips(false).margin({ bottom: 8 })
           .onChange((next: number, mode: SliderChangeMode) => onChange(Math.round(next)))
       }
-    }.width('100%').backgroundColor('#202127').borderRadius(12)
+    }.width('100%').backgroundColor(this.rsetCardBg).borderRadius(12)
       .margin({ left: 14, right: 14, bottom: 4 })
   }
 
@@ -920,17 +971,17 @@ export struct ReaderSettingsPage {
   private menuSettingsContent() {
     Column() {
       Row() {
-        Text('菜单栏').fontSize(11).fontColor(this.selectedMenuSettingsTab === 0 ? '#ECECF0' : '#B7B8C1')
+        Text('菜单栏').fontSize(11).fontColor(this.selectedMenuSettingsTab === 0 ? this.rsetSelectedText : this.rsetTextTertiary)
           .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.selectedMenuSettingsTab === 0 ? '#454B62' : '#202127')
+          .backgroundColor(this.selectedMenuSettingsTab === 0 ? this.rsetSelectedBg : this.rsetCardBg)
           .borderRadius(15).padding(8).onClick(() => this.selectedMenuSettingsTab = 0)
-        Text('底栏布局').fontSize(11).fontColor(this.selectedMenuSettingsTab === 1 ? '#ECECF0' : '#B7B8C1')
+        Text('底栏布局').fontSize(11).fontColor(this.selectedMenuSettingsTab === 1 ? this.rsetSelectedText : this.rsetTextTertiary)
           .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.selectedMenuSettingsTab === 1 ? '#454B62' : '#202127')
+          .backgroundColor(this.selectedMenuSettingsTab === 1 ? this.rsetSelectedBg : this.rsetCardBg)
           .borderRadius(15).padding(8).onClick(() => this.selectedMenuSettingsTab = 1)
-        Text('顶栏布局').fontSize(11).fontColor(this.selectedMenuSettingsTab === 2 ? '#ECECF0' : '#B7B8C1')
+        Text('顶栏布局').fontSize(11).fontColor(this.selectedMenuSettingsTab === 2 ? this.rsetSelectedText : this.rsetTextTertiary)
           .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.selectedMenuSettingsTab === 2 ? '#454B62' : '#202127')
+          .backgroundColor(this.selectedMenuSettingsTab === 2 ? this.rsetSelectedBg : this.rsetCardBg)
           .borderRadius(15).padding(8).onClick(() => this.selectedMenuSettingsTab = 2)
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
 
@@ -1487,15 +1538,15 @@ export struct ReaderSettingsPage {
   private informationSettingsContent() {
     Column() {
       Row() {
-        Text('页眉').fontSize(11).fontColor(this.infoSubTab === 0 ? '#ECECF0' : '#B7B8C1')
-          .layoutWeight(1).textAlign(TextAlign.Center).backgroundColor(this.infoSubTab === 0 ? '#454B62' : '#202127')
+        Text('页眉').fontSize(11).fontColor(this.infoSubTab === 0 ? this.rsetSelectedText : this.rsetTextTertiary)
+          .layoutWeight(1).textAlign(TextAlign.Center).backgroundColor(this.infoSubTab === 0 ? this.rsetSelectedBg : this.rsetCardBg)
           .borderRadius(14).padding(8).onClick(() => this.infoSubTab = 0)
-        Text('页脚').fontSize(11).fontColor(this.infoSubTab === 1 ? '#ECECF0' : '#B7B8C1')
-          .layoutWeight(1).textAlign(TextAlign.Center).backgroundColor(this.infoSubTab === 1 ? '#454B62' : '#202127')
+        Text('页脚').fontSize(11).fontColor(this.infoSubTab === 1 ? this.rsetSelectedText : this.rsetTextTertiary)
+          .layoutWeight(1).textAlign(TextAlign.Center).backgroundColor(this.infoSubTab === 1 ? this.rsetSelectedBg : this.rsetCardBg)
           .borderRadius(14).padding(8).margin({ left: 8 }).onClick(() => this.infoSubTab = 1)
         Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.app_padding')).width(18).height(18).fillColor('#D9DAE0')
-        }.width(40).height(40).backgroundColor('#202127').borderRadius(10).margin({ left: 8 })
+          Image($r('app.media.app_padding')).width(18).height(18).fillColor(this.rsetTextSecondary)
+        }.width(40).height(40).backgroundColor(this.rsetCardBg).borderRadius(10).margin({ left: 8 })
           .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
       Scroll() {
@@ -1597,7 +1648,7 @@ export struct ReaderSettingsPage {
             stepValue: 10,
             onChange: (value: number) => this.onPageTouchSlopChange(value)
           })
-          Text('滑动翻页阈值（0 = 系统默认值）').fontSize(10).fontColor('#898B95')
+          Text('滑动翻页阈值（0 = 系统默认值）').fontSize(10).fontColor(this.rsetTextTertiary)
             .width('100%').padding({ left: 18, right: 18, bottom: 8 })
           MenuSettingOption({
             title: '横屏双页', detail: readerColumnModeTitle(this.doubleHorizontalPage), migrated: true
@@ -1731,31 +1782,31 @@ export struct ReaderSettingsPage {
   @Builder
   private readerTextMenuIcon(id: string) {
     if (id === 'menu_copy') {
-      Image($r('app.media.reader_menu_copy')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_copy')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_share_str') {
-      Image($r('app.media.reader_menu_share')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_share')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_browser') {
-      Image($r('app.media.reader_menu_language')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_language')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_aloud') {
-      Image($r('app.media.reader_menu_volume_up')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_volume_up')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_bookmark') {
-      Image($r('app.media.reader_menu_bookmark')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_bookmark')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_mark') {
-      Image($r('app.media.reader_menu_border_color')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_border_color')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_dict') {
-      Image($r('app.media.reader_menu_book')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_book')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_replace') {
-      Image($r('app.media.reader_menu_find_replace')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_find_replace')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_edit') {
-      Image($r('app.media.reader_menu_edit')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_edit')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_ai_clean' || id === 'menu_ai_rewrite') {
-      Image($r('app.media.reader_menu_smart_toy')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_smart_toy')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_search_content') {
-      Image($r('app.media.reader_menu_search')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_search')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_insert_bgm_before') {
-      Image($r('app.media.reader_menu_queue_music')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_queue_music')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else if (id === 'menu_insert_bgm_after') {
-      Image($r('app.media.reader_menu_playlist_add')).width(18).height(18).fillColor('#D9DAE0')
+      Image($r('app.media.reader_menu_playlist_add')).width(18).height(18).fillColor(this.rsetTextSecondary)
     } else {
       Blank().width(18).height(18)
     }
@@ -1863,7 +1914,7 @@ export struct ReaderSettingsPage {
       Column() {
         Column() {
           Text(this.getBackgroundStyleLabel(style)).fontSize(11).maxLines(2).textAlign(TextAlign.Center)
-            .fontColor('#3E3D3B')
+            .fontColor(this.rsetTextPrimary)
         }
         .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
         .backgroundColor(this.readerNightMode ? style.nightColor : style.dayColor)
@@ -1873,7 +1924,7 @@ export struct ReaderSettingsPage {
           !this.themeManageMode && this.paperIndex === styleIndex ? Visibility.Visible : Visibility.Hidden)
           .backgroundColor(this.themeColorAccent)
       }
-      .width('100%').aspectRatio(44 / 56).backgroundColor('#202127')
+      .width('100%').aspectRatio(44 / 56).backgroundColor(this.rsetCardBg)
       .borderRadius(10).clip(true)
       .opacity(styleIndex < READER_STYLE_PRESET_COUNT ? 1 : 1)
 
@@ -1884,7 +1935,7 @@ export struct ReaderSettingsPage {
       } else if (this.themeManageMode) {
         Stack({ alignContent: Alignment.Center }) {
           Text(this.themeSelected.indexOf(styleIndex) >= 0 ? '✓' : '')
-            .fontSize(10).fontColor('#FFFFFF')
+            .fontSize(10).fontColor(this.rsetSelectedText)
         }
         .width(14).height(14).borderRadius(7).margin({ top: 4, right: 4 })
         .backgroundColor(this.themeSelected.indexOf(styleIndex) >= 0 ? this.themeColorAccent : '#66000000')
@@ -1895,8 +1946,8 @@ export struct ReaderSettingsPage {
 
   @Builder
   private ThemeManageAction(label: string, action: () => void) {
-    Text(label).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).textAlign(TextAlign.Center)
-      .padding({ top: 9, bottom: 9 }).backgroundColor('#202127').borderRadius(10)
+    Text(label).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
+      .padding({ top: 9, bottom: 9 }).backgroundColor(this.rsetCardBg).borderRadius(10)
       .margin({ left: 3, right: 3 }).onClick(action)
   }
 
@@ -2293,12 +2344,12 @@ export struct ReaderSettingsPage {
     Stack({ alignContent: Alignment.Center }) {
       Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.detailSheetVisible = false)
       Column() {
-        Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4).margin({ top: 10, bottom: 14 })
+        Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
         Row() {
-          Text(this.detailSheetTitle).fontSize(17).fontColor('#E5E6EB').layoutWeight(1)
-          Text('关闭').fontSize(13).fontColor('#C6D3FF').onClick(() => this.detailSheetVisible = false)
+          Text(this.detailSheetTitle).fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
+          Text('关闭').fontSize(13).fontColor(this.rsetAccent).onClick(() => this.detailSheetVisible = false)
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
-        Text(this.detailSheetDescription).fontSize(13).fontColor('#D3D4DC').width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
+        Text(this.detailSheetDescription).fontSize(13).fontColor(this.rsetTextSecondary).width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
         if (this.detailSheetTitle === '种子色' || this.detailSheetTitle === '菜单背景颜色' ||
           this.detailSheetTitle === '菜单容器颜色' || this.detailSheetTitle === '菜单强调颜色' ||
           this.detailSheetTitle === '菜单栏边框颜色' || this.detailSheetTitle === '菜单文字颜色' ||
@@ -2397,10 +2448,10 @@ export struct ReaderSettingsPage {
         } else if (this.detailSheetTitle === '编辑背景样式') {
           Scroll() {
             Column() {
-              Text('样式名称').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 6, bottom: 6 })
+              Text('样式名称').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 6, bottom: 6 })
               TextInput({ text: this.editingStyleName, placeholder: '给这份样式起个名字' })
-                .fontSize(13).fontColor('#E5E6EB').placeholderColor(this.themeColorTextTertiary)
-                .backgroundColor('#292A31').borderRadius(10).padding(12)
+                .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                 .onChange((value: string) => this.editingStyleName = value)
               MenuSettingPalette({
                 title: '日间背景颜色',
@@ -2416,7 +2467,7 @@ export struct ReaderSettingsPage {
               }).margin({ top: 12 })
               Text('改名与改色只影响这一份样式；其余样式与自定义背景图不受影响。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
-              Text('保存').fontSize(13).fontColor('#ECEEF4').textAlign(TextAlign.Center)
+              Text('保存').fontSize(13).fontColor(this.rsetSelectedText).textAlign(TextAlign.Center)
                 .width('100%').padding({ top: 11, bottom: 11 })
                 .backgroundColor(this.themeColorAccent).borderRadius(10)
                 .onClick(() => {
@@ -2434,12 +2485,12 @@ export struct ReaderSettingsPage {
                 Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary)
                   .onClick(() => this.exitThemeManage())
                 Text(this.themeSelected.length === 0 ? '选择主题' : `已选中 ${this.themeSelected.length}`)
-                  .fontSize(13).fontColor('#E5E6EB').fontWeight(FontWeight.Medium)
+                  .fontSize(13).fontColor(this.rsetTextPrimary).fontWeight(FontWeight.Medium)
                   .layoutWeight(1).textAlign(TextAlign.Center)
                 Text('完成').fontSize(13).fontColor(this.themeColorAccent)
                   .onClick(() => this.exitThemeManage())
               } else {
-                Text('主题列表').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                Text('主题列表').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
                 // 列数切换只在非管理态出现（上游管理态隐去布局入口）。
                 Text(`${this.themeGridColumns} 列`).fontSize(12).fontColor(this.themeColorTextTertiary)
                   .padding({ left: 8, right: 8 })
@@ -2479,7 +2530,7 @@ export struct ReaderSettingsPage {
                   Row() {
                     Text('新建样式').fontSize(13).fontColor(this.themeColorAccent)
                       .padding({ left: 10, right: 10, top: 9, bottom: 9 }).margin({ top: 12 })
-                      .backgroundColor('#202127').borderRadius(10)
+                      .backgroundColor(this.rsetCardBg).borderRadius(10)
                       .onClick(() => this.onAddBackgroundStyle())
                     Text('前 5 份是内置预设，不能删除也不能移动；自建样式可以删掉、可以置顶置底。')
                       .fontSize(10).fontColor(this.themeColorTextTertiary).layoutWeight(1).margin({ left: 10 })
@@ -2492,28 +2543,28 @@ export struct ReaderSettingsPage {
           Scroll() {
             Column() {
               Text('当前字体').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 8, bottom: 6 })
-              Text(this.getCurrentFontDisplayName()).fontSize(14).fontColor('#E5E6EB').width('100%')
-                .padding(12).backgroundColor('#202127').borderRadius(10)
+              Text(this.getCurrentFontDisplayName()).fontSize(14).fontColor(this.rsetTextPrimary).width('100%')
+                .padding(12).backgroundColor(this.rsetCardBg).borderRadius(10)
               Text('系统字体').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 14, bottom: 6 })
               Row() {
                 ForEach(['默认字体', '衬线字体', '等宽字体'], (label: string, index: number) => {
                   Text(label).fontSize(11).fontColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
-                    ? '#ECEEF4' : '#B7B8C1')
+                    ? this.rsetSelectedText : this.rsetTextTertiary)
                     .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 10, bottom: 10 })
                     .backgroundColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
-                      ? '#454B62' : '#202127').borderRadius(10).margin({ right: 5 })
+                      ? this.rsetSelectedBg : this.rsetCardBg).borderRadius(10).margin({ right: 5 })
                     .onClick(() => this.chooseSystemTypeface(index))
                 }, (label: string) => label)
               }.width('100%')
               Row() {
-                Text('导入字体文件').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                Text('导入字体文件').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
                 Text('选择 TTF/OTF').fontSize(11).fontColor(this.themeColorAccent)
-              }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10)
+              }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(10)
                 .margin({ top: 12, bottom: 6 }).onClick(() => this.importReaderFontFile())
               Row() {
-                Text('导入字体目录').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                Text('导入字体目录').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
                 Text('支持时可用').fontSize(11).fontColor(this.themeColorTextTertiary)
-              }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10)
+              }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(10)
                 .margin({ bottom: 8 }).onClick(() => this.importReaderFontFolder())
               if (this.fontEntries.length === 0) {
                 Text('尚无导入字体。可选择单个字体文件；已选字体复制到应用私有目录。')
@@ -2523,7 +2574,7 @@ export struct ReaderSettingsPage {
                 ForEach(this.fontEntries, (font: ReaderFontEntry) => {
                   Row() {
                     Column() {
-                      Text(font.displayName).fontSize(13).fontColor('#E5E6EB').maxLines(1)
+                      Text(font.displayName).fontSize(13).fontColor(this.rsetTextPrimary).maxLines(1)
                       Text(font.familyName).fontSize(10).fontColor(this.themeColorTextTertiary).maxLines(1).margin({ top: 3 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     if (this.getFontTargetPath() === font.path) {
@@ -2531,7 +2582,7 @@ export struct ReaderSettingsPage {
                     } else {
                       Text('选择').fontSize(11).fontColor(this.themeColorAccent)
                     }
-                  }.width('100%').padding(12).backgroundColor('#202127').borderRadius(10).margin({ bottom: 6 })
+                  }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(10).margin({ bottom: 6 })
                     .onClick(() => this.chooseReaderFont(font))
                 }, (font: ReaderFontEntry) => font.familyName)
               }
@@ -2542,16 +2593,16 @@ export struct ReaderSettingsPage {
             Row() {
               ForEach(TYPOGRAPHY_PAGE_LABELS, (label: string) => {
                 Text(label).fontSize(11)
-                  .fontColor(this.detailSelectedOption === label ? '#ECECF0' : '#B7B8C1')
+                  .fontColor(this.detailSelectedOption === label ? this.rsetSelectedText : this.rsetTextTertiary)
                   .layoutWeight(1).textAlign(TextAlign.Center).padding(9)
-                  .backgroundColor(this.detailSelectedOption === label ? '#454B62' : '#292A31')
+                  .backgroundColor(this.detailSelectedOption === label ? this.rsetSelectedBg : this.rsetInnerBg)
                   .borderRadius(8).margin({ right: 4 })
                   .onClick(() => this.detailSelectedOption = label)
               }, (label: string) => label)
               // 上游 TypographyPage.kt:182-204：页签右侧 56dp 方形「边距」卡。
               Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.app_padding')).width(20).height(20).fillColor('#B7B8C1')
-              }.width(40).height(40).backgroundColor('#292A31').borderRadius(10).margin({ left: 4 })
+                Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextTertiary)
+              }.width(40).height(40).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ left: 4 })
                 .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
             }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
             // 上游是 CardTabRow + HorizontalPager：点页签切页，也可以直接横滑。
@@ -2580,16 +2631,16 @@ export struct ReaderSettingsPage {
                 onChange: (enabled: boolean) => this.onTextItalicChange(enabled)
               })
               Column() {
-                Text('字重').fontSize(13).fontColor('#E2E3E8').width('100%').margin({ bottom: 8 })
+                Text('字重').fontSize(13).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 8 })
                 Row() {
                   ForEach(['纤细', '常规', '中等', '粗体', '特粗'], (label: string, index: number) => {
-                    Text(label).fontSize(11).fontColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? '#ECECF0' : '#B7B8C1')
+                    Text(label).fontSize(11).fontColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? this.rsetSelectedText : this.rsetTextTertiary)
                       .layoutWeight(1).textAlign(TextAlign.Center).padding(8)
-                      .backgroundColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? '#454B62' : '#15161B').borderRadius(8)
+                      .backgroundColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? this.rsetSelectedBg : this.rsetChipBg).borderRadius(8)
                       .margin({ right: 4 }).onClick(() => this.onTextBoldChange(READER_BODY_WEIGHT_VALUES[index] ?? 500))
                   }, (label: string) => label)
                 }.width('100%')
-              }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+              }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
               MenuSettingSwitch({
                 title: '文字阴影', detail: '为正文绘制阴影', checked: this.textShadow,
                 onChange: (enabled: boolean) => this.onTextShadowChange(enabled)
@@ -2686,82 +2737,82 @@ export struct ReaderSettingsPage {
                 onChange: (enabled: boolean) => this.onShowSelectMenuIconChange(enabled)
               })
               Row() {
-                Text('主菜单').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
-                Text(`${this.getTextMenuEntries(0).length}`).fontSize(11).fontColor('#AEB0B9')
-                Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor('#AEB0B9')
+                Text('主菜单').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text(`${this.getTextMenuEntries(0).length}`).fontSize(11).fontColor(this.rsetTextTertiary)
+                Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor(this.rsetTextTertiary)
                   .rotate({ angle: this.primaryTextMenuExpanded ? 180 : 0 }).margin({ left: 8 })
-              }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(10).margin({ top: 8, bottom: 5 })
+              }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 8, bottom: 5 })
                 .onClick(() => this.toggleTextMenuGroup(0))
               if (this.primaryTextMenuExpanded) {
                 ForEach(this.getTextMenuEntries(0), (item: ReaderTextMenuEntry) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
-                    Text(item.title).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).margin({ left: 8 })
-                    Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor('#C8CAD2')
+                    Text(item.title).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
+                    Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 0))
-                    Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor('#C8CAD2')
+                    Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, 1, 0))
-                    Image($r('app.media.app_reduce')).width(17).height(17).fillColor('#C8CAD2')
+                    Image($r('app.media.app_reduce')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 1))
-                    Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor('#C8CAD2')
+                    Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 2))
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
-                    .backgroundColor('#202127').borderRadius(9).margin({ bottom: 4 })
+                    .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
-                Text('折叠菜单').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
-                Text(`${this.getTextMenuEntries(1).length}`).fontSize(11).fontColor('#AEB0B9')
-                Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor('#AEB0B9')
+                Text('折叠菜单').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text(`${this.getTextMenuEntries(1).length}`).fontSize(11).fontColor(this.rsetTextTertiary)
+                Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor(this.rsetTextTertiary)
                   .rotate({ angle: this.collapsedTextMenuExpanded ? 180 : 0 }).margin({ left: 8 })
-              }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(10).margin({ top: 5, bottom: 5 })
+              }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 5, bottom: 5 })
                 .onClick(() => this.toggleTextMenuGroup(1))
               if (this.collapsedTextMenuExpanded) {
                 ForEach(this.getTextMenuEntries(1), (item: ReaderTextMenuEntry) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
-                    Text(item.title).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).margin({ left: 8 })
-                    Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor('#C8CAD2')
+                    Text(item.title).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
+                    Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 1))
-                    Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor('#C8CAD2')
+                    Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, 1, 1))
-                    Image($r('app.media.app_add')).width(17).height(17).fillColor('#C8CAD2')
+                    Image($r('app.media.app_add')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 0))
-                    Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor('#C8CAD2')
+                    Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 2))
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
-                    .backgroundColor('#202127').borderRadius(9).margin({ bottom: 4 })
+                    .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
-                Text('隐藏项目').fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
-                Text(`${this.getTextMenuEntries(2).length}`).fontSize(11).fontColor('#AEB0B9')
-                Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor('#AEB0B9')
+                Text('隐藏项目').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text(`${this.getTextMenuEntries(2).length}`).fontSize(11).fontColor(this.rsetTextTertiary)
+                Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor(this.rsetTextTertiary)
                   .rotate({ angle: this.hiddenTextMenuExpanded ? 180 : 0 }).margin({ left: 8 })
-              }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(10).margin({ top: 5, bottom: 5 })
+              }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 5, bottom: 5 })
                 .onClick(() => this.toggleTextMenuGroup(2))
               if (this.hiddenTextMenuExpanded) {
                 ForEach(this.getTextMenuEntries(2), (item: ReaderTextMenuEntry) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
-                    Text(item.title).fontSize(12).fontColor('#E5E6EB').layoutWeight(1).margin({ left: 8 })
-                    Image($r('app.media.app_add')).width(17).height(17).fillColor('#C8CAD2')
+                    Text(item.title).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
+                    Image($r('app.media.app_add')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 0))
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
-                    .backgroundColor('#202127').borderRadius(9).margin({ bottom: 4 })
+                    .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Column() {
                 Text('Android 系统提供的文字处理应用项暂未迁移。')
-                  .fontSize(11).fontColor('#AEB0B9').width('100%')
+                  .fontSize(11).fontColor(this.rsetTextTertiary).width('100%')
                 Text('排序、分组与两个开关点「保存」后落库，并随备份同步；阅读页菜单只显示已实现能力的条目。')
                   .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 5 })
-              }.padding(12).backgroundColor('#202127').borderRadius(10).margin({ top: 8 })
+              }.padding(12).backgroundColor(this.rsetCardBg).borderRadius(10).margin({ top: 8 })
               Row() {
                 Blank()
-                Text('保存').fontSize(13).fontColor('#101116')
+                Text('保存').fontSize(13).fontColor(this.rsetSelectedText)
                   .padding({ left: 20, right: 20, top: 10, bottom: 10 })
-                  .backgroundColor('#C6D3FF').borderRadius(18)
+                  .backgroundColor(this.rsetAccent).borderRadius(18)
                   .onClick(() => {
                     this.saveTextMenuConfig();
                     this.onUnavailableAction('选中文字菜单配置已保存');
@@ -2773,17 +2824,17 @@ export struct ReaderSettingsPage {
           Scroll() {
             Column() {
               Text('点击阅读页面的分区，再选择该区域的动作。')
-                .fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 4, bottom: 10 })
+                .fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 4, bottom: 10 })
               ForEach([0, 1, 2], (rowIndex: number) => {
                 Row() {
                   ForEach([0, 1, 2], (columnIndex: number) => {
                     Column() {
                       Text(CLICK_REGION_NAMES[rowIndex * 3 + columnIndex] ?? '')
-                        .fontSize(10).fontColor('#AEB0B9').margin({ bottom: 4 })
+                        .fontSize(10).fontColor(this.rsetTextTertiary).margin({ bottom: 4 })
                       Text(this.clickRegionActions[rowIndex * 3 + columnIndex] ?? '无操作')
-                        .fontSize(12).fontColor('#E5E6EB').textAlign(TextAlign.Center)
+                        .fontSize(12).fontColor(this.rsetTextPrimary).textAlign(TextAlign.Center)
                     }.layoutWeight(1).height(58).justifyContent(FlexAlign.Center)
-                      .backgroundColor(this.selectedClickRegionIndex === rowIndex * 3 + columnIndex ? '#454B62' : '#292A31')
+                      .backgroundColor(this.selectedClickRegionIndex === rowIndex * 3 + columnIndex ? this.rsetSelectedBg : this.rsetInnerBg)
                       .borderRadius(10).margin({ right: columnIndex < 2 ? 6 : 0, bottom: 6 })
                       .onClick(() => this.selectedClickRegionIndex = rowIndex * 3 + columnIndex)
                   }, (columnIndex: number) => `column-${columnIndex}`)
@@ -2793,12 +2844,12 @@ export struct ReaderSettingsPage {
                 .fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 8, bottom: 6 })
               ForEach(READER_CLICK_REGION_ACTIONS, (action: string) => {
                 Row() {
-                  Text(action).fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                  Text(action).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
                   if ((this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action) {
                     Image($r('app.media.app_check')).width(18).height(18).fillColor(this.themeColorAccent)
                   }
                 }.width('100%').padding(10).backgroundColor(
-                  (this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action ? '#34394C' : '#202127'
+                  (this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action ? this.rsetSelectedBg : this.rsetCardBg
                 ).borderRadius(9).margin({ bottom: 5 }).onClick(() => {
                   const nextActions: string[] = this.clickRegionActions.map((current: string, index: number) =>
                     index === this.selectedClickRegionIndex ? action : current
@@ -2813,27 +2864,27 @@ export struct ReaderSettingsPage {
         } else if (this.detailSheetTitle === '自定义翻页按键') {
           Scroll() {
             Column() {
-              Text('上一页按键').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 6, bottom: 6 })
+              Text('上一页按键').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 6, bottom: 6 })
               TextInput({ text: this.previousPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
-                .fontSize(13).fontColor('#E5E6EB').placeholderColor(this.themeColorTextTertiary)
-                .backgroundColor('#292A31').borderRadius(10).padding(12)
+                .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                 .onChange((value: string) => this.previousPageKeys = value)
-              Text('下一页按键').fontSize(12).fontColor('#AEB0B9').width('100%').padding({ top: 12, bottom: 6 })
+              Text('下一页按键').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 12, bottom: 6 })
               TextInput({ text: this.nextPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
-                .fontSize(13).fontColor('#E5E6EB').placeholderColor(this.themeColorTextTertiary)
-                .backgroundColor('#292A31').borderRadius(10).padding(12)
+                .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                 .onChange((value: string) => this.nextPageKeys = value)
               Text('将焦点放到输入框按下物理按键会自动录入键值，多个按键会自动用英文逗号隔开。')
-                .fontSize(11).fontColor('#AEB0B9').width('100%').padding({ top: 10, bottom: 6 })
+                .fontSize(11).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 10, bottom: 6 })
               Text('当前可由系统接管翻页的按键只有音量键与媒体键（上一曲/下一曲/播放暂停）；其余键值会被保存并随备份同步，但按下时只有应用窗口持有焦点才会生效。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding({ bottom: 14 })
               Row() {
-                Text('重置').fontSize(13).fontColor('#D3D4DC').padding({ left: 18, right: 18, top: 10, bottom: 10 })
-                  .backgroundColor('#292A31').borderRadius(18)
+                Text('重置').fontSize(13).fontColor(this.rsetTextSecondary).padding({ left: 18, right: 18, top: 10, bottom: 10 })
+                  .backgroundColor(this.rsetInnerBg).borderRadius(18)
                   .onClick(() => { this.previousPageKeys = ''; this.nextPageKeys = ''; })
                 Blank()
-                Text('确定').fontSize(13).fontColor('#101116').padding({ left: 20, right: 20, top: 10, bottom: 10 })
-                  .backgroundColor('#C6D3FF').borderRadius(18)
+                Text('确定').fontSize(13).fontColor(this.rsetSelectedText).padding({ left: 20, right: 20, top: 10, bottom: 10 })
+                  .backgroundColor(this.rsetAccent).borderRadius(18)
                   .onClick(() => {
                     this.onPrevKeysChange(this.previousPageKeys);
                     this.onNextKeysChange(this.nextPageKeys);
@@ -2867,15 +2918,15 @@ export struct ReaderSettingsPage {
                 })
                 if (this.eyeProtectionSchedule) {
                   Row() {
-                    Text('开始时间').fontSize(12).fontColor('#D9DAE0')
+                    Text('开始时间').fontSize(12).fontColor(this.rsetTextSecondary)
                     Blank()
-                    Text(this.eyeProtectionStartTime).fontSize(12).fontColor('#C6D3FF')
+                    Text(this.eyeProtectionStartTime).fontSize(12).fontColor(this.rsetAccent)
                     Text('›').fontSize(20).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
                   }.width('100%').padding({ top: 10, bottom: 6 }).onClick(() => this.showEyeProtectionTimePicker(true))
                   Row() {
-                    Text('结束时间').fontSize(12).fontColor('#D9DAE0')
+                    Text('结束时间').fontSize(12).fontColor(this.rsetTextSecondary)
                     Blank()
-                    Text(this.eyeProtectionEndTime).fontSize(12).fontColor('#C6D3FF')
+                    Text(this.eyeProtectionEndTime).fontSize(12).fontColor(this.rsetAccent)
                     Text('›').fontSize(20).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
                   }.width('100%').padding({ top: 6, bottom: 8 }).onClick(() => this.showEyeProtectionTimePicker(false))
                 }
@@ -2897,17 +2948,17 @@ export struct ReaderSettingsPage {
                     .objectFit(ImageFit.Contain)
                 } else {
                   Image($r('app.media.app_bookmark')).width(Math.max(8, this.bookmarkBadgeSize))
-                    .height(Math.max(8, this.bookmarkBadgeSize)).fillColor('#C6D3FF')
+                    .height(Math.max(8, this.bookmarkBadgeSize)).fillColor(this.rsetAccent)
                 }
-              }.width(62).height(62).backgroundColor('#292A31').borderRadius(12)
+              }.width(62).height(62).backgroundColor(this.rsetInnerBg).borderRadius(12)
               Column() {
                 Text(this.bookmarkBadgeImage.length > 0 ? '自定义图片' : '默认')
-                  .fontSize(14).fontColor('#E5E6EB')
+                  .fontSize(14).fontColor(this.rsetTextPrimary)
                 Text('角标大小：' + this.bookmarkBadgeSize.toString() + 'dp')
-                  .fontSize(11).fontColor('#AEB0B9').margin({ top: 5 })
+                  .fontSize(11).fontColor(this.rsetTextTertiary).margin({ top: 5 })
               }.alignItems(HorizontalAlign.Start).margin({ left: 12 })
               Blank()
-            }.width('100%').padding(12).backgroundColor('#202127').borderRadius(12)
+            }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
             MenuSettingOption({ title: '选择书签标记图片', detail: '使用本地图片作为阅读页角标', migrated: true })
               .onClick(() => this.onPickBookmarkBadgeImage())
             if (this.bookmarkBadgeImage.length > 0) {
@@ -2925,8 +2976,8 @@ export struct ReaderSettingsPage {
           Column() {
             Row() {
               ForEach(['正文', '页眉', '页脚'], (label: string) => {
-                Text(label).fontSize(11).fontColor('#D9DAE0').layoutWeight(1).textAlign(TextAlign.Center)
-                  .padding(9).backgroundColor('#292A31').borderRadius(8).margin({ right: 4 })
+                Text(label).fontSize(11).fontColor(this.rsetTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
+                  .padding(9).backgroundColor(this.rsetInnerBg).borderRadius(8).margin({ right: 4 })
                   .onClick(() => this.detailSelectedOption = label)
               }, (label: string) => label)
             }.width('100%').padding({ bottom: 8 })
@@ -2947,44 +2998,44 @@ export struct ReaderSettingsPage {
         } else if (this.detailSheetTitle === '正文排版') {
           Column() {
             Row() {
-              Text('缩进').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-              Text(this.paragraphIndent.length.toString()).fontSize(12).fontColor('#D3D4DC')
+              Text('缩进').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text(this.paragraphIndent.length.toString()).fontSize(12).fontColor(this.rsetTextSecondary)
             }.width('100%')
             Slider({ value: this.paragraphIndent.length, min: 0, max: 4, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
+              .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onParagraphIndentCountChange(Math.max(0, Math.min(4, Math.round(value))));
                 }
               })
             Row() {
-              Text('字距').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-              Text(this.letterSpacing.toFixed(2)).fontSize(12).fontColor('#D3D4DC')
+              Text('字距').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text(this.letterSpacing.toFixed(2)).fontSize(12).fontColor(this.rsetTextSecondary)
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.letterSpacing * 100 + 50, min: 0, max: 100, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
+              .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onLetterSpacingChange((Math.round(value) - 50) / 100);
                 }
               })
             Row() {
-              Text('段距').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-              Text((this.paragraphSpacing / 10).toFixed(1)).fontSize(12).fontColor('#D3D4DC')
+              Text('段距').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text((this.paragraphSpacing / 10).toFixed(1)).fontSize(12).fontColor(this.rsetTextSecondary)
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.paragraphSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
+              .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onParagraphSpacingChange(Math.max(0, Math.min(20, Math.round(value))));
                 }
               })
             Row() {
-              Text('行距').fontSize(13).fontColor('#E2E3E8').layoutWeight(1)
-              Text(((this.lineSpacing - 10) / 10).toFixed(1)).fontSize(12).fontColor('#D3D4DC')
+              Text('行距').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text(((this.lineSpacing - 10) / 10).toFixed(1)).fontSize(12).fontColor(this.rsetTextSecondary)
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.lineSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
-              .width('100%').selectedColor(this.themeColorAccent).trackColor('#454751').blockColor(this.themeColorAccent)
+              .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
                   this.onLineSpacingChange(Math.max(0, Math.min(20, Math.round(value))));
@@ -2998,30 +3049,30 @@ export struct ReaderSettingsPage {
             Column() {
               ForEach(this.getDetailChoices(this.detailSheetTitle), (choice: string) => {
                 Row() {
-                  Text(choice).fontSize(13).fontColor('#E5E6EB').layoutWeight(1)
+                  Text(choice).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
                   if (this.detailSelectedOption === choice) {
                     Image($r('app.media.app_check')).width(18).height(18).fillColor(this.themeColorAccent)
                   }
                 }.width('100%').padding(12).backgroundColor(
-                  this.detailSelectedOption === choice ? '#34394C' : '#202127'
+                  this.detailSelectedOption === choice ? this.rsetSelectedBg : this.rsetCardBg
                 ).borderRadius(10).margin({ bottom: 6 }).onClick(() => this.applyDetailChoicePreview(choice))
               }, (choice: string) => choice)
               if (this.detailInfoSlot !== undefined && this.detailSelectedOption === '自定义') {
                 TextInput({ text: this.detailCustomText, placeholder: '输入自定义提示内容' })
-                  .fontSize(13).fontColor('#E5E6EB').placeholderColor(this.themeColorTextTertiary)
-                  .backgroundColor('#292A31').borderRadius(10).padding(12)
+                  .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                  .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                   .onChange((value: string) => this.detailCustomText = value)
                 Text('可用变量：{BookName}、{ChapterTitle}、{Time}、{BatteryPercent}、{ChapterIndex}、{ChapterSize}、{PageIndex}、{PageSize}、{PageRemaining}、{ReadProgress}、{FullPageIndex}、{FullPageSize}')
                   .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding({ top: 8, bottom: 8 })
-                Text('保存').fontSize(13).fontColor('#101116').padding({ left: 18, right: 18, top: 9, bottom: 9 })
-                  .backgroundColor('#C6D3FF').borderRadius(18).alignSelf(ItemAlign.End)
+                Text('保存').fontSize(13).fontColor(this.rsetSelectedText).padding({ left: 18, right: 18, top: 9, bottom: 9 })
+                  .backgroundColor(this.rsetAccent).borderRadius(18).alignSelf(ItemAlign.End)
                   .onClick(() => this.saveCustomInfoTip())
               }
               if (this.getDetailChoices(this.detailSheetTitle).length === 0 &&
                 this.detailSheetTitle !== '自定义阅读背景' &&
                 this.detailSheetTitle !== '编辑背景样式' &&
                 this.detailSheetTitle !== '主题列表') {
-                Text('此配置项的实际操作尚未迁移。').fontSize(12).fontColor('#A9ABB5').width('100%').padding(12)
+                Text('此配置项的实际操作尚未迁移。').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding(12)
               }
               Text(this.detailSheetTitle === '自定义阅读背景' ||
                 this.detailSheetTitle === '编辑背景样式' ||
@@ -3217,12 +3268,12 @@ export struct ReaderSettingsPage {
       Column().width('100%').height('100%').backgroundColor('#99000000')
         .onClick(() => this.bottomActionConfigVisible = false)
       Column() {
-        Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4).margin({ top: 10, bottom: 14 })
+        Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
         Row() {
-          Text('底栏按钮配置').fontSize(17).fontColor('#E5E6EB').layoutWeight(1)
-          Text('取消').fontSize(13).fontColor('#C7C9D1').margin({ right: 18 })
+          Text('底栏按钮配置').fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
+          Text('取消').fontSize(13).fontColor(this.rsetTextSecondary).margin({ right: 18 })
             .onClick(() => this.bottomActionConfigVisible = false)
-          Text('保存').fontSize(13).fontColor('#C6D3FF')
+          Text('保存').fontSize(13).fontColor(this.rsetAccent)
             .onClick(() => {
               this.onBottomActionsChange(this.draftBottomActions.map(
                 (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
@@ -3237,7 +3288,7 @@ export struct ReaderSettingsPage {
                 this.BottomActionConfigIcon(item.id, item.enabled)
                 Column() {
                   Text(this.getBottomActionLabel(item.id)).fontSize(14)
-                    .fontColor(item.enabled ? '#E5E6EB' : '#777984')
+                    .fontColor(item.enabled ? this.rsetTextPrimary : this.rsetTextDisabled)
                   if (this.getBottomActionOption(item.id)?.scopeLabel) {
                     Text(this.getBottomActionOption(item.id)?.scopeLabel ?? '')
                       .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
@@ -3248,13 +3299,13 @@ export struct ReaderSettingsPage {
                 }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                 Stack({ alignContent: Alignment.Center }) {
                   Image(item.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
-                    .width(20).height(20).fillColor(item.enabled ? '#D5C2C6' : '#777984')
-                }.width(36).height(36).borderRadius(18).backgroundColor('#292A31')
+                    .width(20).height(20).fillColor(item.enabled ? this.rsetTextSecondary : this.rsetTextDisabled)
+                }.width(36).height(36).borderRadius(18).backgroundColor(this.rsetInnerBg)
                   .onClick(() => this.toggleBottomAction(item.id, !item.enabled))
                 // 上游 ReorderableConfigList.kt:239-249 只有拖拽把手，没有上下箭头；
                 // 拖动时整行抬升 4dp（:65-131 的 animateDpAsState），松手才落到草稿顺序里。
                 Stack({ alignContent: Alignment.Center }) {
-                  Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
+                  Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor(this.rsetTextTertiary)
                 }.width(36).height(36).margin({ left: 4 })
                   .hitTestBehavior(HitTestMode.Block)
                   .gesture(
@@ -3283,7 +3334,7 @@ export struct ReaderSettingsPage {
                       })
                   )
               }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 8 })
-                .backgroundColor('#202127').borderRadius(12).margin({ bottom: 8 })
+                .backgroundColor(this.rsetCardBg).borderRadius(12).margin({ bottom: 8 })
                 // 关闭态整行透明度 0.38（上游 ReorderableConfigList 关态口径）。
                 .opacity(item.enabled ? 1 : 0.38)
                 // 拖动中的行抬升 4dp。
@@ -3301,49 +3352,49 @@ export struct ReaderSettingsPage {
   @Builder
   private BottomActionConfigIcon(id: string, enabled: boolean) {
     if (id === 'search') {
-      Image($r('app.media.reader_search')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_search')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'autoPage') {
-      Image($r('app.media.reader_play')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_play')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'catalog') {
-      Image($r('app.media.reader_toc')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_toc')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'voice') {
-      Image($r('app.media.reader_voice')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_voice')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'settings') {
-      Image($r('app.media.reader_settings')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_settings')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'addBookmark') {
-      Image($r('app.media.app_bookmark')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_bookmark')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'theme') {
-      Image($r('app.media.app_daynight')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_daynight')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'eye_protection') {
-      Image($r('app.media.app_visibility')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_visibility')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'prev_chapter') {
-      Image($r('app.media.app_previous')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_previous')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'next_chapter') {
-      Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'replace' || id === 'replace_badge') {
-      Image($r('app.media.profile_find_replace')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.profile_find_replace')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'translate' || id === 'charset') {
-      Image($r('app.media.reader_translate')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_translate')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'refresh_current' || id === 'refresh') {
-      Image($r('app.media.app_refresh')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_refresh')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'change_source') {
-      Image($r('app.media.app_swap')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_swap')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'download' || id === 'audio_download') {
-      Image($r('app.media.app_download')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_download')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'toc_rule') {
-      Image($r('app.media.profile_rule')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.profile_rule')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'source_custom_button' || id === 'more_actions') {
-      Image($r('app.media.reader_more')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_more')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'ai_summary' || id === 'ai_cast') {
-      Image($r('app.media.profile_auto_awesome')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.profile_auto_awesome')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'ai_rewrite') {
-      Image($r('app.media.app_edit')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_edit')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'multi_role_read' || id === 'multi_role_cast') {
-      Image($r('app.media.app_group')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_group')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else if (id === 'cast_table') {
-      Image($r('app.media.app_list')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.app_list')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     } else {
-      Image($r('app.media.reader_more')).width(20).height(20).fillColor(enabled ? '#D5C2C6' : '#777984').margin({ right: 12 })
+      Image($r('app.media.reader_more')).width(20).height(20).fillColor(enabled ? this.rsetTextSecondary : this.rsetTextDisabled).margin({ right: 12 })
     }
   }
 
@@ -3423,15 +3474,15 @@ export struct ReaderSettingsPage {
       Column().width('100%').height('100%').backgroundColor('#99000000')
         .onClick(() => this.closeButtonConfigSheet())
       Column() {
-        Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4).margin({ top: 10, bottom: 14 })
+        Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
         Row() {
           // 同一个 sheet 服务两个入口：顶栏操作按钮与浮动图标（上游 FloatingBarIconConfigSheet
           // 同样复用 ButtonIconConfigSheet，只换标题与保存目标）。
           Text(this.floatingIconConfigVisible ? '浮动图标' : '顶栏按钮配置')
-            .fontSize(17).fontColor('#E5E6EB').layoutWeight(1)
-          Text('取消').fontSize(13).fontColor('#C7C9D1').margin({ right: 18 })
+            .fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
+          Text('取消').fontSize(13).fontColor(this.rsetTextSecondary).margin({ right: 18 })
             .onClick(() => this.closeButtonConfigSheet())
-          Text('保存').fontSize(13).fontColor('#C6D3FF')
+          Text('保存').fontSize(13).fontColor(this.rsetAccent)
             .onClick(() => {
               const saved = this.draftTopActions.map(
                 (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
@@ -3451,7 +3502,7 @@ export struct ReaderSettingsPage {
               this.BottomActionConfigIcon(item.id, item.enabled)
               Column() {
                 Text(this.getTopActionLabel(item.id)).fontSize(14)
-                  .fontColor(item.enabled ? '#E5E6EB' : '#777984')
+                  .fontColor(item.enabled ? this.rsetTextPrimary : this.rsetTextDisabled)
                 if (this.getBottomActionOption(item.id)?.scopeLabel) {
                   Text(this.getBottomActionOption(item.id)?.scopeLabel ?? '')
                     .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
@@ -3466,19 +3517,19 @@ export struct ReaderSettingsPage {
                 Stack({ alignContent: Alignment.Center }) {
                   Image(this.hasButtonCustomIcon(item.id)
                     ? $r('app.media.profile_close') : $r('app.media.app_add'))
-                    .width(16).height(16).fillColor('#D5C2C6')
-                }.width(32).height(32).borderRadius(16).backgroundColor('#292A31').margin({ right: 6 })
+                    .width(16).height(16).fillColor(this.rsetTextSecondary)
+                }.width(32).height(32).borderRadius(16).backgroundColor(this.rsetInnerBg).margin({ right: 6 })
                   .onClick(() => { this.editButtonCustomIcon(item.id); })
               }
               Stack({ alignContent: Alignment.Center }) {
                 Image(item.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
-                  .width(20).height(20).fillColor(item.enabled ? '#D5C2C6' : '#777984')
-              }.width(36).height(36).borderRadius(18).backgroundColor('#292A31')
+                  .width(20).height(20).fillColor(item.enabled ? this.rsetTextSecondary : this.rsetTextDisabled)
+              }.width(36).height(36).borderRadius(18).backgroundColor(this.rsetInnerBg)
                 .onClick(() => this.toggleTopAction(item.id, !item.enabled))
               // 上游 ReorderableConfigList.kt:239-249 只有拖拽把手，没有上下箭头；
               // 拖动时整行抬升 4dp（:65-131），松手才落进草稿顺序。
               Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
+                Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor(this.rsetTextTertiary)
               }.width(36).height(36).margin({ left: 4 })
                 .hitTestBehavior(HitTestMode.Block)
                 // distance 用 1vp：把手很窄，默认阈值在细长把手上经常量不到位移，
@@ -3508,7 +3559,7 @@ export struct ReaderSettingsPage {
                     })
                 )
             }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 8 })
-              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 8 })
+              .backgroundColor(this.rsetCardBg).borderRadius(12).margin({ bottom: 8 })
               // 关闭态整行透明度 0.38（上游 ReorderableConfigList 关态口径）。
               .opacity(item.enabled ? 1 : 0.38)
               // 拖动中的行抬升 4dp。
