@@ -2,6 +2,7 @@ import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import curves from '@ohos.curves';
 import { UiSection } from '../components/settings/UiSection';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+import { FONT_ROW_TITLE } from '../components/UiTokens';
 
 @Component
 export struct AppTranslationSettingsPage {
@@ -47,7 +48,7 @@ export struct AppTranslationSettingsPage {
             ThemeItemDivider()
             Column() {
               Row() {
-                Text('每块最大字符数').fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text('每块最大字符数').fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                 Text(`${Math.round(this.maxChars)}`).fontSize(12).fontColor(this.themeColorAccent)
               }
               Slider({ value: this.maxChars, min: 1000, max: 10000, step: 500 })
@@ -61,7 +62,7 @@ export struct AppTranslationSettingsPage {
               UiSection({ title: '应用 AI 接口' }) {
                 Row() {
                   Column() {
-                    Text('使用应用 AI 接口').fontSize(18).fontColor(this.themeColorTextSecondary)
+                    Text('使用应用 AI 接口').fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary)
                     Text('模型、API Key 和协议在 AI 设置中配置。').fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                   }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                   Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary)
@@ -116,7 +117,7 @@ struct TranslationSettingsChoice {
   }
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
       Text(this.getSelectedLabel()).fontSize(12).fontColor(this.themeColorAccent)
       Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.showOptions = true)

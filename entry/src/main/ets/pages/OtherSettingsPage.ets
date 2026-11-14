@@ -177,7 +177,7 @@ export struct OtherSettingsPage {
     Column() {
       if (this.activeSheet === 'folderPicker') {
         Row() {
-          Text('选择操作').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text('选择操作').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
           Text('取消').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 16 })
         Row() {
@@ -196,7 +196,7 @@ export struct OtherSettingsPage {
             AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: this.themeColorAccent })
           }.width(40).height(40).backgroundColor('#25262D').borderRadius(20)
             .onClick(() => this.onUnavailableAction('直链规则测试尚未迁移'))
-          Text('直链上传配置').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          Text('直链上传配置').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
             .layoutWeight(1).textAlign(TextAlign.Center)
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })

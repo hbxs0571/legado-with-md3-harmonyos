@@ -8,6 +8,7 @@ import { Book } from '../model/Book';
 import { BookRepository } from '../data/BookRepository';
 import { CacheSettings, DEFAULT_CACHE_SETTINGS, copyCacheSettings, CacheSettingsRepository } from '../data/CacheSettingsRepository';
 import { RdbStore } from '../data/RdbStore';
+import { FONT_ROW_TITLE } from '../components/UiTokens';
 
 @Component
 export struct AppDownloadCacheSettingsPage {
@@ -119,7 +120,7 @@ struct CacheSettingsInput {
   aboutToAppear(): void { this.currentValue = this.value; }
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
       TextInput({ text: this.currentValue, placeholder: '默认' })
         .fontSize(12).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.End)
         .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).width(130).borderRadius(8)

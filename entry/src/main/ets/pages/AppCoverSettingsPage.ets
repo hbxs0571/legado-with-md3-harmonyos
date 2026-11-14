@@ -14,6 +14,7 @@ import {
 import {
   CoverAlbumItem, CoverAlbumImageItem, CoverAlbumRepository
 } from '../data/CoverAlbumRepository';
+import { FONT_ROW_TITLE } from '../components/UiTokens';
 
 /**
  * 封面设置页。
@@ -394,7 +395,7 @@ export struct AppCoverSettingsPage {
     Column() {
       if (this.activeSheet === 'rule') {
         Row() {
-          Text('封面规则').fontSize(18).fontWeight(FontWeight.Medium)
+          Text('封面规则').fontSize(20).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary).layoutWeight(1)
           Text('恢复默认').fontSize(14).fontColor(this.themeColorAccent)
             .onClick(() => this.restoreDefaultRule())
@@ -435,7 +436,7 @@ export struct AppCoverSettingsPage {
         if (this.albumView === 'select') {
           // B1/B2：选择 sheet。顶栏「管理相册」进管理页，对应上游 onManage。
           Row() {
-            Text('选择封面相册').fontSize(18).fontWeight(FontWeight.Medium)
+            Text('选择封面相册').fontSize(20).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1)
             Text('管理相册').fontSize(14).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'manage')
@@ -482,7 +483,7 @@ export struct AppCoverSettingsPage {
           Row() {
             Text('返回').fontSize(14).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'select')
-            Text('封面相册').fontSize(18).fontWeight(FontWeight.Medium)
+            Text('封面相册').fontSize(20).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'add', glyphSize: 20, tint: this.themeColorAccent })
@@ -537,7 +538,7 @@ export struct AppCoverSettingsPage {
           Row() {
             Text('返回').fontSize(14).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'manage')
-            Text(this.currentEditorAlbum()?.name ?? '相册').fontSize(18).fontWeight(FontWeight.Medium)
+            Text(this.currentEditorAlbum()?.name ?? '相册').fontSize(20).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
             AppGlyph({ name: 'add', glyphSize: 20, tint: this.themeColorAccent })
               .onClick(() => { this.addEditorImages(); })
@@ -578,7 +579,7 @@ export struct AppCoverSettingsPage {
           // 所以用这一层页面内面板（上游 :420-449 的 CoverAlbumNameDialog）。
           Column() {
             Text(this.nameDialogMode === 'rename' ? '重命名相册' : '新建相册')
-              .fontSize(18).fontWeight(FontWeight.Medium)
+              .fontSize(20).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).margin({ bottom: 16 })
             TextInput({ text: this.nameDraft, placeholder: '相册名称' })
               .fontSize(15).fontColor(this.themeColorTextPrimary)
@@ -635,7 +636,7 @@ struct CoverSettingsColor {
   }
   build() {
     Row() {
-      Text(this.title).fontSize(18).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary).layoutWeight(1)
       Stack().width(26).height(26).backgroundColor(this.color).borderRadius(13)
         .border({ width: 1, color: '#676A75' })
         .opacity(this.disabled ? 0.4 : 1)

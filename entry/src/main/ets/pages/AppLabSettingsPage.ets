@@ -1,6 +1,7 @@
 import curves from '@ohos.curves';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+import { FONT_SECTION_TITLE, ROW_PADDING_H, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP, FONT_ROW_TITLE } from '../components/UiTokens';
 
 @Component
 export struct AppLabSettingsPage {
@@ -45,8 +46,8 @@ export struct AppLabSettingsPage {
           }.margin({ left: 16, right: 16, top: 12 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           if (this.labEnabled) {
-            Text('显示').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-              .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
+            Text('显示').fontSize(FONT_SECTION_TITLE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+              .alignSelf(ItemAlign.Start).padding({ left: ROW_PADDING_H, top: SECTION_TITLE_TOP, bottom: SECTION_TITLE_BOTTOM })
             Column() {
               UiSwitch({ title: '墨水屏显示', detail: '在平板界面显示墨水屏选项', value: this.eInkEnabled, onChange: (value: boolean) => this.eInkEnabled = value })
               if (this.eInkEnabled) {
@@ -57,11 +58,11 @@ export struct AppLabSettingsPage {
               .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
-          Text('诊断').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-            .alignSelf(ItemAlign.Start).padding({ left: 18, top: 14, bottom: 8 })
+          Text('诊断').fontSize(FONT_SECTION_TITLE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+            .alignSelf(ItemAlign.Start).padding({ left: ROW_PADDING_H, top: SECTION_TITLE_TOP, bottom: SECTION_TITLE_BOTTOM })
           Row() {
             Column() {
-              Text('导出全文页码诊断').fontSize(18).fontColor(this.themeColorTextSecondary)
+              Text('导出全文页码诊断').fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary)
               Text('分享本机最近的估算与校正记录，不会自动上传。')
                 .fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
