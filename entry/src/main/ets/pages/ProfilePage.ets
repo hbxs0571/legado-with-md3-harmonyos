@@ -1,7 +1,7 @@
 import curves from '@ohos.curves';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { AppTopBar } from '../components/TopBar';
 import {
-  PROFILE_PAGE_TITLE_SIZE,
   PROFILE_ROW_DETAIL_SIZE,
   PROFILE_ROW_TITLE_SIZE,
   PROFILE_SECTION_TITLE_SIZE,
@@ -11,7 +11,6 @@ import { ProfileRoute } from '../model/Book';
 
 @Component
 export struct ProfilePage {
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
@@ -29,17 +28,10 @@ export struct ProfilePage {
 
   build() {
     Column() {
-      if (this.collapsedHeader) {
-        Row() {
-          Text('我的').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-        }.width('100%').height(56).alignItems(VerticalAlign.Center).padding({ left: 16, right: 16 })
-          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
-      } else {
-        Text('我的').fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-          .alignSelf(ItemAlign.Start).padding({ left: 16, right: 16, top: 50, bottom: 38 })
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
-      }
+      AppTopBar({
+        title: '我的',
+        collapsed: this.collapsedHeader
+      })
       Scroll(this.profileScroller) {
         Column() {
           Column() {
