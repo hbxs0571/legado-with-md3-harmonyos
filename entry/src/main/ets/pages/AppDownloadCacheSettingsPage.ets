@@ -3,12 +3,12 @@ import { UiSection } from '../components/settings/UiSection';
 import { UiAction } from '../components/settings/UiAction';
 import { UiSlider } from '../components/settings/UiSlider';
 import { UiSwitch } from '../components/settings/UiSwitch';
+import { UiInput } from '../components/settings/UiInput';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { Book } from '../model/Book';
 import { BookRepository } from '../data/BookRepository';
 import { CacheSettings, DEFAULT_CACHE_SETTINGS, copyCacheSettings, CacheSettingsRepository } from '../data/CacheSettingsRepository';
 import { RdbStore } from '../data/RdbStore';
-import { FONT_ROW_TITLE } from '../components/UiTokens';
 
 @Component
 export struct AppDownloadCacheSettingsPage {
@@ -77,26 +77,29 @@ export struct AppDownloadCacheSettingsPage {
         Column() {
           UiSection({ title: 'HTTP 缓存' }) {
             UiAction({ title: '封面缓存', detail: '本地书籍封面即时生成', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
-            UiAction({showDivider: false,  title: '漫画缓存', detail: '本地无漫画形态', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
+            UiAction({showDivider: false, title: '漫画缓存', detail: '本地无漫画形态', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
           }
           UiSection({ title: '下载设置' }) {
             UiSlider({ title: '更新和搜索线程', detail: '控制请求并发数量', value: this.cacheSettings.updateSearchThreads, minValue: 1, maxValue: 256, onChange: (v: number) => { this.cacheSettings.updateSearchThreads = v; this.saveSettings(); } })
             UiSlider({ title: '书籍缓存下载线程', detail: '并发越高越不稳定', value: this.cacheSettings.bookDownloadThreads, minValue: 1, maxValue: 8, onChange: (v: number) => { this.cacheSettings.bookDownloadThreads = v; this.saveSettings(); } })
             UiSlider({ title: '向后预下载', detail: '预先下载后续章节', value: this.cacheSettings.preloadBehind, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadBehind = v; this.saveSettings(); } })
             UiSlider({ title: '向前预下载', detail: '预先下载前面的章节', value: this.cacheSettings.preloadAhead, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadAhead = v; this.saveSettings(); } })
-            UiSlider({showDivider: false,  title: '整本正文内存缓存上限', detail: '单位 MB；超过就不缓存整本正文', value: this.cacheSettings.bookContentCacheMb, minValue: 1, maxValue: 512, onChange: (v: number) => { this.cacheSettings.bookContentCacheMb = v; this.saveSettings(); } })
+            UiSlider({showDivider: false, title: '整本正文内存缓存上限', detail: '单位 MB；超过就不缓存整本正文', value: this.cacheSettings.bookContentCacheMb, minValue: 1, maxValue: 512, onChange: (v: number) => { this.cacheSettings.bookContentCacheMb = v; this.saveSettings(); } })
           }
           UiSection({ title: '图片缓存' }) {
             UiSlider({ title: '图片绘制缓存', detail: '最大缓存大小（MB）', value: this.cacheSettings.imageDrawCacheMb, minValue: 1, maxValue: 2047, onChange: (v: number) => { this.cacheSettings.imageDrawCacheMb = v; this.saveSettings(); } })
-            UiSlider({showDivider: false,  title: '漫画保留数量', detail: '保留已读章节数量', value: this.cacheSettings.comicKeepCount, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
+            UiSlider({showDivider: false, title: '漫画保留数量', detail: '保留已读章节数量', value: this.cacheSettings.comicKeepCount, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
           }
           UiSection({ title: '网络' }) {
-            CacheSettingsInput({ title: '用户代理', value: this.cacheSettings.userAgent, onValueChange: (v: string) => { this.cacheSettings.userAgent = v; this.saveSettings(); } })
-            UiSwitch({showDivider: false,  title: 'Cronet', detail: '使用 Cronet 网络组件', value: this.cacheSettings.cronetEnabled, onChange: (v: boolean) => { this.cacheSettings.cronetEnabled = v; this.saveSettings(); } })
+            UiInput({
+              title: '用户代理', value: this.cacheSettings.userAgent, defaultValue: '',
+              onConfirm: (v: string) => { this.cacheSettings.userAgent = v; this.saveSettings(); }
+            })
+            UiSwitch({showDivider: false, title: 'Cronet', detail: '使用 Cronet 网络组件', value: this.cacheSettings.cronetEnabled, onChange: (v: boolean) => { this.cacheSettings.cronetEnabled = v; this.saveSettings(); } })
           }
           UiSection({ title: '其它' }) {
             UiAction({ title: '清理缓存', detail: '清应用内正文副本与章节缓存', onSelect: () => this.clearBookCache() })
-            UiAction({showDivider: false,  title: '压缩数据库', detail: '整理本地数据库空间', onSelect: () => { this.vacuumDatabase(); } })
+            UiAction({showDivider: false, title: '压缩数据库', detail: '整理本地数据库空间', onSelect: () => { this.vacuumDatabase(); } })
           }
           Text('滑块与开关改动即落盘；清理缓存与压缩数据库已接入，封面/漫画缓存本地即时生成无独立缓存。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
@@ -106,25 +109,3 @@ export struct AppDownloadCacheSettingsPage {
   }
 }
 
-@Component
-struct CacheSettingsInput {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
-  @StorageProp('themeAppBackground') themeAppBackground: string = '';
-  @StorageProp('themePureBlack') themePureBlack: boolean = false;
-  @Prop title: string = '';
-  @Prop value: string = '';
-  /** 用户代理改动后落盘（:484）。 */
-  onValueChange: (value: string) => void = () => {};
-  @State currentValue: string = '';
-  aboutToAppear(): void { this.currentValue = this.value; }
-  build() {
-    Row() {
-      Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-      TextInput({ text: this.currentValue, placeholder: '默认' })
-        .fontSize(12).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.End)
-        .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).width(130).borderRadius(8)
-        .onChange((value: string) => { this.currentValue = value; this.onValueChange(value); })
-    }.padding({ left: 14, right: 14, top: 10, bottom: 10 })
-  }
-}

@@ -101,7 +101,7 @@ export struct AppPrivacySettingsPage {
               detail: '本地密码用于私密内容验证；只存 PBKDF2 校验值，不保存明文',
               onSelect: () => this.openPasswordPanel()
             })
-            UiSwitch({showDivider: false,  title: '生物识别快捷解锁', detail: '需要设备支持且先设置本地密码', preview: true })
+            UiSwitch({showDivider: false, title: '生物识别快捷解锁', detail: '需要设备支持且先设置本地密码', preview: true })
           }
 
           UiSection({ title: '验证时机' }) {
@@ -110,7 +110,7 @@ export struct AppPrivacySettingsPage {
             UiSwitch({ title: '应用启动时验证', preview: true })
             UiChoice({ title: '解锁有效期', options: ['每次都验证', '应用会话内有效', '离开应用前有效'], selectedIndex: this.unlockScopeIndex, onSelect: (index: number) => this.unlockScopeIndex = index })
             if (this.unlockScopeIndex === 2) {
-              UiChoice({showDivider: false,  title: '切到后台后的宽限期', options: ['立即失效', '30 秒', '2 分钟', '3 分钟', '5 分钟'], selectedIndex: 0, onSelect: (_index: number) => this.onUnavailableAction('宽限期暂为界面预览') })
+              UiChoice({showDivider: false, title: '切到后台后的宽限期', options: ['立即失效', '30 秒', '2 分钟', '3 分钟', '5 分钟'], selectedIndex: 0, onSelect: (_index: number) => this.onUnavailableAction('宽限期暂为界面预览') })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
             }
           }
@@ -118,7 +118,7 @@ export struct AppPrivacySettingsPage {
           UiSection({ title: '权限与数据' }) {
             UiAction({ title: '通知权限', detail: '用于显示必要的应用通知', onSelect: () => this.onUnavailableAction('通知权限申请尚未接入') })
             UiAction({ title: '后台运行权限', detail: '查看电池优化状态', onSelect: () => this.onUnavailableAction('系统后台权限尚未接入') })
-            UiSwitch({showDivider: false,  title: 'Firebase 服务', detail: '此开关当前仅展示设置项，不会更改服务状态', preview: true })
+            UiSwitch({showDivider: false, title: 'Firebase 服务', detail: '此开关当前仅展示设置项，不会更改服务状态', preview: true })
           }
           Text('说明：本地密码以 PBKDF2 校验值存储，不保存明文，也不进备份。生物识别与验证时机细项仍是界面预览。')
             .fontSize(12).fontColor('#D9A6A0').margin({ left: 18, right: 18, top: 6, bottom: 22 })

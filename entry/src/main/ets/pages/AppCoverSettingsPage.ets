@@ -3,6 +3,7 @@ import { UiSection } from '../components/settings/UiSection';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { UiAction } from '../components/settings/UiAction';
 import { UiChoice } from '../components/settings/UiChoice';
+import { UiColorSheet } from '../components/settings/UiColorSheet';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { AppGlyph } from '../components/AppGlyph';
 import {
@@ -14,7 +15,6 @@ import {
 import {
   CoverAlbumItem, CoverAlbumImageItem, CoverAlbumRepository
 } from '../data/CoverAlbumRepository';
-import { FONT_ROW_TITLE } from '../components/UiTokens';
 
 /**
  * 封面设置页。
@@ -57,6 +57,8 @@ export struct AppCoverSettingsPage {
    * 不变，bindSheet 的 isShow 就一直为 true，不会因为分支切换被 onDisappear 关掉。
    */
   @State albumView: string = 'select';
+  /** 取色面板正在改的字段名，对应上游 CoverConfigSheet.Color(field)。 */
+  @State colorField: string = '';
   /** 相册列表整份替换刷新：ArkUI V1 的 @State 观察不到数组就地 push。 */
   @State albums: CoverAlbumItem[] = [];
   @State selectedAlbumId: string = '';
@@ -98,6 +100,51 @@ export struct AppCoverSettingsPage {
     try {
       this.getUIContext().getPromptAction().showToast({ message: message });
     } catch (_) {}
+  }
+
+  /**
+   * 打开取色 sheet。activeSheet 沿用同一个 bindSheet，取值是 'color'，
+   * 具体改哪个字段由 colorField 记着（对应上游 CoverConfigSheet.Color(field)）。
+   */
+  private openColorSheet(field: string): void {
+    this.colorField = field;
+    this.activeSheet = 'color';
+  }
+
+  /** 取色面板的当前值：按 colorField 从 settings 里取，取不到给黑色。 */
+  private colorFieldValue(): string {
+    if (this.colorField === 'textColor') { return this.settings.textColor; }
+    if (this.colorField === 'shadowColor') { return this.settings.shadowColor; }
+    if (this.colorField === 'textColorDark') { return this.settings.textColorDark; }
+    if (this.colorField === 'shadowColorDark') { return this.settings.shadowColorDark; }
+    return '#000000';
+  }
+
+  /** 取色面板的「重置」目标值，取上游这几个键的默认值。 */
+  private colorFieldDefault(): string {
+    if (this.colorField === 'textColor') { return DEFAULT_COVER_SETTINGS.textColor; }
+    if (this.colorField === 'shadowColor') { return DEFAULT_COVER_SETTINGS.shadowColor; }
+    if (this.colorField === 'textColorDark') { return DEFAULT_COVER_SETTINGS.textColorDark; }
+    if (this.colorField === 'shadowColorDark') { return DEFAULT_COVER_SETTINGS.shadowColorDark; }
+    return '#000000';
+  }
+
+  /** 取色面板的标题，用界面上的行名，与上游 ColorField 的文案一致。 */
+  private colorFieldTitle(): string {
+    if (this.colorField === 'textColor' || this.colorField === 'textColorDark') { return '文字颜色'; }
+    return '文字阴影颜色';
+  }
+
+  /** 取色确认：按 colorField 写回对应字段。 */
+  private applyColor(color: string): void {
+    const field = this.colorField;
+    this.activeSheet = '';
+    this.applyChange((draft: CoverSettings) => {
+      if (field === 'textColor') { draft.textColor = color; }
+      else if (field === 'shadowColor') { draft.shadowColor = color; }
+      else if (field === 'textColorDark') { draft.textColorDark = color; }
+      else if (field === 'shadowColorDark') { draft.shadowColorDark = color; }
+    });
   }
 
   /** 打开规则 sheet：把仓储里的当前值复制进草稿，编辑不落库。 */
@@ -269,10 +316,15 @@ export struct AppCoverSettingsPage {
     this.onChange(draft);
   }
 
-  /** 文字色可选值，与阅读设置的强调色板保持同一套。 */
-  private static readonly TEXT_COLOR_OPTIONS: string[] = [
-    '#000000', '#FFFFFF', '#E7E8ED', '#AFC2FF', '#E8B77B', '#9AD0B7'
-  ];
+  /**
+   * 色行的 option 文案。上游 CoverConfigScreen.kt 用的是
+   * "#" + Integer.toHexString(color).uppercase()，是 8 位 ARGB；本地这些字段存的是
+   * 6 位 #RRGGBB（见 CoverSettingsRepository 的 coverColorToAndroidInt），
+   * 所以这里只做大写规范化，不补 alpha 位，免得显示与实际存储不一致。
+   */
+  private colorOption(color: string): string {
+    return color.toUpperCase();
+  }
 
   build() {
     Column() {
@@ -303,7 +355,7 @@ export struct AppCoverSettingsPage {
               value: this.settings.showStroke,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showStroke = value; })
             })
-            UiSwitch({showDivider: false, 
+            UiSwitch({showDivider: false,
               title: '使用默认颜色', detail: '关闭后用下面日间/夜间封面里选的颜色',
               value: this.settings.useDefaultColor,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultColor = value; })
@@ -323,7 +375,7 @@ export struct AppCoverSettingsPage {
               value: this.settings.restrictCoverRatio,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.restrictCoverRatio = value; })
             })
-            UiChoice({showDivider: false, 
+            UiChoice({showDivider: false,
               title: '网络书籍角标', options: ['全部显示', '隐藏书架内', '隐藏同名同作者', '仅显示书架外'],
               selectedIndex: this.settings.exploreFilterState,
               onSelect: (index: number) => this.applyChange((draft: CoverSettings) => {
@@ -333,21 +385,21 @@ export struct AppCoverSettingsPage {
           }
 
           UiSection({ title: '日间封面' }) {
-            CoverSettingsColor({
-              title: '文字颜色', colors: AppCoverSettingsPage.TEXT_COLOR_OPTIONS,
-              color: this.settings.textColor, disabled: this.settings.useDefaultColor,
-              onPick: (color: string) => this.applyChange((draft: CoverSettings) => { draft.textColor = color; })
+            UiAction({
+              title: '文字颜色', option: this.colorOption(this.settings.textColor),
+              swatchColor: this.settings.textColor, swatchDisabled: this.settings.useDefaultColor,
+              onSelect: () => this.openColorSheet('textColor')
             })
-            CoverSettingsColor({
-              title: '文字阴影颜色', colors: AppCoverSettingsPage.TEXT_COLOR_OPTIONS,
-              color: this.settings.shadowColor, disabled: !this.settings.showShadow,
-              onPick: (color: string) => this.applyChange((draft: CoverSettings) => { draft.shadowColor = color; })
+            UiAction({
+              title: '文字阴影颜色', option: this.colorOption(this.settings.shadowColor),
+              swatchColor: this.settings.shadowColor, swatchDisabled: !this.settings.showShadow,
+              onSelect: () => this.openColorSheet('shadowColor')
             })
             UiSwitch({
               title: '显示书名', value: this.settings.showName,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showName = value; })
             })
-            UiSwitch({showDivider: false, 
+            UiSwitch({showDivider: false,
               title: '显示作者', detail: '关闭书名显示时不生效',
               value: this.settings.showAuthor, disabled: !this.settings.showName,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthor = value; })
@@ -355,21 +407,21 @@ export struct AppCoverSettingsPage {
           }
 
           UiSection({ title: '夜间封面' }) {
-            CoverSettingsColor({
-              title: '文字颜色', colors: AppCoverSettingsPage.TEXT_COLOR_OPTIONS,
-              color: this.settings.textColorDark, disabled: this.settings.useDefaultColor,
-              onPick: (color: string) => this.applyChange((draft: CoverSettings) => { draft.textColorDark = color; })
+            UiAction({
+              title: '文字颜色', option: this.colorOption(this.settings.textColorDark),
+              swatchColor: this.settings.textColorDark, swatchDisabled: this.settings.useDefaultColor,
+              onSelect: () => this.openColorSheet('textColorDark')
             })
-            CoverSettingsColor({
-              title: '文字阴影颜色', colors: AppCoverSettingsPage.TEXT_COLOR_OPTIONS,
-              color: this.settings.shadowColorDark, disabled: !this.settings.showShadow,
-              onPick: (color: string) => this.applyChange((draft: CoverSettings) => { draft.shadowColorDark = color; })
+            UiAction({
+              title: '文字阴影颜色', option: this.colorOption(this.settings.shadowColorDark),
+              swatchColor: this.settings.shadowColorDark, swatchDisabled: !this.settings.showShadow,
+              onSelect: () => this.openColorSheet('shadowColorDark')
             })
             UiSwitch({
               title: '显示书名', value: this.settings.showNameDark,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showNameDark = value; })
             })
-            UiSwitch({showDivider: false, 
+            UiSwitch({showDivider: false,
               title: '显示作者', detail: '关闭书名显示时不生效',
               value: this.settings.showAuthorDark, disabled: !this.settings.showNameDark,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthorDark = value; })
@@ -393,7 +445,17 @@ export struct AppCoverSettingsPage {
   @Builder
   private CoverSettingsSheetContent() {
     Column() {
-      if (this.activeSheet === 'rule') {
+      if (this.activeSheet === 'color') {
+        // 取色面板：对应上游 ColorPickerSheet。四行色共用这一个分支，
+        // 改哪个字段由 colorField 决定。
+        UiColorSheet({
+          title: this.colorFieldTitle(),
+          initialColor: this.colorFieldValue(),
+          resetColor: this.colorFieldDefault(),
+          onCancel: () => { this.activeSheet = ''; },
+          onConfirm: (color: string) => this.applyColor(color)
+        })
+      } else if (this.activeSheet === 'rule') {
         Row() {
           Text('封面规则').fontSize(20).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary).layoutWeight(1)
@@ -619,28 +681,3 @@ struct CoverAlbumThumb {
   }
 }
 
-@Component
-struct CoverSettingsColor {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @Prop title: string = '';
-  @Prop colors: string[] = [];
-  @Prop color: string = '#000000';
-  /** 上游语义：使用默认颜色时文字色不生效、关闭阴影时阴影色不生效，这里把色块压暗提示。 */
-  @Prop disabled: boolean = false;
-  onPick: (color: string) => void = (_color: string) => {};
-  private nextColor(): string {
-    if (this.colors.length === 0) { return this.color; }
-    const current = this.colors.findIndex((item: string) => item.toUpperCase() === this.color.toUpperCase());
-    return this.colors[(current + 1) % this.colors.length];
-  }
-  build() {
-    Row() {
-      Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary).layoutWeight(1)
-      Stack().width(26).height(26).backgroundColor(this.color).borderRadius(13)
-        .border({ width: 1, color: '#676A75' })
-        .opacity(this.disabled ? 0.4 : 1)
-    }.padding({ left: 14, right: 14, top: 10, bottom: 10 })
-      .onClick(() => { if (!this.disabled) { this.onPick(this.nextColor()); } })
-  }
-}
