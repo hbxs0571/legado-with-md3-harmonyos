@@ -5,6 +5,7 @@ import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { Book, BookChapter, BookMediaType, LocalBookFormat, bookCoverColor, bookCoverMark } from '../model/Book';
 import { AppLog } from '../lib/AppLog';
 import { EpubRepository, EpubChapterMeta } from './EpubRepository';
+import { UmdRepository } from './UmdRepository';
 import { LocalTextSemantics } from './LocalTextSemantics';
 import { LocalTextReSegmenter } from './LocalTextReSegmenter';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
@@ -571,8 +572,11 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       // MOBI / AZW3 解析器在批 10-12 接入。
       throw new Error('MOBI / AZW3 解析器未实现，暂时无法导入');
     } else if (format === 'umd') {
-      // UMD 解析器在批 6 接入。
-      throw new Error('UMD 解析器未实现，暂时无法导入 .umd');
+      const imported = await UmdRepository.importFromUri(context, uri, fileName, bookId);
+      // UMD 正文落盘为 UTF-8，章节偏移按拼接后字符数给，与 EPUB 走同一条 buildChapterRows。
+      const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
+        imported.titles, imported.offsets, imported.volumes, imported.content, undefined);
+      created = { book: imported.book, chapters: chapters };
     } else if (format === 'archive') {
       // 压缩包不走单本路径，由 importLocalBooks 展开（见批 9）。
       throw new Error('压缩包请用多选导入');
