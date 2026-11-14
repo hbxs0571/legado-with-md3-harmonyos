@@ -91,12 +91,12 @@ export struct OtherSettingsPage {
               onSelect: (value: string) => this.variant = value
             })
             UiSwitch({ title: '启动时自动检测更新', detail: '仅在应用进程完全重新启动时检测，从后台返回不会触发', value: this.autoCheckUpdate, onChange: (value: boolean) => this.autoCheckUpdate = value })
-            UiSwitch({ title: '启动应用时打开Web服务', value: this.webAutoStart, onChange: (value: boolean) => this.webAutoStart = value })
+            UiSwitch({showDivider: false,  title: '启动应用时打开Web服务', value: this.webAutoStart, onChange: (value: boolean) => this.webAutoStart = value })
           }
 
           UiSection({ title: '主界面' }) {
             UiSwitch({ title: '自动刷新', detail: '打开软件时自动更新书籍', value: this.autoRefresh, onChange: (value: boolean) => this.autoRefresh = value })
-            UiSwitch({ title: '自动跳转最近阅读', detail: '默认打开书架', value: this.defaultToRead, onChange: (value: boolean) => this.defaultToRead = value })
+            UiSwitch({showDivider: false,  title: '自动跳转最近阅读', detail: '默认打开书架', value: this.defaultToRead, onChange: (value: boolean) => this.defaultToRead = value })
           }
 
           UiSection({ title: '阅读' }) {
@@ -108,7 +108,7 @@ export struct OtherSettingsPage {
             UiSwitch({ title: '忽略音频焦点', detail: '允许与其他应用同时播放音频', value: this.ignoreAudioFocus, onChange: (value: boolean) => this.ignoreAudioFocus = value })
             UiSwitch({ title: '自动清除过期搜索数据', detail: '超过一天的搜索数据', value: this.autoClearExpired, onChange: (value: boolean) => this.autoClearExpired = value })
             UiSwitch({ title: '返回时提示放入书架', detail: '阅读未放入书架的书籍在返回时提示放入书架', value: this.showAddToShelfAlert, onChange: (value: boolean) => this.showAddToShelfAlert = value })
-            UiSwitch({ title: '漫画浏览', value: this.showMangaUi, onChange: (value: boolean) => this.showMangaUi = value })
+            UiSwitch({showDivider: false,  title: '漫画浏览', value: this.showMangaUi, onChange: (value: boolean) => this.showMangaUi = value })
           }
 
           UiSection({ title: '高级' }) {
@@ -121,7 +121,7 @@ export struct OtherSettingsPage {
             UiSwitch({ title: '阻止书源打开内置浏览器', detail: '开启后，书源无法通过 java.startBrowser 等接口弹出内置浏览器，等待网页结果的调用会直接报错', value: this.blockSourceBrowser, onChange: (value: boolean) => this.blockSourceBrowser = value })
             UiSwitch({ title: '文字操作显示搜索', detail: '长按文字在操作菜单中显示阅读 · 搜索', value: this.processText, onChange: (value: boolean) => this.processText = value })
             UiSwitch({ title: '记录日志', detail: '记录调试日志', value: this.recordLog, onChange: (value: boolean) => this.recordLog = value })
-            UiSwitch({ title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
+            UiSwitch({showDivider: false,  title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
           }
         }.width('100%').padding({ top: 4, bottom: 120 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {

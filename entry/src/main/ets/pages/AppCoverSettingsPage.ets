@@ -302,7 +302,7 @@ export struct AppCoverSettingsPage {
               value: this.settings.showStroke,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showStroke = value; })
             })
-            UiSwitch({
+            UiSwitch({showDivider: false, 
               title: '使用默认颜色', detail: '关闭后用下面日间/夜间封面里选的颜色',
               value: this.settings.useDefaultColor,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultColor = value; })
@@ -322,7 +322,7 @@ export struct AppCoverSettingsPage {
               value: this.settings.restrictCoverRatio,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.restrictCoverRatio = value; })
             })
-            UiChoice({
+            UiChoice({showDivider: false, 
               title: '网络书籍角标', options: ['全部显示', '隐藏书架内', '隐藏同名同作者', '仅显示书架外'],
               selectedIndex: this.settings.exploreFilterState,
               onSelect: (index: number) => this.applyChange((draft: CoverSettings) => {
@@ -346,7 +346,7 @@ export struct AppCoverSettingsPage {
               title: '显示书名', value: this.settings.showName,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showName = value; })
             })
-            UiSwitch({
+            UiSwitch({showDivider: false, 
               title: '显示作者', detail: '关闭书名显示时不生效',
               value: this.settings.showAuthor, disabled: !this.settings.showName,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthor = value; })
@@ -368,7 +368,7 @@ export struct AppCoverSettingsPage {
               title: '显示书名', value: this.settings.showNameDark,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showNameDark = value; })
             })
-            UiSwitch({
+            UiSwitch({showDivider: false, 
               title: '显示作者', detail: '关闭书名显示时不生效',
               value: this.settings.showAuthorDark, disabled: !this.settings.showNameDark,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthorDark = value; })

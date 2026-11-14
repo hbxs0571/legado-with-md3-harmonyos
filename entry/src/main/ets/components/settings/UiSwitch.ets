@@ -1,3 +1,4 @@
+import { ThemeItemDivider } from '../ThemeItemDivider';
 import {
   FONT_ROW_DETAIL, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2
 } from '../UiTokens';
@@ -26,12 +27,14 @@ export struct UiSwitch {
   @Prop disabled: boolean = false;
   /** true = 预览模式：自己存值、不回调。给尚未接后端的开关用。 */
   @Prop preview: boolean = false;
+  @Prop showDivider: boolean = true;
 
   onChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
   @State private previewValue: boolean = false;
 
   build() {
+    Column() {
     Row() {
       Column() {
         Text(this.title)
@@ -63,5 +66,9 @@ export struct UiSwitch {
     }
     .width('100%')
     .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
+      if (this.showDivider) {
+        ThemeItemDivider()
+      }
+    }.width('100%')
   }
 }

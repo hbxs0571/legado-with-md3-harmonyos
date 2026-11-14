@@ -1,3 +1,4 @@
+import { ThemeItemDivider } from '../ThemeItemDivider';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../AppGlyph';
 import {
@@ -23,6 +24,7 @@ export struct UiDropdown {
   @Prop detail: string = '';
   @Prop option: string = '';
   @Prop options: string[] = [];
+  @Prop showDivider: boolean = true;
 
   /** 值→显示文案。默认原样返回，给「options 里本来就是中文」的页面用。 */
   labelOf: (value: string) => string = (value: string) => value;
@@ -51,6 +53,7 @@ export struct UiDropdown {
   }
 
   build() {
+    Column() {
     Row() {
       Column() {
         Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextPrimary).width('100%')
@@ -81,5 +84,9 @@ export struct UiDropdown {
       onAppear: () => { this.menuVisible = true; },
       onDisappear: () => { this.menuVisible = false; }
     })
+      if (this.showDivider) {
+        ThemeItemDivider()
+      }
+    }.width('100%')
   }
 }

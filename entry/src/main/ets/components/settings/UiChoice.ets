@@ -1,3 +1,4 @@
+import { ThemeItemDivider } from '../ThemeItemDivider';
 import {
   FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4
 } from '../UiTokens';
@@ -17,10 +18,12 @@ export struct UiChoice {
   @Prop detail: string = '';
   @Prop options: string[] = [];
   @Prop selectedIndex: number = 0;
+  @Prop showDivider: boolean = true;
 
   onSelect: (index: number) => void = (_index: number) => {};
 
   build() {
+    Column() {
     Column() {
       Row() {
         Text(this.title)
@@ -52,5 +55,9 @@ export struct UiChoice {
       }
       this.onSelect((this.selectedIndex + 1) % this.options.length);
     })
+      if (this.showDivider) {
+        ThemeItemDivider()
+      }
+    }.width('100%')
   }
 }

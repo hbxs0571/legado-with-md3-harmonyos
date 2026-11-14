@@ -1,3 +1,4 @@
+import { ThemeItemDivider } from '../ThemeItemDivider';
 import {
   FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2
 } from '../UiTokens';
@@ -16,10 +17,12 @@ export struct UiSlider {
   @Prop minValue: number = 0;
   @Prop maxValue: number = 100;
   @Prop stepValue: number = 1;
+  @Prop showDivider: boolean = true;
 
   onChange: (value: number) => void = (_value: number) => {};
 
   build() {
+    Column() {
     Column() {
       Row() {
         Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextPrimary)
@@ -61,5 +64,9 @@ export struct UiSlider {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
+      if (this.showDivider) {
+        ThemeItemDivider()
+      }
+    }.width('100%')
   }
 }

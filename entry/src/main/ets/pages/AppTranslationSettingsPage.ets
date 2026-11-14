@@ -1,3 +1,4 @@
+import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import curves from '@ohos.curves';
 import { UiSection } from '../components/settings/UiSection';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
@@ -43,6 +44,7 @@ export struct AppTranslationSettingsPage {
 
           UiSection({ title: '翻译选项' }) {
             TranslationSettingsChoice({ title: '目标语言', options: this.languages, selected: this.languageIndex, onSelect: (index: number) => this.languageIndex = index })
+            ThemeItemDivider()
             Column() {
               Row() {
                 Text('每块最大字符数').fontSize(18).fontColor(this.themeColorTextSecondary).layoutWeight(1)

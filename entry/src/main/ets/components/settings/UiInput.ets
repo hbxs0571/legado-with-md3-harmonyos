@@ -1,3 +1,4 @@
+import { ThemeItemDivider } from '../ThemeItemDivider';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../AppGlyph';
 import {
@@ -26,6 +27,7 @@ export struct UiInput {
   @Prop value: string = '';
   /** 「默认」按钮填回的值（上游同名参数 defaultValue: String? = ""）。 */
   @Prop defaultValue: string = '';
+  @Prop showDivider: boolean = true;
 
   onConfirm: (text: string) => void = (_text: string) => {};
 
@@ -33,6 +35,7 @@ export struct UiInput {
   @State editValue: string = '';
 
   build() {
+    Column() {
     Column() {
       Row() {
         Column() {
@@ -113,5 +116,9 @@ export struct UiInput {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+      if (this.showDivider) {
+        ThemeItemDivider()
+      }
+    }.width('100%')
   }
 }

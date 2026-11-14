@@ -37,23 +37,21 @@ export struct AppAiSettingsPage {
       Scroll(this.settingsScroller) {
         Column() {
           UiSection({ title: '供应商' }) {
-            UiAction({ title: '新建供应商', onSelect: () => this.onUnavailableAction('AI 服务商配置尚未迁移') })
+            UiAction({showDivider: false,  title: '新建供应商', onSelect: () => this.onUnavailableAction('AI 服务商配置尚未迁移') })
           }
 
           UiSection({ title: '模型' }) {
-            UiAction({ title: '当前模型', detail: '未配置模型', onSelect: () => this.onUnavailableAction('AI 模型选择尚未迁移') })
+            UiAction({showDivider: false,  title: '当前模型', detail: '未配置模型', onSelect: () => this.onUnavailableAction('AI 模型选择尚未迁移') })
           }
 
           UiSection({ title: '任务' }) {
             UiAction({ title: '翻译设置', onSelect: () => this.onUnavailableAction('AI 翻译服务设置尚未迁移') })
-            Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
             UiAction({ title: '章节梗概', onSelect: () => this.onUnavailableAction('AI 章节梗概设置尚未迁移') })
-            Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-            UiAction({ title: '提示词设置', detail: '编辑各 AI 工具的提示词', onSelect: () => this.onUnavailableAction('AI 提示词设置尚未迁移') })
+            UiAction({showDivider: false,  title: '提示词设置', detail: '编辑各 AI 工具的提示词', onSelect: () => this.onUnavailableAction('AI 提示词设置尚未迁移') })
           }
 
           UiSection({ title: 'Skills' }) {
-            UiAction({ title: '新建 Skill', onSelect: () => this.onUnavailableAction('AI Skill 尚未迁移') })
+            UiAction({showDivider: false,  title: '新建 Skill', onSelect: () => this.onUnavailableAction('AI Skill 尚未迁移') })
           }
         }.width('100%').padding({ top: 6, bottom: 120 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {

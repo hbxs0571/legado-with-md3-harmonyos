@@ -550,24 +550,24 @@ export struct ThemeSettingsPage {
                 .onChange((enabled: boolean) => this.onPureBlackChange(enabled))
             }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
             ThemeItemDivider()
-            UiAction({ title: '字体设置', detail: this.appFontSummary(),
+            UiAction({showDivider: false,  title: '字体设置', detail: this.appFontSummary(),
               onSelect: () => { this.appFontExpanded = !this.appFontExpanded } })
             if (this.appFontExpanded) {
               ThemeItemDivider()
-              UiAction({ title: '选择字体文件', detail: '支持 .ttf / .otf / .ttc', onSelect: () => this.onPickAppFont() })
+              UiAction({showDivider: false,  title: '选择字体文件', detail: '支持 .ttf / .otf / .ttc', onSelect: () => this.onPickAppFont() })
               ThemeItemDivider()
-              UiAction({ title: '恢复系统字体', detail: '清除已选择的应用字体', onSelect: () => this.onClearAppFont() })
+              UiAction({showDivider: false,  title: '恢复系统字体', detail: '清除已选择的应用字体', onSelect: () => this.onClearAppFont() })
             }
             ThemeItemDivider()
             // 上游 `ThemeConfigScreen.kt:266-270`：只有 appTheme == "12"（自定义）时才显示这一行。
             if (this.paletteIndex === 12) {
-              UiAction({ title: '自定义颜色', detail: this.customColorSummary(),
+              UiAction({showDivider: false,  title: '自定义颜色', detail: this.customColorSummary(),
                 onSelect: () => this.onOpenCustomTheme() })
               ThemeItemDivider()
             }
-            UiAction({ title: '主题风格', detail: 'Material Design', onSelect: () => this.onUnavailableAction('主题风格切换尚未接入') })
+            UiAction({showDivider: false,  title: '主题风格', detail: 'Material Design', onSelect: () => this.onUnavailableAction('主题风格切换尚未接入') })
             ThemeItemDivider()
-            UiAction({ title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
+            UiAction({showDivider: false,  title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
             ThemeItemDivider()
             ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => this.onPredictiveBackChange(value) })
             ThemeItemDivider()
@@ -582,27 +582,27 @@ export struct ThemeSettingsPage {
                 .width('100%').onChange((value: number) => this.onFontScaleChange(value))
             }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 8 })
             ThemeItemDivider()
-            UiAction({ title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onOpenThemeManage() })
+            UiAction({showDivider: false,  title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onOpenThemeManage() })
             ThemeItemDivider()
-            UiAction({ title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.backgroundExpanded = !this.backgroundExpanded } })
+            UiAction({showDivider: false,  title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.backgroundExpanded = !this.backgroundExpanded } })
             if (this.backgroundExpanded) {
-              UiAction({ title: '日间背景图片', detail: this.appBackgroundImage.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(false) })
+              UiAction({showDivider: false,  title: '日间背景图片', detail: this.appBackgroundImage.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(false) })
               ThemeItemDivider()
               Slider({ value: this.appBackgroundBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
                 .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(false, value))
               ThemeItemDivider()
-              UiAction({ title: '夜间背景图片', detail: this.appBackgroundImageNight.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(true) })
+              UiAction({showDivider: false,  title: '夜间背景图片', detail: this.appBackgroundImageNight.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(true) })
               ThemeItemDivider()
               Slider({ value: this.appBackgroundNightBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
                 .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(true, value))
               ThemeItemDivider()
-              UiAction({ title: '移除背景图片', detail: '同时清空日间与夜间', onSelect: () => { this.onClearBackgroundImage(false); this.onClearBackgroundImage(true); } })
+              UiAction({showDivider: false,  title: '移除背景图片', detail: '同时清空日间与夜间', onSelect: () => { this.onClearBackgroundImage(false); this.onClearBackgroundImage(true); } })
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '主界面' }).margin({ top: 20 })
           Column() {
-            UiAction({ title: '首页与导航', detail: this.navigationSummary(), onSelect: () => { this.navigationExpanded = !this.navigationExpanded; } })
+            UiAction({showDivider: false,  title: '首页与导航', detail: this.navigationSummary(), onSelect: () => { this.navigationExpanded = !this.navigationExpanded; } })
             if (this.navigationExpanded) {
               Column() {
                 // 逐项显隐：上游 `setVisibilityForRoute`，书架与我的恒可见。
@@ -613,7 +613,7 @@ export struct ThemeSettingsPage {
                 ThemeSwitchRow({ title: '订阅', detail: '在底部导航显示订阅', checked: this.showRss, onChange: (value: boolean) => this.onNavigationVisibilityChange('rss', value) })
                 ThemeItemDivider()
                 // 默认主页面：只能选可见项，对齐上游 `MainNavigationSettingsSheet.kt:81-84`。
-                UiDropdown({
+                UiDropdown({showDivider: false, 
                   title: '默认主页面',
                   option: this.defaultHomePage,
                   options: this.visibleNavigationOptions(),
@@ -621,7 +621,7 @@ export struct ThemeSettingsPage {
                   onSelect: (value: string) => this.onDefaultHomePageChange(value)
                 })
                 ThemeItemDivider()
-                UiDropdown({
+                UiDropdown({showDivider: false, 
                   title: '导航标签显示',
                   option: this.labelVisibilityMode,
                   options: LABEL_VISIBILITY_VALUES,
@@ -646,12 +646,12 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimationEnabled, onChange: (value: boolean) => this.onSwipeAnimationChange(value) })
             ThemeItemDivider()
-            UiAction({ title: '顶栏与底栏', detail: this.topBottomBarSummary(), onSelect: () => { this.topBottomBarExpanded = !this.topBottomBarExpanded } })
+            UiAction({showDivider: false,  title: '顶栏与底栏', detail: this.topBottomBarSummary(), onSelect: () => { this.topBottomBarExpanded = !this.topBottomBarExpanded } })
             if (this.topBottomBarExpanded) {
               Column() {
                 ThemeSwitchRow({ title: '使用折叠应用栏', checked: this.useFlexibleTopAppBar, onChange: (value: boolean) => this.onUseFlexibleTopAppBarChange(value) })
                 ThemeItemDivider()
-                UiDropdown({
+                UiDropdown({showDivider: false, 
                   title: '顶栏按钮样式',
                   option: this.topBarButtonStyle,
                   options: TOP_BAR_BUTTON_STYLES,
@@ -672,7 +672,7 @@ export struct ThemeSettingsPage {
                   ThemeSwitchRow({ title: '液态玻璃效果', detail: '为悬浮底栏启用液态玻璃高光效果', checked: this.useFloatingBottomBarLiquidGlass, onChange: (value: boolean) => this.onUseFloatingBottomBarLiquidGlassChange(value) })
                     .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
                   ThemeItemDivider()
-                  UiSlider({
+                  UiSlider({showDivider: false, 
                     title: '底栏模糊强度',
                     detail: `液态玻璃扭曲程度 ${this.bottomBarLensRadius}vp`,
                     value: this.bottomBarLensRadius,
@@ -683,7 +683,7 @@ export struct ThemeSettingsPage {
                 }
                 ThemeItemDivider()
                 if (this.enableBlur) {
-                  UiSlider({
+                  UiSlider({showDivider: false, 
                     title: '顶栏模糊半径',
                     detail: `采样模糊强度 ${this.topBarBlurRadius}`,
                     value: this.topBarBlurRadius,
@@ -692,7 +692,7 @@ export struct ThemeSettingsPage {
                     onChange: (value: number) => this.onTopBarBlurRadiusChange(value)
                   })
                   ThemeItemDivider()
-                  UiSlider({
+                  UiSlider({showDivider: false, 
                     title: '底栏模糊半径',
                     detail: `采样模糊强度 ${this.bottomBarBlurRadius}`,
                     value: this.bottomBarBlurRadius,
@@ -701,7 +701,7 @@ export struct ThemeSettingsPage {
                     onChange: (value: number) => this.onBottomBarBlurRadiusChange(value)
                   })
                   ThemeItemDivider()
-                  UiSlider({
+                  UiSlider({showDivider: false, 
                     title: '顶栏模糊透明度',
                     detail: `${this.topBarBlurAlpha}%`,
                     value: this.topBarBlurAlpha,
@@ -710,7 +710,7 @@ export struct ThemeSettingsPage {
                     onChange: (value: number) => this.onTopBarBlurAlphaChange(value)
                   })
                   ThemeItemDivider()
-                  UiSlider({
+                  UiSlider({showDivider: false, 
                     title: '底栏模糊透明度',
                     detail: `${this.bottomBarBlurAlpha}%`,
                     value: this.bottomBarBlurAlpha,
@@ -719,7 +719,7 @@ export struct ThemeSettingsPage {
                     onChange: (value: number) => this.onBottomBarBlurAlphaChange(value)
                   })
                 } else {
-                  UiSlider({
+                  UiSlider({showDivider: false, 
                     title: '顶栏不透明度',
                     detail: `${this.topBarOpacity}%`,
                     value: this.topBarOpacity,
@@ -728,7 +728,7 @@ export struct ThemeSettingsPage {
                     onChange: (value: number) => this.onTopBarOpacityChange(value)
                   })
                   ThemeItemDivider()
-                  UiSlider({
+                  UiSlider({showDivider: false, 
                     title: '底栏不透明度',
                     detail: `${this.bottomBarOpacity}%`,
                     value: this.bottomBarOpacity,
@@ -741,18 +741,18 @@ export struct ThemeSettingsPage {
               .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
             ThemeItemDivider()
-            UiAction({ title: '导航布局', detail: '', onSelect: () => this.onUnavailableAction('导航布局设置尚未迁移') })
+            UiAction({showDivider: false,  title: '导航布局', detail: '', onSelect: () => this.onUnavailableAction('导航布局设置尚未迁移') })
             ThemeItemDivider()
-            UiAction({ title: '多窗布局', detail: '', onSelect: () => this.onUnavailableAction('多窗布局设置尚未迁移') })
+            UiAction({showDivider: false,  title: '多窗布局', detail: '', onSelect: () => this.onUnavailableAction('多窗布局设置尚未迁移') })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '书籍详情页' }).margin({ top: 20 })
           Column() {
             ThemeSwitchRow({ title: '界面颜色跟随封面取色', detail: '仅在显示背景封面时生效', checked: this.bookInfoFollowCoverColor, onChange: (value: boolean) => this.onBookInfoFollowCoverColorChange(value) })
             ThemeItemDivider()
-            UiDropdown({ title: '网络封面背景设置', option: this.bookInfoNetworkCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
+            UiDropdown({showDivider: false,  title: '网络封面背景设置', option: this.bookInfoNetworkCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
             ThemeItemDivider()
-            UiDropdown({ title: '默认封面背景设置', option: this.bookInfoDefaultCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
+            UiDropdown({showDivider: false,  title: '默认封面背景设置', option: this.bookInfoDefaultCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '护眼模式' }).margin({ top: 20 })
@@ -762,7 +762,7 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换', checked: this.eyeProtectionAutoNight, onChange: (value: boolean) => this.onEyeProtectionAutoNightChange(value) })
             ThemeItemDivider()
             if (this.eyeProtectionEnabled || this.eyeProtectionAutoNight) {
-              UiSlider({
+              UiSlider({showDivider: false, 
                 title: '色温',
                 detail: this.eyeProtectionActive ? `当前生效：${this.eyeProtectionIntensity}` : `强度 ${this.eyeProtectionIntensity}`,
                 value: this.eyeProtectionIntensity,
@@ -774,9 +774,9 @@ export struct ThemeSettingsPage {
               ThemeSwitchRow({ title: '定时开启', detail: '仅在设定的时间段内生效', checked: this.eyeProtectionSchedule, onChange: (value: boolean) => this.onEyeProtectionScheduleChange(value) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               if (this.eyeProtectionSchedule) {
-                UiAction({ title: '开始时间', detail: this.eyeProtectionStartTime, onSelect: () => this.pickEyeProtectionTime(true) })
+                UiAction({showDivider: false,  title: '开始时间', detail: this.eyeProtectionStartTime, onSelect: () => this.pickEyeProtectionTime(true) })
                   .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-                UiAction({ title: '结束时间', detail: this.eyeProtectionEndTime, onSelect: () => this.pickEyeProtectionTime(false) })
+                UiAction({showDivider: false,  title: '结束时间', detail: this.eyeProtectionEndTime, onSelect: () => this.pickEyeProtectionTime(false) })
                   .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               }
             }
@@ -797,14 +797,14 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '容器背景图', detail: '大容器和项目分别使用独立的日间/夜间图片', checked: this.enableContainerBackgroundImage, onChange: (value: boolean) => this.onEnableContainerBackgroundImageChange(value) })
             ThemeItemDivider()
             if (this.enableContainerBackgroundImage) {
-              UiAction({ title: '大容器背景图片', detail: this.backgroundSummary(this.largeContainerBackgroundLight, this.largeContainerBackgroundDark), onSelect: () => this.onPickContainerBackground(true, false) })
+              UiAction({showDivider: false,  title: '大容器背景图片', detail: this.backgroundSummary(this.largeContainerBackgroundLight, this.largeContainerBackgroundDark), onSelect: () => this.onPickContainerBackground(true, false) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
               ThemeItemDivider()
-              UiAction({ title: '项目背景图片', detail: this.backgroundSummary(this.itemBackgroundLight, this.itemBackgroundDark), onSelect: () => this.onPickContainerBackground(false, false) })
+              UiAction({showDivider: false,  title: '项目背景图片', detail: this.backgroundSummary(this.itemBackgroundLight, this.itemBackgroundDark), onSelect: () => this.onPickContainerBackground(false, false) })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
             ThemeItemDivider()
-            UiSlider({
+            UiSlider({showDivider: false, 
               title: '容器背景不透明度',
               detail: `${this.containerOpacity}%`,
               value: this.containerOpacity,
@@ -818,7 +818,7 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '覆盖卡片圆角', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardCorner, onChange: (value: boolean) => this.onOverrideCardCornerChange(value) })
             ThemeItemDivider()
             if (this.overrideCardCorner) {
-              UiSlider({
+              UiSlider({showDivider: false, 
                 title: '卡片圆角',
                 detail: `${this.cardCornerRadius}vp`,
                 value: this.cardCornerRadius,
@@ -832,7 +832,7 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '覆盖卡片边框', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardBorder, onChange: (value: boolean) => this.onOverrideCardBorderChange(value) })
             ThemeItemDivider()
             if (this.overrideCardBorder) {
-              UiSlider({
+              UiSlider({showDivider: false, 
                 title: '边框宽度',
                 detail: `${this.cardBorderWidth}vp`,
                 value: this.cardBorderWidth,
@@ -841,14 +841,14 @@ export struct ThemeSettingsPage {
                 onChange: (value: number) => this.onCardBorderWidthChange(value)
               })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              UiDropdown({
+              UiDropdown({showDivider: false, 
                 title: '日间边框颜色',
                 option: this.cardBorderColorDay, labelOf: (value: string) => this.borderColorLabel(value),
                 options: this.cardBorderColorOptions(),
                 onSelect: (value: string) => this.onCardBorderColorChange(false, value)
               })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              UiDropdown({
+              UiDropdown({showDivider: false, 
                 title: '夜间边框颜色',
                 option: this.cardBorderColorNight, labelOf: (value: string) => this.borderColorLabel(value),
                 options: this.cardBorderColorOptions(),
@@ -860,19 +860,19 @@ export struct ThemeSettingsPage {
             ThemeSwitchRow({ title: '显示分隔线', checked: this.enableItemDivider, onChange: (value: boolean) => this.onEnableItemDividerChange(value) })
             ThemeItemDivider()
             if (this.enableItemDivider) {
-              UiSlider({
+              UiSlider({showDivider: false, 
                 title: '分隔线宽度', detail: `${this.dividerWidth}vp`,
                 value: this.dividerWidth, minValue: DIVIDER_WIDTH_MIN, maxValue: DIVIDER_WIDTH_MAX,
                 onChange: (value: number) => this.onDividerWidthChange(value)
               })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              UiSlider({
+              UiSlider({showDivider: false, 
                 title: '分隔线长度', detail: `${this.dividerLength}%`,
                 value: this.dividerLength, minValue: DIVIDER_LENGTH_MIN, maxValue: DIVIDER_LENGTH_MAX,
                 onChange: (value: number) => this.onDividerLengthChange(value)
               })
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
-              UiDropdown({
+              UiDropdown({showDivider: false, 
                 title: '分隔线颜色',
                 option: this.dividerColor, labelOf: (value: string) => this.borderColorLabel(value),
                 options: this.dividerColorOptions(),
@@ -882,7 +882,7 @@ export struct ThemeSettingsPage {
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           Column() {
-            UiAction({ title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.confirmResetDefaults() })
+            UiAction({showDivider: false,  title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.confirmResetDefaults() })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.width('100%').padding({ top: 4, bottom: 18 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())

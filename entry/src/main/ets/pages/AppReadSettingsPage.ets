@@ -64,7 +64,7 @@ export struct AppReadSettingsPage {
             UiSwitch({ title: '中文排版优化', preview: true })
             UiAction({ title: '护眼模式', detail: '护眼与定时设置', onSelect: () => this.onUnavailableAction('护眼模式设置尚未接入') })
             UiChoice({ title: '亮度调节条', options: ['关闭', '横向', '纵向'], selectedIndex: this.brightnessBarIndex, onSelect: (index: number) => { this.brightnessBarIndex = index; } })
-            UiSwitch({ title: '显示下划线', preview: true })
+            UiSwitch({showDivider: false,  title: '显示下划线', preview: true })
           }
 
           UiSection({ title: '翻页设置' }) {
@@ -75,7 +75,7 @@ export struct AppReadSettingsPage {
             UiSwitch({ title: '音量键翻页', preview: true })
             UiSwitch({ title: '朗读时音量键翻页', preview: true })
             UiSwitch({ title: '长按按键翻页', preview: true })
-            UiSlider({ title: '翻页触摸灵敏度', value: this.touchSensitivity, maxValue: 1000, minValue: 0, onChange: (value: number) => { this.touchSensitivity = value; } })
+            UiSlider({showDivider: false,  title: '翻页触摸灵敏度', value: this.touchSensitivity, maxValue: 1000, minValue: 0, onChange: (value: number) => { this.touchSensitivity = value; } })
           }
 
           UiSection({ title: '其它' }) {
@@ -95,7 +95,7 @@ export struct AppReadSettingsPage {
             UiSwitch({ title: '禁用返回键', preview: true })
             UiAction({ title: '自定义翻页按键', onSelect: () => this.onUnavailableAction('自定义按键设置尚未接入') })
             UiSwitch({ title: '标题栏显示附加信息', preview: true })
-            UiSwitch({ title: '显示菜单图标', preview: true })
+            UiSwitch({showDivider: false,  title: '显示菜单图标', preview: true })
           }
           Text('此页控件目前用于界面预览；设置保存和护眼/按键子面板尚未接入。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })

@@ -1,3 +1,4 @@
+import { ThemeItemDivider } from '../ThemeItemDivider';
 import {
   FONT_ROW_DETAIL, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2
 } from '../UiTokens';
@@ -12,10 +13,12 @@ export struct UiAction {
   @Prop detail: string = '';
   /** 右箭头尺寸。各页现在混用 15/16/18，默认取 15（最常见）。 */
   @Prop chevronSize: number = 15;
+  @Prop showDivider: boolean = true;
 
   onSelect: () => void = () => {};
 
   build() {
+    Column() {
     Row() {
       Column() {
         Text(this.title)
@@ -43,5 +46,9 @@ export struct UiAction {
     .width('100%')
     .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
     .onClick(() => this.onSelect())
+      if (this.showDivider) {
+        ThemeItemDivider()
+      }
+    }.width('100%')
   }
 }

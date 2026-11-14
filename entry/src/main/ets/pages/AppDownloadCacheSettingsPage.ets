@@ -76,26 +76,26 @@ export struct AppDownloadCacheSettingsPage {
         Column() {
           UiSection({ title: 'HTTP 缓存' }) {
             UiAction({ title: '封面缓存', detail: '本地书籍封面即时生成', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
-            UiAction({ title: '漫画缓存', detail: '本地无漫画形态', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
+            UiAction({showDivider: false,  title: '漫画缓存', detail: '本地无漫画形态', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
           }
           UiSection({ title: '下载设置' }) {
             UiSlider({ title: '更新和搜索线程', detail: '控制请求并发数量', value: this.cacheSettings.updateSearchThreads, minValue: 1, maxValue: 256, onChange: (v: number) => { this.cacheSettings.updateSearchThreads = v; this.saveSettings(); } })
             UiSlider({ title: '书籍缓存下载线程', detail: '并发越高越不稳定', value: this.cacheSettings.bookDownloadThreads, minValue: 1, maxValue: 8, onChange: (v: number) => { this.cacheSettings.bookDownloadThreads = v; this.saveSettings(); } })
             UiSlider({ title: '向后预下载', detail: '预先下载后续章节', value: this.cacheSettings.preloadBehind, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadBehind = v; this.saveSettings(); } })
             UiSlider({ title: '向前预下载', detail: '预先下载前面的章节', value: this.cacheSettings.preloadAhead, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadAhead = v; this.saveSettings(); } })
-            UiSlider({ title: '整本正文内存缓存上限', detail: '单位 MB；超过就不缓存整本正文', value: this.cacheSettings.bookContentCacheMb, minValue: 1, maxValue: 512, onChange: (v: number) => { this.cacheSettings.bookContentCacheMb = v; this.saveSettings(); } })
+            UiSlider({showDivider: false,  title: '整本正文内存缓存上限', detail: '单位 MB；超过就不缓存整本正文', value: this.cacheSettings.bookContentCacheMb, minValue: 1, maxValue: 512, onChange: (v: number) => { this.cacheSettings.bookContentCacheMb = v; this.saveSettings(); } })
           }
           UiSection({ title: '图片缓存' }) {
             UiSlider({ title: '图片绘制缓存', detail: '最大缓存大小（MB）', value: this.cacheSettings.imageDrawCacheMb, minValue: 1, maxValue: 2047, onChange: (v: number) => { this.cacheSettings.imageDrawCacheMb = v; this.saveSettings(); } })
-            UiSlider({ title: '漫画保留数量', detail: '保留已读章节数量', value: this.cacheSettings.comicKeepCount, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
+            UiSlider({showDivider: false,  title: '漫画保留数量', detail: '保留已读章节数量', value: this.cacheSettings.comicKeepCount, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
           }
           UiSection({ title: '网络' }) {
             CacheSettingsInput({ title: '用户代理', value: this.cacheSettings.userAgent, onValueChange: (v: string) => { this.cacheSettings.userAgent = v; this.saveSettings(); } })
-            UiSwitch({ title: 'Cronet', detail: '使用 Cronet 网络组件', value: this.cacheSettings.cronetEnabled, onChange: (v: boolean) => { this.cacheSettings.cronetEnabled = v; this.saveSettings(); } })
+            UiSwitch({showDivider: false,  title: 'Cronet', detail: '使用 Cronet 网络组件', value: this.cacheSettings.cronetEnabled, onChange: (v: boolean) => { this.cacheSettings.cronetEnabled = v; this.saveSettings(); } })
           }
           UiSection({ title: '其它' }) {
             UiAction({ title: '清理缓存', detail: '清应用内正文副本与章节缓存', onSelect: () => this.clearBookCache() })
-            UiAction({ title: '压缩数据库', detail: '整理本地数据库空间', onSelect: () => { this.vacuumDatabase(); } })
+            UiAction({showDivider: false,  title: '压缩数据库', detail: '整理本地数据库空间', onSelect: () => { this.vacuumDatabase(); } })
           }
           Text('滑块与开关改动即落盘；清理缓存与压缩数据库已接入，封面/漫画缓存本地即时生成无独立缓存。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
