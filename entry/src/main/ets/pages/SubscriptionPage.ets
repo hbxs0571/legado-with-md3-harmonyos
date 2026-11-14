@@ -1,5 +1,6 @@
 import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
+import { AppTopBar, TopBarButton } from '../components/TopBar';
 
 @Component
 export struct SubscriptionPage {
@@ -56,52 +57,28 @@ export struct SubscriptionPage {
     });
   }
 
+  /** 顶栏动作区照现有代码逐个映射：搜索、更多菜单。 */
+  @Builder subscriptionTopActions() {
+    TopBarButton({
+      icon: 'search',
+      showDivider: false,
+      onSelect: () => {
+        this.showSearch = !this.showSearch;
+        if (!this.showSearch) { this.searchQuery = ''; }
+      }
+    })
+    TopBarButton({ icon: 'more', menuMode: true })
+      .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+  }
+
   build() {
     Column() {
-      if (this.collapsedHeader) {
-        Column() {
-          Row() {
-            Text('订阅').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-            Blank().layoutWeight(1)
-            Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'search', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
-              .onClick(() => {
-                this.showSearch = !this.showSearch;
-                if (!this.showSearch) { this.searchQuery = ''; }
-              })
-            Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'more', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-              .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-          }.width('100%').height(48).alignItems(VerticalAlign.Top)
-            .padding({ left: 18, right: 18 })
-        }.width('100%').padding({ top: 20 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
-      } else {
-        Column() {
-          Row() {
-            Blank()
-            Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'search', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18)
-              .onClick(() => {
-                this.showSearch = !this.showSearch;
-                if (!this.showSearch) { this.searchQuery = ''; }
-              })
-            Stack({ alignContent: Alignment.Center }) {
-              AppGlyph({ name: 'more', glyphSize: 20 })
-            }.width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(18).margin({ left: 8 })
-              .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-          }.width('100%').height(48).padding({ left: 18, right: 18 })
-          Column() {
-            Text('订阅').fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-            Text('全部').fontSize(14).fontColor('#B6B8C2').margin({ top: 3 })
-          }.width('100%').alignItems(HorizontalAlign.Start)
-            .padding({ left: 18, right: 18, top: 12, bottom: 18 }).offset({ y: -5 })
-        }.width('100%').padding({ top: 20 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
-      }
+      AppTopBar({
+        title: '订阅',
+        subtitle: '全部',
+        collapsed: this.collapsedHeader,
+        actions: () => { this.subscriptionTopActions() }
+      })
 
       if (this.showSearch) {
         Row() {
