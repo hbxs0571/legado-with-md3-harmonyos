@@ -377,7 +377,11 @@ export struct CatalogPage {
   private getSourceLabel(): string {
     if (!this.book.isLocal) { return '--'; }
     if (this.book.format === 'epub') { return '本地 EPUB'; }
-    return '本地 TXT';
+    if (this.book.format === 'pdf') { return '本地 PDF'; }
+    if (this.book.format === 'mobi') { return '本地 MOBI'; }
+    if (this.book.format === 'umd') { return '本地 UMD'; }
+    if (this.book.format === 'txt') { return '本地 TXT'; }
+    return '本地';
   }
 
   private getCurrentChapterNumber(): number {

@@ -170,6 +170,9 @@ export struct BookInfoPage {
   private getFormatLabel(): string {
     if (this.book.format === 'epub') { return 'EPUB'; }
     if (this.book.format === 'txt') { return 'TXT'; }
+    if (this.book.format === 'pdf') { return 'PDF'; }
+    if (this.book.format === 'mobi') { return 'MOBI'; }
+    if (this.book.format === 'umd') { return 'UMD'; }
     return this.book.category;
   }
 

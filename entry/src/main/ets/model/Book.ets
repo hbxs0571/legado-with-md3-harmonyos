@@ -1,5 +1,8 @@
 export type BookMediaType = 'text' | 'audio' | 'image';
 
+/** 本地书籍的正文形态。与上游 BookExtensions.kt:74-89 的五个谓词一一对应。 */
+export type LocalBookFormat = 'txt' | 'epub' | 'pdf' | 'mobi' | 'umd';
+
 /**
  * 书籍。字段与上游 Book 实体对齐，章节已拆到 chapters 表，
  * 因此这里不再有 chapterTitles / chapterOffsets / chapterVolumes 三个数组。
@@ -30,7 +33,7 @@ export interface Book {
   /** 对齐 Android 固定书籍类型设置。 */
   fixedType?: boolean;
   contentPath?: string;
-  format?: 'txt' | 'epub';
+  format?: LocalBookFormat;
   chapterCount?: string;
   /** 与 Android Book.imageStyle 同值：DEFAULT / FULL / TEXT / SINGLE。 */
   imageStyle?: string;

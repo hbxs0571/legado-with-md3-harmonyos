@@ -536,10 +536,15 @@ export struct BookshelfPage {
     return this.layout.showUnread && this.layout.showUnreadNew && (book.lastCheckCount ?? 0) > 0;
   }
 
-  /** 书籍类型，本地只做 EPUB / 本地；音频、漫画、网络文件、小说档本地无对应形态，待接。 */
+  /** 书籍类型标签：图片书（漫画包 / PDF）优先，其余按本地格式映射。 */
   private bookTypeLabel(book: Book): string {
     if (!this.layout.showTip) { return ''; }
+    if (book.bookType === 'image') { return '图片'; }
     if (book.format === 'epub') { return 'EPUB'; }
+    if (book.format === 'pdf') { return 'PDF'; }
+    if (book.format === 'mobi') { return 'MOBI'; }
+    if (book.format === 'umd') { return 'UMD'; }
+    if (book.format === 'txt') { return 'TXT'; }
     return '本地';
   }
 

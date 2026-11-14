@@ -2,7 +2,7 @@ import { fileIo, picker } from '@kit.CoreFileKit';
 import { preferences, relationalStore } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
-import { Book, BookChapter, BookMediaType, bookCoverColor, bookCoverMark } from '../model/Book';
+import { Book, BookChapter, BookMediaType, LocalBookFormat, bookCoverColor, bookCoverMark } from '../model/Book';
 import { AppLog } from '../lib/AppLog';
 import { EpubRepository } from './EpubRepository';
 import { LocalTextSemantics } from './LocalTextSemantics';
@@ -485,8 +485,8 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
    * 保留这条单文件入口给「没有确认页」的调用方；导入页的多选链路走 importLocalBooks。
    * maxSelectNumber 由 1 改成 500（批 10 的 :554）：SDK 声明里 0 没有「不限」语义，
    * 写 500 在基线 12 上安全，在 API 21+ 等价于不限。
-   * 后缀仍限 .txt / .epub —— 本地没有 PDF / MOBI / AZW3 / ZIP 的解析器，
-   * 放开后缀只会让用户导进来一堆打不开的书。
+   * 后缀见 pickLocalBookUris：各本地书格式与压缩包都能选，在 importSingleUri 按后缀分流。
+   * TXT / EPUB 走现有解析器；PDF / MOBI / AZW3 / UMD / 压缩包的解析器后续批次接入，当前导入给出明确的不支持提示；rar / 7z 暂不支持（平台无能力）。
    */
   static async importLocalBook(context: Context,
     maxLengthWithNoToc: number = 3000): Promise<CreatedLocalBook | undefined> {
@@ -499,7 +499,15 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
   /** 弹系统选择器，返回用户选中的 uri 列表；取消时返回空数组。 */
   static async pickLocalBookUris(context: Context): Promise<string[]> {
     const options = new picker.DocumentSelectOptions();
-    options.fileSuffixFilters = ['TXT 文本|.txt', 'EPUB 电子书|.epub'];
+    options.fileSuffixFilters = [
+      'TXT 文本|.txt',
+      'EPUB 电子书|.epub',
+      'PDF 文档|.pdf',
+      'MOBI 电子书|.mobi',
+      'AZW3 电子书|.azw3',
+      'UMD 电子书|.umd',
+      '压缩包|.zip,.cbz'
+    ];
     options.maxSelectNumber = 500;
     const documentPicker = new picker.DocumentViewPicker(context);
     return await documentPicker.select(options);
@@ -517,13 +525,26 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
     maxLengthWithNoToc: number = 3000): Promise<CreatedLocalBook> {
     const fileName = BookRepository.getFileName(uri);
     const bookId = `local-${BookRepository.md5Encode16(uri)}`;
+    const format = BookRepository.formatFromFileName(fileName);
     let created: CreatedLocalBook;
-    if (fileName.toLowerCase().endsWith('.epub')) {
+    if (format === 'epub') {
       const imported = await EpubRepository.importFromUri(context, uri, fileName, bookId);
       // EPUB 写出的正文是 UTF-8，章节偏移按字符给，这里统一转成字节偏移的章节行。
       const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
         imported.titles, imported.offsets, [], imported.content, undefined);
       created = { book: imported.book, chapters: chapters };
+    } else if (format === 'pdf') {
+      // PDF 解析器在批 7 接入；先给可读提示，交给导入流程的失败分支，避免落一本空书。
+      throw new Error('PDF 解析器未实现，暂时无法导入 .pdf');
+    } else if (format === 'mobi') {
+      // MOBI / AZW3 解析器在批 10-12 接入。
+      throw new Error('MOBI / AZW3 解析器未实现，暂时无法导入');
+    } else if (format === 'umd') {
+      // UMD 解析器在批 6 接入。
+      throw new Error('UMD 解析器未实现，暂时无法导入 .umd');
+    } else if (format === 'archive') {
+      // 压缩包不走单本路径，由 importLocalBooks 展开（见批 9）。
+      throw new Error('压缩包请用多选导入');
     } else {
       created = await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
     }
@@ -914,11 +935,24 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
    * 优先信库里的 format 列；老库该列为空串时退回按路径后缀判，
    * 与 format 列落地之前的行为保持一致，避免存量书目全变 txt。
    */
-  private static normalizeFormat(stored: string | undefined, bookUrl: string): 'txt' | 'epub' {
-    if (stored === 'epub' || stored === 'txt') {
+  private static normalizeFormat(stored: string | undefined, bookUrl: string): LocalBookFormat {
+    if (stored === 'epub' || stored === 'txt' || stored === 'pdf' || stored === 'mobi' || stored === 'umd') {
       return stored;
     }
-    return bookUrl.toLowerCase().endsWith('.epub') ? 'epub' : 'txt';
+    // 老库 format 列可能是空串：按 bookUrl 后缀回推；压缩包不会直接成书，兜底成 txt。
+    const byName = BookRepository.formatFromFileName(bookUrl);
+    return byName === 'archive' ? 'txt' : byName;
+  }
+
+  /** 按文件名后缀判本地书形态，与上游 AppPattern.kt:46/48 两条正则同口径。 */
+  private static formatFromFileName(fileName: string): LocalBookFormat | 'archive' {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith('.epub')) { return 'epub'; }
+    if (lower.endsWith('.pdf')) { return 'pdf'; }
+    if (lower.endsWith('.umd')) { return 'umd'; }
+    if (lower.endsWith('.mobi') || lower.endsWith('.azw3') || lower.endsWith('.azw')) { return 'mobi'; }
+    if (lower.endsWith('.zip') || lower.endsWith('.cbz')) { return 'archive'; }
+    return 'txt';
   }
 
   /** 解析 readConfig JSON，只关心本地有对应字段的三项。 */
@@ -2711,7 +2745,7 @@ private static getTitle(fileName: string): string {
   /** 去掉已知电子书后缀，得到默认书名；供导入判重与接回比对共用。 */
   static localTitleFromFileName(fileName: string): string {
     const lowerName = fileName.toLowerCase();
-    const suffixes: string[] = ['.txt', '.epub'];
+    const suffixes: string[] = ['.txt', '.epub', '.pdf', '.mobi', '.azw3', '.azw', '.umd'];
     for (let index = 0; index < suffixes.length; index += 1) {
       const suffix = suffixes[index];
       if (suffix !== undefined && lowerName.endsWith(suffix)) {

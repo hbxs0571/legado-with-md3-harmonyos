@@ -84,6 +84,17 @@ export struct HomePage {
     };
   }
 
+  /** 最近阅读卡副标题：EPUB 显示元数据作者，其余按本地格式给不写死兜底的标签。 */
+  private recentBookSubtitle(): string {
+    const book = this.getRecentBook();
+    if (book.format === 'epub') { return book.author.length > 0 ? book.author : '本地 EPUB'; }
+    if (book.format === 'pdf') { return '本地 PDF'; }
+    if (book.format === 'mobi') { return '本地 MOBI'; }
+    if (book.format === 'umd') { return '本地 UMD'; }
+    if (book.format === 'txt') { return '本地 TXT'; }
+    return '本地';
+  }
+
   private getRecentBooks(): Book[] {
     const localBooks = this.getLocalBooks();
     const start = Math.max(0, localBooks.length - 6);
@@ -158,7 +169,7 @@ export struct HomePage {
                 BookCover({ book: this.getRecentBook(), mini: true, displayWidth: 56, displayHeight: 78 })
                 Column() {
                   Text(this.getRecentBook().title).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Text(this.getRecentBook().format === 'epub' ? this.getRecentBook().author : '本地 TXT').fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
+                  Text(this.recentBookSubtitle()).fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
                   Text(this.getRecentBook().lastChapter).fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
                 Text(`${Math.round(this.getRecentBookProgress(this.getRecentBook()))}%`).fontSize(11).fontColor('#D7DFFB').padding({ left: 9, right: 9, top: 6, bottom: 6 }).backgroundColor('#383D50').borderRadius(8)

@@ -2145,7 +2145,7 @@ export struct ReaderPage {
     }
     // 视口/正文宽度没就绪时排出来的页是错的，等下一次 rebuild 再请求。
     if (this.readerContentWidth <= 0 || this.viewportHeight <= 0 ||
-      this.book.format !== 'txt' && this.book.format !== 'epub') {
+      this.book.isLocal !== true) {
       return;
     }
     const startedAt = Date.now();
@@ -2241,7 +2241,7 @@ export struct ReaderPage {
   private rebuildReaderPages(forceProgressCommit: boolean = false,
     onlyImageSizesChanged: boolean = false): void {
     const startedAt = Date.now();
-    if ((this.book.format !== 'txt' && this.book.format !== 'epub') ||
+    if (this.book.isLocal !== true ||
       this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
       // KI-REL1：换章交接期间不清空页表。上游任何时刻都有 pages.current
       // （`ReaderCanvasSurface.kt:254` 的 `pages.current ?: return` 只是「没有就不画」），
@@ -5120,7 +5120,7 @@ export struct ReaderPage {
 
 
   private usesLocalPagination(): boolean {
-    return (this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation !== 3;
+    return this.book.isLocal === true && this.pageAnimation !== 3;
   }
 
   /**
@@ -5130,12 +5130,12 @@ export struct ReaderPage {
    * 二是拿不到行几何，KI-C3 的下划线四项与选区都只得分页模式才有。
    */
   private usesCanvasScroll(): boolean {
-    return (this.book.format === 'txt' || this.book.format === 'epub') && this.pageAnimation === 3;
+    return this.book.isLocal === true && this.pageAnimation === 3;
   }
 
   /** 是否走画布渲染：本地分页与连续滚动都算。 */
   private usesReaderCanvas(): boolean {
-    return this.book.format === 'txt' || this.book.format === 'epub';
+    return this.book.isLocal === true;
   }
   /**
    * 滚动模式的整章内容高度（vp）：所有页的滚动 extent 累加。
