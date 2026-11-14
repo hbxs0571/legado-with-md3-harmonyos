@@ -1096,7 +1096,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 2. `entry/src/main/ets/data/ThemeSettingsRepository.ets`：`ThemeSnapshot` 从 38 扩到 **53 字段**（+15），`load()` / `save()` 逐键同步。
 3. `entry/src/main/ets/pages/Index.ets`：新增 15 个 `@State`、`topBottomBarSnapshot()`、`publishTopBottomBarStyle()`（广播 `themeTopBarBackground`/`themeBottomBarBackground`/`themeTopBarBlurRadius`/`themeBottomBarBlurRadius`/`themeBottomBarRadius`）与 15 个 `selectTheme*` 回调；底栏渲染改成 `if (this.themeShowBottomView && ...)`，按 `useFloatingBottomBar` 改宽度与圆角，按合成色设底色，按 `enableBlur` 挂 `backdropBlur`。
 4. `entry/src/main/ets/pages/ThemeSettingsPage.ets`：「模糊效果」两项改真回调；「顶栏与底栏」由 `ThemeSettingsOption` 改为可展开组，13 项全部接上（使用折叠应用栏 / 顶栏按钮样式 / 合并顶栏按钮 / 显示导航栏 / 悬浮底栏 / 液态玻璃 / 底栏模糊强度 / 顶栏与底栏模糊半径 / 顶栏与底栏模糊透明度 / 顶栏与底栏不透明度），并按 `enableBlur` 与 `useFloatingBottomBar` 决定显示哪几项。
-5. 顶栏底色消费端：`entry/src/main/ets/components/CollapsingSettingsHeader.ets`（12 个设置子页）+ `HomePage.ets`/`SearchPage.ets`/`ThemeSettingsPage.ets` 三处内联 header，各加两个 `@StorageProp` 与 `.backgroundColor(...)` + `.backdropBlur(...)`。
+5. 顶栏底色消费端：`entry/src/main/ets/components/CollapsingSettingsHeader.ets`（12 个设置子页）+ `HomePage.ets`/`SearchPage.ets`/`ThemeSettingsPage.ets` 三处内联 header，各加两个 `@StorageProp` 与 `.backgroundColor(...)` + `.backdropBlur(...)`。（**r343 后已收敛**：顶栏统一到 `entry/src/main/ets/components/TopBar.ets` 的 `AppTopBar`，上述组件与三处内联 header 各自订阅 `themeTopBarBackground`/`themeTopBarBlurRadius` 的写法已不存在。）
 
 **与上游的差异**（已写进对照表 A17/A30/A31 三行）
 
@@ -1121,7 +1121,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 **踩坑**
 
-1. `ThemeSettingsPage.ets` 的头部是**页面内联写的**（不是 `CollapsingSettingsHeader` 组件），第一版漏改，导致 `topBarOpacity` 改了但截图 `ImageChops` changed 为 0。补三处内联 header（`HomePage`/`SearchPage`/`ThemeSettingsPage`）后才生效——**改广播式主题键时，要先把所有消费点找全，组件与内联两套都要覆盖**。
+1. `ThemeSettingsPage.ets` 的头部当时是**页面内联写的**（不是 `CollapsingSettingsHeader` 组件；该页自 r343 起已改用 `CollapsingSettingsHeader`，`pages/ThemeSettingsPage.ets:458`），第一版漏改，导致 `topBarOpacity` 改了但截图 `ImageChops` changed 为 0。补三处内联 header（`HomePage`/`SearchPage`/`ThemeSettingsPage`）后才生效——**改广播式主题键时，要先把所有消费点找全，组件与内联两套都要覆盖**。
 2. `uitest uiInput swipe` 拖 Slider 必须从轨道内起手且距离适中：`swipe 120 y 1100 y 700` 无效，`swipe 200 y 400 y 800` 才落到滑块上。
 3. `uitest uiInput click` 落在 Toggle 上偶发第一次无效（r308 的「关闭设置分组圆角」也是第二次才生效），一律以 prefs 变值为准。
 
