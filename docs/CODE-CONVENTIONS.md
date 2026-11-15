@@ -114,7 +114,7 @@
 
 **规则**：用脚本整份重写文件时，`newline` 必须与原文件一致；改成别的换行符会让 git 把整份文件判成重写。
 
-**为什么**：本仓库 `.ets` 实测 **42 个 CRLF / 87 个 LF** 混用，`core.autocrlf=true`，`README.md` 本身就是 CRLF。编辑器匹配时把 CRLF 与 LF 视为相同、写回时保留原样（已用 CRLF 探针文件验证）；脚本没有这层保护。
+**为什么**：本仓库 `.ets` 实测 **71 个 CRLF / 137 个 LF** 混用（共 208 个文件），`core.autocrlf=true`，`README.md` 本身就是 CRLF。编辑器匹配时把 CRLF 与 LF 视为相同、写回时保留原样（已用 CRLF 探针文件验证）；脚本没有这层保护。
 
 **检查方法**：脚本改写后看 `git diff --stat`，行数等于整份文件行数就是换行符被改了。
 
@@ -149,4 +149,52 @@
 **何时才合成**：只有「必须精确构造一种畸形输入」时才造——缺正文的占位书、单条 `bookshelf.json` 的备份 ZIP、坏编码、超长单章、空数组与 `null` 边界。造出来的样本要在验收说明里写明它测的是哪个边界，不能用它替代真实数据的往返。
 
 **交付时怎么交代**：验收记录里写清用了哪一份（文件名 + 本数/条数），真实材料没覆盖到的部分如实写「未验」，不要用合成样本的结果补齐。
+
+## 八、跨页面共享的新状态进 @ObservedV2 Store，不再加 @Prop
+
+**规则**：新写的跨页面共享状态，一律做成 `@ObservedV2` 单例 Store（类里字段用 `@Trace`），页面通过普通成员读取，**不再往 `pages/Index.ets` 加 `@State`、往页面加 `@Prop`**。存量不动。
+
+**为什么**：现在是属性下钻——`@Prop` 全仓 783 个，`pages/Index.ets` 10,189 行、49 个页面组件被挂载（52 处调用）、传参键合计 1,729 个，其中 `ReaderSettingsPage` 一个页面被挂了四份（`:8351` / `:9140` / `:9519` / `:9816`，合计 1,200 行）。每加一个功能都要动同一个文件，边际成本落在它的行数上。结构的完整分析与改动量估算见[架构说明](ARCHITECTURE.md)第七节。
+
+**怎么写（最简单的一条路）**：
+
+```ets
+// data/XxxStore.ets
+import { AppStorageV2 } from '@kit.ArkUI';
+
+@ObservedV2
+export class XxxStore {
+  private static instance: XxxStore | undefined = undefined;
+
+  @Trace public playing: boolean = false;
+  @Trace public position: number = 0;
+
+  static get(): XxxStore {
+    if (XxxStore.instance === undefined) {
+      XxxStore.instance = AppStorageV2.connect(XxxStore, 'xxxStore', () => new XxxStore()) as XxxStore;
+    }
+    return XxxStore.instance;
+  }
+}
+```
+
+页面里当普通成员用，**不要**给它加状态装饰器：
+
+```ets
+@Component
+export struct XxxPage {
+  private store: XxxStore = XxxStore.get();  // 可以
+  // @State store: XxxStore = new XxxStore();  // 编译报错
+}
+```
+
+**三条会踩的坑**（依据官方《状态管理V1和V2混用指导》，页面更新于 2026-11-10）：
+
+1. `@ObservedV2` 装饰的类**不能**塞进 `@State` / `@Prop` / `@Link` 等 V1 装饰器，编译报错。靠继承绕也不行——`class Sub extends ObservedV2Class` 再做 `@State` 是运行时报错。
+2. `@ObservedV2` 只能装饰 class，不能装饰 struct；`@Trace` 只能装饰 `@ObservedV2` 类里的属性，不能用在 struct 里。
+3. `@Trace` **不支持 Function 类型**——把回调存进 `@Trace` 字段，改它不会触发刷新。回调照旧用普通字段或参数传。
+
+**第一个 Store 落地时先做五分钟验证**：写一个 `@ObservedV2` 计数器，在 `@Component` 里 `Text(String(this.store.count))` + 按钮 `this.store.count++`，确认数字会变。官方原文说会，本仓库也还没有先例（`@ObservedV2`/`@Trace` 全仓 0 处）；不变就说明这条路径在这台设备的运行时上不成立，停下来重新评估，不要硬推。（基线已由 `97c653b` 抬到 `6.0.0(20)`，`UIUtils.enableV2Compatibility` / `makeV1Observed` 因此可用；本节仍推荐普通成员写法，因为它不依赖任何兼容层。）
+
+**存量怎么处理**：不主动改。只在新功能里用新写法；哪天要动某个存量页面，顺手把它那部分状态收进 store，不要为改而改。
 

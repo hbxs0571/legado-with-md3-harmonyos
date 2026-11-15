@@ -14,6 +14,7 @@
 | 已知问题与验收边界 | [已知问题](KNOWN-ISSUES.md) |
 | 模块入口与责任范围 | [模块概览](MODULES.md) |
 | 本地与上游的结构差异、为什么不重构 | [架构说明](ARCHITECTURE.md) |
+| Compose 与 ArkUI 的语义差异、照着上游搬代码时的替换规则 | [Compose 与 ArkUI 语义对照](COMPOSE-ARKUI-MAP.md) |
 | 本地阅读行为 | [阅读模块](READER.md) |
 | Android ZIP 兼容范围 | [备份恢复](BACKUP-RESTORE.md) |
 | ZIP 兼容度总账与盘点方法 | [ZIP 兼容总账](parity/STATUS.md)、[对照关键词](parity/KEYWORDS.md) |
