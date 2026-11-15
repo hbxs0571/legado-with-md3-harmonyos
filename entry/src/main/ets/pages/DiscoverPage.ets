@@ -1,6 +1,10 @@
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const DISCOVER_MENU_WIDTH: number = 260;
 
 interface DiscoverSourceDemo {
   name: string;
@@ -25,6 +29,7 @@ export struct DiscoverPage {
   @State searchQuery: string = '';
   @State showExploreContent: boolean = false;
   @State collapsedHeader: boolean = false;
+  @State groupVisible: boolean = false;
   private discoverScroller: Scroller = new Scroller();
   @State expandedSourceName: string = '';
   @State selectedGroup: string = '';
@@ -74,26 +79,38 @@ export struct DiscoverPage {
       }
     })
     TopBarButton({ icon: 'more', menuMode: true })
-      .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
+      .onClick(() => { this.groupVisible = !this.groupVisible; })
+      .bindPopup(this.groupVisible, {
+        builder: this.GroupMenu,
+        placement: Placement.BottomRight,
+        popupColor: '#00000000',
+        enableArrow: false,
+        autoCancel: true,
+        width: DISCOVER_MENU_WIDTH,
+        onStateChange: (event: PopupStateChangeParam) => { this.groupVisible = event.isVisible; }
+      })
+  }
+
+  private groupMenuItems(): UiMenuItem[] {
+    // 探索内容态下上游不显示分组项，这里返回空数组让面板整块不出现。
+    if (this.showExploreContent) { return []; }
+    return this.groups.map((group: string): UiMenuItem => {
+      const picked: boolean = (group === '全部' && this.selectedGroup.length === 0) || this.selectedGroup === group;
+      return { key: group, title: group, selected: picked, icon: group === '全部' ? 'home' : 'tag' };
+    });
   }
 
   @Builder
   private GroupMenu() {
-    Menu() {
-      if (!this.showExploreContent) {
-        ForEach(this.groups, (group: string) => {
-          MenuItem({
-            startIcon: group === '全部' ? $r('app.media.app_group') : $r('app.media.app_label'),
-            content: group
-          })
-            .selected((group === '全部' && this.selectedGroup.length === 0) || this.selectedGroup === group)
-            .onClick(() => {
-              this.selectedGroup = group === '全部' ? '' : group;
-              this.expandedSourceName = '';
-            })
-        }, (group: string) => group)
+    UiMenuPanel({
+      items: this.groupMenuItems(),
+      panelWidth: DISCOVER_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.groupVisible = false;
+        this.selectedGroup = key === '全部' ? '' : key;
+        this.expandedSourceName = '';
       }
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    })
   }
 
   private getVisibleSources(): DiscoverSourceDemo[] {

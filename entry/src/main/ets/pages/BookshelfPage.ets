@@ -15,6 +15,8 @@ import { BookCover } from '../components/BookCover';
 import { BookGroupCard } from '../components/BookGroupCard';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
+import { UiSwitchControl } from '../components/UiSwitchControl';
 import { normalizeCustomColor } from '../data/CustomThemeColors';
 import { AppLog } from '../lib/AppLog';
 import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
@@ -28,6 +30,9 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import {
   PRIVATE_UNLOCK_EVERY_TIME, PrivateAccessRepository, isPrivateBook, requiresPrivateUnlock
 } from '../data/PrivateAccessRepository';
+
+/** 卡片式菜单的统一宽度，与详情页溢出菜单同口径。 */
+const SHELF_MENU_WIDTH: number = 260;
 
 /** 网格左右内边距，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
 const BOOKSHELF_GRID_PADDING: number = 8;
@@ -124,6 +129,13 @@ export struct BookshelfPage {
   /** 正在刷新目录的书主键集合（来自 Index），网格卡据此显示更新中转圈（:120）。 */
   @Prop refreshingBookIds: string[] = [];
   @State showLayoutSheet: boolean = false;
+  /** 五个卡片式菜单各自的显隐；每个挂载点一份，互不干扰。 */
+  @State sortMenuVisible: boolean = false;
+  @State groupFilterVisible: boolean = false;
+  @State groupManageMenuVisible: boolean = false;
+  @State selectionGroupVisible: boolean = false;
+  @State layoutMenuVisible: boolean = false;
+  @State moreMenuVisible: boolean = false;
   /** 布局面板编辑中的草稿；打开面板时从 layout 复制，确认后整体提交。 */
   @State layoutDraft: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
   @State @Watch('onBookshelfDataDirty') selectedFilter: string = '全部';
@@ -742,13 +754,22 @@ export struct BookshelfPage {
   /** 选择模式工具条里的「移动」菜单：列自定义分组再加「未分组」。 */
   @Builder
   private SelectionGroupMenu() {
-    Menu() {
-      ForEach(this.getGroupNames().filter((name: string) => name !== '全部'), (groupName: string) => {
-        MenuItem({ content: groupName === '本地未分组' ? '未分组' : groupName }).height(44)
-          .onClick(async () => { await this.moveSelectedToGroup(groupName); })
-      }, (groupName: string) => `sel_group_${groupName}`)
-    }.backgroundColor(this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)
-      .fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.selectionGroupItems(),
+      panelWidth: SHELF_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.selectionGroupVisible = false;
+        this.moveSelectedToGroup(key);
+      }
+    })
+  }
+
+  private selectionGroupItems(): UiMenuItem[] {
+    return this.getGroupNames()
+      .filter((name: string) => name !== '全部')
+      .map((groupName: string): UiMenuItem => {
+        return { key: groupName, title: groupName === '本地未分组' ? '未分组' : groupName };
+      });
   }
 
   /** 批量删除确认面板（:148 / :149）。 */
@@ -1106,12 +1127,20 @@ export struct BookshelfPage {
   /** 分组排序方式菜单，选项来自 BOOK_SORT_OPTIONS。 */
   @Builder
   private SortMenu() {
-    Menu() {
-      ForEach(BOOK_SORT_OPTIONS, (option: BookSortOption) => {
-        MenuItem({ content: option.label }).height(44)
-          .onClick(() => this.draftSort = option.value)
-      }, (option: BookSortOption) => `${option.value}`)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.sortMenuItems(),
+      panelWidth: SHELF_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.sortMenuVisible = false;
+        this.draftSort = Number(key);
+      }
+    })
+  }
+
+  private sortMenuItems(): UiMenuItem[] {
+    return BOOK_SORT_OPTIONS.map((option: BookSortOption): UiMenuItem => {
+      return { key: `${option.value}`, title: option.label, selected: option.value === this.draftSort };
+    });
   }
 
   @Builder
@@ -1129,15 +1158,26 @@ export struct BookshelfPage {
   /** 隐藏页签布局仍可从管理面板选择全部当前可用的分组筛选。 */
   @Builder
   private GroupFilterMenu() {
-    Menu() {
-      ForEach(this.getGroupNames(), (groupName: string) => {
-        MenuItem({ content: groupName === this.activeFilter() ? `✓ ${groupName}` : groupName }).height(44)
-          .onClick(async () => {
-            await this.selectGroup(groupName);
-            this.showGroupManager = false;
-          })
-      }, (groupName: string) => groupName)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.groupFilterItems(),
+      panelWidth: SHELF_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.groupFilterVisible = false;
+        this.selectGroupFromMenu(key);
+      }
+    })
+  }
+
+  private groupFilterItems(): UiMenuItem[] {
+    return this.getGroupNames().map((groupName: string): UiMenuItem => {
+      // 原来靠文案前面的勾表示当前分组，卡片式菜单改用右侧勾，文案保持干净。
+      return { key: groupName, title: groupName, selected: groupName === this.activeFilter() };
+    });
+  }
+
+  private async selectGroupFromMenu(groupName: string): Promise<void> {
+    await this.selectGroup(groupName);
+    this.showGroupManager = false;
   }
 
   /** 分组管理顶栏「＋」菜单（上游 GroupManageSheet.kt:150 的四项里，AI 自动分组
@@ -1149,24 +1189,42 @@ export struct BookshelfPage {
    *  让用户在里面录表达式。 */
   @Builder
   private GroupManageMoreMenu() {
-    Menu() {
-      MenuItem({ content: '新建分组' }).height(44)
-        .onClick(() => { this.openGroupEditor(undefined); })
-      MenuItem({ content: '添加标签匹配规则' }).height(44)
-        .onClick(() => {
-          const candidates = this.getUserGroups();
-          let target: BookGroup | undefined = this.groups.find((group: BookGroup) =>
-            group.groupId > 0 && group.groupName === this.activeFilter());
-          if (target === undefined && candidates.length > 0) { target = candidates[0]; }
-          if (target === undefined) {
-            this.onUnavailableAction('请先新建一个分组，再为它添加标签匹配规则');
-            return;
-          }
-          this.openGroupEditor(target);
-        })
-      MenuItem({ content: '同步标签分组' }).height(44)
-        .onClick(async () => { await this.onApplyTagGroupRules(); })
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.groupManageMenuItems(),
+      panelWidth: SHELF_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.groupManageMenuVisible = false;
+        this.onGroupManageMenuSelect(key);
+      }
+    })
+  }
+
+  private groupManageMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'new_group', title: '新建分组' },
+      { key: 'add_tag_rule', title: '添加标签匹配规则' },
+      { key: 'sync_tag_rule', title: '同步标签分组' }
+    ];
+  }
+
+  private onGroupManageMenuSelect(key: string): void {
+    if (key === 'new_group') {
+      this.openGroupEditor(undefined);
+      return;
+    }
+    if (key === 'sync_tag_rule') {
+      this.onApplyTagGroupRules();
+      return;
+    }
+    const candidates = this.getUserGroups();
+    let target: BookGroup | undefined = this.groups.find((group: BookGroup) =>
+      group.groupId > 0 && group.groupName === this.activeFilter());
+    if (target === undefined && candidates.length > 0) { target = candidates[0]; }
+    if (target === undefined) {
+      this.onUnavailableAction('请先新建一个分组，再为它添加标签匹配规则');
+      return;
+    }
+    this.openGroupEditor(target);
   }
 
   /** 分组管理：自适应网格卡片，对应上游 LazyVerticalGrid(GridCells.Adaptive(160.dp))。 */
@@ -1176,12 +1234,30 @@ export struct BookshelfPage {
       Row() {
         Text('分组管理').fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text('新建').fontSize(14).fontColor('#B9C8FF').padding(8)
-          .bindMenu(this.GroupManageMoreMenu())
+          .onClick(() => { this.groupManageMenuVisible = !this.groupManageMenuVisible; })
+          .bindPopup(this.groupManageMenuVisible, {
+            builder: this.GroupManageMoreMenu,
+            placement: Placement.Bottom,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: SHELF_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.groupManageMenuVisible = event.isVisible; }
+          })
         Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Row() {
         Text(`切换分组：${this.activeFilter()}`).fontSize(13).fontColor(this.themeColorAccent).layoutWeight(1)
-          .bindMenu(this.GroupFilterMenu())
+          .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
+          .bindPopup(this.groupFilterVisible, {
+            builder: this.GroupFilterMenu,
+            placement: Placement.Bottom,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: SHELF_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.groupFilterVisible = event.isVisible; }
+          })
       }.width('100%').padding({ left: 18, right: 18, bottom: 10 })
 
       if (this.getUserGroups().length === 0) {
@@ -1199,11 +1275,13 @@ export struct BookshelfPage {
                 Row() {
                   this.GroupCoverThumb(group, 40)
                   Blank()
-                  Toggle({ type: ToggleType.Switch, isOn: group.show })
-                    .onChange((visible: boolean) => {
+                  UiSwitchControl({
+                    checked: group.show,
+                    onChange: (visible: boolean) => {
                       this.onSetGroupVisible(group.groupId, visible);
                       if (!visible && this.selectedFilter === group.groupName) { this.selectedFilter = '全部'; }
-                    })
+                    }
+                  })
                 }.width('100%')
                 Text(group.groupName).fontSize(14).fontColor(this.themeColorTextPrimary).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1283,7 +1361,16 @@ export struct BookshelfPage {
           Row() {
             Text('排序方式').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
             Text(bookSortLabel(this.draftSort)).fontSize(14).fontColor(this.themeColorAccent)
-              .bindMenu(this.SortMenu())
+              .onClick(() => { this.sortMenuVisible = !this.sortMenuVisible; })
+              .bindPopup(this.sortMenuVisible, {
+                builder: this.SortMenu,
+                placement: Placement.Bottom,
+                popupColor: '#00000000',
+                enableArrow: false,
+                autoCancel: true,
+                width: SHELF_MENU_WIDTH,
+                onStateChange: (event: PopupStateChangeParam) => { this.sortMenuVisible = event.isVisible; }
+              })
           }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
 
           Row() {
@@ -1291,18 +1378,26 @@ export struct BookshelfPage {
               Text('下拉刷新').fontSize(14).fontColor(this.themeColorTextSecondary)
               Text('仅保存 Android 兼容字段；当前不控制实际更新').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.draftRefresh })
-              .onChange((enabled: boolean) => this.draftRefresh = enabled)
+            UiSwitchControl({
+              checked: this.draftRefresh,
+              interactive: false,
+              onChange: (enabled: boolean) => this.draftRefresh = enabled
+            })
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .onClick(() => this.draftRefresh = !this.draftRefresh)
 
           Row() {
             Column() {
               Text('私有分组').fontSize(14).fontColor(this.themeColorTextSecondary)
               Text('仅保存兼容标记；当前不限制跨分组显示').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.draftPrivate })
-              .onChange((enabled: boolean) => this.draftPrivate = enabled)
+            UiSwitchControl({
+              checked: this.draftPrivate,
+              interactive: false,
+              onChange: (enabled: boolean) => this.draftPrivate = enabled
+            })
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .onClick(() => this.draftPrivate = !this.draftPrivate)
 
           // 标签匹配规则（:249 / :250）：本地不另建独立规则面板，开关与多行输入框
           // 直接放在分组编辑面板里，对应上游 GroupEditSheet.kt:221-238。
@@ -1312,9 +1407,13 @@ export struct BookshelfPage {
               Text(this.draftRuleEnabled ? '启用后分组将根据书籍标签自动匹配' : '关闭后分组为手动管理')
                 .fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.draftRuleEnabled })
-              .onChange((enabled: boolean) => this.draftRuleEnabled = enabled)
+            UiSwitchControl({
+              checked: this.draftRuleEnabled,
+              interactive: false,
+              onChange: (enabled: boolean) => this.draftRuleEnabled = enabled
+            })
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .onClick(() => this.draftRuleEnabled = !this.draftRuleEnabled)
 
           if (this.draftRuleEnabled) {
             Column() {
@@ -1584,19 +1683,36 @@ export struct BookshelfPage {
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Text(bookshelfLayoutOptionLabel(options, current)).fontSize(14).fontColor(this.themeColorAccent)
-        .bindMenu(this.LayoutOptionsMenu(options, onPick))
+        .onClick(() => { this.layoutMenuVisible = !this.layoutMenuVisible; })
+        .bindPopup(this.layoutMenuVisible, {
+          builder: () => { this.LayoutOptionsMenu(options, current, onPick) },
+          placement: Placement.Bottom,
+          popupColor: '#00000000',
+          enableArrow: false,
+          autoCancel: true,
+          width: SHELF_MENU_WIDTH,
+          onStateChange: (event: PopupStateChangeParam) => { this.layoutMenuVisible = event.isVisible; }
+        })
     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
 
   /** 枚举项菜单；ArkTS 不允许 bindMenu 传对象字面量数组，统一用 Builder 生成。 */
   @Builder
-  private LayoutOptionsMenu(options: BookshelfLayoutOption[], onPick: (value: number) => void) {
-    Menu() {
-      ForEach(options, (option: BookshelfLayoutOption) => {
-        MenuItem({ content: option.label }).height(44)
-          .onClick(() => onPick(option.value))
-      }, (option: BookshelfLayoutOption) => `${option.value}_${option.label}`)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+  private LayoutOptionsMenu(options: BookshelfLayoutOption[], current: number, onPick: (value: number) => void) {
+    UiMenuPanel({
+      items: this.layoutOptionItems(options, current),
+      panelWidth: SHELF_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.layoutMenuVisible = false;
+        onPick(Number(key));
+      }
+    })
+  }
+
+  private layoutOptionItems(options: BookshelfLayoutOption[], current: number): UiMenuItem[] {
+    return options.map((option: BookshelfLayoutOption): UiMenuItem => {
+      return { key: `${option.value}`, title: option.label, selected: option.value === current };
+    });
   }
 
   /** 开关行。 */
@@ -1609,9 +1725,14 @@ export struct BookshelfPage {
           Text(description).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: isOn })
-        .onChange((value: boolean) => onToggle(value))
-    }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+      UiSwitchControl({
+        checked: isOn,
+        interactive: false,
+        onChange: (value: boolean) => onToggle(value)
+      })
+    }
+    .width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .onClick(() => onToggle(!isOn))
   }
 
   /** 数值行：用 -/+ 加减，避免滑块在小屏上难以精确点中。 */
@@ -2088,48 +2209,90 @@ export struct BookshelfPage {
 
   @Builder
   private MoreMenu() {
-    Menu() {
-      MenuItem({ startIcon: $r('app.media.menu_wifi'), content: '远程书籍' }).height(48)
-        .onClick(() => this.onUnavailableAction('远程书籍导入尚未迁移'))
-      MenuItem({ startIcon: $r('app.media.menu_save'), content: '添加本地' }).height(48)
-        .onClick(async () => {
-          // 多选后先进确认页（批 10 的 :555）——真正导入在 Index 的确认页回调里，
-          // 这里拿到的一定是 undefined，不再按返回值切分组。
-          // 解析整本正文 + 建目录 + 写库期间屏幕没有任何变化，用户会以为点漏了（:156）。
-          this.busyText = '正在导入，请稍候…';
-          try {
-            await this.onImportBook();
-          } finally {
-            // finally 不能省：导入抛异常时遮罩必须撤掉，否则书架永久卡在一层黑纱上。
-            this.busyText = '';
-          }
-        })
-      MenuItem({ startIcon: $r('app.media.app_refresh'), content: '更新目录' }).height(48)
-        .onClick(async () => {
-          this.busyText = '正在重新识别目录…';
-          try {
-            await this.onRefreshToc();
-          } finally {
-            this.busyText = '';
-          }
-        })
-      MenuItem({ startIcon: $r('app.media.menu_grid'), content: '布局设置' }).height(48)
-        .onClick(() => this.openLayoutSheet())
-      MenuItem({ startIcon: $r('app.media.menu_carousel'), content: '分组管理' }).height(48)
-        .onClick(() => this.showGroupManager = true)
-      MenuItem({ startIcon: $r('app.media.menu_link'), content: '添加网址' }).height(48)
-        .onClick(() => this.onUnavailableAction('网址导入尚未迁移'))
-      MenuItem({ startIcon: $r('app.media.app_pencil'), content: '选择模式' }).height(48)
-        .onClick(() => this.toggleSelectionMode())
-      MenuItem({ startIcon: $r('app.media.menu_bookmarks'), content: '书架管理' }).height(48)
-        .onClick(() => this.onOpenBookshelfManage(this.activeFilter()))
-      MenuItem({ startIcon: $r('app.media.menu_upload_file'), content: '导出书单' }).height(48)
-        .onClick(async () => { await this.exportBookList(); })
-      MenuItem({ startIcon: $r('app.media.app_cloud_download'), content: '导入书单' }).height(48)
-        .onClick(async () => { await this.importBookList(); })
-      MenuItem({ startIcon: $r('app.media.profile_history'), content: '日志' }).height(48)
-        .onClick(() => { this.logEntries = AppLog.getAll(); this.showLogSheet = true; })
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.moreMenuItems(),
+      panelWidth: SHELF_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.moreMenuVisible = false;
+        this.onMoreMenuSelect(key);
+      }
+    })
+  }
+
+  private moreMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'remote_book', title: '远程书籍', icon: 'cloud' },
+      { key: 'import_local', title: '添加本地', icon: 'profileSave' },
+      { key: 'refresh_toc', title: '更新目录', icon: 'profileRefresh' },
+      { key: 'layout', title: '布局设置', icon: 'list' },
+      { key: 'group_manage', title: '分组管理', icon: 'folder' },
+      { key: 'add_url', title: '添加网址', icon: 'web' },
+      { key: 'selection_mode', title: '选择模式', icon: 'edit' },
+      { key: 'shelf_manage', title: '书架管理', icon: 'bookmark' },
+      { key: 'export_list', title: '导出书单', icon: 'profileSave' },
+      { key: 'import_list', title: '导入书单', icon: 'cloudDownload' },
+      { key: 'log', title: '日志', icon: 'profileHistory' }
+    ];
+  }
+
+  private async onMoreMenuSelect(key: string): Promise<void> {
+    if (key === 'remote_book') {
+      this.onUnavailableAction('远程书籍导入尚未迁移');
+      return;
+    }
+    if (key === 'import_local') {
+      // 多选后先进确认页（批 10 的 :555）——真正导入在 Index 的确认页回调里。
+      // 解析整本正文 + 建目录 + 写库期间屏幕没有任何变化，用户会以为点漏了（:156）。
+      this.busyText = '正在导入，请稍候…';
+      try {
+        await this.onImportBook();
+      } finally {
+        // finally 不能省：导入抛异常时遮罩必须撤掉，否则书架永久卡在一层黑纱上。
+        this.busyText = '';
+      }
+      return;
+    }
+    if (key === 'refresh_toc') {
+      this.busyText = '正在重新识别目录…';
+      try {
+        await this.onRefreshToc();
+      } finally {
+        this.busyText = '';
+      }
+      return;
+    }
+    if (key === 'layout') {
+      this.openLayoutSheet();
+      return;
+    }
+    if (key === 'group_manage') {
+      this.showGroupManager = true;
+      return;
+    }
+    if (key === 'add_url') {
+      this.onUnavailableAction('网址导入尚未迁移');
+      return;
+    }
+    if (key === 'selection_mode') {
+      this.toggleSelectionMode();
+      return;
+    }
+    if (key === 'shelf_manage') {
+      this.onOpenBookshelfManage(this.activeFilter());
+      return;
+    }
+    if (key === 'export_list') {
+      await this.exportBookList();
+      return;
+    }
+    if (key === 'import_list') {
+      await this.importBookList();
+      return;
+    }
+    if (key === 'log') {
+      this.logEntries = AppLog.getAll();
+      this.showLogSheet = true;
+    }
   }
 
   @Builder bookshelfTopActions() {
@@ -2155,7 +2318,18 @@ export struct BookshelfPage {
           this.onSearch();
         }
       }))
-      TopBarButton({ icon: 'more', menuMode: true }).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+      // menuMode: true 让 TopBarButton 不注册 onClick，点击交给外层 bindPopup。
+      TopBarButton({ icon: 'more', menuMode: true })
+        .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+        .bindPopup(this.moreMenuVisible, {
+          builder: this.MoreMenu,
+          placement: Placement.BottomRight,
+          popupColor: '#00000000',
+          enableArrow: false,
+          autoCancel: true,
+          width: SHELF_MENU_WIDTH,
+          onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
+        })
     }
   }
 
@@ -2209,14 +2383,32 @@ export struct BookshelfPage {
           if (this.layout.showBookshelfTabMenu) {
             Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'list', glyphSize: 18 }) }
               .width(34).height(34).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(17)
-              .bindMenu(this.GroupFilterMenu())
+              .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
+              .bindPopup(this.groupFilterVisible, {
+                builder: this.GroupFilterMenu,
+                placement: Placement.Bottom,
+                popupColor: '#00000000',
+                enableArrow: false,
+                autoCancel: true,
+                width: SHELF_MENU_WIDTH,
+                onStateChange: (event: PopupStateChangeParam) => { this.groupFilterVisible = event.isVisible; }
+              })
           }
         }.width('100%').padding({ left: 12, right: 12, bottom: 14 })
       } else {
         Row() {
           Text(`当前分组：${this.activeFilter()}`).fontSize(12).fontColor(this.themeColorTextTertiary).layoutWeight(1)
           Text('切换分组').fontSize(12).fontColor(this.themeColorAccent).padding(6)
-            .bindMenu(this.GroupFilterMenu())
+            .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
+            .bindPopup(this.groupFilterVisible, {
+              builder: this.GroupFilterMenu,
+              placement: Placement.Bottom,
+              popupColor: '#00000000',
+              enableArrow: false,
+              autoCancel: true,
+              width: SHELF_MENU_WIDTH,
+              onStateChange: (event: PopupStateChangeParam) => { this.groupFilterVisible = event.isVisible; }
+            })
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       }
       if (this.selectionMode) {
@@ -2229,7 +2421,16 @@ export struct BookshelfPage {
           Text('反选').fontSize(12).fontColor(this.themeColorAccent).padding(6)
             .onClick(() => this.invertVisibleSelection())
           Text('移动').fontSize(12).fontColor(this.themeColorAccent).padding(6)
-            .bindMenu(this.SelectionGroupMenu)
+            .onClick(() => { this.selectionGroupVisible = !this.selectionGroupVisible; })
+            .bindPopup(this.selectionGroupVisible, {
+              builder: this.SelectionGroupMenu,
+              placement: Placement.Bottom,
+              popupColor: '#00000000',
+              enableArrow: false,
+              autoCancel: true,
+              width: SHELF_MENU_WIDTH,
+              onStateChange: (event: PopupStateChangeParam) => { this.selectionGroupVisible = event.isVisible; }
+            })
           // 批量私密标记（:147）：上游的可见条件是「编辑态且已设过本地密码」，
           // 没密码时不显示，免得留一个点了只能弹「请先设置密码」的按钮。
           if (this.privateHasPassword) {

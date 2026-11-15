@@ -1,3 +1,5 @@
+import { UiSwitchControl } from '../components/UiSwitchControl';
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import curves from '@ohos.curves';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
@@ -13,6 +15,9 @@ import {
   CustomThemeSnapshot,
   normalizeCustomColor
 } from '../data/CustomThemeColors';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const CUSTOM_THEME_MENU_WIDTH: number = 260;
 
 /**
  * 自定义主题配色页，对应上游 `ui/config/customTheme/CustomThemeScreen.kt`（269 行）。
@@ -59,6 +64,12 @@ export struct CustomThemePage {
   /** 整份快照回调，对齐上游 `CustomThemeViewModel` 每次 intent 都写一次网关。 */
   onChange: (snapshot: CustomThemeSnapshot) => void = (_snapshot: CustomThemeSnapshot) => {};
   @State collapsedHeader: boolean = false;
+  // 下拉行共用一个卡片式菜单：点开前记住本行的选项与回调。
+  @State dropdownVisible: boolean = false;
+  // 当前点开的那一行有哪些选项（每行不同）。
+  @State pendingOptions: string[] = [];
+  // 当前点开的那一行的回调，只在渲染用不到，不需要观察。
+  private pendingPick: (value: string) => void = (_value: string) => {};
   /** 正在编辑的色位：-1 未开面板，0..5 是日间六项，6..11 是夜间六项。 */
   @State editingSlot: number = -1;
   /** 编辑面板里的 hex 文本（含 `#`）。 */
@@ -217,18 +228,27 @@ export struct CustomThemePage {
   }
 
   /**
-   * 下拉行：点开菜单选一项。
+   * 下拉行：点开卡片式菜单选一项。
    *
-   * 这里用 `bindMenu(Array<MenuElement>)` 而不是 `@Builder Menu`，因为选项是逐行不同的入参，
-   * 而 `@Builder` 无法按行参数化菜单内容（`ThemeSettingsDropdown` 那种单实例写法不适用）。
+   * 选项是逐行不同的入参，所以行自己保存 pending 的选项与回调，
+   * 菜单面板由行内 `bindPopup` 挂载（`UiMenuPanel` 只负责画与回传 key）。
    */
-  private dropdownElements(options: string[], onPick: (value: string) => void): MenuElement[] {
-    const elements: MenuElement[] = [];
-    for (let index = 0; index < options.length; index++) {
-      const option = options[index];
-      elements.push({ value: option, action: () => onPick(option) });
-    }
-    return elements;
+  private dropdownItems(): UiMenuItem[] {
+    return this.pendingOptions.map((option: string): UiMenuItem => {
+      return { key: option, title: option };
+    });
+  }
+
+  @Builder
+  private DropdownMenuPanel() {
+    UiMenuPanel({
+      items: this.dropdownItems(),
+      panelWidth: CUSTOM_THEME_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.dropdownVisible = false;
+        this.pendingPick(key);
+      }
+    })
   }
 
   @Builder
@@ -239,7 +259,21 @@ export struct CustomThemePage {
       Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
         .margin({ left: 4 })
     }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
-      .bindMenu(this.dropdownElements(options, onPick), { placement: Placement.Bottom })
+      .onClick(() => {
+        // 每行点开前把本行的选项与回调记下来，面板只读这份。
+        this.pendingOptions = options;
+        this.pendingPick = onPick;
+        this.dropdownVisible = !this.dropdownVisible;
+      })
+      .bindPopup(this.dropdownVisible, {
+        builder: this.DropdownMenuPanel,
+        placement: Placement.Bottom,
+        popupColor: '#00000000',
+        enableArrow: false,
+        autoCancel: true,
+        width: CUSTOM_THEME_MENU_WIDTH,
+        onStateChange: (event: PopupStateChangeParam) => { this.dropdownVisible = event.isVisible; }
+      })
   }
 
   build() {
@@ -258,13 +292,22 @@ export struct CustomThemePage {
                 Text('关闭后由种子色自动生成整套配色').fontSize(12)
                   .fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Toggle({ type: ToggleType.Switch, isOn: !this.customTheme.enableDeepPersonalization })
-                .onChange((enabled: boolean) => {
+              UiSwitchControl({
+                checked: !this.customTheme.enableDeepPersonalization,
+                interactive: false,
+                onChange: (enabled: boolean) => {
                   const snapshot = this.cloneSnapshot();
                   snapshot.enableDeepPersonalization = !enabled;
                   this.onChange(snapshot);
-                })
+                }
+              })
             }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
+              .onClick(() => {
+                // 上游 checked = !enableDeepPersonalization，取反关系必须保留。
+                const snapshot = this.cloneSnapshot();
+                snapshot.enableDeepPersonalization = !snapshot.enableDeepPersonalization;
+                this.onChange(snapshot);
+              })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 12 })
             .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary)
             .borderRadius(this.themeCardRadius)

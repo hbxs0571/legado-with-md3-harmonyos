@@ -1,3 +1,4 @@
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import curves from '@ohos.curves';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { UiSection } from '../components/settings/UiSection';
@@ -6,6 +7,9 @@ import { UiSwitch } from '../components/settings/UiSwitch';
 import { UiAction } from '../components/settings/UiAction';
 import { UiInput } from '../components/settings/UiInput';
 import { AppGlyph } from '../components/AppGlyph';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const OTHER_SETTINGS_MENU_WIDTH: number = 260;
 
 @Component
 export struct OtherSettingsPage {
@@ -46,6 +50,7 @@ export struct OtherSettingsPage {
   @State directDownloadRule: string = '';
   @State directRuleSummary: string = '';
   @State directCompress: boolean = false;
+  @State directLinkVisible: boolean = false;
   private settingsScroller: Scroller = new Scroller();
 
   private openBatteryGuide(): void {
@@ -160,16 +165,30 @@ export struct OtherSettingsPage {
       })
   }
 
+  private directLinkMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'import_default', title: '导入默认规则' },
+      { key: 'copy_rule', title: '拷贝规则' },
+      { key: 'paste_rule', title: '粘贴规则' }
+    ];
+  }
+
   @Builder
   private DirectLinkMenu() {
-    Menu() {
-      MenuItem({ content: '导入默认规则' }).height(48)
-        .onClick(() => this.onUnavailableAction('默认直链规则尚未接入'))
-      MenuItem({ content: '拷贝规则' }).height(48)
-        .onClick(() => this.onUnavailableAction('规则复制尚未接入'))
-      MenuItem({ content: '粘贴规则' }).height(48)
-        .onClick(() => this.onUnavailableAction('规则粘贴尚未接入'))
-    }.backgroundColor('#25262D').fontColor(this.themeColorTextPrimary).radius(16)
+    UiMenuPanel({
+      items: this.directLinkMenuItems(),
+      panelWidth: OTHER_SETTINGS_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.directLinkVisible = false;
+        if (key === 'import_default') {
+          this.onUnavailableAction('默认直链规则尚未接入');
+        } else if (key === 'copy_rule') {
+          this.onUnavailableAction('规则复制尚未接入');
+        } else if (key === 'paste_rule') {
+          this.onUnavailableAction('规则粘贴尚未接入');
+        }
+      }
+    })
   }
 
   @Builder
@@ -201,7 +220,16 @@ export struct OtherSettingsPage {
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
           }.width(40).height(40).backgroundColor('#25262D').borderRadius(20)
-            .bindMenu(this.DirectLinkMenu, { placement: Placement.Bottom })
+            .onClick(() => { this.directLinkVisible = !this.directLinkVisible; })
+            .bindPopup(this.directLinkVisible, {
+              builder: this.DirectLinkMenu,
+              placement: Placement.Bottom,
+              popupColor: '#00000000',
+              enableArrow: false,
+              autoCancel: true,
+              width: OTHER_SETTINGS_MENU_WIDTH,
+              onStateChange: (event: PopupStateChangeParam) => { this.directLinkVisible = event.isVisible; }
+            })
         }.width('100%').padding({ left: 18, right: 14, top: 8, bottom: 14 })
         Scroll() {
           Column() {

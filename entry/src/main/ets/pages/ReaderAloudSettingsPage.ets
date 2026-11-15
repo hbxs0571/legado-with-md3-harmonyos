@@ -1,3 +1,5 @@
+import { UiSwitchControl } from '../components/UiSwitchControl';
+
 @Component
 export struct ReaderAloudSettingsPage {
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
@@ -135,13 +137,20 @@ export struct ReaderAloudSettingsPage {
                 Text('语速由系统朗读服务控制').fontSize(10).fontColor('#AEB0B9').margin({ top: 3 })
               }
               .layoutWeight(1)
-              Toggle({ type: ToggleType.Switch, isOn: this.followSystem })
-                .onChange((value: boolean) => {
+              UiSwitchControl({
+                checked: this.followSystem,
+                interactive: false,
+                onChange: (value: boolean) => {
                   this.followSystem = value
                   this.onUnavailableAction('朗读系统设置尚未迁移')
-                })
+                }
+              })
             }
             .padding(13)
+              .onClick(() => {
+                this.followSystem = !this.followSystem
+                this.onUnavailableAction('朗读系统设置尚未迁移')
+              })
             .backgroundColor('#202127')
             .borderRadius(14)
             .margin({ left: 14, right: 14, bottom: 10 })

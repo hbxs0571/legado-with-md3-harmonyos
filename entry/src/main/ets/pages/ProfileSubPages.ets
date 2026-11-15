@@ -25,9 +25,15 @@ import { ReadRecordDetail, ReadRecordSession, ReadRecordSummary, ReadTimeRecord 
 import { ReadRecordRepository } from '../data/ReadRecordRepository';
 import { TxtTocRule } from '../model/TxtTocRule';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
+import { UiSwitchControl } from '../components/UiSwitchControl';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const PROFILE_MENU_WIDTH: number = 260;
 
 @Component
 export struct BookSourceManagePage {
+  @State moreMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -57,27 +63,59 @@ export struct BookSourceManagePage {
 
   @Builder
   private MoreMenu() {
-    Menu() {
-      MenuItem({ content: '分组管理' }).onClick(() =>
-        this.onUnavailableAction('书源分组管理尚未迁移，未修改分组'))
-      MenuItem({ content: '本地导入' }).onClick(() =>
-        this.onUnavailableAction('书源本地导入尚未迁移，未导入数据'))
-      MenuItem({ content: '二维码导入' }).onClick(() =>
-        this.onUnavailableAction('书源二维码导入尚未迁移，未导入数据'))
-      MenuItem({ content: '在线导入' }).onClick(() =>
-        this.onUnavailableAction('书源在线导入尚未迁移，未导入数据'))
-      MenuItem({ content: this.groupByDomain ? '取消按域名分组' : '按域名分组' })
-        .onClick(() => this.groupByDomain = !this.groupByDomain)
-      MenuItem({ content: '手动排序' }).onClick(() => this.sortMode = '手动排序')
-      MenuItem({ content: '权重排序' }).onClick(() => this.sortMode = '权重排序')
-      MenuItem({ content: '名称排序' }).onClick(() => this.sortMode = '名称排序')
-      MenuItem({ content: 'URL 排序' }).onClick(() => this.sortMode = 'URL 排序')
-      MenuItem({ content: '按更新时间排序' }).onClick(() => this.sortMode = '按更新时间排序')
-      MenuItem({ content: '按响应时间排序' }).onClick(() => this.sortMode = '按响应时间排序')
-      MenuItem({ content: '按启用状态排序' }).onClick(() => this.sortMode = '按启用状态排序')
-      MenuItem({ content: this.sortDescending ? '切换为升序' : '切换为降序' })
-        .onClick(() => this.sortDescending = !this.sortDescending)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.srcMoreItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.moreMenuVisible = false; this.onSrcMoreSelect(key); }
+    })
+  }
+
+  private srcMoreItems(): UiMenuItem[] {
+    return [
+      { key: 'groups', title: '分组管理' },
+      { key: 'import_local', title: '本地导入' },
+      { key: 'import_qrcode', title: '二维码导入' },
+      { key: 'import_online', title: '在线导入' },
+      { key: 'group_by_domain', title: this.groupByDomain ? '取消按域名分组' : '按域名分组' },
+      { key: 'sort_manual', title: '手动排序', selected: this.sortMode === '手动排序' },
+      { key: 'sort_weight', title: '权重排序', selected: this.sortMode === '权重排序' },
+      { key: 'sort_name', title: '名称排序', selected: this.sortMode === '名称排序' },
+      { key: 'sort_url', title: 'URL 排序', selected: this.sortMode === 'URL 排序' },
+      { key: 'sort_update', title: '按更新时间排序', selected: this.sortMode === '按更新时间排序' },
+      { key: 'sort_response', title: '按响应时间排序', selected: this.sortMode === '按响应时间排序' },
+      { key: 'sort_enabled', title: '按启用状态排序', selected: this.sortMode === '按启用状态排序' },
+      { key: 'descending', title: this.sortDescending ? '切换为升序' : '切换为降序' }
+    ];
+  }
+
+  private onSrcMoreSelect(key: string): void {
+    if (key === 'groups') {
+      this.onUnavailableAction('书源分组管理尚未迁移，未修改分组');
+    } else if (key === 'import_local') {
+      this.onUnavailableAction('书源本地导入尚未迁移，未导入数据');
+    } else if (key === 'import_qrcode') {
+      this.onUnavailableAction('书源二维码导入尚未迁移，未导入数据');
+    } else if (key === 'import_online') {
+      this.onUnavailableAction('书源在线导入尚未迁移，未导入数据');
+    } else if (key === 'group_by_domain') {
+      this.groupByDomain = !this.groupByDomain;
+    } else if (key === 'sort_manual') {
+      this.sortMode = '手动排序';
+    } else if (key === 'sort_weight') {
+      this.sortMode = '权重排序';
+    } else if (key === 'sort_name') {
+      this.sortMode = '名称排序';
+    } else if (key === 'sort_url') {
+      this.sortMode = 'URL 排序';
+    } else if (key === 'sort_update') {
+      this.sortMode = '按更新时间排序';
+    } else if (key === 'sort_response') {
+      this.sortMode = '按响应时间排序';
+    } else if (key === 'sort_enabled') {
+      this.sortMode = '按启用状态排序';
+    } else if (key === 'descending') {
+      this.sortDescending = !this.sortDescending;
+    }
   }
 
   @Builder
@@ -142,7 +180,17 @@ export struct BookSourceManagePage {
         Stack({ alignContent: Alignment.Center }) {
           Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
           AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+        }.width(40).height(40)
+          .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+.bindPopup(this.moreMenuVisible, {
+  builder: this.MoreMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
+})
       }.width('100%').padding({ left: 12, right: 12, top: 11, bottom: 9 })
 
       if (this.showSearch) {
@@ -192,8 +240,11 @@ export struct BookSourceManagePage {
 
 @Component
 export struct ReplaceRulesPage {
+  @State replaceRuleMenuVisible: boolean = false;
+  @State ruleRowMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
@@ -278,44 +329,77 @@ export struct ReplaceRulesPage {
 
   @Builder
   private ReplaceRuleMenu() {
-    Menu() {
-      MenuItem({ content: '导入' })
-        .onClick(() => this.ruleActionSheet = 'import')
-      MenuItem({ content: '导出' })
-        .onClick(() => this.onExportRules(this.filteredReplaceRules()))
-      MenuItem({ content: '分组管理' })
-        .onClick(() => this.ruleActionSheet = 'groups')
-      MenuItem({ content: '选择模式' })
-        .onClick(() => {
-          if (this.selectionMode) {
-            this.exitSelection();
-          } else {
-            this.selectionMode = true;
-            this.selectedRuleIds = [];
-          }
-        })
-      MenuItem({ content: '旧的在前' })
-        .onClick(() => this.onSortModeChange('asc'))
-      MenuItem({ content: '新的在前' })
-        .onClick(() => this.onSortModeChange('desc'))
-      MenuItem({ content: '名称升序' })
-        .onClick(() => this.onSortModeChange('name_asc'))
-      MenuItem({ content: '名称降序' })
-        .onClick(() => this.onSortModeChange('name_desc'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.replaceMenuItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.replaceRuleMenuVisible = false; this.onReplaceMenuSelect(key); }
+    })
+  }
+
+  private replaceMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'import', title: '导入' },
+      { key: 'export', title: '导出' },
+      { key: 'groups', title: '分组管理' },
+      { key: 'selection', title: '选择模式' },
+      { key: 'sort_asc', title: '旧的在前' },
+      { key: 'sort_desc', title: '新的在前' },
+      { key: 'sort_name_asc', title: '名称升序' },
+      { key: 'sort_name_desc', title: '名称降序' }
+    ];
+  }
+
+  private onReplaceMenuSelect(key: string): void {
+    if (key === 'import') {
+      this.ruleActionSheet = 'import';
+    } else if (key === 'export') {
+      this.onExportRules(this.filteredReplaceRules());
+    } else if (key === 'groups') {
+      this.ruleActionSheet = 'groups';
+    } else if (key === 'selection') {
+      if (this.selectionMode) {
+        this.exitSelection();
+      } else {
+        this.selectionMode = true;
+        this.selectedRuleIds = [];
+      }
+    } else if (key === 'sort_asc') {
+      this.onSortModeChange('asc');
+    } else if (key === 'sort_desc') {
+      this.onSortModeChange('desc');
+    } else if (key === 'sort_name_asc') {
+      this.onSortModeChange('name_asc');
+    } else if (key === 'sort_name_desc') {
+      this.onSortModeChange('name_desc');
+    }
   }
 
   /** 规则条目长按菜单：置顶、置底、删除（与上游条目下拉的三项一致）。 */
   @Builder
   private RuleRowMenu(rule: ReplaceRule) {
-    Menu() {
-      MenuItem({ content: '置顶' })
-        .onClick(() => this.onMoveRule(rule.id, true))
-      MenuItem({ content: '置底' })
-        .onClick(() => this.onMoveRule(rule.id, false))
-      MenuItem({ content: '删除' })
-        .onClick(() => this.requestDelete([rule.id]))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.replaceRowItems(rule),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.ruleRowMenuVisible = false; this.onReplaceRowSelect(rule, key); }
+    })
+  }
+
+  private replaceRowItems(_rule: ReplaceRule): UiMenuItem[] {
+    return [
+      { key: 'top', title: '置顶' },
+      { key: 'bottom', title: '置底' },
+      { key: 'delete', title: '删除' }
+    ];
+  }
+
+  private onReplaceRowSelect(rule: ReplaceRule, key: string): void {
+    if (key === 'top') {
+      this.onMoveRule(rule.id, true);
+    } else if (key === 'bottom') {
+      this.onMoveRule(rule.id, false);
+    } else if (key === 'delete') {
+      this.requestDelete([rule.id]);
+    }
   }
 
   @Builder
@@ -554,9 +638,18 @@ export struct ReplaceRulesPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
-          .bindMenu(this.ReplaceRuleMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.replaceRuleMenuVisible = !this.replaceRuleMenuVisible; })
+.bindPopup(this.replaceRuleMenuVisible, {
+  builder: this.ReplaceRuleMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.replaceRuleMenuVisible = event.isVisible; }
+})
       }.width('100%').height(40).padding({ left: 11, right: 12 })
-        .margin({ top: -8 })
+        .margin({ top: this.appTopInset - 8 })
 
       Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '替换净化')
         .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
@@ -613,13 +706,24 @@ export struct ReplaceRulesPage {
                     .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                 if (!this.selectionMode) {
-                  Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
-                    .onChange((enabled: boolean) => this.onToggleRule(rule.id, enabled))
+                  UiSwitchControl({
+                    checked: rule.isEnabled,
+                    onChange: (enabled: boolean) => this.onToggleRule(rule.id, enabled)
+                  })
                   // 长按手势留给拖拽排序，条目操作改由「更多」图标触发，与上游条目右侧的更多按钮一致。
                   Stack({ alignContent: Alignment.Center }) {
                     AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary })
                   }.width(32).height(32).margin({ left: 4 })
-                    .bindMenu(this.RuleRowMenu(rule), { placement: Placement.BottomRight })
+                    .onClick(() => { this.ruleRowMenuVisible = !this.ruleRowMenuVisible; })
+.bindPopup(this.ruleRowMenuVisible, {
+  builder: () => { this.RuleRowMenu(rule) },
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.ruleRowMenuVisible = event.isVisible; }
+})
                 }
               }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
                 .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
@@ -683,8 +787,11 @@ export struct ReplaceRulesPage {
 
 @Component
 export struct ReplaceRuleEditPage {
+  @State ruleActionsMenuVisible: boolean = false;
+  @State groupMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
@@ -776,14 +883,29 @@ export struct ReplaceRuleEditPage {
 
   @Builder
   private RuleActionsMenu() {
-    Menu() {
-      MenuItem({ content: '拷贝规则' })
-        .onClick(() => this.copyRule())
-      MenuItem({ content: '粘贴规则' })
-        .onClick(() => this.showPasteAuthorization = true)
-      MenuItem({ content: '测试规则' })
-        .onClick(() => this.activeSheet = 'test')
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.replaceEditActionItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.ruleActionsMenuVisible = false; this.onReplaceEditActionSelect(key); }
+    })
+  }
+
+  private replaceEditActionItems(): UiMenuItem[] {
+    return [
+      { key: 'copy', title: '拷贝规则' },
+      { key: 'paste', title: '粘贴规则' },
+      { key: 'test', title: '测试规则' }
+    ];
+  }
+
+  private onReplaceEditActionSelect(key: string): void {
+    if (key === 'copy') {
+      this.copyRule();
+    } else if (key === 'paste') {
+      this.showPasteAuthorization = true;
+    } else if (key === 'test') {
+      this.activeSheet = 'test';
+    }
   }
 
   /**
@@ -854,14 +976,18 @@ export struct ReplaceRuleEditPage {
 
   @Builder
   private GroupMenu() {
-    Menu() {
-      MenuItem({ content: '默认' }).onClick(() => this.group = '默认')
-      ForEach(this.availableGroups(), (group: string) => {
-        if (group !== '默认') {
-          MenuItem({ content: group }).onClick(() => this.group = group)
-        }
-      }, (group: string) => group)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.groupMenuItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.groupMenuVisible = false; this.group = key; }
+    })
+  }
+
+  private groupMenuItems(): UiMenuItem[] {
+    return this.availableGroups().map((group: string) => {
+      const item: UiMenuItem = { key: group, title: group, selected: this.group === group };
+      return item;
+    });
   }
 
   private clipboardJson(): string {
@@ -1019,9 +1145,18 @@ export struct ReplaceRuleEditPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
-          .bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.ruleActionsMenuVisible = !this.ruleActionsMenuVisible; })
+.bindPopup(this.ruleActionsMenuVisible, {
+  builder: this.RuleActionsMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.ruleActionsMenuVisible = event.isVisible; }
+})
       }.width('100%').height(40).padding({ left: 11, right: 12 })
-        .margin({ top: -8 })
+        .margin({ top: this.appTopInset - 8 })
       Text(this.editingId > 0 ? '编辑替换' : '新建替换').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 14, right: 0, top: 12, bottom: 0 })
       Scroll() {
@@ -1042,7 +1177,16 @@ export struct ReplaceRuleEditPage {
               Row().width('calc(100% - 4vp)').height(1).backgroundColor('#898B94').margin({ left: 2, right: 2 })
             }.width('calc(100% - 40vp)').height(56).justifyContent(FlexAlign.Center)
               .backgroundColor('#24252C').borderRadius(8)
-              .bindMenu(this.GroupMenu, { placement: Placement.BottomRight })
+              .onClick(() => { this.groupMenuVisible = !this.groupMenuVisible; })
+.bindPopup(this.groupMenuVisible, {
+  builder: this.GroupMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.groupMenuVisible = event.isVisible; }
+})
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileSettings', glyphSize: 20, tint: this.themeColorTextSecondary })
             }.width(48).height(56).onClick(() => { this.activeSheet = 'group'; })
@@ -1268,6 +1412,7 @@ export interface RuleListEntry {
 
 @Component
 struct RuleListBody {
+  @State rowMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -1296,14 +1441,29 @@ struct RuleListBody {
   /** 条目右侧「更多」菜单：置顶、置底、删除，与上游条目下拉三项一致。 */
   @Builder
   private RowMenu(rule: RuleListEntry) {
-    Menu() {
-      MenuItem({ content: '置顶' })
-        .onClick(() => this.onMoveToEdge(rule.id, true))
-      MenuItem({ content: '置底' })
-        .onClick(() => this.onMoveToEdge(rule.id, false))
-      MenuItem({ content: '删除' })
-        .onClick(() => this.onDelete(rule.id))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.ruleListMenuItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.rowMenuVisible = false; this.onRuleListMenuSelect(rule, key); }
+    })
+  }
+
+  private ruleListMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'top', title: '置顶' },
+      { key: 'bottom', title: '置底' },
+      { key: 'delete', title: '删除' }
+    ];
+  }
+
+  private onRuleListMenuSelect(rule: RuleListEntry, key: string): void {
+    if (key === 'top') {
+      this.onMoveToEdge(rule.id, true);
+    } else if (key === 'bottom') {
+      this.onMoveToEdge(rule.id, false);
+    } else if (key === 'delete') {
+      this.onDelete(rule.id);
+    }
   }
 
   private visibleRules(): RuleListEntry[] {
@@ -1340,13 +1500,24 @@ struct RuleListBody {
                   .onClick(() => this.onMove(rule.id, 1))
               } else if (!this.selectionMode) {
                 // 开关、编辑与更多图标并排；key 里带上 enabled，避免 ArkUI 复用节点导致开关不刷新。
-                Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
-                  .onChange((enabled: boolean) => this.onEnabledChange(rule.id, enabled))
+                UiSwitchControl({
+                  checked: rule.enabled,
+                  onChange: (enabled: boolean) => this.onEnabledChange(rule.id, enabled)
+                })
                 AppGlyph({ name: 'edit', glyphSize: 18, tint: this.themeColorAccent }).margin({ left: 8 })
                 Stack({ alignContent: Alignment.Center }) {
                   AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary })
                 }.width(32).height(32).margin({ left: 4 })
-                  .bindMenu(this.RowMenu(rule), { placement: Placement.BottomRight })
+                  .onClick(() => { this.rowMenuVisible = !this.rowMenuVisible; })
+.bindPopup(this.rowMenuVisible, {
+  builder: () => { this.RowMenu(rule) },
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.rowMenuVisible = event.isVisible; }
+})
               }
             }.width('100%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
               .margin({ left: 16, right: 16, bottom: 8 })
@@ -1361,6 +1532,8 @@ struct RuleListBody {
 
 @Component
 export struct TxtTocRulesPage {
+  @State editMoreMenuVisible: boolean = false;
+  @State importMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -1615,31 +1788,60 @@ export struct TxtTocRulesPage {
 
   @Builder
   private ImportMenu() {
-    Menu() {
-      MenuItem({ content: '排序' }).onClick(() => this.sortMode = !this.sortMode)
-      MenuItem({ content: '选择模式' }).onClick(() => {
-        this.selectionMode = !this.selectionMode;
-        this.selectedRuleIds = [];
-      })
-      MenuItem({ content: '导入' })
-        .onClick(() => this.onImportRules())
-      MenuItem({ content: '导出' })
-        .onClick(() => this.onExportRules(this.sourceRules))
-      MenuItem({ content: '导入内置规则' })
-        .onClick(async () => {
-          await this.onImportBuiltin();
-        })
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.tocImportItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.importMenuVisible = false; this.onTocImportSelect(key); }
+    })
+  }
+
+  private tocImportItems(): UiMenuItem[] {
+    return [
+      { key: 'sort', title: '排序' },
+      { key: 'selection', title: '选择模式' },
+      { key: 'import', title: '导入' },
+      { key: 'export', title: '导出' },
+      { key: 'import_builtin', title: '导入内置规则' }
+    ];
+  }
+
+  private onTocImportSelect(key: string): void {
+    if (key === 'sort') {
+      this.sortMode = !this.sortMode;
+    } else if (key === 'selection') {
+      this.selectionMode = !this.selectionMode;
+      this.selectedRuleIds = [];
+    } else if (key === 'import') {
+      this.onImportRules();
+    } else if (key === 'export') {
+      this.onExportRules(this.sourceRules);
+    } else if (key === 'import_builtin') {
+      this.onImportBuiltin();
+    }
   }
 
   @Builder
   private EditMoreMenu() {
-    Menu() {
-      MenuItem({ content: '复制规则' })
-        .onClick(() => this.copyRuleToClipboard())
-      MenuItem({ content: '粘贴规则' })
-        .onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.tocEditMoreItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.editMoreMenuVisible = false; this.onTocEditMoreSelect(key); }
+    })
+  }
+
+  private tocEditMoreItems(): UiMenuItem[] {
+    return [
+      { key: 'copy', title: '复制规则' },
+      { key: 'paste', title: '粘贴规则' }
+    ];
+  }
+
+  private onTocEditMoreSelect(key: string): void {
+    if (key === 'copy') {
+      this.copyRuleToClipboard();
+    } else if (key === 'paste') {
+      this.showPasteAuthorization = true;
+    }
   }
 
   @Builder
@@ -1650,7 +1852,16 @@ export struct TxtTocRulesPage {
           .onClick(() => this.showAddRule = false)
         Text(this.editingExisting ? '编辑目录规则' : 'TXT 目录规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-          .bindMenu(this.EditMoreMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.editMoreMenuVisible = !this.editMoreMenuVisible; })
+.bindPopup(this.editMoreMenuVisible, {
+  builder: this.EditMoreMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.editMoreMenuVisible = event.isVisible; }
+})
       }.width('100%').padding({ left: 18, right: 16, top: 8, bottom: 12 })
       Scroll() {
         Column() {
@@ -1780,7 +1991,16 @@ export struct TxtTocRulesPage {
             if (!this.showSearch) { this.searchQuery = ''; }
           })
         AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary }).padding({ left: 6, right: 8 })
-          .bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.importMenuVisible = !this.importMenuVisible; })
+.bindPopup(this.importMenuVisible, {
+  builder: this.ImportMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.importMenuVisible = event.isVisible; }
+})
       }.width('100%').height(40).padding({ left: 18, right: 18 })
       Row() {
         Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : 'TXT 目录规则')
@@ -1931,8 +2151,11 @@ interface TxtRuleClipboardData {
 
 @Component
 export struct DictionaryRulesPage {
+  @State ruleEditorMenuVisible: boolean = false;
+  @State importMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
@@ -1957,10 +2180,26 @@ export struct DictionaryRulesPage {
 
   @Builder
   private RuleEditorMenu() {
-    Menu() {
-      MenuItem({ content: '复制规则' }).onClick(() => this.copyDictionaryRule())
-      MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.dictEditorMenuItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.ruleEditorMenuVisible = false; this.onDictEditorMenuSelect(key); }
+    })
+  }
+
+  private dictEditorMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'copy', title: '复制规则' },
+      { key: 'paste', title: '粘贴规则' }
+    ];
+  }
+
+  private onDictEditorMenuSelect(key: string): void {
+    if (key === 'copy') {
+      this.copyDictionaryRule();
+    } else if (key === 'paste') {
+      this.showPasteAuthorization = true;
+    }
   }
 
   private async copyDictionaryRule(): Promise<void> {
@@ -2044,7 +2283,17 @@ export struct DictionaryRulesPage {
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 19, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).bindMenu(this.RuleEditorMenu, { placement: Placement.BottomRight })
+                }.width(40).height(40)
+          .onClick(() => { this.ruleEditorMenuVisible = !this.ruleEditorMenuVisible; })
+.bindPopup(this.ruleEditorMenuVisible, {
+  builder: this.RuleEditorMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.ruleEditorMenuVisible = event.isVisible; }
+})
       }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
       Scroll() {
         Column() {
@@ -2071,15 +2320,30 @@ export struct DictionaryRulesPage {
 
   @Builder
   private ImportMenu() {
-    Menu() {
-      MenuItem({ content: '排序' }).onClick(() => this.sortMode = !this.sortMode)
-      MenuItem({ content: '选择模式' }).onClick(() => {
-        this.selectionMode = !this.selectionMode;
-        this.selectedRuleIds = [];
-      })
-      MenuItem({ content: '导入' })
-        .onClick(() => this.onUnavailableAction('字典规则导入尚未接入，未导入任何数据'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.dictImportItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.importMenuVisible = false; this.onDictImportSelect(key); }
+    })
+  }
+
+  private dictImportItems(): UiMenuItem[] {
+    return [
+      { key: 'sort', title: '排序' },
+      { key: 'selection', title: '选择模式' },
+      { key: 'import', title: '导入' }
+    ];
+  }
+
+  private onDictImportSelect(key: string): void {
+    if (key === 'sort') {
+      this.sortMode = !this.sortMode;
+    } else if (key === 'selection') {
+      this.selectionMode = !this.selectionMode;
+      this.selectedRuleIds = [];
+    } else if (key === 'import') {
+      this.onUnavailableAction('字典规则导入尚未接入，未导入任何数据');
+    }
   }
 
   private toggleSelectedRule(id: string): void {
@@ -2107,9 +2371,18 @@ export struct DictionaryRulesPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
-          .bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.importMenuVisible = !this.importMenuVisible; })
+.bindPopup(this.importMenuVisible, {
+  builder: this.ImportMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.importMenuVisible = event.isVisible; }
+})
       }.width('100%').height(40).padding({ left: 11, right: 12 })
-        .margin({ top: -8 })
+        .margin({ top: this.appTopInset - 8 })
 
       Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '字典规则')
         .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
@@ -2170,8 +2443,10 @@ interface DictionaryRuleClipboardData {
 
 @Component
 export struct DictionaryRuleEditPage {
+  @State ruleActionsMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
@@ -2187,10 +2462,26 @@ export struct DictionaryRuleEditPage {
 
   @Builder
   private RuleActionsMenu() {
-    Menu() {
-      MenuItem({ content: '复制规则' }).onClick(() => this.copyRule())
-      MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.dictEditActionItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.ruleActionsMenuVisible = false; this.onDictEditActionSelect(key); }
+    })
+  }
+
+  private dictEditActionItems(): UiMenuItem[] {
+    return [
+      { key: 'copy', title: '复制规则' },
+      { key: 'paste', title: '粘贴规则' }
+    ];
+  }
+
+  private onDictEditActionSelect(key: string): void {
+    if (key === 'copy') {
+      this.copyRule();
+    } else if (key === 'paste') {
+      this.showPasteAuthorization = true;
+    }
   }
 
   private clipboardJson(): string {
@@ -2284,8 +2575,18 @@ export struct DictionaryRuleEditPage {
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
-      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
+                }.width(40).height(40)
+          .onClick(() => { this.ruleActionsMenuVisible = !this.ruleActionsMenuVisible; })
+.bindPopup(this.ruleActionsMenuVisible, {
+  builder: this.RuleActionsMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.ruleActionsMenuVisible = event.isVisible; }
+})
+      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
       Text('字典规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 14, right: 0, top: 12 })
       Scroll() {
@@ -2312,8 +2613,11 @@ export struct DictionaryRuleEditPage {
 
 @Component
 export struct HighlightTagRulesPage {
+  @State tagEditorMenuVisible: boolean = false;
+  @State importMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
@@ -2338,15 +2642,30 @@ export struct HighlightTagRulesPage {
 
   @Builder
   private ImportMenu() {
-    Menu() {
-      MenuItem({ content: '排序' }).onClick(() => this.sortMode = !this.sortMode)
-      MenuItem({ content: '选择模式' }).onClick(() => {
-        this.selectionMode = !this.selectionMode;
-        this.selectedRuleIds = [];
-      })
-      MenuItem({ content: '导入' })
-        .onClick(() => this.onUnavailableAction('标签规则导入尚未接入，未导入任何数据'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.tagImportItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.importMenuVisible = false; this.onTagImportSelect(key); }
+    })
+  }
+
+  private tagImportItems(): UiMenuItem[] {
+    return [
+      { key: 'sort', title: '排序' },
+      { key: 'selection', title: '选择模式' },
+      { key: 'import', title: '导入' }
+    ];
+  }
+
+  private onTagImportSelect(key: string): void {
+    if (key === 'sort') {
+      this.sortMode = !this.sortMode;
+    } else if (key === 'selection') {
+      this.selectionMode = !this.selectionMode;
+      this.selectedRuleIds = [];
+    } else if (key === 'import') {
+      this.onUnavailableAction('标签规则导入尚未接入，未导入任何数据');
+    }
   }
 
   private toggleSelectedRule(id: string): void {
@@ -2356,10 +2675,26 @@ export struct HighlightTagRulesPage {
 
   @Builder
   private TagEditorMenu() {
-    Menu() {
-      MenuItem({ content: '复制规则' }).onClick(() => this.copyTagRule())
-      MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.tagEditorMenuItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.tagEditorMenuVisible = false; this.onTagEditorMenuSelect(key); }
+    })
+  }
+
+  private tagEditorMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'copy', title: '复制规则' },
+      { key: 'paste', title: '粘贴规则' }
+    ];
+  }
+
+  private onTagEditorMenuSelect(key: string): void {
+    if (key === 'copy') {
+      this.copyTagRule();
+    } else if (key === 'paste') {
+      this.showPasteAuthorization = true;
+    }
   }
 
   private async copyTagRule(): Promise<void> {
@@ -2419,7 +2754,17 @@ export struct HighlightTagRulesPage {
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 19, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).bindMenu(this.TagEditorMenu, { placement: Placement.BottomRight })
+                }.width(40).height(40)
+          .onClick(() => { this.tagEditorMenuVisible = !this.tagEditorMenuVisible; })
+.bindPopup(this.tagEditorMenuVisible, {
+  builder: this.TagEditorMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.tagEditorMenuVisible = event.isVisible; }
+})
       }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
       Scroll() {
         Column() {
@@ -2435,9 +2780,13 @@ export struct HighlightTagRulesPage {
             .onChange((value: string) => this.draftPattern = value)
           Row() {
             Text('已启用').fontSize(16).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.draftEnabled })
-              .onChange((value: boolean) => this.draftEnabled = value)
+            UiSwitchControl({
+              checked: this.draftEnabled,
+              interactive: false,
+              onChange: (value: boolean) => this.draftEnabled = value
+            })
           }.width('100%').padding({ top: 12, bottom: 12 })
+            .onClick(() => this.draftEnabled = !this.draftEnabled)
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 120 })
       }.layoutWeight(1).scrollBar(BarState.Off)
       Row() {
@@ -2474,8 +2823,18 @@ export struct HighlightTagRulesPage {
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).bindMenu(this.ImportMenu, { placement: Placement.BottomRight })
-      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
+                }.width(40).height(40)
+          .onClick(() => { this.importMenuVisible = !this.importMenuVisible; })
+.bindPopup(this.importMenuVisible, {
+  builder: this.ImportMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.importMenuVisible = event.isVisible; }
+})
+      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
 
       Text(this.selectionMode ? `已选择 ${this.selectedRuleIds.length} 项` : '标签规则')
         .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
@@ -2536,8 +2895,10 @@ interface HighlightTagRuleClipboardData {
 
 @Component
 export struct HighlightTagRuleEditPage {
+  @State ruleActionsMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
@@ -2553,10 +2914,26 @@ export struct HighlightTagRuleEditPage {
 
   @Builder
   private RuleActionsMenu() {
-    Menu() {
-      MenuItem({ content: '复制规则' }).onClick(() => this.copyRule())
-      MenuItem({ content: '粘贴规则' }).onClick(() => this.showPasteAuthorization = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.tagEditActionItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.ruleActionsMenuVisible = false; this.onTagEditActionSelect(key); }
+    })
+  }
+
+  private tagEditActionItems(): UiMenuItem[] {
+    return [
+      { key: 'copy', title: '复制规则' },
+      { key: 'paste', title: '粘贴规则' }
+    ];
+  }
+
+  private onTagEditActionSelect(key: string): void {
+    if (key === 'copy') {
+      this.copyRule();
+    } else if (key === 'paste') {
+      this.showPasteAuthorization = true;
+    }
   }
 
   private clipboardJson(): string {
@@ -2615,8 +2992,18 @@ export struct HighlightTagRuleEditPage {
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).bindMenu(this.RuleActionsMenu, { placement: Placement.BottomRight })
-      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
+                }.width(40).height(40)
+          .onClick(() => { this.ruleActionsMenuVisible = !this.ruleActionsMenuVisible; })
+.bindPopup(this.ruleActionsMenuVisible, {
+  builder: this.RuleActionsMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.ruleActionsMenuVisible = event.isVisible; }
+})
+      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
       Text('添加规则').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 14, right: 0, top: 12 })
       Scroll() {
@@ -2635,8 +3022,13 @@ export struct HighlightTagRuleEditPage {
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
           Row() {
             Text('已启用').fontSize(16).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.ruleEnabled }).onChange((value: boolean) => this.ruleEnabled = value)
+            UiSwitchControl({
+              checked: this.ruleEnabled,
+              interactive: false,
+              onChange: (value: boolean) => this.ruleEnabled = value
+            })
           }.width('100%').padding({ top: 8, bottom: 8 })
+            .onClick(() => this.ruleEnabled = !this.ruleEnabled)
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 140 })
           .layoutWeight(1)
       }.layoutWeight(1).scrollBar(BarState.Off)
@@ -2688,8 +3080,10 @@ const BOOKMARK_EMPTY_FACES: string[] = [
 
 @Component
 export struct AllBookmarksPage {
+  @State exportMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
@@ -2807,11 +3201,25 @@ export struct AllBookmarksPage {
   /** 书签导出菜单，对应上游 AllBookmarkScreen 的两项导出。 */
   @Builder
   private BookmarkExportMenu() {
-    Menu() {
-      MenuItem({ content: '导出为 JSON' }).height(44)
-        .onClick(() => this.onExportBookmarks(this.selectedBookKey, false))
-      MenuItem({ content: '导出为 Markdown' }).height(44)
-        .onClick(() => this.onExportBookmarks(this.selectedBookKey, true))
+    UiMenuPanel({
+      items: this.bookmarkExportItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.exportMenuVisible = false; this.onBookmarkExportSelect(key); }
+    })
+  }
+
+  private bookmarkExportItems(): UiMenuItem[] {
+    return [
+      { key: 'json', title: '导出为 JSON' },
+      { key: 'markdown', title: '导出为 Markdown' }
+    ];
+  }
+
+  private onBookmarkExportSelect(key: string): void {
+    if (key === 'json') {
+      this.onExportBookmarks(this.selectedBookKey, false);
+    } else if (key === 'markdown') {
+      this.onExportBookmarks(this.selectedBookKey, true);
     }
   }
 
@@ -2845,9 +3253,19 @@ export struct AllBookmarksPage {
           Stack({ alignContent: Alignment.Center }) {
             Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
             AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-          }.width(40).height(40).bindMenu(this.BookmarkExportMenu, { placement: Placement.BottomRight })
+          }.width(40).height(40)
+            .onClick(() => { this.exportMenuVisible = !this.exportMenuVisible; })
+.bindPopup(this.exportMenuVisible, {
+  builder: this.BookmarkExportMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.exportMenuVisible = event.isVisible; }
+})
         }
-      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
+      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
 
       Text(this.selectedBookKey.length === 0 ? '所有书签' : this.selectedBookTitle)
         .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
@@ -3019,6 +3437,7 @@ struct BookmarkEntryCard {
 export struct ReadRecordsPage {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
@@ -3581,7 +4000,7 @@ export struct ReadRecordsPage {
             AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40).onClick(() => this.showActionsSheet = true)
         }
-      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
+      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
 
       if (this.showSearch) {
         Row() {
@@ -3818,14 +4237,22 @@ export struct ReadRecordsPage {
         .padding({ left: 28, right: 28, top: 12, bottom: 16 })
       Row() {
         Text('本页不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.skipDeleteConfirmPageDraft })
-          .onChange((value: boolean) => { this.skipDeleteConfirmPageDraft = value; })
+        UiSwitchControl({
+          checked: this.skipDeleteConfirmPageDraft,
+          interactive: false,
+          onChange: (value: boolean) => { this.skipDeleteConfirmPageDraft = value; }
+        })
       }.width('100%').padding({ left: 28, right: 28, bottom: 8 })
+        .onClick(() => this.skipDeleteConfirmPageDraft = !this.skipDeleteConfirmPageDraft)
       Row() {
         Text('以后都不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.skipDeleteConfirmLongTermDraft })
-          .onChange((value: boolean) => { this.skipDeleteConfirmLongTermDraft = value; })
+        UiSwitchControl({
+          checked: this.skipDeleteConfirmLongTermDraft,
+          interactive: false,
+          onChange: (value: boolean) => { this.skipDeleteConfirmLongTermDraft = value; }
+        })
       }.width('100%').padding({ left: 28, right: 28, bottom: 16 })
+        .onClick(() => this.skipDeleteConfirmLongTermDraft = !this.skipDeleteConfirmLongTermDraft)
       Row() {
         Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
@@ -3904,8 +4331,10 @@ export struct ReadRecordsPage {
 
 @Component
 export struct CacheManagementPage {
+  @State cacheGroupMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
@@ -4021,12 +4450,18 @@ export struct CacheManagementPage {
 
   @Builder
   private CacheGroupMenu() {
-    Menu() {
-      ForEach(this.cacheGroupOptions(), (group: string) => {
-        MenuItem({ content: group, labelInfo: this.selectedCacheGroup === group ? '✓' : '' })
-          .onClick(() => this.selectedCacheGroup = group)
-      }, (group: string) => group)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.cacheGroupItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => { this.cacheGroupMenuVisible = false; this.selectedCacheGroup = key; }
+    })
+  }
+
+  private cacheGroupItems(): UiMenuItem[] {
+    return this.cacheGroupOptions().map((group: string) => {
+      const item: UiMenuItem = { key: group, title: group, selected: this.selectedCacheGroup === group };
+      return item;
+    });
   }
 
   build() {
@@ -4047,12 +4482,22 @@ export struct CacheManagementPage {
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'profileFilterAlt', glyphSize: 20, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).bindMenu(this.CacheGroupMenu, { placement: Placement.BottomRight })
+        }.width(40).height(40)
+          .onClick(() => { this.cacheGroupMenuVisible = !this.cacheGroupMenuVisible; })
+.bindPopup(this.cacheGroupMenuVisible, {
+  builder: this.CacheGroupMenu,
+  placement: Placement.BottomRight,
+  popupColor: '#00000000',
+  enableArrow: false,
+  autoCancel: true,
+  width: PROFILE_MENU_WIDTH,
+  onStateChange: (event: PopupStateChangeParam) => { this.cacheGroupMenuVisible = event.isVisible; }
+})
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'profileRefresh', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.refreshCacheStats())
-      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: -8 })
+      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
 
       Text('缓存管理').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 12, right: 18, top: 12 })

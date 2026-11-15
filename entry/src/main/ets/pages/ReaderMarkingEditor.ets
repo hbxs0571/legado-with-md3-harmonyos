@@ -1,7 +1,11 @@
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository, StyleResult } from '../data/ReaderMarkingRepository';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
+
+/** 标记编辑器的样式来源菜单宽度。 */
+const MARKING_MENU_WIDTH: number = 220;
 
 // 与上游 MarkingEffect 枚举一致（7 种），已删除本地独有的「双下划线」。
 // 两个数组按下标配对，增删必须同步。
@@ -240,6 +244,7 @@ export struct ReaderMarkingEditor {
    * 这样打开面板就能直接看到预选的效果与颜色，不会被规则列表盖住。
    */
   @State useRule: boolean = false;
+  @State styleSourceVisible: boolean = false;
   /** 当前选中的规则 id，空串表示未选。 */
   @State selectedRuleId: string = '';
   /** 可选的高亮规则快照，打开面板时异步载入。 */
@@ -392,15 +397,24 @@ export struct ReaderMarkingEditor {
     .margin({ top: 8 })
   }
 
-  /** 样式来源下拉；ArkTS 不允许 bindMenu 传对象字面量数组，统一用 Builder 生成。 */
+  /** 样式来源下拉：卡片式菜单，当前项右侧带勾。 */
+  private styleSourceItems(): UiMenuItem[] {
+    return [
+      { key: 'rule', title: '复用已有规则', selected: this.useRule },
+      { key: 'custom', title: '自定义样式', selected: !this.useRule }
+    ];
+  }
+
   @Builder
   private StyleSourceMenu() {
-    Menu() {
-      MenuItem({ content: '复用已有规则' }).height(44)
-        .onClick(() => this.useRule = true)
-      MenuItem({ content: '自定义样式' }).height(44)
-        .onClick(() => this.useRule = false)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.styleSourceItems(),
+      panelWidth: MARKING_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.styleSourceVisible = false;
+        this.useRule = key === 'rule';
+      }
+    })
   }
 
   build() {
@@ -429,7 +443,16 @@ export struct ReaderMarkingEditor {
               Text(this.useRule ? '复用已有规则' : '自定义样式')
                 .fontSize(13).fontColor(this.themeColorAccent)
                 .padding({ left: 8, right: 8, top: 5, bottom: 5 })
-                .bindMenu(this.StyleSourceMenu())
+                .onClick(() => { this.styleSourceVisible = !this.styleSourceVisible; })
+                .bindPopup(this.styleSourceVisible, {
+                  builder: this.StyleSourceMenu,
+                  placement: Placement.BottomRight,
+                  popupColor: '#00000000',
+                  enableArrow: false,
+                  autoCancel: true,
+                  width: MARKING_MENU_WIDTH,
+                  onStateChange: (event: PopupStateChangeParam) => { this.styleSourceVisible = event.isVisible; }
+                })
             }.width('100%').margin({ top: 10, bottom: 5 })
             if (this.useRule) {
               if (this.highlightRules.length === 0) {

@@ -1,8 +1,13 @@
+import { UiSwitchControl } from '../components/UiSwitchControl';
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { Book } from '../model/Book';
 import { AppGlyph } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { BookContentProcess, ContentProcessDisplayItem, toContentProcessDisplayItem } from '../model/BookContentProcess';
+
+/** 筛选菜单宽度。 */
+const REPLACE_FILTER_MENU_WIDTH: number = 220;
 
 /** 规则行高度（含 7dp 下间距），拖拽换位按这个步长判定。 */
 const RULE_ROW_HEIGHT: number = 67;
@@ -37,6 +42,7 @@ export struct ReaderTextProcessingSheet {
   /** 拖拽期间的规则 id 草稿顺序；空数组表示跟随 rules 原顺序。 */
   @State ruleOrderDraft: number[] = [];
   @State replaceFilter: string = '当前有效';
+  @State replaceFilterVisible: boolean = false;
   @State viewedProcess: ContentProcessDisplayItem | undefined = undefined;
   @State deleteProcess: ContentProcessDisplayItem | undefined = undefined;
   onClose: () => void = () => {};
@@ -57,14 +63,22 @@ export struct ReaderTextProcessingSheet {
     this.replaceFilter = '当前有效';
   }
 
+  private replaceFilterItems(): UiMenuItem[] {
+    return READER_REPLACE_FILTERS.map((filter: string): UiMenuItem => {
+      return { key: filter, title: filter, selected: filter === this.replaceFilter };
+    });
+  }
+
   @Builder
   private replaceFilterMenu() {
-    Menu() {
-      ForEach(READER_REPLACE_FILTERS, (filter: string) => {
-        MenuItem({ content: filter })
-          .onClick(() => this.replaceFilter = filter)
-      }, (filter: string) => filter)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(18)
+    UiMenuPanel({
+      items: this.replaceFilterItems(),
+      panelWidth: REPLACE_FILTER_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.replaceFilterVisible = false;
+        this.replaceFilter = key;
+      }
+    })
   }
 
   private openFullReplaceRules(): void {
@@ -186,8 +200,11 @@ export struct ReaderTextProcessingSheet {
               Text(this.replaceEnabled ? '按已启用规则处理正文' : '本书暂不应用替换规则')
                 .fontSize(11).fontColor('#999BA5').margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.replaceEnabled })
-              .onChange((enabled: boolean) => this.onReplaceEnabledChange(enabled))
+            UiSwitchControl({
+              checked: this.replaceEnabled,
+              interactive: false,
+              onChange: (enabled: boolean) => this.onReplaceEnabledChange(enabled)
+            })
             if (!this.replaceUsesDefault) {
               Text('使用默认').fontSize(11).fontColor('#B9C8FF').margin({ left: 8 })
                 .onClick(() => this.onReplaceResetToDefault())
@@ -211,7 +228,16 @@ export struct ReaderTextProcessingSheet {
             Text(this.replaceFilter).fontSize(12).fontColor(this.themeColorTextSecondary)
               .padding({ left: 12, right: 12, top: 12, bottom: 12 })
               .backgroundColor('#292A31').borderRadius(12)
-              .bindMenu(this.replaceFilterMenu, { placement: Placement.BottomRight })
+              .onClick(() => { this.replaceFilterVisible = !this.replaceFilterVisible; })
+              .bindPopup(this.replaceFilterVisible, {
+                builder: this.replaceFilterMenu,
+                placement: Placement.BottomRight,
+                popupColor: '#00000000',
+                enableArrow: false,
+                autoCancel: true,
+                width: REPLACE_FILTER_MENU_WIDTH,
+                onStateChange: (event: PopupStateChangeParam) => { this.replaceFilterVisible = event.isVisible; }
+              })
           }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
           Scroll() {
             Column() {
@@ -270,10 +296,14 @@ export struct ReaderTextProcessingSheet {
                       Text(`${rule.pattern} → ${rule.replacement}`).fontSize(11).fontColor('#999BA5')
                         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                    Toggle({ type: ToggleType.Switch, isOn: rule.isEnabled })
-                      .onChange((enabled: boolean) => this.onRuleEnabledChange(rule.id, enabled))
+                    UiSwitchControl({
+                      checked: rule.isEnabled,
+                      interactive: false,
+                      onChange: (enabled: boolean) => this.onRuleEnabledChange(rule.id, enabled)
+                    })
                   }.width('100%').padding({ left: 2, right: 12, top: 10, bottom: 10 })
                     .backgroundColor('#202127').borderRadius(10).margin({ bottom: 7 })
+                    .onClick(() => this.onRuleEnabledChange(rule.id, !rule.isEnabled))
                     // 停用态整行 alpha 0.38（上游 TextProcessingSheet 行禁用态口径）。
                     .opacity(rule.isEnabled ? 1 : 0.38)
                 }, (rule: ReplaceRule) => replaceRuleRowKey(rule))
@@ -308,8 +338,10 @@ export struct ReaderTextProcessingSheet {
                       Text(item.selectedText).fontSize(11).fontColor('#999BA5')
                         .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                    Toggle({ type: ToggleType.Switch, isOn: item.enabled })
-                      .onChange((enabled: boolean) => this.onContentProcessToggle(item.id, enabled))
+                    UiSwitchControl({
+                      checked: item.enabled,
+                      onChange: (enabled: boolean) => this.onContentProcessToggle(item.id, enabled)
+                    })
                     Text('删除').fontSize(11).fontColor('#E7A5AC').margin({ left: 10 })
                       .onClick(() => this.deleteProcess = item)
                   }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })

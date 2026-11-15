@@ -1,5 +1,9 @@
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton, TopBarBackButton } from '../components/TopBar';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const SUB_PAGES_MENU_WIDTH: number = 260;
 
 const SUBSCRIPTION_EMPTY_FACES: string[] = [
   '(；′⌒`)', '(つ﹏⊂)', '(•̀ᴗ•́)و', '(๑•́ ₃ •̀๑)', '(눈‸눈)', '(ಥ﹏ಥ)', '(｡•́︿•̀｡)'
@@ -61,23 +65,46 @@ struct SubscriptionListPage {
     this.faceIndex = (this.faceIndex + 1) % SUBSCRIPTION_EMPTY_FACES.length;
   }
 
+  private moreMenuItems(): UiMenuItem[] {
+    if (this.title === '规则') {
+      return [{ key: 'sort', title: '排序' }];
+    }
+    return [
+      { key: 'all', title: '全部' },
+      { key: 'add_group', title: '添加到分组' },
+      { key: 'remove_group', title: '从分组移除' },
+      { key: 'delete_selected_group', title: '删除所选分组' },
+      { key: 'delete_all', title: '删除全部' }
+    ];
+  }
+
   @Builder
   private MoreMenu() {
-    Menu() {
-      if (this.title === '规则') {
-        MenuItem({ content: '排序' }).onClick(() => this.onUnavailableAction('订阅规则排序尚未接入'))
-      } else {
-        MenuItem({ content: '全部' }).onClick(() => this.onUnavailableAction('收藏分组尚未接入'))
-        MenuItem({ content: '添加到分组' }).onClick(() => this.activeSheet = 'addGroup')
-        MenuItem({ content: '从分组移除' }).onClick(() => this.activeSheet = 'removeGroup')
-        MenuItem({ content: '删除所选分组' }).onClick(() => this.onUnavailableAction('收藏分组尚未接入'))
-        MenuItem({ content: '删除全部' }).onClick(() => this.onUnavailableAction('收藏数据尚未接入'))
+    UiMenuPanel({
+      items: this.moreMenuItems(),
+      panelWidth: SUB_PAGES_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.moreMenuVisible = false;
+        if (key === 'sort') {
+          this.onUnavailableAction('订阅规则排序尚未接入');
+        } else if (key === 'all') {
+          this.onUnavailableAction('收藏分组尚未接入');
+        } else if (key === 'add_group') {
+          this.activeSheet = 'addGroup';
+        } else if (key === 'remove_group') {
+          this.activeSheet = 'removeGroup';
+        } else if (key === 'delete_selected_group') {
+          this.onUnavailableAction('收藏分组尚未接入');
+        } else if (key === 'delete_all') {
+          this.onUnavailableAction('收藏数据尚未接入');
+        }
       }
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    })
   }
 
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @State collapsedHeader: boolean = false;
+  @State moreMenuVisible: boolean = false;
 
   @Builder subNavSlot() {
     TopBarBackButton({ onSelect: () => this.onBack() })
@@ -90,7 +117,16 @@ struct SubscriptionListPage {
       onSelect: () => { this.searchVisible = !this.searchVisible; }
     })
     TopBarButton({ icon: 'more', menuMode: true })
-      .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+      .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+      .bindPopup(this.moreMenuVisible, {
+        builder: this.MoreMenu,
+        placement: Placement.BottomRight,
+        popupColor: '#00000000',
+        enableArrow: false,
+        autoCancel: true,
+        width: SUB_PAGES_MENU_WIDTH,
+        onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
+      })
   }
 
   build() {
@@ -195,21 +231,41 @@ export struct SubscriptionSourceManagePage {
   @State searchVisible: boolean = false;
   @State searchText: string = '';
 
+  private moreMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'group_manage', title: '分组管理' },
+      { key: 'import_source', title: '导入订阅源' },
+      { key: 'all', title: '全部' },
+      { key: 'enabled', title: '已启用' },
+      { key: 'disabled', title: '已禁用' },
+      { key: 'need_login', title: '需登录' },
+      { key: 'ungrouped', title: '未分组' }
+    ];
+  }
+
   @Builder
   private MoreMenu() {
-    Menu() {
-      MenuItem({ content: '分组管理' }).onClick(() => this.onUnavailableAction('订阅源分组管理尚未迁移'))
-      MenuItem({ content: '导入订阅源' }).onClick(() => this.onUnavailableAction('订阅源导入尚未迁移'))
-      MenuItem({ content: '全部' }).onClick(() => this.onUnavailableAction('当前已显示全部订阅源'))
-      MenuItem({ content: '已启用' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
-      MenuItem({ content: '已禁用' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
-      MenuItem({ content: '需登录' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
-      MenuItem({ content: '未分组' }).onClick(() => this.onUnavailableAction('订阅源筛选尚未迁移'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    UiMenuPanel({
+      items: this.moreMenuItems(),
+      panelWidth: SUB_PAGES_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.moreMenuVisible = false;
+        if (key === 'group_manage') {
+          this.onUnavailableAction('订阅源分组管理尚未迁移');
+        } else if (key === 'import_source') {
+          this.onUnavailableAction('订阅源导入尚未迁移');
+        } else if (key === 'all') {
+          this.onUnavailableAction('当前已显示全部订阅源');
+        } else {
+          this.onUnavailableAction('订阅源筛选尚未迁移');
+        }
+      }
+    })
   }
 
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @State collapsedHeader: boolean = false;
+  @State moreMenuVisible: boolean = false;
 
   @Builder subNavSlot() {
     TopBarBackButton({ onSelect: () => this.onBack() })
@@ -222,7 +278,16 @@ export struct SubscriptionSourceManagePage {
       onSelect: () => { this.searchVisible = !this.searchVisible; }
     })
     TopBarButton({ icon: 'more', menuMode: true })
-      .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+      .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+      .bindPopup(this.moreMenuVisible, {
+        builder: this.MoreMenu,
+        placement: Placement.BottomRight,
+        popupColor: '#00000000',
+        enableArrow: false,
+        autoCancel: true,
+        width: SUB_PAGES_MENU_WIDTH,
+        onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
+      })
   }
 
   build() {

@@ -1,3 +1,4 @@
+import { UiSwitchControl } from '../components/UiSwitchControl';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
 import { UiAction } from '../components/settings/UiAction';
@@ -526,9 +527,14 @@ export struct ThemeSettingsPage {
                 Text('纯黑深色模式').fontSize(16).fontColor(this.themeColorTextSecondary)
                 Text('使用纯黑阅读背景').fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Toggle({ type: ToggleType.Switch, isOn: this.pureBlack })
-                .onChange((enabled: boolean) => this.onPureBlackChange(enabled))
+              // 整行可点：点标题一侧也能切换（对齐上游 SwitchSettingItem）。
+              UiSwitchControl({
+                checked: this.pureBlack,
+                interactive: false,
+                onChange: (enabled: boolean) => this.onPureBlackChange(enabled)
+              })
             }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
+              .onClick(() => this.onPureBlackChange(!this.pureBlack))
             ThemeItemDivider()
             UiAction({showDivider: false, title: '字体设置', detail: this.appFontSummary(),
               onSelect: () => { this.appFontExpanded = !this.appFontExpanded } })
@@ -955,8 +961,12 @@ struct ThemeSwitchRow {
           Text(this.detail).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.checked })
-        .onChange((enabled: boolean) => this.onChange(enabled))
+      UiSwitchControl({
+        checked: this.checked,
+        interactive: false,
+        onChange: (enabled: boolean) => this.onChange(enabled)
+      })
     }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
+      .onClick(() => this.onChange(!this.checked))
   }
 }

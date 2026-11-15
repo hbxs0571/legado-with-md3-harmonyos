@@ -1,3 +1,4 @@
+import { UiSwitchControl } from '../components/UiSwitchControl';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
@@ -228,10 +229,13 @@ export struct ReaderHighlightRuleSheet {
   private ToggleRow(label: string, checked: boolean, onToggle: (next: boolean) => void) {
     Row() {
       Text(label).fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: checked })
-        .selectedColor('#B9C6FF')
-        .onChange((isOn: boolean) => onToggle(isOn))
+      UiSwitchControl({
+        checked: checked,
+        interactive: false,
+        onChange: (isOn: boolean) => onToggle(isOn)
+      })
     }.width('100%').margin({ bottom: 8 })
+      .onClick(() => onToggle(!checked))
   }
 
   private imageFitLabel(): string {
@@ -551,8 +555,10 @@ export struct ReaderHighlightRuleSheet {
           .margin({ top: 4 })
       }.layoutWeight(1).alignItems(HorizontalAlign.Start).onClick(() => this.startEdit(rule))
       Column() {
-        Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
-          .onChange((enabled: boolean) => this.setEnabled(rule.id, enabled))
+        UiSwitchControl({
+          checked: rule.enabled,
+          onChange: (enabled: boolean) => this.setEnabled(rule.id, enabled)
+        })
         Row() {
           Text('↑').fontSize(14).fontColor('#B9C6FF').padding(5)
             .onClick(() => this.moveRule(rule.id, -1))
@@ -634,10 +640,13 @@ export struct ReaderHighlightRuleSheet {
               }.width('100%').margin({ bottom: 10 })
               Row() {
                 Text('启用').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-                Toggle({ type: ToggleType.Switch, isOn: this.editEnabled })
-                  .selectedColor('#B9C6FF')
-                  .onChange((isOn: boolean) => this.editEnabled = isOn)
+                UiSwitchControl({
+                  checked: this.editEnabled,
+                  interactive: false,
+                  onChange: (isOn: boolean) => this.editEnabled = isOn
+                })
               }.width('100%').margin({ bottom: 4 })
+                .onClick(() => this.editEnabled = !this.editEnabled)
 
               // 分区 2：样式设置（上游 :422-673，本地只取渲染支持的色/线型）
               this.SectionTitle('样式设置')

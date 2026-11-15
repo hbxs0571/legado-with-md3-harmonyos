@@ -5,6 +5,11 @@ import { BookCover } from '../components/BookCover';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { HomeDashboardSection, HOME_DASHBOARD_SECTIONS } from '../data/HomeDashboardSettingsRepository';
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
+import { UiSwitchControl } from '../components/UiSwitchControl';
+
+/** 首页右上角菜单的宽度，与详情页溢出菜单同口径。 */
+const HOME_MENU_WIDTH: number = 260;
 
 @Component
 export struct HomePage {
@@ -27,6 +32,7 @@ export struct HomePage {
   @Prop visibleSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   onSectionVisibilityChange: (section: HomeDashboardSection, visible: boolean) => void = (_section: HomeDashboardSection, _visible: boolean) => {};
   @State showHomeOptions: boolean = false;
+  @State moreMenuVisible: boolean = false;
   @State refreshing: boolean = false;
   @State collapsedHeader: boolean = false;
   private homeScroller: Scroller = new Scroller();
@@ -48,10 +54,19 @@ export struct HomePage {
 
   @Builder
   private MoreMenu() {
-    Menu() {
-      MenuItem({ content: '首页组件' }).height(48)
-        .onClick(() => this.showHomeOptions = true)
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(20)
+    // 菜单内容交给 UiMenuPanel 画（浅容器 + 深卡片），不再用系统 Menu。
+    UiMenuPanel({
+      items: this.moreMenuItems(),
+      panelWidth: HOME_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.moreMenuVisible = false;
+        if (key === 'home_sections') { this.showHomeOptions = true; }
+      }
+    })
+  }
+
+  private moreMenuItems(): UiMenuItem[] {
+    return [{ key: 'home_sections', title: '首页组件' }];
   }
 
   @Builder homeTopActions() {
@@ -60,7 +75,18 @@ export struct HomePage {
       showDivider: false,
       onSelect: () => { this.showHomeOptions = !this.showHomeOptions; }
     })
-    TopBarButton({ icon: 'more', menuMode: true }).bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+    // menuMode: true 让 TopBarButton 不注册自己的 onClick，点击手势交给外层 bindPopup。
+    TopBarButton({ icon: 'more', menuMode: true })
+      .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+      .bindPopup(this.moreMenuVisible, {
+        builder: this.MoreMenu,
+        placement: Placement.BottomRight,
+        popupColor: '#00000000',
+        enableArrow: false,
+        autoCancel: true,
+        width: HOME_MENU_WIDTH,
+        onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
+      })
   }
 
   private getLocalBooks(): Book[] {
@@ -291,11 +317,17 @@ export struct HomePage {
   private homeOptionsSheetContent() {
     Column() {
       ForEach(HOME_DASHBOARD_SECTIONS, (section: HomeDashboardSection) => {
+        // 整行可点（对齐上游 SwitchSettingItem），开关本身 interactive: false 只画不点。
         Row() {
           Text(this.sectionTitle(section)).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: this.visibleSections.includes(section) })
-            .onChange((visible: boolean) => this.onSectionVisibilityChange(section, visible))
-        }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          UiSwitchControl({
+            checked: this.visibleSections.includes(section),
+            interactive: false,
+            onChange: (visible: boolean) => this.onSectionVisibilityChange(section, visible)
+          })
+        }
+        .width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+        .onClick(() => this.onSectionVisibilityChange(section, !this.visibleSections.includes(section)))
       }, (section: HomeDashboardSection) => section)
     }.width('100%').padding({ top: 8, bottom: 8 })
   }

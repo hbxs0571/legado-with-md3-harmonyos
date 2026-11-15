@@ -1,6 +1,10 @@
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const SUBSCRIPTION_MENU_WIDTH: number = 260;
 
 @Component
 export struct SubscriptionPage {
@@ -21,18 +25,32 @@ export struct SubscriptionPage {
   private subscriptionScroller: Scroller = new Scroller();
   @State touchStartY: number = 0;
   @State collapsedHeader: boolean = false;
+  @State moreMenuVisible: boolean = false;
   @State showSearch: boolean = false;
   @State searchQuery: string = '';
   @State gridColumnCount: number = 5;
 
+  private moreMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'source_manage', title: '订阅源管理' },
+      { key: 'all', title: '全部' }
+    ];
+  }
+
   @Builder
   private MoreMenu() {
-    Menu() {
-      MenuItem({ content: '订阅源管理' })
-        .onClick(() => this.onOpenSourceManage())
-      MenuItem({ content: '全部' })
-        .onClick(() => this.onUnavailableAction('当前已显示全部订阅源'))
-    }.backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).fontColor(this.themeColorTextPrimary).radius(18)
+    UiMenuPanel({
+      items: this.moreMenuItems(),
+      panelWidth: SUBSCRIPTION_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.moreMenuVisible = false;
+        if (key === 'source_manage') {
+          this.onOpenSourceManage();
+        } else if (key === 'all') {
+          this.onUnavailableAction('当前已显示全部订阅源');
+        }
+      }
+    })
   }
 
   private getVisibleItems(): string[] {
@@ -68,7 +86,16 @@ export struct SubscriptionPage {
       }
     })
     TopBarButton({ icon: 'more', menuMode: true })
-      .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
+      .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+      .bindPopup(this.moreMenuVisible, {
+        builder: this.MoreMenu,
+        placement: Placement.BottomRight,
+        popupColor: '#00000000',
+        enableArrow: false,
+        autoCancel: true,
+        width: SUBSCRIPTION_MENU_WIDTH,
+        onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
+      })
   }
 
   build() {

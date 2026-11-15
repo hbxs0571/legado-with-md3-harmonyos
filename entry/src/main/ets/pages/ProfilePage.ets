@@ -8,6 +8,7 @@ import {
   PROFILE_ROW_VERTICAL_PADDING
 } from '../components/ProfileUiMetrics';
 import { ProfileRoute } from '../model/Book';
+import { UiSwitchControl } from '../components/UiSwitchControl';
 
 @Component
 export struct ProfilePage {
@@ -44,8 +45,11 @@ export struct ProfilePage {
               Text(this.showWebPreview ? '收起' : '预览').fontSize(12).fontColor(this.themeColorAccent)
                 .padding({ left: 8, right: 8, top: 8, bottom: 8 })
                 .onClick(() => this.showWebPreview = !this.showWebPreview)
-              Toggle({ type: ToggleType.Switch, isOn: false })
-                .onChange((_enabled: boolean) => this.onUnavailableAction('Web 服务尚未迁移'))
+              // Web 服务未迁移，开关只做界面预览：点了给提示，状态不保持。
+              UiSwitchControl({
+                checked: false,
+                onChange: (_enabled: boolean) => this.onUnavailableAction('Web 服务尚未迁移')
+              })
             }.width('100%').padding(10)
             Column() {
               Text('Web 服务尚未迁移 · 以下为界面预览').fontSize(12).fontColor('#AEB0BA')

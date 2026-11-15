@@ -1,3 +1,4 @@
+import { UiSwitchControl } from '../components/UiSwitchControl';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
@@ -393,9 +394,13 @@ struct BackupPreviewSwitchRow {
         Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
         Text(this.detail).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.checked })
-        .onChange((checked: boolean) => this.onChange(checked))
+      UiSwitchControl({
+        checked: this.checked,
+        interactive: false,
+        onChange: (checked: boolean) => this.onChange(checked)
+      })
     }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+      .onClick(() => this.onChange(!this.checked))
   }
 }
 
@@ -445,9 +450,13 @@ struct BackupIgnoreList {
             Text(option.title).fontSize(14).fontColor(this.themeColorTextSecondary)
             Text(option.files.join('、')).fontSize(11).fontColor('#858792').margin({ top: 3 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: this.ignoredKeys.includes(option.key) })
-            .onChange((ignored: boolean) => this.onToggle(option.key, ignored))
+          UiSwitchControl({
+            checked: this.ignoredKeys.includes(option.key),
+            interactive: false,
+            onChange: (ignored: boolean) => this.onToggle(option.key, ignored)
+          })
         }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
+          .onClick(() => this.onToggle(option.key, !this.ignoredKeys.includes(option.key)))
       }, (option: BackupCategoryOption) => option.key)
     }.width('100%').margin({ top: 6 }).padding({ left: 8, right: 8, top: 4, bottom: 4 })
       .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)

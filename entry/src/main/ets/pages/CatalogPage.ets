@@ -1,3 +1,4 @@
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { Book, BookChapter } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking } from '../model/ReaderMarking';
@@ -5,6 +6,9 @@ import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const CATALOG_MENU_WIDTH: number = 260;
 
 interface CatalogChapter {
   title: string;
@@ -119,6 +123,10 @@ export struct CatalogPage {
 
   /** 多选模式：长按章节行进入，选中项显示勾选圈。 */
   @State selectionMode: boolean = false;
+  // 三个卡片式菜单的显隐状态。
+  @State catalogMoreVisible: boolean = false;
+  @State chapterSelectionVisible: boolean = false;
+  @State bookmarkExportVisible: boolean = false;
   /** 已选中的章节下标（对应 `chapterRows` 下标）。 */
   @State selectedChapterIndexes: Set<number> = new Set<number>();
   /** 多选浮层是否展开（对齐上游 `fabExpanded`）。 */
@@ -464,31 +472,56 @@ export struct CatalogPage {
     if (index >= 0) { this.chapterScroller.scrollToIndex(index, true); }
   }
   /** 书签页「更多」菜单，对应上游 TocScreen 的书签导出两项。 */
+  private bookmarkExportItems(): UiMenuItem[] {
+    return [
+      { key: 'json', title: '导出为 JSON' },
+      { key: 'markdown', title: '导出为 Markdown' }
+    ];
+  }
+
   @Builder
   private BookmarkExportMenu() {
-    Menu() {
-      MenuItem({ content: '导出为 JSON' }).height(44)
-        .onClick(() => this.onExportBookmarks(false))
-      MenuItem({ content: '导出为 Markdown' }).height(44)
-        .onClick(() => this.onExportBookmarks(true))
-    }
+    UiMenuPanel({
+      items: this.bookmarkExportItems(),
+      panelWidth: CATALOG_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.bookmarkExportVisible = false;
+        // JSON 与 Markdown 的布尔口径来自原 onClick 参数。
+        this.onExportBookmarks(key === 'markdown');
+      }
+    })
   }
 
   /** 目录页「更多」菜单，对应上游 TocScreen 信息页那组菜单项。 */
+  private catalogMoreItems(): UiMenuItem[] {
+    // 条件项按原 if 分支顺序拼装，缺数据时不留空位。
+    const items: UiMenuItem[] = [];
+    if (this.isLocalTxt()) {
+      items.push({ key: 'refresh_toc', title: '更新目录' });
+    }
+    items.push({ key: 'replace_rules', title: '替换规则' });
+    if (this.book.isLocal) {
+      items.push({ key: 'txt_toc_rules', title: '本地 TXT 目录规则' });
+    }
+    return items;
+  }
+
   @Builder
   private CatalogMoreMenu() {
-    Menu() {
-      if (this.isLocalTxt()) {
-        MenuItem({ content: '更新目录' }).height(44)
-          .onClick(() => this.onRefreshToc())
+    UiMenuPanel({
+      items: this.catalogMoreItems(),
+      panelWidth: CATALOG_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.catalogMoreVisible = false;
+        if (key === 'refresh_toc') {
+          this.onRefreshToc();
+        } else if (key === 'replace_rules') {
+          this.onOpenReplaceRules();
+        } else if (key === 'txt_toc_rules') {
+          this.onOpenTxtTocRules();
+        }
       }
-      MenuItem({ content: '替换规则' }).height(44)
-        .onClick(() => this.onOpenReplaceRules())
-      if (this.book.isLocal) {
-        MenuItem({ content: '本地 TXT 目录规则' }).height(44)
-          .onClick(() => this.onOpenTxtTocRules())
-      }
-    }
+    })
   }
 
   /** 当前书是否为可重新识别目录的本地 TXT。 */  private isLocalTxt(): boolean {
@@ -551,15 +584,33 @@ export struct CatalogPage {
    * 下载选中 / 删除角色分配 / 删除朗读音频 / 取消选择。后三项属于下载与朗读链路，
    * 本地 TXT 离线阅读没有这两个功能，所以只保留其余四项。
    */
+  private chapterSelectionItems(): UiMenuItem[] {
+    return [
+      { key: 'select_all', title: '全选' },
+      { key: 'invert', title: '反选' },
+      { key: 'add_bookmark', title: `加书签（${this.selectedChapterIndexes.size}）` },
+      { key: 'clear', title: '取消选择' }
+    ];
+  }
+
   @Builder
   private ChapterSelectionMenu() {
-    Menu() {
-      MenuItem({ content: '全选' }).height(44).onClick(() => this.selectAllChapters())
-      MenuItem({ content: '反选' }).height(44).onClick(() => this.invertChapterSelection())
-      MenuItem({ content: `加书签（${this.selectedChapterIndexes.size}）` }).height(44)
-        .onClick(() => this.addBookmarksForSelection())
-      MenuItem({ content: '取消选择' }).height(44).onClick(() => this.clearChapterSelection())
-    }
+    UiMenuPanel({
+      items: this.chapterSelectionItems(),
+      panelWidth: CATALOG_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.chapterSelectionVisible = false;
+        if (key === 'select_all') {
+          this.selectAllChapters();
+        } else if (key === 'invert') {
+          this.invertChapterSelection();
+        } else if (key === 'add_bookmark') {
+          this.addBookmarksForSelection();
+        } else if (key === 'clear') {
+          this.clearChapterSelection();
+        }
+      }
+    })
   }
 
   @Builder
@@ -605,7 +656,16 @@ export struct CatalogPage {
           }
           .width(28)
           .height(32)
-          .bindMenu(this.CatalogMoreMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.catalogMoreVisible = !this.catalogMoreVisible; })
+          .bindPopup(this.catalogMoreVisible, {
+            builder: this.CatalogMoreMenu,
+            placement: Placement.BottomRight,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: CATALOG_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.catalogMoreVisible = event.isVisible; }
+          })
         }
         .padding({ left: 12, right: 12, bottom: 8 })
 
@@ -627,7 +687,16 @@ export struct CatalogPage {
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
               .borderRadius(8)
               .backgroundColor(this.themeColorSurfaceSecondary)
-              .bindMenu(this.ChapterSelectionMenu, { placement: Placement.BottomRight })
+              .onClick(() => { this.chapterSelectionVisible = !this.chapterSelectionVisible; })
+              .bindPopup(this.chapterSelectionVisible, {
+                builder: this.ChapterSelectionMenu,
+                placement: Placement.BottomRight,
+                popupColor: '#00000000',
+                enableArrow: false,
+                autoCancel: true,
+                width: CATALOG_MENU_WIDTH,
+                onStateChange: (event: PopupStateChangeParam) => { this.chapterSelectionVisible = event.isVisible; }
+              })
             Text('完成')
               .fontSize(11).fontColor('#C4D1FF')
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -752,7 +821,16 @@ export struct CatalogPage {
           }
           .width(32)
           .height(32)
-          .bindMenu(this.BookmarkExportMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.bookmarkExportVisible = !this.bookmarkExportVisible; })
+          .bindPopup(this.bookmarkExportVisible, {
+            builder: this.BookmarkExportMenu,
+            placement: Placement.BottomRight,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: CATALOG_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.bookmarkExportVisible = event.isVisible; }
+          })
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 4, bottom: 8 })

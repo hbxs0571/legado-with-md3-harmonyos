@@ -29,6 +29,7 @@ export struct LocalBookImportPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '#F5F6F8';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  @StorageProp('appTopInset') appTopInset: number = 0;
 
   @Prop candidates: ImportCandidate[] = [];
   onBack: () => void = () => {};
@@ -188,7 +189,7 @@ export struct LocalBookImportPage {
           });
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 10, bottom: 10 });
+      .padding({ left: 16, right: 16, top: 10 + this.appTopInset, bottom: 10 });
 
       Text('已选文件（已在书架的可以跳过；取消勾选后不导入）')
         .fontSize(12)

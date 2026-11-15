@@ -2,7 +2,7 @@
 // 外层容器是「稍亮一档的表面色」，每一项是「更深一档的表面色」独立圆角卡片。
 
 import { display } from '@kit.ArkUI';
-import { AppGlyph } from './AppGlyph';
+import { AppGlyph, AppGlyphName } from './AppGlyph';
 
 /** 一个菜单项。key 由调用方定义，面板只负责把它回传。 */
 export interface UiMenuItem {
@@ -11,6 +11,8 @@ export interface UiMenuItem {
   /** 右侧打勾。上游不是「不画勾」而是「画一个透明的勾」，这样有无勾行宽不变。 */
   selected?: boolean;
   disabled?: boolean;
+  /** 左端图标，对齐上游 RoundDropdownMenuItem 的 leadingIcon。 */
+  icon?: AppGlyphName;
 }
 
 /** 容器圆角，对齐上游 shapes.medium。 */
@@ -34,6 +36,8 @@ const MENU_TEXT_CHECK_GAP: number = 8;
 const MENU_FONT_SIZE: number = 14;
 /** 勾尺寸，对齐上游 size = 18.dp。 */
 const MENU_CHECK_SIZE: number = 18;
+/** 左端图标尺寸，与勾同口径。 */
+const MENU_ICON_SIZE: number = 18;
 /** 禁用整项透明度，对齐上游 alpha = 0.38f。 */
 const MENU_DISABLED_OPACITY: number = 0.38;
 /** 面板高度上限占屏高比例；超过则内部滚动。 */
@@ -71,6 +75,14 @@ export struct UiMenuPanel {
   @Builder
   MenuItemRow(item: UiMenuItem) {
     Row({ space: MENU_TEXT_CHECK_GAP }) {
+      // 有图标时才画，避免无图标的菜单整体右移。
+      if (item.icon !== undefined) {
+        AppGlyph({
+          name: item.icon,
+          glyphSize: MENU_ICON_SIZE,
+          tint: item.selected ? this.themeColorAccent : this.themeColorTextPrimary
+        })
+      }
       Text(item.title)
         .fontSize(MENU_FONT_SIZE)
         .fontWeight(FontWeight.Medium)

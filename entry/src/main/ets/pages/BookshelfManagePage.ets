@@ -1,3 +1,5 @@
+import { UiSwitchControl } from '../components/UiSwitchControl';
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { Book } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
@@ -6,6 +8,9 @@ import { AppGlyph } from '../components/AppGlyph';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { Context } from '@kit.AbilityKit';
+
+/** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
+const MANAGE_MENU_WIDTH: number = 260;
 
 /**
  * 书架管理页（:447–:475）。上游是 BookshelfManageScreen.kt，本地原先整页未建。
@@ -38,6 +43,7 @@ export struct BookshelfManagePage {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#B9C6FF';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#17181E';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#23242C';
+  @StorageProp('appTopInset') appTopInset: number = 0;
 
   @State currentGroupName: string = '';
   @State isSearchMode: boolean = false;
@@ -57,6 +63,11 @@ export struct BookshelfManagePage {
   @State exportFileNameTemplate: string = '{title}';
   @State exportWithChapterName: boolean = true;
   @State showGroupSelect: boolean = false;
+  // 四个卡片式菜单的显隐状态，各自独立，避免互相顶掉。
+  @State groupFilterVisible: boolean = false;
+  @State moreMenuVisible: boolean = false;
+  @State selectionMenuVisible: boolean = false;
+  @State exportCharsetVisible: boolean = false;
   @State groupSelectBookKeys: string[] = [];
   @State preselectedGroupName: string = '';
   @State rowMenuKey: string = '';
@@ -361,45 +372,85 @@ export struct BookshelfManagePage {
 
   // ---------------------------------------------------------------- 菜单
 
+  private groupFilterItems(): UiMenuItem[] {
+    // 选中项改为右侧勾，不再在文案里拼「✓ 」。
+    return this.groupOptions().map((name: string): UiMenuItem => {
+      return { key: name, title: name, selected: name === this.effectiveGroup() };
+    });
+  }
+
   @Builder
   private GroupFilterMenu() {
-    Menu() {
-      ForEach(this.groupOptions(), (name: string) => {
-        MenuItem({ content: name === this.effectiveGroup() ? `✓ ${name}` : name }).height(44)
-          .onClick(() => this.currentGroupName = name)
-      }, (name: string) => name)
-    }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
+    UiMenuPanel({
+      items: this.groupFilterItems(),
+      panelWidth: MANAGE_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.groupFilterVisible = false;
+        this.currentGroupName = key;
+      }
+    })
   }
 
   /** 顶栏「更多」本批只放「导出全部」；下载全部(:450)与日志(:452)不做，菜单里不放占位项。 */
+  private moreMenuItems(): UiMenuItem[] {
+    return [{ key: 'export_all', title: '导出全部' }];
+  }
+
   @Builder
   private MoreMenu() {
-    Menu() {
-      MenuItem({ content: '导出全部' }).height(44)
-        .onClick(() => this.openExportSheet(this.filteredBooks()))
-    }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
+    UiMenuPanel({
+      items: this.moreMenuItems(),
+      panelWidth: MANAGE_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.moreMenuVisible = false;
+        if (key === 'export_all') { this.openExportSheet(this.filteredBooks()); }
+      }
+    })
+  }
+
+  private selectionMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'select_all', title: '全选' },
+      { key: 'invert', title: '反选' },
+      { key: 'move_group', title: '移入分组' }
+    ];
   }
 
   @Builder
   private SelectionMenu() {
-    Menu() {
-      MenuItem({ content: '全选' }).height(44).onClick(() => this.selectAllVisible())
-      MenuItem({ content: '反选' }).height(44).onClick(() => this.invertVisibleSelection())
-      MenuItem({ content: '移入分组' }).height(44).onClick(() => {
-        const keys = this.selectedBooks().map((book: Book) => this.rowKey(book));
-        this.openGroupSelect(keys);
-      })
-    }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
+    UiMenuPanel({
+      items: this.selectionMenuItems(),
+      panelWidth: MANAGE_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.selectionMenuVisible = false;
+        if (key === 'select_all') {
+          this.selectAllVisible();
+        } else if (key === 'invert') {
+          this.invertVisibleSelection();
+        } else if (key === 'move_group') {
+          const keys: string[] = this.selectedBooks().map((book: Book) => this.rowKey(book));
+          this.openGroupSelect(keys);
+        }
+      }
+    })
+  }
+
+  private exportCharsetItems(): UiMenuItem[] {
+    return ['UTF-8', 'GBK', 'GB2312', 'GB18030', 'Big5', 'UTF-16'].map((charset: string): UiMenuItem => {
+      return { key: charset, title: charset, selected: charset === this.exportCharset };
+    });
   }
 
   @Builder
   private ExportCharsetMenu() {
-    Menu() {
-      ForEach(['UTF-8', 'GBK', 'GB2312', 'GB18030', 'Big5', 'UTF-16'], (charset: string) => {
-        MenuItem({ content: charset === this.exportCharset ? `✓ ${charset}` : charset }).height(44)
-          .onClick(() => this.exportCharset = charset)
-      }, (charset: string) => charset)
-    }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
+    UiMenuPanel({
+      items: this.exportCharsetItems(),
+      panelWidth: MANAGE_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.exportCharsetVisible = false;
+        this.exportCharset = key;
+      }
+    })
   }
 
   // ---------------------------------------------------------------- 书籍行
@@ -513,7 +564,16 @@ export struct BookshelfManagePage {
       Row() {
         Text('导出字符集').fontSize(14).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text(this.exportCharset).fontSize(13).fontColor(this.themeColorAccent)
-          .bindMenu(this.ExportCharsetMenu, { placement: Placement.BottomRight })
+          .onClick(() => { this.exportCharsetVisible = !this.exportCharsetVisible; })
+          .bindPopup(this.exportCharsetVisible, {
+            builder: this.ExportCharsetMenu,
+            placement: Placement.BottomRight,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: MANAGE_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.exportCharsetVisible = event.isVisible; }
+          })
       }.width('100%').padding({ top: 8, bottom: 8 })
       Row() {
         Text('自定义字符集').fontSize(14).fontColor(this.themeColorTextPrimary).width(110)
@@ -531,9 +591,13 @@ export struct BookshelfManagePage {
         .fontSize(11).fontColor(this.themeColorTextTertiary).width('100%')
       Row() {
         Text('导出包含章节名').fontSize(14).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.exportWithChapterName })
-          .onChange((value: boolean) => this.exportWithChapterName = value)
+        UiSwitchControl({
+          checked: this.exportWithChapterName,
+          interactive: false,
+          onChange: (value: boolean) => this.exportWithChapterName = value
+        })
       }.width('100%').padding({ top: 8, bottom: 8 })
+        .onClick(() => this.exportWithChapterName = !this.exportWithChapterName)
     }.width('100%')
   }
 
@@ -617,13 +681,31 @@ export struct BookshelfManagePage {
           .width(40).height(40).onClick(() => this.isSearchMode = !this.isSearchMode)
           .accessibilityText('搜索')
         AppGlyph({ name: 'profileFilterAlt', glyphSize: 20, tint: this.themeColorTextPrimary })
-          .width(40).height(40).onClick(() => {})
-          .bindMenu(this.GroupFilterMenu, { placement: Placement.BottomRight })
+          .width(40).height(40)
+          .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
+          .bindPopup(this.groupFilterVisible, {
+            builder: this.GroupFilterMenu,
+            placement: Placement.BottomRight,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: MANAGE_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.groupFilterVisible = event.isVisible; }
+          })
           .accessibilityText('分组筛选')
         AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextPrimary })
-          .width(40).height(40).onClick(() => {})
-          .bindMenu(this.MoreMenu, { placement: Placement.BottomRight })
-      }.width('100%').padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .width(40).height(40)
+          .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+          .bindPopup(this.moreMenuVisible, {
+            builder: this.MoreMenu,
+            placement: Placement.BottomRight,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: MANAGE_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
+          })
+      }.width('100%').padding({ left: 12, right: 12, top: 8 + this.appTopInset, bottom: 8 })
       if (this.isSearchMode) {
         Row() {
           TextInput({ text: this.searchKey, placeholder: '筛选书名/作者' })
@@ -650,7 +732,16 @@ export struct BookshelfManagePage {
           Text('操作').fontSize(12).fontColor('#C4D1FF')
             .padding({ left: 10, right: 10, top: 5, bottom: 5 }).borderRadius(8)
             .backgroundColor(this.themeColorSurfaceElevated)
-            .bindMenu(this.SelectionMenu, { placement: Placement.BottomRight })
+            .onClick(() => { this.selectionMenuVisible = !this.selectionMenuVisible; })
+            .bindPopup(this.selectionMenuVisible, {
+              builder: this.SelectionMenu,
+              placement: Placement.BottomRight,
+              popupColor: '#00000000',
+              enableArrow: false,
+              autoCancel: true,
+              width: MANAGE_MENU_WIDTH,
+              onStateChange: (event: PopupStateChangeParam) => { this.selectionMenuVisible = event.isVisible; }
+            })
           Text('完成').fontSize(12).fontColor('#C4D1FF')
             .padding({ left: 10, right: 10, top: 5, bottom: 5 }).borderRadius(8)
             .backgroundColor(this.themeColorSurfaceElevated)
