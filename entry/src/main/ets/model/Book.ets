@@ -145,6 +145,8 @@ export enum AppRoute {
   READER_SETTINGS = 'readerSettings',
   READER_SEARCH = 'readerSearch',
   BOOK_INFO = 'bookInfo',
+  /** 书籍信息编辑独立成页，从详情页顶栏的编辑按钮进入。 */
+  BOOK_INFO_EDIT = 'bookInfoEdit',
   READ_ALOUD_SETTINGS = 'readAloudSettings',
   SEARCH = 'search',
   /** 本地书多选后的导入确认页（批 10 的 :555）。 */

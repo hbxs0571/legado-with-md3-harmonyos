@@ -22,6 +22,7 @@ import { ReadRecordOverviewPage } from './ReadRecordOverviewPage';
 import { ReaderSearchPage } from './ReaderSearchPage';
 import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
 import { BookInfoPage } from './BookInfoPage';
+import { BookInfoEditPage } from './BookInfoEditPage';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
 import { CustomThemePage } from './CustomThemePage';
 import { ThemeManagePage } from './ThemeManagePage';
@@ -7895,6 +7896,11 @@ private canWriteInto(dir: string): boolean {
       this.readerImagePreviewCloseRevision++;
       return true;
     }
+    if (this.route === AppRoute.BOOK_INFO_EDIT) {
+      // 编辑页是详情页的下级：返回详情，不是回书架。
+      this.route = AppRoute.BOOK_INFO;
+      return true;
+    }
     if (this.route === AppRoute.BOOK_INFO) {
       this.route = this.bookInfoReturnRoute;
       return true;
@@ -8082,6 +8088,23 @@ private canWriteInto(dir: string): boolean {
             remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
             this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
           onExportEpub: (book: Book) => this.exportBookAsEpub(book),
+          onOpenEditPage: () => { this.route = AppRoute.BOOK_INFO_EDIT; },
+          onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+        })
+        } else if (this.route === AppRoute.BOOK_INFO_EDIT) {
+        BookInfoEditPage({
+          book: this.selectedBook,
+          groups: this.bookGroups,
+          coverSettings: this.coverSettings,
+          followCoverColor: this.bookInfoFollowCoverColor,
+          networkCoverBackground: this.bookInfoNetworkCoverBackground,
+          defaultCoverBackground: this.bookInfoDefaultCoverBackground,
+          onBack: () => { this.route = AppRoute.BOOK_INFO; },
+          onSave: (title: string, author: string, category: string, description: string,
+            remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
+            this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
+          onChooseCover: () => this.chooseBookCover(),
+          onRestoreCover: () => this.restoreBookCover(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         } else if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {
