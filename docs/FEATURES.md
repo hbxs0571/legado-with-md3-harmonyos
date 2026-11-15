@@ -23,38 +23,32 @@
 
 今天在设备上能走通的完整链路：
 
-- **导入本地书**：系统文件选择器，只列 `.txt` 与 `.epub`（`data/BookRepository.ets:437` 的 `fileSuffixFilters`）。同一本书再导入走「更新目录」分支，不新增第二条记录（`pages/Index.ets` 的 `importLocalBook`，判重键是 `bookUrl`）。
-- **书架展示**：分组页签 / 隐藏页签 / 文件夹三种样式（`pages/BookshelfPage.ets:1118`、`:1125`、`:1142`），竖屏与横屏各有列表/网格两档，卡片可显示简介、最新章节、章节角标与阅读进度。
-- **排序**：六个排序档加正逆序（`model/BookGroup.ets:39` 的 `BOOK_SORT_OPTIONS`，比较逻辑在 `data/BookshelfSort.ets:11`）；分组自己设了排序档时覆盖书架全局，与上游 `sortBooks()` 取值优先级一致（`BookshelfPage.ets:255`-`:257`）。
-- **分组管理**：新建、改名、显隐、删除、换封面、拖动改分组顺序（回调见 `BookshelfPage.ets:114`-`:133`，面板在 `GroupManagerSheet` `:542`）。
-- **搜索**：书名或作者子串过滤（`BookshelfPage.ets:1109` 的输入框，过滤逻辑 `:242`-`:259`）。
-- **更新目录**：菜单项「更新目录」走 `onRefreshToc`（`BookshelfPage.ets:1050`-`:1051`）。
-- **布局设置**：30 余项，含封面宽度上限、列表封面宽度、标题行数/字号/居中/阴影、卡片底色日夜两套、列表分隔线与简介位置、快速滚动条（`LayoutSheetContent` `:818` 起）。
-- **书籍详情**：编辑元数据、查看目录、阅读记录面板、移出书架或删除缺正文记录（`pages/BookInfoPage.ets:265`-`:279`）。
-- **长按**：长按分组卡片进编辑面板，长按书籍卡片进详情（`BookshelfPage.ets:1087`、`:1281`）。
+- **导入本地书**：系统文件选择器列出六种格式与压缩包七项（`data/BookRepository.ets:534`-`:542` 的 `fileSuffixFilters`：`.txt` / `.epub` / `.pdf` / `.mobi` / `.azw3` / `.umd` / `.zip,.cbz`）。同一本书再导入走「更新目录」分支，不新增第二条记录（`pages/Index.ets` 的 `importLocalBook`，判重键是 `bookUrl`）。
+- **书架展示**：分组页签 / 隐藏页签 / 文件夹三种样式（`pages/BookshelfPage.ets:2215`、`:2198`、`:2189`），竖屏与横屏各有列表/网格两档，卡片可显示简介、最新章节、章节角标与阅读进度。
+- **排序**：六个排序档加正逆序（`model/BookGroup.ets:39` 的 `BOOK_SORT_OPTIONS`，比较逻辑在 `data/BookshelfSort.ets:11`）；分组自己设了排序档时覆盖书架全局，与上游 `sortBooks()` 取值优先级一致（`BookshelfPage.ets:619`-`:622` 的 `getVisibleBooks()` 先按分组档再回落全局）。
+- **分组管理**：新建、改名、显隐、删除、换封面、拖动改分组顺序（回调见 `BookshelfPage.ets:226`-`:240`，面板在 `GroupManagerSheet` `:1391`）。
+- **搜索**：书名或作者子串过滤（`BookshelfPage.ets:2175` 的输入框，过滤逻辑在 `getVisibleBooks()` `:608`-`:624`）。
+- **更新目录**：菜单项「更新目录」走 `onRefreshToc`（回调声明 `BookshelfPage.ets:225`，菜单项在 `:2107`-`:2115`）。
+- **布局设置**：30 余项，含封面宽度上限、列表封面宽度、标题行数/字号/居中/阴影、卡片底色日夜两套、列表分隔线与简介位置、快速滚动条（`LayoutSheetContent` `:1669` 起）。
+- **书籍详情**：编辑元数据、查看目录、阅读记录面板、移出书架或删除缺正文记录（动作行 `pages/BookInfoPage.ets:523`-`:535`）。
+- **长按**：长按分组卡片进编辑面板，长按书籍卡片进详情（分组卡 `BookGroupCard` 的 `onLongPress`，调用点 `BookshelfPage.ets:2264`；书籍卡 `:2459`）。
 
 ### 1.2 卡在这几处
 
-全部集中在书架右上的「更多」菜单与书籍详情的动作行，都是**入口在、后端与服务不在**：
+只剩四项仍是**入口在、后端与服务不在**，其余同菜单项已接通（选择模式 `BookshelfPage.ets:2123`、书架管理 `:2124`、导出书单 `:2126`、导入书单 `:2128`、日志 `:2130`，详情页更多操作 `BookInfoPage.ets:614` 是真实菜单）：
 
 | 菜单项 | 位置 | 缺什么 |
 | --- | --- | --- |
-| 远程书籍 | `BookshelfPage.ets:1044` | 远程书库的 URL 拉取与解析（上游 `ui/book/import/remote/RemoteBookScreen.kt`） |
-| 添加网址 | `BookshelfPage.ets:1057` | 同上，从 URL 直接建书 |
-| 选择模式 | `BookshelfPage.ets:1059` | 批量选择与批量删除/分组（上游 `ui/book/manage/BookshelfManageScreen.kt`） |
-| 书架管理 | `BookshelfPage.ets:1061` | 同上，书架管理的独立页 |
-| 导出书单 | `BookshelfPage.ets:1063` | 书单 JSON 生成与落盘 |
-| 导入书单 | `BookshelfPage.ets:1065` | 书单解析与合并 |
-| 日志 | `BookshelfPage.ets:1067` | 应用日志页（依赖日志缓冲） |
-| 换源 | `BookInfoPage.ets:271` | 在线书源；文案写的「将在 P5 接入」是历史排期号，现由本文的模块顺序取代 |
-| 书籍分享 | `BookInfoPage.ets:349` | 分享面板 |
-| 更多操作 | `BookInfoPage.ets:350` | 详情页溢出菜单 |
+| 远程书籍 | `BookshelfPage.ets:2092`-`:2093` | 远程书库的 URL 拉取与解析（上游 `ui/book/import/remote/RemoteBookScreen.kt`） |
+| 添加网址 | `BookshelfPage.ets:2120`-`:2121` | 同上，从 URL 直接建书 |
+| 换源 | `BookInfoPage.ets:529` | 在线书源；文案写的「将在 P5 接入」是历史排期号，现由本文的模块顺序取代 |
+| 书籍分享 | `BookInfoPage.ets:610` | 分享面板 |
 
-另有**三处「看着能用、其实不生效」**，比纯占位更容易被误判：
+另有**两处「看着能用、其实不生效」**，比纯占位更容易被误判：
 
-- **手动排序档可以选，但不能拖**：`Book_SORT_OPTIONS` 的第 4 档「手动排序」按 `book.order` 比较（`data/BookshelfSort.ets:45`-`:47`），但全仓没有任何拖动改 `order` 的入口（`onItemDrag` / `ItemDragInfo` 零命中）。选中该档只会按导入顺序显示。
-- **下拉刷新只是存字段**：分组编辑里的「下拉刷新」开关写的是 Android 兼容字段 `enableRefresh`，界面自己标了「仅保存 Android 兼容字段；当前不控制实际更新」（`BookshelfPage.ets:497`）。
-- **缺正文的记录**：书目存在但正文文件丢失时卡片走详情页而非阅读页（`BookshelfPage.ets:1275`-`:1279`），详情页给的是「移出缺正文记录」而不是「补正文」。
+- **手动排序档只在手动档下能拖**：`Book_SORT_OPTIONS` 的第 4 档「手动排序」按 `book.order` 比较（`data/BookshelfSort.ets:45`-`:47`），拖拽入口是书卡 Grid 的 `onMove`（`BookshelfPage.ets:2481`-`:2484`）加 `editMode`（`:2493`，判据 `canReorderBooks()` `:724`-`:729` 只在排序值 3 时放开）；拖完落库 `data/BookRepository.ets:1450` 的 `saveBookOrder`（接线 `pages/Index.ets:7071`）。非手动排序下拖拽被关掉，屏幕不会变化，这是上游行为。
+- **下拉刷新只是存字段**：分组编辑里的「下拉刷新」开关写的是 Android 兼容字段 `enableRefresh`（读 `BookshelfPage.ets:997`、写 `:1033`），界面自己标了「仅保存 Android 兼容字段；当前不控制实际更新」（文案在 `:1291`-`:1292`）。
+- **缺正文的记录**：书目存在但正文文件丢失时卡片走详情页而非阅读页（`BookshelfPage.ets:2444`-`:2448` 的 `isBodyMissing` 分支），详情页给的是「移出缺正文记录」而不是「补正文」。
 
 ### 1.3 算做完的判据
 
@@ -64,12 +58,12 @@
 - [ ] 同一本再导入一次，提示已更新，书架仍是一条。
 - [ ] 三种分组样式各切一遍，页签/文件夹/隐藏三态都能回到书架且筛选不丢。
 - [ ] 新建分组、改名、换封面、拖到另一个位置、删除，五步都生效且重启后保持。
-- [ ] 六个排序档各选一次，顺序与预期一致；切到「手动排序」后**能拖动改序并持久化**（当前缺，见 1.2）。
+- [ ] 六个排序档各选一次，顺序与预期一致；切到「手动排序」后**能拖动改序并持久化**。
 - [ ] 搜索框输入书名片段与作者片段，均能过滤；清空后恢复全量。
 - [ ] 布局设置里改封面宽度、标题居中、卡片底色，书架立即变化，重启后保持。
 - [ ] 「更新目录」对已导入的书可用，章节数与最新章节变化。
 - [ ] 长按书籍进详情，元数据编辑保存后书架卡片同步刷新。
-- [ ] 菜单里七项在线/书单/日志入口，要么接通，要么保持明确的未迁移提示（不能静默失败）。
+- [ ] 菜单里七项入口五项已接通（选择模式、书架管理、导出书单、导入书单、日志），剩下远程书籍与添加网址两项要么接通，要么保持明确的未迁移提示（不能静默失败）。
 
 ### 1.4 验收记录
 
@@ -211,7 +205,7 @@
 
 **四、系统 TTS 能力现成，一行没接**
 
-`@kit.CoreSpeechKit` 在 SDK 里就有（`sdk/default/hms/ets/kits/@kit.CoreSpeechKit.d.ts`，`@since 4.1.0(11)`），实体 `@hms.ai.textToSpeech` 提供 `createEngine`（`:40` 回调式 / `:57` Promise 式）、`setListener`（`:79`）、`speak(text, speakParams)`（`:98`，单次文本上限 10000 字符）、`listVoices`（`:111` / `:124`）、`stop`（`:135`）。项目基线 `compatibleSdkVersion` 与 `targetSdkVersion` 都是 `5.0.0(12)`，够用。**缺的只是接线。**
+`@kit.CoreSpeechKit` 在 SDK 里就有（`sdk/default/hms/ets/kits/@kit.CoreSpeechKit.d.ts`，`@since 4.1.0(11)`），实体 `@hms.ai.textToSpeech` 提供 `createEngine`（`:40` 回调式 / `:57` Promise 式）、`setListener`（`:79`）、`speak(text, speakParams)`（`:98`，单次文本上限 10000 字符）、`listVoices`（`:111` / `:124`）、`stop`（`:135`）。项目基线 `compatibleSdkVersion` 与 `targetSdkVersion` 都是 `6.0.0(20)`，够用。**缺的只是接线。**
 
 **五、与上游的规模差**
 
