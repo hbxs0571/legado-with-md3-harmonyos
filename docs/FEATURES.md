@@ -2,7 +2,7 @@
 
 本文件按**用户视角的功能模块**回答三个问题：这块能做什么、卡在哪几处、做到什么程度算做完。
 
-与七张对照表的分工写死一句：**七表回答「上游有什么、本地接了没有」**（逐行 1172 条，见 [ZIP 兼容总账](parity/STATUS.md)），**本文件回答「用户能用什么」**。两者不重复——本文件不抄逐行状态，只在需要时指到具体 `文件:行`。
+与七张对照表的分工写死一句：**七表回答「上游有什么、本地接了没有」**（逐行 1226 条，见 [ZIP 兼容总账](parity/STATUS.md)），**本文件回答「用户能用什么」**。两者不重复——本文件不抄逐行状态，只在需要时指到具体 `文件:行`。
 
 ## 六模块与优先级
 
@@ -10,7 +10,7 @@
 
 | 顺序 | 模块 | 现在能不能用 | 主要入口 | 明细 |
 | --- | --- | --- | --- | --- |
-| 1 | 书架 | 本地 TXT/EPUB 的完整闭环可用；在线来源与书单导入导出仍空 | `pages/BookshelfPage.ets`、`pages/BookInfoPage.ets` | 本文第一章 |
+| 1 | 书架 | 本地六种格式（TXT / EPUB / PDF / MOBI·AZW3 / UMD / 压缩包）的导入闭环可用；在线来源与书单导入导出仍空 | `pages/BookshelfPage.ets`、`pages/BookInfoPage.ets` | 本文第一章 |
 | 2 | 阅读器 | 分页与滚动两种模式、目录、书内搜索、主题、替换净化可用；朗读入口未接 | `pages/ReaderPage.ets`（7871 行）、`pages/ReaderSettingsPage.ets`（3954 行） | 本文第二章 |
 | 3 | 朗读 | **不能**：零音频能力，两个朗读页全是占位 | `pages/ReaderAloudSettingsPage.ets`、`pages/AppReadAloudSettingsPage.ets` | 本文第三章 |
 | 4 | 阅读记录 | 概览、热力图、合并、扫描修复、清空都可用 | `pages/ProfileSubPages.ets:3014`-`:3873`、`pages/ReadRecordOverviewPage.ets` | 本文第四章 |

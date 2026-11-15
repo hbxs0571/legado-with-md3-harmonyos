@@ -907,6 +907,53 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 合计 39 行登记，其中 33 行已接、6 行仍 `未接`（与对照表 `未接` 计数一致）。不适用 2 行（D 块 `:178` `CoverImageView`、`:179` `CoverBlurBackdrop`）不进本节——前者在上游全仓除定义处零调用点，后者本地没有播放器封面背景这类场景。
 
+## 六格式实现（r344）留下的已知差异
+
+批 1–13 把 TXT / EPUB / PDF / MOBI·AZW3 / UMD / 压缩包六条导入与阅读链路落地时，遇到六处「当时没修」或「只能近似」的地方。它们不影响主路径可用，但都真实存在，按 [`TXT-READER.md`](parity/TXT-READER.md) E–I 五块验收时逐条碰到过，登记在这里让「为什么是这个形态」有落点。**本节只登记，不改 `.ets` 代码。**
+
+**KI-FMT1 导入失败的完整提示到不了屏幕** —— 关联 E16、F1、F7
+
+- **现象**：源码层给的是可读文案（如「这台设备不支持 PDF 渲染（缺少 PDFKit 能力），暂时打不开 PDF」），但模拟器上看到的 toast 是「没有导入任何书籍」。
+- **根因**：`pages/Index.ets` 的 `importSelectedLocalBooks()` 逐本调 `importOneLocalBook()`，「一本都没成功」时统一抛自己的提示，把内层 `showUnavailableAction('导入失败：' + message)` 那条覆盖掉了。用户读不到具体原因。
+- **补法**：`importSelectedLocalBooks()` 汇总时把内层失败原因带出来（收 `failed: string[]` 后拼成「导入失败：<第一本的原因>」），或单本导入时直接显示内层文案、只在多本时补计数。
+- **验收**：在模拟器上从文件选择器选一本 PDF，toast 里出现「这台设备不支持 PDF 渲染」，而不是「没有导入任何书籍」。
+
+**KI-FMT2 PDF 页图没按屏宽渲染，分辨率由平台默认值决定** —— 关联 F4
+
+- **现象**：`data/PdfRepository.ets` 用的是无参 `PdfPage.getPagePixelMap()`，渲出来的 PixelMap 是平台默认分辨率；「等比缩到屏宽」这一步交给排版层（`ReaderCanvasSurface` 按页宽缩放绘制），导入期不做重采样。
+- **根因**：本批取的是「无参数、最少未知量」的那条渲染路径，因为模拟器没有 PDFKit 能力、带尺寸的渲染参数在真机上行为未核实，不想写一条自己验不了的调用。
+- **平台能力其实够**：`@hms.officeservice.pdfservice.d.ts:2562` 的 `getAreaPixelMap(matrix, bitmapwidth, bitmapHeight, isGray, drawAnnotations)` 是 `@since 5.0.0(12)`，在本项目基线 `6.0.0(20)` 内；`getAreaPixelMapWithOptions(...)`（`:2573`）才是 `@since 5.1.0(18)`。所以这不是平台限制，是本批的取舍——**不能写成「平台做不到」**。
+- **后果**：页图内存占用与落盘体积偏大，字号小的 PDF 全屏显示时可能不够锐利。上游 `PdfFile.openPdfPage` 是显式按屏幕宽算渲染尺寸的，本地这一步缺失。
+- **补法**：真机上先验 `getAreaPixelMap` 的 `bitmapwidth`/`bitmapHeight` 语义（d.ts 写的是 points，不是像素），再按「屏宽 × 页宽高比」渲；验不通就退回无参版本并在本文件写明原因。
+- **验收**：真机导入一本 45 页 PDF，页图落盘体积明显下降且放大后正文小字清晰。
+
+**KI-FMT3 `docs/FEATURES.md` 的文件选择器描述已过时** —— 关联 F1、G1、H1、I1
+
+- **现象**：`docs/FEATURES.md:26` 仍写「导入本地书：系统文件选择器，只列 `.txt` 与 `.epub`（`data/BookRepository.ets:437` 的 `fileSuffixFilters`）」，实际 `fileSuffixFilters` 已是七项（TXT / EPUB / PDF / MOBI / AZW3 / UMD / 压缩包），行号也从 `:437` 漂到 `:502` 一带。
+- **根因**：r344 的范围文档改动按任务书只点了 `docs/PROJECT.md:9` 与 `docs/FEATURES.md:13` 两处，这一行不在点名范围，未擅自扩大改动。
+- **补法**：把该行的后缀清单与行号更新为七项，并说明 rar / 7z 不在其中（平台无能力）。
+- **验收**：无屏幕现象；以 `grep -n '只列' docs/FEATURES.md` 不再只命中 `.txt` 与 `.epub` 两项为准。
+
+**KI-FMT4 ruby 注音删除是字符级近似，中文注音会留残形** —— 关联 E7
+
+- **现象**：开了「删除ruby标签」后，日文书里连续假名被整段删掉（符合预期）；但中文注音书（`<ruby>汉字<rt>hànzì</rt></ruby>` 一类的拉丁字母或拼音）删完会剩下「汉字 + 零散字母」的残形。
+- **根因**：本地正文在导入期就经 `htmlToText` 转成纯文本，`<rp>` / `<rt>` 标签此时已不存在，运行时只能按字符类别近似删除（`/[぀-ゟ゠-ヿｦ-ﾝ]+/g` 删连续假名）。上游是在 DOM 层按标签精确删的。
+- **补法**：要精确只有两条路——①导入时把 ruby 元素边界标记写进正文（改动 `.txt` 中间格式，影响全部既有书），②运行时回原 xhtml 取（要留解压目录、重解析）。两条成本都远超本行价值，暂不做。
+- **验收**：打开一本中文注音 EPUB 点「删除ruby标签」，正文里不该出现孤立字母。当前做不到，故登记。
+
+**KI-FMT5 `display:none` 净化是有意近似，嵌层与自闭合认不全** —— 关联 E5
+
+- **现象**：`<div style="display:none">…</div>` 这类「开标签带 style + 有对应闭标签」的隐藏块能被删；但嵌套结构、自闭合标签、`display : none` 中间夹换行的写法会漏。
+- **根因**：本地没有 DOM，净化走正则。上游用 Jsoup 的 `[style*=display:none]` 选择器，也只匹配「属性里含这个子串」的元素，同样不是完整 CSS 求值——两边都是近似，只是容错面不同。
+- **补法**：在片段级复用 EPUB 导入已有的 markup 中间态做元素裁剪，而不是在纯文本上补正则。
+- **验收**：找一本用嵌套 `display:none` 藏脚注的 EPUB，正文里不该出现脚注文字。当前对嵌套形态做不到。
+
+**KI-FMT6 MOBI 导入异常时不写 `intro` 兜底，简介字段留空** —— 关联 G13
+
+- **现象**：EXTH 里没有 103（简介）记录的 MOBI，导入后详情页简介为空；上游在导入异常时写「书籍导入异常」。
+- **根因**：本地 `MobiRepository.importFromUri` 的 `description` 一律给空串，没有照抄上游那条异常兜底文案。正常路径两边一致（都读 EXTH 103），差的是异常路径的一个可见提示。
+- **补法**：导入流程 catch 到 MOBI 解析异常时把 `book.intro` 置成「书籍导入异常」再落库。
+- **验收**：导入一个头部损坏的 .mobi，详情页简介显示「书籍导入异常」而不是空白。
 ---
 
 ## 设备范围
