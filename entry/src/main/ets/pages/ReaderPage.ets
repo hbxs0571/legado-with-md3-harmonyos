@@ -1262,19 +1262,22 @@ export struct ReaderPage {
    * 不透明度取 `readMenuBlurAlpha / 100`，并且**上限 0.6**，保证背后正文始终透得出来。
    */
   private readerBottomBarFillColor(): string {
-    return this.readerMenuTintAlphaString(this.readerMenuContainerBaseColor());
+    // 上游 `ReadBookMenuBar.kt:1033-1040`：菜单栏底色恒取 `surfaceContainerHigh`，
+    // 而 `surfaceContainerHigh` 在 `ReadBookColorTheme.kt:291-297` 被改写成「菜单背景色」
+    // （`readMenuBgColor`/`Night`），即本地的 `readerMenuBaseColor()`。
+    // `surfaceContainerLow`（= 容器色）是按钮与项容器的底色，不是菜单栏底色。
+    return this.readerMenuTintAlphaString(this.readerMenuBaseColor());
   }
 
   /**
-   * 底栏背景渐变。对齐上游 `ReadMenuBlurStyle`：
-   * - `0` 填充（Solid）：两段同色，视觉上是纯色，等价于只用 `backgroundColor`；
-   * - `1` 渐变（Progressive）：上浓下淡，等价于上游 `ReaderMenuTintStyle.Gradient` 分支
-   *   （`ReadBookMenuBarShared.kt:41-47` 把 Progressive 映射成 Gradient）。
-   * 模糊模式（0 关闭 / 1 液态玻璃 / 2 雾化）在 ArkUI 侧没有逐帧背景采样等价物，
-   * 用降低不透明度近似，因此不额外影响这里的渐变。
+   * 底栏背景渐变。对齐上游 `ReaderMenuVisuals.kt:12-25` 的 `readerMenuSurfaceBrush`：
+   * - `0` 填充（Fill）：两段同色，等于纯色；
+   * - `1` 渐变：`Brush.verticalGradient` 在 Bottom 位置是 `[Transparent, opaque]`，
+   *   即**上透下浓**（本地原先是上浓下淡，方向反了）。
+   * 位置 0 在顶部、1 在底部，与上游 verticalGradient 的语义一致。
    */
   private readerBottomBarGradient(): LinearGradientOptions {
-    const base = this.readerMenuContainerBaseColor();
+    const base = this.readerMenuBaseColor();
     if (this.readMenuBottomBarBlurStyle !== 1) {
       const solid = this.readerMenuTintAlphaString(base);
       return {
@@ -1282,11 +1285,12 @@ export struct ReaderPage {
         colors: [[solid, 0.0], [solid, 1.0]]
       };
     }
-    const top = this.readerMenuTintAlphaString(base);
-    const bottom = this.readerMenuTintAlphaString(base, 0.25);
+    // 上游第二段是 Color.Transparent（alpha 全 0），不是「再降 0.25」。
+    const clear = '#' + '00' + this.readerMenuRgb(base);
+    const opaque = this.readerMenuTintAlphaString(base);
     return {
       angle: 180,
-      colors: [[top, 0.0], [bottom, 1.0]]
+      colors: [[clear, 0.0], [opaque, 1.0]]
     };
   }
 
@@ -1300,12 +1304,16 @@ export struct ReaderPage {
    * `ReadBookMenuBarShared.kt:49-85` 把不透明度上限夹到 0.6），因此直接复用同一折算。
    */
   private readerTopBarFillColor(): string {
-    return this.readerMenuTintAlphaString(this.readerMenuContainerBaseColor());
+    // 同底栏：菜单栏底色是 `surfaceContainerHigh` = 菜单背景色（见 readerBottomBarFillColor）。
+    return this.readerMenuTintAlphaString(this.readerMenuBaseColor());
   }
 
-  /** 顶栏背景渐变，语义同底栏；样式取上游 `readMenuTopBarBlurStyle`（0 填充 / 1 渐变）。 */
+  /**
+   * 顶栏背景渐变。对齐上游 `ReaderMenuVisuals.kt:12-25`：Top 位置是 `[opaque, Transparent]`，
+   * 即**上浓下透**（这一档方向本来就对，但第二段应是全透明，不是降 0.25）。
+   */
   private readerTopBarGradient(): LinearGradientOptions {
-    const base = this.readerMenuContainerBaseColor();
+    const base = this.readerMenuBaseColor();
     if (this.readMenuTopBarBlurStyle !== 1) {
       const solid = this.readerMenuTintAlphaString(base);
       return {
@@ -1313,20 +1321,22 @@ export struct ReaderPage {
         colors: [[solid, 0.0], [solid, 1.0]]
       };
     }
-    const top = this.readerMenuTintAlphaString(base);
-    const bottom = this.readerMenuTintAlphaString(base, 0.25);
+    const opaque = this.readerMenuTintAlphaString(base);
+    const clear = '#' + '00' + this.readerMenuRgb(base);
     return {
       angle: 180,
-      colors: [[top, 0.0], [bottom, 1.0]]
+      colors: [[opaque, 0.0], [clear, 1.0]]
     };
   }
 
   /**
-   * 顶栏按钮表面填充。对齐上游 `ReadBookMenuBarTitle.kt:534-540`：
-   * `iconStyle == 1`（色调）时用 surfaceContainerLow 做底，其余透明。
+   * 顶栏按钮表面填充。对齐上游 `ReadBookMenuBarTitle.kt:1008-1016` 的
+   * `readMenuIconButtonContainerColor(selected, iconStyle)`：`iconStyle == 1`（色调）时
+   * 走 `surfaceContainerLow`，即本地的菜单容器色（`ReadBookColorTheme.kt:296`）；
+   * 其余透明。选中态由 `readerMenuItemFill()` 接管。
    */
   private readerTopBarButtonFillColor(): string {
-    return this.titleBarIconStyle === 1 ? '#2A2B31' : 'Transparent';
+    return this.titleBarIconStyle === 1 ? this.readerMenuContainerBaseColor() : 'Transparent';
   }
 
   /**
@@ -1391,6 +1401,27 @@ export struct ReaderPage {
   private readerMenuContainerBaseColor(): string {
     const custom = this.readerMenuIsNight() ? this.readMenuContainerColorNight : this.readMenuContainerColor;
     return custom.length > 0 ? custom : this.readerMenuBaseColor();
+  }
+
+  /**
+   * 菜单项 / 按钮的容器底色。
+   * 上游 `ReadBookMenuBarTitle.kt:1008-1016` 的 `readMenuIconButtonContainerColor(selected, iconStyle)`：
+   * 选中走 secondaryContainer，`iconStyle == 1`（色调）走 surfaceContainerLow，其余透明。
+   * `iconStyle == 1` 的 surfaceContainerLow 就是本地的菜单容器色（见 `ReadBookColorTheme.kt:296`）。
+   */
+  private readerMenuItemFill(selected: boolean, iconStyle: number): string {
+    if (selected) { return this.readerMenuSelectedFill(); }
+    if (iconStyle === 1) { return this.readerMenuContainerBaseColor(); }
+    return 'Transparent';
+  }
+
+  /**
+   * 选中态容器底色。
+   * 上游是 `secondaryContainer`，由 M3 色调调色板从种子色派生；本地没有派生能力，
+   * 用「强调色向菜单背景色压 70%」近似。验收只判「选中项能不能一眼认出来」，不做像素对照。
+   */
+  private readerMenuSelectedFill(): string {
+    return mixHexColor(this.readerMenuAccentTint(), this.readerMenuBaseColor(), 0.7);
   }
 
   /**
@@ -7088,7 +7119,9 @@ export struct ReaderPage {
               }
             }
             .width('100%')
-            .backgroundColor(this.readerTopBarFillColor())
+            // 渐变档下透明端会露出 backgroundColor 的实色，方向一改就露馅，
+            // 所以渐变档把底色让给渐变（上游 `ReaderMenuVisuals.kt:12-25` 只用 Brush，不再叠实色）。
+            .backgroundColor(this.readMenuTopBarBlurStyle === 1 ? Color.Transparent : this.readerTopBarFillColor())
             .linearGradient(this.readerTopBarGradient())
             // KI-E2：菜单栏边框（宽度同时是开关）与背景模糊半径，对齐上游
             // `ReadBookMenuBarTitle.kt:504-521`（描边）与 `:131`（`blurRadius = readMenuBlurRadius`）。
@@ -7102,11 +7135,11 @@ export struct ReaderPage {
 
           if (this.showQuickActions) {
             Row() {
-              ReaderControl({ kind: 'search', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: () => this.onOpenSearchContent() })
-              ReaderControl({ kind: 'autoPage', active: this.autoPageActive, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: (): void => this.toggleAutoPage() })
-              ReaderControl({ kind: 'catalog', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: () => this.onOpenCatalog() })
-              ReaderControl({ kind: 'voice', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: (): void => { this.onUnavailableAction('朗读播放尚未迁移'); }, onLongSelect: (): void => { this.onOpenReadAloud(); } })
-              ReaderControl({ kind: 'settings', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), onSelect: () => this.onOpenSettings() })
+              ReaderControl({ kind: 'search', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: () => this.onOpenSearchContent() })
+              ReaderControl({ kind: 'autoPage', active: this.autoPageActive, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: (): void => this.toggleAutoPage() })
+              ReaderControl({ kind: 'catalog', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: () => this.onOpenCatalog() })
+              ReaderControl({ kind: 'voice', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: (): void => { this.onUnavailableAction('朗读播放尚未迁移'); }, onLongSelect: (): void => { this.onOpenReadAloud(); } })
+              ReaderControl({ kind: 'settings', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: () => this.onOpenSettings() })
             }.width('100%').justifyContent(FlexAlign.Start).padding({ left: 18, right: 18, top: 8, bottom: 8 })
           }
 
@@ -7197,6 +7230,9 @@ export struct ReaderPage {
                           iconStyle: this.bottomIconStyle,
                           menuForeground: this.readerMenuForeground(),
                           menuAccent: this.readerMenuAccentTint(),
+                          itemFill: this.readerMenuItemFill(false, this.bottomIconStyle),
+                          itemFillSelected: this.readerMenuSelectedFill(),
+                          menuForegroundAlpha: this.readerMenuForegroundAlpha('73'),
                           onSelect: () => this.selectBottomAction(kind),
                           onLongSelect: () => this.longSelectBottomAction(kind)
                         }).width(40)
@@ -7220,7 +7256,8 @@ export struct ReaderPage {
             .width(this.readMenuFloatingBottomBar ? '92%' : '100%')
             .alignSelf(ItemAlign.Center)
             .padding({ left: 8, right: 8, top: 12, bottom: 0 })
-            .backgroundColor(this.readerBottomBarFillColor())
+            // 同顶栏：渐变档让底色给渐变，避免透明端露出实色。
+            .backgroundColor(this.readMenuBottomBarBlurStyle === 1 ? Color.Transparent : this.readerBottomBarFillColor())
             .linearGradient(this.readerBottomBarGradient())
             // KI-E2：底栏同样吃边框与模糊半径，对齐上游 `ReadBookMenuBar.kt:450`（描边）
             // 与 `:1027`（`blurRadius = menuConfig.readMenuBlurRadius`）。
@@ -7758,6 +7795,32 @@ export struct ReaderPage {
   }
 }
 
+/**
+ * 两个 `#RRGGBB` / `#AARRGGBB` 之间线性插值；`otherRatio` 是第二个色的占比，0..1。
+ * 用来近似上游由 M3 调色板派生的 `secondaryContainer`（本地无派生能力）。
+ * 解析失败时返回 `first`。
+ */
+function mixHexColor(first: string, second: string, otherRatio: number): string {
+  const fold = (color: string): string => {
+    const raw = color.trim().toUpperCase();
+    if (/^#[0-9A-F]{6}$/.test(raw)) { return raw.substring(1); }
+    if (/^#[0-9A-F]{8}$/.test(raw)) { return raw.substring(3); }
+    return '';
+  };
+  const a = fold(first);
+  const b = fold(second);
+  if (a.length !== 6 || b.length !== 6) { return first; }
+  const ratio = Math.max(0, Math.min(1, otherRatio));
+  let out = '#';
+  for (let i = 0; i < 6; i += 2) {
+    const ca = parseInt(a.substring(i, i + 2), 16);
+    const cb = parseInt(b.substring(i, i + 2), 16);
+    const mixed = Math.round(ca * (1 - ratio) + cb * ratio);
+    out += Math.max(0, Math.min(255, mixed)).toString(16).padStart(2, '0').toUpperCase();
+  }
+  return out;
+}
+
 @Component
 struct ReaderControl {
   @Prop kind: ReaderControlKind = 'catalog';
@@ -7766,13 +7829,17 @@ struct ReaderControl {
   @Prop menuForeground: string = '#D5C2C6';
   /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
   @Prop menuAccent: string = '#FFB1C8';
+  /** 项容器底色（未选中）。取菜单容器色，见 readerMenuItemFill。 */
+  @Prop itemFill: string = '#00000000';
+  /** 项容器底色（选中）。近似上游 secondaryContainer，见 readerMenuSelectedFill。 */
+  @Prop itemFillSelected: string = '#00000000';
   onSelect: () => void = () => {};
   onLongSelect: () => void = () => {};
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
       ReaderControlGlyph({ kind: this.kind, glyphSize: 19, active: this.active, menuForeground: this.menuForeground, menuAccent: this.menuAccent })
-    }.width(36).height(36).backgroundColor(this.active ? '#454B62' : '#303139').borderRadius(20)
+    }.width(36).height(36).backgroundColor(this.active ? this.itemFillSelected : this.itemFill).borderRadius(20)
       .parallelGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => { this.onLongSelect(); }))
       .onClick(() => this.onSelect())
   }
@@ -7791,6 +7858,12 @@ struct ReaderBottomAction {
   @Prop menuForeground: string = '#D5C2C6';
   /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
   @Prop menuAccent: string = '#FFB1C8';
+  /** 项容器底色（未选中），见 readerMenuItemFill。 */
+  @Prop itemFill: string = '#00000000';
+  /** 项容器底色（选中），见 readerMenuSelectedFill。 */
+  @Prop itemFillSelected: string = '#00000000';
+  /** 描边色（iconStyle === 2 时用），由 ReaderPage 传 menuForegroundAlpha('73')。 */
+  @Prop menuForegroundAlpha: string = '#73D5C2C6';
   onSelect: () => void = () => {};
   onLongSelect: () => void = () => {};
 
@@ -7808,11 +7881,12 @@ struct ReaderBottomAction {
             .align(Alignment.TopEnd)
         }
       }.width(40).height(40)
-        .backgroundColor(this.active ? '#454B62' : (this.iconStyle === 1 ? '#292A31' : '#00000000'))
-        .border({ width: this.iconStyle === 2 ? 1 : 0, color: '#8B8E98' })
+        .backgroundColor(this.active ? this.itemFillSelected : this.itemFill)
+        .border({ width: this.iconStyle === 2 ? 1 : 0, color: this.menuForegroundAlpha })
         .borderRadius(20)
       if (this.showLabel) {
-        Text(this.label).fontSize(9).fontColor('#E1E2E7').margin({ top: 3 })
+        // 字号 9 → 11 是批 3 的范围，本批只改颜色与描边色。
+        Text(this.label).fontSize(9).fontColor(this.menuForeground).margin({ top: 3 })
       }
     }.layoutWeight(1).padding({ top: 3, bottom: 3 })
       .parallelGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => { this.onLongSelect(); }))
