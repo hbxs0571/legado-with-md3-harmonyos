@@ -49,6 +49,7 @@ import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
 import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
+import { ArchiveImporter } from '../data/ArchiveImporter';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
@@ -6273,14 +6274,40 @@ private canWriteInto(dir: string): boolean {
   private async importSelectedLocalBooks(uris: string[]): Promise<void> {
     this.localBookImportCandidates = [];
     let importedCount = 0;
+    let archiveFailedCount = 0;
     for (let index = 0; index < uris.length; index += 1) {
       const uri = uris[index];
       if (uri === undefined) {
         continue;
       }
-      const imported = await this.importOneLocalBook(uri);
-      if (imported !== undefined) {
-        importedCount += 1;
+      if (ArchiveImporter.isArchiveUri(uri)) {
+        // 压缩包先展开成若干本，再逐本走与单文件同一套「更新 / 接回 / 新建」落库逻辑。
+        const context = this.getUIContext().getHostContext();
+        if (context === undefined) {
+          continue;
+        }
+        try {
+          const archiveResult = await ArchiveImporter.importFromUri(context, uri);
+          archiveFailedCount += archiveResult.failedCount;
+          const createdBooks = archiveResult.books;
+          for (let inner = 0; inner < createdBooks.length; inner += 1) {
+            const oneCreated = createdBooks[inner];
+            if (oneCreated === undefined) {
+              continue;
+            }
+            const persisted = await this.persistCreatedBook(oneCreated, uri);
+            if (persisted !== undefined) {
+              importedCount += 1;
+            }
+          }
+        } catch (error) {
+          this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：压缩包无法读取');
+        }
+      } else {
+        const imported = await this.importOneLocalBook(uri);
+        if (imported !== undefined) {
+          importedCount += 1;
+        }
       }
     }
     if (importedCount === 0) {
@@ -6291,7 +6318,11 @@ private canWriteInto(dir: string): boolean {
     await this.reloadBooksAfterImport();
     this.localBookImportCandidates = [];
     this.route = AppRoute.BOOKSHELF;
-    this.showUnavailableAction(`已导入 ${importedCount} 本书`);
+    let message = `已导入 ${importedCount} 本书`;
+    if (archiveFailedCount > 0) {
+      message = `已导入 ${importedCount} 本，${archiveFailedCount} 本失败`;
+    }
+    this.showUnavailableAction(message);
   }
 
   /** 重读书目：导入（含接回）会新增或改写记录，书架需要重新取一次。 */
@@ -6308,7 +6339,7 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
-  /** 导入单个已选定的 uri；接回、更新、新建三条分支都在这里判定。 */
+  /** 导入单个已选定的 uri：解析成 CreatedLocalBook 后交给 persistCreatedBook 落库。 */
   private async importOneLocalBook(uri: string): Promise<Book | undefined> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -6322,6 +6353,15 @@ private canWriteInto(dir: string): boolean {
       return undefined;
     }
     if (created === undefined) {
+      return undefined;
+    }
+    return await this.persistCreatedBook(created, uri);
+  }
+
+  /** 落库：更新 / 接回 / 新建三分支；单文件与压缩包解出的每一本都走这里。 */
+  private async persistCreatedBook(created: CreatedLocalBook, uri: string): Promise<Book | undefined> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
       return undefined;
     }
     const importedBook = created.book;

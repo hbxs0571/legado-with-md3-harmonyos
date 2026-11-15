@@ -584,7 +584,7 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
         imported.titles, imported.offsets, imported.volumes, imported.content, undefined);
       created = { book: imported.book, chapters: chapters };
     } else if (format === 'archive') {
-      // 压缩包不走单本路径，由 importLocalBooks 展开（见批 9）。
+      // 压缩包不走单本路径，由 Index.importSelectedLocalBooks 拦截后交给 ArchiveImporter 展开（批 9）。
       throw new Error('压缩包请用多选导入');
     } else {
       created = await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
@@ -623,6 +623,19 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       throw new Error(`导入失败：${lastError.length > 0 ? lastError : '所有文件都无法读取'}`);
     }
     return results;
+  }
+
+  /** 压缩包整册成书时复用私有 buildChapterRows 生成章节行（窄入口，不放开全部私有方法）。 */
+  static buildChaptersForImport(bookUrl: string, titles: string[], offsets: number[],
+    volumes: boolean[], content: string, encoding: string | undefined,
+    tocLevels?: number[], chapterMeta?: EpubChapterMeta[]): BookChapter[] {
+    return BookRepository.buildChapterRows(bookUrl, titles, offsets, volumes, content, encoding,
+      tocLevels, chapterMeta);
+  }
+
+  /** 压缩包缓存子目录按包名取 md5（上游 ArchiveUtils.getCacheFolderFileDoc 的 md5Encode16）。 */
+  static archiveCacheKey(archiveName: string): string {
+    return BookRepository.md5Encode16(archiveName);
   }
 
   static async importTxtFromUri(context: Context, uri: string, fileName: string, bookId: string,

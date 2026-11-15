@@ -17,7 +17,7 @@ import { BookRepository } from './BookRepository';
  *   改用 title —— 导入时写库的书名由 parseNameAuthor 解析得到（会剥掉「作者：X」这类片段），
  *   所以这里也必须用 parseNameAuthor().title 才算同一口径。
  *   副作用：用户手动改过书名的书接不回，只能手动移出再导入。
- * * 上游还有 isArchive / webDav 两条否决；本地没有压缩包与远端书籍来源，两条不适用。注意：isArchive 否决在压缩包导入落地后（批 9）要补回来，届时这行描述要改。
+ * * 上游还有 isArchive / webDav 两条否决。批 9 起压缩包在 Index.importSelectedLocalBooks 里展开成若干本、各自按文件 uri 判重，不再作为单本走这里的接回判定；webDav 仍不适用（本地没有远端书籍来源）。
  *
  * @return 可复用的旧记录；undefined 表示应当新建。
  */
