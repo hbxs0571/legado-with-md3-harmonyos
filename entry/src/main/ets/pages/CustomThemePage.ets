@@ -65,7 +65,9 @@ export struct CustomThemePage {
   onChange: (snapshot: CustomThemeSnapshot) => void = (_snapshot: CustomThemeSnapshot) => {};
   @State collapsedHeader: boolean = false;
   // 下拉行共用一个卡片式菜单：点开前记住本行的选项与回调。
-  @State dropdownVisible: boolean = false;
+  // 三行下拉共用一份待选数据，但显隐必须按行区分：
+  // 共用一个布尔会让三个 bindPopup 同时弹开（实测会叠出三份一样的菜单）。
+  @State dropdownOpenRow: number = -1;
   // 当前点开的那一行有哪些选项（每行不同）。
   @State pendingOptions: string[] = [];
   // 当前点开的那一行的回调，只在渲染用不到，不需要观察。
@@ -245,14 +247,14 @@ export struct CustomThemePage {
       items: this.dropdownItems(),
       panelWidth: CUSTOM_THEME_MENU_WIDTH,
       onSelect: (key: string) => {
-        this.dropdownVisible = false;
+        this.dropdownOpenRow = -1;
         this.pendingPick(key);
       }
     })
   }
 
   @Builder
-  private DropdownRow(title: string, value: string, options: string[], onPick: (value: string) => void) {
+  private DropdownRow(row: number, title: string, value: string, options: string[], onPick: (value: string) => void) {
     Row() {
       Text(title).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
       Text(value).fontSize(14).fontColor(this.themeColorAccent)
@@ -263,16 +265,21 @@ export struct CustomThemePage {
         // 每行点开前把本行的选项与回调记下来，面板只读这份。
         this.pendingOptions = options;
         this.pendingPick = onPick;
-        this.dropdownVisible = !this.dropdownVisible;
+        this.dropdownOpenRow = this.dropdownOpenRow === row ? -1 : row;
       })
-      .bindPopup(this.dropdownVisible, {
+      .bindPopup(this.dropdownOpenRow === row, {
         builder: this.DropdownMenuPanel,
         placement: Placement.Bottom,
         popupColor: '#00000000',
         enableArrow: false,
         autoCancel: true,
         width: CUSTOM_THEME_MENU_WIDTH,
-        onStateChange: (event: PopupStateChangeParam) => { this.dropdownVisible = event.isVisible; }
+        onStateChange: (event: PopupStateChangeParam) => {
+          // 只有本行自己关闭时才把行号清掉，别的行关不掉本行。
+          if (!event.isVisible && this.dropdownOpenRow === row) {
+            this.dropdownOpenRow = -1;
+          }
+        }
       })
   }
 
@@ -354,7 +361,7 @@ export struct CustomThemePage {
               ThemeItemDivider()
               this.SlotRow(13)
               ThemeItemDivider()
-              this.DropdownRow('色板风格', this.styleLabel(this.customTheme.paletteStyle),
+              this.DropdownRow(0, '色板风格', this.styleLabel(this.customTheme.paletteStyle),
                 CUSTOM_PALETTE_STYLE_LABELS, (value: string) => {
                   const index = CUSTOM_PALETTE_STYLE_LABELS.indexOf(value);
                   const snapshot = this.cloneSnapshot();
@@ -362,7 +369,7 @@ export struct CustomThemePage {
                   this.onChange(snapshot);
                 })
               ThemeItemDivider()
-              this.DropdownRow('对比度', this.contrastLabel(this.customTheme.customContrast),
+              this.DropdownRow(1, '对比度', this.contrastLabel(this.customTheme.customContrast),
                 CUSTOM_CONTRAST_LABELS, (value: string) => {
                   const index = CUSTOM_CONTRAST_LABELS.indexOf(value);
                   const snapshot = this.cloneSnapshot();
@@ -370,7 +377,7 @@ export struct CustomThemePage {
                   this.onChange(snapshot);
                 })
               ThemeItemDivider()
-              this.DropdownRow('Material 版本', this.materialLabel(this.customTheme.materialVersion),
+              this.DropdownRow(2, 'Material 版本', this.materialLabel(this.customTheme.materialVersion),
                 CUSTOM_MATERIAL_VERSION_LABELS, (value: string) => {
                   const index = CUSTOM_MATERIAL_VERSION_LABELS.indexOf(value);
                   const snapshot = this.cloneSnapshot();
