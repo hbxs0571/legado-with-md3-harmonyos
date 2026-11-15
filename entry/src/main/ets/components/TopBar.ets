@@ -63,6 +63,12 @@ export struct AppTopBar {
   @StorageProp('themeTopBarButtonStyle') themeTopBarButtonStyle: string = 'tonal';
   /** 「合并顶栏按钮」：为真且样式非 plain 时动作区包成一颗胶囊。 */
   @StorageProp('themeMergeTopBarActions') themeMergeTopBarActions: boolean = false;
+  /**
+   * 状态栏高度（vp）。打开全屏布局后内容画到状态栏底下，顶栏必须自己让出这一段，
+   * 否则标题行会被状态栏文字压住。由 `Index` 读 `getWindowAvoidArea(TYPE_SYSTEM)` 后广播；
+   * 阅读器页面自管状态栏显隐，那里广播 0。
+   */
+  @StorageProp('appTopInset') appTopInset: number = 0;
 
   @Prop title: string = '';
   /** 非空即「有副标题」：展开高从 112 变 136，大标题下多一行小字。 */
@@ -179,7 +185,9 @@ export struct AppTopBar {
       }
     }
     .width('100%')
-    .height(this.totalHeight())
+    // 高度加 appTopInset：多出来的这段就是状态栏让位，不给它的话两行会被压扁。
+    .height(this.totalHeight() + this.appTopInset)
+    .padding({ top: this.appTopInset })
     .clip(true)
     .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
       : (this.themeAppBackground.length > 0 ? '#00000000'

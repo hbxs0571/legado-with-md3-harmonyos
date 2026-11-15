@@ -8,9 +8,14 @@ import { ThemeSettingsRepository, THEME_MODE_DARK } from '../data/ThemeSettingsR
 import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
 import { BookRepository } from '../data/BookRepository';
 
-/** 系统栏颜色资源名，供深浅色两套资源目录各取一值。 */
-const SYSTEM_BAR_LIGHT: string = '#F6F4F0';
-const SYSTEM_BAR_DARK: string = '#111217';
+/**
+ * 系统栏底色：全屏布局下恒透明。
+ *
+ * 上游 `base/BaseActivity.kt` 与 `base/BaseComposeActivity.kt` 都调 `enableEdgeToEdge()`，
+ * 页面自己画到状态栏底下；本地对应的是 `setWindowLayoutFullScreen(true)`，
+ * 打开后系统不再为两条栏铺底色，这里必须给透明，否则会盖出两条实色横条。
+ */
+const SYSTEM_BAR_TRANSPARENT: string = '#00000000';
 
 /**
  * 系统深浅色变化监听器。
@@ -38,14 +43,20 @@ class SystemBarEnvironmentCallback extends EnvironmentCallback {
   }
 }
 
-/** 按深浅色设置状态栏与导航栏底色。 */
+/**
+ * 按深浅色设置状态栏与导航栏。
+ *
+ * 打开 `setWindowLayoutFullScreen(true)` 之后，两条栏的区域不再由系统涂色、而是透出页面内容
+ * （对齐上游 `enableEdgeToEdge()`），所以这里两条栏的底色恒为透明，只保留图标/文字的前景深浅。
+ * 若仍按深浅色涂实底，内容向上延展后会在状态栏位置压一条与页面脱节的横条 —— 正是这次要修的现象。
+ */
 function applySystemBar(context: Context, isDark: boolean): void {
   try {
     window.getLastWindow(context).then((win) => {
       win.setWindowSystemBarProperties({
-        statusBarColor: isDark ? SYSTEM_BAR_DARK : SYSTEM_BAR_LIGHT,
+        statusBarColor: SYSTEM_BAR_TRANSPARENT,
         statusBarContentColor: isDark ? '#E5FFFFFF' : '#E5000000',
-        navigationBarColor: isDark ? SYSTEM_BAR_DARK : SYSTEM_BAR_LIGHT,
+        navigationBarColor: SYSTEM_BAR_TRANSPARENT,
         navigationBarContentColor: isDark ? '#E5FFFFFF' : '#E5000000'
       }).catch(() => {});
     }).catch(() => {});
@@ -77,10 +88,13 @@ export default class EntryAbility extends UIAbility {
     });
     try {
       const mainWindow = windowStage.getMainWindowSync();
+      // 边缘到边缘：布局不避让状态栏与导航栏，组件可以画到它们底下。
+      // 上游对应 `enableEdgeToEdge()`；不打开的话所有页面顶部都会被系统留白占掉一条。
+      mainWindow.setWindowLayoutFullScreen(true).catch(() => {});
       mainWindow.setWindowSystemBarProperties({
-        statusBarColor: SYSTEM_BAR_DARK,
+        statusBarColor: SYSTEM_BAR_TRANSPARENT,
         statusBarContentColor: '#E5FFFFFF',
-        navigationBarColor: SYSTEM_BAR_DARK,
+        navigationBarColor: SYSTEM_BAR_TRANSPARENT,
         navigationBarContentColor: '#E5FFFFFF'
       }).catch(() => {});
     } catch (_) {

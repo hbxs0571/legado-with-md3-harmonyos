@@ -705,9 +705,67 @@ struct Index {
       }
       this.restoreStartupState(context);
     }
+    this.publishAppTopInset();
+    this.syncSystemBarContentColor();
     this.eyeProtectionTimerId = setInterval(() => {
       this.eyeProtectionMinute = Math.floor(Date.now() / 60000);
     }, 60000);
+  }
+
+
+  /**
+   * 按当前页面选系统栏图标深浅。
+   *
+   * 绝大多数页面顶上就是页面底色，跟随主题即可；详情页顶部永远是封面的暗色渐变，
+   * 浅色主题下按主题出黑字会糊在深底上（实测 (66,58,55) 的底上压黑字），所以那里恒用白字。
+   * 阅读页自己管状态栏，这里完全不碰，避免和 ReaderPage 抢。
+   */
+  private syncSystemBarContentColor(): void {
+    if (this.route === AppRoute.READER) {
+      return;
+    }
+    this.applySystemBarContentColor(this.route === AppRoute.BOOK_INFO ? true : this.readerNightMode);
+  }
+
+  /**
+   * 按深浅色重设系统栏前景色。
+   *
+   * 全屏布局（`setWindowLayoutFullScreen(true)`）下两条栏的底色恒透明、透出页面内容，
+   * 这里只负责图标与文字的深浅：深色主题白字，浅色主题黑字。
+   * 与 `EntryAbility.applySystemBar` 同一口径，区别是那一个只在启动/系统换肤时跑，
+   * 应用内切换主题必须在这里补一次，否则系统会留着切换前的颜色。
+   */
+  private applySystemBarContentColor(isDark: boolean): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    window.getLastWindow(context).then((win: window.Window) => {
+      win.setWindowSystemBarProperties({
+        statusBarColor: '#00000000',
+        statusBarContentColor: isDark ? '#E5FFFFFF' : '#E5000000',
+        navigationBarColor: '#00000000',
+        navigationBarContentColor: isDark ? '#E5FFFFFF' : '#E5000000'
+      }).catch(() => {});
+    }).catch(() => {});
+  }
+
+  /**
+   * 读状态栏高度并广播成 vp。
+   *
+   * 打开 `setWindowLayoutFullScreen(true)` 之后页面会画到状态栏底下，顶栏必须自己让出这一段。
+   * 结构与 `pages/ReaderPage.ets` 的 applyReaderDisplayCutout 一致：
+   * getLastWindow → getWindowAvoidArea → px2vp，并且先判 `visible`，不可见时置 0。
+   * 读不到就保持 0 —— 顶栏贴顶比顶栏被状态栏压字安全。
+   */
+  private publishAppTopInset(): void {
+    window.getLastWindow(this.getUIContext().getHostContext()).then((w: window.Window) => {
+      const area: window.AvoidArea = w.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      const topPx: number = area.visible ? area.topRect.height : 0;
+      AppStorage.setOrCreate('appTopInset', this.getUIContext().px2vp(topPx));
+    }).catch(() => {
+      AppStorage.setOrCreate('appTopInset', 0);
+    });
   }
 
   /**
@@ -3304,6 +3362,9 @@ struct Index {
     // 调色板序号为 12（自定义）时改用用户手选的 6 个颜色，判断顺序见 `resolveCustomPaletteColors`。
     const normalizedIndex = normalizePaletteIndex(paletteIndex);
     const isDarkNow = this.readerNightMode;
+    // 全屏布局下状态栏底色恒透明（见 EntryAbility.applySystemBar），但图标深浅不会跟着换：
+    // 浅色主题仍留白字会糊在浅底上看不见，所以每次换肤都重设一次。
+    this.syncSystemBarContentColor();
     const customColors = normalizedIndex === 12
       ? resolveCustomPaletteColors(this.themeCustomColors, isDarkNow,
         resolvePaletteColors(normalizedIndex, isDarkNow))
@@ -4447,6 +4508,11 @@ struct Index {
     } else {
       this.stopReaderAmbientLightWatch();
       this.readerDayNightReminderText = '';
+      // 阅读页自己管状态栏图标，退出时会把图标恢复成固定的白色（ReaderPage.restoreReaderStatusBarIcon）。
+      // 它恢复的时机落在 ReaderPage.aboutToDisappear 里，晚于本回调，所以这里先设一次占位、
+      // 再延后 1.2 秒按主题盖回去。实测只设一次或只延 400ms，浅色主题下会留在浅底白字。
+      this.syncSystemBarContentColor();
+      setTimeout(() => { this.syncSystemBarContentColor(); }, 1200);
     }
   }
 
@@ -10141,7 +10207,7 @@ private canWriteInto(dir: string): boolean {
       }
       }
     }.width('100%').height('100%').backgroundColor(this.appBackgroundSource().length > 0 ? Color.Transparent : (this.themePureBlackActive ? '#000000' : this.themeColorSurfacePrimary))
-      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     // 护眼覆盖层：上游用 ColorFilter.colorMatrix 给全屏套对角色矩阵，这里用同尺寸纯色层
     // 配 MULTIPLY 混合，混合公式 result = 内容 × 覆盖色，与对角矩阵逐通道相乘等价。
     if (this.eyeProtectionOverlayColor().length > 0) {

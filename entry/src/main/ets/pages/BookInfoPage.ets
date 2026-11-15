@@ -22,6 +22,11 @@ export struct BookInfoPage {
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /**
+   * 状态栏高度（vp）。打开全屏布局后本页内容画到状态栏底下，
+   * 自绘顶栏与头部占位都要让出这一段，否则返回键与状态栏文字重叠。
+   */
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
@@ -443,7 +448,8 @@ export struct BookInfoPage {
         Column() {
           Stack() {
             Column() {
-            Blank().height(66)
+            // 顶栏占位：66 = 56（顶栏）+ 10（原视觉留白）。打开全屏布局后还要让出状态栏那一段。
+            Blank().height(66 + this.appTopInset)
 
             Row() {
               // 封面：点击换封面、长按看大图（:301）。容器在调用处包，BookCover 内部加
@@ -612,7 +618,7 @@ export struct BookInfoPage {
         Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 19, tint: '#F1F2F6' }) }
           .width(40).height(40).backgroundColor('#171820').borderRadius(20).margin({ left: 8 })
           .bindMenu(this.BookInfoMoreMenu, { placement: Placement.BottomRight })
-      }.width('100%').height(56).padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      }.width('100%').height(56 + this.appTopInset).padding({ left: 16, right: 16, top: 8 + this.appTopInset, bottom: 8 })
         .backgroundColor(this.collapsedHeader ? this.themeColorSurfacePrimary : '#00000000')
         .animation({ duration: 220, curve: Curve.EaseInOut })
       }.layoutWeight(1).width('100%').backgroundColor(bookCoverColor(this.book))
