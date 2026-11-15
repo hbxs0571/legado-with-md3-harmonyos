@@ -50,6 +50,7 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
 import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
 import { ArchiveImporter } from '../data/ArchiveImporter';
+import { EpubExporter } from '../data/EpubExporter';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
@@ -1474,6 +1475,23 @@ struct Index {
       this.showUnavailableAction(saved ? `已导出 ${rules.length} 条规则` : '未选择保存位置');
     } catch (_) {
       this.showUnavailableAction('替换规则导出失败');
+    }
+  }
+
+  /**
+   * 把一本本地书导出成 .epub。
+   * 只在书籍详情页的「更多」菜单里出现（且只对本地书），落盘位置由用户在系统保存对话框里选。
+   */
+  private async exportBookAsEpub(book: Book): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const saved = await EpubExporter.exportBook(context, book);
+      this.showUnavailableAction(saved ? `已导出《${book.title}》` : '未选择保存位置');
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `导出失败：${error.message}` : '导出失败');
     }
   }
 
@@ -7997,6 +8015,7 @@ private canWriteInto(dir: string): boolean {
           onSaveMetadata: (title: string, author: string, category: string, description: string,
             remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
             this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
+          onExportEpub: (book: Book) => this.exportBookAsEpub(book),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         } else if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {

@@ -72,6 +72,8 @@ export struct BookInfoPage {
     _category: string, _description: string, _remark: string, _customTag: string, _groupNames: string[],
     _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 导出为 EPUB：只对本地书可用；落盘与提示文案都在 Index 侧。 */
+  onExportEpub: (book: Book) => void = (_book: Book) => {};
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
   @State backdropOpacity: number = 0;
@@ -371,6 +373,9 @@ export struct BookInfoPage {
       MenuItem({ content: '刷新书籍信息' }).height(48).onClick(async () => {
         await this.onRefreshBookInfo(this.book);
       })
+      if (this.book.isLocal === true) {
+        MenuItem({ content: '导出为 EPUB' }).height(48).onClick(() => this.onExportEpub(this.book))
+      }
       MenuItem({ content: this.deleteAlertEnabled ? '删除时不再确认' : '删除前先确认' })
         .height(48).onClick(() => this.onToggleDeleteAlert())
     }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
