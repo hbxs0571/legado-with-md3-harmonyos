@@ -14,6 +14,7 @@
 - 改文件时同一文件不要混用脚本与编辑器（会报 `file changed since it was read`）；定位片段只取一到两行，大段替换用整份写入；脚本整份重写必须沿用原换行符。详见 `docs/CODE-CONVENTIONS.md` 第六节。
 - 模拟器交互先 OCR 识别当前界面和目标文字，点击后再 OCR 验证；Android 用 `adb-screen-detection`，HarmonyOS 用 HMNextAuto。中间截图不发给用户，失败时才展示并说明；设备选择、依赖与完整步骤见 `docs/VALIDATION.md`。模拟器启停、探活与截图一律走 `bash scripts/emu.sh`（`start`/`stop`/`restart`/`status`/`cap`），它每次启动都自检密度；密度从 3.5 掉到 1.5 会让整屏 UI 变小的成因与排查记录见 `docs/EMULATOR.md`。
 - **测试材料优先取真实数据，不要用自己造的小样本判定做完**：①书用 `N:\HarmonyProjects\测试\Book\`（仓库外，`txt/` 71 本 + `epub/` 75 本，覆盖 GB18030 / UTF-8 / UTF-8-BOM 三种编码，含无卷、单卷、数百卷多种结构），该目录 `README.md` 有选书指引、`MANIFEST.tsv` 有逐本编码与章节标记数；②备份用 `N:\HarmonyProjects\测试\backup.zip`（2026-11-11，658 本书 / 344 条书签 / 904 个书源 / 41,629 条阅读会话）或 `backup2026-10-22.zip`，两份都是同一台 Android 设备的真实导出。**能挑到现成的就不要现场合成**——合成既费 token，也测不出真实负载与真实使用情形（目录卡顿、聚合耗时、孤儿记录与重复条目这些只在真实数据量下才暴露）。只有「必须精确构造一种畸形输入」时才合成，例如缺正文的占位书、单条 `bookshelf.json` 的备份 ZIP、坏编码、超长单章。两个理由与边界情形见 `docs/CODE-CONVENTIONS.md` 第七节。
+- **浅色模式不单独验收**：界面功能照常做，但验收流程跳过浅色模式专项——不切浅色复跑、不做浅色截图对照、不核对浅色配色，只验深色模式这一条主路径。原因是浅色配色整体尚未打磨（`docs/KNOWN-ISSUES.md` 的 KI-REL5），逐页验它只会反复确认同一批已知差异。跳过的部分不得写成“已验证”或“已通过”。
 - 候选模块不自动展开；保持真实业务与“未迁移”标记，保留现有本地数据能力。
 - 源码备份仅在危险修改之前、关键兼容里程碑完成或用户明确要求时创建；普通页面微调、构建和小修订不创建连续备份。资源、截图和样本只使用 `N:\HarmonyProjects\project-resources\legado-with-MD3`，不得再读取或写入旧开发目录。
 - 发行本轮不排期；用户另行启动时才读 `docs/RELEASE.md`。
