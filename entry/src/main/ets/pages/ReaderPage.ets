@@ -1356,6 +1356,42 @@ export struct ReaderPage {
   }
 
   /**
+   * 顶栏按钮外径。上游 `ReadBookMenuBarTitle.kt:439-440`：
+   * `outerSize = if (glassEnabled) 48.dp else 40.dp`，内层内容区恒 40。
+   * 合并胶囊模式不受影响：上游 `MenuTitleBarMergedGlassButton` 的容器高度就是 40，
+   * 外层若变 48 会撑破胶囊，所以合并模式下锁 40。
+   */
+  private readerTopBarButtonOuterSize(): number {
+    if (this.readerTopBarMergeEnabled()) { return 40; }
+    return this.readMenuTopBarLiquidGlassButtons ? 48 : 40;
+  }
+
+  /**
+   * 菜单文字阴影。对齐上游 `ReadBookMenuBarShared.kt:19`：
+   * 黑色 12% 不透明、无偏移、模糊 12。`#1F000000` 的 0x1F = 31/255 ≈ 12%。
+   * ArkUI 的 `.textShadow` 参数是（radius, color, offsetX, offsetY），radius 单位是 vp。
+   */
+  private readerMenuTextShadow(): ShadowOptions {
+    return { radius: 12, color: '#1F000000', offsetX: 0, offsetY: 0 };
+  }
+
+  /**
+   * 标题栏胶囊的描边。上游 `ReadBookMenuBarTitle.kt:503-515` 的优先级是
+   * 「有菜单边框配置线 > iconStyle == 2 的 1dp 线 > 无」。
+   * `'73'` 是 45%，与上游 `onSurfaceVariant.copy(alpha = 0.45f)` 同口径。
+   */
+  private readerTitleCapsuleBorder(): BorderOptions {
+    // 直接重算宽度而不用 `configured.width > 0`：BorderOptions.width 的静态类型是
+    // Length（number | string | Resource），取出来做数值比较在严格模式下不合法。
+    const width = Math.max(0, Math.min(4, Math.round(this.readMenuBorderWidth)));
+    if (width > 0) { return this.readerMenuBorderSettings(); }
+    if (this.titleBarIconStyle === 2) {
+      return { width: 1, color: this.readerMenuForegroundAlpha('73') };
+    }
+    return { width: 0 };
+  }
+
+  /**
    * 当前纸色是不是深色。上游用 `ReadStyleResolver.isNightTheme()` 判断，
    * 本地没有独立日夜状态，按纸色亮度折算（与 Index.isReaderBackgroundLight 同一口径，
    * 阈值 0.5）。解析不出来时按「浅色」处理。
@@ -3566,9 +3602,9 @@ export struct ReaderPage {
     Stack({ alignContent: Alignment.Center }) {
       ReaderControlGlyph({ kind: this.getTopActionKind(action.id), glyphSize: 20, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint() })
     }
-    .width(40).height(40)
+    .width(this.readerTopBarButtonOuterSize()).height(this.readerTopBarButtonOuterSize())
     .margin({ left: this.readerTopBarMergeEnabled() ? 0 : 6 })
-    .borderRadius(20)
+    .borderRadius(this.readerTopBarButtonOuterSize() / 2)
     .backgroundColor(this.readerTopBarMergeEnabled() ? Color.Transparent : this.readerTopBarButtonFillColor())
     .border({
       width: this.readerTopBarMergeEnabled() ? 0 : this.readerTopBarButtonBorderWidth(),
@@ -3627,18 +3663,22 @@ export struct ReaderPage {
   @Builder
   private readerTitleCapsule() {
     Column() {
+      // 胶囊内书名恒 1 行：40vp 定高装不下两行，上游 `TitleCapsuleGlassLayout` 也是 `maxLines = 1`
+      // （`ReadBookMenuBarTitle.kt:556`）。
       Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.readerMenuForeground()).maxLines(1)
         .width('100%').textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textShadow(this.readerMenuTextShadow())
       if (this.displayChapterTitle.length > 0) {
         Text(this.displayChapterTitle).fontSize(11).fontColor(this.readerMenuForegroundAlpha('B3')).maxLines(1)
           .width('100%').margin({ top: 2 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textShadow(this.readerMenuTextShadow())
       }
     }
     .layoutWeight(1).alignItems(HorizontalAlign.Start)
     .padding({ left: 12, right: 12, top: 4, bottom: 4 })
     .borderRadius(20)
     .backgroundColor(this.readerTopBarButtonFillColor())
-    .border({ width: this.readerTopBarButtonBorderWidth(), color: this.readerMenuForegroundAlpha('73') })
+    .border(this.readerTitleCapsuleBorder())
     // 上游 `ReadBookMenuBarTitle.kt:492-600` `TitleCapsuleGlassLayout` 整块 combinedClickable：
     // 单击进书籍详情（OpenBookInfo）、长按直接进详情（OpenBookInfoDirect）。本地没有「阅读信息
     // Sheet」这个中间态，两种手势都落到书籍详情页 `AppRoute.BOOK_INFO`。
@@ -7081,7 +7121,7 @@ export struct ReaderPage {
               Row() {
                 Stack({ alignContent: Alignment.Center }) {
                   Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
-                }.width(40).height(40).onClick(() => this.onBack())
+                }.width(this.readerTopBarButtonOuterSize()).height(this.readerTopBarButtonOuterSize()).onClick(() => this.onBack())
                 // 胶囊模式：书名 + 章节名压成一行两段，独占中间剩余宽度（上游 ReadBookMenuBarTitle.kt:198/492）。
                 if (this.readerTitleCapsuleVisible()) {
                   this.readerTitleCapsule()
@@ -7090,9 +7130,12 @@ export struct ReaderPage {
                   if (this.readerTitleInlineVisible()) {
                     // 上游 `ReadBookMenuBarTitle.kt:207-221`：非胶囊模式的书名同样 combinedClickable
                     // 进书籍详情，不是纯展示文本。
-                    Text(this.book.title).fontSize(16).fontColor(this.readerMenuForeground()).maxLines(1)
+                    // 上游 `ReadBookMenuBarTitle.kt:213` 的书名是 `maxLines = 2`
+                    // （`maxLines(2)` + `Ellipsis` 正是上游的组合，不要删 textOverflow）。
+                    Text(this.book.title).fontSize(16).fontColor(this.readerMenuForeground()).maxLines(2)
                       .layoutWeight(1).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .textShadow(this.readerMenuTextShadow())
                       .onClick(() => this.onOpenBookInfo())
                       .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
                         this.onOpenBookInfo();
@@ -7104,9 +7147,11 @@ export struct ReaderPage {
               }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
               // 模式 "1"：书名单独占一行（上游 :239）。
               if (this.readerTitleOwnLineVisible()) {
-                // 上游 `ReadBookMenuBarTitle.kt:239-252`：独占一行的书名同样可点进详情。
-                Text(this.book.title).fontSize(16).fontColor(this.readerMenuForeground()).maxLines(1)
+                // 上游 `ReadBookMenuBarTitle.kt:241`：独占一行的书名 `maxLines = 2`，同样可点进详情。
+                Text(this.book.title).fontSize(16).fontColor(this.readerMenuForeground()).maxLines(2)
                   .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 4 })
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .textShadow(this.readerMenuTextShadow())
                   .onClick(() => this.onOpenBookInfo())
                   .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
                     this.onOpenBookInfo();
@@ -7114,8 +7159,18 @@ export struct ReaderPage {
               }
               // 模式 "0"/"1"：章节名独占一行（上游 :259）。
               if (this.readerChapterLineVisible()) {
-                Text(this.displayChapterTitle).fontSize(12).fontColor(this.readerMenuForeground()).maxLines(1)
-                  .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 8 })
+                Row() {
+                  Text(this.displayChapterTitle).fontSize(12).fontColor(this.readerMenuForeground()).maxLines(1)
+                    .textShadow(this.readerMenuTextShadow())
+                    .layoutWeight(1).padding({ left: 16, top: 4, bottom: 8 })
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  // 上游 `ReadBookMenuBarTitle.kt:288-311`：章名行右侧还有一个书源名，点开书源下拉。
+                  // 本地 `book.isLocal` 在 `data/BookRepository.ets` 全链写死 true 且书源引擎未接入，
+                  // 这个分支永远不可达，故留空位不实现（见批 2.6）。
+                  if (!this.book.isLocal) {
+                    // 书源入口未实现，见批 2.6。
+                  }
+                }.width('100%')
               }
             }
             .width('100%')
