@@ -1866,6 +1866,13 @@ export struct ReaderPage {
     this.rebuildReaderPages();
   }
 
+  /** 图片书（PDF / 漫画包）默认样式下强制走 SINGLE 一图一页（批 8）；
+   *  用户手动选的 FULL / TEXT / SINGLE 保持原值，四个取值的语义不变。 */
+  private effectiveImageStyle(): string {
+    return this.book.bookType === 'image' && this.activeImageStyle === 'DEFAULT'
+      ? 'SINGLE' : this.activeImageStyle;
+  }
+
   private imageStyleLabel(style: string): string {
     if (style === 'FULL') { return '全屏'; }
     if (style === 'TEXT') { return '文字嵌入'; }
@@ -2180,7 +2187,7 @@ export struct ReaderPage {
         }
       }
     }
-    const singleImageStyle = this.activeImageStyle === 'SINGLE';
+    const singleImageStyle = this.effectiveImageStyle() === 'SINGLE';
     // 标题块必须用**邻章自己的标题**：之前传空串，邻章首页就没有标题块，
     // 与换章后宿主送来的真页（带标题）排版不一致——页表整表替换时正文会整体
     // 位移一截，用户看到的就是跨章那一下「跳」。章标题从章节缓存里取，同步可得。
@@ -2199,7 +2206,7 @@ export struct ReaderPage {
           this.getReaderTextLetterSpacingWidth(text, fontSize);
       },
       adjacentImageSizes,
-      this.activeImageStyle,
+      this.effectiveImageStyle(),
       context.px2vp(80),
       (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
         this.getReaderLetterSpacingVp(fontSize)),
@@ -2314,7 +2321,7 @@ export struct ReaderPage {
     this.paginationUsesImagePlaceholder = placeholderUsed;
     // 章标题进块流（上游标题是带 `isTitle` 的普通文本块，`ReaderPaginator.kt:1112-1116`）。
     // 标题不再是「首屏预留几行」——预留会让标题脱离排版流，滚动模式下不跟着滚（KI-REL2）。
-    const singleImageStyle = this.activeImageStyle === 'SINGLE';
+    const singleImageStyle = this.effectiveImageStyle() === 'SINGLE';
     // 页层批次 4：正文标题块必须走 `resolvePaginationTitle`，与邻章预排同一口径。
     //
     // 之前这里吃默认参数 `displayChapterTitle`：换章时 `content` 先到、标题是异步
@@ -2337,7 +2344,7 @@ export struct ReaderPage {
           this.getReaderTextLetterSpacingWidth(text, fontSize);
       },
       paginationImageSizes,
-      this.activeImageStyle,
+      this.effectiveImageStyle(),
       context.px2vp(80),
       (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
         this.getReaderLetterSpacingVp(fontSize)),
@@ -4110,7 +4117,7 @@ export struct ReaderPage {
       this.book.id, this.book.contentPath ?? '', this.readerContentRevision, this.fontSize,
       this.textFontPath, this.titleFontPath, this.systemTypefaces,
       this.paragraphSpacing, this.lineSpacing, this.letterSpacing, this.paragraphIndent,
-      this.readerContentWidth, this.viewportHeight, this.activeImageStyle, this.resolveReaderColumnCount(),
+      this.readerContentWidth, this.viewportHeight, this.effectiveImageStyle(), this.resolveReaderColumnCount(),
       JSON.stringify(this.paddingSettings),
       this.useZhLayout,
       this.infoSettings.headerMode, this.infoSettings.footerMode,
@@ -4233,7 +4240,7 @@ export struct ReaderPage {
       await cacheDocumentGlyphWidths(document);
       await this.loadImageSizesForDocument(document, imageSizes);
       const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
-        document.content.length, this.activeImageStyle === 'SINGLE', displayTitle);
+        document.content.length, this.effectiveImageStyle() === 'SINGLE', displayTitle);
       const pageCount = chapterIndex === this.getChapterIndex() && this.localReaderPages.length > 0
         ? this.currentChapterPageCount()
         : await LocalReaderPaginator.countPagesIncrementally(
@@ -4244,7 +4251,7 @@ export struct ReaderPage {
           paragraphSpacing,
           (text: string): number => measureFromGlyphCache(text),
           imageSizes,
-          this.activeImageStyle,
+          this.effectiveImageStyle(),
           context.px2vp(80),
           inlineImageWidth,
           // 标题已进块流，首屏不再预留行。

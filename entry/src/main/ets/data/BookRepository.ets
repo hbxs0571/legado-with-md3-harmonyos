@@ -942,7 +942,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       progress: 0,
       coverUri: RdbCodec.optionalText(resultSet, 15),
       customCoverUri: RdbCodec.optionalText(resultSet, 16),
-      bookType: bookTypeValue === 64 ? 'image' : bookTypeValue === 32 ? 'audio' : 'text',
+      // type 列是位掩码：本地书带 256 位（bookTypeMask 写入），必须按位与还原媒体类型，
+      // 否则图片书 320 / 听书 288 会被误判成 text，图片书一图一页与书架「图片」标签都会失效。
+      bookType: (bookTypeValue & 64) !== 0 ? 'image' : (bookTypeValue & 32) !== 0 ? 'audio' : 'text',
       fixedType: config.fixedType === true,
       contentPath: bookUrl.length > 0 ? bookUrl : undefined,
       format: BookRepository.normalizeFormat(RdbCodec.optionalText(resultSet, 23), bookUrl),

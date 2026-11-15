@@ -391,10 +391,16 @@ export class LocalReaderPaginator {
           continue;
         }
         const intrinsic = imageSizes.get(part.value);
-        const sourceWidth = intrinsic?.width ?? 0;
-        const sourceHeight = intrinsic?.height ?? 0;
-        // 尺寸还没到（应当极少见）：当成不存在，后面这段文字继续接着排。
-        if (sourceWidth <= 0 || sourceHeight <= 0) { continue; }
+        let sourceWidth = intrinsic?.width ?? 0;
+        let sourceHeight = intrinsic?.height ?? 0;
+        // 尺寸还没到：普通书当成不存在继续排；图片书（SINGLE）由下面分支给整页占位。
+        if (sourceWidth <= 0 || sourceHeight <= 0) {
+          // 图片书（SINGLE）缺尺寸时用整页占位，避免首屏空白或全书页数少算（批 8）；
+          // 普通书维持「当成不存在」的旧口径，避免把带插图的 TXT 误判成图片书。
+          if (imageStyle.toUpperCase() !== 'SINGLE') { continue; }
+          sourceWidth = contentWidth;
+          sourceHeight = contentHeight * 0.9;
+        }
         const normalizedImageStyle = imageStyle.toUpperCase();
         const inlineStyle = normalizedImageStyle === 'TEXT' ||
           (normalizedImageStyle === 'DEFAULT' &&
@@ -707,9 +713,15 @@ export class LocalReaderPaginator {
           continue;
         }
         const intrinsic = imageSizes.get(part.value);
-        const sourceWidth = intrinsic?.width ?? 0;
-        const sourceHeight = intrinsic?.height ?? 0;
-        if (sourceWidth <= 0 || sourceHeight <= 0) { continue; }
+        let sourceWidth = intrinsic?.width ?? 0;
+        let sourceHeight = intrinsic?.height ?? 0;
+        if (sourceWidth <= 0 || sourceHeight <= 0) {
+          // 图片书（SINGLE）缺尺寸时用整页占位，避免首屏空白或全书页数少算（批 8）；
+          // 普通书维持「当成不存在」的旧口径，避免把带插图的 TXT 误判成图片书。
+          if (imageStyle.toUpperCase() !== 'SINGLE') { continue; }
+          sourceWidth = contentWidth;
+          sourceHeight = contentHeight * 0.9;
+        }
         const normalizedImageStyle = imageStyle.toUpperCase();
         const inlineStyle = normalizedImageStyle === 'TEXT' ||
           (normalizedImageStyle === 'DEFAULT' &&
