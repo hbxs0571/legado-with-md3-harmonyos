@@ -1,9 +1,13 @@
 import { ThemeItemDivider } from '../ThemeItemDivider';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../AppGlyph';
+import { UiMenuItem, UiMenuPanel } from '../UiMenu';
 import {
-  FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, RADIUS_MENU, ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4
+  FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4
 } from '../UiTokens';
+
+/** 卡片式菜单面板宽；上游由内容驱动，本地给固定宽。 */
+const DROPDOWN_MENU_WIDTH: number = 260;
 
 /**
  * 设置行：点一下弹菜单选值。当前值显示在标题下方的副行（与上游 DropdownListSettingItem 一致）。
@@ -30,26 +34,28 @@ export struct UiDropdown {
   labelOf: (value: string) => string = (value: string) => value;
   onSelect: (value: string) => void = (_value: string) => {};
 
-  /** 菜单开闭状态，驱动右侧箭头旋转（bindMenu 的 onAppear/onDisappear 写它）。 */
+  /** 菜单开闭状态，驱动右侧箭头旋转（bindPopup 的 onStateChange 与本行点击都写它）。 */
   @State menuVisible: boolean = false;
+
+  /** options → 面板条目。菜单显示文案，key 回传的仍是原始值；当前值带勾。 */
+  private menuItems(): UiMenuItem[] {
+    const result: UiMenuItem[] = [];
+    for (const item of this.options) {
+      result.push({ key: item, title: this.labelOf(item), selected: item === this.option });
+    }
+    return result;
+  }
 
   @Builder
   OptionMenu() {
-    Menu() {
-      ForEach(this.options, (item: string) => {
-        // 菜单显示文案，回传的仍是原始值。
-        MenuItem({ content: this.labelOf(item) })
-          .height(48)
-          .onClick(() => {
-            this.onSelect(item);
-          });
-      }, (item: string) => item)
-    }
-    // 跟随主界面背景图与纯黑深色模式（两处原有实现都是这么处理的，不要写死单一底色）
-    .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent :
-      (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
-    .fontColor(this.themeColorTextPrimary)
-    .radius(RADIUS_MENU)
+    UiMenuPanel({
+      items: this.menuItems(),
+      panelWidth: DROPDOWN_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.menuVisible = false;
+        this.onSelect(key);
+      }
+    })
   }
 
   build() {
@@ -79,10 +85,15 @@ export struct UiDropdown {
     }
     .width('100%')
     .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
-    .bindMenu(this.OptionMenu, {
+    .onClick(() => { this.menuVisible = !this.menuVisible; })
+    .bindPopup(this.menuVisible, {
+      builder: this.OptionMenu,
       placement: Placement.Bottom,
-      onAppear: () => { this.menuVisible = true; },
-      onDisappear: () => { this.menuVisible = false; }
+      popupColor: '#00000000',
+      enableArrow: false,
+      autoCancel: true,
+      width: DROPDOWN_MENU_WIDTH,
+      onStateChange: (event: PopupStateChangeParam) => { this.menuVisible = event.isVisible; }
     })
       if (this.showDivider) {
         ThemeItemDivider()
