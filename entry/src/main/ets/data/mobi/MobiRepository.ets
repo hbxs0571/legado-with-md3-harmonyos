@@ -1,11 +1,19 @@
 import { fileIo } from '@kit.CoreFileKit';
 import { MobiReader } from './MobiReader';
 import { PdbFile } from './PdbFile';
+import { Kf6Book } from './Kf6Book';
+import { MobiImportResult } from './MobiEntities';
 
 /** 批 10 调试入口的落盘实作：产 <stem>.meta.txt / <stem>.text.bin 到应用 filesDir，
  * 供 hdc 拉回与 Python 参考逐字节比对。本批不接阅读界面。
  */
 export class MobiRepository {
+  /** KF6 正文/目录/图片导入（批 11）；KF8 由 Kf6Book 抛可读错误，留到批 12。 */
+  static async importFromUri(context: Context, uri: string, fileName: string,
+    bookId: string): Promise<MobiImportResult> {
+    return Kf6Book.importFromUri(context, uri, fileName, bookId);
+  }
+
   static async debugMobi(context: Context, uri: string, stem: string): Promise<string> {
     const pdb = new PdbFile(uri);
     const info = MobiReader.readMobi(pdb);

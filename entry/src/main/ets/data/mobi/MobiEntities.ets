@@ -2,6 +2,8 @@
  * 上游 android.util.SparseArray 在三处只是 int→对象 映射（G14），
  * 这里 EXTH 直接用 Map<number, T>，不需要稀疏语义或 keyAt 遍历顺序。
  */
+import { Book } from '../../model/Book';
+
 export interface PdbRecord {
   offset: number;
   length: number;
@@ -30,6 +32,8 @@ export interface MobiInfo {
   exth: Map<number, string | number>;
   boundary: number;
   isKF8: boolean;
+  /** INDX 目录记录号（record0 +244），批 11 的 NCX 解析入口。 */
+  indx: number;
 }
 
 /** 解压器统一接口，对应上游 Decompressor。 */
@@ -42,4 +46,13 @@ export interface MobiDebugData {
   stem: string;
   meta: string;
   text: Uint8Array;
+}
+
+/** KF6 导入结果，与 UmdImportResult 同形，交给 buildChapterRows 统一生成章节行。 */
+export interface MobiImportResult {
+  book: Book;
+  titles: string[];
+  offsets: number[];
+  volumes: boolean[];
+  content: string;
 }

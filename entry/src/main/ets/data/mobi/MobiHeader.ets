@@ -18,6 +18,7 @@ export class MobiHeader {
       numHuffcdic: PdbFile.be32(record0, 116), exthFlag: PdbFile.be32(record0, 128),
       trailingFlags: PdbFile.be32(record0, 240), title: '',
       exth: new Map<number, string | number>(), boundary: -1, isKF8: false,
+      indx: record0.length >= 248 ? PdbFile.be32(record0, 244) : 0xFFFFFFFF,
     };
     const hdrLen = PdbFile.be32(record0, 20);
     const titleOffset = PdbFile.be32(record0, 84);

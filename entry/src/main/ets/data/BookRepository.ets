@@ -576,11 +576,12 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
         imported.titles, imported.offsets, imported.volumes, imported.content, undefined);
       created = { book: imported.book, chapters: chapters };
     } else if (format === 'mobi') {
-      // 批 10 只做底盘：借导入链触发调试 dump（落 meta/text.bin 供逐字节比对），
-      // 正文/分章/图片在批 11-12 接入；这里抛可读错误，不落半截书、不进阅读界面。
-      const stem = fileName.replace(/\.[^.]+$/, '');
-      await BookRepository.debugMobi(context, uri, stem);
-      throw new Error('MOBI 正文导入在批 11/12 接入；底盘调试数据已产出到 mobi-debug/' + stem);
+      // KF6 正文/分章/图片（批 11）；KF8 内容在批 12 接入，Kf6Book 内部会抛可读错误。
+      const imported = await MobiRepository.importFromUri(context, uri, fileName, bookId);
+      // MOBI 正文落盘为 UTF-8，章节偏移按拼接后字符数给，与 UMD 走同一条 buildChapterRows。
+      const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
+        imported.titles, imported.offsets, imported.volumes, imported.content, undefined);
+      created = { book: imported.book, chapters: chapters };
     } else if (format === 'umd') {
       const imported = await UmdRepository.importFromUri(context, uri, fileName, bookId);
       // UMD 正文落盘为 UTF-8，章节偏移按拼接后字符数给，与 EPUB 走同一条 buildChapterRows。
