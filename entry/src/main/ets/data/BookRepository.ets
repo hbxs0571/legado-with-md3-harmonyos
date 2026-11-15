@@ -7,6 +7,7 @@ import { AppLog } from '../lib/AppLog';
 import { EpubRepository, EpubChapterMeta } from './EpubRepository';
 import { UmdRepository } from './UmdRepository';
 import { PdfRepository } from './PdfRepository';
+import { MobiRepository } from './mobi/MobiRepository';
 import { LocalTextSemantics } from './LocalTextSemantics';
 import { LocalTextReSegmenter } from './LocalTextReSegmenter';
 import { ReplaceRuleRepository } from './ReplaceRuleRepository';
@@ -575,8 +576,11 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
         imported.titles, imported.offsets, imported.volumes, imported.content, undefined);
       created = { book: imported.book, chapters: chapters };
     } else if (format === 'mobi') {
-      // MOBI / AZW3 解析器在批 10-12 接入。
-      throw new Error('MOBI / AZW3 解析器未实现，暂时无法导入');
+      // 批 10 只做底盘：借导入链触发调试 dump（落 meta/text.bin 供逐字节比对），
+      // 正文/分章/图片在批 11-12 接入；这里抛可读错误，不落半截书、不进阅读界面。
+      const stem = fileName.replace(/\.[^.]+$/, '');
+      await BookRepository.debugMobi(context, uri, stem);
+      throw new Error('MOBI 正文导入在批 11/12 接入；底盘调试数据已产出到 mobi-debug/' + stem);
     } else if (format === 'umd') {
       const imported = await UmdRepository.importFromUri(context, uri, fileName, bookId);
       // UMD 正文落盘为 UTF-8，章节偏移按拼接后字符数给，与 EPUB 走同一条 buildChapterRows。
@@ -591,6 +595,13 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
     }
     created.fileName = fileName;
     return created;
+  }
+
+  /** 批 10 临时调试入口：对一本 MOBI 产出底盘调试数据（任务书 §10.7）。
+   * 由 importSingleUri 的 mobi 分支借导入链触发，设备侧拉回与 Python 参考逐字节比对。
+   */
+  static async debugMobi(context: Context, uri: string, stem: string): Promise<void> {
+    await MobiRepository.debugMobi(context, uri, stem);
   }
 
   /**
