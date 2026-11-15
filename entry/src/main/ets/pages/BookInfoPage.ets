@@ -10,6 +10,19 @@ import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepo
 import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession } from '../model/ReadRecord';
 import { HighlightTagRule } from '../model/HighlightTagRule';
 import { HighlightedTag, matchHighlightTags } from '../data/HighlightTagMatcher';
+import { pasteboard } from '@kit.BasicServicesKit';
+import {
+  TopBarButton, TopBarBackButton, topBarButtonSize, topBarActionSpacing,
+  TOP_BAR_SIDE_PADDING, TOP_BAR_ACTIONS_END
+} from '../components/TopBar';
+import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
+
+/** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
+const OVERFLOW_MENU_WIDTH: number = 260;
+/** 底栏 FAB 高度，对齐上游 ExtendedFloatingActionButton 的 56dp。 */
+const READ_FAB_HEIGHT: number = 56;
+/** 内容底部留白：给浮在内容上的 FAB 让位，对齐上游 `+ 88.dp`。 */
+const CONTENT_BOTTOM_INSET: number = 88;
 
 @Component
 export struct BookInfoPage {
@@ -27,6 +40,8 @@ export struct BookInfoPage {
    * 自绘顶栏与头部占位都要让出这一段，否则返回键与状态栏文字重叠。
    */
   @StorageProp('appTopInset') appTopInset: number = 0;
+  /** 顶栏按钮版式（tonal / plain / outlined / glass / liquid），顶栏三颗按钮的底色由它决定。 */
+  @StorageProp('themeTopBarButtonStyle') themeTopBarButtonStyle: string = 'tonal';
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
@@ -46,6 +61,8 @@ export struct BookInfoPage {
   /** 移出书架前是否二次确认（批 7 的 `:291`）。 */
   @Prop deleteAlertEnabled: boolean = true;
   onBack: () => void = () => {};
+  /** 打开书籍信息编辑页（批 5 的独立整页，不是浮窗）。 */
+  onOpenEditPage: () => void = () => {};
   onRead: () => void = () => {};
   onOpenCatalog: () => void = () => {};
   onOpenReadRecords: () => void = () => {};
@@ -82,16 +99,6 @@ export struct BookInfoPage {
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
   @State backdropOpacity: number = 0;
-  @State metadataEditorVisible: boolean = false;
-  @State metadataTitle: string = '';
-  @State metadataAuthor: string = '';
-  @State metadataCategory: string = '';
-  @State metadataDescription: string = '';
-  @State metadataRemark: string = '';
-  @State metadataCustomTag: string = '';
-  @State metadataGroupNames: string[] = [];
-  @State metadataBookType: BookMediaType = 'text';
-  @State metadataFixedType: boolean = false;
   /** 从封面提取出的主色，空串表示尚未取到或取色失败。 */
   @State coverSeedColor: string = '';
   /** 本书阅读记录面板显隐与数据，照 F12 自绘全屏遮罩范式。 */
@@ -101,10 +108,8 @@ export struct BookInfoPage {
   @State titleExpanded: boolean = false;
   /** 命中高亮规则的标签块，aboutToAppear 算一次。 */
   @State highlightedTags: HighlightedTag[] = [];
-  /** 标签编辑器的 chip 列表（:332）；保存时 join 成 customTag。 */
-  @State metadataTags: string[] = [];
-  @State metadataTagInput: string = '';
-  @State metadataTagEditing: boolean = false;
+  /** 溢出菜单显隐。挂 `bindPopup`，`onStateChange` 会回写这里。 */
+  @State overflowVisible: boolean = false;
   /** 移出书架面板（:337）。 */
   @State deleteSheetVisible: boolean = false;
   /** 面板里「同时删除应用内副本」的勾选；每次打开都复位成未勾（:339）。 */
@@ -156,6 +161,40 @@ export struct BookInfoPage {
   private seedOverlayColor(): string {
     if (this.coverSeedColor.length === 0) { return ''; }
     return `#57${this.coverSeedColor.substring(1)}`;
+  }
+
+  /**
+   * 渐变层里某一档的主色。有 seed 就换成对应 alpha 的 8 位色，没有就返回全透明
+   * —— 对齐上游 `seedOverlay.copy(alpha = 0.10f / 0.18f)` 在无 seed 时取 Transparent。
+   */
+  private seedGradientColor(alpha: number): string {
+    if (this.coverSeedColor.length === 0) { return '#00000000'; }
+    const byte: number = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+    const hex: string = byte.toString(16).padStart(2, '0').toUpperCase();
+    return `#${hex}${this.coverSeedColor.substring(1)}`;
+  }
+
+  /**
+   * 渐变 0.40 那一档。上游写法是 `seedOverlay.copy(alpha = 0.18f)`，
+   * 但注释写明了无 seed 时改取 `surface.copy(alpha = 0.35f)` —— 没有这一档，
+   * 背景会从纯透明直接跳到 85% 底色，头部到内容之间就是一道硬边。
+   */
+  private midGradientColor(): string {
+    return this.coverSeedColor.length > 0 ? this.seedGradientColor(0.18) : this.surfaceAlphaColor(0.35);
+  }
+
+  /** 页面底色：跟随背景图与纯黑主题，正文卡片之外的那一层就用这个色。 */
+  private pageBaseColor(): string {
+    if (this.themeAppBackground.length > 0) { return '#00000000'; }
+    return this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary;
+  }
+
+  /** 页面底色加自定义 alpha，对齐上游 `surface.copy(alpha = 0.85f)`。 */
+  private surfaceAlphaColor(alpha: number): string {
+    const byte: number = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+    const hex: string = byte.toString(16).padStart(2, '0').toUpperCase();
+    const base: string = this.pageBaseColor();
+    return `#${hex}${base.substring(base.length - 6)}`;
   }
 
   private loadFileSize(): void {
@@ -272,20 +311,6 @@ export struct BookInfoPage {
     this.onSearchKeyword(author);
   }
 
-  /** 标签编辑器里加一个标签（:332）；重名忽略，不重复加。 */
-  private addMetadataTag(): void {
-    const value = this.metadataTagInput.trim();
-    this.metadataTagInput = '';
-    this.metadataTagEditing = false;
-    if (value.length === 0) { return; }
-    if (this.metadataTags.includes(value)) { return; }
-    this.metadataTags = [...this.metadataTags, value];
-  }
-
-  private removeMetadataTag(tag: string): void {
-    this.metadataTags = this.metadataTags.filter((item: string) => item !== tag);
-  }
-
   private getChapterTotal(): number {
     // chapterTitles 已随迁移删除：章节数一律取 books 行的 totalChapterNum。
     const savedCount = Number(this.book.chapterCount ?? '0');
@@ -368,70 +393,101 @@ export struct BookInfoPage {
     }.width('100%').height('100%').zIndex(1002)
   }
 
-  /** 顶栏「更多」菜单（:294）。只放能真做的项，不放点了没反应的占位。 */
-  @Builder
-  private BookInfoMoreMenu() {
-    Menu() {
-      MenuItem({ content: this.book.isPrivate === true ? '取消私密' : '设为私密' }).height(48)
-        .onClick(() => this.onSetPrivate(this.book, this.book.isPrivate !== true))
-      MenuItem({ content: '置顶' }).height(48).onClick(() => this.onTopBook())
-      MenuItem({ content: '刷新书籍信息' }).height(48).onClick(async () => {
-        await this.onRefreshBookInfo(this.book);
-      })
-      if (this.book.isLocal === true) {
-        MenuItem({ content: '导出为 EPUB' }).height(48).onClick(() => this.onExportEpub(this.book))
+  /**
+   * 溢出菜单的项。
+   *
+   * 顺序照上游 `BookInfoScreen.kt:1034-1143` 的 `BookInfoOverflowMenu`
+   * （custom_button → edit → refresh → read_record → book_disable_read_record →
+   *  … → to_top → … → delete_alert → … → private），去掉本地没有对应能力的项后不补空位。
+   * 上游 19 项里本地能做 8 项：书源变量、WebDAV 重同步、拆分超长章节、清理缓存、
+   * 日志这些没有数据模型支撑，做了就是编。
+   */
+  private overflowItems(): UiMenuItem[] {
+    const items: UiMenuItem[] = [
+      { key: 'edit', title: '编辑' },
+      { key: 'refresh', title: '刷新' },
+      { key: 'read_record', title: '阅读记录' },
+      {
+        key: 'book_disable_read_record',
+        title: this.book.disableReadRecord === true ? '启用阅读记录' : '禁用阅读记录',
+        selected: this.book.disableReadRecord === true
+      },
+      { key: 'copy_book_url', title: '拷贝书籍 URL' },
+      { key: 'to_top', title: '置顶' },
+      { key: 'delete_alert', title: '删除提醒', selected: this.deleteAlertEnabled },
+      {
+        key: 'private',
+        title: this.book.isPrivate === true ? '取消私密标记' : '标记为私密',
+        selected: this.book.isPrivate === true
       }
-      MenuItem({ content: this.deleteAlertEnabled ? '删除时不再确认' : '删除前先确认' })
-        .height(48).onClick(() => this.onToggleDeleteAlert())
-    }.backgroundColor('#17181E').fontColor('#F1F2F6').radius(20)
+    ];
+    // 导出为 EPUB 是本地扩展（上游导出在 ExportBookService，不在溢出菜单里）。
+    if (this.book.isLocal === true) {
+      items.push({ key: 'export_epub', title: '导出为 EPUB' });
+    }
+    return items;
   }
 
-  private openMetadataEditor(): void {
-    this.metadataTitle = this.book.title;
-    this.metadataAuthor = this.book.author;
-    this.metadataCategory = this.book.category;
-    this.metadataDescription = this.book.description ?? '';
-    this.metadataRemark = this.book.remark ?? '';
-    this.metadataCustomTag = this.book.customTag ?? '';
-    this.metadataTags = this.getCustomTags();
-    this.metadataTagInput = '';
-    this.metadataTagEditing = false;
-    this.metadataGroupNames = [...(this.book.groupNames ?? [])];
-    this.metadataBookType = this.book.bookType ?? 'text';
-    this.metadataFixedType = this.book.fixedType === true;
-    this.metadataEditorVisible = true;
+  /** 点溢出菜单某一项。关闭在回调里做，面板自己不关自己。 */
+  private onOverflowSelect(key: string): void {
+    this.overflowVisible = false;
+    if (key === 'edit') {
+      this.onOpenEditPage();
+    } else if (key === 'refresh') {
+      this.onRefreshBookInfo(this.book);
+    } else if (key === 'read_record') {
+      this.openReadRecordPanel();
+    } else if (key === 'book_disable_read_record') {
+      this.onToggleDisableReadRecord(this.book, !(this.book.disableReadRecord === true));
+    } else if (key === 'copy_book_url') {
+      this.copyBookUrl();
+    } else if (key === 'to_top') {
+      this.onTopBook();
+    } else if (key === 'delete_alert') {
+      this.onToggleDeleteAlert();
+    } else if (key === 'private') {
+      this.onSetPrivate(this.book, this.book.isPrivate !== true);
+    } else if (key === 'export_epub') {
+      this.onExportEpub(this.book);
+    }
   }
 
-  private async saveMetadata(): Promise<void> {
-    const title = this.metadataTitle.trim();
-    if (title.length === 0) {
-      this.onUnavailableAction('书名不能为空，未保存书籍信息');
+  /**
+   * 拷贝书籍 URL（上游 `copy_book_url`）。
+   *
+   * 上游取 `book.bookUrl`；本地没有书源 URL，用 `androidOriginalPath`，
+   * 再退到 `contentPath`。写剪贴板不需要 PasteButton 授权（读才需要）。
+   */
+  private copyBookUrl(): void {
+    const url = (this.book.androidOriginalPath ?? '').length > 0
+      ? (this.book.androidOriginalPath ?? '')
+      : (this.book.contentPath ?? '');
+    if (url.length === 0) {
+      this.onUnavailableAction('这本书没有可拷贝的路径');
       return;
     }
-    const saved = await this.onSaveMetadata(
-      title,
-      this.metadataAuthor.trim(),
-      this.metadataCategory.trim(),
-      this.metadataDescription.trim(),
-      this.metadataRemark.trim(),
-      this.metadataTags.join(','),
-      this.metadataGroupNames,
-      this.metadataBookType,
-      this.metadataFixedType
-    );
-    if (saved) { this.metadataEditorVisible = false; }
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, url);
+    pasteboard.getSystemPasteboard().setData(data).then(() => {
+      this.onUnavailableAction('已拷贝书籍路径');
+    }).catch(() => {
+      this.onUnavailableAction('拷贝失败，剪贴板不可用');
+    });
   }
 
-  private toggleMetadataGroup(name: string, selected: boolean): void {
-    if (selected && !this.metadataGroupNames.includes(name)) {
-      this.metadataGroupNames = [...this.metadataGroupNames, name];
-    } else if (!selected) {
-      this.metadataGroupNames = this.metadataGroupNames.filter((item: string) => item !== name);
-    }
+  /** 溢出菜单面板：批 1 的卡片式菜单，挂在「更多」按钮的 bindPopup 上。 */
+  @Builder
+  private OverflowMenuPopup() {
+    UiMenuPanel({
+      items: this.overflowItems(),
+      panelWidth: OVERFLOW_MENU_WIDTH,
+      onSelect: (key: string) => this.onOverflowSelect(key)
+    })
   }
 
   build() {
     Column() {
+      // 内容层 + FAB 层：FAB 浮在内容右下角（上游 floatingActionButton），不占布局高度。
+      Stack({ alignContent: Alignment.BottomEnd }) {
       Stack({ alignContent: Alignment.TopStart }) {
       if (this.backdropStyle().showCover && this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
         Image(this.book.coverUri).width('100%').height(480).objectFit(ImageFit.Cover)
@@ -444,6 +500,25 @@ export struct BookInfoPage {
       if (this.backdropStyle().applySeedOverlay && this.seedOverlayColor().length > 0) {
         Column().width('100%').height(480).backgroundColor(this.seedOverlayColor())
       }
+      // 第三层：固定竖向渐变，上游 BookInfoBackdrop（BookInfoScreen.kt:927-1023）的
+      // Brush.verticalGradient(colorStops = 0f 透明 / 0.20f seed 0.10 / 0.40f seed 0.18 /
+      // 0.60f surface 0.85 / 0.80f surface / 1f surface)。本地原本缺这一层，所以背景
+      // 从封面图直接切到页面底色，滚到底是一圈硬边界。
+      Column()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 180,
+          colors: [
+            ['#00000000', 0.0],
+            [this.seedGradientColor(0.10), 0.20],
+            [this.midGradientColor(), 0.40],
+            [this.surfaceAlphaColor(0.85), 0.60],
+            [this.pageBaseColor(), 0.80],
+            [this.pageBaseColor(), 1.0]
+          ]
+        })
+        .hitTestBehavior(HitTestMode.None)
       Scroll(this.infoScroller) {
         Column() {
           Stack() {
@@ -520,11 +595,15 @@ export struct BookInfoPage {
                 BookInfoTag({ label: tag })
               }, (tag: string) => tag)
             }.width('100%').padding({ left: 18, right: 18, bottom: 20 })
-            }.width('100%').backgroundColor('#55343845')
+            // 头部不设自己的底色：底色来自背景层的三段渐变（上游 BookInfoHeader 也是这样），
+            // 原来这块硬编码的 '#55343845' 会在渐变上压出一块紫灰。
+            }.width('100%')
           }.width('100%')
 
           Column() {
 
+          // 上游 BookInfoActions（BookInfoScreen.kt:1391-1493）只有 4 张卡：
+          // 书架 / 查看目录 / 换源 / 阅读记录。「禁用阅读记录」在上游只存在于溢出菜单里。
           Row() {
             BookInfoAction({
               icon: 'bookmark',
@@ -533,31 +612,22 @@ export struct BookInfoPage {
             })
             BookInfoAction({ icon: 'list', label: '查看目录', onSelect: () => this.onOpenCatalog() })
             BookInfoAction({ icon: 'swap', label: '换源', onSelect: () => this.onUnavailableAction('在线换源将在 P5 接入') })
-            BookInfoAction({ icon: 'clock', label: '阅读记录', onSelect: () => this.openReadRecordPanel() })
-            BookInfoAction({
-              icon: 'clock',
-              label: this.book.disableReadRecord === true ? '启用阅读记录' : '禁用阅读记录',
-              onSelect: () => this.onToggleDisableReadRecord(this.book, !(this.book.disableReadRecord === true))
-            })
+            BookInfoAction({ icon: 'profileTimeline', label: '阅读记录', onSelect: () => this.openReadRecordPanel() })
           }.width('100%').padding({ left: 12, right: 12, top: 14, bottom: 16 })
 
           Column() {
             Text(this.book.progress > 0 ? `在读 · ${this.book.lastChapter}` : '尚未开始阅读')
               .fontSize(19).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-            Text(`最新 · ${this.book.lastChapter.length > 0 ? this.book.lastChapter : '尚无章节信息'}`)
-              .fontSize(16).fontColor('#BFC1CB').margin({ top: 8 })
+            // 第二行是「最新章节」，不是「当前阅读章」：上游接的是 latestChapterTitle。
+            Text(`最新 · ${this.book.latestChapterTitle ?? ''}`)
+              .fontSize(16).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
             Row() {
               Text(this.getChapterTotal() > 0 ? `共 ${this.getChapterTotal()} 章` : '章节总数待读取')
                 .fontSize(14).fontColor(this.themeColorAccent)
-              Text('  |  ').fontSize(14).fontColor('#777B88')
+              Text('  |  ').fontSize(14).fontColor(this.themeColorTextTertiary)
               Text(this.readStateLabel())
-                .fontSize(14).fontColor(this.themeColorAccent)
+                .fontSize(14).fontColor(this.themeColorTextSecondary)
             }.margin({ top: 8 })
-            Row() {
-              Row().width(`${Math.max(0, Math.min(100, this.book.progress))}%`).height(5)
-                .backgroundColor(this.themeColorAccent).borderRadius(3)
-              Blank()
-            }.width('100%').height(5).backgroundColor('#3A3C46').borderRadius(3).margin({ top: 12 })
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18).margin({ left: 16, right: 16, bottom: 14 })
 
@@ -595,162 +665,73 @@ export struct BookInfoPage {
                   .alignSelf(ItemAlign.Start).margin({ top: 16 })
                 Text(this.book.remark ?? '').fontSize(14).lineHeight(21).fontColor('#BFC1CB')
                   .alignSelf(ItemAlign.Start).margin({ top: 6 })
-              }.width('100%').onClick(() => this.openMetadataEditor())
+              }.width('100%').onClick(() => this.onOpenEditPage())
             }
           }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
-          }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-        }.width('100%').padding({ bottom: 12 })
+          // 内容列不铺底色：底色由第三层渐变给（上游 BookInfoBackdrop 的 0.60→1.0 段），
+          // 铺了就从头部到内容一刀切，渐变看不出来。
+          }.width('100%')
+        }.width('100%').padding({ bottom: CONTENT_BOTTOM_INSET })
       }.width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.infoScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
       })
 
+      // 顶栏：上游 BookInfoTransparentTopAppBar（BookInfoScreen.kt:738-805）在顶部时完全透明，
+      // 滚动后才是 scrolledContainerColor。三个动作按 BookInfoTopBarActions 的顺序：
+      // 编辑（inBookshelf 才有）→ 分享 → 更多。
       Row() {
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor('#F1F2F6')
-        }.width(40).height(40).backgroundColor('#171820').borderRadius(20)
-          .onClick(() => this.onBack())
-        Blank().layoutWeight(1)
-        BookInfoIconButton({ icon: 'edit', onSelect: () => this.openMetadataEditor() })
-        BookInfoIconButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
-        // 「更多」改成真实菜单（:294）。批7 会把置顶/刷新书籍信息/删除确认陆续接进来。
-        Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'more', glyphSize: 19, tint: '#F1F2F6' }) }
-          .width(40).height(40).backgroundColor('#171820').borderRadius(20).margin({ left: 8 })
-          .bindMenu(this.BookInfoMoreMenu, { placement: Placement.BottomRight })
-      }.width('100%').height(56 + this.appTopInset).padding({ left: 16, right: 16, top: 8 + this.appTopInset, bottom: 8 })
+        TopBarBackButton({ onSelect: () => this.onBack() })
+        Blank()
+        Row({ space: topBarActionSpacing(this.themeTopBarButtonStyle) }) {
+          TopBarButton({ icon: 'edit', onSelect: () => this.onOpenEditPage() })
+          TopBarButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
+          // menuMode: true 让 TopBarButton 不注册自己的 onSelect（否则内层点击会被它吃掉）；
+          // bindPopup 要求宿主节点可点击，所以这里补一个只翻转显隐的 onClick。
+          TopBarButton({ icon: 'more', menuMode: true })
+            .onClick(() => { this.overflowVisible = !this.overflowVisible; })
+            .bindPopup(this.overflowVisible, {
+              builder: this.OverflowMenuPopup,
+              placement: Placement.BottomRight,
+              popupColor: '#00000000',
+              enableArrow: false,
+              autoCancel: true,
+              width: OVERFLOW_MENU_WIDTH,
+              onStateChange: (event: PopupStateChangeParam) => {
+                this.overflowVisible = event.isVisible;
+              }
+            })
+        }
+        .height(topBarButtonSize(this.themeTopBarButtonStyle))
+        .borderRadius(topBarButtonSize(this.themeTopBarButtonStyle) / 2)
+      }.width('100%').height(64 + this.appTopInset)
+        .padding({ left: TOP_BAR_SIDE_PADDING, right: TOP_BAR_ACTIONS_END, top: this.appTopInset })
         .backgroundColor(this.collapsedHeader ? this.themeColorSurfacePrimary : '#00000000')
         .animation({ duration: 220, curve: Curve.EaseInOut })
-      }.layoutWeight(1).width('100%').backgroundColor(bookCoverColor(this.book))
+      }.width('100%').height('100%').backgroundColor(bookCoverColor(this.book))
 
-      Row() {
-        Blank()
+      // 阅读按钮：上游是 ExtendedFloatingActionButton，浮在内容右下角，不是常驻底栏。
+      if (this.readRecordPanelVisible === false) {
         Row() {
-          AppGlyph({ name: 'book', glyphSize: 17, tint: '#F2F2F7' })
+          AppGlyph({
+            name: 'book',
+            glyphSize: 17,
+            tint: this.themePureBlack ? '#101114' : this.themeColorSurfacePrimary
+          })
           Text(BookRepository.isBodyMissing(this.book) ? '缺少正文' : '阅读')
-            .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#F2F2F7').margin({ left: 7 })
-        }.justifyContent(FlexAlign.Center).width(104).padding({ top: 13, bottom: 13 })
-          .backgroundColor('#46476B').borderRadius(26).onClick(() => this.onRead())
-      }.width('100%').justifyContent(FlexAlign.End).padding({ left: 20, right: 20, top: 8, bottom: 12 })
-
-      if (this.metadataEditorVisible) {
-        Stack({ alignContent: Alignment.Center }) {
-          Column().width('100%').height('100%').backgroundColor('#99000000')
-            .onClick(() => this.metadataEditorVisible = false)
-          Column() {
-            Row() {
-              Text('编辑书籍信息').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
-              Text('取消').fontSize(14).fontColor('#C5C7D0').padding(8)
-                .onClick(() => this.metadataEditorVisible = false)
-            }.width('100%').padding({ bottom: 12 })
-            Scroll() {
-              Column() {
-                Row() {
-                  BookCover({ book: this.book, displayWidth: 58, displayHeight: 82, cornerRadius: 7, coverSettings: this.coverSettings })
-                    .width(58).height(82)
-                  Column() {
-                    Text('封面').fontSize(15).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
-                    Text('仅更改应用内封面副本，原始小说文件保持不变')
-                      .fontSize(12).fontColor('#AEB0BA').margin({ top: 4, bottom: 8 })
-                    Row() {
-                      Text('选择图片').fontSize(13).fontColor('#B9C6FF').padding({ right: 16 })
-                        .onClick(() => this.onChooseCover())
-                      Text('还原封面').fontSize(13).fontColor('#BFC1CB')
-                        .onClick(() => this.onRestoreCover())
-                    }
-                  }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
-                }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(12)
-                Column() {
-                  Text('书籍类型').fontSize(14).fontColor('#ECEEF2').margin({ bottom: 8 })
-                  Row() {
-                    BookTypeChoice({ label: '文本', selected: this.metadataBookType === 'text', onSelect: () => this.metadataBookType = 'text' })
-                    BookTypeChoice({ label: '音频', selected: this.metadataBookType === 'audio', onSelect: () => this.metadataBookType = 'audio' })
-                    BookTypeChoice({ label: '图片', selected: this.metadataBookType === 'image', onSelect: () => this.metadataBookType = 'image' })
-                  }.width('100%')
-                  Row() {
-                    Text('固定书籍类型').fontSize(13).fontColor('#C5C7D0').layoutWeight(1)
-                    Toggle({ type: ToggleType.Switch, isOn: this.metadataFixedType })
-                      .onChange((value: boolean) => this.metadataFixedType = value)
-                  }.width('100%').margin({ top: 8 })
-                }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(12).margin({ bottom: 10 })
-                Column() {
-                  Text('书架分组（可多选）').fontSize(14).fontColor('#ECEEF2').margin({ bottom: 8 })
-                  if (this.groups.filter((group: BookGroup) => group.groupId > 0).length === 0) {
-                    Text('暂无自定义分组，可从书架右上角的分组管理中添加')
-                      .fontSize(12).fontColor(this.themeColorTextTertiary)
-                  } else {
-                    ForEach(this.groups.filter((group: BookGroup) => group.groupId > 0), (group: BookGroup) => {
-                      Row() {
-                        Text(group.groupName).fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                        Toggle({ type: ToggleType.Checkbox, isOn: this.metadataGroupNames.includes(group.groupName) })
-                          .onChange((selected: boolean) => this.toggleMetadataGroup(group.groupName, selected))
-                      }.width('100%').padding({ top: 5, bottom: 5 })
-                    }, (group: BookGroup) => `${group.groupId}`)
-                  }
-                }.width('100%').padding(12).backgroundColor('#292A31').borderRadius(12).margin({ bottom: 10 })
-                TextInput({ text: this.metadataTitle, placeholder: '书名' }).width('100%').height(48)
-                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
-                  .padding({ left: 12, right: 12 }).onChange((value: string) => this.metadataTitle = value)
-                TextInput({ text: this.metadataAuthor, placeholder: '作者' }).width('100%').height(48)
-                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
-                  .padding({ left: 12, right: 12 }).margin({ top: 10 })
-                  .onChange((value: string) => this.metadataAuthor = value)
-                TextInput({ text: this.metadataCategory, placeholder: '分类' }).width('100%').height(48)
-                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
-                  .padding({ left: 12, right: 12 }).margin({ top: 10 })
-                  .onChange((value: string) => this.metadataCategory = value)
-                // 标签编辑器改成 chip 行（:332）：逐个增删。不做拖拽——标签顺序只影响
-                // 这一行的排布，对其它界面没有意义。
-                Column() {
-                  Text('自定义标签').fontSize(14).fontColor('#ECEEF2').margin({ top: 10, bottom: 8 })
-                  Flex({ wrap: FlexWrap.Wrap }) {
-                    ForEach(this.metadataTags, (tag: string) => {
-                      Row() {
-                        Text(tag).fontSize(13).fontColor('#ECEEF2')
-                        Stack({ alignContent: Alignment.Center }) {
-                          AppGlyph({ name: 'profileClose', glyphSize: 11, tint: '#9AA0B4' })
-                        }.width(20).height(20).margin({ left: 4 })
-                          .onClick(() => this.removeMetadataTag(tag))
-                      }.padding({ left: 10, right: 6, top: 6, bottom: 6 })
-                        .backgroundColor('#33353D').borderRadius(14).margin({ right: 8, bottom: 8 })
-                    }, (tag: string) => tag)
-                    Text('＋').fontSize(15).fontColor('#B9C6FF')
-                      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                      .backgroundColor('#293A5C').borderRadius(14).margin({ bottom: 8 })
-                      .onClick(() => this.metadataTagEditing = true)
-                  }.width('100%')
-                  if (this.metadataTagEditing) {
-                    Row() {
-                      TextInput({ text: this.metadataTagInput, placeholder: '输入标签后点添加' })
-                        .layoutWeight(1).height(44).fontSize(14).fontColor('#ECEEF2')
-                        .backgroundColor('#33353D').borderRadius(10).padding({ left: 12, right: 12 })
-                        .onChange((value: string) => this.metadataTagInput = value)
-                      Text('添加').fontSize(13).fontColor('#B9C6FF').padding(10)
-                        .onClick(() => this.addMetadataTag())
-                    }.width('100%')
-                  }
-                }.width('100%').alignItems(HorizontalAlign.Start)
-                TextArea({ text: this.metadataDescription, placeholder: '小说简介' }).width('100%').height(180)
-                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
-                  .padding(12).margin({ top: 10 })
-                  .onChange((value: string) => this.metadataDescription = value)
-                TextArea({ text: this.metadataRemark, placeholder: '备注' }).width('100%').height(120)
-                  .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31').borderRadius(10)
-                  .padding(12).margin({ top: 10 })
-                  .onChange((value: string) => this.metadataRemark = value)
-              }.width('100%')
-            }.layoutWeight(1).scrollBar(BarState.Off)
-            Row() {
-              Blank().layoutWeight(1)
-              Text('保存').fontSize(14).fontColor('#101116').textAlign(TextAlign.Center)
-                .width(84).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(18)
-                .onClick(() => this.saveMetadata())
-            }.width('100%').padding({ top: 12 })
-          }
-          .width('90%').height('78%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(22)
-          .onClick(() => {})
-        }.width('100%').height('100%').zIndex(1000)
+            .fontSize(14).fontWeight(FontWeight.Medium).margin({ left: 7 })
+            .fontColor(this.themePureBlack ? '#101114' : this.themeColorSurfacePrimary)
+        }
+        .height(READ_FAB_HEIGHT)
+        .padding({ left: 16, right: 20 })
+        .borderRadius(16)
+        .backgroundColor(this.themeColorAccent)
+        .shadow({ radius: 12, color: '#33000000', offsetY: 4 })
+        .margin({ right: 16, bottom: 16 })
+        .onClick(() => this.onRead())
       }
+      }.width('100%').layoutWeight(1)
 
       if (this.readRecordPanelVisible) {
         Stack({ alignContent: Alignment.Center }) {
@@ -841,18 +822,6 @@ struct BookTypeChoice {
       .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 9, bottom: 9 })
       .backgroundColor(this.selected ? '#46476B' : this.themeColorSurfaceElevated).borderRadius(10)
       .margin({ right: 6 }).onClick(() => this.onSelect())
-  }
-}
-
-@Component
-struct BookInfoIconButton {
-  @Prop icon: AppGlyphName = 'info';
-  onSelect: () => void = () => {};
-  build() {
-    Stack({ alignContent: Alignment.Center }) {
-      AppGlyph({ name: this.icon, glyphSize: 19, tint: '#F1F2F6' })
-    }.width(40).height(40).backgroundColor('#171820').borderRadius(20)
-      .margin({ left: 8 }).onClick(() => this.onSelect())
   }
 }
 
