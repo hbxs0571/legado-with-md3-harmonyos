@@ -741,18 +741,48 @@ export struct ReaderSettingsPage {
       if (showHandle) {
         Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
       }
-      Row() {
+      if (this.selectedSettingsTab === 2) {
+        // 信息：上游是菜单内路由页（ReadBookMenuBar.kt:660-668 → OpenReadMenuRoute(InformationConfig)），
+        // 外壳 ReadBookMenuRoutePage（:914-966）的标题行 = SmallTonalButton(back) + 标题(weight 1) + Spacer(48dp)。
+        // SmallTonalButton 走 smallContainerSize() = 32dp、smallIconSize = 18dp（SmallPlainButton.kt:11-14），
+        // 形状 RoundedCornerShape(50)（SeriesIconButton.kt:56）→ 半径一半的圆；
+        // 底色 surfaceContainerLow（SeriesIconButton.kt:277-310）→ rsetChipBgAlt（不是更重一档的 rsetInnerBg）。
         Row() {
-          Image($r('app.media.reader_back')).width(22).height(22).fillColor(this.rsetTextPrimary)
-        }.width(38).height(38).justifyContent(FlexAlign.Center)
-          .backgroundColor(this.rsetInnerBg).borderRadius(19).onClick(() => {
-            if (this.selectedSettingsTab >= 2) { this.selectedSettingsTab = this.previousMainSettingsTab; }
-            else { this.onBack(); }
-          })
-        Text(this.selectedSettingsTab === 2 ? '信息' : this.selectedSettingsTab === 3 ? '更多设置' : '阅读界面')
-          .fontSize(17).fontColor(this.rsetTextPrimary).margin({ left: 10 })
-        Blank()
-      }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
+          Stack({ alignContent: Alignment.Center }) {
+            Image($r('app.media.reader_back')).width(18).height(18).fillColor(this.rsetTextSecondary)
+          }.width(32).height(32).borderRadius(16)
+            .backgroundColor(this.rsetChipBgAlt)
+            .onClick((): void => { this.selectedSettingsTab = this.previousMainSettingsTab; })
+          Text('信息')
+            .fontSize(16).fontColor(this.rsetTextPrimary).maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1).margin({ left: 12 })
+          // 上游右端 Spacer(width = 48.dp)：没有它标题会被 layoutWeight 顶上偏左，不是真正居中。
+          Row().width(48)
+        }.width('100%').padding({ left: 16, right: 16, bottom: 16 })
+      } else if (this.selectedSettingsTab === 3) {
+        // 更多：上游是独立底部弹层（onOpenMoreConfig → ShowSheet(MoreConfig)），
+        // AppModalBottomSheet 只画抓手 + 居中标题，没有返回钮（返回靠底部页签切回）。
+        Text('更多设置')
+          .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.rsetTextPrimary)
+          .textAlign(TextAlign.Center).width('100%')
+          .padding({ left: 56, right: 56, bottom: 16 })
+      } else {
+        // 全局 / 菜单：上游 ReadStyleContent 自己不带标题行（标题在 ReadBookMenuRoutePage 上），
+        // 本地这一层是全屏页与 sheet 共用的，保留返回钮但按路由页尺寸收口。
+        Row() {
+          Stack({ alignContent: Alignment.Center }) {
+            Image($r('app.media.reader_back')).width(18).height(18).fillColor(this.rsetTextSecondary)
+          }.width(32).height(32).borderRadius(16)
+            .backgroundColor(this.rsetChipBgAlt)
+            .onClick((): void => { this.onBack(); })
+          Text('阅读界面')
+            .fontSize(16).fontColor(this.rsetTextPrimary).maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1).margin({ left: 12 })
+          Row().width(48)
+        }.width('100%').padding({ left: 16, right: 16, bottom: 16 })
+      }
 
       if (this.selectedSettingsTab < 2) {
         Swiper() {
@@ -765,6 +795,9 @@ export struct ReaderSettingsPage {
         .onChange((index: number) => this.selectSettingsTab(index))
         .layoutWeight(1)
         .width('100%')
+        // 上游高度由内容驱动、切页时弹簧过渡；本地高度是 settingsSheetHeight() 的固定百分比，
+        // 这里只能给属性变化一个 200ms 过渡，做不出「内容多高面板就多高」。
+        .animation({ duration: 200, curve: Curve.EaseOut })
       } else if (this.selectedSettingsTab === 2) {
         this.informationSettingsContent()
       } else {
@@ -773,16 +806,11 @@ export struct ReaderSettingsPage {
 
       if (this.selectedSettingsTab < 2) {
         Row() {
-          Text('全局').fontSize(10).fontColor(this.rsetSelectedText).layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor(this.selectedSettingsTab === 0 ? this.rsetSelectedBg : this.rsetChipBgAlt)
-            .borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(0))
-          Text('菜单').fontSize(10).fontColor(this.rsetTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor(this.selectedSettingsTab === 1 ? this.rsetSelectedBg : this.rsetChipBgAlt)
-            .borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(1))
-          Text('信息').fontSize(10).fontColor(this.rsetTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor(this.rsetChipBgAlt).borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(2))
-          Text('更多').fontSize(10).fontColor(this.rsetTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
-            .backgroundColor(this.rsetChipBgAlt).borderRadius(15).padding(8).onClick(() => this.selectSettingsTab(3))
+          ReaderTabRow({
+            titles: ['全局', '菜单', '信息', '更多'],
+            selectedIndex: this.selectedSettingsTab,
+            onSelect: (index: number) => this.selectSettingsTab(index)
+          })
         }.padding({ left: 14, right: 14, top: 10, bottom: 16 })
       }
     }.width('100%').height('100%')
@@ -971,18 +999,11 @@ export struct ReaderSettingsPage {
   private menuSettingsContent() {
     Column() {
       Row() {
-        Text('菜单栏').fontSize(11).fontColor(this.selectedMenuSettingsTab === 0 ? this.rsetSelectedText : this.rsetTextTertiary)
-          .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.selectedMenuSettingsTab === 0 ? this.rsetSelectedBg : this.rsetCardBg)
-          .borderRadius(15).padding(8).onClick(() => this.selectedMenuSettingsTab = 0)
-        Text('底栏布局').fontSize(11).fontColor(this.selectedMenuSettingsTab === 1 ? this.rsetSelectedText : this.rsetTextTertiary)
-          .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.selectedMenuSettingsTab === 1 ? this.rsetSelectedBg : this.rsetCardBg)
-          .borderRadius(15).padding(8).onClick(() => this.selectedMenuSettingsTab = 1)
-        Text('顶栏布局').fontSize(11).fontColor(this.selectedMenuSettingsTab === 2 ? this.rsetSelectedText : this.rsetTextTertiary)
-          .layoutWeight(1).textAlign(TextAlign.Center)
-          .backgroundColor(this.selectedMenuSettingsTab === 2 ? this.rsetSelectedBg : this.rsetCardBg)
-          .borderRadius(15).padding(8).onClick(() => this.selectedMenuSettingsTab = 2)
+        ReaderTabRow({
+          titles: ['菜单栏', '底栏布局', '顶栏布局'],
+          selectedIndex: this.selectedMenuSettingsTab,
+          onSelect: (index: number) => { this.selectedMenuSettingsTab = index; }
+        })
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
 
       // 上游 SystemMenuPage.kt:144-148 是 HorizontalPager：页签切换用动画滚到对应页，
@@ -1538,16 +1559,13 @@ export struct ReaderSettingsPage {
   private informationSettingsContent() {
     Column() {
       Row() {
-        Text('页眉').fontSize(11).fontColor(this.infoSubTab === 0 ? this.rsetSelectedText : this.rsetTextTertiary)
-          .layoutWeight(1).textAlign(TextAlign.Center).backgroundColor(this.infoSubTab === 0 ? this.rsetSelectedBg : this.rsetCardBg)
-          .borderRadius(14).padding(8).onClick(() => this.infoSubTab = 0)
-        Text('页脚').fontSize(11).fontColor(this.infoSubTab === 1 ? this.rsetSelectedText : this.rsetTextTertiary)
-          .layoutWeight(1).textAlign(TextAlign.Center).backgroundColor(this.infoSubTab === 1 ? this.rsetSelectedBg : this.rsetCardBg)
-          .borderRadius(14).padding(8).margin({ left: 8 }).onClick(() => this.infoSubTab = 1)
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.app_padding')).width(18).height(18).fillColor(this.rsetTextSecondary)
-        }.width(40).height(40).backgroundColor(this.rsetCardBg).borderRadius(10).margin({ left: 8 })
-          .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
+        ReaderTabRow({
+          titles: ['页眉', '页脚'],
+          selectedIndex: this.infoSubTab,
+          trailingIcon: $r('app.media.app_padding'),
+          onSelect: (index: number) => { this.infoSubTab = index; },
+          onTrailing: (): void => { this.openDetailSheet('页边距', '页面内边距与正文留白设置'); }
+        }).layoutWeight(1)
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
       Scroll() {
         Column() {
@@ -2329,10 +2347,12 @@ export struct ReaderSettingsPage {
   }
 
   private settingsSheetHeight(): string {
-    if (this.selectedSettingsTab === 0) { return '62%'; }
-    if (this.selectedSettingsTab === 1) { return '68%'; }
-    if (this.selectedSettingsTab === 2) { return '70%'; }
-    return '86%';
+    // 上游 AppModalBottomSheet.kt:134-137 的高度上限是容器高的 0.8，:165 再 heightIn(max = maxHeight)；
+    // 内容高度由 rememberPagerAnimatedHeight（PagerHeight.kt:30）按页内容实测值插值驱动。
+    // 本地做不到内容自适应（探针实证：把信息页内容换成两行文字，面板高度不变，仍是固定百分比），
+    // 所以按上游口径把三档收敛成「上限 80%」+ 全局页更矮一点，并靠 Swiper 的 200ms 过渡让切页不硬跳。
+    if (this.selectedSettingsTab >= 2) { return '80%'; }
+    return this.selectedSettingsTab === 0 ? '62%' : '68%';
   }
 
   private settingsSheetWidth(): string {
@@ -3582,6 +3602,9 @@ export struct ReaderSettingsPage {
         }.width(this.settingsSheetWidth()).height(this.settingsSheetHeight()).alignSelf(ItemAlign.Center)
           .backgroundColor('#D91A1B21').borderRadius(22)
           .margin({ left: 8, right: 8, bottom: this.selectedSettingsTab === 2 ? 0 : 16 })
+          // 信息页在上游不是底部弹层，而是菜单内的路由页（ReadBookMenuBar.kt:660-668），
+          // 所以它在本地居中显示、不贴底；-18 只是把居中位置往视觉中心再抬一点，
+          // 让「抓手 + 标题 + 内容」的整体重心不偏下，不是历史遗留的乱写值。
           .offset({ x: 0, y: this.selectedSettingsTab === 2 ? -18 : 0 })
         if (this.bottomActionConfigVisible) {
           this.bottomActionConfigurationSheet()
@@ -4080,5 +4103,62 @@ struct BackgroundOption {
     }.width(44).height(56).justifyContent(FlexAlign.Center).backgroundColor(this.color)
       .borderRadius(11).clip(true)
       .border({ width: this.selected ? 2 : 1, color: this.selected ? this.rsetAccent : this.rsetTrack })
+  }
+}
+
+/**
+ * 统一页签行。对齐上游 `ui/widget/components/tabRow/CardTabRow.kt`：
+ * `:72-79` 外层 `Row(fillMaxWidth, spacedBy(8.dp))`；
+ * `:80-113` 每项底色 `selected ? secondaryContainer : surfaceContainerLow`（未选中也有底色，不是透明）、
+ * 圆角 12dp、非滚动模式 `Modifier.weight(1f)`；
+ * `:115-121` 内层 `padding(horizontal = 8.dp, vertical = 8.dp)`；
+ * `:122-140` 文字 `labelMediumEmphasized` = 13sp（`ui/theme/Typography.kt:37`）、选中 Bold、未选 Normal。
+ * 本地原本三套自绘页签行（字号 10/11/11、圆角 15/15/14、间距各异），收敛成这一个组件。
+ */
+@Component
+struct ReaderTabRow {
+  @Prop titles: string[] = [];
+  @Prop selectedIndex: number = 0;
+  // 右侧方形附加钮（上游 CardTabRow 的 tabEndContent，信息页「页边距」入口用到）。
+  @Prop trailingIcon: Resource | undefined = undefined;
+  onSelect: (index: number) => void = () => {};
+  onTrailing: () => void = () => {};
+  // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
+  @StorageProp('rsetSelectedBg') rsetSelectedBg: string = '#454B62';
+  @StorageProp('rsetSelectedText') rsetSelectedText: string = '#ECECF0';
+  @StorageProp('rsetChipBgAlt') rsetChipBgAlt: string = '#1E1F25';
+  @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
+  @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
+
+  build() {
+    Row({ space: 8 }) {
+      ForEach(this.titles, (title: string, index: number) => {
+        Text(title)
+          .fontSize(13)
+          .fontWeight(index === this.selectedIndex ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(index === this.selectedIndex ? this.rsetSelectedText : this.rsetTextTertiary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Center)
+          .layoutWeight(1)
+          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+          .backgroundColor(index === this.selectedIndex ? this.rsetSelectedBg : this.rsetChipBgAlt)
+          .borderRadius(12)
+          // ArkUI 的 .animation() 只在属性变化时生效，首次挂载直接落终值，
+          // 与上游 CardTabRow.kt:63-70「首次 snap、换选中才 tween(200)」语义相同，不需要额外判首次。
+          .animation({ duration: 200, curve: Curve.EaseOut })
+          .onClick(() => this.onSelect(index))
+      }, (title: string, index: number) => index.toString() + '-' + title)
+
+      if (this.trailingIcon !== undefined) {
+        Stack({ alignContent: Alignment.Center }) {
+          Image(this.trailingIcon).width(18).height(18).fillColor(this.rsetTextPrimary)
+        }
+        .width(36).height(36).borderRadius(12)
+        .backgroundColor(this.rsetChipBgAlt)
+        .onClick(() => this.onTrailing())
+      }
+    }
+    .width('100%')
   }
 }
