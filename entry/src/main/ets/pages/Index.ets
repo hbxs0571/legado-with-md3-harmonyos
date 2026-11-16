@@ -186,6 +186,11 @@ struct Index {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  /** 底部系统栏高度（vp），由 `publishAppBottomInset()` 读出；底栏内容据此让开手势条/三键栏。 */
+  @State appBottomInset: number = 0;
   /** 纯黑是否实际生效（深色 + 用户开启），由 `publishThemeCardStyle` 广播；Index 自身持有开关源状态，故用别名读回。 */
   @StorageProp('themePureBlack') themePureBlackActive: boolean = false;
   @State @Watch('onReaderRouteChanged') route: AppRoute = AppRoute.HOME;
@@ -707,6 +712,7 @@ struct Index {
       this.restoreStartupState(context);
     }
     this.publishAppTopInset();
+    this.publishAppBottomInset();
     this.syncSystemBarContentColor();
     this.eyeProtectionTimerId = setInterval(() => {
       this.eyeProtectionMinute = Math.floor(Date.now() / 60000);
@@ -766,6 +772,37 @@ struct Index {
       AppStorage.setOrCreate('appTopInset', this.getUIContext().px2vp(topPx));
     }).catch(() => {
       AppStorage.setOrCreate('appTopInset', 0);
+    });
+  }
+
+  /**
+   * 读底部系统栏高度并写进 @State，供底栏内容让位。
+   *
+   * `TYPE_SYSTEM` 的 `bottomRect.height` 在手势导航下是手势条高度、在虚拟三键下是三键栏高度，
+   * 两种都要能吃。上游口径分两层（`MainScreen.kt:519` 非悬浮档由 `contentWindowInsets` 让开、
+   * `FloatingNavigationContainer.kt:27` 悬浮档自己再 `windowInsetsPadding`），本地只有
+   * `expandSafeArea([SYSTEM],[BOTTOM])` 那一层——它只允许底色铺进安全区，不给内容加内缩，
+   * 所以这里读出来的值必须显式加到内容的内边距上。
+   */
+  private publishAppBottomInset(): void {
+    window.getLastWindow(this.getUIContext().getHostContext()).then((w: window.Window) => {
+      // 两个来源取大值：`TYPE_SYSTEM` 覆盖状态栏 + 导航栏（手势模式下是手势条、三键模式下是三键栏），
+      // `TYPE_NAVIGATION_INDICATOR` 只报手势条。实测本机模拟器上 `TYPE_SYSTEM` 的 bottomRect 为 0，
+      // 只读它会让底栏内容完全不让位，所以两个都读。
+      const systemBottom: number = w.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM).bottomRect.height;
+      let indicatorBottom: number = 0;
+      try {
+        const indicator = w.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+        indicatorBottom = indicator.visible ? indicator.bottomRect.height : 0;
+      } catch (_) {
+        indicatorBottom = 0;
+      }
+      const bottomPx: number = Math.max(systemBottom, indicatorBottom);
+      this.appBottomInset = this.getUIContext().px2vp(bottomPx);
+      AppStorage.setOrCreate('appBottomInset', this.appBottomInset);
+    }).catch(() => {
+      this.appBottomInset = 0;
+      AppStorage.setOrCreate('appBottomInset', 0);
     });
   }
 
@@ -10207,11 +10244,27 @@ private canWriteInto(dir: string): boolean {
             }).layoutWeight(1).onClick(() => this.selectTab(this.navigationRouteTabIndex(navRoute)))
           }, (navRoute: string) => navRoute)
         }.width(this.themeUseFloatingBottomBar ? 'calc(100% - 32vp)' : '100%')
-          .padding({ top: 7, bottom: 6 })
+          // 底部让位：`.expandSafeArea([SYSTEM],[BOTTOM])` 只让底色铺进手势条区域，不给内容加内缩，
+          // 所以内容必须自己加 appBottomInset（手势条或三键栏高度）。
+          // 上游口径是「底色铺满、内容让开」：`ReadBookMenuBar.kt:500-506` 非悬浮时面板 inset 只留
+          // Horizontal（底色一路延伸到导航栏），`:629` 再按 `navBarHeight + 16.dp` 让内容。
+          // 悬浮档上游由 `FloatingNavigationContainer.kt:27` 的 `windowInsetsPadding` 让位，本地悬浮档
+          // 已有 `margin.bottom: 8`，不再叠一层，避免双重让位。
+          .padding({
+            top: 7,
+            bottom: this.themeUseFloatingBottomBar ? 6 : 6 + this.appBottomInset
+          })
           .margin(this.themeUseFloatingBottomBar ? { left: 16, right: 16, bottom: 8 } : 0)
           .borderRadius(this.bottomBarCornerRadius())
           .backgroundColor(this.bottomBarBackgroundColor().length > 0 ? this.bottomBarBackgroundColor()
             : (this.themePureBlackActive ? '#121212' : this.themeColorSurfaceElevated))
+          // 模糊档口径与上游**不同**，这里保留本地数值，只把差异记下来：
+          // 上游 `AppNavigationBar.kt:76-99` 的 `baseColor` = `GlassDefaults.glassColor(noBlurColor,
+          // blurAlpha = TransparentAlpha)`，`TransparentAlpha = 0f`（`GlassDefaults.kt:38`），
+          // 也就是「开模糊 = 面板 alpha 归零、完全透明」，靠背后的 haze 效果显形；
+          // 本地没有 haze 系统，全透明会让底栏彻底看不见，所以 `TopBottomBarSettings.ets:134`
+          // 乘的是 `bottomBarBlurAlpha`（默认 40）而不是 0，开模糊时是约 40% 半透明。
+          // 这两个旋钮的语义（模糊开关 + 不透明度）与上游一致，只是数值不能照抄。
           .backdropBlur(this.themeEnableBlur ? this.themeBottomBarBlurRadius : 0)
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
@@ -10239,12 +10292,36 @@ struct TabItem {
   @Prop selected: boolean = false;
   /** 是否显示文字标签；由 labelVisibilityMode 决定，对齐上游 `labelVisibilityMode`。 */
   @Prop showLabel: boolean = true;
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  /**
+   * 选中指示器底色。
+   *
+   * 上游 `AppNavigationBar.kt:148-156` 用 `secondaryContainer`。本地 `ThemePaletteColors`
+   * 只有 `secondary`（预览卡下半圆用），没有 `secondaryContainer` 这一档，
+   * 所以按任务书口径降级成 `themeColorSurfaceElevated`（= surfaceContainerHigh）——
+   * 比底栏底色高一档，选中态仍然看得出来，只是不像上游那样带主色调。
+   */
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   build() {
     Column() {
       Stack({ alignContent: Alignment.Center }) {
-        AppGlyph({ name: this.icon, tint: '#C5C7D0', glyphSize: 20 })
-      }.width(50).height(32).backgroundColor(this.selected ? '#3A4054' : Color.Transparent).borderRadius(18)
-      if (this.selected && this.showLabel) { Text(this.label).fontSize(10).fontColor('#D7DFFB').margin({ top: 2 }) }
+        // 图标 24vp：上游 `AppIcon.kt:82-86` 走 Material 默认 24dp。
+        AppGlyph({
+          name: this.icon,
+          tint: this.selected ? this.themeColorTextPrimary : this.themeColorTextSecondary,
+          glyphSize: 24
+        })
+      }
+        // 指示器 64×32、圆角 16：上游 `AppNavigationBar.kt:148-156`。
+      .width(64).height(32)
+      .backgroundColor(this.selected ? this.themeColorSurfaceElevated : Color.Transparent)
+      .borderRadius(16)
+      // 标签 12vp、选中加粗：上游 `AppNavigationBar.kt:217-225` 是 12sp + 选中 Bold。
+      if (this.selected && this.showLabel) {
+        Text(this.label).fontSize(12).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).margin({ top: 2 })
+      }
     }.width('100%').alignItems(HorizontalAlign.Center).padding({ top: 1, bottom: 1 })
   }
 }
