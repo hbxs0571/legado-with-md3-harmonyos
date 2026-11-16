@@ -4138,8 +4138,10 @@ export struct ReaderPage {
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
         // 上游 MoreActionsConfigContent 用 ReorderableConfigList：右侧开关 + 左侧拖拽把手，
         // 没有上下箭头。ArkUI 里改为 List + 长按拖拽排序。
-        // 注意 onMove 挂在 ForEach 上（不是 List 上），List 只负责开编辑态与提供容器。
+        // 注意 onMove 挂在 ForEach 上（不是 List 上），List 只负责提供容器。
         // 也不能用 Scroll 再包 List：两层滚动容器会让 List 拿不到自己的滚动手势，onMove 一起失效。
+        // 不调 `editMode(true)`：该 API 自 API 9 起已废弃且无替代物，长按拖拽由 onMove 自身驱动；
+        // 批 4 上机实测（`uinput -M -g` 4 秒慢拖）在去掉它之后仍能换序。
         List() {
           ForEach(this.draftMoreActions, (config: ReaderMoreActionConfig) => {
             ListItem() {
@@ -4148,7 +4150,6 @@ export struct ReaderPage {
           }, (config: ReaderMoreActionConfig) => config.id)
             .onMove((from: number, to: number) => this.moveMoreActionTo(from, to))
         }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
-        .editMode(true)
         .padding({ left: 14, right: 14, bottom: 12 })
       }.width('100%').height('62%').backgroundColor('#D91A1B21')
         .borderRadius({ topLeft: 24, topRight: 24 })
@@ -7510,13 +7511,19 @@ export struct ReaderPage {
       // （底部 pill：当前/总数 + 百分比 + 竖分隔线 + 章名，下面一行三枚按钮 2:1:0.55）。
       if (this.searchResultOverlayVisible()) {
         Row() {
+          // 上游 `ReadBookSearchBar.kt:41-91`：`AppFloatingActionButton` 没传 size，
+          // 用 M3 默认 56dp；底色 `surfaceContainerLow`（= 菜单容器色），图标色 `onSurfaceVariant`；
+          // 带 FAB 阴影、没有描边（`border` 默认 null）。
+          // 「跟随阅读背景」档下 `surfaceContainerLow` 就是纸色（`ReadBookColorTheme.kt:270-284`），
+          // 与正文同色，全靠 elevation 6dp 托起。实测 `.shadow` 在深色纸面上采样与背景同值
+          // （#1A1A1A），看不出边界，所以按任务书 7.1 的退化条款改用淡描边，不同时上两样。
           if (this.searchNavIndex > 0) {
             Stack({ alignContent: Alignment.Center }) {
               Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
             }
-            .width(44).height(44).borderRadius(22)
-            .backgroundColor(this.readerBottomBarFillColor())
-            .border(this.readerMenuBorderSettings())
+            .width(56).height(56).borderRadius(28)
+            .backgroundColor(this.readerMenuContainerBaseColor())
+            .border({ width: 1, color: this.readerMenuForegroundAlpha('14') })
             .onClick(() => this.onOpenSearchNavItem(this.searchNavIndex - 1))
           }
           Blank().layoutWeight(1)
@@ -7524,9 +7531,9 @@ export struct ReaderPage {
             Stack({ alignContent: Alignment.Center }) {
               Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
             }
-            .width(44).height(44).borderRadius(22)
-            .backgroundColor(this.readerBottomBarFillColor())
-            .border(this.readerMenuBorderSettings())
+            .width(56).height(56).borderRadius(28)
+            .backgroundColor(this.readerMenuContainerBaseColor())
+            .border({ width: 1, color: this.readerMenuForegroundAlpha('14') })
             .onClick(() => this.onOpenSearchNavItem(this.searchNavIndex + 1))
           }
         }
@@ -7540,59 +7547,71 @@ export struct ReaderPage {
         // 所以外面套一层满高 Column + Blank 把内容推到底，不能靠 alignSelf 居中。
         Column() {
           Blank().layoutWeight(1)
+          // 上游 `ReadBookMenuBarSearch.kt`：父 Column 给 `padding(top = 12, horizontal = 16)`，
+          // 即结果条占满屏宽减 32vp，不再是本地的 88% 居中。
           Column() {
-            // 信息 pill：上游高 40、圆角 16、surfaceContainerLow 底、横向内边距 12。
+            // 信息 pill：上游 `SearchPillSurface` 高 40、圆角 16、`surfaceContainerLow` 底
+            // （= 菜单容器色）、横向内边距 12。N/M 用 `labelSmallEmphasized` = 11sp。
             Row() {
             Text((this.searchNavIndex + 1).toString() + ' / ' + this.searchNavItems.length.toString())
-              .fontSize(13).fontColor(this.readerMenuForeground())
+              .fontSize(11).fontColor(this.readerMenuForeground())
             Blank().width(8)
+            // 百分比徽标走上游 `TextCard` 默认值：11sp、圆角 8、内边距 H8 V4、底色 `surfaceContainer`
+            // （本地取菜单背景色近似，容器色是 surfaceContainerLow，低一档）。
             Text(Math.round((this.searchNavIndex + 1) * 100 / this.searchNavItems.length).toString() + '%')
               .fontSize(11).fontColor(this.readerMenuAccentTint())
-              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-              .backgroundColor(this.readerMenuForegroundAlpha('1A')).borderRadius(8)
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .backgroundColor(this.readerMenuBaseColor()).borderRadius(8)
             Blank().width(16)
-            Column().width(1).height(8).backgroundColor(this.readerMenuForegroundAlpha('33'))
+            // 分隔线：上游 `outlineVariant` 实色，深色下约 40% 量级。
+            Column().width(1).height(8).backgroundColor(this.readerMenuForegroundAlpha('66'))
             Blank().width(16)
             Text(this.currentSearchNavTitle())
-              .fontSize(12).fontColor(this.readerMenuForeground()).maxLines(1)
+              .fontSize(11).fontColor(this.readerMenuForeground()).maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
           }
           .width('100%').height(40).padding({ left: 12, right: 12 })
-          .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+          .backgroundColor(this.readerMenuContainerBaseColor()).borderRadius(16)
           .border(this.readerMenuBorderSettings())
 
           // 三枚按钮：权重 2 : 1 : 0.55（上游 SearchBottomMenuContent）。
+          // 图标色走上游 `primary`（本地强调色），文字 `onSurfaceVariant`（本地前景色）、13sp。
           Row({ space: 8 }) {
-            Row({ space: 6 }) {
-              Image($r('app.media.app_search')).width(16).height(16).fillColor(this.readerMenuForeground())
-              Text('所有结果').fontSize(12).fontColor(this.readerMenuForeground()).maxLines(1)
+            Row({ space: 8 }) {
+              Image($r('app.media.app_search')).width(16).height(16).fillColor(this.readerMenuAccentTint())
+              Text('所有结果').fontSize(13).fontColor(this.readerMenuForeground()).maxLines(1)
             }
             .layoutWeight(2).height(40).justifyContent(FlexAlign.Center)
-            .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor(this.readerMenuContainerBaseColor()).borderRadius(16)
             .border(this.readerMenuBorderSettings())
             .onClick(() => this.onOpenSearchContent())
 
-            Row() {
-              Image($r('app.media.app_more')).width(16).height(16).fillColor(this.readerMenuForeground())
+            // 上游这枚按钮带「主菜单」文字，不只是纯图标。
+            Row({ space: 8 }) {
+              Image($r('app.media.app_more')).width(16).height(16).fillColor(this.readerMenuAccentTint())
+              Text('主菜单').fontSize(13).fontColor(this.readerMenuForeground()).maxLines(1)
             }
             .layoutWeight(1).height(40).justifyContent(FlexAlign.Center)
-            .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor(this.readerMenuContainerBaseColor()).borderRadius(16)
             .border(this.readerMenuBorderSettings())
             .onClick(() => { this.controlsVisible = true; })
 
             Row() {
-              AppGlyph({ name: 'profileClose', glyphSize: 16, tint: this.readerMenuForeground() })
+              AppGlyph({ name: 'profileClose', glyphSize: 16, tint: this.readerMenuAccentTint() })
             }
             .layoutWeight(0.55).height(40).justifyContent(FlexAlign.Center)
-            .backgroundColor(this.readerBottomBarFillColor()).borderRadius(16)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor(this.readerMenuContainerBaseColor()).borderRadius(16)
             .border(this.readerMenuBorderSettings())
             .onClick(() => this.onCloseSearchResult())
           }
           .width('100%').margin({ top: 8 })
           }
-          .width('88%')
-          .alignSelf(ItemAlign.Center)
-          .margin({ bottom: 24 })
+          .width('100%')
+          .padding({ left: 16, right: 16 })
+          .margin({ top: 12, bottom: 24 })
         }
         .width('100%').height('100%')
         .alignItems(HorizontalAlign.Center)
