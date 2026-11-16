@@ -1566,6 +1566,18 @@ export struct ReaderPage {
     return '#' + alphaHex + this.readerMenuRgb(this.readerMenuForeground());
   }
 
+  /**
+   * 划词卡片的容器底色。
+   * 上游取 `surfaceBright`，它在 `ReadBookColorTheme.kt:270-284` 的 `withReadSurfaceColors`
+   * 里被改成「阅读背景色」；本地没有这个色位，按同一语义直接用纸色（`paperColor`）。
+   * 其余两档（跟随系统 / 跟随菜单）上游回落到主题的 surfaceBright，本地用菜单底色近似，
+   * 差别是「比正文背景亮一档还是暗一档」，验收只判卡片能不能从正文里分出来。
+   */
+  private readerSelectionCardColor(): string {
+    if (this.readBarStyle === 1) { return this.paperColor; }
+    return this.readerMenuBaseColor();
+  }
+
   private stopAutoPageTimer(): void {
     if (this.autoPageTimer >= 0) {
       clearInterval(this.autoPageTimer);
@@ -4954,51 +4966,77 @@ export struct ReaderPage {
   private readerMarkingSelectionMenu() {
     Column() {
       if (this.expandTextMenu) {
-        // 展开态：多行平铺卡片（上游 MultiLineMenuView）。
-        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
-          ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
-            Row() {
-              if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
-              Text(item.title).fontSize(14).fontColor('#E5E6EB').margin({ left: this.showSelectMenuIcon ? 6 : 0 })
-            }
-            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-            .onClick(() => this.runSelectionMenuAction(item.id))
-          }, (item: ReaderSelectionMenuItem) =>
-            `${item.id}-${this.showSelectMenuIcon}-${this.expandTextMenu}-${this.selectionMenuMoreVisible}`)
-        }.backgroundColor('#242127').borderRadius(12)
-      } else {
-        // 折叠态：一行可横向滚动的快捷条 + 右端分隔线 + 三点钮
-        // （上游 TextActionSelectionMenu.kt:355-415 QuickMenuView）。
-        Row() {
+        // 展开态：多行平铺卡片（上游 TextActionSelectionMenu.kt:166-190 + MultiLineMenuView :311-352）。
+        // 条目竖排（图标在上、文字在下）、横向 8dp 排开，整卡最高 300dp 超出内部竖滚。
+        Column() {
           Scroll() {
-            Row() {
-              ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem, index: number) => {
-                Row() {
-                  if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
-                  Text(item.title).fontSize(14).fontColor('#E5E6EB')
-                    .margin({ left: this.showSelectMenuIcon ? 6 : 0 })
-                }
-                // 上游首项左距 16dp、其余 10dp，右端统一 8dp（QuickMenuView 的 itemsIndexed）。
-                .padding({ left: index === 0 ? 16 : 10, right: 8, top: 10, bottom: 10 })
-                .onClick(() => this.runSelectionMenuAction(item.id))
+            Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
+              ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
+                this.selectionMenuColumnItem(item, 12, 8)
               }, (item: ReaderSelectionMenuItem) =>
                 `${item.id}-${this.showSelectMenuIcon}-${this.expandTextMenu}-${this.selectionMenuMoreVisible}`)
+
+              // 上游 MultiLineMenuView 末尾追加的「编辑菜单项」行（:330-350）。
+              Row() {
+                AppGlyph({ name: 'settings', glyphSize: 16, tint: this.readerMenuForeground() })
+                Text('编辑菜单项').fontSize(11)
+                  .fontColor(this.readerMenuForeground()).margin({ left: 6 })
+              }
+              .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+              .onClick(() => {
+                this.canvasSelectionMenuVisible = false;
+                this.animateCanvasSelectionMenu(false);
+                this.paintReaderCanvas();
+                this.onOpenSettings();
+              })
             }
           }
-          .scrollable(ScrollDirection.Horizontal)
+          .scrollable(ScrollDirection.Vertical)
           .scrollBar(BarState.Off)
-          .align(Alignment.Start)
-          // 折叠态一行：条目区吃掉剩余宽度，条目多了在内部横向滚动。
-          .layoutWeight(1)
+          .align(Alignment.Top)
+          // 卡片本体宽度口径照上游 `menuCardWidth = 屏幕宽 - 32`（TextActionSelectionMenu.kt:107）。
+          .constraintSize({ maxHeight: 300, maxWidth: Math.max(160, this.readerContentWidth - 32) })
+          .backgroundColor(this.readerSelectionCardColor())
+          .borderRadius(12)
+          // 上游是 elevation 12dp 的双层投影（环境光 + 键光），ArkUI 只有单层 shadow。
+          // 上机实测：`readBarStyle == 1` 时卡片底色就是纸色，与正文背景同像素（26,26,26），
+          // `{ radius: 12, color: '#40000000', offsetY: 4 }` 在这块深色同色面上看不出边界，
+          // 所以这一档改走描边兜底（任务书 6.3 的 B 档），不是投影。
+          .border({ width: 1, color: this.readerMenuForegroundAlpha('26') })
+        }
+        // 注：上游在这一层还有 `menuShadowPadding = 12dp` 给投影留边。本地改走描边后不需要，
+        // 加了反而会把卡片再缩一圈、并让它在选区上方多顶 12vp。
+      } else {
+        // 折叠态：一行可横向滚动的快捷条 + 右端分隔线 + 三点钮
+        // （上游 TextActionSelectionMenu.kt:354-418 QuickMenuView）。
+        // 外面这层 Column 不能省：挂载点是 position 定位、宽度撑满整屏，
+        // 只有 Column{ Row } 这种嵌套才让卡片收缩到内容宽（实测省掉它卡片会拉满 1280px）。
+        Column() {
+          Row() {
+            Scroll() {
+              Row() {
+                ForEach(this.resolveSelectionMenuItems(), (item: ReaderSelectionMenuItem, index: number) => {
+                  this.selectionMenuColumnItem(item, 12, 8, index)
+                }, (item: ReaderSelectionMenuItem) =>
+                  `${item.id}-${this.showSelectMenuIcon}-${this.expandTextMenu}-${this.selectionMenuMoreVisible}`)
+              }
+            }
+            .scrollable(ScrollDirection.Horizontal)
+            .scrollBar(BarState.Off)
+            .align(Alignment.Start)
+            // 折叠态一行：条目区吃掉剩余宽度，条目多了在内部横向滚动。
+            // 注意这里必须是 flexShrink 不能是 layoutWeight —— 父 Row 没有定宽，
+            // layoutWeight(1) 会把整行撑到满屏（实测卡片拉到 1280px 溢出屏幕右缘）。
+            .flexShrink(1)
           if (this.resolveSelectionMenuItems().length > 0) {
-            // 右端分隔线：高 20dp、宽 1dp、40% 透明（上游 VerticalDivider）
-            Row().width(1).height(20).backgroundColor('#4A4C5666')
+            // 右端分隔线：高 20dp、宽 1dp、40% 透明（上游 `outlineVariant.copy(alpha = 0.4f)`）。
+            Row().width(1).height(20).backgroundColor(this.readerMenuForegroundAlpha('66'))
           }
           Row() {
             AppGlyph({
               name: this.hasCollapsedSelectionMenuItem() ? 'more' : 'settings',
               glyphSize: 16,
-              tint: '#E5E6EB'
+              tint: this.readerMenuForeground()
             })
           }
           // 有折叠项时点开更多，否则去菜单管理（上游 onMoreClick / onSettingsClick）
@@ -5011,13 +5049,17 @@ export struct ReaderPage {
             }
           })
         }
-        .backgroundColor('#242127')
+        .backgroundColor(this.readerSelectionCardColor())
         .borderRadius(12)
         // 卡片按内容自适应宽度，但必须夹进视口：外层 Column 没有参照宽度，
         // 百分比 maxWidth 在这里不生效，只能用正文宽度算具体数值。
         .constraintSize({ maxWidth: Math.max(200, this.readerContentWidth * 0.92) })
-        // 二级弹层打开时主卡缩到 0.96、透明度 0.82（上游 quickMenuScale/quickMenuAlpha，
-        // 锚点在右端中点 TransformOrigin(1f, 0.5f)）
+        // 上游 elevation 6.dp（折叠态比展开态低一档）。与展开态同理，同色纸面上单层 shadow
+        // 看不出边界，一并改走描边（任务书 6.3 的 B 档）。
+        .border({ width: 1, color: this.readerMenuForegroundAlpha('26') })
+        // 二级弹层打开时主卡缩到 0.96、透明度 0.82（上游 quickMenuScale tween 400 / quickMenuAlpha tween 360，
+        // 锚点在右端中点 TransformOrigin(1f, 0.5f)）。ArkUI 一个 .animation() 管全部属性，
+        // 做不到两个时长，这里取 400 —— 是把上游两档合并成一个值，不是漏了 360。
         .scale({
           x: this.selectionMenuMoreVisible ? 0.96 : 1,
           y: this.selectionMenuMoreVisible ? 0.96 : 1,
@@ -5026,6 +5068,7 @@ export struct ReaderPage {
         })
         .opacity(this.selectionMenuMoreVisible ? 0.82 : 1)
         .animation({ duration: 400, curve: Curve.EaseOut })
+        }
       }
       if (!this.expandTextMenu && this.selectionMenuMoreVisible) {
         this.readerSelectionMoreMenu()
@@ -5041,49 +5084,104 @@ export struct ReaderPage {
    */
   @Builder
   private readerSelectionMoreMenu() {
+    // 外层只负责给投影留边（menuShadowPadding = 12dp），底色与圆角在内层卡片上。
     Column() {
-      Row() {
-        Image($r('app.media.reader_back')).width(20).height(20).fillColor('#E5E6EB')
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Start)
-      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
-      .onClick(() => { this.selectionMenuMoreVisible = false; })
-      Row().width('80%').height(1).backgroundColor('#4A4C5666')
-      Scroll() {
-        Column() {
-          ForEach(this.collapsedSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
-            Row() {
-              if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
-              Text(item.title).fontSize(14).fontColor('#E5E6EB')
-                .margin({ left: this.showSelectMenuIcon ? 12 : 0 })
-            }
-            .width('100%')
-            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            .onClick(() => this.runSelectionMenuAction(item.id))
-          }, (item: ReaderSelectionMenuItem) => `more-${item.id}-${this.showSelectMenuIcon}`)
+      Column() {
+        Row() {
+          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
         }
+        .width('100%')
+        .justifyContent(FlexAlign.Start)
+        .padding({ left: 16, right: 16, top: 12, bottom: 8 })
+        .onClick(() => { this.selectionMenuMoreVisible = false; })
+        Row().width('80%').height(1).backgroundColor(this.readerMenuForegroundAlpha('66'))
+        Scroll() {
+          Column() {
+            ForEach(this.collapsedSelectionMenuItems(), (item: ReaderSelectionMenuItem) => {
+              // 这一层上游是横排（MoreMenuView :500-520），不要跟着主卡改成竖排。
+              Row() {
+                if (this.showSelectMenuIcon) { this.readerSelectionMenuIcon(item.id) }
+                Text(item.title).fontSize(13).fontColor(this.readerMenuForeground())
+                  .margin({ left: this.showSelectMenuIcon ? 12 : 0 })
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+              .onClick(() => this.runSelectionMenuAction(item.id))
+            }, (item: ReaderSelectionMenuItem) => `more-${item.id}-${this.showSelectMenuIcon}`)
+          }
+        }
+        .scrollable(ScrollDirection.Vertical)
+        .scrollBar(BarState.Off)
+        .constraintSize({ maxHeight: 240 })
+        .align(Alignment.Top)
+        Row().width('80%').height(1).backgroundColor(this.readerMenuForegroundAlpha('66'))
+        Row() {
+          AppGlyph({ name: 'settings', glyphSize: 20, tint: this.readerMenuForeground() })
+          Text('编辑菜单项').fontSize(13).fontColor(this.readerMenuForeground()).margin({ left: 12 })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 8, bottom: 12 })
+        .onClick(() => {
+          this.selectionMenuMoreVisible = false;
+          this.onOpenSettings();
+        })
       }
-      .scrollable(ScrollDirection.Vertical)
-      .scrollBar(BarState.Off)
-      .constraintSize({ maxHeight: 240 })
-      .align(Alignment.Top)
-      Row().width('80%').height(1).backgroundColor('#4A4C5666')
-      Row() {
-        AppGlyph({ name: 'settings', glyphSize: 20, tint: '#E5E6EB' })
-        Text('编辑菜单项').fontSize(13).fontColor('#E5E6EB').margin({ left: 12 })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 8, bottom: 12 })
-      .onClick(() => {
-        this.selectionMenuMoreVisible = false;
-        this.onOpenSettings();
+      .backgroundColor(this.readerSelectionCardColor())
+      .borderRadius(12)
+      // 上游用 `width(IntrinsicSize.Max)`（宽度贴合最宽子项），ArkUI 没有这个原语。
+      // 里面的分隔线与各行都写着 `width('100%')`，只有父宽确定时才肯跟随：
+      // 用 constraintSize 只收住了卡片自身的背景宽度，子项仍按未约束的可用宽度布局
+      // （实测卡片背景 767px、里面各行却拉到 1244px 溢出屏幕）。所以这里给确定宽度。
+      .width(Math.max(160, this.readerContentWidth * 0.6))
+      // 与主卡同理：同色纸面上单层 shadow 看不出边界，改走描边（任务书 6.3 的 B 档）。
+      .border({ width: 1, color: this.readerMenuForegroundAlpha('26') })
+      // 进出场：上游是 AnimatedVisibility(enter = fadeIn(360) + scaleIn(0.94, tween 400),
+      // exit = fadeOut(240) + scaleOut(0.96, tween 280))；ArkUI 的 .animation() 只认一个时长，
+      // 进 360 / 退 240 做不到分开，取中间 300，且不做 @State + animateTo 双路径。
+      .opacity(this.selectionMenuMoreVisible ? 1 : 0)
+      .scale({
+        x: this.selectionMenuMoreVisible ? 1 : 0.94,
+        y: this.selectionMenuMoreVisible ? 1 : 0.94,
+        // 贴折叠卡的右端长出来（上游锚点在锚点元素方向）。
+        centerX: '100%',
+        centerY: '0%'
       })
+      .animation({ duration: 300, curve: Curve.EaseOut })
     }
-    .backgroundColor('#242127')
-    .borderRadius(12)
     .constraintSize({ maxWidth: '92%' })
+    // 上游这一层还有 `shadowPadding` 给投影留边；本地主卡已改走描边，这一层同样不需要，
+    // 保持原来的 `margin({ top: 6 })` 贴住折叠卡下方即可（任务书 6.6 允许的退化写法）。
     .margin({ top: 6 })
+  }
+
+  /**
+   * 划词菜单条目（展开态与折叠态共用一套形状）。
+   * 对齐上游 `TextActionSelectionMenu.kt:311-352`：`Column` 竖排居中，图标在上、
+   * `Spacer(4.dp)` 之后是 `labelMedium` = 13sp 的文字；展开态条目内边距 `verticalPadding = 12.dp`。
+   * 折叠态首项左距 16dp、其余 10dp，右端统一 8dp（`QuickMenuView` 的 itemsIndexed），由 `firstIndex` 传入。
+   */
+  @Builder
+  selectionMenuColumnItem(item: ReaderSelectionMenuItem, verticalPadding: number, endPadding: number,
+    firstIndex: number = -1) {
+    Column() {
+      if (this.showSelectMenuIcon) {
+        this.readerSelectionMenuIcon(item.id)
+        // 上游 Spacer(4.dp)：图标在上、文字在下。
+        Blank().height(4)
+      }
+      Text(item.title)
+        .fontSize(13)
+        .fontColor(this.readerMenuForeground())
+        .maxLines(1)
+    }
+    .padding({
+      left: firstIndex < 0 ? 0 : (firstIndex === 0 ? 16 : 10),
+      right: endPadding,
+      top: verticalPadding,
+      bottom: verticalPadding
+    })
+    .alignItems(HorizontalAlign.Center)
+    .onClick(() => this.runSelectionMenuAction(item.id))
   }
 
   /**
@@ -6962,6 +7060,21 @@ export struct ReaderPage {
               }
               if (Math.abs(heightVp - this.canvasSelectionMenuHeightVp) > 0.5) {
                 this.canvasSelectionMenuHeightVp = heightVp;
+              }
+              // 上面更新的是「下一帧」锚点用的实际尺寸。展开态条目折行后实测比上一帧宽，
+              // 右端会顶出屏幕被裁（实测 1056px 卡片停在 x=224，右侧 80px 不可见）。
+              // 这里用刚量到的尺寸把位置收回屏内，位置变化不会再改尺寸，不会自激。
+              if (widthVp > 0 && this.readerContentWidth > 0) {
+                const maxX = Math.max(4, this.readerContentWidth - widthVp - 4);
+                if (this.canvasSelectionMenuX > maxX) {
+                  this.canvasSelectionMenuX = maxX;
+                }
+              }
+              if (heightVp > 0 && this.viewportHeight > 0) {
+                const maxY = Math.max(0, this.viewportHeight - heightVp - 4);
+                if (this.canvasSelectionMenuY > maxY) {
+                  this.canvasSelectionMenuY = maxY;
+                }
               }
             })
           }
