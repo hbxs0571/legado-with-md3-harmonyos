@@ -40,7 +40,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 ## 按功能分组的历史索引
 
-主文件放三类记录：①最近 8 轮深色模式（r310–r317）；②当前仍在推进的专题（画布重写、基准包核对）；③r331 起的书架布局与封面设置实现段。**排列顺序是「新的在前、旧的在后」**——`r329` 在最前，`r310` 在中间，只有 r331 之后的七节（r331 批 1–5、r332、r333、r334）因历史原因追加在文件末尾，`r334` 是最后一节。更早的轮次原样归档在 `docs/history/validation/`，按下面这张表找。
+主文件放三类记录：①最近 8 轮深色模式（r310–r317）；②当前仍在推进的专题（画布重写、基准包核对）；③r331 起的书架布局与封面设置实现段。**排列顺序是「新的在前、旧的在后」**——`r329` 在最前，`r310` 在中间，只有 r331 之后的七节（r331 批 1–5、r332、r333、r334）与 `r344` 因历史原因追加在文件末尾，`r334` 是那一组的最后一节，`r344` 排在全文最末。更早的轮次原样归档在 `docs/history/validation/`，按下面这张表找。
 归档规则与理由见[盘点规约](PARITY-RULES.md)。
 
 | 功能分组 | 涵盖轮次 | 归档文件 |
@@ -50,6 +50,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 | Android 基准包（两批） | 2026-11-02 采集与核对：第一批阅读器 62 张、第二批设置与书架 86 张 | 本文件（下方各节） |
 | 深色模式 / 主题 | r310–r317 | 本文件（下方各节） |
 | 书架布局与封面设置 | r331 批 1–5、r332、r333、r334 | 本文件（末尾七节） |
+| 阅读域 UI 对齐 | 2026-11-16（r344，八批：配色 / 顶栏 / 底栏 / 更多操作 / 设置外壳 / 划词卡 / 搜索浮层 / 页眉与亮度条） | 本文件（全文最末一节） |
 | 深色模式 / 主题 | r300–r309 | [2026-11-01-n-r300-r309-theme.md](history/validation/2026-11-01-n-r300-r309-theme.md) |
 | 阅读配置 KI 落地 | KI-A1–A12 / C1–C6 / D1–D6 / E1–E6、r296–r298 | [2026-10-31-reading-config-ki-rounds.md](history/validation/2026-10-31-reading-config-ki-rounds.md) |
 | 阅读渲染与视觉取证 | 正文排版三缺陷、r299 像素级 | [2026-11-01-n-r299-visual-evidence.md](history/validation/2026-11-01-n-r299-visual-evidence.md) |
@@ -1397,3 +1398,55 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 8. **`docs/parity/ZIP-COVER.md` 的状态列在实现段提交（`1eb2812`）时一次性翻了 33 行**，其中 `:131` B15 随后改回 `未接`；其余 32 行在 r334 文档核对时逐行复核过代码落点，但**没有逐行重拍屏幕**——按第 2 级口径只能记「构建通过 / 覆盖安装成功」，不能记设备验收。
 
 **本仓库提供开发预览源码，不代表稳定版、签名发行包或已完成 API 12 兼容验收。**
+
+## 2026-11-16 N 端 r344 阅读域 UI 八批对齐（菜单配色 / 顶栏 / 底栏 / 更多操作 / 设置外壳 / 划词卡 / 搜索浮层 / 页眉与亮度条）
+
+**设备**：DevEco 模拟器 `Mate 90 Pro`（`127.0.0.1:5555`），竖屏 1280×2832，密度 3.5，视口 365×809vp，包名 `io.legado.harmony`。
+
+**范围边界**：只动界面。`entry/src/main/ets/reader/` 下七个排版引擎文件（画布、分页、卷曲、正文过滤、样式编解码、页标识、文字背景）零改动；朗读 / AI / 书源一律不做实现，只在界面上标注「未迁移」。浅色模式按本文件的现行约定不单独验收，跳过项逐条列在「未做到 / 偏离」里。
+
+### 四条前置验证
+
+| 项 | 做法 | 结论 |
+| --- | --- | --- |
+| P1 菜单底色链 | 设备偏好置 `readBarStyle=2`、`readMenuBgColor=#3A5F3A`（绿）、`readMenuContainerColor=#5F3A3A`（红），分别用 `titleBarIconStyle=0/1` 截图 | **改前实测为反向映射**：顶栏与底栏取到容器色（红），按钮取到硬编码灰 `#2A2B31`。与上游 `ReadBookMenuBar.kt:1033` → `surfaceContainerHigh`（菜单背景色）、`surfaceContainerLow`（容器色）的链一致地指出本地错在哪 |
+| P2 两页 Pager | 临时探针页 `pages/TmpPagerProbe.ets`：`Column{ Swiper{ 长页 Scroll; 短页 Scroll }.layoutWeight(1); 页签行 }` | 三点全过：矮页不被拉成等高留白；页内纵向 swipe 不误触横翻；点页签切页不闪。探针已删，`grep` 零命中后重建 |
+| P3 elevation 等价物 | 查 `.shadow(ShadowOptions)` 可用性与全仓先例 | `shadow` 在基线 `6.0.0(20)` 可用（`components/BookCover.ets:299`、`pages/BookInfoPage.ets:730` 等 4 处先例 + 基线构建通过），但 ArkUI 只有单层投影，**不等价** Compose 双层 elevation；`pointLight` 是光照不是投影。批 6 先按 A 档 shadow 做探针，实测不可见后按退化条款改描边 |
+| P4 构建环境 | `bash scripts/build-hap.sh` | `BUILD SUCCESSFUL`，无 `00308018 spawn java ENOENT`（该错误只在把 `DEVECO_STUDIO_HOME` 导成 Windows 风格路径时出现，脚本默认 POSIX 路径不受影响） |
+
+### 八批逐批记录
+
+| 批 | 提交 | 改了哪几处 | 上机看到什么 | 未验到 / 偏离 |
+| --- | --- | --- | --- | --- |
+| 1 菜单配色地基 | `44e6421` | 顶底栏底色改取菜单背景色、按钮底色改取容器色并收口 `#454B62`/`#303139`/`#2A2B31`；新增 `readerMenuItemFill`(`ReaderPage.ets:1472`)、`readerMenuSelectedFill`(`:1483`)、模块级 `mixHexColor`(`:8050`)；渐变改上浓下透 / 上透下浓且不再叠 background 实色 | 自定义双色下栏绿钮红、清空容器色后按钮回落绿、跟随阅读背景时跟纸色、底栏上沿透出正文、选中态与未选中一眼可分 | — |
+| 2 顶栏 | `e6d24d0` | 两处书名 `maxLines(2)`、四处补 `readerMenuTextShadow`(`:1398`)、新增 `readerTopBarButtonOuterSize`(`:1388`，合并模式锁 40 / 玻璃 48 / 否则 40) 并套到图标钮与返回钮、新增 `readerTitleCapsuleBorder`(`:1407`) | dumpLayout 实测按钮 140→168px（40→48vp）、合并模式锁回 140px；长书名切两行带省略号；胶囊内书名仍一行 | 胶囊书源入口只留 `if (!this.book.isLocal)` 空分支，`book.isLocal` 恒 `true` 故**不可达**，未画假圆点 |
+| 3 底栏 | `6bc2df9` | 新增 `readerBottomActionOuterSize`(`:1322`) 与具名常量 `BOTTOM_ACTION_PADDING`(`:590`)；换章钮 / 动作钮 / Swiper 高度算式跟玻璃开关；进度条删自绘竖条、`blockColor` 改强调色 `blockSize 14`；删无消费者的 `getProgressSliderThumbRatio()` | 40 档 140px 与改前一致、48 档 168px、拇指可见、翻页高度不抖 | **文字 11 号实测被裁**（「自动翻页」只显示「自动翻」），按任务书退化条款降到 10 号；上游 `unbounded` 不做；轨道色用前景色 20% 近似上游「强调色带 alpha」 |
+| 4 更多操作面板 | `b6c8a01` | `READER_MORE_ACTIONS`(`:86`) 与 `READER_MORE_ACTION_DEFAULTS`(`data/ReaderMoreActionsRepository.ets:9`) 同序插入 5 项（23→28）；`isMoreActionApplicable`(`:3943`) 显式判这五项恒 `false`；三角补独立点击区与选中态；配置面板换 `List` + `onMove` 真拖拽、眼睛图标换 `UiSwitchControl`、删上下箭头与 `moveMoreAction` | 配置面板 28 行、新五项带「未迁移」、4 秒慢拖能换序且取消后回原；格子仍 23 格同序；点三角只变色不弹窗、点主体弹「尚未迁移」；图片样式仍直接开四项菜单 | 三角点击区在正式构建下不可达（三项主操作都未迁移），是在临时放开 `change_source|refresh|download` 的构建上验的，验完已还原重装；格子仍用 `Grid`，与上游 `Row`+`Spacer` 的最后一行对齐方式不同，判为可接受差异 |
+| 5 设置面板外壳 | `43da00c` | 新增私有 `ReaderTabRow`(`ReaderSettingsPage.ets:4119`) 替换三套自绘页签（三处调用点）；头部改三分支（信息 32×32 返回钮 + 16 号标题 + 48 占位、更多居中标题无返回钮）；`settingsSheetHeight`(`:2349`) 三档上限对齐 0.8 并给 Swiper 加 200ms 过渡 | 四 tab 等宽 + 8vp 间隙 + 圆角 12 + 13 号、选中加粗亮字；切「信息」时第一个按钮不再是亮字（老 bug 已修）；信息页返回钮 32 比改动前 38 小、标题 16 号；更多页标题居中且无返回钮 | **走 B 档**：探针把信息页内容换成两行文字后面板高度完全没变，内容自适应高度在 ArkUI 的 Swiper 上未成立，原因是 `settingsSheetHeight()` 写死百分比；Swiper 拿不到换页偏移量，只做换页后一次过渡。`moreSettingsContent()` 里 7 个 `showNotMigrated` 开关、`menuSettingsTabPage` 未接项、信息页字体文件选择与取色器仍是原样 |
+| 6 划词菜单卡片 | `378b7e1` | 新增 `readerSelectionCardColor`(`:1581`) 与 `selectionMenuColumnItem`(`:4985`)；展开态重写为 `Flex(wrap)` + 竖排条目 + 300vp 上限 + 末尾「编辑菜单项」；折叠态共用同一条目、分隔线改 `'66'`；更多弹层 `.width(readerContentWidth * 0.6)` 收住溢出并补淡入放大 | 条目图标在上文字在下居中；14 项探针下折成两行且卡片收在屏内；点「编辑菜单项」收菜单并打开设置；二级弹层从右端淡入 | **投影走 B 档**：探针下 `shadow` 在深色纸面采样与原背景完全同值，改 1vp 描边，上游 `menuShadowPadding` 的 12dp 外留白一并去掉。折行验证用了把 `READER_SELECTION_MENU_SUPPORTED` 临时扩到 14 项的探针，验完已还原 |
+| 7 搜索结果浮层 | `22694e2` | 左右钮 44→56 并按退化条款改淡描边；结果条 `88%` 居中改满宽减 32 且补 top 12；pill 与三枚按钮内部按上游改（N/M 与章名 11、徽标 `H8 V4`、图标强调色、文字 13、第二枚补「主菜单」） | 实测 `Stack` 196px=56vp、内层 `Row [56,2440][1224,2580]`；首条只右钮、翻页后两钮并存；主菜单让位与结果条回来都成立；图标粉紫 `#FFC2D7` 与文字 `#E1D5D7` 不同色 | 左右钮淡入**没做**（`if` 分支首次挂载 `.animation()` 不播），仍是硬切；`shadow` 在深色纸面上采样四周全 `#1A1A1A`，故改描边而非两者都上 |
+| 8 存废与故障项 | `0da81e1` | `isReaderHeaderVisible`(`:6742`) 改三档（1 显示 / 2 隐藏 / 其余跟随 `hideStatusBar`）并在 `onSystemBarSettingsChanged`(`:404`) 补 `onPaginationInputsChanged()`；`ReaderBrightnessBar`(`:4851`) 删竖排与横排两处数值文字、竖排宽度随玻璃开关 56/64、横排右端改纯占位；`ReaderBrightnessSlider`(`:4908`) 加 `.enabled(!this.brightnessAuto)` | 页眉四档行为全部符合，且隐藏状态栏开 / 关时正文首行位置 389 与 309 相差 80px 证明重排生效；竖排 196px=56vp、玻璃开 224px=64vp；`brightnessAuto=true` 时拖滑块亮度仍 100（拖不动）、关掉后变 94（能拖） | **8.2 快捷动作行未动代码**：三条路线的实测依据已在结论里列出，删不删、删到只剩哪一枚等指令；「拖动中先预览、松手才提交」未做（需新开预览回调并从 `ReaderPage` 透到 `Index`） |
+
+### 8.2 快捷动作行的核对结论（未改代码）
+
+关掉 `showQuickActions` 后五枚按钮的替代入口：搜索有底栏动作池（把 `bottomActions` 的 `search` 置 `true` 后底栏出现「全文搜索」，实测可点）与结果条「所有结果」；目录、设置、朗读都有底栏默认启用项（`DEFAULT_ENABLED_READER_ACTIONS = ['search','autoPage','catalog','voice','settings']`，见 `data/ReaderSettingsRepository.ets:683`）；**自动翻页只有底栏这一条路**，且它在顶栏默认池里不存在，用户若同时在底栏配置里关掉 `autoPage` 就彻底没有入口。因此 A 路线（默认关掉即可）基本成立，但自动翻页是单点依赖，倾向 B 路线（把这一枚挪进顶栏动作区）。**未拍板，等指令。**
+
+### 复原
+
+设备偏好逐个回读确认回到基线：`showQuickActions=false`、`readBarStyle=1.000000`、`readMenuBgColor`/`readMenuContainerColor` 空串、`titleBarIconStyle=0`、`bottomIconStyle=0`、`readMenuBottomBarBlurStyle=0`、`headerMode=0.000000`、`hideStatusBar=true`、`expandTextMenu=false`、`readBrightnessMode=0`、`brightnessAuto=true`、`readMenuTopBarLiquidGlassButtons=false`、`readMenuBottomBarLiquidGlassButtons=false`、`textSelectMenuConfig` 空串。设备侧 `/data/local/tmp` 的临时脚本与截图已删。
+
+### 提交与体检
+
+八个 commit 各自独立：`44e6421` / `e6d24d0` / `6bc2df9` / `b6c8a01` / `43da00c` / `378b7e1` / `22694e2` / `0da81e1`，每批一次 `git add` 且只用显式路径。每批收尾跑三项体检，最后一次结果：`doc-links.py docs` → `OK 所有 md 链接可解析（扫了 225 份）`；`parity-pipes.py` → `OK 所有表格行单元格数与表头一致`；`parity-rows.py --file TXT-READER.md` → `296 {'已接': 252, '不适用': 12, '未接': 32}`，与开工时逐位相同。
+
+### 未做到 / 偏离总表
+
+1. **浅色模式全部跳过**（按本文件约定），配色、投影、描边在浅色纸面上是否合规未验。
+2. 批 3 底栏文字由任务书的 11 号降到 10 号：11 号在 8 列布局下实测被裁。
+3. 批 5 内容自适应高度未成立，走 B 档固定百分比；上游「面板跟着内容缩」在 ArkUI 的 `Swiper` 上做不到。
+4. 批 6 与批 7 的投影都由 A 档退到 B 档描边，依据是深色纸面上采样不可见；这是近似，不是与上游 elevation 等价。
+5. 批 4 三角点击区、批 6 展开态折行各自依赖一次临时放开的探针构建，正式构建下三角那三格不出现、折叠项默认只有三项。
+6. 批 8「拖动中先预览、松手才提交」未做；要接需改三处：`ReaderBrightnessBar` 的 `onChange` 拆成 preview / commit 双回调、`ReaderPage` 增加 `onReadBrightnessPreview` 入参、`Index.ets` 的亮度链路补 preview 入口。
+7. 朗读 / AI / 书源一律未实现，界面上出现的相关项均带「未迁移」标记。
+
+**等级说明**：以上「上机看到什么」一栏的内容都来自本轮设备截图与 `dumpLayout` 实测（截图留存在开发机 `tmp/`，不入公开仓库），可记第 3 级；未列入的项按第 2 级记「构建通过 / 覆盖安装成功」，不外推为设备验收。

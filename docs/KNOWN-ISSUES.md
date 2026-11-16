@@ -4,7 +4,7 @@
 
 ## 发布版五条已知问题（r323，前四条已修、第五条未修）与后续新增（KI-REL6、KI-REL7）
 
-0.1.0 开发预览发布时用户报了五条体验问题。发布当时代码一行未改；此后 KI-REL1 已在 r325、KI-REL2 在 r326、KI-REL3 在 r327、KI-REL4 在 r328 修复，**只剩 KI-REL5 未修**。KI-REL6、KI-REL7 不属于那五条，是后续新发现后按同一编号续排的（都未修）。派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。
+0.1.0 开发预览发布时用户报了五条体验问题。发布当时代码一行未改；此后 KI-REL1 已在 r325、KI-REL2 在 r326、KI-REL3 在 r327、KI-REL4 在 r328 修复，**只剩 KI-REL5 未修**。KI-REL6、KI-REL7 不属于那五条，是后续新发现后按同一编号续排的：**KI-REL7 已在 r344 修复**，KI-REL6 仍未修。派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。
 
 **KI-REL1 滚动阅读跳章闪烁** —— 换章时整章重新分页，重排期间画布空着。入口 `entry/src/main/ets/pages/ReaderPage.ets:1531 onReaderContentChanged()`（清 `localReaderPages` + `scrollOffset = 0` 后 `rebuildReaderPages()`），`:5706-5712` 注释说明照上游 `ReaderCanvasSurface.kt:254` 不用滚动兜底。补法：跨章增量追加，或重排期保留上一章尾页作过渡帧；**不要**改两套排版兜底。
 > 已盘点，见 [TXT-READER.md](parity/TXT-READER.md) B8「跨章换页与页窗口拼接」第 222 行起（11 行，222–232；根因行 222）。上游那一层共 11 个能力，本地只接住 2 个（页窗口同步换装、四页纵向堆叠绘制）。
@@ -42,7 +42,7 @@
 **KI-REL7 页眉在“状态栏显示时隐藏”档位下永不显示** —— 阅读页把页眉模式设成“状态栏显示时隐藏”（`headerMode = 0`）且阅读时隐藏系统状态栏（`hideStatusBar = true`）时，页眉本应显示，实际整块不画。原因只在可见性判定少了一支：`entry/src/main/ets/pages/ReaderPage.ets:6536` 的 `isReaderHeaderVisible()` 写成 `return this.infoSettings.headerMode === 1;`，只认“显示”档，模式 0 没有回落到 `hideStatusBar`；同函数 `:6537` 的注释“HOS 目前保留系统状态栏”也不成立——`syncReaderSystemBars()`（`:1134`）在 `hideStatusBar` 为真时已 `setSpecificSystemBarEnabled('status', false, false)` 把状态栏关掉。页脚**不是**缺陷：`isReaderFooterVisible()`（`:6541`）的 `footerMode !== 1` 与上游一致，当前设备 `footerMode = 1`（隐藏）是设置值本身。
 > 上游口径：`legado-with-MD3/app/src/main/java/io/legado/app/feature/reader/legacy/LegacyReaderPageDecorationFactory.kt:333` 写的是 `when (headerMode) { 1 -> true; 2 -> false; else -> ReadBookConfig.hideStatusBar }`，模式 0 就是“状态栏可见时隐藏页眉、状态栏已隐藏则显示页眉”。
 > 设备实证：把档位临时切到“显示”后页眉立刻出现（左 `第1章(1)`、右 `02:50 100%`、下方一条分隔线，正文整体下移，`getReaderInfoReserve(true)` 的预留也跟着生效），说明绘制链路（`buildReaderHeaderDecoration`（`:5725`）→ `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1141` 的 `drawPageDecoration()`）本身正常，坏的只有这一个判定；试完已把 `headerMode` 改回 0。
-> 修法（未做，留待统一处理）：把 `isReaderHeaderVisible()` 改成三支——`1` 返回 `true`、`2` 返回 `false`、其余返回 `this.hideStatusBar`，并订正 `:6537` 那条错误注释。改后需注意 `onSystemBarSettingsChanged()`（`:1050`）目前只调 `syncReaderSystemBars()`、不触发重排版，切 `hideStatusBar` 时页眉可能出现但不立即重排。
+> 修法（**r344 已修**）：把 `isReaderHeaderVisible()`（`entry/src/main/ets/pages/ReaderPage.ets:6742`）改成三支——`1` 返回 `true`、`2` 返回 `false`、其余返回 `this.hideStatusBar`，并把原来那条「HOS 目前保留系统状态栏」的错误注释订正为引用上游 `LegacyReaderPageDecorationFactory.kt:333` 三档口径。同时给 `onSystemBarSettingsChanged()`（`:404`）补一支：`headerMode` 不是 1 也不是 2 时调 `onPaginationInputsChanged()`，否则切 `hideStatusBar` 后页眉会出现但不重排。设备验收见 [VALIDATION.md](VALIDATION.md)「r344 阅读域 UI 八批对齐」节：四档行为全部符合，隐藏状态栏开 / 关时正文首行位置相差 80px（页眉行高），证明重排确实发生。
 
 ## 书架与分组
 
