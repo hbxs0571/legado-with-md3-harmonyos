@@ -25,6 +25,12 @@ interface ReaderSearchMatch {
   isCurrentChapter: boolean;
 }
 
+/**
+ * 结果安全上限。上游 SearchContentRepository.kt:112-160 全文无 take/limit，
+ * 搜多少出多少；本地保留一个大得多的兜底值，防止正则全命中把内存打爆。
+ */
+const SEARCH_RESULT_LIMIT: number = 5000;
+
 @Component
 export struct ReaderSearchPage {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
@@ -32,6 +38,10 @@ export struct ReaderSearchPage {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  // 上游顶栏按钮选中态走 primaryContainer/onPrimaryContainer；本地无
+  // themeColorAccentContainer 键，按任务书口径降级用 themeColorSurfaceElevated。
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop book: Book = {
@@ -56,8 +66,14 @@ export struct ReaderSearchPage {
   @State historyOnlyThisBook: boolean = true;
   @State searchProgress: number = 0;
   @State searchError: string = '';
-  /** 因正则超时被跳过的章节数；搜索结束后提示「N 章因正则超时已跳过」。 */
+  /** 因正则超时被跳过的章节数（本地无展示点，仅计数；上游也不提示超时章数）。 */
   @State timedOutChapterCount: number = 0;
+  /**
+   * 顶栏动作按钮的 1 秒文字提示（上游 `TopBarAnimatedActionButton`：点击后
+   * AnimatedActionButtonCore 显示 activeText/inactiveText，1 秒后收起）。
+   */
+  @State actionHint: string = '';
+  private actionHintTimer: number = -1;
   onBack: () => void = () => {};
   private searchGeneration: number = 0;
   private searchTimer: number = -1;
@@ -74,6 +90,14 @@ export struct ReaderSearchPage {
       this.reloadSearchHistory();
       this.loadChapterRows(context);
     }
+    // 上游 SearchBar.kt:74-84 默认 autoFocus=true：进页面即 requestFocus + 弹键盘。
+    // 这里延后一拍，等首帧布局完成后再抢焦点，否则焦点会被外层容器吃掉。
+    setTimeout(() => {
+      try {
+        this.getUIContext().getFocusController().requestFocus('readerSearchInput');
+      } catch (_) {
+      }
+    }, 200);
   }
 
   private async loadChapterRows(context: Context): Promise<void> {
@@ -91,6 +115,22 @@ export struct ReaderSearchPage {
       clearTimeout(this.searchTimer);
       this.searchTimer = -1;
     }
+    if (this.actionHintTimer >= 0) {
+      clearTimeout(this.actionHintTimer);
+      this.actionHintTimer = -1;
+    }
+  }
+
+  /** 顶栏动作按钮的 1 秒文字提示，对齐上游 `AnimatedActionButtonCore.kt:49-54` 的 delay(1000)。 */
+  private showActionHint(text: string): void {
+    this.actionHint = text;
+    if (this.actionHintTimer >= 0) {
+      clearTimeout(this.actionHintTimer);
+    }
+    this.actionHintTimer = setTimeout(() => {
+      this.actionHint = '';
+      this.actionHintTimer = -1;
+    }, 1000);
   }
 
   private visibleHistory(): ReaderSearchHistoryEntry[] {
@@ -154,6 +194,8 @@ export struct ReaderSearchPage {
 
   private toggleReplaceMode(): void {
     this.replaceEnabled = !this.replaceEnabled;
+    // 上游 TopBarAnimatedActionButton：点击后按钮旁展开「替换开启/关闭」1 秒。
+    this.showActionHint(this.replaceEnabled ? '替换开启' : '替换关闭');
     if (this.query.trim().length > 0) {
       this.scheduleSearch(this.query);
     }
@@ -170,6 +212,7 @@ export struct ReaderSearchPage {
 
   private toggleRegexMode(): void {
     this.regexMode = !this.regexMode;
+    this.showActionHint(this.regexMode ? '正则开启' : '正则关闭');
     if (this.query.trim().length > 0) {
       this.scheduleSearch(this.query);
     }
@@ -212,7 +255,7 @@ export struct ReaderSearchPage {
     try {
       await BookRepository.forEachChapter(this.book,
         async (content: string, chapterIndex: number): Promise<boolean> => {
-          if (generation !== this.searchGeneration || results.length >= 200) { return false; }
+          if (generation !== this.searchGeneration || results.length >= SEARCH_RESULT_LIMIT) { return false; }
           const chapterTitle = this.chapterRows[chapterIndex]?.title ?? this.book.lastChapter;
           const semanticContent = LocalTextSemantics.fromRawBody(content);
           const chapterMatches: ReaderSearchMatch[] = [];
@@ -221,11 +264,11 @@ export struct ReaderSearchPage {
             // 正则匹配丢到 worker 线程并带 500ms 预算（上游 REGEX_MATCH_TIMEOUT_MILLIS）：
             // 灾难性回溯的正则最多卡这一章 500ms，界面不冻，超时就跳过本章继续搜。
             try {
-              const regexResult = await ReaderSearchRegex.run(semanticContent, keyword, 200 - results.length);
+              const regexResult = await ReaderSearchRegex.run(semanticContent, keyword, SEARCH_RESULT_LIMIT - results.length);
               if (regexResult.timedOut) {
                 this.timedOutChapterCount++;
                 this.searchProgress = chapterIndex + 1;
-                return generation === this.searchGeneration && results.length < 200;
+                return generation === this.searchGeneration && results.length < SEARCH_RESULT_LIMIT;
               }
               for (let hitIndex = 0; hitIndex < regexResult.hits.length; hitIndex++) {
                 const hit = regexResult.hits[hitIndex];
@@ -239,12 +282,12 @@ export struct ReaderSearchPage {
             }
           } else {
             let position = semanticContent.indexOf(keyword);
-            while (position >= 0 && hits.length + results.length < 200) {
+            while (position >= 0 && hits.length + results.length < SEARCH_RESULT_LIMIT) {
               hits.push({ position: position, length: keyword.length });
               position = semanticContent.indexOf(keyword, position + Math.max(1, keyword.length));
             }
           }
-          for (let hitIndex = 0; hitIndex < hits.length && results.length < 200; hitIndex++) {
+          for (let hitIndex = 0; hitIndex < hits.length && results.length < SEARCH_RESULT_LIMIT; hitIndex++) {
             const hit = hits[hitIndex];
             if (hit === undefined) { continue; }
             const excerptStart = Math.max(0, hit.position - 12);
@@ -264,7 +307,7 @@ export struct ReaderSearchPage {
           results.push(...chapterMatches);
           this.searchProgress = chapterIndex + 1;
           this.matches = results.slice();
-          return generation === this.searchGeneration && results.length < 200;
+          return generation === this.searchGeneration && results.length < SEARCH_RESULT_LIMIT;
         }, this.replaceEnabled);
       if (generation === this.searchGeneration) {
         this.searching = false;
@@ -290,21 +333,22 @@ export struct ReaderSearchPage {
   private highlightedExcerpt(match: ReaderSearchMatch) {
     Text() {
       if (match.excerptMatchStart > 0) {
-        Span(match.excerpt.substring(0, match.excerptMatchStart)).fontColor('#D9DAE0');
+        Span(match.excerpt.substring(0, match.excerptMatchStart)).fontColor(this.themeColorTextSecondary);
       }
       if (Math.min(match.excerpt.length, match.excerptMatchStart + match.matchLength) > match.excerptMatchStart) {
+        // 上游 SearchResult.kt:61-65：高亮 = accentColor 前景 + primaryContainer 背景 + Bold。
         Span(match.excerpt.substring(
           match.excerptMatchStart,
           Math.min(match.excerpt.length, match.excerptMatchStart + match.matchLength)
         ))
-          .fontColor('#FFFFFF')
-          .backgroundColor('#454B62')
-          .fontWeight(FontWeight.Medium);
+          .fontColor(this.themeColorAccent)
+          .backgroundColor(this.themeColorSurfaceElevated)
+          .fontWeight(FontWeight.Bold);
       }
       if (Math.min(match.excerpt.length, match.excerptMatchStart + match.matchLength) < match.excerpt.length) {
         Span(match.excerpt.substring(
           Math.min(match.excerpt.length, match.excerptMatchStart + match.matchLength)
-        )).fontColor('#D9DAE0');
+        )).fontColor(this.themeColorTextSecondary);
       }
     }
     .fontSize(13)
@@ -319,12 +363,27 @@ export struct ReaderSearchPage {
           Image($r('app.media.reader_back')).width(22).height(22).fillColor('#E4E5EA')
         }.width(40).height(40).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(22).onClick(() => this.onBack())
         Blank()
-        Image($r('app.media.profile_find_replace')).width(20).height(20)
-          .fillColor(this.replaceEnabled ? this.themeColorAccent : this.themeColorTextSecondary).width(38)
+        // 上游两个 TopBarAnimatedActionButton 都是 36×36 盒 + 20dp 图标
+        // （`SeriesIconButton.kt:54-55`），选中态底色 primaryContainer。
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.profile_find_replace')).width(20).height(20)
+            .fillColor(this.replaceEnabled ? this.themeColorAccent : this.themeColorTextSecondary)
+        }.width(36).height(36).borderRadius(18)
+          .backgroundColor(this.replaceEnabled ? this.themeColorSurfaceElevated : Color.Transparent)
           .onClick(() => this.toggleReplaceMode())
-        Image($r('app.media.app_code')).width(18).height(18).fillColor(this.themeColorTextSecondary).width(42)
-          .fillColor(this.regexMode ? this.themeColorAccent : this.themeColorTextSecondary).onClick(() => this.toggleRegexMode())
-      }.padding({ left: 16, right: 16, top: 14, bottom: 18 })
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.app_code')).width(20).height(20)
+            .fillColor(this.regexMode ? this.themeColorAccent : this.themeColorTextSecondary)
+        }.width(36).height(36).borderRadius(18)
+          .backgroundColor(this.regexMode ? this.themeColorSurfaceElevated : Color.Transparent)
+          .onClick(() => this.toggleRegexMode())
+        // 上游点击后按钮旁展开 1 秒文字；本地放在按钮右侧同一行。
+        if (this.actionHint.length > 0) {
+          Text(this.actionHint).fontSize(12).fontColor(this.themeColorAccent).margin({ left: 4 })
+        }
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 14 + this.appTopInset, bottom: 18 })
 
       Text(this.query.trim().length > 0 && this.matches.length > 0
         ? '共 ' + this.matches.length.toString() + ' 条结果' : '搜索内容')
@@ -333,9 +392,11 @@ export struct ReaderSearchPage {
 
       Row() {
         AppSearchGlyph()
-        TextInput({ placeholder: '搜索本书…', text: this.query })
+        TextInput({ placeholder: '搜索…', text: this.query })
+          .id('readerSearchInput')
           .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor('#8C8E98')
           .backgroundColor(Color.Transparent).layoutWeight(1)
+          .defaultFocus(true)
           .enterKeyType(EnterKeyType.Search)
           .onChange((value: string) => this.scheduleSearch(value))
           .onSubmit(() => this.submitSearch())
@@ -347,36 +408,47 @@ export struct ReaderSearchPage {
         .margin({ left: 16, right: 16 })
 
       if (this.query.trim().length === 0) {
-        Row() {
+        // 上游 SearchContentScreen.kt:365-386：标题在 Box 里 align=Center 绝对居中，
+        // 「仅本书」开关叠在 CenterEnd 同一行；文案恒定「仅本书」，图标 checked=Book /
+        // unchecked=CollectionsBookmark。本地用 Stack 复刻这个叠放关系。
+        Stack({ alignContent: Alignment.Center }) {
           Text('搜索历史').fontSize(12).fontColor(this.themeColorAccent)
-          Blank()
           Row() {
-            AppGlyph({ name: this.historyOnlyThisBook ? 'book' : 'bookshelf', glyphSize: 13, tint: '#25262C' })
-            Text(this.historyOnlyThisBook ? '仅本书' : '全部')
-              .fontSize(11).fontColor('#25262C').margin({ left: 5 })
+            Row() {
+              AppGlyph({ name: this.historyOnlyThisBook ? 'book' : 'bookshelf', glyphSize: 13, tint: this.themeColorTextPrimary })
+              Text('仅本书')
+                .fontSize(11).fontColor(this.themeColorTextPrimary).margin({ left: 5 })
+            }
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .backgroundColor(this.historyOnlyThisBook ? this.themeColorSurfaceElevated : this.themeColorSurfaceTertiary)
+            .borderRadius(16)
+            .onClick(() => this.historyOnlyThisBook = !this.historyOnlyThisBook)
           }
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-          .backgroundColor('#F0F1F5')
-          .borderRadius(16)
-          .onClick(() => this.historyOnlyThisBook = !this.historyOnlyThisBook)
-        }.padding({ left: 18, right: 18, top: 13, bottom: 8 })
-      } else {
+          .width('100%')
+          .justifyContent(FlexAlign.End)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 13, bottom: 8 })
+      } else if (this.searching) {
+        // 上游顶栏 title 已经是「共 N 条结果」，搜索结束后不再重复计数；
+        // 搜索中的进度行是本地新增的（上游只用顶栏进度条表示），保留。
         Row() {
-          Text(this.searching
-            ? '正在搜索 ' + this.searchProgress.toString() + '/' + this.chapterRows.length.toString()
-            : '本书正文 · 最多200条')
+          Text('正在搜索 ' + this.searchProgress.toString() + '/' + this.chapterRows.length.toString())
             .fontSize(12).fontColor(this.themeColorAccent)
-          if (this.searching) {
-            Text('停止').fontSize(12).fontColor(this.themeColorAccent).margin({ left: 12 })
-              .onClick(() => this.stopSearch())
-          }
-        }.padding({ left: 18, right: 18, top: 13, bottom: 8 })
+        }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 8 })
+      }
+
+      // 上游搜索中在顶栏下画一条 AppLinearProgressIndicator（SearchContentScreen.kt:247-249）。
+      if (this.searching) {
+        Progress({ value: this.searchProgress, total: Math.max(1, this.chapterRows.length), type: ProgressType.Linear })
+          .width('calc(100% - 32vp)').height(2).margin({ left: 16, right: 16, top: 4 })
+          .color(this.themeColorAccent)
+          .backgroundColor(this.themeColorSurfaceTertiary)
       }
 
       if (this.searchError.length > 0) {
         Column() {
           Text(this.searchError).fontSize(14).fontColor('#BFC0C8')
-          Text(this.bookTitle).fontSize(11).fontColor('#777984').margin({ top: 8 })
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.query.trim().length === 0) {
         if (this.visibleHistory().length === 0) {
@@ -428,38 +500,51 @@ export struct ReaderSearchPage {
         }
       } else if (this.matches.length === 0 && this.searching) {
         Column() {
-          LoadingProgress().width(24).height(24).color(this.themeColorAccent)
-          Text('正在搜索本书正文').fontSize(12).fontColor('#B4B5BC').margin({ top: 8 })
+          Text('正在搜索本书正文').fontSize(12).fontColor('#B4B5BC')
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.matches.length === 0) {
         Column() {
           Text('没有找到相关内容！').fontSize(14).fontColor('#BFC0C8')
-          Text(this.bookTitle).fontSize(11).fontColor('#777984').margin({ top: 8 })
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else {
         Stack({ alignContent: Alignment.BottomEnd }) {
           List({ scroller: this.resultScroller }) {
             ForEach(this.matches, (match: ReaderSearchMatch, matchIndex: number) => {
               ListItem() {
-                Column() {
-                  Row() {
-                    Text(match.chapterTitle).fontSize(13).fontColor(this.themeColorAccent)
-                      .layoutWeight(1).maxLines(1)
-                    if (match.isCurrentChapter) {
-                      Text('当前章').fontSize(10).fontColor('#25262C')
-                        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                        .backgroundColor('#C8D3FF').borderRadius(12)
+                // 上游角标是 Box 内 Modifier.align(Alignment.TopEnd) 的绝对定位行
+                // （SearchContentScreen.kt:491-517），不是排在正文后面，所以这里用 Stack 叠放。
+                Stack({ alignContent: Alignment.TopEnd }) {
+                  Column() {
+                    Row() {
+                      // 上游 SearchResultItem：章名 titleSmall(14sp Medium) primary 色。
+                      Text(match.chapterTitle).fontSize(14).fontWeight(FontWeight.Medium)
+                        .fontColor(this.themeColorAccent)
+                        .layoutWeight(1).maxLines(1)
                     }
-                    Text(Math.round(match.progressPercent).toString() + '%')
-                      .fontSize(10).fontColor('#D9DAE0')
-                      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                      .backgroundColor('#303139').borderRadius(12).margin({ left: 6 })
+                    .width('100%')
+                    .alignItems(VerticalAlign.Top)
+                    // 上游章名与摘录之间有 HorizontalDivider(surface 色)。
+                    Divider().color(this.themeColorSurfacePrimary).margin({ top: 8, bottom: 8 })
+                    this.highlightedExcerpt(match)
                   }
                   .width('100%')
-                  this.highlightedExcerpt(match)
+                  // 上游角标圆角 8、padding 4/2，百分比一位小数且 >0 才显示。
+                  Row() {
+                    if (match.isCurrentChapter) {
+                      Text('当前章节').fontSize(10).fontColor(this.themeColorTextPrimary)
+                        .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                        .backgroundColor(this.themeColorSurfaceElevated).borderRadius(8)
+                    }
+                    if (match.progressPercent > 0) {
+                      Text(match.progressPercent.toFixed(1) + '%')
+                        .fontSize(10).fontColor(this.themeColorTextPrimary)
+                        .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                        .backgroundColor(this.themeColorSurfaceElevated).borderRadius(8).margin({ left: 4 })
+                    }
+                  }
                 }
                 .width('100%')
-                .padding(14)
+                .padding(16)
                 .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))
                 .borderRadius(12)
                 .onClick(() => this.onOpenResult(match.chapterIndex, match.position,
@@ -477,17 +562,18 @@ export struct ReaderSearchPage {
           .layoutWeight(1)
           .scrollBar(BarState.Off)
 
-          if (this.searching || this.matches.length > 0) {
+          // 上游 FAB 显示条件：(isSearching || results.isNotEmpty()) && query.isNotBlank()。
+          if ((this.searching || this.matches.length > 0) && this.query.trim().length > 0) {
             Stack({ alignContent: Alignment.Center }) {
               if (this.searching) {
-                AppGlyph({ name: 'profileClose', glyphSize: 22, tint: '#ECEEF2' })
+                AppGlyph({ name: 'profileClose', glyphSize: 22, tint: this.themeColorTextPrimary })
               } else {
-                Image($r('app.media.app_locate')).width(22).height(22).fillColor('#ECEEF2')
+                Image($r('app.media.app_locate')).width(22).height(22).fillColor(this.themeColorTextPrimary)
               }
             }
             .width(48)
             .height(48)
-            .backgroundColor('#454B62')
+            .backgroundColor(this.themeColorSurfaceElevated)
             .borderRadius(26)
             .margin({ right: 20, bottom: 20 })
             .onClick(() => {
