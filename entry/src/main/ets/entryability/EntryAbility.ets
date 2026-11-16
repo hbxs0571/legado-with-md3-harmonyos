@@ -5,7 +5,7 @@ import { RdbMigration } from '../data/RdbMigration';
 import { RdbCleanup } from '../data/RdbCleanup';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { ThemeSettingsRepository, THEME_MODE_DARK } from '../data/ThemeSettingsRepository';
-import { applyStartWindowBackgroundColor } from '../data/StartWindowBackground';
+import { applyStartWindowBackgroundColor, preloadInitialThemeColors } from '../data/StartWindowBackground';
 import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
 import { BookRepository } from '../data/BookRepository';
 
@@ -67,6 +67,10 @@ function applySystemBar(context: Context, isDark: boolean): void {
 
 export default class EntryAbility extends UIAbility {
   onCreate(): void {
+    // 首帧之前把落盘的主题色同步灌进 AppStorage（批 1，对齐用户「概率性白闪」的反馈）：
+    // Index 的 @StorageProp 默认值是浅色，真值要到 restoreOnboarding 的一串 await 之后才广播，
+    // 深色主题下首帧就会用浅色画一遍。这里早于窗口创建与 loadContent，是唯一赶得上的位置。
+    preloadInitialThemeColors(this.context);
     // 存量搬迁不在这里做：它必须和首屏加载串行，见 onWindowStageCreate。
     // 启动清扫 epub-assets 与 pdf-pages 两个目录下的孤儿目录（批 5 / 批 7）：fire-and-forget，不阻塞首屏；
     // 读不到在架书（搬迁未完）时 clearOrphanLocalAssets 内部空集合会直接返回，不会误删在用的图。

@@ -569,6 +569,15 @@ struct Index {
   @State webDavTesting: boolean = false;
   @State webDavBackupNames: string[] = [];
   @State onboardingLoaded: boolean = false;
+  /**
+   * 主题真值是否已广播进 AppStorage。
+   *
+   * 首帧与「真值到达」之间有一个空窗：`@StorageProp('themeColorSurfacePrimary')` 等的默认值是浅色，
+   * 真值由 `applyThemeMode` → `applyThemeColors` 广播。空窗期根背景改用
+   * `$r('app.color.start_window_background')`（base/dark 限定目录，天然跟随系统深浅色）顶上，
+   * 避免深色主题下露一帧浅底。
+   */
+  @State themeColorsReady: boolean = false;
   @State onboardingComplete: boolean = false;
   /**
    * 全局深色模式开关，上游 `AppShellSettings.themeMode`（`"0"` 跟随系统 / `"1"` 亮色 / `"2"` 暗色）。
@@ -697,6 +706,13 @@ struct Index {
   private eyeProtectionTimerId: number = -1;
 
   aboutToAppear(): void {
+    // `EntryAbility.onCreate` 的 `preloadInitialThemeColors` 已经把真值灌进 AppStorage，
+    // 这里只要确认它到了就直接置位，不必再等 `applyThemeMode` 那条异步链。
+    // 不这么做的话，「系统浅色 + 应用深色」下根背景会退回
+    // `$r('app.color.start_window_background')` 的 base 浅色值，等于把白闪放回来。
+    if (AppStorage.get<string>('themeColorSurfacePrimary') !== undefined) {
+      this.themeColorsReady = true;
+    }
     const context = this.getUIContext().getHostContext();
     if (context !== undefined) {
       if (!this.readerLifecycleEventsRegistered) {
@@ -3411,6 +3427,8 @@ struct Index {
         resolvePaletteColors(normalizedIndex, isDarkNow))
       : undefined;
     applyThemeColors(context, normalizedIndex, themeMode, customColors);
+    // 真值已广播进 AppStorage：根背景从系统资源色切回主题色（见 build 里的三层取值）。
+    this.themeColorsReady = true;
     // 日夜一变，卡片边框色就要按 baseCardBorderColor(Night) 重选，所以顺带刷新一次。
     this.publishThemeCardStyle();
     this.publishTopBottomBarStyle();
@@ -10292,7 +10310,10 @@ private canWriteInto(dir: string): boolean {
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       }
       }
-    }.width('100%').height('100%').backgroundColor(this.appBackgroundSource().length > 0 ? Color.Transparent : (this.themePureBlackActive ? '#000000' : this.themeColorSurfacePrimary))
+    }.width('100%').height('100%').backgroundColor(this.appBackgroundSource().length > 0 ? Color.Transparent
+      : (this.themePureBlackActive ? '#000000'
+      : (this.themeColorsReady ? this.themeColorSurfacePrimary
+      : $r('app.color.start_window_background'))))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     // 护眼覆盖层：上游用 ColorFilter.colorMatrix 给全屏套对角色矩阵，这里用同尺寸纯色层
     // 配 MULTIPLY 混合，混合公式 result = 内容 × 覆盖色，与对角矩阵逐通道相乘等价。
