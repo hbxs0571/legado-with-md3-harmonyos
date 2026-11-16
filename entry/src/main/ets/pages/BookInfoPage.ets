@@ -605,20 +605,20 @@ export struct BookInfoPage {
   /**
    * 溢出菜单的项。
    *
-   * 顺序照上游 `BookInfoScreen.kt:1034-1143` 的 `BookInfoOverflowMenu`
-   * （custom_button → edit → refresh → read_record → book_disable_read_record →
-   *  … → to_top → … → delete_alert → clear_cache → log → private），去掉本地没有对应能力的项后不补空位。
+   * 顺序照上游 `BookInfoScreen.kt:1034-1143` 的 `BookInfoOverflowMenu`，19 项一项不落：
+   * custom_button → edit → refresh → read_record → book_disable_read_record →
+   * re_sync_webdav → upload_to_remote → login → set_source_variable → set_book_variable →
+   * copy_book_url → copy_toc_url → to_top → allow_update → split_long_chapter →
+   * delete_alert → clear_cache → log → private，末尾再补本地独有的 export_epub。
    *
-   * 为什么没补 `allow_update` 与 `copy_toc_url`：上游这两项都有前置条件 ——
-   * `allow_update` 只在 `book?.isLocal == false`（`:1107`）时出现，
-   * `copy_toc_url` 只在 `state.bookSourceUi != null`（`:1085`）时出现。
-   * 本地书目全是 `isLocal === true` 的本地书、也没有书源系统，这两个条件在本仓库永远不成立，
-   * 加了就是凭空多两行点了没意义的东西，所以按上游条件不显示。
-   * 同理 `custom_button` / `login` / `set_source_variable` / `set_book_variable`（书源域）、
-   * `re_sync_webdav` / `upload_to_remote`（远程书库）、`split_long_chapter`（改排版引擎）都不做。
+   * **上游的显示条件在本地一律不判**：上游这些项各自挂着 `bookSourceUi != null`、
+   * `hasLogin`、`isLocal == false` 之类的前置条件，本地没有书源系统、书目全是本地书，
+   * 照条件判等于全都不显示。按用户要求「哪怕不做实际功能也要把所有按钮做出来」，
+   * 这里全部列出，未接入的项在 `onOverflowSelect` 里提示「未接入」。
    */
   private overflowItems(): UiMenuItem[] {
     const items: UiMenuItem[] = [
+      { key: 'custom_button', title: '自定义菜单' },
       { key: 'edit', title: '编辑' },
       { key: 'refresh', title: '刷新' },
       { key: 'read_record', title: '阅读记录' },
@@ -627,10 +627,17 @@ export struct BookInfoPage {
         title: this.book.disableReadRecord === true ? '启用阅读记录' : '禁用阅读记录',
         selected: this.book.disableReadRecord === true
       },
+      { key: 're_sync_webdav', title: '重新同步 WebDAV' },
+      { key: 'upload_to_remote', title: '上传到远程' },
+      { key: 'login', title: '登录' },
+      { key: 'set_source_variable', title: '设置书源变量' },
+      { key: 'set_book_variable', title: '设置书籍变量' },
       { key: 'copy_book_url', title: '拷贝书籍 URL' },
+      { key: 'copy_toc_url', title: '拷贝目录 URL' },
       { key: 'to_top', title: '置顶' },
+      { key: 'allow_update', title: '允许更新' },
+      { key: 'split_long_chapter', title: '拆分超长章节' },
       { key: 'delete_alert', title: '删除提醒', selected: this.deleteAlertEnabled },
-      // 上游 `clear_cache`（`:1126-1129`）与 `log`（`:1130-1133`）都是无条件项。
       { key: 'clear_cache', title: '清理缓存' },
       { key: 'log', title: '日志' },
       {
@@ -671,7 +678,19 @@ export struct BookInfoPage {
       this.onSetPrivate(this.book, this.book.isPrivate !== true);
     } else if (key === 'export_epub') {
       this.onExportEpub(this.book);
+    } else {
+      // 其余 8 项（custom_button / re_sync_webdav / upload_to_remote / login /
+      // set_source_variable / set_book_variable / copy_toc_url / allow_update /
+      // split_long_chapter）依赖书源、远程书库或排版引擎，本地没有对应能力。
+      // 按用户要求仍然列出来，点了给一句「未接入」，不留死按钮。
+      this.onUnavailableAction(`${this.overflowTitleOf(key)} 未接入`);
     }
+  }
+
+  /** 按 key 反查菜单标题，给「未接入」提示用。 */
+  private overflowTitleOf(key: string): string {
+    const matched = this.overflowItems().find((item: UiMenuItem) => item.key === key);
+    return matched === undefined ? key : matched.title;
   }
 
   /**
