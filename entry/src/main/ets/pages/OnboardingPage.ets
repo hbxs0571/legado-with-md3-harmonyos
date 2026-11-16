@@ -1,5 +1,5 @@
-import { resolvePaletteColors, THEME_PALETTES, ThemePaletteDefinition } from '../data/ThemePalette';
 import { AppGlyph } from '../components/AppGlyph';
+import { ThemeColorSelector, ThemeModeSelector } from '../components/ThemeSelectors';
 
 @Component
 export struct OnboardingPage {
@@ -8,7 +8,6 @@ export struct OnboardingPage {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
@@ -39,14 +38,6 @@ export struct OnboardingPage {
   /** 当前是否深色，由 Index 传入（`ThemeModeResolver.isDarkTheme` 派生），调色板预览据此取日/夜色值。 */
   @Prop readerNightMode: boolean = false;
 
-  private paletteSurface(index: number): string {
-    return resolvePaletteColors(index, this.readerNightMode).surfaceContainer;
-  }
-
-  private paletteCenter(index: number): string {
-    return resolvePaletteColors(index, this.readerNightMode).primary;
-  }
-
   private pageTitle(): string {
     if (this.page === 0) { return '欢迎'; }
     if (this.page === 1) { return '备份与恢复'; }
@@ -58,7 +49,7 @@ export struct OnboardingPage {
     if (this.page === 0) { return '请先阅读应用说明与用户协议。'; }
     if (this.page === 1) { return '了解本地备份与恢复设置。'; }
     if (this.page === 2) { return '本地书籍会保存在应用目录中。'; }
-    return '选择你喜欢的界面样式。';
+    return '在这里设置您喜爱的样式。';
   }
 
   private next(): void {
@@ -119,53 +110,33 @@ export struct OnboardingPage {
       }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
         .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else {
+      // 上游 `OnboardingScreen.kt:326-359` `ThemePage` 只有两个节点：
+      // `ThemeModeSelector`（:339-344）与 `padding(top = 16.dp)` 包裹的 `ThemeColorSelector`（:345-357）。
+      // 没有预览卡、没有分组标题、没有说明文字，本地照此只留这两个组件。
       Column() {
-        Row() {
-          this.modeOption('跟随系统', 0)
-          this.modeOption('浅色', 1)
-          this.modeOption('深色', 2)
-        }.width('100%')
-        Row() {
-          ForEach(THEME_PALETTES, (palette: ThemePaletteDefinition) => {
-            Column() {
-              Stack({ alignContent: Alignment.Center }) {
-                if (this.paletteIndex === palette.index) {
-                  Text('✓').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.paletteCenter(palette.index))
-                }
-              }.width(40).height(40).backgroundColor(this.paletteSurface(palette.index)).borderRadius(21)
-                .border({ width: this.paletteIndex === palette.index ? 3 : 0, color: this.themeColorTextPrimary })
-              Text(palette.name)
-                .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 7 }).maxLines(1)
-            }.layoutWeight(1).onClick(() => {
-              this.paletteIndex = palette.index;
-              this.onPaletteChange(palette.index);
-            })
-          }, (palette: ThemePaletteDefinition) => palette.index.toString())
-        }.width('100%').margin({ top: 26 })
-        Column() {
-          Text('主题预览').fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-          Text('我的书架　　继续阅读').fontSize(14).fontColor(this.paletteCenter(this.paletteIndex))
-            .width('100%').padding(16).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
-        }.width('100%').alignItems(HorizontalAlign.Start).padding(16).margin({ top: 24 })
-          .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(16)
-        Text('深色模式点选即写入主题设置并在整个应用生效；配色序号会一并保存，配色渲染仍在迁移中。')
-          .fontSize(12).fontColor(this.themeColorTextTertiary).lineHeight(18).margin({ top: 14 })
-      }.width('100%').padding(16)
+        ThemeModeSelector({
+          selectedMode: this.themeMode,
+          onModeSelected: (mode: number) => {
+            // 先改本页 @State 再回调父组件：只回调的话，父组件重渲染前本页选中态不更新
+            // （与上游 `OnboardingViewModel.kt:120-123` 点一下即写网关的时序对应）。
+            this.themeMode = mode;
+            this.onThemeModeChange(mode);
+          }
+        })
+        // 上游 `Box(Modifier.padding(top = 16.dp))`。用独立 Blank 而不是 margin，
+        // 否则会与父 Column 的默认排布叠加。
+        Blank().height(16)
+        ThemeColorSelector({
+          selectedIndex: this.paletteIndex,
+          isDark: this.readerNightMode,
+          onPaletteSelected: (index: number) => {
+            this.paletteIndex = index;
+            this.onPaletteChange(index);
+          }
+        })
+      }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
         .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     }
-  }
-
-  @Builder
-  private modeOption(label: string, mode: number) {
-    Text(label).fontSize(13)
-      .fontColor(this.themeMode === mode ? this.themeColorSurfacePrimary : this.themeColorTextTertiary)
-      .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 12, bottom: 12 })
-      .backgroundColor(this.themeMode === mode ? this.themeColorAccent : this.themeColorSurfaceTertiary)
-      .borderRadius(24)
-      .margin({ left: 3, right: 3 }).onClick(() => {
-        this.themeMode = mode;
-        this.onThemeModeChange(mode);
-      })
   }
 
   build() {
@@ -182,10 +153,23 @@ export struct OnboardingPage {
         .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))
         .margin({ left: 16, right: 16, bottom: 10 })
         .animation({ duration: 300, curve: Curve.EaseInOut })
+      // 卡片拆成两层：外层只占位（layoutWeight），内层才是卡片、高度随内容。
+      // 上游 `OnboardingScreen.kt:109-114` 是 `Box(fillMaxSize())` 里放 `GlassCard(fillMaxWidth())`——
+      // 卡片高度随内容、贴顶，短页下方留白。本地原来把两层合成一个带 layoutWeight 的 Column，
+      // 卡片会被拉满到按钮上方。底色取 `surfaceContainer` 而不是 `surface`：
+      // `GlassCard.kt:133`/`:95` 默认 `LegadoTheme.colorScheme.surfaceContainer`，
+      // 本地对应键是 `themeColorSurfaceTertiary`（`data/ThemePalette.ets:520`）。
+      // `clip(true)` 必留：第 1 页内容是 Scroll，会顶出圆角。`alignItems(Start)` 让卡片贴顶。
       Column() {
-        this.pageContent()
-      }.width('100%').layoutWeight(1).margin({ left: 16, right: 16 })
-        .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(18)
+        Column() {
+          this.pageContent()
+        }
+        .width('100%')
+        .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfaceTertiary))
+        .borderRadius(18)
+        .clip(true)
+      }.width('100%').layoutWeight(1).alignItems(HorizontalAlign.Start)
+        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
       Row() {
         Blank()
         // 上游 `OnboardingScreen.kt:138-141` 是 `MediumTonalButton { Text(...); Icon(ArrowForward) }`，
