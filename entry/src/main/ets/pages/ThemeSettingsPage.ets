@@ -4,10 +4,11 @@ import curves from '@ohos.curves';
 import { UiAction } from '../components/settings/UiAction';
 import { UiDropdown } from '../components/settings/UiDropdown';
 import { UiSlider } from '../components/settings/UiSlider';
-import { AppGlyph } from '../components/AppGlyph';
+import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { appFontDisplayName } from '../data/AppFontSettings';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
-import { resolvePaletteColors, THEME_PALETTES, ThemePaletteDefinition } from '../data/ThemePalette';
+import { ThemeRefactorTipStore } from '../data/ThemeRefactorTipStore';
+import { resolvePaletteColors, THEME_PALETTES, ThemePaletteColors, ThemePaletteDefinition } from '../data/ThemePalette';
 import {
   CustomThemeSnapshot, defaultCustomThemeSnapshot, hasCustomColor
 } from '../data/CustomThemeColors';
@@ -198,6 +199,29 @@ export struct ThemeSettingsPage {
   onEyeProtectionEndTimeChange: (time: string) => void = (_time: string) => {};
   @State backgroundExpanded: boolean = false;
   @State showRefactorTip: boolean = true;
+
+  /**
+   * 进页面时读提示条的关闭状态。上游 `theme.showRefactorTip` 是持久化偏好
+   * （`FeatureSettingsRepositories.kt:427-429`），关一次永久关；本地原先只有 `@State`。
+   */
+  aboutToAppear(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    ThemeRefactorTipStore.load(context).then((visible: boolean) => {
+      this.showRefactorTip = visible;
+    });
+  }
+
+  /** 关闭提示条并落盘，下次进外观页不再出现。 */
+  private dismissRefactorTip(): void {
+    this.showRefactorTip = false;
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      ThemeRefactorTipStore.saveHidden(context);
+    }
+  }
   /** 预见性返回手势；上游 `AppShellSettings.kt:9 predictiveBackEnabled`。 */
   @Prop predictiveBack: boolean = true;
   onPredictiveBackChange: (enabled: boolean) => void = () => {};
@@ -290,6 +314,16 @@ export struct ThemeSettingsPage {
 
   private paletteCenterColor(index: number): string {
     return resolvePaletteColors(index, this.readerNightMode).primary;
+  }
+
+  /**
+   * 预览卡用的整套配色：上游 `ThemeCard`（`ThemeConfigScreen.kt:1195-1207`）按当前主题现算一套
+   * `getThemeColors(...)`，四块色分别取 `onSurfaceVariant` / `secondaryContainer` / `secondary` /
+   * `surfaceContainer` / `primary`。本地 `ThemePaletteColors` 没有 `secondaryContainer` 字段，
+   * 书块底色降级用 `surfaceContainerHigh`（否则会与内部 `secondary` 角标同色看不出层次）。
+   */
+  private previewPalette(): ThemePaletteColors {
+    return resolvePaletteColors(this.paletteIndex, this.readerNightMode);
   }
 
   /** 封面背景模式的中文文案，对齐上游 `values-zh-rCN/strings.xml:1751-1753`。 */
@@ -460,66 +494,81 @@ export struct ThemeSettingsPage {
       Scroll(this.themeScroller) {
         Column() {
           Column() {
+            // 上游 `ThemeCard`（`ThemeConfigScreen.kt:1209-1277`）：128×256dp、16dp 圆角、1dp primary 描边，
+            // 卡内是三个抽象色块（顶条 / 书块 / 底条），不是缩小版界面截图 —— 原先这里画了假文字条，
+            // 且三个色值写死成灰，切配色时不跟着变，所以看起来「怪」。
             Column() {
-              Row().width(54).height(12).backgroundColor('#AEB0B8').borderRadius(6)
-              Column() {
-                Row().width(30).height(5).backgroundColor(this.themeColorAccent).borderRadius(3)
-                Row().width(42).height(7).backgroundColor(this.themeColorTextSecondary).borderRadius(4).margin({ top: 8 })
-                Row().width(34).height(6).backgroundColor('#858792').borderRadius(3).margin({ top: 5 })
-              }.width(62).height(95).padding(9).margin({ top: 8 }).backgroundColor('#454B62').borderRadius(8)
-                .alignItems(HorizontalAlign.Start)
-            }.width('100%').alignItems(HorizontalAlign.Start)
-            Blank().layoutWeight(1)
-            Row() {
-              Row().width(28).height(8).backgroundColor(this.themeColorAccent).borderRadius(5)
-              Blank()
-              Row().width(14).height(14).backgroundColor(this.themeColorAccent).borderRadius(7)
-            }.width('100%').padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(10)
-          }.width(112).height(224).padding(10).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(22)
-            .border({ width: 1, color: this.themeColorAccent })
-            .alignSelf(ItemAlign.Center).margin({ top: 18, bottom: 16 })
+              // 顶条 48×16，圆角 8，色 onSurfaceVariant，距顶/左各 12。
+              Row().width(48).height(16).borderRadius(8)
+                .backgroundColor(this.previewPalette().onSurfaceVariant)
+                .margin({ top: 12, left: 12 })
+              // 书块 56×80，圆角 8，色 secondaryContainer；内部右上角 16×12、圆角 4 的 secondary 角标。
+              Stack({ alignContent: Alignment.TopEnd }) {
+                Column().width(56).height(80).borderRadius(8)
+                  .backgroundColor(this.previewPalette().surfaceContainerHigh)
+                Row().width(16).height(12).borderRadius(4)
+                  .backgroundColor(this.previewPalette().secondary)
+                  .margin({ top: 4, right: 4 })
+              }.margin({ top: 8, left: 12 })
+              Blank().layoutWeight(1)
+              // 底条整宽 40 高、左右各 4、无圆角，色 surfaceContainer；中心 20 实心圆 primary。
+              Stack({ alignContent: Alignment.Center }) {
+                Row().width('100%').height(40).backgroundColor(this.previewPalette().surfaceContainer)
+                Row().width(20).height(20).borderRadius(10).backgroundColor(this.previewPalette().primary)
+              }.width('100%').margin({ left: 4, right: 4 })
+            }.width(128).height(256)
+              .backgroundColor(this.previewPalette().surface)
+              .borderRadius(16)
+              .border({ width: 1, color: this.previewPalette().primary })
+              .alignItems(HorizontalAlign.Start)
+              .clip(true)
+              .alignSelf(ItemAlign.Center).margin({ top: 18, bottom: 16 })
+          }.width('100%').alignItems(HorizontalAlign.Center)
 
           if (this.showRefactorTip) {
             Row() {
               Text('仍有部分界面未用Compose重构，这些界面会与大部分界面有较大差异。')
                 .fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               AppGlyph({ name: 'profileClose', glyphSize: 18, tint: '#C5C7D0' })
-                .onClick(() => this.showRefactorTip = false)
+                .onClick(() => this.dismissRefactorTip())
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16)
               .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
           ThemeSectionTitle({ title: '主题模式' })
-          Row() {
-            ThemeModeItem({ title: '跟随系统', selected: this.themeMode === '0', first: true,
-              onSelect: () => this.onThemeModeChange('0') })
-            ThemeModeItem({ title: '浅色', selected: this.themeMode === '1',
-              onSelect: () => this.onThemeModeChange('1') })
-            ThemeModeItem({ title: '深色', selected: this.themeMode === '2', last: true,
-              onSelect: () => this.onThemeModeChange('2') })
+          // 上游「主题模式」一个分组里同时放模式三档与配色两行（`ThemeConfigScreen.kt:223`/`:237`），
+          // 本地原先拆成两张独立卡，这里合成一张，中间放分隔线。
+          Column() {
+            Row() {
+              ThemeModeItem({ title: '跟随系统', icon: 'brightness_medium', weight: 1.2, selected: this.themeMode === '0', first: true,
+                onSelect: () => this.onThemeModeChange('0') })
+              ThemeModeItem({ title: '浅色', icon: 'light_mode', selected: this.themeMode === '1',
+                onSelect: () => this.onThemeModeChange('1') })
+              ThemeModeItem({ title: '深色', icon: 'dark_mode', selected: this.themeMode === '2', last: true,
+                onSelect: () => this.onThemeModeChange('2') })
+            }.width('100%').padding({ top: 12, bottom: 12 })
+            ThemeItemDivider()
+            // 上游是 `LazyRow`（横向滚动、间距 16dp），14 项一屏放不下，所以横向 Scroll + 每项 64vp 固定宽。
+            Scroll() {
+              Row() {
+                ForEach(THEME_PALETTES, (palette: ThemePaletteDefinition) => {
+                  ThemePaletteItem({
+                    index: palette.index,
+                    title: palette.name,
+                    surfaceColor: this.paletteColor(palette.index),
+                    upperColor: this.paletteArcColor(palette.index, true),
+                    lowerColor: this.paletteArcColor(palette.index, false),
+                    centerColor: this.paletteCenterColor(palette.index),
+                    selected: this.paletteIndex === palette.index,
+                    onSelect: () => this.onPaletteChange(palette.index)
+                  })
+                }, (palette: ThemePaletteDefinition) => palette.index.toString())
+              }.padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+              .width('100%').align(Alignment.Start)
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, bottom: 18 })
             .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-
-          // 上游是 `LazyRow`（横向滚动、间距 16dp），14 项一屏放不下，所以横向 Scroll + 每项 64vp 固定宽。
-          Scroll() {
-            Row() {
-              ForEach(THEME_PALETTES, (palette: ThemePaletteDefinition) => {
-                ThemePaletteItem({
-                  index: palette.index,
-                  title: palette.name,
-                  surfaceColor: this.paletteColor(palette.index),
-                  upperColor: this.paletteArcColor(palette.index, true),
-                  lowerColor: this.paletteArcColor(palette.index, false),
-                  centerColor: this.paletteCenterColor(palette.index),
-                  selected: this.paletteIndex === palette.index,
-                  onSelect: () => this.onPaletteChange(palette.index)
-                })
-              }, (palette: ThemePaletteDefinition) => palette.index.toString())
-            }.padding({ left: 16, right: 16 })
-          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-            .width('100%').align(Alignment.Start).padding({ bottom: 20 })
 
           Column() {
             Row() {
@@ -888,15 +937,28 @@ struct ThemeSectionTitle {
 
 @Component
 struct ThemeModeItem {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @Prop title: string = '';
+  /** 对应上游 `Icons.Default.BrightnessMedium` / `LightMode` / `DarkMode`。 */
+  @Prop icon: AppGlyphName = 'brightness_medium';
   @Prop selected: boolean = false;
   @Prop first: boolean = false;
   @Prop last: boolean = false;
+  /** 上游三档权重 `1.2f / 1f / 1f`（`ThemeConfigScreen.kt:1004-1040`），第一档更宽。 */
+  @Prop weight: number = 1;
   onSelect: () => void = () => {};
   build() {
-    Text(this.title).fontSize(14).fontColor(this.selected ? '#F0F1F5' : '#AEB0B9')
-      .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 12, bottom: 12 })
-      .backgroundColor(this.selected ? '#454B62' : Color.Transparent)
+    Row() {
+      AppGlyph({ name: this.icon, glyphSize: 18,
+        tint: this.selected ? this.themeColorTextPrimary : this.themeColorTextSecondary })
+      Text(this.title).fontSize(14).margin({ left: 8 })
+        .fontColor(this.selected ? this.themeColorTextPrimary : this.themeColorTextSecondary)
+    }
+      .justifyContent(FlexAlign.Center).layoutWeight(this.weight).padding({ top: 12, bottom: 12 })
+      .backgroundColor(this.selected ? this.themeColorSurfaceElevated : Color.Transparent)
       .borderRadius({ topLeft: this.first ? 14 : 0, bottomLeft: this.first ? 14 : 0,
         topRight: this.last ? 14 : 0, bottomRight: this.last ? 14 : 0 })
       .onClick(() => this.onSelect())
@@ -921,23 +983,28 @@ struct ThemePaletteItem {
   onSelect: () => void = () => {};
   build() {
     Column() {
-      // 上游卡片 64dp、圆角 16dp，选中时 2dp `primary` 描边；本地 56vp 与既有尺寸一致。
+      // 上游 `ThemeColorButton`（`ThemeConfigScreen.kt:1077-1183`）：64dp 方卡、16dp 圆角、
+      // 底色 surfaceContainer，内部 48dp 双半圆 + 24dp primary 中心圆；选中时 2dp primary 描边
+      // 加 40dp 圆角 12 的勾选覆盖层。原先本地是 56/42/20/34，比上游小一圈。
       Stack({ alignContent: Alignment.Center }) {
-        // 用上下两个 42×21 的半圆拼出 42dp 圆：上半 `secondary`、下半 `tertiary`，中心再叠 20dp `primary`。
+        // 用上下两个 24×24 的半圆拼出 48dp 圆：上半 `secondary`、下半 `tertiary`，中心再叠 24dp `primary`。
         Column() {
-          Row().width(42).height(21).backgroundColor(this.upperColor)
-            .borderRadius({ topLeft: 21, topRight: 21 })
-          Row().width(42).height(21).backgroundColor(this.lowerColor)
-            .borderRadius({ bottomLeft: 21, bottomRight: 21 })
-        }.width(42).height(42).borderRadius(21).clip(true)
-        Column().width(20).height(20).backgroundColor(this.centerColor).borderRadius(10)
+          Row().width(48).height(24).backgroundColor(this.upperColor)
+            .borderRadius({ topLeft: 24, topRight: 24 })
+          Row().width(48).height(24).backgroundColor(this.lowerColor)
+            .borderRadius({ bottomLeft: 24, bottomRight: 24 })
+        }.width(48).height(48).borderRadius(24).clip(true)
+        Column().width(24).height(24).backgroundColor(this.centerColor).borderRadius(12)
         if (this.selected) {
           Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#20212A' })
-          }.width(34).height(34).backgroundColor(this.themeColorAccent).borderRadius(17)
+            AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: '#20212A' })
+          }.width(40).height(40).backgroundColor(this.themeColorAccent).borderRadius(12)
         }
-      }.width(56).height(56).backgroundColor(this.surfaceColor).borderRadius(14)
-        .border({ width: this.selected ? 2 : 0, color: this.themeColorAccent }).onClick(() => this.onSelect())
+      }.width(64).height(64).backgroundColor(this.surfaceColor).borderRadius(16)
+        .border({ width: this.selected ? 2 : 0, color: this.themeColorAccent })
+        // 上游描边宽度走 animateDpAsState；ArkUI 用 animation 修饰符等价近似。
+        .animation({ duration: 200, curve: Curve.EaseInOut })
+        .onClick(() => this.onSelect())
       Text(this.title).fontSize(11)
         .fontColor(this.selected ? this.themeColorAccent : this.themeColorTextPrimary)
         .textAlign(TextAlign.Center).margin({ top: 8 })
