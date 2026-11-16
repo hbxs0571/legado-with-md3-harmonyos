@@ -20,6 +20,8 @@ export struct UiAction {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 按压底色兜底色：强调色取不出 alpha 时（理论上不会）退回 surfaceContainer。
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
 
   @Prop title: string = '';
   @Prop detail: string = '';
@@ -34,6 +36,23 @@ export struct UiAction {
   @Prop showDivider: boolean = true;
 
   onSelect: () => void = () => {};
+
+  /**
+   * 按压时的整行底色。
+   *
+   * 对齐上游 ClickableSettingItem 的 indication（Compose 默认水波纹 = onSurface 低透明度叠加）。
+   * 不用 surfaceContainer 做按压色：设置页底色是 surfaceContainerLow，深色主题下两者只差
+   * 1 个色阶（#1A1B21 vs #1B1C22），实测按下前后像素只差 (26,27,32)→(27,28,33)，肉眼看不出来。
+   * 这里改用强调色的 15% alpha 叠在行底色上，任何主题下都有可见的染色。
+   */
+  private pressedBackground(): string {
+    const accent = this.themeColorAccent;
+    // 主题色是 #RRGGBB，前面补两位 alpha 变成 #AARRGGBB（ArkUI 八位色值口径）。
+    if (accent.length === 7 && accent.charAt(0) === '#') {
+      return '#26' + accent.substring(1);
+    }
+    return this.themeColorSurfaceTertiary;
+  }
 
   build() {
     Column() {
@@ -82,6 +101,10 @@ export struct UiAction {
       }
       .width('100%')
       .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
+      .stateStyles({
+        pressed: { .backgroundColor(this.pressedBackground()) },
+        normal: { .backgroundColor(Color.Transparent) }
+      })
       .onClick(() => this.onSelect());
 
       if (this.showDivider) {

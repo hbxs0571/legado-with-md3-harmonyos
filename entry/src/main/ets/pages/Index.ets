@@ -10282,7 +10282,11 @@ private canWriteInto(dir: string): boolean {
               label: mainNavigationLabel(navRoute),
               selected: this.selectedTab === this.navigationRouteTabIndex(navRoute),
               showLabel: this.navigationLabelVisible(navRoute)
-            }).layoutWeight(1).onClick(() => this.selectTab(this.navigationRouteTabIndex(navRoute)))
+            }).layoutWeight(1)
+              // 按下缩放：底栏项面积小，0.92 的位移约 3px，是「按下去」而不是「抖一下」。
+              // 挂在 TabItem 的调用链上而非组件内部：内部已有选中态背景切换，再叠缩放会打架。
+              .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
+              .onClick(() => this.selectTab(this.navigationRouteTabIndex(navRoute)))
           }, (navRoute: string) => navRoute)
         }.width(this.themeUseFloatingBottomBar ? 'calc(100% - 32vp)' : '100%')
           // 底部让位：`.expandSafeArea([SYSTEM],[BOTTOM])` 只让底色铺进手势条区域，不给内容加内缩，

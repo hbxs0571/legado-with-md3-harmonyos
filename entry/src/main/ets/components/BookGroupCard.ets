@@ -116,6 +116,7 @@ export struct BookGroupCard {
     .padding(4)
     .backgroundColor(this.themeColorSurfaceElevated)
     .borderRadius(8)
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
     .onClick(() => { this.onOpen(); })
     .gesture(LongPressGesture({ duration: 500 }).onAction(() => { this.onLongPress(this.groupName); }))
   }

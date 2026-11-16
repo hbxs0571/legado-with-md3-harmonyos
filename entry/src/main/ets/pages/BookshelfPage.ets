@@ -2692,6 +2692,9 @@ export struct BookshelfPage {
               }.width('100%').alignItems(HorizontalAlign.Center)
                 .backgroundColor(this.cardBackgroundColor())
                 .borderRadius(8)
+                // 按下轻缩：书卡面积大，0.96 只缩 4%，比 LIGHT 默认的 0.9 克制。
+                // 不用 stateStyles 换底色——卡片底色由封面/主题决定，换色会盖掉卡片自身的层次。
+                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
                 .onClick(() => {
                   // 选择模式下点击=切换选中，不打开书（:142 验收第 12 条）。
                   if (this.selectionMode) { this.toggleBookSelection(book); return; }

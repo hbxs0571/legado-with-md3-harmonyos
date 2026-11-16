@@ -111,6 +111,10 @@ export struct UiMenuPanel {
     .borderRadius(MENU_ITEM_CORNER)
     .backgroundColor(this.themeColorSurfacePrimary)
     .opacity(item.disabled ? MENU_DISABLED_OPACITY : 1)
+    // 按压反馈用轻缩放而不是换底色：菜单项底色（surface）与可用的「深一档」
+    // （surfaceContainer）在深色主题下只差 1 级，肉眼分不出来。
+    // scale 取 0.97 而不是 LIGHT 默认的 0.9：菜单项是满宽行，缩 10% 两侧会露出菜单底色。
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
     .onClick(() => {
       if (item.disabled) {
         return;

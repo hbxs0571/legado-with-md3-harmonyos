@@ -301,6 +301,8 @@ export struct TopBarButton {
         })
         .opacity(this.disabled ? 0.38 : 1)
         .enabled(!this.disabled)
+        // 按下缩放：按钮 36/40vp，LIGHT 默认 0.9 只有 3-4vp 位移，观感是「按下去」。
+        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.9 })
         .onClick(() => {
           if (!this.disabled) { this.onSelect(); }
         })
@@ -319,6 +321,7 @@ export struct TopBarBackButton {
       Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextPrimary)
     }
     .width(40).height(40).justifyContent(FlexAlign.Center).borderRadius(20)
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.9 })
     .onClick(() => this.onSelect())
   }
 }
