@@ -226,6 +226,47 @@ export class BookRepository {
     }
   }
 
+  /**
+   * books.variable 里取一个字符串值。
+   *
+   * 本地 books 表没有源文件名与源文件大小的列，而这两个值上游是直接挂在 Book 上的
+   * （`originName` / `FileDoc.fromFile(bookUrl).size`）。为了不动表结构，塞进 variable
+   * 这个本来就存 putVariable 键值的 JSON 列。
+   */
+  private static variableString(variable: string | undefined, key: string): string | undefined {
+    if (variable === undefined || variable.length === 0) { return undefined; }
+    try {
+      const parsed = JSON.parse(variable) as Record<string, string | number>;
+      const value = parsed[key];
+      return typeof value === 'string' && value.length > 0 ? value : undefined;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  /** books.variable 里取一个数字值（源文件字节大小）。 */
+  private static variableNumber(variable: string | undefined, key: string): number | undefined {
+    if (variable === undefined || variable.length === 0) { return undefined; }
+    try {
+      const parsed = JSON.parse(variable) as Record<string, string | number>;
+      const value = parsed[key];
+      return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  /** 写库前把 delTag / 源文件名 / 源文件大小合成一个 variable JSON；都没有则写 null。 */
+  private static buildBookVariable(book: Book): string | null {
+    const payload: Record<string, string | number> = {};
+    if (book.delTag !== undefined) { payload['delTag'] = book.delTag; }
+    if (book.originFileName !== undefined && book.originFileName.length > 0) {
+      payload['originFileName'] = book.originFileName;
+    }
+    if (book.sourceSize !== undefined && book.sourceSize > 0) { payload['sourceSize'] = book.sourceSize; }
+    return Object.keys(payload).length === 0 ? null : JSON.stringify(payload);
+  }
+
   /** books.variable 存 {"delTag":6}；chapters.variable 存的是批 3 的 nextUrl，两表互不冲突。 */
   private static delTagFromVariable(variable: string | undefined): number {
     if (variable === undefined || variable.length === 0) { return 0; }
@@ -488,7 +529,9 @@ export class BookRepository {
       wordCount: book.wordCount,
       isPrivate: book.isPrivate,
       isLocal: book.isLocal,
-      delTag: book.delTag
+      delTag: book.delTag,
+      originFileName: book.originFileName,
+      sourceSize: book.sourceSize
     };
   }
 
@@ -595,6 +638,18 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       created = await BookRepository.importTxtFromUri(context, uri, fileName, bookId, maxLengthWithNoToc);
     }
     created.fileName = fileName;
+    // 上游本地书的 originName 就是源文件名、upKind() 的文件大小取自源文件本身
+    // （`LocalBook.kt:268-278` 的 `originName = fileName` 与 `BookExtensions.kt:361-365`
+    // 的 `FileDoc.fromFile(bookUrl).size`）。本地 bookUrl 指向转出的正文副本，两者都得
+    // 在导入这一刻从源 uri 记下来，否则详情页只能显示副本文件名与副本大小。
+    created.book.originFileName = fileName;
+    try {
+      const sourceInfo = fileIo.statSync(uri);
+      if (sourceInfo.size > 0) { created.book.sourceSize = sourceInfo.size; }
+    } catch (error) {
+      // 取不到源大小不影响导入，标签行少一格而已。
+      AppLog.put(`[BookRepository] 读取源文件大小失败: ${error}`);
+    }
     return created;
   }
 
@@ -993,7 +1048,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       // 导致 toBookArgs 每次把它写回 0，手工改库也会被下次保存冲掉。
       isPrivate: RdbCodec.boolean(resultSet, 27, false),
       isLocal: true,
-      delTag: BookRepository.delTagFromVariable(RdbCodec.optionalText(resultSet, 28))
+      delTag: BookRepository.delTagFromVariable(RdbCodec.optionalText(resultSet, 28)),
+      originFileName: BookRepository.variableString(RdbCodec.optionalText(resultSet, 28), 'originFileName'),
+      sourceSize: BookRepository.variableNumber(RdbCodec.optionalText(resultSet, 28), 'sourceSize')
     };
     book.progress = BookRepository.readProgress(book);
     return book;
@@ -1608,7 +1665,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       book.disableReadRecord === true ? 1 : 0,
       Math.trunc(book.order ?? 0),
       0,
-      book.delTag === undefined ? null : `{"delTag":${book.delTag}}`,
+      BookRepository.buildBookVariable(book),
       JSON.stringify(readConfig),
       0,
       null,
@@ -2607,7 +2664,9 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
       // 作者从文件名解析（批 10 的 :556），解析不到才回落「未知作者」。
       // 原来写死的 '本地 TXT' 是分类不是作者，摆在书架卡作者位会让人以为书名写错了。
       author: parsedAuthor.length > 0 ? parsedAuthor : '未知作者',
-      category: '本地',
+      // 上游本地书导入时 kind 是空的，标签由 `upKind()` 现算（格式名 + 文件大小 + 字数）。
+      // 本地原来把 kind 写死成「本地」，详情页标签行就多出一个上游没有的「本地」。
+      category: '',
       groupName: '本地未分组',
       groupNames: [],
       tocRule: chapterRule.length > 0 ? chapterRule : undefined,

@@ -1,4 +1,4 @@
-export type AppGlyphName = 'home' | 'bookshelf' | 'discover' | 'subscription' | 'profile' | 'search' | 'searchPrecisionOn' | 'searchPrecisionOff' | 'more' | 'settings' | 'swap' | 'add' | 'goal' | 'book' | 'bookmark' | 'cloud' | 'cloudSync' | 'cloudUpload' | 'cloudDownload' | 'edit' | 'pencil' | 'delete' | 'share' | 'star' | 'ruleSubscription' | 'favoriteStar' | 'navHomeFilled' | 'navHomeOutlined' | 'navBookshelfFilled' | 'navBookshelfOutlined' | 'navExploreFilled' | 'navExploreOutlined' | 'navRss' | 'navProfileFilled' | 'navProfileOutlined' | 'profileWeb' | 'profileSource' | 'profileFindReplace' | 'profileRule' | 'profileSell' | 'profileAutoAwesome' | 'profileSettings' | 'profileBookmark' | 'profileHistory' | 'profileDownload' | 'profileFolder' | 'profileInfo' | 'profileExitToApp' | 'profileClose' | 'profileNoteAdd' | 'profileContentPaste' | 'profileRunningWithErrors' | 'profileSave' | 'profileCheck' | 'lock' | 'profileExpandMore' | 'profileTimeline' | 'profileFilterAlt' | 'profileRefresh' | 'clock' | 'accessTime' | 'chart' | 'folder' | 'tag' | 'list' | 'download' | 'info' | 'sparkles' | 'logout' | 'web' | 'locate' | 'arrowForward' | 'wifi' | 'grid' | 'carousel' | 'link' | 'uploadFile';
+export type AppGlyphName = 'home' | 'bookshelf' | 'discover' | 'subscription' | 'profile' | 'search' | 'searchPrecisionOn' | 'searchPrecisionOff' | 'more' | 'settings' | 'swap' | 'add' | 'goal' | 'book' | 'bookmark' | 'cloud' | 'cloudSync' | 'cloudUpload' | 'cloudDownload' | 'edit' | 'pencil' | 'delete' | 'share' | 'star' | 'ruleSubscription' | 'favoriteStar' | 'navHomeFilled' | 'navHomeOutlined' | 'navBookshelfFilled' | 'navBookshelfOutlined' | 'navExploreFilled' | 'navExploreOutlined' | 'navRss' | 'navProfileFilled' | 'navProfileOutlined' | 'profileWeb' | 'profileSource' | 'profileFindReplace' | 'profileRule' | 'profileSell' | 'profileAutoAwesome' | 'profileSettings' | 'profileBookmark' | 'profileHistory' | 'profileDownload' | 'profileFolder' | 'profileInfo' | 'profileExitToApp' | 'profileClose' | 'profileNoteAdd' | 'profileContentPaste' | 'profileRunningWithErrors' | 'profileSave' | 'profileCheck' | 'lock' | 'profileExpandMore' | 'profileTimeline' | 'profileFilterAlt' | 'profileRefresh' | 'clock' | 'accessTime' | 'chart' | 'folder' | 'tag' | 'list' | 'download' | 'info' | 'sparkles' | 'logout' | 'web' | 'locate' | 'arrowForward' | 'wifi' | 'grid' | 'carousel' | 'link' | 'uploadFile' | 'shuffle';
 
 @Component
 export struct AppGlyph {
@@ -165,6 +165,9 @@ export struct AppGlyph {
       // 上游 `Icons.Default.UploadFile`（书架更多菜单「导出书单」）。改前与「添加本地」共用 profileSave，
       // 两行图标撞车，视觉上容易被当成重复行。
       Image($r('app.media.menu_upload_file')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+    } else if (this.name === 'shuffle') {
+      // 上游 `Icons.Default.Shuffle`：详情页书架卡在「疑似重复」时用它。
+      Image($r('app.media.app_shuffle')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else if (this.name === 'arrowForward') {
       // 上游 `Icons.AutoMirrored.Filled.ArrowForward`（欢迎页按钮尾部箭头）。
       Image($r('app.media.reader_arrow_forward')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)

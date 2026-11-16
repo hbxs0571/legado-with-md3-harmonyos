@@ -33,6 +33,8 @@ export struct BookInfoPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  /** surfaceContainerHigh 档，本地降级顶替上游的 secondaryContainer（ThemePalette 无该字段）。 */
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   /**
@@ -124,11 +126,50 @@ export struct BookInfoPage {
     this.refreshHighlightedTags();
   }
 
-  /** 匹配源只有自定义标签与分类两路：本地没有书源标签，不硬造（:299）。 */
+  /** 这本书是否已在书架。本地 `books` 就是书架全量，按 id 判即可。 */
+  private inBookshelf(): boolean {
+    return this.books.some((item: Book) => item.id === this.book.id);
+  }
+
+  /**
+   * 冲突态：不在架、但书架里有同名书。对齐上游 `BookInfoScreen.kt:1423`
+   * `conflictHighlight = !inBookshelf && hasShelfDuplicates`。
+   */
+  private shelfConflictHighlight(): boolean {
+    return !this.inBookshelf() && this.sameNameCopies().length > 0;
+  }
+
+  /**
+   * 书架卡文案，对齐上游 `BookInfoScreen.kt:1424-1430` 的五态顺序。
+   *
+   * 上游前两态（「点击删除」/「长按分组」）由 `LaunchedEffect(inBookshelf)` 在
+   * 「刚加入书架」后的 1 秒 / 2 秒各显示一次。本地没有「从详情页把书挂回书架」这条
+   * 路径（加入书架只发生在导入时，`Book.isNotShelf` 这一列本地也不存在），那两态
+   * 永远到不了，所以这里不摆一个空转的定时器，只保留可达的三态。
+   * 没做的那两态写进收尾的「未做到」，不假装实现。
+   */
+  private shelfActionLabel(): string {
+    if (this.inBookshelf()) { return '已在书架'; }
+    if (this.shelfConflictHighlight()) { return '疑似重复'; }
+    return '放入书架';
+  }
+
+  /** 书架卡点击：在架时走移出面板；不在架时给出可达的导入入口提示。 */
+  private onShelfCardClick(): void {
+    if (!this.inBookshelf()) {
+      this.onUnavailableAction('请通过「添加本地」导入这本书加入书架');
+      return;
+    }
+    this.requestRemoveFromShelf();
+  }
+
+  /**
+   * 匹配源就是标签行的同一份数据（上游 `BookInfoViewModel.kt:1306-1308`：
+   * 先 `getDisplayTagList()` 再 `parseHighlightedTags`），所以两边必须同源，
+   * 否则会出现「标签行里还在、高亮区也有一份」的重复显示。
+   */
   private refreshHighlightedTags(): void {
-    const labels: string[] = this.getCustomTags();
-    if (this.book.category.length > 0) { labels.push(this.book.category); }
-    this.highlightedTags = matchHighlightTags(labels, this.highlightTagRules);
+    this.highlightedTags = matchHighlightTags(this.allKindLabels(), this.highlightTagRules);
   }
 
   /**
@@ -159,8 +200,35 @@ export struct BookInfoPage {
 
   /** 取色叠层的颜色：主色半透明，对齐上游 `seedOverlay.copy(alpha = 0.34f)`。 */
   private seedOverlayColor(): string {
-    if (this.coverSeedColor.length === 0) { return ''; }
-    return `#57${this.coverSeedColor.substring(1)}`;
+    const base: string = this.seedOverlayBaseColor();
+    if (base.length === 0) { return ''; }
+    return `#57${base.substring(1)}`;
+  }
+
+  /**
+   * seed 叠层与渐变档共用的基色。
+   *
+   * 上游 `BookInfoScreen.kt:950-954` 是 `lerp(secondaryContainer, seedColor, 0.42f)` ——
+   * 封面主色要先和主题的 secondaryContainer 按 0.42 插值，才拿去铺叠层与渐变。
+   * 本地 `ThemePalette` 没有 secondaryContainer（`data/ThemePalette.ets:31-44` 只有 10 个字段），
+   * 降级用 `themeColorSurfaceElevated`（= surfaceContainerHigh）顶替，其余算法照上游。
+   */
+  private seedOverlayBaseColor(): string {
+    if (this.coverSeedColor.length < 7) { return ''; }
+    return BookInfoPage.lerpHexColor(this.themeColorSurfaceElevated, this.coverSeedColor, 0.42);
+  }
+
+  /** 两个 `#RRGGBB` 按 t 线性插值，返回 `#RRGGBB`。上游对应 Compose 的 `lerp(Color, Color, Float)`。 */
+  private static lerpHexColor(from: string, to: string, t: number): string {
+    if (from.length < 7 || to.length < 7) { return to; }
+    const clamp: (value: number) => number = (value: number) =>
+      Math.max(0, Math.min(255, Math.round(value)));
+    const mix: (offset: number) => number = (offset: number) =>
+      clamp(parseInt(from.substring(offset, offset + 2), 16) * (1 - t)
+        + parseInt(to.substring(offset, offset + 2), 16) * t);
+    const hex: (value: number) => string = (value: number) =>
+      value.toString(16).padStart(2, '0').toUpperCase();
+    return `#${hex(mix(1))}${hex(mix(3))}${hex(mix(5))}`;
   }
 
   /**
@@ -168,10 +236,11 @@ export struct BookInfoPage {
    * —— 对齐上游 `seedOverlay.copy(alpha = 0.10f / 0.18f)` 在无 seed 时取 Transparent。
    */
   private seedGradientColor(alpha: number): string {
-    if (this.coverSeedColor.length === 0) { return '#00000000'; }
+    const base: string = this.seedOverlayBaseColor();
+    if (base.length === 0) { return '#00000000'; }
     const byte: number = Math.max(0, Math.min(255, Math.round(alpha * 255)));
     const hex: string = byte.toString(16).padStart(2, '0').toUpperCase();
-    return `#${hex}${this.coverSeedColor.substring(1)}`;
+    return `#${hex}${base.substring(1)}`;
   }
 
   /**
@@ -180,7 +249,30 @@ export struct BookInfoPage {
    * 背景会从纯透明直接跳到 85% 底色，头部到内容之间就是一道硬边。
    */
   private midGradientColor(): string {
-    return this.coverSeedColor.length > 0 ? this.seedGradientColor(0.18) : this.surfaceAlphaColor(0.35);
+    return this.seedOverlayBaseColor().length > 0 ? this.seedGradientColor(0.18) : this.surfaceAlphaColor(0.35);
+  }
+
+  /**
+   * 头部渐变的中档色，上游 `BookInfoScreen.kt:1195-1200`：
+   * `applySeedOverlay` 为真取 `lerp(surface, seedColor, 0.08f).copy(alpha = 0.5f)`，
+   * 否则取 `surface.copy(alpha = 0.5f)`。
+   */
+  private headerMidGradientColor(): string {
+    const base: string = this.pageBaseColor();
+    // 自定义背景图模式下 pageBaseColor() 是全透明，插值会算出黑色，这里直接给透明。
+    if (base.length !== 7) { return '#00000000'; }
+    if (this.backdropStyle().applySeedOverlay && this.coverSeedColor.length >= 7) {
+      return this.withAlpha(BookInfoPage.lerpHexColor(base, this.coverSeedColor, 0.08), 0.5);
+    }
+    return this.withAlpha(base, 0.5);
+  }
+
+  /** 给 `#RRGGBB` 拼一个 8 位 alpha 前缀。 */
+  private withAlpha(color: string, alpha: number): string {
+    if (color.length < 7) { return color; }
+    const byte: number = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+    const hex: string = byte.toString(16).padStart(2, '0').toUpperCase();
+    return `#${hex}${color.substring(color.length - 6)}`;
   }
 
   /** 页面底色：跟随背景图与纯黑主题，正文卡片之外的那一层就用这个色。 */
@@ -198,8 +290,14 @@ export struct BookInfoPage {
   }
 
   private loadFileSize(): void {
-    // fileSizeBytes 已随迁移删除：一律按正文文件实际大小统计。
-    if (this.book.contentPath === undefined || this.book.format === 'epub') { return; }
+    // 上游 `BookExtensions.kt:361-365` 取的是**源文件**大小（`FileDoc.fromFile(bookUrl).size`），
+    // 本地 bookUrl 是转出来的正文副本，副本大小与源文件差得远（EPUB 尤其）。
+    // 所以优先用导入时记下的 `sourceSize`，没有（老记录）才退回副本大小。
+    if (this.book.sourceSize !== undefined && this.book.sourceSize > 0) {
+      this.fileSizeLabel = this.formatFileSize(this.book.sourceSize);
+      return;
+    }
+    if (this.book.contentPath === undefined) { return; }
     try {
       this.fileSizeLabel = this.formatFileSize(fileIo.statSync(this.book.contentPath).size);
     } catch (_) {
@@ -207,10 +305,22 @@ export struct BookInfoPage {
     }
   }
 
+  /**
+   * 上游 `ConvertExtensions.kt:87-94 formatFileSize()` 的口径：
+   * 单位表 `b / kb / M / G / T`，指数按 log10 计算，数值走 `DecimalFormat("#.##")`
+   * （最多两位小数、不补零）。本地原来写的是 `1024 / 1.1 KB / 1.10 MB` 三档、
+   * 大单位固定两位小数，与上游的 `5.23 M`、`3133 b` 这类输出不一致。
+   */
   private formatFileSize(bytes: number): string {
-    if (bytes < 1024) { return `${bytes} B`; }
-    if (bytes < 1024 * 1024) { return `${(bytes / 1024).toFixed(1)} KB`; }
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    if (bytes <= 0) { return '0'; }
+    const units: string[] = ['b', 'kb', 'M', 'G', 'T'];
+    let digitGroups = Math.floor(Math.log10(bytes) / Math.log10(1024));
+    digitGroups = Math.max(0, Math.min(units.length - 1, digitGroups));
+    const scaled = bytes / Math.pow(1024, digitGroups);
+    // 对应 DecimalFormat("#.##")：四舍五入到两位小数，去掉末尾多余的 0。
+    const rounded = Math.round(scaled * 100) / 100;
+    const text = Number.isInteger(rounded) ? `${rounded}` : `${rounded}`.replace(/0+$/, '');
+    return `${text} ${units[digitGroups] ?? 'b'}`;
   }
 
   private getFormatLabel(): string {
@@ -219,7 +329,25 @@ export struct BookInfoPage {
     if (this.book.format === 'pdf') { return 'PDF'; }
     if (this.book.format === 'mobi') { return 'MOBI'; }
     if (this.book.format === 'umd') { return 'UMD'; }
-    return this.book.category;
+    // 原来这里 `return this.book.category`，与标签行里单独渲染的 category 撞成重复项，
+    // 空 category 时还会漏出一个空标签。上游 `getBookTypeName()` 认不出类型时返回
+    // 「未知书籍」，但那是要参与判断的字面量（upKind 会跳过它），不能直接显示。
+    return '';
+  }
+
+  /**
+   * 上游 `BookExtensions.kt:114-127 getBookTypeName()` 的口径。
+   *
+   * 本地只有本地书，前五个格式分支之外补 audio / image 两档（`Book.bookType`）。
+   * 认不出时返回空串，调用方据此跳过 —— 上游那里是「未知书籍」，但 upKind 明确
+   * 只在 `typeName != "未知书籍"` 时才插入，语义等价。
+   */
+  private getBookTypeName(): string {
+    const format = this.getFormatLabel();
+    if (format.length > 0) { return format; }
+    if (this.book.bookType === 'audio') { return '有声书'; }
+    if (this.book.bookType === 'image') { return '漫画'; }
+    return '';
   }
 
   private getCustomTags(): string[] {
@@ -227,10 +355,86 @@ export struct BookInfoPage {
       .map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0);
   }
 
+  /**
+   * 标签行的内容，对齐上游 `BookExtensions.kt:343-379 upKind()` +
+   * `:149-150 getDisplayTagList()`。
+   *
+   * 上游先把 `book.kind` 洗一遍（剔掉纯大小串与纯字数串、本地书在第 0 位插格式名、
+   * 末尾补文件大小与字数），再取 `(customTagList + sourceTagList).distinct()`。
+   * 本地 `book.kind` 的对应物是 `book.category`，`sourceTagList` 同理。
+   *
+   * 高亮命中的标签由 `refreshHighlightedTags()` 抽走，这里返回剩下的普通标签。
+   */
+  private regularKindLabels(): string[] {
+    const all: string[] = this.allKindLabels();
+    const highlighted: string[] = [];
+    this.highlightedTags.forEach((item: HighlightedTag) => {
+      item.matchedLabels.forEach((label: string) => highlighted.push(label));
+    });
+    return all.filter((label: string) => !highlighted.includes(label));
+  }
+
+  /** 洗过之后的完整标签数组（含高亮命中项），供高亮匹配与标签行共用。 */
+  private allKindLabels(): string[] {
+    // 上游两条正则：纯文件大小串、以「字」结尾的纯字数串。
+    const fileSizePattern: RegExp = /^\d[\d,.]*\s*(b|kb|mb|gb|tb|k|m|g|t)$/i;
+    const wordCountPattern: RegExp = /^.*?\d.*字$/;
+    const kinds: string[] = (this.book.category ?? '').split(/[\n,，]/)
+      .map((item: string) => item.trim())
+      .filter((item: string) => item.length > 0
+        && !fileSizePattern.test(item) && !wordCountPattern.test(item));
+    // 本地书：在第 0 位插格式名（上游 `kinds.add(0, typeName)`）。
+    if (this.book.isLocal) {
+      const typeName = this.getBookTypeName();
+      if (typeName.length > 0 && !kinds.includes(typeName)) { kinds.unshift(typeName); }
+      // 再补文件大小。
+      if (this.fileSizeLabel.length > 0) { kinds.push(this.fileSizeLabel); }
+    }
+    // 末尾补字数。
+    const wordCount = (this.book.wordCount ?? '').trim();
+    if (wordCount.length > 0) { kinds.push(wordCount); }
+    // 再接用户自定义标签，最后整体去重（上游 `(getCustomTagList() + getSourceTagList()).distinct()`）。
+    return Array.from(new Set(kinds.concat(this.getCustomTags())));
+  }
+
+  /**
+   * 分组名那一格，对齐上游 `BookInfoScreen.kt:1363-1372` 的 `group_s`（`%s`）。
+   *
+   * 上游是 `bookGroupRepository.getGroupNames(book.group).joinToString(",")`，
+   * 本地 `book.groupNames` 就是同源的名称集合；为空时不渲染这一格。
+   */
+  private groupNameLabel(): string {
+    const names = this.book.groupNames ?? [];
+    if (names.length > 0) { return names.join(','); }
+    const legacy = (this.book.groupName ?? '').trim();
+    return legacy.length > 0 ? legacy : '';
+  }
+
   /** 第三行左段：状态。本地没有书源，这段永远不点击（:298）。 */
   private statusLabel(): string {
     if (BookRepository.isBodyMissing(this.book)) { return 'Android 备份 · 正文缺失'; }
     return this.book.isLocal ? '本地书籍' : '书籍详情';
+  }
+
+  /**
+   * 来源行文案，对齐上游 `origin_show`（`BookInfoScreen.kt:1334-1339`，只有 `book.originName`）。
+   *
+   * 本地 `books.originName` 列在 `BookRepository.toBookArgs` 里写的是
+   * `book.androidOriginalPath ?? getFileName(bookUrl)`（`data/BookRepository.ets:1562`），
+   * 但 `readBookRow` 没有把它读回 `Book`，所以这里按同一口径现算：
+   * 有 Android 原始路径就用它，否则取正文文件名（含扩展名，和上游一致）。
+   * 两者都空时按上游 `origin_show` 语义返回空串，整行不渲染。
+   */
+  private originNameLabel(): string {
+    // 上游 `Book.originName` 就是导入时的源文件名（`LocalBook.kt:268-278`）。
+    // 本地优先用导入时记下的 `originFileName`；老记录没有这个字段时再退回
+    // Android 迁移留下的原始路径 / 正文副本文件名。
+    const importedName = this.book.originFileName ?? '';
+    if (importedName.length > 0) { return importedName; }
+    const original = this.book.androidOriginalPath ?? '';
+    if (original.length > 0) { return original; }
+    const bookUrl = this.book.contentPath ?? '';
+    return bookUrl.length > 0 ? BookRepository.getFileName(bookUrl) : '';
   }
 
   /**
@@ -490,15 +694,15 @@ export struct BookInfoPage {
       Stack({ alignContent: Alignment.BottomEnd }) {
       Stack({ alignContent: Alignment.TopStart }) {
       if (this.backdropStyle().showCover && this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
+        // 上游 BookInfoScreen.kt:965-989 的封面层不设 opacity，也不做淡入：整层靠 Crossfade
+        // 换状态（书名/作者/封面/来源任一变化才重放），封面本身始终满不透明。
+        // 本地原来挂 opacity 0→0.45 的 animateTo，等于把背景永远压掉一半，这里去掉。
         Image(this.book.coverUri).width('100%').height(480).objectFit(ImageFit.Cover)
           .blur(this.backdropStyle().blurCover ? 24 : 0)
-          .opacity(this.backdropOpacity).onAppear(() => {
-            this.backdropOpacity = 0;
-            animateTo({ duration: 800, curve: Curve.EaseInOut }, () => this.backdropOpacity = 0.45);
-          })
       }
       if (this.backdropStyle().applySeedOverlay && this.seedOverlayColor().length > 0) {
-        Column().width('100%').height(480).backgroundColor(this.seedOverlayColor())
+        // 上游 :991-997 是 `Modifier.fillMaxSize()`：叠层铺满整屏，不是只盖住封面的 480。
+        Column().width('100%').height('100%').backgroundColor(this.seedOverlayColor())
       }
       // 第三层：固定竖向渐变，上游 BookInfoBackdrop（BookInfoScreen.kt:927-1023）的
       // Brush.verticalGradient(colorStops = 0f 透明 / 0.20f seed 0.10 / 0.40f seed 0.18 /
@@ -552,14 +756,14 @@ export struct BookInfoPage {
                 Text(this.book.author.length > 0 ? this.book.author : '作者未知')
                   .fontSize(17).fontColor('#D0D2DB').margin({ top: 8 })
                   .onClick(() => this.searchByAuthor())
-                // 第三行拆两段：状态段不可点，来源段可点（:298）。
-                Row() {
-                  Text(this.statusLabel()).fontSize(14).fontColor('#B9C8FF')
-                  Text(' · ').fontSize(14).fontColor('#777B88')
-                  Text(this.sourceLabel()).fontSize(14).fontColor('#9FA6C8')
-                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-                    .onClick(() => this.onOriginClick())
-                }.width('100%').margin({ top: 8 })
+                // 来源行：上游 `BookInfoScreen.kt:1334-1339` 只有一行
+                // `origin_show`（`%s` = book.originName），没有「本地书籍 / 本地文件」这种
+                // 状态前缀。本地原来拆成 statusLabel + ' · ' + sourceLabel 两段，
+                // 用户在详情页看到的是「本地书籍 · 本地文件」，与上游不符，这里只留名字。
+                Text(this.originNameLabel()).fontSize(14).fontColor('#9FA6C8')
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .margin({ top: 8 })
+                  .onClick(() => this.onOriginClick())
                 // 高亮标签行（:299）：在作者/来源行之后、普通标签行之前。
                 if (this.highlightedTags.length > 0) {
                   Row() {
@@ -580,40 +784,66 @@ export struct BookInfoPage {
               }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 16 })
             }.width('100%').alignItems(VerticalAlign.Center).padding({ left: 18, right: 18, bottom: 18 })
 
-            Row() {
-              if (this.book.category.length > 0) { BookInfoTag({ label: this.book.category }) }
-              if ((this.book.groupNames ?? []).length > 0) {
-                ForEach(this.book.groupNames ?? [], (groupName: string) => {
-                  BookInfoTag({ label: groupName })
-                }, (groupName: string) => groupName)
-              } else {
-                BookInfoTag({ label: this.book.groupName ?? (this.book.isLocal ? '本地未分组' : '书架') })
+            // 标签行拆两路，对齐上游 `BookInfoScreen.kt:1354-1385`：
+            // 左边一个分组名（`groupNames` 单串），右边是 kindLabels 的横向列表。
+            // 本地原来把 category / groupNames / 格式名 / 大小 / 自定义标签五路混在一个
+            // Row 里，`getFormatLabel()` 的 else 又回落到 category，于是同一个词出现两次，
+            // 中间夹着一个空标签 —— 就是用户看到的「中间一个空白很小的像标签」。
+            if ((this.groupNameLabel().length > 0 || this.regularKindLabels().length > 0)) {
+              Scroll() {
+                Row() {
+                  if (this.groupNameLabel().length > 0) {
+                    BookInfoTag({ label: this.groupNameLabel() })
+                  }
+                  ForEach(this.regularKindLabels(), (tag: string) => {
+                    BookInfoTag({ label: tag })
+                  }, (tag: string) => tag)
+                }
               }
-              BookInfoTag({ label: this.getFormatLabel() })
-              if (this.fileSizeLabel.length > 0) { BookInfoTag({ label: this.fileSizeLabel }) }
-              ForEach(this.getCustomTags(), (tag: string) => {
-                BookInfoTag({ label: tag })
-              }, (tag: string) => tag)
-            }.width('100%').padding({ left: 18, right: 18, bottom: 20 })
-            // 头部不设自己的底色：底色来自背景层的三段渐变（上游 BookInfoHeader 也是这样），
-            // 原来这块硬编码的 '#55343845' 会在渐变上压出一块紫灰。
+              .scrollable(ScrollDirection.Horizontal)
+              .scrollBar(BarState.Off)
+              // Scroll 的内容默认居中（书架分组栏也踩过同一条），这里必须显式左对齐，
+              // 否则两三个标签会飘到整行中间，与上游 LazyRow 的左起排布不一致。
+              .align(Alignment.Start)
+              .width('100%').padding({ left: 18, right: 18, bottom: 20 })
+            }
+            // 头部自己的竖向渐变，上游 `BookInfoScreen.kt:1188-1206`：
+            // Transparent → lerp(surface, seedColor, 0.08).copy(0.5) → surface，
+            // 没有 seed 时中档退成 surface.copy(0.5)。原来这块注释写「头部不设自己的底色」，
+            // 那是漏实现：没有这层，头部文字直接压在封面图上，滚到内容区又是一刀切。
             }.width('100%')
+              .linearGradient({
+                angle: 180,
+                colors: [
+                  ['#00000000', 0.0],
+                  [this.headerMidGradientColor(), 0.5],
+                  [this.pageBaseColor(), 1.0]
+                ]
+              })
           }.width('100%')
 
           Column() {
 
           // 上游 BookInfoActions（BookInfoScreen.kt:1391-1493）只有 4 张卡：
           // 书架 / 查看目录 / 换源 / 阅读记录。「禁用阅读记录」在上游只存在于溢出菜单里。
-          Row() {
+          // 容器底色、内边距与 8dp 间距照 `:1436-1442`：Row 铺 surface 底、横向 16 纵向 8。
+          Row({ space: 8 }) {
             BookInfoAction({
-              icon: 'bookmark',
-              label: BookRepository.isBodyMissing(this.book) ? '移出缺正文记录' : '已在书架',
-              onSelect: () => this.requestRemoveFromShelf()
+              // 图标三态照 `:1445-1449`：冲突 → Shuffle、在架 → Outlined.Book、其余 → BookmarkAdd。
+              // 本地没有 BookmarkAdd 资源，未在架那档用已有的 bookmark 图标，语义同为「收藏」。
+              icon: this.shelfConflictHighlight() ? 'shuffle'
+                : (this.inBookshelf() ? 'book' : 'bookmark'),
+              label: this.shelfActionLabel(),
+              highlight: this.shelfConflictHighlight(),
+              onSelect: () => this.onShelfCardClick(),
+              onLongPress: () => this.onOpenEditPage()
             })
             BookInfoAction({ icon: 'list', label: '查看目录', onSelect: () => this.onOpenCatalog() })
             BookInfoAction({ icon: 'swap', label: '换源', onSelect: () => this.onUnavailableAction('在线换源将在 P5 接入') })
             BookInfoAction({ icon: 'profileTimeline', label: '阅读记录', onSelect: () => this.openReadRecordPanel() })
-          }.width('100%').padding({ left: 12, right: 12, top: 14, bottom: 16 })
+          }.width('100%')
+            .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+            .backgroundColor(this.themeColorSurfacePrimary)
 
           Column() {
             Text(this.book.progress > 0 ? `在读 · ${this.book.lastChapter}` : '尚未开始阅读')
@@ -646,29 +876,31 @@ export struct BookInfoPage {
           }
 
           Column() {
-            Text('小说简介').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-              .alignSelf(ItemAlign.Start)
+            // 上游 `BookInfoScreen.kt:1533-1720 BookInfoSummary` 的简介区没有小标题、
+            // 没有卡片底色，正文直接接在摘要下面，`bodyMedium` 也不设 maxLines。
+            // 本地原来是一张「小说简介」标题 + 圆角 18 卡片，这一层去掉。
+            //
+            // 上游三个富文本前缀 `<useweb>` / `<usehtml>` / `<md>` 本批未实现（需要
+            // WebView / HTML / Markdown 三套渲染器），这里一律按纯文本显示，不做伪装。
             if (this.book.description !== undefined && this.book.description.trim().length > 0) {
-              Text(this.book.description).fontSize(16).lineHeight(25).fontColor('#D0D2DB')
-                .alignSelf(ItemAlign.Start).margin({ top: 12 })
+              Text(this.book.description).fontSize(14).lineHeight(22).fontColor('#D0D2DB')
+                .alignSelf(ItemAlign.Start)
             } else {
-              Text('暂无小说简介').fontSize(16).fontColor('#BFC1CB').alignSelf(ItemAlign.Start)
-                .margin({ top: 12 })
-              Text(this.book.isLocal ? '本地导入文件没有附带简介信息。' : '当前没有可显示的简介内容。')
-                .fontSize(14).lineHeight(21).fontColor('#858792').alignSelf(ItemAlign.Start)
-                .margin({ top: 6 })
+              // 上游 `R.string.intro_show_null` = 「简介：暂无简介」。
+              Text('简介：暂无简介').fontSize(14).lineHeight(22).fontColor('#BFC1CB')
+                .alignSelf(ItemAlign.Start)
             }
             if ((this.book.remark ?? '').trim().length > 0) {
               // 备注卡可点：整块进元数据面板（:315），不单给正文加点击区。
               Column() {
-                Text('备注').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-                  .alignSelf(ItemAlign.Start).margin({ top: 16 })
-                Text(this.book.remark ?? '').fontSize(14).lineHeight(21).fontColor('#BFC1CB')
-                  .alignSelf(ItemAlign.Start).margin({ top: 6 })
+                Text('备注').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                  .alignSelf(ItemAlign.Start).margin({ top: 12 })
+                Text(this.book.remark ?? '').fontSize(14).lineHeight(22).fontColor('#BFC1CB')
+                  .alignSelf(ItemAlign.Start).margin({ top: 4 })
               }.width('100%').onClick(() => this.onOpenEditPage())
             }
-          }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18).margin({ left: 16, right: 16, bottom: 24 })
+          }.width('100%').alignItems(HorizontalAlign.Start)
+            .padding({ left: 16, right: 16, top: 8, bottom: 24 })
           // 内容列不铺底色：底色由第三层渐变给（上游 BookInfoBackdrop 的 0.60→1.0 段），
           // 铺了就从头部到内容一刀切，渐变看不出来。
           }.width('100%')
@@ -839,19 +1071,37 @@ struct BookInfoTag {
 @Component
 struct BookInfoAction {
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop icon: AppGlyphName = 'book';
   @Prop label: string = '';
+  /** 冲突态：底色用 secondaryContainer 档（本地降级成 surfaceElevated）。 */
+  @Prop highlight: boolean = false;
   onSelect: () => void = () => {};
+  /** 上游 `BookInfoActionCard` 的 `onLongClick`，只书架卡绑（`:1462`）。 */
+  onLongPress: () => void = () => {};
   build() {
     Column() {
-      AppGlyph({ name: this.icon, glyphSize: 20, tint: this.themeColorTextSecondary }).margin({ bottom: 7 })
-      Text(this.label).fontSize(12).fontColor(this.themeColorTextSecondary).maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }.layoutWeight(1).height(72).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).margin({ left: 4, right: 4 })
+      AppGlyph({
+        name: this.icon,
+        glyphSize: 20,
+        tint: this.highlight ? this.themeColorTextPrimary : this.themeColorTextSecondary
+      }).margin({ bottom: 4 })
+      // 上游 `:1495-1531` 文案是 bodySmall + maxLines 2，高度由内容决定，不是固定 72。
+      Text(this.label)
+        .fontSize(12)
+        .fontColor(this.highlight ? this.themeColorTextPrimary : this.themeColorTextSecondary)
+        .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+    }.layoutWeight(1).constraintSize({ minHeight: 72 }).justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center).padding({ left: 8, right: 8, top: 12, bottom: 12 })
+      .backgroundColor(this.themeAppBackground.length > 0
+        ? Color.Transparent
+        : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
+      .borderRadius(16)
       .onClick(() => this.onSelect())
+      .gesture(LongPressGesture({ duration: 500 }).onAction(() => this.onLongPress()))
   }
 }

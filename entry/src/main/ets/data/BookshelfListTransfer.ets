@@ -107,7 +107,9 @@ export class BookshelfListTransfer {
         id: `booklist-${hash}`,
         title: name,
         author: author,
-        category: '本地',
+        // 上游本地书导入时 kind 是空的，标签由 `upKind()` 现算（格式名 + 文件大小 + 字数）。
+      // 本地原来把 kind 写死成「本地」，详情页标签行就多出一个上游没有的「本地」。
+      category: '',
         groupName: '本地未分组',
         groupNames: [],
         chapterIndex: 0,

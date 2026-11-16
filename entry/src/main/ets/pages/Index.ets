@@ -6500,7 +6500,15 @@ private canWriteInto(dir: string): boolean {
       const updatedBook: Book = BookRepository.copyBook(existing);
       updatedBook.chapterCount = importedBook.chapterCount;
       updatedBook.lastChapter = importedBook.lastChapter;
+      // 「最新 ·」取自 latestChapterTitle，之前更新分支没刷新它，旧值会一直留在书架上。
+      updatedBook.latestChapterTitle = importedBook.latestChapterTitle;
+      // 老记录把本地书的 kind 写死成「本地」，重导时一并刷成导入器给的空串，
+      // 否则详情页标签行会一直多出一个上游没有的「本地」。
+      updatedBook.category = importedBook.category;
       updatedBook.tocRule = importedBook.tocRule;
+      // 源文件名与源文件大小跟着这次导入刷新（老记录没有这两个字段，重导一次就补上）。
+      updatedBook.originFileName = importedBook.originFileName ?? created.fileName;
+      updatedBook.sourceSize = importedBook.sourceSize;
       // 与上游一致：latestChapterTime 归零触发「本地文件已更新」，正文重新分页。
       updatedBook.latestChapterTime = 0;
       const booksToSave = this.books
@@ -6547,6 +6555,9 @@ private canWriteInto(dir: string): boolean {
         rebound.latestChapterTitle = importedBook.latestChapterTitle;
         rebound.wordCount = importedBook.wordCount;
         rebound.tocRule = importedBook.tocRule;
+        rebound.category = importedBook.category;
+        rebound.originFileName = importedBook.originFileName ?? created.fileName;
+        rebound.sourceSize = importedBook.sourceSize;
         // 新目录的正文偏移对旧进度没有意义，回到第 1 章；latestChapterTime 归零触发重新解析。
         rebound.chapterIndex = 0;
         rebound.chapterProgress = 0;

@@ -55,6 +55,16 @@ export interface Book {
   customTag?: string;
   androidOriginalPath?: string;
   androidCharacterPosition?: number;
+  /**
+   * 导入时的源文件名（含扩展名）。上游本地书的 originName 就是它，详情页来源行直接显示；
+   * 本地 originName 列被当作 androidOriginalPath 读，所以另存一份，避免动那条语义。
+   */
+  originFileName?: string;
+  /**
+   * 导入时源文件的字节大小。上游 upKind() 用 FileDoc.fromFile(bookUrl).size 取它，
+   * 本地 bookUrl 指向转出的正文副本，取不到源大小，只能在导入时记下来。
+   */
+  sourceSize?: number;
   /** 导入时选中的 TXT 章节正则；留空表示沿用旧版默认识别。 */
   tocRule?: string;
   /** 最近一次更新目录的时间戳，对应上游 Book.latestChapterTime。 */

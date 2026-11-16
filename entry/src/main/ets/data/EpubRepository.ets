@@ -258,7 +258,9 @@ export class EpubRepository {
         id: bookId,
         title: title,
         author: author,
-        category: '本地',
+        // 上游本地书导入时 kind 是空的，标签由 `upKind()` 现算（格式名 + 文件大小 + 字数）。
+      // 本地原来把 kind 写死成「本地」，详情页标签行就多出一个上游没有的「本地」。
+      category: '',
         groupName: '本地未分组',
         groupNames: [],
         chapterIndex: 0,
@@ -271,6 +273,9 @@ export class EpubRepository {
         contentPath: contentPath,
         format: 'epub',
         latestChapterTime: Date.now(),
+        // 上游 `latestChapterTitle` 是最新章的标题，本地原来没设，详情页「最新 ·」
+        // 就退回 `lastChapter`（第 0 章，EPUB 里常常是封面页）。这里取最后一个非卷章。
+        latestChapterTitle: EpubRepository.lastChapterTitleOf(chapterTitles, chapterVolumes),
         isLocal: true
       };
       return {
@@ -380,7 +385,11 @@ export class EpubRepository {
         if (text.length > 0) {
           const nameFromMarkup = EpubRepository.readHeading(markup);
           const pathName = EpubRepository.fileTitle(item.href);
-          const chapterTitle = pathName.toLowerCase() === 'cover' ? '封面' : nameFromMarkup || pathName || `第${resources.length + 1}章`;
+          // EPUB 里 href 叫 cover 的页面不是正文。上游目录不会把它当成一章，
+          // 本地把它命名成纯「封面」时，若它恰好落在目录末尾就会被写成
+          // `latestChapterTitle`，详情页「最新 · 」后面就显示出「封面」。
+          // 这里加后缀区分，属权宜之计；根治要在算最新章时跳过这类非正文章节。
+          const chapterTitle = pathName.toLowerCase() === 'cover' ? '封面（非正文）' : nameFromMarkup || pathName || `第${resources.length + 1}章`;
           const chapterBody = EpubRepository.removeDuplicateHeading(text, chapterTitle);
           totalTextCharacters += chapterBody.length;
           if (totalTextCharacters > EpubRepository.maximumTextCharacters) {
@@ -404,6 +413,14 @@ export class EpubRepository {
       spineMatch = spinePattern.exec(spineText);
     }
     return resources;
+  }
+
+  /** 取最后一个非卷章节作为「最新章」；全是卷时退回最后一项。 */
+  private static lastChapterTitleOf(titles: string[], volumes: boolean[]): string | undefined {
+    for (let index = titles.length - 1; index >= 0; index--) {
+      if (volumes[index] !== true) { return titles[index]; }
+    }
+    return titles.length > 0 ? titles[titles.length - 1] : undefined;
   }
 
   /** 目录优先：NCX/nav 解析成功就按树建章，失败才退回 spine 平铺。 */
@@ -556,7 +573,8 @@ export class EpubRepository {
     for (let index = 0; index < prefixEnd; index++) {
       const resource = resources[index];
       if (resource === undefined || tocResourcePaths.has(resource.fullPath)) { continue; }
-      const volumeTitle = resource.isCoverPage ? '封面'
+      // 同 `:383`：封面页不是正文章节，名字加后缀，避免被当成「最新章」显示在详情页。
+      const volumeTitle = resource.isCoverPage ? '封面（非正文）'
         : (resource.heading.length > 0 ? resource.heading : '--卷首--');
       chapters.push({
         title: volumeTitle,
