@@ -1,4 +1,5 @@
 import { resolvePaletteColors, THEME_PALETTES, ThemePaletteDefinition } from '../data/ThemePalette';
+import { AppGlyph } from '../components/AppGlyph';
 
 @Component
 export struct OnboardingPage {
@@ -11,6 +12,15 @@ export struct OnboardingPage {
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /**
+   * 状态栏高度（vp），由 `pages/Index.ets` 的 `publishAppTopInset()` 广播。
+   *
+   * 全屏布局下页面画到状态栏底下，欢迎页外层必须自己让开这段，
+   * 否则第一屏的图标会与状态栏图标重叠。上游 `OnboardingScreen.kt:51-52`
+   * 在外层 `Column` 上挂 `windowInsetsPadding(WindowInsets.safeDrawing)`，
+   * 本地等价做法就是读这个既有广播键（仓库口径，见 `BookInfoPage.ets`）。
+   */
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @Prop localBooksPath: string = '';
   onComplete: (themeMode: number, paletteIndex: number) => void = (_mode: number, _palette: number) => {};
   /**
@@ -160,7 +170,10 @@ export struct OnboardingPage {
 
   build() {
     Column() {
-      Image($r('app.media.app_icon')).width(128).height(96).objectFit(ImageFit.Cover)
+      // 上游 `OnboardingScreen.kt:55-56` 用的是 `ic_launcher_foreground`（只有图形、没有底色），
+      // 尺寸 128×96 + ContentScale.Crop。本地对应的就是分层图标里那张前景图。
+      // ArkUI 的 ImageFit 没有 Crop，`Cover` 即「等比填满并裁掉溢出」，语义相同。
+      Image($r('app.media.app_icon_foreground')).width(128).height(96).objectFit(ImageFit.Cover)
         .margin({ top: 16, bottom: 8 })
       Text(this.pageTitle()).fontSize(32).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
       Text(this.pageSummary()).fontSize(16).fontColor(this.themeColorTextTertiary).margin({ top: 4, bottom: 12 })
@@ -175,10 +188,20 @@ export struct OnboardingPage {
         .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(18)
       Row() {
         Blank()
-        Button(this.page === 0 ? '阅读并同意　→' : this.page === 3 ? '完成　→' : '下一步　→')
-          .fontSize(14).fontColor(this.themeColorSurfacePrimary).backgroundColor(this.themeColorAccent).borderRadius(28)
-          .padding({ left: 22, right: 22, top: 12, bottom: 12 }).onClick(() => this.next())
+        // 上游 `OnboardingScreen.kt:138-141` 是 `MediumTonalButton { Text(...); Icon(ArrowForward) }`，
+        // 文案与箭头是两个节点。本地原来用全角「　→」拼在按钮文字里，箭头随字号缩放且对不齐，
+        // 这里拆成 Text + AppGlyph 两段。
+        Button() {
+          Row() {
+            Text(this.page === 0 ? '阅读并同意' : this.page === 3 ? '完成' : '下一步')
+              .fontSize(14).fontColor(this.themeColorSurfacePrimary)
+            AppGlyph({ name: 'arrowForward', glyphSize: 18, tint: this.themeColorSurfacePrimary })
+              .margin({ left: 8 })
+          }.alignItems(VerticalAlign.Center)
+        }
+        .backgroundColor(this.themeColorAccent).borderRadius(28)
+        .padding({ left: 22, right: 18, top: 12, bottom: 12 }).onClick(() => this.next())
       }.width('100%').padding({ left: 20, right: 20, top: 14, bottom: 18 })
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).justifyContent(FlexAlign.Start)
+    }.width('100%').height('100%').padding({ top: this.appTopInset }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).justifyContent(FlexAlign.Start)
   }
 }
