@@ -574,6 +574,8 @@ export struct ReaderPage {
   // 把手淡出的比淡入快：上游 SelectionHandleFadeOutMillis / SelectionHandleFadeInMillis
   private static readonly CANVAS_HANDLE_FADE_OUT_MILLIS: number = 90;
   private static readonly CANVAS_HANDLE_FADE_IN_MILLIS: number = 140;
+  /** 底栏动作区上下内边距（`.padding({ top: 4, bottom: 17 })`）之和。 */
+  private static readonly BOTTOM_ACTION_PADDING: number = 21;
   private paginationRebuildTimer: number = -1;
   // 本轮待排的重排是否只由图片尺寸变化触发；true 时跳过语义解析与高亮匹配，只重分页
   private imageSizesRebuildPending: boolean = false;
@@ -1297,6 +1299,11 @@ export struct ReaderPage {
   /** 底栏按钮表面是否加玻璃底色；上游 `readMenuBottomBarLiquidGlassButtons`（`ReadSettings.kt:101`）。 */
   private readerBottomBarButtonGlassEnabled(): boolean {
     return this.readMenuBottomBarLiquidGlassButtons;
+  }
+
+  /** 底栏按钮外径。上游 `ReadBookMenuBarBottom.kt:245`：玻璃开关打开时 48，否则 40。 */
+  private readerBottomActionOuterSize(): number {
+    return this.readerBottomBarButtonGlassEnabled() ? 48 : 40;
   }
 
   /**
@@ -3509,12 +3516,6 @@ export struct ReaderPage {
     if (this.pageAnimation === 3) { return 100; }
     // 页层批次 4：滑块上限是本章页数（窗口表还含邻章页），不是页表长度。
     return this.isPageProgressMode() ? this.currentChapterPageCount() - 1 : this.getChapterCount() - 1;
-  }
-
-  private getProgressSliderThumbRatio(): number {
-    const maximum = this.getProgressSliderMaximum();
-    if (maximum <= 0) { return 0; }
-    return Math.max(0, Math.min(1, this.sliderProgressIndex / maximum));
   }
 
   private getChapterCount(): number {
@@ -7215,9 +7216,12 @@ export struct ReaderPage {
             // 只包住**中间那根 Slider**，两侧的上一章/下一章按钮在 `readSliderMode == "1"` 时仍然保留。
             // 本地原先把整行一起藏掉，隐藏进度条后连换章按钮都没了。
             Row() {
+              // 换章按钮尺寸跟随玻璃开关：上游 `ReadBookMenuBarBottom.kt:161-196` 用的是
+              // 与底栏按钮同一个 `BottomBarGlassIconButton`（`buttonGlassEnabled ? 48 : 40`）。
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
-              }.width(40).height(40).onClick(() => this.turnReaderChapter(-1))
+              }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
+                .onClick(() => this.turnReaderChapter(-1))
               if (this.readSliderMode !== '1') {
                 Stack({ alignContent: Alignment.Center }) {
                   Slider({
@@ -7228,9 +7232,15 @@ export struct ReaderPage {
                     style: SliderStyle.InSet
                   })
                     .width('100%').height(40)
-                    .selectedColor(this.readerMenuAccentTint()).trackColor('#5A3F47').blockColor('#00000000')
+                    // 上游 `ReadMenuSlider`（`ReadBookMenuBarTool.kt:67-113`）两档的拇指都是可见的
+                    // （普通档 M3 默认拇指，玻璃档 40×24 胶囊）。本地原先 blockColor 给透明、
+                    // 另画一根 5vp 竖条，结果拖到哪看不出来。改回强调色圆点。
+                    // 轨道色上游是强调色带透明度，本地用前景色 20% 近似（强调色在浅色纸面上
+                    // 做 6vp 轨道太跳），这是近似不是等价。
+                    .selectedColor(this.readerMenuAccentTint()).trackColor(this.readerMenuForegroundAlpha('33'))
+                    .blockColor(this.readerMenuAccentTint())
                     .trackThickness(6)
-                    .blockSize({ width: 12, height: 12 })
+                    .blockSize({ width: 14, height: 14 })
                     .showSteps(true).stepColor(this.readerMenuAccentTint()).stepSize(3)
                     // 无障碍文案：上游 `ReadBookMenuBarBottom.kt:84-95` 按 `progressBarBehavior`
                     // 念「第 x / 共 y 页」或「第 x / 共 y 章」。本地没有读屏器自定义能力，
@@ -7256,18 +7266,13 @@ export struct ReaderPage {
                         this.onSelectChapterIndex(index);
                       }
                     })
-                  Row() {
-                    Blank().layoutWeight(this.getProgressSliderThumbRatio())
-                    Column().width(5).height(40).backgroundColor(this.readerMenuAccentTint()).borderRadius(2.5)
-                    Blank().layoutWeight(1 - this.getProgressSliderThumbRatio())
-                  }.width('100%').height(40).padding({ left: 10, right: 10 })
-                    .hitTestBehavior(HitTestMode.Transparent)
                 }.layoutWeight(1).height(40)
               }
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
-              }.width(40).height(40).onClick(() => this.turnReaderChapter(1))
-            }.width('100%').height(40).padding({ left: 8, right: 8 })
+              }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
+                .onClick(() => this.turnReaderChapter(1))
+            }.width('100%').height(this.readerBottomActionOuterSize()).padding({ left: 8, right: 8 })
             if (this.getBottomActionPages().length > 0) {
             Swiper() {
               ForEach(this.getBottomActionPages(), (rows: ReaderControlKind[][], _pageIndex: number) => {
@@ -7288,9 +7293,10 @@ export struct ReaderPage {
                           itemFill: this.readerMenuItemFill(false, this.bottomIconStyle),
                           itemFillSelected: this.readerMenuSelectedFill(),
                           menuForegroundAlpha: this.readerMenuForegroundAlpha('73'),
+                          outerSize: this.readerBottomActionOuterSize(),
                           onSelect: () => this.selectBottomAction(kind),
                           onLongSelect: () => this.longSelectBottomAction(kind)
-                        }).width(40)
+                        }).width(this.readerBottomActionOuterSize())
                       }, (kind: ReaderControlKind) => kind)
                     }.width('100%').justifyContent(FlexAlign.SpaceBetween)
                   }, (_row: ReaderControlKind[], rowIndex: number) => `${_pageIndex}-${rowIndex}`)
@@ -7299,7 +7305,11 @@ export struct ReaderPage {
             }
               .width('100%')
               .index(this.getBottomActionPageIndex())
-              .height((this.showBottomActionText ? 64 : 48) * Math.max(1, Math.min(2, this.bottomRowCount)) + 21)
+              // 高度算式参数化：`+ 24` / `+ 8` 是从旧常量反推的（40+24=64、40+8=48），
+              // 40 档时结果与改前完全一致；玻璃档按钮变 48，两个档位各自跟上。
+              .height((this.showBottomActionText ? this.readerBottomActionOuterSize() + 24
+                : this.readerBottomActionOuterSize() + 8)
+                * Math.max(1, Math.min(2, this.bottomRowCount)) + ReaderPage.BOTTOM_ACTION_PADDING)
               .loop(false)
               .indicator(false)
               .onChange((pageIndex: number) => this.currentBottomActionPage = pageIndex)
@@ -7919,6 +7929,8 @@ struct ReaderBottomAction {
   @Prop itemFillSelected: string = '#00000000';
   /** 描边色（iconStyle === 2 时用），由 ReaderPage 传 menuForegroundAlpha('73')。 */
   @Prop menuForegroundAlpha: string = '#73D5C2C6';
+  /** 按钮内层尺寸；上游 `ReadBookMenuBarBottom.kt:245`（玻璃 48 / 普通 40）。 */
+  @Prop outerSize: number = 40;
   onSelect: () => void = () => {};
   onLongSelect: () => void = () => {};
 
@@ -7935,13 +7947,22 @@ struct ReaderBottomAction {
             .padding({ left: 4, right: 4, top: 1, bottom: 1 })
             .align(Alignment.TopEnd)
         }
-      }.width(40).height(40)
+      }.width(this.outerSize).height(this.outerSize)
         .backgroundColor(this.active ? this.itemFillSelected : this.itemFill)
         .border({ width: this.iconStyle === 2 ? 1 : 0, color: this.menuForegroundAlpha })
-        .borderRadius(20)
+        .borderRadius(this.outerSize / 2)
       if (this.showLabel) {
-        // 字号 9 → 11 是批 3 的范围，本批只改颜色与描边色。
-        Text(this.label).fontSize(9).fontColor(this.menuForeground).margin({ top: 3 })
+        // 上游 `ReadBookMenuBarTool.kt:355-364`：`labelSmall` = 11sp，单行、居中。
+        // 上游那层还带 `unbounded = true`（文字可横向溢出父宽），ArkUI 没有等价物；
+        // 本地按钮是 40/48 定宽 + SpaceBetween，真放开会让相邻文字互相压，本批不做。
+        // 实测 11 号在 40vp 按钮里「自动翻页」只能显示三个字（被裁），退到 10 号。
+        Text(this.label)
+          .fontSize(10)
+          .fontColor(this.menuForeground)
+          .maxLines(1)
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .margin({ top: 2 })
       }
     }.layoutWeight(1).padding({ top: 3, bottom: 3 })
       .parallelGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => { this.onLongSelect(); }))
