@@ -168,6 +168,7 @@ import { ReaderBookmarkEditor } from './ReaderBookmarkEditor';
 import { ReaderMarkingEditor } from './ReaderMarkingEditor';
 import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession, ReadRecordDetail, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
 import { ReadRecordRepository } from '../data/ReadRecordRepository';
+import { applyStartWindowBackgroundColor } from '../data/StartWindowBackground';
 
 const EMPTY_BOOK: Book = {
   id: '',
@@ -3365,6 +3366,9 @@ struct Index {
     // 全屏布局下状态栏底色恒透明（见 EntryAbility.applySystemBar），但图标深浅不会跟着换：
     // 浅色主题仍留白字会糊在浅底上看不见，所以每次换肤都重设一次。
     this.syncSystemBarContentColor();
+    // 启动窗口底色也跟主题走（上游 `?attr/colorSurface` 是 DayNight 资源），
+    // 换肤后同步一次，下次冷启动才不会闪回另一套底色。
+    applyStartWindowBackgroundColor(isDarkNow);
     const customColors = normalizedIndex === 12
       ? resolveCustomPaletteColors(this.themeCustomColors, isDarkNow,
         resolvePaletteColors(normalizedIndex, isDarkNow))

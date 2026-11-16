@@ -22,7 +22,7 @@
         "name": "EntryAbility",
         "srcEntry": "./ets/entryability/EntryAbility.ets",
         "description": "$string:entry_desc",
-        "icon": "$media:app_icon",
+        "icon": "$media:layered_image",
         "label": "$string:entry_name",
         "startWindowIcon": "$media:app_icon",
         "startWindowBackground": "$color:start_window_background",

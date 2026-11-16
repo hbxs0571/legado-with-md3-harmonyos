@@ -5,6 +5,7 @@ import { RdbMigration } from '../data/RdbMigration';
 import { RdbCleanup } from '../data/RdbCleanup';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { ThemeSettingsRepository, THEME_MODE_DARK } from '../data/ThemeSettingsRepository';
+import { applyStartWindowBackgroundColor } from '../data/StartWindowBackground';
 import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
 import { BookRepository } from '../data/BookRepository';
 
@@ -99,6 +100,15 @@ export default class EntryAbility extends UIAbility {
       }).catch(() => {});
     } catch (_) {
     }
+    // 启动窗口底色尽早设：它在应用主题生效前就画完了，只能靠这里写进去的值。
+    // 与下面的存量搬迁并行，不进入那条串行链（搬迁可能要几秒）。
+    ThemeSettingsRepository.load(this.context)
+      .then((snapshot) => {
+        applyStartWindowBackgroundColor(
+          ThemeModeResolver.isDarkTheme(snapshot.themeMode, ThemeModeResolver.isSystemDark(this.context))
+        );
+      })
+      .catch(() => {});
     // 先完成存量搬迁与老数据清理，再加载首屏。
     // 上游用 Room，建表与迁移都在打开数据库时同步完成，界面不会读到「表刚建好但还没搬」的中间态；
     // relationalStore 是异步的，所以这里把 loadContent 排到搬迁之后，等效于上游的时序。
@@ -147,6 +157,8 @@ export default class EntryAbility extends UIAbility {
   private syncSystemBar(themeMode: string): void {
     const isDark = ThemeModeResolver.isDarkTheme(themeMode, ThemeModeResolver.isSystemDark(this.context));
     applySystemBar(this.context, isDark);
+    // 主题切换后启动窗口底色也要跟着改：下次冷启动才不会闪回另一套底色。
+    applyStartWindowBackgroundColor(isDark);
   }
 
   /**
