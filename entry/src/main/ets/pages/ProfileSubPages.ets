@@ -27,6 +27,7 @@ import { TxtTocRule } from '../model/TxtTocRule';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
+import { UiAction } from '../components/settings/UiAction';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const PROFILE_MENU_WIDTH: number = 260;
@@ -4726,6 +4727,7 @@ export struct AboutAppPage {
 @Component
 struct AboutQuickAction {
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @Prop icon: string = 'about_web';
   @Prop description: string = '';
   onSelect: () => void = () => {};
@@ -4735,7 +4737,7 @@ struct AboutQuickAction {
         Image(this.icon === 'about_github' ? $r('app.media.about_github') :
           (this.icon === 'about_update' ? $r('app.media.about_update') : $r('app.media.about_web')))
           .width(20).height(20).fillColor(this.themeColorTextSecondary).accessibilityText(this.description)
-      }.width(36).height(36).backgroundColor('#3A4054').borderRadius(18).onClick(() => this.onSelect())
+      }.width(36).height(36).backgroundColor(this.themeColorSurfaceElevated).borderRadius(18).onClick(() => this.onSelect())
     }.layoutWeight(1).alignItems(HorizontalAlign.Center)
   }
 }
@@ -4792,27 +4794,20 @@ export struct AppSettingsHomePage {
       Scroll(this.settingsScroller) {
         Column() {
           Column() {
-          SettingsCategoryRow({ title: '外观', onSelect: () => this.onOpenCategory(ProfileRoute.APP_THEME_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '高级', onSelect: () => this.onOpenCategory(ProfileRoute.APP_OTHER_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '阅读界面', onSelect: () => this.onOpenCategory(ProfileRoute.APP_READ_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '朗读设置', summary: '管理角色声音池、背景音乐池与角色配音分配', onSelect: () => this.onOpenCategory(ProfileRoute.APP_ALOUD_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '封面设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_COVER_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '下载与缓存', onSelect: () => this.onOpenCategory(ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '备份与恢复', onSelect: () => this.onOpenCategory(ProfileRoute.APP_BACKUP_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: 'AI 设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_AI_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '翻译设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_TRANSLATION_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '隐私', onSelect: () => this.onOpenCategory(ProfileRoute.APP_PRIVACY_SETTINGS) })
-          ThemeItemDivider()
-          SettingsCategoryRow({ title: '实验室', last: true, onSelect: () => this.onOpenCategory(ProfileRoute.APP_LAB_SETTINGS) })
+          // 上游 ConfigNavScreen.kt:57-104 是「一个 SplicedColumnGroup + 11 个
+          // ClickableSettingItem」，行组件统一走 UiAction（含自带分隔线），
+          // 不再手写 SettingsCategoryRow + ThemeItemDivider。
+          UiAction({ title: '外观', onSelect: () => this.onOpenCategory(ProfileRoute.APP_THEME_SETTINGS) })
+          UiAction({ title: '高级', onSelect: () => this.onOpenCategory(ProfileRoute.APP_OTHER_SETTINGS) })
+          UiAction({ title: '阅读界面', onSelect: () => this.onOpenCategory(ProfileRoute.APP_READ_SETTINGS) })
+          UiAction({ title: '朗读设置', detail: '管理角色声音池、背景音乐池与角色配音分配', onSelect: () => this.onOpenCategory(ProfileRoute.APP_ALOUD_SETTINGS) })
+          UiAction({ title: '封面设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_COVER_SETTINGS) })
+          UiAction({ title: '下载与缓存', onSelect: () => this.onOpenCategory(ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS) })
+          UiAction({ title: '备份与恢复', onSelect: () => this.onOpenCategory(ProfileRoute.APP_BACKUP_SETTINGS) })
+          UiAction({ title: 'AI 设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_AI_SETTINGS) })
+          UiAction({ title: '翻译设置', onSelect: () => this.onOpenCategory(ProfileRoute.APP_TRANSLATION_SETTINGS) })
+          UiAction({ title: '隐私', onSelect: () => this.onOpenCategory(ProfileRoute.APP_PRIVACY_SETTINGS) })
+          UiAction({ title: '实验室', showDivider: false, onSelect: () => this.onOpenCategory(ProfileRoute.APP_LAB_SETTINGS) })
           }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.padding({ left: 16, right: 16, top: 8, bottom: 16 })
       }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
@@ -4839,34 +4834,6 @@ struct SettingsPageHeader {
       // 导致 navSlot 内 this.onBack 为 undefined，点返回即崩溃（批3 实测）。
       navigationIcon: () => { this.navSlot() }
     })
-  }
-}
-
-@Component
-struct SettingsCategoryRow {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
-  @StorageProp('themeAppBackground') themeAppBackground: string = '';
-  @StorageProp('themePureBlack') themePureBlack: boolean = false;
-  @Prop title: string = '';
-  @Prop summary: string = '';
-  @Prop last: boolean = false;
-  onSelect: () => void = () => {};
-  build() {
-    Column() {
-      Row() {
-        Column() {
-          Text(this.title).fontSize(PROFILE_ROW_TITLE_SIZE).fontColor(this.themeColorTextSecondary)
-          if (this.summary.length > 0) {
-            Text(this.summary).fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
-          }
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
-      }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
-        .onClick(() => this.onSelect())
-      if (!this.last) { Row().width('100%').height(2).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)) }
-    }.width('100%')
   }
 }
 
