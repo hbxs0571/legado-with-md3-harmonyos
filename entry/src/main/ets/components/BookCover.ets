@@ -25,6 +25,19 @@ export struct BookCover {
   /** 更新小红点（:119）。 */
   @Prop showBadgeDot: boolean = false;
   /**
+   * 封面左下角的小字标签。
+   *
+   * 对应上游 BookshelfCover.kt:104-121 的 `leftBottomText`：`Alignment.BottomStart` +
+   * `padding(2.dp)` + 圆角 4 + 内边距 4/2。上游调用点传 `matchedSourceLabel ?: bookTypeLabel`
+   * （BookItem.kt:794），本地没有「搜索命中书源」这一态，只传书籍类型标签。
+   */
+  @Prop leftBottomText: string = '';
+  // 角标与左下标签的配色：上游是 cardContainer / onCardContainer（TextCard.kt:43-44 的
+  // surfaceContainer / onSurface）。本地 ThemePaletteColors 没有 cardContainer 这一档，
+  // 按任务书口径降级成 surfaceContainerHigh / onSurface。
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  /**
    * 私密锁定（:325）：为真时在封面上叠一层「锁 + 已加密」蒙层，遮住封面本身。
    * 判定（单本标记 ∪ 所属私密分组）留在调用方，组件只负责画：
    * 书架、详情页、目录页都在用这个组件，判定逻辑只能有一处。
@@ -236,7 +249,7 @@ export struct BookCover {
       }
       Column() {
         if (this.showChapterBadge || BookRepository.isBodyMissing(this.book)
-          || this.badgeText.length > 0 || this.showBadgeDot) {
+          || (this.badgeText.length === 0 && this.book.chapterCount !== undefined)) {
           Row() {
             if (BookRepository.isBodyMissing(this.book)) {
               Text('缺正文').fontSize(8).fontColor('#FFE0DC')
@@ -244,14 +257,7 @@ export struct BookCover {
                 .backgroundColor('#8B3A3A').borderRadius(5)
             }
             Blank()
-            if (this.badgeText.length > 0) {
-              Text(this.badgeText)
-                .fontSize(8)
-                .fontColor('#FFFFFFFF')
-                .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-                .backgroundColor('#C0504D')
-                .borderRadius(5)
-            } else if (this.showChapterBadge && this.book.chapterCount !== undefined) {
+            if (this.badgeText.length === 0 && this.showChapterBadge && this.book.chapterCount !== undefined) {
               Text(this.book.chapterCount)
                 .fontSize(8)
                 .fontColor('#E6E7EC')
@@ -264,16 +270,9 @@ export struct BookCover {
         // 上下两个 Blank 把书签图标压到底部，与上游 SpaceBetween 的效果一致
         Blank()
         Blank()
-        if (this.showChapterBadge || this.showBadgeDot) {
+        if (this.showChapterBadge) {
           Row() {
-            if (this.showChapterBadge) {
-              AppGlyph({ name: 'bookmark', tint: '#C4C9D7', glyphSize: 16 })
-            }
-            Blank()
-            if (this.showBadgeDot) {
-              Row().width(8).height(8).backgroundColor('#E5484D').borderRadius(4)
-                .margin({ right: 2 })
-            }
+            AppGlyph({ name: 'bookmark', tint: '#C4C9D7', glyphSize: 16 })
           }.width('100%').height(16)
         }
       }
@@ -282,6 +281,59 @@ export struct BookCover {
       .padding({ left: 5, right: 5, top: 5, bottom: 5 })
       .alignItems(HorizontalAlign.Center)
       .justifyContent(FlexAlign.SpaceBetween)
+      // 未读角标：上游 BookshelfCover.kt:85-102 是 TextCard(text = 未读数, icon = 更新图标,
+      // iconSize 12, align = TopEnd, padding 2, cornerRadius 4, hPadding 4, vPadding 2)，
+      // 底色 surfaceContainer、字色 onSurface、字号 labelSmallEmphasized = 11sp Medium
+      // （TextCard.kt:39-44 + Typography.kt:121/:38）。
+      // 改前这里是暗红小胶囊（#C0504D / 8 号字 / 圆角 5），且「更新红点」是底部一个独立 8×8 圆点。
+      // 现在按上游口径：数字在右上角，showBadgeDot 只决定数字左边加不加更新图标。
+      //
+      // 定位方式：外层 Stack 的 alignContent 只对「全尺寸子节点」生效，直接给角标挂 .align()
+      // 是设置元素内容自身的对齐、不是父容器里的位置（实测角标落在封面正中）。所以套一层
+      // 铺满封面的 Stack，由它的 alignContent 把角标推到右上角。
+      if (this.badgeText.length > 0) {
+        Stack({ alignContent: Alignment.TopEnd }) {
+          Row({ space: 4 }) {
+            if (this.showBadgeDot) {
+              AppGlyph({ name: 'profileRefresh', glyphSize: 12, tint: this.themeColorTextPrimary })
+            }
+            Text(this.badgeText)
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themeColorTextPrimary)
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+          .backgroundColor(this.themeColorSurfaceElevated)
+          .borderRadius(4)
+        }
+        .width('100%')
+        .height('100%')
+        // 角标只负责显示，点按要穿透到封面（书架格子靠外层 onClick 打开书籍）。
+        .hitTestBehavior(HitTestMode.Transparent)
+        // margin 2 对应上游的 `padding(2.dp)`。
+        .padding({ top: 2, right: 2 })
+      }
+      // 左下角小标签：上游 BookshelfCover.kt:104-121 的 leftBottomText，形态与上面的角标同源
+      // （TextCard、圆角 4、内边距 4/2），底色 cardContainer、字色 onCardContainer。
+      if (this.leftBottomText.length > 0) {
+        Stack({ alignContent: Alignment.BottomStart }) {
+          Text(this.leftBottomText)
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themeColorTextPrimary)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+            .backgroundColor(this.themeColorSurfaceElevated)
+            .borderRadius(4)
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+        .padding({ bottom: 2, left: 2 })
+      }
       if (this.locked) {
         // 私密遮罩盖在封面与角标之上（:325）：锁图标 +「已加密」，不是单纯压暗。
         Column() {

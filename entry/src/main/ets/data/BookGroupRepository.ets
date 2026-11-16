@@ -27,6 +27,16 @@ interface AndroidBookGroupRecord {
 export class BookGroupRepository {
   private static readonly preferenceName: string = 'book_group_store';
   private static readonly groupsKey: string = 'android_groups_v1';
+  /**
+   * 「本地未分组」内置分组的 groupId，对齐上游 `BookGroup.kt:35` 的 `IdLocalNone = -5L`。
+   *
+   * 上游在 `AppDatabase.kt:433` 里插这一行时给的 show 是 0（默认不显示），
+   * 用户要在分组管理里手动打开它才出现在页签上。本地此前没有这一行，
+   * 只要书架里有未分组的书就无条件显示页签，没有开关可用。
+   */
+  static readonly LOCAL_NONE_GROUP_ID: number = -5;
+  /** 「本地未分组」的显示名，与上游 R.string.local_no_group 的中文串一致。 */
+  static readonly LOCAL_NONE_GROUP_NAME: string = '本地未分组';
   private static readonly selectAll: string =
     'SELECT `groupId`, `groupName`, `cover`, `order`, `enableRefresh`, `show`, `bookSort`, `isPrivate` ' +
       'FROM `book_groups` ORDER BY `order`';
@@ -298,8 +308,11 @@ export class BookGroupRepository {
   }
 
   static async setVisible(context: Context, groupId: number, visible: boolean): Promise<void> {
+    // 内置分组「本地未分组」（groupId -5）同样可切显隐，对齐上游 GroupManageSheet
+    // 对内置行也能改 show 的行为；其余内置行仍不可写。
+    const writable = groupId > 0 || groupId === BookGroupRepository.LOCAL_NONE_GROUP_ID;
     await BookGroupRepository.persist(context, BookGroupRepository.groups.map((group: BookGroup) =>
-      group.groupId === groupId && group.groupId > 0 ? BookGroupRepository.withVisibility(group, visible) :
+      group.groupId === groupId && writable ? BookGroupRepository.withVisibility(group, visible) :
         BookGroupRepository.copyGroup(group)));
   }
 
@@ -479,6 +492,21 @@ export class BookGroupRepository {
         cover: group.cover
       });
     });
+    // 「本地未分组」是上游 AppDatabase.kt:433 预置的内置行，show 默认 0。
+    // 老库与导入数据里都没有这一行，这里补齐，保证分组管理里始终有它可开可关。
+    if (!normalized.some((group: BookGroup) => group.groupId === BookGroupRepository.LOCAL_NONE_GROUP_ID)) {
+      normalized.push({
+        groupId: BookGroupRepository.LOCAL_NONE_GROUP_ID,
+        groupName: BookGroupRepository.LOCAL_NONE_GROUP_NAME,
+        // 上游给的 order 是 -6（排在「网络未分组」-7 之后、「导入失败」-1 之前）。
+        order: -6,
+        show: false,
+        enableRefresh: false,
+        bookSort: -1,
+        isPrivate: false,
+        cover: undefined
+      });
+    }
     return normalized.sort((left: BookGroup, right: BookGroup) => left.order - right.order);
   }
 

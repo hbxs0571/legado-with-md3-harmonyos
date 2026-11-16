@@ -111,6 +111,8 @@ export class BookshelfLayoutRepository {
         store, 'bookshelfGroupCoverCount', settings.bookshelfGroupCoverCount);
       settings.bookshelfRefreshingLimit = await BookshelfLayoutRepository.readInt(
         store, 'bookshelfRefreshingLimit', settings.bookshelfRefreshingLimit);
+      // 回退值来自 DEFAULT_BOOKSHELF_LAYOUT（现为 false，对齐 BookshelfSettingsRepository.kt:54 的 `?: false`），
+      // 所以改默认值只需改 BookshelfLayout.ets 一处，这里不用再写常量。
       settings.showBookshelfTabMenu = await BookshelfLayoutRepository.readBoolean(
         store, 'shouldShowExpandButton', settings.showBookshelfTabMenu);
       settings.bookshelfShowTag = await BookshelfLayoutRepository.readBoolean(

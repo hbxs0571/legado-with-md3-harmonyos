@@ -86,7 +86,7 @@ export interface BookshelfLayoutSettings {
   showBookIntro: boolean;
   /** 批量更新数量限制，0 为不限制。对应上游 PreferKey 字符串值 bookshelfRefreshingLimit。 */
   bookshelfRefreshingLimit: number;
-  /** 页签栏右端分组管理按钮是否显示。上游键名 shouldShowExpandButton，默认 true。 */
+  /** 页签栏右端分组管理按钮是否显示。上游键名 shouldShowExpandButton，默认 false。 */
   showBookshelfTabMenu: boolean;
   /** 是否显示书籍标签行；上游键名 bookshelfShowTag，默认 true。 */
   bookshelfShowTag: boolean;
@@ -219,7 +219,9 @@ export const DEFAULT_BOOKSHELF_LAYOUT: BookshelfLayoutSettings = {
   bookshelfGroupCoverCount: 4,
   showBookIntro: false,
   bookshelfRefreshingLimit: 0,
-  showBookshelfTabMenu: true,
+  // 默认 false：上游 BookshelfSettings.kt:25 声明 false、BookshelfSettingsRepository.kt:54 回退也是 false，
+  // 首次安装看不到这个按钮。
+  showBookshelfTabMenu: false,
   bookshelfShowTag: true,
   bookshelfShowCustomTags: true,
   bookshelfShowSourceTags: true,

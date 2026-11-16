@@ -42,6 +42,8 @@ const MENU_ICON_SIZE: number = 18;
 const MENU_DISABLED_OPACITY: number = 0.38;
 /** 面板高度上限占屏高比例；超过则内部滚动。 */
 const MENU_MAX_SCREEN_RATIO: number = 0.7;
+/** 面板阴影半径，对齐上游 RoundDropdownMenu.kt:57 的 `shadowElevation = 4.dp`。 */
+const MENU_SHADOW_RADIUS: number = 4;
 
 /**
  * 卡片式菜单面板。
@@ -134,5 +136,8 @@ export struct UiMenuPanel {
     .align(Alignment.Top)
     .backgroundColor(this.themeColorSurfaceSecondary)
     .borderRadius(MENU_CORNER)
+    // 阴影 4dp：上游 RoundDropdownMenu.kt:57 的 `shadowElevation = 4.dp`。
+    // 改前整个组件没有任何阴影，菜单贴在背景上没有「浮起来」的层次。
+    .shadow({ radius: MENU_SHADOW_RADIUS, color: '#40000000', offsetX: 0, offsetY: 2 })
   }
 }

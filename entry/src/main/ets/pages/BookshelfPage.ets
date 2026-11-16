@@ -11,6 +11,7 @@ import {
 import { BookshelfSort } from '../data/BookshelfSort';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { BookRepository } from '../data/BookRepository';
+import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookCover } from '../components/BookCover';
 import { BookGroupCard } from '../components/BookGroupCard';
 import { AppGlyph } from '../components/AppGlyph';
@@ -31,8 +32,14 @@ import {
   PRIVATE_UNLOCK_EVERY_TIME, PrivateAccessRepository, isPrivateBook, requiresPrivateUnlock
 } from '../data/PrivateAccessRepository';
 
-/** 卡片式菜单的统一宽度，与详情页溢出菜单同口径。 */
-const SHELF_MENU_WIDTH: number = 260;
+/**
+ * 卡片式菜单的统一宽度，与详情页溢出菜单同口径。
+ *
+ * 上游 RoundDropdownMenu 本身**没有宽度参数**（RoundDropdownMenu.kt:52-60），由 DropdownMenu 按内容
+ * 自适应；本地 UiMenuPanel 用固定宽。260 在 365vp 视口下占 71%，观感上比上游宽一圈，
+ * 收到 220（约 60%）作为内容自适应的近似值。
+ */
+const SHELF_MENU_WIDTH: number = 220;
 
 /** 网格左右内边距，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
 const BOOKSHELF_GRID_PADDING: number = 8;
@@ -360,7 +367,12 @@ export struct BookshelfPage {
   private getGroupNames(): string[] {
     const names: string[] = ['全部'];
     const userGroups = this.groups.filter((group: BookGroup) => group.groupId > 0);
-    if (this.books.some((book: Book) => (book.groupNames ?? []).length === 0)) { names.push('本地未分组'); }
+    // 「本地未分组」是内置分组，show 由分组管理里的开关控制，默认 false。
+    // 对齐上游：AppDatabase.kt:433 插入时 show = 0，BookGroupDao.kt:24 只取 show > 0，
+    // 所以未手动打开前它不出现在页签上（此前本地是「有未分组书就无条件显示」）。
+    if (this.isLocalNoneGroupVisible() && this.books.some((book: Book) => (book.groupNames ?? []).length === 0)) {
+      names.push(BookGroupRepository.LOCAL_NONE_GROUP_NAME);
+    }
     userGroups.filter((group: BookGroup) => group.show)
       .sort((left: BookGroup, right: BookGroup) => left.order - right.order)
       .forEach((group: BookGroup) => {
@@ -376,6 +388,13 @@ export struct BookshelfPage {
     // 「隐藏没有书籍的分组」只过滤自定义分组，「全部」永远保留。
     if (!this.layout.hideEmptyGroups) { return names; }
     return names.filter((name: string) => name === '全部' || this.countBooksInGroup(name) > 0);
+  }
+
+  /** 「本地未分组」内置分组的当前显示态；库里缺这一行时按上游默认（false）处理。 */
+  private isLocalNoneGroupVisible(): boolean {
+    const builtin = this.groups.find((group: BookGroup) =>
+      group.groupId === BookGroupRepository.LOCAL_NONE_GROUP_ID);
+    return builtin !== undefined && builtin.show;
   }
 
   /** 某个分组下的书籍数量，供隐藏空分组使用。 */
@@ -548,16 +567,21 @@ export struct BookshelfPage {
     return this.layout.showUnread && this.layout.showUnreadNew && (book.lastCheckCount ?? 0) > 0;
   }
 
-  /** 书籍类型标签：图片书（漫画包 / PDF）优先，其余按本地格式映射。 */
+  /**
+   * 书籍类型标签：照上游 `BookItem.kt:754-764` 的五分支写。
+   *
+   * 上游口径是 `when { isAudio -> 音频; isImage -> 漫画; type and webFile > 0 -> 网页文件;
+   * isLocal -> 本地; else -> 小说 }`，文案取 `values-zh-rCN/strings.xml` 的 audio/manga/web_file/local/noval。
+   * 本地 `Book` 没有 `webFile` 位标志（`BookMediaType` 只有 text/audio/image），第三个分支留空实现。
+   * 改前这里按 `book.format` 映射成 EPUB/PDF/MOBI/UMD/TXT，是上游不存在的一档口径。
+   */
   private bookTypeLabel(book: Book): string {
     if (!this.layout.showTip) { return ''; }
-    if (book.bookType === 'image') { return '图片'; }
-    if (book.format === 'epub') { return 'EPUB'; }
-    if (book.format === 'pdf') { return 'PDF'; }
-    if (book.format === 'mobi') { return 'MOBI'; }
-    if (book.format === 'umd') { return 'UMD'; }
-    if (book.format === 'txt') { return 'TXT'; }
-    return '本地';
+    if (book.bookType === 'audio') { return '音频'; }
+    if (book.bookType === 'image') { return '漫画'; }
+    // 上游第三分支是 `(book.type and BookType.webFile) > 0`；本地无 webFile 位，故不实现。
+    if (book.isLocal) { return '本地'; }
+    return '小说';
   }
 
   /** 标签拼接顺序：自定义标签 → 来源分类(去重) → 字数，三段各由对应开关控制。 */
@@ -968,6 +992,26 @@ export struct BookshelfPage {
       .sort((left: BookGroup, right: BookGroup) => left.order - right.order);
   }
 
+  /**
+   * 分组管理面板要列的分组。
+   *
+   * 上游 GroupManageSheet.kt:86 读 `allGroupsFlow`（= flowAll，含 show=0 的内置行），
+   * 所以「本地未分组」在管理面板里始终可见、可切显隐，即使它没显示在页签上。
+   * 本地对应做法：自定义分组 + 内置的「本地未分组」一行。
+   */
+  private getManageGroups(): BookGroup[] {
+    const manage = this.getUserGroups();
+    const builtin = this.groups.find((group: BookGroup) =>
+      group.groupId === BookGroupRepository.LOCAL_NONE_GROUP_ID);
+    if (builtin !== undefined) { manage.unshift(builtin); }
+    return manage;
+  }
+
+  /** 内置分组不可编辑/删除，只有显隐开关可用（对齐上游 GroupManageSheet 对内置行的处理）。 */
+  private isBuiltinGroup(group: BookGroup): boolean {
+    return group.groupId <= 0;
+  }
+
   /** 文件夹根层显示的分组名清单：与页签共用 getGroupNames，保证「全部」与各分组一致。 */
   private getFolderGroups(): string[] {
     return this.getGroupNames();
@@ -1260,7 +1304,7 @@ export struct BookshelfPage {
           })
       }.width('100%').padding({ left: 18, right: 18, bottom: 10 })
 
-      if (this.getUserGroups().length === 0) {
+      if (this.getManageGroups().length === 0) {
         Column() {
           Text('还没有自定义分组').fontSize(14).fontColor(this.themeColorTextTertiary)
           Text('点右上「新建」创建第一个分组').fontSize(12).fontColor('#6E7078').margin({ top: 6 })
@@ -1269,7 +1313,7 @@ export struct BookshelfPage {
         // 长按卡片进入拖拽排序，对应上游 rememberReorderableLazyGridState；
         // editMode(true) 是 Grid 内 ForEach.onMove 生效的前提。
         Grid() {
-          ForEach(this.getUserGroups(), (group: BookGroup) => {
+          ForEach(this.getManageGroups(), (group: BookGroup) => {
             GridItem() {
               Column() {
                 Row() {
@@ -1292,13 +1336,20 @@ export struct BookshelfPage {
                   .margin({ top: 4 }).width('100%')
               }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
                 .alignItems(HorizontalAlign.Start)
-                .onClick(() => { this.openGroupEditor(group); })
+                // 内置分组没有可编辑字段（上游对内置行也不给编辑入口），点了不打开编辑面板。
+                .onClick(() => {
+                  if (this.isBuiltinGroup(group)) { return; }
+                  this.openGroupEditor(group);
+                })
             }
           }, (group: BookGroup) => this.groupCardKey(group))
             .onMove((from: number, to: number) => {
-              const userGroups = this.getUserGroups();
-              if (from < 0 || to < 0 || from >= userGroups.length || to >= userGroups.length) { return; }
-              this.onMoveGroup(userGroups[from].groupId, userGroups[to].groupId);
+              // 网格里第一格是内置的「本地未分组」，不参与排序；
+              // 所以按同一份列表取，涉及内置行的拖动直接忽略。
+              const managed = this.getManageGroups();
+              if (from < 0 || to < 0 || from >= managed.length || to >= managed.length) { return; }
+              if (this.isBuiltinGroup(managed[from]) || this.isBuiltinGroup(managed[to])) { return; }
+              this.onMoveGroup(managed[from].groupId, managed[to].groupId);
             })
         }
         .columnsTemplate('1fr 1fr').columnsGap(10).rowsGap(10)
@@ -2220,16 +2271,20 @@ export struct BookshelfPage {
   }
 
   private moreMenuItems(): UiMenuItem[] {
+    // 图标逐项对齐上游 BookshelfScreen.kt:694-778：远程书籍 Wifi、布局设置 GridView、
+    // 分组管理 ViewCarousel、添加网址 Link、导出书单 UploadFile。
+    // 改前这五项分别是 cloud / list / folder / web / profileSave，其中「导出书单」与「添加本地」
+    // 共用 profileSave，两行图标完全一样。
     return [
-      { key: 'remote_book', title: '远程书籍', icon: 'cloud' },
+      { key: 'remote_book', title: '远程书籍', icon: 'wifi' },
       { key: 'import_local', title: '添加本地', icon: 'profileSave' },
       { key: 'refresh_toc', title: '更新目录', icon: 'profileRefresh' },
-      { key: 'layout', title: '布局设置', icon: 'list' },
-      { key: 'group_manage', title: '分组管理', icon: 'folder' },
-      { key: 'add_url', title: '添加网址', icon: 'web' },
+      { key: 'layout', title: '布局设置', icon: 'grid' },
+      { key: 'group_manage', title: '分组管理', icon: 'carousel' },
+      { key: 'add_url', title: '添加网址', icon: 'link' },
       { key: 'selection_mode', title: '选择模式', icon: 'edit' },
       { key: 'shelf_manage', title: '书架管理', icon: 'bookmark' },
-      { key: 'export_list', title: '导出书单', icon: 'profileSave' },
+      { key: 'export_list', title: '导出书单', icon: 'uploadFile' },
       { key: 'import_list', title: '导入书单', icon: 'cloudDownload' },
       { key: 'log', title: '日志', icon: 'profileHistory' }
     ];
@@ -2380,9 +2435,15 @@ export struct BookshelfPage {
               }, (groupName: string) => groupName)
             }
           }.layoutWeight(1).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+            // Scroll 的内容区默认居中（实测单个分组时 Text 落在 x=535 而不是 x=0）。
+            // 上游 PrimaryScrollableTabRow 是从左往右排，这里显式靠左。
+            .align(Alignment.Start)
           if (this.layout.showBookshelfTabMenu) {
+            // 上游 BookshelfScreen.kt:809-821 是 SmallToggleButton(ToggleStyle.Outlined)：
+            // 描边 1dp、未选中前景 onSurfaceVariant。本地补一条描边，形态从「裸图标」变成「描边按钮」。
             Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'list', glyphSize: 18 }) }
               .width(34).height(34).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(17)
+              .border({ width: 1, color: this.themeColorTextSecondary })
               .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
               .bindPopup(this.groupFilterVisible, {
                 builder: this.GroupFilterMenu,
@@ -2394,7 +2455,13 @@ export struct BookshelfPage {
                 onStateChange: (event: PopupStateChangeParam) => { this.groupFilterVisible = event.isVisible; }
               })
           }
-        }.width('100%').padding({ left: 12, right: 12, bottom: 14 })
+        // 整栏内边距对齐上游 adaptiveHorizontalPaddingTab()：material 引擎下 start 0 / end 16
+        // （AdaptivePadding.kt:19-20）。每项的 8 由 ShelfFilter 自己出（AppTabRow.kt:91）。
+        //
+        // 但 start 取 8 而不是上游的 0：上游第一个分组文字距屏幕左缘只有 8dp（Tab 自带的
+        // padding），而顶栏标题是 M3 的 16dp 起始内边距，两者本来就差 8dp。本地视觉上表现为
+        // 分组比标题「凸出去」一截，所以给整栏补上这 8，让首项文字左缘与标题左缘落在同一条竖线上。
+        }.width('100%').padding({ left: 8, right: 16, bottom: 14 })
       } else {
         Row() {
           Text(`当前分组：${this.activeFilter()}`).fontSize(12).fontColor(this.themeColorTextTertiary).layoutWeight(1)
@@ -2581,6 +2648,9 @@ export struct BookshelfPage {
                     showChapterBadge: false,
                     badgeText: this.unreadTextOf(book),
                     showBadgeDot: this.showBadgeDotOf(book),
+                    // 类型标签画在封面左下角（上游 BookItem.kt:794 的 leftBottomText）；
+                    // 上游是 `matchedSourceLabel ?: bookTypeLabel`，本地没有搜索命中书源这一态。
+                    leftBottomText: this.bookTypeLabel(book),
                     shadowEnabled: this.layout.bookshelfCoverShadow,
                     fillWidth: true,
                     maxWidth: this.bookshelfCoverWidthLimit(),
@@ -2608,27 +2678,15 @@ export struct BookshelfPage {
                   }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 2, bottom: 2 })
                 }
                 if (this.layout.bookshelfGridLayout === 0) {
+                  // 上游 BookItem.kt:135-146：网格卡（gridStyle 0）只有封面 + 书名两样，
+                  // 作者 / 类型标签 / 更新时间 / 标签行都只在列表模式（BookshelfListItem）里出现。
+                  // 改前这四行也画在网格卡上，所以本地网格卡比上游多四行。
                   Text(book.title).fontSize(this.bookshelfTitleFontSize()).fontColor(this.themeColorTextSecondary)
                     .maxLines(this.layout.bookshelfTitleMaxLines)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .width('100%')
                     .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
                     .padding({ left: 4, right: 4, bottom: 4 })
-                  // 作者行：非精简→作者；精简→合成「作者 · N 未读」（上游 subTitle 紧凑分支）。
-                  Text(this.authorLineOf(book)).fontSize(11).fontColor(this.themeColorTextTertiary)
-                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    .width('100%')
-                    .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
-                    .padding({ left: 4, right: 4, bottom: 4 })
-                  if (this.bookTypeLabel(book).length > 0) {
-                    Text(this.bookTypeLabel(book)).fontSize(9).fontColor(this.themeColorAccent)
-                  }
-                  if (this.layout.showLastUpdateTime && !book.isLocal
-                    && book.latestChapterTime !== undefined) {
-                    Text(toTimeAgo(book.latestChapterTime)).fontSize(10)
-                      .fontColor(this.themeColorTextTertiary).opacity(0.5)
-                  }
-                  this.BookTagRow(book)
                 }
                 }
               }.width('100%').alignItems(HorizontalAlign.Center)
@@ -2771,15 +2829,34 @@ export struct BookshelfPage {
 @Component
 struct ShelfFilter {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop label: string = '';
   @Prop selected: boolean = false;
   build() {
-    Column() {
-      Text(this.label).fontSize(12).fontColor(this.selected ? '#C4D1FF' : '#B6B8C2').padding({ left: 7, right: 7, top: 7, bottom: 7 })
-      Row().width(42).height(2).backgroundColor(this.themeColorAccent).borderRadius(1)
-        .opacity(this.selected ? 1 : 0)
-        .animation({ duration: 180, curve: Curve.EaseInOut })
-    }.layoutWeight(1).alignItems(HorizontalAlign.Center)
+    // 上游 AppTabRow.kt:88-92：labelLargeEmphasized = 14sp Medium、maxLines 1 + Ellipsis，
+    // 颜色 if (selected) primary else onSurfaceVariant。本地对应 themeColorAccent / themeColorTextSecondary。
+    //
+    // 选中指示器用 Text 自己的底边描边，不用另起一个 Row：
+    // 描边宽度 = 文字宽 + 左右各 8 的内边距，正好等于 material3 Tab 的宽度（指示器跟 Tab 同宽）。
+    // 改前是 Column 里一个 `Row().width('100%')`，而 Column 在横向 Scroll 里拿到的约束是视口宽，
+    // 于是下划线撑满整屏、文字被居中 —— 这才是「分组居中 + 大片空白」的真身。
+    Text(this.label)
+      .fontSize(14)
+      .fontWeight(this.selected ? FontWeight.Medium : FontWeight.Normal)
+      .fontColor(this.selected ? this.themeColorAccent : this.themeColorTextSecondary)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .textAlign(TextAlign.Center)
+      .padding({ left: 8, right: 8, top: 7, bottom: 7 })
+      // material3 的 Tab 在可滚动 TabRow 里有 ScrollableTabMinWidth = 72.dp 的下限，
+      // 内容不足 72 时由 Tab 居中留白 —— 这才是上游页签之间间距比本地大的原因。
+      // 本地只有「文字宽 + 16」，两个分组挨得很近。这里补上同一个下限。
+      .constraintSize({ minWidth: 72 })
+      .border({
+        width: { bottom: 2 },
+        color: this.selected ? this.themeColorAccent : Color.Transparent
+      })
+      .animation({ duration: 180, curve: Curve.EaseInOut })
   }
 }
 
