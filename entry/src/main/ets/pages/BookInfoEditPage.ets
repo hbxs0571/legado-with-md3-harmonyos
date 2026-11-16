@@ -2,7 +2,7 @@ import { Book, BookMediaType } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
 import { BookCover } from '../components/BookCover';
-import { AppGlyph } from '../components/AppGlyph';
+import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
@@ -24,6 +24,8 @@ const FIELD_MIN_HEIGHT: number = 52;
 const FIELD_M3_HEIGHT: number = 56;
 const FIELD_M3_RADIUS: number = 4;
 const SUMMARY_MAX_LINES: number = 6;
+/** 卡片圆角（上游 `NormalCard` 默认走 `shapes.large` = 16）。 */
+const RADIUS_CARD: number = 16;
 
 /**
  * 书籍信息编辑页。
@@ -73,6 +75,13 @@ export struct BookInfoEditPage {
   @State private description: string = '';
   @State private remark: string = '';
   @State private customTag: string = '';
+  /** 「我的标签」编辑器的草稿列表（上游 `KindEditor` 的 `kindList`，落库时拼回 customTag）。 */
+  @State private kindList: string[] = [];
+  /** 进页面时的标签快照，供「重置」还原（上游 `originalKindList`）。 */
+  private originalKindList: string[] = [];
+  /** 标签编辑弹窗：-1 表示新增，>=0 表示改第几项，null 表示弹窗关闭。 */
+  @State private kindEditingIndex: number = -2;
+  @State private kindEditingText: string = '';
   @State private groupNames: string[] = [];
   @State private bookType: BookMediaType = 'text';
   @State private fixedType: boolean = false;
@@ -93,6 +102,11 @@ export struct BookInfoEditPage {
     this.description = this.book.description ?? '';
     this.remark = this.book.remark ?? '';
     this.customTag = this.book.customTag ?? '';
+    // 我的标签：上游 `BookInfoEditViewModel.kt:68-78` 用 customTag 按逗号/换行切分去重，
+    // 同时留一份 originalKindList 供「重置」还原。
+    this.kindList = (this.book.customTag ?? '').split(/[\n,，]/).map((item: string) => item.trim())
+      .filter((item: string) => item.length > 0);
+    this.originalKindList = this.kindList.slice(0);
     this.groupNames = (this.book.groupNames ?? []).slice(0);
     this.bookType = this.book.bookType ?? 'text';
     this.fixedType = this.book.fixedType === true;
@@ -144,8 +158,11 @@ export struct BookInfoEditPage {
       return;
     }
     this.saving = true;
+    // 我的标签编辑器落库时拼回 customTag（上游 `BookInfoEditViewModel.kt:146`
+    // 的 `book.customTag = currentState.kindList.joinToString(",").ifBlank { null }`）。
+    const mergedTag: string = this.kindList.join(',');
     const saved: boolean = await this.onSave(this.title.trim(), this.author.trim(), this.category.trim(),
-      this.description, this.remark, this.customTag, this.groupNames, this.bookType, this.fixedType,
+      this.description, this.remark, mergedTag, this.groupNames, this.bookType, this.fixedType,
       this.coverUrl.trim());
     this.saving = false;
     if (saved) {
@@ -181,17 +198,165 @@ export struct BookInfoEditPage {
     })
   }
 
-  /** 封面右侧的三个动作，与上游一样竖排等宽。 */
+  /**
+   * 封面右侧的圆形描边图标按钮，对齐上游 `MediumOutlinedButton(icon = ...)`
+   * （`BookInfoEditScreen.kt:194-208` 的三个按钮只有图标、无文字）。
+   */
   @Builder
-  coverAction(icon: 'profileRefresh' | 'profileFolder' | 'profileHistory', label: string, action: () => void) {
+  coverIconAction(icon: AppGlyphName, label: string, action: () => void) {
+    Stack({ alignContent: Alignment.Center }) {
+      AppGlyph({ name: icon, glyphSize: 18, tint: this.themeColorTextSecondary })
+    }
+    .width(44).height(44).borderRadius(22)
+    .border({ width: 1, color: this.themeColorTextTertiary })
+    .onClick(() => action())
+    .accessibilityText(label)
+  }
+
+  /**
+   * 知识卡：上游 `BookInfoEditScreen.kt:296-349` 的 `BookKnowledgeEditCard`。
+   * 一张 `NormalCard`，标题「知识」+ 一行四个 `MediumOutlinedButton`
+   * （人物 / 关系网 / 世界知识 / 事件列表）。本地没有知识库数据，
+   * 四个按钮照上游列出来，点了提示未接入（用户要求按钮做全）。
+   */
+  @Builder
+  knowledgeCard() {
+    Column({ space: SPACE_12 }) {
+      Text('知识').fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Scroll() {
+        Row({ space: SPACE_8 }) {
+          this.knowledgeChip('list', '人物')
+          this.knowledgeChip('group', '关系网')
+          this.knowledgeChip('book', '世界知识')
+          this.knowledgeChip('profileTimeline', '事件列表')
+        }.alignItems(VerticalAlign.Center)
+      }
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .align(Alignment.Start)
+      .width('100%')
+    }
+    .width('100%').alignItems(HorizontalAlign.Start)
+    .padding(16)
+    .backgroundColor(this.inputSurface()).borderRadius(RADIUS_CARD)
+  }
+
+  /** 知识卡的单个描边按钮（上游 `MediumOutlinedButton`）。 */
+  @Builder
+  knowledgeChip(icon: AppGlyphName, label: string) {
     Row() {
-      AppGlyph({ name: icon, glyphSize: 15, tint: this.themeColorTextSecondary })
+      AppGlyph({ name: icon, glyphSize: 16, tint: this.themeColorTextSecondary })
       Text(label).fontSize(13).fontColor(this.themeColorTextPrimary).margin({ left: 6 })
     }
-    .width('100%').height(34).justifyContent(FlexAlign.Center)
-    .backgroundColor(this.themePureBlack ? '#161616' : this.themeColorSurfaceTertiary)
+    .height(34).padding({ left: 12, right: 12 })
+    .border({ width: 1, color: this.themeColorTextTertiary })
     .borderRadius(17)
-    .onClick(() => action())
+    .onClick(() => this.onUnavailableAction(`${label} 未接入`))
+  }
+
+  /**
+   * 我的标签编辑器：上游 `KindEditor`（`BookInfoEditScreen.kt:408-549`）。
+   *
+   * 上游是 `LazyRow` + 可长按拖拽排序的 `KindChip`，右侧两个描边按钮
+   * （重置 / 新增）；点 chip 弹对话框改名，对话框的否定按钮在编辑态是「删除」。
+   * 本地用 `Scroll` + `Row` 承载，拖拽排序不做（ArkUI 的 List 才有 onMove），
+   * 改名/新增/删除/重置四个动作都有。
+   */
+  @Builder
+  kindEditor() {
+    Column({ space: SPACE_8 }) {
+      Text('我的标签').fontSize(FIELD_LABEL_SIZE).fontColor(this.themeColorTextTertiary)
+      Row({ space: SPACE_8 }) {
+        Scroll() {
+          Row({ space: SPACE_8 }) {
+            ForEach(this.kindList, (kind: string, index: number) => {
+              Row() {
+                Text(kind).fontSize(13).fontColor(this.themeColorTextPrimary)
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+              .backgroundColor(this.themePureBlack ? '#161616' : this.themeColorSurfaceTertiary)
+              .borderRadius(8)
+              .onClick(() => {
+                this.kindEditingIndex = index;
+                this.kindEditingText = kind;
+              })
+            }, (kind: string) => kind)
+          }.alignItems(VerticalAlign.Center)
+        }
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .align(Alignment.Start)
+        .layoutWeight(1)
+
+        // 重置：回到进页面时的标签快照（上游 `resetKinds()`）。
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'profileHistory', glyphSize: 16, tint: this.themeColorTextSecondary })
+        }.width(34).height(34).borderRadius(17)
+        .border({ width: 1, color: this.themeColorTextTertiary })
+        .onClick(() => { this.kindList = this.originalKindList.slice(0); })
+
+        // 新增：editingIndex = -1（上游 `:493-494`）。
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'add', glyphSize: 16, tint: this.themeColorTextSecondary })
+        }.width(34).height(34).borderRadius(17)
+        .border({ width: 1, color: this.themeColorTextTertiary })
+        .onClick(() => {
+          this.kindEditingIndex = -1;
+          this.kindEditingText = '';
+        })
+      }.width('100%').alignItems(VerticalAlign.Center)
+    }.width('100%').alignItems(HorizontalAlign.Start)
+  }
+
+  /** 标签编辑对话框：-1 新增、>=0 改名（上游 `:503-548` 的 `AppAlertDialog`）。 */
+  @Builder
+  kindDialog() {
+    Column({ space: SPACE_16 }) {
+      Text(this.kindEditingIndex === -1 ? '添加标签' : '编辑标签')
+        .fontSize(17).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Column() {
+        this.m3Input('标签', this.kindEditingText, '请输入标签',
+          (value: string) => { this.kindEditingText = value; })
+      }.width('100%')
+      Row({ space: SPACE_8 }) {
+        Button(this.kindEditingIndex === -1 ? '取消' : '删除')
+          .layoutWeight(1).height(40)
+          .backgroundColor(this.themeColorSurfaceTertiary)
+          .fontColor(this.themeColorTextPrimary)
+          .onClick(() => { this.onKindDialogDismiss(); })
+        Button('确定')
+          .layoutWeight(1).height(40)
+          .onClick(() => { this.onKindDialogConfirm(); })
+      }.width('100%')
+    }
+    .width('86%').padding(20)
+    .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(22)
+  }
+
+  private onKindDialogConfirm(): void {
+    const trimmed = this.kindEditingText.trim();
+    if (trimmed.length > 0) {
+      const next: string[] = this.kindList.slice(0);
+      if (this.kindEditingIndex === -1) {
+        if (next.indexOf(trimmed) < 0) { next.push(trimmed); }
+      } else {
+        next[this.kindEditingIndex] = trimmed;
+      }
+      // 上游 `onKindListChange` 里再做一次 distinct。
+      this.kindList = Array.from(new Set(next));
+    }
+    this.kindEditingIndex = -2;
+  }
+
+  private onKindDialogDismiss(): void {
+    // 编辑态的否定按钮是「删除」（上游 `:536-546`）。
+    if (this.kindEditingIndex >= 0) {
+      const next: string[] = this.kindList.slice(0);
+      next.splice(this.kindEditingIndex, 1);
+      this.kindList = next;
+    }
+    this.kindEditingIndex = -2;
   }
 
   @Builder
@@ -239,17 +404,22 @@ export struct BookInfoEditPage {
   }
 
   build() {
-    Column() {
-      AppTopBar({
-        title: '书籍信息编辑',
-        collapsed: false,
-        hasNavigation: true,
-        navigationIcon: () => { this.navSlot() },
-        actions: () => { this.topActions() }
-      })
+    // 根节点用 Stack：页面本体 + 标签编辑弹窗浮层（ArkUI 要求 build 只有一个根节点）。
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        AppTopBar({
+          title: '书籍信息编辑',
+          collapsed: false,
+          hasNavigation: true,
+          navigationIcon: () => { this.navSlot() },
+          actions: () => { this.topActions() }
+        })
 
       Scroll() {
         Column({ space: SPACE_16 }) {
+          // 封面行：上游 `BookInfoEditScreen.kt:170-221` —— 左边 110dp 封面，
+          // 右边一列：三个等间距的圆形描边图标按钮（刷新封面 / 选择文件夹 / 还原封面），
+          // 下面 4dp 间隔再跟书籍类型下拉。
           Row({ space: SPACE_16 }) {
             BookCover({
               book: this.book,
@@ -259,48 +429,51 @@ export struct BookInfoEditPage {
               applyAspectRatio: true
             })
             Column({ space: SPACE_8 }) {
-              // 上游三个封面动作（`BookInfoEditScreen.kt:193-208`）：
-              // 「刷新封面」打开 ChangeCoverSheet（从书源拉网络封面）、
-              // 「选择文件夹」走 SelectImageContract 选本地图片、「还原封面」清掉自定义封面。
-              // 本地没有书源，「刷新封面」拉不到东西，所以只留后面两个；
-              // 原来第一个按钮也绑 `onChooseCover`，与第二个完全重复，一并去掉。
-              this.coverAction('profileFolder', '选择文件夹', () => this.onChooseCover())
-              this.coverAction('profileHistory', '还原封面', () => this.onRestoreCover())
-            }.layoutWeight(1)
+              Row({ space: SPACE_12 }) {
+                // 「刷新封面」：上游打开 ChangeCoverSheet 从书源拉网络封面。
+                // 本地没有书源，点了给一句未接入，不删按钮。
+                this.coverIconAction('profileRefresh', '刷新封面', () => this.onUnavailableAction('刷新封面 未接入'))
+                this.coverIconAction('profileFolder', '选择文件夹', () => this.onChooseCover())
+                this.coverIconAction('profileHistory', '还原封面', () => this.onRestoreCover())
+              }.justifyContent(FlexAlign.Center)
+              Blank().height(4)
+              // 书籍类型：上游是 ExposedDropdownMenuBox + AppTextField（readOnly + trailingIcon），
+              // 本地用同形态的圆角 4 输入框 + 右侧展开箭头承载。
+              Row() {
+                Text(this.bookTypeLabel(this.bookType)).fontSize(FIELD_INPUT_SIZE)
+                  .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextTertiary })
+              }
+              .width('100%').height(FIELD_M3_HEIGHT).padding({ left: 16, right: 12 })
+              .backgroundColor(this.inputSurface()).borderRadius(FIELD_M3_RADIUS)
+              .onClick(() => { this.bookTypeMenuVisible = !this.bookTypeMenuVisible; })
+              .bindPopup(this.bookTypeMenuVisible, {
+                builder: this.bookTypePopup,
+                placement: Placement.Bottom,
+                popupColor: '#00000000',
+                enableArrow: false,
+                autoCancel: true,
+                width: BOOK_TYPE_MENU_WIDTH,
+                onStateChange: (event: PopupStateChangeParam) => { this.bookTypeMenuVisible = event.isVisible; }
+              })
+            }.layoutWeight(1).alignItems(HorizontalAlign.Center)
           }.width('100%').alignItems(VerticalAlign.Center)
 
-          // 书籍类型：上游是 ExposedDropdownMenuBox，这里用同一个卡片菜单承载。
-          Column() {
-            this.fieldLabel('书籍类型')
-            Row() {
-              Text(this.bookTypeLabel(this.bookType)).fontSize(FIELD_INPUT_SIZE)
-                .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-              AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextTertiary })
-            }
-            .width('100%').height(FIELD_MIN_HEIGHT).padding({ left: 14, right: 12 })
-            .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-            .onClick(() => { this.bookTypeMenuVisible = !this.bookTypeMenuVisible; })
-            .bindPopup(this.bookTypeMenuVisible, {
-              builder: this.bookTypePopup,
-              placement: Placement.Bottom,
-              popupColor: '#00000000',
-              enableArrow: false,
-              autoCancel: true,
-              width: BOOK_TYPE_MENU_WIDTH,
-              onStateChange: (event: PopupStateChangeParam) => { this.bookTypeMenuVisible = event.isVisible; }
-            })
-          }.width('100%')
+          // 知识卡（上游 `:223-229`）。
+          this.knowledgeCard()
 
-          // 固定书籍类型：上游 SwitchSettingItem，整行可点，开关由 UiSwitch 自绘。
+          // 固定书籍类型（上游 `:231-236` 的 `SwitchSettingItem`）。
           Column() {
             UiSwitch({
               title: '固定书籍类型',
-              detail: '开启后按上面的类型解析正文，不再自动识别',
+              detail: '书籍更新后不覆盖书籍类型',
               value: this.fixedType,
               onChange: (enabled: boolean) => { this.fixedType = enabled; }
             })
-          }.width('100%').backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
+          }.width('100%').backgroundColor(this.inputSurface()).borderRadius(RADIUS_CARD)
 
+          // 七个字段，顺序照上游 `:238-292`：
+          // 书名 → 作者 → 封面链接 → 书源分类 → 我的标签 → 内容简介 → 书籍备注。
           Column() {
             this.m3Input('书名', this.title, '请输入书名', (value: string) => { this.title = value; })
           }.width('100%')
@@ -309,44 +482,20 @@ export struct BookInfoEditPage {
             this.m3Input('作者', this.author, '请输入作者', (value: string) => { this.author = value; })
           }.width('100%')
 
-          // 封面链接：上游 `BookInfoEditScreen.kt:254-260` 的 `cover_url` 输入框。
-          // 本地封面是导入时抽出的图片副本（`covers/<id>.img`），没有可编辑的 URL，
-          // 这个字段只做展示与手工改写：写进去的是 `book.coverUri`，保存时一并落库。
+          // 封面链接：上游 `cover_url` 输入框。本地封面是导入时抽出的图片副本，
+          // 这个字段写进去的是 `book.coverUri`，保存时一并落库（留空表示不改）。
           Column() {
             this.m3Input('封面链接', this.coverUrl, '请输入封面链接', (value: string) => { this.coverUrl = value; })
           }.width('100%')
 
+          // 书源分类：上游 `:262-269` 是 readOnly 的 `source_kind` 展示行。
+          // 本地没有书源，这里展示并允许改写本地的 `category`。
           Column() {
-            this.m3Input('分类', this.category, '请输入分类', (value: string) => { this.category = value; })
+            this.m3Input('书源分类', this.category, '暂无分类', (value: string) => { this.category = value; })
           }.width('100%')
 
-          // 分组多选：上游是固定分组，本地分组是用户自建的可变集合，这里给一个可展开的勾选面板。
-          Column() {
-            this.fieldLabel('分组')
-            Row() {
-              Text(this.groupNames.length > 0 ? this.groupNames.join('、') : '本地未分组')
-                .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
-                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-              AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextTertiary })
-            }
-            .width('100%').height(FIELD_MIN_HEIGHT).padding({ left: 14, right: 12 })
-            .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-            .onClick(() => { this.groupPickerVisible = !this.groupPickerVisible; })
-            .bindPopup(this.groupPickerVisible, {
-              builder: this.groupPopup,
-              placement: Placement.Bottom,
-              popupColor: '#00000000',
-              enableArrow: false,
-              autoCancel: true,
-              width: BOOK_TYPE_MENU_WIDTH,
-              onStateChange: (event: PopupStateChangeParam) => { this.groupPickerVisible = event.isVisible; }
-            })
-          }.width('100%')
-
-          Column() {
-            this.m3Input('自定义标签', this.customTag, '多个标签用逗号分隔',
-              (value: string) => { this.customTag = value; })
-          }.width('100%')
+          // 我的标签（上游 `:271-276` 的 `KindEditor`）。
+          this.kindEditor()
 
           Column() {
             this.fieldLabel('内容简介')
@@ -367,17 +516,53 @@ export struct BookInfoEditPage {
               .constraintSize({ minHeight: 96 }).padding({ left: 16, right: 16, top: 12, bottom: 12 })
               .onChange((value: string) => { this.remark = value; })
           }.width('100%')
+
+          // 分组多选：上游编辑页没有这一项（分组是书架的独立能力），
+          // 本地分组是用户自建的可变集合，保留在这里并排在上游字段之后。
+          Column() {
+            this.fieldLabel('分组')
+            Row() {
+              Text(this.groupNames.length > 0 ? this.groupNames.join('、') : '本地未分组')
+                .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
+                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+              AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextTertiary })
+            }
+            .width('100%').height(FIELD_M3_HEIGHT).padding({ left: 16, right: 12 })
+            .backgroundColor(this.inputSurface()).borderRadius(FIELD_M3_RADIUS)
+            .onClick(() => { this.groupPickerVisible = !this.groupPickerVisible; })
+            .bindPopup(this.groupPickerVisible, {
+              builder: this.groupPopup,
+              placement: Placement.Bottom,
+              popupColor: '#00000000',
+              enableArrow: false,
+              autoCancel: true,
+              width: BOOK_TYPE_MENU_WIDTH,
+              onStateChange: (event: PopupStateChangeParam) => { this.groupPickerVisible = event.isVisible; }
+            })
+          }.width('100%')
         }
         .width('100%')
-        .padding({ left: SPACE_16, right: SPACE_16, top: SPACE_12, bottom: SPACE_16 })
+        .padding({ left: SPACE_16, right: SPACE_16, top: SPACE_16, bottom: SPACE_16 })
       }
-      .layoutWeight(1)
+        .layoutWeight(1)
+        .width('100%')
+        .scrollBar(BarState.Off)
+        .align(Alignment.Top)
+      }
       .width('100%')
-      .scrollBar(BarState.Off)
-      .align(Alignment.Top)
+      .height('100%')
+      .backgroundColor(this.pageSurface())
+
+      // 标签编辑弹窗（上游 `AppAlertDialog`）：kindEditingIndex === -2 表示关闭。
+      if (this.kindEditingIndex !== -2) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column().width('100%').height('100%').backgroundColor('#99000000')
+            .onClick(() => { this.kindEditingIndex = -2; })
+          this.kindDialog()
+        }.width('100%').height('100%').zIndex(100)
+      }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.pageSurface())
   }
 }
