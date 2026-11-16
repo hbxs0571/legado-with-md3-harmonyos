@@ -6,6 +6,7 @@ import { ReaderSettingsRepository } from '../data/ReaderSettingsRepository';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
 import { READER_COLUMN_MODE_TITLES, readerColumnModeTitle } from '../data/ReaderColumnMode';
+import { UiSwitchControl } from '../components/UiSwitchControl';
 import {
   defaultReaderSelectionMenuItems,
   parseReaderSelectionMenuConfig,
@@ -3784,8 +3785,13 @@ struct MenuSettingSwitch {
         Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
         Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.checked })
-        .onChange((enabled: boolean) => this.onChange(enabled))
+      // 与全仓其它开关统一用 UiSwitchControl：SDK 的 Toggle 无法往滑块里放勾，
+      // 且配色不可控。interactive 保持 true —— 原来就是「开关本体可点」，换成整行可点
+      // 会与调用方已挂的 .onClick(...)（如 showNotMigrated）抢同一次点击。
+      UiSwitchControl({
+        checked: this.checked,
+        onChange: (enabled: boolean) => this.onChange(enabled)
+      })
     }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
@@ -3945,8 +3951,11 @@ struct ReaderInfoSwitchRow {
         Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
         Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.checked })
-        .onChange((enabled: boolean) => this.onChange(enabled))
+      // 同上：与全仓开关统一，interactive 保持 true（开关本体可点）。
+      UiSwitchControl({
+        checked: this.checked,
+        onChange: (enabled: boolean) => this.onChange(enabled)
+      })
     }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }

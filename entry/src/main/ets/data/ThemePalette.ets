@@ -37,6 +37,7 @@ export interface ThemePaletteColors {
   surfaceContainerLow: string;
   surfaceContainer: string;
   surfaceContainerHigh: string;
+  surfaceContainerHighest: string;
   /** 仅用于调色板色块预览（上游 `ThemeColorButton` 的上半圆），不参与全局换肤。 */
   secondary: string;
   /** 仅用于调色板色块预览（上游 `ThemeColorButton` 的下半圆），不参与全局换肤。 */
@@ -65,6 +66,7 @@ const DEFAULT_LIGHT: ThemePaletteColors = {
   surfaceContainerLow: '#FFFFFF',
   surfaceContainer: '#F0F1F5',
   surfaceContainerHigh: '#FFFFFF',
+  surfaceContainerHighest: '#E9EAEF',
   secondary: '#5F74B8',
   tertiary: '#4A5FA8',
 };
@@ -78,6 +80,7 @@ const DEFAULT_DARK: ThemePaletteColors = {
   surfaceContainerLow: '#1A1B21',
   surfaceContainer: '#1B1C22',
   surfaceContainerHigh: '#1C1D23',
+  surfaceContainerHighest: '#1D1E24',
   secondary: '#9FB0E8',
   tertiary: '#8A9BD8',
 };
@@ -96,6 +99,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFFFFF',
       surfaceContainer: '#F0F1F5',
       surfaceContainerHigh: '#FFFFFF',
+      surfaceContainerHighest: '#E9EAEF',
       secondary: '#5F74B8',
       tertiary: '#4A5FA8',
     },
@@ -108,6 +112,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1A1B21',
       surfaceContainer: '#1B1C22',
       surfaceContainerHigh: '#1C1D23',
+      surfaceContainerHighest: '#1D1E24',
       secondary: '#9FB0E8',
       tertiary: '#8A9BD8',
     }
@@ -124,6 +129,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#F3F4E9',
       surfaceContainer: '#EEEFE3',
       surfaceContainerHigh: '#E8E9DE',
+      surfaceContainerHighest: '#E2E3D8',
       secondary: '#586249',
       tertiary: '#386663',
     },
@@ -136,6 +142,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1A1C16',
       surfaceContainer: '#1E201A',
       surfaceContainerHigh: '#282B24',
+      surfaceContainerHighest: '#33362E',
       secondary: '#BFCBAD',
       tertiary: '#A0D0CB',
     }
@@ -152,6 +159,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FAF3E5',
       surfaceContainer: '#F4EDDF',
       surfaceContainerHigh: '#EEE8DA',
+      surfaceContainerHighest: '#E8E2D4',
       secondary: '#665E40',
       tertiary: '#43664E',
     },
@@ -164,6 +172,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1E1B13',
       surfaceContainer: '#222017',
       surfaceContainerHigh: '#2D2A21',
+      surfaceContainerHighest: '#38352B',
       secondary: '#D1C6A1',
       tertiary: '#A9D0B3',
     }
@@ -180,6 +189,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#F7F3F2',
       surfaceContainer: '#F1EDEC',
       surfaceContainerHigh: '#EBE7E7',
+      surfaceContainerHighest: '#E5E2E1',
       secondary: '#5F5E5E',
       tertiary: '#5E5B5D',
     },
@@ -192,6 +202,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1C1B1B',
       surfaceContainer: '#201F1F',
       surfaceContainerHigh: '#2A2A2A',
+      surfaceContainerHighest: '#353434',
       secondary: '#C8C6C5',
       tertiary: '#CBC5C7',
     }
@@ -208,6 +219,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFFFFF',
       surfaceContainer: '#FFFFFF',
       surfaceContainerHigh: '#FFFFFF',
+      surfaceContainerHighest: '#FFFFFF',
       secondary: '#000000',
       tertiary: '#000000',
     },
@@ -220,6 +232,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1C1B1B',
       surfaceContainer: '#000000',
       surfaceContainerHigh: '#2A2A2A',
+      surfaceContainerHighest: '#353434',
       secondary: '#FFFFFF',
       tertiary: '#FFFFFF',
     }
@@ -236,6 +249,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#F2F3FA',
       surfaceContainer: '#EDEDF4',
       surfaceContainerHigh: '#E7E8EE',
+      surfaceContainerHighest: '#E1E2E9',
       secondary: '#545F71',
       tertiary: '#6D5677',
     },
@@ -248,6 +262,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#191C20',
       surfaceContainer: '#1D2024',
       surfaceContainerHigh: '#282A2F',
+      surfaceContainerHighest: '#32353A',
       secondary: '#BCC7DC',
       tertiary: '#D9BDE3',
     }
@@ -264,6 +279,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFF1ED',
       surfaceContainer: '#FCEAE5',
       surfaceContainerHigh: '#F7E4E0',
+      surfaceContainerHighest: '#F1DFDA',
       secondary: '#77574D',
       tertiary: '#6B5D2F',
     },
@@ -276,6 +292,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#231917',
       surfaceContainer: '#271D1B',
       surfaceContainerHigh: '#322825',
+      surfaceContainerHighest: '#3D322F',
       secondary: '#E7BDB2',
       tertiary: '#D8C68D',
     }
@@ -292,6 +309,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFF0F2',
       surfaceContainer: '#FAEAED',
       surfaceContainerHigh: '#F4E4E7',
+      surfaceContainerHighest: '#EFDFE2',
       secondary: '#74565F',
       tertiary: '#7D5635',
     },
@@ -304,6 +322,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#22191C',
       surfaceContainer: '#261D20',
       surfaceContainerHigh: '#31282A',
+      surfaceContainerHighest: '#3C3235',
       secondary: '#E2BDC7',
       tertiary: '#EFBC94',
     }
@@ -320,6 +339,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFF0F0',
       surfaceContainer: '#FCEAE9',
       surfaceContainerHigh: '#F6E4E4',
+      surfaceContainerHighest: '#F0DEDE',
       secondary: '#765657',
       tertiary: '#755A2F',
     },
@@ -332,6 +352,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#221919',
       surfaceContainer: '#271D1D',
       surfaceContainerHigh: '#322828',
+      surfaceContainerHighest: '#3D3232',
       secondary: '#E6BDBD',
       tertiary: '#E6C18D',
     }
@@ -348,6 +369,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#F5F2FA',
       surfaceContainer: '#F0ECF4',
       surfaceContainerHigh: '#EAE7EF',
+      surfaceContainerHighest: '#E4E1E9',
       secondary: '#5C5D72',
       tertiary: '#78536B',
     },
@@ -360,6 +382,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1B1B21',
       surfaceContainer: '#1F1F25',
       surfaceContainerHigh: '#2A292F',
+      surfaceContainerHighest: '#34343A',
       secondary: '#C5C4DD',
       tertiary: '#E8B9D5',
     }
@@ -376,6 +399,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#F9F3E5',
       surfaceContainer: '#F4EDDF',
       surfaceContainerHigh: '#EEE8DA',
+      surfaceContainerHighest: '#E8E2D4',
       secondary: '#475D92',
       tertiary: '#01677D',
     },
@@ -388,6 +412,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1E1C13',
       surfaceContainer: '#222017',
       surfaceContainerHigh: '#2C2A21',
+      surfaceContainerHighest: '#37352B',
       secondary: '#B1C5FF',
       tertiary: '#86D1EA',
     }
@@ -404,6 +429,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFF0F1',
       surfaceContainer: '#FBEAEB',
       surfaceContainerHigh: '#F5E4E6',
+      surfaceContainerHighest: '#EFDEE0',
       secondary: '#75565C',
       tertiary: '#4D5C92',
     },
@@ -416,6 +442,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#22191B',
       surfaceContainer: '#261D1F',
       surfaceContainerHigh: '#312829',
+      surfaceContainerHighest: '#3C3234',
       secondary: '#E4BDC3',
       tertiary: '#B6C4FF',
     }
@@ -432,6 +459,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFFFFF',
       surfaceContainer: '#F0F1F5',
       surfaceContainerHigh: '#FFFFFF',
+      surfaceContainerHighest: '#E9EAEF',
       secondary: '#5F74B8',
       tertiary: '#4A5FA8',
     },
@@ -444,6 +472,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#1A1B21',
       surfaceContainer: '#1B1C22',
       surfaceContainerHigh: '#1C1D23',
+      surfaceContainerHighest: '#1D1E24',
       secondary: '#9FB0E8',
       tertiary: '#8A9BD8',
     }
@@ -460,6 +489,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#FFFFFF',
       surfaceContainer: '#FFFFFF',
       surfaceContainerHigh: '#FFFFFF',
+      surfaceContainerHighest: '#FFFFFF',
       secondary: '#000000',
       tertiary: '#000000',
     },
@@ -472,6 +502,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainerLow: '#000000',
       surfaceContainer: '#FFFFFF',
       surfaceContainerHigh: '#FFFFFF',
+      surfaceContainerHighest: '#FFFFFF',
       secondary: '#FFFFFF',
       tertiary: '#FFFFFF',
     }
@@ -519,6 +550,8 @@ export function publishPaletteColors(colors: ThemePaletteColors): void {
   AppStorage.setOrCreate('themeColorSurfaceSecondary', colors.surfaceContainerLow);
   AppStorage.setOrCreate('themeColorSurfaceTertiary', colors.surfaceContainer);
   AppStorage.setOrCreate('themeColorSurfaceElevated', colors.surfaceContainerHigh);
+  // 键名沿用现有 themeColorSurface* 前缀（不写全名 Container，避免 30 多个使用点打错）。
+  AppStorage.setOrCreate('themeColorSurfaceHighest', colors.surfaceContainerHighest);
 }
 
 /** 序号 + `themeMode` + 系统色模式 → 广播当前该用的配色。`themeMode` 三值口径见 `ThemeModeResolver`。 */

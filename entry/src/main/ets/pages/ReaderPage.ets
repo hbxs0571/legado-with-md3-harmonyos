@@ -7931,9 +7931,12 @@ export struct ReaderPage {
                 Text('折叠图片、富文本与分页标记，避免误删源码')
                   .fontSize(11).fontColor('#9A9CA6').margin({ top: 2 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Toggle({ type: ToggleType.Switch, isOn: this.contentEditBodyOnly })
-                .selectedColor('#B9C6FF')
-                .onChange((isOn: boolean) => this.setContentEditBodyOnly(isOn))
+              // 上游这处是 RoundDropdownMenuItem（ContentEditSheet.kt:125-132）里的开关项，
+              // 本地保留「行内开关」的形态，只把 Toggle 换成与全仓一致的 UiSwitchControl。
+              UiSwitchControl({
+                checked: this.contentEditBodyOnly,
+                onChange: (isOn: boolean) => this.setContentEditBodyOnly(isOn)
+              })
             }
             .width('100%').padding({ top: 4, bottom: 10 })
             TextInput({ text: this.contentEditTitle, placeholder: '章节名称' })

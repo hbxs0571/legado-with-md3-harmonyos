@@ -182,6 +182,7 @@ export function hasCustomColor(colors: CustomThemeColorSet): boolean {
  *   surfaceContainerLow = labelContainerColor
  *   surfaceContainer    = backgroundColor
  *   surfaceContainerHigh= backgroundColor
+ *   surfaceContainerHighest = backgroundColor
  * 两个预览色位：secondary = secondaryColor，tertiary = secondaryColor（上游 `tertiary = secondaryColor`）。
  */
 export function buildCustomPaletteColors(
@@ -203,6 +204,7 @@ export function buildCustomPaletteColors(
     surfaceContainerLow: labelContainer,
     surfaceContainer: background,
     surfaceContainerHigh: background,
+    surfaceContainerHighest: background,
     secondary: secondary,
     tertiary: secondary
   };
@@ -239,6 +241,7 @@ export function resolveCustomPaletteColors(
     surfaceContainerLow: fallback.surfaceContainerLow,
     surfaceContainer: fallback.surfaceContainer,
     surfaceContainerHigh: fallback.surfaceContainerHigh,
+    surfaceContainerHighest: fallback.surfaceContainerHighest,
     secondary: fallback.secondary,
     tertiary: fallback.tertiary
   };
