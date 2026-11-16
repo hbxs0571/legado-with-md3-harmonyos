@@ -799,10 +799,13 @@ export struct CatalogPage {
                     Stack({ alignContent: Alignment.Center }) {
                       Column()
                         .width(18).height(18).borderRadius(9)
-                        .backgroundColor(this.selectedChapterIndexes.has(chapter.index) ? '#C4D1FF' : '#00000000')
-                        .border({ width: 1.5, color: this.selectedChapterIndexes.has(chapter.index) ? '#C4D1FF' : '#7A7D88' })
+                        .backgroundColor(this.selectedChapterIndexes.has(chapter.index) ? this.themeColorAccent : '#00000000')
+                        .border({ width: 1.5, color: this.selectedChapterIndexes.has(chapter.index) ? this.themeColorAccent : '#7A7D88' })
                       if (this.selectedChapterIndexes.has(chapter.index)) {
-                        AppGlyph({ name: 'profileCheck', glyphSize: 12, tint: '#1A1B21' })
+                        // 对勾是 onPrimary 语义，但勾圈底已随主题（themeColorAccent），
+                        // 原来的 #1A1B21 只适合深色的浅 accent；浅色主题 accent 是深蓝，
+                        // 深勾会糊在底上，改取 surfaceContainerLow（深色≈#1A1B21、浅色=白）。
+                        AppGlyph({ name: 'profileCheck', glyphSize: 12, tint: this.themeColorSurfaceSecondary })
                       }
                     }.width(26).margin({ right: 2 })
                   }
@@ -962,7 +965,7 @@ export struct CatalogPage {
                 }
                 .width('100%')
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-                .backgroundColor(this.isCurrentChapterItem(bookmark.chapterIndex) ? '#303442' : this.themeColorSurfaceSecondary)
+                .backgroundColor(this.isCurrentChapterItem(bookmark.chapterIndex) ? this.themeColorSurfaceTertiary : this.themeColorSurfaceSecondary)
                 .borderRadius(12)
                 .onClick(() => this.onEditBookmark(bookmark.id))
                 .gesture(LongPressGesture({ duration: 500 })
@@ -1020,7 +1023,7 @@ export struct CatalogPage {
                 }
               }
               .width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .backgroundColor(this.isCurrentChapterItem(marking.chapterIndex) ? '#303442' : this.themeColorSurfaceSecondary)
+              .backgroundColor(this.isCurrentChapterItem(marking.chapterIndex) ? this.themeColorSurfaceTertiary : this.themeColorSurfaceSecondary)
               .borderRadius(12).margin({ bottom: 6 })
               .onClick(() => this.onEditMarking(marking.id))
               .gesture(LongPressGesture({ duration: 500 })

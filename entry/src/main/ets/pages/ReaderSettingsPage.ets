@@ -407,27 +407,31 @@ export struct ReaderSettingsPage {
   // 浮动图标显示开关改为读 @Prop showTitleBarIcons（上游 showTitleBarIcons 字段）。
 
   /**
-   * 把「按形态解析后的 13 个颜色」广播进 AppStorage，供本 struct 与 17 个私有行组件读取。
+   * 把 13 个颜色广播进 AppStorage，供本 struct 与 17 个私有行组件读取。
    * 口径与 pages/Index.ets 的 publishThemeCardStyle() 一致。
-   * asSheet 为真时一律取改造前的深色字面量——阅读器内浮层压在纸面上，深色是它对的位置；
-   * 只有全屏形态（设置 → 阅读界面）跟随应用主题。
+   *
+   * 浮层与全屏两种形态**取同一套主题色**，不再按 asSheet 分叉。上游阅读域浮层统一走
+   * `AppModalBottomSheet`（AppModalBottomSheet.kt:61-64）：容器取 `surfaceContainer`、
+   * 内容取 `onSurface`、抓手取 `onSurfaceVariant`；面板里的卡片取 `surfaceContainerLow`
+   * （ReaderBookSheet.kt:544/861），文字与强调色全走 `colorScheme`，没有一处字面量。
+   * 所以「浮层压在纸面上就该固定深色」是本地的旧口径，与上游不符，已删。
    */
   private publishReaderSetColors(): void {
-    const isSheet = this.asSheet;
     const cardBg = this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary;
-    AppStorage.setOrCreate('rsetTextPrimary', isSheet ? '#E5E6EB' : this.themeColorTextPrimary);
-    AppStorage.setOrCreate('rsetTextSecondary', isSheet ? '#D9DAE0' : this.themeColorTextSecondary);
-    AppStorage.setOrCreate('rsetTextTertiary', isSheet ? '#AEB0B9' : this.themeColorTextTertiary);
-    AppStorage.setOrCreate('rsetTextDisabled', isSheet ? '#777984' : this.themeColorTextTertiary);
-    AppStorage.setOrCreate('rsetAccent', isSheet ? '#C6D3FF' : this.themeColorAccent);
-    AppStorage.setOrCreate('rsetCardBg', isSheet ? '#202127' : cardBg);
-    AppStorage.setOrCreate('rsetInnerBg', isSheet ? '#292A31' : this.themeColorSurfaceTertiary);
-    AppStorage.setOrCreate('rsetChipBg', isSheet ? '#15161B' : this.themeColorSurfaceTertiary);
-    AppStorage.setOrCreate('rsetChipBgAlt', isSheet ? '#1E1F25' : this.themeColorSurfaceTertiary);
-    AppStorage.setOrCreate('rsetSelectedBg', isSheet ? '#454B62' : this.themeColorAccent);
-    AppStorage.setOrCreate('rsetSelectedText', isSheet ? '#ECECF0' : '#FFFFFF');
-    AppStorage.setOrCreate('rsetTrack', isSheet ? '#454751' : this.themeColorSurfaceTertiary);
-    AppStorage.setOrCreate('rsetHandle', isSheet ? '#C5C6CD' : this.themeColorTextTertiary);
+    AppStorage.setOrCreate('rsetTextPrimary', this.themeColorTextPrimary);
+    AppStorage.setOrCreate('rsetTextSecondary', this.themeColorTextSecondary);
+    AppStorage.setOrCreate('rsetTextTertiary', this.themeColorTextTertiary);
+    AppStorage.setOrCreate('rsetTextDisabled', this.themeColorTextTertiary);
+    AppStorage.setOrCreate('rsetAccent', this.themeColorAccent);
+    AppStorage.setOrCreate('rsetCardBg', cardBg);
+    AppStorage.setOrCreate('rsetInnerBg', this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetChipBg', this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetChipBgAlt', this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetSelectedBg', this.themeColorAccent);
+    // 选中 chip 上是强调色底，文字取 onPrimary；本地没有 OnPrimary 键，沿用原来的白。
+    AppStorage.setOrCreate('rsetSelectedText', '#FFFFFF');
+    AppStorage.setOrCreate('rsetTrack', this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetHandle', this.themeColorTextTertiary);
   }
 
   // asSheet 是 @Prop，父组件切形态时 aboutToAppear 不会再跑，必须靠 watch 重算。
@@ -813,7 +817,9 @@ export struct ReaderSettingsPage {
         }.padding({ left: 14, right: 14, top: 10, bottom: 16 })
       }
     }.width('100%').height('100%')
-      .backgroundColor(this.asSheet ? '#D91A1B21' : this.themeColorSurfaceSecondary)
+      // 浮层底与全屏底都取主题：上游 AppModalBottomSheet.kt:62 的 sheetContainerColor
+      // 是 `colorScheme.surfaceContainer`（本地 themeColorSurfaceTertiary），不是固定深色。
+      .backgroundColor(this.asSheet ? this.themeColorSurfaceTertiary : this.themeColorSurfaceSecondary)
       .borderRadius(this.asSheet ? 22 : 0).clip(this.asSheet)
   }
 
@@ -3592,7 +3598,9 @@ export struct ReaderSettingsPage {
         Column() {
           this.settingsContent(true)
         }.width(this.settingsSheetWidth()).height(this.settingsSheetHeight()).alignSelf(ItemAlign.Center)
-          .backgroundColor('#D91A1B21').borderRadius(22)
+          // 与内层同一口径（surfaceContainer）；原来这里是 #D91A1B21（85% 的 surfaceContainerLow），
+          // 内外两层都要改，只改内层会被这层固定深色盖掉。
+          .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(22)
           .margin({ left: 8, right: 8, bottom: this.selectedSettingsTab === 2 ? 0 : 16 })
           // 信息页在上游不是底部弹层，而是菜单内的路由页（ReadBookMenuBar.kt:660-668），
           // 所以它在本地居中显示、不贴底；-18 只是把居中位置往视觉中心再抬一点，

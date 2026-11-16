@@ -187,6 +187,12 @@ export struct ReaderPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  // 「编辑内容」与「设置编码」两个浮层原来整块写死深色字面量，切主题纹丝不动。
+  // 按 ThemePalette.publishPaletteColors() 的既有映射换成主题键：
+  // 主文字=onSurface(themeColorTextPrimary)、次要文字=onSurfaceVariant(themeColorTextTertiary)、
+  // 输入框底=surfaceContainer(themeColorSurfaceTertiary)、强调=primary(themeColorAccent)。
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   /**
    * 状态栏高度（vp），由 `pages/Index.ets` 的 `publishAppTopInset()` 广播。
    *
@@ -7915,21 +7921,22 @@ export struct ReaderPage {
 
       if (this.contentEditVisible) {
         Stack({ alignContent: Alignment.Center }) {
-          Column().width('100%').height('100%').backgroundColor('#99000000')
+          // 遮罩用 M3 的 scrim 口径 Black α0.32（0x52），原来是 0x99 = 60%，比上游深一倍。
+          Column().width('100%').height('100%').backgroundColor('#52000000')
             .onClick(() => this.contentEditVisible = false)
           Column() {
             Row() {
-              Text('编辑内容').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+              Text('编辑内容').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               Blank()
-              Text('取消').fontSize(14).fontColor('#C8C9D0').onClick(() => this.contentEditVisible = false)
+              Text('取消').fontSize(14).fontColor(this.themeColorTextTertiary).onClick(() => this.contentEditVisible = false)
             }.width('100%').padding({ bottom: 14 })
             // 「仅正文」开关：把 <img>/<usehtml>/[newpage] 折叠成〔图片1〕这类占位，
             // 对齐上游 ReadContentEditDelegate 的 bodyOnly 开关（ReaderBodyOnlyFilter）。
             Row() {
               Column() {
-                Text('仅正文').fontSize(14).fontColor('#ECEEF2')
+                Text('仅正文').fontSize(14).fontColor(this.themeColorTextPrimary)
                 Text('折叠图片、富文本与分页标记，避免误删源码')
-                  .fontSize(11).fontColor('#9A9CA6').margin({ top: 2 })
+                  .fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               // 上游这处是 RoundDropdownMenuItem（ContentEditSheet.kt:125-132）里的开关项，
               // 本地保留「行内开关」的形态，只把 Toggle 换成与全仓一致的 UiSwitchControl。
@@ -7940,12 +7947,12 @@ export struct ReaderPage {
             }
             .width('100%').padding({ top: 4, bottom: 10 })
             TextInput({ text: this.contentEditTitle, placeholder: '章节名称' })
-              .width('100%').height(48).fontSize(15).fontColor('#ECEEF2')
-              .backgroundColor('#292A31').borderRadius(10).padding({ left: 12, right: 12 })
+              .width('100%').height(48).fontSize(15).fontColor(this.themeColorTextPrimary)
+              .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(10).padding({ left: 12, right: 12 })
               .onChange((value: string) => this.contentEditTitle = value)
             TextArea({ text: this.contentEditBody, placeholder: '章节正文' })
               .width('100%').layoutWeight(1).margin({ top: 10 })
-              .fontSize(15).fontColor('#ECEEF2').backgroundColor('#292A31')
+              .fontSize(15).fontColor(this.themeColorTextPrimary).backgroundColor(this.themeColorSurfaceTertiary)
               .borderRadius(10).padding(12)
               .onChange((value: string) => this.contentEditBody = value)
             Row() {
@@ -7957,8 +7964,9 @@ export struct ReaderPage {
                   this.contentEditBody = this.contentEditBodyOnly
                     ? toBodyOnly(this.content, this.contentEditHiddenSpans) : this.content;
                 })
-              Text('保存').fontSize(14).fontColor('#101116').textAlign(TextAlign.Center)
-                .width(84).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(18)
+              // 保存按钮：底=primary、字=onPrimary；本地没有 OnPrimary 键，用 surfacePrimary 近似。
+              Text('保存').fontSize(14).fontColor(this.themeColorSurfacePrimary).textAlign(TextAlign.Center)
+                .width(84).padding({ top: 10, bottom: 10 }).backgroundColor(this.themeColorAccent).borderRadius(18)
                 .onClick(() => {
                   const currentPage = this.localReaderPages[this.currentPageIndex];
                   this.pendingBookmarkTargetPosition = currentPage?.startPosition ?? 0;
@@ -7998,20 +8006,21 @@ export struct ReaderPage {
 
       if (this.charsetDialogVisible) {
         Stack({ alignContent: Alignment.Center }) {
-          Column().width('100%').height('100%').backgroundColor('#99000000')
+          // 遮罩同「编辑内容」浮层：M3 scrim = Black α0.32（0x52）。
+          Column().width('100%').height('100%').backgroundColor('#52000000')
             .onClick(() => {
               this.charsetDialogVisible = false;
               this.charsetOptionsExpanded = false;
             })
           Column() {
-            Text('设置编码').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+            Text('设置编码').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               .width('100%').margin({ bottom: 16 })
             Row() {
               TextInput({ text: this.charsetInput, placeholder: '输入或选择字符集' })
-                .layoutWeight(1).height(48).fontSize(14).fontColor('#ECEEF2')
-                .backgroundColor('#292A31').borderRadius(10).padding({ left: 12, right: 12 })
+                .layoutWeight(1).height(48).fontSize(14).fontColor(this.themeColorTextPrimary)
+                .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(10).padding({ left: 12, right: 12 })
                 .onChange((value: string) => this.charsetInput = value)
-              Text(this.charsetOptionsExpanded ? '⌃' : '⌄').fontSize(22).fontColor('#D9DAE0')
+              Text(this.charsetOptionsExpanded ? '⌃' : '⌄').fontSize(22).fontColor(this.themeColorTextTertiary)
                 .width(38).height(48).textAlign(TextAlign.Center)
                 .onClick(() => this.charsetOptionsExpanded = !this.charsetOptionsExpanded)
             }.width('100%')
@@ -8020,9 +8029,9 @@ export struct ReaderPage {
                 Column() {
                   ForEach(READER_CHARSETS, (charset: string) => {
                     Row() {
-                      Text(charset).fontSize(14).fontColor('#E1E2E7').layoutWeight(1)
+                      Text(charset).fontSize(14).fontColor(this.themeColorTextPrimary).layoutWeight(1)
                       if (this.charsetInput.trim().toLowerCase() === charset.toLowerCase()) {
-                        Text('✓').fontSize(14).fontColor('#C5D0FF')
+                        Text('✓').fontSize(14).fontColor(this.themeColorAccent)
                       }
                     }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
                       .onClick(() => {
@@ -8036,15 +8045,16 @@ export struct ReaderPage {
             }
             Row() {
               Blank().layoutWeight(1)
-              Text('取消').fontSize(14).fontColor('#B9BBC4').padding({ left: 14, right: 14, top: 10, bottom: 10 })
+              Text('取消').fontSize(14).fontColor(this.themeColorTextTertiary).padding({ left: 14, right: 14, top: 10, bottom: 10 })
                 .onClick(() => {
                   this.charsetDialogVisible = false;
                   this.charsetOptionsExpanded = false;
                 })
-              Text('确定').fontSize(14).fontColor('#C5D0FF').padding({ left: 14, right: 14, top: 10, bottom: 10 })
+              Text('确定').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, top: 10, bottom: 10 })
                 .onClick(() => this.applyCharset())
             }.width('100%').margin({ top: 12 })
           }
+          // 纯黑是本地功能开关（上游没有这个概念），保留；其余走主题 surfaceContainerHigh。
           .width('86%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(20)
         }
         .width('100%').height('100%')
