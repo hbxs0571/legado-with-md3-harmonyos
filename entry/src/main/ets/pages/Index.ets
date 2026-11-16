@@ -3181,6 +3181,39 @@ struct Index {
     return fade.combine(TransitionEffect.scale({ x: 0.92, y: 0.92 }).animation({ curve: curves.springMotion(0.3, 0.85) }));
   }
 
+  /**
+   * 非阅读页的路由转场。
+   *
+   * 对齐上游 `MainActivity.kt:805-877` 的 NavDisplay transitionSpec / popTransitionSpec：
+   * 进入 = 新页从右侧滑入 + 淡入，旧页左移并淡出；
+   * 返回 = 旧页滑回 + 淡入，当前页缩小并淡出。
+   * 时长常量出处 `ModalOverlaySceneStrategy.kt:37-38`（480 / 360）。
+   *
+   * 与上游的三处刻意偏差：
+   * 1. 位移用固定 vp（进 40 / 退 -60）而不是上游的整屏宽。上游 `initialOffset = { fullWidth -> fullWidth }`，
+   *    本地要拿整屏宽得先算 display 的 vp，且横竖屏、折叠屏各不同；固定 vp 在这个单页容器里观感足够。
+   * 2. 时长 280 / 220 而不是 480 / 360。ArkUI 的 `Curve.FastOutSlowIn` 与 Compose 同名 easing 接近，
+   *    但帧率与合成路径不同，480ms 在这个容器里明显拖沓。
+   * 3. 上游靠 NavDisplay 知道方向（进入/返回两套 spec）；本地是同一个 Stack 里 if/else 换子树，
+   *    组件无法知道自己是被推入还是被弹出，所以用 `asymmetric` 让「出现」演滑入、「消失」演左移淡出。
+   *    返回时出现的一方是「被返回的那一页」，它也演滑入，看起来会略像又前进了一次——
+   *    这是本地路由模型带来的固有偏差，不追求与上游逐帧一致。
+   *
+   * 主 tab 的 Swiper 不挂这个：Swiper 自己就有左右滑动动画，再叠 translate 会变成「滑动两次」。
+   */
+  private routeTransition(): TransitionEffect {
+    return TransitionEffect.asymmetric(
+      // 出现：从右滑入一点 + 淡入
+      TransitionEffect.translate({ x: 40, y: 0 })
+        .combine(TransitionEffect.OPACITY)
+        .animation({ duration: 280, curve: Curve.FastOutSlowIn }),
+      // 消失：左移一点 + 淡出
+      TransitionEffect.translate({ x: -60, y: 0 })
+        .combine(TransitionEffect.OPACITY)
+        .animation({ duration: 220, curve: Curve.FastOutSlowIn })
+    );
+  }
+
   /** 阅读界面共享元素动画开关。上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
   private selectThemeReaderSharedElement(context: Context, enabled: boolean): void {
     this.themeReaderSharedElement = enabled;
@@ -8157,6 +8190,7 @@ private canWriteInto(dir: string): boolean {
           onOpenEditPage: () => { this.route = AppRoute.BOOK_INFO_EDIT; },
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.BOOK_INFO_EDIT) {
         BookInfoEditPage({
           book: this.selectedBook,
@@ -8175,6 +8209,7 @@ private canWriteInto(dir: string): boolean {
           onRestoreCover: () => this.restoreBookCover(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {
         LocalBookImportPage({
           candidates: this.localBookImportCandidates,
@@ -8184,21 +8219,25 @@ private canWriteInto(dir: string): boolean {
           },
           onImportSelected: (uris: string[]) => this.importSelectedLocalBooks(uris)
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.SUBSCRIPTION_RULES) {
         SubscriptionRulesPage({
           onBack: () => this.route = AppRoute.SUBSCRIPTIONS,
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.SUBSCRIPTION_FAVORITES) {
         SubscriptionFavoritesPage({
           onBack: () => this.route = AppRoute.SUBSCRIPTIONS,
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.SUBSCRIPTION_SOURCE_MANAGE) {
         SubscriptionSourceManagePage({
           onBack: () => this.route = AppRoute.SUBSCRIPTIONS,
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.READER || this.route === AppRoute.CATALOG ||
         (this.route === AppRoute.READER_SETTINGS && this.settingsReturnRoute === AppRoute.READER) ||
         this.route === AppRoute.READ_ALOUD_SETTINGS) {
@@ -8841,6 +8880,7 @@ private canWriteInto(dir: string): boolean {
             this.openReaderSearchResult(chapterIndex, position, items, index),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.SEARCH) {
         SearchPage({
           books: this.books,
@@ -8859,6 +8899,7 @@ private canWriteInto(dir: string): boolean {
           onSourceScopeChange: (enabled: boolean) => this.searchPageSourceScope = enabled,
           onExactMatchChange: (enabled: boolean) => this.searchPageExactMatch = enabled
         })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.PROFILE_SUBPAGE) {
         if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_MANAGE) {
           BookSourceManagePage({ onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
