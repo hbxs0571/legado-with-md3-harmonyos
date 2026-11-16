@@ -548,7 +548,6 @@ struct Index {
   @State readerHideNavigationBar: boolean = false;
   @State readerImagePreviewOpen: boolean = false;
   @State readerImagePreviewCloseRevision: number = 0;
-  @State showReaderQuickActions: boolean = false;
   @State autoReadSpeed: number = 10;
   @State readerPageAnimation: number = 0;
   @State readerAnimationSpeed: number = 2;
@@ -3850,7 +3849,6 @@ struct Index {
       this.readerClickRegionActions = settings.clickRegionActions;
       this.readerHideStatusBar = settings.hideStatusBar;
       this.readerHideNavigationBar = settings.hideNavigationBar;
-      this.showReaderQuickActions = settings.showQuickActions;
       this.autoReadSpeed = settings.autoReadSpeed;
       this.readerPageAnimation = settings.pageAnimation;
       this.readerAnimationSpeed = settings.animationSpeed;
@@ -4064,7 +4062,8 @@ struct Index {
         clickRegionActions: this.readerClickRegionActions,
         hideStatusBar: this.readerHideStatusBar,
         hideNavigationBar: this.readerHideNavigationBar,
-        showQuickActions: this.showReaderQuickActions,
+        // 快捷图标行（本地独有形态）已按上游删除，快照恒写 false 以保持存储结构不变。
+        showQuickActions: false,
         autoReadSpeed: this.autoReadSpeed,
         pageAnimation: this.readerPageAnimation,
         animationSpeed: this.readerAnimationSpeed,
@@ -5442,12 +5441,6 @@ struct Index {
     this.readerImagePreviewOpen = false;
   }
 
-  private setReaderQuickActions(enabled: boolean): void {
-    this.showReaderQuickActions = enabled;
-    this.readerSettingsRevision += 1;
-    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
-  }
-
   private async restoreImportedBooks(context: Context): Promise<void> {
     this.bookGroups = await BookGroupRepository.load(context);
     const importedBooks = await BookRepository.loadImportedBooks(context);
@@ -6132,7 +6125,6 @@ private canWriteInto(dir: string): boolean {
     this.readerShowMenuIcon = result.settings.showMenuIcon;
     this.readerShowReadTitleAddition = result.settings.showReadTitleAddition;
     this.readerMenuAlpha = result.settings.menuAlpha;
-      this.showReaderQuickActions = result.settings.showQuickActions;
       this.autoReadSpeed = result.settings.autoReadSpeed;
       this.readerPageAnimation = result.settings.pageAnimation;
       this.readerAnimationSpeed = result.settings.animationSpeed;
@@ -8201,7 +8193,6 @@ private canWriteInto(dir: string): boolean {
             darkStatusIcon: this.getDarkStatusIconSetting(),
             readerNightMode: this.readerNightMode,
             eyeProtectionActive: this.isEyeProtectionActive(),
-            showQuickActions: this.showReaderQuickActions,
             showControlsOnAppear: this.readerControlsOpenOnReturn,
             onControlsShown: (): void => { this.readerControlsOpenOnReturn = false; },
             showBottomActionText: this.showReaderBottomActionText,
@@ -8706,7 +8697,6 @@ private canWriteInto(dir: string): boolean {
               onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
               onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
               onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-              showQuickActions: this.showReaderQuickActions,
               asSheet: true,
               openBottomActionConfigOnAppear: this.readerSettingsOpenBottomActionConfig,
               onBack: () => {
@@ -8743,8 +8733,7 @@ private canWriteInto(dir: string): boolean {
               onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
                 this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
               onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
-              onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
-              onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
+              onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
             })
           } else if (this.route === AppRoute.READ_ALOUD_SETTINGS) {
             ReaderAloudSettingsPage({
@@ -9495,7 +9484,6 @@ private canWriteInto(dir: string): boolean {
             onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
             onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-            showQuickActions: this.showReaderQuickActions,
             asSheet: false,
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
@@ -9528,8 +9516,7 @@ private canWriteInto(dir: string): boolean {
             onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
               this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
             onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
-            onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
-            onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
+            onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_ALOUD_SETTINGS) {
           AppReadAloudSettingsPage({
@@ -9864,7 +9851,6 @@ private canWriteInto(dir: string): boolean {
             onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
             onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-            showQuickActions: this.showReaderQuickActions,
             asSheet: false,
             onBack: () => this.route = this.profileDetailReturnRoute,
             onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
@@ -9897,8 +9883,7 @@ private canWriteInto(dir: string): boolean {
             onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
               this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
             onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
-            onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
-            onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
+            onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
           })
         }
         } else {
@@ -10157,7 +10142,6 @@ private canWriteInto(dir: string): boolean {
           onEyeProtectionStartTimeChange: (value: string) => this.setEyeProtectionStartTime(value),
           onEyeProtectionEndTimeChange: (value: string) => this.setEyeProtectionEndTime(value),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-          showQuickActions: this.showReaderQuickActions,
           asSheet: false,
           onBack: () => this.route = this.settingsReturnRoute,
           onFontSizeChange: (fontSize: number) => this.setReaderFontSize(fontSize),
@@ -10190,8 +10174,7 @@ private canWriteInto(dir: string): boolean {
           onUpdateBackgroundStyle: (index: number, name: string, dayColor: string, nightColor: string): void =>
             this.updateReaderBackgroundStyle(index, name, dayColor, nightColor),
           onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
-          onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to),
-          onQuickActionsChange: (enabled: boolean) => this.setReaderQuickActions(enabled)
+          onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
         })
         }
         // 书签编辑面板挂在外层 Stack，阅读页与「所有书签」页都能唤起

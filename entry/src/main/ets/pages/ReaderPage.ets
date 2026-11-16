@@ -432,7 +432,6 @@ export struct ReaderPage {
   @Prop backgroundAlpha: number = 100;
   /** 状态栏图标是否用深色；上游 ReadBookConfig.kt:552-553 darkStatusIcon / darkStatusIconNight。 */
   @Prop @Watch('onDarkStatusIconChanged') darkStatusIcon: boolean = true;
-  @Prop showQuickActions: boolean = false;
   @Prop showControlsOnAppear: boolean = false;
   @Prop showBottomActionText: boolean = true;
   @Prop bottomIconStyle: number = 1;
@@ -7342,16 +7341,6 @@ export struct ReaderPage {
             this.readerFloatingIconRow(this.titleBarIconPosition)
           }
 
-          if (this.showQuickActions) {
-            Row() {
-              ReaderControl({ kind: 'search', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: () => this.onOpenSearchContent() })
-              ReaderControl({ kind: 'autoPage', active: this.autoPageActive, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: (): void => this.toggleAutoPage() })
-              ReaderControl({ kind: 'catalog', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: () => this.onOpenCatalog() })
-              ReaderControl({ kind: 'voice', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: (): void => { this.onUnavailableAction('朗读播放尚未迁移'); }, onLongSelect: (): void => { this.onOpenReadAloud(); } })
-              ReaderControl({ kind: 'settings', active: false, menuForeground: this.readerMenuForeground(), menuAccent: this.readerMenuAccentTint(), itemFill: this.readerMenuItemFill(false, this.titleBarIconStyle), itemFillSelected: this.readerMenuSelectedFill(), onSelect: () => this.onOpenSettings() })
-            }.width('100%').justifyContent(FlexAlign.Start).padding({ left: 18, right: 18, top: 8, bottom: 8 })
-          }
-
           Blank().layoutWeight(1)
 
           // KI-E3：位置 2/3 的浮动图标行贴在菜单浮层上方（上游 ReadBookMenuBar.kt:310-330）。
@@ -8066,30 +8055,6 @@ function mixHexColor(first: string, second: string, otherRatio: number): string 
     out += Math.max(0, Math.min(255, mixed)).toString(16).padStart(2, '0').toUpperCase();
   }
   return out;
-}
-
-@Component
-struct ReaderControl {
-  @Prop kind: ReaderControlKind = 'catalog';
-  @Prop active: boolean = false;
-  /** 菜单前景色（文字与图标），由 ReaderPage 按菜单配色折算后传入。 */
-  @Prop menuForeground: string = '#D5C2C6';
-  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
-  @Prop menuAccent: string = '#FFB1C8';
-  /** 项容器底色（未选中）。取菜单容器色，见 readerMenuItemFill。 */
-  @Prop itemFill: string = '#00000000';
-  /** 项容器底色（选中）。近似上游 secondaryContainer，见 readerMenuSelectedFill。 */
-  @Prop itemFillSelected: string = '#00000000';
-  onSelect: () => void = () => {};
-  onLongSelect: () => void = () => {};
-
-  build() {
-    Stack({ alignContent: Alignment.Center }) {
-      ReaderControlGlyph({ kind: this.kind, glyphSize: 19, active: this.active, menuForeground: this.menuForeground, menuAccent: this.menuAccent })
-    }.width(36).height(36).backgroundColor(this.active ? this.itemFillSelected : this.itemFill).borderRadius(20)
-      .parallelGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => { this.onLongSelect(); }))
-      .onClick(() => this.onSelect())
-  }
 }
 
 @Component

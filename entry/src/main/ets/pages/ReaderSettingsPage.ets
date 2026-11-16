@@ -341,7 +341,6 @@ export struct ReaderSettingsPage {
   @Prop hideNavigationBar: boolean = false;
   @Prop infoSettings: ReaderInfoSettings = DEFAULT_READER_INFO_SETTINGS;
   @Prop paddingSettings: ReaderPaddingSettings = DEFAULT_READER_PADDING_SETTINGS;
-  @Prop showQuickActions: boolean = false;
   @Prop @Watch('onAsSheetChanged') asSheet: boolean = false;
   @Prop openBottomActionConfigOnAppear: boolean = false;
   @State selectedSettingsTab: number = 0;
@@ -513,7 +512,6 @@ export struct ReaderSettingsPage {
   onAnimationSpeedChange: (speed: number) => void = (_speed: number) => {};
   onInfoSettingsChange: (settings: ReaderInfoSettings) => void = (_settings: ReaderInfoSettings) => {};
   onPaddingSettingsChange: (settings: ReaderPaddingSettings) => void = (_settings: ReaderPaddingSettings) => {};
-  onQuickActionsChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onSelectTextChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onSliderVibratorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
@@ -1050,13 +1048,6 @@ export struct ReaderSettingsPage {
               (count: number) => this.onBottomItemsPerRowChange(count))
             this.MenuStepperRow('底栏图标行数', this.bottomRowCount, 1, 2,
               (count: number) => this.onBottomRowCountChange(count))
-          } else if (tab === 2) {
-            MenuSettingSwitch({
-              title: '快捷图标行',
-              detail: '在标题栏下方显示快捷阅读操作',
-              checked: this.showQuickActions,
-              onChange: (enabled: boolean) => this.onQuickActionsChange(enabled)
-            }).margin({ left: 14, right: 14, bottom: 8 })
           }
           ForEach(this.getMenuSettingsEntries(tab), (entry: ReaderMenuSettingsEntry) => {
             this.menuSettingsEntry(entry)
