@@ -916,7 +916,7 @@ export struct ReaderSettingsPage {
             .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
         }.padding(13).backgroundColor(this.rsetCardBg).borderRadius(13).margin({ top: 13 })
       }.width('100%').padding({ left: 14, right: 14, bottom: 14 })
-    }
+    }.edgeEffect(EdgeEffect.Spring)
     .width('100%')
     .layoutWeight(1)
     .scrollBar(BarState.Off)
@@ -956,7 +956,7 @@ export struct ReaderSettingsPage {
         MenuSettingOption({ title: '中文简繁体转换', detail: this.getChineseConverterLabel(), migrated: true })
           .onClick(() => this.openDetailSheet('中文简繁体转换', '按档位转换正文与章节标题的字形'))
       }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-    }.width('100%').scrollBar(BarState.Off)
+    }.edgeEffect(EdgeEffect.Spring).width('100%').scrollBar(BarState.Off)
   }
 
   @Builder
@@ -1053,7 +1053,7 @@ export struct ReaderSettingsPage {
             this.menuSettingsEntry(entry)
           }, (entry: ReaderMenuSettingsEntry) => `${tab}-${entry.title}`)
         }.width('100%').padding({ top: 4, bottom: 8 })
-      }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).width('100%').layoutWeight(1).scrollBar(BarState.Off)
   }
 
   @Builder
@@ -1622,7 +1622,7 @@ export struct ReaderSettingsPage {
           Text('页眉/页脚模式、提示内容、分隔线和字号会保存到阅读样式。字体文件选择与颜色取色器尚未迁移。')
             .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').layoutWeight(1)
   }
 
@@ -1723,7 +1723,7 @@ export struct ReaderSettingsPage {
           Text('未迁移项目保留原版设置入口；当前仅呈现设置界面，不执行对应业务。')
             .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').layoutWeight(1)
   }
 
@@ -2388,7 +2388,7 @@ export struct ReaderSettingsPage {
                 '文字色回落 onSurface，模糊色未设置时不影响底色。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.height(360).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).height(360).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '自定义阅读背景') {
           Scroll() {
             Column() {
@@ -2455,7 +2455,7 @@ export struct ReaderSettingsPage {
               Text('强调色用于链接、搜索结果与朗读中的段落；背景透明度只作用于背景图片。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.height(460).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).height(460).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '编辑背景样式') {
           Scroll() {
             Column() {
@@ -2487,7 +2487,7 @@ export struct ReaderSettingsPage {
                   this.detailSheetVisible = false;
                 })
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.height(460).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).height(460).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '主题列表') {
           // 对齐上游 ThemeListContent：网格卡片（44:56）+ 管理态多选。
           Column() {
@@ -2519,7 +2519,7 @@ export struct ReaderSettingsPage {
                       this.ThemeGridCard(style, styleIndex)
                     }.onClick(() => this.onThemeCardTap(styleIndex))
                   }, (style: ReaderBackgroundStyle) => `${style.id}|${style.name}|${style.dayColor}|${style.nightColor}`)
-                }
+                }.edgeEffect(EdgeEffect.None)
                 .columnsTemplate(this.themeGridTemplate())
                 .columnsGap(8)
                 .rowsGap(8)
@@ -2548,7 +2548,7 @@ export struct ReaderSettingsPage {
                   }.width('100%').alignItems(VerticalAlign.Center)
                 }
               }.width('100%')
-            }.height(400).scrollBar(BarState.Off).align(Alignment.Top)
+            }.edgeEffect(EdgeEffect.Spring).height(400).scrollBar(BarState.Off).align(Alignment.Top)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '选择字体') {
           Scroll() {
@@ -2598,7 +2598,7 @@ export struct ReaderSettingsPage {
                 }, (font: ReaderFontEntry) => font.familyName)
               }
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).width('100%').layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '排版设置') {
           Column() {
             Row() {
@@ -2681,7 +2681,7 @@ export struct ReaderSettingsPage {
               Text('高亮规则在阅读页底栏的「更多操作」面板里，与上游一致；本页不重复放入口。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.height(440).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).height(440).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '文字下划线') {
           // 对齐上游 UnderlineConfigSheet.kt：8 项，5/6 与 7/8 之间插「下划虚线」分区标题。
           Scroll() {
@@ -2716,7 +2716,7 @@ export struct ReaderSettingsPage {
               MenuSettingSlider({ title: '空隙长度', value: this.dottedRatio, minValue: 0, maxValue: 20,
                 onChange: (value: number) => this.onDottedRatioChange(value) })
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.height(440).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).height(440).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '文字对齐') {
           Column() {
             MenuSettingSwitch({
@@ -2830,7 +2830,7 @@ export struct ReaderSettingsPage {
                   })
               }.width('100%').padding({ top: 10 })
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '点击区域配置') {
           Scroll() {
             Column() {
@@ -2871,7 +2871,7 @@ export struct ReaderSettingsPage {
               Text('动作会立即保存，并应用到阅读页对应分区。未迁移的动作会明确提示。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '自定义翻页按键') {
           Scroll() {
             Column() {
@@ -2903,7 +2903,7 @@ export struct ReaderSettingsPage {
                   })
               }.width('100%')
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '护眼设置') {
           Scroll() {
             Column() {
@@ -2945,7 +2945,7 @@ export struct ReaderSettingsPage {
               Text('设置会立即保存并应用到阅读页面；定时支持跨越午夜。')
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '书签标记') {
           Column() {
             Text('当前标记').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 4, bottom: 8 })
@@ -3115,7 +3115,7 @@ export struct ReaderSettingsPage {
                 .fontSize(10).fontColor(this.themeColorTextTertiary)
                 .width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-          }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).width('100%').layoutWeight(1).scrollBar(BarState.Off)
         }
       }.width('88%').height('86%').backgroundColor('#F21A1B21').borderRadius(22)
     }.width('100%').height('100%')
@@ -3354,7 +3354,7 @@ export struct ReaderSettingsPage {
                   ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
             }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
-        }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).width('100%').layoutWeight(1).scrollBar(BarState.Off)
       }.width('100%').height('62%').backgroundColor('#D91A1B21')
         .borderRadius({ topLeft: 24, topRight: 24 })
     }.width('100%').height('100%')
@@ -3578,7 +3578,7 @@ export struct ReaderSettingsPage {
                 ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
           }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
-        }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).width('100%').layoutWeight(1).scrollBar(BarState.Off)
       }.width('100%').height('62%').backgroundColor('#D91A1B21')
         .borderRadius({ topLeft: 24, topRight: 24 })
     }.width('100%').height('100%')

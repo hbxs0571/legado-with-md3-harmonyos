@@ -430,7 +430,7 @@ export struct AppCoverSettingsPage {
           Text('仅 WiFi 下载封面、网络书籍角标随网络封面与在线书源一起接入；其余改动即时生效。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet.length > 0, this.CoverSettingsSheetContent(), {
         height: 620,
@@ -493,7 +493,7 @@ export struct AppCoverSettingsPage {
                 .onChange((value: string) => this.ruleExpression = value)
             }.width('100%')
           }.width('100%').padding({ left: 16, right: 16, top: 4 })
-        }.layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       } else if (this.activeSheet === 'album') {
         if (this.albumView === 'select') {
           // B1/B2：选择 sheet。顶栏「管理相册」进管理页，对应上游 onManage。
@@ -539,7 +539,7 @@ export struct AppCoverSettingsPage {
                   .onClick(() => { this.selectAlbum(album.id); })
               }, (album: CoverAlbumItem) => album.id)
             }.width('100%').padding({ left: 16, right: 16, top: 4 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.albumView === 'manage') {
           // B3/B4/B5/B6/B7：管理页。顶栏返回选择 sheet、右侧「+」新建。
           Row() {
@@ -593,7 +593,7 @@ export struct AppCoverSettingsPage {
                   }.width('100%').justifyContent(FlexAlign.End).margin({ bottom: 16 })
                 }, (album: CoverAlbumItem) => album.id)
               }.width('100%').padding({ left: 16, right: 16, top: 4 })
-            }.layoutWeight(1).scrollBar(BarState.Off)
+            }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
           }
         } else if (this.albumView === 'editor') {
           // B8/B9/B10：图片编辑器，日夜两套独立列表。
@@ -635,7 +635,7 @@ export struct AppCoverSettingsPage {
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
                 .onClick(() => { this.addEditorImages(); })
             }.width('100%').padding({ left: 16, right: 16, top: 4 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
         } else {
           // B3/B6 名称输入：上游新建与改名共用 saveName；showAlertDialog 带不了输入框，
           // 所以用这一层页面内面板（上游 :420-449 的 CoverAlbumNameDialog）。

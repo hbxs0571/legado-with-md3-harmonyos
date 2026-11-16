@@ -309,7 +309,7 @@ export struct ReaderTextProcessingSheet {
                 }, (rule: ReplaceRule) => replaceRuleRowKey(rule))
               }
             }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).width('100%').scrollBar(BarState.Off)
         } else {
           Row() {
             AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
@@ -350,7 +350,7 @@ export struct ReaderTextProcessingSheet {
                 }, (item: ContentProcessDisplayItem) => item.id)
               }
             }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).width('100%').scrollBar(BarState.Off)
         }
         Row() {
           Text('关闭').fontSize(13).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).layoutWeight(1)

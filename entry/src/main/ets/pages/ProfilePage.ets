@@ -90,7 +90,7 @@ export struct ProfilePage {
             ProfileRow({ title: '退出', detail: '', last: true, onSelect: () => this.onExit() })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, bottom: 120 }).constraintSize({ minHeight: '100%' })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.profileScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) {
           // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。

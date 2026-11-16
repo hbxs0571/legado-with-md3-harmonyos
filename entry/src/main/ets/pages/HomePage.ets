@@ -292,7 +292,7 @@ export struct HomePage {
         }.width('100%').alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Start)
           .padding({ left: 16, right: 16, top: 8, bottom: 14 })
           .constraintSize({ minHeight: '100%' })
-        }.width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
+        }.edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
           const offset = this.homeScroller.currentOffset().yOffset;
           const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
           if (shouldCollapse !== this.collapsedHeader) {

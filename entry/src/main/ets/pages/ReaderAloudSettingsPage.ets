@@ -193,7 +193,7 @@ export struct ReaderAloudSettingsPage {
           }
           .width('100%')
           .padding({ bottom: 6 })
-        }
+        }.edgeEffect(EdgeEffect.Spring)
         .layoutWeight(1)
         .scrollBar(BarState.Off)
       }

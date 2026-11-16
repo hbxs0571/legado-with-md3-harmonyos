@@ -694,7 +694,7 @@ export struct CatalogPage {
         }
         .width('100%')
         .padding({ top: 8, bottom: 8 })
-      }
+      }.edgeEffect(EdgeEffect.Spring)
       .width('100%')
       .height('100%')
       .scrollBar(BarState.Off)
@@ -1027,7 +1027,7 @@ export struct CatalogPage {
                 .onAction((_event: GestureEvent): void => { this.onOpenMarking(marking.id); }))
             }, (marking: ReaderMarking) => this.markingItemKey(marking))
           }.padding({ left: 12, right: 12, top: 4, bottom: 24 })
-        }.width('100%').height('100%').scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off)
       }
     }
   }

@@ -1351,7 +1351,7 @@ export struct BookshelfPage {
               if (this.isBuiltinGroup(managed[from]) || this.isBuiltinGroup(managed[to])) { return; }
               this.onMoveGroup(managed[from].groupId, managed[to].groupId);
             })
-        }
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate('1fr 1fr').columnsGap(10).rowsGap(10)
         .width('100%').layoutWeight(1).padding({ left: 16, right: 16, bottom: 18 })
         .scrollBar(BarState.Off).editMode(true)
@@ -1532,7 +1532,7 @@ export struct BookshelfPage {
             }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
           }
         }.width('100%')
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
@@ -2108,7 +2108,7 @@ export struct BookshelfPage {
               });
             })
         }.width('100%').padding({ bottom: 24 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
@@ -2202,7 +2202,7 @@ export struct BookshelfPage {
               }.width('100%').padding({ left: 16, right: 12, top: 6, bottom: 6 })
             }, (pair: TagColorPair, index: number) => `${index}_${pair.textColor}_${pair.bgColor}`)
           }
-        }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).width('100%').scrollBar(BarState.Off)
       }
 
       if (this.showTagColorPicker) {
@@ -2536,7 +2536,7 @@ export struct BookshelfPage {
               })
             }
           }, (groupName: string) => `folder_${groupName}_${this.getFolderPreviewBooks(groupName).length}_${this.layout.bookshelfGroupCoverCount}_${this.layout.bookshelfGroupListStyle}_${this.activeLayoutMode()}`)
-        }
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate(this.folderColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
@@ -2741,7 +2741,7 @@ export struct BookshelfPage {
               // 拖拽重排只在「手动」排序下看得见效果（:138）。
               this.moveBook(from, to);
             })
-        }
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate(this.bookshelfColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })

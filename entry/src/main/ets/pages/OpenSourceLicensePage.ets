@@ -75,7 +75,7 @@ export struct OpenSourceLicensePage {
         Scroll(this.licenseScroller) {
           Text(this.licenseText).fontSize(12).lineHeight(17).fontColor(this.themeColorTextSecondary)
             .width('100%').padding(16).textAlign(TextAlign.Start)
-        }.layoutWeight(1).width('100%').scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).width('100%').scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }

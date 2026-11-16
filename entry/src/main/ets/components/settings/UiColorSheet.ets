@@ -141,7 +141,7 @@ export struct UiColorSheet {
         }
         .width('100%')
         .padding({ left: 18, right: 18, bottom: SPACE_16 });
-      }
+      }.edgeEffect(EdgeEffect.Spring)
       .layoutWeight(1)
       .scrollBar(BarState.Off);
     }

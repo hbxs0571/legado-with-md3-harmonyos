@@ -163,7 +163,7 @@ export struct SearchPage {
               }.padding({ left: 18, right: 18, top: 18, bottom: 8 })
               SearchEmptyState({ title: '暂无搜索历史', detail: '在线搜索记录将在搜索能力接入后显示。' })
             }.padding({ bottom: 18 })
-          }.layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
             .onScroll(() => this.updateHeader(this.suggestionScroller.currentOffset().yOffset))
         } else if (this.sourceScope) {
           Column() {
@@ -197,7 +197,7 @@ export struct SearchPage {
                     SearchBookRow({ book: book, coverSettings: this.coverSettings, onSelect: () => this.onOpenBook(book) })
                   }, (book: Book) => book.id)
                 }.padding({ bottom: 12 })
-              }.layoutWeight(1).scrollBar(BarState.Off)
+              }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
                 .onScroll(() => this.updateHeader(this.resultsScroller.currentOffset().yOffset))
               Row() {
                 Text('搜索在线书源').fontSize(16).fontColor('#151720').fontWeight(FontWeight.Medium)

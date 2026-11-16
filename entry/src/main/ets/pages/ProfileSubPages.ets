@@ -153,7 +153,7 @@ export struct BookSourceManagePage {
               })
           }, (option: string) => option)
         }.width('100%').padding({ top: 4, bottom: 22 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
@@ -678,7 +678,7 @@ export struct ReplaceRulesPage {
               ModuleTab({ label: group, selected: this.selectedGroup === group, onSelect: () => this.selectedGroup = group })
             })
           }.width('100%').padding({ left: 16, right: 9, top: 8, bottom: 12 })
-        }.scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).scrollBar(BarState.Off)
       }
 
       if (this.filteredReplaceRules().length === 0) {
@@ -971,7 +971,7 @@ export struct ReplaceRuleEditPage {
             }
           }
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 20 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
@@ -1219,7 +1219,7 @@ export struct ReplaceRuleEditPage {
             .padding({ left: 14, right: 14 }).backgroundColor('#24252C').borderRadius(8)
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 0, bottom: 140 })
           .layoutWeight(1)
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       if (this.keyboardVisible) {
         Scroll() {
           Row() {
@@ -1368,7 +1368,7 @@ export struct ReplaceRuleGroupSheet {
               .backgroundColor('#22232A').borderRadius(12).margin({ bottom: 7 })
           }, (group: string) => group)
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 }
@@ -1526,7 +1526,7 @@ struct RuleListBody {
               .priorityGesture(LongPressGesture({ duration: 500 }).onAction(() => this.onLongSelect(rule.id)))
           }, (rule: RuleListEntry) => `${rule.id}_${rule.enabled ? 1 : 0}`)
         }.padding({ top: 8, bottom: 120 })
-      }.width('100%').height('100%').scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off)
     }
   }
 }
@@ -1903,7 +1903,7 @@ export struct TxtTocRulesPage {
             }
           }
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 18 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       Row() {
         Row() {
           AppGlyph({ name: 'profileRunningWithErrors', glyphSize: 20, tint: this.themeColorTextPrimary })
@@ -2303,7 +2303,7 @@ export struct DictionaryRulesPage {
           this.DictionaryEditorField('显示规则 (showRule)', this.showRule, 'showRule', true)
         }.width('100%').alignItems(HorizontalAlign.Start)
           .padding({ left: 16, right: 16, top: 4, bottom: 120 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       Row() {
         if (this.showPasteAuthorization) {
           PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
@@ -2597,7 +2597,7 @@ export struct DictionaryRuleEditPage {
           this.RuleField('显示规则 (showRule)', this.showRule, 'showRule', true)
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, top: 0, bottom: 140 })
           .layoutWeight(1)
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       Row() {
         if (this.showPasteAuthorization) {
           PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
@@ -2789,7 +2789,7 @@ export struct HighlightTagRulesPage {
           }.width('100%').padding({ top: 12, bottom: 12 })
             .onClick(() => this.draftEnabled = !this.draftEnabled)
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 120 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       Row() {
         if (this.showPasteAuthorization) {
           PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
@@ -3032,7 +3032,7 @@ export struct HighlightTagRuleEditPage {
             .onClick(() => this.ruleEnabled = !this.ruleEnabled)
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 140 })
           .layoutWeight(1)
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       Row() {
         if (this.showPasteAuthorization) {
           PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
@@ -3349,7 +3349,7 @@ export struct AllBookmarksPage {
               })
             }, (book: BookmarkBookSummary) => book.key)
           }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
-        }.layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
@@ -4132,7 +4132,7 @@ export struct ReadRecordsPage {
               }, (record: ReadTimeRecord) => `${record.bookId}-${this.selectedKeys.has(this.latestKey(record))}`)
             }
           }.width('100%').padding({ top: 8, bottom: 16 })
-        }.layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -4212,7 +4212,7 @@ export struct ReadRecordsPage {
                 .onClick(() => this.toggleMergeCandidate(this.mergeCandidateKey(item)))
             }, (item: ReadRecordSummary) => `${this.mergeCandidateKey(item)}-${this.mergeSelectedKeys.has(this.mergeCandidateKey(item))}`)
           }.width('100%')
-        }.height(240).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).height(240).scrollBar(BarState.Off)
       }
       Row() {
         Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
@@ -4546,7 +4546,7 @@ export struct CacheManagementPage {
               })
             }, (book: Book) => this.bookKey(book) + '_' + book.id)
           }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 18 })
-        }.layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
@@ -4719,7 +4719,7 @@ export struct AboutAppPage {
             AboutActionRow({ title: '创建堆转储', last: true, onSelect: () => this.onUnavailableAction('堆转储尚未迁移') })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 4, bottom: 18 })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
@@ -4810,7 +4810,7 @@ export struct AppSettingsHomePage {
           UiAction({ title: '实验室', showDivider: false, onSelect: () => this.onOpenCategory(ProfileRoute.APP_LAB_SETTINGS) })
           }.width('100%').backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
         }.padding({ left: 16, right: 16, top: 8, bottom: 16 })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }

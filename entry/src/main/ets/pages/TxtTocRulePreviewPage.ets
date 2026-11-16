@@ -349,7 +349,7 @@ export struct TxtTocRulePreviewPage {
               this.RuleCard(item);
             }
           }, (item: TocRulePreviewItem) => `${item.rule.id}-${item.totalCount}`)
-        }
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate('1fr 1fr')
         .columnsGap(8)
         .rowsGap(8)

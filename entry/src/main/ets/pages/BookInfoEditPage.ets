@@ -543,7 +543,7 @@ export struct BookInfoEditPage {
         }
         .width('100%')
         .padding({ left: SPACE_16, right: SPACE_16, top: SPACE_16, bottom: SPACE_16 })
-      }
+      }.edgeEffect(EdgeEffect.Spring)
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)

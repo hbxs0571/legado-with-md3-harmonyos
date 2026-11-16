@@ -170,7 +170,7 @@ struct StatsGridCard {
             this.StatCell(item)
           }
         }, (item: StatItem) => item.label)
-      }.columnsTemplate('1fr 1fr').rowsGap(2).columnsGap(2).width('100%')
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true }).columnsTemplate('1fr 1fr').rowsGap(2).columnsGap(2).width('100%')
     }.width('100%').padding(14).backgroundColor(this.themeColorSurfaceElevated).borderRadius(16)
   }
 }
@@ -325,7 +325,7 @@ struct ReadingCalendarCard {
             }.aspectRatio(0.75).width('100%').padding(2)
           }
         }, (cell: CalendarCell, index: number) => `${index}_${cell.dateKey}`)
-      }.columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr').rowsGap(2).columnsGap(2).width('100%')
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true }).columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr').rowsGap(2).columnsGap(2).width('100%')
     }.width('100%').padding(14).backgroundColor(this.themeColorSurfaceElevated).borderRadius(16)
   }
 }
@@ -511,7 +511,7 @@ export struct ReadRecordOverviewPage {
             books: this.books
           }).margin({ bottom: 16 })
         }.width('100%').padding({ left: 12, right: 12, top: 8 })
-      }.layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%')
       .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent
         : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))

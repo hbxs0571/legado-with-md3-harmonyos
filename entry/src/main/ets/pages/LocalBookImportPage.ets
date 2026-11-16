@@ -206,7 +206,7 @@ export struct LocalBookImportPage {
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 18 });
-      }
+      }.edgeEffect(EdgeEffect.Spring)
       .layoutWeight(1)
       .scrollBar(BarState.Off);
     }

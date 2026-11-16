@@ -47,7 +47,7 @@ export struct AppAiSettingsPage {
             UiAction({showDivider: false, title: '新建 Skill', onSelect: () => this.onUnavailableAction('AI Skill 尚未迁移') })
           }
         }.width('100%').padding({ top: 6, bottom: 120 })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }

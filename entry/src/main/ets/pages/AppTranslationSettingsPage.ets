@@ -73,7 +73,7 @@ export struct AppTranslationSettingsPage {
           Text('此页选项目前仅用于界面预览；不会发起翻译请求或保存设置。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }
@@ -112,7 +112,7 @@ struct TranslationSettingsChoice {
               .onClick(() => { this.onSelect(index); this.showOptions = false; })
           }, (option: string, index: number) => `${index}-${option}`)
         }
-      }.constraintSize({ maxHeight: 440 }).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring).constraintSize({ maxHeight: 440 }).scrollBar(BarState.Off)
     }.width('100%').padding({ bottom: 16 })
   }
   build() {

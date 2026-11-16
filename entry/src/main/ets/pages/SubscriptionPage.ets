@@ -149,7 +149,7 @@ export struct SubscriptionPage {
                     .onClick(() => this.onUnavailableAction('订阅源数据尚未接入'))
                 }
               }, (item: string, index: number) => `subscription-cell-${index}-${item}`)
-            }.columnsTemplate(this.getGridColumnsTemplate()).columnsGap(12).rowsGap(12)
+            }.edgeEffect(EdgeEffect.None).columnsTemplate(this.getGridColumnsTemplate()).columnsGap(12).rowsGap(12)
               .width('100%').height(Math.ceil(this.getVisibleItems().length / this.gridColumnCount) * 112)
               .scrollBar(BarState.Off)
           } else if (this.showSearch && this.searchQuery.trim().length > 0) {
@@ -169,7 +169,7 @@ export struct SubscriptionPage {
               if (this.gridColumnCount !== nextCount) { this.gridColumnCount = nextCount; }
             }
           })
-      }.layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
+      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const scrollOffset = this.subscriptionScroller.currentOffset().yOffset;
         if (scrollOffset > 20 && !this.collapsedHeader) {
           this.setCollapsedHeader(true);
