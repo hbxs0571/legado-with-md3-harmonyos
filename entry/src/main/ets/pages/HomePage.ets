@@ -39,6 +39,8 @@ export struct HomePage {
   @State refreshing: boolean = false;
   /** 下拉已过触发阈值（松手就会刷新），只喂给自绘指示器换图标用。 */
   @State refreshArmed: boolean = false;
+  /** 当前下拉距离（vp），来自 Refresh.onOffsetChange，用来驱动指示器齿轮跟手旋转。 */
+  @State refreshPullOffset: number = 0;
   @State collapsedHeader: boolean = false;
   private homeScroller: Scroller = new Scroller();
 
@@ -75,7 +77,8 @@ export struct HomePage {
   private RefreshIndicatorBuilder() {
     PullRefreshIndicator({
       armed: this.refreshArmed,
-      refreshing: this.refreshing
+      refreshing: this.refreshing,
+      pullDistance: this.refreshPullOffset
     });
   }
 
@@ -220,6 +223,10 @@ export struct HomePage {
         refreshing: this.refreshing,
         builder: () => { this.RefreshIndicatorBuilder(); }
       }) {
+        // 内容层用 `.position({ x: 0, y: 0 })`（见链首）钉在本来的位置：不设它，Refresh
+        // 会依据下拉距离把整个子组件往下推，观感是「整页被拖下去」。上游 PullToRefreshBox
+        // 只有指示器进出、内容不动（refresh.d.ts:100-104 的原话：给子组件设 position 后，
+        // 子组件相对 Refresh 的位置固定，不随下拉手势下移）。
         Scroll(this.homeScroller) {
         Column() {
           if (this.visibleSections.includes('recentBook') && this.getLocalBooks().length > 0) {
@@ -331,7 +338,8 @@ export struct HomePage {
         }.width('100%').alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Start)
           .padding({ left: 16, right: 16, top: 8, bottom: 14 })
           .constraintSize({ minHeight: '100%' })
-        }.edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
+        }.position({ x: 0, y: 0 })
+        .edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
           const offset = this.homeScroller.currentOffset().yOffset;
           const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
           if (shouldCollapse !== this.collapsedHeader) {
@@ -342,12 +350,23 @@ export struct HomePage {
           }
         })
       }.layoutWeight(1).refreshOffset(64)
+        // 内容层已被 position 钉住不动，跟着下拉走的只有指示器，所以这里要 1（完全跟手）：
+        // 压小比例会让指示器能拉出的距离也变短，上游不是这个手感
+        // （refresh.d.ts 的 pullDownRatio：1 = 完全跟手）。
+        .pullDownRatio(1)
+        // 指示器最多下移 120vp：内容已被 position 钉住，只有指示器跟手，不封顶的话
+        // 一拉就能滑到屏幕中部（实测到了 y≈1984），上游是「从顶部探出一小段」。
+        .maxPullDownDistance(120)
         .onRefreshing(() => { this.handlePullToRefresh(); })
         // RefreshStatus: Inactive / Drag / OverDrag / Refresh / Done。
         // OverDrag 就是「已拉过阈值、松手会刷」，用它驱动指示器换对勾。
         .onStateChange((state: RefreshStatus) => {
           const armed = state === RefreshStatus.OverDrag;
           if (armed !== this.refreshArmed) { this.refreshArmed = armed; }
+        })
+        // 每帧报当前下拉距离（vp），喂给指示器做跟手旋转。
+        .onOffsetChange((offset: number) => {
+          this.refreshPullOffset = offset;
         })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showHomeOptions, this.homeOptionsSheetContent(), {

@@ -203,6 +203,8 @@ export struct BookshelfPage {
   @State pullRefreshing: boolean = false;
   /** 下拉已过触发阈值，只喂给自绘指示器换图标用。 */
   @State pullArmed: boolean = false;
+  /** 当前下拉距离（vp），来自 Refresh.onOffsetChange，驱动指示器齿轮跟手旋转。 */
+  @State pullOffsetValue: number = 0;
   /**
    * 已选书籍的键集合（:142-144）。
    * 键一律用 bookUrl（contentPath 优先），不用 book.id —— id 是文件名去扩展名派生的，
@@ -458,7 +460,8 @@ export struct BookshelfPage {
   private pullIndicatorBuilder() {
     PullRefreshIndicator({
       armed: this.pullArmed,
-      refreshing: this.pullRefreshing
+      refreshing: this.pullRefreshing,
+      pullDistance: this.pullOffsetValue
     });
   }
 
@@ -2596,6 +2599,8 @@ export struct BookshelfPage {
           refreshing: this.pullRefreshing,
           builder: () => { this.pullIndicatorBuilder(); }
         }) {
+        // 与首页同一处理：Grid 上的 `.position({ x: 0, y: 0 })`（见链首）钉住内容层，
+        // 下拉只出指示器，内容不跟着手指走（refresh.d.ts:100-104）。
         Grid(this.bookshelfScroller) {
           // :154：LazyForEach 只创建视口内 + cachedCount 的项，ForEach 是首帧全量建。
           LazyForEach(this.bookshelfData, (book: Book) => {
@@ -2796,7 +2801,8 @@ export struct BookshelfPage {
               // 拖拽重排只在「手动」排序下看得见效果（:138）。
               this.moveBook(from, to);
             })
-        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+        }.position({ x: 0, y: 0 })
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate(this.bookshelfColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
@@ -2837,6 +2843,15 @@ export struct BookshelfPage {
         })
         .pullToRefresh(this.canPullRefresh())
         .refreshOffset(64)
+        // 与首页同一口径：内容层被 position 钉住，跟着下拉走的只有指示器，
+        // 所以比例要 1（完全跟手），压小会让能拉的距离也变短。
+        .pullDownRatio(1)
+        // 与首页同口径：指示器最多下移 120vp。
+        .maxPullDownDistance(120)
+        // 每帧报当前下拉距离（vp），喂给指示器做跟手旋转。
+        .onOffsetChange((offset: number) => {
+          this.pullOffsetValue = offset;
+        })
         .layoutWeight(1)
       } else {
         Column() {
