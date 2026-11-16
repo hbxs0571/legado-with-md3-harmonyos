@@ -1063,6 +1063,11 @@ export struct ReaderPage {
 
   onSystemBarSettingsChanged(): void {
     this.syncReaderSystemBars();
+    // 页眉在 headerMode 既非 1 也非 2 时跟随状态栏显隐（见 isReaderHeaderVisible），
+    // 所以「隐藏状态栏」这个开关也改变了正文可用高度，必须触发重排版。
+    if (this.infoSettings.headerMode !== 1 && this.infoSettings.headerMode !== 2) {
+      this.onPaginationInputsChanged();
+    }
   }
 
   onScreenOrientationChanged(): void {
@@ -4849,17 +4854,18 @@ export struct ReaderPage {
         this.ReaderBrightnessButton('auto', this.brightnessAuto)
         this.ReaderBrightnessSlider(true)
         this.ReaderBrightnessButton('position', false)
-        Text(`${Math.round(this.readBrightness)}`).fontSize(11).fontColor('#B7B8C1')
-          .textAlign(TextAlign.Center)
+        // 上游 `ReadBookMenuBarBottom.kt:376-459` 竖排只有「按钮 + 滑块 + 按钮」，没有数值文字；
+        // 本地原来那块 11 号数值是自造的，已删。删后底部空出约 11vp 属正常。
       }
-      .width(56)
+      // 上游竖排整条宽 `buttonGlassEnabled ? 64.dp : 56.dp`。
+      .width(this.readerBottomBarButtonGlassEnabled() ? 64 : 56)
       .padding({ top: 12, bottom: 12, left: 4, right: 4 })
     } else {
       Row({ space: 8 }) {
         this.ReaderBrightnessButton('auto', this.brightnessAuto)
         this.ReaderBrightnessSlider(false)
-        Text(`${Math.round(this.readBrightness)}`).fontSize(11).fontColor('#B7B8C1').width(32)
-          .textAlign(TextAlign.End)
+        // 上游横排右端是 `Spacer(Modifier.width(buttonSize))`——纯占位，不显示数值。
+        Row().width(this.readerBottomBarButtonGlassEnabled() ? 48 : 40)
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -4915,6 +4921,9 @@ export struct ReaderPage {
       .selectedColor(this.readerMenuAccentTint()).trackColor('#5A3F47').blockColor(this.readerMenuAccentTint())
       .trackThickness(6)
       .blockSize({ width: 14, height: 14 })
+      // 上游 `updateSliderValue` 里 `if (brightnessAuto) return`，且滑块 `enabled = !brightnessAuto`：
+      // 跟随系统亮度时滑块拖不动。
+      .enabled(!this.brightnessAuto)
       .onChange((value: number, mode: SliderChangeMode) => {
         if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
           this.onReadBrightnessChange(Math.max(1, Math.min(100, Math.round(value))));
@@ -6731,8 +6740,12 @@ export struct ReaderPage {
   }
 
   private isReaderHeaderVisible(): boolean {
-    // HOS 目前保留系统状态栏；Android 模式0在状态栏显示时隐藏页眉。
-    return this.infoSettings.headerMode === 1;
+    // 上游 `LegacyReaderPageDecorationFactory.kt:333` 三档：1 显示 / 2 隐藏 / 0（含其它值）跟随状态栏。
+    // 「跟随状态栏」= 状态栏显示时隐藏页眉，所以取 hideStatusBar 的反面；这一档下两者互斥、不同时出现。
+    const mode = this.infoSettings.headerMode;
+    if (mode === 1) { return true; }
+    if (mode === 2) { return false; }
+    return this.hideStatusBar;
   }
 
   private isReaderFooterVisible(): boolean {
