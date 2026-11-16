@@ -1450,3 +1450,13 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 7. 朗读 / AI / 书源一律未实现，界面上出现的相关项均带「未迁移」标记。
 
 **等级说明**：以上「上机看到什么」一栏的内容都来自本轮设备截图与 `dumpLayout` 实测（截图留存在开发机 `tmp/`，不入公开仓库），可记第 3 级；未列入的项按第 2 级记「构建通过 / 覆盖安装成功」，不外推为设备验收。
+### 追加（r344 之后）：8.2 快捷图标行按用户指令删除
+
+| 项 | 内容 |
+| --- | --- |
+| 用户指令 | 对 8.2 快捷动作行的存废，用户答复「怎么还原上游怎么来」；上游 `ui/book/read/` 无此形态（全目录搜 quickAction 零命中），判定为整行删除。 |
+| 改动 | `entry/src/main/ets/pages/ReaderPage.ets` 删 `@Prop showQuickActions`、挂载块与只在快捷行使用的 `struct ReaderControl`；`ReaderSettingsPage.ets` 删 `@Prop`/回调与「快捷图标行」开关（顶栏布局 tab 分支清空）；`Index.ets` 删 `@State showReaderQuickActions`、`setReaderQuickActions` 与全部透传。存储层（`ReaderSettingsRepository` 接口 / 默认值 / store 读写、`BackupRepository` ZIP 字段）保留不动，快照恒写 `showQuickActions: false`，旧偏好与备份往返不受影响。 |
+| 构建 | `BUILD SUCCESSFUL in 1 min 7 s 477 ms` / exit 0；首次失败（快照缺 `showQuickActions` 字段，10505001）补常量后通过。 |
+| 上机 | 顶栏下方书名/章名之后直接是正文（dumpLayout y 199–384 后接 Blank，无五圆钮）；设置「菜单 → 顶栏布局」tab 第一项变为「标题栏胶囊」，「快捷图标行」开关消失；底栏第一枚「自动翻页」点击后进入自动翻页且呈选中态高亮，入口未丢。 |
+| 提交 | `13a3c1e`（3 files, +6/−67）；三项体检 doc-links OK（225 份）/ parity-pipes OK / parity-rows 296 {'已接': 252, '不适用': 12, '未接': 32}。 |
+| 未验到 | 自动翻页的「顶栏入口」（上游 auto_page 可配到顶栏动作区）未实测——本地顶栏动作配置界面未迁移，用户需经底栏使用；存储层字段 `showQuickActions` 恒 false 未在深色主路径外验证。 |
