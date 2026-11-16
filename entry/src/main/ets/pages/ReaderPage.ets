@@ -184,6 +184,23 @@ export struct ReaderPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /**
+   * 状态栏高度（vp），由 `pages/Index.ets` 的 `publishAppTopInset()` 广播。
+   *
+   * 上游阅读器面板的让位在面板层：`ReadBookMenuBarTitle.kt:167-171` 外层
+   * `windowInsetsPadding(WindowInsets.safeDrawing.only(Top + Horizontal))`，
+   * 标题行 `:174-180` 只 `padding(horizontal = 16.dp, vertical = 4.dp)`。
+   * 本地面板只有这一行内容，把 inset 加进行 padding 是等价近似。
+   */
+  @StorageProp('appTopInset') appTopInset: number = 0;
+  /**
+   * 手势条 / 三键导航高度（vp），由 `pages/Index.ets` 的 `publishAppBottomInset()` 广播。
+   *
+   * 上游 `ReadBookMenuBar.kt:500-506` 非悬浮时 `surfaceWindowInsetSides` 只留 Horizontal
+   * （面板底色一路铺到导航栏），靠 `:629` 的 `bottomPadding = navBarHeight + 16.dp` 让内容避让。
+   * 本地 `.expandSafeArea` 那层等价于「底色铺满」，缺的就是这份内容让位。
+   */
+  @StorageProp('appBottomInset') appBottomInset: number = 0;
   @Prop @Watch('onStartAtChapterBeginningChanged') startAtChapterBeginning: boolean = false;
   @Prop @Watch('onBookChanged') book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
@@ -1236,7 +1253,9 @@ export struct ReaderPage {
    * 读取显示缺口（刘海 / 挖孔）避让量并写进三个 inset 字段。
    * 对齐上游 `ReaderContentAvoidancePolicy.padding()`（`ui/book/read/ReaderContentAvoidancePolicy.kt:34-51`）：
    * 只有 `paddingDisplayCutouts` 打开时才把缺口算进正文可用区，关闭时一律按 0 处理。
-   * 顶部不在这里避让：状态栏占位已盖住顶部缺口，与上游 `statusPlaceholderGone` 的判法一致。
+   * 注意这里只读 `TYPE_CUTOUT` 的 left / right / bottom 三个方向，**没读 topRect、也没读 `TYPE_SYSTEM`**：
+   * 竖屏主路径的顶部避让由 `@StorageProp('appTopInset')`（`pages/Index.ets` 广播）覆盖，
+   * 但横屏或异形屏上若正文被顶部刘海压住，根因就在这份缺口读数不全。此处只标注事实，未改逻辑。
    */
   private applyReaderDisplayCutout(): void {
     const context = this.getUIContext().getHostContext();
@@ -1537,6 +1556,32 @@ export struct ReaderPage {
   /** 菜单模糊半径（vp）。上游 `readMenuBlurRadius` 夹 0–32，0 表示不模糊。 */
   private readerMenuBlurRadiusVp(): number {
     return Math.max(0, Math.min(32, Math.round(this.readMenuBlurRadius)));
+  }
+
+  /**
+   * 顶栏是否启用玻璃/雾化档。上游 `ReadBookMenuBarTitle.kt:1000-1006`：
+   * `readMenuTopBarHazeEnabled = hazeState != null && mode == Haze`，`blurRadius = readMenuBlurRadius`。
+   * ArkUI 没有 haze 系统，2 档用「模糊半径翻倍」近似，不是等价实现。
+   */
+  private readerTopBarBlurRadiusVp(): number {
+    if (this.readMenuTopBarBlurMode === 0) { return 0; }
+    return this.readMenuTopBarBlurMode === 2
+      ? this.readerMenuBlurRadiusVp() * 2
+      : this.readerMenuBlurRadiusVp();
+  }
+
+  /**
+   * 底栏是否启用玻璃/雾化档。上游 `ReadBookMenuBar.kt:978-997`：
+   * 非悬浮时液态玻璃档被强制降级成雾化档（`readMenuBottomBarEffectiveBlurMode`）。
+   * 同样地，2 档用模糊翻倍近似 ArkUI 无 haze 的现状。
+   */
+  private readerBottomBarBlurRadiusVp(): number {
+    const effective = (!this.readMenuFloatingBottomBar && this.readMenuBottomBarBlurMode === 1)
+      ? 2 : this.readMenuBottomBarBlurMode;
+    if (effective === 0) { return 0; }
+    return effective === 2
+      ? this.readerMenuBlurRadiusVp() * 2
+      : this.readerMenuBlurRadiusVp();
   }
 
   /** 把 `#RRGGBB` / `#AARRGGBB` 折成 6 位 RGB；解析不了时按当前日夜取黑白。 */
@@ -7297,7 +7342,10 @@ export struct ReaderPage {
                   Blank().layoutWeight(1)
                 }
                 this.readerTopActionGroup()
-              }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
+              // top 里叠上 appTopInset：原来写死 12，顶栏按钮压在状态栏图标上。
+              // 上游让位在面板层（`ReadBookMenuBarTitle.kt:167-171` 的 windowInsetsPadding），
+              // 本地面板只有这一行，加到行 padding 上等价。
+              }.width('100%').padding({ left: 16, right: 16, top: 12 + this.appTopInset, bottom: 4 })
               // 模式 "1"：书名单独占一行（上游 :239）。
               if (this.readerTitleOwnLineVisible()) {
                 // 上游 `ReadBookMenuBarTitle.kt:241`：独占一行的书名 `maxLines = 2`，同样可点进详情。
@@ -7334,7 +7382,8 @@ export struct ReaderPage {
             // KI-E2：菜单栏边框（宽度同时是开关）与背景模糊半径，对齐上游
             // `ReadBookMenuBarTitle.kt:504-521`（描边）与 `:131`（`blurRadius = readMenuBlurRadius`）。
             .border(this.readerMenuBorderSettings())
-            .backdropBlur(this.readerMenuBlurRadiusVp())
+            // 模糊只在该档启用时才开：None 档靠底色/渐变显形，不该整片模糊。
+            .backdropBlur(this.readerTopBarBlurRadiusVp())
 
           // KI-E3：位置 0/1 的浮动图标行贴在顶栏下方（上游 ReadBookMenuBar.kt:172）。
           if (this.readerFloatingIconTopVisible()) {
@@ -7381,9 +7430,9 @@ export struct ReaderPage {
                     // 做 6vp 轨道太跳），这是近似不是等价。
                     .selectedColor(this.readerMenuAccentTint()).trackColor(this.readerMenuForegroundAlpha('33'))
                     .blockColor(this.readerMenuAccentTint())
-                    .trackThickness(6)
-                    .blockSize({ width: 14, height: 14 })
-                    .showSteps(true).stepColor(this.readerMenuAccentTint()).stepSize(3)
+                    .trackThickness(4)
+                    .blockSize({ width: 16, height: 16 })
+                    .showSteps(true).stepColor(this.readerMenuForegroundAlpha('33')).stepSize(3)
                     // 无障碍文案：上游 `ReadBookMenuBarBottom.kt:84-95` 按 `progressBarBehavior`
                     // 念「第 x / 共 y 页」或「第 x / 共 y 章」。本地没有读屏器自定义能力，
                     // 用 `accessibilityText` 把同一句挂在滑块上。
@@ -7414,7 +7463,9 @@ export struct ReaderPage {
                 Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
               }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
                 .onClick(() => this.turnReaderChapter(1))
-            }.width('100%').height(this.readerBottomActionOuterSize()).padding({ left: 8, right: 8 })
+            }.width('100%').height(this.readerBottomActionOuterSize())
+              // 上游 `ReadBookMenuBarBottom.kt:162-169`：`padding(vertical = 4.dp).padding(horizontal = 16.dp)`。
+              .padding({ left: 16, right: 16, top: 4, bottom: 4 })
             if (this.getBottomActionPages().length > 0) {
             Swiper() {
               ForEach(this.getBottomActionPages(), (rows: ReaderControlKind[][], _pageIndex: number) => {
@@ -7462,14 +7513,22 @@ export struct ReaderPage {
             // 悬浮时左右留边、底部留 16vp 且四角同圆；非悬浮时铺满宽度、底部不留白，只圆上两个角。
             .width(this.readMenuFloatingBottomBar ? '92%' : '100%')
             .alignSelf(ItemAlign.Center)
-            .padding({ left: 8, right: 8, top: 12, bottom: 0 })
+            // 非悬浮档在底部叠 appBottomInset：上游 `ReadBookMenuBar.kt:500-506` 非悬浮时
+            // 底色一路铺到导航栏、`:629` 用 `bottomPadding = navBarHeight + 16.dp` 让内容避让，
+            // 本地缺的就是这份内容让位。悬浮档靠下面的 margin bottom 16 已让开，不重复叠。
+            .padding({
+              left: 8,
+              right: 8,
+              top: 12,
+              bottom: this.readMenuFloatingBottomBar ? 0 : this.appBottomInset
+            })
             // 同顶栏：渐变档让底色给渐变，避免透明端露出实色。
             .backgroundColor(this.readMenuBottomBarBlurStyle === 1 ? Color.Transparent : this.readerBottomBarFillColor())
             .linearGradient(this.readerBottomBarGradient())
             // KI-E2：底栏同样吃边框与模糊半径，对齐上游 `ReadBookMenuBar.kt:450`（描边）
             // 与 `:1027`（`blurRadius = menuConfig.readMenuBlurRadius`）。
             .border(this.readerMenuBorderSettings())
-            .backdropBlur(this.readerMenuBlurRadiusVp())
+            .backdropBlur(this.readerBottomBarBlurRadiusVp())
             .borderRadius({
               topLeft: this.readMenuBottomCornerRadius,
               topRight: this.readMenuBottomCornerRadius,
@@ -7494,7 +7553,7 @@ export struct ReaderPage {
               .backgroundColor(this.readerBottomBarFillColor())
               .borderRadius(this.readMenuBottomCornerRadius)
               .border(this.readerMenuBorderSettings())
-              .backdropBlur(this.readerMenuBlurRadiusVp())
+              .backdropBlur(this.readerBottomBarBlurRadiusVp())
               .padding({ top: 12, bottom: 12 })
             }
             .width('100%').height('100%')
