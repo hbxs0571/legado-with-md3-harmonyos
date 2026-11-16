@@ -169,7 +169,7 @@ export struct SubscriptionPage {
               if (this.gridColumnCount !== nextCount) { this.gridColumnCount = nextCount; }
             }
           })
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => {
         const scrollOffset = this.subscriptionScroller.currentOffset().yOffset;
         if (scrollOffset > 20 && !this.collapsedHeader) {
           this.setCollapsedHeader(true);

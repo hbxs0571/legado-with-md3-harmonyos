@@ -104,7 +104,7 @@ export struct AppDownloadCacheSettingsPage {
           Text('滑块与开关改动即落盘；清理缓存与压缩数据库已接入，封面/漫画缓存本地即时生成无独立缓存。')
             .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 }

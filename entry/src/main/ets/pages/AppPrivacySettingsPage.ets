@@ -123,7 +123,7 @@ export struct AppPrivacySettingsPage {
           Text('说明：本地密码以 PBKDF2 校验值存储，不保存明文，也不进备份。生物识别与验证时机细项仍是界面预览。')
             .fontSize(12).fontColor('#D9A6A0').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       if (this.passwordPanelVisible) {
         this.PasswordPanel()

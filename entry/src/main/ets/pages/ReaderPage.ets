@@ -5068,7 +5068,7 @@ export struct ReaderPage {
                 this.onOpenSettings();
               })
             }
-          }.edgeEffect(EdgeEffect.Spring)
+          }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
           .scrollable(ScrollDirection.Vertical)
           .scrollBar(BarState.Off)
           .align(Alignment.Top)
@@ -5187,7 +5187,7 @@ export struct ReaderPage {
               .onClick(() => this.runSelectionMenuAction(item.id))
             }, (item: ReaderSelectionMenuItem) => `more-${item.id}-${this.showSelectMenuIcon}`)
           }
-        }.edgeEffect(EdgeEffect.Spring)
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
         .scrollable(ScrollDirection.Vertical)
         .scrollBar(BarState.Off)
         .constraintSize({ maxHeight: 240 })
@@ -7836,7 +7836,7 @@ export struct ReaderPage {
                         .onClick(() => this.selectMoreAction(action))
                     }
                   }, (action: ReaderMoreAction) => action.id)
-                }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true }).columnsTemplate('1fr 1fr 1fr 1fr').rowsGap(8).columnsGap(8).width('100%')
+                }.edgeEffect(EdgeEffect.None).columnsTemplate('1fr 1fr 1fr 1fr').rowsGap(8).columnsGap(8).width('100%')
               }, (page: ReaderMoreAction[], pageIndex: number) => `page-${pageIndex}`)
             }.loop(false).indicator(false)
               .onChange((index: number) => {
@@ -8040,7 +8040,7 @@ export struct ReaderPage {
                       })
                   }, (charset: string) => charset)
                 }.width('100%')
-              }.edgeEffect(EdgeEffect.Spring).width('100%').height(220).margin({ top: 8 })
+              }.edgeEffect(EdgeEffect.None).width('100%').height(220).margin({ top: 8 })
                 .scrollBar(BarState.Off)
             }
             Row() {

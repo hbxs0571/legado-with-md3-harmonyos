@@ -123,7 +123,7 @@ export struct OtherSettingsPage {
             UiSwitch({showDivider: false, title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
           }
         }.width('100%').padding({ top: 4, bottom: 120 })
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
 
       if (this.activeDialog.length > 0) {
@@ -243,7 +243,7 @@ export struct OtherSettingsPage {
                 .onChange((value: boolean) => this.directCompress = value)
             }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
           }.width('100%').padding({ left: 16, right: 16, top: 4 }).constraintSize({ minHeight: '100%' })
-        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
         Row() {
           Text('取消').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor('#25262D').borderRadius(20)

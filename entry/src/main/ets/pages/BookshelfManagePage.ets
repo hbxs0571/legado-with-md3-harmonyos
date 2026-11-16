@@ -725,7 +725,7 @@ export struct BookshelfManagePage {
               .width('100%').textAlign(TextAlign.Center).margin({ top: 60 })
           }
         }.width('100%')
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
       if (this.selectionMode) {
         Row() {
           Text(this.selectionTitle()).fontSize(12).fontColor('#DCDDE4').layoutWeight(1)

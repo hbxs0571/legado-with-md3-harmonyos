@@ -436,7 +436,7 @@ export struct ReaderMarkingEditor {
             Scroll() {
               Text(this.marking.selectedText).fontSize(13).fontColor(this.themeColorTextSecondary).lineHeight(20)
                 .width('100%')
-            }.edgeEffect(EdgeEffect.Spring).height(76).width('100%').padding(9).backgroundColor('#15161B').borderRadius(10)
+            }.edgeEffect(EdgeEffect.None).height(76).width('100%').padding(9).backgroundColor('#15161B').borderRadius(10)
             // 样式来源：对齐上游 MarkingSheet.kt:175 的 TinyDropdownSettingItem。
             Row() {
               Text('样式来源').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
@@ -531,7 +531,7 @@ export struct ReaderMarkingEditor {
               .backgroundColor('#15161B').height(82).width('100%')
               .onChange((value: string) => this.note = value)
           }.width('100%').alignItems(HorizontalAlign.Start)
-        }.edgeEffect(EdgeEffect.Spring).width('100%').layoutWeight(1).scrollBar(BarState.Off).align(Alignment.Top)
+        }.edgeEffect(EdgeEffect.None).width('100%').layoutWeight(1).scrollBar(BarState.Off).align(Alignment.Top)
         // 按钮行固定在面板底部，不随中间内容滚动，保证取色面板展开时依然可保存。
         Row() {
           if (!this.isNew) {

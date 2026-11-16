@@ -394,7 +394,7 @@ export struct CustomThemePage {
 
           Column().height(32)
         }.width('100%')
-      }.layoutWeight(1).scrollBar(BarState.Off).edgeEffect(EdgeEffect.Spring)
+      }.layoutWeight(1).scrollBar(BarState.Off).edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
         .onDidScroll(() => this.updateHeader())
 
       // 色位编辑面板：上游是 `ColorPickerSheet`（底部弹层），这里用底部固定面板对齐。

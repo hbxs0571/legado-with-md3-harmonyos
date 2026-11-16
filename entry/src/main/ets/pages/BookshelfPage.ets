@@ -1581,7 +1581,7 @@ export struct BookshelfPage {
             }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
           }
         }.width('100%')
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
@@ -2157,7 +2157,7 @@ export struct BookshelfPage {
               });
             })
         }.width('100%').padding({ bottom: 24 })
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
@@ -2251,7 +2251,7 @@ export struct BookshelfPage {
               }.width('100%').padding({ left: 16, right: 12, top: 6, bottom: 6 })
             }, (pair: TagColorPair, index: number) => `${index}_${pair.textColor}_${pair.bgColor}`)
           }
-        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).width('100%').scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.None).layoutWeight(1).width('100%').scrollBar(BarState.Off)
       }
 
       if (this.showTagColorPicker) {

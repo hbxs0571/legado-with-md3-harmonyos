@@ -995,7 +995,7 @@ export struct BookInfoPage {
           // 摘要那张圆角卡又浮在上面 —— 就是「下滑之后成这样了」的观感来源。
           }.width('100%').backgroundColor(this.pageBaseColor())
         }.width('100%').padding({ bottom: CONTENT_BOTTOM_INSET })
-      }.edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.infoScroller.currentOffset().yOffset) > 70;
         if (this.collapsedHeader !== shouldCollapse) { this.collapsedHeader = shouldCollapse; }
       })
@@ -1104,7 +1104,7 @@ export struct BookInfoPage {
                     }.width('100%').alignItems(HorizontalAlign.Start)
                   }, (day: BookReadRecordDay, dayIndex: number) => `${dayIndex}-${day.dateLabel}`)
                 }.width('100%')
-              }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+              }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
             }
             Text('查看全部').fontSize(14).fontColor('#B9C6FF').textAlign(TextAlign.Center)
               .width('100%').padding({ top: 14, bottom: 4 })

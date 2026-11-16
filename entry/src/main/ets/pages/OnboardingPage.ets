@@ -76,7 +76,7 @@ export struct OnboardingPage {
           Text('点击“阅读并同意”继续，即表示你已阅读并接受以上说明。')
             .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(19).width('100%').margin({ top: 18 })
         }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
-      }.edgeEffect(EdgeEffect.Spring).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).scrollBar(BarState.Off)
         .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else if (this.page === 1) {
       Column() {

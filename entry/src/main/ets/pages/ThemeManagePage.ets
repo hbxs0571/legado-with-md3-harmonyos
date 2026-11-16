@@ -402,7 +402,7 @@ export struct ThemeManagePage {
 
           Column().height(32)
         }.width('100%')
-      }.layoutWeight(1).scrollBar(BarState.Off).edgeEffect(EdgeEffect.Spring)
+      }.layoutWeight(1).scrollBar(BarState.Off).edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
         .onDidScroll(() => this.updateHeader())
 
       // ③ 名称输入面板：保存当前设置与重命名共用（上游是对话框里的 `AppTextField`）。

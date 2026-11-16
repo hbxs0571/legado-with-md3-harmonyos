@@ -176,7 +176,7 @@ export struct FileManagerPage {
                 }
               })
             }.height(24).padding({ left: 10, right: 10 })
-          }.edgeEffect(EdgeEffect.Spring).height(24).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.None).height(24).scrollBar(BarState.Off)
 
           if (this.isLoading) {
             FileManagerEmpty({ icon: 'folder', title: '正在读取目录', detail: '' }).layoutWeight(1)
@@ -201,7 +201,7 @@ export struct FileManagerPage {
             }.width('100%').padding({ left: 16, right: 16, bottom: 20 })
           }
         }.width('100%').height('100%')
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
 

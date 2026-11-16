@@ -203,7 +203,7 @@ export struct DiscoverPage {
               }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
             }
           }.padding({ left: 16, right: 16, bottom: 16 }).constraintSize({ minHeight: '100%' })
-        }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
           .onDidScroll((_xOffset: number, _yOffset: number) => {
             this.updateHeader(this.discoverScroller.currentOffset().yOffset);
           })

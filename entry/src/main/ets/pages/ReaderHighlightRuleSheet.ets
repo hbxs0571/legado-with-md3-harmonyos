@@ -605,7 +605,7 @@ export struct ReaderHighlightRuleSheet {
                   this.buildRuleItem(rule, index)
                 }, (rule: ReaderHighlightRule) => this.ruleItemKey(rule))
               }.width('100%')
-            }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+            }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           }
           Row() {
             Text('预设规则').fontSize(14).fontColor('#C7C9D1')
@@ -798,7 +798,7 @@ export struct ReaderHighlightRuleSheet {
                 }
               }
             }.width('100%')
-          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           Row() {
             Text('取消').fontSize(14).fontColor('#C7C9D1').padding(10)
               .onClick(() => this.editorVisible = false)
@@ -861,7 +861,7 @@ export struct ReaderHighlightRuleSheet {
                 })
               }, (preset: ReaderHighlightRule) => this.presetItemKey(preset))
             }.width('100%')
-          }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+          }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           Row() {
             Text('取消').fontSize(14).fontColor('#C7C9D1').padding(10)
               .onClick(() => {

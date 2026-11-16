@@ -511,7 +511,7 @@ export struct ReadRecordOverviewPage {
             books: this.books
           }).margin({ bottom: 16 })
         }.width('100%').padding({ left: 12, right: 12, top: 8 })
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off)
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%')
       .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent
         : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))

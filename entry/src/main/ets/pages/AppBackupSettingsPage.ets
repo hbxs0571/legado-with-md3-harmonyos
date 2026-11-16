@@ -253,7 +253,7 @@ export struct AppBackupSettingsPage {
             .fontSize(14).fontColor(this.themeColorTextSecondary).lineHeight(20)
             .width('100%').padding(15).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
-      }.edgeEffect(EdgeEffect.Spring).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet.length > 0, this.backupSheetContent(), {
         height: 520,
@@ -300,7 +300,7 @@ export struct AppBackupSettingsPage {
               else { this.onToggleRestoreIgnore(key, ignored); }
             }
           })
-        }.edgeEffect(EdgeEffect.Spring).height(420).scrollBar(BarState.Off)
+        }.edgeEffect(EdgeEffect.None).height(420).scrollBar(BarState.Off)
       } else if (this.activeSheet === 'input') {
         TextInput({ placeholder: this.inputTitle, text: this.inputDraft })
           .fontSize(16).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
