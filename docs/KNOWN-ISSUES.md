@@ -44,6 +44,10 @@
 > 设备实证：把档位临时切到“显示”后页眉立刻出现（左 `第1章(1)`、右 `02:50 100%`、下方一条分隔线，正文整体下移，`getReaderInfoReserve(true)` 的预留也跟着生效），说明绘制链路（`buildReaderHeaderDecoration`（`:5725`）→ `entry/src/main/ets/reader/ReaderCanvasSurface.ets:1141` 的 `drawPageDecoration()`）本身正常，坏的只有这一个判定；试完已把 `headerMode` 改回 0。
 > 修法（**r344 已修**）：把 `isReaderHeaderVisible()`（`entry/src/main/ets/pages/ReaderPage.ets:6742`）改成三支——`1` 返回 `true`、`2` 返回 `false`、其余返回 `this.hideStatusBar`，并把原来那条「HOS 目前保留系统状态栏」的错误注释订正为引用上游 `LegacyReaderPageDecorationFactory.kt:333` 三档口径。同时给 `onSystemBarSettingsChanged()`（`:404`）补一支：`headerMode` 不是 1 也不是 2 时调 `onPaginationInputsChanged()`，否则切 `hideStatusBar` 后页眉会出现但不重排。设备验收见 [VALIDATION.md](VALIDATION.md)「r344 阅读域 UI 八批对齐」节：四档行为全部符合，隐藏状态栏开 / 关时正文首行位置相差 80px（页眉行高），证明重排确实发生。
 
+**KI-REL8 详情页不认私密锁** —— 书架对私密书显示锁定并要密码，但点进详情页后封面、书名、简介、最新章节全部直接显示，编辑入口也能进。入口 `entry/src/main/ets/pages/BookInfoPage.ets`（全文 `isBookLocked` / `requiresPrivateUnlock` 零命中）；对照 `pages/BookshelfPage.ets:852` 的 `isBookLocked`、`:868` 的 `isGroupLocked` 与 `:2699`/`:2720` 的遮罩分支。上游整页脱敏（`BookInfoViewModel.kt:170-174`、`BookInfoScreen.kt:355-373`、`:665-734`、`:1343-1353` 的 `PrivateMaskLine`）。
+> 修法：`BookInfoPage` 加 `@StorageProp` 读 `PrivateAccessRepository` 的解锁态，未解锁时把封面 / 简介 / 章节名替换成遮罩行并禁用编辑与阅读记录入口。判为**安全相关的行为不一致**（不是纯观感），所以记在这里而不是只记在验证记录里。
+
+
 ## 书架与分组
 
 - r250 的全局排序档位和分组 `bookSort` 覆盖逻辑已接入；E 端尚未使用多本书和多组分组逐档核对真实列表顺序。
