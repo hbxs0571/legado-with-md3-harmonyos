@@ -1509,3 +1509,31 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 `dab51f0` / `a152c38` / `4943a43` / `638709b` / `32a055f` / `32e9dbc` / `00d9b9f` / `d73dbb5` / `be0a8d3` / `487ef5d` / `a060e3f` / `58f606d` / `ecd209d` / `8b54f10`。
 
 三项体检结果：`doc-links.py docs` → `OK 所有 md 链接可解析（扫了 225 份）`；`parity-pipes.py` → `OK 所有表格行单元格数与表头一致`；`parity-rows.py --file TXT-READER.md` → `296 {'已接': 252, '不适用': 12, '未接': 32}`，与开工时逐位相同。
+
+### 追加（r346 之后）：欢迎页第 4 页抽出公共件，外观页未跟进
+
+欢迎页第 4 页（`entry/src/main/ets/pages/OnboardingPage.ets`）已改走新建的 `entry/src/main/ets/components/ThemeSelectors.ets`（198 行，两个导出 struct：`ThemeModeSelector`、`ThemeColorSelector`），提交 `0d9d769`。
+
+**外观页 `entry/src/main/ets/pages/ThemeSettingsPage.ets`（1039 行）没有跟进**，仍是自己的两个私有 struct：`ThemeModeItem`（`:939-966`）与 `ThemePaletteItem`（`:969-1013`）。于是同一件事现在有两套画法，观感不同：
+
+| 维度 | 外观页（`ThemeModeItem`） | 欢迎页（`ThemeModeSelector`） | 上游 |
+| --- | --- | --- | --- |
+| 选中底 | `themeColorSurfaceElevated`（tonal） | `themeColorAccent`（filled） | M3 `ToggleButton` 默认 `secondaryContainer`，两边都是近似 |
+| 选中字/图标 | `themeColorTextPrimary` | `themeColorSurfacePrimary` | `onSecondaryContainer`，两边都是近似 |
+| 未选字/图标 | `themeColorTextSecondary` | `themeColorTextTertiary` | `onSurfaceVariant` |
+| 圆角 | 首尾 14、中间 0，档间无缝隙 | 首尾 20、内角 2，档间 2vp 缝 | `connectedLeading/Middle/TrailingButtonShapes()`，内角 = `ConnectedSpaceBetween` |
+| 高度 | 靠上下 `padding({top:12,bottom:12})`，实测约 44 | 固定 40 | 40 |
+
+配色卡一处关键差别：**外观页的选中勾有底色**（`.backgroundColor(this.themeColorAccent)` + 20 号 `#20212A` 勾，`:998-1002`），**欢迎页按源码不画底色**（`ThemeSelectors.ets:172-177`，只有 `size(40).clip(RoundedCornerShape(12))` + 24 号 `themeColorSurfacePrimary` 勾）。上游 `ThemeConfigScreen.kt:1157-1171` 那个 `Box` 确实没有 `background`，所以这一处欢迎页那版贴源码，外观页那版是旧的。
+
+另有两处小差：名字与卡的间距外观页 8、欢迎页 12（上游 `Spacer(12)`）；描边动画时长外观页 200ms、欢迎页 180ms。
+
+**为什么本轮没有一并改**：`tmp/ui-parity-impl-prompt.md` 批 10 已把外观页的预览卡与两个选择器列成独立一批（已实现并提交 `8b54f10`，那次动的是预览卡与选择器尺寸，没有抽公共件）。把外观页也换成公共件需要再改一次 `ThemeSettingsPage.ets`、重新构建、重新上机，属于同一批的延续工作，单独排。
+
+**修法**（留给后续批次）：
+
+1. `ThemeSettingsPage.ets:544-548` 三个 `ThemeModeItem(` 调用换成 `ThemeModeSelector({ selectedMode: ..., onModeSelected: ... })`。注意外观页的 `themeMode` 是字符串 `'0'/'1'/'2'`，公共件的 `selectedMode` 是 `number`，要转换。
+2. `:556` 的 `ThemePaletteItem(` 换成 `ThemeColorSelector({ selectedIndex, isDark, onPaletteSelected })`。外观页的配色卡额外传了 `surfaceColor` / `upperColor` / `lowerColor` / `centerColor` 四个 `@Prop`，公共件内部用 `resolvePaletteColors(index, isDark)` 现算，不再需要这四个入参。
+3. 删掉两个私有 struct（`:939-966`、`:969-1013`），并清掉只为它们存在的 `@StorageProp`。
+4. 上机对比三处：模式档选中底色从 tonal 变 filled、配色卡选中勾从「有底色 + 20 号勾」变「无底色 + 24 号勾」、名字间距 8 变 12。**这三处是观感变化，不是纯重构，验收时要看屏幕。**
+

@@ -2,7 +2,7 @@
 
 更新：2026-11-10。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
 
-## 发布版五条已知问题（r323，前四条已修、第五条未修）与后续新增（KI-REL6、KI-REL7）
+## 发布版五条已知问题（r323，前四条已修、第五条未修）与后续新增（KI-REL6、KI-REL7、KI-REL8、KI-REL9）
 
 0.1.0 开发预览发布时用户报了五条体验问题。发布当时代码一行未改；此后 KI-REL1 已在 r325、KI-REL2 在 r326、KI-REL3 在 r327、KI-REL4 在 r328 修复，**只剩 KI-REL5 未修**。KI-REL6、KI-REL7 不属于那五条，是后续新发现后按同一编号续排的：**KI-REL7 已在 r344 修复**，KI-REL6 仍未修。派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。
 
@@ -46,6 +46,11 @@
 
 **KI-REL8 详情页不认私密锁** —— 书架对私密书显示锁定并要密码，但点进详情页后封面、书名、简介、最新章节全部直接显示，编辑入口也能进。入口 `entry/src/main/ets/pages/BookInfoPage.ets`（全文 `isBookLocked` / `requiresPrivateUnlock` 零命中）；对照 `pages/BookshelfPage.ets:852` 的 `isBookLocked`、`:868` 的 `isGroupLocked` 与 `:2699`/`:2720` 的遮罩分支。上游整页脱敏（`BookInfoViewModel.kt:170-174`、`BookInfoScreen.kt:355-373`、`:665-734`、`:1343-1353` 的 `PrivateMaskLine`）。
 > 修法：`BookInfoPage` 加 `@StorageProp` 读 `PrivateAccessRepository` 的解锁态，未解锁时把封面 / 简介 / 章节名替换成遮罩行并禁用编辑与阅读记录入口。判为**安全相关的行为不一致**（不是纯观感），所以记在这里而不是只记在验证记录里。
+
+**KI-REL9 外观页与欢迎页各留一套主题选择器** —— 欢迎页第 4 页已改用 `entry/src/main/ets/components/ThemeSelectors.ets`（`ThemeModeSelector` / `ThemeColorSelector`，提交 `0d9d769`），但外观页 `entry/src/main/ets/pages/ThemeSettingsPage.ets` 仍是自己的 `ThemeModeItem`（`:939-966`）与 `ThemePaletteItem`（`:969-1013`）。同一件事两套画法，观感不同：模式档选中底前者的 `themeColorSurfaceElevated`（tonal）vs 后者的 `themeColorAccent`（filled）；圆角前者「首尾 14 / 中间 0 / 无缝」vs 后者「首尾 20 / 内角 2 / 档间 2vp」；配色卡选中勾前者有 `themeColorAccent` 底色 + 20 号 `#20212A` 勾（`:998-1002`）vs 后者无底色 + 24 号勾（`ThemeSelectors.ets:172-177`）；名字间距 8 vs 12。
+> 上游只有一个 `ThemeModeSelector`（`ThemeConfigScreen.kt:1004-1040`）与一个 `ThemeColorButton`（`:1077-1183`），欢迎页（`OnboardingScreen.kt:339-357`）与外观页（`ThemeConfigScreen.kt:223`/`:237`）调的是同一对组件，所以上游不存在这个差异。配色卡那处**无底色的勾**是上游真实形态（`:1157-1171` 那个 `Box` 没有 `background`），外观页现版是旧的。
+> 修法见 [VALIDATION.md](VALIDATION.md) 的「追加（r346 之后）」一节。判为**观感不一致**（不是功能缺失），所以只登记、本轮不改代码。
+
 
 
 ## 书架与分组
