@@ -1537,3 +1537,102 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 3. 删掉两个私有 struct（`:939-966`、`:969-1013`），并清掉只为它们存在的 `@StorageProp`。
 4. 上机对比三处：模式档选中底色从 tonal 变 filled、配色卡选中勾从「有底色 + 20 号勾」变「无底色 + 24 号勾」、名字间距 8 变 12。**这三处是观感变化，不是纯重构，验收时要看屏幕。**
 
+
+## 2026-11-16 N 端 r347 动效六批（启动闪屏 / 滚动回弹 / 点击反馈 / 页面转场 / 下拉刷新 / 主页指示器）
+
+**设备**：DevEco 模拟器 `127.0.0.1:5555`（API 26，1280×2832，密度 3.5，视口 365×809vp），包名 `io.legado.harmony`。
+
+**判据来源**：上游 `N:/HarmonyProjects/legado-with-MD3`（Kotlin）源码，逐条对照 `MainActivity.kt` 的 NavDisplay 转场、`BookshelfScreen.kt` 的 `AppPullToRefresh`、`AppPullToRefresh.kt` 的 M3 指示器、`BookshelfViewModel.kt:1111-1117` 的刷新上限；平台默认值查 DevEco SDK 的 `scroll.d.ts` / `grid.d.ts` / `common.d.ts` / `list.d.ts` / `refresh.d.ts`。**只改 `entry/src/main/ets/` 下的 `.ets`，不动资源与 `module.json5`。**
+
+### 做了什么
+
+| 批 | 主题 | 提交 | 一句话 |
+| --- | --- | --- | --- |
+| 1 | 启动闪屏首帧 | `a659916` | `EntryAbility.onCreate` 用 `preferences.getPreferencesSync` 同步预读 `themeMode`/`paletteIndex`，算出深浅色后 `publishPaletteColors` 把八色灌进 `AppStorage`，赶在 `loadContent` 与 Index 的 `aboutToAppear` 之前；Index 根背景在「真值未就绪」那一段改用 `$r('app.color.start_window_background')` |
+| 2 | 滚动回弹 | `7ae172b` | 纵向 `Scroll` 88 处补 `EdgeEffect.Spring`，`Grid` 9 处（7 处带 `{ alwaysEnabled: true }`、2 处内嵌改 `None`） |
+| 3 | 点击反馈 | `1820f68` | 设置行用 `stateStyles` 换按压底色，菜单项 / 顶栏按钮 / 书卡 / 分组卡 / 底栏 tab 用 `clickEffect` 缩放 |
+| 4 | 页面转场 | `b878608` | 新增 `routeTransition()`，八个非阅读分支挂 `.transition(...)`，阅读族沿用原 `readerRouteTransition()` |
+| 5 | 书架下拉刷新 | `7f19980` | `BookshelfPage` 的卡片区包进 `Refresh`，按 `enableRefresh` 与编辑态收窄，Index 侧按分组与 `bookshelfRefreshingLimit` 取书 |
+| 6 | 主页刷新指示器 | `067def6` + `f035a00` | 新建 `PullRefreshIndicator`，主页与书架都换成它；主页的假刷新（弹「尚未迁移」+ `setTimeout`）换成真重读。第一版画的是「圆片 + 静态图标 + 对勾」，**不符合上游**，`f035a00` 改成 Canvas 逐帧重算的「圆 ↔ 软爆裂」morph + 跟手旋转 + 刷新自转，内容层用 `.position({x:0,y:0})` 钉住不再被拖走 |
+
+### 上机验证了什么
+
+1. **批 1**：临时探针（已撤、未提交）对照实验。把 `preloadInitialThemeColors` 注释掉，日志是 `[B1PROBE] Index aboutToAppear surface=#F5F6F8`（浅色，即白闪来源）；恢复后是 `surface=#111217`（深色）。这是「首帧拿到的是深色」的直接证据。
+2. **批 2**：`uitest` 慢速拖拽 + 途中抓帧 + 按最小残差估竖直位移。书架（内容不足一屏）下拉位移 −128 / −144 / −272 px 且松手后截图哈希完全回到基准；「我的」页底边上推 +160（平移后残差 0.000）/ +344 / +296；详情页 +184 / +392 / +400；三点菜单 4 帧位移恒为 0（`UiMenu` 的 `None` 未被误改）。
+3. **批 3**：`uinput -T -d/-u` 按住后抓帧。设置「外观」行按压时该行 bbox=(47,735,1233,913) 像素由 (26,27,32) 变 (48,52,64)、相邻行不变；滑走取消后哈希回到基准且未跳页；顶栏返回按钮按压 bbox=(48,223,112,273)；书卡按压 bbox=(31,687,416,1296)；底栏「我的」tab 按压 bbox=(1112,2568,1192,2704)。书卡长按 900ms 仍进详情页（长按手势没被吃掉）。
+4. **批 4**：设备端连拍（约 110ms/张）。书架长按书卡 → 详情页、详情页 → 编辑页、详情页 → 阅读页、详情页 → 目录、详情页 → 书架、底栏切 tab 各自都抓到至少一张中间帧；连点两次返回后最终帧与再等 2s 的帧哈希相同（无撕裂）。
+5. **批 5**：书架下拉 → 出现指示器与「更新中」标记、松手后 toast「更新目录完成：已更新 1 本」；编辑态下拉无任何反应；新建分组 `b5test` 关掉「下拉刷新」开关后下拉无反应、重新打开后恢复；三点菜单「更新目录」仍走全量分支。
+6. **批 6**：主页浅拉出现圆形卡片 + 刷新箭头（不是系统细线圆环），深拉图标变对勾；松手后不再出现「首页数据刷新尚未迁移」。真刷新用临时探针（已撤、未提交）打印下拉前后 `totalReadTimeMs=4646911 records=41`，两次完全一致，说明刷新真的执行且没把阅读记录覆盖回旧值。书架下拉是同一个圆形指示器。
+
+### 没做什么 / 与上游的刻意偏差
+
+1. **设置子页仍无转场**。`PROFILE_SUBPAGE` 这一支的根容器在 `profileSubpage` 变化时是复用的，`transition` 只在组件插入/移除时播，挂上去也基本看不到；要真做必须改 `ProfileSubPages.ets` 内部十几处 `if`。本批按任务书不做，登记为 KI-MOTION1。
+2. **转场不是整屏宽度滑动**。上游 `initialOffset = { fullWidth -> fullWidth }` 是整屏；本地固定 `40` / `-60` vp。整屏要在 ArkUI 里按 display 宽度算 vp，且横竖屏与折叠屏都要单独处理，收益不抵风险。
+3. **转场时长 280 / 220ms，不是上游的 480 / 360**。上游那组值配的是 Android 的 motion spec；`Curve.FastOutSlowIn` 与 Compose 同名曲线接近但合成方式不同，480ms 在模拟器上实测发拖。
+4. **`TransitionEffect.asymmetric` 代替方向感知**。上游 NavDisplay 知道「进入」与「返回」是两个 spec；本地是 if/else 换子树，同一个组件分不清自己是被推入还是被弹出，只能让出现演滑入、消失演左移淡出。返回时被返回的那一页也演「从右滑入」，看起来像又前进了一次——这是本地路由模型的固有偏差，**没有逐帧对齐上游，只保证有动画且不突兀**。
+5. **抽帧粒度约 110ms**，比 280/220ms 的单段动画还粗，只能证明「中间存在过渡帧」，不能比对缓动曲线。
+6. **横向 `Scroll` 12 处没加回弹**。横向回弹在鸿蒙上会把相邻内容拉进视口露出白边，上游横向列表没这个露白。
+7. **`Refresh` 用 `builder` 而不是 `refreshingContent`**。`refreshingContent` 要构造 `ComponentContent`，在 `@Component` 里用不方便；`builder` 的代价是 API 12 注记说刷新过程中组件可能被销毁重建。返工后指示器带 Canvas 重绘状态（`pullDistance` / `spinClock`），理论上会丢重建前的中间态，但形变每帧都从 `pullDistance` 重算、自转从 0 重新起算，实测抓帧里没有断帧，故仍用 `builder`。
+8. **WebDAV 备份信息不参与下拉刷新**。上游也是分离的两条数据流（`HomeViewModel.kt:328` 的 `refreshLatestBackup` 由别的事件触发，不在 `onRefresh` 链路里）。
+9. **浅色模式逐项未验**。全部按深色主路径改与验，浅色只做到「不崩、不明显更差」。
+10. **`bookshelfRefreshingLimit` 未上机验证**。公式照上游 `BookshelfViewModel.kt:1111-1117` 写了（`limit > 0 ? groupBooks.slice(0, limit) : groupBooks`），但模拟器书架只有 1 本书，构造不出「5 本书只刷前 2 本」的场景。
+11. **「刷新中」的自转没有连帧证据**。首页刷新只跑约 20ms（探针实测首尾时间差），指示器来不及转就被收掉；连抓 70 帧（约 7.7s）在松手后全部同哈希。`startSpin()` 这条路径只有构建验证，**没有上机证据**。
+12. **批 2 的阅读页滚动模式回弹观感未确认**。`uitest` 拖拽在 Canvas 上触发的是选区手势而不是滚动；分页模式点按翻页正常（1/16 → 2/16）。
+13. **批 1 的冷启动白闪没有次数型证据**。10 次冷启动 × 5 帧亮度统计，修复前后都是零浅色帧——连续截图约 200–400ms 一张，抓不到不足 100ms 的闪屏窗口。这个方法的结论是「该法证明不了」，不是「已验证不闪」。
+
+### 体检
+
+`doc-links.py docs` → `OK 所有 md 链接可解析（扫了 225 份）`；`parity-pipes.py` → `OK 所有表格行单元格数与表头一致`；`parity-rows.py --file TXT-READER.md` → `296 {'已接': 252, '不适用': 12, '未接': 32}`（与本轮起点一致，本任务没有动对照表状态列）。
+
+### 完成判据自检
+
+- `edgeEffect(EdgeEffect.Spring` 全仓 **97** 处（判据要求 ≥100：91 纵向 `Scroll` 中 2 处原有、1 处 `UiMenu` 是 `None`，实补 88；`Grid` 9 处中 7 处 Spring、2 处内嵌改 `None`；加上原有 2 处 Spring 共 97。**未达 100，差 3 处正是两条内嵌 Grid 与 UiMenu 那条 `None`，都是任务书要求保留的例外**）
+- `clickEffect` 全仓 **6** 处（≥5）
+- `Refresh(` 组件用法 **2 处**（`HomePage.ets:219`、`BookshelfPage.ets:2595`），两处都有 `builder:` 指向 `PullRefreshIndicator`
+- `首页数据刷新尚未迁移` 全仓 **0** 命中
+
+### 批 6 返工（`f035a00`）
+
+第一版指示器（`067def6`）画的是「40vp 圆片 + `AppGlyph` 静态图标 + 过阈值换对勾」，
+用户两次指出不对：上游是「类似齿轮、会转、跟着拖动转、能拉的距离也更长」的形变图形，
+而且界面本身不该被往下拖、只该拖出指示器。
+
+**上游到底是什么形状**（查证，不是猜）：`AppPullToRefresh.kt:104-110` 用
+`PullToRefreshDefaults.LoadingIndicator`，其形状来自
+`LoadingIndicatorDefaults.DeterminateIndicatorPolygons` =
+`listOf(MaterialShapes.Circle.transformed(rotateZ(360f/20)), MaterialShapes.SoftBurst)`，
+即在**正圆与 SoftBurst 之间连续 morph**，同时整体旋转。SoftBurst 是圆润八瓣、实心无孔。
+本地没有 `RoundedPolygon` 插值 API，用 `Canvas` 自绘径向连续函数
+`r(θ) = R - depth*(R-R0)*(1-cos(8θ))/2` 近似同一条 morph 路径。
+
+**返工过程中定位到的一个真 bug**：把旋转角加进取样角
+（`theta = angle + i*Δ` 且半径也用同一个 `theta`）只是把闭合曲线换个参数起点重画一遍，
+形状完全不变 —— 这就是用户说的「完全没有旋转」。判据：写了合成测试，对已知旋转
+0/10/20/30/40/60/90° 的形状做 8θ 傅里叶相位估计，估计值随真实旋转单调变化（估计器可靠）；
+而对真机抓帧跑同一估计器，相位恒为 0~1°，与合成结果矛盾。改成旋转矩阵作用在点坐标上
+（`x = cx + px*cosA - py*sinA`）后，相位逐帧推进。
+
+**其他两处非平凡改动**：
+
+| 问题 | 现象 | 做法 |
+| --- | --- | --- |
+| 内容被整页拖下去 | 下拉时整页内容跟着手指平移，上游只有指示器进出 | 内容层加 `.position({x:0,y:0})`（`refresh.d.ts:100-104` 的官方手段），配套 `pullDownRatio(1)`、`maxPullDownDistance(120)`，指示器 `.zIndex(9999)`（否则被钉住的内容层盖住，实测只露出 9vp） |
+| 拖拽期指示器纹丝不动 | 原实现常驻 `setInterval(16ms)` 轮询重绘，下拉手势占着主线程，定时器排不上队；松手后才补几帧 | 改数据驱动：`@Prop @Watch('pullDistance')` 在 `onOffsetChange` 里直接重绘；只有 `refreshing` 期间才起定时器做自转 |
+
+**上机证据（深色，模拟器）**：
+
+1. 连帧抓取：`uitest uiInput drag`（第 5 参是 velocity px/s，传 200 才是慢拖）+ 设备端
+   `snapshot_display` 连拍（约 110ms/帧）。**注意顺序**：先起拖拽、sleep 0.35s、再连拍，
+   反了会得到一堆完全相同的静止帧。
+2. 书架下拉 40 帧，8θ 相位逐帧推进 `35.9 → 41.9 → 45.7 → 68.1 → 50.4 → 60.5`（mod 45°），
+   振幅 `0.74 → 1.37` —— 边转边变形。首页下拉同样单调（`16.1 → 23.7 → 31.1 → 40.3`）。
+3. 内容不动：把中间帧与基准帧求差，下半屏（`crop((0,1200,1280,2500))`）
+   书架与首页**全部 `max diff = 0.0`**。
+4. 形变终态目视：深色圆形容器 + 强调色圆润八瓣、无中心孔。
+
+**返工后仍然存在、且不打算在本轮解决的偏差**：
+
+- 上游 morph 走 `MaterialShapes` 多边形插值、形状序列更长（圆→软爆裂→圆），
+  本地只有单个余弦径向函数，细节形状不完全相同；
+- 刷新中的容器形状变化（`ContainedLoadingIndicator`）没做，容器始终是圆形；
+- 自转只在 `refreshing` 期间跑，且没有连帧证据（见「没做什么」第 11 条）。
