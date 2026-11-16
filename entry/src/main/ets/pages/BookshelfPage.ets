@@ -18,6 +18,7 @@ import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
+import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 import { normalizeCustomColor } from '../data/CustomThemeColors';
 import { AppLog } from '../lib/AppLog';
 import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
@@ -200,6 +201,8 @@ export struct BookshelfPage {
   @State selectionMode: boolean = false;
   /** 下拉刷新进行中。与单本刷新的 refreshingBookIds 是两件事：这个是整批转圈。 */
   @State pullRefreshing: boolean = false;
+  /** 下拉已过触发阈值，只喂给自绘指示器换图标用。 */
+  @State pullArmed: boolean = false;
   /**
    * 已选书籍的键集合（:142-144）。
    * 键一律用 bookUrl（contentPath 优先），不用 book.id —— id 是文件名去扩展名派生的，
@@ -445,6 +448,18 @@ export struct BookshelfPage {
     } finally {
       this.pullRefreshing = false;
     }
+  }
+
+  /**
+   * 下拉指示器。与首页 HomePage.RefreshIndicatorBuilder 是同一个组件，
+   * 两处下拉长得一致（任务书 6.8：书架不能和主页两个样式）。
+   */
+  @Builder
+  private pullIndicatorBuilder() {
+    PullRefreshIndicator({
+      armed: this.pullArmed,
+      refreshing: this.pullRefreshing
+    });
   }
 
   /**
@@ -2577,7 +2592,10 @@ export struct BookshelfPage {
       } else if (this.bookshelfData.totalCount() > 0) {
         // 下拉刷新只包「卡片滚动区」这一层：包整个 Column 的话顶栏会跟着一起下移。
         // 是否可刷由 canPullRefresh() 现算（编辑态/分组开关都会变，不能缓存）。
-        Refresh({ refreshing: this.pullRefreshing }) {
+        Refresh({
+          refreshing: this.pullRefreshing,
+          builder: () => { this.pullIndicatorBuilder(); }
+        }) {
         Grid(this.bookshelfScroller) {
           // :154：LazyForEach 只创建视口内 + cachedCount 的项，ForEach 是首帧全量建。
           LazyForEach(this.bookshelfData, (book: Book) => {
@@ -2812,6 +2830,11 @@ export struct BookshelfPage {
         }
         // refreshOffset 与 HomePage.ets:305 保持一致（promptText 未设时默认也是 64vp）。
         .onRefreshing(() => { this.handlePullRefresh(); })
+        // RefreshStatus 的 OverDrag 就是「已拉过阈值、松手会刷」，用它换指示器图标。
+        .onStateChange((state: RefreshStatus) => {
+          const armed = state === RefreshStatus.OverDrag;
+          if (armed !== this.pullArmed) { this.pullArmed = armed; }
+        })
         .pullToRefresh(this.canPullRefresh())
         .refreshOffset(64)
         .layoutWeight(1)

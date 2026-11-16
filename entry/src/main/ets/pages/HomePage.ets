@@ -7,6 +7,7 @@ import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { HomeDashboardSection, HOME_DASHBOARD_SECTIONS } from '../data/HomeDashboardSettingsRepository';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
+import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 
 /** 首页右上角菜单的宽度，与详情页溢出菜单同口径。 */
 const HOME_MENU_WIDTH: number = 260;
@@ -31,16 +32,51 @@ export struct HomePage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop visibleSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
   onSectionVisibilityChange: (section: HomeDashboardSection, visible: boolean) => void = (_section: HomeDashboardSection, _visible: boolean) => {};
+  /** 下拉刷新：由 Index 重读 books 与阅读记录后返回。 */
+  onPullRefresh: () => Promise<void> = async () => {};
   @State showHomeOptions: boolean = false;
   @State moreMenuVisible: boolean = false;
   @State refreshing: boolean = false;
+  /** 下拉已过触发阈值（松手就会刷新），只喂给自绘指示器换图标用。 */
+  @State refreshArmed: boolean = false;
   @State collapsedHeader: boolean = false;
   private homeScroller: Scroller = new Scroller();
 
-  private handlePullToRefresh(): void {
+  /**
+   * 下拉刷新。
+   *
+   * 上游对应 HomepageViewModel.kt:648-663 的 onRefresh()：取消在途加载、重新从各模块
+   * 拉一遍、全部结束后把 isRefreshing 置回 false。本地首页没有「模块」，数据源是 books
+   * 表与 read_record 表，所以等价于重读这两张表（Index.refreshHomeFromPull）。
+   */
+  private async handlePullToRefresh(): Promise<void> {
+    if (this.refreshing) { return; }
     this.refreshing = true;
-    this.onUnavailableAction('首页数据刷新尚未迁移');
-    setTimeout(() => this.refreshing = false, 500);
+    try {
+      await this.onPullRefresh();
+    } catch (_) {
+      // 刷新失败不该把界面卡在转圈状态，只收掉指示器。
+    } finally {
+      this.refreshing = false;
+    }
+  }
+
+  /**
+   * 自绘指示器。
+   *
+   * `Refresh` 的自定义入口有 `builder`（CustomBuilder，API 10）与 `refreshingContent`
+   * （ComponentContent，API 12）两个，同时设时 builder 不生效。
+   * 这里选 builder：它的类型就是箭头函数，在 struct 里直接写最省事；
+   * refreshingContent 要另外构造 ComponentContent，在 @Component 里用不方便。
+   * 代价是 API 12 的注记说 builder 在刷新过程中可能被销毁重建——对本地这个
+   * 只有一个静态圆片的指示器没有影响（重建后状态从 @State 重读，画面一致）。
+   */
+  @Builder
+  private RefreshIndicatorBuilder() {
+    PullRefreshIndicator({
+      armed: this.refreshArmed,
+      refreshing: this.refreshing
+    });
   }
 
   private sectionTitle(section: HomeDashboardSection): string {
@@ -180,7 +216,10 @@ export struct HomePage {
         collapsed: this.collapsedHeader,
         actions: () => { this.homeTopActions() }
       })
-      Refresh({ refreshing: this.refreshing }) {
+      Refresh({
+        refreshing: this.refreshing,
+        builder: () => { this.RefreshIndicatorBuilder(); }
+      }) {
         Scroll(this.homeScroller) {
         Column() {
           if (this.visibleSections.includes('recentBook') && this.getLocalBooks().length > 0) {
@@ -302,7 +341,14 @@ export struct HomePage {
             });
           }
         })
-      }.layoutWeight(1).refreshOffset(64).onRefreshing(() => this.handlePullToRefresh())
+      }.layoutWeight(1).refreshOffset(64)
+        .onRefreshing(() => { this.handlePullToRefresh(); })
+        // RefreshStatus: Inactive / Drag / OverDrag / Refresh / Done。
+        // OverDrag 就是「已拉过阈值、松手会刷」，用它驱动指示器换对勾。
+        .onStateChange((state: RefreshStatus) => {
+          const armed = state === RefreshStatus.OverDrag;
+          if (armed !== this.refreshArmed) { this.refreshArmed = armed; }
+        })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showHomeOptions, this.homeOptionsSheetContent(), {
         height: SheetSize.FIT_CONTENT,

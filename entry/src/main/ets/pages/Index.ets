@@ -6771,6 +6771,22 @@ private canWriteInto(dir: string): boolean {
   }
 
   /**
+   * 首页下拉刷新：重读书架与阅读记录，让首页三块数字都是最新的。
+   *
+   * 上游对应 HomepageViewModel.kt:648-663 的 onRefresh()：取消在途加载、重新从各模块
+   * 拉一遍、全部结束后把 isRefreshing 置回 false。本地首页没有「模块」，数据源是 books
+   * 表与 read_record 表，所以等价于重读这两张表。
+   * WebDAV 备份信息不在这里刷：上游也是分离的两条数据流（HomeViewModel.kt:328 的
+   * refreshLatestBackup 由别的事件触发，不在 onRefresh 链路里）。
+   */
+  private async refreshHomeFromPull(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    await this.restoreImportedBooks(context);   // books / bookGroups
+    await this.reloadReadRecordData(context);   // readTimeRecords / details / summaries
+  }
+
+  /**
    * 当前纸色。优先取用户自定义的背景色（上游 `bgStr`/`bgStrNight`），
    * 没有自定义时回落到 `paperIndex` 指向的内置方案——`READER_BACKGROUND_STYLES`
    * 因此从「唯一来源」降级为「预设」。
@@ -8144,7 +8160,8 @@ private canWriteInto(dir: string): boolean {
           onOpenBookshelf: () => this.selectTab(1),
           onOpenReadRecords: () => this.openProfileDetail(ProfileRoute.READ_RECORDS),
           onOpenBackup: () => this.openProfileDetail(ProfileRoute.APP_BACKUP_SETTINGS),
-          onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+          onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+          onPullRefresh: () => this.refreshHomeFromPull()
         })
         BookshelfPage({
           books: this.books,
