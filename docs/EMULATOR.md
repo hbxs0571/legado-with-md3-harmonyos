@@ -40,7 +40,16 @@ hdc shell "hidumper -s DisplayManagerService -a -a" | grep -E 'Density|VirtualWi
 - 模拟器配置本身是好的：`config.ini` 与 `hardware-qemu.ini` 都是 `hw.lcd.density=560`，`Emulator.log` 每次启动都记 `Init Phone dpi = 560`
 - 应用里没有改密度的代码：`setDefaultDisplayDensity` / `densityDPI` / `@ohos.display` 全 0 命中
 
-**唯一解法是重启模拟器**，重启后自愈。
+**真正的原因是系统设置里的「显示大小缩放」档位，不是配置坏了，也不必重启模拟器。**
+
+路径：`设置 → 显示和亮度 → 字体大小和界面缩放 → 显示大小缩放`，共三档。
+
+两个实测细节：
+
+- **点已选中档无效**：hilog 会打 `ScreenZoomSettings : slider dpi value not change`，档位没变。
+- **必须切到别的档再切回原档** 才会真正生效（相当于强制重算一次 dpi）。
+
+改完桌面可能不重排，需要 `hdc shell reboot`。
 
 ## 启动必须给足权限
 
