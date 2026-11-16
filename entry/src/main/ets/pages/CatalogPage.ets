@@ -3,7 +3,7 @@ import { Book, BookChapter } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking } from '../model/ReaderMarking';
 import { BookCover } from '../components/BookCover';
-import { AppGlyph } from '../components/AppGlyph';
+import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 
@@ -65,10 +65,12 @@ class CatalogChapterDataSource implements IDataSource {
 
 @Component
 export struct CatalogPage {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
@@ -103,6 +105,8 @@ export struct CatalogPage {
   private hasAutoScrolledBookmarks: boolean = false;
   onBack: () => void = () => {};
   onSelectChapter: (chapterIndex: number) => void = () => {};
+  /** 上游书封/书名点击进书籍详情（`ReaderBookSheet.kt` 的 combinedClickable）。 */
+  onOpenBookInfo: () => void = () => {};
   onOpenBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
   onEditBookmark: (bookmarkId: string) => void = (_bookmarkId: string) => {};
   onOpenMarking: (markingId: string) => void = (_markingId: string) => {};
@@ -270,9 +274,35 @@ export struct CatalogPage {
     this.collapsedVolumes = new Set<number>(this.collapsedVolumes);
   }
 
-  private isChapterSelected(chapterIndex: number): boolean {
+  /**
+   * 当前阅读章节。上游 `ReaderBookSheet.kt:899-903` 把行背景分三档：
+   * 多选选中 → `primaryContainer`、当前章 → `secondaryContainer`、其余 → `surfaceContainerLow`。
+   * 本地没有 primaryContainer / secondaryContainer，降级用 `themeColorSurfaceElevated`
+   * 与 `themeColorSurfaceTertiary` 两级（见 `data/ThemePalette.ets` 只有 10 个色字段）。
+   */
+  private isCurrentChapter(chapterIndex: number): boolean {
     const selectedIndex = this.book.chapterIndex ?? this.getAllChapters().indexOf(this.selectedChapter);
     return chapterIndex === selectedIndex;
+  }
+
+  /** 多选是否选中该章（与「当前阅读章」是两件事，别混用）。 */
+  private isMarked(chapterIndex: number): boolean {
+    return this.selectedChapterIndexes.has(chapterIndex);
+  }
+
+  /** 章节行三档背景色。 */
+  private chapterRowBackground(chapterIndex: number): string {
+    if (this.isMarked(chapterIndex)) { return this.themeColorSurfaceElevated; }
+    if (this.isCurrentChapter(chapterIndex)) { return this.themeColorSurfaceTertiary; }
+    return this.themeColorSurfaceSecondary;
+  }
+
+  /** 章节行三档文字色。 */
+  private chapterRowForeground(chapterIndex: number): string {
+    if (this.isMarked(chapterIndex) || this.isCurrentChapter(chapterIndex)) {
+      return this.themeColorTextPrimary;
+    }
+    return this.themeColorTextSecondary;
   }
 
   private getTabLabel(index: number): string {
@@ -390,6 +420,23 @@ export struct CatalogPage {
     if (this.book.format === 'umd') { return '本地 UMD'; }
     if (this.book.format === 'txt') { return '本地 TXT'; }
     return '本地';
+  }
+
+  /**
+   * 信息页展示用的简介。上游 `ReaderBookSheet.kt:517-521` 先过 `HtmlFormatter.formatReadableText`：
+   * 去 `<useweb>`/`<usehtml>`/`<md>` 前缀、丢掉 `@onclick:JS` 片段、剥 HTML 标签。
+   * 本地没有 HtmlFormatter，这里做一个最小实现（剥标签 + 解常见实体 + 去三个前缀），
+   * 与上游不等价，但比直接渲染带标签的原文好。
+   */
+  private displayIntro(): string {
+    let text = (this.book.description ?? '').trim();
+    if (text.length === 0) { return ''; }
+    text = text.replace(/^<(useweb|usehtml|md)>/i, '');
+    text = text.replace(/@onclick:[^\s<>]*/gi, '');
+    text = text.replace(/<[^>]*>/g, '');
+    text = text.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+    return text.trim();
   }
 
   private getCurrentChapterNumber(): number {
@@ -613,49 +660,77 @@ export struct CatalogPage {
     })
   }
 
+  /**
+   * 目录页工具图标盒。上游 `CompactToolIconBox`：32dp 方盒、radius 10、
+   * 选中态底色 `secondaryContainer`（本地降级 `themeColorSurfaceElevated`），
+   * 图标本身 16-18dp 居中。原来本地是五个裸 AppGlyph，没有点击盒也没有选中底色。
+   */
+  @Builder
+  private catalogToolBox(icon: AppGlyphName, active: boolean, action: () => void) {
+    Stack({ alignContent: Alignment.Center }) {
+      AppGlyph({ name: icon, glyphSize: 18,
+        tint: active ? this.themeColorAccent : this.themeColorTextSecondary })
+    }
+    .width(32).height(32).borderRadius(10)
+    .backgroundColor(active ? this.themeColorSurfaceElevated : Color.Transparent)
+    .onClick(() => action())
+  }
+
   @Builder
   private CatalogTabPage(tab: number) {
     if (tab === 0) {
+      // 上游 `ReaderBookSheet.kt:504-540 ReaderBookInformation`：四行（作者 / 书源 / 备注 / 简介），
+      // `contentPadding(vertical = 8.dp)` + `Arrangement.spacedBy(8.dp)`，备注与简介为空时不占位。
       Scroll() {
-        Column() {
+        Column({ space: 8 }) {
           CatalogInformationRow({ label: '作者', value: this.book.author })
           CatalogInformationRow({ label: '书源', value: this.getSourceLabel() })
-          if ((this.book.description ?? '').trim().length > 0) {
-            CatalogInformationRow({ label: '简介', value: this.book.description ?? '' })
+          if ((this.book.remark ?? '').trim().length > 0) {
+            CatalogInformationRow({ label: '备注', value: this.book.remark ?? '' })
+          }
+          if (this.displayIntro().length > 0) {
+            CatalogInformationRow({ label: '简介', value: this.displayIntro() })
           }
         }
         .width('100%')
-        .padding({ top: 8, bottom: 14 })
+        .padding({ top: 8, bottom: 8 })
       }
       .width('100%')
       .height('100%')
       .scrollBar(BarState.Off)
     } else if (tab === 1) {
       Column() {
-        Row() {
-          TextInput({ placeholder: '搜索章节…', text: this.query })
-            .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
-            .backgroundColor(this.themeColorSurfaceSecondary).layoutWeight(1).borderRadius(12)
-            .onChange((value: string) => this.query = value)
-          if (this.query.length > 0) {
-            AppGlyph({ name: 'profileClose', glyphSize: 16, tint: '#C5C7D0' })
-              .width(32).onClick(() => this.query = '')
+        Row({ space: 6 }) {
+          // 上游 `CompactSearchField`：带放大镜、`radius 10`、`height 32`。
+          Row() {
+            AppGlyph({ name: 'search', glyphSize: 14, tint: this.themeColorTextTertiary })
+              .margin({ left: 10, right: 6 })
+            TextInput({ placeholder: '搜索章节…', text: this.query })
+              .fontSize(12).fontColor(this.themeColorTextPrimary)
+              .placeholderColor(this.themeColorTextTertiary)
+              .backgroundColor(Color.Transparent)
+              .layoutWeight(1).height(32)
+              .padding({ left: 0, right: 0 })
+              .onChange((value: string) => this.query = value)
           }
-          AppGlyph({ name: 'profileFindReplace', glyphSize: 17,
-            tint: this.useTitleReplacement ? this.themeColorAccent : this.themeColorTextSecondary })
-            .width(32)
-            .onClick(() => this.onTitleReplacementChange(!this.useTitleReplacement))
-          AppGlyph({ name: 'profileTimeline', glyphSize: 17,
-            tint: this.showWordCount ? this.themeColorAccent : this.themeColorTextSecondary })
-            .width(32)
-            .onClick(() => this.toggleShowWordCount())
-          AppGlyph({ name: 'swap', glyphSize: 18, tint: this.ascending ? this.themeColorTextSecondary : this.themeColorAccent })
-            .width(32).onClick(() => this.ascending = !this.ascending)
+          .layoutWeight(1).height(32)
+          .backgroundColor(this.themeColorSurfaceSecondary)
+          .borderRadius(10)
+          if (this.query.length > 0) {
+            AppGlyph({ name: 'profileClose', glyphSize: 16, tint: this.themeColorTextSecondary })
+              .width(24).onClick(() => this.query = '')
+          }
+          // 上游四个工具是 `CompactToolIconBox`（32dp 方盒、radius 10、选中 secondaryContainer）。
+          this.catalogToolBox('profileFindReplace', this.useTitleReplacement,
+            () => this.onTitleReplacementChange(!this.useTitleReplacement))
+          this.catalogToolBox('profileTimeline', this.showWordCount,
+            () => this.toggleShowWordCount())
+          this.catalogToolBox('swap', !this.ascending, () => this.ascending = !this.ascending)
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
           }
-          .width(28)
-          .height(32)
+          .width(32).height(32).borderRadius(10)
+          .backgroundColor(this.catalogMoreVisible ? this.themeColorSurfaceElevated : Color.Transparent)
           .onClick(() => { this.catalogMoreVisible = !this.catalogMoreVisible; })
           .bindPopup(this.catalogMoreVisible, {
             builder: this.CatalogMoreMenu,
@@ -732,29 +807,45 @@ export struct CatalogPage {
                     }.width(26).margin({ right: 2 })
                   }
                   if (chapter.isVolume) {
-                    Image($r('app.media.profile_expand_more')).width(14).height(14)
-                      .fillColor('#AEB0B9')
+                    // 上游 `ReaderBookSheet.kt` 卷行是 `ExpandMore` 18dp、`tint = primary`。
+                    Image($r('app.media.profile_expand_more')).width(18).height(18)
+                      .fillColor(this.themeColorAccent)
                       .rotate({ angle: this.collapsedVolumes.has(chapter.index) ? -90 : 0 })
                       .margin({ right: 4 })
                   }
                   Text(chapter.title).fontSize(chapter.isVolume ? 13 : 12)
                     .fontWeight(chapter.isVolume ? FontWeight.Medium : FontWeight.Normal)
-                    .fontColor(this.isChapterSelected(chapter.index) ? '#F0F1F5' : (chapter.isVolume ? '#DCDDE4' : '#D4D5DB'))
-                    .layoutWeight(1).maxLines(1)
+                    .fontColor(chapter.isVolume
+                      ? this.themeColorTextPrimary
+                      : this.chapterRowForeground(chapter.index))
+                    // 上游 `ReaderBookSheet.kt` 章节标题 maxLines = 2，本地原来 1 行把长章名截掉了。
+                    .layoutWeight(1).maxLines(2)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
                   // 字数直接读预存字段：上游 TocScreen 的章节行也是读 chapter.wordCount，不读正文。
+                  // 上游是 `NormalCard(radius 8)` 里一个 8sp 的字数，这里套同形态的小卡片。
                   if (this.showWordCount && chapter.wordCount.length > 0) {
                     Text(chapter.wordCount)
-                      .fontSize(10).fontColor('#AEB0B9').margin({ right: 8 })
+                      .fontSize(9).fontColor(this.themeColorTextTertiary)
+                      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                      .backgroundColor(this.themeColorSurfaceTertiary)
+                      .borderRadius(8)
+                      .margin({ right: 8 })
                   }
-                  if (this.isChapterSelected(chapter.index)) {
-                    Image($r('app.media.app_locate')).width(16).height(16).fillColor('#C4D1FF')
+                  if (this.isCurrentChapter(chapter.index)) {
+                    Image($r('app.media.app_locate')).width(16).height(16).fillColor(this.themeColorAccent)
                   }
                 }
                 .width('100%')
-                // 多级缩进对齐上游 ReaderBookSheet.kt:890-935：行内基础 12dp + tocLevel×10dp，最多 6 级。
-                .padding({ left: 12 + Math.min(6, Math.max(0, chapter.tocLevel)) * 10, right: 12, top: 11, bottom: 11 })
-                .backgroundColor(this.isChapterSelected(chapter.index) ? '#454B62' : this.themeColorSurfaceSecondary)
-                .borderRadius(10)
+                // 多级缩进对齐上游 `ReaderBookSheet.kt:915-917`：只有 `tocLevel.coerceIn(0,6) * 10`，
+                // 没有基础偏移；右内边距上游是 4dp。
+                .padding({
+                  left: Math.min(6, Math.max(0, chapter.tocLevel)) * 10,
+                  right: 4,
+                  top: 11,
+                  bottom: 11
+                })
+                .backgroundColor(this.chapterRowBackground(chapter.index))
+                .borderRadius(12)
                 .onClick(() => {
                   if (this.selectionMode && !chapter.isVolume) {
                     this.toggleChapterSelection(chapter.index);
@@ -953,25 +1044,36 @@ export struct CatalogPage {
         Row()
           .width(32)
           .height(4)
-          .backgroundColor('#C6C7CE')
+          .backgroundColor(this.themeColorTextSecondary)
           .borderRadius(4)
           .margin({ top: 9, bottom: 16 })
           .onClick(() => this.onBack())
 
         Row() {
-          BookCover({ book: this.book, mini: true })
+          // 上游 `ReaderBookSheet.kt` 的书封是 `width(40.dp) + aspectRatio(5/7)` = 40×56，
+          // 点击书封同样进书籍详情。
+          // 本地 `mini: true` 是 48×68，偏大一圈。
+          BookCover({ book: this.book, displayWidth: 40, displayHeight: 56, applyAspectRatio: true })
+            .onClick(() => this.onOpenBookInfo())
           Column() {
-            Text(this.book.title).fontSize(13).fontColor('#ECEEF2').maxLines(1)
-            Text(this.book.lastChapter).fontSize(10).fontColor('#AEB0B9').margin({ top: 4 }).maxLines(1)
+            // 上游书名 `labelLargeEmphasized`（14sp Medium）、maxLines 2、可点进详情。
+            Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium)
+              .fontColor(this.themeColorTextPrimary).maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .onClick(() => this.onOpenBookInfo())
+            // 上游副标题 `labelSmallEmphasized` + `basicMarquee()`：长章名滚动而不是截断。
+            Text(this.book.lastChapter).fontSize(10).fontColor(this.themeColorTextSecondary)
+              .margin({ top: 4 }).maxLines(1)
+              .textOverflow({ overflow: TextOverflow.MARQUEE })
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
           .margin({ left: 12 })
           Text(this.getCurrentChapterNumber().toString() + ' / ' + this.getAllChapters().length.toString())
             .fontSize(10)
-            .fontColor('#ECEEF2')
+            .fontColor(this.themeColorTextPrimary)
             .padding({ left: 9, right: 9, top: 6, bottom: 6 })
-            .backgroundColor('#101116')
+            .backgroundColor(this.themeColorSurfaceTertiary)
             .borderRadius(14)
         }
         .width('100%')
@@ -979,19 +1081,23 @@ export struct CatalogPage {
 
         Row() {
           ForEach([0, 1, 2, 3], (index: number) => {
+            // 上游 `CardTabRow.kt:118`：`labelMediumEmphasized`（12sp Medium），水平内边距 8dp。
             Text(this.getTabLabel(index))
-              .fontSize(11)
-              .fontColor(this.selectedTab === index ? '#F0F1F5' : '#B0B2BC')
+              .fontSize(12)
+              .fontWeight(this.selectedTab === index ? FontWeight.Medium : FontWeight.Normal)
+              .fontColor(this.selectedTab === index ? this.themeColorTextPrimary : this.themeColorTextSecondary)
               .textAlign(TextAlign.Center)
               .layoutWeight(1)
-              .padding({ top: 8, bottom: 8 })
-              .backgroundColor(this.selectedTab === index ? '#454B62' : this.themeColorSurfaceElevated)
+              .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+              .backgroundColor(this.selectedTab === index ? this.themeColorSurfaceElevated : Color.Transparent)
               .borderRadius(12)
               .margin({ left: index === 0 ? 12 : 4, right: index === 3 ? 12 : 4 })
+              .animation({ duration: 200, curve: Curve.EaseInOut })
               .onClick(() => {
                 this.selectedTab = index;
                 if (index === 1) { this.scrollToCurrentChapter(); }
               })
+              // 上游前三页长按 = 关 sheet + 开全屏页，本地没有全屏目录路由，未实现。
           }, (index: number) => index.toString())
         }
         .width('100%')
@@ -1014,8 +1120,9 @@ export struct CatalogPage {
       }
       .width('100%')
       .height('72%')
-      .backgroundColor('#17181E')
-      .borderRadius({ topLeft: 22, topRight: 22 })
+      // 上游 `AppModalBottomSheet.kt:62-64` 底色是 `surfaceContainer`，圆角走 M3 `large` = 16dp。
+      .backgroundColor(this.themeColorSurfaceElevated)
+      .borderRadius({ topLeft: 16, topRight: 16 })
     }
     .width('100%')
     .height('100%')
@@ -1024,6 +1131,9 @@ export struct CatalogPage {
 
 @Component
 struct CatalogInformationRow {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @Prop label: string = '';
@@ -1036,9 +1146,9 @@ struct CatalogInformationRow {
         .fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorAccent)
       Text(this.value.trim().length > 0 ? this.value : '--')
-        .fontSize(13)
-        .fontColor('#D4D5DB')
-        .lineHeight(19)
+        .fontSize(14)
+        .fontColor(this.themeColorTextSecondary)
+        .lineHeight(20)
         .margin({ top: 3 })
     }
     .width('100%')

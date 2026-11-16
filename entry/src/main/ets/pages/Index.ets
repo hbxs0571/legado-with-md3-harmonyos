@@ -8454,6 +8454,12 @@ private canWriteInto(dir: string): boolean {
               useTitleReplacement: this.readerTocUseReplace,
               showWordCount: this.readerTocShowWordCount,
               onBack: () => this.route = this.catalogReturnRoute,
+              // 目录页书封/书名点击进详情，返回时回到目录。
+              // 不动 catalogReturnRoute：否则「目录 → 详情 → 目录 → 返回」会回到详情，形成来回跳。
+              onOpenBookInfo: () => {
+                this.bookInfoReturnRoute = AppRoute.CATALOG;
+                this.route = AppRoute.BOOK_INFO;
+              },
               onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId),
               onEditBookmark: (bookmarkId: string) => this.editReaderBookmark(bookmarkId),
               onOpenMarking: (markingId: string) => this.openReaderMarking(markingId),
