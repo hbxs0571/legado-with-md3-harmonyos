@@ -16,9 +16,10 @@ import {
   TOP_BAR_SIDE_PADDING, TOP_BAR_ACTIONS_END
 } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
+import { AppLog } from '../lib/AppLog';
 
 /** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
-const OVERFLOW_MENU_WIDTH: number = 260;
+const OVERFLOW_MENU_WIDTH: number = 220;
 /** 底栏 FAB 高度，对齐上游 ExtendedFloatingActionButton 的 56dp。 */
 const READ_FAB_HEIGHT: number = 56;
 /** 内容底部留白：给浮在内容上的 FAB 让位，对齐上游 `+ 88.dp`。 */
@@ -118,6 +119,10 @@ export struct BookInfoPage {
   @State deleteSourceChecked: boolean = false;
   /** 封面长按看大图（:301）。 */
   @State photoPreviewVisible: boolean = false;
+  /** 溢出菜单「日志」打开的日志面板（上游 `BookInfoMenuAction.ShowLog` → `AppLogSheet`）。 */
+  @State logSheetVisible: boolean = false;
+  /** 日志面板的行，打开时从 AppLog 内存缓冲取一次。 */
+  @State logEntries: string[] = [];
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
@@ -602,9 +607,15 @@ export struct BookInfoPage {
    *
    * 顺序照上游 `BookInfoScreen.kt:1034-1143` 的 `BookInfoOverflowMenu`
    * （custom_button → edit → refresh → read_record → book_disable_read_record →
-   *  … → to_top → … → delete_alert → … → private），去掉本地没有对应能力的项后不补空位。
-   * 上游 19 项里本地能做 8 项：书源变量、WebDAV 重同步、拆分超长章节、清理缓存、
-   * 日志这些没有数据模型支撑，做了就是编。
+   *  … → to_top → … → delete_alert → clear_cache → log → private），去掉本地没有对应能力的项后不补空位。
+   *
+   * 为什么没补 `allow_update` 与 `copy_toc_url`：上游这两项都有前置条件 ——
+   * `allow_update` 只在 `book?.isLocal == false`（`:1107`）时出现，
+   * `copy_toc_url` 只在 `state.bookSourceUi != null`（`:1085`）时出现。
+   * 本地书目全是 `isLocal === true` 的本地书、也没有书源系统，这两个条件在本仓库永远不成立，
+   * 加了就是凭空多两行点了没意义的东西，所以按上游条件不显示。
+   * 同理 `custom_button` / `login` / `set_source_variable` / `set_book_variable`（书源域）、
+   * `re_sync_webdav` / `upload_to_remote`（远程书库）、`split_long_chapter`（改排版引擎）都不做。
    */
   private overflowItems(): UiMenuItem[] {
     const items: UiMenuItem[] = [
@@ -619,6 +630,9 @@ export struct BookInfoPage {
       { key: 'copy_book_url', title: '拷贝书籍 URL' },
       { key: 'to_top', title: '置顶' },
       { key: 'delete_alert', title: '删除提醒', selected: this.deleteAlertEnabled },
+      // 上游 `clear_cache`（`:1126-1129`）与 `log`（`:1130-1133`）都是无条件项。
+      { key: 'clear_cache', title: '清理缓存' },
+      { key: 'log', title: '日志' },
       {
         key: 'private',
         title: this.book.isPrivate === true ? '取消私密标记' : '标记为私密',
@@ -649,6 +663,10 @@ export struct BookInfoPage {
       this.onTopBook();
     } else if (key === 'delete_alert') {
       this.onToggleDeleteAlert();
+    } else if (key === 'clear_cache') {
+      this.clearBookCache();
+    } else if (key === 'log') {
+      this.openLogSheet();
     } else if (key === 'private') {
       this.onSetPrivate(this.book, this.book.isPrivate !== true);
     } else if (key === 'export_epub') {
@@ -686,6 +704,52 @@ export struct BookInfoPage {
       panelWidth: OVERFLOW_MENU_WIDTH,
       onSelect: (key: string) => this.onOverflowSelect(key)
     })
+  }
+
+  /**
+   * 溢出菜单「清理缓存」（上游 `BookInfoMenuAction.ClearCache`，`BookInfoScreen.kt:1126-1129`）。
+   *
+   * 上游清的是 `clearBookCacheUseCase` 管的缓存目录，不动 `bookUrl` 指向的书源正文。
+   * 本地 `book.contentPath` 是导入时转出的**唯一正文副本**，删了这本书就读不了了
+   * （那是「缓存管理」页 `confirmDeleteCache` 的语义，且有「恢复本地书」兜底），
+   * 所以这里只清内存里的章节行与正文缓存，不碰磁盘副本。
+   */
+  private clearBookCache(): void {
+    BookRepository.clearChapterCache();
+    this.onUnavailableAction('已清理缓存');
+  }
+
+  /** 溢出菜单「日志」（上游 `BookInfoMenuAction.ShowLog` → `AppLogSheet`）。 */
+  private openLogSheet(): void {
+    this.logEntries = AppLog.getAll();
+    this.logSheetVisible = true;
+  }
+
+  /** 日志面板：与书架页 `LogSheetContent` 同一形态，行取自 AppLog 内存缓冲。 */
+  @Builder
+  private LogSheet() {
+    Column() {
+      Row() {
+        Text('日志').fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+        Blank()
+        Text('清空').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+          .onClick(() => { AppLog.clear(); this.logEntries = []; })
+      }.width('100%').padding({ left: 16, right: 16, top: 18, bottom: 12 })
+      if (this.logEntries.length === 0) {
+        Column() {
+          Text('暂无日志').fontSize(13).fontColor(this.themeColorTextTertiary)
+        }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+      } else {
+        List() {
+          ForEach(this.logEntries, (line: string) => {
+            ListItem() {
+              Text(line).fontSize(11).fontColor(this.themeColorTextSecondary)
+                .fontFamily('monospace').width('100%')
+            }.padding({ left: 16, right: 16, top: 4, bottom: 4 })
+          }, (line: string) => line)
+        }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+      }
+    }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
   build() {
@@ -850,16 +914,20 @@ export struct BookInfoPage {
               .fontSize(19).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
             // 第二行是「最新章节」，不是「当前阅读章」：上游接的是 latestChapterTitle。
             Text(`最新 · ${this.book.latestChapterTitle ?? ''}`)
-              .fontSize(16).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
+              .fontSize(16).fontColor(this.themeColorTextSecondary).margin({ top: 4 })
             Row() {
               Text(this.getChapterTotal() > 0 ? `共 ${this.getChapterTotal()} 章` : '章节总数待读取')
                 .fontSize(14).fontColor(this.themeColorAccent)
               Text('  |  ').fontSize(14).fontColor(this.themeColorTextTertiary)
               Text(this.readStateLabel())
                 .fontSize(14).fontColor(this.themeColorTextSecondary)
-            }.margin({ top: 8 })
-          }.width('100%').alignItems(HorizontalAlign.Start).padding(18)
-            .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18).margin({ left: 16, right: 16, bottom: 14 })
+            }.margin({ top: 4 })
+          }.width('100%').alignItems(HorizontalAlign.Start)
+            // 上游 `BookInfoSummary`（BookInfoScreen.kt:1544-1550）是
+            // `fillMaxWidth().background(surface).padding(start 16, end 16, top 8, bottom 16)`，
+            // 铺满整宽、无圆角、无外边距。本地原来做成圆角 18 的独立卡片并带左右 16 外边距，
+            // 往下滚时它就变成一张浮在正文上的卡片 —— 与上游的一整片底色不是一回事。
+            .padding({ left: 16, right: 16, top: 8, bottom: 16 })
 
           if (BookRepository.isBodyMissing(this.book)) {
             Column() {
@@ -901,9 +969,12 @@ export struct BookInfoPage {
             }
           }.width('100%').alignItems(HorizontalAlign.Start)
             .padding({ left: 16, right: 16, top: 8, bottom: 24 })
-          // 内容列不铺底色：底色由第三层渐变给（上游 BookInfoBackdrop 的 0.60→1.0 段），
-          // 铺了就从头部到内容一刀切，渐变看不出来。
-          }.width('100%')
+          // 头部以下铺一整片页面底色。上游 `BookInfoScreen.kt:419-427` 这一层是
+          // `fillMaxWidth().background(surface).padding(bottom = 24.dp)`：动作卡、摘要、
+          // 简介全部落在这一片不透明底色上，背景图只透在头部那一段。
+          // 本地原来整列不铺底色，往下滚时封面图/渐变会从正文后面透出来，
+          // 摘要那张圆角卡又浮在上面 —— 就是「下滑之后成这样了」的观感来源。
+          }.width('100%').backgroundColor(this.pageBaseColor())
         }.width('100%').padding({ bottom: CONTENT_BOTTOM_INSET })
       }.width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
         const shouldCollapse = Math.abs(this.infoScroller.currentOffset().yOffset) > 70;
@@ -939,7 +1010,9 @@ export struct BookInfoPage {
         .borderRadius(topBarButtonSize(this.themeTopBarButtonStyle) / 2)
       }.width('100%').height(64 + this.appTopInset)
         .padding({ left: TOP_BAR_SIDE_PADDING, right: TOP_BAR_ACTIONS_END, top: this.appTopInset })
-        .backgroundColor(this.collapsedHeader ? this.themeColorSurfacePrimary : '#00000000')
+        // 滚动后铺的是 `scrolledContainerColor` = surfaceContainer（本地 themeColorSurfaceElevated）。
+        // 原来用的是 themeColorSurfacePrimary，与页面底色同值，看起来等于「没底色」。
+        .backgroundColor(this.collapsedHeader ? this.themeColorSurfaceElevated : '#00000000')
         .animation({ duration: 220, curve: Curve.EaseInOut })
       }.width('100%').height('100%').backgroundColor(bookCoverColor(this.book))
 
@@ -1029,17 +1102,33 @@ export struct BookInfoPage {
         this.PhotoPreview()
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.deleteSheetVisible, this.DeleteSheet(), {
-        height: SheetSize.FIT_CONTENT,
+      // 移出书架确认面板与日志面板共用这一个 bindSheet：
+      // 同一节点挂两个 bindSheet 只有最后一个生效（书架页 :2118 踩过同一个坑），
+      // 所以用一个合并条件 + 内容分支，不用两个独立 sheet。
+      .bindSheet(this.deleteSheetVisible || this.logSheetVisible, this.InfoSheetContent(), {
+        height: this.logSheetVisible ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: '#17181E',
         onDisappear: () => {
-          this.deleteSheetVisible = false;
-          // 每次打开都从未勾选起步（:339）。
-          this.deleteSourceChecked = false;
+          if (this.deleteSheetVisible) {
+            this.deleteSheetVisible = false;
+            // 每次打开都从未勾选起步（:339）。
+            this.deleteSourceChecked = false;
+          }
+          this.logSheetVisible = false;
         }
       })
+  }
+
+  /** 详情页 sheet 内容：日志优先，其余落回移出书架确认面板。 */
+  @Builder
+  InfoSheetContent() {
+    if (this.logSheetVisible) {
+      this.LogSheet()
+    } else {
+      this.DeleteSheet()
+    }
   }
 }
 

@@ -7344,7 +7344,7 @@ private canWriteInto(dir: string): boolean {
 
   private async saveBookMetadata(title: string, author: string, category: string,
     description: string, remark: string, customTag: string, groupNames: string[],
-    bookType: BookMediaType, fixedType: boolean): Promise<boolean> {
+    bookType: BookMediaType, fixedType: boolean, coverUrl: string = ''): Promise<boolean> {
     const currentBook = this.books.find((book: Book) => book.id === this.selectedBook.id);
     if (currentBook === undefined || !currentBook.isLocal) {
       this.showUnavailableAction('当前书籍不在本地书架，未保存书籍信息');
@@ -7354,6 +7354,10 @@ private canWriteInto(dir: string): boolean {
     updatedBook.title = title;
     updatedBook.author = author;
     updatedBook.category = category;
+    // 封面链接（上游 `cover_url`）：本地就是 `coverUri`，留空表示不改。
+    if (coverUrl.length > 0) {
+      updatedBook.coverUri = coverUrl;
+    }
     updatedBook.groupName = groupNames.length > 0 ? groupNames.join('、') : '本地未分组';
     updatedBook.groupNames = groupNames;
     updatedBook.bookType = bookType;
@@ -8145,8 +8149,10 @@ private canWriteInto(dir: string): boolean {
           defaultCoverBackground: this.bookInfoDefaultCoverBackground,
           onBack: () => { this.route = AppRoute.BOOK_INFO; },
           onSave: (title: string, author: string, category: string, description: string,
-            remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
-            this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
+            remark: string, customTag: string, groupNames: string[], bookType: BookMediaType,
+            fixedType: boolean, coverUrl: string) =>
+            this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames,
+              bookType, fixedType, coverUrl),
           onChooseCover: () => this.chooseBookCover(),
           onRestoreCover: () => this.restoreBookCover(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)

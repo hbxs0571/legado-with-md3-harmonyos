@@ -13,6 +13,16 @@ const BOOK_TYPE_MENU_WIDTH: number = 220;
 const FIELD_LABEL_SIZE: number = 13;
 const FIELD_INPUT_SIZE: number = 15;
 const FIELD_MIN_HEIGHT: number = 52;
+/**
+ * 输入框高度与圆角。
+ *
+ * 上游编辑页用的是 `AppTextField`（`ui/widget/components/AppTextField.kt`），
+ * 走 material3 `TextFieldDefaults.shape` = 4dp 圆角、label 内嵌在框内、
+ * 底部一条 1dp indicator。本地原来是自己画的 52 高 + 16 圆角 + 外置 label，
+ * 与设置页的卡片行同一形态，和上游的输入框不是一回事。
+ */
+const FIELD_M3_HEIGHT: number = 56;
+const FIELD_M3_RADIUS: number = 4;
 const SUMMARY_MAX_LINES: number = 6;
 
 /**
@@ -47,10 +57,10 @@ export struct BookInfoEditPage {
   @Prop defaultCoverBackground: string = 'on';
 
   onBack: () => void = () => {};
-  /** 九个参数与 `Index.saveBookMetadata` 完全一致，直接转发，不在本页重写落库逻辑。 */
+  /** 十个参数与 `Index.saveBookMetadata` 完全一致，直接转发，不在本页重写落库逻辑。 */
   onSave: (title: string, author: string, category: string, description: string, remark: string,
-    customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) => Promise<boolean> =
-    () => Promise.resolve(false);
+    customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean,
+    coverUrl: string) => Promise<boolean> = () => Promise.resolve(false);
   onChooseCover: () => void = () => {};
   onRestoreCover: () => void = () => {};
   onUnavailableAction: (message: string) => void = () => {};
@@ -58,6 +68,8 @@ export struct BookInfoEditPage {
   @State private title: string = '';
   @State private author: string = '';
   @State private category: string = '';
+  /** 封面链接（上游 `cover_url`）。本地就是 `book.coverUri` 的展示与手工改写。 */
+  @State private coverUrl: string = '';
   @State private description: string = '';
   @State private remark: string = '';
   @State private customTag: string = '';
@@ -77,6 +89,7 @@ export struct BookInfoEditPage {
     this.title = this.book.title;
     this.author = this.book.author;
     this.category = this.book.category;
+    this.coverUrl = this.book.coverUri ?? '';
     this.description = this.book.description ?? '';
     this.remark = this.book.remark ?? '';
     this.customTag = this.book.customTag ?? '';
@@ -132,7 +145,8 @@ export struct BookInfoEditPage {
     }
     this.saving = true;
     const saved: boolean = await this.onSave(this.title.trim(), this.author.trim(), this.category.trim(),
-      this.description, this.remark, this.customTag, this.groupNames, this.bookType, this.fixedType);
+      this.description, this.remark, this.customTag, this.groupNames, this.bookType, this.fixedType,
+      this.coverUrl.trim());
     this.saving = false;
     if (saved) {
       this.onBack();
@@ -186,6 +200,33 @@ export struct BookInfoEditPage {
       .width('100%').margin({ bottom: 6 })
   }
 
+  /**
+   * 单行输入框，对齐上游 `AppTextField`（material3 `TextFieldDefaults.shape`）：
+   * 4dp 圆角、label 内嵌在框内左上、底部一条 indicator。
+   *
+   * ArkUI 的 `TextInput` 没有内嵌 label，所以用一个 Column 把 label 与输入行叠在
+   * 同一块圆角底里，底部再画 1vp 的 indicator 线。
+   */
+  @Builder
+  m3Input(label: string, text: string, placeholder: string, onChange: (value: string) => void) {
+    Column() {
+      Text(label).fontSize(FIELD_LABEL_SIZE).fontColor(this.themeColorTextTertiary)
+        .width('100%').margin({ bottom: 2 })
+      TextInput({ text: text, placeholder: placeholder })
+        .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
+        .placeholderColor(this.themeColorTextTertiary)
+        .backgroundColor(Color.Transparent)
+        .padding({ left: 0, right: 0, top: 0, bottom: 6 })
+        .height(30)
+        .onChange((value: string) => onChange(value))
+      // indicator：material3 未聚焦时是一条 `outline` 色的细线，聚焦后变 `primary`。
+      Row().width('100%').height(1).backgroundColor(this.themeColorTextTertiary)
+    }
+    .width('100%').constraintSize({ minHeight: FIELD_M3_HEIGHT })
+    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    .backgroundColor(this.inputSurface()).borderRadius(FIELD_M3_RADIUS)
+  }
+
   @Builder
   navSlot() {
     TopBarBackButton({ onSelect: () => this.onBack() })
@@ -218,7 +259,11 @@ export struct BookInfoEditPage {
               applyAspectRatio: true
             })
             Column({ space: SPACE_8 }) {
-              this.coverAction('profileRefresh', '替换封面', () => this.onChooseCover())
+              // 上游三个封面动作（`BookInfoEditScreen.kt:193-208`）：
+              // 「刷新封面」打开 ChangeCoverSheet（从书源拉网络封面）、
+              // 「选择文件夹」走 SelectImageContract 选本地图片、「还原封面」清掉自定义封面。
+              // 本地没有书源，「刷新封面」拉不到东西，所以只留后面两个；
+              // 原来第一个按钮也绑 `onChooseCover`，与第二个完全重复，一并去掉。
               this.coverAction('profileFolder', '选择文件夹', () => this.onChooseCover())
               this.coverAction('profileHistory', '还原封面', () => this.onRestoreCover())
             }.layoutWeight(1)
@@ -257,33 +302,22 @@ export struct BookInfoEditPage {
           }.width('100%').backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
 
           Column() {
-            this.fieldLabel('书名')
-            TextInput({ text: this.title, placeholder: '请输入书名' })
-              .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
-              .placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-              .height(FIELD_MIN_HEIGHT).padding({ left: 14, right: 14 })
-              .onChange((value: string) => { this.title = value; })
+            this.m3Input('书名', this.title, '请输入书名', (value: string) => { this.title = value; })
           }.width('100%')
 
           Column() {
-            this.fieldLabel('作者')
-            TextInput({ text: this.author, placeholder: '请输入作者' })
-              .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
-              .placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-              .height(FIELD_MIN_HEIGHT).padding({ left: 14, right: 14 })
-              .onChange((value: string) => { this.author = value; })
+            this.m3Input('作者', this.author, '请输入作者', (value: string) => { this.author = value; })
+          }.width('100%')
+
+          // 封面链接：上游 `BookInfoEditScreen.kt:254-260` 的 `cover_url` 输入框。
+          // 本地封面是导入时抽出的图片副本（`covers/<id>.img`），没有可编辑的 URL，
+          // 这个字段只做展示与手工改写：写进去的是 `book.coverUri`，保存时一并落库。
+          Column() {
+            this.m3Input('封面链接', this.coverUrl, '请输入封面链接', (value: string) => { this.coverUrl = value; })
           }.width('100%')
 
           Column() {
-            this.fieldLabel('分类')
-            TextInput({ text: this.category, placeholder: '请输入分类' })
-              .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
-              .placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-              .height(FIELD_MIN_HEIGHT).padding({ left: 14, right: 14 })
-              .onChange((value: string) => { this.category = value; })
+            this.m3Input('分类', this.category, '请输入分类', (value: string) => { this.category = value; })
           }.width('100%')
 
           // 分组多选：上游是固定分组，本地分组是用户自建的可变集合，这里给一个可展开的勾选面板。
@@ -310,13 +344,8 @@ export struct BookInfoEditPage {
           }.width('100%')
 
           Column() {
-            this.fieldLabel('自定义标签')
-            TextInput({ text: this.customTag, placeholder: '多个标签用逗号分隔' })
-              .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
-              .placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-              .height(FIELD_MIN_HEIGHT).padding({ left: 14, right: 14 })
-              .onChange((value: string) => { this.customTag = value; })
+            this.m3Input('自定义标签', this.customTag, '多个标签用逗号分隔',
+              (value: string) => { this.customTag = value; })
           }.width('100%')
 
           Column() {
@@ -324,8 +353,8 @@ export struct BookInfoEditPage {
             TextArea({ text: this.description, placeholder: '请输入内容简介' })
               .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
               .placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-              .constraintSize({ minHeight: 120 }).padding({ left: 14, right: 14, top: 12, bottom: 12 })
+              .backgroundColor(this.inputSurface()).borderRadius(FIELD_M3_RADIUS)
+              .constraintSize({ minHeight: 120 }).padding({ left: 16, right: 16, top: 12, bottom: 12 })
               .onChange((value: string) => { this.description = value; })
           }.width('100%')
 
@@ -334,8 +363,8 @@ export struct BookInfoEditPage {
             TextArea({ text: this.remark, placeholder: '请输入书籍备注' })
               .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
               .placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor(this.inputSurface()).borderRadius(RADIUS_SHEET)
-              .constraintSize({ minHeight: 96 }).padding({ left: 14, right: 14, top: 12, bottom: 12 })
+              .backgroundColor(this.inputSurface()).borderRadius(FIELD_M3_RADIUS)
+              .constraintSize({ minHeight: 96 }).padding({ left: 16, right: 16, top: 12, bottom: 12 })
               .onChange((value: string) => { this.remark = value; })
           }.width('100%')
         }
