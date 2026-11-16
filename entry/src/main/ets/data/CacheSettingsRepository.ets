@@ -27,7 +27,7 @@ export interface CacheSettings {
   preloadAhead: number;
   imageDrawCacheMb: number;
   comicKeepCount: number;
-  /** 整本正文内存缓存上限，MB（滑块单位；与 bookContentCacheBytes 互为换算） */
+  /** 整本正文内存缓存上限，MB。滑块唯一权威值就是这个字段；bookContentCacheBytes 是它的派生量，每次 load/save 由它重算且从不落盘，所以两者不是互为换算，是单向派生。 */
   bookContentCacheMb: number;
   /** 用户代理 */
   userAgent: string;

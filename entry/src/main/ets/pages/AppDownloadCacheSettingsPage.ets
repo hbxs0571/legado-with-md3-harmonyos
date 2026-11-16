@@ -19,7 +19,7 @@ export struct AppDownloadCacheSettingsPage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** 清理缓存要逐本丢掉应用内导入副本（:484）；由 Index 挂载处传入。 */
   @Prop books: Book[] = [];
-  /** 6 个滑块、1 个开关与正文缓存上限都从偏好读进来，改动即落盘。 */
+  /** 7 个滑块与 1 个开关都从偏好读进来，改动即落盘。 */
   @State cacheSettings: CacheSettings = CacheSettingsRepository.get();
   @State collapsedHeader: boolean = false;
   private settingsScroller: Scroller = new Scroller();
