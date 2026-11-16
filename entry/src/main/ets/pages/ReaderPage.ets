@@ -124,6 +124,9 @@ const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
 const READER_PAGE_ANIMATION_LABELS: string[] = ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画'];
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
+/** 底栏进度条自绘拇指宽度（vp）。上游 `ReadBookMenuBarTool.kt:320` 的 handle 是 4dp 宽。 */
+const SLIDER_THUMB_WIDTH: number = 4;
+
 interface ReaderContentSegment {
   kind: 'text' | 'image';
   value: string;
@@ -201,6 +204,8 @@ export struct ReaderPage {
    * 本地 `.expandSafeArea` 那层等价于「底色铺满」，缺的就是这份内容让位。
    */
   @StorageProp('appBottomInset') appBottomInset: number = 0;
+  /** 底栏进度条轨道实测宽度（vp），由 Slider 的 `onAreaChange` 写入，自绘拇指按它定位。 */
+  @State sliderTrackWidth: number = 0;
   @Prop @Watch('onStartAtChapterBeginningChanged') startAtChapterBeginning: boolean = false;
   @Prop @Watch('onBookChanged') book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
@@ -1559,8 +1564,21 @@ export struct ReaderPage {
   }
 
   /**
-   * 顶栏是否启用玻璃/雾化档。上游 `ReadBookMenuBarTitle.kt:1000-1006`：
-   * `readMenuTopBarHazeEnabled = hazeState != null && mode == Haze`，`blurRadius = readMenuBlurRadius`。
+   * 底栏进度条自绘拇指的水平偏移（相对 Stack 中心）。
+   * 上游 `ReadBookMenuBarTool.kt:74-160` 的 handle 是 4dp×44dp 竖条，
+   * 位置由 value 在 valueRange 里的比例算出。ArkUI 系统 Slider 的 InSet 样式轨道两端
+   * 各留半个拇指宽度，所以可用行程是 `轨道宽 - 拇指宽`，中心点再平移半个行程。
+   */
+  private sliderThumbOffset(): number {
+    const maximum = Math.max(0, this.getProgressSliderMaximum());
+    if (maximum <= 0 || this.sliderTrackWidth <= 0) { return 0; }
+    const ratio = Math.max(0, Math.min(1, this.sliderProgressIndex / maximum));
+    const travel = Math.max(0, this.sliderTrackWidth - SLIDER_THUMB_WIDTH);
+    return ratio * travel - travel / 2;
+  }
+
+  /**
+   * 顶栏是否启用玻璃/雾化档。上游 `ReadBookMenuBarTitle.kt:1000-1006`：   * `readMenuTopBarHazeEnabled = hazeState != null && mode == Haze`，`blurRadius = readMenuBlurRadius`。
    * ArkUI 没有 haze 系统，2 档用「模糊半径翻倍」近似，不是等价实现。
    */
   private readerTopBarBlurRadiusVp(): number {
@@ -7414,6 +7432,12 @@ export struct ReaderPage {
               }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
                 .onClick(() => this.turnReaderChapter(-1))
               if (this.readSliderMode !== '1') {
+                // 上游 `ReadMenuSlider`（`ReadBookMenuBarTool.kt:67-113`）普通档走
+                // `AppSlider` → material3 `Slider` 默认外观，也就是 M3 的形态：
+                // 16dp 粗轨道 + 4dp×44dp 的竖条 handle + 轨道上的小圆点刻度。
+                // ArkUI 系统 Slider 的 DEFAULT 拇指只能是圆点、SHAPE 需要 RectAttribute 实例
+                // （组件构建器造不出来），所以这里拆成两层：系统 Slider 负责轨道/刻度/拖拽，
+                // 拇指改成自绘的竖条叠在上面，按同一百分比定位。
                 Stack({ alignContent: Alignment.Center }) {
                   Slider({
                     value: this.sliderProgressIndex,
@@ -7423,17 +7447,18 @@ export struct ReaderPage {
                     style: SliderStyle.InSet
                   })
                     .width('100%').height(40)
-                    // 上游 `ReadMenuSlider`（`ReadBookMenuBarTool.kt:67-113`）两档的拇指都是可见的
-                    // （普通档 M3 默认拇指，玻璃档 40×24 胶囊）。本地原先 blockColor 给透明、
-                    // 另画一根 5vp 竖条，结果拖到哪看不出来。改回强调色圆点。
-                    // 轨道色上游是强调色带透明度，本地用前景色 20% 近似（强调色在浅色纸面上
-                    // 做 6vp 轨道太跳），这是近似不是等价。
-                    .selectedColor(this.readerMenuAccentTint()).trackColor(this.readerMenuForegroundAlpha('33'))
-                    .blockColor(this.readerMenuAccentTint())
-                    .trackThickness(4)
-                    .blockSize({ width: 16, height: 16 })
-                    .showSteps(true).stepColor(this.readerMenuForegroundAlpha('33')).stepSize(3)
-                    // 无障碍文案：上游 `ReadBookMenuBarBottom.kt:84-95` 按 `progressBarBehavior`
+                    .selectedColor(this.readerMenuAccentTint())
+                    .trackColor(this.readerMenuForegroundAlpha('33'))
+                    // 系统圆点拇指涂透明，位置让给下面的竖条。
+                    .blockColor(Color.Transparent)
+                    .blockBorderColor(Color.Transparent)
+                    .trackThickness(16)
+                    // 刻度是轨道上的小暗点，不是一排强调色亮点。
+                    .showSteps(true).stepColor(this.readerMenuForegroundAlpha('73')).stepSize(4)
+                    .onAreaChange((_oldArea: Area, newArea: Area) => {
+                      const width = Number(newArea.width);
+                      if (!Number.isNaN(width) && width > 0) { this.sliderTrackWidth = width; }
+                    })                    // 无障碍文案：上游 `ReadBookMenuBarBottom.kt:84-95` 按 `progressBarBehavior`
                     // 念「第 x / 共 y 页」或「第 x / 共 y 章」。本地没有读屏器自定义能力，
                     // 用 `accessibilityText` 把同一句挂在滑块上。
                     .accessibilityText(this.getProgressAccessibilityText())
@@ -7457,6 +7482,15 @@ export struct ReaderPage {
                         this.onSelectChapterIndex(index);
                       }
                     })
+                  // 自绘竖条拇指：M3 的 handle 是 4dp 宽、44dp 高的圆角竖条，
+                  // ArkUI 系统 Slider 的拇指只能是圆点（SHAPE 档要 RectAttribute 实例，
+                  // 组件构建器造不出来），所以在轨道上按同一百分比叠一根竖条。
+                  // Stack 是 Center 对齐，offset 从中心起算。
+                  Row()
+                    .width(4).height(44).borderRadius(2)
+                    .backgroundColor(this.readerMenuForeground())
+                    .offset({ x: this.sliderThumbOffset() })
+                    .hitTestBehavior(HitTestMode.None)
                 }.layoutWeight(1).height(40)
               }
               Stack({ alignContent: Alignment.Center }) {
