@@ -6673,14 +6673,19 @@ private canWriteInto(dir: string): boolean {
    * 导入时选中的章节正则会固定在 Book.tocRule 上，规则调整后已有书的目录不会变，
    * 这里给用户一个主动重算的入口：清掉缓存规则、重新匹配、按字符偏移迁移阅读位置。
    * 与上游一致，书签与划线/笔记按原章节号保留，不随新目录重映射。
+   *
+   * books 不传 = 处理 whole `this.books`（三点菜单的「更新目录」走这条）；
+   * 传了就只处理这一批，其余书原样带进 updatedBooks 参与落库——
+   * 书架下拉刷新（refreshBookshelfFromPull）依赖这个口径，漏带会把没刷的书写丢。
    */
-  private async refreshAllToc(): Promise<void> {
+  private async refreshAllToc(books?: Book[]): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       this.showUnavailableAction('无法访问本地书架，未更新目录');
       return;
     }
-    const localBooks = this.books.filter((book: Book) =>
+    const source: Book[] = books ?? this.books;
+    const localBooks = source.filter((book: Book) =>
       book.isLocal && book.format === 'txt' && book.contentPath !== undefined);
     if (localBooks.length === 0) {
       this.showUnavailableAction('书架里没有可更新目录的本地 TXT');
@@ -6689,8 +6694,8 @@ private canWriteInto(dir: string): boolean {
     let updatedCount = 0;
     let failedCount = 0;
     const updatedBooks: Book[] = [];
-    for (let index = 0; index < this.books.length; index++) {
-      const book = this.books[index];
+    for (let index = 0; index < source.length; index++) {
+      const book = source[index];
       if (book === undefined) { continue; }
       if (!book.isLocal || book.format !== 'txt' || book.contentPath === undefined) {
         updatedBooks.push(book);
@@ -6720,7 +6725,8 @@ private canWriteInto(dir: string): boolean {
       }
     }
     if (updatedCount === 0 && failedCount === 0) {
-      this.showUnavailableAction('所有本地 TXT 的目录都没有变化');
+      this.showUnavailableAction(books === undefined
+        ? '所有本地 TXT 的目录都没有变化' : '当前分组没有需要更新的目录');
       return;
     }
     try {
@@ -6730,11 +6736,38 @@ private canWriteInto(dir: string): boolean {
       this.showUnavailableAction('目录已更新，但保存失败，重新打开后可能回到旧目录');
       return;
     }
-    this.books = updatedBooks;
+    if (books === undefined) {
+      // 全量分支：updatedBooks 就是 this.books 的全量映射，直接换掉。
+      this.books = updatedBooks;
+    } else {
+      // 限定范围分支：updatedBooks 只含这一批书，按 id 合并回 this.books，
+      // 其余书（包括不在当前分组、以及非本地 TXT）保持原对象不动。
+      const changedById = new Map<string, Book>();
+      updatedBooks.forEach((book: Book) => changedById.set(book.id, book));
+      this.books = this.books.map((book: Book) => changedById.get(book.id) ?? book);
+    }
     const parts: string[] = [];
     if (updatedCount > 0) { parts.push(`已更新 ${updatedCount} 本`); }
     if (failedCount > 0) { parts.push(`${failedCount} 本读取失败已跳过`); }
     this.showUnavailableAction(`更新目录完成：${parts.join('，')}`);
+  }
+
+  /**
+   * 书架下拉刷新。
+   *
+   * 对齐上游 BookshelfViewModel.kt:1111-1117 的 refreshBooks：
+   * 只刷新「当前分组」的书，且受 bookshelfRefreshingLimit 限制（0 = 不限制）。
+   * 上游是 `books.take(limit)`，这里同样按当前顺序取前 limit 本，
+   * 否则几百本书的书架下拉一次要转很久。
+   *
+   * 分组名口径跟 BookshelfPage.activeFilter() 一致：'全部' 表示不加分组过滤。
+   */
+  private async refreshBookshelfFromPull(groupName: string): Promise<void> {
+    const limit = this.bookshelfLayout.bookshelfRefreshingLimit;
+    const groupBooks = groupName === '全部' ? this.books
+      : this.books.filter((book: Book) => (book.groupNames ?? []).includes(groupName));
+    const target = limit > 0 ? groupBooks.slice(0, limit) : groupBooks;
+    await this.refreshAllToc(target);
   }
 
   /**
@@ -8136,6 +8169,7 @@ private canWriteInto(dir: string): boolean {
           onImportBook: () => this.importLocalBook(),
           onImportBookList: (books: Book[]) => this.importBookList(books),
           onRefreshToc: () => this.refreshAllToc(),
+          onPullRefresh: (groupName: string) => { this.refreshBookshelfFromPull(groupName); },
           onApplyTagGroupRules: () => this.applyTagGroupRules(),
           onSetBooksGroup: (bookKeys: string[], groupName: string) => this.setBooksGroupByKeys(bookKeys, groupName),
           onDeleteBooks: (books: Book[], deleteSource: boolean) => this.deleteBooksFromShelf(books, deleteSource),

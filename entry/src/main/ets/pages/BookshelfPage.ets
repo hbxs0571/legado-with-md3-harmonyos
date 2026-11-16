@@ -198,6 +198,8 @@ export struct BookshelfPage {
   @State showRulePasteAuthorization: boolean = false;
   /** 选择模式（:87 / :142-144）。进入后卡片点击改勾选，顶栏换关闭按钮。 */
   @State selectionMode: boolean = false;
+  /** 下拉刷新进行中。与单本刷新的 refreshingBookIds 是两件事：这个是整批转圈。 */
+  @State pullRefreshing: boolean = false;
   /**
    * 已选书籍的键集合（:142-144）。
    * 键一律用 bookUrl（contentPath 优先），不用 book.id —— id 是文件名去扩展名派生的，
@@ -242,6 +244,8 @@ export struct BookshelfPage {
   onImportBook: () => Promise<Book | undefined> = async () => undefined;
   /** 重新识别全部本地 TXT 的目录。 */
   onRefreshToc: () => Promise<void> = async () => {};
+  /** 下拉刷新：参数是当前分组名，由 Index 侧按分组与刷新上限取书。 */
+  onPullRefresh: (groupName: string) => void = (_groupName: string) => {};
   onAddGroup: (name: string) => void = (_name: string) => {};
   onRenameGroup: (id: number, name: string) => void = (_id: number, _name: string) => {};
   onSetGroupVisible: (id: number, visible: boolean) => void = (_id: number, _visible: boolean) => {};
@@ -414,6 +418,33 @@ export struct BookshelfPage {
   private activeFilter(): string {
     const names = this.getGroupNames();
     return names.includes(this.selectedFilter) ? this.selectedFilter : '全部';
+  }
+
+  /**
+   * 当前是否允许下拉刷新。
+   *
+   * 对齐上游 BookshelfScreen.kt:929-930：
+   *   pullToRefreshEnabled = (currentGroup?.enableRefresh ?: true) && !isEditMode
+   * 上游注释特别强调这里不能缓存（分组开关会变），所以每次都现算，不放进 remember/derivedStateOf。
+   */
+  private canPullRefresh(): boolean {
+    if (this.selectionMode) { return false; }
+    const current = this.activeFilter();
+    // '全部' 没有对应的分组定义，按上游默认值 true 处理。
+    if (current === '全部') { return true; }
+    const group = this.groups.find((item: BookGroup) => item.groupName === current);
+    return group === undefined ? true : group.enableRefresh;
+  }
+
+  /** 下拉触发。上游同样是 `if (isRefreshing) return`，重复触发直接忽略。 */
+  private async handlePullRefresh(): Promise<void> {
+    if (this.pullRefreshing) { return; }
+    this.pullRefreshing = true;
+    try {
+      await this.onPullRefresh(this.activeFilter());
+    } finally {
+      this.pullRefreshing = false;
+    }
   }
 
   /**
@@ -1427,7 +1458,7 @@ export struct BookshelfPage {
           Row() {
             Column() {
               Text('下拉刷新').fontSize(14).fontColor(this.themeColorTextSecondary)
-              Text('仅保存 Android 兼容字段；当前不控制实际更新').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+              Text('关闭后该分组的下拉刷新不触发；仅对本地 TXT 生效').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             UiSwitchControl({
               checked: this.draftRefresh,
@@ -2544,6 +2575,9 @@ export struct BookshelfPage {
       } else if (this.activeGroupLocked()) {
         this.PrivateGroupLockedPanel()
       } else if (this.bookshelfData.totalCount() > 0) {
+        // 下拉刷新只包「卡片滚动区」这一层：包整个 Column 的话顶栏会跟着一起下移。
+        // 是否可刷由 canPullRefresh() 现算（编辑态/分组开关都会变，不能缓存）。
+        Refresh({ refreshing: this.pullRefreshing }) {
         Grid(this.bookshelfScroller) {
           // :154：LazyForEach 只创建视口内 + cachedCount 的项，ForEach 是首帧全量建。
           LazyForEach(this.bookshelfData, (book: Book) => {
@@ -2750,7 +2784,7 @@ export struct BookshelfPage {
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
         // 缓存半屏：一屏约 15 张卡，cachedCount(20) 就等于没省钱。
         .cachedCount(6)
-        .layoutWeight(1).scrollBar(this.layout.showBookshelfFastScroller ? BarState.On : BarState.Off)
+        .scrollBar(this.layout.showBookshelfFastScroller ? BarState.On : BarState.Off)
           // editMode(true) 是 ForEach.onMove 生效的前提，与分组网格同一套写法（:138）。
           .editMode(this.canReorderBooks())
           .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -2775,6 +2809,12 @@ export struct BookshelfPage {
               });
             }
           })
+        }
+        // refreshOffset 与 HomePage.ets:305 保持一致（promptText 未设时默认也是 64vp）。
+        .onRefreshing(() => { this.handlePullRefresh(); })
+        .pullToRefresh(this.canPullRefresh())
+        .refreshOffset(64)
+        .layoutWeight(1)
       } else {
         Column() {
           Text(this.emptyFace).fontSize(32).fontColor(this.themeColorTextSecondary).margin({ bottom: 14 })
