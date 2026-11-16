@@ -17,6 +17,7 @@ import { ReaderTitleSegment, segmentReaderTitle } from '../data/ReaderTitleSegme
 import { READER_SELECTION_MENU_SUPPORTED, ReaderSelectionMenuItem, parseReaderSelectionMenuConfig } from '../data/ReaderSelectionMenu';
 import { readerColumnCount } from '../data/ReaderColumnMode';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { UiSwitchControl } from '../components/UiSwitchControl';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import image from '@ohos.multimedia.image';
@@ -84,10 +85,19 @@ const READER_IMAGE_STYLE_OPTIONS: ReaderImageStyleOption[] = [
 
 const READER_MORE_ACTIONS: ReaderMoreAction[] = [
   { id: 'source_custom_button', label: '书源自定义按钮', glyph: 'profileSource', scopeLabel: '仅支持该按钮的网络书', migrated: false },
+  // 上游 MoreActionIds（ReadBookContract.kt:545-552）第 2-5 位：书源四项。
+  // 本地 book.isLocal 恒 true、书源引擎未接（见 isMoreActionApplicable），
+  // 所以它们只出现在配置面板里、带「未迁移」，永远不会成为格子。
+  { id: 'source_login', label: '书源登录', glyph: 'profileWeb', scopeLabel: '仅网络书', migrated: false },
+  { id: 'source_pay', label: '书源支付', glyph: 'profileSell', scopeLabel: '仅网络书', migrated: false },
+  { id: 'edit_source', label: '编辑书源', glyph: 'edit', scopeLabel: '仅网络书', migrated: false },
+  { id: 'disable_source', label: '停用书源', glyph: 'lock', scopeLabel: '仅网络书', migrated: false },
   { id: 'change_source', label: '换源', glyph: 'swap', scopeLabel: '仅网络书', migrated: false },
   { id: 'refresh', label: '刷新', glyph: 'profileRefresh', scopeLabel: '仅网络书', migrated: false },
   { id: 'download', label: '离线缓存', glyph: 'cloudDownload', scopeLabel: '仅网络书', migrated: false },
   { id: 'audio_download', label: '听书下载', glyph: 'download', scopeLabel: '', migrated: false },
+  // 上游 MoreActionIds 第 10 位 ai_chat。AI 在范围之外（见 docs/PROJECT.md），只入池不实现。
+  { id: 'ai_chat', label: 'AI 对话', glyph: 'sparkles', scopeLabel: '', migrated: false },
   { id: 'edit_content', label: '编辑内容', glyph: 'edit', scopeLabel: '', migrated: true },
   { id: 'add_bookmark', label: '添加书签', glyph: 'bookmark', scopeLabel: '', migrated: true },
   { id: 'text_processing', label: '文本处理', glyph: 'profileFindReplace', scopeLabel: '', migrated: true },
@@ -452,6 +462,8 @@ export struct ReaderPage {
   /** 「翻页动画」条目的二级菜单：上游点一下直接展开 6 项单选，不弹「未迁移」。 */
   /** 更多操作面板当前页（每页 8 格，对齐上游 chunked(8)）。 */
   @State moreActionPage: number = 0;
+  /** 哪一格展开了二级菜单（空串 = 都没展开）。上游 ReaderMenuActionSquare.kt:72-75 的三角点击带。 */
+  @State moreActionMenuId: string = '';
   @State pageAnimMenuVisible: boolean = false;
   @State moreActionConfigVisible: boolean = false;
   @State moreActionShellVisible: boolean = false;
@@ -3862,7 +3874,7 @@ export struct ReaderPage {
     // 上游 `ReadMenuActionDefs.kt:443-449` 的 `replace` 与 `replace_badge` 是同一个面板，
     // 区别只在后者右上角多一枚「本章命中条数」角标。
     else if (kind === 'replace' || kind === 'replace_badge') { this.textProcessingVisible = true; }
-    else if (kind === 'more_actions') { this.overflowVisible = true; }
+    else if (kind === 'more_actions') { this.moreActionMenuId = ''; this.overflowVisible = true; }
     else if (kind === 'charset') { this.openCharsetDialog(); }
     else if (kind === 'toc_rule') { this.onOpenTocRule(); }
     else { this.onUnavailableAction(this.getBottomActionLabel(kind) + '功能尚未迁移'); }
@@ -3913,10 +3925,19 @@ export struct ReaderPage {
 
   private isMoreActionApplicable(id: string): boolean {
     if (id === 'source_custom_button') { return false; }
+    // 书源四项：本地 book.isLocal 恒 true（见 data/BookRepository.ets 导入链只做本地书），
+    // 上游条件是 !isLocalBook 一类，写 !isLocal 与写 false 行为完全等价；
+    // 直接写 false 并留这行注释，免得后来接书源的人以为「条件已经写好了，只是这本书没开」。
+    if (id === 'source_login' || id === 'source_pay') { return false; }
+    if (id === 'edit_source' || id === 'disable_source') { return false; }
+    // AI 在范围之外，见 docs/PROJECT.md。
+    if (id === 'ai_chat') { return false; }
     if (id === 'change_source' || id === 'refresh' || id === 'download') { return !this.book.isLocal; }
     if (id === 'toc_rule') { return this.book.isLocal && this.book.format === 'txt'; }
     if (id === 'charset') { return this.book.isLocal; }
     if (id === 'del_ruby' || id === 'del_h') { return this.book.isLocal && this.book.format === 'epub'; }
+    // 上游条件是 inBookshelf && isReadingProgressSyncConfigured。本地 WebDAV 已落地（lib/WebDav.ets），
+    // inBookshelf 也判得出，但进度同步的读写入口本批不做，放进格子就是个点不动的格。
     if (id === 'get_progress' || id === 'cover_progress') { return false; }
     return true;
   }
@@ -3959,30 +3980,29 @@ export struct ReaderPage {
     this.moreActionConfigVisible = true;
   }
 
-  private toggleMoreAction(id: string): void {
+  /** 显式设值版：配置行的开关走这个，不做取反（上游 ConfigListEntry 的 Switch 是设值语义）。 */
+  private setMoreActionEnabled(id: string, enabled: boolean): void {
     this.draftMoreActions = this.draftMoreActions.map((item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({
       id: item.id,
-      enabled: item.id === id ? !item.enabled : item.enabled
+      enabled: item.id === id ? enabled : item.enabled
     }));
   }
 
-  private moveMoreAction(index: number, delta: number): void {
-    const target = index + delta;
-    if (target < 0 || target >= this.draftMoreActions.length) { return; }
-    const updated = this.draftMoreActions.map((item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({
-      id: item.id,
-      enabled: item.enabled
-    }));
-    const current = updated[index];
-    const neighbor = updated[target];
-    if (current === undefined || neighbor === undefined) { return; }
-    updated[index] = neighbor;
-    updated[target] = current;
+  /** List.onMove 的回调：把第 from 项搬到 to 位（对应上游 ReorderableConfigList 的拖拽结果）。 */
+  private moveMoreActionTo(from: number, to: number): void {
+    if (from === to || from < 0 || to < 0
+      || from >= this.draftMoreActions.length || to >= this.draftMoreActions.length) {
+      return;
+    }
+    const updated = this.draftMoreActions.slice();
+    const moved = updated.splice(from, 1)[0];
+    if (moved === undefined) { return; }
+    updated.splice(to, 0, moved);
     this.draftMoreActions = updated;
   }
 
   @Builder
-  private moreActionConfigRow(config: ReaderMoreActionConfig, index: number) {
+  private moreActionConfigRow(config: ReaderMoreActionConfig) {
     Row() {
       AppGlyph({ name: this.getMoreAction(config.id)?.glyph ?? 'more', glyphSize: 20,
         tint: config.enabled ? this.readerMenuForeground() : '#777984' }).margin({ right: 12 })
@@ -3997,27 +4017,26 @@ export struct ReaderPage {
           Text('未迁移').fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
         }
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-      Stack({ alignContent: Alignment.Center }) {
-        Image(config.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
-          .width(20).height(20).fillColor(config.enabled ? this.readerMenuForeground() : '#777984')
-      }.width(36).height(36).borderRadius(18).backgroundColor('#292A31')
-        .onClick(() => this.toggleMoreAction(config.id))
-      Column() {
-        Image($r('app.media.reader_reorder_up')).width(16).height(16)
-          .fillColor(index === 0 ? '#555761' : '#B9BBC4')
-          .onClick(() => this.moveMoreAction(index, -1))
-        Image($r('app.media.reader_reorder_down')).width(16).height(16)
-          .fillColor(index === this.draftMoreActions.length - 1 ? '#555761' : '#B9BBC4')
-          .onClick(() => this.moveMoreAction(index, 1))
-      }.width(24).height(36).justifyContent(FlexAlign.SpaceBetween).margin({ left: 4 })
+      // 上游 MoreActionsConfigContent（ReaderMoreActionsSheet.kt:276-306）右侧是开关，
+      // 不是本地的眼睛图标；开关只改启用，不改顺序。
+      UiSwitchControl({
+        checked: config.enabled,
+        interactive: true,
+        onChange: (value: boolean) => { this.setMoreActionEnabled(config.id, value); }
+      })
+      // 拖拽把手：顺序由 List.onMove 的拖拽手势决定，把手本身只是视觉提示，
+      // 所以这里显式关掉命中测试，避免它吃掉半个拖拽手势。
       Image($r('app.media.reader_drag_handle')).width(20).height(20).fillColor('#B9BBC4')
-        .width(32).height(36)
+        .width(32).height(36).margin({ left: 4 })
+        .hitTestBehavior(HitTestMode.None)
     }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 8 })
-      .backgroundColor('#202127').borderRadius(12).margin({ bottom: 8 })
+      .backgroundColor('#202127').borderRadius(12)
   }
 
   private selectMoreAction(action: ReaderMoreAction): void {
     this.overflowVisible = false;
+    // 选中任一动作即收起上次展开的三角态，避免下次开面板还残留高亮。
+    this.moreActionMenuId = '';
     if (action.id === 'configure_more_actions') {
       this.openMoreActionConfig();
     } else if (action.id === 'add_bookmark') {
@@ -4105,13 +4124,20 @@ export struct ReaderPage {
               this.moreActionConfigVisible = false;
             })
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
-        Scroll() {
-          Column() {
-            ForEach(this.draftMoreActions, (config: ReaderMoreActionConfig, index: number) => {
-              this.moreActionConfigRow(config, index)
-            }, (config: ReaderMoreActionConfig) => config.id)
-          }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
+        // 上游 MoreActionsConfigContent 用 ReorderableConfigList：右侧开关 + 左侧拖拽把手，
+        // 没有上下箭头。ArkUI 里改为 List + 长按拖拽排序。
+        // 注意 onMove 挂在 ForEach 上（不是 List 上），List 只负责开编辑态与提供容器。
+        // 也不能用 Scroll 再包 List：两层滚动容器会让 List 拿不到自己的滚动手势，onMove 一起失效。
+        List() {
+          ForEach(this.draftMoreActions, (config: ReaderMoreActionConfig) => {
+            ListItem() {
+              this.moreActionConfigRow(config)
+            }.width('100%').margin({ bottom: 8 })
+          }, (config: ReaderMoreActionConfig) => config.id)
+            .onMove((from: number, to: number) => this.moveMoreActionTo(from, to))
         }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+        .editMode(true)
+        .padding({ left: 14, right: 14, bottom: 12 })
       }.width('100%').height('62%').backgroundColor('#D91A1B21')
         .borderRadius({ topLeft: 24, topRight: 24 })
     }.width('100%').height('100%')
@@ -7561,19 +7587,30 @@ export struct ReaderPage {
                         // 上游 ReaderMenuActionSquare.kt:72-84：格子底部 16dp 点击带 + 12dp 展开箭头，
                         // 只有需要二次选择的条目才有（换源 / 刷新 / 自定义按钮）。
                         if (this.moreActionHasSubmenu(action.id)) {
+                          Divider().color(this.readerMenuForegroundAlpha('26')).strokeWidth(1).width('100%')
+                          // 这条 16 高的点击带是独立点击区：点它只展开二级菜单，不触发格子本身的主操作。
                           Row() {
                             AppGlyph({ name: 'profileExpandMore', tint: this.readerMenuForeground(), glyphSize: 12 })
                           }.width('100%').height(16).justifyContent(FlexAlign.Center)
+                            .onClick(() => {
+                              this.moreActionMenuId = this.moreActionMenuId === action.id ? '' : action.id;
+                            })
                         }
                       }.width('100%').aspectRatio(1).justifyContent(FlexAlign.Center)
-                        .backgroundColor('#202127').borderRadius(16)
+                        .backgroundColor(this.moreActionMenuId === action.id
+                          ? this.readerMenuSelectedFill()
+                          : '#202127').borderRadius(16)
                         .onClick(() => this.selectMoreAction(action))
                     }
                   }, (action: ReaderMoreAction) => action.id)
                 }.columnsTemplate('1fr 1fr 1fr 1fr').rowsGap(8).columnsGap(8).width('100%')
               }, (page: ReaderMoreAction[], pageIndex: number) => `page-${pageIndex}`)
             }.loop(false).indicator(false)
-              .onChange((index: number) => this.moreActionPage = index)
+              .onChange((index: number) => {
+                this.moreActionPage = index;
+                // 翻页时清掉三角展开态：展开的那一格已经不在视野里。
+                this.moreActionMenuId = '';
+              })
               .width('100%').layoutWeight(1)
             Row() {
               ForEach(this.getMoreActionPages(), (page: ReaderMoreAction[], pageIndex: number) => {

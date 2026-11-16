@@ -8,10 +8,17 @@ export interface ReaderMoreActionConfig {
 // 与 Android MoreActionIds 同序，所有原版动作默认启用，运行时再按书籍类型过滤。
 export const READER_MORE_ACTION_DEFAULTS: ReaderMoreActionConfig[] = [
   { id: 'source_custom_button', enabled: true },
+  // 书源四项：与 ReaderPage.ets 的 READER_MORE_ACTIONS 同序同步，
+  // 它们永远不适用（本地只做本地书），入池只为在配置面板里如实标出「未迁移」。
+  { id: 'source_login', enabled: true },
+  { id: 'source_pay', enabled: true },
+  { id: 'edit_source', enabled: true },
+  { id: 'disable_source', enabled: true },
   { id: 'change_source', enabled: true },
   { id: 'refresh', enabled: true },
   { id: 'download', enabled: true },
   { id: 'audio_download', enabled: true },
+  { id: 'ai_chat', enabled: true },
   { id: 'edit_content', enabled: true },
   { id: 'add_bookmark', enabled: true },
   { id: 'text_processing', enabled: true },
