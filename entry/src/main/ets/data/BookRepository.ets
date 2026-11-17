@@ -154,6 +154,11 @@ export class BookRepository {
   private static readonly preferenceName: string = 'legado_local_books';
   private static effectiveRuleIdsByChapter: Map<string, number[]> = new Map<string, number[]>();
   private static effectiveRuleCacheOrder: string[] = [];
+  /**
+   * 「移除重复标题」按章节的非持久化开关，对齐上游 setRemoveSameTitle 靠 nr 缓存文件存在性判断。
+   * key = `${bookId}|${chapterIndex}`；缺省返回 true（默认剥掉重复标题，与当前行为一致）。
+   */
+  private static removeRepeatedTitleByChapter: Map<string, boolean> = new Map<string, boolean>();
   private static saveQueue: Promise<void> = Promise.resolve();
   /** 章节行缓存：bookUrl → 章节行，供页面上的同步访问器读取。 */
   private static chapterCache: Map<string, BookChapter[]> = new Map<string, BookChapter[]>();
@@ -533,6 +538,17 @@ export class BookRepository {
       originFileName: book.originFileName,
       sourceSize: book.sourceSize
     };
+  }
+
+  /** 本章是否剥掉重复标题；未配置时默认 true，与上游默认行为一致。 */
+  static getRemoveRepeatedTitle(bookId: string, chapterIndex: number): boolean {
+    const value = BookRepository.removeRepeatedTitleByChapter.get(`${bookId}|${chapterIndex}`);
+    return value === undefined ? true : value;
+  }
+
+  /** 记录本章的「移除重复标题」开关；非持久化，重启后回到默认。 */
+  static setRemoveRepeatedTitle(bookId: string, chapterIndex: number, enabled: boolean): void {
+    BookRepository.removeRepeatedTitleByChapter.set(`${bookId}|${chapterIndex}`, enabled);
   }
 
 static getEffectiveReplaceRuleIds(bookId: string, chapterIndex: number): number[] {
@@ -2280,7 +2296,12 @@ private static async applyChapterContentAsync(
   ): Promise<string> {
     // ① 去重复标题：正文首行如果又抄了一遍章节名（常见于 TXT 转码工具），先剥掉，
     //    否则正文第一段会和页眉/标题重复出现。对齐上游 ContentProcessor.kt:126-155。
-    const deduped = BookRepository.removeDuplicateChapterTitle(book, chapterTitle, body);
+    //    「移除重复标题」开关按章节存储（非持久化），关闭时保留正文首行。
+    const chapterIndexForDedup = requestedChapterIndex ?? book.chapterIndex ?? 0;
+    const shouldRemoveRepeatedTitle = BookRepository.getRemoveRepeatedTitle(book.id, chapterIndexForDedup);
+    const deduped = shouldRemoveRepeatedTitle
+      ? BookRepository.removeDuplicateChapterTitle(book, chapterTitle, body)
+      : body;
     // ② 重新分段（按书开关）。
     const segmented = BookRepository.applyChapterReSegment(book, chapterTitle, deduped);
     // ③ 简繁转换：上游 ContentProcessor.kt:161-171 把它放在 reSegment 之后、HTML 占位之前，

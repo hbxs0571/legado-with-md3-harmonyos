@@ -535,6 +535,8 @@ struct Index {
   @State readerTitleSegScaling: number = 1;
   @State readerTitleSegDistance: number = 4;
   @State readerTitleSegFlag: string = '';
+  /** 「移除重复标题」按章节开关：对齐上游 MenuSameTitleRemoved，非持久化。 */
+  @State readerRemoveRepeatedTitle: boolean = true;
   @State readerMaxLengthWithNoToc: number = 3000;
   @State eyeProtectionEnabled: boolean = false;
   @State eyeProtectionAutoNight: boolean = false;
@@ -5450,6 +5452,14 @@ struct Index {
     // 正文是按已转换结果缓存的，档位变了必须重读，否则要等下次翻页才生效。
     this.reloadSelectedChapterForTransform();
   }
+  /** 移除重复标题：写 BookRepository 的按章节缓存并重读当前章，正文首行即时变化。 */
+  private setRemoveRepeatedTitle(enabled: boolean): void {
+    const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ?? 0);
+    BookRepository.setRemoveRepeatedTitle(this.selectedBook.id, chapterIndex, enabled);
+    this.readerRemoveRepeatedTitle = enabled;
+    // 开关是正文管线的输入，必须重读当前章才体现（同简繁转换）。
+    this.reloadSelectedChapterForTransform();
+  }
   /** 颜色类设置统一走这里：只改显示，不重读正文，因此不必触发章节重载。 */
   private setReaderTextColor(value: string, night: boolean): void {
     if (night) { this.readerTextColorNight = value; } else { this.readerTextColor = value; }
@@ -8889,6 +8899,7 @@ private canWriteInto(dir: string): boolean {
               titleSegScaling: this.readerTitleSegScaling,
               titleSegDistance: this.readerTitleSegDistance,
               titleSegFlag: this.readerTitleSegFlag,
+              removeRepeatedTitle: this.readerRemoveRepeatedTitle,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -8907,6 +8918,7 @@ private canWriteInto(dir: string): boolean {
               onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
               onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
               onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
+              onRemoveSameTitleChange: (enabled: boolean) => this.setRemoveRepeatedTitle(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
               clickRegionActions: this.readerClickRegionActions,
               onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -9678,6 +9690,7 @@ private canWriteInto(dir: string): boolean {
               titleSegScaling: this.readerTitleSegScaling,
               titleSegDistance: this.readerTitleSegDistance,
               titleSegFlag: this.readerTitleSegFlag,
+              removeRepeatedTitle: this.readerRemoveRepeatedTitle,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -9696,6 +9709,7 @@ private canWriteInto(dir: string): boolean {
               onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
               onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
               onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
+              onRemoveSameTitleChange: (enabled: boolean) => this.setRemoveRepeatedTitle(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -10050,6 +10064,7 @@ private canWriteInto(dir: string): boolean {
               titleSegScaling: this.readerTitleSegScaling,
               titleSegDistance: this.readerTitleSegDistance,
               titleSegFlag: this.readerTitleSegFlag,
+              removeRepeatedTitle: this.readerRemoveRepeatedTitle,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -10068,6 +10083,7 @@ private canWriteInto(dir: string): boolean {
               onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
               onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
               onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
+              onRemoveSameTitleChange: (enabled: boolean) => this.setRemoveRepeatedTitle(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
             clickRegionActions: this.readerClickRegionActions,
             onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),
@@ -10345,6 +10361,7 @@ private canWriteInto(dir: string): boolean {
               titleSegScaling: this.readerTitleSegScaling,
               titleSegDistance: this.readerTitleSegDistance,
               titleSegFlag: this.readerTitleSegFlag,
+              removeRepeatedTitle: this.readerRemoveRepeatedTitle,
               onTextColorChange: (value: string, night: boolean) => this.setReaderTextColor(value, night),
               onTextAccentColorChange: (value: string, night: boolean) => this.setReaderTextAccentColor(value, night),
               onBackgroundColorChange: (value: string, night: boolean) => this.setReaderBackgroundColor(value, night),
@@ -10363,6 +10380,7 @@ private canWriteInto(dir: string): boolean {
               onTitleSegScalingChange: (value: number) => this.setReaderTitleSegScaling(value),
               onTitleSegDistanceChange: (value: number) => this.setReaderTitleSegDistance(value),
               onTitleSegFlagChange: (value: string) => this.setReaderTitleSegFlag(value),
+              onRemoveSameTitleChange: (enabled: boolean) => this.setRemoveRepeatedTitle(enabled),
               onMaxLengthWithNoTocChange: (value: number) => this.setReaderMaxLengthWithNoToc(value),
           clickRegionActions: this.readerClickRegionActions,
           onClickRegionActionsChange: (actions: string[]) => this.setReaderClickRegionActions(actions),

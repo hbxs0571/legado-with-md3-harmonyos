@@ -7,6 +7,7 @@ import { fileIo, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
 import { READER_COLUMN_MODE_TITLES, readerColumnModeTitle } from '../data/ReaderColumnMode';
 import { UiSwitchControl } from '../components/UiSwitchControl';
+import { UiColorModeRow } from '../components/settings/UiColorModeRow';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
 import { ReaderHighlightRuleSheet } from './ReaderHighlightRuleSheet';
@@ -30,6 +31,8 @@ type ReaderFontTarget = 'body' | 'title' | 'header' | 'footer';
 const READ_INFO_TIP_VALUES: number[] = [0, 7, 1, 12, 17, 2, 3, 15, 13, 14, 10, 4, 5, 11, 6, 8, 16, 9, 19, 20, 18];
 const READER_INFO_COLOR_VALUES: number[] = [0, -1, -16777216, -8355712, -65536, -16711936, -16776961];
 const READER_INFO_COLOR_CHOICES: string[] = ['跟随正文', '白色', '黑色', '灰色', '红色', '绿色', '蓝色'];
+// 页眉/页脚「颜色」双色行的预设色板，去掉「跟随正文」（由 UiColorModeRow 的 showFollow 单独提供）。
+const READER_INFO_COLOR_HEX: string[] = ['#FFFFFF', '#000000', '#808080', '#FF0000', '#00FF00', '#0000FF'];
 const CLICK_REGION_NAMES: string[] = ['左上', '上中', '右上', '左中', '中间', '右中', '左下', '下中', '右下'];
 // 排版页四个子页，顺序对齐上游 TypographyTabs：正文 → 标题 → 页眉 → 页脚。
 /** 底栏按钮配置行的高度（含 8dp 下间距），拖拽换位按这个步长判定。 */
@@ -233,6 +236,8 @@ export struct ReaderSettingsPage {
   @Prop titleSegScaling: number = 1;
   @Prop titleSegDistance: number = 4;
   @Prop titleSegFlag: string = '';
+  /** 「移除重复标题」按章节开关；对齐上游 MenuSameTitleRemoved，非持久化。 */
+  @Prop removeRepeatedTitle: boolean = true;
   /** 划词菜单是否展开成多行，对齐上游 expandTextMenu（ReadSettings.kt:51）。 */
   @Prop expandTextMenu: boolean = false;
   /** 划词菜单是否显示图标，对齐上游 showSelectMenuIcon（ReadSettings.kt:52）。 */
@@ -547,6 +552,8 @@ export struct ReaderSettingsPage {
   onTitleSegScalingChange: (value: number) => void = (_value: number) => {};
   onTitleSegDistanceChange: (value: number) => void = (_value: number) => {};
   onTitleSegFlagChange: (value: string) => void = (_value: string) => {};
+  /** 移除重复标题：改本章缓存状态并重载正文，对齐上游发 ReadBookIntent.MenuSameTitleRemoved。 */
+  onRemoveSameTitleChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onExpandTextMenuChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onShowSelectMenuIconChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onDoubleHorizontalPageChange: (value: string) => void = (_value: string) => {};
@@ -651,16 +658,34 @@ export struct ReaderSettingsPage {
     }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 
-  /** 标题排版：十四个字段全部可配，对齐上游 TypographyTabs 的标题页。 */
+  /** 标题排版：对齐上游 TypographyTabs 的标题页四分组 15 项。 */
   @Builder
   private TitleTypographySettings() {
+    Scroll() {
     Column() {
-      // 位置模式：0 居左 / 1 居中 / 2 隐藏（ReadBookConfig.kt:267）。
-      this.TitleChoiceRow('标题位置', ['居左显示', '居中显示', '隐藏标题'],
-        Math.max(0, Math.min(2, this.titleMode)), (index: number) => this.onTitleModeChange(index))
-      // 字号：relative 决定是「正文 + n」还是绝对号数（ReadBookConfig.kt:669-676）。
+      // 分组「字体」——上游第一项就是「选择字体」，标题页此前缺这个入口。
+      MenuSettingSection({ title: '字体' })
+      MenuSettingOption({ title: '选择字体', detail: this.getTitleFontDisplayName(), migrated: true })
+        .onClick(() => this.openTitleFontSelection())
+      // 字重：上游四档「细体/常规/粗体/自定义」，非三档时出 100–900 自定义滑杆。
+      this.TitleChoiceRow('字重', ['细体', '常规', '粗体', '自定义'],
+        this.getTitleWeightIndex(), (index: number) => this.onTitleWeightChoice(index))
+      if (this.getTitleWeightIndex() === 3) {
+        MenuSettingSlider({
+          title: '自定义字重', value: this.titleBold, minValue: 100, maxValue: 900, stepValue: 1,
+          onChange: (value: number) => this.onTitleBoldChange(value)
+        })
+      }
+      // 颜色：上游是一个 TinyColorModeSettingItem（日夜双色点），本地合成一行。
+      UiColorModeRow({
+        title: '颜色', dayColor: this.titleColor, nightColor: this.titleColorNight,
+        colors: READER_TITLE_COLORS, showFollow: true,
+        onDayChange: (color: string) => this.onTitleColorChange(color, false),
+        onNightChange: (color: string) => this.onTitleColorChange(color, true)
+      })
+      // 字号/字号偏移：括号里的动态值移到右侧 value 位（MenuSettingSlider 自带）。
       MenuSettingSlider({
-        title: `标题字号（${this.getTitleSizeLabel()}）`,
+        title: this.titleSizeRelative ? '字号偏移' : '字号',
         value: this.titleSize,
         minValue: this.titleSizeRelative ? 0 : 5,
         maxValue: this.titleSizeRelative ? 40 : 60,
@@ -668,58 +693,20 @@ export struct ReaderSettingsPage {
         onChange: (value: number) => this.onTitleSizeChange(value)
       })
       MenuSettingSwitch({
-        title: '字号相对正文', detail: '关闭后按绝对号数显示',
+        title: '相对正文字号', detail: '兼容其他版本',
         checked: this.titleSizeRelative,
         onChange: (enabled: boolean) => this.onTitleSizeRelativeChange(enabled)
       })
-      // 上下间距（ReadBookConfig.kt:298/301），单位与上游一致按 dp。
-      MenuSettingSlider({
-        title: '标题上间距', value: this.titleTopSpacing, minValue: 0, maxValue: 60, stepValue: 1,
-        onChange: (value: number) => this.onTitleSpacingChange(value, this.titleBottomSpacing)
-      })
-      MenuSettingSlider({
-        title: '标题下间距', value: this.titleBottomSpacing, minValue: 0, maxValue: 60, stepValue: 1,
-        onChange: (value: number) => this.onTitleSpacingChange(this.titleTopSpacing, value)
-      })
-      // 字重：档位与上游 resolveWeight 一致（LegacyReaderPaginationStyleFactory.kt:113-119）。
-      this.TitleChoiceRow('标题字重', ['纤细', '常规', '中等', '粗体', '特粗'],
-        Math.max(0, [300, 400, 500, 700, 900].indexOf(this.titleBold)),
-        (index: number) => this.onTitleBoldChange([300, 400, 500, 700, 900][index] ?? 500))
-      // 行距：Extra 是首段、Sub 是分段后的副标题段（LegacyReaderPaginationStyleFactory.kt:99-101）。
-      MenuSettingSlider({
-        title: '标题行距', value: this.titleLineSpacingExtra, minValue: 0, maxValue: 20, stepValue: 1,
-        onChange: (value: number) => this.onTitleLineSpacingChange(value, this.titleLineSpacingSub)
-      })
-      MenuSettingSlider({
-        title: '标题副项行距', value: this.titleLineSpacingSub, minValue: 0, maxValue: 20, stepValue: 1,
-        onChange: (value: number) => this.onTitleLineSpacingChange(this.titleLineSpacingExtra, value)
-      })
-      // 标题取色：空串表示跟随正文（上游 titleColor 取 0 时回落正文色）。
-      MenuSettingPalette({
-        title: `日间标题颜色（${this.getTitleColorLabel(false)}）`,
-        colors: READER_TITLE_COLORS,
-        selectedColor: this.titleColor,
-        onChange: (color: string) => this.onTitleColorChange(color, false)
-      })
-      MenuSettingPalette({
-        title: `夜间标题颜色（${this.getTitleColorLabel(true)}）`,
-        colors: READER_TITLE_COLORS,
-        selectedColor: this.titleColorNight,
-        onChange: (color: string) => this.onTitleColorChange(color, true)
-      })
-      Row() {
-        Text('标题颜色跟随正文').fontSize(11).fontColor(this.rsetAccent)
-          .onClick(() => {
-            this.onTitleColorChange('', false);
-            this.onTitleColorChange('', true);
-          })
-      }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
-      // 分段：上游把标题切成多段，首段正常字号、后续段按缩放（ReaderTitleSegmentation.kt）。
-      this.TitleChoiceRow(`标题分段（${this.getTitleSegTypeLabel()}）`, ['不分段', '按字数', '按分隔符', '按正则'],
+
+      // 分组「样式」。
+      MenuSettingSection({ title: '样式' })
+      this.TitleChoiceRow('标题位置', ['靠左', '居中', '隐藏'],
+        Math.max(0, Math.min(2, this.titleMode)), (index: number) => this.onTitleModeChange(index))
+      this.TitleChoiceRow('分段模式', ['关闭', '按位置分段', '按标记分段', '正则分段'],
         Math.max(0, Math.min(3, this.titleSegType)), (index: number) => this.onTitleSegTypeChange(index))
       if (this.titleSegType === 1) {
         MenuSettingSlider({
-          title: '分段字数', value: this.titleSegDistance, minValue: 1, maxValue: 40, stepValue: 1,
+          title: '分段位置', value: this.titleSegDistance, minValue: 1, maxValue: 40, stepValue: 1,
           onChange: (value: number) => this.onTitleSegDistanceChange(value)
         })
       } else if (this.titleSegType !== 0) {
@@ -730,13 +717,39 @@ export struct ReaderSettingsPage {
       }
       if (this.titleSegType !== 0) {
         MenuSettingSlider({
-          title: '副标题字号比例', value: this.titleSegScaling, minValue: 1, maxValue: 2, stepValue: 0.1,
+          title: '次行缩放', value: this.titleSegScaling, minValue: 1, maxValue: 2, stepValue: 0.1,
           onChange: (value: number) => this.onTitleSegScalingChange(value)
         })
       }
-      Text('标题样式参与分页度量：改字号、行距、间距或分段后，章节页数会重新计算。标题颜色留空时跟随正文色。')
-        .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+      MenuSettingSwitch({
+        title: '移除重复标题', detail: '去掉章节正文开头重复的章节标题',
+        checked: this.removeRepeatedTitle,
+        onChange: (enabled: boolean) => this.onRemoveSameTitleChange(enabled)
+      })
+
+      // 分组「间距」。
+      MenuSettingSection({ title: '间距' })
+      MenuSettingSlider({
+        title: '标题段距', value: this.titleLineSpacingExtra, minValue: 0, maxValue: 20, stepValue: 1,
+        onChange: (value: number) => this.onTitleLineSpacingChange(value, this.titleLineSpacingSub)
+      })
+      MenuSettingSlider({
+        title: '次行距离', value: this.titleLineSpacingSub, minValue: 0, maxValue: 20, stepValue: 1,
+        onChange: (value: number) => this.onTitleLineSpacingChange(this.titleLineSpacingExtra, value)
+      })
+
+      // 分组「标题边距」。
+      MenuSettingSection({ title: '标题边距' })
+      MenuSettingSlider({
+        title: '上边距', value: this.titleTopSpacing, minValue: 0, maxValue: 60, stepValue: 1,
+        onChange: (value: number) => this.onTitleSpacingChange(value, this.titleBottomSpacing)
+      })
+      MenuSettingSlider({
+        title: '下边距', value: this.titleBottomSpacing, minValue: 0, maxValue: 60, stepValue: 1,
+        onChange: (value: number) => this.onTitleSpacingChange(this.titleTopSpacing, value)
+      })
     }.width('100%').padding({ bottom: 16 })
+    }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).width('100%').scrollBar(BarState.Off)
   }
 
   /** 把设置里存的沙箱绝对路径转成 `Image()` 能读的 `file://` URI（裸路径会渲染空白）。 */
@@ -1677,12 +1690,27 @@ export struct ReaderSettingsPage {
                 footerFontSize: this.infoSubTab === 1 ? value : this.infoSettings.footerFontSize
               }))
             })
-            ReaderInfoColorRow({ iconKind: 7, title: '日间文字颜色', detail: '阅读器日间样式' })
-              .onClick(() => this.openDetailSheet(
-                this.infoSubTab === 0 ? '页眉日间文字颜色' : '页脚日间文字颜色', '选择信息文字颜色'))
-            ReaderInfoColorRow({ iconKind: 7, title: '夜间文字颜色', detail: '阅读器夜间样式' })
-              .onClick(() => this.openDetailSheet(
-                this.infoSubTab === 0 ? '页眉夜间文字颜色' : '页脚夜间文字颜色', '选择信息文字颜色'))
+            UiColorModeRow({
+              title: '颜色',
+              dayColor: this.infoColorToHex(this.infoSubTab === 0
+                ? this.infoSettings.tipHeaderColor : this.infoSettings.tipFooterColor),
+              nightColor: this.infoColorToHex(this.infoSubTab === 0
+                ? this.infoSettings.tipHeaderColorNight : this.infoSettings.tipFooterColorNight),
+              colors: READER_INFO_COLOR_HEX,
+              showFollow: true,
+              onDayChange: (hex: string) => this.onInfoSettingsChange(updateReaderInfoSettings(this.infoSettings, {
+                tipHeaderColor: this.infoSubTab === 0
+                  ? this.infoHexToColorValue(hex) : this.infoSettings.tipHeaderColor,
+                tipFooterColor: this.infoSubTab === 1
+                  ? this.infoHexToColorValue(hex) : this.infoSettings.tipFooterColor
+              })),
+              onNightChange: (hex: string) => this.onInfoSettingsChange(updateReaderInfoSettings(this.infoSettings, {
+                tipHeaderColorNight: this.infoSubTab === 0
+                  ? this.infoHexToColorValue(hex) : this.infoSettings.tipHeaderColorNight,
+                tipFooterColorNight: this.infoSubTab === 1
+                  ? this.infoHexToColorValue(hex) : this.infoSettings.tipFooterColorNight
+              }))
+            })
           }
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
@@ -2080,6 +2108,37 @@ export struct ReaderSettingsPage {
     return ['不分段', '按字数分段', '按分隔符分段', '按正则分段'][Math.max(0, Math.min(3, this.titleSegType))] ?? '不分段';
   }
 
+  /** 标题字重档位：对齐上游 FontWeightSetting 的 entryValues 2/0/1/-1→索引 0/1/2/3。 */
+  private getTitleWeightIndex(): number {
+    if (this.titleBold === 300) { return 0; }
+    if (this.titleBold === 400) { return 1; }
+    if (this.titleBold === 900) { return 2; }
+    return 3;
+  }
+
+  /** 标题字重选档：细体 300 / 常规 400 / 粗体 900；自定义档沿用当前值或退到 900。 */
+  private onTitleWeightChoice(index: number): void {
+    if (index === 0) { this.onTitleBoldChange(300); }
+    else if (index === 1) { this.onTitleBoldChange(400); }
+    else if (index === 2) { this.onTitleBoldChange(900); }
+    else if (this.getTitleWeightIndex() !== 3) { this.onTitleBoldChange(900); }
+  }
+
+  /** 标题页「选择字体」入口：直接锁定 fontTarget 为 title，不走详情面板的 option 判定。 */
+  private openTitleFontSelection(): void {
+    this.fontTarget = 'title';
+    this.fontPickerReturn = 'typography';
+    this.detailSelectedOption = '标题';
+    this.openDetailSheet('选择字体', `为${this.getFontTargetLabel()}选择字体`);
+  }
+
+  /** 标题当前字体名，空串表示沿用默认字体。 */
+  private getTitleFontDisplayName(): string {
+    if (this.titleFont.length === 0) { return '默认字体'; }
+    const selected = this.fontEntries.find((entry: ReaderFontEntry) => entry.path === this.titleFont);
+    return selected?.displayName ?? '字体文件不可用（点按“默认字体”清除）';
+  }
+
   private getChineseConverterLabel(): string {
     return ['关闭简繁转换', '繁体转简体', '简体转繁体'][Math.max(0, Math.min(2, this.chineseConverterType))]
       ?? '关闭简繁转换';
@@ -2170,11 +2229,28 @@ export struct ReaderSettingsPage {
     this.returnToTypographyFromFontPicker();
   }
 
+  /**
+   * detailSheet 里走专用面板（不靠通用 choices 列表）的 title。
+   * 批 4.7：这些 title 的 getDetailChoices 返回空但是有真实内容，开浮层时应放行。
+   */
+  private hasDedicatedDetailPanel(title: string): boolean {
+    return title === '种子色' || title === '菜单背景颜色' || title === '菜单容器颜色' ||
+      title === '菜单强调颜色' || title === '菜单栏边框颜色' || title === '菜单文字颜色' ||
+      title === '菜单模糊颜色' || title === '自定义阅读背景' || title === '编辑背景样式' ||
+      title === '主题列表' || title === '选择字体' || title === '排版设置' ||
+      title === '文字效果' || title === '文字下划线' || title === '文字对齐' ||
+      title === '选中文字菜单' || title === '点击区域配置' || title === '自定义翻页按键' ||
+      title === '护眼设置' || title === '书签标记' || title === '页边距' || title === '正文排版' ||
+      title === '信息颜色';
+  }
+
   private openDetailSheet(title: string, description: string): void {
     this.detailSheetTitle = title;
     this.detailSheetDescription = description;
     this.detailInfoSlot = undefined;
     const choices = this.getDetailChoices(title);
+    // 批 4.7：无选项又无专用面板的 title 不渲染空浮层（原「尚未迁移」兜底句的落点）。
+    if (choices.length === 0 && !this.hasDedicatedDetailPanel(title)) { return; }
     // 自定义翻页按键面板是即时编辑式，打开时把已保存的键值串灌进输入框作为草稿。
     if (title === '自定义翻页按键') {
       this.previousPageKeys = this.prevKeys;
@@ -2350,6 +2426,18 @@ export struct ReaderSettingsPage {
     return this.infoSettings.tipDividerColor;
   }
 
+  /** 信息颜色数值（0=跟随正文）转双色行 hex 色值；跟随正文回空串。 */
+  private infoColorToHex(value: number): string {
+    const idx = READER_INFO_COLOR_VALUES.indexOf(value);
+    return idx >= 1 ? (READER_INFO_COLOR_HEX[idx - 1] ?? '') : '';
+  }
+
+  /** 双色行 hex 色值转回信息颜色数值；空串或预设外的值回 0（跟随正文）。 */
+  private infoHexToColorValue(hex: string): number {
+    const idx = READER_INFO_COLOR_HEX.indexOf(hex);
+    return idx >= 0 ? (READER_INFO_COLOR_VALUES[idx + 1] ?? 0) : 0;
+  }
+
   private getPaddingValue(side: string): number {
     if (this.detailSelectedOption === '页眉') {
       if (side === '上') { return this.paddingSettings.headerPaddingTop; }
@@ -2397,7 +2485,9 @@ export struct ReaderSettingsPage {
   }
 
   private showNotMigrated(title: string): void {
-    this.openDetailSheet(title, '此选项的原版 UI 已呈现；实际设置逻辑尚未迁移。');
+    // 批 4.7：不再渲染「尚未迁移」占位浮层；这类入口本身可点但不做设置，
+    // 统一走 onUnavailableAction 的占位提示（已批准占位，不算自造文案）。
+    this.onUnavailableAction(title);
   }
 
   private settingsSheetHeight(): string {
@@ -2448,7 +2538,8 @@ export struct ReaderSettingsPage {
               })
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).height(360).scrollBar(BarState.Off)
-        } else if (this.detailSheetTitle === '自定义阅读背景') {
+        } else if (this.detailSheetTitle === '自定义阅读背景' || this.detailSheetTitle === '信息颜色') {
+          // 「信息颜色」由正文页的颜色组（正文/强调两行）复用：日/夜文字色 + 日/夜强调色都在这里改。
           Scroll() {
             Column() {
               // 上游 BgTextConfigSheet 是日/夜两组并列（TinyColorModeSettingItem 日间+夜间双色、
@@ -3101,8 +3192,6 @@ export struct ReaderSettingsPage {
                   this.onLineSpacingChange(Math.max(0, Math.min(20, Math.round(value))));
                 }
               })
-            Text('缩进为全角空格，范围0–4；字距按 em 比例调整（-0.50–0.50）。段距和行距遵循 Android 配置。更改后立即保存并应用。')
-              .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding({ top: 10, bottom: 12 })
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else {
           Scroll() {
@@ -3128,12 +3217,7 @@ export struct ReaderSettingsPage {
                   .backgroundColor(this.rsetAccent).borderRadius(18).alignSelf(ItemAlign.End)
                   .onClick(() => this.saveCustomInfoTip())
               }
-              if (this.getDetailChoices(this.detailSheetTitle).length === 0 &&
-                this.detailSheetTitle !== '自定义阅读背景' &&
-                this.detailSheetTitle !== '编辑背景样式' &&
-                this.detailSheetTitle !== '主题列表') {
-                Text('此配置项的实际操作尚未迁移。').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding(12)
-              }
+              // 批 4.7：空 choices 的 title 已在 openDetailSheet 里被 guard 掉，这里不必再渲染兜底句。
               Text(this.detailSheetTitle === '自定义阅读背景' ||
                 this.detailSheetTitle === '编辑背景样式' ||
                 this.detailSheetTitle === '主题列表' ||
@@ -3160,7 +3244,7 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '显示模式' ||
                 this.detailSheetTitle === '正文排版' ||
                 this.detailInfoSlot !== undefined
-                ? '选择后立即应用并保存；自定义内容需点击保存。' : '仅展示选择预览，不保存设置。')
+                ? '选择后立即应用并保存；自定义内容需点击保存。' : '')
                 .fontSize(10).fontColor(this.themeColorTextTertiary)
                 .width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
