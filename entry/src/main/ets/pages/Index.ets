@@ -618,6 +618,8 @@ struct Index {
   @State bookInfoNetworkCoverBackground: string = 'on';
   /** 默认封面背景模式，对齐上游 `bookInfoDefaultCoverBackground`。 */
   @State bookInfoDefaultCoverBackground: string = 'on';
+  /** 无关联规则时按作者搜索，对齐上游 `bookInfoAuthorSearchFallback`（默认 false）。 */
+  @State bookInfoAuthorSearchFallback: boolean = false;
   /** 容器底色不透明度 0..100，对齐上游 `ThemeSettings.kt:24 containerOpacity`（默认 100）。 */
   @State themeContainerOpacity: number = CONTAINER_OPACITY_DEFAULT;
   /** 关闭设置分组圆角，对齐上游 `disableSplicedColumnGroupCornerRadius`（默认 false）。 */
@@ -2646,6 +2648,7 @@ struct Index {
         bookInfoFollowCoverColor: this.bookInfoFollowCoverColor,
         bookInfoNetworkCoverBackground: this.bookInfoNetworkCoverBackground,
         bookInfoDefaultCoverBackground: this.bookInfoDefaultCoverBackground,
+        bookInfoAuthorSearchFallback: this.bookInfoAuthorSearchFallback,
         containerOpacity: this.themeContainerOpacity,
         disableSplicedColumnGroupCornerRadius: this.themeDisableGroupCorner,
         overrideBaseCardCornerRadius: this.themeOverrideCardCorner,
@@ -2726,6 +2729,7 @@ struct Index {
     this.bookInfoFollowCoverColor = theme.bookInfoFollowCoverColor;
     this.bookInfoNetworkCoverBackground = theme.bookInfoNetworkCoverBackground;
     this.bookInfoDefaultCoverBackground = theme.bookInfoDefaultCoverBackground;
+    this.bookInfoAuthorSearchFallback = theme.bookInfoAuthorSearchFallback;
     this.themeContainerOpacity = theme.containerOpacity;
     this.themeDisableGroupCorner = theme.disableSplicedColumnGroupCornerRadius;
     this.themeOverrideCardCorner = theme.overrideBaseCardCornerRadius;
@@ -3464,6 +3468,7 @@ struct Index {
     this.bookInfoFollowCoverColor = true;
     this.bookInfoNetworkCoverBackground = 'on';
     this.bookInfoDefaultCoverBackground = 'on';
+    this.bookInfoAuthorSearchFallback = false;
     this.themePureBlack = false;
     this.themeBackgroundImage = '';
     this.themeBackgroundImageNight = '';
@@ -3562,6 +3567,7 @@ struct Index {
       bookInfoFollowCoverColor: this.bookInfoFollowCoverColor,
       bookInfoNetworkCoverBackground: this.bookInfoNetworkCoverBackground,
       bookInfoDefaultCoverBackground: this.bookInfoDefaultCoverBackground,
+      bookInfoAuthorSearchFallback: this.bookInfoAuthorSearchFallback,
       containerOpacity: this.themeContainerOpacity,
       disableSplicedColumnGroupCornerRadius: this.themeDisableGroupCorner,
       overrideBaseCardCornerRadius: this.themeOverrideCardCorner,
@@ -3672,6 +3678,17 @@ struct Index {
   }
 
   /** 主题设置页「界面颜色跟随封面取色」回调。上游 `ThemeConfigScreen.kt:399` 的 `BookInfoFollowCoverColor`。 */
+  /**
+   * 外观页「无关联规则时按作者搜索」开关回调。值真落盘并随备份走；
+   * 消费方（书源搜索作者）待书源排期，见 docs/PROJECT.md。
+   */
+  private selectBookInfoAuthorSearchFallback(context: Context, enabled: boolean): void {
+    this.bookInfoAuthorSearchFallback = enabled;
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('作者搜索回退设置保存失败，请重试');
+    });
+  }
+
   private selectBookInfoFollowCoverColor(context: Context, enabled: boolean): void {
     this.bookInfoFollowCoverColor = enabled;
     this.saveThemeSettings(context).catch(() => {
@@ -9293,6 +9310,11 @@ private canWriteInto(dir: string): boolean {
             onBookInfoCoverBackgroundChange: (isDefaultCover: boolean, value: string) => {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectBookInfoCoverBackground(themeContext, isDefaultCover, value); }
+            },
+            bookInfoAuthorSearchFallback: this.bookInfoAuthorSearchFallback,
+            onBookInfoAuthorSearchFallbackChange: (enabled: boolean) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectBookInfoAuthorSearchFallback(themeContext, enabled); }
             },
             containerOpacity: this.themeContainerOpacity,
             disableGroupCorner: this.themeDisableGroupCorner,

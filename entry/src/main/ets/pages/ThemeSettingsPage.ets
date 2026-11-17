@@ -4,11 +4,12 @@ import curves from '@ohos.curves';
 import { UiAction } from '../components/settings/UiAction';
 import { UiDropdown } from '../components/settings/UiDropdown';
 import { UiSlider } from '../components/settings/UiSlider';
-import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
+import { AppGlyph } from '../components/AppGlyph';
+import { ThemeModeSelector, ThemeColorSelector } from '../components/ThemeSelectors';
 import { appFontDisplayName } from '../data/AppFontSettings';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import { ThemeRefactorTipStore } from '../data/ThemeRefactorTipStore';
-import { resolvePaletteColors, THEME_PALETTES, ThemePaletteColors, ThemePaletteDefinition } from '../data/ThemePalette';
+import { resolvePaletteColors, ThemePaletteColors } from '../data/ThemePalette';
 import {
   CustomThemeSnapshot, defaultCustomThemeSnapshot, hasCustomColor
 } from '../data/CustomThemeColors';
@@ -98,6 +99,9 @@ export struct ThemeSettingsPage {
   @Prop bookInfoNetworkCoverBackground: string = 'on';
   /** 默认封面背景模式。 */
   @Prop bookInfoDefaultCoverBackground: string = 'on';
+  /** 无关联规则时按作者搜索，对齐上游 `bookInfoAuthorSearchFallback`（默认 false）。 */
+  @Prop bookInfoAuthorSearchFallback: boolean = false;
+  onBookInfoAuthorSearchFallbackChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onBookInfoFollowCoverColorChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   /** 封面背景下拉回调，`isDefaultCover` 区分「网络封面」与「默认封面」两行。 */
   onBookInfoCoverBackgroundChange: (isDefaultCover: boolean, value: string) => void =
@@ -294,26 +298,6 @@ export struct ThemeSettingsPage {
         this.collapsedHeader = shouldCollapse;
       });
     }
-  }
-
-  /**
-   * 调色板预览色：查 `data/ThemePalette.ets` 的 14 套表。
-   *
-   * 上游 `ThemeColorButton`（`ThemeConfigScreen.kt:1077`）用 `getThemeColorPalette(...)` 现算一套配色，
-   * 卡片底色取 `surfaceContainer`、48dp 圆上半圆取 `secondary`、下半圆取 `tertiary`、中心 24dp 圆取 `primary`。
-   * 本地照抄这四处取色，日间/夜间按当前 `themeMode` 派生，所以点「深色」后预览色块也跟着换。
-   */
-  private paletteColor(index: number): string {
-    return resolvePaletteColors(index, this.readerNightMode).surfaceContainer;
-  }
-
-  private paletteArcColor(index: number, upper: boolean): string {
-    const colors = resolvePaletteColors(index, this.readerNightMode);
-    return upper ? colors.secondary : colors.tertiary;
-  }
-
-  private paletteCenterColor(index: number): string {
-    return resolvePaletteColors(index, this.readerNightMode).primary;
   }
 
   /**
@@ -540,33 +524,16 @@ export struct ThemeSettingsPage {
           // 上游「主题模式」一个分组里同时放模式三档与配色两行（`ThemeConfigScreen.kt:223`/`:237`），
           // 本地原先拆成两张独立卡，这里合成一张，中间放分隔线。
           Column() {
-            Row() {
-              ThemeModeItem({ title: '跟随系统', icon: 'brightness_medium', weight: 1.2, selected: this.themeMode === '0', first: true,
-                onSelect: () => this.onThemeModeChange('0') })
-              ThemeModeItem({ title: '浅色', icon: 'light_mode', selected: this.themeMode === '1',
-                onSelect: () => this.onThemeModeChange('1') })
-              ThemeModeItem({ title: '深色', icon: 'dark_mode', selected: this.themeMode === '2', last: true,
-                onSelect: () => this.onThemeModeChange('2') })
-            }.width('100%').padding({ top: 12, bottom: 12 })
+            ThemeModeSelector({
+              selectedMode: this.themeMode === '1' ? 1 : this.themeMode === '2' ? 2 : 0,
+              onModeSelected: (mode: number) => this.onThemeModeChange(mode.toString())
+            }).padding({ top: 12, bottom: 12 })
             ThemeItemDivider()
-            // 上游是 `LazyRow`（横向滚动、间距 16dp），14 项一屏放不下，所以横向 Scroll + 每项 64vp 固定宽。
-            Scroll() {
-              Row() {
-                ForEach(THEME_PALETTES, (palette: ThemePaletteDefinition) => {
-                  ThemePaletteItem({
-                    index: palette.index,
-                    title: palette.name,
-                    surfaceColor: this.paletteColor(palette.index),
-                    upperColor: this.paletteArcColor(palette.index, true),
-                    lowerColor: this.paletteArcColor(palette.index, false),
-                    centerColor: this.paletteCenterColor(palette.index),
-                    selected: this.paletteIndex === palette.index,
-                    onSelect: () => this.onPaletteChange(palette.index)
-                  })
-                }, (palette: ThemePaletteDefinition) => palette.index.toString())
-              }.padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-              .width('100%').align(Alignment.Start)
+            ThemeColorSelector({
+              selectedIndex: this.paletteIndex,
+              isDark: this.readerNightMode,
+              onPaletteSelected: (index: number) => this.onPaletteChange(index)
+            }).padding({ top: 12, bottom: 12 })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, bottom: 18 })
             .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
@@ -574,7 +541,6 @@ export struct ThemeSettingsPage {
             Row() {
               Column() {
                 Text('纯黑深色模式').fontSize(16).fontColor(this.themeColorTextSecondary)
-                Text('使用纯黑阅读背景').fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               // 整行可点：点标题一侧也能切换（对齐上游 SwitchSettingItem）。
               UiSwitchControl({
@@ -589,9 +555,14 @@ export struct ThemeSettingsPage {
               onSelect: () => { this.appFontExpanded = !this.appFontExpanded } })
             if (this.appFontExpanded) {
               ThemeItemDivider()
-              UiAction({showDivider: false, title: '选择字体文件', detail: '支持 .ttf / .otf / .ttc', onSelect: () => this.onPickAppFont() })
-              ThemeItemDivider()
-              UiAction({showDivider: false, title: '恢复系统字体', detail: '清除已选择的应用字体', onSelect: () => this.onClearAppFont() })
+              Row() {
+                UiAction({showDivider: false, title: '选择字体文件', onSelect: () => this.onPickAppFont() }).layoutWeight(1)
+                // 上游 FontSettingSheet 的 clear 是图标按钮（contentDescription=R.string.clear=清除），
+                // 不是独立文字行；本地用删除图标承接同一 onClearAppFont 回调（任务书 6.2）。
+                AppGlyph({ name: 'delete', glyphSize: 20, tint: this.themeColorTextTertiary })
+                  .padding({ left: 16, right: 16 }).accessibilityText('清除')
+                  .onClick(() => this.onClearAppFont())
+              }.width('100%')
             }
             ThemeItemDivider()
             // 上游 `ThemeConfigScreen.kt:266-270`：只有 appTheme == "12"（自定义）时才显示这一行。
@@ -600,8 +571,6 @@ export struct ThemeSettingsPage {
                 onSelect: () => this.onOpenCustomTheme() })
               ThemeItemDivider()
             }
-            UiAction({showDivider: false, title: '主题风格', detail: 'Material Design', onSelect: () => this.onUnavailableAction('主题风格切换尚未接入') })
-            ThemeItemDivider()
             UiAction({showDivider: false, title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
             ThemeItemDivider()
             ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => this.onPredictiveBackChange(value) })
@@ -611,7 +580,7 @@ export struct ThemeSettingsPage {
             Column() {
               Row() {
                 Text('字体大小').fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                Text(`${(this.fontScale / 10).toFixed(1)}x`).fontSize(14).fontColor(this.themeColorTextTertiary)
+                Text(`当前字体大小: ${(this.fontScale / 10).toFixed(1)}`).fontSize(14).fontColor(this.themeColorTextTertiary)
               }.width('100%')
               Slider({ value: this.fontScale, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
                 .width('100%').onChange((value: number) => this.onFontScaleChange(value))
@@ -775,10 +744,6 @@ export struct ThemeSettingsPage {
               }
               .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
             }
-            ThemeItemDivider()
-            UiAction({showDivider: false, title: '导航布局', detail: '', onSelect: () => this.onUnavailableAction('导航布局设置尚未迁移') })
-            ThemeItemDivider()
-            UiAction({showDivider: false, title: '多窗布局', detail: '', onSelect: () => this.onUnavailableAction('多窗布局设置尚未迁移') })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '书籍详情页' }).margin({ top: 20 })
@@ -788,6 +753,13 @@ export struct ThemeSettingsPage {
             UiDropdown({showDivider: false, title: '网络封面背景设置', option: this.bookInfoNetworkCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
             ThemeItemDivider()
             UiDropdown({showDivider: false, title: '默认封面背景设置', option: this.bookInfoDefaultCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
+            ThemeItemDivider()
+            ThemeSwitchRow({
+              title: '无关联规则时按作者搜索',
+              detail: '书源未配置关联书籍（relatedBooks）规则时，用当前书源搜索作者名，把作者的其它作品显示为关联书籍',
+              checked: this.bookInfoAuthorSearchFallback,
+              onChange: (value: boolean) => this.onBookInfoAuthorSearchFallbackChange(value)
+            })
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           ThemeSectionTitle({ title: '护眼模式' }).margin({ top: 20 })
@@ -848,6 +820,8 @@ export struct ThemeSettingsPage {
               onChange: (value: number) => this.onContainerOpacityChange(value)
             })
             ThemeItemDivider()
+            // 上游 disable_spliced_group_corner_radius_summary 原文含内部类名「SplicedColumnGroup」，
+            // 属上游文案缺陷；本地保留更可读的表述（任务书 6.2 允许偏离）。
             ThemeSwitchRow({ title: '关闭设置分组圆角', detail: '让设置分组使用直角外轮廓', checked: this.disableGroupCorner, onChange: (value: boolean) => this.onDisableGroupCornerChange(value) })
             ThemeItemDivider()
             ThemeSwitchRow({ title: '覆盖卡片圆角', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardCorner, onChange: (value: boolean) => this.onOverrideCardCornerChange(value) })
@@ -932,83 +906,6 @@ struct ThemeSectionTitle {
   build() {
     Text(this.title).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
       .alignSelf(ItemAlign.Start).margin({ left: 18, bottom: 9 })
-  }
-}
-
-@Component
-struct ThemeModeItem {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
-  @Prop title: string = '';
-  /** 对应上游 `Icons.Default.BrightnessMedium` / `LightMode` / `DarkMode`。 */
-  @Prop icon: AppGlyphName = 'brightness_medium';
-  @Prop selected: boolean = false;
-  @Prop first: boolean = false;
-  @Prop last: boolean = false;
-  /** 上游三档权重 `1.2f / 1f / 1f`（`ThemeConfigScreen.kt:1004-1040`），第一档更宽。 */
-  @Prop weight: number = 1;
-  onSelect: () => void = () => {};
-  build() {
-    Row() {
-      AppGlyph({ name: this.icon, glyphSize: 18,
-        tint: this.selected ? this.themeColorTextPrimary : this.themeColorTextSecondary })
-      Text(this.title).fontSize(14).margin({ left: 8 })
-        .fontColor(this.selected ? this.themeColorTextPrimary : this.themeColorTextSecondary)
-    }
-      .justifyContent(FlexAlign.Center).layoutWeight(this.weight).padding({ top: 12, bottom: 12 })
-      .backgroundColor(this.selected ? this.themeColorSurfaceElevated : Color.Transparent)
-      .borderRadius({ topLeft: this.first ? 14 : 0, bottomLeft: this.first ? 14 : 0,
-        topRight: this.last ? 14 : 0, bottomRight: this.last ? 14 : 0 })
-      .onClick(() => this.onSelect())
-  }
-}
-
-@Component
-struct ThemePaletteItem {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @Prop index: number = 0;
-  @Prop title: string = '';
-  /** 卡片底色，取该套配色的 `surfaceContainer`（上游 `CardDefaults.cardColors(containerColor = colors.surfaceContainer)`）。 */
-  @Prop surfaceColor: string = '#F0F1F5';
-  /** 48dp 圆的上半圆，取 `secondary`。 */
-  @Prop upperColor: string = '#5F74B8';
-  /** 48dp 圆的下半圆，取 `tertiary`。 */
-  @Prop lowerColor: string = '#4A5FA8';
-  /** 中心 24dp 圆，取 `primary`。 */
-  @Prop centerColor: string = '#3F5BD9';
-  @Prop selected: boolean = false;
-  onSelect: () => void = () => {};
-  build() {
-    Column() {
-      // 上游 `ThemeColorButton`（`ThemeConfigScreen.kt:1077-1183`）：64dp 方卡、16dp 圆角、
-      // 底色 surfaceContainer，内部 48dp 双半圆 + 24dp primary 中心圆；选中时 2dp primary 描边
-      // 加 40dp 圆角 12 的勾选覆盖层。原先本地是 56/42/20/34，比上游小一圈。
-      Stack({ alignContent: Alignment.Center }) {
-        // 用上下两个 24×24 的半圆拼出 48dp 圆：上半 `secondary`、下半 `tertiary`，中心再叠 24dp `primary`。
-        Column() {
-          Row().width(48).height(24).backgroundColor(this.upperColor)
-            .borderRadius({ topLeft: 24, topRight: 24 })
-          Row().width(48).height(24).backgroundColor(this.lowerColor)
-            .borderRadius({ bottomLeft: 24, bottomRight: 24 })
-        }.width(48).height(48).borderRadius(24).clip(true)
-        Column().width(24).height(24).backgroundColor(this.centerColor).borderRadius(12)
-        if (this.selected) {
-          Stack({ alignContent: Alignment.Center }) {
-            AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: '#20212A' })
-          }.width(40).height(40).backgroundColor(this.themeColorAccent).borderRadius(12)
-        }
-      }.width(64).height(64).backgroundColor(this.surfaceColor).borderRadius(16)
-        .border({ width: this.selected ? 2 : 0, color: this.themeColorAccent })
-        // 上游描边宽度走 animateDpAsState；ArkUI 用 animation 修饰符等价近似。
-        .animation({ duration: 200, curve: Curve.EaseInOut })
-        .onClick(() => this.onSelect())
-      Text(this.title).fontSize(11)
-        .fontColor(this.selected ? this.themeColorAccent : this.themeColorTextPrimary)
-        .textAlign(TextAlign.Center).margin({ top: 8 })
-    }.width(64).alignItems(HorizontalAlign.Center).margin({ right: 16 })
   }
 }
 

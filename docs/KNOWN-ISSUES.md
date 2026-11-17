@@ -10,6 +10,16 @@
 
 > 上两行属四类合法「不适用」里的第二类（平台无此能力），不是功能缺失，不排期补。
 
+## 批6：外观页三行按「不适用 / 范围之外」删除、切换图标未做（KI-THEME1）
+
+**KI-THEME1 主题风格（composeEngine）整项删** —— 上游 `compose_engine` = 主题风格是个 `DropdownListSettingItem`，两个选项 `Material Design` / `Miuix`；`ThemeResolver.isMiuixEngine` 被九个界面据此分叉，Miuix 是 Android 侧第三方组件库（`top.yukonga.miuix.kmp`）。鸿蒙 `D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\` 无任何 Miuix 或等价的第二套组件库，选项只能剩一个，单选项下拉=假控件。按任务书 6.2c「平台无此能力」整行删（原行 `title: '主题风格', detail: 'Material Design'` + `onUnavailableAction`），不改成假下拉、不保留「尚未接入」。
+
+**导航布局（tabletInterface）与多窗布局（multiPaneMode）整行删** —— 上游 `ThemeConfigScreen.kt:379-397` 两项都是 `DropdownListSettingItem`（切平板界面 / 切多栏），属 `docs/PROJECT.md:46-48` 明确列出的「额外设备形态适配」范围之外。按任务书 6.2b 三类证据里的「范围之外」整行删，不保留禁用态（禁用下拉=点了没反应）。本地原名「多窗布局」与上游 `multi_pane_layout`=多栏布局的文案差异随整行删除一并消失。这两项属「不适用」而非缺陷，不登记为待修。
+
+**切换图标（启动图标）本批未做** —— `pages/ThemeSettingsPage.ets` 该行仍是 `onUnavailableAction('启动图标设置尚未迁移')`，全页唯一保留的占位。上游是 `ShowSheet(LauncherIcon)`；鸿蒙换应用图标要预置多套 `layered_image` 并改 `module.json5` 的 `icon`，能做但工作量大，任务书 6.5 判本批不动、登记在案。这是待办不是「不适用」，后续要做时按此条定位。
+
+> 上述「主题风格 / 导航布局 / 多窗布局」三条属合法「不适用」（平台无能力 / 范围之外），不排期；「切换图标」是明确待办。
+
 ## 发布版五条已知问题（r323，前四条已修、第五条未修）与后续新增（KI-REL6、KI-REL7、KI-REL8、KI-REL9）
 
 0.1.0 开发预览发布时用户报了五条体验问题。发布当时代码一行未改；此后 KI-REL1 已在 r325、KI-REL2 在 r326、KI-REL3 在 r327、KI-REL4 在 r328 修复，**只剩 KI-REL5 未修**。KI-REL6、KI-REL7 不属于那五条，是后续新发现后按同一编号续排的：**KI-REL7 已在 r344 修复**，KI-REL6 仍未修。派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。
@@ -55,9 +65,10 @@
 **KI-REL8 详情页不认私密锁** —— 书架对私密书显示锁定并要密码，但点进详情页后封面、书名、简介、最新章节全部直接显示，编辑入口也能进。入口 `entry/src/main/ets/pages/BookInfoPage.ets`（全文 `isBookLocked` / `requiresPrivateUnlock` 零命中）；对照 `pages/BookshelfPage.ets:852` 的 `isBookLocked`、`:868` 的 `isGroupLocked` 与 `:2699`/`:2720` 的遮罩分支。上游整页脱敏（`BookInfoViewModel.kt:170-174`、`BookInfoScreen.kt:355-373`、`:665-734`、`:1343-1353` 的 `PrivateMaskLine`）。
 > 修法：`BookInfoPage` 加 `@StorageProp` 读 `PrivateAccessRepository` 的解锁态，未解锁时把封面 / 简介 / 章节名替换成遮罩行并禁用编辑与阅读记录入口。判为**安全相关的行为不一致**（不是纯观感），所以记在这里而不是只记在验证记录里。
 
-**KI-REL9 外观页与欢迎页各留一套主题选择器** —— 欢迎页第 4 页已改用 `entry/src/main/ets/components/ThemeSelectors.ets`（`ThemeModeSelector` / `ThemeColorSelector`，提交 `0d9d769`），但外观页 `entry/src/main/ets/pages/ThemeSettingsPage.ets` 仍是自己的 `ThemeModeItem`（`:939-966`）与 `ThemePaletteItem`（`:969-1013`）。同一件事两套画法，观感不同：模式档选中底前者的 `themeColorSurfaceElevated`（tonal）vs 后者的 `themeColorAccent`（filled）；圆角前者「首尾 14 / 中间 0 / 无缝」vs 后者「首尾 20 / 内角 2 / 档间 2vp」；配色卡选中勾前者有 `themeColorAccent` 底色 + 20 号 `#20212A` 勾（`:998-1002`）vs 后者无底色 + 24 号勾（`ThemeSelectors.ets:172-177`）；名字间距 8 vs 12。
+**KI-REL9 外观页与欢迎页各留一套主题选择器（批6 已修）** —— 欢迎页第 4 页已改用 `entry/src/main/ets/components/ThemeSelectors.ets`（`ThemeModeSelector` / `ThemeColorSelector`，提交 `0d9d769`），但外观页 `entry/src/main/ets/pages/ThemeSettingsPage.ets` 仍是自己的 `ThemeModeItem`（`:939-966`）与 `ThemePaletteItem`（`:969-1013`）。同一件事两套画法，观感不同：模式档选中底前者的 `themeColorSurfaceElevated`（tonal）vs 后者的 `themeColorAccent`（filled）；圆角前者「首尾 14 / 中间 0 / 无缝」vs 后者「首尾 20 / 内角 2 / 档间 2vp」；配色卡选中勾前者有 `themeColorAccent` 底色 + 20 号 `#20212A` 勾（`:998-1002`）vs 后者无底色 + 24 号勾（`ThemeSelectors.ets:172-177`）；名字间距 8 vs 12。
 > 上游只有一个 `ThemeModeSelector`（`ThemeConfigScreen.kt:1004-1040`）与一个 `ThemeColorButton`（`:1077-1183`），欢迎页（`OnboardingScreen.kt:339-357`）与外观页（`ThemeConfigScreen.kt:223`/`:237`）调的是同一对组件，所以上游不存在这个差异。配色卡那处**无底色的勾**是上游真实形态（`:1157-1171` 那个 `Box` 没有 `background`），外观页现版是旧的。
 > 修法见 [VALIDATION.md](VALIDATION.md) 的「追加（r346 之后）」一节。判为**观感不一致**（不是功能缺失），所以只登记、本轮不改代码。
+> **批6 已修**：`pages/ThemeSettingsPage.ets` 已切成公共件 `ThemeModeSelector` / `ThemeColorSelector`（themeMode 字符串三值转 number 传入），私有 `ThemeModeItem` / `ThemePaletteItem` 两个 struct 已删；外观页模式三档与配色卡现与欢迎页第 4 页同一套画法。
 
 
 

@@ -60,6 +60,11 @@ export interface ThemeSnapshot {
   bookInfoNetworkCoverBackground: string;
   /** 默认封面背景模式，对齐上游 bookInfoDefaultCoverBackground（默认 `on`）。 */
   bookInfoDefaultCoverBackground: string;
+  /**
+   * 无关联规则时按作者搜索，对齐上游 `bookInfoAuthorSearchFallback`（默认 false）。
+   * 值真落盘并随备份走；消费方（书源搜索作者）待书源排期，见 docs/PROJECT.md。
+   */
+  bookInfoAuthorSearchFallback: boolean;
   /** 容器底色不透明度 0..100，对齐上游 `ThemeSettings.kt:24 containerOpacity`（默认 100）。 */
   containerOpacity: number;
   /** 关闭设置分组圆角，对齐上游 `disableSplicedColumnGroupCornerRadius`（默认 false）。 */
@@ -264,6 +269,7 @@ export class ThemeSettingsRepository {
       bookInfoFollowCoverColor: true,
       bookInfoNetworkCoverBackground: BOOK_INFO_BACKGROUND_ON,
       bookInfoDefaultCoverBackground: BOOK_INFO_BACKGROUND_ON,
+      bookInfoAuthorSearchFallback: false,
       containerOpacity: CONTAINER_OPACITY_DEFAULT,
       disableSplicedColumnGroupCornerRadius: false,
       overrideBaseCardCornerRadius: false,
@@ -322,6 +328,7 @@ export class ThemeSettingsRepository {
       const followCoverColor = await store.get('bookInfoFollowCoverColor', defaults.bookInfoFollowCoverColor);
       const networkCoverBackground = await store.get('bookInfoNetworkCoverBackground', defaults.bookInfoNetworkCoverBackground);
       const defaultCoverBackground = await store.get('bookInfoDefaultCoverBackground', defaults.bookInfoDefaultCoverBackground);
+      const authorSearchFallback = await store.get('bookInfoAuthorSearchFallback', defaults.bookInfoAuthorSearchFallback);
       const containerOpacity = await store.get('containerOpacity', defaults.containerOpacity);
       const disableGroupCorner = await store.get('disableSplicedColumnGroupCornerRadius',
         defaults.disableSplicedColumnGroupCornerRadius);
@@ -382,6 +389,8 @@ export class ThemeSettingsRepository {
           ? normalizeBookInfoBackground(networkCoverBackground) : defaults.bookInfoNetworkCoverBackground,
         bookInfoDefaultCoverBackground: typeof defaultCoverBackground === 'string'
           ? normalizeBookInfoBackground(defaultCoverBackground) : defaults.bookInfoDefaultCoverBackground,
+        bookInfoAuthorSearchFallback: typeof authorSearchFallback === 'boolean'
+          ? authorSearchFallback : defaults.bookInfoAuthorSearchFallback,
         containerOpacity: typeof containerOpacity === 'number'
           ? normalizeContainerOpacity(containerOpacity) : defaults.containerOpacity,
         disableSplicedColumnGroupCornerRadius: typeof disableGroupCorner === 'boolean'
@@ -499,6 +508,7 @@ export class ThemeSettingsRepository {
       normalizeBookInfoBackground(snapshot.bookInfoNetworkCoverBackground));
     await store.put('bookInfoDefaultCoverBackground',
       normalizeBookInfoBackground(snapshot.bookInfoDefaultCoverBackground));
+    await store.put('bookInfoAuthorSearchFallback', snapshot.bookInfoAuthorSearchFallback);
     await store.put('containerOpacity', normalizeContainerOpacity(snapshot.containerOpacity));
     await store.put('disableSplicedColumnGroupCornerRadius', snapshot.disableSplicedColumnGroupCornerRadius);
     await store.put('overrideBaseCardCornerRadius', snapshot.overrideBaseCardCornerRadius);
