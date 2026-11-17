@@ -7,6 +7,8 @@ import { UiSwitch } from '../components/settings/UiSwitch';
 import { UiAction } from '../components/settings/UiAction';
 import { UiInput } from '../components/settings/UiInput';
 import { AppGlyph } from '../components/AppGlyph';
+import { picker } from '@kit.CoreFileKit';
+import { OtherSettingsRepository, OtherSettings, DEFAULT_OTHER_SETTINGS } from '../data/OtherSettingsRepository';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const OTHER_SETTINGS_MENU_WIDTH: number = 260;
@@ -51,7 +53,69 @@ export struct OtherSettingsPage {
   @State directRuleSummary: string = '';
   @State directCompress: boolean = false;
   @State directLinkVisible: boolean = false;
+  @State otherSettings: OtherSettings = OtherSettingsRepository.get();
   private settingsScroller: Scroller = new Scroller();
+
+  aboutToAppear(): void {
+    // 进页取一次偏好，保证书籍保存位置/两个输入框显示的是落盘值。
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      OtherSettingsRepository.load(context).then((settings: OtherSettings) => {
+        this.otherSettings = settings;
+      });
+    }
+  }
+
+  private saveOtherSettings(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    OtherSettingsRepository.save(context, this.otherSettings);
+  }
+
+  private confirmSourceEditMaxLine(text: string): void {
+    const value = parseInt(text, 10);
+    this.otherSettings = {
+      defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
+      sourceEditMaxLine: isNaN(value) ? DEFAULT_OTHER_SETTINGS.sourceEditMaxLine : Math.max(1, value),
+      webPort: this.otherSettings.webPort
+    };
+    this.saveOtherSettings();
+  }
+
+  private confirmWebPort(text: string): void {
+    const value = parseInt(text, 10);
+    const port = (isNaN(value) || value < 1 || value > 65535)
+      ? DEFAULT_OTHER_SETTINGS.webPort : value;
+    this.otherSettings = {
+      defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
+      sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
+      webPort: port
+    };
+    this.saveOtherSettings();
+  }
+
+  /** 系统文件夹选择器真接：选完把 URI 存偏好，回写「书籍保存位置」detail。 */
+  private async pickBookFolder(): Promise<void> {
+    this.activeSheet = '';
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.selectMode = picker.DocumentSelectMode.FOLDER;
+      options.maxSelectNumber = 1;
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) { return; }
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris[0];
+      if (uri === undefined) { return; }
+      this.otherSettings = {
+        defaultBookTreeUri: uri,
+        sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
+        webPort: this.otherSettings.webPort
+      };
+      this.saveOtherSettings();
+    } catch (error) {
+      console.error(`选择书籍目录失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   private openBatteryGuide(): void {
     this.activeDialog = 'battery';
@@ -99,7 +163,7 @@ export struct OtherSettingsPage {
           }
 
           UiSection({ title: '阅读' }) {
-            UiAction({ title: '书籍保存位置', detail: '', onSelect: () => this.activeSheet = 'folderPicker' })
+            UiAction({ title: '书籍保存位置', detail: this.otherSettings.defaultBookTreeUri, detailMaxLines: 1, onSelect: () => this.activeSheet = 'folderPicker' })
             UiSwitch({ title: '抗锯齿', detail: '绘制图片时抗锯齿', value: this.antiAlias, onChange: (value: boolean) => this.antiAlias = value })
             UiSwitch({ title: '默认启用替换净化', detail: '新加入书架的书是否启用替换净化', value: this.replaceEnableDefault, onChange: (value: boolean) => this.onReplaceEnableDefaultChange(value) })
             UiSwitch({ title: '全程响应耳机按键', detail: '即使退出软件也响应耳机按键', value: this.mediaButtonOnExit, onChange: (value: boolean) => this.mediaButtonOnExit = value })
@@ -113,9 +177,9 @@ export struct OtherSettingsPage {
           UiSection({ title: '高级' }) {
             UiAction({ title: '后台保活与电池优化', detail: '未开启无限制，后台可能被系统终止', onSelect: () => this.openBatteryGuide() })
             UiSwitch({ title: 'WebService 唤醒锁', detail: '开启 Web 服务的时候启用唤醒锁，有些手机开启唤醒锁会被杀后台', value: this.webServiceWakeLock, onChange: (value: boolean) => this.webServiceWakeLock = value })
-            UiInput({ title: '源编辑框最大行数', value: '2147483647', defaultValue: '2147483647', onConfirm: () => this.onUnavailableAction('源编辑框最大行数尚未保存') })
+            UiInput({ title: '源编辑框最大行数', value: `${this.otherSettings.sourceEditMaxLine}`, defaultValue: '2147483647', onConfirm: (text: string) => this.confirmSourceEditMaxLine(text) })
             UiAction({ title: '直链上传规则', detail: '用于导出书源书单时生成直链 URL', onSelect: () => this.activeSheet = 'directLink' })
-            UiInput({ title: 'Web 端口', value: '1122', defaultValue: '1122', onConfirm: () => this.onUnavailableAction('Web 端口尚未保存') })
+            UiInput({ title: 'Web 端口', value: `${this.otherSettings.webPort}`, defaultValue: '1122', onConfirm: (text: string) => this.confirmWebPort(text) })
             UiAction({ title: '清除 WebView 数据', detail: '清除内置浏览器所有数据', onSelect: () => this.confirmClearWebView() })
             UiSwitch({ title: '阻止书源打开内置浏览器', detail: '开启后，书源无法通过 java.startBrowser 等接口弹出内置浏览器，等待网页结果的调用会直接报错', value: this.blockSourceBrowser, onChange: (value: boolean) => this.blockSourceBrowser = value })
             UiSwitch({ title: '文字操作显示搜索', detail: '长按文字在操作菜单中显示阅读 · 搜索', value: this.processText, onChange: (value: boolean) => this.processText = value })
@@ -204,22 +268,19 @@ export struct OtherSettingsPage {
           Text('系统文件夹选择器').fontSize(15).fontColor(this.themeColorTextPrimary).margin({ left: 12 })
           Blank()
         }.width('100%').height(84).padding({ left: 20, right: 20 })
-          .backgroundColor('#25262D').borderRadius(14)
-          .onClick(() => {
-            this.activeSheet = '';
-            this.onUnavailableAction('系统文件夹选择器尚未接入');
-          })
+          .backgroundColor(this.themeColorSurfaceElevated).borderRadius(14)
+          .onClick(() => this.pickBookFolder())
       } else {
         Row() {
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: this.themeColorAccent })
-          }.width(40).height(40).backgroundColor('#25262D').borderRadius(20)
+          }.width(40).height(40).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => this.onUnavailableAction('直链规则测试尚未迁移'))
           Text('直链上传配置').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
             .layoutWeight(1).textAlign(TextAlign.Center)
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
-          }.width(40).height(40).backgroundColor('#25262D').borderRadius(20)
+          }.width(40).height(40).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => { this.directLinkVisible = !this.directLinkVisible; })
             .bindPopup(this.directLinkVisible, {
               builder: this.DirectLinkMenu,
@@ -246,7 +307,7 @@ export struct OtherSettingsPage {
         }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
         Row() {
           Text('取消').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
-            .padding({ top: 12, bottom: 12 }).backgroundColor('#25262D').borderRadius(20)
+            .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => this.activeSheet = '')
           Text('确认').fontSize(14).fontColor(this.themeColorSurfacePrimary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorAccent).borderRadius(20).margin({ left: 10 })

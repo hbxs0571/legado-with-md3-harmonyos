@@ -34,6 +34,8 @@ export struct UiAction {
   /** 右箭头尺寸。各页现在混用 15/16/18，默认取 15（最常见）。 */
   @Prop chevronSize: number = 15;
   @Prop showDivider: boolean = true;
+  /** >0 时描述文字单行截断（书籍保存位置显示目录 URI 用）；默认不限行。 */
+  @Prop detailMaxLines: number = 0;
 
   onSelect: () => void = () => {};
 
@@ -67,7 +69,9 @@ export struct UiAction {
               .fontSize(FONT_ROW_DETAIL)
               .fontColor(this.themeColorTextTertiary)
               .width('100%')
-              .margin({ top: SPACE_2 });
+              .margin({ top: SPACE_2 })
+              .maxLines(this.detailMaxLines > 0 ? this.detailMaxLines : 1000)
+              .textOverflow({ overflow: TextOverflow.Ellipsis });
           }
           // 上游 option 在 supportingContent 列里位于 description 之下。
           if (this.option.length > 0) {
