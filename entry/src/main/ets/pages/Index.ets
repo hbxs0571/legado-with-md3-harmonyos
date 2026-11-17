@@ -55,7 +55,7 @@ import { EpubExporter } from '../data/EpubExporter';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookshelfLayoutRepository } from '../data/BookshelfLayoutRepository';
 import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
-import { PrivateAccessRepository, PRIVATE_STORE_UNLOCKED } from '../data/PrivateAccessRepository';
+import { PrivateAccessRepository, PRIVATE_STORE_UNLOCKED, PRIVATE_UNLOCK_EVERY_TIME } from '../data/PrivateAccessRepository';
 import { BookInfoSettingsRepository } from '../data/BookInfoSettings';
 import { HighlightTagRuleRepository } from '../data/HighlightTagRuleRepository';
 import { HighlightTagRule } from '../model/HighlightTagRule';
@@ -191,6 +191,12 @@ struct Index {
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   /** 底部系统栏高度（vp），由 `publishAppBottomInset()` 读出；底栏内容据此让开手势条/三键栏。 */
   @State appBottomInset: number = 0;
+  /** verifyOnAppStart 启动门：load 后判定是否全屏盖住内容；密码校验通过才放行。 */
+  @State showAppStartGate: boolean = false;
+  /** 私密设置读完前不渲染正文，避免启动验证门判定完成前一帧内容暴露。 */
+  @State privateReady: boolean = false;
+  @State appStartPassword: string = '';
+  @State appStartPasswordError: string = '';
   /** 纯黑是否实际生效（深色 + 用户开启），由 `publishThemeCardStyle` 广播；Index 自身持有开关源状态，故用别名读回。 */
   @StorageProp('themePureBlack') themePureBlackActive: boolean = false;
   @State @Watch('onReaderRouteChanged') route: AppRoute = AppRoute.HOME;
@@ -7230,7 +7236,63 @@ private canWriteInto(dir: string): boolean {
   }
 
   private async restorePrivateAccess(context: Context): Promise<void> {
-    await PrivateAccessRepository.load(context);
+    try {
+      const settings = await PrivateAccessRepository.load(context);
+      // 启动门只证明「进得来」：设了密码、开了启动验证、尚未验证过时盖住全屏。
+      if (settings.enabled && settings.hasPassword && settings.verifyOnAppStart
+        && !settings.unlocked && !PrivateAccessRepository.isAppStartVerified()) {
+        this.showAppStartGate = true;
+      }
+    } finally {
+      // 无论读取成功与否都放行正文渲染，绝不让首帧卡在 loading。
+      this.privateReady = true;
+    }
+  }
+
+  /** 启动门校验：验过密码后，按解锁有效期决定是否整会话放行，并标记启动门已过。 */
+  private async submitAppStartPassword(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const ok = await PrivateAccessRepository.verifyPassword(context, this.appStartPassword);
+    if (!ok) {
+      this.appStartPasswordError = '密码错误';
+      return;
+    }
+    // 每次验证档：启动门只证明进得来，具体内容仍逐项验证，不整会话解锁。
+    if (PrivateAccessRepository.get().unlockScope !== PRIVATE_UNLOCK_EVERY_TIME) {
+      PrivateAccessRepository.unlock();
+    }
+    PrivateAccessRepository.markAppStartVerified();
+    this.showAppStartGate = false;
+    this.appStartPassword = '';
+    this.appStartPasswordError = '';
+  }
+
+  /** 启动验证全屏面板：不可取消（没有「取消」按钮），必须验过密码才进得去。 */
+  @Builder
+  private AppStartGatePanel() {
+    Column() {
+      Column() {
+        Text('验证本地密码').fontSize(18).fontColor('#F1F2F6').alignSelf(ItemAlign.Start)
+        Text('应用启动时验证，请输入本地密码后继续。')
+          .fontSize(13).fontColor('#B6B8C2').alignSelf(ItemAlign.Start).margin({ top: 8 })
+        TextInput({ text: this.appStartPassword, placeholder: '本地密码' })
+          .type(InputType.Password).fontSize(14).height(44).margin({ top: 18 })
+          .onChange((value: string) => { this.appStartPassword = value; })
+        if (this.appStartPasswordError.length > 0) {
+          Text(this.appStartPasswordError).fontSize(12).fontColor('#FF6B6B')
+            .alignSelf(ItemAlign.Start).margin({ top: 8 })
+        }
+        Row() {
+          Blank()
+          Text('解锁').fontSize(14).fontColor(this.themeColorAccent).padding(10)
+            .onClick(async () => { await this.submitAppStartPassword(); })
+        }.width('100%').margin({ top: 12 })
+      }.width('86%').padding(20).backgroundColor('#1D1E26').borderRadius(18)
+    }
+    .width('100%').height('100%').justifyContent(FlexAlign.Center)
+    .backgroundColor('#CC000000')
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   /** 单本私密标记（:294）：窄 UPDATE 只动 isPrivate 一列，写完重读整行。 */
@@ -8207,7 +8269,7 @@ private canWriteInto(dir: string): boolean {
         .hitTestBehavior(HitTestMode.None)
     }
     Column() {
-      if (!this.onboardingLoaded) {
+      if (!this.onboardingLoaded || !this.privateReady) {
         Column() {
           LoadingProgress().width(28).height(28).color(this.themeColorAccent)
         }.width('100%').height('100%').justifyContent(FlexAlign.Center)
@@ -10512,6 +10574,10 @@ private canWriteInto(dir: string): boolean {
         .blendMode(BlendMode.MULTIPLY)
         .hitTestBehavior(HitTestMode.None)
         .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    }
+    // 启动验证门：盖在最上层，验过本地密码才放行（verifyOnAppStart）。
+    if (this.showAppStartGate) {
+      this.AppStartGatePanel()
     }
     }.width('100%').height('100%')
   }

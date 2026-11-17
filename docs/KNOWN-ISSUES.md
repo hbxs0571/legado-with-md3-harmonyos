@@ -1,6 +1,14 @@
 # 已知问题与验收边界
 
-更新：2026-11-10。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
+更新：2026-11-17。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
+
+## 批5：隐私页两行按「平台无此能力」删除（KI-PRIV1、KI-PRIV2）
+
+**KI-PRIV1 后台运行权限（电池优化白名单）整项删** —— 上游 `ui/config/privateConfig/PrivateConfigScreen.kt` 的 `background_permission` 是查电池优化白名单状态（`BatteryOptimizationUtils.isIgnoringBatteryOptimizations`）并跳厂商设置页。鸿蒙无等价 API：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\` 下 `@ohos.settings.d.ts` 的全部开页函数（`:1271`-`:1410`）无任何 startup/background/battery/白名单项；`ohos.settings.*` action 字面量仅 `ohos.settings.wireless` / `ohos.settings.manage.applications` / `ohos.settings.application.details` 三条（均在已 `@deprecated since 9` 的旧 `wantConstant` 模块）；`backgroundTaskManager`（长时任务）、`deviceStandby`（空命名空间）、`backgroundProcessManager`（进程优先级）三者都不是「本应用是否在白名单」的查询。最接近的 `settings.openAppDetailSettingsPage`（`@ohos.settings.d.ts:1383`，@since 26）只到「应用详情」通用页而非启动管理专项页，且状态判断做不了。按任务书 5.5「查不到就整项删、不许保留点了弹『尚未接入』的项」，`pages/AppPrivacySettingsPage.ets` 的该行已删。
+
+**KI-PRIV2 匿名统计（Firebase）整项删** —— 上游 `firebase_enable_title` = 匿名统计，控制 `utils/FirebaseManager.kt`。鸿蒙无 Firebase / HiAnalytics / AGC SDK：`$DEVECO_SDK/ets/api/` 下 `firebase` 与 `analytics` 零命中。按「上游没有的不要自己加」的反向判据（平台无此能力，属合法「不适用」），`pages/AppPrivacySettingsPage.ets` 的该行已删；**不**改成「匿名统计」假开关（任务书 5.6 明令禁止）。
+
+> 上两行属四类合法「不适用」里的第二类（平台无此能力），不是功能缺失，不排期补。
 
 ## 发布版五条已知问题（r323，前四条已修、第五条未修）与后续新增（KI-REL6、KI-REL7、KI-REL8、KI-REL9）
 

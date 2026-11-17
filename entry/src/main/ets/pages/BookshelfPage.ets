@@ -223,6 +223,9 @@ export struct BookshelfPage {
   @StorageProp('privateEnabled') privateEnabled: boolean = false;
   @StorageProp('privateHasPassword') privateHasPassword: boolean = false;
   @StorageProp('privateUnlocked') privateUnlocked: boolean = false;
+  /** 两个验证时机开关：关掉后对应的分组/书籍不再要求验证（对齐上游 verifyOnEnterGroup/verifyOnOpenBook）。 */
+  @StorageProp('privateVerifyOnEnterGroup') privateVerifyOnEnterGroup: boolean = true;
+  @StorageProp('privateVerifyOnOpenBook') privateVerifyOnOpenBook: boolean = true;
   /**
    * 「每次都验证」档的单独授权集合。必须用 @StorageProp 订阅：该档解锁只调
    * PrivateAccessRepository.grant()，改的是 AppStorage 里的这两个数组，
@@ -900,6 +903,7 @@ export struct BookshelfPage {
    */
   private isBookLocked(book: Book): boolean {
     if (this.privateEnabled !== true) { return false; }
+    if (!this.privateVerifyOnOpenBook) { return false; }
     if (!isPrivateBook(book, this.privateGroupIds())) { return false; }
     if (PrivateAccessRepository.get().unlockScope === PRIVATE_UNLOCK_EVERY_TIME) {
       // 读一下订阅到的授权集合，让 grant() 之后能触发重绘。
@@ -916,6 +920,7 @@ export struct BookshelfPage {
   /** 某个分组卡是否该画成锁定态（:257）。读 privateEnabled / privateUnlocked 的理由同 isBookLocked。 */
   private isGroupLocked(groupName: string): boolean {
     if (this.privateEnabled !== true) { return false; }
+    if (!this.privateVerifyOnEnterGroup) { return false; }
     if (groupName === '全部' || groupName === '本地未分组') { return false; }
     const group = this.getUserGroups().find((item: BookGroup) => item.groupName === groupName);
     if (group === undefined || group.isPrivate !== true) { return false; }

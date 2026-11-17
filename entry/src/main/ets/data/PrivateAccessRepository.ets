@@ -1,7 +1,9 @@
 import { preferences } from '@kit.ArkData';
 import { Context } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { util } from '@kit.ArkTS';
+import userAuth from '@ohos.userIAM.userAuth';
 import { Book } from '../model/Book';
 import { BookGroupRepository } from './BookGroupRepository';
 
@@ -15,12 +17,22 @@ import { BookGroupRepository } from './BookGroupRepository';
  *    备份本来就把该键排除在外，所以互通性不受影响。
  * 2. 上游密码校验用 Android 的 PBKDF2WithHmacSHA256；本地用 @kit.CryptoArchitectureKit 的同名算法，
  *    迭代次数与 key 长度照抄（210000 / 32 字节），但派生出的是「校验值」而不是加密密钥。
- * 3. 上游有生物识别（AndroidKeyStore + AES/GCM）；本地本批不做指纹——模拟器上无法验收，
- *    且表格里没有对应行，单独开批次做。
+ * 3. 上游生物识别用 AndroidKeyStore + AES/GCM 把密码封进信封；鸿蒙用
+ *    @ohos.userIAM.userAuth 做「在场证明」——验证通过后仍走本地 verifyPassword/unlock,
+ *    不拿生物结果当密码校验（见 verifyBiometric）。
  *
  * 解锁态只存进程内存（AppStorage），进程结束即回到锁定态，不做超时。
  * 这里不用 PersistentStorage：那会把「已解锁」持久化，等于永不解锁。
  */
+
+/** 生物识别能力状态，对齐上游 PrivateBiometricStatus 五值中的鸿蒙可达四态。 */
+export enum PrivateBiometricStatus {
+  NOT_SET_PASSWORD = 0,
+  AVAILABLE = 1,
+  NOT_ENROLLED = 2,
+  NO_HARDWARE = 3,
+  UNAVAILABLE = 4
+}
 
 /** 解锁有效期：每次都验证。 */
 export const PRIVATE_UNLOCK_EVERY_TIME: number = 0;
@@ -36,8 +48,17 @@ export const PRIVATE_STORE_UNLOCKED: string = 'privateUnlocked';
 export const PRIVATE_STORE_UNLOCK_SCOPE: string = 'privateUnlockScope';
 export const PRIVATE_STORE_GRANTED_BOOK_KEYS: string = 'privateGrantedBookKeys';
 export const PRIVATE_STORE_GRANTED_GROUP_IDS: string = 'privateGrantedGroupIds';
+/** 启动验证门是否已过（verifyOnAppStart）。与 unlocked 分开：它只证明「进得来」。 */
+export const PRIVATE_STORE_APP_START_VERIFIED: string = 'privateAppStartVerified';
+/** 三个验证时机 + 宽限期，供设置页 @StorageProp 订阅。 */
+export const PRIVATE_STORE_VERIFY_ON_ENTER_GROUP: string = 'privateVerifyOnEnterGroup';
+export const PRIVATE_STORE_VERIFY_ON_OPEN_BOOK: string = 'privateVerifyOnOpenBook';
+export const PRIVATE_STORE_VERIFY_ON_APP_START: string = 'privateVerifyOnAppStart';
+export const PRIVATE_STORE_BACKGROUND_GRACE_SECONDS: string = 'privateBackgroundGraceSeconds';
+/** 生物识别开关状态，供设置页 @StorageProp 订阅（可不可用另由能力探测给出）。 */
+export const PRIVATE_STORE_BIOMETRIC_ENABLED: string = 'privateBiometricEnabled';
 
-/** 私密设置快照。 */
+/** 私密设置快照。七字段对齐上游 domain/model/settings/PrivateAccessSettings.kt。 */
 export interface PrivateAccessSettings {
   /** 总开关。关掉即整体休眠：不验证、不脱敏、不放守卫，密码与标记都留着。 */
   enabled: boolean;
@@ -47,13 +68,25 @@ export interface PrivateAccessSettings {
   unlockScope: number;
   /** 当前是否已解锁。只在进程内有效。 */
   unlocked: boolean;
+  /** 切到私密分组时验证（默认 true）。 */
+  verifyOnEnterGroup: boolean;
+  /** 打开私密书籍时验证（默认 true）。 */
+  verifyOnOpenBook: boolean;
+  /** 应用启动时立即验证（默认 false）。 */
+  verifyOnAppStart: boolean;
+  /** 离开前台后多久重新验证，秒；仅 UntilBackground 档有意义（默认 0）。 */
+  backgroundGraceSeconds: number;
 }
 
 export const DEFAULT_PRIVATE_ACCESS: PrivateAccessSettings = {
   enabled: false,
   hasPassword: false,
   unlockScope: PRIVATE_UNLOCK_APP_SESSION,
-  unlocked: false
+  unlocked: false,
+  verifyOnEnterGroup: true,
+  verifyOnOpenBook: true,
+  verifyOnAppStart: false,
+  backgroundGraceSeconds: 0
 };
 
 /** Uint8Array 转小写十六进制，用于把 salt 与校验值存成偏好字符串。 */
@@ -121,6 +154,14 @@ export class PrivateAccessRepository {
   private static readonly keyVerifier: string = 'PRIVATE_PASSWORD_VERIFIER';
   private static readonly keyEnabled: string = 'PRIVATE_ENABLED';
   private static readonly keyUnlockScope: string = 'PRIVATE_UNLOCK_SCOPE';
+  // 下列五个键的值照抄上游 LocalPreferences.kt（private_verify_on_* 等），便于备份互通。
+  private static readonly keyVerifyOnEnterGroup: string = 'private_verify_on_enter_group';
+  private static readonly keyVerifyOnOpenBook: string = 'private_verify_on_open_book';
+  private static readonly keyVerifyOnAppStart: string = 'private_verify_on_app_start';
+  private static readonly keyBackgroundGraceSeconds: string = 'private_background_grace_seconds';
+  private static readonly keyBiometricEnabled: string = 'private_biometric_enabled';
+  /** 进入后台的时间戳（毫秒），仅进程内有效，宽限期判定用。 */
+  private static backgroundTimestamp: number = 0;
 
   /** 把设置快照写进 AppStorage，页面用 @StorageProp 订阅。 */
   private static publish(settings: PrivateAccessSettings): void {
@@ -128,6 +169,10 @@ export class PrivateAccessRepository {
     AppStorage.setOrCreate(PRIVATE_STORE_HAS_PASSWORD, settings.hasPassword);
     AppStorage.setOrCreate(PRIVATE_STORE_UNLOCK_SCOPE, settings.unlockScope);
     AppStorage.setOrCreate(PRIVATE_STORE_UNLOCKED, settings.unlocked);
+    AppStorage.setOrCreate(PRIVATE_STORE_VERIFY_ON_ENTER_GROUP, settings.verifyOnEnterGroup);
+    AppStorage.setOrCreate(PRIVATE_STORE_VERIFY_ON_OPEN_BOOK, settings.verifyOnOpenBook);
+    AppStorage.setOrCreate(PRIVATE_STORE_VERIFY_ON_APP_START, settings.verifyOnAppStart);
+    AppStorage.setOrCreate(PRIVATE_STORE_BACKGROUND_GRACE_SECONDS, settings.backgroundGraceSeconds);
     if (AppStorage.get<string[]>(PRIVATE_STORE_GRANTED_BOOK_KEYS) === undefined) {
       AppStorage.setOrCreate(PRIVATE_STORE_GRANTED_BOOK_KEYS, [] as string[]);
     }
@@ -142,11 +187,19 @@ export class PrivateAccessRepository {
     const hasPassword = AppStorage.get<boolean>(PRIVATE_STORE_HAS_PASSWORD);
     const unlockScope = AppStorage.get<number>(PRIVATE_STORE_UNLOCK_SCOPE);
     const unlocked = AppStorage.get<boolean>(PRIVATE_STORE_UNLOCKED);
+    const verifyOnEnterGroup = AppStorage.get<boolean>(PRIVATE_STORE_VERIFY_ON_ENTER_GROUP);
+    const verifyOnOpenBook = AppStorage.get<boolean>(PRIVATE_STORE_VERIFY_ON_OPEN_BOOK);
+    const verifyOnAppStart = AppStorage.get<boolean>(PRIVATE_STORE_VERIFY_ON_APP_START);
+    const backgroundGraceSeconds = AppStorage.get<number>(PRIVATE_STORE_BACKGROUND_GRACE_SECONDS);
     return {
       enabled: enabled === true,
       hasPassword: hasPassword === true,
       unlockScope: unlockScope === undefined ? PRIVATE_UNLOCK_APP_SESSION : unlockScope,
-      unlocked: unlocked === true
+      unlocked: unlocked === true,
+      verifyOnEnterGroup: verifyOnEnterGroup === undefined ? true : verifyOnEnterGroup,
+      verifyOnOpenBook: verifyOnOpenBook === undefined ? true : verifyOnOpenBook,
+      verifyOnAppStart: verifyOnAppStart === true,
+      backgroundGraceSeconds: backgroundGraceSeconds === undefined ? 0 : backgroundGraceSeconds
     };
   }
 
@@ -160,14 +213,26 @@ export class PrivateAccessRepository {
       const enabled = await store.get(PrivateAccessRepository.keyEnabled, false) as boolean;
       const scope = await store.get(PrivateAccessRepository.keyUnlockScope,
         PRIVATE_UNLOCK_APP_SESSION) as number;
+      const verifyOnEnterGroup = await store.get(PrivateAccessRepository.keyVerifyOnEnterGroup, true) as boolean;
+      const verifyOnOpenBook = await store.get(PrivateAccessRepository.keyVerifyOnOpenBook, true) as boolean;
+      const verifyOnAppStart = await store.get(PrivateAccessRepository.keyVerifyOnAppStart, false) as boolean;
+      const grace = await store.get(PrivateAccessRepository.keyBackgroundGraceSeconds, 0) as number;
+      const biometricEnabled = await store.get(PrivateAccessRepository.keyBiometricEnabled, false) as boolean;
       const next: PrivateAccessSettings = {
         enabled: enabled === true,
         hasPassword: salt.length > 0 && verifier.length > 0,
         unlockScope: scope,
-        // 进程刚起，一律锁定态。
-        unlocked: false
+        // 进程刚起，一律锁定态；启动验证门也未过。
+        unlocked: false,
+        verifyOnEnterGroup: verifyOnEnterGroup === true,
+        verifyOnOpenBook: verifyOnOpenBook === true,
+        verifyOnAppStart: verifyOnAppStart === true,
+        backgroundGraceSeconds: Number.isFinite(grace) ? Math.max(0, Math.floor(grace)) : 0
       };
       PrivateAccessRepository.publish(next);
+      AppStorage.setOrCreate(PRIVATE_STORE_BIOMETRIC_ENABLED, biometricEnabled === true);
+      AppStorage.setOrCreate(PRIVATE_STORE_APP_START_VERIFIED, false);
+      PrivateAccessRepository.backgroundTimestamp = 0;
       return next;
     } catch (error) {
       console.error(`[PrivateAccess] 私密设置读取失败：${error instanceof Error ? error.message : error}`);
@@ -196,7 +261,11 @@ export class PrivateAccessRepository {
       enabled: current.enabled,
       hasPassword: true,
       unlockScope: current.unlockScope,
-      unlocked: current.unlocked
+      unlocked: current.unlocked,
+      verifyOnEnterGroup: current.verifyOnEnterGroup,
+      verifyOnOpenBook: current.verifyOnOpenBook,
+      verifyOnAppStart: current.verifyOnAppStart,
+      backgroundGraceSeconds: current.backgroundGraceSeconds
     });
   }
 
@@ -228,7 +297,11 @@ export class PrivateAccessRepository {
       enabled: enabled,
       hasPassword: current.hasPassword,
       unlockScope: current.unlockScope,
-      unlocked: enabled ? current.unlocked : false
+      unlocked: enabled ? current.unlocked : false,
+      verifyOnEnterGroup: current.verifyOnEnterGroup,
+      verifyOnOpenBook: current.verifyOnOpenBook,
+      verifyOnAppStart: current.verifyOnAppStart,
+      backgroundGraceSeconds: current.backgroundGraceSeconds
     });
   }
 
@@ -242,8 +315,115 @@ export class PrivateAccessRepository {
       enabled: current.enabled,
       hasPassword: current.hasPassword,
       unlockScope: scope,
-      unlocked: current.unlocked
+      unlocked: current.unlocked,
+      verifyOnEnterGroup: current.verifyOnEnterGroup,
+      verifyOnOpenBook: current.verifyOnOpenBook,
+      verifyOnAppStart: current.verifyOnAppStart,
+      backgroundGraceSeconds: current.backgroundGraceSeconds
     });
+  }
+
+  /**
+   * 改四个验证时机字段中的一个并落盘。字段白名单避免拼错键名。
+   */
+  static async setVerifyOption(context: Context, key: 'verifyOnEnterGroup' | 'verifyOnOpenBook' |
+    'verifyOnAppStart' | 'backgroundGraceSeconds', value: boolean | number): Promise<void> {
+    const store = await preferences.getPreferences(context, PrivateAccessRepository.preferenceName);
+    const prefKey = key === 'verifyOnEnterGroup' ? PrivateAccessRepository.keyVerifyOnEnterGroup
+      : key === 'verifyOnOpenBook' ? PrivateAccessRepository.keyVerifyOnOpenBook
+        : key === 'verifyOnAppStart' ? PrivateAccessRepository.keyVerifyOnAppStart
+          : PrivateAccessRepository.keyBackgroundGraceSeconds;
+    await store.put(prefKey, value);
+    await store.flush();
+    const current = PrivateAccessRepository.get();
+    PrivateAccessRepository.publish({
+      enabled: current.enabled,
+      hasPassword: current.hasPassword,
+      unlockScope: current.unlockScope,
+      unlocked: current.unlocked,
+      verifyOnEnterGroup: key === 'verifyOnEnterGroup' ? value === true : current.verifyOnEnterGroup,
+      verifyOnOpenBook: key === 'verifyOnOpenBook' ? value === true : current.verifyOnOpenBook,
+      verifyOnAppStart: key === 'verifyOnAppStart' ? value === true : current.verifyOnAppStart,
+      backgroundGraceSeconds: key === 'backgroundGraceSeconds' ? (typeof value === 'number' ? value : 0) : current.backgroundGraceSeconds
+    });
+  }
+
+  /** 生物识别开关落盘（只记开关状态；能力可用性由 detectBiometricStatus 现查）。 */
+  static async setBiometricEnabled(context: Context, enabled: boolean): Promise<void> {
+    const store = await preferences.getPreferences(context, PrivateAccessRepository.preferenceName);
+    await store.put(PrivateAccessRepository.keyBiometricEnabled, enabled);
+    await store.flush();
+    AppStorage.setOrCreate(PRIVATE_STORE_BIOMETRIC_ENABLED, enabled);
+  }
+
+  /** 生物识别开关当前值（来自 AppStorage）。 */
+  static isBiometricEnabled(): boolean {
+    return AppStorage.get<boolean>(PRIVATE_STORE_BIOMETRIC_ENABLED) === true;
+  }
+
+  /** 启动验证门是否已过。 */
+  static isAppStartVerified(): boolean {
+    return AppStorage.get<boolean>(PRIVATE_STORE_APP_START_VERIFIED) === true;
+  }
+
+  /** 标记启动验证门通过。 */
+  static markAppStartVerified(): void {
+    AppStorage.setOrCreate(PRIVATE_STORE_APP_START_VERIFIED, true);
+  }
+
+  /**
+   * 探测生物识别能力状态。getAvailableStatus 不抛=可用；抛码映射到上游五态的鸿蒙可达四态。
+   * UnsupportedSystem 那档是 Android 11 以下专属，鸿蒙基线 6.0.0(20) 不可达（见 d.ts @since 10），
+   * 故不产生该状态。
+   */
+  static detectBiometricStatus(): PrivateBiometricStatus {
+    const settings = PrivateAccessRepository.get();
+    if (!settings.hasPassword) {
+      return PrivateBiometricStatus.NOT_SET_PASSWORD;
+    }
+    try {
+      userAuth.getAvailableStatus(userAuth.UserAuthType.FACE, userAuth.AuthTrustLevel.ATL2);
+      return PrivateBiometricStatus.AVAILABLE;
+    } catch (error) {
+      const code = (error as BusinessError).code;
+      if (code === 12500010) {
+        return PrivateBiometricStatus.NOT_ENROLLED;
+      }
+      if (code === 12500005) {
+        return PrivateBiometricStatus.NO_HARDWARE;
+      }
+      return PrivateBiometricStatus.UNAVAILABLE;
+    }
+  }
+
+  /**
+   * 发起生物识别（在场证明）。验证通过后由调用方走本地密码解锁链；
+   * 这里只把「生物验证成功」这一事实通过回调返回，绝不因为验了生物就跳过密码校验。
+   * 每个 UserAuthInstance 只能用一次，所以每次都新建。
+   */
+  static authenticateBiometric(onSuccess: () => void, onFail: (message: string) => void): void {
+    try {
+      const challenge = cryptoFramework.createRandom().generateRandomSync(16).data;
+      const authParam: userAuth.AuthParam = {
+        challenge: challenge,
+        authType: [userAuth.UserAuthType.FACE, userAuth.UserAuthType.FINGERPRINT],
+        authTrustLevel: userAuth.AuthTrustLevel.ATL2
+      };
+      const widgetParam: userAuth.WidgetParam = { title: '验证身份以查看私密内容' };
+      const instance = userAuth.getUserAuthInstance(authParam, widgetParam);
+      instance.on('result', {
+        onResult: (result: userAuth.UserAuthResult) => {
+          if (result.result === userAuth.UserAuthResultCode.SUCCESS) {
+            onSuccess();
+          } else {
+            onFail('生物识别未完成');
+          }
+        }
+      });
+      instance.start();
+    } catch (error) {
+      onFail(error instanceof Error ? error.message : '生物识别不可用');
+    }
   }
 
   /** 解锁（本次会话或整个应用，取决于 unlockScope）。 */
@@ -253,19 +433,44 @@ export class PrivateAccessRepository {
       enabled: current.enabled,
       hasPassword: current.hasPassword,
       unlockScope: current.unlockScope,
-      unlocked: true
+      unlocked: true,
+      verifyOnEnterGroup: current.verifyOnEnterGroup,
+      verifyOnOpenBook: current.verifyOnOpenBook,
+      verifyOnAppStart: current.verifyOnAppStart,
+      backgroundGraceSeconds: current.backgroundGraceSeconds
     });
   }
 
   /**
-   * 只在「离开应用前有效」这一档下回锁定态（EntryAbility.onBackground 调）。
+   * 切后台时记时间戳。只在「离开应用前有效」这一档下有意义：
+   * 立即锁（grace=0）就回锁定态；grace>0 则记下时刻，回前台时由 lockIfGraceExpired 比对。
    * 其它两档不动：每次都验证靠 grant 逐目标放行，应用会话内本来就该一直解锁。
+   * （EntryAbility.onBackground 调。）
    */
-  static lockIfUntilBackground(): void {
+  static onBackground(): void {
+    const current = PrivateAccessRepository.get();
+    PrivateAccessRepository.backgroundTimestamp = Date.now();
+    if (current.unlockScope !== PRIVATE_UNLOCK_UNTIL_BACKGROUND) { return; }
+    if (!current.unlocked) { return; }
+    if (current.backgroundGraceSeconds <= 0) {
+      PrivateAccessRepository.lock();
+    }
+  }
+
+  /**
+   * 回前台时检查宽限期：离开时长未超过宽限期就不重锁；超过则锁。
+   * （EntryAbility.onForeground 调。）
+   */
+  static onForeground(): void {
     const current = PrivateAccessRepository.get();
     if (current.unlockScope !== PRIVATE_UNLOCK_UNTIL_BACKGROUND) { return; }
     if (!current.unlocked) { return; }
-    PrivateAccessRepository.lock();
+    if (PrivateAccessRepository.backgroundTimestamp <= 0) { return; }
+    const elapsedSeconds = (Date.now() - PrivateAccessRepository.backgroundTimestamp) / 1000;
+    PrivateAccessRepository.backgroundTimestamp = 0;
+    if (elapsedSeconds >= current.backgroundGraceSeconds) {
+      PrivateAccessRepository.lock();
+    }
   }
 
   /** 回到锁定态。切后台、关总开关、会话结束时调。 */
@@ -275,7 +480,11 @@ export class PrivateAccessRepository {
       enabled: current.enabled,
       hasPassword: current.hasPassword,
       unlockScope: current.unlockScope,
-      unlocked: false
+      unlocked: false,
+      verifyOnEnterGroup: current.verifyOnEnterGroup,
+      verifyOnOpenBook: current.verifyOnOpenBook,
+      verifyOnAppStart: current.verifyOnAppStart,
+      backgroundGraceSeconds: current.backgroundGraceSeconds
     });
     AppStorage.setOrCreate(PRIVATE_STORE_GRANTED_BOOK_KEYS, [] as string[]);
     AppStorage.setOrCreate(PRIVATE_STORE_GRANTED_GROUP_IDS, [] as number[]);

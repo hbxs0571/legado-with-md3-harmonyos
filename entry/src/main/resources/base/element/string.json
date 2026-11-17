@@ -11,6 +11,10 @@
     {
       "name": "entry_desc",
       "value": "书架与阅读体验"
+    },
+    {
+      "name": "biometric_permission_reason",
+      "value": "用于生物识别快捷解锁私密内容"
     }
   ]
 }

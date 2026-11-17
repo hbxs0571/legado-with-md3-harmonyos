@@ -79,12 +79,14 @@ export default class EntryAbility extends UIAbility {
 
   onBackground(): void {
     this.context.eventHub.emit('pauseReadSession');
-    // 解锁有效期选「离开应用前有效」时，切后台即回到锁定态（批6，对齐上游 PrivateUnlockScope.UntilBackground）。
-    PrivateAccessRepository.lockIfUntilBackground();
+    // 「离开应用前有效」档：grace=0 立即锁、grace>0 记时间戳，回前台按宽限期判定（批5，对齐上游 PrivateUnlockScope.UntilBackground）。
+    PrivateAccessRepository.onBackground();
   }
 
   onForeground(): void {
     this.context.eventHub.emit('resumeReadSession');
+    // 回前台检查宽限期是否已过，过了就回锁定态。
+    PrivateAccessRepository.onForeground();
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {

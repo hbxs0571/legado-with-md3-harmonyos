@@ -15,6 +15,15 @@
       {
         // 记住用户选过的备份目录授权，重启后仍能直接往里写（fileshare.persistPermission）。
         "name": "ohos.permission.FILE_ACCESS_PERSIST"
+      },
+      {
+        // 生物识别快捷解锁：@ohos.userIAM.userAuth 的人脸/指纹验证（批5）。
+        "name": "ohos.permission.ACCESS_BIOMETRIC",
+        "reason": "$string:biometric_permission_reason",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
       }
     ],
     "abilities": [
