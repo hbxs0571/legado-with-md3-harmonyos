@@ -7,7 +7,7 @@
 ## 规模
 
 - 213 个 `.ets` 文件 / 89,341 行 / 41 个页面（`find entry/src/main/ets -name '*.ets'`、`wc -l` 与 `ls entry/src/main/ets/pages/*.ets` 实测，r346 收口更新；r346 新增 `data/StartWindowBackground.ets` 与 `data/ThemeRefactorTipStore.ets` 两个文件）。
-- 七张界面级对照表：书架 345 行、书签 117 行、阅读配置 189 行、TXT 阅读 296 行、书架布局 122 行、封面设置 66 行、深色模式 91 行，合计 1226 行（已接 1038 / 未接 157 / 不适用 31）。（按 `scripts/parity-rows.py` 对当前工作区实跑；表内统计见 `docs/parity/BOOKSHELF.md` 盘面节，本句的合计取自 `scripts/parity-rows.py` 实跑）
+- 七张界面级对照表：书架 345 行、书签 117 行、阅读配置 189 行、TXT 阅读 296 行、书架布局 122 行、封面设置 66 行、深色模式 91 行，合计 1226 行（已接 1039 / 未接 156 / 不适用 31）。（按 `scripts/parity-rows.py` 对当前工作区实跑；表内统计见 `docs/parity/BOOKSHELF.md` 盘面节，本句的合计取自 `scripts/parity-rows.py` 实跑）
 - 28 个 Android ZIP 数据类别：已接入 19、部分接入 5、未接入 2（`threadCount`、`mangaConfig`）、不适用 2（`searchHistory`、`keyboardAssists`）、无仅归档类别。见[备份恢复](BACKUP-RESTORE.md)的 28 类表。
 
 ## 已接入并有设备验收

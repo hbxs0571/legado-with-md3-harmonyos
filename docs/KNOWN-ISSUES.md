@@ -534,13 +534,13 @@ val shadowY = (frame.touch.y + (if (reverse) 1 else -1) * 25f * 1.414f * sin(ang
 
 上游这个字段是「阅读页内开 Sheet」与「跳独立目录页」两种呈现的切换开关（`ui/book/read/ReadBookViewModel.kt:193`）。本地目录固定为 `CatalogPage.ets` 独立页一种形态，没有第二态可切。为它造一个不存在的新旧目录等于凭空加功能，**不补**。
 
-**KI-A10 主题网格列数（不接）** —— 覆盖 A-18（`themeGridColumns`，`ReadSettings.kt:40`，默认 4）。
+**KI-A10 主题网格列数（要接，约 10 行）** —— 覆盖 A-18（`themeGridColumns`，`ReadSettings.kt:40`，默认 4）。
 
-本地背景/主题是 `READER_BACKGROUND_STYLES` 六个内置方案的自绘列表（`entry/src/main/ets/data/ReaderSettingsRepository.ets:339-346`，入口 `ReaderSettingsPage.ets:1281`），不是网格布局，该字段没有消费面。**不补**；将来若把面板改成网格，再一并接。
+**复核（r348）：原判断「本地不是网格布局、该字段没有消费面」为误。** 本地主题列表就是 `Grid`：`ReaderSettingsPage.ets:2706-2716` 的 `Grid()` + `.columnsTemplate(this.themeGridTemplate())`，列数由 `:1960-1963` 的 `Math.max(2, Math.min(6, this.themeGridColumns))` 算，`:2696` 右上角显示「N 列」、`:2698` 点击 `cycleThemeGridColumns()` 循环 2…6。**与上游同构**（上游 `ReadSettings.kt:40` → `ThemeListContent.kt:370`/`:465` 的 `GridCells.Fixed(gridColumns.coerceIn(2, 6))`）。真缺口只有一个：`themeGridColumns` 是 `@State`（`:390`），全仓 4 处命中全在本页，`data/ReaderSettingsRepository.ets` 与 `data/BackupRepository.ets` 均零命中 → **退出即丢**。补法：加进 `ReaderSettingsRepository` 的读写与 `BackupRepository` 的键组（上游 `PreferKey.kt:448` 与 `ReadSettingsRepository.kt:644` 都把它记为偏好），约 10 行。
 
 **KI-A11 预下载两项（要接，待排期）** —— 覆盖 A-19 向后预下载章节数（`preDownloadNum`，`ReadSettings.kt:58`，默认 10）、A-20 向前预下载章节数（`preDownloadNumPrev`，`:59`，默认 0）。
 
-依赖离线缓存/预下载子系统；本地 `AppDownloadCacheSettingsPage.ets:31` 是预览页，没有缓存实现。预下载服务于在线书源，后者自 2026-11-09 起**已纳入范围、尚未排期**（[PROJECT.md](PROJECT.md) `:24-44`），故记「要接，待排期」。补法：随下载缓存子系统与在线书源一起接入。
+**复核（r348）：原判断「`AppDownloadCacheSettingsPage.ets:31` 是预览页、滑块无持久化」为误。** 该文件 186 行、`:31` 是 `@State cacheSettings` 初始化；两个滑块在 `:161`/`:162`，落盘走 `saveSettings()` → `data/CacheSettingsRepository.ets`（字段 `preloadBehind`/`preloadAhead`，默认 10/0，读 `:92`/`:93`、写 `:121`/`:122`），往返正常。真缺口是**除仓储与设置页外全仓零消费**（`preloadBehind\|preloadAhead\|preDownloadNum` 共 12 处命中，全在这两处）→ 调大不驱动任何缓存动作。仍记「要接，待排期」：预下载服务于在线书源的离线缓存，后者自 2026-11-09 起已纳入范围、尚未排期（[PROJECT.md](PROJECT.md) `:24-44`）。补法：随下载缓存子系统与在线书源一起接入。
 
 **KI-A12 在浏览器打开（要接，待排期）** —— 覆盖 A-21（`readUrlInBrowser`，`ReadSettings.kt:64`）。打开的是书源页面，随在线书源一起做。
 

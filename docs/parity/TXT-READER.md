@@ -56,7 +56,7 @@
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A 规则层（TXT 特有） | 32 | 28 | 3 | 1 |
+| A 规则层（TXT 特有） | 32 | 29 | 2 | 1 |
 | B 引擎层（TXT 与 EPUB 共用） | 75 | 65 | 8 | 2 |
 | C 界面层 | 86 | 76 | 7 | 3 |
 | D 交互层 | 49 | 44 | 3 | 2 |
@@ -65,7 +65,7 @@
 | G MOBI · AZW3 专属层 | 15 | 13 | 2 | 0 |
 | H UMD 专属层 | 7 | 5 | 0 | 2 |
 | I 压缩包导入层 | 7 | 6 | 1 | 0 |
-| 合计 | 296 | 252 | 32 | 12 |
+| 合计 | 296 | 253 | 31 | 12 |
 
 （统计口径与核对脚本见文末「小结」；数字随表更新，改行后重跑。）
 
@@ -121,7 +121,7 @@
 | 目录页字数显示（>10000 显示「N万字」，口径是 `String.length`，标点空格英文都算 1） | `utils/StringUtils.kt:263-274`、`model/localBook/TextFile.kt:244-245` | `entry/src/main/ets/pages/CatalogPage.ets:288-294`（`formatWordCount`）、`:296-310`（`loadChapterWordCounts`，用 `content.length`） | 已接 | 一致：都按 UTF-16 码元计数，>10000 折成「万字」。 | 目录页打开字数显示，看某章是否显示「1.2万字」 | 依据源码推断，未设备验证 | `readConfig` |
 | 目录字数默认开启（`tocCountWords = true`） | `TocViewModel.kt`、`ui/book/toc/TocScreen.kt` | `entry/src/main/ets/pages/CatalogPage.ets:322`（`toggleShowWordCount`） | 已接 | 一致。本地首次统计用 `BookRepository.forEachChapter` 逐章读，1378 章要 6 秒以上（`:295` 注释自认）。 | 打开一本 1000 章以上的书进目录页，看字数多久出现 | 依据源码推断，未设备验证 | `readConfig` |
 | 正文 8MB 窗口缓存，不整本常驻 | `model/localBook/TextFile.kt:30`、`:118-147` | `entry/src/main/ets/data/BookRepository.ets:2168`（`readTextFile`）、`:2184`（`readTextFileAsync`），整本进内存，无窗口缓存 | 未接 | 打开一本 100MB 的 TXT 后，本地内存里会长期压着一整本字符串，切到别的书才释放；上游只保留 8MB 窗口。低内存设备上表现为看书久了被系统杀后台。本轮没改：需要把 `splitChapters` / `readChapter` / `forEachChapter` 全部改成按窗口取文，改动面大于本轮批次。 | 打开一本 100MB 的 TXT 看 10 分钟，再切到书架看应用是否被杀 | `BookRepository.ets` 的 `readTextFile` / `readTextFileAsync` 整本进内存；依据源码推断，未设备验证 | `localBook` |
-| 整本章节字数在切章时算一次并落库（`BookChapter.wordCount`），之后任何界面读的都是这个字段 | `data/entities/BookChapter.kt:55`（`var wordCount: String? = null,      // 本章节字数`）、`model/localBook/TextFile.kt:307-308`、`:317-325`（`it.wordCount = StringUtils.wordCountFormat(lastChapterWordCount)`）、`:101-102`（整本 `book.wordCount`）、`help/book/BookHelp.kt:262-269`（在线书读到正文时补写） | `entry/src/main/ets/data/BookRepository.ets:1538-1563`（`forEachChapter` 逐章 `readTextFileAsync` 整本读入后现算）、`entry/src/main/ets/pages/CatalogPage.ets:361-385`（`loadChapterWordCounts` 现算） | 未接 | 上游的字数在**写库那一刻**就算好并持久化，之后打开目录、备份、导出都是纯读字段；本地没有「章节字数」这一列，每次要看字数就重新读一遍全文再数。屏幕现象：同一本书第二次打开目录，上游字数立刻在、本地仍要重新统计（`chapterWordCounts` 只活在页面状态里，退出即丢）。 | 打开目录等字数出现 → 退出阅读页 → 再进目录，看字数是否立刻在 | 依据源码推断，未设备验证。与 C5「章节字数来自预存字段」不重复：那行盘**目录页显示**，本行盘**落库时机与持久化** | `localBook` |
+| 整本章节字数在切章时算一次并落库（`BookChapter.wordCount`），之后任何界面读的都是这个字段 | `data/entities/BookChapter.kt:55`（`var wordCount: String? = null,      // 本章节字数`）、`model/localBook/TextFile.kt:307-308`、`:317-325`（`it.wordCount = StringUtils.wordCountFormat(lastChapterWordCount)`）、`:101-102`（整本 `book.wordCount`）、`help/book/BookHelp.kt:262-269`（在线书读到正文时补写） | `entry/src/main/ets/data/RdbSchema.ets:278-301`（`chapters.wordCount TEXT` 列）、`entry/src/main/ets/data/BookRepository.ets:2009-2050`（`buildChapterRows` 切章时 `:2038` 写 `wordCount`）、`:1699-1720`（`toChapterArgs` 绑定 `:1712`）、`:180`（`selectChaptersByBookUrl` 读回）、`entry/src/main/ets/pages/CatalogPage.ets:201-202`（直接取 `row.wordCount`，不读正文） | 已接 | 上游的字数在**写库那一刻**就算好并持久化，之后打开目录、备份、导出都是纯读字段；**复核（r348）：本条判断段判错，代码本来就有。** 列、写入、读回、显示四段齐全——`chapters` 表有 `wordCount TEXT`（`RdbSchema.ets:290`）、`buildChapterRows` 按章内字符数写入（`BookRepository.ets:2038`）、`insertChapterSql` 18 列含它、`selectChaptersByBookUrl:180` 读回、`CatalogPage.ets:202` 直接用。原来的 `loadChapterWordCounts()` 已在 r327 删除（`CatalogPage.ets:467-477` 注释记着它的耗时与删除原因）。 | 打开目录 → 退出阅读页 → 再进目录，字数立刻在（不出现「正在统计章节字数」中间态） | 设备验证见本表 `:349`（`m12.jpeg`）与 `:509`（查库 EPUB 章节 `wordCount` 空 0 条）。与 C5「章节字数来自预存字段」是同一件事的两面：那行盘**目录页显示**，本行盘**落库时机与持久化**，两行现均为 `已接` | `localBook` |
 
 ## B 引擎层（TXT 与 EPUB 共用）
 
@@ -403,7 +403,7 @@
 | 上游能力 | 上游位置(文件:行) | 本地位置(文件:行) | 状态 | 差异说明 | 验收方式 | 备注 | ZIP 类别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 3×3 九宫格点击分区（按宽高各三等分） | `feature/reader/core/gesture/ReaderTapAction.kt:37-54` | `entry/src/main/ets/pages/ReaderPage.ets:2080`（`handleReaderTapAt` 用 `floor(x/w*3)`、`floor(y/h*3)`）、`:2090`（`performReaderTapAction`） | 已接 | 一致：三等分。 | 点屏幕九个位置，看动作是否不同 | 依据源码推断，未设备验证 | `readConfig` |
-| 每格 14/15 种动作可选（无/菜单/下一页/上一页/下一章/上一章/朗读上一段/朗读下一段/加书签/编辑正文/切换替换/目录/搜索/同步进度/朗读暂停） | `feature/reader/core/gesture/ReaderTapAction.kt:3-18`、`ui/book/read/sheet/ClickActionConfigSheet.kt:61-75`（14 项） | `entry/src/main/ets/pages/ReaderSettingsPage.ets:2471-2515`（`READER_CLICK_REGION_ACTIONS`） | 未接 | 本地 12 项与上游同名同序，缺的 3 项全是朗读相关（朗读上一段 / 朗读下一段 / 朗读暂停继续）。TTS 自 2026-11-09 起**已纳入范围、尚未排期**（[项目队列](../PROJECT.md) `:24-44`），故由 `不适用` 改判 `未接`；翻页、书签、目录、搜索、替换、同步等其余动作本地都有。 | 阅读设置 → 更多设置 → 点击区域配置 → 任选一格，列表里应有 12 个可选项（无/菜单/下一页/上一页/下一章/上一章/加书签/编辑正文/切换替换/目录/搜索/同步进度） | 要接，随 TTS 排期；缺的三项均属朗读能力 | `readConfig` |
+| 每格 14/15 种动作可选（无/菜单/下一页/上一页/下一章/上一章/朗读上一段/朗读下一段/加书签/编辑正文/切换替换/目录/搜索/同步进度/朗读暂停） | `feature/reader/core/gesture/ReaderTapAction.kt:2-17`（枚举 15 项）、`ui/book/read/sheet/ClickActionConfigSheet.kt:48-64`（`linkedMapOf` 15 项，`-1` 到 `13`） | `entry/src/main/ets/data/ReaderSettingsRepository.ets:631-634`（`READER_CLICK_REGION_ACTIONS` **15 项**）、`entry/src/main/ets/pages/ReaderSettingsPage.ets:3036-3044`（`ForEach` 渲染选项）、`entry/src/main/ets/pages/ReaderPage.ets:3587-3606`（`performReaderTapAction` 只处理 12 项） | 未接 | **复核（r348）：选项一个不缺，缺的是行为。** 上游 `ReaderTapAction.kt:3-17` 枚举 15 项（`NONE(-1)` … `TOGGLE_READ_ALOUD_PAUSE(13)`），本地 `READER_CLICK_REGION_ACTIONS` 也是 15 项、顺序一致（首项本地写「无操作」对应上游 `NONE`）。真缺口在 `performReaderTapAction`：它只处理 12 项，`朗读上一段` / `朗读下一段` / `朗读暂停/继续` 三项落到末行 `onUnavailableAction`。TTS 自 2026-11-09 起**已纳入范围、尚未排期**（[项目队列](../PROJECT.md) `:24-44`），故仍判 `未接`。 | 阅读设置 → 点击区域配置 → 任选一格，列表应有 **15 项**（含朗读三项）；选「朗读上一段」后点该格，当前弹「朗读上一段功能尚未迁移」 | 复核 r348：原「本地 12 项、缺 3 项选项」为误——选项 15 项已齐，缺的是行为分支 | `readConfig` |
 | 脏值（配置里写了不认识的动作）按「无动作」处理 | `feature/reader/core/gesture/ReaderTapAction.kt:21-22` | `entry/src/main/ets/pages/ReaderPage.ets:2090` 起（`performReaderTapAction` 的 `default` 分支走 `onUnavailableAction`） | 已接 | 一致：不认识的动作不执行。 | 备份里写一个非法动作值再恢复，看点击是否无反应 | 依据源码推断，未设备验证 | `readConfig` |
 | 正中格优先级：朗读中→朗读菜单；自动翻页中→自动翻页面板；搜索条显示中→收起；否则→主菜单 | `ui/book/read/ReadBookController.kt:626-634` | `entry/src/main/ets/pages/ReaderPage.ets:2585`（`shouldUseCenterPriorityTap`）、`:2475`（`performReaderTapAction` 开头） | 已接 | 自动翻页进行中点正中格会先开自动翻页面板，不会翻页也不会开主菜单。 | 开自动翻页后点屏幕正中，看是否弹出自动翻页面板 | 本地无朗读、搜索是独立路由，只保留自动翻页这一档；依据源码推断，未设备验证 | `readConfig` |
 | 图片点击四档（1 直接开大图 / 2 单击执行图片动作（默认）/ 3 不响应 / 4 双击才执行，双击窗口 300ms） | `ui/book/read/ReadBookController.kt:674-693` | `entry/src/main/ets/pages/ReaderPage.ets:2517`（`handleImageTap`）、`entry/src/main/ets/reader/ReaderCanvasSurface.ets:1673`（`hitTestImageBox`） | 已接 | 点正文图片按设置里的四档行为走：直接开大图 / 双击才开 / 不响应；大图是全屏黑底浮层。 | 设置里依次选「点击图片」四档，点正文图片看反应 | 依据源码推断，未设备验证；`2` 档需要在线书源动作，本地无动作来源故等同不响应 | `readConfig` |
@@ -506,7 +506,7 @@
 | 元数据：书名 / 作者 / 简介 | `model/localBook/EpubFile.kt:282-309`（`metadata.firstTitle`，空则 `originName.replace(".epub","")`；`metadata.authors[0]` 去首尾逗号；`descriptions[0]` 为 XML 则 Jsoup 取 `text`） | `entry/src/main/ets/data/EpubRepository.ets:54-205`（`importFromUri` 在 `:120-160` 一带读 OPF 的 `title` / `creator` / `description`） | 已接 | 三项都有。差别两处：作者上游取第一个并去首尾逗号，本地取 `creator` 原值；简介上游遇 XML 会剥标签，本地走 `decodeXml` 后是否还残留标签文本未实测。 | — | 依据源码推断，未设备验证 | `localBook` |
 | 封面：`meta name=cover` 与 manifest `properties` 含 `cover-image` | `model/localBook/EpubFile.kt:258-280`（`upBookCover`） | `entry/src/main/ets/data/EpubRepository.ets:186-206`（`findCoverResource` 两处判据都在）+ `importFromUri` 把封面复制到 `${context.filesDir}/covers/${bookId}.img` | 已接 | 两处判据本地都有，另加一层落盘。界面结果等价：书架卡与详情页都能显示 EPUB 自带封面。 | 导入一本 EPUB，看书架卡是否显示封面 | 依据源码推断，未设备验证 | `localBook` |
 | 正文以「只留 img 的 HTML 片段」交给排版层 | `model/localBook/EpubFile.kt:178-179`（`HtmlFormatter.formatKeepImg(elements.outerHtml())`，`utils/HtmlFormatter.kt` 用 Jsoup）、`model/localBook/LocalBook.kt:210-216`（EPUB 额外 `replace("&lt;img", "&lt; img")` + `StringEscapeUtils.unescapeHtml4`） | `entry/src/main/ets/data/EpubRepository.ets:333-372`（先把 `<img>` 换成 `[[EPUB_IMAGE:uri]]` 标记）+ `:373-389`（`htmlToText` 正则剥掉其余标签） | 已接 | **实现路线不同、屏幕结果等价**：上游保留 HTML 片段交给渲染层；本地先转纯文本、图片另存为 `[[EPUB_IMAGE:]]` 标记，由 `data/LocalTextSemantics.ets:58` 认标记后当图片块排版（`:111` 的 `imageOnlyParagraph` 正则）。两边都只留图片，样式表与内嵌字体都不保留。本地多一道「所有图片复制到 `${filesDir}/epub-assets/<bookId>/`」。 | 打开一本带插图的 EPUB，看图片是否显示、文字是否连排 | 依据源码推断，未设备验证。这条是路线差异，不是缺口 | `localBook` |
-| 章节字数（`wordCount`） | `model/localBook/EpubFile.kt:310-356`（建章时带 `wordCount`） | `entry/src/main/ets/data/RdbSchema.ets:278-301` 有 `wordCount TEXT` 列；`entry/src/main/ets/data/BookRepository.ets:1509-1530`（`toChapterArgs` 恒写空） | 已接 | 列在、值恒空。目录页与章末要显示「本章 N 字」时读不到；上游 TXT 与 EPUB 都填。 **复核（r344）：判断段判错，代码本来就有**。查库 EPUB 章节 `wordCount` 全有值（形如「99字」「6241字」），`buildChapterRows` 早已按章内字符数写入，`pages/CatalogPage.ets:676-679` 也有显示分支与 `showWordCount` 开关（默认 true）。本轮未改代码 | 打开目录页，章节行右侧显示「N字」 | 设备验证：查库 epub 章节 `wordCount` 空 0 条、非空全量；目录页字数与列表同帧出现（r327 KI-REL3 已验） | `localBook` |
+| 章节字数（`wordCount`） | `model/localBook/EpubFile.kt:310-356`（建章时带 `wordCount`） | `entry/src/main/ets/data/RdbSchema.ets:278-301` 有 `wordCount TEXT` 列；`entry/src/main/ets/data/BookRepository.ets:1509-1530`（`toChapterArgs` 恒写空） | 已接 | 列在、值恒空。目录页与章末要显示「本章 N 字」时读不到；上游 TXT 与 EPUB 都填。 **复核（r344）：判断段判错，代码本来就有**。查库 EPUB 章节 `wordCount` 全有值（形如「99字」「6241字」），`buildChapterRows` 早已按章内字符数写入；显示分支在 `pages/CatalogPage.ets:829`（`if (this.showWordCount && chapter.wordCount.length > 0)`），开关 `:82` 默认 true、`:475-477` 只改显示。r348 复核时原引的 `:676-679` 已随文件增长漂到别处；代码本身未改动 | 打开目录页，章节行右侧显示「N字」 | 设备验证：查库 epub 章节 `wordCount` 空 0 条、非空全量；目录页字数与列表同帧出现（r327 KI-REL3 已验） | `localBook` |
 | 章节图片落盘后的淘汰与读取租约 | `help/book/BookImageFileStore.kt:1-223`（`pin(file)` 读取租约、临时文件不暴露为可读、按 `lastModified` 淘汰）、`help/book/ChapterImageCache.kt:9`（`isChapterImageCacheComplete(failures, filesCached)`） | `entry/src/main/ets/data/EpubRepository.ets:347-358`（图片复制到 `${context.filesDir}/epub-assets/<bookId>/<序号>.img`，无淘汰、无租约，失败只在正文里补一个空格） | 已接 | 本地图片一旦复制就永不清理：删书、改编码、重复导入都会在 `epub-assets` 下留目录，设备存储只增不减。上游有读取租约（正被排版用的图不会被淘汰）与按时间淘汰。对用户可感知的是「设备存储」与「备份包体积」。 **实现（r344）**：`EpubRepository` 新增 `clearAssets` / `clearOrphanAssets`，三个时机回收——删书（`BookRepository.deleteBook`）、重导入（`importFromUri` 开局清同目录）、启动清扫孤儿（`EntryAbility.onCreate` 异步扫，`liveBookIds` 空集合保护）。屏幕上：删掉一本带 20 张图的 EPUB 后`epub-assets/<bookId>` 目录消失；同一本连导入两次体积不翻倍；手工造一个孤儿目录后冷启动被清掉。**实现的是这三个明确时机，不是上游的「按 lastModified 淘汰 + 读取租约」**——本地不存在「删到正在渲染的图」的窗口，租约那层护栏按此取舍不做 | 删掉一本带图 EPUB 后 `epub-assets` 下对应目录消失；同一本连导入两次体积不翻倍；重启一次孤儿目录被清 | 设备验证：删书后目录消失与 books 行 count=0；重导入 28 张 9304KB 不变（mtime 05:08→05:44 证重建）；删书目行后冷启动孤儿目录 10→9，在架 9 个无误删 | `localBook` |
 | 导出为 .epub（`EpubWriter`） | `service/ExportBookService.kt:485`（`EpubWriter().write(epubBook, bookOs)`）、`:949-950`（`EpubWriter().setCallback(...)`）；库在 `modules/book/src/main/java/me/ag2s/epublib/epub/EpubWriter.java:27` | 无（`entry/src/main/ets/data/EpubRepository.ets` 只有读侧；全仓无 `createZip` / `zipFile` / `EpubWriter`） | 已接 | 上游能把书架里的书导出成 .epub（含目录、封面、图片）；本地 `EpubRepository` 只读不写。`@ohos.zlib` 的 `createZip` / `compressFile` 可用，只是没被用于 EPUB 打包。 **实现（r344）**：新建 `data/EpubExporter.ets`（读侧反向：按章取正文、`[[EPUB_IMAGE:]]` 换 `<img>`、图片按字节头定扩展名与 media-type）与 `data/EpubWriter.ets`（手写 zip 序列化：`mimetype` 为第一项且 STORED、flags bit3=0、CRC32 走 `zlib.createChecksumSync().crc32`，其余条目先试 `deflateInit2(-15)`、不通则退 `compress2` 剥 zlib 头尾）；书籍详情页「更多」新增「导出为 EPUB」，只对本地书显示。屏幕上：60 章图片书导出 58288B，`mimetype` 在第一条且 `method=0`，第三方解析器读出 60 条 nav 与 60 张可读 JPEG。导出为**纯文本重排版**，样式与内嵌字体不保留 | 书籍详情页「更多 → 导出为 EPUB」，选保存位置后生成 .epub，用第三方阅读器打开目录与正文可读 | 设备验证：comic60.epub 58288B（60 章 / 60 图，EbookLib 解析通过）、the-metamorphosis.epub 43862B（1 章 97 段）；本机无 Calibre、无 java，第三方校验用 `python -m pip install EbookLib` 跑独立解析；反向自检（把 mimetype 改 DEFLATED 重打包）能被检查脚本判 FAIL | `localBook` |
 
@@ -1009,7 +1009,7 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 
 | 块 | 条数 | 已接 | 未接 | 不适用 |
 | --- | --- | --- | --- | --- |
-| A 规则层（TXT 特有） | 32 | 28 | 3 | 1 |
+| A 规则层（TXT 特有） | 32 | 29 | 2 | 1 |
 | B 引擎层（TXT 与 EPUB 共用） | 75 | 65 | 8 | 2 |
 | C 界面层 | 86 | 76 | 7 | 3 |
 | D 交互层 | 49 | 44 | 3 | 2 |
@@ -1018,7 +1018,7 @@ for d in ['feature/reader','ui/book/read','ui/book/toc','help/book',
 | G MOBI · AZW3 专属层 | 15 | 13 | 2 | 0 |
 | H UMD 专属层 | 7 | 5 | 0 | 2 |
 | I 压缩包导入层 | 7 | 6 | 1 | 0 |
-| 合计 | 296 | 252 | 32 | 12 |
+| 合计 | 296 | 253 | 31 | 12 |
 
 r326 KI-REL2 修复带来的状态变化（**只改状态列，不新增行**）：
 
@@ -1068,19 +1068,19 @@ grep -nE '^\|.*\|\s*(部[分]|基[本]|待[定])' docs/parity/TXT-READER.md   # 
 
 ### 一句话结论
 
-**从打开一本本地 TXT 到翻目录、搜正文、调面板、选中划线的整条路径，已经能对着上游用**——A–D 四块 242 行里只剩 **21 行**未接，全部是
+**从打开一本本地 TXT 到翻目录、搜正文、调面板、选中划线的整条路径，已经能对着上游用**——A–D 四块 242 行里只剩 **20 行**未接，全部是
 「大文件与缓存策略」和「选区跨页」两类底层项，没有一条挡住日常阅读。
 
 2026-11-13 用户决定**六格式全支持**（TXT / EPUB / PDF / MOBI·AZW3 / UMD + 压缩包导入）后，本表新开 E–I 五块共 **54 行**
-（已接 39 / 未接 11 / 不适用 4），把此前被「已排除」挡在分母外的四个格式解析层纳入盘点。**这 54 行与 A–D 的 21 行不是同一类工作**：
-A–D 的 21 行是手感与性能打磨，E–I 剩下的 11 行则全部卡在「本机拿不到样本或平台没这个能力」——三处净化与 SVG 在 74 本真 EPUB 里找不到可见对照、PDF 页图渲染在模拟器上缺 PDFKit 能力、MOBI 分卷缺带卷样本、Huff/CDIC 缺压缩样本、rar/7z 平台无能力。
-全表合计 296 行 = 已接 252 / 未接 32 / 不适用 12。
+（已接 39 / 未接 11 / 不适用 4），把此前被「已排除」挡在分母外的四个格式解析层纳入盘点。**这 54 行与 A–D 的 20 行不是同一类工作**：
+A–D 的 20 行是手感与性能打磨，E–I 剩下的 11 行则全部卡在「本机拿不到样本或平台没这个能力」——三处净化与 SVG 在 74 本真 EPUB 里找不到可见对照、PDF 页图渲染在模拟器上缺 PDFKit 能力、MOBI 分卷缺带卷样本、Huff/CDIC 缺压缩样本、rar/7z 平台无能力。
+全表合计 296 行 = 已接 253 / 未接 31 / 不适用 12。
 
 前六批见历史记录；**第七批十二行**（分层绘制、6 种手绘线型、自动翻页逐帧揭示、滚动不画书签角标、文字背景色带合并、菜单进出场动画、正中格优先级、点划线开笔记、图片点击四档、折叠态横向滚动快捷条、「更多」二级弹层、无障碍选区快照）之后又补了**命中排版与文字背景图**：高亮规则可配字前距/字后距/行上距/行下距、换字体、调字号偏移与字重斜体，以及气泡背景图（四种填充方式、0.1~5 倍缩放、九宫格四条切线、手动切图）；画布按上游顺序把背景图插在色带与正文之间，命中字距按上游「首字带前距、末字带后距、段内不加」三段拆分；分页器让字号偏移改行高、行上下距改行间留白，与上游 `ReaderChapterBlockMeasurer` 的口径一致。
 
 ### 对阅读手感影响最大的前 5 条（剩余未接行中）
 
-> 七批已落地。下面这份榜单**只从 A–D 四块尚未接的 21 行里挑**（E–I 五块是新开的格式层，问题性质不同，另见各块小结），避免拿已修好的项占位。
+> 七批已落地。下面这份榜单**只从 A–D 四块尚未接的 20 行里挑**（E–I 五块是新开的格式层，问题性质不同，另见各块小结），避免拿已修好的项占位。
 
 1. **选区只到下一页，上游能跨当前页 + 下两页**（D4）—— 想选一段跨三页的长段落时，本地选到第二页末尾就停住，只能分两次选、分两次划线。这是 A–D 剩下 21 条里唯一纯手感项。
 2. **滚动模式没有整页缓存，长书滚动会反复重排重绘**（B3）—— 上游 `ScrollPageDrawCache` 是容量 8 的 LRU（key 用元素引用身份），滚动回去的页直接复用 PixelMap；本地每帧重新测量绘制。滚动一本几 MB 的书来回上下翻时卡顿与掉帧明显。
