@@ -2072,11 +2072,23 @@ export struct ReaderPage {
     return Math.max(0, Math.min(5, perBook));
   }
 
-  /** 选中某档后交给上层写回本书并落库。 */
+  /** 选中某档后交给上层写回本书并落库，然后立刻按新档位重排。 */
   private choosePageAnim(anim: number): void {
     this.onPageAnimChange(anim);
     this.pageAnimMenuVisible = false;
     this.overflowVisible = false;
+    // 照 onPageAnimationChanged() 的五个动作做，但不能直接调它：它读全局 this.pageAnimation，
+    // 这里改的是本书值，调它会按旧档位重排。落库是异步的，this.book 尚未被上层更新，
+    // 所以用「即将生效的 anim」判滚动/分页；选默认(-1)时实际生效的是全局值。
+    this.resetPageTurnTransition();
+    this.restoredProgressPosition = false;
+    const next = anim >= 0 ? Math.max(0, Math.min(5, anim)) : this.pageAnimation;
+    if (next === 3) {
+      this.scrollOffset = 0;
+      if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
+    } else {
+      this.rebuildReaderPages();
+    }
   }
 
   private imageStyleLabel(style: string): string {
