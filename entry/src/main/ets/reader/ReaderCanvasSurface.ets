@@ -923,13 +923,20 @@ export class ReaderCanvasRenderer {
   private imageLoading: Set<string> = new Set<string>();
   /** 文字背景图（气泡图）缓存：与正文图片分开，`.9.png` 必须按原尺寸解，否则引导边被降采样吃掉。 */
   private bgImageCache: Map<string, image.PixelMap> = new Map<string, image.PixelMap>();
+  /** 每张气泡图占的字节数，用于按字节淘汰。 */
+  private bgImageBytes: Map<string, number> = new Map<string, number>();
   private bgImageLoading: Set<string> = new Set<string>();
   /** 折页五条路径与镜像矩阵，逐帧复用（Path.rewind 清形不换对象）。 */
   private curlPaths: ReaderCurlRenderPaths = new ReaderCurlRenderPaths();
 
   private static readonly PARAGRAPH_CACHE_LIMIT: number = 1024;
   private static readonly IMAGE_CACHE_LIMIT: number = 32;
-  private static readonly BG_IMAGE_CACHE_LIMIT: number = 16;
+  /**
+   * 气泡图缓存字节上限（上游 ReaderTextBackgroundLoader.kt:26-30 用 maxOf(16MB, maxMemory/8)）。
+   * 按字节而不是按条数：九宫格 .9.png 必须原尺寸解，单张可达几十 MB，
+   * 上游注释明确说按条数会让 18MB 的大图一进就被挤出去。
+   */
+  private static readonly BG_IMAGE_CACHE_BYTES_LIMIT: number = 16 * 1024 * 1024;
 
   /**
    * 预取：把窗口里四页用到的图片全部解进 LRU。
@@ -1005,6 +1012,15 @@ export class ReaderCanvasRenderer {
     }
   }
 
+  private static pixelMapBytes(pixelMap: image.PixelMap): number {
+    try {
+      return pixelMap.getPixelBytesNumber();
+    } catch (error) {
+      // 已 release 或非可读格式时退回 0，让淘汰逻辑按条数兜底
+      return 0;
+    }
+  }
+
   private async loadBackgroundImage(source: string): Promise<void> {
     this.bgImageLoading.add(source);
     try {
@@ -1022,23 +1038,34 @@ export class ReaderCanvasRenderer {
           }
         });
       this.bgImageCache.set(source, pixelMap);
+      this.bgImageBytes.set(source, ReaderCanvasRenderer.pixelMapBytes(pixelMap));
       imageSource.release();
     } catch (error) {
       console.warn(`[ReaderCanvas] 文字背景图预取失败: ${error}`);
     } finally {
       this.bgImageLoading.delete(source);
     }
-    if (this.bgImageCache.size > ReaderCanvasRenderer.BG_IMAGE_CACHE_LIMIT) {
+    // 按字节淘汰（上游 ReaderTextBackgroundLoader.kt:26-30）。
+    // 原实现按条数（16 条），九宫格大图一进就把小图挤光，滚动时小图反复重解。
+    let totalBytes: number = 0;
+    for (const bytes of this.bgImageBytes.values()) {
+      totalBytes += bytes;
+    }
+    while (totalBytes > ReaderCanvasRenderer.BG_IMAGE_CACHE_BYTES_LIMIT && this.bgImageCache.size > 1) {
       let firstKey: string = '';
       for (const key of this.bgImageCache.keys()) {
         firstKey = key;
         break;
       }
-      if (firstKey.length > 0) {
-        const dropped = this.bgImageCache.get(firstKey);
-        this.bgImageCache.delete(firstKey);
-        dropped?.release();
+      if (firstKey.length === 0) {
+        break;
       }
+      const dropped = this.bgImageCache.get(firstKey);
+      const droppedBytes: number = this.bgImageBytes.get(firstKey) ?? 0;
+      this.bgImageCache.delete(firstKey);
+      this.bgImageBytes.delete(firstKey);
+      totalBytes -= droppedBytes;
+      dropped?.release();
     }
   }
 
@@ -1053,6 +1080,7 @@ export class ReaderCanvasRenderer {
       pixelMap.release();
     }
     this.bgImageCache.clear();
+    this.bgImageBytes.clear();
     this.bgImageLoading.clear();
   }
 
