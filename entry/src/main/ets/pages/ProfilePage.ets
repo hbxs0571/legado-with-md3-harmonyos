@@ -24,7 +24,6 @@ export struct ProfilePage {
   onExit: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State collapsedHeader: boolean = false;
-  @State showWebPreview: boolean = false;
   private profileScroller: Scroller = new Scroller();
 
   build() {
@@ -40,24 +39,18 @@ export struct ProfilePage {
               Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'profileWeb', tint: '#C5C7D0', glyphSize: 20 }) }.width(26).height(26)
               Column() {
                 Text('Web 服务').fontSize(PROFILE_ROW_TITLE_SIZE).fontColor(this.themeColorTextSecondary)
-                Text('用浏览器看书源与书籍').fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor('#AEB0BA').margin({ top: 4 })
+                Text('用浏览器写源或看书').fontSize(PROFILE_ROW_DETAIL_SIZE).fontColor('#AEB0BA').margin({ top: 4 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Text(this.showWebPreview ? '收起' : '预览').fontSize(12).fontColor(this.themeColorAccent)
-                .padding({ left: 8, right: 8, top: 8, bottom: 8 })
-                .onClick(() => this.showWebPreview = !this.showWebPreview)
-              // Web 服务未迁移，开关只做界面预览：点了给提示，状态不保持。
               UiSwitchControl({
                 checked: false,
                 onChange: (_enabled: boolean) => this.onUnavailableAction('Web 服务尚未迁移')
               })
             }.width('100%').padding(10)
             Column() {
-              Text('Web 服务尚未迁移 · 以下为界面预览').fontSize(12).fontColor('#AEB0BA')
-                .width('100%').textAlign(TextAlign.End)
               Row() {
                 Row() {
                   AppGlyph({ name: 'profileContentPaste', glyphSize: 16, tint: '#C5C7D0' })
-                  Text('复制网址').fontSize(12).fontColor('#C5C7D0').margin({ left: 6 })
+                  Text('拷贝 URL').fontSize(12).fontColor('#C5C7D0').margin({ left: 6 })
                 }.padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .onClick(() => this.onUnavailableAction('Web 服务尚未迁移'))
                 Row() {
@@ -67,8 +60,6 @@ export struct ProfilePage {
                   .onClick(() => this.onUnavailableAction('Web 服务尚未迁移'))
               }.width('100%').justifyContent(FlexAlign.End)
             }.width('100%').padding({ left: 10, right: 10, bottom: 8 })
-              .height(this.showWebPreview ? 70 : 0).opacity(this.showWebPreview ? 1 : 0)
-              .clip(true).animation({ duration: 220, curve: Curve.EaseInOut })
           }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).margin({ bottom: 13 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           Text('规则').fontSize(PROFILE_SECTION_TITLE_SIZE).fontColor(this.themeColorAccent).alignSelf(ItemAlign.Start).margin({ left: 12, bottom: 8 })
           Column() {

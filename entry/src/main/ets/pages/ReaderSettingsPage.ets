@@ -1626,8 +1626,6 @@ export struct ReaderSettingsPage {
               .onClick(() => this.openDetailSheet(
                 this.infoSubTab === 0 ? '页眉夜间文字颜色' : '页脚夜间文字颜色', '选择信息文字颜色'))
           }
-          Text('页眉/页脚模式、提示内容、分隔线和字号会保存到阅读样式。字体文件选择与颜色取色器尚未迁移。')
-            .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').layoutWeight(1)
@@ -1647,7 +1645,7 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onHideNavigationBarChange(enabled) })
           MenuSettingSwitch({ title: '填充刘海区域', detail: '把显示缺口算进正文可用区', checked: this.paddingDisplayCutouts,
             onChange: (enabled: boolean) => this.onPaddingDisplayCutoutsChange(enabled) })
-          MenuSettingSwitch({ title: '扩展到刘海', detail: '上游同名字段只做配置，没有对应渲染效果', checked: this.readBodyToLh,
+          MenuSettingSwitch({ title: '扩展到刘海', checked: this.readBodyToLh,
             onChange: (enabled: boolean) => this.onReadBodyToLhChange(enabled) })
           MenuSettingSwitch({ title: '适配特殊样式', detail: '按标记解释正文里的分段与富文本', checked: this.adaptSpecialStyle,
             onChange: (enabled: boolean) => this.onAdaptSpecialStyleChange(enabled) })
@@ -1716,7 +1714,7 @@ export struct ReaderSettingsPage {
           // 「展示顶部工具栏附加区域」上游 showReadTitleAddition（ReadSettings.kt:55，默认 true）：
           // 上游只有字段与设置界面（MoreConfigSheet.kt:458 / ReadConfigScreen.kt:418）、没有渲染消费点，本地只落库。
           MenuSettingSwitch({
-            title: '展示顶部工具栏附加区域', detail: '上游只落库，无渲染效果',
+            title: '展示顶部工具栏附加区域',
             checked: this.showReadTitleAddition,
             onChange: (enabled: boolean) => this.onShowReadTitleAdditionChange(enabled)
           })
@@ -2390,10 +2388,6 @@ export struct ReaderSettingsPage {
                 selectedColor: this.menuColorNight(this.detailSheetTitle),
                 onChange: (color: string) => this.applyMenuColor(this.detailSheetTitle, color, true)
               })
-              Text('「种子色」与「菜单强调颜色」共用同一组字段（上游 readMenuAccentColor / Night）；' +
-                '菜单背景色、容器色未设置时回落到主题默认值，边框色回落描边默认色，' +
-                '文字色回落 onSurface，模糊色未设置时不影响底色。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).height(360).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '自定义阅读背景') {
@@ -2683,10 +2677,6 @@ export struct ReaderSettingsPage {
                 detail: this.underline ? (this.dottedLine ? '虚线' : '实线') : '关闭',
                 migrated: true
               }).onClick(() => this.openDetailSheet('文字下划线', '下划线开关、颜色与虚线细节'))
-              // 上游把高亮规则入口放在「更多操作」面板（ReaderMoreActionsSheet 的 highlight_rule），
-              // 不在阅读界面设置里；这里只留指路文案，不伪造第二个入口。
-              Text('高亮规则在阅读页底栏的「更多操作」面板里，与上游一致；本页不重复放入口。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).height(440).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '文字下划线') {
@@ -2820,12 +2810,6 @@ export struct ReaderSettingsPage {
                     .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
-              Column() {
-                Text('Android 系统提供的文字处理应用项暂未迁移。')
-                  .fontSize(11).fontColor(this.rsetTextTertiary).width('100%')
-                Text('排序、分组与两个开关点「保存」后落库，并随备份同步；阅读页菜单只显示已实现能力的条目。')
-                  .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 5 })
-              }.padding(12).backgroundColor(this.rsetCardBg).borderRadius(10).margin({ top: 8 })
               Row() {
                 Blank()
                 Text('保存').fontSize(13).fontColor(this.rsetSelectedText)
@@ -4075,9 +4059,6 @@ struct MenuSettingOption {
         Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
         Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      if (!this.migrated) {
-        Text('尚未迁移').fontSize(9).fontColor(this.rsetTextTertiary).margin({ right: 8 })
-      }
       Text('›').fontSize(20).fontColor(this.rsetTextTertiary)
     }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }

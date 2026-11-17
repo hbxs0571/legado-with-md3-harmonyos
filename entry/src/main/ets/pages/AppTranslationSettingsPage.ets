@@ -40,11 +40,11 @@ export struct AppTranslationSettingsPage {
       Scroll(this.settingsScroller) {
         Column() {
           UiSection({ title: '翻译提供商' }) {
-            TranslationSettingsChoice({ title: '提供商', options: this.providers, selected: this.providerIndex, onSelect: (index: number) => this.providerIndex = index })
+            TranslationSettingsChoice({ title: '提供商', options: this.providers, selected: this.providerIndex, disabled: true, onSelect: (index: number) => this.providerIndex = index })
           }
 
           UiSection({ title: '翻译选项' }) {
-            TranslationSettingsChoice({ title: '目标语言', options: this.languages, selected: this.languageIndex, onSelect: (index: number) => this.languageIndex = index })
+            TranslationSettingsChoice({ title: '目标语言', options: this.languages, selected: this.languageIndex, disabled: true, onSelect: (index: number) => this.languageIndex = index })
             ThemeItemDivider()
             Column() {
               Row() {
@@ -52,7 +52,7 @@ export struct AppTranslationSettingsPage {
                 Text(`${Math.round(this.maxChars)}`).fontSize(12).fontColor(this.themeColorAccent)
               }
               Slider({ value: this.maxChars, min: 1000, max: 10000, step: 500 })
-                .selectedColor(this.themeColorAccent).trackColor('#454750')
+                .selectedColor(this.themeColorAccent).trackColor('#454750').enabled(false)
                 .onChange((value: number) => this.maxChars = value)
             }.padding({ left: 14, right: 14, top: 9, bottom: 9 })
           }
@@ -70,8 +70,6 @@ export struct AppTranslationSettingsPage {
               }
             }.transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
-          Text('此页选项目前仅用于界面预览；不会发起翻译请求或保存设置。')
-            .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -88,6 +86,7 @@ struct TranslationSettingsChoice {
   @Prop title: string = '';
   @Prop options: string[] = [];
   @Prop selected: number = 0;
+  @Prop disabled: boolean = false;
   @State showOptions: boolean = false;
   onSelect: (index: number) => void = (_index: number) => {};
   private getSelectedLabel(): string {
@@ -120,7 +119,9 @@ struct TranslationSettingsChoice {
       Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
       Text(this.getSelectedLabel()).fontSize(12).fontColor(this.themeColorAccent)
       Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
-    }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).onClick(() => this.showOptions = true)
+    }.padding({ left: 14, right: 14, top: 12, bottom: 12 })
+      .opacity(this.disabled ? 0.38 : 1)
+      .onClick(() => { if (!this.disabled) { this.showOptions = true; } })
       .bindSheet(this.showOptions, this.ChoiceSheet(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceSecondary,

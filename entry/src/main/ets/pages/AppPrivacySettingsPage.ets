@@ -120,8 +120,6 @@ export struct AppPrivacySettingsPage {
             UiAction({ title: '后台运行权限', detail: '查看电池优化状态', onSelect: () => this.onUnavailableAction('系统后台权限尚未接入') })
             UiSwitch({showDivider: false, title: 'Firebase 服务', detail: '此开关当前仅展示设置项，不会更改服务状态', preview: true })
           }
-          Text('说明：本地密码以 PBKDF2 校验值存储，不保存明文，也不进备份。生物识别与验证时机细项仍是界面预览。')
-            .fontSize(12).fontColor('#D9A6A0').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))

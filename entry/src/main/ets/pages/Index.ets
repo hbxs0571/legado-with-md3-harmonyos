@@ -6661,7 +6661,7 @@ private canWriteInto(dir: string): boolean {
     try {
       await BookRepository.saveImportedBooks(context, booksToSave);
     } catch (error) {
-      this.showUnavailableAction(error instanceof Error ? error.message : '书单落库失败');
+      this.showUnavailableAction(error instanceof Error ? error.message : '导出书单失败');
       return;
     }
     this.books = [...this.books, ...books];

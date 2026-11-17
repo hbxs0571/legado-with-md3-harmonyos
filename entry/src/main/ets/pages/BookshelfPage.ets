@@ -2149,7 +2149,7 @@ export struct BookshelfPage {
           this.LayoutSwitchRow('页签栏菜单按钮', '页签栏右端出现分组下拉按钮',
             this.layoutDraft.showBookshelfTabMenu,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.showBookshelfTabMenu = value; }); })
-          this.LayoutStepperRow('书架更新线程数', '0 表示不限（上游键名 bookshelfUpdateLimit）',
+          this.LayoutStepperRow('书架更新线程数', '',
             this.layoutDraft.bookshelfRefreshingLimit, 0, 100,
             (delta: number) => {
               this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {

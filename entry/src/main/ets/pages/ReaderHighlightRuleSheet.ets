@@ -480,7 +480,6 @@ export struct ReaderHighlightRuleSheet {
 
   private presetStatus(preset: ReaderHighlightRule): string {
     if (this.draftRules.some((rule: ReaderHighlightRule) => rule.id === preset.id)) { return '已有'; }
-    if (preset.targetScope !== ReaderHighlightRulePresets.targetContent) { return '标题规则，本地暂不执行'; }
     if (!ReaderHighlightRuleEngine.isSupported(preset.pattern)) { return '此正则在本机不受支持'; }
     return '可添加';
   }

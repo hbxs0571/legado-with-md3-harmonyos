@@ -2,6 +2,7 @@ import curves from '@ohos.curves';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { FONT_SECTION_TITLE, ROW_PADDING_H, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP, FONT_ROW_TITLE } from '../components/UiTokens';
+import { LabSettings, LabSettingsRepository } from '../data/LabSettingsRepository';
 
 @Component
 export struct AppLabSettingsPage {
@@ -14,10 +15,21 @@ export struct AppLabSettingsPage {
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
-  @State labEnabled: boolean = false;
-  @State eInkEnabled: boolean = false;
+  @State labSettings: LabSettings = LabSettingsRepository.get();
   @State collapsedHeader: boolean = false;
   private settingsScroller: Scroller = new Scroller();
+
+  aboutToAppear(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    LabSettingsRepository.load(context).then((settings: LabSettings) => { this.labSettings = settings; });
+  }
+
+  private saveSettings(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    LabSettingsRepository.save(context, this.labSettings);
+  }
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
@@ -42,15 +54,15 @@ export struct AppLabSettingsPage {
       Scroll(this.settingsScroller) {
         Column() {
           Column() {
-            UiSwitch({ title: '启用实验室', detail: '开启后显示实验性功能，可能不稳定', value: this.labEnabled, onChange: (value: boolean) => this.labEnabled = value })
+            UiSwitch({ title: '启用实验室', detail: '开启后显示实验性功能，可能不稳定', value: this.labSettings.enabled, onChange: (value: boolean) => { this.labSettings = { enabled: value, eInkDisplay: this.labSettings.eInkDisplay, eyeProtection: this.labSettings.eyeProtection }; this.saveSettings(); } })
           }.margin({ left: 16, right: 16, top: 12 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
-          if (this.labEnabled) {
+          if (this.labSettings.enabled) {
             Text('显示').fontSize(FONT_SECTION_TITLE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
               .alignSelf(ItemAlign.Start).padding({ left: ROW_PADDING_H, top: SECTION_TITLE_TOP, bottom: SECTION_TITLE_BOTTOM })
             Column() {
-              UiSwitch({ title: '墨水屏显示', detail: '在平板界面显示墨水屏选项', value: this.eInkEnabled, onChange: (value: boolean) => this.eInkEnabled = value })
-              if (this.eInkEnabled) {
+              UiSwitch({ title: '墨水屏显示', detail: '在平板界面显示墨水屏选项', value: this.labSettings.eInkDisplay, onChange: (value: boolean) => { this.labSettings = { enabled: this.labSettings.enabled, eInkDisplay: value, eyeProtection: this.labSettings.eyeProtection }; this.saveSettings(); } })
+              if (this.labSettings.eInkDisplay) {
                 Text('可在“主题 → 显示”中调整墨水屏设置')
                   .fontSize(12).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, bottom: 12 })
               }
@@ -71,9 +83,6 @@ export struct AppLabSettingsPage {
           }.padding({ left: 14, right: 14, top: 13, bottom: 13 }).margin({ left: 16, right: 16 })
             .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
             .onClick(() => this.onUnavailableAction('全文页码诊断导出尚未迁移'))
-
-          Text('实验室开关仅作页面预览，不会启用实验功能或导出诊断数据。')
-            .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 10, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
