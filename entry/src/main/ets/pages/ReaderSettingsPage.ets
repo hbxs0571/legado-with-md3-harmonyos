@@ -242,7 +242,7 @@ export struct ReaderSettingsPage {
   @Prop expandTextMenu: boolean = false;
   /** 划词菜单是否显示图标，对齐上游 showSelectMenuIcon（ReadSettings.kt:52）。 */
   @Prop showSelectMenuIcon: boolean = true;
-  /** 横屏双页档位，对齐上游 doubleHorizontalPage（ReadSettings.kt:26），四档 '0'..'3'。 */
+  /** 平板/横屏双页档位，对齐上游 doubleHorizontalPage（ReadSettings.kt:26），四档 '0'..'3'。 */
   @Prop doubleHorizontalPage: string = '0';
   /** 环境光日夜提醒开关；上游 `autoSuggestDayNight`（`ReadSettings.kt:43`）。 */
   @Prop autoSuggestDayNight: boolean = false;
@@ -899,7 +899,7 @@ export struct ReaderSettingsPage {
             .fillColor(this.eyeProtectionActive ? this.rsetAccent : this.rsetTextSecondary).margin({ left: 10 })
             .onClick(() => this.onEyeProtectionToggle())
             .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
-              this.openDetailSheet('护眼设置', '护眼模式与色温参数');
+              this.openDetailSheet('护眼模式', '护眼模式与色温参数');
             }))
           Image(this.readerNightMode ? $r('app.media.app_moon') : $r('app.media.app_daynight'))
             .width(18).height(18).fillColor(this.rsetTextSecondary).margin({ left: 9 })
@@ -1469,10 +1469,10 @@ export struct ReaderSettingsPage {
     if (this.detailSheetTitle === '翻页动画' && choiceIndex >= 0) { this.onPageAnimationChange(choiceIndex); }
     if (this.detailSheetTitle === '翻页动画速度' && choiceIndex >= 0) { this.onAnimationSpeedChange(choiceIndex); }
     if (this.detailSheetTitle === '屏幕方向' && choiceIndex >= 0) { this.onScreenOrientationChange(choiceIndex.toString()); }
-    if (this.detailSheetTitle === '保持屏幕常亮' && choiceIndex >= 0) {
+    if (this.detailSheetTitle === '屏幕超时' && choiceIndex >= 0) {
       this.onKeepLightChange(['0', '60', '300', '600', '-1'][choiceIndex] ?? '0');
     }
-    if (this.detailSheetTitle === '横屏双页' && choiceIndex >= 0) {
+    if (this.detailSheetTitle === '平板/横屏双页' && choiceIndex >= 0) {
       this.onDoubleHorizontalPageChange(['0', '1', '2', '3'][choiceIndex] ?? '0');
     }
     if (this.detailSheetTitle === '进度条行为' && choiceIndex >= 0) {
@@ -1724,7 +1724,7 @@ export struct ReaderSettingsPage {
         Column() {
           Text('屏幕设置').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 6, bottom: 4 })
           MenuSettingOption({ title: '屏幕方向', detail: '跟随系统 / 竖屏 / 横屏', migrated: true }).onClick(() => this.openDetailSheet('屏幕方向', '选择系统、竖屏或横屏'))
-          MenuSettingOption({ title: '保持屏幕常亮', detail: this.getDetailChoices('保持屏幕常亮')[Math.max(0, ['0', '60', '300', '600', '-1'].indexOf(this.keepLight))] ?? '默认', migrated: true }).onClick(() => this.openDetailSheet('保持屏幕常亮', '设置阅读期间的屏幕超时'))
+          MenuSettingOption({ title: '屏幕超时', detail: this.getDetailChoices('屏幕超时')[Math.max(0, ['0', '60', '300', '600', '-1'].indexOf(this.keepLight))] ?? '默认', migrated: true }).onClick(() => this.openDetailSheet('屏幕超时', '设置阅读期间的屏幕超时'))
           MenuSettingSwitch({ title: '隐藏状态栏', detail: '沉浸式阅读', checked: this.hideStatusBar,
             onChange: (enabled: boolean) => this.onHideStatusBarChange(enabled) })
           MenuSettingSwitch({ title: '隐藏导航栏', detail: '沉浸式阅读', checked: this.hideNavigationBar,
@@ -1737,8 +1737,8 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onAdaptSpecialStyleChange(enabled) })
           MenuSettingSwitch({ title: '使用自定义中文分行', detail: '改后重新计算分页', checked: this.useZhLayout,
             onChange: (enabled: boolean) => this.onUseZhLayoutChange(enabled) })
-          MenuSettingOption({ title: '护眼设置', detail: '护眼模式与色温', migrated: true })
-            .onClick(() => this.openDetailSheet('护眼设置', '配置护眼模式、色温与日夜参数'))
+          MenuSettingOption({ title: '护眼模式', detail: '护眼模式与色温', migrated: true })
+            .onClick(() => this.openDetailSheet('护眼模式', '配置护眼模式、色温与日夜参数'))
           Text('翻页控制').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSlider({
             title: '滑动翻页阈值',
@@ -1751,8 +1751,8 @@ export struct ReaderSettingsPage {
           Text('滑动翻页阈值（0 = 系统默认值）').fontSize(10).fontColor(this.rsetTextTertiary)
             .width('100%').padding({ left: 18, right: 18, bottom: 8 })
           MenuSettingOption({
-            title: '横屏双页', detail: readerColumnModeTitle(this.doubleHorizontalPage), migrated: true
-          }).onClick(() => this.openDetailSheet('横屏双页', '选择单页、双页以及双页生效的屏幕形态'))
+            title: '平板/横屏双页', detail: readerColumnModeTitle(this.doubleHorizontalPage), migrated: true
+          }).onClick(() => this.openDetailSheet('平板/横屏双页', '选择单页、双页以及双页生效的屏幕形态'))
           MenuSettingOption({
             title: '进度条行为', detail: this.progressBehavior === 'chapter' ? '章节进度' : '页码进度', migrated: true
           }).onClick(() => this.openDetailSheet('进度条行为', '设置拖动进度条的定位方式'))
@@ -1760,43 +1760,43 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onMouseWheelPageChange(enabled) })
           MenuSettingSwitch({ title: '音量键翻页', detail: '按音量键切换页面', checked: this.volumeKeyPage,
             onChange: (enabled: boolean) => this.onVolumeKeyPageChange(enabled) })
-          MenuSettingSwitch({ title: '朗读时允许音量键翻页', detail: '朗读期间使用音量键翻页', checked: false }).onClick(() => this.showNotMigrated('朗读时音量键翻页'))
-          MenuSettingSwitch({ title: '长按按键翻页', detail: '长按音量键连续翻页', checked: this.keyPageOnLongPress,
+          MenuSettingSwitch({ title: '朗读时音量键翻页', detail: '朗读期间使用音量键翻页', checked: false }).onClick(() => this.showNotMigrated('朗读时音量键翻页'))
+          MenuSettingSwitch({ title: '按键长按翻页', detail: '长按音量键连续翻页', checked: this.keyPageOnLongPress,
             onChange: (enabled: boolean) => this.onKeyPageOnLongPressChange(enabled) })
           MenuSettingSwitch({ title: '下滑添加书签', detail: '下滑翻动当前页以添加或取消书签', checked: this.swipeToAddBookmark,
             onChange: (enabled: boolean) => this.onSwipeToAddBookmarkChange(enabled) })
-          MenuSettingOption({ title: '书签标记', detail: this.bookmarkBadgeImage.length > 0 ? '自定义图片' : '默认', migrated: true })
-            .onClick(() => this.openDetailSheet('书签标记', '选择书签标记图片或恢复默认'))
+          MenuSettingOption({ title: '书签角标', detail: this.bookmarkBadgeImage.length > 0 ? '自定义图片' : '默认', migrated: true })
+            .onClick(() => this.openDetailSheet('书签角标', '选择书签角标图片或恢复默认'))
           MenuSettingSlider({
-            title: '书签标记大小', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
+            title: '角标大小', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
             onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
           })
           Text('其他').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
-          MenuSettingSwitch({ title: '进度条触感反馈', detail: '拖动时提供触觉反馈', checked: this.sliderVibrator,
+          MenuSettingSwitch({ title: '滑动进度条时震动', detail: '拖动时提供触觉反馈', checked: this.sliderVibrator,
             onChange: (enabled: boolean) => this.onSliderVibratorChange(enabled) })
           MenuSettingSwitch({ title: '使用新版目录', detail: '使用新的目录面板', checked: true }).onClick(() => this.showNotMigrated('使用新版目录'))
-          MenuSettingSlider({ title: '无目录书籍分段长度', value: this.maxLengthWithNoToc, minValue: 3000, maxValue: 100000, stepValue: 100,
+          MenuSettingSlider({ title: '无规则匹配时章节分割字数', value: this.maxLengthWithNoToc, minValue: 3000, maxValue: 100000, stepValue: 100,
             onChange: (value: number) => this.onMaxLengthWithNoTocChange(value) })
-          MenuSettingSwitch({ title: '文字选择触感反馈', detail: '选择正文时提供触觉反馈', checked: this.selectVibrator,
+          MenuSettingSwitch({ title: '选择文本时震动', detail: '选择正文时提供触觉反馈', checked: this.selectVibrator,
             onChange: (enabled: boolean) => this.onSelectVibratorChange(enabled) })
-          MenuSettingSwitch({ title: '自动切换书源', detail: '当前书源失效时尝试其它书源', checked: false }).onClick(() => this.showNotMigrated('自动切换书源'))
-          MenuSettingSwitch({ title: '换源结果应用于全部书籍', detail: '同步更新其它书籍的书源', checked: false }).onClick(() => this.showNotMigrated('换源结果应用于全部书籍'))
-          MenuSettingSwitch({ title: '自动切换日夜模式提醒', detail: '根据环境光提醒切换浅色/深色模式', checked: this.autoSuggestDayNight, onChange: (enabled: boolean) => this.onAutoSuggestDayNightChange(enabled) })
-          MenuSettingSwitch({ title: '阅读位置锚点', detail: '跳转章节两次及以上后可返回原阅读位置', checked: this.readingAnchorEnabled,
+          MenuSettingSwitch({ title: '自动换源', detail: '当前书源失效时尝试其它书源', checked: false }).onClick(() => this.showNotMigrated('自动换源'))
+          MenuSettingSwitch({ title: '换源按钮默认弹出整书换源', detail: '同步更新其它书籍的书源', checked: false }).onClick(() => this.showNotMigrated('换源按钮默认弹出整书换源'))
+          MenuSettingSwitch({ title: '主题模式切换提醒', detail: '根据环境光提醒切换浅色/深色模式', checked: this.autoSuggestDayNight, onChange: (enabled: boolean) => this.onAutoSuggestDayNightChange(enabled) })
+          MenuSettingSwitch({ title: '阅读锚点', detail: '跳转章节两次及以上后可返回原阅读位置', checked: this.readingAnchorEnabled,
             onChange: (enabled: boolean) => this.onReadingAnchorEnabledChange(enabled) })
-          MenuSettingSwitch({ title: '朗读悬浮窗分离提醒', detail: '分离朗读控制时显示提醒', checked: true }).onClick(() => this.showNotMigrated('朗读悬浮窗分离提醒'))
-          MenuSettingSwitch({ title: '允许选择正文', detail: '长按正文显示选择菜单', checked: this.selectText,
+          MenuSettingSwitch({ title: '朗读脱离提示', detail: '分离朗读控制时显示提醒', checked: true }).onClick(() => this.showNotMigrated('朗读脱离提示'))
+          MenuSettingSwitch({ title: '长按选择文本', detail: '长按正文显示选择菜单', checked: this.selectText,
             onChange: (enabled: boolean) => this.onSelectTextChange(enabled) })
-          MenuSettingSwitch({ title: '滚动翻页无动画', detail: '关闭滚动翻页过渡动画',
+          MenuSettingSwitch({ title: '禁用滚动点击动画', detail: '关闭滚动翻页过渡动画',
             checked: this.noAnimScrollPage,
             onChange: (enabled: boolean) => this.onNoAnimScrollPageChange(enabled) })
-          MenuSettingSwitch({ title: '优化正文渲染', detail: '使用优化渲染方式', checked: true }).onClick(() => this.showNotMigrated('优化正文渲染'))
+          MenuSettingSwitch({ title: '启用绘制优化', detail: '使用优化渲染方式', checked: true }).onClick(() => this.showNotMigrated('启用绘制优化'))
           MenuSettingOption({ title: '点击图片行为', detail: this.getClickImageBehaviorLabel(), migrated: true })
             .onClick(() => this.openDetailSheet('点击图片行为', '选择正文图片的点击行为'))
-          MenuSettingOption({ title: '点击区域配置', detail: '设置屏幕各区域的触摸动作', migrated: true }).onClick(() => this.openDetailSheet('点击区域配置', '配置九宫格点按动作，并应用到阅读界面。'))
+          MenuSettingOption({ title: '点击区域设置', detail: '设置屏幕各区域的触摸动作', migrated: true }).onClick(() => this.openDetailSheet('点击区域设置', '配置九宫格点按动作，并应用到阅读界面。'))
           MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: this.disableReturnKey, onChange: (enabled: boolean) => this.onDisableReturnKeyChange(enabled) })
           MenuSettingOption({ title: '自定义翻页按键', detail: this.getPageKeysLabel(), migrated: true }).onClick(() => this.openDetailSheet('自定义翻页按键', '录制物理按键作为上一页/下一页'))
-          MenuSettingOption({ title: '选中文字菜单', detail: '配置文本选择后的操作', migrated: true }).onClick(() => this.openDetailSheet('选中文字菜单', '排序、分组与图标开关，保存后随备份同步'))
+          MenuSettingOption({ title: '编辑选择菜单', detail: '配置文本选择后的操作', migrated: true }).onClick(() => this.openDetailSheet('编辑选择菜单', '排序、分组与图标开关，保存后随备份同步'))
           // 「展示顶部工具栏附加区域」上游 showReadTitleAddition（ReadSettings.kt:55，默认 true）：
           // 上游只有字段与设置界面（MoreConfigSheet.kt:458 / ReadConfigScreen.kt:418）、没有渲染消费点，本地只落库。
           MenuSettingSwitch({
@@ -2239,8 +2239,8 @@ export struct ReaderSettingsPage {
       title === '菜单模糊颜色' || title === '自定义阅读背景' || title === '编辑背景样式' ||
       title === '主题列表' || title === '选择字体' || title === '排版设置' ||
       title === '文字效果' || title === '文字下划线' || title === '文字对齐' ||
-      title === '选中文字菜单' || title === '点击区域配置' || title === '自定义翻页按键' ||
-      title === '护眼设置' || title === '书签标记' || title === '页边距' || title === '正文排版' ||
+      title === '编辑选择菜单' || title === '点击区域设置' || title === '自定义翻页按键' ||
+      title === '护眼模式' || title === '书签角标' || title === '页边距' || title === '正文排版' ||
       title === '信息颜色';
   }
 
@@ -2256,8 +2256,8 @@ export struct ReaderSettingsPage {
       this.previousPageKeys = this.prevKeys;
       this.nextPageKeys = this.nextKeys;
     }
-    // 选中文字菜单是草稿式编辑：每次打开都用已落库的配置重建条目表。
-    if (title === '选中文字菜单') {
+    // 编辑选择菜单是草稿式编辑：每次打开都用已落库的配置重建条目表。
+    if (title === '编辑选择菜单') {
       this.syncTextMenuEntriesFromConfig();
     }
     // 「编辑背景样式」用长按那一份当草稿，关闭不保存就丢弃。
@@ -2283,7 +2283,7 @@ export struct ReaderSettingsPage {
       this.detailSelectedOption = choices[this.animationSpeedIndex] ?? choices[2] ?? '';
     } else if (title === '中文简繁体转换') {
       this.detailSelectedOption = choices[this.chineseConverterType] ?? choices[0] ?? '';
-    } else if (title === '横屏双页') {
+    } else if (title === '平板/横屏双页') {
       const modeIndex = ['0', '1', '2', '3'].indexOf(this.doubleHorizontalPage);
       this.detailSelectedOption = choices[Math.max(0, modeIndex)] ?? choices[0] ?? '';
     } else if (title === '进度条行为') {
@@ -2295,7 +2295,7 @@ export struct ReaderSettingsPage {
     } else if (title === '屏幕方向') {
       const orientationIndex = Math.max(0, Math.min(5, Number.parseInt(this.screenOrientation, 10)));
       this.detailSelectedOption = choices[orientationIndex] ?? choices[0] ?? '';
-    } else if (title === '保持屏幕常亮') {
+    } else if (title === '屏幕超时') {
       this.detailSelectedOption = choices[Math.max(0, ['0', '60', '300', '600', '-1'].indexOf(this.keepLight))] ?? choices[0] ?? '';
     } else if (title === '点击图片行为') {
       const behaviorIndex = Math.max(0, ['0', '1', '2', '3', '4'].indexOf(this.clickImageBehavior));
@@ -2399,8 +2399,8 @@ export struct ReaderSettingsPage {
       return this.getInfoTipChoices();
     }
     if (title === '屏幕方向') { return ['跟随系统', '竖屏', '横屏', '传感器自动', '反向竖屏', '反向横屏']; }
-    if (title === '保持屏幕常亮') { return ['默认', '1分钟', '5分钟', '10分钟', '常亮']; }
-    if (title === '横屏双页') { return READER_COLUMN_MODE_TITLES; }
+    if (title === '屏幕超时') { return ['默认', '1分钟', '5分钟', '10分钟', '常亮']; }
+    if (title === '平板/横屏双页') { return READER_COLUMN_MODE_TITLES; }
     if (title === '进度条行为') { return ['页码进度', '章节进度']; }
     if (title === '滑动条显示样式') { return ['常驻', '不显示']; }
     if (title === '点击图片行为') { return ['新版行为', '预览图片', '经典', '禁用点击', '双击']; }
@@ -2880,7 +2880,7 @@ export struct ReaderSettingsPage {
             Text('设置会立即保存并应用。两端对齐改变行内间距；底部对齐只移动本页文字，不改章节位置。')
               .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
-        } else if (this.detailSheetTitle === '选中文字菜单') {
+        } else if (this.detailSheetTitle === '编辑选择菜单') {
           Scroll() {
             Column() {
               MenuSettingSwitch({
@@ -2966,12 +2966,12 @@ export struct ReaderSettingsPage {
                   .backgroundColor(this.rsetAccent).borderRadius(18)
                   .onClick(() => {
                     this.saveTextMenuConfig();
-                    this.onUnavailableAction('选中文字菜单配置已保存');
+                    this.onUnavailableAction('编辑选择菜单配置已保存');
                   })
               }.width('100%').padding({ top: 10 })
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
-        } else if (this.detailSheetTitle === '点击区域配置') {
+        } else if (this.detailSheetTitle === '点击区域设置') {
           Scroll() {
             Column() {
               Text('点击阅读页面的分区，再选择该区域的动作。')
@@ -3044,7 +3044,7 @@ export struct ReaderSettingsPage {
               }.width('100%')
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
-        } else if (this.detailSheetTitle === '护眼设置') {
+        } else if (this.detailSheetTitle === '护眼模式') {
           Scroll() {
             Column() {
               MenuSettingSwitch({
@@ -3086,7 +3086,7 @@ export struct ReaderSettingsPage {
                 .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
-        } else if (this.detailSheetTitle === '书签标记') {
+        } else if (this.detailSheetTitle === '书签角标') {
           Column() {
             Text('当前标记').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 4, bottom: 8 })
             Row() {
@@ -3110,7 +3110,7 @@ export struct ReaderSettingsPage {
               }.alignItems(HorizontalAlign.Start).margin({ left: 12 })
               Blank()
             }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
-            MenuSettingOption({ title: '选择书签标记图片', detail: '使用本地图片作为阅读页角标', migrated: true })
+            MenuSettingOption({ title: '选择书签角标图片', detail: '使用本地图片作为阅读页角标', migrated: true })
               .onClick(() => this.onPickBookmarkBadgeImage())
             if (this.bookmarkBadgeImage.length > 0) {
               MenuSettingOption({ title: '恢复默认', detail: '移除自定义角标图片', migrated: true })
@@ -3222,7 +3222,7 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '编辑背景样式' ||
                 this.detailSheetTitle === '主题列表' ||
                 this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
-                this.detailSheetTitle === '横屏双页' ||
+                this.detailSheetTitle === '平板/横屏双页' ||
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '滑动条显示样式' ||
                 this.detailSheetTitle === '中文简繁体转换' ||
                 this.detailSheetTitle === '点击图片行为' ||
