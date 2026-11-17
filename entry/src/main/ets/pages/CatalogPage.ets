@@ -614,6 +614,39 @@ export struct CatalogPage {
     this.selectionMode = next.size > 0;
   }
 
+  /**
+   * 选择后续：把「已选里位置最靠后的那一章」之后的所有章加入选择。
+   * 上游 TocViewModel.kt:794-800 selectFromLast 的三步：
+   *   ① 取已选里 id 最大的（本地用 index，等价）
+   *   ② 在当前显示顺序里找它的位置
+   *   ③ 把它之后的全部加入（不取消前面已选的）
+   * 顺序源必须是 chapterView（已过滤/可能逆序），不是 chapterRows。
+   * 与上游一致：卷标题不进选择。
+   */
+  private selectFollowingChapters(): void {
+    if (this.selectedChapterIndexes.size === 0) { return; }
+    let maxSelectedIndex: number = -1;
+    this.selectedChapterIndexes.forEach((index: number) => {
+      if (index > maxSelectedIndex) { maxSelectedIndex = index; }
+    });
+    // 在显示顺序里定位：该章可能已被折叠/搜索过滤掉，找不到就不做。
+    let position: number = -1;
+    for (let i = 0; i < this.chapterView.length; i++) {
+      const chapter = this.chapterView[i];
+      if (chapter !== undefined && chapter.index === maxSelectedIndex) { position = i; break; }
+    }
+    if (position < 0) { return; }
+    const next = new Set<number>();
+    this.selectedChapterIndexes.forEach((index: number) => next.add(index));
+    for (let i = position + 1; i < this.chapterView.length; i++) {
+      const chapter = this.chapterView[i];
+      if (chapter === undefined || chapter.isVolume) { continue; }
+      next.add(chapter.index);
+    }
+    this.selectedChapterIndexes = next;
+    this.selectionMode = next.size > 0;
+  }
+
   /** 选中的章节各加一条书签，对齐上游 `TocIntent.AddBookmarksForSelected`。 */
   private addBookmarksForSelection(): void {
     const indexes: number[] = [];
@@ -629,12 +662,14 @@ export struct CatalogPage {
    *
    * 上游 `ReaderBookSheet.kt:678-740` 的 `fabItems` 共 7 项：全选 / 反选 / 加书签 /
    * 下载选中 / 删除角色分配 / 删除朗读音频 / 取消选择。后三项属于下载与朗读链路，
-   * 本地 TXT 离线阅读没有这两个功能，所以只保留其余四项。
+   * 本地 TXT 离线阅读没有这两个功能，所以只保留其余四项；
+   * 另补上游 TocViewModel.selectFromLast 的「选择后续」一项，共五项。
    */
   private chapterSelectionItems(): UiMenuItem[] {
     return [
       { key: 'select_all', title: '全选' },
       { key: 'invert', title: '反选' },
+      { key: 'select_following', title: '选择后续' },
       { key: 'add_bookmark', title: `加书签（${this.selectedChapterIndexes.size}）` },
       { key: 'clear', title: '取消选择' }
     ];
@@ -651,6 +686,8 @@ export struct CatalogPage {
           this.selectAllChapters();
         } else if (key === 'invert') {
           this.invertChapterSelection();
+        } else if (key === 'select_following') {
+          this.selectFollowingChapters();
         } else if (key === 'add_bookmark') {
           this.addBookmarksForSelection();
         } else if (key === 'clear') {
