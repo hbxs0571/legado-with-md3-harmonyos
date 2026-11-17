@@ -7,6 +7,9 @@ import { fileIo, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
 import { READER_COLUMN_MODE_TITLES, readerColumnModeTitle } from '../data/ReaderColumnMode';
 import { UiSwitchControl } from '../components/UiSwitchControl';
+import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
+import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
+import { ReaderHighlightRuleSheet } from './ReaderHighlightRuleSheet';
 import {
   defaultReaderSelectionMenuItems,
   parseReaderSelectionMenuConfig,
@@ -355,6 +358,10 @@ export struct ReaderSettingsPage {
   @State detailSheetTitle: string = '';
   @State detailSheetDescription: string = '';
   @State detailSelectedOption: string = '';
+  // 高亮规则编辑页（上游 HighlightRuleConfigSheet）：从正文页「高亮规则」入口直达，
+  // 规则本身由 ReaderHighlightRuleRepository 真落盘，不依赖父组件回调。
+  @State highlightRuleSheetVisible: boolean = false;
+  @State highlightRules: ReaderHighlightRule[] = [];
   @State fontTarget: ReaderFontTarget = 'body';
   // 字体选择器是从哪个入口打开的：排版页还是页眉页脚，决定选完字体后回到哪里。
   @State fontPickerReturn: string = 'typography';
@@ -943,27 +950,78 @@ export struct ReaderSettingsPage {
   private TypographySettingsPage() {
     Scroll() {
       Column() {
-        MenuSettingOption({ title: '字体', detail: this.getCurrentFontDisplayName(), migrated: true })
+        // 分组「字体」——对齐上游 TypographyBodyTab 的五个 SectionTitle 分组。
+        MenuSettingSection({ title: '字体' })
+        MenuSettingOption({ title: '选择字体', detail: this.getCurrentFontDisplayName(), migrated: true })
           .onClick(() => this.openFontSelection())
-        MenuSettingSlider({ title: '字号', value: this.fontSize, minValue: 5, maxValue: 50 })
-        MenuSettingOption({ title: '颜色', detail: '日间 / 夜间' })
-          .onClick(() => this.openDetailSheet('信息颜色', '选择文字颜色'))
-        MenuSettingOption({ title: '效果', detail: '斜体 / 字重 / 阴影 / 下划线', migrated: true })
+        MenuSettingSwitch({ title: '斜体', detail: '', checked: this.textItalic,
+          onChange: (enabled: boolean) => this.onTextItalicChange(enabled) })
+        MenuSettingOption({ title: '字重', detail: this.getBodyWeightLabel(), migrated: true })
           .onClick(() => this.openDetailSheet('文字效果', '配置文字效果'))
-        MenuSettingOption({ title: '缩进', detail: '全角空格数（0–4）', migrated: true })
-          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-        MenuSettingOption({ title: '字距', detail: '字符间距设置', migrated: true })
-          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-        MenuSettingOption({ title: '段距', detail: '按行高比例设置', migrated: true })
-          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-        MenuSettingOption({ title: '行距', detail: '行高比例设置', migrated: true })
-          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
-        MenuSettingOption({ title: '文字对齐', detail: '两端对齐 / 底部对齐', migrated: true })
-          .onClick(() => this.openDetailSheet('文字对齐', '选择正文对齐方式'))
         MenuSettingOption({ title: '中文简繁体转换', detail: this.getChineseConverterLabel(), migrated: true })
           .onClick(() => this.openDetailSheet('中文简繁体转换', '按档位转换正文与章节标题的字形'))
+
+        // 分组「颜色」——正文/强调拆两行，各自进信息颜色面板选日/夜色。
+        MenuSettingSection({ title: '颜色' })
+        MenuSettingOption({ title: '正文', detail: '', migrated: true })
+          .onClick(() => this.openDetailSheet('信息颜色', '选择文字颜色'))
+        MenuSettingOption({ title: '强调', detail: '', migrated: true })
+          .onClick(() => this.openDetailSheet('信息颜色', '选择文字颜色'))
+
+        // 分组「特效」——效果拆阴影/下划线/高亮规则三行，description 照抄上游。
+        MenuSettingSection({ title: '特效' })
+        MenuSettingOption({ title: '阴影设置', detail: '配置阴影距离、半径和颜色', migrated: true })
+          .onClick(() => this.openDetailSheet('文字效果', '配置文字效果'))
+        MenuSettingOption({ title: '文字下划线', detail: '配置下划线颜色、高度、虚线和位置', migrated: true })
+          .onClick(() => this.openDetailSheet('文字下划线', '配置下划线'))
+        MenuSettingOption({ title: '高亮规则', detail: '根据正则表达式更换字体与颜色', migrated: true })
+          .onClick(() => this.openHighlightRuleSheet())
+
+        // 分组「正文间距」——缩进/字距/段距/行距复用正文排版面板。
+        MenuSettingSection({ title: '正文间距' })
+        MenuSettingOption({ title: '缩进', detail: '', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+        MenuSettingOption({ title: '字距', detail: '', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+        MenuSettingOption({ title: '段距', detail: '', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+        MenuSettingOption({ title: '行距', detail: '', migrated: true })
+          .onClick(() => this.openDetailSheet('正文排版', '调整正文排版'))
+
+        // 分组「对齐」——两端/底部对齐拆两行开关，真接线。
+        MenuSettingSection({ title: '对齐' })
+        MenuSettingSwitch({ title: '文字两端对齐', detail: '', checked: this.textFullJustify,
+          onChange: (enabled: boolean) => this.onTextFullJustifyChange(enabled) })
+        MenuSettingSwitch({ title: '文字底部对齐', detail: '', checked: this.textBottomJustify,
+          onChange: (enabled: boolean) => this.onTextBottomJustifyChange(enabled) })
       }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
     }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).width('100%').scrollBar(BarState.Off)
+  }
+
+  // 正文页「字重」行的右值标签：与文字效果面板里的五档 chips 同一口径。
+  private getBodyWeightLabel(): string {
+    const labels: string[] = ['纤细', '常规', '中等', '粗体', '特粗'];
+    for (let i = 0; i < READER_BODY_WEIGHT_VALUES.length; i++) {
+      if (this.textBold === READER_BODY_WEIGHT_VALUES[i]) {
+        return labels[i] ?? '常规';
+      }
+    }
+    return `${this.textBold}`;
+  }
+
+  // 正文页「高亮规则」入口：加载仓储规则后拉起自包含编辑页，保存走仓储真落盘。
+  private async openHighlightRuleSheet(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      this.highlightRules = await ReaderHighlightRuleRepository.load(context);
+    }
+    this.highlightRuleSheetVisible = true;
+  }
+
+  private async saveHighlightRulesFromSettings(rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return rules; }
+    return await ReaderHighlightRuleRepository.save(context, rules);
   }
 
   @Builder
@@ -3599,6 +3657,15 @@ export struct ReaderSettingsPage {
         if (this.detailSheetVisible) {
           this.detailSheet()
         }
+        if (this.highlightRuleSheetVisible) {
+          ReaderHighlightRuleSheet({
+            rules: this.highlightRules,
+            chapterLength: 0,
+            onDismiss: () => this.highlightRuleSheetVisible = false,
+            onSave: (rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> =>
+              this.saveHighlightRulesFromSettings(rules)
+          })
+        }
       }.width('100%').height('100%')
     } else {
       Stack({ alignContent: Alignment.Center }) {
@@ -3613,6 +3680,15 @@ export struct ReaderSettingsPage {
         }
         if (this.detailSheetVisible) {
           this.detailSheet()
+        }
+        if (this.highlightRuleSheetVisible) {
+          ReaderHighlightRuleSheet({
+            rules: this.highlightRules,
+            chapterLength: 0,
+            onDismiss: () => this.highlightRuleSheetVisible = false,
+            onSave: (rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> =>
+              this.saveHighlightRulesFromSettings(rules)
+          })
         }
       }.width('100%').height('100%')
     }
