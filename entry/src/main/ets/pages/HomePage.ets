@@ -8,6 +8,7 @@ import { HomeDashboardSection, HOME_DASHBOARD_SECTIONS } from '../data/HomeDashb
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
+import { DEFAULT_DAILY_READING_GOAL_MINUTES, MAX_DAILY_READING_GOAL_MINUTES } from '../data/HomeDashboardSettingsRepository';
 
 /** 首页右上角菜单的宽度，与详情页溢出菜单同口径。 */
 const HOME_MENU_WIDTH: number = 260;
@@ -24,6 +25,15 @@ export struct HomePage {
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @Prop books: Book[] = [];
   @Prop totalReadTimeMs: number = 0;
+  // 今日阅读目标：由 Index 从偏好与今日阅读记录灌入，本页只显示与编辑（回写走 onGoalChange）。
+  @Prop goalMinutes: number = DEFAULT_DAILY_READING_GOAL_MINUTES;
+  @Prop todayReadMinutes: number = 0;
+  // WebDAV 卡副标题四态：0 未测 / 1 加载中 / 2 成功（有备份名）/ 3 失败。
+  @Prop webDavBackupName: string = '';
+  @Prop webDavState: number = 0;
+  onWebDavBackup: () => void = () => {};
+  onWebDavRestore: () => void = () => {};
+  onGoalChange: (minutes: number) => void = (_minutes: number) => {};
   onOpenBook: (book: Book) => void = () => {};
   onOpenBookInfo: (book: Book) => void = () => {};
   onOpenBookshelf: () => void = () => {};
@@ -42,6 +52,9 @@ export struct HomePage {
   /** 当前下拉距离（vp），来自 Refresh.onOffsetChange，用来驱动指示器齿轮跟手旋转。 */
   @State refreshPullOffset: number = 0;
   @State collapsedHeader: boolean = false;
+  // 设定阅读目标对话框：铅笔按钮打开，确认回写偏好。
+  @State showGoalDialog: boolean = false;
+  @State goalDraft: string = '';
   private homeScroller: Scroller = new Scroller();
 
   /**
@@ -196,7 +209,7 @@ export struct HomePage {
     const centerX = width / 2;
     const centerY = height - 10;
     const radius = Math.min(width * 0.4, height * 0.82);
-    const progress = 0;
+    const progress = this.goalMinutes > 0 ? Math.min(1, this.todayReadMinutes / this.goalMinutes) : 0;
     this.goalContext.clearRect(0, 0, width, height);
     this.goalContext.beginPath();
     this.goalContext.arc(centerX, centerY, radius, Math.PI, 0, false);
@@ -292,12 +305,15 @@ export struct HomePage {
               Text('今日阅读目标').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
               Blank()
               Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'pencil', glyphSize: 18 }) }.width(36).height(36).backgroundColor('#24252C').borderRadius(22)
-                .onClick(() => this.onUnavailableAction('阅读目标设置尚未迁移'))
+                .onClick(() => {
+                  this.goalDraft = `${this.goalMinutes}`;
+                  this.showGoalDialog = true;
+                })
             }.width('100%')
             Stack({ alignContent: Alignment.Bottom }) {
               Canvas(this.goalContext).width(240).height(120).onReady(() => this.drawGoalArc())
               Column() {
-                Text('0 / 30').fontSize(24).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+                Text(`${this.todayReadMinutes} / ${this.goalMinutes}`).fontSize(24).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
                 Text('分钟').fontSize(12).fontColor('#B6B8C2').margin({ top: 3 })
               }.width('100%').alignItems(HorizontalAlign.Center).margin({ bottom: 20 })
           }.width('100%').height(136)
@@ -309,7 +325,16 @@ export struct HomePage {
               AppGlyph({ name: 'cloudSync', tint: this.themeColorAccent, glyphSize: 20 })
               Column() {
                 Text('WebDAV 备份').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
-                Text('暂无 WebDAV 备份').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                // 四态照抄上游：加载中 / 失败 / 有备份 / 无备份，一个字不改。
+                if (this.webDavState === 1) {
+                  Text('正在获取备份信息…').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                } else if (this.webDavState === 3) {
+                  Text('无法获取备份信息').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                } else if (this.webDavState === 2) {
+                  Text(`最近备份：${this.webDavBackupName}`).fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                } else {
+                  Text('暂无 WebDAV 备份').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                }
               }.alignItems(HorizontalAlign.Start).margin({ left: 10 })
             }.width('100%')
             Row() {
@@ -317,23 +342,29 @@ export struct HomePage {
                 AppGlyph({ name: 'cloudUpload', glyphSize: 15 })
                 Text('备份').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14)
-                .onClick(() => this.onUnavailableAction('WebDAV 备份尚未迁移'))
+                .onClick(() => this.onWebDavBackup())
               Row() {
                 AppGlyph({ name: 'cloudDownload', glyphSize: 15 })
                 Text('恢复').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
-                .onClick(() => this.onUnavailableAction('WebDAV 恢复尚未迁移'))
+                .onClick(() => this.onWebDavRestore())
               Row() {
                 AppGlyph({ name: 'settings', glyphSize: 15 })
                 Text('设置').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
-                .onClick(() => this.onUnavailableAction('WebDAV 设置尚未迁移'))
+                .onClick(() => this.onOpenBackup())
             }.margin({ top: 12 })
           }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16).margin({ top: 12, bottom: 18 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
-          Column() {
-            Text('未选择任何书源集').fontSize(14).fontColor('#AEB0BA').textAlign(TextAlign.Center)
-          }.width('100%').height('100%').justifyContent(FlexAlign.Center)
+          Column({ space: 12 }) {
+            AppGlyph({ name: 'add', tint: this.themeColorTextSecondary, glyphSize: 32 })
+            Text('暂无已加入的模块').fontSize(14).fontColor(this.themeColorTextSecondary)
+            Row() {
+              Text('浏览书源模块添加').fontSize(14).fontColor(this.themeColorAccent)
+            }.padding({ left: 16, right: 16, top: 8, bottom: 8 })
+              .backgroundColor(this.themeColorSurfaceElevated).borderRadius(14)
+              .onClick(() => this.onUnavailableAction('浏览书源模块尚未迁移'))
+          }.width('100%').constraintSize({ minHeight: 220 }).justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
         }.width('100%').alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Start)
           .padding({ left: 16, right: 16, top: 8, bottom: 14 })
@@ -369,13 +400,57 @@ export struct HomePage {
           this.refreshPullOffset = offset;
         })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.showHomeOptions, this.homeOptionsSheetContent(), {
+      // 同一组件只挂一个 bindSheet（项目已踩过挂多个只有最后一个生效的坑），
+      // 首页组件面板与设定阅读目标对话框共用，按状态切换内容。
+      .bindSheet(this.showHomeOptions || this.showGoalDialog, this.homeSheetContent(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: this.themeColorSurfaceElevated,
-        onDisappear: () => this.showHomeOptions = false
+        onDisappear: () => { this.showHomeOptions = false; this.showGoalDialog = false; }
       })
+  }
+
+  /** 确认设定阅读目标：解析输入、钳到 [1, 1440]（与上游 coerceIn 同口径）后回写偏好。 */
+  private confirmGoal(): void {
+    const parsed: number = parseInt(this.goalDraft, 10);
+    const minutes: number = isNaN(parsed)
+      ? this.goalMinutes
+      : Math.min(MAX_DAILY_READING_GOAL_MINUTES, Math.max(1, parsed));
+    this.onGoalChange(minutes);
+    this.showGoalDialog = false;
+  }
+
+  @Builder
+  private homeSheetContent() {
+    if (this.showGoalDialog) {
+      this.goalDialogContent();
+    } else {
+      this.homeOptionsSheetContent();
+    }
+  }
+
+  /** 设定阅读目标对话框（上游 SetReadingGoal）：标题/标签照抄 strings.xml。 */
+  @Builder
+  private goalDialogContent() {
+    Column() {
+      Text('设定阅读目标').fontSize(16).fontColor(this.themeColorTextPrimary)
+        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
+      Row() {
+        Text('目标（分钟）').fontSize(14).fontColor(this.themeColorTextSecondary).width(100)
+        TextInput({ text: this.goalDraft, placeholder: '30' })
+          .type(InputType.Number).fontSize(14).height(44).layoutWeight(1)
+          .backgroundColor('#22232A').borderRadius(9)
+          .onChange((value: string) => { this.goalDraft = value; })
+      }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
+      Row() {
+        Text('取消').fontSize(14).fontColor(this.themeColorTextSecondary).padding(10)
+          .onClick(() => { this.showGoalDialog = false; this.goalDraft = ''; })
+        Blank()
+        Text('确定').fontSize(14).fontColor(this.themeColorAccent).padding(10)
+          .onClick(() => this.confirmGoal())
+      }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder

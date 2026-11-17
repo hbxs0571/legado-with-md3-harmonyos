@@ -170,6 +170,17 @@ export class ReadRecordRepository {
     }
   }
 
+  /**
+   * 今日阅读时长（毫秒）。与阅读记录页同口径：读权威明细表按 date 聚合，
+   * 日期用本地时区的 toDateKey（YYYY-MM-DD），绝不与会话时长走两套算法。
+   */
+  static async todayReadMillis(context: Context): Promise<number> {
+    const today = ReadRecordRepository.toDateKey(Date.now());
+    const details = await ReadRecordRepository.loadDetails(context);
+    return details.reduce((total: number, detail: ReadRecordDetail) =>
+      detail.date === today ? total + detail.readTime : total, 0);
+  }
+
   static async loadSummaries(context: Context): Promise<ReadRecordSummary[]> {
     try {
       const store = await RdbStore.getStore(context);

@@ -696,6 +696,10 @@ struct Index {
    */
   @State themeCustomColors: CustomThemeSnapshot = defaultCustomThemeSnapshot();
   @State homeDashboardSections: HomeDashboardSection[] = [...HOME_DASHBOARD_SECTIONS];
+  @State homeGoalMinutes: number = 30;
+  @State homeTodayReadMinutes: number = 0;
+  @State homeWebDavBackupName: string = '';
+  @State homeWebDavState: number = 0;
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
   private readerSettingsLoaded: boolean = false;
@@ -884,6 +888,8 @@ struct Index {
     this.readTimeRecords = ReadRecordRepository.toTimelineRecords(sessions);
     this.readRecordDetails = await ReadRecordRepository.loadDetails(context);
     this.readRecordSummaries = await ReadRecordRepository.loadSummaries(context);
+    // 首页今日目标分钟数与阅读记录同口径（明细表按本地日期聚合），任何 reload 都同步刷新。
+    this.homeTodayReadMinutes = Math.floor(await ReadRecordRepository.todayReadMillis(context) / 60000);
   }
 
   /** 详情页面板数据：调批 0 两个方法取汇总与按天会话，在 Index 侧格式化好再下发。 */
@@ -1668,6 +1674,63 @@ struct Index {
 
   private async restoreHomeDashboardSettings(context: Context): Promise<void> {
     this.homeDashboardSections = await HomeDashboardSettingsRepository.load(context);
+    this.homeGoalMinutes = await HomeDashboardSettingsRepository.loadReadingGoal(context);
+    this.loadHomeWebDavBackupState(context);
+  }
+
+  /** 首页 WebDAV 卡副标题四态：0 未测/无备份 / 1 加载中 / 2 有备份 / 3 失败。 */
+  private async loadHomeWebDavBackupState(context: Context): Promise<void> {
+    this.homeWebDavState = 1;
+    try {
+      const latest = await WebDavSync.latestBackup(context);
+      if (latest === undefined) {
+        this.homeWebDavBackupName = '';
+        this.homeWebDavState = 0;
+      } else {
+        this.homeWebDavBackupName = latest.name;
+        this.homeWebDavState = 2;
+      }
+    } catch (error) {
+      console.error(`[Index] 首页获取 WebDAV 备份信息失败: ${error}`);
+      this.homeWebDavBackupName = '';
+      this.homeWebDavState = 3;
+    }
+  }
+
+  /** 首页铅笔确认后的回写：钳制在 HomePage.confirmGoal 已做，这里落盘并更新 @Prop 源。 */
+  private async setHomeGoalMinutes(minutes: number): Promise<void> {
+    this.homeGoalMinutes = minutes;
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      try {
+        await HomeDashboardSettingsRepository.saveReadingGoal(context, minutes);
+      } catch (error) {
+        console.error(`[Index] 保存阅读目标失败: ${error}`);
+      }
+    }
+  }
+
+  /** 首页「恢复」：弹上游确认文案（%1$s 换成最新备份名），确认后走备份页同一条恢复链。 */
+  private async confirmWebDavRestoreFromHome(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    let backupName = '';
+    try {
+      const latest = await WebDavSync.latestBackup(context);
+      backupName = latest === undefined ? '' : latest.name;
+    } catch (_) {
+      backupName = '';
+    }
+    const message = `恢复 WebDAV 备份 ${backupName}？当前数据可能被覆盖。`;
+    await new Promise<void>((resolve: () => void) => {
+      this.getUIContext().showAlertDialog({
+        title: '恢复',
+        message: message,
+        autoCancel: true,
+        primaryButton: { value: '取消', action: () => { resolve(); } },
+        secondaryButton: { value: '恢复', action: () => { this.openProfileDetail(ProfileRoute.APP_BACKUP_SETTINGS); this.restoreFromWebDav(); resolve(); } }
+      });
+    });
   }
 
   private async setHomeDashboardSection(section: HomeDashboardSection, visible: boolean): Promise<void> {
@@ -8153,6 +8216,17 @@ private canWriteInto(dir: string): boolean {
         HomePage({
           books: this.books,
           totalReadTimeMs: this.getTotalReadTimeMs(),
+          goalMinutes: this.homeGoalMinutes,
+          todayReadMinutes: this.homeTodayReadMinutes,
+          webDavBackupName: this.homeWebDavBackupName,
+          webDavState: this.homeWebDavState,
+          onWebDavBackup: () => {
+            this.backupToWebDav().then(() => {
+              if (this.backupStatusMessage.length > 0) { this.showUnavailableAction(this.backupStatusMessage); }
+            });
+          },
+          onWebDavRestore: () => this.confirmWebDavRestoreFromHome(),
+          onGoalChange: (minutes: number) => this.setHomeGoalMinutes(minutes),
           visibleSections: this.homeDashboardSections,
           onSectionVisibilityChange: (section: HomeDashboardSection, visible: boolean) => this.setHomeDashboardSection(section, visible),
           onOpenBook: (book: Book) => this.openBook(book),
