@@ -7,12 +7,8 @@ import { UiSwitchControl } from '../UiSwitchControl';
 /**
  * 设置行：标题 +（可选）说明 + 右侧开关。
  *
- * 两种模式：
- * - 默认（受控）：值只从 value 来，改动只走 onChange。父级必须回写 value，否则开关会弹回原状。
- * - preview: true（预览）：组件自己存一份 @State，拨动有效但不回调、不落盘。
- *   这是给「界面已有、后端没接」的那些开关用的，保持改造前的可见行为。
- *
- * 受控模式下不存值副本，是为了修掉改造前的一个缺陷：CacheSettingsSwitch /
+ * 受控模式：值只从 value 来，改动只走 onChange。父级必须回写 value，否则开关会弹回原状。
+ * 不存值副本，是为了修掉改造前的一个缺陷：CacheSettingsSwitch /
  * PrivacySettingsSwitch 用 @Prop + @State + aboutToAppear 同步，而 aboutToAppear
  * 只跑一次，父级之后改值开关不会跟着动。
  *
@@ -30,25 +26,12 @@ export struct UiSwitch {
   @Prop detail: string = '';
   @Prop value: boolean = false;
   @Prop disabled: boolean = false;
-  /** true = 预览模式：自己存值、不回调。给尚未接后端的开关用。 */
-  @Prop preview: boolean = false;
   @Prop showDivider: boolean = true;
 
   onChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
-  @State private previewValue: boolean = false;
-
-  /** 当前显示值：预览模式读本地副本，受控模式读 value。 */
-  private currentValue(): boolean {
-    return this.preview ? this.previewValue : this.value;
-  }
-
   private applyValue(next: boolean): void {
     if (this.disabled) {
-      return;
-    }
-    if (this.preview) {
-      this.previewValue = next;
       return;
     }
     this.onChange(next);
@@ -75,7 +58,7 @@ export struct UiSwitch {
 
         // interactive: false —— 点击由整行负责，控件内部再挂一次会让点开关切成两次
         UiSwitchControl({
-          checked: this.currentValue(),
+          checked: this.value,
           switchEnabled: !this.disabled,
           interactive: false,
           onChange: (checked: boolean) => {
@@ -86,7 +69,7 @@ export struct UiSwitch {
       .width('100%')
       .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
       .onClick(() => {
-        this.applyValue(!this.currentValue());
+        this.applyValue(!this.value);
       })
       .opacity(this.disabled ? 0.38 : 1)
       if (this.showDivider) {
