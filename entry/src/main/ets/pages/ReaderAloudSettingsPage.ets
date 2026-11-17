@@ -1,9 +1,10 @@
-import { UiSwitchControl } from '../components/UiSwitchControl';
 
 @Component
 export struct ReaderAloudSettingsPage {
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @State followSystem: boolean = true;
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#494C59';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @State rate: number = 40;
   @State musicVolume: number = 100;
   @State timerLabel: string = '关闭';
@@ -24,7 +25,7 @@ export struct ReaderAloudSettingsPage {
         Row()
           .width(32)
           .height(4)
-          .backgroundColor('#C8C9D0')
+          .backgroundColor(this.themeColorTextTertiary)
           .borderRadius(4)
           .margin({ top: 10, bottom: 15 })
 
@@ -32,11 +33,11 @@ export struct ReaderAloudSettingsPage {
           Image($r('app.media.reader_back'))
             .width(22)
             .height(22)
-            .fillColor('#E4E5EA')
+            .fillColor(this.themeColorTextPrimary)
             .onClick(() => this.onBack())
-          Text('朗读设置')
+          Text('朗读')
             .fontSize(15)
-            .fontColor('#E4E5EA')
+            .fontColor(this.themeColorTextPrimary)
             .margin({ left: 10 })
           Blank()
         }
@@ -53,8 +54,8 @@ export struct ReaderAloudSettingsPage {
               AloudTransportButton({ icon: 'stop', actionLabel: '停止',
                 onAction: () => this.onUnavailableAction('朗读播放尚未迁移') })
               Row() {
-                Image($r('app.media.reader_next')).width(18).height(18).fillColor('#E6E7EC')
-                Text('下一句').fontSize(12).fontColor('#E6E7EC').margin({ left: 5 })
+                Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextPrimary)
+                Text('下一句').fontSize(12).fontColor(this.themeColorTextPrimary).margin({ left: 5 })
               }
               .layoutWeight(1)
               .height(42)
@@ -71,11 +72,11 @@ export struct ReaderAloudSettingsPage {
 
             Row() {
               Column() {
-                Text('定时').fontSize(13).fontColor('#E2E3E8')
-                Text(this.timerLabel).fontSize(11).fontColor('#AEB0B9').margin({ top: 3 })
+                Text('定时').fontSize(13).fontColor(this.themeColorTextPrimary)
+                Text(this.timerLabel).fontSize(11).fontColor(this.themeColorTextSecondary).margin({ top: 3 })
               }
               .layoutWeight(1)
-              Image($r('app.media.reader_next')).width(18).height(18).fillColor('#AEB0B9')
+              Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextSecondary)
             }
             .width('100%')
             .padding(14)
@@ -87,7 +88,7 @@ export struct ReaderAloudSettingsPage {
             Row() {
               Text('上一章')
                 .fontSize(12)
-                .fontColor('#E4E5EA')
+                .fontColor(this.themeColorTextPrimary)
                 .layoutWeight(1)
                 .height(38)
                 .textAlign(TextAlign.Center)
@@ -96,7 +97,7 @@ export struct ReaderAloudSettingsPage {
                 .onClick(() => this.onUnavailableAction('朗读播放尚未迁移'))
               Text('下一章')
                 .fontSize(12)
-                .fontColor('#E4E5EA')
+                .fontColor(this.themeColorTextPrimary)
                 .layoutWeight(1)
                 .height(38)
                 .textAlign(TextAlign.Center)
@@ -113,9 +114,9 @@ export struct ReaderAloudSettingsPage {
 
             Column() {
               Row() {
-                Text('背景音乐总音量').fontSize(12).fontColor('#E2E3E8')
+                Text('背景音乐总音量').fontSize(12).fontColor(this.themeColorTextPrimary)
                 Blank()
-                Text(this.musicVolume.toString() + '%').fontSize(11).fontColor('#D5D6DD')
+                Text(this.musicVolume.toString() + '%').fontSize(11).fontColor(this.themeColorTextSecondary)
               }
               Slider({ value: this.musicVolume, min: 0, max: 100, step: 1, style: SliderStyle.OutSet })
                 .onChange((value: number, mode: SliderChangeMode) => {
@@ -131,40 +132,17 @@ export struct ReaderAloudSettingsPage {
             .borderRadius(14)
             .margin({ left: 14, right: 14, bottom: 10 })
 
-            Row() {
-              Column() {
-                Text('跟随系统').fontSize(12).fontColor('#E2E3E8')
-                Text('语速由系统朗读服务控制').fontSize(10).fontColor('#AEB0B9').margin({ top: 3 })
-              }
-              .layoutWeight(1)
-              UiSwitchControl({
-                checked: this.followSystem,
-                interactive: false,
-                onChange: (value: boolean) => {
-                  this.followSystem = value
-                  this.onUnavailableAction('朗读系统设置尚未迁移')
-                }
-              })
-            }
-            .padding(13)
-              .onClick(() => {
-                this.followSystem = !this.followSystem
-                this.onUnavailableAction('朗读系统设置尚未迁移')
-              })
-            .backgroundColor('#202127')
-            .borderRadius(14)
-            .margin({ left: 14, right: 14, bottom: 10 })
 
             Column() {
               Row() {
-                Text('朗读语速').fontSize(12)
-                  .fontColor(this.followSystem ? '#8D8F98' : '#E2E3E8')
+                Text('调整语速').fontSize(12)
+                  .fontColor(this.themeColorTextPrimary)
                 Blank()
                 Text(this.rate.toString()).fontSize(11)
-                  .fontColor(this.followSystem ? '#8D8F98' : '#D5D6DD')
+                  .fontColor(this.themeColorTextSecondary)
               }
               Slider({ value: this.rate, min: 0, max: 80, step: 1, style: SliderStyle.OutSet })
-                .enabled(!this.followSystem)
+
                 .onChange((value: number, mode: SliderChangeMode) => {
                   this.rate = Math.round(value)
                   if (mode === SliderChangeMode.End) {
@@ -209,6 +187,7 @@ export struct ReaderAloudSettingsPage {
 
 @Component
 struct AloudTransportButton {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @Prop icon: string = 'reader_play';
   @Prop actionLabel: string = '';
   onAction: () => void = () => {};
@@ -216,13 +195,13 @@ struct AloudTransportButton {
   build() {
     Stack({ alignContent: Alignment.Center }) {
       if (this.icon === 'previous') {
-        Image($r('app.media.app_previous')).width(19).height(19).fillColor('#E6E7EC')
+        Image($r('app.media.app_previous')).width(19).height(19).fillColor(this.themeColorTextPrimary)
       } else if (this.icon === 'pause') {
-        Image($r('app.media.reader_pause')).width(19).height(19).fillColor('#E6E7EC')
+        Image($r('app.media.reader_pause')).width(19).height(19).fillColor(this.themeColorTextPrimary)
       } else if (this.icon === 'stop') {
-        Image($r('app.media.app_stop_square')).width(19).height(19).fillColor('#E6E7EC')
+        Image($r('app.media.app_stop_square')).width(19).height(19).fillColor(this.themeColorTextPrimary)
       } else {
-        Image($r('app.media.reader_play')).width(19).height(19).fillColor('#E6E7EC')
+        Image($r('app.media.reader_play')).width(19).height(19).fillColor(this.themeColorTextPrimary)
       }
     }
     .layoutWeight(1)

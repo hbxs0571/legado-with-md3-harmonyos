@@ -2,6 +2,10 @@
 
 更新：2026-11-17。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
 
+## 批10：朗读界面形态差异（KI-ALOUD1，等朗读功能实现时一并做）
+
+**KI-ALOUD1 朗读页仍是底部浮层，不是上游整页播放器** —— 上游 `ui/book/readaloud/player/ReadAloudPlayerScreen.kt`（773 行）是整页播放器，前提是「正在朗读」：运输条、逐句高亮、说话人/引擎行、定时进度。本地零 TTS 引擎（`@kit.CoreSpeechKit` 未接）、零音频播放层（`data/HttpTtsRepository.ets` / `data/ReadAloudVoiceRepository.ets` 仅备份互通用，网络层与播放层未接），把 262 行浮层扩成整页只会得到「点了没声音」的空壳，比现在的浮层更不诚实。故批10 只改文案与配色、形态保持底浮层（`pages/ReaderAloudSettingsPage.ets`）：标题「朗读设置」→「朗读」、「朗读语速」→「调整语速」、删无上游依据的「跟随系统」档、六处硬编码色换主题 token。形态变更留到朗读功能实现那一批，届时一并做运输条 + 逐句高亮 + 整页播放器。这是明确待办，属「已纳入范围、尚未排期」，不是「不适用」。
+
 ## 批5：隐私页两行按「平台无此能力」删除（KI-PRIV1、KI-PRIV2）
 
 **KI-PRIV1 后台运行权限（电池优化白名单）整项删** —— 上游 `ui/config/privateConfig/PrivateConfigScreen.kt` 的 `background_permission` 是查电池优化白名单状态（`BatteryOptimizationUtils.isIgnoringBatteryOptimizations`）并跳厂商设置页。鸿蒙无等价 API：`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\` 下 `@ohos.settings.d.ts` 的全部开页函数（`:1271`-`:1410`）无任何 startup/background/battery/白名单项；`ohos.settings.*` action 字面量仅 `ohos.settings.wireless` / `ohos.settings.manage.applications` / `ohos.settings.application.details` 三条（均在已 `@deprecated since 9` 的旧 `wantConstant` 模块）；`backgroundTaskManager`（长时任务）、`deviceStandby`（空命名空间）、`backgroundProcessManager`（进程优先级）三者都不是「本应用是否在白名单」的查询。最接近的 `settings.openAppDetailSettingsPage`（`@ohos.settings.d.ts:1383`，@since 26）只到「应用详情」通用页而非启动管理专项页，且状态判断做不了。按任务书 5.5「查不到就整项删、不许保留点了弹『尚未接入』的项」，`pages/AppPrivacySettingsPage.ets` 的该行已删。
