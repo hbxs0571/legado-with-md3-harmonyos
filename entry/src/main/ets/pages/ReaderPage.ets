@@ -84,17 +84,17 @@ const READER_IMAGE_STYLE_OPTIONS: ReaderImageStyleOption[] = [
 ];
 
 const READER_MORE_ACTIONS: ReaderMoreAction[] = [
-  { id: 'source_custom_button', label: '书源自定义按钮', glyph: 'profileSource', scopeLabel: '仅支持该按钮的网络书', migrated: false },
+  { id: 'source_custom_button', label: '自定义按钮', glyph: 'profileSource', scopeLabel: '仅在线书籍', migrated: false },
   // 上游 MoreActionIds（ReadBookContract.kt:545-552）第 2-5 位：书源四项。
   // 本地 book.isLocal 恒 true、书源引擎未接（见 isMoreActionApplicable），
   // 所以它们只出现在配置面板里、带「未迁移」，永远不会成为格子。
-  { id: 'source_login', label: '书源登录', glyph: 'profileWeb', scopeLabel: '仅网络书', migrated: false },
-  { id: 'source_pay', label: '书源支付', glyph: 'profileSell', scopeLabel: '仅网络书', migrated: false },
-  { id: 'edit_source', label: '编辑书源', glyph: 'edit', scopeLabel: '仅网络书', migrated: false },
-  { id: 'disable_source', label: '停用书源', glyph: 'lock', scopeLabel: '仅网络书', migrated: false },
-  { id: 'change_source', label: '换源', glyph: 'swap', scopeLabel: '仅网络书', migrated: false },
-  { id: 'refresh', label: '刷新', glyph: 'profileRefresh', scopeLabel: '仅网络书', migrated: false },
-  { id: 'download', label: '离线缓存', glyph: 'cloudDownload', scopeLabel: '仅网络书', migrated: false },
+  { id: 'source_login', label: '登录', glyph: 'profileWeb', scopeLabel: '仅在线书籍', migrated: false },
+  { id: 'source_pay', label: '购买', glyph: 'profileSell', scopeLabel: '仅在线书籍', migrated: false },
+  { id: 'edit_source', label: '编辑源', glyph: 'edit', scopeLabel: '仅在线书籍', migrated: false },
+  { id: 'disable_source', label: '禁用源', glyph: 'lock', scopeLabel: '仅在线书籍', migrated: false },
+  { id: 'change_source', label: '换源', glyph: 'swap', scopeLabel: '仅在线书籍', migrated: false },
+  { id: 'refresh', label: '刷新章节', glyph: 'profileRefresh', scopeLabel: '仅在线书籍', migrated: false },
+  { id: 'download', label: '离线缓存', glyph: 'cloudDownload', scopeLabel: '仅在线书籍', migrated: false },
   { id: 'audio_download', label: '听书下载', glyph: 'download', scopeLabel: '', migrated: false },
   // 上游 MoreActionIds 第 10 位 ai_chat。AI 在范围之外（见 docs/PROJECT.md），只入池不实现。
   { id: 'ai_chat', label: 'AI 对话', glyph: 'sparkles', scopeLabel: '', migrated: false },
@@ -103,22 +103,22 @@ const READER_MORE_ACTIONS: ReaderMoreAction[] = [
   { id: 'text_processing', label: '文本处理', glyph: 'profileFindReplace', scopeLabel: '', migrated: true },
   { id: 'reverse_content', label: '反转内容', glyph: 'swap', scopeLabel: '', migrated: true },
   { id: 're_segment', label: '重新分段', glyph: 'list', scopeLabel: '', migrated: true },
-  { id: 'del_ruby', label: '删除ruby标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: true },
-  { id: 'del_h', label: '删除h标签', glyph: 'delete', scopeLabel: '仅EPUB', migrated: true },
-  { id: 'toc_rule', label: 'TXT目录规则', glyph: 'profileRule', scopeLabel: '仅本地TXT', migrated: true },
-  { id: 'charset', label: '设置编码', glyph: 'info', scopeLabel: '仅本地书', migrated: true },
+  { id: 'del_ruby', label: '删除ruby标签', glyph: 'delete', scopeLabel: '', migrated: true },
+  { id: 'del_h', label: '删除h标签', glyph: 'delete', scopeLabel: '', migrated: true },
+  { id: 'toc_rule', label: 'TXT 目录规则', glyph: 'profileRule', scopeLabel: '', migrated: true },
+  { id: 'charset', label: '设置编码', glyph: 'info', scopeLabel: '', migrated: true },
   { id: 'image_style', label: '图片样式', glyph: 'book', scopeLabel: '', migrated: true },
-  { id: 'page_anim', label: '翻页动画', glyph: 'profileSettings', scopeLabel: '', migrated: false },
-  { id: 'simulated_reading', label: '模拟阅读', glyph: 'book', scopeLabel: '', migrated: false },
-  { id: 'get_progress', label: '获取阅读进度', glyph: 'profileHistory', scopeLabel: '需配置阅读进度同步', migrated: false },
-  { id: 'cover_progress', label: '覆盖阅读进度', glyph: 'profileHistory', scopeLabel: '需配置阅读进度同步', migrated: false },
+  { id: 'page_anim', label: '本书翻页动画', glyph: 'profileSettings', scopeLabel: '', migrated: false },
+  { id: 'simulated_reading', label: '模拟追读', glyph: 'book', scopeLabel: '', migrated: false },
+  { id: 'get_progress', label: '拉取云端进度', glyph: 'profileHistory', scopeLabel: '', migrated: false },
+  { id: 'cover_progress', label: '覆盖云端进度', glyph: 'profileHistory', scopeLabel: '', migrated: false },
   { id: 'highlight_rule', label: '高亮规则', glyph: 'profileRule', scopeLabel: '', migrated: true },
-  { id: 'read_style', label: '阅读设置', glyph: 'profileSettings', scopeLabel: '', migrated: true },
-  { id: 'bottom_button_config', label: '底栏按钮配置', glyph: 'profileSettings', scopeLabel: '', migrated: true },
+  { id: 'read_style', label: '阅读界面', glyph: 'profileSettings', scopeLabel: '', migrated: true },
+  { id: 'bottom_button_config', label: '配置底部按钮', glyph: 'profileSettings', scopeLabel: '', migrated: true },
   { id: 'log', label: '日志', glyph: 'info', scopeLabel: '', migrated: false }
 ];
 const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
-  id: 'configure_more_actions', label: '配置更多操作', glyph: 'settings', scopeLabel: '', migrated: true
+  id: 'configure_more_actions', label: '配置更多菜单', glyph: 'settings', scopeLabel: '', migrated: true
 };
 // 翻页动画六档，顺序与上游 GlobalThemePage.kt:353-360 的 cover/slide/simulation/scroll/fade/none 一致。
 const READER_PAGE_ANIMATION_LABELS: string[] = ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画'];

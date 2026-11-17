@@ -26,6 +26,10 @@
 
 > 同批封面缓存按路线①真算（本地封面落盘在 `${filesDir}/covers`，遍历目录累加 `statSync.size` 得 MB），不是假数字；漫画缓存因本地无漫画形态整行删。
 
+## 批8：详情页溢出菜单删自造「导出为 EPUB」入口（能力保留，入口待建）
+
+**KI-EPUB1 导出入口从详情页溢出菜单移除** —— 上游 `BookInfoScreen.kt:1033-1142` 的 `BookInfoOverflowMenu` 没有「导出为 EPUB」项；上游的书籍导出在书架管理页（`ui/book/manage/BookshelfManageScreen.kt:81` 引入 `ExportBookService`，`:1147` 有 `parallelExportBook` 配置，`:186-338` 是整套导出流程）。本地 `pages/BookInfoPage.ets` 的 `export_epub` 是实现方自造的溢出菜单入口，按「上游没有的不要自己加」从 `overflowItems()` 删除（连同 `onExportEpub` 入参与 `pages/Index.ets` 的接线一并删）。**能力不删**：`data/EpubExporter.ets` 与 `pages/Index.ets` 的 `exportBookAsEpub()` 是上游书架管理页导出能力在本地的实现，保留；入口待建（应在书架管理页，而非详情页溢出菜单）。属待办，不是「不适用」。
+
 ## 发布版五条已知问题（r323，前四条已修、第五条未修）与后续新增（KI-REL6、KI-REL7、KI-REL8、KI-REL9）
 
 0.1.0 开发预览发布时用户报了五条体验问题。发布当时代码一行未改；此后 KI-REL1 已在 r325、KI-REL2 在 r326、KI-REL3 在 r327、KI-REL4 在 r328 修复，**只剩 KI-REL5 未修**。KI-REL6、KI-REL7 不属于那五条，是后续新发现后按同一编号续排的：**KI-REL7 已在 r344 修复**，KI-REL6 仍未修。派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。

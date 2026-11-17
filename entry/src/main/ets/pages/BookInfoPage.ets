@@ -97,8 +97,6 @@ export struct BookInfoPage {
     _category: string, _description: string, _remark: string, _customTag: string, _groupNames: string[],
     _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
-  /** 导出为 EPUB：只对本地书可用；落盘与提示文案都在 Index 侧。 */
-  onExportEpub: (book: Book) => void = (_book: Book) => {};
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
   @State backdropOpacity: number = 0;
@@ -609,7 +607,7 @@ export struct BookInfoPage {
    * custom_button → edit → refresh → read_record → book_disable_read_record →
    * re_sync_webdav → upload_to_remote → login → set_source_variable → set_book_variable →
    * copy_book_url → copy_toc_url → to_top → allow_update → split_long_chapter →
-   * delete_alert → clear_cache → log → private，末尾再补本地独有的 export_epub。
+   * delete_alert → clear_cache → log → private。
    *
    * **上游的显示条件在本地一律不判**：上游这些项各自挂着 `bookSourceUi != null`、
    * `hasLogin`、`isLocal == false` 之类的前置条件，本地没有书源系统、书目全是本地书，
@@ -618,19 +616,19 @@ export struct BookInfoPage {
    */
   private overflowItems(): UiMenuItem[] {
     const items: UiMenuItem[] = [
-      { key: 'custom_button', title: '自定义菜单' },
+      { key: 'custom_button', title: '自定义按钮' },
       { key: 'edit', title: '编辑' },
       { key: 'refresh', title: '刷新' },
       { key: 'read_record', title: '阅读记录' },
       {
         key: 'book_disable_read_record',
-        title: this.book.disableReadRecord === true ? '启用阅读记录' : '禁用阅读记录',
+        title: '独立关闭阅读记录',
         selected: this.book.disableReadRecord === true
       },
-      { key: 're_sync_webdav', title: '重新同步 WebDAV' },
-      { key: 'upload_to_remote', title: '上传到远程' },
+      { key: 're_sync_webdav', title: '重新同步远程书籍' },
+      { key: 'upload_to_remote', title: '上传 WebDav' },
       { key: 'login', title: '登录' },
-      { key: 'set_source_variable', title: '设置书源变量' },
+      { key: 'set_source_variable', title: '设置源变量' },
       { key: 'set_book_variable', title: '设置书籍变量' },
       { key: 'copy_book_url', title: '拷贝书籍 URL' },
       { key: 'copy_toc_url', title: '拷贝目录 URL' },
@@ -646,10 +644,6 @@ export struct BookInfoPage {
         selected: this.book.isPrivate === true
       }
     ];
-    // 导出为 EPUB 是本地扩展（上游导出在 ExportBookService，不在溢出菜单里）。
-    if (this.book.isLocal === true) {
-      items.push({ key: 'export_epub', title: '导出为 EPUB' });
-    }
     return items;
   }
 
@@ -676,8 +670,6 @@ export struct BookInfoPage {
       this.openLogSheet();
     } else if (key === 'private') {
       this.onSetPrivate(this.book, this.book.isPrivate !== true);
-    } else if (key === 'export_epub') {
-      this.onExportEpub(this.book);
     } else {
       // 其余 8 项（custom_button / re_sync_webdav / upload_to_remote / login /
       // set_source_variable / set_book_variable / copy_toc_url / allow_update /

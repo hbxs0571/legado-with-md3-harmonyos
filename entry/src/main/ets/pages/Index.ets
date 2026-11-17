@@ -8400,7 +8400,6 @@ private canWriteInto(dir: string): boolean {
           onSaveMetadata: (title: string, author: string, category: string, description: string,
             remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
             this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
-          onExportEpub: (book: Book) => this.exportBookAsEpub(book),
           onOpenEditPage: () => { this.route = AppRoute.BOOK_INFO_EDIT; },
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
