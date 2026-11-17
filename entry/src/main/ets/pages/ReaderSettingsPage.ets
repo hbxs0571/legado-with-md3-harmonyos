@@ -1137,15 +1137,15 @@ export struct ReaderSettingsPage {
   @Builder
   private menuSettingsEntry(entry: ReaderMenuSettingsEntry) {
     if (entry.section === true) {
-      MenuSettingSection({ title: entry.title })
+      MenuSettingSection({ title: this.menuEntryDisplayTitle(entry.title) })
     } else if (!this.isMenuSettingsEntryVisible(entry.title)) {
       Blank().height(0)
     } else if (entry.title === '底栏按钮配置' || entry.title === '标题栏操作按钮' || entry.title === '标题栏悬浮图标配置') {
-      MenuSettingOption({ title: entry.title, detail: entry.detail, migrated: true })
+      MenuSettingOption({ title: this.menuEntryDisplayTitle(entry.title), detail: entry.detail, migrated: true })
         .onClick(() => this.handleMenuSettingsEntryClick(entry))
     } else if (this.isMenuToggle(entry.title)) {
       MenuSettingSwitch({
-        title: entry.title,
+        title: this.menuEntryDisplayTitle(entry.title),
         detail: entry.detail,
         checked: entry.title === '菜单栏边框'
           // 上游开关本体就是 readMenuBorderWidth > 0（SystemMenuPage.kt:398），没有独立布尔字段。
@@ -1205,7 +1205,7 @@ export struct ReaderSettingsPage {
       })
     } else if (this.isMenuSlider(entry.title)) {
       MenuSettingSlider({
-        title: entry.title,
+        title: this.menuEntryDisplayTitle(entry.title),
         value: this.menuSliderValue(entry.title),
         minValue: this.menuSliderMinimum(entry.title),
         maxValue: this.menuSliderMaximum(entry.title),
@@ -1222,7 +1222,7 @@ export struct ReaderSettingsPage {
       })
     } else if (this.getMenuChoices(entry.title).length > 0) {
       MenuSettingSegments({
-        title: entry.title,
+        title: this.menuEntryDisplayTitle(entry.title),
         choices: this.getMenuChoices(entry.title),
         selectedIndex: this.getMenuSelectedIndex(entry.title),
         onSelect: (index: number) => {
@@ -1240,16 +1240,54 @@ export struct ReaderSettingsPage {
       })
     } else if (this.isMenuColor(entry.title)) {
       MenuSettingColor({
-        title: entry.title,
+        title: this.menuEntryDisplayTitle(entry.title),
         detail: entry.detail,
         dayColor: this.menuColorDay(entry.title),
         nightColor: this.menuColorNight(entry.title)
       })
         .onClick(() => this.openDetailSheet(entry.title, entry.detail))
     } else {
-      MenuSettingOption({ title: entry.title, detail: entry.detail })
+      MenuSettingOption({ title: this.menuEntryDisplayTitle(entry.title), detail: entry.detail })
         .onClick(() => this.openDetailSheet(entry.title, entry.detail))
     }
+  }
+
+  /**
+   * 菜单系统 tab 的显示文案映射：内部仍用本地 title 作逻辑判断 key，
+   * 这里把 29 项照上游 strings.xml 真值显示。撞名项（模糊效果/液态玻璃按钮等）
+   * 上游本就共用名字，映射后显示一致而各判断链仍按内部名区分，功能不受影响。
+   */
+  private menuEntryDisplayTitle(title: string): string {
+    if (title === '调色板风格') { return '调色板样式'; }
+    if (title === '菜单颜色来源') { return '色板来源'; }
+    if (title === '菜单背景颜色') { return '背景色'; }
+    if (title === '菜单容器颜色') { return '容器背景色'; }
+    if (title === '菜单强调颜色') { return '强调色'; }
+    if (title === '菜单栏边框') { return '边框'; }
+    if (title === '菜单栏边框宽度') { return '宽度'; }
+    if (title === '菜单栏边框颜色') { return '颜色'; }
+    if (title === '菜单模糊半径') { return '模糊半径'; }
+    if (title === '菜单模糊透明度') { return '菜单不透明度'; }
+    if (title === '菜单模糊颜色') { return '菜单着色'; }
+    if (title === '显示标题栏图标') { return '显示浮动图标'; }
+    if (title === '标题栏悬浮图标配置') { return '浮动图标'; }
+    if (title === '标题栏悬浮图标位置') { return '浮动图标位置'; }
+    if (title === '悬浮图标液态玻璃按钮') { return '液态玻璃按钮'; }
+    if (title === '底栏按钮配置') { return '配置底部按钮'; }
+    if (title === '底栏悬浮') { return '悬浮底栏'; }
+    if (title === '底栏模糊') { return '模糊效果'; }
+    if (title === '底栏模糊样式') { return '着色样式'; }
+    if (title === '底栏液态玻璃') { return '液态玻璃背景'; }
+    if (title === '底栏按钮液态玻璃') { return '液态玻璃按钮'; }
+    if (title === '标题栏胶囊') { return '标题胶囊布局'; }
+    if (title === '标题栏模式') { return '菜单标题显示方式'; }
+    if (title === '标题栏操作按钮') { return '配置顶部按钮'; }
+    if (title === '标题栏紧凑') { return '精简顶部按钮'; }
+    if (title === '顶栏模糊') { return '模糊效果'; }
+    if (title === '顶栏模糊样式') { return '着色样式'; }
+    if (title === '顶栏液态玻璃按钮') { return '液态玻璃按钮'; }
+    if (title === '合并标题栏按钮') { return '合并顶栏按钮'; }
+    return title;
   }
 
   private handleMenuSettingsEntryClick(entry: ReaderMenuSettingsEntry): void {
@@ -2510,7 +2548,7 @@ export struct ReaderSettingsPage {
       Column() {
         Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
         Row() {
-          Text(this.detailSheetTitle).fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
+          Text(this.menuEntryDisplayTitle(this.detailSheetTitle)).fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
           Text('关闭').fontSize(13).fontColor(this.rsetAccent).onClick(() => this.detailSheetVisible = false)
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
         Text(this.detailSheetDescription).fontSize(13).fontColor(this.rsetTextSecondary).width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
@@ -2525,13 +2563,13 @@ export struct ReaderSettingsPage {
               // 这里照抄成日/夜两块并列色板。「种子色」与「菜单强调颜色」在上游共用 readMenuAccentColor，
               // 因此两块色板读写同一对字段（日间 readMenuAccentColor / 夜间 readMenuAccentColorNight）。
               MenuSettingPalette({
-                title: this.detailSheetTitle + '（日间）',
+                title: this.menuEntryDisplayTitle(this.detailSheetTitle) + '（日间）',
                 colors: MENU_COLOR_PALETTE,
                 selectedColor: this.menuColorDay(this.detailSheetTitle),
                 onChange: (color: string) => this.applyMenuColor(this.detailSheetTitle, color, false)
               })
               MenuSettingPalette({
-                title: this.detailSheetTitle + '（夜间）',
+                title: this.menuEntryDisplayTitle(this.detailSheetTitle) + '（夜间）',
                 colors: MENU_COLOR_PALETTE,
                 selectedColor: this.menuColorNight(this.detailSheetTitle),
                 onChange: (color: string) => this.applyMenuColor(this.detailSheetTitle, color, true)
