@@ -20,6 +20,12 @@
 
 > 上述「主题风格 / 导航布局 / 多窗布局」三条属合法「不适用」（平台无能力 / 范围之外），不排期；「切换图标」是明确待办。
 
+## 批7：下载缓存页 Cronet 整项删（KI-DOWN1）
+
+**KI-DOWN1 Cronet 开关整项删** —— 上游 `pref_cronet_summary` = 使用 Cronet 网络组件，控制是否用 Chromium 的 Cronet 网络栈。Cronet 是 Android 侧 `org.chromium.net` 的 native 库，鸿蒙 SDK（`D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\ets\api\`）无任何 Cronet 或等价网络栈开关，开关拨动不会产生任何行为差异，按任务书 7.3「整行删、登记平台无此能力」处置：`pages/AppDownloadCacheSettingsPage.ets` 该行已删，不改假开关、不保留「尚未接入」。属合法「不适用」，不排期。
+
+> 同批封面缓存按路线①真算（本地封面落盘在 `${filesDir}/covers`，遍历目录累加 `statSync.size` 得 MB），不是假数字；漫画缓存因本地无漫画形态整行删。
+
 ## 发布版五条已知问题（r323，前四条已修、第五条未修）与后续新增（KI-REL6、KI-REL7、KI-REL8、KI-REL9）
 
 0.1.0 开发预览发布时用户报了五条体验问题。发布当时代码一行未改；此后 KI-REL1 已在 r325、KI-REL2 在 r326、KI-REL3 在 r327、KI-REL4 在 r328 修复，**只剩 KI-REL5 未修**。KI-REL6、KI-REL7 不属于那五条，是后续新发现后按同一编号续排的：**KI-REL7 已在 r344 修复**，KI-REL6 仍未修。派活时按编号引用，根因已在下面各条末尾给出行号，不要重新定位。

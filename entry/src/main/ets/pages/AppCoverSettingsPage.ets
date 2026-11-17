@@ -131,8 +131,8 @@ export struct AppCoverSettingsPage {
 
   /** 取色面板的标题，用界面上的行名，与上游 ColorField 的文案一致。 */
   private colorFieldTitle(): string {
-    if (this.colorField === 'textColor' || this.colorField === 'textColorDark') { return '文字颜色'; }
-    return '文字阴影颜色';
+    if (this.colorField === 'textColor' || this.colorField === 'textColorDark') { return '正文'; }
+    return '阴影';
   }
 
   /** 取色确认：按 colorField 写回对应字段。 */
@@ -197,11 +197,11 @@ export struct AppCoverSettingsPage {
     this.selectedAlbumId = selection;
   }
 
-  /** A4 的摘要行：随选中相册变成「相册名 · 日 N / 夜 M」，没选中回事先写死的那句。 */
+  /** 摘要行：上游 cover_album_day_night_count「日间 N · 夜间 M」，未选为 cover_album_none。 */
   private albumSummary(): string {
     const album = this.albums.find((item: CoverAlbumItem) => item.id === this.selectedAlbumId);
-    if (album === undefined) { return '未选择相册'; }
-    return `${album.name} · 日 ${album.lightImages.length} / 夜 ${album.darkImages.length}`;
+    if (album === undefined) { return '应用内置封面'; }
+    return `${album.name} · 日间 ${album.lightImages.length} · 夜间 ${album.darkImages.length}`;
   }
 
   private openAlbumSelect(): void {
@@ -332,37 +332,42 @@ export struct AppCoverSettingsPage {
 
       Scroll(this.settingsScroller) {
         Column() {
-          UiSection({ title: '通用' }) {
+          UiSection({ title: '' }) {
             UiSwitch({
-              title: '仅 WiFi 下载封面', detail: '蜂窝网络下不加载网络封面',
+              title: '仅 WiFi', detail: '仅在 WiFi 下加载网络封面',
               value: this.settings.loadOnlyOnWifi,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.loadOnlyOnWifi = value; })
             })
-            UiAction({ title: '封面规则', detail: '编辑按规则获取封面用的搜索源与规则表达式', onSelect: () => this.openRuleSheet() })
+            UiAction({ title: '封面规则', detail: '进入详情页时使用封面规则重新获取封面', onSelect: () => this.openRuleSheet() })
             UiSwitch({
-              title: '使用默认封面', detail: '忽略书籍自带封面，统一显示默认封面',
+              title: '总是使用默认封面', detail: '总是显示默认封面（不显示网络封面）',
               value: this.settings.useDefaultCover,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultCover = value; })
             })
             UiAction({ title: '默认封面', detail: this.albumSummary(), onSelect: () => this.openAlbumSelect() })
             UiSwitch({
-              title: '显示字体阴影', detail: '给书名与作者加一层阴影',
+              title: '显示字体阴影',
               value: this.settings.showShadow,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showShadow = value; })
             })
             UiSwitch({
-              title: '显示字体描边', detail: '深色封面上描白边，默认开启',
+              title: '显示字体描边',
               value: this.settings.showStroke,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showStroke = value; })
             })
-            UiSwitch({showDivider: false,
-              title: '使用默认颜色', detail: '关闭后用下面日间/夜间封面里选的颜色',
+            UiSwitch({
+              title: '使用默认字体颜色',
               value: this.settings.useDefaultColor,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.useDefaultColor = value; })
             })
+            UiSwitch({showDivider: false,
+              title: '限制封面比例', detail: '开启时封面固定 5:7 显示；关闭后搜索、发现与书籍详情页封面按原图宽高比自适应',
+              value: this.settings.restrictCoverRatio,
+              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.restrictCoverRatio = value; })
+            })
           }
 
-          UiSection({ title: '书架显示' }) {
+          UiSection({ title: '' }) {
             UiChoice({
               title: '封面信息方向', options: ['竖向', '横向'],
               selectedIndex: this.settings.infoOrientation === '1' ? 1 : 0,
@@ -370,13 +375,8 @@ export struct AppCoverSettingsPage {
                 draft.infoOrientation = index === 1 ? '1' : '0';
               })
             })
-            UiSwitch({
-              title: '限制封面比例', detail: '开启时搜索/详情封面固定 5:7，关闭后按原图比例',
-              value: this.settings.restrictCoverRatio,
-              onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.restrictCoverRatio = value; })
-            })
             UiChoice({showDivider: false,
-              title: '网络书籍角标', options: ['全部显示', '隐藏书架内', '隐藏同名同作者', '仅显示书架外'],
+              title: '网络书籍角标设置', options: ['全部显示', '隐藏已在书架的同源书籍', '隐藏已在书架的非同源书籍', '只显示不在书架的书籍'],
               selectedIndex: this.settings.exploreFilterState,
               onSelect: (index: number) => this.applyChange((draft: CoverSettings) => {
                 draft.exploreFilterState = index;
@@ -384,51 +384,49 @@ export struct AppCoverSettingsPage {
             })
           }
 
-          UiSection({ title: '日间封面' }) {
+          UiSection({ title: '白天' }) {
             UiAction({
-              title: '文字颜色', option: this.colorOption(this.settings.textColor),
+              title: '正文', option: this.colorOption(this.settings.textColor),
               swatchColor: this.settings.textColor, swatchDisabled: this.settings.useDefaultColor,
               onSelect: () => this.openColorSheet('textColor')
             })
             UiAction({
-              title: '文字阴影颜色', option: this.colorOption(this.settings.shadowColor),
+              title: '阴影', option: this.colorOption(this.settings.shadowColor),
               swatchColor: this.settings.shadowColor, swatchDisabled: !this.settings.showShadow,
               onSelect: () => this.openColorSheet('shadowColor')
             })
             UiSwitch({
-              title: '显示书名', value: this.settings.showName,
+              title: '显示书名', detail: '封面上显示书名', value: this.settings.showName,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showName = value; })
             })
             UiSwitch({showDivider: false,
-              title: '显示作者', detail: '关闭书名显示时不生效',
+              title: '显示作者', detail: '封面上显示作者',
               value: this.settings.showAuthor, disabled: !this.settings.showName,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthor = value; })
             })
           }
 
-          UiSection({ title: '夜间封面' }) {
+          UiSection({ title: '夜间' }) {
             UiAction({
-              title: '文字颜色', option: this.colorOption(this.settings.textColorDark),
+              title: '正文', option: this.colorOption(this.settings.textColorDark),
               swatchColor: this.settings.textColorDark, swatchDisabled: this.settings.useDefaultColor,
               onSelect: () => this.openColorSheet('textColorDark')
             })
             UiAction({
-              title: '文字阴影颜色', option: this.colorOption(this.settings.shadowColorDark),
+              title: '阴影', option: this.colorOption(this.settings.shadowColorDark),
               swatchColor: this.settings.shadowColorDark, swatchDisabled: !this.settings.showShadow,
               onSelect: () => this.openColorSheet('shadowColorDark')
             })
             UiSwitch({
-              title: '显示书名', value: this.settings.showNameDark,
+              title: '显示书名', detail: '封面上显示书名', value: this.settings.showNameDark,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showNameDark = value; })
             })
             UiSwitch({showDivider: false,
-              title: '显示作者', detail: '关闭书名显示时不生效',
+              title: '显示作者', detail: '封面上显示作者',
               value: this.settings.showAuthorDark, disabled: !this.settings.showNameDark,
               onChange: (value: boolean) => this.applyChange((draft: CoverSettings) => { draft.showAuthorDark = value; })
             })
           }
-          Text('仅 WiFi 下载封面、网络书籍角标随网络封面与在线书源一起接入；其余改动即时生效。')
-            .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -528,7 +526,7 @@ export struct AppCoverSettingsPage {
                   Column() {
                     Text(album.name.length > 0 ? album.name : '未命名相册').fontSize(15)
                       .fontColor(this.themeColorTextPrimary).maxLines(1)
-                    Text(`日 ${album.lightImages.length} / 夜 ${album.darkImages.length}`)
+                    Text(`日间 ${album.lightImages.length} · 夜间 ${album.darkImages.length}`)
                       .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                   }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 12 })
                   if (this.selectedAlbumId === album.id) {
@@ -570,7 +568,7 @@ export struct AppCoverSettingsPage {
                     Column() {
                       Text(album.name.length > 0 ? album.name : '未命名相册').fontSize(15)
                         .fontColor(this.themeColorTextPrimary).maxLines(1)
-                      Text(`日 ${album.lightImages.length} / 夜 ${album.darkImages.length}`)
+                      Text(`日间 ${album.lightImages.length} · 夜间 ${album.darkImages.length}`)
                         .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                       if (this.selectedAlbumId === album.id) {
                         Text('使用中').fontSize(12).fontColor(this.themeColorAccent).margin({ top: 4 })

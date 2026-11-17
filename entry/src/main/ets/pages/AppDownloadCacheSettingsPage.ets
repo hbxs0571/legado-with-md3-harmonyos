@@ -1,4 +1,5 @@
 import curves from '@ohos.curves';
+import { fileIo } from '@kit.CoreFileKit';
 import { UiSection } from '../components/settings/UiSection';
 import { UiAction } from '../components/settings/UiAction';
 import { UiSlider } from '../components/settings/UiSlider';
@@ -13,6 +14,7 @@ import { RdbStore } from '../data/RdbStore';
 @Component
 export struct AppDownloadCacheSettingsPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#858792';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
@@ -22,17 +24,92 @@ export struct AppDownloadCacheSettingsPage {
   /** 7 个滑块与 1 个开关都从偏好读进来，改动即落盘。 */
   @State cacheSettings: CacheSettings = CacheSettingsRepository.get();
   @State collapsedHeader: boolean = false;
+  /** 封面缓存目录大小（MB 文案），进页与清理后各算一次，由 build 直接读取。 */
+  @State coverCacheSize: string = '0.0 MB';
   private settingsScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     // 启动恢复是异步的，进页时再取一次，保证滑块显示的是偏好里的当前值。
     this.cacheSettings = CacheSettingsRepository.get();
+    this.coverCacheSize = this.computeCoverCacheSizeMb();
   }
 
   private saveSettings(): void {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
     CacheSettingsRepository.save(context, this.cacheSettings);
+  }
+
+  /**
+   * 封面缓存真算：本地封面落盘在 ${filesDir}/covers（BookRepository / EpubRepository
+   * / PdfRepository / UmdRepository 都在写），遍历目录累加字节数，不显示假数字。
+   */
+  private computeCoverCacheSizeMb(): string {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return '0.0 MB'; }
+    try {
+      const dir = `${context.filesDir}/covers`;
+      if (!fileIo.accessSync(dir)) { return '0.0 MB'; }
+      let total = 0;
+      const names = fileIo.listFileSync(dir);
+      for (const name of names) {
+        try { total += fileIo.statSync(`${dir}/${name}`).size; } catch (error) { /* 跳过已消失的文件 */ }
+      }
+      return `${(total / 1024 / 1024).toFixed(1)} MB`;
+    } catch (error) {
+      return '0.0 MB';
+    }
+  }
+
+  /** 封面缓存二次确认，确认后清空 covers 目录下所有文件。 */
+  private confirmClearCoverCache(): void {
+    this.getUIContext().showAlertDialog({
+      title: '封面缓存',
+      message: '是否确认删除?',
+      autoCancel: true,
+      primaryButton: { value: '删除', action: () => { this.doClearCoverCache(); } },
+      secondaryButton: { value: '取消', fontColor: this.themeColorTextTertiary, action: () => {} }
+    });
+  }
+
+  private doClearCoverCache(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const dir = `${context.filesDir}/covers`;
+      if (fileIo.accessSync(dir)) {
+        const names = fileIo.listFileSync(dir);
+        for (const name of names) {
+          try { fileIo.unlinkSync(`${dir}/${name}`); } catch (error) { /* 单文件失败不打断整批 */ }
+        }
+      }
+      this.coverCacheSize = this.computeCoverCacheSizeMb();
+      this.onUnavailableAction('封面缓存已清理');
+    } catch (error) {
+      this.onUnavailableAction('封面缓存清理失败');
+    }
+  }
+
+  /** 清理缓存二次确认（上游 sure_del）。 */
+  private confirmClearBookCache(): void {
+    this.getUIContext().showAlertDialog({
+      title: '清理缓存',
+      message: '是否确认删除?',
+      autoCancel: true,
+      primaryButton: { value: '删除', action: () => { this.clearBookCache(); } },
+      secondaryButton: { value: '取消', fontColor: this.themeColorTextTertiary, action: () => {} }
+    });
+  }
+
+  /** 压缩数据库二次确认（上游 sure）。 */
+  private confirmVacuumDatabase(): void {
+    this.getUIContext().showAlertDialog({
+      title: '压缩数据库',
+      message: '确认',
+      autoCancel: true,
+      primaryButton: { value: '确认', action: () => { this.vacuumDatabase(); } },
+      secondaryButton: { value: '取消', fontColor: this.themeColorTextTertiary, action: () => {} }
+    });
   }
 
   /** 清理缓存：逐本删应用内导入副本 + 清内存章节行与当前书正文缓存；不删书目。 */
@@ -75,34 +152,32 @@ export struct AppDownloadCacheSettingsPage {
 
       Scroll(this.settingsScroller) {
         Column() {
-          UiSection({ title: 'HTTP 缓存' }) {
-            UiAction({ title: '封面缓存', detail: '本地书籍封面即时生成', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
-            UiAction({showDivider: false, title: '漫画缓存', detail: '本地无漫画形态', onSelect: () => this.onUnavailableAction('本地书籍封面即时生成，无独立缓存') })
+          UiSection({ title: 'HTTP缓存' }) {
+            UiAction({showDivider: false, title: '封面缓存', detail: `当前 ${this.coverCacheSize}`, onSelect: () => this.confirmClearCoverCache() })
           }
-          UiSection({ title: '下载设置' }) {
-            UiSlider({ title: '更新和搜索线程', detail: '控制请求并发数量', value: this.cacheSettings.updateSearchThreads, minValue: 1, maxValue: 256, onChange: (v: number) => { this.cacheSettings.updateSearchThreads = v; this.saveSettings(); } })
-            UiSlider({ title: '书籍缓存下载线程', detail: '并发越高越不稳定', value: this.cacheSettings.bookDownloadThreads, minValue: 1, maxValue: 8, onChange: (v: number) => { this.cacheSettings.bookDownloadThreads = v; this.saveSettings(); } })
-            UiSlider({ title: '向后预下载', detail: '预先下载后续章节', value: this.cacheSettings.preloadBehind, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadBehind = v; this.saveSettings(); } })
-            UiSlider({ title: '向前预下载', detail: '预先下载前面的章节', value: this.cacheSettings.preloadAhead, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadAhead = v; this.saveSettings(); } })
+          UiSection({ title: '下载' }) {
+            UiSlider({ title: '更新和搜索线程', detail: '控制更新和搜索线程的并发数量。数值越高越不稳定', value: this.cacheSettings.updateSearchThreads, minValue: 1, maxValue: 256, onChange: (v: number) => { this.cacheSettings.updateSearchThreads = v; this.saveSettings(); } })
+            UiSlider({ title: '书籍缓存下载线程', detail: '控制离线缓存章节下载的并发数量。数值越高越不稳定', value: this.cacheSettings.bookDownloadThreads, minValue: 1, maxValue: 8, onChange: (v: number) => { this.cacheSettings.bookDownloadThreads = v; this.saveSettings(); } })
+            UiSlider({ title: '向后预下载', value: this.cacheSettings.preloadBehind, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadBehind = v; this.saveSettings(); } })
+            UiSlider({ title: '向前预下载', value: this.cacheSettings.preloadAhead, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.preloadAhead = v; this.saveSettings(); } })
+            // 上游无此字段，本地架构差异（整本正文缓存策略）引入；detail 为本地可读说明。
             UiSlider({showDivider: false, title: '整本正文内存缓存上限', detail: '单位 MB；超过就不缓存整本正文', value: this.cacheSettings.bookContentCacheMb, minValue: 1, maxValue: 512, onChange: (v: number) => { this.cacheSettings.bookContentCacheMb = v; this.saveSettings(); } })
           }
           UiSection({ title: '图片缓存' }) {
-            UiSlider({ title: '图片绘制缓存', detail: '最大缓存大小（MB）', value: this.cacheSettings.imageDrawCacheMb, minValue: 1, maxValue: 2047, onChange: (v: number) => { this.cacheSettings.imageDrawCacheMb = v; this.saveSettings(); } })
-            UiSlider({showDivider: false, title: '漫画保留数量', detail: '保留已读章节数量', value: this.cacheSettings.comicKeepCount, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
+            UiSlider({ title: '图片绘制缓存', detail: `当前最大缓存 ${this.cacheSettings.imageDrawCacheMb} MB`, value: this.cacheSettings.imageDrawCacheMb, minValue: 1, maxValue: 2047, onChange: (v: number) => { this.cacheSettings.imageDrawCacheMb = v; this.saveSettings(); } })
+            UiSlider({showDivider: false, title: '漫画保留数量', detail: `保留已读章节数量 ${this.cacheSettings.comicKeepCount}`, value: this.cacheSettings.comicKeepCount, minValue: 0, maxValue: 100, onChange: (v: number) => { this.cacheSettings.comicKeepCount = v; this.saveSettings(); } })
           }
           UiSection({ title: '网络' }) {
-            UiInput({
+            UiInput({showDivider: false,
               title: '用户代理', value: this.cacheSettings.userAgent, defaultValue: '',
               onConfirm: (v: string) => { this.cacheSettings.userAgent = v; this.saveSettings(); }
             })
-            UiSwitch({showDivider: false, title: 'Cronet', detail: '使用 Cronet 网络组件', value: this.cacheSettings.cronetEnabled, onChange: (v: boolean) => { this.cacheSettings.cronetEnabled = v; this.saveSettings(); } })
+            // 上游 pref_cronet_summary「使用 Cronet 网络组件」：Cronet 是 Chromium 网络栈，鸿蒙平台无此能力，整行删。
           }
-          UiSection({ title: '其它' }) {
-            UiAction({ title: '清理缓存', detail: '清应用内正文副本与章节缓存', onSelect: () => this.clearBookCache() })
-            UiAction({showDivider: false, title: '压缩数据库', detail: '整理本地数据库空间', onSelect: () => { this.vacuumDatabase(); } })
+          UiSection({ title: '高级' }) {
+            UiAction({ title: '清理缓存', detail: '清除已下载书籍和字体缓存', onSelect: () => this.confirmClearBookCache() })
+            UiAction({showDivider: false, title: '压缩数据库', detail: '减小数据库文件的大小', onSelect: () => this.confirmVacuumDatabase() })
           }
-          Text('滑块与开关改动即落盘；清理缓存与压缩数据库已接入，封面/漫画缓存本地即时生成无独立缓存。')
-            .fontSize(15).fontColor('#858792').margin({ left: 18, right: 18, top: 6, bottom: 22 })
         }.width('100%').padding({ top: 6 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
