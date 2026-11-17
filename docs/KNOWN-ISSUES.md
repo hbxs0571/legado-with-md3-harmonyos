@@ -2,6 +2,23 @@
 
 更新：2026-11-17。以下仅列出公开源码和 E 端记录能够支持的状态，不包含测试书名、个人文件名、设备地址、日志或截图。
 
+2026-11-17 自造与降级清算（11 批）已收口：门槛判据全绿（scripts/selfmade-scan.py 六词口径归零、tmp/batch11_gate.py 22 项全过），七表合计未变（1226 行 / 已接 1038 / 未接 157 / 不适用 31）。下文批 5/6/10 各节已按清算后的实际状态更新；本批新增的十类「不做」项集中登记在「## 批11：自造与降级清算——十类不做的项」。
+
+## 批11：自造与降级清算——十类「不做」项集中登记
+
+本轮清算逐条比对上游，以下十项判「不做」，证据按任务书 11.3 三类之一给出（平台无对应物 / 范围之外 / 备份互通但无界面）。不改变功能级对照表判定，故七表合计未变。
+
+1. **主题风格（composeEngine / Miuix）**：鸿蒙 `ets/api/` 无 Miuix 或等价第二套组件库；上游 `ThemeResolver.isMiuixEngine` 依赖 Android 侧 `top.yukonga.miuix.kmp`。平台无对应物，批 6 已整行删（见批 6 节 KI-THEME1）。
+2. **Cronet 网络栈**：Chromium `org.chromium.net` native 库，鸿蒙 SDK 无对应物；批 7 已整行删（见 KI-DOWN1）。
+3. **匿名统计 Firebase**：鸿蒙 SDK 无 Firebase / HiAnalytics / AGC；批 5 已整行删（见 KI-PRIV2）。
+4. **生物识别 UnsupportedSystem 档**：上游 `PrivateBiometricStatus` 五态含 UnsupportedSystem（Android 侧系统不支持），鸿蒙基线 6.0.0(20) 无此限制、该档不可达；本地 `data/PrivateAccessRepository.ets` 的 `enum PrivateBiometricStatus` 为五态 `NOT_SET_PASSWORD / AVAILABLE / NOT_ENROLLED / NO_HARDWARE / UNAVAILABLE`，无 UnsupportedSystem。
+5. **导航布局（tabletInterface）/ 多栏布局（multiPaneMode）**：`docs/PROJECT.md:46-48` 明确列为「额外设备形态适配」范围之外；批 6 已整行删（见批 6 节）。
+6. **整本正文内存缓存上限**：上游无此字段，本地 `data/BookRepository.ets` 架构差异引入，`pages/AppDownloadCacheSettingsPage.ets` 保留该行并加代码注释写明；属「上游没有但本地有架构理由」，保留，另见 `docs/CODE-CONVENTIONS.md:284`。
+7. **朗读界面形态（整页播放器）**：上游整页播放前提是「正在朗读」，本地零 TTS 引擎（`@kit.CoreSpeechKit` 未接）、零音频播放层，扩成整页只会得到「点了没声音」的空壳；属「已纳入范围、尚未排期」的待办（见 KI-ALOUD1）。
+8. **书籍导出入口（详情页溢出菜单）**：上游导出在书架管理页（`BookshelfManageScreen.kt:186-338` 的 `ExportBookService` 流程），不在详情页；本地 `data/EpubExporter.ets` 写出能力保留，入口待建（见 KI-EPUB1）。
+9. **翻译页只读**：翻译属在线服务且上游默认走 Google 翻译接口，本页两个 `TranslationSettingsChoice`（提供商 / 目标语言）设 `disabled`，落盘实现等判断段定范围；属范围之外。
+10. **实验室页 `eyeProtection` 行**：上游 `LabSettings` 有该字段，本地 `data/LabSettingsRepository.ets` 有 `eyeProtection` 字段但 `pages/AppLabSettingsPage.ets` 无对应界面行（只有「启用实验室 / 墨水屏显示」两行）；补行要接护眼渲染链，属另一个域，本批不补。
+
 ## 批10：朗读界面形态差异（KI-ALOUD1，等朗读功能实现时一并做）
 
 **KI-ALOUD1 朗读页仍是底部浮层，不是上游整页播放器** —— 上游 `ui/book/readaloud/player/ReadAloudPlayerScreen.kt`（773 行）是整页播放器，前提是「正在朗读」：运输条、逐句高亮、说话人/引擎行、定时进度。本地零 TTS 引擎（`@kit.CoreSpeechKit` 未接）、零音频播放层（`data/HttpTtsRepository.ets` / `data/ReadAloudVoiceRepository.ets` 仅备份互通用，网络层与播放层未接），把 262 行浮层扩成整页只会得到「点了没声音」的空壳，比现在的浮层更不诚实。故批10 只改文案与配色、形态保持底浮层（`pages/ReaderAloudSettingsPage.ets`）：标题「朗读设置」→「朗读」、「朗读语速」→「调整语速」、删无上游依据的「跟随系统」档、六处硬编码色换主题 token。形态变更留到朗读功能实现那一批，届时一并做运输条 + 逐句高亮 + 整页播放器。这是明确待办，属「已纳入范围、尚未排期」，不是「不适用」。
@@ -20,7 +37,7 @@
 
 **导航布局（tabletInterface）与多窗布局（multiPaneMode）整行删** —— 上游 `ThemeConfigScreen.kt:379-397` 两项都是 `DropdownListSettingItem`（切平板界面 / 切多栏），属 `docs/PROJECT.md:46-48` 明确列出的「额外设备形态适配」范围之外。按任务书 6.2b 三类证据里的「范围之外」整行删，不保留禁用态（禁用下拉=点了没反应）。本地原名「多窗布局」与上游 `multi_pane_layout`=多栏布局的文案差异随整行删除一并消失。这两项属「不适用」而非缺陷，不登记为待修。
 
-**切换图标（启动图标）本批未做** —— `pages/ThemeSettingsPage.ets` 该行仍是 `onUnavailableAction('启动图标设置尚未迁移')`，全页唯一保留的占位。上游是 `ShowSheet(LauncherIcon)`；鸿蒙换应用图标要预置多套 `layered_image` 并改 `module.json5` 的 `icon`，能做但工作量大，任务书 6.5 判本批不动、登记在案。这是待办不是「不适用」，后续要做时按此条定位。
+**切换图标（启动图标）本批未做** —— `pages/ThemeSettingsPage.ets` 该行仍是 `onUnavailableAction('启动图标设置尚未迁移')`，全页唯一保留的占位。上游是 `ShowSheet(LauncherIcon)`；鸿蒙换应用图标要预置多套 `layered_image` 并改 `module.json5` 的 `icon`，能做但工作量大，任务书 6.5 判本批不动、登记在案。这是待办不是「不适用」，后续要做时按此条定位。批 11 收口复查：`onUnavailableAction` 全页仅此一处调用，保持登记。
 
 > 上述「主题风格 / 导航布局 / 多窗布局」三条属合法「不适用」（平台无能力 / 范围之外），不排期；「切换图标」是明确待办。
 
@@ -92,7 +109,7 @@
 - 书架布局九字段的 Android ZIP 差异值往返、外部 Android ZIP 分组导入导出尚未完成 E 端设备验收。
 - r256 已验证隐藏页签后从分组管理切换到“本地未分组”并在冷启动后保留；没有自定义分组的设备场景未覆盖自定义筛选项。
 - 分组卡片的拖拽排序、封面实际选择/冷启动读回仍未验。
-- `isPrivate` 已不再是纯标记：批 6（r341）接通密码校验（PBKDF2）、解锁授权集、私密分组锁定页与封面遮罩；`**不接**` 的是指纹解锁。`enableRefresh` 仍不控制分组更新（分组刷新未接入）。
+- `isPrivate` 已不再是纯标记：批 6（r341）接通密码校验（PBKDF2）、解锁授权集、私密分组锁定页与封面遮罩；批 5（2026-11-17 自造与降级清算）又接通生物识别快捷解锁（`userAuth` 人脸/指纹，需 `ACCESS_BIOMETRIC` 权限，真机可验、模拟器无硬件时开关置灰）与三个 verifyOn* 时机开关、应用启动验证门、离开应用重新验证。`enableRefresh` 仍不控制分组更新（分组刷新未接入）。
 
 ## Android ZIP 兼容
 
@@ -563,7 +580,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ### A 主题设置页
 
-**A 块共同前提（2026-11-09 重写）**：这段原写「本地 `pages/ThemeSettingsPage.ets`（333 行）整页零持久化、39 处一律 `onUnavailableAction`」，**已被 r300–r316 逐批落地推翻**。实测该页现 **1070 行、7 个 `@State` + 88 个 `@Prop`、125 个回调 prop**，`onUnavailableAction` 只剩 **4 处真实占位**（`:548` 主题风格切换、`:550` 切换图标、`:724` 导航布局、`:726` 多窗布局），持久化走 `data/ThemeSettingsRepository.ets` 的 `ThemeSnapshot`（`load`/`save` 逐键读写）与 `data/MainNavigationSettings.ets`、`data/TopBottomBarSettings.ets`、`data/BookInfoBackdropStyle.ets`、`data/CustomThemeColors.ets`、`data/ThemePalette.ets` 六个配套模块。下面各组「已实现」的落地记录仍是准的，只有这段前提过时。
+**A 块共同前提（2026-11-09 重写）**：这段原写「本地 `pages/ThemeSettingsPage.ets`（333 行）整页零持久化、39 处一律 `onUnavailableAction`」，**已被 r300–r316 逐批落地推翻**。实测该页批 6 后 **937 行**，主题风格 / 导航布局 / 多窗布局三行已按「不适用 / 范围之外」整行删，`onUnavailableAction` 只剩 **1 处真实占位**（切换图标，见批 6 节），持久化走 `data/ThemeSettingsRepository.ets` 的 `ThemeSnapshot`（`load`/`save` 逐键读写）与 `data/MainNavigationSettings.ets`、`data/TopBottomBarSettings.ets`、`data/BookInfoBackdropStyle.ets`、`data/CustomThemeColors.ets`、`data/ThemePalette.ets` 六个配套模块。下面各组「已实现」的落地记录仍是准的，只有这段前提过时。
 
 **KI-TH-A2 Miuix 引擎两项（不接）** —— 覆盖 A3 Miuix 动态取色（Monet）、A7 主题引擎切换。
 
@@ -577,7 +594,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **上游口径**：A14 sheet 可拖排主导航顺序、逐项显隐（`SetMainNavigationOrder`/`SetMainDestinationVisible`）；A15 `showStatusBar`；A16 `enableSwipeAnimation`；A17 sheet 10 个键（`topBarOpacity`/`bottomBarOpacity`/`topBarBlurRadius`/`bottomBarBlurRadius`/`topBarBlurAlpha`/`bottomBarBlurAlpha`/`topBarHeight`/`bottomBarHeight` 等）；A18 `tabletInterface`、A19 `multiPaneMode` 都按设备形态显示。
 
-**判定**：A14–A17 **要接**（A14 已 r311、A17 已 r312 落地）；A18 平板界面与 A19 多窗布局属**额外设备形态**，按 [项目范围](PROJECT.md)「范围之外」判**不接**——本地 `:161` 的「多窗布局」条目保留在界面上，但不实施、不删行。
+**判定**：A14–A17 **要接**（A14 已 r311、A17 已 r312 落地）；A18 平板界面与 A19 多窗布局属**额外设备形态**，按 [项目范围](PROJECT.md)「范围之外」判**不接**——批 6（2026-11-17 自造与降级清算）已把这两行整行删除，不再保留禁用态。
 
 **补法**：**A17 已在 r312 落地**：新建 `entry/src/main/ets/data/TopBottomBarSettings.ets`（`TOP_BAR_BUTTON_STYLES` 五档 + `topBarButtonStyleLabel` 逐条对齐上游 `values-zh-rCN/arrays.xml:226-232`、`TopBottomBarSnapshot` 15 字段、7 个 `normalize*`、`resolveBarBackgroundColor` 按上游 `GlassDefaults.glassColor()` + `AppNavigationBar.kt:60` 合成、`resolveTopBarBackground`/`resolveBottomBarBackground`/`resolveBottomBarCornerRadius`）；`data/ThemeSettingsRepository.ets` 的 `ThemeSnapshot` 增加 15 字段（现 53 字段）；`pages/Index.ets` 新增 15 个 `@State`、`topBottomBarSnapshot()`、`publishTopBottomBarStyle()`（广播 `themeTopBarBackground`/`themeBottomBarBackground`/`themeTopBarBlurRadius`/`themeBottomBarBlurRadius`/`themeBottomBarRadius` 五个键）与 15 个 `selectTheme*` 回调；底栏渲染改成 `if (this.themeShowBottomView && ...)`，并按 `useFloatingBottomBar` 改宽度/圆角、按合成色设底色、按 `enableBlur` 挂 `backdropBlur`；顶栏底色由 `components/CollapsingSettingsHeader.ets`（12 个设置子页）与 `HomePage.ets`/`SearchPage.ets`/`ThemeSettingsPage.ets` 三处内联 header 消费（**r343 后这半句已过时**：顶栏统一到 `components/TopBar.ets` 的 `AppTopBar`，底色与模糊只由它一个消费，详见 `docs/parity/ZIP-THEME.md` 的 A17 行）。A18/A19 不动。**A14 已在 r311 落地**：新建 `data/MainNavigationSettings.ets`（`MAIN_NAVIGATION_ROUTES`、`mainNavigationLabel`、`orderedMainNavigation` 逐条对齐上游 `MainDestination.ordered` 的「过滤未知与重复 + 补齐未出现项」、`moveNavigationUp`/`moveNavigationDown`、`normalizeDefaultHomePage` 的不可见回落、`isMainDestinationVisible`/`visibleMainNavigation`）；`data/ThemeSettingsRepository.ets` 的 `ThemeSnapshot` 增加 `showHome`/`showDiscovery`/`showRss`/`defaultHomePage`/`mainNavigationOrder`/`labelVisibilityMode` 六字段（现 38 字段）；`pages/Index.ets` 的底栏由 5 个硬编码 `TabItem` 改为 `ForEach(this.visibleNavigationRoutes())`，并新增 `applyDefaultHomePage()`（启动与关掉当前页时回落）；`pages/ThemeSettingsPage.ets` 的「首页与导航」改为可展开组（三枚显隐开关 + 默认主页面下拉 + 导航标签显示下拉 + 逐项上下移按钮）。**与上游的差异**：上游用可拖列表（`rememberReorderableLazyListState`）改顺序，本地用「上移/下移」两枚按钮承接同一个 `onSetOrder` 语义；上游还有「导航栏图标」子 sheet（`NavIconManageSheet`，10 个自定义图标键），本地未做。**A15 已在 r304 落地**：`pages/ThemeSettingsPage.ets` 的「显示状态栏」改为 `@Prop showStatusBarVisible` + `onShowStatusBarChange`；`pages/Index.ets` 的 `selectThemeShowStatusBar()` 写 `themeShowStatusBar` + `applyThemeStatusBar()`（`setSpecificSystemBarEnabled('status', visible, false)`）+ 落盘；`restoreOnboarding()` 启动时读回并应用。**A16 已在 r304 落地**：同构的 `themeSwipeAnimation` / `selectThemeSwipeAnimation()`，**只落盘不造效果**——上游这个键本身没有任何渲染消费者（`ThemeConfigScreen.kt:361` 原文 TODO「这个可以不要了」），照实对齐现状。
 
