@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 # 本机临时文件（编辑器/脚本落盘的 .tmp-* 备份，不应进仓库）
 .tmp-*
+.tmp_*
 # 签名材料和本机配置
 *.p12
 *.pfx
@@ -58,4 +59,5 @@ docs/dev/
 
 # 会话临时证据目录（设备截图、布局树、一次性脚本），与 screenshots/ project-resources/ 同性质
 tmp3/
+tmp/
 evidence/
