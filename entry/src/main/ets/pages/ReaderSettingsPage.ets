@@ -1686,7 +1686,7 @@ export struct ReaderSettingsPage {
           ForEach(['左侧', '中间', '右侧'], (position: string) => {
             ReaderInfoSettingRow({
               iconKind: position === '左侧' ? 1 : position === '中间' ? 2 : 3,
-              title: position,
+              title: position === '左侧' ? '左' : position === '中间' ? '中' : '右',
               choices: this.getInfoTipChoices(),
               selectedIndex: Math.max(0, READ_INFO_TIP_VALUES.indexOf(this.getInfoTipValue(
                 this.infoSubTab === 0
@@ -1698,7 +1698,7 @@ export struct ReaderSettingsPage {
           }, (position: string) => position)
           Text('分隔线').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           ReaderInfoSwitchRow({
-            title: '显示分割线', detail: '显示页眉/页脚分隔线',
+            title: '显示分隔线', detail: '显示页眉/页脚分隔线',
             checked: this.infoSubTab === 0 ? this.infoSettings.showHeaderLine : this.infoSettings.showFooterLine,
             onChange: (enabled: boolean) => this.onInfoSettingsChange(updateReaderInfoSettings(this.infoSettings, {
               showHeaderLine: this.infoSubTab === 0 ? enabled : this.infoSettings.showHeaderLine,
@@ -1707,11 +1707,11 @@ export struct ReaderSettingsPage {
           })
           ReaderInfoColorRow({ iconKind: 4, title: '分割线', detail: '页眉与页脚共用' })
             .onClick(() => this.openDetailSheet('分割线颜色', '选择页眉/页脚分割线颜色'))
-          Text('文字字体').fontSize(12).fontColor(this.themeColorAccent)
+          Text('字体样式').fontSize(12).fontColor(this.themeColorAccent)
             .width('100%').padding({ left: 4, top: 10, bottom: 4 })
           if (this.infoSubTab === 1) {
             MenuSettingSwitch({
-              title: '应用页眉样式', detail: '页脚文字继承页眉样式', checked: this.infoSettings.applyHeaderStyle,
+              title: '应用页眉字体样式', checked: this.infoSettings.applyHeaderStyle,
               onChange: (enabled: boolean) => this.onInfoSettingsChange(
                 updateReaderInfoSettings(this.infoSettings, { applyHeaderStyle: enabled }))
             })
