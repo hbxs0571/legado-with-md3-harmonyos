@@ -885,7 +885,7 @@ export struct ReaderSettingsPage {
           .backgroundColor(this.rsetInnerBg)
           .borderRadius(12)
           .margin({ left: 8 })
-          .onClick(() => this.openDetailSheet('排版设置', '正文、标题、页眉页脚与边距设置'))
+          .onClick(() => this.openDetailSheet('排版设置', ''))
         }
         .padding(12)
         .backgroundColor(this.rsetCardBg)
@@ -938,9 +938,9 @@ export struct ReaderSettingsPage {
             .backgroundColor(this.rsetInnerBg).borderRadius(8)
             .onClick(() => this.openDetailSheet('翻页动画', '覆盖、滑动、仿真、滚动、淡入淡出、无动画'))
           Image($r('app.media.app_anim_speed')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 12 })
-          .onClick(() => this.openDetailSheet('翻页动画速度', `当前：${this.getAnimationSpeedLabel()}；可选极速、快速、适中、优雅`))
+          .onClick(() => this.openDetailSheet('翻页动画速度', ''))
           Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 14 })
-            .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
+            .onClick(() => this.openDetailSheet('页边距', ''))
         }.padding(13).backgroundColor(this.rsetCardBg).borderRadius(13).margin({ top: 13 })
       }.width('100%').padding({ left: 14, right: 14, bottom: 14 })
     }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
@@ -1671,7 +1671,7 @@ export struct ReaderSettingsPage {
           selectedIndex: this.infoSubTab,
           trailingIcon: $r('app.media.app_padding'),
           onSelect: (index: number) => { this.infoSubTab = index; },
-          onTrailing: (): void => { this.openDetailSheet('页边距', '页面内边距与正文留白设置'); }
+          onTrailing: (): void => { this.openDetailSheet('页边距', ''); }
         }).layoutWeight(1)
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
       Scroll() {
@@ -2218,7 +2218,7 @@ export struct ReaderSettingsPage {
       return;
     }
     this.detailSheetTitle = '排版设置';
-    this.detailSheetDescription = '正文、标题、页眉页脚与边距设置';
+    this.detailSheetDescription = '';
     this.detailSelectedOption = this.getFontTargetLabel();
   }
 
@@ -2551,7 +2551,9 @@ export struct ReaderSettingsPage {
           Text(this.menuEntryDisplayTitle(this.detailSheetTitle)).fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
           Text('关闭').fontSize(13).fontColor(this.rsetAccent).onClick(() => this.detailSheetVisible = false)
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
-        Text(this.detailSheetDescription).fontSize(13).fontColor(this.rsetTextSecondary).width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
+        if (this.detailSheetDescription.length > 0) {
+          Text(this.detailSheetDescription).fontSize(13).fontColor(this.rsetTextSecondary).width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
+        }
         if (this.detailSheetTitle === '种子色' || this.detailSheetTitle === '菜单背景颜色' ||
           this.detailSheetTitle === '菜单容器颜色' || this.detailSheetTitle === '菜单强调颜色' ||
           this.detailSheetTitle === '菜单栏边框颜色' || this.detailSheetTitle === '菜单文字颜色' ||
@@ -2802,7 +2804,7 @@ export struct ReaderSettingsPage {
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextTertiary)
               }.width(40).height(40).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ left: 4 })
-                .onClick(() => this.openDetailSheet('页边距', '页面内边距与正文留白设置'))
+                .onClick(() => this.openDetailSheet('页边距', ''))
             }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
             // 上游是 CardTabRow + HorizontalPager：点页签切页，也可以直接横滑。
             Swiper() {
