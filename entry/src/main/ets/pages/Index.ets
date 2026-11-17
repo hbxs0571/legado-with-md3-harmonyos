@@ -7819,6 +7819,24 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  private async setReaderPageAnim(anim: number): Promise<void> {
+    // -1 = 显式「默认」档（回落全局），0..5 = 本书显式动画，与上游 Book.config.pageAnim 同值。
+    const value = Math.max(-1, Math.min(5, Math.round(anim)));
+    if (this.selectedBook.pageAnim === value) { return; }
+    const updatedBook: Book = BookRepository.copyBook(this.selectedBook);
+    updatedBook.pageAnim = value;
+    this.selectedBook = updatedBook;
+    this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || !BookRepository.isPersistableBook(updatedBook)) { return; }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        this.books.filter((book: Book) => BookRepository.isPersistableBook(book)));
+    } catch (_) {
+      this.showUnavailableAction('翻页动画保存失败，重新打开后可能恢复默认动画');
+    }
+  }
+
   private async setReaderReSegment(enabled: boolean): Promise<void> {
     if (this.selectedBook.reSegment === enabled || this.selectedBook.contentPath === undefined) { return; }
     const context = this.getUIContext().getHostContext();
@@ -8632,6 +8650,7 @@ private canWriteInto(dir: string): boolean {
             onBrightnessVwPosChange: (position: string) => this.setReaderBrightnessVwPos(position),
             onImageStyleChange: (imageStyle: string) => this.setReaderImageStyle(imageStyle),
             onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
+            onPageAnimChange: (animation: number) => this.setReaderPageAnim(animation),
             onOpenSettings: () => this.openReaderSettings(),
             onOpenBottomActionConfig: () => this.openReaderSettings(true),
             onCharsetChange: (charset: string) => this.setReaderCharset(charset),

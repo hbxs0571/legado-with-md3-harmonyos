@@ -122,6 +122,8 @@ const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
 };
 // 翻页动画六档，顺序与上游 GlobalThemePage.kt:353-360 的 cover/slide/simulation/scroll/fade/none 一致。
 const READER_PAGE_ANIMATION_LABELS: string[] = ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画'];
+/** 翻页动画「默认」档（上游 R.string.btn_default_s → -1），选中即回落全局设置。 */
+const READER_PAGE_ANIM_DEFAULT: number = -1;
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
 /** 底栏进度条自绘拇指宽度（vp）。上游 `ReadBookMenuBarTool.kt:320` 的 handle 是 4dp 宽。 */
@@ -840,6 +842,8 @@ export struct ReaderPage {
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onImageStyleChange: (imageStyle: string) => void = (_imageStyle: string) => {};
   onPageAnimationChange: (animation: number) => void = (_animation: number) => {};
+  /** 设置当前书的翻页动画（上游 Book.config.pageAnim），由上层落库并回填 selectedBook。 */
+  onPageAnimChange: (animation: number) => void = (_animation: number) => {};
   onProgressChange: (bookId: string, chapterIndex: number, progress: number,
     chapterPosition: number, androidCoordinate: boolean) => void = () => {};
   onAddBookmark: (chapterPosition: number, pageText: string) => void = (_position: number, _pageText: string) => {};
@@ -2002,7 +2006,7 @@ export struct ReaderPage {
   }
 
   onProgressBehaviorChanged(): void {
-    this.sliderProgressIndex = this.pageAnimation === 3
+    this.sliderProgressIndex = this.effectivePageAnim() === 3
       ? this.readerProgress
       : (this.progressBehavior === 'page' && this.localReaderPages.length > 0
         ? this.currentChapterPageIndex() : this.getChapterIndex());
@@ -2042,6 +2046,37 @@ export struct ReaderPage {
   private effectiveImageStyle(): string {
     return this.book.bookType === 'image' && this.activeImageStyle === 'DEFAULT'
       ? 'SINGLE' : this.activeImageStyle;
+  }
+
+  /**
+   * 本书实际生效的翻页动画。
+   * 上游三级回落：Book.config.pageAnim（null / <0 = 跟随全局）→ ReadBookConfig.pageAnim。
+   * 见 app/src/main/java/io/legado/app/data/entities/Book.kt:274-285 getPageAnim()。
+   * 漫画书未设置时默认滚动那条不实现：本地 isLocal 恒 true 且无漫画形态。
+   */
+  private effectivePageAnim(): number {
+    // ?? undefined 把 null 与 undefined 一并归一为「未设置」，对齐上游 null 语义。
+    const perBook = this.book.pageAnim ?? undefined;
+    if (perBook === undefined || perBook < 0) {
+      return this.pageAnimation;
+    }
+    return Math.max(0, Math.min(5, perBook));
+  }
+
+  /** 菜单选中档位：-1 = 默认（跟随全局），0..5 = 本书显式选择。 */
+  private selectedPageAnimIndex(): number {
+    const perBook = this.book.pageAnim ?? undefined;
+    if (perBook === undefined || perBook < 0) {
+      return READER_PAGE_ANIM_DEFAULT;
+    }
+    return Math.max(0, Math.min(5, perBook));
+  }
+
+  /** 选中某档后交给上层写回本书并落库。 */
+  private choosePageAnim(anim: number): void {
+    this.onPageAnimChange(anim);
+    this.pageAnimMenuVisible = false;
+    this.overflowVisible = false;
   }
 
   private imageStyleLabel(style: string): string {
@@ -2678,9 +2713,9 @@ export struct ReaderPage {
       `contentLen=${document.content.length} chPages=${this.currentChapterPageCount()}`);
     const consumedBookmarkTarget = this.pendingBookmarkTargetPosition >= 0;
     this.pendingBookmarkTargetPosition = -1;
-    if (this.pageAnimation !== 3 && forceProgressCommit) {
+    if (this.effectivePageAnim() !== 3 && forceProgressCommit) {
       this.reportReaderPageProgress();
-    } else if (this.pageAnimation !== 3) {
+    } else if (this.effectivePageAnim() !== 3) {
       this.sliderProgressIndex = this.progressBehavior === 'page'
         ? this.currentChapterPageIndex() : this.getChapterIndex();
     }
@@ -2793,7 +2828,7 @@ export struct ReaderPage {
   private shouldShowBookmarkBadge(): boolean {
     if (this.bookmarkBadgeSize <= 0) { return false; }
     // 上游只在分页模式显示角标（滚动模式没有固定页面边界）。
-    if (this.pageAnimation === 3) { return false; }
+    if (this.effectivePageAnim() === 3) { return false; }
     if (!this.book.isLocal) { return false; }
     return this.hasBookmarkOnCurrentPage();
   }
@@ -2891,7 +2926,7 @@ export struct ReaderPage {
   }
 
   private updateBookmarkPull(event: GestureEvent): void {
-    if (!this.swipeToAddBookmark || !this.book.isLocal || this.pageAnimation === 3 ||
+    if (!this.swipeToAddBookmark || !this.book.isLocal || this.effectivePageAnim() === 3 ||
       event.offsetY <= 0 || event.offsetY <= Math.abs(event.offsetX) * 1.5) {
       this.bookmarkPullOffset = 0;
       this.bookmarkPullArmed = false;
@@ -3120,7 +3155,7 @@ export struct ReaderPage {
    * 折页模式另外写触点，让纸角跟着手指走。
    */
   private updateHorizontalPageDrag(event: GestureEvent): void {
-    if (this.pageAnimation === 5) { return; }
+    if (this.effectivePageAnim() === 5) { return; }
     if (this.usesCanvasScroll()) { return; }
     const context = this.getUIContext();
     const slop = this.pageTouchSlop > 0 ? this.pageTouchSlop : 36;
@@ -3143,7 +3178,7 @@ export struct ReaderPage {
       this.horizontalDragLastOffsetVp = 0;
       return;
     }
-    const mode = readerTransitionModeFromPageAnim(this.pageAnimation);
+    const mode = readerTransitionModeFromPageAnim(this.effectivePageAnim());
     this.turnMode = mode;
     this.turnTransition = transition;
     this.horizontalDragLastOffsetVp = context.px2vp(transition.offsetPx);
@@ -3186,7 +3221,7 @@ export struct ReaderPage {
     // ArkUI 的 velocityX 单位是 vp/s，正方向「左→右」，与 offsetX 同号
     const velocityPxPerSecond = context.vp2px(event.velocityX ?? 0);
     const transition = this.turnTransition;
-    const mode = readerTransitionModeFromPageAnim(this.pageAnimation);
+    const mode = readerTransitionModeFromPageAnim(this.effectivePageAnim());
     // 淡入转场松手判定只要求过 10%，而且不看甩动速度：上游
     // ReaderCanvasSurface.kt:1455-1462 在 fade 时把 velocityPxPerSecond 传 0、
     // commitProgress 传 0.1f。否则屏幕上刚淡了一点的手势会被当成「没翻」弹回去。
@@ -3330,7 +3365,7 @@ export struct ReaderPage {
       this.onTurnChapterBoundary(delta);
       return;
     }
-    if (this.pageAnimation === 5) {
+    if (this.effectivePageAnim() === 5) {
       this.currentPageIndex = nextPageIndex;
       this.reportReaderPageProgress();
       // 无动画翻页也要重绘：currentPageIndex 是 @State 但没有 @Watch，画布不会自己刷新。
@@ -3341,7 +3376,7 @@ export struct ReaderPage {
     const baseDuration = durationBySpeed[this.animationSpeed] ?? 360;
     // 翻页方向：进度只增不减，负值一律算 PREVIOUS（上游 ReaderHorizontalDrag.capture 同口径）
     const turnDirection = delta > 0 ? ReaderTransitionDirection.NEXT : ReaderTransitionDirection.PREVIOUS;
-    const mode = readerTransitionModeFromPageAnim(this.pageAnimation);
+    const mode = readerTransitionModeFromPageAnim(this.effectivePageAnim());
     const pageExtentPx = this.getUIContext().vp2px(Math.max(1, this.readerContentWidth));
     const pageHeightPx = this.getUIContext().vp2px(Math.max(1, this.viewportHeight));
     const targetOffsetPx = turnDirection === ReaderTransitionDirection.NEXT ? -pageExtentPx : pageExtentPx;
@@ -3606,11 +3641,11 @@ export struct ReaderPage {
   }
 
   private isPageProgressMode(): boolean {
-    return this.pageAnimation !== 3 && this.progressBehavior === 'page' && this.localReaderPages.length > 0;
+    return this.effectivePageAnim() !== 3 && this.progressBehavior === 'page' && this.localReaderPages.length > 0;
   }
 
   private getProgressSliderMaximum(): number {
-    if (this.pageAnimation === 3) { return 100; }
+    if (this.effectivePageAnim() === 3) { return 100; }
     // 页层批次 4：滑块上限是本章页数（窗口表还含邻章页），不是页表长度。
     return this.isPageProgressMode() ? this.currentChapterPageCount() - 1 : this.getChapterCount() - 1;
   }
@@ -4232,7 +4267,7 @@ export struct ReaderPage {
   private getWholeBookProgress(): number {
     const chapterCount = this.getChapterCount();
     const chapterIndex = this.getChapterIndex();
-    if (this.pageAnimation !== 3) {
+    if (this.effectivePageAnim() !== 3) {
       // 页层批次 4：分母与分子都取当前章（窗口表还含邻章页，不能拿 length 当章页数）。
       const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
       const pageCount = position?.pageCount ?? this.localReaderPages.length;
@@ -4314,12 +4349,12 @@ export struct ReaderPage {
   private requestFullBookPagination(): void {
     // 批 2 验收打点：needs=1 说明页脚确实配了「全文页数」类占位符，
     // skipScroll=1 说明本次是滚动模式、全书分页被跳过（改前会照跑不误）。
-    console.info(`[ReaderBench] fullBookPagination skipScroll=${this.pageAnimation === 3 ? 1 : 0} needs=${this.needsFullBookPageData() ? 1 : 0}`);
+    console.info(`[ReaderBench] fullBookPagination skipScroll=${this.effectivePageAnim() === 3 ? 1 : 0} needs=${this.needsFullBookPageData() ? 1 : 0}`);
     // 滚动模式的进度不走页数（getWholeBookPageIndex / getWholeBookPageCount 直接返回 -1），
     // 全书逐章分页算完没人读，却会占住排版线程，是换章顿挫的来源之一。
     // 并入早退：既不再启动，也借现有代际清理打断正在跑的任务并清掉已算结果。
     if (!this.needsFullBookPageData() || !this.book.isLocal || this.book.contentPath === undefined ||
-      this.pageAnimation === 3) {
+      this.effectivePageAnim() === 3) {
       if (this.fullBookPaginationKey !== '' || this.fullBookPageCounts.length > 0) {
         this.fullBookPaginationGeneration++;
         this.fullBookPaginationKey = '';
@@ -4412,7 +4447,7 @@ export struct ReaderPage {
       chapterIndex: number
     ): Promise<boolean> => {
       // 切到滚动模式后逐章检查一次，及时打断已在跑的全书分页（沿用现有循环返回，不另造取消机制）。
-      if (this.pageAnimation === 3 || generation !== this.fullBookPaginationGeneration ||
+      if (this.effectivePageAnim() === 3 || generation !== this.fullBookPaginationGeneration ||
         key !== this.getFullBookPaginationLayoutKey()) {
         return false;
       }
@@ -4492,7 +4527,7 @@ export struct ReaderPage {
   }
 
   private getWholeBookPageIndex(): number {
-    if (!this.fullBookPaginationReady || this.pageAnimation === 3) { return -1; }
+    if (!this.fullBookPaginationReady || this.effectivePageAnim() === 3) { return -1; }
     const chapterIndex = this.getChapterIndex();
     if (chapterIndex < 0 || chapterIndex >= this.fullBookPageCounts.length) { return -1; }
     // 页层批次 4：全书页码累加的是本章页号，不是窗口表下标。
@@ -4505,7 +4540,7 @@ export struct ReaderPage {
   }
 
   private getWholeBookPageCount(): number {
-    if (!this.fullBookPaginationReady || this.pageAnimation === 3) { return -1; }
+    if (!this.fullBookPaginationReady || this.effectivePageAnim() === 3) { return -1; }
     let total = 0;
     for (let index = 0; index < this.fullBookPageCounts.length; index++) {
       total += this.fullBookPageCounts[index] ?? 0;
@@ -4531,7 +4566,7 @@ export struct ReaderPage {
   // '2' 只在横屏且非滚动时双页，'3' 放宽到平板，其余单页。
   private resolveReaderColumnCount(): number {
     return readerColumnCount(this.doubleHorizontalPage, this.readerContentWidth, this.viewportHeight,
-      this.pageAnimation === 3);
+      this.effectivePageAnim() === 3);
   }
 
   // 单列的横向步长（含左右内边距），对齐上游 ReaderPaginator.kt:86 的 columnStridePx。
@@ -5408,7 +5443,7 @@ export struct ReaderPage {
 
 
   private usesLocalPagination(): boolean {
-    return this.book.isLocal === true && this.pageAnimation !== 3;
+    return this.book.isLocal === true && this.effectivePageAnim() !== 3;
   }
 
   /**
@@ -5418,7 +5453,7 @@ export struct ReaderPage {
    * 二是拿不到行几何，KI-C3 的下划线四项与选区都只得分页模式才有。
    */
   private usesCanvasScroll(): boolean {
-    return this.book.isLocal === true && this.pageAnimation === 3;
+    return this.book.isLocal === true && this.effectivePageAnim() === 3;
   }
 
   /** 是否走画布渲染：本地分页与连续滚动都算。 */
@@ -7301,7 +7336,7 @@ export struct ReaderPage {
               // 速度沿用 ArkUI 给的 velocityY（vp/s，手指向下为正），与 delta 同号。
               this.startReaderScrollFling(event.velocityY ?? 0);
             }),
-          PanGesture({ direction: this.swipeToAddBookmark && this.book.isLocal && this.pageAnimation !== 3
+          PanGesture({ direction: this.swipeToAddBookmark && this.book.isLocal && this.effectivePageAnim() !== 3
             ? PanDirection.Vertical : PanDirection.None })
             .onActionStart(() => {
               this.bookmarkWillRemove = this.hasBookmarkOnCurrentPage();
@@ -7472,7 +7507,7 @@ export struct ReaderPage {
                       const maximum = this.getProgressSliderMaximum();
                       const index = Math.max(0, Math.min(maximum, Math.round(value)));
                       this.sliderProgressIndex = index;
-                      if (this.pageAnimation === 3) {
+                      if (this.effectivePageAnim() === 3) {
                         if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
                           this.seekToProgress(index);
                         }
@@ -7894,18 +7929,24 @@ export struct ReaderPage {
               Text('关闭').fontSize(13).fontColor('#C7C9D1')
                 .onClick(() => this.pageAnimMenuVisible = false)
             }.width('100%').padding({ bottom: 12 })
+            // 「默认」档（上游 R.string.btn_default_s → -1）：回落全局设置；未设置同义。
+            Row() {
+              Text('默认').fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
+              if (this.selectedPageAnimIndex() === READER_PAGE_ANIM_DEFAULT) {
+                AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
+              }
+            }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
+              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+              .onClick(() => this.choosePageAnim(READER_PAGE_ANIM_DEFAULT))
             ForEach(READER_PAGE_ANIMATION_LABELS, (label: string, index: number) => {
               Row() {
                 Text(label).fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
-                if (this.pageAnimation === index) {
+                if (this.selectedPageAnimIndex() === index) {
                   AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
                 }
               }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
                 .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
-                .onClick(() => {
-                  this.onPageAnimationChange(index);
-                  this.pageAnimMenuVisible = false;
-                })
+                .onClick(() => this.choosePageAnim(index))
             }, (label: string) => label)
           }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
         }.width('100%').height('100%')

@@ -37,6 +37,12 @@ interface StoredReadConfig {
    * 而 readBookRow 是同步函数，拿不到章长，只能靠存两份。
    */
   chapterProgress?: number;
+  /**
+   * 每本书的翻页动画（上游 Book.config.pageAnim）。
+   * undefined = 跟随全局；-1 = 显式「默认」档，同样回落全局。
+   * 上游 getPageAnim() 把 null 与 <0 都当跟随全局（Book.kt:274-285）。
+   */
+  pageAnim?: number;
 }
 
 interface ChapterTextRange {
@@ -517,6 +523,7 @@ export class BookRepository {
       format: book.format,
       chapterCount: book.chapterCount,
       imageStyle: book.imageStyle,
+      pageAnim: book.pageAnim,
       reSegment: book.reSegment,
       charset: book.charset,
       description: book.description,
@@ -1045,6 +1052,7 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       contentPath: bookUrl.length > 0 ? bookUrl : undefined,
       format: BookRepository.normalizeFormat(RdbCodec.optionalText(resultSet, 23), bookUrl),
       imageStyle: config.imageStyle,
+      pageAnim: config.pageAnim,
       reSegment: config.reSegment === true,
       useReplaceRule: config.useReplaceRule,
       charset: RdbCodec.optionalText(resultSet, 14),
@@ -1642,7 +1650,9 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       fixedType: book.fixedType === true,
       useReplaceRule: book.useReplaceRule,
       // 章内百分比没有独立列，与阅读配置一起存；读回时 readBookRow 从同一处取。
-      chapterProgress: Math.max(0, Math.min(100, book.chapterProgress ?? 0))
+      chapterProgress: Math.max(0, Math.min(100, book.chapterProgress ?? 0)),
+      // undefined 时 JSON.stringify 会丢掉该键，正好对应上游「跟随全局」的语义
+      pageAnim: book.pageAnim
     };
     const totalChapterNum = Number(book.chapterCount ?? '0');
     const lastChapter = book.lastChapter.length > 0 ? book.lastChapter : null;

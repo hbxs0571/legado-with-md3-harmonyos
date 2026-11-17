@@ -37,6 +37,8 @@ export interface Book {
   chapterCount?: string;
   /** 与 Android Book.imageStyle 同值：DEFAULT / FULL / TEXT / SINGLE。 */
   imageStyle?: string;
+  /** 与 Android Book.config.pageAnim 同值：0..5，-1 = 默认（跟随全局）。缺省 = 跟随全局。 */
+  pageAnim?: number;
   /** 与 Android Book.config.reSegment 对应，按书启用正文重分段。 */
   reSegment?: boolean;
   /** 上游 Book.delTag 位掩码：hTag=2、rubyTag=4，按书启用 EPUB 正文净化开关。 */
