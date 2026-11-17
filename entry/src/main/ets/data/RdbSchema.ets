@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7。 */
-  static readonly version: number = 7;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7；第八批（高亮规则边框）给 highlightRules 补 borderColor / borderWidth / borderRadius 三列后升到 8。 */
+  static readonly version: number = 8;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -135,7 +135,7 @@ export class RdbSchema {
 
   /**
    * highlightRules：上游 HighlightRule.kt，主键 id，无索引。
-   * 注意 14 个 REAL 列：读的时候必须用 RdbCodec.real()（内部 getDouble），
+   * 注意 15 个 REAL 列（含新增的 borderWidth / borderRadius）：读的时候必须用 RdbCodec.real()（内部 getDouble），
    * 用 getLong 会静默截断（实测 0.1 变 0），九宫格边距与字距会全变 0。
    */
   static readonly createHighlightRules: string =
@@ -173,6 +173,9 @@ export class RdbSchema {
     '`lineSpacingBottom` REAL NOT NULL DEFAULT 0, ' +
     '`bgLengthOffsetLeft` REAL NOT NULL DEFAULT 0, ' +
     '`bgLengthOffsetRight` REAL NOT NULL DEFAULT 0, ' +
+    '`borderColor` INTEGER, ' +
+    '`borderWidth` REAL NOT NULL DEFAULT 1, ' +
+    '`borderRadius` REAL NOT NULL DEFAULT 4, ' +
     'PRIMARY KEY(`id`)' +
     ')';
 
@@ -590,6 +593,21 @@ export class RdbSchema {
       await store.executeSql("ALTER TABLE books ADD COLUMN format TEXT NOT NULL DEFAULT ''");
     } catch (_) {
       // 列已存在（duplicate column name）是正常路径，不记错误
+    }
+    // highlightRules 三个边框列是后加的：CREATE TABLE IF NOT EXISTS 不会给老库补列。
+    // 与 books.format 同样靠吞「duplicate column」做到幂等。
+    try {
+      await store.executeSql("ALTER TABLE highlightRules ADD COLUMN borderColor INTEGER");
+    } catch (_) {
+      // 列已存在（duplicate column name）是正常路径，不记错误
+    }
+    try {
+      await store.executeSql("ALTER TABLE highlightRules ADD COLUMN borderWidth REAL NOT NULL DEFAULT 1");
+    } catch (_) {
+    }
+    try {
+      await store.executeSql("ALTER TABLE highlightRules ADD COLUMN borderRadius REAL NOT NULL DEFAULT 4");
+    } catch (_) {
     }
     if (store.version !== RdbSchema.version) {
       store.version = RdbSchema.version;

@@ -18,7 +18,7 @@ export interface ReaderHighlightRuleImportOutcome {
  * load() 把整表读进 cachedRules，getAll() 同步读缓存，写操作落库后更新缓存。
  * preferences 只作为搬迁来源，搬迁完成后不再写入。
  *
- * 注意：本表有 14 个 REAL 列（下划线宽/偏移、九宫格边距、字距、行距等），
+ * 注意：本表有 15 个 REAL 列（下划线宽/偏移、九宫格边距、字距、行距、边框宽/圆角等），
  * 读取必须走 RdbCodec.real()（内部 getDouble）；用 getLong 不报错，
  * 但会把 0.1 静默读成 0，表现是「规则能存能读，样式全丢」。
  */
@@ -30,7 +30,8 @@ export class ReaderHighlightRuleRepository {
       '`bgColor`, `underlineMode`, `underlineColor`, `underlineWidth`, `underlineOffset`, `underlineSvgPath`, ' +
       '`bgImage`, `bgImageFit`, `bgImageScale`, `configName`, `fontPath`, `fontWeight`, `isItalic`, ' +
       '`fontSizeOffset`, `npLeft`, `npRight`, `npTop`, `npBottom`, `manualNineSlice`, `letterSpacingBefore`, ' +
-      '`letterSpacingAfter`, `lineSpacingTop`, `lineSpacingBottom`, `bgLengthOffsetLeft`, `bgLengthOffsetRight` ' +
+      '`letterSpacingAfter`, `lineSpacingTop`, `lineSpacingBottom`, `bgLengthOffsetLeft`, `bgLengthOffsetRight`, ' +
+      '`borderColor`, `borderWidth`, `borderRadius` ' +
       'FROM `highlightRules` ORDER BY `position` ASC';
   private static readonly insertSql: string =
     'INSERT OR REPLACE INTO `highlightRules` ' +
@@ -38,8 +39,9 @@ export class ReaderHighlightRuleRepository {
       '`bgColor`, `underlineMode`, `underlineColor`, `underlineWidth`, `underlineOffset`, `underlineSvgPath`, ' +
       '`bgImage`, `bgImageFit`, `bgImageScale`, `configName`, `fontPath`, `fontWeight`, `isItalic`, ' +
       '`fontSizeOffset`, `npLeft`, `npRight`, `npTop`, `npBottom`, `manualNineSlice`, `letterSpacingBefore`, ' +
-      '`letterSpacingAfter`, `lineSpacingTop`, `lineSpacingBottom`, `bgLengthOffsetLeft`, `bgLengthOffsetRight`) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+      '`letterSpacingAfter`, `lineSpacingTop`, `lineSpacingBottom`, `bgLengthOffsetLeft`, `bgLengthOffsetRight`, ' +
+      '`borderColor`, `borderWidth`, `borderRadius`) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
   private static saveQueue: Promise<void> = Promise.resolve();
   private static cachedRules: ReaderHighlightRule[] = [];
 
@@ -106,8 +108,8 @@ export class ReaderHighlightRuleRepository {
   /**
    * 导出为与上游 highlightRule.json 一致的 JSON 数组。
    * 字段名逐字对齐 Android HighlightRule 实体，不含本地独有的运行时字段，
-   * 因此 Android 端可直接读回；上游多出的 borderColor/borderWidth/borderRadius
-   * 三个边框字段本地没有模型，缺失时由 Kotlin 默认值兜底。
+   * 因此 Android 端可直接读回；borderColor/borderWidth/borderRadius
+   * 三个边框字段本地已建模并随备份往返。
    */
   static exportRules(rules: ReaderHighlightRule[]): string {
     const ordered: ReaderHighlightRule[] = rules.map((rule: ReaderHighlightRule, index: number) => {
@@ -239,7 +241,11 @@ export class ReaderHighlightRuleRepository {
         rule.lineSpacingTop === undefined ? 0 : rule.lineSpacingTop,
         rule.lineSpacingBottom === undefined ? 0 : rule.lineSpacingBottom,
         rule.bgLengthOffsetLeft === undefined ? 0 : rule.bgLengthOffsetLeft,
-        rule.bgLengthOffsetRight === undefined ? 0 : rule.bgLengthOffsetRight
+        rule.bgLengthOffsetRight === undefined ? 0 : rule.bgLengthOffsetRight,
+        // 边框三件套：颜色为 null 时粗细与圆角不参与绘制（上游同一判断）。
+        rule.borderColor === undefined ? null : rule.borderColor,
+        rule.borderWidth === undefined ? 1 : rule.borderWidth,
+        rule.borderRadius === undefined ? 4 : rule.borderRadius
       ]);
     }
   }
@@ -279,6 +285,9 @@ export class ReaderHighlightRuleRepository {
     const lineSpacingBottomIndex = RdbCodec.column(resultSet, 'lineSpacingBottom');
     const bgLengthOffsetLeftIndex = RdbCodec.column(resultSet, 'bgLengthOffsetLeft');
     const bgLengthOffsetRightIndex = RdbCodec.column(resultSet, 'bgLengthOffsetRight');
+    const borderColorIndex = RdbCodec.column(resultSet, 'borderColor');
+    const borderWidthIndex = RdbCodec.column(resultSet, 'borderWidth');
+    const borderRadiusIndex = RdbCodec.column(resultSet, 'borderRadius');
     const rules: ReaderHighlightRule[] = [];
     while (resultSet.goToNextRow()) {
       const rule: ReaderHighlightRule = {
@@ -315,7 +324,10 @@ export class ReaderHighlightRuleRepository {
         lineSpacingTop: RdbCodec.real(resultSet, lineSpacingTopIndex),
         lineSpacingBottom: RdbCodec.real(resultSet, lineSpacingBottomIndex),
         bgLengthOffsetLeft: RdbCodec.real(resultSet, bgLengthOffsetLeftIndex),
-        bgLengthOffsetRight: RdbCodec.real(resultSet, bgLengthOffsetRightIndex)
+        bgLengthOffsetRight: RdbCodec.real(resultSet, bgLengthOffsetRightIndex),
+        borderColor: RdbCodec.optionalInteger(resultSet, borderColorIndex),
+        borderWidth: RdbCodec.real(resultSet, borderWidthIndex, 1),
+        borderRadius: RdbCodec.real(resultSet, borderRadiusIndex, 4)
       };
       rules.push(rule);
     }
@@ -356,7 +368,10 @@ export class ReaderHighlightRuleRepository {
       lineSpacingTop: rule.lineSpacingTop,
       lineSpacingBottom: rule.lineSpacingBottom,
       bgLengthOffsetLeft: rule.bgLengthOffsetLeft,
-      bgLengthOffsetRight: rule.bgLengthOffsetRight
+      bgLengthOffsetRight: rule.bgLengthOffsetRight,
+      borderColor: rule.borderColor,
+      borderWidth: rule.borderWidth,
+      borderRadius: rule.borderRadius
     };
   }
 

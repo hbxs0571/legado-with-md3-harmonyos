@@ -33,6 +33,15 @@ export interface ReaderHighlightRule {
   lineSpacingBottom?: number;
   bgLengthOffsetLeft?: number;
   bgLengthOffsetRight?: number;
+  /**
+   * 边框颜色：null 或 undefined = 不描边。粗细与圆角只在颜色非空时参与绘制。
+   * 对齐上游 HighlightRule.kt:61-67 borderColor / borderWidth / borderRadius。
+   */
+  borderColor?: number | null;
+  /** 边框粗细（dp，上游默认 1）。颜色为 null 时不参与绘制。 */
+  borderWidth?: number;
+  /** 边框圆角（dp，上游默认 4）：0 = 直角。色块填充跟同一个圆角。 */
+  borderRadius?: number;
 }
 
 /** 正文正则命中的 UTF-16 半开区间；坐标与当前 LocalTextSemantics 渲染文本一致。 */

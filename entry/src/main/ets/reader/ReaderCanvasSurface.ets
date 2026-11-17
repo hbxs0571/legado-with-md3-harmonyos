@@ -547,6 +547,10 @@ class ReaderCanvasBackgroundRect {
   right: number = 0;
   bottom: number = 0;
   colorArgb: number = 0;
+  /** 背景框边框：颜色 0 表示不描边；粗细与圆角是 px。 */
+  borderColorArgb: number = 0;
+  borderWidthPx: number = 0;
+  borderRadiusPx: number = 0;
 }
 
 /** 一条高亮 / 笔记标记，start/end 是渲染坐标（与 LocalReaderLineItem 同口径）。 */
@@ -608,6 +612,13 @@ export class ReaderCanvasStyleRange {
   letterSpacingBeforePx: number = 0;
   /** 命中排版：命中末字之后多出的间距（px）。 */
   letterSpacingAfterPx: number = 0;
+  /**
+   * 背景框边框：颜色 0 表示不描边（与上游 borderColor == null 同义）。
+   * 粗细 / 圆角是 px（规则里是 dp，注入时已换算）。
+   */
+  borderColorArgb: number = 0;
+  borderWidthPx: number = 0;
+  borderRadiusPx: number = 0;
 }
 
 export class ReaderCanvasMarking {
@@ -798,7 +809,9 @@ export class ReaderCanvasDrawRequest {
 
 /** ARGB 数值 → common2D.Color（0..255 整数）。 */
 export function readerCanvasColor(argb: number): common2D.Color {
-  const value = Math.trunc(Math.abs(argb)) >>> 0;
+  // 规则颜色经 colorFromCss 的 | 0 存成有符号数（#FFFF00 = -256），取 abs 会把 alpha 抹成 0；
+  // 统一按无符号 32 位解释，正数与负数两种 ARGB 表示都能还原出正确的 AARRGGBB。
+  const value = Math.trunc(argb) >>> 0;
   const color: common2D.Color = {
     alpha: (value >>> 24) & 0xFF,
     red: (value >>> 16) & 0xFF,
@@ -2796,7 +2809,8 @@ export class ReaderCanvasRenderer {
     }
     const rects: ReaderCanvasBackgroundRect[] = [];
     for (const range of ranges) {
-      if (range.backgroundArgb === 0) {
+      // 背景色与边框色都是 0 才跳过：只配了边框色的规则也要画。
+      if (range.backgroundArgb === 0 && (range.borderColorArgb ?? 0) === 0) {
         continue;
       }
       const boxes = built.paragraph.getRectsForRange(
@@ -2811,6 +2825,9 @@ export class ReaderCanvasRenderer {
         rect.right = left + box.rect.right;
         rect.bottom = top + box.rect.bottom;
         rect.colorArgb = range.backgroundArgb;
+        rect.borderColorArgb = range.borderColorArgb;
+        rect.borderWidthPx = range.borderWidthPx;
+        rect.borderRadiusPx = range.borderRadiusPx;
         rects.push(rect);
       }
     }
@@ -2818,13 +2835,40 @@ export class ReaderCanvasRenderer {
       return;
     }
     const bands = ReaderCanvasRenderer.mergeBackgroundBands(rects);
-    const brush = new drawing.Brush();
-    canvas.attachBrush(brush);
     for (const band of bands) {
-      brush.setColor(readerCanvasColor(band.colorArgb));
-      canvas.drawRect(band.left, band.top, band.right, band.bottom);
+      // 圆角夹到宽高较小一边的一半：半径超出的圆角矩形在窄行盒上会画出交叉弧线。
+      const halfHeight = (band.bottom - band.top) / 2;
+      const halfWidth = (band.right - band.left) / 2;
+      const radiusPx = Math.max(0, Math.min(band.borderRadiusPx, Math.min(halfWidth, halfHeight)));
+      const rounded = radiusPx > 0;
+      const rect: common2D.Rect = {
+        left: band.left, top: band.top, right: band.right, bottom: band.bottom
+      };
+      if (band.colorArgb !== 0) {
+        const brush = new drawing.Brush();
+        brush.setColor(readerCanvasColor(band.colorArgb));
+        canvas.attachBrush(brush);
+        if (rounded) {
+          canvas.drawRoundRect(new drawing.RoundRect(rect, radiusPx, radiusPx));
+        } else {
+          canvas.drawRect(band.left, band.top, band.right, band.bottom);
+        }
+        canvas.detachBrush();
+      }
+      if (band.borderColorArgb !== 0 && band.borderWidthPx > 0) {
+        const pen = new drawing.Pen();
+        pen.setColor(readerCanvasColor(band.borderColorArgb));
+        pen.setStrokeWidth(band.borderWidthPx);
+        pen.setAntiAlias(true);
+        canvas.attachPen(pen);
+        if (rounded) {
+          canvas.drawRoundRect(new drawing.RoundRect(rect, radiusPx, radiusPx));
+        } else {
+          canvas.drawRect(band.left, band.top, band.right, band.bottom);
+        }
+        canvas.detachPen();
+      }
     }
-    canvas.detachBrush();
   }
 
   /** 同色矩形合并：按上游 `mergeBackgroundBounds` 的两条判定（同行重叠 + 间隙容差）。 */
@@ -2849,11 +2893,18 @@ export class ReaderCanvasRenderer {
       const sameLine = minHeight > 0 && overlap >= minHeight * 0.5;
       const joinGap = minHeight * 0.5;
       const horizontalGap = Math.max(rect.left - previous.right, previous.left - rect.right, 0);
-      if (sameLine && previous.colorArgb === rect.colorArgb && horizontalGap <= joinGap) {
+      if (sameLine && previous.colorArgb === rect.colorArgb &&
+        previous.borderColorArgb === rect.borderColorArgb &&
+        previous.borderWidthPx === rect.borderWidthPx &&
+        previous.borderRadiusPx === rect.borderRadiusPx &&
+        horizontalGap <= joinGap) {
         previous.left = Math.min(previous.left, rect.left);
         previous.top = Math.min(previous.top, rect.top);
         previous.right = Math.max(previous.right, rect.right);
         previous.bottom = Math.max(previous.bottom, rect.bottom);
+        previous.borderColorArgb = rect.borderColorArgb;
+        previous.borderWidthPx = rect.borderWidthPx;
+        previous.borderRadiusPx = rect.borderRadiusPx;
       } else {
         bands.push(rect);
       }
@@ -3160,6 +3211,10 @@ export class ReaderCanvasRenderer {
       local.npBottom = range.npBottom;
       local.bgLengthOffsetLeft = range.bgLengthOffsetLeft;
       local.bgLengthOffsetRight = range.bgLengthOffsetRight;
+      // 边框三字段必须逐字段传递：漏一个，画布侧就拿不到描边参数
+      local.borderColorArgb = range.borderColorArgb;
+      local.borderWidthPx = range.borderWidthPx;
+      local.borderRadiusPx = range.borderRadiusPx;
       // 命中排版与字体替换：逐字段抄下来，漏一个就画不出来
       local.fontFamilies = range.fontFamilies;
       local.fontWeightValue = range.fontWeightValue;

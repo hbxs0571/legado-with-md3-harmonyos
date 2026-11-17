@@ -37,6 +37,10 @@ export struct ReaderHighlightRuleSheet {
   @State editLetterSpacingAfter: number = 0;
   @State editLineSpacingTop: number = 0;
   @State editLineSpacingBottom: number = 0;
+  // 背景框边框：颜色串空串 = 不描边（与上游 borderColor == null 同义）
+  @State editBorderColor: string = '';
+  @State editBorderWidth: number = 1;
+  @State editBorderRadius: number = 4;
   // 字体替换（上游 :781-793）：路径 + 字重 + 斜体 + 字号偏移（sp）
   @State editFontPath: string = '';
   @State editFontWeight: number = 400;
@@ -73,7 +77,8 @@ export struct ReaderHighlightRuleSheet {
       manualNineSlice: rule.manualNineSlice, letterSpacingBefore: rule.letterSpacingBefore,
       letterSpacingAfter: rule.letterSpacingAfter, lineSpacingTop: rule.lineSpacingTop,
       lineSpacingBottom: rule.lineSpacingBottom, bgLengthOffsetLeft: rule.bgLengthOffsetLeft,
-      bgLengthOffsetRight: rule.bgLengthOffsetRight
+      bgLengthOffsetRight: rule.bgLengthOffsetRight, borderColor: rule.borderColor,
+      borderWidth: rule.borderWidth, borderRadius: rule.borderRadius
     };
   }
 
@@ -110,6 +115,9 @@ export struct ReaderHighlightRuleSheet {
     this.editBgImageScale = 1;
     this.editBgLengthOffsetLeft = 0;
     this.editBgLengthOffsetRight = 0;
+    this.editBorderColor = '';
+    this.editBorderWidth = 1;
+    this.editBorderRadius = 4;
     this.editNpLeft = 0.1;
     this.editNpRight = 0.1;
     this.editNpTop = 0.1;
@@ -142,6 +150,9 @@ export struct ReaderHighlightRuleSheet {
     this.editBgImageScale = rule.bgImageScale ?? 1;
     this.editBgLengthOffsetLeft = rule.bgLengthOffsetLeft ?? 0;
     this.editBgLengthOffsetRight = rule.bgLengthOffsetRight ?? 0;
+    this.editBorderColor = this.colorInput(rule.borderColor);
+    this.editBorderWidth = rule.borderWidth ?? 1;
+    this.editBorderRadius = rule.borderRadius ?? 4;
     this.editNpLeft = rule.npLeft ?? 0.1;
     this.editNpRight = rule.npRight ?? 0.1;
     this.editNpTop = rule.npTop ?? 0.1;
@@ -365,9 +376,12 @@ export struct ReaderHighlightRuleSheet {
       ? undefined : ReaderHighlightRuleEngine.colorFromCss(this.editBackgroundColor);
     const underlineColor = this.editUnderlineColor.trim().length === 0
       ? undefined : ReaderHighlightRuleEngine.colorFromCss(this.editUnderlineColor);
+    const borderColor = this.editBorderColor.trim().length === 0
+      ? null : ReaderHighlightRuleEngine.colorFromCss(this.editBorderColor);
     if ((this.editTextColor.trim().length > 0 && textColor === undefined) ||
       (this.editBackgroundColor.trim().length > 0 && bgColor === undefined) ||
-      (this.editUnderlineColor.trim().length > 0 && underlineColor === undefined)) {
+      (this.editUnderlineColor.trim().length > 0 && underlineColor === undefined) ||
+      (this.editBorderColor.trim().length > 0 && borderColor === undefined)) {
       this.errorMessage = '颜色请填写 #RRGGBB 或 #AARRGGBB';
       return;
     }
@@ -408,6 +422,10 @@ export struct ReaderHighlightRuleSheet {
     rule.bgImageScale = this.editBgImageScale;
     rule.bgLengthOffsetLeft = this.editBgLengthOffsetLeft;
     rule.bgLengthOffsetRight = this.editBgLengthOffsetRight;
+    // borderColor 写 null 不写 undefined：仓储的 optionalInteger 绑参需要显式 null。
+    rule.borderColor = borderColor ?? null;
+    rule.borderWidth = this.editBorderWidth;
+    rule.borderRadius = this.editBorderRadius;
     rule.npLeft = this.editNpLeft;
     rule.npRight = this.editNpRight;
     rule.npTop = this.editNpTop;
@@ -657,6 +675,18 @@ export struct ReaderHighlightRuleSheet {
               TextInput({ text: this.editBackgroundColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editBackgroundColor = value)
                 .fontSize(14).margin({ top: 6, bottom: 12 })
+              Text('边框色（可空，留白不描边）').fontSize(12).fontColor('#BFC2CD').width('100%')
+              TextInput({ text: this.editBorderColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
+                .onChange((value: string) => this.editBorderColor = value)
+                .fontSize(14).margin({ top: 6, bottom: 12 })
+              this.StepperRow('边框粗细 ' + this.editBorderWidth + ' dp',
+                '' + this.editBorderWidth, (delta: number) => {
+                  this.editBorderWidth = Math.min(20, Math.max(0, this.editBorderWidth + delta));
+                })
+              this.StepperRow('边框圆角 ' + this.editBorderRadius + ' dp',
+                '' + this.editBorderRadius, (delta: number) => {
+                  this.editBorderRadius = Math.min(40, Math.max(0, this.editBorderRadius + delta));
+                })
               Row() {
                 Text('下划线样式').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
                 Text(this.underlineLabel()).fontSize(13).fontColor('#B9C6FF')

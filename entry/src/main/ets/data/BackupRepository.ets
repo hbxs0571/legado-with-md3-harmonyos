@@ -3742,7 +3742,10 @@ export class BackupRepository {
       lineSpacingTop: BackupRepository.readNumber(record, 'lineSpacingTop', 0),
       lineSpacingBottom: BackupRepository.readNumber(record, 'lineSpacingBottom', 0),
       bgLengthOffsetLeft: BackupRepository.readNumber(record, 'bgLengthOffsetLeft', 0),
-      bgLengthOffsetRight: BackupRepository.readNumber(record, 'bgLengthOffsetRight', 0)
+      bgLengthOffsetRight: BackupRepository.readNumber(record, 'bgLengthOffsetRight', 0),
+      borderColor: BackupRepository.readNullableNumber(record, 'borderColor'),
+      borderWidth: BackupRepository.readNumber(record, 'borderWidth', 1),
+      borderRadius: BackupRepository.readNumber(record, 'borderRadius', 4)
     };
     return rule;
   }

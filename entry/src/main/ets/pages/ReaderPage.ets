@@ -6274,7 +6274,8 @@ export struct ReaderPage {
       const overrideItalic = rule.isItalic === true ? 1 : -1;
       const families = this.highlightRuleFontFamilies(rule.fontPath);
       const hasBase = (rule.textColor ?? 0) !== 0 || (rule.bgColor ?? 0) !== 0 ||
-        readerCanvasHighlightDecoration(rule.underlineMode) !== 0 || (rule.bgImage ?? '').length > 0;
+        readerCanvasHighlightDecoration(rule.underlineMode) !== 0 || (rule.bgImage ?? '').length > 0 ||
+        (rule.borderColor ?? 0) !== 0;
       const hasType = families.length > 0 || sizeOffsetPx !== 0 || overrideWeight !== 0;
       const hasSpace = spaceBeforePx > 0 || spaceAfterPx > 0;
       if (!hasBase && !hasType && !hasSpace) {
@@ -6303,6 +6304,10 @@ export struct ReaderPage {
         item.npBottom = rule.npBottom ?? 0.1;
         item.bgLengthOffsetLeft = rule.bgLengthOffsetLeft ?? 0;
         item.bgLengthOffsetRight = rule.bgLengthOffsetRight ?? 0;
+        // 边框三件套是一个整体：颜色没给，粗细与圆角就不单独存在。
+        item.borderColorArgb = rule.borderColor ?? 0;
+        item.borderWidthPx = (rule.borderColor ?? 0) !== 0 ? (rule.borderWidth ?? 1) * vpScale : 0;
+        item.borderRadiusPx = (rule.borderColor ?? 0) !== 0 ? (rule.borderRadius ?? 4) * vpScale : 0;
         // 字体替换与字号偏移（上游 spToPx，已按 fp 换算）
         item.fontFamilies = families;
         item.fontWeightValue = overrideWeight;
