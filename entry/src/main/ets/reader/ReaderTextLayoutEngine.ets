@@ -1,4 +1,5 @@
 import { text } from '@kit.ArkGraphics2D';
+import { ChineseLineBreaker } from './ChineseLineBreaker';
 
 /**
  * 正文排版断行引擎：把断行交给系统原生文本引擎，与上游 legado 的 `StaticLayout` 同一底座。
@@ -258,6 +259,7 @@ export class ReaderTextLayoutEngine {
       return this.fitRanges(value);
     }
     this.reclaimTrailingSpaces(value, ranges);
+    this.applyPunctuationHanging(value, ranges);
     const last = ranges[ranges.length - 1] as ReaderTextLineRange;
     if (last.end < value.length) {
       last.end = value.length;
@@ -315,6 +317,68 @@ export class ReaderTextLayoutEngine {
         cursor = wordEnd;
         current.end = wordEnd;
         next.start = wordEnd;
+      }
+    }
+  }
+
+  /**
+   * 行尾标点后处理：在系统断行结果之上做两项禁则修正。
+   *
+   * 1) 下一行以收尾标点开头 → 把该标点**悬挂**到本行行尾（上游 HANG 语义）；
+   * 2) 本行以开标点结尾 → 把该开标点推到下一行行首（上游 PULL_PREVIOUS 语义）。
+   *
+   * 第 1 项**允许本行超出右边界**：上游 `ChineseLineBreaker` 的 HANG 分支原文就是
+   * 「标点留在本行（行宽超出右边界，旧版正是靠这个避免标点落到下一行行首）」。
+   * 绘制侧 `drawTextBox` 只做 save/paint/restore、没有 clipRect，超出一个标点不会被裁掉；
+   * 两端对齐的 `justifyGap` 在 `naturalWidth > contentWidth` 时被 `Math.max(0, …)` 归零，
+   * 所以超宽行只是右边界多出一个标点，不会把别的字挤压变形。
+   *
+   * 行首连续的收尾标点（`。”` `？！」`）整体搬走：上游 HANG 一次只挂一个，剩下的交给
+   * REWIND 回退整词；后处理层没有回退余地，只挂一个会让 `”` 继续落在行首。
+   * 悬挂后保证下一行不被搬空。
+   */
+  private applyPunctuationHanging(value: string, ranges: ReaderTextLineRange[]): void {
+    for (let index = 0; index + 1 < ranges.length; index++) {
+      const current = ranges[index] as ReaderTextLineRange;
+      const next = ranges[index + 1] as ReaderTextLineRange;
+      // 只在相邻行首尾相接时才有「行首/行尾」可言。
+      if (current.end !== next.start) {
+        continue;
+      }
+      // 1) 收尾标点不落行首：把下一行开头连续的收尾标点整体悬挂到本行行尾。
+      //    上游 HANG 一次只挂一个，剩下的交给 REWIND 回退整词；后处理层没有回退余地，
+      //    只挂一个会让 `。”` 的 `”` 继续落在行首，所以这里按「连续收尾标点」整体搬。
+      let hangEnd = next.start;
+      while (hangEnd < next.end) {
+        const mark = value.substring(hangEnd, hangEnd + 1);
+        if (!ChineseLineBreaker.isClosingMark(mark)) {
+          break;
+        }
+        // 同一标点连打允许断在中间（`！！！`），第一个不悬挂。
+        if (hangEnd === next.start && value.substring(hangEnd - 1, hangEnd) === mark) {
+          break;
+        }
+        hangEnd++;
+      }
+      // 悬挂后下一行不能变空。
+      if (hangEnd > next.start && hangEnd < next.end) {
+        current.end = hangEnd;
+        next.start = hangEnd;
+        continue;
+      }
+      // 2) 开标点不留行尾：把本行末尾的开标点推到下一行行首。
+      let pushStart = current.end;
+      while (pushStart > current.start + 1) {
+        const mark = value.substring(pushStart - 1, pushStart);
+        if (!ChineseLineBreaker.isOpeningMark(mark)) {
+          break;
+        }
+        pushStart--;
+      }
+      // 下推后本行不能变空。
+      if (pushStart < current.end) {
+        current.end = pushStart;
+        next.start = pushStart;
       }
     }
   }
