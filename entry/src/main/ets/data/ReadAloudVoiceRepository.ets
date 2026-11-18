@@ -64,6 +64,23 @@ export class ReadAloudVoiceRepository {
   }
 
   /**
+   * 按 HTTP 源取可用音色，供批 8 的 HTTP 朗读消费。
+   *
+   * 判据与 SQL `WHERE engineType = 'http' AND engineId = :sourceId AND excluded = 0`
+   * 完全等价：`load()` 已用 selectAll 把全表（含 excluded=1 行）读进缓存，这里直接过滤。
+   * `excluded` 不能漏——上游 ReadAloudVoice.excluded 的注释写明它不是删除，行必须留着，
+   * 否则下次导入同一个源会把它当成新音色重新插回来；但消费侧必须忽略被排除的音色。
+   *
+   * 从缓存读而非另开查询，是为了守住任务书给的签名（只有 sourceId、无 context），
+   * 与 getAll() 同范式；调用方在批 8 使用前会先 load()。
+   */
+  static async listBySource(sourceId: string): Promise<ReadAloudVoice[]> {
+    const voices = ReadAloudVoiceRepository.cachedVoices.filter((voice: ReadAloudVoice): boolean =>
+      voice.engineType === 'http' && voice.engineId === sourceId && !voice.excluded);
+    return ReadAloudVoiceRepository.copyVoices(voices);
+  }
+
+  /**
    * 备份写出用：只取 engineType='http' 的行，按 displayName 不区分大小写排序。
    * excluded=1 的行必须读出来（导出要带上），这里不按 excluded 过滤；
    * 孤儿音色由 selectHttp 的子查询排除，避免新包里永远带着死源音色。

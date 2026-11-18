@@ -51,6 +51,9 @@ import { TagGroupRuleRepository } from './TagGroupRuleRepository';
 import { TagGroupRuleImporter } from './TagGroupRuleImporter';
 import { HttpTtsRepository } from './HttpTtsRepository';
 import { ReadAloudVoiceRepository } from './ReadAloudVoiceRepository';
+import {
+  READ_ALOUD_SETTINGS_ANDROID_TYPES, ReadAloudSettingsRepository, ReadAloudSettingsSnapshot
+} from './ReadAloudSettingsRepository';
 import { HttpTtsImporter } from './HttpTtsImporter';
 import { BookSourceRepository } from './BookSourceRepository';
 import { BookSourceImporter } from './BookSourceImporter';
@@ -1241,6 +1244,24 @@ export class BackupRepository {
           console.error(`[BackupRepository] 补写 config.xml 本地真值键失败，已跳过: ${error}`);
         }
       }
+      // 朗读偏好 14 键：任务书批 1 要求全部随 config.xml 导出（上游唯一的例外
+      // readAloudWakeLock 不在这 14 键里）。键名即上游 PreferKey，标签类型取自
+      // READ_ALOUD_SETTINGS_ANDROID_TYPES（capsuleOffsetX/Y 是 float）。排在透传之前，
+      // 让本地真值覆盖透传缓存里可能存在的旧值。
+      if (!ignoredCategories.includes('readConfig')) {
+        try {
+          const aloudSettings: ReadAloudSettingsSnapshot = await ReadAloudSettingsRepository.load(context);
+          const aloudValues = ReadAloudSettingsRepository.toAndroidValues(aloudSettings);
+          let aloudText = fileIo.readTextSync(configPath);
+          aloudValues.forEach((value: string, key: string): void => {
+            const declaredType = READ_ALOUD_SETTINGS_ANDROID_TYPES.get(key) ?? 'string';
+            aloudText = BackupRepository.upsertXmlPreference(aloudText, key, { type: declaredType, value: value });
+          });
+          BackupRepository.writeTextFile(configPath, aloudText);
+        } catch (error) {
+          console.error(`[BackupRepository] 写入朗读偏好到 config.xml 失败，已跳过: ${error}`);
+        }
+      }
       // 透传：copyPreservedEntries 带进来的 config.xml 里，凡是本地读不懂的键，
       // 这次原样写回去，避免「从 Android 恢复 → 本地备份 → 上游键全丢」。
       // 判据与上游 keyIsNotIgnore 的 else -> true 对齐：不在已知写出键集、不在忽略键里，就保留。
@@ -1924,6 +1945,9 @@ export class BackupRepository {
       selection.stagingDirectory, restoredReadSettings, ignoredCategories
     );
     await ReaderSettingsRepository.save(context, settings);
+    // 朗读偏好 14 键：与写出侧对称，从 config.xml 反读后合并进当前快照并落盘。
+    // 与阅读设置分开存（legado_read_aloud_settings），所以单独 save。
+    await BackupRepository.restoreReadAloudSettings(context, selection.stagingDirectory, ignoredCategories);
     // 全局深色模式与阅读设置分开存（`legado_theme`），所以单独读、单独回传，
     // 由调用方 `Index.ets` 走 `applyThemeMode` 应用，与上游 Restore.kt:326-335 同序。
     const restoredThemeMode = BackupRepository.restoreThemeMode(
@@ -2280,6 +2304,41 @@ export class BackupRepository {
     if (unconditionalRatio !== undefined) { restored.restrictCoverRatio = unconditionalRatio; }
     if (unconditionalFilter !== undefined) { restored.exploreFilterState = unconditionalFilter; }
     return restored;
+  }
+
+  /**
+   * 朗读偏好恢复：从 config.xml 逐键读出 14 键（按标签类型分派读取函数），
+   * 填进 Map 交给 ReadAloudSettingsRepository.mergeAndroidValues，缺失的保持当前值。
+   * 门控取 readConfig——与写出侧一致，config.xml 首要归属阅读配置。
+   */
+  private static async restoreReadAloudSettings(
+    context: Context,
+    directory: string,
+    ignoredCategories: string[]
+  ): Promise<void> {
+    if (ignoredCategories.includes('readConfig')) { return; }
+    const path = directory + '/config.xml';
+    if (!fileIo.accessSync(path)) { return; }
+    const current = await ReadAloudSettingsRepository.load(context);
+    const values = new Map<string, string>();
+    READ_ALOUD_SETTINGS_ANDROID_TYPES.forEach((declaredType: string, key: string): void => {
+      let raw: string | undefined = undefined;
+      if (declaredType === 'boolean') {
+        const bool = BackupRepository.readXmlBoolean(path, key);
+        raw = bool === undefined ? undefined : `${bool}`;
+      } else if (declaredType === 'float') {
+        const num = BackupRepository.readXmlFloat(path, key);
+        raw = num === undefined ? undefined : `${num}`;
+      } else if (declaredType === 'int') {
+        const num = BackupRepository.readXmlInteger(path, key);
+        raw = num === undefined ? undefined : `${num}`;
+      } else {
+        raw = BackupRepository.readXmlString(path, key);
+      }
+      if (raw !== undefined) { values.set(key, raw); }
+    });
+    const merged = ReadAloudSettingsRepository.mergeAndroidValues(current, values);
+    await ReadAloudSettingsRepository.save(context, merged);
   }
 
   private static applyEyeProtection(
