@@ -532,6 +532,10 @@ export struct ReaderPage {
   @State activeImageStyle: string = 'DEFAULT';
   @State readerProgress: number = 0;
   @State sliderProgressIndex: number = 0;
+  // 分页档拖动进度条时，上一次已经跳到的预览页号。
+  // 对齐上游 `ReadBookMenuBarBottom.kt:77` 的 previewPageIndex：拖动过程中
+  // 系统会连续派发同一个整数值，重复跳同一页会让画布反复重绘而闪烁。
+  @State sliderDragPreviewPageIndex: number = -1;
   @State viewportHeight: number = 0;
   @State readerContentWidth: number = 0;
   @State readerContentRevision: number = 0;
@@ -5921,6 +5925,12 @@ export struct ReaderPage {
 
   private seekToProgress(progress: number): void {
     this.resolveStartPosition();
+    // 滚动档的 updateProgress 有 250ms 节流回填，松手瞬间把拖动前的旧进度写回滑块，
+    // 表现为手指离开后进度条回弹一下。这里先取消挂起的回填再落新位置。
+    if (this.scrollProgressTimer >= 0) {
+      clearTimeout(this.scrollProgressTimer);
+      this.scrollProgressTimer = -1;
+    }
     const nextProgress = Math.max(0, Math.min(100, Math.round(progress)));
     const totalScrollHeight = this.readerScrollTotalHeight();
     if (totalScrollHeight <= 0) {
@@ -7835,7 +7845,7 @@ export struct ReaderPage {
                     step: 1,
                     style: SliderStyle.InSet
                   })
-                    .width('100%').height(40)
+                    .width('100%').height(52)
                     .selectedColor(this.readerMenuAccentTint())
                     .trackColor(this.readerMenuForegroundAlpha('33'))
                     // 系统圆点拇指涂透明，位置让给下面的竖条。
@@ -7854,12 +7864,21 @@ export struct ReaderPage {
                     .onChange((value: number, mode: SliderChangeMode) => {
                       const maximum = this.getProgressSliderMaximum();
                       const index = Math.max(0, Math.min(maximum, Math.round(value)));
+                      // 松手/点击之后不再处于拖动过程，清掉预览页号，下一次拖动重新从 -1 起算。
+                      if (mode !== SliderChangeMode.Moving) {
+                        this.sliderDragPreviewPageIndex = -1;
+                      }
                       this.sliderProgressIndex = index;
                       if (this.effectivePageAnim() === 3) {
                         if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
                           this.seekToProgress(index);
                         }
                       } else if (this.isPageProgressMode()) {
+                        // 拖动过程中同一个整数值会被连续派发，已经停在这一页就不再重绘。
+                        if (mode === SliderChangeMode.Moving && index === this.sliderDragPreviewPageIndex) {
+                          return;
+                        }
+                        this.sliderDragPreviewPageIndex = index;
                         // 页层批次 4：滑块 value 是章内页号，换算成窗口页表下标。
                         const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
                         this.currentPageIndex = position === undefined ? index
@@ -7880,7 +7899,7 @@ export struct ReaderPage {
                     .backgroundColor(this.readerMenuForeground())
                     .offset({ x: this.sliderThumbOffset() })
                     .hitTestBehavior(HitTestMode.None)
-                }.layoutWeight(1).height(40)
+                }.layoutWeight(1).height(52)
               }
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
