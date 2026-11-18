@@ -21,6 +21,8 @@ import { UiSwitchControl } from '../components/UiSwitchControl';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import image from '@ohos.multimedia.image';
+import { fileIo } from '@kit.CoreFileKit';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { batteryInfo, pasteboard, settings } from '@kit.BasicServicesKit';
 import { AnimatorResult, window } from '@kit.ArkUI';
 import { LengthMetricsUnit } from '@kit.ArkUI';
@@ -122,6 +124,8 @@ const MORE_ACTION_CONFIG_ENTRY: ReaderMoreAction = {
 };
 // 翻页动画六档，顺序与上游 GlobalThemePage.kt:353-360 的 cover/slide/simulation/scroll/fade/none 一致。
 const READER_PAGE_ANIMATION_LABELS: string[] = ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画'];
+/** 大图预览缩放上限，对齐上游 PhotoView.kt:38 MAX_SCALE = 2.5f。 */
+const IMAGE_PREVIEW_MAX_SCALE: number = 2.5;
 /** 翻页动画「默认」档（上游 R.string.btn_default_s → -1），选中即回落全局设置。 */
 const READER_PAGE_ANIM_DEFAULT: number = -1;
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
@@ -486,6 +490,15 @@ export struct ReaderPage {
   private imageTapTimestamp: number = 0;
   @State imagePreviewVisible: boolean = false;
   @State imagePreviewUri: string = '';
+  /** 大图预览缩放倍数：上游 PhotoView 钳制在 1..2.5（PhotoView.kt:38/501-506）。 */
+  @State imagePreviewScale: number = 1;
+  /** 拖动位移（px），与缩放一起组成预览的 transform。 */
+  @State imagePreviewOffsetX: number = 0;
+  @State imagePreviewOffsetY: number = 0;
+  /** 手势开始时的基准值，供 PinchGesture / PanGesture 叠加。 */
+  private imagePreviewBaseScale: number = 1;
+  private imagePreviewBaseOffsetX: number = 0;
+  private imagePreviewBaseOffsetY: number = 0;
   @State overflowVisible: boolean = false;
   @State imageStyleMenuVisible: boolean = false;
   /** 「翻页动画」条目的二级菜单：上游点一下直接展开 6 项单选，不弹「未迁移」。 */
@@ -2017,7 +2030,53 @@ export struct ReaderPage {
     if (!this.imagePreviewVisible) { return; }
     this.imagePreviewVisible = false;
     this.imagePreviewUri = '';
+    this.imagePreviewScale = 1;
+    this.imagePreviewOffsetX = 0;
+    this.imagePreviewOffsetY = 0;
+    this.imagePreviewBaseScale = 1;
+    this.imagePreviewBaseOffsetX = 0;
+    this.imagePreviewBaseOffsetY = 0;
     this.onCloseImagePreview();
+  }
+
+  /**
+   * 把当前预览的图存进相册。SaveButton 已给临时媒体库授权，
+   * 走 createAsset + fileIo 写入，不需要 WRITE_IMAGEVIDEO 常规权限。
+   * 转 JPEG 字节沿用 EpubExporter.packAsJpeg 的成熟写法。
+   */
+  private async saveReaderImageToGallery(): Promise<void> {
+    const uri = this.imagePreviewUri;
+    if (uri.length === 0) { return; }
+    let source: image.ImageSource | undefined;
+    let pixelMap: image.PixelMap | undefined;
+    let packer: image.ImagePacker | undefined;
+    try {
+      source = image.createImageSource(uri);
+      if (source === undefined) { this.onUnavailableAction('保存失败：无法读取图片'); return; }
+      pixelMap = await source.createPixelMap();
+      if (pixelMap === undefined) { this.onUnavailableAction('保存失败：无法解码图片'); return; }
+      packer = image.createImagePacker();
+      const options: image.PackingOption = { format: 'image/jpeg', quality: 100 };
+      const packed = await packer.packToData(pixelMap, options);
+      if (packed === undefined) { this.onUnavailableAction('保存失败：无法编码图片'); return; }
+      const bytes = new Uint8Array(packed);
+      const helper = photoAccessHelper.getPhotoAccessHelper(getContext(this));
+      const title = 'IMG_' + Date.now();
+      const assetUri = await helper.createAsset(photoAccessHelper.PhotoType.IMAGE, 'jpg', { title: title });
+      const file = fileIo.openSync(assetUri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+      try {
+        fileIo.writeSync(file.fd, bytes.buffer);
+      } finally {
+        fileIo.closeSync(file);
+      }
+      this.onUnavailableAction('已保存到相册');
+    } catch (error) {
+      this.onUnavailableAction('保存失败：' + JSON.stringify(error));
+    } finally {
+      if (packer !== undefined) { await packer.release(); }
+      if (pixelMap !== undefined) { await pixelMap.release(); }
+      if (source !== undefined) { source.release(); }
+    }
   }
 
   onImagePreviewCloseRevisionChanged(): void {
@@ -3584,6 +3643,13 @@ export struct ReaderPage {
       return;
     }
     this.imagePreviewUri = uri;
+    // 不复位的话第二张图会继承上一张的缩放与位移，看着像坏了。
+    this.imagePreviewScale = 1;
+    this.imagePreviewOffsetX = 0;
+    this.imagePreviewOffsetY = 0;
+    this.imagePreviewBaseScale = 1;
+    this.imagePreviewBaseOffsetX = 0;
+    this.imagePreviewBaseOffsetY = 0;
     this.imagePreviewVisible = true;
   }
 
@@ -8136,9 +8202,83 @@ export struct ReaderPage {
             Image($r('app.media.profile_close')).width(22).height(22).fillColor('#ECEEF2')
               .padding(8).onClick(() => this.closeReaderImagePreview())
           }.width('100%').height(48).padding({ left: 16, right: 16 })
-          Image(this.imagePreviewUri)
-            .width('100%').layoutWeight(1).objectFit(ImageFit.Contain)
-            .onClick(() => {})
+          Stack({ alignContent: Alignment.Center }) {
+            // 点击空白处关闭（保留现有行为）
+            Column()
+              .width('100%')
+              .height('100%')
+              .onClick(() => this.closeReaderImagePreview())
+            Image(this.imagePreviewUri)
+              .objectFit(ImageFit.Contain)
+              .width('100%')
+              .height('100%')
+              .scale({ x: this.imagePreviewScale, y: this.imagePreviewScale })
+              .translate({ x: this.imagePreviewOffsetX, y: this.imagePreviewOffsetY })
+              // 双指缩放：fingers 默认 2，钳制下限 1、上限 2.5（PhotoView.kt:501-506）。
+              .gesture(
+                PinchGesture({ fingers: 2 })
+                  .onActionStart(() => {
+                    this.imagePreviewBaseScale = this.imagePreviewScale;
+                  })
+                  .onActionUpdate((event: GestureEvent) => {
+                    const next = Math.max(1, Math.min(IMAGE_PREVIEW_MAX_SCALE, this.imagePreviewBaseScale * event.scale));
+                    this.imagePreviewScale = next;
+                    // 缩回 1 时位移必须归零，否则图会停在屏幕外。
+                    if (next <= 1) {
+                      this.imagePreviewOffsetX = 0;
+                      this.imagePreviewOffsetY = 0;
+                    }
+                  })
+              )
+              // 放大后单指拖动平移；缩放为 1 时不响应，交给上层点击关闭。
+              .gesture(
+                PanGesture()
+                  .onActionStart(() => {
+                    this.imagePreviewBaseOffsetX = this.imagePreviewOffsetX;
+                    this.imagePreviewBaseOffsetY = this.imagePreviewOffsetY;
+                  })
+                  .onActionUpdate((event: GestureEvent) => {
+                    if (this.imagePreviewScale <= 1) { return; }
+                    this.imagePreviewOffsetX = this.imagePreviewBaseOffsetX + event.offsetX;
+                    this.imagePreviewOffsetY = this.imagePreviewBaseOffsetY + event.offsetY;
+                  })
+              )
+              // 双击：放大到 2.5 与回正之间切换（PhotoView.kt:1204-1235）。
+              .gesture(
+                TapGesture({ count: 2 })
+                  .onAction(() => {
+                    if (this.imagePreviewScale > 1) {
+                      this.imagePreviewScale = 1;
+                      this.imagePreviewOffsetX = 0;
+                      this.imagePreviewOffsetY = 0;
+                    } else {
+                      this.imagePreviewScale = IMAGE_PREVIEW_MAX_SCALE;
+                    }
+                  })
+              )
+          }
+          .layoutWeight(1)
+          .width('100%')
+          // 长按保存：SaveButton 安全控件（免 WRITE_IMAGEVIDEO 权限）。
+          // 上游是长按弹系统分享面板（PhotoSheet.kt:82-97），本地改成右下角常驻按钮，
+          // 因为 ArkUI 的 LongPressGesture 与 PanGesture 在同一节点上容易互相吞掉。
+          Row() {
+            SaveButton({
+              icon: SaveIconStyle.FULL_FILLED,
+              text: SaveDescription.SAVE_IMAGE,
+              buttonType: ButtonType.Capsule
+            })
+              .onClick(async (event: ClickEvent, result: SaveButtonOnClickResult) => {
+                if (result === SaveButtonOnClickResult.SUCCESS) {
+                  await this.saveReaderImageToGallery();
+                } else {
+                  this.onUnavailableAction('未获得保存授权');
+                }
+              })
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.End)
+          .padding({ right: 16, bottom: 12 })
         }
         .width('100%').height('100%')
         .padding({ top: 28, bottom: 20 })
