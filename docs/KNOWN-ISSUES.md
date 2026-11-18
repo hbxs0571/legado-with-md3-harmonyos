@@ -1052,3 +1052,33 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - r257 设备没有自定义分组，卡片上新增的私有标记/刷新状态文案未在设备上直接显示验证。
 
 构建与设备记录见[验证记录](VALIDATION.md)，Android ZIP 字段边界见[备份恢复说明](BACKUP-RESTORE.md)。
+
+---
+
+## 滚动模式三批修复（2026-11-18~19，commit ebfaa08/eeec428/343749c）
+
+**KI-REL11 滚动模式每页末行被下一页整屏纸面盖掉半行** —— commit `ebfaa08`
+
+- **现象**：滚动档（pageAnimation=3）每滑到一页末尾，最后一行只露上半截、下半截消失，或整段空白。
+- **根因**：`entry/src/main/ets/reader/ReaderCanvasSurface.ets` 的 `drawScrollSlot()` 里，每一页绘制前都 `fillPageSurface(canvas, request, layout.viewportWidthPx, layout.viewportHeightPx)` 铺一张整屏纸面；next 页的纸面起点 `offset + currentExtent` 会盖掉 current 页末尾约一个 `originYpx`（≈61vp≈2 行）。上游 `feature/reader/ReaderCanvasSurface.kt:1964-1998` 的 `drawOne` 只 translate 不填充，整屏底色由 `draw()` 开头统一刷。
+- **修法**：删掉 `drawScrollSlot()` 里那三行 `if (request.pageSurfaceOpaque) { fillPageSurface(...); }`，原位留中文注释说明上游只 translate。`draw()` 开头 `:1155-1159` 已刷整屏 `pageBackgroundArgb`，无背景图时它与 `paperColor` 同源（`ReaderPage.ets:6200-6204`），有背景图时 `pageSurfaceOpaque=false` 两分支都不执行。不改 `pageScrollExtent()`、不动 `drawSlot`/`drawCurl` 的填充。
+- **验收（上机，深色）**：同一本书滑到页边界横跨屏幕中部，修前包截图 `tmp/b1_before_reverse.jpeg`：屏幕中部「可恶！是数百只大小了吗？」一行被笔直水平线从字中间切断、下半截消失（逐行亮像素统计 1700–1760px 行仅 18 个亮点，为切痕带）；修后包截图 `tmp/b1_after_boundary.jpeg` + 放大 `tmp/b1_after_rowzoom.png`：页边界附近各行文字完整、无水平切痕，连滑 10 屏无整片空白/纸色块。写"第 N 屏末行从被切掉 X 像素变成完整"；未做浅色单独验收（按惯例，见 KI-REL5）。
+- **副作用**：页间纸色缝隙消失属预期；章首顶部空白本就存在（originYpx 一直在），非本批引入，未动 originYpx。
+
+**KI-REL12 底栏进度条留白窄、竖条端点与粉色进度不同源** —— commit `eeec428`
+
+- **现象**：进度条两端留白比上游窄；竖条端点不到轨道端或越界；粉色已读端点与竖条不在同一位置（本地按轨道宽 −4 算，系统 Slider 按拇指实际行程算）。
+- **根因**：本地滑块容器只有 16vp 留白，上游是 16+5+5=26vp（`ReadBookMenuBarBottom.kt:162-169`）；`sliderThumbOffset()` 的 travel 用 `sliderTrackWidth - SLIDER_THUMB_WIDTH(=4)`，而系统 Slider 默认 blockSize 12×12、两端 InSet 6vp，实测真实行程远小于轨道宽。
+- **修法**：Slider 容器 Stack `.height(52)` 后加 `.padding({ left: 5, right: 5 })`（Row 的 16vp 不动）；新增常量 `SLIDER_THUMB_TRAVEL_INSET = 14.3`（`ReaderPage.ets:138`，带完整实测注释），`sliderThumbOffset()` 改用 `travel = Math.max(0, sliderTrackWidth - SLIDER_THUMB_TRAVEL_INSET * 2)` 保留 `ratio*travel - travel/2`。
+- **探针实测**（2026-11-18，1280×2832/密度3.5/视口365×809vp）：Slider bounds `[295,2371][985,2553]`px，X1=295/X2=985/宽 690px=197.03vp，max=100。非 clamp 区 7 点最小二乘 slope=0.169676 v/px、travel=589.4px=168.39vp、X0=344.7px；A1=(X0−X1)/3.5=14.21vp、A2=(197.03−168.39)/2=14.38vp，多组标定极差≤0.5vp（<1vp 无需重测），取 14.3。探针 `console.info('[SliderProbe]...')` 两处验收后已删净（grep -c SliderProbe=0）。
+- **验收（上机，深色）**：100% 竖条中心实测 935px（系统拇指理论 934.1px，差 0.9px），旧公式约 970.6px 越界约 36px；50% 竖条压在粉色右端（像素差 4–6px）；7 点拖动残差<0.4。截图 `tmp/b2_final_menu.jpeg`、`tmp/b2_drag_mid.jpeg`，布局 `tmp/b2lay.json`、`tmp/b2drag.json`。未做浅色单独验收。
+
+**KI-REL13 滚动档进度条刻度连成线、拖动位置与读数不符** —— commit `343749c`
+
+- **现象**：滚动档进度条上 100 个 4vp 刻度点铺满约 220vp 轨道连成一条线；拖到底时位置与页码读数不一致。
+- **根因**：`isPageProgressMode()` 排除了 `effectivePageAnim() === 3`，滚动档恒走 `getProgressSliderMaximum()` 的 100 特判；`onChange` 又把滚动档分支排最前，导致滚动 + 页码档仍按百分比滚。上游 `ReadBookViewModel.kt:2172-2181` 的 `calculateSeekMax` 只看 progressBarBehavior 不分滚动档。
+- **修法**：`isPageProgressMode()` 只留 `progressBehavior==='page' && localReaderPages.length>0`；删除滚动恒 100 特判，页码档上限 `currentChapterPageCount()-1`、章节档 `getChapterCount()-1`；Slider 加 `.enabled(Math.max(0, getProgressSliderMaximum())>0)`；新增唯一重置入口 `syncProgressIndexFromPosition()`（7 处赋值替换）；`onChange` 改为页码档走 `seekToChapterPage(index)`（章内页号→窗口页下标），章节档松手才 `onSelectChapterIndex(index)`；删 `seekToProgress()`。
+- **验收（上机，深色）**：滚动档刻度点从"连成一片"变为本章页数对应的约 10 个可数点（`tmp/b3_scroll_slider_zoom.png`）；页码档拖到 1/4 显示 3/10、拖到 3/4 显示 8/10，跟手（`tmp/b3_drag_quarter.jpeg`、`tmp/b3_drag_threequarter.jpeg`）；翻页档回归：翻页前后页码 5/10→6/10，动作正常无退化（`tmp/b3_pageturn_menu.jpeg`、`tmp/b3_pageturn_after.jpeg`）。
+- **未验项**：章节档「拖动中不动、松手才跳章」在当前 EPUB 书（暂无目录、章节档未真正切换）上未取得有效证据；代码已按上游语义实现（`onChange` 仅 End/Click 调 `onSelectChapterIndex`），但未在带目录的 TXT 书上机确认，记为"代码改到位、屏幕未确认"。无障碍文案滚动档念"页"按代码推断为预期，未设备取证。
+- **保留**：`getProgressAccessibilityText` 滚动档语义、`getReaderFooterProgress`（全仓零调用）、`updateProgress`/`getWholeBookProgress` 均未改；页表未就绪时短暂回落章号语义不去对齐。
+
