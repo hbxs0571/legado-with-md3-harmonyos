@@ -2702,7 +2702,8 @@ export struct ReaderPage {
         `${entry[0]}:${entry[1].width}x${entry[1].height}`).sort().join(',');
     const paginationCacheKey = ReaderChapterPageCache.key(
       this.book.contentPath ?? '', this.getChapterIndex(),
-      this.getPaginationLayoutKey(0) + '|imgs=' + imageSizeKey);
+      this.getPaginationLayoutKey(0) + '|imgs=' + imageSizeKey +
+      '|body=' + this.contentFingerprint(this.content));
     const cachedPages = ReaderChapterPageCache.get(paginationCacheKey);
     const paginateStartedAt = Date.now();
     const paginatedPages = cachedPages ?? LocalReaderPaginator.paginate(
@@ -4533,6 +4534,20 @@ export struct ReaderPage {
       }
     }
     return false;
+  }
+
+  /**
+   * 正文内容指纹（FNV-1a 32 位），供章页快照键区分同一章的不同正文。
+   * 不能用 readerContentRevision：它单调递增，换回同一章会永远 miss 批5的快照；
+   * 正文没变时指纹稳定仍能命中，编辑正文后指纹改变就让旧页表失效。
+   */
+  private contentFingerprint(text: string): string {
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return hash.toString(36);
   }
 
   private getFullBookPaginationLayoutKey(): string {

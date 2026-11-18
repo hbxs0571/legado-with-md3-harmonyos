@@ -7857,15 +7857,64 @@ private canWriteInto(dir: string): boolean {
       this.showUnavailableAction('开始日格式应为 yyyy-MM-dd，例如 2026-11-01');
       return;
     }
+    const startCh = Math.max(0, Math.round(startChapter));
+    const daily = Math.max(0, Math.round(dailyChapters));
     const updatedBook: Book = BookRepository.copyBook(this.selectedBook);
     updatedBook.readSimulating = enabled;
     updatedBook.startDate = date.length > 0 ? date : undefined;
-    updatedBook.startChapter = Math.max(0, Math.round(startChapter));
-    updatedBook.dailyChapters = Math.max(0, Math.round(dailyChapters));
-    this.selectedBook = updatedBook;
-    this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    updatedBook.startChapter = startCh;
+    updatedBook.dailyChapters = daily;
+    // 模拟追读开启后只允许读到解锁章：把当前章夹到可读范围并重载那一章正文，
+    // 与上游 ReadBook.kt:1993-1994 一致（夹 durChapterIndex 后 loadContent）。
+    // 只夹显示层 getChapterIndex() 会让「页表按章 N 排、正文仍是旧章」。
+    const chapterTitles = BookRepository.cachedChapterTitles(updatedBook);
+    const realCount = chapterTitles.length;
+    let clampedIndex = Math.max(0,
+      updatedBook.chapterIndex ?? chapterTitles.indexOf(this.selectedChapter));
+    let needReload = false;
+    if (enabled && realCount > 0) {
+      let daysPassed = 1;
+      if (date.length >= 10) {
+        const parts = date.split('-');
+        const year = Number(parts[0]);
+        const month = Number(parts[1]);
+        const day = Number(parts[2]);
+        if (Number.isInteger(year) && Number.isInteger(month) && Number.isInteger(day)) {
+          // 拆年月日 + Date.UTC，与 ReaderPage.simulatedChapterCount 同口径，避开时区偏差。
+          const startUtc = Date.UTC(year, month - 1, day);
+          const now = new Date();
+          const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+          daysPassed = Math.max(1, Math.floor((todayUtc - startUtc) / 86400000) + 1);
+        }
+      }
+      const unlock = Math.max(0, startCh + daysPassed * daily);
+      const maxIndex = Math.max(0, Math.min(realCount, unlock) - 1);
+      if (clampedIndex > maxIndex) {
+        clampedIndex = maxIndex;
+        needReload = true;
+      }
+    }
+    const chapterTitle = chapterTitles[clampedIndex] ?? this.selectedChapter;
+    let reloadedContent: string | undefined = undefined;
+    if (needReload) {
+      try {
+        reloadedContent = await BookRepository.readChapter(updatedBook, chapterTitle, clampedIndex);
+      } catch (_) {
+        // 重载失败不影响设置落库，下一次换章会按夹过的章号重取正文。
+      }
+      updatedBook.chapterIndex = clampedIndex;
+      updatedBook.chapterProgress = 0;
+      updatedBook.androidCharacterPosition = 0;
+      if (realCount > 0) { updatedBook.progress = clampedIndex / realCount * 100; }
+    }
     const context = this.getUIContext().getHostContext();
     if (context === undefined || !BookRepository.isPersistableBook(updatedBook)) { return; }
+    this.selectedBook = updatedBook;
+    this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    if (needReload) {
+      this.selectedChapter = chapterTitle;
+      if (reloadedContent !== undefined) { this.readerContent = reloadedContent; }
+    }
     try {
       await BookRepository.saveImportedBooks(context,
         this.books.filter((book: Book) => BookRepository.isPersistableBook(book)));
