@@ -21,6 +21,24 @@ export interface EpubImportResult {
   chapterMeta: EpubChapterMeta[];
 }
 
+/**
+ * EPUB 行内样式区间（批 11）。颜色/粗体/斜体/下划线在导入时从 markup 抽出来，
+ * 经 sidecar 落盘；渲染端用 anchorText 在最终正文里重定位，绕开替换规则/分段造成的偏移。
+ */
+export interface EpubInlineStyleRange {
+  /** 被样式包裹文本在章正文里的起点（含）。 */
+  startPosition: number;
+  /** 终点（不含）。 */
+  endPosition: number;
+  /** 被包裹文本经 htmlToText 清洗后的锚点，用于渲染端重新定位。 */
+  anchorText: string;
+  /** 0 表示不覆盖颜色；非 0 为有符号 ARGB。 */
+  colorArgb: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+}
+
 /** 目录项的章节几何信息，写入 chapters.resourceUrl / startFragmentId / endFragmentId / variable。 */
 export interface EpubChapterMeta {
   /** 本章对应的资源路径（相对 OPF 解压根），纯目录项为空串。 */
@@ -79,6 +97,8 @@ interface EpubChapterText {
   endFragmentId?: string;
   /** 下一章的 url；最后一章为 undefined。 */
   nextUrl?: string;
+  /** 本章行内样式区间（批 11），导入时抽取、sidecar 持久化。 */
+  styles?: EpubInlineStyleRange[];
 }
 
 interface EpubMarkupConversion {
@@ -252,6 +272,25 @@ export class EpubRepository {
         fileIo.writeSync(contentFile.fd, contentSegments.join(''));
       } finally {
         fileIo.closeSync(contentFile);
+      }
+      // 批 11：每章行内样式按章下标落 sidecar。老书没有这个文件，渲染端天然走纯文本。
+      const stylesByChapter: Record<string, EpubInlineStyleRange[]> = {};
+      for (let index = 0; index < chapters.length; index++) {
+        const chapter = chapters[index];
+        if (chapter === undefined || chapter.styles === undefined || chapter.styles.length === 0) {
+          continue;
+        }
+        stylesByChapter[`${index}`] = chapter.styles;
+      }
+      if (Object.keys(stylesByChapter).length > 0) {
+        const stylesPath = `${booksDirectory}/${bookId}.styles.json`;
+        const stylesFile = fileIo.openSync(stylesPath,
+          fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+        try {
+          fileIo.writeSync(stylesFile.fd, JSON.stringify(stylesByChapter));
+        } finally {
+          fileIo.closeSync(stylesFile);
+        }
       }
 
       const book: Book = {
@@ -444,7 +483,8 @@ export class EpubRepository {
         text: resource.text,
         resourceHref: resource.relativePath,
         isVolume: false,
-        tocLevel: 0
+        tocLevel: 0,
+        styles: EpubRepository.extractInlineStyles(resource.markup, resource.text)
       });
     }
     return chapters;
@@ -528,6 +568,8 @@ export class EpubRepository {
     // 目录项引用时，在保留 id 的 markup 上按各章片段切片，每章只拿自己那一段，
     // 不再整本重复拼进 .txt（情形 A：导入阶段切好，chapterBody 仍按字节偏移取）。
     const slicedText: Map<number, string> = new Map<number, string>();
+    // 批 11：与 slicedText 一一对应的行内样式，锚点在切片正文里定位。
+    const slicedStyles: Map<number, EpubInlineStyleRange[]> = new Map<number, EpubInlineStyleRange[]>();
     const groupKeys: string[] = [];
     const groupIndices: number[][] = [];
     for (let index = 0; index < flat.length; index++) {
@@ -562,6 +604,7 @@ export class EpubRepository {
         const text = EpubRepository.removeDuplicateHeading(
           EpubRepository.htmlToText(slices[k] ?? ''), title);
         slicedText.set(idx, text);
+        slicedStyles.set(idx, EpubRepository.extractInlineStyles(slices[k] ?? '', text));
       }
     }
 
@@ -582,7 +625,8 @@ export class EpubRepository {
         resourceHref: resource.relativePath,
         isVolume: false,
         tocLevel: 0,
-        nextUrl: firstHref.length > 0 ? firstHref : undefined
+        nextUrl: firstHref.length > 0 ? firstHref : undefined,
+        styles: EpubRepository.extractInlineStyles(resource.markup, resource.text)
       });
       claimed.add(resource.fullPath);
     }
@@ -602,12 +646,15 @@ export class EpubRepository {
       const nextUrl = nextHref.length > 0 ? nextHref : undefined;
       let text = '';
       let resourceHref = '';
+      let chapterStyles: EpubInlineStyleRange[] = [];
       const sliced = slicedText.get(index);
       if (sliced !== undefined) {
         text = sliced;
+        chapterStyles = slicedStyles.get(index) ?? [];
         resourceHref = resource !== undefined ? resource.relativePath : '';
       } else if (resource !== undefined && !claimed.has(resource.fullPath)) {
         text = EpubRepository.removeDuplicateHeading(resource.text, title);
+        chapterStyles = EpubRepository.extractInlineStyles(resource.markup, text);
         resourceHref = resource.relativePath;
         claimed.add(resource.fullPath);
       }
@@ -619,7 +666,8 @@ export class EpubRepository {
         tocLevel: entry.level,
         startFragmentId: startFragmentId,
         endFragmentId: endFragmentId,
-        nextUrl: nextUrl
+        nextUrl: nextUrl,
+        styles: chapterStyles
       });
     }
     return chapters;
@@ -908,6 +956,91 @@ export class EpubRepository {
       imageCount: imageIndex - startImageIndex,
       markup: convertedMarkup
     };
+  }
+
+  /**
+   * 批 11：从保留标签的 markup 抽取行内样式。
+   * anchorText 走与 htmlToText 相同的清洗口径，保证锚点能直接在章正文里找到；
+   * 渲染端再用同一锚点在最终 localSemanticContent 里重定位，绕开替换规则造成的偏移。
+   */
+  private static extractInlineStyles(markup: string, text: string): EpubInlineStyleRange[] {
+    const raw: EpubInlineStyleRange[] = [];
+    const tagPattern: RegExp = /<(b|strong|i|em|u)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi;
+    let m: RegExpExecArray | null = tagPattern.exec(markup);
+    while (m !== null) {
+      const tag = (m[1] ?? '').toLowerCase();
+      const anchor = EpubRepository.htmlToText(m[2] ?? '');
+      if (anchor.length > 0) {
+        raw.push({
+          startPosition: -1, endPosition: -1, anchorText: anchor, colorArgb: 0,
+          bold: tag === 'b' || tag === 'strong',
+          italic: tag === 'i' || tag === 'em',
+          underline: tag === 'u'
+        });
+      }
+      m = tagPattern.exec(markup);
+    }
+    const spanPattern: RegExp = /<span\b([^>]*)>([\s\S]*?)<\/span\s*>/gi;
+    m = spanPattern.exec(markup);
+    while (m !== null) {
+      const styleAttr = m[1] ?? '';
+      const styleHit = /style\s*=\s*["']([^"']*)["']/i.exec(styleAttr);
+      const style = styleHit === null ? '' : (styleHit[1] ?? '');
+      let colorArgb = 0;
+      let bold = false;
+      let italic = false;
+      let underline = false;
+      const colorHit = /color\s*:\s*(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8})\b/i.exec(style);
+      if (colorHit !== null) {
+        const hex = (colorHit[1] ?? '').substring(1);
+        const full = hex.length === 6 ? `FF${hex}` : hex;
+        const parsed = Number.parseInt(full, 16);
+        if (Number.isFinite(parsed)) { colorArgb = parsed | 0; }
+      }
+      if (/font-weight\s*:\s*(bold|[6-9]00)/i.test(style)) { bold = true; }
+      if (/font-style\s*:\s*italic/i.test(style)) { italic = true; }
+      if (/text-decoration[^;]*:\s*[^;]*underline/i.test(style)) { underline = true; }
+      if (colorArgb !== 0 || bold || italic || underline) {
+        const anchor = EpubRepository.htmlToText(m[2] ?? '');
+        if (anchor.length > 0) {
+          raw.push({
+            startPosition: -1, endPosition: -1, anchorText: anchor, colorArgb: colorArgb,
+            bold: bold, italic: italic, underline: underline
+          });
+        }
+      }
+      m = spanPattern.exec(markup);
+    }
+    // 在正文里按出现顺序定位锚点，searchFrom 递增防止同一个短词互相抢占。
+    let searchFrom = 0;
+    for (const item of raw) {
+      const at = text.indexOf(item.anchorText, searchFrom);
+      if (at < 0) { continue; }
+      item.startPosition = at;
+      item.endPosition = at + item.anchorText.length;
+      searchFrom = item.endPosition;
+    }
+    // 合并重叠区间：如 <b><i>粗斜</i></b> 会抽出粗体与斜体两条，合并成一条双标志。
+    const placed = raw.filter((item) => item.startPosition >= 0)
+      .sort((a, b) => a.startPosition - b.startPosition || b.endPosition - a.endPosition);
+    const merged: EpubInlineStyleRange[] = [];
+    for (const item of placed) {
+      const last = merged[merged.length - 1];
+      if (last !== undefined && item.startPosition < last.endPosition) {
+        last.endPosition = Math.max(last.endPosition, item.endPosition);
+        last.bold = last.bold || item.bold;
+        last.italic = last.italic || item.italic;
+        last.underline = last.underline || item.underline;
+        if (last.colorArgb === 0) { last.colorArgb = item.colorArgb; }
+      } else {
+        merged.push({
+          startPosition: item.startPosition, endPosition: item.endPosition,
+          anchorText: item.anchorText, colorArgb: item.colorArgb,
+          bold: item.bold, italic: item.italic, underline: item.underline
+        });
+      }
+    }
+    return merged;
   }
 
   private static htmlToText(markup: string): string {

@@ -4,6 +4,12 @@ export interface LocalSemanticPart {
   startPosition: number;
   endPosition: number;
   leadingIndent: boolean;
+  // 批 11：EPUB 行内样式（可选；普通 TXT 不带这些字段）。
+  // 当前渲染走 ReaderCanvasStyleRange 区间注入，字段本身为将来按 part 直接渲染铺路。
+  colorArgb?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
 }
 
 export interface LocalSemanticParagraph {

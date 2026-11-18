@@ -1579,6 +1579,15 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     // 删书时同步清掉这本书落盘的 EPUB 内嵌图与 PDF 页图（批 5 / 批 7）；非该格式没有对应目录，clearAssets 静默返回。
     EpubRepository.clearAssets(context, BookRepository.bookIdFromUrl(bookUrl));
     PdfRepository.clearAssets(context, BookRepository.bookIdFromUrl(bookUrl));
+    // 批 11：删书时同步删除 EPUB 行内样式 sidecar（老书没有这个文件，忽略即可）。
+    try {
+      const stylesPath = `${context.filesDir}/books/${BookRepository.bookIdFromUrl(bookUrl)}.styles.json`;
+      if (fileIo.accessSync(stylesPath)) {
+        fileIo.unlinkSync(stylesPath);
+      }
+    } catch (_) {
+      // sidecar 不存在或删除失败都不影响删书主流程。
+    }
   }
 
   /** 启动清扫 epub-assets 与 pdf-pages 下不属于任何在架书 id 的孤儿目录（批 5 / 批 7）。异步，不阻塞启动。 */

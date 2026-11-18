@@ -13,6 +13,8 @@ import { BookContentProcessRepository } from '../data/BookContentProcessReposito
 import { BookContentProcess } from '../model/BookContentProcess';
 import { ReaderFontRepository } from '../data/ReaderFontRepository';
 import { LocalSemanticDocument, LocalTextSemantics } from '../data/LocalTextSemantics';
+// 批 11：EPUB 行内样式区间类型（sidecar 反序列化结果）
+import { EpubInlineStyleRange } from '../data/EpubRepository';
 import { ReaderTitleSegment, segmentReaderTitle } from '../data/ReaderTitleSegmentation';
 import { READER_SELECTION_MENU_SUPPORTED, ReaderSelectionMenuItem, parseReaderSelectionMenuConfig } from '../data/ReaderSelectionMenu';
 import { readerColumnCount } from '../data/ReaderColumnMode';
@@ -754,6 +756,8 @@ export struct ReaderPage {
   // 高亮样式区间的构造缓存（翻页动画每帧都会重建 request，不缓存会每帧新建上千对象）
   private canvasHighlights: ReaderCanvasStyleRange[] = [];
   private canvasHighlightSignature: string = '';
+  // 批 11：EPUB 行内样式 sidecar 缓存：key 为 bookId，避免每次重绘都读盘。
+  private epubStyleCache: Map<string, Record<string, EpubInlineStyleRange[]> | null> = new Map();
   // 翻页动画期的临时页索引：COVER 期间旧页仍是 currentPageIndex，新页已经作为 next 参与绘制，
   // 动画收尾才把索引换过去 —— 这样任何一帧都不会出现「两页都没画」。
   private turnTargetPageIndex: number = -1;
@@ -6367,6 +6371,69 @@ export struct ReaderPage {
     return list;
   }
 
+  /**
+   * 批 11：读取本书的 EPUB 行内样式 sidecar（老书无此文件，返回 null）。
+   * 样式在导入时按章下标落盘到 ${booksDirectory}/${bookId}.styles.json。
+   */
+  private epubInlineStylesForChapter(chapterIndex: number): EpubInlineStyleRange[] {
+    const bookId = this.book.id;
+    if (bookId.length === 0) { return []; }
+    if (!this.epubStyleCache.has(bookId)) {
+      let parsed: Record<string, EpubInlineStyleRange[]> | null = null;
+      try {
+        const context = this.getUIContext().getHostContext();
+        if (context === undefined) { return []; }
+        const stylesPath = `${context.filesDir}/books/${bookId}.styles.json`;
+        if (fileIo.accessSync(stylesPath)) {
+          const text = fileIo.readTextSync(stylesPath);
+          if (text.length > 0) {
+            const raw = JSON.parse(text) as Record<string, EpubInlineStyleRange[]>;
+            parsed = raw;
+          }
+        }
+      } catch (_) {
+        // 格式损坏等异常按无样式处理，老书行为完全不变。
+        parsed = null;
+      }
+      this.epubStyleCache.set(bookId, parsed);
+    }
+    const byChapter = this.epubStyleCache.get(bookId);
+    if (byChapter === null || byChapter === undefined) { return []; }
+    const ranges = byChapter[`${chapterIndex}`];
+    return ranges === undefined ? [] : ranges;
+  }
+
+  /**
+   * 批 11：把 sidecar 里的锚点样式转换到画布正文坐标系。
+   * 锚点是导入时同一 htmlToText 管线的产物；替换规则/分段/缩进都会让原始数字偏移漂移，
+   * 所以用 anchorText 在最终正文里 indexOf 重定位，searchFrom 递增防止重复词互相抢占。
+   */
+  private buildEpubStyleRanges(chapterIndex: number): ReaderCanvasStyleRange[] {
+    const out: ReaderCanvasStyleRange[] = [];
+    const styles = this.epubInlineStylesForChapter(chapterIndex);
+    if (styles.length === 0) { return out; }
+    let searchFrom = 0;
+    for (const item of styles) {
+      if (item === null || item === undefined || item.anchorText.length === 0) { continue; }
+      const found = this.localSemanticContent.indexOf(item.anchorText, searchFrom);
+      if (found < 0) { continue; }
+      const start = found;
+      const end = Math.min(this.localSemanticContent.length, start + item.anchorText.length);
+      searchFrom = end;
+      const range = new ReaderCanvasStyleRange();
+      range.start = start;
+      range.end = end;
+      range.textColorArgb = item.colorArgb ?? 0;
+      range.fontWeightValue = item.bold === true ? 700 : 0;
+      range.italicOverride = item.italic === true ? 1 : 0;
+      range.decoration = item.underline === true ? 1 : 0;
+      // decorationArgb=0 时画布回退 textColorArgb；无色的下划线就用正文色。
+      range.decorationArgb = 0;
+      out.push(range);
+    }
+    return out;
+  }
+
   private buildReaderCanvasHighlights(): ReaderCanvasStyleRange[] {
     const signature = `${this.readerContentRevision}|${this.readerHighlightRanges.length}|` +
       `${this.markings.length}|${this.getChapterIndex()}`;
@@ -6374,6 +6441,11 @@ export struct ReaderPage {
       return this.canvasHighlights;
     }
     const list: ReaderCanvasStyleRange[] = [];
+    // 批 11：EPUB 行内样式先入列，随后 push 的用户高亮规则按数组顺序覆盖它。
+    // 老书没有 sidecar，这里注入空数组，正文绘制与改动前逐字一致。
+    for (const epubRange of this.buildEpubStyleRanges(this.getChapterIndex())) {
+      list.push(epubRange);
+    }
     for (let index = 0; index < this.readerHighlightRanges.length; index++) {
       const range = this.readerHighlightRanges[index];
       if (range === undefined) {
