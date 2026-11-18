@@ -1042,6 +1042,8 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **页脚口径**：`buildReaderFooterDecoration()`（`:6267`）改成 `row.originYpx = request.layout.originYpx + request.layout.bodyHeightPx;`（贴正文底边）。不采用「贴画布底」式，实测页脚文字 `y=2722..2754` 与正文末行底 `y=2689` 不重叠、页脚底距画布底 78px≈22vp，符合正常留白。
 - **验收**：同一本书同一页 A/B——修前正文首行 `y=24..100`（压状态栏）、修后 `y=153` 起（状态栏 `y=59..100` 下方）；分页档翻 3 页后正文首行仍在状态栏下方；滚动档章标题 `y=268..404`、退出重进同位置；`hideStatusBar=true` 时正文与页眉一起上移（268→247）、状态栏图标消失，占位归零分支正常；切回 `hideStatusBar=false` 后正文回到状态栏下方。
 
+**r351 追加：底部对齐的单位错（同一批 r348 引入，本轮修掉）** —— 分页器侧算位移整条链路是 vp，画布侧 `layout.bottomJustifyGapByColumn` 是 px，`entry/src/main/ets/reader/ReaderCanvasSurface.ets` 合并页内值与 layout 值进同一个 `gaps` 数组时漏乘 `vp`，页内分支的位移只有应有的 1/3.5。修法是页内值先 `* vp` 再合并（分页器不必知道 vpScale，换算留在画布侧）。实测同一章首页：关对齐末行底 `y=2676`，开对齐修复版 `y=2701`（下移 25px≈7.1vp），带 bug 版 `y=2683`（只下移 7px），比值 25/7≈3.57≈密度 3.5。
+
 ---
 
 ## 设备范围

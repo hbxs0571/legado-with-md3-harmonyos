@@ -1725,3 +1725,24 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
 - **浅色模式未验证**：全部上机取证都在深色模式下做的。
 - **批 3 只改到高度**：行程算法没动，因为实测改前改后两端都完整（见上）。若后续有人报「拖到最右端拇指不到轨道末端」，那要另起一笔实测数据再改。
 - `ProfileSubPages.ets` 九处负边距、`CatalogPage.ets` 拖拽把手：按任务范围没碰，只在 `KNOWN-ISSUES.md` 之外的本节记录。
+
+### r351 返工：批 2 的单位错
+
+验收方逐行读代码时发现批 2 引入一处单位错：分页器侧 `computeBottomJustifyGaps()` 整条链路是 vp（`currentPageCapacity()` 吃的是 `getBodyContentHeight()` 的 vp 值，`usedHeight` 累加的也是 vp），画布侧 `layout.bottomJustifyGapByColumn` 是 px（`ReaderPage.ets:6388` 已逐个 `context.vp2px()` 过）。`entry/src/main/ets/reader/ReaderCanvasSurface.ets` 把两路合并进同一个 `gaps` 数组时直接混用，页内分支的位移因此只有应有的 1/3.5，看不出「末页被拉满」的反面——摊分在跑，但跑得不够。
+
+修法（`entry/src/main/ets/reader/ReaderCanvasSurface.ets:2057` 起）：页内值先乘 `vp` 再合并，`let gaps = layout.bottomJustifyGapByColumn;` 作默认值。不在分页器侧换算——分页器本来就不该知道 vpScale。
+
+受控 A/B（同一本书同一章首页，`pageAnimation=0`，改 `textBottomJustify` 与安装包两个变量）：
+
+| 版本 | `textBottomJustify` | 行数 | 正文末行底 y |
+| --- | --- | --- | --- |
+| 修复版 | false | 17 | 2676 |
+| 修复版 | true | 17 | 2701 |
+| 带单位 bug（r348 原样） | false | 17 | 2676 |
+| 带单位 bug（r348 原样） | true | 16 | 2683 |
+
+修复版开对齐相对关对齐末行下移 **25px**，带 bug 版只下移 **7px**，比值 3.57 ≈ 设备密度 3.5，与「漏乘 vp」的预期完全吻合。截图 `ab_fixed_off.png` / `u4_start.png`（修复版开）、`ab_buggy_off.png` / `ab_buggy_on.png`（带 bug 版两档）。
+
+另修一处验收方指出的过时注释：`entry/src/main/ets/pages/ReaderPage.ets:6307` 的「页眉贴画布顶（originYpx = 0）」已与 `:6321` 实际行为不符，改为描述状态栏让位。该改动只碰注释，行为不变。
+
+**这一批的教训**：r348 的验收只证明了「同一页翻走再翻回来逐像素不动」，那验证的是位移**随页定型**，不验证位移**量是否够**。当时 A/B 选的那页剩余不足一行、按判据本就不摊分，两版看起来一样，我把它当成「摊分不生效」的反证收下了——这是取样选错了。r351 换成章首页（剩余空间足够摊分）才暴露出量级差。

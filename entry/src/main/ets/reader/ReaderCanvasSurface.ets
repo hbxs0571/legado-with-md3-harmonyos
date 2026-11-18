@@ -2055,7 +2055,17 @@ export class ReaderCanvasRenderer {
     // 上游在 justifyColumnBottom() 里把位移写进元素坐标，每页带着自己的值定型。
     // 所以先取本页的，页上没有（占位页 / 老缓存页）才回落到 layout 里那份。
     const pageGaps = page.bottomJustifyGapByColumn;
-    const gaps = pageGaps !== undefined && pageGaps.length > 0 ? pageGaps : layout.bottomJustifyGapByColumn;
+    // 单位：分页器整条链路是 vp（见 LocalReaderPage.bottomJustifyGapByColumn 的注释），
+    // 而 layout 那份是 px（ReaderPage 侧已经 vp2px 过）。合并进同一个数组前必须把页内值乘上
+    // vpScale，否则位移只有应有的 1/vpScale——密度 3.5 时每行只移 28.6%，末行差出 100px 以上。
+    let gaps = layout.bottomJustifyGapByColumn;
+    if (pageGaps !== undefined && pageGaps.length > 0) {
+      const pageGapsPx: number[] = [];
+      for (let index = 0; index < pageGaps.length; index++) {
+        pageGapsPx.push((pageGaps[index] ?? 0) * vp);
+      }
+      gaps = pageGapsPx;
+    }
     // 标题页垂直居中（上游 titlePageCenterVertical，`ReaderPaginator.kt:369-389`）：
     // 页成型后按「整页内容高度」算一次平移量，把元素整体下移半个剩余高度。
     const centerVertical = page.centerVertical === true;

@@ -6304,8 +6304,9 @@ export struct ReaderPage {
   /**
    * 把页眉槽位从 ArkUI 组件翻译成画布可画的纯数据。
    *
-   * 与页脚版同一套口径，只是取数换成页眉那一侧：页眉贴画布顶（originYpx = 0），
-   * 正文由 layout.originYpx 让出 headerReserve。各项都用 vp2px 换算，逐项对齐
+   * 与页脚版同一套口径，只是取数换成页眉那一侧：页眉让开状态栏（originYpx 取
+   * readerStatusBarReserve，见下方 6318 起的说明），正文由 layout.originYpx 让出
+   * headerReserve。各项都用 vp2px 换算，逐项对齐
    * getReaderInfoReserve(true) 的预留，分页与绘制才不会各算一套。
    */
   private buildReaderHeaderDecoration(request: ReaderCanvasDrawRequest): ReaderCanvasDecorationRow {
