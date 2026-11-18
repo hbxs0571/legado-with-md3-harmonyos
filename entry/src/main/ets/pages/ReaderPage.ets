@@ -871,6 +871,8 @@ export struct ReaderPage {
   /** 收起搜索结果条（上游 `HideSearchMenu`）。 */
   onCloseSearchResult: () => void = () => {};
   onOpenReadAloud: () => void = () => {};
+  /** 底栏「朗读」点击：开始/停止朗读（上游 ReadMenuActionDefs.kt:407 的 LongClickReadAloud 之外的点击分支）。 */
+  onToggleReadAloud: () => void = () => {};
   onOpenImagePreview: (uri: string) => void = (_uri: string) => {};
   onCloseImagePreview: () => void = () => {};
   onControlsShown: () => void = () => {};
@@ -4213,7 +4215,7 @@ export struct ReaderPage {
     if (kind === 'catalog') { this.onOpenCatalog(); }
     else if (kind === 'search') { this.onOpenSearchContent(); }
     else if (kind === 'autoPage') { this.toggleAutoPage(); }
-    else if (kind === 'voice') { this.onUnavailableAction('朗读播放尚未迁移'); }
+    else if (kind === 'voice') { this.onToggleReadAloud(); }
     else if (kind === 'settings') { this.onOpenSettings(); }
     else if (kind === 'addBookmark') { this.addCurrentPageBookmark(); }
     else if (kind === 'theme') { this.onToggleNightMode(); }

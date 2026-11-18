@@ -133,6 +133,9 @@ import {
   ReaderPaddingSettings, DEFAULT_READER_PADDING_SETTINGS, copyReaderPaddingSettings
 } from '../data/ReaderSettingsRepository';
 import { ReaderMoreActionConfig, ReaderMoreActionsRepository, READER_MORE_ACTION_DEFAULTS } from '../data/ReaderMoreActionsRepository';
+import { ReadAloudSettingsRepository } from '../data/ReadAloudSettingsRepository';
+import { SpeechSegmenter, SpeechUnit } from '../readaloud/SpeechSegmenter';
+import { SystemTtsPlayer, ReadAloudState } from '../readaloud/SystemTtsPlayer';
 import {
   BackupCategoryOption, BackupEntryPreview, BackupIgnoreLists, BackupPreview, BackupRepository, BackupSelection
 } from '../data/BackupRepository';
@@ -713,6 +716,9 @@ struct Index {
   @State homeWebDavState: number = 0;
   private pendingBackup: BackupSelection | undefined = undefined;
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
+  /** 系统 TTS 朗读播放器（批 3）。单例，引擎复用，退阅读页不 shutdown。 */
+  private readonly readAloudPlayer: SystemTtsPlayer = SystemTtsPlayer.getInstance();
+  private readAloudActive: boolean = false;
   private readerSettingsLoaded: boolean = false;
   private readerSettingsRevision: number = 0;
   private readerSessionLastSaveTime: number = 0;
@@ -7775,6 +7781,44 @@ private canWriteInto(dir: string): boolean {
   private openReadAloudSettings(): void {
     this.route = AppRoute.READ_ALOUD_SETTINGS;
   }
+
+  /**
+   * 底栏「朗读」：点一次开始，再点停止。
+   * 上游 ReadMenuActionDefs.kt:407-418 / ReadBookViewModel.kt:895 的点击分支；
+   * 本批只接「能播放」，面板在批 5。切段用批 2 的 SpeechSegmenter，
+   * 正文取当前章语义文本（LocalTextSemantics.fromRawBody），设置取批 1 偏好。
+   */
+  private async toggleReadAloud(): Promise<void> {
+    if (this.readAloudActive) {
+      this.readAloudPlayer.stop();
+      this.readAloudActive = false;
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书籍');
+      return;
+    }
+    try {
+      const settings = await ReadAloudSettingsRepository.load(context);
+      const body = LocalTextSemantics.fromRawBody(this.readerContent);
+      const units: SpeechUnit[] = SpeechSegmenter.segment(body, settings.contentSplitMode, settings.contentSplitSymbols);
+      if (units.length === 0) {
+        this.showUnavailableAction('本章没有可朗读的内容');
+        return;
+      }
+      this.readAloudPlayer.setParagraphInterval(settings.ttsParagraphInterval);
+      this.readAloudPlayer.load(units, 0);
+      this.readAloudPlayer.onUnitAdvance = (index: number): void => {
+        console.info(`[ReadAloud] unit advance index=${index}`);
+      };
+      this.readAloudPlayer.play();
+      this.readAloudActive = true;
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `朗读启动失败：${error.message}` : '朗读启动失败');
+    }
+  }
+
   private async updateReadingProgress(
     chapterProgress: number,
     chapterPosition: number,
@@ -8753,6 +8797,7 @@ private canWriteInto(dir: string): boolean {
             onOpenSearchNavItem: (index: number) => this.openReaderSearchNavItem(index),
             onCloseSearchResult: () => this.closeReaderSearchNav(),
             onOpenReadAloud: () => this.openReadAloudSettings(),
+            onToggleReadAloud: () => { this.toggleReadAloud(); },
             onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULE_PREVIEW),
             onToggleNightMode: () => this.toggleReaderNightMode(),
             onToggleEyeProtection: () => this.toggleEyeProtection(),
