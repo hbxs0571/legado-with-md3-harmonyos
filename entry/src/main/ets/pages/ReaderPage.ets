@@ -135,6 +135,15 @@ const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode
 
 /** 底栏进度条自绘拇指宽度（vp）。上游 `ReadBookMenuBarTool.kt:320` 的 handle 是 4dp 宽。 */
 const SLIDER_THUMB_WIDTH: number = 4;
+/**
+ * Slider 拇指行程两端的内缩（vp）。2026-11-18 在 1280x2832、密度 3.5 的模拟器上实测：
+ * Slider bounds X1=295px/X2=985px（组件宽 W=197.03vp），max=100；注入 x/v 点
+ * (364,3)(468,21)(502,27)(640,50)(709,62)(812,79)(916,97)，
+ * 最小二乘 slope=0.169676 v/px -> travel=589.4px=168.39vp，X0=344.7px；
+ * A1=(X0-X1)/3.5=14.21vp，A2=(W-travelVp)/2=14.38vp，三组成对标定极差<=0.5vp，取均值 14.3。
+ * InSet 的 6vp + 自定义 padding 5vp 并未直接等于该值，故用实测值而非推算值。
+ */
+const SLIDER_THUMB_TRAVEL_INSET: number = 14.3;
 
 interface ReaderContentSegment {
   kind: 'text' | 'image';
@@ -1620,7 +1629,7 @@ export struct ReaderPage {
     const maximum = Math.max(0, this.getProgressSliderMaximum());
     if (maximum <= 0 || this.sliderTrackWidth <= 0) { return 0; }
     const ratio = Math.max(0, Math.min(1, this.sliderProgressIndex / maximum));
-    const travel = Math.max(0, this.sliderTrackWidth - SLIDER_THUMB_WIDTH);
+    const travel = Math.max(0, this.sliderTrackWidth - SLIDER_THUMB_TRAVEL_INSET * 2);
     return ratio * travel - travel / 2;
   }
 
@@ -7901,6 +7910,7 @@ export struct ReaderPage {
                     .offset({ x: this.sliderThumbOffset() })
                     .hitTestBehavior(HitTestMode.None)
                 }.layoutWeight(1).height(52)
+                  .padding({ left: 5, right: 5 })
               }
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
