@@ -171,6 +171,14 @@ export class BookRepository {
   /** 当前书正文缓存：换章整本重读解码太慢，只留当前这一本，key = contentPath|编码。 */
   private static cachedBookContentKey: string = '';
   private static cachedBookContent: string = '';
+  /**
+   * 每本书的章节字节区间缓存（chapterIndex -> [startByte, endByte)）。
+   * chapter.start/end 落库时由 charOffsetsToByteOffsets 按完整字符宽度累加得出，
+   * 天然落在字符边界，可直接用于 fileIo 定位读，不会切在多字节字符中间。
+   * key = `${contentPath}|${encoding ?? ''}`；上限 8 本（超过丢最早的）。
+   */
+  private static chapterCharRanges: Map<string, number[][]> = new Map<string, number[][]>();
+  private static readonly CHAPTER_RANGE_CACHE_LIMIT: number = 8;
   // 正文缓存体积上限改由「下载与缓存」设置页落盘（:484），见 readBookContent 里的 CacheSettingsRepository.get()。
   /** 规则匹配只扫描文件开头，与 Android 只读首个缓冲区识别目录的行为一致。 */
   private static readonly tocSampleSize: number = 65536;
@@ -1796,6 +1804,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     BookRepository.chapterCache = new Map<string, BookChapter[]>();
     BookRepository.cachedBookContentKey = '';
     BookRepository.cachedBookContent = '';
+    BookRepository.chapterCharRanges.clear();
   }
 
   private static readBookContent(path: string, encoding: string | undefined): string {
@@ -1823,6 +1832,91 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       BookRepository.cachedBookContentKey = '';
       BookRepository.cachedBookContent = '';
     }
+    if (path !== undefined) {
+      BookRepository.chapterCharRanges.forEach((_ranges: number[][], key: string): void => {
+        if (key.startsWith(`${path}|`)) { BookRepository.chapterCharRanges.delete(key); }
+      });
+    }
+  }
+
+  /**
+   * 取某本书的章节字节区间：命中缓存直接返回，没有则从落库章节行（已是字节偏移）建立并做 LRU 淘汰。
+   */
+  private static chapterByteRanges(key: string, rows: BookChapter[]): number[][] {
+    const cached = BookRepository.chapterCharRanges.get(key);
+    if (cached !== undefined) { return cached; }
+    const ranges: number[][] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      ranges.push([row?.start ?? 0, row?.end ?? 0]);
+    }
+    if (BookRepository.chapterCharRanges.size >= BookRepository.CHAPTER_RANGE_CACHE_LIMIT) {
+      const oldest: string | undefined = BookRepository.chapterCharRanges.keys().next().value as string | undefined;
+      if (oldest !== undefined) { BookRepository.chapterCharRanges.delete(oldest); }
+    }
+    BookRepository.chapterCharRanges.set(key, ranges);
+    return ranges;
+  }
+
+  /**
+   * 按字节区间 seek 读一章正文片段。startByte/endByte 是「去掉 BOM 后的正文」里的字节偏移
+   * （buildChapterRows 的口径），所以文件里的实际起点要加上 BOM 长度。
+   * 编码用 book.charset 原样传入：当初算偏移用的就是它，解码必须用同一口径。
+   */
+  private static readChapterByByteRange(path: string, encoding: string,
+    startByte: number, endByte: number): string {
+    const sourceFile = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY);
+    try {
+      const fileSize = fileIo.statSync(sourceFile.fd).size;
+      let bom = 0;
+      if (fileSize >= 3) {
+        const head = new ArrayBuffer(3);
+        fileIo.readSync(sourceFile.fd, head, { offset: 0, length: 3 });
+        const h = new Uint8Array(head);
+        if (h[0] === 0xEF && h[1] === 0xBB && h[2] === 0xBF) { bom = 3; }
+        else if ((h[0] === 0xFF && h[1] === 0xFE) || (h[0] === 0xFE && h[1] === 0xFF)) { bom = 2; }
+      }
+      const start = Math.max(0, Math.min(startByte + bom, fileSize));
+      const end = Math.max(start, Math.min(endByte + bom, fileSize));
+      const length = end - start;
+      if (length <= 0) { return ''; }
+      const buffer = new ArrayBuffer(length);
+      const bytesRead = fileIo.readSync(sourceFile.fd, buffer, { offset: start, length: length });
+      if (bytesRead <= 0) { return ''; }
+      const bytes = new Uint8Array(buffer, 0, bytesRead);
+      return BookRepository.decodeTextBytes(bytes, encoding).replace(/^\uFEFF/, '');
+    } finally {
+      fileIo.closeSync(sourceFile);
+    }
+  }
+
+  /**
+   * charset 为空的书，落库时 charOffsetsToByteOffsets 按 UTF-8 折算偏移；
+   * 只有文件真实编码也是 UTF-8，落库偏移才等于文件真实字节偏移，seek 才安全。
+   * 这里只读文件头做探测（与 decodeTextBytes 同款口径），不解码全文。
+   */
+  private static fileIsUtf8(path: string): boolean {
+    const sourceFile = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY);
+    try {
+      const fileSize = fileIo.statSync(sourceFile.fd).size;
+      const length = Math.min(fileSize, BookRepository.encodingSampleSize);
+      if (length <= 0) { return true; }
+      const buffer = new ArrayBuffer(length);
+      const bytesRead = fileIo.readSync(sourceFile.fd, buffer, { offset: 0, length: length });
+      if (bytesRead <= 0) { return true; }
+      let bytes = new Uint8Array(buffer, 0, bytesRead);
+      if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+        return true;
+      }
+      if (bytes.length >= 2 && ((bytes[0] === 0xFF && bytes[1] === 0xFE) ||
+        (bytes[0] === 0xFE && bytes[1] === 0xFF))) {
+        return false;
+      }
+      bytes = bytes.subarray(0, length);
+      return BookRepository.detectTextEncoding(bytes) === 'utf-8';
+    } finally {
+      fileIo.closeSync(sourceFile);
+    }
   }
 
   /**
@@ -1841,17 +1935,38 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     // 换章会反复进来，正文缓存把整本读盘+解码从「每章一次」压成「每本一次」；
     // contentOverride 是调用方现算好的正文（重新分段/换字符集），不查也不写缓存。
     const contentStartedAt = Date.now();
-    const content = contentOverride ?? BookRepository.readBookContent(book.contentPath, encoding);
-    // 性能观测打点：验收要对比同书连读里取正文那段耗时，缓存命中后应显著下降。
+    // 快路径：有落库章节行时，chapter.start/end 是字符边界的字节偏移，按区间 seek 只读本章，
+    // 内存从整本降到一章。charset 明确时用该编码；charset 为空时落库偏移按 UTF-8 折算，
+    // 只有确认文件真是 UTF-8 才 seek，否则（GBK/UTF-16 等）回退整本读，避免落在多字节字符中间。
+    const seedRows = chapters.length > 0 ? chapters : BookRepository.cachedChapters(book);
+    const explicitEncoding = encoding !== undefined ? encoding.trim() : '';
+    let content: string = '';
+    let seekRange: ChapterTextRange | undefined;
+    // 偏移口径：charset 显式时用它；为空时落库按 UTF-8 折算，须确认文件真是 UTF-8。
+    const seekEncoding = explicitEncoding.length > 0 ? explicitEncoding : 'utf-8';
+    const canSeek = explicitEncoding.length > 0 || BookRepository.fileIsUtf8(book.contentPath as string);
+    if (contentOverride === undefined && canSeek &&
+      seedRows.length > 0 && seedRows[0]?.start !== undefined) {
+      const key = `${book.contentPath}|${encoding ?? ''}`;
+      const ranges = BookRepository.chapterByteRanges(key, seedRows);
+      const seekIndex = BookRepository.resolveChapterIndex(seedRows, chapterTitle, requestedChapterIndex, book);
+      const range = ranges[seekIndex];
+      if (range !== undefined) {
+        content = BookRepository.readChapterByByteRange(book.contentPath as string, seekEncoding,
+          range[0], range[1]);
+        seekRange = { start: 0, end: content.length };
+      }
+    }
+    if (content.length === 0) {
+      content = contentOverride ?? BookRepository.readBookContent(book.contentPath, encoding);
+    }
+    // 性能观测打点：验收要对比同书连读里取正文那段耗时，seek 命中后应显著下降。
     if (contentOverride === undefined) {
-      console.info(`[ReaderBench] readChapter contentMs=${Date.now() - contentStartedAt} title=${chapterTitle}`);
+      console.info(`[ReaderBench] readChapter contentMs=${Date.now() - contentStartedAt} seek=${seekRange !== undefined ? 1 : 0} title=${chapterTitle}`);
     }
     // 章节行已经是落库的权威数据，能用就用：deriveChapters 要把整本正文重切一遍
     // 并逐章折算字节长度，几 MB 的书在主线程上要两秒以上（会触发 THREAD_BLOCK_6S）。
-    let rows = chapters;
-    if (rows.length === 0) {
-      rows = BookRepository.cachedChapters(book);
-    }
+    let rows = seedRows;
     if (rows.length === 0) {
       rows = BookRepository.deriveChapters(book, content);
     }
@@ -1864,7 +1979,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     }
     const selectedIndex = BookRepository.resolveChapterIndex(rows, chapterTitle, requestedChapterIndex, book);
     const chapter = rows[selectedIndex];
-    const body = BookRepository.chapterBody(book, content, chapter, encoding);
+    const body = BookRepository.chapterBody(book, content, chapter, encoding, seekRange);
     const applyStartedAt = Date.now();
     const applied = await BookRepository.applyChapterContentAsync(book, chapter.title, body, chapter.index);
     console.info(`[ReaderBench] readChapter applyMs=${Date.now() - applyStartedAt} fallback=false title=${chapter.title}`);
