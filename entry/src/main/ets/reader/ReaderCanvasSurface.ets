@@ -8,6 +8,7 @@ import {
 import {
   isNinePatchSource, ReaderNineSliceLayout, ReaderTextBackgroundImage, ReaderTextBackgroundRun
 } from './ReaderTextBackground';
+import { ReaderSvgPath } from './ReaderSvgPath';
 
 /**
  * 画布正文渲染层（阶段 A）。
@@ -619,6 +620,8 @@ export class ReaderCanvasStyleRange {
   borderColorArgb: number = 0;
   borderWidthPx: number = 0;
   borderRadiusPx: number = 0;
+  /** 自定义 SVG 下划线（mode 5）的路径串，空串表示没配。 */
+  underlineSvgPath: string = '';
 }
 
 export class ReaderCanvasMarking {
@@ -3018,7 +3021,26 @@ export class ReaderCanvasRenderer {
       canvas.detachPen();
       return;
     }
-    // 兜底（含 5 SVG：本地高亮规则没有 SVG 路径字段，按实线画）
+    if (range.decoration === 5) {
+      // 5 自定义 SVG（上游 ReaderPageDecorationDrawCache.kt:101-107）：
+      // 把一条 100 宽、基线 50 的坐标系整体横向拉伸到当前行宽，Y 不缩放。
+      // 解析失败（含 A/a 未支持）时不画，不退化成长实线。
+      const svgPath = ReaderSvgPath.parse(range.underlineSvgPath);
+      const spanPx = endX - startX;
+      if (svgPath === undefined || spanPx < 0.1) {
+        return;
+      }
+      canvas.save();
+      canvas.translate(startX, lineY - 50 * vp);
+      canvas.scale(spanPx / (100 * vp), 1);
+      canvas.attachPen(pen);
+      canvas.drawPath(svgPath);
+      canvas.detachPen();
+      canvas.restore();
+      return;
+    }
+    // 兜底：1 实线，以及任何没进上面分支的取值（含 data 里不存在的 mode）。
+    // mode 5 自定义 SVG 在上面单独分支，不再走这里。
     canvas.attachPen(pen);
     canvas.drawLine(startX, lineY, endX, lineY);
     canvas.detachPen();
@@ -3071,7 +3093,8 @@ export class ReaderCanvasRenderer {
         `${range.bgImageScale}-${range.npLeft}-${range.npRight}-${range.npTop}-${range.npBottom}-` +
         `${range.bgLengthOffsetLeft}-${range.bgLengthOffsetRight}-` +
         `${range.fontFamilies.join(',')}-${range.fontWeightValue}-${range.italicOverride}-` +
-        `${range.fontSizeOffsetPx}-${range.letterSpacingBeforePx}-${range.letterSpacingAfterPx};`;
+        `${range.fontSizeOffsetPx}-${range.letterSpacingBeforePx}-${range.letterSpacingAfterPx}-` +
+        `${range.underlineSvgPath};`;
     }
     return out;
   }
@@ -3202,6 +3225,8 @@ export class ReaderCanvasRenderer {
       local.decorationArgb = range.decorationArgb;
       local.underlineWidthVp = range.underlineWidthVp;
       local.underlineOffsetVp = range.underlineOffsetVp;
+      // mode 5 自定义 SVG 的路径串必须逐字段传递，漏了画布侧拿到空串就不画
+      local.underlineSvgPath = range.underlineSvgPath;
       local.bgImage = range.bgImage;
       local.bgImageFit = range.bgImageFit;
       local.bgImageScale = range.bgImageScale;

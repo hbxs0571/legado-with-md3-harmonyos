@@ -43,13 +43,14 @@ export function readerCanvasArgb(value: string, fallback: number): number {
 /**
  * `ReaderHighlightRule.underlineMode` → 画布 decoration 口径。
  *
- * 6 = 删除线，1..4 = 下划线（线型由 `readerCanvasDecorationLineStyle` 决定），0 = 无。
+ * 6 = 删除线，1..4 = 下划线（线型由 `readerCanvasDecorationLineStyle` 决定），
+ * 5 = 自定义 SVG 路径（画布侧单独分支手绘），0 = 无。
  */
 export function readerCanvasHighlightDecoration(mode: number): number {
   if (mode === 6) {
     return 6;
   }
-  if (mode >= 1 && mode <= 4) {
+  if (mode >= 1 && mode <= 5) {
     return mode;
   }
   return 0;

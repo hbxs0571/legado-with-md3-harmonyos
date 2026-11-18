@@ -6275,7 +6275,7 @@ export struct ReaderPage {
       const families = this.highlightRuleFontFamilies(rule.fontPath);
       const hasBase = (rule.textColor ?? 0) !== 0 || (rule.bgColor ?? 0) !== 0 ||
         readerCanvasHighlightDecoration(rule.underlineMode) !== 0 || (rule.bgImage ?? '').length > 0 ||
-        (rule.borderColor ?? 0) !== 0;
+        (rule.borderColor ?? 0) !== 0 || (rule.underlineSvgPath ?? '').length > 0;
       const hasType = families.length > 0 || sizeOffsetPx !== 0 || overrideWeight !== 0;
       const hasSpace = spaceBeforePx > 0 || spaceAfterPx > 0;
       if (!hasBase && !hasType && !hasSpace) {
@@ -6294,6 +6294,8 @@ export struct ReaderPage {
         // 规则自带的下划线粗细/偏移（dp），画布按 vp 口径逐行手绘时用
         item.underlineWidthVp = rule.underlineWidth ?? 0;
         item.underlineOffsetVp = rule.underlineOffset ?? 0;
+        // 自定义 SVG 下划线（mode 5）的路径串，空串表示没配
+        item.underlineSvgPath = rule.underlineSvgPath ?? '';
         // 文字背景图（气泡图）：source/fit/scale 与九宫格四条切线、左右偏移
         item.bgImage = rule.bgImage ?? '';
         item.bgImageFit = rule.bgImageFit ?? 0;

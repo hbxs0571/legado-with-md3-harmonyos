@@ -21,6 +21,8 @@ export struct ReaderHighlightRuleSheet {
   @State editBackgroundColor: string = '';
   @State editUnderlineColor: string = '';
   @State editUnderlineMode: number = 0;
+  /** 自定义 SVG 下划线（mode 5）的路径串，空串表示没配。 */
+  @State editSvgPath: string = '';
   /** 作用范围：0 全部 / 1 标题 / 2 正文（上游 HighlightRuleEditSheet 的范围下拉）。 */
   @State editTargetScope: number = 2;
   @State editEnabled: boolean = true;
@@ -100,6 +102,7 @@ export struct ReaderHighlightRuleSheet {
     this.editBackgroundColor = '';
     this.editUnderlineColor = '';
     this.editUnderlineMode = 0;
+    this.editSvgPath = '';
     this.editTargetScope = 2;
     this.editEnabled = true;
     this.editLetterSpacingBefore = 0;
@@ -135,6 +138,7 @@ export struct ReaderHighlightRuleSheet {
     this.editBackgroundColor = this.colorInput(rule.bgColor);
     this.editUnderlineColor = this.colorInput(rule.underlineColor);
     this.editUnderlineMode = rule.underlineMode;
+    this.editSvgPath = rule.underlineSvgPath ?? '';
     this.editTargetScope = rule.targetScope;
     this.editEnabled = rule.enabled;
     this.editLetterSpacingBefore = rule.letterSpacingBefore ?? 0;
@@ -405,6 +409,7 @@ export struct ReaderHighlightRuleSheet {
     rule.textColor = textColor;
     rule.bgColor = bgColor;
     rule.underlineMode = this.editUnderlineMode;
+    rule.underlineSvgPath = this.editSvgPath.trim().length > 0 ? this.editSvgPath.trim() : null;
     rule.underlineColor = underlineColor;
     // 命中排版与字体替换：上游四个 dp 间距、sp 字号偏移与字体路径
     rule.letterSpacingBefore = this.editLetterSpacingBefore;
@@ -693,6 +698,10 @@ export struct ReaderHighlightRuleSheet {
                   .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .backgroundColor('#303139').borderRadius(12).onClick(() => this.cycleUnderlineMode())
               }.width('100%').margin({ bottom: 10 })
+              Text('SVG 路径（mode 5 自定义下划线，可空）').fontSize(12).fontColor('#BFC2CD').width('100%')
+              TextInput({ text: this.editSvgPath, placeholder: '例如 M0 0 L100 0 L100 20 L0 20 Z' })
+                .onChange((value: string) => this.editSvgPath = value)
+                .fontSize(14).margin({ top: 6, bottom: 12 })
               Text('线条颜色（可空）').fontSize(12).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editUnderlineColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editUnderlineColor = value)
