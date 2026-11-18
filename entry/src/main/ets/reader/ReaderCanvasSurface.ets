@@ -1634,9 +1634,10 @@ export class ReaderCanvasRenderer {
       left: 0, top: bodyTopPx, right: layout.viewportWidthPx, bottom: bodyBottomPx
     }, drawing.ClipOp.INTERSECT, true);
     canvas.translate(0, stackOffsetY);
-    if (request.pageSurfaceOpaque) {
-      this.fillPageSurface(canvas, request, layout.viewportWidthPx, layout.viewportHeightPx);
-    }
+    // 滚动栈这里**不铺纸面**：上游 ScrollPageStack（ReaderCanvasSurface.kt:1975-1988）只做
+    // translate、不填底色，整屏底色由 draw() 开头那一层负责。曾在这里铺整屏不透明纸面，
+    // 结果 next 页的纸面（起点 = offset + currentExtent）盖掉 current 页内容底部一个
+    // originYpx（状态栏占位 + 页眉预留）——表现就是每页末尾半行字看不见。
     // 批6：几何本体只依赖页内容与排版（页内绝对坐标，不含滚动偏移），跨帧复用。
     // 占位页没有正文几何，也不缓存。
     let geometry: ReaderCanvasPageGeometry | undefined;
