@@ -197,12 +197,14 @@ export class ReaderTextLayoutEngine {
   }
 
   /**
-   * 交给系统原生文本引擎断行，取每行的字符区间。
+   * 断行入口：交给本地中文断行器（第三层接管整段断行）。
    *
-   * 这是本引擎的核心：`layoutSync(widthPx)` 之后 `getLineMetrics(i)` 同时给出
-   * `startIndex` / `endIndex`，中文避头尾（「，。」不落行首、「“《」不挂行尾）
-   * 由系统按 `WordBreak.BREAK_WORD` + `locale: 'zh-Hans'` 的语言惯例处理，
-   * 不再需要本地自造的避头尾表。
+   * 本地断行器逐句移植自上游 `ChineseLineBreaker.kt`，四模式（NORMAL / PULL_PREVIOUS /
+   * REWIND / HANG）全部生效，`。，」）` 不再落行首、`（「` 不再留行尾，
+   * 并且按上游语义允许收尾标点悬挂在本行右边界之外。
+   *
+   * 系统 `Paragraph` 断行只作运行期兜底（`systemRanges`）：本地断行器抛错或一行都排不出来时
+   * 退回逐 cluster 自量（`fitRanges`）。
    */
   private breakRanges(value: string): ReaderTextLineRange[] {
     if (value.length === 0) {
@@ -211,11 +213,102 @@ export class ReaderTextLayoutEngine {
     if (this.style === undefined || !(this.contentWidthVp > 0)) {
       return this.fitRanges(value);
     }
+    let ranges: ReaderTextLineRange[] = [];
+    try {
+      ranges = this.breakerRanges(value);
+    } catch (error) {
+      if (!ReaderTextLayoutEngine.fallbackLogged) {
+        ReaderTextLayoutEngine.fallbackLogged = true;
+        console.error(`[ReaderTextLayoutEngine] 本地断行器不可用，退回逐 cluster 自量：${error}`);
+      }
+      return this.fitRanges(value);
+    }
+    if (ranges.length === 0) {
+      // 本地断行器一行都没排出来（理论上只在空串时发生）：退回系统引擎。
+      return this.systemRanges(value);
+    }
+    this.reclaimTrailingSpaces(value, ranges);
+    this.applyPunctuationHanging(value, ranges);
+    const last = ranges[ranges.length - 1] as ReaderTextLineRange;
+    if (last.end < value.length) {
+      last.end = value.length;
+    }
+    return ranges;
+  }
+
+  /**
+   * 本地断行器：逐 cluster 测宽后交给 `ChineseLineBreaker` 算每行起点。
+   *
+   * 与上游 `ReaderPaginator.addParagraph` 构造断行器的那一段逐项对应：
+   * - `clusters` 按码点切分（代理对算一个 cluster）；
+   * - `widthsPx` 是每个 cluster 的实测宽度，**已含字间距**（`measureWidth` 的口径），
+   *   所以字间距不再单独叠加；
+   * - 行宽上限仍然补一个 `letterSpacingPx`：上游注释原文是「its width limit compensates
+   *   for the final, undrawn trailing gap」，即每行最后一个字后面那段字间距并不绘制，
+   *   上限放宽一个字间距正好抵消，否则每行会少排一个字；
+   * - `ideographWidthPx` 取一个汉字（含字间距）的宽度，用来判断窄标点可压缩。
+   */
+  private breakerRanges(value: string): ReaderTextLineRange[] {
+    const clusters: string[] = [];
+    const widthsPx: number[] = [];
+    // clusterChars[i] 是第 i 个 cluster 在整串文本里的字符起点，末尾再补一个总长。
+    const clusterChars: number[] = [0];
+    let cursor = 0;
+    let charCount = 0;
+    while (cursor < value.length) {
+      const codePoint = value.codePointAt(cursor);
+      const step = codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1;
+      clusters.push(value.substring(cursor, cursor + step));
+      widthsPx.push(this.measureWidth(value.substring(cursor, cursor + step)));
+      cursor += step;
+      charCount += step;
+      clusterChars.push(charCount);
+    }
+    if (clusters.length === 0) {
+      return [];
+    }
+    const letterSpacingPx = this.style === undefined ? 0 : this.style.letterSpacingVp;
+    const ideographWidthPx = this.measureWidth('袮');
+    const breaker = new ChineseLineBreaker(clusters, widthsPx, 0, this.contentWidthVp,
+      ideographWidthPx, letterSpacingPx);
+    const starts = breaker.lineClusterStarts;
+    const ranges: ReaderTextLineRange[] = [];
+    for (let index = 0; index < breaker.lineCount; index++) {
+      const from = starts[index];
+      if (from === undefined) {
+        break;
+      }
+      const until = index + 1 < starts.length ? starts[index + 1] : clusters.length;
+      if (until === undefined || until <= from) {
+        // 悬挂在最后一个标点上时会多出一个空行起点，跳过即可。
+        continue;
+      }
+      const start = clusterChars[from];
+      const end = until >= clusters.length ? value.length : clusterChars[until];
+      if (start === undefined || end === undefined || end <= start) {
+        continue;
+      }
+      ranges.push({ start: start, end: end });
+    }
+    return ranges;
+  }
+
+  /**
+   * 交给系统原生文本引擎断行，取每行的字符区间（第三层之后只作对照与兜底）。
+   *
+   * `layoutSync(widthPx)` 之后 `getLineMetrics(i)` 同时给出 `startIndex` / `endIndex`，
+   * 中文避头尾（「，。」不落行首、「“《」不挂行尾）由系统按 `WordBreak.BREAK_WORD` +
+   * `locale: 'zh-Hans'` 的语言惯例处理。
+   */
+  private systemRanges(value: string): ReaderTextLineRange[] {
+    const ranges: ReaderTextLineRange[] = [];
+    if (this.style === undefined) {
+      return this.fitRanges(value);
+    }
     const layoutWidthPx = this.contentWidthVp * this.style.vpScalePx;
     if (!(layoutWidthPx > 0)) {
       return this.fitRanges(value);
     }
-    const ranges: ReaderTextLineRange[] = [];
     try {
       const paragraphStyle: text.ParagraphStyle = {
         textStyle: renderStyle(this.style),
@@ -257,12 +350,6 @@ export class ReaderTextLayoutEngine {
     }
     if (ranges.length === 0) {
       return this.fitRanges(value);
-    }
-    this.reclaimTrailingSpaces(value, ranges);
-    this.applyPunctuationHanging(value, ranges);
-    const last = ranges[ranges.length - 1] as ReaderTextLineRange;
-    if (last.end < value.length) {
-      last.end = value.length;
     }
     return ranges;
   }
