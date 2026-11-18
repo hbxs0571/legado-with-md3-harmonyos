@@ -403,6 +403,8 @@ export struct ReaderSettingsPage {
   );
   private detailInfoSlot: ReaderInfoSlot | undefined = undefined;
   @Prop pageAnimationIndex: number = 0;
+  /** 电子书主题独立的翻页动画档（上游 pageAnimEInk，默认 4 = 淡入淡出）。 */
+  @Prop pageAnimationEInkIndex: number = 4;
   @Prop animationSpeedIndex: number = 2;
   @State infoSubTab: number = 0;
   @State moreSubTab: number = 0;
@@ -526,6 +528,7 @@ export struct ReaderSettingsPage {
   onHideStatusBarChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onHideNavigationBarChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onPageAnimationChange: (animation: number) => void = (_animation: number) => {};
+  onPageAnimationEInkChange: (animation: number) => void = (_animation: number) => {};
   onAnimationSpeedChange: (speed: number) => void = (_speed: number) => {};
   onInfoSettingsChange: (settings: ReaderInfoSettings) => void = (_settings: ReaderInfoSettings) => {};
   onPaddingSettingsChange: (settings: ReaderPaddingSettings) => void = (_settings: ReaderPaddingSettings) => {};
@@ -941,6 +944,12 @@ export struct ReaderSettingsPage {
           .onClick(() => this.openDetailSheet('翻页动画速度', ''))
           Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 14 })
             .onClick(() => this.openDetailSheet('页边距', ''))
+        }.padding(13).backgroundColor(this.rsetCardBg).borderRadius(13).margin({ top: 13 })
+        Row() {
+          Text('电子书翻页动画').fontSize(12).fontColor(this.rsetTextSecondary).layoutWeight(1)
+          Text(this.getPageAnimationEInkLabel()).fontSize(11).fontColor(this.rsetTextSecondary).padding(8)
+            .backgroundColor(this.rsetInnerBg).borderRadius(8)
+            .onClick(() => this.openDetailSheet('电子书翻页动画', '仅电子书主题生效，默认淡入淡出'))
         }.padding(13).backgroundColor(this.rsetCardBg).borderRadius(13).margin({ top: 13 })
       }.width('100%').padding({ left: 14, right: 14, bottom: 14 })
     }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
@@ -1505,6 +1514,7 @@ export struct ReaderSettingsPage {
       this.onChineseConverterTypeChange(choiceIndex);
     }
     if (this.detailSheetTitle === '翻页动画' && choiceIndex >= 0) { this.onPageAnimationChange(choiceIndex); }
+    if (this.detailSheetTitle === '电子书翻页动画' && choiceIndex >= 0) { this.onPageAnimationEInkChange(choiceIndex); }
     if (this.detailSheetTitle === '翻页动画速度' && choiceIndex >= 0) { this.onAnimationSpeedChange(choiceIndex); }
     if (this.detailSheetTitle === '屏幕方向' && choiceIndex >= 0) { this.onScreenOrientationChange(choiceIndex.toString()); }
     if (this.detailSheetTitle === '屏幕超时' && choiceIndex >= 0) {
@@ -2317,6 +2327,8 @@ export struct ReaderSettingsPage {
         : (this.infoSettings.footerMode === 1 ? choices[1] ?? '' : choices[0] ?? '');
     } else if (title === '翻页动画') {
       this.detailSelectedOption = choices[this.pageAnimationIndex] ?? choices[0] ?? '';
+    } else if (title === '电子书翻页动画') {
+      this.detailSelectedOption = choices[this.pageAnimationEInkIndex] ?? choices[4] ?? '';
     } else if (title === '翻页动画速度') {
       this.detailSelectedOption = choices[this.animationSpeedIndex] ?? choices[2] ?? '';
     } else if (title === '中文简繁体转换') {
@@ -2379,6 +2391,11 @@ export struct ReaderSettingsPage {
     return choices[this.pageAnimationIndex] ?? choices[0] ?? '覆盖';
   }
 
+  private getPageAnimationEInkLabel(): string {
+    const choices = this.getDetailChoices('电子书翻页动画');
+    return choices[this.pageAnimationEInkIndex] ?? choices[4] ?? '淡入淡出';
+  }
+
   private getAnimationSpeedLabel(): string {
     const choices = this.getDetailChoices('翻页动画速度');
     return choices[this.animationSpeedIndex] ?? choices[2] ?? '适中';
@@ -2421,7 +2438,7 @@ export struct ReaderSettingsPage {
     if (title.includes('图标样式')) { return ['纯色', '色调', '描边']; }
     if (title.includes('模糊样式')) { return ['纯色', '渐变']; }
     if (title === '中文简繁体转换') { return ['关闭简繁转换', '繁体转简体', '简体转繁体']; }
-    if (title === '翻页动画') { return ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画']; }
+    if (title === '翻页动画' || title === '电子书翻页动画') { return ['覆盖', '滑动', '仿真', '滚动', '淡入淡出', '无动画']; }
     if (title === '翻页动画速度') { return ['极速', '快速', '适中', '优雅']; }
     if (title === '显示模式') {
       return this.infoSubTab === 0 ? ['状态栏显示时隐藏', '显示', '隐藏'] : ['显示', '隐藏'];
@@ -3261,7 +3278,8 @@ export struct ReaderSettingsPage {
               Text(this.detailSheetTitle === '自定义阅读背景' ||
                 this.detailSheetTitle === '编辑背景样式' ||
                 this.detailSheetTitle === '主题列表' ||
-                this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '翻页动画速度' ||
+                this.detailSheetTitle === '翻页动画' || this.detailSheetTitle === '电子书翻页动画' ||
+                this.detailSheetTitle === '翻页动画速度' ||
                 this.detailSheetTitle === '平板/横屏双页' ||
                 this.detailSheetTitle === '进度条行为' || this.detailSheetTitle === '滑动条显示样式' ||
                 this.detailSheetTitle === '中文简繁体转换' ||

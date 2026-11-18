@@ -440,6 +440,10 @@ export struct ReaderPage {
   @Prop @Watch('onSystemBarSettingsChanged') hideNavigationBar: boolean = false;
   @Prop @Watch('onImagePreviewCloseRevisionChanged') imagePreviewCloseRevision: number = 0;
   @Prop @Watch('onPageAnimationChanged') pageAnimation: number = 0;
+  /** 当前主题档位（上游 appTheme），电子书 = 4，由 Index 以 @Prop 传入。 */
+  @Prop themePaletteIndex: number = 0;
+  /** 电子书主题独立的翻页动画档（上游 pageAnimEInk，默认 4 = 淡入淡出）。 */
+  @Prop pageAnimationEInk: number = 4;
   @Prop animationSpeed: number = 2;
   @Prop @Watch('onPaginationInputsChanged') infoSettings: ReaderInfoSettings = DEFAULT_READER_INFO_SETTINGS;
   @Prop @Watch('onPaginationInputsChanged') paddingSettings: ReaderPaddingSettings = DEFAULT_READER_PADDING_SETTINGS;
@@ -2116,18 +2120,29 @@ export struct ReaderPage {
   }
 
   /**
-   * 本书实际生效的翻页动画。
-   * 上游三级回落：Book.config.pageAnim（null / <0 = 跟随全局）→ ReadBookConfig.pageAnim。
+   * 本书实际生效的翻页动画。四级回落：
+   *   ① 本书独立配置（book.pageAnim，null / <0 = 未设置）
+   *   ② 电子书主题档（pageAnimationEInk，仅当当前主题是「电子书」= index 4）
+   *   ③ 全局配置（pageAnimation）
+   * 上游对应 ReadBookConfig.kt:807-817 currentModeValue(eInk, night, day) + :929/:936 pageAnim；
+   * 本书配置优先于 EInk 档（Book.getPageAnim() 先看 config.pageAnim）。
    * 见 app/src/main/java/io/legado/app/data/entities/Book.kt:274-285 getPageAnim()。
-   * 漫画书未设置时默认滚动那条不实现：本地 isLocal 恒 true 且无漫画形态。
    */
   private effectivePageAnim(): number {
     // ?? undefined 把 null 与 undefined 一并归一为「未设置」，对齐上游 null 语义。
     const perBook = this.book.pageAnim ?? undefined;
     if (perBook === undefined || perBook < 0) {
+      if (this.readerThemeIsEInk()) {
+        return Math.max(0, Math.min(5, this.pageAnimationEInk));
+      }
       return this.pageAnimation;
     }
     return Math.max(0, Math.min(5, perBook));
+  }
+
+  /** 当前主题是不是「电子书」那一档（上游 appTheme == "4"，ThemePalette.ets:212 index 4）。 */
+  private readerThemeIsEInk(): boolean {
+    return this.themePaletteIndex === 4;
   }
 
   /** 菜单选中档位：-1 = 默认（跟随全局），0..5 = 本书显式选择。 */
@@ -2149,7 +2164,8 @@ export struct ReaderPage {
     // 所以用「即将生效的 anim」判滚动/分页；选默认(-1)时实际生效的是全局值。
     this.resetPageTurnTransition();
     this.restoredProgressPosition = false;
-    const next = anim >= 0 ? Math.max(0, Math.min(5, anim)) : this.pageAnimation;
+    const next = anim >= 0 ? Math.max(0, Math.min(5, anim))
+      : (this.readerThemeIsEInk() ? Math.max(0, Math.min(5, this.pageAnimationEInk)) : this.pageAnimation);
     if (next === 3) {
       this.scrollOffset = 0;
       if (!this.chapterBoundaryContinuation) { this.pendingChapterScrollVp = 0; }
@@ -4454,7 +4470,7 @@ export struct ReaderPage {
       this.paragraphSpacing, this.lineSpacing, this.letterSpacing, this.paragraphIndent,
       this.readerContentWidth, this.viewportHeight, this.effectiveImageStyle(), this.resolveReaderColumnCount(),
       JSON.stringify(this.paddingSettings),
-      this.useZhLayout,
+      this.useZhLayout, this.effectivePageAnim(),
       this.infoSettings.headerMode, this.infoSettings.footerMode,
       this.infoSettings.headerFont, this.infoSettings.footerFont,
       this.infoSettings.headerFontSize, this.infoSettings.footerFontSize, this.infoSettings.applyHeaderStyle,

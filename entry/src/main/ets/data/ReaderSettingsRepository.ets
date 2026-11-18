@@ -214,6 +214,11 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   showQuickActions: boolean;
   autoReadSpeed: number;
   pageAnimation: number;
+  /**
+   * 电子书主题（appTheme == "4"）下独立的翻页动画档，对应上游 `pageAnimEInk`，默认 4 = 淡入淡出。
+   * 见 app/src/main/java/io/legado/app/help/config/ReadBookConfig.kt:562。
+   */
+  pageAnimationEInk: number;
   animationSpeed: number;
   screenOrientation: string;
   keepLight: string;
@@ -863,6 +868,7 @@ export class ReaderSettingsRepository {
       showQuickActions: false,
       autoReadSpeed: 10,
       pageAnimation: 0,
+      pageAnimationEInk: 4,
       animationSpeed: 2,
       screenOrientation: '0',
       keepLight: '0',
@@ -1053,6 +1059,7 @@ export class ReaderSettingsRepository {
       const quickActionsValue = await store.get('showQuickActions', defaults.showQuickActions);
       const autoReadSpeedValue = await store.get('autoReadSpeed', defaults.autoReadSpeed);
       const pageAnimationValue = await store.get('pageAnimation', defaults.pageAnimation);
+      const pageAnimationEInkValue = await store.get('pageAnimationEInk', defaults.pageAnimationEInk);
       const animationSpeedValue = await store.get('animationSpeed', defaults.animationSpeed);
       const screenOrientationValue = await store.get('screenOrientation', defaults.screenOrientation);
       const keepLightValue = await store.get('keep_light', defaults.keepLight);
@@ -1387,6 +1394,8 @@ export class ReaderSettingsRepository {
           ? Math.max(1, Math.min(120, autoReadSpeedValue)) : defaults.autoReadSpeed,
         pageAnimation: typeof pageAnimationValue === 'number' && Number.isInteger(pageAnimationValue)
           ? Math.max(0, Math.min(5, pageAnimationValue)) : defaults.pageAnimation,
+        pageAnimationEInk: typeof pageAnimationEInkValue === 'number' && Number.isInteger(pageAnimationEInkValue)
+          ? Math.max(0, Math.min(5, pageAnimationEInkValue)) : defaults.pageAnimationEInk,
         animationSpeed: typeof animationSpeedValue === 'number' && Number.isInteger(animationSpeedValue)
           ? Math.max(0, Math.min(3, animationSpeedValue)) : defaults.animationSpeed,
         screenOrientation: typeof screenOrientationValue === 'string' && ['0', '1', '2', '3', '4', '5'].includes(screenOrientationValue)
@@ -1635,6 +1644,7 @@ export class ReaderSettingsRepository {
       await store.put('showQuickActions', settings.showQuickActions);
       await store.put('autoReadSpeed', Math.max(1, Math.min(120, Math.round(settings.autoReadSpeed))));
       await store.put('pageAnimation', Math.max(0, Math.min(5, Math.round(settings.pageAnimation))));
+      await store.put('pageAnimationEInk', Math.max(0, Math.min(5, Math.round(settings.pageAnimationEInk))));
       await store.put('animationSpeed', Math.max(0, Math.min(3, Math.round(settings.animationSpeed))));
       await store.put('screenOrientation', ['0', '1', '2', '3', '4', '5'].includes(settings.screenOrientation)
         ? settings.screenOrientation : '0');

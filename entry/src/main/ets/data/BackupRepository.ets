@@ -2663,6 +2663,8 @@ export class BackupRepository {
       autoReadSpeed: current.autoReadSpeed,
       pageAnimation: Math.max(0, Math.min(5,
         BackupRepository.readJsonNumber(selected, 'pageAnim') ?? current.pageAnimation)),
+      pageAnimationEInk: Math.max(0, Math.min(5,
+        BackupRepository.readJsonNumber(selected, 'pageAnimEInk') ?? current.pageAnimationEInk)),
       animationSpeed: Math.max(0, Math.min(3,
         BackupRepository.readJsonNumber(selected, 'pageAnimSpeed') ?? current.animationSpeed)),
       headerMode: Math.max(0, Math.min(2,

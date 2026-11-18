@@ -564,6 +564,7 @@ struct Index {
   @State readerImagePreviewCloseRevision: number = 0;
   @State autoReadSpeed: number = 10;
   @State readerPageAnimation: number = 0;
+  @State readerPageAnimationEInk: number = 4;
   @State readerAnimationSpeed: number = 2;
   @State readerInfoSettings: ReaderInfoSettings = DEFAULT_READER_INFO_SETTINGS;
   @State backupBusy: boolean = false;
@@ -4031,6 +4032,7 @@ struct Index {
       this.readerHideNavigationBar = settings.hideNavigationBar;
       this.autoReadSpeed = settings.autoReadSpeed;
       this.readerPageAnimation = settings.pageAnimation;
+      this.readerPageAnimationEInk = settings.pageAnimationEInk;
       this.readerAnimationSpeed = settings.animationSpeed;
       this.readerInfoSettings = infoSettings;
     }
@@ -4246,6 +4248,7 @@ struct Index {
         showQuickActions: false,
         autoReadSpeed: this.autoReadSpeed,
         pageAnimation: this.readerPageAnimation,
+        pageAnimationEInk: this.readerPageAnimationEInk,
         animationSpeed: this.readerAnimationSpeed,
         headerMode: this.readerInfoSettings.headerMode,
         footerMode: this.readerInfoSettings.footerMode,
@@ -4428,6 +4431,12 @@ struct Index {
 
   private setReaderPageAnimation(animation: number): void {
     this.readerPageAnimation = Math.max(0, Math.min(5, Math.round(animation)));
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
+  }
+
+  private setReaderPageAnimationEInk(animation: number): void {
+    this.readerPageAnimationEInk = Math.max(0, Math.min(5, Math.round(animation)));
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) { this.persistReaderSettings(); }
   }
@@ -8630,6 +8639,8 @@ private canWriteInto(dir: string): boolean {
             onOpenImagePreview: (_uri: string): void => { this.readerImagePreviewOpen = true; },
             onCloseImagePreview: (): void => this.closeReaderImagePreview(),
             pageAnimation: this.readerPageAnimation,
+            themePaletteIndex: this.themePaletteIndex,
+            pageAnimationEInk: this.readerPageAnimationEInk,
             animationSpeed: this.readerAnimationSpeed,
             infoSettings: this.readerInfoSettings,
             autoReadSpeedSeconds: this.autoReadSpeed,
@@ -9028,6 +9039,7 @@ private canWriteInto(dir: string): boolean {
               infoSettings: this.readerInfoSettings,
               onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
               pageAnimationIndex: this.readerPageAnimation,
+              pageAnimationEInkIndex: this.readerPageAnimationEInk,
               animationSpeedIndex: this.readerAnimationSpeed,
               onBottomIconStyleChange: (style: number) => this.setReaderBottomIconStyle(style),
               onBottomItemsPerRowChange: (count: number) => this.setReaderBottomItemsPerRow(count),
@@ -9040,6 +9052,7 @@ private canWriteInto(dir: string): boolean {
               pageTouchSlop: this.readerPageTouchSlop,
               onPageTouchSlopChange: (value: number) => this.setReaderPageTouchSlop(value),
               onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
+              onPageAnimationEInkChange: (animation: number) => this.setReaderPageAnimationEInk(animation),
               onAnimationSpeedChange: (speed: number) => this.setReaderAnimationSpeed(speed),
               onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
               onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
@@ -9824,6 +9837,7 @@ private canWriteInto(dir: string): boolean {
             infoSettings: this.readerInfoSettings,
             onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
             pageAnimationIndex: this.readerPageAnimation,
+            pageAnimationEInkIndex: this.readerPageAnimationEInk,
             animationSpeedIndex: this.readerAnimationSpeed,
             onBottomIconStyleChange: (style: number) => this.setReaderBottomIconStyle(style),
             onBottomItemsPerRowChange: (count: number) => this.setReaderBottomItemsPerRow(count),
@@ -9836,6 +9850,7 @@ private canWriteInto(dir: string): boolean {
             pageTouchSlop: this.readerPageTouchSlop,
             onPageTouchSlopChange: (value: number) => this.setReaderPageTouchSlop(value),
             onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
+            onPageAnimationEInkChange: (animation: number) => this.setReaderPageAnimationEInk(animation),
             onAnimationSpeedChange: (speed: number) => this.setReaderAnimationSpeed(speed),
             onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
             onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
@@ -10198,6 +10213,7 @@ private canWriteInto(dir: string): boolean {
             onHideNavigationBarChange: (enabled: boolean) => this.setReaderHideNavigationBar(enabled),
             onInfoSettingsChange: (settings: ReaderInfoSettings) => this.setReaderInfoSettings(settings),
             pageAnimationIndex: this.readerPageAnimation,
+            pageAnimationEInkIndex: this.readerPageAnimationEInk,
             animationSpeedIndex: this.readerAnimationSpeed,
             onProgressBehaviorChange: (value: string) => this.setReaderProgressBehavior(value),
             readSliderMode: this.readerReadSliderMode,
@@ -10205,6 +10221,7 @@ private canWriteInto(dir: string): boolean {
             pageTouchSlop: this.readerPageTouchSlop,
             onPageTouchSlopChange: (value: number) => this.setReaderPageTouchSlop(value),
             onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
+            onPageAnimationEInkChange: (animation: number) => this.setReaderPageAnimationEInk(animation),
             onAnimationSpeedChange: (speed: number) => this.setReaderAnimationSpeed(speed),
             onBottomActionTextChange: (enabled: boolean) => this.setReaderBottomActionText(enabled),
             onShareLayoutChange: (enabled: boolean) => this.setReaderShareLayout(enabled),
