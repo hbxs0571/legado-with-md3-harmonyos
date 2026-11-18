@@ -105,6 +105,15 @@ export interface LocalReaderPage {
    */
   centerVertical?: boolean;
   /**
+   * 本页逐列的底部对齐位移（vp）。
+   *
+   * 对齐上游 `ReaderPaginator.justifyColumnBottom()`（`feature/reader/core/layout/ReaderPaginator.kt:481-499`）：
+   * 上游把位移直接写进元素 bounds（shiftElement），所以它是**分页产物**——每页带着自己的值定型，翻页不再变。
+   * 本地原来在绘制期按「当前页」现算一份、画布上所有页共用，翻页时整屏行位置会跳。
+   * 长度为列数（1 或 2），空或全 0 表示不需要对齐。
+   */
+  bottomJustifyGapByColumn?: number[];
+  /**
    * 页身份：本页属于第几章（对齐上游 `ReaderPageId.chapterIndex`，`ReaderPage.kt:5`）。
    * 可选是为了不一次改崩下游 52 处 `currentPageIndex` 引用；页层批次 3 只补身份、不改行为，
    * 页层批次 4 页表跨章后由各章 `paginate()` 结果拼窗口表时按此字段筛章。
@@ -205,7 +214,11 @@ export class LocalReaderPaginator {
     textStyle: ReaderTextLayoutStyle | undefined = undefined,
     // 页身份的章号：放最后、可选，不动已有形参顺序。页层批次 3 只补身份、不改行为；
     // 单章页表时调用方不传即为 0，页层批次 4 拼窗口表时各章传各章的 chapterIndex。
-    chapterIndex: number = 0
+    chapterIndex: number = 0,
+    // 底部对齐的两个判据原本在 ReaderPage 里（@Prop textBottomJustify / usesCanvasScroll()），
+    // 现在对齐位移要在分页期算进页产物，判据必须一起下沉。默认 false = 老行为（不算）。
+    textBottomJustify: boolean = false,
+    continuousScroll: boolean = false
   ): LocalReaderPage[] {
     const columns = columnCount >= 2 ? 2 : 1;
     if (contentWidth <= 0 || contentHeight <= 0 || lineHeight <= 0) {
@@ -231,6 +244,45 @@ export class LocalReaderPaginator {
 
     const currentPageCapacity = (): number => Math.max(lineHeight,
       contentHeight - (pages.length === 0 ? Math.max(0, firstPageReservedLines) * lineHeight : 0));
+    // 本页逐列的底部对齐位移（vp）。对齐上游 justifyColumnBottom()：
+    // ① 整页只有一行、或某列只有一行时不摊分；② 该列最后一行独占图片时不摊分；
+    // ③ 剩余高度还够一行（行高 + 乘过倍率的行距）时不摊分；④ 按「列内行数 - 1」等分剩余高度。
+    // 上游把位移写进元素坐标，所以必须在成页时算完、跟着页走，不能留到绘制期按当前页现算。
+    const computeBottomJustifyGaps = (capacity: number): number[] => {
+      const zeros: number[] = [];
+      for (let column = 0; column < columns; column++) { zeros.push(0); }
+      if (!textBottomJustify || pageLines.length <= 1) { return zeros; }
+      // 连续滚动没有「页底」：摊分会把下一章的行推到本页已有行上（画布按 extent 堆叠，靠位移区分页）。
+      if (continuousScroll) { return zeros; }
+      const result: number[] = [];
+      for (let column = 0; column < columns; column++) {
+        let columnLines = 0;
+        let usedHeight = 0;
+        let lastHeight = 0;
+        let lastSpacingAfter = 0;
+        let lastImageOnly = false;
+        for (let index = 0; index < pageLines.length; index++) {
+          const line = pageLines[index];
+          if (line === undefined) { continue; }
+          const lineColumn = pageColumns.length > index ? (pageColumns[index] ?? 0) : 0;
+          if (lineColumn !== column) { continue; }
+          columnLines++;
+          usedHeight += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+          lastHeight = line.height;
+          lastSpacingAfter = line.paragraphSpacingAfter;
+          lastImageOnly = line.imageOnly;
+        }
+        if (columnLines <= 1 || lastImageOnly) { result.push(0); continue; }
+        // 上游 surplus = contentBottomPx - last.bottom，而 last.bottom 不含末行的段后距。
+        // 若不扣掉 lastSpacingAfter，surplus 会偏小、末行落不到页底，观感仍与上游不符。
+        const surplus = capacity - (usedHeight - lastSpacingAfter);
+        // 上游判据 contentBottomPx - (last.bottom + reservedLineSpacing) >= lastHeight 的等价式：
+        // surplus >= lastHeight + lineHeight 就不摊分（lineHeight 已是乘过 lineSpacing 倍率的行高）。
+        if (surplus <= 0 || surplus >= lastHeight + lineHeight) { result.push(0); continue; }
+        result.push(surplus / (columnLines - 1));
+      }
+      return result;
+    };
     const flushPage = (): void => {
       if (pageLines.length === 0) { return; }
       // 标题页判定：本页所有行都是标题行（titleLine===true）。
@@ -242,7 +294,8 @@ export class LocalReaderPaginator {
         lines: pageLines, startPosition: pageStart, endPosition: pageEnd,
         titleOnly: pageIsTitleOnly, lineColumns: pageColumns,
         // 章内页号就是本批内的 0..n-1；页层批次 4 页表跨章后它不等于数组下标。
-        chapterIndex: chapterIndex, pageIndex: pages.length
+        chapterIndex: chapterIndex, pageIndex: pages.length,
+        bottomJustifyGapByColumn: computeBottomJustifyGaps(currentPageCapacity())
       });
       pageLines = [];
       pageColumns = [];

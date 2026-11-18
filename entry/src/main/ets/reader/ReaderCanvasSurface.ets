@@ -2051,9 +2051,11 @@ export class ReaderCanvasRenderer {
       used.push(0);
       lineCount.push(0);
     }
-    // 底部对齐：上游 justifyColumnBottom() 是**逐列**独立摊分（两列的行数不同，
-    // 剩余高度也不同），所以这里按列取各自的位移，不能用全页一个值。
-    const gaps = layout.bottomJustifyGapByColumn;
+    // 底部对齐的位移是分页产物（见 LocalReaderPage.bottomJustifyGapByColumn 的注释）：
+    // 上游在 justifyColumnBottom() 里把位移写进元素坐标，每页带着自己的值定型。
+    // 所以先取本页的，页上没有（占位页 / 老缓存页）才回落到 layout 里那份。
+    const pageGaps = page.bottomJustifyGapByColumn;
+    const gaps = pageGaps !== undefined && pageGaps.length > 0 ? pageGaps : layout.bottomJustifyGapByColumn;
     // 标题页垂直居中（上游 titlePageCenterVertical，`ReaderPaginator.kt:369-389`）：
     // 页成型后按「整页内容高度」算一次平移量，把元素整体下移半个剩余高度。
     const centerVertical = page.centerVertical === true;

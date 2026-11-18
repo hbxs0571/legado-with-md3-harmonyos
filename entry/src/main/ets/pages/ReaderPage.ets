@@ -2577,7 +2577,9 @@ export struct ReaderPage {
       this.readerSizeOffsets,
       titleBlock,
       this.buildReaderTextLayoutStyle(fontSize),
-      adjacentChapter
+      adjacentChapter,
+      this.textBottomJustify,
+      this.usesCanvasScroll()
     );
     // 当前页身份必须在 merge 之前取：merge 会重排页表，下标会变。
     const currentPage = this.localReaderPages[this.currentPageIndex];
@@ -2730,7 +2732,9 @@ export struct ReaderPage {
       // 断行交给系统原生文本引擎，样式必须与绘制正文同一套。
       this.buildReaderTextLayoutStyle(fontSize),
       // 页身份的章号（页层批次 3）：单章页表只填字段、不改行为。
-      this.getChapterIndex()
+      this.getChapterIndex(),
+      this.textBottomJustify,
+      this.usesCanvasScroll()
     );
     const nextPages: LocalReaderPage[] = [];
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {
@@ -2940,16 +2944,6 @@ export struct ReaderPage {
       result.push(surplus / (columnLines - 1));
     }
     return result;
-  }
-
-  /** 只重算当前页的底部对齐位移，不重排分页（翻页路径专用）。 */
-  private refreshReaderBottomJustifyGap(): void {
-    if (this.readerBottomJustifyPageHeight <= 0 || this.readerBottomJustifyLineHeight <= 0) {
-      return;
-    }
-    this.readerBottomJustifyGap = this.calculateReaderBottomJustifyGap(
-      this.readerBottomJustifyPageHeight, this.readerBottomJustifyLineHeight,
-      this.readerBottomJustifyTitleLines);
   }
 
   private reportReaderPageProgress(): void {
@@ -3251,7 +3245,6 @@ export struct ReaderPage {
       this.resetCanvasSelectionState();
       // 位移照常落到新页上（`result.offsetPx` 是相对新页顶边的残差）。
       this.scrollOffset = context.px2vp(result.offsetPx);
-      this.refreshReaderBottomJustifyGap();
       this.paintReaderCanvas();
       // 滚进邻章的页：位置已经落在邻章正文上，但宿主 `book.chapterIndex` /
       // `content` 还停在旧章。这里只标记「这次换章是滚动驱动的」，让重建时
@@ -3291,7 +3284,6 @@ export struct ReaderPage {
       this.currentPageIndex = this.currentPageIndex - 1;
       this.resetCanvasSelectionState();
       this.scrollOffset = context.px2vp(result.offsetPx);
-      this.refreshReaderBottomJustifyGap();
       this.paintReaderCanvas();
       const landed = chapterPosition(pages, this.currentPageIndex);
       if (landed !== undefined && landed.chapterIndex !== this.getChapterIndex()) {
@@ -3302,7 +3294,6 @@ export struct ReaderPage {
       return result.hitBoundary;
     }
     this.scrollOffset = context.px2vp(result.offsetPx);
-    this.refreshReaderBottomJustifyGap();
     this.paintReaderCanvas();
     return result.hitBoundary;
   }
@@ -3513,7 +3504,6 @@ export struct ReaderPage {
     const nextPageIndex = locateChapterPage(this.localReaderPages, position.chapterIndex, localNext);
     this.currentPageIndex = nextPageIndex;
     this.resetCanvasSelectionState();
-    this.refreshReaderBottomJustifyGap();
     this.reportReaderPageProgress();
     this.paintReaderCanvas();
   }
@@ -3612,8 +3602,6 @@ export struct ReaderPage {
       this.turnAnimator = undefined;
       // 上游 ReaderSelectionLifecyclePolicy：程序化翻页要清选区，否则旧页的选区会画到新页上
       this.resetCanvasSelectionState();
-      // 换页后按新页重算底部对齐位移（只换索引不重排，避免翻页时整页重排卡顿）
-      this.refreshReaderBottomJustifyGap();
       this.reportReaderPageProgress();
       this.paintReaderCanvas();
     };
@@ -5941,7 +5929,6 @@ export struct ReaderPage {
     this.readerProgress = nextProgress;
     this.lastReportedProgress = nextProgress;
     this.seekReaderScrollAbsolute(totalScrollHeight * nextProgress / 100);
-    this.refreshReaderBottomJustifyGap();
     this.paintReaderCanvas();
     this.emitReaderProgress(nextProgress, Math.round(this.content.length * nextProgress / 100), false);
   }
