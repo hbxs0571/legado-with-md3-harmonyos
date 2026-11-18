@@ -1128,11 +1128,10 @@ export struct ReaderPage {
 
   onSystemBarSettingsChanged(): void {
     this.syncReaderSystemBars();
-    // 页眉在 headerMode 既非 1 也非 2 时跟随状态栏显隐（见 isReaderHeaderVisible），
-    // 所以「隐藏状态栏」这个开关也改变了正文可用高度，必须触发重排版。
-    if (this.infoSettings.headerMode !== 1 && this.infoSettings.headerMode !== 2) {
-      this.onPaginationInputsChanged();
-    }
+    // hideStatusBar 现在有两个后果：①页眉在 headerMode 既非 1 也非 2 时跟随显隐
+    // ②正文区的状态栏占位归零/恢复（见 readerStatusBarReserve）。两者都改排版输入，
+    // 所以不再按 headerMode 分档，一律重排。
+    this.onPaginationInputsChanged();
   }
 
   onScreenOrientationChanged(): void {
@@ -4868,8 +4867,11 @@ export struct ReaderPage {
   }
 
   private getBodyContentHeight(headerReserve: number, footerReserve: number): number {
+    // 状态栏占位与页眉预留是两笔独立的扣减，见 readerStatusBarReserve() 的注释：
+    // 上游 paddingTopPx = paddingTop + contentPaddingTop + headerExtentPx（LegacyReaderChapterPaginator.kt:267）。
     return Math.max(1, this.viewportHeight - this.paddingSettings.paddingTop -
-      this.paddingSettings.paddingBottom - headerReserve - footerReserve - this.readerCutoutBottomInset());
+      this.paddingSettings.paddingBottom - this.readerStatusBarReserve() -
+      headerReserve - footerReserve - this.readerCutoutBottomInset());
   }
 
   /**
@@ -4885,6 +4887,29 @@ export struct ReaderPage {
     const bottom = isHeader ? this.paddingSettings.headerPaddingBottom : this.paddingSettings.footerPaddingBottom;
     const showLine = isHeader ? this.infoSettings.showHeaderLine : this.infoSettings.showFooterLine;
     return 18 + (showLine ? 1 : 0) + 4 + top + bottom;
+  }
+
+  /**
+   * 状态栏占位高度（vp）。
+   *
+   * 对齐上游 `ui/book/read/ReaderContentAvoidancePolicy.kt:30-48` 的 statusPlaceholderGone 分支：
+   * 占位存在时正文顶部让开一整条状态栏，hideStatusBar 打开时让位归零、正文上移贴顶。
+   *
+   * 与页眉是两件事，必须叠加：页眉是「画在让位区之下的一条装饰」，状态栏占位是「让位区本身」。
+   * 上游 `LegacyReaderChapterPaginator.kt:267` 的 paddingTopPx = paddingTop + contentPaddingTop + headerExtent
+   * 就是这个叠加关系。
+   *
+   * 高度取 @StorageProp('appTopInset')：`pages/Index.ets:799-807` 的 publishAppTopInset()
+   * 读 TYPE_SYSTEM 的 topRect.height 后 px2vp 广播，与上游 statusBarTopPx 同源同口径。
+   * 它由 getWindowAvoidArea 采样、不是逐帧跟随可见性——菜单开关不会改这个值，
+   * 所以本轮不会引入「开关菜单整章重排」。
+   */
+  private readerStatusBarReserve(): number {
+    // 上游 statusPlaceholderGone = hideStatusBar || inMultiWindow。
+    // 本地没有多窗口形态（docs/PROJECT.md 范围之外），只判 hideStatusBar。
+    if (this.hideStatusBar) { return 0; }
+    // 取整到 0.5vp：状态栏高度是设备常数，亚像素抖动会让分页键每帧变化、反复重排。
+    return Math.max(0, Math.round(this.appTopInset * 2) / 2);
   }
 
   private getReaderLineGapAfter(line: LocalReaderLine, itemIndex: number, item: LocalReaderLineItem): number {
@@ -6236,8 +6261,10 @@ export struct ReaderPage {
       return row;
     }
     const context = this.getUIContext();
-    // 页脚贴正文区底边：正文画到 bodyHeightPx 为止，装饰从那里接下去。
-    row.originYpx = request.layout.bodyHeightPx;
+    // 页脚贴在正文区**底边之下**：正文区从 originYpx 开始、高 bodyHeightPx，
+    // 所以底边 = originYpx + bodyHeightPx。原来直接用 bodyHeightPx 当坐标，
+    // 少加了 originYpx，页脚会画进正文区里（状态栏占位加上后误差更大）。
+    row.originYpx = request.layout.originYpx + request.layout.bodyHeightPx;
     row.lineHeightPx = context.vp2px(18);
     row.fontSizePx = context.vp2px(this.getReaderInfoFontSize(false));
     row.fontFamilies = [this.readerInfoFontFamily(false)];
@@ -6291,8 +6318,10 @@ export struct ReaderPage {
       return row;
     }
     const context = this.getUIContext();
-    // 页眉贴画布顶：正文从 layout.originYpx 处开始画，页眉占住它上面那一条。
-    row.originYpx = 0;
+    // 页眉不是贴画布顶，而是贴在状态栏让位区之下——上游页眉装饰行的
+    // paddingTopPx 里含 contentPaddingTopPx（LegacyReaderPageDecorationFactory.kt:185），
+    // 所以状态栏那一条是空的，页眉从它下面开始。
+    row.originYpx = context.vp2px(this.readerStatusBarReserve());
     row.lineHeightPx = context.vp2px(18);
     row.fontSizePx = context.vp2px(this.getReaderInfoFontSize(true));
     row.fontFamilies = [this.readerInfoFontFamily(true)];
@@ -6347,9 +6376,10 @@ export struct ReaderPage {
     const leftPadding = context.vp2px(this.paddingSettings.paddingLeft + this.readerCutoutLeftInset());
     layout.originXpx = leftPadding;
     const headerReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
-    // 页眉搬进画布后 Canvas 顶到 Column 顶部，原来由 ArkUI 页眉节点撑开的那段偏移
-    // 没有了，正文纵向原点要自己补回来；漏补会让正文顶到页眉上，滚动坐标系也跟着错。
-    layout.originYpx = context.vp2px(headerReserve);
+    // 正文纵向原点 = 状态栏占位 + 页眉预留。上游页眉装饰行的 paddingTop 就是
+    // headerPaddingTop + contentPaddingTop（LegacyReaderPageDecorationFactory.kt:185），
+    // 正文从装饰行下方开始，所以两笔都要加进来。
+    layout.originYpx = context.vp2px(this.readerStatusBarReserve() + headerReserve);
     layout.bottomJustifyGapPx = context.vp2px(this.readerBottomJustifyGap);
     // 双页模式按列各算一份（上游 justifyColumnBottom 逐列摊分）
     if (columnCount > 1) {
@@ -7447,10 +7477,11 @@ export struct ReaderPage {
               .onAreaChange((oldArea: Area, newArea: Area) => {
                 // 菜单要定位在外层 Stack 里，记下画布自己的纵向偏移（Area 的 position 单位是 vp）
                 this.readerCanvasOffsetYVp = readerLengthToNumber(newArea.position.y ?? 0);
-                // 页眉页脚都搬进画布后 Canvas 实测高度里同时含这两段预留，都要扣掉才是
-                // 「正文区高」；漏一段就会让实测值比公式多一整条装饰，
+                // 页眉页脚都搬进画布后 Canvas 实测高度里同时含状态栏占位与这两段预留，
+                // 都要扣掉才是「正文区高」；漏一段就会让实测值比公式多一整条装饰，
                 // syncReaderCanvasBodyHeight 再触发 rebuildReaderPages()，批 3 的抖动就回来了。
                 this.syncReaderCanvasBodyHeight(readerLengthToNumber(newArea.height) -
+                  this.readerStatusBarReserve() -
                   (this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0) -
                   (this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0));
                 this.paintReaderCanvas();
@@ -7478,7 +7509,8 @@ export struct ReaderPage {
             // 上游 leftPx = 页宽 - 右内边距 - 6dp - 角标宽度，即右边距为「右内边距 + 6dp」；
             // topPx = 正文视口顶边，与页眉不重叠。
             .margin({
-              top: this.paddingSettings.paddingTop + (this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0),
+              top: this.readerStatusBarReserve() +
+                this.paddingSettings.paddingTop + (this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0),
               right: this.paddingSettings.paddingRight + 6
             })
             .translate({ x: this.pageTurnOffsetX, y: this.pageTurnOffsetY + this.bookmarkPullOffset })
