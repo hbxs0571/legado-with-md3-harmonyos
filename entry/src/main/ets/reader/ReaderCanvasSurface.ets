@@ -948,6 +948,14 @@ export class ReaderCanvasRenderer {
   private static readonly PARAGRAPH_CACHE_LIMIT: number = 1024;
   private static readonly IMAGE_CACHE_LIMIT: number = 32;
   /**
+   * 单张图解码宽度上限（px）。
+   * 绘制侧 drawImageBox 会把图拉伸到行盒，解出远超行盒的位图是纯浪费：
+   * 3000px 宽的插图画在 300px 行盒里，内存差 100 倍。
+   * 取 1600 的理由：1280 宽的模拟器上，整宽图（含左右边距）约 1200px；
+   * 1600 留出约 1.3 倍余量，既不缩常见图，又能挡住手机拍摄级的超大图。
+   */
+  private static readonly IMAGE_DECODE_MAX_WIDTH: number = 1600;
+  /**
    * 气泡图缓存字节上限（上游 ReaderTextBackgroundLoader.kt:26-30 用 maxOf(16MB, maxMemory/8)）。
    * 按字节而不是按条数：九宫格 .9.png 必须原尺寸解，单张可达几十 MB，
    * 上游注释明确说按条数会让 18MB 的大图一进就被挤出去。
@@ -982,10 +990,16 @@ export class ReaderCanvasRenderer {
       const imageSource = image.createImageSource(source);
       const info = await imageSource.getImageInfo();
       const density = info.density > 0 ? info.density / 160 : 1;
+      const naturalWidth = Math.max(1, info.size.width / density);
+      const naturalHeight = Math.max(1, info.size.height / density);
+      // 超宽图按比例缩到上限，保持宽高比（不上限的图原样解）。
+      const scale = naturalWidth > ReaderCanvasRenderer.IMAGE_DECODE_MAX_WIDTH
+        ? ReaderCanvasRenderer.IMAGE_DECODE_MAX_WIDTH / naturalWidth
+        : 1;
       const pixelMap = await imageSource.createPixelMap({
         desiredSize: {
-          width: Math.max(1, Math.round(info.size.width / density)),
-          height: Math.max(1, Math.round(info.size.height / density))
+          width: Math.max(1, Math.round(naturalWidth * scale)),
+          height: Math.max(1, Math.round(naturalHeight * scale))
         }
       });
       this.imageCache.set(source, pixelMap);
