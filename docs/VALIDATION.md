@@ -95,7 +95,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 1. **新建 `entry/src/main/ets/reader/ReaderTextLayoutEngine.ets`**（约 370 行）：把一段连续文本交给 `text.ParagraphBuilder` → `layoutSync(widthPx)` → `getLineCount()` / `getLineMetrics(i)`，只取每行的 `startIndex`/`endIndex` 作为断点。`wordBreak: text.WordBreak.BREAK_WORD`、`breakStrategy: text.BreakStrategy.GREEDY`、`locale: 'zh-Hans'`。文件头写明单位口径与 API 12 禁用清单。系统引擎抛异常时退回逐 cluster 自量并打一次 `console.error`。
 2. **`entry/src/main/ets/pages/LocalReaderPaginator.ets` 整文件重写**（842→752 行）：对外接口 `LocalReaderLineItem` / `LocalReaderLine` / `LocalReaderPage` 与 `paginate()` 的形参顺序**全部保持原样**，只在末尾加一个可选参 `textStyle`。`addParagraph()` 改成「先把连续 text part 攒成一段交给引擎，遇到图片或段尾再落地」；`appendLine()` 的行高、段距、换行判定、`justifyGap` 公式一字未动。段首缩进（`　　`）保护为 `leadingIndent` item，不参与两端对齐拉伸。
 3. **`entry/src/main/ets/pages/ReaderPage.ets`**：`:1859` 与 `:3554` 两个调用点各补一个实参 `this.buildReaderTextLayoutStyle(fontSize)`；新增该方法返回 `{ fontFamilies, fontSizeFp, letterSpacingVp, fontWeight, vpScalePx, fpScalePx }`，口径与 `buildReaderCanvasStyle()` 一致（否则断行与绘制行宽对不上）。
-4. **删 `entry/src/main/ets/reader/ChineseLineBreaker.ets`**（117 行）：全仓已无 import，避头尾改由系统断行承担。
+4. **删 `entry/src/main/ets/reader/ChineseLineBreaker.ets`**（117 行）：全仓已无 import，避头尾改由系统断行承担。**（r346 订正：本地断行器已按上游重新移植回来，现为 16,053 B、四模式 NORMAL / PULL_PREVIOUS / REWIND / HANG，主路径见 `entry/src/main/ets/reader/ReaderTextLayoutEngine.ets:209-294`，系统断行退为兜底。本行是 r329 的历史记录，不是当前状态。）**
 5. **行尾空格回收**（`ReaderTextLayoutEngine.reclaimTrailingSpaces()`）：`targetSdk 12` 没有 `ParagraphStyle.trailingSpaceOptimized`（since 20），系统 `layoutSync` 会把行尾那一个空格算进行宽，西文因此比上游 `StaticLayout` 少排一个词。修法是在 `breakRanges()` 取完行区间后，逐相邻行对判断「行尾是 `0x20`」，把「空格 + 紧随的一个完整词」整词搬到上一行（条件：搬完的行宽 ≤ `contentWidth`）。
 
 ### 页码差异对比（任务书 ≤ 5% 验收项）
@@ -133,9 +133,9 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 ### 边界与未验
 
-- `useZhLayout`（「使用自定义中文分行」）现在**没有任何实现支撑**：上游本来就只有唯一断行器、开关只进 `PageEstimateConfig.kt:61` 的布局签名；本地原来那套自造断行已删，开关仍只参与布局 key、有效果但不改变断行算法，与上游语义一致。`docs/parity/READER-CONFIG.md` 对应行的「本地无分支」描述需要按此更新。
+- `useZhLayout`（「使用自定义中文分行」）现在**没有任何实现支撑**：上游本来就只有唯一断行器、开关只进 `PageEstimateConfig.kt:61` 的布局签名；本地断行器现为按上游移植的 `ChineseLineBreaker.ets`，开关仍只参与布局 key、有效果但不改变断行算法，与上游语义一致。**（r346 订正：原句写「自造断行已删」，现断行器已在且是主路径。）**`docs/parity/READER-CONFIG.md` 对应行的「本地无分支」描述需要按此更新。
 - 标题块**不走**系统引擎（各段字号按 `fontSizeScale` 缩放、字体族是 `readerTitleFontFamily`，与正文样式不是一套）。`docs/parity/TXT-READER.md` B9「标题与正文共用同一个折行器」保持 `未接`。
-- 上游 `ChineseLineBreaker.kt` 额外处理「」「」` 连打这类 `StaticLayout` 不做的情况，本地没有对应实现，极满的行上可能出现两个标点连在行首。B1 仍按「已接但缺这一半」记录。
+- 上游 `ChineseLineBreaker.kt` 额外处理「」「」` 连打这类 `StaticLayout` 不做的情况，本地没有对应实现，极满的行上可能出现两个标点连在行首。B1 仍按「已接但缺这一半」记录。**（r346 订正：该缺口已补齐——本地断行器四模式生效，连打标点与收尾悬挂都按上游处理，B1 不再是「缺这一半」。本条为 r329 的历史记录。）**
 - API 12 缺 `includeFontPadding`（since 23）：本次实测 CJK 首行墨迹**没有被 `Paragraph` 裁掉**（每页首行字形完整），因为本地行盒高度由 `lineHeight`（vp）施加、绘制另走 `maxLines:1` 的独立 `Paragraph` 且 `layoutSync` 宽度留了一个字号余量（`ReaderCanvasSurface.ets` 的 `getParagraph()`）。故本轮不需要顶部留白补偿。
 - 折页手势拖拽跟手（B4）、fling（B5）、滚动拖拽方向（D2）走的是渲染与手势通道，本次一行未改，状态不变。
 
