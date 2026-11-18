@@ -2372,14 +2372,20 @@ export struct ReaderPage {
   /**
    * 向宿主请求预排邻章正文（页层批次 4）。
    *
-   * 只在滚动模式做：分页模式翻章是「整表替换」，预排邻章只会白占内存。
+   * 滚动与分页模式都做：翻到章末时下一章已在内存，翻章不用现场读盘+排版。
    * 一次只请求一章，优先下一章——向下读是主路径。
    *
    * 三种情况不请求：已在途（`pendingAdjacentChapter`）、已经下发过且页还在
    * （`deliveredAdjacentChapter` + `hasChapterPages`）、目标章越界。
    */
   private prefetchAdjacentChapters(): void {
-    if (!this.usesCanvasScroll()) { return; }
+    // 批7：原来只在画布滚动模式下预排（非滚动模式直接 return）。
+    // 分页模式同样受益于邻章预热：翻到章末时下一章已在内存，不用现场读盘+排版。
+    // 上游对应机制是 ensureBoundaryPlaceholderPages（ReadBookController.kt:1085）+
+    // 换章时 promote（:2935-2955），本项只借「先热邻章」这一点。
+    // 主体逻辑（hasChapterPages / 在途超时 / onRequestAdjacentChapter）不依赖滚动窗口，
+    // 探针已在分页模式验证：不崩、不串章、换章前邻章页已就绪。
+    if (!this.book.isLocal) { return; }
     const currentChapter = this.getChapterIndex();
     const nextChapter = currentChapter + 1;
     const previousChapter = currentChapter - 1;
