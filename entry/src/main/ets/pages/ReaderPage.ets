@@ -4585,6 +4585,9 @@ export struct ReaderPage {
       this.book.id, this.book.contentPath ?? '', revision, this.fontSize,
       this.textFontPath, this.titleFontPath, this.systemTypefaces,
       this.paragraphSpacing, this.lineSpacing, this.letterSpacing, this.paragraphIndent,
+      // adaptSpecialStyle 决定 [newpage] 与 <usehtml> 是否被识别，直接改变段落结构；
+      // 章页快照键固定用 revision=0，revision 自增拦不住，必须自己进键。
+      this.adaptSpecialStyle,
       this.readerContentWidth, this.viewportHeight, this.effectiveImageStyle(), this.resolveReaderColumnCount(),
       JSON.stringify(this.paddingSettings),
       this.useZhLayout, this.effectivePageAnim(),

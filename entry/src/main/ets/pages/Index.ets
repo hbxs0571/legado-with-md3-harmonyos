@@ -7903,6 +7903,9 @@ private canWriteInto(dir: string): boolean {
         // 重载失败不影响设置落库，下一次换章会按夹过的章号重取正文。
       }
       updatedBook.chapterIndex = clampedIndex;
+      // 章号被夹走后章名必须同步：openBook 拿 lastChapter 当章名传给 readChapter
+      // 并赋给 selectedChapter，漏了这里重启后会「正文已夹、标题还是旧章」。
+      updatedBook.lastChapter = chapterTitle;
       updatedBook.chapterProgress = 0;
       updatedBook.androidCharacterPosition = 0;
       if (realCount > 0) { updatedBook.progress = clampedIndex / realCount * 100; }
