@@ -341,6 +341,8 @@ export struct ReadRecordOverviewPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /** 状态栏高度（vp）：顶栏要让开它，与 `ReaderSearchPage.ets` 同一套做法。 */
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @Prop details: ReadRecordDetail[] = [];
   @Prop summaries: ReadRecordSummary[] = [];
   @Prop books: Book[] = [];
@@ -444,7 +446,7 @@ export struct ReadRecordOverviewPage {
         Text('阅读总览').fontSize(18).fontWeight(FontWeight.Bold)
           .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
         Text(' ').fontSize(14).width(28)
-      }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 10 })
+      }.width('100%').padding({ left: 16, right: 16, top: 12 + this.appTopInset, bottom: 10 })
 
       // 周期选择器：日/周/月/年/总。
       Row() {

@@ -24,6 +24,8 @@ export struct FileManagerPage {
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /** 状态栏高度（vp）：顶栏要让开它，与 `ReaderSearchPage.ets` 同一套做法。 */
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @Prop rootPath: string = '';
   @Prop books: Book[] = [];
   onBack: () => void = () => {};
@@ -148,7 +150,7 @@ export struct FileManagerPage {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
-      }.width('100%').height(48).padding({ left: 11, right: 12 })
+      }.width('100%').height(48 + this.appTopInset).padding({ left: 11, right: 12, top: this.appTopInset })
 
       if (this.showSearch) {
         Row() {

@@ -37,6 +37,8 @@ export struct TxtTocRulePreviewPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /** 状态栏高度（vp）：顶栏要让开它，与 `ReaderSearchPage.ets` 同一套做法。 */
+  @StorageProp('appTopInset') appTopInset: number = 0;
   @Prop book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
@@ -186,7 +188,7 @@ export struct TxtTocRulePreviewPage {
         AppGlyph({ name: 'settings', glyphSize: 19, tint: this.themeColorTextSecondary })
           .padding({ left: 6, right: 8 })
           .onClick(() => this.onOpenManagePage())
-      }.width('100%').height(40).padding({ left: 18, right: 18 })
+      }.width('100%').height(40 + this.appTopInset).padding({ left: 18, right: 18, top: this.appTopInset })
       Column() {
         Text('选择目录规则').fontSize(24).fontWeight(FontWeight.Bold)
           .fontColor(this.themeColorTextPrimary).width('100%')
