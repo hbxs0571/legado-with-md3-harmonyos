@@ -1636,3 +1636,92 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
   本地只有单个余弦径向函数，细节形状不完全相同；
 - 刷新中的容器形状变化（`ContainedLoadingIndicator`）没做，容器始终是圆形；
 - 自转只在 `refreshing` 期间跑，且没有连帧证据（见「没做什么」第 11 条）。
+
+## 2026-11-18 N 端 r348~r350 阅读域视觉与手感修复（四批）
+
+开工 HEAD `b939c21`，`git status --short` 无输出。四批各自一个提交，每批改完即构建 + 装包 + 上机取证：
+
+| 批 | 提交 | 主题 | 改动文件 |
+| --- | --- | --- | --- |
+| 1 | `6eb6b7c` | 正文让开状态栏 | `entry/src/main/ets/pages/ReaderPage.ets` |
+| 2 | `7ee1512` | 文字底部对齐按页定型 | `entry/src/main/ets/pages/LocalReaderPaginator.ets`、`entry/src/main/ets/reader/ReaderCanvasSurface.ets`、`entry/src/main/ets/pages/ReaderPage.ets` |
+| 3 | `b3dc490` | 进度条拖动去重 / 松手回弹 / 竖条高度 | `entry/src/main/ets/pages/ReaderPage.ets` |
+| 4 | `8a703a5` | 三个子页面顶栏让开状态栏 | `entry/src/main/ets/pages/TxtTocRulePreviewPage.ets`、`entry/src/main/ets/pages/FileManagerPage.ets`、`entry/src/main/ets/pages/ReadRecordOverviewPage.ets` |
+
+### 批 1：正文让开状态栏（`6eb6b7c`）
+
+新增 `private readerStatusBarReserve()`（`entry/src/main/ets/pages/ReaderPage.ets:4899`）：`hideStatusBar` 为真返回 0，否则返回 `appTopInset` 取整到 0.5vp。接进正文高度、画布纵向原点、页眉行原点、`onAreaChange` 实测扣高、书签角标 margin 五处；`onSystemBarSettingsChanged()` 去掉 headerMode 条件改为一律重排。详见 [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的 KI-REL10。
+
+**修前 / 修后 A/B（同一本书第 262 章，像素带取自 `_verify_shots` 下的截图，`measure_text.py` 逐行统计亮度 > 60 的像素段）**：
+
+| 版本 | 正文首行 | 状态栏 | 判定 |
+| --- | --- | --- | --- |
+| 修前（`b939c21` 的 `ReaderPage.ets`，`ab_old_paged.png`） | `y=24..100` | `y=59..100` | 首行与状态栏重叠，字压在时间上 |
+| 修后（`ab_new_paged.png`） | `y=154..438` | `y=59..100` | 首行在状态栏下方 |
+
+修前版本的代码证据：`appTopInset` 在开工版 `ReaderPage.ets` 里只有三处命中——一处注释、一处 `@StorageProp` 声明、一处顶栏按钮的 `.padding({ top: 12 + this.appTopInset })`，**正文排版链路零处读取**。
+
+其余三项上机：①分页档翻 3 页后正文首行 `y=154..343`，仍在状态栏下方；②滚动档章标题 `y=268..404`，退出重进同位置（不是首渲染偶然）；③`hideStatusBar=true` 时正文与页眉一起上移（章标题 268→247）、状态栏图标消失，切回 `false` 后回到状态栏下方。
+
+页脚口径：`buildReaderFooterDecoration()` 改成贴正文底边（`originYpx + bodyHeightPx`），实测页脚文字 `y=2722..2754` 与正文末行底 `y=2689` 不重叠、页脚底距画布底 78px≈22vp。
+
+### 批 2：文字底部对齐按页定型（`7ee1512`）
+
+摊分位移改由分页器算好写进 `LocalReaderPage.bottomJustifyGapByColumn`（`entry/src/main/ets/pages/LocalReaderPaginator.ets:298`），画布优先取页内值、取不到才回落 `layout.bottomJustifyGapByColumn`；删掉画布侧按当前页现算的 `refreshReaderBottomJustifyGap()` 及其 6 处调用。
+
+**逐页翻 11 页、回翻 11 页**（测试书《失明的她遇上盗神》，571 章，分页档）：
+
+| 页 | 行数 | 首行 y | 末行底 | 备注 |
+| --- | --- | --- | --- | --- |
+| 00 | 21 | 154 | 2699 | |
+| 01 | 23 | 154 | 2645 | |
+| 02 | 23 | 161 | 2659 | |
+| 03 | 21 | 161 | 2618 | |
+| 04 | 21 | 161 | 2672 | |
+| 05 | 22 | 154 | 2645 | |
+| 06 | 25 | 161 | 2686 | |
+| 07 | 21 | 161 | 2631 | |
+| 08 | 12 | 160 | 1578 | 章末短页，未被拉满（末行底距画布底 1254px） |
+| 09 | 18 | 268 | 2674 | 换章，首行是章标题 |
+| 10 | 26 | 154 | 2659 | |
+
+回翻 11 页的末行底落在 2618 / 2659 / 2674 / 2631 / 2686 / 2645，与顺序翻同页一致。**往返一致性**：翻走三页再翻回来，21 行的 y 坐标与翻走前逐个相等（首行 `154..343`、末行 `2605..2699` 全表一致），说明位移随页定型，不再随「当前计算时刻」变。
+
+单页行距实测（相邻行 top 差）`[254,151,95,95,95,146,101,96,95,145,102,152,98,149,88,102,96,151,95,145]`：常规行距 95px、段间距 145~152px。
+
+A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true 时几乎相同（首行 154、末行底 2699，个别行差 1px）——该页剩余不足一行，按判据本就不摊分，**这张图不能用来证明摊分生效**；章末短页那张（12 行、末行底 1578）才是「末页不再被拉满」的直接证据。
+
+⑤滚动档行距对比：`52_scroll_mode.png` 正文 18 行，pitches `[94,146,196,101,48,98,95,146,102,145,386,152,95,96,145,102,145]`，常规 94~102px、段间 145~152px，与分页档一致 ⇒ 本批对滚动档是 no-op。
+
+**双列未验证**：模拟器竖屏只有单列。
+
+### 批 3：进度条拖动去重与松手回弹（`b3dc490`）
+
+1. **分页档拖动去重**：新增 `@State sliderDragPreviewPageIndex`（`entry/src/main/ets/pages/ReaderPage.ets:538`），`onChange` 里同一个 index 只提交一次。实测分页档从 8/10 起：拖 `556→700` 到 6/10、拖到 830 回 8/10、拖回 400 到 4/10，拇指 x_center 依次 836.5 / 678.5 / 836.5 / 363.5。**同页不闪烁的像素证据**：8/10 两次截图（拖动前与拖回后）逐像素比较，差异像素 778 / 3624960，其中 **正文区（y=130..2300）差异 0**，差异只在状态栏区 412px（时间从 08:26 变 08:29）与滑块区 366px（边缘抗锯齿）。
+2. **滚动档松手不回弹**：`seekToProgress()` 开头先 `clearTimeout(this.scrollProgressTimer)`（`:5931`）。实测 `drag 292 2460 → 800 2460` 松手后 200ms 与 1300ms 两次截图竖条位置完全相同（`x=810..823 y=2385..2538`）。
+3. **章节档拖动中不动、松手才跳**：`progressBehavior` 改 chapter 后 4 秒慢拖（`drag 285 → 900`），拖动中拇指停在 292.5、正文完全没跳；松手后拇指 900.5、跳到新章。
+4. **拇指竖条高度**：Slider 与竖条容器两处 `.height(40)` 改 `.height(52)`（上游 `ReadBookMenuBarBottom.kt:162-166` 是 44 + 4×2）。实测改前竖条高度 146~154px、改后 144~154px，**两者最高都是 154px = 44vp 完整高度，改前并没有被真裁**；行程算法 `sliderThumbOffset()`（`entry/src/main/ets/pages/ReaderPage.ets:1619-1625`，`travel = sliderTrackWidth - SLIDER_THUMB_WIDTH`）**未改**，两端实测完整。
+
+### 批 4：三个子页面顶栏让开状态栏（`8a703a5`）
+
+三处都是「加声明 + 把顶栏高度和 `padding.top` 各加一份 `appTopInset`」，照 `entry/src/main/ets/pages/ReaderSearchPage.ets` 已在用的模式（`:44` 声明、`:386` `top: 14 + this.appTopInset`）：
+
+| 页面 | 声明 | 顶栏改动 |
+| --- | --- | --- |
+| `entry/src/main/ets/pages/TxtTocRulePreviewPage.ets` | `:41` | `:191` `height(40 + this.appTopInset).padding({ left: 18, right: 18, top: this.appTopInset })` |
+| `entry/src/main/ets/pages/FileManagerPage.ets` | `:28` | `:153` `height(48 + this.appTopInset).padding({ left: 11, right: 12, top: this.appTopInset })` |
+| `entry/src/main/ets/pages/ReadRecordOverviewPage.ets` | `:345` | `:449` `top: 12 + this.appTopInset`（不补 height） |
+
+上机取证（`row_runs.py` 量纵向亮像素行段）：
+- 文件管理页 `b4_10_file_manager.png`：状态栏 `(59,100)`、顶栏行 `(192,243)`；dumpLayout 里「筛选 • 文件管理」bounds 顶 187 > 状态栏底 136。
+- TXT 目录规则页 `b4_30_toc_rule_preview.png`：状态栏 `(59,100)`、返回键与三个图标行 `(171,240)`、标题 `(311,388)`；展开搜索 `b4_31_toc_search.png` 搜索框完整不被键盘挤。
+- 阅读总览页 `b4_53_overview.png`：状态栏 `(59,100)`、顶栏文字行 `(183,240)`；dumpLayout「阅读总览」bounds 顶 178 > 状态栏底 100。
+
+`FileManagerPage.ets` 的搜索框 `:164` `height(48)` 未动（搜索框不吃 inset）；`CatalogPage.ets` 未动（那是底部弹起面板，顶部是拖拽把手）；`ProfileSubPages.ets` 的九处 `.margin({ top: this.appTopInset - 8 })` 未动——这是一笔独立的负边距问题，本轮不碰。
+
+### 没做什么
+
+- **双页 / 双列未验证**：模拟器竖屏只有单列，批 2 的双列摊分、批 1 的横屏避让都没有设备证据。
+- **浅色模式未验证**：全部上机取证都在深色模式下做的。
+- **批 3 只改到高度**：行程算法没动，因为实测改前改后两端都完整（见上）。若后续有人报「拖到最右端拇指不到轨道末端」，那要另起一笔实测数据再改。
+- `ProfileSubPages.ets` 九处负边距、`CatalogPage.ets` 拖拽把手：按任务范围没碰，只在 `KNOWN-ISSUES.md` 之外的本节记录。

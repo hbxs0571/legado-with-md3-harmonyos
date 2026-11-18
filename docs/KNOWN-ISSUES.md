@@ -1032,6 +1032,18 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ---
 
+## 阅读页正文压状态栏（r349 已修）
+
+**KI-REL10 阅读页正文压住系统状态栏** —— 关联 [`VALIDATION.md`](VALIDATION.md) r349 一节
+
+- **现象**：阅读页顶部正文与系统状态栏重叠。分页档同一本书同一页，正文首行占 `y=24..100`，状态栏时间与图标也在 `y=59..100`，字压在时间上。
+- **根因**：正文纵向起点只算了两笔——`paddingSettings.paddingTop` 与页眉预留，没有算系统栏占位。`appTopInset`（`pages/Index.ets:799-807` 的 `publishAppTopInset()` 广播）在 `entry/src/main/ets/pages/ReaderPage.ets` 里此前只被顶栏按钮用（修前版本 `:7736` 的 `.padding({ top: 12 + this.appTopInset })`），排版链路完全没读它。上游是分开两笔的：`ui/book/read/ReaderContentAvoidancePolicy.kt:30-48` 的 `statusPlaceholderGone` 给正文留出状态栏那一整条，`LegacyReaderChapterPaginator.kt:267` 的 `paddingTopPx = paddingTop + contentPaddingTop + headerExtentPx` 再把页眉叠上去。
+- **修法**：新增 `private readerStatusBarReserve(): number`（`entry/src/main/ets/pages/ReaderPage.ets:4899`）——`hideStatusBar` 为真返回 0（对齐上游 `statusPlaceholderGone`），否则返回 `@StorageProp('appTopInset')` 取整到 0.5vp。接进五处：`getBodyContentHeight()`（`:4865`）、`buildReaderCanvasLayout()` 的 `layout.originYpx`（`:6379`，与页眉预留相加）、`buildReaderHeaderDecoration()` 的 `row.originYpx`（`:6321`）、`onAreaChange` 画布实测扣高（`:7481`）、书签角标 margin.top（`:7509`）。另外 `onSystemBarSettingsChanged()`（`:1136`）去掉 headerMode 条件改为一律重排——否则切 `hideStatusBar` 后占位变了但页不重排。
+- **页脚口径**：`buildReaderFooterDecoration()`（`:6267`）改成 `row.originYpx = request.layout.originYpx + request.layout.bodyHeightPx;`（贴正文底边）。不采用「贴画布底」式，实测页脚文字 `y=2722..2754` 与正文末行底 `y=2689` 不重叠、页脚底距画布底 78px≈22vp，符合正常留白。
+- **验收**：同一本书同一页 A/B——修前正文首行 `y=24..100`（压状态栏）、修后 `y=153` 起（状态栏 `y=59..100` 下方）；分页档翻 3 页后正文首行仍在状态栏下方；滚动档章标题 `y=268..404`、退出重进同位置；`hideStatusBar=true` 时正文与页眉一起上移（268→247）、状态栏图标消失，占位归零分支正常；切回 `hideStatusBar=false` 后正文回到状态栏下方。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。
