@@ -1728,7 +1728,7 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
 
 ### r351 返工：批 2 的单位错
 
-验收方逐行读代码时发现批 2 引入一处单位错：分页器侧 `computeBottomJustifyGaps()` 整条链路是 vp（`currentPageCapacity()` 吃的是 `getBodyContentHeight()` 的 vp 值，`usedHeight` 累加的也是 vp），画布侧 `layout.bottomJustifyGapByColumn` 是 px（`ReaderPage.ets:6388` 已逐个 `context.vp2px()` 过）。`entry/src/main/ets/reader/ReaderCanvasSurface.ets` 把两路合并进同一个 `gaps` 数组时直接混用，页内分支的位移因此只有应有的 1/3.5，看不出「末页被拉满」的反面——摊分在跑，但跑得不够。
+验收方逐行读代码时发现批 2 引入一处单位错：分页器侧 `computeBottomJustifyGaps()` 整条链路是 vp（`currentPageCapacity()` 吃的是 `getBodyContentHeight()` 的 vp 值，`usedHeight` 累加的也是 vp），画布侧 `layout.bottomJustifyGapByColumn` 是 px（`ReaderPage.ets:6389` 已逐个 `context.vp2px()` 过）。`entry/src/main/ets/reader/ReaderCanvasSurface.ets` 把两路合并进同一个 `gaps` 数组时直接混用，页内分支的位移因此只有应有的 1/3.5，看不出「末页被拉满」的反面——摊分在跑，但跑得不够。
 
 修法（`entry/src/main/ets/reader/ReaderCanvasSurface.ets:2057` 起）：页内值先乘 `vp` 再合并，`let gaps = layout.bottomJustifyGapByColumn;` 作默认值。不在分页器侧换算——分页器本来就不该知道 vpScale。
 
