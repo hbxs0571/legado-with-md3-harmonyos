@@ -43,6 +43,18 @@ interface StoredReadConfig {
    * 上游 getPageAnim() 把 null 与 <0 都当跟随全局（Book.kt:274-285）。
    */
   pageAnim?: number;
+  /**
+   * 模拟追读（上游 Book.config.readSimulating / startDate / startChapter / dailyChapters）。
+   * 设了开始日与日更数后，可读章数随天数增长，追到真实章节数为止。
+   * 见 app/src/main/java/io/legado/app/help/book/BookExtensions.kt:709-735。
+   */
+  readSimulating?: boolean;
+  /** ISO 日期串（yyyy-MM-dd），不是时间戳。解析失败按「未设置」处理。 */
+  startDate?: string;
+  /** 起始章号，0 起算。缺省 0。 */
+  startChapter?: number;
+  /** 每日解锁章数。上游默认 3（Book.kt:489），不是 0。 */
+  dailyChapters?: number;
 }
 
 interface ChapterTextRange {
@@ -532,6 +544,10 @@ export class BookRepository {
       chapterCount: book.chapterCount,
       imageStyle: book.imageStyle,
       pageAnim: book.pageAnim,
+      readSimulating: book.readSimulating,
+      startDate: book.startDate,
+      startChapter: book.startChapter,
+      dailyChapters: book.dailyChapters,
       reSegment: book.reSegment,
       charset: book.charset,
       description: book.description,
@@ -1061,6 +1077,10 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       format: BookRepository.normalizeFormat(RdbCodec.optionalText(resultSet, 23), bookUrl),
       imageStyle: config.imageStyle,
       pageAnim: config.pageAnim,
+      readSimulating: config.readSimulating === true,
+      startDate: config.startDate,
+      startChapter: config.startChapter,
+      dailyChapters: config.dailyChapters,
       reSegment: config.reSegment === true,
       useReplaceRule: config.useReplaceRule,
       charset: RdbCodec.optionalText(resultSet, 14),
@@ -1669,7 +1689,12 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       // 章内百分比没有独立列，与阅读配置一起存；读回时 readBookRow 从同一处取。
       chapterProgress: Math.max(0, Math.min(100, book.chapterProgress ?? 0)),
       // undefined 时 JSON.stringify 会丢掉该键，正好对应上游「跟随全局」的语义
-      pageAnim: book.pageAnim
+      pageAnim: book.pageAnim,
+      // undefined 时 JSON.stringify 丢掉该键，语义与「未设置」一致。
+      readSimulating: book.readSimulating === true ? true : undefined,
+      startDate: book.startDate,
+      startChapter: book.startChapter,
+      dailyChapters: book.dailyChapters
     };
     const totalChapterNum = Number(book.chapterCount ?? '0');
     const lastChapter = book.lastChapter.length > 0 ? book.lastChapter : null;

@@ -114,7 +114,7 @@ const READER_MORE_ACTIONS: ReaderMoreAction[] = [
   { id: 'charset', label: '设置编码', glyph: 'info', scopeLabel: '', migrated: true },
   { id: 'image_style', label: '图片样式', glyph: 'book', scopeLabel: '', migrated: true },
   { id: 'page_anim', label: '本书翻页动画', glyph: 'profileSettings', scopeLabel: '', migrated: false },
-  { id: 'simulated_reading', label: '模拟追读', glyph: 'book', scopeLabel: '', migrated: false },
+  { id: 'simulated_reading', label: '模拟追读', glyph: 'book', scopeLabel: '', migrated: true },
   { id: 'get_progress', label: '拉取云端进度', glyph: 'profileHistory', scopeLabel: '', migrated: false },
   { id: 'cover_progress', label: '覆盖云端进度', glyph: 'profileHistory', scopeLabel: '', migrated: false },
   { id: 'highlight_rule', label: '高亮规则', glyph: 'profileRule', scopeLabel: '', migrated: true },
@@ -514,6 +514,12 @@ export struct ReaderPage {
   /** 哪一格展开了二级菜单（空串 = 都没展开）。上游 ReaderMenuActionSquare.kt:72-75 的三角点击带。 */
   @State moreActionMenuId: string = '';
   @State pageAnimMenuVisible: boolean = false;
+  /** 「模拟追读」面板（上游 Book.config 四项），点确定时由上层一次落库。 */
+  @State simulatedReadingVisible: boolean = false;
+  @State simReadEnabled: boolean = false;
+  @State simReadStartDate: string = '';
+  @State simReadDailyInput: string = '3';
+  @State simReadStartChapterInput: string = '0';
   @State moreActionConfigVisible: boolean = false;
   @State moreActionShellVisible: boolean = false;
   @State moreActionShellTitle: string = '';
@@ -866,6 +872,10 @@ export struct ReaderPage {
   onPageAnimationChange: (animation: number) => void = (_animation: number) => {};
   /** 设置当前书的翻页动画（上游 Book.config.pageAnim），由上层落库并回填 selectedBook。 */
   onPageAnimChange: (animation: number) => void = (_animation: number) => {};
+  /** 模拟追读四项落地（上游 Book.config.readSimulating/startDate/startChapter/dailyChapters）。 */
+  onSimulatedReadingChange: (enabled: boolean, startDate: string, startChapter: number,
+    dailyChapters: number) => void = (_enabled: boolean, _startDate: string, _startChapter: number,
+    _dailyChapters: number) => {};
   onProgressChange: (bookId: string, chapterIndex: number, progress: number,
     chapterPosition: number, androidCoordinate: boolean) => void = () => {};
   onAddBookmark: (chapterPosition: number, pageText: string) => void = (_position: number, _pageText: string) => {};
@@ -2156,6 +2166,47 @@ export struct ReaderPage {
       return READER_PAGE_ANIM_DEFAULT;
     }
     return Math.max(0, Math.min(5, perBook));
+  }
+
+  /** 打开系统日期选择器；开始日草稿为空时默认今天。 */
+  private openSimReadDatePicker(): void {
+    let selected = new Date();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(this.simReadStartDate)) {
+      const parts = this.simReadStartDate.split('-');
+      selected = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+    this.getUIContext().showDatePickerDialog({
+      start: new Date(2020, 0, 1),
+      end: new Date(2100, 11, 31),
+      selected: selected,
+      onDateAccept: (value: Date) => {
+        this.simReadStartDate = this.formatSimReadDate(value);
+      }
+    });
+  }
+
+  /** Date -> yyyy-MM-dd，全部用本地年月日，避开 toISOString 的 UTC 偏移。 */
+  private formatSimReadDate(d: Date): string {
+    const y = d.getFullYear();
+    const m = `${d.getMonth() + 1}`.padStart(2, '0');
+    const day = `${d.getDate()}`.padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  /** 校验草稿并一次性交给上层落地四项。 */
+  private confirmSimulatedReading(): void {
+    const date = this.simReadStartDate.trim();
+    if (date.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      this.onUnavailableAction('开始日格式应为 yyyy-MM-dd，例如 2026-11-01');
+      return;
+    }
+    const daily = Number(this.simReadDailyInput);
+    const startChapter = Number(this.simReadStartChapterInput);
+    const dailyValue = Number.isFinite(daily) ? Math.max(0, Math.round(daily)) : 3;
+    const startValue = Number.isFinite(startChapter) ? Math.max(0, Math.round(startChapter)) : 0;
+    this.onSimulatedReadingChange(this.simReadEnabled, date, startValue, dailyValue);
+    this.simulatedReadingVisible = false;
+    this.overflowVisible = false;
   }
 
   /** 选中某档后交给上层写回本书并落库，然后立刻按新档位重排。 */
@@ -3778,13 +3829,53 @@ export struct ReaderPage {
   }
 
   private getChapterCount(): number {
-    // 章节行已拆进 chapters 表，优先用缓存里的真实行数，其次退回 books 行的 totalChapterNum。
+    const realCount = this.realChapterCount();
+    const simulated = this.simulatedChapterCount(realCount);
+    return simulated !== undefined ? simulated : realCount;
+  }
+
+  /** 真实章节数：原有逻辑原样搬过来，行为不变。 */
+  private realChapterCount(): number {
     const titles = BookRepository.cachedChapterTitles(this.book);
     if (titles.length > 0) {
       return titles.length;
     }
     const count = Number(this.book.chapterCount ?? '');
     return Number.isInteger(count) && count > 0 ? count : 1;
+  }
+
+  /**
+   * 模拟追读下的可读章数。未开启时返回 undefined（调用方用真实章数）。
+   * 上游 Book.simulatedTotalChapterNum()，见 help/book/BookExtensions.kt:709-731：
+   *   chaptersToUnlock = max(0, startChapter + daysPassed * dailyChapters)
+   *   result = min(totalChapterNum, chaptersToUnlock)
+   * daysPassed = startDate.daysUntil(today) + 1，解析失败或未设置都回落到 1。
+   */
+  private simulatedChapterCount(realCount: number): number | undefined {
+    if (this.book.readSimulating !== true) {
+      return undefined;
+    }
+    const start = this.book.startDate;
+    let daysPassed = 1;
+    if (start !== undefined && start.length >= 10) {
+      const parts = start.split('-');
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
+      const day = Number(parts[2]);
+      if (Number.isInteger(year) && Number.isInteger(month) && Number.isInteger(day)) {
+        // 自己拆年月日再 Date.UTC：Date.parse('yyyy-MM-dd') 按 UTC 解析，
+        // 与 Date.now() 的本地口径混用会跨时区偏一天。
+        const startUtc = Date.UTC(year, month - 1, day);
+        const now = new Date();
+        const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+        daysPassed = Math.max(1, Math.floor((todayUtc - startUtc) / 86400000) + 1);
+      }
+    }
+    const startChapter = Math.max(0, this.book.startChapter ?? 0);
+    const daily = Math.max(0, this.book.dailyChapters ?? 3);
+    const unlock = Math.max(0, startChapter + daysPassed * daily);
+    // realCount 必须是真实章数；追到最新就停在这里。
+    return Math.min(realCount, unlock);
   }
 
   private getChapterIndex(): number {
@@ -4316,6 +4407,13 @@ export struct ReaderPage {
     } else if (action.id === 'page_anim') {
       // 上游 ReaderMoreActionsSheet.kt:207-211：page_anim 点一下直接展开单选菜单。
       this.pageAnimMenuVisible = true;
+    } else if (action.id === 'simulated_reading') {
+      // 打开面板时把已落库的四项灌进草稿，取消不改任何值。
+      this.simReadEnabled = this.book.readSimulating === true;
+      this.simReadStartDate = this.book.startDate ?? '';
+      this.simReadDailyInput = `${this.book.dailyChapters ?? 3}`;
+      this.simReadStartChapterInput = `${this.book.startChapter ?? 0}`;
+      this.simulatedReadingVisible = true;
     } else if (action.id === 'read_style') {
       this.onOpenSettings();
     } else if (action.id === 'highlight_rule') {
@@ -8161,6 +8259,64 @@ export struct ReaderPage {
                 .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
                 .onClick(() => this.choosePageAnim(index))
             }, (label: string) => label)
+          }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
+        }.width('100%').height('100%')
+      }
+
+      if (this.simulatedReadingVisible) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column().width('100%').height('100%').backgroundColor('#88000000')
+            .onClick(() => this.simulatedReadingVisible = false)
+          Column() {
+            Row() {
+              Text('模拟追读').fontSize(17).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
+              Blank()
+              Text('关闭').fontSize(13).fontColor('#C7C9D1')
+                .onClick(() => this.simulatedReadingVisible = false)
+            }.width('100%').padding({ bottom: 12 })
+            Row() {
+              Column() {
+                Text('模拟追读').fontSize(14).fontColor('#E5E6EB')
+                Text('按开始日与日更数逐日解锁章节，追到最新即停')
+                  .fontSize(11).fontColor('#9AA0AA').margin({ top: 2 })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              UiSwitchControl({
+                checked: this.simReadEnabled,
+                onChange: (isOn: boolean) => { this.simReadEnabled = isOn; }
+              })
+            }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+            Row() {
+              Text('开始日').fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
+              Text(this.simReadStartDate.length > 0 ? this.simReadStartDate : '今天')
+                .fontSize(13).fontColor('#B9C6FF')
+            }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
+              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+              .onClick(() => this.openSimReadDatePicker())
+            Row() {
+              Text('日更数').fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
+              TextInput({ text: this.simReadDailyInput, placeholder: '3' })
+                .width(100).fontSize(14).fontColor('#E5E6EB')
+                .backgroundColor('#2A2B33').borderRadius(8)
+                .onChange((text: string) => { this.simReadDailyInput = text; })
+            }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+            Row() {
+              Text('起始章').fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
+              TextInput({ text: this.simReadStartChapterInput, placeholder: '0' })
+                .width(100).fontSize(14).fontColor('#E5E6EB')
+                .backgroundColor('#2A2B33').borderRadius(8)
+                .onChange((text: string) => { this.simReadStartChapterInput = text; })
+            }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 12 })
+            Row() {
+              Text('取消').fontSize(14).fontColor('#C7C9D1').layoutWeight(1)
+                .textAlign(TextAlign.Center)
+                .onClick(() => this.simulatedReadingVisible = false)
+              Text('确定').fontSize(14).fontColor('#B9C6FF').layoutWeight(1)
+                .textAlign(TextAlign.Center)
+                .onClick(() => this.confirmSimulatedReading())
+            }.width('100%')
           }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
         }.width('100%').height('100%')
       }

@@ -7846,6 +7846,34 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /**
+   * 模拟追读四项一次落库。startChapter / dailyChapters 夹到 >=0 的整数（上游 Int 无上限），
+   * startDate 非空必须是 yyyy-MM-dd，否则提示且不落库。
+   */
+  private async setReaderSimulatedReading(enabled: boolean, startDate: string,
+    startChapter: number, dailyChapters: number): Promise<void> {
+    const date = startDate.trim();
+    if (date.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      this.showUnavailableAction('开始日格式应为 yyyy-MM-dd，例如 2026-11-01');
+      return;
+    }
+    const updatedBook: Book = BookRepository.copyBook(this.selectedBook);
+    updatedBook.readSimulating = enabled;
+    updatedBook.startDate = date.length > 0 ? date : undefined;
+    updatedBook.startChapter = Math.max(0, Math.round(startChapter));
+    updatedBook.dailyChapters = Math.max(0, Math.round(dailyChapters));
+    this.selectedBook = updatedBook;
+    this.books = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || !BookRepository.isPersistableBook(updatedBook)) { return; }
+    try {
+      await BookRepository.saveImportedBooks(context,
+        this.books.filter((book: Book) => BookRepository.isPersistableBook(book)));
+    } catch (_) {
+      this.showUnavailableAction('模拟追读保存失败，重新打开后可能恢复默认设置');
+    }
+  }
+
   private async setReaderReSegment(enabled: boolean): Promise<void> {
     if (this.selectedBook.reSegment === enabled || this.selectedBook.contentPath === undefined) { return; }
     const context = this.getUIContext().getHostContext();
@@ -8662,6 +8690,8 @@ private canWriteInto(dir: string): boolean {
             onImageStyleChange: (imageStyle: string) => this.setReaderImageStyle(imageStyle),
             onPageAnimationChange: (animation: number) => this.setReaderPageAnimation(animation),
             onPageAnimChange: (animation: number) => this.setReaderPageAnim(animation),
+            onSimulatedReadingChange: (enabled: boolean, startDate: string, startChapter: number,
+              dailyChapters: number) => this.setReaderSimulatedReading(enabled, startDate, startChapter, dailyChapters),
             onOpenSettings: () => this.openReaderSettings(),
             onOpenBottomActionConfig: () => this.openReaderSettings(true),
             onCharsetChange: (charset: string) => this.setReaderCharset(charset),
