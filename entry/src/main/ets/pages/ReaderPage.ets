@@ -32,6 +32,7 @@ import {
   LocalReaderTitleBlock, LocalReaderTitleSegment
 } from './LocalReaderPaginator';
 import { ReaderTextLayoutStyle } from '../reader/ReaderTextLayoutEngine';
+import { ReaderChapterPageCache } from '../reader/ReaderChapterPageCache';
 // 页身份与跨章页表定位的纯函数（页层批次 3 建、批次 4 补全）。
 import {
   ReaderChapterPagePosition, canTurnNext, canTurnPrevious, chapterPosition,
@@ -967,6 +968,8 @@ export struct ReaderPage {
     this.restoreReaderBrightness();
     this.restoreReaderOrientation();
     this.fullBookPaginationGeneration++;
+    // 批5：关阅读页释放章页快照（内存缓存不跨进程，退出即清）。
+    ReaderChapterPageCache.clear();
     this.stopAutoPageTimer();
     this.resetPageTurnTransition();
     if (this.scrollProgressTimer >= 0) {
@@ -1814,6 +1817,8 @@ export struct ReaderPage {
     const sameBook = this.observedBookId.length > 0 && this.observedBookId === this.book.id;
     this.observedBookId = this.book.id;
     if (!sameBook) {
+      // 批5：换书时旧书的章页快照全部作废，不能拿去套新书。
+      ReaderChapterPageCache.clear();
       // 换书不是换章：作废交接标记，下一次正文到达按「换书」处理（清空页表）。
       this.chapterHandoffBookId = '';
       this.chapterHandoffPending = false;
@@ -1946,6 +1951,9 @@ export struct ReaderPage {
   }
 
   onPaginationInputsChanged(): void {
+    // 批5：任一排版输入变化，旧章快照全部作废（滚动模式走不到 requestFullBookPagination
+    // 的排版键分支，这里兜住）。clear 是幂等的，批量触发清多次无副作用。
+    ReaderChapterPageCache.clear();
     // 分页输入是整批下发的：约 30 个 @Prop 各自 @Watch，设置页一次保存会连续触发几十次。
     // 每次都全量重排会把主线程占满（开书那 1-2 秒的卡顿有它一份），这里合并成一帧后只排一次。
     this.scheduleReaderPaginationRebuild();
@@ -2608,8 +2616,19 @@ export struct ReaderPage {
     // 页表整表替换时正文整体错位，用户看到的跨章那一下「跳」就是它。
     const titleBlock = this.buildReaderTitleBlock(context, width, lineHeight,
       document.content.length, singleImageStyle, this.resolvePaginationTitle(this.getChapterIndex()));
+    // 批5：已排章的内存快照。只缓存最贵的 paginate 产物，语义解析/高亮/定位/绘制
+    // 副作用全部照常走——任务书骨架里在复用分支调 onReaderContentChanged() 会递归
+    // 触发本方法，故不采用那条路径。布局键排除单调递增的 revision，换回同章才能命中。
+    // 图片尺寸参与排版（未到齐时用行高占位），编进键避免占位页被当成最终页复用。
+    const imageSizeKey = Array.from(paginationImageSizes.entries())
+      .map((entry: [string, ReaderIntrinsicImageSize]) =>
+        `${entry[0]}:${entry[1].width}x${entry[1].height}`).sort().join(',');
+    const paginationCacheKey = ReaderChapterPageCache.key(
+      this.book.contentPath ?? '', this.getChapterIndex(),
+      this.getPaginationLayoutKey(0) + '|imgs=' + imageSizeKey);
+    const cachedPages = ReaderChapterPageCache.get(paginationCacheKey);
     const paginateStartedAt = Date.now();
-    const paginatedPages = LocalReaderPaginator.paginate(
+    const paginatedPages = cachedPages ?? LocalReaderPaginator.paginate(
       document,
       width,
       pageHeight,
@@ -2640,6 +2659,10 @@ export struct ReaderPage {
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {
       const page = paginatedPages[pageIndex];
       if (page !== undefined) { nextPages.push(page); }
+    }
+    // 批5：本章页表排好后留一份内存快照（最多 3 章），换回同章且布局键未变时直接复用。
+    if (cachedPages === undefined && nextPages.length > 0) {
+      ReaderChapterPageCache.put(paginationCacheKey, nextPages);
     }
     // 页层批次 4：拼跨章窗口页表（当前章 ±1 章 + 当前章新排页），
     // 邻章页来自换章时保留的旧页；后续定位一律在窗口表上按页身份查下标。
@@ -4389,6 +4412,15 @@ export struct ReaderPage {
   }
 
   private getFullBookPaginationLayoutKey(): string {
+    return this.getPaginationLayoutKey(this.readerContentRevision);
+  }
+
+  /**
+   * 排版布局键的本体。revision 参数化是为了给章节快照键复用同一套排版输入
+   * （字号/行距/边距/字体/列数/页面尺寸/替换规则等），但排除 readerContentRevision：
+   * 它每次换章/规则变更都单调递增，含它做章快照键会让换回同一章永远 miss。
+   */
+  private getPaginationLayoutKey(revision: number): string {
     const replaceKey = JSON.stringify([
       ReplaceRuleRepository.isBookEnabled(this.book),
       this.replaceRules.map((rule: ReplaceRule) => [
@@ -4411,7 +4443,7 @@ export struct ReaderPage {
       BookRepository.cachedChapterOffsets(this.book)
     ]);
     return [
-      this.book.id, this.book.contentPath ?? '', this.readerContentRevision, this.fontSize,
+      this.book.id, this.book.contentPath ?? '', revision, this.fontSize,
       this.textFontPath, this.titleFontPath, this.systemTypefaces,
       this.paragraphSpacing, this.lineSpacing, this.letterSpacing, this.paragraphIndent,
       this.readerContentWidth, this.viewportHeight, this.effectiveImageStyle(), this.resolveReaderColumnCount(),
@@ -4444,6 +4476,8 @@ export struct ReaderPage {
     if (this.readerContentWidth <= 0 || this.viewportHeight <= 0) { return; }
     const key = this.getFullBookPaginationLayoutKey();
     if (this.fullBookPaginationKey === key) { return; }
+    // 批5：排版输入变了，旧章快照全部作废，否则拿旧页表套新字号。
+    ReaderChapterPageCache.clear();
     this.fullBookPaginationKey = key;
     this.fullBookPaginationReady = false;
     this.fullBookPageCounts = [];
