@@ -967,7 +967,10 @@ export struct ReaderPage {
     this.activeImageStyle = this.imageStyle;
     this.readerProgress = this.startPositionPending ? 0 : (this.book.chapterProgress ?? 0);
     this.lastReportedProgress = this.readerProgress;
-    this.sliderProgressIndex = this.startPositionPending ? 0 : this.getChapterIndex();
+    this.sliderProgressIndex = 0;
+    if (!this.startPositionPending) {
+      this.syncProgressIndexFromPosition();
+    }
     // 首排之前先把本章图片尺寸量好：排版期就用真实尺寸，图片解码完只重绘不重排
     this.primeContentImageSizesSync();
     if (this.startPositionPending) {
@@ -1814,7 +1817,7 @@ export struct ReaderPage {
     this.autoPageWaitingForChapter = false;
     this.readerProgress = this.book.chapterProgress ?? 0;
     this.lastReportedProgress = this.readerProgress;
-    this.sliderProgressIndex = this.getChapterIndex();
+    this.syncProgressIndexFromPosition();
     // 页层批次 4：滚动驱动换章时标题变化**不是**「换章完成、位置归零」的信号。
     // 用户是一路滚进来的，`currentPageIndex + scrollOffset` 就是眼睛正看着的位置；
     // 这里把它清零等于在换章瞬间把画面拍回页顶——又一处「跳」。
@@ -2057,10 +2060,7 @@ export struct ReaderPage {
   }
 
   onProgressBehaviorChanged(): void {
-    this.sliderProgressIndex = this.effectivePageAnim() === 3
-      ? this.readerProgress
-      : (this.progressBehavior === 'page' && this.localReaderPages.length > 0
-        ? this.currentChapterPageIndex() : this.getChapterIndex());
+    this.syncProgressIndexFromPosition();
   }
 
 
@@ -2903,9 +2903,8 @@ export struct ReaderPage {
     this.pendingBookmarkTargetPosition = -1;
     if (this.effectivePageAnim() !== 3 && forceProgressCommit) {
       this.reportReaderPageProgress();
-    } else if (this.effectivePageAnim() !== 3) {
-      this.sliderProgressIndex = this.progressBehavior === 'page'
-        ? this.currentChapterPageIndex() : this.getChapterIndex();
+    } else {
+      this.syncProgressIndexFromPosition();
     }
     this.requestFullBookPagination();
     if (consumedBookmarkTarget) { this.onBookmarkTargetConsumed(); }
@@ -2963,8 +2962,7 @@ export struct ReaderPage {
     const page = this.localReaderPages[this.currentPageIndex];
     if (page === undefined) { return; }
     this.resolveStartPosition();
-    this.sliderProgressIndex = this.progressBehavior === 'page'
-      ? this.currentChapterPageIndex() : this.getChapterIndex();
+    this.syncProgressIndexFromPosition();
     const renderPosition = Math.max(0, Math.min(this.localSemanticContent.length, page.startPosition));
     const position = LocalTextSemantics.toSourcePosition(this.localSemanticDocument, renderPosition);
     const progress = this.localSemanticDocument.sourceLength > 0
@@ -3820,12 +3818,24 @@ export struct ReaderPage {
   }
 
   private isPageProgressMode(): boolean {
-    return this.effectivePageAnim() !== 3 && this.progressBehavior === 'page' && this.localReaderPages.length > 0;
+    // 上游 ReadBookViewModel.kt:2162-2181 calculateSeekMax 只按 progressBarBehavior 分流，不按翻页动画。
+    return this.progressBehavior === 'page' && this.localReaderPages.length > 0;
+  }
+
+  /**
+   * 从当前位置重置滑块进度索引（页码档=章内页号，章节档=章号）。
+   * 唯一的 sliderProgressIndex 重置入口，避免各调用点语义漂移。
+   */
+  private syncProgressIndexFromPosition(): void {
+    const maximum = Math.max(0, this.getProgressSliderMaximum());
+    const raw = this.isPageProgressMode() && this.localReaderPages.length > 0
+      ? this.currentChapterPageIndex() : this.getChapterIndex();
+    this.sliderProgressIndex = Math.max(0, Math.min(maximum, raw));
   }
 
   private getProgressSliderMaximum(): number {
-    if (this.effectivePageAnim() === 3) { return 100; }
-    // 页层批次 4：滑块上限是本章页数（窗口表还含邻章页），不是页表长度。
+    // 上游 ReadBookViewModel.kt:2172-2181 calculateSeekMax 不按滚动档固定刻度；
+    // 页码档上限为本章页数-1，章节档为章节数-1。
     return this.isPageProgressMode() ? this.currentChapterPageCount() - 1 : this.getChapterCount() - 1;
   }
 
@@ -5900,7 +5910,7 @@ export struct ReaderPage {
 
   /** 把节流后的进度落到滑块与进度回调上。 */
   private applyScrollProgress(progress: number): void {
-    if (this.usesCanvasScroll()) { this.sliderProgressIndex = progress; }
+    this.syncProgressIndexFromPosition();
     if (progress !== this.lastReportedProgress) {
       this.lastReportedProgress = progress;
       this.emitReaderProgress(progress, Math.round(this.content.length * progress / 100), false);
@@ -5928,28 +5938,29 @@ export struct ReaderPage {
     this.seekReaderScrollAbsolute(totalScrollHeight * chapterProgress / 100);
     this.readerProgress = chapterProgress;
     this.lastReportedProgress = chapterProgress;
-    this.sliderProgressIndex = chapterProgress;
+    this.syncProgressIndexFromPosition();
     this.paintReaderCanvas();
   }
 
-  private seekToProgress(progress: number): void {
-    this.resolveStartPosition();
-    // 滚动档的 updateProgress 有 250ms 节流回填，松手瞬间把拖动前的旧进度写回滑块，
-    // 表现为手指离开后进度条回弹一下。这里先取消挂起的回填再落新位置。
+  /**
+   * 页码档：把滑块值（章内页号）换算成窗口页表下标并跳过去。
+   * 上游 ReadBookController.publishDirectReaderWindow 每换页刷新、ViewModel 节流落库。
+   * currentChapterPosition() 为 undefined（页表未就绪）时直接 return，不加兜底。
+   */
+  private seekToChapterPage(chapterPageIndex: number): void {
+    const position = this.currentChapterPosition();
+    if (position === undefined) { return; }
+    const target = locateChapterPage(this.localReaderPages, position.chapterIndex, chapterPageIndex);
+    if (target < 0) { return; }
     if (this.scrollProgressTimer >= 0) {
       clearTimeout(this.scrollProgressTimer);
       this.scrollProgressTimer = -1;
     }
-    const nextProgress = Math.max(0, Math.min(100, Math.round(progress)));
-    const totalScrollHeight = this.readerScrollTotalHeight();
-    if (totalScrollHeight <= 0) {
-      return;
-    }
-    this.readerProgress = nextProgress;
-    this.lastReportedProgress = nextProgress;
-    this.seekReaderScrollAbsolute(totalScrollHeight * nextProgress / 100);
+    this.currentPageIndex = target;
+    this.scrollOffset = 0;
+    this.resetCanvasSelectionState();
     this.paintReaderCanvas();
-    this.emitReaderProgress(nextProgress, Math.round(this.content.length * nextProgress / 100), false);
+    this.reportReaderPageProgress();
   }
 
   private getDisplayContent(content: string): string {
@@ -7864,6 +7875,7 @@ export struct ReaderPage {
                     .trackThickness(16)
                     // 刻度是轨道上的小暗点，不是一排强调色亮点。
                     .showSteps(true).stepColor(this.readerMenuForegroundAlpha('73')).stepSize(4)
+                    .enabled(Math.max(0, this.getProgressSliderMaximum()) > 0)
                     .onAreaChange((_oldArea: Area, newArea: Area) => {
                       const width = Number(newArea.width);
                       if (!Number.isNaN(width) && width > 0) { this.sliderTrackWidth = width; }
@@ -7879,23 +7891,13 @@ export struct ReaderPage {
                         this.sliderDragPreviewPageIndex = -1;
                       }
                       this.sliderProgressIndex = index;
-                      if (this.effectivePageAnim() === 3) {
-                        if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                          this.seekToProgress(index);
-                        }
-                      } else if (this.isPageProgressMode()) {
+                      if (this.isPageProgressMode()) {
                         // 拖动过程中同一个整数值会被连续派发，已经停在这一页就不再重绘。
                         if (mode === SliderChangeMode.Moving && index === this.sliderDragPreviewPageIndex) {
                           return;
                         }
                         this.sliderDragPreviewPageIndex = index;
-                        // 页层批次 4：滑块 value 是章内页号，换算成窗口页表下标。
-                        const position = chapterPosition(this.localReaderPages, this.currentPageIndex);
-                        this.currentPageIndex = position === undefined ? index
-                          : locateChapterPage(this.localReaderPages, position.chapterIndex, index);
-                        this.reportReaderPageProgress();
-                        // 同上：页码没有 @Watch，改完必须显式重绘画布，否则拖进度条屏幕停在旧页。
-                        this.paintReaderCanvas();
+                        this.seekToChapterPage(index);
                       } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
                         this.onSelectChapterIndex(index);
                       }
