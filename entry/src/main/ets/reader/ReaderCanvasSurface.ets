@@ -926,11 +926,30 @@ export class ReaderCanvasRenderer {
    * 上游 `ReaderPageWindow.selectionPages()` 就是这三页、不含 previous。
    * 只在选区激活（selectionStart >= 0）期间登记：positionAt 是手势热路径，
    * 这里复用 draw 期已经算好的 geometry，不在命中时重新 layout。
+   * 批6起几何本体来自 scrollDrawGeometry，不再逐帧 layoutPage。
    */
   private scrollWindowGeometry: Map<number, ReaderCanvasPageGeometry> =
     new Map<number, ReaderCanvasPageGeometry>();
   /** 上一帧是否处于「滚动 + 选区激活」态：只在状态切换时清空 Map，避免每帧重建。 */
   private scrollWindowSelectionActive: boolean = false;
+  /**
+   * 批6：滚动绘制几何缓存（key = pageIndex），滚动期间一直有效，含 previous 共四页。
+   * 存的是 layoutPage 产出的「页内绝对坐标」，不含滚动偏移；偏移由 canvas.translate
+   * 每帧施加，所以这里的东西与帧无关。依赖偏移的 scrollContentTopPx/scrollExtentPx
+   * 由 drawScroll 每帧覆盖，不参与缓存命中。
+   *
+   * 「不做」：上游 ScrollPageDrawData 那 8 个字段（paints、decorationDrawCache 等）
+   * 本地没有对应的 draw cache 对象，硬造一层等于重写绘制管线，故只缓存几何这一项最贵的部分。
+   */
+  private scrollDrawGeometry: Map<number, ReaderCanvasPageGeometry> =
+    new Map<number, ReaderCanvasPageGeometry>();
+  /**
+   * 绘制几何缓存的失效键：排版参数 + 视口尺寸（窗口页引用的变化由 scrollDrawPages 单独判）。
+   * 帧相关的 scrollOffsetPx 绝不进键，否则滚动时每帧重建，缓存失去意义。
+   */
+  private scrollGeometryKey: string = '';
+  /** 上次缓存几何时窗口里的四页引用；任一页对象变了（换章/重排/翻页）就失效。 */
+  private scrollDrawPages: (LocalReaderPage | undefined)[] = [];
   private paragraphCache: Map<string, ReaderCanvasParagraph> = new Map<string, ReaderCanvasParagraph>();
   /** 页眉页脚文字单独缓存：带省略号、按槽宽排版，与正文段落的排版口径不同，不能共用一把 key。 */
   private decorationParagraphCache: Map<string, ReaderCanvasParagraph> =
@@ -1521,6 +1540,37 @@ export class ReaderCanvasRenderer {
     // 命中时绝不重新 layout；每帧覆盖登记只是几次 Map.set，不是重建 Map。
     // 必须每帧覆盖：拖选区到底缘会触发自动滚动，current 页会换，若只登记一次，
     // 旧的 scrollContentTopPx（相对旧 current 顶）就会把命中算到错误的页。
+    // 批6：绘制几何缓存的失效判定。只由「窗口四页的引用变化」或「排版/视口参数变化」
+    // 触发，帧相关的 scrollOffsetPx 绝不进这两个键，否则滚动时每帧都重建，缓存白做。
+    const slots: (ReaderCanvasPage | undefined)[] =
+      [window.previous, window.current, window.next, window.nextPlus];
+    const pages: (LocalReaderPage | undefined)[] =
+      slots.map((slot: ReaderCanvasPage | undefined) => slot === undefined ? undefined : slot.page);
+    const pagesChanged = pages.length !== this.scrollDrawPages.length ||
+      pages.some((page: LocalReaderPage | undefined, index: number) =>
+        page !== this.scrollDrawPages[index]);
+    const scrollLayout = request.layout;
+    const scrollStyle = request.style;
+    // 键覆盖 layoutPage 真正依赖的排版量：正文字号/字体/字重/斜体/字距、标题样式、
+    // 列布局与逐列底部对齐位移、视口尺寸。这些都是滚动期间恒定的量，不会让滚动帧 miss；
+    // 只在用户改排版设置时失效。markings/highlights 不进键——它们变化必伴随 readerContentRevision
+    // 递增触发页表重建，页对象引用变化（pagesChanged）已能捕获。
+    const titleStyle = request.titleStyle;
+    const nextGeometryKey =
+      `${scrollLayout.originXpx}x${scrollLayout.originYpx}` +
+      `|${scrollLayout.bodyWidthPx}x${scrollLayout.bodyHeightPx}` +
+      `|${scrollLayout.columnCount}|${scrollLayout.columnStridePx}|${scrollLayout.vpScale}` +
+      `|${scrollLayout.bottomJustifyGapPx}|${scrollLayout.bottomJustifyGapByColumn.join(',')}` +
+      `|${scrollStyle.fontSizePx}|${scrollStyle.fontWeight}|${scrollStyle.letterSpacingPx}` +
+      `|${scrollStyle.fontFamilies.join(',')}|${scrollStyle.italic ? 1 : 0}` +
+      `|${titleStyle.fontSizePx}|${titleStyle.fontWeight}|${titleStyle.letterSpacingPx}` +
+      `|${titleStyle.fontFamilies.join(',')}|${titleStyle.align}`;
+    if (pagesChanged || nextGeometryKey !== this.scrollGeometryKey) {
+      this.scrollGeometryKey = nextGeometryKey;
+      this.scrollDrawPages = pages;
+      // 换章/重排/改字号/视口变化：旧的行盒与图片框坐标全部作废。
+      this.scrollDrawGeometry.clear();
+    }
     const selectionActive = request.selectionStart >= 0;
     if (!selectionActive && this.scrollWindowSelectionActive) {
       // 选区刚结束：清一次即可，之后每帧都不再碰 Map。
@@ -1587,12 +1637,24 @@ export class ReaderCanvasRenderer {
     if (request.pageSurfaceOpaque) {
       this.fillPageSurface(canvas, request, layout.viewportWidthPx, layout.viewportHeightPx);
     }
-    // 只有 recordGeometry 的那一页（current）回填选区把手坐标：
-    // 邻页也画高亮条带，但整段选区只有一对端点，不能让邻页的页内坐标顶掉它们。
-    const geometry = this.drawPage(canvas, slot.page, slot.pageIndex, request,
-      recordGeometry, drawSelection, recordGeometry);
+    // 批6：几何本体只依赖页内容与排版（页内绝对坐标，不含滚动偏移），跨帧复用。
+    // 占位页没有正文几何，也不缓存。
+    let geometry: ReaderCanvasPageGeometry | undefined;
+    if (slot.page.messageText !== undefined) {
+      geometry = undefined;
+    } else {
+      geometry = this.scrollDrawGeometry.get(slot.pageIndex);
+      if (geometry === undefined) {
+        geometry = this.layoutPage(slot.page, slot.pageIndex, request);
+        this.scrollDrawGeometry.set(slot.pageIndex, geometry);
+      }
+    }
+    // 几何复用只省去逐行定位/图片测量；画面每帧照常重画，平移由上面的 canvas.translate 施加。
+    // 只有 recordGeometry 的那一页（current）回填选区把手坐标，邻页不顶掉 current 的端点。
+    const drawn = this.drawPage(canvas, slot.page, slot.pageIndex, request,
+      recordGeometry, drawSelection, recordGeometry, geometry);
     canvas.restore();
-    return geometry;
+    return drawn;
   }
 
   /**
@@ -1899,7 +1961,8 @@ export class ReaderCanvasRenderer {
    */
   private drawPage(canvas: drawing.Canvas, page: LocalReaderPage, pageIndex: number,
     request: ReaderCanvasDrawRequest, recordGeometry: boolean,
-    drawSelection: boolean, reportHandles: boolean = true): ReaderCanvasPageGeometry | undefined {
+    drawSelection: boolean, reportHandles: boolean = true,
+    cachedGeometry?: ReaderCanvasPageGeometry): ReaderCanvasPageGeometry | undefined {
     // Paragraph.paint() 内部会 push 不配对的裁剪层且不恢复：逐框 save/restore 之后
     // 画布栈仍会比进入时多出几层，后面自绘的选区底色/把手就全落在残留 clip 里被裁掉
     // （表现为「drawRect 被调用但一个像素都不落」）。这里记下进入时的栈深，
@@ -1912,7 +1975,8 @@ export class ReaderCanvasRenderer {
       canvas.restoreToCount(entrySaveCount);
       return undefined;
     }
-    const geometry = this.layoutPage(page, pageIndex, request);
+    // 批6：滚动路径传进来的是跨帧缓存的几何（帧无关）；其余路径（翻页/折页）仍现算。
+    const geometry = cachedGeometry ?? this.layoutPage(page, pageIndex, request);
     // 只有「手指正在操作的那一页」才把几何记成命中测试的依据。
     // 四页窗口是一次绘制里按 z 序画完的，若每页都覆盖 this.geometry，
     // 最后画的邻页会顶掉当前页的坐标，长按选词就会选到邻页的字符区间，
