@@ -8167,6 +8167,24 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /** 跟随系统语速（上游 flow_sys）：写偏好 + HTTP 模式按 1.0x/设置值重新应用。 */
+  private async onAloudFollowSysChange(follow: boolean): Promise<void> {
+    const updated = copyReadAloudSettings(this.readAloudSettings);
+    updated.ttsFollowSys = follow;
+    this.readAloudSettings = updated;
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) { await ReadAloudSettingsRepository.save(context, updated); }
+    if (this.readAloudPlayer.isHttpMode() && this.readAloudActive) {
+      HttpTtsPlayer.getInstance().applyRate(follow ? 5 : this.readAloudSettings.ttsSpeechRate);
+    }
+  }
+
+  /** 切后台：退出阅读页但保留朗读（上游 CloseReadBook(keepReadAloud=true)）。 */
+  private async goReadAloudBackground(): Promise<void> {
+    await this.stopReaderSession();
+    this.route = AppRoute.BOOKSHELF;
+  }
+
   private async onAloudTimerChange(mode: string, minutes: number, chapters: number): Promise<void> {
     const updated = copyReadAloudSettings(this.readAloudSettings);
     updated.timerMode = mode;
@@ -9690,6 +9708,7 @@ private canWriteInto(dir: string): boolean {
                 unitIndex: this.aloudUnitIndex,
                 unitTotal: this.aloudUnitTotal,
                 initialRate: this.readAloudSettings.ttsSpeechRate,
+                followSys: this.readAloudSettings.ttsFollowSys,
                 initialTimerLabel: this.readAloudSettings.timerMode === 'minute'
                   ? (this.readAloudSettings.ttsTimer > 0 ? `${this.readAloudSettings.ttsTimer} 分钟后停止` : '关闭')
                   : (this.readAloudSettings.timerChapters > 0 ? `${this.readAloudSettings.timerChapters} 章后停止` : '关闭'),
@@ -9706,16 +9725,20 @@ private canWriteInto(dir: string): boolean {
                 onNext: () => this.onAloudNext(),
                 onTurnChapter: (delta: number) => this.turnReadAloudChapter(delta),
                 onRateChange: (rate: number) => this.onAloudRateChange(rate),
+                onFollowSysChange: (follow: boolean) => this.onAloudFollowSysChange(follow),
                 onTimerChange: (mode: string, minutes: number, chapters: number) =>
                   this.onAloudTimerChange(mode, minutes, chapters),
-                onOpenConfig: () => { this.showAloudConfig = true; }
+                onOpenConfig: () => { this.showAloudConfig = true; },
+                onOpenPlayer: () => this.openReadAloudPlayer(),
+                onGoToBackground: () => this.goReadAloudBackground()
               })
               if (this.showAloudConfig) {
                 ReadAloudConfigPanel({
                   settings: this.readAloudSettings,
                   onBack: () => { this.showAloudConfig = false; },
                   onSettingsChange: (settings: ReadAloudSettingsSnapshot) => this.onAloudSettingsChange(settings),
-                  onResetCapsulePosition: () => this.onCapsuleResetPosition()
+                  onResetCapsulePosition: () => this.onCapsuleResetPosition(),
+                  onOpenEngine: () => { this.showAloudConfig = false; this.showReadAloudPlayer = false; this.openAloudEnginePage(); }
                 })
               }
             }
@@ -11302,7 +11325,8 @@ private canWriteInto(dir: string): boolean {
             settings: this.readAloudSettings,
             onBack: () => { this.showAloudConfig = false; },
             onSettingsChange: (settings: ReadAloudSettingsSnapshot) => this.onAloudSettingsChange(settings),
-            onResetCapsulePosition: () => this.onCapsuleResetPosition()
+            onResetCapsulePosition: () => this.onCapsuleResetPosition(),
+            onOpenEngine: () => { this.showAloudConfig = false; this.showReadAloudPlayer = false; this.openAloudEnginePage(); }
           })
         }
       }.width('100%').height('100%')
