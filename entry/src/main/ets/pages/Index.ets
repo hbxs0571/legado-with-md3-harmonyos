@@ -135,7 +135,7 @@ import {
 import { ReaderMoreActionConfig, ReaderMoreActionsRepository, READER_MORE_ACTION_DEFAULTS } from '../data/ReaderMoreActionsRepository';
 import { ReadAloudSettingsRepository } from '../data/ReadAloudSettingsRepository';
 import { SpeechSegmenter, SpeechUnit } from '../readaloud/SpeechSegmenter';
-import { SystemTtsPlayer, ReadAloudState } from '../readaloud/SystemTtsPlayer';
+import { SystemTtsPlayer, ReadAloudState, ReadAloudSpan, EMPTY_READ_ALOUD_SPAN } from '../readaloud/SystemTtsPlayer';
 import {
   BackupCategoryOption, BackupEntryPreview, BackupIgnoreLists, BackupPreview, BackupRepository, BackupSelection
 } from '../data/BackupRepository';
@@ -719,6 +719,8 @@ struct Index {
   /** 系统 TTS 朗读播放器（批 3）。单例，引擎复用，退阅读页不 shutdown。 */
   private readonly readAloudPlayer: SystemTtsPlayer = SystemTtsPlayer.getInstance();
   private readAloudActive: boolean = false;
+  /** 批4：当前朗读段区间，传给 ReaderPage 做高亮与翻页跟随；stop 时播放器上报 start<0 清空。 */
+  @State readAloudSpan: ReadAloudSpan = EMPTY_READ_ALOUD_SPAN;
   private readerSettingsLoaded: boolean = false;
   private readerSettingsRevision: number = 0;
   private readerSessionLastSaveTime: number = 0;
@@ -7801,13 +7803,19 @@ private canWriteInto(dir: string): boolean {
     }
     try {
       const settings = await ReadAloudSettingsRepository.load(context);
-      const body = LocalTextSemantics.fromRawBody(this.readerContent);
+      // 切段坐标必须与画布同口径：用与 ReaderPage 相同的缩进与特殊样式参数，
+      // 否则 SpeechUnit.start/end 与 LocalReaderLineItem.startPosition 错位，高亮会跑偏。
+      const semantic = LocalTextSemantics.parse(this.readerContent, this.readerParagraphIndent, this.readerAdaptSpecialStyle);
+      const body = semantic.content;
       const units: SpeechUnit[] = SpeechSegmenter.segment(body, settings.contentSplitMode, settings.contentSplitSymbols);
       if (units.length === 0) {
         this.showUnavailableAction('本章没有可朗读的内容');
         return;
       }
       this.readAloudPlayer.setParagraphInterval(settings.ttsParagraphInterval);
+      this.readAloudPlayer.onSpanChange = (span: ReadAloudSpan): void => {
+        this.readAloudSpan = span;
+      };
       this.readAloudPlayer.load(units, 0);
       this.readAloudPlayer.onUnitAdvance = (index: number): void => {
         console.info(`[ReadAloud] unit advance index=${index}`);
@@ -8798,6 +8806,7 @@ private canWriteInto(dir: string): boolean {
             onCloseSearchResult: () => this.closeReaderSearchNav(),
             onOpenReadAloud: () => this.openReadAloudSettings(),
             onToggleReadAloud: () => { this.toggleReadAloud(); },
+            readAloudSpan: this.readAloudSpan,
             onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULE_PREVIEW),
             onToggleNightMode: () => this.toggleReaderNightMode(),
             onToggleEyeProtection: () => this.toggleEyeProtection(),

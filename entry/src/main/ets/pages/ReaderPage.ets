@@ -33,6 +33,7 @@ import {
   LocalReaderLine, LocalReaderLineItem, LocalReaderPage, LocalReaderPaginator, LocalReaderSizeOffset,
   LocalReaderTitleBlock, LocalReaderTitleSegment
 } from './LocalReaderPaginator';
+import { ReadAloudSpan, EMPTY_READ_ALOUD_SPAN } from '../readaloud/SystemTtsPlayer';
 import { ReaderTextLayoutStyle } from '../reader/ReaderTextLayoutEngine';
 import { ReaderChapterPageCache } from '../reader/ReaderChapterPageCache';
 // 页身份与跨章页表定位的纯函数（页层批次 3 建、批次 4 补全）。
@@ -476,6 +477,11 @@ export struct ReaderPage {
   @Prop @Watch('onReaderCanvasStyleChanged') readingTextColor: string = '';
   /** 强调色；上游 ReadBookConfig.kt:62 textAccentColor，用于链接、搜索结果与朗读段落。 */
   @Prop textAccentColor: string = '';
+  /**
+   * 批4：当前朗读段区间（语义正文坐标，与 LocalReaderLineItem.startPosition 同源）。
+   * @Watch 在段切换时跟随位置 + 重绘；start<0 表示无朗读段。
+   */
+  @Prop @Watch('onReadAloudSpanChanged') readAloudSpan: ReadAloudSpan = EMPTY_READ_ALOUD_SPAN;
   /** 自定义背景图片的沙箱路径；空串表示没有，上游 ReadBookConfig.kt:549 bgType != 0 的情况。 */
   @Prop @Watch('onReaderCanvasStyleChanged') readerBackgroundImage: string = '';
   /** 背景图片不透明度百分比（0..100），上游 ReadBookConfig.kt:548 bgAlpha。 */
@@ -2958,6 +2964,52 @@ export struct ReaderPage {
       result.push(surplus / (columnLines - 1));
     }
     return result;
+  }
+
+  /**
+   * 批4：朗读段切换时把当前段首字位置翻到可见页，并回写阅读进度。
+   * 上游 ReadBookController.bodyParagraphAt + upTextChapterAloudSpan 的同源实现：
+   * 段首语义坐标 → 本章内页号 → currentPageIndex / scrollOffset → 进度写库。
+   * 只在 start>=0 时跟随；stop 上报 start<0 时只重绘清高亮，不挪动页面。
+   */
+  private onReadAloudSpanChanged(): void {
+    if (!this.usesReaderCanvas()) {
+      this.invalidateReaderCanvas();
+      return;
+    }
+    const span = this.readAloudSpan;
+    if (span.start >= 0 && this.localReaderPages.length > 0) {
+      const chapterIndex = this.getChapterIndex();
+      const chapterPages: number[] = [];
+      for (let i = 0; i < this.localReaderPages.length; i++) {
+        const pg = this.localReaderPages[i];
+        if (pg !== undefined && (pg.chapterIndex ?? 0) === chapterIndex) { chapterPages.push(i); }
+      }
+      let chapterOrdinal = 0;
+      for (let k = 0; k < chapterPages.length; k++) {
+        const idx = chapterPages[k] ?? -1;
+        const pg = this.localReaderPages[idx];
+        if (pg !== undefined && pg.endPosition > span.start) { break; }
+        chapterOrdinal++;
+      }
+      if (this.usesCanvasScroll()) {
+        this.seekReaderScrollAbsolute(Math.max(0, span.start));
+      } else {
+        const target = locateChapterPage(this.localReaderPages, chapterIndex, chapterOrdinal);
+        if (target >= 0 && target !== this.currentPageIndex) {
+          this.currentPageIndex = target;
+        }
+      }
+      // 位置回写：段首语义坐标 → 源字符坐标 → 百分比 → 宿主落库。
+      const renderPos = Math.max(0, Math.min(this.localSemanticContent.length, span.start));
+      const sourcePos = LocalTextSemantics.toSourcePosition(this.localSemanticDocument, renderPos);
+      const progress = this.localSemanticDocument.sourceLength > 0
+        ? sourcePos / this.localSemanticDocument.sourceLength * 100 : 0;
+      this.readerProgress = progress;
+      this.lastReportedProgress = Math.round(progress);
+      this.emitReaderProgress(progress, sourcePos, true);
+    }
+    this.invalidateReaderCanvas();
   }
 
   private reportReaderPageProgress(): void {
@@ -6602,7 +6654,8 @@ export struct ReaderPage {
 
   private buildReaderCanvasHighlights(): ReaderCanvasStyleRange[] {
     const signature = `${this.readerContentRevision}|${this.readerHighlightRanges.length}|` +
-      `${this.markings.length}|${this.getChapterIndex()}`;
+      `${this.markings.length}|${this.getChapterIndex()}|` +
+      `${this.readAloudSpan.revision}|${this.readAloudSpan.start}|${this.readAloudSpan.end}`;
     if (this.canvasHighlightSignature === signature) {
       return this.canvasHighlights;
     }
@@ -6707,6 +6760,15 @@ export struct ReaderPage {
       item.end = marking.endPosition;
       item.textColorArgb = readerCanvasArgb(marking.color, 0);
       list.push(item);
+    }
+    // 批4：正在朗读的段落底色，取强调色（上游 resolvedColorArgb = accentColor）。
+    // 半透明底色压在字形之下，跟随 onSpanChange 逐段移动。
+    if (this.readAloudSpan.start >= 0 && this.readAloudSpan.end > this.readAloudSpan.start) {
+      const spoken = new ReaderCanvasStyleRange();
+      spoken.start = this.readAloudSpan.start;
+      spoken.end = Math.min(this.readAloudSpan.end, this.localSemanticContent.length);
+      spoken.backgroundArgb = readerCanvasArgb(this.textAccentColor, 0x22FFB1C8) & 0x3FFFFFFF;
+      list.push(spoken);
     }
     this.canvasHighlightSignature = signature;
     this.canvasHighlights = list;

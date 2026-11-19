@@ -2,6 +2,19 @@ import { textToSpeech } from '@kit.CoreSpeechKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { SpeechUnit } from './SpeechSegmenter';
 
+/**
+ * 正在朗读的正文区间（语义内容坐标，与画布 LocalReaderLineItem.startPosition 同源）。
+ * start < 0 表示当前没有朗读段。revision 每次变化触发 ReaderPage 跟随重绘。
+ */
+export interface ReadAloudSpan {
+  start: number;
+  end: number;
+  revision: number;
+}
+
+/** 空区间的共享常量：ArkTS 禁止无类型对象字面量，Index/ReaderPage 都用它初始化。 */
+export const EMPTY_READ_ALOUD_SPAN: ReadAloudSpan = { start: -1, end: -1, revision: 0 };
+
 /** 朗读播放状态，与上游 service 的播放/暂停/空闲三态对应。 */
 export enum ReadAloudState {
   IDLE = 0,
@@ -47,9 +60,13 @@ export class SystemTtsPlayer {
   /** 当前正在硬切的句子队列（一段 >10000 字符时拆成多句）。 */
   private chunkQueue: string[] = [];
   private chunkIndex: number = 0;
+  /** 当前朗读段区间每次变化递增，交给 ReaderPage 判断是否需要重绘/跟随。 */
+  private spanRevision: number = 0;
 
   onStateChange: (state: ReadAloudState) => void = (_state: ReadAloudState): void => {};
   onUnitAdvance: (index: number) => void = (_index: number): void => {};
+  /** 进入新朗读段时上报语义正文区间（批 4 位置回写 + 高亮消费）。 */
+  onSpanChange: (span: ReadAloudSpan) => void = (_span: ReadAloudSpan): void => {};
   onError: (message: string) => void = (_message: string): void => {};
 
   static getInstance(): SystemTtsPlayer {
@@ -127,6 +144,7 @@ export class SystemTtsPlayer {
       }
     }
     this.scheduleShutdown();
+    this.clearSpan();
     this.emitState();
   }
 
@@ -194,6 +212,8 @@ export class SystemTtsPlayer {
       this.stop();
       return;
     }
+    // 进入新段即上报区间：高亮与翻页跟随都拿它当权威位置。
+    this.emitSpan(unit);
     const text = unit.text.trim();
     if (text.length === 0) {
       // 上游 TTSReadAloudService.kt:246-251：全标点段落不进引擎（会静默不回调卡死链）。
@@ -311,6 +331,21 @@ export class SystemTtsPlayer {
 
   private emitState(): void {
     this.onStateChange(this.stateValue);
+  }
+
+  /** 上报当前朗读段区间；只读 units，play/stop 的 generation 已保证不串段。 */
+  private emitSpan(unit: SpeechUnit): void {
+    this.spanRevision++;
+    const span: ReadAloudSpan = { start: unit.start, end: unit.end, revision: this.spanRevision };
+    console.info(`[ReadAloud] span ${span.start}-${span.end} rev=${span.revision}`);
+    this.onSpanChange(span);
+  }
+
+  /** 清空高亮（停止/暂停时）：start<0 由消费方识别为「无朗读段」。 */
+  private clearSpan(): void {
+    this.spanRevision++;
+    const span: ReadAloudSpan = { start: -1, end: -1, revision: this.spanRevision };
+    this.onSpanChange(span);
   }
 
   private emitProgress(): void {
