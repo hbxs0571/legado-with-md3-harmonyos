@@ -3038,13 +3038,9 @@ export struct ReaderPage {
         const pg = this.localReaderPages[i];
         if (pg !== undefined && (pg.chapterIndex ?? 0) === chapterIndex) { chapterPages.push(i); }
       }
-      let chapterOrdinal = 0;
-      for (let k = 0; k < chapterPages.length; k++) {
-        const idx = chapterPages[k] ?? -1;
-        const pg = this.localReaderPages[idx];
-        if (pg !== undefined && pg.endPosition > span.start) { break; }
-        chapterOrdinal++;
-      }
+      // 严格对齐上游 findReadAloudPageIndex（BaseReadAloudService.kt:2137-2149）：
+      // 只要朗读位置超过下一章内页的 pageStart 就往后翻；pageStart 排除标题坐标。
+      const chapterOrdinal = this.findReadAloudPageOrdinal(span.start, chapterPages);
       // 对齐上游：高亮按段逐句走（只着色），可见页只在「跨页」时跳到目标页页首，
       // 页内不做连续滚动（BaseReadAloudService.moveToReadAloudPage / syncReaderToPlaybackPage）。
       const target = locateChapterPage(this.localReaderPages, chapterIndex, chapterOrdinal);
@@ -6148,9 +6144,44 @@ export struct ReaderPage {
   }
 
   /**
-   * 章内第 chapterOrdinal 页的页首绝对位移（vp）。上游朗读跨页时定位到目标页页首
-   * （syncReaderToPlaybackPage 传 chapter.pageStart(pageIndex)），页内不连续滚动。
-   * extent 口径与 seekReaderScrollAbsolute / readerScrollAbsoluteOffset 完全一致。
+   * 页内正文首行的章内字符位置。严格对齐上游 ReaderPageNavigator.pageStart(:267-275)：
+   * 取页内「非标题元素」的最小 startPosition。本地标题行 titleLine=true 且 startPosition=0，
+   * 与正文不同坐标空间，不能当页首，否则朗读定位会被拖进标题坐标。全标题页回退到
+   * page.startPosition（对应上游 start==Int.MAX 时返回 0）。
+   */
+  private readerPageBodyStart(page: LocalReaderPage): number {
+    let start = Number.MAX_SAFE_INTEGER;
+    for (const line of page.lines) {
+      if (line.titleLine === true) { continue; }
+      if (line.startPosition < start) { start = line.startPosition; }
+    }
+    return start === Number.MAX_SAFE_INTEGER ? page.startPosition : start;
+  }
+
+  /**
+   * 对齐上游 BaseReadAloudService.findReadAloudPageIndex(:2137-2149)：
+   * 从本章第一页起，只要朗读位置超过下一章内页的 pageStart（排除标题）就往后翻。
+   * chapterPages 是本章各页在页表里的下标，按章内页序排列。
+   */
+  private findReadAloudPageOrdinal(chapterPosition: number, chapterPages: number[]): number {
+    if (chapterPages.length === 0) { return 0; }
+    let ordinal = 0;
+    while (ordinal + 1 < chapterPages.length) {
+      const nextIdx = chapterPages[ordinal + 1] ?? -1;
+      const nextPage = this.localReaderPages[nextIdx];
+      if (nextPage === undefined) { break; }
+      if (chapterPosition > this.readerPageBodyStart(nextPage)) { ordinal++; } else { break; }
+    }
+    return ordinal;
+  }
+
+  /**
+   * 章内第 chapterOrdinal 页「正文首行」的绝对位移（vp）。对齐上游
+   * syncReaderToPlaybackPage → chapter.pageStart(pageIndex)：朗读跨页时把可见页定位到
+   * 目标页正文首行（排除标题），页内不连续滚动。
+   * - 目标页之前的章内页：累加整页 extent（滚动栈里页与页紧挨）；
+   * - 目标页本身：只累加正文首行之前那几行（标题行）的高度，使正文首行落在视口顶部。
+   * extent 口径与 seekReaderScrollAbsolute / readerScrollAbsoluteOffset 一致。
    */
   private chapterPageStartVp(chapterOrdinal: number): number {
     const pages = this.localReaderPages;
@@ -6161,15 +6192,23 @@ export struct ReaderPage {
     const bodyHeight = this.getBodyContentHeight(headerReserve, footerReserve);
     let startVp = 0;
     let order = 0;
-    for (let index = 0; index < pages.length && order < chapterOrdinal; index++) {
+    for (let index = 0; index < pages.length && order <= chapterOrdinal; index++) {
       const page = pages[index];
       if (page === undefined || (page.chapterIndex ?? 0) !== currentChapter) { continue; }
-      let used = 0;
-      for (const line of page.lines) {
-        used += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+      if (order < chapterOrdinal) {
+        let used = 0;
+        for (const line of page.lines) {
+          used += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+        }
+        if (page.titleOnly && used <= 0) { used = Math.max(1, bodyHeight); }
+        startVp += Math.max(1, used);
+      } else {
+        const bodyStart = this.readerPageBodyStart(page);
+        for (const line of page.lines) {
+          if (line.titleLine === true || line.startPosition >= bodyStart) { break; }
+          startVp += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+        }
       }
-      if (page.titleOnly && used <= 0) { used = Math.max(1, bodyHeight); }
-      startVp += Math.max(1, used);
       order++;
     }
     return startVp;

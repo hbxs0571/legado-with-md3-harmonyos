@@ -155,7 +155,14 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
   `ReadBookController.kt:2626-2637` 后确认——上游高亮按段逐句着色（`readAloudPosition`），
   可见页只在朗读跨页时 `pageIndex++` / `syncReaderToPlaybackPage` 跳到**目标页页首**，
   **页内不做连续滚动**；所以「红色段落移动比页面滚动快」是上游的正常设计，两者本就不同步。
-  本地先前用「字符进度 → 可滚高度连续线性映射」与此不一致，已撤销，改为按 `endPosition`
-  判目标页、只在跨页时 `seekReaderScrollAbsolute(chapterPageStartVp(ordinal))` 定位页首；
-  同时修正 `scrollOffset` 符号（手势往后读为负），使方向不再往回滚。上机：span 匀速推进、
-  页面按页离散跳，两帧截图内容上移=往后读。
+  本地先前用「字符进度 → 可滚高度连续线性映射」与此不一致，已撤销，改为按页离散跳：
+  - 判目标页严格照 `findReadAloudPageIndex`（`ReaderPage.ets.findReadAloudPageOrdinal`）：
+    朗读位置超过下一章内页的 `pageStart` 才往后翻；`pageStart`（`readerPageBodyStart`）取
+    页内**非标题行**最小 `startPosition`，排除 `titleLine=true` 的标题坐标（与上游
+    `ReaderPageNavigator.pageStart` 排除 emphasized 标题同口径），不再用 `endPosition` 近似。
+  - 定位页首（`chapterPageStartVp`）按目标页**正文首行**算 vp：目标页之前累加整页 extent，
+    目标页本身只累加正文首行之前的标题行高度，使正文首行落在视口顶部——对应上游
+    `syncReaderToPlaybackPage → chapter.pageStart(pageIndex)`，非整页 extent 累加近似。
+  - 同时修正 `scrollOffset` 符号（手势往后读为负），使方向不再往回滚。
+  上机：span 匀速推进、页面按页离散跳（6/10 84.1% → 10/10 99.7%），方向正确、无回退；
+  两帧截图内容上移=往后读。
