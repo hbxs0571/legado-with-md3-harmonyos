@@ -12,6 +12,9 @@ export struct ReaderHighlightRuleSheet {
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#1A1B21';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#1B1C22';
   @StorageProp('themeColorOnPrimary') themeColorOnPrimary: string = '#1F3701';
+  // 批5：错误红改走 error 色位，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorError') themeColorError: string = '#FFB4AB';
+  @StorageProp('themeColorErrorContainer') themeColorErrorContainer: string = '#93000A';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop rules: ReaderHighlightRule[] = [];
@@ -577,7 +580,7 @@ export struct ReaderHighlightRuleSheet {
         Text(rule.pattern).fontSize(11).fontColor('#AEB0BA').maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
         Text(this.ruleStatus(rule)).fontSize(11)
-          .fontColor(ReaderHighlightRuleEngine.isSupported(rule.pattern) ? '#AEB0BA' : '#FFB4AB')
+          .fontColor(ReaderHighlightRuleEngine.isSupported(rule.pattern) ? '#AEB0BA' : this.themeColorError)
           .margin({ top: 4 })
       }.layoutWeight(1).alignItems(HorizontalAlign.Start).onClick(() => this.startEdit(rule))
       Column() {
@@ -590,7 +593,7 @@ export struct ReaderHighlightRuleSheet {
             .onClick(() => this.moveRule(rule.id, -1))
           Text('↓').fontSize(14).fontColor('#B9C6FF').padding(5)
             .onClick(() => this.moveRule(rule.id, 1))
-          Text('删').fontSize(12).fontColor('#FFB4AB').padding(5)
+          Text('删').fontSize(12).fontColor(this.themeColorError).padding(5)
             .onClick(() => this.pendingDeleteId = rule.id)
         }
       }.alignItems(HorizontalAlign.End)
@@ -612,11 +615,11 @@ export struct ReaderHighlightRuleSheet {
             .fontSize(12).fontColor('#AEB0BA').width('100%').margin({ bottom: 6 })
           if (this.chapterLength > ReaderHighlightRuleEngine.maximumChapterCharacters) {
             Text('当前章节超过 150000 个 UTF-16 字符，出于防卡顿保护，本章暂不执行正则。')
-              .fontSize(11).fontColor('#FFB4AB').width('100%').margin({ bottom: 10 })
+              .fontSize(11).fontColor(this.themeColorError).width('100%').margin({ bottom: 10 })
           }
           if (this.draftRules.length > ReaderHighlightRuleEngine.maximumRuleCount) {
             Text('规则数超过 64 条，本次阅读暂不执行正则。')
-              .fontSize(11).fontColor('#FFB4AB').width('100%').margin({ bottom: 10 })
+              .fontSize(11).fontColor(this.themeColorError).width('100%').margin({ bottom: 10 })
           }
           if (this.draftRules.length === 0) {
             Column() {
@@ -762,7 +765,7 @@ export struct ReaderHighlightRuleSheet {
                   .onClick(() => this.pickRuleFont())
               }.width('100%').margin({ bottom: 6 })
               if (this.editFontPath.length > 0) {
-                Text('清除自定义字体').fontSize(12).fontColor('#FFB4AB').width('100%')
+                Text('清除自定义字体').fontSize(12).fontColor(this.themeColorError).width('100%')
                   .padding({ top: 4, bottom: 8 })
                   .onClick(() => this.editFontPath = '')
               }
@@ -784,7 +787,7 @@ export struct ReaderHighlightRuleSheet {
                   .onClick(() => this.pickBackgroundImage())
               }.width('100%').margin({ bottom: 6 })
               if (this.editBgImage.length > 0) {
-                Text('清除背景图').fontSize(12).fontColor('#FFB4AB').width('100%')
+                Text('清除背景图').fontSize(12).fontColor(this.themeColorError).width('100%')
                   .padding({ top: 4, bottom: 8 })
                   .onClick(() => this.editBgImage = '')
               }
@@ -846,7 +849,7 @@ export struct ReaderHighlightRuleSheet {
               .onClick(() => this.editorVisible = false)
             Blank().layoutWeight(1)
             if (this.editId.length > 0) {
-              Text('删除').fontSize(14).fontColor('#FFB4AB').padding(10)
+              Text('删除').fontSize(14).fontColor(this.themeColorError).padding(10)
                 .onClick(() => this.pendingDeleteId = this.editId)
             }
             Text(this.saving ? '保存中' : '保存').fontSize(14).fontColor(this.themeColorOnPrimary)
@@ -856,7 +859,7 @@ export struct ReaderHighlightRuleSheet {
           }.width('100%').margin({ top: 8 })
         }
         if (this.errorMessage.length > 0) {
-          Text(this.errorMessage).fontSize(12).fontColor('#FFB4AB').width('100%').margin({ top: 8 })
+          Text(this.errorMessage).fontSize(12).fontColor(this.themeColorError).width('100%').margin({ top: 8 })
         }
       }
       .width('100%').height('82%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
@@ -869,7 +872,7 @@ export struct ReaderHighlightRuleSheet {
               .onClick(() => this.pendingDeleteId = '')
             Text('删除').fontSize(14).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 9, bottom: 9 })
-              .backgroundColor('#FFB4AB').borderRadius(18)
+              .backgroundColor(this.themeColorErrorContainer).borderRadius(18)
               .onClick(() => this.confirmDelete())
           }.width('100%').justifyContent(FlexAlign.End).margin({ top: 12 })
         }.width('82%').padding(18).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(18).zIndex(2)
@@ -889,7 +892,7 @@ export struct ReaderHighlightRuleSheet {
                     Text(preset.pattern).fontSize(11).fontColor('#AEB0BA').maxLines(2)
                       .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
                     Text(this.presetStatus(preset)).fontSize(11)
-                      .fontColor(this.isPresetSelectable(preset) ? '#AEB0BA' : '#FFB4AB')
+                      .fontColor(this.isPresetSelectable(preset) ? '#AEB0BA' : this.themeColorError)
                       .margin({ top: 4 })
                   }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                   Checkbox()

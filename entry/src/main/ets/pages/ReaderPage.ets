@@ -7578,8 +7578,8 @@ export struct ReaderPage {
     // 有配置色就用配置色（上游 textColor/textColorNight 可配任意色）；
     // 空串说明还没装载过设置，回落到上游无数据层 readConfig.json[0] 的正文色。
     if (this.readingTextColor.length > 0) { return this.readingTextColor; }
-    return this.paperColor === '#000000' || this.paperColor === '#343832' || this.paperColor === '#3C3F43'
-      ? '#ADADAD' : '#ff0b0b0b';
+    // 批5：上游 ReadStyleResolver.currentMode()/isNightTheme() 按主题模式判，不按纸色值。
+    return this.readerMenuIsNight() ? '#ADADAD' : '#ff0b0b0b';
   }
 
   /** 背景图片的 `file://` URI；空串时返回空串，由调用方判断是否渲染。 */
@@ -7615,7 +7615,8 @@ export struct ReaderPage {
 
   private getReaderInfoColor(isHeader: boolean): string {
     const useHeaderStyle = isHeader || this.infoSettings.applyHeaderStyle;
-    const isNightPaper = this.paperColor === '#000000' || this.paperColor === '#343832' || this.paperColor === '#3C3F43';
+    // 批5：上游 ReadBookConfig.tipHeaderColor 按 isNightTheme() 判（ReadBookConfig.kt:442）。
+    const isNightPaper = this.readerMenuIsNight();
     const configuredColor = useHeaderStyle
       ? (isNightPaper ? this.infoSettings.tipHeaderColorNight : this.infoSettings.tipHeaderColor)
       : (isNightPaper ? this.infoSettings.tipFooterColorNight : this.infoSettings.tipFooterColor);
