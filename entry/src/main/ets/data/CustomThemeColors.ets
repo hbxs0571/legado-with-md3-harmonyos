@@ -205,6 +205,18 @@ export function buildCustomPaletteColors(
     surfaceContainer: background,
     surfaceContainerHigh: background,
     surfaceContainerHighest: background,
+    // 批 1 新增的 11 个色位没有手选输入，沿用 fallback（本地默认配色）真值。
+    error: fallback.error,
+    onError: fallback.onError,
+    errorContainer: fallback.errorContainer,
+    secondaryContainer: fallback.secondaryContainer,
+    onSecondaryContainer: fallback.onSecondaryContainer,
+    primaryContainer: fallback.primaryContainer,
+    onPrimaryContainer: fallback.onPrimaryContainer,
+    onPrimary: fallback.onPrimary,
+    outlineVariant: fallback.outlineVariant,
+    surfaceBright: fallback.surfaceBright,
+    scrim: fallback.scrim,
     secondary: secondary,
     tertiary: secondary
   };
@@ -242,6 +254,17 @@ export function resolveCustomPaletteColors(
     surfaceContainer: fallback.surfaceContainer,
     surfaceContainerHigh: fallback.surfaceContainerHigh,
     surfaceContainerHighest: fallback.surfaceContainerHighest,
+    error: fallback.error,
+    onError: fallback.onError,
+    errorContainer: fallback.errorContainer,
+    secondaryContainer: fallback.secondaryContainer,
+    onSecondaryContainer: fallback.onSecondaryContainer,
+    primaryContainer: fallback.primaryContainer,
+    onPrimaryContainer: fallback.onPrimaryContainer,
+    onPrimary: fallback.onPrimary,
+    outlineVariant: fallback.outlineVariant,
+    surfaceBright: fallback.surfaceBright,
+    scrim: fallback.scrim,
     secondary: fallback.secondary,
     tertiary: fallback.tertiary
   };

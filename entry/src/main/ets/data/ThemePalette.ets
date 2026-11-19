@@ -9,7 +9,7 @@ import { ThemeModeResolver } from './ThemeModeResolver';
  *   0 动态取色 / 1 草野 / 2 柠檬 / 3 黑白 / 4 电子书 / 5 晴空 / 6 八月 / 7 新浪潮
  *   8 春 / 9 千禧年 / 10 隐海修会 / 11 乐队 / 12 自定义 / 13 透明
  *
- * 上游每套 colorScheme 有 45 个字段（`ui/theme/colorScheme/*ColorScheme.kt`），本地只落 8 个语义色位——
+ * 上游每套 colorScheme 有 53 个字段（`ui/theme/colorScheme/*ColorScheme.kt`），本地落 20 个语义色位——
  * 正好覆盖 `resources/{base,dark}/element/color.json` 里的 8 个 `theme_*` 颜色资源，逐条对应关系：
  *
  *   primary             → theme_accent
@@ -38,6 +38,28 @@ export interface ThemePaletteColors {
   surfaceContainer: string;
   surfaceContainerHigh: string;
   surfaceContainerHighest: string;
+  /** 错误色。上游 `LegadoColorScheme.error`，全仓引用 63 处。 */
+  error: string;
+  /** 错误色上的文字。上游 `onError`。 */
+  onError: string;
+  /** 错误色容器（错误提示底色）。上游 `errorContainer`。 */
+  errorContainer: string;
+  /** 次级容器（选中态最常用）。上游 `secondaryContainer`，全仓引用 62 处。 */
+  secondaryContainer: string;
+  /** 次级容器上的文字。上游 `onSecondaryContainer`。 */
+  onSecondaryContainer: string;
+  /** 主色容器。上游 `primaryContainer`。 */
+  primaryContainer: string;
+  /** 主色容器上的文字。上游 `onPrimaryContainer`。 */
+  onPrimaryContainer: string;
+  /** 主色上的文字。上游 `onPrimary`，按钮/tab 选中态的文字用它。 */
+  onPrimary: string;
+  /** 轮廓变体（分隔线、次要描边）。上游 `outlineVariant`，全仓引用 53 处。 */
+  outlineVariant: string;
+  /** 最亮的一档 surface。上游 `surfaceBright`，浮层卡片底色用它。 */
+  surfaceBright: string;
+  /** 遮罩色。上游 `scrim`，弹层背景压暗用它。 */
+  scrim: string;
   /** 仅用于调色板色块预览（上游 `ThemeColorButton` 的上半圆），不参与全局换肤。 */
   secondary: string;
   /** 仅用于调色板色块预览（上游 `ThemeColorButton` 的下半圆），不参与全局换肤。 */
@@ -56,7 +78,9 @@ export interface ThemePaletteDefinition {
 export const THEME_PALETTE_MIN: number = 0;
 export const THEME_PALETTE_MAX: number = 13;
 
-/** 本地内置默认配色（= `resources/base/element/color.json` 的 8 个 `theme_*`），供动态取色与自定义回落。 */
+/** 本地内置默认配色（= `resources/base/element/color.json` 的 8 个 `theme_*`），供动态取色与自定义回落。
+ *  批 1 新增的 11 个色位取本地默认配色「草野」的日/夜档真值，与批 2 的 @StorageProp 默认值一致。
+ */
 const DEFAULT_LIGHT: ThemePaletteColors = {
   primary: '#3F5BD9',
   onSurface: '#1B1C22',
@@ -67,6 +91,17 @@ const DEFAULT_LIGHT: ThemePaletteColors = {
   surfaceContainer: '#F0F1F5',
   surfaceContainerHigh: '#FFFFFF',
   surfaceContainerHighest: '#E9EAEF',
+  error: '#BA1A1A',
+  onError: '#FFFFFF',
+  errorContainer: '#FFDAD6',
+  secondaryContainer: '#DCE7C8',
+  onSecondaryContainer: '#404A33',
+  primaryContainer: '#CDEDA3',
+  onPrimaryContainer: '#354E16',
+  onPrimary: '#FFFFFF',
+  outlineVariant: '#C5C8BA',
+  surfaceBright: '#F9FAEF',
+  scrim: '#000000',
   secondary: '#5F74B8',
   tertiary: '#4A5FA8',
 };
@@ -81,6 +116,17 @@ const DEFAULT_DARK: ThemePaletteColors = {
   surfaceContainer: '#1B1C22',
   surfaceContainerHigh: '#1C1D23',
   surfaceContainerHighest: '#1D1E24',
+  error: '#FFB4AB',
+  onError: '#690005',
+  errorContainer: '#93000A',
+  secondaryContainer: '#404A33',
+  onSecondaryContainer: '#DCE7C8',
+  primaryContainer: '#354E16',
+  onPrimaryContainer: '#CDEDA3',
+  onPrimary: '#1F3701',
+  outlineVariant: '#44483D',
+  surfaceBright: '#383A32',
+  scrim: '#000000',
   secondary: '#9FB0E8',
   tertiary: '#8A9BD8',
 };
@@ -100,6 +146,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#F0F1F5',
       surfaceContainerHigh: '#FFFFFF',
       surfaceContainerHighest: '#E9EAEF',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#DCE7C8',
+      onSecondaryContainer: '#404A33',
+      primaryContainer: '#CDEDA3',
+      onPrimaryContainer: '#354E16',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#C5C8BA',
+      surfaceBright: '#F9FAEF',
+      scrim: '#000000',
       secondary: '#5F74B8',
       tertiary: '#4A5FA8',
     },
@@ -113,6 +170,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#1B1C22',
       surfaceContainerHigh: '#1C1D23',
       surfaceContainerHighest: '#1D1E24',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#404A33',
+      onSecondaryContainer: '#DCE7C8',
+      primaryContainer: '#354E16',
+      onPrimaryContainer: '#CDEDA3',
+      onPrimary: '#1F3701',
+      outlineVariant: '#44483D',
+      surfaceBright: '#383A32',
+      scrim: '#000000',
       secondary: '#9FB0E8',
       tertiary: '#8A9BD8',
     }
@@ -130,6 +198,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#EEEFE3',
       surfaceContainerHigh: '#E8E9DE',
       surfaceContainerHighest: '#E2E3D8',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#DCE7C8',
+      onSecondaryContainer: '#404A33',
+      primaryContainer: '#CDEDA3',
+      onPrimaryContainer: '#354E16',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#C5C8BA',
+      surfaceBright: '#F9FAEF',
+      scrim: '#000000',
       secondary: '#586249',
       tertiary: '#386663',
     },
@@ -143,6 +222,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#1E201A',
       surfaceContainerHigh: '#282B24',
       surfaceContainerHighest: '#33362E',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#404A33',
+      onSecondaryContainer: '#DCE7C8',
+      primaryContainer: '#354E16',
+      onPrimaryContainer: '#CDEDA3',
+      onPrimary: '#1F3701',
+      outlineVariant: '#44483D',
+      surfaceBright: '#383A32',
+      scrim: '#000000',
       secondary: '#BFCBAD',
       tertiary: '#A0D0CB',
     }
@@ -160,6 +250,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#F4EDDF',
       surfaceContainerHigh: '#EEE8DA',
       surfaceContainerHighest: '#E8E2D4',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#EEE2BC',
+      onSecondaryContainer: '#4E472A',
+      primaryContainer: '#F8E287',
+      onPrimaryContainer: '#534600',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#CDC6B4',
+      surfaceBright: '#FFF9EE',
+      scrim: '#000000',
       secondary: '#665E40',
       tertiary: '#43664E',
     },
@@ -173,6 +274,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#222017',
       surfaceContainerHigh: '#2D2A21',
       surfaceContainerHighest: '#38352B',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#4E472A',
+      onSecondaryContainer: '#EEE2BC',
+      primaryContainer: '#534600',
+      onPrimaryContainer: '#F8E287',
+      onPrimary: '#3A3000',
+      outlineVariant: '#4B4739',
+      surfaceBright: '#3C3930',
+      scrim: '#000000',
       secondary: '#D1C6A1',
       tertiary: '#A9D0B3',
     }
@@ -190,6 +302,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#F1EDEC',
       surfaceContainerHigh: '#EBE7E7',
       surfaceContainerHighest: '#E5E2E1',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#E2DFDE',
+      onSecondaryContainer: '#636262',
+      primaryContainer: '#747474',
+      onPrimaryContainer: '#FEFCFC',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#C4C7C7',
+      surfaceBright: '#F8F8F8',
+      scrim: '#000000',
       secondary: '#5F5E5E',
       tertiary: '#5E5B5D',
     },
@@ -203,6 +326,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#201F1F',
       surfaceContainerHigh: '#2A2A2A',
       surfaceContainerHighest: '#353434',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#474746',
+      onSecondaryContainer: '#B7B5B4',
+      primaryContainer: '#919090',
+      onPrimaryContainer: '#050606',
+      onPrimary: '#303031',
+      outlineVariant: '#444748',
+      surfaceBright: '#3A3939',
+      scrim: '#000000',
       secondary: '#C8C6C5',
       tertiary: '#CBC5C7',
     }
@@ -220,6 +354,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#FFFFFF',
       surfaceContainerHigh: '#FFFFFF',
       surfaceContainerHighest: '#FFFFFF',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#808080',
+      onSecondaryContainer: '#FFFFFF',
+      primaryContainer: '#000000',
+      onPrimaryContainer: '#FFFFFF',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#000000',
+      surfaceBright: '#FFFFFF',
+      scrim: '#000000',
       secondary: '#000000',
       tertiary: '#000000',
     },
@@ -233,6 +378,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#000000',
       surfaceContainerHigh: '#2A2A2A',
       surfaceContainerHighest: '#353434',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#808080',
+      onSecondaryContainer: '#FFFFFF',
+      primaryContainer: '#FFFFFF',
+      onPrimaryContainer: '#000000',
+      onPrimary: '#000000',
+      outlineVariant: '#444846',
+      surfaceBright: '#3A3939',
+      scrim: '#000000',
       secondary: '#FFFFFF',
       tertiary: '#FFFFFF',
     }
@@ -250,6 +406,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#EDEDF4',
       surfaceContainerHigh: '#E7E8EE',
       surfaceContainerHighest: '#E1E2E9',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#D8E3F8',
+      onSecondaryContainer: '#3D4758',
+      primaryContainer: '#D4E3FF',
+      onPrimaryContainer: '#214876',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#C3C6CF',
+      surfaceBright: '#F8F9FF',
+      scrim: '#000000',
       secondary: '#545F71',
       tertiary: '#6D5677',
     },
@@ -263,6 +430,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#1D2024',
       surfaceContainerHigh: '#282A2F',
       surfaceContainerHighest: '#32353A',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#3D4758',
+      onSecondaryContainer: '#D8E3F8',
+      primaryContainer: '#214876',
+      onPrimaryContainer: '#D4E3FF',
+      onPrimary: '#00315D',
+      outlineVariant: '#43474E',
+      surfaceBright: '#37393E',
+      scrim: '#000000',
       secondary: '#BCC7DC',
       tertiary: '#D9BDE3',
     }
@@ -280,6 +458,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#FCEAE5',
       surfaceContainerHigh: '#F7E4E0',
       surfaceContainerHighest: '#F1DFDA',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#FFDBD1',
+      onSecondaryContainer: '#5D4037',
+      primaryContainer: '#FFDBD1',
+      onPrimaryContainer: '#723522',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#D8C2BC',
+      surfaceBright: '#FFF8F6',
+      scrim: '#000000',
       secondary: '#77574D',
       tertiary: '#6B5D2F',
     },
@@ -293,6 +482,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#271D1B',
       surfaceContainerHigh: '#322825',
       surfaceContainerHighest: '#3D322F',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#5D4037',
+      onSecondaryContainer: '#FFDBD1',
+      primaryContainer: '#723522',
+      onPrimaryContainer: '#FFDBD1',
+      onPrimary: '#561F0E',
+      outlineVariant: '#53433F',
+      surfaceBright: '#423734',
+      scrim: '#000000',
       secondary: '#E7BDB2',
       tertiary: '#D8C68D',
     }
@@ -310,6 +510,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#FAEAED',
       surfaceContainerHigh: '#F4E4E7',
       surfaceContainerHighest: '#EFDFE2',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#FFD9E3',
+      onSecondaryContainer: '#5A3F48',
+      primaryContainer: '#FFD9E3',
+      onPrimaryContainer: '#6F334A',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#D5C2C6',
+      surfaceBright: '#FFF8F8',
+      scrim: '#000000',
       secondary: '#74565F',
       tertiary: '#7D5635',
     },
@@ -323,6 +534,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#261D20',
       surfaceContainerHigh: '#31282A',
       surfaceContainerHighest: '#3C3235',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#5A3F48',
+      onSecondaryContainer: '#FFD9E3',
+      primaryContainer: '#6F334A',
+      onPrimaryContainer: '#FFD9E3',
+      onPrimary: '#541D33',
+      outlineVariant: '#514347',
+      surfaceBright: '#403739',
+      scrim: '#000000',
       secondary: '#E2BDC7',
       tertiary: '#EFBC94',
     }
@@ -340,6 +562,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#FCEAE9',
       surfaceContainerHigh: '#F6E4E4',
       surfaceContainerHighest: '#F0DEDE',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#FFDADA',
+      onSecondaryContainer: '#2C1516',
+      primaryContainer: '#FFDADA',
+      onPrimaryContainer: '#3B080E',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#D7C1C1',
+      surfaceBright: '#FFF8F7',
+      scrim: '#000000',
       secondary: '#765657',
       tertiary: '#755A2F',
     },
@@ -353,6 +586,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#271D1D',
       surfaceContainerHigh: '#322828',
       surfaceContainerHighest: '#3D3232',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#5D3F40',
+      onSecondaryContainer: '#FFDADA',
+      primaryContainer: '#733337',
+      onPrimaryContainer: '#FFDADA',
+      onPrimary: '#561D22',
+      outlineVariant: '#524343',
+      surfaceBright: '#413737',
+      scrim: '#000000',
       secondary: '#E6BDBD',
       tertiary: '#E6C18D',
     }
@@ -370,6 +614,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#F0ECF4',
       surfaceContainerHigh: '#EAE7EF',
       surfaceContainerHighest: '#E4E1E9',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#E1E0F9',
+      onSecondaryContainer: '#444559',
+      primaryContainer: '#E0E0FF',
+      onPrimaryContainer: '#3E4278',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#C7C5D0',
+      surfaceBright: '#FBF8FF',
+      scrim: '#000000',
       secondary: '#5C5D72',
       tertiary: '#78536B',
     },
@@ -383,6 +638,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#1F1F25',
       surfaceContainerHigh: '#2A292F',
       surfaceContainerHighest: '#34343A',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#444559',
+      onSecondaryContainer: '#E1E0F9',
+      primaryContainer: '#3E4278',
+      onPrimaryContainer: '#E0E0FF',
+      onPrimary: '#272B60',
+      outlineVariant: '#46464F',
+      surfaceBright: '#39393F',
+      scrim: '#000000',
       secondary: '#C5C4DD',
       tertiary: '#E8B9D5',
     }
@@ -400,6 +666,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#F4EDDF',
       surfaceContainerHigh: '#EEE8DA',
       surfaceContainerHighest: '#E8E2D4',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#D9E2FF',
+      onSecondaryContainer: '#2F4578',
+      primaryContainer: '#F6E388',
+      onPrimaryContainer: '#524700',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#CCC6B4',
+      surfaceBright: '#FFF9EC',
+      scrim: '#000000',
       secondary: '#475D92',
       tertiary: '#01677D',
     },
@@ -413,6 +690,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#222017',
       surfaceContainerHigh: '#2C2A21',
       surfaceContainerHighest: '#37352B',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#2F4578',
+      onSecondaryContainer: '#D9E2FF',
+      primaryContainer: '#524700',
+      onPrimaryContainer: '#F6E388',
+      onPrimary: '#383000',
+      outlineVariant: '#4A4739',
+      surfaceBright: '#3C3930',
+      scrim: '#000000',
       secondary: '#B1C5FF',
       tertiary: '#86D1EA',
     }
@@ -430,6 +718,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#FBEAEB',
       surfaceContainerHigh: '#F5E4E6',
       surfaceContainerHighest: '#EFDEE0',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#FFD9DF',
+      onSecondaryContainer: '#5C3F44',
+      primaryContainer: '#FFD9DF',
+      onPrimaryContainer: '#713341',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#D6C2C4',
+      surfaceBright: '#FFF8F7',
+      scrim: '#000000',
       secondary: '#75565C',
       tertiary: '#4D5C92',
     },
@@ -443,6 +742,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#261D1F',
       surfaceContainerHigh: '#312829',
       surfaceContainerHighest: '#3C3234',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#5C3F44',
+      onSecondaryContainer: '#FFD9DF',
+      primaryContainer: '#713341',
+      onPrimaryContainer: '#FFD9DF',
+      onPrimary: '#551D2B',
+      outlineVariant: '#524345',
+      surfaceBright: '#413738',
+      scrim: '#000000',
       secondary: '#E4BDC3',
       tertiary: '#B6C4FF',
     }
@@ -460,6 +770,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#F0F1F5',
       surfaceContainerHigh: '#FFFFFF',
       surfaceContainerHighest: '#E9EAEF',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#DCE7C8',
+      onSecondaryContainer: '#404A33',
+      primaryContainer: '#CDEDA3',
+      onPrimaryContainer: '#354E16',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#C5C8BA',
+      surfaceBright: '#F9FAEF',
+      scrim: '#000000',
       secondary: '#5F74B8',
       tertiary: '#4A5FA8',
     },
@@ -473,6 +794,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#1B1C22',
       surfaceContainerHigh: '#1C1D23',
       surfaceContainerHighest: '#1D1E24',
+      error: '#FFB4AB',
+      onError: '#690005',
+      errorContainer: '#93000A',
+      secondaryContainer: '#404A33',
+      onSecondaryContainer: '#DCE7C8',
+      primaryContainer: '#354E16',
+      onPrimaryContainer: '#CDEDA3',
+      onPrimary: '#1F3701',
+      outlineVariant: '#44483D',
+      surfaceBright: '#383A32',
+      scrim: '#000000',
       secondary: '#9FB0E8',
       tertiary: '#8A9BD8',
     }
@@ -490,6 +822,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#FFFFFF',
       surfaceContainerHigh: '#FFFFFF',
       surfaceContainerHighest: '#FFFFFF',
+      error: '#BA1A1A',
+      onError: '#FFFFFF',
+      errorContainer: '#FFDAD6',
+      secondaryContainer: '#B0FFFFFF',
+      onSecondaryContainer: '#000000',
+      primaryContainer: '#B0FFFFFF',
+      onPrimaryContainer: '#000000',
+      onPrimary: '#FFFFFF',
+      outlineVariant: '#CCC6B4',
+      surfaceBright: '#33FFFFFF',
+      scrim: '#33000000',
       secondary: '#000000',
       tertiary: '#000000',
     },
@@ -503,6 +846,17 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       surfaceContainer: '#FFFFFF',
       surfaceContainerHigh: '#FFFFFF',
       surfaceContainerHighest: '#FFFFFF',
+      error: '#CF6679',
+      onError: '#000000',
+      errorContainer: '#8B0000',
+      secondaryContainer: '#A0FFFFFF',
+      onSecondaryContainer: '#000000',
+      primaryContainer: '#80FFFFFF',
+      onPrimaryContainer: '#000000',
+      onPrimary: '#000000',
+      outlineVariant: '#33FFFFFF',
+      surfaceBright: '#33FFFFFF',
+      scrim: '#66000000',
       secondary: '#FFFFFF',
       tertiary: '#FFFFFF',
     }
@@ -523,7 +877,7 @@ export function themePaletteName(index: number): string {
 }
 
 /**
- * 序号 + 日夜 → 8 个色位。
+ * 序号 + 日夜 → 20 个色位。
  *
  * 上游由 `ThemeEngine.getColorScheme(context, mode, darkTheme, isAmoled, ...)` 现算，
  * 这里直接查表；纯黑（`isAmoled`）由 `themePureBlack` 那套条件式替换承接，不在本函数里叠加，
@@ -537,9 +891,11 @@ export function resolvePaletteColors(index: number, isDark: boolean): ThemePalet
 /**
  * 把一套配色广播到 AppStorage，供各 struct 的 `@StorageProp` 订阅。
  *
- * 键名必须与 130 个 struct 里 `@StorageProp('themeColorXxx')` 的写法**逐字一致**：
- * 那批键是按 8 个 `theme_*` 颜色资源命名的（`themeColorTextPrimary` 等），
- * 所以这里按资源映射改名，不能直接用 `primary`/`onSurface` 这些上游字段名。
+ * 本函数广播 20 个键：原 9 个语义色位 + 批 1 新增的 11 个（error/onError/各种 Container 等）。
+ * 键名必须与各 struct 里 `@StorageProp('themeColorXxx')` 的写法**逐字一致**：
+ * 原 9 个键按 8 个 `theme_*` 颜色资源命名（`themeColorTextPrimary` 等），
+ * 新增 11 个键按上游 `LegadoColorScheme` 字段名映射（`themeColorError` 等），
+ * 所以这里按资源/字段映射改名，不能直接用 `primary`/`onSurface` 这些上游字段名。
  */
 export function publishPaletteColors(colors: ThemePaletteColors): void {
   AppStorage.setOrCreate('themeColorAccent', colors.primary);
@@ -552,6 +908,17 @@ export function publishPaletteColors(colors: ThemePaletteColors): void {
   AppStorage.setOrCreate('themeColorSurfaceElevated', colors.surfaceContainerHigh);
   // 键名沿用现有 themeColorSurface* 前缀（不写全名 Container，避免 30 多个使用点打错）。
   AppStorage.setOrCreate('themeColorSurfaceHighest', colors.surfaceContainerHighest);
+  AppStorage.setOrCreate('themeColorError', colors.error);
+  AppStorage.setOrCreate('themeColorOnError', colors.onError);
+  AppStorage.setOrCreate('themeColorErrorContainer', colors.errorContainer);
+  AppStorage.setOrCreate('themeColorSecondaryContainer', colors.secondaryContainer);
+  AppStorage.setOrCreate('themeColorOnSecondaryContainer', colors.onSecondaryContainer);
+  AppStorage.setOrCreate('themeColorPrimaryContainer', colors.primaryContainer);
+  AppStorage.setOrCreate('themeColorOnPrimaryContainer', colors.onPrimaryContainer);
+  AppStorage.setOrCreate('themeColorOnPrimary', colors.onPrimary);
+  AppStorage.setOrCreate('themeColorOutlineVariant', colors.outlineVariant);
+  AppStorage.setOrCreate('themeColorSurfaceBright', colors.surfaceBright);
+  AppStorage.setOrCreate('themeColorScrim', colors.scrim);
 }
 
 /** 序号 + `themeMode` + 系统色模式 → 广播当前该用的配色。`themeMode` 三值口径见 `ThemeModeResolver`。 */
