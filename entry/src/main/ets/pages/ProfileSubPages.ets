@@ -3504,6 +3504,8 @@ export struct ReadRecordsPage {
   /** 确认框里的两档勾选项，点「删除」时才生效。 */
   @State skipDeleteConfirmPageDraft: boolean = false;
   @State skipDeleteConfirmLongTermDraft: boolean = false;
+  /** 删除确认档位：1 单条 / 0 删时段 / -1 清空 / >1 多条。按动作来源赋值、决定四档文案。 */
+  @State deleteConfirmKind: number = 1;
   /** 合并对话框：目标汇总行、候选、多选集合与搜索词。 */
   @State showMergeSheet: boolean = false;
   @State mergeTarget: ReadRecordSummary | undefined = undefined;
@@ -3911,9 +3913,24 @@ export struct ReadRecordsPage {
     this.requestDeleteSelected();
   }
 
-  /** 点顶栏删除按钮：已勾不再提醒就直接删，否则弹两档确认。 */
+  /** 侧滑时间线会话：文案是「删时段」而不是「删一条记录」。 */
+  private requestDeletePeriod(key: string): void {
+    this.selectedKeys = new Set<string>([key]);
+    this.deleteConfirmKind = 0;
+    if (this.skipDeleteConfirmForPage || this.skipDeleteConfirm) {
+      this.performDeleteSelected();
+      return;
+    }
+    this.skipDeleteConfirmPageDraft = false;
+    this.skipDeleteConfirmLongTermDraft = false;
+    this.showDeleteConfirm = true;
+  }
+
+  /** 点顶栏删除按钮：按选中条数分档，已勾不再提醒就直接删，否则弹两档确认。 */
   private requestDeleteSelected(): void {
     if (!this.isInSelectionMode()) { return; }
+    // 多选批量按条数分档；单条侧滑时 selectedKeys 也只有 1 条，走 else 分支文案。
+    this.deleteConfirmKind = this.selectedKeys.size;
     if (this.skipDeleteConfirmForPage || this.skipDeleteConfirm) {
       this.performDeleteSelected();
       return;
@@ -4384,7 +4401,7 @@ export struct ReadRecordsPage {
                           }))
                       }
                       .swipeAction({
-                        start: { builder: () => { this.swipeDeleteAction(() => this.requestDeleteOne(this.timelineKey(record))) } }
+                        start: { builder: () => { this.swipeDeleteAction(() => this.requestDeletePeriod(this.timelineKey(record))) } }
                       })
                     }
                   }, (record: ReadTimeRecord) => `${record.id}-${this.selectedKeys.has(this.timelineKey(record))}`)
@@ -4543,7 +4560,7 @@ export struct ReadRecordsPage {
     Column() {
       Text('清空阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 22 })
-      Text(`确定删除全部 ${this.records.length} 条阅读会话？删除后不可恢复。`)
+      Text('确定要清空全部阅读记录吗？此操作无法撤销。')
         .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
         .padding({ left: 28, right: 28, top: 12, bottom: 20 })
       Row() {
@@ -4615,31 +4632,42 @@ export struct ReadRecordsPage {
   @Builder
   private ReadRecordDeleteConfirmSheet() {
     Column() {
-      Text(this.selectedKeys.size === 1 ? '删除这条记录' : `删除 ${this.selectedKeys.size} 条记录`)
+      Text(this.deleteConfirmKind === 0 ? '删除阅读时段' : (this.deleteConfirmKind > 1 ? `删除 ${this.deleteConfirmKind} 条记录` : '删除阅读记录'))
         .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 22 })
-      Text(this.selectedKeys.size === 1 ? '确定删除这条阅读记录？删除后不可恢复。' :
-        `确定删除选中的 ${this.selectedKeys.size} 条阅读记录？删除后不可恢复。`)
+      Text(this.deleteConfirmKind === 0
+        ? '确定要删除这个阅读时段吗？该行连续的所有会话（包括其他设备的会话）都会被删除。'
+        : (this.deleteConfirmKind > 1
+          ? `确定要删除选中的 ${this.deleteConfirmKind} 条阅读记录吗？`
+          : '确定要删除这条记录吗？'))
         .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
         .padding({ left: 28, right: 28, top: 12, bottom: 16 })
       Row() {
-        Text('本页不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('本次打开不再提示').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
         UiSwitchControl({
           checked: this.skipDeleteConfirmPageDraft,
           interactive: false,
           onChange: (value: boolean) => { this.skipDeleteConfirmPageDraft = value; }
         })
       }.width('100%').padding({ left: 28, right: 28, bottom: 8 })
-        .onClick(() => this.skipDeleteConfirmPageDraft = !this.skipDeleteConfirmPageDraft)
+        .onClick(() => {
+          this.skipDeleteConfirmPageDraft = !this.skipDeleteConfirmPageDraft;
+          // 上游两档互斥：勾「本次打开」就清掉「今后都不再提醒」
+          if (this.skipDeleteConfirmPageDraft) { this.skipDeleteConfirmLongTermDraft = false; }
+        })
       Row() {
-        Text('以后都不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('今后不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
         UiSwitchControl({
           checked: this.skipDeleteConfirmLongTermDraft,
           interactive: false,
           onChange: (value: boolean) => { this.skipDeleteConfirmLongTermDraft = value; }
         })
       }.width('100%').padding({ left: 28, right: 28, bottom: 16 })
-        .onClick(() => this.skipDeleteConfirmLongTermDraft = !this.skipDeleteConfirmLongTermDraft)
+        .onClick(() => {
+          this.skipDeleteConfirmLongTermDraft = !this.skipDeleteConfirmLongTermDraft;
+          // 反向互斥：勾「今后都不再提醒」就清掉「本次打开不再提示」
+          if (this.skipDeleteConfirmLongTermDraft) { this.skipDeleteConfirmPageDraft = false; }
+        })
       Row() {
         Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
