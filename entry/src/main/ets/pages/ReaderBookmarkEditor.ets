@@ -6,6 +6,9 @@ export struct ReaderBookmarkEditor {
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 批3：页面底色/弹层容器字面量改走主题色位，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#111217';
+  @StorageProp('themeColorSurfaceBright') themeColorSurfaceBright: string = '#383A32';
   @Prop bookmark: ReaderBookmark = {
     id: '', bookId: '', bookName: '', bookAuthor: '', bookUrl: '',
     chapterIndex: 0, chapterName: '', chapterPosition: 0, bookText: '', content: '', createdAt: 0
@@ -37,12 +40,12 @@ export struct ReaderBookmarkEditor {
         Text('原文').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ bottom: 6 })
         TextArea({ text: this.bookText, placeholder: '书签原文（可编辑）' })
           .fontSize(13).fontColor('#C8CAD3').placeholderColor(this.themeColorTextTertiary)
-          .backgroundColor('#15161B').height(118).width('100%')
+          .backgroundColor(this.themeColorSurfacePrimary).height(118).width('100%')
           .onChange((value: string) => this.bookText = value)
         Text('备注').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ top: 12, bottom: 6 })
         TextArea({ text: this.note, placeholder: '添加书签备注（可选）' })
           .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
-          .backgroundColor('#15161B').height(92).width('100%')
+          .backgroundColor(this.themeColorSurfacePrimary).height(92).width('100%')
           .onChange((value: string) => this.note = value)
         Row() {
           if (!this.isNew) {
@@ -56,7 +59,7 @@ export struct ReaderBookmarkEditor {
             .backgroundColor('#454B62').borderRadius(18)
             .onClick(() => this.onSave(this.note, this.bookText))
         }.width('100%').margin({ top: 14 })
-      }.width('calc(100% - 36vp)').padding(18).backgroundColor('#242127').borderRadius(20)
+      }.width('calc(100% - 36vp)').padding(18).backgroundColor(this.themeColorSurfaceBright).borderRadius(20)
     }.width('100%').height('100%')
   }
 }
