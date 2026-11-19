@@ -62,12 +62,17 @@ export class SystemTtsPlayer {
   private chunkIndex: number = 0;
   /** 当前朗读段区间每次变化递增，交给 ReaderPage 判断是否需要重绘/跟随。 */
   private spanRevision: number = 0;
+  /** 系统 TTS 人声 person 值；听书页切换音色时更新并重建引擎（平台只 3 个音色）。 */
+  private voicePerson: number = 13;
 
   onStateChange: (state: ReadAloudState) => void = (_state: ReadAloudState): void => {};
   onUnitAdvance: (index: number) => void = (_index: number): void => {};
   /** 进入新朗读段时上报语义正文区间（批 4 位置回写 + 高亮消费）。 */
   onSpanChange: (span: ReadAloudSpan) => void = (_span: ReadAloudSpan): void => {};
   onError: (message: string) => void = (_message: string): void => {};
+  /** 听书页用：进入新朗读段时上报当前句/下一句原文与句序，与高亮段同源。 */
+  onTextChange: (current: string, next: string, index: number) => void =
+    (_current: string, _next: string, _index: number): void => {};
 
   static getInstance(): SystemTtsPlayer {
     if (SystemTtsPlayer.instance === null) {
@@ -181,6 +186,57 @@ export class SystemTtsPlayer {
   /** 当前状态。 */
   state(): ReadAloudState {
     return this.stateValue;
+  }
+
+  /** 听书页取第 index 句原文（未 trim），供当前句/下一句/正文列表显示。 */
+  unitText(index: number): string {
+    const unit = this.units[index];
+    return unit === undefined ? '' : unit.text.trim();
+  }
+
+  /** 听书页正文列表：导出全部单元文本（正文页跟随高亮用）。 */
+  allUnitTexts(): string[] {
+    const texts: string[] = [];
+    for (const unit of this.units) {
+      texts.push(unit.text.trim());
+    }
+    return texts;
+  }
+
+  /**
+   * 跳到第 index 句并从该处续播（听书页进度条/正文点选 seek）。
+   * 与 previous/next 的 jumpTo 同一路径：越界钳住，暂停态只挪位置不出声。
+   */
+  seekTo(index: number): void {
+    if (this.units.length === 0) {
+      return;
+    }
+    const target = Math.max(0, Math.min(index, this.units.length - 1));
+    this.jumpTo(target);
+  }
+
+  /**
+   * 切换系统人声（听书页音色选择）。person 为 SDK 音色值，如 13/21/8。
+   * 重建引擎：先停当前合成并 shutdown 旧实例，再让 ensureEngine 用新 person 创建。
+   * 系统 TTS 全设备最多 3 引擎，重建只持有一个，符合上限。
+   */
+  setVoicePerson(person: number): void {
+    if (person === this.voicePerson) {
+      return;
+    }
+    this.voicePerson = person;
+    this.stop();
+    const engine = this.engine;
+    if (engine !== null) {
+      try {
+        engine.shutdown();
+      } catch (error) {
+        console.warn(`[ReadAloud] 切音色 shutdown 失败: ${SystemTtsPlayer.errorText(error as BusinessError)}`);
+      }
+      this.engine = null;
+    }
+    this.cancelShutdown();
+    console.info(`[ReadAloud] setVoicePerson=${person}`);
   }
 
   /** 手动上下句：flush 当前、从新位置起播。 */
@@ -339,6 +395,7 @@ export class SystemTtsPlayer {
     const span: ReadAloudSpan = { start: unit.start, end: unit.end, revision: this.spanRevision };
     console.info(`[ReadAloud] span ${span.start}-${span.end} rev=${span.revision}`);
     this.onSpanChange(span);
+    this.onTextChange(this.unitText(this.index), this.unitText(this.index + 1), this.index);
   }
 
   /** 清空高亮（停止/暂停时）：start<0 由消费方识别为「无朗读段」。 */
@@ -350,6 +407,7 @@ export class SystemTtsPlayer {
 
   private emitProgress(): void {
     this.onUnitAdvance(this.index);
+    this.onTextChange(this.unitText(this.index), this.unitText(this.index + 1), this.index);
   }
 
   /** 单例持有引擎；创建中的 Promise 共享，避免并发 createEngine 撞 3 实例上限。 */
@@ -363,7 +421,7 @@ export class SystemTtsPlayer {
     console.info('[ReadAloud] createEngine begin');
     const creating = textToSpeech.createEngine({
       language: 'zh-CN',
-      person: 13,
+      person: this.voicePerson,
       online: 1
     }).then((engine: textToSpeech.TextToSpeechEngine): textToSpeech.TextToSpeechEngine => {
       this.engine = engine;

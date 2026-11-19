@@ -4,6 +4,38 @@
 
 2026-11-17 自造与降级清算（11 批）已收口：门槛判据全绿（scripts/selfmade-scan.py 六词口径归零、tmp/batch11_gate.py 22 项全过），七表合计未变（1226 行 / 已接 1038 / 未接 157 / 不适用 31）。下文批 5/6/10 各节已按清算后的实际状态更新；本批新增的十类「不做」项集中登记在「## 批11：自造与降级清算——十类不做的项」。
 
+## 批12：朗读胶囊是应用内浮层，不是系统悬浮窗（KI-ALOUD-CAPSULE）
+
+上游朗读胶囊（`ui/book/read/ReadAloudCapsule.kt`，458 行）是系统悬浮窗（`SYSTEM_FLOAT_WINDOW`），画在 Nav3 叠层之上，退出阅读器仍能看到。鸿蒙三方应用拿不到该权限：SDK `PermissionDefinitions.json` 中 `SYSTEM_FLOAT_WINDOW` 的 `level=system_basic`（第 615 行），只向系统应用授权。故本地胶囊做在 `pages/ReaderPage.ets` 顶层 `Stack` 内，是应用内浮层：**退出阅读器即消失**，`onToggleReadAloud` 停止后也不显示。
+
+胶囊结构照上游 `ReadAloudCapsule.kt:339-458` 实际实现，不是「进度环/播放暂停/展开按钮」：
+
+- **封面圆图**（上游 `BookCoverImage`，`:369-399`）：折叠态唯一可见元素；播放时旋转（20 秒/圈，暂停即停）；点击 = 折叠/半展开态展开、完全展开态打开 player（上游 `onOpenPlayer`，`:310-313`）。
+- **播放暂停按钮**（`:415-432`，`isPaused ? PlayArrow : Pause`）。
+- **进度环内含停止按钮**（`:433-454`，`CircularProgressIndicator` + `Close` → `onStop`）。
+- 底色日白夜黑、不跟随主题（上游 `capsuleSurfaceColor/capsuleContentColor:325-337`）。
+- 展开是封面宽度连续变化（tween 320ms，`:175-179`），揭示两个按钮；**不是**「打开朗读面板」。
+
+能力边界与降级项（如实记录，非「胶囊已完全实现」）：
+
+1. **展开态点封面 → 打开听书界面（player）**：已按上游 onOpenPlayer 语义实现，打开 `pages/ReadAloudPlayerPage.ets`（全屏浮层，见下节「听书界面」）。上游是 Activity 级 morph 浮层、不在导航栈；本地用 Index 根 `Stack` 的全屏浮层近似——退出阅读器后同样消失。
+2. 显隐开关 `showReadAloudCapsule`、自动收起 `capsuleAutoCollapse`（3 秒无操作折叠、任何触摸重置、拖边缘折叠）、位置可拖与钳位、位置复位（设置面板「复位朗读胶囊位置」对应 `ReadAloudConfigContent.kt:243`）均保留；位置存 `read_aloud_capsule_offset_x/y` 偏好，杀进程重开仍在。
+3. 位置语义已按上游 `CapsulePosition.kt` 实现为「相对屏幕底部中央的中心偏移」，贴边（±edge）保存、重开即折叠、展开让位防出屏均已还原；差异仅在于本地钳位在应用视口内（无系统悬浮窗的跨应用边界）。
+4. 外观定制页（`CastCapsuleStyleScreen.kt`，774 行）本批不做，`AppReadAloudSettingsPage.ets` 的「朗读胶囊设置」行继续留占位。
+
+## 听书界面（player，`pages/ReadAloudPlayerPage.ets`）
+
+对照上游 `ui/book/readaloud/player/ReadAloudPlayerScreen.kt`（773 行）+ Contract 实现，全屏浮层，三页 Swiper（目录 / 封面 / 正文）+ 顶栏（书名/章名/设置）+ 底栏。
+
+能真实现并已接 `SystemTtsPlayer` 单例的控件：上一句 / 下一句（`previous`/`next`）、上一章 / 下一章（复用换章链）、播放暂停、进度条与正文点选 seek（`seekTo`）、目录选章、切换经典（回朗读面板）、正文逐句跟随高亮（读 `onTextChange`），当前句/下一句取 `unitText`。背景模式做了「跟随阅读/深色/浅色」三档（上游 `ReadAloudBgMode` 的视觉近似，非同一套 haze 背景）。
+
+平台边界（如实记录）：
+
+- **音色**：系统 TTS 实测仅 3 条（聆小珊 person13 / 凌飞哲 person21 / 英语 person8）；选音色会重建引擎并从当前句续播。上游音色目录还含 HTTP 朗读源音色，本批无 HTTP 源，故只列系统 3 条。
+- **语速**：系统 TTS 无 `setSpeechRate`，滑杆只写 `ttsSpeechRate` 偏好、不调 API，界面如实标注「系统朗读不支持调速，此设置用于 HTTP 朗读源」。
+- **定时**：分钟档到点立刻停（对齐上游 `finishCurrentChapterAfterTimer=false`），章节档按已读章数累计；复用批5 `onAloudTimerChange`。
+- 上游 `PlayerBackground` 的 haze 流动光背景、morph 形变动画、3 个 bottom sheet 的花字动画是 Compose 专属效果，本地以静态背景/普通浮层近似。
+
 ## 批11：自造与降级清算——十类「不做」项集中登记
 
 本轮清算逐条比对上游，以下十项判「不做」，证据按任务书 11.3 三类之一给出（平台无对应物 / 范围之外 / 备份互通但无界面）。不改变功能级对照表判定，故七表合计未变。
@@ -14,7 +46,7 @@
 4. **生物识别 UnsupportedSystem 档**：上游 `PrivateBiometricStatus` 五态含 UnsupportedSystem（Android 侧系统不支持），鸿蒙基线 6.0.0(20) 无此限制、该档不可达；本地 `data/PrivateAccessRepository.ets` 的 `enum PrivateBiometricStatus` 为五态 `NOT_SET_PASSWORD / AVAILABLE / NOT_ENROLLED / NO_HARDWARE / UNAVAILABLE`，无 UnsupportedSystem。
 5. **导航布局（tabletInterface）/ 多栏布局（multiPaneMode）**：`docs/PROJECT.md:46-48` 明确列为「额外设备形态适配」范围之外；批 6 已整行删（见批 6 节）。
 6. **整本正文内存缓存上限**：上游无此字段，本地 `data/BookRepository.ets` 架构差异引入，`pages/AppDownloadCacheSettingsPage.ets` 保留该行并加代码注释写明；属「上游没有但本地有架构理由」，保留，另见 `docs/CODE-CONVENTIONS.md:284`。
-7. **朗读界面形态（整页播放器）**：上游整页播放前提是「正在朗读」，本地零 TTS 引擎（`@kit.CoreSpeechKit` 未接）、零音频播放层，扩成整页只会得到「点了没声音」的空壳；属「已纳入范围、尚未排期」的待办（见 KI-ALOUD1）。
+7. **朗读界面形态（整页播放器）**：判「不做」时的依据是当时零 TTS 引擎（`@kit.CoreSpeechKit` 未接），扩成整页只会是空壳。此后批 3 已接系统 TTS、批 5 已做朗读面板，现新增 `pages/ReadAloudPlayerPage.ets` 听书界面（真实控件已接单例播放器，见上节「听书界面」）。本条历史判定保留作记录，当前状态以上节为准。
 8. **书籍导出入口（详情页溢出菜单）**：上游导出在书架管理页（`BookshelfManageScreen.kt:186-338` 的 `ExportBookService` 流程），不在详情页；本地 `data/EpubExporter.ets` 写出能力保留，入口待建（见 KI-EPUB1）。
 9. **翻译页只读**：翻译属在线服务且上游默认走 Google 翻译接口，本页两个 `TranslationSettingsChoice`（提供商 / 目标语言）设 `disabled`，落盘实现等判断段定范围；属范围之外。
 10. **实验室页 `eyeProtection` 行**：上游 `LabSettings` 有该字段，本地 `data/LabSettingsRepository.ets` 有 `eyeProtection` 字段但 `pages/AppLabSettingsPage.ets` 无对应界面行（只有「启用实验室 / 墨水屏显示」两行）；补行要接护眼渲染链，属另一个域，本批不补。

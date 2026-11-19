@@ -34,6 +34,10 @@ import {
   LocalReaderTitleBlock, LocalReaderTitleSegment
 } from './LocalReaderPaginator';
 import { ReadAloudSpan, EMPTY_READ_ALOUD_SPAN } from '../readaloud/SystemTtsPlayer';
+import {
+  ReadAloudSettingsRepository, ReadAloudSettingsSnapshot,
+  DEFAULT_READ_ALOUD_SETTINGS, copyReadAloudSettings
+} from '../data/ReadAloudSettingsRepository';
 import { ReaderTextLayoutStyle } from '../reader/ReaderTextLayoutEngine';
 import { ReaderChapterPageCache } from '../reader/ReaderChapterPageCache';
 // 页身份与跨章页表定位的纯函数（页层批次 3 建、批次 4 补全）。
@@ -482,6 +486,36 @@ export struct ReaderPage {
    * @Watch 在段切换时跟随位置 + 重绘；start<0 表示无朗读段。
    */
   @Prop @Watch('onReadAloudSpanChanged') readAloudSpan: ReadAloudSpan = EMPTY_READ_ALOUD_SPAN;
+  /**
+   * 批6：应用内朗读胶囊（上游是系统悬浮窗，三方做不到；退出阅读器即消失）。
+   * 播放中且 showReadAloudCapsule 为真时显示；位置可拖、松手存偏好。
+   */
+  @Prop @Watch('onCapsuleSettingsChanged') readAloudCapsuleSettings: ReadAloudSettingsSnapshot =
+    DEFAULT_READ_ALOUD_SETTINGS;
+  @Prop @Watch('onCapsuleActiveChanged') readAloudActive: boolean = false;
+  /** 批6：播放状态（0 空闲/1 播放/2 暂停），决定播放暂停图标方向与封面是否旋转。 */
+  @Prop @Watch('onCapsuleAloudStateChanged') capsuleAloudState: number = 0;
+  @State capsuleX: number = 0;
+  @State capsuleY: number = 0;
+  @State capsuleCollapsed: boolean = false;
+  @State capsuleDragBaseX: number = 0;
+  @State capsuleDragBaseY: number = 0;
+  @State capsuleCoverAngle: number = 0;
+  /** 渲染宽度（vp）：折叠 56 / 展开 140，animateTo 320ms 插值以还原上游连续揭示。 */
+  @State capsuleWidthAnim: number = 56;
+  /** 位置是否已从偏好换算成渲染中心坐标（尺寸到位后只换算一次）。 */
+  private capsulePosInitialized: boolean = false;
+  /** 胶囊中心距屏幕底部的默认距离（上游 CapsuleDefaultCenterFromBottomDp = 72）。 */
+  private readonly capsuleCenterFromBottom: number = 72;
+  /** 胶囊自动收起计时器（上游 3 秒无操作折叠）。 */
+  private capsuleCollapseTimer: number = -1;
+  /** 封面旋转计时器（上游播放时封面 20 秒转一圈）。 */
+  private capsuleCoverTimer: number = -1;
+  /** 胶囊尺寸（vp），位置钳位用；折叠态只露封面、展开态揭示按钮。 */
+  private readonly capsuleCoverSize: number = 48;
+  private readonly capsuleWidthCollapsed: number = 56;
+  private readonly capsuleWidthExpanded: number = 140;
+  private readonly capsuleHeight: number = 56;
   /** 自定义背景图片的沙箱路径；空串表示没有，上游 ReadBookConfig.kt:549 bgType != 0 的情况。 */
   @Prop @Watch('onReaderCanvasStyleChanged') readerBackgroundImage: string = '';
   /** 背景图片不透明度百分比（0..100），上游 ReadBookConfig.kt:548 bgAlpha。 */
@@ -552,7 +586,7 @@ export struct ReaderPage {
   // 系统会连续派发同一个整数值，重复跳同一页会让画布反复重绘而闪烁。
   @State sliderDragPreviewPageIndex: number = -1;
   @State viewportHeight: number = 0;
-  @State readerContentWidth: number = 0;
+  @State @Watch('onCapsuleViewportChanged') readerContentWidth: number = 0;
   @State readerContentRevision: number = 0;
   @State readerBodyFontFamily: string = 'HarmonyOS Sans';
   @State readerTitleFontFamily: string = 'HarmonyOS Sans';
@@ -879,6 +913,15 @@ export struct ReaderPage {
   onOpenReadAloud: () => void = () => {};
   /** 底栏「朗读」点击：开始/停止朗读（上游 ReadMenuActionDefs.kt:407 的 LongClickReadAloud 之外的点击分支）。 */
   onToggleReadAloud: () => void = () => {};
+  /** 批6：胶囊播放暂停按钮 —— 直接切播放/暂停，不改朗读的启停状态。 */
+  onCapsulePauseToggle: () => void = () => {};
+  /** 批6：胶囊停止按钮 —— 停止朗读。 */
+  onCapsuleStop: () => void = () => {};
+  /**
+   * 批6：封面在完全展开态被点击 —— 上游打开 player 听书界面（onOpenPlayer）。
+   * 本地无 player，降级到朗读面板；在 KNOWN-ISSUES KI-ALOUD-CAPSULE 如实说明。
+   */
+  onCapsuleOpenPlayer: () => void = () => {};
   onOpenImagePreview: (uri: string) => void = (_uri: string) => {};
   onCloseImagePreview: () => void = () => {};
   onControlsShown: () => void = () => {};
@@ -979,6 +1022,8 @@ export struct ReaderPage {
     if (!this.startPositionPending) {
       this.syncProgressIndexFromPosition();
     }
+    // 批6：胶囊位置从偏好载入（杀进程重开仍记住）——尺寸到位后按上游坐标语义换算。
+    this.syncCapsulePositionFromSettings();
     // 首排之前先把本章图片尺寸量好：排版期就用真实尺寸，图片解码完只重绘不重排
     this.primeContentImageSizesSync();
     if (this.startPositionPending) {
@@ -1013,6 +1058,14 @@ export struct ReaderPage {
     // 批5：关阅读页释放章页快照（内存缓存不跨进程，退出即清）。
     ReaderChapterPageCache.clear();
     this.stopAutoPageTimer();
+    if (this.capsuleCollapseTimer >= 0) {
+      clearTimeout(this.capsuleCollapseTimer);
+      this.capsuleCollapseTimer = -1;
+    }
+    if (this.capsuleCoverTimer >= 0) {
+      clearInterval(this.capsuleCoverTimer);
+      this.capsuleCoverTimer = -1;
+    }
     this.resetPageTurnTransition();
     if (this.scrollProgressTimer >= 0) {
       clearTimeout(this.scrollProgressTimer);
@@ -3010,6 +3063,162 @@ export struct ReaderPage {
       this.emitReaderProgress(progress, sourcePos, true);
     }
     this.invalidateReaderCanvas();
+  }
+
+  /** 进度环百分比：用当前段首坐标 / 本章正文长度近似，避免依赖播放器内部句序。 */
+  private currentAloudProgress(): number {
+    const total = this.localSemanticContent.length;
+    if (total <= 0 || this.readAloudSpan.start < 0) { return 0; }
+    return Math.max(0, Math.min(100,
+      Math.round(this.readAloudSpan.start / total * 100)));
+  }
+
+  // ---- 批6：朗读胶囊 helpers（上游 ReadAloudCapsule.kt / CapsulePosition.kt） ----
+  /** 胶囊是否处于暂停态：上游 isPaused 决定封面是否旋转、播放暂停图标方向。 */
+  private capsulePaused(): boolean {
+    return this.capsuleAloudState !== 1;
+  }
+
+  /** 按上游 tween(320) 连续展开/折叠；仅展开态重新起自动收起计时。 */
+  private setCapsuleCollapsed(collapsed: boolean): void {
+    const target = collapsed ? this.capsuleWidthCollapsed : this.capsuleWidthExpanded;
+    this.getUIContext().animateTo({ duration: 320, curve: Curve.EaseInOut }, () => {
+      this.capsuleWidthAnim = target;
+      this.capsuleCollapsed = collapsed;
+    });
+    if (!collapsed) { this.resetCapsuleCollapseTimer(); }
+  }
+
+  /** 进入播放态展开胶囊并起 3 秒自动收起计时；停止时清计时并复位（上游 ReadAloudCapsule.kt:189-195）。 */
+  private onCapsuleActiveChanged(): void {
+    // 上游 collapsed 初值由保存位置决定（贴边即折叠），进入播放态不强制展开。
+    this.syncCapsuleCoverRotation();
+    if (this.readAloudActive && !this.capsuleCollapsed) {
+      this.resetCapsuleCollapseTimer();
+    } else if (this.capsuleCollapseTimer >= 0) {
+      clearTimeout(this.capsuleCollapseTimer);
+      this.capsuleCollapseTimer = -1;
+    }
+  }
+
+  /** 播放状态变化：控制封面旋转（暂停停转）与自动收起计时。 */
+  private onCapsuleAloudStateChanged(): void {
+    this.syncCapsuleCoverRotation();
+    if (!this.readAloudActive || this.capsulePaused()) { return; }
+    this.resetCapsuleCollapseTimer();
+  }
+
+  /** 上游封面播放时 20 秒转一圈（coverRotation:141-149），暂停即停。 */
+  private syncCapsuleCoverRotation(): void {
+    if (this.capsuleCoverTimer >= 0) {
+      clearInterval(this.capsuleCoverTimer);
+      this.capsuleCoverTimer = -1;
+    }
+    if (!this.readAloudActive || this.capsuleAloudState !== 1) { return; }
+    this.capsuleCoverTimer = setInterval(() => {
+      this.capsuleCoverAngle = (this.capsuleCoverAngle + 3) % 360;
+    }, 100);
+  }
+
+  /** 封面点击（上游 :310-313）：折叠/半展开时先展开，完全展开时打开 player（本地降级面板）。 */
+  private onCapsuleCoverClick(): void {
+    if (this.capsuleCollapsed) {
+      this.setCapsuleCollapsed(false);
+    } else {
+      this.onCapsuleOpenPlayer();
+    }
+    this.resetCapsuleCollapseTimer();
+  }
+
+  /** 任何触摸重置自动收起计时；仅在播放中 + 开关开 + 当前展开时重新计时。 */
+  private resetCapsuleCollapseTimer(): void {
+    if (this.capsuleCollapseTimer >= 0) {
+      clearTimeout(this.capsuleCollapseTimer);
+      this.capsuleCollapseTimer = -1;
+    }
+    if (this.readAloudActive && this.readAloudCapsuleSettings.capsuleAutoCollapse && !this.capsuleCollapsed) {
+      this.capsuleCollapseTimer = setTimeout(() => {
+        this.setCapsuleCollapsed(true);
+        this.capsuleCollapseTimer = -1;
+      }, 3000);
+    }
+  }
+
+  private onCapsuleSettingsChanged(): void {
+    this.syncCapsulePositionFromSettings();
+  }
+
+  /**
+   * 上游 CapsulePosition.kt:5-6 明确：偏好存的是相对屏幕底部中央的中心偏移（vp），
+   * 不是左上坐标。默认 0,0 → 胶囊中心落在屏幕中央、距底 72vp（上游 CapsuleDefaultCenterFromBottomDp）。
+   */
+  private syncCapsulePositionFromSettings(): void {
+    if (this.readerContentWidth <= 0 || this.viewportHeight <= 0) { return; }
+    this.capsuleX = this.readerContentWidth / 2 + this.readAloudCapsuleSettings.capsuleOffsetX;
+    this.capsuleY = this.viewportHeight - this.capsuleCenterFromBottom
+      - this.readAloudCapsuleSettings.capsuleOffsetY;
+    // 上游 collapsed 初值（ReadAloudCapsule.kt:166）：保存位置贴左右边缘则初始即折叠。
+    const edge = this.readerContentWidth / 2;
+    this.capsuleCollapsed = edge > 0 &&
+      (this.readAloudCapsuleSettings.capsuleOffsetX <= -edge + 0.5 ||
+       this.readAloudCapsuleSettings.capsuleOffsetX >= edge - 0.5);
+    this.capsuleWidthAnim = this.capsuleCollapsed
+      ? this.capsuleWidthCollapsed : this.capsuleWidthExpanded;
+    this.capsulePosInitialized = true;
+  }
+
+  /** 阅读区尺寸到位后首次换算位置（aboutToAppear 时还没有尺寸）。 */
+  private onCapsuleViewportChanged(): void {
+    if (!this.capsulePosInitialized) { this.syncCapsulePositionFromSettings(); }
+  }
+
+  /** 胶囊是否可见：播放中 + 设置开启。 */
+  private capsuleVisible(): boolean {
+    return this.readAloudActive && this.readAloudCapsuleSettings.showReadAloudCapsule;
+  }
+
+  /** 位置钳位：限制在视口内，否则拖出屏幕就再也找不回来（本地必须多写）。 */
+  private clampCapsule(x: number, y: number): void {
+    const halfW = this.capsuleCurrentWidth() / 2;
+    const halfH = this.capsuleHeight / 2;
+    this.capsuleX = Math.max(halfW, Math.min(x, this.readerContentWidth - halfW));
+    this.capsuleY = Math.max(halfH, Math.min(y, this.viewportHeight - halfH));
+  }
+
+  /** 胶囊当前宽度：展开态揭示按钮，折叠态只剩封面。 */
+  private capsuleCurrentWidth(): number {
+    return this.capsuleCollapsed ? this.capsuleWidthCollapsed : this.capsuleWidthExpanded;
+  }
+
+  /**
+   * 上游 capsulePresentationOffsetX（CapsulePosition.kt:42-52）：展开时中心连续让位，
+   * 保证完整胶囊不出屏。本地按当前渲染宽度把中心再钳位一次（不改存储的 capsuleX）。
+   */
+  private capsuleRenderX(): number {
+    const half = this.capsuleWidthAnim / 2;
+    const w = this.readerContentWidth > 0 ? this.readerContentWidth : half * 2;
+    return Math.max(half, Math.min(this.capsuleX, w - half));
+  }
+
+  /** 松手存偏好：把钳位后的坐标写回仓库（capsuleOffsetX/Y）。 */
+  private persistCapsulePosition(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const updated: ReadAloudSettingsSnapshot =
+      copyReadAloudSettings(this.readAloudCapsuleSettings);
+    // 反弹回上游坐标语义：相对底部中央的中心偏移。
+    // 边缘吸附时 capsuleX 被设为视口边界（0 或屏宽），要还原成 ±edge 供 dockSide 判定，
+    // 而不是 (0 - W/2) 直接存。
+    const halfW: number = this.readerContentWidth / 2;
+    if (this.capsuleX <= 0) {
+      updated.capsuleOffsetX = -halfW;
+    } else if (this.capsuleX >= this.readerContentWidth) {
+      updated.capsuleOffsetX = halfW;
+    } else {
+      updated.capsuleOffsetX = this.capsuleX - halfW;
+    }
+    updated.capsuleOffsetY = this.viewportHeight - this.capsuleCenterFromBottom - this.capsuleY;
+    ReadAloudSettingsRepository.save(context, updated);
   }
 
   private reportReaderPageProgress(): void {
@@ -8722,6 +8931,102 @@ export struct ReaderPage {
         // 之前用 Default 会把整屏都拦住——提醒弹出的 5 秒里用户连菜单都唤不出来。
         .hitTestBehavior(HitTestMode.None)
         .zIndex(900)
+      }
+
+      // 批6：朗读胶囊 —— 应用内浮层（退出阅读器即消失，平台无系统悬浮窗能力）。
+      // 结构照上游 ReadAloudCapsule.kt：封面圆图（点击展开/开player）+ 播放暂停 + 进度环内含停止。
+      // 日白夜黑底色不跟随主题（上游 capsuleSurfaceColor）。
+      if (this.capsuleVisible()) {
+        Row() {
+          // 封面圆图：折叠态唯一元素；点击折叠时展开、完全展开时开 player（本地降级面板）。
+          Stack({ alignContent: Alignment.Center }) {
+            if (this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
+              Image(this.book.coverUri)
+                .width(this.capsuleCoverSize).height(this.capsuleCoverSize)
+                .borderRadius(this.capsuleCoverSize / 2)
+                .objectFit(ImageFit.Cover)
+            } else {
+              Text(this.book.title.length > 0 ? this.book.title.substring(0, 1) : '书')
+                .fontSize(20).fontWeight(FontWeight.Bold)
+                .fontColor(this.readerNightMode ? '#1B1C22' : '#FFFFFF')
+            }
+          }
+          .width(this.capsuleCoverSize).height(this.capsuleCoverSize)
+          .borderRadius(this.capsuleCoverSize / 2)
+          .backgroundColor(this.readerNightMode ? '#E5E6EB' : '#3A3B42')
+          .clip(true)
+          .rotate({ angle: this.capsuleCoverAngle })
+          .onClick(() => this.onCapsuleCoverClick())
+
+          // 展开态揭示：播放暂停 + 进度环内含停止（上游 CapsuleContent:400-455）。
+          if (!this.capsuleCollapsed) {
+            Row() {
+              // 播放暂停按钮：isPaused ? PlayArrow : Pause。
+              Stack({ alignContent: Alignment.Center }) {
+                Image($r(this.capsulePaused() ? 'app.media.reader_play' : 'app.media.reader_pause'))
+                  .width(20).height(20)
+                  .fillColor(this.readerNightMode ? '#FFFFFF' : '#000000')
+              }
+              .width(36).height(36)
+              .borderRadius(18)
+              .backgroundColor(this.readerNightMode ? '#1AFFFFFF' : '#1A000000')
+              .onClick(() => { this.onCapsulePauseToggle(); this.resetCapsuleCollapseTimer(); })
+
+              // 进度环 + 中间停止按钮（上游 CircularProgressIndicator + Close）。
+              Stack({ alignContent: Alignment.Center }) {
+                Progress({ value: this.readAloudSpan.start >= 0 ? this.currentAloudProgress() : 0,
+                  total: 100, type: ProgressType.Ring })
+                  .width(36).height(36)
+                  .color(this.readerNightMode ? '#99FFFFFF' : '#99000000')
+                Image($r('app.media.profile_close'))
+                  .width(16).height(16)
+                  .fillColor(this.readerNightMode ? '#FFFFFF' : '#000000')
+                  .onClick(() => this.onCapsuleStop())
+              }
+              .width(36).height(36)
+            }
+            .width(84).height(40)
+            .margin({ left: 4 })
+          }
+        }
+        .width(this.capsuleWidthAnim)
+        .height(this.capsuleHeight)
+        .padding({ left: 4, right: 4 })
+        .backgroundColor(this.readerNightMode ? '#FF000000' : '#FFFFFFFF')
+        .borderRadius(28)
+        .shadow({ radius: 12, color: '#66000000', offsetY: 2 })
+        .position({ x: this.capsuleRenderX() - this.capsuleWidthAnim / 2, y: this.capsuleY - this.capsuleHeight / 2 })
+        .gesture(
+          PanGesture()
+            .onActionStart(() => {
+              this.capsuleDragBaseX = this.capsuleX;
+              this.capsuleDragBaseY = this.capsuleY;
+              this.resetCapsuleCollapseTimer();
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.clampCapsule(this.capsuleDragBaseX + event.offsetX,
+                this.capsuleDragBaseY + event.offsetY);
+            })
+            .onActionEnd(() => {
+              // 上游 snapCapsuleOffsetX：松手时距边缘 72vp 内吸附到边线（中心偏移 ±W/2）。
+              const edge = this.readerContentWidth / 2;
+              const offsetX = this.capsuleX - edge;
+              if (edge - Math.abs(offsetX) <= 72) {
+                // 上游语义：吸附保存 ±edge（capsuleDockSide 据此判贴边折叠）；
+                // 渲染中心由 capsuleRenderX 钳到可见范围，应用内浮层不出屏。
+                this.capsuleX = offsetX < 0 ? 0 : this.readerContentWidth;
+              }
+              this.persistCapsulePosition();
+              // 上游 capsuleDockSide != 0：吸附到边缘即折叠。
+              const halfW = this.capsuleWidthCollapsed / 2;
+              if (this.capsuleX <= halfW || this.capsuleX >= this.readerContentWidth - halfW) {
+                this.setCapsuleCollapsed(true);
+              }
+              this.resetCapsuleCollapseTimer();
+            })
+        )
+        .onClick(() => this.resetCapsuleCollapseTimer())
+        .zIndex(950)
       }
     }
     .width('100%')

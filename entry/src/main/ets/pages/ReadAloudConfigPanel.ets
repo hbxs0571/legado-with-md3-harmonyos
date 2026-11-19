@@ -22,6 +22,8 @@ export struct ReadAloudConfigPanel {
 
   onBack: () => void = () => {};
   onSettingsChange: (settings: ReadAloudSettingsSnapshot) => void = (_settings: ReadAloudSettingsSnapshot) => {};
+  /** 批6：复位胶囊位置（上游 ReadAloudConfigContent.kt:243 reset_read_aloud_capsule_position）。 */
+  onResetCapsulePosition: () => void = () => {};
 
   aboutToAppear(): void {
     this.capsuleVisible = this.settings.showReadAloudCapsule;
@@ -76,6 +78,13 @@ export struct ReadAloudConfigPanel {
         .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 16 })
         .backgroundColor('#202127').borderRadius(14)
         .margin({ left: 14, right: 14, bottom: 10 })
+
+        Text('复位朗读胶囊位置')
+          .fontSize(13).fontColor(this.themeColorTextPrimary)
+          .width('100%').textAlign(TextAlign.Center).padding({ top: 14, bottom: 14 })
+          .backgroundColor('#202127').borderRadius(14)
+          .margin({ left: 14, right: 14, bottom: 10 })
+          .onClick(() => this.onResetCapsulePosition())
       }
       .width('100%').height('60%')
       .backgroundColor(this.themeColorSurfaceSecondary)

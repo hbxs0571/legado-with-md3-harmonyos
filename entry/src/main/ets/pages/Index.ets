@@ -140,6 +140,7 @@ import {
 } from '../data/ReadAloudSettingsRepository';
 import { SpeechSegmenter, SpeechUnit } from '../readaloud/SpeechSegmenter';
 import { SystemTtsPlayer, ReadAloudState, ReadAloudSpan, EMPTY_READ_ALOUD_SPAN } from '../readaloud/SystemTtsPlayer';
+import { ReadAloudPlayerPage } from './ReadAloudPlayerPage';
 import {
   BackupCategoryOption, BackupEntryPreview, BackupIgnoreLists, BackupPreview, BackupRepository, BackupSelection
 } from '../data/BackupRepository';
@@ -722,7 +723,8 @@ struct Index {
   private readerBookmarkToggleQueue: Promise<void> = Promise.resolve();
   /** 系统 TTS 朗读播放器（批 3）。单例，引擎复用，退阅读页不 shutdown。 */
   private readonly readAloudPlayer: SystemTtsPlayer = SystemTtsPlayer.getInstance();
-  private readAloudActive: boolean = false;
+  // 批6：改 @State，播放/停止要驱动 ReaderPage 朗读胶囊的显隐。
+  @State readAloudActive: boolean = false;
   /** 批4：当前朗读段区间，传给 ReaderPage 做高亮与翻页跟随；stop 时播放器上报 start<0 清空。 */
   @State readAloudSpan: ReadAloudSpan = EMPTY_READ_ALOUD_SPAN;
   /** 批5：朗读偏好快照，供面板显示与编辑；打开面板/启动朗读时从仓库载入。 */
@@ -733,6 +735,14 @@ struct Index {
   @State aloudStateNum: number = 0;
   @State aloudUnitIndex: number = 0;
   @State aloudUnitTotal: number = 0;
+  /** 听书页：当前句/下一句/全文段列表，来自 SystemTtsPlayer 的 onTextChange（与高亮同源）。 */
+  @State aloudCurrentText: string = '';
+  @State aloudNextText: string = '';
+  @State aloudTexts: string[] = [];
+  /** 听书页全屏浮层显隐（上游 Activity 级 morph 浮层的本地近似）。 */
+  @State showReadAloudPlayer: boolean = false;
+  @State aloudVoiceName: string = '聆小珊';
+  private currentVoicePerson: number = 13;
   /** 批5：定时到点定时器；章节档的已读章节计数。 */
   private readAloudTimerId: number = -1;
   private aloudChaptersRead: number = 0;
@@ -7848,7 +7858,16 @@ private canWriteInto(dir: string): boolean {
         console.info(`[ReadAloud] unit advance index=${index}`);
         this.aloudUnitIndex = index;
       };
+      // 听书页当前句/下一句/正文列表：复用与高亮段同源的 onTextChange。
+      this.readAloudPlayer.onTextChange = (current: string, next: string, index: number): void => {
+        this.aloudCurrentText = current;
+        this.aloudNextText = next;
+        this.aloudUnitIndex = index;
+      };
       this.readAloudPlayer.load(units, 0);
+      this.aloudTexts = this.readAloudPlayer.allUnitTexts();
+      this.aloudCurrentText = this.readAloudPlayer.unitText(0);
+      this.aloudNextText = this.readAloudPlayer.unitText(1);
       this.aloudUnitTotal = units.length;
       this.aloudUnitIndex = 0;
       this.readAloudPlayer.play();
@@ -7949,6 +7968,70 @@ private canWriteInto(dir: string): boolean {
     const context = this.getUIContext().getHostContext();
     if (context !== undefined) { await ReadAloudSettingsRepository.save(context, updated); }
     this.scheduleAloudTimer();
+  }
+
+  // ---- 听书页（player）回调：全部作用于批3的 SystemTtsPlayer 单例 ----
+  /** 胶囊展开态点封面 → 打开听书界面（上游 onOpenPlayer / OverlayBus.request）。 */
+  private openReadAloudPlayer(): void {
+    this.aloudVoiceName = this.voiceNameFor(this.currentVoicePerson);
+    this.showReadAloudPlayer = true;
+  }
+
+  private closeReadAloudPlayer(): void {
+    this.showReadAloudPlayer = false;
+  }
+
+  private voiceNameFor(person: number): string {
+    if (person === 21) { return '凌飞哲'; }
+    if (person === 8) { return '英语人声'; }
+    return '聆小珊';
+  }
+
+  /** 音色切换：系统 TTS 仅 3 个 person，重建引擎后从当前句续播。 */
+  private onPlayerSelectVoice(person: number): void {
+    this.currentVoicePerson = person;
+    this.aloudVoiceName = this.voiceNameFor(person);
+    this.readAloudPlayer.setVoicePerson(person);
+    if (this.readAloudActive) { this.readAloudPlayer.play(); }
+  }
+
+  /** 进度条/正文点选：跳到指定句，当前句则不重复 seek（避免拖动抖动重建引擎）。 */
+  private onPlayerSeek(index: number): void {
+    if (index === this.readAloudPlayer.currentIndex()) { return; }
+    this.readAloudPlayer.seekTo(index);
+  }
+
+  /** 目录选章：按绝对章序换算成相对 delta，复用已有的换章链路。 */
+  private onPlayerSelectChapter(index: number): void {
+    const chapters = BookRepository.cachedChapterTitles(this.selectedBook);
+    const current = this.selectedBook.chapterIndex ?? chapters.indexOf(this.selectedChapter);
+    if (index === current) { return; }
+    this.turnReadAloudChapter(index - current);
+  }
+
+  /** 切经典：收起听书浮层，回到已有经典朗读面板。 */
+  private onPlayerSwitchToClassic(): void {
+    this.showReadAloudPlayer = false;
+    this.openReadAloudSettings();
+  }
+
+  /** 听书页设置按钮：先载偏好再开三开关面板（不切路由，浮层上直接叠）。 */
+  private async openPlayerConfig(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      this.readAloudSettings = await ReadAloudSettingsRepository.load(context);
+    }
+    this.showAloudConfig = true;
+  }
+
+  /** 批6：胶囊位置复位 —— 偏好 X/Y 归零并落盘。 */
+  private async onCapsuleResetPosition(): Promise<void> {
+    const updated = copyReadAloudSettings(this.readAloudSettings);
+    updated.capsuleOffsetX = 0;
+    updated.capsuleOffsetY = 0;
+    this.readAloudSettings = updated;
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) { await ReadAloudSettingsRepository.save(context, updated); }
   }
 
   private async onAloudSettingsChange(settings: ReadAloudSettingsSnapshot): Promise<void> {
@@ -8938,6 +9021,13 @@ private canWriteInto(dir: string): boolean {
             onOpenReadAloud: () => this.openReadAloudSettings(),
             onToggleReadAloud: () => { this.toggleReadAloud(); },
             readAloudSpan: this.readAloudSpan,
+            // 批6：朗读胶囊 —— 只做应用内浮层，退出阅读器即消失。
+            readAloudActive: this.readAloudActive,
+            capsuleAloudState: this.aloudStateNum,
+            readAloudCapsuleSettings: this.readAloudSettings,
+            onCapsulePauseToggle: () => this.onAloudPauseToggle(),
+            onCapsuleStop: () => this.onAloudStop(),
+            onCapsuleOpenPlayer: () => this.openReadAloudPlayer(),
             onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULE_PREVIEW),
             onToggleNightMode: () => this.toggleReaderNightMode(),
             onToggleEyeProtection: () => this.toggleEyeProtection(),
@@ -9401,7 +9491,8 @@ private canWriteInto(dir: string): boolean {
                 ReadAloudConfigPanel({
                   settings: this.readAloudSettings,
                   onBack: () => { this.showAloudConfig = false; },
-                  onSettingsChange: (settings: ReadAloudSettingsSnapshot) => this.onAloudSettingsChange(settings)
+                  onSettingsChange: (settings: ReadAloudSettingsSnapshot) => this.onAloudSettingsChange(settings),
+                  onResetCapsulePosition: () => this.onCapsuleResetPosition()
                 })
               }
             }
@@ -10928,6 +11019,52 @@ private canWriteInto(dir: string): boolean {
     // 启动验证门：盖在最上层，验过本地密码才放行（verifyOnAppStart）。
     if (this.showAppStartGate) {
       this.AppStartGatePanel()
+    }
+    // 听书界面浮层：上游是 Activity 级 morph 浮层（不在导航栈），本地用根 Stack 全屏浮层近似。
+    if (this.showReadAloudPlayer) {
+      Stack() {
+        ReadAloudPlayerPage({
+          bookName: this.selectedBook.title,
+          author: this.selectedBook.author,
+          chapterTitle: this.selectedChapter,
+          coverUri: this.selectedBook.customCoverUri ?? this.selectedBook.coverUri ?? '',
+          isPlaying: this.aloudStateNum === ReadAloudState.PLAYING,
+          unitIndex: this.aloudUnitIndex,
+          unitTotal: this.aloudUnitTotal,
+          currentText: this.aloudCurrentText,
+          nextText: this.aloudNextText,
+          texts: this.aloudTexts,
+          chapters: BookRepository.cachedChapterTitles(this.selectedBook),
+          currentChapterIndex: this.selectedBook.chapterIndex ?? BookRepository.cachedChapterTitles(this.selectedBook).indexOf(this.selectedChapter),
+          speedLabel: `${this.readAloudSettings.ttsSpeechRate}x`,
+          timerLabel: this.readAloudSettings.timerMode === 'minute'
+            ? (this.readAloudSettings.ttsTimer > 0 ? `${this.readAloudSettings.ttsTimer} 分钟后停止` : '关闭')
+            : (this.readAloudSettings.timerChapters > 0 ? `${this.readAloudSettings.timerChapters} 章后停止` : '关闭'),
+          voiceName: this.aloudVoiceName,
+          onBack: () => this.closeReadAloudPlayer(),
+          onPrevious: () => this.onAloudPrevious(),
+          onPreviousChapter: () => this.turnReadAloudChapter(-1),
+          onTogglePause: () => this.onAloudPauseToggle(),
+          onNextChapter: () => this.turnReadAloudChapter(1),
+          onNext: () => this.onAloudNext(),
+          onSeek: (index: number) => this.onPlayerSeek(index),
+          onSelectChapter: (index: number) => this.onPlayerSelectChapter(index),
+          onSwitchToClassic: () => this.onPlayerSwitchToClassic(),
+          onSelectVoice: (person: number) => this.onPlayerSelectVoice(person),
+          onRateChange: (rate: number) => this.onAloudRateChange(rate),
+          onTimerChange: (mode: string, minutes: number, chapters: number) =>
+            this.onAloudTimerChange(mode, minutes, chapters),
+          onOpenConfig: () => this.openPlayerConfig()
+        })
+        if (this.showAloudConfig) {
+          ReadAloudConfigPanel({
+            settings: this.readAloudSettings,
+            onBack: () => { this.showAloudConfig = false; },
+            onSettingsChange: (settings: ReadAloudSettingsSnapshot) => this.onAloudSettingsChange(settings),
+            onResetCapsulePosition: () => this.onCapsuleResetPosition()
+          })
+        }
+      }.width('100%').height('100%')
     }
     }.width('100%').height('100%')
   }
