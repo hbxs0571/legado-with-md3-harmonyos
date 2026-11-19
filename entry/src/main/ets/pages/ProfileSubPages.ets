@@ -7,6 +7,7 @@ import { ReadRecordHeatmap } from '../components/ReadRecordHeatmap';
 import { BookCover } from '../components/BookCover';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
+import { FONT_LABEL_SMALL } from '../components/UiTokens';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import {
   PROFILE_PAGE_SUBTITLE_SIZE,
@@ -3444,6 +3445,7 @@ export struct ReadRecordsPage {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
@@ -3477,6 +3479,9 @@ export struct ReadRecordsPage {
    * 上游 `isTargetGranted(null, groupMask)` 传的也是 null，同一处限制。
    */
   @StorageProp('privateGrantedGroupIds') privateGrantedGroupIds: number[] = [];
+  /** 列表首个可见项与滚动偏移：悬浮日期条只在滚过一定距离后出现（对齐上游 floatingDate）。 */
+  @State listFirstVisibleIndex: number = 0;
+  @State listFirstVisibleScrollOffset: number = 0;
   @State recordEnabled: boolean = true;
   @State displayMode: number = 0;
   @State showSearch: boolean = false;
@@ -3575,6 +3580,51 @@ export struct ReadRecordsPage {
     const granted = mask > 0 && this.privateGrantedGroupIds.some((groupId: number) =>
       groupIds.includes(groupId) && groupId > 0 && Math.floor(mask / groupId) % 2 === 1);
     return !granted;
+  }
+
+  /** 日期分组头：汇总视图右侧带当天总时长，时间线只有日期。
+   * 用 @Builder 生成的 CustomBuilder 传给 ListItemGroup.header。 */
+  @Builder
+  private dateHeaderBuilder(dateKey: string, duration: string) {
+    Row() {
+      Text(ReadRecordRepository.formatFriendlyDate(dateKey)).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
+      Blank()
+      if (duration.length > 0) {
+        Text(duration).fontSize(13).fontColor(this.themeColorAccent)
+      }
+    }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+  }
+
+  /** 悬浮日期条文案：汇总视图带当天总时长，时间线只有日期，最后阅读不显示。 */
+  private floatingDateLabel(): string {
+    if (this.displayMode === 2) { return ''; }
+    // 对齐上游 floatingDate 两条：firstVisibleItemIndex > 1 || firstVisibleItemScrollOffset > 24。
+    // first=0 是「阅读总成就」卡、first=1 是第一个日期头，都算列表顶部，不显示悬浮条。
+    // 这里不再单看累加偏移：Spring 回弹后绝对位移无法可靠归零，会导致滚到顶悬浮条残留。
+    const first = this.listFirstVisibleIndex;
+    const shouldStick = first > 1 || (first === 1 && this.listFirstVisibleScrollOffset > 24);
+    if (!shouldStick) { return ''; }
+    const date = this.currentVisibleDate();
+    if (date.length === 0) { return ''; }
+    if (this.displayMode === 0) {
+      return `${ReadRecordRepository.formatFriendlyDate(date)} · ${this.formatRecordDuration(this.getSummaryDurationForDate(date))}`;
+    }
+    return ReadRecordRepository.formatFriendlyDate(date);
+  }
+
+  /** 首个可见项所属的日期：index 0 是「阅读总成就」卡，其后每个日期组占 1 个 header + N 个条目。 */
+  private currentVisibleDate(): string {
+    const keys = this.displayMode === 0 ? this.getSummaryDateKeys() : this.getDateKeys();
+    const first = this.listFirstVisibleIndex;
+    let idx = 1;
+    for (const key of keys) {
+      const count = this.displayMode === 0
+        ? this.getDistinctSummaryBooksForDate(key).length
+        : this.getRecordsForDate(key).length;
+      if (first >= idx && first <= idx + count) { return key; }
+      idx += 1 + count;
+    }
+    return keys.length > 0 ? keys[keys.length - 1] : '';
   }
 
   private cycleDisplayMode(): void {
@@ -4119,73 +4169,117 @@ export struct ReadRecordsPage {
       if (this.getVisibleRecords().length === 0) {
         this.ReadRecordEmptyMessage(this.records.length === 0 ? '没有阅读记录' : '没有匹配的阅读记录')
       } else {
-        Scroll() {
-          Column() {
-            Column() {
-              Text('阅读总成就').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-              Row() {
-                Text(`${this.getSummaryBookCount()} 本书`).fontSize(20).fontColor(this.themeColorAccent)
-                Blank()
-                Text(this.formatRecordDuration(this.getSummaryDuration()))
-                  .fontSize(16).fontColor(this.themeColorTextSecondary)
-              }.width('100%').margin({ top: 12 })
-            }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-              .margin({ left: 16, right: 16, bottom: 10 }).onClick(() => this.showCalendarSheet = true)
+        // 用 List + ListItemGroup 实现日期头吸顶（StickyStyle.Header），替换原来的
+        // Scroll + Column + 三层 ForEach：后者一次渲染全部条目，既没有 sticky，条目多了也掉帧。
+        // Stack 让悬浮日期条盖在列表左上角；它自己占满剩余高度，List 再填满 Stack。
+        Stack({ alignContent: Alignment.TopStart }) {
+          List() {
+            // 「阅读总成就」不是日期分组，用普通 ListItem 平铺在最前面。
+            ListItem() {
+              Column() {
+                Text('阅读总成就').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                Row() {
+                  Text(`${this.getSummaryBookCount()} 本书`).fontSize(20).fontColor(this.themeColorAccent)
+                  Blank()
+                  Text(this.formatRecordDuration(this.getSummaryDuration()))
+                    .fontSize(16).fontColor(this.themeColorTextSecondary)
+                }.width('100%').margin({ top: 12 })
+              }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+                .margin({ left: 16, right: 16, bottom: 10 }).onClick(() => this.showCalendarSheet = true)
+            }
             if (this.displayMode === 0) {
+              // 汇总视图：每个自然日一个 ListItemGroup，日期行作为 header 参与吸顶。
               ForEach(this.getSummaryDateKeys(), (dateKey: string) => {
-                Column() {
-                  Row() {
-                    Text(ReadRecordRepository.formatFriendlyDate(dateKey)).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
-                    Blank()
-                    Text(this.formatRecordDuration(this.getSummaryDurationForDate(dateKey)))
-                      .fontSize(13).fontColor(this.themeColorAccent)
-                  }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+                ListItemGroup({ header: this.dateHeaderBuilder(dateKey, this.formatRecordDuration(this.getSummaryDurationForDate(dateKey))) }) {
                   ForEach(this.getDistinctSummaryBooksForDate(dateKey), (detail: ReadRecordDetail) => {
-                    Row() {
-                      // 行首封面：上游 ReadRecordItem（ReadRecordScreen.kt:1408）是 44dp 宽、5:7 的 CoilBookCover。
-                      BookCover({
-                        book: this.bookForRecord(detail.bookName, detail.bookAuthor),
-                        displayWidth: 44,
-                        displayHeight: 62,
-                        cornerRadius: 4,
-                        locked: this.isRecordLocked(detail.bookName, detail.bookAuthor)
-                      }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
-                      Column() {
-                        // 锁定行书名/作者/时长一律空串（上游只留模糊封面，不留占位条与「已隐藏」字样）。
-                        Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookName)
-                          .fontSize(16).fontColor(this.themeColorTextPrimary)
-                        Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookAuthor)
-                          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-                      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                      Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? ''
-                        : this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
-                        .fontSize(13).fontColor(this.themeColorAccent)
-                    }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
-                      .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
-                      .backgroundColor(this.selectedKeys.has(this.aggregateKey(detail, dateKey)) ? '#48577D' : Color.Transparent)
-                      .onClick(() => {
-                        if (this.isInSelectionMode()) { this.toggleSelectionKey(this.aggregateKey(detail, dateKey)); }
-                      })
-                      .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
-                        // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
-                        if (this.isRecordLocked(detail.bookName, detail.bookAuthor)) { return; }
-                        this.enterSelectionWith(this.aggregateKey(detail, dateKey));
-                      }))
+                    ListItem() {
+                      Row() {
+                        // 行首封面：上游 ReadRecordItem（ReadRecordScreen.kt:1408）是 44dp 宽、5:7 的 CoilBookCover。
+                        BookCover({
+                          book: this.bookForRecord(detail.bookName, detail.bookAuthor),
+                          displayWidth: 44,
+                          displayHeight: 62,
+                          cornerRadius: 4,
+                          locked: this.isRecordLocked(detail.bookName, detail.bookAuthor)
+                        }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
+                        Column() {
+                          // 锁定行书名/作者/时长一律空串（上游只留模糊封面，不留占位条与「已隐藏」字样）。
+                          Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookName)
+                            .fontSize(16).fontColor(this.themeColorTextPrimary)
+                          Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookAuthor)
+                            .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                        Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? ''
+                          : this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
+                          .fontSize(13).fontColor(this.themeColorAccent)
+                      }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                        .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
+                        .backgroundColor(this.selectedKeys.has(this.aggregateKey(detail, dateKey)) ? '#48577D' : Color.Transparent)
+                        .onClick(() => {
+                          if (this.isInSelectionMode()) { this.toggleSelectionKey(this.aggregateKey(detail, dateKey)); }
+                        })
+                        .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                          // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
+                          if (this.isRecordLocked(detail.bookName, detail.bookAuthor)) { return; }
+                          this.enterSelectionWith(this.aggregateKey(detail, dateKey));
+                        }))
+                    }
                   }, (detail: ReadRecordDetail) =>
                     `${dateKey}-${detail.bookName}-${detail.bookAuthor}-${this.selectedKeys.has(this.aggregateKey(detail, dateKey))}-${this.isRecordLocked(detail.bookName, detail.bookAuthor)}`)
                 }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
             } else if (this.displayMode === 1) {
+              // 时间线视图：同样按日期分组吸顶，header 只有日期、不带时长（对齐上游 timeline_header）。
               ForEach(this.getDateKeys(), (dateKey: string) => {
-                Column() {
-                  Text(ReadRecordRepository.formatFriendlyDate(dateKey)).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
-                    .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+                ListItemGroup({ header: this.dateHeaderBuilder(dateKey, '') }) {
                   ForEach(this.getRecordsForDate(dateKey), (record: ReadTimeRecord) => {
+                    ListItem() {
+                      Row() {
+                        Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor(this.themeColorAccent)
+                          .width(56)
+                        // 行首封面：上游 TimelineSessionItem（ReadRecordScreen.kt:1254）同为 44dp 宽 5:7。
+                        BookCover({
+                          book: this.bookForRecord(record.bookName, record.bookAuthor),
+                          displayWidth: 44,
+                          displayHeight: 62,
+                          cornerRadius: 4,
+                          locked: this.isRecordLocked(record.bookName, record.bookAuthor)
+                        }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
+                        Column() {
+                          // 锁定行书名/作者/章号一律空串，只留封面上的「已加密」蒙层。
+                          Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
+                            .fontSize(16).fontColor(this.themeColorTextPrimary)
+                          Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
+                            .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                          if (!this.isRecordLocked(record.bookName, record.bookAuthor) && this.chapterLabelOf(record).length > 0) {
+                            Text(this.chapterLabelOf(record)).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                          }
+                        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                        Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
+                          : this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
+                      }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                        .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
+                        .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
+                        .onClick(() => {
+                          if (this.isInSelectionMode()) { this.toggleSelectionKey(this.timelineKey(record)); }
+                        })
+                        .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                          this.enterSelectionWith(this.timelineKey(record));
+                        }))
+                    }
+                  }, (record: ReadTimeRecord) => `${record.id}-${this.selectedKeys.has(this.timelineKey(record))}`)
+                }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
+                  .margin({ left: 16, right: 16, bottom: 8 })
+              }, (dateKey: string) => dateKey)
+            } else {
+              // 最后阅读视图：上游是普通 items(...) 平铺，没有日期分组，
+              // 所以这里不用 ListItemGroup、不参与吸顶（StickyStyle.Header 只对 group 的 header 生效）。
+              ForEach(this.getLatestRecords(), (record: ReadTimeRecord) => {
+                ListItem() {
+                  Column() {
                     Row() {
-                      Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor(this.themeColorAccent)
-                        .width(56)
-                      // 行首封面：上游 TimelineSessionItem（ReadRecordScreen.kt:1254）同为 44dp 宽 5:7。
+                      // 行首封面：上游 LatestReadItem（ReadRecordScreen.kt:1143）同为 44dp 宽 5:7。
                       BookCover({
                         book: this.bookForRecord(record.bookName, record.bookAuthor),
                         displayWidth: 44,
@@ -4194,77 +4288,71 @@ export struct ReadRecordsPage {
                         locked: this.isRecordLocked(record.bookName, record.bookAuthor)
                       }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
                       Column() {
-                        // 锁定行书名/作者/章号一律空串，只留封面上的「已加密」蒙层。
+                        // 锁定行只留封面上的「已加密」蒙层，行内文字区一律空白。
                         Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
-                          .fontSize(16).fontColor(this.themeColorTextPrimary)
+                          .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
                         Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
-                          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-                        if (!this.isRecordLocked(record.bookName, record.bookAuthor) && this.chapterLabelOf(record).length > 0) {
-                          Text(this.chapterLabelOf(record)).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
-                        }
+                          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                       Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
-                        : this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
-                    }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
-                      .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
-                      .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
-                      .onClick(() => {
-                        if (this.isInSelectionMode()) { this.toggleSelectionKey(this.timelineKey(record)); }
-                      })
-                      .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
-                        this.enterSelectionWith(this.timelineKey(record));
-                      }))
-                  }, (record: ReadTimeRecord) => `${record.id}-${this.selectedKeys.has(this.timelineKey(record))}`)
-                }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
-                  .margin({ left: 16, right: 16, bottom: 8 })
-              }, (dateKey: string) => dateKey)
-            } else {
-              ForEach(this.getLatestRecords(), (record: ReadTimeRecord) => {
-                Column() {
-                  Row() {
-                    // 行首封面：上游 LatestReadItem（ReadRecordScreen.kt:1143）同为 44dp 宽 5:7。
-                    BookCover({
-                      book: this.bookForRecord(record.bookName, record.bookAuthor),
-                      displayWidth: 44,
-                      displayHeight: 62,
-                      cornerRadius: 4,
-                      locked: this.isRecordLocked(record.bookName, record.bookAuthor)
-                    }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
-                    Column() {
-                      // 锁定行只留封面上的「已加密」蒙层，行内文字区一律空白。
-                      Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
-                        .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-                      Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
-                        .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
-                    }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                    Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
-                      : this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
-                      .fontSize(13).fontColor(this.themeColorAccent)
-                    // 「合并」是行内文字，锁定态一并隐去。
-                    if (!this.isRecordLocked(record.bookName, record.bookAuthor)) {
-                      Text('合并').fontSize(12).fontColor(this.themeColorAccent)
-                        .padding({ left: 10, right: 2 })
-                        .onClick(() => { this.openMergeSheetForRecord(record); })
-                    }
-                  }.width('100%')
-                  Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : this.latestReadLineOf(record))
-                    .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
-                }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
-                  .margin({ left: 16, right: 16, bottom: 8 })
-                  .onClick(() => {
-                    if (this.isInSelectionMode()) { this.toggleSelectionKey(this.latestKey(record)); }
-                  })
-                  .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
-                    // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
-                    if (this.isRecordLocked(record.bookName, record.bookAuthor)) { return; }
-                    this.enterSelectionWith(this.latestKey(record));
-                  }))
+                        : this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
+                        .fontSize(13).fontColor(this.themeColorAccent)
+                      // 「合并」是行内文字，锁定态一并隐去。
+                      if (!this.isRecordLocked(record.bookName, record.bookAuthor)) {
+                        Text('合并').fontSize(12).fontColor(this.themeColorAccent)
+                          .padding({ left: 10, right: 2 })
+                          .onClick(() => { this.openMergeSheetForRecord(record); })
+                      }
+                    }.width('100%')
+                    Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : this.latestReadLineOf(record))
+                      .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
+                  }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
+                    .margin({ left: 16, right: 16, bottom: 8 })
+                    .onClick(() => {
+                      if (this.isInSelectionMode()) { this.toggleSelectionKey(this.latestKey(record)); }
+                    })
+                    .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                      // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
+                      if (this.isRecordLocked(record.bookName, record.bookAuthor)) { return; }
+                      this.enterSelectionWith(this.latestKey(record));
+                    }))
+                }
               }, (record: ReadTimeRecord) =>
                 `${record.bookId}-${this.selectedKeys.has(this.latestKey(record))}-${this.isRecordLocked(record.bookName, record.bookAuthor)}`)
             }
-          }.width('100%').padding({ top: 8, bottom: 16 })
-        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
+          }
+          .width('100%').height('100%').padding({ top: 8, bottom: 16 })
+          .scrollBar(BarState.Off)
+          // 汇总/时间线两个视图的每个 ListItemGroup 都带 header，最后阅读视图不用 group，
+          // 所以 Header 吸顶不会出现「有 group 没 header」的空档。
+          .sticky(StickyStyle.Header)
+          .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+          .onScrollIndex((first: number, _last: number, _center: number) => {
+            // 首个可见项变了，偏移从零重新累计（对齐 CatalogPage.ets:906 的写法）。
+            this.listFirstVisibleIndex = first;
+            this.listFirstVisibleScrollOffset = 0;
+          })
+          .onDidScroll((offset: number, _state: ScrollState) => {
+            // offset 是带符号的位移增量：向下滚为正、向上滚为负。必须带符号累加并钳到 0，
+            // 回滚到顶时偏移才能归零、悬浮条才消失（验收第 5 条）。
+            // 任务书示例写 += Math.abs(offset)，但那样 Spring 回弹后偏移只增不减，
+            // 滚到顶仍残留 >24，与「最顶部不显示悬浮条」的验收直接冲突，故按带符号处理。
+            this.listFirstVisibleScrollOffset = Math.max(0, this.listFirstVisibleScrollOffset + offset);
+          })
+
+          // 悬浮日期条：对齐上游 TopFloatingStickyItem（TextCard，圆角 8、padding 8）。
+          // hitTestBehavior(None) 必须加，否则会挡住下面日期头/条目的点击。
+          if (this.floatingDateLabel().length > 0) {
+            Text(this.floatingDateLabel())
+              .fontSize(FONT_LABEL_SMALL).fontColor(this.themeColorTextPrimary)
+              .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+              .backgroundColor(this.themeColorSurfaceSecondary)
+              .borderRadius(8)
+              .margin({ left: 8, top: 4 })
+              .hitTestBehavior(HitTestMode.None)
+          }
+        }.width('100%').layoutWeight(1)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       // 三个半模态共用一个 bindSheet：同一节点链式挂多个 bindSheet 时，
