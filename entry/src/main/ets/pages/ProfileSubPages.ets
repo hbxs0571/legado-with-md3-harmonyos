@@ -3491,6 +3491,8 @@ export struct ReadRecordsPage {
   @State emptyFaceIndex: number = Math.floor(Math.random() * BOOKMARK_EMPTY_FACES.length);
   @State showActionsSheet: boolean = false;
   @State showCalendarSheet: boolean = false;
+  /** 热力图档位：0=次数（上游默认 COUNT）/ 1=时长；面板内状态，不持久化（上游 remember）。 */
+  @State heatmapMode: number = 0;
   @State showClearConfirm: boolean = false;
   @State selectedCalendarDay: number = 0;
   /** 热力图选中的日期，非空时三视图只看这一天；对应上游 SelectDate。 */
@@ -3521,6 +3523,9 @@ export struct ReadRecordsPage {
     if (context !== undefined) {
       ReadRecordRepository.loadSkipDeleteConfirm(context).then((value: boolean) => {
         this.skipDeleteConfirm = value;
+      });
+      ReadRecordRepository.loadDisplayMode(context).then((mode: string) => {
+        this.displayMode = mode === 'TIMELINE' ? 1 : (mode === 'LATEST' ? 2 : 0);
       });
     }
   }
@@ -3633,6 +3638,13 @@ export struct ReadRecordsPage {
 
   private cycleDisplayMode(): void {
     this.displayMode = (this.displayMode + 1) % 3;
+    // 切视图清选择（上游切 DisplayMode 时 selectedItemKeys=emptySet）
+    this.clearSelection();
+    const context = this.hostContext();
+    if (context !== undefined) {
+      const mode = this.displayMode === 1 ? 'TIMELINE' : (this.displayMode === 2 ? 'LATEST' : 'AGGREGATE');
+      ReadRecordRepository.setDisplayMode(context, mode);
+    }
   }
 
   private getVisibleRecords(): ReadTimeRecord[] {
@@ -4609,6 +4621,8 @@ export struct ReadRecordsPage {
         onDisappear: () => {
           this.showActionsSheet = false; this.showCalendarSheet = false;
           this.showClearConfirm = false; this.showDeleteConfirm = false; this.showMergeSheet = false;
+          // 对齐上游 remember 语义：面板关闭后档位复位为次数，下次打开默认按次数
+          this.heatmapMode = 0;
         }
       })
   }
@@ -4744,7 +4758,21 @@ export struct ReadRecordsPage {
     Column() {
       Row() {
         Text('阅读热力图').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('关闭').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.showCalendarSheet = false)
+        // 两档切换：次数 / 时长。上游 MediumToggleButton 换图标，本地换图标+文案语义等价。
+        Row() {
+          AppGlyph({
+            name: this.heatmapMode === 1 ? 'accessTime' : 'list',
+            glyphSize: 18,
+            tint: this.themeColorAccent
+          })
+          Text(this.heatmapMode === 1 ? '按时长' : '按次数').fontSize(13).fontColor(this.themeColorAccent).margin({ left: 4 })
+        }
+        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .backgroundColor(this.themeColorSurfaceTertiary)
+        .borderRadius(16)
+        .onClick(() => { this.heatmapMode = this.heatmapMode === 1 ? 0 : 1; })
+        Text('关闭').fontSize(14).fontColor(this.themeColorAccent).margin({ left: 12 })
+          .onClick(() => this.showCalendarSheet = false)
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       if (this.selectedDateKey.length > 0) {
         Row() {
@@ -4758,7 +4786,7 @@ export struct ReadRecordsPage {
         dailyReadCounts: this.buildDailyReadCounts(),
         dailyReadTimes: this.buildDailyReadTimes(),
         selectedDate: this.selectedDateKey,
-        mode: 1,
+        mode: this.heatmapMode,
         onDateSelected: (date: string) => {
           this.selectedDateKey = date;
           this.showCalendarSheet = false;

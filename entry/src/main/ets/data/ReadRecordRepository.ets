@@ -40,6 +40,8 @@ export class ReadRecordRepository {
   private static readonly legacySessionsKey: string = 'sessions_v1';
   /** 删除确认「不再提醒」长期档，键名与上游 READ_RECORD_SKIP_DELETE_CONFIRM 一致。 */
   private static readonly skipDeleteConfirmKey: string = 'readRecordSkipDeleteConfirm';
+  /** 显示模式键。值与上游一致：存枚举名字符串（AGGREGATE/TIMELINE/LATEST），不存数字，便于备份互通。 */
+  private static readonly displayModeKey: string = 'readRecordDisplayMode';
   /** 作者为空的旧记录归属决定，键名与上游 READ_RECORD_ALIAS_DECISIONS 一致。 */
   private static readonly aliasDecisionsKey: string = 'readRecordAliasDecisions';
   /** 归属决定里 key 与 MERGE/KEEP 的分隔符，与上游 ReadRecordAliasDecision.SEPARATOR 一致。 */
@@ -829,6 +831,28 @@ export class ReadRecordRepository {
     const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
     await store.put(ReadRecordRepository.skipDeleteConfirmKey, skip ? '1' : '0');
     await store.flush();
+  }
+
+  /** 读显示模式；非法值一律回落 AGGREGATE（对齐上游 valueOf().getOrDefault()）。 */
+  static async loadDisplayMode(context: Context): Promise<string> {
+    try {
+      const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
+      const value = await store.get(ReadRecordRepository.displayModeKey, 'AGGREGATE');
+      const text = value as string;
+      if (text === 'AGGREGATE' || text === 'TIMELINE' || text === 'LATEST') { return text; }
+      return 'AGGREGATE';
+    } catch (_) {
+      return 'AGGREGATE';
+    }
+  }
+
+  /** 写显示模式，存枚举名字符串。 */
+  static async setDisplayMode(context: Context, mode: string): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(context, ReadRecordRepository.preferenceName);
+      await store.put(ReadRecordRepository.displayModeKey, mode);
+      await store.flush();
+    } catch (_) {}
   }
 
   // ---------------------------------------------------------------- 合并与归属
