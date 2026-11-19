@@ -21,6 +21,8 @@ export struct ReaderTextProcessingSheet {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  // 批3：内层容器字面量改走主题色位，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#1B1C22';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop book: Book = {
@@ -211,7 +213,7 @@ export struct ReaderTextProcessingSheet {
             }
           }.width('calc(100% - 32vp)').padding({ left: 14, right: 14, top: 10, bottom: 10 })
             .margin({ left: 16, right: 16, bottom: 8 })
-            .backgroundColor('#202127').borderRadius(12)
+            .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
           Row() {
             Row() {
               AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
@@ -220,14 +222,14 @@ export struct ReaderTextProcessingSheet {
                 .backgroundColor(Color.Transparent).layoutWeight(1)
                 .onChange((value: string) => this.replaceQuery = value)
             }.layoutWeight(1).height(42).padding({ left: 12, right: 12 })
-              .backgroundColor('#202127').borderRadius(12)
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileFindReplace', glyphSize: 18, tint: '#A9ABB4' })
-            }.width(38).height(42).backgroundColor('#202127').borderRadius(12)
+            }.width(38).height(42).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
               .onClick(() => this.onReplaceEnabledChange(!this.replaceEnabled))
             Text(this.replaceFilter).fontSize(12).fontColor(this.themeColorTextSecondary)
               .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-              .backgroundColor('#292A31').borderRadius(12)
+              .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(12)
               .onClick(() => { this.replaceFilterVisible = !this.replaceFilterVisible; })
               .bindPopup(this.replaceFilterVisible, {
                 builder: this.replaceFilterMenu,
@@ -249,7 +251,7 @@ export struct ReaderTextProcessingSheet {
                   .fontSize(12).fontColor('#999BA5').margin({ top: 7, bottom: 14 })
                 Text('打开规则管理').fontSize(13).fontColor('#D5C2C6')
                   .padding({ left: 15, right: 15, top: 10, bottom: 10 })
-                  .backgroundColor('#292A31').borderRadius(18)
+                  .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(18)
                   .onClick(() => this.openFullReplaceRules())
                 Blank().layoutWeight(1)
               } else {
@@ -302,7 +304,7 @@ export struct ReaderTextProcessingSheet {
                       onChange: (enabled: boolean) => this.onRuleEnabledChange(rule.id, enabled)
                     })
                   }.width('100%').padding({ left: 2, right: 12, top: 10, bottom: 10 })
-                    .backgroundColor('#202127').borderRadius(10).margin({ bottom: 7 })
+                    .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(10).margin({ bottom: 7 })
                     .onClick(() => this.onRuleEnabledChange(rule.id, !rule.isEnabled))
                     // 停用态整行 alpha 0.38（上游 TextProcessingSheet 行禁用态口径）。
                     .opacity(rule.isEnabled ? 1 : 0.38)
@@ -319,7 +321,7 @@ export struct ReaderTextProcessingSheet {
               .onChange((value: string) => this.contentQuery = value)
           }.width('calc(100% - 32vp)').height(42).padding({ left: 12, right: 12 })
             .margin({ left: 16, right: 16, bottom: 10 })
-            .backgroundColor('#202127').borderRadius(12)
+            .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
           Scroll() {
             Column() {
               if (this.getVisibleContentProcesses().length === 0) {
@@ -345,7 +347,7 @@ export struct ReaderTextProcessingSheet {
                     Text('删除').fontSize(11).fontColor('#E7A5AC').margin({ left: 10 })
                       .onClick(() => this.deleteProcess = item)
                   }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-                    .backgroundColor('#202127').borderRadius(10).margin({ bottom: 7 })
+                    .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(10).margin({ bottom: 7 })
                     .onClick(() => this.viewedProcess = item)
                 }, (item: ContentProcessDisplayItem) => item.id)
               }
@@ -375,7 +377,7 @@ export struct ReaderTextProcessingSheet {
               .fontSize(14).fontColor(this.themeColorTextPrimary).width('100%').margin({ top: 4, bottom: 16 })
             Text('关闭').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.End)
               .onClick(() => this.viewedProcess = undefined)
-          }.width('88%').padding(18).backgroundColor('#202127').borderRadius(18).onClick(() => {})
+          }.width('88%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(18).onClick(() => {})
         }.width('100%').height('100%')
       }
       if (this.deleteProcess !== undefined) {
@@ -399,7 +401,7 @@ export struct ReaderTextProcessingSheet {
                   this.deleteProcess = undefined;
                 })
             }.width('100%')
-          }.width('88%').padding(18).backgroundColor('#202127').borderRadius(18).onClick(() => {})
+          }.width('88%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(18).onClick(() => {})
         }.width('100%').height('100%')
       }    }.width('100%').height('100%')
   }
