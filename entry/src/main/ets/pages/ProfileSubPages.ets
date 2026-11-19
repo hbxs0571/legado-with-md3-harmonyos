@@ -3484,6 +3484,8 @@ export struct ReadRecordsPage {
   /** 列表首个可见项与滚动偏移：悬浮日期条只在滚过一定距离后出现（对齐上游 floatingDate）。 */
   @State listFirstVisibleIndex: number = 0;
   @State listFirstVisibleScrollOffset: number = 0;
+  // 列表真实滚动控制器：用 currentOffset().yOffset 取代逐帧累加，Spring 回弹后能精确归零。
+  private recordListScroller: Scroller = new Scroller();
   @State recordEnabled: boolean = true;
   @State displayMode: number = 0;
   @State showSearch: boolean = false;
@@ -3607,11 +3609,12 @@ export struct ReadRecordsPage {
   /** 悬浮日期条文案：汇总视图带当天总时长，时间线只有日期，最后阅读不显示。 */
   private floatingDateLabel(): string {
     if (this.displayMode === 2) { return ''; }
-    // 对齐上游 floatingDate 两条：firstVisibleItemIndex > 1 || firstVisibleItemScrollOffset > 24。
-    // first=0 是「阅读总成就」卡、first=1 是第一个日期头，都算列表顶部，不显示悬浮条。
+    // 严格对齐上游 ReadRecordScreen.kt:240-241：两个独立条件 OR。
+    // firstVisibleItemIndex > 1 || firstVisibleItemScrollOffset > 24。
+    // 去掉原先的 first===1 前置：first=0（成就卡仍可见但已滚过阈值）时也可能达到第二个条件。
     // 这里不再单看累加偏移：Spring 回弹后绝对位移无法可靠归零，会导致滚到顶悬浮条残留。
     const first = this.listFirstVisibleIndex;
-    const shouldStick = first > 1 || (first === 1 && this.listFirstVisibleScrollOffset > 24);
+    const shouldStick = first > 1 || this.listFirstVisibleScrollOffset > 24;
     if (!shouldStick) { return ''; }
     const date = this.currentVisibleDate();
     if (date.length === 0) { return ''; }
@@ -3625,6 +3628,9 @@ export struct ReadRecordsPage {
   private currentVisibleDate(): string {
     const keys = this.displayMode === 0 ? this.getSummaryDateKeys() : this.getDateKeys();
     const first = this.listFirstVisibleIndex;
+    // first=0 是「阅读总成就」卡、first=1 是第一个日期头：两者都应取第一个日期。
+    // 不加这个前置的话，循环条件 first>=1 对 first=0 全不成立，会落到末尾错取最后一个日期。
+    if (first <= 1) { return keys.length > 0 ? keys[0] : ''; }
     let idx = 1;
     for (const key of keys) {
       const count = this.displayMode === 0
@@ -3640,6 +3646,10 @@ export struct ReadRecordsPage {
     this.displayMode = (this.displayMode + 1) % 3;
     // 切视图清选择（上游切 DisplayMode 时 selectedItemKeys=emptySet）
     this.clearSelection();
+    // 列表数据整体替换，旧滚动偏移会残留；回顶并清掉，避免悬浮条误显。
+    this.recordListScroller.scrollToIndex(0, false);
+    this.listFirstVisibleIndex = 0;
+    this.listFirstVisibleScrollOffset = 0;
     const context = this.hostContext();
     if (context !== undefined) {
       const mode = this.displayMode === 1 ? 'TIMELINE' : (this.displayMode === 2 ? 'LATEST' : 'AGGREGATE');
@@ -4259,7 +4269,7 @@ export struct ReadRecordsPage {
         // Scroll + Column + 三层 ForEach：后者一次渲染全部条目，既没有 sticky，条目多了也掉帧。
         // Stack 让悬浮日期条盖在列表左上角；它自己占满剩余高度，List 再填满 Stack。
         Stack({ alignContent: Alignment.TopStart }) {
-          List() {
+          List({ scroller: this.recordListScroller }) {
             // 「阅读总成就」不是日期分组，用普通 ListItem 平铺在最前面。
             ListItem() {
               Column() {
@@ -4589,16 +4599,14 @@ export struct ReadRecordsPage {
           .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
           .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           .onScrollIndex((first: number, _last: number, _center: number) => {
-            // 首个可见项变了，偏移从零重新累计（对齐 CatalogPage.ets:906 的写法）。
+            // 只更新首项索引；偏移改由 onDidScroll 读 scroller 绝对量，避免逐帧累加不归零。
             this.listFirstVisibleIndex = first;
-            this.listFirstVisibleScrollOffset = 0;
           })
-          .onDidScroll((offset: number, _state: ScrollState) => {
-            // offset 是带符号的位移增量：向下滚为正、向上滚为负。必须带符号累加并钳到 0，
-            // 回滚到顶时偏移才能归零、悬浮条才消失（验收第 5 条）。
-            // 任务书示例写 += Math.abs(offset)，但那样 Spring 回弹后偏移只增不减，
-            // 滚到顶仍残留 >24，与「最顶部不显示悬浮条」的验收直接冲突，故按带符号处理。
-            this.listFirstVisibleScrollOffset = Math.max(0, this.listFirstVisibleScrollOffset + offset);
+          .onDidScroll((_offset: number, _state: ScrollState) => {
+            // offset 是逐帧增量，累加在 Spring 回弹后无法可靠归零（实测回顶后悬浮条残留）。
+            // 改读 scroller 的真实绝对偏移：回顶精确为 0，悬浮条随之消失（验收第 5 条）。
+            // 用 yOffset 对应上游 firstVisibleItemScrollOffset（列表滚过成就卡的距离）。
+            this.listFirstVisibleScrollOffset = Math.max(0, this.recordListScroller.currentOffset().yOffset);
           })
 
           // 悬浮日期条：对齐上游 TopFloatingStickyItem（TextCard，圆角 8、padding 8）。
