@@ -21,6 +21,7 @@ import {
 import { ReadRecordOverviewPage } from './ReadRecordOverviewPage';
 import { ReaderSearchPage } from './ReaderSearchPage';
 import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
+import { ReadAloudConfigPanel } from './ReadAloudConfigPanel';
 import { BookInfoPage } from './BookInfoPage';
 import { BookInfoEditPage } from './BookInfoEditPage';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
@@ -133,7 +134,10 @@ import {
   ReaderPaddingSettings, DEFAULT_READER_PADDING_SETTINGS, copyReaderPaddingSettings
 } from '../data/ReaderSettingsRepository';
 import { ReaderMoreActionConfig, ReaderMoreActionsRepository, READER_MORE_ACTION_DEFAULTS } from '../data/ReaderMoreActionsRepository';
-import { ReadAloudSettingsRepository } from '../data/ReadAloudSettingsRepository';
+import {
+  ReadAloudSettingsRepository, ReadAloudSettingsSnapshot,
+  DEFAULT_READ_ALOUD_SETTINGS, copyReadAloudSettings
+} from '../data/ReadAloudSettingsRepository';
 import { SpeechSegmenter, SpeechUnit } from '../readaloud/SpeechSegmenter';
 import { SystemTtsPlayer, ReadAloudState, ReadAloudSpan, EMPTY_READ_ALOUD_SPAN } from '../readaloud/SystemTtsPlayer';
 import {
@@ -721,6 +725,17 @@ struct Index {
   private readAloudActive: boolean = false;
   /** 批4：当前朗读段区间，传给 ReaderPage 做高亮与翻页跟随；stop 时播放器上报 start<0 清空。 */
   @State readAloudSpan: ReadAloudSpan = EMPTY_READ_ALOUD_SPAN;
+  /** 批5：朗读偏好快照，供面板显示与编辑；打开面板/启动朗读时从仓库载入。 */
+  @State readAloudSettings: ReadAloudSettingsSnapshot = DEFAULT_READ_ALOUD_SETTINGS;
+  /** 批5：三开关小面板是否叠在朗读面板之上。 */
+  @State showAloudConfig: boolean = false;
+  /** 批5：面板展示的播放状态/句序，来自 SystemTtsPlayer 回调。 */
+  @State aloudStateNum: number = 0;
+  @State aloudUnitIndex: number = 0;
+  @State aloudUnitTotal: number = 0;
+  /** 批5：定时到点定时器；章节档的已读章节计数。 */
+  private readAloudTimerId: number = -1;
+  private aloudChaptersRead: number = 0;
   private readerSettingsLoaded: boolean = false;
   private readerSettingsRevision: number = 0;
   private readerSessionLastSaveTime: number = 0;
@@ -7780,7 +7795,11 @@ private canWriteInto(dir: string): boolean {
     this.route = AppRoute.READER;
   }
 
-  private openReadAloudSettings(): void {
+  private async openReadAloudSettings(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      this.readAloudSettings = await ReadAloudSettingsRepository.load(context);
+    }
     this.route = AppRoute.READ_ALOUD_SETTINGS;
   }
 
@@ -7794,6 +7813,8 @@ private canWriteInto(dir: string): boolean {
     if (this.readAloudActive) {
       this.readAloudPlayer.stop();
       this.readAloudActive = false;
+      this.clearAloudTimer();
+      this.aloudStateNum = ReadAloudState.IDLE;
       return;
     }
     const context = this.getUIContext().getHostContext();
@@ -7803,6 +7824,8 @@ private canWriteInto(dir: string): boolean {
     }
     try {
       const settings = await ReadAloudSettingsRepository.load(context);
+      this.readAloudSettings = settings;
+      this.aloudChaptersRead = 0;
       // 切段坐标必须与画布同口径：用与 ReaderPage 相同的缩进与特殊样式参数，
       // 否则 SpeechUnit.start/end 与 LocalReaderLineItem.startPosition 错位，高亮会跑偏。
       const semantic = LocalTextSemantics.parse(this.readerContent, this.readerParagraphIndent, this.readerAdaptSpecialStyle);
@@ -7816,15 +7839,123 @@ private canWriteInto(dir: string): boolean {
       this.readAloudPlayer.onSpanChange = (span: ReadAloudSpan): void => {
         this.readAloudSpan = span;
       };
-      this.readAloudPlayer.load(units, 0);
+      // 批5：状态/句序回调同步给面板（单例播放器，回调每次启动重设）。
+      this.readAloudPlayer.onStateChange = (state: ReadAloudState): void => {
+        this.aloudStateNum = state;
+        if (state === ReadAloudState.IDLE) { this.readAloudActive = false; }
+      };
       this.readAloudPlayer.onUnitAdvance = (index: number): void => {
         console.info(`[ReadAloud] unit advance index=${index}`);
+        this.aloudUnitIndex = index;
       };
+      this.readAloudPlayer.load(units, 0);
+      this.aloudUnitTotal = units.length;
+      this.aloudUnitIndex = 0;
       this.readAloudPlayer.play();
       this.readAloudActive = true;
+      this.aloudStateNum = ReadAloudState.PLAYING;
+      this.scheduleAloudTimer();
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? `朗读启动失败：${error.message}` : '朗读启动失败');
     }
+  }
+
+  // ---- 批5：朗读面板操作，全部作用于批3的 SystemTtsPlayer 单例 ----
+  private clearAloudTimer(): void {
+    if (this.readAloudTimerId >= 0) {
+      clearTimeout(this.readAloudTimerId);
+      this.readAloudTimerId = -1;
+    }
+  }
+
+  /** 时长档定时：到点立刻停（上游 finishCurrentChapterAfterTimer 默认 false）。 */
+  private scheduleAloudTimer(): void {
+    this.clearAloudTimer();
+    const s = this.readAloudSettings;
+    if (s.timerMode === 'minute' && s.ttsTimer > 0) {
+      this.readAloudTimerId = setTimeout((): void => {
+        this.readAloudPlayer.stop();
+        this.readAloudActive = false;
+        this.aloudStateNum = ReadAloudState.IDLE;
+        this.readAloudTimerId = -1;
+      }, s.ttsTimer * 60 * 1000);
+    }
+  }
+
+  private onAloudPrevious(): void {
+    // 已在第一个单元：previous() 返回 false，不动作也不弹提示（任务书 5.2）。
+    this.readAloudPlayer.previous();
+  }
+
+  private onAloudPauseToggle(): void {
+    if (this.readAloudPlayer.state() === ReadAloudState.PLAYING) {
+      this.readAloudPlayer.pause();
+    } else {
+      this.readAloudPlayer.play();
+    }
+  }
+
+  private onAloudStop(): void {
+    this.readAloudPlayer.stop();
+    this.readAloudActive = false;
+    this.aloudStateNum = ReadAloudState.IDLE;
+    this.clearAloudTimer();
+    this.returnToReaderMenu();
+  }
+
+  private onAloudNext(): void {
+    if (!this.readAloudPlayer.next()) {
+      this.showUnavailableAction('已是本章最后一句');
+    }
+  }
+
+  /** 换章：停当前朗读 → 换章载入新正文 → 恢复朗读（章节档计时在此累计）。 */
+  private async turnReadAloudChapter(delta: number): Promise<void> {
+    this.clearAloudTimer();
+    this.readAloudPlayer.stop();
+    this.readAloudActive = false;
+    this.showAloudConfig = false;
+    const s = this.readAloudSettings;
+    if (s.timerMode === 'chapter' && s.timerChapters > 0) {
+      this.aloudChaptersRead++;
+      if (this.aloudChaptersRead >= s.timerChapters) { return; }
+    }
+    const chapters = BookRepository.cachedChapterTitles(this.selectedBook);
+    const currentIndex = this.selectedBook.chapterIndex ?? chapters.indexOf(this.selectedChapter);
+    const targetIndex = currentIndex + delta;
+    const targetTitle = chapters[targetIndex];
+    if (targetTitle === undefined) {
+      this.showUnavailableAction(delta < 0 ? '没有上一章' : '没有下一章');
+      return;
+    }
+    await this.selectChapter(targetTitle, targetIndex, delta < 0 ? 100 : 0);
+    this.toggleReadAloud();
+  }
+
+  private async onAloudRateChange(rate: number): Promise<void> {
+    const updated = copyReadAloudSettings(this.readAloudSettings);
+    updated.ttsSpeechRate = rate;
+    this.readAloudSettings = updated;
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) { await ReadAloudSettingsRepository.save(context, updated); }
+  }
+
+  private async onAloudTimerChange(mode: string, minutes: number, chapters: number): Promise<void> {
+    const updated = copyReadAloudSettings(this.readAloudSettings);
+    updated.timerMode = mode;
+    updated.ttsTimer = minutes;
+    updated.timerChapters = chapters;
+    this.readAloudSettings = updated;
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) { await ReadAloudSettingsRepository.save(context, updated); }
+    this.scheduleAloudTimer();
+  }
+
+  private async onAloudSettingsChange(settings: ReadAloudSettingsSnapshot): Promise<void> {
+    this.readAloudSettings = settings;
+    this.readAloudPlayer.setParagraphInterval(settings.ttsParagraphInterval);
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) { await ReadAloudSettingsRepository.save(context, settings); }
   }
 
   private async updateReadingProgress(
@@ -9240,15 +9371,41 @@ private canWriteInto(dir: string): boolean {
               onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
             })
           } else if (this.route === AppRoute.READ_ALOUD_SETTINGS) {
-            ReaderAloudSettingsPage({
-              onBack: () => this.returnToReaderMenu(),
-              onOpenMainMenu: () => this.returnToReaderMenu(),
-              onOpenCatalog: () => {
-                this.catalogReturnRoute = AppRoute.READER;
-                this.route = AppRoute.CATALOG;
-              },
-              onUnavailableAction: (message: string) => this.showUnavailableAction(message)
-            })
+            Stack() {
+              ReaderAloudSettingsPage({
+                aloudState: this.aloudStateNum,
+                unitIndex: this.aloudUnitIndex,
+                unitTotal: this.aloudUnitTotal,
+                initialRate: this.readAloudSettings.ttsSpeechRate,
+                initialTimerLabel: this.readAloudSettings.timerMode === 'minute'
+                  ? (this.readAloudSettings.ttsTimer > 0 ? `${this.readAloudSettings.ttsTimer} 分钟后停止` : '关闭')
+                  : (this.readAloudSettings.timerChapters > 0 ? `${this.readAloudSettings.timerChapters} 章后停止` : '关闭'),
+                onBack: () => this.returnToReaderMenu(),
+                onOpenMainMenu: () => this.returnToReaderMenu(),
+                onOpenCatalog: () => {
+                  this.catalogReturnRoute = AppRoute.READER;
+                  this.route = AppRoute.CATALOG;
+                },
+                onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+                onPrevious: () => this.onAloudPrevious(),
+                onPauseToggle: () => this.onAloudPauseToggle(),
+                onStop: () => this.onAloudStop(),
+                onNext: () => this.onAloudNext(),
+                onTurnChapter: (delta: number) => this.turnReadAloudChapter(delta),
+                onRateChange: (rate: number) => this.onAloudRateChange(rate),
+                onTimerChange: (mode: string, minutes: number, chapters: number) =>
+                  this.onAloudTimerChange(mode, minutes, chapters),
+                onOpenConfig: () => { this.showAloudConfig = true; }
+              })
+              if (this.showAloudConfig) {
+                ReadAloudConfigPanel({
+                  settings: this.readAloudSettings,
+                  onBack: () => { this.showAloudConfig = false; },
+                  onSettingsChange: (settings: ReadAloudSettingsSnapshot) => this.onAloudSettingsChange(settings)
+                })
+              }
+            }
+            .width('100%').height('100%')
           }
         }.width('100%').height('100%')
           .transition(this.readerRouteTransition())
