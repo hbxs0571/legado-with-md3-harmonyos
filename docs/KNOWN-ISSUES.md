@@ -1086,6 +1086,972 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ---
 
+## M3 色位缺口（r352 盘点，未修）
+
+**KI-THEME2 上游 34 个在用色位本地只落 9 个，容器色与错误色一律降级或写死** —— 状态：**部分修**（r354 补 11 色位广播、收口阅读域硬编码；余下见本节末「r354 本轮」）。r352 把缺口量化到行号级，代价也算清了，但没有排期（理由见本节末「判断」）。
+
+### 上游真实用量
+
+上游 `ui/theme/LegadoTheme.kt` 的 `data class LegadoColorScheme` 共 **53 个字段**，全仓 `colorScheme.xxx` 引用 **1,531 处**。按字段逐个数，**34 个有引用、19 个零引用**。
+
+| 色位 | 引用 | 本地是否已广播 |
+| --- | ---: | --- |
+| `onSurfaceVariant` | 343 | 是（themeColorTextSecondary） |
+| `primary` | 171 | 是（themeColorAccent） |
+| `onSurface` | 139 | 是（themeColorTextPrimary） |
+| `surface` | 137 | 是（themeColorSurfacePrimary） |
+| `surfaceContainerLow` | 117 | 是（themeColorSurfaceSecondary） |
+| `onSheetContent` | 83 | 否，可派生 = surface |
+| `error` | 63 | 否 |
+| `surfaceContainer` | 63 | 是（themeColorSurfaceTertiary） |
+| `secondaryContainer` | 62 | 否 |
+| `outlineVariant` | 53 | 否 |
+| `surfaceContainerHigh` | 48 | 是（themeColorSurfaceElevated） |
+| `outline` | 35 | 是（themeColorTextTertiary） |
+| `primaryContainer` | 28 | 否 |
+| `onSecondaryContainer` | 26 | 否 |
+| `onPrimaryContainer` | 20 | 否 |
+| `secondary` | 20 | 否（仅色块预览用） |
+| `surfaceVariant` | 16 | 否 |
+| `surfaceContainerHighest` | 15 | 是（themeColorSurfaceHighest） |
+| `surfaceInput` | 15 | 否，上游由 bookInfoInputColor 取色 |
+| `cardContainer` | 7 | 否，可派生 = surfaceContainerLow |
+| `background` | 6 | 否 |
+| `onCardContainer` | 6 | 否，可派生 = primary |
+| `onPrimary` | 4 | 否 |
+| `onTertiaryContainer` | 4 | 否 |
+| `inverseSurface` | 4 | 否 |
+| `errorContainer` | 4 | 否 |
+| `scrim` | 4 | 否 |
+| `surfaceBright` | 4 | 否 |
+| `tertiaryContainer` | 3 | 否 |
+| `onErrorContainer` | 3 | 否 |
+| `tertiary` | 2 | 否（仅色块预览用） |
+| `inverseOnSurface` | 2 | 否 |
+| `onBackground` | 1 | 否，可派生 = onSurface |
+| `onError` | 1 | 否 |
+
+**19 个零引用字段**（上游自己一次都没用，抄过来纯占地方，不必补）：
+
+`inversePrimary` / `onSecondary` / `onTertiary` / `surfaceTint` / `surfaceDim` / `surfaceContainerLowest` / `primaryFixed` / `primaryFixedDim` / `onPrimaryFixed` / `onPrimaryFixedVariant` / `secondaryFixed` / `secondaryFixedDim` / `onSecondaryFixed` / `onSecondaryFixedVariant` / `tertiaryFixed` / `tertiaryFixedDim` / `onTertiaryFixed` / `onTertiaryFixedVariant` / `cardPrimaryContainer`
+
+### 本地现状
+
+- `entry/src/main/ets/data/ThemePalette.ets`（580 行）：`interface ThemePaletteColors` **11 个字段**（`:32-44`）——9 个参与换肤，外加 `secondary` / `tertiary` 两个只给调色板色块预览用（接口注释明写「不参与全局换肤」）。
+- `publishPaletteColors(colors)`（`:544-554`）只广播 **9 个** `AppStorage` 键：`themeColorAccent` / `themeColorTextPrimary` / `themeColorTextSecondary` / `themeColorTextTertiary` / `themeColorSurfacePrimary` / `themeColorSurfaceSecondary` / `themeColorSurfaceTertiary` / `themeColorSurfaceElevated` / `themeColorSurfaceHighest`。
+- 消费面：`@StorageProp('themeColor*')` 共 **555 处**、涉及 **62 个 .ets 文件**（`themeColorTextSecondary` 96 / `themeColorTextPrimary` 85 / `themeColorTextTertiary` 85 / `themeColorAccent` 81 / `themeColorSurfacePrimary` 65 / `themeColorSurfaceElevated` 59 / `themeColorSurfaceSecondary` 45 / `themeColorSurfaceTertiary` 37 / `themeColorSurfaceHighest` 1）。
+- `resources/base|dark/element/color.json` 各只有 8 个 `theme_*` + `start_window_background`，`$r('app.color.theme_*')` 在 .ets 里只剩 **1 处**引用 —— 色资源这条路基本没在用，全靠 `AppStorage` 广播。
+
+### 缺口账（25 个要补，三种性质）
+
+| 性质 | 个数 | 色位 |
+| --- | ---: | --- |
+| 值需新增 | 18 | `error` / `secondaryContainer` / `outlineVariant` / `primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` / `surfaceVariant` / `background` / `onPrimary` / `onTertiaryContainer` / `inverseSurface` / `errorContainer` / `scrim` / `surfaceBright` / `tertiaryContainer` / `onErrorContainer` / `inverseOnSurface` / `onError` |
+| 值已有、只缺广播键 | 2 | `secondary` / `tertiary`（色块预览已在用同一份值） |
+| 可派生、不新增值 | 5 | `onSheetContent`←`surface` / `cardContainer`←`surfaceContainerLow` / `onCardContainer`←`primary` / `onBackground`←`onSurface` / `surfaceInput`←`bookInfoInputColor`（上游 `ui/theme/ThemeColorSchemeOverride.kt:74-77`） |
+
+9（已广播）+ 25（缺口）= 34，与上游有引用的字段数正好对上。
+
+### error 色位：16 种红，没有统一来源
+
+本地全仓 `themeColorError` / `errorContainer` **零命中**，危险色全靠写死。去重后 16 种：`#FF0000`(1) `#E53935`(2) `#F44848`(1) `#FE4D55`(3) `#C62828`(1) `#E5484D`(1) `#FF6B6B`(7) `#DB4B4B`(1) `#CF3E40`(3) `#B3261E`(1) `#FF7417`(1) `#D95656`(2) `#FF8A80`(2) `#FF8C00`(2) `#E57373`(2) `#AD1457`(1)。其中 `#FFB4AB` 10 处全在 `pages/ReaderHighlightRuleSheet.ets`（`:589` / `:611` / `:615` / `:761` / `:783` / `:845` / `:855` / `:868` / `:888` 等）。同一个「红」散成六种色调，换主题时一个都不会跟着变。
+
+### 27 处降级点（11 个文件）
+
+全仓 `secondaryContainer` / `primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` 共 27 处，每处都在注释里写着「本地没有该色位，用 xxx 顶」：
+
+| 文件 | 处数 | 代表位置 |
+| --- | ---: | --- |
+| `pages/BookInfoPage.ets` | 5 | `:37`（`themeColorSurfaceElevated` 注释顶替 secondaryContainer）、`:214-216`（`lerp(secondaryContainer, seedColor, 0.42f)` 封面主色）、`:1180` |
+| `pages/CatalogPage.ets` | 4 | `:279-280`（目录三档：多选 primaryContainer / 当前章 secondaryContainer / 其余 surfaceContainerLow）、`:702`、`:760` |
+| `pages/ThemeSettingsPage.ets` | 3 | `:305-306`、`:489` |
+| `pages/ReaderSearchPage.ets` | 3 | `:42`、`:339`（搜索结果高亮 = accent 前景 + primaryContainer 背景）、`:367` |
+| `pages/ReaderPage.ets` | 3 | `:1612`（选中走 secondaryContainer）、`:1623`、`:9137` |
+| `pages/ReaderSettingsPage.ets` | 2 | `:4296`、`:4319` |
+| `pages/Index.ets` | 2 | `:11350-11351`（`AppNavigationBar.kt:148-156` 用 secondaryContainer） |
+| `components/ThemeSelectors.ets` | 2 | `:17-18`；`:21-22` 是**刻意的设计取舍**（三档并排时整块强调色更能表达当前档位），改造时要保留原判断 |
+| `pages/TxtTocRulePreviewPage.ets` | 1 | `:219`（徽章 primaryContainer α0.85） |
+| `pages/ReaderAloudSettingsPage.ets` | 1 | `:244`（tonal 按钮近似） |
+| `pages/ReadAloudConfigPanel.ets` | 1 | `:89`（页签选中） |
+
+### 代价
+
+| 项 | 量 | 性质 |
+| --- | --- | --- |
+| 色值数据 | **432 个**（18 色位 × 日/夜 × 12 套内置配色） | 对着上游 `*ColorScheme.kt` 逐套抄，机械但易错 |
+| `publishPaletteColors` | 9 行 → 34 行 | 简单，但键名定了就改不动 |
+| `@StorageProp` 声明 | 预估 **+150–250 行** | 纯样板。Compose 靠 `CompositionLocal` 自动继承，ArkUI 必须在每个 `@Component` struct 单独声明一行 |
+| 降级点改造 | 27 处 / 11 文件 | 不是批量替换，部分要保留刻意取舍 |
+| `ThemePaletteColors` | 11 → 36 字段 | 牵动所有构造点 |
+| 备份兼容 | 无需改 | 本地自定义色按 6 个手选色存（`data/CustomThemeColors.ets`） |
+| **小计（不含 Monet）** | **约 700–900 行** | |
+| Monet / HCT 算法 | 约 1,500 行新代码 | 另立项。「动态取色」档要真做必须移植 Material Color Utilities 的 HCT 色彩空间 + 9 种 paletteStyle 生成算法 |
+
+### 一处文档失真（本节点出，已改）
+
+`docs/parity/ZIP-THEME.md` 的 A2 行原写「上游 45 个 Material 色位本地只落 8 个（其余色位全仓无引用）」，三处都错：上游 `LegadoColorScheme` 是 **53** 个字段不是 45；本地广播 **9** 个不是 8；「其余色位全仓无引用」不成立（上游 34 个有引用）。已在本轮改成本节的数字。
+
+### 判断：值得做，但不排现在
+
+支持做：这是结构性欠账而非缺功能。27 处降级点是 27 个「看起来差一点」的地方，累积成「UI 有点平」的整体观感；光补 `error` 一个色位就能收掉散落各处的六种红。
+
+暂缓：它不改任何能力，纯观感；本地还挂着私密脱敏、朗读两个死控件、阅读记录三视图等真功能缺口。且 Monet 不做的话「动态取色」档永远是假的（现在回落到内置默认配色），补 18 个色位只是让 11 套内置配色更准。
+
+排期建议（真要做时）：放在「功能缺口清完之后、Miuix 之前」，拆 4 批——
+
+1. **地基**：`ThemePaletteColors` 扩字段 + 432 个色值 + `publishPaletteColors` 扩键。改完界面无可见变化（新键没人读），但这是所有后续的地基。
+2. **高频三色**：`error`(63) / `secondaryContainer`(62) / `outlineVariant`(53)。补上后删除按钮、选中态、分隔线立刻变对。
+3. **容器族**：`primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` / `surfaceVariant` / `surfaceInput` + 改 27 处降级点。
+4. **收尾**：剩余 10 个小用量色位 + `outlineVariant` 分隔线全局归位 + 文档订正。
+
+关联：[`docs/parity/ZIP-THEME.md`](parity/ZIP-THEME.md) 的 A2/A3/A7 行、[`docs/FEATURES.md`](FEATURES.md) 5.2 第五点、KI-REL5（浅色配色未打磨，与本条同源）。
+
+### r354 本轮：阅读域硬编码深色收敛到主题色位
+
+本轮把「167 处硬编码深色」逐条判类后，只改其中真正跟随主题的消费点，兜底默认值、色板数组、纯黑分支、正确实现一律没动。
+
+- **地基**：`ThemePaletteColors` 11 → 22 字段（补 `error`/`onError`/`errorContainer`/`secondaryContainer`/`onSecondaryContainer`/`primaryContainer`/`onPrimaryContainer`/`onPrimary`/`outlineVariant`/`surfaceBright`/`scrim`）；12 套配色的日/夜档都填了上游真值（264 个色值）；`publishPaletteColors()` 广播 9 → 20 键。`CustomThemeColors.ets` 两个构造点补 11 字段取 fallback。
+- **rset 四键**：`ReaderSettingsPage.ets` 的 `rsetSelectedBg`/`rsetSelectedText`/`rsetChipBgAlt`/`rsetTrack` 改走 `secondaryContainer`/`onSecondaryContainer`/`surfaceElevated`/`outlineVariant` 真色位。
+- **消费点**：批 3 六文件 C 类 51 处 + Z 类 1 处、批 4 选中态 7 处、批 5 错误红 10 处、批 6 降级点 4 处，都换成主题色位；每一处都补了所在 struct 的 `@StorageProp`（默认值为本地默认配色「草野」夜档真值）。
+- **判断为「不改」**：ReaderPage 朗读胶囊封面 2 处三元——上游 `ReadAloudCapsule.kt:320-334` 明确写着「胶囊底色刻意不用 `LegadoTheme.colorScheme`……黑白两色在任何背景上都读得清」，属正确实现，收敛反会破坏对比度。`readerSelectionCardColor()` 的纸色派生属 KI-THEME3 另案（待 M3 能力），本轮不动。
+- **逻辑缺陷**：`ReaderPage` 两处「按纸色三色比较判夜间」改用 `readerMenuIsNight()`（对齐上游 `ReadStyleResolver.isNightTheme()` 按主题模式判的语义）。
+- **没做**：HCT/Monet 派生能力（约 1500 行，另立项），动态取色档仍回落内置配色；全仓 `pages/` 下其余 622 处硬编码不属阅读域，本轮没碰；`docs/parity/` 七表盘面数没变。
+
+验收：`doc-links.py docs` / `parity-pipes.py` / `parity-rows.py --file TXT-READER.md` 三脚本全过（TXT-READER 296 行：已结 253 / 进行中 12 / 未结 31，盘面未变）；每批 `build-hap.sh` 均 BUILD SUCCESSFUL。上机换肤验收视设备占用情况另记。
+
+---
+
+## 阅读器菜单取色链与上游的九条差异（r353 盘点）
+
+**KI-THEME3 阅读器菜单底色取错了属性，且本地没有 M3 派生能力** —— 状态：**部分修**（r353 修掉 3/4/5/7/9 五条，1/2/6/8 待 M3 色位补齐）。
+
+### 根因：本地照抄了「状态栏用色」，不是「菜单底色」
+
+本地 `entry/src/main/ets/pages/ReaderPage.ets:1586-1596` 的 `readerMenuBaseColor()` 逐条照上游 `help/config/ReadBookConfig.kt:154-178` 的 `resolvedMenuBgColor`，注释也标着这个出处。
+
+但上游这个属性**全仓只有 1 个消费点**：
+
+```
+ReadBookController.kt:1904
+activity.setLightStatusBar(ColorUtils.isColorLight(ReadBookConfig.resolvedMenuBgColor))
+```
+
+它只用来决定系统状态栏图标是黑是白，**不参与菜单绘制**。
+
+菜单真正的底色走 `ui/book/read/ReadBookMenuBar.kt:1033-1040`：
+
+```kotlin
+private fun readMenuColors(readBarStyle: Int): ReadMenuColors {
+    val themeBackground = LegadoTheme.colorScheme.surfaceContainerHigh
+    val themeContent = LegadoTheme.colorScheme.onSurface
+    return when (readBarStyle) {
+        2 -> ReadMenuColors(surfaceContainerHigh, primary)
+        else -> ReadMenuColors(themeBackground, themeContent)
+    }
+}
+```
+
+**菜单底色恒为 `surfaceContainerHigh` 色位**，不是手工算出来的 hex。
+
+### 上游的架构：ColorScheme override，不是第二套色板
+
+`ui/book/read/ReadBookColorTheme.kt:30` 用 `ProvideThemeOverride` 把整个阅读界面包住，先派生整套 M3 色位，再按 `readBarStyle` 覆盖：
+
+| `readBarStyle` | 上游做什么 | 本地做什么 |
+| --- | --- | --- |
+| 0 跟随系统 | `rememberReadBookColorTheme` `:47-63` 返回 `null` → **完全继承应用主题** | 按纸色明暗返回 `#000000`/`#FFFFFF` |
+| 1 跟随阅读背景（默认） | 纸色作 `seedColor`，经 `dynamicColorScheme` 派生整套 47 色位，再 `withReadSurfaceColors` 覆盖 5 个 surface | 直接返回 `paperColor` |
+| 2 自定义 | 同样派生整套，再 `withCustomReadMenuColors` 覆盖 `primary`/`onPrimary`/`surfaceTint`/`surfaceContainerHigh`/`surfaceContainerLow` | 取 `readMenuBgColor`/`Night`，空则按 `readMenuColorMode` 取强调色或黑白 |
+
+### 九条差异逐条
+
+| # | 项 | 上游 | 本地（r353 前） | r353 是否修 |
+| --- | --- | --- | --- | --- |
+| 1 | 底色来源 | `surfaceContainerHigh` 色位 | `resolvedMenuBgColor`（状态栏用色） | 否，见「为什么 1/2 没修」 |
+| 2 | 默认档（style 1） | 纸色作种子派生，`surfaceContainerHigh` 比纸面**深一档** | `paperColor` 原值，菜单与纸面**同色**、看不出边界 | 否，同因 |
+| 3 | style 0 | 返回 `null` 继承应用主题 | 按纸色明暗返回 `#000000`/`#FFFFFF` | **已修**：改用 `themeColorSurfaceElevated` |
+| 4 | style 2 未设色回落 | `menuBgColor(isNight)` = `#EEEFE3`(日)/`#BFCBAD`(夜) | 强调色或黑白 | **已修**：填对两个默认值 |
+| 5 | 强调色未设回落 | `menuAccentColor(isNight)` = `#EEEFE3`(日)/`#586249`(夜) | **硬编码 `#FFB1C8`（粉）** | **已修**：填对两个默认值 |
+| 6 | 选中态 | `secondaryContainer`（派生色位） | `mixHexColor(accent, base, 0.7)` 手工混 | 否，需派生能力 |
+| 7 | 夜间判据 | `themeMode`：`"1"`=日 / `"2"`=夜 / 其他 `sysConfiguration.isNightMode` | 纸色亮度 `< 0.5` | **已修**：改用 `readerNightMode` |
+| 8 | `readMenuColorMode == 0`（种子档） | 用强调色作**种子派生整套** | 直接拿强调色**当底色** | 否，需派生能力 |
+| 9 | `readMenuTintColor` | 三段回落，第三段 `readMenuBlurColor.takeIf { it != 0 }` 兜日间值 | 只有两段，夜间且 `Night` 为空时不兜日间值 | **已修**：补第三段 |
+
+第 5 条最直观：本地那个 `#FFB1C8` 粉是错的。上游未设强调色时用草野配色的 `#586249`（夜间）／`#EEEFE3`（日间）。
+
+第 2 条最容易被忽略：默认档下本地菜单底色 = 纸面色**完全一样**，上游是「纸色派生出来的 `surfaceContainerHigh`」，比纸面深一档 —— 所以上游菜单浮在纸面上有边界感，本地是糊在一起。
+
+### 为什么 1/2 没修：本地没有 M3 派生能力
+
+上游 style 1 的 `surfaceContainerHigh` 是 `dynamicColorScheme(seed = 纸色)` 派生出来的 tonal 值，不是任何一个现成的 hex。本地要拿到它只有两条路：
+
+- **用 `themeColorSurfaceElevated`**（应用主题的 `surfaceContainerHigh`）：色位语义对了，但**丢失「跟随纸色」** —— 用户换纸色菜单不再跟。
+- **手工把 `paperColor` 压暗一档**：保住「跟随纸色」，但压多少没有依据，是拍数字。
+
+两条都不是「照上游」，所以 r353 不动，留待 KI-THEME2 的派生能力落地后一起做。**当前 style 1 的菜单底色 = 纸色原值，与上游差「深一档」**。
+
+### 还有第三层：167 处写死深色
+
+这些连「算」都没算，直接写死，不属于本条（菜单取色链），单列在 KI-THEME2 的 27 处降级点之外：
+
+按 `'#[0-3][0-9A-Fa-f]{5}'` 统计：`pages/ReaderSettingsPage.ets` **52** / `pages/ReaderPage.ets` **35** / `pages/ReaderHighlightRuleSheet.ets` **20** / `pages/ReaderMarkingEditor.ets` **18** / `pages/ReaderTextProcessingSheet.ets` **15** / `pages/ReaderSearchPage.ets` **9** / `pages/ReaderAloudSettingsPage.ets` **7** / `pages/ReadAloudPlayerPage.ets` **6** / `pages/ReadAloudConfigPanel.ets` **5**。
+
+最典型是三个 62% 高配置面板的 `'#D91A1B21'`：`ReaderPage.ets:4759`、`ReaderSettingsPage.ets:3549`、`:3773`。commit `f78bc70` 改了主面板内外两层底色，**漏了这三个子面板**。
+
+### 已对齐的部分（不需要动）
+
+- `readBarStyle` 默认 **1**（`ReaderPage.ets:385` ↔ `ReadSettings.kt:69`）
+- `readMenuColorMode` 默认 **1**（`:389` ↔ `ReadSettings.kt:88`）
+- `readerMenuContainerBaseColor()` 的「空则继承底色」回落链（`:1604` ↔ `ReadBookColorTheme.kt:322-326`）
+- 渐变方向（`readerTopBarGradient` `:1478` / `readerBottomBarGradient` `:1438` ↔ `ReaderMenuVisuals.kt:12-25`，上浓下透 / 上透下浓，第二段全透明）
+- `readMenuBorderWidth` 夹 0–4（`:1673` ↔ `ReadBookConfig.kt:115`）
+- 状态栏图标明暗（`applyReaderStatusBarIcon()` `:1320` 用 `darkStatusIcon`/`Night` ↔ `BaseActivity.kt:167`）
+
+关联：KI-THEME2（M3 色位缺口，本条 1/2/6/8 条要等它）、[`docs/parity/ZIP-THEME.md`](parity/ZIP-THEME.md)、[`docs/FEATURES.md`](FEATURES.md) 5.2。
+
+---
+
+## 形状与面板：令牌有但阅读域不读，面板没有公共容器（r354 盘点）
+
+**KI-THEME4 形状设置只有设置类页面跟随，阅读域完全不读；面板没有公共容器，高度/圆角/遮罩各写各的** —— 状态：**未修**。
+
+颜色之外还有两层差距，性质完全不同：形状是「令牌层齐备、消费面缺失」，面板是「压根没有抽象层」。
+
+### 一、上游的形状体系：没有自定义 Shapes，靠 M3 默认值加两处容器
+
+`grep -rn "RoundedCornerShape" --include=*.kt ui/theme/` **零命中** —— 上游没有定义自己的 `Shapes`。`grep -rn "Shapes()"` 全仓只 4 处，全是直接构造 M3 默认值（`ui/theme/ThemeComponents.kt:283`、`ui/widget/components/menuItem/RoundDropdownMenu.kt:100` 与 `:179`、`ui/widget/components/modalBottomSheet/AppModalBottomSheet.kt:143`）。
+
+所以形状实际由两处决定：
+
+**1. `SplicedColumnGroup`（拼接分组容器）**，`ui/widget/components/SplicedColumnGroup.kt:50-54`：
+
+```kotlin
+val cornerRadius = when {
+    themeSettings.disableSplicedColumnGroupCornerRadius -> 0.dp
+    themeSettings.overrideBaseCardCornerRadius -> themeSettings.baseCardCornerRadius.dp
+    else -> 16.dp
+}
+```
+
+边框 `:55-66`：`overrideBaseCardBorder` 为真时 `BorderStroke(baseCardBorderWidth.dp, 配置色非 0 用之否则 outlineVariant)`。组内分隔线由 `SplicedColumnGroupState(enableItemDivider, currentIndex, incrementIndex)` 加 `SettingItemDivider` 驱动；`currentIndex` 用 `remember { IntArray(1) }` 而不是 `mutableStateOf`（源码注释：「换成 mutableStateOf 会让每轮组合都重新失效别的作用域，画面不变却持续重组」）。
+
+**2. 各组件就地写 `RoundedCornerShape(N.dp)`**，阅读域共 **26 处**：`10.dp`×4 / `8.dp`×3 / `16.dp`×3 / `12.dp`×3 / `50`（胶囊）×2 / `6.dp` / `40.dp` / `32.dp` / `3.dp` / `24.dp` 各 1。注意 `ui/book/read/sheet/` 目录内 `RoundedCornerShape` **零命中** —— 所有 sheet 内容都是裸 `Column`，圆角由 `ModalBottomSheet` 容器自己给。
+
+`MaterialTheme.shapes.*` 全仓只 9 处使用，不是主要路径。
+
+主题设置页的形状控制项在 `ui/config/themeConfig/ThemeConfigScreen.kt:580-680`，四项按顺序：
+
+| 项 | 偏好字段 | 默认 | 附加控件 |
+| --- | --- | --- | --- |
+| 关闭拼接分组圆角 | `disableSplicedColumnGroupCornerRadius` | false | — |
+| 覆盖卡片圆角 | `overrideBaseCardCornerRadius` | false | 滑杆 `0f..40f`、79 步、默认 16 |
+| 覆盖卡片边框 | `overrideBaseCardBorder` | false | 宽度滑杆 `0f..5f`、49 步、默认 1 + 日间色 + 夜间色 |
+| 显示分隔线 | `enableItemDivider` | false | — |
+
+对应字段与默认值在 `domain/model/settings/ThemeSettings.kt:27-66`。
+
+### 二、本地形状层：令牌齐备、设置页真在跟随
+
+本地这块**做得比颜色好**：
+
+- `entry/src/main/ets/data/ThemeCardStyle.ets` 字段齐全（`containerOpacity` / `overrideBaseCardCornerRadius` / `baseCardCornerRadius` / `overrideBaseCardBorder` / `baseCardBorderWidth` / `itemDividerWidth` / `itemDividerLength` 全套 + 归一化函数）。
+- `entry/src/main/ets/pages/Index.ets:3710-3727` 的 `publishThemeCardStyle()` 广播 **10 个**键：`themeCardRadius` / `themeCardBorderWidth` / `themeCardBorderColor` / `themeCardBackground` / `themeDividerWidth` / `themeDividerLength` / `themeDividerColor` / `themeContainerBackground` / `themeItemBackground` / `themePureBlack`（另有 `themeAppBackground`）。
+- `themeCardRadius` 消费面 **12 个文件 40 处**：`components/settings/UiSection.ets` 2 / `components/UiTokens.ets` 1（注释）/ `pages/AppBackupSettingsPage.ets` 3 / `AppLabSettingsPage.ets` 4 / `AppReadAloudSettingsPage.ets` 2 / `CustomThemePage.ets` 6 / `Index.ets` 1 / `PrivacyNoticePage.ets` 2 / `ProfileSubPages.ets` 4 / `ReadAloudEnginePage.ets` 1 / `ThemeManagePage.ets` 5 / `ThemeSettingsPage.ets` 9。
+- `components/settings/UiSection.ets:44-45` 直接吃三键：
+
+```ts
+.borderRadius(this.themeCardRadius)
+.border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor })
+```
+
+- `components/ThemeItemDivider.ets` 已按 `itemDividerWidth` / `itemDividerLength` / `itemDividerColor` 三键实现。
+
+**结论：设置类页面（外观 / 主题管理 / 自定义主题 / 隐私 / 备份 / 实验室 / 朗读设置…）全部跟随形状设置。**
+
+### 三、缺口一：阅读域对形状令牌零命中
+
+九个阅读域文件对 `themeCardRadius` / `themeCardBorderWidth` / `themeDividerWidth` **全部 0 命中**：
+
+`pages/ReaderPage.ets` / `pages/ReaderSettingsPage.ets` / `pages/ReaderMarkingEditor.ets` / `pages/ReaderSearchPage.ets` / `pages/ReaderHighlightRuleSheet.ets` / `pages/ReaderTextProcessingSheet.ets` / `pages/ReadAloudPlayerPage.ets` / `pages/ReadAloudConfigPanel.ets` / `pages/ReaderAloudSettingsPage.ets`。
+
+也就是说：外观页把卡片圆角从 16 拖到 40，整个应用会变，**进阅读器一个角都不动**。
+
+而阅读域自己用了一套散值。同一个「卡片」概念，`borderRadius` 用了 **18 / 20 / 22 / 24 / 26** 五种值：
+
+| 文件 | ≥18 的圆角处数 | 具体行 |
+| --- | --- | --- |
+| `pages/ReaderPage.ets` | 21 | `:4286 20`、`:4329 20`、`:4474 18`、`:4745 18`、`:4748 20`、`:5575 20`、`:5627 18`、`:5635 18`、`:5640 20`、`:8112 24` 等 |
+| `pages/ReaderSettingsPage.ets` | 8 | `:3023 18`、`:3091 18`、`:3095 18`、`:3274 18`、`:3311 22`、`:3505 18`、`:3729 18`、`:3787 22` |
+| `pages/ReaderHighlightRuleSheet.ets` | 7 | `:635 22`、`:640 22`、`:850 20`、`:868 18`、`:871 18`、`:914 20`、`:919 20` |
+| `pages/ReaderSearchPage.ets` | 6 | `:364 22`、`:371 18`、`:377 18`、`:407 24`、`:494 20`、`:577 26` |
+| `pages/ReaderTextProcessingSheet.ets` | 5 | `:183 18`、`:187 18`、`:252 18`、`:378 18`、`:402 18` |
+| `pages/ReaderMarkingEditor.ets` | 2 | `:546 18`、`:549 20` |
+
+`ReaderSearchPage.ets` 一个文件里就出现 18/20/22/24/26 五档，同一屏内的卡片圆角互不相同。
+
+### 四、缺口二：面板没有公共容器
+
+上游 **30 处** `AppModalBottomSheet(` 全走同一个容器（`ui/widget/components/modalBottomSheet/AppModalBottomSheet.kt`），关键三条：
+
+| 项 | 上游 | 本地阅读域 |
+| --- | --- | --- |
+| 高度 | `animateContentSize = true`（`:60` 默认）+ `heightIn(max = 容器高 × 0.8f)`（`:134-137`/`:165`）→ 内容多高面板多高 | 写死百分比 |
+| 内边距 | 固定 `start/end/bottom = 16.dp`（`:159-163`） | 7 种值 |
+| 抓手 | `BottomSheetDefaults.DragHandle`（`:150`），颜色 `onSurfaceVariant`（`:64`） | 尺寸对、颜色分两派 |
+| 容器色 | `surfaceContainer` / 内容 `onSurface`（`:63-65`） | 各写各的 |
+
+本地阅读域只有 **5 个手写 `Stack({ alignContent: Alignment.Bottom })` 弹层**：`pages/ReaderPage.ets:4754`、`:8512`、`:8568`，`pages/ReaderSettingsPage.ets:3469`、`:3675`。全仓 `bindSheet(` 有 19 处，但**阅读域一处都没有**（分布：`ProfileSubPages.ets` 9 / `TxtTocRulePreviewPage` / `SubscriptionSubPages` / `OtherSettingsPage` / `HomePage` / `BookshelfPage` / `BookshelfManagePage` / `BookInfoPage` / `AppTranslationSettingsPage` / `AppCoverSettingsPage` / `AppBackupSettingsPage` 各 1）。
+
+四个具体后果：
+
+**① 高度写死百分比，切页签硬跳。** `pages/ReaderSettingsPage.ets:2548-2555`：
+
+```ts
+private settingsSheetHeight(): string {
+  if (this.selectedSettingsTab >= 2) { return '80%'; }
+  return this.selectedSettingsTab === 0 ? '62%' : '68%';
+}
+```
+
+源码注释自陈：「本地做不到内容自适应（探针实证：把信息页内容换成两行文字，面板高度不变，仍是固定百分比）」。宽度同样写死：`settingsSheetWidth()`（`:2557-2559`）= `selectedSettingsTab === 3 ? '100%' : '88%'`。另有三处：`ReaderPage.ets:4786 height('62%')`、`:8643 height('52%')`、`:8833 height('76%') width('92%')`；`ReaderSettingsPage.ets:3311 height('86%') width('88%')`、`:3549 height('62%')`、`:3773 height('62%')`。
+
+**② 遮罩 9 种值。** 阅读域：`#99000000`×10 / `#88000000`×6 / `#D91A1B21`×3 / `#33FFFFFF`×2 / `#66000000`×2 / `#52000000`×2 / `#E6242127` / `#A0000000` / `#D92B2D35` 各 1。全仓 `#99000000` 共 18 处、`#88000000` 6、`#66000000` 5、`#52000000` 2。
+
+上游口径：`BgmSceneSheet.kt:119` 与 `ReadAloudCastSheet.kt:132` 用 `scrim.copy(alpha = 0.42f * scrimAlpha)`；`SearchBookItem.kt:142`/`:308` 用 `0.58f`；M3 `ModalBottomSheet` 默认 32%。
+
+**③ 内边距 7 种值。** 阅读域 `padding({left, right})` 分布：`18`×26 / `16`×18 / `14`×14 / `12`×20 / `10`×4 / `16,14`×1 / `12,16`×1。上游固定 16。
+
+**④ 抓手尺寸对、颜色分两派。** 6 处全是 `Row().width(32).height(4)`（`ReadAloudConfigPanel.ets:121`、`ReaderAloudSettingsPage.ets:76`、`ReaderPage.ets:4758` 与 `:8575`、`ReaderSettingsPage.ets:768` / `:2566` / `:3473` / `:3679`），与 M3 默认一致；但 `ReaderPage.ets:4758` 与 `:8575` 写死 `'#C5C6CD'`，其余走 `this.rsetHandle`。上游统一 `onSurfaceVariant`。
+
+### 五、附带：UiTokens 三个圆角常量基本没被用
+
+`components/UiTokens.ets:64-68` 定义了 `RADIUS_INNER = 8`、`RADIUS_SHEET = 16`、`RADIUS_MENU = 16`，`:59-60` 注释还特意写「卡片圆角**不在这里**：它由主题系统拥有（themeCardRadius）」。
+
+但消费面只有 **4 处**：`components/settings/UiColorSheet.ets:122`、`components/settings/UiInput.ets:83`、`pages/BookInfoEditPage.ets:9`（import 未使用）。令牌定义了基本没被用起来。
+
+### 六、已对齐、不需要动
+
+- 抓手尺寸 32×4 与 M3 `BottomSheetDefaults.DragHandle` 一致。
+- `components/settings/UiSection.ets` 的卡片圆角/边框三键接线正确。
+- `components/ThemeItemDivider.ets` 的分隔线三键接线正确。
+- `ThemePackageRepository.ets`（`:66`/`:185`/`:303`/`:368`/`:452`/`:531`）与 `ThemeSettingsRepository.ets`（`:74-75`/`:276`/`:336`/`:400-401`/`:515`）的读写链完整，备份透传键组在 `data/BackupRepository.ets:484`/`:495-501`/`:538-539`。
+
+### 七、判断：三块性质不同，不能一起做
+
+| 块 | 缺什么 | 修法性质 | 相对成本 |
+| --- | --- | --- | --- |
+| 颜色（KI-THEME2） | 25 个色位没建 | 补数据 + 补广播键 | 中（432 个色值抄写） |
+| 形状（本条三） | 令牌有，阅读域不读 | 接消费点 + 统一散值 | 小（改消费点，不新建抽象） |
+| 面板（本条四） | 没有公共容器 | 新建组件 + 迁 5 个弹层 | 大（唯一要新建抽象层的一块） |
+
+**面板这块要先探针再动手**：ArkUI 上「内容自适应高度 + 上限 80%」是否成立，本地源码注释已经写了「探针实证做不到」，但那次探针只测了固定百分比面板换成两行文字后高度不变 —— 还没测过用 `bindSheet` 的 `detents` 或 `SheetSize.FIT_CONTENT` 能不能做到。不确认这一点就动 5 个弹层，等于赌。
+
+关联：KI-THEME2（M3 色位缺口）、KI-THEME3（菜单取色链）、[`docs/parity/ZIP-THEME.md`](parity/ZIP-THEME.md)、[`docs/FEATURES.md`](FEATURES.md) 5.2。
+
+---
+
+## 排版、图标、动效、模糊、阴影、无障碍：外观体系里另外六块（r355 粗盘）
+
+**KI-THEME5 除颜色/菜单取色/形状面板外，主题体系还有六块从未盘过；本条只做粗测，未逐行取证** —— 状态：**未修**。
+
+这一条与前三条的区别要说清楚：KI-THEME2/3/4 是逐文件、逐行号实测出来的；本条六块只做了关键词计数与取样，**没有逐处读代码确认语义**。数字可信（都是 `grep -c` / `grep -rho` 直接数出来的），但「这一处是不是真的该用令牌」这类判断没做。当作摸底，不当作取证。
+
+### 一、排版（Typography）
+
+上游有完整的语义阶梯，本地没有。
+
+- 上游 `ui/theme/LegadoTheme.kt:85-119` 定义 `data class LegadoTypography`，**24 个槽位**：headline / title / body / label 各三档（Large/Medium/Small），每档再加一个 `*Emphasized` 变体。
+- 引用面：`grep -rho "typography\.[a-zA-Z]*"` 共 **696 处**，分布在 **186 个文件**。用量前六：`bodySmall` 155 / `labelSmall` 104 / `bodyMedium` 97 / `labelMedium` 74 / `titleMedium` 45 / `titleSmall` 39。`*Emphasized` 变体合计约 130 处（`labelSmallEmphasized` 39 / `labelMediumEmphasized` 39 / `labelLargeEmphasized` 18 / `titleSmallEmphasized` 16 / `titleMediumEmphasized` 14 / `titleLargeEmphasized` 4）。
+- 本地：**没有排版层**。`fontSize(N)` 字面量 **1,189 处**，用到的字号有 **20 种**：14(311) / 13(206) / 12(177) / 11(123) / 16(98) / 15(88) / 10(50) / 18(39) / 20(37) / 17(21) / 9(10) / 19(7) / 32(5) / 8(3) / 24(3) / 23(3) / 28(2) / 26(2) / 22(2) / 48(1)。
+- `components/UiTokens.ets:13-29` 定义了 9 个 `FONT_*` 常量，但只有 5 个真被消费：`FONT_ROW_TITLE` 18 处 / `FONT_ROW_DETAIL` 14 / `FONT_ROW_OPTION` 10 / `FONT_INPUT` 8 / `FONT_SECTION_TITLE` 5；`FONT_PAGE_TITLE`、`FONT_LABEL_SMALL`、`FONT_INPUT_LABEL` 三个**零消费**。
+- 后果：同一层级的东西在不同页面大小不一。上游靠 24 个槽位保证「所有分组标题一样大、所有说明文字一样小」，本地靠 1,189 处手写数字维持。
+- 关联：`fontScale`（全局字号缩放 8..16，默认 10）本地是真接的 —— `entry/src/main/ets/pages/Index.ets:3839` 调 `setFontSizeScale(scale)`，`AppFontSettings.ets` 与 `Index.ets:3867-3872` 用 `getFont().registerFont` + `setFont` 换应用字体。这一层与排版阶梯是两件事，不要混为一谈。
+
+### 二、图标（Iconography）
+
+数量差得不多，但命名不成体系。
+
+- 上游 Material Icons 引用 **1,043 处 / 263 种**，另有 **177 个** vector drawable（`res/drawable*` 下 226 个 xml，其中 177 个是 vector）。用量前十：`Check` 50 / `Delete` 47 / `Add` 45 / `Refresh` 36 / `Edit` 32 / `Close` 32 / `Save` 28 / `PlayArrow` 21 / `MoreVert` 19 / `Download` 18。
+- 本地 `components/AppGlyph.ets` 的 `AppGlyphName` union 有 **82 个**名字，81 个 `this.name ===` 分支；`resources/base/media/` 下 146 个文件，其中 140 个 svg（`app_` 前缀 57、`reader_` 前缀 38）。
+- 命名不成体系：`profileCheck` / `profileClose` / `profileSave` / `profileRefresh` / `profileExpandMore` / `profileFolder` 等 20 多个带 `profile` 前缀，而 `add` / `delete` / `edit` / `search` / `settings` / `download` / `share` / `star` 不带；`clock` 与 `accessTime` 是两个名字指同一类语义；`brightness_medium` / `light_mode` / `dark_mode` 三个用下划线，其余全是驼峰。
+- 上游 top10 里本地**没有独立名字**的：`Refresh`（本地只有 `profileRefresh`）、`PlayArrow` / `Stop` / `Save` / `Close` / `SelectAll` / `FindReplace`（本地有 `profileSave` / `profileClose` / `profileFindReplace` 但都在 `profile` 命名空间下）、`KeyboardArrowDown`（本地是 `profileExpandMore`）。
+- 播放/暂停/停止图标不在 `AppGlyph` 里，是 `resources/base/media/` 的独立资源（`reader_play.svg` / `reader_pause.svg` / `app_stop_square.svg`），调用方直接 `Image($r(...))` 绕过 `AppGlyph`。
+
+### 三、动效（Motion）
+
+有底座，没有语义档位。
+
+- 上游 `ui/theme/ThemeComponents.kt:282` 挂 `motionScheme = MotionScheme.expressive()`，全应用动效由 M3 motion scheme 统一接管；`tween(` **143 处**、`spring(` **15 处**。
+- 本地没有动效令牌。`duration:` 字面量 **82 处**，用到的时长有 **11 种**：220(34) / 500(21) / 300(8) / 200(5) / 180(2) / 600 / 400 / 320 / 280 / 160 各 1，另有 7 处 `duration:` 后面跟的是变量。`curve` 只有 3 种：`Curve.EaseInOut` 25 / `Curve.EaseOut` 5 / `Curve.FastOutSlowIn` 2。
+- 220 这个值出现 34 次是好的信号（说明有一批是统一改过的，对应 r347 动效六批），但没有常量收口，下次改还得全仓找。
+
+### 四、模糊与玻璃（Haze）
+
+主界面通了，阅读域与朗读域全靠硬编码。
+
+- 上游 `ui/theme/hazeStyle/HazeLegado.kt` 提供四档预设（`ultraThinPlus` / `ultraThin` / `regular` / `custom`），`ultraThin` 与 `regular` 都从 `LocalAppUiConfiguration.current.theme.topBarBlurAlpha / 100f` 取 alpha；`hazeSource` / `hazeEffect` / `HazeState` 在 **20 个文件**里使用。
+- 本地 `backdropBlur` **24 处**，其中 18 处是硬编码数字（12 / 16 / 20 / 30），只有两处读偏好：`components/TopBar.ets:195` `.backdropBlur(this.themeTopBarBlurRadius)` 与 `pages/Index.ets:11262` `.backdropBlur(this.themeEnableBlur ? this.themeBottomBarBlurRadius : 0)`。其余 18 处分布在 `pages/ReaderAloudSettingsPage.ets`（11 处）、`pages/ReadAloudConfigPanel.ets`（4 处）、`pages/ReadAloudPlayerPage.ets`（1 处）、`components/ReadAloudGlassWidgets.ets:141`（1 处）、`pages/ReaderPage.ets:8197`/`:8359`/`:8384`（3 处，读的是阅读域自己的 `readerTopBarBlurRadiusVp()` / `readerBottomBarBlurRadiusVp()`）。
+- 四个模糊偏好键的消费面要分清：`themeTopBarBlurRadius` 有 1 处 `@StorageProp`（`TopBar.ets:59`）；`themeBottomBarBlurRadius` 是 **0 处** `@StorageProp`（只有 `pages/Index.ets:11262` 直接读 `@State`）；`themeTopBarBlurAlpha` / `themeBottomBarBlurAlpha` 是 **0 处** `@StorageProp` —— 它们经 `entry/src/main/ets/data/TopBottomBarSettings.ets:126-139` 的 `resolveBarBackgroundColor(baseColor, opacityPercent, blurAlphaPercent, enableBlur)` 参与底色 alpha 计算，所以**不是死键，但没有广播**。
+- 语义差异已记在 `pages/Index.ets:11254-11261` 的注释里：上游开模糊时面板 alpha 归零（`GlassDefaults.TransparentAlpha = 0f`）靠背后 haze 显形，本地没有 haze，全透明会让底栏彻底看不见，所以乘的是 `bottomBarBlurAlpha`（默认 40）而不是 0。
+
+### 五、阴影（Elevation）
+
+方向相反：本地比上游更「拟物」。
+
+- 上游全仓只有 **3 处** `Modifier.shadow` / `.shadow(` —— M3 的层次靠 tonal elevation（用 `surfaceContainer*` 色位分层）而不是投影。
+- 本地 `.shadow(` **10 处**，参数组合 7 种：`radius` 10 / 12 / 20 / 24 / `MENU_SHADOW_RADIUS`，`color` `#33000000` / `#40000000` / `#55000000` / `#66000000`，`offsetY` 2 / 4 / -4 / 12。
+- 这一条不是「本地缺了什么」，而是「本地多了什么」。要不要收，取决于产品取向；M3 口径下这 10 处应当改成色位分层。
+
+### 六、无障碍（Accessibility）
+
+差两个数量级。
+
+- 上游 `contentDescription` / `semantics` **1,017 处**（`ui/` 目录）。
+- 本地 `accessibilityText` / `accessibilityDescription` / `accessibilityLevel` **14 处**。
+- 这一条严格说不是「外观」，但图标按钮不带语义标签，读屏用户听到的就是一串「按钮」。若要补，前提是先把图标命名统一（见本条二）。
+
+### 七、外围一：主题包字段覆盖
+
+上游 `domain/model/settings/ThemeExportData.kt` 约 **120 个字段**；本地 `data/ThemePackageRepository.ets:56` 的 `ThemePortableConfig` 只保留本地有对应功能的字段。
+
+已知**有意放弃**（不是漏做，文件头注释 `:49-53` 写明）：
+
+| 字段组 | 数量 | 放弃理由 |
+| --- | --- | --- |
+| `navIconHome` / `navIconBookshelf` / `navIconExplore` / `navIconRss` / `navIconMy` 及五个 `*Selected` | 10 | 本地无导航图标自定义（全仓零命中） |
+| `selectedCoverAlbumId` | 1 | 本地无封面图集（全仓零命中） |
+| `launcherIcon` | 1 | 切换应用图标，平台不适用 |
+| 封面相关（`coverShowShadow` / `coverShowStroke` / `coverTextColor` / `coverInfoOrientation` 等） | 12 | 本地无封面图集 |
+
+其余字段本地都有对应（`fontScale` 32 处引用、`enableDeepPersonalization` 24 处、`isPredictiveBackEnabled` 5 处、`coverShowShadow` 4 处是备份透传）。
+
+### 八、外围二：沉浸式覆盖
+
+本地 13 处 `expandSafeArea` / `setWindowLayoutFullScreen`。此前记录过「四个整页未吃 `appTopInset`」，**r355 复核后只剩两个**：`pages/TxtTocRulePreviewPage.ets`、`pages/ReaderSearchPage.ets`。`pages/ReadRecordOverviewPage.ets:345`/`:449` 与 `pages/FileManagerPage.ets:28`/`:153` 已经接了。
+
+### 九、判断
+
+| 块 | 差距性质 | 是否值得现在做 |
+| --- | --- | --- |
+| 排版 | 没有语义阶梯，1,189 处手写数字 | **值得先查** —— 与动效同属「看起来一样、细节全不同」的典型 |
+| 动效 | 有底座、无档位，82 处 11 种时长 | 值得，成本小（收口常量） |
+| 图标 | 命名不成体系，功能不缺 | 值得，但要与无障碍一起做 |
+| 模糊 | 主界面通、其余硬编码 | 值得，成本小 |
+| 阴影 | 本地比上游多（方向相反） | 看产品取向，M3 口径下应改成色位分层 |
+| 无障碍 | 差两个数量级 | 差距最大，但属纯功能项，不属外观 |
+
+排版这块要先查的理由：它和动效一样，是「同一层级在不同页面长得不一样」的根因。但**本条没做逐行取证**，查的时候要重新盘，不能直接引用本条的数字当证据。
+
+关联：KI-THEME2（M3 色位缺口）、KI-THEME3（菜单取色链）、KI-THEME4（形状与面板）、[`docs/parity/ZIP-THEME.md`](parity/ZIP-THEME.md)、[`docs/FEATURES.md`](FEATURES.md) 5.2。
+
+---
+
+## 组件级形变：ArkUI 能做，`@AnimatableExtend` 已上机验证（r356）
+
+**KI-THEME6 上游十二类「会变的控件」本地只有两个有等价物；关键能力 `@AnimatableExtend` 本仓从未用过，但实测可用** —— 状态：**未修**（只做了能力验证，没做任何控件改造）。
+
+这条与前五条的区别：KI-THEME2/3/4/5 盘的是「配色、令牌、排版这些静态东西对不对」；本条盘的是**控件在动的时候形状怎么变**。它此前被误判成「平台做不到」，r356 已上机证伪。第六节另记一条**不属于形变、但常被误认成形变**的东西：阅读器底栏的进度拖动条（r360）。它的拇指自始至终是同一个胶囊，只被仿射缩放，真正的差异在阻尼动画与玻璃材质上。
+
+### 一、先把能力这条钉死：`@AnimatableExtend` 能驱动 `Polygon.points` 逐帧插值
+
+这是本条最重要的结论，因为它推翻了此前「ArkUI 没有形状插值 API」的判断。
+
+- 官方接口：`component/common.d.ts:1029` `declare const AnimatableExtend: MethodDecorator & ((value: Object) => MethodDecorator);`（@since 10）；`:1195` `declare interface AnimatableArithmetic<T>`（@since 10），四个方法 `plus` `:1207` / `subtract` `:1219` / `multiply` `:1231` / `equals` `:1244`。**基线 20 就能用，不需要抬基线**。
+- 官方文档原话（`arkts-custom-attribute-animation`）：「通过自定义可动画属性接口和可动画数据类型，通过逐帧回调函数修改不可动画属性接口的值，能够让不可动画属性接口实现动画效果」，并明确以 `Polyline.points` 为示例 —— 因为「系统不支持 Polyline 组件 points 属性的动画」。
+- 编译期不是语法糖：`ets-loader` 的 `process_ui_syntax.js` 里 `processAnimatableExtend` 会给装饰函数注入 `elmtId` / `isInitialRender` / `parent` 三个隐藏参数，生成 `if (isInitialRender) { createAnimatableProperty(...) } else { updateAnimatableProperty(...) }`；这两个函数在 JS 侧只有字符串常量，真实实现在 `libace_compatible.dll` 里 —— 引擎 native 能力。
+- 本仓现状：`grep -rn "AnimatableExtend\|AnimatableArithmetic" --include=*.ets .` → **0 命中**；`Polygon()` / `Polyline()` → **0 命中**。这条正规路一次都没试过。
+
+### 二、上机实测数据（模拟器 127.0.0.1:5555，探针在仓库外 `N:/HarmonyProjects/tmp/probe-animatable/`）
+
+| 测什么 | 结果 |
+| --- | --- |
+| 圆 → 八瓣软爆裂（幅度 0.055，上游 `AnimatedPlayPauseButton.kt` 真实值） | 形变成功，观感即 M3 LoadingIndicator 的软爆裂 |
+| 幅度 0.35（放大到肉眼易辨） | 形变成功，八个尖瓣清晰 |
+| 中间帧是否连续 | **连续**。0.5s 时瓣刚起、1.7s 时瓣已明显，不是两个形状硬跳 |
+| 插值速率（`linear` 4000ms） | **118.6–240.0 次/秒**（`multiply` 调用数 ÷ 时间跨度），多数采样落在 118–141 |
+| `multiply` 在 `springMotion(0.35, 0.9)` 下是否被调用 | **仍被调用**（spring 3000ms 时 `mul 79` / `plus 78` / `eq 28`）→ 此前担心的「spring 曲线不提供插值」不成立 |
+| 128 顶点 Polygon 的流畅度 | 无卡顿；插值速率 >100 次/秒说明帧率不受 128 点影响 |
+| 72vp / 36vp 小尺寸（上游播放按钮真实尺寸）下是否过密 | 不过密，无毛刺（用 `scale` 缩放整块后观察） |
+
+### 三、四条实现硬约束（都是实测撞出来的）
+
+1. **`@AnimatableExtend` 装饰的函数必须与使用它的 `build()` 在同一个 `.ets` 文件**。抽到 `ProbeShared.ets` 后 import，编译报 `Property 'animatablePoints' does not exist on type 'PolygonAttribute'` 与 `File '...ProbeShared.ets' is not a module`。根因：`@Extend` 用模块级全局 Map（`_component_map.EXTEND_ATTRIBUTE`），而 `@AnimatableExtend` 用**文件级** Map（`storedFileInfo.getCurrentArkTsFile().animatableExtendAttribute`，每文件重建）。→ 实现时不能抽到 `components/` 下，只能就地定义。
+2. **两端采样点数必须一致**。官方示例的 `plus` 用 `Math.min(this.length, rhs.length)` 截断，点数不同会静默丢点、形变错位。
+3. **`Polygon.points` 是绝对坐标，不随 `width`/`height` 缩放**。小尺寸下会溢出到组件外且**不裁切**（dump 实测 200vp 的 Polygon 实际 bounds 是 `[290,795][990,1495]`，比 200vp 大）。三种处理方式实测：`Shape` + `viewPort` 包裹**图形完全不显示**（不可用）；`Polygon.viewPort` 不存在（编译报 `Property 'viewPort' does not exist on type 'PolygonAttribute'`）；**`scale()` 缩放整块可行**，代价是描边跟着缩。
+4. **`extends Array<number>` / `extends Array<PointClass>` 在本仓 ArkTS 配置下可编译**。115 条 `arkts-*` linter 规则里没有禁止继承内置类型的规则（只有 `arkts-extends-only-class`）。
+
+### 四、上游十二类「会变的控件」与本地对应
+
+| # | 上游控件 | 怎么变 | 本地 |
+| --- | --- | --- | --- |
+| 1 | `AppPullToRefresh`（`ui/widget/components/AppPullToRefresh.kt`，116 行） | M3 `PullToRefreshDefaults.LoadingIndicator`：圆 ↔ SoftBurst 八瓣连续形变 + 旋转；7 处调用点 | **有等价物**，`entry/src/main/ets/components/PullRefreshIndicator.ets` 自绘 Canvas 径向函数 |
+| 2 | `AnimatedPlayPauseButton`（166 行） | 三重形变：容器圆↔八瓣（128 点，`baseRadius = r*(1-0.055p)`、`lobe = r*0.055p`、转 30°）+ 图标 play/pause 顶点插值 + 容器色 `primaryContainer`↔`secondaryContainer`；`tween(300, FastOutSlowIn)`；72dp | **无**。`entry/src/main/ets/pages/ReadAloudPlayerPage.ets:309` 的 `PlayerIconBtn` 纯换 `Image` 资源，零形变；54×54 圆底写死 `#CF3E40` |
+| 3 | `AnimatedText` / `AdaptiveAnimatedText`（`ui/widget/components/text/AnimatedText.kt`） | **逐字符** `AnimatedContent` + `slideInVertically`/`slideOutVertically`；9 处调用点，含底栏标签 `AppNavigationBar.kt:185`/`:218` | **无**。底栏 `TabItem`（`entry/src/main/ets/pages/Index.ets:11339-11380`）是 `if (this.selected && this.showLabel) { Text(...) }` —— 选中才出现，无逐字动画 |
+| 4 | `SmallAnimatedButton`（75 行） | 点击后图标按钮**临时展开成带文字的按钮**，`delay(1000)` 自动收起；9 处调用点 | **无** |
+| 5 | `MediumAnimatedButton`（63 行） | 同机制 | **无**（上游自己也是 0 调用点） |
+| 6 | `AppFloatingActionButtonMenu`（`AppFloatingActionButton.kt`，255 行） | M3 Expressive `FloatingActionButtonMenu`：出现/消失形变 + 图标 Close↔MenuOpen 形变 | **无**，本地只有 `pages/BookInfoPage.ets:23` `READ_FAB_HEIGHT = 56` 的静态 FAB |
+| 7 | `AppContainedLoadingIndicator`（25 行） | M3 `ContainedLoadingIndicator` 形变+旋转；6 处调用点 | **无**，本地 `LoadingProgress()` 7 处全是原生组件 |
+| 8 | `AdaptiveSwitch`（`IconSwitch.kt`，139 行） | M3 `Switch` + `thumbContent = Icon(Check)` + `scale` | **有等价物**，`entry/src/main/ets/components/UiSwitchControl.ets`（266 行，`springMotion(0.35,0.9)`、按下 28/选中 24/未选中 16 滑块） |
+| 9 | `VoiceAuditionButton`（342 行） | `busy` 时无限旋转（`tween(900, LinearEasing)`）+ 图标三态 | **无** |
+| 10 | `DampedDragAnimation`（`ui/animation/DampedDragAnimation.kt`，142 行） | `Animatable` + `spring` + `VelocityTracker`；浮动底栏拖拽 | **无** |
+| 11 | morph 浮层族（8 文件） | 封面从书架**无缝展开**到阅读器/听书页 | **无**。`geometryTransition` 可用，但圆角只同步绑定处、不管子组件 |
+| 12 | `ToggleChip`（122 行） | `FilterChip` + `AnimatedVisibility` 勾 | 本地 `ReplaceScopeChip`（`pages/ProfileSubPages.ets:1381`）自绘，无勾动画 |
+
+统计口径：上游 `Expressive` 143 处 / `ButtonGroup` 29 / `ToggleButton` 20 / `ContainedLoadingIndicator` 15 / `FloatingActionButtonMenu` 13 / `LoadingIndicator` 3；`updateTransition|animateFloatAsState|animateColorAsState|animateFloat(` 共 **41 个文件**。本地 `springMotion` 34 处 / `animateTo(` 28 处 / `displaySync` 0 处。
+
+### 五、抬基线的真实收益（查过了，不是猜的）
+
+- 本机 SDK 只有一套 `D:/Program Files/Huawei/DevEco Studio/sdk/default/`，`sdk-pkg.json` 是 `apiVersion: "26"` / `26.0.0.105` / `Release`。仓库 `build-profile.json5` 停在 `6.0.0(20)` 是**自己的选择**，抬基线不用装新 SDK，只改两个数字（且 `compatibleSdkVersion <= targetSdkVersion` 必须同步抬）。
+- **API 20+**：`Polygon` 的 `points` 可经 `AttributeUpdater.updateConstructorParams` 绕过状态系统直改顶点，高频形变省一轮状态 diff。
+- **API 26**：组件级沉浸光感（`@ohos.arkui.uiMaterial`，`MaterialLevel` 三档 `EXQUISITE`/`GENTLE`/`SMOOTH` + `ImmersiveStyle` 五档 `ULTRA_THIN`/`THIN`/`REGULAR`/`THICK`/`ULTRA_THICK`）—— 唯一与玻璃质感直接相关的新能力，但它是系统材质档位，不是任意形状的折射（见第六节）。
+- **任何基线都没有**：M3 `RoundedPolygon` 式的内建形状插值类 API（6.1.0 Beta2 与 26.0.0 变更清单都读过，无形状形变类 API）。所以形变只能靠 `@AnimatableExtend` 自己算。
+
+### 六、玻璃材质：模糊有、折射没有（r360 初记，r361 补到十层）
+
+这一小节回答一个具体问题：上游阅读器底栏那条进度拖动条能不能照做。答案是「能补大半，但补不了最关键的那一下」。
+
+#### 上游那条滑块是十层叠在一起，形变占比为零
+
+`ui/book/read/ReadBookMenuBarTool.kt:115` 起的 `ReadMenuLiquidSlider`（玻璃档，`glassThumbEnabled && backdrop != null` 才走）实测十层：
+
+| # | 层 | 上游做法 | 位置 |
+| --- | --- | --- | --- |
+| 1 | 位置 | `translationX = -w/2 + trackW*progress`，两端各夹 `w/4` | `:260-268` |
+| 2 | 拇指形状 | `.size(40f.dp, 24f.dp)` + `shape = { ContinuousCapsule }`（连续曲率胶囊） | `:298` 附近 |
+| 3 | 阻尼动画 | `DampedDragAnimation` 五条 spring | `ui/animation/DampedDragAnimation.kt` |
+| 4 | 速度驱动惯性拉伸 | `layerBlock { val velocity = dampedDragAnimation.velocity / 10f; scaleX /= 1f - (velocity*0.75f).coerceIn(-0.2f, 0.2f); scaleY *= 1f - (velocity*0.25f).coerceIn(-0.2f, 0.2f) }` | `:275-280` |
+| 5 | 按压时白底淡出 | `onDrawSurface = { drawRect(thumbColor.copy(alpha = 1f - pressProgress)) }` | `:317` |
+| 6 | 玻璃材质 | `drawBackdrop(effects = { blur(8dp*(1-p)); lens(10dp*p, 14dp*p, chromaticAberration = true) }, highlight = Ambient 缩 1/1.5 * p, shadow = Shadow(8dp, 黑 12%), innerShadow = 4dp*p)` | `:281-307` |
+| 7 | 拇指采样轨道层而非整页背景 | `rememberLayerBackdrop()` → `Box(Modifier.layerBackdrop(trackBackdrop))` 包住底轨与进度；拇指 `backdrop = rememberCombinedBackdrop(backdrop, rememberBackdrop(trackBackdrop) { scale(2f/3f + 1f/3f*pressProgress, pressProgress) { drawBackdrop() } })` | `:135` / `:209` / `:290` 附近 |
+| 8 | 轨道自身也是玻璃 | 轨道 `drawBackdrop(... shadow = Shadow(8dp, 黑 12%), onDrawSurface = { drawRect(trackColor.copy(alpha = enabledAlpha)) }).height(6f.dp)`；进度是独立 Box `.clip(ContinuousCapsule).background(accentColor)` | `:225` / `:246` |
+| 9 | 点击轨道带一次完整按压脉冲 | `detectTapGestures` → `dampedDragAnimation.animateToValue(target)`，内部 `press()` → 动画 → `release()` | `:249` 附近 |
+| 10 | 无障碍 | `semantics { progressBarRangeInfo = ProgressBarRangeInfo(current, range, steps); setProgress { ... } }` | `:146` 附近 |
+
+`p` 是 `DampedDragAnimation.pressProgress`（五条 spring：value `spring(1, 1000, visibilityThreshold)`、velocity `spring(0.5, 300, threshold*10)`、pressProgress `spring(1, 1000, 0.001)`、scaleX `spring(0.6, 250, 0.001)`、scaleY `spring(0.7, 250, 0.001)`；`pressedScale = 1.5f`）。
+
+**第 7 层是「拇指所在位置的轨道断开、露出背景」的真正机制**：`scale(scaleX, pressProgress)` 的第二个参数是纵向缩放，不按时 `pressProgress = 0`，轨道层被压成零高度，于是拇指采样的合成结果里没有轨道 —— 拇指压到哪，哪里的轨道就「消失」。按下时 `pressProgress → 1`，纵向从 0 展开、横向从 2/3 涨到 1，轨道在拇指内长回来并被 `lens` 放大。
+
+**两端固定留白**：`ReadBookMenuBarBottom.kt:164` 的 Row `padding(horizontal = 16.dp)` 加 `:191-193` 滑块自身 `.padding(horizontal = 8.dp)`，每侧 24vp；再加 `translationX` 的 `coerceIn` 让拇指中心最远只到距轨道两端 10dp，视觉上两端各约 34vp 空白。
+
+**这条滑块不是形变**：拇指从头到尾是同一个胶囊，只被 `graphicsLayer` 做仿射缩放。真正逐顶点形变的是 `AnimatedPlayPauseButton`（见本节第二、四节）。
+
+#### 刻度条：普通档有，玻璃档没有
+
+这是两档之间最容易被忽略的一处差异。
+
+| 档 | 拇指 | 刻度 |
+| --- | --- | --- |
+| 普通档（`glassThumbEnabled == false`） | material3 框架圆点 | **有**，框架按 `steps` 自绘，上游零代码 |
+| 玻璃档（`glassThumbEnabled == true`） | 自绘液态胶囊 | **完全没有** |
+
+依据：
+
+- 普通档走 `ReadBookMenuBarTool.kt:101` 的 `BaseReaderMenuSlider`（`:64` 的 `import io.legado.app.ui.widget.components.reader.ReaderMenuSlider as BaseReaderMenuSlider`），即 `ui/widget/components/reader/ReaderMenuPrimitives.kt:109` 的 `fun ReaderMenuSlider`，内部转 `AppSlider` → material3 `Slider(steps = steps)`，刻度由框架画。
+- 玻璃档整个 `:115-322` 里 `steps` 只出现两次：`:119` 形参声明、`:146` 塞进 `semantics` 的 `ProgressBarRangeInfo`。**零绘制用途。** 全函数只有三处绘制：`:225` 底轨、`:246` 已读进度、`:317` 拇指白底，没有 `drawLine`、没有 tick 循环。
+- `onDrag` 里 `nextValue` 是连续浮点累加（`range * (dragAmount.x / trackWidth)`），**不按 steps 取整、不吸附**。
+
+即：**打开液态玻璃按钮后，上游底栏进度条的刻度直接消失**，只剩底轨 + 强调色进度 + 液态拇指。`steps` 在玻璃档只服务无障碍朗读与调用方的整数语义。
+
+上游唯一画刻度的地方是**朗读播放器**的 `ui/widget/components/player/PlayerProgressSlider.kt:99-111`（`tickSpacing = 4.dp`、`tickHeight = 2.dp`、`strokeWidth = 1.5.dp`、`RoundRect` 全圆角裁剪、`scaleY = trackScale`），与阅读器底栏这条滑块无关。
+
+#### 本地现状
+
+`entry/src/main/ets/pages/ReaderPage.ets:8284-8290` 的拇指是一根静态竖条：
+
+```ts
+// 自绘竖条拇指：M3 的 handle 是 4dp 宽、44dp 高的圆角竖条，
+// ArkUI 系统 Slider 的拇指只能是圆点（SHAPE 档要 RectAttribute 实例，
+// 组件构建器造不出来），所以在轨道上按同一百分比叠一根竖条。
+Row()
+  .width(4).height(44).borderRadius(2)
+  .backgroundColor(this.readerMenuForeground())
+  .offset({ x: this.sliderThumbOffset() })
+  .hitTestBehavior(HitTestMode.None)
+```
+
+配套三个常量：`SLIDER_THUMB_WIDTH = 4`（`:142`）、`SLIDER_THUMB_TRAVEL_INSET = 14.3`（`:151`）、`sliderThumbOffset()`（`:1723`）。改值只改 `offset`，没有按压、没有回弹、没有材质、没有惯性。
+
+**本地当前是两档之外的第三种混搭**：`:8257` 有 `.showSteps(true).stepColor(this.readerMenuForegroundAlpha('73')).stepSize(4)`（框架刻度），同时 `:8284` 又是自绘竖条拇指（系统圆点被 `.blockColor(Color.Transparent)` 涂透明）。上游普通档是「框架刻度 + 框架圆点」，玻璃档是「无刻度 + 自绘胶囊」，本地这个组合两档都不是。
+
+另外本地**连玻璃档的开关都没接**：`readMenuBottomBarLiquidGlassButtons` 只在 `entry/src/main/ets/data/ReaderSettingsRepository.ets:334` 声明、在 `entry/src/main/ets/data/BackupRepository.ets:477`/`:526`/`:2548`/`:2555` 透传与忽略，**零 UI 消费**。所以本地恒等于普通档。
+
+顺带记一条：`readSliderMode`（`constant/PreferKey.kt:85` = `"read_slider_mode"`，`ReadSettings.kt:25` 默认 `"0"`）在 `ReadBookMenuBarBottom.kt:161` 只判 `!= "1"` —— 值 1 是**整条滑块隐藏**，不是换形态。
+
+#### 鸿蒙能做什么
+
+本地已有基础设施：`backdropBlur` 24 处、`springMotion` 34 处。
+
+| 上游层 | 鸿蒙对应 | 备注 |
+| --- | --- | --- |
+| 1 位置 | `.offset()` / `.translate()` | 直接对应 |
+| 2 连续曲率胶囊 | `.borderRadius()` 近似；要真连续曲率得自绘 `Path` | 近似 |
+| 3 阻尼回弹（五条 spring） | `curves.springMotion(response, dampingFraction)` | 参数不同名；`entry/src/main/ets/components/UiSwitchControl.ets` 已在用 `springMotion(0.35, 0.9)` |
+| 4 速度惯性拉伸 | 从 `onTouch` 的位移差自算 velocity，`scaleX`/`scaleY` 用两条不同参数的 `springMotion` 回弹 | **能做**，需自己实现速度跟踪 |
+| 5 按压白底淡出 | `.opacity(1 - pressProgress)` 或按 alpha 算色 | 直接对应 |
+| 6 `blur(8dp*(1-p))` | `.backdropBlur(number)`；另 `.backgroundBlurStyle(BlurStyle, options)`（`component/common.d.ts:17891`，`BlurStyle` 13 档，`:6614` 起） | 有。注意 `:19055` 的 `blur(value, options)` 是**前景**模糊，不是背景 |
+| 6 `highlight = Ambient * p` | `.linearGradient()` 叠一层白色渐变 | 近似，非真实光照 |
+| 6 `shadow(8dp, 黑 12%)` / `innerShadow(4dp*p)` | `.shadow()` + `.border()` | 近似 |
+| 7 拇指处轨道断开 | 给拇指加 `.backdropBlur(8)` + 白色 90% 底，视觉上等同「一块模糊背景胶囊盖在轨道上」 | **能近似**，与上游不按时几乎一样；但机制不同（上游是采样层被压扁，本地是盖一层） |
+| 9 点击脉冲 | `Slider` 的 `onChange` 已有点击语义，补一次 press→release 动画 | 能做 |
+| 10 无障碍 | `.accessibilityText()` + `accessibilityValue` / `onAccessibilityAction` | 本地 `:8265` 已用 `accessibilityText` 挂「第 x / 共 y 页」 |
+
+#### 鸿蒙做不到什么
+
+| 上游效果 | 鸿蒙 | 证据 |
+| --- | --- | --- |
+| `lens(10dp*p, 14dp*p)` 实时背景折射 | **无** | `@ohos.graphics.uiEffect.d.ts` 的 `interface Filter`（`:43`）只有 `blur(blurRadius)`（`:55`，@since 12）与 `hdrBrightnessRatio(ratio)`（`:75`，@since 24，需 `ohos.permission.HDR_BRIGHTNESS`）；`interface VisualEffect`（`:95`）是**空接口**，`createEffect()` 造出来的对象没有可用方法 |
+| `chromaticAberration = true` 色散 | **无** | 全 SDK 搜 chromatic 只命中 `component/common.d.ts:19331-19352` 的 saturation 属性文档注释（讲色度分量），无 API |
+| 任意形状的运行时着色器 | **无** | `@ohos.graphics.drawing.d.ts` 的 `class ShaderEffect`（`:3924`）只有 `createColorShader`、四个渐变、`createImageShader`、`createComposeShader`（`:4011-4067`），没有运行时着色器；全 SDK 搜 `RuntimeShader` 零命中 |
+| 第 7 层的「把某个组件注册成 backdrop 采样源」 | **无** | ArkUI 的 `backdropBlur` 只能采样组件背后的实时背景，没有 `rememberLayerBackdrop` / `layerBackdrop` 那种「指定层」概念 |
+
+`@ohos.arkui.uiMaterial`（API 26）是**系统材质档位**，不是任意形状的折射：`MaterialLevel` 三档（`EXQUISITE = 0` / `GENTLE = 1` / `SMOOTH = 2`，`:237-268`）、`ImmersiveStyle` 五档（`ULTRA_THIN = 0` / `THIN = 1` / `REGULAR = 2` / `THICK = 3` / `ULTRA_THICK = 4`，`:174-224`）。玻璃观感由系统决定，业务只能选档。
+
+#### 判断
+
+- 进度条**不属于 KI-THEME6 的形变范畴**，归「阻尼动画 + 玻璃材质」。十层里能补八层（1/2/3/4/5/8/9/10），第 6 层的模糊与阴影能补、折射与色散不能，第 7 层只能近似。
+- **刻度与液态拇指互斥**：要走上游玻璃档，必须先关掉本地的 `showSteps(true)`，否则就是「一排点 + 一块胶囊」，比现在更乱。
+- 本地目前是两档之外的混搭（框架刻度 + 自绘竖条），且玻璃档开关根本没接，所以「对齐上游」的第一步不是加动效，是**先把玻璃档这个开关接上**，再让两档各自成立。
+- 补不了的是**按住时背景被透镜放大的果冻感**。这与 KI-THEME2 的色位缺口同一性质：不是实现没写，是没有对应 API。
+- 若要做，按「能做多少做多少」写，验收时明确「折射与色散做不到、轨道断开只是近似」，不要拿放大加模糊冒充透镜。
+
+### 七、判断
+
+- 能力不缺：**A 档（播放按钮三重形变、加载圈、试听旋转、下拉刷新）基线 20 就够做**，已上机证明。B 档（底栏逐字、SmallAnimatedButton 展开）靠 `animateTo` + 条件渲染 + `transition` 也能做。C 档（封面 morph）`geometryTransition` 可用但有圆角/子组件限制。
+- 本仓缺的是**实现**，不是平台能力。所以这一条不能判「不适用」，应判 `未接` + `**要接**`。
+- 做的时候优先级：播放按钮（每屏可见、差异最刺眼）> 加载圈（`LoadingProgress` 7 处一次性换）> 底栏逐字（每页可见）> 其余。
+- 落地注意：`@AnimatableExtend` 函数写在页面文件里，不要抽公共组件；128 点是性能上限不是必需，72vp 尺寸下 64 点足够。
+
+关联：KI-THEME2（M3 色位缺口，`secondaryContainer` 缺位会连带影响播放按钮的颜色形变）、KI-THEME5（动效六块的粗测）、[`docs/parity/TXT-READER.md`](parity/TXT-READER.md)、[`docs/FEATURES.md`](FEATURES.md) 5.2。
+
+---
+
+## 云端 TTS 整层未建（r357 盘点，未做）
+
+上游朗读有**三条**引擎路径：系统 TTS、用户自建 HTTP 源、**云端 provider（七家）**。本地只落了前两条，第三条整层没有——不是「平台做不到」，是这一层从来没搬。
+
+### 上游的四层结构
+
+| 层 | 上游文件 | 行数 |
+| --- | --- | --- |
+| 引擎配置表 | `data/entities/CloudTtsEngineEntity.kt`（`cloud_tts_engines`，13 列：`id` / `name` / `provider` / `baseUrl` / `apiKey` / `secretKey` / `region` / `appId` / `model` / `optionsJson` / `enabled` / `createdAt` / `updatedAt`，主键 `id`，索引 `(provider, enabled)`） | 26 |
+| provider 接口与注册表 | `help/readaloud/playback/CloudTtsProvider.kt`（`CloudTtsProviderRegistry` 注册七家） | 73 |
+| 七家实现 | `OpenAiCloudTtsProvider` 73 / `GeminiCloudTtsProvider` 94 / `MimoCloudTtsProvider` 89 / `AzureSpeechCloudTtsProvider` 96 / `AlibabaCloudTtsProvider` 95 / `AwsPollyCloudTtsProvider` 149 / `VolcengineCloudTtsProvider` 86 | 682 |
+| 合成与映射 | `CloudTtsAudioSynthesizer.kt` 98 / `CloudTtsEmotionMapper.kt` 93 / `CloudTtsRoleInstructionMapper.kt` 20 | 211 |
+
+provider 类型枚举七值（`domain/model/readaloud/CloudTtsModels.kt:19-26`）：`openai_speech` / `gemini_tts` / `mimo` / `azure_speech` / `alibaba_cloud` / `aws_polly` / `volcengine`，`fromStorage` 缺省回落 `Mimo`。
+
+界面侧三文件合计 **2,885 行**：`ui/book/readaloud/cloudtts/CloudTtsScreen.kt` 1,337 / `CloudTtsViewModel.kt` 1,324 / `CloudTtsContract.kt` 224。
+
+### 上游云端引擎怎么进播放链（这一点最容易搞错）
+
+上游**没有第三条播放通道**。`model/ReadAloud.kt:70-101` 的 `getReadAloudClass()` 里，`ttsEngine` 解析成 `engineType == ENGINE_CLOUD`（`domain/model/readaloud/ReadAloudSpeechModels.kt:23`，值 `"cloud_tts"`）时：
+
+```
+httpTTS = HttpTTS(id = Long.MIN_VALUE, name = selection.displayName.ifBlank { "Cloud TTS" })
+return HttpReadAloudService::class.java
+```
+
+即**云端引擎合成出一个假的 `HttpTTS` 源，塞进同一条 HTTP 播放服务**。合成产物是文件（`CloudTtsAudioSynthesizer.synthesize(engine, request, output: File)` 写盘），播放仍是 `ExoPlayer`（`service/HttpReadAloudService.kt:164`）。
+
+连 MiMo 这种发 SSE 流的 provider 也一样：`MimoCloudTtsProvider.kt` 里 `put("stream", true)`、逐行读 `data:`、`choices[0].delta.audio.data` 取 base64、`Base64.decode` 累进 `ByteArrayOutputStream`，收完后 `CloudTtsAudio(pcm16MonoToWav(bytes, SAMPLE_RATE), "wav", SAMPLE_RATE)`——**上游是「流式收、整段落盘、文件播放」，没有边收边播**。默认地址 `https://api.xiaomimimo.com/v1`，采样率 24,000。
+
+### 本地现状（三条证据，均为 r357 实测）
+
+1. **表不存在**：`entry/src/main/ets/data/RdbSchema.ets` 共 27 张表，朗读相关只有 `httpTTS`（`:421`）与 `read_aloud_voices`（`:444`），`cloud_tts_engines` 零命中。
+2. **代码不存在**：`grep -rni "mimo\|xiaomimimo" --include=*.ets entry/src/main/ets` 空；`grep -rn "cloudTts\|CloudTts"` 全仓仅 `pages/ReadAloudEnginePage.ets:7` 一处注释（说明该页对标 `CloudTtsScreen.kt`）。
+3. **引擎类型只有一种**：`entry/src/main/ets/model/ReadAloudVoice.ets:45` 只定义 `READ_ALOUD_VOICE_ENGINE_HTTP = 'http'`；`pages/ReadAloudEnginePage.ets:67` 还有一行显式过滤 `if (voice.engineType !== READ_ALOUD_VOICE_ENGINE_HTTP) { return; }`。上游的 `ENGINE_SYSTEM` / `ENGINE_CLOUD` 两个值本地都没有。
+
+### 界面现状：引擎 tab 是借壳的
+
+`pages/ReadAloudEnginePage.ets` 的骨架确实照 `CloudTtsScreen.kt` 画的（标题「朗读引擎与音色」+ 音色/引擎两 tab + 右下 FAB + 行尾编辑/删除/拉取），但 `activeTab === 1`（引擎页）渲染的是 `this.sourceList()`——列的是 `httpTTS` 源，不是云端引擎。所以用户看到的「引擎」不是上游语义上的引擎。
+
+### 平台侧并没有拦着（推翻「因为平台限制」这个前提）
+
+| 能力 | SDK 依据 |
+| --- | --- |
+| 流式接收响应体 | `rcp.ResponseBodyDestination` 含 `IncomingDataCallback = (incomingData: ArrayBuffer) => void \| Promise<void>`，`@hms.collaboration.rcp.d.ts:292`，`@since 5.0.0(12)` |
+| 逐段收数据事件 | `HttpEventsHandler.onDataReceive` / `onDataEnd` / `onCanceled`，`@hms.collaboration.rcp.d.ts:2337` 起，`@since 4.1.0(11)`；挂在 `TracingConfiguration.httpEventsHandler`（`:1467`） |
+| 流式播放 PCM | `AudioRenderer.write(buffer: ArrayBuffer)`，`@ohos.multimedia.audio.d.ts:6105`（callback）/ `:6116`（Promise） |
+| 播放端变速 | `AudioRenderer.setSpeed(speed: number)`，范围 0.25–4.0，`:6344`，`@since 11` |
+
+基线 `6.0.0(20)` 全部覆盖。真正的缺口是本地没建这一层（`AudioRenderer` / `cloudTts` / `event-stream` 三个关键词在 `.ets` 里都是零命中）。
+
+### 与「自研 MiMo 客户端」方案的四处偏离
+
+有人提过一个方案：新建 `readaloud/MimoTtsClient.ets` + `StreamingPcmPlayer.ets` + `StreamingTtsReader.ets`，并在 `readaloud/SystemTtsPlayer.ets:339` 的二元分支后加第三条。按上游核对，这四处都偏离：
+
+1. **provider 层从「七家可配置」退化成「一家写死」**。上游是接口 + 注册表 + 引擎表，用户能配七家、填各自的 key、切模型；单家硬编码协议对了、架构反了。
+2. **播放层引入了上游不存在的东西**。`StreamingPcmPlayer`（AudioRenderer + 环形缓冲 + 段末补零）在整条朗读链路上游不存在——上游 `AudioTrack` 的所有命中都在注释里说变声器拿不到会话号（`model/ReadAloud.kt:61`/`:139`、`service/HttpReadAloudService.kt:2122`），不是流式播放实现。
+3. **分支位置与上游设计相反**。上游是「云端走 HTTP 通道」，不是「三条并列通道」。本地对应的注入点是现成的 `SystemTtsPlayer.configureHttp(context, source, voice, rate)`（`readaloud/SystemTtsPlayer.ets:123`），选源在 `pages/Index.ets:7853 configureHttpSource()`。
+4. **多出一处上游没有的凭据存储面**。`cloud_tts_engines` 不在上游备份白名单里（`help/storage/BackupConfig.kt:96` 的 `dbIgnoreKeys` 19 项无 `cloudTts`），说明上游自己也没给这张表做备份互通；新方案的 MiMo 配置若存本地偏好，又多一处「上游没有、备份对不上」的面。
+
+另有一条不是「不对齐」而是**功能缺陷**：`this.httpSource !== null` 在 `readaloud/SystemTtsPlayer.ets` 里出现 **3 次**——`:168`（`pause()` 走 `HttpTtsPlayer.pause()` 保留当前段）、`:194`（`stop()` 走 `HttpTtsPlayer.stop()`）、`:339`（`speakNextUnit()` 分发合成）。只改 `:339` 的话，流式模式下 pause/stop 会掉进系统 TTS 引擎分支（`engine.stop()`），AudioRenderer 不会被停、缓冲不会清。
+
+### 一处文档口径打架
+
+`docs/PROJECT.md:42` 把「TTS 服务」列在**范围之内**（「在线书源抓取、RSS 拉取、TTS 服务、WebDAV 属于本项目范围之内」），但 `docs/READALOUD-BATCH-REPORT.md:115` 把七家云端 provider 判为「**范围之外**」，`:128` 与第六章第 6 条也照此口径。云端 TTS 属于「TTS 服务」而非 `PROJECT.md:46-48` 排除的「AI 在线服务 / 云同步 / 额外设备形态」，按现有范围定义应在范围内。r357 只记录这个矛盾，未改口径——口径由用户定。
+
+### 判断
+
+- 状态：`未接`。这是**整层缺失**，不是个别能力受限。
+- 如果要接，正确顺序是搬上游四层（表 → 接口与七家 → 合成 → 挂进现有 HTTP 通道），MiMo 只是 registry 里的一个条目，不是独立客户端。
+- 「边收边播」若确实想要，那是**上游没有的增强**，应加在 provider 之下（provider 仍返回完整音频，另加可选流式合成入口），不要动 `SystemTtsPlayer` 的通道结构——否则对齐与增强会互相污染。
+- 未验证项：本地从未编译或运行过任何云端 provider 代码；上表 SDK 能力只核对了声明（`@since` 与签名），没有跑过探针。
+
+关联：KI-THEME2（M3 色位缺口）、[`docs/FEATURES.md`](FEATURES.md) 3.1/3.2、[`docs/READALOUD-BATCH-REPORT.md`](READALOUD-BATCH-REPORT.md) 第五章与第六章、[`docs/PROJECT.md`](PROJECT.md)「在线服务（已纳入范围）」。
+
+---
+
+## 朗读的平台底座：能做什么、不能做什么（r358 盘点）
+
+与上一节盘点的是不同的东西：上一节说「上游有云端 TTS 而本地没建」，这一节说「平台给了什么、没给什么」。素材来自并行项目 `N:\HarmonyProjects\Frigivox` 的可行性分析（`docs/FEASIBILITY-ANALYSIS.md`，363 行；该项目 2026-11-19 已暂停，零代码、零构建、零上机）。凡标「未复核」的，是它读 OpenHarmony native 源码或外部文档得出的结论，本机 SDK 验证不了；其余 SDK 声明我都逐条复核过。
+
+### 一、鸿蒙没有「系统 TTS 引擎插槽」——五条证据链
+
+Android 的 `TextToSpeechService` 提供三件事：**注册**（`intent-filter action=android.intent.action.TTS_SERVICE`）、**发现**（调用方不指定引擎，系统自己枚举）、**选择**（用户在设置里选默认引擎）。鸿蒙三件都没有：
+
+| # | 证据 | 出处 |
+| --- | --- | --- |
+| 1 | ExtensionAbility 类型白名单 **24 类**里没有 TTS：accessibility / action / asset / cert / dataShare / deviceManager / fence / fileShare / form / ime / inputMethod / node / preview / print / push / screen / service / share / uiExtension / userAuth / vpn / wallpaper / window / workScheduler | `build-tools/ets-loader` 里的 ExtensionAbility 类型枚举 |
+| 2 | `wantConstant` 没有任何 TTS / Speech 相关 action | `@ohos.app.ability.wantConstant.d.ts` |
+| 3 | Core Speech Kit 只是库不是插槽：`@hms.ai.textToSpeech.d.ts` 只暴露 `createEngine(CreateEngineParams)`，四个字段 `language` / `person` / `online` / `extraParams`，**没有 engineId、没有枚举、没有注册入口** | `@hms.ai.textToSpeech.d.ts:40` / `:57` |
+| 4 | 全 SDK 无 `TtsEngine` / `ITtsEngine` 声明；`@ohos.ai` 下只有 `mindSporeLite` | 全 SDK 递归 grep 零命中 |
+| 5 | 系统设置里没有「首选 TTS 引擎」项 | 官方支持页路径 + 未找到反证，**未真机实测** |
+
+补充一条否决：`AppServiceExtensionAbility`（API 20+）看起来像「给第三方提供后台服务」的入口，但它**仅 2in1 设备 + 需 ACL `ohos.permission.SUPPORT_APP_SERVICE_EXTENSION` + 仅企业应用**，个人开发者用不上。
+
+**后果**：任何「让别的 App 调用本应用的 TTS」的方案都退化成五处硬编码——端口、端点路径、参数名、标记 header、`bundleName` + `abilityName`。准确说法不是「私有协议」，是「**无发现机制的硬编码对接**」：只有预先知道对方存在的两个应用才能配对，第三方无法发现也无法复用。
+
+### 二、推流播放：能做，而且这是整包问题的唯一解
+
+本地现状是**整包**：`readaloud/HttpTtsPlayer.ets` 用 `session.downloadToFile()` 把整段音频落到 cacheDir，再 `media.createAVPlayer()` + `fdSrc` 播放——音频一个字节都没穿过阅读器的内存，阅读器只说「有个文件，你播」。所以首音延迟 = 整段合成时长。
+
+平台侧并没有拦着，`@ohos.multimedia.audio.d.ts` 里推流 API 齐全（我逐条复核存在）：
+
+| 能力 | 声明 |
+| --- | --- |
+| 创建渲染器 | `:182` AsyncCallback 重载、`:208` `createAudioRenderer(options): Promise<AudioRenderer>` |
+| 逐帧要数据 | `:6871` `on(type: 'writeData', callback: AudioRendererWriteDataCallback): void` |
+| 推一块 PCM | `:6116` `write(buffer: ArrayBuffer): Promise<number>`（**`write()` 已 deprecated since 11**，新写法走 `writeData` 回调） |
+| 变速 | `:6344` `setSpeed(speed: number): void`，范围 0.25–4.0 |
+| 采样率常量 | `:1090` `SAMPLE_RATE_24000 = 24000` |
+| 打断事件 | `:6688` `on('audioInterrupt', callback: Callback<InterruptEvent>)` |
+
+三条硬约束（前两条来自 native 源码，未复核；第三条我复核过）：
+
+1. **回调 buffer 只有 100ms**。`audio_info.h:78` `constexpr uint64_t MAX_CBBUF_IN_USEC = 100000;` → 24kHz × 0.1s × 2 字节 = **4800 字节**。所以「合成一块、播一块」的粒度就是 100ms，不能指望一次喂一大段。
+2. **回调里不能等网络**。`napi_audio_renderer_write_data_callback.cpp` 的 `WRITE_CALLBACK_TIMEOUT_IN_MS = 1000`，`napi_call_threadsafe_function(..., napi_tsfn_blocking)` 同步等 JS 返回，超时打 `"Client OnWriteData operation timed out"`。所以回调里只做 memcpy：不够就返回 `AudioDataCallbackResult.INVALID`（`:5834` `= -1`，@since 12）让系统重试（框架收到 INVALID 会置 `bufDesc.dataLength = 0`，不消耗缓冲）；段末剩多少就读多少、补零填满，返回 `VALID`（`:5838`）。
+3. **编码枚举名写错就编不过**：`ENCODING_PCM_16BIT` 在 SDK 里**根本不存在**（全 SDK grep 计数 0）。正确写法是 `ENCODING_TYPE_RAW = 0`（`:1187`）+ `SAMPLE_FORMAT_S16LE`。这条纠正了此前多处的口误。
+
+### 三、变速不变调：`setSpeed` 走 Sonic，0.5x 以上不改音高
+
+`frameworks/native/audiorenderer/src/audio_renderer.cpp:2662-2683` 的 `SetSpeed` 末尾调 `SetPitch(AudioSpeed::GetPitchForSpeed(speed))`；`frameworks/native/audioutils/src/audio_speed.cpp:48` 是 `sonicCreateStream`，`:121-130` 的 `GetPitchForSpeed` 在 `speed > 0.5` 时把 pitch 固定为 `SPEED_NORMAL`。（两处都是 native 源码，未复核；`setSpeed` 声明本身我复核过。）
+
+对本仓的实际含义：`HttpTtsPlayer.ets:136-152` 的十档是 `[0.75, 1.00, 1.25, 1.75, 2.00, 0.50, 1.50, 3.00, 0.25, 0.125]`，**只有最后两档（0.25x / 0.125x）会降调**，其余八档用 `renderer.setSpeed()` 即可，不需要「变速靠重新合成」那条路。
+
+### 四、一个反向坑：别用 `STREAM_USAGE_MUSIC` / `AUDIOBOOK`
+
+官方 `power-saving-for-playback.md`：这两种用途默认走**低功耗渲染器**，熄屏时缓存上限 **10000ms**、亮屏 1000ms，且「应用无法快速提供数据时会降级到普通渲染器周期」。对 TTS 是双向负面——填不满必然降级，能填满时 10 秒缓存会把「停止 / 暂停」延迟拉到秒级。
+
+正确做法是用 `STREAM_USAGE_VOICE_ASSISTANT = 3`（`@ohos.multimedia.audio.d.ts:1309`）。它不属于「媒体类型」，按 `continuous-task.md` 走 `AUDIO_PLAYBACK` 长时任务即可，不需要 AVSession；本地现有的 AVSession（`readaloud/ReadAloudBackgroundTask.ets`）保留也不违规。
+
+顺带一条与上一节相关的：`AUDIO_PLAYBACK` 长时任务从 API 20 起要求「真在播放」且需连 AVSession，否则 `SYSTEM_CANCEL_AUDIO_PLAYBACK_NOT_RUNNING = 6` 会被系统取消。这也是「独立 HAP 只起 HTTP 服务不放音」那条路拿不到后台保活的原因。
+
+### 五、流式合成的两个硬要求
+
+MiMo 这类 SSE 供应商的音频块是裸 PCM（`format: "pcm16"`，24kHz / 16bit / mono，**采样率与声道由客户端写死，响应里不带**）。两条必须自己做的：
+
+1. **必须 `pcm16` 不能 `mp3`**。mp3 流式每块自带 Xing 头帧，逐块拼接会每 ~0.3s 突一下。
+2. **必须自己做 PCM 帧对齐**。16bit 意味着一个采样 2 字节，奇数长度的尾字节会让后续所有样本错位（听起来是持续噪声）。做法是把不足一帧的尾字节留到下一块拼接。
+
+### 六、上游自己也没做「单请求长流边播」
+
+这条容易被忽略：`LonePheasantWarrior/TalkifyTTS`（Android）不是靠「一次请求播完整章」，而是 `chunkMaxLength = 768` 切文本 + `ChunkPipelineExecutor` 默认 `DEFAULT_WINDOW = 2` 两路预取，类注释明写「适用于『单块文本一次 HTTP 请求、响应体内嵌音频数据』的供应商」。所以即便供应商真流式，首块延迟也不够稳——**要抄的是「切块 + 两路预取 + 块内流式」这个三层结构，不是单层**。
+
+本仓对应的现成件是 `readaloud/SpeechSegmenter.ets`（切段）与 `readaloud/SystemTtsPlayer.ets:346-355` 的 `preload` 循环（预取），改造方向是把「预下载文件」换成「预取下一段音频流」。
+
+### 七、判断
+
+- **不该做的事**：把朗读做成「独立 HAP + 本机 HTTP 中转」。平台没有 TTS 插槽，这条路的每一环都在模拟一个不存在的能力：整包（服务端收完才回、客户端下完才播，双重整包）、无取消（无 `/cancel`，用户点停止后合成仍跑到底并占住管线）、语速语义错位（本仓 `HttpTtsPlayer.ets:154-156` 的 `speakSpeed(source) = (source.speed ?? 5) + 5`，speed=5 送 10；对端若当倍率解释就是 10 倍速），还压在「跨应用 `127.0.0.1` 回环」这个**至今没有任何官方依据**的地基上。
+- **该做的事**：合成内核直接跑在阅读器进程里 + `AudioRenderer` 推流播放。改动面是三个新文件（请求与 SSE 解析、渲染器与环形缓冲、对外门面）+ 一处分支（`SystemTtsPlayer.ets` 的 `isHttpMode()` 二元判断变三元），现有 HTTP 源路径与系统 TTS 兜底一行不动。
+- **仍然做不到的**：被别的 App 当系统 TTS 调用（无插槽）、多角色朗读（要自建 `MultiRoleParser` / `RoleAttributor` / `SpeechPlan` 编排层，属工作量不属平台限制）。
+- **仍未验证的六条**（引用时照标）：`SONIC_ENABLE` 编译开关在目标设备是否开启（关闭时 `setSpeed` 静默不变速）、`writeData` 回调 1000ms 超时余量、`STREAM_USAGE_VOICE_ASSISTANT` 与现有 AVSession 的实际配合、首块延迟实测值、段间空窗、环形缓冲欠载。
+
+
+---
+
+## 书源引擎：能接、已上机验证、但还差调度层（r359）
+
+与「在线书源抓取仍未排期」那条不冲突：这一节说的是**技术上能不能接**，不是「排期到了」。素材来自工程外最小验证工程 `N:\HarmonyProjects\tmp\probe-sourceengine`（包名 `io.legado.probe.sourceengine`），**主仓一行未改**。被测对象是社区实现 [`wip3l/harmony-book-source-engine`](https://github.com/wip3l/harmony-book-source-engine)（GPL-3.0）的 `sourceengine/` 与 `quickjs/` 两个目录，zip 1,844,595 B。
+
+### 一、结论先说
+
+**能接，而且已经在本机跑通。** 三层都实测过：
+
+| 层 | 结论 | 证据 |
+| --- | --- | --- |
+| 编译链 | 76 个 `.ts` + 295 行入口，共 **25,999 行**，在 `compatibleSdkVersion 6.0.0(20)` + `targetSdkVersion 26.0.0` 下被 hvigor 当源码编进编译图，**零 ERROR** | `BUILD SUCCESSFUL in 19 s 257 ms`，49 个 task |
+| native 库 | `libquickjs.so` 在 **x86_64 模拟器**上加载成功，并真的执行了 JS | 探针页第 3–6 关 |
+| 规则解析 | CSS 选择器、属性取值、列表、JSONPath、`@js:` 脚本规则**全部返回正确结果** | 探针页第 7 关 |
+| 真实书源端到端 | 用真实书源合集里的一条纯 CSS 书源跑通 **搜索 → 目录（1302 章）→ 正文**，书名/作者/章节名/正文全对 | 见第八节 |
+
+剩下没验的是**调度层**——`SearchCoordinator` / `ExploreCoordinator` / `WebBookService` 这些不在 `sourceengine` 包里，作者自己 README 写明要宿主实现（他指向自己的阅读器项目 `wip3l/qingye-reader`，那边三个文件合计约 8,000 行）。所以「能接」不等于「接完就能搜书」，见第五节。
+
+**但「能接」也不等于「对齐上游」。** 用 463 条真实书源统计，`java.*` 桥的覆盖率是 **92.5%（50 种 / 3,436 次调用命中）**，缺 43 种 / 280 次；而且引擎的 `ScriptCompatibility.ts` 明写这是 allow-list，文件系统、进程、反射、UI 四类**有意不模拟**。分层的准确判断在第九节。
+
+### 二、编译链：怎么接才行（这一条最要紧，两种接法结果相反）
+
+`sourceengine` 的 `main` 是 `Index.ts`（不是 `.ets`、不是编译产物），所以它不是普通 HAR 依赖，必须**作为工程内模块**参与编译。实测两种接法：
+
+| 接法 | 配置 | 结果 |
+| --- | --- | --- |
+| ✅ 模块 | 根 `build-profile.json5` 的 `modules` 里加 `{ "name": "sourceengine", "srcPath": "..." }` 与 `{ "name": "quickjs", "srcPath": "..." }` | **成功**，产物正常 |
+| ❌ `file:` 依赖 | `entry/oh-package.json5` 里写 `"@legado/sourceengine": "file:..."` | **失败**，两种表现见下 |
+
+`file:` 依赖的两种失败模式（都实测过）：
+
+- 指向**工程外绝对路径**：编译阶段过（只报 HAR 内部的 `Cannot import files outside of the current module using relative paths` 告警 368 条），但**打包 .abc 阶段崩**：`hvigor ERROR: 00305010 Syntax Error / Cannot read properties of undefined (reading 'split')`，stacktrace 落在 `ets-loader/lib/utils.js` 的 `toUnixPath` ← `genContentAndSourceMapInfo` ← `ModuleSourceFile.writeSourceFile` ← `generateModuleAbc`。
+- 指向**工程内相对路径**（`file:../quickjs`）：编译阶段直接报 `10311002 ArkTS: ERROR / Failed to resolve OhmUrl. Failed to get a resolved OhmUrl for "...\quickjs\Index.ts"`，一条 import 报一次。
+
+`file:` 依赖本身能被 ohpm 正常安装（`entry/oh_modules/@legado/sourceengine` 会出现，`oh-package-lock.json5` 里 `registryType: "local"`），所以问题不在依赖解析，在 OhmUrl 的生成——`file:` 装进来的包不会被登记为模块。
+
+**`srcPath` 可以指向工程目录之外。** 实测把 `srcPath` 写成 `../hbse_src/harmony-book-source-engine-main/sourceengine`（工程外）同样构建成功、装机运行正常。两条路径的相对基准不一样，容易写错：
+
+- `build-profile.json5` 的 `srcPath`：相对**工程根**
+- `entry/oh-package.json5` 的 `file:`：相对**entry 目录**（所以工程外要写 `../../hbse_src/...`）
+
+**`hvigorw` 不会自动装 `file:` 依赖**，得先手工装一次（`ohpm install --all`，装在 `entry/oh_modules`，不是根 `oh_modules`），否则报 `Cannot find module '@devzeng/quickjs'`。
+
+### 三、native 库：x86_64 模拟器上加载并执行成功
+
+`quickjs/` 是 38 个文件 3.6 MB 的 MIT 包（`@devzeng/quickjs` 0.1.0），自带两套预编译静态库：`libs/arm64-v8a/libquickjs.a` 与 `libs/x86_64/libquickjs.a`。模拟器实测 `uname -m` = `x86_64`，所以用的是后者。
+
+产物 hap 里两个架构的 `.so` 都在：
+
+```
+libs/arm64-v8a/libc++_shared.so   1,262,504
+libs/arm64-v8a/libquickjs.so      1,316,672
+libs/x86_64/libc++_shared.so      1,294,904
+libs/x86_64/libquickjs.so         1,439,008
+```
+
+探针页六关（`JSContext` 的 TS 封装，`quickjs/src/main/ets/JSContext.ts`）：
+
+| 关 | 做什么 | 结果 |
+| --- | --- | --- |
+| 3 | `new JSContext(opts)` | 创建成功（native 库已加载） |
+| 4 | `evaluateScript('1 + 2 * 3')` | `7` |
+| 4 | `evaluateScript('"abc".toUpperCase()')` | `ABC` |
+| 5 | `var host = { name: "legado" }` 后取 `host.name` | `legado` |
+| 6 | `release()` | 成功 |
+
+`JSContext` 的构造参数是 `JSRuntimeOptions { memoryLimitBytes; stackLimitBytes }`；另有 `evaluateBounded(script, sourceURL, timeoutMs, maxPendingJobs)` 做带超时的执行，与 `JSScriptSession`（独立后台线程跑 QuickJS，脚本调 `__host(name, payload)` 同步等 ArkTS 回答）——后两者探针没验。
+
+### 四、规则解析：七项实测全部正确
+
+探针页第 7 关用 `AnalyzeRule`（`sourceengine/src/main/ets/core/rule/AnalyzeRule.ts`，3,014 行）跑真实规则串：
+
+| 规则 | 结果 |
+| --- | --- |
+| `@css:.name@text` | `书名一` / `书名二` |
+| `@css:.name@href`（`isUrl = true`） | `https://example.com/book/42`（相对地址补全生效） |
+| `@css:.name@text` 列表 | `书名一 \| 书名二` |
+| `@css:.author@text` | `作者甲` / `作者乙` |
+| `$.data.name`（JSONPath） | `JSON书名` |
+| `$.data.chapters[*].t` | `第一章 \| 第二章` |
+| `@css:.author@text@js:result.toUpperCase()` | `作者甲` / `作者乙`（`@js:` 的 `result` 是前一段规则的结果） |
+| `@css:.name@text@js:"《" + result + "》"` | `《书名一》` / `《书名二》` |
+
+关键 API 形态（写实现时别踩）：`getString` / `getStringList` / `getElements` 是**实例方法**，构造签名 `constructor(content: string = '', baseUrl: string = '', ctx?: RuleContext)`；`JavaRegexCompat` 的 `convert` / `compile` / `isSupported` / `notes` / `convertReplacement` **全是静态方法**，`new JavaRegexCompat()` 是错的。
+
+### 五、还没验的（引用时照标）
+
+- **调度层不存在**：`SearchCoordinator` / `ExploreCoordinator` / `WebBookService` 不在 `sourceengine` 包里，作者指向 `wip3l/qingye-reader`。要接完整搜索/发现/正文，得再搬那约 8,000 行。
+- **宿主适配一件没接**：`BookSourceRuntimeStore.install()`、ArkWeb（`BookSourceStageWebRuntime.get().attach(controller)`）、`TlsTrustStore.load(context)`、`NativeSourceInteraction.setHandler`、`SourceEngineHost.install(adapter)`、五个 AppStorage 键（`pendingVerificationUrl` / `Title` / `Time` / `SourceUrl` / `LoginUrl`）。探针只验了纯函数层，这些全没碰。
+- **模型是两套**：它自带 `model/data/Book.ts`（16,179 B，含 `Book` / `ReadConfig` / `BookChapter` / `BookSource` / `BookSearchRule`），与本地 `entry/src/main/ets/model/Book.ets` / `BookSource.ets` 不同构，接的时候要做映射层。
+- **登录验证没跑**：`loginUrl` / `loginUi` / `loginCheckJs` 三个字段的交互没验（`@js:` 里 `java.*` 桥接同理）。
+- **只验了一条书源**：463 条真实书源里挑的是纯 CSS 那类；带 `@js:`、`java.*`、gbk 编码、`{{page}}` 分页的书源一条都没跑。
+- **Cookie 落盘没验**：`HttpClient` 的 `useCookieJar` 走通了请求，但持久化到 `BookSourceRuntimeStore` 那层没接。
+- **`@Concurrent` 那条注释要留意**：`Index.ts` 里作者写明「带 `@Concurrent` 等 ArkTS 语法的 `.ets` 不能从 `.ts` 引用，统一放 `Diagnostics.ets` 子入口」——意味着部分能力只能从子入口拿。
+
+### 六、告警与体积
+
+构建告警 137 条，分布：`entry`（探针页）3 条、`sourceengine` 130 条、`quickjs` 2 条。`sourceengine` 那 130 条里 61 条是 `Function may throw exceptions. Special handling is required.`，其余是 crypto API 的 `The system capacity of this api '...' is not supported on all devices`（`CryptoMode` 9 / `createSymKeyGenerator` 7 / `createMd` 6 / `clearMem` 6 / `createCipher` 5 / `ENCRYPT_MODE` 5 / `DECRYPT_MODE` 4 / `init` 3 / `pubKey` 1）+ `decodeWithStream` 已废弃 9 条。**零 ERROR**。
+
+体积：hap 8,450,316 B（未签名），其中两套 `libquickjs.so` 合计 2.76 MB、两套 `libc++_shared.so` 合计 2.56 MB、`ets/modules.abc` 1,885,784 B、`ets/sourceMaps.map` 1,246,825 B。**真接入时 sourceMaps 与多余架构可裁**（模拟器只需 x86_64，真机只需 arm64-v8a）。
+
+### 七、许可
+
+本仓、上游 legado、`harmony-book-source-engine`、`qingye-reader` **全是 GPL-3.0**，`quickjs` 层是 MIT。→ **可整包引入或改，不需换许可、不需隔离进程**。
+
+### 八、真实书源端到端（r359 补测，用用户提供的合集）
+
+素材：`https://www.yckceo.com/yuedu/shuyuans/json/id/1331.json`（6,728,267 B，**463 条书源 / 31 个字段**），下载必须带 `--tlsv1.2`，否则 curl 报 `exit 35`。合集塞进探针工程的 `entry/src/main/resources/rawfile/yck1331.json`。
+
+被测书源：`bookSourceUrl = https://www.deqitxt.com`（「得奇小说（优+++）」），`ruleSearch` / `ruleToc` / `ruleContent` **全是纯 CSS 规则**，无 `@js:`、无 `java.`。
+
+五步实测输出（截图 `N:/HarmonyProjects/tmp/shots/sbe_real2.jpeg`）：
+
+| 步 | 实测 |
+| --- | --- |
+| 读合集 | 463 条，解析成功 |
+| 挑书源 + 映射 | `bookList = @css:div.container div.item`，`chapterList = id.list@tag.li@tag.a` |
+| 搜索 | HTTP 200，正文 1,774 字符 → 书名「剑来」/ 作者「烽火戏诸侯」/ 地址 `https://www.deqitxt.com/75/` |
+| 目录 | HTTP 200，正文 69,431 字符 → **1302 章**，第 1 章「新书感言」、第 2 章「第一章 惊蛰」 |
+| 正文 | HTTP 200，正文 3,137 字符 → 1 段 / 93 字，开头「新书的重点在于"构建一个光怪陆离却合理有趣的仙侠世界"…」 |
+
+**这一步暴露的硬事实：Android 键名映射不在包里。** 全仓 `grep -rn "ruleSearch\|ruleBookInfo\|ruleToc\|ruleContent\|ruleExplore"` 在 `sourceengine/src/main/ets` 下**零命中**，只在 `docs/book-source-development.md` 里出现过一次（「导入器也接受本项目内部键名 `searchRule`…」）。引擎自己的模型 `BookSource`（`sourceengine/src/main/ets/model/data/Book.ts:317`）用的是内部名 `searchRule` / `exploreRule` / `bookInfoRule` / `tocRule` / `contentRule`（`Book.ts:345-349`）。所以**从真实书源 JSON 到引擎模型的那层键名翻译必须宿主自己写**（探针里是 30 行手写赋值），与「调度层不在本包」是同一件事。
+
+### 九、`java.*` 桥覆盖率：92.5%，**不算对齐上游**（r359 补测）
+
+上面第八节证明了「一条纯 CSS 书源能跑通」，但**能跑通一条不等于对齐上游**。这一节给的是覆盖率实测。
+
+**上游的 `java` 就是 `AnalyzeRule` 自己**：`model/analyzeRule/AnalyzeRule.kt:834` 是 `bindings["java"] = this`，`data/entities/BaseSource.kt:335` 同（`bindings["source"] = this`）。所以脚本里的 `java.getString` / `java.ajax` / `java.put` / `java.md5Encode16` 全是这两个类的成员方法，不存在「Java 互操作」这回事。
+
+**实测覆盖率**（用用户提供的 463 条真实书源统计，`N:/HarmonyProjects/tmp/yck1331.json`）：
+
+| 项 | 数字 |
+| --- | --- |
+| 真实书源用到的 `java.*` 方法种类 | **93 种** |
+| 调用总次数 | **3,716 次** |
+| 引擎桥接面提供的名字数 | **122 个** |
+| 命中 | **50 种 / 3,436 次 = 92.5%** |
+| 缺失 | **43 种 / 280 次 = 7.5%** |
+
+引擎桥接面那 122 个名字来自三处（都是**照着书源实际用法手挑的**，不是按上游逐个移植）：`core/rule/ScriptEngine.ts:571-580` 的 `isJavaRuntimeCall` 白名单 30 个、`core/book/BookSourceRuntimeRouter.ts:58-76` 的 `FULL_JAVA_METHODS` 64 个、`core/book/BookSourceStageWebRuntime.ts` 里 `name:function` 形式的 90 个（三者有重叠）。
+
+**缺失清单（按调用次数，前 15 项）**：
+
+| 方法 | 次数 | 上游有无 | 说明 |
+| --- | --- | --- | --- |
+| `java.getElements` | 73 | **有**（`AnalyzeRule.kt:419`） | 真缺，可补 |
+| `java.security` | 19 | 无 | Android 类访问，**不该模拟** |
+| `java.copyText` | 17 | 无（UI 侧） | 剪贴板，**不该模拟** |
+| `java.io` / `java.net` / `java.nio` | 23 | 无 | 文件与网络类访问，**不该模拟** |
+| `java.toNumChapter` | 13 | 有 | 真缺，可补 |
+| `java.getUserAgent` | 12 | 有 | 真缺，可补 |
+| `java.digestHex` / `HMacHex` / `HMacBase64` | 22 | 部分 | 真缺，可补 |
+| `java.refreshTocUrl` / `refreshBookInfo` / `refreshToc` / `refreshBookUrl` | 24 | 有 | 真缺，属调度层 |
+| `java.ajaxAll` / `ajaxTestAll` / `connect` / `getResponse` / `getStrResponse` | 38 | 有 | 真缺，属网络层 |
+| `java.getVerificationCode` / `reLoginView` / `upLoginData` | 27 | 有 | 真缺，属登录流程 |
+| `java.s2t`（繁转简） | 4 | 有 | 真缺，`t2s` 引擎已实现而反向没有 |
+| 其余 20 余种 | <5 各 | 多为无 | 零散能力 |
+
+**这不是「漏了」，是引擎作者的有意选择。** `core/rule/ScriptCompatibility.ts` 文件头原文：「This is deliberately an allow-list: filesystem, process, reflection and UI access must never be emulated by imported rules.」——它只模拟书源脚本真正需要的那一档，文件系统、进程、反射、UI 一律不模拟。所以 `java.io` / `java.nio` / `java.security` / `java.copyText` 这 4 类（合计 54 次）**即使补也不该按上游语义补**，鸿蒙这边没有对应能力，强行模拟是安全风险。
+
+**结论要分四层说，不能一句话概括**：
+
+| 层 | 状态 | 对齐上游？ |
+| --- | --- | --- |
+| 规则语法（CSS / XPath / JSONPath / `@js:` / 正则替换 / URL 选项） | 引擎已实现，七项实测全对 | **是** |
+| 书源字段与导入 | 引擎用内部名 `searchRule`…，Android 键名 `ruleSearch`… 的映射**不在包里**，宿主手写 | **差一层胶水** |
+| `java.*` 桥 | 92.5% 覆盖，白名单策略 | **否，且作者不打算对齐** |
+| 调度层（搜索 / 发现 / 正文 / 换源 / 调试） | 完全不在包里（约 8,000 行在作者自己的阅读器） | **完全缺失** |
+
+第八节跑通的那条「得奇小说」是纯 CSS 书源、不调 `java.*`，正好落在 92.5% 那档里——所以它是有效证据，但不能拿来当「已对齐」的证据。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。
@@ -1108,9 +2074,9 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 **KI-REL12 底栏进度条留白窄、竖条端点与粉色进度不同源** —— commit `eeec428`
 
 - **现象**：进度条两端留白比上游窄；竖条端点不到轨道端或越界；粉色已读端点与竖条不在同一位置（本地按轨道宽 −4 算，系统 Slider 按拇指实际行程算）。
-- **根因**：本地滑块容器只有 16vp 留白，上游是 16+5+5=26vp（`ReadBookMenuBarBottom.kt:162-169`）；`sliderThumbOffset()` 的 travel 用 `sliderTrackWidth - SLIDER_THUMB_WIDTH(=4)`，而系统 Slider 默认 blockSize 12×12、两端 InSet 6vp，实测真实行程远小于轨道宽。
-- **修法**：Slider 容器 Stack `.height(52)` 后加 `.padding({ left: 5, right: 5 })`（Row 的 16vp 不动）；新增常量 `SLIDER_THUMB_TRAVEL_INSET = 14.3`（`ReaderPage.ets:149`，带完整实测注释；原写 `:138` 已漂，2026-11-20 复核），`sliderThumbOffset()` 改用 `travel = Math.max(0, sliderTrackWidth - SLIDER_THUMB_TRAVEL_INSET * 2)` 保留 `ratio*travel - travel/2`。
-- **探针实测**（2026-11-18，1280×2832/密度3.5/视口365×809vp）：Slider bounds `[295,2371][985,2553]`px，X1=295/X2=985/宽 690px=197.03vp，max=100。非 clamp 区 7 点最小二乘 slope=0.169676 v/px、travel=589.4px=168.39vp、X0=344.7px；A1=(X0−X1)/3.5=14.21vp、A2=(197.03−168.39)/2=14.38vp，多组标定极差≤0.5vp（<1vp 无需重测），取 14.3。探针 `console.info('[SliderProbe]...')` 两处验收后已删净（grep -c SliderProbe=0）。
+- **根因**：本地滑块容器只有 16vp 留白，上游滑块每侧真实内缩 18vp——Row 的 `padding(horizontal=16)` 之后，滑块自己的 `padding(horizontal=8)`（`ReadBookMenuBarBottom.kt:188-190`，本地此前整层漏掉）、`ReadBookMenuBarTool.kt:104` 与 `ReaderMenuPrimitives.kt:121` 各 5vp 继续叠加（Compose 的 `Modifier.padding` 是叠加，不是取最大）；`sliderThumbOffset()` 的 travel 用 `sliderTrackWidth - SLIDER_THUMB_WIDTH(=4)`，而系统 Slider 默认 blockSize 12×12、两端 InSet 6vp，实测真实行程远小于轨道宽。
+- **修法**：Slider 容器 Stack `.height(52)` 后加 `.padding({ left: 18, right: 18 })`（Row 的 16vp 不动）；新增常量 `SLIDER_THUMB_TRAVEL_INSET = 14.07`（`ReaderPage.ets:153`，带完整实测注释；2026-11-20 按洋红拇指逐像素重标定 A1=13.857 / A2=14.286），`sliderThumbOffset()` 改用 `travel = Math.max(0, sliderTrackWidth - SLIDER_THUMB_TRAVEL_INSET * 2)` 保留 `ratio*travel - travel/2`。
+- **探针实测**（2026-11-18，1280×2832/密度3.5/视口365×809vp）：Slider bounds `[295,2371][985,2553]`px，X1=295/X2=985/宽 690px=197.03vp，max=100。非 clamp 区 7 点最小二乘 slope=0.169676 v/px、travel=589.4px=168.39vp、X0=344.7px；A1=(X0−X1)/3.5=14.21vp、A2=(197.03−168.39)/2=14.38vp，多组标定极差≤0.5vp（<1vp 无需重测），取 14.07。另做了对照实验：把外层 padding 从 5vp 改成 18vp 各构建一次，两端内缩逐像素相同（48.5px / 50.0px），证明该内缩是 Slider 相对自身 bounds 的固定量、与 padding 无关。探针 `console.info('[SliderProbe]...')` 两处验收后已删净（grep -c SliderProbe=0）。
 - **验收（上机，深色）**：100% 竖条中心实测 935px（系统拇指理论 934.1px，差 0.9px），旧公式约 970.6px 越界约 36px；50% 竖条压在粉色右端（像素差 4–6px）；7 点拖动残差<0.4。截图 `tmp/b2_final_menu.jpeg`、`tmp/b2_drag_mid.jpeg`，布局 `tmp/b2lay.json`、`tmp/b2drag.json`。未做浅色单独验收。
 
 **KI-REL13 滚动档进度条刻度连成线、拖动位置与读数不符** —— commit `343749c`
@@ -1131,9 +2097,6 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **修法**：把时间线条目的身份从「首条会话的起止时间」改成「合并段包含的所有会话 id」，删除时整段删除；
   同时要改 isInSelectionMode 的选中集合与 selectionKey 口径，牵连侧滑、批量删除、合并对话框三处。
 - **状态**：代码未改，待排期。
-
-
-
 
 **KI-RR2 背景样式里的文字色只驱动卡片标签，正文文字色仍是全局单份**
 

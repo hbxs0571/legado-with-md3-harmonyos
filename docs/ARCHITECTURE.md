@@ -76,6 +76,14 @@ onIntent = viewModel::onIntent,
 
 没有双向绑定，也没有跨层注入。`AppStorage` 只承担主题色一类全局量：`AppStorage.setOrCreate` 52 处、41 个去重键，写入点是 `data/PrivateAccessRepository.ets`、`data/ThemePalette.ets`、`pages/Index.ets`、`pages/ReaderSettingsPage.ets` 四个文件。
 
+主题色这一类的实际规模：`data/ThemePalette.ets:544-554` 的 `publishPaletteColors` 一次广播 **9 个** `themeColor*` 键，消费侧 `@StorageProp('themeColor*')` 共 **555 处**、散在 **62 个 .ets 文件**里。Compose 那边 `LegadoTheme.colorScheme.xxx` 随处可取（`CompositionLocal` 自动继承），ArkUI 没有等价机制，**每个用到主题色的 `@Component` struct 都必须自己声明一行 `@StorageProp`**——这是本仓 `@StorageProp` 数量（754 处）远高于 `@State`（876）与 `@Prop`（783）同量级的主因，也是补齐上游 34 个在用色位要付的主要代价（预估 +150–250 行样板，见[已知问题](KNOWN-ISSUES.md)的 KI-THEME2）。
+
+同一种结构性劣势在**排版**上更彻底：上游 `LegadoTypography` 有 24 个语义槽位（`ui/theme/LegadoTheme.kt:85-119`），靠 `CompositionLocal` 自动继承，全仓引用 696 处却不需要在调用点声明任何东西；本地没有这一层，1,189 处 `fontSize(N)` 直接写字面量、用到 20 种字号，`components/UiTokens.ets` 的 9 个 `FONT_*` 常量只有 5 个真被消费。要补这一层，等于把 1,189 处字面量逐个归到槽位上，且每个消费 struct 仍要自己声明一行——成本比补色位更高（见[已知问题](KNOWN-ISSUES.md)的 KI-THEME5）。
+
+**动效这条上 ArkUI 反而给得更多**，但没人用：上游要画非规则形状的连续形变（播放键的圆↔八瓣、下拉刷新的软爆裂、加载圈的 morph），只能靠 Compose 的 `RoundedPolygon` / 逐点插值自己算；ArkUI 提供了 `@AnimatableExtend` + `AnimatableArithmetic<T>`（`component/common.d.ts:1029` / `:1195`，均 `@since 10`），把「怎么在两个点集之间插值」交给业务实现四个方法（`plus`/`subtract`/`multiply`/`equals`），框架逐帧回调。r356 上机实测：驱动 `Polygon.points` 插值速率 **118.6–240 次/秒**，`springMotion` 下 `multiply` 仍被逐帧调用，128 顶点无卡顿。本仓 `grep AnimatableExtend` **0 命中**——能力在，一行没用（见[已知问题](KNOWN-ISSUES.md)的 KI-THEME6）。
+
+这条也说明本仓的问题性质：**平台缺的比想象少，缺的是把平台能力接到业务上**。上面排版、色位那两条是真受 ArkUI 的结构性限制（没有 `CompositionLocal` 等价物）；形变这条不受限，纯粹是没做。
+
 页面直连仓储的密度：`pages/` 下 571 处 `Repository.` 调用，按文件排前三位是 `pages/Index.ets` 400、`pages/ReaderPage.ets` 47、`pages/ProfileSubPages.ets` 30。
 
 ### 5.3 仓储是无状态工具类，不是实例
@@ -166,6 +174,10 @@ onIntent = viewModel::onIntent,
 2. 一个真正的实例化播放器持有者——跟着页面生命周期创建与销毁，而不是静态字段。
 
 这两样都是朗读的硬前置，且都是新增文件，不波及现有页面。做完再谈要不要继续长成一层。
+
+补完这两样之后，朗读本身还差一层结构。上游的朗读有三条引擎路径：系统 TTS、自建 HTTP 源、七家云端 provider。本地前两条已落，第三条整层未建（见[已知问题](KNOWN-ISSUES.md)的「云端 TTS 整层未建」）；而上游云端那一层并不是第三条通道——它把云端引擎合成成一个假的 `HttpTTS` 源，塞进同一条 HTTP 播放服务。这一点对本地的影响是：要补云端，改的是数据层（一张 `cloud_tts_engines` 表 + 一个 provider 接口 + 七家实现），不是播放层。
+
+平台侧给出的能力分布也值得记在这里，因为它决定了架构的天花板：**推流给了，插槽没给**。`AudioRenderer.on('writeData')`（`@ohos.multimedia.audio.d.ts:6871`）能让应用自己喂 PCM，所以「边合成边播」是架构上做得到的；但鸿蒙没有系统 TTS 引擎插槽（五条证据链见[已知问题](KNOWN-ISSUES.md)的「朗读的平台底座」），所以「把朗读做成独立服务、让别的应用调用」这条路在鸿蒙上不存在对应物，不要按那个形态设计。本仓现状是整包播放（`readaloud/HttpTtsPlayer.ets` 的 `downloadToFile` + `AVPlayer(fdSrc)`），`createAudioRenderer` 在 `entry/src/main/ets` 里零命中。
 
 ## 八、怎么复核本文
 

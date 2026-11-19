@@ -112,7 +112,7 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
 | 背景音乐池 `BgmPoolScreen.kt` | 689 | **顺延**（BGM 域） |
 | 变声器 `VoiceEffectScreen.kt` | 468 | **不接**（平台无播放侧音频效果 API） |
 | 朗读胶囊设置 `CastCapsuleStyleScreen.kt` | 774 | **不接**（外观定制，批6 只做显隐/位置/收起） |
-| 朗读引擎与音色 `CloudTtsScreen.kt` | 1337 | **部分做**：批8 做了 HTTP 源与音色目录；七家云端 provider 不接（范围之外） |
+| 朗读引擎与音色 `CloudTtsScreen.kt` | 1337 | **部分做**：批8 做了 HTTP 源与音色目录；七家云端 provider 与 `cloud_tts_engines` 表**整层未建**（r357 核对：不是范围判断问题，是这一层从没搬；详见 [KNOWN-ISSUES](KNOWN-ISSUES.md)「云端 TTS 整层未建」）。另注：`ReadAloudEnginePage.ets` 的「引擎」tab 是借壳，列的是 `httpTTS` 源 |
 | 多角色识别 `MultiRoleRecognitionScreen.kt` | 157 | **不接**（AI） |
 | 正则角色管理 `RegexCastRuleScreen.kt` | 534 | **不接**（AI） |
 
@@ -125,7 +125,7 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
 3. **通知栏媒体控制条**：系统发出 bgmode 通知后被 SystemUI 移除（`isShowStatusBarIcon:false`），模拟器通知栏不显示 AVSession 媒体卡片；代码侧 `setAVMetadata/setAVQueueItems/setAVQueueTitle/setLaunchAbility` 均调用成功。
 4. **锁屏 30 秒续播**：模拟器无锁屏音频行为，未验证。
 5. **外部真实 HTTP TTS 源**：无公网 TTS 凭据；用本地测试服务器（`tmp/b8_tts_server2.mjs`）验证了 URL 拼接、音色目录、播放链路与缓存。
-6. **云端七家 provider / 角色体系 / BGM 域**：范围之外或未迁移，未做未验。
+6. **云端七家 provider / 角色体系 / BGM 域**：云端 provider 属整层未建（见第五章与 [KNOWN-ISSUES](KNOWN-ISSUES.md)），角色体系与 BGM 域属未迁移；三者均未做未验。
 
 ## 七、做不到项平台依据（SDK 文件:行号）
 

@@ -44,6 +44,10 @@
 | 换源 | `BookInfoPage.ets:529` | 在线书源；文案写的「将在 P5 接入」是历史排期号，现由本文的模块顺序取代 |
 | 书籍分享 | `BookInfoPage.ets:610` | 分享面板 |
 
+**在线书源在本地是「只有仓库，没有引擎」**：`model/BookSource.ets` 26 行 7 字段、`data/BookSourceRepository.ets` 186 行纯 CRUD、`data/BookSourceImporter.ets` 117 行导入器，全仓 `http.createHttp` / `JSONPath` / `xpath` / `Jsoup` **零命中** —— 能导入、能列出、能随备份往返，但一条规则都解析不了，一次请求都发不出。
+
+技术可行性已实测（r359，工程外验证工程，主仓零改动）：社区实现 `wip3l/harmony-book-source-engine` 的规则引擎（76 个 `.ts`，25,999 行）与 QuickJS 运行时（MIT，自带 arm64-v8a 与 x86_64 两套预编译静态库）能在本机基线下编译、在模拟器上加载并真的执行 JS；CSS 选择器、属性取值、列表、JSONPath、`@js:` 脚本规则**七项全返回正确结果**；再用一条真实书源（463 条合集里的「得奇小说」）跑通了**搜索 → 目录 1302 章 → 正文**的完整链路。它只提供引擎，搜索 / 发现 / 正文的调度层不在这个包里（作者指向自己的阅读器项目，那部分约 8,000 行），宿主适配（ArkWeb、Cookie、TLS、模型映射）一件没接。完整实测数据、两种接入方式的成败差别与尚未验证的项见 [已知问题](KNOWN-ISSUES.md)「书源引擎：能接、已上机验证、但还差调度层」。
+
 另有**两处「看着能用、其实不生效」**，比纯占位更容易被误判：
 
 - **手动排序档只在手动档下能拖**：`Book_SORT_OPTIONS` 的第 4 档「手动排序」按 `book.order` 比较（`data/BookshelfSort.ets:45`-`:47`），拖拽入口是书卡 Grid 的 `onMove`（`BookshelfPage.ets:2481`-`:2484`）加 `editMode`（`:2493`，判据 `canReorderBooks()` `:724`-`:729` 只在排序值 3 时放开）；拖完落库 `data/BookRepository.ets:1450` 的 `saveBookOrder`（接线 `pages/Index.ets:7071`）。非手动排序下拖拽被关掉，屏幕不会变化，这是上游行为。
@@ -196,6 +200,18 @@
 - **后台续播限制**：长时任务与 AVSession 激活有日志证实，但模拟器上系统 TTS 引擎在应用失焦后回调冻结，
   未测到持续推进；媒体控制条在模拟器通知栏未显示（系统侧发出通知后被 SystemUI 移除）。
 - **HTTP 源仅纯 URL**：AnalyzeUrl 模板/JS、`loginCheckJs`、`jsLib` 依赖 JS 引擎，鸿蒙无对应物，字段保留不执行。
+- **云端 TTS 整层未建（不是平台限制）**：上游朗读有三条引擎路径，本地只落了两条（系统 TTS、自建 HTTP 源）。
+  上游第三层是七家云端 provider（OpenAI / Gemini / MiMo / Azure / 阿里云 / AWS Polly / 火山）加一张 `cloud_tts_engines` 配置表，
+  代码 682 行 + 界面 2,885 行；上游把云端引擎合成成一个假 `HttpTTS` 源塞进同一条 HTTP 播放服务，**没有第三条通道**。
+  本地 `RdbSchema.ets` 27 张表无 `cloud_tts_engines`，`mimo`/`cloudTts` 在 `.ets` 里零命中，引擎类型只有 `'http'` 一个值——
+  `ReadAloudEnginePage.ets` 的「引擎」tab 是借壳的，列的是 `httpTTS` 源。
+  平台侧并不拦：`rcp` 的 `IncomingDataCallback`（`@hms.collaboration.rcp.d.ts:292`）、`AudioRenderer.write`（`@ohos.multimedia.audio.d.ts:6105`）、
+  `setSpeed`（`:6344`）基线 20 全部覆盖。详见 [KNOWN-ISSUES](KNOWN-ISSUES.md) 的「云端 TTS 整层未建（r357 盘点）」。
+- **朗读只能是整包，不能边合成边播**：本地 `readaloud/HttpTtsPlayer.ets` 走 `downloadToFile` + `AVPlayer(fdSrc)`，
+  音频一个字节都没穿过应用内存，首音延迟 = 整段合成时长。平台侧并不缺推流能力——`AudioRenderer.on('writeData')`
+  （`@ohos.multimedia.audio.d.ts:6871`）每 100ms 要 4800 字节，`setSpeed`（`:6344`）走 Sonic、0.5x 以上不变调——
+  缺的是把合成内核放进应用进程。另有一条**平台事实**要记住：鸿蒙没有「系统 TTS 引擎插槽」（五条证据链见 KNOWN-ISSUES），
+  所以「做成独立应用、让别的应用调用」这条路不成立。详见 [KNOWN-ISSUES](KNOWN-ISSUES.md) 的「朗读的平台底座（r358 盘点）」。
 
 ### 3.3 算做完的判据（按实测）
 
@@ -205,6 +221,8 @@
 - [x] HTTP 源保存重开仍在；音色目录可拉取落库；导出 `httpTTS.json` 不含三个本地扩展列。
 - [x] 缓存 key 含源/语速/正文三要素；并发限流 coerceIn(1,8)；预合成命中（cache=false → cache=true）。
 - [ ] 真机扬声器出声、后台持续续播、通知栏媒体控制条——模拟器无法验证，见 3.4。
+- [ ] 云端 provider 七家与 `cloud_tts_engines` 表——整层未建，见 3.2 末条。
+- [ ] 边合成边播（推流）——未做，见 3.2 末两条。
 
 ### 3.4 验收环境说明
 
@@ -323,6 +341,49 @@
 **四、浅色模式的配色仍差**
 
 深色适配明显好于浅色，根因是 r300–r317 只改夜间配色与主题包，`entry/src/main/resources/base/element/color.json` 的 `theme_*` 日间色没对齐上游浅色方案。登记为 [已知问题](KNOWN-ISSUES.md) 的 KI-REL5，**未修**。
+
+**五、M3 色位只落了一小半，容器色与错误色一律降级**
+
+上游 `ui/theme/LegadoTheme.kt` 的 `LegadoColorScheme` 有 **53 个色位**，代码里真被引用的有 **34 个**（`colorScheme.xxx` 全仓 1,531 处）。本地 `entry/src/main/ets/data/ThemePalette.ets` 的 `ThemePaletteColors` 只有 **11 个字段**，`publishPaletteColors` 只广播 **9 个** `AppStorage` 键。
+
+缺口 25 个，分三种性质：**18 个值要新增**（`error` 63 次 / `secondaryContainer` 62 / `outlineVariant` 53 / `primaryContainer` 28 / `onSecondaryContainer` 26 / `onPrimaryContainer` 20 / `surfaceVariant` 16 / `background` 6 / 其余 10 个小用量）、**2 个值已有只缺广播键**（`secondary` / `tertiary`）、**5 个可由现有色位派生**（`onSheetContent`←`surface` / `cardContainer`←`surfaceContainerLow` / `onCardContainer`←`primary` / `onBackground`←`onSurface` / `surfaceInput`←`bookInfoInputColor`）。
+
+两个最直接的后果：
+
+- **选中态是「亮一点的灰」而不是带主色调的容器色**。全仓 27 处写着「本地没有该色位，用 xxx 顶」的降级点，分布在 11 个文件（`pages/BookInfoPage.ets` 5 / `pages/CatalogPage.ets` 4 / `pages/ThemeSettingsPage.ets` 3 / `pages/ReaderSearchPage.ets` 3 / `pages/ReaderPage.ets` 3 / `pages/ReaderSettingsPage.ets` 2 / `pages/Index.ets` 2 / `components/ThemeSelectors.ets` 2 / 另三处各 1）。深色主题下差异小，浅色与彩色主题下明显偏灰平。
+- **危险色是 16 种写死的红，没有统一来源**。本地全仓 `themeColorError` 零命中，`#FFB4AB` 10 处、`#D99AA5` 8 处、`#FF6B6B` 7 处、`#CF3E40` 3 处……换主题时一个都不会跟着变。
+
+代价：**432 个色值**（18 色位 × 日/夜 × 12 套内置配色）＋ `@StorageProp` 样板声明 **150–250 行**（ArkUI 必须在每个 struct 单独声明，没有 Compose `CompositionLocal` 那样的继承）＋ 27 处降级点改造，**合计约 700–900 行**。另有一条独立的大账：真做「动态取色」要移植 Material Color Utilities 的 HCT 算法（约 1,500 行），本地零命中，不做则「动态取色」档永远回落内置默认配色。
+
+**判断：值得做但不排现在**——它不改任何能力，纯观感；本地还挂着私密脱敏、朗读两处死控件、阅读记录三视图等真功能缺口。完整量化、逐色位用量表与四批拆法见 [已知问题](KNOWN-ISSUES.md) 的 KI-THEME2。与上面第四条同源（都是配色没对齐上游），但根因不同：第四条是浅色值没抄，本条是色位根本没建。
+
+**六、形状设置阅读域不读，面板没有公共容器**
+
+颜色之外还有两层，性质不同：
+
+- **形状：令牌齐备，阅读域不跟随。** 上游没有自定义 `Shapes`，形状由 `SplicedColumnGroup`（`ui/widget/components/SplicedColumnGroup.kt:50-54`，三档圆角 0 / `baseCardCornerRadius` / 16dp）加各组件就地写值决定。本地这块做得好：`data/ThemeCardStyle.ets` 字段齐全，`pages/Index.ets:3710-3727` 广播 10 个键，`themeCardRadius` 有 **12 个文件 40 处**消费，设置类页面全部跟随。但**九个阅读域文件对 `themeCardRadius` / `themeCardBorderWidth` / `themeDividerWidth` 全部 0 命中** —— 外观页把卡片圆角从 16 拖到 40，进阅读器一个角都不动。而阅读域自己把「卡片圆角」用了 18/20/22/24/26 五种值，`pages/ReaderSearchPage.ets` 一个文件里就出现五档。
+- **面板：没有公共容器。** 上游 30 处面板全走 `AppModalBottomSheet`，高度由内容驱动（`animateContentSize` + `heightIn(max = 容器高 × 0.8f)`）、内边距固定 16、抓手与容器色统一。本地阅读域是 **5 个手写 `Stack({ alignContent: Alignment.Bottom })` 弹层**，全仓 19 处 `bindSheet(` 阅读域一处都没有。后果四条：高度写死百分比（`pages/ReaderSettingsPage.ets:2548-2555` 三档 62%/68%/80%，源码注释自陈「探针实证做不到内容自适应」）、遮罩 9 种值、内边距 7 种值、抓手尺寸对但颜色分两派（`pages/ReaderPage.ets:4758` 与 `:8575` 写死 `'#C5C6CD'`）。
+
+三块性质不同、修法也不同：颜色要补数据（432 个色值），形状要接消费点（不新建抽象），面板要新建组件并迁 5 个弹层。**面板这块要先探针**——ArkUI 上「内容自适应高度 + 上限 80%」是否成立还没测过 `bindSheet` 的 `detents` / `SheetSize.FIT_CONTENT`，不确认就动 5 个弹层等于赌。完整量化与逐文件圆角清单见 [已知问题](KNOWN-ISSUES.md) 的 KI-THEME4。
+
+**七、外观体系还有六块没盘（r355 粗测）**
+
+颜色、菜单取色、形状面板之外，同一套主题体系里还有六块：
+
+- **排版没有语义阶梯。** 上游 `ui/theme/LegadoTheme.kt:85-119` 有 24 个槽位（headline/title/body/label × 三档 × 普通与 `Emphasized`），引用 **696 处 / 186 文件**。本地 `fontSize(N)` 字面量 **1,189 处、20 种字号**，`components/UiTokens.ets` 的 9 个 `FONT_*` 常量只有 5 个真被消费（`FONT_PAGE_TITLE` / `FONT_LABEL_SMALL` / `FONT_INPUT_LABEL` 零消费）。后果是同一层级的东西在不同页面大小不一。
+- **图标命名不成体系。** 上游 Material Icons **1,043 处 / 263 种** + 177 个 vector drawable；本地 `AppGlyph` **82 个**名字 + 140 个 svg，功能不缺，但 20 多个带 `profile` 前缀、其余不带，播放/暂停图标绕过 `AppGlyph` 直接用 `Image($r(...))`。
+- **动效有底座没档位。** 上游 `MotionScheme.expressive()` 统一接管，`tween(` 143 处 + `spring(` 15 处；本地 `duration:` **82 处 11 种值**、`curve` 只 3 种，没有常量收口。
+- **模糊主界面通了，其余硬编码。** 本地 `backdropBlur` **24 处**，其中 18 处是写死数字（12/16/20/30），只有 `components/TopBar.ets:195` 与 `pages/Index.ets:11262` 读偏好。
+- **阴影方向相反。** 上游全仓只有 3 处 `Modifier.shadow`（M3 靠色位分层不靠投影），本地 `.shadow(` **10 处**、7 种参数组合。
+- **无障碍差两个数量级。** 上游 `contentDescription`/`semantics` **1,017 处**，本地 `accessibilityText` 类 **14 处**。
+
+这六块只做了关键词计数与取样，**没有逐行取证**（与 KI-THEME2/3/4 的取证深度不同）。其中**排版**最值得先查：它和动效同属「看起来都一样、细节全不同」的典型。完整粗测数据与判断见 [已知问题](KNOWN-ISSUES.md) 的 KI-THEME5。
+
+**八、组件级形变（r356 已上机验证，能力不缺）**
+
+上游有一整类「会变的控件」：下拉刷新指示器（圆 ↔ 八瓣软爆裂）、听书播放键（容器 + 图标 + 颜色三重形变）、底栏标签（逐字滑入）、FAB 菜单（图标 Close ↔ MenuOpen）、加载圈、试听按钮旋转、封面 morph 展开。本地只有下拉刷新（`components/PullRefreshIndicator.ets` 自绘 Canvas）与开关（`components/UiSwitchControl.ets`）两个有等价物，其余全无。
+
+此前判断「ArkUI 没有形状插值 API」是错的。`@AnimatableExtend` + `AnimatableArithmetic<T>`（均 @since 10，基线 20 就能用）可以驱动 `Polygon.points` 做逐帧插值，实测插值速率 **118.6–240 次/秒**、`springMotion` 下 `multiply` 仍被逐帧调用、128 顶点无卡顿、72vp/36vp 小尺寸无毛刺。**缺的是实现，不是平台能力**。四条硬约束：装饰函数必须与 `build()` 同文件、两端采样点数必须一致、`points` 是绝对坐标不随宽高缩放（`Shape`+`viewPort` 包裹会不显示，只能用 `scale`）、`extends Array` 可编译。完整实测数据与十二类控件对照见 [已知问题](KNOWN-ISSUES.md) 的 KI-THEME6。
 
 ### 5.3 算做完的判据
 
