@@ -39,8 +39,9 @@ export struct ReaderSearchPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
-  // 上游顶栏按钮选中态走 primaryContainer/onPrimaryContainer；本地无
-  // themeColorAccentContainer 键，按任务书口径降级用 themeColorSurfaceElevated。
+  // 批6：上游搜索高亮/顶栏选中态走 primaryContainer，原先降级用 surfaceElevated；
+  // 现改读主题真色位 themeColorPrimaryContainer，默认值取草野夜档真值。
+  @StorageProp('themeColorPrimaryContainer') themeColorPrimaryContainer: string = '#354E16';
   @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
@@ -342,7 +343,7 @@ export struct ReaderSearchPage {
           Math.min(match.excerpt.length, match.excerptMatchStart + match.matchLength)
         ))
           .fontColor(this.themeColorAccent)
-          .backgroundColor(this.themeColorSurfaceElevated)
+          .backgroundColor(this.themeColorPrimaryContainer)
           .fontWeight(FontWeight.Bold);
       }
       if (Math.min(match.excerpt.length, match.excerptMatchStart + match.matchLength) < match.excerpt.length) {
@@ -369,13 +370,13 @@ export struct ReaderSearchPage {
           Image($r('app.media.profile_find_replace')).width(20).height(20)
             .fillColor(this.replaceEnabled ? this.themeColorAccent : this.themeColorTextSecondary)
         }.width(36).height(36).borderRadius(18)
-          .backgroundColor(this.replaceEnabled ? this.themeColorSurfaceElevated : Color.Transparent)
+          .backgroundColor(this.replaceEnabled ? this.themeColorPrimaryContainer : Color.Transparent)
           .onClick(() => this.toggleReplaceMode())
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.app_code')).width(20).height(20)
             .fillColor(this.regexMode ? this.themeColorAccent : this.themeColorTextSecondary)
         }.width(36).height(36).borderRadius(18)
-          .backgroundColor(this.regexMode ? this.themeColorSurfaceElevated : Color.Transparent)
+          .backgroundColor(this.regexMode ? this.themeColorPrimaryContainer : Color.Transparent)
           .onClick(() => this.toggleRegexMode())
         // 上游点击后按钮旁展开 1 秒文字；本地放在按钮右侧同一行。
         if (this.actionHint.length > 0) {

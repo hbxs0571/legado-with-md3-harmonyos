@@ -210,6 +210,8 @@ export struct ReaderPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   // 批3：主色底上的文字字面量改走主题色位，默认值取本地默认配色「草野」夜档真值。
   @StorageProp('themeColorOnPrimary') themeColorOnPrimary: string = '#1F3701';
+  // 批6：菜单选中态由 M3 派生近似改为主题真色位 secondaryContainer，默认值取草野夜档真值。
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#404A33';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   // 「编辑内容」与「设置编码」两个浮层原来整块写死深色字面量，切主题纹丝不动。
@@ -1637,12 +1639,12 @@ export struct ReaderPage {
   }
 
   /**
-   * 选中态容器底色。
-   * 上游是 `secondaryContainer`，由 M3 色调调色板从种子色派生；本地没有派生能力，
-   * 用「强调色向菜单背景色压 70%」近似。验收只判「选中项能不能一眼认出来」，不做像素对照。
+   * 选中态容器底色。上游是 `secondaryContainer`（ReadBookMenuBarTitle.kt:1008-1016）。
+   * 批6：原先用 mixHexColor(强调色, 菜单底色, 0.7) 近似 M3 派生色——那是近似值，
+   * 换主题时不跟真色位走；现改读主题真色位 themeColorSecondaryContainer。
    */
   private readerMenuSelectedFill(): string {
-    return mixHexColor(this.readerMenuAccentTint(), this.readerMenuBaseColor(), 0.7);
+    return this.themeColorSecondaryContainer;
   }
 
   /**
