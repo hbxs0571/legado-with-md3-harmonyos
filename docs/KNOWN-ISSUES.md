@@ -1109,7 +1109,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 - **现象**：进度条两端留白比上游窄；竖条端点不到轨道端或越界；粉色已读端点与竖条不在同一位置（本地按轨道宽 −4 算，系统 Slider 按拇指实际行程算）。
 - **根因**：本地滑块容器只有 16vp 留白，上游是 16+5+5=26vp（`ReadBookMenuBarBottom.kt:162-169`）；`sliderThumbOffset()` 的 travel 用 `sliderTrackWidth - SLIDER_THUMB_WIDTH(=4)`，而系统 Slider 默认 blockSize 12×12、两端 InSet 6vp，实测真实行程远小于轨道宽。
-- **修法**：Slider 容器 Stack `.height(52)` 后加 `.padding({ left: 5, right: 5 })`（Row 的 16vp 不动）；新增常量 `SLIDER_THUMB_TRAVEL_INSET = 14.3`（`ReaderPage.ets:138`，带完整实测注释），`sliderThumbOffset()` 改用 `travel = Math.max(0, sliderTrackWidth - SLIDER_THUMB_TRAVEL_INSET * 2)` 保留 `ratio*travel - travel/2`。
+- **修法**：Slider 容器 Stack `.height(52)` 后加 `.padding({ left: 5, right: 5 })`（Row 的 16vp 不动）；新增常量 `SLIDER_THUMB_TRAVEL_INSET = 14.3`（`ReaderPage.ets:149`，带完整实测注释；原写 `:138` 已漂，2026-11-20 复核），`sliderThumbOffset()` 改用 `travel = Math.max(0, sliderTrackWidth - SLIDER_THUMB_TRAVEL_INSET * 2)` 保留 `ratio*travel - travel/2`。
 - **探针实测**（2026-11-18，1280×2832/密度3.5/视口365×809vp）：Slider bounds `[295,2371][985,2553]`px，X1=295/X2=985/宽 690px=197.03vp，max=100。非 clamp 区 7 点最小二乘 slope=0.169676 v/px、travel=589.4px=168.39vp、X0=344.7px；A1=(X0−X1)/3.5=14.21vp、A2=(197.03−168.39)/2=14.38vp，多组标定极差≤0.5vp（<1vp 无需重测），取 14.3。探针 `console.info('[SliderProbe]...')` 两处验收后已删净（grep -c SliderProbe=0）。
 - **验收（上机，深色）**：100% 竖条中心实测 935px（系统拇指理论 934.1px，差 0.9px），旧公式约 970.6px 越界约 36px；50% 竖条压在粉色右端（像素差 4–6px）；7 点拖动残差<0.4。截图 `tmp/b2_final_menu.jpeg`、`tmp/b2_drag_mid.jpeg`，布局 `tmp/b2lay.json`、`tmp/b2drag.json`。未做浅色单独验收。
 

@@ -138,8 +138,6 @@ const IMAGE_PREVIEW_MAX_SCALE: number = 2.5;
 const READER_PAGE_ANIM_DEFAULT: number = -1;
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
-/** 底栏进度条自绘拇指宽度（vp）。上游 `ReadBookMenuBarTool.kt:320` 的 handle 是 4dp 宽。 */
-const SLIDER_THUMB_WIDTH: number = 4;
 /**
  * Slider 拇指行程两端的内缩（vp）。2026-11-18 在 1280x2832、密度 3.5 的模拟器上实测：
  * Slider bounds X1=295px/X2=985px（组件宽 W=197.03vp），max=100；注入 x/v 点
@@ -8280,9 +8278,10 @@ export struct ReaderPage {
                         this.onSelectChapterIndex(index);
                       }
                     })
-                  // 自绘竖条拇指：M3 的 handle 是 4dp 宽、44dp 高的圆角竖条，
-                  // ArkUI 系统 Slider 的拇指只能是圆点（SHAPE 档要 RectAttribute 实例，
-                  // 组件构建器造不出来），所以在轨道上按同一百分比叠一根竖条。
+                  // 自绘竖条拇指：M3 的 handle 是 4dp 宽、44dp 高的圆角竖条（上游
+                  // `ReadBookMenuBarTool.kt:320`），ArkUI 系统 Slider 的拇指只能是圆点
+                  // （SHAPE 档要 RectAttribute 实例，组件构建器造不出来），所以在轨道上
+                  // 按同一百分比叠一根竖条。竖条尺寸就地写字面量，只有这一处用。
                   // Stack 是 Center 对齐，offset 从中心起算。
                   Row()
                     .width(4).height(44).borderRadius(2)
