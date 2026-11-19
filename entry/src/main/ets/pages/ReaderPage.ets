@@ -208,6 +208,8 @@ export struct ReaderPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  // 批3：主色底上的文字字面量改走主题色位，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorOnPrimary') themeColorOnPrimary: string = '#1F3701';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   // 「编辑内容」与「设置编码」两个浮层原来整块写死深色字面量，切主题纹丝不动。
@@ -4667,7 +4669,7 @@ export struct ReaderPage {
         .width(32).height(36).margin({ left: 4 })
         .hitTestBehavior(HitTestMode.None)
     }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 8 })
-      .backgroundColor('#202127').borderRadius(12)
+      .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
   }
 
   private selectMoreAction(action: ReaderMoreAction): void {
@@ -4740,7 +4742,7 @@ export struct ReaderPage {
         Text('此操作尚未迁移，当前不会执行。')
           .fontSize(14).fontColor('#B7B8C1').width('100%')
         Row() {
-          Text('知道了').fontSize(14).fontColor('#101116')
+          Text('知道了').fontSize(14).fontColor(this.themeColorOnPrimary)
             .padding({ left: 22, right: 22, top: 10, bottom: 10 })
             .backgroundColor('#B9C6FF').borderRadius(18)
             .onClick(() => this.moreActionShellVisible = false)
@@ -5620,7 +5622,7 @@ export struct ReaderPage {
   private ReaderDayNightReminderCapsule() {
     Row({ space: 8 }) {
       Row() {
-        Text(this.dayNightReminderText).fontSize(13).fontColor('#101116')
+        Text(this.dayNightReminderText).fontSize(13).fontColor(this.themeColorOnPrimary)
       }
       .padding({ left: 16, right: 16, top: 9, bottom: 9 })
       .backgroundColor('#C6D3FF')
@@ -5631,7 +5633,7 @@ export struct ReaderPage {
         Text('关闭').fontSize(13).fontColor('#D9DAE0')
       }
       .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-      .backgroundColor('#2A2B33')
+      .backgroundColor(this.themeColorSurfaceTertiary)
       .borderRadius(18)
       .onClick(() => this.onDismissDayNightReminder())
     }
@@ -8620,7 +8622,7 @@ export struct ReaderPage {
                       }.width('100%').aspectRatio(1).justifyContent(FlexAlign.Center)
                         .backgroundColor(this.moreActionMenuId === action.id
                           ? this.readerMenuSelectedFill()
-                          : '#202127').borderRadius(16)
+                          : this.themeColorSurfaceSecondary).borderRadius(16)
                         .onClick(() => this.selectMoreAction(action))
                     }
                   }, (action: ReaderMoreAction) => action.id)
@@ -8664,7 +8666,7 @@ export struct ReaderPage {
                   AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
                 }
               }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
-                .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+                .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 6 })
                 .onClick(() => this.chooseImageStyle(style.id))
             }, (style: ReaderImageStyleOption) => style.id)
           }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
@@ -8689,7 +8691,7 @@ export struct ReaderPage {
                 AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
               }
             }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
-              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 6 })
               .onClick(() => this.choosePageAnim(READER_PAGE_ANIM_DEFAULT))
             ForEach(READER_PAGE_ANIMATION_LABELS, (label: string, index: number) => {
               Row() {
@@ -8698,7 +8700,7 @@ export struct ReaderPage {
                   AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
                 }
               }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
-                .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+                .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 6 })
                 .onClick(() => this.choosePageAnim(index))
             }, (label: string) => label)
           }.width('86%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
@@ -8727,30 +8729,30 @@ export struct ReaderPage {
                 onChange: (isOn: boolean) => { this.simReadEnabled = isOn; }
               })
             }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 6 })
             Row() {
               Text('开始日').fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
               Text(this.simReadStartDate.length > 0 ? this.simReadStartDate : '今天')
                 .fontSize(13).fontColor('#B9C6FF')
             }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
-              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 6 })
               .onClick(() => this.openSimReadDatePicker())
             Row() {
               Text('日更数').fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
               TextInput({ text: this.simReadDailyInput, placeholder: '3' })
                 .width(100).fontSize(14).fontColor('#E5E6EB')
-                .backgroundColor('#2A2B33').borderRadius(8)
+                .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8)
                 .onChange((text: string) => { this.simReadDailyInput = text; })
             }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 6 })
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 6 })
             Row() {
               Text('起始章').fontSize(14).fontColor('#E5E6EB').layoutWeight(1)
               TextInput({ text: this.simReadStartChapterInput, placeholder: '0' })
                 .width(100).fontSize(14).fontColor('#E5E6EB')
-                .backgroundColor('#2A2B33').borderRadius(8)
+                .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8)
                 .onChange((text: string) => { this.simReadStartChapterInput = text; })
             }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .backgroundColor('#202127').borderRadius(12).margin({ bottom: 12 })
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 12 })
             Row() {
               Text('取消').fontSize(14).fontColor('#C7C9D1').layoutWeight(1)
                 .textAlign(TextAlign.Center)
