@@ -1559,42 +1559,58 @@ export struct ReaderPage {
   }
 
   /**
-   * 当前纸色是不是深色。上游用 `ReadStyleResolver.isNightTheme()` 判断，
-   * 本地没有独立日夜状态，按纸色亮度折算（与 Index.isReaderBackgroundLight 同一口径，
-   * 阈值 0.5）。解析不出来时按「浅色」处理。
+   * 当前是不是夜间。上游 `ReadStyleResolver.isNightTheme()`（`ReadStyleResolver.kt:57-59`）=
+   * `ReadSessionState.isDarkThemeOverride ?: isNightThemeCompat`，而 `isNightThemeCompat`
+   * 由 `AppShellSettings.themeMode` 决定（`"1"` 日 / `"2"` 夜 / 其余跟系统），**与纸色无关**。
+   *
+   * 本地 `readerNightMode` 的唯一来源是全局 `themeMode`（见 `pages/Index.ets:337` 的注释），
+   * 与上游同口径，因此直接用它。KI-THEME3 第 7 条：r353 前按纸色亮度折算，
+   * 导致「浅色纸 + 夜间主题」时菜单取日间色。
    */
   private readerMenuIsNight(): boolean {
-    const raw = this.paperColor.trim().toUpperCase();
-    let hex = '';
-    if (/^#[0-9A-F]{6}$/.test(raw)) { hex = raw.substring(1); }
-    else if (/^#[0-9A-F]{8}$/.test(raw)) { hex = raw.substring(3); }
-    if (hex.length !== 6) { return false; }
-    const channel = (shift: number): number => {
-      const srgb = parseInt(hex.substring(shift, shift + 2), 16) / 255;
-      return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
-    };
-    const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
-    return luminance < 0.5;
+    return this.readerNightMode;
   }
 
   /**
-   * 菜单基底色（不含透明度）。逐条照上游 `ReadBookConfig.kt:154-178` 的 `resolvedMenuBgColor`：
-   * `0` 跟随系统 → 日间白、夜间黑；`1` 跟随阅读背景 → 取当前纸色；
-   * `2` 自定义 → 取 `readMenuBgColor`/`Night`（空串表示未设置，回落跟随系统那一档）。
-   * `readMenuColorMode == 0`（种子色）时上游用强调色派生整套色板，本地取强调色作基底近似。
+   * 菜单基底色（不含透明度）。
+   *
+   * 上游菜单底色走 `ReadBookMenuBar.kt:1033-1040` 的 `readMenuColors(readBarStyle)`：
+   * `2` 自定义 → `surfaceContainerHigh`，其余 → `surfaceContainerHigh`。
+   * 而 `surfaceContainerHigh` 在 `ReadBookColorTheme.kt:286-298` 被改写成「菜单背景色」
+   * （`readMenuBgColor`/`Night`），style 0 时返回 `null` 即继承应用主题的 `surfaceContainerHigh`。
+   *
+   * 注意：上游 `ReadBookConfig.kt:154-178` 的 `resolvedMenuBgColor` **不是菜单底色**，
+   * 它全仓只有 `ReadBookController.kt:1904` 一个消费点，用来决定状态栏图标明暗。
+   * r353 前本地照抄了它，属取错对象（KI-THEME3 第 1 条）。
+   *
+   * 第 1/2 条仍未修：style 1 的 `surfaceContainerHigh` 是「纸色作种子派生」出来的 tonal 值，
+   * 本地没有 M3 派生能力，只能保留 `paperColor` 原值（比上游少「深一档」的层次）。
    */
   private readerMenuBaseColor(): string {
-    // 上游 `readMenuTintColor`（ReadBookMenuBarShared.kt:76-92）优先级最高：夜间取
-    // `readMenuBlurColorNight`、日间取 `readMenuBlurColor`，任一非未设置就盖过整条底色推导。
+    // 模糊层着色优先级最高。上游 `ReadBookMenuBarShared.kt:52` 与
+    // `ReadBookMenuBarTitle.kt:113` 都写成 `readMenuTintColor(menuConfig) ?: colors.background`，
+    // 即 tint 非未设置时**直接顶替**底色，不是叠在底色上。
     const tint = this.readerMenuTintColor();
     if (tint.length > 0) { return tint; }
-    if (this.readBarStyle === 1) { return this.paperColor; }
     if (this.readBarStyle === 2) {
       const custom = this.readerMenuIsNight() ? this.readMenuBgColorNight : this.readMenuBgColor;
       if (custom.length > 0) { return custom; }
+      // 种子档（`readMenuColorMode == 0`）：上游 `rememberCustomReadMenuTheme`
+      // （`ReadBookColorTheme.kt:112-161`）用强调色作 seed 派生整套色位，
+      // 所以 `surfaceContainerHigh` 仍跟着强调色走。本地没有派生能力，直接拿强调色顶替
+      // ——这是 KI-THEME3 第 8 条，保留原行为不当作修好。
       if (this.readMenuColorMode === 0) { return this.readerMenuAccentTint(); }
+      // 上游 `readMenuBackgroundColor`（`ReadBookColorTheme.kt:304-310`）未设置时回落
+      // `durConfig.menuBgColor(isNight)`，其默认值见 `ReadBookConfig.kt:540-546`：
+      // 日 `#EEEFE3` / 夜 `#BFCBAD`（草野配色的 light surface / dark surface）。
+      return this.readerMenuIsNight() ? '#BFCBAD' : '#EEEFE3';
     }
-    return this.readerMenuIsNight() ? '#000000' : '#FFFFFF';
+    if (this.readBarStyle === 1) {
+      return this.paperColor;
+    }
+    // style 0：上游 `rememberReadBookColorTheme` 返回 null → 完全继承应用主题，
+    // 菜单底色即应用主题的 `surfaceContainerHigh`，本地对应 `themeColorSurfaceElevated`。
+    return this.themeColorSurfaceElevated;
   }
 
   /**
@@ -1628,26 +1644,37 @@ export struct ReaderPage {
   }
 
   /**
-   * 菜单强调色。上游 `resolvedMenuAccentColor`（`ReadBookConfig.kt:180-181`）取
-   * `readMenuAccentColor`/`Night`；未设置时上游回落到主题色，本地沿用原有硬编码 `#FFB1C8`。
+   * 菜单强调色。上游 `readMenuAccentColor`（`ReadBookColorTheme.kt:312-320`）取
+   * `readMenuAccentColor`/`Night`；未设置时回落 `durConfig.menuAccentColor(isNight)`，
+   * 其默认值见 `ReadBookConfig.kt:540-546`：日 `#EEEFE3` / 夜 `#586249`
+   * （草野配色的 light surface / dark primary），**不是硬编码的粉色**。
+   *
    * 上游「种子色」与「强调色」共用同一字段（`SystemMenuPage.kt:308-368`），这里同样只读一处。
+   * KI-THEME3 第 5 条：r353 前未设置时写死 `#FFB1C8`。
    */
   private readerMenuAccentTint(): string {
     const custom = this.readerMenuIsNight() ? this.readMenuAccentColorNight : this.readMenuAccentColor;
-    return custom.length > 0 ? custom : '#FFB1C8';
+    return custom.length > 0 ? custom : (this.readerMenuIsNight() ? '#586249' : '#EEEFE3');
   }
 
   /**
-   * 菜单模糊层着色。逐条照上游 `readMenuTintColor`（`ReadBookMenuBarShared.kt:76-92`）：
-   * 夜间看 `readMenuBlurColorNight`、日间看 `readMenuBlurColor`；日间未设置时再回落
-   * `readMenuBlurColor`（上游第三段 `takeIf { it != 0 }` 的兜底）。空串表示两端都没设置。
+   * 菜单模糊层着色。逐条照上游 `readMenuTintColor`（`ReadBookMenuBarShared.kt:76-92`）三段：
+   *
+   * ```
+   * menuConfig.readMenuBlurColorNight.takeIf { it != 0 && isNightTheme() }
+   *   ?: menuConfig.readMenuBlurColor.takeIf { it != 0 && !isNightTheme() }
+   *   ?: menuConfig.readMenuBlurColor.takeIf { it != 0 }
+   * ```
+   *
+   * 第三段是兜底：**夜间但 `Night` 未设置时，仍回落日间的 `readMenuBlurColor`**。
+   * KI-THEME3 第 9 条：r353 前缺第三段，夜间且 `Night` 为空时返回空串、丢掉了日间着色。
+   * 空串表示两端都没设置。
    */
   private readerMenuTintColor(): string {
     const day = this.readMenuBlurColor.trim();
     const night = this.readMenuBlurColorNight.trim();
-    if (this.readerMenuIsNight()) {
-      return night.length > 0 ? night : '';
-    }
+    if (this.readerMenuIsNight() && night.length > 0) { return night; }
+    if (!this.readerMenuIsNight() && day.length > 0) { return day; }
     return day.length > 0 ? day : '';
   }
 
