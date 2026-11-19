@@ -75,6 +75,8 @@ export class SystemTtsPlayer {
   private httpVoice: ReadAloudVoice | null = null;
   private httpContext: Context | null = null;
   private httpRate: number = 5;
+  /** 预合成并发数（上游 ttsPreSynthesisConcurrency，1..8）：念当前段时预取下 N 段。 */
+  private httpPreloadCount: number = 3;
   /** HTTP 源 pause 后 play 时标记「恢复当前段」而非重新合成。 */
   private httpResumePending: boolean = false;
 
@@ -104,6 +106,14 @@ export class SystemTtsPlayer {
   /** 设段落间隔毫秒数（ttsParagraphInterval）。 */
   setParagraphInterval(ms: number): void {
     this.paragraphInterval = Math.max(0, Math.trunc(ms));
+  }
+
+  /**
+   * 批9：预合成并发数（上游 ttsPreSynthesisConcurrency，clamp 1..8）。
+   * 念当前段时预下载后续 N 段；改设置后立即生效到下一次切段。
+   */
+  setPreSynthesisConcurrency(count: number): void {
+    this.httpPreloadCount = Math.max(1, Math.min(8, Math.trunc(count)));
   }
 
   /**
@@ -333,9 +343,11 @@ export class SystemTtsPlayer {
       const context = this.httpContext;
       const myGeneration = this.generation;
       console.info(`[ReadAloud] speak via HTTP idx=${this.index}`);
-      // 批9 9.1-5：念当前段时预下载下一段（并发默认 3，由 HttpTtsPlayer 内部限流）。
-      const nextUnit = this.units[this.index + 1];
-      if (nextUnit !== undefined) {
+      // 批9 9.1-5：念当前段时预下载后续 N 段（N = ttsPreSynthesisConcurrency，clamp 1..8）。
+      // 缓存 key 含正文，preload 内部按 sourceId 限流；并发数在这里决定预取窗口。
+      for (let step = 1; step <= this.httpPreloadCount; step++) {
+        const nextUnit = this.units[this.index + step];
+        if (nextUnit === undefined) { break; }
         const nextText = nextUnit.text.trim();
         if (nextText.length > 0) {
           HttpTtsPlayer.getInstance().preload(context, source, voice, nextText, this.httpRate);

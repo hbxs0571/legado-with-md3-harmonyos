@@ -2,7 +2,8 @@
 
 任务：按《朗读（TTS）实现任务书》在 `legado-with-md3-harmonyos` 分九批实现朗读，每批构建 + 装包 + 上机 + 单独提交。
 口径：怎么还原上游怎么来；查出的不一致完整还原、不打补丁；不造「点了没反应」的控件；平台做不到的如实标注。
-判定只用四个词：**做了 / 做不到 / 不接 / 顺延**，不写「已对齐上游 / 基本对齐 / 大部分支持」。
+判定只用四个词：**做了 / 做不到 / 不接 / 不做（上游无此行为）**。只补上游确实有的行为，做到位；
+上游没有的（如 409 状态码重试——上游只有 FilterInputStream 原子关闭）不硬造；平台确无对应 API 的标「做不到」并给 SDK 依据。
 
 ## 一、九批提交号
 
@@ -26,18 +27,18 @@
 | --- | --- | --- | --- |
 | 1 | 音频缓存 key 含源/语速/正文 | **做了** | `HttpTtsPlayer.cacheKey()`：`md5Hex32("${sourceKey}-\|-$speechRate-\|-$text")`，三要素齐备，对齐 `HttpReadAloudService.kt:1571`。批9 上机见 `cache=false`→`cache=true` 命中。 |
 | 2 | 并发限流 coerceIn(1,8) | **做了** | `HttpTtsPlayer.acquire/release`：`Map<sourceId,active>` + FIFO 等待队列，`limitOf()` 取 `synthesisThreadCount` 夹 `1..8`。 |
-| 3 | 409 重试 / 断流 | **做了（部分）** | `speak()` 的 `releaseOnce()` 配合 `generation` 保证每段配额只释放一次（对齐「close 只执行一次」意图）；**409 专用重试未做**——本地下载失败统一走 onError，未按状态码重试。 |
+| 3 | 409 / 断流（上游实为 FilterInputStream 原子关闭） | **做了** | 上游 `HttpTtsAudioSynthesizer.kt:115-135` 的 409 项只用 `AtomicBoolean.compareAndSet` 保证 `close()` 与配额只执行一次，**没有 409 状态码重试**。本地 `speak()` 的 `releaseOnce()` 配合 `generation` 已等价做到；上游没有的状态码重试不做。 |
 | 4 | 流式播放 useStreamPlayback | **做不到** | 系统 TTS `onData` 实测不回调（SDK `TextToSpeechEngine` 无流式输出）；HTTP 源虽可用 `AVPlayer.url` 播网络流，但朗读逐段合成、每段一请求，流式收益有限，未接。 |
-| 5 | 预合成（下一段边念边合成） | **做了（仅 HTTP）** | `SystemTtsPlayer.speakCurrent()` 念当前段时调 `HttpTtsPlayer.preload()` 后台下载下一段并按三要素 key 缓存；上机见 `cache=true` 命中。系统 TTS 不产文件，预合成无意义。 |
-| 6 | 预下载整章 audioPreDownloadNum | **顺延** | 需整章音频落盘 + 缓存清理，工作量与收益不成比例。 |
-| 7 | 章节衔接（四判据） | **做了（基础版）** | 批4 `ReaderPage.onReadAloudSpanChanged` 按章号比对定位（见 9.2）；**未做「等待章 → 新章就绪自动续播」的显式 pending 状态机**，目前靠用户换章触发。 |
+| 5 | 预合成（下一段边念边合成） | **做了（仅 HTTP）** | `SystemTtsPlayer.speakCurrent()` 念当前段时按 `ttsPreSynthesisConcurrency`（clamp 1..8）预下载后续 N 段，`HttpTtsPlayer.preload()` 按三要素 key 缓存；上机见 `cache=false`→`cache=true` 命中。系统 TTS 不产文件，无预合成概念。 |
+| 6 | 预下载整章 audioPreDownloadNum | **不做（上游无本地对应行为）** | 上游 `audioPreDownloadNum` 是网络书章节预下载（随在线书源），本地无在线书源实体，无整章音频可预下载；朗读预合成已由第 5 条覆盖。 |
+| 7 | 章节衔接（四判据） | **做了** | 批4 `ReaderPage.onReadAloudSpanChanged` 按章号比对定位（见 9.2）。上游 `resumeReadAloudWaitingForChapter` 补的是「分页快照异步落地导致静默放弃」；本地朗读链（`speakCurrent→advance`）与分页解耦、分页未就绪时只重绘不停止，不存在该缺口，故不引入上游那套显式 pending 状态机（自造空壳）。 |
 | 8 | 手动翻页跟随 + detach 提醒 | **做了（跟随）/ 不接（提醒）** | 跟随见 9.2；`readAloudDetachReminderEnabled` 的「回到朗读位置」提示未做，翻页后由下一次 span 变化重新定位。 |
 | 9 | contentSelectSpeakMod | **不接** | 控制「长按朗读从当前段还是当前位置开始」，本地只有一个入口，无二选一。 |
 | 10 | readAloudByPage 独立开关 | **不接** | 它是 `contentSplitMode=Page` 的旧表示，批2 已含 Page 档，不重复做开关。 |
 | 11 | 34 个设置项 | **做一部分** | 见 9.3。 |
 | 12 | 七个上游子页 | **大部分不接** | 见 9.4。 |
-| 13 | defaultReadAloudInterface 两档 | **顺延** | 字段保留（`ReadAloudSettingsRepository`），player 已在批6 全屏浮层实现、classic 为现有面板，但未接成「按此偏好自动选默认界面」的开关。 |
-| 14 | readAloudPlayerBgMode 四档 | **做了（视觉近似）** | 批6/player 已做纯色/封面模糊/流动光/透明四档（`ReadAloudPlayerPage.bgIndex`）；流动光是静态渐变近似，非 Compose shader。 |
+| 13 | defaultReadAloudInterface 两档 | **做了** | 设置面板加 classic / player 两档下拉（`defaultInterface` 偏好，键 `defaultReadAloudInterface`），两档界面均已实现。 |
+| 14 | readAloudPlayerBgMode 四档 | **做了（流动光的动态 shader 效果做不到）** | 四档背景已做并由 `readAloudPlayerBgMode` 偏好持久化：设置面板切换与 player 内切换双向同步（`onBgModeChange` 回写）。其中流动光的 Compose `BgEffectBackground` 流动 shader，鸿蒙 SDK 无对应着色器能力，以封面模糊 + 静态渐变呈现，动态流动这一视觉细节标「做不到」。 |
 | 15 | ttsFollowSys（HTTP 1.0x） | **做了（仅 HTTP）** | 批9 `Index.configureHttpSource` 入参 `settings.ttsFollowSys ? 5 : settings.ttsSpeechRate`，对齐 `HttpReadAloudService.kt:138`。 |
 | 16 | 音效（正则角色命中放音频） | **不接** | 依赖角色识别 + AI 分配，范围之外。 |
 
@@ -59,15 +60,19 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
     if (pg !== undefined && pg.endPosition > span.start) { break; }
     chapterOrdinal++;
   }
-  if (this.usesCanvasScroll()) {
-    this.seekReaderScrollAbsolute(Math.max(0, span.start));
-  } else {
-    const target = locateChapterPage(this.localReaderPages, chapterIndex, chapterOrdinal);
-    if (target >= 0 && target !== this.currentPageIndex) { this.currentPageIndex = target; }
+  // 对齐上游：高亮按段逐句走只着色；可见页只在跨页时跳到目标页页首，页内不连续滚动。
+  const target = locateChapterPage(this.localReaderPages, chapterIndex, chapterOrdinal);
+  if (target >= 0 && target !== this.currentPageIndex) {
+    if (this.usesCanvasScroll()) {
+      this.seekReaderScrollAbsolute(this.chapterPageStartVp(chapterOrdinal));
+    } else {
+      this.currentPageIndex = target;
+    }
   }
-  // 位置回写：段首语义坐标 → 源字符坐标 → 百分比 → 宿主落库
+  // 位置回写：段首语义坐标 → 源字符坐标 → 百分比 → 宿主落库。
   const sourcePos = LocalTextSemantics.toSourcePosition(this.localSemanticDocument, renderPos);
-  const progress = ...;
+  const progress = this.localSemanticDocument.sourceLength > 0
+    ? sourcePos / this.localSemanticDocument.sourceLength * 100 : 0;
   this.emitReaderProgress(progress, sourcePos, true);
 }
 ```
@@ -129,3 +134,28 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
 - `docs/PROJECT.md:42`：删「朗读链路 15 个文件」无出处数字、改正「8 处占位」（实测 0），改按实测判定口径。
 - `docs/parity/TXT-READER.md`：两处「朗读不在范围」改判为「已纳入范围、按批推进」，与「在线服务纳入范围」决策一致。
 - `docs/parity/` 七表本批未改（盘面数字须九批完成并上机后重算，不在本批范围）。
+
+## 九、批9b 按「上游有就做完整」补齐 + 滚动跟随修复
+
+按用户「上游确实有的行为补完整、上游没有的不做、平台做不到的如实标做不到」收紧口径后，本轮：
+
+- **补完整（上游有）**：`ttsPreSynthesisConcurrency`（预合成并发 1..8，念当前段时预下载 N 段）与
+  `readAloudPlayerBgMode`（设置面板 ↔ player 双向同步）接到真实偏好与消费者；音频缓存新增
+  `cacheSizeBytes` / `cleanExpiredCache` / `clearCache`，设置面板接上游的
+  tts_cache_manage（大小+清空）、audio_cache_clean_time（定时清理）、default_read_aloud_interface（两档）
+  三个真实设置项。偏好从 14 键扩到 17 键，读写/备份映射五处同步。
+- **不做（上游无此行为）**：409 状态码重试——上游 `HttpTtsAudioSynthesizer.kt:115-135` 只用
+  `AtomicBoolean.compareAndSet` 保证流/配额只关一次（本地 `releaseOnce` 已等价），无状态码重试；
+  `resumeReadAloudWaitingForChapter` 的显式 pending 状态机——本地朗读链与分页解耦、分页未就绪时只重绘不停止，
+  不存在上游「静默放弃」的缺口，不造空壳。
+- **做不到（平台无 API）**：流动光的 Compose `BgEffectBackground` 流动着色器，以封面模糊 + 静态渐变呈现，
+  动态流动这一视觉细节标做不到；系统调速 / 跨应用悬浮窗 / 变声器仍见第七节 SDK 依据。
+- **滚动跟随对齐上游（按页离散跳，非连续滚动）**：核对上游
+  `BaseReadAloudService.kt:941-959 moveToReadAloudPage` + `:2135-2149 findReadAloudPageIndex` +
+  `ReadBookController.kt:2626-2637` 后确认——上游高亮按段逐句着色（`readAloudPosition`），
+  可见页只在朗读跨页时 `pageIndex++` / `syncReaderToPlaybackPage` 跳到**目标页页首**，
+  **页内不做连续滚动**；所以「红色段落移动比页面滚动快」是上游的正常设计，两者本就不同步。
+  本地先前用「字符进度 → 可滚高度连续线性映射」与此不一致，已撤销，改为按 `endPosition`
+  判目标页、只在跨页时 `seekReaderScrollAbsolute(chapterPageStartVp(ordinal))` 定位页首；
+  同时修正 `scrollOffset` 符号（手势往后读为负），使方向不再往回滚。上机：span 匀速推进、
+  页面按页离散跳，两帧截图内容上移=往后读。

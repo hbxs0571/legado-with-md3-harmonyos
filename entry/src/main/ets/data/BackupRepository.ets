@@ -1244,8 +1244,8 @@ export class BackupRepository {
           console.error(`[BackupRepository] 补写 config.xml 本地真值键失败，已跳过: ${error}`);
         }
       }
-      // 朗读偏好 14 键：任务书批 1 要求全部随 config.xml 导出（上游唯一的例外
-      // readAloudWakeLock 不在这 14 键里）。键名即上游 PreferKey，标签类型取自
+      // 朗读偏好 17 键：批 1 的 14 键 + 批 9 补的预合成并发/缓存清理/播放器背景三键，
+      // 全部随 config.xml 导出（上游唯一的例外 readAloudWakeLock 不在其中）。键名即上游 PreferKey，标签类型取自
       // READ_ALOUD_SETTINGS_ANDROID_TYPES（capsuleOffsetX/Y 是 float）。排在透传之前，
       // 让本地真值覆盖透传缓存里可能存在的旧值。
       if (!ignoredCategories.includes('readConfig')) {

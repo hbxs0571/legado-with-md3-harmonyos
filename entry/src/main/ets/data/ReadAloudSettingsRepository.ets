@@ -38,11 +38,17 @@ export interface ReadAloudSettingsSnapshot {
   timerMode: string;
   /** 按章节定时时的章节数（批 5）。 */
   timerChapters: number;
-  /** 朗读界面档位：classic | player；本地目前只做 classic（批 5）。 */
+  /** 朗读界面档位：classic | player（从设置面板选择默认进入哪一档）。 */
   defaultInterface: string;
+  /** 预合成并发数 1..8，默认 3（上游 ttsPreSynthesisConcurrency，经 HTTP 源消费）。 */
+  preSynthesisConcurrency: number;
+  /** 音频缓存定时清理分钟数 0..10080，默认 10（上游 audioCacheCleanTime）。 */
+  audioCacheCleanTime: number;
+  /** 播放器背景模式 0..3（上游 readAloudPlayerBgMode，对应 Blur 等四档）。 */
+  playerBgMode: number;
 }
 
-/** 14 字段默认值，全部照上游 ReadAloudSettings.kt 的 data class 默认值。 */
+/** 17 字段默认值，全部照上游 ReadAloudSettings.kt 的 data class 默认值。 */
 export const DEFAULT_READ_ALOUD_SETTINGS: ReadAloudSettingsSnapshot = {
   ttsSpeechRate: 5,
   ttsFollowSys: true,
@@ -57,11 +63,14 @@ export const DEFAULT_READ_ALOUD_SETTINGS: ReadAloudSettingsSnapshot = {
   ttsTimer: 0,
   timerMode: 'minute',
   timerChapters: 0,
-  defaultInterface: 'classic'
+  defaultInterface: 'classic',
+  preSynthesisConcurrency: 3,
+  audioCacheCleanTime: 10,
+  playerBgMode: 1
 };
 
 /**
- * 14 个键写进 Android config.xml 时的标签类型，键名即偏好键名（上游 PreferKey）。
+ * 17 个键写进 Android config.xml 时的标签类型，键名即偏好键名（上游 PreferKey）。
  * 供 BackupRepository 逐个 upsert 时选标签用；contentSplitSymbols 上游是 Set<String>，
  * 本地按任务书用逗号串存，写出用 string 标签（本地扩展，读回仍是同一个串）。
  */
@@ -79,7 +88,10 @@ export const READ_ALOUD_SETTINGS_ANDROID_TYPES: Map<string, string> = new Map<st
   ['ttsTimer', 'int'],
   ['readAloudTimerMode', 'string'],
   ['readAloudTimerChapters', 'int'],
-  ['defaultReadAloudInterface', 'string']
+  ['defaultReadAloudInterface', 'string'],
+  ['ttsPreSynthesisConcurrency', 'int'],
+  ['audioCacheCleanTime', 'int'],
+  ['readAloudPlayerBgMode', 'int']
 ]);
 
 export function copyReadAloudSettings(settings: ReadAloudSettingsSnapshot): ReadAloudSettingsSnapshot {
@@ -97,7 +109,10 @@ export function copyReadAloudSettings(settings: ReadAloudSettingsSnapshot): Read
     ttsTimer: settings.ttsTimer,
     timerMode: settings.timerMode,
     timerChapters: settings.timerChapters,
-    defaultInterface: settings.defaultInterface
+    defaultInterface: settings.defaultInterface,
+    preSynthesisConcurrency: settings.preSynthesisConcurrency,
+    audioCacheCleanTime: settings.audioCacheCleanTime,
+    playerBgMode: settings.playerBgMode
   };
 }
 
@@ -105,7 +120,7 @@ export class ReadAloudSettingsRepository {
   private static readonly preferenceName: string = 'legado_read_aloud_settings';
   private static saveQueue: Promise<void> = Promise.resolve();
 
-  /** 从偏好 store 读 14 键；任一读取异常都不覆盖已经读到的值，返回当前快照。 */
+  /** 从偏好 store 读 17 键；任一读取异常都不覆盖已经读到的值，返回当前快照。 */
   static async load(context: Context): Promise<ReadAloudSettingsSnapshot> {
     const settings: ReadAloudSettingsSnapshot = copyReadAloudSettings(DEFAULT_READ_ALOUD_SETTINGS);
     try {
@@ -124,13 +139,16 @@ export class ReadAloudSettingsRepository {
       settings.timerMode = await store.get('readAloudTimerMode', DEFAULT_READ_ALOUD_SETTINGS.timerMode) as string;
       settings.timerChapters = await store.get('readAloudTimerChapters', DEFAULT_READ_ALOUD_SETTINGS.timerChapters) as number;
       settings.defaultInterface = await store.get('defaultReadAloudInterface', DEFAULT_READ_ALOUD_SETTINGS.defaultInterface) as string;
+      settings.preSynthesisConcurrency = await store.get('ttsPreSynthesisConcurrency', DEFAULT_READ_ALOUD_SETTINGS.preSynthesisConcurrency) as number;
+      settings.audioCacheCleanTime = await store.get('audioCacheCleanTime', DEFAULT_READ_ALOUD_SETTINGS.audioCacheCleanTime) as number;
+      settings.playerBgMode = await store.get('readAloudPlayerBgMode', DEFAULT_READ_ALOUD_SETTINGS.playerBgMode) as number;
     } catch (error) {
       console.error(`朗读偏好读取失败：${error instanceof Error ? error.message : String(error)}`);
     }
     return settings;
   }
 
-  /** 写 14 键，串行队列 + flush，范式与 ReaderSettingsRepository.save 一致。 */
+  /** 写 17 键，串行队列 + flush，范式与 ReaderSettingsRepository.save 一致。 */
   static save(context: Context, settings: ReadAloudSettingsSnapshot): Promise<void> {
     const operation = ReadAloudSettingsRepository.saveQueue.then(async (): Promise<void> => {
       const store = await preferences.getPreferences(context, ReadAloudSettingsRepository.preferenceName);
@@ -148,6 +166,9 @@ export class ReadAloudSettingsRepository {
       await store.put('readAloudTimerMode', settings.timerMode);
       await store.put('readAloudTimerChapters', settings.timerChapters);
       await store.put('defaultReadAloudInterface', settings.defaultInterface);
+      await store.put('ttsPreSynthesisConcurrency', settings.preSynthesisConcurrency);
+      await store.put('audioCacheCleanTime', settings.audioCacheCleanTime);
+      await store.put('readAloudPlayerBgMode', settings.playerBgMode);
       await store.flush();
     });
     ReadAloudSettingsRepository.saveQueue = operation.then((): void => {}, (_error: Error): void => {});
@@ -171,6 +192,9 @@ export class ReadAloudSettingsRepository {
     values.set('readAloudTimerMode', settings.timerMode);
     values.set('readAloudTimerChapters', `${settings.timerChapters}`);
     values.set('defaultReadAloudInterface', settings.defaultInterface);
+    values.set('ttsPreSynthesisConcurrency', `${settings.preSynthesisConcurrency}`);
+    values.set('audioCacheCleanTime', `${settings.audioCacheCleanTime}`);
+    values.set('readAloudPlayerBgMode', `${settings.playerBgMode}`);
     return values;
   }
 
@@ -211,6 +235,12 @@ export class ReadAloudSettingsRepository {
     if (timerChapters !== undefined) { merged.timerChapters = timerChapters; }
     const defaultInterface = values.get('defaultReadAloudInterface');
     if (defaultInterface !== undefined) { merged.defaultInterface = defaultInterface; }
+    const concurrency = ReadAloudSettingsRepository.parseAndroidInt(values.get('ttsPreSynthesisConcurrency'));
+    if (concurrency !== undefined) { merged.preSynthesisConcurrency = concurrency; }
+    const cleanTime = ReadAloudSettingsRepository.parseAndroidInt(values.get('audioCacheCleanTime'));
+    if (cleanTime !== undefined) { merged.audioCacheCleanTime = cleanTime; }
+    const bgMode = ReadAloudSettingsRepository.parseAndroidInt(values.get('readAloudPlayerBgMode'));
+    if (bgMode !== undefined) { merged.playerBgMode = bgMode; }
     return merged;
   }
 

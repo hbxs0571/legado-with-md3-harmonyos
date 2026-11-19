@@ -386,20 +386,72 @@ export class HttpTtsPlayer {
     this.finishOne(generation, false, message);
   }
 
-  /** 退出朗读清整个缓存目录里的合成临时文件。 */
-  clearCache(context: Context): void {
+  /** 缓存文件名前缀（合成临时 / 目录 / 预合成）。 */
+  private static readonly CACHE_PREFIXES: string[] = [
+    'legado_tts_', 'legado_catalog_', 'legado_preload_'
+  ];
+
+  private static isCacheFile(name: string): boolean {
+    return HttpTtsPlayer.CACHE_PREFIXES.some((prefix: string): boolean => name.startsWith(prefix));
+  }
+
+  /** 朗读缓存占用字节数（上游 tts_cache_manage 显示缓存目录大小）。 */
+  static cacheSizeBytes(context: Context): number {
+    let total = 0;
     try {
-      const names = fs.listFileSync(context.cacheDir);
-      names.forEach((name: string): void => {
-        if (name.startsWith('legado_tts_') || name.startsWith('legado_catalog_') ||
-          name.startsWith('legado_preload_')) {
-          HttpTtsPlayer.safeUnlink(`${context.cacheDir}/${name}`);
+      for (const name of fs.listFileSync(context.cacheDir)) {
+        if (!HttpTtsPlayer.isCacheFile(name)) { continue; }
+        try {
+          total += fs.statSync(`${context.cacheDir}/${name}`).size;
+        } catch (_) {
+          // 单个文件 stat 失败跳过
         }
-        this.audioCache.clear();
-      });
+      }
+    } catch (_) {
+      // 缓存目录不可读时返回 0
+    }
+    return total;
+  }
+
+  /**
+   * 定时清理超过 maxAgeMinutes 分钟的缓存（上游 audioCacheCleanTime，0 表示不清理）。
+   * 返回删除的文件数。
+   */
+  static cleanExpiredCache(context: Context, maxAgeMinutes: number): number {
+    if (maxAgeMinutes <= 0) { return 0; }
+    const threshold = Date.now() - maxAgeMinutes * 60 * 1000;
+    let removed = 0;
+    try {
+      for (const name of fs.listFileSync(context.cacheDir)) {
+        if (!HttpTtsPlayer.isCacheFile(name)) { continue; }
+        const path = `${context.cacheDir}/${name}`;
+        try {
+          if (fs.statSync(path).mtime < threshold) {
+            HttpTtsPlayer.safeUnlink(path);
+            removed++;
+          }
+        } catch (_) {
+          // 单个文件 stat 失败跳过
+        }
+      }
     } catch (_) {
       // 缓存目录不可读时忽略
     }
+    return removed;
+  }
+
+  /** 退出朗读清整个缓存目录里的合成临时文件。 */
+  clearCache(context: Context): void {
+    try {
+      for (const name of fs.listFileSync(context.cacheDir)) {
+        if (HttpTtsPlayer.isCacheFile(name)) {
+          HttpTtsPlayer.safeUnlink(`${context.cacheDir}/${name}`);
+        }
+      }
+    } catch (_) {
+      // 缓存目录不可读时忽略
+    }
+    this.audioCache.clear();
   }
 
   private static ensureSharedSession(): rcp.Session {

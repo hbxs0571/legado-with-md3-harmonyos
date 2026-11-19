@@ -918,8 +918,8 @@ export struct ReaderPage {
   /** 批6：胶囊停止按钮 —— 停止朗读。 */
   onCapsuleStop: () => void = () => {};
   /**
-   * 批6：封面在完全展开态被点击 —— 上游打开 player 听书界面（onOpenPlayer）。
-   * 本地无 player，降级到朗读面板；在 KNOWN-ISSUES KI-ALOUD-CAPSULE 如实说明。
+   * 胶囊封面在完全展开态被点击 —— 对齐上游 onOpenPlayer，打开听书界面
+   * （pages/ReadAloudPlayerPage.ets 全屏浮层）。
    */
   onCapsuleOpenPlayer: () => void = () => {};
   onOpenImagePreview: (uri: string) => void = (_uri: string) => {};
@@ -3045,11 +3045,13 @@ export struct ReaderPage {
         if (pg !== undefined && pg.endPosition > span.start) { break; }
         chapterOrdinal++;
       }
-      if (this.usesCanvasScroll()) {
-        this.seekReaderScrollAbsolute(Math.max(0, span.start));
-      } else {
-        const target = locateChapterPage(this.localReaderPages, chapterIndex, chapterOrdinal);
-        if (target >= 0 && target !== this.currentPageIndex) {
+      // 对齐上游：高亮按段逐句走（只着色），可见页只在「跨页」时跳到目标页页首，
+      // 页内不做连续滚动（BaseReadAloudService.moveToReadAloudPage / syncReaderToPlaybackPage）。
+      const target = locateChapterPage(this.localReaderPages, chapterIndex, chapterOrdinal);
+      if (target >= 0 && target !== this.currentPageIndex) {
+        if (this.usesCanvasScroll()) {
+          this.seekReaderScrollAbsolute(this.chapterPageStartVp(chapterOrdinal));
+        } else {
           this.currentPageIndex = target;
         }
       }
@@ -3065,7 +3067,7 @@ export struct ReaderPage {
     this.invalidateReaderCanvas();
   }
 
-  /** 进度环百分比：用当前段首坐标 / 本章正文长度近似，避免依赖播放器内部句序。 */
+  /** 进度环百分比：当前段首坐标 / 本章正文长度（与段高亮同一语义坐标口径）。 */
   private currentAloudProgress(): number {
     const total = this.localSemanticContent.length;
     if (total <= 0 || this.readAloudSpan.start < 0) { return 0; }
@@ -3120,7 +3122,7 @@ export struct ReaderPage {
     }, 100);
   }
 
-  /** 封面点击（上游 :310-313）：折叠/半展开时先展开，完全展开时打开 player（本地降级面板）。 */
+  /** 封面点击（上游 :310-313）：折叠/半展开时先展开，完全展开时打开听书界面 player。 */
   private onCapsuleCoverClick(): void {
     if (this.capsuleCollapsed) {
       this.setCapsuleCollapsed(false);
@@ -6098,7 +6100,9 @@ export struct ReaderPage {
       }
       before += Math.max(1, used);
     }
-    return before + this.scrollOffset;
+    // scrollOffset 负值=往后读（见 ReaderScrollPolicy.apply 的 crossing NEXT），
+    // 故当前页内已读量是 -scrollOffset（正值），绝对位移随阅读前进递增。
+    return before - this.scrollOffset;
   }
 
   /** 把章内绝对位移还原成「当前页索引 + 页内偏移」。 */
@@ -6134,11 +6138,41 @@ export struct ReaderPage {
       const extent = Math.max(1, used);
       if (remaining < extent || order === chapterIndexes.length - 1) {
         this.currentPageIndex = index;
-        this.scrollOffset = Math.min(remaining, Math.max(0, extent - 1));
+        // 与 readerScrollAbsoluteOffset 互逆：页内已读 remaining → scrollOffset 取负。
+        // 批4 曾写成正值，导致朗读高亮跟随时内容往回滚。
+        this.scrollOffset = -Math.min(remaining, Math.max(0, extent - 1));
         return;
       }
       remaining -= extent;
     }
+  }
+
+  /**
+   * 章内第 chapterOrdinal 页的页首绝对位移（vp）。上游朗读跨页时定位到目标页页首
+   * （syncReaderToPlaybackPage 传 chapter.pageStart(pageIndex)），页内不连续滚动。
+   * extent 口径与 seekReaderScrollAbsolute / readerScrollAbsoluteOffset 完全一致。
+   */
+  private chapterPageStartVp(chapterOrdinal: number): number {
+    const pages = this.localReaderPages;
+    const current = pages[this.currentPageIndex];
+    const currentChapter = current?.chapterIndex ?? this.getChapterIndex();
+    const footerReserve = this.isReaderFooterVisible() ? this.getReaderInfoReserve(false) : 0;
+    const headerReserve = this.isReaderHeaderVisible() ? this.getReaderInfoReserve(true) : 0;
+    const bodyHeight = this.getBodyContentHeight(headerReserve, footerReserve);
+    let startVp = 0;
+    let order = 0;
+    for (let index = 0; index < pages.length && order < chapterOrdinal; index++) {
+      const page = pages[index];
+      if (page === undefined || (page.chapterIndex ?? 0) !== currentChapter) { continue; }
+      let used = 0;
+      for (const line of page.lines) {
+        used += line.verticalSpaceBefore + line.height + line.paragraphSpacingAfter;
+      }
+      if (page.titleOnly && used <= 0) { used = Math.max(1, bodyHeight); }
+      startVp += Math.max(1, used);
+      order++;
+    }
+    return startVp;
   }
 
   /**
@@ -8938,7 +8972,7 @@ export struct ReaderPage {
       // 日白夜黑底色不跟随主题（上游 capsuleSurfaceColor）。
       if (this.capsuleVisible()) {
         Row() {
-          // 封面圆图：折叠态唯一元素；点击折叠时展开、完全展开时开 player（本地降级面板）。
+          // 封面圆图：折叠态唯一元素；点击折叠时展开、完全展开时开听书界面 player。
           Stack({ alignContent: Alignment.Center }) {
             if (this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
               Image(this.book.coverUri)

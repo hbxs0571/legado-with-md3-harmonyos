@@ -43,8 +43,8 @@ export struct ReadAloudPlayerPage {
   @State showSpeedSheet: boolean = false;
   @State showTimerSheet: boolean = false;
   // 对齐上游 ReadAloudBgMode（PreferKey.kt:509-514）：0=Solid 1=Blur 2=FlowingLight 3=Transparent。
-  // 默认 Blur(1)。流动光用静态渐变近似（Compose 专属 shader 本地做不到），透明档露出下层。
-  @State bgIndex: number = 1;
+  // 默认 Blur(1)。背景档由设置 readAloudPlayerBgMode 持久化，切换经 onBgModeChange 回写。
+  @Prop bgIndex: number = 1;
   @State speedPreview: number = 5;
   @State timerModeSel: string = 'minute';
   @State timerMinutesSel: number = 10;
@@ -65,6 +65,8 @@ export struct ReadAloudPlayerPage {
   onTimerChange: (mode: string, minutes: number, chapters: number) => void =
     (_mode: string, _minutes: number, _chapters: number): void => {};
   onOpenConfig: () => void = () => {};
+  /** 背景档切换回写偏好（上游 readAloudPlayerBgMode）。 */
+  onBgModeChange: (mode: number) => void = (_mode: number): void => {};
 
   // 上游字符串 read_aloud_bg_solid / blur / flowing_light / transparent。
   private readonly bgLabels: string[] = ['纯色', '封面模糊', '流动光', '透明'];
@@ -116,7 +118,7 @@ export struct ReadAloudPlayerPage {
     return this.isDarkBg() ? '#8A8A90' : '#6A6D77';
   }
 
-  // 底栏底色：上游 haze 半透明叠在背景上；本地用半透明中性色近似。
+  // 底栏底色：上游 haze 半透明叠在背景上；鸿蒙 ArkUI 无 haze 跨组件采样，以半透明中性色呈现。
   private barBg(): string {
     return this.isDarkBg() ? '#99000000' : '#99F5F6F8';
   }
@@ -129,6 +131,7 @@ export struct ReadAloudPlayerPage {
 
   private cycleBg(): void {
     this.bgIndex = (this.bgIndex + 1) % this.bgLabels.length;
+    this.onBgModeChange(this.bgIndex);
   }
 
   @Builder
@@ -141,7 +144,8 @@ export struct ReadAloudPlayerPage {
           .blur(40).scale({ x: 1.2, y: 1.2 })
         Column().width('100%').height('100%').backgroundColor('#B3000000')
       } else if (this.bgIndex === 2) {
-        // FlowingLight(2)：上游是封面模糊 + 流动光 shader；本地无该 shader，静态渐变近似。
+        // FlowingLight(2)：上游是封面模糊 + Compose 流动光 shader；鸿蒙 SDK 无对应着色器能力，
+        // 以封面模糊 + 静态渐变呈现，流动动画这一视觉细节平台做不到。
         if (this.coverUri.length > 0) {
           Image(this.coverUri).width('100%').height('100%').objectFit(ImageFit.Cover).blur(48)
         }

@@ -753,6 +753,8 @@ struct Index {
   @State aloudTexts: string[] = [];
   /** 听书页全屏浮层显隐（上游 Activity 级 morph 浮层的本地近似）。 */
   @State showReadAloudPlayer: boolean = false;
+  /** 听书页背景档（上游 readAloudPlayerBgMode，0..3，随设置持久化）。 */
+  @State playerBgMode: number = 1;
   @State aloudVoiceName: string = '聆小珊';
   private currentVoicePerson: number = 13;
   /** 批5：定时到点定时器；章节档的已读章节计数。 */
@@ -7827,6 +7829,8 @@ private canWriteInto(dir: string): boolean {
 
   /** 批8：按选中源配置门面的 HTTP 模式；未选中则清空回退系统 TTS。 */
   private async configureHttpSource(context: Context, rate: number): Promise<void> {
+    // 批9b：预合成并发数取设置值（上游 ttsPreSynthesisConcurrency，clamp 1..8）。
+    this.readAloudPlayer.setPreSynthesisConcurrency(this.readAloudSettings.preSynthesisConcurrency);
     this.httpTtsSelection = await HttpTtsSelectionRepository.load(context);
     await HttpTtsRepository.load(context);
     await ReadAloudVoiceRepository.load(context);
@@ -8146,11 +8150,23 @@ private canWriteInto(dir: string): boolean {
   /** 胶囊展开态点封面 → 打开听书界面（上游 onOpenPlayer / OverlayBus.request）。 */
   private openReadAloudPlayer(): void {
     this.aloudVoiceName = this.voiceNameFor(this.currentVoicePerson);
+    // 批9b：播放器背景档取设置（上游 readAloudPlayerBgMode）。
+    this.playerBgMode = this.readAloudSettings.playerBgMode;
     this.showReadAloudPlayer = true;
   }
 
   private closeReadAloudPlayer(): void {
     this.showReadAloudPlayer = false;
+  }
+
+  /** 听书页切换背景档 → 写回 readAloudPlayerBgMode 偏好（上游同键）。 */
+  private async onPlayerBgModeChange(mode: number): Promise<void> {
+    this.playerBgMode = mode;
+    const updated = copyReadAloudSettings(this.readAloudSettings);
+    updated.playerBgMode = mode;
+    this.readAloudSettings = updated;
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) { await ReadAloudSettingsRepository.save(context, updated); }
   }
 
   private voiceNameFor(person: number): string {
@@ -8209,6 +8225,7 @@ private canWriteInto(dir: string): boolean {
   private async onAloudSettingsChange(settings: ReadAloudSettingsSnapshot): Promise<void> {
     this.readAloudSettings = settings;
     this.readAloudPlayer.setParagraphInterval(settings.ttsParagraphInterval);
+    this.readAloudPlayer.setPreSynthesisConcurrency(settings.preSynthesisConcurrency);
     const context = this.getUIContext().getHostContext();
     if (context !== undefined) { await ReadAloudSettingsRepository.save(context, settings); }
   }
@@ -11231,6 +11248,8 @@ private canWriteInto(dir: string): boolean {
             ? (this.readAloudSettings.ttsTimer > 0 ? `${this.readAloudSettings.ttsTimer} 分钟后停止` : '关闭')
             : (this.readAloudSettings.timerChapters > 0 ? `${this.readAloudSettings.timerChapters} 章后停止` : '关闭'),
           voiceName: this.aloudVoiceName,
+          bgIndex: this.playerBgMode,
+          onBgModeChange: (mode: number) => this.onPlayerBgModeChange(mode),
           onBack: () => this.closeReadAloudPlayer(),
           onPrevious: () => this.onAloudPrevious(),
           onPreviousChapter: () => this.turnReadAloudChapter(-1),
