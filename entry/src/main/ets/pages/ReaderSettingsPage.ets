@@ -4119,6 +4119,8 @@ struct ReaderInfoSettingRow {
 
 @Component
 struct ReaderInfoColorRow {
+  // 批3：夜色预览占位块改走 rsetChipBgAlt（批2 已指向 surfaceContainerHigh）。
+  @StorageProp('rsetChipBgAlt') rsetChipBgAlt: string = '#1E1F25';
   // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
   @StorageProp('rsetTextSecondary') rsetTextSecondary: string = '#D9DAE0';
   @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
@@ -4141,7 +4143,7 @@ struct ReaderInfoColorRow {
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Row() {
         Column().width(22).height(22).backgroundColor('#E6E1E7').borderRadius(11)
-        Column().width(22).height(22).backgroundColor('#3D3D46').borderRadius(11).margin({ left: 5 })
+        Column().width(22).height(22).backgroundColor(this.rsetChipBgAlt).borderRadius(11).margin({ left: 5 })
       }
       Text('›').fontSize(20).fontColor(this.rsetTextTertiary).margin({ left: 8 })
     }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
@@ -4234,6 +4236,8 @@ struct ReaderInfoSliderRow {
 
 @Component
 struct MenuSettingColor {
+  // 批3：日色未设置时的占位块改走 rsetChipBgAlt。
+  @StorageProp('rsetChipBgAlt') rsetChipBgAlt: string = '#1E1F25';
   // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
   @StorageProp('rsetTextPrimary') rsetTextPrimary: string = '#E5E6EB';
   @StorageProp('rsetTextTertiary') rsetTextTertiary: string = '#AEB0B9';
@@ -4254,7 +4258,7 @@ struct MenuSettingColor {
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Row() {
         Column().width(22).height(22)
-          .backgroundColor(this.dayColor.length > 0 ? this.dayColor : '#3D3D46')
+          .backgroundColor(this.dayColor.length > 0 ? this.dayColor : this.rsetChipBgAlt)
           .border({ width: this.dayColor.length > 0 ? 0 : 1, color: this.rsetTrack })
           .borderRadius(11)
         Column().width(22).height(22)
@@ -4290,6 +4294,8 @@ struct MenuSettingOption {
 
 @Component
 struct BackgroundOption {
+  // 批3：选中勾图标（画在 rsetAccent 底上）改走 onPrimary，默认值取草野夜档真值。
+  @StorageProp('themeColorOnPrimary') themeColorOnPrimary: string = '#1F3701';
   // 颜色由主 struct 的 publishReaderSetColors() 广播：浮层形态保持深色，全屏形态跟随主题。
   @StorageProp('rsetAccent') rsetAccent: string = '#C6D3FF';
   @StorageProp('rsetTrack') rsetTrack: string = '#454751';
@@ -4309,7 +4315,7 @@ struct BackgroundOption {
       }.width('100%').layoutWeight(1)
       if (this.selected) {
         Column() {
-          Image($r('app.media.app_check')).width(10).height(10).fillColor('#1B1D25')
+          Image($r('app.media.app_check')).width(10).height(10).fillColor(this.themeColorOnPrimary)
         }.width('100%').height(12).justifyContent(FlexAlign.Center)
           .backgroundColor(this.rsetAccent)
       }
