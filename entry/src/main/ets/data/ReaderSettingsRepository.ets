@@ -730,9 +730,10 @@ export const READER_LOCAL_TOP_ACTION_DEFAULTS: ReaderBottomActionConfig[] = READ
  * 一个阅读背景样式，对应上游 `ReadStyleItem`（`domain/model/settings/ReadStyleState.kt:21`）里
  * 与背景有关的那几个字段。
  *
- * 上游的 `ReadStyleItem` 还带 `bgType`/`textColor`/`*EInk` 等字段：本地 `bgType` 与文字颜色
- * 是全局单份（`bgStr`/`bgType`/`textColor`，见 `ReaderSettingsSnapshot`），不随样式独立，
- * 因此这里只保留「名字 + 日间色 + 夜间色」，避免同一份状态有两个来源。
+ * 上游的 `ReadStyleItem` 还带 `bgType`/`*EInk` 等字段：本地 `bgType` 与正文文字颜色
+ * 是全局单份（`bgStr`/`bgType`/`textColor`，见 `ReaderSettingsSnapshot`），不随样式独立。
+ * 这里多带两个文字色，只驱动背景样式卡片标签的字体色（对齐上游 `readStyleTextColor`，
+ * `ui/book/read/sheet/ThemeListContent.kt:869`），正文文字色仍是全局单份。
  */
 export interface ReaderBackgroundStyle {
   /** 稳定身份。拖动排序、删除后选中项要跟着走，靠名字会认错（允许重名）。 */
@@ -740,6 +741,10 @@ export interface ReaderBackgroundStyle {
   name: string;
   dayColor: string;
   nightColor: string;
+  /** 日间文字色。上游 ReadStyleItem.textColor（ReadStyleState.kt:30），只驱动卡片标签。 */
+  textColor: string;
+  /** 夜间文字色。上游 ReadStyleItem.textColorNight（同上 :31）。 */
+  textColorNight: string;
 }
 
 /**
@@ -757,15 +762,24 @@ export const READER_STYLE_PRESET_COUNT: number = 5;
  */
 export const READER_STYLE_NEW_DAY_COLOR: string = '#EEEEEE';
 export const READER_STYLE_NEW_NIGHT_COLOR: string = '#000000';
+/** 新样式文字色，取上游 ReadBookConfig.kt:555-556 的全局默认 #3E3D3B / #ADADAD。 */
+export const READER_STYLE_NEW_TEXT_COLOR: string = '#3E3D3B';
+export const READER_STYLE_NEW_TEXT_COLOR_NIGHT: string = '#ADADAD';
 
 // 来源于 Android 原项目 assets/defaultData/readConfig.json 的六个默认阅读样式。
 export const READER_BACKGROUND_STYLES: ReaderBackgroundStyle[] = [
-  { id: 'preset-0', name: '微信读书', dayColor: '#ffc0edc6', nightColor: '#000000' },
-  { id: 'preset-1', name: '预设1', dayColor: '#FFFFFF', nightColor: '#000000' },
-  { id: 'preset-2', name: '预设2', dayColor: '#DDC090', nightColor: '#3C3F43' },
-  { id: 'preset-3', name: '预设3', dayColor: '#C2D8AA', nightColor: '#3C3F43' },
-  { id: 'preset-4', name: '预设4', dayColor: '#DBB8E2', nightColor: '#3C3F43' },
-  { id: 'preset-5', name: '预设5', dayColor: '#ABCEE0', nightColor: '#3C3F43' }
+  { id: 'preset-0', name: '微信读书', dayColor: '#ffc0edc6', nightColor: '#000000',
+    textColor: '#ff0b0b0b', textColorNight: '#ADADAD' },
+  { id: 'preset-1', name: '预设1', dayColor: '#FFFFFF', nightColor: '#000000',
+    textColor: '#000000', textColorNight: '#FFFFFF' },
+  { id: 'preset-2', name: '预设2', dayColor: '#DDC090', nightColor: '#3C3F43',
+    textColor: '#3E3422', textColorNight: '#DCDFE1' },
+  { id: 'preset-3', name: '预设3', dayColor: '#C2D8AA', nightColor: '#3C3F43',
+    textColor: '#596C44', textColorNight: '#88C16F' },
+  { id: 'preset-4', name: '预设4', dayColor: '#DBB8E2', nightColor: '#3C3F43',
+    textColor: '#68516C', textColorNight: '#F6AEAE' },
+  { id: 'preset-5', name: '预设5', dayColor: '#ABCEE0', nightColor: '#3C3F43',
+    textColor: '#3D4C54', textColorNight: '#90BFF5' }
 ];
 
 /** 复制一份样式列表，避免 @State 直接持有常量数组实例后被就地改写。 */
@@ -774,7 +788,9 @@ export function copyReaderBackgroundStyles(styles: ReaderBackgroundStyle[]): Rea
     id: style.id,
     name: style.name,
     dayColor: style.dayColor,
-    nightColor: style.nightColor
+    nightColor: style.nightColor,
+    textColor: style.textColor,
+    textColorNight: style.textColorNight
   }));
 }
 
@@ -1972,7 +1988,12 @@ export class ReaderSettingsRepository {
         READER_BACKGROUND_STYLES[0].dayColor);
       const nightColor = ReaderSettingsRepository.normalizeHexColor(item.nightColor,
         READER_BACKGROUND_STYLES[0].nightColor);
-      styles.push({ id: id, name: name, dayColor: dayColor, nightColor: nightColor });
+      const preset = READER_BACKGROUND_STYLES[Math.min(index, READER_BACKGROUND_STYLES.length - 1)];
+      const textColor = ReaderSettingsRepository.normalizeHexColor(item.textColor, preset.textColor);
+      const textColorNight = ReaderSettingsRepository.normalizeHexColor(item.textColorNight,
+        preset.textColorNight);
+      styles.push({ id: id, name: name, dayColor: dayColor, nightColor: nightColor,
+        textColor: textColor, textColorNight: textColorNight });
     }
     // 预设不足时用内置表补齐，保证 paperIndex 的 0..PRESET_COUNT-1 语义始终成立。
     for (let index = styles.length; index < READER_STYLE_PRESET_COUNT; index++) {
@@ -1981,7 +2002,9 @@ export class ReaderSettingsRepository {
         id: preset.id,
         name: preset.name,
         dayColor: preset.dayColor,
-        nightColor: preset.nightColor
+        nightColor: preset.nightColor,
+        textColor: preset.textColor,
+        textColorNight: preset.textColorNight
       });
     }
     return styles;

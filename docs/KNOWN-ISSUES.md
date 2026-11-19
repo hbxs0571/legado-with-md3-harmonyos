@@ -1132,3 +1132,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
   同时要改 isInSelectionMode 的选中集合与 selectionKey 口径，牵连侧滑、批量删除、合并对话框三处。
 - **状态**：代码未改，待排期。
 
+
+
+
+**KI-RR2 背景样式里的文字色只驱动卡片标签，正文文字色仍是全局单份**
+
+- **现象**：上游 `ReadStyleItem`（`domain/model/settings/ReadStyleState.kt:21-33`）的 `textColor` / `textColorNight` / `textColorEInk` 随「当前选中的那一份样式」切换，切样式会连带改正文文字色（`ReadStyleResolver.currentMode` + `readStyleTextColor`，`ui/book/read/sheet/ThemeListContent.kt:869-878`）。本地正文文字色只有一份全局 `textColor` / `textColorNight`（`data/ReaderSettingsRepository.ets` 的 `ReaderSettingsSnapshot`），切背景样式不会改正文文字色。
+- **本轮的落地范围**：给 `ReaderBackgroundStyle` 补 `textColor` / `textColorNight` 两个字段（默认表六条按上游 `assets/defaultData/readConfig.json` 逐条取值），只用于**背景样式卡片的标签字体色**——阅读设置页 `BackgroundOption`（`pages/ReaderSettingsPage.ets:4302`）与主题网格 `ThemeGridCard`（`:2069`）改成 `readerNightMode ? style.textColorNight : style.textColor`。这一处修掉了原来「按背景色明暗猜标签色」的错误启发式。
+- **未做的部分（明确登记，不是遗漏）**：正文文字色没有样式级化，仍是全局单份。整体上游化会牵动 `ReaderPage.readingTextColor` 的整条 `@Prop` 链、备份 `readConfig.json` 的 `textColor` 语义、以及「信息颜色」面板的取值口径，爆炸半径远超卡片标签问题，本轮按任务书路线 B 只做卡片标签。
+- **用户看得见的差别**：卡片标签色现在与上游一致（预设2 深棕 `#3E3422`、预设3 深绿 `#596C44` 等，不再是统一的 `#585963`）；但把样式从预设1 切到预设3，正文文字色不会跟着变，上游会变。
+- **备份影响**：`readConfig.json` 的写出内容未变（仍是单元素数组 + 全局 `textColor`），样式表结构变化只影响本地偏好键 `legado_reader_settings` 里的 `backgroundStyles` JSON；老备份恢复后新字段走内置预设按下标补齐。

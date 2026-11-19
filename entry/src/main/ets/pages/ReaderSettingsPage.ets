@@ -923,6 +923,7 @@ export struct ReaderSettingsPage {
               BackgroundOption({
                 label: this.getBackgroundStyleLabel(style),
                 color: this.readerNightMode ? style.nightColor : style.dayColor,
+                textColor: this.readerNightMode ? style.textColorNight : style.textColor,
                 selected: this.paperIndex === styleIndex
               }).margin({ right: 8 })
                 .onClick(() => this.onPaperChange(styleIndex))
@@ -2068,7 +2069,7 @@ export struct ReaderSettingsPage {
       Column() {
         Column() {
           Text(this.getBackgroundStyleLabel(style)).fontSize(11).maxLines(2).textAlign(TextAlign.Center)
-            .fontColor(this.rsetTextPrimary)
+            .fontColor(this.readerNightMode ? style.textColorNight : style.textColor)
         }
         .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
         .backgroundColor(this.readerNightMode ? style.nightColor : style.dayColor)
@@ -4301,6 +4302,7 @@ struct BackgroundOption {
   @StorageProp('rsetTrack') rsetTrack: string = '#454751';
   @Prop label: string = '';
   @Prop color: string = '#000000';
+  @Prop textColor: string = '#ff0b0b0b';
   @Prop selected: boolean = false;
 
   build() {
@@ -4309,8 +4311,7 @@ struct BackgroundOption {
     Column() {
       Stack({ alignContent: Alignment.Center }) {
         Text(this.label).fontSize(10).maxLines(2).textAlign(TextAlign.Center)
-          .fontColor(this.color.toLowerCase() === '#000000' || this.color.toLowerCase() === '#3c3f43'
-            ? '#E4E5EA' : '#585963')
+          .fontColor(this.textColor)
           .padding({ left: 2, right: 2 })
       }.width('100%').layoutWeight(1)
       if (this.selected) {

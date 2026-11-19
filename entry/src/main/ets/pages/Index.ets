@@ -128,6 +128,7 @@ import {
   ReaderBottomActionConfig, ReaderSettingsRepository, ReaderSettingsSnapshot, READER_BACKGROUND_STYLES,
   ReaderBackgroundStyle, READER_STYLE_PRESET_COUNT, copyReaderBackgroundStyles,
   READER_STYLE_NEW_DAY_COLOR, READER_STYLE_NEW_NIGHT_COLOR,
+  READER_STYLE_NEW_TEXT_COLOR, READER_STYLE_NEW_TEXT_COLOR_NIGHT,
   READER_CLICK_REGION_DEFAULTS,
   READER_LOCAL_BOTTOM_ACTION_DEFAULTS, READER_LOCAL_TOP_ACTION_DEFAULTS,
   ReaderInfoSettings, DEFAULT_READER_INFO_SETTINGS, copyReaderInfoSettings, updateReaderInfoSettings,
@@ -4535,7 +4536,9 @@ struct Index {
       id: `style-${Date.now()}-${nextIndex}`,
       name: '',
       dayColor: READER_STYLE_NEW_DAY_COLOR,
-      nightColor: READER_STYLE_NEW_NIGHT_COLOR
+      nightColor: READER_STYLE_NEW_NIGHT_COLOR,
+      textColor: READER_STYLE_NEW_TEXT_COLOR,
+      textColorNight: READER_STYLE_NEW_TEXT_COLOR_NIGHT
     });
     this.backgroundStyles = styles;
     this.setReaderPaperIndex(nextIndex);
@@ -4552,7 +4555,9 @@ struct Index {
       id: current.id,
       name: name.length > 0 ? name : current.name,
       dayColor: dayColor.length > 0 ? dayColor : current.dayColor,
-      nightColor: nightColor.length > 0 ? nightColor : current.nightColor
+      nightColor: nightColor.length > 0 ? nightColor : current.nightColor,
+      textColor: current.textColor,
+      textColorNight: current.textColorNight
     };
     this.backgroundStyles = styles;
     this.readerSettingsRevision += 1;
