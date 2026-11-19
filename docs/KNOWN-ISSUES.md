@@ -35,7 +35,7 @@
 
 对照上游 `ui/book/readaloud/player/ReadAloudPlayerScreen.kt`（773 行）+ Contract 实现，全屏浮层，三页 Swiper（目录 / 封面 / 正文）+ 顶栏（书名/章名/设置）+ 底栏。
 
-能真实现并已接 `SystemTtsPlayer` 单例的控件：上一句 / 下一句（`previous`/`next`）、上一章 / 下一章（复用换章链）、播放暂停、进度条与正文点选 seek（`seekTo`）、目录选章、切换经典（回朗读面板）、正文逐句跟随高亮（读 `onTextChange`），当前句/下一句取 `unitText`。背景模式做了「跟随阅读/深色/浅色」三档（上游 `ReadAloudBgMode` 的视觉近似，非同一套 haze 背景）。
+能真实现并已接 `SystemTtsPlayer` 单例的控件：上一句 / 下一句（`previous`/`next`）、上一章 / 下一章（复用换章链）、播放暂停、进度条与正文点选 seek（`seekTo`）、目录选章、切换经典（回朗读面板）、正文逐句跟随高亮（读 `onTextChange`），当前句/下一句取 `unitText`。背景模式四档对齐上游 `ReadAloudBgMode`（`PreferKey.kt:509-514`）：纯色 / 封面模糊 / 流动光 / 透明，由 `readAloudPlayerBgMode` 偏好持久化，设置面板与 player 双向同步。其中流动光档用封面模糊 + 静态渐变呈现——上游的 `BgEffectBackground` 流动着色器是 Compose 专属，鸿蒙 SDK 无对应能力，动态流动这一视觉细节做不到。
 
 平台边界（如实记录）：
 

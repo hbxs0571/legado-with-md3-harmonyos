@@ -22,7 +22,14 @@ export interface ReadAloudSettingsSnapshot {
   contentSplitMode: string;
   /** symbols 档的标点集，逗号分隔；空串回退 。！？…（批 2）。 */
   contentSplitSymbols: string;
-  /** 是否启用多Speaker切分；本地只切段不做角色分配，字段保留作备份互通。 */
+  /**
+   * 多角色音色开关。上游语义是**选旁白音色**，不参与切段：
+   * `BuildSpeechPlanUseCase.narrationVoice` 里该值为真时优先用本书绑定的旁白音色、并以默认音色作 fallback，
+   * 为假时只用默认音色。与 `contentSplitMode` 无关——`ContentSplitPolicies.resolve` 虽收了同名的
+   * `useMultiSpeaker` 形参，但函数体只判 `mode == Default`，形参未被使用。
+   *
+   * 本地没有角色音色体系（角色绑定依赖 AI 分配，属范围之外），故本字段只做备份互通，无业务消费者。
+   */
   useMultiSpeaker: boolean;
   /** 朗读胶囊显隐（批 6）。 */
   showReadAloudCapsule: boolean;
