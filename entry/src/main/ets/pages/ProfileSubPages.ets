@@ -4034,7 +4034,13 @@ export struct ReadRecordsPage {
     const candidates = await ReadRecordRepository.loadMergeCandidates(context, target);
     this.mergeTarget = target;
     this.mergeCandidates = candidates;
-    this.mergeSelectedKeys = new Set<string>();
+    // 默认预选所有同名候选（上游 mergeDialogData 初始 selectedMergeKeys）：
+    // 这些正是最该合并的同名不同作者条目。
+    this.mergeSelectedKeys = new Set<string>(
+      candidates
+        .filter((item: ReadRecordSummary) => item.bookName === record.bookName)
+        .map((item: ReadRecordSummary) => this.mergeCandidateKey(item))
+    );
     this.mergeSearchQuery = '';
     this.showActionsSheet = false;
     this.showMergeSheet = true;
@@ -4116,11 +4122,10 @@ export struct ReadRecordsPage {
     const context = this.hostContext();
     if (context === undefined) { return; }
     const report = await ReadRecordRepository.scanIssues(context);
-    const parts: string[] = [];
-    if (report.duplicateSessionCount > 0) { parts.push(`重复时段 ${report.duplicateSessionCount} 条`); }
-    if (report.normalizedRecordCount > 0) { parts.push(`写法不规范 ${report.normalizedRecordCount} 条`); }
-    if (report.mergedCount > 0) { parts.push(`明细/汇总不一致 ${report.mergedCount} 组`); }
-    this.onUnavailableAction(parts.length > 0 ? `发现：${parts.join('，')}` : '未发现问题');
+    // 扫描与修复共用上游三段格式；扫描阶段 mergedCount 表示可合并条数。
+    this.onUnavailableAction(
+      `合并：${report.mergedCount}，异常：${report.exceptionCount}，字段完全相同的阅读时段记录：${report.duplicateSessionCount}`
+    );
   }
 
   /** 修复重复记录与身份写法，并按会话重算明细与汇总。 */
@@ -4128,10 +4133,10 @@ export struct ReadRecordsPage {
     const context = this.hostContext();
     if (context === undefined) { return; }
     const report = await ReadRecordRepository.repair(context);
+    this.onUnavailableAction(
+      `合并：${report.mergedCount}，异常：${report.exceptionCount}，字段完全相同的阅读时段记录：${report.duplicateSessionCount}`
+    );
     const total = report.duplicateSessionCount + report.normalizedRecordCount + report.mergedCount;
-    this.onUnavailableAction(total > 0
-      ? `修复完成：重复 ${report.duplicateSessionCount} 条、写法 ${report.normalizedRecordCount} 条、派生数据 ${report.mergedCount} 组`
-      : '没有需要修复的问题');
     if (total > 0) { this.onRecordsChanged(); }
   }
 

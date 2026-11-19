@@ -59,6 +59,8 @@ export interface ReadRecordRepairReport {
   duplicateSessionCount: number;
   /** 因书名/作者写法不一致而被合并的条数。 */
   mergedCount: number;
+  /** 合并过程中抛异常的条数，对应上游 ReadRecordRepairReport.exceptionCount。 */
+  exceptionCount: number;
   /** 书名或作者需要规范化的条数。 */
   normalizedRecordCount: number;
 }

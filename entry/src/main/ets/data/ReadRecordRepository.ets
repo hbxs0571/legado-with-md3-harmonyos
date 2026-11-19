@@ -1057,7 +1057,9 @@ export class ReadRecordRepository {
     return {
       duplicateSessionCount: duplicateSessionCount,
       mergedCount: mergedCount,
-      normalizedRecordCount: normalizedRecordCount
+      normalizedRecordCount: normalizedRecordCount,
+      // 扫描阶段不合并，无异常可计
+      exceptionCount: 0
     };
   }
 
@@ -1091,6 +1093,8 @@ export class ReadRecordRepository {
     normalized.sort((left: ReadRecordSession, right: ReadRecordSession) => left.startTime - right.startTime);
     await ReadRecordRepository.replaceSessions(context, normalized);
     await ReadRecordRepository.rebuildDetailsAndSummaries(context, normalized);
+    // 本地合并全程在单事务内整表重算，逐条失败会整体回滚，没有可计的异常条数；
+    // report.exceptionCount 沿用 scanIssues 的 0（对齐上游默认 exceptionCount=0）。
     return report;
   }
 
