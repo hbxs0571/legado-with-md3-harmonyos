@@ -3456,6 +3456,8 @@ export struct ReadRecordsPage {
   onRecordsChanged: () => void = () => {};
   /** 顶栏更多菜单里的「阅读总览」入口，由 Index 切到总览页。 */
   onOpenOverview: () => void = () => {};
+  /** 点条目打开书：由 Index 按书名+作者反查书架并 openBook。 */
+  onOpenBook: (bookName: string, bookAuthor: string) => void = (_bookName: string, _bookAuthor: string) => {};
   @Prop records: ReadTimeRecord[] = [];
   @Prop details: ReadRecordDetail[] = [];
   @Prop summaries: ReadRecordSummary[] = [];
@@ -3644,10 +3646,13 @@ export struct ReadRecordsPage {
     return this.formatRecordDate(timestamp).substring(0, 10);
   }
 
-  /** 汇总视图按跨午夜拆分后的自然日明细分组；搜索只作用于时间线，汇总不过滤。 */
+  /** 汇总视图按跨午夜拆分后的自然日明细分组；搜索同时作用于明细表（对齐上游 searchDetails）。 */
   private getSummaryDateKeys(): string[] {
+    const query = this.searchQuery.trim().toLocaleLowerCase();
     const keys: string[] = [];
     for (const detail of this.details) {
+      if (query.length > 0 && !detail.bookName.toLocaleLowerCase().includes(query) &&
+        !detail.bookAuthor.toLocaleLowerCase().includes(query)) { continue; }
       if (!keys.includes(detail.date)) { keys.push(detail.date); }
     }
     const ordered = keys.sort((left: string, right: string) => right.localeCompare(left));
@@ -3658,7 +3663,13 @@ export struct ReadRecordsPage {
   }
 
   private getSummaryDetailsForDate(dateKey: string): ReadRecordDetail[] {
-    return this.details.filter((detail: ReadRecordDetail) => detail.date === dateKey);
+    const query = this.searchQuery.trim().toLocaleLowerCase();
+    return this.details.filter((detail: ReadRecordDetail) => {
+      if (detail.date !== dateKey) { return false; }
+      if (query.length === 0) { return true; }
+      return detail.bookName.toLocaleLowerCase().includes(query) ||
+        detail.bookAuthor.toLocaleLowerCase().includes(query);
+    });
   }
 
   private getDistinctSummaryBooksForDate(dateKey: string): ReadRecordDetail[] {
@@ -3763,7 +3774,7 @@ export struct ReadRecordsPage {
   }
 
   private getLatestRecords(): ReadTimeRecord[] {
-    const ordered = [...this.records].sort((left: ReadTimeRecord, right: ReadTimeRecord) =>
+    const ordered = [...this.getVisibleRecords()].sort((left: ReadTimeRecord, right: ReadTimeRecord) =>
       right.endTime - left.endTime);
     const filtered = this.selectedDateKey.length > 0
       ? ordered.filter((record: ReadTimeRecord) => this.getDateKey(record.startTime) === this.selectedDateKey)
@@ -4275,7 +4286,15 @@ export struct ReadRecordsPage {
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.aggregateKey(detail, dateKey)) ? '#48577D' : Color.Transparent)
                           .onClick(() => {
-                            if (this.isInSelectionMode()) { this.toggleSelectionKey(this.aggregateKey(detail, dateKey)); }
+                            if (this.isRecordLocked(detail.bookName, detail.bookAuthor)) {
+                              this.onOpenBook(detail.bookName, detail.bookAuthor);
+                              return;
+                            }
+                            if (this.isInSelectionMode()) {
+                              this.toggleSelectionKey(this.aggregateKey(detail, dateKey));
+                            } else {
+                              this.onOpenBook(detail.bookName, detail.bookAuthor);
+                            }
                           })
                           .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
                             // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
@@ -4308,7 +4327,15 @@ export struct ReadRecordsPage {
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.aggregateKey(detail, dateKey)) ? '#48577D' : Color.Transparent)
                           .onClick(() => {
-                            if (this.isInSelectionMode()) { this.toggleSelectionKey(this.aggregateKey(detail, dateKey)); }
+                            if (this.isRecordLocked(detail.bookName, detail.bookAuthor)) {
+                              this.onOpenBook(detail.bookName, detail.bookAuthor);
+                              return;
+                            }
+                            if (this.isInSelectionMode()) {
+                              this.toggleSelectionKey(this.aggregateKey(detail, dateKey));
+                            } else {
+                              this.onOpenBook(detail.bookName, detail.bookAuthor);
+                            }
                           })
                           .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
                             // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
@@ -4359,7 +4386,15 @@ export struct ReadRecordsPage {
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
                           .onClick(() => {
-                            if (this.isInSelectionMode()) { this.toggleSelectionKey(this.timelineKey(record)); }
+                            if (this.isRecordLocked(record.bookName, record.bookAuthor)) {
+                              this.onOpenBook(record.bookName, record.bookAuthor);
+                              return;
+                            }
+                            if (this.isInSelectionMode()) {
+                              this.toggleSelectionKey(this.timelineKey(record));
+                            } else {
+                              this.onOpenBook(record.bookName, record.bookAuthor);
+                            }
                           })
                           .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
                             this.enterSelectionWith(this.timelineKey(record));
@@ -4394,7 +4429,15 @@ export struct ReadRecordsPage {
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
                           .onClick(() => {
-                            if (this.isInSelectionMode()) { this.toggleSelectionKey(this.timelineKey(record)); }
+                            if (this.isRecordLocked(record.bookName, record.bookAuthor)) {
+                              this.onOpenBook(record.bookName, record.bookAuthor);
+                              return;
+                            }
+                            if (this.isInSelectionMode()) {
+                              this.toggleSelectionKey(this.timelineKey(record));
+                            } else {
+                              this.onOpenBook(record.bookName, record.bookAuthor);
+                            }
                           })
                           .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
                             this.enterSelectionWith(this.timelineKey(record));
@@ -4446,7 +4489,15 @@ export struct ReadRecordsPage {
                     }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
                       .margin({ left: 16, right: 16, bottom: 8 })
                       .onClick(() => {
-                        if (this.isInSelectionMode()) { this.toggleSelectionKey(this.latestKey(record)); }
+                        if (this.isRecordLocked(record.bookName, record.bookAuthor)) {
+                          this.onOpenBook(record.bookName, record.bookAuthor);
+                          return;
+                        }
+                        if (this.isInSelectionMode()) {
+                          this.toggleSelectionKey(this.latestKey(record));
+                        } else {
+                          this.onOpenBook(record.bookName, record.bookAuthor);
+                        }
                       })
                       .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
                         // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
@@ -4488,7 +4539,15 @@ export struct ReadRecordsPage {
                     }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
                       .margin({ left: 16, right: 16, bottom: 8 })
                       .onClick(() => {
-                        if (this.isInSelectionMode()) { this.toggleSelectionKey(this.latestKey(record)); }
+                        if (this.isRecordLocked(record.bookName, record.bookAuthor)) {
+                          this.onOpenBook(record.bookName, record.bookAuthor);
+                          return;
+                        }
+                        if (this.isInSelectionMode()) {
+                          this.toggleSelectionKey(this.latestKey(record));
+                        } else {
+                          this.onOpenBook(record.bookName, record.bookAuthor);
+                        }
                       })
                       .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
                         // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）

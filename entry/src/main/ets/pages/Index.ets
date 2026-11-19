@@ -9881,6 +9881,11 @@ private canWriteInto(dir: string): boolean {
             onRecordsChanged: async () => {
               const context = this.getUIContext().getHostContext();
               if (context !== undefined) { await this.reloadReadRecordData(context); }
+            },
+            onOpenBook: (name: string, author: string) => {
+              const hit = this.books.find((item: Book) => item.title === name && item.author === author);
+              if (hit !== undefined) { this.openBook(hit); }
+              else { this.showUnavailableAction('这本书已不在书架'); }
             }
           })
         } else if (this.profileSubpage === ProfileRoute.READ_RECORD_OVERVIEW) {
