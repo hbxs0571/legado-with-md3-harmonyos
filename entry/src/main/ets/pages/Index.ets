@@ -921,6 +921,8 @@ struct Index {
       clearInterval(this.eyeProtectionTimerId);
       this.eyeProtectionTimerId = -1;
     }
+    // 批9c①：应用退出兜底清理（上游 onDestroy 等价点），覆盖未走 IDLE 就退出的情况。
+    this.applyHttpCacheRetention(false);
   }
 
   private async restoreBookshelfLayout(context: Context): Promise<void> {
@@ -7827,6 +7829,26 @@ private canWriteInto(dir: string): boolean {
     this.route = AppRoute.READ_ALOUD_SETTINGS;
   }
 
+  /** 批9c①：缓存保留策略，接 audioCacheCleanTime（上游 audioCacheCleanTime/removeCacheFile）。
+   *  <=0 即听即焚：全删；>0 按分钟数删过期缓存。
+   *  onStart=true 是起手清扫（对齐 sweepBurnAfterReadLeftovers）：仅即听即焚模式动手，
+   *  保留模式起手不删，否则当前章缓存会在开播前被清掉、逼出整章重复合成。
+   *  本地缓存按 md5(sourceKey-speechRate-text) 命名、不按章组织，
+   *  无法照上游保护当前章 md5 前缀；这个差异如实标注在报告。
+   */
+  private applyHttpCacheRetention(onStart: boolean = false): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const minutes = this.readAloudSettings.audioCacheCleanTime;
+    if (minutes <= 0) {
+      HttpTtsPlayer.getInstance().clearCache(context);
+      console.info(`[ReadAloud] 缓存清理 即听即焚全删 onStart=${onStart}`);
+    } else if (!onStart) {
+      const removed = HttpTtsPlayer.cleanExpiredCache(context, minutes);
+      console.info(`[ReadAloud] 缓存清理 保留${minutes}分钟 删除${removed}个 onStart=${onStart}`);
+    }
+  }
+
   /** 批8：按选中源配置门面的 HTTP 模式；未选中则清空回退系统 TTS。 */
   private async configureHttpSource(context: Context, rate: number): Promise<void> {
     // 批9b：预合成并发数取设置值（上游 ttsPreSynthesisConcurrency，clamp 1..8）。
@@ -7980,11 +8002,21 @@ private canWriteInto(dir: string): boolean {
     try {
       const settings = await ReadAloudSettingsRepository.load(context);
       this.readAloudSettings = settings;
+      // 上游 ReadBookViewModel.kt:895 ToggleReadAloud：朗读未运行时先按 defaultInterface 开界面，再启动朗读。
+      if (settings.defaultInterface === 'player') {
+        console.info('[ReadAloud] 默认朗读界面=player，打开听书界面');
+        this.openReadAloudPlayer();
+      } else {
+        console.info('[ReadAloud] 默认朗读界面=classic，打开经典面板');
+        this.route = AppRoute.READ_ALOUD_SETTINGS;
+      }
       this.aloudChaptersRead = 0;
       // 批8：若配置了 HTTP 朗读源，切到 AVPlayer 合成链；否则保持系统 TTS。
       // 批9 9.1-15：HTTP 倍速对齐上游 ttsFollowSys——true 固定 1.0x(档位5)，false 用设置值。
       const httpRate = settings.ttsFollowSys ? 5 : settings.ttsSpeechRate;
       await this.configureHttpSource(context, httpRate);
+      // 批9c①：起手清扫上次会话残留缓存（即听即焚模式全删，保留模式不动）。
+      this.applyHttpCacheRetention(true);
       // 切段坐标必须与画布同口径：用与 ReaderPage 相同的缩进与特殊样式参数，
       // 否则 SpeechUnit.start/end 与 LocalReaderLineItem.startPosition 错位，高亮会跑偏。
       const semantic = LocalTextSemantics.parse(this.readerContent, this.readerParagraphIndent, this.readerAdaptSpecialStyle);

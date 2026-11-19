@@ -82,25 +82,27 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
 - 判据3「新章已就绪」：用 `pg.chapterIndex === chapterIndex` **按章号比对**（不是只看 `length > 0`），避开上游「章节分页未完成静默放弃」的坑。
 - 判据4「当前位置在章首附近」：`chapterOrdinal` 从该章第 0 页算起，换章后从第 0 段开始定位。
 
-## 四、9.3 设置项判定（33 项：做 10 / 顺延 8 / 不接 15）
+## 四、9.3 设置项判定（33 项：做 12 / 顺延 6 / 不接 15）
 
 任务书称 34 项且统计「做11/顺延6/不接17」，但其表逐行只有 33 行且加总为「做11/顺延7/不接15」，自身矛盾。
 判定标准是**控件拨动后确有行为**，不是「偏好里存了这个键」。带 UI 但无消费者的记「顺延」并在本节写明，不按界面数量凑「做了」。
 
-- **做了（10）**：`show_read_aloud_capsule`（批6）、`capsule_auto_collapse`（批6）、`reset_read_aloud_capsule_position`（批6）、`read_aloud_engines_and_voices`（批8）、`tts_paragraph_interval`（批3行为 + 设置面板滑杆）、`pref_media_button_per_next`（批7 AVSession `playNext` 已注册）、`read_aloud_player_background`（`playerBgMode` 偏好 ↔ 设置面板 ↔ player 四档双向同步）、`tts_pre_synthesis_concurrency`（`httpPreloadCount` 决定预下载窗口，clamp 1..8）、`tts_cache_manage`（`cacheSizeBytes` 显示缓存大小）、`clear_cache`（`clearCache` 清缓存目录并按 generation 让在飞请求失效）。
-- **顺延（8）**：`default_read_aloud_interface`（**两档下拉已在设置面板，但 `pages/Index.ets` 全文无 `defaultInterface` 消费点，朗读入口恒开经典面板——拨了不生效，见本节末**）、`audio_cache_clean_time`（**滑杆已存偏好，但 `HttpTtsPlayer.cleanExpiredCache` 全仓零调用点，缓存不会按时间清理——拨了不生效，见本节末**）、`read_aloud_content_split_mode`（四档切段已由 `SpeechSegmenter` 实现并被 `Index.ets:7992` 消费，但设置页没有选择器 UI，用户改不了）、`sys_tts_config`（鸿蒙无对应系统页）、`read_aloud_preload`、`bgm_assign`、`cast_bgm_pool`、`cast_bgm_scene_table`。
+- **做了（12）**：`show_read_aloud_capsule`（批6）、`capsule_auto_collapse`（批6）、`reset_read_aloud_capsule_position`（批6）、`read_aloud_engines_and_voices`（批8）、`tts_paragraph_interval`（批3行为 + 设置面板滑杆）、`pref_media_button_per_next`（批7 AVSession `playNext` 已注册）、`read_aloud_player_background`（`playerBgMode` 偏好 ↔ 设置面板 ↔ player 四档双向同步）、`tts_pre_synthesis_concurrency`（`httpPreloadCount` 决定预下载窗口，clamp 1..8）、`tts_cache_manage`（`cacheSizeBytes` 显示缓存大小）、`clear_cache`（`clearCache` 清缓存目录并按 generation 让在飞请求失效）、`default_read_aloud_interface`（批9c：`toggleReadAloud` 启动分支按 `defaultInterface` 分流 player / 经典面板，见 4.1）、`audio_cache_clean_time`（批9c：`applyHttpCacheRetention` 在起手零值全删、退出兜底按保留分钟清过期，见 4.1）。
+- **顺延（6）**：`read_aloud_content_split_mode`（四档切段已由 `SpeechSegmenter` 实现并被 `Index.ets:7992` 消费，但设置页没有选择器 UI，用户改不了）、`sys_tts_config`（鸿蒙无对应系统页）、`read_aloud_preload`、`bgm_assign`、`cast_bgm_pool`、`cast_bgm_scene_table`。
 - **不接（15）**：`capsule_style_title`、`ignore_audio_focus_title`、`pause_read_aloud_while_phone_calls_title`、`read_aloud_wake_lock`、`read_aloud_keep_on_exit`、`read_aloud_android_media_control`、`system_media_control_compatibility_change`、`stream_read_aloud_audio`、`speech_analysis_mode`、`speech_analysis_reasoning_level`、`use_multi_speaker`、`multi_role_cast`、`read_aloud_character_casting`、`cast_voice_pool`、`ai_scene_assign_entry`。
 
 结论：上游朗读设置面板超过半数依赖本地没有的 AI 角色体系、Android 专有能力或平台做不到的 audiofx，不接是如实判定而非遗漏。
 
-### 4.1 两处「有控件、无消费者」的空档
+### 4.1 两处已接真行为的设置项（批9c 补完）
 
-这两项的偏好读写、设置面板控件都已落地，**但没有任何代码读它去改变行为**——用户拨到哪个档，界面和播放一个都不会变。如实登记为待办，不计入「做了」：
+这两项在 c9ea69d / a235e29 时曾有控件无消费者，批9c 已接上真实行为，拨动即生效：
 
-| 设置项 | 现状 | 缺什么 | 上游依据 |
+| 设置项 | 控件 | 接入的真实行为 | 上游依据 |
 | --- | --- | --- | --- |
-| `default_read_aloud_interface`（默认朗读界面） | `ReadAloudConfigPanel.ets:99-103` 两档下拉，存进 `defaultInterface`；`pages/Index.ets` 全文无 `defaultInterface` 消费点 | 朗读入口（`onOpenReadAloud`，`Index.ets:9212`）需按该值分流到 `openReadAloudPlayer()` 或 `openReadAloudSettings()` | `ReadAloudDelegate.kt:227-236 openDefaultInterface()`，调用点 `ReadBookViewModel.kt:897` / `:1333` |
-| `audio_cache_clean_time`（缓存保留时间） | `ReadAloudConfigPanel.ets:122-126` 滑杆，存进 `audioCacheCleanTime`；`HttpTtsPlayer.cleanExpiredCache`（`readaloud/HttpTtsPlayer.ets:420`）**全仓零调用点** | 需在退出朗读（`onDestroy` 等价点）与起手时各调一次；上游还把 `=0` 定义为「即听即焚」，起手整目录清扫 | `HttpReadAloudService.kt:1857`（`cacheBurnAfterRead` 判据）、`:1878`（`keepTime`）、`:1894`（过期判定）；调用点 `:379 sweepBurnAfterReadLeftovers()` 与 `:410 removeCacheFile()` |
+| `default_read_aloud_interface`（默认朗读界面） | `ReadAloudConfigPanel.ets:99-103` 两档下拉，存进 `defaultInterface` | `Index.ets` `toggleReadAloud` 启动分支读该值：`player`→`openReadAloudPlayer()`（听书界面），`classic`→经典面板。长按朗读图标（`onOpenReadAloud`）按用户口径恒开经典面板，不参与分流 | `ReadAloudDelegate.kt:227-236 openDefaultInterface()`，调用点 `ReadBookViewModel.kt:895`（`ToggleReadAloud`）/ `:1333` |
+| `audio_cache_clean_time`（缓存保留时间） | `ReadAloudConfigPanel.ets:122-126` 滑杆（min0/max10080/step30），存进 `audioCacheCleanTime` | `Index.ets applyHttpCacheRetention()`：`<=0` 即听即焚（`clearCache` 全删），`>0` 按分钟调 `cleanExpiredCache` 删过期。起手按上游 `sweepBurnAfterReadLeftovers` 仅零值模式清扫；退出 `aboutToDisappear`（onDestroy 等价点）兜底清理。**本地缓存按 md5(sourceKey-speechRate-text) 命名、不按章组织，无法照上游按当前章 md5 前缀保护**——这个差异如实标注 | `HttpReadAloudService.kt:1857`（`cacheBurnAfterRead`）、`:1878`（`keepTime`）、`:1894`（过期判定）；调用点 `:379 sweepBurnAfterReadLeftovers()` 与 `:410 removeCacheFile()` |
+
+上机实测（`hilog -x -e`）：`classic` 档点朗读打「默认朗读界面=classic，打开经典面板」并打开经典面板；`player` 档打「默认朗读界面=player，打开听书界面」并打开 player；缓存清理时间拨到 0 后起手打「缓存清理 即听即焚全删 onStart=true」，残留缓存 295→6（新生成的是本次实时预合成）。
 
 ## 五、9.4 七个上游子页判定
 
@@ -152,8 +154,8 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
   `readAloudPlayerBgMode`（设置面板 ↔ player 双向同步）接到真实偏好与消费者；音频缓存新增
   `cacheSizeBytes` / `cleanExpiredCache` / `clearCache`，设置面板接上游的 tts_cache_manage（大小+清空）、
   audio_cache_clean_time（保留时间滑杆）、default_read_aloud_interface（两档下拉）。偏好从 14 键扩到 17 键，
-  读写/备份映射五处同步。其中 `cleanExpiredCache` 与 `defaultInterface` **只有控件与偏好、还没有调用点**，
-  属拨了不生效，如实计入第四节「顺延」而非「做了」。
+  读写/备份映射五处同步。批9c 又补上 `cleanExpiredCache` 与 `defaultInterface` 的真实调用点
+  （见 4.1），这两项从「顺延」改判「做了」，第四节统计同步更新为做 12 / 顺延 6。
 - **不做（上游无此行为）**：409 状态码重试——上游 `HttpTtsAudioSynthesizer.kt:115-135` 只用
   `AtomicBoolean.compareAndSet` 保证流/配额只关一次（本地 `releaseOnce` 已等价），无状态码重试；
   `resumeReadAloudWaitingForChapter` 的显式 pending 状态机——本地朗读链与分页解耦、分页未就绪时只重绘不停止，
