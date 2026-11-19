@@ -689,7 +689,7 @@ done
 
 **`core/readaloud/` 2 个** —— **已排除：TTS 朗读链路**
 `ReaderReadAloudChapter.kt`(190)、`ReaderVisibleTextPositionPolicy.kt`(81)。
-理由：前者把章节切成朗读段落、后者计算朗读高亮位置，都只在 `ReadAloudBookSession` 里使用。朗读不在范围。
+理由：前者把章节切成朗读段落、后者计算朗读高亮位置，都只在 `ReadAloudBookSession` 里使用。朗读已纳入范围、按批推进（见批次报告）：批2 切段器、批4 高亮与位置回写已落地，本项随朗读链路纳入。
 
 **`core/selection/` 7 个**
 
@@ -863,7 +863,7 @@ done
 | `ShadowSetSheet.kt` | 106 | 映射 C7「阴影设置面板 5 项」 |
 | `TextSelectMenuConfigSheet.kt` | 460 | 映射 C7「选词菜单配置面板」 |
 | `ToolButtonConfigSheet.kt` | 22 | 映射 C3「底栏图标行」（工具按钮配置壳，本地走 `ReaderSettingsPage.ets:2880-2932`） |
-| `SimulatedReadingSheet.kt` | 126 | **已排除：模拟朗读**。朗读不在范围；本地对应条目 `simulated_reading` 落「尚未迁移」提示，已在 C6「3 个带更多箭头」行记录 |
+| `SimulatedReadingSheet.kt` | 126 | **模拟朗读：已纳入范围、按批推进**（非「不在范围」）。朗读九批已落地主体链路；`simulated_reading` 这个模拟朗读演示界面本身未单独迁移，按上游范围判断处理 |
 | `DownloadSheet.kt` | 82 | **已排除：离线下载，本地书全离线** |
 | `ReaderAudioDownloadSheet.kt` | 424 | **已排除：朗读音频下载** |
 | `ChangeChapterSourceSheet.kt` | 338 | **已排除：换源，本地无书源** |

@@ -4,6 +4,14 @@
 
 2026-11-17 自造与降级清算（11 批）已收口：门槛判据全绿（scripts/selfmade-scan.py 六词口径归零、tmp/batch11_gate.py 22 项全过），七表合计未变（1226 行 / 已接 1038 / 未接 157 / 不适用 31）。下文批 5/6/10 各节已按清算后的实际状态更新；本批新增的十类「不做」项集中登记在「## 批11：自造与降级清算——十类不做的项」。
 
+## 批13：朗读三处平台做不到（KI-ALOUD-RATE / KI-ALOUD-VOICEFX / KI-ALOUD-CAPSULE 补充）
+
+九批实现后对三处「上游有、平台做不到」集中登记，编号顺延当前最大号（批12），不复用。
+
+1. **KI-ALOUD-RATE 系统朗读不支持调速**：SDK `TextToSpeechEngine` 只有 `setListener/speak/listVoices/stop/isBusy/shutdown`，无 `setSpeechRate/setPitch/setVolume`（`sdk/default/hms/ets/kits/@kit.CoreSpeechKit.d.ts`）。`ttsSpeechRate` 偏好字段与滑杆都保留，但系统朗读下不调 API、不变速；滑杆下方如实标注「系统朗读不支持调速，此设置用于 HTTP 朗读源」。只有 HTTP 源经 `AVPlayer.setSpeed`（10 档）真正变速。
+2. **KI-ALOUD-VOICEFX 变声器不可实现**：上游变声器依赖 `android.media.audiofx.Equalizer` 等播放侧音频效果；鸿蒙 SDK `@ohos.multimedia.audio.d.ts` 仅有 loopback 的 `AudioLoopbackEqualizerPreset/AudioLoopbackReverbPreset`（通话/录音回环），无面向媒体播放的 Equalizer/混响/变调 API。入口保留，点开如实说明「平台不支持音频效果」，不做空页面。
+3. **KI-ALOUD-CAPSULE 已并入批12**：朗读胶囊是应用内浮层、退出阅读器即消失（`SYSTEM_FLOAT_WINDOW` 为 `system_basic` 权限，三方拿不到），详见批12 条目，此处不重复编号。
+
 ## 批12：朗读胶囊是应用内浮层，不是系统悬浮窗（KI-ALOUD-CAPSULE）
 
 上游朗读胶囊（`ui/book/read/ReadAloudCapsule.kt`，458 行）是系统悬浮窗（`SYSTEM_FLOAT_WINDOW`），画在 Nav3 叠层之上，退出阅读器仍能看到。鸿蒙三方应用拿不到该权限：SDK `PermissionDefinitions.json` 中 `SYSTEM_FLOAT_WINDOW` 的 `level=system_basic`（第 615 行），只向系统应用授权。故本地胶囊做在 `pages/ReaderPage.ets` 顶层 `Stack` 内，是应用内浮层：**退出阅读器即消失**，`onToggleReadAloud` 停止后也不显示。

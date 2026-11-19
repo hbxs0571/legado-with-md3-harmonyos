@@ -39,7 +39,7 @@
 | 项 | 上游接触面 | 依赖的本地缺口 |
 | --- | --- | --- |
 | 在线书源抓取 | `model/webBook/`（6 个 `.kt`，`WebBook.kt` 509 行）、`service/`（13 个） | 网络层、书源规则解析（JS/正则）、书源管理页（现为 162 行空壳，5 处 `onUnavailableAction` 调用，`pages/ProfileSubPages.ets:25`-`:186`） |
-| 朗读 / TTS 服务 | `HttpReadAloudService.kt` 等朗读链路 15 个文件 | 网络层、音频播放、前台服务；阅读器侧入口现有 8 处「朗读播放尚未迁移」占位 |
+| 朗读 / TTS 服务 | `HttpReadAloudService.kt` 等上游朗读链路（含 readaloud 路径约 143 个 `.kt`） | 九批已落地：系统/HTTP 两条合成播放链、面板、胶囊、听书界面、后台控制条；上游朗读设置项按实测判定为做 6 / 顺延 12 / 不接 15（共 33 项，见批次报告），七个子页大部分不接；阅读器侧「朗读播放尚未迁移」占位实测 0 处 |
 | RSS 拉取 | `model/rss/`（3 个 `.kt`，`Rss.kt` 160 行） | 网络层、订阅源管理与筛选（现有 4 处「订阅源筛选尚未迁移」占位） |
 | WebDAV | 12 个文件名含 `webdav` 的 `.kt`（按内容计则 62 个），含 `WebDavBackupRepository.kt` | **已无缺口**（2026-11-11 落地）：lib/WebDav.ets + lib/WebDavSync.ets + lib/WebDavConfig.ets，设置页 `onUnavailableAction` 从 14 处降到 3 处（清掉 11 处调用，保留旧版数据导入、备份目录两处与属性声明本身） |
 

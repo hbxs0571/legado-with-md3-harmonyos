@@ -11,8 +11,8 @@
 | 顺序 | 模块 | 现在能不能用 | 主要入口 | 明细 |
 | --- | --- | --- | --- | --- |
 | 1 | 书架 | 本地六种格式（TXT / EPUB / PDF / MOBI·AZW3 / UMD / 压缩包）的导入闭环可用；在线来源与书单导入导出仍空 | `pages/BookshelfPage.ets`、`pages/BookInfoPage.ets` | 本文第一章 |
-| 2 | 阅读器 | 分页与滚动两种模式、目录、书内搜索、主题、替换净化可用；朗读入口未接 | `pages/ReaderPage.ets`（7871 行）、`pages/ReaderSettingsPage.ets`（3954 行） | 本文第二章 |
-| 3 | 朗读 | **不能**：零音频能力，两个朗读页全是占位 | `pages/ReaderAloudSettingsPage.ets`、`pages/AppReadAloudSettingsPage.ets` | 本文第三章 |
+| 2 | 阅读器 | 分页与滚动两种模式、目录、书内搜索、主题、替换净化可用；底栏朗读键短按即可起播 | `pages/ReaderPage.ets`、`pages/ReaderSettingsPage.ets` | 本文第二章 |
+| 3 | 朗读 | 系统 TTS 与 HTTP TTS 两条合成播放链可用；面板、胶囊、听书界面、后台控制条已接；调速/变声/跨应用悬浮窗受平台限制 | `readaloud/SystemTtsPlayer.ets`、`readaloud/HttpTtsPlayer.ets`、`pages/ReadAloudPlayerPage.ets` | 本文第三章 |
 | 4 | 阅读记录 | 概览、热力图、合并、扫描修复、清空都可用 | `pages/ProfileSubPages.ets:3014`-`:3873`、`pages/ReadRecordOverviewPage.ets` | 本文第四章 |
 | 5 | 外观 | 主题包、日夜模式、自定义配色可用；启动图标是平台限制、主题风格与多窗布局上游本身不接 | `pages/ThemeSettingsPage.ets`、`pages/ThemeManagePage.ets` | 本文第五章 |
 | 6 | 备份与恢复 | 28 类全部双向通，含 WebDAV 上传下载；旧版数据导入与系统目录选择仍空 | `pages/AppBackupSettingsPage.ets`、`data/BackupRepository.ets`（3773 行） | 本文第六章 |
@@ -155,89 +155,61 @@
 
 ## 三、朗读
 
-界面上的叫法是**朗读**——阅读页底栏那一格、`我的 → 设置 → 朗读设置`、页面标题 `Text('朗读设置')`（`pages/ReaderAloudSettingsPage.ets:35`、`pages/AppReadAloudSettingsPage.ets:30`、`pages/ProfileSubPages.ets:4161`）。技术上就是 TTS（Text To Speech），本章提到音源格式与系统能力时仍用 `TTS` 这个词（`httpTTS.json`、`@kit.CoreSpeechKit`）。界面上唯一出现「听书」的地方是底栏两项功能名：「听书界面」（`pages/ReaderAloudSettingsPage.ets:179`）与「听书下载」（`pages/ReaderPage.ets:90`），它们不是这一块的名字。
+界面叫法是**朗读**（阅读页底栏那一格、`我的 → 设置 → 朗读设置`），技术上就是 TTS。`httpTTS.json`、
+`@kit.CoreSpeechKit`、`@kit.MediaKit` 这些词指技术侧。九批实现后的状态按本节实测记录。
 
 ### 3.1 能做什么
 
-**今天一件都做不了**：全仓没有任何音频播放或语音合成能力，两个朗读页的所有按钮都只弹提示。
+**两条合成播放链都能把一段正文走完**（模拟器无扬声器，验收口径是「合成链路走到 onComplete」，不写「验证出声」）：
 
-- **进得去**：阅读页底栏的朗读键**长按**能打开朗读设置页（`pages/ReaderPage.ets:3831` 的 `longSelectBottomAction` → `onOpenReadAloud()` → `pages/Index.ets:6559` 的 `openReadAloudSettings()` → `:7731` 挂载 `ReaderAloudSettingsPage`）；`我的 → 设置 → 朗读设置` 也能进另一页（`pages/ProfileSubPages.ets:4161` → `pages/Index.ets:8505` 挂载 `AppReadAloudSettingsPage`）。
-- **看得见**：朗读设置页界面是完整的——语速滑杆（`min:0 max:80`）、背景音乐音量滑杆（`0..100`）、「跟随系统」开关、定时行、底栏五格，都画出来了。
-- **能滑不能存**：四个 `@State` 在 `pages/ReaderAloudSettingsPage.ets:4`-`:7`（`followSystem = true`、`rate = 40`、`musicVolume = 100`、`timerLabel = '关闭'`）。滑杆拖得动、开关翻得动，但值只停在内存里，`SliderChangeMode.End` 一到就弹「尚未迁移」，既不落盘也不影响任何播放（`:122`、`:141`、`:162`）。
-- **数据层是真有的**：HTTP TTS 音源与朗读音色两张表、两个仓储都已落地（`data/HttpTtsRepository.ets` 208 行：`load` `:37`、`getAll` `:57`、`exportSources` `:62`、`importSources` `:67`、`save` `:94`；`data/ReadAloudVoiceRepository.ets` 296 行：`load` `:47`、`loadHttpVoices` `:71`、`exportVoices` `:86`、`importVoices` `:91`、`save` `:118`）。但它们**唯一的消费方是备份**（`data/BackupRepository.ets` 的写出与恢复分支），没有任何播放或界面代码读它们。
+- **系统 TTS**（`readaloud/SystemTtsPlayer.ets`）：单例持有引擎，`speak` 后等 `onComplete` 才推进下一段；
+  段间高亮与翻页跟随（`onSpanChange` → `ReaderPage` 按 `SpeechUnit.start/end` 上底色并回写阅读进度）；
+  实测连续多段 `speak start → onComplete → unit advance` 串行链成立，停止后 60 秒内复用引擎、不二次 `createEngine`。
+- **HTTP TTS**（`readaloud/HttpTtsPlayer.ets`）：选中 HTTP 源后把每段合成音频下载到 `cacheDir`，用 `AVPlayer(fdSrc)` 播放，
+  `completed` 才推进；本地测试服务器实测 `?text={URL编码正文}&speed=&tone=` 一段接一段到达。
+  这里 `ttsSpeechRate` 通过 `setSpeed` 真正调速（1..10 映射 AVPlayer 10 档），是「系统不支持调速」那句话的落点。
+- **切段与偏好**：`readaloud/SpeechSegmenter.ets` 四档切段（默认/段落/按页/标点）；14 个偏好键存
+  `data/ReadAloudSettingsRepository.ets`，逐字对齐上游键名，杀进程重开仍在。
 
-### 3.2 卡在这几处
+**界面与形态**（`pages/`）：
 
-**一、朗读设置页十三处占位，只有两格是真的**
+- **朗读面板**（`ReaderAloudSettingsPage.ets`）：上一句/暂停/停止/下一句、上一章/下一章、定时三档、
+  语速滑杆（下方注明只对 HTTP 源生效）、底栏五格；三开关设置浮层 `ReadAloudConfigPanel.ets`。
+- **朗读胶囊**（`ReaderPage.ets` 顶层浮层）：封面圆图 + 播放暂停 + 进度环内含停止，3 秒自动收起、
+  可拖并钳位吸附、位置复位；展开态点封面打开听书界面。
+- **听书界面**（`ReadAloudPlayerPage.ets`）：目录/封面/正文三页、当前句与下一句、进度条 seek、
+  Transport 与设置按钮，接同一个播放器单例。
+- **后台**（`readaloud/ReadAloudBackgroundTask.ets`）：`AUDIO_PLAYBACK` 长时任务 + AVSession，
+  控制条 play/pause/上下段/停止接到播放器；`module.json5` 加 `KEEP_BACKGROUND_RUNNING` 与 `audioPlayback`。
+- **引擎与音色管理页**（`ReadAloudEnginePage.ets`）：HTTP 源的新增/编辑/删除/设为当前、音色目录拉取与排除。
 
-页面 `pages/ReaderAloudSettingsPage.ets` 253 行，`onUnavailableAction` 共 14 处 = `:11` 属性声明 + 13 个调用点：
+### 3.2 卡在这几处（平台做不到，如实标注）
 
-| 位置 | 控件 | 弹出的提示 |
-| --- | --- | --- |
-| `:48`、`:50`、`:52` | 三个 `AloudTransportButton`（上一句 / 暂停 / 停止） | 朗读播放尚未迁移 |
-| `:62` | 「下一句」行 | 朗读播放尚未迁移 |
-| `:94`、`:104` | 「上一章」「下一章」 | 朗读播放尚未迁移 |
-| `:83` | 「定时」行 | 朗读定时功能尚未迁移 |
-| `:122` | 背景音乐滑杆松手 | 背景音乐音量设置尚未迁移 |
-| `:162` | 语速滑杆松手 | 朗读语速设置尚未迁移 |
-| `:141` | 「跟随系统」开关 | 朗读系统设置尚未迁移 |
-| `:176`、`:178`、`:180` | 底栏「后台」「设置」「听书界面」 | 后台朗读 / 朗读设置 / 听书界面尚未迁移 |
+- **系统 TTS 无调速**：`TextToSpeechEngine` 只有 `setListener/speak/listVoices/stop/isBusy/shutdown`，无 `setSpeechRate/setPitch/setVolume`。
+  语速滑杆保留并写 `ttsSpeechRate`，但系统朗读不变速；只有 HTTP 源真生效。
+- **胶囊是应用内浮层**：`SYSTEM_FLOAT_WINDOW` 是 `system_basic` 权限（SDK `PermissionDefinitions.json:615`），
+  三方拿不到；退出阅读器胶囊即消失。
+- **变声器不可实现**：平台无面向播放的音频效果 API（`@ohos.multimedia.audio.d.ts` 只有 loopback 的混响/均衡预设，
+  无 Equalizer 等播放侧音频效果）；入口保留，点开如实说明，不做空页面。
+- **音色只有 3 条**：系统 TTS 实测 zh 聆小珊(13)/zh 凌飞哲(21)/en(8)；`online=0` 在线不支持。
+- **后台续播限制**：长时任务与 AVSession 激活有日志证实，但模拟器上系统 TTS 引擎在应用失焦后回调冻结，
+  未测到持续推进；媒体控制条在模拟器通知栏未显示（系统侧发出通知后被 SystemUI 移除）。
+- **HTTP 源仅纯 URL**：AnalyzeUrl 模板/JS、`loginCheckJs`、`jsLib` 依赖 JS 引擎，鸿蒙无对应物，字段保留不执行。
 
-底栏五格（`AloudBottomAction`，`:172`-`:181`）里只有前两格真接线：主菜单走 `onOpenMainMenu()`，目录走 `onOpenCatalog()`。
+### 3.3 算做完的判据（按实测）
 
-**二、朗读设置总页七行全占位**
+- [x] 底栏朗读键短按起播，逐段合成链走到 `onComplete`，段间高亮跟随并回写阅读进度。
+- [x] 面板 Transport、上下章、定时、三开关设置均真接线；暂停后无新 `speak start`，图标切播放。
+- [x] 听书界面三页与当前句/下一句、seek、目录选章接同一播放器。
+- [x] HTTP 源保存重开仍在；音色目录可拉取落库；导出 `httpTTS.json` 不含三个本地扩展列。
+- [x] 缓存 key 含源/语速/正文三要素；并发限流 coerceIn(1,8)；预合成命中（cache=false → cache=true）。
+- [ ] 真机扬声器出声、后台持续续播、通知栏媒体控制条——模拟器无法验证，见 3.4。
 
-页面 `pages/AppReadAloudSettingsPage.ets` 只有 83 行，`onUnavailableAction` 共 8 处 = `:11` 属性声明 + 7 个 `AppReadAloudLinkRow`：
+### 3.4 验收环境说明
 
-| 位置 | 行标题 | 副标题写的用途 |
-| --- | --- | --- |
-| `:35` | 角色声音池 | 管理角色声音池以及池内启用的音色 |
-| `:39` | 背景音乐池 | 导入配乐文件，朗读时作为背景音乐播放 |
-| `:43` | 变声器 | 管理音高、语速、混响与金属感预设 |
-| `:47` | 朗读胶囊设置 | 设置正文胶囊的圆角、背景与头像形状位置 |
-| `:51` | 朗读引擎与音色 | 配置朗读引擎并导入音色 |
-| `:55` | 多角色识别 | 配置角色标记与声音池分隔符 |
-| `:59` | 正则角色管理 | 按正文匹配更换音色或播放音效 |
-
-**三、零音频能力**
-
-`AVPlayer`、`AudioRenderer`、`avSession`、`media.create`、`audio.create`、`speechSynth`、`textToSpeech`、`@kit.MediaKit`、`@kit.AudioKit` 在 `entry/src/main/ets` 下**全部零命中**；`entry/include`、`entry/src/main/cpp` 都不存在，没有 native 音频代码；`entry/src/main/module.json5:13` 的权限只有 `ohos.permission.INTERNET` 一条。
-
-**四、系统 TTS 能力现成，一行没接**
-
-`@kit.CoreSpeechKit` 在 SDK 里就有（`sdk/default/hms/ets/kits/@kit.CoreSpeechKit.d.ts`，`@since 4.1.0(11)`），实体 `@hms.ai.textToSpeech` 提供 `createEngine`（`:40` 回调式 / `:57` Promise 式）、`setListener`（`:79`）、`speak(text, speakParams)`（`:98`，单次文本上限 10000 字符）、`listVoices`（`:111` / `:124`）、`stop`（`:135`）。项目基线 `compatibleSdkVersion` 与 `targetSdkVersion` 都是 `6.0.0(20)`，够用。**缺的只是接线。**
-
-**五、与上游的规模差**
-
-上游含 readaloud 路径的 `.kt` 有 143 个文件 / 38044 行，朗读相关 9 张表；本地只有 2 张（`httpTTS` 与 `read_aloud_voices`，`data/RdbSchema.ets:417`、`:436`）。角色声音池、背景音乐池、变声器、朗读胶囊、多角色识别、正则角色六块都没有对应表。
-
-### 3.3 算做完的判据
-
-分三档，前两档是「真的能读出声」，第三档是「对齐上游」：
-
-**第一档：系统 TTS 能出声**
-
-- [ ] 打开任意一本 TXT，长按底栏朗读键进设置页，点开始朗读后设备真的出声。
-- [ ] 语速滑杆从最小拖到最大，朗读速度当场变化；退出再进，值还在（不是回到默认 40）。
-- [ ] 点暂停立刻停声，点继续从停的地方接着读，不是从头。
-- [ ] 朗读到章末自动进下一章，不需要手动点「下一章」。
-- [ ] 朗读时切到别的页面，声音继续；回阅读页时正文高亮跟着朗读位置走。
-
-**第二档：HTTP TTS 音源能用**
-
-- [ ] 「我的 → 设置 → 朗读设置 → 朗读引擎与音色」能列出已导入的 HTTP TTS 音源（来自 `httpTTS` 表，不是空列表）。
-- [ ] 导入一个 Android 备份 ZIP，其中的 `httpTTS.json` 与 `httpTtsVoices.json` 能出现在音源列表里并被选中朗读。
-- [ ] 选一个需要网络的 HTTP TTS 音源朗读，断网时给出明确错误而不是静默无声。
-
-**第三档：上游那七块不再是占位**
-
-- [ ] `pages/AppReadAloudSettingsPage.ets` 的七行（`:35`、`:39`、`:43`、`:47`、`:51`、`:55`、`:59`）点进去都是真页面，不再走 `onUnavailableAction`。
-- [ ] `pages/ReaderAloudSettingsPage.ets` 的 13 处 `onUnavailableAction` 调用全部消失，底栏五格全可用。
-- [ ] 语速、背景音乐音量、跟随系统三项设置重启后保持。
-
-### 3.4 验收记录
-
-本章尚无任何设备验收记录——这块从零开始。相关登记见 [已知问题](KNOWN-ISSUES.md) 的 KI-A5 / KI-A11 / KI-A12（在线服务纳入范围后已改判「要接，待排期」）。
+以上链路在模拟器（127.0.0.1:5555）用 hilog + dumpLayout 验证，模拟器无扬声器，
+故只记录「合成链路走到 onComplete/onStart」，不出「已验证出声」的结论。平台做不到的项逐条见
+[已知问题](KNOWN-ISSUES.md) 与批次报告。
 
 ## 四、阅读记录
 
