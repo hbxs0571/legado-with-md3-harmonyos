@@ -96,6 +96,12 @@ export struct ReaderSettingsPage {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  // 批 2：rsetChipBgAlt 改走 surfaceContainerHigh；原 struct 未声明该键，补上（草野夜档真值）。
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#282B24';
+  // 批 2：rset 选中态与轨道改走真色位，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#404A33';
+  @StorageProp('themeColorOnSecondaryContainer') themeColorOnSecondaryContainer: string = '#DCE7C8';
+  @StorageProp('themeColorOutlineVariant') themeColorOutlineVariant: string = '#44483D';
   @StorageProp('themeCardBackground') themeCardBackground: string = '';
   // 阅读设置页的两种形态共用同一批行组件：阅读器内浮层（asSheet=true，压在纸面上，
   // 保持深色）与设置里的全屏页（asSheet=false，跟随应用主题）。解析后的颜色由
@@ -422,13 +428,14 @@ export struct ReaderSettingsPage {
 
   /**
    * 把 13 个颜色广播进 AppStorage，供本 struct 与 17 个私有行组件读取。
-   * 口径与 pages/Index.ets 的 publishThemeCardStyle() 一致。
    *
-   * 浮层与全屏两种形态**取同一套主题色**，不再按 asSheet 分叉。上游阅读域浮层统一走
-   * `AppModalBottomSheet`（AppModalBottomSheet.kt:61-64）：容器取 `surfaceContainer`、
-   * 内容取 `onSurface`、抓手取 `onSurfaceVariant`；面板里的卡片取 `surfaceContainerLow`
-   * （ReaderBookSheet.kt:544/861），文字与强调色全走 `colorScheme`，没有一处字面量。
-   * 所以「浮层压在纸面上就该固定深色」是本地的旧口径，与上游不符，已删。
+   * 口径与 `pages/Index.ets` 的 `publishThemeCardStyle()` 一致。
+   *
+   * 浮层与全屏两种形态**取同一套主题色**，不按 asSheet 分叉。上游阅读域浮层统一走
+   * `AppModalBottomSheet`（AppModalBottomSheet.kt:62）：`sheetContainerColor = colorScheme.surfaceContainer`，
+   * 面板里的卡片取 `surfaceContainerLow`（ReorderableConfigList.kt:93 的 NormalCard），
+   * 选中态取 `secondaryContainer`（ReadBookMenuBarTitle.kt:1008-1014），文字与强调色全走 `colorScheme`，
+   * 没有一处字面量。
    */
   private publishReaderSetColors(): void {
     const cardBg = this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary;
@@ -440,11 +447,10 @@ export struct ReaderSettingsPage {
     AppStorage.setOrCreate('rsetCardBg', cardBg);
     AppStorage.setOrCreate('rsetInnerBg', this.themeColorSurfaceTertiary);
     AppStorage.setOrCreate('rsetChipBg', this.themeColorSurfaceTertiary);
-    AppStorage.setOrCreate('rsetChipBgAlt', this.themeColorSurfaceTertiary);
-    AppStorage.setOrCreate('rsetSelectedBg', this.themeColorAccent);
-    // 选中 chip 上是强调色底，文字取 onPrimary；本地没有 OnPrimary 键，沿用原来的白。
-    AppStorage.setOrCreate('rsetSelectedText', '#FFFFFF');
-    AppStorage.setOrCreate('rsetTrack', this.themeColorSurfaceTertiary);
+    AppStorage.setOrCreate('rsetChipBgAlt', this.themeColorSurfaceElevated);
+    AppStorage.setOrCreate('rsetSelectedBg', this.themeColorSecondaryContainer);
+    AppStorage.setOrCreate('rsetSelectedText', this.themeColorOnSecondaryContainer);
+    AppStorage.setOrCreate('rsetTrack', this.themeColorOutlineVariant);
     AppStorage.setOrCreate('rsetHandle', this.themeColorTextTertiary);
   }
 
