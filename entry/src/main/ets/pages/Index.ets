@@ -140,6 +140,7 @@ import {
 } from '../data/ReadAloudSettingsRepository';
 import { SpeechSegmenter, SpeechUnit } from '../readaloud/SpeechSegmenter';
 import { SystemTtsPlayer, ReadAloudState, ReadAloudSpan, EMPTY_READ_ALOUD_SPAN } from '../readaloud/SystemTtsPlayer';
+import { ReadAloudBackgroundTask, ReadAloudControlHandlers } from '../readaloud/ReadAloudBackgroundTask';
 import { ReadAloudPlayerPage } from './ReadAloudPlayerPage';
 import {
   BackupCategoryOption, BackupEntryPreview, BackupIgnoreLists, BackupPreview, BackupRepository, BackupSelection
@@ -7822,6 +7823,7 @@ private canWriteInto(dir: string): boolean {
   private async toggleReadAloud(): Promise<void> {
     if (this.readAloudActive) {
       this.readAloudPlayer.stop();
+      ReadAloudBackgroundTask.end();
       this.readAloudActive = false;
       this.clearAloudTimer();
       this.aloudStateNum = ReadAloudState.IDLE;
@@ -7852,7 +7854,12 @@ private canWriteInto(dir: string): boolean {
       // 批5：状态/句序回调同步给面板（单例播放器，回调每次启动重设）。
       this.readAloudPlayer.onStateChange = (state: ReadAloudState): void => {
         this.aloudStateNum = state;
-        if (state === ReadAloudState.IDLE) { this.readAloudActive = false; }
+        ReadAloudBackgroundTask.updateState(state);
+        if (state === ReadAloudState.IDLE) {
+          // 自然念完一章也会走这里：收掉长时任务，否则通知栏残留。
+          ReadAloudBackgroundTask.end();
+          this.readAloudActive = false;
+        }
       };
       this.readAloudPlayer.onUnitAdvance = (index: number): void => {
         console.info(`[ReadAloud] unit advance index=${index}`);
@@ -7874,6 +7881,21 @@ private canWriteInto(dir: string): boolean {
       this.readAloudActive = true;
       this.aloudStateNum = ReadAloudState.PLAYING;
       this.scheduleAloudTimer();
+      // 批7：控制条按键接到已有面板操作；先激活长时任务/AVSession 再写元数据。
+      const handlers: ReadAloudControlHandlers = {
+        // play/pause 分别接幂等的 play()/pause()，不用 toggle：
+        // 控制条按"播放"时必须恢复播放，不能因为当前非 PLAYING 就误切换。
+        onPlay: (): void => { this.readAloudPlayer.play(); },
+        onPause: (): void => { this.readAloudPlayer.pause(); },
+        onNext: (): void => { this.onAloudNext(); },
+        onPrevious: (): void => { this.onAloudPrevious(); },
+        onStop: (): void => { this.onAloudStop(); }
+      };
+      ReadAloudBackgroundTask.setControlHandlers(handlers);
+      ReadAloudBackgroundTask.begin(context).then((): void => {
+        ReadAloudBackgroundTask.updateMeta(this.selectedBook.title, this.selectedChapter);
+        ReadAloudBackgroundTask.updateState(this.readAloudPlayer.state());
+      });
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? `朗读启动失败：${error.message}` : '朗读启动失败');
     }
@@ -7894,6 +7916,7 @@ private canWriteInto(dir: string): boolean {
     if (s.timerMode === 'minute' && s.ttsTimer > 0) {
       this.readAloudTimerId = setTimeout((): void => {
         this.readAloudPlayer.stop();
+        ReadAloudBackgroundTask.end();
         this.readAloudActive = false;
         this.aloudStateNum = ReadAloudState.IDLE;
         this.readAloudTimerId = -1;
@@ -7916,6 +7939,7 @@ private canWriteInto(dir: string): boolean {
 
   private onAloudStop(): void {
     this.readAloudPlayer.stop();
+    ReadAloudBackgroundTask.end();
     this.readAloudActive = false;
     this.aloudStateNum = ReadAloudState.IDLE;
     this.clearAloudTimer();
@@ -7932,6 +7956,7 @@ private canWriteInto(dir: string): boolean {
   private async turnReadAloudChapter(delta: number): Promise<void> {
     this.clearAloudTimer();
     this.readAloudPlayer.stop();
+    ReadAloudBackgroundTask.end();
     this.readAloudActive = false;
     this.showAloudConfig = false;
     const s = this.readAloudSettings;

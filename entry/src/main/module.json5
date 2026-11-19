@@ -24,6 +24,10 @@
           "abilities": ["EntryAbility"],
           "when": "inuse"
         }
+      },
+      {
+        // 朗读后台续播：批7 长时任务 AUDIO_PLAYBACK。normal/system_grant，无需运行时申请。
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
       }
     ],
     "abilities": [
@@ -36,6 +40,8 @@
         "startWindowIcon": "$media:app_icon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        // 批7：允许 AUDIO_PLAYBACK 长时任务，朗读切后台后继续出声。
+        "backgroundModes": ["audioPlayback"],
         "skills": [
           {
             "entities": ["entity.system.home"],
