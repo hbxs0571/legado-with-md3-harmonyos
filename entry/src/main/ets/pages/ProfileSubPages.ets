@@ -6,7 +6,7 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ReadRecordHeatmap } from '../components/ReadRecordHeatmap';
 import { BookCover } from '../components/BookCover';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
-import { AppTopBar, TopBarBackButton } from '../components/TopBar';
+import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import {
   PROFILE_PAGE_SUBTITLE_SIZE,
@@ -3438,7 +3438,6 @@ struct BookmarkEntryCard {
 export struct ReadRecordsPage {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('appTopInset') appTopInset: number = 0;
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
@@ -3961,47 +3960,57 @@ export struct ReadRecordsPage {
       .padding({ left: 16, right: 16 })
   }
 
+  /** 顶栏左侧：多选态清空选择、否则返回，逻辑已在 handleReadRecordBack 里，直接复用。 */
+  @Builder
+  private topNavSlot() {
+    // @BuilderParam 必须箭头包一层：直接传方法引用会把 builder 的 this 重绑到 AppTopBar，
+    // 导致 this.handleReadRecordBack 为 undefined，点返回即崩。
+    TopBarBackButton({ onSelect: () => this.handleReadRecordBack() })
+  }
+
+  /** 顶栏动作区：多选态只有删除，否则显示模式切换 + 搜索 + 更多。 */
+  @Builder
+  private topActions() {
+    if (this.isInSelectionMode()) {
+      TopBarButton({
+        icon: 'delete',
+        showDivider: false,
+        onSelect: () => this.requestDeleteSelected()
+      })
+    } else {
+      // 图标按当前视图取：汇总→时间线、时间线→时钟、最后阅读→列表。
+      TopBarButton({
+        icon: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'),
+        showDivider: false,
+        onSelect: () => this.cycleDisplayMode()
+      })
+      TopBarButton({
+        icon: 'search',
+        onSelect: () => {
+          this.showSearch = !this.showSearch;
+          if (!this.showSearch) { this.searchQuery = ''; }
+        }
+      })
+      TopBarButton({
+        icon: 'more',
+        onSelect: () => this.showActionsSheet = true
+      })
+    }
+  }
+
   build() {
     Column() {
-      Row() {
-        if (this.isInSelectionMode()) {
-          Text('清空选择').fontSize(13).fontColor(this.themeColorAccent)
-            .height(40).padding({ left: 4, right: 4 }).onClick(() => this.clearSelection())
-        } else {
-          Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-          }.width(40).height(40).onClick(() => this.handleReadRecordBack())
-        }
-        Column() {
-          Text(this.isInSelectionMode() ? `${this.selectedKeys.size} 项已选` : '阅读记录')
-            .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
-          Text(this.isInSelectionMode() ? '点条目切换选中' : this.getModeLabel())
-            .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 2 })
-        if (this.isInSelectionMode()) {
-          Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-            AppGlyph({ name: 'delete', glyphSize: 20, tint: this.themeColorTextSecondary })
-          }.width(40).height(40).onClick(() => this.requestDeleteSelected())
-        } else {
-          Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-            AppGlyph({ name: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'), glyphSize: 20, tint: this.themeColorTextSecondary })
-          }.width(40).height(40).onClick(() => this.cycleDisplayMode())
-          Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-            AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
-          }.width(40).height(40).onClick(() => {
-            this.showSearch = !this.showSearch;
-            if (!this.showSearch) { this.searchQuery = ''; }
-          })
-          Stack({ alignContent: Alignment.Center }) {
-            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
-            AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
-          }.width(40).height(40).onClick(() => this.showActionsSheet = true)
-        }
-      }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
+      // 顶栏：统一用 AppTopBar，与书架页/设置页同款。
+      // 不要再在外面包 margin 让出 appTopInset——AppTopBar 自己读 @StorageProp('appTopInset')
+      // 并把它加进高度（components/TopBar.ets:189-190），外面再让一次会双倍留白。
+      AppTopBar({
+        title: this.isInSelectionMode() ? `已选 ${this.selectedKeys.size} 项` : '阅读记录',
+        subtitle: this.isInSelectionMode() ? '点按项目选择，返回退出' : this.getModeLabel(),
+        collapsed: false,
+        hasNavigation: true,
+        navigationIcon: () => { this.topNavSlot() },
+        actions: () => { this.topActions() }
+      })
 
       if (this.showSearch) {
         Row() {
