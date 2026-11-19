@@ -362,13 +362,13 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 进度恢复（打开即定位） | `ReadBookConfig.kt` | `pages/ReaderPage.ets` | 已接 | — | 关掉 App 重开，点该书回到上次章节与位置 | — | localBook |
 | 章节内位置记忆 | `Book.kt:45-138` | `model/Book.ets:18` | 已接 | 本地 `chapterProgress` 是章内百分比，直接落在上游 `durChapterPos` 列上（`data/BookRepository.ets:689-690`） | 在同一章内滚动后退出再进，停在原位 | r284 起 `readerPositionVersion` 已删除（上游无此列）；`androidCharacterPosition` 仍保留在 `model/Book.ets:52`，被 26 处代码读写（导出侧 `toAndroidBookRecord` 取它落 `durChapterPos`），迁移时按章内字符位置换算百分比 | localBook |
 | 阅读记录开关 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3450`（`toggleRecordEnabled`）+ `:3850`-`:3855`（动作单开关项） | 已接 | — | 关掉后读书不再产生记录 | — | 不备份 |
-| 阅读记录三视图切换 | `ReadRecordScreen.kt:939` | `pages/ProfileSubPages.ets:3078`（`cycleDisplayMode`）+ `:3543`-`:3544`（图标按钮） | 已接 | 本地 `cycleDisplayMode()` 轮换 0 汇总/1 时间线/2 最后阅读 | 点视图图标在三种视图间轮换 | 上游为图标按钮组 | — |
+| 阅读记录三视图切换 | `ReadRecordScreen.kt:939` | `pages/ProfileSubPages.ets:3078`（`cycleDisplayMode`）+ `:3543`-`:3544`（图标按钮） | 已接 | 本地 `cycleDisplayMode()` 轮换 0 汇总/1 时间线/2 最后阅读；**实现（r001）**：displayMode 落 preferences，键 `readRecordDisplayMode`，值存枚举名（AGGREGATE/TIMELINE/LATEST） | 点视图图标在三种视图间轮换 | 上游为图标按钮组 | — |
 | 阅读记录搜索 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:3082`（`getVisibleRecords`）+ `:3560`-`:3570`（`showSearch` 搜索框） | 已接 | 本地按书名与作者过滤 | 输入书名后列表只剩该书记录 | — | — |
-| 汇总视图 | `ReadRecordScreen.kt:813` | `pages/ProfileSubPages.ets:3600` 起（`displayMode === 0` 分支） | 已接 | 本地按日期分组、按书聚合时长 | 汇总视图按日期显示各书阅读时长 | — | readRecord |
-| 时间线视图 | `ReadRecordScreen.kt:939`、`:1254` | `pages/ProfileSubPages.ets:3631` 起（`displayMode === 1` 分支） | 已接 | — | 时间线按会话列出开始时间与时长 | — | readRecord |
-| 最后阅读视图 | `ReadRecordScreen.kt:1143` | `pages/ProfileSubPages.ets:3658` 起（`displayMode` 其余分支的 `} else {`） | 已接 | — | 列表按最后阅读时间倒序 | — | readRecord |
+| 汇总视图 | `ReadRecordScreen.kt:813` | `pages/ProfileSubPages.ets:3600` 起（`displayMode === 0` 分支） | 已接 | 本地按日期分组、按书聚合时长；**实现（r001）**：行内加 44dp 封面、私密书脱敏、sticky 日期头、侧滑删除 | 汇总视图按日期显示各书阅读时长 | — | readRecord |
+| 时间线视图 | `ReadRecordScreen.kt:939`、`:1254` | `pages/ProfileSubPages.ets:3631` 起（`displayMode === 1` 分支） | 已接 | **实现（r001）**：行内加 44dp 封面、私密书脱敏、sticky 日期头、侧滑删除 | 时间线按会话列出开始时间与时长 | — | readRecord |
+| 最后阅读视图 | `ReadRecordScreen.kt:1143` | `pages/ProfileSubPages.ets:3658` 起（`displayMode` 其余分支的 `} else {`） | 已接 | **实现（r001）**：行内加 44dp 封面、私密书脱敏、sticky 日期头、侧滑删除、左滑合并 | 列表按最后阅读时间倒序 | — | readRecord |
 | 阅读总成就 | `ReadRecordScreen.kt` | `pages/ProfileSubPages.ets:3234`（`getSummaryDuration`）+ `:3591`（汇总卡「阅读总成就」） | 已接 | 本地显示本书数与总时长 | 顶部卡片显示「N 本书 · X 小时」 | — | readRecord |
-| 热力图日历 | `ReadRecordScreen.kt:860` | `pages/ProfileSubPages.ets:3811`-`:3812`（`ReadRecordCalendarSheet`）、`:3826`（挂 `ReadRecordHeatmap`）；组件 `components/ReadRecordHeatmap.ets:9`（210 行，`@Prop mode` `:17`） | 已接 | 年度按周网格热力格子，点成就卡（`:3599`）打开该 sheet | 显示近一年的阅读热力格子 | `HeatmapCalendarSection` | readRecord |
+| 热力图日历 | `ReadRecordScreen.kt:860` | `pages/ProfileSubPages.ets:3811`-`:3812`（`ReadRecordCalendarSheet`）、`:3826`（挂 `ReadRecordHeatmap`）；组件 `components/ReadRecordHeatmap.ets:9`（210 行，`@Prop mode` `:17`） | 已接 | 年度按周网格热力格子，点成就卡（`:3599`）打开该 sheet；**实现（r001）**：面板内加次数/时长两档切换（默认次数，不持久化） | 显示近一年的阅读热力格子 | `HeatmapCalendarSection` | readRecord |
 | 阅读时长柱状图 | `ReadRecordCharts.kt:40` | `pages/ReadRecordOverviewPage.ets:44`（`ReadTimeBarChartCard`）、`:478`（挂载） | 已接 | 总览页内，周期为「总」时整卡不渲染 | 显示近 7 天阅读时长柱状图 | — | readRecord |
 | 统计格子 | `ReadRecordStats.kt:35`、`:79` | `pages/ReadRecordOverviewPage.ets:133`（`StatsGridCard`）、`:481`（挂载） | 已接 | 五项：阅读时长 / 阅读天数 / 总本数 / 读完 / 在读 | 显示日均时长、最长单次等指标 | — | readRecord |
 | 扫描问题 | `ReadRecordScreen.kt:703` | `pages/ProfileSubPages.ets:3460`（`runScanIssues`）+ `:3857`（菜单项） | 已接 | 本地扫描只读，不改数据 | 点扫描后列出异常记录条数 | — | readRecord |
@@ -398,6 +398,11 @@ A1–C 的 260 行写于 r277–r280（C 块 r286 补 3 行后为 263 行），�
 | 连续会话合并接进时间线 | `ui/book/readRecord/ReadRecordViewModel.kt:294` | `data/ReadRecordRepository.ets`、`pages/ProfileSubPages.ets` | 已接 | `mergeContinuousSessions` 按 20*60*1000 毫秒间隔合并同书相邻会话；时间线 `getRecordsForDate` 先合并再按开始时间倒序 | 时间线视图里相邻短会话按合并整段时长列出 | 本轮补登；F9 纯函数落在批 0 | readRecord |
 | 友好日期接进三视图 | `utils/StringUtils.kt:109` | `data/ReadRecordRepository.ets`、`pages/ProfileSubPages.ets`、`pages/Index.ets` | 已接 | `formatFriendlyDate` 今天 / 昨天 / 2..5 天前 / 否则原日期串，接进汇总、时间线、最后阅读三处日期头与详情页面板 | 汇总视图日期头显示「今天」「昨天」「2天前」 | 本轮补登；F10 落在批 0 | readRecord |
 
+
+> **实现（r001）·阅读记录页顶栏**：阅读记录页顶栏由手写 Row 换成统一 `AppTopBar`
+> （`components/TopBar.ets:48`），返回键用 `TopBarBackButton`，动作区用 `TopBarButton`；
+> 多选态顶栏只保留删除按钮，普通态有视图切换 / 搜索 / 更多三枚按钮。
+> 原表无「阅读记录页顶栏」独立行，此处以表下文字补记，避免新增表格行改变行数统计。
 ---
 
 ## D 缓存管理页（整界面）

@@ -1122,3 +1122,13 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **未验项**：章节档「拖动中不动、松手才跳章」在当前 EPUB 书（暂无目录、章节档未真正切换）上未取得有效证据；代码已按上游语义实现（`onChange` 仅 End/Click 调 `onSelectChapterIndex`），但未在带目录的 TXT 书上机确认，记为"代码改到位、屏幕未确认"。无障碍文案滚动档念"页"按代码推断为预期，未设备取证。
 - **保留**：`getProgressAccessibilityText` 滚动档语义、`getReaderFooterProgress`（全仓零调用）、`updateProgress`/`getWholeBookProgress` 均未改；页表未就绪时短暂回落章号语义不去对齐。
 
+**KI-RR1 时间线删除单条会话后，合并段仍然存在**
+
+- **现象**：上游 `ReadRecordRepository.kt:526-600` 的 deleteSession 会把「同书同日、20 分钟间隔内连续的一组会话」整组删除；
+  本地 `data/ReadRecordRepository.ets:422` deleteSessionById 按五元组只删单条，删完整表重算派生层。
+  时间线里一段合并显示 40 分钟的会话，删除后变成 25 分钟的那一段（只掉了最后一条），而不是整段消失。
+- **影响**：不会算错时长（派生层是重算的），但「删掉这个阅读时段」的语义没兑现。
+- **修法**：把时间线条目的身份从「首条会话的起止时间」改成「合并段包含的所有会话 id」，删除时整段删除；
+  同时要改 isInSelectionMode 的选中集合与 selectionKey 口径，牵连侧滑、批量删除、合并对话框三处。
+- **状态**：代码未改，待排期。
+
