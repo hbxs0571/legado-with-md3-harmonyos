@@ -10,6 +10,8 @@ export struct AppReadAloudSettingsPage {
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 批8：打开「朗读引擎与音色」页（HTTP TTS 源与音色目录）。 */
+  onOpenEngine: () => void = () => {};
   @State collapsedHeader: boolean = false;
   private settingsScroller: Scroller = new Scroller();
 
@@ -52,7 +54,7 @@ export struct AppReadAloudSettingsPage {
             ThemeItemDivider()
             Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
             ThemeItemDivider()
-            AppReadAloudLinkRow({ title: '朗读引擎与音色', detail: '配置朗读引擎并导入音色', onSelect: () => this.onUnavailableAction('朗读引擎与音色页面尚未迁移') })
+            AppReadAloudLinkRow({ title: '朗读引擎与音色', detail: '配置朗读引擎并导入音色', onSelect: () => this.onOpenEngine() })
             ThemeItemDivider()
             Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
             ThemeItemDivider()

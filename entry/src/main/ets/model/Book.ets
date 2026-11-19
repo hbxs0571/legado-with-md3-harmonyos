@@ -193,6 +193,8 @@ export enum ProfileRoute {
   APP_OTHER_SETTINGS = 'appOtherSettings',
   APP_READ_SETTINGS = 'appReadSettings',
   APP_ALOUD_SETTINGS = 'appAloudSettings',
+  /** 批8：朗读引擎与音色页（HTTP TTS 源与音色目录管理）。 */
+  ALOUD_ENGINE = 'aloudEngine',
   APP_COVER_SETTINGS = 'appCoverSettings',
   APP_DOWNLOAD_CACHE_SETTINGS = 'appDownloadCacheSettings',
   APP_BACKUP_SETTINGS = 'appBackupSettings',

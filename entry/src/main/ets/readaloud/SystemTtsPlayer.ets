@@ -1,6 +1,9 @@
 import { textToSpeech } from '@kit.CoreSpeechKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { SpeechUnit } from './SpeechSegmenter';
+import { HttpTtsPlayer } from './HttpTtsPlayer';
+import { HttpTts } from '../model/HttpTts';
+import { ReadAloudVoice } from '../model/ReadAloudVoice';
 
 /**
  * 正在朗读的正文区间（语义内容坐标，与画布 LocalReaderLineItem.startPosition 同源）。
@@ -64,6 +67,16 @@ export class SystemTtsPlayer {
   private spanRevision: number = 0;
   /** 系统 TTS 人声 person 值；听书页切换音色时更新并重建引擎（平台只 3 个音色）。 */
   private voicePerson: number = 13;
+  /**
+   * 批8：HTTP 朗读源与音色。非空时 speak 走 HttpTtsPlayer（AVPlayer 播合成音频），
+   * 空时走系统 TTS。统一门面让 Index/高亮/句序/面板状态零改动复用。
+   */
+  private httpSource: HttpTts | null = null;
+  private httpVoice: ReadAloudVoice | null = null;
+  private httpContext: Context | null = null;
+  private httpRate: number = 5;
+  /** HTTP 源 pause 后 play 时标记「恢复当前段」而非重新合成。 */
+  private httpResumePending: boolean = false;
 
   onStateChange: (state: ReadAloudState) => void = (_state: ReadAloudState): void => {};
   onUnitAdvance: (index: number) => void = (_index: number): void => {};
@@ -93,6 +106,24 @@ export class SystemTtsPlayer {
     this.paragraphInterval = Math.max(0, Math.trunc(ms));
   }
 
+  /**
+   * 批8：配置 HTTP 合成源。source 为 null 时切回系统 TTS。
+   * context 用于合成临时文件（cacheDir），rate 为 ttsSpeechRate(1..10)，HTTP 下真调速。
+   */
+  configureHttp(context: Context | null, source: HttpTts | null, voice: ReadAloudVoice | null,
+    rate: number): void {
+    this.httpSource = source;
+    this.httpVoice = voice;
+    this.httpContext = context;
+    this.httpRate = rate;
+    console.info(`[ReadAloud] configureHttp source=${source === null ? 'none' : source.name}`);
+  }
+
+  /** 当前是否处于 HTTP 合成模式，供界面显示真实能力（调速是否生效）。 */
+  isHttpMode(): boolean {
+    return this.httpSource !== null;
+  }
+
   /** 开始/恢复朗读。 */
   play(): void {
     if (this.units.length === 0) {
@@ -103,6 +134,12 @@ export class SystemTtsPlayer {
     this.stateValue = ReadAloudState.PLAYING;
     this.emitState();
     if (this.activeRequestId.length === 0 && this.chunkQueue.length === 0) {
+      if (this.httpResumePending && this.httpSource !== null) {
+        // HTTP 源从 PAUSED 恢复：AVPlayer.resume 继续当前段，不重新合成。
+        this.httpResumePending = false;
+        HttpTtsPlayer.getInstance().resume();
+        return;
+      }
       this.generation++;
       this.speakCurrent();
     }
@@ -118,6 +155,13 @@ export class SystemTtsPlayer {
     this.chunkQueue = [];
     this.chunkIndex = 0;
     this.generation++;
+    if (this.httpSource !== null) {
+      // HTTP 源：AVPlayer.pause 保留当前段，不删临时文件（resume 需要）。
+      this.httpResumePending = true;
+      HttpTtsPlayer.getInstance().pause();
+      this.emitState();
+      return;
+    }
     const engine = this.engine;
     if (engine !== null && engine.isBusy()) {
       try {
@@ -136,6 +180,10 @@ export class SystemTtsPlayer {
     this.generation++;
     this.chunkQueue = [];
     this.chunkIndex = 0;
+    this.httpResumePending = false;
+    if (this.httpSource !== null) {
+      HttpTtsPlayer.getInstance().stop();
+    }
     if (this.busyRetryTimerId >= 0) {
       clearTimeout(this.busyRetryTimerId);
       this.busyRetryTimerId = -1;
@@ -245,6 +293,7 @@ export class SystemTtsPlayer {
     this.activeRequestId = '';
     this.chunkQueue = [];
     this.chunkIndex = 0;
+    this.httpResumePending = false;
     this.generation++;
     if (this.stateValue === ReadAloudState.PAUSED) {
       // 暂停态下跳句只更新位置，不自动出声（与上游手动切段后仍需 play 一致）。
@@ -275,6 +324,28 @@ export class SystemTtsPlayer {
       // 上游 TTSReadAloudService.kt:246-251：全标点段落不进引擎（会静默不回调卡死链）。
       console.info(`[ReadAloud] 空白单元跳过 index=${this.index}`);
       this.advance();
+      return;
+    }
+    if (this.httpSource !== null && this.httpContext !== null) {
+      // HTTP 源：AudioPlayer 播合成音频，setSpeed 真调速；播完 completed 走同一 advance 链。
+      const source = this.httpSource;
+      const voice = this.httpVoice;
+      const context = this.httpContext;
+      const myGeneration = this.generation;
+      console.info(`[ReadAloud] speak via HTTP idx=${this.index}`);
+      HttpTtsPlayer.getInstance().speak(context, source, voice, text, this.httpRate, {
+        onComplete: (): void => {
+          if (myGeneration === this.generation && this.stateValue === ReadAloudState.PLAYING) {
+            this.advance();
+          }
+        },
+        onError: (message: string): void => {
+          if (myGeneration === this.generation) {
+            this.onError(message);
+            this.stop();
+          }
+        }
+      });
       return;
     }
     this.chunkQueue = SystemTtsPlayer.chunkText(text);

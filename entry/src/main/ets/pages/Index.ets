@@ -141,7 +141,14 @@ import {
 import { SpeechSegmenter, SpeechUnit } from '../readaloud/SpeechSegmenter';
 import { SystemTtsPlayer, ReadAloudState, ReadAloudSpan, EMPTY_READ_ALOUD_SPAN } from '../readaloud/SystemTtsPlayer';
 import { ReadAloudBackgroundTask, ReadAloudControlHandlers } from '../readaloud/ReadAloudBackgroundTask';
+import { HttpTtsPlayer } from '../readaloud/HttpTtsPlayer';
 import { ReadAloudPlayerPage } from './ReadAloudPlayerPage';
+import { ReadAloudEnginePage } from './ReadAloudEnginePage';
+import { HttpTts } from '../model/HttpTts';
+import { ReadAloudVoice, READ_ALOUD_VOICE_MANAGED_BY_HTTP_SOURCE_CATALOG, copyReadAloudVoice } from '../model/ReadAloudVoice';
+import { HttpTtsRepository } from '../data/HttpTtsRepository';
+import { ReadAloudVoiceRepository } from '../data/ReadAloudVoiceRepository';
+import { HttpTtsSelection, HttpTtsSelectionRepository, EMPTY_HTTP_TTS_SELECTION } from '../data/HttpTtsSelectionRepository';
 import {
   BackupCategoryOption, BackupEntryPreview, BackupIgnoreLists, BackupPreview, BackupRepository, BackupSelection
 } from '../data/BackupRepository';
@@ -730,6 +737,10 @@ struct Index {
   @State readAloudSpan: ReadAloudSpan = EMPTY_READ_ALOUD_SPAN;
   /** 批5：朗读偏好快照，供面板显示与编辑；打开面板/启动朗读时从仓库载入。 */
   @State readAloudSettings: ReadAloudSettingsSnapshot = DEFAULT_READ_ALOUD_SETTINGS;
+  // 批8：HTTP 朗读源选中态与引擎页数据源。
+  @State httpTtsSources: HttpTts[] = [];
+  @State httpTtsVoices: ReadAloudVoice[] = [];
+  @State httpTtsSelection: HttpTtsSelection = EMPTY_HTTP_TTS_SELECTION;
   /** 批5：三开关小面板是否叠在朗读面板之上。 */
   @State showAloudConfig: boolean = false;
   /** 批5：面板展示的播放状态/句序，来自 SystemTtsPlayer 回调。 */
@@ -7814,6 +7825,134 @@ private canWriteInto(dir: string): boolean {
     this.route = AppRoute.READ_ALOUD_SETTINGS;
   }
 
+  /** 批8：按选中源配置门面的 HTTP 模式；未选中则清空回退系统 TTS。 */
+  private async configureHttpSource(context: Context, rate: number): Promise<void> {
+    this.httpTtsSelection = await HttpTtsSelectionRepository.load(context);
+    await HttpTtsRepository.load(context);
+    await ReadAloudVoiceRepository.load(context);
+    const sources = HttpTtsRepository.getAll();
+    const source = sources.find((s: HttpTts): boolean => s.id === this.httpTtsSelection.sourceId);
+    if (source === undefined || this.httpTtsSelection.sourceId === 0) {
+      this.readAloudPlayer.configureHttp(null, null, null, rate);
+      return;
+    }
+    const voices = await ReadAloudVoiceRepository.listBySource(String(source.id));
+    const voice = voices.find((v: ReadAloudVoice): boolean => v.speakerId === this.httpTtsSelection.speakerId);
+    this.readAloudPlayer.configureHttp(context, source, voice ?? null, rate);
+    console.info(`[HttpTts] 使用源 ${source.name} 音色 ${voice === undefined ? "默认" : voice.displayName}`);
+  }
+
+  /** 批8：打开朗读引擎与音色页，先载入源/音色/选中态。 */
+  private async openAloudEnginePage(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      await HttpTtsRepository.load(context);
+      await ReadAloudVoiceRepository.load(context);
+      this.httpTtsSources = HttpTtsRepository.getAll();
+      this.httpTtsVoices = ReadAloudVoiceRepository.getAll();
+      this.httpTtsSelection = await HttpTtsSelectionRepository.load(context);
+    }
+    this.profileSettingsReturn = ProfileRoute.APP_ALOUD_SETTINGS;
+    this.profileSubpage = ProfileRoute.ALOUD_ENGINE;
+    this.route = AppRoute.PROFILE_SUBPAGE;
+  }
+
+  /** 批8：保存（新增/编辑）一个 HTTP 源。 */
+  private async saveHttpSource(source: HttpTts): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const next = HttpTtsRepository.getAll().filter((s: HttpTts): boolean => s.id !== source.id);
+    next.push(source);
+    await HttpTtsRepository.save(context, next);
+    this.httpTtsSources = HttpTtsRepository.getAll();
+    this.showUnavailableAction("已保存朗读引擎");
+  }
+
+  /** 批8：删除源，同时清掉指向它的选中态。 */
+  private async deleteHttpSource(id: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const next = HttpTtsRepository.getAll().filter((s: HttpTts): boolean => s.id !== id);
+    await HttpTtsRepository.save(context, next);
+    if (this.httpTtsSelection.sourceId === id) {
+      this.httpTtsSelection = EMPTY_HTTP_TTS_SELECTION;
+      await HttpTtsSelectionRepository.save(context, this.httpTtsSelection);
+    }
+    this.httpTtsSources = HttpTtsRepository.getAll();
+    this.showUnavailableAction("已删除朗读引擎");
+  }
+
+  /** 批8：设当前源（清空音色选中），落盘。 */
+  private async selectHttpSource(id: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    this.httpTtsSelection = { sourceId: id, speakerId: "" };
+    await HttpTtsSelectionRepository.save(context, this.httpTtsSelection);
+    this.showUnavailableAction(id === 0 ? "已切回系统朗读" : "已设为当前朗读引擎");
+  }
+
+  /** 批8：从源拉取音色目录 {url}?catalog=1，写 read_aloud_voices。 */
+  private async fetchHttpCatalog(source: HttpTts): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const catalog = await HttpTtsPlayer.fetchCatalog(context, source);
+      if (catalog.length === 0) {
+        this.showUnavailableAction("源未返回可用音色");
+        return;
+      }
+      const now = Date.now();
+      const incoming: ReadAloudVoice[] = catalog.map((item): ReadAloudVoice => ({
+        id: `${source.id}:${item.speakerId}`,
+        engineType: "http",
+        engineId: String(source.id),
+        speakerId: item.speakerId,
+        displayName: item.displayName,
+        traitsJson: "[]",
+        emotionCatalogJson: "[]",
+        managedBy: READ_ALOUD_VOICE_MANAGED_BY_HTTP_SOURCE_CATALOG,
+        enabled: true, available: true, excluded: false, revision: 0,
+        createdAt: now, updatedAt: now
+      }));
+      // 合并：保留被排除行与用户音色，目录音色同 id 覆盖。
+      const merged = ReadAloudVoiceRepository.getAll().filter(
+        (v: ReadAloudVoice): boolean => !(v.engineType === "http" && v.engineId === String(source.id) && v.excluded));
+      incoming.forEach((v: ReadAloudVoice): void => {
+        const idx = merged.findIndex((x: ReadAloudVoice): boolean => x.id === v.id);
+        if (idx >= 0) { merged[idx] = v; } else { merged.push(v); }
+      });
+      await ReadAloudVoiceRepository.save(context, merged);
+      this.httpTtsVoices = ReadAloudVoiceRepository.getAll();
+      this.showUnavailableAction(`已拉取 ${catalog.length} 个音色`);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : "拉取音色失败");
+    }
+  }
+
+  /** 批8：排除/恢复音色——不删行，只置 excluded（上游 excluded 语义）。 */
+  private async toggleHttpVoiceExcluded(voice: ReadAloudVoice): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const next = ReadAloudVoiceRepository.getAll().map((v: ReadAloudVoice): ReadAloudVoice => {
+      if (v.id === voice.id) {
+        const updated = copyReadAloudVoice(v);
+        updated.excluded = !v.excluded;
+        return updated;
+      }
+      return v;
+    });
+    await ReadAloudVoiceRepository.save(context, next);
+    this.httpTtsVoices = ReadAloudVoiceRepository.getAll();
+  }
+
+  /** 批8：选中音色，落盘。 */
+  private async selectHttpVoice(voice: ReadAloudVoice): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    this.httpTtsSelection = { sourceId: Number(voice.engineId), speakerId: voice.speakerId };
+    await HttpTtsSelectionRepository.save(context, this.httpTtsSelection);
+    this.showUnavailableAction(`已选音色：${voice.displayName}`);
+  }
   /**
    * 底栏「朗读」：点一次开始，再点停止。
    * 上游 ReadMenuActionDefs.kt:407-418 / ReadBookViewModel.kt:895 的点击分支；
@@ -7838,6 +7977,8 @@ private canWriteInto(dir: string): boolean {
       const settings = await ReadAloudSettingsRepository.load(context);
       this.readAloudSettings = settings;
       this.aloudChaptersRead = 0;
+      // 批8：若配置了 HTTP 朗读源，切到 AVPlayer 合成链；否则保持系统 TTS。
+      await this.configureHttpSource(context, settings.ttsSpeechRate);
       // 切段坐标必须与画布同口径：用与 ReaderPage 相同的缩进与特殊样式参数，
       // 否则 SpeechUnit.start/end 与 LocalReaderLineItem.startPosition 错位，高亮会跑偏。
       const semantic = LocalTextSemantics.parse(this.readerContent, this.readerParagraphIndent, this.readerAdaptSpecialStyle);
@@ -7982,6 +8123,10 @@ private canWriteInto(dir: string): boolean {
     this.readAloudSettings = updated;
     const context = this.getUIContext().getHostContext();
     if (context !== undefined) { await ReadAloudSettingsRepository.save(context, updated); }
+    // 批8：HTTP 源下 setSpeed 真生效——正在播放则即时改 AVPlayer 速度；系统 TTS 无此 API。
+    if (this.readAloudPlayer.isHttpMode() && this.readAloudActive) {
+      HttpTtsPlayer.getInstance().applyRate(rate);
+    }
   }
 
   private async onAloudTimerChange(mode: string, minutes: number, chapters: number): Promise<void> {
@@ -8622,6 +8767,8 @@ private canWriteInto(dir: string): boolean {
         this.profileSubpage = ProfileRoute.HIGHLIGHT_TAG_RULES;
       } else if (this.profileSubpage === ProfileRoute.APP_SETTINGS) {
         this.route = this.profileDetailReturnRoute;
+      } else if (this.profileSubpage === ProfileRoute.ALOUD_ENGINE) {
+        this.profileSubpage = ProfileRoute.APP_ALOUD_SETTINGS;
       } else if (this.profileSubpage === ProfileRoute.APP_TRANSLATION_SETTINGS) {
         this.profileSubpage = ProfileRoute.APP_SETTINGS;
       } else if (this.profileSubpage === ProfileRoute.PRIVACY_NOTICE) {
@@ -10309,7 +10456,23 @@ private canWriteInto(dir: string): boolean {
         } else if (this.profileSubpage === ProfileRoute.APP_ALOUD_SETTINGS) {
           AppReadAloudSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
-            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            onOpenEngine: () => this.openAloudEnginePage()
+          })
+        } else if (this.profileSubpage === ProfileRoute.ALOUD_ENGINE) {
+          ReadAloudEnginePage({
+            sources: this.httpTtsSources,
+            voices: this.httpTtsVoices,
+            selectedSourceId: String(this.httpTtsSelection.sourceId),
+            selectedSpeakerId: this.httpTtsSelection.speakerId,
+            onBack: () => { this.profileSubpage = ProfileRoute.APP_ALOUD_SETTINGS; },
+            onSaveSource: (source: HttpTts): void => { this.saveHttpSource(source); },
+            onDeleteSource: (id: number): void => { this.deleteHttpSource(id); },
+            onSelectSource: (id: number): void => { this.selectHttpSource(id); },
+            onFetchCatalog: (source: HttpTts): void => { this.fetchHttpCatalog(source); },
+            onToggleVoiceExcluded: (voice: ReadAloudVoice): void => { this.toggleHttpVoiceExcluded(voice); },
+            onSelectVoice: (voice: ReadAloudVoice): void => { this.selectHttpVoice(voice); },
+            onMessage: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.APP_COVER_SETTINGS) {
           AppCoverSettingsPage({

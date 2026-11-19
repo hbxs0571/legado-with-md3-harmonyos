@@ -46,3 +46,15 @@ export const READ_ALOUD_VOICE_ENGINE_HTTP: string = 'http';
 
 /** 上游只把由源目录同步来的音色标成这个值，用户手动加的保持 'user'。 */
 export const READ_ALOUD_VOICE_MANAGED_BY_HTTP_SOURCE_CATALOG: string = 'http_source_catalog';
+
+/** 批8：复制一行音色（ArkTS 禁止无类型对象字面量，排除/恢复时用它做不可变更新）。 */
+export function copyReadAloudVoice(voice: ReadAloudVoice): ReadAloudVoice {
+  return {
+    id: voice.id, engineType: voice.engineType, engineId: voice.engineId,
+    speakerId: voice.speakerId, displayName: voice.displayName,
+    traitsJson: voice.traitsJson, emotionCatalogJson: voice.emotionCatalogJson,
+    managedBy: voice.managedBy, enabled: voice.enabled, available: voice.available,
+    excluded: voice.excluded, revision: voice.revision,
+    createdAt: voice.createdAt, updatedAt: voice.updatedAt
+  };
+}

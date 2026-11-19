@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7；第八批（高亮规则边框）给 highlightRules 补 borderColor / borderWidth / borderRadius 三列后升到 8。 */
-  static readonly version: number = 8;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7；第八批（高亮规则边框）给 highlightRules 补 borderColor / borderWidth / borderRadius 三列后升到 8；朗读批 8 给 httpTTS 补 textParam / speedParam / toneParam 三个本地扩展列后升到 9。 */
+  static readonly version: number = 9;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -433,6 +433,10 @@ export class RdbSchema {
     '`speed` INTEGER, ' +
     '`synthesisThreadCount` INTEGER NOT NULL DEFAULT 1, ' +
     '`lastUpdateTime` INTEGER NOT NULL DEFAULT 0, ' +
+    // 朗读批 8：三个本地扩展列（参数名映射），上游实体无此三列，不进 JSON 导出。
+    '`textParam` TEXT NOT NULL DEFAULT \'text\', ' +
+    '`speedParam` TEXT NOT NULL DEFAULT \'speed\', ' +
+    '`toneParam` TEXT NOT NULL DEFAULT \'tone\', ' +
     'PRIMARY KEY(`id`)' +
     ')';
 
@@ -607,6 +611,20 @@ export class RdbSchema {
     }
     try {
       await store.executeSql("ALTER TABLE highlightRules ADD COLUMN borderRadius REAL NOT NULL DEFAULT 4");
+    } catch (_) {
+    }
+    // 朗读批 8：httpTTS 三个本地扩展列。老库靠吞「duplicate column」做到幂等，
+    // 新库 createHttpTts 已含这三列、ALTER 走到 duplicate 分支被吞，两条路径都安全。
+    try {
+      await store.executeSql("ALTER TABLE httpTTS ADD COLUMN textParam TEXT NOT NULL DEFAULT 'text'");
+    } catch (_) {
+    }
+    try {
+      await store.executeSql("ALTER TABLE httpTTS ADD COLUMN speedParam TEXT NOT NULL DEFAULT 'speed'");
+    } catch (_) {
+    }
+    try {
+      await store.executeSql("ALTER TABLE httpTTS ADD COLUMN toneParam TEXT NOT NULL DEFAULT 'tone'");
     } catch (_) {
     }
     if (store.version !== RdbSchema.version) {

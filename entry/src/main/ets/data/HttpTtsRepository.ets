@@ -22,14 +22,14 @@ export class HttpTtsRepository {
   private static readonly selectAll: string =
     'SELECT `id`, `name`, `url`, `contentType`, `concurrentRate`, `loginUrl`, `loginUi`, ' +
     '`header`, `jsLib`, `enabledCookieJar`, `loginCheckJs`, `speed`, ' +
-    '`synthesisThreadCount`, `lastUpdateTime` ' +
+    '`synthesisThreadCount`, `lastUpdateTime`, `textParam`, `speedParam`, `toneParam` ' +
     'FROM `httpTTS` ORDER BY `name` ASC';
   private static readonly insertSql: string =
     'INSERT OR REPLACE INTO `httpTTS` ' +
     '(`id`, `name`, `url`, `contentType`, `concurrentRate`, `loginUrl`, `loginUi`, ' +
     '`header`, `jsLib`, `enabledCookieJar`, `loginCheckJs`, `speed`, ' +
-    '`synthesisThreadCount`, `lastUpdateTime`) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    '`synthesisThreadCount`, `lastUpdateTime`, `textParam`, `speedParam`, `toneParam`) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
   private static saveQueue: Promise<void> = Promise.resolve();
   private static cachedSources: HttpTts[] = [];
 
@@ -58,9 +58,30 @@ export class HttpTtsRepository {
     return HttpTtsRepository.copySources(HttpTtsRepository.cachedSources);
   }
 
-  /** 导出为与上游同名的 JSON 数组；字段名逐字对齐实体，不含本地扩展字段。 */
+  /**
+   * 导出为与上游同名的 JSON 数组；字段名逐字对齐实体，不含本地扩展字段。
+   * textParam/speedParam/toneParam 是本地扩展列，上游实体没有，绝不写进 httpTTS.json
+   * （否则上游读到未知字段可能报错）；用显式字段构造，可选扩展字段不赋值，
+   * JSON.stringify 会跳过 undefined 值。
+   */
   static exportSources(sources: HttpTts[]): string {
-    return JSON.stringify(sources, null, 2);
+    const exported: HttpTts[] = sources.map((source: HttpTts): HttpTts => ({
+      id: source.id,
+      name: source.name,
+      url: source.url,
+      contentType: source.contentType,
+      concurrentRate: source.concurrentRate,
+      loginUrl: source.loginUrl,
+      loginUi: source.loginUi,
+      header: source.header,
+      jsLib: source.jsLib,
+      enabledCookieJar: source.enabledCookieJar,
+      loginCheckJs: source.loginCheckJs,
+      speed: source.speed,
+      synthesisThreadCount: source.synthesisThreadCount,
+      lastUpdateTime: source.lastUpdateTime
+    }));
+    return JSON.stringify(exported, null, 2);
   }
 
   /** 合并导入：同 id 覆盖、其余新增，非法主键计 skipped 后跳过。 */
@@ -133,7 +154,10 @@ export class HttpTtsRepository {
         source.loginCheckJs === undefined ? null : source.loginCheckJs,
         source.speed === undefined ? null : source.speed,
         source.synthesisThreadCount,
-        source.lastUpdateTime
+        source.lastUpdateTime,
+        source.textParam === undefined ? 'text' : source.textParam,
+        source.speedParam === undefined ? 'speed' : source.speedParam,
+        source.toneParam === undefined ? 'tone' : source.toneParam
       ]);
     }
   }
@@ -154,6 +178,9 @@ export class HttpTtsRepository {
     const speedIndex = RdbCodec.column(resultSet, 'speed');
     const synthesisThreadCountIndex = RdbCodec.column(resultSet, 'synthesisThreadCount');
     const lastUpdateTimeIndex = RdbCodec.column(resultSet, 'lastUpdateTime');
+    const textParamIndex = RdbCodec.column(resultSet, 'textParam');
+    const speedParamIndex = RdbCodec.column(resultSet, 'speedParam');
+    const toneParamIndex = RdbCodec.column(resultSet, 'toneParam');
     const sources: HttpTts[] = [];
     while (resultSet.goToNextRow()) {
       const source: HttpTts = {
@@ -170,7 +197,10 @@ export class HttpTtsRepository {
         loginCheckJs: RdbCodec.optionalText(resultSet, loginCheckJsIndex),
         speed: RdbCodec.optionalInteger(resultSet, speedIndex),
         synthesisThreadCount: RdbCodec.integer(resultSet, synthesisThreadCountIndex, 1),
-        lastUpdateTime: RdbCodec.integer(resultSet, lastUpdateTimeIndex)
+        lastUpdateTime: RdbCodec.integer(resultSet, lastUpdateTimeIndex),
+        textParam: RdbCodec.text(resultSet, textParamIndex, 'text'),
+        speedParam: RdbCodec.text(resultSet, speedParamIndex, 'speed'),
+        toneParam: RdbCodec.text(resultSet, toneParamIndex, 'tone')
       };
       sources.push(source);
     }
@@ -192,7 +222,10 @@ export class HttpTtsRepository {
       loginCheckJs: source.loginCheckJs,
       speed: source.speed,
       synthesisThreadCount: source.synthesisThreadCount,
-      lastUpdateTime: source.lastUpdateTime
+      lastUpdateTime: source.lastUpdateTime,
+      textParam: source.textParam,
+      speedParam: source.speedParam,
+      toneParam: source.toneParam
     };
   }
 

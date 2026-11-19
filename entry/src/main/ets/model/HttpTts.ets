@@ -36,4 +36,12 @@ export interface HttpTts {
   synthesisThreadCount: number;
   /** 上游 lastUpdateTime: Long = System.currentTimeMillis()（@ColumnInfo(defaultValue = "0")）。 */
   lastUpdateTime: number;
+
+  // ---- 以下三列是本地扩展（纯 URL 源的参数名映射），不写进 httpTTS.json ----
+  /** 正文参数名，缺省 text。 */
+  textParam?: string;
+  /** 语速参数名，缺省 speed；空串表示不发该参数。 */
+  speedParam?: string;
+  /** 音色参数名，缺省 tone；空串表示不发该参数。 */
+  toneParam?: string;
 }
