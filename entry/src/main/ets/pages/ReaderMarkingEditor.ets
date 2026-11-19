@@ -217,6 +217,10 @@ export struct ReaderMarkingEditor {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  // 批3：C 类字面量改走主题色位，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#111217';
+  @StorageProp('themeColorSurfaceHighest') themeColorSurfaceHighest: string = '#1D1E24';
+  @StorageProp('themeColorSurfaceBright') themeColorSurfaceBright: string = '#383A32';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop marking: ReaderMarking = {
@@ -380,7 +384,7 @@ export struct ReaderMarkingEditor {
           .margin({ right: 8 })
         TextInput({ text: this.colorInput, placeholder: '#RRGGBB' })
           .fontSize(13).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
-          .backgroundColor('#15161B').layoutWeight(1)
+          .backgroundColor(this.themeColorSurfacePrimary).layoutWeight(1)
           .onChange((value: string) => {
             // 手输框实时同步到选中色：合法立即生效，非法保留文本待用户改完
             this.colorInput = normalizeHexInput(value);
@@ -393,7 +397,7 @@ export struct ReaderMarkingEditor {
       Text('支持 #RRGGBB 与 #AARRGGBB；背景高亮会自动叠加约 20% 透明度。')
         .fontSize(11).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
     }
-    .width('100%').padding(10).backgroundColor('#1D1E24').borderRadius(12)
+    .width('100%').padding(10).backgroundColor(this.themeColorSurfaceHighest).borderRadius(12)
     .margin({ top: 8 })
   }
 
@@ -436,7 +440,7 @@ export struct ReaderMarkingEditor {
             Scroll() {
               Text(this.marking.selectedText).fontSize(13).fontColor(this.themeColorTextSecondary).lineHeight(20)
                 .width('100%')
-            }.edgeEffect(EdgeEffect.None).height(76).width('100%').padding(9).backgroundColor('#15161B').borderRadius(10)
+            }.edgeEffect(EdgeEffect.None).height(76).width('100%').padding(9).backgroundColor(this.themeColorSurfacePrimary).borderRadius(10)
             // 样式来源：对齐上游 MarkingSheet.kt:175 的 TinyDropdownSettingItem。
             Row() {
               Text('样式来源').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
@@ -528,7 +532,7 @@ export struct ReaderMarkingEditor {
             Text('笔记').fontSize(13).fontColor(this.themeColorTextSecondary).margin({ top: 8, bottom: 5 }).alignSelf(ItemAlign.Start)
             TextArea({ text: this.note, placeholder: '添加笔记（可选）' })
               .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor('#15161B').height(82).width('100%')
+              .backgroundColor(this.themeColorSurfacePrimary).height(82).width('100%')
               .onChange((value: string) => this.note = value)
           }.width('100%').alignItems(HorizontalAlign.Start)
         }.edgeEffect(EdgeEffect.None).width('100%').layoutWeight(1).scrollBar(BarState.Off).align(Alignment.Top)
@@ -546,7 +550,7 @@ export struct ReaderMarkingEditor {
             .backgroundColor('#454B62').borderRadius(18)
             .onClick(() => this.onSave(this.effect, this.color, this.note))
         }.width('100%').margin({ top: 10 })
-      }.width('calc(100% - 32vp)').padding(16).backgroundColor('#242127').borderRadius(20)
+      }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeColorSurfaceBright).borderRadius(20)
         .margin({ bottom: 12 })
         // 面板高度最多占满屏幕，超过时由中间的 Scroll 消化，避免内容溢出到屏幕外。
         .constraintSize({ maxHeight: '100%' })
