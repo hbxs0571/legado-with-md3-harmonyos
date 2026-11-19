@@ -139,14 +139,18 @@ const READER_PAGE_ANIM_DEFAULT: number = -1;
 const READER_CHARSETS: string[] = ['UTF-8', 'GB2312', 'GB18030', 'GBK', 'Unicode', 'UTF-16', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
 
 /**
- * Slider 拇指行程两端的内缩（vp）。2026-11-18 在 1280x2832、密度 3.5 的模拟器上实测：
- * Slider bounds X1=295px/X2=985px（组件宽 W=197.03vp），max=100；注入 x/v 点
- * (364,3)(468,21)(502,27)(640,50)(709,62)(812,79)(916,97)，
- * 最小二乘 slope=0.169676 v/px -> travel=589.4px=168.39vp，X0=344.7px；
- * A1=(X0-X1)/3.5=14.21vp，A2=(W-travelVp)/2=14.38vp，三组成对标定极差<=0.5vp，取均值 14.3。
- * InSet 的 6vp + 自定义 padding 5vp 并未直接等于该值，故用实测值而非推算值。
+ * Slider 拇指行程两端的内缩（vp）。2026-11-20 在 1280x2832、密度 3.5 的模拟器上实测：
+ * 把系统圆点拇指临时涂成 `#FF00FF` 后按像素量它的真实边界中点（涂透明时量不到，
+ * 早先只能靠「选中色段端点」间接推，端点被刻度点覆盖，误差大）。
+ * Slider bounds X0=341px/X1=939px（W=598px=170.86vp），max=14；
+ * 注入点击后读回的 v 与拇指中点：v=0 -> 389.50px，v=14 -> 889.00px。
+ * A1=(389.50-341)/3.5=13.857vp，A2=(939-889.00)/3.5=14.286vp，均值 14.071 -> 取 14.07。
+ * 复核：travel=170.86-2*14.07=142.72vp=499.5px，与实测 889.00-389.50=499.5px 吻合。
+ * 对照实验：把本组件外层 padding 从 5vp 改成 18vp 各构建一次，两端内缩逐像素相同
+ * （48.5px / 50.0px），说明该内缩是 Slider 相对自身 bounds 的固定量，与 padding 无关；
+ * 早先注释把 6vp + 5vp 当成它的来源是错的，此处按实测取值。
  */
-const SLIDER_THUMB_TRAVEL_INSET: number = 14.3;
+const SLIDER_THUMB_TRAVEL_INSET: number = 14.07;
 
 interface ReaderContentSegment {
   kind: 'text' | 'image';
@@ -8289,7 +8293,13 @@ export struct ReaderPage {
                     .offset({ x: this.sliderThumbOffset() })
                     .hitTestBehavior(HitTestMode.None)
                 }.layoutWeight(1).height(52)
-                  .padding({ left: 5, right: 5 })
+                  // 内缩 18vp/侧，上游是三层叠加：`ReadBookMenuBarBottom.kt:165` 的 16dp
+                  // 行内边距已由外层 Row 承担，这里只补
+                  // `ReadBookMenuBarBottom.kt:194-196` 的 `padding(horizontal = 8.dp)`
+                  // + `ReadBookMenuBarTool.kt:104` 的 5dp + `ReaderMenuPrimitives.kt:121` 的 5dp
+                  // = 8+5+5 = 18vp。玻璃拇指档（`ReadMenuLiquidSlider`，
+                  // `ReadBookMenuBarTool.kt:81` 起）不叠那两层 5dp，是 13vp。
+                  .padding({ left: 18, right: 18 })
               }
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
