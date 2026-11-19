@@ -221,6 +221,9 @@ export struct ReaderMarkingEditor {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#111217';
   @StorageProp('themeColorSurfaceHighest') themeColorSurfaceHighest: string = '#1D1E24';
   @StorageProp('themeColorSurfaceBright') themeColorSurfaceBright: string = '#383A32';
+  // 批4：效果/规则选中态改走 secondaryContainer，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#404A33';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#1B1C22';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop marking: ReaderMarking = {
@@ -380,7 +383,7 @@ export struct ReaderMarkingEditor {
       Row() {
         Row().width(28).height(28).borderRadius(7)
           .backgroundColor(normalizeColorText(this.colorInput).length > 0
-            ? normalizeColorText(this.colorInput) : '#292A31')
+            ? normalizeColorText(this.colorInput) : this.themeColorSurfaceTertiary)
           .margin({ right: 8 })
         TextInput({ text: this.colorInput, placeholder: '#RRGGBB' })
           .fontSize(13).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
@@ -480,7 +483,7 @@ export struct ReaderMarkingEditor {
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     }.width('100%')
                       .padding({ left: 8, right: 8, top: 9, bottom: 9 })
-                      .backgroundColor(this.selectedRuleId === rule.id ? '#2C2F3C' : '#1D1E24')
+                      .backgroundColor(this.selectedRuleId === rule.id ? this.themeColorSecondaryContainer : this.themeColorSurfaceHighest)
                       .borderRadius(10).margin({ bottom: 4 })
                       .onClick(() => this.pickRule(rule))
                   }, (rule: ReaderHighlightRule) => rule.id)
@@ -495,7 +498,7 @@ export struct ReaderMarkingEditor {
                 Text(READER_MARKING_LABELS[index] ?? '划线')
                   .fontSize(11).fontColor(this.effect === item ? '#E7E9F5' : '#B9BBC5')
                   .padding({ left: 9, right: 9, top: 7, bottom: 7 }).margin({ right: 6, bottom: 5 })
-                  .backgroundColor(this.effect === item ? '#454B62' : '#292A31').borderRadius(14)
+                  .backgroundColor(this.effect === item ? this.themeColorSecondaryContainer : this.themeColorSurfaceTertiary).borderRadius(14)
                   .onClick(() => this.effect = item)
               }, (item: ReaderMarkingEffect) => item)
             }.width('100%')
@@ -514,7 +517,7 @@ export struct ReaderMarkingEditor {
               // 尾部自定义色：对齐上游 MarkingSheet.kt:305-310，未选自定义色时显示取色图标
               Stack() {
                 Row().width(32).height(32).borderRadius(16)
-                  .backgroundColor(this.isCustomColor() ? this.color : '#292A31')
+                  .backgroundColor(this.isCustomColor() ? this.color : this.themeColorSurfaceTertiary)
                   .border({ width: this.isCustomColor() ? 2 : 1, color: this.isCustomColor() ? '#E7E9F5' : '#4A4C56' })
                 if (!this.isCustomColor()) {
                   Text('+').fontSize(15).fontColor('#B9BBC5')
@@ -547,7 +550,7 @@ export struct ReaderMarkingEditor {
             .padding({ left: 10, right: 10, top: 9, bottom: 9 }).onClick(() => this.onClose())
           Text('保存').fontSize(13).fontColor('#D7DFFB')
             .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-            .backgroundColor('#454B62').borderRadius(18)
+            .backgroundColor(this.themeColorSecondaryContainer).borderRadius(18)
             .onClick(() => this.onSave(this.effect, this.color, this.note))
         }.width('100%').margin({ top: 10 })
       }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeColorSurfaceBright).borderRadius(20)

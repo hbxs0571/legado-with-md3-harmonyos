@@ -21,6 +21,8 @@ export struct ReaderTextProcessingSheet {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  // 批4：页签选中态改走 secondaryContainer，默认值取本地默认配色「草野」夜档真值。
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#404A33';
   // 批3：内层容器字面量改走主题色位，默认值取本地默认配色「草野」夜档真值。
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#1B1C22';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
@@ -182,11 +184,11 @@ export struct ReaderTextProcessingSheet {
         Row() {
           Text('替换净化').fontSize(14).fontColor(this.activeTab === 0 ? '#ECECF2' : '#A9ABB4')
             .textAlign(TextAlign.Center).layoutWeight(1)
-            .backgroundColor(this.activeTab === 0 ? '#454B62' : '#202127').borderRadius(18)
+            .backgroundColor(this.activeTab === 0 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary).borderRadius(18)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.activeTab = 0)
           Text('正文处理').fontSize(14).fontColor(this.activeTab === 1 ? '#ECECF2' : '#A9ABB4')
             .textAlign(TextAlign.Center).layoutWeight(1)
-            .backgroundColor(this.activeTab === 1 ? '#454B62' : '#202127').borderRadius(18)
+            .backgroundColor(this.activeTab === 1 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary).borderRadius(18)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.activeTab = 1)
           if (this.activeTab === 0) {
             Stack({ alignContent: Alignment.Center }) {
