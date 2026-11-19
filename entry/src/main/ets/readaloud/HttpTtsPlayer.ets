@@ -5,6 +5,7 @@ import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { HttpTts } from '../model/HttpTts';
 import { ReadAloudVoice } from '../model/ReadAloudVoice';
+import { md5Hex32 } from '../data/BackupCrypto';
 
 /**
  * 批8：HTTP 朗读源的合成与播放（对齐上游 HttpTtsAudioSynthesizer + AVPlayer）。
@@ -37,16 +38,98 @@ export class HttpTtsPlayer {
   private player: media.AVPlayer | null = null;
   private session: rcp.Session | null = null;
   private tempFile: string = '';
+  private tempIsCache: boolean = false;
   private currentFd: number = -1;
   private generation: number = 0;
   private callbacks: HttpTtsSpeakCallbacks | null = null;
   private paused: boolean = false;
+  // 批9 9.1-2：并发限流 Map<sourceId, active> + 等待队列，上限 coerceIn(1,8)。
+  private activeBySource: Map<number, number> = new Map();
+  private waitQueue: Array<() => void> = [];
+  // 批9 9.1-3：预合成——当前段播放时预下载下一段音频到缓存，键含源/语速/正文三要素。
+  private audioCache: Map<string, string> = new Map();
+  private preloadPending: string = '';
 
   static getInstance(): HttpTtsPlayer {
     if (HttpTtsPlayer.instance === null) {
       HttpTtsPlayer.instance = new HttpTtsPlayer();
     }
     return HttpTtsPlayer.instance;
+  }
+
+  /** 批9 9.1-1：缓存 key = md5(sourceKey-|-(speed)-|-(content))，三要素缺一不可（对齐上游 HttpReadAloudService.kt:1571）。 */
+  static cacheKey(source: HttpTts, rate: number, text: string): string {
+    const sourceKey = `${source.id}-${source.url}`;
+    const speechRate = HttpTtsPlayer.speakSpeed(source) + rate;
+    return md5Hex32(`${sourceKey}-|-${speechRate}-|-${text}`);
+  }
+
+  /** 并发上限：source.synthesisThreadCount 夹到 1..8（对齐上游 coerceIn(1,8)）。 */
+  private static limitOf(source: HttpTts): number {
+    const raw = source.synthesisThreadCount === undefined ? 1 : source.synthesisThreadCount;
+    return Math.max(1, Math.min(8, raw));
+  }
+
+  /** 申请一个并发槽；满时入队等待，释放后 FIFO 放行。 */
+  private acquire(source: HttpTts): Promise<void> {
+    return new Promise<void>((resolve: () => void): void => {
+      const id = source.id;
+      const active = this.activeBySource.get(id) ?? 0;
+      if (active < HttpTtsPlayer.limitOf(source)) {
+        this.activeBySource.set(id, active + 1);
+        resolve();
+      } else {
+        this.waitQueue.push((): void => {
+          this.activeBySource.set(id, (this.activeBySource.get(id) ?? 0) + 1);
+          resolve();
+        });
+      }
+    });
+  }
+
+  /** 释放并发槽并唤醒队首（每段只调用一次，配合 generation 防重复释放）。 */
+  private release(source: HttpTts): void {
+    const id = source.id;
+    const active = this.activeBySource.get(id) ?? 0;
+    this.activeBySource.set(id, Math.max(0, active - 1));
+    const next = this.waitQueue.shift();
+    if (next !== undefined) {
+      next();
+    }
+  }
+
+  /** 批9 9.1-5：预合成下一段——后台下载并按三要素 key 缓存，念到时直接命中。 */
+  preload(context: Context, source: HttpTts, voice: ReadAloudVoice | null,
+    text: string, rate: number): void {
+    const key = HttpTtsPlayer.cacheKey(source, rate, text);
+    if (this.audioCache.has(key) || key === this.preloadPending) {
+      return;
+    }
+    this.preloadPending = key;
+    const url = HttpTtsPlayer.buildUrl(source, text, voice);
+    const session = HttpTtsPlayer.ensureSharedSession();
+    const file = `${context.cacheDir}/legado_preload_${key}.audio`;
+    session.downloadToFile(url, { kind: 'file', file: file }).then((response: rcp.Response): void => {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          if (fs.statSync(file).size > 0) {
+            this.audioCache.set(key, file);
+          } else {
+            HttpTtsPlayer.safeUnlink(file);
+          }
+        } catch (_) {
+          HttpTtsPlayer.safeUnlink(file);
+        }
+      } else {
+        HttpTtsPlayer.safeUnlink(file);
+      }
+    }).catch((): void => {
+      HttpTtsPlayer.safeUnlink(file);
+    }).finally((): void => {
+      if (this.preloadPending === key) {
+        this.preloadPending = '';
+      }
+    });
   }
 
   /** ttsSpeechRate(1..10) → AVPlayer 10 档；1 对应 0.75x，5 对应 1.00x（正常速）。 */
@@ -141,32 +224,50 @@ export class HttpTtsPlayer {
     this.paused = false;
     const url = HttpTtsPlayer.buildUrl(source, text, voice);
     const session = HttpTtsPlayer.ensureSharedSession();
-    const file = `${context.cacheDir}/legado_tts_${Date.now()}_${generation}.audio`;
+    const cacheKey = HttpTtsPlayer.cacheKey(source, rate, text);
+    let file = this.audioCache.get(cacheKey) ?? '';
+    const cached = file.length > 0;
+    if (!cached) {
+      file = `${context.cacheDir}/legado_tts_${Date.now()}_${generation}.audio`;
+    }
     this.tempFile = file;
-    console.info(`[HttpTts] speak gen=${generation} url=${url}`);
+    this.tempIsCache = cached;
+    console.info(`[HttpTts] speak gen=${generation} cache=${cached} url=${url}`);
+    // 批9 9.1-2：并发限流——拿到槽才下载，任何提前返回都 release 一次。
+    await this.acquire(source);
+    let released = false;
+    const releaseOnce = (): void => {
+      if (!released) { released = true; this.release(source); }
+    };
     try {
-      const destination: rcp.DownloadToFile = { kind: 'file', file: file };
-      const response = await session.downloadToFile(url, destination);
-      if (generation !== this.generation) { return; }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        this.failOne(generation, `合成失败（HTTP ${response.statusCode}）`);
-        return;
-      }
-      // 上游 8.3⑤：JSON / text 响应视为「TTS 服务器返回错误」，不是音频。
-      const contentType = String(response.headers['content-type'] ?? '').toLowerCase();
-      if (contentType.includes('application/json') || contentType.includes('text/')) {
-        this.failOne(generation, 'TTS 服务器返回错误（非音频响应）');
-        return;
+      if (!cached) {
+        const destination: rcp.DownloadToFile = { kind: 'file', file: file };
+        const response = await session.downloadToFile(url, destination);
+        if (generation !== this.generation) { releaseOnce(); return; }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          this.failOne(generation, `合成失败（HTTP ${response.statusCode}）`);
+          return;
+        }
+        // 上游 8.3⑤：JSON / text 响应视为「TTS 服务器返回错误」，不是音频。
+        const contentType = String(response.headers['content-type'] ?? '').toLowerCase();
+        if (contentType.includes('application/json') || contentType.includes('text/')) {
+          this.failOne(generation, 'TTS 服务器返回错误（非音频响应）');
+          return;
+        }
       }
       const stat = fs.statSync(file);
       if (stat.size <= 0) {
         this.failOne(generation, '合成失败（空音频文件）');
         return;
       }
+      // 下载完成即可释放配额，播放阶段不占合成并发。
+      releaseOnce();
       await this.playFile(generation, file, stat.size, rate);
     } catch (error) {
       console.warn(`[HttpTts] 合成异常: ${error instanceof Error ? error.message : String(error)}`);
       this.failOne(generation, '合成异常');
+    } finally {
+      releaseOnce();
     }
   }
 
@@ -260,8 +361,12 @@ export class HttpTtsPlayer {
       }
       this.currentFd = -1;
     }
-    HttpTtsPlayer.safeUnlink(this.tempFile);
+    // 缓存文件要复用，不能播一次就删；只有临时下载文件才清理。
+    if (!this.tempIsCache) {
+      HttpTtsPlayer.safeUnlink(this.tempFile);
+    }
     this.tempFile = '';
+    this.tempIsCache = false;
   }
 
   private finishOne(generation: number, ok: boolean, message: string): void {
@@ -286,9 +391,11 @@ export class HttpTtsPlayer {
     try {
       const names = fs.listFileSync(context.cacheDir);
       names.forEach((name: string): void => {
-        if (name.startsWith('legado_tts_') || name.startsWith('legado_catalog_')) {
+        if (name.startsWith('legado_tts_') || name.startsWith('legado_catalog_') ||
+          name.startsWith('legado_preload_')) {
           HttpTtsPlayer.safeUnlink(`${context.cacheDir}/${name}`);
         }
+        this.audioCache.clear();
       });
     } catch (_) {
       // 缓存目录不可读时忽略

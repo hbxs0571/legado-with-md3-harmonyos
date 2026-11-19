@@ -333,6 +333,14 @@ export class SystemTtsPlayer {
       const context = this.httpContext;
       const myGeneration = this.generation;
       console.info(`[ReadAloud] speak via HTTP idx=${this.index}`);
+      // 批9 9.1-5：念当前段时预下载下一段（并发默认 3，由 HttpTtsPlayer 内部限流）。
+      const nextUnit = this.units[this.index + 1];
+      if (nextUnit !== undefined) {
+        const nextText = nextUnit.text.trim();
+        if (nextText.length > 0) {
+          HttpTtsPlayer.getInstance().preload(context, source, voice, nextText, this.httpRate);
+        }
+      }
       HttpTtsPlayer.getInstance().speak(context, source, voice, text, this.httpRate, {
         onComplete: (): void => {
           if (myGeneration === this.generation && this.stateValue === ReadAloudState.PLAYING) {

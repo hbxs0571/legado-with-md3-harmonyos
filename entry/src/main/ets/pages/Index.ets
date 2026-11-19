@@ -7978,7 +7978,9 @@ private canWriteInto(dir: string): boolean {
       this.readAloudSettings = settings;
       this.aloudChaptersRead = 0;
       // 批8：若配置了 HTTP 朗读源，切到 AVPlayer 合成链；否则保持系统 TTS。
-      await this.configureHttpSource(context, settings.ttsSpeechRate);
+      // 批9 9.1-15：HTTP 倍速对齐上游 ttsFollowSys——true 固定 1.0x(档位5)，false 用设置值。
+      const httpRate = settings.ttsFollowSys ? 5 : settings.ttsSpeechRate;
+      await this.configureHttpSource(context, httpRate);
       // 切段坐标必须与画布同口径：用与 ReaderPage 相同的缩进与特殊样式参数，
       // 否则 SpeechUnit.start/end 与 LocalReaderLineItem.startPosition 错位，高亮会跑偏。
       const semantic = LocalTextSemantics.parse(this.readerContent, this.readerParagraphIndent, this.readerAdaptSpecialStyle);
