@@ -9874,6 +9874,7 @@ private canWriteInto(dir: string): boolean {
             records: this.readTimeRecords,
             details: this.readRecordDetails,
             summaries: this.readRecordSummaries,
+            books: this.books,
             onBack: () => this.route = this.profileDetailReturnRoute,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             onOpenOverview: () => this.openProfileDetail(ProfileRoute.READ_RECORD_OVERVIEW),

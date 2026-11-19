@@ -16,6 +16,9 @@ import {
   PROFILE_ROW_VERTICAL_PADDING
 } from '../components/ProfileUiMetrics';
 import { Book, ProfileRoute } from '../model/Book';
+import { BookGroup } from '../model/BookGroup';
+import { BookGroupRepository } from '../data/BookGroupRepository';
+import { isPrivateBook } from '../data/PrivateAccessRepository';
 import { BookCacheStat, CacheStatsRepository } from '../data/CacheStatsRepository';
 import { BookRepository } from '../data/BookRepository';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
@@ -3454,6 +3457,26 @@ export struct ReadRecordsPage {
   @Prop records: ReadTimeRecord[] = [];
   @Prop details: ReadRecordDetail[] = [];
   @Prop summaries: ReadRecordSummary[] = [];
+  /**
+   * 书架全量书籍：封面（coverUri）与私密判定（isPrivate / groupNames）都要靠它反查。
+   * 阅读记录表里只存书名+作者，没有 bookUrl 也没有封面路径。
+   */
+  @Prop books: Book[] = [];
+  /**
+   * 私密体系状态。@StorageProp 直接订阅 AppStorage：PrivateAccessRepository 每次 publish
+   * 后这些值都会重建，不需要自己传回调。
+   */
+  @StorageProp('privateEnabled') privateEnabled: boolean = false;
+  @StorageProp('privateUnlocked') privateUnlocked: boolean = false;
+  /** 关掉「打开书籍时验证」= 不按条目脱敏（上游 rememberPrivateLockedRecords 第一分支）。 */
+  @StorageProp('privateVerifyOnOpenBook') privateVerifyOnOpenBook: boolean = true;
+  /**
+   * 「每次都验证」档的分组授权集合，订阅后 grant() 才能触发重绘。
+   *
+   * 没有订阅 `privateGrantedBookKeys`：阅读记录表里没有 bookUrl，单本授权项无从匹配。
+   * 上游 `isTargetGranted(null, groupMask)` 传的也是 null，同一处限制。
+   */
+  @StorageProp('privateGrantedGroupIds') privateGrantedGroupIds: number[] = [];
   @State recordEnabled: boolean = true;
   @State displayMode: number = 0;
   @State showSearch: boolean = false;
@@ -3497,6 +3520,61 @@ export struct ReadRecordsPage {
     if (this.displayMode === 1) { return '时间线视图'; }
     if (this.displayMode === 2) { return '最后阅读视图'; }
     return '汇总视图';
+  }
+
+  /**
+   * 把书名+作者拼成一个最小 Book 供 BookCover 用。
+   *
+   * 照 ReadRecordOverviewPage.ets:189-192 的 coverUriOf 口径：反查不到时返回空壳 Book，
+   * BookCover 会画占位色块——这正是上游 CoilBookCover 在 path == null 时的行为，不额外隐藏。
+   */
+  private bookForRecord(bookName: string, bookAuthor: string): Book {
+    const hit = this.books.find((item: Book) => item.title === bookName && item.author === bookAuthor);
+    if (hit !== undefined) { return hit; }
+    return {
+      id: `${bookName}-${bookAuthor}`, title: bookName, author: bookAuthor,
+      category: '', lastChapter: '', progress: 0, isLocal: true
+    };
+  }
+
+  /**
+   * 当前所有私密分组的 id。分组上的 isPrivate 标记早就有，这里只是取出来用。
+   *
+   * 用 getAll() 而不是 getVisibleUserGroups()：后者会滤掉 show=false 的分组，
+   * 但 `maskFromNames` 与书架的 `getUserGroups()` 都不滤，混用会让隐藏的私密分组漏判。
+   */
+  private privateGroupIds(): number[] {
+    return BookGroupRepository.getAll()
+      .filter((group: BookGroup) => group.groupId > 0 && group.isPrivate === true)
+      .map((group: BookGroup) => group.groupId);
+  }
+
+  /**
+   * 这条记录现在要不要脱敏。判定照上游 `rememberPrivateLockedRecords`
+   * （ui/widget/components/privacy/PrivateListMasking.kt:74-95）。
+   *
+   * 这里必须真的读 privateEnabled / privateUnlocked / privateGrantedGroupIds：
+   * 它们只是 AppStorage 静态快照时，ArkUI 不会把它们当重绘依赖，输对密码或解锁分组后
+   * 锁定行不会变回正常行（同 BookshelfPage.ets:900 那条注释）。
+   */
+  private isRecordLocked(bookName: string, bookAuthor: string): boolean {
+    if (this.privateEnabled !== true) { return false; }
+    // 关掉「打开书籍时验证」= 不按条目脱敏（上游 rememberPrivateLockedRecords 第一分支）
+    if (!this.privateVerifyOnOpenBook) { return false; }
+    const book = this.books.find((item: Book) => item.title === bookName && item.author === bookAuthor);
+    // 反查不到按「与私密无关」处理（上游 factsOfByName 返回 null 同）
+    if (book === undefined) { return false; }
+    const groupIds = this.privateGroupIds();
+    if (!isPrivateBook(book, groupIds)) { return false; }
+    // 阅读记录表里没有 bookUrl，单本授权项无从匹配，只能按分组粒度判
+    // （上游 isTargetGranted(null, groupMask) 传的也是 null）
+    if (this.privateUnlocked === true) { return false; }
+    const mask = BookGroupRepository.maskFromNames(book.groupNames ?? []);
+    // mask 为 0 表示这本书只靠单本标记进私密（没挂私密分组）。此时没有任何分组授权能覆盖它，
+    // 上游 isTargetGranted(null, 0L) 的 `group != 0L` 分支为 false 同样放行不了，所以照旧锁定。
+    const granted = mask > 0 && this.privateGrantedGroupIds.some((groupId: number) =>
+      groupIds.includes(groupId) && groupId > 0 && Math.floor(mask / groupId) % 2 === 1);
+    return !granted;
   }
 
   private cycleDisplayMode(): void {
@@ -4064,11 +4142,23 @@ export struct ReadRecordsPage {
                   }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
                   ForEach(this.getDistinctSummaryBooksForDate(dateKey), (detail: ReadRecordDetail) => {
                     Row() {
+                      // 行首封面：上游 ReadRecordItem（ReadRecordScreen.kt:1408）是 44dp 宽、5:7 的 CoilBookCover。
+                      BookCover({
+                        book: this.bookForRecord(detail.bookName, detail.bookAuthor),
+                        displayWidth: 44,
+                        displayHeight: 62,
+                        cornerRadius: 4,
+                        locked: this.isRecordLocked(detail.bookName, detail.bookAuthor)
+                      }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
                       Column() {
-                        Text(detail.bookName).fontSize(16).fontColor(this.themeColorTextPrimary)
-                        Text(detail.bookAuthor).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                        // 锁定行书名/作者/时长一律空串（上游只留模糊封面，不留占位条与「已隐藏」字样）。
+                        Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookName)
+                          .fontSize(16).fontColor(this.themeColorTextPrimary)
+                        Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookAuthor)
+                          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                      Text(this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
+                      Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? ''
+                        : this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
                         .fontSize(13).fontColor(this.themeColorAccent)
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                       .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
@@ -4077,10 +4167,12 @@ export struct ReadRecordsPage {
                         if (this.isInSelectionMode()) { this.toggleSelectionKey(this.aggregateKey(detail, dateKey)); }
                       })
                       .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                        // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
+                        if (this.isRecordLocked(detail.bookName, detail.bookAuthor)) { return; }
                         this.enterSelectionWith(this.aggregateKey(detail, dateKey));
                       }))
                   }, (detail: ReadRecordDetail) =>
-                    `${dateKey}-${detail.bookName}-${detail.bookAuthor}-${this.selectedKeys.has(this.aggregateKey(detail, dateKey))}`)
+                    `${dateKey}-${detail.bookName}-${detail.bookAuthor}-${this.selectedKeys.has(this.aggregateKey(detail, dateKey))}-${this.isRecordLocked(detail.bookName, detail.bookAuthor)}`)
                 }.width('calc(100% - 32vp)').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(12)
                   .margin({ left: 16, right: 16, bottom: 8 })
               }, (dateKey: string) => dateKey)
@@ -4093,14 +4185,26 @@ export struct ReadRecordsPage {
                     Row() {
                       Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor(this.themeColorAccent)
                         .width(56)
+                      // 行首封面：上游 TimelineSessionItem（ReadRecordScreen.kt:1254）同为 44dp 宽 5:7。
+                      BookCover({
+                        book: this.bookForRecord(record.bookName, record.bookAuthor),
+                        displayWidth: 44,
+                        displayHeight: 62,
+                        cornerRadius: 4,
+                        locked: this.isRecordLocked(record.bookName, record.bookAuthor)
+                      }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
                       Column() {
-                        Text(record.bookName).fontSize(16).fontColor(this.themeColorTextPrimary)
-                        Text(record.bookAuthor).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-                        if (this.chapterLabelOf(record).length > 0) {
+                        // 锁定行书名/作者/章号一律空串，只留封面上的「已加密」蒙层。
+                        Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
+                          .fontSize(16).fontColor(this.themeColorTextPrimary)
+                        Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
+                          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                        if (!this.isRecordLocked(record.bookName, record.bookAuthor) && this.chapterLabelOf(record).length > 0) {
                           Text(this.chapterLabelOf(record)).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                         }
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                      Text(this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
+                      Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
+                        : this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
                     }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                       .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                       .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
@@ -4118,17 +4222,32 @@ export struct ReadRecordsPage {
               ForEach(this.getLatestRecords(), (record: ReadTimeRecord) => {
                 Column() {
                   Row() {
+                    // 行首封面：上游 LatestReadItem（ReadRecordScreen.kt:1143）同为 44dp 宽 5:7。
+                    BookCover({
+                      book: this.bookForRecord(record.bookName, record.bookAuthor),
+                      displayWidth: 44,
+                      displayHeight: 62,
+                      cornerRadius: 4,
+                      locked: this.isRecordLocked(record.bookName, record.bookAuthor)
+                    }).margin({ right: this.isInSelectionMode() ? 8 : 16 })
                     Column() {
-                      Text(record.bookName).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-                      Text(record.bookAuthor).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+                      // 锁定行只留封面上的「已加密」蒙层，行内文字区一律空白。
+                      Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
+                        .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                      Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
+                        .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                    Text(this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
+                    Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
+                      : this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
                       .fontSize(13).fontColor(this.themeColorAccent)
-                    Text('合并').fontSize(12).fontColor(this.themeColorAccent)
-                      .padding({ left: 10, right: 2 })
-                      .onClick(() => { this.openMergeSheetForRecord(record); })
+                    // 「合并」是行内文字，锁定态一并隐去。
+                    if (!this.isRecordLocked(record.bookName, record.bookAuthor)) {
+                      Text('合并').fontSize(12).fontColor(this.themeColorAccent)
+                        .padding({ left: 10, right: 2 })
+                        .onClick(() => { this.openMergeSheetForRecord(record); })
+                    }
                   }.width('100%')
-                  Text(this.latestReadLineOf(record))
+                  Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : this.latestReadLineOf(record))
                     .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
                 }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
                   .margin({ left: 16, right: 16, bottom: 8 })
@@ -4136,9 +4255,12 @@ export struct ReadRecordsPage {
                     if (this.isInSelectionMode()) { this.toggleSelectionKey(this.latestKey(record)); }
                   })
                   .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
+                    // 锁定行不进多选（上游 ReadRecordItem：锁定态 onLongClick = onClick）
+                    if (this.isRecordLocked(record.bookName, record.bookAuthor)) { return; }
                     this.enterSelectionWith(this.latestKey(record));
                   }))
-              }, (record: ReadTimeRecord) => `${record.bookId}-${this.selectedKeys.has(this.latestKey(record))}`)
+              }, (record: ReadTimeRecord) =>
+                `${record.bookId}-${this.selectedKeys.has(this.latestKey(record))}-${this.isRecordLocked(record.bookName, record.bookAuthor)}`)
             }
           }.width('100%').padding({ top: 8, bottom: 16 })
         }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
