@@ -68,6 +68,8 @@ export struct BookInfoPage {
   onOpenEditPage: () => void = () => {};
   onRead: () => void = () => {};
   onOpenCatalog: () => void = () => {};
+  /** 打开换源面板（P8）；在线书与本地书都可换源。 */
+  onOpenChangeSource: () => void = () => {};
   onOpenReadRecords: () => void = () => {};
   /** 本书阅读记录面板的数据由 Index 组装，详情页不直接 import 仓储。 */
   onLoadBookReadRecord: (book: Book) => Promise<BookReadRecordPanel> =
@@ -914,7 +916,7 @@ export struct BookInfoPage {
               onLongPress: () => this.onOpenEditPage()
             })
             BookInfoAction({ icon: 'list', label: '查看目录', onSelect: () => this.onOpenCatalog() })
-            BookInfoAction({ icon: 'swap', label: '换源', onSelect: () => this.onUnavailableAction('在线换源将在 P5 接入') })
+            BookInfoAction({ icon: 'swap', label: '换源', onSelect: () => this.onOpenChangeSource() })
             BookInfoAction({ icon: 'profileTimeline', label: '阅读记录', onSelect: () => this.openReadRecordPanel() })
           }.width('100%')
             .padding({ left: 16, right: 16, top: 8, bottom: 8 })

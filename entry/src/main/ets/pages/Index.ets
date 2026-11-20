@@ -28,6 +28,8 @@ import { ReaderAloudSettingsPage } from './ReaderAloudSettingsPage';
 import { ReadAloudConfigPanel } from './ReadAloudConfigPanel';
 import { BookInfoPage } from './BookInfoPage';
 import { BookInfoEditPage } from './BookInfoEditPage';
+import { ChangeSourceSheet } from './ChangeSourceSheet';
+import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions } from '../bookSource/ChangeSourceCoordinator';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
 import { CustomThemePage } from './CustomThemePage';
 import { ThemeManagePage } from './ThemeManagePage';
@@ -241,6 +243,8 @@ struct Index {
   @State localBookImportCandidates: ImportCandidate[] = [];
   @State selectedTab: number = 0;
   @State selectedBook: Book = EMPTY_BOOK;
+  /** 换源面板（P8）：非空表示正在为这本书换源。 */
+  @State changeSourceBook: Book | null = null;
   @State readerStartAtChapterBeginning: boolean = false;
   @State selectedChapter: string = '';
   @State books: Book[] = [];
@@ -6837,6 +6841,79 @@ private canWriteInto(dir: string): boolean {
    * 搜索结果 SearchBook → Book → 判重（同 bookUrl 或规范化 name+author）→ 落库 → 进入阅读页。
    * 上游判重用 NFKC + 空白折叠规范化，这里用等价的空白折叠 + 去首尾空格。
    */
+  /**
+   * P8 换源落库：把当前书迁到候选源。
+   * 对齐上游 ChangeBookSourceUseCase.changeTo：先在内存构造新书与进度，
+   * 全部校验通过再整批写库；任何一步失败都保留原书、旧目录与进度。
+   */
+  private async applyChangeSource(
+    candidate: ChangeSourceCandidate, options: ChangeSourceMigrationOptions
+  ): Promise<void> {
+    const oldBook = this.selectedBook;
+    if (candidate.book === null || !candidate.verified || candidate.chapters.length === 0) {
+      this.showUnavailableAction('候选源目录校验未通过，原书未改动');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，换源未执行');
+      return;
+    }
+    try {
+      // ① 迁移阅读进度（三档算法，对齐 BookHelp.getDurChapter）。
+      const oldCount = Number.parseInt(oldBook.chapterCount ?? '', 10) || candidate.chapterCount;
+      const oldIndex = options.migrateProgress ? (oldBook.chapterIndex ?? 0) : 0;
+      const oldTitle = options.migrateProgress ? oldBook.lastChapter : '';
+      const newIndex = ChangeSourceCoordinator.migrateIndex(
+        oldIndex, oldTitle, candidate.chapters, oldCount
+      );
+      const target = candidate.chapters[newIndex];
+
+      // ② 构造新书：保留书架字段（分组/顺序/私密/阅读设置），替换来源与目录。
+      const newBook: Book = BookRepository.copyBook(oldBook);
+      newBook.origin = candidate.sourceUrl;
+      newBook.originName = candidate.sourceName;
+      newBook.contentPath = candidate.book.bookUrl;   // 在线书逻辑主键 = 详情页 URL
+      newBook.tocUrl = candidate.book.tocUrl.length > 0 ? candidate.book.tocUrl : candidate.book.bookUrl;
+      newBook.tocRule = undefined;                     // 在线书不用本地目录正则
+      newBook.isLocal = false;
+      newBook.chapterCount = String(candidate.chapters.length);
+      if (options.migrateProgress) {
+        newBook.chapterIndex = newIndex;
+        newBook.chapterProgress = 0;
+        newBook.lastChapter = target !== undefined ? target.title : oldBook.lastChapter;
+        newBook.progress = candidate.chapters.length > 0
+          ? (newIndex / candidate.chapters.length) * 100 : 0;
+      } else {
+        newBook.chapterIndex = 0;
+        newBook.chapterProgress = 0;
+        newBook.lastChapter = '';
+        newBook.progress = 0;
+      }
+      if (options.migrateMetadata) {
+        newBook.coverUri = candidate.book.coverUrl.length > 0 ? candidate.book.coverUrl : newBook.coverUri;
+        newBook.description = candidate.book.intro.length > 0 ? candidate.book.intro : newBook.description;
+        newBook.category = candidate.book.kind.length > 0 ? candidate.book.kind : newBook.category;
+        newBook.latestChapterTitle = candidate.book.lastChapter.length > 0
+          ? candidate.book.lastChapter : newBook.latestChapterTitle;
+      }
+
+      // ③ 单事务落库：删旧书主键+旧章节、插新书（对齐上游 changeTo），失败整体回滚。
+      //    新目录由 provider 按新 origin/tocUrl 异步重拉，不在此写章节行。
+      const oldBookUrl = oldBook.contentPath ?? oldBook.androidOriginalPath ?? '';
+      await BookRepository.changeSourceBook(context, oldBookUrl, newBook);
+
+      // ④ 成功后才更新内存状态（换源可能改变主键，必须按旧主键替换）。
+      const nextBooks = this.books.map((b: Book) =>
+        (b.contentPath ?? b.androidOriginalPath ?? '') === oldBookUrl ? newBook : b);
+      this.books = nextBooks;
+      this.selectedBook = newBook;
+      this.showUnavailableAction(`已换源到「${candidate.sourceName}」${options.migrateProgress ? `，进度停在第 ${newIndex + 1} 章` : ''}`);
+    } catch (e) {
+      this.showUnavailableAction('换源失败，原书与进度未改动：' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
   private onAddOnlineBook(item: MergedBook): void {
     const source = item.book;
     const bookUrl = source.bookUrl;
@@ -9143,6 +9220,7 @@ private canWriteInto(dir: string): boolean {
           onBack: () => this.route = this.bookInfoReturnRoute,
           onRead: () => this.openBook(this.selectedBook),
           onOpenCatalog: () => this.openCatalogFromBookInfo(),
+          onOpenChangeSource: () => { this.changeSourceBook = this.selectedBook; },
           onOpenReadRecords: () => this.openProfileDetail(ProfileRoute.READ_RECORDS),
           onLoadBookReadRecord: (book: Book) => this.loadBookReadRecordPanel(book),
           onToggleDisableReadRecord: (book: Book, disabled: boolean) => this.toggleBookDisableReadRecord(book, disabled),
@@ -11493,6 +11571,15 @@ private canWriteInto(dir: string): boolean {
             onSettingsChange: (settings: ReadAloudSettingsSnapshot) => this.onAloudSettingsChange(settings),
             onResetCapsulePosition: () => this.onCapsuleResetPosition(),
             onOpenEngine: () => { this.showAloudConfig = false; this.showReadAloudPlayer = false; this.openAloudEnginePage(); }
+          })
+        }
+        // P8 换源面板：条件覆盖层，非空即显示；搜索/校验在面板内完成，落库由此处回调执行。
+        if (this.changeSourceBook !== null) {
+          ChangeSourceSheet({
+            book: this.changeSourceBook,
+            onClose: () => { this.changeSourceBook = null; },
+            onConfirm: (candidate: ChangeSourceCandidate, options: ChangeSourceMigrationOptions) =>
+              this.applyChangeSource(candidate, options)
           })
         }
       }.width('100%').height('100%')

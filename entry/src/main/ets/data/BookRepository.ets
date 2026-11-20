@@ -584,7 +584,12 @@ export class BookRepository {
       isLocal: book.isLocal,
       delTag: book.delTag,
       originFileName: book.originFileName,
-      sourceSize: book.sourceSize
+      sourceSize: book.sourceSize,
+      // P3-E 在线字段：换源依赖 copyBook 保住来源与目录，遗漏会让在线书复制后退化成本地书。
+      origin: book.origin,
+      originName: book.originName,
+      tocUrl: book.tocUrl,
+      kind: book.kind
     };
   }
 
@@ -1646,6 +1651,30 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     } catch (_) {
       // sidecar 不存在或删除失败都不影响删书主流程。
     }
+  }
+
+  /**
+   * 换源落库（P8）：单事务删旧书行+旧章节、插新书行，对齐上游 ChangeBookSourceUseCase.changeTo 的事务。
+   * 换源会改变 contentPath（books 主键），必须删旧主键再插新主键，否则书架残留两本。
+   * 新目录由在线 provider 按新 origin/tocUrl 异步重拉，不在此写章节行。
+   * 任一 SQL 失败整体回滚，原书与进度保持不变。
+   */
+  static async changeSourceBook(context: Context, oldBookUrl: string, newBook: Book): Promise<void> {
+    if (oldBookUrl.length === 0) { return; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    await store.beginTransaction();
+    try {
+      await store.executeSql(BookRepository.deleteChaptersByBookUrl, [oldBookUrl]);
+      await store.executeSql(BookRepository.deleteBookSql, [oldBookUrl]);
+      await store.executeSql(BookRepository.upsertBookSql, BookRepository.toBookArgs(newBook));
+      await store.commit();
+    } catch (error) {
+      await store.rollBack();
+      throw error instanceof Error ? error : new Error('换源写库失败');
+    }
+    BookRepository.chapterCache.delete(oldBookUrl);
+    BookRepository.clearChapterCache();
   }
 
   /** 启动清扫 epub-assets 与 pdf-pages 下不属于任何在架书 id 的孤儿目录（批 5 / 批 7）。异步，不阻塞启动。 */
