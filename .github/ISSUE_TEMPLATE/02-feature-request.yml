@@ -1,0 +1,46 @@
+name: 功能建议
+description: 建议补某个能力，或指出本地与上游的行为差异
+title: '[建议] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个项目是 Android 版 Legado 的 HarmonyOS 原生移植，所以**「上游怎么做」是最硬的依据**。
+        如果这条在上游也不存在，项目不一定不做，但需要说清理由。
+        已经逐条登记过的缺口在 KNOWN-ISSUES.md，按编号（KI-REL / KI-THEME / KI-ALOUD 等）查。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 想补什么
+      description: 用户视角描述——你按下什么、期待发生什么。不用写实现思路。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: upstream
+    attributes:
+      label: 上游有这个行为吗
+      options:
+        - 有，上游有，本地没有
+        - 有，但上游与本地表现不同
+        - 没有，上游也没有，这是新想法
+        - 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: upstream_ref
+    attributes:
+      label: 上游对应位置
+      description: 选上一项的前两类时填。上游仓库是 HapeLee/legado-with-MD3，写文件名或类名即可，不必精确到行。
+      placeholder: 例：ui/book/read/ReadBookMenuBarBottom.kt 里的进度条拖动
+
+  - type: textarea
+    id: why
+    attributes:
+      label: 为什么现在不够用
+      description: 说清现在的替代做法是什么、差在哪。只说「希望能有」很难排期。
+    validations:
+      required: true

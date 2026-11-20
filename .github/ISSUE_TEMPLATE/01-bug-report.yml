@@ -1,0 +1,77 @@
+name: 缺陷报告
+description: 装了包之后发现行为不对，或与上游不一致
+title: '[缺陷] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先说清一件事：这个项目**没有正式发行包**，Release 里的 HAP 是 2026-11-03 按 API 12 打的未签名包，之后 main 又走了几百个提交。
+        如果你是从 Release 下的包，请先确认问题是不是那个旧包的问题——自行从源码构建通常就没了。
+
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统
+      description: 机型或模拟器镜像，以及 HarmonyOS 版本（设置 → 关于本机）。
+      placeholder: 例：DevEco 模拟器 API 26 镜像 1280x2832 / 真机 Mate60 HarmonyOS 6.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: 装的是哪个包
+      options:
+        - 自己从源码构建（DevEco Studio）
+        - Release 里的未签名 HAP，用小白安装助手签名装的
+        - Release 里的未签名 HAP，用 DevEco Studio 自动签名装的
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: 对应的提交
+      description: 自己构建的填 commit 短哈希；用 Release 包的填 v0.1.0。
+      placeholder: 例：91dad2c
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 按顺序写，从打开应用开始。能稳定复现的比偶发的好查。
+      placeholder: |
+        1. 打开应用，进入书架
+        2. 导入一本 TXT
+        3. ……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为 / 实际行为
+      description: 两句就够。如果上游（Legado for Android）的行为不同，也请一并写，那是最有用的定位信息。
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 有就贴。抓法：设备连着电脑，跑 hdc hilog，复现一次，把相关几行贴上来。
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我在 KNOWN-ISSUES.md 里查过，这不是已登记的已知问题
+          required: true
+        - label: 这不是「未签名 HAP 装不上」这类签名问题（签名问题请直接看 README 的安装一节）
+          required: true

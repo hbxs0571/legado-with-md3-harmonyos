@@ -1,0 +1,14 @@
+# 现在是 0 issue、5 star 的阶段，不锁死入口：模板只做引导，不做门禁。
+# 上游（HapeLee/legado-with-MD3）设的是 blank_issues_enabled: false，那是有 75 个
+# open issue 之后的做法，本地照搬会把随机提问挡在门外。
+blank_issues_enabled: true
+contact_links:
+  - name: 已知问题与平台限制
+    url: https://github.com/hbxs0571/legado-with-md3-harmonyos/blob/main/docs/KNOWN-ISSUES.md
+    about: 提问题前先看这里。浅色模式配色、玻璃材质折射、云端 TTS、M3 色位缺口等都已逐条登记，附根因与证据。
+  - name: 功能清单与对照表
+    url: https://github.com/hbxs0571/legado-with-md3-harmonyos/blob/main/docs/FEATURES.md
+    about: 想知道某个功能到底做了没有，看这里比看 release 说明准确——release 说明描述的是打那个包时的状态。
+  - name: 当前构建状态
+    url: https://github.com/hbxs0571/legado-with-md3-harmonyos/blob/main/docs/VALIDATION.md
+    about: 哪些能力在模拟器验过、哪些只能真机验、哪些没验，都写在这里。

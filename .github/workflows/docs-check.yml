@@ -1,0 +1,67 @@
+# 文档体检：把仓库里三支只依赖 Python 标准库的检查搬到 CI。
+#
+# 为什么只有这三项：
+#   - doc-links.py   断链就返回 1，能当闸门。
+#   - parity-pipes.py 表格列数不符返回 1，能当闸门。
+#   - parity-rows.py  正常路径恒返回 0（只有参数错才返回 2），不能当闸门，
+#                     所以改成解析它的汇总输出、卡「待定」必须为 0。
+#
+# 为什么不挂 selfmade-scan.py：
+#   它扫的是界面层里的开发者口吻文案，命中即返回 1。当前实测有 3 行命中，
+#   全在 entry/src/main/ets/pages/ReadAloudConfigPanel.ets（:156 / :202 / :204），
+#   文案含「上游……本工程未实现」。这三处是待决的存量占位，不是本轮引入的。
+#   挂上去会永久红，红久了就没人看，所以先不挂。清掉那三行后再加回来。
+#
+# 为什么不挂构建：scripts/build-hap.sh 调的是 hvigorw.bat，路径写死
+#   /d/Program Files/Huawei/DevEco Studio，是 Windows + DevEco Studio 专用脚本；
+#   GitHub-hosted runner 上没有 HarmonyOS SDK。要做构建 CI 得先重写脚本。
+
+name: 文档体检
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/doc-links.py'
+      - 'scripts/parity-pipes.py'
+      - 'scripts/parity-rows.py'
+      - '.github/workflows/docs-check.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'scripts/doc-links.py'
+      - 'scripts/parity-pipes.py'
+      - 'scripts/parity-rows.py'
+      - '.github/workflows/docs-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 相对链接可解析
+        run: python scripts/doc-links.py docs
+
+      - name: 表格单元格数与表头一致
+        run: python scripts/parity-pipes.py
+
+      - name: 对照表没有「待定」行
+        run: |
+          python scripts/parity-rows.py > /tmp/rows.txt
+          cat /tmp/rows.txt
+          # 约定：七张对照表里不允许留「待定」，状态必须落到已接 / 未接 / 不适用。
+          if grep -qE '待定 [1-9]' /tmp/rows.txt; then
+            echo '::error::对照表里还有待定行，先把每一行的状态定下来再提交。'
+            exit 1
+          fi
+          echo 'OK 待定 0'
