@@ -2,10 +2,14 @@ import curves from '@ohos.curves';
 import { Book } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
+import { BookSourceRepository } from '../data/BookSourceRepository';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton, TopBarBackButton } from '../components/TopBar';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
+import { SearchCoordinator, SearchProgress, SearchOutcome } from '../bookSource/SearchCoordinator';
+import { MergedBook } from '../bookSource/SearchResultMerger';
+import { SearchBookItem } from '../bookSource/SourceModels';
 
 @Component
 export struct SearchPage {
@@ -21,14 +25,23 @@ export struct SearchPage {
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   @Prop books: Book[] = [];
   @Prop groups: BookGroup[] = [];
-  @Prop query: string = '';
+  @Prop @Watch('onQueryChanged') query: string = '';
   @Prop selectedGroup: string = '全部书籍';
-  @Prop sourceScope: boolean = false;
+  @Prop @Watch('onScopeChanged') sourceScope: boolean = false;
   @Prop exactMatch: boolean = false;
   /** 封面文字设置，从 Index 下发；搜索结果封面受 A8「限制封面比例」约束。 */
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   @State showScopePanel: boolean = false;
   @State collapsedHeader: boolean = false;
+  /** 在线多源搜索：结果快照、进度、四态。 */
+  @State onlineBooks: MergedBook[] = [];
+  @State onlineSearching: boolean = false;
+  @State onlineSearchDone: boolean = false;
+  @State onlineProgressText: string = '';
+  /** 在线结果视图：平铺 / 按源分组。 */
+  @State onlineViewMode: 'flat' | 'grouped' = 'flat';
+  private cancelSearchFlag: boolean = false;
+  private onlineScroller: Scroller = new Scroller();
   private suggestionScroller: Scroller = new Scroller();
   private resultsScroller: Scroller = new Scroller();
   onBack: () => void = () => {};
@@ -83,12 +96,75 @@ export struct SearchPage {
     });
   }
 
-  private searchOnline(): void {
-    if (this.query.trim().length === 0) {
+  /** 触发在线多源搜索：先确保书源缓存已载入，再并发搜索并增量刷新结果。 */
+  private async startOnlineSearch(): Promise<void> {
+    const keyword = this.query.trim();
+    if (keyword.length === 0) {
       this.onUnavailableAction('请输入书名或作者');
       return;
     }
-    this.onUnavailableAction('在线书源搜索将在 P5 接入；当前仅搜索已导入的本地书籍');
+    if (this.onlineSearching) { return; }
+    try {
+      await BookSourceRepository.load(getContext(this));
+    } catch (e) {
+      this.onUnavailableAction('书源载入失败：' + String(e));
+      return;
+    }
+    if (!SearchCoordinator.hasSearchableSource()) {
+      this.onUnavailableAction('没有可搜索的在线书源，请先到书源管理导入并启用');
+      return;
+    }
+    this.cancelSearchFlag = false;
+    this.onlineBooks = [];
+    this.onlineSearchDone = false;
+    this.onlineSearching = true;
+    this.onlineProgressText = '正在连接书源…';
+    const outcome: SearchOutcome = await SearchCoordinator.search(
+      keyword, 1, this.exactMatch,
+      (p: SearchProgress) => {
+        this.onlineBooks = p.books;
+        this.onlineProgressText = `已搜索 ${p.finished}/${p.total} 个源 · ${p.books.length} 条结果` +
+          (p.error ? ` · 最近失败：${p.sourceName}` : '');
+      },
+      () => this.cancelSearchFlag
+    );
+    this.onlineBooks = outcome.books;
+    this.onlineSearching = false;
+    this.onlineSearchDone = true;
+    this.onlineProgressText = outcome.cancelled
+      ? '搜索已取消'
+      : `完成：${outcome.sourceFinished}/${outcome.sourceTotal} 个源 · ${outcome.books.length} 条结果`;
+  }
+
+  /** 退出/返回时真取消后台请求。 */
+  private cancelOnlineSearch(): void {
+    this.cancelSearchFlag = true;
+    this.onlineSearching = false;
+  }
+
+  /** 输入变化防抖 400ms 后自动重搜；仅在线范围生效。 */
+  private queryDebounceTimer: number = 0;
+  private onQueryChanged(): void {
+    this.onlineBooks = [];
+    this.onlineSearchDone = false;
+    if (!this.sourceScope || this.query.trim().length === 0) { return; }
+    clearTimeout(this.queryDebounceTimer);
+    this.queryDebounceTimer = setTimeout(() => {
+      void this.startOnlineSearch();
+    }, 400);
+  }
+
+  /** 切到在线范围且有关键词时立即拉起搜索。 */
+  private onScopeChanged(): void {
+    if (this.sourceScope && this.query.trim().length > 0) {
+      void this.startOnlineSearch();
+    } else if (!this.sourceScope) {
+      this.cancelOnlineSearch();
+    }
+  }
+
+  private searchOnline(): void {
+    void this.startOnlineSearch();
   }
 
   private updateHeader(offset: number): void {
@@ -103,6 +179,98 @@ export struct SearchPage {
 
   @Builder searchNavSlot() {
     TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
+  /** 在线结果区：四态（搜索中转圈 / 无结果 / 结果列表尾部提示 / 结束）+ 两视图。 */
+  @Builder onlineResultsView() {
+    Column() {
+      // 结果条 + 视图切换 + 进度
+      Row() {
+        Text(`在线书源 · ${this.onlineBooks.length}`).fontSize(16).fontColor(this.themeColorAccent)
+        Blank()
+        if (this.onlineSearching) {
+          Text(this.onlineProgressText).fontSize(11).fontColor(this.themeColorTextTertiary).maxLines(1)
+            .layoutWeight(1).margin({ left: 8 })
+          Text('取消').fontSize(13).fontColor(this.themeColorAccent).margin({ left: 8 })
+            .onClick(() => this.cancelOnlineSearch())
+        } else {
+          Text(this.onlineViewMode === 'flat' ? '平铺' : '按源')
+            .fontSize(13).fontColor(this.themeColorAccent).margin({ left: 8 })
+            .onClick(() => {
+              this.onlineViewMode = this.onlineViewMode === 'flat' ? 'grouped' : 'flat';
+            })
+        }
+      }.width('100%').padding({ left: 18, right: 18, top: 7, bottom: 8 })
+
+      if (this.onlineSearching && this.onlineBooks.length === 0) {
+        Column() {
+          LoadingProgress().width(36).height(36).color(this.themeColorAccent)
+          Text('正在搜索在线书源…').fontSize(14).fontColor(this.themeColorTextTertiary).margin({ top: 12 })
+          Text(this.onlineProgressText).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 6 })
+        }.layoutWeight(1).justifyContent(FlexAlign.Center)
+      } else if (this.onlineSearchDone && this.onlineBooks.length === 0) {
+        SearchEmptyState({ title: '没有找到相关书籍', detail: '换个关键词，或到书源管理检查启用的书源。' })
+      } else {
+        Scroll(this.onlineScroller) {
+          Column() {
+            if (this.onlineViewMode === 'flat') {
+              ForEach(this.onlineBooks, (item: MergedBook, index: number) => {
+                OnlineBookRow({ item: item, coverSettings: this.coverSettings,
+                  onSelect: () => this.onOpenOnlineBook(item) })
+              }, (item: MergedBook, index: number) => item.book.bookUrl + '_' + index)
+            } else {
+              ForEach(this.groupOnlineBooks(), (group: OnlineSourceGroup) => {
+                Column() {
+                  Row() {
+                    Text(group.originName).fontSize(13).fontColor(this.themeColorAccent)
+                      .fontWeight(FontWeight.Medium)
+                    Text(` ${group.items.length}`).fontSize(12).fontColor(this.themeColorTextTertiary)
+                  }.width('100%').padding({ left: 4, top: 10, bottom: 6 })
+                  ForEach(group.items, (item: MergedBook, index: number) => {
+                    OnlineBookRow({ item: item, coverSettings: this.coverSettings,
+                      onSelect: () => this.onOpenOnlineBook(item) })
+                  }, (item: MergedBook, index: number) => item.book.bookUrl + '_' + index)
+                }.width('100%')
+              }, (group: OnlineSourceGroup, index: number) => group.origin + '_' + index)
+            }
+            // 尾部四态
+            if (this.onlineSearching) {
+              Row() {
+                LoadingProgress().width(18).height(18).color(this.themeColorAccent)
+                Text(' 加载中…').fontSize(13).fontColor(this.themeColorTextTertiary)
+              }.justifyContent(FlexAlign.Center).width('100%').padding({ top: 14, bottom: 14 })
+            } else if (this.onlineSearchDone) {
+              Text('已显示全部结果').fontSize(12).fontColor(this.themeColorTextTertiary)
+                .width('100%').textAlign(TextAlign.Center).padding({ top: 14, bottom: 14 })
+            }
+          }.padding({ bottom: 12 })
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
+          .onScroll(() => this.updateHeader(this.onlineScroller.currentOffset().yOffset))
+      }
+    }.layoutWeight(1).width('100%')
+  }
+
+  /** 按源分组：一条书若命中多源，归到它 origins[0]。 */
+  private groupOnlineBooks(): OnlineSourceGroup[] {
+    const groups: Map<string, OnlineSourceGroup> = new Map<string, OnlineSourceGroup>();
+    for (const item of this.onlineBooks) {
+      const origin = item.origins.length > 0 ? item.origins[0] : '';
+      let group = groups.get(origin);
+      if (group === undefined) {
+        const created: OnlineSourceGroup = {
+          origin: origin, originName: item.book.originName || origin, items: []
+        };
+        groups.set(origin, created);
+        group = created;
+      }
+      group.items.push(item);
+    }
+    return Array.from(groups.values());
+  }
+
+  /** 在线书点击：当前仅提示（入书架+在线阅读链的规格缺口见任务计划第六节）。 */
+  private onOpenOnlineBook(item: MergedBook): void {
+    this.onUnavailableAction(`《${item.book.name}》来自 ${item.originCount} 个书源；在线书加入书架与阅读将在后续批次接入`);
   }
 
   @Builder searchTopActions() {
@@ -166,14 +334,14 @@ export struct SearchPage {
           }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
             .onScroll(() => this.updateHeader(this.suggestionScroller.currentOffset().yOffset))
         } else if (this.sourceScope) {
+          // 进入在线范围即触发搜索；关键词变化由外部 onQueryChange 驱动，此处只在首次进入时拉起。
           Column() {
-            SearchEmptyState({ title: '在线书源搜索尚未接入', detail: '搜索范围、书源选择和在线结果将在 P5 接入。当前没有伪造搜索结果。' })
+            this.onlineResultsView()
             Row() {
-              Text('管理书源').fontSize(16).fontColor('#151720').fontWeight(FontWeight.Medium)
-            }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 13, bottom: 13 })
-              .backgroundColor('#B9C8FF').borderRadius(24).margin({ bottom: 18 })
+              Text('管理书源').fontSize(14).fontColor(this.themeColorAccent)
+            }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 10, bottom: 12 })
               .onClick(() => this.onOpenSourceManage())
-          }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+          }.layoutWeight(1).width('100%')
         } else {
           if (this.getResults().length === 0) {
             Column() {
@@ -259,6 +427,53 @@ struct SearchBookRow {
       Text(`${Math.round(this.book.progress)}%`).fontSize(13).fontColor(this.themeColorTextSecondary)
     }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       .margin({ left: 16, right: 16, bottom: 9 }).onClick(() => this.onSelect())
+  }
+}
+
+/** 按源分组的一组在线结果。 */
+interface OnlineSourceGroup {
+  origin: string;
+  originName: string;
+  items: MergedBook[];
+}
+
+/** 在线结果卡片：书名/作者/来源数/最新章节，命中多源时显示角标。 */
+@Component
+struct OnlineBookRow {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  @Prop item: MergedBook = { book: {
+    bookUrl: '', origin: '', originName: '', name: '', author: '', kind: '', coverUrl: '',
+    intro: '', lastChapter: '', wordCount: '', updateTime: '', tocUrl: ''
+  }, origins: [], originCount: 0 };
+  @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
+  onSelect: () => void = () => {};
+  build() {
+    Row() {
+      Column() {
+        Row() {
+          Text(this.item.book.name).fontSize(16).fontColor(this.themeColorTextPrimary).maxLines(1)
+            .layoutWeight(1)
+          if (this.item.originCount > 1) {
+            Text(`${this.item.originCount} 源`).fontSize(11).fontColor('#FFFFFF')
+              .backgroundColor(this.themeColorAccent).borderRadius(9).padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .margin({ left: 6 })
+          }
+        }.width('100%')
+        Text(this.item.book.author || '佚名').fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 5 }).maxLines(1)
+        Row() {
+          Text(this.item.book.lastChapter).fontSize(12).fontColor(this.themeColorTextTertiary).maxLines(1)
+            .layoutWeight(1)
+          Text(this.item.book.originName).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ left: 6 }).maxLines(1)
+        }.width('100%').margin({ top: 6 })
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+    }.width('100%').padding(12)
+      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
+      .borderRadius(14).margin({ left: 16, right: 16, bottom: 9 }).onClick(() => this.onSelect())
   }
 }
 

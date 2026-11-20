@@ -9,6 +9,8 @@ import { BookSource } from '@legado/sourceengine';
 
 export class SourceHttp {
   private static client: HttpClient | null = null;
+  /** 全局取消标记：一次搜索的取消对它在途的所有源请求生效。 */
+  private static cancelCheck: () => boolean = () => false;
 
   /** 全局单例客户端：复用连接池与 cookie 会话，避免每条源 new 一个。 */
   static getClient(): HttpClient {
@@ -18,10 +20,21 @@ export class SourceHttp {
     return SourceHttp.client;
   }
 
+  /** 搜索开始时挂取消钩子（对齐任务书 7.2 的 AnalyzeUrl.setCancelCheck）。 */
+  static setCancelCheck(check: () => boolean): void {
+    SourceHttp.cancelCheck = check;
+  }
+
+  /** 搜索结束时清掉钩子，避免影响后续单源请求。 */
+  static clearCancelCheck(): void {
+    SourceHttp.cancelCheck = () => false;
+  }
+
   /** 建一个绑定书源的 AnalyzeUrl，带限流与取消钩子。 */
   static newAnalyzer(source: BookSource, timeoutMs: number = 15000): AnalyzeUrl {
     const au = new AnalyzeUrl(source, SourceHttp.getClient());
     au.setRequestTimeout(timeoutMs);
+    au.setCancelCheck(SourceHttp.cancelCheck);
     return au;
   }
 
