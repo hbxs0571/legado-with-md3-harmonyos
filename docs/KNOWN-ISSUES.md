@@ -2198,6 +2198,114 @@ SQL 复杂度极低——零 `JOIN`、只有一条 `COUNT(*)`，全是单表 CRU
 
 ---
 
+## 缺失的层：真缺什么、平台不给什么、别处有等价物（r364 盘点）
+
+这一节回答「本地还缺哪些层」。方法是把上游 17 个顶层包逐个量过（`find <pkg> -name '*.kt'` 计文件、`cat` 计行），再对照本地 9 个顶层目录，把结论分成三类：**真缺且该补**、**平台不给（含社区替代方案查证）**、**本地用了别的形态（含更等价方案查证）**。所有社区库数据取自 ohpm 页面与官方文档，查证日期 2026-11-20。
+
+上游顶层包实测：`ui` 778 文件 / 204,312 行、`help` 174 / 33,107、`data` 227 / 27,204、`model` 58 / 15,807、`feature` 78 / 14,595、`domain` 186 / 13,524、`utils` 93 / 11,504、`service` 13 / 9,078、`lib` 97 / 8,086、`base` 21 / 2,357、`core` 5 / 1,207、`constant` 14 / 1,068、`di` 2 / 955、`api` 7 / 858、`web` 5 / 514、`receiver` 4 / 290、`exception` 8 / 48。
+
+本地顶层实测：`pages` 44 / 49,930、`data` 114 / 35,589、`reader` 10 / 5,776、`components` 25 / 3,506、`readaloud` 4 / 1,407、`model` 25 / 1,326、`lib` 6 / 1,023、`bookSource` 8 / 554、`entryability` 1 / 188。
+
+### 一、真缺且该补的三层
+
+#### 1. 网络请求层（最紧迫）
+
+上游 `help/http/` **15 文件 / 2,789 行**：`OkHttpUtils.kt` 201、`CookieManager.kt` 170、`CookieStore.kt` 122、`StrResponse.kt` 88、`SSLHelper.kt` 194、`ObsoleteUrlFactory.kt` 1,200（WebView 拦截请求）、`BackstageWebView.kt` 377、`DecompressInterceptor.kt` 45、`Cronet.kt` 28、`LocalNetworkBlockedNotifier.kt` 59、`OkHttpExceptionInterceptor.kt` 24、`RequestMethod.kt` 5、`api/CookieManagerInterface.kt` 27、`OkhttpUncaughtExceptionHandler.kt` 11。
+
+本地实测：全仓 `rcp.` 调用 **20 处**，`rcp.createSession` 只有 **2 处**（`lib/WebDav.ets:115`、`readaloud/HttpTtsPlayer.ets:462`），`AbortSignal` **零命中**。
+
+后果：超时、重试、cookie、并发限流、取消全部散落在各调用点，没有统一入口。正在做的 `bookSource/SourceHttp.ets`（55 行）是一个 `HttpClient` 单例 + 模板替换，没有 cookie 与取消。
+
+**社区替代：`@ohos/axios` 可用且成熟。** ohpm 实测：V2.2.15、下载量 **226,521**、被依赖 **59**、MIT、43 个版本、基于 npm axios v1.3.4 适配。提供请求/响应拦截器、取消请求、自动 JSON 转换——这三样正好覆盖上游 `OkHttpUtils` + `Interceptor` 的职责。**但要注意它解决不了 `ObsoleteUrlFactory` 那 1,200 行的活**（拦截 WebView 请求转给 OkHttp），那是平台机制差异，不是库能补的。
+
+#### 2. 封面下载与缓存层
+
+上游 `help/coil/` 12 文件 + `help/glide/` 14 文件，核心是 `help/coil/CoverFileCache.kt`。它的注释写明存在理由：书源封面最终 URL 常带时效 token，每次解析都不同 → 常规缓存全 miss，重启后书架要重新走网络，而且解析过程会执行书源里的 JS/Java 检查脚本，触发「未登录」「非官方版本」等自定义弹窗。所以它用**书架存下的原始封面地址**的 MD5 做键，把解密后的字节落 `filesDir`。
+
+本地实测：`data/BookRepository.ets:862` 的 `resolveCoverUri` 只认两种本地路径——`customCoverPath` 与 `${context.filesDir}/covers/${bookId}.img`；全仓 `grep 'covers/'` 只有 `:866` 与 `:898` 两处**读**路径，**没有任何把 http 封面下载到 `covers/` 的写路径**。
+
+这条现在就是书源线上的实际阻塞：`bookSource/WebBookService.ets:70`/`:103` 已经把 `coverUrl` 解析出来、`:78`/`:110` 做了 URL 拼接，但这个 URL 没有落点。`components/BookCover.ets:118` 的 `effectiveCoverUri()` 直接把它当本地路径喂 `Image()`。
+
+**社区替代：两个，都不建议直接装。**
+
+| 库 | 版本 | 下载量 | 最低 API | 许可 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| `@ohos/imageknife` | V3.2.10 | 161,103 | 18 | Apache-2.0 | ohpm 页面首行自陈「**已停止演进**，推荐迁移至 imageknifepro」 |
+| `@ohos/imageknifepro` | V1.0.19 | 15,647 | 12 | Apache-2.0 | 53 天前发布，C 化实现，包体 **7.3 MB** |
+
+两者都提供内存 LRU + 磁盘二级缓存 + 自定义网络下载/解码/文件缓存 + 拦截器。**但对本项目不合适**：① 我们要的不是通用图片缓存，而是「用原始封面 URL 的 MD5 做键、跳过书源脚本执行」这一条特定语义——上游 `CoverFileCache` 的价值就在这个键的选择上，通用库给的是 URL 缓存；② imageknifepro 包体 7.3 MB，为一个封面缓存引入 C 化图库不划算；③ 本地 `ImageSeedColorExtractor`（取封面主色）已经自己用 `image.createImageSource` 实现了，两套并存会更乱。**建议自己写 `CoverCache`（约 150 行：URL → md5 → 落 filesDir → 命中直接返回 file://），而不是装库。**
+
+#### 3. 常量层
+
+上游 `constant/` **14 文件 / 1,068 行**（`AppConst`、`AppPattern`、`PreferKey`、`BookType`、`PageAnim`、`ReadTipType`、`SourceType`、`Status`、`Theme`、`EventBus`、`IntentAction`、`NotificationId`、`AppLog`、`BookSourceType`）。
+
+本地**没有 `constant/` 目录**。常量散在各文件顶部：`pages/ReaderSettingsPage.ets` 14 个、`ReaderPage.ets` 8 个、`BookInfoEditPage.ets` 8 个、`ReaderMarkingEditor.ets` 6 个、`BookshelfPage.ets` 5 个……`pages/` 下共 55 处顶层 `const`。`lib/AppLog.ets` 32 行。
+
+这一层没有「等价物」可找——它本来就是纯约定，不是库。**建议只在新增模块时抽，不回头大改**（否则 55 处 const 的搬迁会污染 diff，收益却只是整理）。
+
+### 二、平台不给：三个，且都查过社区有没有替代
+
+| 上游层 | 规模 | 本地 | 社区有没有等价物 |
+| --- | --- | --- | --- |
+| `di/` 依赖注入（Koin） | 2 文件 / 955 行 | 无 | **没有**。`docs/ARCHITECTURE.md` 7.1 已查过 GitHub 与 SDK 两处：搜到的全是示例工程（CoolMallArkTS ⭐79、HarmonyKit ⭐46、arkts-mvvm-v1-skill、HarmonyStudy ⭐8），没有可 `ohpm install` 的 DI 容器；SDK 里按 `inject|di\.|ioc|provider` 过滤只命中 `insightIntentProvider.d.ts` 这类无关声明。本轮复查 ohpm 亦无。 |
+| `domain/gateway/`（59-63 个接口） | 63 文件 / 1,349 行 | 无 | **不需要**。Gateway 的存在前提是「同一接口多实现可切换」（测试替身、远端/本地切换）。本地 `new XxxRepository(` 全仓 **0 处**，仓储是静态方法，没有可注入的东西。 |
+| `base/`（Activity / DialogFragment 基类） | 21 文件 / 2,357 行 | 无 | **平台机制不同**。ArkUI 没有 Activity 生命周期，页面是 `@Component` struct。`base/` 里真正可搬的只有 `AppContextWrapper`（字号缩放），本地已等价实现：`data/AppFontSettings.ets` + `pages/Index.ets:3839` 的 `setFontSizeScale`。 |
+
+补充一条容易误判的：`lib/prefs/`（上游 14 文件 / 1,531 行）**不是缺口**——平台 `@ohos.data.preferences` 就是等价物，本地已在用。`lib/mobi/`（34 文件 / 1,632 行）也不是——本地 `data/mobi/MobiRepository.ets` 已实现。
+
+### 三、本地用了别的形态：三条，都查了有没有更等价的方案
+
+#### 1. 事件总线：`AppStorage` 广播 vs `@ohos.events.emitter`
+
+上游 `constant/EventBus.kt` + `utils/EventBusExtensions.kt`（EventBus 库）。本地实测：`AppStorage.setOrCreate` / `AppStorage.link` **76 处**用来做跨页通知，`@ohos.events.emitter` **零命中**。
+
+**更等价的方案：SDK 自带的 `@ohos.events.emitter`，不需要装任何库。** SDK 26 实测 `@ohos.events.emitter.d.ts` 共 **684 行 / 17 个 function**，提供 `on(eventId: string, callback)` / `once` / `off` / `emit`，并有泛型版 `on<T>(eventId: string, callback: Callback<GenericEventData<T>>)`（`:100`/`:136`/`:222`），**类型安全**。
+
+为什么它比 `AppStorage` 更合适：`AppStorage` 是**状态容器**，用它做通知等于「把事件塞进全局状态再读出来」，语义错位且会留下无人清理的键；`emitter` 是**发布-订阅**，正是上游 EventBus 的语义，且 `off` 能正确解绑。`docs/ARCHITECTURE.md` 7.6 已经把「一个极简事件广播（几十行，`@ohos.events.emitter` 就够）」列为朗读的硬前置——**这条结论现在有了 SDK 行号支撑，可以直接执行**。
+
+#### 2. ViewModel 层：`@State`/`@Prop` 直传 vs `@ObservedV2` Store
+
+上游 `domain/usecase` 55 文件 + 各页 ViewModel 共 99 个。本地实测：`@State` **1,004 处**、`@Prop` **870 处**、`@StorageProp` **933 处**、`@Link` **0 处**、`@ObservedV2` **0 处**。
+
+**更等价的方案：官方 `@ObservedV2` + `@Trace` + `AppStorageV2.connect`，也不需要装库。** 这条已在 `docs/ARCHITECTURE.md` 7.2 判定为「该搬，唯一真有价值的一层」，7.3 给了混用写法的四条硬约束与最小验证步骤。本轮补充两点查证：
+
+- 官方有专门教程《MVVM 模式（状态管理 V2）》与《@ObservedV2 装饰器和 @Trace 装饰器》，说明这是官方推荐路径而非民间方案。
+- 社区**没有**可 `ohpm install` 的状态管理库——和 DI 一样，官方立场是「ArkTS 的状态管理是语言级内置的，不需要第三方库」。
+
+#### 3. 工具层：`lib/` 6 文件 vs 上游 `utils/` 86 文件
+
+上游 `utils/` **93 文件 / 11,504 行**：`EncodingDetect`、`EncoderUtils`、`MD5Utils`、`TimeUtils`、`StringUtils`、`ColorUtils`、`Throttle`、`Debounce`、`RegexDeadlineSequence`、`SvgUtils`、`QRCodeUtils`、`NetworkUtils` 等 86 个。
+
+本地 `lib/` **6 文件 / 1,023 行**（`AppLog`、`TagColorUtils`、`TimeAgo`、`WebDav`、`WebDavConfig`、`WebDavSync`）。逐项抽查：`debounce`/`throttle` 全仓仅 1 个文件命中且是业务局部变量；`UUID` 零命中；`MD5` 只在 `data/BackupCrypto.ets` 内部实现。
+
+**没有「更等价的方案」**——这些都是纯函数工具，装库不如按需写。**建议遇到再补，不预先建层**：这类文件单个都很小（上游 86 个平均 134 行），预先抽象反而增加理解成本。
+
+### 四、还有一层容易被忽略：RSS 整层
+
+本地**有数据层无功能层**：`model/RssSource.ets`、`data/RssSourceRepository.ets`（182 行）、`RssSourceImporter.ets`、`RssStarRepository.ets`（194 行）、`RssStarImporter.ets` 都在，但只做**备份导入导出**——`RssSourceRepository.ets` 里 `grep 'fetch|http|rcp|parse'` 只命中一条注释。
+
+本地**没有任何 RSS 页面**（`ls pages/ | grep -i rss` 零输出），没有 feed 抓取，没有 feed 解析。上游 RSS 是 **33 文件 / 6,996 行**。
+
+`docs/FEATURES.md:453` 写着「书源、RSS 源、RSS 收藏、规则订阅、服务器配置都已接通」——**这句话只对备份导入导出成立**，对抓取与阅读不成立。这是本轮发现的**文档失真**，已在 FEATURES 该行加了限定说明。
+
+**平台侧不缺能力**：`@ohos.xml`（`XmlPullParser`，`:611` 起，`parseXml` `:645`、SAX `:680`）与 `@ohos.convertxml`（`ConvertXML.convertToJSObject` `:255`）都能解析 feed。社区也有 `prof18/RSS-Parser`（KMP），但那是 Kotlin 的，ArkTS 用不上。**该不该做取决于范围**：这一条不在「缺一层」的范畴，是「整块功能没做」，需先确认是否在范围内。
+
+### 五、判断与顺序
+
+1. **封面下载与缓存** —— 真缺，且正在阻塞书源功能。**自己写约 150 行**（URL→md5→filesDir），不装 imageknife/imageknifepro。
+2. **网络请求层** —— 真缺。`@ohos/axios` 可用（22.6 万下载、59 个被依赖），能补拦截器/取消/JSON，但补不了 WebView 请求拦截。是否引入取决于书源这条线要不要统一请求入口。
+3. **事件总线** —— 已有等价物，**改用 `@ohos.events.emitter`**（684 行声明、17 个 function、带泛型），替掉 `AppStorage` 做通知。零依赖。
+4. **ViewModel 层** —— 已有等价物，按 ARCHITECTURE 7.2/7.3 用 `@ObservedV2`，零依赖。存量不动，新模块立规矩。
+5. **常量层** —— 真缺但收益最小，新模块顺手抽，不回头大改。
+6. **utils 工具层** —— 零碎，遇到再补，不预先建层。
+7. **RSS 整层** —— 不属于「缺一层」，是整块功能未做，先确认范围。
+
+**这一节的取证边界**：所有社区库数据来自 ohpm 页面（版本/下载量/许可/最低 API）与官方文档，**没有一个装进工程编译验证过**；上游行数为 `wc -l` 实测；本地命中数为 `grep -c` 实测。RSS 的范围问题未查 `docs/PROJECT.md` 原始表述。
+
+关联：[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) 第七章（该不该重构、7.1 DI 与状态管理库查证、7.6 事件广播与播放器持有者）、[`docs/FEATURES.md`](FEATURES.md) 第四章（RSS 能力口径）。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。

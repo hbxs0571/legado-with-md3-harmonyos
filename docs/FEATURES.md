@@ -450,7 +450,7 @@
 
 **四、备份页的兼容说明还是旧口径**
 
-`pages/AppBackupSettingsPage.ets:229` 原文写着「尚未迁移的书源、规则、RSS、历史等条目只原样保留，不能在 HarmonyOS 中使用」——书源、RSS 源、RSS 收藏、规则订阅、服务器配置都已接通，这句现在是错的，会误导用户以为导进来的书源用不了。
+`pages/AppBackupSettingsPage.ets:229` 原文写着「尚未迁移的书源、规则、RSS、历史等条目只原样保留，不能在 HarmonyOS 中使用」——书源、RSS 源、RSS 收藏、规则订阅、服务器配置都已接通，这句现在是错的，会误导用户以为导进来的书源用不了。（r364 补充限定：**RSS 只接通了备份导入导出这一半**——`model/RssSource.ets` 与 `data/RssSourceRepository.ets`/`RssStarRepository.ets` 都在，但没有 RSS 页面、没有 feed 抓取与解析，上游 RSS 是 33 文件 / 6,996 行。所以那句旧文案对 RSS 其实不算全错，只是把「不能使用」说成整体，而实际是「能导入导出、不能抓取阅读」。详见 [`docs/KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的「缺失的层」第四节。）
 
 **五、WebDAV 联网自测与设备侧真包往返都没做过**
 

@@ -120,7 +120,7 @@ onIntent = viewModel::onIntent,
 - **SDK 里也没有依赖注入。** 在 `sdk/default/openharmony/ets/api/` 下按 `inject|di\.|ioc|provider` 过滤，只命中 `insightIntentProvider.d.ts`、`formProvider.d.ts` 这类与依赖注入无关的声明。
 - **这是语言选择，不是生态缺口。** 华为云社区文章原话：「别找了。鸿蒙有自己的状态管理系统，而且不需要第三方库。ArkTS 的状态管理是语言级内置的」（`https://bbs.huaweicloud.com/blogs/480642`）。
 
-取证边界：ohpm 官方仓库未实测，本节只断言 GitHub 与本地 SDK 两处。
+取证边界：ohpm 官方仓库未实测，本节只断言 GitHub 与本地 SDK 两处。（r364 复查：ohpm 上同样没有可安装的 DI 容器或状态管理库；另确认事件总线不需要第三方库——SDK 自带 `@ohos.events.emitter`，684 行声明、17 个 function、带泛型版 `on<T>(eventId, callback: Callback<GenericEventData<T>>)`，比本地现在用 `AppStorage` 做通知更贴上游 EventBus 的语义。缺口清单与社区替代方案查证见 [`docs/KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的「缺失的层」一节。）
 
 ### 7.2 哪些差异能补，哪些不能
 
