@@ -127,6 +127,8 @@ export struct BookSourceManagePage {
   onOpenSourceSearch: (keyword: string, sourceUrl: string) => void = (_keyword: string, _sourceUrl: string) => {};
   /** 打开书源编辑页（P5）。sourceUrl 为空表示新建。 */
   onOpenSourceEdit: (sourceUrl: string) => void = (_sourceUrl: string) => {};
+  /** 打开书源登录页（P9）。 */
+  onOpenSourceLogin: (sourceUrl: string) => void = (_sourceUrl: string) => {};
   // P6 导入：导入对话框状态。importStage='options' 显示三个保留开关，'online' 收 URL。
   @State private importVisible: boolean = false;
   @State private importStage: string = 'options';
@@ -545,7 +547,7 @@ export struct BookSourceManagePage {
     if (key === 'top' || key === 'bottom') {
       this.moveToEdge([source.bookSourceUrl], key === 'top');
     } else if (key === 'login') {
-      this.onUnavailableAction('书源登录在 P9 实现');
+      this.onOpenSourceLogin(source.bookSourceUrl);
     } else if (key === 'search') {
       this.onOpenSourceSearch(source.bookSourceName, source.bookSourceUrl);
     } else if (key === 'edit') {

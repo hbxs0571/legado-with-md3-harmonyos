@@ -156,6 +156,9 @@ export struct BookSourceEditPage {
   onSaveSource: (source: BookSource) => void = (_source: BookSource) => {};
   onOpenSourceSearch: (keyword: string, sourceUrl: string) => void = (_keyword: string, _sourceUrl: string) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** P9 登录/清 Cookie/源变量回调，由 Index 接线。 */
+  onOpenSourceLogin: (sourceUrl: string) => void = (_sourceUrl: string) => {};
+  onClearSourceCookie: (sourceUrl: string) => void = (_sourceUrl: string) => {};
 
   @State private activeTab: number = 0;
   @State private rootObj: Record<string, Object> = {};
@@ -163,6 +166,8 @@ export struct BookSourceEditPage {
   @State private sourceTypeIndex: number = 0;
   @State private autoComplete: boolean = true;
   @State private moreMenuVisible: boolean = false;
+  @State private variablePanelVisible: boolean = false;
+  @State private variableDraft: string = '';
 
   aboutToAppear(): void {
     this.loadIntoRoot();
@@ -263,6 +268,11 @@ export struct BookSourceEditPage {
     this.onSaveSource(saved);
   }
 
+  /** 当前正在编辑的源 URL（未保存时用编辑页里的 bookSourceUrl 字段）。 */
+  private currentSourceUrl(): string {
+    return this.editingSource?.bookSourceUrl ?? this.readPath('bookSourceUrl').trim();
+  }
+
   /** 溢出菜单动作。 */
   private async onMoreAction(key: string): Promise<void> {
     this.moreMenuVisible = false;
@@ -301,11 +311,16 @@ export struct BookSourceEditPage {
       this.autoComplete = !this.autoComplete;
       this.onUnavailableAction(this.autoComplete ? '已开启自动补全' : '已关闭自动补全');
     } else if (key === 'login') {
-      this.onUnavailableAction('书源登录在 P9 实现');
+      const url = this.currentSourceUrl();
+      if (url.length === 0) { this.onUnavailableAction('请先保存书源再登录'); return; }
+      this.onOpenSourceLogin(url);
     } else if (key === 'clear_cookie') {
-      this.onUnavailableAction('清除 Cookie 在 P9 实现');
+      const url = this.currentSourceUrl();
+      if (url.length === 0) { this.onUnavailableAction('请先保存书源'); return; }
+      this.onClearSourceCookie(url);
     } else if (key === 'variables') {
-      this.onUnavailableAction('设置源变量在 P9 实现');
+      this.variableDraft = this.readPath('variable');
+      this.variablePanelVisible = true;
     } else if (key === 'log') {
       this.onUnavailableAction('日志在 P10 实现');
     }
@@ -380,6 +395,36 @@ export struct BookSourceEditPage {
     .width('100%').height('100%')
     .backgroundColor(this.themeAppBackground.length > 0 ? this.themeAppBackground : this.themeColorSurfacePrimary)
     .bindSheet($$this.moreMenuVisible, this.MoreMenuBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: false })
+    .overlay(this.VariablePanelBuilder(), { align: Alignment.Bottom })
+  }
+
+  /** P9 源变量编辑面板：直接改 sourceJson 的 variable 键，保存时随整条写回。 */
+  @Builder VariablePanelBuilder() {
+    if (this.variablePanelVisible) {
+      Column() {
+        Row() {
+          Text('设置源变量').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          Blank()
+          Text('关闭').fontSize(15).fontColor(this.themeColorAccent)
+            .onClick(() => { this.variablePanelVisible = false; })
+        }.width('100%').padding({ left: 20, right: 20, top: 16, bottom: 8 })
+        Text('变量名=值，每行一个。供书源 JS 通过 source.getVariable 读取。')
+          .fontSize(12).fontColor(this.themeColorTextTertiary).padding({ left: 20, right: 20, bottom: 8 })
+        TextArea({ placeholder: 'key=value', text: this.variableDraft })
+          .fontSize(14).fontColor(this.themeColorTextPrimary)
+          .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8).height(160)
+          .margin({ left: 20, right: 20 })
+          .onChange((value: string) => { this.variableDraft = value; })
+        Button('保存变量').width('calc(100% - 40vp)').margin({ left: 20, right: 20, top: 12, bottom: 20 })
+          .onClick(() => {
+            this.writePath('variable', this.variableDraft);
+            this.variablePanelVisible = false;
+            this.onUnavailableAction('源变量已写入，点「保存」生效');
+          })
+      }
+      .width('100%').backgroundColor(this.themeColorSurfacePrimary)
+      .padding({ bottom: 16 })
+    }
   }
 
   @Builder MoreMenuBuilder() {

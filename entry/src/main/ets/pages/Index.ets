@@ -30,6 +30,10 @@ import { BookInfoPage } from './BookInfoPage';
 import { BookInfoEditPage } from './BookInfoEditPage';
 import { ChangeSourceSheet } from './ChangeSourceSheet';
 import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions } from '../bookSource/ChangeSourceCoordinator';
+import { SourceLoginPage } from './SourceLoginPage';
+import { SourceWebPage } from './SourceWebPage';
+import { BookSourceLoginCoordinator } from '../bookSource/BookSourceLoginCoordinator';
+import { BookSourceStageRuntimeHost } from '../components/BookSourceStageRuntimeHost';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
 import { CustomThemePage } from './CustomThemePage';
 import { ThemeManagePage } from './ThemeManagePage';
@@ -245,6 +249,10 @@ struct Index {
   @State selectedBook: Book = EMPTY_BOOK;
   /** 换源面板（P8）：非空表示正在为这本书换源。 */
   @State changeSourceBook: Book | null = null;
+  /** P9 正在登录的书源 URL；非空即显示登录页。 */
+  @State loginSourceUrl: string = '';
+  /** P9 通用 WebView 页 URL；非空即显示。 */
+  @State sourceWebUrl: string = '';
   @State readerStartAtChapterBeginning: boolean = false;
   @State selectedChapter: string = '';
   @State books: Book[] = [];
@@ -7995,6 +8003,24 @@ private canWriteInto(dir: string): boolean {
     this.openSearch();
   }
 
+  /** P9 打开书源登录页。 */
+  private openSourceLogin(sourceUrl: string): void {
+    this.loginSourceUrl = sourceUrl;
+  }
+
+  /** P9 打开通用 WebView 页（验证码/源站浏览）。 */
+  private openSourceWeb(url: string): void {
+    this.sourceWebUrl = url;
+  }
+
+  /** P9 清除书源登录态（cookie + 三载体）。 */
+  private async clearSourceCookie(sourceUrl: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.showUnavailableAction('无法访问应用上下文'); return; }
+    const message = await BookSourceLoginCoordinator.clearLogin(context, sourceUrl);
+    this.showUnavailableAction(message);
+  }
+
   /** P5 打开书源编辑器：sourceUrl 为空表示新建，否则从仓储快照找那条编辑。 */
   private openBookSourceEdit(sourceUrl: string): void {
     this.editingBookSource = undefined;
@@ -9107,6 +9133,8 @@ private canWriteInto(dir: string): boolean {
 
   build() {
     Stack() {
+    // P9 书源脚本 ArkWeb 宿主：常驻隐藏 Web，为登录/脚本提供 StageWebRuntime 控制器。
+    BookSourceStageRuntimeHost()
     // 全 App 背景图：上游 `ui/theme/AppBackground.kt:17-48` 把背景图铺在内容层之下、按日夜选路径与虚化度。
     // 本地放在根 Stack 的首个子节点，`ImageFit.Cover` 填满；`.blur()` 接受动态半径。
     if (this.appBackgroundSource().length > 0) {
@@ -10005,7 +10033,8 @@ private canWriteInto(dir: string): boolean {
             onBack: () => this.route = this.profileDetailReturnRoute,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl),
-            onOpenSourceEdit: (sourceUrl: string) => this.openBookSourceEdit(sourceUrl)
+            onOpenSourceEdit: (sourceUrl: string) => this.openBookSourceEdit(sourceUrl),
+            onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl)
           })
         } else if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_EDIT) {
           BookSourceEditPage({
@@ -10016,6 +10045,8 @@ private canWriteInto(dir: string): boolean {
             },
             onSaveSource: (source: BookSource) => this.saveBookSource(source),
             onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl),
+            onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl),
+            onClearSourceCookie: (sourceUrl: string) => this.clearSourceCookie(sourceUrl),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULES) {
@@ -11583,6 +11614,23 @@ private canWriteInto(dir: string): boolean {
           })
         }
       }.width('100%').height('100%')
+    }
+    // P9 书源登录页：条件覆盖层，非空即显示，盖在内容之上。
+    if (this.loginSourceUrl.length > 0) {
+      SourceLoginPage({
+        sourceUrl: this.loginSourceUrl,
+        onBack: () => { this.loginSourceUrl = ''; },
+        onOpenWeb: (url: string) => this.openSourceWeb(url),
+        onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+      })
+    }
+    // P9 通用 WebView 页（验证码/源站浏览）：盖在登录页之上。
+    if (this.sourceWebUrl.length > 0) {
+      SourceWebPage({
+        url: this.sourceWebUrl,
+        onBack: () => { this.sourceWebUrl = ''; },
+        onHtmlLoaded: (_html: string) => { /* HTML 回传预留给规则/调试入口 */ }
+      })
     }
     }.width('100%').height('100%')
   }
