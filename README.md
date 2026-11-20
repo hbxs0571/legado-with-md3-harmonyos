@@ -1,60 +1,72 @@
 # Legado with MD3 for HarmonyOS
 
-Legado with MD3 for HarmonyOS 是基于 [Legado with MD3](https://github.com/HapeLee/legado-with-MD3) 与 [Legado（阅读）](https://github.com/gedoor/legado) 的 HarmonyOS 原生移植工程，使用 ArkTS、ArkUI 与 Stage 模型开发。本项目处于开发预览阶段，持续迁移本地阅读、阅读设置与书架功能；它与上游项目及华为、Google 均无隶属关系，也未获其官方认证或背书。
+基于 [Legado with MD3](https://github.com/HapeLee/legado-with-MD3) 与 [阅读 (Legado)](https://github.com/gedoor/legado) 的 HarmonyOS 原生移植，使用 ArkTS、ArkUI 与 Stage 模型开发。本项目处于开发预览阶段；与上游项目及华为、Google 均无隶属关系，也未获其官方认证或背书。
 
 ## 📦 获取与安装
 
-最新构建是 [0.1.0 开发预览](https://github.com/hbxs0571/legado-with-md3-harmonyos/releases/tag/v0.1.0)（Pre-release），附件 `legado-harmonyos-0.1.0-unsigned.hap`。本仓库发布的是**未签名 HAP**，未上架应用市场，也不提供签名后的正式发行包。
+最新构建为 [0.1.0 开发预览](https://github.com/hbxs0571/legado-with-md3-harmonyos/releases/tag/v0.1.0)（Pre-release），提供**未签名 HAP**，未上架应用市场，也不提供签名后的正式发行包。
 
-未签名 HAP **不能用文件管理器双击安装**——Windows 没有 HAP 关联程序，这不是包本身的问题。安装方式有三种：
+未签名 HAP 不能双击安装——Windows 没有 HAP 关联程序，这不是包本身的问题。三种装法：
 
-**推荐：小白安装助手**（[likuai2010/auto-installer](https://github.com/likuai2010/auto-installer)）。把 `legado-harmonyos-0.1.0-unsigned.hap` 拖进去，它读取已连接设备的 UDID 自动生成 Profile 并完成签名安装，不需要配证书、不需要 DevEco Studio。这是目前最省事的试用方式。
+1. **小白安装助手**（推荐）：把 HAP 拖进 [likuai2010/auto-installer](https://github.com/likuai2010/auto-installer)，它读取设备 UDID 自动生成 Profile 并完成签名安装，不需要证书，也不需要 DevEco Studio。该工具为第三方项目，请自行确认来源与许可。
+2. **DevEco Studio 自动签名**：打开工程，`File → Project Structure → Signing Configs` 勾选自动签名并登录华为账号，然后运行到设备。
+3. **模拟器命令行**：模拟器可覆盖安装未签名包，不需要任何签名配置。
 
-**备选：DevEco Studio 自动签名**。用 DevEco Studio 打开工程，`File → Project Structure → Signing Configs` 勾选「Automatically generate signature」并登录华为账号，然后运行到设备。
+   ```bash
+   hdc install -r legado-harmonyos-0.1.0-unsigned.hap
+   ```
 
-**备选：命令行直接装进模拟器**。模拟器可以覆盖安装未签名包，不需要任何签名配置：
+真机需按设备生成签名，且只能装进已加入 Profile 的设备。自行构建见[构建说明](docs/BUILDING.md)，发行范围见[开源与发行范围](docs/RELEASE.md)。
 
-```bash
-hdc install -r legado-harmonyos-0.1.0-unsigned.hap
-```
+## ✨ 上游 README 之外
 
-真机则需要先按设备生成签名（走上面两条路）；无论签名与否，包都只能装进已加入 Profile 的设备。自行构建的命令与产物路径见[构建说明](docs/BUILDING.md)，发行范围与签名要求见[开源与发行范围](docs/RELEASE.md)。
+上游 README 的核心功能只列了五条，下面三块它没写但本项目已落地：
 
-小白安装助手是第三方工具，本项目未参与其开发，请自行确认来源与许可后再使用。
+- **在线书源**：接入社区规则引擎（`@legado/sourceengine` + QuickJS），可导入 Legado 书源并本地执行规则；多源并发搜索、在线阅读正文、发现页、单本换源、登录与调试页均已可用。
+- **朗读**：系统语音合成与 HTTP TTS 两条链路，切段四档、语速、定时停止，含朗读胶囊、听书界面、引擎与音色管理页、后台长时任务与媒体会话。
+- **备份恢复**：按 Android ZIP 的 28 个数据类别逐类映射，含 WebDAV 上传下载。
 
-## ✨ 已实现
-
-- **本地阅读**：TXT 与 EPUB，目录、阅读进度、书签、阅读记录，正文处理与文本选择。PDF、MOBI/AZW3、UMD 与压缩包（ZIP/CBZ）也已接入。各格式的验证范围见[阅读器对照表](docs/parity/TXT-READER.md)。
-- **阅读设置**：字体（系统字体，以及本地 TTF/OTF 字体文件与整个字体文件夹的导入）、间距、对齐、文字效果，以及护眼模式（开关、强度、深色自动开启、定时与跨零点）。各项的验证范围以文档为准。
-- **书架**：分组方式三档（页签 / 隐藏页签 / 文件夹），网格与列表两套布局，**横屏与竖屏各自独立的布局模式与列数**，封面宽度、卡片底色、分组样式与排序；多选批量操作（设或取消私密、删除、导出书单）、私密分组与单本加锁、拖拽重排、未读角标与标签取色，以及独立的书架管理页与阅读记录概览页。
-- **朗读**：系统语音合成（`@kit.CoreSpeechKit`）与 HTTP TTS 音源两条链路，切段四档、语速、定时停止，朗读胶囊、听书界面、引擎与音色管理页，以及后台长时任务与媒体会话；`httpTTS.json` 与音色表随备份双向。模拟器无扬声器，验收口径只到合成链路走通，真机出声、后台续播与通知栏控制条尚未验证。
-- **外观与主题**：**14 套调色板**（日间/夜间各一套语义配色）、纯黑深色模式、全 App 背景图片与虚化度、容器圆角/边框/分隔线共 16 项、应用界面字体、自定义主题配色，以及**主题包的导入与导出**。
-- **数据兼容**：按 **28 个 Android ZIP 数据类别**逐类盘点——已接入 19 类双向映射，部分接入 5 类（只映射了其中一部分字段），未接入 2 类，不适用 2 类，无仅归档类别。它不等同于完整 Android 数据库迁移，逐类的读写状态与差异见[备份恢复说明](docs/BACKUP-RESTORE.md)。
-- **在线书源**：接入社区规则引擎（`@legado/sourceengine` + QuickJS），可导入 Legado 书源并本地执行规则。管理页支持 904 条书源的搜索、筛选、七种排序、域名分组、拖拽重排与批量操作，编辑页六 tab 68 字段可读写；多源并发搜索按书名/作者跨源合并、边搜边出、可随时取消，结果可加入书架并在线阅读正文（缓存优先、网络兜底）；发现页按源与分类翻页，单本换源可迁移阅读进度。有 `loginUrl` 的源支持表单/Web 双模式登录并保存凭据，另设书源调试页查看执行过程日志。导入导出走标准 Legado 格式。已跑通的真实源与明确缺口见[批次交付报告](docs/booksource/BATCH-REPORT.md)与[已知问题](docs/KNOWN-ISSUES.md)。
-
-RSS 拉取尚未排期，界面入口仍是未迁移占位；朗读（TTS）已接入系统语音合成与 HTTP 两类音源，属功能队列第 3 项，界面与数据层已落地；云端七家 provider、角色体系与背景音乐整层未建，变声器在 HarmonyOS 无对应音频效果 API。WebDAV 备份已接入（上传、下载、远端列表与凭据设置），但只服务备份包，不连书源、不做云同步；账号密码目前明文存 preferences，属已知限制。AI 在线服务、云同步与额外设备形态适配仍在范围之外。界面或备份中出现相关入口或数据类别，不代表对应服务可用。
+RSS 拉取尚未排期；云端 TTS 的七家 provider、角色体系与背景音乐未建（变声器在 HarmonyOS 无对应音频效果 API）；WebDAV 只服务备份包，不连书源、不做云同步，账号密码目前明文存于 preferences。AI 在线服务、云同步与额外设备形态适配在范围之外。
 
 ## 📊 完成度
 
-按上游界面逐块盘点的七张对照表合计 **1226 行**：已接 **1039**、未接 **156**、不适用 **31**。「未接」不等于都该做——其中不少经判断后登记为「不接」（上游有、本项目不做，或平台无对应能力），逐行理由写在表内备注与[已知问题](docs/KNOWN-ISSUES.md)里。
+按上游 README 列出的两组特性逐项对照。**已接**＝可用且有设备验证；**部分**＝主链可用但覆盖不全；**未接**＝上游有、本地没有；**不适用**＝平台无对应能力。
 
-| 对照表 | 行数 | 已接 | 未接 | 不适用 |
-| --- | --- | --- | --- | --- |
-| [书架](docs/parity/BOOKSHELF.md) | 345 | 276 | 64 | 5 |
-| [TXT 阅读](docs/parity/TXT-READER.md) | 296 | 253 | 31 | 12 |
-| [阅读配置](docs/parity/READER-CONFIG.md) | 189 | 176 | 11 | 2 |
-| [书架布局](docs/parity/ZIP-BOOKSHELF-LAYOUT.md) | 122 | 112 | 7 | 3 |
-| [书签](docs/parity/ZIP-BOOKMARK.md) | 117 | 83 | 30 | 4 |
-| [深色模式](docs/parity/ZIP-THEME.md) | 91 | 81 | 7 | 3 |
-| [封面设置](docs/parity/ZIP-COVER.md) | 66 | 58 | 6 | 2 |
+### 分支特性
 
-「哪一块还没盘」的总览见 [ZIP 兼容总账](docs/parity/STATUS.md)；设备验证范围与遗留问题见[当前进度](docs/PROGRESS.md)、[验证记录](docs/VALIDATION.md)和[已知问题](docs/KNOWN-ISSUES.md)。产品交付口径、架构说明、对照规则、模拟器用法等其余文档的入口见[文档索引](docs/INDEX.md)。
+| 上游条目 | 状态 | 说明 |
+| --- | --- | --- |
+| 全新 Material Design 3 界面 | 部分 | 主题体系已接，但 M3 色位只落 9 个，容器色与错误色一律降级 |
+| 预测性返回手势 | 不适用 | ArkUI 无对应系统能力，设置项只落盘不驱动渲染 |
+| 共享元素动画 | 未接 | 上游书封到播放器、封面到详情的 morph 链路本地未做 |
+| 个性化阅读界面与菜单配置 | 已接 | 菜单取色链、点击区域、翻页键、进度条行为等近百项 |
+| 阅读记录时间轴与章节维度 | 部分 | 时间轴、汇总、最后阅读三视图已接；章节维度统计未做 |
+| 漫画阅读 | 部分 | 图片书按一图一页渲染，另有图片样式档；无上游的漫画专用界面 |
+| 有声书 | 未接 | 只保留 `bookType` 标记与筛选，无音频书播放器 |
+| 发现页 | 已接 | 按书源与分类翻页，`exploreUrl` 四种写法均解析 |
+| 书架布局与平板优化 | 已接 | 三种分组样式、网格与列表两套布局、横竖屏独立配置；平板按短边 ≥ 600vp 近似判定 |
+| 书籍备注 | 已接 | 编辑页可读写 |
+| 智能伴生分组 | 未接 | 按已读/未读自动归类的伴生分组未做 |
+| 手柄翻页 | 部分 | 音量键与媒体键可翻页；手柄键位 ArkUI 无接管入口 |
+
+### 核心功能
+
+| 上游条目 | 状态 | 说明 |
+| --- | --- | --- |
+| 多格式阅读 | 已接 | TXT、EPUB、PDF、MOBI/AZW3、UMD 与压缩包（ZIP/CBZ）六类 |
+| 智能扫描本地文件 | 未接 | 导入走系统文件选择器，未做目录扫描 |
+| 高度自定义 | 已接 | 字体、背景、行距、段距、加粗、简繁转换、文字效果与护眼模式 |
+| 净化替换 | 已接 | 规则在正文进入排版前生效，正则跑在 taskpool，单条超时自动停用 |
+| 翻页模式 | 已接 | 覆盖、滑动、仿真、滚动、淡入淡出、无动画六档 |
+| 完全开源、无广告 | 已接 | GPL-3.0，无广告、分析统计与自有服务端 |
+
+逐行盘点的七张对照表（1226 条）见 [ZIP 兼容总账](docs/parity/STATUS.md)，其中不少「未接」经判断后登记为「不接」（上游有、本项目不做，或平台无对应能力），理由写在表内备注与[已知问题](docs/KNOWN-ISSUES.md)。设备验证范围见[验证记录](docs/VALIDATION.md)，其余文档入口见[文档索引](docs/INDEX.md)。
 
 ## ⚠️ 注意事项
 
-- 当前为开发预览，不是稳定发行版；仓库未配置正式签名，也没有应用市场上架版本。[0.1.0 开发预览](https://github.com/hbxs0571/legado-with-md3-harmonyos/releases/tag/v0.1.0) 登记的五条已知问题里，KI-REL1–4 已在 r325–r328 修复，KI-REL5（浅色模式配色）仍未修。
+- 当前为开发预览，不是稳定发行版；仓库未配置正式签名，也没有应用市场上架版本。[0.1.0 开发预览](https://github.com/hbxs0571/legado-with-md3-harmonyos/releases/tag/v0.1.0) 登记的五条已知问题里，KI-REL1–4 已修复，KI-REL5（浅色模式配色）仍未修。
 - 兼容/目标版本配置为 `6.0.0(20)`，尚未做过 API 20 真机验收（只有模拟器 API 26 的验收记录）。
-- 字体方面：应用界面字体（含本地字体文件导入）已在模拟器上验收；**阅读器正文的自定义字体导入虽已实现，但还没有设备验证记录**。
+- 应用界面字体（含本地字体文件导入）已在模拟器验收；**阅读器正文的自定义字体导入虽已实现，但还没有设备验证记录**。
 - 书籍正文保存在设备本地，备份 ZIP 不包含正文；请另行保管原始书籍文件。
 - 备份可能含账号、Cookie、请求头或令牌等敏感信息。公开提交前请检查并清除个人数据。
 - 用户导入或配置的内容由用户自行判断来源、许可和使用方式，并遵守适用法律与服务条款。
@@ -67,6 +79,7 @@ RSS 拉取尚未排期，界面入口仍是未迁移占位；朗读（TTS）已�
 
 - [HapeLee/legado-with-MD3](https://github.com/HapeLee/legado-with-MD3)：上游界面与功能参考。
 - [gedoor/legado](https://github.com/gedoor/legado)：原始开源项目及阅读功能基础。
+- [wip3l/harmony-book-source-engine](https://github.com/wip3l/harmony-book-source-engine)：在线书源的规则解析与脚本执行引擎（GPL-3.0）。
 - [wip3l/qingye-reader](https://github.com/wip3l/qingye-reader)：正文排版引擎的段落构建与逐行切页算法参考（GPL-3.0，按本地接口重写，未整文件复制）。
 - 第三方图标和资源来源见[资源许可清单](docs/RESOURCE-LICENSES.md)。
 
