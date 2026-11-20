@@ -12,7 +12,9 @@ import {
 export struct UiSection {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  // 设置分组卡片对应上游 SplicedColumnGroup：读单独的 themeGroupRadius，只有它响应
+  // 「关闭设置分组圆角」开关；普通卡片读 themeCardRadius，不受该开关影响。
+  @StorageProp('themeGroupRadius') themeGroupRadius: number = 16;
   @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
   @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
   @StorageProp('themeCardBackground') themeCardBackground: string = '';
@@ -42,7 +44,7 @@ export struct UiSection {
       }
       .margin({ left: 16, right: 16 })
       .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary)
-      .borderRadius(this.themeCardRadius)
+      .borderRadius(this.themeGroupRadius)
       .border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor })
       .backgroundImage(
         this.themeContainerBackground.length > 0

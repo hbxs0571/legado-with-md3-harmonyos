@@ -3,6 +3,7 @@ import { fileIo, picker } from '@kit.CoreFileKit';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
 import { ReaderHighlightRulePresets } from '../data/ReaderHighlightRulePresets';
+import { ReaderSheetShell } from '../components/ReaderSheetShell';
 
 @Component
 export struct ReaderHighlightRuleSheet {
@@ -602,9 +603,16 @@ export struct ReaderHighlightRuleSheet {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000')
-        .onClick(() => this.onDismiss())
-      Column() {
+      // 上游 AppModalBottomSheet：scrim 平台默认、圆角 28；本面板无抓手。
+      // 两个居中确认/预设弹层仍是外层 Stack 的兄弟节点（zIndex 2/3 压在面板上），保留不动。
+      ReaderSheetShell({
+        scrimColor: '#66000000',
+        panelColor: this.themeAppBackground.length > 0 ? '#00000000' : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated),
+        panelHeight: '82%',
+        showHandle: false,
+        onDismiss: () => this.onDismiss()
+      }) {
+        Column() {
         Row() {
           Text(this.editorVisible ? (this.editId.length > 0 ? '编辑高亮规则' : '新建高亮规则') : '高亮规则')
             .fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E5E6EB').layoutWeight(1)
@@ -861,9 +869,9 @@ export struct ReaderHighlightRuleSheet {
         if (this.errorMessage.length > 0) {
           Text(this.errorMessage).fontSize(12).fontColor(this.themeColorError).width('100%').margin({ top: 8 })
         }
+        }
+        .width('100%').padding(18)
       }
-      .width('100%').height('82%').padding(18).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
-      .borderRadius({ topLeft: 24, topRight: 24 }).alignItems(HorizontalAlign.Start)
       if (this.pendingDeleteId.length > 0) {
         Column() {
           Text('删除这条阅读高亮规则？').fontSize(16).fontColor('#E5E6EB')

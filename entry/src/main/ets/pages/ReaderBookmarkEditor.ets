@@ -28,7 +28,7 @@ export struct ReaderBookmarkEditor {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.onClose())
+      Column().width('100%').height('100%').backgroundColor('#66000000').onClick(() => this.onClose())
       Column() {
         Text(this.isNew ? '添加书签' : '编辑书签')
           .fontSize(19).fontColor('#E5E6EB').fontWeight(FontWeight.Medium)

@@ -131,7 +131,8 @@ import {
   resolveCardCornerRadius,
   resolveDividerColor,
   resolveDividerLength,
-  resolveDividerWidth
+  resolveDividerWidth,
+  resolveGroupCornerRadius
 } from '../data/ThemeCardStyle';
 import { ThemeModeResolver } from '../data/ThemeModeResolver';
 import { EyeProtection } from '../data/EyeProtection';
@@ -3731,11 +3732,18 @@ struct Index {
    */
   private publishThemeCardStyle(): void {
     const snapshot = this.themeCardStyleSnapshot();
+    // 完整快照供阅读域等非 Index 组件通过 @StorageProp('themeCardStyleSnapshot') 读回，
+    // 以响应「覆盖卡片圆角」开关；每次广播新对象，引用变化会触发订阅组件重渲染。
+    AppStorage.setOrCreate('themeCardStyleSnapshot', snapshot);
     const context = this.getUIContext().getHostContext();
     const isDark = context === undefined ? false
       : ThemeModeResolver.isDarkTheme(this.themeMode, ThemeModeResolver.isSystemDark(context));
-    AppStorage.setOrCreate('themeCardRadius', resolveCardCornerRadius(snapshot));
-    AppStorage.setOrCreate('themeCardBorderWidth', resolveCardBorderWidth(snapshot));
+    // 分组卡片圆角（设置页 UiSection，上游 SplicedColumnGroup）单独广播：只有它看
+    // disableSplicedColumnGroupCornerRadius；普通卡片圆角不看该开关（上游 BaseCard 语义）。
+    // 分离两键后，「关闭设置分组圆角」只压分组卡片，不再误伤全 App 普通卡片。
+    AppStorage.setOrCreate('themeGroupRadius', resolveGroupCornerRadius(snapshot));
+    AppStorage.setOrCreate('themeCardRadius', resolveCardCornerRadius(snapshot, CARD_RADIUS_DEFAULT));
+    AppStorage.setOrCreate('themeCardBorderWidth', resolveCardBorderWidth(snapshot, 0));
     AppStorage.setOrCreate('themeCardBorderColor', resolveCardBorderColor(snapshot, isDark));
     AppStorage.setOrCreate('themeCardBackground', resolveCardBackgroundColor(snapshot, isDark));
     AppStorage.setOrCreate('themeDividerWidth', resolveDividerWidth(snapshot));

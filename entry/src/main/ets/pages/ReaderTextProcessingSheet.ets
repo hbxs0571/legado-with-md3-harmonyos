@@ -5,6 +5,7 @@ import { AppGlyph } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { BookContentProcess, ContentProcessDisplayItem, toContentProcessDisplayItem } from '../model/BookContentProcess';
+import { ReaderSheetShell } from '../components/ReaderSheetShell';
 
 /** 筛选菜单宽度。 */
 const REPLACE_FILTER_MENU_WIDTH: number = 220;
@@ -164,11 +165,12 @@ export struct ReaderTextProcessingSheet {
   }
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      Column().width('100%').height('100%').backgroundColor('#88000000')
-        .onClick(() => this.onClose())
-      Column() {
-        Row().width(34).height(4).backgroundColor('#C5C6CD').borderRadius(4)
-          .alignSelf(ItemAlign.Center).margin({ top: 10, bottom: 14 })
+    ReaderSheetShell({
+      scrimColor: '#66000000',
+      panelColor: this.themeColorSurfaceSecondary,
+      panelHeight: '72%',
+      onDismiss: () => this.onClose()
+    }) {
         Row() {
           BookCover({ book: this.book, mini: true }).width(44).height(60).margin({ right: 12 })
           Column() {
@@ -360,13 +362,10 @@ export struct ReaderTextProcessingSheet {
           Text('关闭').fontSize(13).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).layoutWeight(1)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.onClose())
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-      }
-      .width('100%').height('72%').backgroundColor(this.themeColorSurfaceSecondary)
-      .borderRadius({ topLeft: 24, topRight: 24 })
-      .onClick(() => {})
+    }
       if (this.viewedProcess !== undefined) {
         Stack({ alignContent: Alignment.Center }) {
-          Column().width('100%').height('100%').backgroundColor('#99000000')
+          Column().width('100%').height('100%').backgroundColor('#66000000')
             .onClick(() => this.viewedProcess = undefined)
           Column() {
             Text(`${this.processKindTitle(this.viewedProcess.kind)} · ${this.processActionTitle(this.viewedProcess)}`)
@@ -384,7 +383,7 @@ export struct ReaderTextProcessingSheet {
       }
       if (this.deleteProcess !== undefined) {
         Stack({ alignContent: Alignment.Center }) {
-          Column().width('100%').height('100%').backgroundColor('#99000000')
+          Column().width('100%').height('100%').backgroundColor('#66000000')
             .onClick(() => this.deleteProcess = undefined)
           Column() {
             Text('删除正文处理记录？').fontSize(16).fontColor('#ECECF2')

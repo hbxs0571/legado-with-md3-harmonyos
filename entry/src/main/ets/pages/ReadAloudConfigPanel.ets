@@ -5,6 +5,7 @@ import {
 } from '../data/ReadAloudSettingsRepository';
 import { HttpTtsPlayer } from '../readaloud/HttpTtsPlayer';
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
+import { ReaderSheetShell } from '../components/ReaderSheetShell';
 
 /**
  * 朗读设置浮层。视觉对齐上游 ReadAloudConfigContent.kt：
@@ -110,20 +111,15 @@ export struct ReadAloudConfigPanel {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%').height('100%')
-        .backgroundColor('#66000000')
-        .onClick(() => this.onBack())
-
-      Column() {
-        Row()
-          .width(32).height(4)
-          .backgroundColor(this.themeColorTextTertiary)
-          .borderRadius(4)
-          .opacity(0.6)
-          .margin({ top: 10, bottom: 12 })
-
+    // 上游 AppModalBottomSheet：圆角 28、scrim 平台默认、抓手统一 rsetHandle 去 opacity。
+    // glassColor + backdropBlur 是朗读域 GlassCard 本来就有的，通过参数保留。
+    ReaderSheetShell({
+      scrimColor: '#66000000',
+      panelColor: glassColor(this.themeColorSurfacePrimary, 0.82),
+      panelHeight: '70%',
+      blurRadius: 30,
+      onDismiss: () => this.onBack()
+    }) {
         Row() {
           Image($r('app.media.reader_back')).width(22).height(22)
             .fillColor(this.themeColorTextPrimary)
@@ -215,13 +211,7 @@ export struct ReadAloudConfigPanel {
         .barWidth('100%')
         .barHeight(52)
         .layoutWeight(1)
-      }
-      .width('100%').height('70%')
-      .backgroundColor(glassColor(this.themeColorSurfacePrimary, 0.82))
-      .backdropBlur(30)
-      .borderRadius({ topLeft: 28, topRight: 28 })
     }
-    .width('100%').height('100%')
   }
 }
 

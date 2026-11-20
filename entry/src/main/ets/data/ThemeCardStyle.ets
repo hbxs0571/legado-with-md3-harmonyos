@@ -128,20 +128,34 @@ export function resolveDividerColor(snapshot: ThemeCardStyleSnapshot): string {
 }
 
 /**
- * 解析出实际生效的圆角。
+ * 分组卡片圆角（上游 SplicedColumnGroup 语义）。
  *
- * 顺序与上游 `SplicedColumnGroup.kt:49-53` 一致：先看「关闭分组圆角」，再看「覆盖卡片圆角」，
- * 都不满足才是默认 16。
+ * 「关闭分组圆角」只作用于分组卡片：开启时直接压 0；否则走普通卡片解析，
+ * 仍可被「覆盖卡片圆角」影响（对齐 resolveGroupCornerRadius 的上游行为）。
  */
-export function resolveCardCornerRadius(snapshot: ThemeCardStyleSnapshot): number {
+export function resolveGroupCornerRadius(snapshot: ThemeCardStyleSnapshot): number {
   if (snapshot.disableSplicedColumnGroupCornerRadius) { return 0; }
-  if (snapshot.overrideBaseCardCornerRadius) { return normalizeCardCornerRadius(snapshot.baseCardCornerRadius); }
-  return CARD_RADIUS_DEFAULT;
+  return resolveCardCornerRadius(snapshot, CARD_RADIUS_DEFAULT);
 }
 
-/** 解析出实际生效的边框宽度；0 表示不画边框。对齐上游 `GlassCard.kt:83-96`。 */
-export function resolveCardBorderWidth(snapshot: ThemeCardStyleSnapshot): number {
-  if (!snapshot.overrideBaseCardBorder) { return 0; }
+/**
+ * 普通卡片圆角（上游 GlassCard.kt BaseCard 语义）。
+ *
+ * BaseCard 完全不看 disableSplicedColumnGroupCornerRadius——那个开关只属于 SplicedColumnGroup。
+ * @param perCardRadius 调用点自己声明的圆角，对应上游 NormalCard(cornerRadius = N.dp) 的 N。
+ *        未打开「覆盖卡片圆角」时原样返回它，打开时被 baseCardCornerRadius 覆盖。
+ */
+export function resolveCardCornerRadius(snapshot: ThemeCardStyleSnapshot, perCardRadius: number): number {
+  if (snapshot.overrideBaseCardCornerRadius) { return normalizeCardCornerRadius(snapshot.baseCardCornerRadius); }
+  return perCardRadius;
+}
+
+/**
+ * 解析出实际生效的边框宽度。对齐上游 `GlassCard.kt:83-96` 的 BaseCard：
+ * 不覆盖时保留调用点自己的 BorderStroke，所以这里返回 perCardWidth 而非 0。
+ */
+export function resolveCardBorderWidth(snapshot: ThemeCardStyleSnapshot, perCardWidth: number): number {
+  if (!snapshot.overrideBaseCardBorder) { return perCardWidth; }
   return normalizeCardBorderWidth(snapshot.baseCardBorderWidth);
 }
 
@@ -149,12 +163,42 @@ export function resolveCardBorderWidth(snapshot: ThemeCardStyleSnapshot): number
  * 解析出实际生效的边框色。
  *
  * 上游 `GlassCard.kt:84-86` 按日夜选 `baseCardBorderColor` / `baseCardBorderColorNight`，
- * 值为 0（未设置）时回落到 `colorScheme.outlineVariant`。
+ * 值为 0（未设置）时回落到 `colorScheme.outlineVariant`。本地对应令牌是
+ * `themeColorOutlineVariant`（ThemePalette.ets:919 广播，浅 #C5C8BA / 深 #44483D）——
+ * 这与旧的硬编码近似色 #6A6D77/#92949E 对不上，故改为读同一令牌；令牌缺失时才退回硬编码兜底。
  */
 export function resolveCardBorderColor(snapshot: ThemeCardStyleSnapshot, isDark: boolean): string {
   const configured = isDark ? snapshot.baseCardBorderColorNight : snapshot.baseCardBorderColorDay;
   if (configured.length > 0) { return configured; }
+  const outlineVariant = AppStorage.get<string>('themeColorOutlineVariant');
+  if (outlineVariant !== undefined && outlineVariant.length > 0) { return outlineVariant; }
   return isDark ? BORDER_FALLBACK_DARK : BORDER_FALLBACK_LIGHT;
+}
+
+/**
+ * 从 AppStorage 读取当前卡片外观快照，给不在 Index 里、无法持有 @State 的组件用。
+ *
+ * Index.ets 的 publishThemeCardStyle() 把完整快照写到 'themeCardStyleSnapshot' 键；
+ * 这里读回并逐字段兜底，保证首帧（广播尚未发生）也能拿到合法默认值。
+ * 阅读域卡片通过它调用 resolveCardCornerRadius，从而响应「覆盖卡片圆角」开关。
+ */
+export function readCardStyleSnapshot(): ThemeCardStyleSnapshot {
+  const stored = AppStorage.get<ThemeCardStyleSnapshot>('themeCardStyleSnapshot');
+  if (stored !== undefined) { return stored; }
+  return {
+    containerOpacity: CONTAINER_OPACITY_DEFAULT,
+    disableSplicedColumnGroupCornerRadius: false,
+    overrideBaseCardCornerRadius: false,
+    baseCardCornerRadius: CARD_RADIUS_DEFAULT,
+    overrideBaseCardBorder: false,
+    baseCardBorderWidth: CARD_BORDER_WIDTH_DEFAULT,
+    baseCardBorderColorDay: '',
+    baseCardBorderColorNight: '',
+    enableItemDivider: false,
+    itemDividerWidth: DIVIDER_WIDTH_DEFAULT,
+    itemDividerLength: DIVIDER_LENGTH_DEFAULT,
+    itemDividerColor: ''
+  };
 }
 
 /**

@@ -10,6 +10,7 @@
  * 配色全取主题色槽位跟随日夜主题。面板不持播放器，所有操作回调给 Index。
  */
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
+import { ReaderSheetShell } from '../components/ReaderSheetShell';
 
 @Component
 export struct ReaderAloudSettingsPage {
@@ -65,20 +66,15 @@ export struct ReaderAloudSettingsPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%').height('100%')
-        .backgroundColor('#66000000')
-        .onClick(() => this.onBack())
-
-      Column() {
-        Row()
-          .width(32).height(4)
-          .backgroundColor(this.themeColorTextTertiary)
-          .borderRadius(4)
-          .opacity(0.6)
-          .margin({ top: 10, bottom: 12 })
-
+    // 上游 AppModalBottomSheet：圆角 28、scrim 平台默认、抓手统一 rsetHandle 去 opacity。
+    // glassColor + backdropBlur 是朗读域 GlassCard 本来就有的，通过参数保留。
+    ReaderSheetShell({
+      scrimColor: '#66000000',
+      panelColor: glassColor(this.themeColorSurfacePrimary, 0.78),
+      panelHeight: '80%',
+      blurRadius: 30,
+      onDismiss: () => this.onBack()
+    }) {
         Row() {
           Image($r('app.media.reader_back'))
             .width(22).height(22)
@@ -231,13 +227,7 @@ export struct ReaderAloudSettingsPage {
         }.edgeEffect(EdgeEffect.None)
         .layoutWeight(1)
         .scrollBar(BarState.Off)
-      }
-      .width('100%').height('80%')
-      .backgroundColor(glassColor(this.themeColorSurfacePrimary, 0.78))
-      .backdropBlur(30)
-      .borderRadius({ topLeft: 28, topRight: 28 })
     }
-    .width('100%').height('100%')
   }
 }
 

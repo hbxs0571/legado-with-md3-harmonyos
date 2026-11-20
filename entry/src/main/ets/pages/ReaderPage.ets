@@ -22,6 +22,7 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
+import { ReaderSheetShell } from '../components/ReaderSheetShell';
 import image from '@ohos.multimedia.image';
 import { fileIo } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
@@ -4735,7 +4736,7 @@ export struct ReaderPage {
   @Builder
   private moreActionUnavailableSheet() {
     Stack({ alignContent: Alignment.Center }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000')
+      Column().width('100%').height('100%').backgroundColor('#66000000')
         .onClick(() => this.moreActionShellVisible = false)
       Column() {
         Row() {
@@ -4757,11 +4758,12 @@ export struct ReaderPage {
 
   @Builder
   private moreActionConfigurationSheet() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000')
-        .onClick(() => this.moreActionConfigVisible = false)
-      Column() {
-        Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4).margin({ top: 10, bottom: 14 })
+    ReaderSheetShell({
+      scrimColor: '#66000000',
+      panelColor: '#D91A1B21',
+      panelHeight: '62%',
+      onDismiss: () => this.moreActionConfigVisible = false
+    }) {
         Row() {
           Text('更多操作配置').fontSize(17).fontColor('#E5E6EB').layoutWeight(1)
           Text('取消').fontSize(13).fontColor('#C7C9D1').margin({ right: 18 })
@@ -4789,9 +4791,7 @@ export struct ReaderPage {
             .onMove((from: number, to: number) => this.moveMoreActionTo(from, to))
         }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
         .padding({ left: 14, right: 14, bottom: 12 })
-      }.width('100%').height('62%').backgroundColor('#D91A1B21')
-        .borderRadius({ topLeft: 24, topRight: 24 })
-    }.width('100%').height('100%')
+    }
   }
 
   private getWholeBookProgress(): number {
@@ -8581,15 +8581,15 @@ export struct ReaderPage {
       }
 
       if (this.controlsVisible && this.overflowVisible) {
-        Stack({ alignContent: Alignment.Bottom }) {
-          Column().width('100%').height('100%').backgroundColor('#88000000')
-            .onClick(() => {
-              this.overflowVisible = false;
-              this.imageStyleMenuVisible = false;
-            })
-          Column() {
-            Row().width(32).height(4).backgroundColor('#C5C6CD').borderRadius(4)
-              .alignSelf(ItemAlign.Center).margin({ top: 10, bottom: 14 })
+        ReaderSheetShell({
+          scrimColor: '#66000000',
+          panelColor: this.themeColorSurfaceSecondary,
+          panelHeight: '52%',
+          onDismiss: () => {
+            this.overflowVisible = false;
+            this.imageStyleMenuVisible = false;
+          }
+        }) {
             Row() {
               BookCover({ book: this.book, mini: true }).margin({ right: 12 })
               Column() {
@@ -8655,12 +8655,7 @@ export struct ReaderPage {
                   .backgroundColor(pageIndex === this.moreActionPage ? '#E5E6EB' : '#5A5C66')
               }, (page: ReaderMoreAction[], pageIndex: number) => `dot-${pageIndex}`)
             }.width('100%').justifyContent(FlexAlign.Center).padding({ bottom: 12 })
-          }
-          .width('100%').height('52%').backgroundColor(this.themeColorSurfaceSecondary)
-          .borderRadius({ topLeft: 26, topRight: 26 })
         }
-        .width('100%')
-        .height('100%')
       }
 
       if (this.imageStyleMenuVisible) {

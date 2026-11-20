@@ -426,7 +426,7 @@ export struct ReaderMarkingEditor {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.onClose())
+      Column().width('100%').height('100%').backgroundColor('#66000000').onClick(() => this.onClose())
       Column() {
         Row() {
           Text(this.isNew ? '划线与笔记' : '编辑标记').fontSize(19).fontWeight(FontWeight.Medium)

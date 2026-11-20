@@ -24,6 +24,9 @@ import {
   copyReaderPaddingSettings, updateReaderInfoSettings,
   READER_CLICK_REGION_ACTIONS, READER_CLICK_REGION_DEFAULTS
 } from '../data/ReaderSettingsRepository';
+import { readCardStyleSnapshot, resolveCardCornerRadius } from '../data/ThemeCardStyle';
+import { ReaderSheetShell } from '../components/ReaderSheetShell';
+
 
 type ReaderInfoSlot = 'headerLeft' | 'headerMiddle' | 'headerRight' | 'footerLeft' | 'footerMiddle' | 'footerRight';
 type ReaderFontTarget = 'body' | 'title' | 'header' | 'footer';
@@ -120,6 +123,9 @@ export struct ReaderSettingsPage {
   @StorageProp('rsetSelectedText') rsetSelectedText: string = '#ECECF0';
   @StorageProp('rsetTrack') rsetTrack: string = '#454751';
   @StorageProp('rsetHandle') rsetHandle: string = '#C5C6CD';
+  // 订阅 8 形状键之一的 themeCardRadius（覆盖圆角开关/滑块变化时更新），
+  // 借它的变化触发本组件重渲染；cardRadius() 再读回完整快照做逐处解析。
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
   // 正文排版声明默认对齐上游「无数据」层 readConfig.json[0]，实例化时由 Index.ets 显式传值覆盖。
   @Prop fontSize: number = 24;
   @Prop paragraphSpacing: number = 6;
@@ -360,6 +366,10 @@ export struct ReaderSettingsPage {
   @Prop openBottomActionConfigOnAppear: boolean = false;
   @State selectedSettingsTab: number = 0;
   @State previousMainSettingsTab: number = 0;
+  // 批4：内容驱动高度。pageHeights 记 4 个页签页（0全局/1菜单/2信息/3更多）的实测内容高，
+  // animatedHeight 由切页时 animateTo 驱动；>0 时外壳用动画高度，否则用 constraintSize 内容驱动兜底。
+  @State pageHeights: number[] = [0, 0, 0, 0];
+  @State animatedHeight: number = 0;
   @State selectedMenuSettingsTab: number = 0;
   @State bottomActionConfigVisible: boolean = false;
   @State topActionConfigVisible: boolean = false;
@@ -437,6 +447,21 @@ export struct ReaderSettingsPage {
    * 选中态取 `secondaryContainer`（ReadBookMenuBarTitle.kt:1008-1014），文字与强调色全走 `colorScheme`，
    * 没有一处字面量。
    */
+  /**
+   * 按上游逐处取值解析阅读域卡片圆角。
+   *
+   * 读 this.cardStyle（@StorageProp 订阅的快照对象），开关/滑块变化时本组件随之重渲染；
+   * 未开「覆盖卡片圆角」时返回调用点的上游值（12/8），打开时由滑块值覆盖。
+   */
+  private cardRadius(perCardRadius: number): number {
+    const snapshot = readCardStyleSnapshot();
+    const resolved = resolveCardCornerRadius(snapshot, perCardRadius);
+    // 无条件读 @StorageProp 建立响应式依赖：开关/滑块变化时 themeCardRadius 更新，
+    // 本组件随之重渲染并重新读到最新快照（覆盖时用广播值，未覆盖时用上游 per-card 值）。
+    const trigger: number = this.themeCardRadius;
+    return snapshot.overrideBaseCardCornerRadius ? trigger : resolved;
+  }
+
   private publishReaderSetColors(): void {
     const cardBg = this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary;
     AppStorage.setOrCreate('rsetTextPrimary', this.themeColorTextPrimary);
@@ -825,11 +850,12 @@ export struct ReaderSettingsPage {
         .loop(false)
         .indicator(false)
         .onChange((index: number) => this.selectSettingsTab(index))
-        .layoutWeight(1)
+        // 批4：浮层形态按内容驱动（不占满剩余空间），全屏形态仍撑满。
+        .layoutWeight(this.asSheet ? 0 : 1)
+        // 批4：对齐上游 ReadStyleSheet.kt:86 的 HorizontalPager.pagerHeight(animatedHeight)——
+        // 弹簧动画高度作用在 Pager/Swiper 自身。animatedHeight=0（首帧未测到）时不设，按内容驱动兜底。
+        .height(this.asSheet && this.animatedHeight > 0 ? `${this.animatedHeight}vp` : undefined)
         .width('100%')
-        // 上游高度由内容驱动、切页时弹簧过渡；本地高度是 settingsSheetHeight() 的固定百分比，
-        // 这里只能给属性变化一个 200ms 过渡，做不出「内容多高面板就多高」。
-        .animation({ duration: 200, curve: Curve.EaseOut })
       } else if (this.selectedSettingsTab === 2) {
         this.informationSettingsContent()
       } else {
@@ -845,7 +871,9 @@ export struct ReaderSettingsPage {
           })
         }.padding({ left: 14, right: 14, top: 10, bottom: 16 })
       }
-    }.width('100%').height('100%')
+    }.width('100%')
+      // 批4：浮层形态不写死 height，让内容驱动（外壳 constraintSize 控 80% 上限）；全屏形态仍撑满。
+      .height(this.asSheet ? undefined : '100%')
       // 浮层底与全屏底都取主题：上游 AppModalBottomSheet.kt:62 的 sheetContainerColor
       // 是 `colorScheme.surfaceContainer`（本地 themeColorSurfaceTertiary），不是固定深色。
       .backgroundColor(this.asSheet ? this.themeColorSurfaceTertiary : this.themeColorSurfaceSecondary)
@@ -898,7 +926,8 @@ export struct ReaderSettingsPage {
         }
         .padding(12)
         .backgroundColor(this.rsetCardBg)
-        .borderRadius(13)
+        // 上游 sheet/GlobalThemePage.kt:148 设置组卡 cornerRadius=12dp
+        .borderRadius(this.cardRadius(12))
 
         Row() {
           Text('背景').fontSize(14).fontColor(this.rsetTextSecondary).layoutWeight(1)
@@ -951,19 +980,53 @@ export struct ReaderSettingsPage {
           .onClick(() => this.openDetailSheet('翻页动画速度', ''))
           Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 14 })
             .onClick(() => this.openDetailSheet('页边距', ''))
-        }.padding(13).backgroundColor(this.rsetCardBg).borderRadius(13).margin({ top: 13 })
+        // 上游 sheet/GlobalThemePage.kt:148 设置组卡 cornerRadius=12dp（翻页/电子翻页动画外卡）
+        }.padding(13).backgroundColor(this.rsetCardBg)
+        .borderRadius(this.cardRadius(12)).margin({ top: 13 })
         Row() {
           Text('电子书翻页动画').fontSize(12).fontColor(this.rsetTextSecondary).layoutWeight(1)
           Text(this.getPageAnimationEInkLabel()).fontSize(11).fontColor(this.rsetTextSecondary).padding(8)
             .backgroundColor(this.rsetInnerBg).borderRadius(8)
             .onClick(() => this.openDetailSheet('电子书翻页动画', '仅电子书主题生效，默认淡入淡出'))
-        }.padding(13).backgroundColor(this.rsetCardBg).borderRadius(13).margin({ top: 13 })
+        // 上游 sheet/GlobalThemePage.kt:148 设置组卡 cornerRadius=12dp（翻页/电子翻页动画外卡）
+        }.padding(13).backgroundColor(this.rsetCardBg)
+        .borderRadius(this.cardRadius(12)).margin({ top: 13 })
       }.width('100%').padding({ left: 14, right: 14, bottom: 14 })
+        // 批4：onAreaChange 挂 Scroll 内层 wrap-content Column 测真实内容高（探针2 已验，
+        // 挂外层被 Swiper 拉伸的节点只能拿到 viewport 高）。
+        .onAreaChange((_old: Area, now: Area) => this.recordPageHeight(0, now))
     }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
     .width('100%')
-    .layoutWeight(1)
     .scrollBar(BarState.Off)
     .align(Alignment.Top)
+  }
+
+  /**
+   * 批4：记录某个页签页的真实内容高（onAreaChange 挂在 Scroll 内层 wrap-content Column 上，
+   * 探针2 已证：挂外层 Swiper 子页根只能拿到 viewport 高）。对齐上游 ReadStyleSheet.kt:91-93
+   * 的 Box.onSizeChanged { pageHeights[page] = size.height }：无条件持续测量，不因动画暂停。
+   */
+  private recordPageHeight(tab: number, area: Area): void {
+    const h: number = Number(area.height);
+    if (h <= 0) { return; }
+    const measured: number = Math.round(h);
+    if (this.pageHeights[tab] === measured) { return; }
+    const next: number[] = this.pageHeights.slice();
+    next[tab] = measured;
+    this.pageHeights = next;
+    if (this.selectedSettingsTab === tab) {
+      this.animatePanelTo(measured);
+    }
+  }
+
+  /**
+   * 批4：animateTo 220ms Friction 驱动 Swiper 内容区高度，对齐上游 PagerHeight.kt:30 的弹簧过渡
+   * （ReadStyleSheet.kt:86 把该高度作用到 HorizontalPager 自身，不是整个面板外壳）。
+   */
+  private animatePanelTo(target: number): void {
+    animateTo({ duration: 220, curve: Curve.Friction }, () => {
+      this.animatedHeight = target;
+    });
   }
 
   private selectSettingsTab(index: number): void {
@@ -971,6 +1034,9 @@ export struct ReaderSettingsPage {
       this.previousMainSettingsTab = this.selectedSettingsTab;
     }
     this.selectedSettingsTab = index;
+    // 批4：切到已测过高度的页时平滑过渡；没测到（值为0）时保持 constraintSize 内容驱动兜底。
+    const target: number = this.pageHeights[index];
+    if (target > 0) { this.animatePanelTo(target); }
   }
 
   /** 步进器行：对齐上游 TinySliderSettingItem（行高 56dp、圆角 12dp、行内 − 数值 ＋）。 */
@@ -1109,9 +1175,9 @@ export struct ReaderSettingsPage {
       .loop(false)
       .indicator(false)
       .width('100%')
-      .layoutWeight(1)
+      .layoutWeight(this.asSheet ? 0 : 1)
       .onChange((index: number) => this.selectedMenuSettingsTab = index)
-    }.width('100%').layoutWeight(1)
+    }.width('100%').layoutWeight(this.asSheet ? 0 : 1)
   }
 
   /** 菜单系统页的单个页签页（上游 GlobalMenuTab / BottomBarTab / TopBarTab）。 */
@@ -1147,7 +1213,10 @@ export struct ReaderSettingsPage {
             this.menuSettingsEntry(entry)
           }, (entry: ReaderMenuSettingsEntry) => `${tab}-${entry.title}`)
         }.width('100%').padding({ top: 4, bottom: 8 })
-      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).width('100%').layoutWeight(1).scrollBar(BarState.Off)
+        // 批4：菜单页内容高记到页签 1（全局页 0、菜单页 1 共用外层 Swiper）。
+        .onAreaChange((_old: Area, now: Area) => this.recordPageHeight(1, now))
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).width('100%')
+        .layoutWeight(this.asSheet ? 0 : 1).scrollBar(BarState.Off)
   }
 
   @Builder
@@ -1768,8 +1837,11 @@ export struct ReaderSettingsPage {
             })
           }
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
-      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
-    }.width('100%').layoutWeight(1)
+        // 批4：信息页内容高记到页签 2（内容少时面板应明显矮，验证内容驱动）。
+        .onAreaChange((_old: Area, now: Area) => this.recordPageHeight(2, now))
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
+        .layoutWeight(this.asSheet ? 0 : 1).scrollBar(BarState.Off)
+    }.width('100%').layoutWeight(this.asSheet ? 0 : 1)
   }
 
   @Builder
@@ -1869,8 +1941,11 @@ export struct ReaderSettingsPage {
           Text('未迁移项目保留原版设置入口；当前仅呈现设置界面，不执行对应业务。')
             .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
-      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
-    }.width('100%').layoutWeight(1)
+        // 批4：更多页内容高记到页签 3。
+        .onAreaChange((_old: Area, now: Area) => this.recordPageHeight(3, now))
+      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
+        .layoutWeight(this.asSheet ? 0 : 1).scrollBar(BarState.Off)
+    }.width('100%').layoutWeight(this.asSheet ? 0 : 1)
   }
 
   /**
@@ -2080,7 +2155,8 @@ export struct ReaderSettingsPage {
           .backgroundColor(this.themeColorAccent)
       }
       .width('100%').aspectRatio(44 / 56).backgroundColor(this.rsetCardBg)
-      .borderRadius(10).clip(true)
+      // 上游 sheet/ThemeListContent.kt:611 主题网格卡 cornerRadius=8dp
+      .borderRadius(this.cardRadius(8)).clip(true)
       .opacity(styleIndex < READER_STYLE_PRESET_COUNT ? 1 : 1)
 
       if (styleIndex < READER_STYLE_PRESET_COUNT) {
@@ -2102,7 +2178,9 @@ export struct ReaderSettingsPage {
   @Builder
   private ThemeManageAction(label: string, action: () => void) {
     Text(label).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
-      .padding({ top: 9, bottom: 9 }).backgroundColor(this.rsetCardBg).borderRadius(10)
+      // 上游 sheet/ThemeListContent.kt:798 主题网格 NormalCard cornerRadius=8dp
+      .padding({ top: 9, bottom: 9 }).backgroundColor(this.rsetCardBg)
+      .borderRadius(this.cardRadius(8))
       .margin({ left: 3, right: 3 }).onClick(action)
   }
 
@@ -2552,15 +2630,6 @@ export struct ReaderSettingsPage {
     this.onUnavailableAction(title);
   }
 
-  private settingsSheetHeight(): string {
-    // 上游 AppModalBottomSheet.kt:134-137 的高度上限是容器高的 0.8，:165 再 heightIn(max = maxHeight)；
-    // 内容高度由 rememberPagerAnimatedHeight（PagerHeight.kt:30）按页内容实测值插值驱动。
-    // 本地做不到内容自适应（探针实证：把信息页内容换成两行文字，面板高度不变，仍是固定百分比），
-    // 所以按上游口径把三档收敛成「上限 80%」+ 全局页更矮一点，并靠 Swiper 的 200ms 过渡让切页不硬跳。
-    if (this.selectedSettingsTab >= 2) { return '80%'; }
-    return this.selectedSettingsTab === 0 ? '62%' : '68%';
-  }
-
   private settingsSheetWidth(): string {
     return this.selectedSettingsTab === 3 ? '100%' : '88%';
   }
@@ -2568,7 +2637,7 @@ export struct ReaderSettingsPage {
   @Builder
   private detailSheet() {
     Stack({ alignContent: Alignment.Center }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.detailSheetVisible = false)
+      Column().width('100%').height('100%').backgroundColor('#66000000').onClick(() => this.detailSheetVisible = false)
       Column() {
         Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
         Row() {
@@ -2827,7 +2896,9 @@ export struct ReaderSettingsPage {
               // 上游 TypographyPage.kt:182-204：页签右侧 56dp 方形「边距」卡。
               Stack({ alignContent: Alignment.Center }) {
                 Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextTertiary)
-              }.width(40).height(40).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ left: 4 })
+              // 上游 sheet/TypographyPage.kt:190 边距卡 cornerRadius=12dp
+              }.width(40).height(40).backgroundColor(this.rsetInnerBg)
+              .borderRadius(this.cardRadius(12)).margin({ left: 4 })
                 .onClick(() => this.openDetailSheet('页边距', ''))
             }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
             // 上游是 CardTabRow + HorizontalPager：点页签切页，也可以直接横滑。
@@ -3473,11 +3544,12 @@ export struct ReaderSettingsPage {
 
   @Builder
   private bottomActionConfigurationSheet() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000')
-        .onClick(() => this.bottomActionConfigVisible = false)
-      Column() {
-        Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
+    ReaderSheetShell({
+      scrimColor: '#66000000',
+      panelColor: '#D91A1B21',
+      panelHeight: '62%',
+      onDismiss: () => this.bottomActionConfigVisible = false
+    }) {
         Row() {
           Text('底栏按钮配置').fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
           Text('取消').fontSize(13).fontColor(this.rsetTextSecondary).margin({ right: 18 })
@@ -3509,7 +3581,8 @@ export struct ReaderSettingsPage {
                 Stack({ alignContent: Alignment.Center }) {
                   Image(item.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
                     .width(20).height(20).fillColor(item.enabled ? this.rsetTextSecondary : this.rsetTextDisabled)
-                }.width(36).height(36).borderRadius(18).backgroundColor(this.rsetInnerBg)
+                // 上游 widgets/ReorderableConfigList.kt:92 可重排配置行 NormalCard cornerRadius=12dp
+                }.width(36).height(36).borderRadius(this.cardRadius(12)).backgroundColor(this.rsetInnerBg)
                   .onClick(() => this.toggleBottomAction(item.id, !item.enabled))
                 // 上游 ReorderableConfigList.kt:239-249 只有拖拽把手，没有上下箭头；
                 // 拖动时整行抬升 4dp（:65-131 的 animateDpAsState），松手才落到草稿顺序里。
@@ -3553,9 +3626,7 @@ export struct ReaderSettingsPage {
             }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
         }.edgeEffect(EdgeEffect.None).width('100%').layoutWeight(1).scrollBar(BarState.Off)
-      }.width('100%').height('62%').backgroundColor('#D91A1B21')
-        .borderRadius({ topLeft: 24, topRight: 24 })
-    }.width('100%').height('100%')
+      }
   }
 
   @Builder
@@ -3679,11 +3750,12 @@ export struct ReaderSettingsPage {
 
   @Builder
   private topActionConfigurationSheet() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column().width('100%').height('100%').backgroundColor('#99000000')
-        .onClick(() => this.closeButtonConfigSheet())
-      Column() {
-        Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
+    ReaderSheetShell({
+      scrimColor: '#66000000',
+      panelColor: '#D91A1B21',
+      panelHeight: '62%',
+      onDismiss: () => this.closeButtonConfigSheet()
+    }) {
         Row() {
           // 同一个 sheet 服务两个入口：顶栏操作按钮与浮动图标（上游 FloatingBarIconConfigSheet
           // 同样复用 ButtonIconConfigSheet，只换标题与保存目标）。
@@ -3727,13 +3799,15 @@ export struct ReaderSettingsPage {
                   Image(this.hasButtonCustomIcon(item.id)
                     ? $r('app.media.profile_close') : $r('app.media.app_add'))
                     .width(16).height(16).fillColor(this.rsetTextSecondary)
-                }.width(32).height(32).borderRadius(16).backgroundColor(this.rsetInnerBg).margin({ right: 6 })
+                // 上游 widgets/ReorderableConfigList.kt:92 NormalCard cornerRadius=12dp
+                }.width(32).height(32).borderRadius(this.cardRadius(12)).backgroundColor(this.rsetInnerBg).margin({ right: 6 })
                   .onClick(() => { this.editButtonCustomIcon(item.id); })
               }
               Stack({ alignContent: Alignment.Center }) {
                 Image(item.enabled ? $r('app.media.app_visibility') : $r('app.media.reader_visibility_off'))
                   .width(20).height(20).fillColor(item.enabled ? this.rsetTextSecondary : this.rsetTextDisabled)
-              }.width(36).height(36).borderRadius(18).backgroundColor(this.rsetInnerBg)
+              // 上游 widgets/ReorderableConfigList.kt:92 同组可重排行 NormalCard cornerRadius=12dp
+              }.width(36).height(36).borderRadius(this.cardRadius(12)).backgroundColor(this.rsetInnerBg)
                 .onClick(() => this.toggleTopAction(item.id, !item.enabled))
               // 上游 ReorderableConfigList.kt:239-249 只有拖拽把手，没有上下箭头；
               // 拖动时整行抬升 4dp（:65-131），松手才落进草稿顺序。
@@ -3777,21 +3851,23 @@ export struct ReaderSettingsPage {
           }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
         }.edgeEffect(EdgeEffect.None).width('100%').layoutWeight(1).scrollBar(BarState.Off)
-      }.width('100%').height('62%').backgroundColor('#D91A1B21')
-        .borderRadius({ topLeft: 24, topRight: 24 })
-    }.width('100%').height('100%')
+      }
   }
 
   build() {
     if (this.asSheet) {
       Stack({ alignContent: this.selectedSettingsTab === 2 ? Alignment.Center : Alignment.Bottom }) {
-        Column().width('100%').height('100%').backgroundColor('#88000000').onClick(() => this.onBack())
+        // 上游 scrim 平台默认；此遮罩是点击关闭类，统一 #66000000。
+        Column().width('100%').height('100%').backgroundColor('#66000000').onClick(() => this.onBack())
         Column() {
           this.settingsContent(true)
-        }.width(this.settingsSheetWidth()).height(this.settingsSheetHeight()).alignSelf(ItemAlign.Center)
-          // 与内层同一口径（surfaceContainer）；原来这里是 #D91A1B21（85% 的 surfaceContainerLow），
-          // 内外两层都要改，只改内层会被这层固定深色盖掉。
-          .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(22)
+        }.width(this.settingsSheetWidth())
+          // 批4：外壳高度纯内容驱动 + 80% 上限，对齐上游 AppModalBottomSheet.kt:134-137/165 的
+          // heightIn(max=容器高*0.8)。切页过渡由内层 Swiper 的动画高度负责（对齐 ReadStyleSheet.kt:86
+          // 的 HorizontalPager.pagerHeight(animatedHeight)），不在这里叠加。
+          .constraintSize({ maxHeight: '80%' }).alignSelf(ItemAlign.Center)
+          // 与内层同一口径（surfaceContainer）；圆角对齐上游 Shapes() extraLarge = 28。
+          .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
           .margin({ left: 8, right: 8, bottom: this.selectedSettingsTab === 2 ? 0 : 16 })
           // 信息页在上游不是底部弹层，而是菜单内的路由页（ReadBookMenuBar.kt:660-668），
           // 所以它在本地居中显示、不贴底；-18 只是把居中位置往视觉中心再抬一点，
@@ -3852,14 +3928,25 @@ struct BackgroundShareOption {
   @StorageProp('rsetSelectedBg') rsetSelectedBg: string = '#454B62';
   @StorageProp('rsetChipBg') rsetChipBg: string = '#15161B';
   @StorageProp('rsetTrack') rsetTrack: string = '#454751';
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
   @Prop selected: boolean = false;
+
+  private cardRadius(perCardRadius: number): number {
+    const snapshot = readCardStyleSnapshot();
+    const resolved = resolveCardCornerRadius(snapshot, perCardRadius);
+    // 无条件读 @StorageProp 建立响应式依赖：开关/滑块变化时 themeCardRadius 更新，
+    // 本组件随之重渲染并重新读到最新快照（覆盖时用广播值，未覆盖时用上游 per-card 值）。
+    const trigger: number = this.themeCardRadius;
+    return snapshot.overrideBaseCardCornerRadius ? trigger : resolved;
+  }
 
   build() {
     Column() {
       Image($r('app.media.menu_grid')).width(20).height(20).fillColor(this.rsetTextPrimary)
     }.width(40).height(56).justifyContent(FlexAlign.Center)
       .backgroundColor(this.selected ? this.rsetSelectedBg : this.rsetChipBg)
-      .borderRadius(9)
+      // 上游 sheet/ThemeListContent.kt:611 主题网格卡 cornerRadius=8dp
+      .borderRadius(this.cardRadius(8))
       .border({ width: this.selected ? 2 : 1, color: this.selected ? this.rsetAccent : this.rsetTrack })
   }
 }

@@ -1747,6 +1747,45 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
 
 **这一批的教训**：r348 的验收只证明了「同一页翻走再翻回来逐像素不动」，那验证的是位移**随页定型**，不验证位移**量是否够**。当时 A/B 选的那页剩余不足一行、按判据本就不摊分，两版看起来一样，我把它当成「摊分不生效」的反证收下了——这是取样选错了。r351 换成章首页（剩余空间足够摊分）才暴露出量级差。
 
+---
+
+## 形状与面板实现批 1–4（r345 之后，对齐上游 AppModalBottomSheet）
+
+目标：形状令牌从设置域接进阅读域，12 处手写弹层收敛到公共外壳。逐处映射见 `docs/history/shape-batch2-mapping.md`，三探针证据见 `docs/history/shape-batch0-probes.md`。
+
+### 批 0 三探针（先探针后动手）
+
+- 探针 1（`constraintSize` 内容驱动 + 上限）：`lines=2` 时面板高 64.6vp、`lines=30` 时 246.0vp，始终贴底 —— **通过**。
+- 探针 2（Swiper 页测高 + 切页动画）：`onAreaChange` 必须挂 Scroll 内层 wrap-content Column（挂 Swiper 子页根只能读到父约束 400vp）；页 0 高 121.7vp、页 1 高 702.9vp，切页中间帧 413.7vp（非两端点）——证明 `animateTo` 补间平滑非瞬跳 —— **通过**。
+- 探针 3（遮罩/抓手分类）：仅"点击关闭整屏遮罩"5 处统一 `#66000000`，面板底色与卡片叠层不动；抓手圆角上游源码未取证，保持 4。
+
+三条探针定案：用普通 Column + `constraintSize({maxHeight:'80%'})`，不用 `bindSheet` detents / `SheetSize.FIT_CONTENT`（阅读器自绘 Canvas，`bindSheet` 层级会打架）。
+
+### 批 1–3（源码接入 + 构建通过）
+
+- 批 1：`data/ThemeCardStyle.ets` 拆 `resolveGroupCornerRadius`、修 `resolveCardCornerRadius`/`resolveCardBorderWidth` 签名与边框色令牌回落；`Index.ets` 调用点同步。构建通过。
+- 批 2：`ReaderSettingsPage.ets` 按上游收敛 10 处卡片圆角，`@StorageProp('themeCardRadius')` 建依赖。构建通过。
+- 批 3：新建 `components/ReaderSheetShell.ets`，12 处弹层统一复用（圆角 28 / 抓手 32×4 rsetHandle / 内边距 16 / 遮罩 `#66000000` / 内容驱动 + 80%）。构建通过。
+
+### 批 4（设备验收通过，模拟器 127.0.0.1:5555 深色模式）
+
+- 外壳（`ReaderSettingsPage.ets` asSheet 分支）去掉写死 `height`，改 `.constraintSize({maxHeight:'80%'})`；根 Column 浮层形态不写死 `100%`；Swiper 去掉 `layoutWeight` 按内容、加 `.height(animatedHeight)`（对齐 `ReadStyleSheet.kt:86` 的 `.pagerHeight(animatedHeight)`）。
+- 高度动画按上游两层机制落地：外壳纯内容驱动 + 80%（`AppModalBottomSheet.kt:134-137/165`），Swiper 自身吃弹簧补间（`PagerHeight.kt:30`）。`recordPageHeight` 恢复无条件持续测高（对齐 `onSizeChanged`），删掉曾误加的"动画中禁测"自造逻辑与写死三档的 `settingsSheetHeight()` 及"本地做不到内容自适应"过期注释。
+- 上机：`tmp-b4-final-global.jpeg` 全局页约 56% 高、`tmp-b4-final-menu.jpeg` 菜单页内容更多更高、`tmp-b4-final-info.jpeg` 信息页顶到 80% —— 高度随内容变化，抓手/28 圆角正常、无截断。切页补间由探针 2 中间帧证实。
+
+**没做什么**：未在浅色模式单独验收（仓库口径不要求）；未逐帧录屏切页动画，用探针 hilog 中间帧替代；上游抓手圆角 2/4 未从源码取证，保持 4；`settingsSheetWidth()===3→100%` 对应上游哪个面板未确认，保留不改；未把 12 处弹层改成 `bindSheet`（层级冲突）。期间多次构建失败均为他人并发书源文件（DiscoverPage / BookSourceRepository / ProfileSubPages / BookSourceEditPage / SourceLoginPage），非本批文件，对方修好后最终 `BUILD SUCCESSFUL`。
+
+### r347 交付核查后的回归修复（设备验收通过，模拟器 127.0.0.1:5555 深色模式）
+
+用户逐条核查交付说明，确认①属实（我引入的死开关回归）、⑤属实（探针3 漏分类），授权"分离两键 + ①⑤一起修"。
+
+- ① 死开关修复（源码接入 + 构建通过 + 设备验收）：`pages/Index.ets:135/3744` 新增广播 `themeGroupRadius = resolveGroupCornerRadius(snapshot)`（看 disable 开关），`components/settings/UiSection.ets:17/47` 分组卡片改读该键；`themeCardRadius` 保持不看 disable（普通卡片对齐上游 `GlassCard.kt` 的 BaseCard）。修前开关变死键、完成态判据③不过。链路 grep 成对：`Index.ets:135/3744` + `UiSection.ets:17/47` + `ThemeCardStyle.ets:136`。
+- ⑤ 6 处点击关闭遮罩 `#99000000→#66000000`（`ReaderTextProcessingSheet.ets:368/386`、`ReaderPage.ets:4739`、`ReaderSettingsPage.ets:2640`、`ReaderMarkingEditor.ets:429`、`ReaderBookmarkEditor.ets:31`），探针3 漏分类补齐；非阅读域与 ReaderPage 内部叠层 `#88000000` 不动。
+- 构建 `BUILD SUCCESSFUL in 1min25s`。
+- 设备验收①：同一 UiSection 页面「我的→设置→下载与缓存」开关开/关对比，像素差分四角圆角弧区各约 52–56 像素差异、卡片中间内容区差异为 0——卡片圆角随开关从圆角变直角再恢复，非渲染抖动。同时确认外观页 `ThemeSettingsPage` 自身卡片用 `themeCardRadius`（普通卡片）不受该开关影响，符合上游「开关只作用于 SplicedColumnGroup」语义（`ThemeConfigScreen.kt:601` 开关 + `SplicedColumnGroup.kt:49-54` 消费）。
+
+**没做什么**：⑤ 的 6 处遮罩改色仅做源码核对 + 构建通过，未逐处上机确认色值（属纯色值统一、非行为变更）；未做浅色专项（仓库口径不要求）。
+
 ### r352 在线书源 12 批（P0–P11）收尾验收
 
 - 本段是书源模块（P0 准入 + P1–P10 实现 + P11 收尾）的统一验收记录，逐批提交号、P0 三轮数据、跑通的真实源与未验证清单见[批次交付报告](booksource/BATCH-REPORT.md)。本段只记「验过什么、怎么验的」。

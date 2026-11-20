@@ -1446,6 +1446,37 @@ private settingsSheetHeight(): string {
 
 **面板这块要先探针再动手**：ArkUI 上「内容自适应高度 + 上限 80%」是否成立，本地源码注释已经写了「探针实证做不到」，但那次探针只测了固定百分比面板换成两行文字后高度不变 —— 还没测过用 `bindSheet` 的 `detents` 或 `SheetSize.FIT_CONTENT` 能不能做到。不确认这一点就动 5 个弹层，等于赌。
 
+### 八、本轮落地（形状与面板实现批 1–4，对齐上游）
+
+本节记录 r354 盘点后的实际落地；逐处映射见 `docs/history/shape-batch2-mapping.md`，探针证据见 `docs/history/shape-batch0-probes.md`。**一至七节为 r354 历史盘点底稿，其中的旧统计（themeCardRadius 12 文件 40 处、遮罩 9 种值、UiSection 三键接线、`:1447` 的「还没测过 bindSheet」疑问等）反映的是修复前状态；当前实际状态以本节为准。**
+
+- **形状解析三偏差**（`data/ThemeCardStyle.ets`）：拆出 `resolveGroupCornerRadius`（仅分组容器看 `disableSplicedColumnGroupCornerRadius`，对齐上游 `SplicedColumnGroup.kt:49-70`）；`resolveCardCornerRadius(snapshot, perCardRadius)` / `resolveCardBorderWidth(snapshot, perCardWidth)` 只看覆盖开关、未覆盖时保留调用点值（对齐 `GlassCard.kt` 的 `BaseCard` 不看 disable）；边框色空串回落改读 `themeColorOutlineVariant` 令牌（对齐上游 `colorScheme.outlineVariant`，`ThemePalette.ets:919` 广播，浅 `#C5C8BA` / 深 `#44483D`）。
+- **阅读域消费**：`ReaderSettingsPage.ets` 按上游取值收敛 10 处卡片圆角（13→12、10→8/12、18→12、16→12、9→8），经 `@StorageProp('themeCardRadius')` 建立响应式依赖；属"同类对应"精度（上游为拆多文件）。其余阅读域散值经逐处盘点判定为上游无对应物或非卡片装饰，保持不改并留取证（见 mapping 文档：全量 195 处 = 改 10 / 有依据保持 56 / 无对应物 129）。判据①「阅读域 10 文件对 8 键命中 > 0」实际只有 ReaderSettingsPage 命中，其余 9 文件 0 命中——属任务书判断段「不统一 95 处 / 无对应物不改」既定范围，非漏做。
+- **面板公共容器**：新建 `components/ReaderSheetShell.ets`（67 行），手写弹层统一复用（圆角 28 / 抓手 32×4 rsetHandle / 内边距 16 / 点击关闭遮罩 `#66000000` / 80% 上限）。9 个调用点 + 8 个 import；`ReaderHighlightRuleSheet.ets:933` 的预设规则弹层是 zIndex 居中叠层、非贴底弹层，未迁（报告如实记录）。
+
+**参数卡（对齐上游文件:行号）**：
+
+| 参数 | 本地值 | 上游依据 |
+| --- | --- | --- |
+| 顶部圆角 | 28vp | `AppModalBottomSheet.kt:139-144` `Shapes()` → M3 extraLarge 28dp（无自定义 Shapes） |
+| 抓手 | 32×4vp、圆角 4、色 `rsetHandle`（onSurfaceVariant） | `AppModalBottomSheet.kt:150` `BottomSheetDefaults.DragHandle(color=sheetDragHandleColor)`、`:64` onSurfaceVariant（上游圆角 2/4 源码未取证，本地保持 4） |
+| 内容内边距 | start/end/bottom 16vp | `AppModalBottomSheet.kt:159-163` |
+| 高度上限 | 内容驱动 + `constraintSize({maxHeight:'80%'})` | `AppModalBottomSheet.kt:134-137` `containerHeight*0.8f`、`:165` `heightIn(max=maxHeight)` |
+| 切页过渡 | `animateTo({duration:220,curve:Friction})` 作用于 Swiper 自身 | `PagerHeight.kt:30` `rememberPagerAnimatedHeight`、`ReadStyleSheet.kt:86` `.pagerHeight(animatedHeight)`（上游为 `currentPage+offsetFraction` 连续插值 + 弹簧，ArkUI 用 onChange 后 220ms 补间，属平台能力差异） |
+| 遮罩 | 点击关闭类统一 `#66000000` | 上游 scrim 由 `ModalBottomSheet` 平台自带（无业务色值），本地取值为统一口径而非上游取证 |
+
+**为何用 `constraintSize` 而非 `bindSheet` detents / FIT_CONTENT**（回答 :1447 的遗留疑问）：探针已实测（`docs/history/shape-batch0-probes.md`）——普通 Column 不写 `height`、只写 `.constraintSize({maxHeight:'80%'})` 即可做到内容驱动高度 + 80% 上限；`bindSheet` 的 detents / `SheetSize.FIT_CONTENT` 未采用，因阅读器是自绘 Canvas，`bindSheet` 的层级与自绘内容会打架。上游用 Compose `ModalBottomSheet`，二者实现层级不同，仅对齐视觉/行为参数，不照搬控件。
+
+**验收**：构建 `BUILD SUCCESSFUL`；模拟器深色主路径逐个面板打开，全局页约 56% 高、菜单页内容多时更高、信息页顶到 80%——高度随内容变化，无截断。切页高度过渡经探针抓到中间帧（121.7vp→702.9vp 之间有 413.7vp 中间值），证明平滑非瞬跳。
+
+**交付核查后的回归修复（r347，用户核查报告触发）**：
+
+- **① 死开关回归（我引入，已修）**：批1 把 `resolveCardCornerRadius` 拆成 group/card 两义后，`Index.ets` 只剩单一 `themeCardRadius` 广播走"不看 disable"的新函数，导致依赖它的 `UiSection` 分组卡片不再响应「关闭设置分组圆角」开关——开关变成死开关（完成态判据③不过）。修法采纳用户授权的"分离两键"：`pages/Index.ets:135` import `resolveGroupCornerRadius`，`:3744` publishThemeCardStyle 新增广播 `themeGroupRadius = resolveGroupCornerRadius(snapshot)`（看 disable 开关）；`components/settings/UiSection.ets:17/47` 分组卡片改读 `@StorageProp('themeGroupRadius')`。`themeCardRadius` 保持不看 disable（普通卡片对齐上游 `GlassCard.kt` 的 `BaseCard`）。链路 grep 成对：`Index.ets:135/3744` + `UiSection.ets:15/17/47` + `ThemeCardStyle.ets:134/136`。
+- **⑤ 探针3 漏分类的 6 处点击关闭遮罩（已修）**：`#99000000`→`#66000000`，`ReaderTextProcessingSheet.ets:368/386`（viewedProcess/deleteProcess 确认框）、`ReaderPage.ets:4739`（moreActionUnavailableSheet）、`ReaderSettingsPage.ets:2640`（detailSheet）、`ReaderMarkingEditor.ets:429`（onClose）、`ReaderBookmarkEditor.ets:31`（onClose）。非阅读域与 ReaderPage 内部叠层 `#88000000` 不在范围、不动。
+- **真机验证（①，深色，模拟器 127.0.0.1:5555）**：在同一 UiSection 页面「我的→设置→下载与缓存」（`AppDownloadCacheSettingsPage`）对比开关开/关，像素差分四角圆角弧区各约 52–56 像素差异、卡片中间内容区差异为 0，证明卡片圆角随开关从圆角变直角再恢复、非渲染抖动。同时确认外观页 `ThemeSettingsPage` 自身卡片用 `themeCardRadius`（普通卡片）不受该开关影响——符合上游「开关只作用于 SplicedColumnGroup」语义（`ThemeConfigScreen.kt:601` 开关 + `SplicedColumnGroup.kt:49-54` 消费）。构建 `BUILD SUCCESSFUL in 1min25s`。⑤ 的 6 处遮罩改色仅做源码核对 + 构建通过，未逐处上机确认色值。
+
+**遗留事项（已知、不影响行为，r346 决定不改代码）**：`entry/src/main/ets/pages/ReaderSettingsPage.ets:370` 的字段注释仍写着「animatedHeight 由切页时 animateTo 驱动；>0 时外壳用动画高度，否则用 constraintSize 内容驱动兜底」，与当前实现矛盾。批4 反复试错后已按上游修正：`animatedHeight` 只作用于内层 Swiper 自身（对齐 `ReadStyleSheet.kt:86` `.pagerHeight(animatedHeight)`），外壳是纯 `.constraintSize({maxHeight:'80%'})`（对齐 `AppModalBottomSheet.kt`，见 `:3868`），外壳不再读取 animatedHeight。该注释是试错期漏清的过期注释，**仅措辞错、不影响行为**；按用户决定保留不改，日后清理时把该行改为「animatedHeight 由切页 animateTo 驱动，>0 时作用于内层 Swiper 高度做过渡；外壳始终按内容驱动 + 80% 上限」即可。
+
 关联：KI-THEME2（M3 色位缺口）、KI-THEME3（菜单取色链）、[`docs/parity/ZIP-THEME.md`](parity/ZIP-THEME.md)、[`docs/FEATURES.md`](FEATURES.md) 5.2。
 
 ---

@@ -6,6 +6,8 @@
 // Transport 三档按钮样式（普通/tonal/主播放键）、细刻度进度条。
 // 平台边界：系统 TTS 无调速 API，语速滑杆只存值并如实标注；音色只有系统 3 条。
 
+import { ReaderSheetShell } from '../components/ReaderSheetShell';
+
 @Extend(Text)
 function playerText(size: number, color: string, weight: FontWeight): void {
   .fontSize(size)
@@ -500,22 +502,23 @@ struct PlayerSheet {
   @Builder emptyContent() {}
   build() {
     if (this.show) {
-      Stack({ alignContent: Alignment.Bottom }) {
-        Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.onDismiss())
-        Column() {
-          Row() {
-            Text(this.title).fontSize(16).fontWeight(FontWeight.Medium)
-              .fontColor(this.dark ? '#FFFFFF' : this.textPrimaryDark())
-            Blank()
-            Text('关闭').fontSize(14).fontColor(this.accentColor()).onClick(() => this.onDismiss())
-          }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 12 })
-          this.content()
-        }
-        .width('100%').backgroundColor(this.dark ? '#1C1D22' : this.surface)
-        .borderRadius({ topLeft: 20, topRight: 20 })
-        .padding({ bottom: 20 + 0 })
+      // 上游 AppModalBottomSheet：外壳圆角 28、scrim 平台默认、抓手统一；底色按深/浅差异传入。
+      // 本面板原本内容驱动（不固定高度），panelHeight 传 auto。
+      ReaderSheetShell({
+        scrimColor: '#66000000',
+        panelColor: this.dark ? '#1C1D22' : this.surface,
+        panelHeight: 'auto',
+        showHandle: false,
+        onDismiss: () => this.onDismiss()
+      }) {
+        Row() {
+          Text(this.title).fontSize(16).fontWeight(FontWeight.Medium)
+            .fontColor(this.dark ? '#FFFFFF' : this.textPrimaryDark())
+          Blank()
+          Text('关闭').fontSize(14).fontColor(this.accentColor()).onClick(() => this.onDismiss())
+        }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 12 })
+        this.content()
       }
-      .width('100%').height('100%')
     }
   }
 
