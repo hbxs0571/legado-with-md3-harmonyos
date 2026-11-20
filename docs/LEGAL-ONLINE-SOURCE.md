@@ -60,9 +60,9 @@ hbse 的 `NOTICE` 明确要求保留 `Copyright (c) 2026 李其健`。这是 GPL
 
 `third_party/harmony-book-source-engine/quickjs/` 是 MIT 许可。MIT 条款要求「版权声明与本许可声明应包含在软件的所有副本或实质部分中」。仅分发 HAP 而不附源码仓库时，该声明未随附。
 
-### 1.7 工作区里的探针素材
+### 1.7 曾经出现过的探针素材（已于 2026-11-20 清理）
 
-**【事实】** 当前工作区存在三个未提交项：
+**【事实】** 2026-11-20 本文档初稿时，工作区曾存在三个未提交项；同日维护者已将其清理，当前 `git status` 中这三项均不存在（`P4ProbePage.ets` 与 `p4-904-sources.json` 已删除，`EntryAbility.ets` 已恢复为 `loadContent('pages/Index')`）。保留此节是为了记录它们当时的样子：
 
 ```
  M entry/src/main/ets/entryability/EntryAbility.ets   ← :137 被改成 loadContent('pages/P4ProbePage')
@@ -70,11 +70,11 @@ hbse 的 `NOTICE` 明确要求保留 `Copyright (c) 2026 李其健`。这是 GPL
 ?? entry/src/main/resources/rawfile/p4-904-sources.json   ← 2.9 MB，904 条
 ```
 
-HEAD 版 `EntryAbility.ets` 的对应位置是 `windowStage.loadContent('pages/Index')`。
+HEAD 版 `EntryAbility.ets` 的对应位置一直是 `windowStage.loadContent('pages/Index')`。
 
 关于 `p4-904-sources.json` 的实际内容：**904 条记录只含元数据**（`bookSourceName` / `bookSourceUrl` / `exploreUrl` / `bookSourceGroup` 等），`ruleSearch` 与 `ruleToc` **各 0 条**。它不能直接用于搜索与正文抓取，但它是一份 904 个站点的地址清单，且 `exploreUrl` 内含 `@js:` 脚本。
 
-**发版前必须回退这三处。** 按当前状态打包，HAP 内会带这份清单——见下一节为什么这会把项目从安全区推到黄区。
+**【判断】** 这类探针素材在发版前必须移除：按当时的状态打包，HAP 内会带这份 904 站点的清单——见第二节为什么这会把项目从安全区推到黄区。它已清理，但值得记下来，因为下次接书源相关实验时同样的形态会再出现一次。
 
 ---
 
@@ -183,7 +183,7 @@ HEAD 版 `EntryAbility.ets` 的对应位置是 `windowStage.loadContent('pages/I
 
 | 顺序 | 事项 | 性质 | 对应节 |
 | --- | --- | --- | --- |
-| 1 | 回退 `EntryAbility.ets`、不提交 `P4ProbePage.ets` 与 `p4-904-sources.json` | 决定安全区/黄区 | 1.7 |
+| 1 | 回退 `EntryAbility.ets`、不提交 `P4ProbePage.ets` 与 `p4-904-sources.json` —— **已于 2026-11-20 完成** | 决定安全区/黄区 | 1.7 |
 | 2 | 修订 `PRIVACY.md:15`、`TERMS.md:11`、`PRIVACY.md:24` | 现有陈述与代码不符 | 1.1–1.3 |
 | 3 | `NOTICE.md` 补 hbse / 李其健 / quickjs / MIT 署名与第 7 条例外说明 | GPL §4/§5 与 MIT 的明确义务 | 1.5、3.2 |
 | 4 | `rawfile/licenses/` 补 MIT 文本 | 同上 | 1.6 |
@@ -199,7 +199,7 @@ HEAD 版 `EntryAbility.ets` 的对应位置是 `windowStage.loadContent('pages/I
 
 **本节的结论来自**：两位领域专家（合同审查、制度文件撰写）的独立分析 + 撰写者逐条复核。
 
-**已复核的事实**（可重复验证）：`module.json5:13` 的权限声明；`PRIVACY.md:15` / `TERMS.md:11` / `PRIVACY.md:24` 的原文；`NOTICE.md` 的署名缺失；`rawfile/licenses/` 的实际内容；hbse `LICENSE` 末尾第 7 条例外原文；`BookRepository.ets:1619` 的清理范围；`SearchCoordinator.ets:31` 与 `LegadoSourceMapper.ets:54`；`TlsTrustStore.ts` 的存在与机制；`p4-904-sources.json` 的条数与字段构成；`EntryAbility.ets` 工作区版与 HEAD 版的差异。
+**已复核的事实**（可重复验证）：`module.json5:13` 的权限声明；`PRIVACY.md:15` / `TERMS.md:11` / `PRIVACY.md:24` 的原文；`NOTICE.md` 的署名缺失；`rawfile/licenses/` 的实际内容；hbse `LICENSE` 末尾第 7 条例外原文；`BookRepository.ets:1619` 的清理范围；`SearchCoordinator.ets:31` 与 `LegadoSourceMapper.ets:54`；`TlsTrustStore.ts` 的存在与机制；`p4-904-sources.json` 的条数与字段构成；`EntryAbility.ets` 工作区版与 HEAD 版的差异；上游 `legado-with-MD3` 顶层无独立法律文件（find 零命中）、`README.md` 113 行与 `:74` 起免责声明五小节、`DefaultData.kt` 的四个导入函数、`defaultData/bookSources.json` 的 1 条书源与全仓零读取、`app/build.gradle.kts:265-267` 的 Firebase 三项依赖与 Crashlytics 零命中。
 
 **未验证的**：
 
@@ -209,6 +209,59 @@ HEAD 版 `EntryAbility.ets` 的对应位置是 `windowStage.loadContent('pages/I
 - 法条与判例的引用为通行理解，**未逐条比对最新修订文本**；案件编号与要旨来自公开资料。
 
 **本文档未做的**：没有修改任何现有文件（`DISCLAIMER.md`、`TERMS.md`、`PRIVACY.md`、`NOTICE.md`、`SECURITY.md` 均未动），没有改动任何代码，没有回退 1.7 节所述的工作区状态。
+
+---
+
+## 八、为什么不照抄上游：上游根本没有这套文件
+
+**【事实】** 本项目顶层现有五份法律文件（`DISCLAIMER.md` 11 行、`TERMS.md` 21 行、`PRIVACY.md` 33 行、`NOTICE.md` 15 行、`SECURITY.md` 7 行）与 `LICENSE`（GPL-3.0）。上游 `legado-with-MD3` 顶层**只有 `LICENSE`**：`find . -maxdepth 2 \( -iname '*privacy*' -o -iname '*disclaimer*' -o -iname '*terms*' -o -iname '*notice*' -o -iname '*security*' \)` 零命中，`docs/` 下也无法律类文档。所谓「上游的法律文件」，实际是 `README.md:74`–`:113` 的 `## ⚠️ 用户协议与免责声明` 一节（`English.md:108` 起为英文版），共五小节 19 条。
+
+### 8.1 上游那份声明里有两处自己没做到
+
+**【事实】** 一、2 称「本软件默认状态下不预置、不内置、不提供任何第三方网站内容、数据资源或解析规则」。但 `app/src/main/assets/defaultData/bookSources.json` 里有 1 条完整书源（`消消乐听书` / `https://www.kaixin7days.com` / 分组「听书」，`ruleSearch`、`ruleToc`、`ruleContent` 齐备）。
+
+**【事实】** 但它没有被加载：`help/DefaultData.kt` 只导入 `httpTTS` / `txtTocRule` / `rssSources` / `dictRules` 四类，**没有 `importDefaultBookSources`**；全仓 `grep -rn 'defaultData/bookSources\|bookSources\.json'` 在 `.kt`/`.java` 下零命中。该文件是死文件，「不内置解析规则」当前成立，靠的是它恰好没被引用，而不是靠机制保证。
+
+**【事实】** 四、3 称「可能集成第三方统计或崩溃分析服务（如 Firebase Crashlytics 等）」。实际 `app/build.gradle.kts:265-267` 集成的是 `firebase-bom` + `firebase-analytics` + `firebase-perf`，**没有 Crashlytics**（全仓 `grep -i crashlytics` 零命中）。同一句里点名的组件并不存在。
+
+**【判断】** 这两处说明该声明的写法是「先写一句免责，再去核对代码」，而不是从实际行为倒推。它是 README 文字，不是经过发版流程校对的合规文件。
+
+### 8.2 上游没有的，是它不需要；不是我们该删
+
+| 文件 | 上游 | 本项目 | 为什么不能照抄上游 |
+| --- | --- | --- | --- |
+| 隐私政策 | 无独立文件，仅 README 四、1–4 四条 | `PRIVACY.md` | 上游直发 APK/F-Droid，不经应用市场隐私审核；HarmonyOS 应用市场上架需提交隐私政策 |
+| 使用协议 | README 二、1–4 | `TERMS.md` | 本项目比上游多一条硬约束：用户导入的书源规则由谁负责 |
+| 第三方许可 | **无**，`README` 里 `grep 'Apache\|MIT\|GPL\|许可'` 零命中 | `NOTICE.md` + `docs/RESOURCE-LICENSES.md` | 上游 121 个 `implementation` 依赖全是 Maven 坐标，POM 自带许可；本项目 `third_party/` 是源码整包拷入，GPL §4/§5 署名义务无人代做 |
+| 安全反馈 | 无 | `SECURITY.md` | 书源规则是可执行内容，攻击面与上游不同 |
+| 权限说明 | README 四、4 一句带过（实际声明 19 个权限） | `PRIVACY.md` 逐项 | 本项目声明 4 个权限，数量少但同样需逐项说明 |
+
+**【依据】** GPL-3.0 第 4、5 条要求传递源码时保留版权声明与修改说明。上游靠 gradle 解析 POM 完成依赖侧声明，本项目把 hbse 与 quickjs 源码直接纳入仓库，这一层没有工具代劳。
+
+### 8.3 「最终目标是还原上游」在功能上成立，在法律文件上不成立
+
+**【判断】** 三条理由：
+
+1. **法律文件跟随主体与分发渠道，不跟随代码。** 上游是 HapeLee 个人分发的 Android APK，本项目是 hbxs0571 分发的 HarmonyOS HAP——两个主体、两个渠道、两套应用市场审核规则。照抄上游等于用别人的合规假设套自己的场景。
+2. **上游那份声明不是法律文件。** 它没有权限清单、没有数据流向、没有第三方许可、没有安全反馈渠道，因为它没有发版审核流程要过。
+3. **本项目确实比上游多引入了东西。** `third_party/harmony-book-source-engine`（GPL-3.0 整包）与 `quickjs`（MIT）在上游不存在，第三方许可面天然更复杂。
+
+**【事实】** 本项目 `DISCLAIMER.md` 有两句上游没有、也不该被删掉的话：「不因代码开源而取得第三方图片、字体或品牌权利」「本声明不能替代版权许可、隐私义务或安全措施，也不表示任何行为因『学习交流』而自动合法」。这两句比上游同类表述更清醒。
+
+### 8.4 可以简化的是哪些
+
+**【判断】** 五份文件里确有防御性写作，可压缩但不紧急：
+
+- `SECURITY.md` 仅 7 行，内容可并入 `TERMS.md` 或 `DISCLAIMER.md`，不必单列。
+- `PRIVACY.md` 中关于「当前未指定独立私密联系邮箱」一类的说明属程序性描述，可并入 `SECURITY.md` 或删除。
+
+**不能简化的是**：
+
+- `PRIVACY.md` 的网络权限与数据去向两块 —— 应用市场审核直接看这两项。
+- `NOTICE.md` 的第三方署名 —— GPL 硬义务。
+- `DISCLAIMER.md` 里那两句「不表示自动合法」的话 —— 最有效的自我保护。
+
+**【判断】** 结论：不要按「还原上游」处理法律文件，按本项目自己的分发场景处理。第六节七项中的第 2–6 项都属于「补齐本项目自己的缺口」，不是「向某个标准对齐」——上游在这几项上给不出参考，因为它压根没写。
 
 ---
 
