@@ -133,12 +133,18 @@ export struct SourceLoginPage {
     }.width('100%').margin({ bottom: 12 })
   }
 
+  // @BuilderParam 槽位须传 @Builder 方法引用；内联 lambda 直接实例化 struct 会
+  // 在运行时变成裸构造函数调用（class constructor cannot called without 'new'）。
+  @Builder loginNavSlot() {
+    TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
   build() {
     Column() {
       AppTopBar({
         title: '登录 · ' + this.sourceName,
         hasNavigation: true,
-        navigationIcon: () => { TopBarBackButton({ onSelect: () => this.onBack() }) }
+        navigationIcon: () => { this.loginNavSlot() }
       })
       if (this.mode === 'web') {
         // Web 模式：内嵌 WebView 加载入口页，cookie 由 onPageEnd 持久化。

@@ -159,6 +159,8 @@ export struct BookSourceEditPage {
   /** P9 登录/清 Cookie/源变量回调，由 Index 接线。 */
   onOpenSourceLogin: (sourceUrl: string) => void = (_sourceUrl: string) => {};
   onClearSourceCookie: (sourceUrl: string) => void = (_sourceUrl: string) => {};
+  /** 打开书源调试页（P10，溢出菜单「日志」）。 */
+  onOpenSourceDebug: (sourceUrl: string) => void = (_sourceUrl: string) => {};
 
   @State private activeTab: number = 0;
   @State private rootObj: Record<string, Object> = {};
@@ -322,7 +324,9 @@ export struct BookSourceEditPage {
       this.variableDraft = this.readPath('variable');
       this.variablePanelVisible = true;
     } else if (key === 'log') {
-      this.onUnavailableAction('日志在 P10 实现');
+      const url = this.currentSourceUrl();
+      if (url.length === 0) { this.onUnavailableAction('请先保存书源'); return; }
+      this.onOpenSourceDebug(url);
     }
   }
 
@@ -352,15 +356,23 @@ export struct BookSourceEditPage {
     }.width('100%').padding({ top: 8, bottom: 8 })
   }
 
+  // @BuilderParam 槽位须传 @Builder 方法引用；内联 lambda 直接实例化 struct 会
+  // 在运行时变成裸构造函数调用（class constructor cannot called without 'new'）。
+  @Builder editNavSlot() {
+    TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
+  @Builder editActionsSlot() {
+    TopBarButton({ icon: 'more', showDivider: false, onSelect: () => { this.moreMenuVisible = true; } })
+  }
+
   build() {
     Column() {
       AppTopBar({
         title: this.editingSource === undefined ? '新建书源' : '编辑书源',
         hasNavigation: true,
-        navigationIcon: () => { TopBarBackButton({ onSelect: () => this.onBack() }) },
-        actions: () => {
-          TopBarButton({ icon: 'more', showDivider: false, onSelect: () => { this.moreMenuVisible = true; } })
-        }
+        navigationIcon: () => { this.editNavSlot() },
+        actions: () => { this.editActionsSlot() }
       })
 
       Tabs({ barPosition: BarPosition.Start, index: this.activeTab }) {

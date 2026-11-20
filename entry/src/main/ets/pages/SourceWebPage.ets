@@ -30,18 +30,26 @@ export struct SourceWebPage {
     }
   }
 
+  // @BuilderParam 槽位须传 @Builder 方法引用；内联 lambda 直接实例化 struct 会
+  // 在运行时变成裸构造函数调用（class constructor cannot called without 'new'）。
+  @Builder webNavSlot() {
+    TopBarBackButton({ onSelect: () => this.onBack() })
+  }
+
+  @Builder webActionsSlot() {
+    TopBarButton({ icon: 'web', showDivider: false, onSelect: () => {
+      // 刷新：重新加载当前 URL。
+      if (this.url.trim().length > 0) { this.controller.refresh(); }
+    } })
+  }
+
   build() {
     Column() {
       AppTopBar({
         title: this.pageTitle.length > 0 ? this.pageTitle : this.title,
         hasNavigation: true,
-        navigationIcon: () => { TopBarBackButton({ onSelect: () => this.onBack() }) },
-        actions: () => {
-          TopBarButton({ icon: 'web', showDivider: false, onSelect: () => {
-            // 刷新：重新加载当前 URL。
-            if (this.url.trim().length > 0) { this.controller.refresh(); }
-          } })
-        }
+        navigationIcon: () => { this.webNavSlot() },
+        actions: () => { this.webActionsSlot() }
       })
       if (this.loading) {
         LoadingProgress().width(28).height(28).color(this.themeColorAccent)

@@ -274,25 +274,29 @@ export struct DiscoverPage {
     }
   }
 
+  // @BuilderParam 槽位须传 @Builder 方法引用；内联 lambda 直接实例化 struct 会
+  // 在运行时变成裸构造函数调用（class constructor cannot called without 'new'）。
+  @Builder discoverActionsSlot() {
+    TopBarButton({
+      icon: 'profileRefresh',
+      showDivider: false,
+      onSelect: () => {
+        this.resultBooks = [];
+        this.errorMessage = '';
+        this.page = 1;
+        this.hasMore = true;
+        this.reloadSources();
+      }
+    })
+  }
+
   build() {
     Column() {
       AppTopBar({
         title: '发现',
         subtitle: '',
         collapsed: this.collapsedHeader,
-        actions: () => {
-          TopBarButton({
-            icon: 'profileRefresh',
-            showDivider: false,
-            onSelect: () => {
-              this.resultBooks = [];
-              this.errorMessage = '';
-              this.page = 1;
-              this.hasMore = true;
-              this.reloadSources();
-            }
-          })
-        }
+        actions: () => { this.discoverActionsSlot() }
       })
 
       if (this.exploreSources.length > 0) {

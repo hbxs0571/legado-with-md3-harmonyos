@@ -32,6 +32,7 @@ import { ChangeSourceSheet } from './ChangeSourceSheet';
 import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions } from '../bookSource/ChangeSourceCoordinator';
 import { SourceLoginPage } from './SourceLoginPage';
 import { SourceWebPage } from './SourceWebPage';
+import { BookSourceDebugPage } from './BookSourceDebugPage';
 import { BookSourceLoginCoordinator } from '../bookSource/BookSourceLoginCoordinator';
 import { BookSourceStageRuntimeHost } from '../components/BookSourceStageRuntimeHost';
 import { ThemeSettingsPage } from './ThemeSettingsPage';
@@ -251,6 +252,8 @@ struct Index {
   @State changeSourceBook: Book | null = null;
   /** P9 正在登录的书源 URL；非空即显示登录页。 */
   @State loginSourceUrl: string = '';
+  /** P10 书源调试页：非空的书源 URL 即显示调试覆盖层。 */
+  @State debugSourceUrl: string = '';
   /** P9 通用 WebView 页 URL；非空即显示。 */
   @State sourceWebUrl: string = '';
   @State readerStartAtChapterBeginning: boolean = false;
@@ -8008,6 +8011,11 @@ private canWriteInto(dir: string): boolean {
     this.loginSourceUrl = sourceUrl;
   }
 
+  /** P10 打开书源调试页。 */
+  private openSourceDebug(sourceUrl: string): void {
+    this.debugSourceUrl = sourceUrl;
+  }
+
   /** P9 打开通用 WebView 页（验证码/源站浏览）。 */
   private openSourceWeb(url: string): void {
     this.sourceWebUrl = url;
@@ -10034,7 +10042,8 @@ private canWriteInto(dir: string): boolean {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl),
             onOpenSourceEdit: (sourceUrl: string) => this.openBookSourceEdit(sourceUrl),
-            onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl)
+            onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl),
+            onOpenSourceDebug: (sourceUrl: string) => this.openSourceDebug(sourceUrl)
           })
         } else if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_EDIT) {
           BookSourceEditPage({
@@ -10047,6 +10056,7 @@ private canWriteInto(dir: string): boolean {
             onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl),
             onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl),
             onClearSourceCookie: (sourceUrl: string) => this.clearSourceCookie(sourceUrl),
+            onOpenSourceDebug: (sourceUrl: string) => this.openSourceDebug(sourceUrl),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULES) {
@@ -11630,6 +11640,14 @@ private canWriteInto(dir: string): boolean {
         url: this.sourceWebUrl,
         onBack: () => { this.sourceWebUrl = ''; },
         onHtmlLoaded: (_html: string) => { /* HTML 回传预留给规则/调试入口 */ }
+      })
+    }
+    // P10 书源调试页：条件覆盖层，非空即显示。
+    if (this.debugSourceUrl.length > 0) {
+      BookSourceDebugPage({
+        sourceUrl: this.debugSourceUrl,
+        onBack: () => { this.debugSourceUrl = ''; },
+        onUnavailableAction: (message: string) => this.showUnavailableAction(message)
       })
     }
     }.width('100%').height('100%')
