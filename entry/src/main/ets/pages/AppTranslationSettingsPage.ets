@@ -2,7 +2,7 @@ import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import curves from '@ohos.curves';
 import { UiSection } from '../components/settings/UiSection';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
-import { FONT_ROW_TITLE } from '../components/UiTokens';
+import { BODY_SMALL, HEADLINE_SMALL, LABEL_MEDIUM, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 @Component
 export struct AppTranslationSettingsPage {
@@ -48,8 +48,8 @@ export struct AppTranslationSettingsPage {
             ThemeItemDivider()
             Column() {
               Row() {
-                Text('每块最大字符数').fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                Text(`${Math.round(this.maxChars)}`).fontSize(12).fontColor(this.themeColorAccent)
+                Text('每块最大字符数').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text(`${Math.round(this.maxChars)}`).fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
               }
               Slider({ value: this.maxChars, min: 1000, max: 10000, step: 500 })
                 .selectedColor(this.themeColorAccent).trackColor('#454750').enabled(false)
@@ -62,8 +62,8 @@ export struct AppTranslationSettingsPage {
               UiSection({ title: '应用 AI 接口' }) {
                 Row() {
                   Column() {
-                    Text('使用应用 AI 接口').fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary)
-                    Text('模型、API Key 和协议在 AI 设置中配置。').fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                    Text('使用应用 AI 接口').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+                    Text('模型、API Key 和协议在 AI 设置中配置。').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                   }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                   Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary)
                 }.padding({ left: 14, right: 14, top: 13, bottom: 13 }).onClick(() => this.onOpenAiSettings())
@@ -97,13 +97,13 @@ struct TranslationSettingsChoice {
   @Builder
   private ChoiceSheet() {
     Column() {
-      Text(this.title).fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text(this.title).fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       Scroll() {
         Column() {
           ForEach(this.options, (option: string, index: number) => {
             Row() {
-              Text(option).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+              Text(option).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               if (this.selected === index) {
                 Image($r('app.media.app_check')).width(18).height(18).fillColor(this.themeColorAccent)
               }
@@ -116,8 +116,8 @@ struct TranslationSettingsChoice {
   }
   build() {
     Row() {
-      Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-      Text(this.getSelectedLabel()).fontSize(12).fontColor(this.themeColorAccent)
+      Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.getSelectedLabel()).fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
       Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
     }.padding({ left: 14, right: 14, top: 12, bottom: 12 })
       .opacity(this.disabled ? 0.38 : 1)

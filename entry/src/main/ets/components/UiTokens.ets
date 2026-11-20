@@ -9,24 +9,6 @@
 
 // ── 字号 ──────────────────────────────────────────────
 
-/** 页面主标题（CollapsingSettingsHeader 展开态） */
-export const FONT_PAGE_TITLE: number = 28;
-/** 顶栏折叠后的标题 */
-export const FONT_PAGE_TITLE_COLLAPSED: number = 20;
-/** 区块标题（「屏幕设置」「翻页设置」这类） */
-export const FONT_SECTION_TITLE: number = 14;
-/** 设置行主标题 */
-export const FONT_ROW_TITLE: number = 16;
-/** 设置行说明（主标题下面那行小字） */
-export const FONT_ROW_DETAIL: number = 12;
-/** 设置行右侧当前值 */
-export const FONT_ROW_OPTION: number = 13;
-/** 小标签（角标、章节号这类） */
-export const FONT_LABEL_SMALL: number = 11;
-/** 输入框内文字 */
-export const FONT_INPUT: number = 14;
-/** 输入框上方的字段名 */
-export const FONT_INPUT_LABEL: number = 13;
 
 // ── 间距 ──────────────────────────────────────────────
 

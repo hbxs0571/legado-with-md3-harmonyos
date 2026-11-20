@@ -3,6 +3,7 @@ import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository, StyleResult } from '../data/ReaderMarkingRepository';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_LARGE, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 标记编辑器的样式来源菜单宽度。 */
 const MARKING_MENU_WIDTH: number = 220;
@@ -363,8 +364,8 @@ export struct ReaderMarkingEditor {
   private ColorPickerPanel() {
     Column() {
       Row() {
-        Text('自定义颜色').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-        Text('关闭').fontSize(12).fontColor(this.themeColorAccent)
+        Text('自定义颜色').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('关闭').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
           .onClick(() => this.colorPickerVisible = false)
       }.width('100%').margin({ bottom: 6 })
       Column() {
@@ -386,7 +387,7 @@ export struct ReaderMarkingEditor {
             ? normalizeColorText(this.colorInput) : this.themeColorSurfaceTertiary)
           .margin({ right: 8 })
         TextInput({ text: this.colorInput, placeholder: '#RRGGBB' })
-          .fontSize(13).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(this.themeColorSurfacePrimary).layoutWeight(1)
           .onChange((value: string) => {
             // 手输框实时同步到选中色：合法立即生效，非法保留文本待用户改完
@@ -398,7 +399,7 @@ export struct ReaderMarkingEditor {
           })
       }.width('100%').margin({ top: 8 })
       Text('支持 #RRGGBB 与 #AARRGGBB；背景高亮会自动叠加约 20% 透明度。')
-        .fontSize(11).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
+        .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
     }
     .width('100%').padding(10).backgroundColor(this.themeColorSurfaceHighest).borderRadius(12)
     .margin({ top: 8 })
@@ -429,26 +430,26 @@ export struct ReaderMarkingEditor {
       Column().width('100%').height('100%').backgroundColor('#66000000').onClick(() => this.onClose())
       Column() {
         Row() {
-          Text(this.isNew ? '划线与笔记' : '编辑标记').fontSize(19).fontWeight(FontWeight.Medium)
+          Text(this.isNew ? '划线与笔记' : '编辑标记').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
             .fontColor('#E5E6EB').layoutWeight(1)
-          Text('关闭').fontSize(13).fontColor(this.themeColorAccent).onClick(() => this.onClose())
+          Text('关闭').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).onClick(() => this.onClose())
         }.width('100%').margin({ bottom: 10 })
-        Text(this.marking.bookName).fontSize(13).fontColor('#D9DAE0').maxLines(1).width('100%')
-        Text(this.marking.chapterName).fontSize(12).fontColor(this.themeColorAccent).maxLines(1).width('100%')
+        Text(this.marking.bookName).fontSize(LABEL_MEDIUM).fontColor('#D9DAE0').maxLines(1).width('100%')
+        Text(this.marking.chapterName).fontSize(BODY_SMALL).fontColor(this.themeColorAccent).maxLines(1).width('100%')
           .margin({ top: 3, bottom: 8 })
         // 取色面板展开后内容会超出一屏，中间这部分必须能滚动，
         // 否则「笔记」与底部按钮会被挤出屏幕而无法保存。
         Scroll() {
           Column() {
             Scroll() {
-              Text(this.marking.selectedText).fontSize(13).fontColor(this.themeColorTextSecondary).lineHeight(20)
+              Text(this.marking.selectedText).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT)
                 .width('100%')
             }.edgeEffect(EdgeEffect.None).height(76).width('100%').padding(9).backgroundColor(this.themeColorSurfacePrimary).borderRadius(10)
             // 样式来源：对齐上游 MarkingSheet.kt:175 的 TinyDropdownSettingItem。
             Row() {
-              Text('样式来源').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+              Text('样式来源').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               Text(this.useRule ? '复用已有规则' : '自定义样式')
-                .fontSize(13).fontColor(this.themeColorAccent)
+                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                 .padding({ left: 8, right: 8, top: 5, bottom: 5 })
                 .onClick(() => { this.styleSourceVisible = !this.styleSourceVisible; })
                 .bindPopup(this.styleSourceVisible, {
@@ -464,20 +465,20 @@ export struct ReaderMarkingEditor {
             if (this.useRule) {
               if (this.highlightRules.length === 0) {
                 Text('还没有高亮规则，可切到「自定义样式」直接设置')
-                  .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%')
+                  .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%')
                   .padding({ top: 10, bottom: 10 })
               } else {
                 Column() {
                   ForEach(this.highlightRules, (rule: ReaderHighlightRule) => {
                     Row() {
                       Text(this.selectedRuleId === rule.id ? '✓' : '')
-                        .fontSize(13).fontColor(this.themeColorAccent).width(18)
+                        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).width(18)
                       Column() {
-                        Text(this.ruleLabel(rule)).fontSize(13)
+                        Text(this.ruleLabel(rule)).fontSize(LABEL_MEDIUM)
                           .fontColor(this.selectedRuleId === rule.id ? '#E7E9F5' : '#C5C7D0')
                           .maxLines(2).width('100%')
                         if (this.ruleHint(rule).length > 0) {
-                          Text(this.ruleHint(rule)).fontSize(11).fontColor(this.themeColorTextTertiary)
+                          Text(this.ruleHint(rule)).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                             .width('100%').margin({ top: 2 })
                         }
                       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
@@ -491,18 +492,18 @@ export struct ReaderMarkingEditor {
               }
             }
             if (!this.useRule) {
-            Text('样式').fontSize(13).fontColor(this.themeColorTextSecondary).margin({ top: 10, bottom: 5 })
+            Text('样式').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).margin({ top: 10, bottom: 5 })
               .alignSelf(ItemAlign.Start)
             Flex({ wrap: FlexWrap.Wrap }) {
               ForEach(READER_MARKING_EFFECTS, (item: ReaderMarkingEffect, index: number) => {
                 Text(READER_MARKING_LABELS[index] ?? '划线')
-                  .fontSize(11).fontColor(this.effect === item ? '#E7E9F5' : '#B9BBC5')
+                  .fontSize(LABEL_SMALL).fontColor(this.effect === item ? '#E7E9F5' : '#B9BBC5')
                   .padding({ left: 9, right: 9, top: 7, bottom: 7 }).margin({ right: 6, bottom: 5 })
                   .backgroundColor(this.effect === item ? this.themeColorSecondaryContainer : this.themeColorSurfaceTertiary).borderRadius(14)
                   .onClick(() => this.effect = item)
               }, (item: ReaderMarkingEffect) => item)
             }.width('100%')
-            Text('颜色').fontSize(13).fontColor(this.themeColorTextSecondary).margin({ top: 2, bottom: 5 }).alignSelf(ItemAlign.Start)
+            Text('颜色').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).margin({ top: 2, bottom: 5 }).alignSelf(ItemAlign.Start)
             // 上游是横向滚动的单行色带，但本地面板外层套了「点空白关闭」的遮罩，
             // 横向手势会被遮罩吃掉，所以改成换行排列，与上方「样式」的排布一致。
             Flex({ wrap: FlexWrap.Wrap }) {
@@ -520,7 +521,7 @@ export struct ReaderMarkingEditor {
                   .backgroundColor(this.isCustomColor() ? this.color : this.themeColorSurfaceTertiary)
                   .border({ width: this.isCustomColor() ? 2 : 1, color: this.isCustomColor() ? '#E7E9F5' : '#4A4C56' })
                 if (!this.isCustomColor()) {
-                  Text('+').fontSize(15).fontColor('#B9BBC5')
+                  Text('+').fontSize(LABEL_MEDIUM).fontColor('#B9BBC5')
                 }
               }.width(38).height(38).margin({ bottom: 4 })
                 .onClick(() => {
@@ -532,9 +533,9 @@ export struct ReaderMarkingEditor {
               this.ColorPickerPanel()
             }
             }
-            Text('笔记').fontSize(13).fontColor(this.themeColorTextSecondary).margin({ top: 8, bottom: 5 }).alignSelf(ItemAlign.Start)
+            Text('笔记').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).margin({ top: 8, bottom: 5 }).alignSelf(ItemAlign.Start)
             TextArea({ text: this.note, placeholder: '添加笔记（可选）' })
-              .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(this.themeColorSurfacePrimary).height(82).width('100%')
               .onChange((value: string) => this.note = value)
           }.width('100%').alignItems(HorizontalAlign.Start)
@@ -542,13 +543,13 @@ export struct ReaderMarkingEditor {
         // 按钮行固定在面板底部，不随中间内容滚动，保证取色面板展开时依然可保存。
         Row() {
           if (!this.isNew) {
-            Text('删除').fontSize(13).fontColor('#F2A6A6')
+            Text('删除').fontSize(LABEL_MEDIUM).fontColor('#F2A6A6')
               .padding({ left: 10, right: 10, top: 9, bottom: 9 }).onClick(() => this.onDelete())
           }
           Blank()
-          Text('取消').fontSize(13).fontColor('#C5C7D0')
+          Text('取消').fontSize(LABEL_MEDIUM).fontColor('#C5C7D0')
             .padding({ left: 10, right: 10, top: 9, bottom: 9 }).onClick(() => this.onClose())
-          Text('保存').fontSize(13).fontColor('#D7DFFB')
+          Text('保存').fontSize(LABEL_MEDIUM).fontColor('#D7DFFB')
             .padding({ left: 16, right: 16, top: 9, bottom: 9 })
             .backgroundColor(this.themeColorSecondaryContainer).borderRadius(18)
             .onClick(() => this.onSave(this.effect, this.color, this.note))

@@ -1,5 +1,6 @@
 import { Book } from '../model/Book';
 import { BookCover } from './BookCover';
+import { LABEL_LARGE, LABEL_SMALL, TITLE_SMALL } from './typography/TypographyTokens';
 
 @Component
 export struct BookCard {
@@ -15,7 +16,7 @@ export struct BookCard {
         BookCover({ book: this.book })
         if (this.book.isLocal) {
           Text('本地')
-            .fontSize(9)
+            .fontSize(LABEL_SMALL)
             .fontColor('#4E5847')
             .padding({ left: 6, right: 6, top: 3, bottom: 3 })
             .backgroundColor('#F3EEDC')
@@ -25,14 +26,14 @@ export struct BookCard {
       }
       .onClick(() => this.onOpen(this.book))
       Text(this.book.title)
-        .fontSize(14)
+        .fontSize(LABEL_LARGE)
         .fontWeight(FontWeight.Medium)
         .fontColor('#302F29')
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .margin({ top: 10 })
       Text(this.book.lastChapter)
-        .fontSize(11)
+        .fontSize(LABEL_SMALL)
         .fontColor('#838178')
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })

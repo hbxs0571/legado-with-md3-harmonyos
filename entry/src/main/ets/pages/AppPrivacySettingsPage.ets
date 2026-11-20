@@ -7,6 +7,7 @@ import { UiAction } from '../components/settings/UiAction';
 import { UiChoice } from '../components/settings/UiChoice';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { PrivateAccessRepository, PrivateBiometricStatus } from '../data/PrivateAccessRepository';
+import { BODY_SMALL, LABEL_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 离开后重新验证五档的秒数，对齐上游 private_background_grace_* 格式串取值。 */
 const GRACE_OPTION_SECONDS: number[] = [0, 30, 120, 180, 300];
@@ -259,24 +260,24 @@ export struct AppPrivacySettingsPage {
         .onClick(() => this.passwordPanelVisible = false)
       Column() {
         Text(this.privateHasPassword ? '修改本地密码' : '设置本地密码')
-          .fontSize(16).fontColor('#F1F2F6').alignSelf(ItemAlign.Start)
+          .fontSize(TITLE_MEDIUM).fontColor('#F1F2F6').alignSelf(ItemAlign.Start)
         if (this.privateHasPassword) {
           TextInput({ text: this.currentPasswordInput, placeholder: '当前密码' })
-            .type(InputType.Password).fontSize(14).height(44).margin({ top: 14 })
+            .type(InputType.Password).fontSize(TITLE_SMALL).height(44).margin({ top: 14 })
             .onChange((value: string) => { this.currentPasswordInput = value; })
         }
         TextInput({ text: this.passwordInput, placeholder: '输入本地密码' })
-          .type(InputType.Password).fontSize(14).height(44).margin({ top: 10 })
+          .type(InputType.Password).fontSize(TITLE_SMALL).height(44).margin({ top: 10 })
           .onChange((value: string) => { this.passwordInput = value; })
         if (this.passwordMessage.length > 0) {
-          Text(this.passwordMessage).fontSize(12).fontColor('#FF6B6B')
+          Text(this.passwordMessage).fontSize(BODY_SMALL).fontColor('#FF6B6B')
             .alignSelf(ItemAlign.Start).margin({ top: 8 })
         }
         Row() {
-          Text('取消').fontSize(14).fontColor('#B6B8C2').padding(10)
+          Text('取消').fontSize(TITLE_SMALL).fontColor('#B6B8C2').padding(10)
             .onClick(() => this.passwordPanelVisible = false)
           Blank()
-          Text('保存').fontSize(14).fontColor(this.themeColorAccent).padding(10)
+          Text('保存').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
             .onClick(async () => { await this.savePassword(); })
         }.width('100%').margin({ top: 12 })
       }.width('90%').padding(18).backgroundColor('#1D1E26').borderRadius(18)

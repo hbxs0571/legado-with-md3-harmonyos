@@ -12,6 +12,7 @@ import {
 } from '../bookSource/BookSourceDebugCoordinator';
 import { BookSourceRepository } from '../data/BookSourceRepository';
 import { BookSource } from '../model/BookSource';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 示例项（具名接口，ArkTS 禁匿名对象字面量）。 */
 interface DebugExample {
@@ -118,7 +119,7 @@ export struct BookSourceDebugPage {
 
   @Builder ChipBuilder(label: string, selected: boolean, onSelect: () => void) {
     Text(label)
-      .fontSize(13)
+      .fontSize(LABEL_MEDIUM)
       .fontColor(selected ? '#FFFFFF' : this.themeColorTextPrimary)
       .backgroundColor(selected ? this.themeColorAccent : this.themeColorSurfaceTertiary)
       .borderRadius(16)
@@ -131,18 +132,18 @@ export struct BookSourceDebugPage {
     Column() {
       Row() {
         Text(kindTitle(entry.kind))
-          .fontSize(12)
+          .fontSize(BODY_SMALL)
           .fontColor(entry.kind === 'Error' ? '#D32F2F' : this.themeColorAccent)
         Text('+' + (entry.elapsedMs / 1000).toFixed(3) + 's')
-          .fontSize(12).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).layoutWeight(1)
           .textAlign(TextAlign.End)
       }.width('100%')
       Text(entry.message)
-        .fontSize(14).fontColor(this.themeColorTextPrimary)
+        .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary)
         .maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%').margin({ top: 6 })
       Text(new Date(entry.timestamp).toLocaleString())
-        .fontSize(11).fontColor(this.themeColorTextTertiary)
+        .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
         .width('100%').margin({ top: 6 })
     }
     .width('100%')
@@ -225,7 +226,7 @@ export struct BookSourceDebugPage {
 
           if (this.visibleEntries().length === 0) {
             Text(this.status === 'Running' ? '等待调试日志…' : '输入内容并开始调试')
-              .fontSize(14).fontColor(this.themeColorTextTertiary)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
               .width('100%').textAlign(TextAlign.Center).padding(60)
           } else {
             ForEach(this.visibleEntries(), (entry: DebugEntry) => {
@@ -241,13 +242,13 @@ export struct BookSourceDebugPage {
         Column() {
           Row() {
             Text(kindTitle(this.selectedEntry()!.kind))
-              .fontSize(18).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-            Text('关闭').fontSize(14).fontColor(this.themeColorAccent)
+              .fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+            Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
               .onClick(() => { this.selectedId = -1; })
           }.width('100%').padding(16)
           Scroll() {
             Text(this.selectedEntry()!.message)
-              .fontSize(14).fontColor(this.themeColorTextPrimary).width('100%')
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
           }.width('100%').layoutWeight(1).padding({ left: 16, right: 16 })
         }
         .width('100%').height('60%')

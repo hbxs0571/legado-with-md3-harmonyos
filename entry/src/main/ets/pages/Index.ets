@@ -198,6 +198,7 @@ import { ReaderMarkingEditor } from './ReaderMarkingEditor';
 import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession, ReadRecordDetail, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
 import { ReadRecordRepository } from '../data/ReadRecordRepository';
 import { applyStartWindowBackgroundColor } from '../data/StartWindowBackground';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_LARGE, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 const EMPTY_BOOK: Book = {
   id: '',
@@ -7543,19 +7544,19 @@ private canWriteInto(dir: string): boolean {
   private AppStartGatePanel() {
     Column() {
       Column() {
-        Text('验证本地密码').fontSize(18).fontColor('#F1F2F6').alignSelf(ItemAlign.Start)
+        Text('验证本地密码').fontSize(TITLE_LARGE).fontColor('#F1F2F6').alignSelf(ItemAlign.Start)
         Text('应用启动时验证，请输入本地密码后继续。')
-          .fontSize(13).fontColor('#B6B8C2').alignSelf(ItemAlign.Start).margin({ top: 8 })
+          .fontSize(LABEL_MEDIUM).fontColor('#B6B8C2').alignSelf(ItemAlign.Start).margin({ top: 8 })
         TextInput({ text: this.appStartPassword, placeholder: '本地密码' })
-          .type(InputType.Password).fontSize(14).height(44).margin({ top: 18 })
+          .type(InputType.Password).fontSize(TITLE_SMALL).height(44).margin({ top: 18 })
           .onChange((value: string) => { this.appStartPassword = value; })
         if (this.appStartPasswordError.length > 0) {
-          Text(this.appStartPasswordError).fontSize(12).fontColor('#FF6B6B')
+          Text(this.appStartPasswordError).fontSize(BODY_SMALL).fontColor('#FF6B6B')
             .alignSelf(ItemAlign.Start).margin({ top: 8 })
         }
         Row() {
           Blank()
-          Text('解锁').fontSize(14).fontColor(this.themeColorAccent).padding(10)
+          Text('解锁').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
             .onClick(async () => { await this.submitAppStartPassword(); })
         }.width('100%').margin({ top: 12 })
       }.width('86%').padding(20).backgroundColor('#1D1E26').borderRadius(18)
@@ -11696,7 +11697,7 @@ struct TabItem {
       .borderRadius(16)
       // 标签 12vp、选中加粗：上游 `AppNavigationBar.kt:217-225` 是 12sp + 选中 Bold。
       if (this.selected && this.showLabel) {
-        Text(this.label).fontSize(12).fontWeight(FontWeight.Medium)
+        Text(this.label).fontSize(BODY_SMALL).fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextPrimary).margin({ top: 2 })
       }
     }.width('100%').alignItems(HorizontalAlign.Center).padding({ top: 1, bottom: 1 })

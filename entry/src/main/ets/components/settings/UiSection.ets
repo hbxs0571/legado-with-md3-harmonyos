@@ -1,6 +1,6 @@
-import {
-  FONT_SECTION_TITLE, ROW_PADDING_H, SECTION_GAP, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP
-} from '../UiTokens';
+import { LABEL_LARGE_EMPHASIZED } from '../typography/TypographyTokens';
+
+import { ROW_PADDING_H, SECTION_GAP, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP } from '../UiTokens';
 
 /**
  * 设置页的区块容器：可选的区块标题 + 一张卡片。
@@ -33,7 +33,7 @@ export struct UiSection {
     Column() {
       if (this.title.length > 0) {
         Text(this.title)
-          .fontSize(FONT_SECTION_TITLE)
+          .fontSize(LABEL_LARGE_EMPHASIZED)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorAccent)
           .alignSelf(ItemAlign.Start)

@@ -7,6 +7,7 @@ import { AppTopBar, TopBarBackButton } from '../components/TopBar';
 import {
   BookSourceLoginCoordinator, LoginPrepare, LoginSubmitResult
 } from '../bookSource/BookSourceLoginCoordinator';
+import { LABEL_MEDIUM, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 /** 表单项的本地可变副本（引擎 BookSourceLoginItem 字段只读投影到 state）。 */
 class FormItem {
@@ -109,7 +110,7 @@ export struct SourceLoginPage {
           .width('100%').enabled(!this.submitting)
           .onClick(() => { this.runItemAction(item); })
       } else if (item.type === 'select' || (item.type === 'toggle' && item.chars.length > 0)) {
-        Text(item.viewName).fontSize(13).fontColor(this.themeColorTextTertiary)
+        Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
           .width('100%').margin({ bottom: 4 })
         Select(this.selectOptions(item.chars))
           .value(item.value.length > 0 ? item.value : (item.chars.length > 0 ? item.chars[0] : ''))
@@ -117,12 +118,12 @@ export struct SourceLoginPage {
           .fontColor(this.themeColorTextPrimary)
       } else if (item.type === 'toggle') {
         Row() {
-          Text(item.viewName).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text(item.viewName).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: item.value === 'true' || item.value === '1' })
             .onChange((on: boolean) => { this.items[index].value = on ? 'true' : 'false'; })
         }
       } else {
-        Text(item.viewName).fontSize(13).fontColor(this.themeColorTextTertiary)
+        Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
           .width('100%').margin({ bottom: 4 })
         TextInput({ placeholder: item.viewName, text: item.value })
           .type(item.type === 'password' ? InputType.Password : InputType.Normal)
@@ -150,7 +151,7 @@ export struct SourceLoginPage {
         // Web 模式：内嵌 WebView 加载入口页，cookie 由 onPageEnd 持久化。
         Column() {
           Text('此源使用网页登录，请在下方页面完成登录后返回。')
-            .fontSize(13).fontColor(this.themeColorTextTertiary).padding(12)
+            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).padding(12)
           Web({ src: this.entryUrl, controller: this.webController })
             .javaScriptAccess(true).domStorageAccess(true)
             .width('100%').layoutWeight(1)
@@ -167,7 +168,7 @@ export struct SourceLoginPage {
         Scroll() {
           Column() {
             Text('请填写登录信息（表单由书源 loginUi 定义）')
-              .fontSize(13).fontColor(this.themeColorTextTertiary).margin({ bottom: 16 })
+              .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ bottom: 16 })
             ForEach(this.items, (item: FormItem, index: number) => {
               this.ControlView(item, index)
             }, (item: FormItem): string => item.name)
@@ -175,7 +176,7 @@ export struct SourceLoginPage {
               .width('100%').enabled(!this.submitting).onClick(() => { this.submit(); })
               .margin({ top: 8 })
             if (this.resultMessage.length > 0) {
-              Text(this.resultMessage).fontSize(13).fontColor(this.themeColorTextTertiary)
+              Text(this.resultMessage).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
                 .margin({ top: 12 }).width('100%')
             }
           }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 24 })

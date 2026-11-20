@@ -1,3 +1,5 @@
+import { LABEL_MEDIUM, LABEL_SMALL } from '../typography/TypographyTokens';
+
 /**
  * 日夜双色行，对齐上游 TinyColorModeSettingItem：一个控件里并排两个色点，
  * 点左边改日间、点右边改夜间。点色点就地展开预设色板；showFollow 为真时
@@ -29,7 +31,7 @@ export struct UiColorModeRow {
   build() {
     Column() {
       Row() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
         Row({ space: 8 }) {
           // 日间色点。
           Stack({ alignContent: Alignment.Center }) {
@@ -70,7 +72,7 @@ export struct UiColorModeRow {
               })
           }, (color: string) => color)
           if (this.showFollow) {
-            Text('跟随正文').fontSize(11).fontColor(this.rsetAccent)
+            Text('跟随正文').fontSize(LABEL_SMALL).fontColor(this.rsetAccent)
               .padding({ left: 8, right: 8 })
               .onClick(() => {
                 if (this.expanded === 0) {

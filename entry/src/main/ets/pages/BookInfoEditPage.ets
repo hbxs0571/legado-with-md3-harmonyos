@@ -7,6 +7,7 @@ import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepo
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { SPACE_8, SPACE_12, SPACE_16, RADIUS_SHEET } from '../components/UiTokens';
+import { BODY_LARGE, LABEL_MEDIUM, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 /** 编辑页顶栏用的保存按钮尺寸走 TopBar 的统一口径，这里只留菜单宽度与输入框常量。 */
 const BOOK_TYPE_MENU_WIDTH: number = 220;
@@ -222,7 +223,7 @@ export struct BookInfoEditPage {
   @Builder
   knowledgeCard() {
     Column({ space: SPACE_12 }) {
-      Text('知识').fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('知识').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
       Scroll() {
         Row({ space: SPACE_8 }) {
           this.knowledgeChip('list', '人物')
@@ -246,7 +247,7 @@ export struct BookInfoEditPage {
   knowledgeChip(icon: AppGlyphName, label: string) {
     Row() {
       AppGlyph({ name: icon, glyphSize: 16, tint: this.themeColorTextSecondary })
-      Text(label).fontSize(13).fontColor(this.themeColorTextPrimary).margin({ left: 6 })
+      Text(label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ left: 6 })
     }
     .height(34).padding({ left: 12, right: 12 })
     .border({ width: 1, color: this.themeColorTextTertiary })
@@ -271,7 +272,7 @@ export struct BookInfoEditPage {
           Row({ space: SPACE_8 }) {
             ForEach(this.kindList, (kind: string, index: number) => {
               Row() {
-                Text(kind).fontSize(13).fontColor(this.themeColorTextPrimary)
+                Text(kind).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               }
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -314,7 +315,7 @@ export struct BookInfoEditPage {
   kindDialog() {
     Column({ space: SPACE_16 }) {
       Text(this.kindEditingIndex === -1 ? '添加标签' : '编辑标签')
-        .fontSize(17).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .fontSize(BODY_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
       Column() {
         this.m3Input('标签', this.kindEditingText, '请输入标签',
           (value: string) => { this.kindEditingText = value; })

@@ -11,6 +11,7 @@
  */
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ReaderAloudSettingsPage {
@@ -81,7 +82,7 @@ export struct ReaderAloudSettingsPage {
             .fillColor(this.themeColorTextPrimary)
             .onClick(() => this.onBack())
           Text('朗读设置')
-            .fontSize(16).fontWeight(FontWeight.Medium)
+            .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary)
             .margin({ left: 10 })
           Blank()
@@ -100,7 +101,7 @@ export struct ReaderAloudSettingsPage {
               Row() {
                 Image($r('app.media.reader_next')).width(18).height(18)
                   .fillColor(this.themeColorTextPrimary)
-                Text('下一句').fontSize(13).fontColor(this.themeColorTextPrimary).margin({ left: 6 })
+                Text('下一句').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ left: 6 })
               }
               .layoutWeight(1).height(48)
               .justifyContent(FlexAlign.Center)
@@ -114,7 +115,7 @@ export struct ReaderAloudSettingsPage {
             .margin({ left: 12, right: 12, bottom: 8 })
 
             Text(this.unitTotal > 0 ? `第 ${this.unitIndex + 1} / ${this.unitTotal} 句` : '未开始朗读')
-              .fontSize(12).fontColor(this.themeColorTextTertiary)
+              .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
               .width('100%').textAlign(TextAlign.Center).margin({ bottom: 10 })
 
             // TinyClickableSettingItem：定时（上游 set_timer）。ValueStepper 风格值在右、chevron 尾。
@@ -124,8 +125,8 @@ export struct ReaderAloudSettingsPage {
             if (this.showTimerPicker) {
               Column() {
                 Row() {
-                  Text('关闭').fontSize(14).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-                  if (this.timerLabel === '关闭') { Text('✓').fontSize(14).fontColor(this.themeColorAccent) }
+                  Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                  if (this.timerLabel === '关闭') { Text('✓').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent) }
                 }.width('100%').padding(12)
                 .onClick(() => {
                   this.timerLabel = '关闭';
@@ -133,9 +134,9 @@ export struct ReaderAloudSettingsPage {
                   this.showTimerPicker = false;
                 })
                 Row() {
-                  Text('按时长').fontSize(14).fontColor(this.themeColorTextPrimary)
+                  Text('按时长').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
                   Blank()
-                  Text(`${this.timerMinutes} 分钟`).fontSize(12).fontColor(this.themeColorTextSecondary)
+                  Text(`${this.timerMinutes} 分钟`).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
                 }.width('100%').padding(12)
                 .onClick(() => { this.pickerMode = 'minute'; })
                 if (this.pickerMode === 'minute') {
@@ -144,9 +145,9 @@ export struct ReaderAloudSettingsPage {
                     .onChange((value: number, _mode: SliderChangeMode) => { this.timerMinutes = Math.round(value); })
                 }
                 Row() {
-                  Text('按章节').fontSize(14).fontColor(this.themeColorTextPrimary)
+                  Text('按章节').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
                   Blank()
-                  Text(`${this.timerChapters} 章`).fontSize(12).fontColor(this.themeColorTextSecondary)
+                  Text(`${this.timerChapters} 章`).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
                 }.width('100%').padding(12)
                 .onClick(() => { this.pickerMode = 'chapter'; })
                 if (this.pickerMode === 'chapter') {
@@ -154,7 +155,7 @@ export struct ReaderAloudSettingsPage {
                     .width('100%').selectedColor(this.themeColorAccent)
                     .onChange((value: number, _mode: SliderChangeMode) => { this.timerChapters = Math.round(value); })
                 }
-                Text('确定').fontSize(14).fontColor(this.themeColorSurfacePrimary)
+                Text('确定').fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary)
                   .width('100%').textAlign(TextAlign.Center).padding(12)
                   .borderRadius(12).backgroundColor(this.themeColorAccent)
                   .onClick(() => {
@@ -175,12 +176,12 @@ export struct ReaderAloudSettingsPage {
 
             // 上一章 / 下一章：两个 weight(1) tonal 按钮。
             Row() {
-              Text('上一章').fontSize(13).fontWeight(FontWeight.Medium)
+              Text('上一章').fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
                 .fontColor(this.themeColorTextPrimary)
                 .layoutWeight(1).height(44).textAlign(TextAlign.Center)
                 .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.7)).backdropBlur(12).borderRadius(22)
                 .onClick(() => this.onTurnChapter(-1))
-              Text('下一章').fontSize(13).fontWeight(FontWeight.Medium)
+              Text('下一章').fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
                 .fontColor(this.themeColorTextPrimary)
                 .layoutWeight(1).height(44).textAlign(TextAlign.Center)
                 .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.7)).backdropBlur(12).borderRadius(22)
@@ -269,7 +270,7 @@ struct ConfigGlassSwitch {
 
   build() {
     Row() {
-      Text(this.label).fontSize(14).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .selectedColor(this.themeColorAccent)
@@ -295,9 +296,9 @@ struct ConfigGlassRow {
 
   build() {
     Row() {
-      Text(this.label).fontSize(14).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-      Text(this.value).fontSize(12).fontColor(this.themeColorTextSecondary).margin({ right: 6 })
+      Text(this.value).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).margin({ right: 6 })
       Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextSecondary)
     }
     .width('100%').constraintSize({ minHeight: 56 })
@@ -334,7 +335,7 @@ struct AloudActionButton {
       }
       .width(48).height(48).borderRadius(24)
       .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.75)).backdropBlur(12)
-      Text(this.label).fontSize(11).fontColor(this.themeColorTextSecondary)
+      Text(this.label).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center).margin({ top: 6 })
     }

@@ -6,6 +6,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { BookSource } from '../model/BookSource';
 import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
 import { AppGlyph } from '../components/AppGlyph';
+import { BODY_LARGE, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 一个字段槽：path 为点路径，label 为中文标签，multi 决定用 TextArea 还是 TextInput。 */
 interface FieldSpec {
@@ -332,15 +333,15 @@ export struct BookSourceEditPage {
 
   @Builder FieldRow(spec: FieldSpec) {
     Column() {
-      Text(spec.label).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ bottom: 4 }).width('100%')
+      Text(spec.label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ bottom: 4 }).width('100%')
       if (spec.multi) {
         TextArea({ placeholder: spec.label, text: this.readPath(spec.path) })
-          .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+          .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8).height(72)
           .onChange((value: string) => { this.writePath(spec.path, value); })
       } else {
         TextInput({ placeholder: spec.label, text: this.readPath(spec.path) })
-          .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+          .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8)
           .onChange((value: string) => { this.writePath(spec.path, value); })
       }
@@ -349,7 +350,7 @@ export struct BookSourceEditPage {
 
   @Builder ToggleRow(toggle: ToggleSpec) {
     Row() {
-      Text(toggle.label).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      Text(toggle.label).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.readBool(toggle.key, toggle.def) })
         .selectedColor(this.themeColorAccent)
         .onChange((isOn: boolean) => { this.writeBool(toggle.key, isOn); })
@@ -382,7 +383,7 @@ export struct BookSourceEditPage {
               Column() {
                 if (index === 0) {
                   Row() {
-                    Text('类型').fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                    Text('类型').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
                     Select(SOURCE_TYPES.map<TypeOption>((t: string): TypeOption => ({ value: t })))
                       .selected(this.sourceTypeIndex)
                       .onSelect((i: number) => { this.sourceTypeIndex = i; })
@@ -415,15 +416,15 @@ export struct BookSourceEditPage {
     if (this.variablePanelVisible) {
       Column() {
         Row() {
-          Text('设置源变量').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          Text('设置源变量').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           Blank()
-          Text('关闭').fontSize(15).fontColor(this.themeColorAccent)
+          Text('关闭').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
             .onClick(() => { this.variablePanelVisible = false; })
         }.width('100%').padding({ left: 20, right: 20, top: 16, bottom: 8 })
         Text('变量名=值，每行一个。供书源 JS 通过 source.getVariable 读取。')
-          .fontSize(12).fontColor(this.themeColorTextTertiary).padding({ left: 20, right: 20, bottom: 8 })
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).padding({ left: 20, right: 20, bottom: 8 })
         TextArea({ placeholder: 'key=value', text: this.variableDraft })
-          .fontSize(14).fontColor(this.themeColorTextPrimary)
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
           .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8).height(160)
           .margin({ left: 20, right: 20 })
           .onChange((value: string) => { this.variableDraft = value; })
@@ -441,11 +442,11 @@ export struct BookSourceEditPage {
 
   @Builder MoreMenuBuilder() {
     Column() {
-      Text('更多操作').fontSize(17).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('更多操作').fontSize(BODY_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 20, top: 16, bottom: 12 })
       ForEach(MORE_ITEMS, (item: MoreMenuItem) => {
         Row() {
-          Text(item.title).fontSize(16).fontColor(this.themeColorTextPrimary)
+          Text(item.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
         }.width('100%').padding({ left: 20, top: 12, bottom: 12 })
         .onClick(() => { this.onMoreAction(item.key); })
       })

@@ -12,7 +12,7 @@ _避免_：把原条目保存为兼容数据就称为已接入
 **安全兼容**：识别、预览、忽略或原样保留未迁移的归档类别，不执行其中的规则，也不调用外部服务。
 _避免_：把未迁移类别写成功能恢复
 
-**排版阶梯（typography scale）**：M3 按用途命名的 24 个文字槽位，headline / title / body / label 各三档（Large/Medium/Small），每档再分普通与 `Emphasized` 变体。与「字号」的区别是它绑的是**用途**不是**尺寸**——写 `bodyMedium` 表示「正文」，至于它是 14sp 还是 15sp 由主题决定，换字体、换字号缩放时所有正文一起变。上游 `ui/theme/LegadoTheme.kt:85-119` 定义这套槽位，全仓引用 696 处；本地**没有这一层**，1,189 处 `fontSize(N)` 直接写字面量、用到 20 种字号，所以「同一层级在不同页面大小不一」是结构性结果，不是个别页面写错。见[已知问题](KNOWN-ISSUES.md)的 KI-THEME5。
+**排版阶梯（typography scale）**：M3 按用途命名的 24 个文字槽位，headline / title / body / label 各三档（Large/Medium/Small），每档再分普通与 `Emphasized` 变体。与「字号」的区别是它绑的是**用途**不是**尺寸**——写 `bodyMedium` 表示「正文」，至于它是 14sp 还是 15sp 由主题决定，换字体、换字号缩放时所有正文一起变。上游 `ui/theme/LegadoTheme.kt:85-119` 定义这套槽位，全仓引用 696 处；本地改造前**没有这一层**（1,282 处 `fontSize(N)` 字面量、20 种字号，旧文档 1,189 为粗测值），改造后已建 `components/typography/TypographyTokens.ets` 的 24 槽位常量，字面量归零。见[已知问题](KNOWN-ISSUES.md)的 KI-THEME5。
 _避免_：别把它和 `fontScale`（全局字号缩放 8..16）混为一谈——前者是「哪个槽位」，后者是「所有槽位放大多少倍」，本地两个都接了一部分但没打通
 
 **组件级形变（component morph）**：一个控件在状态切换时**形状本身连续变化**，而不是换一张图或换一个组件。典型是 M3 Expressive 的播放/暂停键：容器从圆变成八瓣软爆裂（同时转 30°）、图标从三角顶点插值到两条竖线、底色从 `secondaryContainer` 切到 `primaryContainer`，三者同一个 300ms `tween` 里完成。上游 `ui/widget/components/player/AnimatedPlayPauseButton.kt` 是标准实现，同类还有下拉刷新指示器、加载圈、FAB 菜单图标。ArkUI 走 `@AnimatableExtend` + `AnimatableArithmetic<T>`（均 @since 10）驱动 `Polygon.points` 逐帧插值，实测插值速率 118.6–240 次/秒。见[已知问题](KNOWN-ISSUES.md)的 KI-THEME6。

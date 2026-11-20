@@ -1,6 +1,7 @@
 import { fileIo } from '@kit.CoreFileKit';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { Book } from '../model/Book';
+import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 interface ManagedFileEntry {
   name: string;
@@ -142,7 +143,7 @@ export struct FileManagerPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.openParent())
-        Text('筛选 • 文件管理').fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1).margin({ left: 8 })
+        Text('筛选 • 文件管理').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1).margin({ left: 8 })
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
@@ -156,7 +157,7 @@ export struct FileManagerPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '筛选 • 文件管理', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_file_manager_search')
             .onAppear(() => focusControl.requestFocus('my_file_manager_search'))
@@ -171,7 +172,7 @@ export struct FileManagerPage {
             Row() {
               ForEach(this.getBreadcrumbs(), (crumb: FileBreadcrumb, index: number) => {
                 Row() {
-                  Text(crumb.title).fontSize(13).fontColor(index === this.getBreadcrumbs().length - 1 ? this.themeColorTextPrimary : this.themeColorAccent)
+                  Text(crumb.title).fontSize(LABEL_MEDIUM).fontColor(index === this.getBreadcrumbs().length - 1 ? this.themeColorTextPrimary : this.themeColorAccent)
                     .onClick(() => { this.searchQuery = ''; this.loadDirectory(crumb.path); })
                   Image($r('app.media.file_picker_arrow')).width(16).height(16)
                     .margin({ left: 5, right: 5 })
@@ -184,7 +185,7 @@ export struct FileManagerPage {
             FileManagerEmpty({ icon: 'folder', title: '正在读取目录', detail: '' }).layoutWeight(1)
           } else if (this.getVisibleEntries().length === 0) {
             Text(this.searchQuery.length > 0 ? '没有匹配的文件' : '内容为空')
-              .fontSize(14).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center).width('100%')
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center).width('100%')
               .layoutWeight(1).alignSelf(ItemAlign.Center).padding(16)
           } else {
             Column() {
@@ -222,8 +223,8 @@ struct FileManagerEmpty {
   build() {
     Column() {
       AppGlyph({ name: this.icon, glyphSize: 34, tint: this.themeColorAccent }).margin({ bottom: 14 })
-      Text(this.title).fontSize(15).fontColor(this.themeColorTextSecondary)
-      Text(this.detail).fontSize(12).fontColor('#858792').textAlign(TextAlign.Center)
+      Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+      Text(this.detail).fontSize(BODY_SMALL).fontColor('#858792').textAlign(TextAlign.Center)
         .margin({ left: 34, right: 34, top: 8 })
     }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
   }
@@ -245,7 +246,7 @@ struct ManagedFileRow {
       } else {
         Image($r('app.media.file_picker_file')).width(24).height(24)
       }
-      Text(this.name).fontSize(16).fontColor(this.themeColorTextSecondary).maxLines(1).layoutWeight(1).margin({ left: 8 })
+      Text(this.name).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary).maxLines(1).layoutWeight(1).margin({ left: 8 })
     }.width('100%').height(42).padding({ left: 8, right: 8 })
       .border({ width: { bottom: 1 }, color: '#26272D' })
       .priorityGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => { this.onLongSelect(); }))

@@ -7,6 +7,7 @@ import { ExploreCoordinator, ExploreOutcome } from '../bookSource/ExploreCoordin
 import { ExploreMenu } from '../bookSource/ExploreMenuParser';
 import { SearchBookItem } from '../bookSource/SourceModels';
 import { MergedBook } from '../bookSource/SearchResultMerger';
+import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 const DISCOVER_MENU_WIDTH: number = 260;
 
@@ -33,14 +34,14 @@ struct ExploreBookCard {
           .alt($r('app.media.transparent_pixel'))
       }
       Column() {
-        Text(this.item.name).fontSize(16).fontColor(this.themeColorTextPrimary).maxLines(1)
+        Text(this.item.name).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-        Text(this.item.author || '佚名').fontSize(13).fontColor(this.themeColorTextTertiary)
+        Text(this.item.author || '佚名').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
           .margin({ top: 5 }).maxLines(1).width('100%')
         Row() {
-          Text(this.item.lastChapter).fontSize(12).fontColor(this.themeColorTextTertiary)
+          Text(this.item.lastChapter).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
             .maxLines(1).layoutWeight(1)
-          Text(this.item.originName).fontSize(11).fontColor(this.themeColorTextTertiary)
+          Text(this.item.originName).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
             .margin({ left: 6 }).maxLines(1)
         }.width('100%').margin({ top: 6 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
@@ -195,7 +196,7 @@ export struct DiscoverPage {
       Row() {
         ForEach(this.exploreSources, (source: BookSource) => {
           Text(source.bookSourceName)
-            .fontSize(13)
+            .fontSize(LABEL_MEDIUM)
             .fontColor(source.bookSourceUrl === this.selectedSourceUrl ? '#FFFFFF' : this.themeColorTextSecondary)
             .backgroundColor(source.bookSourceUrl === this.selectedSourceUrl ? this.themeColorAccent : this.themeColorSurfaceElevated)
             .borderRadius(16).padding({ left: 12, right: 12, top: 7, bottom: 7 })
@@ -214,7 +215,7 @@ export struct DiscoverPage {
       Row() {
         ForEach(this.menus, (menu: ExploreMenu, index: number) => {
           Text(menu.title)
-            .fontSize(12)
+            .fontSize(BODY_SMALL)
             .fontColor(menu.url === this.selectedMenuUrl ? '#FFFFFF' : this.themeColorTextTertiary)
             .backgroundColor(menu.url === this.selectedMenuUrl ? this.themeColorAccent : this.themeColorSurfaceElevated)
             .borderRadius(14).padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -231,21 +232,21 @@ export struct DiscoverPage {
   private ResultArea() {
     if (this.errorMessage.length > 0) {
       Column() {
-        Text('加载失败').fontSize(15).fontColor(this.themeColorTextSecondary)
-        Text(this.errorMessage).fontSize(12).fontColor(this.themeColorTextTertiary)
+        Text('加载失败').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+        Text(this.errorMessage).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
           .textAlign(TextAlign.Center).margin({ top: 6, left: 24, right: 24 })
-        Text('重试').fontSize(13).fontColor(this.themeColorAccent).margin({ top: 12 })
+        Text('重试').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).margin({ top: 12 })
           .onClick(() => this.loadPage(this.page, false))
       }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
     } else if (this.selectedSourceUrl.length === 0) {
       Column() {
-        Text('当前没有发现源！').fontSize(14).fontColor(this.themeColorTextSecondary)
-        Text('在书源管理中启用带发现规则的书源').fontSize(12).fontColor(this.themeColorTextTertiary)
+        Text('当前没有发现源！').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+        Text('在书源管理中启用带发现规则的书源').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
           .margin({ top: 8 })
       }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
     } else if (this.resultBooks.length === 0 && !this.loading) {
       Column() {
-        Text('暂无内容').fontSize(14).fontColor(this.themeColorTextSecondary)
+        Text('暂无内容').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
       }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
     } else {
       Scroll(this.exploreScroller) {
@@ -256,16 +257,16 @@ export struct DiscoverPage {
 
           if (this.loading) {
             Row() {
-              Text('加载中…').fontSize(13).fontColor(this.themeColorTextTertiary)
+              Text('加载中…').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
             }.width('100%').justifyContent(FlexAlign.Center).padding(14)
           } else if (this.hasMore) {
             Row() {
-              Text('加载更多').fontSize(13).fontColor(this.themeColorAccent)
+              Text('加载更多').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
             }.width('100%').justifyContent(FlexAlign.Center).padding(14)
               .onAppear(() => this.onReachBottom())
           } else if (this.resultBooks.length > 0) {
             Row() {
-              Text('没有更多了').fontSize(12).fontColor(this.themeColorTextTertiary)
+              Text('没有更多了').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
             }.width('100%').justifyContent(FlexAlign.Center).padding(14)
           }
         }.padding({ top: 4, bottom: 16 }).constraintSize({ minHeight: '100%' })

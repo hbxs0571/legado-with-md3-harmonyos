@@ -9,6 +9,7 @@ import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 import { DEFAULT_DAILY_READING_GOAL_MINUTES, MAX_DAILY_READING_GOAL_MINUTES } from '../data/HomeDashboardSettingsRepository';
+import { BODY_MEDIUM, BODY_SMALL, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 首页右上角菜单的宽度，与详情页溢出菜单同口径。 */
 const HOME_MENU_WIDTH: number = 260;
@@ -248,16 +249,16 @@ export struct HomePage {
               Row() {
                 AppGlyph({ name: 'book', tint: this.themeColorAccent, glyphSize: 20 })
                 Text(BookRepository.isBodyMissing(this.getRecentBook()) ? '已恢复书目 · 缺少正文' : '最近阅读')
-                  .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+                  .fontSize(BODY_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
               }.margin({ bottom: 10 })
               Row() {
                 BookCover({ book: this.getRecentBook(), mini: true, displayWidth: 56, displayHeight: 78 })
                 Column() {
-                  Text(this.getRecentBook().title).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Text(this.recentBookSubtitle()).fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
-                  Text(this.getRecentBook().lastChapter).fontSize(12).fontColor('#B6B8C2').margin({ top: 6 })
+                  Text(this.getRecentBook().title).fontSize(BODY_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(this.recentBookSubtitle()).fontSize(BODY_SMALL).fontColor('#B6B8C2').margin({ top: 6 })
+                  Text(this.getRecentBook().lastChapter).fontSize(BODY_SMALL).fontColor('#B6B8C2').margin({ top: 6 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
-                Text(`${Math.round(this.getRecentBookProgress(this.getRecentBook()))}%`).fontSize(11).fontColor('#D7DFFB').padding({ left: 9, right: 9, top: 6, bottom: 6 }).backgroundColor('#383D50').borderRadius(8)
+                Text(`${Math.round(this.getRecentBookProgress(this.getRecentBook()))}%`).fontSize(LABEL_SMALL).fontColor('#D7DFFB').padding({ left: 9, right: 9, top: 6, bottom: 6 }).backgroundColor('#383D50').borderRadius(8)
               }.width('100%')
             }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 14 })
             Progress({ value: this.getRecentBookProgress(this.getRecentBook()), total: 100, type: ProgressType.Linear })
@@ -269,10 +270,10 @@ export struct HomePage {
             Column() {
               Row() {
                 AppGlyph({ name: 'book', tint: this.themeColorAccent, glyphSize: 20 })
-                Text('最近阅读').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+                Text('最近阅读').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
               }.alignSelf(ItemAlign.Start)
               Blank().layoutWeight(1)
-              Text('暂无阅读记录').fontSize(14).fontColor('#AEB0BA').alignSelf(ItemAlign.Center)
+              Text('暂无阅读记录').fontSize(TITLE_SMALL).fontColor('#AEB0BA').alignSelf(ItemAlign.Center)
               Blank().layoutWeight(1)
             }.width('100%').height(160).padding({ left: 16, right: 16, top: 16, bottom: 14 }).justifyContent(FlexAlign.Center)
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(17).alignItems(HorizontalAlign.Center).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
@@ -302,7 +303,7 @@ export struct HomePage {
           Column() {
             Row() {
               AppGlyph({ name: 'goal', tint: this.themeColorAccent, glyphSize: 20 })
-              Text('今日阅读目标').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+              Text('今日阅读目标').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
               Blank()
               Stack({ alignContent: Alignment.Center }) { AppGlyph({ name: 'pencil', glyphSize: 18 }) }.width(36).height(36).backgroundColor('#24252C').borderRadius(22)
                 .onClick(() => {
@@ -313,8 +314,8 @@ export struct HomePage {
             Stack({ alignContent: Alignment.Bottom }) {
               Canvas(this.goalContext).width(240).height(120).onReady(() => this.drawGoalArc())
               Column() {
-                Text(`${this.todayReadMinutes} / ${this.goalMinutes}`).fontSize(24).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-                Text('分钟').fontSize(12).fontColor('#B6B8C2').margin({ top: 3 })
+                Text(`${this.todayReadMinutes} / ${this.goalMinutes}`).fontSize(HEADLINE_MEDIUM).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+                Text('分钟').fontSize(BODY_SMALL).fontColor('#B6B8C2').margin({ top: 3 })
               }.width('100%').alignItems(HorizontalAlign.Center).margin({ bottom: 20 })
           }.width('100%').height(136)
           }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16).margin({ top: 12 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
@@ -324,33 +325,33 @@ export struct HomePage {
             Row() {
               AppGlyph({ name: 'cloudSync', tint: this.themeColorAccent, glyphSize: 20 })
               Column() {
-                Text('WebDAV 备份').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
+                Text('WebDAV 备份').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
                 // 四态照抄上游：加载中 / 失败 / 有备份 / 无备份，一个字不改。
                 if (this.webDavState === 1) {
-                  Text('正在获取备份信息…').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                  Text('正在获取备份信息…').fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
                 } else if (this.webDavState === 3) {
-                  Text('无法获取备份信息').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                  Text('无法获取备份信息').fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
                 } else if (this.webDavState === 2) {
-                  Text(`最近备份：${this.webDavBackupName}`).fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                  Text(`最近备份：${this.webDavBackupName}`).fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
                 } else {
-                  Text('暂无 WebDAV 备份').fontSize(12).fontColor('#AEB0BA').margin({ top: 4 })
+                  Text('暂无 WebDAV 备份').fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
                 }
               }.alignItems(HorizontalAlign.Start).margin({ left: 10 })
             }.width('100%')
             Row() {
               Row() {
                 AppGlyph({ name: 'cloudUpload', glyphSize: 15 })
-                Text('备份').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
+                Text('备份').fontSize(TITLE_SMALL).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14)
                 .onClick(() => this.onWebDavBackup())
               Row() {
                 AppGlyph({ name: 'cloudDownload', glyphSize: 15 })
-                Text('恢复').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
+                Text('恢复').fontSize(TITLE_SMALL).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onWebDavRestore())
               Row() {
                 AppGlyph({ name: 'settings', glyphSize: 15 })
-                Text('设置').fontSize(14).fontColor('#C5C7D0').margin({ left: 5 })
+                Text('设置').fontSize(TITLE_SMALL).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onOpenBackup())
             }.margin({ top: 12 })
@@ -358,9 +359,9 @@ export struct HomePage {
           }
           Column({ space: 12 }) {
             AppGlyph({ name: 'add', tint: this.themeColorTextSecondary, glyphSize: 32 })
-            Text('暂无已加入的模块').fontSize(14).fontColor(this.themeColorTextSecondary)
+            Text('暂无已加入的模块').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
             Row() {
-              Text('浏览书源模块添加').fontSize(14).fontColor(this.themeColorAccent)
+              Text('浏览书源模块添加').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
             }.padding({ left: 16, right: 16, top: 8, bottom: 8 })
               .backgroundColor(this.themeColorSurfaceElevated).borderRadius(14)
               .onClick(() => this.onUnavailableAction('浏览书源模块尚未迁移'))
@@ -434,20 +435,20 @@ export struct HomePage {
   @Builder
   private goalDialogContent() {
     Column() {
-      Text('设定阅读目标').fontSize(16).fontColor(this.themeColorTextPrimary)
+      Text('设定阅读目标').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
         .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
       Row() {
-        Text('目标（分钟）').fontSize(14).fontColor(this.themeColorTextSecondary).width(100)
+        Text('目标（分钟）').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width(100)
         TextInput({ text: this.goalDraft, placeholder: '30' })
-          .type(InputType.Number).fontSize(14).height(44).layoutWeight(1)
+          .type(InputType.Number).fontSize(TITLE_SMALL).height(44).layoutWeight(1)
           .backgroundColor('#22232A').borderRadius(9)
           .onChange((value: string) => { this.goalDraft = value; })
       }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
       Row() {
-        Text('取消').fontSize(14).fontColor(this.themeColorTextSecondary).padding(10)
+        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).padding(10)
           .onClick(() => { this.showGoalDialog = false; this.goalDraft = ''; })
         Blank()
-        Text('确定').fontSize(14).fontColor(this.themeColorAccent).padding(10)
+        Text('确定').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
           .onClick(() => this.confirmGoal())
       }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
     }.width('100%').alignItems(HorizontalAlign.Start)
@@ -459,7 +460,7 @@ export struct HomePage {
       ForEach(HOME_DASHBOARD_SECTIONS, (section: HomeDashboardSection) => {
         // 整行可点（对齐上游 SwitchSettingItem），开关本身 interactive: false 只画不点。
         Row() {
-          Text(this.sectionTitle(section)).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+          Text(this.sectionTitle(section)).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           UiSwitchControl({
             checked: this.visibleSections.includes(section),
             interactive: false,
@@ -490,10 +491,10 @@ struct SummaryCard {
     Row() {
       AppGlyph({ name: this.icon, tint: this.themeColorAccent, glyphSize: 20 }).margin({ right: 12 })
       Column() {
-        Text(this.title).fontSize(12).fontColor('#B6B8C2')
+        Text(this.title).fontSize(BODY_SMALL).fontColor('#B6B8C2')
         Row() {
-          Text(this.value).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
-          Text(this.unit).fontSize(12).fontColor('#B6B8C2').margin({ left: 2 })
+          Text(this.value).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
+          Text(this.unit).fontSize(BODY_SMALL).fontColor('#B6B8C2').margin({ left: 2 })
         }
       }.alignItems(HorizontalAlign.Start)
     }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 8 })

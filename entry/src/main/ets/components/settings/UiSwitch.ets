@@ -1,7 +1,7 @@
+import { BODY_SMALL_EMPHASIZED, TITLE_MEDIUM } from '../typography/TypographyTokens';
+
 import { ThemeItemDivider } from '../ThemeItemDivider';
-import {
-  FONT_ROW_DETAIL, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2
-} from '../UiTokens';
+import { ROW_PADDING_H, ROW_PADDING_V, SPACE_2 } from '../UiTokens';
 import { UiSwitchControl } from '../UiSwitchControl';
 
 /**
@@ -42,12 +42,12 @@ export struct UiSwitch {
       Row() {
         Column() {
           Text(this.title)
-            .fontSize(FONT_ROW_TITLE)
+            .fontSize(TITLE_MEDIUM)
             .fontColor(this.themeColorTextPrimary)
             .width('100%')
           if (this.detail.length > 0) {
             Text(this.detail)
-              .fontSize(FONT_ROW_DETAIL)
+              .fontSize(BODY_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextTertiary)
               .width('100%')
               .margin({ top: SPACE_2 })

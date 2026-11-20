@@ -6,6 +6,7 @@ import {
 import { HttpTtsPlayer } from '../readaloud/HttpTtsPlayer';
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, LABEL_SMALL_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /**
  * 朗读设置浮层。视觉对齐上游 ReadAloudConfigContent.kt：
@@ -92,7 +93,7 @@ export struct ReadAloudConfigPanel {
   tabCard(label: string, index: number) {
     Row() {
       Text(label)
-        .fontSize(13)
+        .fontSize(LABEL_MEDIUM)
         .fontWeight(this.selectedTab === index ? FontWeight.Bold : FontWeight.Normal)
         .fontColor(this.selectedTab === index ? this.themeColorAccent : this.themeColorTextSecondary)
         .maxLines(1)
@@ -124,7 +125,7 @@ export struct ReadAloudConfigPanel {
           Image($r('app.media.reader_back')).width(22).height(22)
             .fillColor(this.themeColorTextPrimary)
             .onClick(() => this.onBack())
-          Text('朗读设置').fontSize(16).fontWeight(FontWeight.Medium)
+          Text('朗读设置').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary).margin({ left: 10 })
           Blank()
         }.width('100%').padding({ left: 16, right: 16, bottom: 14 })
@@ -222,7 +223,7 @@ struct ConfigSectionTitle {
   @Prop label: string = '';
 
   build() {
-    Text(this.label).fontSize(13).fontWeight(FontWeight.Medium)
+    Text(this.label).fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
       .fontColor(this.themeColorTextSecondary)
       .width('100%').textAlign(TextAlign.Center)
       .padding({ left: 16, right: 16, top: 14, bottom: 6 })
@@ -236,9 +237,9 @@ struct ConfigNote {
   @Prop text: string = '';
 
   build() {
-    Text(this.text).fontSize(11).fontColor(this.themeColorTextSecondary)
+    Text(this.text).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
       .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 8 })
-      .lineHeight(17)
+      .lineHeight(LABEL_SMALL_LINE_HEIGHT)
   }
 }
 
@@ -254,7 +255,7 @@ struct ConfigGlassSwitch {
 
   build() {
     Row() {
-      Text(this.label).fontSize(14).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .selectedColor(this.themeColorAccent)
@@ -283,10 +284,10 @@ struct ConfigGlassRow {
 
   build() {
     Row() {
-      Text(this.label).fontSize(14).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       if (this.value.length > 0) {
-        Text(this.value).fontSize(12).fontColor(this.themeColorTextPrimary)
+        Text(this.value).fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.85)).borderRadius(8)
           .margin({ right: 6 })

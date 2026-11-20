@@ -1,5 +1,6 @@
 import { AppGlyph, AppGlyphName } from './AppGlyph';
 import { resolvePaletteColors, THEME_PALETTES, ThemePaletteColors, ThemePaletteDefinition } from '../data/ThemePalette';
+import { LABEL_LARGE, LABEL_SMALL, TITLE_SMALL } from './typography/TypographyTokens';
 
 /**
  * 主题模式三档连体分段按钮。
@@ -47,7 +48,7 @@ export struct ThemeModeSelector {
   private modeItem(label: string, icon: AppGlyphName, mode: number, weight: number, position: string) {
     Row({ space: 8 }) {
       AppGlyph({ name: icon, glyphSize: 18, tint: this.itemColor(mode) })
-      Text(label).fontSize(14).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(label).fontSize(LABEL_LARGE).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         .fontColor(this.itemColor(mode))
     }
     .height(40)
@@ -188,7 +189,7 @@ struct ThemeColorItem {
       // 名字在 64×64 的框外：上游 Card 只包三色圆，Spacer(12) 之后才是文字。
       // 塞进带边框的容器会把卡变成 64×76 的竖条。
       Text(this.title)
-        .fontSize(11).maxLines(1).textAlign(TextAlign.Center)
+        .fontSize(LABEL_SMALL).maxLines(1).textAlign(TextAlign.Center)
         .fontColor(this.selected ? this.themeColorAccent : this.themeColorTextPrimary)
         .margin({ top: 12 })
     }

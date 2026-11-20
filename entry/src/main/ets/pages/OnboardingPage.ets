@@ -1,5 +1,6 @@
 import { AppGlyph } from '../components/AppGlyph';
 import { ThemeColorSelector, ThemeModeSelector } from '../components/ThemeSelectors';
+import { BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 @Component
 export struct OnboardingPage {
@@ -65,25 +66,25 @@ export struct OnboardingPage {
     if (this.page === 0) {
       Scroll() {
         Column() {
-          Text('隐私与应用说明').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+          Text('隐私与应用说明').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ bottom: 10 })
           Text('本 HarmonyOS 版本不包含自有服务端与 Firebase 统计；书籍和阅读进度保存在本机应用空间。在线书源抓取、WebDAV 备份同步与在线朗读只在你主动配置并使用对应功能时才发起请求，且直接发往你填写的目标地址。导入、导出文件时由你通过系统文件选择器选择文件。')
-            .fontSize(14).fontColor(this.themeColorTextSecondary).lineHeight(22).width('100%')
-          Text('用户协议与免责声明').fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).lineHeight(TITLE_SMALL_LINE_HEIGHT).width('100%')
+          Text('用户协议与免责声明').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
             .alignSelf(ItemAlign.Start).margin({ top: 26, bottom: 12 })
           Text('一、软件性质\n本软件提供本地书籍管理、文本解析与阅读排版功能。在线书源抓取、WebDAV 备份与在线朗读由你自行配置后使用；本软件不提供内容运营、内容存储或内容分发服务，不内置任何书源规则。\n\n二、用户内容\n请确保导入、阅读、备份和分享的书籍及数据来源合法，并遵守适用法律和权利人的要求。\n\n三、本地数据与备份\n书籍正文保存在设备本地。Android 兼容备份不会包含 TXT/EPUB 正文；恢复未匹配的本地书目时会建立缺正文记录。备份文件可能包含个人阅读数据，请妥善保管。\n\n四、开源软件\n本软件为开源项目。第三方规则或脚本由用户自行选择和使用，其来源、合法性与适用性由用户自行判断并承担责任。书源规则中的 JavaScript 经内置引擎执行，可能发起网络请求；备份恢复本身只解析数据，不执行其中的脚本。\n\n五、免责声明\n本软件按现有功能提供。因设备故障、用户操作或第三方内容造成的数据损失及权利争议，请相关责任方依法处理。')
-            .fontSize(14).fontColor(this.themeColorTextSecondary).lineHeight(22).width('100%')
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).lineHeight(TITLE_SMALL_LINE_HEIGHT).width('100%')
           Text('点击“阅读并同意”继续，即表示你已阅读并接受以上说明。')
-            .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(19).width('100%').margin({ top: 18 })
+            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).width('100%').margin({ top: 18 })
         }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).scrollBar(BarState.Off)
         .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else if (this.page === 1) {
       Column() {
-        Text('本地 Android 兼容备份').fontSize(16).fontColor(this.themeColorTextSecondary)
+        Text('本地 Android 兼容备份').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
           .alignSelf(ItemAlign.Start).margin({ bottom: 10 })
         Text('你可以稍后在「我的 - 备份与恢复」中选择 Android 阅读 ZIP，预览并恢复书目、阅读进度及可保留的数据条目。TXT/EPUB 正文需要从原文件重新导入。')
-          .fontSize(14).fontColor(this.themeColorTextTertiary).lineHeight(22).width('100%')
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).lineHeight(TITLE_SMALL_LINE_HEIGHT).width('100%')
         TextInput({ placeholder: 'WebDAV 服务器地址' }).enabled(false).width('100%').height(52)
           .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(6).margin({ top: 20 })
         TextInput({ placeholder: 'WebDAV 账号' }).enabled(false).width('100%').height(52)
@@ -91,22 +92,22 @@ export struct OnboardingPage {
         TextInput({ placeholder: 'WebDAV 密码' }).enabled(false).width('100%').height(52)
           .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(6).margin({ top: 10 })
         Text('WebDAV 服务器、账号与密码在「我的 - 备份与恢复」中配置；本页只作说明，不在此处保存或发送凭据。本地备份密码尚未接入。')
-          .fontSize(12).fontColor(this.themeColorTextTertiary).lineHeight(18).width('100%').margin({ top: 14 })
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).lineHeight(BODY_SMALL_LINE_HEIGHT).width('100%').margin({ top: 14 })
       }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
         .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else if (this.page === 2) {
       Column() {
-        Text('本地书籍保存位置').fontSize(16).fontColor(this.themeColorTextSecondary)
+        Text('本地书籍保存位置').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
           .alignSelf(ItemAlign.Start).margin({ bottom: 8 })
         Text('导入的 TXT/EPUB 会复制到应用私有空间，卸载应用可能会删除这些文件。当前版本暂不支持选择外部书籍目录；你仍可通过系统文件选择器导入书籍。')
-          .fontSize(14).fontColor(this.themeColorTextTertiary).lineHeight(22).width('100%')
-        Text('当前应用目录').fontSize(15).fontColor(this.themeColorTextPrimary).margin({ top: 24, bottom: 8 })
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).lineHeight(TITLE_SMALL_LINE_HEIGHT).width('100%')
+        Text('当前应用目录').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ top: 24, bottom: 8 })
           .alignSelf(ItemAlign.Start)
         Text(this.localBooksPath.length > 0 ? this.localBooksPath : '应用私有文件目录 /books')
-          .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(19).width('100%')
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).width('100%')
           .padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(8)
         Text('目录选择会在后续适配系统文件授权后开放。')
-          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 12 }).alignSelf(ItemAlign.Start)
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 12 }).alignSelf(ItemAlign.Start)
       }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
         .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.EaseInOut }))
     } else {
@@ -146,8 +147,8 @@ export struct OnboardingPage {
       // ArkUI 的 ImageFit 没有 Crop，`Cover` 即「等比填满并裁掉溢出」，语义相同。
       Image($r('app.media.app_icon_foreground')).width(128).height(96).objectFit(ImageFit.Cover)
         .margin({ top: 16, bottom: 8 })
-      Text(this.pageTitle()).fontSize(32).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-      Text(this.pageSummary()).fontSize(16).fontColor(this.themeColorTextTertiary).margin({ top: 4, bottom: 12 })
+      Text(this.pageTitle()).fontSize(HEADLINE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+      Text(this.pageSummary()).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 4, bottom: 12 })
       Progress({ value: this.page, total: 4, type: ProgressType.Linear })
         .width('calc(100% - 32vp)').height(4).color(this.themeColorAccent)
         .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))
@@ -178,7 +179,7 @@ export struct OnboardingPage {
         Button() {
           Row() {
             Text(this.page === 0 ? '阅读并同意' : this.page === 3 ? '完成' : '下一步')
-              .fontSize(14).fontColor(this.themeColorSurfacePrimary)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary)
             AppGlyph({ name: 'arrowForward', glyphSize: 18, tint: this.themeColorSurfacePrimary })
               .margin({ left: 8 })
           }.alignItems(VerticalAlign.Center)

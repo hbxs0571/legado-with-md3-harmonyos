@@ -6,6 +6,7 @@ import { BookCover } from '../components/BookCover';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { BookContentProcess, ContentProcessDisplayItem, toContentProcessDisplayItem } from '../model/BookContentProcess';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 筛选菜单宽度。 */
 const REPLACE_FILTER_MENU_WIDTH: number = 220;
@@ -174,21 +175,21 @@ export struct ReaderTextProcessingSheet {
         Row() {
           BookCover({ book: this.book, mini: true }).width(44).height(60).margin({ right: 12 })
           Column() {
-            Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
+            Text(this.book.title).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
               .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text(this.chapterTitle).fontSize(11).fontColor('#B7B8C1').maxLines(1).margin({ top: 4 })
+            Text(this.chapterTitle).fontSize(LABEL_SMALL).fontColor('#B7B8C1').maxLines(1).margin({ top: 4 })
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
           Text(this.activeTab === 0 ? '替换净化' : '正文处理')
-            .fontSize(11).fontColor(this.themeColorTextSecondary).padding({ left: 10, right: 10, top: 7, bottom: 7 })
+            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary).padding({ left: 10, right: 10, top: 7, bottom: 7 })
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(16)
         }.width('100%').padding({ left: 16, right: 16, bottom: 12 })
 
         Row() {
-          Text('替换净化').fontSize(14).fontColor(this.activeTab === 0 ? '#ECECF2' : '#A9ABB4')
+          Text('替换净化').fontSize(TITLE_SMALL).fontColor(this.activeTab === 0 ? '#ECECF2' : '#A9ABB4')
             .textAlign(TextAlign.Center).layoutWeight(1)
             .backgroundColor(this.activeTab === 0 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary).borderRadius(18)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.activeTab = 0)
-          Text('正文处理').fontSize(14).fontColor(this.activeTab === 1 ? '#ECECF2' : '#A9ABB4')
+          Text('正文处理').fontSize(TITLE_SMALL).fontColor(this.activeTab === 1 ? '#ECECF2' : '#A9ABB4')
             .textAlign(TextAlign.Center).layoutWeight(1)
             .backgroundColor(this.activeTab === 1 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary).borderRadius(18)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.activeTab = 1)
@@ -202,9 +203,9 @@ export struct ReaderTextProcessingSheet {
         if (this.activeTab === 0) {
           Row() {
             Column() {
-              Text('本书启用替换净化').fontSize(13).fontColor(this.themeColorTextPrimary)
+              Text('本书启用替换净化').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary)
               Text(this.replaceEnabled ? '按已启用规则处理正文' : '本书暂不应用替换规则')
-                .fontSize(11).fontColor('#999BA5').margin({ top: 3 })
+                .fontSize(LABEL_SMALL).fontColor('#999BA5').margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             UiSwitchControl({
               checked: this.replaceEnabled,
@@ -212,7 +213,7 @@ export struct ReaderTextProcessingSheet {
               onChange: (enabled: boolean) => this.onReplaceEnabledChange(enabled)
             })
             if (!this.replaceUsesDefault) {
-              Text('使用默认').fontSize(11).fontColor('#B9C8FF').margin({ left: 8 })
+              Text('使用默认').fontSize(LABEL_SMALL).fontColor('#B9C8FF').margin({ left: 8 })
                 .onClick(() => this.onReplaceResetToDefault())
             }
           }.width('calc(100% - 32vp)').padding({ left: 14, right: 14, top: 10, bottom: 10 })
@@ -222,7 +223,7 @@ export struct ReaderTextProcessingSheet {
             Row() {
               AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
               TextInput({ text: this.replaceQuery, placeholder: '搜索规则…' })
-                .fontSize(13).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
                 .backgroundColor(Color.Transparent).layoutWeight(1)
                 .onChange((value: string) => this.replaceQuery = value)
             }.layoutWeight(1).height(42).padding({ left: 12, right: 12 })
@@ -231,7 +232,7 @@ export struct ReaderTextProcessingSheet {
               AppGlyph({ name: 'profileFindReplace', glyphSize: 18, tint: '#A9ABB4' })
             }.width(38).height(42).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
               .onClick(() => this.onReplaceEnabledChange(!this.replaceEnabled))
-            Text(this.replaceFilter).fontSize(12).fontColor(this.themeColorTextSecondary)
+            Text(this.replaceFilter).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
               .padding({ left: 12, right: 12, top: 12, bottom: 12 })
               .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(12)
               .onClick(() => { this.replaceFilterVisible = !this.replaceFilterVisible; })
@@ -250,10 +251,10 @@ export struct ReaderTextProcessingSheet {
               if (this.getVisibleRules().length === 0) {
                 Blank().layoutWeight(1)
                 Text(this.rules.length === 0 ? '暂无替换净化规则' : '没有符合条件的规则')
-                  .fontSize(15).fontColor(this.themeColorTextSecondary)
+                  .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
                 Text(this.rules.length === 0 ? '添加规则后会按顺序处理本地正文' : '可以更改搜索词或筛选条件')
-                  .fontSize(12).fontColor('#999BA5').margin({ top: 7, bottom: 14 })
-                Text('打开规则管理').fontSize(13).fontColor('#D5C2C6')
+                  .fontSize(BODY_SMALL).fontColor('#999BA5').margin({ top: 7, bottom: 14 })
+                Text('打开规则管理').fontSize(LABEL_MEDIUM).fontColor('#D5C2C6')
                   .padding({ left: 15, right: 15, top: 10, bottom: 10 })
                   .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(18)
                   .onClick(() => this.openFullReplaceRules())
@@ -297,9 +298,9 @@ export struct ReaderTextProcessingSheet {
                           })
                       )
                     Column() {
-                      Text(this.ruleTitle(rule)).fontSize(13)
+                      Text(this.ruleTitle(rule)).fontSize(LABEL_MEDIUM)
                         .fontColor(this.themeColorTextPrimary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                      Text(`${rule.pattern} → ${rule.replacement}`).fontSize(11).fontColor('#999BA5')
+                      Text(`${rule.pattern} → ${rule.replacement}`).fontSize(LABEL_SMALL).fontColor('#999BA5')
                         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     UiSwitchControl({
@@ -320,7 +321,7 @@ export struct ReaderTextProcessingSheet {
           Row() {
             AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
             TextInput({ text: this.contentQuery, placeholder: '搜索正文处理记录…' })
-              .fontSize(13).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+              .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(Color.Transparent).layoutWeight(1)
               .onChange((value: string) => this.contentQuery = value)
           }.width('calc(100% - 32vp)').height(42).padding({ left: 12, right: 12 })
@@ -331,24 +332,24 @@ export struct ReaderTextProcessingSheet {
               if (this.getVisibleContentProcesses().length === 0) {
                 Blank().layoutWeight(1)
                 Text(this.contentProcesses.length === 0 ? '暂无正文处理记录' : '没有符合条件的正文处理记录')
-                  .fontSize(15).fontColor(this.themeColorTextSecondary)
+                  .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
                 Text(this.contentProcesses.length === 0 ? '当前章节没有正文处理' : '可以更改搜索词')
-                  .fontSize(12).fontColor('#999BA5').margin({ top: 7 })
+                  .fontSize(BODY_SMALL).fontColor('#999BA5').margin({ top: 7 })
                 Blank().layoutWeight(1)
               } else {
                 ForEach(this.getVisibleContentProcesses(), (item: ContentProcessDisplayItem) => {
                   Row() {
                     Column() {
                       Text(`${this.processKindTitle(item.kind)} · ${this.processActionTitle(item)}`)
-                        .fontSize(13).fontColor(this.themeColorTextPrimary).maxLines(1)
-                      Text(item.selectedText).fontSize(11).fontColor('#999BA5')
+                        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
+                      Text(item.selectedText).fontSize(LABEL_SMALL).fontColor('#999BA5')
                         .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     UiSwitchControl({
                       checked: item.enabled,
                       onChange: (enabled: boolean) => this.onContentProcessToggle(item.id, enabled)
                     })
-                    Text('删除').fontSize(11).fontColor('#E7A5AC').margin({ left: 10 })
+                    Text('删除').fontSize(LABEL_SMALL).fontColor('#E7A5AC').margin({ left: 10 })
                       .onClick(() => this.deleteProcess = item)
                   }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
                     .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(10).margin({ bottom: 7 })
@@ -359,7 +360,7 @@ export struct ReaderTextProcessingSheet {
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).width('100%').scrollBar(BarState.Off)
         }
         Row() {
-          Text('关闭').fontSize(13).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).layoutWeight(1)
+          Text('关闭').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).layoutWeight(1)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.onClose())
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }
@@ -369,14 +370,14 @@ export struct ReaderTextProcessingSheet {
             .onClick(() => this.viewedProcess = undefined)
           Column() {
             Text(`${this.processKindTitle(this.viewedProcess.kind)} · ${this.processActionTitle(this.viewedProcess)}`)
-              .fontSize(16).fontColor('#ECECF2').margin({ bottom: 14 })
-            Text('处理前').fontSize(12).fontColor('#A9ABB4').width('100%')
-            Text(this.viewedProcess.selectedText).fontSize(14).fontColor(this.themeColorTextPrimary)
+              .fontSize(TITLE_MEDIUM).fontColor('#ECECF2').margin({ bottom: 14 })
+            Text('处理前').fontSize(BODY_SMALL).fontColor('#A9ABB4').width('100%')
+            Text(this.viewedProcess.selectedText).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
               .width('100%').margin({ top: 4, bottom: 12 })
-            Text('处理后').fontSize(12).fontColor('#A9ABB4').width('100%')
+            Text('处理后').fontSize(BODY_SMALL).fontColor('#A9ABB4').width('100%')
             Text(this.viewedProcess.actionType === 'delete' ? '已删除选中文本' : this.viewedProcess.replacementText)
-              .fontSize(14).fontColor(this.themeColorTextPrimary).width('100%').margin({ top: 4, bottom: 16 })
-            Text('关闭').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.End)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width('100%').margin({ top: 4, bottom: 16 })
+            Text('关闭').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.End)
               .onClick(() => this.viewedProcess = undefined)
           }.width('88%').padding(18).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(18).onClick(() => {})
         }.width('100%').height('100%')
@@ -386,14 +387,14 @@ export struct ReaderTextProcessingSheet {
           Column().width('100%').height('100%').backgroundColor('#66000000')
             .onClick(() => this.deleteProcess = undefined)
           Column() {
-            Text('删除正文处理记录？').fontSize(16).fontColor('#ECECF2')
-            Text(this.deleteProcess.selectedText).fontSize(13).fontColor('#A9ABB4')
+            Text('删除正文处理记录？').fontSize(BODY_MEDIUM).fontColor('#ECECF2')
+            Text(this.deleteProcess.selectedText).fontSize(LABEL_MEDIUM).fontColor('#A9ABB4')
               .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%').margin({ top: 10, bottom: 20 })
             Row() {
-              Text('取消').fontSize(13).fontColor('#C5C7D0').layoutWeight(1).textAlign(TextAlign.Center)
+              Text('取消').fontSize(LABEL_MEDIUM).fontColor('#C5C7D0').layoutWeight(1).textAlign(TextAlign.Center)
                 .onClick(() => this.deleteProcess = undefined)
-              Text('删除').fontSize(13).fontColor('#E7A5AC').layoutWeight(1).textAlign(TextAlign.Center)
+              Text('删除').fontSize(LABEL_MEDIUM).fontColor('#E7A5AC').layoutWeight(1).textAlign(TextAlign.Center)
                 .onClick(() => {
                   const item = this.deleteProcess;
                   if (item !== undefined) {

@@ -15,6 +15,7 @@ import {
 import {
   CoverAlbumItem, CoverAlbumImageItem, CoverAlbumRepository
 } from '../data/CoverAlbumRepository';
+import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /**
  * 封面设置页。
@@ -455,37 +456,37 @@ export struct AppCoverSettingsPage {
         })
       } else if (this.activeSheet === 'rule') {
         Row() {
-          Text('封面规则').fontSize(20).fontWeight(FontWeight.Medium)
+          Text('封面规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('恢复默认').fontSize(14).fontColor(this.themeColorAccent)
+          Text('恢复默认').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
             .onClick(() => this.restoreDefaultRule())
-          Text('保存').fontSize(14).fontColor(this.themeColorAccent).margin({ left: 18 })
+          Text('保存').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ left: 18 })
             .onClick(() => { this.saveRule(); })
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 12 })
 
         Scroll() {
           Column() {
             Row() {
-              Text('启用').fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+              Text('启用').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
               Toggle({ type: ToggleType.Checkbox, isOn: this.ruleEnabled })
                 .onChange((value: boolean) => this.ruleEnabled = value)
             }.width('100%').padding({ top: 8, bottom: 8 })
 
             Column() {
-              Text('搜索 URL').fontSize(13).fontColor(this.themeColorTextTertiary)
+              Text('搜索 URL').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
                 .alignSelf(ItemAlign.Start).margin({ bottom: 6 })
               TextInput({ text: this.ruleSearchUrl, placeholder: '搜索 URL' })
-                .fontSize(14).fontColor(this.themeColorTextPrimary)
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
                 .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : this.themeColorSurfacePrimary)
                 .borderRadius(8).padding(10)
                 .onChange((value: string) => this.ruleSearchUrl = value)
             }.width('100%').margin({ bottom: 12 })
 
             Column() {
-              Text('规则表达式').fontSize(13).fontColor(this.themeColorTextTertiary)
+              Text('规则表达式').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
                 .alignSelf(ItemAlign.Start).margin({ bottom: 6 })
               TextArea({ text: this.ruleExpression, placeholder: '规则表达式' })
-                .width('100%').height(300).fontSize(12).fontColor(this.themeColorTextPrimary)
+                .width('100%').height(300).fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)
                 .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : this.themeColorSurfacePrimary)
                 .borderRadius(8).padding(10)
                 .onChange((value: string) => this.ruleExpression = value)
@@ -496,9 +497,9 @@ export struct AppCoverSettingsPage {
         if (this.albumView === 'select') {
           // B1/B2：选择 sheet。顶栏「管理相册」进管理页，对应上游 onManage。
           Row() {
-            Text('选择封面相册').fontSize(20).fontWeight(FontWeight.Medium)
+            Text('选择封面相册').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-            Text('管理相册').fontSize(14).fontColor(this.themeColorAccent)
+            Text('管理相册').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'manage')
           }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 12 })
 
@@ -508,8 +509,8 @@ export struct AppCoverSettingsPage {
               Row() {
                 CoverAlbumThumb({ path: '', w: 44, h: 60 })
                 Column() {
-                  Text('无').fontSize(15).fontColor(this.themeColorTextPrimary)
-                  Text('不使用相册，回落到随机默认封面').fontSize(12)
+                  Text('无').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  Text('不使用相册，回落到随机默认封面').fontSize(BODY_SMALL)
                     .fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 12 })
                 if (this.selectedAlbumId.length === 0) {
@@ -524,10 +525,10 @@ export struct AppCoverSettingsPage {
                 Row() {
                   CoverAlbumThumb({ path: CoverAlbumRepository.previewPath(album), w: 44, h: 60 })
                   Column() {
-                    Text(album.name.length > 0 ? album.name : '未命名相册').fontSize(15)
+                    Text(album.name.length > 0 ? album.name : '未命名相册').fontSize(TITLE_MEDIUM)
                       .fontColor(this.themeColorTextPrimary).maxLines(1)
                     Text(`日间 ${album.lightImages.length} · 夜间 ${album.darkImages.length}`)
-                      .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+                      .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                   }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 12 })
                   if (this.selectedAlbumId === album.id) {
                     AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: this.themeColorAccent })
@@ -541,9 +542,9 @@ export struct AppCoverSettingsPage {
         } else if (this.albumView === 'manage') {
           // B3/B4/B5/B6/B7：管理页。顶栏返回选择 sheet、右侧「+」新建。
           Row() {
-            Text('返回').fontSize(14).fontColor(this.themeColorAccent)
+            Text('返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'select')
-            Text('封面相册').fontSize(20).fontWeight(FontWeight.Medium)
+            Text('封面相册').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'add', glyphSize: 20, tint: this.themeColorAccent })
@@ -555,7 +556,7 @@ export struct AppCoverSettingsPage {
             // B4 空态：仅整个列表为空时出现，居中集合图标 + 一行提示。
             Column() {
               AppGlyph({ name: 'folder', glyphSize: 48, tint: this.themeColorTextTertiary })
-              Text('暂无相册').fontSize(15).fontColor(this.themeColorTextTertiary)
+              Text('暂无相册').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
                 .margin({ top: 12 })
             }.width('100%').height('100%').justifyContent(FlexAlign.Center)
           } else {
@@ -566,12 +567,12 @@ export struct AppCoverSettingsPage {
                   Row() {
                     CoverAlbumThumb({ path: CoverAlbumRepository.previewPath(album), w: 64, h: 88 })
                     Column() {
-                      Text(album.name.length > 0 ? album.name : '未命名相册').fontSize(15)
+                      Text(album.name.length > 0 ? album.name : '未命名相册').fontSize(TITLE_MEDIUM)
                         .fontColor(this.themeColorTextPrimary).maxLines(1)
                       Text(`日间 ${album.lightImages.length} · 夜间 ${album.darkImages.length}`)
-                        .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+                        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                       if (this.selectedAlbumId === album.id) {
-                        Text('使用中').fontSize(12).fontColor(this.themeColorAccent).margin({ top: 4 })
+                        Text('使用中').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).margin({ top: 4 })
                       }
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 12 })
                   }.width('100%').padding(10).margin({ bottom: 8 })
@@ -596,9 +597,9 @@ export struct AppCoverSettingsPage {
         } else if (this.albumView === 'editor') {
           // B8/B9/B10：图片编辑器，日夜两套独立列表。
           Row() {
-            Text('返回').fontSize(14).fontColor(this.themeColorAccent)
+            Text('返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'manage')
-            Text(this.currentEditorAlbum()?.name ?? '相册').fontSize(20).fontWeight(FontWeight.Medium)
+            Text(this.currentEditorAlbum()?.name ?? '相册').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
             AppGlyph({ name: 'add', glyphSize: 20, tint: this.themeColorAccent })
               .onClick(() => { this.addEditorImages(); })
@@ -606,11 +607,11 @@ export struct AppCoverSettingsPage {
 
           // B8 页签：默认白天（0）；切换后下方网格换成另一套图。
           Row() {
-            Text('白天').fontSize(14)
+            Text('白天').fontSize(TITLE_SMALL)
               .fontColor(this.editorTab === 0 ? this.themeColorAccent : this.themeColorTextTertiary)
               .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
               .onClick(() => this.editorTab = 0)
-            Text('夜间').fontSize(14)
+            Text('夜间').fontSize(TITLE_SMALL)
               .fontColor(this.editorTab === 1 ? this.themeColorAccent : this.themeColorTextTertiary)
               .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
               .onClick(() => this.editorTab = 1)
@@ -629,7 +630,7 @@ export struct AppCoverSettingsPage {
                     .onClick(() => { this.removeEditorImage(image.id); })
                 }.width(76).margin({ right: 8, bottom: 8 })
               }, (image: CoverAlbumImageItem) => image.id)
-              Text('添加图片').fontSize(14).fontColor(this.themeColorAccent)
+              Text('添加图片').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
                 .onClick(() => { this.addEditorImages(); })
             }.width('100%').padding({ left: 16, right: 16, top: 4 })
@@ -639,17 +640,17 @@ export struct AppCoverSettingsPage {
           // 所以用这一层页面内面板（上游 :420-449 的 CoverAlbumNameDialog）。
           Column() {
             Text(this.nameDialogMode === 'rename' ? '重命名相册' : '新建相册')
-              .fontSize(20).fontWeight(FontWeight.Medium)
+              .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).margin({ bottom: 16 })
             TextInput({ text: this.nameDraft, placeholder: '相册名称' })
-              .fontSize(15).fontColor(this.themeColorTextPrimary)
+              .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary)
               .backgroundColor(this.themeColorSurfacePrimary).borderRadius(8).padding(10)
               .onChange((value: string) => this.nameDraft = value)
             Row() {
-              Text('取消').fontSize(14).fontColor(this.themeColorTextSecondary)
+              Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
                 .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
                 .onClick(() => this.albumView = 'manage')
-              Text('确定').fontSize(14).fontColor(this.themeColorAccent)
+              Text('确定').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
                 .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
                 .onClick(() => { this.saveAlbumName(); })
             }.width('100%').margin({ top: 20 })

@@ -9,6 +9,7 @@ import { UiInput } from '../components/settings/UiInput';
 import { AppGlyph } from '../components/AppGlyph';
 import { picker } from '@kit.CoreFileKit';
 import { OtherSettingsRepository, OtherSettings, DEFAULT_OTHER_SETTINGS } from '../data/OtherSettingsRepository';
+import { HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const OTHER_SETTINGS_MENU_WIDTH: number = 260;
@@ -196,17 +197,17 @@ export struct OtherSettingsPage {
             .onClick(() => this.activeDialog = '')
           Column() {
             Text(this.activeDialog === 'battery' ? '后台保活与省电策略设置指引' : '清除 WebView 数据')
-              .fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+              .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
               .textAlign(TextAlign.Center).width('100%')
             Text(this.activeDialog === 'battery'
               ? '后台保活设置指引：\n1. 在系统设置中进入【电池 / 耗电管理】。\n2. 将后台行为设为【无限制】或【不优化】。\n3. 允许应用【后台活动】与【自启动】。'
               : '是否确认删除?')
-              .fontSize(15).fontColor(this.themeColorTextSecondary).lineHeight(24).margin({ top: 22, bottom: 24 })
+              .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).margin({ top: 22, bottom: 24 })
             Row() {
-              Text('取消').fontSize(15).fontColor(this.themeColorAccent).textAlign(TextAlign.Center)
+              Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).textAlign(TextAlign.Center)
                 .layoutWeight(1).padding({ top: 14, bottom: 14 })
                 .onClick(() => this.activeDialog = '')
-              Text(this.activeDialog === 'battery' ? '设置' : '确认').fontSize(15).fontColor(this.themeColorAccent)
+              Text(this.activeDialog === 'battery' ? '设置' : '确认').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
                 .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 14, bottom: 14 })
                 .onClick(() => {
                   const dialogType = this.activeDialog;
@@ -260,12 +261,12 @@ export struct OtherSettingsPage {
     Column() {
       if (this.activeSheet === 'folderPicker') {
         Row() {
-          Text('选择操作').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('取消').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
+          Text('选择操作').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 16 })
         Row() {
           AppGlyph({ name: 'profileFolder', glyphSize: 28, tint: this.themeColorAccent })
-          Text('系统文件夹选择器').fontSize(15).fontColor(this.themeColorTextPrimary).margin({ left: 12 })
+          Text('系统文件夹选择器').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ left: 12 })
           Blank()
         }.width('100%').height(84).padding({ left: 20, right: 20 })
           .backgroundColor(this.themeColorSurfaceElevated).borderRadius(14)
@@ -276,7 +277,7 @@ export struct OtherSettingsPage {
             AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: this.themeColorAccent })
           }.width(40).height(40).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => this.onUnavailableAction('直链规则测试尚未迁移'))
-          Text('直链上传配置').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          Text('直链上传配置').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
             .layoutWeight(1).textAlign(TextAlign.Center)
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
@@ -298,7 +299,7 @@ export struct OtherSettingsPage {
             OtherSettingsSheetField({ title: '下载 URL 规则', value: this.directDownloadRule, onChange: (value: string) => this.directDownloadRule = value })
             OtherSettingsSheetField({ title: '注释', value: this.directRuleSummary, onChange: (value: string) => this.directRuleSummary = value })
             Row() {
-              Text('是否压缩').fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+              Text('是否压缩').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
               Checkbox({ name: 'direct_link_compress' }).shape(CheckBoxShape.ROUNDED_SQUARE)
                 .select(this.directCompress)
                 .onChange((value: boolean) => this.directCompress = value)
@@ -306,10 +307,10 @@ export struct OtherSettingsPage {
           }.width('100%').padding({ left: 16, right: 16, top: 4 }).constraintSize({ minHeight: '100%' })
         }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
         Row() {
-          Text('取消').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
+          Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => this.activeSheet = '')
-          Text('确认').fontSize(14).fontColor(this.themeColorSurfacePrimary).layoutWeight(1).textAlign(TextAlign.Center)
+          Text('确认').fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorAccent).borderRadius(20).margin({ left: 10 })
             .onClick(() => {
               this.onUnavailableAction('直链上传规则尚未保存');
@@ -333,9 +334,9 @@ struct OtherSettingsSheetField {
 
   build() {
     Column() {
-      Text(this.title).fontSize(13).fontColor('#B6B8C2').alignSelf(ItemAlign.Start).margin({ bottom: 6 })
+      Text(this.title).fontSize(LABEL_MEDIUM).fontColor('#B6B8C2').alignSelf(ItemAlign.Start).margin({ bottom: 6 })
       TextInput({ text: this.value, placeholder: this.title })
-        .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor('#858792')
+        .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor('#858792')
         .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(8)
         .onChange((value: string) => this.onChange(value))
     }.width('100%').margin({ bottom: 14 })

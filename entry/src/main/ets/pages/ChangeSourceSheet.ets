@@ -6,6 +6,7 @@ import {
   ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions, defaultMigrationOptions
 } from '../bookSource/ChangeSourceCoordinator';
 import { BookSourceRepository } from '../data/BookSourceRepository';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ChangeSourceSheet {
@@ -68,19 +69,19 @@ export struct ChangeSourceSheet {
   CandidateView(item: ChangeSourceCandidate) {
     Row() {
       Column() {
-        Text(item.sourceName).fontSize(15).fontColor(this.themeColorTextPrimary).maxLines(1)
+        Text(item.sourceName).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
         Text(item.verified
           ? `${item.chapterCount} 章 · 校验通过`
           : (item.message.length > 0 ? item.message : '校验失败'))
-          .fontSize(12).fontColor(item.verified ? this.themeColorAccent : this.themeColorTextTertiary)
+          .fontSize(BODY_SMALL).fontColor(item.verified ? this.themeColorAccent : this.themeColorTextTertiary)
           .margin({ top: 4 }).maxLines(2)
         if (item.book !== null) {
           Text(item.book.name + (item.book.author.length > 0 ? ' · ' + item.book.author : ''))
-            .fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 }).maxLines(1)
+            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 }).maxLines(1)
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       if (item.sourceUrl === this.selectedUrl && item.verified) {
-        Text('✓').fontSize(18).fontColor(this.themeColorAccent)
+        Text('✓').fontSize(TITLE_LARGE).fontColor(this.themeColorAccent)
       }
     }.width('100%').padding(12)
       .backgroundColor(this.itemBackground(item))
@@ -98,7 +99,7 @@ export struct ChangeSourceSheet {
   @Builder
   OptionRow(label: string, checked: boolean, onChange: (v: boolean) => void) {
     Row() {
-      Text(label).fontSize(14).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      Text(label).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
       Toggle({ type: ToggleType.Checkbox, isOn: checked })
         .onChange((v: boolean) => onChange(v))
     }.width('100%').padding({ top: 8, bottom: 8 })
@@ -114,14 +115,14 @@ export struct ChangeSourceSheet {
 
       Column() {
         Row() {
-          Text('换源').fontSize(19).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('✕').fontSize(18).fontColor(this.themeColorTextTertiary)
+          Text('换源').fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text('✕').fontSize(TITLE_LARGE).fontColor(this.themeColorTextTertiary)
             .onClick(() => this.onClose())
         }.width('100%').padding({ bottom: 12 })
 
         if (this.searching) {
           Row() {
-            Text('正在搜索候选源并校验目录…').fontSize(13).fontColor(this.themeColorTextTertiary)
+            Text('正在搜索候选源并校验目录…').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
           }.width('100%').justifyContent(FlexAlign.Center).padding(24)
         } else if (this.candidates.length > 0) {
           Scroll() {
@@ -143,20 +144,20 @@ export struct ChangeSourceSheet {
         } else {
           Row() {
             Text(this.resultMessage.length > 0 ? this.resultMessage : '没有候选源')
-              .fontSize(13).fontColor(this.themeColorTextTertiary)
+              .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
           }.width('100%').justifyContent(FlexAlign.Center).padding(24)
         }
 
         if (this.resultMessage.length > 0 && !this.searching) {
-          Text(this.resultMessage).fontSize(12).fontColor(this.themeColorTextTertiary)
+          Text(this.resultMessage).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
             .margin({ bottom: 6 })
         }
 
         Row() {
-          Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary)
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary)
             .padding({ left: 24, right: 24, top: 12, bottom: 12 })
             .onClick(() => this.onClose())
-          Text('确认换源').fontSize(15).fontColor('#FFFFFF')
+          Text('确认换源').fontSize(LABEL_LARGE).fontColor('#FFFFFF')
             .backgroundColor(this.themeColorAccent).borderRadius(10)
             .padding({ left: 24, right: 24, top: 12, bottom: 12 })
             .onClick(() => this.confirm())

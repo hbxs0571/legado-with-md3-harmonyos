@@ -2,6 +2,7 @@ import { Book } from '../model/Book';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { BookCover } from './BookCover';
 import { AppGlyph } from './AppGlyph';
+import { BODY_MEDIUM, LABEL_LARGE, LABEL_SMALL, TITLE_SMALL } from './typography/TypographyTokens';
 
 /**
  * 分组卡片：书架「文件夹」样式根层每个分组一张卡。
@@ -61,12 +62,12 @@ export struct BookGroupCard {
         if (this.locked) {
           AppGlyph({ name: 'lock', glyphSize: 13, tint: this.themeColorTextTertiary }).margin({ right: 4 })
         }
-        Text(this.groupName).fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text(this.groupName).fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         if (this.showCount && !this.locked) {
-          Text(`${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
+          Text(`${this.books.length} 本`).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
         }
-        Text('›').fontSize(16).fontColor(this.themeColorAccent).margin({ left: 4 })
+        Text('›').fontSize(BODY_MEDIUM).fontColor(this.themeColorAccent).margin({ left: 4 })
       }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
 
       if (this.listStyle === 2) {
@@ -104,9 +105,9 @@ export struct BookGroupCard {
             })
           }
           Column() {
-            Text(this.listStyle === 1 ? '紧凑列表' : '分组').fontSize(11).fontColor(this.themeColorTextTertiary)
+            Text(this.listStyle === 1 ? '紧凑列表' : '分组').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
             if (this.showCount && !this.locked) {
-              Text(`共 ${this.books.length} 本`).fontSize(11).fontColor(this.themeColorTextTertiary)
+              Text(`共 ${this.books.length} 本`).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
             }
           }.alignItems(HorizontalAlign.Start).layoutWeight(1).padding({ left: 10 })
         }.width('100%').alignItems(VerticalAlign.Top).padding({ left: 8, right: 8, bottom: 10 })

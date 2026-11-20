@@ -1800,3 +1800,126 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
   - P10 前发现一处真实崩溃：`TypeError: class constructor cannot called without 'new'`，根因是 `TopBar.ets` 的 `@BuilderParam` 槽位传了内联 lambda 直接实例化自定义 struct；修法为 5 个页面（BookSourceDebugPage/DiscoverPage/BookSourceEditPage/SourceLoginPage/SourceWebPage）各加 `@Builder` slot 方法并改传 `() => { this.xxxSlot() }`，修后逐页真机复验不再崩溃。
 - **七表盘面**：P0–P11 之后只把 `docs/parity/BOOKSHELF.md:307`「动作卡·换源」由未接改已接（P8 已真实接通，原文 `onUnavailableAction('在线换源将在 P5 接入')` 已过期）；其余书源相关未接行按源码逐行核对后保持未接，不为凑数字改状态。三件套 doc-links / parity-pipes / parity-rows 复跑全 OK，七表合计仍 1226。
 - **没做什么（诚实清单）**：A3/A4/C 类脚本源与代码模板规则不承诺；`java.*` 桥 32 方法未支持（KI-BS4）；书源回调按钮、简介三种渲染、角色/知识/事件卡、批量换源/下载、在线进度持久化、目录定时刷新、旧版 `myBookSource.json` 导入、keyboardAssists 表均未做（KI-BS1/3/5/6）。真机（非模拟器）联网抓取、登录凭据端到端、换源落库后的跨会话进度迁移未单独上机；这些列入交付报告「未验证清单」，不以「已验证」表述。
+
+### 排版语义层 批 0：令牌文件 + 三探针 + 真机行高（2026-11-20）
+
+- **改了什么**：新建 `entry/src/main/ets/components/typography/TypographyTokens.ets`（24 槽位字号/行高常量 + `TextStyleToken` 接口 + `TypographySlot` 联合类型 + `resolveTextStyle` 24 分支查表）；探针结论与 11 个实测行高写入 `docs/KNOWN-ISSUES.md` 排版段。未动任何 `.fontSize()` 调用点，未动 `components/UiTokens.ets`。
+- **强制重编**：批 0 按任务书删除 `entry/build/default/intermediates/loader_out`、`intermediates/loader`、`cache` 三目录后跑 `bash scripts/build-hap.sh`；探针阶段迭代构建三次（探针 A 编译失败→注释 A→BUILD SUCCESSFUL→字重对照→BUILD SUCCESSFUL），恢复临时入口后最终 `BUILD SUCCESSFUL in 1min43s`（ERROR 0，仅 ArkTS 既有 WARN + 一条 `@Entry struct export` 建议性提示）。
+- **上机（模拟器 127.0.0.1:5555，API 26，深色，密度实测 3.5）**：临时把 `EntryAbility.ets:137` loadContent 与 `main_pages.json` 入口指向探针页，装 HAP 后 `uitest dumpLayout` + `snapshot_display` 取证；验完两处入口已恢复（`pages/Index` / `["pages/Index"]`），探针页与 `TextExtend.ets` 已删除。
+  - 探针 A `@Extend` 跨文件：不通过，编译报 `Property 'slotTitleMedium' does not exist on type 'TextAttribute'`（import 本身成功，但跨文件属性扩展未注册到调用方）。
+  - 探针 B `AttributeModifier<TextAttribute>`：字号+行高+字重三者全生效。字重严格对照——同文本同字号，Normal 行宽 545px、挂 `titleMediumEmphasized` 的 B 行宽 553px（+8px）、高 84px=24vp。注意 `AttributeModifier`/`TextAttribute` 是全局声明类型，从 `@kit.ArkUI` import 会报 not exported，直接 implements 即可。
+  - 探针 C `.font({size,weight})` + `.lineHeight()`：字号+字重生效（宽 553px 同 B），但 `Font` 接口无 lineHeight 字段，行高必须单独一行。
+  - 11 个行高实测（bounds 高 / 3.5 得 vp）：40 / 30.857 / 26.571 / 22.857 / 24 / 20 / 25.429 / 22.857 / 16 / 18.571 / 17.429，与令牌表 11 值逐个吻合，最大偏差 0.099fp——Material3 规范比推算的行高上机确认可用，无需修正。
+- **守恒检查**：本批 0 未迁移任何 `.fontSize()` 字面量，1282 处字面量 + 77 处变量保持不变（下一批开工前基线）。
+- **没做什么（截至批 0 时点）**：15 号字归属当时待拍板（用户已于本日拍板「怎么还原上游怎么来/还原上游才是最高宗旨」，口径见 `KNOWN-ISSUES.md` 排版段）；批 1–8 当时一行未改（批 1 见下段）；`UiTokens.ets` 9 个常量按约定留到迁移 60% 后再统一；33 处 `.lineHeight()` 未批量迁移。
+
+### 排版语义层 批 1：14 号 321 处 → TITLE_SMALL / LABEL_LARGE（2026-11-20）
+
+- **改了什么**：42 个 `.ets` 文件里 `.fontSize(14)` 共 321 处全部换成槽位常量——`TITLE_SMALL` 287 处、`LABEL_LARGE` 34 处。分流按任务书 5.2：邻近有 `.maxLines(` / `.textOverflow(` 的单行文本→`LABEL_LARGE`（较小行高 18.67），其余→`TITLE_SMALL`（较大行高 20）。每个文件加一行对应层级的 import（pages/→`../components/typography/TypographyTokens`，components/→`./typography/TypographyTokens`）。用 `tmp/scan_batch1.py` 侦察、`tmp/replace_batch1.py` 先 `--dry` 预览再实改，逐文件按原换行符字节级写回（`core.autocrlf=true`，脚本读字节判定 CRLF/LF 后原样保留）。
+- **为什么**：`TITLE_SMALL` 与 `LABEL_LARGE` 字号同为 14（取自 `TypographyTokens.ets` 常量，实测确认），所以本批是**等值替换**，视觉零变化；分流只为把语义标注落到正确槽位，真实行高差异（20 vs 18.67）留到行高独立批次处理。
+- **强制重编**：删 loader_out/loader/cache 三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min50s`，ERROR 0（仅既有 `@Entry struct export` 建议性提示）。
+- **守恒检查**（Python 统计工作区字节）：字面量 1282−321=**961**、变量 77+321=**398**、和 **1359**（守恒成立）；14 号字面量残留 **0**；42 文件常量替换合计 **321**，import 齐全、0 异常。
+- **上机比对（模拟器 127.0.0.1:5555 深色主路径）**：`tmp/typography-batch1/before-dark.jpeg` 与 `after-dark.jpeg`，PIL 逐像素比对 **最大差 0、差异像素 0 / 3,624,960**，完全一致——等值替换无视觉回归。改前图因探针入口未重装曾误截到探针页，重装恢复版 HAP 后重截为书架主页，比对有效。按仓库口径跳过浅色专项；未单独截 fontScale=16 图（等值替换字号数值未变，大字号下同样不变，属代码级推论非上机实测）。
+- **没做什么（诚实清单）**：13 处 `.fontSize(14)` 同行带手写 `.lineHeight(20/21/22)`（`AppBackupSettingsPage.ets:208/230/253`、`BookInfoPage.ets:555/950/967/971/979`、`BookshelfManagePage.ets:538`、`OnboardingPage.ets:71/75/86/102`）**行高原样保留**——其中 21/22 上游无对应、属偏离值，按"还原上游"本应归位到槽位行高（20 或 18.67），但任务书第十节第 3 条把 33 处 lineHeight 列为独立批次、明令字号批次不动，故本批未改，列为后续行高批次的明确待办。未动 `UiTokens.ets`、未碰阅读域 Canvas 链。
+
+### 排版语义层 批 2：13 号 231 处 → LABEL_MEDIUM（2026-11-20）
+
+- **改了什么**：36 个 `.ets` 文件里 `.fontSize(13)` 共 231 处全部换成 `LABEL_MEDIUM`（13 号只命中上游 `labelMedium` 一个槽位，单值单映射、无需语义分流）。其中 31 个文件批 1 已 import 过 TypographyTokens，本批把 `LABEL_MEDIUM` 按字母序合并进现有大括号（如 `{ LABEL_LARGE, TITLE_SMALL }` → `{ LABEL_LARGE, LABEL_MEDIUM, TITLE_SMALL }`）；另 5 个新文件新增 import。用 `tmp/replace_batch2.py --dry` 预览后实改，逐文件按原换行符字节级写回。
+- **为什么**：`LABEL_MEDIUM` 字号就是 13，等值替换、视觉零变化；把 13 号字归到唯一对应槽位。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min51s`，ERROR 0（仅既有建议性提示）。
+- **守恒检查**（Python 工作区字节统计）：字面量 961−231=**730**、变量 398+231=**629**、和 **1359**（守恒）；13 号字面量残留 **0**；`LABEL_MEDIUM` 引用 **231**、import 异常（重复/缺失）**0**。
+- **上机比对**：`tmp/typography-batch2/before-dark.jpeg` 与 `after-dark.jpeg` PIL 逐像素比对，最大差 **0**、差异像素 **0 / 3,624,960**，完全一致。按仓库口径跳过浅色专项；等值替换未单独截 fontScale=16 图（代码级推论）。
+- **没做什么**：未动行高（本批 13 号处若有同行 lineHeight 一律保留）；未动 `UiTokens.ets` 与阅读域。
+
+### 排版语义层 批 3：12 号 199 处 → BODY_SMALL（2026-11-20）
+
+- **改了什么**：36 个 `.ets` 文件里 `.fontSize(12)` 共 199 处全部换成 `BODY_SMALL`（12 号唯一命中 `bodySmall`，单值单映射）。用通用脚本 `tmp/replace_single.py 12 BODY_SMALL`（先 `--dry` 预览）合并/新增 import、按原换行符字节级写回。
+- **为什么**：`BODY_SMALL` 字号 12，等值替换、视觉零变化。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min46s`，ERROR 0。
+- **守恒检查**：字面量 961−231−199=**531**、变量 398+231+199=**828**、和 **1359**（守恒）；12 号残留 **0**、`BODY_SMALL` 引用 **199**、重复 import **0**。
+- **上机比对**：`tmp/typography-batch3/before-dark.jpeg` 与 `after-dark.jpeg` 逐像素最大差 **0**、差异 **0/3,624,960**，完全一致。按仓库口径跳过浅色专项；等值替换未单独截 fontScale=16 图。
+- **没做什么**：未动行高、`UiTokens.ets`、阅读域。
+
+### 排版语义层 批 4：11 号 130 处 → LABEL_SMALL（2026-11-20）
+
+- **改了什么**：31 个 `.ets` 文件里 `.fontSize(11)` 共 130 处换成 `LABEL_SMALL`（11 号唯一命中 `labelSmall`）。通用脚本 `tmp/replace_single.py 11 LABEL_SMALL` 合并/新增 import、按原换行符字节级写回。
+- **为什么**：`LABEL_SMALL` 字号 11，等值替换、视觉零变化。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 2min8s`，ERROR 0。
+- **守恒检查**：字面量 531−130=**401**、变量 828+130=**958**、和 **1359**（守恒）；11 号残留 **0**、`LABEL_SMALL` 引用 **130**、重复 import **0**。
+- **上机比对**：基线截图首次误截到「我的」页（设备停留在上次位置），force-stop + start 回书架页重截后有效；`tmp/typography-batch4/before-dark.jpeg` 与 `after-dark.jpeg` 逐像素最大差 **0**、差异 **0/3,624,960**。按仓库口径跳过浅色专项；等值替换未单独截 fontScale=16 图。
+- **没做什么**：未动行高、`UiTokens.ets`、阅读域。
+
+### 排版语义层 批 5：15 号 106 处 → TITLE_MEDIUM/LABEL_MEDIUM/LABEL_LARGE（2026-11-20）
+
+- **改了什么**：30 个 `.ets` 文件里 `.fontSize(15)` 共 106 处，按逐处语义定档换成三档常量：`LABEL_LARGE`(14) 51 处、`TITLE_MEDIUM`(16) 41 处、`LABEL_MEDIUM`(13) 14 处。这是**唯一字号变化**的批次。
+- **怎么定档的**：扫描每处准确源码行（`tmp/scan_batch5.py` → 106 条上下文），经四版分类器迭代（v1 文案匹配误判多；v2 onClick/控件类型；v3 基于准确 cur 行；v4 补 prev 行 + 6 处人工 override），最终决策表 `tmp/typography-batch5-final.json` 逐处含 `rel:line`/档位/依据/源码行。规则：按钮（`取消/确定/删除/导入/保存…`）与输入框（TextInput/TextArea 带 placeholderColor）→LABEL_LARGE(14，上游 Button=labelLarge、本地 FONT_INPUT=14)；说明/空状态（`暂无/加载失败`）/符号（`⌄`/`+`）/开关值→LABEL_MEDIUM(13)；其余行主标题/右侧值/条目名/状态→TITLE_MEDIUM(16，上游 SettingItem titleMedium)。用 `tmp/replace_batch5.py` 按决策表逐行精确替换（非按值全替）。
+- **为什么**：用户两次强调「怎么还原上游怎么来 / 还原上游才是最高宗旨」，15 号字上游无对应，按任务书甲方案逐处归到上游语义档位；已写入 `KNOWN-ISSUES.md` 15 号字决策段。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min54s`，ERROR 0。
+- **守恒检查**：字面量 299−106=**193**、变量 1060+106=**1166**、和 **1359**（守恒）；15 号残留 **0**；106 处替换逐处校验与决策表一致 **0 错误**；重复 import **0**。
+- **上机比对**：书架主页 0 差异（该页无 15 号字元素）；「我的」页与设置首页逐屏确认渲染正常、无错位裁切。按仓库口径跳过浅色专项。
+- **没做什么（诚实清单）**：30 文件/106 处未逐页截图（用户已确认接受定档）；未单独截 fontScale=16 图；与等值批次不同，本批**不能用像素零差异证明正确**，视觉变化是预期的上游还原，逐处依据以决策表为准。未动行高（15 号处若有同行 lineHeight 保留）、`UiTokens.ets`、阅读域。
+
+### 排版语义层 全仓终验（批 0–8 收口，2026-11-20）
+
+- **终验命令**（Python 遍历 `entry/src/main/ets` 全部 254 个 `.ets`）：`.fontSize(数字字面量)` **0 处**（改造前 1282）；`TypographyTokens` 槽位常量引用 **1350**；其它变量/表达式 `.fontSize()` **9**；字面量+槽位+其它 = **1359**（守恒成立，改造前 1282 字面量 + 77 变量）。
+- `TypographyTokens.ets` 导出 **48** 个常量（24 字号 + 24 行高）全部在用；引用槽位常量却缺 import 的文件 **0**；重复 import **0**。
+- 非 TypographyTokens 的既有常量引用（FIELD_INPUT_SIZE / MENU_FONT_SIZE / PROFILE_*_SIZE / FONT_* 等，共 9 类）属本地其它模块既有令牌，按任务书「UiTokens 9 常量留到迁移 60% 后统一」不动。
+- 各批构建全通过：批 0 `1min43s`、批 1 `1min50s`、批 2 `1min51s`、批 3 `1min46s`、批 4 `2min8s`、批 5 `1min54s`、批 6 `2min19s`、批 7 `1min50s`、批 8 `1min59s`，均 ERROR 0（仅既有 `@Entry export` 建议性提示）。
+- **任务书第十二节文档错误已修**：`ARCHITECTURE.md:81`、`FEATURES.md:374`、`GLOSSARY.md:15`、`KNOWN-ISSUES.md:1496-1498/1618` 的旧数字（1,189、5 个消费、零消费、没有排版层）改为实测 1,282 / 已建成 / 6 个消费。
+- **未纳入本任务、诚实移交**：33 处手写 `.lineHeight()`（其中 13 处 21/22 偏离上游）留独立批次；字重 `*Emphasized` 未批量接入（探针 B 已验证 `AttributeModifier` 可行）；浅色专项按仓库口径跳过。以上三项随后由「修正偏离上游」任务（goal-e254d796）接续处理，见下方三段。
+
+### 修正偏离上游 ①：33 处手写 lineHeight 统一（2026-11-20，goal-e254d796）
+
+- **改了什么**：材料 `tmp/typography-evidence.md:919-957` 列 33 处手写 `.lineHeight()`。脚本 `tmp/scan_lineheight.py`→`lineheight-scan.json/.tsv`、`tmp/pair_lineheight.py`→`lineheight-pairs.json/.tsv` 按邻近 fontSize 槽位精确配对：32 处固定值配到对应槽位行高常量（TITLE_SMALL=20 / LABEL_MEDIUM=17.33 / BODY_SMALL=16 / LABEL_SMALL=16 / TITLE_LARGE=22.91 / LABEL_LARGE=18.67 等），1 处 `ReaderPage.ets:5381` 动态 `Math.max`（阅读器 Canvas 自绘，任务书明确不动）跳过。`tmp/fix_lineheight.py --dry` 预览后实改，合并 import、按原换行符写回，`SKIP={"ReaderPage.ets"}`。
+- **为什么**：这 32 处行高原本是散落的数字字面量，其中 13 处 21/22 上游无对应，属"偏离上游"；换成槽位行高常量后与令牌层同源，语义自洽。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min49s`，ERROR 0。
+- **守恒验证**：数字字面量 `.lineHeight(数字)` **0**、槽位行高常量 `.lineHeight(XXX_LINE_HEIGHT)` **32**、动态保留 **1**（ReaderPage Canvas）。
+- **上机比对（深色）**：书架首页与改前逐像素差 **0**；导航到设置→备份与恢复页截图 `tmp/lineheight-fix/backup-page.jpeg`，渲染正常无文字重叠。按仓库口径跳过浅色专项。
+- **没做什么**：ReaderPage.ets:5381 动态行高未动（Canvas 自绘，任务书明确排除）；未逐页截图其余设置子页。
+
+### 修正偏离上游 ②：UiTokens 9 个 FONT_* 常量按上游语义统一（2026-11-20，goal-e254d796）
+
+- **最高口径**：用户 m01314/m01315 重申「怎么还原上游怎么来」，否决了「按数值近似映射丢字重」方案；范围收窄到有 FONT_* 语义锚点、能精确还原的 settings 组件族 32 处（m01451 选定）。
+- **改了什么**（`tmp/unify_font_const.py` 整份重写、单通道、按原换行符写回）：11 个消费文件共 32 处 `.fontSize(FONT_*)` 按上游 settingItem 语义换成 TypographyTokens 槽位常量，并从 UiTokens import 移除 FONT_* 名字；UiTokens.ets 删全部 9 个 FONT_* 定义（含 3 个零消费 PAGE_TITLE/COLLAPSED/INPUT_LABEL）。
+  - `FONT_ROW_TITLE`(16)→`TITLE_MEDIUM`(Normal) 10 处——上游 title→titleMedium(Normal)；其中 `AppLabSettingsPage.ets:78` 原本带 Medium，保留 `TITLE_MEDIUM + .fontWeight(Medium)` 不强行改名（视觉零变化、仍符合上游）。
+  - `FONT_ROW_DETAIL`(12)→`BODY_SMALL_EMPHASIZED` + 补 `.fontWeight(Medium)` 7 处——上游 description→bodySmallEmphasized(Medium)。
+  - `FONT_ROW_OPTION`(13)→`LABEL_MEDIUM_EMPHASIZED` + 补 `.fontWeight(Medium)` 5 处——上游 option→labelMediumEmphasized(Medium)。
+  - `FONT_SECTION_TITLE`(14)→`LABEL_LARGE_EMPHASIZED` 3 处（原本已带 Medium，不重复加）——上游 SectionTitle→labelLargeEmphasized。
+  - `FONT_INPUT`(14)→`LABEL_LARGE`(Normal) 6 处、`FONT_LABEL_SMALL`(11)→`LABEL_SMALL`(Normal) 1 处——无干净 Emphasized 对应、零变化。
+- **为什么用 `*_EMPHASIZED` 槽位 + `.fontWeight(Medium)` 而非 AttributeModifier 三件套**：三件套会同时给这 32 处新增行高常量，而前 8 批全仓 1359 处都只有字号、无显式行高（逐像素比对已过），新增行高会破坏既成事实；字重语义不丢才是核心，故只补字重不换行高。Emphasized 槽位的字号值与普通槽位相同，等值替换、视觉仅字重变化（正是还原上游）。
+- **守恒验证**：改前 FONT_* 消费 **32** / UiTokens FONT_* 定义 **9**（工作区另有 ThemeSettingsRepository 3 个 FONT_SCALE_* 不在范围）；改后 FONT_* 消费 **0** / 定义 **0** / 残留 FONT_ import **0**。Emphasized 槽位 fontSize 消费 **15**（BODY_SMALL 7 + LABEL_LARGE 3 + LABEL_MEDIUM 5），全部邻近带 Medium 字重、无重复、无遗漏（`tmp/verify_font_unify.py`）。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min52s`，ERROR 0（日志 `tmp/build-font-unify.log`）。
+- **上机比对（深色）**：书架首页、`我的`页、设置首页、外观页均渲染正常——「书源管理」等行的标题+加粗说明、「规则/其它」分组标题、「纯黑深色模式」开关行、「字体设置」标题+说明均清晰无重叠（截图 `tmp/font-unify-check/*.jpeg`）。按仓库口径跳过浅色专项。
+- **没做什么**：ROW_TITLE 那处原有 Medium 未强改槽位名（保持视觉零变化）；全仓其余 1573 处槽位引用未动——取证确认除 settings 组件族外无法逐处对应上游 Emphasized（上游 136 处引用仅 33 处能解析中文 stringResource、本地无语义锚点），强做即取近似，用户已认可收窄范围。
+
+### 修正偏离上游 ③：全仓字重 Emphasized 批量接入（2026-11-20，goal-e254d796）
+
+- **结论：并入②，无独立改动**。用户最高口径「还原上游」要求按语义定档，取证后全仓 1573 处槽位引用是按字号数值归档的，与上游「用途+字重」语义不同构，无法逐处精确还原；唯一有语义锚点的 settings 组件族 32 处已在②中把该上字重的 15 处接入 `*_EMPHASIZED` + Medium。`TypographyTokens.ets` 的 24 个 Emphasized 槽位此前生产引用为 0，②后 3 个槽位（BODY_SMALL/LABEL_LARGE/LABEL_MEDIUM）共 15 处进入生产；其余 Emphasized 槽位仍无对应调用点，不强造。
+- **验证**：`resolveTextStyle` / `AttributeModifier` 三件套方案在批 0 探针 B 已验证可行（字号+行高+字重全生效），但按②的理由（避免新增行高破坏既成事实）未在三件套形态落地；字重语义通过 `*_EMPHASIZED` 常量 + `.fontWeight(Medium)` 等价达成。
+- **没做什么**：未对全仓 173 处 `.fontWeight()` / 147 处 Medium 做批量改写（无上游语义锚点，强改即取近似）；浅色专项按仓库口径跳过。
+
+### 排版语义层 批 8：孤值 80 处就近归位，字面量归零（2026-11-20）
+
+- **改了什么**：上游 10 个字号里没有的 9 种孤值（8/9/10/19/22/23/27/28/48）共 80 处，按用户明确指令「上游没有的本地也不要有」就近归入上游有的字号，不新增槽位：8/9/10→`LABEL_SMALL`(11) 63 处、19→`TITLE_LARGE`(18) 8 处、22/23→`HEADLINE_MEDIUM`(24) 5 处、27/28→`HEADLINE_LARGE`(32) 3 处、48→`HEADLINE_LARGE`(32) 1 处。映射经用户确认。
+- **为什么**：这是整个改造的最后一值清理——让本地字号集合收敛到上游的 10 个值，彻底消除「上游无对应」的孤值。视觉会变（如 48→32 封面首字母变小、10→11 说明标签变大），是「上游没有本地也不要有」的必然结果。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min59s`，ERROR 0。
+- **守恒检查（里程碑）**：字面量 80−80=**0**、变量 1279+80=**1359**、和 **1359**。至此 `.fontSize(数字字面量)` **全仓归零**，1282 处原始字面量全部迁移到槽位常量或变量；重复 import **0**。
+- **上机比对**：书架页差异像素 611,922 / 3,624,960，包围盒 x[31,1232] y[1327,2519]（书架卡片区），与 10→11 号标签字（未读徽章/时间/类型）变大预期一致；渲染正常无错位。卡片顺序/封面呈现与改前有轻微视觉差，疑因异步封面加载时序，未在静态比对中排除。按仓库口径跳过浅色专项；未单独截 fontScale=16 图。
+- **没做什么**：未动行高（孤值处若有同行 lineHeight 保留）、`UiTokens.ets`、阅读域 Canvas 链；30 处孤值未逐页截图（映射已经用户确认）。
+
+### 排版语义层 批 7：17/18/20/24/32 共 113 处 → 对应 headline/title/body 槽位（2026-11-20）
+
+- **改了什么**：5 个有唯一上游对应槽位的字号全部归位——17→`BODY_LARGE` 22 处、18→`TITLE_LARGE` 46 处、20→`HEADLINE_SMALL` 37 处、24→`HEADLINE_MEDIUM` 3 处、32→`HEADLINE_LARGE` 5 处，共 113 处。每个常量字号与字面量完全相同（`TypographyTokens.ets` 实测确认），等值替换、视觉零变化。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min50s`，ERROR 0。
+- **守恒检查**：字面量 193−113=**80**、变量 1166+113=**1279**、和 **1359**（守恒）；重复 import **0**；剩余字面量分布 `8:3 / 9:10 / 10:50 / 19:8 / 22:2 / 23:3 / 27:1 / 28:2 / 48:1`，全是上游 10 个字号里没有的孤值（留批 8）。
+- **上机比对**：`tmp/typography-batch7/before-dark.jpeg` 与 `after-dark.jpeg` 逐像素最大差 **0**、差异 **0/3,624,960**。按仓库口径跳过浅色专项。
+- **没做什么**：未动行高、`UiTokens.ets`、阅读域；孤值 80 处未动。
+
+### 排版语义层 批 6：16 号 102 处 → TITLE_MEDIUM / BODY_MEDIUM（2026-11-20）
+
+- **改了什么**：27 个 `.ets` 文件里 `.fontSize(16)` 共 102 处按语义分流——`TITLE_MEDIUM` 86 处、`BODY_MEDIUM` 16 处。分流规则同批 1（邻近 `maxLines`/`textOverflow` 的单行文本→`BODY_MEDIUM` 较小行高 22.86，其余→`TITLE_MEDIUM` 24）。用 `tmp/replace_batch6.py --dry` 预览后实改，合并/新增 import、按原换行符字节级写回。
+- **为什么**：两槽位字号都是 16（等值替换、视觉零变化），分流只为把语义标注落到正确槽位；真实行高差异留行高独立批次。
+- **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 2min19s`，ERROR 0。
+- **守恒检查**：字面量 401−102=**299**、变量 958+102=**1060**、和 **1359**（守恒）；16 号残留 **0**、`TITLE_MEDIUM` 86 + `BODY_MEDIUM` 16 = **102**、重复 import **0**。
+- **上机比对**：`tmp/typography-batch6/before-dark.jpeg` 与 `after-dark.jpeg` 逐像素最大差 **0**、差异 **0/3,624,960**，完全一致。按仓库口径跳过浅色专项；等值替换未单独截 fontScale=16 图。
+- **没做什么**：未动行高、`UiTokens.ets`、阅读域。

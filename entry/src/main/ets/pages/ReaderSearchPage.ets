@@ -7,6 +7,7 @@ import { ReaderSearchHistoryRepository } from '../data/ReaderSearchHistoryReposi
 import { ReaderSearchRegex } from '../data/ReaderSearchRegex';
 import { ReaderSearchNavItem } from '../model/ReaderSearchNav';
 import { AppGlyph } from '../components/AppGlyph';
+import { BODY_SMALL, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 interface ReaderSearchHit {
   position: number;
@@ -352,7 +353,7 @@ export struct ReaderSearchPage {
         )).fontColor(this.themeColorTextSecondary);
       }
     }
-    .fontSize(13)
+    .fontSize(LABEL_MEDIUM)
     .maxLines(3)
     .margin({ top: 6 })
   }
@@ -380,7 +381,7 @@ export struct ReaderSearchPage {
           .onClick(() => this.toggleRegexMode())
         // 上游点击后按钮旁展开 1 秒文字；本地放在按钮右侧同一行。
         if (this.actionHint.length > 0) {
-          Text(this.actionHint).fontSize(12).fontColor(this.themeColorAccent).margin({ left: 4 })
+          Text(this.actionHint).fontSize(BODY_SMALL).fontColor(this.themeColorAccent).margin({ left: 4 })
         }
       }
       .width('100%')
@@ -388,14 +389,14 @@ export struct ReaderSearchPage {
 
       Text(this.query.trim().length > 0 && this.matches.length > 0
         ? '共 ' + this.matches.length.toString() + ' 条结果' : '搜索内容')
-        .fontSize(23).fontWeight(FontWeight.Bold).fontColor('#E5E6EA')
+        .fontSize(HEADLINE_MEDIUM).fontWeight(FontWeight.Bold).fontColor('#E5E6EA')
         .alignSelf(ItemAlign.Start).margin({ left: 18, bottom: 12 })
 
       Row() {
         AppSearchGlyph()
         TextInput({ placeholder: '搜索…', text: this.query })
           .id('readerSearchInput')
-          .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor('#8C8E98')
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor('#8C8E98')
           .backgroundColor(Color.Transparent).layoutWeight(1)
           .defaultFocus(true)
           .enterKeyType(EnterKeyType.Search)
@@ -413,12 +414,12 @@ export struct ReaderSearchPage {
         // 「仅本书」开关叠在 CenterEnd 同一行；文案恒定「仅本书」，图标 checked=Book /
         // unchecked=CollectionsBookmark。本地用 Stack 复刻这个叠放关系。
         Stack({ alignContent: Alignment.Center }) {
-          Text('搜索历史').fontSize(12).fontColor(this.themeColorAccent)
+          Text('搜索历史').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
           Row() {
             Row() {
               AppGlyph({ name: this.historyOnlyThisBook ? 'book' : 'bookshelf', glyphSize: 13, tint: this.themeColorTextPrimary })
               Text('仅本书')
-                .fontSize(11).fontColor(this.themeColorTextPrimary).margin({ left: 5 })
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextPrimary).margin({ left: 5 })
             }
             .padding({ left: 10, right: 10, top: 6, bottom: 6 })
             .backgroundColor(this.historyOnlyThisBook ? this.themeColorSurfaceElevated : this.themeColorSurfaceTertiary)
@@ -435,7 +436,7 @@ export struct ReaderSearchPage {
         // 搜索中的进度行是本地新增的（上游只用顶栏进度条表示），保留。
         Row() {
           Text('正在搜索 ' + this.searchProgress.toString() + '/' + this.chapterRows.length.toString())
-            .fontSize(12).fontColor(this.themeColorAccent)
+            .fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
         }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 8 })
       }
 
@@ -449,13 +450,13 @@ export struct ReaderSearchPage {
 
       if (this.searchError.length > 0) {
         Column() {
-          Text(this.searchError).fontSize(14).fontColor('#BFC0C8')
+          Text(this.searchError).fontSize(TITLE_SMALL).fontColor('#BFC0C8')
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.query.trim().length === 0) {
         if (this.visibleHistory().length === 0) {
           Column() {
-            Text('(つ＿⊂)').fontSize(27).fontColor(this.themeColorTextPrimary)
-            Text('暂无搜索历史').fontSize(11).fontColor('#B4B5BC').margin({ top: 8 })
+            Text('(つ＿⊂)').fontSize(HEADLINE_LARGE).fontColor(this.themeColorTextPrimary)
+            Text('暂无搜索历史').fontSize(LABEL_SMALL).fontColor('#B4B5BC').margin({ top: 8 })
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         } else {
           List() {
@@ -465,10 +466,10 @@ export struct ReaderSearchPage {
                   AppGlyph({ name: 'profileHistory', glyphSize: 18, tint: this.themeColorAccent })
                     .margin({ right: 12 })
                   Column() {
-                    Text(entry.query).fontSize(14).fontColor('#D9DAE0').maxLines(1)
+                    Text(entry.query).fontSize(LABEL_LARGE).fontColor('#D9DAE0').maxLines(1)
                     if (!this.historyOnlyThisBook) {
                       Text(entry.bookName + ' · ' + entry.bookAuthor)
-                        .fontSize(10).fontColor('#81838D').maxLines(1).margin({ top: 3 })
+                        .fontSize(LABEL_SMALL).fontColor('#81838D').maxLines(1).margin({ top: 3 })
                     }
                   }
                   .layoutWeight(1)
@@ -488,7 +489,7 @@ export struct ReaderSearchPage {
               Row() {
                 AppGlyph({ name: 'delete', glyphSize: 18, tint: '#C5C7D0' })
                   .margin({ right: 8 })
-                Text('清除搜索历史').fontSize(13).fontColor('#D9DAE0')
+                Text('清除搜索历史').fontSize(LABEL_MEDIUM).fontColor('#D9DAE0')
               }
               .padding({ left: 18, right: 18, top: 10, bottom: 10 })
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))
@@ -501,11 +502,11 @@ export struct ReaderSearchPage {
         }
       } else if (this.matches.length === 0 && this.searching) {
         Column() {
-          Text('正在搜索本书正文').fontSize(12).fontColor('#B4B5BC')
+          Text('正在搜索本书正文').fontSize(BODY_SMALL).fontColor('#B4B5BC')
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.matches.length === 0) {
         Column() {
-          Text('没有找到相关内容！').fontSize(14).fontColor('#BFC0C8')
+          Text('没有找到相关内容！').fontSize(TITLE_SMALL).fontColor('#BFC0C8')
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else {
         Stack({ alignContent: Alignment.BottomEnd }) {
@@ -518,7 +519,7 @@ export struct ReaderSearchPage {
                   Column() {
                     Row() {
                       // 上游 SearchResultItem：章名 titleSmall(14sp Medium) primary 色。
-                      Text(match.chapterTitle).fontSize(14).fontWeight(FontWeight.Medium)
+                      Text(match.chapterTitle).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium)
                         .fontColor(this.themeColorAccent)
                         .layoutWeight(1).maxLines(1)
                     }
@@ -532,13 +533,13 @@ export struct ReaderSearchPage {
                   // 上游角标圆角 8、padding 4/2，百分比一位小数且 >0 才显示。
                   Row() {
                     if (match.isCurrentChapter) {
-                      Text('当前章节').fontSize(10).fontColor(this.themeColorTextPrimary)
+                      Text('当前章节').fontSize(LABEL_SMALL).fontColor(this.themeColorTextPrimary)
                         .padding({ left: 4, right: 4, top: 2, bottom: 2 })
                         .backgroundColor(this.themeColorSurfaceElevated).borderRadius(8)
                     }
                     if (match.progressPercent > 0) {
                       Text(match.progressPercent.toFixed(1) + '%')
-                        .fontSize(10).fontColor(this.themeColorTextPrimary)
+                        .fontSize(LABEL_SMALL).fontColor(this.themeColorTextPrimary)
                         .padding({ left: 4, right: 4, top: 2, bottom: 2 })
                         .backgroundColor(this.themeColorSurfaceElevated).borderRadius(8).margin({ left: 4 })
                     }

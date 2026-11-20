@@ -18,6 +18,7 @@ import { TxtTocRule } from '../model/TxtTocRule';
 import { BookRepository } from '../data/BookRepository';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { TocRulePreviewEngine } from '../data/TocRulePreviewEngine';
+import { BODY_SMALL, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 一条规则的预览条目：`totalCount < 0` 表示还没算出来。 */
 interface TocRulePreviewItem {
@@ -190,9 +191,9 @@ export struct TxtTocRulePreviewPage {
           .onClick(() => this.onOpenManagePage())
       }.width('100%').height(40 + this.appTopInset).padding({ left: 18, right: 18, top: this.appTopInset })
       Column() {
-        Text('选择目录规则').fontSize(24).fontWeight(FontWeight.Bold)
+        Text('选择目录规则').fontSize(HEADLINE_MEDIUM).fontWeight(FontWeight.Bold)
           .fontColor(this.themeColorTextPrimary).width('100%')
-        Text('选择规则预览章节').fontSize(13).fontColor(this.themeColorTextTertiary)
+        Text('选择规则预览章节').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
           .width('100%').margin({ top: 4 })
       }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 10 })
 
@@ -200,7 +201,7 @@ export struct TxtTocRulePreviewPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索目录规则', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('txt_toc_preview_search')
             .onAppear(() => focusControl.requestFocus('txt_toc_preview_search'))
@@ -224,7 +225,7 @@ export struct TxtTocRulePreviewPage {
       if (totalCount < 0) {
         LoadingProgress().width(12).height(12).color(this.themeColorAccent)
       } else {
-        Text(`${totalCount} 章`).fontSize(11).fontColor('#1B1C22')
+        Text(`${totalCount} 章`).fontSize(LABEL_SMALL).fontColor('#1B1C22')
       }
     }
       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -239,11 +240,11 @@ export struct TxtTocRulePreviewPage {
   private RuleCard(item: TocRulePreviewItem) {
     Stack({ alignContent: Alignment.BottomEnd }) {
       Column() {
-        Text(item.rule.name).fontSize(14).fontWeight(FontWeight.Medium)
+        Text(item.rule.name).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextPrimary).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
         if ((item.rule.example ?? '').length > 0) {
-          Text(item.rule.example ?? '').fontSize(11).fontColor(this.themeColorTextTertiary)
+          Text(item.rule.example ?? '').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
             .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%').margin({ top: 4 })
         }
@@ -269,10 +270,10 @@ export struct TxtTocRulePreviewPage {
   private RuleRow(item: TocRulePreviewItem) {
     Row() {
       Column() {
-        Text(item.rule.name).fontSize(15).fontColor(this.themeColorTextPrimary)
+        Text(item.rule.name).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
         if ((item.rule.example ?? '').length > 0) {
-          Text(item.rule.example ?? '').fontSize(11).fontColor(this.themeColorTextTertiary)
+          Text(item.rule.example ?? '').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%').margin({ top: 2 })
         }
@@ -295,31 +296,31 @@ export struct TxtTocRulePreviewPage {
   @Builder
   private ChapterListSheet() {
     Column() {
-      Text(this.sheetRuleName).fontSize(18).fontWeight(FontWeight.Medium)
+      Text(this.sheetRuleName).fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).width('100%')
         .padding({ left: 18, right: 18, top: 16, bottom: 6 })
-      Text(`${this.sheetTotalCount} 章`).fontSize(13).fontColor(this.themeColorTextTertiary)
+      Text(`${this.sheetTotalCount} 章`).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
         .width('100%').padding({ left: 18, right: 18, bottom: 10 })
       List() {
         ForEach(this.sheetChapterTitles, (title: string, index: number) => {
           ListItem() {
-            Text(title).fontSize(14).fontColor(this.themeColorTextSecondary)
+            Text(title).fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
               .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
           }
         }, (title: string, index: number) => `${index}-${title}`)
         if (this.sheetChapterTitles.length >= BookRepository.previewChapterLimit) {
           ListItem() {
-            Text('仅预览前 500 章').fontSize(12).fontColor(this.themeColorTextTertiary)
+            Text('仅预览前 500 章').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
               .width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
           }
         }
       }.layoutWeight(1).width('100%')
       Row() {
-        Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
           .textAlign(TextAlign.Center).padding({ top: 14, bottom: 14 })
           .onClick(() => this.sheetRuleName = '')
-        Text(this.applying ? '应用中…' : '应用').fontSize(15)
+        Text(this.applying ? '应用中…' : '应用').fontSize(LABEL_LARGE)
           .fontColor(this.applying ? this.themeColorTextTertiary : this.themeColorAccent)
           .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 14, bottom: 14 })
           .onClick(() => {
@@ -342,7 +343,7 @@ export struct TxtTocRulePreviewPage {
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.visibleItems().length === 0) {
         Column() {
-          Text('没有匹配的目录规则').fontSize(14).fontColor(this.themeColorTextTertiary)
+          Text('没有匹配的目录规则').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.gridLayout) {
         Grid() {

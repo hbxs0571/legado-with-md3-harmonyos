@@ -1493,10 +1493,61 @@ private settingsSheetHeight(): string {
 
 - 上游 `ui/theme/LegadoTheme.kt:85-119` 定义 `data class LegadoTypography`，**24 个槽位**：headline / title / body / label 各三档（Large/Medium/Small），每档再加一个 `*Emphasized` 变体。
 - 引用面：`grep -rho "typography\.[a-zA-Z]*"` 共 **696 处**，分布在 **186 个文件**。用量前六：`bodySmall` 155 / `labelSmall` 104 / `bodyMedium` 97 / `labelMedium` 74 / `titleMedium` 45 / `titleSmall` 39。`*Emphasized` 变体合计约 130 处（`labelSmallEmphasized` 39 / `labelMediumEmphasized` 39 / `labelLargeEmphasized` 18 / `titleSmallEmphasized` 16 / `titleMediumEmphasized` 14 / `titleLargeEmphasized` 4）。
-- 本地：**没有排版层**。`fontSize(N)` 字面量 **1,189 处**，用到的字号有 **20 种**：14(311) / 13(206) / 12(177) / 11(123) / 16(98) / 15(88) / 10(50) / 18(39) / 20(37) / 17(21) / 9(10) / 19(7) / 32(5) / 8(3) / 24(3) / 23(3) / 28(2) / 26(2) / 22(2) / 48(1)。
-- `components/UiTokens.ets:13-29` 定义了 9 个 `FONT_*` 常量，但只有 5 个真被消费：`FONT_ROW_TITLE` 18 处 / `FONT_ROW_DETAIL` 14 / `FONT_ROW_OPTION` 10 / `FONT_INPUT` 8 / `FONT_SECTION_TITLE` 5；`FONT_PAGE_TITLE`、`FONT_LABEL_SMALL`、`FONT_INPUT_LABEL` 三个**零消费**。
-- 后果：同一层级的东西在不同页面大小不一。上游靠 24 个槽位保证「所有分组标题一样大、所有说明文字一样小」，本地靠 1,189 处手写数字维持。
+- 本地（改造前粗测，状态已过期，见下方 r348 复核与批 0–8）：**没有排版层**。`fontSize(N)` 字面量 **1,189 处**（实测 1,282），字号 **20 种**：14(311) / 13(206) / 12(177) / 11(123) / 16(98) / 15(88) / 10(50) / 18(39) / 20(37) / 17(21) / 9(10) / 19(7) / 32(5) / 8(3) / 24(3) / 23(3) / 28(2) / 26(2) / 22(2) / 48(1)。**现状：字面量已归零，全部迁入 `TypographyTokens.ets` 24 槽位常量**。
+- `components/UiTokens.ets:13-29` 原 9 个 `FONT_*` 常量（6 个真消费共 32 处、`FONT_LABEL_SMALL` 在 `pages/ProfileSubPages.ets:5384` 有 1 处非零消费，3 个零消费）；旧文档写「5 个消费、3 个零消费」为粗测失真。**现已统一**：settings 组件族 32 处按上游 settingItem 语义换成 TypographyTokens 槽位常量、15 处补 Emphasized 字重，UiTokens 删全部 9 个定义（详见 `VALIDATION.md`「修正偏离上游②」段）。
+- 后果（改造前）：同一层级的东西在不同页面大小不一。上游靠 24 个槽位保证「所有分组标题一样大、所有说明文字一样小」，本地靠 1,282 处手写数字维持——该后果已由批 0–8 消除。
 - 关联：`fontScale`（全局字号缩放 8..16，默认 10）本地是真接的 —— `entry/src/main/ets/pages/Index.ets:3839` 调 `setFontSizeScale(scale)`，`AppFontSettings.ets` 与 `Index.ets:3867-3872` 用 `getFont().registerFont` + `setFont` 换应用字体。这一层与排版阶梯是两件事，不要混为一谈。
+
+#### 批 0 探针与行高实测（2026-11-20，基线 HEAD 91dad2c）
+
+上面 1,189/9 个/5 个那几个数字是粗测旧值，复核后应为 **1282 处 / 20 种 / 9 个 FONT_* 中 6 个真消费**（逐值分布见文末"已知文档错误清单"对应的订正；`FONT_LABEL_SMALL` 在 `pages/ProfileSubPages.ets:5384` 有 1 处消费，不是零消费）。以下为本轮新建 `entry/src/main/ets/components/typography/TypographyTokens.ets`（24 槽位常量 / 行高常量 / `TextStyleToken` / `resolveTextStyle`）后，三个能力探针 + 真机行高测量的实测结论。
+
+**探针 A：`@Extend(Text)` 跨文件 —— 不通过（整条路线弃用）**。在 `components/typography/TextExtend.ets` 定义 `@Extend(Text) export function slotTitleMedium(...)`，在 `pages/TypographyProbePage.ets` import 后调用，编译报 `Property 'slotTitleMedium' does not exist on type 'TextAttribute'`。注意 `import` 本身没报 "not a module"（与本文件 :1609 的 `@AnimatableExtend` 不同），但跨文件的属性扩展**没有注册到调用文件**，调用点看不到这个方法。根因同样是 `@Extend` 走文件级注册：定义文件里能用，跨文件后调用方 `TextAttribute` 上没有这个方法。结论：`@Extend` 不能跨文件复用，24 槽位不能靠它封装成 `.titleMedium()` 短语法。
+
+**探针 B：`AttributeModifier<TextAttribute>` —— 通过，字号+行高+字重三者都生效，定为首选**。定义 `class SlotModifier implements AttributeModifier<TextAttribute>`，`applyNormalAttribute(instance)` 里 `instance.fontSize/size`、`instance.lineHeight`、`instance.fontWeight` 各设一次。`AttributeModifier` / `TextAttribute` 是 SDK 全局声明接口（`component/common.d.ts:16148` / `component/text.d.ts:92`），**不从 `@kit.ArkUI` 导出**，直接 implements 即可（若写 `import { AttributeModifier } from '@kit.ArkUI'` 会报 `'AttributeModifier' is not exported from Kit '@kit.ArkUI'`）。上机证据：同文本 `WEIGHT-SAMPLE-16`、同字号 16，Normal 行 bounds 宽 545px，挂 `titleMediumEmphasized` 的行宽 553px（+8px，证明 Medium 字重生效）、高 84px=24vp（证明行高生效）、字号 16（证明字号生效）。
+
+**探针 C：`.font({ size, weight, family })` —— 字号+字重生效，但不能带行高**。`Font` 接口（`component/units.d.ts:2021-2064`）只有 `size/weight/family/style` 四个字段，**没有 lineHeight**，所以 `.font()` 只能设三件套里的两件，行高必须另起一行 `.lineHeight()`。上机证据：同文本同字号，`.font({size:16,weight:Medium})` + `.lineHeight(24)` 的行宽 553px（与 B 相同，字重生效）、高 84px=24vp（行高生效）。定位为不需要独立封装时的一次性快捷写法，承担不了单调用表达完整槽位。
+
+**真机 11 个行高实测**（设备 API 26 模拟器 `127.0.0.1:5555`，密度实测 3.5，vp→px ×3.5；`uitest dumpLayout` 读 Text 节点 bounds 高度）：
+
+| 槽位 | 字号/令牌行高(fp) | 实测 px | 实测 vp | 偏差 |
+| --- | --- | --- | --- | --- |
+| headlineLarge | 32 / 40 | 140 | 40.00 | 0 |
+| headlineMedium | 24 / 30.86 | 108 | 30.857 | −0.003 |
+| headlineSmall | 20 / 26.67 | 93 | 26.571 | −0.099 |
+| titleLarge | 18 / 22.91 | 80 | 22.857 | −0.053 |
+| titleMedium | 16 / 24 | 84 | 24.00 | 0 |
+| titleSmall | 14 / 20 | 70 | 20.00 | 0 |
+| bodyLarge | 17 / 25.5 | 89 | 25.429 | −0.071 |
+| bodyMedium | 16 / 22.86 | 80 | 22.857 | −0.003 |
+| bodySmall | 12 / 16 | 56 | 16.00 | 0 |
+| labelLarge | 14 / 18.67 | 65 | 18.571 | −0.099 |
+| labelMedium | 13 / 17.33 | 61 | 17.429 | +0.099 |
+
+11 个值全部吻合，最大偏差 0.099fp（远低于 0.5fp 记录阈值）——4.4 表按 Material3 规范比 × 字号推算的行高值**经上机确认可用，无需修正**，`TypographyTokens.ets` 文件头"无本地源码可核、需上机量"的声明已由本轮实测消除，实测值就写在上面这张表。
+
+**路线定案**：B（`AttributeModifier`）为主——类型安全、可传参、能进 Builder；C（`.font` + 单独 `.lineHeight`）作不需要封装的快捷写法；A（`@Extend`）整条弃用。探针页 `pages/TypographyProbePage.ets` 与 `components/typography/TextExtend.ets` 在验证后删除，临时的 `EntryAbility.ets` loadContent 指向与 `main_pages.json` 入口恢复原状（`EntryAbility.ets:137` 回到 `pages/Index`、`main_pages.json` 回到 `["pages/Index"]`）；报错原文与实测数据已逐字留在本段作证据。留下的只有 `components/typography/TypographyTokens.ets`（令牌正式产物）。
+
+#### 15 号字归类决策（用户拍板「怎么还原上游怎么来」）
+
+用户 2026-11-20 对 15 号字 106 处的取舍答复是「怎么还原上游怎么来」。按 `AGENTS.md` 的最高口径（用户感知范围内一律 1:1，参数逐项照抄上游、不取近似值、不自造值），**排除丙方案（新增第 25 槽位）**——上游 24 槽位、10 个字号（11/12/13/14/16/17/18/20/24/32）里根本没有 15，本地自造 15 号槽位就是「多做」。执行方向 = **甲方案的精神：每一处 15 号字按它在上游对应控件的真实槽位归位**，落到 24 槽位里对应的档位，而不是全仓统一改成某一个值。
+
+上游槽位证据（已逐条读源码确认，路径相对 `legado-with-MD3/app/src/main/java/io/legado/app/ui/`）：
+
+| 上游语义 | 控件/锚点 | 上游槽位 | 字号 |
+| --- | --- | --- | --- |
+| 设置行主标题 | `widget/components/settingItem/SettingItem.kt:173` | `titleMedium` | 16 |
+| 紧凑设置项标题 | `widget/components/settingItem/TinySettingItems.kt:167` | `titleSmallEmphasized` | 14 |
+| 设置项说明/副标题 | `SettingItem.kt:137` / `:130` | `labelMediumEmphasized` / `bodySmallEmphasized` | 13 / 12 |
+| 按钮文字 | `ui/theme/Typography.kt:298` `button = button.withLineHeightRatio(material.labelLarge)` | `labelLarge` | 14 |
+| Tab 标题 | `widget/components/tabRow/AppTabRow.kt:90` | `labelLargeEmphasized` | 14 |
+| 书籍描述 | `main/bookshelf/BookItem.kt:233` | `labelSmallEmphasized` | 11 |
+
+据此，本地 15 号字的落点原则（批 5 执行时逐处以上游对应控件核对，不硬套）：按钮（取消/确定/导入/拉取/删除）→ `labelLarge`(14)；设置行主标题/右侧当前值 → `titleMedium`(16)；说明/副标题 → `labelMedium`(13) 或 `bodySmall`(12)；输入框内文字与下拉选项 → 执行时查上游对应控件后定档，暂不预设。
+
+**边界（避免误读）**：这条「按上游定档」只解决**15 号字无同字号槽位**的问题——上游 10 个字号里没有 15，必须按语义决定它落到 14 还是 16。它**不适用于**本地已有的 14/13/12/11/16 等字号：这些在 24 槽位里有同字号槽位，迁移就是**等值替换**（14→`labelLarge`/`titleSmall` 都是 14，只是行高 18.67/20 二选一；13→`labelMedium`、12→`bodySmall`、11→`labelSmall`），**不改字号、视觉保持**。任务书 5.2 对 14/16 号的语义分流（按 maxLines/可变长文本决定行高大小档）继续有效，不要因为上游 `SettingItem.kt:173` 主标题是 16 就把本地写 14 的设置行标题改成 16——那是视觉还原改造，不是本次令牌化迁移，会引入全仓视觉回归，不在当前范围。
+
+**批 5 逐处定档结果（已落地，106 处）**：按钮/输入框文字 51 处→`LABEL_LARGE`(14，上游 `Button`=`labelLarge`、本地 `FONT_INPUT`=14 一致)；说明/空状态/符号/开关值 14 处→`LABEL_MEDIUM`(13，上游 option/说明档)；行主标题/右侧值/条目名/状态值 41 处→`TITLE_MEDIUM`(16，上游 `SettingItem.kt:173`=`titleMedium`)。逐处决策表存 `tmp/typography-batch5-final.json`（开发机，不入公开仓库），含每处 `rel:line`、档位、判定依据、准确源码行。这是本次改造**唯一字号变化**的批次：15→14/13/16，用户已确认接受该预期视觉变化。高风险的 15 号字所在页（书架/我的/设置首页）已上机确认无错位裁切；30 个文件/106 处未逐页截图（用户确认接受定档）。
 
 ### 二、图标（Iconography）
 
@@ -1564,7 +1615,7 @@ private settingsSheetHeight(): string {
 
 | 块 | 差距性质 | 是否值得现在做 |
 | --- | --- | --- |
-| 排版 | 没有语义阶梯，1,189 处手写数字 | **值得先查** —— 与动效同属「看起来一样、细节全不同」的典型 |
+| 排版 | ~~没有语义阶梯，1,282 处手写数字~~ 已建 `TypographyTokens.ets` 24 槽位，字面量归零（批 0–8，2026-11-20）；33 处手写行高亦已在独立批次统一（2026-11-20） | **已做** —— 字号、行高两批均收口 |
 | 动效 | 有底座、无档位，82 处 11 种时长 | 值得，成本小（收口常量） |
 | 图标 | 命名不成体系，功能不缺 | 值得，但要与无障碍一起做 |
 | 模糊 | 主界面通、其余硬编码 | 值得，成本小 |

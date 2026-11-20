@@ -15,6 +15,7 @@ import {
   CustomThemeSnapshot,
   normalizeCustomColor
 } from '../data/CustomThemeColors';
+import { BODY_SMALL, LABEL_LARGE, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const CUSTOM_THEME_MENU_WIDTH: number = 260;
@@ -184,15 +185,15 @@ export struct CustomThemePage {
   @Builder
   private SlotRow(slot: number) {
     Row() {
-      Text(this.slotLabel(slot)).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(this.slotLabel(slot)).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
       if (this.slotValue(slot).length > 0) {
         Row() {
-          Text(this.slotValue(slot)).fontSize(14).fontColor(this.themeColorTextTertiary).margin({ right: 8 })
+          Text(this.slotValue(slot)).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).margin({ right: 8 })
           Row().width(28).height(28).borderRadius(14).backgroundColor(this.slotValue(slot))
             .border({ width: 1, color: this.themeColorTextTertiary })
         }
       } else {
-        Text('点击选择').fontSize(14).fontColor(this.themeColorAccent)
+        Text('点击选择').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
       }
       Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
         .margin({ left: 4 })
@@ -204,11 +205,11 @@ export struct CustomThemePage {
   private ColorEditor() {
     Column() {
       Row() {
-        Text('选择颜色').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        Text('选择颜色').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .layoutWeight(1)
-        Text('重置').fontSize(15).fontColor(this.themeColorTextTertiary)
+        Text('重置').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary)
           .onClick(() => { this.editingHex = ''; this.commitSlot(''); })
-        Text('保存').fontSize(15).fontColor(this.themeColorAccent).margin({ left: 18 })
+        Text('保存').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).margin({ left: 18 })
           .onClick(() => this.commitSlot(this.editingHex))
       }.width('100%').padding({ bottom: 12 })
       Row() {
@@ -221,7 +222,7 @@ export struct CustomThemePage {
           .onChange((value: string) => this.editingHex = value)
       }.width('100%')
       Text('留空表示沿用日间颜色（夜间）或未设置（日间）。')
-        .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 10 })
+        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 10 })
     }.width('100%').padding(16)
       .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceElevated)
       .borderRadius(this.themeCardRadius)
@@ -256,8 +257,8 @@ export struct CustomThemePage {
   @Builder
   private DropdownRow(row: number, title: string, value: string, options: string[], onPick: (value: string) => void) {
     Row() {
-      Text(title).fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-      Text(value).fontSize(14).fontColor(this.themeColorAccent)
+      Text(title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Text(value).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
       Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
         .margin({ left: 4 })
     }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
@@ -295,8 +296,8 @@ export struct CustomThemePage {
           Column() {
             Row() {
               Column() {
-                Text('使用色板生成颜色').fontSize(16).fontColor(this.themeColorTextSecondary)
-                Text('关闭后由种子色自动生成整套配色').fontSize(12)
+                Text('使用色板生成颜色').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+                Text('关闭后由种子色自动生成整套配色').fontSize(BODY_SMALL)
                   .fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               UiSwitchControl({
@@ -324,7 +325,7 @@ export struct CustomThemePage {
 
           if (this.customTheme.enableDeepPersonalization) {
             // ② 深度个性化开：日/夜各 6 个色位，顺序对齐 `strings.xml:1729-1734`。
-            Text('白天').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+            Text('白天').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
               .alignSelf(ItemAlign.Start).padding({ left: 18, top: 20, bottom: 8 })
             Column() {
               ForEach([0, 1, 2, 3, 4, 5], (slot: number) => {
@@ -338,7 +339,7 @@ export struct CustomThemePage {
               .backgroundImage(this.themeContainerBackground.length > 0
                 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
-            Text('夜间').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+            Text('夜间').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
               .alignSelf(ItemAlign.Start).padding({ left: 18, top: 20, bottom: 8 })
             Column() {
               ForEach([6, 7, 8, 9, 10, 11], (slot: number) => {
@@ -354,7 +355,7 @@ export struct CustomThemePage {
           } else {
             // ③ 种子色模式：两个种子色 + 三个下拉。上游这三个下拉的消费者是 HCT 生成器，
             // 本地只落盘（ArkUI 无等价算法），差异写在 ZIP-THEME A6 行备注。
-            Text('自定义颜色').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+            Text('自定义颜色').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
               .alignSelf(ItemAlign.Start).padding({ left: 18, top: 20, bottom: 8 })
             Column() {
               this.SlotRow(12)

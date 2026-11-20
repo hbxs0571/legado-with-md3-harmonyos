@@ -1,5 +1,6 @@
 import curves from '@ohos.curves';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+import { LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, TITLE_LARGE } from '../components/typography/TypographyTokens';
 
 @Component
 export struct PrivacyNoticePage {
@@ -48,7 +49,7 @@ export struct PrivacyNoticePage {
             body: '应用未接入广告、分析统计、远端崩溃收集或 AI 服务；没有自有账号体系，也没有自有服务端。书源登录凭据（Cookie、登录信息）保存在本机书源数据中，会随你主动导出的备份文件一并导出，请勿公开分享备份。'
           })
           Text('本说明根据当前源码整理，属于开发阶段披露，不替代目标发布渠道要求的正式隐私政策。正式发布前需完成资源授权、网络请求和隐私政策审核。')
-            .fontSize(13).fontColor('#D9A6A0').lineHeight(20).padding({ left: 18, right: 18, top: 8, bottom: 22 })
+            .fontSize(LABEL_MEDIUM).fontColor('#D9A6A0').lineHeight(LABEL_MEDIUM_LINE_HEIGHT).padding({ left: 18, right: 18, top: 8, bottom: 22 })
         }.width('100%').padding({ top: 4 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -70,9 +71,9 @@ struct PrivacyNoticeSection {
   @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
-      Text(this.title).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+      Text(this.title).fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
         .alignSelf(ItemAlign.Start).margin({ bottom: 8 })
-      Text(this.body).fontSize(15).fontColor(this.themeColorTextSecondary).lineHeight(22).textAlign(TextAlign.Start)
+      Text(this.body).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).textAlign(TextAlign.Start)
     }.width('100%').padding(16).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       .margin({ left: 16, right: 16, bottom: 12 })
   }

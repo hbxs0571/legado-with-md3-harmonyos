@@ -10,6 +10,7 @@ import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepo
 import { SearchCoordinator, SearchProgress, SearchOutcome } from '../bookSource/SearchCoordinator';
 import { MergedBook } from '../bookSource/SearchResultMerger';
 import { SearchBookItem } from '../bookSource/SourceModels';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct SearchPage {
@@ -188,16 +189,16 @@ export struct SearchPage {
     Column() {
       // 结果条 + 视图切换 + 进度
       Row() {
-        Text(`在线书源 · ${this.onlineBooks.length}`).fontSize(16).fontColor(this.themeColorAccent)
+        Text(`在线书源 · ${this.onlineBooks.length}`).fontSize(BODY_MEDIUM).fontColor(this.themeColorAccent)
         Blank()
         if (this.onlineSearching) {
-          Text(this.onlineProgressText).fontSize(11).fontColor(this.themeColorTextTertiary).maxLines(1)
+          Text(this.onlineProgressText).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
             .layoutWeight(1).margin({ left: 8 })
-          Text('取消').fontSize(13).fontColor(this.themeColorAccent).margin({ left: 8 })
+          Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).margin({ left: 8 })
             .onClick(() => this.cancelOnlineSearch())
         } else {
           Text(this.onlineViewMode === 'flat' ? '平铺' : '按源')
-            .fontSize(13).fontColor(this.themeColorAccent).margin({ left: 8 })
+            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).margin({ left: 8 })
             .onClick(() => {
               this.onlineViewMode = this.onlineViewMode === 'flat' ? 'grouped' : 'flat';
             })
@@ -207,8 +208,8 @@ export struct SearchPage {
       if (this.onlineSearching && this.onlineBooks.length === 0) {
         Column() {
           LoadingProgress().width(36).height(36).color(this.themeColorAccent)
-          Text('正在搜索在线书源…').fontSize(14).fontColor(this.themeColorTextTertiary).margin({ top: 12 })
-          Text(this.onlineProgressText).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 6 })
+          Text('正在搜索在线书源…').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 12 })
+          Text(this.onlineProgressText).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 6 })
         }.layoutWeight(1).justifyContent(FlexAlign.Center)
       } else if (this.onlineSearchDone && this.onlineBooks.length === 0) {
         SearchEmptyState({ title: '没有找到相关书籍', detail: '换个关键词，或到书源管理检查启用的书源。' })
@@ -224,9 +225,9 @@ export struct SearchPage {
               ForEach(this.groupOnlineBooks(), (group: OnlineSourceGroup) => {
                 Column() {
                   Row() {
-                    Text(group.originName).fontSize(13).fontColor(this.themeColorAccent)
+                    Text(group.originName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                       .fontWeight(FontWeight.Medium)
-                    Text(` ${group.items.length}`).fontSize(12).fontColor(this.themeColorTextTertiary)
+                    Text(` ${group.items.length}`).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
                   }.width('100%').padding({ left: 4, top: 10, bottom: 6 })
                   ForEach(group.items, (item: MergedBook, index: number) => {
                     OnlineBookRow({ item: item, coverSettings: this.coverSettings,
@@ -239,10 +240,10 @@ export struct SearchPage {
             if (this.onlineSearching) {
               Row() {
                 LoadingProgress().width(18).height(18).color(this.themeColorAccent)
-                Text(' 加载中…').fontSize(13).fontColor(this.themeColorTextTertiary)
+                Text(' 加载中…').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
               }.justifyContent(FlexAlign.Center).width('100%').padding({ top: 14, bottom: 14 })
             } else if (this.onlineSearchDone) {
-              Text('已显示全部结果').fontSize(12).fontColor(this.themeColorTextTertiary)
+              Text('已显示全部结果').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
                 .width('100%').textAlign(TextAlign.Center).padding({ top: 14, bottom: 14 })
             }
           }.padding({ bottom: 12 })
@@ -307,11 +308,11 @@ export struct SearchPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 19, tint: '#C5C7D0' }).margin({ right: 9 })
           TextInput({ placeholder: '搜索书名、作者或书源…', text: this.query })
-            .fontSize(17).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(BODY_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => { this.collapsedHeader = false; this.onQueryChange(value); })
           if (this.query.length > 0) {
-            Text('清除').fontSize(14).fontColor(this.themeColorAccent).margin({ left: 8 })
+            Text('清除').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ left: 8 })
               .onClick(() => this.onQueryChange(''))
           }
         }.width('100%').padding({ left: 14, right: 14, top: 11, bottom: 11 })
@@ -322,8 +323,8 @@ export struct SearchPage {
           Scroll(this.suggestionScroller) {
             Column() {
               Row() {
-                Text('书架').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                Text('本地').fontSize(13).fontColor(this.themeColorTextTertiary)
+                Text('书架').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text('本地').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
               }.padding({ left: 18, right: 18, top: 12, bottom: 8 })
               if (this.getLocalBooks().length === 0) {
                 SearchEmptyState({ title: '书架暂无书籍', detail: '导入 TXT 或 EPUB 后，可在此搜索书名和作者。' })
@@ -333,7 +334,7 @@ export struct SearchPage {
                 }, (book: Book) => book.id)
               }
               Row() {
-                Text('搜索历史').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text('搜索历史').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               }.padding({ left: 18, right: 18, top: 18, bottom: 8 })
               SearchEmptyState({ title: '暂无搜索历史', detail: '在线搜索记录将在搜索能力接入后显示。' })
             }.padding({ bottom: 18 })
@@ -344,7 +345,7 @@ export struct SearchPage {
           Column() {
             this.onlineResultsView()
             Row() {
-              Text('管理书源').fontSize(14).fontColor(this.themeColorAccent)
+              Text('管理书源').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
             }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 10, bottom: 12 })
               .onClick(() => this.onOpenSourceManage())
           }.layoutWeight(1).width('100%')
@@ -353,7 +354,7 @@ export struct SearchPage {
             Column() {
               SearchEmptyState({ title: '本地书架没有匹配结果', detail: '可调整书名或作者，在线书源搜索将在 P5 接入。' })
               Row() {
-                Text('搜索在线书源').fontSize(16).fontColor('#151720').fontWeight(FontWeight.Medium)
+                Text('搜索在线书源').fontSize(TITLE_MEDIUM).fontColor('#151720').fontWeight(FontWeight.Medium)
               }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 13, bottom: 13 })
                 .backgroundColor('#B9C8FF').borderRadius(24).margin({ bottom: 18 })
                 .onClick(() => this.searchOnline())
@@ -361,9 +362,9 @@ export struct SearchPage {
           } else {
             Column() {
               Row() {
-                Text(`本地书籍 · ${this.getResults().length}`).fontSize(16).fontColor(this.themeColorAccent)
+                Text(`本地书籍 · ${this.getResults().length}`).fontSize(TITLE_MEDIUM).fontColor(this.themeColorAccent)
                 Blank()
-                Text('点按继续阅读').fontSize(13).fontColor(this.themeColorTextTertiary)
+                Text('点按继续阅读').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
               }.width('100%').padding({ left: 18, right: 18, top: 7, bottom: 8 })
               Scroll(this.resultsScroller) {
                 Column() {
@@ -374,7 +375,7 @@ export struct SearchPage {
               }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
                 .onScroll(() => this.updateHeader(this.resultsScroller.currentOffset().yOffset))
               Row() {
-                Text('搜索在线书源').fontSize(16).fontColor('#151720').fontWeight(FontWeight.Medium)
+                Text('搜索在线书源').fontSize(TITLE_MEDIUM).fontColor('#151720').fontWeight(FontWeight.Medium)
               }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 13, bottom: 13 })
                 .backgroundColor('#B9C8FF').borderRadius(24).margin({ bottom: 18 })
                 .onClick(() => this.searchOnline())
@@ -426,11 +427,11 @@ struct SearchBookRow {
     Row() {
       BookCover({ book: this.book, compact: true, coverSettings: this.coverSettings, applyAspectRatio: true })
       Column() {
-        Text(this.book.title).fontSize(17).fontColor(this.themeColorTextPrimary).maxLines(1)
-        Text(this.book.author).fontSize(14).fontColor('#AEB0BA').margin({ top: 5 }).maxLines(1)
-        Text(this.book.lastChapter).fontSize(13).fontColor('#858792').margin({ top: 6 }).maxLines(1)
+        Text(this.book.title).fontSize(BODY_LARGE).fontColor(this.themeColorTextPrimary).maxLines(1)
+        Text(this.book.author).fontSize(LABEL_LARGE).fontColor('#AEB0BA').margin({ top: 5 }).maxLines(1)
+        Text(this.book.lastChapter).fontSize(LABEL_MEDIUM).fontColor('#858792').margin({ top: 6 }).maxLines(1)
       }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
-      Text(`${Math.round(this.book.progress)}%`).fontSize(13).fontColor(this.themeColorTextSecondary)
+      Text(`${Math.round(this.book.progress)}%`).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
     }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
       .margin({ left: 16, right: 16, bottom: 9 }).onClick(() => this.onSelect())
   }
@@ -462,19 +463,19 @@ struct OnlineBookRow {
     Row() {
       Column() {
         Row() {
-          Text(this.item.book.name).fontSize(16).fontColor(this.themeColorTextPrimary).maxLines(1)
+          Text(this.item.book.name).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
             .layoutWeight(1)
           if (this.item.originCount > 1) {
-            Text(`${this.item.originCount} 源`).fontSize(11).fontColor('#FFFFFF')
+            Text(`${this.item.originCount} 源`).fontSize(LABEL_SMALL).fontColor('#FFFFFF')
               .backgroundColor(this.themeColorAccent).borderRadius(9).padding({ left: 6, right: 6, top: 2, bottom: 2 })
               .margin({ left: 6 })
           }
         }.width('100%')
-        Text(this.item.book.author || '佚名').fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 5 }).maxLines(1)
+        Text(this.item.book.author || '佚名').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 5 }).maxLines(1)
         Row() {
-          Text(this.item.book.lastChapter).fontSize(12).fontColor(this.themeColorTextTertiary).maxLines(1)
+          Text(this.item.book.lastChapter).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
             .layoutWeight(1)
-          Text(this.item.book.originName).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ left: 6 }).maxLines(1)
+          Text(this.item.book.originName).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 6 }).maxLines(1)
         }.width('100%').margin({ top: 6 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
     }.width('100%').padding(12)
@@ -493,8 +494,8 @@ struct SearchEmptyState {
   build() {
     Column() {
       AppGlyph({ name: 'search', glyphSize: 30, tint: this.themeColorAccent }).margin({ bottom: 14 })
-      Text(this.title).fontSize(17).fontColor(this.themeColorTextSecondary)
-      Text(this.detail).fontSize(14).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center)
+      Text(this.title).fontSize(BODY_LARGE).fontColor(this.themeColorTextSecondary)
+      Text(this.detail).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center)
         .margin({ left: 28, right: 28, top: 8 })
     }.width('100%').padding({ top: 34, bottom: 34 })
       .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
@@ -523,8 +524,8 @@ struct SearchScopePanel {
       Column().width('100%').height('100%').backgroundColor('#99000000').onClick(() => this.onClose())
       Column() {
         Row() {
-          Text('搜索范围').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('完成').fontSize(15).fontColor(this.themeColorAccent).onClick(() => this.onClose())
+          Text('搜索范围').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text('完成').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).onClick(() => this.onClose())
         }.width('100%').padding({ left: 20, right: 20, top: 20, bottom: 14 })
         Row() {
           SearchScopeTab({ title: '书架分组', selected: !this.sourceTab, onSelect: () => this.sourceTab = false })
@@ -535,7 +536,7 @@ struct SearchScopePanel {
             ForEach(this.groups, (group: string) => {
               ListItem() {
                 Row() {
-                  Text(group).fontSize(17).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                  Text(group).fontSize(BODY_LARGE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                   if (group === this.selectedGroup && !this.sourceScope) {
                     AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: this.themeColorAccent })
                   }
@@ -549,12 +550,12 @@ struct SearchScopePanel {
           Column() {
             SearchEmptyState({ title: '尚无可选书源', detail: '书源搜索将在 P5 接入。可以先打开书源管理页面。' })
             Row() {
-              Text('选择全部书源').fontSize(16).fontColor('#151720').fontWeight(FontWeight.Medium)
+              Text('选择全部书源').fontSize(TITLE_MEDIUM).fontColor('#151720').fontWeight(FontWeight.Medium)
             }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 13, bottom: 13 })
               .backgroundColor('#B9C8FF').borderRadius(24).margin({ bottom: 10 })
               .onClick(() => this.onSelectSources())
             Row() {
-              Text('管理书源').fontSize(16).fontColor('#151720').fontWeight(FontWeight.Medium)
+              Text('管理书源').fontSize(TITLE_MEDIUM).fontColor('#151720').fontWeight(FontWeight.Medium)
             }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 13, bottom: 13 })
               .backgroundColor('#B9C8FF').borderRadius(24).margin({ bottom: 18 })
               .onClick(() => this.onOpenSourceManage())
@@ -574,7 +575,7 @@ struct SearchScopeTab {
   @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   build() {
-    Text(this.title).fontSize(15).fontColor(this.selected ? this.themeColorTextPrimary : '#AEB0BA')
+    Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.selected ? this.themeColorTextPrimary : '#AEB0BA')
       .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 11, bottom: 11 })
       .backgroundColor(this.selected ? '#41485D' : this.themeColorSurfaceTertiary).borderRadius(20).margin({ right: 8 })
       .onClick(() => this.onSelect())

@@ -1,6 +1,7 @@
 import curves from '@ohos.curves';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
+import { LABEL_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct AppReadAloudSettingsPage {
@@ -80,8 +81,8 @@ struct AppReadAloudLinkRow {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
-        Text(this.detail).fontSize(14).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+        Text(this.detail).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
     }.padding({ left: 16, right: 14, top: 15, bottom: 15 }).onClick(() => this.onSelect())

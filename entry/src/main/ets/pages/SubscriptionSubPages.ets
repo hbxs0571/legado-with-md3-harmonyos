@@ -1,6 +1,7 @@
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton, TopBarBackButton } from '../components/TopBar';
+import { HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const SUB_PAGES_MENU_WIDTH: number = 260;
@@ -144,7 +145,7 @@ struct SubscriptionListPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索…', text: this.searchText })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
@@ -153,9 +154,9 @@ struct SubscriptionListPage {
       }
 
       Column() {
-        Text(SUBSCRIPTION_EMPTY_FACES[this.faceIndex]).fontSize(22).fontColor(this.themeColorTextPrimary)
+        Text(SUBSCRIPTION_EMPTY_FACES[this.faceIndex]).fontSize(HEADLINE_MEDIUM).fontColor(this.themeColorTextPrimary)
           .margin({ bottom: 8 }).onClick(() => this.changeFace())
-        Text(this.emptyMessage).fontSize(13).fontColor(this.themeColorTextPrimary).textAlign(TextAlign.Center)
+        Text(this.emptyMessage).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).textAlign(TextAlign.Center)
       }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
         .offset({ y: this.subtitle.length > 0 ? 0 : 34 })
 
@@ -184,28 +185,28 @@ struct SubscriptionListPage {
       Row() {
         Text(this.activeSheet === 'ruleEditor' ? '规则订阅' : this.activeSheet === 'addGroup' ?
           '添加到分组' : '从分组移除')
-          .fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('取消').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
+          .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 16 })
       TextInput({ placeholder: this.activeSheet === 'ruleEditor' ? '名称' : '分组名称', text: this.draftName })
-        .fontSize(16).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
+        .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
         .margin({ left: 18, right: 18, bottom: 12 }).onChange((value: string) => this.draftName = value)
       if (this.activeSheet === 'ruleEditor') {
         TextInput({ placeholder: 'URL', text: this.draftUrl })
-          .fontSize(16).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
+          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
           .margin({ left: 18, right: 18, bottom: 12 }).onChange((value: string) => this.draftUrl = value)
-        Text('订阅类型').fontSize(14).fontColor('#B6B8C2').alignSelf(ItemAlign.Start)
+        Text('订阅类型').fontSize(TITLE_SMALL).fontColor('#B6B8C2').alignSelf(ItemAlign.Start)
           .margin({ left: 18, top: 6, bottom: 8 })
         Row() {
           ForEach(['书源', '订阅源', '替换规则', '自动识别'], (label: string, index: number) => {
-            Text(label).fontSize(14).fontColor(this.draftType === index ? this.themeColorAccent : this.themeColorTextSecondary)
+            Text(label).fontSize(TITLE_SMALL).fontColor(this.draftType === index ? this.themeColorAccent : this.themeColorTextSecondary)
               .padding({ left: 16, right: 16, top: 10, bottom: 10 })
               .backgroundColor(this.draftType === index ? '#41485D' : '#292B33').borderRadius(18)
               .margin({ right: 8 }).onClick(() => this.draftType = index)
           }, (label: string) => label)
         }.width('100%').padding({ left: 18, right: 18 })
       }
-      Button('保存').fontSize(14).fontColor(this.themeColorSurfacePrimary).backgroundColor(this.themeColorAccent).borderRadius(22)
+      Button('保存').fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary).backgroundColor(this.themeColorAccent).borderRadius(22)
         .margin({ top: 18 }).onClick(() => {
           this.activeSheet = '';
           this.draftName = '';
@@ -305,7 +306,7 @@ export struct SubscriptionSourceManagePage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索订阅源…', text: this.searchText })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })

@@ -1,8 +1,8 @@
 import curves from '@ohos.curves';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
-import { FONT_SECTION_TITLE, ROW_PADDING_H, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP, FONT_ROW_TITLE } from '../components/UiTokens';
-import { LabSettings, LabSettingsRepository } from '../data/LabSettingsRepository';
+import { ROW_PADDING_H, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP } from '../components/UiTokens';import { LabSettings, LabSettingsRepository } from '../data/LabSettingsRepository';
+import { BODY_SMALL, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 @Component
 export struct AppLabSettingsPage {
@@ -58,27 +58,27 @@ export struct AppLabSettingsPage {
           }.margin({ left: 16, right: 16, top: 12 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           if (this.labSettings.enabled) {
-            Text('显示').fontSize(FONT_SECTION_TITLE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+            Text('显示').fontSize(LABEL_LARGE_EMPHASIZED).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
               .alignSelf(ItemAlign.Start).padding({ left: ROW_PADDING_H, top: SECTION_TITLE_TOP, bottom: SECTION_TITLE_BOTTOM })
             Column() {
               UiSwitch({ title: '墨水屏显示', detail: '在平板界面显示墨水屏选项', value: this.labSettings.eInkDisplay, onChange: (value: boolean) => { this.labSettings = { enabled: this.labSettings.enabled, eInkDisplay: value, eyeProtection: this.labSettings.eyeProtection }; this.saveSettings(); } })
               if (this.labSettings.eInkDisplay) {
                 Text('可在“主题 → 显示”中调整墨水屏设置')
-                  .fontSize(12).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, bottom: 12 })
+                  .fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, bottom: 12 })
               }
             }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
           }
 
-          Text('诊断').fontSize(FONT_SECTION_TITLE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+          Text('诊断').fontSize(LABEL_LARGE_EMPHASIZED).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).padding({ left: ROW_PADDING_H, top: SECTION_TITLE_TOP, bottom: SECTION_TITLE_BOTTOM })
           Row() {
             Column() {
-              Text('导出全文页码诊断').fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextSecondary)
+              Text('导出全文页码诊断').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
               Text('分享本机最近的估算与校正记录，不会自动上传。')
-                .fontSize(15).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            Text('0 条').fontSize(12).fontColor(this.themeColorAccent)
+            Text('0 条').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
             Image($r('app.media.reader_next')).width(15).height(15).fillColor(this.themeColorTextTertiary).margin({ left: 6 })
           }.padding({ left: 14, right: 14, top: 13, bottom: 13 }).margin({ left: 16, right: 16 })
             .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)

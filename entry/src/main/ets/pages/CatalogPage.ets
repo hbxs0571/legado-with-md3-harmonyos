@@ -6,6 +6,7 @@ import { BookCover } from '../components/BookCover';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
+import { BODY_SMALL, BODY_SMALL_LINE_HEIGHT, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const CATALOG_MENU_WIDTH: number = 260;
@@ -743,7 +744,7 @@ export struct CatalogPage {
             AppGlyph({ name: 'search', glyphSize: 14, tint: this.themeColorTextTertiary })
               .margin({ left: 10, right: 6 })
             TextInput({ placeholder: '搜索章节…', text: this.query })
-              .fontSize(12).fontColor(this.themeColorTextPrimary)
+              .fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)
               .placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(Color.Transparent)
               .layoutWeight(1).height(32)
@@ -783,19 +784,19 @@ export struct CatalogPage {
 
         Row() {
           Text(this.ascending ? '正序' : '倒序')
-            .fontSize(10).fontColor('#AEB0B9')
+            .fontSize(LABEL_SMALL).fontColor('#AEB0B9')
           Blank()
           Text('共 ' + this.getAllChapters().length.toString() + ' 章')
-            .fontSize(10).fontColor('#AEB0B9')
+            .fontSize(LABEL_SMALL).fontColor('#AEB0B9')
         }.padding({ left: 16, right: 16, bottom: 7 })
 
         // 多选工具条：长按章节行后出现，对齐上游 `ReaderBookSheet.kt:678-740` 的多选浮层
         if (this.selectionMode) {
           Row() {
             Text(`已选 ${this.selectedChapterIndexes.size} 章`)
-              .fontSize(11).fontColor('#DCDDE4').layoutWeight(1)
+              .fontSize(LABEL_SMALL).fontColor('#DCDDE4').layoutWeight(1)
             Text('操作')
-              .fontSize(11).fontColor('#C4D1FF')
+              .fontSize(LABEL_SMALL).fontColor('#C4D1FF')
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
               .borderRadius(8)
               .backgroundColor(this.themeColorSurfaceSecondary)
@@ -810,7 +811,7 @@ export struct CatalogPage {
                 onStateChange: (event: PopupStateChangeParam) => { this.chapterSelectionVisible = event.isVisible; }
               })
             Text('完成')
-              .fontSize(11).fontColor('#C4D1FF')
+              .fontSize(LABEL_SMALL).fontColor('#C4D1FF')
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
               .onClick(() => this.clearChapterSelection())
           }
@@ -821,7 +822,7 @@ export struct CatalogPage {
         if (this.chapterView.length === 0) {
           Column() {
             Text(this.query.trim().length > 0 ? '没有找到相关章节' : '暂无目录')
-              .fontSize(13).fontColor('#AEB0B9')
+              .fontSize(LABEL_MEDIUM).fontColor('#AEB0B9')
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         } else {
           Stack({ alignContent: Alignment.TopStart }) {
@@ -865,7 +866,7 @@ export struct CatalogPage {
                   // 上游是 `NormalCard(radius 8)` 里一个 8sp 的字数，这里套同形态的小卡片。
                   if (this.showWordCount && chapter.wordCount.length > 0) {
                     Text(chapter.wordCount)
-                      .fontSize(9).fontColor(this.themeColorTextTertiary)
+                      .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                       .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                       .backgroundColor(this.themeColorSurfaceTertiary)
                       .borderRadius(8)
@@ -922,7 +923,7 @@ export struct CatalogPage {
           // 吸顶卷头：盖在列表顶部，样式对齐上游 TextCard（圆角 8、内边距 8/6）。
           if (this.stickyVolumeTitle.length > 0) {
             Text(this.stickyVolumeTitle)
-              .fontSize(11).fontColor('#DCDDE4').maxLines(1)
+              .fontSize(LABEL_SMALL).fontColor('#DCDDE4').maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .padding({ left: 8, right: 8, top: 6, bottom: 6 })
               .backgroundColor(this.themeColorSurfaceSecondary)
@@ -940,7 +941,7 @@ export struct CatalogPage {
       Column() {
         Row() {
           TextInput({ placeholder: '搜索', text: this.markQuery })
-            .fontSize(12).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
+            .fontSize(BODY_SMALL).fontColor('#E1E2E8').placeholderColor('#A0A2AB')
             .backgroundColor(this.themeColorSurfaceSecondary).layoutWeight(1).borderRadius(12)
             .onChange((value: string) => this.markQuery = value)
           if (this.markQuery.length > 0) {
@@ -970,7 +971,7 @@ export struct CatalogPage {
           Column() {
             AppGlyph({ name: 'bookmark', glyphSize: 30, tint: this.themeColorAccent })
             Text(this.markQuery.length > 0 ? '没有找到相关书签' : '暂无书签')
-              .fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
+              .fontSize(TITLE_SMALL).fontColor('#AEB0B9').margin({ top: 8 })
           }
           .width('100%')
           .layoutWeight(1)
@@ -983,7 +984,7 @@ export struct CatalogPage {
                   Row() {
                     Text(bookmark.chapterName.length > 0 ? bookmark.chapterName
                       : this.getChapterFallbackName(bookmark.chapterIndex))
-                      .fontSize(13)
+                      .fontSize(LABEL_MEDIUM)
                       .fontColor(this.isCurrentChapterItem(bookmark.chapterIndex) ? '#F0F1F5' : '#DCDDE4')
                       .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                     if (this.isCurrentChapterItem(bookmark.chapterIndex)) {
@@ -992,11 +993,11 @@ export struct CatalogPage {
                     }
                   }.width('100%')
                   if (bookmark.bookText.length > 0) {
-                    Text(bookmark.bookText).fontSize(12).fontColor('#BFC1CA')
+                    Text(bookmark.bookText).fontSize(BODY_SMALL).fontColor('#BFC1CA')
                       .maxLines(2).margin({ top: 4 }).textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
                   if (bookmark.content.length > 0) {
-                    Text(bookmark.content).fontSize(11).fontColor(this.themeColorAccent)
+                    Text(bookmark.content).fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
                       .maxLines(2).margin({ top: 4 }).textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
                 }
@@ -1024,7 +1025,7 @@ export struct CatalogPage {
         Column() {
           AppGlyph({ name: 'profileNoteAdd', glyphSize: 28, tint: this.themeColorAccent })
           Text(this.markQuery.length > 0 ? '没有找到相关笔记' : '暂无笔记')
-            .fontSize(14).fontColor('#AEB0B9').margin({ top: 8 })
+            .fontSize(LABEL_LARGE).fontColor('#AEB0B9').margin({ top: 8 })
         }
         .width('100%')
         .height('100%')
@@ -1035,26 +1036,26 @@ export struct CatalogPage {
             ForEach(this.getVisibleMarkings(), (marking: ReaderMarking) => {
               Column() {
                 Row() {
-                  Text(this.formatCreatedTime(marking.createdAt)).fontSize(10).fontColor('#C5C7D0')
+                  Text(this.formatCreatedTime(marking.createdAt)).fontSize(LABEL_SMALL).fontColor('#C5C7D0')
                     .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(marking.chapterName.length > 0 ? marking.chapterName
                     : this.getChapterFallbackName(marking.chapterIndex))
-                    .fontSize(10).fontColor(this.themeColorTextTertiary).maxLines(1)
+                    .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ right: 4 })
                   if (this.isMarkingFromOtherSource(marking)) {
-                    Text('其他书源').fontSize(10).fontColor('#E57373').margin({ right: 4 })
+                    Text('其他书源').fontSize(LABEL_SMALL).fontColor('#E57373').margin({ right: 4 })
                   }
                   if (this.isCurrentChapterItem(marking.chapterIndex)) {
                     AppGlyph({ name: 'locate', glyphSize: 12, tint: '#C5C7D0' })
                   }
                 }.width('100%')
                 if (marking.selectedText.length > 0) {
-                  Text(marking.selectedText).fontSize(13).fontColor('#E0E1E6').lineHeight(19)
+                  Text(marking.selectedText).fontSize(LABEL_MEDIUM).fontColor('#E0E1E6').lineHeight(LABEL_MEDIUM_LINE_HEIGHT)
                     .maxLines(2).width('100%').margin({ top: 4 })
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
                 if (marking.note.trim().length > 0) {
-                  Text(marking.note).fontSize(12).fontColor(this.themeColorAccent).lineHeight(17)
+                  Text(marking.note).fontSize(BODY_SMALL).fontColor(this.themeColorAccent).lineHeight(BODY_SMALL_LINE_HEIGHT)
                     .maxLines(2).width('100%').margin({ top: 4 })
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
@@ -1097,12 +1098,12 @@ export struct CatalogPage {
             .onClick(() => this.onOpenBookInfo())
           Column() {
             // 上游书名 `labelLargeEmphasized`（14sp Medium）、maxLines 2、可点进详情。
-            Text(this.book.title).fontSize(14).fontWeight(FontWeight.Medium)
+            Text(this.book.title).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .onClick(() => this.onOpenBookInfo())
             // 上游副标题 `labelSmallEmphasized` + `basicMarquee()`：长章名滚动而不是截断。
-            Text(this.book.lastChapter).fontSize(10).fontColor(this.themeColorTextSecondary)
+            Text(this.book.lastChapter).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
               .margin({ top: 4 }).maxLines(1)
               .textOverflow({ overflow: TextOverflow.MARQUEE })
           }
@@ -1110,7 +1111,7 @@ export struct CatalogPage {
           .layoutWeight(1)
           .margin({ left: 12 })
           Text(this.getCurrentChapterNumber().toString() + ' / ' + this.getAllChapters().length.toString())
-            .fontSize(10)
+            .fontSize(LABEL_SMALL)
             .fontColor(this.themeColorTextPrimary)
             .padding({ left: 9, right: 9, top: 6, bottom: 6 })
             .backgroundColor(this.themeColorSurfaceTertiary)
@@ -1123,7 +1124,7 @@ export struct CatalogPage {
           ForEach([0, 1, 2, 3], (index: number) => {
             // 上游 `CardTabRow.kt:118`：`labelMediumEmphasized`（12sp Medium），水平内边距 8dp。
             Text(this.getTabLabel(index))
-              .fontSize(12)
+              .fontSize(BODY_SMALL)
               .fontWeight(this.selectedTab === index ? FontWeight.Medium : FontWeight.Normal)
               .fontColor(this.selectedTab === index ? this.themeColorTextPrimary : this.themeColorTextSecondary)
               .textAlign(TextAlign.Center)
@@ -1182,13 +1183,13 @@ struct CatalogInformationRow {
   build() {
     Column() {
       Text(this.label)
-        .fontSize(11)
+        .fontSize(LABEL_SMALL)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorAccent)
       Text(this.value.trim().length > 0 ? this.value : '--')
-        .fontSize(14)
+        .fontSize(TITLE_SMALL)
         .fontColor(this.themeColorTextSecondary)
-        .lineHeight(20)
+        .lineHeight(TITLE_SMALL_LINE_HEIGHT)
         .margin({ top: 3 })
     }
     .width('100%')

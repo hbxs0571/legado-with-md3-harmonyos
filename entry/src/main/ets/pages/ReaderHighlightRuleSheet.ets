@@ -4,6 +4,7 @@ import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
 import { ReaderHighlightRulePresets } from '../data/ReaderHighlightRulePresets';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ReaderHighlightRuleSheet {
@@ -219,7 +220,7 @@ export struct ReaderHighlightRuleSheet {
   /** 上游 HighlightRuleEditSheet 的 SectionTitle：整宽、居中、上下 8dp。 */
   @Builder
   private SectionTitle(label: string) {
-    Text(label).fontSize(12).fontColor('#9AA0B2').width('100%')
+    Text(label).fontSize(BODY_SMALL).fontColor('#9AA0B2').width('100%')
       .textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 }).margin({ bottom: 4 })
   }
 
@@ -227,11 +228,11 @@ export struct ReaderHighlightRuleSheet {
   @Builder
   private StepperRow(label: string, value: string, onDelta: (delta: number) => void) {
     Row() {
-      Text(label).fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-      Text('−').fontSize(16).fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      Text(label).fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
+      Text('−').fontSize(TITLE_MEDIUM).fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
         .backgroundColor(this.themeColorSurfaceElevated).borderRadius(10).onClick(() => onDelta(-1))
-      Text(value).fontSize(13).fontColor('#E5E6EB').width(64).textAlign(TextAlign.Center)
-      Text('＋').fontSize(16).fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      Text(value).fontSize(LABEL_MEDIUM).fontColor('#E5E6EB').width(64).textAlign(TextAlign.Center)
+      Text('＋').fontSize(TITLE_MEDIUM).fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
         .backgroundColor(this.themeColorSurfaceElevated).borderRadius(10).onClick(() => onDelta(1))
     }.width('100%').margin({ bottom: 8 })
   }
@@ -240,8 +241,8 @@ export struct ReaderHighlightRuleSheet {
   @Builder
   private CycleRow(label: string, value: string, onCycle: () => void) {
     Row() {
-      Text(label).fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-      Text(value).fontSize(13).fontColor('#B9C6FF')
+      Text(label).fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
+      Text(value).fontSize(LABEL_MEDIUM).fontColor('#B9C6FF')
         .padding({ left: 12, right: 12, top: 8, bottom: 8 })
         .backgroundColor(this.themeColorSurfaceElevated).borderRadius(12).onClick(() => onCycle())
     }.width('100%').margin({ bottom: 8 })
@@ -251,7 +252,7 @@ export struct ReaderHighlightRuleSheet {
   @Builder
   private ToggleRow(label: string, checked: boolean, onToggle: (next: boolean) => void) {
     Row() {
-      Text(label).fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+      Text(label).fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
       UiSwitchControl({
         checked: checked,
         interactive: false,
@@ -577,10 +578,10 @@ export struct ReaderHighlightRuleSheet {
   private buildRuleItem(rule: ReaderHighlightRule, index: number) {
     Row() {
       Column() {
-        Text(rule.name).fontSize(15).fontColor('#E5E6EB').maxLines(1)
-        Text(rule.pattern).fontSize(11).fontColor('#AEB0BA').maxLines(2)
+        Text(rule.name).fontSize(TITLE_MEDIUM).fontColor('#E5E6EB').maxLines(1)
+        Text(rule.pattern).fontSize(LABEL_SMALL).fontColor('#AEB0BA').maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
-        Text(this.ruleStatus(rule)).fontSize(11)
+        Text(this.ruleStatus(rule)).fontSize(LABEL_SMALL)
           .fontColor(ReaderHighlightRuleEngine.isSupported(rule.pattern) ? '#AEB0BA' : this.themeColorError)
           .margin({ top: 4 })
       }.layoutWeight(1).alignItems(HorizontalAlign.Start).onClick(() => this.startEdit(rule))
@@ -590,11 +591,11 @@ export struct ReaderHighlightRuleSheet {
           onChange: (enabled: boolean) => this.setEnabled(rule.id, enabled)
         })
         Row() {
-          Text('↑').fontSize(14).fontColor('#B9C6FF').padding(5)
+          Text('↑').fontSize(TITLE_SMALL).fontColor('#B9C6FF').padding(5)
             .onClick(() => this.moveRule(rule.id, -1))
-          Text('↓').fontSize(14).fontColor('#B9C6FF').padding(5)
+          Text('↓').fontSize(TITLE_SMALL).fontColor('#B9C6FF').padding(5)
             .onClick(() => this.moveRule(rule.id, 1))
-          Text('删').fontSize(12).fontColor(this.themeColorError).padding(5)
+          Text('删').fontSize(BODY_SMALL).fontColor(this.themeColorError).padding(5)
             .onClick(() => this.pendingDeleteId = rule.id)
         }
       }.alignItems(HorizontalAlign.End)
@@ -615,25 +616,25 @@ export struct ReaderHighlightRuleSheet {
         Column() {
         Row() {
           Text(this.editorVisible ? (this.editId.length > 0 ? '编辑高亮规则' : '新建高亮规则') : '高亮规则')
-            .fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E5E6EB').layoutWeight(1)
-          Text('关闭').fontSize(13).fontColor('#C7C9D1').padding(8).onClick(() => this.onDismiss())
+            .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#E5E6EB').layoutWeight(1)
+          Text('关闭').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').padding(8).onClick(() => this.onDismiss())
         }.width('100%').padding({ bottom: 12 })
         if (!this.editorVisible) {
           Text('仅匹配当前章节正文全局规则；不修改原文或划线笔记。')
-            .fontSize(12).fontColor('#AEB0BA').width('100%').margin({ bottom: 6 })
+            .fontSize(BODY_SMALL).fontColor('#AEB0BA').width('100%').margin({ bottom: 6 })
           if (this.chapterLength > ReaderHighlightRuleEngine.maximumChapterCharacters) {
             Text('当前章节超过 150000 个 UTF-16 字符，出于防卡顿保护，本章暂不执行正则。')
-              .fontSize(11).fontColor(this.themeColorError).width('100%').margin({ bottom: 10 })
+              .fontSize(LABEL_SMALL).fontColor(this.themeColorError).width('100%').margin({ bottom: 10 })
           }
           if (this.draftRules.length > ReaderHighlightRuleEngine.maximumRuleCount) {
             Text('规则数超过 64 条，本次阅读暂不执行正则。')
-              .fontSize(11).fontColor(this.themeColorError).width('100%').margin({ bottom: 10 })
+              .fontSize(LABEL_SMALL).fontColor(this.themeColorError).width('100%').margin({ bottom: 10 })
           }
           if (this.draftRules.length === 0) {
             Column() {
-              Text('还没有阅读高亮规则').fontSize(15).fontColor('#E5E6EB')
+              Text('还没有阅读高亮规则').fontSize(LABEL_MEDIUM).fontColor('#E5E6EB')
               Text('添加规则后，命中内容会在正文中即时套用样式。')
-                .fontSize(12).fontColor('#AEB0BA').margin({ top: 6 })
+                .fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 6 })
             }.width('100%').padding({ top: 26, bottom: 26 }).alignItems(HorizontalAlign.Center)
           } else {
             Scroll() {
@@ -645,12 +646,12 @@ export struct ReaderHighlightRuleSheet {
             }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           }
           Row() {
-            Text('预设规则').fontSize(14).fontColor('#C7C9D1')
+            Text('预设规则').fontSize(TITLE_SMALL).fontColor('#C7C9D1')
               .padding({ left: 16, right: 16, top: 11, bottom: 11 })
               .backgroundColor(this.themeColorSurfaceElevated).borderRadius(22)
               .onClick(() => this.openPresets())
             Blank().layoutWeight(1)
-            Text('＋ 新建规则').fontSize(14).fontColor(this.themeColorOnPrimary)
+            Text('＋ 新建规则').fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 11, bottom: 11 })
               .backgroundColor('#B9C6FF').borderRadius(22).onClick(() => this.startCreate())
           }.width('100%').margin({ top: 12 })
@@ -659,24 +660,24 @@ export struct ReaderHighlightRuleSheet {
             Column() {
               // 分区 1：规则信息（上游 HighlightRuleEditSheet.kt:363-418）
               this.SectionTitle('规则信息')
-              Text('规则名称').fontSize(12).fontColor('#BFC2CD').width('100%')
+              Text('规则名称').fontSize(BODY_SMALL).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editName, placeholder: '例如：对话高亮' })
                 .onChange((value: string) => this.editName = value)
-                .fontSize(14).margin({ top: 6, bottom: 12 })
-              Text('HOS 正则表达式').fontSize(12).fontColor('#BFC2CD').width('100%')
+                .fontSize(TITLE_SMALL).margin({ top: 6, bottom: 12 })
+              Text('HOS 正则表达式').fontSize(BODY_SMALL).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editPattern, placeholder: '输入正文匹配正则' })
                 .onChange((value: string) => this.editPattern = value)
-                .fontSize(14).margin({ top: 6, bottom: 6 })
+                .fontSize(TITLE_SMALL).margin({ top: 6, bottom: 6 })
               Text('使用 HOS RegExp 子集；最长 256 字符，拒绝常见高回溯结构；没有硬超时。')
-                .fontSize(11).fontColor('#AEB0BA').width('100%').margin({ bottom: 12 })
+                .fontSize(LABEL_SMALL).fontColor('#AEB0BA').width('100%').margin({ bottom: 12 })
               Row() {
-                Text('作用范围').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-                Text(this.targetScopeLabel()).fontSize(13).fontColor('#B9C6FF')
+                Text('作用范围').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
+                Text(this.targetScopeLabel()).fontSize(LABEL_MEDIUM).fontColor('#B9C6FF')
                   .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .backgroundColor(this.themeColorSurfaceElevated).borderRadius(12).onClick(() => this.cycleTargetScope())
               }.width('100%').margin({ bottom: 10 })
               Row() {
-                Text('启用').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
+                Text('启用').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
                 UiSwitchControl({
                   checked: this.editEnabled,
                   interactive: false,
@@ -687,18 +688,18 @@ export struct ReaderHighlightRuleSheet {
 
               // 分区 2：样式设置（上游 :422-673，本地只取渲染支持的色/线型）
               this.SectionTitle('样式设置')
-              Text('字色（可空）').fontSize(12).fontColor('#BFC2CD').width('100%')
+              Text('字色（可空）').fontSize(BODY_SMALL).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editTextColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editTextColor = value)
-                .fontSize(14).margin({ top: 6, bottom: 12 })
-              Text('背景色（可空）').fontSize(12).fontColor('#BFC2CD').width('100%')
+                .fontSize(TITLE_SMALL).margin({ top: 6, bottom: 12 })
+              Text('背景色（可空）').fontSize(BODY_SMALL).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editBackgroundColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editBackgroundColor = value)
-                .fontSize(14).margin({ top: 6, bottom: 12 })
-              Text('边框色（可空，留白不描边）').fontSize(12).fontColor('#BFC2CD').width('100%')
+                .fontSize(TITLE_SMALL).margin({ top: 6, bottom: 12 })
+              Text('边框色（可空，留白不描边）').fontSize(BODY_SMALL).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editBorderColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editBorderColor = value)
-                .fontSize(14).margin({ top: 6, bottom: 12 })
+                .fontSize(TITLE_SMALL).margin({ top: 6, bottom: 12 })
               this.StepperRow('边框粗细 ' + this.editBorderWidth + ' dp',
                 '' + this.editBorderWidth, (delta: number) => {
                   this.editBorderWidth = Math.min(20, Math.max(0, this.editBorderWidth + delta));
@@ -708,28 +709,28 @@ export struct ReaderHighlightRuleSheet {
                   this.editBorderRadius = Math.min(40, Math.max(0, this.editBorderRadius + delta));
                 })
               Row() {
-                Text('下划线样式').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-                Text(this.underlineLabel()).fontSize(13).fontColor('#B9C6FF')
+                Text('下划线样式').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
+                Text(this.underlineLabel()).fontSize(LABEL_MEDIUM).fontColor('#B9C6FF')
                   .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .backgroundColor(this.themeColorSurfaceElevated).borderRadius(12).onClick(() => this.cycleUnderlineMode())
               }.width('100%').margin({ bottom: 10 })
-              Text('SVG 路径（mode 5 自定义下划线，可空）').fontSize(12).fontColor('#BFC2CD').width('100%')
+              Text('SVG 路径（mode 5 自定义下划线，可空）').fontSize(BODY_SMALL).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editSvgPath, placeholder: '例如 M0 0 L100 0 L100 20 L0 20 Z' })
                 .onChange((value: string) => this.editSvgPath = value)
-                .fontSize(14).margin({ top: 6, bottom: 12 })
-              Text('线条颜色（可空）').fontSize(12).fontColor('#BFC2CD').width('100%')
+                .fontSize(TITLE_SMALL).margin({ top: 6, bottom: 12 })
+              Text('线条颜色（可空）').fontSize(BODY_SMALL).fontColor('#BFC2CD').width('100%')
               TextInput({ text: this.editUnderlineColor, placeholder: '#RRGGBB 或 #AARRGGBB' })
                 .onChange((value: string) => this.editUnderlineColor = value)
-                .fontSize(14).margin({ top: 6, bottom: 12 })
+                .fontSize(LABEL_LARGE).margin({ top: 6, bottom: 12 })
 
               // 分区 3：预览效果（上游 :796-813）
               this.SectionTitle('预览效果')
               TextInput({ text: this.editSample, placeholder: '输入示例文字' })
                 .onChange((value: string) => this.editSample = value)
-                .fontSize(14).margin({ bottom: 8 })
+                .fontSize(LABEL_LARGE).margin({ bottom: 8 })
               Row() {
                 Text(this.previewSample())
-                  .fontSize(15).maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .fontSize(TITLE_MEDIUM).maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .fontColor(this.previewTextColor())
                   .backgroundColor(this.previewBackgroundColor())
                   .padding({ left: 8, right: 8, top: 6, bottom: 6 })
@@ -766,14 +767,14 @@ export struct ReaderHighlightRuleSheet {
               // 分区 5：字体替换（上游 :781-793 自定义字体开关 + 选择行）
               this.SectionTitle('字体替换')
               Row() {
-                Text('自定义字体').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-                Text(this.fontDisplayName()).fontSize(13).fontColor('#B9C6FF')
+                Text('自定义字体').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
+                Text(this.fontDisplayName()).fontSize(LABEL_MEDIUM).fontColor('#B9C6FF')
                   .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .backgroundColor(this.themeColorSurfaceElevated).borderRadius(12)
                   .onClick(() => this.pickRuleFont())
               }.width('100%').margin({ bottom: 6 })
               if (this.editFontPath.length > 0) {
-                Text('清除自定义字体').fontSize(12).fontColor(this.themeColorError).width('100%')
+                Text('清除自定义字体').fontSize(BODY_SMALL).fontColor(this.themeColorError).width('100%')
                   .padding({ top: 4, bottom: 8 })
                   .onClick(() => this.editFontPath = '')
               }
@@ -788,14 +789,14 @@ export struct ReaderHighlightRuleSheet {
               // 分区 6：文字背景图与九宫格（上游 :551-673、:1207-1444）
               this.SectionTitle('文字背景图')
               Row() {
-                Text('背景图').fontSize(13).fontColor('#C7C9D1').layoutWeight(1)
-                Text(this.editBgImage.length > 0 ? '已选择' : '未选择').fontSize(13)
+                Text('背景图').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').layoutWeight(1)
+                Text(this.editBgImage.length > 0 ? '已选择' : '未选择').fontSize(LABEL_MEDIUM)
                   .fontColor('#B9C6FF').padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .backgroundColor(this.themeColorSurfaceElevated).borderRadius(12)
                   .onClick(() => this.pickBackgroundImage())
               }.width('100%').margin({ bottom: 6 })
               if (this.editBgImage.length > 0) {
-                Text('清除背景图').fontSize(12).fontColor(this.themeColorError).width('100%')
+                Text('清除背景图').fontSize(BODY_SMALL).fontColor(this.themeColorError).width('100%')
                   .padding({ top: 4, bottom: 8 })
                   .onClick(() => this.editBgImage = '')
               }
@@ -821,8 +822,8 @@ export struct ReaderHighlightRuleSheet {
                   this.editManualNineSlice, (next: boolean) => this.editManualNineSlice = next)
                 Row() {
                   Text(this.editManualNineSlice ? '四条切线按下面数值拉伸' : '四条切线按图片自动识别')
-                    .fontSize(11).fontColor('#AEB0BA').layoutWeight(1)
-                  Text('切图').fontSize(12).fontColor('#B9C6FF')
+                    .fontSize(LABEL_SMALL).fontColor('#AEB0BA').layoutWeight(1)
+                  Text('切图').fontSize(BODY_SMALL).fontColor('#B9C6FF')
                     .padding({ left: 12, right: 12, top: 6, bottom: 6 })
                     .backgroundColor(this.themeColorSurfaceElevated).borderRadius(10)
                     .onClick(() => this.ninePatchVisible = !this.ninePatchVisible)
@@ -853,32 +854,32 @@ export struct ReaderHighlightRuleSheet {
             }.width('100%')
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           Row() {
-            Text('取消').fontSize(14).fontColor('#C7C9D1').padding(10)
+            Text('取消').fontSize(TITLE_SMALL).fontColor('#C7C9D1').padding(10)
               .onClick(() => this.editorVisible = false)
             Blank().layoutWeight(1)
             if (this.editId.length > 0) {
-              Text('删除').fontSize(14).fontColor(this.themeColorError).padding(10)
+              Text('删除').fontSize(TITLE_SMALL).fontColor(this.themeColorError).padding(10)
                 .onClick(() => this.pendingDeleteId = this.editId)
             }
-            Text(this.saving ? '保存中' : '保存').fontSize(14).fontColor(this.themeColorOnPrimary)
+            Text(this.saving ? '保存中' : '保存').fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 10, bottom: 10 })
               .backgroundColor('#B9C6FF').borderRadius(20)
               .onClick(() => this.saveRule())
           }.width('100%').margin({ top: 8 })
         }
         if (this.errorMessage.length > 0) {
-          Text(this.errorMessage).fontSize(12).fontColor(this.themeColorError).width('100%').margin({ top: 8 })
+          Text(this.errorMessage).fontSize(BODY_SMALL).fontColor(this.themeColorError).width('100%').margin({ top: 8 })
         }
         }
         .width('100%').padding(18)
       }
       if (this.pendingDeleteId.length > 0) {
         Column() {
-          Text('删除这条阅读高亮规则？').fontSize(16).fontColor('#E5E6EB')
+          Text('删除这条阅读高亮规则？').fontSize(TITLE_MEDIUM).fontColor('#E5E6EB')
           Row() {
-            Text('取消').fontSize(14).fontColor('#C7C9D1').padding(10)
+            Text('取消').fontSize(TITLE_SMALL).fontColor('#C7C9D1').padding(10)
               .onClick(() => this.pendingDeleteId = '')
-            Text('删除').fontSize(14).fontColor(this.themeColorOnPrimary)
+            Text('删除').fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 9, bottom: 9 })
               .backgroundColor(this.themeColorErrorContainer).borderRadius(18)
               .onClick(() => this.confirmDelete())
@@ -887,19 +888,19 @@ export struct ReaderHighlightRuleSheet {
       }
       if (this.presetVisible) {
         Column() {
-          Text('预设规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
+          Text('预设规则').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#E5E6EB')
             .width('100%')
           Text('勾选后追加到规则列表；已存在的同 id 规则不会被覆盖，只补缺失的。')
-            .fontSize(12).fontColor('#AEB0BA').width('100%').margin({ top: 6, bottom: 12 })
+            .fontSize(BODY_SMALL).fontColor('#AEB0BA').width('100%').margin({ top: 6, bottom: 12 })
           Scroll() {
             Column() {
               ForEach(ReaderHighlightRulePresets.rules(), (preset: ReaderHighlightRule) => {
                 Row() {
                   Column() {
-                    Text(preset.name).fontSize(15).fontColor('#E5E6EB').maxLines(1)
-                    Text(preset.pattern).fontSize(11).fontColor('#AEB0BA').maxLines(2)
+                    Text(preset.name).fontSize(TITLE_MEDIUM).fontColor('#E5E6EB').maxLines(1)
+                    Text(preset.pattern).fontSize(LABEL_SMALL).fontColor('#AEB0BA').maxLines(2)
                       .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 })
-                    Text(this.presetStatus(preset)).fontSize(11)
+                    Text(this.presetStatus(preset)).fontSize(LABEL_SMALL)
                       .fontColor(this.isPresetSelectable(preset) ? '#AEB0BA' : this.themeColorError)
                       .margin({ top: 4 })
                   }.layoutWeight(1).alignItems(HorizontalAlign.Start)
@@ -916,7 +917,7 @@ export struct ReaderHighlightRuleSheet {
             }.width('100%')
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           Row() {
-            Text('取消').fontSize(14).fontColor('#C7C9D1').padding(10)
+            Text('取消').fontSize(TITLE_SMALL).fontColor('#C7C9D1').padding(10)
               .onClick(() => {
                 this.presetVisible = false;
                 this.presetSelectedIds = [];
@@ -924,7 +925,7 @@ export struct ReaderHighlightRuleSheet {
               })
             Blank().layoutWeight(1)
             Text(this.saving ? '添加中' : `添加 ${this.presetSelectedIds.length} 条`)
-              .fontSize(14).fontColor(this.themeColorOnPrimary)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 10, bottom: 10 })
               .backgroundColor('#B9C6FF').borderRadius(20)
               .onClick(() => this.applyPresets())

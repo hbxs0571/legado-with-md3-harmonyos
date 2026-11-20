@@ -1,4 +1,5 @@
 import { ReaderBookmark } from '../model/ReaderBookmark';
+import { LABEL_LARGE, LABEL_MEDIUM, TITLE_LARGE, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ReaderBookmarkEditor {
@@ -31,31 +32,31 @@ export struct ReaderBookmarkEditor {
       Column().width('100%').height('100%').backgroundColor('#66000000').onClick(() => this.onClose())
       Column() {
         Text(this.isNew ? '添加书签' : '编辑书签')
-          .fontSize(19).fontColor('#E5E6EB').fontWeight(FontWeight.Medium)
+          .fontSize(TITLE_LARGE).fontColor('#E5E6EB').fontWeight(FontWeight.Medium)
           .alignSelf(ItemAlign.Start).margin({ bottom: 14 })
-        Text(this.bookmark.bookName).fontSize(14).fontColor('#E1E2E8').maxLines(1)
+        Text(this.bookmark.bookName).fontSize(LABEL_LARGE).fontColor('#E1E2E8').maxLines(1)
           .alignSelf(ItemAlign.Start)
-        Text(this.bookmark.chapterName).fontSize(13).fontColor(this.themeColorAccent).maxLines(1)
+        Text(this.bookmark.chapterName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).maxLines(1)
           .alignSelf(ItemAlign.Start).margin({ top: 4, bottom: 10 })
-        Text('原文').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ bottom: 6 })
+        Text('原文').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ bottom: 6 })
         TextArea({ text: this.bookText, placeholder: '书签原文（可编辑）' })
-          .fontSize(13).fontColor('#C8CAD3').placeholderColor(this.themeColorTextTertiary)
+          .fontSize(LABEL_MEDIUM).fontColor('#C8CAD3').placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(this.themeColorSurfacePrimary).height(118).width('100%')
           .onChange((value: string) => this.bookText = value)
-        Text('备注').fontSize(13).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ top: 12, bottom: 6 })
+        Text('备注').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).alignSelf(ItemAlign.Start).margin({ top: 12, bottom: 6 })
         TextArea({ text: this.note, placeholder: '添加书签备注（可选）' })
-          .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(this.themeColorSurfacePrimary).height(92).width('100%')
           .onChange((value: string) => this.note = value)
         Row() {
           if (!this.isNew) {
-            Text('删除').fontSize(14).fontColor('#F2A6A6').padding({ left: 10, right: 10, top: 10, bottom: 10 })
+            Text('删除').fontSize(TITLE_SMALL).fontColor('#F2A6A6').padding({ left: 10, right: 10, top: 10, bottom: 10 })
               .onClick(() => this.onDelete())
           }
           Blank()
-          Text('取消').fontSize(14).fontColor('#C5C7D0').padding({ left: 10, right: 10, top: 10, bottom: 10 })
+          Text('取消').fontSize(TITLE_SMALL).fontColor('#C5C7D0').padding({ left: 10, right: 10, top: 10, bottom: 10 })
             .onClick(() => this.onClose())
-          Text('保存').fontSize(14).fontColor('#D7DFFB').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          Text('保存').fontSize(TITLE_SMALL).fontColor('#D7DFFB').padding({ left: 16, right: 16, top: 10, bottom: 10 })
             .backgroundColor('#454B62').borderRadius(18)
             .onClick(() => this.onSave(this.note, this.bookText))
         }.width('100%').margin({ top: 14 })

@@ -2,6 +2,7 @@ import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
+import { BODY_SMALL, LABEL_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const SUBSCRIPTION_MENU_WIDTH: number = 260;
@@ -111,7 +112,7 @@ export struct SubscriptionPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 17 }).margin({ right: 9 })
           TextInput({ placeholder: '搜索订阅源…', text: this.searchQuery })
-            .fontSize(16).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 14, right: 14, top: 10, bottom: 10 })
@@ -123,13 +124,13 @@ export struct SubscriptionPage {
           Row() {
             Row() {
               AppGlyph({ name: 'ruleSubscription', glyphSize: 18, tint: '#C5C7D0' })
-              Text('规则').fontSize(14).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+              Text('规则').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(13).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenRules())
             Row() {
               AppGlyph({ name: 'favoriteStar', glyphSize: 18, tint: '#C5C7D0' })
-              Text('收藏').fontSize(14).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+              Text('收藏').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(13).margin({ left: 10 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenFavorites())
@@ -143,7 +144,7 @@ export struct SubscriptionPage {
                     Stack({ alignContent: Alignment.Center }) {
                       AppGlyph({ name: 'subscription', tint: this.themeColorAccent, glyphSize: 28 })
                     }.width(48).height(48).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-                    Text(item).fontSize(12).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+                    Text(item).fontSize(BODY_SMALL).fontColor('#C5C7D0').textAlign(TextAlign.Center)
                       .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).height(36).margin({ top: 8 })
                   }.width('100%').padding({ top: 8, bottom: 8 })
                     .onClick(() => this.onUnavailableAction('订阅源数据尚未接入'))
@@ -155,8 +156,8 @@ export struct SubscriptionPage {
           } else if (this.showSearch && this.searchQuery.trim().length > 0) {
             Column() {
               AppGlyph({ name: 'search', glyphSize: 32, tint: this.themeColorAccent }).margin({ bottom: 14 })
-              Text('没有匹配的订阅源').fontSize(16).fontColor(this.themeColorTextSecondary)
-              Text('调整搜索内容后重试').fontSize(14).fontColor('#858792').margin({ top: 8 })
+              Text('没有匹配的订阅源').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+              Text('调整搜索内容后重试').fontSize(TITLE_SMALL).fontColor('#858792').margin({ top: 8 })
             }.width('100%').height(240).justifyContent(FlexAlign.Center)
           }
         }.width('100%').padding({ bottom: 120 }).constraintSize({ minHeight: '100%' })

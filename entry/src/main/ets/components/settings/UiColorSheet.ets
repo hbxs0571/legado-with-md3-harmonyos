@@ -1,6 +1,4 @@
-import {
-  FONT_INPUT, FONT_ROW_DETAIL, RADIUS_INNER, SPACE_12, SPACE_16, SPACE_2, SPACE_8
-} from '../UiTokens';
+import { RADIUS_INNER, SPACE_12, SPACE_16, SPACE_2, SPACE_8 } from '../UiTokens';import { BODY_SMALL_EMPHASIZED, HEADLINE_SMALL, LABEL_LARGE } from '../typography/TypographyTokens';
 
 /**
  * 取色面板，对齐上游 ui/widget/components/dialog/ColorPickerSheet.kt。
@@ -60,17 +58,17 @@ export struct UiColorSheet {
       // 标题行：左「重置」、中标题、右「保存」，对齐上游 AppModalBottomSheet 的两个 action。
       Row() {
         Text('重置')
-          .fontSize(FONT_INPUT)
+          .fontSize(LABEL_LARGE)
           .fontColor(this.themeColorTextSecondary)
           .onClick(() => this.pickColor(this.resetColor));
         Text(this.title)
-          .fontSize(20)
+          .fontSize(HEADLINE_SMALL)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextPrimary)
           .layoutWeight(1)
           .textAlign(TextAlign.Center);
         Text('保存')
-          .fontSize(FONT_INPUT)
+          .fontSize(LABEL_LARGE)
           // 上游 endAction 的 enabled = parsedHexColor != null && !isHexInputError。
           .fontColor(this.resolved().length > 0 ? this.themeColorAccent : this.themeColorTextTertiary)
           .onClick(() => {
@@ -115,7 +113,7 @@ export struct UiColorSheet {
               .backgroundColor(this.resolved().length > 0 ? this.resolved() : this.themeColorSurfaceTertiary)
               .border({ width: 1, color: this.themeColorTextTertiary });
             TextInput({ text: this.hexInput, placeholder: '#RRGGBB' })
-              .fontSize(FONT_INPUT)
+              .fontSize(LABEL_LARGE)
               .fontColor(this.themeColorTextPrimary)
               .placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(this.themeColorSurfacePrimary)
@@ -133,7 +131,7 @@ export struct UiColorSheet {
 
           if (this.hexInput.length > 0 && this.resolved().length === 0) {
             Text('色值需为 #RRGGBB 或 #AARRGGBB')
-              .fontSize(FONT_ROW_DETAIL)
+              .fontSize(BODY_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
               .fontColor('#E5484D')
               .width('100%')
               .margin({ top: SPACE_8 });

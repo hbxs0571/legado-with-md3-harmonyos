@@ -1,7 +1,7 @@
+import { BODY_SMALL_EMPHASIZED, LABEL_MEDIUM_EMPHASIZED, TITLE_MEDIUM } from '../typography/TypographyTokens';
+
 import { ThemeItemDivider } from '../ThemeItemDivider';
-import {
-  FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2
-} from '../UiTokens';
+import { ROW_PADDING_H, ROW_PADDING_V, SPACE_2 } from '../UiTokens';
 
 /** 设置行：标题 +（可选）数值 + 滑块 +（可选）说明。 */
 @Component
@@ -25,11 +25,11 @@ export struct UiSlider {
     Column() {
     Column() {
       Row() {
-        Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextPrimary)
+        Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
         Blank()
         // 有说明时数值只出现在说明里，避免同一个数字显示两次（照 ThemeSettingsSlider 的做法）
         if (this.detail.length === 0) {
-          Text('' + this.value).fontSize(FONT_ROW_OPTION).fontColor(this.themeColorAccent)
+          Text('' + this.value).fontSize(LABEL_MEDIUM_EMPHASIZED).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
         }
       }
       .width('100%')
@@ -55,7 +55,7 @@ export struct UiSlider {
 
       if (this.detail.length > 0) {
         Text(this.detail)
-          .fontSize(FONT_ROW_DETAIL)
+          .fontSize(BODY_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextTertiary)
           .width('100%')
           .margin({ top: SPACE_2 })

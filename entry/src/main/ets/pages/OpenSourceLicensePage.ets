@@ -1,6 +1,7 @@
 import curves from '@ohos.curves';
 import { util } from '@kit.ArkTS';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
+import { BODY_SMALL, BODY_SMALL_LINE_HEIGHT, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct OpenSourceLicensePage {
@@ -58,7 +59,7 @@ export struct OpenSourceLicensePage {
       CollapsingSettingsHeader({ title: '开源许可证', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
       Text('应用主体遵循 GPL-3.0；图标遵循 Apache-2.0；在线书源引擎及其内嵌的 QuickJS 遵循 MIT（另有 Apache-2.0 的 NAPI wrapper）。')
-        .fontSize(13).lineHeight(19).fontColor('#C6C8D2')
+        .fontSize(LABEL_MEDIUM).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).fontColor('#C6C8D2')
         .width('100%').padding(14).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
         .margin({ left: 16, right: 16, bottom: 10 })
 
@@ -78,10 +79,10 @@ export struct OpenSourceLicensePage {
         .padding({ left: 16, right: 16, bottom: 10 })
 
       if (this.loadError.length > 0) {
-        Text(this.loadError).fontSize(14).fontColor('#F0B2A8').padding(16)
+        Text(this.loadError).fontSize(TITLE_SMALL).fontColor('#F0B2A8').padding(16)
       } else {
         Scroll(this.licenseScroller) {
-          Text(this.licenseText).fontSize(12).lineHeight(17).fontColor(this.themeColorTextSecondary)
+          Text(this.licenseText).fontSize(BODY_SMALL).lineHeight(BODY_SMALL_LINE_HEIGHT).fontColor(this.themeColorTextSecondary)
             .width('100%').padding(16).textAlign(TextAlign.Start)
         }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).width('100%').scrollBar(BarState.Off).onScroll(() => this.updateHeader())
       }
@@ -98,7 +99,7 @@ struct LicenseChoice {
   @Prop selected: boolean = false;
 
   build() {
-    Text(this.title).fontSize(14).fontColor(this.selected ? '#151720' : this.themeColorTextSecondary)
+    Text(this.title).fontSize(TITLE_SMALL).fontColor(this.selected ? '#151720' : this.themeColorTextSecondary)
       .padding({ left: 14, right: 14, top: 9, bottom: 9 })
       .backgroundColor(this.selected ? this.themeColorAccent : this.themeColorSurfaceSecondary)
       .borderRadius(18).margin({ right: 8 })

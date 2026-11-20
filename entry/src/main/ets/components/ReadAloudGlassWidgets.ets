@@ -1,4 +1,6 @@
 
+import { LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_SMALL } from './typography/TypographyTokens';
+
 /**
  * 朗读面板共享的「磨砂玻璃」视觉组件。
  *
@@ -46,19 +48,19 @@ export struct AloudStepper {
   build() {
     Row({ space: 6 }) {
       Text('−')
-        .fontSize(18).fontWeight(FontWeight.Medium)
+        .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
         .fontColor(this.stepperEnabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
         .width(30).height(30).textAlign(TextAlign.Center)
         .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.9))
         .borderRadius(15)
         .onClick(() => this.onDec())
       Text(this.valueText)
-        .fontSize(13).fontColor(this.stepperEnabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
+        .fontSize(LABEL_MEDIUM).fontColor(this.stepperEnabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
         .padding({ left: 10, right: 10, top: 5, bottom: 5 })
         .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.9))
         .borderRadius(8)
       Text('+')
-        .fontSize(18).fontWeight(FontWeight.Medium)
+        .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
         .fontColor(this.stepperEnabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
         .width(30).height(30).textAlign(TextAlign.Center)
         .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.9))
@@ -104,10 +106,10 @@ export struct AloudSliderSetting {
       Row() {
         // 标题区可点展开；加减号在右侧、不在此 Row 内，故不会误触发展开。
         Column() {
-          Text(this.label).fontSize(14).fontWeight(FontWeight.Medium)
+          Text(this.label).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium)
             .fontColor(this.settingEnabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
           if (this.description.length > 0) {
-            Text(this.description).fontSize(11).fontColor(this.themeColorTextSecondary)
+            Text(this.description).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
               .margin({ top: 2 }).maxLines(2)
           }
         }
@@ -119,7 +121,7 @@ export struct AloudSliderSetting {
           AloudStepper({ valueText: this.valueText, stepperEnabled: this.settingEnabled,
             onDec: (): void => this.stepBy(-1), onInc: (): void => this.stepBy(1) })
         } else {
-          Text(this.valueText).fontSize(13).fontColor(this.themeColorAccent)
+          Text(this.valueText).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
             .onClick(() => { this.expanded = false; })
         }
       }

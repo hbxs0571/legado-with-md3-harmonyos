@@ -9,6 +9,7 @@ import {
 } from '../components/ProfileUiMetrics';
 import { ProfileRoute } from '../model/Book';
 import { UiSwitchControl } from '../components/UiSwitchControl';
+import { BODY_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ProfilePage {
@@ -50,12 +51,12 @@ export struct ProfilePage {
               Row() {
                 Row() {
                   AppGlyph({ name: 'profileContentPaste', glyphSize: 16, tint: '#C5C7D0' })
-                  Text('拷贝 URL').fontSize(12).fontColor('#C5C7D0').margin({ left: 6 })
+                  Text('拷贝 URL').fontSize(BODY_SMALL).fontColor('#C5C7D0').margin({ left: 6 })
                 }.padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .onClick(() => this.onUnavailableAction('Web 服务尚未迁移'))
                 Row() {
                   AppGlyph({ name: 'web', glyphSize: 16, tint: '#C5C7D0' })
-                  Text('浏览器打开').fontSize(12).fontColor('#C5C7D0').margin({ left: 6 })
+                  Text('浏览器打开').fontSize(BODY_SMALL).fontColor('#C5C7D0').margin({ left: 6 })
                 }.padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .onClick(() => this.onUnavailableAction('Web 服务尚未迁移'))
               }.width('100%').justifyContent(FlexAlign.End)

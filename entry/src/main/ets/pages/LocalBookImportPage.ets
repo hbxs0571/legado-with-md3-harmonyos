@@ -1,4 +1,5 @@
 import { AppGlyph } from '../components/AppGlyph';
+import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 确认页里的一行待导入文件。 */
 export interface ImportCandidate {
@@ -132,18 +133,18 @@ export struct LocalBookImportPage {
 
       Column() {
         Text(item.fileName)
-          .fontSize(15)
+          .fontSize(TITLE_MEDIUM)
           .fontColor(this.themeColorTextPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%');
         Row() {
           Text(item.onShelf ? '已在书架' : '未上架')
-            .fontSize(11)
+            .fontSize(LABEL_SMALL)
             .fontColor(item.onShelf ? '#3F5BD9' : this.themeColorTextTertiary);
           if (item.sizeLabel.length > 0) {
             Text(' · ' + item.sizeLabel)
-              .fontSize(11)
+              .fontSize(LABEL_SMALL)
               .fontColor(this.themeColorTextTertiary);
           }
         }
@@ -168,20 +169,20 @@ export struct LocalBookImportPage {
       // AppGlyphName 里没有返回箭头图标（只有 profileClose 等），不为此新增图标。
       Row() {
         Text('‹ 返回')
-          .fontSize(14)
+          .fontSize(TITLE_SMALL)
           .fontColor('#3F5BD9')
           .padding({ right: 4 })
           .onClick(() => this.onBack());
 
         Text('导入本地书')
-          .fontSize(20)
+          .fontSize(HEADLINE_SMALL)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextPrimary)
           .margin({ left: 12 })
           .layoutWeight(1);
 
         Text(this.busy ? '导入中…' : `导入 ${this.selectedCount()} 本`)
-          .fontSize(14)
+          .fontSize(TITLE_SMALL)
           .fontColor(this.selectedCount() > 0 && !this.busy ? '#3F5BD9' : this.themeColorTextTertiary)
           .padding({ left: 12, right: 4 })
           .onClick(() => {
@@ -192,7 +193,7 @@ export struct LocalBookImportPage {
       .padding({ left: 16, right: 16, top: 10 + this.appTopInset, bottom: 10 });
 
       Text('已选文件（已在书架的可以跳过；取消勾选后不导入）')
-        .fontSize(12)
+        .fontSize(BODY_SMALL)
         .fontColor(this.themeColorTextTertiary)
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 8 });

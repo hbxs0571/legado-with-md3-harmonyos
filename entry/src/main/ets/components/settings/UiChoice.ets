@@ -1,7 +1,7 @@
+import { BODY_SMALL_EMPHASIZED, LABEL_MEDIUM_EMPHASIZED, TITLE_MEDIUM } from '../typography/TypographyTokens';
+
 import { ThemeItemDivider } from '../ThemeItemDivider';
-import {
-  FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4
-} from '../UiTokens';
+import { ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4 } from '../UiTokens';
 
 /**
  * 设置行：点一下在若干选项间循环切换（上游 DropdownListSettingItem 的简化形态）。
@@ -27,12 +27,12 @@ export struct UiChoice {
     Column() {
       Row() {
         Text(this.title)
-          .fontSize(FONT_ROW_TITLE)
+          .fontSize(TITLE_MEDIUM)
           .fontColor(this.themeColorTextPrimary)
           .layoutWeight(1)
         if (this.options.length > 0) {
           Text(this.options[Math.min(this.selectedIndex, this.options.length - 1)])
-            .fontSize(FONT_ROW_OPTION)
+            .fontSize(LABEL_MEDIUM_EMPHASIZED).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorAccent)
         }
       }
@@ -40,7 +40,7 @@ export struct UiChoice {
 
       if (this.detail.length > 0) {
         Text(this.detail)
-          .fontSize(FONT_ROW_DETAIL)
+          .fontSize(BODY_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextTertiary)
           .width('100%')
           .margin({ top: SPACE_2 })

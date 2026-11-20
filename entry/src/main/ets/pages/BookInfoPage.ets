@@ -17,6 +17,7 @@ import {
 } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppLog } from '../lib/AppLog';
+import { BODY_LARGE, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
 const OVERFLOW_MENU_WIDTH: number = 220;
@@ -547,30 +548,30 @@ export struct BookInfoPage {
   @Builder
   private DeleteSheet() {
     Column() {
-      Text('移出书架？').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+      Text('移出书架？').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
         .width('100%').margin({ bottom: 8 })
       Text(BookRepository.isBodyMissing(this.book)
         ? '移出后只删除这条缺正文书目记录；Android 兼容归档和原始文件不会更改。'
         : '移出后会清理应用内的导入副本，原始文件会保留。')
-        .fontSize(14).lineHeight(21).fontColor('#AEB0BA').width('100%')
+        .fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#AEB0BA').width('100%')
       if (this.sameNameCopies().length > 0) {
         Text(this.sameNameCopies().length === 1
           ? `书架里还有 1 本同名书：${this.book.title}`
           : `书架里还有 ${this.sameNameCopies().length} 本同名书：${this.book.title}`)
-          .fontSize(13).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 12 })
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 12 })
       }
       if (this.book.isLocal) {
         Row() {
           Toggle({ type: ToggleType.Checkbox, isOn: this.deleteSourceChecked })
             .onChange((value: boolean) => this.deleteSourceChecked = value)
-          Text('同时删除应用内副本').fontSize(14).fontColor('#D0D2DB').margin({ left: 8 })
+          Text('同时删除应用内副本').fontSize(TITLE_SMALL).fontColor('#D0D2DB').margin({ left: 8 })
         }.width('100%').margin({ top: 12 })
       }
       Row() {
-        Text('取消').fontSize(15).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+        Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
           .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
           .onClick(() => this.deleteSheetVisible = false)
-        Text('移出书架').fontSize(15).fontColor('#101116').textAlign(TextAlign.Center)
+        Text('移出书架').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
           .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
           .margin({ left: 10 }).onClick(() => {
             this.deleteSheetVisible = false;
@@ -743,20 +744,20 @@ export struct BookInfoPage {
   private LogSheet() {
     Column() {
       Row() {
-        Text('日志').fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+        Text('日志').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
         Blank()
-        Text('清空').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+        Text('清空').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
           .onClick(() => { AppLog.clear(); this.logEntries = []; })
       }.width('100%').padding({ left: 16, right: 16, top: 18, bottom: 12 })
       if (this.logEntries.length === 0) {
         Column() {
-          Text('暂无日志').fontSize(13).fontColor(this.themeColorTextTertiary)
+          Text('暂无日志').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else {
         List() {
           ForEach(this.logEntries, (line: string) => {
             ListItem() {
-              Text(line).fontSize(11).fontColor(this.themeColorTextSecondary)
+              Text(line).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
                 .fontFamily('monospace').width('100%')
             }.padding({ left: 16, right: 16, top: 4, bottom: 4 })
           }, (line: string) => line)
@@ -824,20 +825,20 @@ export struct BookInfoPage {
                 .accessibilityText(`${this.book.title}，封面。点击更换封面，长按查看大图`)
               Column() {
                 // 书名：点击进搜索、长按弹「搜索书名 / 展开收起」（:296）。
-                Text(this.book.title).fontSize(23).fontWeight(FontWeight.Bold).fontColor('#F1F2F6')
+                Text(this.book.title).fontSize(HEADLINE_MEDIUM).fontWeight(FontWeight.Bold).fontColor('#F1F2F6')
                   .maxLines(this.titleExpanded ? 20 : 3).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .onClick(() => this.searchByTitle())
                   .bindContextMenu(this.TitleMenu, ResponseType.LongPress,
                     { placement: Placement.BottomLeft })
                 // 作者：点击进作者搜索（:297）。上游长按走另一分支，本地不做长按。
                 Text(this.book.author.length > 0 ? this.book.author : '作者未知')
-                  .fontSize(17).fontColor('#D0D2DB').margin({ top: 8 })
+                  .fontSize(BODY_LARGE).fontColor('#D0D2DB').margin({ top: 8 })
                   .onClick(() => this.searchByAuthor())
                 // 来源行：上游 `BookInfoScreen.kt:1334-1339` 只有一行
                 // `origin_show`（`%s` = book.originName），没有「本地书籍 / 本地文件」这种
                 // 状态前缀。本地原来拆成 statusLabel + ' · ' + sourceLabel 两段，
                 // 用户在详情页看到的是「本地书籍 · 本地文件」，与上游不符，这里只留名字。
-                Text(this.originNameLabel()).fontSize(14).fontColor('#9FA6C8')
+                Text(this.originNameLabel()).fontSize(LABEL_LARGE).fontColor('#9FA6C8')
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 8 })
                   .onClick(() => this.onOriginClick())
@@ -850,9 +851,9 @@ export struct BookInfoPage {
                           .margin({ left: 6, right: 6 })
                       }
                       Column() {
-                        Text(item.title).fontSize(12).fontColor('#E8C56B').maxLines(1)
+                        Text(item.title).fontSize(BODY_SMALL).fontColor('#E8C56B').maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis })
-                        Text(item.matchedLabels.join('、')).fontSize(11).fontColor('#A99258')
+                        Text(item.matchedLabels.join('、')).fontSize(LABEL_SMALL).fontColor('#A99258')
                           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                     }, (item: HighlightedTag, index: number) => `${index}-${item.title}`)
@@ -924,16 +925,16 @@ export struct BookInfoPage {
 
           Column() {
             Text(this.book.progress > 0 ? `在读 · ${this.book.lastChapter}` : '尚未开始阅读')
-              .fontSize(19).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+              .fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
             // 第二行是「最新章节」，不是「当前阅读章」：上游接的是 latestChapterTitle。
             Text(`最新 · ${this.book.latestChapterTitle ?? ''}`)
-              .fontSize(16).fontColor(this.themeColorTextSecondary).margin({ top: 4 })
+              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).margin({ top: 4 })
             Row() {
               Text(this.getChapterTotal() > 0 ? `共 ${this.getChapterTotal()} 章` : '章节总数待读取')
-                .fontSize(14).fontColor(this.themeColorAccent)
-              Text('  |  ').fontSize(14).fontColor(this.themeColorTextTertiary)
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+              Text('  |  ').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
               Text(this.readStateLabel())
-                .fontSize(14).fontColor(this.themeColorTextSecondary)
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
             }.margin({ top: 4 })
           }.width('100%').alignItems(HorizontalAlign.Start)
             // 上游 `BookInfoSummary`（BookInfoScreen.kt:1544-1550）是
@@ -945,12 +946,12 @@ export struct BookInfoPage {
           if (BookRepository.isBodyMissing(this.book)) {
             Column() {
               Text('已恢复书目与阅读位置，缺少正文文件')
-                .fontSize(17).fontWeight(FontWeight.Medium).fontColor('#F0B2A8')
+                .fontSize(BODY_LARGE).fontWeight(FontWeight.Medium).fontColor('#F0B2A8')
               Text('Android 备份只保存书架记录和阅读位置，不包含 TXT / EPUB 正文。重新选择原书文件后才能继续阅读。')
-                .fontSize(14).lineHeight(21).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
+                .fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
               if ((this.book.androidOriginalPath ?? '').length > 0) {
                 Text(`Android 原路径：${this.book.androidOriginalPath ?? ''}`)
-                  .fontSize(12).lineHeight(18).fontColor(this.themeColorTextTertiary).margin({ top: 8 })
+                  .fontSize(BODY_SMALL).lineHeight(BODY_SMALL_LINE_HEIGHT).fontColor(this.themeColorTextTertiary).margin({ top: 8 })
               }
             }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
               .backgroundColor('#2A1D20').borderRadius(16).margin({ left: 16, right: 16, bottom: 14 })
@@ -964,19 +965,19 @@ export struct BookInfoPage {
             // 上游三个富文本前缀 `<useweb>` / `<usehtml>` / `<md>` 本批未实现（需要
             // WebView / HTML / Markdown 三套渲染器），这里一律按纯文本显示，不做伪装。
             if (this.book.description !== undefined && this.book.description.trim().length > 0) {
-              Text(this.book.description).fontSize(14).lineHeight(22).fontColor('#D0D2DB')
+              Text(this.book.description).fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#D0D2DB')
                 .alignSelf(ItemAlign.Start)
             } else {
               // 上游 `R.string.intro_show_null` = 「简介：暂无简介」。
-              Text('简介：暂无简介').fontSize(14).lineHeight(22).fontColor('#BFC1CB')
+              Text('简介：暂无简介').fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#BFC1CB')
                 .alignSelf(ItemAlign.Start)
             }
             if ((this.book.remark ?? '').trim().length > 0) {
               // 备注卡可点：整块进元数据面板（:315），不单给正文加点击区。
               Column() {
-                Text('备注').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                Text('备注').fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
                   .alignSelf(ItemAlign.Start).margin({ top: 12 })
-                Text(this.book.remark ?? '').fontSize(14).lineHeight(22).fontColor('#BFC1CB')
+                Text(this.book.remark ?? '').fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#BFC1CB')
                   .alignSelf(ItemAlign.Start).margin({ top: 4 })
               }.width('100%').onClick(() => this.onOpenEditPage())
             }
@@ -1038,7 +1039,7 @@ export struct BookInfoPage {
             tint: this.themePureBlack ? '#101114' : this.themeColorSurfacePrimary
           })
           Text(BookRepository.isBodyMissing(this.book) ? '缺少正文' : '阅读')
-            .fontSize(14).fontWeight(FontWeight.Medium).margin({ left: 7 })
+            .fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium).margin({ left: 7 })
             .fontColor(this.themePureBlack ? '#101114' : this.themeColorSurfacePrimary)
         }
         .height(READ_FAB_HEIGHT)
@@ -1057,25 +1058,25 @@ export struct BookInfoPage {
             .onClick(() => this.readRecordPanelVisible = false)
           Column() {
             Row() {
-              Text('阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
-              Text('关闭').fontSize(14).fontColor('#C5C7D0').padding(8)
+              Text('阅读记录').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
+              Text('关闭').fontSize(TITLE_SMALL).fontColor('#C5C7D0').padding(8)
                 .onClick(() => this.readRecordPanelVisible = false)
             }.width('100%').padding({ bottom: 12 })
             Column() {
-              Text('累计阅读').fontSize(13).fontColor(this.themeColorTextSecondary)
-              Text(this.readRecordPanel.totalLabel).fontSize(28).fontWeight(FontWeight.Bold)
+              Text('累计阅读').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+              Text(this.readRecordPanel.totalLabel).fontSize(HEADLINE_LARGE).fontWeight(FontWeight.Bold)
                 .fontColor(this.themeColorAccent).margin({ top: 6 })
             }.width('100%').padding(16).backgroundColor('#292A31').borderRadius(14)
               .alignItems(HorizontalAlign.Start)
             if (this.readRecordPanel.days.length === 0) {
-              Text('暂无阅读记录').fontSize(14).fontColor('#AEB0BA')
+              Text('暂无阅读记录').fontSize(TITLE_SMALL).fontColor('#AEB0BA')
                 .width('100%').textAlign(TextAlign.Center).margin({ top: 28, bottom: 28 })
             } else {
               Scroll() {
                 Column() {
                   ForEach(this.readRecordPanel.days, (day: BookReadRecordDay) => {
                     Column() {
-                      Text(day.dateLabel).fontSize(14).fontWeight(FontWeight.Medium)
+                      Text(day.dateLabel).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
                         .fontColor(this.themeColorTextPrimary).alignSelf(ItemAlign.Start)
                         .margin({ top: 14, bottom: 8 })
                       ForEach(day.sessions, (session: BookReadRecordSession, sessionIndex: number) => {
@@ -1084,10 +1085,10 @@ export struct BookInfoPage {
                           Column().width(8).height(8).borderRadius(4)
                             .backgroundColor(this.themeColorAccent).margin({ left: 8, top: 8 })
                           Column() {
-                            Text(`${session.timeLabel} · ${session.durationLabel}`).fontSize(14)
+                            Text(`${session.timeLabel} · ${session.durationLabel}`).fontSize(TITLE_SMALL)
                               .fontColor(this.themeColorTextPrimary)
                             if (session.chapterLabel.length > 0) {
-                              Text(session.chapterLabel).fontSize(12)
+                              Text(session.chapterLabel).fontSize(BODY_SMALL)
                                 .fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                             }
                           }.width('100%').alignItems(HorizontalAlign.Start)
@@ -1100,7 +1101,7 @@ export struct BookInfoPage {
                 }.width('100%')
               }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
             }
-            Text('查看全部').fontSize(14).fontColor('#B9C6FF').textAlign(TextAlign.Center)
+            Text('查看全部').fontSize(TITLE_SMALL).fontColor('#B9C6FF').textAlign(TextAlign.Center)
               .width('100%').padding({ top: 14, bottom: 4 })
               .onClick(() => {
                 this.readRecordPanelVisible = false;
@@ -1152,7 +1153,7 @@ struct BookTypeChoice {
   @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   build() {
-    Text(this.label).fontSize(13).fontColor(this.selected ? '#F1F2F6' : '#C5C7D0')
+    Text(this.label).fontSize(LABEL_MEDIUM).fontColor(this.selected ? '#F1F2F6' : '#C5C7D0')
       .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 9, bottom: 9 })
       .backgroundColor(this.selected ? '#46476B' : this.themeColorSurfaceElevated).borderRadius(10)
       .margin({ right: 6 }).onClick(() => this.onSelect())
@@ -1164,7 +1165,7 @@ struct BookInfoTag {
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @Prop label: string = '';
   build() {
-    Text(this.label).fontSize(13).fontColor(this.themeColorTextSecondary)
+    Text(this.label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
       .padding({ left: 10, right: 10, top: 6, bottom: 6 })
       .backgroundColor('#171820').borderRadius(14).margin({ right: 8 })
   }
@@ -1193,7 +1194,7 @@ struct BookInfoAction {
       }).margin({ bottom: 4 })
       // 上游 `:1495-1531` 文案是 bodySmall + maxLines 2，高度由内容决定，不是固定 72。
       Text(this.label)
-        .fontSize(12)
+        .fontSize(BODY_SMALL)
         .fontColor(this.highlight ? this.themeColorTextPrimary : this.themeColorTextSecondary)
         .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center)

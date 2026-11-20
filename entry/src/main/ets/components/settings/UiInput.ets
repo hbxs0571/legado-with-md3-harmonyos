@@ -1,10 +1,9 @@
+import { BODY_SMALL_EMPHASIZED, LABEL_LARGE, LABEL_MEDIUM_EMPHASIZED, TITLE_MEDIUM } from '../typography/TypographyTokens';
+
 import { ThemeItemDivider } from '../ThemeItemDivider';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../AppGlyph';
-import {
-  EXPAND_BUTTONS_BOTTOM, EXPAND_BUTTONS_TOP, EXPAND_PADDING_BOTTOM, FONT_INPUT,
-  FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, RADIUS_INNER, ROW_PADDING_H, ROW_PADDING_V, SPACE_2
-} from '../UiTokens';
+import { EXPAND_BUTTONS_BOTTOM, EXPAND_BUTTONS_TOP, EXPAND_PADDING_BOTTOM, RADIUS_INNER, ROW_PADDING_H, ROW_PADDING_V, SPACE_2 } from '../UiTokens';
 
 /**
  * 设置行：点一下行内展开输入框 + 「默认 / 确定」。
@@ -39,10 +38,10 @@ export struct UiInput {
     Column() {
       Row() {
         Column() {
-          Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextPrimary).width('100%')
+          Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).width('100%')
           if (this.detail.length > 0) {
             Text(this.detail)
-              .fontSize(FONT_ROW_DETAIL)
+              .fontSize(BODY_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextTertiary)
               .width('100%')
               .margin({ top: SPACE_2 })
@@ -50,7 +49,7 @@ export struct UiInput {
           // 展开时收起这个只读值，避免与输入框里的内容重复显示。
           if (!this.expanded) {
             Text(this.value)
-              .fontSize(FONT_ROW_OPTION)
+              .fontSize(LABEL_MEDIUM_EMPHASIZED).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorAccent)
               .width('100%')
               .margin({ top: SPACE_2 });
@@ -77,7 +76,7 @@ export struct UiInput {
       if (this.expanded) {
         Column() {
           TextInput({ text: this.editValue, placeholder: this.title })
-            .fontSize(FONT_INPUT)
+            .fontSize(LABEL_LARGE)
             .fontColor(this.themeColorTextPrimary)
             .backgroundColor(this.themeColorSurfaceTertiary)
             .borderRadius(RADIUS_INNER)
@@ -89,14 +88,14 @@ export struct UiInput {
           Row() {
             // 「默认」= 填回默认值，不收起、不回调（上游 ConfirmDismissButtonsRow 的 onDismiss）。
             Text('默认')
-              .fontSize(FONT_INPUT)
+              .fontSize(LABEL_LARGE)
               .fontColor(this.themeColorTextSecondary)
               .onClick(() => {
                 this.editValue = this.defaultValue;
               });
             Blank()
             Text('确定')
-              .fontSize(FONT_INPUT)
+              .fontSize(LABEL_LARGE)
               .fontColor(this.themeColorAccent)
               .onClick(() => {
                 this.onConfirm(this.editValue);

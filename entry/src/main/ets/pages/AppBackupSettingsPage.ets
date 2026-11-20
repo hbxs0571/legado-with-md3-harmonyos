@@ -5,6 +5,7 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import { BackupCategoryOption, BackupEntryPreview, BackupPreview } from '../data/BackupRepository';
 import { WebDavSettings, defaultWebDavSettings, cloneWebDavSettings } from '../lib/WebDavConfig';
+import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 本地备份与恢复页面，文件格式与 Android 原项目兼容。 */
 @Component
@@ -94,7 +95,7 @@ export struct AppBackupSettingsPage {
       CollapsingSettingsHeader({ title: '备份与恢复', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
       Scroll(this.backupScroller) {
         Column() {
-          Text('WebDAV 设置').fontSize(14).fontColor(this.themeColorAccent)
+          Text('WebDAV 设置').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'cloud', title: 'WebDAV 服务器地址',
@@ -153,7 +154,7 @@ export struct AppBackupSettingsPage {
               onSelect: () => this.activeSheet = 'syncMode' })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
-          Text('备份与恢复').fontSize(14).fontColor(this.themeColorAccent)
+          Text('备份与恢复').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'folder', title: '备份路径',
@@ -197,23 +198,23 @@ export struct AppBackupSettingsPage {
           if (this.busy) {
             Row() {
               LoadingProgress().width(18).height(18).color(this.themeColorAccent)
-              Text('正在处理 Android 备份…').fontSize(14).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+              Text('正在处理 Android 备份…').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
             }.width('100%').padding(14).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
           }
 
           if (this.backupPreview !== undefined) {
             Column() {
-              Text('Android ZIP 预览').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+              Text('Android ZIP 预览').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               Text(`识别 ${this.backupPreview.entryCount} 个根条目；书架 ${this.backupPreview.bookCount} 本，其中本地书籍 ${this.backupPreview.localBookCount} 本`)
-                .fontSize(14).fontColor(this.themeColorTextSecondary).lineHeight(20).margin({ top: 8 })
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).lineHeight(TITLE_SMALL_LINE_HEIGHT).margin({ top: 8 })
                 Text(`ZIP 不含 TXT/EPUB 正文；${this.backupPreview.localBooksWithoutBody} 本本地书未匹配到当前书架中的可读正文。`)
-                .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(18).margin({ top: 5 })
+                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).margin({ top: 5 })
               Column() {
                 ForEach(this.backupPreview.entries, (entry: BackupEntryPreview) => {
                   Row() {
-                    Text(entry.name).fontSize(12).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                    Text(entry.name).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                     Text(entry.recordCount >= 0 ? `${entry.recordCount} 条` : '配置文件')
-                      .fontSize(12).fontColor(this.themeColorTextTertiary)
+                      .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
                   }.padding({ top: 5, bottom: 5 })
                 }, (entry: BackupEntryPreview) => entry.name)
               }.width('100%').margin({ top: 8 })
@@ -227,30 +228,30 @@ export struct AppBackupSettingsPage {
           }
 
           if (this.statusMessage.length > 0) {
-            Text(this.statusMessage).fontSize(14).fontColor(this.themeColorAccent).lineHeight(20)
+            Text(this.statusMessage).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).lineHeight(TITLE_SMALL_LINE_HEIGHT)
               .width('100%').padding(13).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
           }
 
           if (this.restoredEntries.length > 0) {
             Column() {
-              Text('已恢复的 Android 数据壳').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+              Text('已恢复的 Android 数据壳').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               Text('书源、规则、历史等原始 JSON/XML 已保留，可继续导出。恢复本身只解析数据、不执行脚本；但恢复后的书源在你下次搜索或阅读时会正常执行其中的 JavaScript 并发起网络请求。')
-                .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(19).margin({ top: 6, bottom: 8 })
+                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).margin({ top: 6, bottom: 8 })
               ForEach(this.restoredEntries, (entry: BackupEntryPreview) => {
                 Row() {
-                  Text(entry.name).fontSize(12).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                  Text(entry.name).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
                   Text(entry.recordCount >= 0 ? `${entry.recordCount} 条` : '配置文件')
-                    .fontSize(12).fontColor(this.themeColorAccent)
+                    .fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
                 }.padding({ top: 5, bottom: 5 })
               }, (entry: BackupEntryPreview) => entry.name)
             }.width('100%').padding(15).margin({ top: 12 })
               .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
           }
 
-          Text('兼容说明').fontSize(14).fontColor(this.themeColorAccent)
+          Text('兼容说明').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 16, bottom: 7 })
           Text('备份沿用 Android 原项目的 ZIP 根目录 JSON/XML 条目和文件名，不增加自定义封装。当前支持的数据会映射到本地书架与阅读设置；尚未迁移的书源、规则、RSS、历史等条目只原样保留，不能在 HarmonyOS 中使用，也不会执行其中的脚本。Android ZIP 不包含 TXT/EPUB 正文。')
-            .fontSize(14).fontColor(this.themeColorTextSecondary).lineHeight(20)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).lineHeight(TITLE_SMALL_LINE_HEIGHT)
             .width('100%').padding(15).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
@@ -272,8 +273,8 @@ export struct AppBackupSettingsPage {
           this.activeSheet === 'ignoreBackup' ? '备份排除项' : this.activeSheet === 'ignoreRestore' ?
           '恢复排除项' : this.activeSheet === 'path' ? '备份路径' : this.activeSheet === 'syncMode' ?
           '备份同步模式' : this.inputTitle)
-          .fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('关闭').fontSize(14).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
+          .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       if (this.activeSheet === 'backup') {
         BackupSheetOption({ title: '备份到本地', detail: '创建 Android 兼容 ZIP',
@@ -303,7 +304,7 @@ export struct AppBackupSettingsPage {
         }.edgeEffect(EdgeEffect.None).height(420).scrollBar(BarState.Off)
       } else if (this.activeSheet === 'input') {
         TextInput({ placeholder: this.inputTitle, text: this.inputDraft })
-          .fontSize(16).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
+          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
           .type(this.inputPassword ? InputType.Password : InputType.Normal)
           .margin({ left: 18, right: 18, bottom: 16 })
           .onChange((value: string) => this.inputDraft = value)
@@ -371,8 +372,8 @@ struct BackupSheetOption {
   onSelect: () => void = () => {};
   build() {
     Column() {
-      Text(this.title).fontSize(16).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
-      Text(this.detail).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+      Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
+      Text(this.detail).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
     }.width('calc(100% - 32vp)').padding(16).alignItems(HorizontalAlign.Start)
       .opacity(this.disabled ? 0.5 : 1)
       .backgroundColor('#292B33').borderRadius(14).margin({ left: 16, right: 16, bottom: 8 })
@@ -391,8 +392,8 @@ struct BackupPreviewSwitchRow {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
-        Text(this.detail).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+        Text(this.detail).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       UiSwitchControl({
         checked: this.checked,
@@ -423,8 +424,8 @@ struct BackupActionRow {
       Row() {
         AppGlyph({ name: this.icon, glyphSize: 20, tint: this.disabled ? '#656873' : this.themeColorAccent }).width(36)
         Column() {
-          Text(this.title).fontSize(16).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
-          Text(this.detail).fontSize(14).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+          Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
+          Text(this.detail).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
       }.padding({ left: 15, right: 15, top: 16, bottom: 16 }).onClick(() => {
@@ -447,8 +448,8 @@ struct BackupIgnoreList {
       ForEach(this.options, (option: BackupCategoryOption) => {
         Row() {
           Column() {
-            Text(option.title).fontSize(14).fontColor(this.themeColorTextSecondary)
-            Text(option.files.join('、')).fontSize(11).fontColor('#858792').margin({ top: 3 })
+            Text(option.title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+            Text(option.files.join('、')).fontSize(LABEL_SMALL).fontColor('#858792').margin({ top: 3 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           UiSwitchControl({
             checked: this.ignoredKeys.includes(option.key),

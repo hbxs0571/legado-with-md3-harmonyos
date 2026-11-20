@@ -7,6 +7,7 @@
 // 平台边界：系统 TTS 无调速 API，语速滑杆只存值并如实标注；音色只有系统 3 条。
 
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, LABEL_LARGE, LABEL_LARGE_LINE_HEIGHT, LABEL_SMALL, TITLE_LARGE, TITLE_LARGE_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Extend(Text)
 function playerText(size: number, color: string, weight: FontWeight): void {
@@ -174,10 +175,10 @@ export struct ReadAloudPlayerPage {
         .fillColor(this.fg())
         .onClick(() => this.onBack())
       Column() {
-        Text(this.bookName).fontSize(16).fontWeight(FontWeight.Medium)
+        Text(this.bookName).fontSize(BODY_MEDIUM).fontWeight(FontWeight.Medium)
           .fontColor(this.fg())
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.chapterTitle).fontSize(11).fontColor(this.fgSub())
+        Text(this.chapterTitle).fontSize(LABEL_SMALL).fontColor(this.fgSub())
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 3 })
       }.layoutWeight(1).margin({ left: 14 })
       Image($r('app.media.reader_settings')).width(20).height(20)
@@ -191,17 +192,17 @@ export struct ReadAloudPlayerPage {
   TocPage() {
     Column() {
       Text(`目录 · 共 ${this.chapters.length} 章`)
-        .fontSize(12).fontColor(this.fgTert()).width('100%')
+        .fontSize(BODY_SMALL).fontColor(this.fgTert()).width('100%')
         .padding({ left: 24, top: 12, bottom: 10 })
       List() {
         ForEach(this.chapters, (title: string, index: number) => {
           ListItem() {
             Row() {
-              Text(title).fontSize(14)
+              Text(title).fontSize(LABEL_LARGE)
                 .fontColor(index === this.currentChapterIndex ? this.accent : this.fg())
                 .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               if (index === this.currentChapterIndex) {
-                Text('正在播放').fontSize(10).fontColor(this.accent).margin({ left: 8 })
+                Text('正在播放').fontSize(LABEL_SMALL).fontColor(this.accent).margin({ left: 8 })
               }
             }
             .width('100%').padding({ left: 24, right: 24, top: 14, bottom: 14 })
@@ -223,7 +224,7 @@ export struct ReadAloudPlayerPage {
       } else {
         Column() {
           Text(this.bookName.length > 0 ? this.bookName.charAt(0) : '书')
-            .fontSize(48).fontColor('#FFFFFF')
+            .fontSize(HEADLINE_LARGE).fontColor('#FFFFFF')
         }
         .width('52%').aspectRatio(5 / 7).borderRadius(16)
         .backgroundColor(this.accent)
@@ -233,13 +234,13 @@ export struct ReadAloudPlayerPage {
 
       Column() {
         Text(this.currentText.length > 0 ? this.currentText : '准备朗读内容…')
-          .fontSize(18).fontColor(this.fg()).maxLines(3).fontWeight(FontWeight.Medium)
+          .fontSize(TITLE_LARGE).fontColor(this.fg()).maxLines(3).fontWeight(FontWeight.Medium)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%').lineHeight(29).textAlign(TextAlign.Start)
+          .width('100%').lineHeight(TITLE_LARGE_LINE_HEIGHT).textAlign(TextAlign.Start)
         if (this.nextText.length > 0) {
-          Text(this.nextText).fontSize(14).fontColor(this.fgSub()).maxLines(3)
+          Text(this.nextText).fontSize(LABEL_LARGE).fontColor(this.fgSub()).maxLines(3)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%').lineHeight(23).margin({ top: 10 }).textAlign(TextAlign.Start)
+            .width('100%').lineHeight(LABEL_LARGE_LINE_HEIGHT).margin({ top: 10 }).textAlign(TextAlign.Start)
         }
       }
       .width('86%').layoutWeight(1).justifyContent(FlexAlign.Center)
@@ -265,11 +266,11 @@ export struct ReadAloudPlayerPage {
     List({ scroller: this.textScroller }) {
       ForEach(this.texts, (text: string, index: number) => {
         ListItem() {
-          Text(text).fontSize(18)
+          Text(text).fontSize(TITLE_LARGE)
             .fontColor(index === this.unitIndex ? this.fg() : this.fgTert())
             .fontWeight(index === this.unitIndex ? FontWeight.Medium : FontWeight.Normal)
             .width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 })
-            .lineHeight(28)
+            .lineHeight(TITLE_LARGE_LINE_HEIGHT)
             .borderRadius(16)
             .backgroundColor(index === this.unitIndex
               ? (this.isDarkBg() ? '#33FFFFFF' : '#1A000000') : Color.Transparent)
@@ -299,9 +300,9 @@ export struct ReadAloudPlayerPage {
           this.onSeek(Math.round(value));
         })
       Row() {
-        Text(`第 ${this.unitIndex + 1} / ${this.unitTotal} 句`).fontSize(11).fontColor(this.fgSub())
+        Text(`第 ${this.unitIndex + 1} / ${this.unitTotal} 句`).fontSize(LABEL_SMALL).fontColor(this.fgSub())
         Text(this.unitTotal > 0 ? `${Math.round(this.unitIndex * 100 / this.unitTotal)}%` : '0%')
-          .fontSize(11).fontColor(this.fgSub())
+          .fontSize(LABEL_SMALL).fontColor(this.fgSub())
       }.width('92%').justifyContent(FlexAlign.SpaceBetween)
 
       // 五个 Transport：上一句(普通)/上一章(tonal)/播放暂停(主)/下一章(tonal)/下一句(普通)。
@@ -335,11 +336,11 @@ export struct ReadAloudPlayerPage {
         ForEach(this.systemVoices, (v: VoiceOption) => {
           Row() {
             Column() {
-              Text(v.name).fontSize(15).fontColor(this.fg())
-              Text(v.lang).fontSize(11).fontColor(this.fgTert()).margin({ top: 2 })
+              Text(v.name).fontSize(TITLE_MEDIUM).fontColor(this.fg())
+              Text(v.lang).fontSize(LABEL_SMALL).fontColor(this.fgTert()).margin({ top: 2 })
             }.layoutWeight(1)
             if (v.name === this.voiceName) {
-              Text('✓').fontSize(16).fontColor(this.accent)
+              Text('✓').fontSize(TITLE_MEDIUM).fontColor(this.accent)
             }
           }
           .width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -349,7 +350,7 @@ export struct ReadAloudPlayerPage {
           })
         }, (v: VoiceOption) => `${v.person}`)
         Text('系统朗读仅提供以上音色；HTTP 朗读源音色在后续版本提供。')
-          .fontSize(11).fontColor(this.fgTert()).padding({ left: 16, right: 16, top: 4, bottom: 12 })
+          .fontSize(LABEL_SMALL).fontColor(this.fgTert()).padding({ left: 16, right: 16, top: 4, bottom: 12 })
       }
     }
   }
@@ -362,9 +363,9 @@ export struct ReadAloudPlayerPage {
           .width('90%').margin({ top: 16 })
           .selectedColor(this.accent)
           .onChange((value: number, _mode: SliderChangeMode): void => { this.speedPreview = Math.round(value); })
-        Text(`${this.speedPreview}x`).fontSize(15).fontColor(this.fg()).margin({ top: 6 })
+        Text(`${this.speedPreview}x`).fontSize(TITLE_MEDIUM).fontColor(this.fg()).margin({ top: 6 })
         Text('系统朗读不支持调速，此设置用于 HTTP 朗读源。')
-          .fontSize(11).fontColor(this.fgTert()).padding({ left: 16, right: 16, top: 12, bottom: 16 })
+          .fontSize(LABEL_SMALL).fontColor(this.fgTert()).padding({ left: 16, right: 16, top: 12, bottom: 16 })
         Button('保存').width('90%').backgroundColor(this.accent).onClick(() => {
           this.onRateChange(this.speedPreview);
           this.showSpeedSheet = false;
@@ -379,7 +380,7 @@ export struct ReadAloudPlayerPage {
       Column() {
         ForEach(['关闭', '按分钟', '按章节'], (label: string, index: number) => {
           Row() {
-            Text(label).fontSize(14).fontColor(this.fg()).layoutWeight(1)
+            Text(label).fontSize(TITLE_SMALL).fontColor(this.fg()).layoutWeight(1)
           }
           .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
           .onClick(() => {
@@ -445,7 +446,7 @@ struct TextCard {
   @Prop label: string = '';
   @Prop dark: boolean = false;
   build() {
-    Text(this.label).fontSize(12).fontColor(this.dark ? '#E8E8EA' : '#494C59')
+    Text(this.label).fontSize(BODY_SMALL).fontColor(this.dark ? '#E8E8EA' : '#494C59')
       .padding({ left: 12, right: 12, top: 7, bottom: 7 })
       .backgroundColor(this.dark ? '#33FFFFFF' : '#E8E9ED').borderRadius(16)
       .margin({ left: 5, right: 5, bottom: 8 })
@@ -484,7 +485,7 @@ struct PlayerTextBtn {
   onAction: () => void = () => {};
   build() {
     Column() {
-      Text(this.label).fontSize(11).fontColor(this.dark ? '#D0D0D4' : this.textSecondary)
+      Text(this.label).fontSize(LABEL_SMALL).fontColor(this.dark ? '#D0D0D4' : this.textSecondary)
     }
     .width(60).height(48).justifyContent(FlexAlign.Center)
     .borderRadius(12).onClick(() => this.onAction())
@@ -512,10 +513,10 @@ struct PlayerSheet {
         onDismiss: () => this.onDismiss()
       }) {
         Row() {
-          Text(this.title).fontSize(16).fontWeight(FontWeight.Medium)
+          Text(this.title).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
             .fontColor(this.dark ? '#FFFFFF' : this.textPrimaryDark())
           Blank()
-          Text('关闭').fontSize(14).fontColor(this.accentColor()).onClick(() => this.onDismiss())
+          Text('关闭').fontSize(TITLE_SMALL).fontColor(this.accentColor()).onClick(() => this.onDismiss())
         }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 12 })
         this.content()
       }

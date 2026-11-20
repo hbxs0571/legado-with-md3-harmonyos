@@ -5,6 +5,7 @@ import {
   LegacyThemeMigrationResult, SavedThemeEntry, ThemeConfigPatch, ThemePackageImport,
   ThemePackageRepository, ThemePackageSource, fromPortableConfig
 } from '../data/ThemePackageRepository';
+import { BODY_LARGE, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /**
  * 主题包管理页，对应上游 `ui/config/themeManage/ThemeManageScreen.kt`（331 行）。
@@ -314,22 +315,22 @@ export struct ThemeManagePage {
     Column() {
       Row() {
         Column() {
-          Text(entry.name).fontSize(17).fontColor(this.themeColorTextPrimary)
+          Text(entry.name).fontSize(BODY_LARGE).fontColor(this.themeColorTextPrimary)
           Row() {
             this.ColorDots(ThemePackageRepository.previewColors(entry.config, false))
-            Text('日间').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ left: 6, right: 12 })
+            Text('日间').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 6, right: 12 })
             this.ColorDots(ThemePackageRepository.previewColors(entry.config, true))
-            Text('夜间').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ left: 6 })
+            Text('夜间').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 6 })
           }.margin({ top: 6 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Text('应用').fontSize(14).fontColor(this.themeColorAccent)
+        Text('应用').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
       }.width('100%').onClick(() => this.confirmApply(entry))
       Row() {
-        Text('编辑').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('编辑').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           .onClick(() => this.promptRename(entry))
-        Text('导出').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('导出').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           .onClick(() => this.exportSaved(entry))
-        Text('删除').fontSize(14).fontColor('#E53935').layoutWeight(1)
+        Text('删除').fontSize(TITLE_SMALL).fontColor('#E53935').layoutWeight(1)
           .onClick(() => this.confirmDelete(entry))
       }.width('100%').margin({ top: 12 })
     }.width('calc(100% - 32vp)').padding({ left: 16, right: 16, top: 14, bottom: 14 })
@@ -345,8 +346,8 @@ export struct ThemeManagePage {
   private EntryRow(title: string, summary: string, onSelect: () => void) {
     Row() {
       Column() {
-        Text(title).fontSize(17).fontColor(this.themeColorTextSecondary)
-        Text(summary).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+        Text(title).fontSize(BODY_LARGE).fontColor(this.themeColorTextSecondary)
+        Text(summary).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextTertiary)
     }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 }).onClick(onSelect)
@@ -389,14 +390,14 @@ export struct ThemeManagePage {
               .borderRadius(this.themeCardRadius)
               .border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor })
               .onChange((value: string) => this.searchKeyword = value)
-            Text('已保存的主题').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+            Text('已保存的主题').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
               .alignSelf(ItemAlign.Start).padding({ left: 18, top: 18, bottom: 2 })
             ForEach(this.filteredThemes(), (entry: SavedThemeEntry) => {
               this.SavedThemeCard(entry)
             }, (entry: SavedThemeEntry) => entry.directoryName)
           } else {
             Text('还没有保存的主题。用上面的「保存当前设置」把当前配置存成主题。')
-              .fontSize(14).fontColor(this.themeColorTextTertiary)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
               .padding({ left: 18, right: 18, top: 18, bottom: 22 })
           }
 
@@ -410,16 +411,16 @@ export struct ThemeManagePage {
         Column() {
           Row() {
             Text(this.savingOpen ? '保存主题' : '编辑主题')
-              .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+              .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               .layoutWeight(1)
-            Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary)
+            Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary)
               .onClick(() => {
                 this.savingOpen = false;
                 this.pendingThemeName = '';
                 this.renamingDirectory = '';
                 this.renamingName = '';
               })
-            Text('保存').fontSize(15).fontColor(this.themeColorAccent).margin({ left: 18 })
+            Text('保存').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).margin({ left: 18 })
               .onClick(() => {
                 if (this.savingOpen) { this.saveCurrentTheme(); } else { this.commitRename(); }
               })

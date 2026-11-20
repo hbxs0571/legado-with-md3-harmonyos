@@ -32,6 +32,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import {
   PRIVATE_UNLOCK_EVERY_TIME, PrivateAccessRepository, isPrivateBook, requiresPrivateUnlock
 } from '../data/PrivateAccessRepository';
+import { BODY_SMALL, HEADLINE_LARGE, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /**
  * 卡片式菜单的统一宽度，与详情页溢出菜单同口径。
@@ -683,7 +684,7 @@ export struct BookshelfPage {
       Scroll() {
         Row({ space: 4 }) {
           ForEach(this.displayTagsOf(book), (tag: string, index: number) => {
-            Text(tag).fontSize(9).fontColor(this.tagTextColor(index))
+            Text(tag).fontSize(LABEL_SMALL).fontColor(this.tagTextColor(index))
               .padding({ left: 6, right: 6, top: 2, bottom: 2 })
               .backgroundColor(this.tagBgColor(index)).borderRadius(4)
           }, (tag: string) => tag)
@@ -853,27 +854,27 @@ export struct BookshelfPage {
   private BatchDeleteSheet() {
     Column() {
       Row() {
-        Text('删除所选书籍').fontSize(19).fontWeight(FontWeight.Medium)
+        Text('删除所选书籍').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
       Column() {
         Text(`将删除 ${this.selectedBookKeys.size} 本书，删除后无法恢复。`)
-          .fontSize(13).fontColor(this.themeColorTextSecondary).width('100%')
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
         if (this.selectedBooks().some((book: Book) => book.isLocal)) {
           Row() {
             Checkbox()
               .select(this.batchDeleteSource)
               .onChange((checked: boolean) => { this.batchDeleteSource = checked; })
             // 本地能删的只有应用内导入副本（book.contentPath），用户原始文件不由应用删除。
-            Text('同时删除应用内副本').fontSize(13).fontColor(this.themeColorTextSecondary)
+            Text('同时删除应用内副本').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
           }.width('100%').margin({ top: 12 })
         }
       }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
       Row() {
-        Text('取消').fontSize(14).fontColor(this.themeColorTextTertiary).padding(10)
+        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).padding(10)
           .onClick(() => { this.showBatchDeleteSheet = false; this.batchDeleteSource = false; })
         Blank()
-        Text('删除').fontSize(14).fontColor('#FF6B6B').padding(10)
+        Text('删除').fontSize(TITLE_SMALL).fontColor('#FF6B6B').padding(10)
           .onClick(async () => { await this.executeBatchDelete(); })
       }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
     }.width('100%').alignItems(HorizontalAlign.Start)
@@ -997,11 +998,11 @@ export struct BookshelfPage {
     Column() {
       AppGlyph({ name: 'lock', glyphSize: 34, tint: this.themeColorTextTertiary })
       Text(this.privateHasPassword ? '这个分组已锁定' : '这个分组是私密分组')
-        .fontSize(15).fontColor(this.themeColorTextPrimary).margin({ top: 12 })
+        .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ top: 12 })
       Text(this.privateHasPassword ? '验证后可以查看组内书籍' : '先在隐私设置里设置本地密码，才能查看组内书籍')
-        .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 6 })
+        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 6 })
       Text(this.privateHasPassword ? '验证后查看' : '设置本地密码')
-        .fontSize(13).fontColor(this.themeColorAccent).padding({ left: 18, right: 18, top: 8, bottom: 8 })
+        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding({ left: 18, right: 18, top: 8, bottom: 8 })
         .backgroundColor(this.themeColorSurfaceElevated).borderRadius(16).margin({ top: 16 })
         .onClick(() => {
           if (!this.privateHasPassword) {
@@ -1018,23 +1019,23 @@ export struct BookshelfPage {
   @Builder
   private PasswordSheet() {
     Column() {
-      Text('验证本地密码').fontSize(16).fontColor(this.themeColorTextPrimary)
+      Text('验证本地密码').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
         .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
       TextInput({ text: this.passwordInput, placeholder: '本地密码' })
-        .type(InputType.Password).fontSize(14).height(44).margin({ left: 18, right: 18 })
+        .type(InputType.Password).fontSize(TITLE_SMALL).height(44).margin({ left: 18, right: 18 })
         .onChange((value: string) => { this.passwordInput = value; })
       if (this.passwordError.length > 0) {
-        Text(this.passwordError).fontSize(12).fontColor('#FF6B6B').padding({ left: 18, top: 8 })
+        Text(this.passwordError).fontSize(BODY_SMALL).fontColor('#FF6B6B').padding({ left: 18, top: 8 })
       }
       Row() {
-        Text('取消').fontSize(14).fontColor(this.themeColorTextTertiary).padding(10)
+        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).padding(10)
           .onClick(() => {
             this.showPasswordPanel = false;
             this.passwordInput = '';
             this.passwordError = '';
           })
         Blank()
-        Text('解锁').fontSize(14).fontColor(this.themeColorAccent).padding(10)
+        Text('解锁').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
           .onClick(async () => { await this.submitPassword(); })
       }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
     }.width('100%').alignItems(HorizontalAlign.Start)
@@ -1330,8 +1331,8 @@ export struct BookshelfPage {
   private GroupManagerGrid() {
     Column() {
       Row() {
-        Text('分组管理').fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('新建').fontSize(14).fontColor('#B9C8FF').padding(8)
+        Text('分组管理').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('新建').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8)
           .onClick(() => { this.groupManageMenuVisible = !this.groupManageMenuVisible; })
           .bindPopup(this.groupManageMenuVisible, {
             builder: this.GroupManageMoreMenu,
@@ -1342,10 +1343,10 @@ export struct BookshelfPage {
             width: SHELF_MENU_WIDTH,
             onStateChange: (event: PopupStateChangeParam) => { this.groupManageMenuVisible = event.isVisible; }
           })
-        Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
+        Text('完成').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Row() {
-        Text(`切换分组：${this.activeFilter()}`).fontSize(13).fontColor(this.themeColorAccent).layoutWeight(1)
+        Text(`切换分组：${this.activeFilter()}`).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).layoutWeight(1)
           .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
           .bindPopup(this.groupFilterVisible, {
             builder: this.GroupFilterMenu,
@@ -1360,8 +1361,8 @@ export struct BookshelfPage {
 
       if (this.getManageGroups().length === 0) {
         Column() {
-          Text('还没有自定义分组').fontSize(14).fontColor(this.themeColorTextTertiary)
-          Text('点右上「新建」创建第一个分组').fontSize(12).fontColor('#6E7078').margin({ top: 6 })
+          Text('还没有自定义分组').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
+          Text('点右上「新建」创建第一个分组').fontSize(BODY_SMALL).fontColor('#6E7078').margin({ top: 6 })
         }.width('100%').padding({ top: 40, bottom: 40 }).justifyContent(FlexAlign.Center)
       } else {
         // 长按卡片进入拖拽排序，对应上游 rememberReorderableLazyGridState；
@@ -1381,11 +1382,11 @@ export struct BookshelfPage {
                     }
                   })
                 }.width('100%')
-                Text(group.groupName).fontSize(14).fontColor(this.themeColorTextPrimary).maxLines(1)
+                Text(group.groupName).fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 10 }).width('100%')
                 Text(`${this.countBooksInGroup(group.groupName)} 本 · ${bookSortLabel(group.bookSort)}${group.isPrivate ? ' · 私有' : ''}`)
-                  .fontSize(11).fontColor(this.themeColorTextTertiary).maxLines(1)
+                  .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 4 }).width('100%')
               }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
@@ -1419,17 +1420,17 @@ export struct BookshelfPage {
     Column() {
       Row() {
         Text(this.editingGroupId > 0 ? '编辑分组' : '新建分组')
-          .fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('保存').fontSize(14).fontColor('#B9C8FF').padding(8)
+          .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('保存').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8)
           .onClick(async () => { await this.submitGroupDraft(); })
-        Text('取消').fontSize(14).fontColor(this.themeColorTextTertiary).padding(8)
+        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).padding(8)
           .onClick(() => this.showGroupEditor = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Scroll() {
         Column() {
           // 封面：点击选图，长按清除，与上游 GroupEditContent 的封面项一致。
           Row() {
-            Text('封面').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+            Text('封面').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
             Stack({ alignContent: Alignment.Center }) {
               if (this.draftCover.length > 0) {
                 Image(this.draftCover).width(48).height(48).borderRadius(10).objectFit(ImageFit.Cover)
@@ -1447,7 +1448,7 @@ export struct BookshelfPage {
               if (cover.length > 0) { this.draftCover = cover; }
             })
             if (this.draftCover.length > 0) {
-              Text('清除').fontSize(12).fontColor('#D99AA5').padding({ left: 12 })
+              Text('清除').fontSize(BODY_SMALL).fontColor('#D99AA5').padding({ left: 12 })
                 .onClick(async () => {
                   if (this.editingGroupId > 0) { await this.onClearGroupCover(this.editingGroupId); }
                   this.draftCover = '';
@@ -1456,16 +1457,16 @@ export struct BookshelfPage {
           }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
 
           Row() {
-            Text('分组名称').fontSize(14).fontColor(this.themeColorTextSecondary).width(88)
+            Text('分组名称').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width(88)
             TextInput({ text: this.draftName, placeholder: '分组名称' }).layoutWeight(1).height(40)
-              .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor('#22232A').borderRadius(9)
               .onChange((value: string) => this.draftName = value)
           }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
 
           Row() {
-            Text('排序方式').fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-            Text(bookSortLabel(this.draftSort)).fontSize(14).fontColor(this.themeColorAccent)
+            Text('排序方式').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+            Text(bookSortLabel(this.draftSort)).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
               .onClick(() => { this.sortMenuVisible = !this.sortMenuVisible; })
               .bindPopup(this.sortMenuVisible, {
                 builder: this.SortMenu,
@@ -1480,8 +1481,8 @@ export struct BookshelfPage {
 
           Row() {
             Column() {
-              Text('下拉刷新').fontSize(14).fontColor(this.themeColorTextSecondary)
-              Text('关闭后该分组的下拉刷新不触发；仅对本地 TXT 生效').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+              Text('下拉刷新').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+              Text('关闭后该分组的下拉刷新不触发；仅对本地 TXT 生效').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             UiSwitchControl({
               checked: this.draftRefresh,
@@ -1493,8 +1494,8 @@ export struct BookshelfPage {
 
           Row() {
             Column() {
-              Text('私有分组').fontSize(14).fontColor(this.themeColorTextSecondary)
-              Text('仅保存兼容标记；当前不限制跨分组显示').fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+              Text('私有分组').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+              Text('仅保存兼容标记；当前不限制跨分组显示').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             UiSwitchControl({
               checked: this.draftPrivate,
@@ -1508,9 +1509,9 @@ export struct BookshelfPage {
           // 直接放在分组编辑面板里，对应上游 GroupEditSheet.kt:221-238。
           Row() {
             Column() {
-              Text('标签匹配规则').fontSize(14).fontColor(this.themeColorTextSecondary)
+              Text('标签匹配规则').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
               Text(this.draftRuleEnabled ? '启用后分组将根据书籍标签自动匹配' : '关闭后分组为手动管理')
-                .fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             UiSwitchControl({
               checked: this.draftRuleEnabled,
@@ -1523,15 +1524,15 @@ export struct BookshelfPage {
           if (this.draftRuleEnabled) {
             Column() {
               TextArea({ placeholder: '匹配标签的正则表达式', text: this.draftRulePattern })
-                .fontSize(14).fontColor(this.themeColorTextPrimary)
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
                 .placeholderColor(this.themeColorTextTertiary)
                 .height(96).backgroundColor('#22232A').borderRadius(9).padding(10)
                 .width('100%')
                 .onChange((value: string) => this.draftRulePattern = value)
               Row() {
-                Text('复制').fontSize(13).fontColor(this.themeColorAccent).padding({ right: 16 })
+                Text('复制').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding({ right: 16 })
                   .onClick(() => { this.copyGroupRule(); })
-                Text('粘贴').fontSize(13).fontColor(this.themeColorAccent)
+                Text('粘贴').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                   .onClick(() => this.showRulePasteAuthorization = true)
                 Blank()
               }.width('100%').padding({ top: 8 })
@@ -1550,7 +1551,7 @@ export struct BookshelfPage {
           if (this.editingGroupId > 0) {
             Row() {
               Text(this.pendingDeleteGroupId === this.editingGroupId ? '确认删除' : '删除分组')
-                .fontSize(14).fontColor('#D99AA5').layoutWeight(1)
+                .fontSize(TITLE_SMALL).fontColor('#D99AA5').layoutWeight(1)
                 .onClick(() => {
                   if (this.pendingDeleteGroupId === this.editingGroupId) {
                     const removed = this.groups.find((group: BookGroup) => group.groupId === this.editingGroupId);
@@ -1580,7 +1581,7 @@ export struct BookshelfPage {
                   }
                 })
               if (this.pendingDeleteGroupId === this.editingGroupId) {
-                Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary).padding({ left: 12 })
+                Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).padding({ left: 12 })
                   .onClick(() => this.pendingDeleteGroupId = -1)
               }
             }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
@@ -1782,12 +1783,12 @@ export struct BookshelfPage {
   ) {
     Row() {
       Column() {
-        Text(title).fontSize(14).fontColor(this.themeColorTextSecondary)
+        Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
         if (description.length > 0) {
-          Text(description).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          Text(description).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text(bookshelfLayoutOptionLabel(options, current)).fontSize(14).fontColor(this.themeColorAccent)
+      Text(bookshelfLayoutOptionLabel(options, current)).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
         .onClick(() => { this.layoutMenuVisible = !this.layoutMenuVisible; })
         .bindPopup(this.layoutMenuVisible, {
           builder: () => { this.LayoutOptionsMenu(options, current, onPick) },
@@ -1825,9 +1826,9 @@ export struct BookshelfPage {
   private LayoutSwitchRow(title: string, description: string, isOn: boolean, onToggle: (value: boolean) => void) {
     Row() {
       Column() {
-        Text(title).fontSize(14).fontColor(this.themeColorTextSecondary)
+        Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
         if (description.length > 0) {
-          Text(description).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          Text(description).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       UiSwitchControl({
@@ -1848,16 +1849,16 @@ export struct BookshelfPage {
   ) {
     Row() {
       Column() {
-        Text(title).fontSize(14).fontColor(this.themeColorTextSecondary)
+        Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
         if (description.length > 0) {
-          Text(description).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          Text(description).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('−').fontSize(18).fontColor(value > minimum ? this.themeColorAccent : '#4A4C55')
+      Text('−').fontSize(TITLE_LARGE).fontColor(value > minimum ? this.themeColorAccent : '#4A4C55')
         .width(36).height(32).textAlign(TextAlign.Center)
         .onClick(() => { if (value > minimum) { onStep(-1); } })
-      Text(`${value}`).fontSize(14).fontColor(this.themeColorTextPrimary).width(34).textAlign(TextAlign.Center)
-      Text('+').fontSize(18).fontColor(value < maximum ? this.themeColorAccent : '#4A4C55')
+      Text(`${value}`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width(34).textAlign(TextAlign.Center)
+      Text('+').fontSize(TITLE_LARGE).fontColor(value < maximum ? this.themeColorAccent : '#4A4C55')
         .width(36).height(32).textAlign(TextAlign.Center)
         .onClick(() => { if (value < maximum) { onStep(1); } })
     }.width('100%').padding({ left: 16, right: 12, top: 10, bottom: 10 })
@@ -1870,8 +1871,8 @@ export struct BookshelfPage {
       Row().width(24).height(24).borderRadius(6)
         .backgroundColor(normalizeCustomColor(hex).length > 0 ? hex : this.themeColorSurfacePrimary)
         .border({ width: 1, color: this.themeColorTextTertiary })
-      Text(title).fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1).margin({ left: 12 })
-      TextInput({ text: hex, placeholder: '#RRGGBB' }).width(110).fontSize(12)
+      Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1).margin({ left: 12 })
+      TextInput({ text: hex, placeholder: '#RRGGBB' }).width(110).fontSize(BODY_SMALL)
         .fontColor(this.themeColorTextPrimary)
         .onChange((value: string) => onHex(value))
     }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
@@ -1881,7 +1882,7 @@ export struct BookshelfPage {
   @Builder
   private LayoutSectionHeader(title: string) {
     Row() {
-      Text(title).fontSize(12).fontColor(this.themeColorTextTertiary)
+      Text(title).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
     }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 6 })
   }
 
@@ -1895,8 +1896,8 @@ export struct BookshelfPage {
   private LayoutSheetContent() {
     Column() {
       Row() {
-        Text('书架布局').fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('完成').fontSize(14).fontColor('#B9C8FF').padding(8)
+        Text('书架布局').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('完成').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8)
           .onClick(async () => { await this.submitLayout(); })
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 6 })
 
@@ -2058,8 +2059,8 @@ export struct BookshelfPage {
           if (this.layoutDraft.bookshelfShowTag) {
             Row() {
               Column() {
-                Text('标签显示内容').fontSize(14).fontColor(this.themeColorTextSecondary)
-                Text(this.tagSourcesLabel()).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                Text('标签显示内容').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+                Text(this.tagSourcesLabel()).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               AppGlyph({ name: this.showTagSources ? 'profileExpandMore' : 'list', glyphSize: 16 })
             }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -2081,8 +2082,8 @@ export struct BookshelfPage {
             if (this.layoutDraft.enableCustomTagColors) {
               Row() {
                 Column() {
-                  Text('管理标签配色').fontSize(14).fontColor(this.themeColorTextSecondary)
-                  Text(`${this.tagColorsCount()} 组配色`).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                  Text('管理标签配色').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+                  Text(`${this.tagColorsCount()} 组配色`).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                 AppGlyph({ name: 'profileExpandMore', glyphSize: 16 })
               }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -2194,20 +2195,20 @@ export struct BookshelfPage {
   private LogSheetContent() {
     Column() {
       Row() {
-        Text('日志').fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+        Text('日志').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
         Blank()
-        Text('清空').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+        Text('清空').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
           .onClick(() => { AppLog.clear(); this.logEntries = []; })
       }.width('100%').padding({ left: 16, right: 16, top: 18, bottom: 12 })
       if (this.logEntries.length === 0) {
         Column() {
-          Text('暂无日志').fontSize(13).fontColor(this.themeColorTextTertiary)
+          Text('暂无日志').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else {
         List() {
           ForEach(this.logEntries, (line: string) => {
             ListItem() {
-              Text(line).fontSize(11).fontColor(this.themeColorTextSecondary)
+              Text(line).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
                 .fontFamily('monospace').width('100%')
             }.padding({ left: 16, right: 16, top: 4, bottom: 4 })
           }, (line: string) => line)
@@ -2224,34 +2225,34 @@ export struct BookshelfPage {
   private TagColorSheet() {
     Column() {
       Row() {
-        Text('‹ 返回').fontSize(14).fontColor(this.themeColorAccent).padding(6)
+        Text('‹ 返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(6)
           .onClick(() => { this.showTagColorPage = false; })
-        Text('管理标签配色').fontSize(18).fontWeight(FontWeight.Bold)
+        Text('管理标签配色').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
           .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
-        Text('生成').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+        Text('生成').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
           .onClick(async () => { await this.generateTagColors(); })
-        Text('添加').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+        Text('添加').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
           .onClick(async () => { await this.addTagColor(); })
       }.width('100%').padding({ left: 12, right: 12, top: 16, bottom: 12 })
 
       if (this.tagColorsDraft.length === 0) {
         Column() {
-          Text('暂无配色，点「生成」创建 8 组').fontSize(13).fontColor(this.themeColorTextTertiary)
+          Text('暂无配色，点「生成」创建 8 组').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else {
         Scroll() {
           Column() {
             ForEach(this.tagColorsDraft, (pair: TagColorPair, index: number) => {
               Row() {
-                Text(`颜色 ${index + 1}`).fontSize(12)
+                Text(`颜色 ${index + 1}`).fontSize(BODY_SMALL)
                   .fontColor(pair.textColor !== 0 ? argbToColorHex(pair.textColor) : this.themeColorTextPrimary)
                   .padding({ left: 10, right: 10, top: 8, bottom: 8 })
                   .backgroundColor(pair.bgColor !== 0 ? argbToColorHex(pair.bgColor) : this.themeColorSurfaceTertiary)
                   .borderRadius(6)
                 Blank()
-                Text('编辑').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+                Text('编辑').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
                   .onClick(() => { this.openTagColorPicker(index); })
-                Text('删除').fontSize(13).fontColor('#D99AA5').padding(6)
+                Text('删除').fontSize(LABEL_MEDIUM).fontColor('#D99AA5').padding(6)
                   .onClick(async () => { await this.removeTagColor(index); })
               }.width('100%').padding({ left: 16, right: 12, top: 6, bottom: 6 })
             }, (pair: TagColorPair, index: number) => `${index}_${pair.textColor}_${pair.bgColor}`)
@@ -2262,11 +2263,11 @@ export struct BookshelfPage {
       if (this.showTagColorPicker) {
         Row() {
           TextInput({ text: this.tagColorPickerHex, placeholder: '#RRGGBB 文字色' })
-            .layoutWeight(1).fontSize(12).fontColor(this.themeColorTextPrimary)
+            .layoutWeight(1).fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)
             .onChange((value: string) => { this.tagColorPickerHex = value; })
-          Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary).padding(6)
+          Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).padding(6)
             .onClick(() => { this.showTagColorPicker = false; })
-          Text('确定').fontSize(13).fontColor(this.themeColorAccent).padding(6)
+          Text('确定').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
             .onClick(async () => { await this.confirmTagColor(); })
         }.width('100%').padding({ left: 16, right: 12, top: 8, bottom: 16 })
       }
@@ -2456,7 +2457,7 @@ export struct BookshelfPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 17 }).margin({ right: 9 })
           TextInput({ placeholder: '搜索书名或作者…', text: this.searchQuery })
-            .fontSize(16).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
           if (this.searchQuery.length > 0) {
@@ -2472,11 +2473,11 @@ export struct BookshelfPage {
       if (this.layout.bookGroupStyle === 2) {
         Row() {
           if (this.folderViewGroup.length > 0) {
-            Text('‹ 返回文件夹').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+            Text('‹ 返回文件夹').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
               .onClick(() => { this.backToFolderRoot(); })
           }
           Text(this.folderViewGroup.length > 0 ? `当前分组：${this.folderViewGroup}` : '文件夹（点卡片进入分组）')
-            .fontSize(12).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+            .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).layoutWeight(1)
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
       } else if (this.layout.bookGroupStyle === 0) {
         // 分组样式为「隐藏页签」时不渲染顶部筛选栏，切换分组改由分组管理面板完成。
@@ -2518,8 +2519,8 @@ export struct BookshelfPage {
         }.width('100%').padding({ left: 8, right: 16, bottom: 14 })
       } else {
         Row() {
-          Text(`当前分组：${this.activeFilter()}`).fontSize(12).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-          Text('切换分组').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+          Text(`当前分组：${this.activeFilter()}`).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+          Text('切换分组').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
             .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
             .bindPopup(this.groupFilterVisible, {
               builder: this.GroupFilterMenu,
@@ -2535,13 +2536,13 @@ export struct BookshelfPage {
       if (this.selectionMode) {
         // 选择模式工具条（:142-144 / :146 / :148）。
         Row() {
-          Text(`已选 ${this.selectedBookKeys.size} 本`).fontSize(12)
+          Text(`已选 ${this.selectedBookKeys.size} 本`).fontSize(BODY_SMALL)
             .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('全选').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+          Text('全选').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
             .onClick(() => this.selectAllVisible())
-          Text('反选').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+          Text('反选').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
             .onClick(() => this.invertVisibleSelection())
-          Text('移动').fontSize(12).fontColor(this.themeColorAccent).padding(6)
+          Text('移动').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
             .onClick(() => { this.selectionGroupVisible = !this.selectionGroupVisible; })
             .bindPopup(this.selectionGroupVisible, {
               builder: this.SelectionGroupMenu,
@@ -2556,12 +2557,12 @@ export struct BookshelfPage {
           // 没密码时不显示，免得留一个点了只能弹「请先设置密码」的按钮。
           if (this.privateHasPassword) {
             Text(this.selectionTargetPrivate() ? '设为私密' : '取消私密')
-              .fontSize(12).fontColor(this.themeColorAccent).padding(6)
+              .fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
               .onClick(async () => { await this.toggleSelectedPrivate(); })
           }
-          Text('删除').fontSize(12).fontColor('#FF6B6B').padding(6)
+          Text('删除').fontSize(BODY_SMALL).fontColor('#FF6B6B').padding(6)
             .onClick(() => { this.batchDeleteSource = false; this.showBatchDeleteSheet = true; })
-          Text('完成').fontSize(12).fontColor(this.themeColorTextTertiary).padding(6)
+          Text('完成').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).padding(6)
             .onClick(() => this.clearSelection())
         }.width('100%').padding({ left: 16, right: 12, bottom: 8 })
       }
@@ -2643,7 +2644,7 @@ export struct BookshelfPage {
                             .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
                           if (this.unreadTextOf(book).length > 0) {
                             Row() {
-                              Text(this.unreadTextOf(book)).fontSize(9).fontColor('#FFFFFFFF')
+                              Text(this.unreadTextOf(book)).fontSize(LABEL_SMALL).fontColor('#FFFFFFFF')
                               if (this.showBadgeDotOf(book)) {
                                 AppGlyph({ name: 'profileRefresh', glyphSize: 12, tint: '#FFFFFFFF' })
                               }
@@ -2655,7 +2656,7 @@ export struct BookshelfPage {
                         if (this.showsListDetails() && this.layout.bookshelfShowIntro
                           && !this.layout.bookshelfListIntroBelowContent) {
                           Text(book.description ?? '')
-                            .fontSize(11).fontColor(this.themeColorTextTertiary)
+                            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                             .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
                             .width('100%')
                             .textAlign(TextAlign.Start)
@@ -2665,7 +2666,7 @@ export struct BookshelfPage {
                         if (this.showsListDetails() && this.layout.bookshelfShowLatestChapter
                           && (book.latestChapterTitle ?? '').length > 0) {
                           Text(book.latestChapterTitle ?? '')
-                            .fontSize(11).fontColor(this.themeColorTextTertiary)
+                            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                             .width('100%')
                             .textAlign(TextAlign.Start)
@@ -2673,11 +2674,11 @@ export struct BookshelfPage {
                         // 最后更新时间：上游仅非本地书显示，本地书恒不显示（本项目书全是本地书）。
                         if (this.layout.showLastUpdateTime && !book.isLocal
                           && book.latestChapterTime !== undefined) {
-                          Text(toTimeAgo(book.latestChapterTime)).fontSize(10)
+                          Text(toTimeAgo(book.latestChapterTime)).fontSize(LABEL_SMALL)
                             .fontColor(this.themeColorTextTertiary).opacity(0.5)
                         }
                         if (this.bookTypeLabel(book).length > 0) {
-                          Text(this.bookTypeLabel(book)).fontSize(9).fontColor(this.themeColorAccent)
+                          Text(this.bookTypeLabel(book)).fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
                         }
                         this.BookTagRow(book)
                       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
@@ -2689,7 +2690,7 @@ export struct BookshelfPage {
                     if (this.showsListDetails() && this.layout.bookshelfShowIntro
                       && this.layout.bookshelfListIntroBelowContent) {
                       Text(book.description ?? '')
-                        .fontSize(11).fontColor(this.themeColorTextTertiary)
+                        .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                         .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
                         .width('100%')
                         .textAlign(TextAlign.Start)
@@ -2736,7 +2737,7 @@ export struct BookshelfPage {
                 if (this.refreshingOf(book)) {
                   Row() {
                     LoadingProgress().width(16).height(16).color(this.themeColorAccent)
-                    Text(' 更新中').fontSize(9).fontColor(this.themeColorTextTertiary)
+                    Text(' 更新中').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                   }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 2, bottom: 2 })
                 }
                 if (this.layout.bookshelfGridLayout === 0) {
@@ -2860,16 +2861,16 @@ export struct BookshelfPage {
         .layoutWeight(1)
       } else {
         Column() {
-          Text(this.emptyFace).fontSize(32).fontColor(this.themeColorTextSecondary).margin({ bottom: 14 })
+          Text(this.emptyFace).fontSize(HEADLINE_LARGE).fontColor(this.themeColorTextSecondary).margin({ bottom: 14 })
             .onClick(() => {
               const currentIndex = this.emptyFaces.indexOf(this.emptyFace);
               this.emptyFace = this.emptyFaces[(currentIndex + 1) % this.emptyFaces.length];
             })
           Text(this.searchQuery.length > 0 ? '没有匹配的书籍' : this.books.length === 0
             ? '书架还空着，先去搜索书籍或从发现里添加吧！' : '这个分组还没有书籍')
-            .width(220).fontSize(11).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2)
+            .width(220).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2)
           if (this.searchQuery.length > 0) {
-            Text('全局搜索').fontSize(13).fontColor(this.themeColorAccent)
+            Text('全局搜索').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
               .padding({ left: 16, right: 16, top: 8, bottom: 8 }).margin({ top: 14 })
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
               .borderRadius(18)
@@ -2889,7 +2890,7 @@ export struct BookshelfPage {
         Column() {
           Column() {
             LoadingProgress().width(40).height(40).color(this.themeColorAccent)
-            Text(this.busyText).fontSize(13).fontColor(this.themeColorTextSecondary)
+            Text(this.busyText).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
               .margin({ top: 16 }).textAlign(TextAlign.Center).maxLines(2)
           }
           .padding(24).borderRadius(12)
@@ -2927,7 +2928,7 @@ struct ShelfFilter {
     // 改前是 Column 里一个 `Row().width('100%')`，而 Column 在横向 Scroll 里拿到的约束是视口宽，
     // 于是下划线撑满整屏、文字被居中 —— 这才是「分组居中 + 大片空白」的真身。
     Text(this.label)
-      .fontSize(14)
+      .fontSize(LABEL_LARGE)
       .fontWeight(this.selected ? FontWeight.Medium : FontWeight.Normal)
       .fontColor(this.selected ? this.themeColorAccent : this.themeColorTextSecondary)
       .maxLines(1)

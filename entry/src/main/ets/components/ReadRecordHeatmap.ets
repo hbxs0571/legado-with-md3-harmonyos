@@ -1,3 +1,5 @@
+import { LABEL_SMALL } from './typography/TypographyTokens';
+
 /**
  * 阅读记录热力图：年度按周网格，对应上游 HeatmapCalendarSection +
  * ui/widget/components/heatmap/HeatmapCalendarComponents.kt。
@@ -136,7 +138,7 @@ export struct ReadRecordHeatmap {
   private WeekdayLabels() {
     Column() {
       ForEach(['一', '', '三', '', '五', '', '日'], (label: string, index: number) => {
-        Text(label).fontSize(10).fontColor(this.themeColorTextTertiary)
+        Text(label).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
           .height(this.cellSize).margin({ bottom: this.cellSpacing })
       }, (_label: string, index: number) => index.toString())
     }.padding({ top: 24, right: 8 })
@@ -163,7 +165,7 @@ export struct ReadRecordHeatmap {
   @Builder
   private WeekColumn(week: string[]) {
     Column() {
-      Text(this.monthLabel(week)).fontSize(10).fontColor(this.themeColorTextTertiary)
+      Text(this.monthLabel(week)).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
         .height(24).width(this.cellSize)
       Column() {
         ForEach(week, (day: string) => {
@@ -177,12 +179,12 @@ export struct ReadRecordHeatmap {
   @Builder
   private HeatmapLegend() {
     Row() {
-      Text(`少${this.mode === 1 ? '(时长)' : '(次)'}`).fontSize(11).fontColor(this.themeColorTextTertiary)
+      Text(`少${this.mode === 1 ? '(时长)' : '(次)'}`).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
       ForEach([0, 1, 2, 3, 4], (level: number) => {
         Row().width(12).height(12).backgroundColor(this.levelColor(level)).borderRadius(2)
           .margin({ left: 4 })
       }, (level: number) => level.toString())
-      Text(`多${this.mode === 1 ? '(时长)' : '(次)'}`).fontSize(11)
+      Text(`多${this.mode === 1 ? '(时长)' : '(次)'}`).fontSize(LABEL_SMALL)
         .fontColor(this.themeColorTextTertiary).margin({ left: 4 })
     }.width('100%').justifyContent(FlexAlign.End).margin({ top: 16 })
   }

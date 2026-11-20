@@ -5,6 +5,7 @@ import { buildCoverTextLayout } from './CoverTextLayout';
 import { AppGlyph } from './AppGlyph';
 import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
+import { LABEL_SMALL } from './typography/TypographyTokens';
 
 /** 无封面文字的绘制上下文；每个 BookCover 各持一份，避免多本共享导致互相覆盖。 */
 const COVER_TEXT_CANVAS_SETTINGS: RenderingContextSettings = new RenderingContextSettings(true);
@@ -252,14 +253,14 @@ export struct BookCover {
           || (this.badgeText.length === 0 && this.book.chapterCount !== undefined)) {
           Row() {
             if (BookRepository.isBodyMissing(this.book)) {
-              Text('缺正文').fontSize(8).fontColor('#FFE0DC')
+              Text('缺正文').fontSize(LABEL_SMALL).fontColor('#FFE0DC')
                 .padding({ left: 4, right: 4, top: 2, bottom: 2 })
                 .backgroundColor('#8B3A3A').borderRadius(5)
             }
             Blank()
             if (this.badgeText.length === 0 && this.showChapterBadge && this.book.chapterCount !== undefined) {
               Text(this.book.chapterCount)
-                .fontSize(8)
+                .fontSize(LABEL_SMALL)
                 .fontColor('#E6E7EC')
                 .padding({ left: 4, right: 4, top: 2, bottom: 2 })
                 .backgroundColor('#15161BCC')
@@ -298,7 +299,7 @@ export struct BookCover {
               AppGlyph({ name: 'profileRefresh', glyphSize: 12, tint: this.themeColorTextPrimary })
             }
             Text(this.badgeText)
-              .fontSize(11)
+              .fontSize(LABEL_SMALL)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary)
               .maxLines(2)
@@ -320,7 +321,7 @@ export struct BookCover {
       if (this.leftBottomText.length > 0) {
         Stack({ alignContent: Alignment.BottomStart }) {
           Text(this.leftBottomText)
-            .fontSize(11)
+            .fontSize(LABEL_SMALL)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary)
             .maxLines(2)
@@ -338,7 +339,7 @@ export struct BookCover {
         // 私密遮罩盖在封面与角标之上（:325）：锁图标 +「已加密」，不是单纯压暗。
         Column() {
           AppGlyph({ name: 'lock', glyphSize: 20, tint: '#E6E7EC' })
-          Text('已加密').fontSize(8).fontColor('#C4C9D7').margin({ top: 3 })
+          Text('已加密').fontSize(LABEL_SMALL).fontColor('#C4C9D7').margin({ top: 3 })
         }.width('100%').height('100%')
         .backgroundColor('#D915161B')
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)

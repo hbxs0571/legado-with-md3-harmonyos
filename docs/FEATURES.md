@@ -371,7 +371,7 @@
 
 颜色、菜单取色、形状面板之外，同一套主题体系里还有六块：
 
-- **排版没有语义阶梯。** 上游 `ui/theme/LegadoTheme.kt:85-119` 有 24 个槽位（headline/title/body/label × 三档 × 普通与 `Emphasized`），引用 **696 处 / 186 文件**。本地 `fontSize(N)` 字面量 **1,189 处、20 种字号**，`components/UiTokens.ets` 的 9 个 `FONT_*` 常量只有 5 个真被消费（`FONT_PAGE_TITLE` / `FONT_LABEL_SMALL` / `FONT_INPUT_LABEL` 零消费）。后果是同一层级的东西在不同页面大小不一。
+- **排版语义阶梯已建成（改造前是缺口）。** 上游 `ui/theme/LegadoTheme.kt:85-119` 有 24 个槽位（headline/title/body/label × 三档 × 普通与 `Emphasized`），引用 **696 处 / 186 文件**。本地原 `fontSize(N)` 字面量 **1,282 处、20 种字号**（旧文档写 1,189 为粗测值）已于改造后全部分批迁入 `components/typography/TypographyTokens.ets` 的 24 槽位常量，**字面量归零**；9 个旧 `FONT_*` 常量已按上游 settingItem 语义统一（settings 组件族 32 处换成槽位常量、15 处补 Emphasized 字重，UiTokens 删全部 9 个定义）。行高 33 处手写值已统一：32 处固定值改成配对字号槽位的行高常量，1 处阅读器 Canvas 动态行高保留——其中 13 处 21/22 上游无对应的偏离值已消除。全仓 173 处 `.fontWeight()` 未批量改写（无上游语义锚点）。后果（改造前同层级字号不一）已消除。
 - **图标命名不成体系。** 上游 Material Icons **1,043 处 / 263 种** + 177 个 vector drawable；本地 `AppGlyph` **82 个**名字 + 140 个 svg，功能不缺，但 20 多个带 `profile` 前缀、其余不带，播放/暂停图标绕过 `AppGlyph` 直接用 `Image($r(...))`。
 - **动效有底座没档位。** 上游 `MotionScheme.expressive()` 统一接管，`tween(` 143 处 + `spring(` 15 处；本地 `duration:` **82 处 11 种值**、`curve` 只 3 种，没有常量收口。
 - **模糊主界面通了，其余硬编码。** 本地 `backdropBlur` **24 处**，其中 18 处是写死数字（12/16/20/30），只有 `components/TopBar.ets:195` 与 `pages/Index.ets:11262` 读偏好。

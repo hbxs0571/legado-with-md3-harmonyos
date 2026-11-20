@@ -20,6 +20,7 @@ import {
   roundedMaxTime,
   computeReadRecordOverview
 } from '../data/ReadRecordOverview';
+import { BODY_LARGE, HEADLINE_SMALL, LABEL_LARGE, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 周期选择器的一个档位。 */
 interface PeriodTab {
@@ -94,14 +95,14 @@ struct ReadTimeBarChartCard {
 
   build() {
     Column() {
-      Text('阅读时长').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('阅读时长').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').margin({ bottom: 10 })
       Row() {
         // Y 轴：只标顶端取整值与 0。
         Column() {
-          Text(hourMinuteLabel(this.maxTime())).fontSize(10).fontColor(this.themeColorTextTertiary)
+          Text(hourMinuteLabel(this.maxTime())).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
           Blank()
-          Text('0').fontSize(10).fontColor(this.themeColorTextTertiary)
+          Text('0').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
         }.height(this.chartHeight()).width(46).justifyContent(FlexAlign.SpaceBetween)
           .alignItems(HorizontalAlign.End).padding({ right: 4 })
         Row() {
@@ -115,10 +116,10 @@ struct ReadTimeBarChartCard {
                   .backgroundColor(point.time > 0 ? this.themeColorAccent : this.themeColorSurfaceTertiary)
               }.width('100%').height(this.chartHeight())
               if (this.showLabel(point.date, index)) {
-                Text(this.labelText(point.date, index)).fontSize(9)
+                Text(this.labelText(point.date, index)).fontSize(LABEL_SMALL)
                   .fontColor(this.themeColorTextTertiary).margin({ top: 4 })
               } else {
-                Text(' ').fontSize(9).margin({ top: 4 })
+                Text(' ').fontSize(LABEL_SMALL).margin({ top: 4 })
               }
             }.layoutWeight(1)
           }, (point: DailyTimePoint, index: number) => `${point.date}_${index}_${point.time}`)
@@ -154,15 +155,15 @@ struct StatsGridCard {
   @Builder
   StatCell(item: StatItem) {
     Column() {
-      Text(item.label).fontSize(11).fontColor(this.themeColorTextTertiary)
-      Text(item.value).fontSize(17).fontWeight(FontWeight.Bold)
+      Text(item.label).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
+      Text(item.value).fontSize(BODY_LARGE).fontWeight(FontWeight.Bold)
         .fontColor(this.themeColorAccent).margin({ top: 3 })
     }.alignItems(HorizontalAlign.Start).width('100%').padding({ left: 6, top: 8, bottom: 8 })
   }
 
   build() {
     Column() {
-      Text('阅读数据').fontSize(16).fontWeight(FontWeight.Medium)
+      Text('阅读数据').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).width('100%').margin({ bottom: 8 })
       Grid() {
         ForEach(this.statItems(), (item: StatItem) => {
@@ -193,11 +194,11 @@ struct TopReadingListCard {
 
   build() {
     Column() {
-      Text('阅读时长榜').fontSize(16).fontWeight(FontWeight.Medium)
+      Text('阅读时长榜').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).width('100%').margin({ bottom: 8 })
       ForEach(this.topBooks, (item: ReadBookRanking, index: number) => {
         Row() {
-          Text(`${index + 1}`).fontSize(15).fontWeight(FontWeight.Bold)
+          Text(`${index + 1}`).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Bold)
             .fontColor(index < 3 ? this.themeColorAccent : this.themeColorTextTertiary).width(24)
           BookCover({
             book: {
@@ -210,11 +211,11 @@ struct TopReadingListCard {
             displayWidth: 40, displayHeight: 56, cornerRadius: 4
           })
           Column() {
-            Text(hourMinuteLabel(item.readTime)).fontSize(11).fontColor(this.themeColorAccent)
-            Text(item.bookName).fontSize(14).fontWeight(FontWeight.Bold)
+            Text(hourMinuteLabel(item.readTime)).fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
+            Text(item.bookName).fontSize(LABEL_LARGE).fontWeight(FontWeight.Bold)
               .fontColor(this.themeColorTextPrimary).maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 2 })
-            Text(item.bookAuthor).fontSize(11).fontColor(this.themeColorTextTertiary)
+            Text(item.bookAuthor).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1).padding({ left: 10 })
         }.width('100%').padding({ top: 6, bottom: 6 })
@@ -294,11 +295,11 @@ struct ReadingCalendarCard {
 
   build() {
     Column() {
-      Text('读书日历').fontSize(16).fontWeight(FontWeight.Medium)
+      Text('读书日历').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).width('100%').margin({ bottom: 8 })
       Row() {
         ForEach(['日', '一', '二', '三', '四', '五', '六'], (label: string) => {
-          Text(label).fontSize(11).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+          Text(label).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).layoutWeight(1)
             .textAlign(TextAlign.Center)
         }, (label: string) => label)
       }.width('100%').margin({ bottom: 4 })
@@ -315,7 +316,7 @@ struct ReadingCalendarCard {
                   .objectFit(ImageFit.Cover).opacity(0.4).borderRadius(6)
               }
               if (cell.dayNumber.length > 0) {
-                Text(cell.dayNumber).fontSize(11)
+                Text(cell.dayNumber).fontSize(LABEL_SMALL)
                   .fontWeight(cell.dateKey.length > 0 && this.coverUriOf(cell.dateKey).length > 0
                     ? FontWeight.Bold : FontWeight.Normal)
                   .fontColor(cell.dateKey.length > 0 && this.coverUriOf(cell.dateKey).length > 0
@@ -441,17 +442,17 @@ export struct ReadRecordOverviewPage {
     Column() {
       // 顶栏：返回 + 标题。
       Row() {
-        Text('返回').fontSize(14).fontColor(this.themeColorAccent)
+        Text('返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
           .onClick(() => this.onBack())
-        Text('阅读总览').fontSize(18).fontWeight(FontWeight.Bold)
+        Text('阅读总览').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
           .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
-        Text(' ').fontSize(14).width(28)
+        Text(' ').fontSize(TITLE_SMALL).width(28)
       }.width('100%').padding({ left: 16, right: 16, top: 12 + this.appTopInset, bottom: 10 })
 
       // 周期选择器：日/周/月/年/总。
       Row() {
         ForEach(this.tabs, (tab: PeriodTab) => {
-          Text(tab.label).fontSize(14)
+          Text(tab.label).fontSize(TITLE_SMALL)
             .fontWeight(this.period === tab.index ? FontWeight.Bold : FontWeight.Normal)
             .fontColor(this.period === tab.index ? this.themeColorAccent : this.themeColorTextTertiary)
             .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
@@ -464,11 +465,11 @@ export struct ReadRecordOverviewPage {
       // 日期导航：ALL 档整块不渲染。
       if (this.period !== ReadPeriod.ALL) {
         Row() {
-          Text('‹').fontSize(20).fontColor(this.themeColorAccent).width(40)
+          Text('‹').fontSize(HEADLINE_SMALL).fontColor(this.themeColorAccent).width(40)
             .textAlign(TextAlign.Center).onClick(() => this.shiftDate(-1))
-          Text(this.dateLabel()).fontSize(14).fontColor(this.themeColorTextPrimary)
+          Text(this.dateLabel()).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
             .layoutWeight(1).textAlign(TextAlign.Center)
-          Text('›').fontSize(20).fontColor(this.themeColorAccent).width(40)
+          Text('›').fontSize(HEADLINE_SMALL).fontColor(this.themeColorAccent).width(40)
             .textAlign(TextAlign.Center).onClick(() => this.shiftDate(1))
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
       }
@@ -489,7 +490,7 @@ export struct ReadRecordOverviewPage {
           }).margin({ bottom: 12 })
           // 跨书热力图：时长模式、不可点，数据用全部明细聚合值。
           Column() {
-            Text('阅读热力图').fontSize(16).fontWeight(FontWeight.Medium)
+            Text('阅读热力图').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).width('100%').margin({ bottom: 10 })
             ReadRecordHeatmap({
               dailyReadCounts: this.overview().allReadCounts,

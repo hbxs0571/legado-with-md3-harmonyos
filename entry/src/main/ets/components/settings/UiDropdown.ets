@@ -1,10 +1,10 @@
+import { BODY_SMALL_EMPHASIZED, LABEL_MEDIUM_EMPHASIZED, TITLE_MEDIUM } from '../typography/TypographyTokens';
+
 import { ThemeItemDivider } from '../ThemeItemDivider';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../AppGlyph';
 import { UiMenuItem, UiMenuPanel } from '../UiMenu';
-import {
-  FONT_ROW_DETAIL, FONT_ROW_OPTION, FONT_ROW_TITLE, ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4
-} from '../UiTokens';
+import { ROW_PADDING_H, ROW_PADDING_V, SPACE_2, SPACE_4 } from '../UiTokens';
 
 /** 卡片式菜单面板宽；上游由内容驱动，本地给固定宽。 */
 const DROPDOWN_MENU_WIDTH: number = 260;
@@ -62,16 +62,16 @@ export struct UiDropdown {
     Column() {
     Row() {
       Column() {
-        Text(this.title).fontSize(FONT_ROW_TITLE).fontColor(this.themeColorTextPrimary).width('100%')
+        Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).width('100%')
         if (this.detail.length > 0) {
           Text(this.detail)
-            .fontSize(FONT_ROW_DETAIL)
+            .fontSize(BODY_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextTertiary)
             .width('100%')
             .margin({ top: SPACE_2 });
         }
         Text(this.labelOf(this.option))
-          .fontSize(FONT_ROW_OPTION)
+          .fontSize(LABEL_MEDIUM_EMPHASIZED).fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorAccent)
           .width('100%')
           .margin({ top: SPACE_4 });

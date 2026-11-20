@@ -11,7 +11,6 @@ import { ReadRecordHeatmap } from '../components/ReadRecordHeatmap';
 import { BookCover } from '../components/BookCover';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
-import { FONT_LABEL_SMALL } from '../components/UiTokens';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
 import {
   PROFILE_PAGE_SUBTITLE_SIZE,
@@ -38,6 +37,7 @@ import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { UiAction } from '../components/settings/UiAction';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const PROFILE_MENU_WIDTH: number = 260;
@@ -261,7 +261,7 @@ export struct BookSourceManagePage {
   @Builder
   private SourceSwipeEnd(row: SourceRow) {
     Row() {
-      Text('删除').fontSize(13).fontColor('#FFFFFF').padding({ left: 16, right: 16 })
+      Text('删除').fontSize(LABEL_MEDIUM).fontColor('#FFFFFF').padding({ left: 16, right: 16 })
         .backgroundColor('#C62828').height('100%')
         .onClick(() => this.deleteSource(row.source))
     }
@@ -702,7 +702,7 @@ export struct BookSourceManagePage {
       Column() {
         Row() {
           Text(row.source.bookSourceName.length > 0 ? row.source.bookSourceName : row.source.bookSourceUrl)
-            .fontSize(15).fontColor(this.themeColorTextPrimary).maxLines(1).layoutWeight(1)
+            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1).layoutWeight(1)
           if (row.hasExplore && row.exploreEnabled) {
             Row().width(7).height(7).borderRadius(4).backgroundColor('#4CAF50').margin({ left: 6 })
           }
@@ -710,10 +710,10 @@ export struct BookSourceManagePage {
         if (row.domain.length > 0 || (row.source.bookSourceGroup ?? '').length > 0) {
           Row() {
             if (row.domain.length > 0) {
-              Text(row.domain).fontSize(12).fontColor(this.themeColorTextTertiary).maxLines(1)
+              Text(row.domain).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
             }
             if ((row.source.bookSourceGroup ?? '').length > 0) {
-              Text(row.source.bookSourceGroup as string).fontSize(12).fontColor(this.themeColorTextTertiary)
+              Text(row.source.bookSourceGroup as string).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
                 .maxLines(1).margin({ left: 8 })
             }
           }.width('100%').margin({ top: 5 })
@@ -788,15 +788,15 @@ export struct BookSourceManagePage {
   private PromptDialog() {
     Column() {
       Text(this.promptAction === undefined ? '' : '输入分组名')
-        .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
       TextInput({ placeholder: '分组名', text: this.promptText })
-        .fontSize(15).fontColor(this.themeColorTextPrimary)
+        .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary)
         .onChange((value: string) => this.promptText = value)
         .margin({ top: 14 })
       Row() {
-        Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
           .onClick(() => this.promptVisible = false)
-        Text('确定').fontSize(15).fontColor('#B9C8FF').layoutWeight(1)
+        Text('确定').fontSize(LABEL_LARGE).fontColor('#B9C8FF').layoutWeight(1)
           .onClick(() => {
             const value = this.promptText.trim();
             if (value.length > 0) { this.promptAction(value); }
@@ -813,32 +813,32 @@ export struct BookSourceManagePage {
   private ImportDialog() {
     Column() {
       if (this.importStage === 'online') {
-        Text('在线导入').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        Text('在线导入').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         TextInput({ placeholder: '输入书源订阅地址（http/https）', text: this.importOnlineUrl })
-          .fontSize(14).fontColor(this.themeColorTextPrimary)
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
           .onChange((value: string) => this.importOnlineUrl = value)
           .margin({ top: 14 })
         Text('使用书源引擎的 HttpClient 拉取，支持重定向与 Cookie。')
-          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 8 })
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 8 })
         Row() {
-          Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
             .onClick(() => this.importVisible = false)
-          Text('拉取').fontSize(15).fontColor('#B9C8FF').layoutWeight(1)
+          Text('拉取').fontSize(LABEL_LARGE).fontColor('#B9C8FF').layoutWeight(1)
             .onClick(() => this.importFromOnlineUrl())
         }.width('100%').margin({ top: 18 })
       } else {
-        Text('导入选项').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        Text('导入选项').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         Text(`解析到 ${this.pendingImportRules.length} 条书源，选择保留项后导入。`)
-          .fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 10 })
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 10 })
         Column() {
           this.ImportToggleRow('保留原名', this.keepName, (v: boolean) => { this.keepName = v; })
           this.ImportToggleRow('保留分组', this.keepGroup, (v: boolean) => { this.keepGroup = v; })
           this.ImportToggleRow('保留启用状态', this.keepEnabled, (v: boolean) => { this.keepEnabled = v; })
         }.width('100%').margin({ top: 12 })
         Row() {
-          Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
             .onClick(() => this.importVisible = false)
-          Text('导入').fontSize(15).fontColor('#B9C8FF').layoutWeight(1)
+          Text('导入').fontSize(LABEL_LARGE).fontColor('#B9C8FF').layoutWeight(1)
             .onClick(() => this.commitImport())
         }.width('100%').margin({ top: 18 })
       }
@@ -849,7 +849,7 @@ export struct BookSourceManagePage {
   @Builder
   private ImportToggleRow(label: string, checked: boolean, onChange: (value: boolean) => void) {
     Row() {
-      Text(label).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      Text(label).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
       UiSwitchControl({ checked: checked, interactive: false, scaleValue: 0.8 })
         .onClick(() => onChange(!checked))
     }.width('100%').padding({ top: 10, bottom: 10 })
@@ -859,14 +859,14 @@ export struct BookSourceManagePage {
   private GroupFilterSheet() {
     Column() {
       Row() {
-        Text('分组筛选').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('清除').fontSize(14).fontColor('#B9C8FF').padding({ left: 12, right: 8, top: 8, bottom: 8 })
+        Text('分组筛选').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('清除').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding({ left: 12, right: 8, top: 8, bottom: 8 })
           .onClick(() => { this.selectedGroup = ''; this.groupFilterQuery = ''; this.showGroupFilter = false; })
       }.width('100%').padding({ left: 20, right: 16, top: 20, bottom: 12 })
       Row() {
         AppGlyph({ name: 'search', glyphSize: 18, tint: '#C5C7D0' }).margin({ right: 9 })
         TextInput({ placeholder: '搜索分组', text: this.groupFilterQuery })
-          .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor('#858792')
+          .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor('#858792')
           .backgroundColor(Color.Transparent).layoutWeight(1)
           .onChange((value: string) => this.groupFilterQuery = value)
       }.margin({ left: 16, right: 16, bottom: 10 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
@@ -875,7 +875,7 @@ export struct BookSourceManagePage {
         Column() {
           ForEach(this.groupFilterOptions(), (option: string) => {
             Row() {
-              Text(option).fontSize(15).fontColor(this.selectedGroup === option ? '#DCE3FF' : this.themeColorTextSecondary)
+              Text(option).fontSize(TITLE_MEDIUM).fontColor(this.selectedGroup === option ? '#DCE3FF' : this.themeColorTextSecondary)
                 .layoutWeight(1)
               if (this.selectedGroup === option) {
                 AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C8FF' })
@@ -934,7 +934,7 @@ export struct BookSourceManagePage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索书源…', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 })
@@ -944,11 +944,11 @@ export struct BookSourceManagePage {
       if (this.selectedGroup.length > 0 || this.searchQuery.length > 0 || this.sortMode !== '手动排序' || this.groupByDomain) {
         Row() {
           Text(this.selectedGroup.length > 0 ? this.selectedGroup : '全部')
-            .fontSize(12).fontColor('#DCE3FF').padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .fontSize(BODY_SMALL).fontColor('#DCE3FF').padding({ left: 10, right: 10, top: 5, bottom: 5 })
             .backgroundColor('#41485D').borderRadius(14)
-          Text(this.sortMode).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
+          Text(this.sortMode).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
           if (this.groupByDomain) {
-            Text('按域名分组').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
+            Text('按域名分组').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
           }
         }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 5 })
       }
@@ -975,10 +975,10 @@ export struct BookSourceManagePage {
 
           if (this.selectionMode) {
             Row() {
-              Text(`已选 ${this.selectedUrls.size} 项`).fontSize(14).fontColor('#151720').layoutWeight(1)
-              Text('批量操作').fontSize(14).fontColor('#151720')
+              Text(`已选 ${this.selectedUrls.size} 项`).fontSize(TITLE_SMALL).fontColor('#151720').layoutWeight(1)
+              Text('批量操作').fontSize(TITLE_SMALL).fontColor('#151720')
                 .onClick(() => { this.batchPanelVisible = true; })
-              Text('取消').fontSize(14).fontColor('#333').margin({ left: 16 })
+              Text('取消').fontSize(TITLE_SMALL).fontColor('#333').margin({ left: 16 })
                 .onClick(() => { this.selectionMode = false; this.selectedUrls = new Set<string>(); })
             }.padding({ left: 18, right: 18, top: 12, bottom: 12 })
               .backgroundColor('#B9C8FF').borderRadius(16)
@@ -986,7 +986,7 @@ export struct BookSourceManagePage {
           } else {
             Row() {
               Image($r('app.media.app_add')).width(18).height(18).fillColor('#151720')
-              Text('添加书源').fontSize(15).fontColor('#151720').margin({ left: 7 })
+              Text('添加书源').fontSize(LABEL_LARGE).fontColor('#151720').margin({ left: 7 })
             }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
               .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 })
               .onClick(() => this.onOpenSourceEdit(''))
@@ -1189,18 +1189,18 @@ export struct ReplaceRulesPage {
     } else if (this.ruleActionSheet === 'confirmDelete') {
       // 删除确认：批量删除与长按菜单的单条删除共用，确认前不动数据。
       Column() {
-        Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        Text('删除规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .width('100%').padding({ left: 18, right: 18, top: 16, bottom: 10 })
         Text(this.pendingDeleteIds.length > 1
           ? `确定删除选中的 ${this.pendingDeleteIds.length} 条替换规则？删除后可通过导入恢复。`
           : '确定删除这条替换规则？删除后可通过导入恢复。')
-          .fontSize(14).fontColor(this.themeColorTextTertiary)
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
           .width('100%').padding({ left: 18, right: 18, bottom: 20 })
         Row() {
-          Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 14, bottom: 14 })
             .onClick(() => this.cancelDelete())
-          Text('删除').fontSize(15).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
+          Text('删除').fontSize(LABEL_LARGE).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 14, bottom: 14 })
             .onClick(() => this.confirmDelete())
         }.width('100%').padding({ left: 8, right: 8, bottom: 12 })
@@ -1209,25 +1209,25 @@ export struct ReplaceRulesPage {
       Column() {
         Row() {
           Text(this.ruleActionSheet === 'manual' ? '手动输入规则' : '导入替换规则')
-            .fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+            .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40).onClick(() => this.ruleActionSheet = '')
         }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
         if (this.ruleActionSheet === 'manual') {
           Column() {
-            Text('粘贴规则文本').fontSize(13).fontColor(this.themeColorTextTertiary).margin({ bottom: 8 })
+            Text('粘贴规则文本').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ bottom: 8 })
             TextArea({ placeholder: '粘贴 JSON 规则数组或单条规则对象', text: this.manualInput })
-              .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor('#22232A').borderRadius(12)
               .width('100%').height(220).padding(12)
               .onChange((value: string) => this.manualInput = value)
             Row() {
-              Text('清空').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+              Text('清空').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
                 .onClick(() => this.manualInput = '')
-              Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+              Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
                 .onClick(() => { this.manualInput = ''; this.ruleActionSheet = 'import'; })
-              Text('导入').fontSize(15).fontColor(this.manualInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+              Text('导入').fontSize(LABEL_LARGE).fontColor(this.manualInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
                 .onClick(() => this.submitManualImport())
             }.width('100%').margin({ top: 12 })
           }.width('100%').padding({ left: 16, right: 16, bottom: 20 })
@@ -1236,8 +1236,8 @@ export struct ReplaceRulesPage {
             Row() {
               AppGlyph({ name: 'folder', glyphSize: 20, tint: this.themeColorAccent }).margin({ right: 12 })
               Column() {
-                Text('选择本地文件').fontSize(15).fontColor(this.themeColorTextPrimary)
-                Text('支持 JSON、TXT 规则文件').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                Text('选择本地文件').fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary)
+                Text('支持 JSON、TXT 规则文件').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start)
             }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
               .backgroundColor('#22232A').borderRadius(12)
@@ -1245,8 +1245,8 @@ export struct ReplaceRulesPage {
             Row() {
               AppGlyph({ name: 'edit', glyphSize: 20, tint: this.themeColorAccent }).margin({ right: 12 })
               Column() {
-                Text('手动输入').fontSize(15).fontColor(this.themeColorTextPrimary)
-                Text('粘贴规则文本或链接').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                Text('手动输入').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+                Text('粘贴规则文本或链接').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start)
             }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
               .backgroundColor('#22232A').borderRadius(12).margin({ top: 8, bottom: 18 })
@@ -1432,7 +1432,7 @@ export struct ReplaceRulesPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_replace_rule_search')
             .onAppear(() => focusControl.requestFocus('my_replace_rule_search'))
@@ -1473,10 +1473,10 @@ export struct ReplaceRulesPage {
                   }).margin({ right: 12 })
                 }
                 Column() {
-                  Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(15).fontColor(this.themeColorTextPrimary)
+                  Text(rule.name.length > 0 ? rule.name : rule.pattern).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
                     .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(`${rule.group} · ${rule.scopeContent ? '正文' : ''}${rule.scopeTitle ? ' 标题' : ''}`)
-                    .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+                    .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                 if (!this.selectionMode) {
                   UiSwitchControl({
@@ -1511,31 +1511,31 @@ export struct ReplaceRulesPage {
       if (this.selectionMode) {
         Row() {
           Text(this.selectedRuleIds.length === 0 ? '取消' : `已选择 ${this.selectedRuleIds.length} 项`)
-            .fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
             .onClick(() => this.exitSelection())
-          Text('全选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 10, right: 10 })
+          Text('全选').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding({ left: 10, right: 10 })
             .onClick(() => this.selectAllVisible())
-          Text('反选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 0, right: 10 })
+          Text('反选').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding({ left: 0, right: 10 })
             .onClick(() => this.invertSelection())
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 4 })
         Row() {
-          Text('启用').fontSize(14)
+          Text('启用').fontSize(TITLE_SMALL)
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(true))
-          Text('停用').fontSize(14).margin({ left: 18 })
+          Text('停用').fontSize(TITLE_SMALL).margin({ left: 18 })
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(false))
-          Text('置顶').fontSize(14).margin({ left: 18 })
+          Text('置顶').fontSize(TITLE_SMALL).margin({ left: 18 })
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchMove(true))
-          Text('置底').fontSize(14).margin({ left: 18 })
+          Text('置底').fontSize(TITLE_SMALL).margin({ left: 18 })
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchMove(false))
-          Text('导出').fontSize(14).margin({ left: 18 })
+          Text('导出').fontSize(TITLE_SMALL).margin({ left: 18 })
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchExport())
           Blank().layoutWeight(1)
-          Text('删除').fontSize(14)
+          Text('删除').fontSize(TITLE_SMALL)
             .fontColor(this.selectedRuleIds.length > 0 ? '#D99AA5' : '#5C5E68')
             .onClick(() => this.submitBatchRemove())
         }.width('100%').padding({ left: 16, right: 16, top: 2, bottom: 10 })
@@ -1713,10 +1713,10 @@ export struct ReplaceRuleEditPage {
       // 「清空」「试跑」放在标题栏里：键盘弹出时半模态面板被压到很矮，
       // 只有标题栏始终可见，放在底部或滚动区内都会被裁掉点不到。
       Row() {
-        Text('测试规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('清空').fontSize(15).fontColor(this.themeColorTextTertiary).margin({ right: 18 })
+        Text('测试规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('清空').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).margin({ right: 18 })
           .onClick(() => { this.testSource = ''; this.clearRuleTest(); })
-        Text('试跑').fontSize(15).fontColor(this.testSource.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+        Text('试跑').fontSize(LABEL_LARGE).fontColor(this.testSource.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
           .margin({ right: 8 })
           .onClick(() => this.runRuleTest())
         Stack({ alignContent: Alignment.Center }) {
@@ -1724,20 +1724,20 @@ export struct ReplaceRuleEditPage {
         }.width(40).height(40).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 8 })
       Text('只对已保存并启用的正文规则试跑，编辑中的改动需要先保存')
-        .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').padding({ left: 18, right: 18, bottom: 10 })
+        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding({ left: 18, right: 18, bottom: 10 })
       Scroll() {
         Column() {
           TextArea({ placeholder: '粘贴一段正文用于试跑', text: this.testSource })
-            .fontSize(14).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor('#22232A').borderRadius(12)
             .width('100%').height(140).padding(12)
             .onChange((value: string) => { this.testSource = value; this.clearRuleTest(); })
           if (this.testHasRun) {
-            Text(this.testError).fontSize(13)
+            Text(this.testError).fontSize(LABEL_MEDIUM)
               .fontColor(this.testError.startsWith('当前没有') ? this.themeColorTextTertiary : this.themeColorTextSecondary)
               .width('100%').textAlign(TextAlign.Start).margin({ top: 16 })
             if (this.testOutput.length > 0) {
-              Text(this.testOutput).fontSize(14).fontColor(this.themeColorTextPrimary)
+              Text(this.testOutput).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
                 .width('100%').textAlign(TextAlign.Start).padding(12).margin({ top: 10 })
                 .backgroundColor('#22232A').borderRadius(12)
             }
@@ -1856,9 +1856,9 @@ export struct ReplaceRuleEditPage {
   @Builder
   private RuleField(label: string, value: string, field: string, placeholder: string) {
     Column() {
-      Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      Text(label).fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       TextInput({ placeholder: placeholder, text: value })
-        .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+        .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
         .height(52).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
         .width('100%')
         .onFocus(() => { this.activeField = field; this.keyboardVisible = true; })
@@ -1939,11 +1939,11 @@ export struct ReplaceRuleEditPage {
             Column() {
               Row() {
                 Blank().width(14)
-                Text('分组').fontSize(14).fontColor('#C3C5CD').textAlign(TextAlign.Start)
+                Text('分组').fontSize(TITLE_SMALL).fontColor('#C3C5CD').textAlign(TextAlign.Start)
               }.width('100%')
               Row() {
                 Blank().width(14)
-                Text(this.group).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                Text(this.group).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
                 AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextSecondary })
                 Blank().width(14)
               }.width('100%')
@@ -1979,9 +1979,9 @@ export struct ReplaceRuleEditPage {
           this.RuleField('特定范围', this.scope, 'scope', '指定规则适用的范围')
           this.RuleField('排除范围', this.excludeScope, 'excludeScope', '指定规则不适用的范围')
           Column() {
-            Text('超时 (ms)').fontSize(14).fontColor('#C3C5CD').width('100%').textAlign(TextAlign.Start)
+            Text('超时 (ms)').fontSize(TITLE_SMALL).fontColor('#C3C5CD').width('100%').textAlign(TextAlign.Start)
             TextInput({ text: this.timeout, placeholder: '3000' })
-              .fontSize(16).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
+              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
               .height(30).padding({ left: 0, right: 0 }).width('100%')
               .onFocus(() => { this.activeField = 'timeout'; this.keyboardVisible = true; })
               .onBlur(() => this.keyboardVisible = false)
@@ -1996,7 +1996,7 @@ export struct ReplaceRuleEditPage {
         Scroll() {
           Row() {
             ForEach(['.*', '\\d+', '\\w+', '[]', '()', '^', '$', '|', '{}', '<>'], (symbol: string) => {
-              Text(symbol).fontSize(14).fontColor(this.themeColorTextSecondary).padding({ left: 10, right: 10, top: 7, bottom: 7 })
+              Text(symbol).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).padding({ left: 10, right: 10, top: 7, bottom: 7 })
                 .backgroundColor('#303139').borderRadius(18).margin({ right: 7 })
                 .onClick(() => this.insertQuickText(symbol))
             })
@@ -2099,7 +2099,7 @@ export struct ReplaceRuleGroupSheet {
   build() {
     Column() {
       Row() {
-        Text('分组管理').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('分组管理').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onClose())
@@ -2109,7 +2109,7 @@ export struct ReplaceRuleGroupSheet {
           ForEach(this.customGroups(), (group: string) => {
             Column() {
               Row() {
-                Text(group).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                Text(group).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
                 AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
                   .onClick(() => {
                     if (this.groupEditing === group) {
@@ -2125,13 +2125,13 @@ export struct ReplaceRuleGroupSheet {
               if (this.groupEditing === group) {
                 Row() {
                   TextInput({ placeholder: '输入新的分组名称', text: this.groupInput })
-                    .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                    .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
                     .backgroundColor(Color.Transparent).layoutWeight(1).height(44)
                     .onChange((value: string) => this.groupInput = value)
-                  Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary).padding({ left: 8, right: 8 })
+                  Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).padding({ left: 8, right: 8 })
                     .onClick(() => this.cancelEditing())
                   Text('保存')
-                    .fontSize(13).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+                    .fontSize(LABEL_MEDIUM).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
                     .padding({ left: 8 })
                     .onClick(() => this.submitRename())
                 }.width('100%')
@@ -2156,7 +2156,7 @@ struct ReplaceScopeChip {
       if (this.selected) {
         AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorTextSecondary }).margin({ right: 5 })
       }
-      Text(this.label).fontSize(14).fontColor(this.themeColorTextSecondary)
+      Text(this.label).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
     }.padding({ left: 12, right: 12, top: 7, bottom: 7 })
       .backgroundColor(this.selected ? '#3A4054' : Color.Transparent).borderRadius(12)
       .border({ width: 1, color: '#51535D' }).margin({ right: 8 }).onClick(() => this.onSelect())
@@ -2248,9 +2248,9 @@ struct RuleListBody {
   build() {
     if (this.visibleRules().length === 0) {
       Column() {
-        Text('(；′⌒`)').fontSize(32).fontColor(this.themeColorTextPrimary)
+        Text('(；′⌒`)').fontSize(HEADLINE_LARGE).fontColor(this.themeColorTextPrimary)
         Text(this.query.length > 0 ? '没有匹配的规则' : this.emptyMessage)
-          .fontSize(14).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
+          .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
     } else {
       Scroll() {
@@ -2263,8 +2263,8 @@ struct RuleListBody {
                   .margin({ right: 12 })
               }
               Column() {
-                Text(rule.title).fontSize(16).fontColor(rule.enabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
-                Text(rule.detail).fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 4 }).maxLines(2)
+                Text(rule.title).fontSize(BODY_MEDIUM).fontColor(rule.enabled ? this.themeColorTextPrimary : this.themeColorTextTertiary)
+                Text(rule.detail).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 4 }).maxLines(2)
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               if (this.sortMode) {
                 Image($r('app.media.reader_reorder_up')).width(18).height(18).fillColor(this.themeColorAccent)
@@ -2623,7 +2623,7 @@ export struct TxtTocRulesPage {
       Row() {
         AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary }).padding({ right: 12 })
           .onClick(() => this.showAddRule = false)
-        Text(this.editingExisting ? '编辑目录规则' : 'TXT 目录规则').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text(this.editingExisting ? '编辑目录规则' : 'TXT 目录规则').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
           .onClick(() => { this.editMoreMenuVisible = !this.editMoreMenuVisible; })
 .bindPopup(this.editMoreMenuVisible, {
@@ -2638,37 +2638,37 @@ export struct TxtTocRulesPage {
       }.width('100%').padding({ left: 18, right: 16, top: 8, bottom: 12 })
       Scroll() {
         Column() {
-          Text('名称').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start)
+          Text('名称').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start)
           TextInput({ placeholder: '名称', text: this.ruleName })
-            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.ruleName = value; this.clearRuleTest(); })
-          Text('章节正则').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
+          Text('章节正则').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '章节正则', text: this.chapterRegex })
-            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.chapterRegex = value; this.clearRuleTest(); })
-          Text('示例').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
+          Text('示例').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextArea({ placeholder: '示例', text: this.exampleText })
-            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).height(96).padding(12).width('100%')
             .onChange((value: string) => { this.exampleText = value; this.clearRuleTest(); })
-          Text('分卷正则').fontSize(14).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
+          Text('分卷正则').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '分卷正则', text: this.volumeRegex })
-            .fontSize(15).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.volumeRegex = value; this.clearRuleTest(); })
           if (this.testHasRun) {
             if (this.testError.length > 0) {
-              Text(this.testError).fontSize(14).fontColor('#FF8A80').width('100%').textAlign(TextAlign.Start).margin({ top: 14 })
+              Text(this.testError).fontSize(TITLE_SMALL).fontColor('#FF8A80').width('100%').textAlign(TextAlign.Start).margin({ top: 14 })
             } else {
               Text(`${this.testResults.filter((item: TxtRuleTestLine) => item.matched).length} / ${this.testResults.length}`)
-                .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start).margin({ top: 14, bottom: 6 })
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start).margin({ top: 14, bottom: 6 })
               ForEach(this.testResults, (item: TxtRuleTestLine, index: number) => {
                 Row() {
                   AppGlyph({ name: item.matched ? 'profileCheck' : 'profileClose', glyphSize: 18,
                     tint: item.matched ? this.themeColorAccent : '#FF8A80' }).margin({ right: 8 })
-                  Text(item.line.length > 0 ? item.line : '（空行）').fontSize(13)
+                  Text(item.line.length > 0 ? item.line : '（空行）').fontSize(LABEL_MEDIUM)
                     .fontColor(item.matched ? this.themeColorTextSecondary : this.themeColorTextTertiary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                 }.width('100%')
               }, (item: TxtRuleTestLine, index: number) => `txt_rule_test_${index}`)
@@ -2679,7 +2679,7 @@ export struct TxtTocRulesPage {
       Row() {
         Row() {
           AppGlyph({ name: 'profileRunningWithErrors', glyphSize: 20, tint: this.themeColorTextPrimary })
-          Text('测试').fontSize(14).fontColor(this.themeColorTextPrimary).margin({ left: 7 })
+          Text('测试').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).margin({ left: 7 })
         }.padding({ left: 14, right: 14, top: 10, bottom: 10 }).backgroundColor('#34353D').borderRadius(22)
           .onClick(() => this.runRuleTest())
         if (this.showPasteAuthorization) {
@@ -2784,7 +2784,7 @@ export struct TxtTocRulesPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索 TXT 目录规则', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_txt_toc_search')
             .onAppear(() => focusControl.requestFocus('my_txt_toc_search'))
@@ -2796,25 +2796,25 @@ export struct TxtTocRulesPage {
       if (this.selectionMode) {
         Row() {
           Text(this.selectedRuleIds.length === 0 ? '取消' : `已选择 ${this.selectedRuleIds.length} 项`)
-            .fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
             .onClick(() => this.exitSelection())
-          Text('全选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 10, right: 10 })
+          Text('全选').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding({ left: 10, right: 10 })
             .onClick(() => this.selectAllVisible())
-          Text('反选').fontSize(14).fontColor(this.themeColorAccent).padding({ left: 0, right: 10 })
+          Text('反选').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding({ left: 0, right: 10 })
             .onClick(() => this.invertSelection())
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 4 })
         Row() {
-          Text('启用').fontSize(14)
+          Text('启用').fontSize(TITLE_SMALL)
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(true))
-          Text('停用').fontSize(14).margin({ left: 18 })
+          Text('停用').fontSize(TITLE_SMALL).margin({ left: 18 })
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchEnabled(false))
-          Text('导出').fontSize(14).margin({ left: 18 })
+          Text('导出').fontSize(TITLE_SMALL).margin({ left: 18 })
             .fontColor(this.selectedRuleIds.length > 0 ? this.themeColorAccent : '#5C5E68')
             .onClick(() => this.submitBatchExport())
           Blank().layoutWeight(1)
-          Text('删除').fontSize(14)
+          Text('删除').fontSize(TITLE_SMALL)
             .fontColor(this.selectedRuleIds.length > 0 ? '#D99AA5' : '#5C5E68')
             .onClick(() => this.requestDelete(this.selectedNumericIds()))
         }.width('100%').padding({ left: 18, right: 18, top: 2, bottom: 10 })
@@ -2881,18 +2881,18 @@ export struct TxtTocRulesPage {
   @Builder
   private DeleteConfirmSheet() {
     Column() {
-      Text('删除规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('删除规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 18, right: 18, top: 16, bottom: 10 })
       Text(this.pendingDeleteIds.length > 1
         ? `确定删除选中的 ${this.pendingDeleteIds.length} 条目录规则？删除后可通过导入恢复。`
         : '确定删除这条目录规则？删除后可通过导入恢复。')
-        .fontSize(14).fontColor(this.themeColorTextTertiary)
+        .fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
         .width('100%').padding({ left: 18, right: 18, bottom: 20 })
       Row() {
-        Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1).textAlign(TextAlign.Center)
           .padding({ top: 14, bottom: 14 })
           .onClick(() => this.cancelDelete())
-        Text('删除').fontSize(15).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
+        Text('删除').fontSize(LABEL_LARGE).fontColor('#D99AA5').layoutWeight(1).textAlign(TextAlign.Center)
           .padding({ top: 14, bottom: 14 })
           .onClick(() => this.confirmDelete())
       }.width('100%').padding({ left: 8, right: 8, bottom: 12 })
@@ -3017,14 +3017,14 @@ export struct DictionaryRulesPage {
   @Builder
   private DictionaryEditorField(label: string, value: string, field: string, multiline: boolean = false) {
     Column() {
-      Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      Text(label).fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       if (multiline) {
-        TextArea({ placeholder: '', text: value }).fontSize(16).fontColor(this.themeColorTextPrimary)
+        TextArea({ placeholder: '', text: value }).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
           .height(120).backgroundColor('#24252C').borderRadius(8)
           .padding({ left: 14, right: 14, top: 14 }).width('100%')
           .onChange((text: string) => this.updateDictionaryField(field, text))
       } else {
-        TextInput({ placeholder: '', text: value }).fontSize(16).fontColor(this.themeColorTextPrimary)
+        TextInput({ placeholder: '', text: value }).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
           .height(54).backgroundColor('#24252C').borderRadius(8)
           .padding({ left: 14, right: 14 }).width('100%')
           .onChange((text: string) => this.updateDictionaryField(field, text))
@@ -3050,7 +3050,7 @@ export struct DictionaryRulesPage {
   private DictionaryRuleSheet() {
     Column() {
       Row() {
-        Text('字典规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('字典规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
@@ -3165,7 +3165,7 @@ export struct DictionaryRulesPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索字典规则', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_dictionary_rule_search')
             .onAppear(() => focusControl.requestFocus('my_dictionary_rule_search'))
@@ -3176,9 +3176,9 @@ export struct DictionaryRulesPage {
 
       if (this.selectionMode && this.selectedRuleIds.length > 0) {
         Row() {
-          Text('全选').fontSize(14).fontColor(this.themeColorAccent).onClick(() =>
+          Text('全选').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() =>
             this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
-          Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
+          Text('删除').fontSize(TITLE_SMALL).fontColor('#F0A6A6').margin({ left: 18 })
             .onClick(() => this.onUnavailableAction('字典规则删除尚未迁移，未更改数据'))
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
       }
@@ -3307,15 +3307,15 @@ export struct DictionaryRuleEditPage {
   @Builder
   private RuleField(label: string, value: string, field: string, multiline: boolean = false) {
     Column() {
-      Text(label).fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      Text(label).fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       if (multiline) {
         TextArea({ placeholder: '', text: value })
-          .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .height(120).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14, top: 14 })
           .width('100%').onChange((text: string) => this.updateField(field, text))
       } else {
         TextInput({ placeholder: '', text: value })
-          .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .height(58).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
           .width('100%').onChange((text: string) => this.updateField(field, text))
       }
@@ -3521,7 +3521,7 @@ export struct HighlightTagRulesPage {
   private TagRuleEditorSheet() {
     Column() {
       Row() {
-        Text('添加规则').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('添加规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
@@ -3541,18 +3541,18 @@ export struct HighlightTagRulesPage {
       }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
       Scroll() {
         Column() {
-          Text('标题（可选）').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
-          TextInput({ placeholder: '', text: this.draftTitle }).fontSize(16).fontColor(this.themeColorTextPrimary)
+          Text('标题（可选）').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          TextInput({ placeholder: '', text: this.draftTitle }).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
             .height(54).backgroundColor('#24252C').borderRadius(8)
             .padding({ left: 14, right: 14 }).width('100%')
             .onChange((value: string) => this.draftTitle = value)
-          Text('匹配规则').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3, top: 8 })
-          TextArea({ placeholder: '', text: this.draftPattern }).fontSize(16).fontColor(this.themeColorTextPrimary)
+          Text('匹配规则').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3, top: 8 })
+          TextArea({ placeholder: '', text: this.draftPattern }).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
             .height(120).backgroundColor('#24252C').borderRadius(8)
             .padding({ left: 14, right: 14, top: 14 }).width('100%')
             .onChange((value: string) => this.draftPattern = value)
           Row() {
-            Text('已启用').fontSize(16).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+            Text('已启用').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
             UiSwitchControl({
               checked: this.draftEnabled,
               interactive: false,
@@ -3617,7 +3617,7 @@ export struct HighlightTagRulesPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索标签规则', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_highlight_tag_search')
             .onAppear(() => focusControl.requestFocus('my_highlight_tag_search'))
@@ -3628,9 +3628,9 @@ export struct HighlightTagRulesPage {
 
       if (this.selectionMode && this.selectedRuleIds.length > 0) {
         Row() {
-          Text('全选').fontSize(14).fontColor(this.themeColorAccent).onClick(() =>
+          Text('全选').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() =>
             this.selectedRuleIds = this.rules.map((rule: RuleListEntry) => rule.id))
-          Text('删除').fontSize(14).fontColor('#F0A6A6').margin({ left: 18 })
+          Text('删除').fontSize(TITLE_SMALL).fontColor('#F0A6A6').margin({ left: 18 })
             .onClick(() => this.onUnavailableAction('标签规则删除尚未迁移，未更改数据'))
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
       }
@@ -3781,20 +3781,20 @@ export struct HighlightTagRuleEditPage {
         .width('100%').padding({ left: 14, right: 0, top: 12 })
       Scroll() {
         Column() {
-          Text('标题（可选）').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          Text('标题（可选）').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
           TextInput({ placeholder: '', text: this.title })
-            .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .height(58).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 }).width('100%')
             .onChange((value: string) => this.title = value)
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
-          Text('匹配规则').fontSize(14).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          Text('匹配规则').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
           TextArea({ placeholder: '', text: this.pattern })
-            .fontSize(16).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .height(120).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14, top: 14 }).width('100%')
             .onChange((value: string) => this.pattern = value)
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
           Row() {
-            Text('已启用').fontSize(16).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+            Text('已启用').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
             UiSwitchControl({
               checked: this.ruleEnabled,
               interactive: false,
@@ -3999,9 +3999,9 @@ export struct AllBookmarksPage {
   @Builder
   private BookmarkEmptyMessage(message: string) {
     Column() {
-      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(32).fontColor(this.themeColorTextPrimary)
+      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(HEADLINE_LARGE).fontColor(this.themeColorTextPrimary)
         .textAlign(TextAlign.Center).onClick(() => this.randomizeEmptyFace())
-      Text(message).fontSize(14).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2)
+      Text(message).fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2)
         .margin({ top: 2 })
     }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       .padding({ left: 16, right: 16 })
@@ -4051,7 +4051,7 @@ export struct AllBookmarksPage {
           TextInput({ placeholder: this.selectedBookKey.length === 0
             ? '搜索笔记内容'
             : `搜索当前${this.selectedTab === 0 ? '书签' : '笔记'}`, text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_bookmark_search')
             .onAppear(() => focusControl.requestFocus('my_bookmark_search'))
@@ -4148,13 +4148,13 @@ struct BookmarkOverviewCard {
   build() {
     Row() {
       Column() {
-        Text(this.book.title).fontSize(17).fontColor(this.themeColorTextSecondary).maxLines(2)
-        if (this.book.author.length > 0) { Text(this.book.author).fontSize(14).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
+        Text(this.book.title).fontSize(BODY_LARGE).fontColor(this.themeColorTextSecondary).maxLines(2)
+        if (this.book.author.length > 0) { Text(this.book.author).fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).margin({ top: 3 }) }
         // 上游 feature_bookmarks_counts：「%1$d 个书签 · %2$d 个笔记」
-        Text(`${this.book.bookmarkCount} 个书签 · ${this.book.noteCount} 个笔记`).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+        Text(`${this.book.bookmarkCount} 个书签 · ${this.book.noteCount} 个笔记`).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
         // 上游 feature_bookmarks_match_hint：搜索命中笔记时用主色提示「包含匹配笔记，点击查看」
         if (this.matchedMarkingId.length > 0) {
-          Text('包含匹配笔记，点击查看').fontSize(12).fontColor(this.themeColorAccent).margin({ top: 2 })
+          Text('包含匹配笔记，点击查看').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).margin({ top: 2 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       // 上游 CoilBookCover width(52.dp)：封面占位与宽度与书架一致
@@ -4191,15 +4191,15 @@ struct BookmarkEntryCard {
       Row() {
         // 上游：章名为空时回退「第 N 章」（feature_bookmarks_chapter_fallback，用 chapterIndex + 1）
         Text(this.entry.chapterName.length > 0 ? this.entry.chapterName : `第 ${this.entry.chapterIndex + 1} 章`)
-          .fontSize(14).fontColor(this.themeColorAccent).maxLines(1).layoutWeight(1)
+          .fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).maxLines(1).layoutWeight(1)
         // 上游 marks_other_source：`bookUrl.isNotBlank() && bookUrl != book?.bookUrl`
         // 记录属于别的书源时标红提示，避免误以为当前书里找不到。
         if (this.entry.sourceUrl.length > 0 && this.entry.sourceUrl !== this.currentSourceUrl) {
-          Text('其他书源').fontSize(12).fontColor('#E57373').margin({ left: 6 })
+          Text('其他书源').fontSize(BODY_SMALL).fontColor('#E57373').margin({ left: 6 })
         }
       }.width('100%')
-      if (this.entry.excerpt.length > 0) { Text(this.entry.excerpt).fontSize(14).fontColor(this.themeColorTextSecondary).maxLines(3).margin({ top: 6 }) }
-      if (this.entry.note.length > 0) { Text(this.entry.note).fontSize(14).fontColor(this.themeColorTextTertiary).maxLines(3).margin({ top: 4 }) }
+      if (this.entry.excerpt.length > 0) { Text(this.entry.excerpt).fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).maxLines(3).margin({ top: 6 }) }
+      if (this.entry.note.length > 0) { Text(this.entry.note).fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).maxLines(3).margin({ top: 4 }) }
     }.width('100%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14).margin({ bottom: 8 })
       .onClick(() => this.onSelect())
       .gesture(LongPressGesture().onAction(() => this.onJump()))
@@ -4366,10 +4366,10 @@ export struct ReadRecordsPage {
   @Builder
   private dateHeaderBuilder(dateKey: string, duration: string) {
     Row() {
-      Text(ReadRecordRepository.formatFriendlyDate(dateKey)).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
+      Text(ReadRecordRepository.formatFriendlyDate(dateKey)).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
       Blank()
       if (duration.length > 0) {
-        Text(duration).fontSize(13).fontColor(this.themeColorAccent)
+        Text(duration).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
       }
     }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
   }
@@ -4943,11 +4943,11 @@ export struct ReadRecordsPage {
   @Builder
   private ReadRecordEmptyMessage(message: string) {
     Column() {
-      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(32).fontColor(this.themeColorTextPrimary)
+      Text(BOOKMARK_EMPTY_FACES[this.emptyFaceIndex]).fontSize(HEADLINE_LARGE).fontColor(this.themeColorTextPrimary)
         .textAlign(TextAlign.Center).onClick(() => {
           this.emptyFaceIndex = Math.floor(Math.random() * BOOKMARK_EMPTY_FACES.length);
         })
-      Text(message).fontSize(14).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2).margin({ top: 2 })
+      Text(message).fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2).margin({ top: 2 })
     }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       .padding({ left: 16, right: 16 })
   }
@@ -5008,7 +5008,7 @@ export struct ReadRecordsPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '搜索', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_read_record_search')
             .onAppear(() => focusControl.requestFocus('my_read_record_search'))
@@ -5021,8 +5021,8 @@ export struct ReadRecordsPage {
       if (this.selectedDateKey.length > 0) {
         Row() {
           Text(`只看 ${ReadRecordRepository.formatFriendlyDate(this.selectedDateKey)} 的记录`)
-            .fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-          Text('查看全部').fontSize(13).fontColor(this.themeColorAccent)
+            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+          Text('查看全部').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
             .onClick(() => { this.selectedDateKey = ''; })
         }.width('calc(100% - 32vp)').padding({ left: 14, right: 14, top: 10, bottom: 10 })
           .margin({ left: 16, right: 16, top: 8 })
@@ -5041,12 +5041,12 @@ export struct ReadRecordsPage {
             // 「阅读总成就」不是日期分组，用普通 ListItem 平铺在最前面。
             ListItem() {
               Column() {
-                Text('阅读总成就').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                Text('阅读总成就').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
                 Row() {
-                  Text(`${this.getSummaryBookCount()} 本书`).fontSize(20).fontColor(this.themeColorAccent)
+                  Text(`${this.getSummaryBookCount()} 本书`).fontSize(HEADLINE_SMALL).fontColor(this.themeColorAccent)
                   Blank()
                   Text(this.formatRecordDuration(this.getSummaryDuration()))
-                    .fontSize(16).fontColor(this.themeColorTextSecondary)
+                    .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
                 }.width('100%').margin({ top: 12 })
               }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
                 .margin({ left: 16, right: 16, bottom: 10 }).onClick(() => this.showCalendarSheet = true)
@@ -5070,13 +5070,13 @@ export struct ReadRecordsPage {
                           Column() {
                             // 锁定行书名/作者/时长一律空串（上游只留模糊封面，不留占位条与「已隐藏」字样）。
                             Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookName)
-                              .fontSize(16).fontColor(this.themeColorTextPrimary)
+                              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
                             Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookAuthor)
-                              .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                              .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                           Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? ''
                             : this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
-                            .fontSize(13).fontColor(this.themeColorAccent)
+                            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                         }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.aggregateKey(detail, dateKey)) ? '#48577D' : Color.Transparent)
@@ -5111,13 +5111,13 @@ export struct ReadRecordsPage {
                           Column() {
                             // 锁定行书名/作者/时长一律空串（上游只留模糊封面，不留占位条与「已隐藏」字样）。
                             Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookName)
-                              .fontSize(16).fontColor(this.themeColorTextPrimary)
+                              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
                             Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? '' : detail.bookAuthor)
-                              .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                              .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                           Text(this.isRecordLocked(detail.bookName, detail.bookAuthor) ? ''
                             : this.formatRecordDuration(this.getSummaryBookDurationForDate(dateKey, detail.bookName, detail.bookAuthor)))
-                            .fontSize(13).fontColor(this.themeColorAccent)
+                            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                         }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.aggregateKey(detail, dateKey)) ? '#48577D' : Color.Transparent)
@@ -5155,7 +5155,7 @@ export struct ReadRecordsPage {
                     if (this.isInSelectionMode()) {
                       ListItem() {
                         Row() {
-                          Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor(this.themeColorAccent)
+                          Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                             .width(56)
                           // 行首封面：上游 TimelineSessionItem（ReadRecordScreen.kt:1254）同为 44dp 宽 5:7。
                           BookCover({
@@ -5168,15 +5168,15 @@ export struct ReadRecordsPage {
                           Column() {
                             // 锁定行书名/作者/章号一律空串，只留封面上的「已加密」蒙层。
                             Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
-                              .fontSize(16).fontColor(this.themeColorTextPrimary)
+                              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
                             Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
-                              .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                              .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                             if (!this.isRecordLocked(record.bookName, record.bookAuthor) && this.chapterLabelOf(record).length > 0) {
-                              Text(this.chapterLabelOf(record)).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                              Text(this.chapterLabelOf(record)).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                             }
                           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                           Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
-                            : this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
+                            : this.formatRecordDuration(record.durationMs)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
                         }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
@@ -5198,7 +5198,7 @@ export struct ReadRecordsPage {
                     } else {
                       ListItem() {
                         Row() {
-                          Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(13).fontColor(this.themeColorAccent)
+                          Text(this.formatRecordDate(record.startTime).substring(11)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                             .width(56)
                           // 行首封面：上游 TimelineSessionItem（ReadRecordScreen.kt:1254）同为 44dp 宽 5:7。
                           BookCover({
@@ -5211,15 +5211,15 @@ export struct ReadRecordsPage {
                           Column() {
                             // 锁定行书名/作者/章号一律空串，只留封面上的「已加密」蒙层。
                             Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
-                              .fontSize(16).fontColor(this.themeColorTextPrimary)
+                              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
                             Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
-                              .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                              .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                             if (!this.isRecordLocked(record.bookName, record.bookAuthor) && this.chapterLabelOf(record).length > 0) {
-                              Text(this.chapterLabelOf(record)).fontSize(11).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                              Text(this.chapterLabelOf(record)).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                             }
                           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                           Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
-                            : this.formatRecordDuration(record.durationMs)).fontSize(13).fontColor(this.themeColorTextSecondary)
+                            : this.formatRecordDuration(record.durationMs)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
                         }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
                           .border({ width: { top: 1 }, color: this.themeColorSurfacePrimary })
                           .backgroundColor(this.selectedKeys.has(this.timelineKey(record)) ? '#48577D' : Color.Transparent)
@@ -5265,22 +5265,22 @@ export struct ReadRecordsPage {
                         Column() {
                           // 锁定行只留封面上的「已加密」蒙层，行内文字区一律空白。
                           Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
-                            .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                            .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
                           Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
-                            .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+                            .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                         Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
                           : this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
-                          .fontSize(13).fontColor(this.themeColorAccent)
+                          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                         // 「合并」是行内文字，锁定态一并隐去。
                         if (!this.isRecordLocked(record.bookName, record.bookAuthor)) {
-                          Text('合并').fontSize(12).fontColor(this.themeColorAccent)
+                          Text('合并').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
                             .padding({ left: 10, right: 2 })
                             .onClick(() => { this.openMergeSheetForRecord(record); })
                         }
                       }.width('100%')
                       Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : this.latestReadLineOf(record))
-                        .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
+                        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
                     }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
                       .margin({ left: 16, right: 16, bottom: 8 })
                       .onClick(() => {
@@ -5315,22 +5315,22 @@ export struct ReadRecordsPage {
                         Column() {
                           // 锁定行只留封面上的「已加密」蒙层，行内文字区一律空白。
                           Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookName)
-                            .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+                            .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
                           Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : record.bookAuthor)
-                            .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+                            .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
                         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                         Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? ''
                           : this.formatRecordDuration(this.getBookDuration(record.bookId, this.records)))
-                          .fontSize(13).fontColor(this.themeColorAccent)
+                          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                         // 「合并」是行内文字，锁定态一并隐去。
                         if (!this.isRecordLocked(record.bookName, record.bookAuthor)) {
-                          Text('合并').fontSize(12).fontColor(this.themeColorAccent)
+                          Text('合并').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
                             .padding({ left: 10, right: 2 })
                             .onClick(() => { this.openMergeSheetForRecord(record); })
                         }
                       }.width('100%')
                       Text(this.isRecordLocked(record.bookName, record.bookAuthor) ? '' : this.latestReadLineOf(record))
-                        .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
+                        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 10 })
                     }.width('calc(100% - 32vp)').padding(16).backgroundColor(this.selectedKeys.has(this.latestKey(record)) ? '#48577D' : (this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))).borderRadius(14)
                       .margin({ left: 16, right: 16, bottom: 8 })
                       .onClick(() => {
@@ -5381,7 +5381,7 @@ export struct ReadRecordsPage {
           // hitTestBehavior(None) 必须加，否则会挡住下面日期头/条目的点击。
           if (this.floatingDateLabel().length > 0) {
             Text(this.floatingDateLabel())
-              .fontSize(FONT_LABEL_SMALL).fontColor(this.themeColorTextPrimary)
+              .fontSize(LABEL_SMALL).fontColor(this.themeColorTextPrimary)
               .padding({ left: 8, right: 8, top: 8, bottom: 8 })
               .backgroundColor(this.themeColorSurfaceSecondary)
               .borderRadius(8)
@@ -5412,16 +5412,16 @@ export struct ReadRecordsPage {
   @Builder
   private ReadRecordClearConfirmSheet() {
     Column() {
-      Text('清空阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('清空阅读记录').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 22 })
       Text('确定要清空全部阅读记录吗？此操作无法撤销。')
-        .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
+        .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
         .padding({ left: 28, right: 28, top: 12, bottom: 20 })
       Row() {
-        Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
+        Text('取消').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
           .onClick(() => this.showClearConfirm = false)
-        Text('清空').fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
+        Text('清空').fontSize(TITLE_MEDIUM).fontColor('#FFFFFF').textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#D95656').borderRadius(24).margin({ left: 12 })
           .onClick(() => { this.confirmClearAll(); })
       }.width('100%').padding({ left: 28, right: 28, bottom: 24 })
@@ -5441,16 +5441,16 @@ export struct ReadRecordsPage {
   @Builder
   private ReadRecordMergeSheet() {
     Column() {
-      Text('合并阅读记录').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('合并阅读记录').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 20 })
       Text('把勾选的记录并入目标书籍，按阅读会话重算，不直接相加时长。')
-        .fontSize(13).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
+        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
         .padding({ left: 24, right: 24, top: 8, bottom: 14 })
       TextInput({ text: this.mergeSearchQuery, placeholder: '按书名或作者搜索候选' })
         .width('calc(100% - 48vp)').height(44).margin({ bottom: 8 })
         .onChange((value: string) => { this.mergeSearchQuery = value; })
       if (this.getFilteredMergeCandidates().length === 0) {
-        Text('没有可合并的候选').fontSize(14).fontColor(this.themeColorTextTertiary)
+        Text('没有可合并的候选').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
           .width('100%').textAlign(TextAlign.Center).padding({ top: 28, bottom: 28 })
       } else {
         Scroll() {
@@ -5458,12 +5458,12 @@ export struct ReadRecordsPage {
             ForEach(this.getFilteredMergeCandidates(), (item: ReadRecordSummary) => {
               Row() {
                 Column() {
-                  Text(item.bookName).fontSize(15).fontColor(this.themeColorTextPrimary)
+                  Text(item.bookName).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
                   Text(item.bookAuthor.length > 0 ? item.bookAuthor : '（作者为空）')
-                    .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+                    .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                 Text(this.mergeSelectedKeys.has(this.mergeCandidateKey(item)) ? '已选' : '选择')
-                  .fontSize(13).fontColor(this.themeColorAccent)
+                  .fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
               }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
                 .backgroundColor(this.mergeSelectedKeys.has(this.mergeCandidateKey(item)) ? '#48577D' : Color.Transparent)
                 .onClick(() => this.toggleMergeCandidate(this.mergeCandidateKey(item)))
@@ -5472,10 +5472,10 @@ export struct ReadRecordsPage {
         }.edgeEffect(EdgeEffect.None).height(240).scrollBar(BarState.Off)
       }
       Row() {
-        Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
+        Text('取消').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
           .onClick(() => this.showMergeSheet = false)
-        Text('合并').fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
+        Text('合并').fontSize(TITLE_MEDIUM).fontColor('#FFFFFF').textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor(this.themeColorAccent).borderRadius(24).margin({ left: 12 })
           .onClick(() => { this.confirmMerge(); })
       }.width('100%').padding({ left: 28, right: 28, top: 12, bottom: 24 })
@@ -5487,17 +5487,17 @@ export struct ReadRecordsPage {
   private ReadRecordDeleteConfirmSheet() {
     Column() {
       Text(this.deleteConfirmKind === 0 ? '删除阅读时段' : (this.deleteConfirmKind > 1 ? `删除 ${this.deleteConfirmKind} 条记录` : '删除阅读记录'))
-        .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 22 })
       Text(this.deleteConfirmKind === 0
         ? '确定要删除这个阅读时段吗？该行连续的所有会话（包括其他设备的会话）都会被删除。'
         : (this.deleteConfirmKind > 1
           ? `确定要删除选中的 ${this.deleteConfirmKind} 条阅读记录吗？`
           : '确定要删除这条记录吗？'))
-        .fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
+        .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Center)
         .padding({ left: 28, right: 28, top: 12, bottom: 16 })
       Row() {
-        Text('本次打开不再提示').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('本次打开不再提示').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
         UiSwitchControl({
           checked: this.skipDeleteConfirmPageDraft,
           interactive: false,
@@ -5510,7 +5510,7 @@ export struct ReadRecordsPage {
           if (this.skipDeleteConfirmPageDraft) { this.skipDeleteConfirmLongTermDraft = false; }
         })
       Row() {
-        Text('今后不再提醒').fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('今后不再提醒').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
         UiSwitchControl({
           checked: this.skipDeleteConfirmLongTermDraft,
           interactive: false,
@@ -5523,10 +5523,10 @@ export struct ReadRecordsPage {
           if (this.skipDeleteConfirmLongTermDraft) { this.skipDeleteConfirmPageDraft = false; }
         })
       Row() {
-        Text('取消').fontSize(16).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
+        Text('取消').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#23242C').borderRadius(24)
           .onClick(() => { this.showDeleteConfirm = false; this.clearSelection(); })
-        Text('删除').fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
+        Text('删除').fontSize(TITLE_MEDIUM).fontColor('#FFFFFF').textAlign(TextAlign.Center)
           .layoutWeight(1).height(48).backgroundColor('#D95656').borderRadius(24).margin({ left: 12 })
           .onClick(() => { this.confirmDeleteSelected(); })
       }.width('100%').padding({ left: 28, right: 28, bottom: 24 })
@@ -5538,7 +5538,7 @@ export struct ReadRecordsPage {
   private ReadRecordCalendarSheet() {
     Column() {
       Row() {
-        Text('阅读热力图').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('阅读热力图').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         // 两档切换：次数 / 时长。上游 MediumToggleButton 换图标，本地换图标+文案语义等价。
         Row() {
           AppGlyph({
@@ -5546,20 +5546,20 @@ export struct ReadRecordsPage {
             glyphSize: 18,
             tint: this.themeColorAccent
           })
-          Text(this.heatmapMode === 1 ? '按时长' : '按次数').fontSize(13).fontColor(this.themeColorAccent).margin({ left: 4 })
+          Text(this.heatmapMode === 1 ? '按时长' : '按次数').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).margin({ left: 4 })
         }
         .padding({ left: 10, right: 10, top: 6, bottom: 6 })
         .backgroundColor(this.themeColorSurfaceTertiary)
         .borderRadius(16)
         .onClick(() => { this.heatmapMode = this.heatmapMode === 1 ? 0 : 1; })
-        Text('关闭').fontSize(14).fontColor(this.themeColorAccent).margin({ left: 12 })
+        Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ left: 12 })
           .onClick(() => this.showCalendarSheet = false)
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       if (this.selectedDateKey.length > 0) {
         Row() {
           Text(`只看 ${ReadRecordRepository.formatFriendlyDate(this.selectedDateKey)}`)
-            .fontSize(13).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-          Text('查看全部').fontSize(13).fontColor(this.themeColorAccent)
+            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+          Text('查看全部').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
             .onClick(() => { this.selectedDateKey = ''; })
         }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
       }
@@ -5574,7 +5574,7 @@ export struct ReadRecordsPage {
         }
       })
       Text('点格子只看当天，再点「查看全部」恢复')
-        .fontSize(12).fontColor(this.themeColorTextTertiary).width('100%')
+        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%')
         .textAlign(TextAlign.Center).margin({ top: 12 })
     }.width('100%').padding({ bottom: 20 })
   }
@@ -5582,7 +5582,7 @@ export struct ReadRecordsPage {
   @Builder
   private ReadRecordOptionsSheet() {
     Column() {
-      Text('阅读记录选项').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('阅读记录选项').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 18, right: 16, top: 12, bottom: 14 })
       ReadRecordOptionRow({ icon: 'chart', title: '显示阅读热力图', detail: '按周网格查看近一年阅读', onSelect: () => {
         this.showActionsSheet = false;
@@ -5789,7 +5789,7 @@ export struct CacheManagementPage {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
           TextInput({ placeholder: '筛选书名/作者', text: this.searchQuery })
-            .fontSize(14).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .id('my_cache_manage_search')
             .onAppear(() => focusControl.requestFocus('my_cache_manage_search'))
@@ -5848,8 +5848,8 @@ struct ReadRecordOptionRow {
     Row() {
       AppGlyph({ name: this.icon, glyphSize: 19, tint: this.themeColorAccent }).width(32)
       Column() {
-        Text(this.title).fontSize(15).fontColor(this.themeColorTextPrimary)
-        Text(this.detail).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+        Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+        Text(this.detail).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
     }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
       .onClick(() => this.onSelect())
@@ -5865,9 +5865,9 @@ struct CacheEmptySection {
   @Prop message: string = '';
   build() {
     Column() {
-      Text(this.title).fontSize(14).fontColor(this.themeColorAccent)
+      Text(this.title).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
         .alignSelf(ItemAlign.Start).margin({ left: 10, bottom: 7 })
-      Text(this.message).fontSize(14).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start)
+      Text(this.message).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start)
         .padding({ left: 12, right: 12, top: 12, bottom: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(8)
     }.width('100%').margin({ bottom: 14 })
   }
@@ -5895,13 +5895,13 @@ struct CacheBookCard {
         AppGlyph({ name: 'profileExpandMore', glyphSize: 18, tint: this.themeColorAccent })
           .rotate({ angle: this.expanded ? 90 : 0 }).margin({ right: 8 })
         Column() {
-          Text(this.bookTitle).fontSize(14).fontColor(this.themeColorTextPrimary).maxLines(1)
+          Text(this.bookTitle).fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(this.bookAuthor.length > 0 ? this.bookAuthor : '作者未知').fontSize(11)
+          Text(this.bookAuthor.length > 0 ? this.bookAuthor : '作者未知').fontSize(LABEL_SMALL)
             .fontColor(this.themeColorTextTertiary).maxLines(1).margin({ top: 2 })
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
         Text(`${this.imported ? this.chapterCount : 0}/${this.chapterCount}`)
-          .fontSize(12).fontColor(this.themeColorAccent)
+          .fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
       }.width('100%').onClick(() => this.onToggleExpand())
       Progress({
         value: this.chapterCount === 0 ? 0 : (this.imported ? 100 : 0),
@@ -5910,13 +5910,13 @@ struct CacheBookCard {
       }).height(3).color(this.themeColorAccent).backgroundColor('#E4E0D7').margin({ top: 9 })
       Row() {
         Text(`章节 ${this.chapterCount} | ${this.imported ? '已导入' : '未导入'} | 占用 ${this.sizeLabel}`)
-          .fontSize(11).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-        Text('删除缓存').fontSize(12).fontColor('#FF6B6B')
+          .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+        Text('删除缓存').fontSize(BODY_SMALL).fontColor('#FF6B6B')
           .padding({ left: 8, top: 4, bottom: 4 }).onClick(() => this.onDeleteCache())
       }.width('100%').margin({ top: 8 })
       if (this.expanded) {
         Text(this.imported ? '正文已在应用内导入，缓存即整本文件。' : '应用内正文副本已删除，可用「恢复本地书」找回。')
-          .fontSize(11).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
+          .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
       }
     }.width('100%').padding(12).backgroundColor(this.themeColorSurfaceSecondary)
       .borderRadius(8).margin({ bottom: 12 })
@@ -5977,12 +5977,12 @@ export struct AboutAppPage {
             Image($r('app.media.about_cat')).width(72).height(72)
             Blank().height(18)
             Blank().height(5)
-            Text('阅读·D').fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+            Text('阅读·D').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
             if (this.versionName.length > 0) {
-              Text(this.versionName).fontSize(12).fontColor(this.themeColorTextSecondary).padding({ left: 9, right: 9, top: 4, bottom: 4 })
+              Text(this.versionName).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).padding({ left: 9, right: 9, top: 4, bottom: 4 })
                 .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(8).margin({ top: 3 })
             }
-            Text('全新设计的阅读 3.0').fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+            Text('全新设计的阅读 3.0').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
           }.width('100%').padding({ top: 4, bottom: 8 }).alignItems(HorizontalAlign.Center)
 
           Row() {
@@ -6162,16 +6162,16 @@ export struct AiChatPage {
   @Builder
   private ReasoningSheet() {
     Column() {
-      Text('思考模式').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text('思考模式').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 20, right: 20, top: 20, bottom: 10 })
-      Text(this.reasoningLabel()).fontSize(24).fontColor(this.themeColorTextPrimary)
+      Text(this.reasoningLabel()).fontSize(HEADLINE_MEDIUM).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 20, bottom: 20 })
       Slider({ value: this.reasoningIndex, min: 0, max: 6, step: 1, style: SliderStyle.OutSet })
         .blockColor('#B9C8FF').trackColor('#41485D').selectedColor('#B9C8FF')
         .showSteps(true).showTips(false).margin({ left: 22, right: 22 })
         .onChange((value: number) => this.reasoningIndex = Math.round(value))
       Text('此选项仅为本页预览；AI 服务未连接时不会用于生成。')
-        .fontSize(13).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center)
+        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center)
         .width('100%').padding({ left: 20, right: 20, top: 18, bottom: 24 })
     }.width('100%').backgroundColor('#17181E')
   }
@@ -6194,7 +6194,7 @@ export struct AiChatPage {
 
         Row() {
           AppGlyph({ name: 'sparkles', glyphSize: 16, tint: this.themeColorAccent }).margin({ right: 7 })
-          Text('模型未配置').fontSize(14).fontColor(this.themeColorTextSecondary)
+          Text('模型未配置').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
           Blank()
           AppGlyph({ name: 'more', glyphSize: 16, tint: this.themeColorTextTertiary })
         }.padding({ left: 12, right: 12, top: 9, bottom: 9 }).margin({ left: 16, right: 16, top: 4 })
@@ -6203,15 +6203,15 @@ export struct AiChatPage {
 
         Column() {
           AppGlyph({ name: 'sparkles', glyphSize: 40, tint: this.themeColorAccent }).margin({ bottom: 14 })
-          Text('和你的书对话').fontSize(17).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
+          Text('和你的书对话').fontSize(BODY_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
           Text('配置 AI 服务后，提问和回复会显示在这里。')
-            .fontSize(14).fontColor('#858792').textAlign(TextAlign.Center).margin({ top: 8 })
+            .fontSize(LABEL_LARGE).fontColor('#858792').textAlign(TextAlign.Center).margin({ top: 8 })
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
 
         Column() {
           Row() {
             TextInput({ placeholder: '输入问题…', text: this.draft })
-              .fontSize(15).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
+              .fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(Color.Transparent).layoutWeight(1).maxLines(4)
               .onChange((value: string) => this.draft = value)
             Image($r('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? '#151720' : this.themeColorTextTertiary)
@@ -6219,10 +6219,10 @@ export struct AiChatPage {
               .borderRadius(20).onClick(() => this.sendDraft())
           }.padding({ left: 14, right: 8, top: 7, bottom: 7 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(24)
           Row() {
-            Text(`思考模式：${this.reasoningLabel()}`).fontSize(12).fontColor(this.themeColorTextTertiary)
+            Text(`思考模式：${this.reasoningLabel()}`).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
               .onClick(() => this.showReasoningSheet = true)
             Blank()
-            Text('AI 服务未配置').fontSize(12).fontColor('#858792')
+            Text('AI 服务未配置').fontSize(BODY_SMALL).fontColor('#858792')
           }.padding({ left: 6, right: 6, top: 7, bottom: 5 })
         }.padding({ left: 16, right: 16, top: 8, bottom: 12 })
       }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -6233,21 +6233,21 @@ export struct AiChatPage {
             .onClick(() => this.historyVisible = false)
           Column() {
             Row() {
-              Text('最近会话').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+              Text('最近会话').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
               AppGlyph({ name: 'add', glyphSize: 19, tint: this.themeColorTextSecondary }).padding(8)
                 .onClick(() => { this.historyVisible = false; this.draft = ''; })
             }.padding({ left: 18, right: 12, top: 18, bottom: 16 })
             Row() {
               AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
-              TextInput({ placeholder: '搜索会话…' }).fontSize(14).fontColor(this.themeColorTextSecondary)
+              TextInput({ placeholder: '搜索会话…' }).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
                 .placeholderColor(this.themeColorTextTertiary).backgroundColor(Color.Transparent).layoutWeight(1)
             }.padding({ left: 12, right: 12, top: 8, bottom: 8 }).margin({ left: 14, right: 14 })
               .backgroundColor('#22232A').borderRadius(20)
             Column() {
               AppGlyph({ name: 'sparkles', glyphSize: 28, tint: this.themeColorTextTertiary }).margin({ bottom: 10 })
-              Text('暂无会话记录').fontSize(14).fontColor('#AEB0BA')
+              Text('暂无会话记录').fontSize(TITLE_SMALL).fontColor('#AEB0BA')
             }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-            Text('新建对话').fontSize(15).fontColor('#151720').textAlign(TextAlign.Center)
+            Text('新建对话').fontSize(LABEL_LARGE).fontColor('#151720').textAlign(TextAlign.Center)
               .width('100%').padding(13).margin({ left: 14, right: 14, bottom: 20 })
               .backgroundColor('#B9C8FF').borderRadius(24)
               .onClick(() => { this.historyVisible = false; this.draft = ''; this.onUnavailableAction('配置 AI 服务后即可开始对话'); })
@@ -6304,7 +6304,7 @@ struct ModuleSearch {
     Row() {
       AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
       TextInput({ placeholder: this.hint, text: this.query })
-        .fontSize(16)
+        .fontSize(TITLE_MEDIUM)
         .fontColor(this.themeColorTextSecondary)
         .placeholderColor(this.themeColorTextTertiary)
         .backgroundColor(Color.Transparent)
@@ -6321,7 +6321,7 @@ struct ModuleTab {
   @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   build() {
-    Text(this.label).fontSize(16).fontColor(this.selected ? '#E1E5F3' : '#A4A6B0')
+    Text(this.label).fontSize(TITLE_MEDIUM).fontColor(this.selected ? '#E1E5F3' : '#A4A6B0')
       .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 9, bottom: 9 })
       .backgroundColor(this.selected ? '#41485D' : this.themeColorSurfaceSecondary).borderRadius(20).margin({ right: 7 })
       .onClick(() => this.onSelect())
@@ -6337,7 +6337,7 @@ struct UiMenuItemView {
   onSelect: () => void = () => {};
   build() {
     Row() {
-      Text(this.title).fontSize(14).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      Text(this.title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
     }.width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 })
       .borderRadius(8).backgroundColor(this.themeColorSurfaceTertiary)
       .margin({ bottom: 6 })
@@ -6355,8 +6355,8 @@ struct ModuleEmpty {
   build() {
     Column() {
       AppGlyph({ name: this.icon, glyphSize: 34, tint: this.themeColorAccent }).margin({ bottom: 14 })
-      Text(this.title).fontSize(18).fontColor(this.themeColorTextSecondary)
-      Text(this.detail).fontSize(15).fontColor('#858792').textAlign(TextAlign.Center).margin({ left: 34, right: 34, top: 8 })
+      Text(this.title).fontSize(TITLE_LARGE).fontColor(this.themeColorTextSecondary)
+      Text(this.detail).fontSize(TITLE_MEDIUM).fontColor('#858792').textAlign(TextAlign.Center).margin({ left: 34, right: 34, top: 8 })
     }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
   }
 }
@@ -6372,8 +6372,8 @@ struct MetricCard {
   @Prop value: string = '';
   build() {
     Column() {
-      Text(this.label).fontSize(14).fontColor(this.themeColorTextTertiary)
-      Text(this.value).fontSize(17).fontColor(this.themeColorTextSecondary).margin({ top: 5 })
+      Text(this.label).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
+      Text(this.value).fontSize(BODY_LARGE).fontColor(this.themeColorTextSecondary).margin({ top: 5 })
     }.layoutWeight(1).alignItems(HorizontalAlign.Start).padding(15).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
       .borderRadius(14).margin({ right: 6 })
   }

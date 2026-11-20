@@ -2,6 +2,7 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 import { HttpTts } from '../model/HttpTts';
 import { ReadAloudVoice, READ_ALOUD_VOICE_ENGINE_HTTP,
   READ_ALOUD_VOICE_MANAGED_BY_HTTP_SOURCE_CATALOG } from '../model/ReadAloudVoice';
+import { BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 /**
  * 批8：朗读引擎与音色页，对齐上游 CloudTtsScreen.kt 的视觉骨架：
@@ -124,34 +125,34 @@ export struct ReadAloudEnginePage {
   sourceList() {
     Column() {
       if (this.sources.length === 0) {
-        Text('暂无朗读引擎，点右下角 + 添加').fontSize(15).fontColor(this.textTertiary)
+        Text('暂无朗读引擎，点右下角 + 添加').fontSize(LABEL_MEDIUM).fontColor(this.textTertiary)
           .padding({ top: 40, bottom: 40 });
       }
       ForEach(this.sources, (source: HttpTts): void => {
         Column() {
           Row() {
             Column() {
-              Text(source.name).fontSize(16).fontColor(this.textPrimary).maxLines(1)
+              Text(source.name).fontSize(BODY_MEDIUM).fontColor(this.textPrimary).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis });
               Text(`${String(source.id) === this.selectedSourceId ? '当前 · ' : ''}${source.url}`)
-                .fontSize(13).fontColor(this.textTertiary).maxLines(2)
+                .fontSize(LABEL_MEDIUM).fontColor(this.textTertiary).maxLines(2)
                 .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 });
             }.layoutWeight(1).alignItems(HorizontalAlign.Start);
             if (String(source.id) === this.selectedSourceId) {
-              Text('使用中').fontSize(12).fontColor(this.accent).margin({ left: 8 });
+              Text('使用中').fontSize(BODY_SMALL).fontColor(this.accent).margin({ left: 8 });
             }
           }.width('100%');
           Row({ space: 8 }) {
-            Button('设为当前').fontSize(12).height(32)
+            Button('设为当前').fontSize(BODY_SMALL).height(32)
               .backgroundColor(this.surfaceTertiary).fontColor(this.textSecondary)
               .onClick(() => this.onSelectSource(source.id));
-            Button('拉取音色').fontSize(12).height(32)
+            Button('拉取音色').fontSize(BODY_SMALL).height(32)
               .backgroundColor(this.surfaceTertiary).fontColor(this.textSecondary)
               .onClick(() => this.onFetchCatalog(source));
-            Button('编辑').fontSize(12).height(32)
+            Button('编辑').fontSize(BODY_SMALL).height(32)
               .backgroundColor(this.surfaceTertiary).fontColor(this.textSecondary)
               .onClick(() => this.openEditor(source));
-            Button('删除').fontSize(12).height(32)
+            Button('删除').fontSize(BODY_SMALL).height(32)
               .backgroundColor(this.surfaceTertiary).fontColor('#C62828')
               .onClick(() => this.onDeleteSource(source.id));
           }.margin({ top: 12 });
@@ -166,19 +167,19 @@ export struct ReadAloudEnginePage {
   voiceList() {
     Column() {
       if (this.voiceItems().length === 0) {
-        Text('暂无音色，切到「引擎」页拉取').fontSize(15).fontColor(this.textTertiary)
+        Text('暂无音色，切到「引擎」页拉取').fontSize(LABEL_MEDIUM).fontColor(this.textTertiary)
           .padding({ top: 40, bottom: 40 });
       }
       ForEach(this.voiceItems(), (item: VoiceItemUi): void => {
         Row() {
           Column() {
-            Text(item.title).fontSize(16).fontColor(item.excluded ? this.textTertiary : this.textPrimary)
+            Text(item.title).fontSize(BODY_MEDIUM).fontColor(item.excluded ? this.textTertiary : this.textPrimary)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
             Text(item.excluded ? `${item.summary} · 已排除` : item.summary)
-              .fontSize(13).fontColor(this.textTertiary).maxLines(2)
+              .fontSize(LABEL_MEDIUM).fontColor(this.textTertiary).maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 4 });
           }.layoutWeight(1).alignItems(HorizontalAlign.Start);
-          Button(item.excluded ? '恢复' : '排除').fontSize(12).height(32)
+          Button(item.excluded ? '恢复' : '排除').fontSize(BODY_SMALL).height(32)
             .backgroundColor(this.surfaceTertiary).fontColor(this.textSecondary)
             .onClick(() => {
               const voice = this.voices.find((v: ReadAloudVoice): boolean => v.id === item.id);
@@ -201,9 +202,9 @@ export struct ReadAloudEnginePage {
       Column() {
         Row() {
           Text(this.editingId === 0 ? '新增朗读引擎' : '编辑朗读引擎')
-            .fontSize(20).fontColor(this.textPrimary).fontWeight(FontWeight.Medium);
+            .fontSize(HEADLINE_SMALL).fontColor(this.textPrimary).fontWeight(FontWeight.Medium);
           Blank();
-          Text('保存').fontSize(16).fontColor(this.accent).onClick(() => this.saveSource());
+          Text('保存').fontSize(TITLE_MEDIUM).fontColor(this.accent).onClick(() => this.saveSource());
         }.width('100%').padding({ left: 20, right: 20, top: 16, bottom: 12 });
 
         Scroll(this.scroller) {
@@ -220,16 +221,16 @@ export struct ReadAloudEnginePage {
             this.fieldInput('音色参数名（默认 tone，留空不发）', this.formToneParam,
               (v: string) => { this.formToneParam = v; });
             Row() {
-              Text('源语速').fontSize(15).fontColor(this.textSecondary);
+              Text('源语速').fontSize(TITLE_MEDIUM).fontColor(this.textSecondary);
               Slider({ value: this.formSpeed, min: 0, max: 80, step: 1 })
                 .layoutWeight(1).margin({ left: 12, right: 12 })
                 .onChange((value: number, _mode: SliderChangeMode): void => {
                   this.formSpeed = Math.round(value);
                 });
-              Text(`${this.formSpeed}`).fontSize(15).fontColor(this.textPrimary).width(30);
+              Text(`${this.formSpeed}`).fontSize(TITLE_MEDIUM).fontColor(this.textPrimary).width(30);
             }.width('100%');
             Text('说明：登录脚本 / jsLib / AnalyzeUrl 模板依赖 JS 引擎，鸿蒙不支持，字段保留但不执行。')
-              .fontSize(12).fontColor(this.textTertiary).width('100%');
+              .fontSize(BODY_SMALL).fontColor(this.textTertiary).width('100%');
           }.padding({ left: 20, right: 20, bottom: 24 });
         }.layoutWeight(1).scrollBar(BarState.Off);
       }
@@ -245,9 +246,9 @@ export struct ReadAloudEnginePage {
   @Builder
   fieldInput(label: string, value: string, onChange: (value: string) => void) {
     Column() {
-      Text(label).fontSize(13).fontColor(this.textTertiary).margin({ bottom: 4 });
+      Text(label).fontSize(LABEL_MEDIUM).fontColor(this.textTertiary).margin({ bottom: 4 });
       TextInput({ text: value, placeholder: label })
-        .fontSize(15).fontColor(this.textPrimary)
+        .fontSize(LABEL_LARGE).fontColor(this.textPrimary)
         .backgroundColor(this.surfaceTertiary).height(48).borderRadius(8)
         .onChange((v: string): void => onChange(v));
     }.width('100%');
@@ -260,7 +261,7 @@ export struct ReadAloudEnginePage {
         Row() {
           ForEach(['音色', '引擎'], (label: string, index: number): void => {
             Column() {
-              Text(label).fontSize(15)
+              Text(label).fontSize(TITLE_MEDIUM)
                 .fontColor(this.activeTab === index ? this.accent : this.textTertiary)
                 .fontWeight(this.activeTab === index ? FontWeight.Medium : FontWeight.Normal);
               Row().width(24).height(2).backgroundColor(this.activeTab === index ? this.accent : Color.Transparent)
@@ -283,7 +284,7 @@ export struct ReadAloudEnginePage {
 
       // FAB 用 Stack 覆盖层 + BottomEnd 定位（position 的 calc 百分比在 ArkUI 不可靠）。
       Stack({ alignContent: Alignment.BottomEnd }) {
-        Button('+', { type: ButtonType.Circle }).fontSize(28)
+        Button('+', { type: ButtonType.Circle }).fontSize(HEADLINE_LARGE)
           .width(56).height(56).backgroundColor(this.accent).fontColor('#FFFFFF')
           .margin({ right: 20, bottom: 28 })
           .onClick(() => {

@@ -26,6 +26,7 @@ import {
 } from '../data/ReaderSettingsRepository';
 import { readCardStyleSnapshot, resolveCardCornerRadius } from '../data/ThemeCardStyle';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 
 type ReaderInfoSlot = 'headerLeft' | 'headerMiddle' | 'headerRight' | 'footerLeft' | 'footerMiddle' | 'footerRight';
@@ -654,16 +655,16 @@ export struct ReaderSettingsPage {
   private BackgroundImageRow(title: string, night: boolean) {
     Row() {
       Column() {
-        Text(title).fontSize(13).fontColor(this.rsetTextPrimary)
+        Text(title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary)
         Text(this.getBackgroundImageOf(night).length > 0 ? '已选择图片' : '未选择图片')
-          .fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
+          .fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('选择').fontSize(11).fontColor(this.rsetAccent)
+      Text('选择').fontSize(LABEL_SMALL).fontColor(this.rsetAccent)
         .padding({ left: 12, right: 12, top: 7, bottom: 7 })
         .backgroundColor(this.rsetInnerBg).borderRadius(8)
         .onClick(() => this.onPickBackgroundImage(night))
       if (this.getBackgroundImageOf(night).length > 0) {
-        Text('清除').fontSize(11).fontColor(this.rsetAccent)
+        Text('清除').fontSize(LABEL_SMALL).fontColor(this.rsetAccent)
           .padding({ left: 12, right: 12, top: 7, bottom: 7 })
           .backgroundColor(this.rsetInnerBg).borderRadius(8).margin({ left: 8 })
           .onClick(() => this.onBackgroundImageChange('', night))
@@ -676,12 +677,12 @@ export struct ReaderSettingsPage {
   private TitleChoiceRow(title: string, choices: string[], selectedIndex: number, onSelect: (index: number) => void) {
     Column() {
       Row() {
-        Text(title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-        Text(choices[selectedIndex] ?? choices[0] ?? '').fontSize(11).fontColor(this.rsetTextSecondary)
+        Text(title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(choices[selectedIndex] ?? choices[0] ?? '').fontSize(LABEL_SMALL).fontColor(this.rsetTextSecondary)
       }.width('100%')
       Row() {
         ForEach(choices, (label: string, index: number) => {
-          Text(label).fontSize(11)
+          Text(label).fontSize(LABEL_SMALL)
             .fontColor(selectedIndex === index ? this.rsetSelectedText : this.rsetTextTertiary)
             .layoutWeight(1).textAlign(TextAlign.Center).padding(8)
             .backgroundColor(selectedIndex === index ? this.rsetSelectedBg : this.rsetChipBg).borderRadius(8)
@@ -746,7 +747,7 @@ export struct ReaderSettingsPage {
       } else if (this.titleSegType !== 0) {
         TextInput({ text: this.titleSegFlag, placeholder: this.titleSegType === 2 ? '分隔符，多个用英文逗号分隔' : '正则表达式' })
           .width('100%').height(44).backgroundColor(this.rsetCardBg).borderRadius(12)
-          .fontSize(12).fontColor(this.rsetTextPrimary).margin({ bottom: 8 })
+          .fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).margin({ bottom: 8 })
           .onChange((value: string) => this.onTitleSegFlagChange(value))
       }
       if (this.titleSegType !== 0) {
@@ -811,7 +812,7 @@ export struct ReaderSettingsPage {
             .backgroundColor(this.rsetChipBgAlt)
             .onClick((): void => { this.selectedSettingsTab = this.previousMainSettingsTab; })
           Text('信息')
-            .fontSize(16).fontColor(this.rsetTextPrimary).maxLines(1)
+            .fontSize(BODY_MEDIUM).fontColor(this.rsetTextPrimary).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1).margin({ left: 12 })
           // 上游右端 Spacer(width = 48.dp)：没有它标题会被 layoutWeight 顶上偏左，不是真正居中。
@@ -821,7 +822,7 @@ export struct ReaderSettingsPage {
         // 更多：上游是独立底部弹层（onOpenMoreConfig → ShowSheet(MoreConfig)），
         // AppModalBottomSheet 只画抓手 + 居中标题，没有返回钮（返回靠底部页签切回）。
         Text('更多设置')
-          .fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.rsetTextPrimary)
+          .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.rsetTextPrimary)
           .textAlign(TextAlign.Center).width('100%')
           .padding({ left: 56, right: 56, bottom: 16 })
       } else {
@@ -834,7 +835,7 @@ export struct ReaderSettingsPage {
             .backgroundColor(this.rsetChipBgAlt)
             .onClick((): void => { this.onBack(); })
           Text('阅读界面')
-            .fontSize(16).fontColor(this.rsetTextPrimary).maxLines(1)
+            .fontSize(BODY_MEDIUM).fontColor(this.rsetTextPrimary).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1).margin({ left: 12 })
           Row().width(48)
@@ -889,8 +890,8 @@ export struct ReaderSettingsPage {
         Row() {
           Column() {
             Row() {
-              Text('字号').fontSize(14).fontColor(this.rsetTextSecondary).layoutWeight(1)
-              Text(this.fontSize.toString()).fontSize(12).fontColor(this.rsetTextPrimary)
+              Text('字号').fontSize(TITLE_SMALL).fontColor(this.rsetTextSecondary).layoutWeight(1)
+              Text(this.fontSize.toString()).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary)
             }
             Slider({
               value: this.fontSize,
@@ -930,8 +931,8 @@ export struct ReaderSettingsPage {
         .borderRadius(this.cardRadius(12))
 
         Row() {
-          Text('背景').fontSize(14).fontColor(this.rsetTextSecondary).layoutWeight(1)
-          Text('长按自定义').fontSize(10).fontColor(this.rsetTextTertiary)
+          Text('背景').fontSize(TITLE_SMALL).fontColor(this.rsetTextSecondary).layoutWeight(1)
+          Text('长按自定义').fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary)
             .onClick(() => this.openDetailSheet('自定义阅读背景', '背景图片、背景颜色与文字颜色设置'))
           Image($r('app.media.app_visibility')).width(18).height(18)
             .fillColor(this.eyeProtectionActive ? this.rsetAccent : this.rsetTextSecondary).margin({ left: 10 })
@@ -972,8 +973,8 @@ export struct ReaderSettingsPage {
         }.width('100%').height(56).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
 
         Row() {
-          Text('翻页动画').fontSize(12).fontColor(this.rsetTextSecondary).layoutWeight(1)
-          Text(this.getPageAnimationLabel()).fontSize(11).fontColor(this.rsetTextSecondary).padding(8)
+          Text('翻页动画').fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary).layoutWeight(1)
+          Text(this.getPageAnimationLabel()).fontSize(LABEL_SMALL).fontColor(this.rsetTextSecondary).padding(8)
             .backgroundColor(this.rsetInnerBg).borderRadius(8)
             .onClick(() => this.openDetailSheet('翻页动画', '覆盖、滑动、仿真、滚动、淡入淡出、无动画'))
           Image($r('app.media.app_anim_speed')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 12 })
@@ -984,8 +985,8 @@ export struct ReaderSettingsPage {
         }.padding(13).backgroundColor(this.rsetCardBg)
         .borderRadius(this.cardRadius(12)).margin({ top: 13 })
         Row() {
-          Text('电子书翻页动画').fontSize(12).fontColor(this.rsetTextSecondary).layoutWeight(1)
-          Text(this.getPageAnimationEInkLabel()).fontSize(11).fontColor(this.rsetTextSecondary).padding(8)
+          Text('电子书翻页动画').fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary).layoutWeight(1)
+          Text(this.getPageAnimationEInkLabel()).fontSize(LABEL_SMALL).fontColor(this.rsetTextSecondary).padding(8)
             .backgroundColor(this.rsetInnerBg).borderRadius(8)
             .onClick(() => this.openDetailSheet('电子书翻页动画', '仅电子书主题生效，默认淡入淡出'))
         // 上游 sheet/GlobalThemePage.kt:148 设置组卡 cornerRadius=12dp（翻页/电子翻页动画外卡）
@@ -1124,16 +1125,16 @@ export struct ReaderSettingsPage {
     onChange: (value: number) => void) {
     Column() {
       Row() {
-        Text(title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-        Text('−').fontSize(16).fontColor(value > minValue ? this.rsetTextPrimary : this.rsetTextDisabled)
+        Text(title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text('−').fontSize(TITLE_MEDIUM).fontColor(value > minValue ? this.rsetTextPrimary : this.rsetTextDisabled)
           .width(32).height(32).textAlign(TextAlign.Center)
           .backgroundColor(this.rsetInnerBg).borderRadius(8)
           .onClick(() => {
             if (value > minValue) { onChange(Math.max(minValue, value - 1)); }
           })
-        Text(`${value}`).fontSize(13).fontColor(this.rsetTextPrimary).width(34).textAlign(TextAlign.Center)
+        Text(`${value}`).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).width(34).textAlign(TextAlign.Center)
           .margin({ left: 6, right: 6 })
-        Text('＋').fontSize(16).fontColor(value < maxValue ? this.rsetTextPrimary : this.rsetTextDisabled)
+        Text('＋').fontSize(TITLE_MEDIUM).fontColor(value < maxValue ? this.rsetTextPrimary : this.rsetTextDisabled)
           .width(32).height(32).textAlign(TextAlign.Center)
           .backgroundColor(this.rsetInnerBg).borderRadius(8)
           .onClick(() => {
@@ -1762,7 +1763,7 @@ export struct ReaderSettingsPage {
       }.width('100%').padding({ left: 14, right: 14, bottom: 8 })
       Scroll() {
         Column() {
-          Text('内容').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 6, bottom: 4 })
+          Text('内容').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 6, bottom: 4 })
           ReaderInfoSettingRow({
             iconKind: 0,
             title: this.infoSubTab === 0 ? '页眉' : '页脚',
@@ -1782,7 +1783,7 @@ export struct ReaderSettingsPage {
               onSelect: (_index: number) => this.openInfoTipSheet(position)
             })
           }, (position: string) => position)
-          Text('分隔线').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
+          Text('分隔线').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           ReaderInfoSwitchRow({
             title: '显示分隔线', detail: '显示页眉/页脚分隔线',
             checked: this.infoSubTab === 0 ? this.infoSettings.showHeaderLine : this.infoSettings.showFooterLine,
@@ -1793,7 +1794,7 @@ export struct ReaderSettingsPage {
           })
           ReaderInfoColorRow({ iconKind: 4, title: '分割线', detail: '页眉与页脚共用' })
             .onClick(() => this.openDetailSheet('分割线颜色', '选择页眉/页脚分割线颜色'))
-          Text('字体样式').fontSize(12).fontColor(this.themeColorAccent)
+          Text('字体样式').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
             .width('100%').padding({ left: 4, top: 10, bottom: 4 })
           if (this.infoSubTab === 1) {
             MenuSettingSwitch({
@@ -1849,7 +1850,7 @@ export struct ReaderSettingsPage {
     Column() {
       Scroll() {
         Column() {
-          Text('屏幕设置').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 6, bottom: 4 })
+          Text('屏幕设置').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 6, bottom: 4 })
           MenuSettingOption({ title: '屏幕方向', detail: '跟随系统 / 竖屏 / 横屏', migrated: true }).onClick(() => this.openDetailSheet('屏幕方向', '选择系统、竖屏或横屏'))
           MenuSettingOption({ title: '屏幕超时', detail: this.getDetailChoices('屏幕超时')[Math.max(0, ['0', '60', '300', '600', '-1'].indexOf(this.keepLight))] ?? '默认', migrated: true }).onClick(() => this.openDetailSheet('屏幕超时', '设置阅读期间的屏幕超时'))
           MenuSettingSwitch({ title: '隐藏状态栏', detail: '沉浸式阅读', checked: this.hideStatusBar,
@@ -1866,7 +1867,7 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onUseZhLayoutChange(enabled) })
           MenuSettingOption({ title: '护眼模式', detail: '护眼模式与色温', migrated: true })
             .onClick(() => this.openDetailSheet('护眼模式', '配置护眼模式、色温与日夜参数'))
-          Text('翻页控制').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
+          Text('翻页控制').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSlider({
             title: '滑动翻页阈值',
             value: this.pageTouchSlop,
@@ -1875,7 +1876,7 @@ export struct ReaderSettingsPage {
             stepValue: 10,
             onChange: (value: number) => this.onPageTouchSlopChange(value)
           })
-          Text('滑动翻页阈值（0 = 系统默认值）').fontSize(10).fontColor(this.rsetTextTertiary)
+          Text('滑动翻页阈值（0 = 系统默认值）').fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary)
             .width('100%').padding({ left: 18, right: 18, bottom: 8 })
           MenuSettingOption({
             title: '平板/横屏双页', detail: readerColumnModeTitle(this.doubleHorizontalPage), migrated: true
@@ -1898,7 +1899,7 @@ export struct ReaderSettingsPage {
             title: '角标大小', value: this.bookmarkBadgeSize, minValue: 0, maxValue: 50,
             onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
           })
-          Text('其他').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
+          Text('其他').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSwitch({ title: '滑动进度条时震动', detail: '拖动时提供触觉反馈', checked: this.sliderVibrator,
             onChange: (enabled: boolean) => this.onSliderVibratorChange(enabled) })
           MenuSettingSwitch({ title: '使用新版目录', detail: '使用新的目录面板', checked: true }).onClick(() => this.showNotMigrated('使用新版目录'))
@@ -1939,7 +1940,7 @@ export struct ReaderSettingsPage {
             onChange: (enabled: boolean) => this.onShowMenuIconChange(enabled)
           })
           Text('未迁移项目保留原版设置入口；当前仅呈现设置界面，不执行对应业务。')
-            .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
+            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
         }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
         // 批4：更多页内容高记到页签 3。
         .onAreaChange((_old: Area, now: Area) => this.recordPageHeight(3, now))
@@ -2143,7 +2144,7 @@ export struct ReaderSettingsPage {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column() {
         Column() {
-          Text(this.getBackgroundStyleLabel(style)).fontSize(11).maxLines(2).textAlign(TextAlign.Center)
+          Text(this.getBackgroundStyleLabel(style)).fontSize(LABEL_SMALL).maxLines(2).textAlign(TextAlign.Center)
             .fontColor(this.readerNightMode ? style.textColorNight : style.textColor)
         }
         .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
@@ -2161,12 +2162,12 @@ export struct ReaderSettingsPage {
 
       if (styleIndex < READER_STYLE_PRESET_COUNT) {
         // 预设 5 份不可删：管理态右下角显示锁并整体半透明（上游 alpha 0.5 + Lock 12dp）。
-        Text('🔒').fontSize(10).margin({ right: 3, bottom: 3 })
+        Text('🔒').fontSize(LABEL_SMALL).margin({ right: 3, bottom: 3 })
           .align(Alignment.BottomEnd).opacity(this.themeManageMode ? 0.5 : 0)
       } else if (this.themeManageMode) {
         Stack({ alignContent: Alignment.Center }) {
           Text(this.themeSelected.indexOf(styleIndex) >= 0 ? '✓' : '')
-            .fontSize(10).fontColor(this.rsetSelectedText)
+            .fontSize(LABEL_SMALL).fontColor(this.rsetSelectedText)
         }
         .width(14).height(14).borderRadius(7).margin({ top: 4, right: 4 })
         .backgroundColor(this.themeSelected.indexOf(styleIndex) >= 0 ? this.themeColorAccent : '#66000000')
@@ -2177,7 +2178,7 @@ export struct ReaderSettingsPage {
 
   @Builder
   private ThemeManageAction(label: string, action: () => void) {
-    Text(label).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
+    Text(label).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
       // 上游 sheet/ThemeListContent.kt:798 主题网格 NormalCard cornerRadius=8dp
       .padding({ top: 9, bottom: 9 }).backgroundColor(this.rsetCardBg)
       .borderRadius(this.cardRadius(8))
@@ -2641,11 +2642,11 @@ export struct ReaderSettingsPage {
       Column() {
         Row().width(32).height(4).backgroundColor(this.rsetHandle).borderRadius(4).margin({ top: 10, bottom: 14 })
         Row() {
-          Text(this.menuEntryDisplayTitle(this.detailSheetTitle)).fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
-          Text('关闭').fontSize(13).fontColor(this.rsetAccent).onClick(() => this.detailSheetVisible = false)
+          Text(this.menuEntryDisplayTitle(this.detailSheetTitle)).fontSize(BODY_LARGE).fontColor(this.rsetTextPrimary).layoutWeight(1)
+          Text('关闭').fontSize(LABEL_MEDIUM).fontColor(this.rsetAccent).onClick(() => this.detailSheetVisible = false)
         }.width('100%').padding({ left: 18, right: 18, bottom: 12 })
         if (this.detailSheetDescription.length > 0) {
-          Text(this.detailSheetDescription).fontSize(13).fontColor(this.rsetTextSecondary).width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
+          Text(this.detailSheetDescription).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextSecondary).width('100%').padding({ left: 18, right: 18, top: 10, bottom: 18 })
         }
         if (this.detailSheetTitle === '种子色' || this.detailSheetTitle === '菜单背景颜色' ||
           this.detailSheetTitle === '菜单容器颜色' || this.detailSheetTitle === '菜单强调颜色' ||
@@ -2736,15 +2737,15 @@ export struct ReaderSettingsPage {
                 onChange: (color: string) => this.onTextAccentColorChange(color, true)
               })
               Text('强调色用于链接、搜索结果与朗读中的段落；背景透明度只作用于背景图片。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).height(460).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '编辑背景样式') {
           Scroll() {
             Column() {
-              Text('样式名称').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 6, bottom: 6 })
+              Text('样式名称').fontSize(BODY_SMALL).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 6, bottom: 6 })
               TextInput({ text: this.editingStyleName, placeholder: '给这份样式起个名字' })
-                .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
                 .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                 .onChange((value: string) => this.editingStyleName = value)
               MenuSettingPalette({
@@ -2760,8 +2761,8 @@ export struct ReaderSettingsPage {
                 onChange: (color: string) => this.editingStyleNightColor = color
               }).margin({ top: 12 })
               Text('改名与改色只影响这一份样式；其余样式与自定义背景图不受影响。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
-              Text('保存').fontSize(13).fontColor(this.rsetSelectedText).textAlign(TextAlign.Center)
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding(10)
+              Text('保存').fontSize(LABEL_MEDIUM).fontColor(this.rsetSelectedText).textAlign(TextAlign.Center)
                 .width('100%').padding({ top: 11, bottom: 11 })
                 .backgroundColor(this.themeColorAccent).borderRadius(10)
                 .onClick(() => {
@@ -2776,20 +2777,20 @@ export struct ReaderSettingsPage {
           Column() {
             Row() {
               if (this.themeManageMode) {
-                Text('取消').fontSize(13).fontColor(this.themeColorTextTertiary)
+                Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
                   .onClick(() => this.exitThemeManage())
                 Text(this.themeSelected.length === 0 ? '选择主题' : `已选中 ${this.themeSelected.length}`)
-                  .fontSize(13).fontColor(this.rsetTextPrimary).fontWeight(FontWeight.Medium)
+                  .fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).fontWeight(FontWeight.Medium)
                   .layoutWeight(1).textAlign(TextAlign.Center)
-                Text('完成').fontSize(13).fontColor(this.themeColorAccent)
+                Text('完成').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                   .onClick(() => this.exitThemeManage())
               } else {
-                Text('主题列表').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text('主题列表').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
                 // 列数切换只在非管理态出现（上游管理态隐去布局入口）。
-                Text(`${this.themeGridColumns} 列`).fontSize(12).fontColor(this.themeColorTextTertiary)
+                Text(`${this.themeGridColumns} 列`).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
                   .padding({ left: 8, right: 8 })
                   .onClick(() => this.cycleThemeGridColumns())
-                Text('管理').fontSize(13).fontColor(this.themeColorAccent)
+                Text('管理').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                   .onClick(() => this.themeManageMode = true)
               }
             }.width('100%').padding({ top: 10, bottom: 10 })
@@ -2822,12 +2823,12 @@ export struct ReaderSettingsPage {
                   }.width('100%').margin({ top: 8 })
                 } else {
                   Row() {
-                    Text('新建样式').fontSize(13).fontColor(this.themeColorAccent)
+                    Text('新建样式').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
                       .padding({ left: 10, right: 10, top: 9, bottom: 9 }).margin({ top: 12 })
                       .backgroundColor(this.rsetCardBg).borderRadius(10)
                       .onClick(() => this.onAddBackgroundStyle())
                     Text('前 5 份是内置预设，不能删除也不能移动；自建样式可以删掉、可以置顶置底。')
-                      .fontSize(10).fontColor(this.themeColorTextTertiary).layoutWeight(1).margin({ left: 10 })
+                      .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).layoutWeight(1).margin({ left: 10 })
                   }.width('100%').alignItems(VerticalAlign.Center)
                 }
               }.width('100%')
@@ -2836,13 +2837,13 @@ export struct ReaderSettingsPage {
         } else if (this.detailSheetTitle === '选择字体') {
           Scroll() {
             Column() {
-              Text('当前字体').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 8, bottom: 6 })
-              Text(this.getCurrentFontDisplayName()).fontSize(14).fontColor(this.rsetTextPrimary).width('100%')
+              Text('当前字体').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ top: 8, bottom: 6 })
+              Text(this.getCurrentFontDisplayName()).fontSize(TITLE_SMALL).fontColor(this.rsetTextPrimary).width('100%')
                 .padding(12).backgroundColor(this.rsetCardBg).borderRadius(10)
-              Text('系统字体').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 14, bottom: 6 })
+              Text('系统字体').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ top: 14, bottom: 6 })
               Row() {
                 ForEach(['默认字体', '衬线字体', '等宽字体'], (label: string, index: number) => {
-                  Text(label).fontSize(11).fontColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
+                  Text(label).fontSize(LABEL_SMALL).fontColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
                     ? this.rsetSelectedText : this.rsetTextTertiary)
                     .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 10, bottom: 10 })
                     .backgroundColor(this.getFontTargetPath().length === 0 && this.systemTypefaces === index
@@ -2851,30 +2852,30 @@ export struct ReaderSettingsPage {
                 }, (label: string) => label)
               }.width('100%')
               Row() {
-                Text('导入字体文件').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-                Text('选择 TTF/OTF').fontSize(11).fontColor(this.themeColorAccent)
+                Text('导入字体文件').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text('选择 TTF/OTF').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
               }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(10)
                 .margin({ top: 12, bottom: 6 }).onClick(() => this.importReaderFontFile())
               Row() {
-                Text('导入字体目录').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-                Text('支持时可用').fontSize(11).fontColor(this.themeColorTextTertiary)
+                Text('导入字体目录').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text('支持时可用').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
               }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(10)
                 .margin({ bottom: 8 }).onClick(() => this.importReaderFontFolder())
               if (this.fontEntries.length === 0) {
                 Text('尚无导入字体。可选择单个字体文件；已选字体复制到应用私有目录。')
-                  .fontSize(11).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+                  .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
               } else {
-                Text('已导入字体').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 10, bottom: 6 })
+                Text('已导入字体').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ top: 10, bottom: 6 })
                 ForEach(this.fontEntries, (font: ReaderFontEntry) => {
                   Row() {
                     Column() {
-                      Text(font.displayName).fontSize(13).fontColor(this.rsetTextPrimary).maxLines(1)
-                      Text(font.familyName).fontSize(10).fontColor(this.themeColorTextTertiary).maxLines(1).margin({ top: 3 })
+                      Text(font.displayName).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).maxLines(1)
+                      Text(font.familyName).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1).margin({ top: 3 })
                     }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     if (this.getFontTargetPath() === font.path) {
                       Image($r('app.media.app_check')).width(18).height(18).fillColor(this.themeColorAccent)
                     } else {
-                      Text('选择').fontSize(11).fontColor(this.themeColorAccent)
+                      Text('选择').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
                     }
                   }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(10).margin({ bottom: 6 })
                     .onClick(() => this.chooseReaderFont(font))
@@ -2886,7 +2887,7 @@ export struct ReaderSettingsPage {
           Column() {
             Row() {
               ForEach(TYPOGRAPHY_PAGE_LABELS, (label: string) => {
-                Text(label).fontSize(11)
+                Text(label).fontSize(LABEL_SMALL)
                   .fontColor(this.detailSelectedOption === label ? this.rsetSelectedText : this.rsetTextTertiary)
                   .layoutWeight(1).textAlign(TextAlign.Center).padding(9)
                   .backgroundColor(this.detailSelectedOption === label ? this.rsetSelectedBg : this.rsetInnerBg)
@@ -2927,10 +2928,10 @@ export struct ReaderSettingsPage {
                 onChange: (enabled: boolean) => this.onTextItalicChange(enabled)
               })
               Column() {
-                Text('字重').fontSize(13).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 8 })
+                Text('字重').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 8 })
                 Row() {
                   ForEach(['纤细', '常规', '中等', '粗体', '特粗'], (label: string, index: number) => {
-                    Text(label).fontSize(11).fontColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? this.rsetSelectedText : this.rsetTextTertiary)
+                    Text(label).fontSize(LABEL_SMALL).fontColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? this.rsetSelectedText : this.rsetTextTertiary)
                       .layoutWeight(1).textAlign(TextAlign.Center).padding(8)
                       .backgroundColor(this.textBold === (READER_BODY_WEIGHT_VALUES[index] ?? 500) ? this.rsetSelectedBg : this.rsetChipBg).borderRadius(8)
                       .margin({ right: 4 }).onClick(() => this.onTextBoldChange(READER_BODY_WEIGHT_VALUES[index] ?? 500))
@@ -2990,7 +2991,7 @@ export struct ReaderSettingsPage {
                 onChange: (value: number) => this.onUnderlineHeightChange(value) })
               MenuSettingSlider({ title: '离字间距', value: this.underlinePadding, minValue: 0, maxValue: 20,
                 onChange: (value: number) => this.onUnderlinePaddingChange(value) })
-              Text('下划虚线').fontSize(11).fontColor(this.themeColorTextTertiary)
+              Text('下划虚线').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                 .width('100%').textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
               MenuSettingSlider({ title: '实线段长', value: this.dottedBase, minValue: 0, maxValue: 20,
                 onChange: (value: number) => this.onDottedBaseChange(value) })
@@ -3013,7 +3014,7 @@ export struct ReaderSettingsPage {
               onChange: (enabled: boolean) => this.onTextBottomJustifyChange(enabled)
             })
             Text('设置会立即保存并应用。两端对齐改变行内间距；底部对齐只移动本页文字，不改章节位置。')
-              .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+              .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '编辑选择菜单') {
           Scroll() {
@@ -3029,8 +3030,8 @@ export struct ReaderSettingsPage {
                 onChange: (enabled: boolean) => this.onShowSelectMenuIconChange(enabled)
               })
               Row() {
-                Text('主菜单').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-                Text(`${this.getTextMenuEntries(0).length}`).fontSize(11).fontColor(this.rsetTextTertiary)
+                Text('主菜单').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text(`${this.getTextMenuEntries(0).length}`).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary)
                 Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor(this.rsetTextTertiary)
                   .rotate({ angle: this.primaryTextMenuExpanded ? 180 : 0 }).margin({ left: 8 })
               }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 8, bottom: 5 })
@@ -3039,7 +3040,7 @@ export struct ReaderSettingsPage {
                 ForEach(this.getTextMenuEntries(0), (item: ReaderTextMenuEntry) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
-                    Text(item.title).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
+                    Text(item.title).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 0))
                     Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor(this.rsetTextSecondary)
@@ -3053,8 +3054,8 @@ export struct ReaderSettingsPage {
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
-                Text('折叠菜单').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-                Text(`${this.getTextMenuEntries(1).length}`).fontSize(11).fontColor(this.rsetTextTertiary)
+                Text('折叠菜单').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text(`${this.getTextMenuEntries(1).length}`).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary)
                 Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor(this.rsetTextTertiary)
                   .rotate({ angle: this.collapsedTextMenuExpanded ? 180 : 0 }).margin({ left: 8 })
               }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 5, bottom: 5 })
@@ -3063,7 +3064,7 @@ export struct ReaderSettingsPage {
                 ForEach(this.getTextMenuEntries(1), (item: ReaderTextMenuEntry) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
-                    Text(item.title).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
+                    Text(item.title).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 1))
                     Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor(this.rsetTextSecondary)
@@ -3077,8 +3078,8 @@ export struct ReaderSettingsPage {
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
-                Text('隐藏项目').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-                Text(`${this.getTextMenuEntries(2).length}`).fontSize(11).fontColor(this.rsetTextTertiary)
+                Text('隐藏项目').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                Text(`${this.getTextMenuEntries(2).length}`).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary)
                 Image($r('app.media.profile_expand_more')).width(18).height(18).fillColor(this.rsetTextTertiary)
                   .rotate({ angle: this.hiddenTextMenuExpanded ? 180 : 0 }).margin({ left: 8 })
               }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 5, bottom: 5 })
@@ -3087,7 +3088,7 @@ export struct ReaderSettingsPage {
                 ForEach(this.getTextMenuEntries(2), (item: ReaderTextMenuEntry) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
-                    Text(item.title).fontSize(12).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
+                    Text(item.title).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.app_add')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 0))
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
@@ -3096,7 +3097,7 @@ export struct ReaderSettingsPage {
               }
               Row() {
                 Blank()
-                Text('保存').fontSize(13).fontColor(this.rsetSelectedText)
+                Text('保存').fontSize(LABEL_MEDIUM).fontColor(this.rsetSelectedText)
                   .padding({ left: 20, right: 20, top: 10, bottom: 10 })
                   .backgroundColor(this.rsetAccent).borderRadius(18)
                   .onClick(() => {
@@ -3110,15 +3111,15 @@ export struct ReaderSettingsPage {
           Scroll() {
             Column() {
               Text('点击阅读页面的分区，再选择该区域的动作。')
-                .fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 4, bottom: 10 })
+                .fontSize(BODY_SMALL).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 4, bottom: 10 })
               ForEach([0, 1, 2], (rowIndex: number) => {
                 Row() {
                   ForEach([0, 1, 2], (columnIndex: number) => {
                     Column() {
                       Text(CLICK_REGION_NAMES[rowIndex * 3 + columnIndex] ?? '')
-                        .fontSize(10).fontColor(this.rsetTextTertiary).margin({ bottom: 4 })
+                        .fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ bottom: 4 })
                       Text(this.clickRegionActions[rowIndex * 3 + columnIndex] ?? '无操作')
-                        .fontSize(12).fontColor(this.rsetTextPrimary).textAlign(TextAlign.Center)
+                        .fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).textAlign(TextAlign.Center)
                     }.layoutWeight(1).height(58).justifyContent(FlexAlign.Center)
                       .backgroundColor(this.selectedClickRegionIndex === rowIndex * 3 + columnIndex ? this.rsetSelectedBg : this.rsetInnerBg)
                       .borderRadius(10).margin({ right: columnIndex < 2 ? 6 : 0, bottom: 6 })
@@ -3127,10 +3128,10 @@ export struct ReaderSettingsPage {
                 }.width('100%')
               }, (rowIndex: number) => `row-${rowIndex}`)
               Text(`设置${CLICK_REGION_NAMES[this.selectedClickRegionIndex] ?? ''}区域动作`)
-                .fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 8, bottom: 6 })
+                .fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ top: 8, bottom: 6 })
               ForEach(READER_CLICK_REGION_ACTIONS, (action: string) => {
                 Row() {
-                  Text(action).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                  Text(action).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
                   if ((this.clickRegionActions[this.selectedClickRegionIndex] ?? '') === action) {
                     Image($r('app.media.app_check')).width(18).height(18).fillColor(this.themeColorAccent)
                   }
@@ -3144,32 +3145,32 @@ export struct ReaderSettingsPage {
                 })
               }, (action: string) => action)
               Text('动作会立即保存，并应用到阅读页对应分区。未迁移的动作会明确提示。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '自定义翻页按键') {
           Scroll() {
             Column() {
-              Text('上一页按键').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 6, bottom: 6 })
+              Text('上一页按键').fontSize(BODY_SMALL).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 6, bottom: 6 })
               TextInput({ text: this.previousPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
-                .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
                 .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                 .onChange((value: string) => this.previousPageKeys = value)
-              Text('下一页按键').fontSize(12).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 12, bottom: 6 })
+              Text('下一页按键').fontSize(BODY_SMALL).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 12, bottom: 6 })
               TextInput({ text: this.nextPageKeys, placeholder: '按键码，多个用英文逗号分隔' })
-                .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
                 .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                 .onChange((value: string) => this.nextPageKeys = value)
               Text('将焦点放到输入框按下物理按键会自动录入键值，多个按键会自动用英文逗号隔开。')
-                .fontSize(11).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 10, bottom: 6 })
+                .fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).width('100%').padding({ top: 10, bottom: 6 })
               Text('当前可由系统接管翻页的按键只有音量键与媒体键（上一曲/下一曲/播放暂停）；其余键值会被保存并随备份同步，但按下时只有应用窗口持有焦点才会生效。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding({ bottom: 14 })
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding({ bottom: 14 })
               Row() {
-                Text('重置').fontSize(13).fontColor(this.rsetTextSecondary).padding({ left: 18, right: 18, top: 10, bottom: 10 })
+                Text('重置').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextSecondary).padding({ left: 18, right: 18, top: 10, bottom: 10 })
                   .backgroundColor(this.rsetInnerBg).borderRadius(18)
                   .onClick(() => { this.previousPageKeys = ''; this.nextPageKeys = ''; })
                 Blank()
-                Text('确定').fontSize(13).fontColor(this.rsetSelectedText).padding({ left: 20, right: 20, top: 10, bottom: 10 })
+                Text('确定').fontSize(LABEL_MEDIUM).fontColor(this.rsetSelectedText).padding({ left: 20, right: 20, top: 10, bottom: 10 })
                   .backgroundColor(this.rsetAccent).borderRadius(18)
                   .onClick(() => {
                     this.onPrevKeysChange(this.previousPageKeys);
@@ -3204,26 +3205,26 @@ export struct ReaderSettingsPage {
                 })
                 if (this.eyeProtectionSchedule) {
                   Row() {
-                    Text('开始时间').fontSize(12).fontColor(this.rsetTextSecondary)
+                    Text('开始时间').fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
                     Blank()
-                    Text(this.eyeProtectionStartTime).fontSize(12).fontColor(this.rsetAccent)
-                    Text('›').fontSize(20).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
+                    Text(this.eyeProtectionStartTime).fontSize(BODY_SMALL).fontColor(this.rsetAccent)
+                    Text('›').fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
                   }.width('100%').padding({ top: 10, bottom: 6 }).onClick(() => this.showEyeProtectionTimePicker(true))
                   Row() {
-                    Text('结束时间').fontSize(12).fontColor(this.rsetTextSecondary)
+                    Text('结束时间').fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
                     Blank()
-                    Text(this.eyeProtectionEndTime).fontSize(12).fontColor(this.rsetAccent)
-                    Text('›').fontSize(20).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
+                    Text(this.eyeProtectionEndTime).fontSize(BODY_SMALL).fontColor(this.rsetAccent)
+                    Text('›').fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
                   }.width('100%').padding({ top: 6, bottom: 8 }).onClick(() => this.showEyeProtectionTimePicker(false))
                 }
               }
               Text('设置会立即保存并应用到阅读页面；定时支持跨越午夜。')
-                .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
         } else if (this.detailSheetTitle === '书签角标') {
           Column() {
-            Text('当前标记').fontSize(12).fontColor(this.themeColorAccent).width('100%').padding({ top: 4, bottom: 8 })
+            Text('当前标记').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ top: 4, bottom: 8 })
             Row() {
               Stack({ alignContent: Alignment.Center }) {
                 // 有自定义图片时预览真实图片，否则用内置书签图标示意默认丝带。
@@ -3239,9 +3240,9 @@ export struct ReaderSettingsPage {
               }.width(62).height(62).backgroundColor(this.rsetInnerBg).borderRadius(12)
               Column() {
                 Text(this.bookmarkBadgeImage.length > 0 ? '自定义图片' : '默认')
-                  .fontSize(14).fontColor(this.rsetTextPrimary)
+                  .fontSize(TITLE_SMALL).fontColor(this.rsetTextPrimary)
                 Text('角标大小：' + this.bookmarkBadgeSize.toString() + 'dp')
-                  .fontSize(11).fontColor(this.rsetTextTertiary).margin({ top: 5 })
+                  .fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 5 })
               }.alignItems(HorizontalAlign.Start).margin({ left: 12 })
               Blank()
             }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
@@ -3256,13 +3257,13 @@ export struct ReaderSettingsPage {
               onChange: (value: number) => this.onBookmarkBadgeSizeChange(value)
             })
             Text('角标大小会立即保存并应用到阅读页右上角；0 表示不显示角标。自定义图片保存在应用内，可随时恢复默认。')
-              .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+              .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '页边距') {
           Column() {
             Row() {
               ForEach(['正文', '页眉', '页脚'], (label: string) => {
-                Text(label).fontSize(11).fontColor(this.rsetTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
+                Text(label).fontSize(LABEL_SMALL).fontColor(this.rsetTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
                   .padding(9).backgroundColor(this.rsetInnerBg).borderRadius(8).margin({ right: 4 })
                   .onClick(() => this.detailSelectedOption = label)
               }, (label: string) => label)
@@ -3279,13 +3280,13 @@ export struct ReaderSettingsPage {
             MenuSettingSlider({ title: '右边距', value: this.getPaddingValue('右'), minValue: 0,
               maxValue: this.detailSelectedOption === '正文' ? 200 : 300,
               onChange: (value: number) => this.updatePadding('右', value) })
-            Text('边距会立即保存并应用到阅读页。').fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
+            Text('边距会立即保存并应用到阅读页。').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding(12)
           }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
         } else if (this.detailSheetTitle === '正文排版') {
           Column() {
             Row() {
-              Text('缩进').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-              Text(this.paragraphIndent.length.toString()).fontSize(12).fontColor(this.rsetTextSecondary)
+              Text('缩进').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text(this.paragraphIndent.length.toString()).fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
             }.width('100%')
             Slider({ value: this.paragraphIndent.length, min: 0, max: 4, step: 1, style: SliderStyle.InSet })
               .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
@@ -3295,8 +3296,8 @@ export struct ReaderSettingsPage {
                 }
               })
             Row() {
-              Text('字距').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-              Text(this.letterSpacing.toFixed(2)).fontSize(12).fontColor(this.rsetTextSecondary)
+              Text('字距').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text(this.letterSpacing.toFixed(2)).fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.letterSpacing * 100 + 50, min: 0, max: 100, step: 1, style: SliderStyle.InSet })
               .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
@@ -3306,8 +3307,8 @@ export struct ReaderSettingsPage {
                 }
               })
             Row() {
-              Text('段距').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-              Text((this.paragraphSpacing / 10).toFixed(1)).fontSize(12).fontColor(this.rsetTextSecondary)
+              Text('段距').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text((this.paragraphSpacing / 10).toFixed(1)).fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.paragraphSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
               .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
@@ -3317,8 +3318,8 @@ export struct ReaderSettingsPage {
                 }
               })
             Row() {
-              Text('行距').fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-              Text(((this.lineSpacing - 10) / 10).toFixed(1)).fontSize(12).fontColor(this.rsetTextSecondary)
+              Text('行距').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+              Text(((this.lineSpacing - 10) / 10).toFixed(1)).fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
             }.width('100%').margin({ top: 12 })
             Slider({ value: this.lineSpacing, min: 0, max: 20, step: 1, style: SliderStyle.InSet })
               .width('100%').selectedColor(this.themeColorAccent).trackColor(this.rsetTrack).blockColor(this.themeColorAccent)
@@ -3333,7 +3334,7 @@ export struct ReaderSettingsPage {
             Column() {
               ForEach(this.getDetailChoices(this.detailSheetTitle), (choice: string) => {
                 Row() {
-                  Text(choice).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
+                  Text(choice).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
                   if (this.detailSelectedOption === choice) {
                     Image($r('app.media.app_check')).width(18).height(18).fillColor(this.themeColorAccent)
                   }
@@ -3343,12 +3344,12 @@ export struct ReaderSettingsPage {
               }, (choice: string) => choice)
               if (this.detailInfoSlot !== undefined && this.detailSelectedOption === '自定义') {
                 TextInput({ text: this.detailCustomText, placeholder: '输入自定义提示内容' })
-                  .fontSize(13).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                  .fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).placeholderColor(this.themeColorTextTertiary)
                   .backgroundColor(this.rsetInnerBg).borderRadius(10).padding(12)
                   .onChange((value: string) => this.detailCustomText = value)
                 Text('可用变量：{BookName}、{ChapterTitle}、{Time}、{BatteryPercent}、{ChapterIndex}、{ChapterSize}、{PageIndex}、{PageSize}、{PageRemaining}、{ReadProgress}、{FullPageIndex}、{FullPageSize}')
-                  .fontSize(10).fontColor(this.themeColorTextTertiary).width('100%').padding({ top: 8, bottom: 8 })
-                Text('保存').fontSize(13).fontColor(this.rsetSelectedText).padding({ left: 18, right: 18, top: 9, bottom: 9 })
+                  .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding({ top: 8, bottom: 8 })
+                Text('保存').fontSize(LABEL_MEDIUM).fontColor(this.rsetSelectedText).padding({ left: 18, right: 18, top: 9, bottom: 9 })
                   .backgroundColor(this.rsetAccent).borderRadius(18).alignSelf(ItemAlign.End)
                   .onClick(() => this.saveCustomInfoTip())
               }
@@ -3381,7 +3382,7 @@ export struct ReaderSettingsPage {
                 this.detailSheetTitle === '正文排版' ||
                 this.detailInfoSlot !== undefined
                 ? '选择后立即应用并保存；自定义内容需点击保存。' : '')
-                .fontSize(10).fontColor(this.themeColorTextTertiary)
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
                 .width('100%').textAlign(TextAlign.Center).padding(12)
             }.width('100%').padding({ left: 18, right: 18, bottom: 16 })
           }.edgeEffect(EdgeEffect.None).width('100%').layoutWeight(1).scrollBar(BarState.Off)
@@ -3551,10 +3552,10 @@ export struct ReaderSettingsPage {
       onDismiss: () => this.bottomActionConfigVisible = false
     }) {
         Row() {
-          Text('底栏按钮配置').fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
-          Text('取消').fontSize(13).fontColor(this.rsetTextSecondary).margin({ right: 18 })
+          Text('底栏按钮配置').fontSize(BODY_LARGE).fontColor(this.rsetTextPrimary).layoutWeight(1)
+          Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextSecondary).margin({ right: 18 })
             .onClick(() => this.bottomActionConfigVisible = false)
-          Text('保存').fontSize(13).fontColor(this.rsetAccent)
+          Text('保存').fontSize(LABEL_MEDIUM).fontColor(this.rsetAccent)
             .onClick(() => {
               this.onBottomActionsChange(this.draftBottomActions.map(
                 (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
@@ -3568,14 +3569,14 @@ export struct ReaderSettingsPage {
               Row() {
                 this.BottomActionConfigIcon(item.id, item.enabled)
                 Column() {
-                  Text(this.getBottomActionLabel(item.id)).fontSize(14)
+                  Text(this.getBottomActionLabel(item.id)).fontSize(TITLE_SMALL)
                     .fontColor(item.enabled ? this.rsetTextPrimary : this.rsetTextDisabled)
                   if (this.getBottomActionOption(item.id)?.scopeLabel) {
                     Text(this.getBottomActionOption(item.id)?.scopeLabel ?? '')
-                      .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                      .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                   }
                   if (this.getBottomActionOption(item.id)?.migrated === false) {
-                    Text('未迁移').fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                    Text('未迁移').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                   }
                 }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                 Stack({ alignContent: Alignment.Center }) {
@@ -3760,10 +3761,10 @@ export struct ReaderSettingsPage {
           // 同一个 sheet 服务两个入口：顶栏操作按钮与浮动图标（上游 FloatingBarIconConfigSheet
           // 同样复用 ButtonIconConfigSheet，只换标题与保存目标）。
           Text(this.floatingIconConfigVisible ? '浮动图标' : '顶栏按钮配置')
-            .fontSize(17).fontColor(this.rsetTextPrimary).layoutWeight(1)
-          Text('取消').fontSize(13).fontColor(this.rsetTextSecondary).margin({ right: 18 })
+            .fontSize(BODY_LARGE).fontColor(this.rsetTextPrimary).layoutWeight(1)
+          Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextSecondary).margin({ right: 18 })
             .onClick(() => this.closeButtonConfigSheet())
-          Text('保存').fontSize(13).fontColor(this.rsetAccent)
+          Text('保存').fontSize(LABEL_MEDIUM).fontColor(this.rsetAccent)
             .onClick(() => {
               const saved = this.draftTopActions.map(
                 (item: ReaderBottomActionConfig): ReaderBottomActionConfig => ({ id: item.id, enabled: item.enabled })
@@ -3782,14 +3783,14 @@ export struct ReaderSettingsPage {
             Row() {
               this.BottomActionConfigIcon(item.id, item.enabled)
               Column() {
-                Text(this.getTopActionLabel(item.id)).fontSize(14)
+                Text(this.getTopActionLabel(item.id)).fontSize(TITLE_SMALL)
                   .fontColor(item.enabled ? this.rsetTextPrimary : this.rsetTextDisabled)
                 if (this.getBottomActionOption(item.id)?.scopeLabel) {
                   Text(this.getBottomActionOption(item.id)?.scopeLabel ?? '')
-                    .fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                    .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                 }
                 if (this.getBottomActionOption(item.id)?.migrated === false) {
-                  Text('未迁移').fontSize(10).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+                  Text('未迁移').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
                 }
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               // 自定义图标：启用态才出现，未设置显示「+」、已设置显示「×」（上游
@@ -3985,10 +3986,10 @@ struct MenuSettingIconStyle {
 
   build() {
     Column() {
-      Text('底栏图标样式').fontSize(13).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 10 })
+      Text('底栏图标样式').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 10 })
       Row() {
         ForEach(['纯色', '色调', '描边'], (label: string, index: number) => {
-          Text(label).fontSize(11).fontColor(this.value === index ? this.rsetSelectedText : this.rsetTextTertiary)
+          Text(label).fontSize(LABEL_SMALL).fontColor(this.value === index ? this.rsetSelectedText : this.rsetTextTertiary)
             .layoutWeight(1).textAlign(TextAlign.Center)
             .backgroundColor(this.value === index ? this.rsetSelectedBg : this.rsetChipBg)
             .borderRadius(11).padding(9).margin({ left: index === 0 ? 0 : 6 })
@@ -4017,8 +4018,8 @@ struct MenuSettingSlider {
   build() {
     Column() {
       Row() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-        Text(`${this.value}`).fontSize(12).fontColor(this.rsetTextSecondary)
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(`${this.value}`).fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: this.stepValue, style: SliderStyle.InSet })
         .width('100%').selectedColor(this.rsetAccent).trackColor(this.rsetTrack).blockColor(this.rsetAccent)
@@ -4057,13 +4058,13 @@ struct MenuSettingChoice {
 
   build() {
     Column() {
-      Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 10 })
+      Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).width('100%').margin({ bottom: 10 })
       Row() {
-        Text('页码').fontSize(11).fontColor(this.value === 'page' ? this.rsetSelectedText : this.rsetTextTertiary)
+        Text('页码').fontSize(LABEL_SMALL).fontColor(this.value === 'page' ? this.rsetSelectedText : this.rsetTextTertiary)
           .layoutWeight(1).textAlign(TextAlign.Center)
           .backgroundColor(this.value === 'page' ? this.rsetSelectedBg : this.rsetChipBg)
           .borderRadius(11).padding(9).onClick(() => this.onChange('page'))
-        Text('章节').fontSize(11).fontColor(this.value === 'chapter' ? this.rsetSelectedText : this.rsetTextTertiary)
+        Text('章节').fontSize(LABEL_SMALL).fontColor(this.value === 'chapter' ? this.rsetSelectedText : this.rsetTextTertiary)
           .layoutWeight(1).textAlign(TextAlign.Center)
           .backgroundColor(this.value === 'chapter' ? this.rsetSelectedBg : this.rsetChipBg)
           .borderRadius(11).padding(9).margin({ left: 8 }).onClick(() => this.onChange('chapter'))
@@ -4086,8 +4087,8 @@ struct MenuSettingSwitch {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
-        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       // 与全仓其它开关统一用 UiSwitchControl：SDK 的 Toggle 无法往滑块里放勾，
       // 且配色不可控。interactive 保持 true —— 原来就是「开关本体可点」，换成整行可点
@@ -4115,8 +4116,8 @@ struct MenuSettingPalette {
   build() {
     Column() {
       Row() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-        Text(this.selectedColor).fontSize(10).fontColor(this.rsetTextTertiary)
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(this.selectedColor).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary)
       }.width('100%').margin({ bottom: 10 })
       Row() {
         ForEach(this.colors, (color: string) => {
@@ -4140,7 +4141,7 @@ struct MenuSettingSection {
   @Prop title: string = '';
 
   build() {
-    Text(this.title).fontSize(12).fontColor(this.rsetAccent).width('100%')
+    Text(this.title).fontSize(BODY_SMALL).fontColor(this.rsetAccent).width('100%')
       .padding({ left: 4, top: 10, bottom: 4 })
   }
 }
@@ -4160,11 +4161,11 @@ struct MenuSettingSegments {
 
   build() {
     Row() {
-      Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1).maxLines(1)
+      Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1).maxLines(1)
       Text(this.choices[this.selectedIndex] ?? this.choices[0] ?? '')
-        .fontSize(11).fontColor(this.rsetTextSecondary).padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .fontSize(LABEL_SMALL).fontColor(this.rsetTextSecondary).padding({ left: 10, right: 10, top: 6, bottom: 6 })
         .backgroundColor(this.rsetInnerBg).borderRadius(8)
-      Text('⌄').fontSize(15).fontColor(this.rsetTextTertiary).margin({ left: 4 })
+      Text('⌄').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextTertiary).margin({ left: 4 })
     }.width('100%').height(46).padding(8).backgroundColor(this.rsetCardBg).borderRadius(12)
       .onClick(() => this.onSelect(this.selectedIndex))
   }
@@ -4195,11 +4196,11 @@ struct ReaderInfoSettingRow {
       } else {
         Image($r('app.media.reader_info_align_right')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       }
-      Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1).maxLines(1)
+      Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1).maxLines(1)
       Text(this.choices[this.selectedIndex] ?? this.choices[0] ?? '')
-        .fontSize(11).fontColor(this.rsetTextSecondary).padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .fontSize(LABEL_SMALL).fontColor(this.rsetTextSecondary).padding({ left: 10, right: 10, top: 6, bottom: 6 })
         .backgroundColor(this.rsetInnerBg).borderRadius(8)
-      Text('⌄').fontSize(15).fontColor(this.rsetTextTertiary).margin({ left: 4 })
+      Text('⌄').fontSize(LABEL_MEDIUM).fontColor(this.rsetTextTertiary).margin({ left: 4 })
     }.width('100%').height(50).padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
       .onClick(() => this.onSelect(this.selectedIndex))
   }
@@ -4226,14 +4227,14 @@ struct ReaderInfoColorRow {
         Image($r('app.media.reader_info_color_text')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       }
       Column() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
-        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Row() {
         Column().width(22).height(22).backgroundColor('#E6E1E7').borderRadius(11)
         Column().width(22).height(22).backgroundColor(this.rsetChipBgAlt).borderRadius(11).margin({ left: 5 })
       }
-      Text('›').fontSize(20).fontColor(this.rsetTextTertiary).margin({ left: 8 })
+      Text('›').fontSize(HEADLINE_SMALL).fontColor(this.rsetTextTertiary).margin({ left: 8 })
     }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
@@ -4254,8 +4255,8 @@ struct ReaderInfoSwitchRow {
     Row() {
       Image($r('app.media.reader_info_minimize')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       Column() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
-        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       // 同上：与全仓开关统一，interactive 保持 true（开关本体可点）。
       UiSwitchControl({
@@ -4281,10 +4282,10 @@ struct ReaderInfoOptionRow {
     Row() {
       Image($r('app.media.reader_info_text_fields')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
       Column() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
-        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('›').fontSize(20).fontColor(this.rsetTextTertiary)
+      Text('›').fontSize(HEADLINE_SMALL).fontColor(this.rsetTextTertiary)
     }.width('100%').padding(10).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
@@ -4308,8 +4309,8 @@ struct ReaderInfoSliderRow {
     Column() {
       Row() {
         Image($r('app.media.reader_info_format_size')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ right: 14 })
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary).layoutWeight(1)
-        Text(`${this.value}`).fontSize(12).fontColor(this.rsetTextSecondary)
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary).layoutWeight(1)
+        Text(`${this.value}`).fontSize(BODY_SMALL).fontColor(this.rsetTextSecondary)
       }.width('100%')
       Slider({ value: this.value, min: this.minValue, max: this.maxValue, step: 1, style: SliderStyle.InSet })
         .width('100%').selectedColor(this.rsetAccent).trackColor(this.rsetTrack).blockColor(this.rsetAccent)
@@ -4341,8 +4342,8 @@ struct MenuSettingColor {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
-        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Row() {
         Column().width(22).height(22)
@@ -4354,7 +4355,7 @@ struct MenuSettingColor {
           .border({ width: this.nightColor.length > 0 ? 0 : 1, color: this.rsetTrack })
           .borderRadius(11).margin({ left: 5 })
       }
-      Text('›').fontSize(20).fontColor(this.rsetTextTertiary).margin({ left: 8 })
+      Text('›').fontSize(HEADLINE_SMALL).fontColor(this.rsetTextTertiary).margin({ left: 8 })
     }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
@@ -4372,10 +4373,10 @@ struct MenuSettingOption {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(13).fontColor(this.rsetTextPrimary)
-        Text(this.detail).fontSize(10).fontColor(this.rsetTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.rsetTextPrimary)
+        Text(this.detail).fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary).margin({ top: 4 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('›').fontSize(20).fontColor(this.rsetTextTertiary)
+      Text('›').fontSize(HEADLINE_SMALL).fontColor(this.rsetTextTertiary)
     }.width('100%').padding(12).backgroundColor(this.rsetCardBg).borderRadius(12)
   }
 }
@@ -4397,7 +4398,7 @@ struct BackgroundOption {
     // 而是底部一条满宽横带，勾画在横带里。横带用 secondaryContainer 色、勾用 onSecondaryContainer。
     Column() {
       Stack({ alignContent: Alignment.Center }) {
-        Text(this.label).fontSize(10).maxLines(2).textAlign(TextAlign.Center)
+        Text(this.label).fontSize(LABEL_SMALL).maxLines(2).textAlign(TextAlign.Center)
           .fontColor(this.textColor)
           .padding({ left: 2, right: 2 })
       }.width('100%').layoutWeight(1)
@@ -4441,7 +4442,7 @@ struct ReaderTabRow {
     Row({ space: 8 }) {
       ForEach(this.titles, (title: string, index: number) => {
         Text(title)
-          .fontSize(13)
+          .fontSize(LABEL_MEDIUM)
           .fontWeight(index === this.selectedIndex ? FontWeight.Bold : FontWeight.Medium)
           .fontColor(index === this.selectedIndex ? this.rsetSelectedText : this.rsetTextTertiary)
           .maxLines(1)

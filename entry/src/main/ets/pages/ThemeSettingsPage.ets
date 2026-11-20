@@ -50,6 +50,7 @@ import {
   DIVIDER_WIDTH_MAX,
   DIVIDER_WIDTH_MIN
 } from '../data/ThemeCardStyle';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ThemeSettingsPage {
@@ -512,7 +513,7 @@ export struct ThemeSettingsPage {
           if (this.showRefactorTip) {
             Row() {
               Text('仍有部分界面未用Compose重构，这些界面会与大部分界面有较大差异。')
-                .fontSize(14).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               AppGlyph({ name: 'profileClose', glyphSize: 18, tint: '#C5C7D0' })
                 .onClick(() => this.dismissRefactorTip())
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
@@ -540,7 +541,7 @@ export struct ThemeSettingsPage {
           Column() {
             Row() {
               Column() {
-                Text('纯黑深色模式').fontSize(16).fontColor(this.themeColorTextSecondary)
+                Text('纯黑深色模式').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               // 整行可点：点标题一侧也能切换（对齐上游 SwitchSettingItem）。
               UiSwitchControl({
@@ -579,8 +580,8 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             Column() {
               Row() {
-                Text('字体大小').fontSize(16).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                Text(`当前字体大小: ${(this.fontScale / 10).toFixed(1)}`).fontSize(14).fontColor(this.themeColorTextTertiary)
+                Text('字体大小').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text(`当前字体大小: ${(this.fontScale / 10).toFixed(1)}`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
               }.width('100%')
               Slider({ value: this.fontScale, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
                 .width('100%').onChange((value: number) => this.onFontScaleChange(value))
@@ -634,12 +635,12 @@ export struct ThemeSettingsPage {
                 })
                 ThemeItemDivider()
                 // 拖排顺序：上游用可拖列表，本地用上下移两枚按钮承接同一个 onSetOrder。
-                Text('主导航顺序').fontSize(16).fontColor(this.themeColorTextSecondary).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
+                Text('主导航顺序').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
                 ForEach(orderedMainNavigation(this.mainNavigationOrder), (navRoute: string) => {
                   Row() {
-                    Text(mainNavigationLabel(navRoute)).fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-                    Button('上移').fontSize(13).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
-                    Button('下移').fontSize(13).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
+                    Text(mainNavigationLabel(navRoute)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+                    Button('上移').fontSize(LABEL_MEDIUM).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
+                    Button('下移').fontSize(LABEL_MEDIUM).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
                   }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 })
                 }, (navRoute: string) => navRoute)
               }
@@ -904,7 +905,7 @@ struct ThemeSectionTitle {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop title: string = '';
   build() {
-    Text(this.title).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+    Text(this.title).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
       .alignSelf(ItemAlign.Start).margin({ left: 18, bottom: 9 })
   }
 }
@@ -920,9 +921,9 @@ struct ThemeSwitchRow {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(16).fontColor(this.themeColorTextSecondary)
+        Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
         if (this.detail.length > 0) {
-          Text(this.detail).fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          Text(this.detail).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       UiSwitchControl({
