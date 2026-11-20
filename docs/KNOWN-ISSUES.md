@@ -2112,7 +2112,67 @@ libs/x86_64/libquickjs.so         1,439,008
 
 所以 1,217 行本身是「一致的债」，不是「这一处特别乱」。真正值得动的是**执行逻辑那 210 行**：它本该在 `ReplaceRuleEngine.ets`（现在只有 80 行 worker 函数），留在 Repository 里导致「想单独测一条替换规则，必须先构造整个 Repository 的静态状态」（`cachedRules` / `defaultEnabled` / `injectedContext`）。上游把它独立成 `ContentProcessor.kt` 正是为了可测。
 
-### 四、纠正一处误判：`EffectiveReplacesSheet` 与 `ContentProcessesSheet` 是死代码
+### 四、有没有 Room 的对等物：官方没有，社区三个都不够格（r363 查证）
+
+这一节回答「本地缺 DAO 层，那有没有现成的 ORM 库可以直接补上」。结论：**官方没有，社区有三个，但都拿不到 Room 真正的价值。**
+
+**官方：没有。** SDK 26 的 `ets/api/` 下只有一个数据库模块：
+
+```
+$ ls .../sdk/default/openharmony/ets/api/ | grep -i relational
+@ohos.data.relationalStore.d.ts
+@ohos.data.sendableRelationalStore.d.ets
+$ ls .../sdk/default/openharmony/ets/api/ | grep -i orm
+（无输出）
+```
+
+API 8/9 时代 OpenHarmony 确实有过 `@ohos.data.orm` 模块（`@Entity` / `@Columns` 注解 + `OrmObject` 基类），HarmonyOS NEXT 已移除，现在只剩裸 `relationalStore`。
+
+**社区：三个，都在 ohpm 上。**
+
+| 库 | ohpm 包名 | 版本 | 下载量 | 最低 API | 许可 | 最近更新 |
+| --- | --- | --- | --- | --- | --- | --- |
+| IBest-ORM | `@ibestservices/ibest-orm` | 2.0.4 | 1,910 | 17 | Apache-2.0 | 2026-03 |
+| OCORM | `@offlinecat/ocorm` | 3.2.0 | 304 | 12 | MIT | 约 3 个月前 |
+| ArkORM | `@explore-in-hmos/arkorm` | 1.0.0 | 17 | 20 | MIT | 2026-09 |
+
+三者都声称支持装饰器定义实体、链式查询、关系映射、事务、自动迁移。ArkORM 的 README 直接写「Inspired by Android Room」，API 风格最接近；IBest-ORM 功能最全（软删除、验证装饰器、嵌套事务、查询缓存），维护最久；OCORM 刻意不用装饰器，改用 `defineEntity({...})` 对象描述表结构。
+
+**为什么都不是 Room：三条核心价值在 ArkTS 上都落不了地。**
+
+先看编译器的实际配置（`.../sdk/default/openharmony/ets/build-tools/ets-loader/tsconfig.json`）：
+
+- `:1055` `"experimentalDecorators": true` —— 自定义装饰器语法可用，官方《从 TypeScript 到 ArkTS 的适配规则》也明写「ArkTS 支持自定义装饰器，语法与 TS 一致」。
+- 同一份文件里**没有** `emitDecoratorMetadata` —— 装饰器拿不到属性类型，只能靠运行时手工登记。
+- `:1064` `"lib": ["es2021"]` —— `Reflect` API 本身存在，但没有编译期元数据喂给它。
+
+| Room 的能力 | 靠什么实现 | ArkTS 能否做到 |
+| --- | --- | --- |
+| 列名写错就编译失败 | 注解处理器在编译期生成 `XxxDao_Impl` | 否。没有注解处理器；用 hvigor 插件自写一套代码生成器是独立工程，不在本轮范围 |
+| `Flow<List<T>>` 响应式，库表一变 UI 自动刷新 | Kotlin Flow | 否。要在写路径自己发通知 |
+| 零运行时开销 | 生成的实现类直接调 SQLite | 否。全是运行时登记 + 运行时拼 `RdbPredicates` |
+
+**实测 ArkORM 源码**（1,920 行，克隆在 `N:/HarmonyProjects/tmp/probe-arkorm/`，只读）：
+
+- `src/main/ets/core/MetadataRegistry.ets:5` 的注释自陈：`Heart of ArkORM: a registry holding entity metadata at runtime in pure ArkTS, without reflect-metadata`。它用「属性装饰器先跑、类装饰器最后跑」的两阶段 staging 手工累积元数据，正是因为拿不到 `emitDecoratorMetadata` 那层信息。
+- `src/main/ets/query/QueryBuilder.ets:79` 的签名是 `where(field: string): Condition<T>` —— 传的是**裸字符串**，不是 `keyof T`。README 里写的 `db.from<User>(User).where('age').gte(18)`，字段名写错编译期不报错。「type-safe」名不副实。
+
+**本地为什么不引入**（实测统计）：
+
+```
+46 个 Repository 文件 / 24,049 行
+32 个手写 SQL 常量、145 处 SQL 字面量
+JOIN：0 处
+聚合（COUNT/SUM/MAX/GROUP BY）：1 处（BookRepository.ets:212 的 SELECT COUNT(*)）
+INSERT OR REPLACE / INSERT OR IGNORE：38 处
+事务调用：122 处
+```
+
+SQL 复杂度极低——零 `JOIN`、只有一条 `COUNT(*)`，全是单表 CRUD。引入 ORM 换来的收益，抵不上重写 24,049 行数据访问层的成本；三个库的维护度也都不高（下载量 17 / 304 / 1,910，其中下载量最高的 IBest-ORM 已 8 个月未更新）；本地大量用 `INSERT OR` 方言与 `IN (?,?,?)` 动态占位符，第三方 ORM 未必覆盖得住。
+
+**该借鉴的是分层，不是库。** Room 真正值钱的地方，是把「SQL 在哪、业务在哪、执行在哪」三件事拆清楚——这一点本地不用装任何依赖就能拿到：把 `ReplaceRuleRepository.ets:910`–`:1120` 那 210 行执行编排搬进 `ReplaceRuleEngine.ets`（理由与第三节相同：可测性），Repository 回到「只存取」。补 DAO 层等于自建一套代码生成工具链，收益不抵成本；装第三方 ORM 则是用 24,049 行的重写换一个编译期仍然不校验字段名的库。
+
+### 五、纠正一处误判：`EffectiveReplacesSheet` 与 `ContentProcessesSheet` 是死代码
 
 我上一轮说「本地缺 `EffectiveReplacesSheet`，这是功能缺失」——**错了**。实测：
 
@@ -2127,10 +2187,10 @@ libs/x86_64/libquickjs.so         1,439,008
 
 **所以这一项不是缺口，本地已经比上游多走了一步。**
 
-### 五、判断
+### 六、判断
 
 - **不该按文件数对齐上游。** 16 个文件是「DAO / Entity / Delegate / Sheet 全部拆开」的产物，本地没有 DAO 层，硬拆只会得到一层空转发。
-- **该做的一件：把执行逻辑搬进 `ReplaceRuleEngine.ets`。** 把 `applyContent` / `previewContent` / `applyContentWithResult` / `applyTitle` / `applyContentForLength` 这 210 行从 Repository 移到 Engine，Repository 回到「只存取」。理由是可测性，不是像上游。
+- **该做的一件：把执行逻辑搬进 `ReplaceRuleEngine.ets`。** 把 `applyContent` / `previewContent` / `applyContentWithResult` / `applyTitle` / `applyContentForLength` 这 210 行从 Repository 移到 Engine，Repository 回到「只存取」。理由是可测性，不是像上游（这条的通用依据见第四节：可借鉴的是 Room 的分层，不是它的库）。
 - **不该做的一件：补 `EffectiveReplacesSheet` / `ContentProcessesSheet`。** 上游自己都没接，补了等于实现上游的死代码。
 - **已知残留**：`applyContentWithResult`（同步入口）仍未限时，只有阅读链路的 `applyContentWithResultAsync` 有 3000ms 预算——这一条已在上一节「阅读与规则」里登记，本轮不变。
 

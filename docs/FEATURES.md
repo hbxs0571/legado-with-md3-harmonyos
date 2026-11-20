@@ -82,7 +82,7 @@
 - **目录**：四个页签——信息 / 目录 / 书签 / 笔记（`pages/CatalogPage.ets:270` 的 `getTabLabel`），章节树支持卷与层级（`reverseTocHierarchy` `:207`），当前章自动滚到可见（`hasAutoScrolledCurrentChapter` `:97`）。
 - **书内搜索**：全文或正则两种模式，支持替换模式、只搜本书历史（`pages/ReaderSearchPage.ets:50`-`:57` 的七个状态位），结果上限 200 条，遍历章节带进度显示（`:213` 的 `BookRepository.forEachChapter`）。
 - **书签与笔记**：下滑添加/取消书签（`swipeToAddBookmark`）、自定义书签角标图片与大小（`bookmarkBadgeImage`/`bookmarkBadgeSize`）、七种标记效果与 16 色预设（`pages/ReaderMarkingEditor.ets:8`-`:22`），编辑与备注在 `ReaderMarkingEditor`（532 行）。
-- **替换净化**：规则在正文进入排版前生效，正则跑在 taskpool worker 里逐条计时，单条超时自动停用该规则并提示（`data/ReplaceRuleEngine.ets:1`-`:17`、应用在 `data/BookRepository.ets:1863`）。规则的存取、分组排序、导入导出与执行编排全部装在 `data/ReplaceRuleRepository.ets`（1,217 行，本地无 DAO 层的必然结果），执行部分约占 210 行（`:910`-`:1120`）——上游把这部分独立在 `help/book/ContentProcessor.kt`（297 行），本地尚未拆出，可测性受影响的说明见 [`docs/KNOWN-ISSUES.md`](KNOWN-ISSUES.md)「替换规则：Repository 混装五类职责」。
+- **替换净化**：规则在正文进入排版前生效，正则跑在 taskpool worker 里逐条计时，单条超时自动停用该规则并提示（`data/ReplaceRuleEngine.ets:1`-`:17`、应用在 `data/BookRepository.ets:1863`）。规则的存取、分组排序、导入导出与执行编排全部装在 `data/ReplaceRuleRepository.ets`（1,217 行，本地无 DAO 层的必然结果），执行部分约占 210 行（`:910`-`:1120`）——上游把这部分独立在 `help/book/ContentProcessor.kt`（297 行），本地尚未拆出，可测性受影响的说明见 [`docs/KNOWN-ISSUES.md`](KNOWN-ISSUES.md)「替换规则：Repository 混装五类职责」。该节另记了为什么不用第三方 ORM 补 DAO 层：官方无 ORM 模块，社区三个库都拿不到 Room 的编译期校验。
 - **阅读设置**：四页签（全局 / 菜单 / 信息 / 更多），`pages/ReaderSettingsPage.ets:688` 的 `settingsContent`；含屏幕方向、沉浸式、护眼、翻页阈值、横屏双页、进度条行为、鼠标滚轮/音量键/长按翻页、文字选择与触感反馈、点击区域配置、自定义翻页按键等近百项。
 - **自动阅读**：分页模式下按设定秒数自动翻页，滚动模式不画指示器（`pages/ReaderPage.ets:707`-`:724` 的状态与 `:1508` 的 `startAutoPageTurn`，计时器见 `:1482`）。
 - **跳转与定位**：目录跳章、书内搜索跳定位、进度条拖拽（三档行为：页码/章节/整本）、翻页键。

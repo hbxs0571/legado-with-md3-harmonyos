@@ -92,7 +92,7 @@ onIntent = viewModel::onIntent,
 
 上游相反：84 个 `class XxxRepository` 由 Koin 注入，生命周期跟着作用域走。差别在于**「什么时候该释放」这件事本地无法表达**——静态缓存没有宿主，页面关掉它还在。
 
-这套「无 DAO 层、SQL 手写在 Repository 里」的选择有个直接后果：**单个 Repository 会把多类职责混在一起**。最典型的是 `data/ReplaceRuleRepository.ets`（1,217 行），它同时装着 SQL 常量、持久化与迁移、分组与排序、导入导出、以及**正文替换的执行编排**（`applyContent` / `previewContent` / `applyContentWithResult` / `applyTitle`，`:910`–`:1120`，约 210 行）。上游对应的是 `help/book/ContentProcessor.kt`（297 行）独立成文件、`ReplaceRuleDao` 与 `ReplaceRuleRepository` 分开。后果不是功能错，是**可测性**：想单独验证一条替换规则，必须先构造 Repository 的整套静态状态（`cachedRules` / `defaultEnabled` / `injectedContext`）。这条已在 [`docs/KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的「替换规则：Repository 混装五类职责」一节里单独登记。
+这套「无 DAO 层、SQL 手写在 Repository 里」的选择有个直接后果：**单个 Repository 会把多类职责混在一起**。最典型的是 `data/ReplaceRuleRepository.ets`（1,217 行），它同时装着 SQL 常量、持久化与迁移、分组与排序、导入导出、以及**正文替换的执行编排**（`applyContent` / `previewContent` / `applyContentWithResult` / `applyTitle`，`:910`–`:1120`，约 210 行）。上游对应的是 `help/book/ContentProcessor.kt`（297 行）独立成文件、`ReplaceRuleDao` 与 `ReplaceRuleRepository` 分开。后果不是功能错，是**可测性**：想单独验证一条替换规则，必须先构造 Repository 的整套静态状态（`cachedRules` / `defaultEnabled` / `injectedContext`）。这条已在 [`docs/KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的「替换规则：Repository 混装五类职责」一节里单独登记。该节第四节另记了「为什么不用现成 ORM 补这一层」：SDK 26 没有官方 ORM（`@ohos.data.orm` 已在 HarmonyOS NEXT 移除），社区三个库（IBest-ORM / OCORM / ArkORM）都拿不到 Room 的编译期校验与响应式流；本地零 `JOIN`、只有一条 `COUNT(*)`，引入的收益抵不上重写 24,049 行数据访问层。**该借鉴的是分层，不是库。**
 
 ### 5.4 迁移机制不同
 
