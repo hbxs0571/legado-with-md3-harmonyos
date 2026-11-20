@@ -2052,6 +2052,92 @@ libs/x86_64/libquickjs.so         1,439,008
 
 ---
 
+## 替换规则：Repository 混装五类职责，上游两个浮层其实是死代码（r362 盘点）
+
+这一节回答「本地 `data/ReplaceRuleRepository.ets` 1,217 行是不是不正常、要不要按上游拆」。结论分两半：**混装是真债，但「缺两个浮层」是我上一轮的误判——那两个浮层在上游根本没有调用点。**
+
+### 一、上游的真实分工：16 个文件、约 2,700 行
+
+引擎层（真正做替换）：
+
+| 文件 | 行数 | 职责 |
+| --- | --- | --- |
+| `help/book/ContentProcessor.kt` | 297 | 正文应用替换规则、净化全流程、`mContent != tmp` 才计入生效 |
+| `help/ReplaceAnalyzer.kt` | 46 | 解析 `##正则##替换` 语法 |
+| `domain/model/BookContentProcessEngine.kt` | 196 | 内容处理引擎（应用哪些规则、什么顺序） |
+| `domain/model/BookContentProcessModels.kt` | 105 | 引擎数据模型 |
+| `domain/usecase/SaveBookContentProcessUseCase.kt` | 71 | 保存内容处理配置 |
+
+数据层：
+
+| 文件 | 行数 |
+| --- | --- |
+| `data/entities/ReplaceRule.kt` | 119 |
+| `data/entities/BookContentProcess.kt` | 60 |
+| `data/dao/ReplaceRuleDao.kt` | 189 |
+| `data/dao/BookContentProcessDao.kt` | 57 |
+| `data/repository/ReplaceRuleRepository.kt` | 239 |
+| `data/repository/BookContentProcessRepository.kt` | 44 |
+
+界面层：`ui/book/read/sheet/TextProcessingSheet.kt` 602（**唯一真正接线的那一个**）、`ui/book/read/ReadReplaceRuleDelegate.kt` 93、`ui/book/read/ReadContentProcessDelegate.kt` 169。
+
+设置里的独立管理页：`ui/replace/` 七个文件（`ReplaceRuleScreen` / `ReplaceRuleViewModel` / `ReplaceRuleContract` / `ReplaceEditRoute` / `edit/ReplaceEditScreen` / `edit/ReplaceEditViewModel` / `edit/ReplaceEditContract`）。
+
+### 二、本地现状：一个文件混装五类职责
+
+`entry/src/main/ets/data/ReplaceRuleRepository.ets` 1,217 行，五类内容挤在一起：
+
+| 层 | 行号 | 约计 |
+| --- | --- | --- |
+| SQL 常量（`upsertSql` / `deleteSql` / `updateOrderSql` / `updateGroupSql` 等十条） | `:71`–`:104` | 34 |
+| 持久化与迁移（`load` / `writeAll` / `loadFromPreferences` / `migrateFromPreferences` / `readAll` / `toArgs`） | `:105`–`:310` | ~205 |
+| 分组与排序（`getGroups` / `splitGroups` / `moveToTop` / `moveBatchToTop` / `reorder` / `rewriteGroups`） | `:310`–`:800` | ~490 |
+| 导入导出（`importRules` / `exportRules` / `pickImportFile` / `saveExportFile`） | `:801`–`:910` | ~110 |
+| **正文替换执行**（`applyContent` / `previewContent` / `applyContentWithResult` / `applyContentWithResultAsync` / `applyContentForLength` / `applyTitle`） | `:910`–`:1120` | ~210 |
+
+对应的本地文件与上游的映射关系：
+
+| 上游 | 本地 | 说明 |
+| --- | --- | --- |
+| `help/book/ContentProcessor.kt` + `domain/model/BookContentProcessEngine.kt` | `data/BookContentProcessEngine.ets` 192 行 | 引擎独立，**但正文替换的编排不在它里面** |
+| `domain/model/BookContentProcessModels.kt` | `model/BookContentProcess.ets` 83 行 | 对得上 |
+| `data/entities/ReplaceRule.kt` | `model/ReplaceRule.ets` 21 行 | 上游是带 Room 注解的实体，本地纯字段模型 |
+| `data/repository/ReplaceRuleRepository.kt` + 两个 DAO + `help/ReplaceAnalyzer.kt` | `data/ReplaceRuleRepository.ets` 1,217 行 | **四合一** |
+| `help/ReplaceAnalyzer.kt` 的正则执行部分 | `data/ReplaceRuleEngine.ets` 80 行 | 只有 worker 函数，不含编排 |
+| `ui/book/read/sheet/TextProcessingSheet.kt` | `pages/ReaderTextProcessingSheet.ets` 410 行 | 两页签，与上游一致 |
+
+### 三、为什么会这样：本地没有 DAO 层
+
+`data/RdbSchema.ets` 只建表、不生成 DAO，所有 SQL 手写在 Repository 里。这是**全仓一致的架构选择**，不是替换规则这一处特殊。`data/*Repository.ets` 体量排名：`BackupRepository.ets` 3,865、`BookRepository.ets` 3,383、`ReaderSettingsRepository.ets` 2,118、`ReadRecordRepository.ets` 1,373、`EpubRepository.ets` 1,283、`ReplaceRuleRepository.ets` 1,217（第六）。
+
+所以 1,217 行本身是「一致的债」，不是「这一处特别乱」。真正值得动的是**执行逻辑那 210 行**：它本该在 `ReplaceRuleEngine.ets`（现在只有 80 行 worker 函数），留在 Repository 里导致「想单独测一条替换规则，必须先构造整个 Repository 的静态状态」（`cachedRules` / `defaultEnabled` / `injectedContext`）。上游把它独立成 `ContentProcessor.kt` 正是为了可测。
+
+### 四、纠正一处误判：`EffectiveReplacesSheet` 与 `ContentProcessesSheet` 是死代码
+
+我上一轮说「本地缺 `EffectiveReplacesSheet`，这是功能缺失」——**错了**。实测：
+
+- `ui/book/read/sheet/EffectiveReplacesSheet.kt`（168 行）与 `ui/book/read/sheet/ContentProcessesSheet.kt`（270 行）**全仓零调用点**。`grep -rn "EffectiveReplacesSheet\|ContentProcessesSheet"` 只命中它们自己的 `fun` 声明行。
+- `ReadBookScreen.kt` 里渲染浮层的块（`:387` 起二十余处 `if (state.activeSheet is ReadBookSheet.XXX)`）**没有这两个**；`ReadBookContract.kt:1307`/`:1308` 定义了 `ReadBookSheet.EffectiveReplaces` 与 `ReadBookSheet.ContentProcesses` 两个 sheet 类型，但从未被 `ShowSheet` 触发。
+- `ReadBookScreen.kt:442-453` 只渲染 `ReadBookSheet.TextProcessing` 一个，它内部用 `CardTabRow` 分两页签（`R.string.replace_purify` 与 `R.string.content_processes`），内容分别是 `ReplaceRulesPage`（`:224`）与 `ContentProcessesPage`（`:390`）——**上游把「正文处理」做成了 TextProcessingSheet 的第二页签**，那两个独立浮层是被这套重构留在仓库里的旧实现。
+
+本地正好对得上：`pages/ReaderTextProcessingSheet.ets` 也是两页签（`activeTab === 0` 替换净化 / `activeTab === 1` 正文处理），且比上游多做了「当前有效」筛选档：
+
+- 上游 `ReplaceFilter.Effective -> rule.id in effectiveIds`（`:242`），只看 id 是否在本章生效集合里。
+- 本地 `:110` 是 `this.replaceFilter === '当前有效' && this.replaceEnabled && rule.isEnabled && this.effectiveRuleIds.includes(rule.id)`，多判了 `replaceEnabled` 与 `rule.isEnabled`。这两个条件在上游语境下是冗余的（没启用的规则不会跑，也就不会进 `effectiveIds`），但本地多判的结果更保守——关掉净化后不会把上一章的缓存 id 显示成「当前有效」。
+
+**所以这一项不是缺口，本地已经比上游多走了一步。**
+
+### 五、判断
+
+- **不该按文件数对齐上游。** 16 个文件是「DAO / Entity / Delegate / Sheet 全部拆开」的产物，本地没有 DAO 层，硬拆只会得到一层空转发。
+- **该做的一件：把执行逻辑搬进 `ReplaceRuleEngine.ets`。** 把 `applyContent` / `previewContent` / `applyContentWithResult` / `applyTitle` / `applyContentForLength` 这 210 行从 Repository 移到 Engine，Repository 回到「只存取」。理由是可测性，不是像上游。
+- **不该做的一件：补 `EffectiveReplacesSheet` / `ContentProcessesSheet`。** 上游自己都没接，补了等于实现上游的死代码。
+- **已知残留**：`applyContentWithResult`（同步入口）仍未限时，只有阅读链路的 `applyContentWithResultAsync` 有 3000ms 预算——这一条已在上一节「阅读与规则」里登记，本轮不变。
+
+关联：[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) 5.3（仓储是无状态工具类）、[`docs/FEATURES.md`](FEATURES.md) 第二章（替换净化）、[`docs/parity/TXT-READER.md`](parity/TXT-READER.md)。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。
