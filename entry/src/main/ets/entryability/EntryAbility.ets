@@ -8,6 +8,8 @@ import { ThemeSettingsRepository, THEME_MODE_DARK } from '../data/ThemeSettingsR
 import { applyStartWindowBackgroundColor, preloadInitialThemeColors } from '../data/StartWindowBackground';
 import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
 import { BookRepository } from '../data/BookRepository';
+import { BookSourceRuntimeStore } from '@legado/sourceengine';
+import { BookSourceRuntimePersistenceImpl } from '../bookSource/BookSourceRuntimePersistenceImpl';
 
 /**
  * 系统栏底色：全屏布局下恒透明。
@@ -67,6 +69,10 @@ function applySystemBar(context: Context, isDark: boolean): void {
 
 export default class EntryAbility extends UIAbility {
   onCreate(): void {
+    // 安装书源引擎的运行时持久化：引擎自己不开库，登录态与书源读取都经这里。
+    // 仓储缓存此时可能还没 load（首屏才 load），但 getBookSource 走 getAll 是同步快照，
+    // 首次调用发生在用户点搜索之后，那时缓存已就绪。
+    BookSourceRuntimeStore.install(new BookSourceRuntimePersistenceImpl(this.context));
     // 首帧之前把落盘的主题色同步灌进 AppStorage（批 1，对齐用户「概率性白闪」的反馈）：
     // Index 的 @StorageProp 默认值是浅色，真值要到 restoreOnboarding 的一串 await 之后才广播，
     // 深色主题下首帧就会用浅色画一遍。这里早于窗口创建与 loadContent，是唯一赶得上的位置。

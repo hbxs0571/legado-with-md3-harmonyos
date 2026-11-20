@@ -23,6 +23,14 @@
           "applyToProducts": ["default"]
         }
       ]
+    },
+    {
+      "name": "sourceengine",
+      "srcPath": "./third_party/harmony-book-source-engine/sourceengine"
+    },
+    {
+      "name": "quickjs",
+      "srcPath": "./third_party/harmony-book-source-engine/quickjs"
     }
   ]
 }

@@ -1,0 +1,14 @@
+{
+  "modelVersion": "6.1.0",
+  "name": "harmony-book-source-engine",
+  "version": "1.0.0",
+  "description": "HarmonyOS 书源解析内核：兼容阅读（Legado）书源与原生书源的规则解析、请求层与脚本运行时。",
+  "main": "",
+  "author": "李其健",
+  "homepage": "https://github.com/wip3l/harmony-book-source-engine",
+  "repository": "https://github.com/wip3l/harmony-book-source-engine.git",
+  "license": "GPL-3.0",
+  "dependencies": {},
+  "devDependencies": {},
+  "scripts": {}
+}

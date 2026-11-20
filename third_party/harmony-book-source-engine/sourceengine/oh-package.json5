@@ -1,0 +1,13 @@
+{
+  "name": "@legado/sourceengine",
+  "version": "1.0.0",
+  "description": "HarmonyOS 书源解析内核：规则解析、请求层、原生书源与脚本运行时。",
+  "main": "Index.ts",
+  "author": "李其健",
+  "homepage": "https://github.com/wip3l/harmony-book-source-engine",
+  "repository": "https://github.com/wip3l/harmony-book-source-engine.git",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "@devzeng/quickjs": "file:../quickjs"
+  }
+}

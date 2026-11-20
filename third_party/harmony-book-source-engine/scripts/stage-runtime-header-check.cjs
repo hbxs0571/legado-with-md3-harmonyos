@@ -1,0 +1,142 @@
+// A stage script's java.ajax() must not wait on the serial stage runtime for the source's `@js:` header rule.
+// DEVECO_HOME=... node scripts/stage-runtime-header-check.cjs
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const ts = require(path.join(process.env.DEVECO_HOME || 'C:/Program Files/Huawei/DevEco Studio',
+  'sdk/default/openharmony/ets/build-tools/ets-loader/node_modules/typescript'));
+const root = path.resolve(__dirname, '../sourceengine/src/main/ets');
+const cache = new Map();
+const stubs = {
+  '@ohos.deviceInfo': {sdkApiVersion: 26},
+  '@kit.BasicServicesKit': {deviceInfo: {deviceType: 'phone'}},
+  '@kit.ArkTS': {util: {TextEncoder: class {encodeInto(s) {return Buffer.from(s);}},
+    Base64Helper: class {encodeToStringSync(a) {return Buffer.from(a).toString('base64');}
+      decodeSync(s) {return Uint8Array.from(Buffer.from(s,'base64'));}}}},
+  '@kit.ArkWeb': {webview: {WebCookieManager: {fetchCookieSync: () => ''}}},
+  '@kit.CryptoArchitectureKit': {cryptoFramework: {}},
+  '@ohos.net.http': {}, '@ohos.data.preferences': {}, '@devzeng/quickjs': {}
+};
+function load(name) {
+  if (stubs[name]) return stubs[name];
+  if (cache.has(name)) return cache.get(name).exports;
+  const module = {exports:{}};
+  cache.set(name, module);
+  const source = fs.readFileSync(path.join(root, name + '.ts'), 'utf8');
+  const output = ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS,
+    target:ts.ScriptTarget.ES2021}}).outputText;
+  vm.runInNewContext(output, {module, exports:module.exports, console, setTimeout, clearTimeout,
+    AppStorage:{get:()=>undefined, setOrCreate:()=>{}},
+    require: dep => load(dep.startsWith('.') ? path.posix.normalize(path.posix.join(path.posix.dirname(name), dep)) : dep)
+  }, {filename:name});
+  return module.exports;
+}
+
+async function run() {
+  const {BookSource} = load('model/data/Book');
+  const {AnalyzeUrl} = load('core/rule/AnalyzeUrl');
+  const {BookSourceHeaderRuntime} = load('core/book/BookSourceHeaderRuntime');
+  const {BookSourceStageWebRuntime: Runtime, StageWebRuntimeRequest: Request} = load('core/book/BookSourceStageWebRuntime');
+  const sent = [];
+  AnalyzeUrl.prototype.fetchWithRetry = async function (req) {
+    sent.push({url: req.url, headers: Object.assign({}, req.headers)});
+    return {url: req.url, statusCode: 200, headers: {}, body: '{"ok":1}', success: true, error: ''};
+  };
+  const evaluate = async script => vm.runInNewContext(script, {atob, btoa, TextEncoder, TextDecoder, escape,
+    unescape, encodeURIComponent, decodeURIComponent}, {timeout: 5000});
+  const runtime = Runtime.get();
+  const controller = {runJavaScript: evaluate};
+  runtime.attach(controller); runtime.setReady(true, controller);
+  const source = new BookSource();
+  source.bookSourceUrl = 'https://header.test';
+  source.jsLib = 'function secret() { return "k-" + source.getVariable(); }';
+  source.variable = 'v1';
+  source.header = '@js:\nJSON.stringify({"X-Api-Key": secret(), "X-Fixed": "1"})';
+  BookSourceHeaderRuntime.clearCache();
+  const request = new Request();
+  request.source = source;
+  request.baseUrl = source.bookSourceUrl;
+  request.code = 'JSON.parse(java.ajax("https://header.test/api")).ok';
+  const outcome = await Promise.race([
+    runtime.execute(request).then(result => result.value),
+    new Promise(resolve => setTimeout(() => resolve('DEADLOCK'), 3000))
+  ]);
+  assert.notEqual(outcome, 'DEADLOCK', 'java.ajax inside the stage runtime waited on its own header task');
+  assert.equal(outcome, '1');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].headers['X-Api-Key'], 'k-v1', 'headers computed by the script with jsLib are sent');
+  assert.equal(sent[0].headers['X-Fixed'], '1');
+  // Requests issued outside the runtime still resolve the header rule through it.
+  sent.length = 0;
+  const response = await new AnalyzeUrl(source, null).fetch('https://header.test/direct');
+  assert.equal(response.statusCode, 200);
+  assert.equal(sent[0].headers['X-Api-Key'], 'k-v1');
+  // Aggregator sources are named rather than addressed: the script's own java.ajax calls still carry the
+  // source header to the hosts it chose, while host-issued requests stay limited to the source's site.
+  const named = new BookSource();
+  named.bookSourceUrl = 'Named aggregator';
+  named.jsLib = source.jsLib;
+  named.variable = 'v2';
+  named.header = source.header;
+  BookSourceHeaderRuntime.clearCache();
+  sent.length = 0;
+  const namedRequest = new Request();
+  namedRequest.source = named;
+  namedRequest.baseUrl = 'https://api.aggregator.test';
+  namedRequest.code = 'JSON.parse(java.ajax("https://api.aggregator.test/para?id=1")).ok';
+  assert.equal((await runtime.execute(namedRequest)).value, '1');
+  assert.equal(sent[0].headers['X-Api-Key'], 'k-v2', 'script requests of a named source keep the dynamic header');
+  sent.length = 0;
+  await new AnalyzeUrl(named, null).fetch('https://cdn.other.test/cover.jpg');
+  assert.equal(sent[0].headers['X-Api-Key'], undefined, 'host-issued requests do not leak it to other sites');
+  assert.equal(sent[0].headers['X-Fixed'], '1', 'literal header values still apply');
+  // A named source's own searchUrl/exploreUrl address (token-guarded API on a mirror host) carries the evaluated
+  // header and the login header, as a java.ajax address would.
+  named.loginHeader = JSON.stringify({'X-Login': 'L1'});
+  sent.length = 0;
+  await new AnalyzeUrl(named, null).trustSourceAuthoredUrl().fetch('https://api.aggregator.test/api/search?keyword=x');
+  assert.equal(sent[0].headers['X-Api-Key'], 'k-v2', 'source-authored addresses carry the dynamic header');
+  assert.equal(sent[0].headers['X-Login'], 'L1', 'source-authored addresses carry the login header');
+  sent.length = 0;
+  await new AnalyzeUrl(named, null).fetch('https://api.aggregator.test/api/search?keyword=x');
+  assert.equal(sent[0].headers['X-Login'], undefined, 'unmarked requests of a named source stay anonymous');
+  named.loginHeader = '';
+  // Timestamp-signed headers are evaluated per request instead of being served from the cache.
+  const nowSec = String(Math.floor(Date.now() / 1000));
+  assert.equal(BookSourceHeaderRuntime.carriesCurrentTime({'x-ts': nowSec}), true, 'a current Unix time disables caching');
+  assert.equal(BookSourceHeaderRuntime.carriesCurrentTime({'x-ts': String(Date.now())}), true, 'milliseconds too');
+  assert.equal(BookSourceHeaderRuntime.carriesCurrentTime({'x-id': '1234567890'}), false, 'an old 10-digit id is not');
+  const timed = new BookSource();
+  timed.bookSourceUrl = 'https://timed.test';
+  timed.header = '@js:\nJSON.stringify({"X-Ts": String(Math.floor(Date.now() / 1000)), "X-N": String(Math.random())})';
+  BookSourceHeaderRuntime.clearCache();
+  sent.length = 0;
+  await new AnalyzeUrl(timed, null).fetch('https://timed.test/a');
+  await new AnalyzeUrl(timed, null).fetch('https://timed.test/b');
+  assert.notEqual(sent[0].headers['X-N'], sent[1].headers['X-N'], 'a timestamped header rule runs for each request');
+  // `<js>…</js>` is the other Legado form of a header script (here reading a token from the login form).
+  const block = new BookSource();
+  block.bookSourceUrl = 'https://block.test';
+  block.header = '<js>\nconst m = source.getLoginInfoMap();\nconst h = {};\nif (m.Token) h.Authorization = `Bearer ${m.Token}`;\nJSON.stringify(h)\n</js>';
+  block.loginInfo = JSON.stringify({Token: 't1'});
+  BookSourceHeaderRuntime.clearCache();
+  sent.length = 0;
+  const blockRequest = new Request();
+  blockRequest.source = block;
+  blockRequest.baseUrl = block.bookSourceUrl;
+  blockRequest.code = 'JSON.parse(java.ajax("https://block.test/api")).ok';
+  assert.equal((await runtime.execute(blockRequest)).value, '1');
+  assert.equal(sent[0].headers['Authorization'], 'Bearer t1', '<js> header scripts run inside stage scripts');
+  sent.length = 0;
+  await new AnalyzeUrl(block, null).fetch('https://block.test/direct');
+  assert.equal(sent[0].headers['Authorization'], 'Bearer t1', '<js> header scripts run for direct requests');
+  assert.equal(Object.keys(sent[0].headers).some(name => /const|JSON/.test(name)), false, 'script text is not a header block');
+  block.loginInfo = JSON.stringify({Token: 't2'});
+  sent.length = 0;
+  await new AnalyzeUrl(block, null).fetch('https://block.test/direct');
+  assert.equal(sent[0].headers['Authorization'], 'Bearer t2', 'a new login token is not hidden by the header cache');
+  console.log('PASS stage runtime requests reuse script-evaluated headers; direct requests still resolve them');
+  console.log('PASS script requests of named sources carry the header to any host; host requests stay site-scoped');
+}
+run().catch(error => { console.error(error); process.exitCode = 1; });

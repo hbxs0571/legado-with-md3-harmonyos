@@ -1,0 +1,1989 @@
+{
+ "catalog :: #list dd a@text": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: #list dd a@href": {
+  "string": "/book/123/9.html\n/book/123/1.html\n/book/123/2.html\n/book/123/3.html\n/book/123/4.html\n/book/123/5.html",
+  "url": "https://www.example.com/book/123/9.html",
+  "list": [
+   "/book/123/9.html",
+   "/book/123/1.html",
+   "/book/123/2.html",
+   "/book/123/3.html",
+   "/book/123/4.html",
+   "/book/123/5.html"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: #list dd a@html": {
+  "string": "<a href=\"/book/123/9.html\">第九章 新的</a>\n<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>\n<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>\n<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>\n<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>\n<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>",
+  "url": "https://www.example.com/book/123/<a href=\"/book/123/9.html\">第九章 新的</a>",
+  "list": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: #list dd": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<dd><a href=\"/book/123/9.html\">第九章 新的</a></dd>",
+   "<dd><a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a></dd>",
+   "<dd><a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a></dd>",
+   "<dd class=\"hidden\"><a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a></dd>",
+   "<dd><a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a></dd>",
+   "<dd><a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a></dd>"
+  ]
+ },
+ "catalog :: dd a": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: dl > dd > a@href": {
+  "string": "/book/123/9.html\n/book/123/1.html\n/book/123/2.html\n/book/123/3.html\n/book/123/4.html\n/book/123/5.html",
+  "url": "https://www.example.com/book/123/9.html",
+  "list": [
+   "/book/123/9.html",
+   "/book/123/1.html",
+   "/book/123/2.html",
+   "/book/123/3.html",
+   "/book/123/4.html",
+   "/book/123/5.html"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: div#list dd:first a@text": {
+  "string": "第九章 新的",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>"
+  ]
+ },
+ "catalog :: #list dd:last a@text": {
+  "string": "第五章 大写属性",
+  "url": "https://www.example.com/book/123/第五章 大写属性",
+  "list": [
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: #list dd:eq(2) a@text": {
+  "string": "第二章 继续",
+  "url": "https://www.example.com/book/123/第二章 继续",
+  "list": [
+   "第二章 继续"
+  ],
+  "elements": [
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>"
+  ]
+ },
+ "catalog :: #list dd:lt(2) a@text": {
+  "string": "第九章 新的\n第一章 开始",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>"
+  ]
+ },
+ "catalog :: #list dd:gt(3) a@text": {
+  "string": "第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第四章 标注结尾",
+  "list": [
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: #list dd:nth-child(3)@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: dd:nth-of-type(2) a@text": {
+  "string": "第一章 开始",
+  "url": "https://www.example.com/book/123/第一章 开始",
+  "list": [
+   "第一章 开始"
+  ],
+  "elements": [
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>"
+  ]
+ },
+ "catalog :: dd:contains(继续) a@href": {
+  "string": "/book/123/2.html",
+  "url": "https://www.example.com/book/123/2.html",
+  "list": [
+   "/book/123/2.html"
+  ],
+  "elements": [
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>"
+  ]
+ },
+ "catalog :: dd:has(span) a@href": {
+  "string": "/book/123/4.html",
+  "url": "https://www.example.com/book/123/4.html",
+  "list": [
+   "/book/123/4.html"
+  ],
+  "elements": [
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>"
+  ]
+ },
+ "catalog :: dd:not(.hidden) a@text": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: dd a:not([rel]) @text": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: a[data-id]@href": {
+  "string": "/book/123/2.html",
+  "url": "https://www.example.com/book/123/2.html",
+  "list": [
+   "/book/123/2.html"
+  ],
+  "elements": [
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>"
+  ]
+ },
+ "catalog :: a[data-id=2]@text": {
+  "string": "第二章 继续",
+  "url": "https://www.example.com/book/123/第二章 继续",
+  "list": [
+   "第二章 继续"
+  ],
+  "elements": [
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>"
+  ]
+ },
+ "catalog :: a[href$=4.html]@text": {
+  "string": "第四章 标注结尾",
+  "url": "https://www.example.com/book/123/第四章 标注结尾",
+  "list": [
+   "第四章 标注结尾"
+  ],
+  "elements": [
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>"
+  ]
+ },
+ "catalog :: a[href^=/book/123/1]@text": {
+  "string": "第一章 开始",
+  "url": "https://www.example.com/book/123/第一章 开始",
+  "list": [
+   "第一章 开始"
+  ],
+  "elements": [
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>"
+  ]
+ },
+ "catalog :: a[href*=123/3]@text": {
+  "string": "第三章 隐藏",
+  "url": "https://www.example.com/book/123/第三章 隐藏",
+  "list": [
+   "第三章 隐藏"
+  ],
+  "elements": [
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>"
+  ]
+ },
+ "catalog :: a[class~=vip]@text": {
+  "string": "第一章 开始",
+  "url": "https://www.example.com/book/123/第一章 开始",
+  "list": [
+   "第一章 开始"
+  ],
+  "elements": [
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>"
+  ]
+ },
+ "catalog :: a[class|=x]@text": {
+  "string": "第五章 大写属性",
+  "url": "https://www.example.com/book/123/第五章 大写属性",
+  "list": [
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: .vip.free@text": {
+  "string": "第一章 开始",
+  "url": "https://www.example.com/book/123/第一章 开始",
+  "list": [
+   "第一章 开始"
+  ],
+  "elements": [
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>"
+  ]
+ },
+ "catalog :: a.vip@href": {
+  "string": "/book/123/1.html",
+  "url": "https://www.example.com/book/123/1.html",
+  "list": [
+   "/book/123/1.html"
+  ],
+  "elements": [
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>"
+  ]
+ },
+ "catalog :: .x-y@text": {
+  "string": "第五章 大写属性",
+  "url": "https://www.example.com/book/123/第五章 大写属性",
+  "list": [
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: #info img@src": {
+  "string": "/cover/1.jpg",
+  "url": "https://www.example.com/cover/1.jpg",
+  "list": [
+   "/cover/1.jpg"
+  ],
+  "elements": [
+   "<img src=\"/cover/1.jpg\" data-src=/lazy/1.jpg alt=\"封面\">"
+  ]
+ },
+ "catalog :: #info img@data-src": {
+  "string": "/lazy/1.jpg",
+  "url": "https://www.example.com/lazy/1.jpg",
+  "list": [
+   "/lazy/1.jpg"
+  ],
+  "elements": [
+   "<img src=\"/cover/1.jpg\" data-src=/lazy/1.jpg alt=\"封面\">"
+  ]
+ },
+ "catalog :: #info img@alt": {
+  "string": "封面",
+  "url": "https://www.example.com/book/123/封面",
+  "list": [
+   "封面"
+  ],
+  "elements": [
+   "<img src=\"/cover/1.jpg\" data-src=/lazy/1.jpg alt=\"封面\">"
+  ]
+ },
+ "catalog :: meta[name=keywords]@content": {
+  "string": "甲,乙",
+  "url": "https://www.example.com/book/123/甲,乙",
+  "list": [
+   "甲,乙"
+  ],
+  "elements": [
+   "<meta name=\"keywords\" content=\"甲,乙\">"
+  ]
+ },
+ "catalog :: .intro@text": {
+  "string": "简介第一句。\n简介第二句&更多",
+  "url": "https://www.example.com/book/123/简介第一句。\n简介第二句&更多",
+  "list": [
+   "简介第一句。\n简介第二句&更多"
+  ],
+  "elements": [
+   "<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p>"
+  ]
+ },
+ "catalog :: .intro@html": {
+  "string": "<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p>",
+  "url": "https://www.example.com/book/123/<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p>",
+  "list": [
+   "<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p>"
+  ],
+  "elements": [
+   "<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p>"
+  ]
+ },
+ "catalog :: p.intro@ownText": {
+  "string": "简介第一句。 简介第二句&更多",
+  "url": "https://www.example.com/book/123/简介第一句。 简介第二句&更多",
+  "list": [
+   "简介第一句。 简介第二句&更多"
+  ],
+  "elements": [
+   "<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p>"
+  ]
+ },
+ "catalog :: .nav a@href": {
+  "string": "/\n/sort/1/",
+  "url": "https://www.example.com/",
+  "list": [
+   "/",
+   "/sort/1/"
+  ],
+  "elements": [
+   "<a href=\"/\">首页</a>",
+   "<a href='/sort/1/'>玄幻</a>"
+  ]
+ },
+ "catalog :: .nav a, .footer b@text": {
+  "string": "首页\n玄幻\n所有",
+  "url": "https://www.example.com/book/123/首页",
+  "list": [
+   "首页",
+   "玄幻",
+   "所有"
+  ],
+  "elements": [
+   "<a href=\"/\">首页</a>",
+   "<a href='/sort/1/'>玄幻</a>",
+   "<b>所有</b>"
+  ]
+ },
+ "catalog :: h1@text": {
+  "string": "某书",
+  "url": "https://www.example.com/book/123/某书",
+  "list": [
+   "某书"
+  ],
+  "elements": [
+   "<h1>某书</h1>"
+  ]
+ },
+ "catalog :: title@text": {
+  "string": "某书 目录",
+  "url": "https://www.example.com/book/123/某书 目录",
+  "list": [
+   "某书 目录"
+  ],
+  "elements": [
+   "<title>某书 目录</title>"
+  ]
+ },
+ "catalog :: .pages li.cur a@href": {
+  "string": "?p=2",
+  "url": "https://www.example.com/book/123/?p=2",
+  "list": [
+   "?p=2"
+  ],
+  "elements": [
+   "<a href=\"?p=2\">2</a>"
+  ]
+ },
+ "catalog :: .pages li.1@text": {
+  "string": "2",
+  "url": "https://www.example.com/book/123/2",
+  "list": [
+   "2"
+  ],
+  "elements": [
+   "<li class=\"cur\"><a href=\"?p=2\">2</a></li>"
+  ]
+ },
+ "catalog :: .pages li!0@text": {
+  "string": "2\n3",
+  "url": "https://www.example.com/book/123/2",
+  "list": [
+   "2",
+   "3"
+  ],
+  "elements": [
+   "<li class=\"cur\"><a href=\"?p=2\">2</a></li>",
+   "<li><a href=\"?p=3\">3</a></li>"
+  ]
+ },
+ "catalog :: .pages li.0:2@text": {
+  "string": "1\n2",
+  "url": "https://www.example.com/book/123/1",
+  "list": [
+   "1",
+   "2"
+  ],
+  "elements": [
+   "<li><a href=\"?p=1\">1</a></li>",
+   "<li class=\"cur\"><a href=\"?p=2\">2</a></li>"
+  ]
+ },
+ "catalog :: .pages li.0:1:2@text": {
+  "string": "1\n2\n3",
+  "url": "https://www.example.com/book/123/1",
+  "list": [
+   "1",
+   "2",
+   "3"
+  ],
+  "elements": [
+   "<li><a href=\"?p=1\">1</a></li>",
+   "<li class=\"cur\"><a href=\"?p=2\">2</a></li>",
+   "<li><a href=\"?p=3\">3</a></li>"
+  ]
+ },
+ "catalog :: @css:#list dd a@text": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: @css:.pages li a@href": {
+  "string": "?p=1\n?p=2\n?p=3",
+  "url": "https://www.example.com/book/123/?p=1",
+  "list": [
+   "?p=1",
+   "?p=2",
+   "?p=3"
+  ],
+  "elements": [
+   "<a href=\"?p=1\">1</a>",
+   "<a href=\"?p=2\">2</a>",
+   "<a href=\"?p=3\">3</a>"
+  ]
+ },
+ "catalog :: a@title": {
+  "string": "作者 甲\n4",
+  "url": "https://www.example.com/book/123/作者 甲",
+  "list": [
+   "作者 甲",
+   "4"
+  ],
+  "elements": [
+   "<a href=\"/\">首页</a>",
+   "<a href='/sort/1/'>玄幻</a>",
+   "<a href=\"/author/9\" title=\"作者 甲\">甲</a>",
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>",
+   "<a href=\"?p=1\">1</a>",
+   "<a href=\"?p=2\">2</a>",
+   "<a href=\"?p=3\">3</a>"
+  ]
+ },
+ "catalog :: a@HREF": {
+  "string": "/\n/sort/1/\n/author/9\n/book/123/9.html\n/book/123/1.html\n/book/123/2.html\n/book/123/3.html\n/book/123/4.html\n/book/123/5.html\n?p=1\n?p=2\n?p=3",
+  "url": "https://www.example.com/",
+  "list": [
+   "/",
+   "/sort/1/",
+   "/author/9",
+   "/book/123/9.html",
+   "/book/123/1.html",
+   "/book/123/2.html",
+   "/book/123/3.html",
+   "/book/123/4.html",
+   "/book/123/5.html",
+   "?p=1",
+   "?p=2",
+   "?p=3"
+  ],
+  "elements": [
+   "<a href=\"/\">首页</a>",
+   "<a href='/sort/1/'>玄幻</a>",
+   "<a href=\"/author/9\" title=\"作者 甲\">甲</a>",
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>",
+   "<a href=\"?p=1\">1</a>",
+   "<a href=\"?p=2\">2</a>",
+   "<a href=\"?p=3\">3</a>"
+  ]
+ },
+ "catalog :: dd a@Class": {
+  "string": "vip free\nx-y",
+  "url": "https://www.example.com/book/123/vip free",
+  "list": [
+   "vip free",
+   "x-y"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: class.listmain@tag.dd@tag.a@text": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ]
+ },
+ "catalog :: id.list@tag.a.0@href": {
+  "string": "/book/123/9.html",
+  "url": "https://www.example.com/book/123/9.html",
+  "list": [
+   "/book/123/9.html"
+  ],
+  "elements": [
+   "/book/123/9.html"
+  ]
+ },
+ "catalog :: id.list@tag.a.-1@text": {
+  "string": "第五章 大写属性",
+  "url": "https://www.example.com/book/123/第五章 大写属性",
+  "list": [
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "第五章 大写属性"
+  ]
+ },
+ "catalog :: tag.dd.1@text": {
+  "string": "第一章 开始",
+  "url": "https://www.example.com/book/123/第一章 开始",
+  "list": [
+   "第一章 开始"
+  ],
+  "elements": [
+   "第一章 开始"
+  ]
+ },
+ "catalog :: class.nav@tag.a[0:1]@text": {
+  "string": "首页",
+  "url": "https://www.example.com/book/123/首页",
+  "list": [
+   "首页"
+  ],
+  "elements": [
+   "首页"
+  ]
+ },
+ "catalog :: id.info@tag.p.1@text": {
+  "string": "简介第一句。\n简介第二句&更多",
+  "url": "https://www.example.com/book/123/简介第一句。\n简介第二句&更多",
+  "list": [
+   "简介第一句。\n简介第二句&更多"
+  ],
+  "elements": [
+   "简介第一句。\n简介第二句&更多"
+  ]
+ },
+ "catalog :: text.第二章@href": {
+  "string": "/book/123/2.html",
+  "url": "https://www.example.com/book/123/2.html",
+  "list": [
+   "/book/123/2.html"
+  ],
+  "elements": [
+   "/book/123/2.html"
+  ]
+ },
+ "catalog :: text.简介@ownText": {
+  "string": "简介第一句。 简介第二句&更多",
+  "url": "https://www.example.com/book/123/简介第一句。 简介第二句&更多",
+  "list": [
+   "简介第一句。 简介第二句&更多"
+  ],
+  "elements": [
+   "简介第一句。 简介第二句&更多"
+  ]
+ },
+ "catalog :: class.result-item@tag.h3@tag.a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: class.detail@tag.p.1@tag.span.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: class.result-item!2@class.desc@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: id.t@tag.tr!0@tag.td.0@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: id.t@tag.td.odd@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: tag.td.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: #list dd a@text##第(.)章##$1": {
+  "string": "九 新的\n一 开始\n二 继续\n三 隐藏\n四 标注结尾\n五 大写属性",
+  "url": "https://www.example.com/book/123/九 新的",
+  "list": [
+   "九 新的",
+   "一 开始",
+   "二 继续",
+   "三 隐藏",
+   "四 标注结尾",
+   "五 大写属性"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: #list dd a@href##\\.html$": {
+  "string": "/book/123/9\n/book/123/1\n/book/123/2\n/book/123/3\n/book/123/4\n/book/123/5",
+  "url": "https://www.example.com/book/123/9",
+  "list": [
+   "/book/123/9",
+   "/book/123/1",
+   "/book/123/2",
+   "/book/123/3",
+   "/book/123/4",
+   "/book/123/5"
+  ],
+  "elements": [
+   "<a href=\"/book/123/9.html\">第九章 新的</a>",
+   "<a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a>",
+   "<a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a>",
+   "<a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a>",
+   "<a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a>",
+   "<a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a>"
+  ]
+ },
+ "catalog :: h1@text||title@text": {
+  "string": "某书",
+  "url": "https://www.example.com/book/123/某书",
+  "list": [
+   "某书"
+  ],
+  "elements": [
+   "某书"
+  ]
+ },
+ "catalog :: .nothing@text||h1@text": {
+  "string": "某书",
+  "url": "https://www.example.com/book/123/某书",
+  "list": [
+   "某书"
+  ],
+  "elements": [
+   "某书"
+  ]
+ },
+ "catalog :: #list dd a@text&&.nav a@text": {
+  "string": "第九章 新的\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性\n首页\n玄幻",
+  "url": "https://www.example.com/book/123/第九章 新的",
+  "list": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性",
+   "首页",
+   "玄幻"
+  ],
+  "elements": [
+   "第九章 新的",
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性",
+   "首页",
+   "玄幻"
+  ]
+ },
+ "catalog :: .pages li a@text%%.pages li a@href": {
+  "string": "1\n?p=1\n2\n?p=2\n3\n?p=3",
+  "url": "https://www.example.com/book/123/1",
+  "list": [
+   "1",
+   "?p=1",
+   "2",
+   "?p=2",
+   "3",
+   "?p=3"
+  ],
+  "elements": [
+   "1",
+   "?p=1",
+   "2",
+   "?p=2",
+   "3",
+   "?p=3"
+  ]
+ },
+ "catalog :: textNodes": {
+  "string": "某书 目录\n首页\n>\n玄幻\n某书\n作者：\n甲\n简介第一句。\n简介第二句&更多\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章\n标注\n结尾\n第五章 大写属性\n1\n2\n3\n版权\n所有",
+  "url": "https://www.example.com/book/123/某书 目录\n首页\n>\n玄幻\n某书\n作者：\n甲\n简介第一句。\n简介第二句&更多\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章\n标注\n结尾\n第五章 大写属性\n1\n2\n3\n版权\n所有",
+  "list": [
+   "某书 目录\n首页\n>\n玄幻\n某书\n作者：\n甲\n简介第一句。\n简介第二句&更多\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章\n标注\n结尾\n第五章 大写属性\n1\n2\n3\n版权\n所有"
+  ],
+  "elements": [
+   "某书 目录\n首页\n>\n玄幻\n某书\n作者：\n甲\n简介第一句。\n简介第二句&更多\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章\n标注\n结尾\n第五章 大写属性\n1\n2\n3\n版权\n所有"
+  ]
+ },
+ "catalog :: text": {
+  "string": "某书 目录\n首页 > 玄幻\n\n某书作者：甲\n\n简介第一句。\n简介第二句&更多\n\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性\n\n1\n2\n3\n\n版权 所有",
+  "url": "https://www.example.com/book/123/某书 目录\n首页 > 玄幻\n\n某书作者：甲\n\n简介第一句。\n简介第二句&更多\n\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性\n\n1\n2\n3\n\n版权 所有",
+  "list": [
+   "某书 目录\n首页 > 玄幻\n\n某书作者：甲\n\n简介第一句。\n简介第二句&更多\n\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性\n\n1\n2\n3\n\n版权 所有"
+  ],
+  "elements": [
+   "某书 目录\n首页 > 玄幻\n\n某书作者：甲\n\n简介第一句。\n简介第二句&更多\n\n最新章节\n第九章 新的\n正文卷\n第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性\n\n1\n2\n3\n\n版权 所有"
+  ]
+ },
+ "catalog :: html": {
+  "string": "<html><head><title>某书 目录</title><meta name=\"keywords\" content=\"甲,乙\"></head><body>\n<div class=\"nav top-nav\"><a href=\"/\">首页</a> &gt; <a href='/sort/1/'>玄幻</a></div>\n<div id=\"info\" class=\"book-info\"><h1>某书</h1><p>作者：<a href=\"/author/9\" title=\"作者 甲\">甲</a></p>\n<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p><img src=\"/cover/1.jpg\" data-src=/lazy/1.jpg alt=\"封面\"></div>\n<div id=\"list\" class=\"listmain\"><dl>\n<dt>最新章节</dt>\n<dd><a href=\"/book/123/9.html\">第九章 新的</a></dd>\n<dt>正文卷</dt>\n<dd><a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a></dd>\n<dd><a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a></dd>\n<dd class=\"hidden\"><a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a></dd>\n<dd><a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a></dd>\n<dd><a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a></dd>\n</dl></div>\n<ul class=\"pages\"><li><a href=\"?p=1\">1</a></li><li class=\"cur\"><a href=\"?p=2\">2</a></li><li><a href=\"?p=3\">3</a></li></ul>\n<div class=\"footer\">版权 <b>所有</b></div></body></html>",
+  "url": "https://www.example.com/book/123/<html><head><title>某书 目录</title><meta name=\"keywords\" content=\"甲,乙\"></head><body>\n<div class=\"nav top-nav\"><a href=\"/\">首页</a> &gt; <a href='/sort/1/'>玄幻</a></div>\n<div id=\"info\" class=\"book-info\"><h1>某书</h1><p>作者：<a href=\"/author/9\" title=\"作者 甲\">甲</a></p>\n<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p><img src=\"/cover/1.jpg\" data-src=/lazy/1.jpg alt=\"封面\"></div>\n<div id=\"list\" class=\"listmain\"><dl>\n<dt>最新章节</dt>\n<dd><a href=\"/book/123/9.html\">第九章 新的</a></dd>\n<dt>正文卷</dt>\n<dd><a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a></dd>\n<dd><a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a></dd>\n<dd class=\"hidden\"><a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a></dd>\n<dd><a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a></dd>\n<dd><a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a></dd>\n</dl></div>\n<ul class=\"pages\"><li><a href=\"?p=1\">1</a></li><li class=\"cur\"><a href=\"?p=2\">2</a></li><li><a href=\"?p=3\">3</a></li></ul>\n<div class=\"footer\">版权 <b>所有</b></div></body></html>",
+  "list": [
+   "<html><head><title>某书 目录</title><meta name=\"keywords\" content=\"甲,乙\"></head><body>\n<div class=\"nav top-nav\"><a href=\"/\">首页</a> &gt; <a href='/sort/1/'>玄幻</a></div>\n<div id=\"info\" class=\"book-info\"><h1>某书</h1><p>作者：<a href=\"/author/9\" title=\"作者 甲\">甲</a></p>\n<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p><img src=\"/cover/1.jpg\" data-src=/lazy/1.jpg alt=\"封面\"></div>\n<div id=\"list\" class=\"listmain\"><dl>\n<dt>最新章节</dt>\n<dd><a href=\"/book/123/9.html\">第九章 新的</a></dd>\n<dt>正文卷</dt>\n<dd><a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a></dd>\n<dd><a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a></dd>\n<dd class=\"hidden\"><a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a></dd>\n<dd><a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a></dd>\n<dd><a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a></dd>\n</dl></div>\n<ul class=\"pages\"><li><a href=\"?p=1\">1</a></li><li class=\"cur\"><a href=\"?p=2\">2</a></li><li><a href=\"?p=3\">3</a></li></ul>\n<div class=\"footer\">版权 <b>所有</b></div></body></html>"
+  ],
+  "elements": [
+   "<html><head><title>某书 目录</title><meta name=\"keywords\" content=\"甲,乙\"></head><body>\n<div class=\"nav top-nav\"><a href=\"/\">首页</a> &gt; <a href='/sort/1/'>玄幻</a></div>\n<div id=\"info\" class=\"book-info\"><h1>某书</h1><p>作者：<a href=\"/author/9\" title=\"作者 甲\">甲</a></p>\n<p class=\"intro\">简介第一句。<br/>简介第二句&amp;更多</p><img src=\"/cover/1.jpg\" data-src=/lazy/1.jpg alt=\"封面\"></div>\n<div id=\"list\" class=\"listmain\"><dl>\n<dt>最新章节</dt>\n<dd><a href=\"/book/123/9.html\">第九章 新的</a></dd>\n<dt>正文卷</dt>\n<dd><a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a></dd>\n<dd><a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a></dd>\n<dd class=\"hidden\"><a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a></dd>\n<dd><a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a></dd>\n<dd><a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a></dd>\n</dl></div>\n<ul class=\"pages\"><li><a href=\"?p=1\">1</a></li><li class=\"cur\"><a href=\"?p=2\">2</a></li><li><a href=\"?p=3\">3</a></li></ul>\n<div class=\"footer\">版权 <b>所有</b></div></body></html>"
+  ]
+ },
+ "catalog :: .result-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: -.result-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: class.result-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: .result-game-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: tr": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "catalog :: #list dd!0": {
+  "string": "第一章 开始\n第二章 继续\n第三章 隐藏\n第四章 标注结尾\n第五章 大写属性",
+  "url": "https://www.example.com/book/123/第一章 开始",
+  "list": [
+   "第一章 开始",
+   "第二章 继续",
+   "第三章 隐藏",
+   "第四章 标注结尾",
+   "第五章 大写属性"
+  ],
+  "elements": [
+   "<dd><a href=\"/book/123/1.html\" class=\"vip free\">第一章 开始</a></dd>",
+   "<dd><a href=\"/book/123/2.html\" data-id=\"2\">第二章 继续</a></dd>",
+   "<dd class=\"hidden\"><a href=\"/book/123/3.html\" rel=\"nofollow\">第三章 隐藏</a></dd>",
+   "<dd><a href=\"/book/123/4.html\" title=\"4\">第四章 <span>标注</span>结尾</a></dd>",
+   "<dd><a HREF=\"/book/123/5.html\" Class=\"x-y\">第五章 大写属性</a></dd>"
+  ]
+ },
+ "search :: #list dd a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd a@html": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: dd a": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: dl > dd > a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: div#list dd:first a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd:last a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd:eq(2) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd:lt(2) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd:gt(3) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd:nth-child(3)@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: dd:nth-of-type(2) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: dd:contains(继续) a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: dd:has(span) a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: dd:not(.hidden) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: dd a:not([rel]) @text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a[data-id]@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a[data-id=2]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a[href$=4.html]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a[href^=/book/123/1]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a[href*=123/3]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a[class~=vip]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a[class|=x]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .vip.free@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a.vip@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .x-y@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #info img@src": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #info img@data-src": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #info img@alt": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: meta[name=keywords]@content": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .intro@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .intro@html": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: p.intro@ownText": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .nav a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .nav a, .footer b@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: h1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: title@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .pages li.cur a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .pages li.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .pages li!0@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .pages li.0:2@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .pages li.0:1:2@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: @css:#list dd a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: @css:.pages li a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: a@title": {
+  "string": "书一\n书二",
+  "url": "https://www.example.com/book/123/书一",
+  "list": [
+   "书一",
+   "书二"
+  ],
+  "elements": [
+   "<a href=\"/book/1/\" title=\"书一\">书<em>一</em></a>",
+   "<a href=\"/book/2/\" title=\"书二\">书二</a>",
+   "<a href=\"/ad\">广告</a>"
+  ]
+ },
+ "search :: a@HREF": {
+  "string": "/book/1/\n/book/2/\n/ad",
+  "url": "https://www.example.com/book/1/",
+  "list": [
+   "/book/1/",
+   "/book/2/",
+   "/ad"
+  ],
+  "elements": [
+   "<a href=\"/book/1/\" title=\"书一\">书<em>一</em></a>",
+   "<a href=\"/book/2/\" title=\"书二\">书二</a>",
+   "<a href=\"/ad\">广告</a>"
+  ]
+ },
+ "search :: dd a@Class": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: class.listmain@tag.dd@tag.a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: id.list@tag.a.0@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: id.list@tag.a.-1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: tag.dd.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: class.nav@tag.a[0:1]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: id.info@tag.p.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: text.第二章@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: text.简介@ownText": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: class.result-item@tag.h3@tag.a@href": {
+  "string": "/book/1/\n/book/2/",
+  "url": "https://www.example.com/book/1/",
+  "list": [
+   "/book/1/",
+   "/book/2/"
+  ],
+  "elements": [
+   "/book/1/",
+   "/book/2/"
+  ]
+ },
+ "search :: class.detail@tag.p.1@tag.span.1@text": {
+  "string": "张三\n李四",
+  "url": "https://www.example.com/book/123/张三",
+  "list": [
+   "张三",
+   "李四"
+  ],
+  "elements": [
+   "张三",
+   "李四"
+  ]
+ },
+ "search :: class.result-item!2@class.desc@text": {
+  "string": "描述一\n描述二",
+  "url": "https://www.example.com/book/123/描述一",
+  "list": [
+   "描述一",
+   "描述二"
+  ],
+  "elements": [
+   "描述一",
+   "描述二"
+  ]
+ },
+ "search :: id.t@tag.tr!0@tag.td.0@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: id.t@tag.td.odd@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: tag.td.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd a@text##第(.)章##$1": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd a@href##\\.html$": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: h1@text||title@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .nothing@text||h1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd a@text&&.nav a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: .pages li a@text%%.pages li a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: textNodes": {
+  "string": "书\n一\n描述一\n作者：\n张三\n类型：\n都市\n书二\n描述二\n作者：\n李四\n类型：\n仙侠\n广告",
+  "url": "https://www.example.com/book/123/书\n一\n描述一\n作者：\n张三\n类型：\n都市\n书二\n描述二\n作者：\n李四\n类型：\n仙侠\n广告",
+  "list": [
+   "书\n一\n描述一\n作者：\n张三\n类型：\n都市\n书二\n描述二\n作者：\n李四\n类型：\n仙侠\n广告"
+  ],
+  "elements": [
+   "书\n一\n描述一\n作者：\n张三\n类型：\n都市\n书二\n描述二\n作者：\n李四\n类型：\n仙侠\n广告"
+  ]
+ },
+ "search :: text": {
+  "string": "书一描述一\n\n作者：张三\n\n类型：都市\n\n书二描述二\n\n作者：李四\n\n类型：仙侠\n\n广告",
+  "url": "https://www.example.com/book/123/书一描述一\n\n作者：张三\n\n类型：都市\n\n书二描述二\n\n作者：李四\n\n类型：仙侠\n\n广告",
+  "list": [
+   "书一描述一\n\n作者：张三\n\n类型：都市\n\n书二描述二\n\n作者：李四\n\n类型：仙侠\n\n广告"
+  ],
+  "elements": [
+   "书一描述一\n\n作者：张三\n\n类型：都市\n\n书二描述二\n\n作者：李四\n\n类型：仙侠\n\n广告"
+  ]
+ },
+ "search :: html": {
+  "string": "<div class=\"result-list\">\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>\n<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>\n</div>",
+  "url": "https://www.example.com/book/123/<div class=\"result-list\">\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>\n<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>\n</div>",
+  "list": [
+   "<div class=\"result-list\">\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>\n<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>\n</div>"
+  ],
+  "elements": [
+   "<div class=\"result-list\">\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>\n<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>\n</div>"
+  ]
+ },
+ "search :: .result-item": {
+  "string": "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>\n<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>",
+  "url": "https://www.example.com/book/123/<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+  "list": [
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>",
+   "<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>"
+  ],
+  "elements": [
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>",
+   "<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>"
+  ]
+ },
+ "search :: -.result-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": [
+   "<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>"
+  ]
+ },
+ "search :: class.result-item": {
+  "string": "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>\n<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>",
+  "url": "https://www.example.com/book/123/<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+  "list": [
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>",
+   "<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>"
+  ],
+  "elements": [
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>",
+   "<div class=\"result-item ad\"><a href=\"/ad\">广告</a></div>"
+  ]
+ },
+ "search :: .result-game-item": {
+  "string": "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>\n<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>",
+  "url": "https://www.example.com/book/123/<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+  "list": [
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>"
+  ],
+  "elements": [
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/a.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/1/\" title=\"书一\">书<em>一</em></a></h3><p class=\"desc\">描述一</p>\n<p><span>作者：</span><span>张三</span></p><p><span>类型：</span><span>都市</span></p></div></div>",
+   "<div class=\"result-item result-game-item\"><div class=\"pic\"><img src=\"//img.example.com/b.jpg\" /></div>\n<div class=\"detail\"><h3><a href=\"/book/2/\" title=\"书二\">书二</a></h3><p class=\"desc\">描述二</p>\n<p><span>作者：</span><span>李四</span></p><p><span>类型：</span><span>仙侠</span></p></div></div>"
+  ]
+ },
+ "search :: tr": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "search :: #list dd!0": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd a@html": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: dd a": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: dl > dd > a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: div#list dd:first a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd:last a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd:eq(2) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd:lt(2) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd:gt(3) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd:nth-child(3)@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: dd:nth-of-type(2) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: dd:contains(继续) a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: dd:has(span) a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: dd:not(.hidden) a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: dd a:not([rel]) @text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a[data-id]@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a[data-id=2]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a[href$=4.html]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a[href^=/book/123/1]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a[href*=123/3]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a[class~=vip]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a[class|=x]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .vip.free@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a.vip@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .x-y@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #info img@src": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #info img@data-src": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #info img@alt": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: meta[name=keywords]@content": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .intro@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .intro@html": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: p.intro@ownText": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .nav a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .nav a, .footer b@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: h1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: title@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .pages li.cur a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .pages li.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .pages li!0@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .pages li.0:2@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .pages li.0:1:2@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: @css:#list dd a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: @css:.pages li a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: a@title": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": [
+   "<a href=\"/b/1\">甲书</a>",
+   "<a href=\"/b/2\">乙书</a>",
+   "<a href=\"/b/3\">丙书</a>"
+  ]
+ },
+ "table :: a@HREF": {
+  "string": "/b/1\n/b/2\n/b/3",
+  "url": "https://www.example.com/b/1",
+  "list": [
+   "/b/1",
+   "/b/2",
+   "/b/3"
+  ],
+  "elements": [
+   "<a href=\"/b/1\">甲书</a>",
+   "<a href=\"/b/2\">乙书</a>",
+   "<a href=\"/b/3\">丙书</a>"
+  ]
+ },
+ "table :: dd a@Class": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: class.listmain@tag.dd@tag.a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: id.list@tag.a.0@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: id.list@tag.a.-1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: tag.dd.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: class.nav@tag.a[0:1]@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: id.info@tag.p.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: text.第二章@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: text.简介@ownText": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: class.result-item@tag.h3@tag.a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: class.detail@tag.p.1@tag.span.1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: class.result-item!2@class.desc@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: id.t@tag.tr!0@tag.td.0@text": {
+  "string": "甲书\n乙书\n丙书",
+  "url": "https://www.example.com/book/123/甲书",
+  "list": [
+   "甲书",
+   "乙书",
+   "丙书"
+  ],
+  "elements": [
+   "甲书",
+   "乙书",
+   "丙书"
+  ]
+ },
+ "table :: id.t@tag.td.odd@text": {
+  "string": "甲书\n甲\n乙书\n乙\n丙书\n丙",
+  "url": "https://www.example.com/book/123/甲书",
+  "list": [
+   "甲书",
+   "甲",
+   "乙书",
+   "乙",
+   "丙书",
+   "丙"
+  ],
+  "elements": [
+   "甲书",
+   "甲",
+   "乙书",
+   "乙",
+   "丙书",
+   "丙"
+  ]
+ },
+ "table :: tag.td.1@text": {
+  "string": "甲",
+  "url": "https://www.example.com/book/123/甲",
+  "list": [
+   "甲"
+  ],
+  "elements": [
+   "甲"
+  ]
+ },
+ "table :: #list dd a@text##第(.)章##$1": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd a@href##\\.html$": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: h1@text||title@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .nothing@text||h1@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: #list dd a@text&&.nav a@text": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .pages li a@text%%.pages li a@href": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: textNodes": {
+  "string": "名\n作者\n甲书\n甲\n乙书\n乙\n丙书\n丙",
+  "url": "https://www.example.com/book/123/名\n作者\n甲书\n甲\n乙书\n乙\n丙书\n丙",
+  "list": [
+   "名\n作者\n甲书\n甲\n乙书\n乙\n丙书\n丙"
+  ],
+  "elements": [
+   "名\n作者\n甲书\n甲\n乙书\n乙\n丙书\n丙"
+  ]
+ },
+ "table :: text": {
+  "string": "名作者\n甲书甲\n乙书乙\n丙书丙",
+  "url": "https://www.example.com/book/123/名作者\n甲书甲\n乙书乙\n丙书丙",
+  "list": [
+   "名作者\n甲书甲\n乙书乙\n丙书丙"
+  ],
+  "elements": [
+   "名作者\n甲书甲\n乙书乙\n丙书丙"
+  ]
+ },
+ "table :: html": {
+  "string": "<table id=\"t\"><tr><th>名</th><th>作者</th></tr>\n<tr><td class=\"odd\"><a href=\"/b/1\">甲书</a></td><td>甲</td></tr>\n<tr><td class=\"even\"><a href=\"/b/2\">乙书</a></td><td>乙</td></tr>\n<tr><td class=\"odd\"><a href=\"/b/3\">丙书</a></td><td>丙</td></tr></table>",
+  "url": "https://www.example.com/book/123/<table id=\"t\"><tr><th>名</th><th>作者</th></tr>\n<tr><td class=\"odd\"><a href=\"/b/1\">甲书</a></td><td>甲</td></tr>\n<tr><td class=\"even\"><a href=\"/b/2\">乙书</a></td><td>乙</td></tr>\n<tr><td class=\"odd\"><a href=\"/b/3\">丙书</a></td><td>丙</td></tr></table>",
+  "list": [
+   "<table id=\"t\"><tr><th>名</th><th>作者</th></tr>\n<tr><td class=\"odd\"><a href=\"/b/1\">甲书</a></td><td>甲</td></tr>\n<tr><td class=\"even\"><a href=\"/b/2\">乙书</a></td><td>乙</td></tr>\n<tr><td class=\"odd\"><a href=\"/b/3\">丙书</a></td><td>丙</td></tr></table>"
+  ],
+  "elements": [
+   "<table id=\"t\"><tr><th>名</th><th>作者</th></tr>\n<tr><td class=\"odd\"><a href=\"/b/1\">甲书</a></td><td>甲</td></tr>\n<tr><td class=\"even\"><a href=\"/b/2\">乙书</a></td><td>乙</td></tr>\n<tr><td class=\"odd\"><a href=\"/b/3\">丙书</a></td><td>丙</td></tr></table>"
+  ]
+ },
+ "table :: .result-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: -.result-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: class.result-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: .result-game-item": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ },
+ "table :: tr": {
+  "string": "<tr><th>名</th><th>作者</th></tr>\n<tr><td class=\"odd\"><a href=\"/b/1\">甲书</a></td><td>甲</td></tr>\n<tr><td class=\"even\"><a href=\"/b/2\">乙书</a></td><td>乙</td></tr>\n<tr><td class=\"odd\"><a href=\"/b/3\">丙书</a></td><td>丙</td></tr>",
+  "url": "https://www.example.com/book/123/<tr><th>名</th><th>作者</th></tr>",
+  "list": [
+   "<tr><th>名</th><th>作者</th></tr>",
+   "<tr><td class=\"odd\"><a href=\"/b/1\">甲书</a></td><td>甲</td></tr>",
+   "<tr><td class=\"even\"><a href=\"/b/2\">乙书</a></td><td>乙</td></tr>",
+   "<tr><td class=\"odd\"><a href=\"/b/3\">丙书</a></td><td>丙</td></tr>"
+  ],
+  "elements": [
+   "<tr><th>名</th><th>作者</th></tr>",
+   "<tr><td class=\"odd\"><a href=\"/b/1\">甲书</a></td><td>甲</td></tr>",
+   "<tr><td class=\"even\"><a href=\"/b/2\">乙书</a></td><td>乙</td></tr>",
+   "<tr><td class=\"odd\"><a href=\"/b/3\">丙书</a></td><td>丙</td></tr>"
+  ]
+ },
+ "table :: #list dd!0": {
+  "string": "",
+  "url": "",
+  "list": [],
+  "elements": []
+ }
+}

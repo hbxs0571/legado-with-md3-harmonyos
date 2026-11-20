@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "description": "Legado HarmonyOS NEXT entry module",
   "modelVersion": "26.0.0",
-  "dependencies": {}
+  "dependencies": {
+    "@legado/sourceengine": "file:../third_party/harmony-book-source-engine/sourceengine",
+    "@devzeng/quickjs": "file:../third_party/harmony-book-source-engine/quickjs"
+  }
 }

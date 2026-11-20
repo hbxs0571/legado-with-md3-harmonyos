@@ -1,0 +1,24 @@
+# IDE
+.idea/
+*.iml
+build/
+tmp/
+
+# HarmonyOS
+/node_modules
+/oh_modules
+**/oh_modules/
+/.hvigor
+/.appanalyzer
+/local.properties
+*.har
+*.hap
+*.hsp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# clangd / clang-tidy (local IDE config)
+.clangd
+.clang-tidy
