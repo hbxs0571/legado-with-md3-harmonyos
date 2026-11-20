@@ -2562,7 +2562,7 @@ export struct ReaderPage {
     // 换章时 promote（:2935-2955），本项只借「先热邻章」这一点。
     // 主体逻辑（hasChapterPages / 在途超时 / onRequestAdjacentChapter）不依赖滚动窗口，
     // 探针已在分页模式验证：不崩、不串章、换章前邻章页已就绪。
-    if (!this.book.isLocal) { return; }
+    // P3-E：在线书也预热邻章（正文由提供器缓存优先，重复请求不重复抓网）。
     const currentChapter = this.getChapterIndex();
     const nextChapter = currentChapter + 1;
     const previousChapter = currentChapter - 1;
@@ -2620,8 +2620,7 @@ export struct ReaderPage {
       return;
     }
     // 视口/正文宽度没就绪时排出来的页是错的，等下一次 rebuild 再请求。
-    if (this.readerContentWidth <= 0 || this.viewportHeight <= 0 ||
-      this.book.isLocal !== true) {
+    if (this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
       return;
     }
     const startedAt = Date.now();
@@ -2719,8 +2718,9 @@ export struct ReaderPage {
   private rebuildReaderPages(forceProgressCommit: boolean = false,
     onlyImageSizesChanged: boolean = false): void {
     const startedAt = Date.now();
-    if (this.book.isLocal !== true ||
-      this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
+    // P3-E：在线书 isLocal=false，但同样要走画布排版；这里只看视口是否就绪，
+    // 不再以 isLocal 拒绝（原移植把 isLocal 当成「能否排版」，上游并无此约束）。
+    if (this.readerContentWidth <= 0 || this.viewportHeight <= 0) {
       // KI-REL1：换章交接期间不清空页表。上游任何时刻都有 pages.current
       // （`ReaderCanvasSurface.kt:254` 的 `pages.current ?: return` 只是「没有就不画」），
       // 本地若在这里清空，视口一时为 0 就会让画布整屏空白——那正是闪烁。
@@ -6027,7 +6027,8 @@ export struct ReaderPage {
 
 
   private usesLocalPagination(): boolean {
-    return this.book.isLocal === true && this.effectivePageAnim() !== 3;
+    // P3-E：在线书也要走画布分页，不再以 isLocal 限制。
+    return this.effectivePageAnim() !== 3;
   }
 
   /**
@@ -6037,12 +6038,13 @@ export struct ReaderPage {
    * 二是拿不到行几何，KI-C3 的下划线四项与选区都只得分页模式才有。
    */
   private usesCanvasScroll(): boolean {
-    return this.book.isLocal === true && this.effectivePageAnim() === 3;
+    // P3-E：在线书同样走连续滚动画布。
+    return this.effectivePageAnim() === 3;
   }
 
-  /** 是否走画布渲染：本地分页与连续滚动都算。 */
+  /** 是否走画布渲染：在线书与本地书都走同一套画布。 */
   private usesReaderCanvas(): boolean {
-    return this.book.isLocal === true;
+    return true;
   }
   /**
    * 滚动模式的整章内容高度（vp）：所有页的滚动 extent 累加。

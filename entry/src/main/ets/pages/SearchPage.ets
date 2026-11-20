@@ -46,6 +46,8 @@ export struct SearchPage {
   private resultsScroller: Scroller = new Scroller();
   onBack: () => void = () => {};
   onOpenBook: (book: Book) => void = (_book: Book) => {};
+  /** 在线书加入书架（P3-E）。MergedBook 在 Index 侧转成在线 Book 落库。 */
+  onAddOnlineBook: (item: MergedBook) => void = (_item: MergedBook) => {};
   onOpenSourceManage: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onQueryChange: (query: string) => void = (_query: string) => {};
@@ -268,9 +270,13 @@ export struct SearchPage {
     return Array.from(groups.values());
   }
 
-  /** 在线书点击：当前仅提示（入书架+在线阅读链的规格缺口见任务计划第六节）。 */
+  /**
+   * 在线书点击（P3-E）：加入书架并打开阅读。
+   * 对应上游 AddToBookshelfUseCase（搜索结果 → Book → 判重 → 落库）后进入阅读页。
+   * 判重与落库在 Index 侧完成（它持有 books 与 context）。
+   */
   private onOpenOnlineBook(item: MergedBook): void {
-    this.onUnavailableAction(`《${item.book.name}》来自 ${item.originCount} 个书源；在线书加入书架与阅读将在后续批次接入`);
+    this.onAddOnlineBook(item);
   }
 
   @Builder searchTopActions() {

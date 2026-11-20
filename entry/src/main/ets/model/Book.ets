@@ -96,7 +96,20 @@ export interface Book {
   order?: number;
   /** 单独为这本书关闭阅读记录，对应上游 Book.disableReadRecord。 */
   disableReadRecord?: boolean;
+  /**
+   * 是否本地书。上游 Book 没有这个数据字段，它是 BookExtensions.isLocal 计算属性
+   * （origin == 'loc_book' 或 type & 256）。本仓保留该字段仓储层按 origin 回填，
+   * 语义与上游计算属性一致：本地书 true、在线书 false。
+   */
   isLocal: boolean;
+  /** 书源 URL。本地书固定 'loc_book'，在线书为书源 bookSourceUrl（对齐上游 Book.origin）。 */
+  origin?: string;
+  /** 书源名称（对齐上游 Book.originName）。 */
+  originName?: string;
+  /** 在线书的目录 URL（对齐上游 Book.tocUrl）。本地书该列存章节正则，见 tocRule。 */
+  tocUrl?: string;
+  /** 分类（对齐上游 Book.kind，与 books 表 kind 列同列）。 */
+  kind?: string;
 }
 
 /**

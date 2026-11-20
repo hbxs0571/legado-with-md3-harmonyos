@@ -10,6 +10,7 @@ import { PrivateAccessRepository } from '../data/PrivateAccessRepository';
 import { BookRepository } from '../data/BookRepository';
 import { BookSourceRuntimeStore } from '@legado/sourceengine';
 import { BookSourceRuntimePersistenceImpl } from '../bookSource/BookSourceRuntimePersistenceImpl';
+import { OnlineBookService } from '../bookSource/OnlineBookService';
 
 /**
  * 系统栏底色：全屏布局下恒透明。
@@ -73,6 +74,8 @@ export default class EntryAbility extends UIAbility {
     // 仓储缓存此时可能还没 load（首屏才 load），但 getBookSource 走 getAll 是同步快照，
     // 首次调用发生在用户点搜索之后，那时缓存已就绪。
     BookSourceRuntimeStore.install(new BookSourceRuntimePersistenceImpl(this.context));
+    // 在线书内容提供器（P3-E）：缓存优先 + 书源网络兜底，供在线书打开阅读用。
+    BookRepository.installOnlineProvider(new OnlineBookService(this.context));
     // 首帧之前把落盘的主题色同步灌进 AppStorage（批 1，对齐用户「概率性白闪」的反馈）：
     // Index 的 @StorageProp 默认值是浅色，真值要到 restoreOnboarding 的一串 await 之后才广播，
     // 深色主题下首帧就会用浅色画一遍。这里早于窗口创建与 loadContent，是唯一赶得上的位置。

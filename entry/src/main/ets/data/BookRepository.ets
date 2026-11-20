@@ -20,6 +20,7 @@ import { RdbStore } from './RdbStore';
 import { CacheSettingsRepository } from './CacheSettingsRepository';
 import { BookGroupRepository } from './BookGroupRepository';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
+import { OnlineBookProvider } from './OnlineBookProvider';
 
 /** books.readConfig 里本地用得上的几项，其余上游字段不解析。 */
 interface StoredReadConfig {
@@ -180,6 +181,21 @@ export class BookRepository {
   private static saveQueue: Promise<void> = Promise.resolve();
   /** 章节行缓存：bookUrl → 章节行，供页面上的同步访问器读取。 */
   private static chapterCache: Map<string, BookChapter[]> = new Map<string, BookChapter[]>();
+  /**
+   * 在线书内容提供器（P3-E）。对应上游 BookHelp/CacheBook 的抽象：
+   * 缓存优先 + 网络兜底。由 EntryAbility install，未安装时在线书读取给出明确错误。
+   */
+  private static onlineProvider: OnlineBookProvider | undefined = undefined;
+
+  /** 安装在线书内容提供器（EntryAbility.onCreate 调用，避免 data ↔ bookSource 循环依赖）。 */
+  static installOnlineProvider(provider: OnlineBookProvider): void {
+    BookRepository.onlineProvider = provider;
+  }
+
+  /** 当前书是否为在线书：沿用上游 BookExtensions.isLocal 口径，仓储已按 origin 回填。 */
+  static isOnlineBook(book: Book): boolean {
+    return book.isLocal !== true;
+  }
   /** 当前书正文缓存：换章整本重读解码太慢，只留当前这一本，key = contentPath|编码。 */
   private static cachedBookContentKey: string = '';
   private static cachedBookContent: string = '';
@@ -234,7 +250,8 @@ export class BookRepository {
     'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
     '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
-    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount`, `isPrivate`, `variable` FROM `books` ORDER BY `durChapterTime` DESC';
+    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount`, `isPrivate`, `variable`, ' +
+    '`origin` FROM `books` ORDER BY `durChapterTime` DESC';
 
   /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
@@ -935,6 +952,12 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
    * androidOriginalPath 记住原始路径，因此这两者有其一即保留。
    */
   static isPersistableBook(book: Book): boolean {
+    // 在线书（P3-E）没有本地正文文件，但有书源标识即可落库；
+    // 本地书沿用旧口径：contentPath 或 androidOriginalPath 有值。
+    if (BookRepository.isOnlineBook(book)) {
+      return (book.origin !== undefined && book.origin.length > 0) ||
+        (book.contentPath !== undefined && book.contentPath.length > 0);
+    }
     return book.contentPath !== undefined || book.androidOriginalPath !== undefined;
   }
 
@@ -1043,6 +1066,12 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     const bookUrl = RdbCodec.text(resultSet, 0);
     const config = BookRepository.parseReadConfig(RdbCodec.optionalText(resultSet, 18));
     const bookTypeValue = RdbCodec.integer(resultSet, 17, 0);
+    // 上游 Book 没有 isLocal 数据字段，它是 BookExtensions.isLocal 计算属性：
+    // origin == 'loc_book'（或 webDav:: 前缀）或 type & BookType.local(256)。
+    // 本仓在仓储层按同一口径回填，本地书 true、在线书 false，不再无条件写死 true。
+    const origin = RdbCodec.optionalText(resultSet, 29);
+    const isLocal = (origin === undefined || origin.length === 0 || origin === 'loc_book' ||
+      origin.startsWith('webDav::')) || (bookTypeValue & 256) !== 0;
     const groupMask = RdbCodec.integer(resultSet, 4, 0);
     const groupNames = BookGroupRepository.namesFromMask(groupMask);
     const book: Book = {
@@ -1050,7 +1079,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       id: BookRepository.bookIdFromUrl(bookUrl),
       title: RdbCodec.text(resultSet, 1),
       author: RdbCodec.text(resultSet, 2),
+      // kind 列（col3）本地书借用为 category，在线书还原为上游 Book.kind。
       category: RdbCodec.text(resultSet, 3),
+      kind: isLocal ? undefined : RdbCodec.text(resultSet, 3),
       groupNames: groupNames,
       groupName: groupNames.length > 0 ? groupNames[0] : '',
       chapterIndex: RdbCodec.integer(resultSet, 5, 0),
@@ -1073,8 +1104,10 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       // 否则图片书 320 / 听书 288 会被误判成 text，图片书一图一页与书架「图片」标签都会失效。
       bookType: (bookTypeValue & 64) !== 0 ? 'image' : (bookTypeValue & 32) !== 0 ? 'audio' : 'text',
       fixedType: config.fixedType === true,
+      // 在线书的 bookUrl 是详情页 URL，并非本地文件路径；本仓下游普遍用 contentPath 作书的逻辑主键，
+      // 这里仍回填为 bookUrl（仅作 key），真正读正文时按 isLocal 分流到在线内容提供器，不读本地文件。
       contentPath: bookUrl.length > 0 ? bookUrl : undefined,
-      format: BookRepository.normalizeFormat(RdbCodec.optionalText(resultSet, 23), bookUrl),
+      format: isLocal ? BookRepository.normalizeFormat(RdbCodec.optionalText(resultSet, 23), bookUrl) : undefined,
       imageStyle: config.imageStyle,
       pageAnim: config.pageAnim,
       readSimulating: config.readSimulating === true,
@@ -1087,8 +1120,13 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       description: RdbCodec.optionalText(resultSet, 11),
       remark: RdbCodec.optionalText(resultSet, 12),
       customTag: RdbCodec.optionalText(resultSet, 13),
-      androidOriginalPath: RdbCodec.optionalText(resultSet, 10),
-      tocRule: RdbCodec.optionalText(resultSet, 9),
+      // tocUrl 列（col9）本地书借用为 tocRule（章节正则），在线书还原为上游 Book.tocUrl。
+      androidOriginalPath: isLocal ? RdbCodec.optionalText(resultSet, 10) : undefined,
+      tocRule: isLocal ? RdbCodec.optionalText(resultSet, 9) : undefined,
+      tocUrl: isLocal ? undefined : RdbCodec.optionalText(resultSet, 9),
+      origin: origin,
+      // originName 列（col10）本地书借用为 androidOriginalPath，在线书还原为书源名。
+      originName: isLocal ? undefined : RdbCodec.optionalText(resultSet, 10),
       latestChapterTime: RdbCodec.optionalInteger(resultSet, 19),
       durChapterTime: RdbCodec.optionalInteger(resultSet, 20),
       order: RdbCodec.optionalInteger(resultSet, 21),
@@ -1099,7 +1137,7 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       // 单本私密标记（:294）。这列建表起就在，过去一直没进 SELECT，
       // 导致 toBookArgs 每次把它写回 0，手工改库也会被下次保存冲掉。
       isPrivate: RdbCodec.boolean(resultSet, 27, false),
-      isLocal: true,
+      isLocal: isLocal,
       delTag: BookRepository.delTagFromVariable(RdbCodec.optionalText(resultSet, 28)),
       originFileName: BookRepository.variableString(RdbCodec.optionalText(resultSet, 28), 'originFileName'),
       sourceSize: BookRepository.variableNumber(RdbCodec.optionalText(resultSet, 28), 'sourceSize')
@@ -1632,6 +1670,19 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   static async loadChapters(context: Context, book: Book): Promise<BookChapter[]> {
     const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
     if (bookUrl.length === 0) { return []; }
+    // 在线书目录从书源网络抓取（对应上游 loadChapterListAwait 的在线分支）。
+    if (BookRepository.isOnlineBook(book)) {
+      const provider = BookRepository.onlineProvider;
+      if (provider === undefined) { return []; }
+      try {
+        const remote = await provider.getChapterList(book);
+        BookRepository.chapterCache.set(bookUrl, remote);
+        return remote;
+      } catch (error) {
+        AppLog.put(`[BookRepository] 在线目录加载失败: ${error}`);
+        return [];
+      }
+    }
     const chapters = await BookRepository.getChapterList(context, bookUrl);
     BookRepository.chapterCache.set(bookUrl, chapters);
     return chapters;
@@ -1677,7 +1728,11 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   /** 把一本书摊成 books 表的 36 个绑定值，顺序必须与 upsertBookSql 一致。 */
   private static toBookArgs(book: Book): relationalStore.ValueType[] {
     const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
-    const originName = book.androidOriginalPath ?? BookRepository.getFileName(bookUrl);
+    // 上游 originName 列：本地书借用为 androidOriginalPath（导入源文件名），
+    // 在线书还原为书源名（对齐上游 Book.originName）。
+    const originName = book.isLocal
+      ? (book.androidOriginalPath ?? BookRepository.getFileName(bookUrl))
+      : (book.originName ?? BookRepository.getFileName(bookUrl));
     const groupNames = book.groupNames ?? ((book.groupName ?? '').length > 0 ? [book.groupName as string] : []);
     // useReplaceRule 为 undefined 时 JSON.stringify 会丢掉该键，
     // 正好对应上游「ReadConfig.useReplaceRule = null 表示跟随全局默认」的语义
@@ -1701,8 +1756,10 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const latestChapterTitle = book.latestChapterTitle ?? lastChapter;
     return [
       bookUrl,
-      book.tocRule ?? '',
-      'loc_book',
+      // tocUrl 列：本地书存章节正则（tocRule），在线书存目录 URL（对齐上游 Book.tocUrl）。
+      book.isLocal ? (book.tocRule ?? '') : (book.tocUrl ?? ''),
+      // origin 列：本地书 'loc_book'，在线书书源 URL（对齐上游 Book.origin）。
+      book.isLocal ? 'loc_book' : (book.origin ?? ''),
       originName,
       book.title,
       book.author,
@@ -1954,6 +2011,37 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /**
+   * 读在线书的一章正文（P3-E）。
+   * 对应上游 ReadBook.loadContent → BookHelp.getContent：提供器内部缓存优先、网络兜底，
+   * 返回纯文本；这里按章号定位 BookChapter，再复用本仓的正文后处理管线。
+   */
+  private static async readOnlineChapter(book: Book, chapterTitle: string,
+    requestedChapterIndex?: number, chapters: BookChapter[] = []): Promise<string> {
+    const provider = BookRepository.onlineProvider;
+    if (provider === undefined) {
+      throw new Error('在线书源尚未就绪，无法读取正文');
+    }
+    const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
+    const seedRows = chapters.length > 0 ? chapters : BookRepository.cachedChapters(book);
+    const rows = seedRows.length > 0 ? seedRows : await provider.getChapterList(book);
+    if (rows.length > 0) {
+      BookRepository.chapterCache.set(bookUrl, rows);
+    }
+    const selectedIndex = requestedChapterIndex !== undefined && requestedChapterIndex >= 0 &&
+      requestedChapterIndex < rows.length
+      ? requestedChapterIndex
+      : Math.max(0, rows.findIndex((row: BookChapter) => row.title === chapterTitle));
+    const chapter = rows[selectedIndex];
+    if (chapter === undefined) {
+      throw new Error('在线目录为空，无法读取正文');
+    }
+    const raw = await provider.getContent(book, chapter);
+    // 在线正文本身已是纯文本，applyChapterContentAsync 的 start/end 不参与（在线章无字节偏移），
+    // 这里直接把整章正文交给后处理管线做替换规则/简繁/重分段。
+    return BookRepository.applyChapterContentAsync(book, chapter.title, raw, chapter.index);
+  }
+
+  /**
    * 读一章正文。
    *
    * 章节行优先用调用方传入的 chapters（页面在 aboutToAppear 里查表得到）；
@@ -1962,6 +2050,12 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
    */
   static async readChapter(book: Book, chapterTitle: string, requestedChapterIndex?: number,
     contentOverride?: string, chapters: BookChapter[] = []): Promise<string> {
+    // 在线书正文走内容提供器（对应上游 BookHelp.getContent：缓存命中或网络兜底），
+    // 不走本地文件 seek/fileIsUtf8。上游网络层已做书源级替换与 HTML 净化，
+    // 这里再复用本仓 applyChapterContentAsync 做用户替换规则/简繁/重分段。
+    if (BookRepository.isOnlineBook(book)) {
+      return BookRepository.readOnlineChapter(book, chapterTitle, requestedChapterIndex, chapters);
+    }
     if (book.contentPath === undefined) {
       throw new Error('本地书籍路径无效');
     }

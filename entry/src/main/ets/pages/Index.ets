@@ -12,6 +12,7 @@ import { CatalogPage } from './CatalogPage';
 import { TxtTocRulePreviewPage } from './TxtTocRulePreviewPage';
 import { ReaderSettingsPage } from './ReaderSettingsPage';
 import { SearchPage } from './SearchPage';
+import { MergedBook } from '../bookSource/SearchResultMerger';
 import {
   BookSourceManagePage, ReplaceRulesPage, ReplaceRuleEditPage, TxtTocRulesPage, DictionaryRulesPage,
   DictionaryRuleEditPage, HighlightTagRulesPage, HighlightTagRuleEditPage,
@@ -6827,6 +6828,72 @@ private canWriteInto(dir: string): boolean {
   }
 
   /**
+   * 在线书加入书架并打开阅读（P3-E）。对应上游 AddToBookshelfUseCase：
+   * 搜索结果 SearchBook → Book → 判重（同 bookUrl 或规范化 name+author）→ 落库 → 进入阅读页。
+   * 上游判重用 NFKC + 空白折叠规范化，这里用等价的空白折叠 + 去首尾空格。
+   */
+  private onAddOnlineBook(item: MergedBook): void {
+    const source = item.book;
+    const bookUrl = source.bookUrl;
+    if (bookUrl.length === 0) {
+      this.showUnavailableAction('该书没有可用的详情地址，无法加入书架');
+      return;
+    }
+    const normalize = (value: string): string => value.replace(/[\p{Z}\s]+/gu, ' ').trim().toLowerCase();
+    const keyName = normalize(source.name);
+    const keyAuthor = normalize(source.author);
+    // 判重：同 bookUrl 视为同一本；否则书名规范化相等且作者兼容（任一方空放宽）。
+    const existing = this.books.find((book: Book) => {
+      if ((book.contentPath ?? '') === bookUrl) { return true; }
+      const nameEq = normalize(book.title) === keyName;
+      if (!nameEq) { return false; }
+      const author = normalize(book.author);
+      return keyAuthor.length === 0 || author.length === 0 || author === keyAuthor;
+    });
+    if (existing !== undefined) {
+      // 已在书架：直接打开那本（上游同 URL 判为已存在即进阅读）。
+      this.openBook(existing);
+      return;
+    }
+    const origin = item.origins.length > 0 ? item.origins[0] : source.origin;
+    const onlineBook: Book = {
+      id: BookRepository.bookIdFromUrl(bookUrl),
+      title: source.name,
+      author: source.author,
+      category: source.kind ?? '',
+      kind: source.kind.length > 0 ? source.kind : undefined,
+      lastChapter: source.lastChapter,
+      progress: 0,
+      chapterIndex: 0,
+      chapterCount: '0',
+      wordCount: source.wordCount.length > 0 ? source.wordCount : undefined,
+      latestChapterTitle: source.lastChapter.length > 0 ? source.lastChapter : undefined,
+      coverUri: source.coverUrl.length > 0 ? source.coverUrl : undefined,
+      // 在线书 contentPath 只是逻辑主键（= 详情页 URL），绝不读本地文件。
+      contentPath: bookUrl,
+      isLocal: false,
+      origin: origin,
+      originName: source.originName,
+      tocUrl: source.tocUrl.length > 0 ? source.tocUrl : bookUrl,
+      order: Math.min(0, ...this.books.map((book: Book) => book.order ?? 0)) - 1
+    };
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，加入失败');
+      return;
+    }
+    BookRepository.saveImportedBooks(context, [...this.books, onlineBook]
+      .filter((book: Book) => BookRepository.isPersistableBook(book)))
+      .then(() => {
+        this.books = [...this.books, onlineBook];
+        this.openBook(onlineBook);
+      })
+      .catch((error: Error) => {
+        this.showUnavailableAction('加入书架失败：' + error.message);
+      });
+  }
+
+  /**
    * 重新识别书架里所有本地 TXT 的目录，对应上游书架的「更新目录」。
    *
    * 导入时选中的章节正则会固定在 Book.tocRule 上，规则调整后已有书的目录不会变，
@@ -7179,7 +7246,9 @@ private canWriteInto(dir: string): boolean {
     this.checkReadRecordAlias(book);
     const progressSynced = await this.warnNewerRemoteProgress(book);
     if (progressSynced !== undefined) { book = progressSynced; }
-    if (book.contentPath === undefined) {
+    // 在线书（P3-E）：contentPath 存的是详情页 URL，不是本地文件路径，按在线链加载。
+    const isOnline = BookRepository.isOnlineBook(book);
+    if (!isOnline && book.contentPath === undefined) {
       this.showUnavailableAction(BookRepository.isBodyMissing(book)
         ? '已恢复书目和阅读位置；备份不含正文，请重新选择原书文件后阅读'
         : '此书暂时没有可用正文');
@@ -7187,7 +7256,27 @@ private canWriteInto(dir: string): boolean {
     }
     let openedBook: Book = book;
     let content: string = '';
+    this.replaceRules = ReplaceRuleRepository.getAll();
     try {
+      if (isOnline) {
+        // 对应上游 ReadBookLoadDelegate.initBook：先按 origin 解析书源（提供器内部），
+        // 拉目录进缓存，再读当前章正文（缓存优先 + 网络兜底）。
+        const chapterContext = this.getUIContext().getHostContext();
+        if (chapterContext !== undefined) {
+          await BookRepository.loadChapters(chapterContext, book);
+        }
+        const titles = BookRepository.cachedChapterTitles(book);
+        const chapterIndex = Math.max(0, Math.min(book.chapterIndex ?? 0, Math.max(0, titles.length - 1)));
+        const chapterTitle = titles[chapterIndex] ?? book.lastChapter;
+        content = await BookRepository.readChapter(book, chapterTitle, chapterIndex);
+        if (titles.length > 0) {
+          const refreshed: Book = BookRepository.copyBook(book);
+          refreshed.chapterIndex = chapterIndex;
+          refreshed.lastChapter = chapterTitle;
+          refreshed.chapterCount = titles.length.toString();
+          openedBook = refreshed;
+        }
+      } else {
       const noTocRefresh = BookRepository.refreshNoTocBook(book, this.readerMaxLengthWithNoToc);
       openedBook = noTocRefresh.book;
       // 先把章节行读进缓存再取正文：readChapter 拿不到章节行时会退化成「整本重切一遍」，
@@ -7198,7 +7287,6 @@ private canWriteInto(dir: string): boolean {
       }
       content = await BookRepository.readChapter(openedBook, openedBook.lastChapter,
         openedBook.chapterIndex, noTocRefresh.content.length > 0 ? noTocRefresh.content : undefined);
-      this.replaceRules = ReplaceRuleRepository.getAll();
       if (noTocRefresh.changed) {
         const context = this.getUIContext().getHostContext();
         if (context === undefined) {
@@ -7221,6 +7309,7 @@ private canWriteInto(dir: string): boolean {
           return;
         }
         this.books = updatedBooks;
+      }
       }
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? '打开失败：' + error.message : '本地书籍文件无法读取');
@@ -9774,6 +9863,7 @@ private canWriteInto(dir: string): boolean {
           coverSettings: this.coverSettings,
           onBack: () => this.route = this.searchReturnRoute,
           onOpenBook: (book: Book) => this.openBook(book),
+          onAddOnlineBook: (item: MergedBook) => this.onAddOnlineBook(item),
           onOpenSourceManage: () => this.openProfileDetail(ProfileRoute.BOOK_SOURCE_MANAGE),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),
           onQueryChange: (query: string) => this.searchPageQuery = query,
