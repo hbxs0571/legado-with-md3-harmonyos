@@ -23,9 +23,9 @@
 
 ## 在线服务（已纳入范围）
 
-在线书源抓取、RSS 拉取、TTS 服务、WebDAV 属于本项目范围之内，四项进度不同：**WebDAV 已落地**（上传、下载、远端列表与凭据设置，走 `rcp`，见 `entry/src/main/ets/lib/WebDav.ets`，并入功能队列第 6 项）；**朗读服务（TTS）已排期**（功能队列第 3 项，本地目前零音频能力，系统侧可用 `@kit.CoreSpeechKit`）；**在线书源抓取与 RSS 拉取仍未排期**，页面上相关入口仍是未迁移占位。
+在线书源抓取、RSS 拉取、TTS 服务、WebDAV 属于本项目范围之内，四项进度不同：**WebDAV 已落地**（上传、下载、远端列表与凭据设置，走 `rcp`，见 `entry/src/main/ets/lib/WebDav.ets`，并入功能队列第 6 项）；**朗读服务（TTS）已落地**（功能队列第 3 项，系统合成与 HTTP 两条链）；**在线书源已落地**（2026-11-20 按 12 批 P0–P11 完成，见[批次报告](booksource/BATCH-REPORT.md)：904 条书源管理/编辑、多源并发搜索与合并、在线书入架与正文读取、发现、单本换源、登录、调试）；**RSS 拉取仍未排期**，页面上相关入口仍是未迁移占位。
 
-纳入范围只表示「要做」，不表示「已经做了」。书源排在 RSS 之前，因为书源是阅读链路的直接上游；RSS 相对独立，可最后做。
+纳入范围只表示「要做」，不表示「已经做了」。书源排在 RSS 之前，因为书源是阅读链路的直接上游；RSS 相对独立，可最后做。书源虽已落地，但范围收敛为 A1/A2 纯 URL 源，脚本源与 `java.*` 桥能力缺口如实登记为 KI-BS1–BS6，详见批次报告。
 
 **书源的技术可行性已经实测过**（r359，工程外验证工程，主仓零改动）：社区实现 `wip3l/harmony-book-source-engine` 的规则引擎与 QuickJS 运行时能在本机基线下编译、在模拟器上加载并跑出正确结果，CSS 选择器 / 属性 / 列表 / JSONPath / `@js:` 脚本规则七项全通过。但它只提供引擎，不提供搜索与发现的调度层，那部分要另搬约 8,000 行。完整实测数据、两种接入方式的成败差别与尚未验证的项见 [已知问题](KNOWN-ISSUES.md) 的「书源引擎：能接、已上机验证、但还差调度层」。
 
@@ -40,7 +40,7 @@
 
 | 项 | 上游接触面 | 依赖的本地缺口 |
 | --- | --- | --- |
-| 在线书源抓取 | `model/webBook/`（6 个 `.kt`，`WebBook.kt` 509 行）、`service/`（13 个） | 书源管理页（现为 162 行空壳，5 处 `onUnavailableAction` 调用，`pages/ProfileSubPages.ets:25`-`:186`）；**规则解析与 JS 运行时不必自研**，社区 `sourceengine`（25,999 行）+ `quickjs`（MIT）已实测可接（r359），见 [已知问题](KNOWN-ISSUES.md)「书源引擎」；仍缺的是搜索/发现/正文的调度层（约 8,000 行，在 `wip3l/qingye-reader` 里）与宿主适配（ArkWeb、Cookie、TLS、模型映射） |
+| 在线书源抓取 | `model/webBook/`（6 个 `.kt`，`WebBook.kt` 509 行）、`service/`（13 个） | **已落地（P0–P11）**：`third_party/harmony-book-source-engine/` 引入 `sourceengine`+`quickjs`；新建 `bookSource/` 调度层（WebBookService 四步、SearchCoordinator 多源并发、ExploreCoordinator、OnlineBookService、ChangeSource 换源、Login/Bridge、Debug）与 `pages/BookSourceManagePage`/`BookSourceEditPage`/`DiscoverPage`/`SourceLoginPage`/`BookSourceDebugPage`。范围收敛为 A1/A2 纯 URL 源，脚本源与 `java.*` 桥缺口见 [批次报告](booksource/BATCH-REPORT.md) KI-BS1–BS6 |
 | 朗读 / TTS 服务 | `HttpReadAloudService.kt` 等上游朗读链路（含 readaloud 路径约 143 个 `.kt`） | 九批已落地：系统/HTTP 两条合成播放链、面板、胶囊、听书界面、后台控制条；上游朗读设置项按实测判定为做 6 / 顺延 12 / 不接 15（共 33 项，见批次报告），七个子页大部分不接；阅读器侧「朗读播放尚未迁移」占位实测 0 处。**第三条引擎路径（七家云端 provider + `cloud_tts_engines` 表）整层未建**——属本项目范围内的未做项，不是平台受限，见 [KNOWN-ISSUES](KNOWN-ISSUES.md)「云端 TTS 整层未建」 |
 | RSS 拉取 | `model/rss/`（3 个 `.kt`，`Rss.kt` 160 行） | 网络层、订阅源管理与筛选（现有 4 处「订阅源筛选尚未迁移」占位） |
 | WebDAV | 12 个文件名含 `webdav` 的 `.kt`（按内容计则 62 个），含 `WebDavBackupRepository.kt` | **已无缺口**（2026-11-11 落地）：lib/WebDav.ets + lib/WebDavSync.ets + lib/WebDavConfig.ets，设置页 `onUnavailableAction` 从 14 处降到 3 处（清掉 11 处调用，保留旧版数据导入、备份目录两处与属性声明本身） |

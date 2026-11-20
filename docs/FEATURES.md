@@ -16,6 +16,7 @@
 | 4 | 阅读记录 | 概览、热力图、合并、扫描修复、清空都可用 | `pages/ProfileSubPages.ets:3014`-`:3873`、`pages/ReadRecordOverviewPage.ets` | 本文第四章 |
 | 5 | 外观 | 主题包、日夜模式、自定义配色可用；启动图标是平台限制、主题风格与多窗布局上游本身不接 | `pages/ThemeSettingsPage.ets`、`pages/ThemeManagePage.ets` | 本文第五章 |
 | 6 | 备份与恢复 | 28 类全部双向通，含 WebDAV 上传下载；旧版数据导入与系统目录选择仍空 | `pages/AppBackupSettingsPage.ets`、`data/BackupRepository.ets`（3773 行） | 本文第六章 |
+| 7 | 书源 | 904 条书源可管理、可编辑；多源搜索跨源合并、结果可加入书架在线阅读；发现、换源、登录、调试页可用。已跑通的真实源数与缺口见批次报告 | `pages/ProfileSubPages.ets`、`pages/SearchPage.ets`、`pages/BookSourceEditPage.ets`、`bookSource/` | 本文第七章 |
 
 ## 一、书架
 
@@ -472,6 +473,38 @@
 ### 6.4 验收记录
 
 本地 ZIP 的类别映射与真包往返记录写在 [备份与恢复](BACKUP-RESTORE.md) 与[兼容总账](parity/STATUS.md)；WebDAV 的联网链路尚无设备记录。相关登记见 [已知问题](KNOWN-ISSUES.md)。
+
+## 七、书源
+
+本章记在线书源模块的用户可见能力。它不在用户确定的前六项队列里，是 2026-11-20 按 12 批（P0–P11）单独落地的；逐批提交号、P0 准入数据、跑通的书源数与明确缺口见[批次交付报告](booksource/BATCH-REPORT.md)。
+
+### 7.1 能做什么
+
+- **书源管理**：「我的 → 书源管理」列出全部 904 条书源（`pages/ProfileSubPages.ets` 的 `BookSourceManagePage`，用 `LazyForEach`），支持关键词搜索、分组筛选、七种排序（手动 / 权重 / 名称 / URL / 更新时间等）、按域名分组、拖拽重排、长按进多选后的 11 项批量操作（启用/禁用、启用/禁用发现、加/移分组、置顶/置底、选区间、校验、导出）与条目菜单 7 项（置顶/置底/搜索/调试/编辑/删除/启用发现；无 `loginUrl` 的源不显示登录项）。
+- **书源编辑**：`pages/BookSourceEditPage.ets` 六 tab 共 68 个字段槽，直接读写整条 Legado 原始 JSON（`sourceJson` 是唯一真值，派生列保存时重建），支持新建书源；溢出菜单含复制/粘贴/分享/搜索/补全/登录/清 Cookie/变量/日志九项。
+- **搜索与阅读**：`pages/SearchPage.ets` 对启用的文本源 8 并发搜索，按书名/作者四桶归并、同书跨源合并来源数、边搜边出、可随时取消；点结果加入书架后 `Index.openBook` 走在线分支，`bookSource/OnlineBookService.ets` 缓存优先、网络兜底取目录与正文，复用引擎规则解析与后处理，打开即能读。
+- **发现与换源**：`pages/DiscoverPage.ets` 按 `exploreUrl` 的四种写法解析源与分类，按源/分类翻页；`pages/ChangeSourceSheet.ets` 单本换源，候选源搜索后展示目录章节数，按 Jaccard 章节名相似度迁移阅读进度（对应上游 `BookHelp.getDurChapter`），失败保留原书。
+- **登录、导入导出、调试**：`pages/SourceLoginPage.ets` 对有 `loginUrl` 的源按 `loginUi` 解析结果走表单或内嵌 WebView 双模式，loginHeader/loginInfo/cookie 三载体回写并在后续请求自动带上；`pages/ProfileSubPages.ets` 支持本地文件 / 在线 URL 导入与整表导出，均为标准 Legado JSON（扫码因平台无对应 API 弹真实提示，不伪造）；`pages/BookSourceDebugPage.ets` 对搜索/发现/详情/目录/正文五类目标打点，按过程/响应/错误过滤并可点开详情。
+
+### 7.2 卡在这几处
+
+- **只覆盖 A1/A2 类纯 URL 源**：P0-ter 准入实测 A1 60% / A2 60%，A3/A4（规则里 `{{}}` 内代码模板）与 C 层脚本源通过率 0%/4%，属引擎语法与 `java.*` 桥能力边界，不承诺；详见[批次报告](booksource/BATCH-REPORT.md)与[已知问题](KNOWN-ISSUES.md) KI-BS1–BS6。
+- **未实现的能力**：书源回调按钮、简介 usehtml/useweb/md 渲染与简介 JS、角色/知识/事件卡（依赖范围外的 AI 服务）、批量下载与批量换源、书架管理页里的书源选择/换源预览面板、`myBookSource.json` 旧版导入、`keyboardAssists` 语法表；在线书进度持久化与目录定时刷新红点留待后续。
+- 书源调试页的过程日志是宿主自包装 `WebBookService` 打点产出——引擎的 `BookSourceDebugContext` 是拉取式结构且当前链路未透传，无法直接给出带 message/耗时/类别的日志流。
+
+### 7.3 算做完的判据
+
+- [ ] 「我的 → 书源管理」能看到 904 条书源，搜索「笔趣阁」收敛到含关键词的结果，七种排序切换后首项随排序变，长按进多选能批量启用/禁用并真正落库。
+- [ ] 编辑页六 tab 切换正常，改一个字段保存后重进仍在新值；新建一条源后能在管理页找到。
+- [ ] 搜索页输入书名，多个源并发返回结果，同一本书只出现一次并显示命中来源数，边搜边出，中途点取消能停止。
+- [ ] 搜索结果加入书架后打开，能加载目录并读到正文（真实源实测「剑来」→ 77读书网目录 1362 章、正文 770 字）。
+- [ ] 发现页能按源、按分类翻页；换源后书籍保留阅读进度，失败时原书不变。
+- [ ] 有 `loginUrl` 的源能弹登录表单或 WebView，保存凭据后搜索请求带上登录态。
+- [ ] 调试页选「搜索」、输入关键词开始，能看到带耗时与类别的日志条目，按「错误」过滤后只剩错误条目。
+
+### 7.4 验收记录
+
+P0 三轮准入数据与 P1–P10 逐批提交、上机结果写在[批次交付报告](booksource/BATCH-REPORT.md)与[验证记录](VALIDATION.md)的 r352 段；模拟器跑不出、需真机的项在交付报告的「未验证清单」。
 
 ## 维护约定
 

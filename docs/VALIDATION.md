@@ -1746,3 +1746,18 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
 另修一处验收方指出的过时注释：`entry/src/main/ets/pages/ReaderPage.ets:6307` 的「页眉贴画布顶（originYpx = 0）」已与 `:6321` 实际行为不符，改为描述状态栏让位。该改动只碰注释，行为不变。
 
 **这一批的教训**：r348 的验收只证明了「同一页翻走再翻回来逐像素不动」，那验证的是位移**随页定型**，不验证位移**量是否够**。当时 A/B 选的那页剩余不足一行、按判据本就不摊分，两版看起来一样，我把它当成「摊分不生效」的反证收下了——这是取样选错了。r351 换成章首页（剩余空间足够摊分）才暴露出量级差。
+
+### r352 在线书源 12 批（P0–P11）收尾验收
+
+- 本段是书源模块（P0 准入 + P1–P10 实现 + P11 收尾）的统一验收记录，逐批提交号、P0 三轮数据、跑通的真实源与未验证清单见[批次交付报告](booksource/BATCH-REPORT.md)。本段只记「验过什么、怎么验的」。
+- **P0 三轮准入（不修改本仓、纯验证）**：P0 多样本 ok 4/30=13.3%；P0-bis 挂 ArkWeb 后 p_A 43.3%；P0-ter 修 `AnalyzeUrl.cleanBaseUrl` URL 拼接缺陷后 A1 60.0%[46.4–73.6]、A2 60.0%、A3 0%、A4 0%、p_all 44.6%。整体未过 50% 硬线，按判据交回数据、不擅自改计划；A1/A2 纯 URL 源单独达立项门槛，故实现范围收敛为 A1+A2，A3/A4/C 列为显式缺口（KI-BS4）。
+- **构建**：P1–P10 每批改动后均 `BUILD SUCCESSFUL`；P10 修 @BuilderParam 崩溃后 1min9s、修两处 UI 瑕疵后 1min14s。构建环境 Git Bash + `unset DEVECO_STUDIO_HOME` + `DEVECO_SDK_HOME=D:/.../sdk`。
+- **离线自测**：`tmp/p0ter_urltest.py` URL 八用例全过；`tmp/p7_parse_test.js` 发现分类四写法六例全过；`tmp/p8_progress_test.js` Jaccard 进度迁移六例全过；`tmp/p9_login_test.py` 904 库 111 登录源表单解析 24/24（467 控件）全过；`tmp/p10_logic_test.py` 调试 key 协议 6/6、分派 5/5、四档过滤判据、1000 条尾保留全过。
+- **上机验收（模拟器 127.0.0.1:5555 深色模式）**：
+  - P3 多源搜索：36 源 19–22 秒返回 568+ 结果，边搜边出 36 次进度回调、193 条多源命中，TOP1《剑来》17 源命中排第一；第 5 源触发取消后接引擎 `AnalyzeUrl.setCancelCheck`，收口从 7.3s 降到 3.9s。
+  - P3-E 在线正文链：搜「剑来」→ 77读书网在线目录 1362 章 → 正文 770 字，打开能读；在线 Book 落库往返 origin/tocUrl/originName/kind/isLocal 全对。
+  - P4 管理页：真实界面 904 条列表、搜索「笔趣阁」收敛 7 条、分组筛选、七种排序、长按多选、11 项批量操作、条目菜单 7 项全部显示；修批量面板残留 bug（统一 `exitSelectionMode` 收口）后复验通过。
+  - P10 调试页（r352 当场补证）：详情页/管理页菜单进入调试页不崩溃；填「我的」示例开始调试产出「过程」「错误」两条带耗时与时间戳的日志；点「错误」过滤从 2 条收敛到 1 条；点日志卡片弹出详情浮层（顶部标签 + 关闭 + 完整 message），截图 `tmp/p10detail.jpeg`。
+  - P10 前发现一处真实崩溃：`TypeError: class constructor cannot called without 'new'`，根因是 `TopBar.ets` 的 `@BuilderParam` 槽位传了内联 lambda 直接实例化自定义 struct；修法为 5 个页面（BookSourceDebugPage/DiscoverPage/BookSourceEditPage/SourceLoginPage/SourceWebPage）各加 `@Builder` slot 方法并改传 `() => { this.xxxSlot() }`，修后逐页真机复验不再崩溃。
+- **七表盘面**：P0–P11 之后只把 `docs/parity/BOOKSHELF.md:307`「动作卡·换源」由未接改已接（P8 已真实接通，原文 `onUnavailableAction('在线换源将在 P5 接入')` 已过期）；其余书源相关未接行按源码逐行核对后保持未接，不为凑数字改状态。三件套 doc-links / parity-pipes / parity-rows 复跑全 OK，七表合计仍 1226。
+- **没做什么（诚实清单）**：A3/A4/C 类脚本源与代码模板规则不承诺；`java.*` 桥 32 方法未支持（KI-BS4）；书源回调按钮、简介三种渲染、角色/知识/事件卡、批量换源/下载、在线进度持久化、目录定时刷新、旧版 `myBookSource.json` 导入、keyboardAssists 表均未做（KI-BS1/3/5/6）。真机（非模拟器）联网抓取、登录凭据端到端、换源落库后的跨会话进度迁移未单独上机；这些列入交付报告「未验证清单」，不以「已验证」表述。
