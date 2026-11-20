@@ -2,7 +2,10 @@
 import curves from '@ohos.curves';
 import { bundleManager } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { fileIo } from '@kit.CoreFileKit';
+import { fileIo, picker } from '@kit.CoreFileKit';
+import { SourceHttp } from '../bookSource/SourceHttp';
+import { BookSourceImporter } from '../data/BookSourceImporter';
+import { BookSourceImportKeep } from '../data/BookSourceRepository';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ReadRecordHeatmap } from '../components/ReadRecordHeatmap';
 import { BookCover } from '../components/BookCover';
@@ -124,6 +127,16 @@ export struct BookSourceManagePage {
   onOpenSourceSearch: (keyword: string, sourceUrl: string) => void = (_keyword: string, _sourceUrl: string) => {};
   /** 打开书源编辑页（P5）。sourceUrl 为空表示新建。 */
   onOpenSourceEdit: (sourceUrl: string) => void = (_sourceUrl: string) => {};
+  // P6 导入：导入对话框状态。importStage='options' 显示三个保留开关，'online' 收 URL。
+  @State private importVisible: boolean = false;
+  @State private importStage: string = 'options';
+  @State private importOnlineUrl: string = '';
+  @State private keepName: boolean = false;
+  @State private keepGroup: boolean = false;
+  @State private keepEnabled: boolean = false;
+  /** 待落库的解析结果；选完保留项后调 importRules。 */
+  private pendingImportRules: BookSource[] = [];
+  private pendingImportSkipped: number = 0;
 
   aboutToAppear(): void {
     this.reloadSources();
@@ -414,6 +427,118 @@ export struct BookSourceManagePage {
     }
   }
 
+  /** P6 本地导入：DocumentViewPicker 选 json/txt → 解析 → 导入选项对话框。 */
+  private async importFromLocalFile(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.maxSelectNumber = 10;
+      options.fileSuffixFilters = ['书源 JSON|.json', '文本文件|.txt'];
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      if (uris.length === 0) { return; }
+      const texts: string[] = [];
+      for (let i = 0; i < uris.length; i++) {
+        // picker 返回 file uri，readTextSync 只认沙箱路径，先 copyFileSync 到 filesDir 再读。
+        const tempPath = `${context.filesDir}/booksource-import-${Date.now()}-${i}.json`;
+        try {
+          const f = fileIo.openSync(uris[i], fileIo.OpenMode.READ_ONLY);
+          try { fileIo.copyFileSync(f.fd, tempPath); } finally { fileIo.closeSync(f); }
+          texts.push(fileIo.readTextSync(tempPath));
+        } catch (_) { /* 单个文件读失败跳过，其余继续 */ }
+        finally { if (fileIo.accessSync(tempPath)) { fileIo.unlinkSync(tempPath); } }
+      }
+      if (texts.length === 0) {
+        this.onUnavailableAction('读取文件失败，未导入数据');
+        return;
+      }
+      this.acceptImportText(texts.join('\n'));
+    } catch (error) {
+      this.onUnavailableAction('本地导入失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  /** P6 网络导入：用 P2 的 HttpClient 拉文本 → 解析 → 导入选项对话框。 */
+  private async importFromOnlineUrl(): Promise<void> {
+    const url = this.importOnlineUrl.trim();
+    if (url.length === 0) {
+      this.onUnavailableAction('请输入书源订阅地址');
+      return;
+    }
+    this.onUnavailableAction('正在从网络拉取书源…');
+    try {
+      const resp = await SourceHttp.getClient().execute({
+        url: url, method: 'GET', headers: {}, useCookieJar: false
+      });
+      if (!resp.success || resp.statusCode < 200 || resp.statusCode >= 300) {
+        this.onUnavailableAction(`网络导入失败：HTTP ${resp.statusCode} ${resp.error ?? ''}`);
+        return;
+      }
+      this.acceptImportText(resp.body);
+    } catch (error) {
+      this.onUnavailableAction('网络导入失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  /** P6 二维码导入：本机 SDK 无 ScanKit 声明（探针证据见任务计划），明确告知不可适配。 */
+  private importFromQrcode(): void {
+    this.onUnavailableAction('二维码导入：当前设备 SDK 未提供 @kit.ScanKit/startScanForResult 能力，暂无法适配，请用本地导入或在线导入');
+  }
+
+  /** 解析导入文本；有条目则打开保留项对话框，否则如实反馈。 */
+  private acceptImportText(text: string): void {
+    const parsed = BookSourceImporter.parse(text);
+    if (parsed.rules.length === 0) {
+      this.onUnavailableAction(`未解析到有效书源（跳过 ${parsed.skipped} 条），请检查文件格式`);
+      return;
+    }
+    this.pendingImportRules = parsed.rules;
+    this.pendingImportSkipped = parsed.skipped;
+    this.keepName = false;
+    this.keepGroup = false;
+    this.keepEnabled = false;
+    this.importStage = 'options';
+    this.importVisible = true;
+  }
+
+  /** 用户确认保留项后真正落库。 */
+  private async commitImport(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.importVisible = false; return; }
+    const keep: BookSourceImportKeep = {
+      keepName: this.keepName, keepGroup: this.keepGroup, keepEnabled: this.keepEnabled
+    };
+    try {
+      const outcome = await BookSourceRepository.importRules(context, this.pendingImportRules, keep);
+      this.onUnavailableAction(`导入完成：新增 ${outcome.added}、更新 ${outcome.updated}、跳过 ${outcome.skipped + this.pendingImportSkipped}`);
+      await this.reloadSources();
+    } catch (error) {
+      this.onUnavailableAction('导入失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+    this.importVisible = false;
+  }
+
+  /** 导出全部书源到用户选择的文件（区别于选中导出的 exportSelection）。 */
+  private async exportAllSources(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const all = BookSourceRepository.getAll();
+    if (all.length === 0) { this.onUnavailableAction('没有可导出的书源'); return; }
+    const text = BookSourceRepository.exportRules(all);
+    try {
+      const options = new picker.DocumentSaveOptions();
+      options.newFileNames = ['bookSource.json'];
+      const uris = await new picker.DocumentViewPicker(context).save(options);
+      if (uris.length === 0) { return; }
+      // 照 TxtTocRuleRepository:528-546：直接 writeSync 传字符串，勿先 encodeInto（模拟器会写出 0 字节）。
+      const f = fileIo.openSync(uris[0], fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+      try { fileIo.writeSync(f.fd, text); } finally { fileIo.closeSync(f); }
+      this.onUnavailableAction(`已导出 ${all.length} 条书源`);
+    } catch (error) {
+      this.onUnavailableAction('导出失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
   /** 条目菜单动作分发。 */
   private onSourceRowAction(key: string, row: SourceRow): void {
     const source = row.source;
@@ -487,6 +612,7 @@ export struct BookSourceManagePage {
       { key: 'import_local', title: '本地导入' },
       { key: 'import_qrcode', title: '二维码导入' },
       { key: 'import_online', title: '在线导入' },
+      { key: 'export_all', title: '导出全部' },
       { key: 'group_by_domain', title: this.groupByDomain ? '取消按域名分组' : '按域名分组' },
       { key: 'sort_manual', title: '手动排序', selected: this.sortMode === '手动排序' },
       { key: 'sort_weight', title: '权重排序', selected: this.sortMode === '权重排序' },
@@ -503,11 +629,15 @@ export struct BookSourceManagePage {
     if (key === 'groups') {
       this.onUnavailableAction('书源分组管理尚未迁移，未修改分组');
     } else if (key === 'import_local') {
-      this.onUnavailableAction('书源本地导入尚未迁移，未导入数据');
+      this.importFromLocalFile();
     } else if (key === 'import_qrcode') {
-      this.onUnavailableAction('书源二维码导入尚未迁移，未导入数据');
+      this.importFromQrcode();
     } else if (key === 'import_online') {
-      this.onUnavailableAction('书源在线导入尚未迁移，未导入数据');
+      this.importOnlineUrl = '';
+      this.importStage = 'online';
+      this.importVisible = true;
+    } else if (key === 'export_all') {
+      this.exportAllSources();
     } else if (key === 'group_by_domain') {
       this.groupByDomain = !this.groupByDomain;
     } else if (key === 'sort_manual') {
@@ -534,7 +664,9 @@ export struct BookSourceManagePage {
   /** 三种面板（分组筛选、批量、分组名输入）合并到一个 bindSheet 的内容。 */
   @Builder
   private SourceSheetContent() {
-    if (this.promptVisible) {
+    if (this.importVisible) {
+      this.ImportDialog()
+    } else if (this.promptVisible) {
       this.PromptDialog()
     } else if (this.batchPanelVisible) {
       this.BatchPanel()
@@ -670,6 +802,53 @@ export struct BookSourceManagePage {
       }.width('100%').margin({ top: 18 })
     }.padding(20).backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
       .borderRadius(16)
+  }
+
+  /** P6 导入对话框：online 收 URL，options 三个保留开关。 */
+  @Builder
+  private ImportDialog() {
+    Column() {
+      if (this.importStage === 'online') {
+        Text('在线导入').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        TextInput({ placeholder: '输入书源订阅地址（http/https）', text: this.importOnlineUrl })
+          .fontSize(14).fontColor(this.themeColorTextPrimary)
+          .onChange((value: string) => this.importOnlineUrl = value)
+          .margin({ top: 14 })
+        Text('使用书源引擎的 HttpClient 拉取，支持重定向与 Cookie。')
+          .fontSize(12).fontColor(this.themeColorTextTertiary).margin({ top: 8 })
+        Row() {
+          Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+            .onClick(() => this.importVisible = false)
+          Text('拉取').fontSize(15).fontColor('#B9C8FF').layoutWeight(1)
+            .onClick(() => this.importFromOnlineUrl())
+        }.width('100%').margin({ top: 18 })
+      } else {
+        Text('导入选项').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        Text(`解析到 ${this.pendingImportRules.length} 条书源，选择保留项后导入。`)
+          .fontSize(13).fontColor(this.themeColorTextTertiary).margin({ top: 10 })
+        Column() {
+          this.ImportToggleRow('保留原名', this.keepName, (v: boolean) => { this.keepName = v; })
+          this.ImportToggleRow('保留分组', this.keepGroup, (v: boolean) => { this.keepGroup = v; })
+          this.ImportToggleRow('保留启用状态', this.keepEnabled, (v: boolean) => { this.keepEnabled = v; })
+        }.width('100%').margin({ top: 12 })
+        Row() {
+          Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+            .onClick(() => this.importVisible = false)
+          Text('导入').fontSize(15).fontColor('#B9C8FF').layoutWeight(1)
+            .onClick(() => this.commitImport())
+        }.width('100%').margin({ top: 18 })
+      }
+    }.padding(20).backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
+      .borderRadius(16)
+  }
+
+  @Builder
+  private ImportToggleRow(label: string, checked: boolean, onChange: (value: boolean) => void) {
+    Row() {
+      Text(label).fontSize(15).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      UiSwitchControl({ checked: checked, interactive: false, scaleValue: 0.8 })
+        .onClick(() => onChange(!checked))
+    }.width('100%').padding({ top: 10, bottom: 10 })
   }
 
   @Builder
@@ -812,9 +991,9 @@ export struct BookSourceManagePage {
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       // 一个组件只能挂一个 bindSheet（本项目已踩坑），三种面板合并按状态切换内容。
-      .bindSheet(this.showGroupFilter || this.batchPanelVisible || this.promptVisible,
+      .bindSheet(this.showGroupFilter || this.batchPanelVisible || this.promptVisible || this.importVisible,
         this.SourceSheetContent(), {
-          height: SheetSize.LARGE,
+          height: this.importVisible ? SheetSize.FIT_CONTENT : SheetSize.LARGE,
           dragBar: true,
           showClose: true,
           backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
@@ -822,6 +1001,7 @@ export struct BookSourceManagePage {
             this.showGroupFilter = false;
             this.batchPanelVisible = false;
             this.promptVisible = false;
+            this.importVisible = false;
           }
         })
   }

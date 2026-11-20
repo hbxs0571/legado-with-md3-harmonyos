@@ -12,6 +12,16 @@ export interface BookSourceImportOutcome {
 }
 
 /**
+ * 导入保留项（P6，对齐上游导入对话框的三个开关）。
+ * 为真时同 URL 的已有条目保留本地对应值，否则用导入文件里的值覆盖。
+ */
+export interface BookSourceImportKeep {
+  keepName?: boolean;
+  keepGroup?: boolean;
+  keepEnabled?: boolean;
+}
+
+/**
  * 书源仓储，对齐上游 `book_sources` 表（Room 实体 BookSource.kt）。
  * 首次使用返回空集，不自动生成默认数据；load() 把整表读进缓存，
  * getAll() 同步读缓存，写操作落库后更新缓存。
@@ -73,8 +83,11 @@ export class BookSourceRepository {
     return `[\n${parts.join(',\n')}\n]`;
   }
 
-  /** 合并导入：同主键覆盖、其余新增，非法主键计 skipped 后跳过。 */
-  static async importRules(context: Context, incoming: BookSource[]): Promise<BookSourceImportOutcome> {
+  /**
+   * 合并导入：同主键覆盖、其余新增，非法主键计 skipped 后跳过。
+   * keep 为真时保留本地已有条目的对应字段（P6 导入对话框三开关），默认全部覆盖。
+   */
+  static async importRules(context: Context, incoming: BookSource[], keep?: BookSourceImportKeep): Promise<BookSourceImportOutcome> {
     const next: BookSource[] = BookSourceRepository.copyRules(BookSourceRepository.cachedRules);
     let added = 0;
     let updated = 0;
@@ -86,7 +99,9 @@ export class BookSourceRepository {
       }
       const existingIndex = next.findIndex((item: BookSource) => item.bookSourceUrl === rule.bookSourceUrl);
       if (existingIndex >= 0) {
-        next[existingIndex] = rule;
+        const existing = next[existingIndex];
+        const merged = BookSourceRepository.applyKeep(rule, existing, keep);
+        next[existingIndex] = merged;
         updated += 1;
       } else {
         next.push(rule);
@@ -98,6 +113,56 @@ export class BookSourceRepository {
     }
     await BookSourceRepository.save(context, next);
     return { added: added, updated: updated, skipped: skipped };
+  }
+
+  /**
+   * 把本地已有值写回导入条目（对齐上游导入对话框保留项）。
+   * sourceJson 是唯一真值，保留字段也要回写进它的 JSON，否则下次从 sourceJson 派生会被冲掉。
+   */
+  private static applyKeep(incoming: BookSource, existing: BookSource, keep?: BookSourceImportKeep): BookSource {
+    if (keep === undefined) { return incoming; }
+    const result: BookSource = {
+      bookSourceUrl: incoming.bookSourceUrl,
+      bookSourceName: incoming.bookSourceName,
+      bookSourceGroup: incoming.bookSourceGroup,
+      bookSourceType: incoming.bookSourceType,
+      enabled: incoming.enabled,
+      customOrder: incoming.customOrder,
+      sourceJson: incoming.sourceJson
+    };
+    let jsonObj: Record<string, Object> | undefined = undefined;
+    const parseJson = (): Record<string, Object> => {
+      if (jsonObj !== undefined) { return jsonObj; }
+      let parsed: Record<string, Object> = {};
+      try { parsed = JSON.parse(result.sourceJson) as Record<string, Object>; } catch (_) { parsed = {}; }
+      jsonObj = parsed;
+      return parsed;
+    };
+    if (keep.keepName === true) {
+      result.bookSourceName = existing.bookSourceName;
+      parseJson()['bookSourceName'] = existing.bookSourceName;
+    }
+    if (keep.keepGroup === true) {
+      result.bookSourceGroup = existing.bookSourceGroup;
+      const obj = parseJson();
+      // ArkTS 禁 delete 操作符；本地无分组时写空串（上游 null 的等价表现）。
+      obj['bookSourceGroup'] = existing.bookSourceGroup ?? '';
+    }
+    if (keep.keepEnabled === true) {
+      result.enabled = existing.enabled;
+      parseJson()['enabled'] = existing.enabled;
+      // 上游「保留启用状态」同时含 enabledExplore（在 sourceJson 里）。
+      try {
+        const existingJson = JSON.parse(existing.sourceJson) as Record<string, Object>;
+        if (existingJson['enabledExplore'] !== undefined) {
+          parseJson()['enabledExplore'] = existingJson['enabledExplore'];
+        }
+      } catch (_) { /* 保留项读取失败不影响其余字段 */ }
+    }
+    if (jsonObj !== undefined) {
+      try { result.sourceJson = JSON.stringify(jsonObj); } catch (_) { /* 回写失败保留原 sourceJson */ }
+    }
+    return result;
   }
 
   /** 整表写回：串行队列内 DELETE + 逐行 INSERT OR REPLACE，整体包在事务里。 */
