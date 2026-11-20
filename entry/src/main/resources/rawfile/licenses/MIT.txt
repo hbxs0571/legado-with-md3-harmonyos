@@ -1,0 +1,43 @@
+MIT License
+
+Copyright (c) 2026 zengjing
+Copyright (c) 2017-2021 Fabrice Bellard
+Copyright (c) 2017-2021 Charlie Gordon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------
+适用组件
+
+本应用通过 third_party/harmony-book-source-engine 引入以下 MIT 许可组件：
+
+1. ohos_quickjs / @devzeng/quickjs
+   https://github.com/hhtczengjing/ohos_quickjs
+   Copyright (c) 2026 zengjing
+
+2. QuickJS JavaScript Engine
+   https://bellard.org/quickjs/
+   Copyright (c) 2017-2021 Fabrice Bellard
+   Copyright (c) 2017-2021 Charlie Gordon
+
+3. acorn（压缩内置于 sourceengine 的脚本解析器）
+   Copyright (c) 2012-2022 by various contributors
+
+各组件各自的版权声明与完整许可文本见「第三方组件」页签，原始文件为
+third_party/harmony-book-source-engine/THIRD_PARTY_LICENSES.txt。

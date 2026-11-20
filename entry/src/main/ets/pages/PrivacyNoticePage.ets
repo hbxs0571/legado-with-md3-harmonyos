@@ -41,11 +41,11 @@ export struct PrivacyNoticePage {
           })
           PrivacyNoticeSection({
             title: '网络请求',
-            body: '当前 HarmonyOS 模块不声明 INTERNET 权限，也没有应用发起的网络请求。Android 书源、规则与 WebDAV 尚未接入；若后续加入网络能力，会先更新权限用途和隐私说明。'
+            body: '应用声明 INTERNET 权限，用于在线书源抓取、WebDAV 备份同步与在线朗读（HTTP TTS）。这些请求只在你主动使用对应功能时发起，并直接发往你所配置的目标：书源请求发往书源站点，WebDAV 请求发往你填写的服务器，朗读请求发往你配置的朗读源。应用没有自有服务端接收书籍正文或阅读记录。'
           })
           PrivacyNoticeSection({
-            title: '当前未接入的服务',
-            body: '当前未配置账号登录、广告、分析 SDK、云同步、AI 服务或在线书源请求。后续如果接入网络服务，会在发布版本前更新本说明并说明相应数据用途。'
+            title: '未接入的服务与凭据',
+            body: '应用未接入广告、分析统计、远端崩溃收集或 AI 服务；没有自有账号体系，也没有自有服务端。书源登录凭据（Cookie、登录信息）保存在本机书源数据中，会随你主动导出的备份文件一并导出，请勿公开分享备份。'
           })
           Text('本说明根据当前源码整理，属于开发阶段披露，不替代目标发布渠道要求的正式隐私政策。正式发布前需完成资源授权、网络请求和隐私政策审核。')
             .fontSize(13).fontColor('#D9A6A0').lineHeight(20).padding({ left: 18, right: 18, top: 8, bottom: 22 })

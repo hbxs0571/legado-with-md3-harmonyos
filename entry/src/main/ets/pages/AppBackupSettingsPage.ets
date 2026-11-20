@@ -234,7 +234,7 @@ export struct AppBackupSettingsPage {
           if (this.restoredEntries.length > 0) {
             Column() {
               Text('已恢复的 Android 数据壳').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-              Text('书源、规则、历史等原始 JSON/XML 已保留，可继续导出；尚未接入的功能不会执行其中的脚本或网络请求。')
+              Text('书源、规则、历史等原始 JSON/XML 已保留，可继续导出。恢复本身只解析数据、不执行脚本；但恢复后的书源在你下次搜索或阅读时会正常执行其中的 JavaScript 并发起网络请求。')
                 .fontSize(13).fontColor(this.themeColorTextTertiary).lineHeight(19).margin({ top: 6, bottom: 8 })
               ForEach(this.restoredEntries, (entry: BackupEntryPreview) => {
                 Row() {

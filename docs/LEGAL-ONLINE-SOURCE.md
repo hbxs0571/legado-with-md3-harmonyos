@@ -139,13 +139,17 @@ HEAD 版 `EntryAbility.ets` 的对应位置一直是 `windowStage.loadContent('p
 
 ## 四、实现层面的两个具体问题
 
-### 4.1 缺 per-host 限流
+### 4.1 限流有实现，但按书源不按站点，且等待无上限
 
-**【事实】** `entry/src/main/ets/bookSource/SearchCoordinator.ets:31` 固定并发 `CONCURRENCY = 8`；`LegadoSourceMapper.ets:54` 映射了上游的 `concurrentRate` 字段，但 `SourceHttp.newAnalyzer` 只设了 timeout 与 cancelCheck，**未见 per-host 限速实现**。
+**【事实】** 引擎有限流器 `third_party/harmony-book-source-engine/sourceengine/src/main/ets/core/http/BookSourceRateLimiter.ts`，签名 `static async acquire(source, isCancelled?, maxWaitMs: number = 0, stageRate?)`；key 取 `source.bookSourceUrl || source.bookSourceName`（`:49`），**按书源而非按站点**。调用点在 `AnalyzeUrl.ts:773`/`:790`（`fetchFollowingRedirects`）与 `:630`（`fetchBinary`），都经 `acquireTimedSlot`（`:754`）。
+
+**【事实】** 本地 `entry/src/main/ets/bookSource/SourceHttp.ets:37` 是 `au.setCancelCheck(SourceHttp.cancelCheck);`，只传第一个参数，于是 `maxWaitMs = 0`，即**无限等待**。`SearchCoordinator.ets:31` 的并发是 8。`LegadoSourceMapper.ets:54` 确实映射了 `concurrentRate`；实测 904 条书源里有 **51 条**带该字段（`3`×20、`5`×16、`1000`×4、`1500`×2、`10`×2、`800`、`30`、`500`、`2000`、`30/5000`、`10/1000`、`20/60000`）。
 
 **【依据】** 《网络安全法》第 27 条禁止「提供专门用于」非法侵入、干扰他人网络正常功能、窃取网络数据的程序、工具。「**专门用于**」是核心构成要件。
 
-**【判断】** 通用书源引擎有大量正当用途，不满足「专门用于」，不落入该条射程。但多源并发打同一站点时，可能被主张为「干扰他人网络正常功能」。补 per-host 限速的成本很低，能把这一指摘空间压掉。
+**【判断】** 通用书源引擎有大量正当用途，不满足「专门用于」，不落入该条射程。限流机制本身存在，真正的两个缺口是：① 粒度按书源不按 host，同一站点的多个书源会各算各的窗口，防不住多源并发打同一站点；② 等待无上限，声明 `1000` 的源在 8 并发下可能长期排队而不报错。这两点都可能被主张为「干扰他人网络正常功能」的指摘空间，改动成本不高。
+
+**（本节初稿曾写成「缺 per-host 限流」，是错的——引擎有限流器，我没查到。已按实测更正。）**
 
 ### 4.2 脚本执行使项目成为执行环境提供方
 
@@ -184,12 +188,14 @@ HEAD 版 `EntryAbility.ets` 的对应位置一直是 `windowStage.loadContent('p
 | 顺序 | 事项 | 性质 | 对应节 |
 | --- | --- | --- | --- |
 | 1 | 回退 `EntryAbility.ets`、不提交 `P4ProbePage.ets` 与 `p4-904-sources.json` —— **已于 2026-11-20 完成** | 决定安全区/黄区 | 1.7 |
-| 2 | 修订 `PRIVACY.md:15`、`TERMS.md:11`、`PRIVACY.md:24` | 现有陈述与代码不符 | 1.1–1.3 |
-| 3 | `NOTICE.md` 补 hbse / 李其健 / quickjs / MIT 署名与第 7 条例外说明 | GPL §4/§5 与 MIT 的明确义务 | 1.5、3.2 |
-| 4 | `rawfile/licenses/` 补 MIT 文本 | 同上 | 1.6 |
-| 5 | `SECURITY.md` 补「书源规则是可执行内容」与 TLS 信任例外两段 | 新引入的最大攻击面 | 1.4 |
-| 6 | 补 per-host 限流（`concurrentRate` 已映射未生效） | 降低指摘空间 | 4.1 |
+| 2 | 修订 `PRIVACY.md:15`、`TERMS.md:11`、`PRIVACY.md:24` —— **已于 2026-11-20 完成** | 现有陈述与代码不符 | 1.1–1.3 |
+| 3 | `NOTICE.md` 补 hbse / 李其健 / quickjs / MIT 署名与第 7 条例外说明 —— **已于 2026-11-20 完成** | GPL §4/§5 与 MIT 的明确义务 | 1.5、3.2 |
+| 4 | `rawfile/licenses/` 补 MIT 文本与第三方许可全文（`MIT.txt`、`THIRD-PARTY.txt`）—— **已于 2026-11-20 完成** | 同上 | 1.6 |
+| 5 | `SECURITY.md` 补「书源规则是可执行内容」与 TLS 信任例外两段 —— **已于 2026-11-20 完成** | 新引入的最大攻击面 | 1.4 |
+| 6 | 限流改为按站点、并给等待设上限（现按书源、等待无上限） | 降低指摘空间 | 4.1 |
 | 7 | 文档明示不支持验证码绕过、登录破解类脚本 | 隔断「专门用于」要件 | 4.2 |
+
+第 2–5 项已于 2026-11-20 全部落地：`PRIVACY.md` 补第 6 条网络请求与在线书缓存清理说明，`TERMS.md` 改为「不提供书源内容服务、只提供执行用户导入规则的通用引擎」，`NOTICE.md` 补 hbse 整包署名与四个第三方组件，`rawfile/licenses/` 新增 `MIT.txt` 与 `THIRD-PARTY.txt` 并已实测打进 HAP，`SECURITY.md` 补脚本执行与 TLS 信任例外两段。第 6、7 项仍未做：第 6 项要改引擎的限流 key 与 `SourceHttp.ets:37` 的第二参数，第 7 项要在文档里明示脚本边界（`SECURITY.md` 已写「不支持登录绕过类脚本」的等价表述，但未逐字列出验证码与登录破解两类）。
 
 **长期约束（不在待办内，是持续要求）**：不内置任何默认书源、不提供订阅地址列表、不做「免费看全网小说」类宣传。这三条一旦破了，前面全部努力归零。
 

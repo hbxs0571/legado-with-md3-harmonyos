@@ -57,17 +57,25 @@ export struct OpenSourceLicensePage {
     Column() {
       CollapsingSettingsHeader({ title: '开源许可证', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
 
-      Text('应用主体遵循 GPL-3.0；app_home、app_moon、app_share 图标遵循 Apache-2.0。')
+      Text('应用主体遵循 GPL-3.0；图标遵循 Apache-2.0；在线书源引擎及其内嵌的 QuickJS 遵循 MIT（另有 Apache-2.0 的 NAPI wrapper）。')
         .fontSize(13).lineHeight(19).fontColor('#C6C8D2')
         .width('100%').padding(14).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
         .margin({ left: 16, right: 16, bottom: 10 })
 
-      Row() {
-        LicenseChoice({ title: 'GPL-3.0', selected: this.selectedLicense === 'GPL-3.0' })
-          .onClick(() => this.selectLicense('GPL-3.0'))
-        LicenseChoice({ title: 'Apache-2.0', selected: this.selectedLicense === 'Apache-2.0' })
-          .onClick(() => this.selectLicense('Apache-2.0'))
-      }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
+      // 页签横向滚动：四个页签在窄屏上一行放不下。
+      Scroll() {
+        Row() {
+          LicenseChoice({ title: 'GPL-3.0', selected: this.selectedLicense === 'GPL-3.0' })
+            .onClick(() => this.selectLicense('GPL-3.0'))
+          LicenseChoice({ title: 'Apache-2.0', selected: this.selectedLicense === 'Apache-2.0' })
+            .onClick(() => this.selectLicense('Apache-2.0'))
+          LicenseChoice({ title: 'MIT', selected: this.selectedLicense === 'MIT' })
+            .onClick(() => this.selectLicense('MIT'))
+          LicenseChoice({ title: '第三方组件', selected: this.selectedLicense === 'THIRD-PARTY' })
+            .onClick(() => this.selectLicense('THIRD-PARTY'))
+        }
+      }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
+        .padding({ left: 16, right: 16, bottom: 10 })
 
       if (this.loadError.length > 0) {
         Text(this.loadError).fontSize(14).fontColor('#F0B2A8').padding(16)
