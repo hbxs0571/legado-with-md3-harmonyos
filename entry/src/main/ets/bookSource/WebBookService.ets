@@ -1,0 +1,171 @@
+// 单源网页服务（P2）：searchBook / getBookInfo / getChapterList / getContent 四步。
+// 对应上游 model/webBook/WebBook.kt（510 行）。链路范式来自 P0-ter 探针（已上机验证）。
+import {
+  AnalyzeRule, AnalyzeUrl, BookUrlResolver, BookSource, HttpResponse
+} from '@legado/sourceengine';
+import { SourceHttp } from './SourceHttp';
+import { RemoteBookDetail, RemoteChapter, SearchBookItem } from './SourceModels';
+
+/** fetch 的返回载体（ArkTS 不允许匿名对象字面量作类型）。 */
+interface FetchResult {
+  resp: HttpResponse;
+  base: string;
+}
+
+export class WebBookService {
+  /** 发起一个请求并返回响应 + 有效 baseUrl；失败时抛带可读原因的 Error。 */
+  private static async fetch(
+    source: BookSource, urlTemplate: string, keyword: string, page: number
+  ): Promise<FetchResult> {
+    const resolved = SourceHttp.evalTemplate(urlTemplate, keyword, page);
+    const au = SourceHttp.newAnalyzer(source);
+    const resp = await au.fetch(resolved);
+    if (!resp.success || resp.statusCode === 0 || !resp.body) {
+      const reason = `HTTP ${resp.statusCode} ${resp.error || ''}`.trim();
+      throw new Error(reason);
+    }
+    const base = BookUrlResolver.effectiveBase(resp, resolved, source.bookSourceUrl);
+    const result: FetchResult = { resp: resp, base: base };
+    return result;
+  }
+
+  /** 给规则引擎挂公共上下文（key/page）。 */
+  private static newRule(body: string, base: string, keyword: string, page: number): AnalyzeRule {
+    const rule = new AnalyzeRule(body, base);
+    rule.setJsVar('key', keyword);
+    rule.setJsVar('page', String(page));
+    rule.getContext().put('key', keyword);
+    rule.getContext().put('page', String(page));
+    return rule;
+  }
+
+  /** 第一步：搜索。取 searchUrl → getElements(bookList) → 逐字段 getString。 */
+  static async searchBook(
+    source: BookSource, keyword: string, page: number
+  ): Promise<SearchBookItem[]> {
+    const sr = source.searchRule;
+    if (!source.searchUrl || !sr.bookList) {
+      throw new Error('源缺少 searchUrl 或 ruleSearch.bookList');
+    }
+    const fetched = await WebBookService.fetch(source, source.searchUrl, keyword, page);
+    const resp = fetched.resp;
+    const base = fetched.base;
+    const rule = WebBookService.newRule(resp.body, base, keyword, page);
+    const elements = rule.getElements(sr.bookList);
+    if (elements.length === 0) return [];
+    // 防止整页被当成一条（规则写错时常见）：单条且几乎等于整页视为规则失败。
+    if (elements.length === 1 && resp.body.length > 1000 && elements[0].length >= resp.body.length * 0.9) {
+      throw new Error('getElements 把整页当结果');
+    }
+    const items: SearchBookItem[] = [];
+    for (const element of elements) {
+      const er = WebBookService.newRule(element, base, keyword, page);
+      const item: SearchBookItem = {
+        bookUrl: er.getString(sr.bookUrl, true),
+        origin: source.bookSourceUrl,
+        originName: source.bookSourceName,
+        name: er.getString(sr.name),
+        author: er.getString(sr.author),
+        kind: er.getString(sr.kind),
+        coverUrl: er.getString(sr.coverUrl, true),
+        intro: er.getString(sr.intro),
+        lastChapter: er.getString(sr.lastChapter),
+        wordCount: er.getString(sr.wordCount),
+        updateTime: er.getString(sr.updateTime),
+        tocUrl: ''
+      };
+      item.bookUrl = BookUrlResolver.resolve(item.bookUrl, base);
+      if (item.coverUrl) item.coverUrl = BookUrlResolver.resolve(item.coverUrl, base);
+      items.push(item);
+    }
+    return items;
+  }
+
+  /** 第二步：详情。取详情页 → 跑 init → 逐字段取值。 */
+  static async getBookInfo(source: BookSource, bookUrl: string): Promise<RemoteBookDetail> {
+    const ir = source.bookInfoRule;
+    const fetched = await WebBookService.fetch(source, bookUrl, '', 1);
+    const resp = fetched.resp;
+    const base = fetched.base;
+    // init 规则可能触发额外请求/赋值；引擎在 AnalyzeRule 内按 @js: 处理，这里先求值再取字段。
+    const initRule = WebBookService.newRule(resp.body, base, '', 1);
+    if (ir.init) {
+      try { initRule.getString(ir.init); } catch (_) { /* init 失败不阻断其余字段 */ }
+    }
+    const r = WebBookService.newRule(resp.body, base, '', 1);
+    const detail: RemoteBookDetail = {
+      bookUrl: bookUrl,
+      origin: source.bookSourceUrl,
+      originName: source.bookSourceName,
+      name: r.getString(ir.name),
+      author: r.getString(ir.author),
+      kind: r.getString(ir.kind),
+      coverUrl: r.getString(ir.coverUrl, true),
+      intro: r.getString(ir.intro),
+      lastChapter: r.getString(ir.lastChapter),
+      wordCount: r.getString(ir.wordCount),
+      updateTime: r.getString(ir.updateTime),
+      tocUrl: r.getString(ir.tocUrl, true)
+    };
+    if (detail.coverUrl) detail.coverUrl = BookUrlResolver.resolve(detail.coverUrl, base);
+    // 上游口径：tocUrl 为空时用 bookUrl 本身当目录地址。
+    detail.tocUrl = detail.tocUrl
+      ? BookUrlResolver.resolve(detail.tocUrl, base)
+      : bookUrl;
+    return detail;
+  }
+
+  /** 第三步：目录。取目录页 → getElements(chapterList) → 逐条取名/链接，处理 nextTocUrl 翻页。 */
+  static async getChapterList(
+    source: BookSource, tocUrl: string, maxPages: number = 20
+  ): Promise<RemoteChapter[]> {
+    const tr = source.tocRule;
+    if (!tr.chapterList) throw new Error('源缺少 ruleToc.chapterList');
+    const chapters: RemoteChapter[] = [];
+    let currentUrl = tocUrl;
+    let page = 0;
+    while (currentUrl && page < maxPages) {
+      const fetched = await WebBookService.fetch(source, currentUrl, '', 1);
+      const resp = fetched.resp;
+      const base = fetched.base;
+      const rule = WebBookService.newRule(resp.body, base, '', 1);
+      const elements = rule.getElements(tr.chapterList);
+      for (const element of elements) {
+        const er = WebBookService.newRule(element, base, '', 1);
+        const title = er.getString(tr.chapterName);
+        const url = BookUrlResolver.resolve(er.getString(tr.chapterUrl, true), base);
+        chapters.push({
+          url: url,
+          title: title,
+          isVip: Boolean(er.getString(tr.isVip)),
+          isPay: Boolean(er.getString(tr.isPay))
+        });
+      }
+      page += 1;
+      if (!tr.nextTocUrl) break;
+      const nextRule = WebBookService.newRule(resp.body, base, '', page + 1);
+      let next = '';
+      try { next = nextRule.getString(tr.nextTocUrl, true); } catch (_) { break; }
+      if (!next) break;
+      currentUrl = BookUrlResolver.resolve(next, base);
+      if (chapters.length > 5000) break; // 防御：坏规则导致无限翻页
+    }
+    return chapters;
+  }
+
+  /**
+   * 第四步：正文。取章节页 → getStringList(content) → 拼接。
+   * replaceRegex 由 AnalyzeRule.getStringList 内的 ## 处理器承担，无需再做一遍。
+   * 任务书 6.4 坑 3：ruleContent.webJs / subContent 引擎没有，有这些字段的源返回部分结果。
+   */
+  static async getContent(source: BookSource, chapterUrl: string): Promise<string> {
+    const cr = source.contentRule;
+    if (!cr.content) throw new Error('源缺少 ruleContent.content');
+    const fetched = await WebBookService.fetch(source, chapterUrl, '', 1);
+    const resp = fetched.resp;
+    const base = fetched.base;
+    const rule = WebBookService.newRule(resp.body, base, '', 1);
+    const parts = rule.getStringList(cr.content);
+    return parts.join('\n').trim();
+  }
+}
