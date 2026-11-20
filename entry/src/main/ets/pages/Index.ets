@@ -9112,7 +9112,10 @@ private canWriteInto(dir: string): boolean {
           onOpenBookshelfManage: (groupName: string) => this.openBookshelfManage(groupName),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
-        DiscoverPage({ onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
+        DiscoverPage({
+          onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+          onOpenOnlineBook: (item: MergedBook) => this.onAddOnlineBook(item)
+        })
         SubscriptionPage({
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),
           onOpenRules: () => this.route = AppRoute.SUBSCRIPTION_RULES,

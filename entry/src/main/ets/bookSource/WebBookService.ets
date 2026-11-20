@@ -81,6 +81,50 @@ export class WebBookService {
     return items;
   }
 
+  /**
+   * 发现：取分类 URL → 用 exploreRule 解析书列表（对齐上游 WebBook.exploreBookAwait）。
+   * 与 searchBook 规则同形，只是规则取自 exploreRule、无关键词；分页由 {{page}} 承担。
+   */
+  static async exploreBook(
+    source: BookSource, urlTemplate: string, page: number
+  ): Promise<SearchBookItem[]> {
+    const er = source.exploreRule;
+    if (!er.bookList) {
+      throw new Error('源缺少 ruleExplore.bookList');
+    }
+    const fetched = await WebBookService.fetch(source, urlTemplate, '', page);
+    const resp = fetched.resp;
+    const base = fetched.base;
+    const rule = WebBookService.newRule(resp.body, base, '', page);
+    const elements = rule.getElements(er.bookList);
+    if (elements.length === 0) return [];
+    if (elements.length === 1 && resp.body.length > 1000 && elements[0].length >= resp.body.length * 0.9) {
+      throw new Error('getElements 把整页当结果');
+    }
+    const items: SearchBookItem[] = [];
+    for (const element of elements) {
+      const ir = WebBookService.newRule(element, base, '', page);
+      const item: SearchBookItem = {
+        bookUrl: ir.getString(er.bookUrl, true),
+        origin: source.bookSourceUrl,
+        originName: source.bookSourceName,
+        name: ir.getString(er.name),
+        author: ir.getString(er.author),
+        kind: ir.getString(er.kind),
+        coverUrl: ir.getString(er.coverUrl, true),
+        intro: ir.getString(er.intro),
+        lastChapter: ir.getString(er.lastChapter),
+        wordCount: ir.getString(er.wordCount),
+        updateTime: ir.getString(er.updateTime),
+        tocUrl: ''
+      };
+      item.bookUrl = BookUrlResolver.resolve(item.bookUrl, base);
+      if (item.coverUrl) item.coverUrl = BookUrlResolver.resolve(item.coverUrl, base);
+      items.push(item);
+    }
+    return items;
+  }
+
   /** 第二步：详情。取详情页 → 跑 init → 逐字段取值。 */
   static async getBookInfo(source: BookSource, bookUrl: string): Promise<RemoteBookDetail> {
     const ir = source.bookInfoRule;
