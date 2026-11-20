@@ -59,6 +59,8 @@ export struct ReaderSearchPage {
   onOpenResult: (chapterIndex: number, position: number,
     items: ReaderSearchNavItem[], index: number) => void =
     (_index: number, _position: number, _items: ReaderSearchNavItem[], _at: number) => {};
+  /** :224 划词「全文搜索」带进来的初值；非空时预填搜索框，不自动搜（对齐上游预填语义）。 */
+  @Prop initialQuery: string = '';
   @State query: string = '';
   @State matches: ReaderSearchMatch[] = [];
   @State searchHistory: ReaderSearchHistoryEntry[] = [];
@@ -86,6 +88,10 @@ export struct ReaderSearchPage {
   @State chapterRows: BookChapter[] = [];
 
   aboutToAppear(): void {
+    // :224 划词全文搜索：把选中文字预填进搜索框；不自动触发搜索，交给用户确认。
+    if (this.initialQuery.length > 0) {
+      this.query = this.initialQuery;
+    }
     const context = this.getUIContext().getHostContext();
     if (context !== undefined) {
       this.historyContext = context;

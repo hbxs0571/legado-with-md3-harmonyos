@@ -5,6 +5,7 @@ import { ReaderFontEntry, ReaderFontRepository } from '../data/ReaderFontReposit
 import { ReaderSettingsRepository } from '../data/ReaderSettingsRepository';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
+import { accessibility } from '@kit.AccessibilityKit';
 import { READER_COLUMN_MODE_TITLES, readerColumnModeTitle } from '../data/ReaderColumnMode';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { UiColorModeRow } from '../components/settings/UiColorModeRow';
@@ -1996,6 +1997,27 @@ export struct ReaderSettingsPage {
     nextEntries[currentIndex] = displacedItem;
     nextEntries[targetIndex] = currentItem;
     this.textMenuEntries = nextEntries;
+    // :252 对齐上游 reorderAccessibility（a11y_reorder_named「调整X顺序」）：
+    // 排序后主动播报该项的新位置，读屏用户在键盘/触摸排序后能听到结果。
+    this.announceReorder(currentItem.title, targetGroupIndex + 1);
+  }
+
+  /**
+   * :252 菜单项排序后的无障碍播报。
+   * 上游用 reorderAccessibility 给排序控件挂「上移/下移」自定义动作 +「调整X顺序」描述；
+   * 本地用上下箭头按钮排序，故在排序完成后用 announceForAccessibility 主动播报新位置。
+   * 无无障碍服务时此 API 静默无副作用（只是一次无监听的事件），不影响正常排序。
+   */
+  private announceReorder(title: string, newPosition: number): void {
+    try {
+      const event = new accessibility.EventInfo('announceForAccessibility', 'io.legado.harmony', 'click');
+      event.textAnnouncedForAccessibility = `已调整${title}顺序，移到第${newPosition}位`;
+      accessibility.sendAccessibilityEvent(event).catch(() => {
+        // 无读屏服务或系统拒绝时忽略，不影响排序本身。
+      });
+    } catch (_) {
+      // 老版本 SDK 不支持时静默降级。
+    }
   }
 
   private isTextMenuGroupExpanded(group: number): boolean {

@@ -49,8 +49,14 @@ export const READER_SELECTION_MENU_DEFAULTS: ReaderSelectionMenuItem[] = [
 /**
  * 本地已有真实处理函数的条目 id。
  * 只有这些会出现在阅读页的划词菜单里；配置面板对全部条目开放编辑。
+ * 批4（r358）：在复制/书签/划线之外补进分享、浏览器、朗读、替换、全文搜索五项，
+ * 每一项在 ReaderPage.runSelectionMenuAction 里都有对应真分支，绝不放假按钮进来。
  */
-export const READER_SELECTION_MENU_SUPPORTED: string[] = ['menu_copy', 'menu_bookmark', 'menu_mark'];
+export const READER_SELECTION_MENU_SUPPORTED: string[] = [
+  'menu_copy', 'menu_bookmark', 'menu_mark',
+  'menu_share_str', 'menu_browser', 'menu_aloud',
+  'menu_replace', 'menu_search_content'
+];
 
 /** 出厂条目表的一份拷贝，调用方可以放心改。 */
 export function defaultReaderSelectionMenuItems(): ReaderSelectionMenuItem[] {

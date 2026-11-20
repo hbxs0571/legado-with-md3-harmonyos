@@ -27,6 +27,7 @@ import image from '@ohos.multimedia.image';
 import { fileIo } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { batteryInfo, pasteboard, settings } from '@kit.BasicServicesKit';
+import { common, Want } from '@kit.AbilityKit';
 import { AnimatorResult, window } from '@kit.ArkUI';
 import { LengthMetricsUnit } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
@@ -907,7 +908,8 @@ export struct ReaderPage {
 
   onOpenSettings: () => void = () => {};
   onCharsetChange: (charset: string) => void = (_charset: string) => {};
-  onOpenSearchContent: () => void = () => {};
+  /** :224 全文搜索：带选中文字作初值；老调用方（底栏/菜单）不传参即空串。 */
+  onOpenSearchContent: (initialQuery?: string) => void = (_initialQuery?: string) => {};
   /**
    * 搜索结果集：从搜索页跳进来时由 `Index.ets` 传下来，正文两侧的「上一个/下一个」
    * 与底部结果条都读它（上游 `ReadBookState.searchResultIndex` 同用途）。
@@ -921,6 +923,8 @@ export struct ReaderPage {
   onOpenReadAloud: () => void = () => {};
   /** 底栏「朗读」点击：开始/停止朗读（上游 ReadMenuActionDefs.kt:407 的 LongClickReadAloud 之外的点击分支）。 */
   onToggleReadAloud: () => void = () => {};
+  /** :111 划词「朗读」：从选中位置开始朗读（上游 menu_aloud 走 ReadAloud 起点参数）。 */
+  onReadAloudFromPosition: (position: number) => void = (_position: number) => {};
   /** 批6：胶囊播放暂停按钮 —— 直接切播放/暂停，不改朗读的启停状态。 */
   onCapsulePauseToggle: () => void = () => {};
   /** 批6：胶囊停止按钮 —— 停止朗读。 */
@@ -960,6 +964,8 @@ export struct ReaderPage {
   onToggleReSegment: (enabled: boolean) => void = (_enabled: boolean) => {};
   onToggleDelTag: (tag: number, enabled: boolean) => void = (_tag: number, _enabled: boolean) => {};
   onOpenReplaceRules: () => void = () => {};
+  /** :220 划词「替换」：把选中文字作 pattern 草稿带进新建规则页（预填，不立即替换）。 */
+  onOpenReplaceRulesWithPattern: (pattern: string) => void = (_pattern: string) => {};
   onReplaceRulesRefresh: () => void = () => {};
   onReplaceEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onReplaceResetToDefault: () => void = () => {};
@@ -5948,7 +5954,7 @@ export struct ReaderPage {
     }
   }
 
-  /** 划词菜单条目的动作分发；只有三个本地已实现的能力。 */
+  /** 划词菜单条目的动作分发；白名单 READER_SELECTION_MENU_SUPPORTED 里的每一项在这里都有真分支。 */
   private runSelectionMenuAction(id: string): void {
     // 老路径的 bindSelectionMenu 会在点中条目后自动收起菜单，画布上得自己收：
     // 只藏菜单、保留选区色块，与 ArkUI 点完菜单仍保持选中的行为一致。
@@ -5958,6 +5964,85 @@ export struct ReaderPage {
     if (id === 'menu_copy') { this.copyCurrentSelection(); return; }
     if (id === 'menu_bookmark') { this.bookmarkCurrentSelection(); return; }
     if (id === 'menu_mark') { this.createMarkingFromCurrentSelection(); return; }
+    // 批4（r358）：五项接真，每一项都有独立真处理函数。
+    if (id === 'menu_share_str') { this.shareSelection(); return; }
+    if (id === 'menu_browser') { this.openSelectionInBrowser(); return; }
+    if (id === 'menu_aloud') { this.readAloudFromSelection(); return; }
+    if (id === 'menu_replace') { this.onOpenReplaceRulesWithPattern(this.selectedText()); return; }
+    if (id === 'menu_search_content') { this.onOpenSearchContent(this.selectedText()); return; }
+  }
+
+  /** 当前选中的正文文本；与 copyCurrentSelection 同源，取不到就是空串。 */
+  private selectedText(): string {
+    return this.pendingMarkingText;
+  }
+
+  /**
+   * :214 划词分享。系统无 sendData 接收方时降级复制到剪贴板（与批1书分享同口径），
+   * 降级行为写进差异说明；不静默失败。
+   */
+  private shareSelection(): void {
+    const text = this.selectedText();
+    if (text.length === 0) {
+      this.onUnavailableAction('没有取得有效的正文选区，请重新选择文字');
+      return;
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (context !== undefined) {
+      const want: Want = {
+        action: 'ohos.want.action.sendData',
+        type: 'text/plain',
+        parameters: { 'ability.params.stream': text, 'ohos.extra.param.key.content': text }
+      };
+      context.startAbility(want).then(() => {
+        this.onUnavailableAction('已调起分享');
+      }).catch(() => {
+        this.copySelectionFallback(text);
+      });
+      return;
+    }
+    this.copySelectionFallback(text);
+  }
+
+  /** 划词分享降级：写剪贴板并明确告知。 */
+  private copySelectionFallback(text: string): void {
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+    pasteboard.getSystemPasteboard().setData(data).then(() => {
+      this.onUnavailableAction('已复制选中文字');
+    }).catch(() => {
+      this.onUnavailableAction('分享失败，剪贴板不可用');
+    });
+  }
+
+  /**
+   * :215 划词「浏览器打开」。只认选中文本里第一段 http(s) URL（/(https?:\/\/\S+)/），
+   * 不瞎猜；没有 URL 就提示。本地无 openLink/startAbility 封装，直接用 UIAbilityContext。
+   */
+  private openSelectionInBrowser(): void {
+    const text = this.selectedText();
+    const match = text.match(/(https?:\/\/\S+)/);
+    if (match === null || match[1] === undefined || match[1].length === 0) {
+      this.onUnavailableAction('选中内容里没有链接');
+      return;
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (context === undefined) {
+      this.onUnavailableAction('无法打开浏览器');
+      return;
+    }
+    const want: Want = { action: 'ohos.want.action.viewData', uri: match[1] };
+    context.startAbility(want).catch(() => {
+      this.onUnavailableAction('没有应用可以打开该链接');
+    });
+  }
+
+  /** :111 划词「朗读」：把当前选区的起止位置交给上层，从选中处开始朗读。 */
+  private readAloudFromSelection(): void {
+    if (this.selectedText().length === 0) {
+      this.onUnavailableAction('没有取得有效的正文选区，请重新选择文字');
+      return;
+    }
+    this.onReadAloudFromPosition(this.pendingMarkingStart);
   }
 
   /** 复制当前选区。对齐上游 R.id.menu_copy：直接写系统剪贴板。 */

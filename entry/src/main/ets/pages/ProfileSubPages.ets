@@ -1576,6 +1576,8 @@ export struct ReplaceRuleEditPage {
   onSaveRule: (rule: ReplaceRule) => void = (_rule: ReplaceRule) => {};
   /** 传入已有规则时进入编辑模式；为空表示新建。 */
   @Prop editingRule: ReplaceRule | undefined = undefined;
+  /** :220 划词「替换」带进来的 pattern 草稿；仅新建时预填，上游是预填让用户手跑替换。 */
+  @Prop seedPattern: string = '';
   @Prop groups: string[] = [];
   /** 分组管理：与列表页共用同一个面板，这里接的是同一批仓储方法。
    *  上游面板无新增分组入口，故只有重命名与删除。 */
@@ -1627,6 +1629,10 @@ export struct ReplaceRuleEditPage {
   private applyEditingRule(): void {
     const rule = this.editingRule;
     if (rule === undefined || rule === null) {
+      // :220 新建模式：有划词带进来的 pattern 就预填，避免覆盖其他字段的默认值。
+      if (this.seedPattern.length > 0) {
+        this.pattern = this.seedPattern;
+      }
       this.initialized = true;
       return;
     }

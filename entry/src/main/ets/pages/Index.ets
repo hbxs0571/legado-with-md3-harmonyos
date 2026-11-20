@@ -238,6 +238,8 @@ struct Index {
   @State readerSettingsOpenBottomActionConfig: boolean = false;
   @State searchReturnRoute: AppRoute = AppRoute.BOOKSHELF;
   @State searchPageQuery: string = '';
+  /** :224 阅读器全文搜索初值（与书架搜索 searchPageQuery 分开，避免串页）。 */
+  @State readerSearchQuery: string = '';
   @State searchPageGroup: string = '全部书籍';
   @State searchPageSourceScope: boolean = false;
   @State searchPageExactMatch: boolean = false;
@@ -282,6 +284,8 @@ struct Index {
   @State bookInfoDeleteAlert: boolean = true;
   /** 当前正在编辑的替换规则；为空表示新建。 */
   @State editingReplaceRule: ReplaceRule | undefined = undefined;
+  /** :220 划词「替换」带进新建规则页的 pattern 草稿（预填，不立即替换）。 */
+  @State replaceRuleSeed: string = '';
   /** P5 当前正在编辑的书源；为空表示新建。 */
   @State editingBookSource: BookSource | undefined = undefined;
   /** 替换规则列表的排序模式，与 Repository 中的持久化值保持同步。 */
@@ -1205,7 +1209,19 @@ struct Index {
       return;
     }
     this.editingReplaceRule = rule;
+    this.replaceRuleSeed = '';
     this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT;
+  }
+
+  /** :220 划词「替换」：新建规则并预填 pattern（上游是预填草稿让用户手跑，不是立刻替换全文）。 */
+  private openReplaceRuleEditorWithPattern(pattern: string): void {
+    this.editingReplaceRule = undefined;
+    this.replaceRuleSeed = pattern;
+    // 替换编辑页只在 route=PROFILE_SUBPAGE 分支里渲染，光改 profileSubpage 页面上看不见，
+    // 所以这里必须一并切路由，并把返回目标记成当前路由（阅读页），返回后回到正文而不是书架。
+    this.profileDetailReturnRoute = this.route;
+    this.profileSubpage = ProfileRoute.REPLACE_RULE_EDIT;
+    this.route = AppRoute.PROFILE_SUBPAGE;
   }
 
   private async moveReplaceRule(id: number, toTop: boolean): Promise<void> {
@@ -8116,7 +8132,8 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
-  private openReaderSearch(): void {
+  private openReaderSearch(initialQuery: string = ''): void {
+    this.readerSearchQuery = initialQuery;
     this.route = AppRoute.READER_SEARCH;
   }
 
@@ -8289,8 +8306,8 @@ private canWriteInto(dir: string): boolean {
    * 本批只接「能播放」，面板在批 5。切段用批 2 的 SpeechSegmenter，
    * 正文取当前章语义文本（LocalTextSemantics.fromRawBody），设置取批 1 偏好。
    */
-  private async toggleReadAloud(): Promise<void> {
-    if (this.readAloudActive) {
+  private async toggleReadAloud(startPosition: number = -1): Promise<void> {
+    if (this.readAloudActive && startPosition < 0) {
       this.readAloudPlayer.stop();
       ReadAloudBackgroundTask.end();
       this.readAloudActive = false;
@@ -8354,12 +8371,24 @@ private canWriteInto(dir: string): boolean {
         this.aloudNextText = next;
         this.aloudUnitIndex = index;
       };
-      this.readAloudPlayer.load(units, 0);
+      // :111 划词朗读：带起点时定位到覆盖该位置的单元；否则从头念。
+      let startIndex = 0;
+      if (startPosition >= 0) {
+        for (let i = 0; i < units.length; i++) {
+          const unit = units[i];
+          if (unit !== undefined && unit.end > startPosition) {
+            startIndex = i;
+            break;
+          }
+          startIndex = i;
+        }
+      }
+      this.readAloudPlayer.load(units, startIndex);
       this.aloudTexts = this.readAloudPlayer.allUnitTexts();
-      this.aloudCurrentText = this.readAloudPlayer.unitText(0);
-      this.aloudNextText = this.readAloudPlayer.unitText(1);
+      this.aloudCurrentText = this.readAloudPlayer.unitText(startIndex);
+      this.aloudNextText = this.readAloudPlayer.unitText(startIndex + 1);
       this.aloudUnitTotal = units.length;
-      this.aloudUnitIndex = 0;
+      this.aloudUnitIndex = startIndex;
       this.readAloudPlayer.play();
       this.readAloudActive = true;
       this.aloudStateNum = ReadAloudState.PLAYING;
@@ -9133,7 +9162,14 @@ private canWriteInto(dir: string): boolean {
     }
     if (this.route === AppRoute.PROFILE_SUBPAGE) {
       if (this.profileSubpage === ProfileRoute.REPLACE_RULE_EDIT) {
-        this.profileSubpage = ProfileRoute.REPLACE_RULES;
+        this.editingReplaceRule = undefined;
+        this.replaceRuleSeed = '';
+        // 划词「替换」是从阅读页进来的：返回直接回正文，不要把用户丢在设置里的规则列表。
+        if (this.profileDetailReturnRoute === AppRoute.READER) {
+          this.route = AppRoute.READER;
+        } else {
+          this.profileSubpage = ProfileRoute.REPLACE_RULES;
+        }
       } else if (this.profileSubpage === ProfileRoute.DICTIONARY_RULE_EDIT) {
         this.profileSubpage = ProfileRoute.DICTIONARY_RULES;
       } else if (this.profileSubpage === ProfileRoute.HIGHLIGHT_TAG_RULE_EDIT) {
@@ -9567,13 +9603,14 @@ private canWriteInto(dir: string): boolean {
             onOpenSettings: () => this.openReaderSettings(),
             onOpenBottomActionConfig: () => this.openReaderSettings(true),
             onCharsetChange: (charset: string) => this.setReaderCharset(charset),
-            onOpenSearchContent: () => this.openReaderSearch(),
+            onOpenSearchContent: (q?: string) => this.openReaderSearch(q ?? ''),
             searchNavItems: this.readerSearchNavItems,
             searchNavIndex: this.readerSearchNavIndex,
             onOpenSearchNavItem: (index: number) => this.openReaderSearchNavItem(index),
             onCloseSearchResult: () => this.closeReaderSearchNav(),
             onOpenReadAloud: () => this.openReadAloudSettings(),
             onToggleReadAloud: () => { this.toggleReadAloud(); },
+            onReadAloudFromPosition: (position: number) => { this.toggleReadAloud(position); },
             readAloudSpan: this.readAloudSpan,
             // 批6：朗读胶囊 —— 只做应用内浮层，退出阅读器即消失。
             readAloudActive: this.readAloudActive,
@@ -9603,6 +9640,7 @@ private canWriteInto(dir: string): boolean {
             onToggleReSegment: (enabled: boolean) => this.setReaderReSegment(enabled),
             onToggleDelTag: (tag: number, enabled: boolean) => this.setReaderDelTag(tag, enabled),
             onOpenReplaceRules: () => this.openProfileDetail(ProfileRoute.REPLACE_RULES),
+            onOpenReplaceRulesWithPattern: (pattern: string) => this.openReplaceRuleEditorWithPattern(pattern),
             onReplaceRulesRefresh: () => this.replaceRules = ReplaceRuleRepository.getAll(),
             replaceEnabled: this.readerReplaceEnabled,
             replaceUsesDefault: this.readerReplaceUsesDefault,
@@ -10063,6 +10101,7 @@ private canWriteInto(dir: string): boolean {
         ReaderSearchPage({
           book: this.selectedBook,
           bookTitle: this.selectedBook.title,
+          initialQuery: this.readerSearchQuery,
           onReplaceRulesChanged: () => this.replaceRules = ReplaceRuleRepository.getAll(),
           onBack: () => this.route = AppRoute.READER,
           onOpenResult: (chapterIndex: number, position: number,
@@ -10144,10 +10183,17 @@ private canWriteInto(dir: string): boolean {
           ReplaceRuleEditPage({
             onBack: () => {
               this.editingReplaceRule = undefined;
-              this.profileSubpage = ProfileRoute.REPLACE_RULES;
+              this.replaceRuleSeed = '';
+              // 划词「替换」是从阅读页进来的：返回要回正文，而不是把人留在设置里的规则列表。
+              if (this.profileDetailReturnRoute === AppRoute.READER) {
+                this.route = AppRoute.READER;
+              } else {
+                this.profileSubpage = ProfileRoute.REPLACE_RULES;
+              }
             },
             onSaveRule: (rule: ReplaceRule) => this.saveReplaceRule(rule),
             editingRule: this.editingReplaceRule,
+            seedPattern: this.replaceRuleSeed,
             groups: this.replaceRuleGroups(),
             onRenameGroup: (oldName: string, newName: string) => this.renameReplaceRuleGroup(oldName, newName),
             onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
