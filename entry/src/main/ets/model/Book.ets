@@ -84,6 +84,11 @@ export interface Book {
   /** 刷新目录发现的新章数，对应上游 Book.lastCheckCount。 */
   lastCheckCount?: number;
   /**
+   * 是否允许自动更新目录，对应上游 Book.canUpdate（books 表 canUpdate 列，默认 1）。
+   * 上游缺省为 true；本地用 !== false 判断，缺省视为允许，避免老数据被当成禁止更新。
+   */
+  canUpdate?: boolean;
+  /**
    * 单本私密标记，对应上游 Book.isPrivate（books 表 isPrivate 列，:294）。
    * 分组级私密标记在 BookGroup 上，两者取并集判定，见 PrivateAccessRepository.isPrivateBook。
    */

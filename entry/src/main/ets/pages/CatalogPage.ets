@@ -154,8 +154,15 @@ export struct CatalogPage {
     if (context === undefined) { return; }
     try {
       this.chapterRows = await BookRepository.loadChapters(context, this.book);
-    } catch (_) {
+    } catch (error) {
       this.chapterRows = [];
+      this.onUnavailableAction(`目录加载失败：${error instanceof Error ? error.message : `${error}`}`);
+      return;
+    }
+    // 在线目录失败时 loadChapters 静默返回空数组，靠 lastTocError 区分「加载失败」
+    // 与「真的没有目录」，避免把网络错误误报成「这本书没有目录」（:314）。
+    if (BookRepository.lastTocError.length > 0) {
+      this.onUnavailableAction(`目录加载失败：${BookRepository.lastTocError}`);
     }
     this.rebuildChapterView();
   }

@@ -186,6 +186,12 @@ export class BookRepository {
    * 缓存优先 + 网络兜底。由 EntryAbility install，未安装时在线书读取给出明确错误。
    */
   private static onlineProvider: OnlineBookProvider | undefined = undefined;
+  /**
+   * 最近一次在线目录加载的失败信息（:314）。loadChapters 的在线分支失败时原本静默
+   * return []，调用方无法区分「这本书真没目录」和「网络抓取失败」。这里记一笔，
+   * 让目录页能提示「目录加载失败」而不是误导成「没有目录」。每次加载前清空。
+   */
+  static lastTocError: string = '';
 
   /** 安装在线书内容提供器（EntryAbility.onCreate 调用，避免 data ↔ bookSource 循环依赖）。 */
   static installOnlineProvider(provider: OnlineBookProvider): void {
@@ -243,15 +249,16 @@ export class BookRepository {
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
   /**
-   * 读全部书目。列顺序必须与 readBookRow 的索引一一对应，改动这里就要同步改那边。
-   * 只取本地用得上的列，上游独有的列（lastCheckTime / syncTime 等）不读。
+   * 读全部书目。前 30 列的顺序必须与 readBookRow 的索引一一对应，改动这里就要同步改那边。
+   * canUpdate 追加在末尾（索引 30）：append 而不插中间，前面 0-29 的索引一个都不动，
+   * 避免中间插列导致 readBookRow 后面全部错位（封面变作者名那类静默数据错乱）。
    */
   private static readonly selectBooksSql: string =
     'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
     '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
     '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
     '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount`, `isPrivate`, `variable`, ' +
-    '`origin` FROM `books` ORDER BY `durChapterTime` DESC';
+    '`origin`, `canUpdate` FROM `books` ORDER BY `durChapterTime` DESC';
 
   /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
@@ -1145,7 +1152,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       isLocal: isLocal,
       delTag: BookRepository.delTagFromVariable(RdbCodec.optionalText(resultSet, 28)),
       originFileName: BookRepository.variableString(RdbCodec.optionalText(resultSet, 28), 'originFileName'),
-      sourceSize: BookRepository.variableNumber(RdbCodec.optionalText(resultSet, 28), 'sourceSize')
+      sourceSize: BookRepository.variableNumber(RdbCodec.optionalText(resultSet, 28), 'sourceSize'),
+      // canUpdate 在 SELECT 末尾（索引 30）；默认 true 对齐上游 canUpdate 列 DEFAULT 1。
+      canUpdate: RdbCodec.boolean(resultSet, 30, true)
     };
     book.progress = BookRepository.readProgress(book);
     return book;
@@ -1551,6 +1560,18 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /**
+   * 单独切换「允许更新」开关（:289），对应上游 BookInfoViewModel.toggleCanUpdate。
+   * 只更新 canUpdate 一列，不整行覆盖 —— 整行写回会顺带冲掉别人正在写的阅读进度。
+   */
+  static async setBookCanUpdate(context: Context, bookUrl: string, canUpdate: boolean): Promise<void> {
+    if (bookUrl.length === 0) { return; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const args: relationalStore.ValueType[] = [canUpdate ? 1 : 0, bookUrl];
+    await store.executeSql('UPDATE `books` SET `canUpdate` = ? WHERE `bookUrl` = ?', args);
+  }
+
+  /**
    * 批量把若干本书挪到指定分组（批 5 的 :146）。
    *
    * 走「替换」语义：书的 group 列被整体覆盖成目标分组，与批 4 的规则同步（只加不减）相反。
@@ -1699,6 +1720,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   static async loadChapters(context: Context, book: Book): Promise<BookChapter[]> {
     const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
     if (bookUrl.length === 0) { return []; }
+    // 每次加载前清空上次错误，避免上一本的失败提示串到这一本。
+    BookRepository.lastTocError = '';
     // 在线书目录从书源网络抓取（对应上游 loadChapterListAwait 的在线分支）。
     if (BookRepository.isOnlineBook(book)) {
       const provider = BookRepository.onlineProvider;
@@ -1708,6 +1731,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
         BookRepository.chapterCache.set(bookUrl, remote);
         return remote;
       } catch (error) {
+        const message = error instanceof Error ? error.message : `${error}`;
+        BookRepository.lastTocError = message;
         AppLog.put(`[BookRepository] 在线目录加载失败: ${error}`);
         return [];
       }
@@ -1815,7 +1840,9 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       Math.max(0, Math.trunc(book.androidCharacterPosition ?? 0)),
       book.durChapterTime ?? 0,
       book.wordCount ?? null,
-      1,
+      // canUpdate：过去恒写 1，导致详情页「允许更新」开关读不出也存不进；
+      // 缺省（undefined/true）仍写 1，对齐上游默认允许更新。
+      book.canUpdate === false ? 0 : 1,
       book.disableReadRecord === true ? 1 : 0,
       Math.trunc(book.order ?? 0),
       0,

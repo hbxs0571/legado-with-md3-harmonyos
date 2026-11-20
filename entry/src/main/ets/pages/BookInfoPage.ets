@@ -11,12 +11,14 @@ import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession } from '.
 import { HighlightTagRule } from '../model/HighlightTagRule';
 import { HighlightedTag, matchHighlightTags } from '../data/HighlightTagMatcher';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { common, Want } from '@kit.AbilityKit';
 import {
   TopBarButton, TopBarBackButton, topBarButtonSize, topBarActionSpacing,
   TOP_BAR_SIDE_PADDING, TOP_BAR_ACTIONS_END
 } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppLog } from '../lib/AppLog';
+import { WebDavSync } from '../lib/WebDavSync';
 import { BODY_LARGE, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
@@ -100,6 +102,12 @@ export struct BookInfoPage {
     _category: string, _description: string, _remark: string, _customTag: string, _groupNames: string[],
     _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 打开书源登录页（:283）：页面不做路由，只把书源 URL 交给 Index。 */
+  onOpenSourceLogin: (sourceUrl: string) => void = (_sourceUrl: string) => {};
+  /** 打开书源编辑页去改源变量（:285）：变量面板在书源编辑页里，详情页跳过去。 */
+  onOpenSourceEdit: (sourceUrl: string) => void = (_sourceUrl: string) => {};
+  /** 切换「允许更新」（:289）：Index 写库后刷新 books，@Prop book 随之更新。 */
+  onToggleCanUpdate: (canUpdate: boolean) => void = (_canUpdate: boolean) => {};
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
   @State backdropOpacity: number = 0;
@@ -636,7 +644,8 @@ export struct BookInfoPage {
       { key: 'copy_book_url', title: '拷贝书籍 URL' },
       { key: 'copy_toc_url', title: '拷贝目录 URL' },
       { key: 'to_top', title: '置顶' },
-      { key: 'allow_update', title: '允许更新' },
+      // 允许更新：选中态对齐上游 isSelected = book.canUpdate（缺省视为 true）。
+      { key: 'allow_update', title: '允许更新', selected: this.book.canUpdate !== false },
       { key: 'split_long_chapter', title: '拆分超长章节' },
       { key: 'delete_alert', title: '删除提醒', selected: this.deleteAlertEnabled },
       { key: 'clear_cache', title: '清理缓存' },
@@ -663,6 +672,16 @@ export struct BookInfoPage {
       this.onToggleDisableReadRecord(this.book, !(this.book.disableReadRecord === true));
     } else if (key === 'copy_book_url') {
       this.copyBookUrl();
+    } else if (key === 'copy_toc_url') {
+      this.copyTocUrl();
+    } else if (key === 'login') {
+      this.openSourceLogin();
+    } else if (key === 'set_source_variable') {
+      this.openSourceEdit();
+    } else if (key === 'upload_to_remote') {
+      this.uploadBook();
+    } else if (key === 'allow_update') {
+      this.onToggleCanUpdate(this.book.canUpdate === false);
     } else if (key === 'to_top') {
       this.onTopBook();
     } else if (key === 'delete_alert') {
@@ -674,10 +693,9 @@ export struct BookInfoPage {
     } else if (key === 'private') {
       this.onSetPrivate(this.book, this.book.isPrivate !== true);
     } else {
-      // 其余 8 项（custom_button / re_sync_webdav / upload_to_remote / login /
-      // set_source_variable / set_book_variable / copy_toc_url / allow_update /
-      // split_long_chapter）依赖书源、远程书库或排版引擎，本地没有对应能力。
-      // 按用户要求仍然列出来，点了给一句「未接入」，不留死按钮。
+      // 其余项（custom_button / re_sync_webdav / set_book_variable / split_long_chapter）
+      // 依赖书源脚本回调、远程书库或排版引擎，本地没有对应能力。
+      // 按仓库约定仍然列出来，点了给一句「未接入」，不留死按钮。
       this.onUnavailableAction(`${this.overflowTitleOf(key)} 未接入`);
     }
   }
@@ -707,6 +725,103 @@ export struct BookInfoPage {
       this.onUnavailableAction('已拷贝书籍路径');
     }).catch(() => {
       this.onUnavailableAction('拷贝失败，剪贴板不可用');
+    });
+  }
+
+  /**
+   * 拷贝目录链接（:288），对齐上游 CopyText(book.tocUrl)。
+   * 语义陷阱：本地书的第 9 列被借用成 tocRule（章节正则），readBookRow 里本地书
+   * 的 tocUrl 恒为 undefined。所以本地书必须提示「没有目录链接」，绝不能退去复制 tocRule。
+   */
+  private copyTocUrl(): void {
+    const url = this.book.tocUrl ?? '';
+    if (url.length === 0) {
+      this.onUnavailableAction('本地书籍没有目录链接');
+      return;
+    }
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, url);
+    pasteboard.getSystemPasteboard().setData(data).then(() => {
+      this.onUnavailableAction('已复制目录链接');
+    }).catch(() => {
+      this.onUnavailableAction('复制失败，剪贴板不可用');
+    });
+  }
+
+  /**
+   * 分享（:273 顶栏）：平台无 systemShare 面板（SDK api+kits 零命中，已核），
+   * 走 Want 的 sendData；模拟器多半无响应方，失败则降级为复制书名与链接并明确提示。
+   * 分享内容按上游口径：书名 + 作者 + 书链（在线书 bookUrl，本地书 contentPath）。
+   */
+  private shareBook(): void {
+    const link = this.book.origin !== undefined && this.book.origin.length > 0 && this.book.origin !== 'loc_book'
+      ? (this.book.tocUrl ?? this.book.origin ?? '')
+      : (this.book.contentPath ?? '');
+    const text = `${this.book.title} ${this.book.author} ${link}`.trim();
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (context !== undefined) {
+      const want: Want = {
+        action: 'ohos.want.action.sendData',
+        type: 'text/plain',
+        parameters: { 'ability.params.stream': text, 'ohos.extra.param.key.content': text }
+      };
+      context.startAbility(want).then(() => {
+        this.onUnavailableAction('已调起分享');
+      }).catch(() => {
+        this.copyShareFallback(text);
+      });
+      return;
+    }
+    this.copyShareFallback(text);
+  }
+
+  /** 分享降级：系统无分享面板时复制到剪贴板，并明确告知用户（不静默降级）。 */
+  private copyShareFallback(text: string): void {
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+    pasteboard.getSystemPasteboard().setData(data).then(() => {
+      this.onUnavailableAction('已复制书名与链接');
+    }).catch(() => {
+      this.onUnavailableAction('分享失败，剪贴板不可用');
+    });
+  }
+
+  /** 登录书源（:283）：本地书没有书源 URL，直接提示；否则把 URL 交给 Index 打开登录页。 */
+  private openSourceLogin(): void {
+    const sourceUrl = this.book.origin ?? '';
+    if (sourceUrl.length === 0 || sourceUrl === 'loc_book') {
+      this.onUnavailableAction('本地书籍没有书源，无法登录');
+      return;
+    }
+    this.onOpenSourceLogin(sourceUrl);
+  }
+
+  /** 设置书源变量（:285）：变量面板在书源编辑页里，跳过去由用户点「变量」。 */
+  private openSourceEdit(): void {
+    const sourceUrl = this.book.origin ?? '';
+    if (sourceUrl.length === 0 || sourceUrl === 'loc_book') {
+      this.onUnavailableAction('本地书籍没有书源变量');
+      return;
+    }
+    this.onOpenSourceEdit(sourceUrl);
+  }
+
+  /** 上传书籍（:278）：把唯一正文副本只读复制到 WebDAV，绝不删除或移动它。 */
+  private uploadBook(): void {
+    const localPath = this.book.contentPath ?? '';
+    if (localPath.length === 0) {
+      this.onUnavailableAction('本地书籍没有正文文件');
+      return;
+    }
+    const fileName = localPath.substring(localPath.lastIndexOf('/') + 1);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('上传失败，无法获取应用上下文');
+      return;
+    }
+    WebDavSync.uploadBookFile(context, localPath, fileName).then(() => {
+      AppLog.put(`[BookInfoPage] 已上传：${fileName}`);
+      this.onUnavailableAction('已上传：' + fileName);
+    }).catch((error: Error) => {
+      this.onUnavailableAction('上传失败：' + error.message);
     });
   }
 
@@ -1003,7 +1118,7 @@ export struct BookInfoPage {
         Blank()
         Row({ space: topBarActionSpacing(this.themeTopBarButtonStyle) }) {
           TopBarButton({ icon: 'edit', onSelect: () => this.onOpenEditPage() })
-          TopBarButton({ icon: 'share', onSelect: () => this.onUnavailableAction('书籍分享尚未迁移') })
+          TopBarButton({ icon: 'share', onSelect: () => this.shareBook() })
           // menuMode: true 让 TopBarButton 不注册自己的 onSelect（否则内层点击会被它吃掉）；
           // bindPopup 要求宿主节点可点击，所以这里补一个只翻转显隐的 onClick。
           TopBarButton({ icon: 'more', menuMode: true })

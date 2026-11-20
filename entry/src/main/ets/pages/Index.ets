@@ -7973,7 +7973,51 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /**
+   * 切换「允许更新」（:289）：写 canUpdate 一列后原位刷新 books 与 selectedBook，
+   * 让详情页菜单的选中态与列表数据都跟上。只改这一个字段，不动阅读进度。
+   */
+  private async toggleBookCanUpdate(canUpdate: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const bookUrl = this.selectedBook.contentPath ?? this.selectedBook.androidOriginalPath ?? '';
+    if (bookUrl.length === 0) { return; }
+    try {
+      await BookRepository.setBookCanUpdate(context, bookUrl, canUpdate);
+      const updatedSelected: Book = BookRepository.copyBook(this.selectedBook);
+      updatedSelected.canUpdate = canUpdate;
+      this.selectedBook = updatedSelected;
+      this.books = this.books.map((item: Book): Book => {
+        if ((item.contentPath ?? item.androidOriginalPath ?? '') !== bookUrl) { return item; }
+        const refreshed: Book = BookRepository.copyBook(item);
+        refreshed.canUpdate = canUpdate;
+        return refreshed;
+      });
+      this.showUnavailableAction(canUpdate ? '已允许更新' : '已关闭更新');
+    } catch (error) {
+      this.showUnavailableAction('设置失败：' + (error instanceof Error ? error.message : `${error}`));
+    }
+  }
+
   private async openCatalogFromBookInfo(): Promise<void> {
+    // :314 在线书目录加载失败要报「目录加载失败：…」，不能退化成「没有本地目录」。
+    // 详情页入口原本只读本地缓存（cachedChapterTitles），缓存为空时在线书需要先触发一次在线加载，
+    // 失败信息由 BookRepository.loadChapters 记在 lastTocError 里。
+    if (BookRepository.isOnlineBook(this.selectedBook)) {
+      BookRepository.lastTocError = '';
+      const context = this.getUIContext().getHostContext();
+      if (context !== undefined) {
+        try {
+          await BookRepository.loadChapters(context, this.selectedBook);
+        } catch (_) {
+          // 错误已由 loadChapters 记入 lastTocError，这里只兜底，不重复提示。
+        }
+      }
+      if (BookRepository.lastTocError.length > 0) {
+        this.showUnavailableAction(`目录加载失败：${BookRepository.lastTocError}`);
+        return;
+      }
+    }
     const chapters = BookRepository.cachedChapterTitles(this.selectedBook);
     if (this.selectedBook.contentPath === undefined || chapters.length === 0) {
       this.showUnavailableAction(BookRepository.isBodyMissing(this.selectedBook)
@@ -9275,6 +9319,9 @@ private canWriteInto(dir: string): boolean {
           onToggleDeleteAlert: () => this.toggleBookInfoDeleteAlert(),
           onSearchKeyword: (keyword: string) => this.openSearchWithKeyword(keyword),
           onSetPrivate: (book: Book, isPrivate: boolean) => this.setBookPrivate(book, isPrivate),
+          onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl),
+          onOpenSourceEdit: (sourceUrl: string) => this.openBookSourceEdit(sourceUrl),
+          onToggleCanUpdate: (canUpdate: boolean) => { void this.toggleBookCanUpdate(canUpdate); },
           onChooseCover: () => this.chooseBookCover(),
           onRestoreCover: () => this.restoreBookCover(),
           onSaveMetadata: (title: string, author: string, category: string, description: string,

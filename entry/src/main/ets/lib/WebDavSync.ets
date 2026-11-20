@@ -121,6 +121,27 @@ export class WebDavSync {
     }
   }
 
+  /**
+   * 上传单本正文文件（:278）。与 uploadBackup 同形：正文文件已是磁盘上现成的副本，
+   * 直接流式 PUT，不需要像进度那样先落临时文件。
+   * 注意这是只读复制 —— localPath 是导入时转出的唯一正文副本，绝不删除或移动它。
+   */
+  static async uploadBookFile(context: Context, localPath: string, fileName: string): Promise<void> {
+    const settings = await WebDavConfigStore.load(context);
+    if (!isWebDavConfigured(settings)) {
+      throw new WebDavError('账号或密码为空，请先在设置里填写', 0);
+    }
+    const dav = new WebDav(buildWebDavRootUrl(settings), settings.account, settings.password);
+    try {
+      await dav.makeAsDir(dav.getRootUrl());
+      await dav.upload(localPath, dav.getRootUrl() + fileName);
+    } catch (error) {
+      throw wrapError(error);
+    } finally {
+      dav.close();
+    }
+  }
+
   /** 下载远端同名文件到 localZipPath。 */
   static async downloadBackup(context: Context, fileName: string, localZipPath: string): Promise<void> {
     const settings = await WebDavConfigStore.load(context);
