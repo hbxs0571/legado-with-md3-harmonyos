@@ -2248,12 +2248,51 @@ SQL 复杂度极低——零 `JOIN`、只有一条 `COUNT(*)`，全是单表 CRU
 | 上游层 | 规模 | 本地 | 社区有没有等价物 |
 | --- | --- | --- | --- |
 | `di/` 依赖注入（Koin） | 2 文件 / 955 行 | 无 | **没有**。`docs/ARCHITECTURE.md` 7.1 已查过 GitHub 与 SDK 两处：搜到的全是示例工程（CoolMallArkTS ⭐79、HarmonyKit ⭐46、arkts-mvvm-v1-skill、HarmonyStudy ⭐8），没有可 `ohpm install` 的 DI 容器；SDK 里按 `inject|di\.|ioc|provider` 过滤只命中 `insightIntentProvider.d.ts` 这类无关声明。本轮复查 ohpm 亦无。 |
-| `domain/gateway/`（59-63 个接口） | 63 文件 / 1,349 行 | 无 | **不需要**。Gateway 的存在前提是「同一接口多实现可切换」（测试替身、远端/本地切换）。本地 `new XxxRepository(` 全仓 **0 处**，仓储是静态方法，没有可注入的东西。 |
+| `domain/gateway/`（63 个接口） | 63 文件 / 1,349 行 | 无 | **不搬，但理由要说对。** 先更正本节初稿的一处错误判据：初稿写「Gateway 的前提是多实现可切换，本地 `new XxxRepository(` 全仓 0 处」——这个 grep 证明不了任何事，它只是本地「46 个 Repository 里 45 个无 `constructor`、全是静态方法」的产物。实测上游 63 个 Gateway **每个都只有一个生产实现**（按 `: XxxGateway {` 检索实现类，无一例外），测试里的 24 个 `Fake*Gateway`/`Stub*Gateway` 才是第二个实现。Gateway 的真实作用是**隔离层间依赖**：`domain/gateway/*.kt` 里 `import androidx.room` / `@Entity` / `@Dao` **零命中**，domain 不依赖 Room。但**上游自己也没做干净**：`domain/usecase/` 54 个文件里 **26 个仍 `import io.legado.app.data.*`**（`data.entities.Book` 11 次、`data.repository.BookRepository` 7 次、`data.dao.BookSourceDao` 2 次），`domain/` 下 `import android.`/`androidx.` 共 19 处（含 `androidx.compose.runtime.Stable`）。本地根本没有 `domain` 目录（`grep 'UseCase|Gateway'` 命中 7 个文件全是注释引用上游），**没有对象可隔离**，所以不搬。真正该借鉴的是「业务决策与存储分离」这条写法，见第四节。 |
 | `base/`（Activity / DialogFragment 基类） | 21 文件 / 2,357 行 | 无 | **平台机制不同**。ArkUI 没有 Activity 生命周期，页面是 `@Component` struct。`base/` 里真正可搬的只有 `AppContextWrapper`（字号缩放），本地已等价实现：`data/AppFontSettings.ets` + `pages/Index.ets:3839` 的 `setFontSizeScale`。 |
 
 补充一条容易误判的：`lib/prefs/`（上游 14 文件 / 1,531 行）**不是缺口**——平台 `@ohos.data.preferences` 就是等价物，本地已在用。`lib/mobi/`（34 文件 / 1,632 行）也不是——本地 `data/mobi/MobiRepository.ets` 已实现。
 
-### 三、本地用了别的形态：三条，都查了有没有更等价的方案
+### 三、测试：本地几乎没有，这是比常量层更要紧的缺口
+
+上游 `app/src/test/` 是 **359 文件 / 43,999 行**（`find` + `cat` 实测）。本地 `entry/src/ohosTest/` 全部 **126 行**：`testability/TestAbility.ets` 30、`testrunner/OpenHarmonyTestRunner.ets` 57，加上两个 smoke 用例（`LaunchSmoke.test.ets`、`List.test.ets`），没有一条覆盖数据层或业务逻辑。
+
+这条列在这里，是因为它决定了别的层「补了有没有用」：上游那 24 个 `Fake*Gateway`（`AnalyzeChapterSpeechUseCaseTest` 的 `MemoryChapterSpeechGateway`、`ResolveBookshelfConflictUseCaseTest` 的 `StubOtherSettingsGateway`、`AboutViewModelTest` 的 `FakeBackupSettingsGateway` 等）全部服务于这套测试。**本地没有测试体系，Gateway 的测试替身价值在本地也落不了地**——这是「不搬 Gateway」的第二个理由，比第一条更硬。
+
+同时它也是第四节那条写法的价值所在：把业务决策抽成不碰存储的纯函数，才可能在没有测试体系的地方先补上单测。
+
+### 四、那 28 个干净 usecase 代表什么写法
+
+`domain/usecase/` 54 个文件里，28 个不 `import io.legado.app.data`。但这 28 个不能一概而论，实测分两类：
+
+**纯转发，没有借鉴价值。** `GetReadingProgressUseCase.kt` 26 行全是 `return gateway.xxx()`；`HomeDashboardUseCase.kt` 91 行里 10 次 `gateway.` 调用、0 行 `if/for/when` 控制流；`CoverAlbumUseCase.kt` 38 行 11 次调用；`WebDavBackupUseCase.kt` 41 行 1 次调用。这类抄过来只是多一层空壳。
+
+**有真业务，且业务不碰存储。** `GenerateBookshelfAutoGroupPlanUseCase.kt` **487 行，只有 5 次 gateway 调用**，几乎全是规则与冲突处理；`AiChatGenerationUseCase.kt` 430 行 / 6 次调用；`BuildSpeechPlanUseCase.kt` 179 行 / 1 次调用；`DeleteBooksUseCase.kt` 27 行，核心是这一段：
+
+```kotlin
+books.forEach { book ->
+    if (book.isLocal) {
+        localBookGateway.deleteBook(book.bookUrl, deleteOriginal)
+    } else {
+        bookSourceCallbackGateway.onDeleteFromShelf(book.bookUrl)
+    }
+    bookRepository.deleteChaptersByBook(book.bookUrl)
+}
+```
+
+它写的是「本地书删文件、网络书通知书源、都删章节、最后删书」这个**顺序与条件**，不是「怎么删 SQL」。`if (book.isLocal)` 是业务判断，`deleteChaptersByBook` 只是被调用。
+
+**判据**：新文件不碰 `getStore(`、不碰 `context`，只接收数据、返回数据。这样它能被直接测，不需要先造 Repository 的静态状态。
+
+**本地可落地的三处**（都不是建 `domain/` 包）：
+
+| 上游 | 本地现状 | 可落地形态 |
+| --- | --- | --- |
+| `DeleteBooksUseCase` 的删除编排 | `data/BookRepository.ets:1576` 的注释自陈「照上游 DeleteBooksUseCase：外键 CASCADE 在 relationalStore 里实测不生效」，逻辑搬了但落在 Repository 里 | 抽成 `data/BookDeletionPolicy.ets`，只收 `Book[]`，返回删除顺序 |
+| `GenerateBookshelfAutoGroupPlanUseCase` 487 行业务 | 本地书架自动分组逻辑位置未查证 | 抽成纯函数模块：输入书架列表 + 规则，输出分组计划 |
+| `ContentProcessor.kt` 297 行执行编排 | `data/ReplaceRuleRepository.ets:910`–`:1120` 的 210 行 | 搬进 `ReplaceRuleEngine.ets`（现只有 80 行 worker 函数） |
+
+### 五、本地用了别的形态：三条，都查了有没有更等价的方案
 
 #### 1. 事件总线：`AppStorage` 广播 vs `@ohos.events.emitter`
 
@@ -2280,7 +2319,7 @@ SQL 复杂度极低——零 `JOIN`、只有一条 `COUNT(*)`，全是单表 CRU
 
 **没有「更等价的方案」**——这些都是纯函数工具，装库不如按需写。**建议遇到再补，不预先建层**：这类文件单个都很小（上游 86 个平均 134 行），预先抽象反而增加理解成本。
 
-### 四、还有一层容易被忽略：RSS 整层
+### 六、还有一层容易被忽略：RSS 整层
 
 本地**有数据层无功能层**：`model/RssSource.ets`、`data/RssSourceRepository.ets`（182 行）、`RssSourceImporter.ets`、`RssStarRepository.ets`（194 行）、`RssStarImporter.ets` 都在，但只做**备份导入导出**——`RssSourceRepository.ets` 里 `grep 'fetch|http|rcp|parse'` 只命中一条注释。
 
@@ -2290,17 +2329,20 @@ SQL 复杂度极低——零 `JOIN`、只有一条 `COUNT(*)`，全是单表 CRU
 
 **平台侧不缺能力**：`@ohos.xml`（`XmlPullParser`，`:611` 起，`parseXml` `:645`、SAX `:680`）与 `@ohos.convertxml`（`ConvertXML.convertToJSObject` `:255`）都能解析 feed。社区也有 `prof18/RSS-Parser`（KMP），但那是 Kotlin 的，ArkTS 用不上。**该不该做取决于范围**：这一条不在「缺一层」的范畴，是「整块功能没做」，需先确认是否在范围内。
 
-### 五、判断与顺序
+### 七、判断与顺序
 
-1. **封面下载与缓存** —— 真缺，且正在阻塞书源功能。**自己写约 150 行**（URL→md5→filesDir），不装 imageknife/imageknifepro。
+1. **测试体系** —— 本地 126 行 vs 上游 43,999 行，没有一条覆盖数据层或业务逻辑。它排在最前不是因为它最急，而是因为**别的层补了有没有用取决于它**：Gateway 的测试替身价值、第四节那批纯函数的可测性，都要落在这上面。先补最小可行的一层（对纯函数与策略模块的单测），再谈补别的层。
 2. **网络请求层** —— 真缺。`@ohos/axios` 可用（22.6 万下载、59 个被依赖），能补拦截器/取消/JSON，但补不了 WebView 请求拦截。是否引入取决于书源这条线要不要统一请求入口。
 3. **事件总线** —— 已有等价物，**改用 `@ohos.events.emitter`**（684 行声明、17 个 function、带泛型），替掉 `AppStorage` 做通知。零依赖。
 4. **ViewModel 层** —— 已有等价物，按 ARCHITECTURE 7.2/7.3 用 `@ObservedV2`，零依赖。存量不动，新模块立规矩。
 5. **常量层** —— 真缺但收益最小，新模块顺手抽，不回头大改。
-6. **utils 工具层** —— 零碎，遇到再补，不预先建层。
-7. **RSS 整层** —— 不属于「缺一层」，是整块功能未做，先确认范围。
+6. **业务决策与存储分离**（第四节）—— 不是一层，是一条写法。三处具体位置已列出，按可测性收益排序做：`ReplaceRuleRepository:910`-`:1120` 的 210 行 > `BookRepository` 的删除编排 > 书架自动分组。
+7. **utils 工具层** —— 零碎，遇到再补，不预先建层。
+8. **RSS 整层** —— 不属于「缺一层」，是整块功能未做，先确认范围。
 
-**这一节的取证边界**：所有社区库数据来自 ohpm 页面（版本/下载量/许可/最低 API）与官方文档，**没有一个装进工程编译验证过**；上游行数为 `wc -l` 实测；本地命中数为 `grep -c` 实测。RSS 的范围问题未查 `docs/PROJECT.md` 原始表述。
+**这一节的取证边界**：所有社区库数据来自 ohpm 页面（版本/下载量/许可/最低 API）与官方文档，**没有一个装进工程编译验证过**；上游行数为 `wc -l` 实测；本地命中数为 `grep -c` 实测。RSS 的范围问题未查 `docs/PROJECT.md` 原始表述；本地书架自动分组逻辑的具体位置未查证（第四节表格已标注）。
+
+**本节的自我更正记录**：初稿用 `new XxxRepository( = 0` 论证「不需要 Gateway」，该判据不成立（见第二节该行）；初稿把 28 个干净 usecase 一概说成「好写法」，实测约一半是纯转发、没有借鉴价值（见第四节）。两处均已在正文改正，保留此记录以免后续误引。
 
 关联：[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) 第七章（该不该重构、7.1 DI 与状态管理库查证、7.6 事件广播与播放器持有者）、[`docs/FEATURES.md`](FEATURES.md) 第四章（RSS 能力口径）。
 
