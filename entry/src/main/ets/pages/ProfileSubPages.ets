@@ -122,6 +122,8 @@ export struct BookSourceManagePage {
   private promptAction: (value: string) => void = (_value: string) => {};
   /** 搜索跳转回调（P4 条目菜单「搜索」）。 */
   onOpenSourceSearch: (keyword: string, sourceUrl: string) => void = (_keyword: string, _sourceUrl: string) => {};
+  /** 打开书源编辑页（P5）。sourceUrl 为空表示新建。 */
+  onOpenSourceEdit: (sourceUrl: string) => void = (_sourceUrl: string) => {};
 
   aboutToAppear(): void {
     this.reloadSources();
@@ -421,6 +423,8 @@ export struct BookSourceManagePage {
       this.onUnavailableAction('书源登录在 P9 实现');
     } else if (key === 'search') {
       this.onOpenSourceSearch(source.bookSourceName, source.bookSourceUrl);
+    } else if (key === 'edit') {
+      this.onOpenSourceEdit(source.bookSourceUrl);
     } else if (key === 'debug') {
       this.onUnavailableAction('调试页在 P10 实现');
     } else if (key === 'delete') {
@@ -616,7 +620,7 @@ export struct BookSourceManagePage {
       }
       UiMenuItemView({ title: '搜索', onSelect: () => this.onSourceRowAction('search', row) })
       UiMenuItemView({ title: '调试', onSelect: () => this.onSourceRowAction('debug', row) })
-      UiMenuItemView({ title: '编辑', onSelect: () => this.onUnavailableAction('编辑页在 P5 实现') })
+      UiMenuItemView({ title: '编辑', onSelect: () => this.onSourceRowAction('edit', row) })
       UiMenuItemView({ title: '删除', onSelect: () => this.onSourceRowAction('delete', row) })
       if (row.hasExplore) {
         UiMenuItemView({ title: row.exploreEnabled ? '禁用发现' : '启用发现',
@@ -802,7 +806,7 @@ export struct BookSourceManagePage {
               Text('添加书源').fontSize(15).fontColor('#151720').margin({ left: 7 })
             }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
               .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 })
-              .onClick(() => this.onUnavailableAction('书源编辑页在 P5 实现'))
+              .onClick(() => this.onOpenSourceEdit(''))
           }
         }.layoutWeight(1)
       }

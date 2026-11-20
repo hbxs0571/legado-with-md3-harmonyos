@@ -189,6 +189,8 @@ export enum AppRoute {
 
 export enum ProfileRoute {
   BOOK_SOURCE_MANAGE = 'bookSourceManage',
+  /** P5 书源编辑页（新建与编辑共用）。 */
+  BOOK_SOURCE_EDIT = 'bookSourceEdit',
   REPLACE_RULES = 'replaceRules',
   REPLACE_RULE_EDIT = 'replaceRuleEdit',
   DICTIONARY_RULE_EDIT = 'dictionaryRuleEdit',

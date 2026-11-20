@@ -12,6 +12,9 @@ import { CatalogPage } from './CatalogPage';
 import { TxtTocRulePreviewPage } from './TxtTocRulePreviewPage';
 import { ReaderSettingsPage } from './ReaderSettingsPage';
 import { SearchPage } from './SearchPage';
+import { BookSourceEditPage } from './BookSourceEditPage';
+import { BookSource } from '../model/BookSource';
+import { BookSourceRepository } from '../data/BookSourceRepository';
 import { MergedBook } from '../bookSource/SearchResultMerger';
 import {
   BookSourceManagePage, ReplaceRulesPage, ReplaceRuleEditPage, TxtTocRulesPage, DictionaryRulesPage,
@@ -262,6 +265,8 @@ struct Index {
   @State bookInfoDeleteAlert: boolean = true;
   /** 当前正在编辑的替换规则；为空表示新建。 */
   @State editingReplaceRule: ReplaceRule | undefined = undefined;
+  /** P5 当前正在编辑的书源；为空表示新建。 */
+  @State editingBookSource: BookSource | undefined = undefined;
   /** 替换规则列表的排序模式，与 Repository 中的持久化值保持同步。 */
   @State replaceRuleSortMode: string = 'asc';
   @State replaceEnableDefault: boolean = true;
@@ -7912,6 +7917,41 @@ private canWriteInto(dir: string): boolean {
     this.searchPageQuery = keyword;
     this.openSearch();
   }
+
+  /** P5 打开书源编辑器：sourceUrl 为空表示新建，否则从仓储快照找那条编辑。 */
+  private openBookSourceEdit(sourceUrl: string): void {
+    this.editingBookSource = undefined;
+    if (sourceUrl.length > 0) {
+      const found = BookSourceRepository.getAll().find((item: BookSource) => item.bookSourceUrl === sourceUrl);
+      this.editingBookSource = found;
+    }
+    this.profileSubpage = ProfileRoute.BOOK_SOURCE_EDIT;
+  }
+
+  /** P5 保存书源：整条替换/新增，整表写回仓储后回管理页。 */
+  private async saveBookSource(source: BookSource): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书源存储');
+      return;
+    }
+    const all = BookSourceRepository.getAll();
+    const idx = all.findIndex((item: BookSource) => item.bookSourceUrl === source.bookSourceUrl);
+    if (idx >= 0) {
+      all[idx] = source;
+    } else {
+      all.push(source);
+    }
+    try {
+      await BookSourceRepository.save(context, all);
+      this.showUnavailableAction(`已保存书源「${source.bookSourceName || source.bookSourceUrl}」`);
+      this.editingBookSource = undefined;
+      this.profileSubpage = ProfileRoute.BOOK_SOURCE_MANAGE;
+    } catch (error) {
+      this.showUnavailableAction('书源保存失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
   private openReaderSearch(): void {
     this.route = AppRoute.READER_SEARCH;
   }
@@ -9883,7 +9923,19 @@ private canWriteInto(dir: string): boolean {
           BookSourceManagePage({
             onBack: () => this.route = this.profileDetailReturnRoute,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-            onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl)
+            onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl),
+            onOpenSourceEdit: (sourceUrl: string) => this.openBookSourceEdit(sourceUrl)
+          })
+        } else if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_EDIT) {
+          BookSourceEditPage({
+            editingSource: this.editingBookSource,
+            onBack: () => {
+              this.editingBookSource = undefined;
+              this.profileSubpage = ProfileRoute.BOOK_SOURCE_MANAGE;
+            },
+            onSaveSource: (source: BookSource) => this.saveBookSource(source),
+            onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl),
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULES) {
           ReplaceRulesPage({
