@@ -25,6 +25,7 @@
 | TXT 阅读链路对照 | [TXT 阅读总账](parity/TXT-READER.md) |
 | 封面设置对照 | [封面设置总账](parity/ZIP-COVER.md) |
 | 深色模式 / 主题设置对照 | [深色模式对照表](parity/ZIP-THEME.md) |
+| 155 条未接项按卡点分类与逐条落点 | [未接项三分类总账](parity/UNMIGRATED-TRIAGE.md) |
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
 | 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
 | 公共 UI 组件（统一顶栏、设置行控件与度量常量） | `entry/src/main/ets/components/TopBar.ets`、`components/settings/`、`components/UiTokens.ets` |
