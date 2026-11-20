@@ -7906,6 +7906,12 @@ private canWriteInto(dir: string): boolean {
     this.searchReturnRoute = this.route;
     this.route = AppRoute.SEARCH;
   }
+
+  /** P4 条目菜单「搜索」：带源名关键词进搜索页。源范围锁定由搜索页 sourceScope 承担。 */
+  private openSourceSearch(keyword: string, _sourceUrl: string): void {
+    this.searchPageQuery = keyword;
+    this.openSearch();
+  }
   private openReaderSearch(): void {
     this.route = AppRoute.READER_SEARCH;
   }
@@ -9874,7 +9880,11 @@ private canWriteInto(dir: string): boolean {
         .transition(this.routeTransition())
         } else if (this.route === AppRoute.PROFILE_SUBPAGE) {
         if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_MANAGE) {
-          BookSourceManagePage({ onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
+          BookSourceManagePage({
+            onBack: () => this.route = this.profileDetailReturnRoute,
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl)
+          })
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULES) {
           ReplaceRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,

@@ -2,6 +2,7 @@
 import curves from '@ohos.curves';
 import { bundleManager } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { fileIo } from '@kit.CoreFileKit';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ReadRecordHeatmap } from '../components/ReadRecordHeatmap';
 import { BookCover } from '../components/BookCover';
@@ -18,6 +19,8 @@ import {
 } from '../components/ProfileUiMetrics';
 import { Book, ProfileRoute } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
+import { BookSource } from '../model/BookSource';
+import { BookSourceRepository } from '../data/BookSourceRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { isPrivateBook } from '../data/PrivateAccessRepository';
 import { BookCacheStat, CacheStatsRepository } from '../data/CacheStatsRepository';
@@ -36,6 +39,46 @@ import { UiAction } from '../components/settings/UiAction';
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const PROFILE_MENU_WIDTH: number = 260;
 
+/**
+ * P4 书源行的派生数据：源本体 + 列表展示所需的三个派生字段。
+ * 域名从 sourceJson.bookSourceUrl 解析，'#' 时按上游规则不显示。
+ */
+class SourceRow {
+  source: BookSource;
+  domain: string;
+  hasLogin: boolean;
+  hasExplore: boolean;
+  exploreEnabled: boolean;
+
+  constructor(source: BookSource, domain: string, hasLogin: boolean,
+    hasExplore: boolean, exploreEnabled: boolean) {
+    this.source = source;
+    this.domain = domain;
+    this.hasLogin = hasLogin;
+    this.hasExplore = hasExplore;
+    this.exploreEnabled = exploreEnabled;
+  }
+}
+
+/** 书源列表的惰性数据源（904 条用 LazyForEach，本仓 CatalogPage:38 先例）。 */
+class SourceDataSource implements IDataSource {
+  private items: SourceRow[] = [];
+  private listeners: DataChangeListener[] = [];
+  totalCount(): number { return this.items.length; }
+  getData(index: number): SourceRow { return this.items[index]; }
+  registerDataChangeListener(listener: DataChangeListener): void {
+    if (this.listeners.indexOf(listener) < 0) { this.listeners.push(listener); }
+  }
+  unregisterDataChangeListener(listener: DataChangeListener): void {
+    const position = this.listeners.indexOf(listener);
+    if (position >= 0) { this.listeners.splice(position, 1); }
+  }
+  setItems(items: SourceRow[]): void {
+    this.items = items;
+    this.listeners.forEach((listener: DataChangeListener) => listener.onDataReloaded());
+  }
+}
+
 @Component
 export struct BookSourceManagePage {
   @State moreMenuVisible: boolean = false;
@@ -50,14 +93,373 @@ export struct BookSourceManagePage {
   onBack: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @Prop groups: string[] = [];
-  @State selectedGroup: string = '';
+  @State @Watch('onListInputChanged') selectedGroup: string = '';
   @State showSearch: boolean = false;
-  @State searchQuery: string = '';
+  @State @Watch('onListInputChanged') searchQuery: string = '';
   @State showGroupFilter: boolean = false;
   @State groupFilterQuery: string = '';
-  @State groupByDomain: boolean = false;
-  @State sortMode: string = '手动排序';
-  @State sortDescending: boolean = false;
+  @State @Watch('onListInputChanged') groupByDomain: boolean = false;
+  @State @Watch('onListInputChanged') sortMode: string = '手动排序';
+  @State @Watch('onListInputChanged') sortDescending: boolean = false;
+
+  private onListInputChanged(): void {
+    this.rebuildVisibleSources();
+  }
+  // P4：书源列表。allSources 是从仓储读出的全量，visibleSources 经搜索/筛选/排序后驱动列表。
+  @State private allSources: BookSource[] = [];
+  @State private visibleSourceRows: SourceRow[] = [];
+  private sourceDataSource: SourceDataSource = new SourceDataSource();
+  /** 多选模式与选中集合（按 bookSourceUrl）。 */
+  @State private selectionMode: boolean = false;
+  @State private selectedUrls: Set<string> = new Set<string>();
+  @State private batchPanelVisible: boolean = false;
+  private sourceScroller: Scroller = new Scroller();
+  /** 当前打开条目菜单的行。 */
+  @State private menuRowUrl: string = '';
+  /** 分组/区间输入的对话框文本。 */
+  @State private promptText: string = '';
+  @State private promptVisible: boolean = false;
+  private promptAction: (value: string) => void = (_value: string) => {};
+  /** 搜索跳转回调（P4 条目菜单「搜索」）。 */
+  onOpenSourceSearch: (keyword: string, sourceUrl: string) => void = (_keyword: string, _sourceUrl: string) => {};
+
+  aboutToAppear(): void {
+    this.reloadSources();
+  }
+
+  /** 从仓储读全量书源，重建可见列表。 */
+  private async reloadSources(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    await BookSourceRepository.load(context);
+    this.allSources = BookSourceRepository.getAll();
+    this.rebuildVisibleSources();
+  }
+
+  /** 把仓储改动（启停/排序/批量）整表写回并刷新可见列表。 */
+  private async commitSources(next: BookSource[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      this.allSources = await BookSourceRepository.save(context, next);
+      this.rebuildVisibleSources();
+    } catch (error) {
+      this.onUnavailableAction('书源保存失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  /** 解析 sourceJson 里的字段（书源的派生字段都在 JSON 里，仓储列只是子集）。 */
+  private static sourceField(json: string, key: string): string {
+    try {
+      const parsed = JSON.parse(json) as Record<string, Object>;
+      const value = parsed[key];
+      return typeof value === 'string' ? value : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /** 域名：从 sourceJson.bookSourceUrl 取 host，'#' 与无协议头的不显示。 */
+  private static domainOf(source: BookSource): string {
+    const url = BookSourceManagePage.sourceField(source.sourceJson, 'bookSourceUrl');
+    if (url.length === 0 || url === '#') { return ''; }
+    // ArkTS 无全局 URL 类，按字符串取协议后的 host（到第一个 / 或 ? 为止）。
+    const scheme = url.indexOf('://');
+    if (scheme < 0) { return ''; }
+    const rest = url.substring(scheme + 3);
+    const end = rest.search(/[/?#]/);
+    return end < 0 ? rest : rest.substring(0, end);
+  }
+
+  /** 由全量 + 搜索词 + 分组筛选 + 排序，算出可见行。 */
+  private rebuildVisibleSources(): void {
+    const query = this.searchQuery.trim().toLowerCase();
+    let list = this.allSources.filter((source: BookSource) => {
+      if (query.length > 0 &&
+        !source.bookSourceName.toLowerCase().includes(query) &&
+        !source.bookSourceUrl.toLowerCase().includes(query)) { return false; }
+      const group = source.bookSourceGroup ?? '';
+      const selected = this.selectedGroup;
+      if (selected.length === 0 || selected === '全部') { return true; }
+      if (selected === '启用') { return source.enabled; }
+      if (selected === '禁用') { return !source.enabled; }
+      if (selected === '未分组') { return group.length === 0; }
+      if (selected === '需要登录') {
+        return BookSourceManagePage.sourceField(source.sourceJson, 'loginUrl').length > 0;
+      }
+      if (selected === '发现已启用') {
+        return BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') === 'true';
+      }
+      if (selected === '发现未启用') {
+        return BookSourceManagePage.sourceField(source.sourceJson, 'exploreUrl').length > 0 &&
+          BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') !== 'true';
+      }
+      return group === selected;
+    });
+    // 排序：手动用 customOrder，其余按派生列；descending 时整体反转。
+    const desc = this.sortDescending ? -1 : 1;
+    list = [...list].sort((a: BookSource, b: BookSource) => {
+      let cmp = 0;
+      if (this.sortMode === '名称排序') { cmp = a.bookSourceName.localeCompare(b.bookSourceName); }
+      else if (this.sortMode === 'URL 排序') { cmp = a.bookSourceUrl.localeCompare(b.bookSourceUrl); }
+      else if (this.sortMode === '按启用状态排序') { cmp = Number(a.enabled) - Number(b.enabled); }
+      else if (this.sortMode === '按更新时间排序') {
+        cmp = BookSourceManagePage.sourceField(a.sourceJson, 'lastUpdateTime')
+          .localeCompare(BookSourceManagePage.sourceField(b.sourceJson, 'lastUpdateTime'));
+      } else if (this.sortMode === '按响应时间排序') {
+        cmp = Number(BookSourceManagePage.sourceField(a.sourceJson, 'respondTime')) -
+          Number(BookSourceManagePage.sourceField(b.sourceJson, 'respondTime'));
+      } else if (this.sortMode === '权重排序') {
+        cmp = a.customOrder - b.customOrder;
+      } else { cmp = a.customOrder - b.customOrder; } // 手动排序
+      return cmp === 0 ? 0 : cmp * desc;
+    });
+    // 按域名分组：以 host 为主键再排一次（每行仍显示自己的域名列）。
+    if (this.groupByDomain) {
+      list = [...list].sort((a: BookSource, b: BookSource) =>
+        BookSourceManagePage.domainOf(a).localeCompare(BookSourceManagePage.domainOf(b)));
+    }
+    const rows: SourceRow[] = [];
+    for (const source of list) {
+      const domain = BookSourceManagePage.domainOf(source);
+      const loginUrl = BookSourceManagePage.sourceField(source.sourceJson, 'loginUrl');
+      const exploreUrl = BookSourceManagePage.sourceField(source.sourceJson, 'exploreUrl');
+      const enabledExplore = BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') === 'true';
+      rows.push(new SourceRow(source, domain, loginUrl.length > 0, exploreUrl.length > 0, enabledExplore));
+    }
+    this.visibleSourceRows = rows;
+    this.sourceDataSource.setItems(rows);
+  }
+
+  // ---------- P4 条目与批量操作 ----------
+
+  /** 只有手动排序、非按域名分组、非多选时才允许拖拽。 */
+  private canReorder(): boolean {
+    return this.sortMode === '手动排序' && !this.groupByDomain && !this.selectionMode;
+  }
+
+  /** 侧滑删/编辑按钮。 */
+  @Builder
+  private SourceSwipeEnd(row: SourceRow) {
+    Row() {
+      Text('删除').fontSize(13).fontColor('#FFFFFF').padding({ left: 16, right: 16 })
+        .backgroundColor('#C62828').height('100%')
+        .onClick(() => this.deleteSource(row.source))
+    }
+  }
+
+  /** 复制一条书源（ArkTS 禁对象展开，显式逐字段拷贝）。 */
+  private static cloneSource(item: BookSource): BookSource {
+    return {
+      bookSourceUrl: item.bookSourceUrl,
+      bookSourceName: item.bookSourceName,
+      bookSourceGroup: item.bookSourceGroup,
+      bookSourceType: item.bookSourceType,
+      enabled: item.enabled,
+      customOrder: item.customOrder,
+      sourceJson: item.sourceJson
+    };
+  }
+
+  /** 切换单条启停，整表写回。 */
+  private async toggleSource(source: BookSource, enabled: boolean): Promise<void> {
+    const next = this.allSources.map((item: BookSource) => {
+      if (item.bookSourceUrl !== source.bookSourceUrl) { return item; }
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.enabled = enabled;
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  /** 置顶/置底：把 urls 里的行移到列表首尾，并按新顺序重排 customOrder。 */
+  private async moveToEdge(urls: string[], toTop: boolean): Promise<void> {
+    const moving = this.allSources.filter((item: BookSource) => urls.includes(item.bookSourceUrl));
+    const rest = this.allSources.filter((item: BookSource) => !urls.includes(item.bookSourceUrl));
+    const reordered: BookSource[] = [];
+    if (toTop) {
+      moving.forEach((item: BookSource) => reordered.push(item));
+      rest.forEach((item: BookSource) => reordered.push(item));
+    } else {
+      rest.forEach((item: BookSource) => reordered.push(item));
+      moving.forEach((item: BookSource) => reordered.push(item));
+    }
+    const next = reordered.map((item: BookSource, index: number) => {
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.customOrder = index + 1;
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  /** 拖拽重排：from/to 是 visibleSourceRows 的下标，把该行对应源移到目标位置。 */
+  private async onSourceMove(from: number, to: number): Promise<void> {
+    const fromRow = this.visibleSourceRows[from];
+    const toRow = this.visibleSourceRows[to];
+    if (fromRow === undefined || toRow === undefined || from === to) { return; }
+    const reordered = this.allSources.slice();
+    const fromIndex = reordered.findIndex((item: BookSource) => item.bookSourceUrl === fromRow.source.bookSourceUrl);
+    const toIndex = reordered.findIndex((item: BookSource) => item.bookSourceUrl === toRow.source.bookSourceUrl);
+    if (fromIndex < 0 || toIndex < 0) { return; }
+    const moved = reordered.splice(fromIndex, 1)[0];
+    if (moved === undefined) { return; }
+    reordered.splice(toIndex, 0, moved);
+    const base = reordered.reduce((min: number, item: BookSource) => Math.min(min, item.customOrder), 0);
+    const next = reordered.map((item: BookSource, index: number) => {
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.customOrder = base + index;
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  /** 置顶/置底/开关/发现/分组的批量实现。 */
+  private async setEnabledForSelection(enabled: boolean): Promise<void> {
+    const next = this.allSources.map((item: BookSource) => {
+      if (!this.selectedUrls.has(item.bookSourceUrl)) { return item; }
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.enabled = enabled;
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  private async setExploreForSelection(enabled: boolean): Promise<void> {
+    const next = this.allSources.map((item: BookSource) => {
+      if (!this.selectedUrls.has(item.bookSourceUrl)) { return item; }
+      const parsed = BookSourceManagePage.parseJson(item.sourceJson);
+      parsed['enabledExplore'] = enabled;
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.sourceJson = JSON.stringify(parsed);
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  private async setGroupForSelection(group: string, add: boolean): Promise<void> {
+    const next = this.allSources.map((item: BookSource) => {
+      if (!this.selectedUrls.has(item.bookSourceUrl)) { return item; }
+      const groups = (item.bookSourceGroup ?? '').split(',').map((g: string) => g.trim()).filter((g: string) => g.length > 0);
+      let result: string[];
+      if (add) {
+        result = groups.includes(group) ? groups.slice() : groups.concat([group]);
+      } else {
+        result = groups.filter((g: string) => g !== group);
+      }
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.bookSourceGroup = result.join(',');
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  private static parseJson(json: string): Record<string, Object> {
+    try {
+      return JSON.parse(json) as Record<string, Object>;
+    } catch (_) {
+      return {} as Record<string, Object>;
+    }
+  }
+
+  /** 改某条的发现开关。 */
+  private async toggleExplore(source: BookSource): Promise<void> {
+    const parsed = BookSourceManagePage.parseJson(source.sourceJson);
+    parsed['enabledExplore'] = BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') !== 'true';
+    const next = this.allSources.map((item: BookSource) => {
+      if (item.bookSourceUrl !== source.bookSourceUrl) { return item; }
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.sourceJson = JSON.stringify(parsed);
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  /** 删除一条（确认后）。 */
+  private async deleteSource(source: BookSource): Promise<void> {
+    const next = this.allSources.filter((item: BookSource) => item.bookSourceUrl !== source.bookSourceUrl);
+    await this.commitSources(next);
+  }
+
+  /** 选中首尾之间的区间。 */
+  private selectInterval(): void {
+    const urls = this.visibleSourceRows.map((row: SourceRow) => row.source.bookSourceUrl);
+    const selectedIndices: number[] = [];
+    urls.forEach((url: string, index: number) => {
+      if (this.selectedUrls.has(url)) { selectedIndices.push(index); }
+    });
+    if (selectedIndices.length === 0) { return; }
+    const first = Math.min(...selectedIndices);
+    const last = Math.max(...selectedIndices);
+    const next = new Set<string>(this.selectedUrls);
+    for (let i = first; i <= last; i++) { next.add(urls[i]); }
+    this.selectedUrls = next;
+  }
+
+  /** 批量导出为 JSON 文件。 */
+  private async exportSelection(): Promise<void> {
+    const selected = this.allSources.filter((item: BookSource) => this.selectedUrls.has(item.bookSourceUrl));
+    if (selected.length === 0) { this.onUnavailableAction('请先选择要导出的书源'); return; }
+    const text = BookSourceRepository.exportRules(selected);
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) { return; }
+      const file = fileIo.openSync(`${context.filesDir}/book_sources_export.json`,
+        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+      try { fileIo.writeSync(file.fd, text); } finally { fileIo.closeSync(file); }
+      this.onUnavailableAction(`已导出 ${selected.length} 条书源到应用文件目录`);
+    } catch (error) {
+      this.onUnavailableAction('导出失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  /** 条目菜单动作分发。 */
+  private onSourceRowAction(key: string, row: SourceRow): void {
+    const source = row.source;
+    if (key === 'top' || key === 'bottom') {
+      this.moveToEdge([source.bookSourceUrl], key === 'top');
+    } else if (key === 'login') {
+      this.onUnavailableAction('书源登录在 P9 实现');
+    } else if (key === 'search') {
+      this.onOpenSourceSearch(source.bookSourceName, source.bookSourceUrl);
+    } else if (key === 'debug') {
+      this.onUnavailableAction('调试页在 P10 实现');
+    } else if (key === 'delete') {
+      this.deleteSource(source);
+    } else if (key === 'explore') {
+      this.toggleExplore(source);
+    }
+    this.menuRowUrl = '';
+  }
+
+  /** 批量动作完成后收起面板并退出多选，避免面板残留在已关闭多选的列表上。 */
+  private exitSelectionMode(): void {
+    this.batchPanelVisible = false;
+    this.selectionMode = false;
+    this.selectedUrls = new Set<string>();
+  }
+
+  /** 多选面板动作分发。面板与多选状态由这里统一收口，onClick 只做分发。 */
+  private onBatchAction(key: string): void {
+    if (key === 'enable') { this.setEnabledForSelection(true); this.exitSelectionMode(); }
+    else if (key === 'disable') { this.setEnabledForSelection(false); this.exitSelectionMode(); }
+    else if (key === 'explore_on') { this.setExploreForSelection(true); this.exitSelectionMode(); }
+    else if (key === 'explore_off') { this.setExploreForSelection(false); this.exitSelectionMode(); }
+    else if (key === 'group_add') {
+      this.promptText = '';
+      this.promptAction = (value: string) => { this.setGroupForSelection(value, true); };
+      this.batchPanelVisible = false;
+      this.promptVisible = true;
+    } else if (key === 'group_remove') {
+      this.promptText = '';
+      this.promptAction = (value: string) => { this.setGroupForSelection(value, false); };
+      this.batchPanelVisible = false;
+      this.promptVisible = true;
+    } else if (key === 'top') { this.moveToEdge(Array.from(this.selectedUrls), true); this.exitSelectionMode(); }
+    else if (key === 'bottom') { this.moveToEdge(Array.from(this.selectedUrls), false); this.exitSelectionMode(); }
+    else if (key === 'interval') { this.selectInterval(); this.batchPanelVisible = false; }
+    else if (key === 'check') { this.onUnavailableAction('批量校验在后续版本提供'); this.exitSelectionMode(); }
+    else if (key === 'export') { this.exportSelection(); this.exitSelectionMode(); }
+  }
 
   private groupFilterOptions(): string[] {
     const options: string[] = ['全部', '启用', '禁用', '需要登录', '未分组', '发现已启用', '发现未启用'];
@@ -121,6 +523,149 @@ export struct BookSourceManagePage {
     } else if (key === 'descending') {
       this.sortDescending = !this.sortDescending;
     }
+  }
+
+  // ---------- P4 UI Builders ----------
+
+  /** 三种面板（分组筛选、批量、分组名输入）合并到一个 bindSheet 的内容。 */
+  @Builder
+  private SourceSheetContent() {
+    if (this.promptVisible) {
+      this.PromptDialog()
+    } else if (this.batchPanelVisible) {
+      this.BatchPanel()
+    } else if (this.showGroupFilter) {
+      this.GroupFilterSheet()
+    }
+  }
+
+  /** 条目行：书名、域名、分组、发现态圆点、启停开关；长按进多选。 */
+  @Builder
+  private SourceRowView(row: SourceRow, index: number) {
+    Row() {
+      if (this.selectionMode) {
+        Stack({ alignContent: Alignment.Center }) {
+          Row().width(20).height(20).borderRadius(10)
+            .border({ width: 1.5, color: this.selectedUrls.has(row.source.bookSourceUrl) ? '#B9C8FF' : '#858792' })
+            .backgroundColor(this.selectedUrls.has(row.source.bookSourceUrl) ? '#B9C8FF' : Color.Transparent)
+          if (this.selectedUrls.has(row.source.bookSourceUrl)) {
+            AppGlyph({ name: 'profileCheck', glyphSize: 13, tint: '#151720' })
+          }
+        }.width(24).margin({ right: 10 })
+          .onClick(() => {
+            const next = new Set<string>(this.selectedUrls);
+            if (next.has(row.source.bookSourceUrl)) { next.delete(row.source.bookSourceUrl); }
+            else { next.add(row.source.bookSourceUrl); }
+            this.selectedUrls = next;
+          })
+      }
+      Column() {
+        Row() {
+          Text(row.source.bookSourceName.length > 0 ? row.source.bookSourceName : row.source.bookSourceUrl)
+            .fontSize(15).fontColor(this.themeColorTextPrimary).maxLines(1).layoutWeight(1)
+          if (row.hasExplore && row.exploreEnabled) {
+            Row().width(7).height(7).borderRadius(4).backgroundColor('#4CAF50').margin({ left: 6 })
+          }
+        }.width('100%')
+        if (row.domain.length > 0 || (row.source.bookSourceGroup ?? '').length > 0) {
+          Row() {
+            if (row.domain.length > 0) {
+              Text(row.domain).fontSize(12).fontColor(this.themeColorTextTertiary).maxLines(1)
+            }
+            if ((row.source.bookSourceGroup ?? '').length > 0) {
+              Text(row.source.bookSourceGroup as string).fontSize(12).fontColor(this.themeColorTextTertiary)
+                .maxLines(1).margin({ left: 8 })
+            }
+          }.width('100%').margin({ top: 5 })
+        }
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      UiSwitchControl({ checked: row.source.enabled, interactive: false, scaleValue: 0.8 })
+        .onClick(() => this.toggleSource(row.source, !row.source.enabled))
+      AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary }).margin({ left: 10 })
+        .onClick(() => { this.menuRowUrl = row.source.bookSourceUrl; })
+        .bindPopup(this.menuRowUrl === row.source.bookSourceUrl, {
+          builder: () => { this.SourceRowMenu(row); },
+          placement: Placement.BottomRight,
+          popupColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+          enableArrow: false,
+          autoCancel: true,
+          width: PROFILE_MENU_WIDTH,
+          onStateChange: (event: PopupStateChangeParam) => {
+            if (!event.isVisible) { this.menuRowUrl = ''; }
+          }
+        })
+    }.width('100%').padding({ left: 16, right: 12, top: 11, bottom: 11 })
+      .backgroundColor(this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)
+      .borderRadius(12)
+      .gesture(LongPressGesture().onAction(() => {
+        if (!this.selectionMode) { this.selectionMode = true; }
+        const next = new Set<string>(this.selectedUrls);
+        next.add(row.source.bookSourceUrl);
+        this.selectedUrls = next;
+      }))
+  }
+
+  /** 条目 7 项菜单。 */
+  @Builder
+  private SourceRowMenu(row: SourceRow) {
+    Column() {
+      UiMenuItemView({ title: '置顶', onSelect: () => this.onSourceRowAction('top', row) })
+      UiMenuItemView({ title: '置底', onSelect: () => this.onSourceRowAction('bottom', row) })
+      if (row.hasLogin) {
+        UiMenuItemView({ title: '登录', onSelect: () => this.onSourceRowAction('login', row) })
+      }
+      UiMenuItemView({ title: '搜索', onSelect: () => this.onSourceRowAction('search', row) })
+      UiMenuItemView({ title: '调试', onSelect: () => this.onSourceRowAction('debug', row) })
+      UiMenuItemView({ title: '编辑', onSelect: () => this.onUnavailableAction('编辑页在 P5 实现') })
+      UiMenuItemView({ title: '删除', onSelect: () => this.onSourceRowAction('delete', row) })
+      if (row.hasExplore) {
+        UiMenuItemView({ title: row.exploreEnabled ? '禁用发现' : '启用发现',
+          onSelect: () => this.onSourceRowAction('explore', row) })
+      }
+    }
+  }
+
+  /** 多选批量 11 项面板。 */
+  @Builder
+  private BatchPanel() {
+    Column() {
+      UiMenuItemView({ title: '启用所选', onSelect: () => this.onBatchAction('enable') })
+      UiMenuItemView({ title: '禁用所选', onSelect: () => this.onBatchAction('disable') })
+      UiMenuItemView({ title: '启用发现', onSelect: () => this.onBatchAction('explore_on') })
+      UiMenuItemView({ title: '禁用发现', onSelect: () => this.onBatchAction('explore_off') })
+      UiMenuItemView({ title: '添加分组', onSelect: () => this.onBatchAction('group_add') })
+      UiMenuItemView({ title: '移除分组', onSelect: () => this.onBatchAction('group_remove') })
+      UiMenuItemView({ title: '置顶所选', onSelect: () => this.onBatchAction('top') })
+      UiMenuItemView({ title: '置底所选', onSelect: () => this.onBatchAction('bottom') })
+      UiMenuItemView({ title: '选中所选区间', onSelect: () => this.onBatchAction('interval') })
+      UiMenuItemView({ title: '校验书源', onSelect: () => this.onBatchAction('check') })
+      UiMenuItemView({ title: '导出', onSelect: () => this.onBatchAction('export') })
+    }
+  }
+
+  /** 分组名输入对话框。 */
+  @Builder
+  private PromptDialog() {
+    Column() {
+      Text(this.promptAction === undefined ? '' : '输入分组名')
+        .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      TextInput({ placeholder: '分组名', text: this.promptText })
+        .fontSize(15).fontColor(this.themeColorTextPrimary)
+        .onChange((value: string) => this.promptText = value)
+        .margin({ top: 14 })
+      Row() {
+        Text('取消').fontSize(15).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+          .onClick(() => this.promptVisible = false)
+        Text('确定').fontSize(15).fontColor('#B9C8FF').layoutWeight(1)
+          .onClick(() => {
+            const value = this.promptText.trim();
+            if (value.length > 0) { this.promptAction(value); }
+            this.promptVisible = false;
+            this.selectionMode = false;
+          })
+      }.width('100%').margin({ top: 18 })
+    }.padding(20).backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
+      .borderRadius(16)
   }
 
   @Builder
@@ -221,25 +766,60 @@ export struct BookSourceManagePage {
         }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 5 })
       }
 
-      ModuleEmpty({
-        icon: 'web',
-        title: this.searchQuery.length > 0 ? '没有匹配的书源' : '暂无书源',
-        detail: this.searchQuery.length > 0 ? '调整关键词或筛选条件后重试' : '添加或导入书源后，会在这里显示书源名称、分组和启用状态'
-      }).layoutWeight(1)
-      Row() {
-        Image($r('app.media.app_add')).width(18).height(18).fillColor('#151720')
-        Text('添加书源').fontSize(15).fontColor('#151720').margin({ left: 7 })
-      }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
-        .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 }).alignSelf(ItemAlign.End)
-        .onClick(() => this.onUnavailableAction('书源编辑和保存尚未迁移，未创建书源'))
+      if (this.visibleSourceRows.length === 0) {
+        ModuleEmpty({
+          icon: 'web',
+          title: this.searchQuery.length > 0 ? '没有匹配的书源' : '暂无书源',
+          detail: this.searchQuery.length > 0 ? '调整关键词或筛选条件后重试' : '添加或导入书源后，会在这里显示书源名称、分组和启用状态'
+        }).layoutWeight(1)
+      } else {
+        Stack({ alignContent: Alignment.BottomEnd }) {
+          List({ space: 8, scroller: this.sourceScroller }) {
+            LazyForEach(this.sourceDataSource, (row: SourceRow, index: number) => {
+              ListItem() {
+                this.SourceRowView(row, index)
+              }
+              .swipeAction({ end: this.SourceSwipeEnd(row) })
+            }, (row: SourceRow) => row.source.bookSourceUrl)
+            // onMove 挂在 ForEach/LazyForEach 上，仅手动排序非分组时可拖。
+            .onMove(this.canReorder() ? (from: number, to: number) => this.onSourceMove(from, to) : undefined)
+          }.layoutWeight(1).width('100%')
+            .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).scrollBar(BarState.Off)
+
+          if (this.selectionMode) {
+            Row() {
+              Text(`已选 ${this.selectedUrls.size} 项`).fontSize(14).fontColor('#151720').layoutWeight(1)
+              Text('批量操作').fontSize(14).fontColor('#151720')
+                .onClick(() => { this.batchPanelVisible = true; })
+              Text('取消').fontSize(14).fontColor('#333').margin({ left: 16 })
+                .onClick(() => { this.selectionMode = false; this.selectedUrls = new Set<string>(); })
+            }.padding({ left: 18, right: 18, top: 12, bottom: 12 })
+              .backgroundColor('#B9C8FF').borderRadius(16)
+              .margin({ right: 16, bottom: 16 })
+          } else {
+            Row() {
+              Image($r('app.media.app_add')).width(18).height(18).fillColor('#151720')
+              Text('添加书源').fontSize(15).fontColor('#151720').margin({ left: 7 })
+            }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
+              .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 })
+              .onClick(() => this.onUnavailableAction('书源编辑页在 P5 实现'))
+          }
+        }.layoutWeight(1)
+      }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.showGroupFilter, this.GroupFilterSheet(), {
-        height: SheetSize.MEDIUM,
-        dragBar: true,
-        showClose: false,
-        backgroundColor: '#17181E',
-        onDisappear: () => this.showGroupFilter = false
-      })
+      // 一个组件只能挂一个 bindSheet（本项目已踩坑），三种面板合并按状态切换内容。
+      .bindSheet(this.showGroupFilter || this.batchPanelVisible || this.promptVisible,
+        this.SourceSheetContent(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: true,
+          backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+          onDisappear: () => {
+            this.showGroupFilter = false;
+            this.batchPanelVisible = false;
+            this.promptVisible = false;
+          }
+        })
   }
 }
 
@@ -5556,6 +6136,23 @@ struct ModuleTab {
     Text(this.label).fontSize(16).fontColor(this.selected ? '#E1E5F3' : '#A4A6B0')
       .textAlign(TextAlign.Center).layoutWeight(1).padding({ top: 9, bottom: 9 })
       .backgroundColor(this.selected ? '#41485D' : this.themeColorSurfaceSecondary).borderRadius(20).margin({ right: 7 })
+      .onClick(() => this.onSelect())
+  }
+}
+
+/** P4 菜单里的一行（条目菜单与批量面板共用），点一下回传 onClick。 */
+@Component
+struct UiMenuItemView {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @Prop title: string = '';
+  onSelect: () => void = () => {};
+  build() {
+    Row() {
+      Text(this.title).fontSize(14).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+    }.width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 })
+      .borderRadius(8).backgroundColor(this.themeColorSurfaceTertiary)
+      .margin({ bottom: 6 })
       .onClick(() => this.onSelect())
   }
 }
