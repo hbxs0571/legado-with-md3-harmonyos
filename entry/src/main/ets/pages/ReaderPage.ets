@@ -1,3 +1,5 @@
+// 批 4：M3 派生色位（移植自 material-color-utilities，Apache-2.0）；菜单底色按种子色派生
+import { resolveDynamicColor, M3PaletteStyle, M3ColorSlot } from '../reader/m3/index';
 import { Book } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
@@ -487,6 +489,9 @@ export struct ReaderPage {
   @State contentProcesses: BookContentProcess[] = [];
   @State readerHighlightRules: ReaderHighlightRule[] = [];
   @State readerHighlightRanges: ReaderHighlightRange[] = [];
+  // 批8 D 组（:923）：当前排版名（本地 = 背景样式名），由 Index 传入；
+  // 高亮规则按 configName 是否包含它决定是否生效（空 = 全局规则恒生效）。
+  @Prop @Watch('onCurrentConfigNameChanged') currentConfigName: string = '';
   // 命中排版（字号偏移 + 行上下距）的分页度量表，跟着 readerHighlightRanges 一起重算。
   private readerSizeOffsets: LocalReaderSizeOffset[] = [];
   @State highlightRuleSheetVisible: boolean = false;
@@ -1641,25 +1646,29 @@ export struct ReaderPage {
       const custom = this.readerMenuIsNight() ? this.readMenuBgColorNight : this.readMenuBgColor;
       if (custom.length > 0) { return custom; }
       // 种子档（`readMenuColorMode == 0`）：上游 `rememberCustomReadMenuTheme`
-      // （`ReadBookColorTheme.kt:112-161`）用强调色作 seed 派生整套色位，
-      // 所以 `surfaceContainerHigh` 仍跟着强调色走。本地没有派生能力，直接拿强调色顶替
-      // ——这是 KI-THEME3 第 8 条，保留原行为不当作修好。
-      if (this.readMenuColorMode === 0) { return this.readerMenuAccentTint(); }
+      // （`ReadBookColorTheme.kt:152-161`）用强调色作 seed 派生整套色位，
+      // 菜单底色取派生方案的 `surfaceContainerHigh`。批 4 已移植派生能力，按同语义派生。
+      if (this.readMenuColorMode === 0) {
+        // paletteStyle 本地无对应 prop，按上游默认 tonalSpot（`ThemeSettings.kt:7`）接入。
+        const accent: string = this.readerMenuAccentTint();
+        return resolveDynamicColor(accent, this.readerMenuIsNight(), 'tonalSpot' as M3PaletteStyle,
+          'surfaceContainerHigh' as M3ColorSlot);
+      }
       // 上游 `readMenuBackgroundColor`（`ReadBookColorTheme.kt:304-310`）未设置时回落
       // `durConfig.menuBgColor(isNight)`，其默认值见 `ReadBookConfig.kt:540-546`：
       // 日 `#EEEFE3` / 夜 `#BFCBAD`（草野配色的 light surface / dark surface）。
       return this.readerMenuIsNight() ? '#BFCBAD' : '#EEEFE3';
     }
     if (this.readBarStyle === 1) {
-      // 上游 `ReadBookColorTheme.kt:106`/`:160` 以纸色为 seed 派生整套色位
+      // 上游 `ReadBookColorTheme.kt:66-106` 以纸色为 seed 派生整套色位
       // （`deriveDarkFromColor = false`，明暗取应用主题 `ReadBookColorTheme.kt:208`/`:217`），
       // 菜单底色 = 派生方案的 `surfaceContainerHigh`（`ReadBookMenuBar.kt:1034`/`:1038`，
       // tone 日 92 / 夜 17，见 material-color-utilities `color_spec_2021.ts:222-231`）。
-      // 本地未移植 M3 派生（ArkUI SDK 无种子色派生 API，上游走 material-kolor 库），
-      // 只对齐「色位」与「明暗」两件事：读应用主题的 `surfaceContainerHigh`
-      // （`themeColorSurfaceElevated`，绑定见 `ThemePalette.ets:908`）。
-      // 未还原 seed 派生：色位不随纸色色相变化——用户换纸色后菜单底色不变。
-      return this.themeColorSurfaceElevated;
+      // 批 4：本地已移植派生能力，色位随纸色色相变化。
+      // paletteStyle 本地无对应 prop，按上游默认 tonalSpot（`ThemeSettings.kt:7`）接入。
+      // 明暗取应用主题（`readerMenuIsNight()` ↔ `readerNightMode`），与上游 deriveDarkFromColor=false 同口径。
+      return resolveDynamicColor(this.paperColor, this.readerMenuIsNight(), 'tonalSpot' as M3PaletteStyle,
+        'surfaceContainerHigh' as M3ColorSlot);
     }
     // style 0：上游 `rememberReadBookColorTheme` 返回 null → 完全继承应用主题，
     // 菜单底色即应用主题的 `surfaceContainerHigh`，本地对应 `themeColorSurfaceElevated`。
@@ -2808,7 +2817,8 @@ export struct ReaderPage {
       : LocalTextSemantics.parse(this.content, this.paragraphIndent, this.adaptSpecialStyle);
     if (!reuseSemantic) {
       this.localSemanticContent = document.content;
-      const nextRanges = ReaderHighlightRuleEngine.findBodyRanges(document.content, this.readerHighlightRules);
+      const nextRanges = ReaderHighlightRuleEngine.findBodyRanges(
+        document.content, this.readerHighlightRules, this.currentConfigName);
       if (nextRanges.length !== this.readerHighlightRanges.length) {
         this.readerContentRevision++;
       }
@@ -6207,7 +6217,8 @@ export struct ReaderPage {
     if (context === undefined) { return; }
     const rules = await ReaderHighlightRuleRepository.load(context);
     this.readerHighlightRules = rules;
-    this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(this.localSemanticContent, rules);
+    this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(
+      this.localSemanticContent, rules, this.currentConfigName);
     this.readerSizeOffsets = this.buildReaderSizeOffsets();
     // 滚动模式的内容 ForEach 以 readerContentRevision 为 key，规则变化必须递增才会重建 Span。
     this.readerContentRevision++;
@@ -6223,7 +6234,8 @@ export struct ReaderPage {
     }
     const saved = await ReaderHighlightRuleRepository.save(context, rules);
     this.readerHighlightRules = saved;
-    this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(this.localSemanticContent, saved);
+    this.readerHighlightRanges = ReaderHighlightRuleEngine.findBodyRanges(
+      this.localSemanticContent, saved, this.currentConfigName);
     this.readerSizeOffsets = this.buildReaderSizeOffsets();
     this.readerContentRevision++;
     this.rebuildReaderPages();

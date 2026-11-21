@@ -177,3 +177,13 @@
 - 许可：该参考工程以 GPL-3.0 发布，与本仓库许可兼容，按 GPL-3.0 条款使用。
 - 使用方式：**只借鉴算法思路并按本地接口重写**，没有把参考工程任何文件整份复制进本仓库；本地文件用 `@kit.ArkGraphics2D` 的 `text` 命名导出（参考工程用 `@ohos.graphics.text` 默认导出），并受本地 API 12 基线约束（不使用 `ParagraphStyle.lineSpacing`（since 21）、`includeFontPadding`（since 23）、`trailingSpaceOptimized` / `autoSpace` / `verticalAlign`（since 20））。
 - 未引入：参考工程的对外页面类型（`ReaderV2PageLayout` / `ReaderV2PageFragment`）、`reader*` 偏好键、标题分段、正则字体气泡与 `imageMinHeightPx` 混合页、`FrameNode.onDraw` 渲染通道，以及它对 `@legado/sourceengine` 子模块的依赖。
+
+## 菜单取色 M3 派生算法
+
+`entry/src/main/ets/reader/m3/` 下的 29 个 `.ets` 文件（HCT / CAM16 / tonal palette / 9 个 scheme 变体 / color spec 2021 / dynamic color）是 [material-foundation/material-color-utilities](https://github.com/material-foundation/material-color-utilities) TypeScript 实现的逐行移植，用于阅读器菜单按种子色派生 M3 色位（`surfaceContainerHigh` 等）。
+
+- 许可：**Apache-2.0**（Google LLC，各源文件头部保留 `@license Copyright ... Google LLC` 及 Apache-2.0 声明），与本仓库 GPL-3.0 兼容；许可全文见 `licenses/Apache-2.0.txt`。
+- 版本：以 `main` 分支 TypeScript 实现为准，移植日期 2026-11-22。上游 legado-with-MD3 使用 `com.materialkolor:material-kolor` 5.0.1（其算法源自本项目）。
+- 使用方式：**保留全部数值公式、tone 表、palette 规则原样**，仅做 ArkTS 严格模式语法适配（构造函数参数属性展开、解构展开、类型显式化）；未改写任何算法常量。
+- 验证：对 6 个种子 × 日夜 × 31 个关键色位共 372 项与官方 golden 逐位比对全部一致（0 误差），派生单色位耗时 < 5ms；验证集与脚本见工作区 `tmp/menu-color-golden/`，不随 HAP 打包。
+- 未引入：`color_spec_2025.ts` / `color_spec_2026.ts` 独立实现（菜单链只用 2021 色位规范，已证 34 色位上 2021 与 2026 取值一致）。
