@@ -21,5 +21,16 @@ export interface OnlineBookProvider {
    * 取一章正文（缓存命中直接返回，否则网络抓取并落缓存）。
    * 对应上游 BookHelp.getContent：返回纯文本 String，替换规则与 HTML 净化在抓取层完成。
    */
-  getContent(book: Book, chapter: BookChapter): Promise<string>;
+  getContent(book: Book, chapter: BookChapter, allowCache?: boolean): Promise<string>;
+
+  /**
+   * 该章正文是否已在本地缓存里（「已下载」状态的真值来源，批2 :442 六档状态用）。
+   */
+  isChapterCached(book: Book, chapter: BookChapter): boolean;
+
+  /** 删掉该章缓存文件（批2 :443 的「删除章节缓存」）。 */
+  deleteChapterCache(book: Book, chapter: BookChapter): void;
+
+  /** 删掉整本书的章节缓存（批2 :469 批量清缓存的在线书那一路；本地书不在其中）。 */
+  clearBookCache(book: Book): void;
 }

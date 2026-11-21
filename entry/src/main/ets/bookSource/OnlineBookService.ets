@@ -87,7 +87,56 @@ export class OnlineBookService implements OnlineBookProvider {
     return rows;
   }
 
-  async getContent(book: Book, chapter: BookChapter): Promise<string> {
+  /**
+   * 批2（:442）：缓存文件在不在，就是「已下载」这一档的真值。
+   * 不读内容，只 access，够快，列表里逐章判也不卡。
+   */
+  isChapterCached(book: Book, chapter: BookChapter): boolean {
+    try {
+      return fileIo.accessSync(this.chapterFile(book, chapter));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** 批2（:443）：删除单章缓存文件；删不掉（不存在/被占用）静默。 */
+  deleteChapterCache(book: Book, chapter: BookChapter): void {
+    try {
+      const file = this.chapterFile(book, chapter);
+      if (fileIo.accessSync(file)) {
+        fileIo.unlinkSync(file);
+      }
+    } catch (_) {
+    }
+  }
+
+  /**
+   * 批2（:469）：清整本书的章节缓存。只删 bookDir 下的 .nb，不删目录本身，
+   * 也不碰本地书的 contentPath —— 调用方（Index.deleteSelectedBookCaches）已经按 isLocal 分过流，
+   * 这里的入参只应是在线书。
+   */
+  clearBookCache(book: Book): void {
+    try {
+      const dir = this.bookDir(book);
+      if (!fileIo.accessSync(dir)) {
+        return;
+      }
+      const names = fileIo.listFileSync(dir);
+      for (let index = 0; index < names.length; index++) {
+        const name = names[index];
+        if (!name.endsWith('.nb')) {
+          continue;
+        }
+        try {
+          fileIo.unlinkSync(`${dir}/${name}`);
+        } catch (_) {
+        }
+      }
+    } catch (_) {
+    }
+  }
+
+  async getContent(book: Book, chapter: BookChapter, allowCache: boolean = true): Promise<string> {
     const file = this.chapterFile(book, chapter);
     // ① 缓存优先：对应上游 BookHelp.getContent 先读 cachedChapterContentFile。
     try {
@@ -109,6 +158,10 @@ export class OnlineBookService implements OnlineBookProvider {
       throw new Error('在线正文为空');
     }
     // ③ 落缓存：对应上游 BookHelp.saveContent/saveText。
+    // 批2（:455）：队列被停止后不许再写缓存文件，所以这一句要看 allowCache。
+    if (!allowCache) {
+      return raw;
+    }
     try {
       const f = fileIo.openSync(file, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
       try {
