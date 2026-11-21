@@ -1623,8 +1623,13 @@ export struct ReaderPage {
    * 它全仓只有 `ReadBookController.kt:1904` 一个消费点，用来决定状态栏图标明暗。
    * r353 前本地照抄了它，属取错对象（KI-THEME3 第 1 条）。
    *
-   * 第 1/2 条仍未修：style 1 的 `surfaceContainerHigh` 是「纸色作种子派生」出来的 tonal 值，
-   * 本地没有 M3 派生能力，只能保留 `paperColor` 原值（比上游少「深一档」的层次）。
+   * 第 1/2/8 条（批 2）：只对齐「色位」与「明暗」，seed 派生（批 4）未做。
+   * 上游 `ReadBookColorTheme.kt:106`/`:160` 的 `deriveDarkFromColor = false` 让明暗取应用主题
+   * （`ReadBookColorTheme.kt:208`/`:217` 的 `fallbackDark = LegadoTheme.isDark`），
+   * 纸色只作 seed；菜单底色 = 派生方案的 `surfaceContainerHigh`（`ReadBookMenuBar.kt:1034`/`:1038`，
+   * tone 日 92 / 夜 17，见 material-color-utilities `color_spec_2021.ts:222-231`）。
+   * 本地读应用主题的 `themeColorSurfaceElevated`（绑定见 `ThemePalette.ets:908`），色位同名、明暗同源；
+   * 未还原 seed 派生，色位不随纸色色相变化——用户换纸色后菜单底色不变。
    */
   private readerMenuBaseColor(): string {
     // 模糊层着色优先级最高。上游 `ReadBookMenuBarShared.kt:52` 与
@@ -1646,7 +1651,15 @@ export struct ReaderPage {
       return this.readerMenuIsNight() ? '#BFCBAD' : '#EEEFE3';
     }
     if (this.readBarStyle === 1) {
-      return this.paperColor;
+      // 上游 `ReadBookColorTheme.kt:106`/`:160` 以纸色为 seed 派生整套色位
+      // （`deriveDarkFromColor = false`，明暗取应用主题 `ReadBookColorTheme.kt:208`/`:217`），
+      // 菜单底色 = 派生方案的 `surfaceContainerHigh`（`ReadBookMenuBar.kt:1034`/`:1038`，
+      // tone 日 92 / 夜 17，见 material-color-utilities `color_spec_2021.ts:222-231`）。
+      // 本地未移植 M3 派生（ArkUI SDK 无种子色派生 API，上游走 material-kolor 库），
+      // 只对齐「色位」与「明暗」两件事：读应用主题的 `surfaceContainerHigh`
+      // （`themeColorSurfaceElevated`，绑定见 `ThemePalette.ets:908`）。
+      // 未还原 seed 派生：色位不随纸色色相变化——用户换纸色后菜单底色不变。
+      return this.themeColorSurfaceElevated;
     }
     // style 0：上游 `rememberReadBookColorTheme` 返回 null → 完全继承应用主题，
     // 菜单底色即应用主题的 `surfaceContainerHigh`，本地对应 `themeColorSurfaceElevated`。
