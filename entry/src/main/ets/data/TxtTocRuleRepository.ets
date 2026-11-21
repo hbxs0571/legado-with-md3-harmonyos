@@ -715,6 +715,33 @@ export class TxtTocRuleRepository {
   }
 
   /**
+   * 把章节规则编译成「单行是否命中」的判定函数，供流式扫描器按行调用。
+   *
+   * 与 `splitChapterStarts` 的逐行判定逐字一致（同样用未 trim 的原始行、同样
+   * `line.trim().length > 0` 前置过滤），区别只是不要求整本正文在内存里。
+   * 规则为空或编译失败时返回恒 false，与 `splitChapterStarts` 返回空数组等价。
+   */
+  static compileTitleMatcher(chapterRule: string): (line: string) => boolean {
+    const pattern = chapterRule.trim();
+    if (pattern.length === 0) {
+      return (_line: string): boolean => false;
+    }
+    let regex: RegExp;
+    try {
+      regex = TxtTocRuleRepository.compileRegex(pattern, 'm');
+    } catch (_) {
+      return (_line: string): boolean => false;
+    }
+    return (line: string): boolean => {
+      if (line.trim().length === 0) {
+        return false;
+      }
+      regex.lastIndex = 0;
+      return regex.test(line);
+    };
+  }
+
+  /**
    * 读取打包在 rawfile 里的内置规则库。
    * 读不到或解析失败时返回空数组，由调用方提示，不阻断规则页其它操作。
    */

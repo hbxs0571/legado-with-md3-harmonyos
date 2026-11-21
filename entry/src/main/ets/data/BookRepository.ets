@@ -20,6 +20,7 @@ import { RdbStore } from './RdbStore';
 import { CacheSettingsRepository } from './CacheSettingsRepository';
 import { BookGroupRepository } from './BookGroupRepository';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
+import { FileByteRangeSource, TxtChapterScanner } from './TxtChapterScanner';
 import { OnlineBookProvider } from './OnlineBookProvider';
 
 /**
@@ -2064,7 +2065,11 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
-      const split = BookRepository.splitChapters(content, chapterRule, book.splitLongChapter !== false);
+      // 切章改流式（1007）：整本 content 仍要读，是因为后面还要算 totalWordCount 与无目录回落，
+      // 但切章本身不再依赖 content.split('\n') 生成的全书行数组。
+      const split = BookRepository.splitChaptersStreaming(book.contentPath,
+        normalizedCharset.length > 0 ? normalizedCharset : undefined,
+        chapterRule, book.splitLongChapter !== false);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
       chapterVolumes = split.volumes;
@@ -2938,7 +2943,9 @@ private static async applyChapterContentAsync(
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
-      const split = BookRepository.splitChapters(content, chapterRule, book.splitLongChapter !== false);
+      // 切章改流式（1007）；整本 content 仍要读，因为下面还要算位置映射与 totalWordCount。
+      const split = BookRepository.splitChaptersStreaming(book.contentPath, book.charset,
+        chapterRule, book.splitLongChapter !== false);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
       chapterVolumes = split.volumes;
@@ -3038,7 +3045,11 @@ static refreshNoTocBook(book: Book, maxLengthWithNoToc: number,
       return { book: book, chapters: [], content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
     }
     const content = BookRepository.readTextFile(book.contentPath, book.charset);
-    if (BookRepository.splitChapters(content, BookRepository.resolveChapterRule(undefined, content)).offsets.length > 0) {
+    // 这里只要判「有没有目录标题」，命中第一个标题就该停（1007 的探测短路）：
+    // 传 stopAfterFirstHit = true 后不再扫完整个文件，也不再生成全书行数组。
+    const probeRule = BookRepository.resolveChapterRule(undefined, content);
+    if (BookRepository.splitChaptersStreaming(book.contentPath, book.charset, probeRule, false, true)
+      .offsets.length > 0) {
       return { book: book, chapters: [], content: content, changed: false,
         oldBodyOffsets: [], newBodyOffsets: [] };
     }
@@ -3134,7 +3145,11 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
-      const split = BookRepository.splitChapters(content, chapterRule, splitLongChapter);
+      // 切章改流式（1007）。只有「正文来自文件」时才走流式：调用方传了 importedContent
+      // 说明正文还在内存里、磁盘上的文件不一定已经写好，那种情况仍用整本口径切。
+      const split = importedContent === undefined
+        ? BookRepository.splitChaptersStreaming(contentPath, charset, chapterRule, splitLongChapter)
+        : BookRepository.splitChapters(content, chapterRule, splitLongChapter);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
       chapterVolumes = split.volumes;
@@ -3640,6 +3655,39 @@ private static getTitle(fileName: string): string {
     // 卷标记按最终标题重新判定：长章拆出的子章标题带 `(1)` 后缀，仍应沿用原章的卷归属。
     const flags = TxtTocRuleRepository.markVolumeTitles(titles, volumeRule);
     return { titles: titles, offsets: offsets, volumes: flags, intro: intro };
+  }
+
+  /**
+   * 流式切章：按 512000 字节窗口扫标题行，不再把整本读成一个字符串再 `split`。
+   *
+   * 与 `splitChapters` 的输出逐项相等（章名、字符偏移、卷标记、intro），
+   * 差别只在读法：`splitChapters` 要 `content.split('\n')` 生成全书行数组，
+   * 200MB 的书光这一步就是几百万个字符串。这里按窗口读、按行判，内存占用与书大小无关。
+   *
+   * `offsets` 仍是**字符**偏移（`ChapterSplit` 的口径），建行时照旧走
+   * `buildChapterRows`，所以 `start`/`end`/`wordCount` 的算法一个字没变。
+   *
+   * @param stopAfterFirstHit 只判「有没有标题」时传 true：命中第一个标题就停，不再读后面的块。
+   */
+  private static splitChaptersStreaming(path: string, encoding: string | undefined,
+    chapterRule: string, splitLongChapter: boolean,
+    stopAfterFirstHit: boolean = false): ChapterSplit {
+    const resolvedRule = chapterRule.trim().length > 0
+      ? chapterRule : BookRepository.fallbackChapterRule;
+    const size = fileIo.statSync(path).size;
+    const source = new FileByteRangeSource(path, size);
+    const matcher = TxtTocRuleRepository.compileTitleMatcher(resolvedRule);
+    const volumeRule = TxtTocRuleRepository.resolveVolumeRule(resolvedRule);
+    const scan = TxtChapterScanner.scan(source, encoding ?? 'utf-8', matcher,
+      splitLongChapter, (titles: string[]): boolean[] => {
+        return TxtTocRuleRepository.markVolumeTitles(titles, volumeRule);
+      }, stopAfterFirstHit, BookRepository.maxLengthWithToc);
+    return {
+      titles: scan.titles,
+      offsets: scan.offsets,
+      volumes: scan.volumes,
+      intro: scan.intro
+    };
   }
 
   /**
