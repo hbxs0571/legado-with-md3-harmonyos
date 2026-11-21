@@ -3,11 +3,13 @@
 // path 是点路径（ruleSearch.bookList），读写走 readPath / writePath 两个辅助函数。
 
 import { pasteboard } from '@kit.BasicServicesKit';
+import curves from '@ohos.curves';
 import { BookSource } from '../model/BookSource';
 import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppFab } from '../components/booksource/AppFab';
-import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { UiMenuPanel, UiMenuItem } from '../components/UiMenu';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 
 /** 一个字段槽：path 为点路径，label 为中文标签，multi 决定用 TextArea 还是 TextInput。 */
@@ -106,27 +108,8 @@ const FIELDS_CONTENT: FieldSpec[] = [
   { path: 'ruleContent.callBackJs', label: 'callBackJs', multi: true }
 ];
 
-/** 六个选项卡的「类型/启用/发现/CookieJar/EventListener/自定义按钮」开关。 */
-interface ToggleSpec {
-  key: string;
-  label: string;
-  def: boolean;
-}
-const TOGGLE_SPECS: ToggleSpec[] = [
-  { key: 'enabled', label: '启用', def: true },
-  { key: 'enabledExplore', label: '发现', def: true },
-  { key: 'enabledCookieJar', label: 'CookieJar', def: true },
-  { key: 'eventListener', label: 'EventListener', def: false },
-  { key: 'customButton', label: '自定义按钮', def: false }
-];
-
 /** 类型下拉四档，对齐上游 book_type 数组。 */
 const SOURCE_TYPES: string[] = ['文本', '音频', '图片', '文件'];
-
-/** Select 选项的显式类型（ArkTS 禁匿名对象字面量）。 */
-interface TypeOption {
-  value: string;
-}
 
 /** 溢出菜单项的显式类型。 */
 interface MoreMenuItem {
@@ -172,6 +155,8 @@ export struct BookSourceEditPage {
   @State private sourceTypeIndex: number = 0;
   @State private autoComplete: boolean = true;
   @State private moreMenuVisible: boolean = false;
+  /** 类型选项卡的下拉菜单（对齐上游 SourceEditOptionCard type 的 RoundDropdownMenu）。 */
+  @State private sourceTypeMenuVisible: boolean = false;
   @State private variablePanelVisible: boolean = false;
   @State private variableDraft: string = '';
   /** 字段编辑底部 sheet：对齐上游 editingFieldPath / SourceEditFieldSheet。 */
@@ -352,7 +337,8 @@ export struct BookSourceEditPage {
    */
   @Builder FieldCard(spec: FieldSpec) {
     Column() {
-      Text(spec.label).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
+      // 上游 titleSmall = 14.sp Bold（Typography.kt:30），调用点须显式加 Bold。
+      Text(spec.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).width('100%')
       Text(this.readPath(spec.path).length > 0 ? this.readPath(spec.path) : '—')
         .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
         .maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -360,8 +346,11 @@ export struct BookSourceEditPage {
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-    .backgroundColor(this.themeColorSurfaceSecondary)
-    .borderRadius(12)
+    // 上游 SourceEditFieldCard（BookSourceEditScreen.kt:193-218）用 GlassCard 壳：
+    // containerColor 默认 surfaceContainer（= themeColorSurfaceTertiary，ThemePalette.ets 发布位），
+    // cornerRadius 默认 themeSettings.baseCardCornerRadius=16f（GlassCard.kt:79 + ThemeSettings.kt:29）。
+    .backgroundColor(this.themeColorSurfaceTertiary)
+    .borderRadius(16)
     .onClick(() => this.openFieldSheet(spec))
   }
 
@@ -373,13 +362,106 @@ export struct BookSourceEditPage {
     this.fieldSheetVisible = true;
   }
 
-  @Builder ToggleRow(toggle: ToggleSpec) {
+  /**
+   * 选项卡片：对齐上游 SourceEditOptionCard（BookSourceEditScreen.kt:321-370）——
+   * GlassCard 壳 + labelSmall(11sp) 单行标题 + 可选 subtitle TextCard + 选中时 16dp Check。
+   */
+  @Builder OptionCard(title: string, subtitle: string, checked: boolean, onClick: () => void) {
     Row() {
-      Text(toggle.label).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: this.readBool(toggle.key, toggle.def) })
-        .selectedColor(this.themeColorAccent)
-        .onChange((isOn: boolean) => { this.writeBool(toggle.key, isOn); })
-    }.width('100%').padding({ top: 8, bottom: 8 })
+      Text(title)
+        .fontSize(LABEL_SMALL).fontColor(this.themeColorTextPrimary)
+        // 上游 .basicMarquee()：单行超长时跑马灯滚动，本地对应 TextOverflow.MARQUEE。
+        .maxLines(1).textOverflow({ overflow: TextOverflow.MARQUEE })
+        .layoutWeight(1).padding({ top: 8, bottom: 8 })
+      if (subtitle.length > 0) {
+        // 上游 TextCard(backgroundColor = colorScheme.surface, cornerRadius = 16.dp)。
+        Text(subtitle)
+          .fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .borderRadius(16).backgroundColor(this.themeColorSurfacePrimary)
+      }
+      if (checked) {
+        // 上游 AppIcon(Check, size 16, padding end 8, tint = primary)。
+        AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorAccent })
+          .margin({ left: 4, right: 8 })
+      }
+    }
+    .width('100%')
+    .padding({ left: 12, right: 4 })
+    .justifyContent(FlexAlign.SpaceBetween).alignItems(VerticalAlign.Center)
+    // 上游同样用 GlassCard 壳：surfaceContainer + baseCardCornerRadius(16f)。
+    .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(16)
+    .onClick(onClick)
+  }
+
+  /** 类型下拉菜单项：对齐上游 RoundDropdownMenu 的四档，选中项打勾。 */
+  private sourceTypeMenuItems(): UiMenuItem[] {
+    const items: UiMenuItem[] = [];
+    for (let i = 0; i < SOURCE_TYPES.length; i++) {
+      items.push({ key: String(i), title: SOURCE_TYPES[i], selected: this.sourceTypeIndex === i });
+    }
+    return items;
+  }
+
+  /** 选项区：对齐上游 BookSourceOptions（BookSourceEditScreen.kt:254-319）两行三列网格。 */
+  @Builder OptionsGrid() {
+    Column({ space: 8 }) {
+      Row({ space: 8 }) {
+        Stack({ alignContent: Alignment.End }) {
+          this.OptionCard(SOURCE_TYPES[this.sourceTypeIndex], SOURCE_TYPES[this.sourceTypeIndex], false, () => {
+            this.sourceTypeMenuVisible = true;
+          })
+        }.layoutWeight(1)
+        // @Builder 调用返回 void，不能链式挂属性；bindPopup 挂在外层 Stack 上。
+        .bindPopup(this.sourceTypeMenuVisible, {
+          builder: () => { this.TypeMenuBuilder(); },
+          placement: Placement.Bottom,
+          enableArrow: false,
+          autoCancel: true,
+          onStateChange: (event: PopupStateChangeParam) => {
+            if (!event.isVisible) { this.sourceTypeMenuVisible = false; }
+          }
+        })
+        Stack() {
+          this.OptionCard('启用', '', this.readBool('enabled', true), () => {
+            this.writeBool('enabled', !this.readBool('enabled', true)); this.rev++;
+          })
+        }.layoutWeight(1)
+        Stack() {
+          this.OptionCard('发现', '', this.readBool('enabledExplore', true), () => {
+            this.writeBool('enabledExplore', !this.readBool('enabledExplore', true)); this.rev++;
+          })
+        }.layoutWeight(1)
+      }.width('100%')
+      Row({ space: 8 }) {
+        Stack() {
+          this.OptionCard('CookieJar', '', this.readBool('enabledCookieJar', true), () => {
+            this.writeBool('enabledCookieJar', !this.readBool('enabledCookieJar', true)); this.rev++;
+          })
+        }.layoutWeight(1)
+        Stack() {
+          this.OptionCard('EventListener', '', this.readBool('eventListener', false), () => {
+            this.writeBool('eventListener', !this.readBool('eventListener', false)); this.rev++;
+          })
+        }.layoutWeight(1)
+        Stack() {
+          this.OptionCard('自定义按钮', '', this.readBool('customButton', false), () => {
+            this.writeBool('customButton', !this.readBool('customButton', false)); this.rev++;
+          })
+        }.layoutWeight(1)
+      }.width('100%')
+    }.width('100%')
+  }
+
+  @Builder TypeMenuBuilder() {
+    UiMenuPanel({
+      items: this.sourceTypeMenuItems(),
+      panelWidth: 160,
+      onSelect: (key: string) => {
+        this.sourceTypeIndex = Number(key);
+        this.sourceTypeMenuVisible = false;
+      }
+    })
   }
 
   // @BuilderParam 槽位须传 @Builder 方法引用；内联 lambda 直接实例化 struct 会
@@ -390,9 +472,9 @@ export struct BookSourceEditPage {
 
   @Builder editActionsSlot() {
     // 上游 :101-110 顺序：BugReport（保存并调试）在前、MoreVert（更多）在后。
-    // 本地无 BugReport 图标，用语义最近的 profileRunningWithErrors（运行诊断）代替，
-    // 差异写进报告；accessibility 文案按上游 contentDescription=debug_source「调试书源」。
-    TopBarButton({ icon: 'profileRunningWithErrors', showDivider: false, onSelect: () => this.saveAndDebug() })
+    // 图标已按上游 ic_bug_report.xml 补齐为 bugReport，不再用近似；
+    // accessibility 文案按上游 contentDescription=debug_source「调试书源」。
+    TopBarButton({ icon: 'bugReport', showDivider: false, onSelect: () => this.saveAndDebug() })
     TopBarButton({ icon: 'more', showDivider: false, onSelect: () => { this.moreMenuVisible = true; } })
   }
 
@@ -413,7 +495,12 @@ export struct BookSourceEditPage {
     const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true
       : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
-      this.collapsedHeader = shouldCollapse;
+      // 对齐上游 GlassTopAppBarDefaults.defaultScrollBehavior()（BookSourceEditScreen.kt:70）的高度过渡：
+      // 上游随 nestedScroll 连续插值，本地是布尔折叠，用 springMotion 包住赋值让高度/透明度有过渡，
+      // 写法与项目内其它折叠页（AppAiSettingsPage.ets:21）一致。
+      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
+        this.collapsedHeader = shouldCollapse;
+      });
     }
   }
 
@@ -434,14 +521,7 @@ export struct BookSourceEditPage {
               Scroll(this.tabScrollers[index]) {
                 Column({ space: 12 }) {
                   if (index === 0) {
-                    Row() {
-                      Text('类型').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-                      Select(SOURCE_TYPES.map<TypeOption>((t: string): TypeOption => ({ value: t })))
-                        .selected(this.sourceTypeIndex)
-                        .onSelect((i: number) => { this.sourceTypeIndex = i; })
-                        .fontColor(this.themeColorTextPrimary)
-                    }.width('100%').padding({ top: 8, bottom: 8 })
-                    ForEach(TOGGLE_SPECS, (toggle: ToggleSpec) => { this.ToggleRow(toggle) })
+                    this.OptionsGrid()
                   }
                   ForEach(this.fieldsForTab(), (spec: FieldSpec) => { this.FieldCard(spec) })
                 }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 96 })
@@ -467,8 +547,11 @@ export struct BookSourceEditPage {
     }
     .width('100%').height('100%')
     .backgroundColor(this.themeAppBackground.length > 0 ? this.themeAppBackground : this.themeColorSurfacePrimary)
-    .bindSheet($$this.moreMenuVisible, this.MoreMenuBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: false })
-    .bindSheet($$this.fieldSheetVisible, this.FieldSheetBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: false })
+    // 上游 AppModalBottomSheet 默认 enableOutsideInteractive=true、sheetGesturesEnabled=true：
+    // 点遮罩或下滑都能关闭。字段 sheet 按上游去掉了「取消/确认」按钮（SourceEditFieldSheet.kt:220-252），
+    // 因此这里必须保留遮罩可点，否则 sheet 打开后无任何关闭途径，整页看起来无法交互。
+    .bindSheet($$this.moreMenuVisible, this.MoreMenuBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: true })
+    .bindSheet($$this.fieldSheetVisible, this.FieldSheetBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: true })
     .overlay(this.VariablePanelBuilder(), { align: Alignment.Bottom })
   }
 
@@ -498,30 +581,23 @@ export struct BookSourceEditPage {
 
   /**
    * 字段编辑 sheet：对齐上游 SourceEditFieldSheet（:220-252）——
-   * 单一 AppTextField（minLines4/maxLines24），按字段 label 作标题，实时回写不另做确认。
-   * 本地用 TextArea 承载多行；确认/取消是 ArkUI bindSheet 的关闭入口，数据只在确认时写回。
+   * 单一 AppTextField（minLines4/maxLines24），按字段 label 作标题，实时回写、无确认/取消按钮。
+   * 本地用 TextArea 承载多行，constraintSize 近似 minLines/maxLines 的动态高度；
+   * onChange 直接 writePath（上游 onValueChange 实时回写），关闭即完成。
    */
   @Builder FieldSheetBuilder() {
     Column() {
       Text(this.editingFieldLabel).fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary)
         .width('100%').padding({ left: 20, right: 20, top: 16, bottom: 8 })
       TextArea({ placeholder: this.editingFieldLabel, text: this.editingFieldDraft })
-        .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
-        .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8).height(160)
-        .margin({ left: 20, right: 20 })
-        .onChange((value: string) => { this.editingFieldDraft = value; })
-      Row() {
-        Blank()
-        Text('取消').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
-          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-          .onClick(() => { this.fieldSheetVisible = false; })
-        Text('确认').fontSize(TITLE_MEDIUM).fontColor(this.themeColorAccent)
-          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-          .onClick(() => {
-            this.writePath(this.editingFieldPath, this.editingFieldDraft);
-            this.fieldSheetVisible = false;
-          })
-      }.width('100%').justifyContent(FlexAlign.End).padding({ right: 20, bottom: 16 })
+        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8)
+        .constraintSize({ minHeight: 96, maxHeight: 320 })
+        .margin({ left: 20, right: 20, bottom: 20 })
+        .onChange((value: string) => {
+          this.editingFieldDraft = value;
+          this.writePath(this.editingFieldPath, value);
+        })
     }
     .width('100%').backgroundColor(this.themeColorSurfacePrimary)
   }
