@@ -17,6 +17,14 @@ const IMAGE_SUFFIXES: string[] = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.av
 const MAX_ARCHIVE_BYTES: number = 128 * 1024 * 1024;
 const MAX_EXPANDED_BYTES: number = 256 * 1024 * 1024;
 
+/** 展开后的分类结果：书文件与图片文件都是绝对路径。 */
+export interface ExtractedArchive {
+  archiveName: string;
+  extractedDirectory: string;
+  bookFiles: string[];
+  imageFiles: string[];
+}
+
 export class ArchiveImporter {
   /** 与 fileSuffixFilters / formatFromFileName 同口径：只认 zip / cbz。 */
   static isArchiveUri(uri: string): boolean {
@@ -25,15 +33,18 @@ export class ArchiveImporter {
   }
 
   /**
-   * 展开一个压缩包：漫画包整册成一本书，普通包只挑书文件逐本走 importSingleUri。
-   * 解压目录按包名 md5 复用（表格 I6 判据），同包二次导入不重新 decompressFile。
+   * 展开一个压缩包并按后缀分类。解压目录按包名 md5 复用（表格 I6 判据），
+   * 同包二次导入不重新 decompressFile —— listBookEntries 与两个导入入口共用这一份，
+   * 不许各自复制一套解压逻辑。
    */
-  static async importFromUri(context: Context, uri: string): Promise<ArchiveImportResult> {
+  private static async extract(context: Context, uri: string): Promise<ExtractedArchive> {
     const archiveName = BookRepository.getFileName(uri);
     const workDirectory = `${context.cacheDir}/archive-import/${BookRepository.archiveCacheKey(archiveName)}`;
     const zipPath = `${workDirectory}/${archiveName}`;
     const extractedDirectory = `${workDirectory}/content`;
-    const result: ArchiveImportResult = { books: [], failedCount: 0 };
+    const result: ExtractedArchive = {
+      archiveName: archiveName, extractedDirectory: extractedDirectory, bookFiles: [], imageFiles: []
+    };
 
     let alreadyExtracted = false;
     try {
@@ -66,8 +77,6 @@ export class ArchiveImporter {
 
     const files: string[] = [];
     ArchiveImporter.listFiles(extractedDirectory, files);
-    const imageFiles: string[] = [];
-    const bookFiles: string[] = [];
     for (let index = 0; index < files.length; index += 1) {
       const filePath = files[index];
       if (filePath === undefined) {
@@ -83,30 +92,95 @@ export class ArchiveImporter {
         }
       }
       if (matchedImage) {
-        imageFiles.push(filePath);
+        result.imageFiles.push(filePath);
         continue;
       }
       for (let s = 0; s < BOOK_SUFFIXES.length; s += 1) {
         const suffix = BOOK_SUFFIXES[s];
         if (suffix !== undefined && lower.endsWith(suffix)) {
-          bookFiles.push(filePath);
+          result.bookFiles.push(filePath);
           break;
         }
       }
     }
+    result.bookFiles.sort();
+    return result;
+  }
 
-    // 上游 LocalBook.kt:407-416 是 any：任一张图就整包成漫画，不是「多数」也不是「只看书文件」。
-    if (imageFiles.length > 0) {
-      const comic = await ArchiveImporter.importComicArchive(context, uri, archiveName, imageFiles);
+  /** 条目在压缩包内的相对路径（列表展示与勾选都用它，绝对路径只在内部分配）。 */
+  private static entryNameOf(extractedDirectory: string, filePath: string): string {
+    const prefix = `${extractedDirectory}/`;
+    return filePath.startsWith(prefix) ? filePath.substring(prefix.length) : BookRepository.getFileName(filePath);
+  }
+
+  /**
+   * 批7（:1162，上游 `BookInfoViewModel.kt:1501-1541`）：列出压缩包里的书文件。
+   *
+   * 只列 BOOK_SUFFIXES 命中的条目；**包里有图时返回空数组** —— 上游 `LocalBook.kt:407-416`
+   * 是 any：任一张图就整包当漫画，那种情况没有「按条目选书」的语义。
+   */
+  static async listBookEntries(context: Context, uri: string): Promise<string[]> {
+    const extracted = await ArchiveImporter.extract(context, uri);
+    if (extracted.imageFiles.length > 0) {
+      return [];
+    }
+    const names: string[] = [];
+    for (let index = 0; index < extracted.bookFiles.length; index += 1) {
+      const filePath = extracted.bookFiles[index];
+      if (filePath === undefined) {
+        continue;
+      }
+      names.push(ArchiveImporter.entryNameOf(extracted.extractedDirectory, filePath));
+    }
+    return names;
+  }
+
+  /** 展开一个压缩包（全部条目）：漫画包整册成一本书，普通包逐本走 importSingleUri。 */
+  static async importFromUri(context: Context, uri: string): Promise<ArchiveImportResult> {
+    return ArchiveImporter.importFromUriEntries(context, uri, []);
+  }
+
+  /**
+   * 只导入指定的条目；`entryNames` 为空 = 全部（等价旧行为）。
+   *
+   * 语义两处不许动：
+   * - 包内有图 → 整包成一本漫画并直接返回（上游 any 语义，条目选择对漫画包不生效）；
+   * - 包里一个书文件都没有 → 抛「压缩包里没有可导入的书籍或图片」，
+   *   而「用户勾了 0 项」是在界面层挡住的（按钮禁用），不靠这里抛错。
+   */
+  static async importFromUriEntries(context: Context, uri: string,
+    entryNames: string[]): Promise<ArchiveImportResult> {
+    const extracted = await ArchiveImporter.extract(context, uri);
+    const result: ArchiveImportResult = { books: [], failedCount: 0 };
+    if (extracted.imageFiles.length > 0) {
+      const comic = await ArchiveImporter.importComicArchive(context, uri, extracted.archiveName,
+        extracted.imageFiles);
       result.books.push(comic);
       return result;
     }
-    if (bookFiles.length === 0) {
+    if (extracted.bookFiles.length === 0) {
       throw new Error('压缩包里没有可导入的书籍或图片');
     }
-    bookFiles.sort();
-    for (let index = 0; index < bookFiles.length; index += 1) {
-      const bookFile = bookFiles[index];
+    const selected: string[] = [];
+    for (let index = 0; index < extracted.bookFiles.length; index += 1) {
+      const filePath = extracted.bookFiles[index];
+      if (filePath === undefined) {
+        continue;
+      }
+      if (entryNames.length === 0) {
+        selected.push(filePath);
+        continue;
+      }
+      const entryName = ArchiveImporter.entryNameOf(extracted.extractedDirectory, filePath);
+      if (entryNames.includes(entryName)) {
+        selected.push(filePath);
+      }
+    }
+    if (selected.length === 0) {
+      throw new Error('没有选中压缩包里的任何书文件');
+    }
+    for (let index = 0; index < selected.length; index += 1) {
+      const bookFile = selected[index];
       if (bookFile === undefined) {
         continue;
       }

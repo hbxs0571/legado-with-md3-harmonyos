@@ -32,14 +32,28 @@ export struct LocalBookImportPage {
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('appTopInset') appTopInset: number = 0;
 
-  @Prop candidates: ImportCandidate[] = [];
+  // 批7（:1162）：压缩包多条目时 Index 会在本页已打开的情况下把 candidates 换成条目列表
+  // （route 值没变、组件不重建），所以必须靠 @Watch 把 items 重新拷一遍，否则界面还停在旧候选上。
+  @Prop @Watch('onCandidatesChanged') candidates: ImportCandidate[] = [];
   onBack: () => void = () => {};
   onImportSelected: (uris: string[]) => Promise<void> = async (_uris: string[]) => {};
+  /**
+   * 批7（:1162）：压缩包条目模式。非空时本页列的是包内条目（uri/fileName 都是条目相对路径），
+   * 提交走 onImportArchiveEntries —— 等价上游 `BookInfoSheet.ArchiveEntries`。
+   */
+  @Prop archiveUri: string = '';
+  @Prop archiveTitle: string = '';
+  onImportArchiveEntries: (entryNames: string[]) => Promise<void> = async (_entryNames: string[]) => {};
 
   @State items: ImportCandidate[] = [];
   @State busy: boolean = false;
 
   aboutToAppear(): void {
+    this.items = this.copyItems(this.candidates);
+  }
+
+  /** candidates 被换成压缩包条目时同步一份可勾选副本（批7 :1162）。 */
+  private onCandidatesChanged(): void {
     this.items = this.copyItems(this.candidates);
   }
 
@@ -98,19 +112,24 @@ export struct LocalBookImportPage {
     if (this.busy) {
       return;
     }
-    const uris: string[] = [];
+    const selected: string[] = [];
     for (let index = 0; index < this.items.length; index += 1) {
       const item = this.items[index];
       if (item !== undefined && item.selected) {
-        uris.push(item.uri);
+        // 压缩包模式的 uri 就是条目相对路径，两种模式取同一个字段。
+        selected.push(item.uri);
       }
     }
-    if (uris.length === 0) {
+    if (selected.length === 0) {
       return;
     }
     this.busy = true;
     try {
-      await this.onImportSelected(uris);
+      if (this.archiveUri.length > 0) {
+        await this.onImportArchiveEntries(selected);
+      } else {
+        await this.onImportSelected(selected);
+      }
     } finally {
       this.busy = false;
     }
@@ -174,14 +193,14 @@ export struct LocalBookImportPage {
           .padding({ right: 4 })
           .onClick(() => this.onBack());
 
-        Text('导入本地书')
+        Text(this.archiveUri.length > 0 ? '导入压缩包条目' : '导入本地书')
           .fontSize(HEADLINE_SMALL)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextPrimary)
           .margin({ left: 12 })
           .layoutWeight(1);
 
-        Text(this.busy ? '导入中…' : `导入 ${this.selectedCount()} 本`)
+        Text(this.busy ? '导入中…' : (this.archiveUri.length > 0 ? `导入所选 ${this.selectedCount()} 本` : `导入 ${this.selectedCount()} 本`))
           .fontSize(TITLE_SMALL)
           .fontColor(this.selectedCount() > 0 && !this.busy ? '#3F5BD9' : this.themeColorTextTertiary)
           .padding({ left: 12, right: 4 })
@@ -192,7 +211,9 @@ export struct LocalBookImportPage {
       .width('100%')
       .padding({ left: 16, right: 16, top: 10 + this.appTopInset, bottom: 10 });
 
-      Text('已选文件（已在书架的可以跳过；取消勾选后不导入）')
+      Text(this.archiveUri.length > 0
+        ? `压缩包：${this.archiveTitle}（勾选要导入的书文件；取消勾选后不导入）`
+        : '已选文件（已在书架的可以跳过；取消勾选后不导入）')
         .fontSize(BODY_SMALL)
         .fontColor(this.themeColorTextTertiary)
         .width('100%')
