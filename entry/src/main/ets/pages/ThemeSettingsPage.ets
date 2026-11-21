@@ -20,9 +20,11 @@ import {
 } from '../data/ThemeSettingsRepository';
 import {
   LABEL_VISIBILITY_VALUES,
+  TABLET_INTERFACE_VALUES,
   labelVisibilityLabel,
   mainNavigationLabel,
-  orderedMainNavigation
+  orderedMainNavigation,
+  tabletInterfaceLabel
 } from '../data/MainNavigationSettings';
 import {
   BAR_BLUR_ALPHA_MAX,
@@ -244,6 +246,12 @@ export struct ThemeSettingsPage {
   onNavigationMove: (route: string, up: boolean) => void = () => {};
   onDefaultHomePageChange: (route: string) => void = () => {};
   onLabelVisibilityModeChange: (value: string) => void = () => {};
+  /**
+   * 平板界面四档（批6 :385）。上游 `PreferKey.tabletInterface`，默认 auto；
+   * 判据在 `data/MainNavigationSettings.ets`，渲染在 `pages/Index.ets` 的 NavigationRail。
+   */
+  @Prop tabletInterface: string = 'auto';
+  onTabletInterfaceChange: (value: string) => void = () => {};
   /** 「首页与导航」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
   @State navigationExpanded: boolean = false;
   @State followCoverColor: boolean = true;
@@ -632,6 +640,16 @@ export struct ThemeSettingsPage {
                   options: LABEL_VISIBILITY_VALUES,
                   labelOf: (value: string) => labelVisibilityLabel(value),
                   onSelect: (value: string) => this.onLabelVisibilityModeChange(value)
+                })
+                ThemeItemDivider()
+                // 平板界面：上游 `AppShellSettings` 的 tabletInterface 档位，决定底栏还是左侧栏。
+                // 四档判据（自动/始终侧栏/横屏侧栏/始终底栏）在 data/MainNavigationSettings.ets。
+                UiDropdown({showDivider: false,
+                  title: '平板界面',
+                  option: this.tabletInterface,
+                  options: TABLET_INTERFACE_VALUES,
+                  labelOf: (value: string) => tabletInterfaceLabel(value),
+                  onSelect: (value: string) => this.onTabletInterfaceChange(value)
                 })
                 ThemeItemDivider()
                 // 拖排顺序：上游用可拖列表，本地用上下移两枚按钮承接同一个 onSetOrder。

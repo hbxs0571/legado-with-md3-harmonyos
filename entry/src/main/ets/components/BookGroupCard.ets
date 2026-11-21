@@ -30,6 +30,11 @@ export struct BookGroupCard {
   /** 是否显示书籍计数（：106）；对应书架布局 showBookCount，关闭后两处「N 本」都不画。 */
   @Prop showCount: boolean = true;
   /**
+   * 分组卡封面阴影（:384）。对应书架布局 bookshelfCoverShadow，上游 BookItem.kt:269-276
+   * 把 `Modifier.shadow(4.dp)` 挂在封面容器上（不是卡片根）。本地原先字段已通、缺这个消费点。
+   */
+  @Prop coverShadow: boolean = false;
+  /**
    * 私密锁定（:257）：锁定时三件事同时做——不画封面预览、不显示计数、组名旁加锁图标。
    * 上游 countText 的条件正是 `showBookCount && !groupLocked`，所以计数两处都要与它取与。
    */
@@ -54,6 +59,14 @@ export struct BookGroupCard {
     const slots: number[] = [];
     for (let index = 0; index < count; index += 1) { slots.push(index); }
     return slots;
+  }
+
+  /** 分组封面阴影参数：关闭时给一份「零阴影」而不是不挂，避免 open/close 切换时结构抖动。 */
+  private coverShadowOptions(): ShadowOptions {
+    if (!this.coverShadow) {
+      return { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 };
+    }
+    return { radius: 4, color: '#33000000', offsetX: 0, offsetY: 2 };
   }
 
   build() {
@@ -85,6 +98,9 @@ export struct BookGroupCard {
                 isNight: this.isNight
               })
             }.layoutWeight(1).alignItems(HorizontalAlign.Center)
+            .borderRadius(4)
+            // 阴影挂在每个封面的外层 Column 上（不是整排）：挂整排会把空位也算进阴影框。
+            .shadow(this.coverShadowOptions())
           }, (book: Book) => `cover_${book.id}`)
           ForEach(this.emptySlots(), (index: number) => {
             Row().layoutWeight(1);
@@ -94,15 +110,19 @@ export struct BookGroupCard {
         // 普通分组 / 紧凑列表：单张封面 + 分组样式说明 + 书籍数。
         Row() {
           if (this.books.length > 0 && !this.locked) {
-            BookCover({
-              book: this.books[0],
-              compact: this.listStyle === 1,
-              displayWidth: this.listCoverWidth,
-              displayHeight: Math.round(this.listCoverWidth * 7 / 5),
-              cornerRadius: 5,
-              coverSettings: this.coverSettings,
-              isNight: this.isNight
-            })
+            // 普通分组 / 紧凑列表的单张封面：阴影挂在封面外层的 Column 上，
+            // 圆角跟封面自己的 cornerRadius（普通 5 / 紧凑 5）走，不统一成 4。
+            Column() {
+              BookCover({
+                book: this.books[0],
+                compact: this.listStyle === 1,
+                displayWidth: this.listCoverWidth,
+                displayHeight: Math.round(this.listCoverWidth * 7 / 5),
+                cornerRadius: 5,
+                coverSettings: this.coverSettings,
+                isNight: this.isNight
+              })
+            }.borderRadius(5).shadow(this.coverShadowOptions())
           }
           Column() {
             Text(this.listStyle === 1 ? '紧凑列表' : '分组').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)

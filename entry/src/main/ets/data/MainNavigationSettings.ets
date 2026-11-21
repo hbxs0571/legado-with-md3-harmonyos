@@ -44,6 +44,40 @@ export function normalizeLabelVisibility(value: string): string {
 }
 
 /**
+ * 平板界面导航方式，对齐上游 `AppShellSettings` 四档与 `R.array.tablet_interface_value`：
+ * auto（随宽度自动）/ always（总是侧栏）/ landscape（横屏用侧栏）/ off（始终底栏）。
+ * 键名对齐上游 `PreferKey.kt:363 tabletInterface`，默认 auto（AppShellSettings.kt:17）。
+ */
+export const TABLET_INTERFACE_VALUES: string[] = ['auto', 'always', 'landscape', 'off'];
+
+export const TABLET_INTERFACE_DEFAULT: string = 'auto';
+
+export function tabletInterfaceLabel(value: string): string {
+  if (value === 'always') { return '始终用侧栏'; }
+  if (value === 'landscape') { return '横屏时用侧栏'; }
+  if (value === 'off') { return '始终用底栏'; }
+  return '自动（随宽度）';
+}
+
+export function normalizeTabletInterface(value: string): string {
+  return TABLET_INTERFACE_VALUES.includes(value) ? value : TABLET_INTERFACE_DEFAULT;
+}
+
+/**
+ * 是否改用侧栏导航，逐条对齐上游 `ui/main/AppAdaptiveNavigation.kt:33-53`：
+ * 先看 `railFits = width >= 456 && height >= 480`（连侧栏都放不下就一律底栏）；
+ * always 恒真、landscape 比宽高、auto 看 width >= 600、off 恒假。
+ */
+export function shouldUseNavigationRail(tabletInterface: string, widthVp: number, heightVp: number): boolean {
+  if (!(widthVp >= 456 && heightVp >= 480)) { return false; }
+  const mode = normalizeTabletInterface(tabletInterface);
+  if (mode === 'always') { return true; }
+  if (mode === 'landscape') { return widthVp > heightVp; }
+  if (mode === 'off') { return false; }
+  return widthVp >= 600;
+}
+
+/**
  * 按 order 排序并补齐缺失项，逐条对齐上游 `MainDestination.ordered(order)`：
  * `order.split(',').map(trim).distinct().mapNotNull(byRoute::get)` 后再接上未出现的项。
  */

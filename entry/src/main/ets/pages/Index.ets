@@ -116,7 +116,10 @@ import {
   moveNavigationDown,
   moveNavigationUp,
   normalizeDefaultHomePage,
+  normalizeTabletInterface,
   orderedMainNavigation,
+  shouldUseNavigationRail,
+  TABLET_INTERFACE_DEFAULT,
   visibleMainNavigation
 } from '../data/MainNavigationSettings';
 import {
@@ -725,8 +728,24 @@ struct Index {
   @State themeDefaultHomePage: string = DEFAULT_HOME_PAGE_DEFAULT;
   /** 主导航顺序；上游 `AppShellSettings.kt:18 mainNavigationOrder`。 */
   @State themeMainNavigationOrder: string = MAIN_NAVIGATION_ORDER_DEFAULT;
+  /**
+   * :368（批6，r360）：书架首屏数据是否还在加载。
+   * 冷启动首帧书架是空的，标题这时不该已经整串摆在那里——上游把标题按字符逐个淡入，
+   * 到位瞬间直接显示完整标题（不重淡入）。这里只负责驱动那个「加载中/已到位」的边界，
+   * 逐字动画本身在 AppTopBar 里按 titleRevealStep 计算。
+   * 初始值为 true：进程从冷启动进来时书架必然是空的。
+   */
+  @State bookshelfLoading: boolean = true;
   /** 导航标签模式；上游 `AppShellSettings.kt:19 labelVisibilityMode`。 */
   @State themeLabelVisibilityMode: string = LABEL_VISIBILITY_DEFAULT;
+  /**
+   * 平板界面导航方式（auto/always/landscape/off），上游 `PreferKey.kt:363 tabletInterface`。
+   * 判据在 `data/MainNavigationSettings.ets` 的 `shouldUseNavigationRail()`。
+   */
+  @State themeTabletInterface: string = TABLET_INTERFACE_DEFAULT;
+  /** 导航区可用宽高（vp），由外层容器 onAreaChange 灌入，供侧栏判据使用。 */
+  @State navigatorWidthVp: number = 0;
+  @State navigatorHeightVp: number = 0;
   /** 预见性返回手势；上游 `AppShellSettings.kt:9 predictiveBackEnabled`。ArkUI 无等价能力，只落盘。 */
   @State themePredictiveBack: boolean = true;
   /** 阅读界面共享元素动画；上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
@@ -933,7 +952,12 @@ struct Index {
     this.restoreOnboarding(context);
     this.restoreReadTimeRecords(context);
     this.restoreHomeDashboardSettings(context);
-    this.restoreImportedBooks(context);
+    // :368（批6，r360）：书架标题要等首屏数据到位后才逐字淡入，所以这里据实驱动加载态。
+    // 仍然不 await——上游也是并发启动，await 会明显拖慢首帧。
+    this.bookshelfLoading = true;
+    this.restoreImportedBooks(context).finally(() => {
+      this.bookshelfLoading = false;
+    });
     this.restoreBookshelfLayout(context);
     this.restoreReaderBookmarks(context);
     this.restoreReaderMarkings(context);
@@ -2687,6 +2711,7 @@ struct Index {
     this.themeUseFloatingBottomBar = patch.useFloatingBottomBar;
     this.themeUseFloatingBottomBarLiquidGlass = patch.useFloatingBottomBarLiquidGlass;
     this.themeLabelVisibilityMode = patch.labelVisibilityMode;
+    this.themeTabletInterface = patch.tabletInterface;
     this.themeDefaultHomePage = patch.defaultHomePage;
     this.themeMainNavigationOrder = patch.mainNavigationOrder;
     this.themeUseFlexibleTopAppBar = patch.useFlexibleTopAppBar;
@@ -2776,6 +2801,7 @@ struct Index {
         defaultHomePage: this.themeDefaultHomePage,
         mainNavigationOrder: this.themeMainNavigationOrder,
         labelVisibilityMode: this.themeLabelVisibilityMode,
+        tabletInterface: this.themeTabletInterface,
         predictiveBack: this.themePredictiveBack,
         readerSharedElement: this.themeReaderSharedElement,
         enableBlur: this.themeEnableBlur,
@@ -2857,6 +2883,7 @@ struct Index {
     this.themeDefaultHomePage = theme.defaultHomePage;
     this.themeMainNavigationOrder = theme.mainNavigationOrder;
     this.themeLabelVisibilityMode = theme.labelVisibilityMode;
+    this.themeTabletInterface = theme.tabletInterface;
     this.themePredictiveBack = theme.predictiveBack;
     this.themeReaderSharedElement = theme.readerSharedElement;
     this.themeEnableBlur = theme.enableBlur;
@@ -3085,6 +3112,67 @@ struct Index {
   }
 
   /**
+   * 平板界面的侧栏（批6 :385）。
+   *
+   * 上游在 rail 档位用 `AppAdaptiveNavigation` 判据把底栏整个换成左侧导航栏
+   * （`AppAdaptiveNavigation.kt:33-53`），窄屏/竖屏再换回底栏。本地复用底栏同一套图标与
+   * 标签判据（`navigationTabIcon` / `navigationLabelVisible`），两种呈现不会分叉。
+   *
+   * 宽度取 88vp：Material 3 的 rail 口径是 80vp 只放图标，本地标签放在图标右侧要放下中文
+   * 「书架／发现／订阅」，多给 8vp。选中态整行圆角底色，与底栏的 64×32 指示器同一颜色来源。
+   */
+  @Builder
+  private NavigationRail() {
+    Column() {
+      ForEach(this.visibleNavigationRoutes(), (navRoute: string) => {
+        Row() {
+          AppGlyph({
+            name: this.navigationTabIcon(navRoute),
+            tint: this.selectedTab === this.navigationRouteTabIndex(navRoute)
+              ? this.themeColorTextPrimary : this.themeColorTextSecondary,
+            glyphSize: 24
+          })
+          if (this.navigationLabelVisible(navRoute)) {
+            Text(mainNavigationLabel(navRoute))
+              .fontSize(BODY_SMALL)
+              .fontWeight(this.selectedTab === this.navigationRouteTabIndex(navRoute)
+                ? FontWeight.Medium : FontWeight.Normal)
+              .fontColor(this.selectedTab === this.navigationRouteTabIndex(navRoute)
+                ? this.themeColorTextPrimary : this.themeColorTextSecondary)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .margin({ left: 10 })
+              .layoutWeight(1)
+          }
+        }
+        .width('100%')
+        .height(56)
+        .padding({ left: 14, right: 10 })
+        .alignItems(VerticalAlign.Center)
+        .borderRadius(28)
+        .backgroundColor(this.selectedTab === this.navigationRouteTabIndex(navRoute)
+          ? this.themeColorSurfaceElevated : Color.Transparent)
+        .margin({ bottom: 4 })
+        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+        .onClick(() => this.selectTab(this.navigationRouteTabIndex(navRoute)))
+      }, (navRoute: string) => navRoute)
+    }
+    .width(88)
+    .height('100%')
+    // 顶部让出状态栏：侧栏贴着窗口左边，标题栏的内边距不会传给这里。
+    .padding({ top: 12 + (AppStorage.get<number>('appTopInset') ?? 0), left: 4, right: 4 })
+    .backgroundColor(this.themeColorSurfacePrimary)
+  }
+
+  /**
+   * 是否走平板侧栏。判据与阈值全部在 `data/MainNavigationSettings.ets`，
+   * 这里只负责把当前窗口尺寸与设置值喂进去（上游同一处判定，见 `AppAdaptiveNavigation.kt:33-53`）。
+   */
+  private shouldUseRail(): boolean {
+    return shouldUseNavigationRail(this.themeTabletInterface, this.navigatorWidthVp, this.navigatorHeightVp);
+  }
+
+  /**
    * 冷启动落到「默认主页面」。上游 `AppShellSettings.kt:17 defaultHomePage`。
    *
    * 不可见的页面按上游 `MainNavigationSettingsSheet.kt:81-84` 回落书架。
@@ -3141,6 +3229,18 @@ struct Index {
     this.themeLabelVisibilityMode = value;
     this.saveThemeSettings(context).catch(() => {
       this.showUnavailableAction('导航标签模式保存失败，请重试');
+    });
+  }
+
+  /**
+   * 平板界面导航方式回调（:385，批6 r360）。
+   * 上游 `PreferKey.kt:363 tabletInterface` 四档；本地只落盘 + 立即重算 shouldUseRail()，
+   * 判据本体在 `data/MainNavigationSettings.ets` 的 `shouldUseNavigationRail()`。
+   */
+  private selectThemeTabletInterface(context: Context, value: string): void {
+    this.themeTabletInterface = normalizeTabletInterface(value);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('平板界面设置保存失败，请重试');
     });
   }
 
@@ -3579,6 +3679,7 @@ struct Index {
     this.themeDefaultHomePage = DEFAULT_HOME_PAGE_DEFAULT;
     this.themeMainNavigationOrder = MAIN_NAVIGATION_ORDER_DEFAULT;
     this.themeLabelVisibilityMode = LABEL_VISIBILITY_DEFAULT;
+    this.themeTabletInterface = TABLET_INTERFACE_DEFAULT;
     this.themePredictiveBack = true;
     this.themeReaderSharedElement = true;
     this.themeEnableBlur = false;
@@ -3695,6 +3796,7 @@ struct Index {
       defaultHomePage: this.themeDefaultHomePage,
       mainNavigationOrder: this.themeMainNavigationOrder,
       labelVisibilityMode: this.themeLabelVisibilityMode,
+      tabletInterface: this.themeTabletInterface,
       predictiveBack: this.themePredictiveBack,
       readerSharedElement: this.themeReaderSharedElement,
       enableBlur: this.themeEnableBlur,
@@ -7167,7 +7269,13 @@ private canWriteInto(dir: string): boolean {
     const groupBooks = groupName === '全部' ? this.books
       : this.books.filter((book: Book) => (book.groupNames ?? []).includes(groupName));
     const target = limit > 0 ? groupBooks.slice(0, limit) : groupBooks;
-    await this.refreshAllToc(target);
+    // :368（批6，r360）：下拉刷新也算一次「书架数据在动」，标题同样先隐去再逐字淡入。
+    this.bookshelfLoading = true;
+    try {
+      await this.refreshAllToc(target);
+    } finally {
+      this.bookshelfLoading = false;
+    }
   }
 
   /**
@@ -7182,8 +7290,14 @@ private canWriteInto(dir: string): boolean {
   private async refreshHomeFromPull(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
-    await this.restoreImportedBooks(context);   // books / bookGroups
-    await this.reloadReadRecordData(context);   // readTimeRecords / details / summaries
+    // :368（批6，r360）：首页下拉同样驱动书架标题的加载态。
+    this.bookshelfLoading = true;
+    try {
+      await this.restoreImportedBooks(context);   // books / bookGroups
+      await this.reloadReadRecordData(context);   // readTimeRecords / details / summaries
+    } finally {
+      this.bookshelfLoading = false;
+    }
   }
 
   /**
@@ -9346,6 +9460,13 @@ private canWriteInto(dir: string): boolean {
           onComplete: (themeMode: number, paletteIndex: number) => this.finishOnboarding(themeMode, paletteIndex)
         })
       } else {
+      // 平板界面（批6 :385）：侧栏与内容并排。上游在 rail 档位把底栏整个换成左侧 NavigationRail
+      // （`AppAdaptiveNavigation.kt:33-53` 判据），本地用同一个 Row 承载：左侧固定宽侧栏、
+      // 右侧 layoutWeight(1) 内容。非 rail 档位 shouldUseRail() 为 false，这里等同原来的单子节点。
+      Row() {
+        if (this.shouldUseRail()) {
+          this.NavigationRail()
+        }
       Stack() {
         if (this.isPrimaryTabRoute()) {
         Swiper() {
@@ -9380,6 +9501,8 @@ private canWriteInto(dir: string): boolean {
           coverSettings: this.coverSettings,
           readerNightMode: this.readerNightMode,
           refreshingBookIds: this.refreshingBookIds,
+          // :368（批6，r360）：加载态驱动标题逐字淡入。
+          bookshelfLoading: this.bookshelfLoading,
           onSaveLayout: (settings: BookshelfLayoutSettings) => this.saveBookshelfLayout(settings),
           onAddGroup: (name: string) => this.addBookshelfGroup(name),
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
@@ -10628,6 +10751,11 @@ private canWriteInto(dir: string): boolean {
             defaultHomePage: this.themeDefaultHomePage,
             mainNavigationOrder: this.themeMainNavigationOrder,
             labelVisibilityMode: this.themeLabelVisibilityMode,
+            tabletInterface: this.themeTabletInterface,
+            onTabletInterfaceChange: (value: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeTabletInterface(themeContext, value); }
+            },
             onNavigationVisibilityChange: (route: string, visible: boolean) => {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectThemeNavigationVisibility(themeContext, route, visible); }
@@ -11701,7 +11829,9 @@ private canWriteInto(dir: string): boolean {
           })
         }
       }.width('100%').layoutWeight(1)
-      if (this.themeShowBottomView &&
+      }.width('100%').layoutWeight(1)
+      // 侧栏档位下底栏不出现：上游是同一判据二选一（有 rail 就无 bottom bar），不是两层叠着。
+      if (!this.shouldUseRail() && this.themeShowBottomView &&
         (this.route === AppRoute.HOME || this.route === AppRoute.BOOKSHELF || this.route === AppRoute.DISCOVER ||
           this.route === AppRoute.SUBSCRIPTIONS || this.route === AppRoute.PROFILE)) {
         Row() {
@@ -11750,6 +11880,12 @@ private canWriteInto(dir: string): boolean {
       : (this.themeColorsReady ? this.themeColorSurfacePrimary
       : $r('app.color.start_window_background'))))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+      // 平板界面判据吃窗口尺寸：上游 AppAdaptiveNavigation.kt:33-53 直接用当前窗口宽高判定，
+      // 本地每次布局变化把 vp 尺寸推到状态里，旋转/折叠屏改尺寸时侧栏与底栏跟着换。
+      .onAreaChange((oldValue: Area, newValue: Area) => {
+        this.navigatorWidthVp = Number(newValue.width);
+        this.navigatorHeightVp = Number(newValue.height);
+      })
     // 护眼覆盖层：上游用 ColorFilter.colorMatrix 给全屏套对角色矩阵，这里用同尺寸纯色层
     // 配 MULTIPLY 混合，混合公式 result = 内容 × 覆盖色，与对角矩阵逐通道相乘等价。
     if (this.eyeProtectionOverlayColor().length > 0) {

@@ -502,7 +502,8 @@ export class BackupRepository {
     ['bookInfoNetworkCoverBackground', 'string'], ['bookInfoDefaultCoverBackground', 'string'], ['topBarButtonStyle', 'string'],
     ['screenOrientation', 'string'], ['largeContainerBackgroundImageLight', 'string'], ['largeContainerBackgroundImageDark', 'string'],
     ['itemBackgroundImageLight', 'string'], ['itemBackgroundImageDark', 'string'], ['defaultHomePage', 'string'],
-    ['mainNavigationOrder', 'string'], ['labelVisibilityMode', 'string'], ['appFontPath', 'string'],
+    ['mainNavigationOrder', 'string'], ['labelVisibilityMode', 'string'], ['tabletInterface', 'string'],
+    ['appFontPath', 'string'],
     ['readBrightnessMode', 'string'], ['readBrightnessControlPosition', 'string'], ['backgroundImage', 'string'],
     ['backgroundImageNight', 'string'], ['keep_light', 'string'], ['titleBarCustomIcons', 'string'],
     ['readMenuCustomIcons', 'string']
