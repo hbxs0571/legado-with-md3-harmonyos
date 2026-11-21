@@ -121,6 +121,9 @@ bash scripts/emu.sh tree --keys           # 打印 attributes 里实际存在的
 bash scripts/emu.sh tap 3                 # 点 tree 里的第 3 项
 bash scripts/emu.sh tap-text 搜索          # 按文字找，点它的中心
 bash scripts/emu.sh tap-text 搜索 --contains --occurrence 2 --settle 1.2
+bash scripts/emu.sh tap-seq 搜索 3 顶部 · 5          # 一次连点多个：数字取 tree 里的序号，其余按文字找
+bash scripts/emu.sh tap-seq --one-shot 顶部 3 4     # 只取一次树、用同一屏坐标连点（界面不跳转时用）
+bash scripts/emu.sh route play 进书源管理            # 回放录过的路径（见下节）
 ```
 
 输出形如（最后一列 `C` 表示节点自己 `clickable`）：
@@ -140,9 +143,18 @@ bash scripts/emu.sh tap-text 搜索 --contains --occurrence 2 --settle 1.2
 - **`tree --keys` 是校准工具**：`dumpLayout` 的属性名在不同组件上并不一致 —— 实测菜单里的图标按钮连 `text` / `description` 都不暴露（见 [VALIDATION.md](VALIDATION.md) 阅读页菜单一节），字段对不上时先看真实字段名，别靠猜。
 - **坐标是设备像素，不是 vp**：密度 3.5 时 1vp = 3.5px。`--settle` 太短会拍到旧帧，太长会错过过渡态。
 
+两个最容易错用掉的口径：
+
+- **`tree --all` 的序号不能用于 `tap`**：`--all` 输出的是全部有 bounds 的节点（实测书架页 168 个），`tap` / `tap-seq` 的序号只数「可点 / 有字」那份清单（同一屏 33 个）。两套序号对不上，拿 `--all` 的序号去 `tap` 会报「序号超出范围」。
+- **序号只对当前屏有效**：底栏那些只有图标的 tab 在树里没有 `text`（无法用文字找），只能记序号；但书架上多一本书、页面多一行，序号就错位。路径里优先记文字，序号只作补充。
+- **点任何控件都没反应时，先怀疑 App 实例卡死**：两次 `dumpLayout` 的 md5 一模一样、点底栏也不变、但进程还在（`ps -A | grep legado`）——这不是 dump 冻住，是 App 卡了；`aa force-stop io.legado.harmony` 再 `aa start -a EntryAbility -b io.legado.harmony` 即恢复。实测两次碰到，重启前点什么都不动、重启后同一坐标立刻生效。
 权限与锁：`tree` 只读，不要求持锁（别的对话持锁时提示一句截图可能拍到它的中间态）；`tap` / `tap-text` 会改设备状态，**要持锁**，与 `start` 同级。
 
 `uitest dumpLayout -p <文件> -a`（全属性）本项目此前一直没用过，所以 `tree --keys` 会先试 `-a`，拿不到数据就退回普通 dump 并提示 —— `--keys` 的字段可能不全，以实际输出为准。
+
+**一次取树、连点多个**：逐个点要 dump 一次树，一屏里点五下就是五次 `dumpLayout`。`tap-seq` 默认每步**重新取树**（屏幕变了序号就不对，重取才安全）；`--one-shot` 只取第一棵，之后都用同一屏坐标 —— 只在「点一排开关、界面不跳转」时用。`tap` / `tap-text` / `tap-seq` 加 `--record 名字` 都会把这一步追加进路径文件，攒够一串就能回放。
+
+脚本里**所有交给 python 的路径都过一层 `to_native`**（内部 `cygpath -w`）：本脚本跑在 Git Bash，`/n/...` 传给 Windows 版 python 会被当作 `N:\n\...`，报 `can't open file`；`TREE_DIR` 的 `/tmp` 同理。自己往脚本里加新调用时也要走这一层，否则只在 Linux 上能跑。
 
 ## 页面导航：先认区域，再点控件
 
@@ -162,6 +174,26 @@ bash scripts/emu.sh tap-text 搜索 --contains --occurrence 2 --settle 1.2
 | 阅读菜单 | 正文中部点一下（历史坐标 `(640,1400)`） | [VALIDATION.md](VALIDATION.md) 样式卡一节 |
 
 更细的逐页路标，等能独占模拟器时走一遍再补 —— 凭记忆写出来的地图比没有更糟。
+
+## 录制与回放：一条路径只摸一次
+
+路径探索真正贵的不是「点中一次」，是「每次都从头摸」。点准了以后把那一串步骤记下来，下次直接重走：
+
+```bash
+bash scripts/emu.sh tap-text 我的 --record 进书源管理        # 记第 1 步
+bash scripts/emu.sh tap-text 书源管理 --record 进书源管理    # 追加第 2 步
+bash scripts/emu.sh route show 进书源管理                   # 看记了什么（--machine 给脚本用）
+bash scripts/emu.sh route play 进书源管理                   # 逐步重走
+bash scripts/emu.sh route list                              # 有哪些路径
+bash scripts/emu.sh route check 进书源管理                   # 查格式
+bash scripts/emu.sh route rm 进书源管理                      # 删掉
+```
+
+- 路径文件落在仓库 `tmp/routes/<名字>.json`（`tmp/` 已被 `.gitignore` 忽略），契约是 `{"version":1,"steps":[{"label":"…"}],"updated":"…"}`。**优先记文字**：序号随屏幕内容错位，文字回放才稳；`--index` 只在文字缺失时作补充。
+- 回放中途某一步的目标不在当前屏，就地停下并打印这一屏可点的清单 —— 一眼看出是被弹窗挡住还是本来就走错了层，比「点了没反应继续往下点」有用。
+- 回放同样**要持锁**：它会点设备。
+- 回放读步骤文件前先 `tr -d '\r'`：Windows 版 python 的输出以 `\r\n` 结尾，`read` 会把 `\r` 当成目标文字的一部分，于是「我的」永远匹配不上、每步都报断。
+- 路径文件是**证据也是资产**：验收记录里写「按 `进书源管理` 路径走到编辑页」，比写一串像素坐标更容易被复核。
 
 ## 常用设备命令
 

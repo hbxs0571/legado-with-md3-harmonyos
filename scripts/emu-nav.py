@@ -7,6 +7,7 @@
 # 而 dumpLayout 的节点带 bounds，是设备像素，取中心就精确。
 # 图标按钮在树里可能没有 text/description（已验证），所以另给了 keys 子命令
 # 打印实际存在的属性名，字段对不上时先用它校准，不要靠猜。
+import io
 import json
 import os
 import sys
@@ -213,13 +214,9 @@ def select(rows, text, contains, occurrence):
     return pool
 
 
-def cmd_pick(path, index=None, text=None, contains=False, occurrence=0, show_all=False):
-    root = find_tree(load(path))
-    if root is None:
-        die('没有找到控件树根节点')
-    all_nodes = walk(root)
-    keep = nodes_with_boxes(root)
-    rows = [n for n in keep if (show_all or n['clickable'] or n['label'])]
+def resolve_target(rows, all_nodes, index=None, text=None, contains=False, occurrence=0):
+    """在已解析的 rows 里定位目标：序号/文字 -> 可点祖先 -> 中心点。
+    返回 (node, 命中的原始 label, (cx, cy))。pick 与 pickseq 共用，避免两份实现走偏。"""
     if index is not None:
         if index < 0 or index >= len(rows):
             die('序号 %d 超出范围（0..%d），先跑 emu.sh tree 看清单' % (index, len(rows) - 1), 3)
@@ -236,7 +233,6 @@ def cmd_pick(path, index=None, text=None, contains=False, occurrence=0, show_all
         target = pool[occurrence if occurrence < len(pool) else len(pool) - 1]
     node = target
     box = node['box']
-    matched_label = node['label']
     if not node['clickable']:
         # 命中的多是内层 Text，可点的是外层容器：沿父链上溯找第一个可点且有 bounds 的祖先。
         cur = node['parent']
@@ -251,15 +247,22 @@ def cmd_pick(path, index=None, text=None, contains=False, occurrence=0, show_all
                     box = cbox
                     break
                 cur = cand[0]['parent']
-            else:
-                cur = None
             seen += 1
-    cx, cy = center_of(box)
+    return node, target['label'], center_of(box)
+
+def cmd_pick(path, index=None, text=None, contains=False, occurrence=0, show_all=False):
+    root = find_tree(load(path))
+    if root is None:
+        die('没有找到控件树根节点')
+    all_nodes = walk(root)
+    keep = nodes_with_boxes(root)
+    rows = [n for n in keep if (show_all or n['clickable'] or n['label'])]
+    node, matched_label, (cx, cy) = resolve_target(rows, all_nodes, index, text, contains, occurrence)
+    box = node['box']
     print('目标: %s %s %s %s' % (node['type'] or '-', node['label'] or '-', fmt_box(box), 'C' if node['clickable'] else '非可点'))
     print('LABEL %s' % (matched_label or '',))
     print('CENTER %d %d' % (cx, cy))
     return 0
-
 
 def label_multiset(root):
     keep = nodes_with_boxes(root) if root is not None else []
@@ -298,9 +301,158 @@ def cmd_verify(pre_path, post_path, text=None):
     return 0
 
 
+EXTERNAL_CMDS = ('pickseq', 'routeadd', 'routeshow', 'routecheck')
+
+
+def cmd_pickseq(path, specs, show_all=False):
+    """一次读一棵树，按顺序解析多个目标，每行一个 STEP。
+    省的是「每验一个点就 dump 一次树」的往返：同一屏的点位一次算齐。"""
+    root = find_tree(load(path))
+    if root is None:
+        die('没有找到控件树根节点')
+    all_nodes = walk(root)
+    keep = nodes_with_boxes(root)
+    rows = [n for n in keep if (show_all or n['clickable'] or n['label'])]
+    bad = 0
+    for i, (kind, val) in enumerate(specs, 1):
+        try:
+            if kind == 'index':
+                node, label, (cx, cy) = resolve_target(rows, all_nodes, index=val)
+                print('STEP %d INDEX %s CENTER %d %d LABEL %s' % (i, val, cx, cy, label or '-'))
+            else:
+                node, label, (cx, cy) = resolve_target(rows, all_nodes, text=val)
+                print('STEP %d TEXT %s CENTER %d %d LABEL %s' % (i, val, cx, cy, label or '-'))
+        except SystemExit:
+            print('STEP %d MISSING %s' % (i, val))
+            bad += 1
+    return 3 if bad else 0
+
+
+def route_load(path, required=False):
+    """读路径文件；required=True 时文件不存在直接报错（show/check 用），add 则当新文件。"""
+    if not os.path.exists(path):
+        if required:
+            die('路径文件不存在：%s' % path, 3)
+        return {'version': 1, 'steps': []}
+    with io.open(path, encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict) or not isinstance(data.get('steps'), list):
+        die('路径文件格式不对：期望 steps 数组，文件 %s' % path, 2)
+    return data
+
+
+def route_save(path, data):
+    d = os.path.dirname(path)
+    if d and not os.path.isdir(d):
+        os.makedirs(d)
+    with io.open(path, 'w', encoding='utf-8', newline='') as f:
+        f.write(json.dumps(data, ensure_ascii=False, indent=1) + chr(10))
+
+
+def cmd_route_add(path, label=None, index=None):
+    """点中一步就记一步：文字优先 —— 序号随屏幕内容错位，文字回放才稳。"""
+    import datetime
+    if not label and index is None:
+        die('routeadd 至少要 --label 或 --index', 2)
+    data = route_load(path)
+    step = {}
+    if label:
+        step['label'] = label
+    if index is not None:
+        step['index'] = index
+    data['steps'].append(step)
+    data['updated'] = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+    route_save(path, data)
+    print('已记录第 %d 步: %s' % (len(data['steps']), json.dumps(step, ensure_ascii=False)))
+    return 0
+
+
+def cmd_route_show(path, machine=False):
+    data = route_load(path, required=True)
+    steps = data.get('steps') or []
+    if machine:
+        for i, st in enumerate(steps, 1):
+            if st.get('label'):
+                print('STEP %d text %s' % (i, st['label']))
+            else:
+                print('STEP %d index %s' % (i, st.get('index')))
+        return 0
+    name = data.get('name') or os.path.basename(path)
+    print('%s：%d 步（更新于 %s）' % (name, len(steps), data.get('updated') or '-'))
+    for i, st in enumerate(steps, 1):
+        if st.get('label'):
+            print('  %d. 点文字「%s」' % (i, st['label']))
+        else:
+            print('  %d. 点序号 %s' % (i, st.get('index')))
+    return 0
+
+
+def cmd_route_check(path):
+    data = route_load(path, required=True)
+    steps = data.get('steps') or []
+    bad = 0
+    if not steps:
+        print('路径为空')
+        return 3
+    for i, st in enumerate(steps, 1):
+        if not isinstance(st, dict):
+            print('第 %d 步不是对象' % i)
+            bad += 1
+            continue
+        if not st.get('label') and st.get('index') is None:
+            print('第 %d 步既没有 label 也没有 index' % i)
+            bad += 1
+    print('步数 %d，问题 %d' % (len(steps), bad))
+    return 0 if not bad else 3
+
+
+def dispatch_ext(cmd, args):
+    """pickseq / route* 的参数在各自分支里解析，不走下面那套扁平解析。"""
+    rest = []
+    specs = []
+    label = None
+    index = None
+    machine = False
+    show_all = False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '--index' and cmd == 'pickseq':
+            i += 1
+            specs.append(('index', int(args[i])))
+        elif a == '--text' and cmd == 'pickseq':
+            i += 1
+            specs.append(('text', args[i]))
+        elif a == '--index':
+            i += 1
+            index = int(args[i])
+        elif a == '--label':
+            i += 1
+            label = args[i]
+        elif a == '--machine':
+            machine = True
+        elif a == '--all':
+            show_all = True
+        else:
+            rest.append(a)
+        i += 1
+    if not rest:
+        die('%s 需要文件路径' % cmd, 2)
+    if cmd == 'pickseq':
+        if not specs:
+            die('pickseq 至少要一个 --index 或 --text', 2)
+        return cmd_pickseq(rest[0], specs, show_all)
+    if cmd == 'routeadd':
+        return cmd_route_add(rest[0], label, index)
+    if cmd == 'routeshow':
+        return cmd_route_show(rest[0], machine)
+    if cmd == 'routecheck':
+        return cmd_route_check(rest[0])
+    die('未知子命令: %s' % cmd, 2)
+
 def main(argv):
     if len(argv) < 2:
-        die('用法: emu-nav.py <keys|list|pick|verify> ...', 2)
+        die('用法: emu-nav.py <keys|list|pick|pickseq|verify|routeadd|routeshow|routecheck> ...', 2)
     cmd = argv[1]
     args = argv[2:]
     index = text = None
@@ -327,6 +479,8 @@ def main(argv):
         else:
             rest.append(a)
         i += 1
+    if cmd in EXTERNAL_CMDS:
+        return dispatch_ext(cmd, argv[2:])
     if cmd == 'keys':
         return cmd_keys(rest[0])
     if cmd == 'list':

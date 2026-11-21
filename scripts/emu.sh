@@ -16,12 +16,26 @@ export MSYS_NO_PATHCONV=1
 
 # 控件树解析脚本与本脚本同目录 —— 不要从别的目录调本脚本。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NAV_PY="$SCRIPT_DIR/emu-nav.py"
+# 本脚本跑在 Git Bash 下，但 python 是 Windows 版：交给 python 的路径必须是原生形式，
+# 否则 /n/... 会被当成 N:\n\...（MSYS_NO_PATHCONV=1 关掉了自动转换，这里自己转）。
+# python 的报错与 pickseq 输出都是中文，统一设成 UTF-8，免得在 GBK 终端下变成乱码。
+export PYTHONIOENCODING=utf-8
+
+to_native() {
+  case "$1" in
+    [A-Za-z]:*) printf '%s' "$1" ;;
+    *) cygpath -w "$1" 2>/dev/null || printf '%s' "$1" ;;
+  esac
+}
+NAV_PY="$(to_native "$SCRIPT_DIR/emu-nav.py")"
 # dumpLayout 先写设备侧文件，再 cat 回来（hdc file recv 对某些文件会挂住）。
 TREE_JSON_DEV="/data/local/tmp/emu-tree.json"
-TREE_DIR="${TMPDIR:-/tmp}"
+# 临时目录也转成原生形式：bash 认 /tmp，python 不认。
+TREE_DIR="$(to_native "${TMPDIR:-/tmp}")"
 # 点完等多久再取第二棵树：太快拍到旧帧，太慢错过过渡态。
 SETTLE="${SETTLE:-0.8}"
+# 录制下来的 UI 路径放在仓库 tmp/routes/ 下：一串「点哪儿」，回放时不用重新摸。
+ROUTES_DIR="${EMU_ROUTES_DIR:-$(to_native "$(cd "$SCRIPT_DIR/.." && pwd)/tmp/routes")}"
 
 die() { printf '错误: %s\n' "$1" >&2; exit 1; }
 
@@ -328,6 +342,7 @@ do_tree() {
     "${PYTHON:-python}" "$NAV_PY" keys "$out"
   elif [ "$all" = "1" ]; then
     "${PYTHON:-python}" "$NAV_PY" list "$out" --all
+    printf '（--all 的序号含不可点节点，与 tap 的序号不是同一套：要 tap 请用不带 --all 的清单）\n'
   else
     "${PYTHON:-python}" "$NAV_PY" list "$out"
   fi
@@ -338,11 +353,12 @@ do_tree() {
 # 菜单图标按钮点不中也不报错，前后两棵树才是证据。
 do_click() {
   local who="$1"; shift
-  local settle="$SETTLE" verify="" args=()
+  local settle="$SETTLE" verify="" record="" args=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --settle) settle="$2"; shift 2; continue ;;
       --verify) verify="$2"; shift 2; continue ;;
+      --record) record="$2"; shift 2; continue ;;
       *) args+=("$1"); shift; continue ;;
     esac
   done
@@ -377,6 +393,21 @@ do_click() {
   else
     "${PYTHON:-python}" "$NAV_PY" verify "$pre" "$post"
   fi
+  if [ -n "$record" ]; then
+    local p_label p_idx j
+    p_label=$(printf '%s\n' "$picked" | sed -n 's/^LABEL //p')
+    p_idx=""
+    j=0
+    while [ $j -lt ${#args[@]} ]; do
+      if [ "${args[$j]}" = "--index" ]; then p_idx="${args[$((j + 1))]}"; fi
+      j=$((j + 1))
+    done
+    if [ -n "$p_idx" ]; then
+      "${PYTHON:-python}" "$NAV_PY" routeadd "$ROUTES_DIR/$record.json" --label "$p_label" --index "$p_idx"
+    elif [ -n "$p_label" ]; then
+      "${PYTHON:-python}" "$NAV_PY" routeadd "$ROUTES_DIR/$record.json" --label "$p_label"
+    fi
+  fi
 }
 
 do_tap() {
@@ -393,6 +424,156 @@ do_tap_text() {
   do_click tap-text --text "$text" --verify "$text" "$@"
 }
 
+# 一次命令连点多步：每步取树定位、点、停、再取树比对，任一步找不到就停下并打印当前屏。
+# --one-shot 只取一次树，用同一屏的坐标连点（批量开关一类的场景，快；会跳页的步骤不能用它）。
+do_tap_seq() {
+  local settle="$SETTLE" one_shot=0 record="" specs=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --settle)   settle="$2"; shift 2; continue ;;
+      --one-shot) one_shot=1; shift; continue ;;
+      --record)   record="$2"; shift 2; continue ;;
+      *)          specs+=("$1"); shift; continue ;;
+    esac
+  done
+  [ ${#specs[@]} -gt 0 ] || die "用法: emu.sh tap-seq <序号或文字> [更多...] [--one-shot] [--settle 秒] [--record 名字]"
+  require_lock tap-seq || return $?
+  emu_online || die "设备不在线：先 emu.sh start"
+  local coord="$TREE_DIR/emu-seq-coord.json"
+  local cur="$TREE_DIR/emu-seq-cur.json"
+  local post="$TREE_DIR/emu-seq-post.json"
+  if ! dump_tree "$coord"; then return 1; fi
+  cp "$coord" "$cur" 2>/dev/null
+  local i=0 total=${#specs[@]} ok=0 rc=0 raw kind val out cx cy
+  for raw in "${specs[@]}"; do
+    i=$((i + 1))
+    if [ "$i" -gt 1 ] && [ "$one_shot" = "0" ]; then
+      if ! dump_tree "$coord"; then rc=1; break; fi
+      cp "$coord" "$cur" 2>/dev/null
+    fi
+    case "$raw" in
+      [0-9]*) kind="index"; val="$raw" ;;
+      *)      kind="text";  val="$raw" ;;
+    esac
+    out=$("${PYTHON:-python}" "$NAV_PY" pickseq "$coord" "--$kind" "$val" 2>/dev/null)
+    cx=$(printf '%s\n' "$out" | sed -n 's/.*CENTER \([0-9][0-9]*\) \([0-9][0-9]*\) LABEL.*/\1/p')
+    cy=$(printf '%s\n' "$out" | sed -n 's/.*CENTER \([0-9][0-9]*\) \([0-9][0-9]*\) LABEL.*/\2/p')
+    if [ -z "$cx" ] || [ -z "$cy" ]; then
+      printf '[%d/%d] 找不到「%s」—— 停在这一步。当前屏可点的：\n' "$i" "$total" "$val"
+      "${PYTHON:-python}" "$NAV_PY" list "$coord" | head -30
+      rc=1
+      break
+    fi
+    printf '[%d/%d] 点 %s「%s」(%s, %s)\n' "$i" "$total" "$kind" "$val" "$cx" "$cy"
+    "$HDC_BIN" shell "uitest uiInput click $cx $cy" >/dev/null 2>&1 || { printf '点击发送失败\n'; rc=1; break; }
+    sleep "$settle"
+    if ! dump_tree "$post"; then rc=1; break; fi
+    if [ "$kind" = "text" ]; then
+      "${PYTHON:-python}" "$NAV_PY" verify "$cur" "$post" --text "$val"
+    else
+      "${PYTHON:-python}" "$NAV_PY" verify "$cur" "$post"
+    fi
+    cp "$post" "$cur" 2>/dev/null
+    ok=$((ok + 1))
+    if [ -n "$record" ]; then
+      if [ "$kind" = "index" ]; then
+        "${PYTHON:-python}" "$NAV_PY" routeadd "$ROUTES_DIR/$record.json" --index "$val"
+      else
+        "${PYTHON:-python}" "$NAV_PY" routeadd "$ROUTES_DIR/$record.json" --label "$val"
+      fi
+    fi
+  done
+  printf '连点结束：%d 步里点到 %d 步\n' "$total" "$ok"
+  return "$rc"
+}
+
+# 路径回放：把录下来的一串步骤逐步重走。哪一步的目标不在当前屏就停下，并把这一屏可点的列出来。
+# 这正是「路径探索成本高」的省法：摸一次、记一次，之后每次都从这条线上接着走。
+do_route_play() {
+  local name="${1:-}"
+  [ -n "$name" ] || die "用法: emu.sh route play <名字> [--settle 秒]"
+  shift || true
+  local settle="$SETTLE"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --settle) settle="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  local f="$ROUTES_DIR/$name.json"
+  [ -f "$f" ] || die "没有这个路径：$f（先 emu.sh route list）"
+  require_lock route-play || return $?
+  emu_online || die "设备不在线：先 emu.sh start"
+  local steps="$TREE_DIR/emu-route-steps.txt"
+  # Windows 版 python 的 print 用 \r\n 结尾，read 会把 \r 当成目标文字的一部分，必须剥掉。
+  "${PYTHON:-python}" "$NAV_PY" routeshow "$f" --machine | tr -d '\r' > "$steps" || return 1
+  local total
+  total=$(grep -c '^STEP ' "$steps" 2>/dev/null || printf 0)
+  local coord="$TREE_DIR/emu-route-coord.json" post="$TREE_DIR/emu-route-post.json"
+  local n=0 ok=0 tag num kind val out cx cy
+  while read -r tag num kind val; do
+    [ "$tag" = "STEP" ] || continue
+    [ -n "$num" ] || continue
+    n=$((n + 1))
+    if ! dump_tree "$coord"; then printf '第 %s 步之前取不到控件树\n' "$num"; break; fi
+    out=$("${PYTHON:-python}" "$NAV_PY" pickseq "$coord" "--$kind" "$val" 2>/dev/null)
+    cx=$(printf '%s\n' "$out" | sed -n 's/.*CENTER \([0-9][0-9]*\) \([0-9][0-9]*\) LABEL.*/\1/p')
+    cy=$(printf '%s\n' "$out" | sed -n 's/.*CENTER \([0-9][0-9]*\) \([0-9][0-9]*\) LABEL.*/\2/p')
+    if [ -z "$cx" ] || [ -z "$cy" ]; then
+      printf '路径在第 %s 步断了：「%s」不在当前屏。当前屏可点的：\n' "$num" "$val"
+      "${PYTHON:-python}" "$NAV_PY" list "$coord" | head -30
+      break
+    fi
+    printf '[%s] 点 %s「%s」(%s, %s)\n' "$num" "$kind" "$val" "$cx" "$cy"
+    "$HDC_BIN" shell "uitest uiInput click $cx $cy" >/dev/null 2>&1 || { printf '点击发送失败\n'; break; }
+    sleep "$settle"
+    if ! dump_tree "$post"; then break; fi
+    if [ "$kind" = "text" ]; then
+      "${PYTHON:-python}" "$NAV_PY" verify "$coord" "$post" --text "$val"
+    fi
+    ok=$((ok + 1))
+  done < "$steps"
+  printf '回放 %s：共 %d 步，走到 %d 步\n' "$name" "$total" "$ok"
+}
+
+do_route() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    list)
+      if [ ! -d "$ROUTES_DIR" ]; then
+        printf '还没有录制过路径（%s 不存在）\n' "$ROUTES_DIR"
+        return 0
+      fi
+      local f found=0
+      for f in "$ROUTES_DIR"/*.json; do
+        [ -e "$f" ] || continue
+        found=1
+        printf '%s\n' "$(basename "$f" .json)"
+      done
+      [ "$found" = "1" ] || printf '目录里还没有路径文件\n'
+      ;;
+    show)
+      [ -n "${1:-}" ] || die "用法: emu.sh route show <名字>"
+      "${PYTHON:-python}" "$NAV_PY" routeshow "$ROUTES_DIR/$1.json"
+      ;;
+    check)
+      [ -n "${1:-}" ] || die "用法: emu.sh route check <名字>"
+      "${PYTHON:-python}" "$NAV_PY" routecheck "$ROUTES_DIR/$1.json"
+      ;;
+    rm)
+      [ -n "${1:-}" ] || die "用法: emu.sh route rm <名字>"
+      rm -f "$ROUTES_DIR/$1.json"
+      printf '已删 %s\n' "$1"
+      ;;
+    play)
+      do_route_play "${1:-}" "${@:2}"
+      ;;
+    *)
+      die "route: 不认识的子命令 $sub（list|show|check|rm|play）" ;;
+  esac
+}
+
 case "${1:-status}" in
   start)   shift; parse_session_flag "$@"; do_start ;;
   stop)    shift; parse_session_flag "$@"; do_stop ;;
@@ -402,12 +583,15 @@ case "${1:-status}" in
   tree)    shift; do_tree "$@" ;;
   tap)     shift; do_tap "$@" ;;
   tap-text) shift; do_tap_text "$@" ;;
+  tap-seq)  shift; do_tap_seq "$@" ;;
+  route)    shift; do_route "$@" ;;
   claim)   shift; do_claim "$@" ;;
   release) shift; do_release "$@" ;;
   who)     do_who ;;
   *)
-     printf '用法: %s {start|stop|restart|status|cap [文件]|tree [--keys|--all]|tap <序号>|tap-text <文字>|claim [--for 用途]|release [--force]|who} [--session 标识]\n' "$0"
+     printf '用法: %s {start|stop|restart|status|cap [文件]|tree [--keys|--all]|tap <序号>|tap-text <文字>|tap-seq <步> [更多]|route {list|play|show|check|rm}|claim [--for 用途]|release [--force]|who} [--session 标识]\n' "$0"
      printf '  --session 或 EMU_SESSION 用来证明「锁是我占的」；不加就按别人的锁处理。\n'
-     printf '  tree 列这一屏可点的控件（带序号）；tap / tap-text 按树里的坐标点，点完自动比对前后两棵树。\n'
+     printf '  tree 列这一屏可点的控件（带序号）；tap / tap-text 按树里的坐标点，点完自动比对前后两棵树。
+  tap-seq 一次命令连点多个（默认每步重新取树，--one-shot 用同一屏坐标）；tap / tap-seq 加 --record 名字 会把步骤存进 tmp/routes/名字.json，route play 名字 逐步重走。\n'
      exit 1 ;;
 esac
