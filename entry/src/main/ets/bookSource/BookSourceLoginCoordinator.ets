@@ -213,6 +213,28 @@ export class BookSourceLoginCoordinator {
     return '已清除 Cookie 与登录态';
   }
 
+  /**
+   * 删除登录头：对齐上游 BaseSource.kt:158-161 `removeLoginHeader()`——
+   * `CacheManager.delete("loginHeader_${getKey()}")` + `CookieStore.removeCookie(getKey())`。
+   * 本地没有 CacheManager，loginHeader 存在 sourceJson 的 loginHeader 键里，所以清该键 + 清 Cookie。
+   */
+  static async removeLoginHeader(context: Context, sourceUrl: string): Promise<string> {
+    const all = BookSourceRepository.getAll();
+    const idx = all.findIndex((r: BookSource): boolean => r.bookSourceUrl === sourceUrl);
+    if (idx < 0) { return '书源不存在'; }
+    const patch: Record<string, string> = {};
+    patch['loginHeader'] = '';
+    BookSourceLoginCoordinator.writeJsonKeys(all[idx], patch);
+    try {
+      await BookSourceRepository.save(context, all);
+    } catch (error) {
+      return '删除失败：' + (error instanceof Error ? error.message : String(error));
+    }
+    // 上游同时清 Cookie（登录头与 Cookie 是同一套登录态的两半）。
+    CookieStore.forSource(sourceUrl).removeCookie('');
+    return '已删除登录头与 Cookie';
+  }
+
   // ---- 私有辅助 ----
 
   private static findLocal(sourceUrl: string): BookSource | undefined {
