@@ -5,10 +5,12 @@ import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { AppGlyph } from '../components/AppGlyph';
+import { AppLog } from '../lib/AppLog';
+import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownloadQueue';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { Context } from '@kit.AbilityKit';
-import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const MANAGE_MENU_WIDTH: number = 260;
@@ -17,9 +19,11 @@ const MANAGE_MENU_WIDTH: number = 260;
  * 书架管理页（:447–:475）。上游是 BookshelfManageScreen.kt，本地原先整页未建。
  *
  * 与上游的差异（逐行写进 BOOKSHELF.md 差异说明）：
- * - 上游「下载 / 停止」类按钮服务在线书的章节抓取；本地书正文本来就在磁盘上
- *   （readBookRow 把 isLocal 写死 true），本页不放下载入口（:450/:454/:461 判不接）。
- * - 上游右侧徽标显示「已缓存 N/M 章」；本地恒显示「本地书」。
+ * - 上游「下载 / 停止」类按钮服务在线书的章节抓取。批2（:455 :459 :466）已接：
+ *   顶栏「更多 → 下载全部」、行内「下载/停止」、选择模式「下载」，三者都调 Index 侧
+ *   downloadSelectedBooks（内部只挑没缓存过的章，再交给 ChapterDownloadQueue）。
+ *   本地书（isLocal）正文本来就在磁盘上，不给下载入口，右端仍显示「本地书」。
+ * - 上游右侧徽标显示「已缓存 N/M 章」；本地按下载队列快照显示六档文字（:442/:459）。
  * - 本地 Book 没有 origin/originName，第三行左半用 groupNames、右半用 androidOriginalPath 的文件名。
  * - 导出走鸿蒙 DocumentViewPicker.save()，每本弹一次系统保存框（:471）。
  * - 删除用自绘 bindSheet（系统 AlertDialog 放不下勾选框），复用批5 的 BookRepository.deleteBooks。
@@ -37,6 +41,15 @@ export struct BookshelfManagePage {
   /** 批量改动后通知 Index 重载书架。 */
   onLibraryChanged: () => Promise<void> = async () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 批2（:455）：顶栏「更多 → 下载全部」；只下没缓存过的章节，由 Index 统一入队。 */
+  onDownloadAll: (books: Book[]) => void = (_books: Book[]) => {};
+  /** 批2（:466）：选择模式「下载」。 */
+  onDownloadSelected: (books: Book[]) => void = (_books: Book[]) => {};
+  /** 批2（:469）：选择模式「清除缓存」，Index 侧按 isLocal 分流后才动磁盘。 */
+  onClearSelectedCache: (books: Book[]) => void = (_books: Book[]) => {};
+  /** 批2（:471）：单本「分段导出」，按范围挑章、每卷 N 章拆成多个 EPUB。 */
+  onExportSegmented: (book: Book, scopeSpec: string, chaptersPerVolume: number) => void =
+    (_book: Book, _scopeSpec: string, _chaptersPerVolume: number) => {};
 
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#F1F2F6';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#AEB0BA';
@@ -64,6 +77,11 @@ export struct BookshelfManagePage {
   @State exportFileNameTemplate: string = '{title}';
   @State exportWithChapterName: boolean = true;
   @State showGroupSelect: boolean = false;
+  /** 批2（:471）：分段导出的输入与目标书。 */
+  @State showSegmentedExport: boolean = false;
+  @State segmentedExportBook: Book | undefined = undefined;
+  @State segmentedScope: string = '1-';
+  @State segmentedVolumeSize: string = '1';
   // 四个卡片式菜单的显隐状态，各自独立，避免互相顶掉。
   @State groupFilterVisible: boolean = false;
   @State moreMenuVisible: boolean = false;
@@ -72,11 +90,99 @@ export struct BookshelfManagePage {
   @State groupSelectBookKeys: string[] = [];
   @State preselectedGroupName: string = '';
   @State rowMenuKey: string = '';
+  /** 批2（:457）：日志面板显隐；内容取 AppLog 内存缓冲快照。 */
+  @State showLogSheet: boolean = false;
+  @State logEntries: string[] = [];
+  /**
+   * 批2（:455 :459 :466）：每本书的下载状态，键是 bookKey(book)。
+   * ArkUI 里 Map 原地 set 不触发刷新，一律整体替换（同 exportMsgByKey 的坑）。
+   */
+  @State bookDownloadStates: Map<string, DownloadState> = new Map<string, DownloadState>();
 
   private listScroller: Scroller = new Scroller();
+  /** 下载队列订阅的取消函数；aboutToDisappear 必须调，否则页面销毁后回调还在跑。 */
+  private downloadUnsubscribe: (() => void) | undefined = undefined;
 
   aboutToAppear(): void {
     this.currentGroupName = this.initialGroupName;
+    this.downloadUnsubscribe = ChapterDownloadQueue.subscribe(() => this.refreshDownloadStates());
+    this.refreshDownloadStates();
+  }
+
+  aboutToDisappear(): void {
+    if (this.downloadUnsubscribe !== undefined) {
+      this.downloadUnsubscribe();
+      this.downloadUnsubscribe = undefined;
+    }
+  }
+
+  /**
+   * 批2（:459）：把队列快照摊成「每本书一个档位」，整张 Map 换新才触发卡片刷新。
+   * 档位判定顺序照上游 CACHE_STATE 的语义：暂停 > 在跑 > 有失败 > 全成 > 空。
+   */
+  private refreshDownloadStates(): void {
+    const next = new Map<string, DownloadState>();
+    this.books.forEach((book: Book) => {
+      const key = this.bookKey(book);
+      const snapshot = ChapterDownloadQueue.snapshot(key);
+      let state: DownloadState = 'idle';
+      if (snapshot.total > 0) {
+        if (snapshot.paused) {
+          state = 'paused';
+        } else if (snapshot.running > 0) {
+          state = 'running';
+        } else if (snapshot.done + snapshot.failed >= snapshot.total) {
+          state = snapshot.failed > 0 ? 'failed' : 'done';
+        } else {
+          state = 'queued';
+        }
+      }
+      next.set(key, state);
+    });
+    this.bookDownloadStates = next;
+  }
+
+  private downloadStateOf(book: Book): DownloadState {
+    return this.bookDownloadStates.get(this.bookKey(book)) ?? 'idle';
+  }
+
+  /**
+   * 批2（:442）：六档文案，与缓存管理页同一套措辞，用户在这两页看到的字要一致。
+   * 上游枚举在 BookCache 的 CACHE_STATE_*（未缓存/排队/下载中/暂停/完成/失败）。
+   */
+  private downloadStateLabelOf(book: Book): string {
+    const state = this.downloadStateOf(book);
+    if (state === 'queued') {
+      return '排队中';
+    }
+    if (state === 'running') {
+      return '下载中';
+    }
+    if (state === 'paused') {
+      return '已暂停';
+    }
+    if (state === 'done') {
+      return '已下载';
+    }
+    if (state === 'failed') {
+      return '失败';
+    }
+    return '未下载';
+  }
+
+  /** 已经被队列挡下（暂停）或跑到一半时，图标换成停止。 */
+  private isDownloadBusy(book: Book): boolean {
+    const state = this.downloadStateOf(book);
+    return state === 'queued' || state === 'running';
+  }
+
+  private toggleBookDownload(book: Book): void {
+    if (this.isDownloadBusy(book)) {
+      ChapterDownloadQueue.stop(this.bookKey(book));
+      this.refreshDownloadStates();
+      return;
+    }
+    this.onDownloadSelected([book]);
   }
 
   /** 书目的主键路径，与 deleteBook / setBooksGroup 同口径（contentPath 优先）。 */
@@ -263,6 +369,40 @@ export struct BookshelfManagePage {
     this.exportMsgByKey = next;
   }
 
+  /**
+   * 批2（:471）：打开分段导出输入。
+   * 上游 BookshelfManageScreen.kt:298 只在「单选一本书」时给这个入口，多选走普通导出，
+   * 所以这里只接受单本，且从来不在选择模式的批量菜单里出现。
+   */
+  private openSegmentedExport(book: Book): void {
+    this.segmentedExportBook = book;
+    this.segmentedScope = `1-${Math.max(1, this.chapterCountHint(book))}`;
+    this.segmentedVolumeSize = '1';
+    this.showSegmentedExport = true;
+  }
+
+  /** 没读到章节数时给一个能覆盖全书的默认范围（上游默认把整本当一段）。 */
+  private chapterCountHint(book: Book): number {
+    const total = Number(book.chapterCount ?? '0');
+    return Number.isFinite(total) && total > 0 ? Math.floor(total) : 1;
+  }
+
+  private runSegmentedExport(): void {
+    const book = this.segmentedExportBook;
+    if (book === undefined) {
+      this.showSegmentedExport = false;
+      return;
+    }
+    const scopeSpec = this.segmentedScope.trim();
+    if (scopeSpec.length === 0) {
+      this.onUnavailableAction('请先填章节范围');
+      return;
+    }
+    const size = Math.floor(Number(this.segmentedVolumeSize));
+    this.showSegmentedExport = false;
+    this.onExportSegmented(book, scopeSpec, Number.isFinite(size) && size >= 1 ? size : 1);
+  }
+
   private exportMsgOf(book: Book): string {
     return this.exportMsgByKey.get(this.rowKey(book)) ?? '';
   }
@@ -392,9 +532,16 @@ export struct BookshelfManagePage {
     })
   }
 
-  /** 顶栏「更多」本批只放「导出全部」；下载全部(:450)与日志(:452)不做，菜单里不放占位项。 */
+  /**
+   * 顶栏「更多」。批2 补两条：下载全部（:455，上游 downloadAll）与日志（:457，上游 AppLogSheet），
+   * 都落在本页，不再走占位 toast。
+   */
   private moreMenuItems(): UiMenuItem[] {
-    return [{ key: 'export_all', title: '导出全部' }];
+    return [
+      { key: 'download_all', title: '下载全部' },
+      { key: 'log', title: '日志' },
+      { key: 'export_all', title: '导出全部' }
+    ];
   }
 
   @Builder
@@ -404,16 +551,26 @@ export struct BookshelfManagePage {
       panelWidth: MANAGE_MENU_WIDTH,
       onSelect: (key: string) => {
         this.moreMenuVisible = false;
-        if (key === 'export_all') { this.openExportSheet(this.filteredBooks()); }
+        if (key === 'download_all') {
+          this.onDownloadAll(this.filteredBooks());
+        } else if (key === 'log') {
+          this.logEntries = AppLog.getAll();
+          this.showLogSheet = true;
+        } else if (key === 'export_all') {
+          this.openExportSheet(this.filteredBooks());
+        }
       }
     })
   }
 
+  /** 选择模式操作。批2 补「下载」（:466）与「清除缓存」（:469）。 */
   private selectionMenuItems(): UiMenuItem[] {
     return [
       { key: 'select_all', title: '全选' },
       { key: 'invert', title: '反选' },
-      { key: 'move_group', title: '移入分组' }
+      { key: 'move_group', title: '移入分组' },
+      { key: 'download_selected', title: '下载' },
+      { key: 'clear_cache', title: '清除缓存' }
     ];
   }
 
@@ -431,6 +588,10 @@ export struct BookshelfManagePage {
         } else if (key === 'move_group') {
           const keys: string[] = this.selectedBooks().map((book: Book) => this.rowKey(book));
           this.openGroupSelect(keys);
+        } else if (key === 'download_selected') {
+          this.onDownloadSelected(this.selectedBooks());
+        } else if (key === 'clear_cache') {
+          this.onClearSelectedCache(this.selectedBooks());
         }
       }
     })
@@ -475,9 +636,28 @@ export struct BookshelfManagePage {
               .margin({ top: 2 }).maxLines(1)
           }
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Text('本地书').fontSize(LABEL_SMALL).fontColor('#B9C6FF')
+        if (BookRepository.isOnlineBook(book)) {
+          // 批2（:459）：在线书右端是下载状态；空闲时点一下开始下，跑起来后点一下停止。
+          Row() {
+            if (this.downloadStateOf(book) === 'done') {
+              AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: '#7BD88F' })
+            } else if (this.isDownloadBusy(book)) {
+              AppGlyph({ name: 'profileClose', glyphSize: 16, tint: this.themeColorAccent })
+            } else {
+              AppGlyph({ name: 'download', glyphSize: 16, tint: this.themeColorAccent })
+            }
+            Text(this.downloadStateLabelOf(book)).fontSize(LABEL_SMALL)
+              .fontColor(this.themeColorTextSecondary).margin({ left: 4 })
+          }
           .padding({ left: 8, right: 8, top: 3, bottom: 3 }).borderRadius(8)
           .backgroundColor(this.themeColorSurfaceElevated)
+          .accessibilityText(`${book.title} ${this.downloadStateLabelOf(book)}`)
+          .onClick(() => this.toggleBookDownload(book))
+        } else {
+          Text('本地书').fontSize(LABEL_SMALL).fontColor('#B9C6FF')
+            .padding({ left: 8, right: 8, top: 3, bottom: 3 }).borderRadius(8)
+            .backgroundColor(this.themeColorSurfaceElevated)
+        }
         if (this.selectionMode) {
           Stack({ alignContent: Alignment.Center }) {
             Column().width(18).height(18).borderRadius(9)
@@ -489,19 +669,31 @@ export struct BookshelfManagePage {
           }.width(26).height(26).margin({ left: 8 })
         }
       }.width('100%')
-      // 行内三个等宽按钮：去掉上游的「下载/停止」(:454 判不接)。
+      // 行内按钮：批2 补「下载/停止」（:459），只在在线书上出现。
       Row() {
         Text('导出').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent).layoutWeight(1).height(30)
           .textAlign(TextAlign.Center).onClick(() => this.openExportSheet([book]))
+        if (BookRepository.isOnlineBook(book)) {
+          Text(this.isDownloadBusy(book) ? '停止' : '下载').fontSize(LABEL_SMALL)
+            .fontColor(this.themeColorAccent).layoutWeight(1).height(30).textAlign(TextAlign.Center)
+            .onClick(() => this.toggleBookDownload(book))
+        }
         Text('分组').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent).layoutWeight(1).height(30)
           .textAlign(TextAlign.Center).onClick(() => this.openGroupSelect([this.rowKey(book)]))
         Text('更多').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent).layoutWeight(1).height(30)
           .textAlign(TextAlign.Center)
           .onClick(() => this.rowMenuKey = this.rowMenuKey === this.rowKey(book) ? '' : this.rowKey(book))
       }.width('100%').margin({ top: 6 })
-      // 「更多」展开的小菜单：本批只放「删除书籍」一项（换源归批13、清缓存判不接）。
+      // 「更多」展开的小菜单：删除书籍 + 分段导出（换源归批13、清缓存判不接）。
+      // 批2（:471）：分段导出只在单本操作里出现，多选批量导出仍走上面的「导出」。
       if (this.rowMenuKey === this.rowKey(book)) {
         Row() {
+          Text('分段导出').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .onClick(() => {
+              this.rowMenuKey = '';
+              this.openSegmentedExport(book);
+            })
           Text('删除书籍').fontSize(BODY_SMALL).fontColor('#FF6B6B').padding({ left: 12, right: 12, top: 6, bottom: 6 })
             .onClick(() => {
               this.rowMenuKey = '';
@@ -656,6 +848,38 @@ export struct BookshelfManagePage {
     }.width('100%')
   }
 
+  @Builder
+  private SegmentedExportSheetContent() {
+    Column() {
+      Text('分段导出').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+        .width('100%')
+      Text(this.segmentedExportBook !== undefined ? this.segmentedExportBook.title : '')
+        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 4 })
+      Text('章节范围').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+        .width('100%').margin({ top: 14 })
+      TextInput({ placeholder: '如 1-10,15,20-22', text: this.segmentedScope })
+        .height(44).width('100%').backgroundColor('#2A2B33').borderRadius(12)
+        .fontColor('#ECEEF2').margin({ top: 6 })
+        .onChange((value: string) => this.segmentedScope = value)
+      Text('范围从 1 开始，逗号分隔多段，段内用 - 连起止。').fontSize(LABEL_SMALL)
+        .fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 4 })
+      Text('每卷章节数').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+        .width('100%').margin({ top: 14 })
+      TextInput({ placeholder: '1', text: this.segmentedVolumeSize })
+        .height(44).width('100%').backgroundColor('#2A2B33').borderRadius(12)
+        .fontColor('#ECEEF2').type(InputType.Number).margin({ top: 6 })
+        .onChange((value: string) => this.segmentedVolumeSize = value)
+      Row() {
+        Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+          .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
+          .onClick(() => this.showSegmentedExport = false)
+        Text('导出').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
+          .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
+          .margin({ left: 10 }).onClick(() => this.runSegmentedExport())
+      }.width('100%').margin({ top: 20 })
+    }.width('100%')
+  }
+
   /** 同一组件只挂一个 bindSheet，按状态分发内容（批3 同款，避免多个 bindSheet 只有最后生效）。 */
   @Builder
   private ManageSheet() {
@@ -664,10 +888,44 @@ export struct BookshelfManagePage {
         this.DeleteConfirmContent()
       } else if (this.showExportSheet) {
         this.ExportSheetContent()
+      } else if (this.showSegmentedExport) {
+        this.SegmentedExportSheetContent()
       } else if (this.showGroupSelect) {
         this.GroupSelectContent()
+      } else if (this.showLogSheet) {
+        this.LogSheetContent()
       }
     }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
+  }
+
+  /**
+   * 批2（:457）：日志面板。内容与书架页 BookshelfPage.ets:2228 的 LogSheetContent 同源
+   * （都读 AppLog 的内存环形缓冲），两处看到的是同一批行，这是有意的设计。
+   */
+  @Builder
+  private LogSheetContent() {
+    Column() {
+      Row() {
+        Text('日志').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+        Blank()
+        Text('清空').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(6)
+          .onClick(() => { AppLog.clear(); this.logEntries = []; })
+      }.width('100%').padding({ top: 8, bottom: 12 })
+      if (this.logEntries.length === 0) {
+        Column() {
+          Text('暂无日志').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary)
+        }.width('100%').height(240).justifyContent(FlexAlign.Center)
+      } else {
+        List() {
+          ForEach(this.logEntries, (line: string) => {
+            ListItem() {
+              Text(line).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
+                .fontFamily('monospace').width('100%')
+            }.padding({ top: 4, bottom: 4 })
+          }, (line: string) => line)
+        }.width('100%').height(440).scrollBar(BarState.Off)
+      }
+    }.width('100%')
   }
 
   build() {
@@ -750,13 +1008,16 @@ export struct BookshelfManagePage {
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
       }
     }.width('100%').height('100%').backgroundColor(this.themeColorSurfacePrimary)
-      .bindSheet(this.showDeleteConfirm || this.showExportSheet || this.showGroupSelect,
+      .bindSheet(this.showDeleteConfirm || this.showExportSheet || this.showGroupSelect || this.showLogSheet ||
+        this.showSegmentedExport,
         this.ManageSheet(), {
           height: SheetSize.FIT_CONTENT, dragBar: true, showClose: false, backgroundColor: '#17181E',
           onDisappear: () => {
             this.showDeleteConfirm = false;
             this.showExportSheet = false;
             this.showGroupSelect = false;
+            this.showLogSheet = false;
+            this.showSegmentedExport = false;
           }
         })
   }

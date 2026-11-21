@@ -1,5 +1,7 @@
 import curves from '@ohos.curves';
 import { AppRoute, Book, BookChapter, bookCoverColor, bookCoverMark, BookMediaType, ProfileRoute } from '../model/Book';
+import { ChapterDownloadQueue } from '../bookSource/ChapterDownloadQueue';
+import { AppLog } from '../lib/AppLog';
 import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { HomePage } from './HomePage';
 import { BookshelfPage } from './BookshelfPage';
@@ -321,6 +323,8 @@ struct Index {
   /** 跳转校验未通过时挂在这里，弹「仍要跳转吗」确认框。 */
   @State pendingBookmarkTarget: PendingBookmarkTarget | undefined = undefined;
   @State readerContent: string = '';
+  /** 批2（TXT:480）：目录跳章期间为真，目录页盖加载态；读完（成功/失败）都复位。 */
+  @State chapterLoading: boolean = false;
   /**
    * 邻章预读结果（页层批次 4）：阅读页在章末前先要一章，宿主读完经这一项送回。
    *
@@ -9323,6 +9327,8 @@ private canWriteInto(dir: string): boolean {
     }
     this.readerStartAtChapterBeginning = false;
     this.saveReaderAnchorBeforeChapterJump(chapterIndex);
+    // 批2（TXT:480）：读章节是异步的（在线书要走网络），目录页据此盖一层加载态。
+    this.chapterLoading = true;
     const chapterCount = Math.max(1, chapterTitles.length);
     const updatedBook: Book = BookRepository.copyBook(this.selectedBook);
     updatedBook.chapterIndex = chapterIndex;
@@ -9337,6 +9343,7 @@ private canWriteInto(dir: string): boolean {
       content = await BookRepository.readChapter(updatedBook, title);
       this.replaceRules = ReplaceRuleRepository.getAll();
     } catch (error) {
+      this.chapterLoading = false;
       this.showUnavailableAction(error instanceof Error ? `读取章节失败：${error.message}` : '章节文件无法读取');
       return;
     }
@@ -9344,6 +9351,7 @@ private canWriteInto(dir: string): boolean {
     if (updatedBook.contentPath !== undefined) {
       const context = this.getUIContext().getHostContext();
       if (context === undefined) {
+        this.chapterLoading = false;
         this.showUnavailableAction('无法访问本地书架，章节位置未保存');
         return;
       }
@@ -9351,6 +9359,7 @@ private canWriteInto(dir: string): boolean {
         await BookRepository.saveImportedBooks(context,
           updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
       } catch (_) {
+        this.chapterLoading = false;
         this.showUnavailableAction('章节进度保存失败，已保留原阅读位置');
         return;
       }
@@ -9359,6 +9368,7 @@ private canWriteInto(dir: string): boolean {
     this.selectedChapter = title;
     this.books = updatedBooks;
     this.readerContent = content;
+    this.chapterLoading = false;
     this.route = AppRoute.READER;
     console.info(`[ReaderBench] selectChapter readMs=${Date.now() - readStartedAt} ` +
       `totalMs=${Date.now() - selectStartedAt} title=${title}`);
@@ -9451,6 +9461,94 @@ private canWriteInto(dir: string): boolean {
     if (context === undefined) { this.showUnavailableAction('无法访问本地书架'); return; }
     const reloaded = await BookRepository.loadImportedBooks(context);
     this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+  }
+
+  /**
+   * 批2（:455 :459 :466 :145）：把书交给下载队列。三处入口共用一个实现。
+   *
+   * 两条纪律（照上游 CacheBook 的语义，不照抄它的并发）：
+   * ① 只把「磁盘上还没有缓存」的章入队——提供器 getContent 内部本来就会落盘，
+   *    这里再全量入队等于把已缓存的章重复抓一遍。
+   * ② 本地书没有远端目录，直接跳过并说明，不静默吞掉。
+   */
+  private async downloadBooks(books: Book[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.showUnavailableAction('无法访问本地书架'); return; }
+    const targets = books.filter((book: Book) => BookRepository.isOnlineBook(book));
+    if (targets.length === 0) {
+      this.showUnavailableAction('选中的都是本地书，没有需要下载的章节');
+      return;
+    }
+    let queuedBooks = 0;
+    let queuedChapters = 0;
+    for (const book of targets) {
+      const bookUrl = book.contentPath ?? book.androidOriginalPath ?? '';
+      if (bookUrl.length === 0) {
+        continue;
+      }
+      try {
+        // 在线书的章节表可能还没落库（只拉过目录元信息），这里先按目录刷新一次，
+        // 否则「拿不到章节」会被误判成「都已经缓存好了」。
+        let chapters = await BookRepository.getChapterList(context, bookUrl);
+        if (chapters.length === 0) {
+          const outcome = await TocRefreshUseCase.execute(context, bookUrl);
+          chapters = outcome.chapters;
+        }
+        const missing = chapters.filter((chapter: BookChapter) => !BookRepository.isChapterCached(book, chapter));
+        if (missing.length === 0) {
+          if (chapters.length === 0) {
+            this.showUnavailableAction(`《${book.title}》还没有目录，先更新目录再下载`);
+          }
+          continue;
+        }
+        ChapterDownloadQueue.enqueue(book, missing);
+        queuedBooks += 1;
+        queuedChapters += missing.length;
+      } catch (error) {
+        AppLog.put(`下载章节失败：${book.title} ${(error as Error).message}`);
+      }
+    }
+    if (queuedChapters === 0) {
+      this.showUnavailableAction('这些书都已经缓存好了');
+      return;
+    }
+    AppLog.put(`已入队 ${queuedBooks} 本共 ${queuedChapters} 章`);
+    this.showUnavailableAction(`已加入下载队列：${queuedBooks} 本共 ${queuedChapters} 章`);
+  }
+
+  /**
+   * 批2（:469）：清除选中书的缓存。必须按 isLocal 分流——
+   * 本地书的 contentPath 就是正文本身，走 discardImportedCopy 会删掉正文（历史缺陷）。
+   */
+  /** 批2（:471）：单本分段导出——按范围挑章、每卷 N 章拆成多个 EPUB。 */
+  private async exportBookSegmented(book: Book, scopeSpec: string, chaptersPerVolume: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地文件');
+      return;
+    }
+    try {
+      const written = await EpubExporter.exportBookSegmented(context, book, scopeSpec, chaptersPerVolume);
+      if (written === 0) {
+        this.showUnavailableAction('已取消导出');
+        return;
+      }
+      this.showUnavailableAction(`已导出 ${written} 卷 EPUB`);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `分段导出失败：${error.message}` : '分段导出失败');
+    }
+  }
+
+  private async clearBookCaches(books: Book[]): Promise<void> {
+    let cleared = 0;
+    for (const book of books) {
+      if (BookRepository.isOnlineBook(book)) {
+        BookRepository.clearOnlineBookCache(book);
+      }
+      BookRepository.clearChapterCache();
+      cleared += 1;
+    }
+    this.showUnavailableAction(`已清除 ${cleared} 本书的阅读缓存`);
   }
 
   /** 下载与缓存设置（:484）：启动时把偏好读进内存，供 BookRepository 的正文缓存上限取值。 */
@@ -9684,6 +9782,7 @@ private canWriteInto(dir: string): boolean {
           onImportBook: () => this.importLocalBook(),
           onImportBookList: (books: Book[]) => this.importBookList(books),
           onRefreshToc: () => this.refreshAllToc(),
+          onDownloadBooks: (books: Book[]) => { this.downloadBooks(books); },
           onPullRefresh: (groupName: string) => { this.refreshBookshelfFromPull(groupName); },
           onApplyTagGroupRules: () => this.applyTagGroupRules(),
           onSetBooksGroup: (bookKeys: string[], groupName: string) => this.setBooksGroupByKeys(bookKeys, groupName),
@@ -10087,6 +10186,7 @@ private canWriteInto(dir: string): boolean {
               markings: this.readerMarkings.filter((marking: ReaderMarking) => marking.bookId === this.selectedBook.id),
               useTitleReplacement: this.readerTocUseReplace,
               showWordCount: this.readerTocShowWordCount,
+              chapterLoading: this.chapterLoading,
               onBack: () => this.route = this.catalogReturnRoute,
               // 目录页书封/书名点击进详情，返回时回到目录。
               // 不动 catalogReturnRoute：否则「目录 → 详情 → 目录 → 返回」会回到详情，形成来回跳。
@@ -10681,7 +10781,13 @@ private canWriteInto(dir: string): boolean {
             onBack: () => this.route = this.profileDetailReturnRoute,
             onOpenBookInfo: (book: Book) => this.openBookInfo(book),
             onLibraryChanged: () => this.reloadLibraryAfterBulkChange(),
-            onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+            onUnavailableAction: (message: string) => this.showUnavailableAction(message),
+            onDownloadAll: (books: Book[]) => { this.downloadBooks(books); },
+            onDownloadSelected: (books: Book[]) => { this.downloadBooks(books); },
+            onClearSelectedCache: (books: Book[]) => { this.clearBookCaches(books); },
+            onExportSegmented: (book: Book, scopeSpec: string, chaptersPerVolume: number) => {
+              this.exportBookSegmented(book, scopeSpec, chaptersPerVolume);
+            }
           })
         } else if (this.profileSubpage === ProfileRoute.FILE_MANAGER) {
           FileManagerPage({

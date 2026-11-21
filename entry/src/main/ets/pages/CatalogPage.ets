@@ -5,6 +5,7 @@ import { ReaderMarking } from '../model/ReaderMarking';
 import { BookCover } from '../components/BookCover';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
+import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownloadQueue';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { BODY_SMALL, BODY_SMALL_LINE_HEIGHT, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
@@ -81,6 +82,16 @@ export struct CatalogPage {
   @Prop markings: ReaderMarking[] = [];
   @Prop @Watch('onChapterViewInputChanged') useTitleReplacement: boolean = false;
   @Prop showWordCount: boolean = true;
+  /**
+   * 批2（TXT:480）：目录跳转加载态。Index 在 readChapter 期间置真，
+   * 否则点章节到正文出现之间的空档看起来像「点了没反应」。
+   */
+  @Prop chapterLoading: boolean = false;
+  /**
+   * 批2（TXT:343）：每章的下载状态，键是章节下标。
+   * 与书架卡、缓存页同源（ChapterDownloadQueue.subscribe），三处一起变才是「同一份状态」。
+   */
+  @State chapterDownloadStates: Map<number, DownloadState> = new Map<number, DownloadState>();
   @State @Watch('onChapterViewInputChanged') ascending: boolean = true;
   @State selectedTab: number = 1;
   @State @Watch('onChapterViewInputChanged') query: string = '';
@@ -140,13 +151,82 @@ export struct CatalogPage {
   /** 目录行，打开页面时从 chapters 表读一次；章节已不在 Book 上。 */
   @State chapterRows: BookChapter[] = [];
 
+  private downloadUnsubscribe: (() => void) | undefined = undefined;
+
   aboutToAppear(): void {
     // 只读章节行：字数在切章时已经写进 chapters 表的 wordCount 字段，
     // 目录页不再逐章读正文重算（上游 BookChapter.wordCount 同口径）。
     this.loadChapterRows();
+    this.downloadUnsubscribe = ChapterDownloadQueue.subscribe(() => this.refreshChapterDownloadStates());
+    this.refreshChapterDownloadStates();
   }
 
   aboutToDisappear(): void {
+    if (this.downloadUnsubscribe !== undefined) {
+      this.downloadUnsubscribe();
+      this.downloadUnsubscribe = undefined;
+    }
+  }
+
+  /** 批2（TXT:343）：把队列里每章的档位摊成 Map，整表换新才触发列表刷新。 */
+  private refreshChapterDownloadStates(): void {
+    if (!BookRepository.isOnlineBook(this.book)) {
+      if (this.chapterDownloadStates.size > 0) {
+        this.chapterDownloadStates = new Map<number, DownloadState>();
+      }
+      return;
+    }
+    const bookUrl = this.book.contentPath ?? this.book.androidOriginalPath ?? '';
+    const next = new Map<number, DownloadState>();
+    this.chapterRows.forEach((row: BookChapter) => {
+      const state = ChapterDownloadQueue.chapterState(bookUrl, row.index);
+      if (state !== 'idle') {
+        next.set(row.index, state);
+      }
+    });
+    this.chapterDownloadStates = next;
+  }
+
+  private chapterDownloadStateOf(chapterIndex: number): DownloadState {
+    return this.chapterDownloadStates.get(chapterIndex) ?? 'idle';
+  }
+
+  /** 图标的读屏文案，与缓存页、书架卡同一套六档措辞。 */
+  private chapterDownloadLabel(chapterIndex: number): string {
+    const state = this.chapterDownloadStateOf(chapterIndex);
+    if (state === 'queued') {
+      return '排队中';
+    }
+    if (state === 'running') {
+      return '下载中';
+    }
+    if (state === 'paused') {
+      return '已暂停';
+    }
+    if (state === 'done') {
+      return '已下载';
+    }
+    if (state === 'failed') {
+      return '下载失败';
+    }
+    return '未下载';
+  }
+
+  /** 点图标：空闲/失败/完成 → 只把这章入队；排队中/下载中 → 停整本（队列按书停，没有单章取消）。 */
+  private toggleChapterDownload(chapterIndex: number): void {
+    const bookUrl = this.book.contentPath ?? this.book.androidOriginalPath ?? '';
+    const state = this.chapterDownloadStateOf(chapterIndex);
+    if (state === 'queued' || state === 'running') {
+      ChapterDownloadQueue.stop(bookUrl);
+      this.refreshChapterDownloadStates();
+      return;
+    }
+    const row = this.chapterRows.find((item: BookChapter) => item.index === chapterIndex);
+    if (row === undefined) {
+      return;
+    }
+    ChapterDownloadQueue.enqueue(this.book, [row]);
+    this.refreshChapterDownloadStates();
   }
 
   private async loadChapterRows(): Promise<void> {
@@ -165,6 +245,8 @@ export struct CatalogPage {
       this.onUnavailableAction(`目录加载失败：${BookRepository.lastTocError}`);
     }
     this.rebuildChapterView();
+    // 章节行到位后才有下标可比，补算一次下载状态（TXT:343）。
+    this.refreshChapterDownloadStates();
   }
 
   private getAllChapters(): string[] {
@@ -882,6 +964,26 @@ export struct CatalogPage {
                   if (this.isCurrentChapter(chapter.index)) {
                     Image($r('app.media.app_locate')).width(16).height(16).fillColor(this.themeColorAccent)
                   }
+                  // 批2（TXT:343）：章节右侧下载状态图标。上游 TocScreen.kt:960-1000 四态
+                  // （下载中/成功/失败/本地空占位），切换 fade 200ms + scale 0.8。
+                  // 这里只显示不响应点击：行本身的 onClick 负责开章节，避免一次点击打两个动作。
+                  if (BookRepository.isOnlineBook(this.book) && this.chapterDownloadStateOf(chapter.index) !== 'idle') {
+                    Row() {
+                      if (this.chapterDownloadStateOf(chapter.index) === 'running') {
+                        LoadingProgress().width(14).height(14).color(this.themeColorAccent)
+                      } else if (this.chapterDownloadStateOf(chapter.index) === 'done') {
+                        AppGlyph({ name: 'profileCheck', glyphSize: 14, tint: '#7BD88F' })
+                      } else if (this.chapterDownloadStateOf(chapter.index) === 'failed') {
+                        AppGlyph({ name: 'profileRunningWithErrors', glyphSize: 14, tint: '#E5484D' })
+                      } else {
+                        AppGlyph({ name: 'download', glyphSize: 14, tint: this.themeColorTextTertiary })
+                      }
+                    }
+                    .width(16).height(16).margin({ left: 4 })
+                    .transition(TransitionEffect.OPACITY.animation({ duration: 200 })
+                      .combine(TransitionEffect.scale({ x: 0.8, y: 0.8 })))
+                    .accessibilityText(this.chapterDownloadLabel(chapter.index))
+                  }
                 }
                 .width('100%')
                 // 多级缩进对齐上游 `ReaderBookSheet.kt:915-917`：只有 `tocLevel.coerceIn(0,6) * 10`，
@@ -1171,6 +1273,17 @@ export struct CatalogPage {
       // 上游 `AppModalBottomSheet.kt:62-64` 底色是 `surfaceContainer`，圆角走 M3 `large` = 16dp。
       .backgroundColor(this.themeColorSurfaceElevated)
       .borderRadius({ topLeft: 16, topRight: 16 })
+      // 批2（TXT:480）：点章节到正文出现之间要等 readChapter，盖一层加载态。
+      // 上游 TocScreen.kt 同位置画的是 20dp 下载中转圈，这里换成「转圈 + 加载中…」。
+      if (this.chapterLoading) {
+        Column() {
+          LoadingProgress().width(28).height(28).color(this.themeColorAccent)
+          Text('加载中…').fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 8 })
+        }
+        .width('100%').height('100%')
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.35)')
+      }
     }
     .width('100%')
     .height('100%')

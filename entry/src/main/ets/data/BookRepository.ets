@@ -214,6 +214,50 @@ export class BookRepository {
   static isOnlineBook(book: Book): boolean {
     return book.isLocal !== true;
   }
+
+  /**
+   * 批2（:459）：这一章在磁盘上是否已经有缓存。
+   * 提供器没装（理论上不会）时按「没缓存」处理，让队列去抓一次，宁可多抓不漏抓。
+   */
+  static isChapterCached(book: Book, chapter: BookChapter): boolean {
+    const provider = BookRepository.onlineProvider;
+    if (provider === undefined) {
+      return false;
+    }
+    try {
+      return provider.isChapterCached(book, chapter);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /** 批2（:469）：清掉一本书在 online_book_cache 下的所有 .nb（不碰本地书正文）。 */
+  static clearOnlineBookCache(book: Book): void {
+    const provider = BookRepository.onlineProvider;
+    if (provider === undefined) {
+      return;
+    }
+    try {
+      provider.clearBookCache(book);
+    } catch (error) {
+      AppLog.put(`清理在线书缓存失败：${(error as Error).message}`);
+    }
+  }
+  /** 批2（:443）：删掉某一章的磁盘缓存，只对在线书有意义。 */
+  static deleteOnlineChapterCache(book: Book, chapter: BookChapter): boolean {
+    const provider = BookRepository.onlineProvider;
+    if (provider === undefined) {
+      return false;
+    }
+    try {
+      provider.deleteChapterCache(book, chapter);
+      return true;
+    } catch (error) {
+      AppLog.put(`删除章节缓存失败：${(error as Error).message}`);
+      return false;
+    }
+  }
+
   /** 当前书正文缓存：换章整本重读解码太慢，只留当前这一本，key = contentPath|编码。 */
   private static cachedBookContentKey: string = '';
   private static cachedBookContent: string = '';

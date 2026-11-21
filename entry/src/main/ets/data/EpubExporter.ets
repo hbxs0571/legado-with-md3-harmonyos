@@ -1,9 +1,10 @@
 import { fileIo, picker } from '@kit.CoreFileKit';
 import image from '@ohos.multimedia.image';
 import { util } from '@kit.ArkTS';
-import { Book } from '../model/Book';
+import { Book, BookChapter } from '../model/Book';
 import { BookRepository } from './BookRepository';
 import { EpubWriter, EpubZipEntry } from './EpubWriter';
+import { AppLog } from '../lib/AppLog';
 
 /** 导出时一张图在包里的最终形态。 */
 interface ExportImage {
@@ -34,6 +35,58 @@ export class EpubExporter {
 
   /** 导出成功后返回 true；用户在保存对话框里取消返回 false。 */
   static async exportBook(context: Context, book: Book): Promise<boolean> {
+    const chapters = await EpubExporter.loadExportableChapters(context, book);
+    if (chapters.length === 0) {
+      throw new Error('这本书没有章节，无法导出');
+    }
+    const archive = await EpubExporter.packVolume(book, chapters, chapters);
+    return await EpubExporter.saveToFile(context, archive, EpubExporter.buildFileName(book.title));
+  }
+
+  /**
+   * 批2（:471）：按章节范围导出，并按每卷章数拆成多个 EPUB。
+   * 上游入口在 BookshelfManageScreen.kt:298（只在单选一本书时出现），弹窗收范围表达式与每卷章数
+   * （:1345-1365），范围解析在 ExportBookService.kt:988-1008，分卷切片在 :855-858。
+   * 返回实际写出的卷数；用户在保存对话框取消返回 0。
+   *
+   * 如实记两处差异：
+   * 1. 上游还收「分卷文件名模板」（customEpisodeExportNameInput），本地只做 书名.epub / 书名-2.epub，
+   *    模板变量不接，已记进 KNOWN-ISSUES。
+   * 2. 上游在后台写缓存再逐个落盘；本地一次弹保存对话框、把所有卷名一起交出去（同名目录下多文件）。
+   */
+  static async exportBookSegmented(context: Context, book: Book, scopeSpec: string,
+    chaptersPerVolume: number): Promise<number> {
+    const chapters = await EpubExporter.loadExportableChapters(context, book);
+    if (chapters.length === 0) {
+      throw new Error('这本书没有章节，无法导出');
+    }
+    const picked = EpubExporter.parseScope(scopeSpec, chapters);
+    if (picked.length === 0) {
+      throw new Error('范围里没有章节，无法导出');
+    }
+    // 上游 ExportBookService.kt:1345 对每卷章数做 toIntOrNull()?.coerceAtLeast(1) ?: 1。
+    const size = Math.floor(chaptersPerVolume) >= 1 ? Math.floor(chaptersPerVolume) : 1;
+    const volumes: BookChapter[][] = [];
+    for (let start = 0; start < picked.length; start += size) {
+      volumes.push(picked.slice(start, Math.min(picked.length, start + size)));
+    }
+    const archives: ArrayBuffer[] = [];
+    for (let index = 0; index < volumes.length; index++) {
+      const volume = volumes[index];
+      if (volume === undefined) { continue; }
+      // 每卷独立打包：nav / opf / 图片表都重来一遍，spine 也按卷重置。
+      archives.push(await EpubExporter.packVolume(book, volume, chapters));
+      AppLog.put(`导出分卷：第 ${index + 1}/${volumes.length} 卷，${volume.length} 章`);
+    }
+    const names: string[] = [];
+    for (let index = 0; index < archives.length; index++) {
+      names.push(EpubExporter.volumeFileBase(book.title, index + 1));
+    }
+    return await EpubExporter.saveManyToFiles(context, archives, names);
+  }
+
+  /** 导出前的公共检查：正文文件在盘上、章节表读得出来。 */
+  private static async loadExportableChapters(context: Context, book: Book): Promise<BookChapter[]> {
     const bookUrl = book.contentPath ?? '';
     if (bookUrl.length === 0) {
       throw new Error('本地正文缺失，无法导出');
@@ -49,10 +102,56 @@ export class EpubExporter {
     if (!bodyExists) {
       throw new Error('本地正文文件不在了，无法导出；重新导入原书文件后再试');
     }
-    const chapters = await BookRepository.getChapterList(context, bookUrl);
-    if (chapters.length === 0) {
-      throw new Error('这本书没有章节，无法导出');
+    return await BookRepository.getChapterList(context, bookUrl);
+  }
+
+  /**
+   * 批2（:471）：范围表达式 → 章节列表。
+   * 语义照 ExportBookService.kt:988-1008：逗号分段，每段可写 a 或 a-b，用户输入是 1 起，
+   * 越界静默剔除（:788），left > right 的段整段跳过并记日志。
+   */
+  private static parseScope(spec: string, chapters: BookChapter[]): BookChapter[] {
+    const picked: BookChapter[] = [];
+    const seen: Set<number> = new Set<number>();
+    const segments = spec.split(',');
+    for (let index = 0; index < segments.length; index++) {
+      const segment = (segments[index] ?? '').trim();
+      if (segment.length === 0) { continue; }
+      const bounds = segment.split('-');
+      const leftText = (bounds[0] ?? '').trim();
+      const rightText = bounds.length > 1 ? (bounds[1] ?? '').trim() : '';
+      const left = Number(leftText);
+      if (leftText.length === 0 || !Number.isFinite(left)) { continue; }
+      const right = rightText.length === 0 ? left : Number(rightText);
+      if (!Number.isFinite(right)) { continue; }
+      if (left > right) {
+        AppLog.put(`范围表达式无效 : ${segment}; left > right`);
+        continue;
+      }
+      for (let one = left; one <= right; one++) {
+        const position = Math.floor(one) - 1;
+        if (position < 0 || position >= chapters.length) { continue; }
+        if (seen.has(position)) { continue; }
+        seen.add(position);
+        const chapter = chapters[position];
+        if (chapter !== undefined) { picked.push(chapter); }
+      }
     }
+    return picked;
+  }
+
+  /** 批2（:471）：第一卷沿用「书名.epub」，第二卷起「书名-2.epub」，与上游 getExportFileName 同形。 */
+  private static volumeFileBase(title: string, volumeIndex: number): string {
+    const base = EpubExporter.buildFileName(title).replace(/\.epub$/, '');
+    return volumeIndex <= 1 ? `${base}.epub` : `${base}-${volumeIndex}.epub`;
+  }
+
+  /**
+   * 把给定的一批章节打成一个 EPUB。exportBook 传「全部章节」，分卷导出传「一卷的章节」，
+   * 两者共用这一份打包逻辑，避免两条路各写一遍（ZIP 结构、nav、opf 只要有一处不同就会分裂）。
+   */
+  private static async packVolume(book: Book, volumeChapters: BookChapter[],
+    allChapters: BookChapter[]): Promise<ArrayBuffer> {
     // uri → 包内文件名；同一张图被多章引用时只转一次、只写一份。
     const images: Map<string, string> = new Map<string, string>();
     const exportImages: ExportImage[] = [];
@@ -60,15 +159,15 @@ export class EpubExporter {
     const spineIds: string[] = [];
     const navLines: string[] = [];
     let chapterFileIndex = 0;
-    for (let index = 0; index < chapters.length; index++) {
-      const chapter = chapters[index];
+    for (let index = 0; index < volumeChapters.length; index++) {
+      const chapter = volumeChapters[index];
       if (chapter === undefined) { continue; }
       // 分卷行没有正文文件（上游 isVolume 行在目录里只是一行标题），只在 nav 里留一行文字。
       if (chapter.isVolume) {
         navLines.push(`      <li><span>${EpubExporter.escapeXml(chapter.title)}</span></li>`);
         continue;
       }
-      const body = await BookRepository.readChapter(book, chapter.title, chapter.index, undefined, chapters);
+      const body = await BookRepository.readChapter(book, chapter.title, chapter.index, undefined, allChapters);
       chapterFileIndex += 1;
       const fileName = `text/chapter-${chapterFileIndex}.xhtml`;
       chapterEntries.push({
@@ -104,7 +203,7 @@ export class EpubExporter {
     if (EpubWriter.lastFallbackReason.length > 0) {
       console.info(`[EpubExport] deflate 不可用，已整包 STORED：${EpubWriter.lastFallbackReason}`);
     }
-    return await EpubExporter.saveToFile(context, archive, EpubExporter.buildFileName(book.title));
+    return archive;
   }
 
   /** 一章一个 xhtml；图片在这里转码进 images/ 并返回可复用的文件名。 */
@@ -378,5 +477,39 @@ export class EpubExporter {
       fileIo.closeSync(target);
     }
     return true;
+  }
+
+  /**
+   * 批2（:471）：多卷一次落盘。把全部卷名一起交给保存对话框，用户在同一个目录里拿到多个文件；
+   * 返回真正写成功的卷数（用户取消返回 0）。
+   */
+  private static async saveManyToFiles(context: Context, archives: ArrayBuffer[],
+    fileNames: string[]): Promise<number> {
+    if (archives.length === 0 || archives.length !== fileNames.length) {
+      return 0;
+    }
+    const options = new picker.DocumentSaveOptions();
+    options.newFileNames = fileNames;
+    options.fileSuffixChoices = ['EPUB 电子书|.epub'];
+    const uris = await new picker.DocumentViewPicker(context).save(options);
+    if (uris.length === 0) {
+      return 0;
+    }
+    let written = 0;
+    for (let index = 0; index < archives.length; index++) {
+      const archive = archives[index];
+      const uri = uris[index];
+      if (archive === undefined || uri === undefined) { continue; }
+      const target = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+      try {
+        fileIo.writeSync(target.fd, archive);
+        written += 1;
+      } catch (error) {
+        AppLog.put(`分卷写入失败：${fileNames[index]} ${(error as Error).message}`);
+      } finally {
+        fileIo.closeSync(target);
+      }
+    }
+    return written;
   }
 }

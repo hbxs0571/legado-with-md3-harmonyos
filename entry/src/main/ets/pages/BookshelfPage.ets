@@ -270,6 +270,8 @@ export struct BookshelfPage {
   onImportBook: () => Promise<Book | undefined> = async () => undefined;
   /** 重新识别全部本地 TXT 的目录。 */
   onRefreshToc: () => Promise<void> = async () => {};
+  /** 批2（:145）：书架「更多 → 下载全部」。只对在线书有意义，本地书由 Index 侧跳过并说明。 */
+  onDownloadBooks: (books: Book[]) => void = (_books: Book[]) => {};
   /** 下拉刷新：参数是当前分组名，由 Index 侧按分组与刷新上限取书。 */
   onPullRefresh: (groupName: string) => void = (_groupName: string) => {};
   onAddGroup: (name: string) => void = (_name: string) => {};
@@ -2372,6 +2374,7 @@ export struct BookshelfPage {
       { key: 'add_url', title: '添加网址', icon: 'link' },
       { key: 'selection_mode', title: '选择模式', icon: 'edit' },
       { key: 'shelf_manage', title: '书架管理', icon: 'bookmark' },
+      { key: 'download_all', title: '下载全部', icon: 'download' },
       { key: 'export_list', title: '导出书单', icon: 'uploadFile' },
       { key: 'import_list', title: '导入书单', icon: 'cloudDownload' },
       { key: 'log', title: '日志', icon: 'profileHistory' }
@@ -2422,6 +2425,11 @@ export struct BookshelfPage {
     }
     if (key === 'shelf_manage') {
       this.onOpenBookshelfManage(this.activeFilter());
+      return;
+    }
+    if (key === 'download_all') {
+      // 批2（:145）：书架页与书架管理页给的是同一个动作，都落到 Index 的 downloadBooks。
+      this.onDownloadBooks(this.getVisibleBooks());
       return;
     }
     if (key === 'export_list') {
