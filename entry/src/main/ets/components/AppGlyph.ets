@@ -1,4 +1,4 @@
-export type AppGlyphName = 'home' | 'bookshelf' | 'discover' | 'subscription' | 'profile' | 'search' | 'searchPrecisionOn' | 'searchPrecisionOff' | 'more' | 'settings' | 'swap' | 'add' | 'goal' | 'book' | 'bookmark' | 'cloud' | 'cloudSync' | 'cloudUpload' | 'cloudDownload' | 'edit' | 'pencil' | 'delete' | 'share' | 'star' | 'ruleSubscription' | 'favoriteStar' | 'navHomeFilled' | 'navHomeOutlined' | 'navBookshelfFilled' | 'navBookshelfOutlined' | 'navExploreFilled' | 'navExploreOutlined' | 'navRss' | 'navProfileFilled' | 'navProfileOutlined' | 'profileWeb' | 'profileSource' | 'profileFindReplace' | 'profileRule' | 'profileSell' | 'profileAutoAwesome' | 'profileSettings' | 'profileBookmark' | 'profileHistory' | 'profileDownload' | 'profileFolder' | 'profileInfo' | 'profileExitToApp' | 'profileClose' | 'profileNoteAdd' | 'profileContentPaste' | 'profileRunningWithErrors' | 'profileSave' | 'profileCheck' | 'lock' | 'profileExpandMore' | 'profileTimeline' | 'profileFilterAlt' | 'profileRefresh' | 'clock' | 'accessTime' | 'chart' | 'folder' | 'tag' | 'list' | 'download' | 'info' | 'sparkles' | 'logout' | 'web' | 'locate' | 'arrowForward' | 'wifi' | 'grid' | 'carousel' | 'link' | 'uploadFile' | 'shuffle' | 'group' | 'brightness_medium' | 'light_mode' | 'dark_mode' | 'visibility' | 'visibilityOff';
+export type AppGlyphName = 'home' | 'bookshelf' | 'discover' | 'subscription' | 'profile' | 'search' | 'searchPrecisionOn' | 'searchPrecisionOff' | 'more' | 'settings' | 'swap' | 'add' | 'goal' | 'book' | 'bookmark' | 'cloud' | 'cloudSync' | 'cloudUpload' | 'cloudDownload' | 'edit' | 'pencil' | 'delete' | 'share' | 'star' | 'ruleSubscription' | 'favoriteStar' | 'navHomeFilled' | 'navHomeOutlined' | 'navBookshelfFilled' | 'navBookshelfOutlined' | 'navExploreFilled' | 'navExploreOutlined' | 'navRss' | 'navProfileFilled' | 'navProfileOutlined' | 'profileWeb' | 'profileSource' | 'profileFindReplace' | 'profileRule' | 'profileSell' | 'profileAutoAwesome' | 'profileSettings' | 'profileBookmark' | 'profileHistory' | 'profileDownload' | 'profileFolder' | 'profileInfo' | 'profileExitToApp' | 'profileClose' | 'profileNoteAdd' | 'profileContentPaste' | 'profileRunningWithErrors' | 'profileSave' | 'profileCheck' | 'lock' | 'profileExpandMore' | 'profileTimeline' | 'profileFilterAlt' | 'profileRefresh' | 'clock' | 'accessTime' | 'chart' | 'folder' | 'tag' | 'list' | 'download' | 'info' | 'sparkles' | 'logout' | 'web' | 'locate' | 'arrowForward' | 'wifi' | 'grid' | 'carousel' | 'link' | 'uploadFile' | 'shuffle' | 'group' | 'brightness_medium' | 'light_mode' | 'dark_mode' | 'visibility' | 'visibilityOff' | 'bugReport' | 'clearAll' | 'playArrow' | 'stop';
 
 @Component
 export struct AppGlyph {
@@ -191,6 +191,18 @@ export struct AppGlyph {
     } else if (this.name === 'web') {
       // 上游 `Icons.Default.Web`（MyScreen.kt:268「网页」入口）：与 web 成员同名。
       Image($r('app.media.app_web')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+    } else if (this.name === 'bugReport') {
+      // 上游 `Icons.Default.BugReport`（编辑页「保存并调试」）：pathData 来自 ic_bug_report.xml。
+      Image($r('app.media.app_bug_report')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+    } else if (this.name === 'clearAll') {
+      // 上游 `Icons.Default.ClearAll`（调试页「清空日志」）：pathData 来自 ic_clear_all.xml。
+      Image($r('app.media.app_clear_all')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+    } else if (this.name === 'playArrow') {
+      // 上游 `Icons.Default.PlayArrow`（调试页「开始调试」）：复用已有 reader_play 资源。
+      Image($r('app.media.reader_play')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+    } else if (this.name === 'stop') {
+      // 上游 `Icons.Default.Stop`（调试页「停止」）：复用已有 app_stop_square 资源。
+      Image($r('app.media.app_stop_square')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else {
       // 兜底：联合类型新增成员却忘了写分支时会落到这里。
       // 渲染成网页图标而不是空白，便于在界面上看见；覆盖度由 scripts/icon-glyph-coverage.py 守。
