@@ -666,6 +666,20 @@ export class RdbSchema {
     'CREATE INDEX IF NOT EXISTS index_book_outline_nodes_bookUrl_parent_order ' +
     'ON book_outline_nodes (bookUrl, parentId, `order`)';
 
+  /**
+   * 批8 C 组（:922）：书源/文本规则编辑页键盘上方的快捷符号配置。
+   * 与上游 KeyboardAssist.kt 一致，主键是复合的 (type, key)——这是全库唯一不用 id 的表，
+   * 漏掉复合主键会建出重键表，恢复时同键多行会被 REPLACE 静默覆盖。
+   * type：0 = txt 规则，1 = 书源规则；本地默认 32 条 type 均为 0（上游 JSON 无 type 字段，取默认值）。
+   */
+  static readonly createKeyboardAssists: string =
+    'CREATE TABLE IF NOT EXISTS `keyboardAssists` (' +
+    '`type` INTEGER NOT NULL DEFAULT 0, ' +
+    '`key` TEXT NOT NULL DEFAULT \'\', ' +
+    '`value` TEXT NOT NULL DEFAULT \'\', ' +
+    '`serialNo` INTEGER NOT NULL DEFAULT 0, ' +
+    'PRIMARY KEY(`type`, `key`))';
+
   /** 全部建表语句，按依赖顺序排列。 */
   private static readonly allStatements: string[] = [
     RdbSchema.createBookmarks,
@@ -727,7 +741,9 @@ export class RdbSchema {
     RdbSchema.createBookKnowledgeEntriesTitleIndex,
     RdbSchema.createBookOutlineNodes,
     RdbSchema.createBookOutlineNodesIndex,
-    RdbSchema.createBookOutlineNodesParentIndex
+    RdbSchema.createBookOutlineNodesParentIndex,
+    // 批8 C 组：keyboardAssists 复合主键表；与知识库五表同批在 v10 里建出
+    RdbSchema.createKeyboardAssists
   ];
 
   /**

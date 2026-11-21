@@ -205,6 +205,7 @@ import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { ReplaceRuleImporter } from '../data/ReplaceRuleImporter';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { TxtTocRuleImporter } from '../data/TxtTocRuleImporter';
+import { KeyboardAssistRepository } from '../data/KeyboardAssistRepository';
 import { TxtTocRule } from '../model/TxtTocRule';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
 import { ReplaceRule } from '../model/ReplaceRule';
@@ -984,6 +985,9 @@ struct Index {
     this.restoreReaderMoreActions(context);
     this.restoreReplaceRules(context);
     this.restoreTxtTocRules(context);
+    // 批8 C 组（:922）：首次打开且 keyboardAssists 表为空时灌 32 条默认快捷符号。
+    // 不 await——它内部自己开事务，与首帧书架渲染无关；对齐上游 AppDatabase 建库回调灌库。
+    KeyboardAssistRepository.ensureDefaults(context);
     this.restoreBookContentProcesses(context);
     this.restoreBackupIgnoreLists(context);
     this.restoreWebDavSettings(context);

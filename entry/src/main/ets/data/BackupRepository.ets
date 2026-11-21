@@ -65,6 +65,7 @@ import { RuleSubRepository } from './RuleSubRepository';
 import { RuleSubImporter } from './RuleSubImporter';
 import { aesEcbEncryptToBase64, aesEcbDecryptFromBase64, aesEcKeyFromPassword } from './BackupCrypto';
 import { ServerRepository } from './ServerRepository';
+import { KeyboardAssist, KeyboardAssistRepository } from './KeyboardAssistRepository';
 
 /** 上游 readRecordSession.json 的字段：words 对应本地 chapterIndex。 */
 interface AndroidReadRecordSessionRecord {
@@ -396,6 +397,40 @@ interface AndroidPreferenceKeyGroups {
 }
 
 /** 本地备份沿用 Legado Android 的 ZIP 根目录文件名、JSON/XML 结构和数据类别。 */
+/**
+ * 批8 C 组（:383/:382）：keyboardAssists.json 的序列化/解析。
+ * 字段与上游 KeyboardAssist.kt 逐字一致（type/key/value/serialNo），
+ * 让 Android 端恢复时能直接 insert 进 keyboardAssists 表。
+ */
+function toKeyboardAssistJson(assists: KeyboardAssist[]): string {
+  // ArkTS 禁止 map 回调里推断不出的对象字面量（arkts-no-untyped-obj-literals），
+  // 改成显式 KeyboardAssist 数组逐条 push，与 parseKeyboardAssists 同形。
+  const rows: KeyboardAssist[] = [];
+  for (let index = 0; index < assists.length; index++) {
+    const item = assists[index];
+    rows.push({ type: item.type, key: item.key, value: item.value, serialNo: item.serialNo });
+  }
+  return JSON.stringify(rows);
+}
+
+/** 解析失败、字段不合法的条目跳过，不让一条坏数据毁掉整份恢复。 */
+function parseKeyboardAssists(text: string): KeyboardAssist[] {
+  const raw: KeyboardAssist[] = JSON.parse(text);
+  if (!Array.isArray(raw)) { return []; }
+  const result: KeyboardAssist[] = [];
+  for (let index = 0; index < raw.length; index++) {
+    const item = raw[index];
+    if (item === undefined || typeof item.key !== 'string' || typeof item.value !== 'string') { continue; }
+    result.push({
+      type: typeof item.type === 'number' ? item.type : 0,
+      key: item.key,
+      value: item.value,
+      serialNo: typeof item.serialNo === 'number' ? item.serialNo : index
+    });
+  }
+  return result;
+}
+
 export class BackupRepository {
   private static readonly preferenceName: string = 'legado_android_backup_options';
   private static readonly maximumCompressedBytes: number = 64 * 1024 * 1024;
@@ -834,6 +869,16 @@ export class BackupRepository {
             console.error(`[BackupRepository] 服务器配置加密失败，回退明文写出: ${error}`);
           }
           BackupRepository.writeTextFile(`${stagingDirectory}/servers.json`, payload);
+        }
+      }
+
+      // 批8 C 组（:383）：按键映射全表序列化。上游 Backup.kt:195-197 的 writeListToJson
+      // 只在 list 非空时建文件——空表不写，让 copyPreservedEntries 带进来的旧副本原样带走。
+      if (!ignoredCategories.includes('keyboardAssists')) {
+        const assists = await KeyboardAssistRepository.loadAll(context);
+        if (assists.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/keyboardAssists.json`,
+            toKeyboardAssistJson(assists));
         }
       }
 
@@ -1420,6 +1465,8 @@ export class BackupRepository {
     let serverAdded: number = 0;
     let serverUpdated: number = 0;
     let serverSkipped: number = 0;
+    // 批8 C 组（:382）：恢复的快捷键映射条数，只用于日志，不进 RestoreResult。
+    let keyboardAssistRestored: number = 0;
     // bookmark.json 与 bookMarking.json 是两个条目，但要一起合并再统一落盘，
     // 否则先写书签时用的还是旧笔记列表，后写笔记又会把书签覆盖回去。
     let restoredThemeConfigCount: number = 0;
@@ -1584,6 +1631,19 @@ export class BackupRepository {
         serverAdded += outcome.added;
         serverUpdated += outcome.updated;
         serverSkipped += parsed.skipped + outcome.skipped;
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      // 批8 C 组（:382）：恢复按键映射——解析 JSON → 清表后逐条 insert（对齐主键 (type,key)）。
+      if (entry.name === 'keyboardAssists.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复按键映射`);
+        }
+        const assists = parseKeyboardAssists(text);
+        keyboardAssistRestored = await KeyboardAssistRepository.replaceAll(context, assists);
+        console.info(`[BackupRepository] 恢复按键映射 ${keyboardAssistRestored} 条`);
         await fileIo.copyFile(sourcePath, targetPath);
         preservedEntryCount += 1;
         continue;
