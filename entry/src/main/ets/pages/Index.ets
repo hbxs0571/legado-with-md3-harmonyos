@@ -10412,7 +10412,9 @@ private canWriteInto(dir: string): boolean {
             readMenuTopBarLiquidGlassButtons: this.readerReadMenuTopBarLiquidGlassButtons,
             readMenuTopBarMergeButtons: this.readerReadMenuTopBarMergeButtons,
             readBarStyle: this.readerReadBarStyle,
-            readMenuPaletteStyle: this.readerMenuPaletteStyle,
+            // 菜单 style 空串=跟随系统，回落应用主题 paletteStyle（上游 ReadBookColorTheme.kt:254 的 defaultPaletteStyle）
+            readMenuPaletteStyle: this.readerMenuPaletteStyle.length > 0
+              ? this.readerMenuPaletteStyle : this.themeCustomColors.paletteStyle,
             readMenuColorMode: this.readerMenuColorMode,
             readMenuBgColor: this.readerMenuBgColor,
             readMenuBgColorNight: this.readerMenuBgColorNight,

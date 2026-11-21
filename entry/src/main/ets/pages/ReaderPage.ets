@@ -1,5 +1,5 @@
 // 批 4：M3 派生色位（移植自 material-color-utilities，Apache-2.0）；菜单底色按种子色派生
-import { resolveDynamicColor, M3PaletteStyle, M3ColorSlot } from '../reader/m3/index';
+import { resolveDynamicColor, normalizePaletteStyle, M3PaletteStyle, M3ColorSlot } from '../reader/m3/index';
 import { Book } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
@@ -1651,9 +1651,10 @@ export struct ReaderPage {
       // （`ReadBookColorTheme.kt:152-161`）用强调色作 seed 派生整套色位，
       // 菜单底色取派生方案的 `surfaceContainerHigh`。批 4 已移植派生能力，按同语义派生。
       if (this.readMenuColorMode === 0) {
-        // paletteStyle 本地无对应 prop，按上游默认 tonalSpot（`ThemeSettings.kt:7`）接入。
+        // 色板风格跟随 `readMenuPaletteStyle`（索引 1 的传参链已接通）；空串/未知值按上游回落 tonalSpot。
         const accent: string = this.readerMenuAccentTint();
-        return resolveDynamicColor(accent, this.readerMenuIsNight(), 'tonalSpot' as M3PaletteStyle,
+        const style: M3PaletteStyle = normalizePaletteStyle(this.readMenuPaletteStyle);
+        return resolveDynamicColor(accent, this.readerMenuIsNight(), style,
           'surfaceContainerHigh' as M3ColorSlot);
       }
       // 上游 `readMenuBackgroundColor`（`ReadBookColorTheme.kt:304-310`）未设置时回落
@@ -1667,9 +1668,10 @@ export struct ReaderPage {
       // 菜单底色 = 派生方案的 `surfaceContainerHigh`（`ReadBookMenuBar.kt:1034`/`:1038`，
       // tone 日 92 / 夜 17，见 material-color-utilities `color_spec_2021.ts:222-231`）。
       // 批 4：本地已移植派生能力，色位随纸色色相变化。
-      // paletteStyle 本地无对应 prop，按上游默认 tonalSpot（`ThemeSettings.kt:7`）接入。
+      // 色板风格跟随 `readMenuPaletteStyle`（索引 1 的传参链已接通）；空串/未知值按上游回落 tonalSpot。
       // 明暗取应用主题（`readerMenuIsNight()` ↔ `readerNightMode`），与上游 deriveDarkFromColor=false 同口径。
-      return resolveDynamicColor(this.paperColor, this.readerMenuIsNight(), 'tonalSpot' as M3PaletteStyle,
+      const style: M3PaletteStyle = normalizePaletteStyle(this.readMenuPaletteStyle);
+      return resolveDynamicColor(this.paperColor, this.readerMenuIsNight(), style,
         'surfaceContainerHigh' as M3ColorSlot);
     }
     // style 0：上游 `rememberReadBookColorTheme` 返回 null → 完全继承应用主题，

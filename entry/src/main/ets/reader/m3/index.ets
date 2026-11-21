@@ -41,6 +41,25 @@ export type M3ColorSlot =
 
 const DEFAULT_CONTRAST: number = 0.0;
 
+/**
+ * 把持久化的样式字符串规范化为 M3PaletteStyle。
+ * 对齐上游 `ThemeResolver.resolvePaletteStyle`（`ThemeResolver.kt:67-69`）：
+ * 未知 / 空串一律回落 TonalSpot。
+ */
+export function normalizePaletteStyle(value: string): M3PaletteStyle {
+  switch (value) {
+    case 'neutral': return 'neutral';
+    case 'vibrant': return 'vibrant';
+    case 'expressive': return 'expressive';
+    case 'rainbow': return 'rainbow';
+    case 'fruitSalad': return 'fruitSalad';
+    case 'monochrome': return 'monochrome';
+    case 'fidelity': return 'fidelity';
+    case 'content': return 'content';
+    default: return 'tonalSpot';
+  }
+}
+
 /** 解析 #RRGGBB / #AARRGGBB 为 argb；解析失败返回 fallback。 */
 export function argbFromHex(hex: string, fallback: number): number {
   const s: string = hex.trim().replace('#', '');
