@@ -10,7 +10,11 @@ import { ReplaceRule } from '../model/ReplaceRule';
 import { ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
 import { BookRepository } from '../data/BookRepository';
 import { BookContentProcessRepository } from '../data/BookContentProcessRepository';
+// 批5（:127）：快速标记面板要复用「上次样式」的解析（encodeStyle/decodeStyle 同一份口径）
+import { ReaderMarkingRepository } from '../data/ReaderMarkingRepository';
 import { BookContentProcess } from '../model/BookContentProcess';
+// 批5（:123）：标记渲染前的锚点重定位复用内容处理引擎的 findTargetRange
+import { BookContentProcessEngine } from '../data/BookContentProcessEngine';
 import { ReaderFontRepository } from '../data/ReaderFontRepository';
 import { LocalSemanticDocument, LocalTextSemantics } from '../data/LocalTextSemantics';
 // 批 11：EPUB 行内样式区间类型（sidecar 反序列化结果）
@@ -23,6 +27,8 @@ import { UiSwitchControl } from '../components/UiSwitchControl';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+// 批5（:127）：划词「划线/笔记」改成贴选区的行内快速标记面板
+import { ReaderQuickMarkPanel } from '../components/ReaderQuickMarkPanel';
 import image from '@ohos.multimedia.image';
 import { fileIo } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
@@ -459,6 +465,8 @@ export struct ReaderPage {
   @Prop bookmarks: ReaderBookmark[] = [];
   // 标记变化必须递增 revision，否则滚动模式的 ForEach 复用旧 Span、划线渲染不出来。
   @Prop @Watch('onMarkingsChanged') markings: ReaderMarking[] = [];
+  /** 上次用过的标记样式（上游 ReadSettings.lastMarkingStyle），批5（:127）快速标记面板默认取它。 */
+  @Prop lastMarkingStyle: string = '';
   @Prop readingAnchorAvailable: boolean = false;
   @Prop clickImageBehavior: string = '2';
   @Prop clickRegionActions: string[] = [];
@@ -757,6 +765,13 @@ export struct ReaderPage {
   /** 菜单卡实测宽高（vp）：锚点要靠它把卡片夹进屏幕，否则宽卡会顶出右边界。 */
   @State canvasSelectionMenuWidthVp: number = 0;
   @State canvasSelectionMenuHeightVp: number = 0;
+  // 批5（:127）行内快速标记面板：可见性、样式、备注草稿、命中的已有标记 id、面板锚点
+  @State quickMarkVisible: boolean = false;
+  @State quickMarkStyle: ReaderMarkingEffect = 'solid';
+  @State quickMarkNote: string = '';
+  @State quickMarkExistingId: string = '';
+  @State quickMarkAnchorX: number = 0;
+  @State quickMarkAnchorY: number = 0;
   /** 长按计时器与按下点（px）。 */
   // 长按起选之后紧跟的那次抬手会再触发一次 TapGesture，
   // 上游用 suppressTap 吞掉它（ReaderCanvasSurface.kt:1035-1080），
@@ -960,6 +975,16 @@ export struct ReaderPage {
   onOpenMarking: (markingId: string) => void = (_markingId: string) => {};
   onCreateMarking: (chapterPosition: number, endPosition: number, selectedText: string) => void =
     (_position: number, _endPosition: number, _selectedText: string) => {};
+  /**
+   * 批5（:127）行内快速标记「应用」：命中已有标记（existingId 非空）就改它，否则新建。
+   * 与 onCreateMarking 分开，是因为这条不经过标记编辑 Sheet，直接落库。
+   */
+  onApplyQuickMarking: (chapterPosition: number, endPosition: number, selectedText: string,
+    effect: ReaderMarkingEffect, note: string, existingId: string) => void =
+    (_position: number, _endPosition: number, _selectedText: string, _effect: ReaderMarkingEffect,
+      _note: string, _existingId: string) => {};
+  /** 批5（:127）行内快速标记「删除」：上游 DismissQuickMarking 的对应动作。 */
+  onDeleteQuickMarking: (markingId: string) => void = (_markingId: string) => {};
   onSaveChapterContent: (chapterIndex: number, title: string, body: string) => void =
     (_chapterIndex: number, _title: string, _body: string) => {};
   onToggleReSegment: (enabled: boolean) => void = (_enabled: boolean) => {};
@@ -5293,6 +5318,87 @@ export struct ReaderPage {
     return undefined;
   }
 
+  /**
+   * 批5（:127）行内快速标记：打开贴选区的样式面板。
+   *
+   * 命中判定按「同一章节 + 同一区间 + 同一段选中文字」找已有标记（上游 OpenQuickMarkingEdit 的口径），
+   * 命中就把它的样式与备注预填进来，点「应用」时走编辑而不是新建，避免同一段文字叠两条标记。
+   */
+  private openQuickMarkPanel(): void {
+    if (!this.book.isLocal || BookRepository.isBodyMissing(this.book)) {
+      this.onUnavailableAction('划线与笔记仅支持已有本地正文的书籍');
+      return;
+    }
+    const start = this.pendingMarkingStart;
+    const end = this.pendingMarkingEnd;
+    const selectedText = this.selectedText();
+    if (start < 0 || end <= start || selectedText.length === 0) {
+      this.onUnavailableAction('没有取得有效的正文选区，请重新选择文字');
+      return;
+    }
+    // 面板锚在划词菜单刚让出来的位置（菜单本来就贴着选区，见 refreshCanvasSelectionMenuAnchor）。
+    // 面板固定宽 300vp、高约 200vp：先夹进屏内，下方放不下就翻到上面。
+    const panelWidth = 300;
+    const panelHeight = 200;
+    const maxX = Math.max(4, this.readerContentWidth - panelWidth - 4);
+    this.quickMarkAnchorX = Math.min(Math.max(4, this.canvasSelectionMenuX), maxX);
+    this.quickMarkAnchorY = this.canvasSelectionMenuY + panelHeight <= this.viewportHeight - 4
+      ? this.canvasSelectionMenuY
+      : Math.max(4, this.canvasSelectionMenuY - panelHeight - 8);
+    const existing = this.findMarkingForExactRange(start, end, selectedText);
+    this.quickMarkExistingId = existing === undefined ? '' : existing.id;
+    this.quickMarkStyle = existing === undefined ? this.readerLastMarkingEffect() : existing.effect;
+    this.quickMarkNote = existing === undefined ? '' : existing.note;
+    this.quickMarkVisible = true;
+  }
+
+  private closeQuickMarkPanel(): void {
+    this.quickMarkVisible = false;
+    this.clearCanvasSelection();
+  }
+
+  /** 同章 + 同区间 + 同文字；与 getMarkingForTextRange 的「相交」口径不同，这里要求完全一致。 */
+  private findMarkingForExactRange(start: number, end: number, selectedText: string): ReaderMarking | undefined {
+    const chapterIndex = this.getChapterIndex();
+    for (let index = 0; index < this.markings.length; index++) {
+      const marking = this.markings[index];
+      if (marking !== undefined && marking.chapterIndex === chapterIndex &&
+        marking.chapterPosition === start && marking.endPosition === end &&
+        marking.selectedText === selectedText) {
+        return marking;
+      }
+    }
+    return undefined;
+  }
+
+  /** 上次用过的样式（上游「记住上次样式」）；没记过就按实线下划线（decodeStyle 自带默认回落）。 */
+  private readerLastMarkingEffect(): ReaderMarkingEffect {
+    return ReaderMarkingRepository.decodeStyle(this.lastMarkingStyle).effect;
+  }
+
+  private applyQuickMarking(): void {
+    const start = this.pendingMarkingStart;
+    const end = this.pendingMarkingEnd;
+    const selectedText = this.selectedText();
+    if (start < 0 || end <= start || selectedText.length === 0) {
+      this.onUnavailableAction('没有取得有效的正文选区，请重新选择文字');
+      return;
+    }
+    this.onApplyQuickMarking(start, end, selectedText, this.quickMarkStyle, this.quickMarkNote,
+      this.quickMarkExistingId);
+    this.quickMarkVisible = false;
+    this.clearCanvasSelection();
+  }
+
+  private deleteQuickMarking(): void {
+    if (this.quickMarkExistingId.length === 0) {
+      return;
+    }
+    this.onDeleteQuickMarking(this.quickMarkExistingId);
+    this.quickMarkVisible = false;
+    this.clearCanvasSelection();
+  }
+
   private getReaderFontWeight(): number {
     if (this.textBold === 0) { return 400; }
     if (this.textBold === 1) { return 900; }
@@ -5964,7 +6070,7 @@ export struct ReaderPage {
     this.paintReaderCanvas();
     if (id === 'menu_copy') { this.copyCurrentSelection(); return; }
     if (id === 'menu_bookmark') { this.bookmarkCurrentSelection(); return; }
-    if (id === 'menu_mark') { this.createMarkingFromCurrentSelection(); return; }
+    if (id === 'menu_mark') { this.openQuickMarkPanel(); return; }
     // 批4（r358）：五项接真，每一项都有独立真处理函数。
     if (id === 'menu_share_str') { this.shareSelection(); return; }
     if (id === 'menu_browser') { this.openSelectionInBrowser(); return; }
@@ -6923,18 +7029,51 @@ export struct ReaderPage {
       if (!marking.enabled || marking.chapterIndex !== chapterIndex) {
         continue;
       }
-      if (marking.chapterPosition >= page.endPosition || marking.endPosition <= page.startPosition) {
+      // 批5（:123）：先按锚点文本确认这条标记在这个正文里还能不能对得上（上游 BookContentProcessEngine.kt:25-46）。
+      // 存储里的偏移是创建时的，正文被替换规则或重新分段改过之后可能已经指向别的文字；
+      // 对不上就用 :101-131 的三级退让重定位，仍然对不上就这一条不渲染。渲染期绝不写回存储，也不弹提示。
+      const range = this.resolveMarkingRenderRange(marking);
+      if (range === undefined) {
+        continue;
+      }
+      if (range.start >= page.endPosition || range.end <= page.startPosition) {
         continue;
       }
       const item = new ReaderCanvasMarking();
-      item.start = marking.chapterPosition;
-      item.end = marking.endPosition;
+      item.start = range.start;
+      item.end = range.end;
       item.backgroundArgb = readerCanvasMarkingBackgroundArgb(marking);
       item.decoration = readerCanvasMarkingDecoration(marking);
       item.decorationArgb = readerCanvasArgb(marking.color, 0xFF000000);
       list.push(item);
     }
     return list;
+  }
+
+  /**
+   * 批5（:123）标记渲染用的区间解析。
+   *
+   * 判定顺序（与上游 BookContentProcessEngine.kt:25-46 一致）：
+   * 1. 当前语义正文里 `[chapterPosition, endPosition)` 取出来的文字等于 `selectedText` → 原偏移直接可用；
+   * 2. 不等 → `locateAnchor` 三级退让重定位，命中就用重定位后的区间；
+   * 3. 都不成 → 返回 undefined，调用方跳过这一条（不渲染，也不改存储）。
+   * `selectedText` 为空的老数据（划线功能最早那批没存锚点文本）无法校验，按原偏移渲染，避免误吞已有标记。
+   */
+  private resolveMarkingRenderRange(marking: ReaderMarking): ReaderMarkingRange | undefined {
+    const content = this.localSemanticContent;
+    const storedStart = Math.max(0, marking.chapterPosition);
+    const storedEnd = Math.max(storedStart, marking.endPosition);
+    if (marking.selectedText.length === 0 || content.length === 0) {
+      return { start: storedStart, end: storedEnd };
+    }
+    if (content.slice(storedStart, storedEnd) === marking.selectedText) {
+      return { start: storedStart, end: storedEnd };
+    }
+    const relocated = BookContentProcessEngine.locateAnchor(content, marking.selectedText, storedStart);
+    if (relocated === undefined) {
+      return undefined;
+    }
+    return { start: relocated.start, end: relocated.end };
   }
 
   /**
@@ -8041,6 +8180,33 @@ export struct ReaderPage {
                 }
               }
             })
+          }
+          // 批5（:127）行内快速标记面板：锚在划词菜单让出来的位置（菜单本来就贴着选区），
+          // 七种样式 + 备注 + 应用/删除；落库走 Index 侧标记仓储，不经过标记编辑 Sheet。
+          if (this.quickMarkVisible) {
+            Column() {
+              ReaderQuickMarkPanel({
+                quickStyle: this.quickMarkStyle,
+                quickNote: this.quickMarkNote,
+                existingMarking: this.quickMarkExistingId.length > 0,
+                onStyleChange: (style: ReaderMarkingEffect) => {
+                  this.quickMarkStyle = style;
+                },
+                onNoteChange: (note: string) => {
+                  this.quickMarkNote = note;
+                },
+                onApply: () => {
+                  this.applyQuickMarking();
+                },
+                onDelete: () => {
+                  this.deleteQuickMarking();
+                },
+                onClose: () => {
+                  this.closeQuickMarkPanel();
+                }
+              })
+            }
+            .position({ x: this.quickMarkAnchorX, y: this.quickMarkAnchorY })
           }
         }
         .id(ReaderPage.STACK_ID)

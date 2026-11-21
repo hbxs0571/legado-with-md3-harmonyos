@@ -9,7 +9,7 @@ export interface ContentProcessApplyResult {
   effectiveProcesses: BookContentProcess[];
 }
 
-interface SourceRange {
+export interface SourceRange {
   start: number;
   end: number;
 }
@@ -83,6 +83,29 @@ export class BookContentProcessEngine {
       }
     }
     return { text: output, effectiveProcesses: effective };
+  }
+
+  /**
+   * 批5（:123）标记渲染前的锚点重定位。
+   *
+   * 上游 BookContentProcessEngine.kt:25-46 先用 `findTargetRange` 判「锚点文本还在不在正文里」，
+   * 再交给 :101-131 的三级退让（原文精确匹配 → 去掉空白后归一化匹配 → 取离近似位置最近的一处）。
+   * 这里把同一套算法暴露给阅读页：区间偏移只在渲染期算，命中就画在重定位后的位置，
+   * 命中不了由调用方决定不渲染 —— 渲染期绝不写回存储（存储里的旧偏移保持原样，等用户自己改）。
+   */
+  static locateAnchor(content: string, selectedText: string, approximatePosition: number): SourceRange | undefined {
+    if (content.length === 0 || selectedText.length === 0) {
+      return undefined;
+    }
+    const anchor: TextProcessAnchor = {
+      chapterIndex: 0,
+      chapterPosition: approximatePosition,
+      selectedText: selectedText,
+      contextBefore: '',
+      contextAfter: '',
+      normalizedTextHash: ''
+    };
+    return BookContentProcessEngine.findTargetRange(content, anchor);
   }
 
   static normalizeProcessText(text: string): string {
