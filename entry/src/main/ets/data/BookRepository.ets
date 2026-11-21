@@ -1787,6 +1787,15 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     try {
       await store.executeSql(BookRepository.deleteChaptersByBookUrl, [bookUrl]);
       await store.executeSql(BookRepository.deleteBookSql, [bookUrl]);
+      // 批8 B 组（:370-:374）：删书连带清知识库五表，与上游 DeleteBooksUseCase 一致。
+      // 放在同一事务里，保证不会留下没有书主的角色/事件行（私密书角色名残留即数据泄漏）。
+      const knowledgeTables: string[] = [
+        'book_character_profiles', 'book_character_events', 'book_character_relations',
+        'book_knowledge_entries', 'book_outline_nodes'
+      ];
+      for (let i = 0; i < knowledgeTables.length; i++) {
+        await store.executeSql(`delete from ${knowledgeTables[i]} where bookUrl = ?`, [bookUrl]);
+      }
       await store.commit();
     } catch (error) {
       await store.rollBack();

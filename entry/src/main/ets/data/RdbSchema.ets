@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7；第八批（高亮规则边框）给 highlightRules 补 borderColor / borderWidth / borderRadius 三列后升到 8；朗读批 8 给 httpTTS 补 textParam / speedParam / toneParam 三个本地扩展列后升到 9。 */
-  static readonly version: number = 9;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7；第八批（高亮规则边框）给 highlightRules 补 borderColor / borderWidth / borderRadius 三列后升到 8；朗读批 8 给 httpTTS 补 textParam / speedParam / toneParam 三个本地扩展列后升到 9。v10：知识库批追加 `book_character_profiles` / `book_character_relations` / `book_character_events` / `book_knowledge_entries` / `book_outline_nodes` 五张表与其索引（同批 `keyboardAssists` 表也在这次升级里）。 */
+  static readonly version: number = 10;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -533,6 +533,139 @@ export class RdbSchema {
     'CREATE INDEX IF NOT EXISTS `index_servers_sortNumber` ' +
     'ON `servers` (`sortNumber`)';
 
+  // ===== 批8 B 组：知识库五表，逐列照抄上游 BookKnowledge.kt 的 Room 实体 =====
+  // 主键 id 是 String（上游 @PrimaryKey val id: String），映射为 TEXT PRIMARY KEY。
+  // 可空列（avatarUri / chapterIndex / sourceTextHash / parentId / scope* / start* / end*）不带 NOT NULL。
+  // confidence 是 Float → REAL；status / schemaVersion / createdAt / updatedAt 是 Int/Long → INTEGER。
+  static readonly createBookCharacterProfiles: string =
+    'CREATE TABLE IF NOT EXISTS book_character_profiles (' +
+    'id TEXT PRIMARY KEY, ' +
+    "bookUrl TEXT NOT NULL DEFAULT '', " +
+    "name TEXT NOT NULL DEFAULT '', " +
+    "aliasesJson TEXT NOT NULL DEFAULT '[]', " +
+    'avatarUri TEXT, ' +
+    "tagsJson TEXT NOT NULL DEFAULT '[]', " +
+    "role TEXT NOT NULL DEFAULT '', " +
+    "voiceGender TEXT NOT NULL DEFAULT 'unknown', " +
+    "voiceAgeBand TEXT NOT NULL DEFAULT 'unknown', " +
+    "personality TEXT NOT NULL DEFAULT '', " +
+    "summary TEXT NOT NULL DEFAULT '', " +
+    'status INTEGER NOT NULL DEFAULT 1, ' +
+    "source TEXT NOT NULL DEFAULT 'user', " +
+    'confidence REAL NOT NULL DEFAULT 1, ' +
+    'schemaVersion INTEGER NOT NULL DEFAULT 1, ' +
+    'createdAt INTEGER NOT NULL DEFAULT 0, ' +
+    'updatedAt INTEGER NOT NULL DEFAULT 0' +
+    ')';
+  static readonly createBookCharacterProfilesIndex: string =
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_book_character_profiles_bookUrl_name ' +
+    'ON book_character_profiles (bookUrl, name)';
+  static readonly createBookCharacterProfilesUpdatedIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_character_profiles_bookUrl_updatedAt ' +
+    'ON book_character_profiles (bookUrl, updatedAt)';
+
+  static readonly createBookCharacterEvents: string =
+    'CREATE TABLE IF NOT EXISTS book_character_events (' +
+    'id TEXT PRIMARY KEY, ' +
+    "bookUrl TEXT NOT NULL DEFAULT '', " +
+    "characterId TEXT NOT NULL DEFAULT '', " +
+    'chapterIndex INTEGER, ' +
+    "chapterTitle TEXT NOT NULL DEFAULT '', " +
+    "eventTimeText TEXT NOT NULL DEFAULT '', " +
+    "content TEXT NOT NULL DEFAULT '', " +
+    'importance INTEGER NOT NULL DEFAULT 0, ' +
+    'sourceTextHash TEXT, ' +
+    "evidenceJson TEXT NOT NULL DEFAULT '[]', " +
+    "source TEXT NOT NULL DEFAULT 'user', " +
+    'confidence REAL NOT NULL DEFAULT 1, ' +
+    'schemaVersion INTEGER NOT NULL DEFAULT 1, ' +
+    'createdAt INTEGER NOT NULL DEFAULT 0, ' +
+    'updatedAt INTEGER NOT NULL DEFAULT 0' +
+    ')';
+  static readonly createBookCharacterEventsIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_character_events_bookUrl_characterId_chapterIndex ' +
+    'ON book_character_events (bookUrl, characterId, chapterIndex)';
+  static readonly createBookCharacterEventsChapterIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_character_events_bookUrl_chapterIndex ' +
+    'ON book_character_events (bookUrl, chapterIndex)';
+
+  static readonly createBookCharacterRelations: string =
+    'CREATE TABLE IF NOT EXISTS book_character_relations (' +
+    'id TEXT PRIMARY KEY, ' +
+    "bookUrl TEXT NOT NULL DEFAULT '', " +
+    "fromCharacterId TEXT NOT NULL DEFAULT '', " +
+    "toCharacterId TEXT NOT NULL DEFAULT '', " +
+    "relationType TEXT NOT NULL DEFAULT '', " +
+    "summary TEXT NOT NULL DEFAULT '', " +
+    "attitude TEXT NOT NULL DEFAULT '', " +
+    "evidenceJson TEXT NOT NULL DEFAULT '[]', " +
+    'chapterIndex INTEGER, ' +
+    'status INTEGER NOT NULL DEFAULT 1, ' +
+    "source TEXT NOT NULL DEFAULT 'user', " +
+    'confidence REAL NOT NULL DEFAULT 1, ' +
+    'schemaVersion INTEGER NOT NULL DEFAULT 1, ' +
+    'createdAt INTEGER NOT NULL DEFAULT 0, ' +
+    'updatedAt INTEGER NOT NULL DEFAULT 0' +
+    ')';
+  static readonly createBookCharacterRelationsIndex: string =
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_book_character_relations_bookUrl_from_to ' +
+    'ON book_character_relations (bookUrl, fromCharacterId, toCharacterId)';
+  static readonly createBookCharacterRelationsFromIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_character_relations_bookUrl_fromCharacterId ' +
+    'ON book_character_relations (bookUrl, fromCharacterId)';
+  static readonly createBookCharacterRelationsToIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_character_relations_bookUrl_toCharacterId ' +
+    'ON book_character_relations (bookUrl, toCharacterId)';
+
+  static readonly createBookKnowledgeEntries: string =
+    'CREATE TABLE IF NOT EXISTS book_knowledge_entries (' +
+    'id TEXT PRIMARY KEY, ' +
+    "bookUrl TEXT NOT NULL DEFAULT '', " +
+    "type TEXT NOT NULL DEFAULT '', " +
+    "title TEXT NOT NULL DEFAULT '', " +
+    "keywordsJson TEXT NOT NULL DEFAULT '[]', " +
+    "content TEXT NOT NULL DEFAULT '', " +
+    'scopeStartChapter INTEGER, ' +
+    'scopeEndChapter INTEGER, ' +
+    'priority INTEGER NOT NULL DEFAULT 0, ' +
+    "source TEXT NOT NULL DEFAULT 'user', " +
+    'confidence REAL NOT NULL DEFAULT 1, ' +
+    "evidenceJson TEXT NOT NULL DEFAULT '[]', " +
+    'schemaVersion INTEGER NOT NULL DEFAULT 1, ' +
+    'createdAt INTEGER NOT NULL DEFAULT 0, ' +
+    'updatedAt INTEGER NOT NULL DEFAULT 0' +
+    ')';
+  static readonly createBookKnowledgeEntriesIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_knowledge_entries_bookUrl_type_priority ' +
+    'ON book_knowledge_entries (bookUrl, type, priority)';
+  static readonly createBookKnowledgeEntriesTitleIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_knowledge_entries_bookUrl_title ' +
+    'ON book_knowledge_entries (bookUrl, title)';
+
+  static readonly createBookOutlineNodes: string =
+    'CREATE TABLE IF NOT EXISTS book_outline_nodes (' +
+    'id TEXT PRIMARY KEY, ' +
+    "bookUrl TEXT NOT NULL DEFAULT '', " +
+    'parentId TEXT, ' +
+    "nodeType TEXT NOT NULL DEFAULT '', " +
+    "title TEXT NOT NULL DEFAULT '', " +
+    "summary TEXT NOT NULL DEFAULT '', " +
+    'startChapterIndex INTEGER, ' +
+    'endChapterIndex INTEGER, ' +
+    '`order` INTEGER NOT NULL DEFAULT 0, ' +
+    "source TEXT NOT NULL DEFAULT 'user', " +
+    'confidence REAL NOT NULL DEFAULT 1, ' +
+    'schemaVersion INTEGER NOT NULL DEFAULT 1, ' +
+    'createdAt INTEGER NOT NULL DEFAULT 0, ' +
+    'updatedAt INTEGER NOT NULL DEFAULT 0' +
+    ')';
+  static readonly createBookOutlineNodesIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_outline_nodes_bookUrl_nodeType_scope ' +
+    'ON book_outline_nodes (bookUrl, nodeType, startChapterIndex, endChapterIndex)';
+  static readonly createBookOutlineNodesParentIndex: string =
+    'CREATE INDEX IF NOT EXISTS index_book_outline_nodes_bookUrl_parent_order ' +
+    'ON book_outline_nodes (bookUrl, parentId, `order`)';
+
   /** 全部建表语句，按依赖顺序排列。 */
   private static readonly allStatements: string[] = [
     RdbSchema.createBookmarks,
@@ -577,7 +710,24 @@ export class RdbSchema {
     RdbSchema.createRuleSubs,
     // 第七批（server 类）：无外键依赖，追加在末尾即可
     RdbSchema.createServers,
-    RdbSchema.createServersSortIndex
+    RdbSchema.createServersSortIndex,
+    // 批8 B 组：知识库五表与其索引；无外键依赖，索引排在表之后
+    RdbSchema.createBookCharacterProfiles,
+    RdbSchema.createBookCharacterProfilesIndex,
+    RdbSchema.createBookCharacterProfilesUpdatedIndex,
+    RdbSchema.createBookCharacterEvents,
+    RdbSchema.createBookCharacterEventsIndex,
+    RdbSchema.createBookCharacterEventsChapterIndex,
+    RdbSchema.createBookCharacterRelations,
+    RdbSchema.createBookCharacterRelationsIndex,
+    RdbSchema.createBookCharacterRelationsFromIndex,
+    RdbSchema.createBookCharacterRelationsToIndex,
+    RdbSchema.createBookKnowledgeEntries,
+    RdbSchema.createBookKnowledgeEntriesIndex,
+    RdbSchema.createBookKnowledgeEntriesTitleIndex,
+    RdbSchema.createBookOutlineNodes,
+    RdbSchema.createBookOutlineNodesIndex,
+    RdbSchema.createBookOutlineNodesParentIndex
   ];
 
   /**

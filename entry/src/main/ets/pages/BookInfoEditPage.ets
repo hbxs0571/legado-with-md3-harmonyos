@@ -8,6 +8,7 @@ import { UiSwitch } from '../components/settings/UiSwitch';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { SPACE_8, SPACE_12, SPACE_16 } from '../components/UiTokens';
 import { BODY_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, TITLE_MEDIUM, TYPE_SCALE_BODY_LARGE } from '../components/typography/TypographyTokens';
+import { BookKnowledgeSheet } from '../components/BookKnowledgeSheet';
 
 /** 编辑页顶栏用的保存按钮尺寸走 TopBar 的统一口径，这里只留菜单宽度与输入框常量。 */
 const BOOK_TYPE_MENU_WIDTH: number = 220;
@@ -90,6 +91,9 @@ export struct BookInfoEditPage {
   @State private bookTypeMenuVisible: boolean = false;
   @State private groupPickerVisible: boolean = false;
   @State private saving: boolean = false;
+  /** 批8 B 组（:370-:374）：知识库四面板是否显示；initialTab 决定打开哪个面板（0 人物/1 关系网/2 世界知识/3 事件）。 */
+  @State private knowledgeSheetVisible: boolean = false;
+  @State private knowledgeSheetTab: number = 0;
 
   aboutToAppear(): void {
     this.resetFromBook();
@@ -218,8 +222,8 @@ export struct BookInfoEditPage {
   /**
    * 知识卡：上游 `BookInfoEditScreen.kt:296-349` 的 `BookKnowledgeEditCard`。
    * 一张 `NormalCard`，标题「知识」+ 一行四个 `MediumOutlinedButton`
-   * （人物 / 关系网 / 世界知识 / 事件列表）。本地没有知识库数据，
-   * 四个按钮照上游列出来，点了提示未接入（用户要求按钮做全）。
+   * （人物 / 关系网 / 世界知识 / 事件列表）。批8 B 组（:370-:374）四个 chip
+   * 各打开知识库面板的一个 tab（手工 CRUD 全做，AI 抽取那一半不画，见 BookKnowledgeSheet 注释）。
    */
   @Builder
   knowledgeCard() {
@@ -227,10 +231,10 @@ export struct BookInfoEditPage {
       Text('知识').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
       Scroll() {
         Row({ space: SPACE_8 }) {
-          this.knowledgeChip('list', '人物')
-          this.knowledgeChip('group', '关系网')
-          this.knowledgeChip('book', '世界知识')
-          this.knowledgeChip('profileTimeline', '事件列表')
+          this.knowledgeChip('list', '人物', 0)
+          this.knowledgeChip('group', '关系网', 1)
+          this.knowledgeChip('book', '世界知识', 2)
+          this.knowledgeChip('profileTimeline', '事件列表', 3)
         }.alignItems(VerticalAlign.Center)
       }
       .scrollable(ScrollDirection.Horizontal)
@@ -243,9 +247,9 @@ export struct BookInfoEditPage {
     .backgroundColor(this.inputSurface()).borderRadius(RADIUS_CARD)
   }
 
-  /** 知识卡的单个描边按钮（上游 `MediumOutlinedButton`）。 */
+  /** 知识卡的单个描边按钮（上游 `MediumOutlinedButton`），tabIndex 对应面板 tab。 */
   @Builder
-  knowledgeChip(icon: AppGlyphName, label: string) {
+  knowledgeChip(icon: AppGlyphName, label: string, tabIndex: number) {
     Row() {
       AppGlyph({ name: icon, glyphSize: 16, tint: this.themeColorTextSecondary })
       Text(label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ left: 6 })
@@ -253,7 +257,10 @@ export struct BookInfoEditPage {
     .height(34).padding({ left: 12, right: 12 })
     .border({ width: 1, color: this.themeColorTextTertiary })
     .borderRadius(17)
-    .onClick(() => this.onUnavailableAction(`${label} 未接入`))
+    .onClick(() => {
+      this.knowledgeSheetTab = tabIndex;
+      this.knowledgeSheetVisible = true;
+    })
   }
 
   /**
@@ -564,6 +571,16 @@ export struct BookInfoEditPage {
             .onClick(() => { this.kindEditingIndex = -2; })
           this.kindDialog()
         }.width('100%').height('100%').zIndex(100)
+      }
+
+      // 批8 B 组（:370-:374）：知识库四面板，四个 chip 打开对应 tab。
+      // bookUrl 取当前编辑书的 contentPath（上游按 bookUrl 存知识库），空 URL 时面板不落库。
+      if (this.knowledgeSheetVisible) {
+        BookKnowledgeSheet({
+          bookUrl: this.book.contentPath ?? this.book.androidOriginalPath ?? '',
+          initialTab: this.knowledgeSheetTab,
+          onClose: () => { this.knowledgeSheetVisible = false; }
+        }).width('100%').height('100%').zIndex(120)
       }
     }
     .width('100%')
