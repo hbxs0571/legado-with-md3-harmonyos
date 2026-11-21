@@ -31,7 +31,7 @@
 | 公共 UI 组件（统一顶栏、设置行控件与度量常量） | `entry/src/main/ets/components/TopBar.ets`、`components/settings/`、`components/UiTokens.ets` |
 | 构建和验证记录 | [构建说明](BUILDING.md)、[验证记录](VALIDATION.md) |
 | 模拟器启停 / 探活 / 截图（含密度掉档排查） | [模拟器使用说明](EMULATOR.md)、`scripts/emu.sh` |
-| 核对脚本（七表计数、竖线体检、链接体检、锚点校验、证据包 lint、上游接触面） | `scripts/parity-rows.py`、`scripts/parity-pipes.py`、`scripts/doc-links.py`、`scripts/anchor-check.py`、`scripts/evidence-lint.py`、`scripts/upstream-surface.sh`（说明见 [盘点规约](PARITY-RULES.md) 第六节） |
+| 核对脚本（七表计数、竖线体检、Markdown 结构体检、链接体检、锚点校验、证据包 lint、上游接触面） | `scripts/parity-rows.py`、`scripts/parity-pipes.py`、`scripts/md-check.py`、`scripts/doc-links.py`、`scripts/anchor-check.py`、`scripts/evidence-lint.py`、`scripts/upstream-surface.sh`（说明见 [盘点规约](PARITY-RULES.md) 第六节） |
 | 阅读配置盘点辅助脚本 | `scripts/reader-config-annotate.py`、`scripts/reader-config-diff.py`、`scripts/reader-config-pending.py` |
 | 构建与设备脚本 | `scripts/build-hap.sh`、`scripts/emu.sh` |
 | Hypium / UI 自动化测试 | [测试目标与运行说明](HYPIUM-UI-TEST.md) |

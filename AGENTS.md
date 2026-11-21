@@ -12,6 +12,7 @@
 - 压缩不是重跑理由。已验项重开要写具体原因；旧“下一步”不覆盖 CURRENT，错误样本结论明确作废。
 - 每次只做一个明确模块。先读迁移计划和当前模块文件，用限定路径的符号搜索定位源码；不重复扫描整个 Android 项目。复用已有证据，按风险做最小充分验证。
 - 每次源码改动后必须执行一次 `assembleHap`，未跑构建不得交付。列表、存储、备份与序列化改动的必查项见 `docs/CODE-CONVENTIONS.md`；「上游没有某实现」这类断言必须附检索证据。
+- **数一数 / 核一核先找现成脚本，不要每次新写一个**（用户 m06297）：需要计数、结构体检、链接检查这类动作时，先看 `scripts/` 有没有现成的——Markdown 结构体检 `python scripts/md-check.py`（BOM / 换行符 / 围栏闭合 / 标题前空行 / 孤立 @）、表格列数 `python scripts/parity-pipes.py`、盘面口径 `python scripts/parity-rows.py`、文档链接 `scripts/doc-links.py`、锚点 `scripts/anchor-check.py`、取证稿 `scripts/evidence-lint.py`。确实没有才加进 `scripts/` 并写清用法与退出码；不要在 `tmp/` 里新起 `_chk*.py`（历史上同一套 Markdown 结构体检被重写了 54 份）。数字口径见 `docs/CODE-CONVENTIONS.md` 第十一节。
 - **该提交的就默认提交**（用户 m06260）：一个模块或一次修改验证通过后直接提交，不要攒着等用户点头。只 `git add` 本次改动涉及的文件，不夹带并发对话的未提交改动；提交信息沿用 `type(scope): 中文描述（:行号 / 要点）` 格式。
 - 改文件时同一文件不要混用脚本与编辑器（会报 `file changed since it was read`）；定位片段只取一到两行，大段替换用整份写入；脚本整份重写必须沿用原换行符。详见 `docs/CODE-CONVENTIONS.md` 第六节。
 - 模拟器交互先 OCR 识别当前界面和目标文字，点击后再 OCR 验证；Android 用 `adb-screen-detection`，HarmonyOS 用 HMNextAuto。中间截图不发给用户，失败时才展示并说明；设备选择、依赖与完整步骤见 `docs/VALIDATION.md`。模拟器启停、探活与截图一律走 `bash scripts/emu.sh`（`start`/`stop`/`restart`/`status`/`cap`），它每次启动都自检密度；密度从 3.5 掉到 1.5 会让整屏 UI 变小的成因与排查记录见 `docs/EMULATOR.md`。
