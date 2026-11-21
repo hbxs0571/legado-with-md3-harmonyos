@@ -355,6 +355,10 @@ interface AndroidReadConfigBackupRecord {
   autoSuggestDayNight: boolean;
   /** 禁用返回键，上游键名 disableReturnKey（PreferKey.kt:420）。 */
   disableReturnKey: boolean;
+  /** 当前书源失效时自动换源，上游键名 autoChangeSource（PreferKey.kt:119）。 */
+  autoChangeSource: boolean;
+  /** 换源按钮默认整书换源，上游键名 defaultSourceChangeAll（PreferKey.kt:432）。 */
+  defaultSourceChangeAll: boolean;
   /** 阅读亮度 1..100，上游键名 brightness（PreferKey.kt:151），随 config.xml 备份。 */
   readBrightness: number;
   /** 亮度条形态，上游键名 readBrightnessMode（PreferKey.kt:112），在阅读配置忽略清单里，不导出。 */
@@ -457,7 +461,7 @@ export class BackupRepository {
    * 会出现「上次写过所以这次跳过」，一旦用户删了某项就永远写不回去。
    */
   private static readonly writtenPreferenceKeys: Set<string> = new Set<string>([
-    'adaptSpecialStyle', 'autoSuggestDayNight', 'auto_refresh', 'bookGroupStyle',
+    'adaptSpecialStyle', 'autoChangeSource', 'autoSuggestDayNight', 'auto_refresh', 'bookGroupStyle',
     'bookmarkBadgeImage', 'bookmarkBadgeSize', 'bookshelfCardColor', 'bookshelfCardColorDark',
     'bookshelfCoverShadow', 'bookshelfFolderLayoutGridLandscape', 'bookshelfFolderLayoutGridPortrait', 'bookshelfFolderLayoutListLandscape',
     'bookshelfFolderLayoutListPortrait', 'bookshelfFolderLayoutModeLandscape', 'bookshelfFolderLayoutModePortrait', 'bookshelfGridCoverWidth',
@@ -471,7 +475,7 @@ export class BackupRepository {
     'clickImgWay', 'colorTemperature', 'coverDefaultColor', 'coverInfoOrientation',
     'coverRestrictRatio', 'coverShadowColor', 'coverShadowColorN', 'coverShowAuthor',
     'coverShowAuthorN', 'coverShowName', 'coverShowNameN', 'coverShowShadow',
-    'coverShowStroke', 'coverTextColor', 'coverTextColorN', 'disableReturnKey',
+    'coverShowStroke', 'coverTextColor', 'coverTextColorN', 'defaultSourceChangeAll', 'disableReturnKey',
     'dottedBase', 'dottedRatio', 'doubleHorizontalPage', 'expandTextMenu',
     'explore_filter_state', 'eyeProtectionAutoNight', 'eyeProtectionEnabled', 'eyeProtectionEndTime',
     'eyeProtectionSchedule', 'eyeProtectionStartTime', 'hideEmptyGroups', 'lastMarkingStyle',
@@ -1106,6 +1110,11 @@ export class BackupRepository {
         // 禁用返回键：上游不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 无条件备份。
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'disableReturnKey', settings.disableReturnKey ? 'true' : 'false');
+        // 两个换源开关：上游不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 无条件备份。
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'autoChangeSource', settings.autoChangeSource ? 'true' : 'false');
+        configText = BackupRepository.upsertAndroidPreference(
+          configText, 'boolean', 'defaultSourceChangeAll', settings.defaultSourceChangeAll ? 'true' : 'false');
         // 阅读亮度：亮度与自动亮度不在 BackupConfig.readPrefKeys 忽略清单里，随 config.xml 备份；
         // 亮度条形态与位置在忽略清单里（ReadSettingsRepository 的 readBrightnessMode/readBrightnessControlPosition），不导出。
         configText = BackupRepository.upsertAndroidPreference(
@@ -2124,6 +2133,8 @@ export class BackupRepository {
       doubleHorizontalPage: settings.doubleHorizontalPage,
       autoSuggestDayNight: settings.autoSuggestDayNight,
       disableReturnKey: settings.disableReturnKey,
+      autoChangeSource: settings.autoChangeSource,
+      defaultSourceChangeAll: settings.defaultSourceChangeAll,
       readBrightness: Math.max(1, Math.min(100, Math.round(settings.readBrightness))),
       showBrightnessView: settings.showBrightnessView,
       brightnessVwPos: settings.brightnessVwPos,
@@ -2506,6 +2517,11 @@ export class BackupRepository {
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'autoSuggestDayNight') ?? current.autoSuggestDayNight,
       disableReturnKey: BackupRepository.readJsonBoolean(selected, 'disableReturnKey') ??
         BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'disableReturnKey') ?? current.disableReturnKey,
+      autoChangeSource: BackupRepository.readJsonBoolean(selected, 'autoChangeSource') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'autoChangeSource') ?? current.autoChangeSource,
+      defaultSourceChangeAll: BackupRepository.readJsonBoolean(selected, 'defaultSourceChangeAll') ??
+        BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'defaultSourceChangeAll') ??
+        current.defaultSourceChangeAll,
       readBrightness: Math.max(1, Math.min(100, Math.round(
         BackupRepository.readJsonNumber(selected, 'readBrightness') ??
           BackupRepository.readXmlInteger(`${directory}/config.xml`, 'brightness') ?? current.readBrightness))),

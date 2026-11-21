@@ -37,6 +37,7 @@ import {
 } from './BatchChangeSourceSheet';
 import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions, defaultMigrationOptions } from '../bookSource/ChangeSourceCoordinator';
 import { BookSourceRuntime } from '../bookSource/BookSourceRuntime';
+import { AutoChangeSource } from '../bookSource/AutoChangeSource';
 import { SearchBookItem, RemoteChapter } from '../bookSource/SourceModels';
 import { SourceLoginPage } from './SourceLoginPage';
 import { SourceWebPage } from './SourceWebPage';
@@ -465,6 +466,10 @@ struct Index {
   @State @Watch('onReaderAutoSuggestDayNightChanged') readerAutoSuggestDayNight: boolean = false;
   /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`）。上游 UI 侧无消费点，本地只做可配+落库。 */
   @State readerDisableReturnKey: boolean = false;
+  /** 当前书源失效时自动换源；上游 `autoChangeSource`（`ReadSettings.kt:42`，默认 true）。 */
+  @State readerAutoChangeSource: boolean = true;
+  /** 换源按钮默认整书换源（false 时默认单章换源）；上游 `defaultSourceChangeAll`（`ReadSettings.kt:15`，默认 true）。 */
+  @State readerDefaultSourceChangeAll: boolean = true;
   /** 阅读亮度 1..100；上游 `readBrightness`（`ReadSettings.kt:22`，默认 100），按 readBrightness/100 设窗口亮度。 */
   @State readerReadBrightness: number = 100;
   /** 阅读菜单里亮度条的形态；上游 `showBrightnessView`（`ReadSettings.kt:20`），"0" 关闭 / "1" 横排 / "2" 竖排。 */
@@ -4320,6 +4325,8 @@ struct Index {
     this.readerDoubleHorizontalPage = settings.doubleHorizontalPage;
     this.readerAutoSuggestDayNight = settings.autoSuggestDayNight;
     this.readerDisableReturnKey = settings.disableReturnKey;
+    this.readerAutoChangeSource = settings.autoChangeSource;
+    this.readerDefaultSourceChangeAll = settings.defaultSourceChangeAll;
     this.readerReadBrightness = settings.readBrightness;
     this.readerShowBrightnessView = settings.showBrightnessView;
     this.readerBrightnessVwPos = settings.brightnessVwPos;
@@ -4480,6 +4487,8 @@ struct Index {
         doubleHorizontalPage: this.readerDoubleHorizontalPage,
         autoSuggestDayNight: this.readerAutoSuggestDayNight,
         disableReturnKey: this.readerDisableReturnKey,
+        autoChangeSource: this.readerAutoChangeSource,
+        defaultSourceChangeAll: this.readerDefaultSourceChangeAll,
         readBrightness: this.readerReadBrightness,
         showBrightnessView: this.readerShowBrightnessView,
         brightnessVwPos: this.readerBrightnessVwPos,
@@ -5365,6 +5374,24 @@ struct Index {
   /** 禁用返回键；上游 UI 侧无消费点，本地只做可配 + 落库 + 随备份（见 KNOWN-ISSUES KI-A3）。 */
   private setReaderDisableReturnKey(enabled: boolean): void {
     this.readerDisableReturnKey = enabled === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 自动换源开关；上游 `autoChangeSource`（`ReadSettings.kt:42`），消费点在打开在线书目录失败时。 */
+  private setReaderAutoChangeSource(enabled: boolean): void {
+    this.readerAutoChangeSource = enabled === true;
+    this.readerSettingsRevision += 1;
+    if (this.readerSettingsLoaded) {
+      this.persistReaderSettings();
+    }
+  }
+
+  /** 换源按钮默认整书换源；上游 `defaultSourceChangeAll`（`ReadSettings.kt:15`）。 */
+  private setReaderDefaultSourceChangeAll(enabled: boolean): void {
+    this.readerDefaultSourceChangeAll = enabled === true;
     this.readerSettingsRevision += 1;
     if (this.readerSettingsLoaded) {
       this.persistReaderSettings();
@@ -8097,6 +8124,48 @@ private canWriteInto(dir: string): boolean {
     });
   }
 
+  /**
+   * 批10（:527）：该不该自动换源。
+   * 上游 ReadBookLoadDelegate.kt:210-213 的判据是「不是本地书 && 书源对象取不到」；
+   * 本地没有书源对象这一层，等价物是「在线书的目录抓不下来」——loadChapters 失败时
+   * 会在 BookRepository.lastTocError 留原因并返回空目录，这里用「有错误 或 目录为空」判。
+   */
+  private shouldAutoChangeSource(book: Book): boolean {
+    if (!BookRepository.isOnlineBook(book)) { return false; }
+    if (!this.readerAutoChangeSource) { return false; }
+    if (BookRepository.lastTocError.length > 0) { return true; }
+    return BookRepository.cachedChapterTitles(book).length === 0;
+  }
+
+  /**
+   * 批10（:527）：自动换源，对齐上游 ReadBookLoadDelegate.kt:400-442。
+   * 上游全程无确认弹窗、换完照迁阅读进度，所以这里也不问、直接换（改判理由见 AutoChangeSource 头注释）。
+   * 返回换源后的书（没换成功就是原书）。落库复用 applyChangeSource，它硬依赖
+   * this.selectedBook，所以先临时指过去（批8 resolveShelfConflictMigrate 同样手法）。
+   */
+  private async runAutoChangeSource(book: Book): Promise<Book> {
+    this.showUnavailableAction('正在自动换源');
+    const previousSelected = this.selectedBook;
+    this.selectedBook = book;
+    let next: Book = book;
+    try {
+      const outcome = await AutoChangeSource.find(book.title, book.author ?? '');
+      if (outcome.candidate !== null) {
+        await this.applyChangeSource(outcome.candidate, defaultMigrationOptions(), true);
+        next = this.selectedBook;
+      } else {
+        // 上游 onEmpty 抛「没有合适书源」，catch 里统一 toast「自动换源失败」。
+        this.showUnavailableAction('自动换源失败：' + outcome.reason);
+      }
+    } catch (e) {
+      this.showUnavailableAction('自动换源失败：' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      // applyChangeSource 成功时已经把 selectedBook 换成新书，保持它；失败则退回原书。
+      if (this.selectedBook === book) { this.selectedBook = previousSelected; }
+    }
+    return next;
+  }
+
   private async openBook(book: Book): Promise<void> {
     this.checkReadRecordAlias(book);
     const progressSynced = await this.warnNewerRemoteProgress(book);
@@ -8120,12 +8189,25 @@ private canWriteInto(dir: string): boolean {
         if (chapterContext !== undefined) {
           await BookRepository.loadChapters(chapterContext, book);
         }
-        const titles = BookRepository.cachedChapterTitles(book);
-        const chapterIndex = Math.max(0, Math.min(book.chapterIndex ?? 0, Math.max(0, titles.length - 1)));
-        const chapterTitle = titles[chapterIndex] ?? book.lastChapter;
-        content = await BookRepository.readChapter(book, chapterTitle, chapterIndex);
+        // 批10（:527）：上游 ReadBookLoadDelegate.kt:210-213 在「书源取不到」时自动换源。
+        // 换源成功后按新书重拉一次目录，后续流程（进度钳位/读正文）完全走同一条路径。
+        let current: Book = book;
+        if (this.shouldAutoChangeSource(current)) {
+          const changed: Book = await this.runAutoChangeSource(current);
+          if ((changed.contentPath ?? '') !== (current.contentPath ?? '')) {
+            current = changed;
+            const retryContext = this.getUIContext().getHostContext();
+            if (retryContext !== undefined) {
+              await BookRepository.loadChapters(retryContext, current);
+            }
+          }
+        }
+        const titles = BookRepository.cachedChapterTitles(current);
+        const chapterIndex = Math.max(0, Math.min(current.chapterIndex ?? 0, Math.max(0, titles.length - 1)));
+        const chapterTitle = titles[chapterIndex] ?? current.lastChapter;
+        content = await BookRepository.readChapter(current, chapterTitle, chapterIndex);
         if (titles.length > 0) {
-          const refreshed: Book = BookRepository.copyBook(book);
+          const refreshed: Book = BookRepository.copyBook(current);
           refreshed.chapterIndex = chapterIndex;
           refreshed.lastChapter = chapterTitle;
           refreshed.chapterCount = titles.length.toString();
@@ -10757,6 +10839,8 @@ private canWriteInto(dir: string): boolean {
               doubleHorizontalPage: this.readerDoubleHorizontalPage,
               autoSuggestDayNight: this.readerAutoSuggestDayNight,
               disableReturnKey: this.readerDisableReturnKey,
+              autoChangeSource: this.readerAutoChangeSource,
+              defaultSourceChangeAll: this.readerDefaultSourceChangeAll,
               readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -10774,6 +10858,8 @@ private canWriteInto(dir: string): boolean {
               onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
               onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
               onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+              onAutoChangeSourceChange: (enabled: boolean) => this.setReaderAutoChangeSource(enabled),
+              onDefaultSourceChangeAllChange: (enabled: boolean) => this.setReaderDefaultSourceChangeAll(enabled),
               onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
               onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
               readBrightness: this.readerReadBrightness,
@@ -11663,6 +11749,8 @@ private canWriteInto(dir: string): boolean {
             doubleHorizontalPage: this.readerDoubleHorizontalPage,
             autoSuggestDayNight: this.readerAutoSuggestDayNight,
             disableReturnKey: this.readerDisableReturnKey,
+            autoChangeSource: this.readerAutoChangeSource,
+            defaultSourceChangeAll: this.readerDefaultSourceChangeAll,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -11680,6 +11768,8 @@ private canWriteInto(dir: string): boolean {
             onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+            onAutoChangeSourceChange: (enabled: boolean) => this.setReaderAutoChangeSource(enabled),
+            onDefaultSourceChangeAllChange: (enabled: boolean) => this.setReaderDefaultSourceChangeAll(enabled),
             onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
               onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
             readBrightness: this.readerReadBrightness,
@@ -12062,6 +12152,8 @@ private canWriteInto(dir: string): boolean {
             doubleHorizontalPage: this.readerDoubleHorizontalPage,
             autoSuggestDayNight: this.readerAutoSuggestDayNight,
             disableReturnKey: this.readerDisableReturnKey,
+            autoChangeSource: this.readerAutoChangeSource,
+            defaultSourceChangeAll: this.readerDefaultSourceChangeAll,
             readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -12079,6 +12171,8 @@ private canWriteInto(dir: string): boolean {
             onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+            onAutoChangeSourceChange: (enabled: boolean) => this.setReaderAutoChangeSource(enabled),
+            onDefaultSourceChangeAllChange: (enabled: boolean) => this.setReaderDefaultSourceChangeAll(enabled),
             onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
               onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
             readBrightness: this.readerReadBrightness,
@@ -12363,6 +12457,8 @@ private canWriteInto(dir: string): boolean {
           doubleHorizontalPage: this.readerDoubleHorizontalPage,
           autoSuggestDayNight: this.readerAutoSuggestDayNight,
           disableReturnKey: this.readerDisableReturnKey,
+          autoChangeSource: this.readerAutoChangeSource,
+          defaultSourceChangeAll: this.readerDefaultSourceChangeAll,
           readingAnchorEnabled: this.readerReadingAnchorEnabled,
         swipeToAddBookmark: this.readerSwipeToAddBookmark,
         bookmarkBadgeSize: this.readerBookmarkBadgeSize,
@@ -12380,6 +12476,8 @@ private canWriteInto(dir: string): boolean {
           onShowSelectMenuIconChange: (enabled: boolean) => this.setReaderShowSelectMenuIcon(enabled),
           onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
           onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
+          onAutoChangeSourceChange: (enabled: boolean) => this.setReaderAutoChangeSource(enabled),
+          onDefaultSourceChangeAllChange: (enabled: boolean) => this.setReaderDefaultSourceChangeAll(enabled),
           onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
               onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
           readBrightness: this.readerReadBrightness,

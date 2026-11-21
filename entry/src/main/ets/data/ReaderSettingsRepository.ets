@@ -258,6 +258,10 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   autoSuggestDayNight: boolean;
   /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`），存储键同名（`PreferKey.kt:420`）。 */
   disableReturnKey: boolean;
+  /** 当前书源失效时自动换源；上游 `autoChangeSource`（`ReadSettings.kt:42`），存储键同名（`PreferKey.kt:119`）。 */
+  autoChangeSource: boolean;
+  /** 换源按钮默认整书换源（true）还是单章换源（false）；上游 `defaultSourceChangeAll`（`ReadSettings.kt:15`），存储键同名（`PreferKey.kt:432`）。 */
+  defaultSourceChangeAll: boolean;
   /**
    * 阅读亮度；上游 `readBrightness: Int = 100`（`ReadSettings.kt:22`），
    * 窗口亮度取 `readBrightness / 100` 应用（`ReadBookController.kt:3179-3187 applyReadBrightness`），
@@ -903,6 +907,9 @@ export class ReaderSettingsRepository {
       doubleHorizontalPage: '0',
   autoSuggestDayNight: false,
   disableReturnKey: false,
+  // 上游两个换源开关默认都开（ReadSettings.kt:15 / :42）。
+  autoChangeSource: true,
+  defaultSourceChangeAll: true,
   // 上游默认亮度 100（ReadSettings.kt:22），亮度条默认不显示、竖排时贴右侧。
   readBrightness: 100,
   showBrightnessView: '0',
@@ -1092,6 +1099,8 @@ export class ReaderSettingsRepository {
       const doubleHorizontalPageValue = await store.get('doubleHorizontalPage', defaults.doubleHorizontalPage);
     const autoSuggestDayNightValue = await store.get('autoSuggestDayNight', defaults.autoSuggestDayNight);
     const disableReturnKeyValue = await store.get('disableReturnKey', defaults.disableReturnKey);
+    const autoChangeSourceValue = await store.get('autoChangeSource', defaults.autoChangeSource);
+    const defaultSourceChangeAllValue = await store.get('defaultSourceChangeAll', defaults.defaultSourceChangeAll);
     const readBrightnessValue = await store.get('brightness', defaults.readBrightness);
     const showBrightnessViewValue = await store.get('readBrightnessMode', defaults.showBrightnessView);
     const brightnessVwPosValue = await store.get('readBrightnessControlPosition', defaults.brightnessVwPos);
@@ -1433,6 +1442,8 @@ export class ReaderSettingsRepository {
         doubleHorizontalPage: ReaderSettingsRepository.normalizeColumnMode(doubleHorizontalPageValue, defaults.doubleHorizontalPage),
       autoSuggestDayNight: typeof autoSuggestDayNightValue === 'boolean' ? autoSuggestDayNightValue : defaults.autoSuggestDayNight,
       disableReturnKey: typeof disableReturnKeyValue === 'boolean' ? disableReturnKeyValue : defaults.disableReturnKey,
+      autoChangeSource: typeof autoChangeSourceValue === 'boolean' ? autoChangeSourceValue : defaults.autoChangeSource,
+      defaultSourceChangeAll: typeof defaultSourceChangeAllValue === 'boolean' ? defaultSourceChangeAllValue : defaults.defaultSourceChangeAll,
       // 亮度夹 1..100：上游窗口亮度按 readBrightness/100 计算，0 会让屏幕全黑。
       readBrightness: ReaderSettingsRepository.normalizeInteger(readBrightnessValue, 1, 100, defaults.readBrightness),
       showBrightnessView: typeof showBrightnessViewValue === 'string' &&
@@ -1678,6 +1689,8 @@ export class ReaderSettingsRepository {
       await store.put('doubleHorizontalPage', ReaderSettingsRepository.normalizeColumnMode(settings.doubleHorizontalPage, '0'));
       await store.put('autoSuggestDayNight', settings.autoSuggestDayNight === true);
       await store.put('disableReturnKey', settings.disableReturnKey === true);
+      await store.put('autoChangeSource', settings.autoChangeSource !== false);
+      await store.put('defaultSourceChangeAll', settings.defaultSourceChangeAll !== false);
       await store.put('brightness', Math.max(1, Math.min(100, Math.round(settings.readBrightness))));
       await store.put('readBrightnessMode', settings.showBrightnessView === '1' || settings.showBrightnessView === '2'
         ? settings.showBrightnessView : '0');

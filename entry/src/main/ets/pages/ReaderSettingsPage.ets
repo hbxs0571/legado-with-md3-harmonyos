@@ -262,6 +262,10 @@ export struct ReaderSettingsPage {
   @Prop autoSuggestDayNight: boolean = false;
   /** 禁用返回键；上游 `disableReturnKey`（`ReadSettings.kt:50`）。 */
   @Prop disableReturnKey: boolean = false;
+  /** 当前书源失效时自动换源；上游 `autoChangeSource`（`ReadSettings.kt:42`，默认 true）。 */
+  @Prop autoChangeSource: boolean = true;
+  /** 换源按钮默认整书换源；上游 `defaultSourceChangeAll`（`ReadSettings.kt:15`，默认 true）。 */
+  @Prop defaultSourceChangeAll: boolean = true;
   /** 阅读亮度 1..100；上游 `readBrightness`（`ReadSettings.kt:22`，默认 100）。 */
   @Prop readBrightness: number = 100;
   /** 亮度条形态；上游 `showBrightnessView`（`ReadSettings.kt:20`），"0" 关闭 / "1" 横排 / "2" 竖排。 */
@@ -598,6 +602,10 @@ export struct ReaderSettingsPage {
   onShowSelectMenuIconChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onDoubleHorizontalPageChange: (value: string) => void = (_value: string) => {};
   onAutoSuggestDayNightChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 自动换源开关变化；上游键 `autoChangeSource`（`PreferKey.kt:119`）。 */
+  onAutoChangeSourceChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /** 整书换源开关变化；上游键 `defaultSourceChangeAll`（`PreferKey.kt:432`）。 */
+  onDefaultSourceChangeAllChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onDisableReturnKeyChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   /**
    * :105「在浏览器打开」：把当前书的书源页面交给系统浏览器。
@@ -1923,8 +1931,10 @@ export struct ReaderSettingsPage {
             onChange: (value: number) => this.onMaxLengthWithNoTocChange(value) })
           MenuSettingSwitch({ title: '选择文本时震动', detail: '选择正文时提供触觉反馈', checked: this.selectVibrator,
             onChange: (enabled: boolean) => this.onSelectVibratorChange(enabled) })
-          MenuSettingSwitch({ title: '自动换源', detail: '当前书源失效时尝试其它书源', checked: false }).onClick(() => this.showNotMigrated('自动换源'))
-          MenuSettingSwitch({ title: '换源按钮默认弹出整书换源', detail: '同步更新其它书籍的书源', checked: false }).onClick(() => this.showNotMigrated('换源按钮默认弹出整书换源'))
+          MenuSettingSwitch({ title: '自动换源', detail: '当前书源失效时尝试其它书源', checked: this.autoChangeSource,
+            onChange: (enabled: boolean) => this.onAutoChangeSourceChange(enabled) })
+          MenuSettingSwitch({ title: '换源按钮默认弹出整书换源', detail: '反之则默认弹出单章换源', checked: this.defaultSourceChangeAll,
+            onChange: (enabled: boolean) => this.onDefaultSourceChangeAllChange(enabled) })
           MenuSettingSwitch({ title: '主题模式切换提醒', detail: '根据环境光提醒切换浅色/深色模式', checked: this.autoSuggestDayNight, onChange: (enabled: boolean) => this.onAutoSuggestDayNightChange(enabled) })
           MenuSettingSwitch({ title: '阅读锚点', detail: '跳转章节两次及以上后可返回原阅读位置', checked: this.readingAnchorEnabled,
             onChange: (enabled: boolean) => this.onReadingAnchorEnabledChange(enabled) })
