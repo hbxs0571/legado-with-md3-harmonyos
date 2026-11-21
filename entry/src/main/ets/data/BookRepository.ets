@@ -269,6 +269,21 @@ export class BookRepository {
   private static cachedBookContentKey: string = '';
   private static cachedBookContent: string = '';
   /**
+   * 正文窗口缓存（对应上游 TextFile.kt:30 `txtBufferSize = 8MB` 的单窗口）。
+   *
+   * 与 cachedBookContent 的分工：整本缓存只在「整本能放进设置上限」时用（readBookContent），
+   * 大文件走这三个字段。两者互斥，同一时刻只会命中一个。
+   *
+   * 单窗口不是多窗口：跳到别的窗口就丢，照上游 getContent（TextFile.kt:118-135）的语义。
+   * 窗口按 8MB 对齐切（windowStart = WINDOW * floor(startByte / WINDOW)），
+   * 这样同一窗口内的相邻章共用一次读盘。
+   */
+  private static cachedWindowBookKey: string = '';
+  private static cachedWindowStartByte: number = 0;
+  private static cachedWindowBytes: Uint8Array | undefined = undefined;
+  /** 8MB，与上游 TextFile.kt:30 的 txtBufferSize 同值。 */
+  private static readonly TXT_WINDOW_BYTES: number = 8 * 1024 * 1024;
+  /**
    * 每本书的章节字节区间缓存（chapterIndex -> [startByte, endByte)）。
    * chapter.start/end 落库时由 charOffsetsToByteOffsets 按完整字符宽度累加得出，
    * 天然落在字符边界，可直接用于 fileIo 定位读，不会切在多字节字符中间。
@@ -2117,6 +2132,9 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     BookRepository.chapterCache = new Map<string, BookChapter[]>();
     BookRepository.cachedBookContentKey = '';
     BookRepository.cachedBookContent = '';
+    BookRepository.cachedWindowBookKey = '';
+    BookRepository.cachedWindowStartByte = 0;
+    BookRepository.cachedWindowBytes = undefined;
     BookRepository.chapterCharRanges.clear();
   }
 
@@ -2144,6 +2162,11 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     if (path !== undefined && BookRepository.cachedBookContentKey.startsWith(`${path}|`)) {
       BookRepository.cachedBookContentKey = '';
       BookRepository.cachedBookContent = '';
+    }
+    if (path !== undefined && BookRepository.cachedWindowBookKey.startsWith(`${path}|`)) {
+      BookRepository.cachedWindowBookKey = '';
+      BookRepository.cachedWindowStartByte = 0;
+      BookRepository.cachedWindowBytes = undefined;
     }
     if (path !== undefined) {
       BookRepository.chapterCharRanges.forEach((_ranges: number[][], key: string): void => {
@@ -2198,6 +2221,80 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       if (bytesRead <= 0) { return ''; }
       const bytes = new Uint8Array(buffer, 0, bytesRead);
       return BookRepository.decodeTextBytes(bytes, encoding).replace(/^\uFEFF/, '');
+    } finally {
+      fileIo.closeSync(sourceFile);
+    }
+  }
+
+  /**
+   * 按字节区间读一章正文（#1008）。
+   *
+   * 上游只有一套窗口缓存（TextFile.kt:118-135 getContent），这里照做：所有本地正文都走
+   * 8MB 窗口。窗口大小按「文件剩余长度」收口，所以小书的窗口就是整个文件，连读多章只读
+   * 一次盘；大书同一窗口内的相邻章共用一次读盘，跳到别的窗口才重读。
+   *
+   * 早前这里是「小书逐章定位读、大书整本读」的全有或全无策略：小书每章一次读盘，
+   * 大书每章重读几十 MB。改成窗口后两种情形都只按窗口读。
+   */
+  private static readChapterRange(path: string, encoding: string,
+    startByte: number, endByte: number): string {
+    return BookRepository.readChapterByWindow(path, encoding, startByte, endByte);
+  }
+
+  /**
+   * 按 8MB 对齐窗口读一章正文（对应上游 TextFile.kt:118-135 getContent 的单窗口缓存）。
+   *
+   * 与 readChapterByByteRange 的差别只有一处：那个每次都开文件定位读本章区间，
+   * 这个把「本章所在的 8MB 窗口」整块留在内存里，同一窗口内的相邻章共用一次读盘。
+   * 单窗口不是多窗口，跳到别的窗口就把旧的丢掉——照上游语义，不自己发明多档缓存。
+   *
+   * startByte/endByte 与 readChapterByByteRange 同口径：都是「去掉 BOM 后的正文」里的字节偏移，
+   * 所以实际文件偏移要加 BOM 长度，窗口对齐也按加完 BOM 的偏移算。
+   */
+  private static readChapterByWindow(path: string, encoding: string,
+    startByte: number, endByte: number): string {
+    const sourceFile = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY);
+    try {
+      const fileSize = fileIo.statSync(sourceFile.fd).size;
+      let bom = 0;
+      if (fileSize >= 3) {
+        const head = new ArrayBuffer(3);
+        fileIo.readSync(sourceFile.fd, head, { offset: 0, length: 3 });
+        const h = new Uint8Array(head);
+        if (h[0] === 0xEF && h[1] === 0xBB && h[2] === 0xBF) { bom = 3; }
+        else if ((h[0] === 0xFF && h[1] === 0xFE) || (h[0] === 0xFE && h[1] === 0xFF)) { bom = 2; }
+      }
+      const fileStart = Math.max(0, Math.min(startByte + bom, fileSize));
+      const fileEnd = Math.max(fileStart, Math.min(endByte + bom, fileSize));
+      if (fileEnd <= fileStart) { return ''; }
+      const key = `${path}|${encoding}`;
+      const windowStart = BookRepository.TXT_WINDOW_BYTES *
+        Math.floor(fileStart / BookRepository.TXT_WINDOW_BYTES);
+      const cached = BookRepository.cachedWindowBytes;
+      const hit = cached !== undefined && BookRepository.cachedWindowBookKey === key &&
+        BookRepository.cachedWindowStartByte === windowStart &&
+        fileEnd <= windowStart + cached.length;
+      let windowBytes: Uint8Array;
+      if (hit) {
+        windowBytes = cached as Uint8Array;
+      } else {
+        const length = Math.min(BookRepository.TXT_WINDOW_BYTES, fileSize - windowStart);
+        if (length <= 0) { return ''; }
+        const buffer = new ArrayBuffer(length);
+        const bytesRead = fileIo.readSync(sourceFile.fd, buffer, { offset: windowStart, length: length });
+        if (bytesRead <= 0) { return ''; }
+        windowBytes = new Uint8Array(buffer, 0, bytesRead);
+        BookRepository.cachedWindowBookKey = key;
+        BookRepository.cachedWindowStartByte = windowStart;
+        BookRepository.cachedWindowBytes = windowBytes;
+      }
+      // 窗口末尾可能切在多字节字符中间，但只解本章那一段（章末是完整字符），所以不受影响。
+      // 万一 endByte 落在窗口外（判据算错），按未命中处理，退回单章定位读，绝不硬切。
+      if (fileEnd > windowStart + windowBytes.length) {
+        return BookRepository.readChapterByByteRange(path, encoding, startByte, endByte);
+      }
+      const slice = windowBytes.subarray(fileStart - windowStart, fileEnd - windowStart);
+      return BookRepository.decodeTextBytes(slice, encoding).replace(/^\uFEFF/, '');
     } finally {
       fileIo.closeSync(sourceFile);
     }
@@ -2292,6 +2389,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const explicitEncoding = encoding !== undefined ? encoding.trim() : '';
     let content: string = '';
     let seekRange: ChapterTextRange | undefined;
+    let seeked = false;
     // 偏移口径：charset 显式时用它；为空时落库按 UTF-8 折算，须确认文件真是 UTF-8。
     const seekEncoding = explicitEncoding.length > 0 ? explicitEncoding : 'utf-8';
     const canSeek = explicitEncoding.length > 0 || BookRepository.fileIsUtf8(book.contentPath as string);
@@ -2302,12 +2400,15 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       const seekIndex = BookRepository.resolveChapterIndex(seedRows, chapterTitle, requestedChapterIndex, book);
       const range = ranges[seekIndex];
       if (range !== undefined) {
-        content = BookRepository.readChapterByByteRange(book.contentPath as string, seekEncoding,
+        content = BookRepository.readChapterRange(book.contentPath as string, seekEncoding,
           range[0], range[1]);
         seekRange = { start: 0, end: content.length };
+        // seek 已按落库字节区间取到本章，哪怕这一章是空正文也算「读过了」：
+        // 再落进下面的整本回落就会把大文件整本读进来，正是 #1008 要消掉的那次读盘。
+        seeked = true;
       }
     }
-    if (content.length === 0) {
+    if (!seeked && content.length === 0) {
       content = contentOverride ?? BookRepository.readBookContent(book.contentPath, encoding);
     }
     // 性能观测打点：验收要对比同书连读里取正文那段耗时，seek 命中后应显著下降。
