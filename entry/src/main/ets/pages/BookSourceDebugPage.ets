@@ -371,7 +371,8 @@ export struct BookSourceDebugPage {
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .backgroundColor(this.entryContainer(entry.kind))
     .borderRadius(12)
-    .margin({ bottom: 10 })
+    // 条目间距由 List({ space: 10 }) 统一给（上游 LazyColumn verticalArrangement = spacedBy(10.dp)），
+    // 条目本身不再带 margin，否则会变成 20。
     .onClick(() => {
       this.selectedId = entry.id;
       this.detailSheetVisible = true;
@@ -405,7 +406,7 @@ export struct BookSourceDebugPage {
       })
 
       Stack({ alignContent: Alignment.BottomEnd }) {
-        List({ scroller: this.logScroller }) {
+        List({ space: 10, scroller: this.logScroller }) {
           // 上游 :109-111 item("controls") = DebugControls。
           // 开始/停止入口只有右下 FAB（:85-96），清除只有顶栏 action（:76-80），内容区不自绘按钮。
           ListItem() {
