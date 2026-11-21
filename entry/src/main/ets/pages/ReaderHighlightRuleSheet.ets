@@ -591,9 +591,9 @@ export struct ReaderHighlightRuleSheet {
           onChange: (enabled: boolean) => this.setEnabled(rule.id, enabled)
         })
         Row() {
-          Text('↑').fontSize(TITLE_SMALL).fontColor('#B9C6FF').padding(5)
+          Text('↑').fontSize(LABEL_LARGE).fontColor('#B9C6FF').padding(5)
             .onClick(() => this.moveRule(rule.id, -1))
-          Text('↓').fontSize(TITLE_SMALL).fontColor('#B9C6FF').padding(5)
+          Text('↓').fontSize(LABEL_LARGE).fontColor('#B9C6FF').padding(5)
             .onClick(() => this.moveRule(rule.id, 1))
           Text('删').fontSize(BODY_SMALL).fontColor(this.themeColorError).padding(5)
             .onClick(() => this.pendingDeleteId = rule.id)
@@ -646,12 +646,12 @@ export struct ReaderHighlightRuleSheet {
             }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           }
           Row() {
-            Text('预设规则').fontSize(TITLE_SMALL).fontColor('#C7C9D1')
+            Text('预设规则').fontSize(LABEL_LARGE).fontColor('#C7C9D1')
               .padding({ left: 16, right: 16, top: 11, bottom: 11 })
               .backgroundColor(this.themeColorSurfaceElevated).borderRadius(22)
               .onClick(() => this.openPresets())
             Blank().layoutWeight(1)
-            Text('＋ 新建规则').fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
+            Text('＋ 新建规则').fontSize(LABEL_LARGE).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 11, bottom: 11 })
               .backgroundColor('#B9C6FF').borderRadius(22).onClick(() => this.startCreate())
           }.width('100%').margin({ top: 12 })
@@ -854,14 +854,14 @@ export struct ReaderHighlightRuleSheet {
             }.width('100%')
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           Row() {
-            Text('取消').fontSize(TITLE_SMALL).fontColor('#C7C9D1').padding(10)
+            Text('取消').fontSize(LABEL_LARGE).fontColor('#C7C9D1').padding(10)
               .onClick(() => this.editorVisible = false)
             Blank().layoutWeight(1)
             if (this.editId.length > 0) {
-              Text('删除').fontSize(TITLE_SMALL).fontColor(this.themeColorError).padding(10)
+              Text('删除').fontSize(LABEL_LARGE).fontColor(this.themeColorError).padding(10)
                 .onClick(() => this.pendingDeleteId = this.editId)
             }
-            Text(this.saving ? '保存中' : '保存').fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
+            Text(this.saving ? '保存中' : '保存').fontSize(LABEL_LARGE).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 10, bottom: 10 })
               .backgroundColor('#B9C6FF').borderRadius(20)
               .onClick(() => this.saveRule())
@@ -877,9 +877,9 @@ export struct ReaderHighlightRuleSheet {
         Column() {
           Text('删除这条阅读高亮规则？').fontSize(TITLE_MEDIUM).fontColor('#E5E6EB')
           Row() {
-            Text('取消').fontSize(TITLE_SMALL).fontColor('#C7C9D1').padding(10)
+            Text('取消').fontSize(LABEL_LARGE).fontColor('#C7C9D1').padding(10)
               .onClick(() => this.pendingDeleteId = '')
-            Text('删除').fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
+            Text('删除').fontSize(LABEL_LARGE).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 9, bottom: 9 })
               .backgroundColor(this.themeColorErrorContainer).borderRadius(18)
               .onClick(() => this.confirmDelete())
@@ -917,7 +917,7 @@ export struct ReaderHighlightRuleSheet {
             }.width('100%')
           }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
           Row() {
-            Text('取消').fontSize(TITLE_SMALL).fontColor('#C7C9D1').padding(10)
+            Text('取消').fontSize(LABEL_LARGE).fontColor('#C7C9D1').padding(10)
               .onClick(() => {
                 this.presetVisible = false;
                 this.presetSelectedIds = [];
@@ -925,7 +925,7 @@ export struct ReaderHighlightRuleSheet {
               })
             Blank().layoutWeight(1)
             Text(this.saving ? '添加中' : `添加 ${this.presetSelectedIds.length} 条`)
-              .fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
+              .fontSize(LABEL_LARGE).fontColor(this.themeColorOnPrimary)
               .padding({ left: 18, right: 18, top: 10, bottom: 10 })
               .backgroundColor('#B9C6FF').borderRadius(20)
               .onClick(() => this.applyPresets())

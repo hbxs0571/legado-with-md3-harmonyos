@@ -19,8 +19,10 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 上游仓库默认按同级目录推断（legado-with-md3-harmonyos 与 legado-with-MD3 是兄弟目录），
+# 不写死本机绝对路径；换机器时设 UPSTREAM_ROOT 覆盖
 UP_BASE = os.environ.get(
-    'UPSTREAM_ROOT', 'N:/HarmonyProjects/legado-with-MD3')
+    'UPSTREAM_ROOT', os.path.join(os.path.dirname(ROOT), 'legado-with-MD3'))
 UP_SRC = os.path.join(UP_BASE, 'app/src/main/java/io/legado/app')
 UP_CFG = os.path.join(UP_SRC, 'help/config/ReadBookConfig.kt')
 UP_SET = os.path.join(UP_SRC, 'domain/model/settings/ReadSettings.kt')

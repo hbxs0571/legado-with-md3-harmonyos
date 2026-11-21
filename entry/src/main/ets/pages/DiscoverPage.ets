@@ -1,3 +1,4 @@
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
@@ -182,7 +183,7 @@ export struct DiscoverPage {
   }
 
   private updateHeader(offset: number): void {
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse === this.collapsedHeader) { return; }
     this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
       this.collapsedHeader = shouldCollapse;

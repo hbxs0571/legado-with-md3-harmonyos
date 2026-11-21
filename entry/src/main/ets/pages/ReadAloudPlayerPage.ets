@@ -216,19 +216,18 @@ export struct ReadAloudPlayerPage {
   @Builder
   CoverPage() {
     Column() {
-      // 上游 PlayerMorphCover：52% 屏宽、5:7 比例。
+      // 上游 PlayerMorphCover.kt:36-68：52% 屏宽、5:7 比例、圆角 8dp（:62 RoundedCornerShape(8.dp)）、无投影。
       if (this.coverUri.length > 0) {
         Image(this.coverUri)
           .width('52%').aspectRatio(5 / 7).objectFit(ImageFit.Cover)
-          .borderRadius(16).shadow({ radius: 24, color: '#66000000', offsetX: 0, offsetY: 12 })
+          .borderRadius(8)
       } else {
         Column() {
           Text(this.bookName.length > 0 ? this.bookName.charAt(0) : '书')
             .fontSize(HEADLINE_LARGE).fontColor('#FFFFFF')
         }
-        .width('52%').aspectRatio(5 / 7).borderRadius(16)
+        .width('52%').aspectRatio(5 / 7).borderRadius(8)
         .backgroundColor(this.accent)
-        .shadow({ radius: 24, color: '#66000000', offsetX: 0, offsetY: 12 })
         .justifyContent(FlexAlign.Center)
       }
 
@@ -380,7 +379,7 @@ export struct ReadAloudPlayerPage {
       Column() {
         ForEach(['关闭', '按分钟', '按章节'], (label: string, index: number) => {
           Row() {
-            Text(label).fontSize(TITLE_SMALL).fontColor(this.fg()).layoutWeight(1)
+            Text(label).fontSize(LABEL_LARGE).fontColor(this.fg()).layoutWeight(1)
           }
           .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
           .onClick(() => {
@@ -516,7 +515,7 @@ struct PlayerSheet {
           Text(this.title).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
             .fontColor(this.dark ? '#FFFFFF' : this.textPrimaryDark())
           Blank()
-          Text('关闭').fontSize(TITLE_SMALL).fontColor(this.accentColor()).onClick(() => this.onDismiss())
+          Text('关闭').fontSize(LABEL_LARGE).fontColor(this.accentColor()).onClick(() => this.onDismiss())
         }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 12 })
         this.content()
       }

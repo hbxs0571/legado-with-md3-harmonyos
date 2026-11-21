@@ -1,3 +1,4 @@
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
@@ -65,7 +66,7 @@ export struct ThemeManagePage {
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -323,14 +324,14 @@ export struct ThemeManagePage {
             Text('夜间').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 6 })
           }.margin({ top: 6 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Text('应用').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+        Text('应用').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
       }.width('100%').onClick(() => this.confirmApply(entry))
       Row() {
-        Text('编辑').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('编辑').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           .onClick(() => this.promptRename(entry))
-        Text('导出').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+        Text('导出').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
           .onClick(() => this.exportSaved(entry))
-        Text('删除').fontSize(TITLE_SMALL).fontColor('#E53935').layoutWeight(1)
+        Text('删除').fontSize(LABEL_LARGE).fontColor('#E53935').layoutWeight(1)
           .onClick(() => this.confirmDelete(entry))
       }.width('100%').margin({ top: 12 })
     }.width('calc(100% - 32vp)').padding({ left: 16, right: 16, top: 14, bottom: 14 })

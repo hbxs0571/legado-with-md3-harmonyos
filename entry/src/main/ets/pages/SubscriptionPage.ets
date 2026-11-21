@@ -124,13 +124,13 @@ export struct SubscriptionPage {
           Row() {
             Row() {
               AppGlyph({ name: 'ruleSubscription', glyphSize: 18, tint: '#C5C7D0' })
-              Text('规则').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+              Text('规则').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(13).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenRules())
             Row() {
               AppGlyph({ name: 'favoriteStar', glyphSize: 18, tint: '#C5C7D0' })
-              Text('收藏').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
+              Text('收藏').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(13).margin({ left: 10 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenFavorites())

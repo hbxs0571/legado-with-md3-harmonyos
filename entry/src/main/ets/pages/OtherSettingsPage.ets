@@ -1,3 +1,4 @@
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import curves from '@ohos.curves';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
@@ -128,7 +129,7 @@ export struct OtherSettingsPage {
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
         this.collapsedHeader = shouldCollapse;
@@ -262,7 +263,7 @@ export struct OtherSettingsPage {
       if (this.activeSheet === 'folderPicker') {
         Row() {
           Text('选择操作').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 16 })
         Row() {
           AppGlyph({ name: 'profileFolder', glyphSize: 28, tint: this.themeColorAccent })
@@ -307,10 +308,10 @@ export struct OtherSettingsPage {
           }.width('100%').padding({ left: 16, right: 16, top: 4 }).constraintSize({ minHeight: '100%' })
         }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
         Row() {
-          Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => this.activeSheet = '')
-          Text('确认').fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary).layoutWeight(1).textAlign(TextAlign.Center)
+          Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorSurfacePrimary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorAccent).borderRadius(20).margin({ left: 10 })
             .onClick(() => {
               this.onUnavailableAction('直链上传规则尚未保存');

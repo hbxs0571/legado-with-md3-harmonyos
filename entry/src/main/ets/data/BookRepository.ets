@@ -713,8 +713,9 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       'TXT 文本|.txt',
       'EPUB 电子书|.epub',
       'PDF 文档|.pdf',
-      'MOBI 电子书|.mobi',
-      'AZW3 电子书|.azw3',
+      // 批7（:1163）：.azw 与 .azw3 同属 MOBI 家族（formatFromFileName 认两者），
+      // 并成一项，避免用户在系统选择器里选不到 .azw。
+      'MOBI 电子书|.mobi,.azw,.azw3',
       'UMD 电子书|.umd',
       '压缩包|.zip,.cbz'
     ];
@@ -736,6 +737,13 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
     const fileName = BookRepository.getFileName(uri);
     const bookId = `local-${BookRepository.md5Encode16(uri)}`;
     const format = BookRepository.formatFromFileName(fileName);
+    // 批7（:1163，上游 BookInfoViewModel.kt:1501-1541 走 UnsupportedWebFile）：
+    // formatFromFileName 的兜底是 return 'txt'，未知后缀会被当成 UTF-8 文本解码，
+    // 静默产出一本乱码书。这里只拦「兜底成 txt 但后缀不认识」这一种，
+    // 压缩包（archive）与 .epub/.pdf/.mobi/.umd 全都不受影响。
+    if (format === 'txt' && !BookRepository.isSupportedBookFile(fileName)) {
+      throw new Error(`不支持的文件格式：${fileName}`);
+    }
     let created: CreatedLocalBook;
     if (format === 'epub') {
       const imported = await EpubRepository.importFromUri(context, uri, fileName, bookId);
@@ -1246,7 +1254,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       canUpdate: RdbCodec.boolean(resultSet, 31, true),
       // 上游 Book.upError 存在 type 位掩码的 16 位上（BookType.upError），
       // 自动刷新失败时置位，书架/详情页据此显示「更新出错」。
-      upError: (bookTypeValue & 16) !== 0
+      upError: (bookTypeValue & 16) !== 0,
+      // 批8（r362）：notShelf 位（1024）读回，未上架的书不进书架列表。
+      notShelf: (bookTypeValue & 1024) !== 0
     };
     book.progress = BookRepository.readProgress(book);
     return book;
@@ -1264,6 +1274,20 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     // 老库 format 列可能是空串：按 bookUrl 后缀回推；压缩包不会直接成书，兜底成 txt。
     const byName = BookRepository.formatFromFileName(bookUrl);
     return byName === 'archive' ? 'txt' : byName;
+  }
+
+  /**
+   * 批7（:1163）：是否是本地能解析的书文件。
+   *
+   * 后缀清单与 `data/ArchiveImporter.ets:14 BOOK_SUFFIXES` 逐字一致 ——
+   * 压缩包内的书文件用同一份口径判，两处漂移就会出现「包里能导、单独选不能导」。
+   * `.zip/.cbz` 不算书文件：它们走 isArchiveUri，由压缩包链路处理。
+   */
+  private static isSupportedBookFile(fileName: string): boolean {
+    const lower = fileName.toLowerCase();
+    return lower.endsWith('.txt') || lower.endsWith('.epub') || lower.endsWith('.umd')
+      || lower.endsWith('.pdf') || lower.endsWith('.mobi') || lower.endsWith('.azw3')
+      || lower.endsWith('.azw');
   }
 
   /** 按文件名后缀判本地书形态，与上游 AppPattern.kt:46/48 两条正则同口径。 */
@@ -1952,7 +1976,10 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     const media = book.bookType === 'image' ? 64 : book.bookType === 'audio' ? 32 : 8;
     // 批3（r359）：upError 位过去没有写入方，自动刷新目录失败后就无从标记。
     const errorBit = book.upError === true ? 16 : 0;
-    return (book.isLocal ? media | 256 : media) | errorBit;
+    // 批8（r362）：notShelf 位 = 上游 BookType.notShelf（0b100_0000_0000 = 1024）。
+    // 从搜索结果进详情页看过的书带这一位落库，书架按位过滤，点「放入书架」时清掉。
+    const notShelfBit = book.notShelf === true ? 1024 : 0;
+    return (book.isLocal ? media | 256 : media) | errorBit | notShelfBit;
   }
 
   /** 章节行 18 个绑定值，顺序必须与 insertChapterSql 一致。 */

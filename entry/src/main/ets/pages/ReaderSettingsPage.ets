@@ -27,7 +27,7 @@ import {
 } from '../data/ReaderSettingsRepository';
 import { readCardStyleSnapshot, resolveCardCornerRadius } from '../data/ThemeCardStyle';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
-import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
 
 type ReaderInfoSlot = 'headerLeft' | 'headerMiddle' | 'headerRight' | 'footerLeft' | 'footerMiddle' | 'footerRight';
@@ -896,7 +896,7 @@ export struct ReaderSettingsPage {
         Row() {
           Column() {
             Row() {
-              Text('字号').fontSize(TITLE_SMALL).fontColor(this.rsetTextSecondary).layoutWeight(1)
+              Text('字号').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.rsetTextSecondary).layoutWeight(1)
               Text(this.fontSize.toString()).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary)
             }
             Slider({
@@ -937,7 +937,7 @@ export struct ReaderSettingsPage {
         .borderRadius(this.cardRadius(12))
 
         Row() {
-          Text('背景').fontSize(TITLE_SMALL).fontColor(this.rsetTextSecondary).layoutWeight(1)
+          Text('背景').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.rsetTextSecondary).layoutWeight(1)
           Text('长按自定义').fontSize(LABEL_SMALL).fontColor(this.rsetTextTertiary)
             .onClick(() => this.openDetailSheet('自定义阅读背景', '背景图片、背景颜色与文字颜色设置'))
           Image($r('app.media.app_visibility')).width(18).height(18)

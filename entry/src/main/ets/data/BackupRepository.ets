@@ -83,23 +83,14 @@ interface HighlightRuleParseOutcome {
   skipped: number;
 }
 
-export interface BackupEntryPreview {
+/** 恢复引擎读取的 ZIP 根条目；本地预览态已删除，这里只保留恢复必需的条目名。 */
+interface BackupArchiveEntry {
   name: string;
-  recordCount: number;
-  byteSize: number;
-}
-
-export interface BackupPreview {
-  entryCount: number;
-  bookCount: number;
-  localBookCount: number;
-  localBooksWithoutBody: number;
-  entries: BackupEntryPreview[];
 }
 
 export interface BackupSelection {
   stagingDirectory: string;
-  preview: BackupPreview;
+  entries: BackupArchiveEntry[];
 }
 
 export interface BackupIgnoreLists {
@@ -137,8 +128,6 @@ export interface RestoreResult {
   createdMissingBodyBookCount: number;
   /** 恢复期按 LocalBookRestorePlanner 判定为重复书目并删除的条数。 */
   deletedDuplicateLocalBookCount: number;
-  localBooksWithoutBody: number;
-  restoredEntries: BackupEntryPreview[];
   /** 恢复替换净化规则的新增条数；没有 replaceRule.json 时为 0。 */
   replaceRuleAdded: number;
   /** 恢复替换净化规则的覆盖条数（同 id 或同 pattern 视为同一条）。 */
@@ -409,7 +398,6 @@ interface AndroidPreferenceKeyGroups {
 /** 本地备份沿用 Legado Android 的 ZIP 根目录文件名、JSON/XML 结构和数据类别。 */
 export class BackupRepository {
   private static readonly preferenceName: string = 'legado_android_backup_options';
-  private static readonly restoredEntrySummaryKey: string = 'restoredEntrySummary';
   private static readonly maximumCompressedBytes: number = 64 * 1024 * 1024;
   private static readonly maximumExpandedBytes: number = 256 * 1024 * 1024;
   private static readonly maximumArchiveEntries: number = 2000;
@@ -629,35 +617,6 @@ export class BackupRepository {
 
   static categoryOptionsList(): BackupCategoryOption[] {
     return BackupRepository.categoryOptions;
-  }
-
-  static async loadRestoredEntries(context: Context): Promise<BackupEntryPreview[]> {
-    try {
-      const store = await preferences.getPreferences(context, BackupRepository.preferenceName);
-      const value = await store.get(BackupRepository.restoredEntrySummaryKey, '');
-      if (typeof value === 'string' && value.length > 0) {
-        return BackupRepository.parseEntrySummary(value);
-      }
-    } catch (error) {
-      console.error(`[BackupRepository] 读取恢复摘要失败: ${error}`);
-    }
-    const directory = `${context.filesDir}/${BackupRepository.legacyDirectoryName}`;
-    let names: string[] = [];
-    try { names = fileIo.listFileSync(directory); } catch (error) { console.error(`[BackupRepository] 列出旧版备份目录失败: ${error}`); return []; }
-    const entries: BackupEntryPreview[] = [];
-    for (let index = 0; index < names.length; index++) {
-      const name = names[index];
-      if (name === undefined || !BackupRepository.isSafeRootEntry(name)) { continue; }
-      try {
-        const path = `${directory}/${name}`;
-        if (fileIo.lstatSync(path).isFile()) {
-          entries.push({ name: name, recordCount: -1, byteSize: fileIo.statSync(path).size });
-        }
-      } catch (error) {
-        console.error(`[BackupRepository] 读取旧版备份条目失败: ${error}`);
-      }
-    }
-    return entries;
   }
 
   /**
@@ -1326,7 +1285,7 @@ export class BackupRepository {
   }
 
   /** 本地选择：picker 选一个 zip 拷到缓存，再交给 prepareBackupArchive。取消返回 undefined。 */
-  static async selectBackup(context: Context, currentBooks: Book[]): Promise<BackupSelection | undefined> {
+  static async selectBackup(context: Context): Promise<BackupSelection | undefined> {
     const options = new picker.DocumentSelectOptions();
     options.fileSuffixFilters = ['Legado Android 备份|.zip'];
     options.maxSelectNumber = 1;
@@ -1350,20 +1309,19 @@ export class BackupRepository {
         const detail = error instanceof Error ? error.message : '未知错误';
         throw new Error(`Android ZIP 备份校验失败：${detail}`);
       }
-      return await BackupRepository.prepareBackupArchive(context, zipPath, currentBooks);
+      return await BackupRepository.prepareBackupArchive(context, zipPath);
     } finally {
       try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[BackupRepository] 删除备份临时包失败: ${error}`); }
     }
   }
 
   /**
-   * 校验并解压一份已经落到本地的备份 ZIP，返回可供 restore 使用的工作目录与预览。
+   * 校验并解压一份已经落到本地的备份 ZIP，返回可供 restore 使用的工作目录与根条目清单。
    * 调用方负责删除传入的 zipPath；staging 由 restore 结束时清理（与原行为一致）。
    */
   static async prepareBackupArchive(
     context: Context,
-    zipPath: string,
-    currentBooks: Book[]
+    zipPath: string
   ): Promise<BackupSelection> {
     const stagingDirectory = `${context.cacheDir}/legado-android-restore-${Date.now()}`;
     BackupRepository.ensureDirectory(stagingDirectory);
@@ -1383,42 +1341,13 @@ export class BackupRepository {
         throw new Error('ZIP 解压内容超过 256 MB');
       }
       await zlib.decompressFile(zipPath, stagingDirectory);
-      const entries = BackupRepository.readEntryPreviews(stagingDirectory);
+      const entries = BackupRepository.readArchiveEntries(stagingDirectory);
       if (entries.length === 0 || entries.length > BackupRepository.maximumArchiveEntries) {
         throw new Error('备份 ZIP 中没有可识别的条目或条目数量超过 2000');
       }
-      let bookCount: number = 0;
-      let localBookCount: number = 0;
-      let localBooksWithoutBody: number = 0;
-      const currentPaths: Set<string> = new Set<string>();
-      for (let index = 0; index < currentBooks.length; index++) {
-        const book = currentBooks[index];
-        if (book !== undefined && book.contentPath !== undefined) { currentPaths.add(book.contentPath); }
-      }
-      for (let index = 0; index < entries.length; index++) {
-        const entry = entries[index];
-        if (entry !== undefined && entry.name === 'bookshelf.json') {
-          bookCount = Math.max(0, entry.recordCount);
-          const text = fileIo.readTextSync(`${stagingDirectory}/${entry.name}`);
-          localBookCount = BackupRepository.countLocalBooks(text);
-          const records = BackupRepository.splitJsonArray(text);
-          for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
-            const record = records[recordIndex] ?? '';
-            if (!BackupRepository.isLocalAndroidBook(record)) { continue; }
-            const bookUrl = BackupRepository.readJsonString(record, 'bookUrl') ?? '';
-            if (!currentPaths.has(bookUrl)) { localBooksWithoutBody += 1; }
-          }
-        }
-      }
       return {
         stagingDirectory: stagingDirectory,
-        preview: {
-          entryCount: entries.length,
-          bookCount: bookCount,
-          localBookCount: localBookCount,
-          localBooksWithoutBody: localBooksWithoutBody,
-          entries: entries
-        }
+        entries: entries
       };
     } catch (error) {
       await EpubRepository.removeBackupWorkDirectory(stagingDirectory);
@@ -1428,8 +1357,8 @@ export class BackupRepository {
   }
 
   /** WebDAV 选择：zip 已经在缓存目录，直接交给 prepareBackupArchive。 */
-  static async selectBackupFromPath(context: Context, zipPath: string, currentBooks: Book[]): Promise<BackupSelection> {
-    return await BackupRepository.prepareBackupArchive(context, zipPath, currentBooks);
+  static async selectBackupFromPath(context: Context, zipPath: string): Promise<BackupSelection> {
+    return await BackupRepository.prepareBackupArchive(context, zipPath);
   }
 
   static async restore(
@@ -1442,7 +1371,7 @@ export class BackupRepository {
   ): Promise<RestoreResult> {
     const targetDirectory = `${context.filesDir}/${BackupRepository.legacyDirectoryName}`;
     BackupRepository.ensureDirectory(targetDirectory);
-    const entries = selection.preview.entries;
+    const entries = selection.entries;
     let preservedEntryCount: number = 0;
     let replaceRuleAdded: number = 0;
     let replaceRuleUpdated: number = 0;
@@ -1977,8 +1906,6 @@ export class BackupRepository {
     );
     const localBooks = updated.books.filter((book: Book) => BookRepository.isPersistableBook(book));
     await BookRepository.saveImportedBooks(context, localBooks);
-    const restoredEntries = BackupRepository.buildRestoredEntrySummary(selection, ignoredCategories);
-    await BackupRepository.saveRestoredEntrySummary(context, restoredEntries);
     return {
       books: updated.books,
       settings: settings,
@@ -1990,8 +1917,6 @@ export class BackupRepository {
       updatedLocalBookCount: updated.updatedCount,
       createdMissingBodyBookCount: updated.createdMissingBodyCount,
       deletedDuplicateLocalBookCount: updated.deletedDuplicateCount,
-      localBooksWithoutBody: selection.preview.localBooksWithoutBody,
-      restoredEntries: restoredEntries,
       replaceRuleAdded: replaceRuleAdded,
       replaceRuleUpdated: replaceRuleUpdated,
       replaceRuleSkipped: replaceRuleSkipped,
@@ -2954,93 +2879,22 @@ export class BackupRepository {
     return `android-missing-${hash.toString(16)}`;
   }
 
-  private static readEntryPreviews(directory: string): BackupEntryPreview[] {
+  /** 读取 ZIP 根目录里可识别的条目名，供恢复引擎逐条处理。 */
+  private static readArchiveEntries(directory: string): BackupArchiveEntry[] {
     let names: string[] = [];
     try { names = fileIo.listFileSync(directory); } catch (error) { console.error(`[BackupRepository] 列出备份目录失败: ${error}`); return []; }
-    const entries: BackupEntryPreview[] = [];
+    const entries: BackupArchiveEntry[] = [];
     for (let index = 0; index < names.length; index++) {
       const name = names[index];
       if (name === undefined || !BackupRepository.isSafeRootEntry(name)) { continue; }
       const path = `${directory}/${name}`;
       try {
-        if (!fileIo.lstatSync(path).isFile()) { continue; }
-        const size = fileIo.statSync(path).size;
-        let count: number = -1;
-        if (name.endsWith('.json') && size <= BackupRepository.maximumJsonTextBytes) {
-          const content = fileIo.readTextSync(path);
-          count = BackupRepository.countJsonRecords(content);
-        } else if (name === 'config.xml' && size <= BackupRepository.maximumJsonTextBytes) {
-          count = BackupRepository.countXmlEntries(fileIo.readTextSync(path));
-        }
-        entries.push({ name: name, recordCount: count, byteSize: size });
+        if (fileIo.lstatSync(path).isFile()) { entries.push({ name: name }); }
       } catch (error) {
         console.error(`[BackupRepository] 读取备份条目失败: ${error}`);
       }
     }
     return entries;
-  }
-
-  private static buildRestoredEntrySummary(
-    selection: BackupSelection,
-    ignoredCategories: string[]
-  ): BackupEntryPreview[] {
-    const entries: BackupEntryPreview[] = [];
-    for (let index = 0; index < selection.preview.entries.length; index++) {
-      const entry = selection.preview.entries[index];
-      if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
-      if (entry.name === 'bookshelf.json' && ignoredCategories.includes('localBook')) {
-        const source = fileIo.readTextSync(`${selection.stagingDirectory}/${entry.name}`);
-        const filtered = BackupRepository.filterLocalBooks(source);
-        const count = BackupRepository.countJsonRecords(filtered);
-        if (count > 0) { entries.push({ name: entry.name, recordCount: count, byteSize: filtered.length }); }
-        continue;
-      }
-      if (entry.name === 'config.xml') {
-        const source = fileIo.readTextSync(`${selection.stagingDirectory}/${entry.name}`);
-        const filtered = BackupRepository.filterAndroidConfigXml(source, ignoredCategories);
-        entries.push({ name: entry.name, recordCount: BackupRepository.countXmlEntries(filtered), byteSize: filtered.length });
-      } else {
-        entries.push(entry);
-      }
-    }
-    return entries;
-  }
-
-  private static async saveRestoredEntrySummary(context: Context, entries: BackupEntryPreview[]): Promise<void> {
-    const store = await preferences.getPreferences(context, BackupRepository.preferenceName);
-    const records: string[] = [];
-    for (let index = 0; index < entries.length; index++) {
-      const entry = entries[index];
-      if (entry !== undefined) {
-        records.push(`${encodeURIComponent(entry.name)}|${entry.recordCount}|${entry.byteSize}`);
-      }
-    }
-    await store.put(BackupRepository.restoredEntrySummaryKey, records.join('\n'));
-    await store.flush();
-  }
-
-  private static parseEntrySummary(value: string): BackupEntryPreview[] {
-    const entries: BackupEntryPreview[] = [];
-    const records = value.split('\n');
-    for (let index = 0; index < records.length; index++) {
-      const fields = (records[index] ?? '').split('|');
-      if (fields.length !== 3) { continue; }
-      const count = Number(fields[1]);
-      const size = Number(fields[2]);
-      if (!Number.isInteger(count) || !Number.isFinite(size) || size < 0) { continue; }
-      entries.push({ name: decodeURIComponent(fields[0] ?? ''), recordCount: count, byteSize: size });
-    }
-    return entries;
-  }
-
-  private static countLocalBooks(text: string): number {
-    const records = BackupRepository.splitJsonArray(text);
-    let count: number = 0;
-    for (let index = 0; index < records.length; index++) {
-      const record = records[index] ?? '';
-      if (BackupRepository.isLocalAndroidBook(record)) { count += 1; }
-    }
-    return count;
   }
 
   /** 与上游 BookExtensions.kt:66-73 的 Book.isLocal 同语义：type 为 0（老数据无类型位）时按 origin 前缀判。 */
@@ -3559,15 +3413,6 @@ export class BackupRepository {
       else if (trimmed[index] === ']') { break; }
     }
     return rows;
-  }
-
-  private static countJsonRecords(text: string): number {
-    return text.trim().startsWith('[') ? BackupRepository.splitJsonArray(text).length : -1;
-  }
-
-  private static countXmlEntries(text: string): number {
-    const matches = text.match(/<(?:string|int|long|float|boolean)\b/g);
-    return matches === null ? 0 : matches.length;
   }
 
   private static readJsonString(json: string, field: string): string | undefined {

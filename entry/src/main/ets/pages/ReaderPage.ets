@@ -81,7 +81,7 @@ import {
   ReaderMoreActionConfig, READER_MORE_ACTION_DEFAULTS
 } from '../data/ReaderMoreActionsRepository';
 import { ReaderSearchNavItem } from '../model/ReaderSearchNav';
-import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
 interface ReaderMoreAction {
   id: string;
@@ -4780,7 +4780,7 @@ export struct ReaderPage {
         Text('此操作尚未迁移，当前不会执行。')
           .fontSize(TITLE_SMALL).fontColor('#B7B8C1').width('100%')
         Row() {
-          Text('知道了').fontSize(TITLE_SMALL).fontColor(this.themeColorOnPrimary)
+          Text('知道了').fontSize(LABEL_LARGE).fontColor(this.themeColorOnPrimary)
             .padding({ left: 22, right: 22, top: 10, bottom: 10 })
             .backgroundColor('#B9C6FF').borderRadius(18)
             .onClick(() => this.moreActionShellVisible = false)
@@ -8781,7 +8781,7 @@ export struct ReaderPage {
           Row() {
             Row() {
               AppGlyph({ name: 'profileHistory', glyphSize: 18, tint: '#DDE1F0' }).margin({ right: 8 })
-              Text('返回原阅读位置').fontSize(TITLE_SMALL).fontColor('#ECEEF4')
+              Text('返回原阅读位置').fontSize(LABEL_LARGE).fontColor('#ECEEF4')
             }.layoutWeight(1).onClick(() => this.onRestoreReadingAnchor())
             Text('关闭').fontSize(LABEL_MEDIUM).fontColor('#BFC2CD').padding({ left: 12, right: 6 })
               .onClick(() => this.onKeepReadingAnchor())
@@ -8922,7 +8922,7 @@ export struct ReaderPage {
             }.width('100%').padding({ bottom: 12 })
             ForEach(READER_IMAGE_STYLE_OPTIONS, (style: ReaderImageStyleOption) => {
               Row() {
-                Text(style.label).fontSize(TITLE_SMALL).fontColor('#E5E6EB').layoutWeight(1)
+                Text(style.label).fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#E5E6EB').layoutWeight(1)
                 if (this.activeImageStyle === style.id) {
                   AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
                 }
@@ -8947,7 +8947,7 @@ export struct ReaderPage {
             }.width('100%').padding({ bottom: 12 })
             // 「默认」档（上游 R.string.btn_default_s → -1）：回落全局设置；未设置同义。
             Row() {
-              Text('默认').fontSize(TITLE_SMALL).fontColor('#E5E6EB').layoutWeight(1)
+              Text('默认').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#E5E6EB').layoutWeight(1)
               if (this.selectedPageAnimIndex() === READER_PAGE_ANIM_DEFAULT) {
                 AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
               }
@@ -8956,7 +8956,7 @@ export struct ReaderPage {
               .onClick(() => this.choosePageAnim(READER_PAGE_ANIM_DEFAULT))
             ForEach(READER_PAGE_ANIMATION_LABELS, (label: string, index: number) => {
               Row() {
-                Text(label).fontSize(TITLE_SMALL).fontColor('#E5E6EB').layoutWeight(1)
+                Text(label).fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#E5E6EB').layoutWeight(1)
                 if (this.selectedPageAnimIndex() === index) {
                   AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C6FF' })
                 }
@@ -8981,7 +8981,7 @@ export struct ReaderPage {
             }.width('100%').padding({ bottom: 12 })
             Row() {
               Column() {
-                Text('模拟追读').fontSize(TITLE_SMALL).fontColor('#E5E6EB')
+                Text('模拟追读').fontSize(TITLE_SMALL_EMPHASIZED).fontColor('#E5E6EB')
                 Text('按开始日与日更数逐日解锁章节，追到最新即停')
                   .fontSize(LABEL_SMALL).fontColor('#9AA0AA').margin({ top: 2 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
@@ -9015,10 +9015,10 @@ export struct ReaderPage {
             }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
               .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12).margin({ bottom: 12 })
             Row() {
-              Text('取消').fontSize(TITLE_SMALL).fontColor('#C7C9D1').layoutWeight(1)
+              Text('取消').fontSize(LABEL_LARGE).fontColor('#C7C9D1').layoutWeight(1)
                 .textAlign(TextAlign.Center)
                 .onClick(() => this.simulatedReadingVisible = false)
-              Text('确定').fontSize(TITLE_SMALL).fontColor('#B9C6FF').layoutWeight(1)
+              Text('确定').fontSize(LABEL_LARGE).fontColor('#B9C6FF').layoutWeight(1)
                 .textAlign(TextAlign.Center)
                 .onClick(() => this.confirmSimulatedReading())
             }.width('100%')
@@ -9043,13 +9043,13 @@ export struct ReaderPage {
             Row() {
               Text('编辑内容').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
               Blank()
-              Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).onClick(() => this.contentEditVisible = false)
+              Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).onClick(() => this.contentEditVisible = false)
             }.width('100%').padding({ bottom: 14 })
             // 「仅正文」开关：把 <img>/<usehtml>/[newpage] 折叠成〔图片1〕这类占位，
             // 对齐上游 ReadContentEditDelegate 的 bodyOnly 开关（ReaderBodyOnlyFilter）。
             Row() {
               Column() {
-                Text('仅正文').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+                Text('仅正文').fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.themeColorTextPrimary)
                 Text('折叠图片、富文本与分页标记，避免误删源码')
                   .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
@@ -9071,7 +9071,7 @@ export struct ReaderPage {
               .borderRadius(10).padding(12)
               .onChange((value: string) => this.contentEditBody = value)
             Row() {
-              Text('还原').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
+              Text('还原').fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.themeColorTextSecondary).layoutWeight(1).textAlign(TextAlign.Center)
                 .onClick(() => {
                   // 还原也回到「折叠态」：与刚打开弹层时看到的一致，
                   // 用户点还原后再关掉「仅正文」仍能拿回完整正文。
@@ -9080,7 +9080,7 @@ export struct ReaderPage {
                     ? toBodyOnly(this.content, this.contentEditHiddenSpans) : this.content;
                 })
               // 保存按钮：底=primary、字=onPrimary；本地没有 OnPrimary 键，用 surfacePrimary 近似。
-              Text('保存').fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary).textAlign(TextAlign.Center)
+              Text('保存').fontSize(LABEL_LARGE).fontColor(this.themeColorSurfacePrimary).textAlign(TextAlign.Center)
                 .width(84).padding({ top: 10, bottom: 10 }).backgroundColor(this.themeColorAccent).borderRadius(18)
                 .onClick(() => {
                   const currentPage = this.localReaderPages[this.currentPageIndex];
@@ -9144,7 +9144,7 @@ export struct ReaderPage {
                 Column() {
                   ForEach(READER_CHARSETS, (charset: string) => {
                     Row() {
-                      Text(charset).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                      Text(charset).fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
                       if (this.charsetInput.trim().toLowerCase() === charset.toLowerCase()) {
                         Text('✓').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
                       }
@@ -9160,12 +9160,12 @@ export struct ReaderPage {
             }
             Row() {
               Blank().layoutWeight(1)
-              Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).padding({ left: 14, right: 14, top: 10, bottom: 10 })
+              Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding({ left: 14, right: 14, top: 10, bottom: 10 })
                 .onClick(() => {
                   this.charsetDialogVisible = false;
                   this.charsetOptionsExpanded = false;
                 })
-              Text('确定').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, top: 10, bottom: 10 })
+              Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, top: 10, bottom: 10 })
                 .onClick(() => this.applyCharset())
             }.width('100%').margin({ top: 12 })
           }

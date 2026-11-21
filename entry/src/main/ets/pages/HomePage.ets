@@ -1,3 +1,4 @@
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { Book } from '../model/Book';
 import { BookRepository } from '../data/BookRepository';
@@ -341,17 +342,17 @@ export struct HomePage {
             Row() {
               Row() {
                 AppGlyph({ name: 'cloudUpload', glyphSize: 15 })
-                Text('备份').fontSize(TITLE_SMALL).fontColor('#C5C7D0').margin({ left: 5 })
+                Text('备份').fontSize(LABEL_LARGE).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14)
                 .onClick(() => this.onWebDavBackup())
               Row() {
                 AppGlyph({ name: 'cloudDownload', glyphSize: 15 })
-                Text('恢复').fontSize(TITLE_SMALL).fontColor('#C5C7D0').margin({ left: 5 })
+                Text('恢复').fontSize(LABEL_LARGE).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onWebDavRestore())
               Row() {
                 AppGlyph({ name: 'settings', glyphSize: 15 })
-                Text('设置').fontSize(TITLE_SMALL).fontColor('#C5C7D0').margin({ left: 5 })
+                Text('设置').fontSize(LABEL_LARGE).fontColor('#C5C7D0').margin({ left: 5 })
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onOpenBackup())
             }.margin({ top: 12 })
@@ -361,7 +362,7 @@ export struct HomePage {
             AppGlyph({ name: 'add', tint: this.themeColorTextSecondary, glyphSize: 32 })
             Text('暂无已加入的模块').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
             Row() {
-              Text('浏览书源模块添加').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+              Text('浏览书源模块添加').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             }.padding({ left: 16, right: 16, top: 8, bottom: 8 })
               .backgroundColor(this.themeColorSurfaceElevated).borderRadius(14)
               .onClick(() => this.onUnavailableAction('浏览书源模块尚未迁移'))
@@ -373,7 +374,7 @@ export struct HomePage {
         }.position({ x: 0, y: 0 })
         .edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {
           const offset = this.homeScroller.currentOffset().yOffset;
-          const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+          const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
           if (shouldCollapse !== this.collapsedHeader) {
             // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
             this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -445,10 +446,10 @@ export struct HomePage {
           .onChange((value: string) => { this.goalDraft = value; })
       }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 8 })
       Row() {
-        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).padding(10)
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).padding(10)
           .onClick(() => { this.showGoalDialog = false; this.goalDraft = ''; })
         Blank()
-        Text('确定').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
+        Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
           .onClick(() => this.confirmGoal())
       }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
     }.width('100%').alignItems(HorizontalAlign.Start)

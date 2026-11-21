@@ -1,8 +1,10 @@
 import { AppGlyph, AppGlyphName } from './AppGlyph';
+import { TYPE_SCALE_HEADLINE_MEDIUM, TYPE_SCALE_LABEL_LARGE, TYPE_SCALE_TITLE_LARGE } from './typography/TypographyTokens';
 
 // 全部来自 M3 官方 token，不要凭手感改。
-// 出处：androidx compose material3 的 tokens/AppBarSmallTokens.kt、tokens/AppBarMediumFlexibleTokens.kt、tokens/TypeScaleTokens.kt，
-// 以及 AppBar.kt 的 TopAppBarHorizontalPadding / TopAppBarTitleInset。
+// 出处：androidx compose material3 的 tokens/AppBarSmallTokens.kt、tokens/AppBarMediumFlexibleTokens.kt；
+// 字号不再写在本文件，改为引 components/typography/TypographyTokens.ets 的 TYPE_SCALE_*，
+// 那里记了上游两套排版值的区别与出处（GlassTopAppBar.kt:76 等）。
 
 /** 收起行高，AppBarSmallTokens.ContainerHeight。 */
 export const TOP_BAR_COLLAPSED_HEIGHT: number = 64;
@@ -10,12 +12,12 @@ export const TOP_BAR_COLLAPSED_HEIGHT: number = 64;
 export const TOP_BAR_EXPANDED_HEIGHT: number = 112;
 /** 展开高（有副标题），AppBarMediumFlexibleTokens.LargeContainerHeight。 */
 export const TOP_BAR_EXPANDED_HEIGHT_SUBTITLE: number = 136;
-/** 展开标题字号，TypeScaleTokens.HeadlineMedium。 */
-export const TOP_BAR_TITLE_EXPANDED_SIZE: number = 28;
-/** 收起标题字号，TypeScaleTokens.TitleLarge。 */
-export const TOP_BAR_TITLE_COLLAPSED_SIZE: number = 22;
-/** 展开副标题字号，TypeScaleTokens.LabelLarge。 */
-export const TOP_BAR_SUBTITLE_SIZE: number = 14;
+/** 展开标题字号，M3 原生 headlineMedium。 */
+export const TOP_BAR_TITLE_EXPANDED_SIZE: number = TYPE_SCALE_HEADLINE_MEDIUM;
+/** 收起标题字号，M3 原生 titleLarge。 */
+export const TOP_BAR_TITLE_COLLAPSED_SIZE: number = TYPE_SCALE_TITLE_LARGE;
+/** 展开副标题字号，M3 原生 labelLarge。 */
+export const TOP_BAR_SUBTITLE_SIZE: number = TYPE_SCALE_LABEL_LARGE;
 /** 顶栏左右最小内边距，AppBar.kt 的 TopAppBarHorizontalPadding。 */
 export const TOP_BAR_SIDE_PADDING: number = 4;
 /** 无导航按钮时标题的左起点，= max(12, 0) + 4。 */

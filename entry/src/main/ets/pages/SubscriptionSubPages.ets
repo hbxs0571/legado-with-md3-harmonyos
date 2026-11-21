@@ -1,3 +1,4 @@
+import { DURATION_FADE } from '../components/UiTokens';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton, TopBarBackButton } from '../components/TopBar';
@@ -150,7 +151,7 @@ struct SubscriptionListPage {
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
           .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+          .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
       }
 
       Column() {
@@ -166,7 +167,7 @@ struct SubscriptionListPage {
             AppGlyph({ name: 'add', glyphSize: 24, tint: '#DDE3FF' })
           }.width(56).height(56).backgroundColor('#4D5C8D').borderRadius(18)
             .onClick(() => this.activeSheet = 'ruleEditor')
-            .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+            .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
         }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 8 })
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -186,7 +187,7 @@ struct SubscriptionListPage {
         Text(this.activeSheet === 'ruleEditor' ? '规则订阅' : this.activeSheet === 'addGroup' ?
           '添加到分组' : '从分组移除')
           .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 16 })
       TextInput({ placeholder: this.activeSheet === 'ruleEditor' ? '名称' : '分组名称', text: this.draftName })
         .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
@@ -195,7 +196,7 @@ struct SubscriptionListPage {
         TextInput({ placeholder: 'URL', text: this.draftUrl })
           .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
           .margin({ left: 18, right: 18, bottom: 12 }).onChange((value: string) => this.draftUrl = value)
-        Text('订阅类型').fontSize(TITLE_SMALL).fontColor('#B6B8C2').alignSelf(ItemAlign.Start)
+        Text('订阅类型').fontSize(TITLE_SMALL).fontWeight(FontWeight.Bold).fontColor('#B6B8C2').alignSelf(ItemAlign.Start)
           .margin({ left: 18, top: 6, bottom: 8 })
         Row() {
           ForEach(['书源', '订阅源', '替换规则', '自动识别'], (label: string, index: number) => {
@@ -206,7 +207,7 @@ struct SubscriptionListPage {
           }, (label: string) => label)
         }.width('100%').padding({ left: 18, right: 18 })
       }
-      Button('保存').fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary).backgroundColor(this.themeColorAccent).borderRadius(22)
+      Button('保存').fontSize(LABEL_LARGE).fontColor(this.themeColorSurfacePrimary).backgroundColor(this.themeColorAccent).borderRadius(22)
         .margin({ top: 18 }).onClick(() => {
           this.activeSheet = '';
           this.draftName = '';
@@ -311,7 +312,7 @@ export struct SubscriptionSourceManagePage {
             .onChange((value: string) => this.searchText = value)
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
           .margin({ left: 16, right: 16, bottom: 8 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+          .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
       }
 
       Blank().layoutWeight(1)

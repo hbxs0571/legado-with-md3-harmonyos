@@ -47,13 +47,6 @@ const SHELF_MENU_WIDTH: number = 220;
 const BOOKSHELF_GRID_PADDING: number = 8;
 /** 网格行间距与列间距，对应上游 BookshelfScreen.kt:1770-1772 的 spacedBy(8.dp)。 */
 const BOOKSHELF_GRID_GAP: number = 8;
-/**
- * 首屏封面预加载列数：本地没有封面预加载器
- * （`grep -rn 'preload\|Preload' entry/src/main/ets` 零命中），按 0 处理，
- * 不新建预加载系统；封面由 components/BookCover.ets 各卡片自行加载。
- * 对应 KI-SL-C3 / 对照表 C 块「首屏封面预加载列数」一行的本地落点。
- */
-const BOOKSHELF_FIRST_SCREEN_PRELOAD_COLUMNS: number = 0;
 
 /** 网格样式选项，对应上游 bookshelf_grid_layout（标准 / 紧凑 / 仅封面）。 */
 const BOOKSHELF_GRID_STYLE_OPTIONS: BookshelfLayoutOption[] = [
@@ -906,10 +899,10 @@ export struct BookshelfPage {
         }
       }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
       Row() {
-        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).padding(10)
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
           .onClick(() => { this.showBatchDeleteSheet = false; this.batchDeleteSource = false; })
         Blank()
-        Text('删除').fontSize(TITLE_SMALL).fontColor('#FF6B6B').padding(10)
+        Text('删除').fontSize(LABEL_LARGE).fontColor('#FF6B6B').padding(10)
           .onClick(async () => { await this.executeBatchDelete(); })
       }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
     }.width('100%').alignItems(HorizontalAlign.Start)
@@ -1063,14 +1056,14 @@ export struct BookshelfPage {
         Text(this.passwordError).fontSize(BODY_SMALL).fontColor('#FF6B6B').padding({ left: 18, top: 8 })
       }
       Row() {
-        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).padding(10)
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
           .onClick(() => {
             this.showPasswordPanel = false;
             this.passwordInput = '';
             this.passwordError = '';
           })
         Blank()
-        Text('解锁').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
+        Text('解锁').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
           .onClick(async () => { await this.submitPassword(); })
       }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
     }.width('100%').alignItems(HorizontalAlign.Start)
@@ -1367,7 +1360,7 @@ export struct BookshelfPage {
     Column() {
       Row() {
         Text('分组管理').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('新建').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8)
+        Text('新建').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
           .onClick(() => { this.groupManageMenuVisible = !this.groupManageMenuVisible; })
           .bindPopup(this.groupManageMenuVisible, {
             builder: this.GroupManageMoreMenu,
@@ -1378,7 +1371,7 @@ export struct BookshelfPage {
             width: SHELF_MENU_WIDTH,
             onStateChange: (event: PopupStateChangeParam) => { this.groupManageMenuVisible = event.isVisible; }
           })
-        Text('完成').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
+        Text('完成').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8).onClick(() => this.showGroupManager = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Row() {
         Text(`切换分组：${this.activeFilter()}`).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).layoutWeight(1)
@@ -1456,9 +1449,9 @@ export struct BookshelfPage {
       Row() {
         Text(this.editingGroupId > 0 ? '编辑分组' : '新建分组')
           .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('保存').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8)
+        Text('保存').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
           .onClick(async () => { await this.submitGroupDraft(); })
-        Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).padding(8)
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(8)
           .onClick(() => this.showGroupEditor = false)
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Scroll() {
@@ -1586,7 +1579,7 @@ export struct BookshelfPage {
           if (this.editingGroupId > 0) {
             Row() {
               Text(this.pendingDeleteGroupId === this.editingGroupId ? '确认删除' : '删除分组')
-                .fontSize(TITLE_SMALL).fontColor('#D99AA5').layoutWeight(1)
+                .fontSize(LABEL_LARGE).fontColor('#D99AA5').layoutWeight(1)
                 .onClick(() => {
                   if (this.pendingDeleteGroupId === this.editingGroupId) {
                     const removed = this.groups.find((group: BookGroup) => group.groupId === this.editingGroupId);
@@ -1932,7 +1925,7 @@ export struct BookshelfPage {
     Column() {
       Row() {
         Text('书架布局').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('完成').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding(8)
+        Text('完成').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
           .onClick(async () => { await this.submitLayout(); })
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 6 })
 
@@ -2260,7 +2253,7 @@ export struct BookshelfPage {
   private TagColorSheet() {
     Column() {
       Row() {
-        Text('‹ 返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(6)
+        Text('‹ 返回').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(6)
           .onClick(() => { this.showTagColorPage = false; })
         Text('管理标签配色').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
           .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
@@ -2876,6 +2869,7 @@ export struct BookshelfPage {
             }
           })
           .onScroll(() => {
+            // 书架折叠阈值 60，与设置子页的 70 有意不同（未查到当初的定值依据）
             const shouldCollapse = Math.abs(this.bookshelfScroller.currentOffset().yOffset) > 60;
             if (this.collapsedHeader !== shouldCollapse) {
               // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。

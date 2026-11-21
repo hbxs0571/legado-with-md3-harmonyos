@@ -179,7 +179,7 @@ export struct OnboardingPage {
         Button() {
           Row() {
             Text(this.page === 0 ? '阅读并同意' : this.page === 3 ? '完成' : '下一步')
-              .fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary)
+              .fontSize(LABEL_LARGE).fontColor(this.themeColorSurfacePrimary)
             AppGlyph({ name: 'arrowForward', glyphSize: 18, tint: this.themeColorSurfacePrimary })
               .margin({ left: 8 })
           }.alignItems(VerticalAlign.Center)

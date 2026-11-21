@@ -50,13 +50,13 @@ export struct ReaderBookmarkEditor {
           .onChange((value: string) => this.note = value)
         Row() {
           if (!this.isNew) {
-            Text('删除').fontSize(TITLE_SMALL).fontColor('#F2A6A6').padding({ left: 10, right: 10, top: 10, bottom: 10 })
+            Text('删除').fontSize(LABEL_LARGE).fontColor('#F2A6A6').padding({ left: 10, right: 10, top: 10, bottom: 10 })
               .onClick(() => this.onDelete())
           }
           Blank()
-          Text('取消').fontSize(TITLE_SMALL).fontColor('#C5C7D0').padding({ left: 10, right: 10, top: 10, bottom: 10 })
+          Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').padding({ left: 10, right: 10, top: 10, bottom: 10 })
             .onClick(() => this.onClose())
-          Text('保存').fontSize(TITLE_SMALL).fontColor('#D7DFFB').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          Text('保存').fontSize(LABEL_LARGE).fontColor('#D7DFFB').padding({ left: 16, right: 16, top: 10, bottom: 10 })
             .backgroundColor('#454B62').borderRadius(18)
             .onClick(() => this.onSave(this.note, this.bookText))
         }.width('100%').margin({ top: 14 })

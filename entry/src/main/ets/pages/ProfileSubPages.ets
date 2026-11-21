@@ -1,3 +1,4 @@
+import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 /** “我的”菜单下与 Android 页面结构对应的二级页面。 */
 import curves from '@ohos.curves';
 import { bundleManager } from '@kit.AbilityKit';
@@ -38,7 +39,7 @@ import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { UiAction } from '../components/settings/UiAction';
-import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const PROFILE_MENU_WIDTH: number = 260;
@@ -1440,7 +1441,7 @@ export struct ReplaceRulesPage {
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+          .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
       }
 
       if (this.groups.length > 0) {
@@ -1863,7 +1864,7 @@ export struct ReplaceRuleEditPage {
   @Builder
   private RuleField(label: string, value: string, field: string, placeholder: string) {
     Column() {
-      Text(label).fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      Text(label).fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       TextInput({ placeholder: placeholder, text: value })
         .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
         .height(52).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 })
@@ -1946,7 +1947,7 @@ export struct ReplaceRuleEditPage {
             Column() {
               Row() {
                 Blank().width(14)
-                Text('分组').fontSize(TITLE_SMALL).fontColor('#C3C5CD').textAlign(TextAlign.Start)
+                Text('分组').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').textAlign(TextAlign.Start)
               }.width('100%')
               Row() {
                 Blank().width(14)
@@ -1986,7 +1987,7 @@ export struct ReplaceRuleEditPage {
           this.RuleField('特定范围', this.scope, 'scope', '指定规则适用的范围')
           this.RuleField('排除范围', this.excludeScope, 'excludeScope', '指定规则不适用的范围')
           Column() {
-            Text('超时 (ms)').fontSize(TITLE_SMALL).fontColor('#C3C5CD').width('100%').textAlign(TextAlign.Start)
+            Text('超时 (ms)').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').width('100%').textAlign(TextAlign.Start)
             TextInput({ text: this.timeout, placeholder: '3000' })
               .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
               .height(30).padding({ left: 0, right: 0 }).width('100%')
@@ -2645,22 +2646,22 @@ export struct TxtTocRulesPage {
       }.width('100%').padding({ left: 18, right: 16, top: 8, bottom: 12 })
       Scroll() {
         Column() {
-          Text('名称').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start)
+          Text('名称').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start)
           TextInput({ placeholder: '名称', text: this.ruleName })
             .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.ruleName = value; this.clearRuleTest(); })
-          Text('章节正则').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
+          Text('章节正则').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '章节正则', text: this.chapterRegex })
             .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
             .onChange((value: string) => { this.chapterRegex = value; this.clearRuleTest(); })
-          Text('示例').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
+          Text('示例').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextArea({ placeholder: '示例', text: this.exampleText })
             .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).height(96).padding(12).width('100%')
             .onChange((value: string) => { this.exampleText = value; this.clearRuleTest(); })
-          Text('分卷正则').fontSize(TITLE_SMALL).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
+          Text('分卷正则').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#AEB0BA').width('100%').textAlign(TextAlign.Start).margin({ top: 12 })
           TextInput({ placeholder: '分卷正则', text: this.volumeRegex })
             .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).borderRadius(12).padding(12).width('100%')
@@ -3024,7 +3025,7 @@ export struct DictionaryRulesPage {
   @Builder
   private DictionaryEditorField(label: string, value: string, field: string, multiline: boolean = false) {
     Column() {
-      Text(label).fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      Text(label).fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       if (multiline) {
         TextArea({ placeholder: '', text: value }).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
           .height(120).backgroundColor('#24252C').borderRadius(8)
@@ -3314,7 +3315,7 @@ export struct DictionaryRuleEditPage {
   @Builder
   private RuleField(label: string, value: string, field: string, multiline: boolean = false) {
     Column() {
-      Text(label).fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+      Text(label).fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
       if (multiline) {
         TextArea({ placeholder: '', text: value })
           .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
@@ -3548,12 +3549,12 @@ export struct HighlightTagRulesPage {
       }.width('100%').padding({ left: 18, right: 12, top: 12, bottom: 10 })
       Scroll() {
         Column() {
-          Text('标题（可选）').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          Text('标题（可选）').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
           TextInput({ placeholder: '', text: this.draftTitle }).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
             .height(54).backgroundColor('#24252C').borderRadius(8)
             .padding({ left: 14, right: 14 }).width('100%')
             .onChange((value: string) => this.draftTitle = value)
-          Text('匹配规则').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3, top: 8 })
+          Text('匹配规则').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').margin({ left: 14, bottom: 3, top: 8 })
           TextArea({ placeholder: '', text: this.draftPattern }).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
             .height(120).backgroundColor('#24252C').borderRadius(8)
             .padding({ left: 14, right: 14, top: 14 }).width('100%')
@@ -3788,13 +3789,13 @@ export struct HighlightTagRuleEditPage {
         .width('100%').padding({ left: 14, right: 0, top: 12 })
       Scroll() {
         Column() {
-          Text('标题（可选）').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          Text('标题（可选）').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
           TextInput({ placeholder: '', text: this.title })
             .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .height(58).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14 }).width('100%')
             .onChange((value: string) => this.title = value)
           Row().width('100%').height(1).backgroundColor('#898B94').margin({ bottom: 12 })
-          Text('匹配规则').fontSize(TITLE_SMALL).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
+          Text('匹配规则').fontSize(LABEL_LARGE_EMPHASIZED).fontColor('#C3C5CD').margin({ left: 14, bottom: 3 })
           TextArea({ placeholder: '', text: this.pattern })
             .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .height(120).backgroundColor('#24252C').borderRadius(8).padding({ left: 14, right: 14, top: 14 }).width('100%')
@@ -5240,7 +5241,7 @@ export struct ReadRecordsPage {
             .onChange((value: string) => this.searchQuery = value)
         }.width('calc(100% - 32vp)').height(48).padding({ left: 14, right: 14 })
           .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+          .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
       }
 
       if (this.selectedDateKey.length > 0) {
@@ -5590,7 +5591,7 @@ export struct ReadRecordsPage {
           // 所以 Header 吸顶不会出现「有 group 没 header」的空档。
           .sticky(StickyStyle.Header)
           .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+          .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
           .onScrollIndex((first: number, _last: number, _center: number) => {
             // 只更新首项索引；偏移改由 onDidScroll 读 scroller 绝对量，避免逐帧累加不归零。
             this.listFirstVisibleIndex = first;
@@ -6335,7 +6336,7 @@ struct CacheEmptySection {
   @Prop message: string = '';
   build() {
     Column() {
-      Text(this.title).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+      Text(this.title).fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorAccent)
         .alignSelf(ItemAlign.Start).margin({ left: 10, bottom: 7 })
       Text(this.message).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width('100%').textAlign(TextAlign.Start)
         .padding({ left: 12, right: 12, top: 12, bottom: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(8)
@@ -6519,7 +6520,7 @@ export struct AboutAppPage {
 
   private updateHeader(): void {
     const offset = this.aboutScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -6632,7 +6633,7 @@ export struct AppSettingsHomePage {
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {

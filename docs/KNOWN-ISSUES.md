@@ -299,7 +299,7 @@ this.pageTurnTimer = setTimeout(() => {
 
 **上游语义**：`feature/reader/core/transition/ReaderPageTransition.kt` 的 `transforms(mode)` 对 `COVER` 返回 `current = ReaderPageTransform(translationX = offsetPx)` + **`next = ReaderPageTransform()`（位移 0，就在原位）+ `currentOnTop = true`** —— 新页是静止的底页，旧页盖在上面滑走，屏幕全程有内容。
 
-**已由上游实机视频佐证（2026-11-02）**：E 端在 Android 模拟器上采集的基准包（`N:\HarmonyProjects\project-resources\legado-with-MD3\screenshots\android\reader-baseline-2026-11-02\`，仓库外不入库）里，`android-reader-animation-cover-frame-during.png`（翻页中间帧 1.55s）实测为**左右两页同屏**：左为旧页（页码 `1/11 27.3%`）正滑出，右为新页（页码 `2/11 29.5%`）已停在最终位置，画面无空白。同一批里 `android-reader-animation-slide-frame-during.png`（1.40s）则是**两页都在位移**——证实 COVER 与 SLIDE 是两套不同动作，本地曾把两者实现成同一套。采集基线与边界见 [VALIDATION](VALIDATION.md) 的「2026-11-02 Android 阅读界面基准包核对」节（`appDebug` / API 37 模拟器，不是 release 证据也不是 API 12 设备证据）。
+**已由上游实机视频佐证（2026-11-02）**：E 端在 Android 模拟器上采集的基准包（`<workspace>project-resources\legado-with-MD3\screenshots\android\reader-baseline-2026-11-02\`，仓库外不入库）里，`android-reader-animation-cover-frame-during.png`（翻页中间帧 1.55s）实测为**左右两页同屏**：左为旧页（页码 `1/11 27.3%`）正滑出，右为新页（页码 `2/11 29.5%`）已停在最终位置，画面无空白。同一批里 `android-reader-animation-slide-frame-during.png`（1.40s）则是**两页都在位移**——证实 COVER 与 SLIDE 是两套不同动作，本地曾把两者实现成同一套。采集基线与边界见 [VALIDATION](VALIDATION.md) 的「2026-11-02 Android 阅读界面基准包核对」节（`appDebug` / API 37 模拟器，不是 release 证据也不是 API 12 设备证据）。
 
 **本地现状（已接）**：
 - 翻页不再改节点树，而是改画布内部的 `turnTransition.offsetPx`：`ReaderPage.ets` 的 `turnReaderPage()` 用 `getUIContext().createAnimator(...)` 的 `onFrame(progress)` 逐帧调 `paintReaderCanvas()`，**`onFinish` 才改 `currentPageIndex`**。
@@ -361,7 +361,7 @@ this.pageTurnTimer = setTimeout(() => {
 
 ### 滚动模式跨章换页顿挫：先量再削（2026-11-10 计时与取舍）
 
-用户报 `pageAnimation = 3` 下滚到章末继续下滑进下一章时会顿一下。本轮先补 `[ReaderBench]` 计时（提交 `75ee736`），再按测量结果决定两处削减（提交 `8cde93c`、`ccad0cc`），逐场景耗时与原始 hilog 见仓库外 `N:/HarmonyProjects/tmp/reader-handoff-evidence.md`。
+用户报 `pageAnimation = 3` 下滚到章末继续下滑进下一章时会顿一下。本轮先补 `[ReaderBench]` 计时（提交 `75ee736`），再按测量结果决定两处削减（提交 `8cde93c`、`ccad0cc`），逐场景耗时与原始 hilog 见仓库外 `<workspace>tmp/reader-handoff-evidence.md`。
 
 **时间花在哪**：三个场景（首次进下一章 / 同一章末第二次 / 往回上一章末页定位）各测 3 轮取中位数，真 `LocalReaderPaginator.paginate`（日志字段 `paginatorMs`）为 57 / 60 / 48 ms，分别占 `contentChanged totalMs` 77 / 79 / 57 的约 75%；`contentMs`（整本正文缓存读盘）= 0、`applyMs`（替换规则 taskpool 往返）= 0~1、`semanticsMs`（语义解析 + 高亮扫描）= 0~1、`renderMs`（定位 + 钳位 + 预解图 + 重绘）= 7~16。任务给的日志模板里 `paginateMs` 实为语义段（1~2 ms），`positionMs` 才是含真 paginate 的大头，故另补 `paginatorMs` / `renderMs` 两个字段判定——按模板字面 `paginateMs` 不是最大项，按「整章同步排版是大头」的意图成立。
 
@@ -428,7 +428,7 @@ onChapterTitleChanged()
 - `BookRepository.ets` 新增 `byteOffsetsToCharIndices(content, byteOffsets, encoding)`（一次顺序扫描换算一组递增的字节偏移，写法与既有的 `charOffsetsToByteOffsets` 同构）与 `sequentialChapterRanges(content, rows, encoding)`（预先算出每章字符区间，任一行缺 `start`/`end` 就返回 `undefined` 让调用方退回逐章换算）；`chapterBody()` 增加可选参数 `charRange`，`forEachChapter()` 在循环前算一次区间表再逐章传进去。`chapterBody()` 的原有逐章换算路径保留，增量导入等只处理少数章节的调用方行为不变。
 
 - 验收（三级口径第 3 级，**通过**）：
-  - 1378 章的 `古神？这分明是白发兽耳小萝莉`：点目录到 `共 1378 章` 渲染完成 **6461 ms**（修复前必被杀），章节标题与右侧字数（`2179字` / `2108字` …）全部正常显示，目录滚动流畅，`pidof` 全程 13273 未变。
+  - 1378 章的 `EPUB 测试用书`：点目录到 `共 1378 章` 渲染完成 **6461 ms**（修复前必被杀），章节标题与右侧字数（`2179字` / `2108字` …）全部正常显示，目录滚动流畅，`pidof` 全程 13273 未变。
   - 连续 5 轮从目录跳章：目标章节与实际落地章节逐轮一致（第19章 / 第24章 / 第29章），进程始终存活。
   - 572 章的 zh-book（修复前必 ANR）：目录 **2522 ms** 打开，跳第 21 章成功，`pidof` 14043 未变。
   - `/data/log/faultlog/faultlogger/` 最新一条 `appfreeze-...` 停在 **14:56**（修复前那一轮），之后整轮验收（15:00 起）**没有再产生任何新的 appfreeze 日志**。
@@ -439,7 +439,7 @@ onChapterTitleChanged()
 
 修法：`rebuildReaderPages(forceProgressCommit = false, onlyImageSizesChanged = false)`，第二个参数为真时复用 `this.localSemanticDocument`、跳过语义解析与高亮区间重算，只重排；`loadContentImageSizes()` 改为走新增的 `scheduleImageSizesPaginationRebuild()`（100ms 防抖，复用 `scheduleReaderPaginationRebuild()` 的定时器，`paginationRebuildDelayMillis` 用后复位成 16ms），一批尺寸一起到达只重排一次。
 
-- 验收：带图 EPUB（`古神？这分明是白发兽耳小萝莉`，1378 章）开书到可读时间，改后 3645 / 4046 / 3981 ms，基线 3982 / 4131 / 4029 ms，**在测量噪声内、无可测退化**。**通过**（三级口径第 3 级，口径是「不退化」而非「变快」——这本 EPUB 全书只有 1 张图，N=1 的路径本来就只重排一次，收益体现在多图章节，本机没有可用样本）。
+- 验收：带图 EPUB（`EPUB 测试用书`，1378 章）开书到可读时间，改后 3645 / 4046 / 3981 ms，基线 3982 / 4131 / 4029 ms，**在测量噪声内、无可测退化**。**通过**（三级口径第 3 级，口径是「不退化」而非「变快」——这本 EPUB 全书只有 1 张图，N=1 的路径本来就只重排一次，收益体现在多图章节，本机没有可用样本）。
 
 ### KI-PROG4 折页阴影 `25 * 1.414` 疑点 —— 经比对上游源码，不是缺陷，不改
 
@@ -450,7 +450,7 @@ const shadowX = frame.touch.x + 25 * 1.414 * Math.cos(angle);
 const shadowY = frame.touch.y + (reverse ? 1 : -1) * 25 * 1.414 * Math.sin(angle);
 ```
 
-**上游逐字原值**，不是本地自拟：`N:\HarmonyProjects\legado-with-MD3\app\src\main\java\io\legado\app\feature\reader\ReaderCanvasSurface.kt:2583-2585` 写的就是
+**上游逐字原值**，不是本地自拟：`<workspace>legado-with-MD3\app\src\main\java\io\legado\app\feature\reader\ReaderCanvasSurface.kt:2583-2585` 写的就是
 
 ```kotlin
 val shadowX = (frame.touch.x + 25f * 1.414f * cos(angle)).toFloat()
@@ -973,7 +973,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **KI-COVER9 14 个 `coverPrefKeys` 的读写** —— 覆盖 E 块 `:190`（E1），共 1 行
 
-- **上游口径**：`help/storage/BackupConfig.kt:396-411` 列了 14 个键（`useDefaultCover`、`loadCoverOnlyWifi`、`coverShowName`、`coverShowAuthor`、`coverShowNameN`、`coverShowAuthorN`、`coverShowShadow`、`coverShowStroke`、`coverTextColor`、`coverTextColorN`、`coverShadowColor`、`coverShadowColorN`、`coverDefaultColor`、`coverInfoOrientation`）；写出在 `help/storage/Backup.kt:258`（`AppConfigStore.preferences.asMap()` 全量导出后按忽略规则过滤），恢复在 `help/storage/Restore.kt` 的 config.xml 分支。样本 `N:\HarmonyProjects\测试\backup2026-10-22\config.xml` 里 14 个键全在（`:227`、`:228`、`:229`、`:231`、`:233`、`:236`、`:238`、`:240`、`:242`、`:245`、`:247`、`:249`、`:251`、`:252`）。
+- **上游口径**：`help/storage/BackupConfig.kt:396-411` 列了 14 个键（`useDefaultCover`、`loadCoverOnlyWifi`、`coverShowName`、`coverShowAuthor`、`coverShowNameN`、`coverShowAuthorN`、`coverShowShadow`、`coverShowStroke`、`coverTextColor`、`coverTextColorN`、`coverShadowColor`、`coverShadowColorN`、`coverDefaultColor`、`coverInfoOrientation`）；写出在 `help/storage/Backup.kt:258`（`AppConfigStore.preferences.asMap()` 全量导出后按忽略规则过滤），恢复在 `help/storage/Restore.kt` 的 config.xml 分支。样本 `<workspace>测试\backup2026-10-22\config.xml` 里 14 个键全在（`:227`、`:228`、`:229`、`:231`、`:233`、`:236`、`:238`、`:240`、`:242`、`:245`、`:247`、`:249`、`:251`、`:252`）。
 - **本地现状**：14 键清单常量在（`entry/src/main/ets/data/BackupRepository.ets:450`-`:454`，与上游逐键一致），同时也是 `filterAndroidConfigXml`（定义 `:2703`）的 `excludedKeys` 来源，用于从上游备份里剥掉这些键。**r334 已把读写都接通**：写出 `:946`-`:951`、恢复 `:1825`-`:1839`，键名映射走 `data/CoverSettingsRepository.ets:262 coverSettingsToAndroid` / `:286 applyAndroidCoverPreferences`（本地落盘仍是裸字段名 `showName`/`textColor`，`:172`-`:189` 的 `save` 段）。
 - **补法**：先做上面「全局前置 1」的键名映射表（本地 `showName` ↔ `coverShowName`、`showNameDark` ↔ `coverShowNameN`、`textColor` ↔ `coverTextColor`、`textColorDark` ↔ `coverTextColorN`、`infoOrientation` ↔ `coverInfoOrientation`，其余同理）；r334 已按此补法落地：写出 `entry/src/main/ets/data/BackupRepository.ets:946`-`:951` 按 `coverSettingsToAndroid` 的映射逐键 upsert，恢复 `:1825`-`:1839` 反向回填。`data/CoverSettingsRepository.ets:4-12` 的头注释已改为「本地 preferences 用裸字段名，双向映射集中在 `coverSettingsToAndroid` / `applyAndroidCoverPreferences`」，与实现对上了。
 - **验收**：把「显示字体描边」关掉 → 备份 → 解压 `config.xml` 里有 `<boolean name="coverShowStroke">false</boolean>`；把本地值改回 `true` → 恢复该 ZIP → 设置页「显示字体描边」变回关、书架页描边消失。
@@ -1065,10 +1065,10 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 **KI-MOTION1 设置子页切换没有转场** —— 关联 [`VALIDATION.md`](VALIDATION.md) r347 一节批 4
 
-- **现象**：r347 给非阅读页的路由分支补了统一转场（进入滑入淡入、退出左移淡出），书架 ↔ 详情页 ↔ 编辑页都有动画；但从「设置」进任何子页（外观、阅读设置、缓存管理、TXT 目录规则、词典管理、书源等等）仍是瞬切。
-- **根因**：`pages/Index.ets` 的 `PROFILE_SUBPAGE` 分支只有一个根容器，子页在 `ProfileSubPages.ets` 内部按 `profileSubpage` 状态用 `if` 换子树。ArkUI 的 `transition` 只在组件插入/移除时播，根容器不变就看不到转场；要让每层都有转场，得改 `ProfileSubPages.ets` 里十几处子页选择点各挂一次。
-- **补法**：在 `ProfileSubPages.ets` 的每个子页根容器上挂 `.transition(...)`，函数可以复用 `Index.ets` 里已公开的 `routeTransition()` 同一套参数（`TransitionEffect.asymmetric`，280/220ms）；先在一两个子页上验证观感再铺开。
-- **验收**：设置列表点「外观」时能看到新页滑入 + 旧页左移淡出；连点两次返回不出现半透明中间态残留。
+- **现象**：r347 给非阅读页的路由分支补了统一转场，书架 ↔ 详情页 ↔ 编辑页都有动画；但从「设置」进任何子页仍是瞬切。动效批 4（提交 `8b4d9dd`）已在 36 个分支根容器挂上 `.transition(this.routeTransition())`，代码侧已修；上机观感验证待做（模拟器被别的会话占用）。
+- **根因（原记录写错，已更正）**：原记录说「子页在 `ProfileSubPages.ets` 内部按 `profileSubpage` 状态用 `if` 换子树」是错的——`grep -c 'profileSubpage' ProfileSubPages.ets` = 0，该文件只是 15 个 struct 的宿主。真正的换子树发生在 `pages/Index.ets` 的 `PROFILE_SUBPAGE` 渲染分支里那 35 个 `if (this.profileSubpage === ProfileRoute.XXX)` 分支（全文件 `profileSubpage ===` 42 处，渲染分支组 35 处），该段原本 `.transition(` 计数为 0。
+- **补法（已做）**：在 `pages/Index.ets` 那 35 个 `profileSubpage` 分支 + 1 个末尾 `else` 分支的根容器上各挂一次 `.transition(this.routeTransition())`，共 36 行（提交 `8b4d9dd`，全文件 `transition(this.routeTransition())` 8 → 44）。`ProfileSubPages.ets` 一字未改；`routeTransition()` 的 280/220ms 与 40/-60vp 位移未动。
+- **验收**：设置列表点「外观」时能看到新页滑入 + 旧页左移淡出；连点两次返回不出现半透明中间态残留。（代码已挂；上机待补，勿写成已通过。）
 
 ---
 
@@ -1368,15 +1368,15 @@ val cornerRadius = when {
 
 **结论：设置类页面（外观 / 主题管理 / 自定义主题 / 隐私 / 备份 / 实验室 / 朗读设置…）全部跟随形状设置。**
 
-### 三、缺口一：阅读域对形状令牌零命中
+### 三、阅读域字样圆角与上游一致，不是缺口
 
 九个阅读域文件对 `themeCardRadius` / `themeCardBorderWidth` / `themeDividerWidth` **全部 0 命中**：
 
 `pages/ReaderPage.ets` / `pages/ReaderSettingsPage.ets` / `pages/ReaderMarkingEditor.ets` / `pages/ReaderSearchPage.ets` / `pages/ReaderHighlightRuleSheet.ets` / `pages/ReaderTextProcessingSheet.ets` / `pages/ReadAloudPlayerPage.ets` / `pages/ReadAloudConfigPanel.ets` / `pages/ReaderAloudSettingsPage.ets`。
 
-也就是说：外观页把卡片圆角从 16 拖到 40，整个应用会变，**进阅读器一个角都不动**。
+这一点与上游行为一致：上游阅读域绝大多数不用 `GlassCard` / `BaseCard`，自己写字面 `RoundedCornerShape`（`ui/book/read/sheet/ReaderBookSheet.kt:572` 10dp、`:1040` 8dp，`ui/book/read/sheet/TextProcessingSheet.kt:158` 6dp，`ui/book/read/sheet/AiCastDialogSheet.kt:546` 12dp，`ui/book/readaloud/download/ReaderAudioDownloadSheet.kt:391` 3dp 等；全域 `RoundedCornerShape(N.dp)` 命中 3/6/8/10/12/16/24/40dp）。唯一例外是 `ui/book/read/sheet/ClickActionConfigSheet.kt:213` 用了一处 `GlassCard`。因此本地阅读域 0 消费 `themeCardRadius` 是符合上游口径的，原记录把它判成「本地缺口」方向反了——外观页的圆角设置本来就只影响用 `GlassCard` 的地方（书架、设置页、详情页），阅读器内部不跟随。
 
-而阅读域自己用了一套散值。同一个「卡片」概念，`borderRadius` 用了 **18 / 20 / 22 / 24 / 26** 五种值：
+阅读域自己用了一套字面圆角，同一个「卡片」概念 `borderRadius` 用了 **18 / 20 / 22 / 24 / 26** 五种值。下表只记录分布，不暗示「散值应当收口」——上游字面圆角同样分散（3–40dp），两边都散，收口到统一令牌属于新增能力，上游没有：
 
 | 文件 | ≥18 的圆角处数 | 具体行 |
 | --- | --- | --- |
@@ -1387,7 +1387,7 @@ val cornerRadius = when {
 | `pages/ReaderTextProcessingSheet.ets` | 5 | `:183 18`、`:187 18`、`:252 18`、`:378 18`、`:402 18` |
 | `pages/ReaderMarkingEditor.ets` | 2 | `:546 18`、`:549 20` |
 
-`ReaderSearchPage.ets` 一个文件里就出现 18/20/22/24/26 五档，同一屏内的卡片圆角互不相同。
+`ReaderSearchPage.ets` 一个文件里出现 18/20/22/24/26 五档；对照上游同样分散，不构成需要消除的差异。
 
 ### 四、缺口二：面板没有公共容器
 
@@ -1423,11 +1423,11 @@ private settingsSheetHeight(): string {
 
 **④ 抓手尺寸对、颜色分两派。** 6 处全是 `Row().width(32).height(4)`（`ReadAloudConfigPanel.ets:121`、`ReaderAloudSettingsPage.ets:76`、`ReaderPage.ets:4758` 与 `:8575`、`ReaderSettingsPage.ets:768` / `:2566` / `:3473` / `:3679`），与 M3 默认一致；但 `ReaderPage.ets:4758` 与 `:8575` 写死 `'#C5C6CD'`，其余走 `this.rsetHandle`。上游统一 `onSurfaceVariant`。
 
-### 五、附带：UiTokens 三个圆角常量基本没被用
+### 五、UiTokens 圆角常量：只留一个在用的
 
-`components/UiTokens.ets:64-68` 定义了 `RADIUS_INNER = 8`、`RADIUS_SHEET = 16`、`RADIUS_MENU = 16`，`:59-60` 注释还特意写「卡片圆角**不在这里**：它由主题系统拥有（themeCardRadius）」。
+`components/UiTokens.ets:46` 现只定义 `RADIUS_INNER = 8`，消费面 **2 处**：`components/settings/UiColorSheet.ets:120`、`components/settings/UiInput.ets:82`。另两个常量 `RADIUS_SHEET = 16` / `RADIUS_MENU = 16`（原 `:48`/`:50`）零消费，本轮已删除。`:41-43` 的注释「卡片圆角**不在这里**：它由主题系统拥有（themeCardRadius）」保留，仍是真实约束。
 
-但消费面只有 **4 处**：`components/settings/UiColorSheet.ets:122`、`components/settings/UiInput.ets:83`、`pages/BookInfoEditPage.ets:9`（import 未使用）。令牌定义了基本没被用起来。
+原记录把定义行号写成 `:64-68`、消费面写成「4 处」都不准：实读定义在 `:46`/`:48`/`:50`，`pages/BookInfoEditPage.ets:9` 只是未使用的 import（不计消费）。
 
 ### 六、已对齐、不需要动
 
@@ -1441,7 +1441,7 @@ private settingsSheetHeight(): string {
 | 块 | 缺什么 | 修法性质 | 相对成本 |
 | --- | --- | --- | --- |
 | 颜色（KI-THEME2） | 25 个色位没建 | 补数据 + 补广播键 | 中（432 个色值抄写） |
-| 形状（本条三） | 令牌有，阅读域不读 | 接消费点 + 统一散值 | 小（改消费点，不新建抽象） |
+| 形状（本条三） | 与上游一致：阅读域用字面圆角 | 不动（上游阅读域也不跟随形状设置） | — |
 | 面板（本条四） | 没有公共容器 | 新建组件 + 迁 5 个弹层 | 大（唯一要新建抽象层的一块） |
 
 **面板这块要先探针再动手**：ArkUI 上「内容自适应高度 + 上限 80%」是否成立，本地源码注释已经写了「探针实证做不到」，但那次探针只测了固定百分比面板换成两行文字后高度不变 —— 还没测过用 `bindSheet` 的 `detents` 或 `SheetSize.FIT_CONTENT` 能不能做到。不确认这一点就动 5 个弹层，等于赌。
@@ -1553,19 +1553,19 @@ private settingsSheetHeight(): string {
 
 数量差得不多，但命名不成体系。
 
-- 上游 Material Icons 引用 **1,043 处 / 263 种**，另有 **177 个** vector drawable（`res/drawable*` 下 226 个 xml，其中 177 个是 vector）。用量前十：`Check` 50 / `Delete` 47 / `Add` 45 / `Refresh` 36 / `Edit` 32 / `Close` 32 / `Save` 28 / `PlayArrow` 21 / `MoreVert` 19 / `Download` 18。
-- 本地 `components/AppGlyph.ets` 的 `AppGlyphName` union 有 **82 个**名字，81 个 `this.name ===` 分支；`resources/base/media/` 下 146 个文件，其中 140 个 svg（`app_` 前缀 57、`reader_` 前缀 38）。
+- 上游 Material Icons 引用 **1,195 处**（口径：`grep -rho 'Icons\.' --include=*.kt app/src/main/java | wc -l`；族限定末端名 **225 种**、全末端名 **241 种**，原记录的「263 种」未查到复现口径），另有 **177 个** vector drawable（`res/drawable` 下共 **225 个** xml，无 `drawable-*` 子目录：按 `<vector` 子串口径 177、按严格根标签口径 173）。用量前十按族限定末端名口径：`Check` 55 / `Delete` 49 / `Add` 45 / `Refresh` 37 / `Close` 34 / `Edit` 33 / `Save` 28 / `PlayArrow` 21 / `MoreVert` 21 / `Settings` 20；按全末端名口径：`Check` 67 / `Delete` 62 / `Close` 46 / `Add` 45 / `Edit` 43 / `MoreVert` 42 / `Refresh` 38 / `Search` 28 / `Save` 28 / `Settings` 28。两套口径的差异来自 `Icons.AutoMirrored.*` 与 `Icons.Outlined.*` 这类族前缀，写数字时必须带口径，不许只留一套。
+- 本地 `components/AppGlyph.ets` 的 `AppGlyphName` union 有 **84 个**名字，83 个 `this.name ===` 分支；`resources/base/media/` 下 146 个文件，其中 140 个 svg（`app_` 前缀 57、`reader_` 前缀 38）。
 - 命名不成体系：`profileCheck` / `profileClose` / `profileSave` / `profileRefresh` / `profileExpandMore` / `profileFolder` 等 20 多个带 `profile` 前缀，而 `add` / `delete` / `edit` / `search` / `settings` / `download` / `share` / `star` 不带；`clock` 与 `accessTime` 是两个名字指同一类语义；`brightness_medium` / `light_mode` / `dark_mode` 三个用下划线，其余全是驼峰。
 - 上游 top10 里本地**没有独立名字**的：`Refresh`（本地只有 `profileRefresh`）、`PlayArrow` / `Stop` / `Save` / `Close` / `SelectAll` / `FindReplace`（本地有 `profileSave` / `profileClose` / `profileFindReplace` 但都在 `profile` 命名空间下）、`KeyboardArrowDown`（本地是 `profileExpandMore`）。
 - 播放/暂停/停止图标不在 `AppGlyph` 里，是 `resources/base/media/` 的独立资源（`reader_play.svg` / `reader_pause.svg` / `app_stop_square.svg`），调用方直接 `Image($r(...))` 绕过 `AppGlyph`。
 
 ### 三、动效（Motion）
 
-有底座，没有语义档位。
+有底座，动效令牌已定义、已部分接线。
 
-- 上游 `ui/theme/ThemeComponents.kt:282` 挂 `motionScheme = MotionScheme.expressive()`，全应用动效由 M3 motion scheme 统一接管；`tween(` **143 处**、`spring(` **15 处**。
-- 本地没有动效令牌。`duration:` 字面量 **82 处**，用到的时长有 **11 种**：220(34) / 500(21) / 300(8) / 200(5) / 180(2) / 600 / 400 / 320 / 280 / 160 各 1，另有 7 处 `duration:` 后面跟的是变量。`curve` 只有 3 种：`Curve.EaseInOut` 25 / `Curve.EaseOut` 5 / `Curve.FastOutSlowIn` 2。
-- 220 这个值出现 34 次是好的信号（说明有一批是统一改过的，对应 r347 动效六批），但没有常量收口，下次改还得全仓找。
+- 上游 `ui/theme/ThemeComponents.kt:282` 挂 `motionScheme = MotionScheme.expressive()`，全应用动效由 M3 motion scheme 统一接管；`tween(` **154 处**、`spring(` **16 处**（旧记 143/15 是旧快照，按上游 HEAD `bba5c64` 现跑 `grep -rn` 重算）。
+- 动效令牌已定义在 `components/UiTokens.ets:55-61`（四个常量：`DURATION_FADE=220` / `DURATION_PAGE_SWITCH=300` / `HEADER_COLLAPSE_THRESHOLD=70` / `HEADER_EXPAND_THRESHOLD=24`），批 1/2 已接线；`DURATION_PAGE_SWITCH` 仍未消费。本地 `duration:` 后跟具体时长值 **77 处**（其中 33 处写 `DURATION_FADE` 常量、44 处仍是数字字面量），10 种：220(34，含 33 处 `DURATION_FADE` + 1 处面板高度动画) / 500(24) / 300(8) / 200(3) / 180(2) / 160(2) / 600 / 400 / 320 / 280 各 1，另有 5 处 `duration:` 后面跟的是变量。`curve` 4 种：`Curve.EaseInOut` 23 / `Curve.EaseOut` 5 / `Curve.FastOutSlowIn` 2 / `Curve.Friction` 1。
+- 220 出现 34 次（含 33 处已收口到 `DURATION_FADE`，字面量只剩 `ReaderSettingsPage.ets:1034` 的面板高度动画 1 处）；常量接线后不必再全仓找。
 
 ### 四、模糊与玻璃（Haze）
 
@@ -1580,9 +1580,9 @@ private settingsSheetHeight(): string {
 
 方向相反：本地比上游更「拟物」。
 
-- 上游全仓只有 **3 处** `Modifier.shadow` / `.shadow(` —— M3 的层次靠 tonal elevation（用 `surfaceContainer*` 色位分层）而不是投影。
-- 本地 `.shadow(` **10 处**，参数组合 7 种：`radius` 10 / 12 / 20 / 24 / `MENU_SHADOW_RADIUS`，`color` `#33000000` / `#40000000` / `#55000000` / `#66000000`，`offsetY` 2 / 4 / -4 / 12。
-- 这一条不是「本地缺了什么」，而是「本地多了什么」。要不要收，取决于产品取向；M3 口径下这 10 处应当改成色位分层。
+- 上游 `Modifier.shadow` / `.shadow(` 投影调用 **3 处**（`ui/main/bookshelf/BookItem.kt:274`、`ui/widget/components/image/cover/CoilBookCover.kt:388`、`ui/book/readaloud/ReadAloudBarCapsule.kt:186`；另两处 `Shadow(...)` 是文字阴影构造器，非容器投影）；另有 `tonalElevation` / `shadowElevation` **12 处**（如 `ui/book/read/ReadAloudCapsule.kt:297` 的 12dp 胶囊投影、`RoundDropdownMenu.kt:57` 的 4dp 下拉菜单、`GlassCard.kt:116`、`GroupManageSheet.kt:307` 拖拽态 8dp）——上游同时用投影与色位分层，不是「只靠色位分层不靠投影」（`core/ui/player/PlayerMorphHost.kt:358` 只在一处全屏图层显式关掉投影）。
+- 本地 `.shadow(` 实测 **11 处命中**（含 `components/BookGroupCard.ets:34` 一处注释误命中，真实调用 10 处）；本轮删除了 3 处（`components/PullRefreshIndicator.ets`、`pages/ReadAloudPlayerPage.ets` 两处）。其中 8 处有上游锚点保留，1 处本地手绘 sheet 无上游锚点保留并在此记录（`pages/ReadAloudEnginePage.ets:240`）。
+- 逐处对照后没有「全部应当改成色位分层」的统一结论；原记录「M3 口径下这 10 处应当改成色位分层」已删除。
 
 ### 六、无障碍（Accessibility）
 
@@ -1616,7 +1616,7 @@ private settingsSheetHeight(): string {
 | 块 | 差距性质 | 是否值得现在做 |
 | --- | --- | --- |
 | 排版 | ~~没有语义阶梯，1,282 处手写数字~~ 已建 `TypographyTokens.ets` 24 槽位，字面量归零（批 0–8，2026-11-20）；33 处手写行高亦已在独立批次统一（2026-11-20） | **已做** —— 字号、行高两批均收口 |
-| 动效 | 有底座、无档位，82 处 11 种时长 | 值得，成本小（收口常量） |
+| 动效 | 有底座、令牌已定义并部分接线，77 处 10 种时长 | **已做** —— 常量收口（折叠阈值 19 处 + 淡入淡出 33 处） |
 | 图标 | 命名不成体系，功能不缺 | 值得，但要与无障碍一起做 |
 | 模糊 | 主界面通、其余硬编码 | 值得，成本小 |
 | 阴影 | 本地比上游多（方向相反） | 看产品取向，M3 口径下应改成色位分层 |
@@ -1643,7 +1643,7 @@ private settingsSheetHeight(): string {
 - 编译期不是语法糖：`ets-loader` 的 `process_ui_syntax.js` 里 `processAnimatableExtend` 会给装饰函数注入 `elmtId` / `isInitialRender` / `parent` 三个隐藏参数，生成 `if (isInitialRender) { createAnimatableProperty(...) } else { updateAnimatableProperty(...) }`；这两个函数在 JS 侧只有字符串常量，真实实现在 `libace_compatible.dll` 里 —— 引擎 native 能力。
 - 本仓现状：`grep -rn "AnimatableExtend\|AnimatableArithmetic" --include=*.ets .` → **0 命中**；`Polygon()` / `Polyline()` → **0 命中**。这条正规路一次都没试过。
 
-### 二、上机实测数据（模拟器 127.0.0.1:5555，探针在仓库外 `N:/HarmonyProjects/tmp/probe-animatable/`）
+### 二、上机实测数据（模拟器 127.0.0.1:5555，探针在仓库外 `<workspace>tmp/probe-animatable/`）
 
 | 测什么 | 结果 |
 | --- | --- |
@@ -1679,7 +1679,7 @@ private settingsSheetHeight(): string {
 | 11 | morph 浮层族（8 文件） | 封面从书架**无缝展开**到阅读器/听书页 | **无**。`geometryTransition` 可用，但圆角只同步绑定处、不管子组件 |
 | 12 | `ToggleChip`（122 行） | `FilterChip` + `AnimatedVisibility` 勾 | 本地 `ReplaceScopeChip`（`pages/ProfileSubPages.ets:1381`）自绘，无勾动画 |
 
-统计口径：上游 `Expressive` 143 处 / `ButtonGroup` 29 / `ToggleButton` 20 / `ContainedLoadingIndicator` 15 / `FloatingActionButtonMenu` 13 / `LoadingIndicator` 3；`updateTransition|animateFloatAsState|animateColorAsState|animateFloat(` 共 **41 个文件**。本地 `springMotion` 34 处 / `animateTo(` 28 处 / `displaySync` 0 处。
+统计口径（旧快照数字）：上游 `Expressive` 143 处（旧值，现跑 `tween(` 154 / `spring(` 16）/ `ButtonGroup` 29 / `ToggleButton` 20 / `ContainedLoadingIndicator` 15 / `FloatingActionButtonMenu` 13 / `LoadingIndicator` 3；`updateTransition|animateFloatAsState|animateColorAsState|animateFloat(` 共 **41 个文件**。本地 `springMotion` 34 处 / `animateTo(` 28 处 / `displaySync` 0 处。
 
 ### 五、抬基线的真实收益（查过了，不是猜的）
 
@@ -1886,7 +1886,7 @@ return HttpReadAloudService::class.java
 
 ## 朗读的平台底座：能做什么、不能做什么（r358 盘点）
 
-与上一节盘点的是不同的东西：上一节说「上游有云端 TTS 而本地没建」，这一节说「平台给了什么、没给什么」。素材来自并行项目 `N:\HarmonyProjects\Frigivox` 的可行性分析（`docs/FEASIBILITY-ANALYSIS.md`，363 行；该项目 2026-11-19 已暂停，零代码、零构建、零上机）。凡标「未复核」的，是它读 OpenHarmony native 源码或外部文档得出的结论，本机 SDK 验证不了；其余 SDK 声明我都逐条复核过。
+与上一节盘点的是不同的东西：上一节说「上游有云端 TTS 而本地没建」，这一节说「平台给了什么、没给什么」。素材来自并行项目 `<workspace>Frigivox` 的可行性分析（`docs/FEASIBILITY-ANALYSIS.md`，363 行；该项目 2026-11-19 已暂停，零代码、零构建、零上机）。凡标「未复核」的，是它读 OpenHarmony native 源码或外部文档得出的结论，本机 SDK 验证不了；其余 SDK 声明我都逐条复核过。
 
 ### 一、鸿蒙没有「系统 TTS 引擎插槽」——五条证据链
 
@@ -1964,7 +1964,7 @@ MiMo 这类 SSE 供应商的音频块是裸 PCM（`format: "pcm16"`，24kHz / 16
 
 ## 书源引擎：能接、已上机验证、但还差调度层（r359）
 
-与「在线书源抓取仍未排期」那条不冲突：这一节说的是**技术上能不能接**，不是「排期到了」。素材来自工程外最小验证工程 `N:\HarmonyProjects\tmp\probe-sourceengine`（包名 `io.legado.probe.sourceengine`），**主仓一行未改**。被测对象是社区实现 [`wip3l/harmony-book-source-engine`](https://github.com/wip3l/harmony-book-source-engine)（GPL-3.0）的 `sourceengine/` 与 `quickjs/` 两个目录，zip 1,844,595 B。
+与「在线书源抓取仍未排期」那条不冲突：这一节说的是**技术上能不能接**，不是「排期到了」。素材来自工程外最小验证工程 `<workspace>tmp\probe-sourceengine`（包名 `io.legado.probe.sourceengine`），**主仓一行未改**。被测对象是社区实现 [`wip3l/harmony-book-source-engine`](https://github.com/wip3l/harmony-book-source-engine)（GPL-3.0）的 `sourceengine/` 与 `quickjs/` 两个目录，zip 1,844,595 B。
 
 ### 一、结论先说
 
@@ -2072,7 +2072,7 @@ libs/x86_64/libquickjs.so         1,439,008
 
 被测书源：`bookSourceUrl = https://www.deqitxt.com`（「得奇小说（优+++）」），`ruleSearch` / `ruleToc` / `ruleContent` **全是纯 CSS 规则**，无 `@js:`、无 `java.`。
 
-五步实测输出（截图 `N:/HarmonyProjects/tmp/shots/sbe_real2.jpeg`）：
+五步实测输出（截图 `<workspace>tmp/shots/sbe_real2.jpeg`）：
 
 | 步 | 实测 |
 | --- | --- |
@@ -2090,7 +2090,7 @@ libs/x86_64/libquickjs.so         1,439,008
 
 **上游的 `java` 就是 `AnalyzeRule` 自己**：`model/analyzeRule/AnalyzeRule.kt:834` 是 `bindings["java"] = this`，`data/entities/BaseSource.kt:335` 同（`bindings["source"] = this`）。所以脚本里的 `java.getString` / `java.ajax` / `java.put` / `java.md5Encode16` 全是这两个类的成员方法，不存在「Java 互操作」这回事。
 
-**实测覆盖率**（用用户提供的 463 条真实书源统计，`N:/HarmonyProjects/tmp/yck1331.json`）：
+**实测覆盖率**（用用户提供的 463 条真实书源统计，`<workspace>tmp/yck1331.json`）：
 
 | 项 | 数字 |
 | --- | --- |
@@ -2234,7 +2234,7 @@ API 8/9 时代 OpenHarmony 确实有过 `@ohos.data.orm` 模块（`@Entity` / `@
 | `Flow<List<T>>` 响应式，库表一变 UI 自动刷新 | Kotlin Flow | 否。要在写路径自己发通知 |
 | 零运行时开销 | 生成的实现类直接调 SQLite | 否。全是运行时登记 + 运行时拼 `RdbPredicates` |
 
-**实测 ArkORM 源码**（1,920 行，克隆在 `N:/HarmonyProjects/tmp/probe-arkorm/`，只读）：
+**实测 ArkORM 源码**（1,920 行，克隆在 `<workspace>tmp/probe-arkorm/`，只读）：
 
 - `src/main/ets/core/MetadataRegistry.ets:5` 的注释自陈：`Heart of ArkORM: a registry holding entity metadata at runtime in pure ArkTS, without reflect-metadata`。它用「属性装饰器先跑、类装饰器最后跑」的两阶段 staging 手工累积元数据，正是因为拿不到 `emitDecoratorMetadata` 那层信息。
 - `src/main/ets/query/QueryBuilder.ets:79` 的签名是 `where(field: string): Condition<T>` —— 传的是**裸字符串**，不是 `keyof T`。README 里写的 `db.from<User>(User).where('age').gte(18)`，字段名写错编译期不报错。「type-safe」名不副实。

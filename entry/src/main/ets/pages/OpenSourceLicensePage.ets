@@ -1,3 +1,4 @@
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { util } from '@kit.ArkTS';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
@@ -19,7 +20,7 @@ export struct OpenSourceLicensePage {
 
   private updateHeader(): void {
     const offset = this.licenseScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {

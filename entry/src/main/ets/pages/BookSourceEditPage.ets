@@ -394,6 +394,7 @@ export struct BookSourceEditPage {
                 ForEach(this.fieldsForTab(), (spec: FieldSpec) => { this.FieldRow(spec) })
               }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 24 })
             }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+              .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
           }.tabBar(name)
         }, (name: string) => name)
       }

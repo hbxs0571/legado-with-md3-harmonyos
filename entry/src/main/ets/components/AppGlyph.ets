@@ -188,7 +188,12 @@ export struct AppGlyph {
     } else if (this.name === 'visibilityOff') {
       // 「打码」态。
       Image($r('app.media.reader_visibility_off')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+    } else if (this.name === 'web') {
+      // 上游 `Icons.Default.Web`（MyScreen.kt:268「网页」入口）：与 web 成员同名。
+      Image($r('app.media.app_web')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else {
+      // 兜底：联合类型新增成员却忘了写分支时会落到这里。
+      // 渲染成网页图标而不是空白，便于在界面上看见；覆盖度由 scripts/icon-glyph-coverage.py 守。
       Image($r('app.media.app_web')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     }
   }

@@ -1,3 +1,4 @@
+import { DURATION_FADE } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { AppRoute, Book, BookChapter, bookCoverColor, bookCoverMark, BookMediaType, ProfileRoute } from '../model/Book';
 import { ChapterDownloadQueue } from '../bookSource/ChapterDownloadQueue';
@@ -31,7 +32,9 @@ import { ReadAloudConfigPanel } from './ReadAloudConfigPanel';
 import { BookInfoPage } from './BookInfoPage';
 import { BookInfoEditPage } from './BookInfoEditPage';
 import { ChangeSourceSheet } from './ChangeSourceSheet';
-import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions } from '../bookSource/ChangeSourceCoordinator';
+import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions, defaultMigrationOptions } from '../bookSource/ChangeSourceCoordinator';
+import { BookSourceRuntime } from '../bookSource/BookSourceRuntime';
+import { SearchBookItem, RemoteChapter } from '../bookSource/SourceModels';
 import { SourceLoginPage } from './SourceLoginPage';
 import { SourceWebPage } from './SourceWebPage';
 import { BookSourceDebugPage } from './BookSourceDebugPage';
@@ -174,7 +177,7 @@ import { HttpTtsRepository } from '../data/HttpTtsRepository';
 import { ReadAloudVoiceRepository } from '../data/ReadAloudVoiceRepository';
 import { HttpTtsSelection, HttpTtsSelectionRepository, EMPTY_HTTP_TTS_SELECTION } from '../data/HttpTtsSelectionRepository';
 import {
-  BackupCategoryOption, BackupEntryPreview, BackupIgnoreLists, BackupPreview, BackupRepository, BackupSelection
+  BackupCategoryOption, BackupIgnoreLists, BackupRepository, BackupSelection
 } from '../data/BackupRepository';
 import { OnboardingPage } from './OnboardingPage';
 import { ReaderBookmark } from '../model/ReaderBookmark';
@@ -263,6 +266,9 @@ struct Index {
   @State bookshelfManageGroupName: string = '';
   /** 本地书多选后的候选列表；非空表示停在导入确认页（批 10 的 :555）。 */
   @State localBookImportCandidates: ImportCandidate[] = [];
+  /** 批7（:1162）：正在挑选条目的压缩包。非空时确认页列的是包内条目。 */
+  @State localBookArchiveUri: string = '';
+  @State localBookArchiveTitle: string = '';
   @State selectedTab: number = 0;
   @State selectedBook: Book = EMPTY_BOOK;
   /** 换源面板（P8）：非空表示正在为这本书换源。 */
@@ -276,6 +282,12 @@ struct Index {
   @State readerStartAtChapterBeginning: boolean = false;
   @State selectedChapter: string = '';
   @State books: Book[] = [];
+  /**
+   * 批8（:1153 :369）：未上架书目。从搜索结果进详情页看过的书以 notShelf 位（type & 1024）落库，
+   * 由 restoreImportedBooks 按位从书架全量分流到这里；书架、分组计数、本地搜索结果都只读 books。
+   * 点「放入书架」后清位并移回 books（对齐上游 BookType.notShelf）。
+   */
+  @State notShelfBooks: Book[] = [];
   /** 正在刷新目录的书主键集合，传给 BookshelfPage 显示更新中状态（:120）。 */
   @State refreshingBookIds: string[] = [];
   @State bookGroups: BookGroup[] = [];
@@ -630,8 +642,6 @@ struct Index {
   @State readerInfoSettings: ReaderInfoSettings = DEFAULT_READER_INFO_SETTINGS;
   @State backupBusy: boolean = false;
   @State backupStatusMessage: string = '';
-  @State backupPreview: BackupPreview | undefined = undefined;
-  @State restoredAndroidEntries: BackupEntryPreview[] = [];
   @State backupIgnoreKeys: string[] = [];
   @State restoreIgnoreKeys: string[] = [];
   @State backupCategoryOptions: BackupCategoryOption[] = BackupRepository.categoryOptionsList();
@@ -981,7 +991,6 @@ struct Index {
     this.restoreBookInfoSettings(context);
     this.restoreHighlightTagRules(context);
     this.restoreCacheSettings(context);
-    this.loadRestoredAndroidEntries(context);
     // 不 await：远端探测要走网络，不能拖住首帧（上游 MainActivity.kt:1092-1116 也是启动时查一次）。
     this.checkNewWebDavBackup(context);
   }
@@ -3619,7 +3628,7 @@ struct Index {
    * 做不到真正的共享元素，所以打开时用「缩小淡入 + 放大淡出」近似，关闭时只做淡入淡出。
    */
   private readerRouteTransition(): TransitionEffect {
-    const fade = TransitionEffect.OPACITY.animation({ duration: 220 });
+    const fade = TransitionEffect.OPACITY.animation({ duration: DURATION_FADE });
     if (!this.themeReaderSharedElement) { return fade; }
     return fade.combine(TransitionEffect.scale({ x: 0.92, y: 0.92 }).animation({ curve: curves.springMotion(0.3, 0.85) }));
   }
@@ -3653,7 +3662,7 @@ struct Index {
       // 消失：左移一点 + 淡出
       TransitionEffect.translate({ x: -60, y: 0 })
         .combine(TransitionEffect.OPACITY)
-        .animation({ duration: 220, curve: Curve.FastOutSlowIn })
+        .animation({ duration: DURATION_FADE, curve: Curve.FastOutSlowIn })
     );
   }
 
@@ -4233,10 +4242,6 @@ struct Index {
     } catch (_) {
       this.showUnavailableAction('设置保存失败，请重试完成向导');
     }
-  }
-
-  private async loadRestoredAndroidEntries(context: Context): Promise<void> {
-    this.restoredAndroidEntries = await BackupRepository.loadRestoredEntries(context);
   }
 
   private async restoreReaderSettings(context: Context): Promise<void> {
@@ -6035,7 +6040,10 @@ struct Index {
       return BookRepository.withShelfMetadata(book, matched,
         matched.length > 0 ? matched.join('、') : '本地未分组', customTag);
     });
-    this.books = migratedBooks;
+    // 批8（r362）：按 notShelf 位（type & 1024）把未上架的书分流出来，
+    // 书架 / 分组计数 / 本地搜索结果都只认 this.books（对齐上游 BookDao.kt:741）。
+    this.notShelfBooks = migratedBooks.filter((book: Book) => book.notShelf === true);
+    this.books = migratedBooks.filter((book: Book) => book.notShelf !== true);
     if (needsMigration) {
       try {
         await BookRepository.saveImportedBooks(context, migratedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
@@ -6531,9 +6539,9 @@ private canWriteInto(dir: string): boolean {
     if (context === undefined || this.backupBusy) { return; }
     this.backupBusy = true;
     this.backupStatusMessage = '';
-    this.backupPreview = undefined;
     this.pendingBackup = undefined;
     let zipPath = '';
+    let selection: BackupSelection | undefined = undefined;
     try {
       const latest = await WebDavSync.latestBackup(context);
       if (latest === undefined) {
@@ -6542,12 +6550,9 @@ private canWriteInto(dir: string): boolean {
       }
       zipPath = `${context.cacheDir}/legado-webdav-restore-${Date.now()}.zip`;
       await WebDavSync.downloadBackup(context, latest.name, zipPath);
-      const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
-      const selection = await BackupRepository.selectBackupFromPath(context, zipPath, localBooks);
+      selection = await BackupRepository.selectBackupFromPath(context, zipPath);
       this.pendingBackup = selection;
-      // 预览卡渲染依赖 backupPreview（:151），必须和 selectLocalBackup 一样同时设。
-      this.backupPreview = selection.preview;
-      this.backupStatusMessage = `已下载 ${latest.name}，请确认预览后导入。`;
+      this.backupStatusMessage = `已下载 ${latest.name}，正在导入。`;
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `从 WebDAV 恢复失败：${error.message}` : '从 WebDAV 恢复失败';
     } finally {
@@ -6556,6 +6561,10 @@ private canWriteInto(dir: string): boolean {
       }
       this.backupBusy = false;
     }
+    // 选完直接恢复，对齐上游：上游选 ZIP 后 Loading → 恢复 → 一条 toast，无预览态。
+    if (selection !== undefined) {
+      await this.restoreWithSelection(selection);
+    }
   }
 
   private async selectLocalBackup(): Promise<void> {
@@ -6563,26 +6572,31 @@ private canWriteInto(dir: string): boolean {
     if (context === undefined || this.backupBusy) { return; }
     this.backupBusy = true;
     this.backupStatusMessage = '';
-    this.backupPreview = undefined;
     this.pendingBackup = undefined;
+    let selection: BackupSelection | undefined = undefined;
     try {
-      const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
-      const selection = await BackupRepository.selectBackup(context, localBooks);
-      if (selection !== undefined) {
-        this.pendingBackup = selection;
-        this.backupPreview = selection.preview;
-      }
+      selection = await BackupRepository.selectBackup(context);
+      if (selection !== undefined) { this.pendingBackup = selection; }
     } catch (error) {
+      // 解析失败时清掉可能的临时 staging，避免残留（原 cancel 路径已随预览块删除）。
+      if (this.pendingBackup !== undefined) {
+        const stale = this.pendingBackup;
+        this.pendingBackup = undefined;
+        BackupRepository.discardSelection(stale).catch(() => {});
+      }
       this.backupStatusMessage = error instanceof Error ? `读取备份失败：${error.message}` : '读取备份失败';
     } finally {
       this.backupBusy = false;
     }
+    // 选完直接恢复，对齐上游：无预览卡与「取消/导入」按钮。
+    if (selection !== undefined) {
+      await this.restoreWithSelection(selection);
+    }
   }
 
-  private async restoreLocalBackup(): Promise<void> {
+  private async restoreWithSelection(selection: BackupSelection): Promise<void> {
     const context = this.getUIContext().getHostContext();
-    const selection = this.pendingBackup;
-    if (context === undefined || selection === undefined || this.backupBusy) { return; }
+    if (context === undefined || this.backupBusy) { return; }
     this.backupBusy = true;
     this.backupStatusMessage = '';
     try {
@@ -6807,12 +6821,12 @@ private canWriteInto(dir: string): boolean {
       if (serverSummary.length > 0) {
         details.push(serverSummary);
       }
-      this.backupStatusMessage = details.length > 0
+      const detailedSummary = details.length > 0
         ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
-      this.restoredAndroidEntries = result.restoredEntries;
+      // 安全提示从原恢复结果清单搬到此处：恢复后的书源含 JS，下次搜索/阅读会执行并发起网络请求。
+      this.backupStatusMessage = `${detailedSummary}恢复后的书源会在下次搜索或阅读时执行其中的 JavaScript 并发起网络请求。`;
       await BackupRepository.discardSelection(selection);
       this.pendingBackup = undefined;
-      this.backupPreview = undefined;
     } catch (error) {
       this.backupStatusMessage = error instanceof Error ? `恢复失败：${error.message}` : '恢复失败';
     } finally {
@@ -6884,18 +6898,6 @@ private canWriteInto(dir: string): boolean {
     return `${label}${parts.join('、')}。`;
   }
 
-  private cancelLocalBackupRestore(): void {
-    if (this.pendingBackup !== undefined) {
-      const selection = this.pendingBackup;
-      BackupRepository.discardSelection(selection).catch(() => {
-        this.backupStatusMessage = '已取消恢复；临时预览文件稍后清理';
-      });
-    }
-    this.pendingBackup = undefined;
-    this.backupPreview = undefined;
-    this.backupStatusMessage = '已取消恢复，当前书架和设置未修改。';
-  }
-
   private async toggleBackupIgnore(key: string, ignored: boolean): Promise<void> {
     this.backupIgnoreKeys = this.updateIgnoredKeys(this.backupIgnoreKeys, key, ignored);
     await this.saveBackupIgnoreLists();
@@ -6940,6 +6942,8 @@ private canWriteInto(dir: string): boolean {
     if (context === undefined) {
       return undefined;
     }
+    this.localBookArchiveUri = '';
+    this.localBookArchiveTitle = '';
     let uris: string[] = [];
     try {
       uris = await BookRepository.pickLocalBookUris(context);
@@ -6988,18 +6992,46 @@ private canWriteInto(dir: string): boolean {
           continue;
         }
         try {
-          const archiveResult = await ArchiveImporter.importFromUri(context, uri);
-          archiveFailedCount += archiveResult.failedCount;
-          const createdBooks = archiveResult.books;
-          for (let inner = 0; inner < createdBooks.length; inner += 1) {
-            const oneCreated = createdBooks[inner];
-            if (oneCreated === undefined) {
-              continue;
+          // 批7（:1162，上游 `BookInfoViewModel.kt:1501-1541` handleWebFileSelection）：
+          // 包内只有一个书文件就直接导（与旧行为一致）；多个书文件才先列条目、转确认页勾选
+          // （等价上游 `BookInfoSheet.ArchiveEntries`）；包里有图时 listBookEntries 返回空，走整包漫画。
+          const entries = await ArchiveImporter.listBookEntries(context, uri);
+          if (entries.length <= 1) {
+            const archiveResult = await ArchiveImporter.importFromUri(context, uri);
+            archiveFailedCount += archiveResult.failedCount;
+            const createdBooks = archiveResult.books;
+            for (let inner = 0; inner < createdBooks.length; inner += 1) {
+              const oneCreated = createdBooks[inner];
+              if (oneCreated === undefined) {
+                continue;
+              }
+              const persisted = await this.persistCreatedBook(oneCreated, uri);
+              if (persisted !== undefined) {
+                importedCount += 1;
+              }
             }
-            const persisted = await this.persistCreatedBook(oneCreated, uri);
-            if (persisted !== undefined) {
-              importedCount += 1;
+          } else {
+            const archiveCandidates: ImportCandidate[] = [];
+            for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+              const entryName = entries[entryIndex];
+              if (entryName === undefined) {
+                continue;
+              }
+              const candidate: ImportCandidate = {
+                uri: entryName,
+                fileName: entryName,
+                sizeLabel: '',
+                onShelf: BookRepository.isFileOnShelf(this.books, BookRepository.getFileName(entryName)),
+                selected: true
+              };
+              archiveCandidates.push(candidate);
             }
+            this.localBookImportCandidates = archiveCandidates;
+            this.localBookArchiveUri = uri;
+            this.localBookArchiveTitle = BookRepository.getFileName(uri);
+            this.route = AppRoute.LOCAL_BOOK_IMPORT;
+            // 交给确认页：勾完再走 importArchiveEntries，本轮不再继续下面的落库循环。
+            return;
           }
         } catch (error) {
           this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：压缩包无法读取');
@@ -7022,6 +7054,52 @@ private canWriteInto(dir: string): boolean {
     let message = `已导入 ${importedCount} 本书`;
     if (archiveFailedCount > 0) {
       message = `已导入 ${importedCount} 本，${archiveFailedCount} 本失败`;
+    }
+    this.showUnavailableAction(message);
+  }
+
+  /** 批7（:1162）：压缩包确认页提交 —— 只导入勾中的条目，落库逻辑与整包导入同一条链。 */
+  private async importArchiveEntries(entryNames: string[]): Promise<void> {
+    const archiveUri = this.localBookArchiveUri;
+    this.localBookImportCandidates = [];
+    this.localBookArchiveUri = '';
+    this.localBookArchiveTitle = '';
+    if (archiveUri.length === 0 || entryNames.length === 0) {
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    let importedCount = 0;
+    let failedCount = 0;
+    try {
+      const archiveResult = await ArchiveImporter.importFromUriEntries(context, archiveUri, entryNames);
+      failedCount = archiveResult.failedCount;
+      const createdBooks = archiveResult.books;
+      for (let inner = 0; inner < createdBooks.length; inner += 1) {
+        const oneCreated = createdBooks[inner];
+        if (oneCreated === undefined) {
+          continue;
+        }
+        const persisted = await this.persistCreatedBook(oneCreated, archiveUri);
+        if (persisted !== undefined) {
+          importedCount += 1;
+        }
+      }
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：压缩包无法读取');
+      return;
+    }
+    if (importedCount === 0) {
+      this.showUnavailableAction('没有导入任何书籍');
+      return;
+    }
+    await this.reloadBooksAfterImport();
+    this.route = AppRoute.BOOKSHELF;
+    let message = `已导入 ${importedCount} 本书`;
+    if (failedCount > 0) {
+      message = `已导入 ${importedCount} 本，${failedCount} 本失败`;
     }
     this.showUnavailableAction(message);
   }
@@ -7275,6 +7353,235 @@ private canWriteInto(dir: string): boolean {
     } catch (e) {
       this.showUnavailableAction('换源失败，原书与进度未改动：' + (e instanceof Error ? e.message : String(e)));
     }
+  }
+
+  /** 书名/作者规范化：对齐上游 BookMatchKey.of（空白归一、转小写）。 */
+  private normalizeBookKey(value: string): string {
+    return value.replace(/[\p{Z}\s]+/gu, ' ').trim().toLowerCase();
+  }
+
+  /** 由搜索结果构造在线书对象（详情页入口与加入书架共用同一份字段口径）。 */
+  private onlineBookFromSearch(item: MergedBook, notShelf: boolean): Book {
+    const source = item.book;
+    const bookUrl = source.bookUrl;
+    const origin = item.origins.length > 0 ? item.origins[0] : source.origin;
+    return {
+      id: BookRepository.bookIdFromUrl(bookUrl),
+      title: source.name,
+      author: source.author,
+      category: source.kind ?? '',
+      kind: source.kind.length > 0 ? source.kind : undefined,
+      lastChapter: source.lastChapter,
+      progress: 0,
+      chapterIndex: 0,
+      chapterCount: '0',
+      wordCount: source.wordCount.length > 0 ? source.wordCount : undefined,
+      latestChapterTitle: source.lastChapter.length > 0 ? source.lastChapter : undefined,
+      coverUri: source.coverUrl.length > 0 ? source.coverUrl : undefined,
+      contentPath: bookUrl,
+      isLocal: false,
+      origin: origin,
+      originName: source.originName,
+      tocUrl: source.tocUrl.length > 0 ? source.tocUrl : bookUrl,
+      notShelf: notShelf,
+      order: Math.min(0, ...this.books.map((book: Book) => book.order ?? 0)) - 1
+    };
+  }
+
+  /** 书架里与新书同名且作者兼容的书（对齐上游 FindBookshelfConflictUseCase.kt:18-48）。 */
+  private shelfConflictsWith(book: Book): Book[] {
+    const name = this.normalizeBookKey(book.title);
+    if (name.length === 0) {
+      return [];
+    }
+    const author = this.normalizeBookKey(book.author);
+    return this.books.filter((item: Book) => {
+      if (item.id === book.id) {
+        return false;
+      }
+      if (this.normalizeBookKey(item.title) !== name) {
+        return false;
+      }
+      // 作者为空视为兼容，两边都有作者时必须相等。
+      const other = this.normalizeBookKey(item.author);
+      return author.length === 0 || other.length === 0 || author === other;
+    });
+  }
+
+  /**
+   * 批8（:1153）：搜索结果点「查看详情」进详情页，此时该书尚未上架。
+   *
+   * 上游 BookInfoViewModel.kt:353/:443 —— 详情页拿到的书若不在架就 addType(notShelf) 落库，
+   * 它是「未上架」的唯一事实来源。本地同口径：以 notShelf 位落库，书架按位过滤后不显示，
+   * 重启后该位从 type 列读回，仍不显示。
+   */
+  private openOnlineBookInfo(item: MergedBook): void {
+    const bookUrl = item.book.bookUrl;
+    if (bookUrl.length === 0) {
+      this.showUnavailableAction('该书没有可用的详情地址，无法查看详情');
+      return;
+    }
+    const shelfBook = this.books.find((book: Book) => (book.contentPath ?? '') === bookUrl);
+    const pending = this.notShelfBooks.find((book: Book) => (book.contentPath ?? '') === bookUrl);
+    let target: Book = shelfBook !== undefined ? shelfBook
+      : (pending !== undefined ? pending : this.onlineBookFromSearch(item, true));
+    if (shelfBook === undefined && pending === undefined) {
+      this.notShelfBooks = [...this.notShelfBooks, target];
+      const context = this.getUIContext().getHostContext();
+      if (context !== undefined) {
+        const persist = BookRepository.saveImportedBooks(context, [target]
+          .filter((book: Book) => BookRepository.isPersistableBook(book)));
+        persist.catch((error: Error) => {
+          // 落库失败不挡用户看详情，只是重启后不再出现在未上架列表里。
+          AppLog.put('未上架书目落库失败：' + error.message);
+        });
+      }
+    }
+    this.openBookInfo(target);
+  }
+
+  /**
+   * 批8（:369）：详情页点「放入书架」。照上游 AddToBookshelfUseCase.kt:26-40 六步：
+   * 清 notShelf 位 → 冲突检测交给详情页面板 → 无冲突按 min-1 排序入架。
+   * 详情页在有同名副本时不会调到这里（它先弹共存/迁移面板）。
+   */
+  private addCurrentBookToShelf(): void {
+    const incoming = this.selectedBook;
+    const bookUrl = incoming.contentPath ?? incoming.androidOriginalPath ?? '';
+    if (bookUrl.length === 0) {
+      this.showUnavailableAction('这本书没有可用的地址，无法加入书架');
+      return;
+    }
+    if (this.books.some((item: Book) => item.id === incoming.id)) {
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('当前上下文不可用，无法保存书架');
+      return;
+    }
+    const nextBook = BookRepository.copyBook(incoming);
+    nextBook.notShelf = false;
+    if ((nextBook.order ?? 0) === 0) {
+      nextBook.order = Math.min(0, ...this.books.map((book: Book) => book.order ?? 0)) - 1;
+    }
+    const saved = BookRepository.saveImportedBooks(context, [nextBook]
+      .filter((book: Book) => BookRepository.isPersistableBook(book));
+    saved.then(() => {
+      this.books = [...this.books, nextBook];
+      this.notShelfBooks = this.notShelfBooks.filter((book: Book) => book.id !== nextBook.id);
+      this.selectedBook = nextBook;
+      this.showUnavailableAction('书籍已添加到书架');
+    }).catch((error: Error) => {
+      this.showUnavailableAction('加入书架失败：' + error.message);
+    });
+  }
+
+  /**
+   * 批8（:369）冲突·共存：两个副本都留架，只搬用户勾选的元信息，**不搬任何阅读记录**
+   * （对齐上游 ResolveBookshelfConflictUseCase.coexist 的注释）。
+   */
+  private resolveShelfConflictCoexist(existingId: string): void {
+    const existing = this.books.find((book: Book) => book.id === existingId);
+    const incoming = this.selectedBook;
+    if (existing === undefined) {
+      this.showUnavailableAction('原书已不在书架，无法共存');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('当前上下文不可用，无法保存书架');
+      return;
+    }
+    const nextBook = BookRepository.copyBook(incoming);
+    nextBook.notShelf = false;
+    nextBook.order = Math.min(0, ...this.books.map((book: Book) => book.order ?? 0)) - 1;
+    // 只复制可用元信息字段，进度/章节/阅读记录保持新书自己的（无进度）。
+    if (existing.coverUri !== undefined && existing.coverUri.length > 0) {
+      nextBook.coverUri = existing.coverUri;
+    }
+    if (existing.description !== undefined && existing.description.length > 0) {
+      nextBook.description = existing.description;
+    }
+    if (existing.category.length > 0) {
+      nextBook.category = existing.category;
+    }
+    const saved = BookRepository.saveImportedBooks(context, [nextBook]
+      .filter((book: Book) => BookRepository.isPersistableBook(book));
+    saved.then(() => {
+      this.books = [...this.books, nextBook];
+      this.notShelfBooks = this.notShelfBooks.filter((book: Book) => book.id !== nextBook.id);
+      this.selectedBook = nextBook;
+      this.showUnavailableAction('已加入书架（与原书共存）');
+    }).catch((error: Error) => {
+      this.showUnavailableAction('加入书架失败：' + error.message);
+    });
+  }
+
+  /**
+   * 批8（:369）冲突·迁移：等价换源（旧书删除、阅读会话整体平移）。
+   * 上游 ResolveBookshelfConflictUseCase.migrate 的硬约束：**新书目录拉不到必须中止**，
+   * 否则等于删旧书并把进度重置到第一章——这里先拉目录，空则直接返回、旧书与进度都不动。
+   */
+  private async resolveShelfConflictMigrate(existingId: string): Promise<void> {
+    const existing = this.books.find((book: Book) => book.id === existingId);
+    const incoming = this.selectedBook;
+    if (existing === undefined) {
+      this.showUnavailableAction('原书已不在书架，无法迁移');
+      return;
+    }
+    if (incoming.isLocal) {
+      this.showUnavailableAction('本地书没有书源，无法迁移进度');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('当前上下文不可用，无法迁移');
+      return;
+    }
+    const sourceUrl = incoming.origin ?? '';
+    const tocUrl = incoming.tocUrl ?? incoming.contentPath ?? '';
+    let chapters: RemoteChapter[] = [];
+    try {
+      chapters = await BookSourceRuntime.toc(sourceUrl, incoming.contentPath ?? '', tocUrl);
+    } catch (error) {
+      const message = (error as Error).message;
+      AppLog.put('迁移取目录失败：' + message);
+      this.showUnavailableAction('获取目录失败：' + message + '，迁移已中止');
+      return;
+    }
+    if (chapters.length === 0) {
+      this.showUnavailableAction('获取目录失败：目录为空，迁移已中止');
+      return;
+    }
+    const candidate: ChangeSourceCandidate = {
+      sourceUrl: sourceUrl,
+      sourceName: incoming.originName,
+      book: incoming.contentPath === undefined ? null : {
+        bookUrl: incoming.contentPath,
+        origin: sourceUrl,
+        originName: incoming.originName,
+        name: incoming.title,
+        author: incoming.author,
+        kind: incoming.category,
+        coverUrl: incoming.coverUri ?? '',
+        intro: incoming.description ?? '',
+        lastChapter: incoming.latestChapterTitle ?? '',
+        wordCount: incoming.wordCount ?? '',
+        updateTime: '',
+        tocUrl: tocUrl
+      },
+      chapters: chapters,
+      chapterCount: chapters.length,
+      verified: true,
+      message: ''
+    };
+    const previousSelected = this.selectedBook;
+    this.selectedBook = existing;
+    await this.applyChangeSource(candidate, defaultMigrationOptions());
+    // 迁移完成后新书已由 applyChangeSource 落库并成为 selectedBook（继承旧书的在架位与进度），
+    // 这里只把当初从详情页落库的未上架副本清掉。
+    this.notShelfBooks = this.notShelfBooks.filter((book: Book) => book.id !== previousSelected.id);
   }
 
   private onAddOnlineBook(item: MergedBook): void {
@@ -7911,7 +8218,7 @@ private canWriteInto(dir: string): boolean {
         }
         Row() {
           Blank()
-          Text('解锁').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
+          Text('解锁').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
             .onClick(async () => { await this.submitAppStartPassword(); })
         }.width('100%').margin({ top: 12 })
       }.width('86%').padding(20).backgroundColor('#1D1E26').borderRadius(18)
@@ -8332,6 +8639,35 @@ private canWriteInto(dir: string): boolean {
    * 切换「允许更新」（:289）：写 canUpdate 一列后原位刷新 books 与 selectedBook，
    * 让详情页菜单的选中态与列表数据都跟上。只改这一个字段，不动阅读进度。
    */
+  /**
+   * 批7（:1156）：简介富文本的 baseUrl。在线书给书源地址，本地书给正文文件所在目录；
+   * 两者都拿不到就返回空串 —— 空串只影响相对链接解析，不影响 HTML 显示。
+   */
+  private bookInfoIntroBaseUrl(): string {
+    const book: Book | undefined = this.selectedBook;
+    if (book === undefined) {
+      return '';
+    }
+    if (BookRepository.isOnlineBook(book)) {
+      const origin: string = book.origin ?? '';
+      const source = BookSourceRepository.getAll().find((item: BookSource) => item.bookSourceUrl === origin);
+      return source === undefined ? '' : origin;
+    }
+    const path: string = book.contentPath ?? '';
+    const slash: number = path.lastIndexOf('/');
+    return slash > 0 ? `file://${path.substring(0, slash)}/` : '';
+  }
+
+  /** 批7（:1164）：简介里 onclick 脚本要的书源 URL；本地书（origin=loc_book）返回空串。 */
+  private bookInfoIntroSourceUrl(): string {
+    const book: Book | undefined = this.selectedBook;
+    if (book === undefined || !BookRepository.isOnlineBook(book)) {
+      return '';
+    }
+    const origin: string = book.origin ?? '';
+    return origin.startsWith('http') ? origin : '';
+  }
+
   private async toggleBookCanUpdate(canUpdate: boolean): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
@@ -9815,6 +10151,17 @@ private canWriteInto(dir: string): boolean {
           groups: this.bookGroups,
           books: this.books,
           highlightTagRules: this.highlightTagRules,
+          bookBaseUrl: this.bookInfoIntroBaseUrl(),
+          bookSourceUrl: this.bookInfoIntroSourceUrl(),
+          shelfConflictCandidates: this.shelfConflictsWith(this.selectedBook),
+          onAddToShelf: () => this.addCurrentBookToShelf(),
+          onResolveShelfConflict: (existingId: string, mode: string) => {
+            if (mode === 'coexist') {
+              this.resolveShelfConflictCoexist(existingId);
+            } else {
+              this.resolveShelfConflictMigrate(existingId);
+            }
+          },
           deleteAlertEnabled: this.bookInfoDeleteAlert,
           followCoverColor: this.bookInfoFollowCoverColor,
           networkCoverBackground: this.bookInfoNetworkCoverBackground,
@@ -9867,11 +10214,16 @@ private canWriteInto(dir: string): boolean {
         } else if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {
         LocalBookImportPage({
           candidates: this.localBookImportCandidates,
+          archiveUri: this.localBookArchiveUri,
+          archiveTitle: this.localBookArchiveTitle,
           onBack: () => {
             this.localBookImportCandidates = [];
+            this.localBookArchiveUri = '';
+            this.localBookArchiveTitle = '';
             this.route = AppRoute.BOOKSHELF;
           },
-          onImportSelected: (uris: string[]) => this.importSelectedLocalBooks(uris)
+          onImportSelected: (uris: string[]) => this.importSelectedLocalBooks(uris),
+          onImportArchiveEntries: (entryNames: string[]) => this.importArchiveEntries(entryNames)
         })
         .transition(this.routeTransition())
         } else if (this.route === AppRoute.SUBSCRIPTION_RULES) {
@@ -10608,6 +10960,8 @@ private canWriteInto(dir: string): boolean {
           onBack: () => this.route = this.searchReturnRoute,
           onOpenBook: (book: Book) => this.openBook(book),
           onAddOnlineBook: (item: MergedBook) => this.onAddOnlineBook(item),
+          onOpenOnlineBookDetail: (item: MergedBook) => this.openOnlineBookInfo(item),
+          onOpenBookDetail: (book: Book) => this.openBookInfo(book),
           onOpenSourceManage: () => this.openProfileDetail(ProfileRoute.BOOK_SOURCE_MANAGE),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),
           onQueryChange: (query: string) => this.searchPageQuery = query,
@@ -10626,6 +10980,7 @@ private canWriteInto(dir: string): boolean {
             onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl),
             onOpenSourceDebug: (sourceUrl: string) => this.openSourceDebug(sourceUrl)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_EDIT) {
           BookSourceEditPage({
             editingSource: this.editingBookSource,
@@ -10640,6 +10995,7 @@ private canWriteInto(dir: string): boolean {
             onOpenSourceDebug: (sourceUrl: string) => this.openSourceDebug(sourceUrl),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULES) {
           ReplaceRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
@@ -10665,6 +11021,7 @@ private canWriteInto(dir: string): boolean {
             onReorderRule: (fromId: number, toId: number) => this.reorderReplaceRule(fromId, toId),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.REPLACE_RULE_EDIT) {
           ReplaceRuleEditPage({
             onBack: () => {
@@ -10685,6 +11042,7 @@ private canWriteInto(dir: string): boolean {
             onRemoveGroup: (name: string) => this.removeReplaceRuleGroup(name),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULE_PREVIEW) {
           TxtTocRulePreviewPage({
             book: this.selectedBook,
@@ -10693,6 +11051,7 @@ private canWriteInto(dir: string): boolean {
             onOpenManagePage: () => this.profileSubpage = ProfileRoute.TXT_TOC_RULES,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.TXT_TOC_RULES) {
           TxtTocRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
@@ -10712,30 +11071,36 @@ private canWriteInto(dir: string): boolean {
             onImportRules: () => this.importTxtTocRules(),
             onExportRules: (rules: TxtTocRule[]) => this.exportTxtTocRules(rules)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.DICTIONARY_RULES) {
           DictionaryRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
             onOpenEditor: () => this.profileSubpage = ProfileRoute.DICTIONARY_RULE_EDIT,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.DICTIONARY_RULE_EDIT) {
           DictionaryRuleEditPage({
             onBack: () => this.profileSubpage = ProfileRoute.DICTIONARY_RULES,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.HIGHLIGHT_TAG_RULES) {
           HighlightTagRulesPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
             onOpenEditor: () => this.profileSubpage = ProfileRoute.HIGHLIGHT_TAG_RULE_EDIT,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.HIGHLIGHT_TAG_RULE_EDIT) {
           HighlightTagRuleEditPage({
             onBack: () => this.profileSubpage = ProfileRoute.HIGHLIGHT_TAG_RULES,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.ALL_BOOKMARKS) {
           AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId), onEditBookmark: (bookmarkId: string) => this.editReaderBookmark(bookmarkId), onOpenMarking: (markingId: string) => this.openReaderMarking(markingId), onExportBookmarks: (bookKey: string, isMarkdown: boolean) => this.exportBookmarksByKey(bookKey, isMarkdown), sortDescending: this.bookmarkSortDescending, onToggleSortDescending: () => this.toggleBookmarkSortDescending(), onDeleteEntries: (bookmarkIds: string[], markingIds: string[]) => { this.deleteBookmarkEntries(bookmarkIds, markingIds); }, onExportSelectedEntries: (ids: string[], isMarkdown: boolean) => { this.exportSelectedBookmarkEntries(ids, isMarkdown); } })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.READ_RECORDS) {
           ReadRecordsPage({
             records: this.readTimeRecords,
@@ -10755,6 +11120,7 @@ private canWriteInto(dir: string): boolean {
               else { this.showUnavailableAction('这本书已不在书架'); }
             }
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.READ_RECORD_OVERVIEW) {
           ReadRecordOverviewPage({
             details: this.readRecordDetails,
@@ -10766,6 +11132,7 @@ private canWriteInto(dir: string): boolean {
               if (hit !== undefined) { this.openBook(hit); }
             }
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.CACHE_MANAGEMENT) {
           CacheManagementPage({
             groups: this.cacheManagementGroups(),
@@ -10773,6 +11140,7 @@ private canWriteInto(dir: string): boolean {
             onBack: () => this.route = this.profileDetailReturnRoute,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.BOOKSHELF_MANAGE) {
           BookshelfManagePage({
             books: this.books,
@@ -10789,6 +11157,7 @@ private canWriteInto(dir: string): boolean {
               this.exportBookSegmented(book, scopeSpec, chaptersPerVolume);
             }
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.FILE_MANAGER) {
           FileManagerPage({
             rootPath: this.getAppFileManagerRootDirectory(),
@@ -10797,10 +11166,13 @@ private canWriteInto(dir: string): boolean {
             onOpenBook: (book: Book) => this.openBook(book),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.PRIVACY_NOTICE) {
           PrivacyNoticePage({ onBack: () => this.profileSubpage = ProfileRoute.ABOUT })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.OPEN_SOURCE_LICENSE) {
           OpenSourceLicensePage({ onBack: () => this.profileSubpage = ProfileRoute.ABOUT })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.ABOUT) {
           AboutAppPage({
             onBack: () => this.route = this.profileDetailReturnRoute,
@@ -10808,14 +11180,17 @@ private canWriteInto(dir: string): boolean {
             onOpenLicense: () => this.profileSubpage = ProfileRoute.OPEN_SOURCE_LICENSE,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.AI_CHAT) {
           AiChatPage({ onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message) })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_SETTINGS) {
           AppSettingsHomePage({
             onBack: () => this.route = this.profileDetailReturnRoute,
             onOpenCategory: (destination: ProfileRoute) => this.openSettingsCategory(destination),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_THEME_SETTINGS) {
           ThemeSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
@@ -11081,6 +11456,7 @@ private canWriteInto(dir: string): boolean {
             onOpenCustomTheme: () => this.openSettingsCategory(ProfileRoute.APP_CUSTOM_THEME),
             onOpenThemeManage: () => this.openSettingsCategory(ProfileRoute.APP_THEME_MANAGE)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_CUSTOM_THEME) {
           CustomThemePage({
             onBack: () => this.profileSubpage = ProfileRoute.APP_THEME_SETTINGS,
@@ -11088,6 +11464,7 @@ private canWriteInto(dir: string): boolean {
             customTheme: this.themeCustomColors,
             onChange: (snapshot: CustomThemeSnapshot) => this.saveCustomTheme(snapshot)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_THEME_MANAGE) {
           ThemeManagePage({
             onBack: () => this.profileSubpage = ProfileRoute.APP_THEME_SETTINGS,
@@ -11096,6 +11473,7 @@ private canWriteInto(dir: string): boolean {
             onApplyTheme: (patch: ThemeConfigPatch, assets: Record<string, string>) =>
               this.applyThemePackage(patch, assets)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_OTHER_SETTINGS) {
           OtherSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
@@ -11103,6 +11481,7 @@ private canWriteInto(dir: string): boolean {
             onReplaceEnableDefaultChange: (enabled: boolean) => this.setReplaceDefaultEnabled(enabled),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_READ_SETTINGS) {
           ReaderSettingsPage({
             fontSize: this.readerFontSize,
@@ -11412,12 +11791,14 @@ private canWriteInto(dir: string): boolean {
             onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
             onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_ALOUD_SETTINGS) {
           AppReadAloudSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
             onOpenEngine: () => this.openAloudEnginePage()
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.ALOUD_ENGINE) {
           ReadAloudEnginePage({
             sources: this.httpTtsSources,
@@ -11433,6 +11814,7 @@ private canWriteInto(dir: string): boolean {
             onSelectVoice: (voice: ReadAloudVoice): void => { this.selectHttpVoice(voice); },
             onMessage: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_COVER_SETTINGS) {
           AppCoverSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
@@ -11443,33 +11825,36 @@ private canWriteInto(dir: string): boolean {
             },
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_DOWNLOAD_CACHE_SETTINGS) {
           AppDownloadCacheSettingsPage({
             books: this.books,
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_AI_SETTINGS) {
           AppAiSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_TRANSLATION_SETTINGS) {
           AppTranslationSettingsPage({
             onBack: () => this.profileSubpage = ProfileRoute.APP_SETTINGS,
             onOpenAiSettings: () => this.openSettingsCategory(ProfileRoute.APP_AI_SETTINGS)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_PRIVACY_SETTINGS) {
           AppPrivacySettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_BACKUP_SETTINGS) {
           AppBackupSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             localBookCount: this.books.filter((book: Book) => BookRepository.isPersistableBook(book)).length,
-            backupPreview: this.backupPreview,
-            restoredEntries: this.restoredAndroidEntries,
             categoryOptions: this.backupCategoryOptions,
             backupIgnoreKeys: this.backupIgnoreKeys,
             restoreIgnoreKeys: this.restoreIgnoreKeys,
@@ -11481,8 +11866,6 @@ private canWriteInto(dir: string): boolean {
             webDavBackupNames: this.webDavBackupNames,
             onCreateBackup: () => this.createLocalBackup(),
             onSelectRestore: () => this.selectLocalBackup(),
-            onApplyRestore: () => this.restoreLocalBackup(),
-            onCancelRestore: () => this.cancelLocalBackupRestore(),
             onToggleBackupIgnore: (key: string, ignored: boolean) => this.toggleBackupIgnore(key, ignored),
             onToggleRestoreIgnore: (key: string, ignored: boolean) => this.toggleRestoreIgnore(key, ignored),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
@@ -11496,11 +11879,13 @@ private canWriteInto(dir: string): boolean {
             onClearBackupPath: () => this.clearBackupPath(),
             onImportOldShelf: () => this.importOldBookShelf()
           })
+        .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_LAB_SETTINGS) {
           AppLabSettingsPage({
             onBack: () => this.profileSubpage = this.profileSettingsReturn,
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
+        .transition(this.routeTransition())
         } else {
           ReaderSettingsPage({
             fontSize: this.readerFontSize,
@@ -11800,6 +12185,7 @@ private canWriteInto(dir: string): boolean {
             onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
             onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
           })
+        .transition(this.routeTransition())
         }
         } else {
         ReaderSettingsPage({

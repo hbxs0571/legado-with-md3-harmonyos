@@ -236,6 +236,7 @@ export struct BookSourceDebugPage {
         }
         .width('100%').padding({ left: 16, right: 16, top: 12, bottom: 24 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
 
       // 详情浮层：选中条目显示完整 message
       if (this.selectedEntry() !== undefined) {
@@ -243,7 +244,7 @@ export struct BookSourceDebugPage {
           Row() {
             Text(kindTitle(this.selectedEntry()!.kind))
               .fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-            Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+            Text('关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
               .onClick(() => { this.selectedId = -1; })
           }.width('100%').padding(16)
           Scroll() {

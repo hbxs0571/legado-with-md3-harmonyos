@@ -21,6 +21,7 @@ export struct UiSwitch {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
 
   @Prop title: string = '';
   @Prop detail: string = '';
@@ -35,6 +36,21 @@ export struct UiSwitch {
       return;
     }
     this.onChange(next);
+  }
+
+  /**
+   * 按压时的整行底色：照 UiAction 用强调色 15% alpha，避免满宽行缩放挤内容。
+   * disabled 时这类行不该有反馈，返回全透明；主题色异常退回 surfaceContainer。
+   */
+  private pressedBackground(): string {
+    if (this.disabled) {
+      return '#00000000';
+    }
+    const accent = this.themeColorAccent;
+    if (accent.length === 7 && accent.charAt(0) === '#') {
+      return '#26' + accent.substring(1);
+    }
+    return this.themeColorSurfaceTertiary;
   }
 
   build() {
@@ -68,6 +84,10 @@ export struct UiSwitch {
       }
       .width('100%')
       .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
+      .stateStyles({
+        pressed: { .backgroundColor(this.pressedBackground()) },
+        normal: { .backgroundColor(Color.Transparent) }
+      })
       .onClick(() => {
         this.applyValue(!this.value);
       })

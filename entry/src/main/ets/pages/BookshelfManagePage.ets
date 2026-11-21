@@ -751,11 +751,11 @@ export struct BookshelfManagePage {
   private ExportSettingsContent() {
     Column() {
       Row() {
-        Text('导出格式').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('导出格式').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text('TXT（EPUB 打包器未接入）').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
       }.width('100%').padding({ top: 8, bottom: 8 })
       Row() {
-        Text('导出字符集').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('导出字符集').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text(this.exportCharset).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
           .onClick(() => { this.exportCharsetVisible = !this.exportCharsetVisible; })
           .bindPopup(this.exportCharsetVisible, {
@@ -769,13 +769,13 @@ export struct BookshelfManagePage {
           })
       }.width('100%').padding({ top: 8, bottom: 8 })
       Row() {
-        Text('自定义字符集').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width(110)
+        Text('自定义字符集').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).width(110)
         TextInput({ text: this.exportCustomCharset, placeholder: '留空用上面选的字符集' })
           .layoutWeight(1).height(36).fontSize(LABEL_MEDIUM)
           .onChange((value: string) => this.exportCustomCharset = value)
       }.width('100%').padding({ top: 8, bottom: 8 })
       Row() {
-        Text('导出文件名').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width(110)
+        Text('导出文件名').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).width(110)
         TextInput({ text: this.exportFileNameTemplate, placeholder: '{title}' })
           .layoutWeight(1).height(36).fontSize(LABEL_MEDIUM)
           .onChange((value: string) => this.exportFileNameTemplate = value)
@@ -783,7 +783,7 @@ export struct BookshelfManagePage {
       Text('占位符：{title} {author} {index}，空模板回落 {title}')
         .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%')
       Row() {
-        Text('导出包含章节名').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('导出包含章节名').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         UiSwitchControl({
           checked: this.exportWithChapterName,
           interactive: false,
@@ -835,7 +835,7 @@ export struct BookshelfManagePage {
       }
       ForEach(this.moveGroupOptions(), (name: string) => {
         Row() {
-          Text(name).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text(name).fontSize(TITLE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
           if (name === (this.preselectedGroupName.length > 0 ? this.preselectedGroupName : '无分组')) {
             AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorAccent })
           }

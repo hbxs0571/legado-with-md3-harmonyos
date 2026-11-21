@@ -11,7 +11,7 @@
  */
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
-import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ReaderAloudSettingsPage {
@@ -125,7 +125,7 @@ export struct ReaderAloudSettingsPage {
             if (this.showTimerPicker) {
               Column() {
                 Row() {
-                  Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                  Text('关闭').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
                   if (this.timerLabel === '关闭') { Text('✓').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent) }
                 }.width('100%').padding(12)
                 .onClick(() => {
@@ -134,7 +134,7 @@ export struct ReaderAloudSettingsPage {
                   this.showTimerPicker = false;
                 })
                 Row() {
-                  Text('按时长').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+                  Text('按时长').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary)
                   Blank()
                   Text(`${this.timerMinutes} 分钟`).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
                 }.width('100%').padding(12)
@@ -145,7 +145,7 @@ export struct ReaderAloudSettingsPage {
                     .onChange((value: number, _mode: SliderChangeMode) => { this.timerMinutes = Math.round(value); })
                 }
                 Row() {
-                  Text('按章节').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+                  Text('按章节').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary)
                   Blank()
                   Text(`${this.timerChapters} 章`).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
                 }.width('100%').padding(12)
@@ -155,7 +155,7 @@ export struct ReaderAloudSettingsPage {
                     .width('100%').selectedColor(this.themeColorAccent)
                     .onChange((value: number, _mode: SliderChangeMode) => { this.timerChapters = Math.round(value); })
                 }
-                Text('确定').fontSize(TITLE_SMALL).fontColor(this.themeColorSurfacePrimary)
+                Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorSurfacePrimary)
                   .width('100%').textAlign(TextAlign.Center).padding(12)
                   .borderRadius(12).backgroundColor(this.themeColorAccent)
                   .onClick(() => {
@@ -270,7 +270,7 @@ struct ConfigGlassSwitch {
 
   build() {
     Row() {
-      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .selectedColor(this.themeColorAccent)
@@ -296,7 +296,7 @@ struct ConfigGlassRow {
 
   build() {
     Row() {
-      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       Text(this.value).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).margin({ right: 6 })
       Image($r('app.media.reader_next')).width(16).height(16).fillColor(this.themeColorTextSecondary)

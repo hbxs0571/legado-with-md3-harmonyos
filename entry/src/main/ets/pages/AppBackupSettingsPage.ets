@@ -1,9 +1,10 @@
+import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
-import { BackupCategoryOption, BackupEntryPreview, BackupPreview } from '../data/BackupRepository';
+import { BackupCategoryOption } from '../data/BackupRepository';
 import { WebDavSettings, defaultWebDavSettings, cloneWebDavSettings } from '../lib/WebDavConfig';
 import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
@@ -19,8 +20,6 @@ export struct AppBackupSettingsPage {
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop localBookCount: number = 0;
-  @Prop backupPreview: BackupPreview | undefined = undefined;
-  @Prop restoredEntries: BackupEntryPreview[] = [];
   @Prop categoryOptions: BackupCategoryOption[] = [];
   @Prop backupIgnoreKeys: string[] = [];
   @Prop restoreIgnoreKeys: string[] = [];
@@ -33,8 +32,6 @@ export struct AppBackupSettingsPage {
   onBack: () => void = () => {};
   onCreateBackup: () => void = () => {};
   onSelectRestore: () => void = () => {};
-  onApplyRestore: () => void = () => {};
-  onCancelRestore: () => void = () => {};
   onToggleBackupIgnore: (key: string, ignored: boolean) => void = (_key: string, _ignored: boolean) => {};
   onToggleRestoreIgnore: (key: string, ignored: boolean) => void = (_key: string, _ignored: boolean) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
@@ -100,7 +97,7 @@ export struct AppBackupSettingsPage {
 
   private updateHeader(): void {
     const offset = this.backupScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -119,7 +116,7 @@ export struct AppBackupSettingsPage {
       CollapsingSettingsHeader({ title: '备份与恢复', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
       Scroll(this.backupScroller) {
         Column() {
-          Text('WebDAV 设置').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+          Text('WebDAV 设置').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'cloud', title: 'WebDAV 服务器地址',
@@ -159,7 +156,7 @@ export struct AppBackupSettingsPage {
                   const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
                   next.syncBookProgressPlus = value;
                   this.onWebDavSettingsChange(next);
-                } }).transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                } }).transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
             ThemeItemDivider()
             BackupPreviewSwitchRow({ title: '自动检查新备份',
@@ -175,7 +172,7 @@ export struct AppBackupSettingsPage {
               onSelect: () => this.activeSheet = 'syncMode' })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
-          Text('备份与恢复').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+          Text('备份与恢复').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'folder', title: '备份路径',
@@ -191,7 +188,7 @@ export struct AppBackupSettingsPage {
             ThemeItemDivider()
             BackupActionRow({
               icon: 'download', title: '恢复',
-              detail: '选择 Android 阅读 ZIP，预览后导入可映射内容',
+              detail: '选择 Android 阅读 ZIP 后直接导入可映射内容',
               onSelect: () => this.activeSheet = 'restore', disabled: this.busy
             })
             ThemeItemDivider()
@@ -223,50 +220,9 @@ export struct AppBackupSettingsPage {
             }.width('100%').padding(14).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
           }
 
-          if (this.backupPreview !== undefined) {
-            Column() {
-              Text('Android ZIP 预览').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-              Text(`识别 ${this.backupPreview.entryCount} 个根条目；书架 ${this.backupPreview.bookCount} 本，其中本地书籍 ${this.backupPreview.localBookCount} 本`)
-                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).lineHeight(TITLE_SMALL_LINE_HEIGHT).margin({ top: 8 })
-                Text(`ZIP 不含 TXT/EPUB 正文；${this.backupPreview.localBooksWithoutBody} 本本地书未匹配到当前书架中的可读正文。`)
-                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).margin({ top: 5 })
-              Column() {
-                ForEach(this.backupPreview.entries, (entry: BackupEntryPreview) => {
-                  Row() {
-                    Text(entry.name).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                    Text(entry.recordCount >= 0 ? `${entry.recordCount} 条` : '配置文件')
-                      .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
-                  }.padding({ top: 5, bottom: 5 })
-                }, (entry: BackupEntryPreview) => entry.name)
-              }.width('100%').margin({ top: 8 })
-              Row() {
-                Button('取消').layoutWeight(1).height(42).fontColor(this.themeColorTextSecondary)
-                  .backgroundColor('#292B33').onClick(() => this.onCancelRestore())
-                Button('导入此 ZIP').layoutWeight(1).height(42).fontColor(this.themeColorSurfacePrimary)
-                  .backgroundColor(this.themeColorAccent).margin({ left: 10 }).onClick(() => this.onApplyRestore())
-              }.width('100%').margin({ top: 14 })
-            }.width('100%').padding(15).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
-          }
-
           if (this.statusMessage.length > 0) {
             Text(this.statusMessage).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).lineHeight(TITLE_SMALL_LINE_HEIGHT)
               .width('100%').padding(13).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
-          }
-
-          if (this.restoredEntries.length > 0) {
-            Column() {
-              Text('已恢复的 Android 数据壳').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-              Text('书源、规则、历史等原始 JSON/XML 已保留，可继续导出。恢复本身只解析数据、不执行脚本；但恢复后的书源在你下次搜索或阅读时会正常执行其中的 JavaScript 并发起网络请求。')
-                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).lineHeight(LABEL_MEDIUM_LINE_HEIGHT).margin({ top: 6, bottom: 8 })
-              ForEach(this.restoredEntries, (entry: BackupEntryPreview) => {
-                Row() {
-                  Text(entry.name).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                  Text(entry.recordCount >= 0 ? `${entry.recordCount} 条` : '配置文件')
-                    .fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
-                }.padding({ top: 5, bottom: 5 })
-              }, (entry: BackupEntryPreview) => entry.name)
-            }.width('100%').padding(15).margin({ top: 12 })
-              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
           }
 
           Text('兼容说明').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
@@ -295,7 +251,7 @@ export struct AppBackupSettingsPage {
           '恢复排除项' : this.activeSheet === 'path' ? '备份路径' : this.activeSheet === 'syncMode' ?
           '备份同步模式' : this.activeSheet === 'webdavAuth' ? 'WebDAV 账号与密码' : this.inputTitle)
           .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
+        Text('关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       if (this.activeSheet === 'backup') {
         BackupSheetOption({ title: '备份到本地', detail: '创建 Android 兼容 ZIP',
@@ -305,7 +261,7 @@ export struct AppBackupSettingsPage {
         BackupSheetOption({ title: '同时备份到本地和 WebDAV', detail: '先保存到本地，再上传到 WebDAV',
           onSelect: () => { this.activeSheet = ''; this.onCreateBackupBoth(); } })
       } else if (this.activeSheet === 'restore') {
-        BackupSheetOption({ title: '从本地恢复', detail: '选择 Android 阅读 ZIP 并预览',
+        BackupSheetOption({ title: '从本地恢复', detail: '选择 Android 阅读 ZIP 并恢复',
           onSelect: () => { this.activeSheet = ''; this.onSelectRestore(); } })
         BackupSheetOption({ title: '从 WebDAV 恢复',
           detail: !this.webDavConfigured ? '请先填写账号与密码' :

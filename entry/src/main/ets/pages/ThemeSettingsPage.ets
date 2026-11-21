@@ -1,3 +1,4 @@
+import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
@@ -52,7 +53,7 @@ import {
   DIVIDER_WIDTH_MAX,
   DIVIDER_WIDTH_MIN
 } from '../data/ThemeCardStyle';
-import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ThemeSettingsPage {
@@ -300,7 +301,7 @@ export struct ThemeSettingsPage {
 
   private updateHeader(): void {
     const offset = this.themeScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -521,12 +522,12 @@ export struct ThemeSettingsPage {
           if (this.showRefactorTip) {
             Row() {
               Text('仍有部分界面未用Compose重构，这些界面会与大部分界面有较大差异。')
-                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                .fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               AppGlyph({ name: 'profileClose', glyphSize: 18, tint: '#C5C7D0' })
                 .onClick(() => this.dismissRefactorTip())
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16)
-              .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+              .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
           }
 
           ThemeSectionTitle({ title: '主题模式' })
@@ -662,7 +663,7 @@ export struct ThemeSettingsPage {
                   }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 })
                 }, (navRoute: string) => navRoute)
               }
-              .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+              .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
             ThemeItemDivider()
             ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBarVisible, onChange: (value: boolean) => this.onShowStatusBarChange(value) })
@@ -684,7 +685,7 @@ export struct ThemeSettingsPage {
                 ThemeItemDivider()
                 if (this.topBarButtonStyle !== 'plain') {
                   ThemeSwitchRow({ title: '合并顶栏按钮', checked: this.mergeTopBarActions, onChange: (value: boolean) => this.onMergeTopBarActionsChange(value) })
-                    .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                    .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
                   ThemeItemDivider()
                 }
                 ThemeSwitchRow({ title: '显示导航栏', detail: '仍可滑动切换页面', checked: this.showBottomView, onChange: (value: boolean) => this.onShowBottomViewChange(value) })
@@ -693,7 +694,7 @@ export struct ThemeSettingsPage {
                 if (this.useFloatingBottomBar) {
                   ThemeItemDivider()
                   ThemeSwitchRow({ title: '液态玻璃效果', detail: '为悬浮底栏启用液态玻璃高光效果', checked: this.useFloatingBottomBarLiquidGlass, onChange: (value: boolean) => this.onUseFloatingBottomBarLiquidGlassChange(value) })
-                    .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                    .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
                   ThemeItemDivider()
                   UiSlider({showDivider: false,
                     title: '底栏模糊强度',
@@ -761,7 +762,7 @@ export struct ThemeSettingsPage {
                   })
                 }
               }
-              .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+              .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
@@ -796,14 +797,14 @@ export struct ThemeSettingsPage {
                 maxValue: 100,
                 onChange: (value: number) => this.onEyeProtectionIntensityChange(value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               ThemeSwitchRow({ title: '定时开启', detail: '仅在设定的时间段内生效', checked: this.eyeProtectionSchedule, onChange: (value: boolean) => this.onEyeProtectionScheduleChange(value) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               if (this.eyeProtectionSchedule) {
                 UiAction({showDivider: false, title: '开始时间', detail: this.eyeProtectionStartTime, onSelect: () => this.pickEyeProtectionTime(true) })
-                  .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
                 UiAction({showDivider: false, title: '结束时间', detail: this.eyeProtectionEndTime, onSelect: () => this.pickEyeProtectionTime(false) })
-                  .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               }
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
@@ -814,7 +815,7 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             if (this.enableBlur) {
               ThemeSwitchRow({ title: '启用渐变模糊', checked: this.enableProgressiveBlur, onChange: (value: boolean) => this.onEnableProgressiveBlurChange(value) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
@@ -824,10 +825,10 @@ export struct ThemeSettingsPage {
             ThemeItemDivider()
             if (this.enableContainerBackgroundImage) {
               UiAction({showDivider: false, title: '大容器背景图片', detail: this.backgroundSummary(this.largeContainerBackgroundLight, this.largeContainerBackgroundDark), onSelect: () => this.onPickContainerBackground(true, false) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               ThemeItemDivider()
               UiAction({showDivider: false, title: '项目背景图片', detail: this.backgroundSummary(this.itemBackgroundLight, this.itemBackgroundDark), onSelect: () => this.onPickContainerBackground(false, false) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
             ThemeItemDivider()
             UiSlider({showDivider: false,
@@ -854,7 +855,7 @@ export struct ThemeSettingsPage {
                 maxValue: CARD_RADIUS_MAX,
                 onChange: (value: number) => this.onCardCornerRadiusChange(value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
             ThemeItemDivider()
             ThemeSwitchRow({ title: '覆盖卡片边框', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardBorder, onChange: (value: boolean) => this.onOverrideCardBorderChange(value) })
@@ -868,21 +869,21 @@ export struct ThemeSettingsPage {
                 maxValue: CARD_BORDER_WIDTH_MAX,
                 onChange: (value: number) => this.onCardBorderWidthChange(value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               UiDropdown({showDivider: false,
                 title: '日间边框颜色',
                 option: this.cardBorderColorDay, labelOf: (value: string) => this.borderColorLabel(value),
                 options: this.cardBorderColorOptions(),
                 onSelect: (value: string) => this.onCardBorderColorChange(false, value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               UiDropdown({showDivider: false,
                 title: '夜间边框颜色',
                 option: this.cardBorderColorNight, labelOf: (value: string) => this.borderColorLabel(value),
                 options: this.cardBorderColorOptions(),
                 onSelect: (value: string) => this.onCardBorderColorChange(true, value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
             ThemeItemDivider()
             ThemeSwitchRow({ title: '显示分隔线', checked: this.enableItemDivider, onChange: (value: boolean) => this.onEnableItemDividerChange(value) })
@@ -893,20 +894,20 @@ export struct ThemeSettingsPage {
                 value: this.dividerWidth, minValue: DIVIDER_WIDTH_MIN, maxValue: DIVIDER_WIDTH_MAX,
                 onChange: (value: number) => this.onDividerWidthChange(value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               UiSlider({showDivider: false,
                 title: '分隔线长度', detail: `${this.dividerLength}%`,
                 value: this.dividerLength, minValue: DIVIDER_LENGTH_MIN, maxValue: DIVIDER_LENGTH_MAX,
                 onChange: (value: number) => this.onDividerLengthChange(value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               UiDropdown({showDivider: false,
                 title: '分隔线颜色',
                 option: this.dividerColor, labelOf: (value: string) => this.borderColorLabel(value),
                 options: this.dividerColorOptions(),
                 onSelect: (value: string) => this.onDividerColorChange(value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220 }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
           }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           Column() {

@@ -32,9 +32,9 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 每次源码或资源变更后，按风险执行一次必要构建；设备可用时安装到明确的目标设备，保存关键截图或录像。设备不可用时记录「未验」，不能补写通过。文本与文档重组后检查链接、空白和引用路径。
 
-**测试书优先取现成真实书籍**：`N:\HarmonyProjects\测试\Book\`（仓库外）有 `txt/` 71 本、`epub/` 75 本，覆盖 GB18030 / UTF-8 / UTF-8-BOM 三种编码，体积 21 KB 到 102 MB，19 本带卷。该目录 `README.md` 有按测试目的分类的推荐档（TXT-极小 / TXT-标准 / TXT-超大章 / TXT-多卷 / EPUB-大 等别名），`MANIFEST.tsv` 有逐本的字节数、编码、章节标记数。**能挑到合适的书就不要现场合成**——合成既费时间，也测不出真实排版与真实章节结构；只有「必须精确构造一种畸形输入」时才合成（缺正文占位书、单条 `bookshelf.json` 的备份 ZIP、坏编码、超长单章）。
+**测试书优先取现成真实书籍**：`<workspace>测试\Book\`（仓库外）有 `txt/` 71 本、`epub/` 75 本，覆盖 GB18030 / UTF-8 / UTF-8-BOM 三种编码，体积 21 KB 到 102 MB，19 本带卷。该目录 `README.md` 有按测试目的分类的推荐档（TXT-极小 / TXT-标准 / TXT-超大章 / TXT-多卷 / EPUB-大 等别名），`MANIFEST.tsv` 有逐本的字节数、编码、章节标记数。**能挑到合适的书就不要现场合成**——合成既费时间，也测不出真实排版与真实章节结构；只有「必须精确构造一种畸形输入」时才合成（缺正文占位书、单条 `bookshelf.json` 的备份 ZIP、坏编码、超长单章）。
 
-**备份同理**：ZIP 往返验收一律用 `N:\HarmonyProjects\测试\backup.zip`（2026-11-11，658 本书 / 41,629 条阅读会话）或 `backup2026-10-22.zip`，不要拿自己造的小包走完就判通过——真实包的负载（条数、体积、历史遗留的孤儿记录与重复条目）本身就是验收对象。两个理由（测负载、还原真实使用情形）与合成样本的边界情形见[代码约定](CODE-CONVENTIONS.md)第七节。
+**备份同理**：ZIP 往返验收一律用 `<workspace>测试\backup.zip`（2026-11-11，658 本书 / 41,629 条阅读会话）或 `backup2026-10-22.zip`，不要拿自己造的小包走完就判通过——真实包的负载（条数、体积、历史遗留的孤儿记录与重复条目）本身就是验收对象。两个理由（测负载、还原真实使用情形）与合成样本的边界情形见[代码约定](CODE-CONVENTIONS.md)第七节。
 
 页面还原的具体操作步骤见 [UI 还原流程](UI-RESTORE.md)。
 
@@ -87,7 +87,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26，1280×2832，Density 3.5），包 `io.legado.harmony`。`targetSdkVersion 5.0.0(12)` 未改，构建按 API 12 基线走。
 - 构建：`bash scripts/build-hap.sh` 多次 `BUILD SUCCESSFUL`（首次 51 s / 行尾回收后 34 s 227 ms / 增量 10 s），`hdc -t 127.0.0.1:5555 install -r entry/build/default/outputs/default/entry-default-unsigned.hap` 每次覆盖安装成功。
-- 目标操作：同书同字号打开 `the-metamorphosis` 与《失明的她遇上盗神的我》，读页脚分母；再开中英混排自建样本、含图片 EPUB、切「全局双页」各截图；最后老代码重装一次取基线做页码对比。
+- 目标操作：同书同字号打开 `the-metamorphosis` 与《TXT 测试用书》，读页脚分母；再开中英混排自建样本、含图片 EPUB、切「全局双页」各截图；最后老代码重装一次取基线做页码对比。
 - 为什么改：本地正文排版原来是**逐字自量**——`ReaderFontRepository.measureTextWidthForPagination()` 按 codePoint 逐个测字形宽再相加，行高、断点、两端对齐全靠自己拼。上游 Android 的排版能力来自 `StaticLayout`（系统原生断行 + 禁则 + 两端对齐），底座就不一样，所以 `docs/parity/TXT-READER.md` B1「中文无避头尾」一直挂着 `未接`，行高与对齐终点也永远差零点几 px。
 
 ### 改动
@@ -104,7 +104,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 | 书 | 旧实现 | 新实现 | 差异 |
 | --- | --- | --- | --- |
-| 《失明的她遇上盗神的我》（中文，427 章） | `1/18` | `1/18` | **0%** |
+| 《TXT 测试用书》（中文，427 章） | `1/18` | `1/18` | **0%** |
 | `the-metamorphosis`（英文，13 章） | `1/17` | `1/17` | **0%** |
 
 第一次对比英文是 `17 → 18`（+5.9%，超线）。根因就是上面第 5 条的行尾空格，补上 `reclaimTrailingSpaces()` 后回到 17。**中文从头到尾没漂**——中文行尾不带空格，`trailingSpaceOptimized` 缺失对 CJK 无影响。
@@ -116,7 +116,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 | 中文书打开第 3 章第 1 页 | 行首无标点、段首 `　　` 缩进、满行右缘齐平 | 页脚 `1/18 0.5%`；抽查 p1/p2/p3/pend/last/ch3end 六张截图，行首无「，」「。」「？」 | 通过 |
 | 中文书翻到章末最后一页 | 末行完整可读、不丢字 | `18/18 0.7%`，末行「内脏器官乃至心跳，在他眼中是完全透明的。」完整 | 通过 |
 | 中英混排自建样本（含 `HarmonyOS`/`ParagraphBuilder`/`don't`/`1280×2832`/ISO 时间戳/英文整段） | 英文整词不被劈开、全角标点不与西文粘连、右缘齐平 | 页脚 `1/3 33.3%`，英文单词整词换行，行首无标点 | 通过 |
-| 含图片 EPUB（`[Shade]我的妹妹是幽灵`，每章 `<img>`） | 图片块前后文字完整、不丢字 | 第 1 章第 1 页：独立图片块居中在「澡」标题与「作者的话」之间，下方正文完整，末行 `https://afdian.net/@shade1` 未丢；页脚 `1/17 7.5%` | 通过 |
+| 含图片 EPUB（`EPUB 测试用书 B`，每章 `<img>`） | 图片块前后文字完整、不丢字 | 第 1 章第 1 页：独立图片块居中在「澡」标题与「作者的话」之间，下方正文完整，末行 `https://afdian.net/@shade1` 未丢；页脚 `1/17 7.5%` | 通过 |
 | 切「全局双页」看中文书 | 左右两栏各自换行、行首无标点、右缘齐平 | 页脚 `1/18 → 16/16 0.5%`（双列页数变少，符合预期）；两栏各约 5 字/行，缩进正确 | 通过 |
 | 同书切回「全局单页」 | 恢复单列页数 | 页脚回到 `17/17` | 通过 |
 
@@ -357,7 +357,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 ### 设备验收
 
-**前置：必须清应用数据。** 改 `defaults` 不影响老用户已落盘值——preferences 里已有的键原样保留。清数据前后从备份 `N:\HarmonyProjects\tmp3\clean-verify-backup\preferences\legado_reader_settings` 提取的「改前基线」是：`paragraphSpacing 2`、`lineSpacingExtra 12`、`letterSpacing 0.1`、`textBold 500`、`textColor #38383B`、`textColorNight #D8D8DC`、`paperIndex 5`、`paddingLeft 16`、`paddingRight 16`、`tipHeaderLeft 2`、`tipHeaderRight 13`、`tipFooterLeft 1`、`showHeaderLine false`。不清数据会一直看到这套旧值，误以为改动没生效。
+**前置：必须清应用数据。** 改 `defaults` 不影响老用户已落盘值——preferences 里已有的键原样保留。清数据前后从备份 `<workspace>tmp3\clean-verify-backup\preferences\legado_reader_settings` 提取的「改前基线」是：`paragraphSpacing 2`、`lineSpacingExtra 12`、`letterSpacing 0.1`、`textBold 500`、`textColor #38383B`、`textColorNight #D8D8DC`、`paperIndex 5`、`paddingLeft 16`、`paddingRight 16`、`tipHeaderLeft 2`、`tipHeaderRight 13`、`tipFooterLeft 1`、`showHeaderLine false`。不清数据会一直看到这套旧值，误以为改动没生效。
 
 操作序列：`bm clean -n io.legado.harmony -d` → `hdc install -r entry-default-unsigned.hap` → `aa start -a EntryAbility -b io.legado.harmony` → onboarding 四步（用户协议 / 备份与恢复 / 书籍文件夹 / 主题样式）→ 书架「⋮ → 添加本地」导入 `the-metamorphosis.txt` → 点书卡进阅读页。
 
@@ -378,7 +378,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 信息面板逐项复核（截图 `v7.jpeg` 页眉页、`v9.jpeg` 页脚页）：页眉「状态栏显示时隐藏 / 左：标题 / 中：无 / 右：时间 / 显示分割线 开」，页脚「显示 / 左：书名 / 中：无 / 右：页数及进度 / 显示分割线 开」，与 `readConfig.json[0]` 的 `headerMode 0 / tipHeaderLeft 1 / tipHeaderMiddle 0 / tipHeaderRight 2 / footerMode 0 / tipFooterLeft 7 / tipFooterMiddle 0 / tipFooterRight 6 / showHeaderLine true / showFooterLine true` 逐项一致。
 
-落盘复核（`N:\HarmonyProjects\tmp3\p6\prefs\legado_reader_settings`）：`readerNightMode false`、`headerMode 0.000000`、`footerMode 0.000000`、`paperIndex 0.000000`、`fontSize 24.000000`、`bgStr #ffc0edc6`、`bgStrNight #000000`、`textColor #FF0B0B0B`、`textColorNight #ADADAD`、`showHeaderLine true`、`tipHeaderLeft 1`、`tipHeaderRight 2`、`tipFooterLeft 7`、`tipFooterRight 6`。颜色落盘成大写是 `normalizeHexColor`（`ReaderSettingsRepository.ets:1851` / `:1862` 用 `value.trim().toUpperCase()`）的既定行为，与上游小写写法等价。
+落盘复核（`<workspace>tmp3\p6\prefs\legado_reader_settings`）：`readerNightMode false`、`headerMode 0.000000`、`footerMode 0.000000`、`paperIndex 0.000000`、`fontSize 24.000000`、`bgStr #ffc0edc6`、`bgStrNight #000000`、`textColor #FF0B0B0B`、`textColorNight #ADADAD`、`showHeaderLine true`、`tipHeaderLeft 1`、`tipHeaderRight 2`、`tipFooterLeft 7`、`tipFooterRight 6`。颜色落盘成大写是 `normalizeHexColor`（`ReaderSettingsRepository.ets:1851` / `:1862` 用 `value.trim().toUpperCase()`）的既定行为，与上游小写写法等价。
 
 **未验**：夜间分支（`bgStrNight #000000` / `textColorNight #ADADAD`）只在深色截图 `v1.jpeg` 里目视确认过黑底灰字，未做像素采样；`paddingTop 5` / `paddingBottom 4` / `headerPadding*` / `footerPadding*` 只通过页眉页脚面板数值与版面留白间接确认，未与上游成对截图做像素差；`textBold 0` 的 400 字重未与上游同字号截图比对笔画粗细。
 
@@ -404,7 +404,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 | 来源 | E 端采集，`测试/android-reader-baseline-2026-11-02.zip`，44,437,409 字节 |
 | ZIP SHA-256 | `D27B12B66F00E21A26C4A90B1D39F3B9DA4A780157C63009D151EBA9D29AD82D`（与移交声明一致） |
 | 包内校验 | `SHA256SUMS.txt` 共 71 条，**全部 OK**。注意该文件是 CRLF 行尾，直接 `sha256sum -c` 会因文件名带 `\r` 报「No such file」，须先 `tr -d '\r'` |
-| 解包位置 | `N:\HarmonyProjects\project-resources\legado-with-MD3\screenshots\android\reader-baseline-2026-11-02\`（仓库外，不入库） |
+| 解包位置 | `<workspace>project-resources\legado-with-MD3\screenshots\android\reader-baseline-2026-11-02\`（仓库外，不入库） |
 | 内容 | 62 张 PNG、6 段 H.264 MP4、3 个 fixtures（合成 TXT / EPUB / 插图源） |
 | 采集基线 | Android 源码 `67970a10b16f90d3cdaf50b487a31bf75950f938`；`appDebug`；AVD `Medium_Phone_API_37.0`；Android 17 / API 37；1080×2400 @420dpi；系统字体缩放 1.0；系统夜间模式 `no`；**应用主题显式深色、纯黑关闭**；隐藏状态栏/导航栏均关闭 |
 
@@ -482,7 +482,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 | 来源 | E 端采集，`测试/新建文件夹/android-settings-bookshelf-baseline-2026-11-02.zip`，16,328,512 字节 |
 | ZIP SHA-256 | `e375fe68dc16004b0032f433b7073b0a93c1a15071ea62d97eedf825b28e283e` |
 | 包内校验 | `SHA256SUMS.txt` 共 89 条，**全部 OK**。本批是 **LF 行尾**（与第一批的 CRLF 不同，无需 `tr -d '\r'`） |
-| 解包位置 | `N:\HarmonyProjects\tmp\batch2\`（临时目录，不入库；正式归档位置待定） |
+| 解包位置 | `<workspace>tmp\batch2\`（临时目录，不入库；正式归档位置待定） |
 | 内容 | 86 张 PNG（**全部 1080×2400**，脚本实测 86/86）+ 2 段 H.264 MP4 + `manifest.md` |
 | manifest 一致性 | 索引列出 88 个媒体文件，实际 88 个，**缺失 0、多余 0、重复列出 0** |
 | 采集基线 | 与第一批同一 APK（`67970a10b16f90d3cdaf50b487a31bf75950f938`、`appDebug`、`3.26.18_debug`/32640、APK SHA-256 `EF2F8697…A9FDA9`）；AVD `Medium_Phone_API_37.0`；Android 17 / API 37；1080×2400 @420dpi；字体缩放 1.0；`zh-Hans-CN`；系统夜间 `no`；**应用主题显式深色、纯黑关闭** |
@@ -582,7 +582,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 阻塞原因不在本次改动，而是画布图片渲染链路本身在本地没打通：
 
-1. 造了两本带图 EPUB 并都导入成功：探针书（6 章 × 3 张手写 PNG = 18 张，刻意小于 `ReaderCanvasSurface.ets:704` 的 `IMAGE_CACHE_LIMIT = 32`，这样 LRU 不会淘汰，`clear()` 是唯一释放路径）、以及用户指定的 `测试/古神？这分明是白发兽耳小萝莉 作者：尚简.epub`（5.49 MB，1378 章，封面 JPEG 600×800）。
+1. 造了两本带图 EPUB 并都导入成功：探针书（6 章 × 3 张手写 PNG = 18 张，刻意小于 `ReaderCanvasSurface.ets:704` 的 `IMAGE_CACHE_LIMIT = 32`，这样 LRU 不会淘汰，`clear()` 是唯一释放路径）、以及用户指定的 `测试/EPUB 测试用书.epub`（5.49 MB，1378 章，封面 JPEG 600×800）。
 2. 两本的图片文件都确实落到了沙箱：探针书 `files/epub-assets/local-1793587448804/0.img … 17.img`，真实书 `files/covers/local-1793588129455.img`（268022 字节，pull 下来确认是合法 JPEG）；正文里 `[[EPUB_IMAGE:file:///...]]` 标记齐全。
 3. 但阅读页画布**一个图片像素都没画**：正文区颜色统计只有背景色与正文白字，既没有图、也没有 `drawImageBox()` 的灰底占位（`0x2E808080`）。探针书整页 `distinct = 1` 全黑。
 4. **这是既有缺陷，不是本次改动引入**：把 5 个改动 `git stash` 掉、用 HEAD `af3651f` 原样构建装机，探针书同样不出图（`distinct = 1`、`nonblack_px = 0`）；恢复改动重新构建装机后现象一致。
@@ -806,7 +806,7 @@ HarmonyOS 使用 HMNextAuto：从 `hdc list targets` 取得序列号后显式创
 
 **验收 2 阅读进度跨进程冷启动保留 —— 通过。** zh-book 打开 → 拖滑块到 `3/10 2.7%` → Back → `aa force-stop` → `aa start` 冷启动 → 重新打开，**仍是 `3/10 2.7%`、标题「第15章 对练」**。
 
-**验收 3 大目录不卡死 —— 通过。** 见 KI-PROG5：1378 章的 `古神？这分明是白发兽耳小萝莉` 目录 6461 ms 渲染完成（`共 1378 章` + 每章字数），572 章的 zh-book 2522 ms；两本修复前都必 ANR。`/data/log/faultlog/faultlogger/` 最新一条 `appfreeze-...` 停在修复前那一轮（14:56），此后整轮验收未再产生新日志。
+**验收 3 大目录不卡死 —— 通过。** 见 KI-PROG5：1378 章的 `EPUB 测试用书` 目录 6461 ms 渲染完成（`共 1378 章` + 每章字数），572 章的 zh-book 2522 ms；两本修复前都必 ANR。`/data/log/faultlog/faultlogger/` 最新一条 `appfreeze-...` 停在修复前那一轮（14:56），此后整轮验收未再产生新日志。
 
 **验收 4 连续从目录跳章 —— 通过。** 1378 章书连续 5 轮跳章，落地章节与目标一致（第19章 / 第24章 / 第29章），`pidof` 全程 13273 未变；zh-book 跳第 21 章成功，`pidof` 14043 未变。
 
@@ -1193,7 +1193,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
 - 构建：`bash scripts/build-hap.sh` → `> hvigor BUILD SUCCESSFUL in 43 s 781 ms`（`build-batch1.log:1530`）；`BUILD_EXIT=0`（`:1533`）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12091010 字节（改前 12056230 字节）。
-- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。截图与原始输出在 `N:\HarmonyProjects\tmp\sl-shots\`。
+- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。截图与原始输出在 `<workspace>tmp\sl-shots\`。
 
 本批只补字段与仓储、不改任何渲染，因此预检核对三项静态与一项视觉：
 
@@ -1212,7 +1212,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 - 设备：HarmonyOS 模拟器 `127.0.0.1:5555`（API 26），包 `io.legado.harmony`。
 - 构建：`bash scripts/build-hap.sh` → `> hvigor BUILD SUCCESSFUL in 43 s 622 ms`（`build-batch2.log:1533`）；HAP `entry/build/default/outputs/default/entry-default-unsigned.hap` 12119625 字节；`bm install -r -w 180 -p` → `install bundle successfully.`（覆盖安装成功）。
-- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。截图与组件树 JSON 在 `N:\HarmonyProjects\tmp\sl-shots\`。
+- 证据等级：按[验证等级口径](#验证等级口径)属第 2 级「构建通过」加设备客观取证；实现段不自行验收，不写「设备验收通过」。截图与组件树 JSON 在 `<workspace>tmp\sl-shots\`。
 
 | 项 | 操作 | 预期 | 实际 |
 | --- | --- | --- | --- |
@@ -1340,12 +1340,12 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 - `pages/BookshelfPage.ets:568-570` `showsListDetails()`、`:573-575` `introMaxLines()`、`:578-581` `introMaxLinesDescription()`；`:939-976` 面板详情区（含 `:960` 与 `:966` 两个额外条件）；`:1005-1010` 外观组删掉原两条列表开关。
 - `pages/BookshelfPage.ets:1171-1230` 列表卡片：外层 `Column`、`:1193-1200` 右列简介、`:1203-1210` 章节行、`:1214` 封面对齐、`:1216-1224` 底部简介、`:1226-1230` 分隔线。
 
-**复原**：收尾把面板「显示分隔线」开、「封面垂直居中」开、「简介在封面和信息下方」关、「显示更多信息」关、「简介行数」2→0、布局模式回「网格」，逐项提交；`python N:/HarmonyProjects/tmp/restore_ui2.py status` 输出「无差异」；复原后截图 `b1-restored.jpeg`（89797B，页签 + 网格默认态）。模拟器全程竖屏，未改 `config.ini`。
+**复原**：收尾把面板「显示分隔线」开、「封面垂直居中」开、「简介在封面和信息下方」关、「显示更多信息」关、「简介行数」2→0、布局模式回「网格」，逐项提交；`python <workspace>tmp/restore_ui2.py status` 输出「无差异」；复原后截图 `b1-restored.jpeg`（89797B，页签 + 网格默认态）。模拟器全程竖屏，未改 `config.ini`。
 
 **未做到 / 存疑**：
 1. 任务书 `m03109` 第 5 节（列表卡片渲染 `:1119-1160`）在 `introMaxLines()` 方法处截断，后续渲染改法没有给出。按任务书「八条上游事实（逐条照做）」第 5–8 条落地：总门（`BookItem.kt:738`）、章节行双重约束（`:942`）、简介两处位置（`:918`/`:925`）、封面垂直居中（`:194`）、分隔线（`:253-260`）。下方简介容器用普通 `Column` + `Text`（上游是 `GlassCard`），分隔线用 `Divider()`（上游是 `HorizontalDivider`）——这两处形态由实现方自行确定，需判断段或用户确认。
 2. 样本书 `titleonly-test` 的 `Book.description` 为空字符串，「显示简介」「简介在封面和信息下方」「简介行数」三项的**文字可见效果**取不到视觉证据；只核到面板项出现/消失、落盘值、代码落点。与 r331/r332 两轮登记一致。
-3. `showBookIntro` 的备份写出/恢复语义**未上机验证**（本机未跑「导出备份 → 取消 bookshelfLayout 勾选 → 恢复」这一串）；只在样本 `N:\HarmonyProjects\测试\backup2026-10-22\config.xml:190` 核到 `<boolean name="showBookIntro" value="false" />` 键存在、值为上游默认。
+3. `showBookIntro` 的备份写出/恢复语义**未上机验证**（本机未跑「导出备份 → 取消 bookshelfLayout 勾选 → 恢复」这一串）；只在样本 `<workspace>测试\backup2026-10-22\config.xml:190` 核到 `<boolean name="showBookIntro" value="false" />` 键存在、值为上游默认。
 4. `introMaxLines()` 用 `999` 代替上游的 `Int.MAX_VALUE`（`BookItem.kt:1058`）；极端长简介下两者是否表现一致未验。
 5. 任务书给的第 5 处行号 `:1119-1160` 在改动前已漂移到 `:1168-1231`，实际按代码结构改，未按行号。
 6. ZIP 表 A 块 `:56`/`:62`/`:63`/`:66`/`:67` 与 B 块 `:106`/`:107`/`:111`/`:113`/`:114` 共 10 行（同属 KI-SL-N1）的**状态值本轮一行未改，仍为 `未接`**；按 `docs/PARITY-RULES.md` 第五节，状态属判断段产出，本段不下结论。已在 `docs/KNOWN-ISSUES.md` 的 KI-SL-N1 组里追加一条「前提已变化，状态未重判」的事实记录。
@@ -1465,7 +1465,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 **设备**：DevEco 模拟器 `Mate 90 Pro`（`127.0.0.1:5555`），竖屏 1280×2832，密度 3.5，视口 365×809vp，包名 `io.legado.harmony`。
 
-**性质与依据**：用户对着模拟器逐屏对比上游提了 29 条观感差异，随后明确「我写的所有反馈仅供参考，实际根据源码修改」。本批一律以 `N:/HarmonyProjects/legado-with-MD3`（Kotlin）的源码为准，29 条只作为定位线索，取证产物在开发机 `tmp/evidence-*.md`（不入公开仓库）。开工 HEAD `c0e6e9b`。
+**性质与依据**：用户对着模拟器逐屏对比上游提了 29 条观感差异，随后明确「我写的所有反馈仅供参考，实际根据源码修改」。本批一律以 `<workspace>legado-with-MD3`（Kotlin）的源码为准，29 条只作为定位线索，取证产物在开发机 `tmp/evidence-*.md`（不入公开仓库）。开工 HEAD `c0e6e9b`。
 
 **范围边界**：只动界面。`entry/src/main/ets/reader/` 下排版引擎文件零改动；书源引擎、WebDAV、远程书库、角色卡、朗读音频一律不做实现，界面上出现但无对应能力的项点击提示「未接入」。浅色模式按本文件 `:16` 的现行约定不单独验收。
 
@@ -1542,14 +1542,14 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 **设备**：DevEco 模拟器 `127.0.0.1:5555`（API 26，1280×2832，密度 3.5，视口 365×809vp），包名 `io.legado.harmony`。
 
-**判据来源**：上游 `N:/HarmonyProjects/legado-with-MD3`（Kotlin）源码，逐条对照 `MainActivity.kt` 的 NavDisplay 转场、`BookshelfScreen.kt` 的 `AppPullToRefresh`、`AppPullToRefresh.kt` 的 M3 指示器、`BookshelfViewModel.kt:1111-1117` 的刷新上限；平台默认值查 DevEco SDK 的 `scroll.d.ts` / `grid.d.ts` / `common.d.ts` / `list.d.ts` / `refresh.d.ts`。**只改 `entry/src/main/ets/` 下的 `.ets`，不动资源与 `module.json5`。**
+**判据来源**：上游 `<workspace>legado-with-MD3`（Kotlin）源码，逐条对照 `MainActivity.kt` 的 NavDisplay 转场、`BookshelfScreen.kt` 的 `AppPullToRefresh`、`AppPullToRefresh.kt` 的 M3 指示器、`BookshelfViewModel.kt:1111-1117` 的刷新上限；平台默认值查 DevEco SDK 的 `scroll.d.ts` / `grid.d.ts` / `common.d.ts` / `list.d.ts` / `refresh.d.ts`。**只改 `entry/src/main/ets/` 下的 `.ets`，不动资源与 `module.json5`。**
 
 ### 做了什么
 
 | 批 | 主题 | 提交 | 一句话 |
 | --- | --- | --- | --- |
 | 1 | 启动闪屏首帧 | `a659916` | `EntryAbility.onCreate` 用 `preferences.getPreferencesSync` 同步预读 `themeMode`/`paletteIndex`，算出深浅色后 `publishPaletteColors` 把八色灌进 `AppStorage`，赶在 `loadContent` 与 Index 的 `aboutToAppear` 之前；Index 根背景在「真值未就绪」那一段改用 `$r('app.color.start_window_background')` |
-| 2 | 滚动回弹 | `7ae172b` | 纵向 `Scroll` 88 处补 `EdgeEffect.Spring`，`Grid` 9 处（7 处带 `{ alwaysEnabled: true }`、2 处内嵌改 `None`） |
+| 2 | 滚动回弹 | `7ae172b` | 纵向 `Scroll` 88 处补 `EdgeEffect.Spring`，`Grid` 9 处（7 处带 `{ alwaysEnabled: true }`、2 处内嵌改 `None`）。此后 `3db4c1c` 按容器语义收窄，现 `edgeEffect(EdgeEffect.Spring` 全仓 57 处（本轮动效批 3 又给书源调试页/编辑页补 2 处） |
 | 3 | 点击反馈 | `1820f68` | 设置行用 `stateStyles` 换按压底色，菜单项 / 顶栏按钮 / 书卡 / 分组卡 / 底栏 tab 用 `clickEffect` 缩放 |
 | 4 | 页面转场 | `b878608` | 新增 `routeTransition()`，八个非阅读分支挂 `.transition(...)`，阅读族沿用原 `readerRouteTransition()` |
 | 5 | 书架下拉刷新 | `7f19980` | `BookshelfPage` 的卡片区包进 `Refresh`，按 `enableRefresh` 与编辑态收窄，Index 侧按分组与 `bookshelfRefreshingLimit` 取书 |
@@ -1566,7 +1566,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 ### 没做什么 / 与上游的刻意偏差
 
-1. **设置子页仍无转场**。`PROFILE_SUBPAGE` 这一支的根容器在 `profileSubpage` 变化时是复用的，`transition` 只在组件插入/移除时播，挂上去也基本看不到；要真做必须改 `ProfileSubPages.ets` 内部十几处 `if`。本批按任务书不做，登记为 KI-MOTION1。
+1. **设置子页转场（KI-MOTION1，原记「仍无转场」已修）**。原记录说「根容器复用、挂 transition 看不到，要改那十几个子页选择点」——根因写错了：`grep -c 'profileSubpage' ProfileSubPages.ets` = 0，换子树实际在 `pages/Index.ets` 的 PROFILE_SUBPAGE 分支里那 35 个 `profileSubpage` 分支。动效批 4（提交 `8b4d9dd`）已在这 35 个分支 + 1 个 else 分支的根容器各挂 `.transition(this.routeTransition())`（8 → 44），ProfileSubPages.ets 一字未改。上机观感验证待补。
 2. **转场不是整屏宽度滑动**。上游 `initialOffset = { fullWidth -> fullWidth }` 是整屏；本地固定 `40` / `-60` vp。整屏要在 ArkUI 里按 display 宽度算 vp，且横竖屏与折叠屏都要单独处理，收益不抵风险。
 3. **转场时长 280 / 220ms，不是上游的 480 / 360**。上游那组值配的是 Android 的 motion spec；`Curve.FastOutSlowIn` 与 Compose 同名曲线接近但合成方式不同，480ms 在模拟器上实测发拖。
 4. **`TransitionEffect.asymmetric` 代替方向感知**。上游 NavDisplay 知道「进入」与「返回」是两个 spec；本地是 if/else 换子树，同一个组件分不清自己是被推入还是被弹出，只能让出现演滑入、消失演左移淡出。返回时被返回的那一页也演「从右滑入」，看起来像又前进了一次——这是本地路由模型的固有偏差，**没有逐帧对齐上游，只保证有动画且不突兀**。
@@ -1586,9 +1586,9 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 ### 完成判据自检
 
-- `edgeEffect(EdgeEffect.Spring` 全仓 **97** 处（判据要求 ≥100：91 纵向 `Scroll` 中 2 处原有、1 处 `UiMenu` 是 `None`，实补 88；`Grid` 9 处中 7 处 Spring、2 处内嵌改 `None`；加上原有 2 处 Spring 共 97。**未达 100，差 3 处正是两条内嵌 Grid 与 UiMenu 那条 `None`，都是任务书要求保留的例外**）
-- `clickEffect` 全仓 **6** 处（≥5）
-- `Refresh(` 组件用法 **2 处**（`HomePage.ets:219`、`BookshelfPage.ets:2595`），两处都有 `builder:` 指向 `PullRefreshIndicator`
+- `edgeEffect(EdgeEffect.Spring` 当时 **97** 处（判据要求 ≥100：91 纵向 `Scroll` 中 2 处原有、1 处 `UiMenu` 是 `None`，实补 88；`Grid` 9 处中 7 处 Spring、2 处内嵌改 `None`；加上原有 2 处 Spring 共 97。**未达 100，差 3 处正是两条内嵌 Grid 与 UiMenu 那条 `None`，都是任务书要求保留的例外**）。此后 `3db4c1c`（feat(scroll): 按容器语义分类收回回弹）把 44 处浮层内改 `EdgeEffect.None`、甲类显式 `{ alwaysEnabled: false }`，数字被该提交取代；现全仓 **57** 处（动效批 3 又给书源调试页/编辑页补 2 处），97 不再是当前值。
+- `clickEffect` 全仓 **7** 处（动效批 5 给三个共享设置行组件补的是 `stateStyles` 底色，未增 `clickEffect`）
+- `Refresh(` 组件用法 **2 处**（`HomePage.ets:237`、`BookshelfPage.ets:2642`，旧记 `:219`/`:2595` 是旧快照），两处都有 `builder:` 指向 `PullRefreshIndicator`
 - `首页数据刷新尚未迁移` 全仓 **0** 命中
 
 ### 批 6 返工（`f035a00`）
@@ -1669,7 +1669,7 @@ r300–r316 十六批已把 [ZIP-THEME](parity/ZIP-THEME.md) 的 91 行推到「
 
 摊分位移改由分页器算好写进 `LocalReaderPage.bottomJustifyGapByColumn`（`entry/src/main/ets/pages/LocalReaderPaginator.ets:298`），画布优先取页内值、取不到才回落 `layout.bottomJustifyGapByColumn`；删掉画布侧按当前页现算的 `refreshReaderBottomJustifyGap()` 及其 6 处调用。
 
-**逐页翻 11 页、回翻 11 页**（测试书《失明的她遇上盗神》，571 章，分页档）：
+**逐页翻 11 页、回翻 11 页**（测试书《TXT 测试用书》，571 章，分页档）：
 
 | 页 | 行数 | 首行 y | 末行底 | 备注 |
 | --- | --- | --- | --- | --- |
@@ -1903,7 +1903,7 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
 - **改了什么**：上游 10 个字号里没有的 9 种孤值（8/9/10/19/22/23/27/28/48）共 80 处，按用户明确指令「上游没有的本地也不要有」就近归入上游有的字号，不新增槽位：8/9/10→`LABEL_SMALL`(11) 63 处、19→`TITLE_LARGE`(18) 8 处、22/23→`HEADLINE_MEDIUM`(24) 5 处、27/28→`HEADLINE_LARGE`(32) 3 处、48→`HEADLINE_LARGE`(32) 1 处。映射经用户确认。
 - **为什么**：这是整个改造的最后一值清理——让本地字号集合收敛到上游的 10 个值，彻底消除「上游无对应」的孤值。视觉会变（如 48→32 封面首字母变小、10→11 说明标签变大），是「上游没有本地也不要有」的必然结果。
 - **强制重编**：删三目录后 `bash scripts/build-hap.sh` → `BUILD SUCCESSFUL in 1min59s`，ERROR 0。
-- **守恒检查（里程碑）**：字面量 80−80=**0**、变量 1279+80=**1359**、和 **1359**。至此 `.fontSize(数字字面量)` **全仓归零**，1282 处原始字面量全部迁移到槽位常量或变量；重复 import **0**。
+- **守恒检查（里程碑）**：字面量 80−80=**0**、变量 1279+80=**1359**、和 **1359**。至此 `entry/src/main/ets` 内 `.fontSize(数字字面量)` **归零**，1282 处原始字面量全部迁移到槽位常量或变量；重复 import **0**。口径修正：`entry/src/ohosTest/ets/testability/pages/Index.ets:7` 尚有 `.fontSize(18)` 一处（测试脚手架，非生产路径），故不能写「全仓」。
 - **上机比对**：书架页差异像素 611,922 / 3,624,960，包围盒 x[31,1232] y[1327,2519]（书架卡片区），与 10→11 号标签字（未读徽章/时间/类型）变大预期一致；渲染正常无错位。卡片顺序/封面呈现与改前有轻微视觉差，疑因异步封面加载时序，未在静态比对中排除。按仓库口径跳过浅色专项；未单独截 fontScale=16 图。
 - **没做什么**：未动行高（孤值处若有同行 lineHeight 保留）、`UiTokens.ets`、阅读域 Canvas 链；30 处孤值未逐页截图（映射已经用户确认）。
 
@@ -1923,3 +1923,27 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
 - **守恒检查**：字面量 401−102=**299**、变量 958+102=**1060**、和 **1359**（守恒）；16 号残留 **0**、`TITLE_MEDIUM` 86 + `BODY_MEDIUM` 16 = **102**、重复 import **0**。
 - **上机比对**：`tmp/typography-batch6/before-dark.jpeg` 与 `after-dark.jpeg` 逐像素最大差 **0**、差异 **0/3,624,960**，完全一致。按仓库口径跳过浅色专项；等值替换未单独截 fontScale=16 图。
 - **没做什么**：未动行高、`UiTokens.ets`、阅读域。
+
+### 排版语义层 批 9：上游第二套 TypeScale 常量 + 编辑页字号对齐（2026-11-21）
+
+- **背景**：批 8 的「字面量归零」只归零了 `.fontSize(数字)`，但上游没有的字号仍以本地常量形式在渲染（`TOP_BAR_TITLE_EXPANDED_SIZE = 28`、`TOP_BAR_TITLE_COLLAPSED_SIZE = 22`、`FIELD_INPUT_SIZE = 15`）。
+- **改了什么**：
+  1. `components/typography/TypographyTokens.ets:115-130` 新增 M3 原生 TypeScale 常量：`TYPE_SCALE_HEADLINE_MEDIUM = 28`、`TYPE_SCALE_TITLE_LARGE = 22`、`TYPE_SCALE_LABEL_LARGE = 14`、`TYPE_SCALE_BODY_LARGE = 16`。注释写清上游有两套排版值：`ui/theme/Typography.kt:18-40` 的 miuix→M3 映射（24 槽位），与 `ui/theme/ThemeComponents.kt:257` 的 `val base = Typography()` 无参构造（M3 原生，`:281` 传给 MaterialExpressiveTheme）。
+  2. `components/TopBar.ets:16/18/20` 三个字号常量改为引用 `TYPE_SCALE_*`，数值不变（28/22/14）；删掉三处「TypeScaleTokens.HeadlineMedium」注释——上游 `app/src` 里 `TypeScaleTokens` 零命中，该类名不存在，真实出处是 `GlassTopAppBar.kt:76` 引 `MaterialTheme.typography.titleLarge`。
+  3. `pages/BookInfoEditPage.ets`：删 `FIELD_INPUT_SIZE = 15`（5 处改 `TYPE_SCALE_BODY_LARGE`=16，依据 material3 TextField 的 textStyle 默认取 LocalTextStyle = typography.bodyLarge）；删 `FIELD_LABEL_SIZE = 13`（3 处改 `LABEL_MEDIUM`，等值）；`:278` 标签 chip 从 `LABEL_MEDIUM`(13) 改 `LABEL_LARGE_EMPHASIZED`(14)+Medium（上游 `BookInfoEditScreen.kt:571` 的 KindChip 用 labelLargeEmphasized）。
+- **强制重编**：删 `loader_out`/`loader`/`cache` 三目录后跑 hvigor → `CompileArkTS ... after 1 min 43 s`、`BUILD SUCCESSFUL in 1 min 48 s`、ERROR 0。确认 ArkTS 真重编，不是 UP-TO-DATE 假成功（删缓存前那次 4s 成功里 `CompileArkTS` 是 UP-TO-DATE，已作废）。
+- **上机**：`hdc install -r` → install bundle successfully；`aa start -a EntryAbility -b io.legado.harmony` 成功。书架页 dumpLayout 文字节点正常；详情页、编辑页均已截图确认渲染（书名/作者/封面链接/书源分类四行输入框、固定书籍类型开关、知识按钮组、文本下拉，无重叠/裁切/掉字重）。截图存 `tmp/ts-check/z.jpeg`（编辑页）、`y.jpeg`（详情页）。
+- **没做什么**：
+  - 没做像素比对。这批有视觉变化（输入框 15→16、chip 13→14+Medium），编辑页没有改前基线图，只做了「渲染正常」的定性确认。
+  - 28/22 的数值未严格核证。来源是 M3 官方 TypeScale 表；本地 `~/.gradle` 与上游 `app/build` 都不存在，取不到 material3 源码。旁证是上游引 `MaterialTheme.typography`、本地实测值恰为 28/22。**（2026-11-21 补记：已按 androidx 源文件核验，`HeadlineMediumSize = 28.sp`、`TitleLargeSize = 22.sp`，见本节 ② ）**
+  - 字段标签 13 vs 上游 16 的偏离保留。上游字段标签走 `AppTextField` 的 label → `AppText` 默认 `LegadoTheme.typography.bodyMedium`(16)，本地保留 13（等值不动）。理由是本地标签是独立悬挂的小字，改 16 会与输入框同号，与上游「label 嵌在框内」的形态不一致。属残留偏离。
+  - `titleSmall` 的 Bold **已落地（titleSmall 字重对齐任务）**：上游 `ui/theme/Typography.kt:30` 明确 `titleSmall = miuixStyles.subtitle // 14.sp, Bold`。本地 287 处 `.fontSize(TITLE_SMALL)` 已逐处判定（A 加粗 3 / B 改槽位 118 / C 不动 165 / D 未查到 1，和 287，判定表 `tmp/ts-decision-table-final.md`）：A 档 3 处已加粗（`BookshelfManagePage.ets:646`、`SubscriptionSubPages.ets:198` 用 `FontWeight.Bold`；`BookInfoPage.ets:1194` 因上游 `BookInfoReadRecordSheet.kt:101` titleSmall + `:103` SemiBold(600) 用数字 `600`——ArkUI 全局 `FontWeight` 枚举无 `W600`，`.fontWeight()` 收 `number|FontWeight|ResourceStr`）；B 档 118 处改到 `LABEL_LARGE`(76)/`LABEL_LARGE_EMPHASIZED`(25)/`TITLE_SMALL_EMPHASIZED`(17)；`TypographyTokens.ets:57` 注释已补字重事实。强制重编 `BUILD SUCCESSFUL`（CompileArkTS after 1 min 55 s，非 UP-TO-DATE）、121 处落地独立逐处复核 0 错误。**上机验收已完成（r357/round 6）**：装包最新版 `entry-default-unsigned.hap`（14:18:19 生成，晚于 A 档三源文件修改）+ `aa start` 起应用，导航 书架→订阅 tab→规则→右下加号打开规则订阅 sheet（`SubscriptionSubPages.ets:198`）。`uitest dumpLayout` 定位到「订阅类型」文字 bounds `[63,2333][260,2390]`、同页同字号 TITLE_SMALL 的 4 个 Normal chip 标签（书源/订阅源/替换规则/自动识别）。**方法偏离（如实记录）**：`dumpLayout` 实测不导出任何 font 属性（`-e fontSize/-e fontWeight` 报 `Invalid attribute name, currently supported names are 'uniqueId'`，`-a` 亦无），且中文是等宽方块字、宽度无法区分字重，故施工指令的「量宽度证 Bold」对中文不可行；改用 `snapshot_display` 截图 + `tmp/ts-compare.py` 对同页同字号样本做二值化墨迹密度量化：Bold「订阅类型」37.2% vs 4 个 Normal 样本（27.2/26.8/30.5/26.0%，均值 27.6%），**比值 1.35×**；放大并排图 `tmp/ts-verify/compare.png` 肉眼可见 Bold 笔画显著更粗。反证干扰已排除：Bold 处文字 fg=191 比 Normal fg≈220 更暗（颜色更不利），密度却更高，说明是字重而非亮度所致。证据：`tmp/ts-verify/{s3.json(布局),sheet.jpeg(截图),compare.png(对比图)}`。
+
+- **r358 排版遗留项收口（goal-ede36d4a，进行中）**：
+  - **① MENU_FONT_SIZE 收口（已完成）**：`components/UiMenu.ets` 最后一处本地字号常量 `MENU_FONT_SIZE=14` 按上游 `widget/components/menuItem/RoundDropdownMenuItem.kt:162` 的 `labelLargeEmphasized` 并入 24 槽位：删常量+注释两行、`.fontSize` 改 `LABEL_LARGE_EMPHASIZED`（:88）、加 import（:6），紧邻 `.fontWeight(FontWeight.Medium)` 保留（上游同槽位也是 Medium）。14→14 等值零视觉变化。强制重编删三目录后 `CompileArkTS after 1 min 59 s 64 ms`、`BUILD SUCCESSFUL in 2 min 7 s 70 ms`（非 UP-TO-DATE）；装包 `install bundle successfully` + `aa start`，订阅页点更多菜单（右上 ⋮）dump 出「订阅源管理」「全部」由 `UiMenuPanel` 渲染、截图 `tmp/ts-verify/menu_shot.jpeg` 确认菜单文字/bounds 正常、无回归。日志 `tmp/build-uimenu.log`。
+  - **② TypeScale 归位确认（已完成，无需改代码）**：独立核上游源码（非照抄并行注释）。`ui/theme/ThemeComponents.kt:135-144` 第一套 `miuixStylesToM3Typography(...).toLegadoTypography()` 出 24 槽位；`:257-286` 第二套 `val base = Typography()` 无参构造，`:281` 以 `typography = materialTypography` 传 `MaterialExpressiveTheme`。顶栏 `widget/components/topbar/GlassTopAppBar.kt:76` 用 `MaterialTheme.typography.titleLarge`（M3 原生 22sp，24 槽位无 22，就近归 20 属数值近似）；行高亦不同（M3 labelLarge 14/20fp vs 槽位 LABEL_LARGE 14/18.67fp、`BODY_MEDIUM` 16/22.86 vs M3 bodyLarge 16/24）。本地消费点 `TopBar.ets:16/18/20`（28/22/14）、`BookInfoEditPage.ets:385/447/507/517/530`（16）各有上游出处。结论：`TYPE_SCALE_*` 保持独立正确，不并入 24 槽位。28/22 已按 androidx 源文件核验通过（`compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/tokens/TypeScaleTokens.kt`：`HeadlineMediumSize = 28.sp`、`HeadlineMediumLineHeight = 36.0.sp`、`TitleLargeSize = 22.sp`、`TitleLargeLineHeight = 28.0.sp`；2026-11-21 实测 HTTP 200），不再依赖「M3 官方表」这一间接口径。本机仍无 material3 副本（`~/.gradle` 与上游 `app/build` 均不存在），所以口径写成「按 androidx 源文件核验」，不写成「从本地缓存核验」。
+  - **③ 死代码清理（已完成）**：经用户拍板删除。`TypographyTokens.ets` 的 `TextStyleToken`(原133-137)/`TypographySlot`(原140-152)/`resolveTextStyle`(原155-208，含 default 分支) 全仓 grep 零消费（三者只在定义文件出现，无任何 import），共删 78 行（含 `TextStyleToken` 上方那行 JSDoc）；删后三符号零残留，52 个在用字号/行高常量与 4 个 TYPE_SCALE_* 全保留，文件 208→130 行、LF 保持，行为零变化。行数口径：208 是删除前工作副本行数（HEAD 该文件为 180 行，`git diff` 为 +28/−78，180−78+28=130），不是 HEAD 行数。强制重编删三目录后 `CompileArkTS after 2 min 4 s 990 ms`、`BUILD SUCCESSFUL in 2 min 12 s 148 ms`（非 UP-TO-DATE）；装包 `install bundle successfully` + `aa start` + dump 有文字节点、无崩溃。日志 `tmp/build-deadcode.log`。
+  - **用户另贴的状态管理分析**（AppStorage 61 键 / `rset*` 转发层 / 主题色覆盖层）与排版遗留项非同一任务，用户拍板「暂时不做」，本轮未改任何相关文件。
+  - **避让**：并行会话改 `BookSourceEditPage.ets`/parity 文档，本轮未碰。
+
+- **工具教训**：`hdc` 全部命令（`list targets` / `shell` / `install` / `file recv`）不需要 `danger-full-access`，workspace-write 下可直接跑；只有 hvigor 构建的 `quickjs BuildNativeWithNinja` 需要（否则 `spawn EPERM`）。本轮曾误对所有 hdc 命令加权限，导致一次 `APPROVAL_REJECTED` 阻断验证。

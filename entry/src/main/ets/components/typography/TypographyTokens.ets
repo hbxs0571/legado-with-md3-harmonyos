@@ -54,7 +54,7 @@ export const TITLE_MEDIUM_LINE_HEIGHT: number = 24;
 /** 上游 LegadoTheme.kt:96。与 TITLE_MEDIUM 同号，仅字重改 Medium。 */
 export const TITLE_MEDIUM_EMPHASIZED: number = 16;
 export const TITLE_MEDIUM_EMPHASIZED_LINE_HEIGHT: number = 24;
-/** 上游 LegadoTheme.kt:97。14fp / 20fp，对应 M3 titleSmall（miuix subtitle，行高比 1.4286）。 */
+/** 上游 LegadoTheme.kt:97 / Typography.kt:30。14fp / 20fp，对应 M3 titleSmall（miuix subtitle，行高比 1.4286）。字重为 Bold(700)：上游 titleSmall = miuixStyles.subtitle 作者注释「14.sp, Bold」，其 Emphasized 变体反而降到 Medium(Typography.kt:109)。本地调用点需显式 .fontWeight(FontWeight.Bold) 才与上游一致。 */
 export const TITLE_SMALL: number = 14;
 export const TITLE_SMALL_LINE_HEIGHT: number = 20;
 /** 上游 LegadoTheme.kt:98。与 TITLE_SMALL 同号，仅字重改 Medium。 */
@@ -101,80 +101,30 @@ export const LABEL_SMALL_LINE_HEIGHT: number = 16;
 export const LABEL_SMALL_EMPHASIZED: number = 11;
 export const LABEL_SMALL_EMPHASIZED_LINE_HEIGHT: number = 16;
 
-/** 一个槽位的完整文字样式。行高已预乘成绝对 fp（见文件头说明）。 */
-export interface TextStyleToken {
-  size: number;
-  lineHeight: number;
-  weight: FontWeight;
-}
-
-/** 槽位名，与上游 LegadoTypography 的 24 个字段一一对应（小驼峰保持上游拼法）。 */
-export type TypographySlot =
-  | 'headlineLarge' | 'headlineLargeEmphasized'
-  | 'headlineMedium' | 'headlineMediumEmphasized'
-  | 'headlineSmall' | 'headlineSmallEmphasized'
-  | 'titleLarge' | 'titleLargeEmphasized'
-  | 'titleMedium' | 'titleMediumEmphasized'
-  | 'titleSmall' | 'titleSmallEmphasized'
-  | 'bodyLarge' | 'bodyLargeEmphasized'
-  | 'bodyMedium' | 'bodyMediumEmphasized'
-  | 'bodySmall' | 'bodySmallEmphasized'
-  | 'labelLarge' | 'labelLargeEmphasized'
-  | 'labelMedium' | 'labelMediumEmphasized'
-  | 'labelSmall' | 'labelSmallEmphasized';
-
-/** 查表：一个槽位名同时拿到字号 + 行高 + 字重三件套。 */
-export function resolveTextStyle(slot: TypographySlot): TextStyleToken {
-  switch (slot) {
-    case 'headlineLarge':
-      return { size: HEADLINE_LARGE, lineHeight: HEADLINE_LARGE_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'headlineLargeEmphasized':
-      return { size: HEADLINE_LARGE_EMPHASIZED, lineHeight: HEADLINE_LARGE_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'headlineMedium':
-      return { size: HEADLINE_MEDIUM, lineHeight: HEADLINE_MEDIUM_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'headlineMediumEmphasized':
-      return { size: HEADLINE_MEDIUM_EMPHASIZED, lineHeight: HEADLINE_MEDIUM_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'headlineSmall':
-      return { size: HEADLINE_SMALL, lineHeight: HEADLINE_SMALL_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'headlineSmallEmphasized':
-      return { size: HEADLINE_SMALL_EMPHASIZED, lineHeight: HEADLINE_SMALL_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'titleLarge':
-      return { size: TITLE_LARGE, lineHeight: TITLE_LARGE_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'titleLargeEmphasized':
-      return { size: TITLE_LARGE_EMPHASIZED, lineHeight: TITLE_LARGE_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'titleMedium':
-      return { size: TITLE_MEDIUM, lineHeight: TITLE_MEDIUM_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'titleMediumEmphasized':
-      return { size: TITLE_MEDIUM_EMPHASIZED, lineHeight: TITLE_MEDIUM_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'titleSmall':
-      return { size: TITLE_SMALL, lineHeight: TITLE_SMALL_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'titleSmallEmphasized':
-      return { size: TITLE_SMALL_EMPHASIZED, lineHeight: TITLE_SMALL_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'bodyLarge':
-      return { size: BODY_LARGE, lineHeight: BODY_LARGE_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'bodyLargeEmphasized':
-      return { size: BODY_LARGE_EMPHASIZED, lineHeight: BODY_LARGE_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'bodyMedium':
-      return { size: BODY_MEDIUM, lineHeight: BODY_MEDIUM_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'bodyMediumEmphasized':
-      return { size: BODY_MEDIUM_EMPHASIZED, lineHeight: BODY_MEDIUM_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'bodySmall':
-      return { size: BODY_SMALL, lineHeight: BODY_SMALL_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'bodySmallEmphasized':
-      return { size: BODY_SMALL_EMPHASIZED, lineHeight: BODY_SMALL_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'labelLarge':
-      return { size: LABEL_LARGE, lineHeight: LABEL_LARGE_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'labelLargeEmphasized':
-      return { size: LABEL_LARGE_EMPHASIZED, lineHeight: LABEL_LARGE_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'labelMedium':
-      return { size: LABEL_MEDIUM, lineHeight: LABEL_MEDIUM_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'labelMediumEmphasized':
-      return { size: LABEL_MEDIUM_EMPHASIZED, lineHeight: LABEL_MEDIUM_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    case 'labelSmall':
-      return { size: LABEL_SMALL, lineHeight: LABEL_SMALL_LINE_HEIGHT, weight: FontWeight.Normal };
-    case 'labelSmallEmphasized':
-      return { size: LABEL_SMALL_EMPHASIZED, lineHeight: LABEL_SMALL_EMPHASIZED_LINE_HEIGHT, weight: FontWeight.Medium };
-    default:
-      return { size: BODY_MEDIUM, lineHeight: BODY_MEDIUM_LINE_HEIGHT, weight: FontWeight.Normal };
-  }
-}
+// ── M3 原生 TypeScale（与上面 24 槽位是两套，勿混） ──────────
+/**
+ * 上游有两套排版值，本地此前只搬了第一套：
+ *
+ *   第一套 = LegadoTypography 的 24 槽位（miuix 派生），即上方全部常量，
+ *            对应 ui/theme/Typography.kt:18-40 的 miuixStylesToM3Typography。
+ *   第二套 = M3 原生 TypeScale，来自 ui/theme/ThemeComponents.kt:257 的
+ *            「val base = Typography()」无参构造（并非 miuix 映射），
+ *            :281 以 typography = materialTypography 传给 MaterialExpressiveTheme。
+ *
+ * 顶栏标题走的是第二套：
+ *   - 收起态：ui/widget/components/topbar/GlassTopAppBar.kt:76 用
+ *     MaterialTheme.typography.titleLarge（M3 原生 22sp）。
+ *   - 展开态：ui/widget/components/topbar/GlassMediumFlexibleTopAppBar.kt 的展开标题由 M3
+ *     MediumFlexibleTopAppBar 内部取 headlineMedium（M3 原生 28sp）。
+ *
+ * 所以 28 / 22 不是本地自造值，也不该就近归进 24 槽位里的 24 / 20。
+ *
+ * 数值依据：material3 `tokens/TypeScaleTokens.kt` 实测（androidx 源文件，2026-11-21 核过，
+ * 本机仍无 material3 副本）：headlineMedium 28.sp/36.0.sp、titleLarge 22.sp/28.0.sp、
+ * labelLarge 14.sp/20.0.sp、bodyLarge 16.sp/24.0.sp。旁证是上游直接引用 MaterialTheme.typography。
+ */
+export const TYPE_SCALE_HEADLINE_MEDIUM: number = 28;
+export const TYPE_SCALE_TITLE_LARGE: number = 22;
+export const TYPE_SCALE_LABEL_LARGE: number = 14;
+/** M3 原生 bodyLarge，16sp / 行高比 1.5。对应 M3 TextField 的默认输入文字样式（LocalTextStyle）。 */
+export const TYPE_SCALE_BODY_LARGE: number = 16;

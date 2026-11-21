@@ -1,7 +1,7 @@
 import curves from '@ohos.curves';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
-import { ROW_PADDING_H, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP } from '../components/UiTokens';import { LabSettings, LabSettingsRepository } from '../data/LabSettingsRepository';
+import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD, ROW_PADDING_H, SECTION_TITLE_BOTTOM, SECTION_TITLE_TOP } from '../components/UiTokens';import { LabSettings, LabSettingsRepository } from '../data/LabSettingsRepository';
 import { BODY_SMALL, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 @Component
@@ -33,7 +33,7 @@ export struct AppLabSettingsPage {
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -67,7 +67,7 @@ export struct AppLabSettingsPage {
                   .fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding({ left: 14, right: 14, bottom: 12 })
               }
             }.margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-              .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+              .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
           }
 
           Text('诊断').fontSize(LABEL_LARGE_EMPHASIZED).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)

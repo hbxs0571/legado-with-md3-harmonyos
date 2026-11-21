@@ -1,3 +1,4 @@
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { UiSection } from '../components/settings/UiSection';
 import { UiSwitch } from '../components/settings/UiSwitch';
@@ -15,7 +16,7 @@ import {
 import {
   CoverAlbumItem, CoverAlbumImageItem, CoverAlbumRepository
 } from '../data/CoverAlbumRepository';
-import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /**
  * 封面设置页。
@@ -300,7 +301,7 @@ export struct AppCoverSettingsPage {
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -458,9 +459,9 @@ export struct AppCoverSettingsPage {
         Row() {
           Text('封面规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('恢复默认').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+          Text('恢复默认').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             .onClick(() => this.restoreDefaultRule())
-          Text('保存').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ left: 18 })
+          Text('保存').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).margin({ left: 18 })
             .onClick(() => { this.saveRule(); })
         }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 12 })
 
@@ -499,7 +500,7 @@ export struct AppCoverSettingsPage {
           Row() {
             Text('选择封面相册').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-            Text('管理相册').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+            Text('管理相册').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'manage')
           }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 12 })
 
@@ -542,7 +543,7 @@ export struct AppCoverSettingsPage {
         } else if (this.albumView === 'manage') {
           // B3/B4/B5/B6/B7：管理页。顶栏返回选择 sheet、右侧「+」新建。
           Row() {
-            Text('返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+            Text('返回').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'select')
             Text('封面相册').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
@@ -597,7 +598,7 @@ export struct AppCoverSettingsPage {
         } else if (this.albumView === 'editor') {
           // B8/B9/B10：图片编辑器，日夜两套独立列表。
           Row() {
-            Text('返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+            Text('返回').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
               .onClick(() => this.albumView = 'manage')
             Text(this.currentEditorAlbum()?.name ?? '相册').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
               .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
@@ -607,11 +608,11 @@ export struct AppCoverSettingsPage {
 
           // B8 页签：默认白天（0）；切换后下方网格换成另一套图。
           Row() {
-            Text('白天').fontSize(TITLE_SMALL)
+            Text('白天').fontSize(LABEL_LARGE_EMPHASIZED)
               .fontColor(this.editorTab === 0 ? this.themeColorAccent : this.themeColorTextTertiary)
               .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
               .onClick(() => this.editorTab = 0)
-            Text('夜间').fontSize(TITLE_SMALL)
+            Text('夜间').fontSize(LABEL_LARGE_EMPHASIZED)
               .fontColor(this.editorTab === 1 ? this.themeColorAccent : this.themeColorTextTertiary)
               .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
               .onClick(() => this.editorTab = 1)
@@ -630,7 +631,7 @@ export struct AppCoverSettingsPage {
                     .onClick(() => { this.removeEditorImage(image.id); })
                 }.width(76).margin({ right: 8, bottom: 8 })
               }, (image: CoverAlbumImageItem) => image.id)
-              Text('添加图片').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+              Text('添加图片').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
                 .onClick(() => { this.addEditorImages(); })
             }.width('100%').padding({ left: 16, right: 16, top: 4 })
@@ -647,10 +648,10 @@ export struct AppCoverSettingsPage {
               .backgroundColor(this.themeColorSurfacePrimary).borderRadius(8).padding(10)
               .onChange((value: string) => this.nameDraft = value)
             Row() {
-              Text('取消').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+              Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
                 .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
                 .onClick(() => this.albumView = 'manage')
-              Text('确定').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+              Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
                 .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
                 .onClick(() => { this.saveAlbumName(); })
             }.width('100%').margin({ top: 20 })

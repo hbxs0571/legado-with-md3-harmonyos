@@ -1,3 +1,4 @@
+import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { notificationManager } from '@kit.NotificationKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -191,7 +192,7 @@ export struct AppPrivacySettingsPage {
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -236,7 +237,7 @@ export struct AppPrivacySettingsPage {
             UiChoice({ title: '验证频率', options: ['每次验证', '进入应用时验证一次', '离开应用前有效'], selectedIndex: this.unlockScopeIndex, onSelect: (index: number) => { void this.applyUnlockScope(index); } })
             if (this.unlockScopeIndex === 2) {
               UiChoice({showDivider: false, title: '离开后重新验证', options: GRACE_OPTION_LABELS, selectedIndex: this.graceIndex(), onSelect: (index: number) => { void this.applyBackgroundGrace(index); } })
-                .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
             }
           }
 
@@ -274,10 +275,10 @@ export struct AppPrivacySettingsPage {
             .alignSelf(ItemAlign.Start).margin({ top: 8 })
         }
         Row() {
-          Text('取消').fontSize(TITLE_SMALL).fontColor('#B6B8C2').padding(10)
+          Text('取消').fontSize(LABEL_LARGE).fontColor('#B6B8C2').padding(10)
             .onClick(() => this.passwordPanelVisible = false)
           Blank()
-          Text('保存').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding(10)
+          Text('保存').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
             .onClick(async () => { await this.savePassword(); })
         }.width('100%').margin({ top: 12 })
       }.width('90%').padding(18).backgroundColor('#1D1E26').borderRadius(18)

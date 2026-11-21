@@ -45,9 +45,9 @@
 > **怎么解**：证据见本文第三节。
 
 - `TXT-READER.md:500` **正文三处净化：`<title>` 元素 / `[style*=display:none]` 块 / 重复的 cover.jpeg**（E EPUB 专属层）
-  - 实测：构造样本 `净化验证.epub` 上机导入。正文 `.txt` 里 `<title>` 元素文字与 `display:none` 块文字**都不出现**；连排两张 `cover.jpeg` 只留第一张的 `[[EPUB_IMAGE:]]`，第二张被跳过。74 本真 EPUB 里没有可见对照（非封面章 body 内 `<title>` 0 本、`display:none` 块内文字全为空 2 本、重复 cover.jpeg 0 本），只能靠构造样本验。
+  - 实测：构造样本 `净化验证.epub` 上机导入。正文 `.txt` 里 `<title>` 元素文字与 `display:none` 块文字**都不出现**；连排两张 `cover.jpeg` 只留第一张的 `[[EPUB_IMAGE:]]`，第二张被跳过。真 EPUB 样本里没有可见对照（非封面章 body 内 `<title>` 0 本、`display:none` 块内文字全为空 2 本、重复 cover.jpeg 0 本），只能靠构造样本验。
 - `TXT-READER.md:504` **SVG `<image>` 转 `<img>`（`xlink:href` 搬进 `src`）**（E EPUB 专属层）
-  - 实测：同上样本第二章的 `<svg><image xlink:href="images/pic.png"/></svg>` 上机导入后，正文出现 `[[EPUB_IMAGE:file://…/1.img]]` 且图片真的落盘，正文首尾文字完整。74 本真书里有 4 章含 `<image xlink:href>`（都在 `(机翻中日对照)超かぐや姫！.epub` 的 fmatter / toc / bookwalker 页），这些页不属正文路径，所以真书里看不到差别。
+  - 实测：同上样本第二章的 `<svg><image xlink:href="images/pic.png"/></svg>` 上机导入后，正文出现 `[[EPUB_IMAGE:file://…/1.img]]` 且图片真的落盘，正文首尾文字完整。真书样本里只有 4 章含 `<image xlink:href>`（都在 `<书名>.epub` 的 fmatter / toc / bookwalker 页），这些页不属正文路径，所以真书里看不到差别。
 - `TXT-READER.md:551` **分卷 `isVolume`（`subitems != null`）**（G MOBI · AZW3 专属层）
   - 实测：构造 `volume-probe.mobi`（自写 INDX / TAGX / IDXT / CNCX，标签 21=parent、22=firstChild 表达卷层级）上机导入后，`chapters` 表实测：`第一卷 卷首` 一行 `isVolume=1 tocLevel=0`，三个子章 `isVolume=0 tocLevel=1`。本地判据 `children !== undefined` 与上游 `ref.subitems != null` 行为一致。
 - `TXT-READER.md:557` **Huff/CDIC 解压（Kindle 的 Huffman + 字典压缩）**（G MOBI · AZW3 专属层）
@@ -269,7 +269,7 @@
 - `ZIP-BOOKMARK.md:219` **词典**（F1 菜单项本体）
   - 现状：本地有 `dictRule` 备份类别与 `LocalTextReSegmenter` 里的局部 `dict` 变量，但无查词能力
 - `ZIP-COVER.md:131` **B15 旧版封面迁移（`migrateLegacyCoversIfNeeded`）**（B 默认封面相册）
-  - 现状：上游迁移方向是「旧的两个偏好键（逗号串绝对路径）→ 相册 `default-cover`」，迁移后**旧键仍被回写**（`syncLegacyCoverPaths`），所以新旧两套读法并存：`CoverAlbumRepository.kt:294-301` 写、`:242-247` 读。本地两套都没有，因此沿用旧版 `defaultCover` 设置的用户升级后会看到「未选择相册」，封面回落到随机默认图。样本备份 `N:\HarmonyProjects\测试\backup2026-10-22\config.xml:…
+  - 现状：上游迁移方向是「旧的两个偏好键（逗号串绝对路径）→ 相册 `default-cover`」，迁移后**旧键仍被回写**（`syncLegacyCoverPaths`），所以新旧两套读法并存：`CoverAlbumRepository.kt:294-301` 写、`:242-247` 读。本地两套都没有，因此沿用旧版 `defaultCover` 设置的用户升级后会看到「未选择相册」，封面回落到随机默认图。样本备份 `<workspace>\测试\backup2026-10-22\config.xml:…
 
 ### J 缺前置模块（排版引擎/缓存体系/编辑器）
 
@@ -453,7 +453,7 @@
 
 ### 1. `TXT-READER.md:500` EPUB 正文三处净化 —— 已接
 
-74 本真 EPUB 里没有可见对照：
+真 EPUB 样本里没有可见对照：
 
 | 检查项 | 真书命中 |
 | --- | --- |

@@ -44,10 +44,6 @@ export const EXPAND_BUTTONS_BOTTOM: number = 8;
 
 /** 行内输入框、菜单弹层的圆角 */
 export const RADIUS_INNER: number = 8;
-/** 底部弹层（bindSheet）圆角 */
-export const RADIUS_SHEET: number = 16;
-/** 菜单（bindMenu）圆角 */
-export const RADIUS_MENU: number = 16;
 
 // ── 动效 ──────────────────────────────────────────────
 
@@ -55,7 +51,7 @@ export const RADIUS_MENU: number = 16;
 // 物理时长由参数与前次速度决定，也拿不到 interpolate 归一化。
 // 所以有 duration 的常量只给「不适用弹簧」的场景——主要是淡入淡出。
 
-/** 淡入淡出时长（全仓 duration: 220 出现 60 次，是绝对主流值，保持不动） */
+/** 淡入淡出时长（全仓 33 处淡入淡出用它，是绝对主流值） */
 export const DURATION_FADE: number = 220;
 /** 页面切换的缩放过渡时长 */
 export const DURATION_PAGE_SWITCH: number = 300;

@@ -121,6 +121,12 @@ export interface Book {
   origin?: string;
   /** 书源名称（对齐上游 Book.originName）。 */
   originName?: string;
+  /**
+   * 未上架标记（对齐上游 BookType.notShelf = 0b100_0000_0000，即 type 位 1024）。
+   * 批8（:1153 :369）：从搜索结果进详情页看过的书先以该标记落库，
+   * 书架、分组计数、本地搜索结果都按「不在架」过滤，直到用户点「放入书架」才清除该位。
+   */
+  notShelf?: boolean;
   /** 在线书的目录 URL（对齐上游 Book.tocUrl）。本地书该列存章节正则，见 tocRule。 */
   tocUrl?: string;
   /** 分类（对齐上游 Book.kind，与 books 表 kind 列同列）。 */

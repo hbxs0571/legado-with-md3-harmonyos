@@ -14,6 +14,15 @@ BOOT_TIMEOUT="${BOOT_TIMEOUT:-240}"
 
 export MSYS_NO_PATHCONV=1
 
+# 控件树解析脚本与本脚本同目录 —— 不要从别的目录调本脚本。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NAV_PY="$SCRIPT_DIR/emu-nav.py"
+# dumpLayout 先写设备侧文件，再 cat 回来（hdc file recv 对某些文件会挂住）。
+TREE_JSON_DEV="/data/local/tmp/emu-tree.json"
+TREE_DIR="${TMPDIR:-/tmp}"
+# 点完等多久再取第二棵树：太快拍到旧帧，太慢错过过渡态。
+SETTLE="${SETTLE:-0.8}"
+
 die() { printf '错误: %s\n' "$1" >&2; exit 1; }
 
 # 设备是否可连。只认 hdc list targets —— Windows 侧 tasklist 匹配不到
@@ -280,17 +289,125 @@ do_status() {
   fi
 }
 
+# ---- 控件树 / 精确点击 ----
+# dumpLayout 的每个节点带 bounds（设备像素），取中心点击比截图目测准；
+# 图标按钮在树里没有 text 时也只能靠它。解析交给 emu-nav.py。
+dump_tree() {
+  local out="$1" extra="${2:-}"
+  rm -f "$out"
+  "$HDC_BIN" shell "uitest dumpLayout -p $TREE_JSON_DEV $extra" >/dev/null 2>&1
+  "$HDC_BIN" shell "cat $TREE_JSON_DEV" 2>/dev/null > "$out"
+  if [ ! -s "$out" ]; then
+    printf '取回布局为空 —— 设备未就绪，或 dumpLayout 被拒（先 emu.sh status）\n' >&2
+    return 1
+  fi
+  return 0
+}
+
+do_tree() {
+  local mode="list" all=0 extra=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --keys) mode="keys"; extra="-a" ;;
+      --all)  all=1 ;;
+      *) die "tree: 不认识的参数 $1" ;;
+    esac
+    shift
+  done
+  emu_online || die "设备不在线：先 emu.sh start"
+  local out="$TREE_DIR/emu-tree.json"
+  if ! dump_tree "$out" "$extra"; then
+    if [ -n "$extra" ]; then
+      printf '加 %s 的 dump 取不到数据，退回普通 dump（属性可能不全）\n' "$extra" >&2
+      dump_tree "$out" "" || return 1
+    else
+      return 1
+    fi
+  fi
+  if [ "$mode" = "keys" ]; then
+    "${PYTHON:-python}" "$NAV_PY" keys "$out"
+  elif [ "$all" = "1" ]; then
+    "${PYTHON:-python}" "$NAV_PY" list "$out" --all
+  else
+    "${PYTHON:-python}" "$NAV_PY" list "$out"
+  fi
+}
+
+# 拾取目标 -> 点中心 -> 停 SETTLE 秒 -> 再取一棵树比对。
+# 点完必比对，因为「点了」和「生效了」是两件事：Toggle 偶发第一次不中、
+# 菜单图标按钮点不中也不报错，前后两棵树才是证据。
+do_click() {
+  local who="$1"; shift
+  local settle="$SETTLE" verify="" args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --settle) settle="$2"; shift 2; continue ;;
+      --verify) verify="$2"; shift 2; continue ;;
+      *) args+=("$1"); shift; continue ;;
+    esac
+  done
+  require_lock "$who" || return $?
+  emu_online || die "设备不在线：先 emu.sh start"
+  local pre="$TREE_DIR/emu-tree-pre.json" post="$TREE_DIR/emu-tree-post.json"
+  dump_tree "$pre" || return 1
+  local picked rc
+  picked=$("${PYTHON:-python}" "$NAV_PY" pick "$pre" "${args[@]}")
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf '%s\n' "$picked" >&2
+    return "$rc"
+  fi
+  printf '%s\n' "$picked"
+  local cx cy
+  cx=$(printf '%s\n' "$picked" | sed -n 's/^CENTER //p' | cut -d' ' -f1)
+  cy=$(printf '%s\n' "$picked" | sed -n 's/^CENTER //p' | cut -d' ' -f2)
+  if [ -z "$cx" ] || [ -z "$cy" ]; then
+    printf '没从树里取到中心坐标\n' >&2
+    return 1
+  fi
+  printf '点击 (%s, %s)\n' "$cx" "$cy"
+  if ! "$HDC_BIN" shell "uitest uiInput click $cx $cy" >/dev/null 2>&1; then
+    printf 'uitest uiInput click 失败 —— 坐标可能已不在屏上（页面变了）\n' >&2
+    return 1
+  fi
+  sleep "$settle"
+  dump_tree "$post" || return 1
+  if [ -n "$verify" ]; then
+    "${PYTHON:-python}" "$NAV_PY" verify "$pre" "$post" --text "$verify"
+  else
+    "${PYTHON:-python}" "$NAV_PY" verify "$pre" "$post"
+  fi
+}
+
+do_tap() {
+  local idx="${1:-}"
+  [ -n "$idx" ] || die "用法: emu.sh tap <tree 里的序号> [--settle 秒]"
+  shift
+  do_click tap --index "$idx" "$@"
+}
+
+do_tap_text() {
+  local text="${1:-}"
+  [ -n "$text" ] || die "用法: emu.sh tap-text <文字> [--contains] [--occurrence N] [--settle 秒]"
+  shift
+  do_click tap-text --text "$text" --verify "$text" "$@"
+}
+
 case "${1:-status}" in
   start)   shift; parse_session_flag "$@"; do_start ;;
   stop)    shift; parse_session_flag "$@"; do_stop ;;
   restart) shift; parse_session_flag "$@"; require_lock restart && { do_stop; sleep 2; do_start; } ;;
   status)  do_status ;;
   cap)     shift; do_cap "${1:-}" ;;
+  tree)    shift; do_tree "$@" ;;
+  tap)     shift; do_tap "$@" ;;
+  tap-text) shift; do_tap_text "$@" ;;
   claim)   shift; do_claim "$@" ;;
   release) shift; do_release "$@" ;;
   who)     do_who ;;
   *)
-     printf '用法: %s {start|stop|restart|status|cap [文件]|claim [--for 用途]|release [--force]|who} [--session 标识]\n' "$0"
+     printf '用法: %s {start|stop|restart|status|cap [文件]|tree [--keys|--all]|tap <序号>|tap-text <文字>|claim [--for 用途]|release [--force]|who} [--session 标识]\n' "$0"
      printf '  --session 或 EMU_SESSION 用来证明「锁是我占的」；不加就按别人的锁处理。\n'
+     printf '  tree 列这一屏可点的控件（带序号）；tap / tap-text 按树里的坐标点，点完自动比对前后两棵树。\n'
      exit 1 ;;
 esac

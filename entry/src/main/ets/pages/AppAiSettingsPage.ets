@@ -1,3 +1,4 @@
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import { UiSection } from '../components/settings/UiSection';
@@ -15,7 +16,7 @@ export struct AppAiSettingsPage {
 
   private updateHeader(): void {
     const offset = this.settingsScroller.currentOffset().yOffset;
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
         this.collapsedHeader = shouldCollapse;

@@ -14,7 +14,7 @@
 | 2 | 阅读器 | 分页与滚动两种模式、目录、书内搜索、主题、替换净化可用；底栏朗读键短按即可起播 | `pages/ReaderPage.ets`、`pages/ReaderSettingsPage.ets` | 本文第二章 |
 | 3 | 朗读 | 系统 TTS 与 HTTP TTS 两条合成播放链可用；面板、胶囊、听书界面、后台控制条已接；调速/变声/跨应用悬浮窗受平台限制 | `readaloud/SystemTtsPlayer.ets`、`readaloud/HttpTtsPlayer.ets`、`pages/ReadAloudPlayerPage.ets` | 本文第三章 |
 | 4 | 阅读记录 | 概览、热力图、合并、扫描修复、清空都可用 | `pages/ProfileSubPages.ets:3014`-`:3873`、`pages/ReadRecordOverviewPage.ets` | 本文第四章 |
-| 5 | 外观 | 主题包、日夜模式、自定义配色可用；启动图标是平台限制、主题风格与多窗布局上游本身不接 | `pages/ThemeSettingsPage.ets`、`pages/ThemeManagePage.ets` | 本文第五章 |
+| 5 | 外观 | 主题包、日夜模式、自定义配色可用；启动图标有受限等价物待接（`ZIP-THEME.md:73` 记 `未接`），主题风格与多窗布局上游有而本地无界面条目（`ZIP-THEME.md:72`/`:84` 均记 `未接`） | `pages/ThemeSettingsPage.ets`、`pages/ThemeManagePage.ets` | 本文第五章 |
 | 6 | 备份与恢复 | 28 类全部双向通，含 WebDAV 上传下载；旧版数据导入与系统目录选择仍空 | `pages/AppBackupSettingsPage.ets`、`data/BackupRepository.ets`（3773 行） | 本文第六章 |
 | 7 | 书源 | 904 条书源可管理、可编辑；多源搜索跨源合并、结果可加入书架在线阅读；发现、换源、登录、调试页可用。已跑通的真实源数与缺口见批次报告 | `pages/ProfileSubPages.ets`、`pages/SearchPage.ets`、`pages/BookSourceEditPage.ets`、`bookSource/` | 本文第七章 |
 
@@ -319,14 +319,13 @@
 
 ### 5.2 卡在这几处
 
-**一、四处占位，其中两处是「上游也没有」或「平台做不到」**
+**一、一处占位：切换图标**
 
 | 位置 | 标题 | 点下去 | 判断 |
 | --- | --- | --- | --- |
-| `pages/ThemeSettingsPage.ets:548` | 主题风格（detail「Material Design」） | 「主题风格切换尚未接入」 | 上游 `composeEngine` 是 Compose 引擎切换，ArkUI 只有一套控件体系，**没有可切换的等价分支**；`docs/parity/ZIP-THEME.md:72` 记为「不接」 |
-| `pages/ThemeSettingsPage.ets:550` | 切换图标 | 「启动图标设置尚未迁移」 | 上游靠 `AndroidManifest` 预置多个 `activity-alias` 再 `setComponentEnabledSetting` 切换；HarmonyOS 的 `module.json5` 只允许一个 abilities 图标，SDK 无运行时改图标接口 → `docs/parity/ZIP-THEME.md:73` 记为**不适用** |
-| `pages/ThemeSettingsPage.ets:724` | 导航布局 | 「导航布局设置尚未迁移」 | **上游没有这个条目**（`docs/parity/ZIP-THEME.md:84` 备注），本地多出来的一行 |
-| `pages/ThemeSettingsPage.ets:726` | 多窗布局 | 「多窗布局设置尚未迁移」 | 上游 `multi_pane_layout` 属**额外设备形态**，`docs/PROJECT.md` 列为范围之外 → `ZIP-THEME.md:84` 记为「不接」 |
+| `pages/ThemeSettingsPage.ets:583` | 切换图标 | 「启动图标设置尚未迁移」 | SDK 有受限等价物：`@hms.core.appgalleryservice.appInfoManager.d.ts` 的 `:65 queryDynamicIcons` / `:80 selectDynamicIcon` / `:91 disableDynamicIcon`（均 @since 5.0.3(15)，入口 `@kit.AppGalleryKit`）；图标须先在 AppGallery Connect「分发 > 服务 > 图标管理」上传并审核，应用只能从已审集合里挑，服务需邮件申请（beta）→ `docs/parity/ZIP-THEME.md:73` 记 `未接`，不是 `不适用` |
+
+多窗布局（上游 `multi_pane_layout`）与主题风格（上游 `compose_engine`）本地均无界面条目，`docs/parity/ZIP-THEME.md:84`/`:72` 记 `未接`。
 
 **二、上游还有两条本地连条目都没有**
 
@@ -372,7 +371,7 @@
 颜色、菜单取色、形状面板之外，同一套主题体系里还有六块：
 
 - **排版语义阶梯已建成（改造前是缺口）。** 上游 `ui/theme/LegadoTheme.kt:85-119` 有 24 个槽位（headline/title/body/label × 三档 × 普通与 `Emphasized`），引用 **696 处 / 186 文件**。本地原 `fontSize(N)` 字面量 **1,282 处、20 种字号**（旧文档写 1,189 为粗测值）已于改造后全部分批迁入 `components/typography/TypographyTokens.ets` 的 24 槽位常量，**字面量归零**；9 个旧 `FONT_*` 常量已按上游 settingItem 语义统一（settings 组件族 32 处换成槽位常量、15 处补 Emphasized 字重，UiTokens 删全部 9 个定义）。行高 33 处手写值已统一：32 处固定值改成配对字号槽位的行高常量，1 处阅读器 Canvas 动态行高保留——其中 13 处 21/22 上游无对应的偏离值已消除。全仓 173 处 `.fontWeight()` 未批量改写（无上游语义锚点）。后果（改造前同层级字号不一）已消除。
-- **图标命名不成体系。** 上游 Material Icons **1,043 处 / 263 种** + 177 个 vector drawable；本地 `AppGlyph` **82 个**名字 + 140 个 svg，功能不缺，但 20 多个带 `profile` 前缀、其余不带，播放/暂停图标绕过 `AppGlyph` 直接用 `Image($r(...))`。
+- **图标命名不成体系。** 上游 Material Icons 引用 **1,195 处**（族限定末端名 **225 种**；全末端名口径 241 种；原记录的「263 种」未查到复现口径），另有 **177 个** vector drawable（`res/drawable` 下 225 个 xml：按 `<vector` 子串 177、按严格根标签 173）；本地 `AppGlyph` **84 个**名字 + 140 个 svg，功能不缺，但 20 多个带 `profile` 前缀、其余不带，播放/暂停图标绕过 `AppGlyph` 直接用 `Image($r(...))`。
 - **动效有底座没档位。** 上游 `MotionScheme.expressive()` 统一接管，`tween(` 143 处 + `spring(` 15 处；本地 `duration:` **82 处 11 种值**、`curve` 只 3 种，没有常量收口。
 - **模糊主界面通了，其余硬编码。** 本地 `backdropBlur` **24 处**，其中 18 处是写死数字（12/16/20/30），只有 `components/TopBar.ets:195` 与 `pages/Index.ets:11262` 读偏好。
 - **阴影方向相反。** 上游全仓只有 3 处 `Modifier.shadow`（M3 靠色位分层不靠投影），本地 `.shadow(` **10 处**、7 种参数组合。
@@ -512,4 +511,4 @@ P0 三轮准入数据与 P1–P10 逐批提交、上机结果写在[批次交付
 - 「卡在这几处」必须给 `文件:行`，且该行要在当前 HEAD 上真实存在该占位。
 - 「算做完的判据」写成可在设备上勾选的步骤，不写「体验流畅」这类无法判定的话。
 - 模块状态变了先改本章，再回头同步 [项目队列](PROJECT.md) 的一句话与七表的逐行状态。
-- 判据要在真实数据上走通：书取 `N:\HarmonyProjects\测试\Book\` 里现成的，备份取 `测试/backup.zip`。用自己造的小样本勾完不算做完，理由见[代码约定](CODE-CONVENTIONS.md)第七节。
+- 判据要在真实数据上走通：书取 `<workspace>\测试\Book\` 里现成的，备份取 `测试/backup.zip`。用自己造的小样本勾完不算做完，理由见[代码约定](CODE-CONVENTIONS.md)第七节。

@@ -192,10 +192,6 @@ export struct PullRefreshIndicator {
     .borderRadius(20)
     // 容器用比页面底色高一档的 surface（M3 LoadingIndicator 的容器色）。
     .backgroundColor(this.themeColorSurfaceElevated)
-    // 深色下 surfaceContainerHigh 与页面底色只差两个色阶（实测 #1C1D22 vs #1A1B21），
-    // 光靠底色看不出这是一块独立的圆片，所以补一层阴影把层级做出来——
-    // 上游 Compose 的容器同样带 tonal elevation 的投影。
-    .shadow({ radius: 10, color: '#55000000', offsetY: 2 })
     // 再加一层极淡描边托轮廓。
     .border({ width: 1, color: this.themeColorSurfaceTertiary })
     .scale({ x: this.containerScale(), y: this.containerScale() })

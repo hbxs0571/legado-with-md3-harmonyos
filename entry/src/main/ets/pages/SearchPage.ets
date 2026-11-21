@@ -1,3 +1,4 @@
+import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import curves from '@ohos.curves';
 import { Book } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
@@ -49,6 +50,13 @@ export struct SearchPage {
   onOpenBook: (book: Book) => void = (_book: Book) => {};
   /** 在线书加入书架（P3-E）。MergedBook 在 Index 侧转成在线 Book 落库。 */
   onAddOnlineBook: (item: MergedBook) => void = (_item: MergedBook) => {};
+  /**
+   * 批8（:1153）：搜索结果进详情页而不直接开始读（对齐上游 Search → BookInfoScreen → 放入书架）。
+   * 进详情页时书还没上架，Index 会以 notShelf 位落库并按位从书架过滤掉。
+   */
+  onOpenOnlineBookDetail: (item: MergedBook) => void = (_item: MergedBook) => {};
+  /** 批8（:1153）：本地书同样补一个详情入口（书架内的书本来就能长按/点开详情）。 */
+  onOpenBookDetail: (book: Book) => void = (_book: Book) => {};
   onOpenSourceManage: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onQueryChange: (query: string) => void = (_query: string) => {};
@@ -171,7 +179,7 @@ export struct SearchPage {
   }
 
   private updateHeader(offset: number): void {
-    const shouldCollapse = offset > 70 ? true : offset < 24 ? false : this.collapsedHeader;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
       // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -219,7 +227,8 @@ export struct SearchPage {
             if (this.onlineViewMode === 'flat') {
               ForEach(this.onlineBooks, (item: MergedBook, index: number) => {
                 OnlineBookRow({ item: item, coverSettings: this.coverSettings,
-                  onSelect: () => this.onOpenOnlineBook(item) })
+                  onSelect: () => this.onOpenOnlineBook(item),
+                  onOpenDetail: () => this.onOpenOnlineBookDetail(item) })
               }, (item: MergedBook, index: number) => item.book.bookUrl + '_' + index)
             } else {
               ForEach(this.groupOnlineBooks(), (group: OnlineSourceGroup) => {
@@ -231,7 +240,8 @@ export struct SearchPage {
                   }.width('100%').padding({ left: 4, top: 10, bottom: 6 })
                   ForEach(group.items, (item: MergedBook, index: number) => {
                     OnlineBookRow({ item: item, coverSettings: this.coverSettings,
-                      onSelect: () => this.onOpenOnlineBook(item) })
+                      onSelect: () => this.onOpenOnlineBook(item),
+                      onOpenDetail: () => this.onOpenOnlineBookDetail(item) })
                   }, (item: MergedBook, index: number) => item.book.bookUrl + '_' + index)
                 }.width('100%')
               }, (group: OnlineSourceGroup, index: number) => group.origin + '_' + index)
@@ -312,7 +322,7 @@ export struct SearchPage {
             .backgroundColor(Color.Transparent).layoutWeight(1)
             .onChange((value: string) => { this.collapsedHeader = false; this.onQueryChange(value); })
           if (this.query.length > 0) {
-            Text('清除').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ left: 8 })
+            Text('清除').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).margin({ left: 8 })
               .onClick(() => this.onQueryChange(''))
           }
         }.width('100%').padding({ left: 14, right: 14, top: 11, bottom: 11 })
@@ -330,7 +340,8 @@ export struct SearchPage {
                 SearchEmptyState({ title: '书架暂无书籍', detail: '导入 TXT 或 EPUB 后，可在此搜索书名和作者。' })
               } else {
                 ForEach(this.getLocalBooks(), (book: Book) => {
-                  SearchBookRow({ book: book, coverSettings: this.coverSettings, onSelect: () => this.onOpenBook(book) })
+                  SearchBookRow({ book: book, coverSettings: this.coverSettings, onSelect: () => this.onOpenBook(book),
+                    onOpenDetail: () => this.onOpenBookDetail(book) })
                 }, (book: Book) => book.id)
               }
               Row() {
@@ -345,7 +356,7 @@ export struct SearchPage {
           Column() {
             this.onlineResultsView()
             Row() {
-              Text('管理书源').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+              Text('管理书源').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             }.justifyContent(FlexAlign.Center).padding({ left: 22, right: 22, top: 10, bottom: 12 })
               .onClick(() => this.onOpenSourceManage())
           }.layoutWeight(1).width('100%')
@@ -369,7 +380,8 @@ export struct SearchPage {
               Scroll(this.resultsScroller) {
                 Column() {
                   ForEach(this.getResults(), (book: Book) => {
-                    SearchBookRow({ book: book, coverSettings: this.coverSettings, onSelect: () => this.onOpenBook(book) })
+                    SearchBookRow({ book: book, coverSettings: this.coverSettings, onSelect: () => this.onOpenBook(book),
+                    onOpenDetail: () => this.onOpenBookDetail(book) })
                   }, (book: Book) => book.id)
                 }.padding({ bottom: 12 })
               }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
@@ -403,7 +415,7 @@ export struct SearchPage {
             this.showScopePanel = false;
             this.onOpenSourceManage();
           }
-        }).transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+        }).transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
@@ -422,18 +434,27 @@ struct SearchBookRow {
   /** 封面文字设置，由 SearchPage 透传；搜索行封面受 A8「限制封面比例」约束。 */
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   onSelect: () => void = () => {};
+  /** 批8（:1153）：右侧「详情」按钮，直接进详情页而不是开始读。 */
+  onOpenDetail: () => void = () => {};
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   build() {
     Row() {
       BookCover({ book: this.book, compact: true, coverSettings: this.coverSettings, applyAspectRatio: true })
+        .onClick(() => this.onSelect())
       Column() {
         Text(this.book.title).fontSize(BODY_LARGE).fontColor(this.themeColorTextPrimary).maxLines(1)
         Text(this.book.author).fontSize(LABEL_LARGE).fontColor('#AEB0BA').margin({ top: 5 }).maxLines(1)
         Text(this.book.lastChapter).fontSize(LABEL_MEDIUM).fontColor('#858792').margin({ top: 6 }).maxLines(1)
       }.alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 14 })
+        .onClick(() => this.onSelect())
       Text(`${Math.round(this.book.progress)}%`).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+      // 整行点击仍是「继续阅读」，详情单独一枚按钮；两者分开绑，
+      // 避免父 Row 的 onClick 把子按钮的点击一并吞掉（批8 :1153）。
+      Text('详情').fontSize(LABEL_MEDIUM).fontColor('#858792')
+        .padding({ left: 10, right: 4, top: 6, bottom: 6 })
+        .onClick(() => this.onOpenDetail())
     }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-      .margin({ left: 16, right: 16, bottom: 9 }).onClick(() => this.onSelect())
+      .margin({ left: 16, right: 16, bottom: 9 })
   }
 }
 
@@ -459,6 +480,8 @@ struct OnlineBookRow {
   }, origins: [], originCount: 0 };
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   onSelect: () => void = () => {};
+  /** 批8（:1153）：右侧「详情」按钮，进详情页（不直接加入书架开读）。 */
+  onOpenDetail: () => void = () => {};
   build() {
     Row() {
       Column() {
@@ -478,9 +501,14 @@ struct OnlineBookRow {
           Text(this.item.book.originName).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 6 }).maxLines(1)
         }.width('100%').margin({ top: 6 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        .onClick(() => this.onSelect())
+      // 批8（:1153）：整行点击仍是「加入书架并阅读」，详情走独立按钮，两者分开绑。
+      Text('详情').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+        .padding({ left: 10, right: 4, top: 6, bottom: 6 })
+        .onClick(() => this.onOpenDetail())
     }.width('100%').padding(12)
       .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
-      .borderRadius(14).margin({ left: 16, right: 16, bottom: 9 }).onClick(() => this.onSelect())
+      .borderRadius(14).margin({ left: 16, right: 16, bottom: 9 })
   }
 }
 

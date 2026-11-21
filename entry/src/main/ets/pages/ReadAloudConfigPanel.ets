@@ -6,7 +6,7 @@ import {
 import { HttpTtsPlayer } from '../readaloud/HttpTtsPlayer';
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
-import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, LABEL_SMALL_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, LABEL_SMALL_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
 /**
  * 朗读设置浮层。视觉对齐上游 ReadAloudConfigContent.kt：
@@ -255,7 +255,7 @@ struct ConfigGlassSwitch {
 
   build() {
     Row() {
-      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.checked })
         .selectedColor(this.themeColorAccent)
@@ -284,7 +284,7 @@ struct ConfigGlassRow {
 
   build() {
     Row() {
-      Text(this.label).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(TITLE_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
         .fontColor(this.themeColorTextPrimary).layoutWeight(1)
       if (this.value.length > 0) {
         Text(this.value).fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)

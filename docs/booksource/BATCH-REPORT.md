@@ -6,7 +6,7 @@
 
 | 批次 | 提交 | 内容 |
 | --- | --- | --- |
-| P0 | 无提交（纯验证，不改本仓） | 三轮引擎准入验收，报告 `N:/HarmonyProjects/tmp/booksource-p0-report.md`、`p0bis-report.md`、`p0ter-report.md` |
+| P0 | 无提交（纯验证，不改本仓） | 三轮引擎准入验收，报告 `<workspace>/tmp/booksource-p0-report.md`、`p0bis-report.md`、`p0ter-report.md` |
 | P1 | `f9c1292` | 引擎接入（复制 `third_party/harmony-book-source-engine/`，带 URL 修复）+ `LegadoSourceMapper` + 运行时持久化注入 |
 | P2 | `4fca9c2` | 单源执行链四步调度器（search / info / toc / content） |
 | P3 | `1479361` | 多源并发搜索 + `SearchResultMerger` 四桶归并 + 搜索页在线结果 |
@@ -24,7 +24,7 @@ P0–P10 均为独立提交，无跨批合并。各批之间夹杂他人并发�
 
 ## 二、P0 三轮准入数据
 
-准入样本来自 904 条真实书源（`N:/HarmonyProjects/测试/backup.zip` 的 `bookSource.json`），分层抽样、挂 ArkWeb 运行时、按引擎 `decide()` 真实分流。
+准入样本来自 904 条真实书源（`<workspace>/测试/backup.zip` 的 `bookSource.json`），分层抽样、挂 ArkWeb 运行时、按引擎 `decide()` 真实分流。
 
 | 轮次 | 关键做法 | 数据 |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ P0–P10 均为独立提交，无跨批合并。各批之间夹杂他人并发�
 - **多源搜索（P3）**：36 源 19–22 秒返回 568–582 结果，193–195 条多源命中；TOP1《剑来》17 源命中排第一。
 - **在线正文链（P3-E）**：搜「剑来」→ 77读书网在线目录 1362 章（首章「新书感言」）→ 正文 770 字，打开能读；在线 Book 落库往返 origin/tocUrl/originName/kind/isLocal 全对。
 - **管理页（P4）**：真实界面 904 条列表、搜索「笔趣阁」收敛 7 条、分组筛选、七种排序、长按多选、11 项批量操作、条目菜单 7 项（登录项因无 loginUrl 正确隐藏）。
-- **调试页（P10）**：填「我的」示例开始调试，产出「过程」「错误」两条带耗时与时间戳的日志；点「错误」过滤从 2 条收敛到 1 条；点日志卡片弹出详情浮层。截图 `N:/HarmonyProjects/tmp/p10detail.jpeg`。
+- **调试页（P10）**：填「我的」示例开始调试，产出「过程」「错误」两条带耗时与时间戳的日志；点「错误」过滤从 2 条收敛到 1 条；点日志卡片弹出详情浮层。截图 `<workspace>/tmp/p10detail.jpeg`。
 
 ## 四、已知问题（KI-BS1–BS6）
 
@@ -70,7 +70,7 @@ P0–P10 均为独立提交，无跨批合并。各批之间夹杂他人并发�
 
 ## 六、验证手段与产物位置
 
-- 逐条原始数据与分析脚本在 `N:/HarmonyProjects/tmp/`：`p0ter-results.json`、`p0ter-full.log`、`p0ter-sample.json`、`p0ter_analyze.py`、`p0ter_urltest.py`、`p7_parse_test.js`、`p8_progress_test.js`、`p9_login_test.py`、`p10_logic_test.py`。
-- 上机截图在 `N:/HarmonyProjects/tmp/`：`p10detail.jpeg`（调试详情浮层）、`dbg3.jpeg` / `dbg4.jpeg`（调试页）、`dbg-filter.jpeg`（过滤生效）、`p4real.jpeg`（管理页）等。
+- 逐条原始数据与分析脚本在 `<workspace>/tmp/`：`p0ter-results.json`、`p0ter-full.log`、`p0ter-sample.json`、`p0ter_analyze.py`、`p0ter_urltest.py`、`p7_parse_test.js`、`p8_progress_test.js`、`p9_login_test.py`、`p10_logic_test.py`。
+- 上机截图在 `<workspace>/tmp/`：`p10detail.jpeg`（调试详情浮层）、`dbg3.jpeg` / `dbg4.jpeg`（调试页）、`dbg-filter.jpeg`（过滤生效）、`p4real.jpeg`（管理页）等。
 - 2026-11-20 追加复核：批量「置底」跨会话持久化、KI-BS5 占位代码、换源进度迁移写入链均经模拟器 / 代码层确认；模拟器网络连通性经 `ping` 确认；证据为上机 dump 与源码行核对，未新增独立截图文件。
 - 构建产物 `entry/build/default/outputs/default/entry-default-unsigned.hap` 属构建输出，未纳入提交。

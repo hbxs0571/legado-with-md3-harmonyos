@@ -20,7 +20,7 @@ import {
   roundedMaxTime,
   computeReadRecordOverview
 } from '../data/ReadRecordOverview';
-import { BODY_LARGE, HEADLINE_SMALL, LABEL_LARGE, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_LARGE, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
 /** 周期选择器的一个档位。 */
 interface PeriodTab {
@@ -442,7 +442,7 @@ export struct ReadRecordOverviewPage {
     Column() {
       // 顶栏：返回 + 标题。
       Row() {
-        Text('返回').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+        Text('返回').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
           .onClick(() => this.onBack())
         Text('阅读总览').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
           .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
@@ -452,7 +452,7 @@ export struct ReadRecordOverviewPage {
       // 周期选择器：日/周/月/年/总。
       Row() {
         ForEach(this.tabs, (tab: PeriodTab) => {
-          Text(tab.label).fontSize(TITLE_SMALL)
+          Text(tab.label).fontSize(LABEL_LARGE_EMPHASIZED)
             .fontWeight(this.period === tab.index ? FontWeight.Bold : FontWeight.Normal)
             .fontColor(this.period === tab.index ? this.themeColorAccent : this.themeColorTextTertiary)
             .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
@@ -467,7 +467,7 @@ export struct ReadRecordOverviewPage {
         Row() {
           Text('‹').fontSize(HEADLINE_SMALL).fontColor(this.themeColorAccent).width(40)
             .textAlign(TextAlign.Center).onClick(() => this.shiftDate(-1))
-          Text(this.dateLabel()).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+          Text(this.dateLabel()).fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary)
             .layoutWeight(1).textAlign(TextAlign.Center)
           Text('›').fontSize(HEADLINE_SMALL).fontColor(this.themeColorAccent).width(40)
             .textAlign(TextAlign.Center).onClick(() => this.shiftDate(1))

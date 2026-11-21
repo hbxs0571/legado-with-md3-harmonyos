@@ -20,6 +20,7 @@ export struct UiDropdown {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
@@ -58,6 +59,18 @@ export struct UiDropdown {
     })
   }
 
+  /**
+   * 按压时的整行底色：照 UiAction 用强调色 15% alpha，避免满宽行缩放挤内容。
+   * 主题色不是 #RRGGBB 时退回 surfaceContainer。
+   */
+  private pressedBackground(): string {
+    const accent = this.themeColorAccent;
+    if (accent.length === 7 && accent.charAt(0) === '#') {
+      return '#26' + accent.substring(1);
+    }
+    return this.themeColorSurfaceTertiary;
+  }
+
   build() {
     Column() {
     Row() {
@@ -85,6 +98,11 @@ export struct UiDropdown {
     }
     .width('100%')
     .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
+    .stateStyles({
+      pressed: { .backgroundColor(this.pressedBackground()) },
+      normal: { .backgroundColor(Color.Transparent) }
+    })
+
     .onClick(() => { this.menuVisible = !this.menuVisible; })
     .bindPopup(this.menuVisible, {
       builder: this.OptionMenu,

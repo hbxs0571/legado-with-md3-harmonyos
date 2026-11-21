@@ -3,6 +3,7 @@
 
 import { display } from '@kit.ArkUI';
 import { AppGlyph, AppGlyphName } from './AppGlyph';
+import { LABEL_LARGE_EMPHASIZED } from './typography/TypographyTokens';
 
 /** 一个菜单项。key 由调用方定义，面板只负责把它回传。 */
 export interface UiMenuItem {
@@ -32,8 +33,6 @@ const MENU_ITEM_PADDING_H: number = 12;
 const MENU_ITEM_PADDING_V: number = 12;
 /** 文字与勾之间的间隙，对齐上游 Box(weight = 1f) 后接勾。 */
 const MENU_TEXT_CHECK_GAP: number = 8;
-/** 文字字号，对齐上游 labelLargeEmphasized。 */
-const MENU_FONT_SIZE: number = 14;
 /** 勾尺寸，对齐上游 size = 18.dp。 */
 const MENU_CHECK_SIZE: number = 18;
 /** 左端图标尺寸，与勾同口径。 */
@@ -86,7 +85,7 @@ export struct UiMenuPanel {
         })
       }
       Text(item.title)
-        .fontSize(MENU_FONT_SIZE)
+        .fontSize(LABEL_LARGE_EMPHASIZED)
         .fontWeight(FontWeight.Medium)
         .fontColor(item.selected ? this.themeColorAccent : this.themeColorTextPrimary)
         .textAlign(TextAlign.Start)

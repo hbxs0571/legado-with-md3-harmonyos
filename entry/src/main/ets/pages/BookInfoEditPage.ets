@@ -6,13 +6,14 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { UiSwitch } from '../components/settings/UiSwitch';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
-import { SPACE_8, SPACE_12, SPACE_16, RADIUS_SHEET } from '../components/UiTokens';
-import { BODY_LARGE, LABEL_MEDIUM, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
+import { SPACE_8, SPACE_12, SPACE_16 } from '../components/UiTokens';
+import { BODY_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, TITLE_MEDIUM, TYPE_SCALE_BODY_LARGE } from '../components/typography/TypographyTokens';
 
 /** 编辑页顶栏用的保存按钮尺寸走 TopBar 的统一口径，这里只留菜单宽度与输入框常量。 */
 const BOOK_TYPE_MENU_WIDTH: number = 220;
-const FIELD_LABEL_SIZE: number = 13;
-const FIELD_INPUT_SIZE: number = 15;
+// 输入框文字：上游 material3 TextField 的 textStyle 默认是 LocalTextStyle.current，
+// 而 MaterialTheme 把 LocalTextStyle 提供成 typography.bodyLarge（M3 原生 16sp）。
+// 原本地自造的 15 上游没有，改用字号常量。
 const FIELD_MIN_HEIGHT: number = 52;
 /**
  * 输入框高度与圆角。
@@ -266,13 +267,15 @@ export struct BookInfoEditPage {
   @Builder
   kindEditor() {
     Column({ space: SPACE_8 }) {
-      Text('我的标签').fontSize(FIELD_LABEL_SIZE).fontColor(this.themeColorTextTertiary)
+      Text('我的标签').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
       Row({ space: SPACE_8 }) {
         Scroll() {
           Row({ space: SPACE_8 }) {
             ForEach(this.kindList, (kind: string, index: number) => {
               Row() {
-                Text(kind).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary)
+                // 上游 KindChip 用 LegadoTheme.typography.labelLargeEmphasized
+                // （BookInfoEditScreen.kt:571，14sp + Medium）。
+                Text(kind).fontSize(LABEL_LARGE_EMPHASIZED).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               }
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -362,7 +365,7 @@ export struct BookInfoEditPage {
 
   @Builder
   fieldLabel(text: string) {
-    Text(text).fontSize(FIELD_LABEL_SIZE).fontColor(this.themeColorTextTertiary)
+    Text(text).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
       .width('100%').margin({ bottom: 6 })
   }
 
@@ -376,10 +379,10 @@ export struct BookInfoEditPage {
   @Builder
   m3Input(label: string, text: string, placeholder: string, onChange: (value: string) => void) {
     Column() {
-      Text(label).fontSize(FIELD_LABEL_SIZE).fontColor(this.themeColorTextTertiary)
+      Text(label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
         .width('100%').margin({ bottom: 2 })
       TextInput({ text: text, placeholder: placeholder })
-        .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
+        .fontSize(TYPE_SCALE_BODY_LARGE).fontColor(this.themeColorTextPrimary)
         .placeholderColor(this.themeColorTextTertiary)
         .backgroundColor(Color.Transparent)
         .padding({ left: 0, right: 0, top: 0, bottom: 6 })
@@ -441,7 +444,7 @@ export struct BookInfoEditPage {
               // 书籍类型：上游是 ExposedDropdownMenuBox + AppTextField（readOnly + trailingIcon），
               // 本地用同形态的圆角 4 输入框 + 右侧展开箭头承载。
               Row() {
-                Text(this.bookTypeLabel(this.bookType)).fontSize(FIELD_INPUT_SIZE)
+                Text(this.bookTypeLabel(this.bookType)).fontSize(TYPE_SCALE_BODY_LARGE)
                   .fontColor(this.themeColorTextPrimary).layoutWeight(1)
                 AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextTertiary })
               }
@@ -501,7 +504,7 @@ export struct BookInfoEditPage {
           Column() {
             this.fieldLabel('内容简介')
             TextArea({ text: this.description, placeholder: '请输入内容简介' })
-              .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
+              .fontSize(TYPE_SCALE_BODY_LARGE).fontColor(this.themeColorTextPrimary)
               .placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(this.inputSurface()).borderRadius(FIELD_M3_RADIUS)
               .constraintSize({ minHeight: 120 }).padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -511,7 +514,7 @@ export struct BookInfoEditPage {
           Column() {
             this.fieldLabel('书籍备注')
             TextArea({ text: this.remark, placeholder: '请输入书籍备注' })
-              .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
+              .fontSize(TYPE_SCALE_BODY_LARGE).fontColor(this.themeColorTextPrimary)
               .placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(this.inputSurface()).borderRadius(FIELD_M3_RADIUS)
               .constraintSize({ minHeight: 96 }).padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -524,7 +527,7 @@ export struct BookInfoEditPage {
             this.fieldLabel('分组')
             Row() {
               Text(this.groupNames.length > 0 ? this.groupNames.join('、') : '本地未分组')
-                .fontSize(FIELD_INPUT_SIZE).fontColor(this.themeColorTextPrimary)
+                .fontSize(TYPE_SCALE_BODY_LARGE).fontColor(this.themeColorTextPrimary)
                 .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
               AppGlyph({ name: 'profileExpandMore', glyphSize: 20, tint: this.themeColorTextTertiary })
             }

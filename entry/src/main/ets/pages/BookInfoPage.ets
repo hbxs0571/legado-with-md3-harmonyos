@@ -1,3 +1,4 @@
+import { DURATION_FADE } from '../components/UiTokens';
 import { fileIo } from '@kit.CoreFileKit';
 import { Book, BookMediaType, bookCoverColor } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
@@ -19,6 +20,7 @@ import {
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppLog } from '../lib/AppLog';
 import { WebDavSync } from '../lib/WebDavSync';
+import { RichIntro } from '../components/RichIntro';
 import { BODY_LARGE, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
@@ -48,7 +50,9 @@ export struct BookInfoPage {
   @StorageProp('appTopInset') appTopInset: number = 0;
   /** 顶栏按钮版式（tonal / plain / outlined / glass / liquid），顶栏三颗按钮的底色由它决定。 */
   @StorageProp('themeTopBarButtonStyle') themeTopBarButtonStyle: string = 'tonal';
-  @Prop book: Book = {
+  // 批8（:369）：加入书架成功后 Index 会整体替换 selectedBook，@Watch 在这里接手
+  // 上游 `BookInfoScreen.kt:1398-1414 LaunchedEffect(inBookshelf)` 的两段引导提示。
+  @Prop @Watch('onBookPropChanged') book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
   @Prop groups: BookGroup[] = [];
@@ -64,6 +68,13 @@ export struct BookInfoPage {
   @Prop books: Book[] = [];
   /** 高亮标签规则，从 Index 启动时 load 一次下发；详情页自己 await 会让首帧空。 */
   @Prop highlightTagRules: HighlightTagRule[] = [];
+  /**
+   * 批7（:1156）：简介富文本要的 baseUrl —— 在线书是书源地址，本地书是正文文件所在目录。
+   * 为空时内联 HTML 里的相对链接按 about:blank 解析，不影响显示。
+   */
+  @Prop bookBaseUrl: string = '';
+  /** 批7（:1164）：简介里 onclick 脚本要执行书源 JS，需要书源 URL；本地书为空。 */
+  @Prop bookSourceUrl: string = '';
   /** 移出书架前是否二次确认（批 7 的 `:291`）。 */
   @Prop deleteAlertEnabled: boolean = true;
   onBack: () => void = () => {};
@@ -108,6 +119,23 @@ export struct BookInfoPage {
   onOpenSourceEdit: (sourceUrl: string) => void = (_sourceUrl: string) => {};
   /** 切换「允许更新」（:289）：Index 写库后刷新 books，@Prop book 随之更新。 */
   onToggleCanUpdate: (canUpdate: boolean) => void = (_canUpdate: boolean) => {};
+  /**
+   * 批8（:369）：书架里与本书同名且作者兼容的书，由 Index 的 `shelfConflictsWith` 算好传入
+   * （对齐上游 `FindBookshelfConflictUseCase.kt:18-48`：空白归一 + 作者兼容 + 已下架不算冲突）。
+   * 为空时回退到本页 `sameNameCopies()` 的按书名比对，保证老调用点行为不变。
+   */
+  @Prop shelfConflictCandidates: Book[] = [];
+  /** 批8（:369）：点「放入书架」。清 notShelf 位、按 min-1 排序落库都在 Index 侧。 */
+  onAddToShelf: () => void = () => {};
+  /** 批8（:369）：冲突面板两个方向，mode = 'coexist' | 'migrate'（对齐上游同名 use case）。 */
+  onResolveShelfConflict: (existingId: string, mode: string) => void =
+    (_existingId: string, _mode: string) => {};
+  /** 批8（:369）：刚点过「放入书架」，等书变成在架后播两段引导（上游 awaitingShelfAddition）。 */
+  @State awaitingShelfAddition: boolean = false;
+  @State showShelfRemoveHint: boolean = false;
+  @State showLongPressGroupHint: boolean = false;
+  /** 批8（:369）：同名冲突面板（共存 / 迁移）。 */
+  @State conflictSheetVisible: boolean = false;
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
   @State backdropOpacity: number = 0;
@@ -148,33 +176,81 @@ export struct BookInfoPage {
   /**
    * 冲突态：不在架、但书架里有同名书。对齐上游 `BookInfoScreen.kt:1423`
    * `conflictHighlight = !inBookshelf && hasShelfDuplicates`。
+   * 批8（:369）：候选优先用 Index 传进来的 `shelfConflictCandidates`（带作者兼容判断），
+   * 没有传时回退到本页按书名比对的老口径。
    */
   private shelfConflictHighlight(): boolean {
-    return !this.inBookshelf() && this.sameNameCopies().length > 0;
+    return !this.inBookshelf() && this.conflictCandidates().length > 0;
+  }
+
+  /** 批8（:369）：同名副本候选，Index 传了就用它，没传就按书名比对。 */
+  private conflictCandidates(): Book[] {
+    if (this.shelfConflictCandidates.length > 0) { return this.shelfConflictCandidates; }
+    return this.sameNameCopies();
   }
 
   /**
    * 书架卡文案，对齐上游 `BookInfoScreen.kt:1424-1430` 的五态顺序。
    *
    * 上游前两态（「点击删除」/「长按分组」）由 `LaunchedEffect(inBookshelf)` 在
-   * 「刚加入书架」后的 1 秒 / 2 秒各显示一次。本地没有「从详情页把书挂回书架」这条
-   * 路径（加入书架只发生在导入时，`Book.isNotShelf` 这一列本地也不存在），那两态
-   * 永远到不了，所以这里不摆一个空转的定时器，只保留可达的三态。
-   * 没做的那两态写进收尾的「未做到」，不假装实现。
+   * 「刚加入书架」后的第 1 秒 / 第 2 秒各显示一次。批8（:369）本地补上了从详情页
+   * 「放入书架」这条路，那两态现在真的到得了：`awaitingShelfAddition` 置位后等
+   * `@Prop book` 变成在架，`onBookPropChanged` 里按 1000ms + 1000ms 播两段。
    */
   private shelfActionLabel(): string {
+    if (this.showShelfRemoveHint) { return '点击删除'; }
+    if (this.showLongPressGroupHint) { return '长按分组'; }
     if (this.inBookshelf()) { return '已在书架'; }
     if (this.shelfConflictHighlight()) { return '疑似重复'; }
     return '放入书架';
   }
 
-  /** 书架卡点击：在架时走移出面板；不在架时给出可达的导入入口提示。 */
-  private onShelfCardClick(): void {
-    if (!this.inBookshelf()) {
-      this.onUnavailableAction('请通过「添加本地」导入这本书加入书架');
+  /**
+   * 批8（:369）：`@Prop book` 整体替换后同步引导态（上游 `LaunchedEffect(inBookshelf)`）。
+   * 加入成功时播「点击删除」1 秒 →「长按分组」1 秒；书不在架时三个状态全清。
+   */
+  private onBookPropChanged(): void {
+    if (this.awaitingShelfAddition && this.inBookshelf()) {
+      this.awaitingShelfAddition = false;
+      this.showShelfRemoveHint = true;
+      setTimeout(() => {
+        this.showShelfRemoveHint = false;
+        this.showLongPressGroupHint = true;
+        setTimeout(() => {
+          this.showLongPressGroupHint = false;
+        }, 1000);
+      }, 1000);
       return;
     }
-    this.requestRemoveFromShelf();
+    if (!this.inBookshelf()) {
+      this.awaitingShelfAddition = false;
+      this.showShelfRemoveHint = false;
+      this.showLongPressGroupHint = false;
+    }
+  }
+
+  /**
+   * 书架卡点击：在架时走移出面板（:337）；不在架时——有同名副本先弹冲突面板（共存/迁移），
+   * 没有就直接「放入书架」（对齐上游 `BookInfoViewModel.onShelfCardClick` 的分支顺序）。
+   */
+  private onShelfCardClick(): void {
+    if (this.inBookshelf()) {
+      this.requestRemoveFromShelf();
+      return;
+    }
+    if (this.conflictCandidates().length > 0) {
+      this.conflictSheetVisible = true;
+      return;
+    }
+    this.awaitingShelfAddition = true;
+    this.onAddToShelf();
+  }
+
+  /** 批8（:369）：冲突面板点「共存」或「迁移」，交给 Index 落库后关面板。 */
+  private applyShelfConflictChoice(existingId: string, mode: string): void {
+    this.conflictSheetVisible = false;
+    this.awaitingShelfAddition = true;
+    this.onResolveShelfConflict(existingId, mode);
   }
 
   /**
@@ -290,6 +366,37 @@ export struct BookInfoPage {
   }
 
   /** 页面底色：跟随背景图与纯黑主题，正文卡片之外的那一层就用这个色。 */
+  /**
+   * 批7（:1164）：简介里 `<button>名称@onclick:脚本</button>` 的点击。
+   *
+   * 本轮只把通道打通并记账：真执行脚本要书源上下文（引擎 runRawScript），
+   * 而本地在线书进详情页的通路还没接（见 :1161），所以这里不假装执行成功。
+   */
+  private handleIntroButtonClick(name: string, click: string): void {
+    AppLog.put(`简介按钮：name=${name} click=${click}`);
+    if (click.length === 0) {
+      this.onUnavailableAction(`${name}：这个按钮没有绑定脚本`);
+      return;
+    }
+    if (this.bookSourceUrl.length === 0) {
+      this.onUnavailableAction('该动作需要书源上下文，当前书籍没有');
+      return;
+    }
+    this.onUnavailableAction(`${name}：已收到脚本 ${click}，书源脚本执行尚未接入`);
+  }
+
+  /** 批7（:1165）：简介里的图片单击。上游 `IntroImageClick(click)` 带的是脚本或地址。 */
+  private handleIntroImageClick(click: string): void {
+    AppLog.put(`简介图片：click=${click}`);
+    this.onUnavailableAction(click.startsWith('http') ? `查看图片：${click}` : '简介图片已点击，动作未接入');
+  }
+
+  /** 批7（:1165）：简介里的图片长按。上游 `IntroImageLongClick(source)` 只给图片地址。 */
+  private handleIntroImageLongClick(source: string): void {
+    AppLog.put(`简介图片长按：source=${source}`);
+    this.onUnavailableAction('简介图片长按已收到，动作未接入');
+  }
+
   private pageBaseColor(): string {
     if (this.themeAppBackground.length > 0) { return '#00000000'; }
     return this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary;
@@ -562,10 +669,10 @@ export struct BookInfoPage {
         ? '移出后只删除这条缺正文书目记录；Android 兼容归档和原始文件不会更改。'
         : '移出后会清理应用内的导入副本，原始文件会保留。')
         .fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#AEB0BA').width('100%')
-      if (this.sameNameCopies().length > 0) {
-        Text(this.sameNameCopies().length === 1
+      if (this.conflictCandidates().length > 0) {
+        Text(this.conflictCandidates().length === 1
           ? `书架里还有 1 本同名书：${this.book.title}`
-          : `书架里还有 ${this.sameNameCopies().length} 本同名书：${this.book.title}`)
+          : `书架里还有 ${this.conflictCandidates().length} 本同名书：${this.book.title}`)
           .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 12 })
       }
       if (this.book.isLocal) {
@@ -586,6 +693,48 @@ export struct BookInfoPage {
             this.onRemoveFromShelf(this.deleteSourceChecked);
           })
       }.width('100%').margin({ top: 20 })
+    }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
+  }
+
+  /**
+   * 批8（:369）：同名冲突面板（共存 / 迁移）。
+   *
+   * 语义照上游 `ResolveBookshelfConflictUseCase.kt` 的文件头注释：
+   * - 共存：两个副本都留架，阅读会话按各自 bookUrl 记账，**只搬元信息、不搬阅读记录**；
+   * - 迁移：等价换源，旧书删除、阅读会话整体平移（平移不是累加）。
+   * 落库在 Index（`resolveShelfConflictCoexist` / `resolveShelfConflictMigrate`），这里只做选择。
+   */
+  @Builder
+  private ConflictSheet() {
+    Column() {
+      Text('发现同名书').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+        .width('100%').margin({ bottom: 8 })
+      Text(`书架里已有 ${this.conflictCandidates().length} 本同名书：${this.book.title}`)
+        .fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#AEB0BA').width('100%')
+      Text('共存＝两本都留在书架，只同步封面等元信息，阅读进度互不影响；'
+        + '迁移＝用当前书源替换原书，原书的阅读进度整体搬到新书。')
+        .fontSize(LABEL_MEDIUM).lineHeight(TITLE_SMALL_LINE_HEIGHT)
+        .fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 8 })
+      ForEach(this.conflictCandidates(), (item: Book) => {
+        Column() {
+          Text(item.title).fontSize(TITLE_SMALL).fontColor('#ECEEF2').width('100%')
+          Text(`${item.author.length > 0 ? item.author : '作者未知'} · ${item.originName ?? '本地'} · `
+            + `已读 ${(item.chapterIndex ?? 0) + 1} 章`)
+            .fontSize(LABEL_MEDIUM).fontColor('#AEB0BA').width('100%').margin({ top: 2 })
+          Row() {
+            Text('共存').fontSize(LABEL_LARGE).fontColor('#D0D2DB').textAlign(TextAlign.Center)
+              .layoutWeight(1).padding({ top: 10, bottom: 10 }).backgroundColor('#2A2B33').borderRadius(12)
+              .onClick(() => this.applyShelfConflictChoice(item.id, 'coexist'))
+            Text('迁移进度').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
+              .layoutWeight(1).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(12)
+              .margin({ left: 10 }).onClick(() => this.applyShelfConflictChoice(item.id, 'migrate'))
+          }.width('100%').margin({ top: 8 })
+        }.width('100%').padding(12).borderRadius(14).backgroundColor('#1B1C24')
+          .margin({ top: 10 })
+      }, (item: Book) => item.id)
+      Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+        .width('100%').padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
+        .margin({ top: 16 }).onClick(() => this.conflictSheetVisible = false)
     }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
   }
 
@@ -1077,11 +1226,19 @@ export struct BookInfoPage {
             // 没有卡片底色，正文直接接在摘要下面，`bodyMedium` 也不设 maxLines。
             // 本地原来是一张「小说简介」标题 + 圆角 18 卡片，这一层去掉。
             //
-            // 上游三个富文本前缀 `<useweb>` / `<usehtml>` / `<md>` 本批未实现（需要
-            // WebView / HTML / Markdown 三套渲染器），这里一律按纯文本显示，不做伪装。
+            // 批7（:1156/:1157/:1158/:1164/:1165）：三个富文本前缀由 RichIntro 分派 ——
+            // `<usehtml>` 与 `<useweb>` 走 Web（后者带同源拦截），`<md>` 走 MarkdownIntro，
+            // 无前缀仍是这一处原来的 Text，字号行高颜色一个字没改。
             if (this.book.description !== undefined && this.book.description.trim().length > 0) {
-              Text(this.book.description).fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#D0D2DB')
-                .alignSelf(ItemAlign.Start)
+              RichIntro({
+                intro: this.book.description,
+                baseUrl: this.bookBaseUrl,
+                textColor: '#D0D2DB',
+                webNotice: '简介页面含外部跳转，已拦截',
+                onButtonClick: (name: string, click: string) => { this.handleIntroButtonClick(name, click); },
+                onImageClick: (click: string) => { this.handleIntroImageClick(click); },
+                onImageLongClick: (source: string) => { this.handleIntroImageLongClick(source); }
+              })
             } else {
               // 上游 `R.string.intro_show_null` = 「简介：暂无简介」。
               Text('简介：暂无简介').fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#BFC1CB')
@@ -1142,7 +1299,7 @@ export struct BookInfoPage {
         // 滚动后铺的是 `scrolledContainerColor` = surfaceContainer（本地 themeColorSurfaceElevated）。
         // 原来用的是 themeColorSurfacePrimary，与页面底色同值，看起来等于「没底色」。
         .backgroundColor(this.collapsedHeader ? this.themeColorSurfaceElevated : '#00000000')
-        .animation({ duration: 220, curve: Curve.EaseInOut })
+        .animation({ duration: DURATION_FADE, curve: Curve.EaseInOut })
       }.width('100%').height('100%').backgroundColor(bookCoverColor(this.book))
 
       // 阅读按钮：上游是 ExtendedFloatingActionButton，浮在内容右下角，不是常驻底栏。
@@ -1174,7 +1331,7 @@ export struct BookInfoPage {
           Column() {
             Row() {
               Text('阅读记录').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
-              Text('关闭').fontSize(TITLE_SMALL).fontColor('#C5C7D0').padding(8)
+              Text('关闭').fontSize(LABEL_LARGE).fontColor('#C5C7D0').padding(8)
                 .onClick(() => this.readRecordPanelVisible = false)
             }.width('100%').padding({ bottom: 12 })
             Column() {
@@ -1191,7 +1348,7 @@ export struct BookInfoPage {
                 Column() {
                   ForEach(this.readRecordPanel.days, (day: BookReadRecordDay) => {
                     Column() {
-                      Text(day.dateLabel).fontSize(TITLE_SMALL).fontWeight(FontWeight.Medium)
+                      Text(day.dateLabel).fontSize(TITLE_SMALL).fontWeight(600)
                         .fontColor(this.themeColorTextPrimary).alignSelf(ItemAlign.Start)
                         .margin({ top: 14, bottom: 8 })
                       ForEach(day.sessions, (session: BookReadRecordSession, sessionIndex: number) => {
@@ -1216,7 +1373,7 @@ export struct BookInfoPage {
                 }.width('100%')
               }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
             }
-            Text('查看全部').fontSize(TITLE_SMALL).fontColor('#B9C6FF').textAlign(TextAlign.Center)
+            Text('查看全部').fontSize(LABEL_LARGE).fontColor('#B9C6FF').textAlign(TextAlign.Center)
               .width('100%').padding({ top: 14, bottom: 4 })
               .onClick(() => {
                 this.readRecordPanelVisible = false;
@@ -1231,11 +1388,12 @@ export struct BookInfoPage {
         this.PhotoPreview()
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      // 移出书架确认面板与日志面板共用这一个 bindSheet：
+      // 移出书架确认面板、日志面板与批8 的同名冲突面板共用这一个 bindSheet：
       // 同一节点挂两个 bindSheet 只有最后一个生效（书架页 :2118 踩过同一个坑），
       // 所以用一个合并条件 + 内容分支，不用两个独立 sheet。
-      .bindSheet(this.deleteSheetVisible || this.logSheetVisible, this.InfoSheetContent(), {
-        height: this.logSheetVisible ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
+      .bindSheet(this.deleteSheetVisible || this.logSheetVisible || this.conflictSheetVisible, this.InfoSheetContent(), {
+        height: this.logSheetVisible ? SheetSize.LARGE
+          : (this.conflictSheetVisible ? SheetSize.FIT_CONTENT : SheetSize.FIT_CONTENT),
         dragBar: true,
         showClose: false,
         backgroundColor: '#17181E',
@@ -1245,6 +1403,7 @@ export struct BookInfoPage {
             // 每次打开都从未勾选起步（:339）。
             this.deleteSourceChecked = false;
           }
+          this.conflictSheetVisible = false;
           this.logSheetVisible = false;
         }
       })
@@ -1255,6 +1414,8 @@ export struct BookInfoPage {
   InfoSheetContent() {
     if (this.logSheetVisible) {
       this.LogSheet()
+    } else if (this.conflictSheetVisible) {
+      this.ConflictSheet()
     } else {
       this.DeleteSheet()
     }

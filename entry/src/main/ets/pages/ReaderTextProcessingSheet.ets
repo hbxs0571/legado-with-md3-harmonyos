@@ -6,7 +6,7 @@ import { BookCover } from '../components/BookCover';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { BookContentProcess, ContentProcessDisplayItem, toContentProcessDisplayItem } from '../model/BookContentProcess';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
-import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 筛选菜单宽度。 */
 const REPLACE_FILTER_MENU_WIDTH: number = 220;
@@ -185,11 +185,11 @@ export struct ReaderTextProcessingSheet {
         }.width('100%').padding({ left: 16, right: 16, bottom: 12 })
 
         Row() {
-          Text('替换净化').fontSize(TITLE_SMALL).fontColor(this.activeTab === 0 ? '#ECECF2' : '#A9ABB4')
+          Text('替换净化').fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.activeTab === 0 ? '#ECECF2' : '#A9ABB4')
             .textAlign(TextAlign.Center).layoutWeight(1)
             .backgroundColor(this.activeTab === 0 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary).borderRadius(18)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.activeTab = 0)
-          Text('正文处理').fontSize(TITLE_SMALL).fontColor(this.activeTab === 1 ? '#ECECF2' : '#A9ABB4')
+          Text('正文处理').fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.activeTab === 1 ? '#ECECF2' : '#A9ABB4')
             .textAlign(TextAlign.Center).layoutWeight(1)
             .backgroundColor(this.activeTab === 1 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary).borderRadius(18)
             .padding({ top: 10, bottom: 10 }).onClick(() => this.activeTab = 1)

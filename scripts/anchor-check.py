@@ -42,6 +42,11 @@ EXTRA_ROOTS = [os.environ.get("LEGADO_SAMPLES") or os.path.join(_PARENT, "测试
 # 交接件目录（tmp/）：证据包之间会互相引用（如 layer2-evidence-package 指 layer2-impl-prompt.md）
 # 默认取仓库同级的 tmp/，可用 LEGADO_HANDOFF_DIR 覆盖
 TMP_DIR = os.environ.get("LEGADO_HANDOFF_DIR") or os.path.join(_PARENT, "tmp")
+# 交接件里的缩写表可能写着本机绝对路径：剥前缀按当前实际根目录现拼，不写死盘符
+_ABS_PREFIXES = (
+    UPSTREAM_REPO.replace(os.sep, "/") + "/",
+    LOCAL_REPO.replace(os.sep, "/") + "/",
+)
 
 # 建文件名索引时扫这些子树（够用且快）
 LOCAL_SCAN = ["entry/src/main/ets", "docs", "scripts", "AppScope"]
@@ -101,7 +106,7 @@ def build_index():
                     full = os.path.join(dirpath, fn)
                     rel = os.path.relpath(full, root).replace(os.sep, "/")
                     idx.setdefault(fn, []).append((root, rel))
-    # 仓库外样本（N:\HarmonyProjects\测试\...）：只索引顶层，避免把整书库扫进来
+    # 仓库外样本（工作区根下的 测试/ 目录）：只索引顶层，避免把整书库扫进来
     for extra in EXTRA_ROOTS:
         try:
             for fn in os.listdir(extra):
@@ -210,7 +215,7 @@ def resolve(ref_path: str):
     # 自引用（证据包用 `本文件名:行` 反向指自己某一节）：直接落到自身
     if _self_md and os.path.basename(p) == os.path.basename(_self_md):
         return ("<abs>", _self_md)
-    # 形如 "HarmonyProjects/legado-with-MD3/app/..." —— 正则把盘符前的 "N:" 吃掉了
+    # 形如 "HarmonyProjects/legado-with-MD3/app/..." —— 正则把盘符前缀（"X:"）吃掉了
     for pre in ("HarmonyProjects/legado-with-MD3/", "HarmonyProjects/legado-with-md3-harmonyos/"):
         if p.startswith(pre):
             p = p[len(pre):]
@@ -224,7 +229,7 @@ def resolve(ref_path: str):
     if _abbr_cache and p in _abbr_cache:
         target = _abbr_cache[p].replace("\\", "/")
         stripped = False
-        for pre in ("N:/HarmonyProjects/legado-with-MD3/", "N:/HarmonyProjects/legado-with-md3-harmonyos/"):
+        for pre in _ABS_PREFIXES:
             if target.startswith(pre):
                 p = target[len(pre):]
                 stripped = True
@@ -260,7 +265,7 @@ def resolve(ref_path: str):
         cand = os.path.join(TMP_DIR, p.split("tmp/", 1)[-1].replace("/", os.sep))
         if os.path.isfile(cand):
             return ("<abs>", cand)
-        # 样本备份等仓库外材料（N:\HarmonyProjects\测试\...）
+        # 样本备份等仓库外材料（工作区根下的 测试/）
         for extra in EXTRA_ROOTS:
             cand = os.path.join(extra, p.replace("/", os.sep))
             if os.path.isfile(cand):
