@@ -3,13 +3,15 @@
 // path 是点路径（ruleSearch.bookList），读写走 readPath / writePath 两个辅助函数。
 
 import { pasteboard } from '@kit.BasicServicesKit';
+import { util } from '@kit.ArkTS';
 import curves from '@ohos.curves';
 import { BookSource } from '../model/BookSource';
 import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppFab } from '../components/booksource/AppFab';
+import { MarkdownIntro } from '../components/MarkdownIntro';
 import { UiMenuPanel, UiMenuItem } from '../components/UiMenu';
-import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_LARGE, BODY_LARGE_LINE_HEIGHT, BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 
 /** 一个字段槽：path 为点路径，label 为中文标签，multi 决定用 TextArea 还是 TextInput。 */
@@ -111,18 +113,22 @@ const FIELDS_CONTENT: FieldSpec[] = [
 /** 类型下拉四档，对齐上游 book_type 数组。 */
 const SOURCE_TYPES: string[] = ['文本', '音频', '图片', '文件'];
 
-/** 溢出菜单项的显式类型。 */
-interface MoreMenuItem {
-  key: string;
-  title: string;
-}
-
-const MORE_ITEMS: MoreMenuItem[] = [
-  { key: 'login', title: '登录' }, { key: 'search', title: '搜索' },
-  { key: 'clear_cookie', title: '清除 Cookie' }, { key: 'autocomplete', title: '自动补全' },
-  { key: 'copy', title: '拷贝源' }, { key: 'paste', title: '粘贴源' },
-  { key: 'variables', title: '设置源变量' }, { key: 'share', title: '字符串分享' },
-  { key: 'log', title: '日志' }
+// 十项顺序与文案照上游 BookSourceEditScreen.kt:383-413 的 RoundDropdownMenuItem：
+// login 登录 / search 搜索 / cookie 清除 Cookie / auto_complete 自动补全（带勾）/
+// copy_source 拷贝源 / paste_source 粘贴源 / set_source_variable 设置源变量 /
+// str_share 字符串分享 / log 日志 / help 帮助。
+// 直接用 UiMenuItem（而不是另立同形 interface）：ArkTS 不支持结构类型互传。
+const MORE_ITEMS: UiMenuItem[] = [
+  { key: 'login', title: '登录' },
+  { key: 'search', title: '搜索' },
+  { key: 'clear_cookie', title: '清除 Cookie' },
+  { key: 'autocomplete', title: '自动补全' },
+  { key: 'copy', title: '拷贝源' },
+  { key: 'paste', title: '粘贴源' },
+  { key: 'variables', title: '设置源变量' },
+  { key: 'share', title: '字符串分享' },
+  { key: 'log', title: '日志' },
+  { key: 'help', title: '帮助' }
 ];
 
 @Entry
@@ -164,6 +170,9 @@ export struct BookSourceEditPage {
   @State private editingFieldPath: string = '';
   @State private editingFieldLabel: string = '';
   @State private editingFieldDraft: string = '';
+  /** 帮助弹层：对齐上游 BookSourceEditSheet.Help(content) + MarkdownSheet(R.string.help)。 */
+  @State private helpSheetVisible: boolean = false;
+  @State private helpText: string = '';
   /** 顶栏随内容滚动折叠（动画不作为验收项，按 yOffset 阈值切换）。 */
   @State private collapsedHeader: boolean = false;
   /** 六个 tab 各自独立的 Scroller，供顶栏折叠判定读取 yOffset。 */
@@ -270,14 +279,38 @@ export struct BookSourceEditPage {
     this.onSaveSource(saved);
   }
 
-  /** 当前正在编辑的源 URL（未保存时用编辑页里的 bookSourceUrl 字段）。 */
-  private currentSourceUrl(): string {
-    return this.editingSource?.bookSourceUrl ?? this.readPath('bookSourceUrl').trim();
+  /** 溢出菜单的动作列表；「自动补全」带当前勾选态（上游 isSelected = state.autoComplete）。 */
+  private moreMenuItems(): UiMenuItem[] {
+    const items: UiMenuItem[] = [];
+    for (let i = 0; i < MORE_ITEMS.length; i++) {
+      const item = MORE_ITEMS[i];
+      items.push({
+        key: item.key,
+        title: item.title,
+        selected: item.key === 'autocomplete' ? this.autoComplete : false
+      });
+    }
+    return items;
   }
 
-  /** 溢出菜单动作。 */
+  /**
+   * 溢出菜单动作。对齐上游 BookSourceEditViewModel.kt:66-99：
+   * login/search/variables/log 都是 `save { 打开对应界面 }`，即**先保存再动作**，
+   * 所以这里也先落一次 save()，不再要求用户手动点保存。
+   */
   private async onMoreAction(key: string): Promise<void> {
     this.moreMenuVisible = false;
+    const url = this.readPath('bookSourceUrl').trim();
+    // 需要源 URL 的项：先保存再执行（上游 save 内部也会校验源 URL 非空）。
+    const needUrl = key === 'login' || key === 'clear_cookie' || key === 'log' ||
+      key === 'search' || key === 'variables';
+    if (needUrl && url.length === 0) {
+      this.onUnavailableAction('源 URL 不能为空');
+      return;
+    }
+    if (needUrl) {
+      this.save();
+    }
     if (key === 'copy') {
       try {
         await pasteboard.getSystemPasteboard()
@@ -308,25 +341,41 @@ export struct BookSourceEditPage {
         this.onUnavailableAction('分享失败');
       }
     } else if (key === 'search') {
-      this.onOpenSourceSearch(this.readPath('bookSourceName'), this.readPath('bookSourceUrl'));
+      this.onOpenSourceSearch(this.readPath('bookSourceName'), url);
     } else if (key === 'autocomplete') {
       this.autoComplete = !this.autoComplete;
       this.onUnavailableAction(this.autoComplete ? '已开启自动补全' : '已关闭自动补全');
     } else if (key === 'login') {
-      const url = this.currentSourceUrl();
-      if (url.length === 0) { this.onUnavailableAction('请先保存书源再登录'); return; }
       this.onOpenSourceLogin(url);
     } else if (key === 'clear_cookie') {
-      const url = this.currentSourceUrl();
-      if (url.length === 0) { this.onUnavailableAction('请先保存书源'); return; }
       this.onClearSourceCookie(url);
     } else if (key === 'variables') {
       this.variableDraft = this.readPath('variable');
       this.variablePanelVisible = true;
     } else if (key === 'log') {
-      const url = this.currentSourceUrl();
-      if (url.length === 0) { this.onUnavailableAction('请先保存书源'); return; }
       this.onOpenSourceDebug(url);
+    } else if (key === 'help') {
+      this.openHelp();
+    }
+  }
+
+  /**
+   * 打开帮助：对齐上游 BookSourceEditViewModel.kt:123-129 showHelp()，
+   * 读 assets/web/help/md/ruleHelp.md 后塞进 Help sheet（MarkdownSheet + MarkdownBlock）。
+   * 本地同一个文件放在 rawfile/web/help/md/ruleHelp.md，读取方式照 OpenSourceLicensePage.ets:44。
+   */
+  private openHelp(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('无法读取随应用提供的书源帮助');
+      return;
+    }
+    try {
+      const data = context.resourceManager.getRawFileContentSync('web/help/md/ruleHelp.md');
+      this.helpText = util.TextDecoder.create('utf-8').decodeToString(data);
+      this.helpSheetVisible = true;
+    } catch (_) {
+      this.onUnavailableAction('书源帮助读取失败');
     }
   }
 
@@ -475,7 +524,20 @@ export struct BookSourceEditPage {
     // 图标已按上游 ic_bug_report.xml 补齐为 bugReport，不再用近似；
     // accessibility 文案按上游 contentDescription=debug_source「调试书源」。
     TopBarButton({ icon: 'bugReport', showDivider: false, onSelect: () => this.saveAndDebug() })
-    TopBarButton({ icon: 'more', showDivider: false, onSelect: () => { this.moreMenuVisible = true; } })
+    // 「更多」是下拉菜单不是底部弹层：上游 BookSourceEditScreen.kt:382 用 RoundDropdownMenu。
+    // @Builder 调用不能链式挂属性，故用 Stack 承载 bindPopup（项目内 UiMenu 的既有用法）。
+    Stack() {
+      TopBarButton({ icon: 'more', showDivider: false, onSelect: () => { this.moreMenuVisible = true; } })
+    }
+    .bindPopup(this.moreMenuVisible, {
+      builder: () => { this.MoreMenuPanel(); },
+      placement: Placement.Bottom,
+      enableArrow: false,
+      autoCancel: true,
+      onStateChange: (event: PopupStateChangeParam) => {
+        if (!event.isVisible) { this.moreMenuVisible = false; }
+      }
+    })
   }
 
   /** 保存并调试：沿用现有保存，成功后把该源送到调试页。 */
@@ -542,17 +604,26 @@ export struct BookSourceEditPage {
           onFabClick: () => this.save()
         })
         .margin({ right: 16, bottom: 16 })
+
+        // 源变量面板：必须放在 Stack 内条件渲染。原先用 `.overlay(this.VariablePanelBuilder())`，
+        // 而 overlay 即便 Builder 内容为空也会生成一个覆盖全屏的 overlay 节点，把整页点击全部吃掉
+        // （表现为字段卡片、tab、按钮全部点不动）。
+        if (this.variablePanelVisible) {
+          this.VariablePanelBuilder()
+        }
       }
       .layoutWeight(1)
+      // ArkUI 一个组件只能绑定一个半模态：原先 fieldSheet 与 helpSheet 都挂在最外层 Column 上，
+      // 后一个会覆盖前一个，导致两个 sheet 都弹不出来（表现为点字段卡片、点「帮助」全无反应）。
+      // 这里把 helpSheet 移到内层 Stack，两个 sheet 各归一个组件。
+      .bindSheet($$this.helpSheetVisible, this.HelpSheetBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: true })
     }
     .width('100%').height('100%')
     .backgroundColor(this.themeAppBackground.length > 0 ? this.themeAppBackground : this.themeColorSurfacePrimary)
     // 上游 AppModalBottomSheet 默认 enableOutsideInteractive=true、sheetGesturesEnabled=true：
     // 点遮罩或下滑都能关闭。字段 sheet 按上游去掉了「取消/确认」按钮（SourceEditFieldSheet.kt:220-252），
     // 因此这里必须保留遮罩可点，否则 sheet 打开后无任何关闭途径，整页看起来无法交互。
-    .bindSheet($$this.moreMenuVisible, this.MoreMenuBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: true })
     .bindSheet($$this.fieldSheetVisible, this.FieldSheetBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: true })
-    .overlay(this.VariablePanelBuilder(), { align: Alignment.Bottom })
   }
 
   /**
@@ -631,16 +702,43 @@ export struct BookSourceEditPage {
     }
   }
 
-  @Builder MoreMenuBuilder() {
+  /** 下拉菜单面板：Reuse UiMenuPanel（对齐 RoundDropdownMenu 的两层卡片结构）。 */
+  @Builder MoreMenuPanel() {
+    UiMenuPanel({
+      items: this.moreMenuItems(),
+      panelWidth: 220,
+      onSelect: (key: string) => { this.onMoreAction(key); }
+    })
+  }
+
+  /**
+   * 帮助弹层：对齐上游 BookSourceEditScreen.kt:184-190 的
+   * `MarkdownSheet(title = R.string.help, content = helpSheet.content)`。
+   */
+  @Builder HelpSheetBuilder() {
     Column() {
-      Text('更多操作').fontSize(BODY_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-        .width('100%').padding({ left: 20, top: 16, bottom: 12 })
-      ForEach(MORE_ITEMS, (item: MoreMenuItem) => {
-        Row() {
-          Text(item.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
-        }.width('100%').padding({ left: 20, top: 12, bottom: 12 })
-        .onClick(() => { this.onMoreAction(item.key); })
-      })
-    }.padding({ bottom: 20 })
+      Text('帮助')
+        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%').textAlign(TextAlign.Center)
+        .padding({ left: 56, right: 56, bottom: 16 })
+      Scroll() {
+        Column() {
+          MarkdownIntro({
+            source: this.helpText,
+            textColor: this.themeColorTextPrimary,
+            bodySize: BODY_LARGE,
+            bodyLineHeight: BODY_LARGE_LINE_HEIGHT
+          })
+          Row().height(16)
+        }.width('100%')
+      }
+      .width('100%').constraintSize({ maxHeight: '80%' })
+      .scrollBar(BarState.Off)
+      .align(Alignment.TopStart)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .backgroundColor(this.themeColorSurfaceTertiary)
+    .borderRadius({ topLeft: 28, topRight: 28 })
   }
 }
