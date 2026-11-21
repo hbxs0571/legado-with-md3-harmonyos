@@ -19,6 +19,7 @@ import {
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppLog } from '../lib/AppLog';
 import { WebDavSync } from '../lib/WebDavSync';
+import { RichIntro } from '../components/RichIntro';
 import { BODY_LARGE, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
@@ -64,6 +65,13 @@ export struct BookInfoPage {
   @Prop books: Book[] = [];
   /** 高亮标签规则，从 Index 启动时 load 一次下发；详情页自己 await 会让首帧空。 */
   @Prop highlightTagRules: HighlightTagRule[] = [];
+  /**
+   * 批7（:1156）：简介富文本要的 baseUrl —— 在线书是书源地址，本地书是正文文件所在目录。
+   * 为空时内联 HTML 里的相对链接按 about:blank 解析，不影响显示。
+   */
+  @Prop bookBaseUrl: string = '';
+  /** 批7（:1164）：简介里 onclick 脚本要执行书源 JS，需要书源 URL；本地书为空。 */
+  @Prop bookSourceUrl: string = '';
   /** 移出书架前是否二次确认（批 7 的 `:291`）。 */
   @Prop deleteAlertEnabled: boolean = true;
   onBack: () => void = () => {};
@@ -290,6 +298,37 @@ export struct BookInfoPage {
   }
 
   /** 页面底色：跟随背景图与纯黑主题，正文卡片之外的那一层就用这个色。 */
+  /**
+   * 批7（:1164）：简介里 `<button>名称@onclick:脚本</button>` 的点击。
+   *
+   * 本轮只把通道打通并记账：真执行脚本要书源上下文（引擎 runRawScript），
+   * 而本地在线书进详情页的通路还没接（见 :1161），所以这里不假装执行成功。
+   */
+  private handleIntroButtonClick(name: string, click: string): void {
+    AppLog.put(`简介按钮：name=${name} click=${click}`);
+    if (click.length === 0) {
+      this.onUnavailableAction(`${name}：这个按钮没有绑定脚本`);
+      return;
+    }
+    if (this.bookSourceUrl.length === 0) {
+      this.onUnavailableAction('该动作需要书源上下文，当前书籍没有');
+      return;
+    }
+    this.onUnavailableAction(`${name}：已收到脚本 ${click}，书源脚本执行尚未接入`);
+  }
+
+  /** 批7（:1165）：简介里的图片单击。上游 `IntroImageClick(click)` 带的是脚本或地址。 */
+  private handleIntroImageClick(click: string): void {
+    AppLog.put(`简介图片：click=${click}`);
+    this.onUnavailableAction(click.startsWith('http') ? `查看图片：${click}` : '简介图片已点击，动作未接入');
+  }
+
+  /** 批7（:1165）：简介里的图片长按。上游 `IntroImageLongClick(source)` 只给图片地址。 */
+  private handleIntroImageLongClick(source: string): void {
+    AppLog.put(`简介图片长按：source=${source}`);
+    this.onUnavailableAction('简介图片长按已收到，动作未接入');
+  }
+
   private pageBaseColor(): string {
     if (this.themeAppBackground.length > 0) { return '#00000000'; }
     return this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary;
@@ -1077,11 +1116,19 @@ export struct BookInfoPage {
             // 没有卡片底色，正文直接接在摘要下面，`bodyMedium` 也不设 maxLines。
             // 本地原来是一张「小说简介」标题 + 圆角 18 卡片，这一层去掉。
             //
-            // 上游三个富文本前缀 `<useweb>` / `<usehtml>` / `<md>` 本批未实现（需要
-            // WebView / HTML / Markdown 三套渲染器），这里一律按纯文本显示，不做伪装。
+            // 批7（:1156/:1157/:1158/:1164/:1165）：三个富文本前缀由 RichIntro 分派 ——
+            // `<usehtml>` 与 `<useweb>` 走 Web（后者带同源拦截），`<md>` 走 MarkdownIntro，
+            // 无前缀仍是这一处原来的 Text，字号行高颜色一个字没改。
             if (this.book.description !== undefined && this.book.description.trim().length > 0) {
-              Text(this.book.description).fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#D0D2DB')
-                .alignSelf(ItemAlign.Start)
+              RichIntro({
+                intro: this.book.description,
+                baseUrl: this.bookBaseUrl,
+                textColor: '#D0D2DB',
+                webNotice: '简介页面含外部跳转，已拦截',
+                onButtonClick: (name: string, click: string) => { this.handleIntroButtonClick(name, click); },
+                onImageClick: (click: string) => { this.handleIntroImageClick(click); },
+                onImageLongClick: (source: string) => { this.handleIntroImageLongClick(source); }
+              })
             } else {
               // 上游 `R.string.intro_show_null` = 「简介：暂无简介」。
               Text('简介：暂无简介').fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#BFC1CB')

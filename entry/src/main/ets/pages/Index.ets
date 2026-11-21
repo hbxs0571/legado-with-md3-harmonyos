@@ -263,6 +263,9 @@ struct Index {
   @State bookshelfManageGroupName: string = '';
   /** 本地书多选后的候选列表；非空表示停在导入确认页（批 10 的 :555）。 */
   @State localBookImportCandidates: ImportCandidate[] = [];
+  /** 批7（:1162）：正在挑选条目的压缩包。非空时确认页列的是包内条目。 */
+  @State localBookArchiveUri: string = '';
+  @State localBookArchiveTitle: string = '';
   @State selectedTab: number = 0;
   @State selectedBook: Book = EMPTY_BOOK;
   /** 换源面板（P8）：非空表示正在为这本书换源。 */
@@ -6534,6 +6537,7 @@ private canWriteInto(dir: string): boolean {
     this.backupPreview = undefined;
     this.pendingBackup = undefined;
     let zipPath = '';
+    let selection: BackupSelection | undefined = undefined;
     try {
       const latest = await WebDavSync.latestBackup(context);
       if (latest === undefined) {
@@ -6542,8 +6546,7 @@ private canWriteInto(dir: string): boolean {
       }
       zipPath = `${context.cacheDir}/legado-webdav-restore-${Date.now()}.zip`;
       await WebDavSync.downloadBackup(context, latest.name, zipPath);
-      const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
-      const selection = await BackupRepository.selectBackupFromPath(context, zipPath, localBooks);
+      selection = await BackupRepository.selectBackupFromPath(context, zipPath);
       this.pendingBackup = selection;
       // 预览卡渲染依赖 backupPreview（:151），必须和 selectLocalBackup 一样同时设。
       this.backupPreview = selection.preview;
@@ -6556,6 +6559,10 @@ private canWriteInto(dir: string): boolean {
       }
       this.backupBusy = false;
     }
+    // 选完直接恢复，对齐上游：上游选 ZIP 后 Loading → 恢复 → 一条 toast，无预览态。
+    if (selection !== undefined) {
+      await this.restoreWithSelection(selection);
+    }
   }
 
   private async selectLocalBackup(): Promise<void> {
@@ -6565,6 +6572,7 @@ private canWriteInto(dir: string): boolean {
     this.backupStatusMessage = '';
     this.backupPreview = undefined;
     this.pendingBackup = undefined;
+    let selection: BackupSelection | undefined = undefined;
     try {
       const localBooks = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
       const selection = await BackupRepository.selectBackup(context, localBooks);
@@ -6573,16 +6581,25 @@ private canWriteInto(dir: string): boolean {
         this.backupPreview = selection.preview;
       }
     } catch (error) {
+      // 解析失败时清掉可能的临时 staging，避免残留（原 cancel 路径已随预览块删除）。
+      if (this.pendingBackup !== undefined) {
+        const stale = this.pendingBackup;
+        this.pendingBackup = undefined;
+        BackupRepository.discardSelection(stale).catch(() => {});
+      }
       this.backupStatusMessage = error instanceof Error ? `读取备份失败：${error.message}` : '读取备份失败';
     } finally {
       this.backupBusy = false;
     }
+    // 选完直接恢复，对齐上游：无预览卡与「取消/导入」按钮。
+    if (selection !== undefined) {
+      await this.restoreWithSelection(selection);
+    }
   }
 
-  private async restoreLocalBackup(): Promise<void> {
+  private async restoreWithSelection(selection: BackupSelection): Promise<void> {
     const context = this.getUIContext().getHostContext();
-    const selection = this.pendingBackup;
-    if (context === undefined || selection === undefined || this.backupBusy) { return; }
+    if (context === undefined || this.backupBusy) { return; }
     this.backupBusy = true;
     this.backupStatusMessage = '';
     try {
@@ -6807,7 +6824,7 @@ private canWriteInto(dir: string): boolean {
       if (serverSummary.length > 0) {
         details.push(serverSummary);
       }
-      this.backupStatusMessage = details.length > 0
+      const detailedSummary = details.length > 0
         ? `${restoreSummary}；${details.join('')}` : `${restoreSummary}。`;
       this.restoredAndroidEntries = result.restoredEntries;
       await BackupRepository.discardSelection(selection);
@@ -6940,6 +6957,8 @@ private canWriteInto(dir: string): boolean {
     if (context === undefined) {
       return undefined;
     }
+    this.localBookArchiveUri = '';
+    this.localBookArchiveTitle = '';
     let uris: string[] = [];
     try {
       uris = await BookRepository.pickLocalBookUris(context);
@@ -6988,18 +7007,46 @@ private canWriteInto(dir: string): boolean {
           continue;
         }
         try {
-          const archiveResult = await ArchiveImporter.importFromUri(context, uri);
-          archiveFailedCount += archiveResult.failedCount;
-          const createdBooks = archiveResult.books;
-          for (let inner = 0; inner < createdBooks.length; inner += 1) {
-            const oneCreated = createdBooks[inner];
-            if (oneCreated === undefined) {
-              continue;
+          // 批7（:1162，上游 `BookInfoViewModel.kt:1501-1541` handleWebFileSelection）：
+          // 包内只有一个书文件就直接导（与旧行为一致）；多个书文件才先列条目、转确认页勾选
+          // （等价上游 `BookInfoSheet.ArchiveEntries`）；包里有图时 listBookEntries 返回空，走整包漫画。
+          const entries = await ArchiveImporter.listBookEntries(context, uri);
+          if (entries.length <= 1) {
+            const archiveResult = await ArchiveImporter.importFromUri(context, uri);
+            archiveFailedCount += archiveResult.failedCount;
+            const createdBooks = archiveResult.books;
+            for (let inner = 0; inner < createdBooks.length; inner += 1) {
+              const oneCreated = createdBooks[inner];
+              if (oneCreated === undefined) {
+                continue;
+              }
+              const persisted = await this.persistCreatedBook(oneCreated, uri);
+              if (persisted !== undefined) {
+                importedCount += 1;
+              }
             }
-            const persisted = await this.persistCreatedBook(oneCreated, uri);
-            if (persisted !== undefined) {
-              importedCount += 1;
+          } else {
+            const archiveCandidates: ImportCandidate[] = [];
+            for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+              const entryName = entries[entryIndex];
+              if (entryName === undefined) {
+                continue;
+              }
+              const candidate: ImportCandidate = {
+                uri: entryName,
+                fileName: entryName,
+                sizeLabel: '',
+                onShelf: BookRepository.isFileOnShelf(this.books, BookRepository.getFileName(entryName)),
+                selected: true
+              };
+              archiveCandidates.push(candidate);
             }
+            this.localBookImportCandidates = archiveCandidates;
+            this.localBookArchiveUri = uri;
+            this.localBookArchiveTitle = BookRepository.getFileName(uri);
+            this.route = AppRoute.LOCAL_BOOK_IMPORT;
+            // 交给确认页：勾完再走 importArchiveEntries，本轮不再继续下面的落库循环。
+            return;
           }
         } catch (error) {
           this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：压缩包无法读取');
@@ -7022,6 +7069,52 @@ private canWriteInto(dir: string): boolean {
     let message = `已导入 ${importedCount} 本书`;
     if (archiveFailedCount > 0) {
       message = `已导入 ${importedCount} 本，${archiveFailedCount} 本失败`;
+    }
+    this.showUnavailableAction(message);
+  }
+
+  /** 批7（:1162）：压缩包确认页提交 —— 只导入勾中的条目，落库逻辑与整包导入同一条链。 */
+  private async importArchiveEntries(entryNames: string[]): Promise<void> {
+    const archiveUri = this.localBookArchiveUri;
+    this.localBookImportCandidates = [];
+    this.localBookArchiveUri = '';
+    this.localBookArchiveTitle = '';
+    if (archiveUri.length === 0 || entryNames.length === 0) {
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    let importedCount = 0;
+    let failedCount = 0;
+    try {
+      const archiveResult = await ArchiveImporter.importFromUriEntries(context, archiveUri, entryNames);
+      failedCount = archiveResult.failedCount;
+      const createdBooks = archiveResult.books;
+      for (let inner = 0; inner < createdBooks.length; inner += 1) {
+        const oneCreated = createdBooks[inner];
+        if (oneCreated === undefined) {
+          continue;
+        }
+        const persisted = await this.persistCreatedBook(oneCreated, archiveUri);
+        if (persisted !== undefined) {
+          importedCount += 1;
+        }
+      }
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：压缩包无法读取');
+      return;
+    }
+    if (importedCount === 0) {
+      this.showUnavailableAction('没有导入任何书籍');
+      return;
+    }
+    await this.reloadBooksAfterImport();
+    this.route = AppRoute.BOOKSHELF;
+    let message = `已导入 ${importedCount} 本书`;
+    if (failedCount > 0) {
+      message = `已导入 ${importedCount} 本，${failedCount} 本失败`;
     }
     this.showUnavailableAction(message);
   }
@@ -8332,6 +8425,35 @@ private canWriteInto(dir: string): boolean {
    * 切换「允许更新」（:289）：写 canUpdate 一列后原位刷新 books 与 selectedBook，
    * 让详情页菜单的选中态与列表数据都跟上。只改这一个字段，不动阅读进度。
    */
+  /**
+   * 批7（:1156）：简介富文本的 baseUrl。在线书给书源地址，本地书给正文文件所在目录；
+   * 两者都拿不到就返回空串 —— 空串只影响相对链接解析，不影响 HTML 显示。
+   */
+  private bookInfoIntroBaseUrl(): string {
+    const book: Book | undefined = this.selectedBook;
+    if (book === undefined) {
+      return '';
+    }
+    if (BookRepository.isOnlineBook(book)) {
+      const origin: string = book.origin ?? '';
+      const source = BookSourceRepository.getAll().find((item: BookSource) => item.bookSourceUrl === origin);
+      return source === undefined ? '' : origin;
+    }
+    const path: string = book.contentPath ?? '';
+    const slash: number = path.lastIndexOf('/');
+    return slash > 0 ? `file://${path.substring(0, slash)}/` : '';
+  }
+
+  /** 批7（:1164）：简介里 onclick 脚本要的书源 URL；本地书（origin=loc_book）返回空串。 */
+  private bookInfoIntroSourceUrl(): string {
+    const book: Book | undefined = this.selectedBook;
+    if (book === undefined || !BookRepository.isOnlineBook(book)) {
+      return '';
+    }
+    const origin: string = book.origin ?? '';
+    return origin.startsWith('http') ? origin : '';
+  }
+
   private async toggleBookCanUpdate(canUpdate: boolean): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
@@ -9815,6 +9937,8 @@ private canWriteInto(dir: string): boolean {
           groups: this.bookGroups,
           books: this.books,
           highlightTagRules: this.highlightTagRules,
+          bookBaseUrl: this.bookInfoIntroBaseUrl(),
+          bookSourceUrl: this.bookInfoIntroSourceUrl(),
           deleteAlertEnabled: this.bookInfoDeleteAlert,
           followCoverColor: this.bookInfoFollowCoverColor,
           networkCoverBackground: this.bookInfoNetworkCoverBackground,
@@ -9867,11 +9991,16 @@ private canWriteInto(dir: string): boolean {
         } else if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {
         LocalBookImportPage({
           candidates: this.localBookImportCandidates,
+          archiveUri: this.localBookArchiveUri,
+          archiveTitle: this.localBookArchiveTitle,
           onBack: () => {
             this.localBookImportCandidates = [];
+            this.localBookArchiveUri = '';
+            this.localBookArchiveTitle = '';
             this.route = AppRoute.BOOKSHELF;
           },
-          onImportSelected: (uris: string[]) => this.importSelectedLocalBooks(uris)
+          onImportSelected: (uris: string[]) => this.importSelectedLocalBooks(uris),
+          onImportArchiveEntries: (entryNames: string[]) => this.importArchiveEntries(entryNames)
         })
         .transition(this.routeTransition())
         } else if (this.route === AppRoute.SUBSCRIPTION_RULES) {
@@ -11481,8 +11610,6 @@ private canWriteInto(dir: string): boolean {
             webDavBackupNames: this.webDavBackupNames,
             onCreateBackup: () => this.createLocalBackup(),
             onSelectRestore: () => this.selectLocalBackup(),
-            onApplyRestore: () => this.restoreLocalBackup(),
-            onCancelRestore: () => this.cancelLocalBackupRestore(),
             onToggleBackupIgnore: (key: string, ignored: boolean) => this.toggleBackupIgnore(key, ignored),
             onToggleRestoreIgnore: (key: string, ignored: boolean) => this.toggleRestoreIgnore(key, ignored),
             onUnavailableAction: (message: string) => this.showUnavailableAction(message),
