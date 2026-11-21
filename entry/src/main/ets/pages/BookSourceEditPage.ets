@@ -6,7 +6,9 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { BookSource } from '../model/BookSource';
 import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
 import { AppGlyph } from '../components/AppGlyph';
-import { BODY_LARGE, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { AppFab } from '../components/booksource/AppFab';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 
 /** 一个字段槽：path 为点路径，label 为中文标签，multi 决定用 TextArea 还是 TextInput。 */
 interface FieldSpec {
@@ -149,6 +151,7 @@ export struct BookSourceEditPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
 
   /** 进入时携带的书源；undefined 表示新建。 */
@@ -171,6 +174,17 @@ export struct BookSourceEditPage {
   @State private moreMenuVisible: boolean = false;
   @State private variablePanelVisible: boolean = false;
   @State private variableDraft: string = '';
+  /** 字段编辑底部 sheet：对齐上游 editingFieldPath / SourceEditFieldSheet。 */
+  @State private fieldSheetVisible: boolean = false;
+  @State private editingFieldPath: string = '';
+  @State private editingFieldLabel: string = '';
+  @State private editingFieldDraft: string = '';
+  /** 顶栏随内容滚动折叠（动画不作为验收项，按 yOffset 阈值切换）。 */
+  @State private collapsedHeader: boolean = false;
+  /** 六个 tab 各自独立的 Scroller，供顶栏折叠判定读取 yOffset。 */
+  private tabScrollers: Scroller[] = [
+    new Scroller(), new Scroller(), new Scroller(), new Scroller(), new Scroller(), new Scroller()
+  ];
 
   aboutToAppear(): void {
     this.loadIntoRoot();
@@ -331,21 +345,32 @@ export struct BookSourceEditPage {
     }
   }
 
-  @Builder FieldRow(spec: FieldSpec) {
+  /**
+   * 字段卡片：对齐上游 SourceEditFieldCard（BookSourceEditScreen.kt:193-218）。
+   * label 用 titleSmall，值摘要用 bodyMedium/onSurfaceVariant、空值「—」、maxLines4 省略；
+   * 点击整卡打开底部 sheet 编辑。字段 path 映射一行不改（只经 readPath 读摘要）。
+   */
+  @Builder FieldCard(spec: FieldSpec) {
     Column() {
-      Text(spec.label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ bottom: 4 }).width('100%')
-      if (spec.multi) {
-        TextArea({ placeholder: spec.label, text: this.readPath(spec.path) })
-          .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
-          .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8).height(72)
-          .onChange((value: string) => { this.writePath(spec.path, value); })
-      } else {
-        TextInput({ placeholder: spec.label, text: this.readPath(spec.path) })
-          .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
-          .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8)
-          .onChange((value: string) => { this.writePath(spec.path, value); })
-      }
-    }.width('100%').margin({ bottom: 12 })
+      Text(spec.label).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
+      Text(this.readPath(spec.path).length > 0 ? this.readPath(spec.path) : '—')
+        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
+        .maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%').margin({ top: 4 })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+    .backgroundColor(this.themeColorSurfaceSecondary)
+    .borderRadius(12)
+    .onClick(() => this.openFieldSheet(spec))
+  }
+
+  /** 打开字段编辑 sheet：把当前值灌进草稿，确认时按同一 path 写回。 */
+  private openFieldSheet(spec: FieldSpec): void {
+    this.editingFieldPath = spec.path;
+    this.editingFieldLabel = spec.label;
+    this.editingFieldDraft = this.readPath(spec.path);
+    this.fieldSheetVisible = true;
   }
 
   @Builder ToggleRow(toggle: ToggleSpec) {
@@ -364,7 +389,32 @@ export struct BookSourceEditPage {
   }
 
   @Builder editActionsSlot() {
+    // 上游 :101-110 顺序：BugReport（保存并调试）在前、MoreVert（更多）在后。
+    // 本地无 BugReport 图标，用语义最近的 profileRunningWithErrors（运行诊断）代替，
+    // 差异写进报告；accessibility 文案按上游 contentDescription=debug_source「调试书源」。
+    TopBarButton({ icon: 'profileRunningWithErrors', showDivider: false, onSelect: () => this.saveAndDebug() })
     TopBarButton({ icon: 'more', showDivider: false, onSelect: () => { this.moreMenuVisible = true; } })
+  }
+
+  /** 保存并调试：沿用现有保存，成功后把该源送到调试页。 */
+  private saveAndDebug(): void {
+    const url = this.readPath('bookSourceUrl').trim();
+    if (url.length === 0) {
+      this.onUnavailableAction('源 URL 不能为空');
+      return;
+    }
+    this.save();
+    this.onOpenSourceDebug(url);
+  }
+
+  /** 顶栏折叠判定：滚动偏移超过阈值折叠，低于阈值展开，中间区间保持原态。 */
+  private updateHeaderOffset(scroller: Scroller): void {
+    const offset = scroller.currentOffset().yOffset;
+    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true
+      : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
+    if (shouldCollapse !== this.collapsedHeader) {
+      this.collapsedHeader = shouldCollapse;
+    }
   }
 
   build() {
@@ -372,44 +422,108 @@ export struct BookSourceEditPage {
       AppTopBar({
         title: this.editingSource === undefined ? '新建书源' : '编辑书源',
         hasNavigation: true,
+        collapsed: this.collapsedHeader,
         navigationIcon: () => { this.editNavSlot() },
         actions: () => { this.editActionsSlot() }
       })
 
-      Tabs({ barPosition: BarPosition.Start, index: this.activeTab }) {
-        ForEach(TAB_NAMES, (name: string, index: number) => {
-          TabContent() {
-            Scroll() {
-              Column() {
-                if (index === 0) {
-                  Row() {
-                    Text('类型').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-                    Select(SOURCE_TYPES.map<TypeOption>((t: string): TypeOption => ({ value: t })))
-                      .selected(this.sourceTypeIndex)
-                      .onSelect((i: number) => { this.sourceTypeIndex = i; })
-                      .fontColor(this.themeColorTextPrimary)
-                  }.width('100%').padding({ top: 8, bottom: 8 })
-                  ForEach(TOGGLE_SPECS, (toggle: ToggleSpec) => { this.ToggleRow(toggle) })
-                }
-                ForEach(this.fieldsForTab(), (spec: FieldSpec) => { this.FieldRow(spec) })
-              }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 24 })
-            }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
-              .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
-          }.tabBar(name)
-        }, (name: string) => name)
-      }
-      .onChange((index: number) => { this.activeTab = index; })
-      .layoutWeight(1)
-      .barMode(BarMode.Scrollable)
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Tabs({ barPosition: BarPosition.Start, index: this.activeTab }) {
+          ForEach(TAB_NAMES, (name: string, index: number) => {
+            TabContent() {
+              Scroll(this.tabScrollers[index]) {
+                Column({ space: 12 }) {
+                  if (index === 0) {
+                    Row() {
+                      Text('类型').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                      Select(SOURCE_TYPES.map<TypeOption>((t: string): TypeOption => ({ value: t })))
+                        .selected(this.sourceTypeIndex)
+                        .onSelect((i: number) => { this.sourceTypeIndex = i; })
+                        .fontColor(this.themeColorTextPrimary)
+                    }.width('100%').padding({ top: 8, bottom: 8 })
+                    ForEach(TOGGLE_SPECS, (toggle: ToggleSpec) => { this.ToggleRow(toggle) })
+                  }
+                  ForEach(this.fieldsForTab(), (spec: FieldSpec) => { this.FieldCard(spec) })
+                }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 96 })
+              }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+                .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
+                .onScroll(() => { this.updateHeaderOffset(this.tabScrollers[index]); })
+            }.tabBar(this.tabCard(name, index))
+          }, (name: string) => name)
+        }
+        .onChange((index: number) => { this.activeTab = index; })
+        .width('100%').height('100%')
+        .barMode(BarMode.Scrollable)
 
-      Row() {
-        Button('保存').onClick(() => this.save()).layoutWeight(1)
-      }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
+        // 右下保存 FAB：复用批3新建的 AppFab（批4调试页复用同一组件）。
+        AppFab({
+          icon: 'profileSave',
+          fabAccessibilityText: '保存',
+          onFabClick: () => this.save()
+        })
+        .margin({ right: 16, bottom: 16 })
+      }
+      .layoutWeight(1)
     }
     .width('100%').height('100%')
     .backgroundColor(this.themeAppBackground.length > 0 ? this.themeAppBackground : this.themeColorSurfacePrimary)
     .bindSheet($$this.moreMenuVisible, this.MoreMenuBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: false })
+    .bindSheet($$this.fieldSheetVisible, this.FieldSheetBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: false })
     .overlay(this.VariablePanelBuilder(), { align: Alignment.Bottom })
+  }
+
+  /**
+   * M3 分段 tab（AppTabRow.kt:40-56 的 PrimaryScrollableTabRow）：
+   * 透明底、无分隔线、选中字用 primary、未选用 onSurfaceVariant、指示条在选中段下方。
+   */
+  @Builder tabCard(label: string, index: number) {
+    Column() {
+      Text(label)
+        .fontSize(LABEL_LARGE)
+        .fontWeight(this.activeTab === index ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.activeTab === index ? this.themeColorAccent : this.themeColorTextSecondary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+      Row()
+        .width(this.activeTab === index ? 24 : 0)
+        .height(3)
+        .borderRadius(2)
+        .backgroundColor(this.themeColorAccent)
+        .margin({ top: 4 })
+    }
+    .justifyContent(FlexAlign.Center)
+    .padding({ left: 8, right: 8, top: 8, bottom: 4 })
+    .constraintSize({ minWidth: 0 })
+  }
+
+  /**
+   * 字段编辑 sheet：对齐上游 SourceEditFieldSheet（:220-252）——
+   * 单一 AppTextField（minLines4/maxLines24），按字段 label 作标题，实时回写不另做确认。
+   * 本地用 TextArea 承载多行；确认/取消是 ArkUI bindSheet 的关闭入口，数据只在确认时写回。
+   */
+  @Builder FieldSheetBuilder() {
+    Column() {
+      Text(this.editingFieldLabel).fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary)
+        .width('100%').padding({ left: 20, right: 20, top: 16, bottom: 8 })
+      TextArea({ placeholder: this.editingFieldLabel, text: this.editingFieldDraft })
+        .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+        .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8).height(160)
+        .margin({ left: 20, right: 20 })
+        .onChange((value: string) => { this.editingFieldDraft = value; })
+      Row() {
+        Blank()
+        Text('取消').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+          .onClick(() => { this.fieldSheetVisible = false; })
+        Text('确认').fontSize(TITLE_MEDIUM).fontColor(this.themeColorAccent)
+          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+          .onClick(() => {
+            this.writePath(this.editingFieldPath, this.editingFieldDraft);
+            this.fieldSheetVisible = false;
+          })
+      }.width('100%').justifyContent(FlexAlign.End).padding({ right: 20, bottom: 16 })
+    }
+    .width('100%').backgroundColor(this.themeColorSurfacePrimary)
   }
 
   /** P9 源变量编辑面板：直接改 sourceJson 的 variable 键，保存时随整条写回。 */
