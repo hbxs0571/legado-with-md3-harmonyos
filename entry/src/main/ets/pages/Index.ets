@@ -32,6 +32,9 @@ import { ReadAloudConfigPanel } from './ReadAloudConfigPanel';
 import { BookInfoPage } from './BookInfoPage';
 import { BookInfoEditPage } from './BookInfoEditPage';
 import { ChangeSourceSheet } from './ChangeSourceSheet';
+import {
+  BatchChangeSourceSheet, BatchChangeSourcePreviewItem, BatchChangeSourceResult, BATCH_PREVIEW_MATCHED
+} from './BatchChangeSourceSheet';
 import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions, defaultMigrationOptions } from '../bookSource/ChangeSourceCoordinator';
 import { BookSourceRuntime } from '../bookSource/BookSourceRuntime';
 import { SearchBookItem, RemoteChapter } from '../bookSource/SourceModels';
@@ -274,6 +277,8 @@ struct Index {
   @State selectedBook: Book = EMPTY_BOOK;
   /** 换源面板（P8）：非空表示正在为这本书换源。 */
   @State changeSourceBook: Book | null = null;
+  /** 批量换源面板（批10 :564）：非空即显示，值是选择模式里勾中的书。 */
+  @State batchChangeSourceBooks: Book[] | null = null;
   /** P9 正在登录的书源 URL；非空即显示登录页。 */
   @State loginSourceUrl: string = '';
   /** P10 书源调试页：非空的书源 URL 即显示调试覆盖层。 */
@@ -7295,16 +7300,16 @@ private canWriteInto(dir: string): boolean {
    * 全部校验通过再整批写库；任何一步失败都保留原书、旧目录与进度。
    */
   private async applyChangeSource(
-    candidate: ChangeSourceCandidate, options: ChangeSourceMigrationOptions
+    candidate: ChangeSourceCandidate, options: ChangeSourceMigrationOptions, silent: boolean = false
   ): Promise<void> {
     const oldBook = this.selectedBook;
     if (candidate.book === null || !candidate.verified || candidate.chapters.length === 0) {
-      this.showUnavailableAction('候选源目录校验未通过，原书未改动');
+      if (!silent) { this.showUnavailableAction('候选源目录校验未通过，原书未改动'); }
       return;
     }
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
-      this.showUnavailableAction('无法访问本地书架，换源未执行');
+      if (!silent) { this.showUnavailableAction('无法访问本地书架，换源未执行'); }
       return;
     }
     try {
@@ -7356,10 +7361,67 @@ private canWriteInto(dir: string): boolean {
         (b.contentPath ?? b.androidOriginalPath ?? '') === oldBookUrl ? newBook : b);
       this.books = nextBooks;
       this.selectedBook = newBook;
-      this.showUnavailableAction(`已换源到「${candidate.sourceName}」${options.migrateProgress ? `，进度停在第 ${newIndex + 1} 章` : ''}`);
+      // 批量换源时逐本成功不弹 toast（N 本会刷屏），由批量面板汇总结果。
+      if (!silent) {
+        this.showUnavailableAction(`已换源到「${candidate.sourceName}」${options.migrateProgress ? `，进度停在第 ${newIndex + 1} 章` : ''}`);
+      }
     } catch (e) {
-      this.showUnavailableAction('换源失败，原书与进度未改动：' + (e instanceof Error ? e.message : String(e)));
+      const message = e instanceof Error ? e.message : String(e);
+      if (!silent) {
+        this.showUnavailableAction('换源失败，原书与进度未改动：' + message);
+      } else {
+        // ArkTS 的 arkts-limited-throw 只允许抛 Error，不能直接 throw catch 到的任意值。
+        throw new Error(message);
+      }
     }
+  }
+
+  /**
+   * 批10（:564）：批量换源执行器。
+   * 对齐上游 ChangeBookSourceUseCase.batchChangeTo：
+   * - 本地书、已经在新源上的书计 skipped，不报错；
+   * - 逐本 try/catch，一本失败不中断整批（上游是 for 循环里 catch，不是 Promise.all）；
+   * - 一本成功就落库一本，中途崩溃已换的不回滚（与上游一致）。
+   * 落库复用 applyChangeSource：它硬依赖 this.selectedBook，所以每本执行前临时指过去，
+   * 执行完再把选中项恢复到执行前那本（批8 resolveShelfConflictMigrate 用过同样的手法）。
+   */
+  private async runBatchChangeSource(
+    books: Book[], sourceUrls: string[], options: ChangeSourceMigrationOptions,
+    preview: BatchChangeSourcePreviewItem[]
+  ): Promise<BatchChangeSourceResult> {
+    const previousSelected = this.selectedBook;
+    let succeeded = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (let index = 0; index < books.length; index++) {
+      const book = books[index];
+      if (book === undefined) { continue; }
+      if (book.isLocal) { skipped++; continue; }
+      // 找这本书的预览结果。未命中的书按上游语义计 failed：上游 batchChangeTo 在执行阶段
+      // 重新 preciselySearch，搜不到就 failedCount++，这里复用预览结果，等价于「搜索失败」。
+      let matched: BatchChangeSourcePreviewItem | undefined = undefined;
+      for (let p = 0; p < preview.length; p++) {
+        const item = preview[p];
+        if (item !== undefined && item.bookUrl === (book.contentPath ?? book.id)) { matched = item; break; }
+      }
+      if (matched === undefined || matched.status !== BATCH_PREVIEW_MATCHED || matched.candidate === null) {
+        failed++;
+        continue;
+      }
+      if (sourceUrls.indexOf(matched.candidate.sourceUrl) < 0) { failed++; continue; }
+      if ((book.origin ?? '') === matched.candidate.sourceUrl) { skipped++; continue; }
+      this.selectedBook = book;
+      try {
+        await this.applyChangeSource(matched.candidate, options, true);
+        succeeded++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    this.selectedBook = previousSelected;
+    // 批量换源会改主键，书架要按新主键重载一次（applyChangeSource 只做了内存原位替换）。
+    await this.reloadLibraryAfterBulkChange();
+    return { succeeded: succeeded, failed: failed, skipped: skipped };
   }
 
   /** 书名/作者规范化：对齐上游 BookMatchKey.of（空白归一、转小写）。 */
@@ -11206,7 +11268,8 @@ private canWriteInto(dir: string): boolean {
             onClearSelectedCache: (books: Book[]) => { this.clearBookCaches(books); },
             onExportSegmented: (book: Book, scopeSpec: string, chaptersPerVolume: number) => {
               this.exportBookSegmented(book, scopeSpec, chaptersPerVolume);
-            }
+            },
+            onBatchChangeSource: (books: Book[]) => { this.batchChangeSourceBooks = books; }
           })
         .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.FILE_MANAGER) {
@@ -12661,16 +12724,27 @@ private canWriteInto(dir: string): boolean {
             onOpenEngine: () => { this.showAloudConfig = false; this.showReadAloudPlayer = false; this.openAloudEnginePage(); }
           })
         }
-        // P8 换源面板：条件覆盖层，非空即显示；搜索/校验在面板内完成，落库由此处回调执行。
-        if (this.changeSourceBook !== null) {
-          ChangeSourceSheet({
-            book: this.changeSourceBook,
-            onClose: () => { this.changeSourceBook = null; },
-            onConfirm: (candidate: ChangeSourceCandidate, options: ChangeSourceMigrationOptions) =>
-              this.applyChangeSource(candidate, options)
-          })
-        }
       }.width('100%').height('100%')
+    }
+    // P8 换源面板：条件覆盖层，非空即显示；搜索/校验在面板内完成，落库由此处回调执行。
+    // 必须挂在根级：早前误挂在听书浮层 Stack 内，只有听书界面打开时才会渲染，换源点了没反应。
+    if (this.changeSourceBook !== null) {
+      ChangeSourceSheet({
+        book: this.changeSourceBook,
+        onClose: () => { this.changeSourceBook = null; },
+        onConfirm: (candidate: ChangeSourceCandidate, options: ChangeSourceMigrationOptions) =>
+          this.applyChangeSource(candidate, options)
+      })
+    }
+    // 批10（:564）：批量换源向导，与单本换源各占一层覆盖层，互不干扰。
+    if (this.batchChangeSourceBooks !== null) {
+      BatchChangeSourceSheet({
+        books: this.batchChangeSourceBooks,
+        onClose: () => { this.batchChangeSourceBooks = null; },
+        onConfirm: (sourceUrls: string[], options: ChangeSourceMigrationOptions,
+          preview: BatchChangeSourcePreviewItem[]): Promise<BatchChangeSourceResult> =>
+          this.runBatchChangeSource(this.batchChangeSourceBooks ?? [], sourceUrls, options, preview)
+      })
     }
     // P9 书源登录页：条件覆盖层，非空即显示，盖在内容之上。
     if (this.loginSourceUrl.length > 0) {

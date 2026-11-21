@@ -27,7 +27,8 @@ const MANAGE_MENU_WIDTH: number = 260;
  * - 本地 Book 没有 origin/originName，第三行左半用 groupNames、右半用 androidOriginalPath 的文件名。
  * - 导出走鸿蒙 DocumentViewPicker.save()，每本弹一次系统保存框（:471）。
  * - 删除用自绘 bindSheet（系统 AlertDialog 放不下勾选框），复用批5 的 BookRepository.deleteBooks。
- * - 独立 EPUB 导出打包器、书源选择/换源面板本批不做（顺延），菜单里不放点了没反应的项。
+ * - 独立 EPUB 导出打包器见 data/EpubExporter.ets（批10 :565 接在书籍详情页溢出菜单，只对本地书出现）；
+ *   批量换源（批10 :564）接在选择模式菜单，面板是 pages/BatchChangeSourceSheet.ets。
  */
 
 @Component
@@ -50,6 +51,8 @@ export struct BookshelfManagePage {
   /** 批2（:471）：单本「分段导出」，按范围挑章、每卷 N 章拆成多个 EPUB。 */
   onExportSegmented: (book: Book, scopeSpec: string, chaptersPerVolume: number) => void =
     (_book: Book, _scopeSpec: string, _chaptersPerVolume: number) => {};
+  /** 批10（:564）：选择模式「批量换源」，交给 Index 打开 BatchChangeSourceSheet。 */
+  onBatchChangeSource: (books: Book[]) => void = (_books: Book[]) => {};
 
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#F1F2F6';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#AEB0BA';
@@ -563,12 +566,13 @@ export struct BookshelfManagePage {
     })
   }
 
-  /** 选择模式操作。批2 补「下载」（:466）与「清除缓存」（:469）。 */
+  /** 选择模式操作。批2 补「下载」（:466）与「清除缓存」（:469）；批10 补「批量换源」（:564）。 */
   private selectionMenuItems(): UiMenuItem[] {
     return [
       { key: 'select_all', title: '全选' },
       { key: 'invert', title: '反选' },
       { key: 'move_group', title: '移入分组' },
+      { key: 'batch_change_source', title: '批量换源' },
       { key: 'download_selected', title: '下载' },
       { key: 'clear_cache', title: '清除缓存' }
     ];
@@ -588,6 +592,8 @@ export struct BookshelfManagePage {
         } else if (key === 'move_group') {
           const keys: string[] = this.selectedBooks().map((book: Book) => this.rowKey(book));
           this.openGroupSelect(keys);
+        } else if (key === 'batch_change_source') {
+          this.onBatchChangeSource(this.selectedBooks());
         } else if (key === 'download_selected') {
           this.onDownloadSelected(this.selectedBooks());
         } else if (key === 'clear_cache') {
