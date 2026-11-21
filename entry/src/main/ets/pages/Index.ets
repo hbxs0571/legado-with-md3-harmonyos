@@ -10171,7 +10171,9 @@ private canWriteInto(dir: string): boolean {
         })
         DiscoverPage({
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-          onOpenOnlineBook: (item: MergedBook) => this.onAddOnlineBook(item)
+          onOpenOnlineBook: (item: MergedBook) => this.onAddOnlineBook(item),
+          shelfBooks: this.books,
+          exploreFilterState: this.coverSettings.exploreFilterState
         })
         SubscriptionPage({
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),

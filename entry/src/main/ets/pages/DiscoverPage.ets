@@ -8,6 +8,7 @@ import { ExploreCoordinator, ExploreOutcome } from '../bookSource/ExploreCoordin
 import { ExploreMenu } from '../bookSource/ExploreMenuParser';
 import { SearchBookItem } from '../bookSource/SourceModels';
 import { MergedBook } from '../bookSource/SearchResultMerger';
+import { Book } from '../model/Book';
 import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 const DISCOVER_MENU_WIDTH: number = 260;
@@ -66,6 +67,10 @@ export struct DiscoverPage {
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onOpenOnlineBook: (item: MergedBook) => void = (_item: MergedBook) => {};
+  /** 批10（:1454）：书架在架书，用于四档过滤；未上架（notShelf）书不在此列，与上游 notShelf 不算冲突一致。 */
+  @Prop shelfBooks: Book[] = [];
+  /** 批10（:1454）：发现页过滤档位 0..3，来自封面设置 explore_filter_state。 */
+  @Prop exploreFilterState: number = 0;
 
   @State exploreSources: BookSource[] = [];
   @State selectedSourceUrl: string = '';
@@ -166,6 +171,42 @@ export struct DiscoverPage {
     if (outcome.books.length < 20) { this.hasMore = false; }
   }
 
+  /**
+   * 批10（:1454）：照上游 ResolveBookShelfStateUseCase 判三态。
+   * 0 = 已在架（同源地址命中）；1 = 同名同作者但不同源；2 = 不在架。
+   * 书架里的在线书 contentPath 就是书源 bookUrl（onAddOnlineBook 的字段口径）。
+   */
+  private bookShelfState(item: SearchBookItem): number {
+    const url = item.bookUrl;
+    for (const shelfBook of this.shelfBooks) {
+      if ((shelfBook.contentPath ?? '') === url) { return 0; }
+    }
+    for (const shelfBook of this.shelfBooks) {
+      if (shelfBook.title === item.name && shelfBook.author === item.author) { return 1; }
+    }
+    return 2;
+  }
+
+  /**
+   * 批10（:1454）：按 explore_filter_state 四档过滤发现结果。
+   * 0 全显 / 1 隐藏已在架 / 2 隐藏同名同作者非同源 / 3 只显不在架。
+   * 过滤后为空则回落全显示，保证发现页不会因档位变空白。
+   */
+  private filteredBooks(): SearchBookItem[] {
+    const all = this.resultBooks;
+    if (all.length === 0) { return all; }
+    const state = this.exploreFilterState;
+    if (state === 0) { return all; }
+    const kept = all.filter((item: SearchBookItem) => {
+      const shelfState = this.bookShelfState(item);
+      if (state === 1) { return shelfState !== 0; }
+      if (state === 2) { return shelfState !== 1; }
+      if (state === 3) { return shelfState === 2; }
+      return true;
+    });
+    return kept.length === 0 ? all : kept;
+  }
+
   /** 底部"加载更多"进入视口时触发（滚动到底自动翻页）。 */
   private onReachBottom(): void {
     if (this.loading || !this.hasMore || this.selectedMenuUrl.length === 0) { return; }
@@ -252,7 +293,7 @@ export struct DiscoverPage {
     } else {
       Scroll(this.exploreScroller) {
         Column() {
-          ForEach(this.resultBooks, (item: SearchBookItem) => {
+          ForEach(this.filteredBooks(), (item: SearchBookItem) => {
             ExploreBookCard({ item: item, onSelect: () => this.openBook(item) })
           }, (item: SearchBookItem) => item.bookUrl)
 
