@@ -2,6 +2,23 @@
 
 项目名称为 Legado with MD3 for HarmonyOS。目标是在 HarmonyOS 上以 ArkTS、ArkUI 和 Stage 模型实现本地阅读体验，并安全兼容部分 Android ZIP 备份数据。此文件记录机器无关的功能队列；当前公开进度见 PROGRESS.md。
 
+## 对标对象：上游的基础包（core）
+
+「与上游一致」里的「上游」，指上游发布的**基础包**（`legado-<版本>-core-<abi>.apk`），不是漫画增强版（`comic`），也不是 Material 3 规范本身。
+
+上游 `HapeLee/legado-with-MD3` 每个 release 提供两种安装包，release 说明原文：
+
+- `core`：「基础包，不含本地推理运行时；云端 OCR、AI 识图/翻译可用。」
+- `comic`：「漫画增强版，内置本地 OCR、擦字与气泡检测，体积明显更大。」
+
+因此 comic 独有的四项能力——本地推理运行时、本地 OCR、擦字、气泡检测——不在对标范围，也不进对照表：对照表每一行的前提是「上游基础包有此行为」。
+
+**代码基线与发布包的时序**：本地上游副本是 `bba5c64`（2026-10-26），早于这次拆分（最新发布版 `3.26.30` 为 2026-11-19）。该基线的 `app/build.gradle.kts:133-138` 只有一个 `create("app")` flavor，没有 core/comic 两种变体；源码里的 `ReadSessionState.isComic`（`ReadBook.kt:714`）说的是「这本书是不是图片书」，与包类型无关。判一项能力属哪个包，只能按 release 说明列出的 comic 专属清单，不能按源码里的 flavor 推断。
+
+该基线本身不含 comic 能力，已实测：在 `legado-with-MD3` 跑 `git grep -I -i -w <词> HEAD -- "*.kt" "*.kts" "*.toml" "*.xml"`，`onnx` / `onnxruntime` / `tflite` / `mlkit` / `paddle` / `inference` / `inpaint` / `eraser` / `bubbleDetect` / `speechRecogniz` / `Ocr` 全部 0 命中。所以现有七表不需要因为这条口径改任何一行。
+
+**Material 3 规范不是对标对象。** 上游的主题派生（色位、tone 值）来自 `material-color-utilities` 一系的库；查阅规范只用来解释「上游为什么是这个颜色」，两者冲突时以基础包的实际呈现为准。
+
 ## 功能队列
 
 队列按用户使用顺序排列（2026-11-11 确定）：先让书架能用，再让阅读器能用，然后补朗读，其余三项按同样力度收口。每项「现在能做到什么、卡在这几处、算做完的判据」写在[功能交付清单](FEATURES.md)的对应章，本文件只记顺序与边界。
@@ -47,6 +64,6 @@
 
 ## 范围之外
 
-AI 在线服务、云同步以及额外设备形态适配均不因出现在页面或备份归档中而视为已实现。备份中的脚本与凭据按不可信数据处理，不执行，也不连接外部服务。
+AI 在线服务、云同步、额外设备形态适配，以及上游漫画增强版（`comic`）独有能力（本地推理运行时、本地 OCR、擦字、气泡检测）均不因出现在页面、源码或备份归档中而视为要实现。备份中的脚本与凭据按不可信数据处理，不执行，也不连接外部服务。
 
 功能状态与设备验证结果请查看 [进度摘要](PROGRESS.md) 和 [验证记录](VALIDATION.md)。
