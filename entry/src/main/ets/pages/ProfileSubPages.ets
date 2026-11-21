@@ -3882,6 +3882,24 @@ export struct AllBookmarksPage {
   /** 导出当前选中书的书签；isMarkdown 为 true 时导出 Markdown。 */
   onExportBookmarks: (bookKey: string, isMarkdown: boolean) => void =
     (_bookKey: string, _isMarkdown: boolean) => {};
+  /**
+   * 批5（:153）排列方向。
+   * 上游书签列表恒升序，没有方向开关；这里按盘面 :153 的形态参考（目录 reverse_toc）补一个
+   * 会落盘的开关，值由 Index 持有（偏好读写都在那边），本页只负责按方向排序与切换。
+   */
+  @Prop sortDescending: boolean = false;
+  onToggleSortDescending: () => void = () => {};
+  /**
+   * 批5（:152）批量删除。书签和笔记在两个仓储里，分开传，各自落盘。
+   */
+  onDeleteEntries: (bookmarkIds: string[], markingIds: string[]) => void =
+    (_bookmarkIds: string[], _markingIds: string[]) => {};
+  /** 批5（:152）批量导出：只导出选中的条目，isMarkdown 决定格式。 */
+  onExportSelectedEntries: (ids: string[], isMarkdown: boolean) => void =
+    (_ids: string[], _isMarkdown: boolean) => {};
+  @State selectionMode: boolean = false;
+  @State selectedEntryIds: string[] = [];
+  @State batchExportMenuVisible: boolean = false;
   @State selectedBookKey: string = '';
   @State selectedBookTitle: string = '';
   @State selectedTab: number = 0;
@@ -3925,9 +3943,13 @@ export struct AllBookmarksPage {
     });
     // 上游 AllBookmarkViewModel 把书签与笔记混成 detailItems 后按 (章节序号, 章内偏移) 排序，
     // 本地原来沿用存储顺序（新书签前插），列表和正文顺序对不上。
+    // 批5（:153）：升序/降序只翻这两个比较键的方向，不动过滤与搜索口径。
+    const direction = this.sortDescending ? -1 : 1;
     return matched.sort((left: BookmarkEntrySummary, right: BookmarkEntrySummary) => {
-      if (left.chapterIndex !== right.chapterIndex) { return left.chapterIndex - right.chapterIndex; }
-      return left.chapterPosition - right.chapterPosition;
+      if (left.chapterIndex !== right.chapterIndex) {
+        return (left.chapterIndex - right.chapterIndex) * direction;
+      }
+      return (left.chapterPosition - right.chapterPosition) * direction;
     });
   }
 
@@ -3961,6 +3983,11 @@ export struct AllBookmarksPage {
   }
 
   private handleBack(): void {
+    // 批5（:152）选择模式下先退选择，再退书，别一步退回上一页把选择态丢了
+    if (this.selectionMode) {
+      this.exitSelectionMode();
+      return;
+    }
     if (this.selectedBookKey.length > 0) {
       this.selectedBookKey = '';
       this.selectedBookTitle = '';
@@ -4002,6 +4029,128 @@ export struct AllBookmarksPage {
     }
   }
 
+  /** 批5（:152）选择模式：条目是否已选。 */
+  private isEntrySelected(id: string): boolean {
+    return this.selectedEntryIds.includes(id);
+  }
+
+  private toggleEntrySelection(id: string): void {
+    const next = this.selectedEntryIds.filter((value: string) => value !== id);
+    // 长度没变说明原来不在选中集里，补进去
+    if (next.length === this.selectedEntryIds.length) {
+      next.push(id);
+    }
+    this.selectedEntryIds = next;
+  }
+
+  private exitSelectionMode(): void {
+    this.selectionMode = false;
+    this.selectedEntryIds = [];
+    this.batchExportMenuVisible = false;
+  }
+
+  /**
+   * 批5（:152）批量删除二次确认。
+   * 上游 selectionSecondaryActions 的批量操作都会先确认，这里照同一口径，文案把条数写进去，
+   * 删除后无法恢复要说清楚。
+   */
+  private confirmBatchDeleteEntries(): void {
+    const count = this.selectedEntryIds.length;
+    if (count === 0) {
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '删除书签',
+      message: `删除选中的 ${count} 条书签？删除后无法恢复。`,
+      autoCancel: true,
+      primaryButton: {
+        value: '取消',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: '删除',
+        action: () => {
+          const bookmarkIds: string[] = [];
+          const markingIds: string[] = [];
+          for (let index = 0; index < this.selectedEntryIds.length; index++) {
+            const id = this.selectedEntryIds[index];
+            const entry = this.entries.find((item: BookmarkEntrySummary) => item.id === id);
+            if (entry === undefined) {
+              continue;
+            }
+            if (entry.kind === 'bookmark') {
+              bookmarkIds.push(id);
+            } else {
+              markingIds.push(id);
+            }
+          }
+          this.onDeleteEntries(bookmarkIds, markingIds);
+          this.exitSelectionMode();
+        }
+      }
+    });
+  }
+
+  private requestBatchExport(isMarkdown: boolean): void {
+    if (this.selectedEntryIds.length === 0) {
+      return;
+    }
+    this.batchExportMenuVisible = false;
+    this.onExportSelectedEntries(this.selectedEntryIds, isMarkdown);
+  }
+
+  @Builder
+  private BookmarkBatchExportMenu() {
+    UiMenuPanel({
+      items: [
+        { key: 'json', title: '导出选中为 JSON' },
+        { key: 'markdown', title: '导出选中为 Markdown' }
+      ],
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => this.requestBatchExport(key === 'markdown')
+    })
+  }
+
+  /**
+   * 批5（:152）批量操作栏。
+   * 只放任务书要求的两项：删除与导出；未选中时按钮置灰，避免点了没反应。
+   */
+  @Builder
+  private BookmarkSelectionBar() {
+    Row() {
+      Text(`已选 ${this.selectedEntryIds.length} 项`)
+        .fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+      Row() {
+        AppGlyph({ name: 'download', glyphSize: 18,
+          tint: this.selectedEntryIds.length > 0 ? this.themeColorTextSecondary : this.themeColorTextTertiary })
+        Text('导出').fontSize(LABEL_LARGE).margin({ left: 4 })
+          .fontColor(this.selectedEntryIds.length > 0 ? this.themeColorTextPrimary : this.themeColorTextTertiary)
+      }.padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .onClick(() => {
+          if (this.selectedEntryIds.length === 0) { return; }
+          this.batchExportMenuVisible = !this.batchExportMenuVisible;
+        })
+        .bindPopup(this.batchExportMenuVisible, {
+          builder: this.BookmarkBatchExportMenu,
+          placement: Placement.TopRight,
+          popupColor: '#00000000',
+          enableArrow: false,
+          autoCancel: true,
+          width: PROFILE_MENU_WIDTH,
+          onStateChange: (event: PopupStateChangeParam) => { this.batchExportMenuVisible = event.isVisible; }
+        })
+      Row() {
+        AppGlyph({ name: 'delete', glyphSize: 18,
+          tint: this.selectedEntryIds.length > 0 ? '#E57373' : this.themeColorTextTertiary })
+        Text('删除').fontSize(LABEL_LARGE).margin({ left: 4 })
+          .fontColor(this.selectedEntryIds.length > 0 ? '#E57373' : this.themeColorTextTertiary)
+      }.padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .onClick(() => this.confirmBatchDeleteEntries())
+    }.width('100%').height(56).padding({ left: 16, right: 12 })
+      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent :
+        (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary))
+  }
+
   @Builder
   private BookmarkEmptyMessage(message: string) {
     Column() {
@@ -4029,6 +4178,28 @@ export struct AllBookmarksPage {
           if (!this.showSearch) { this.searchQuery = ''; }
         })
         if (this.selectedBookKey.length > 0) {
+          // 批5（:153）方向切换：图标用 swap，读屏念当前方向，点一下翻面后由 Index 落盘
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: 'swap', glyphSize: 20, tint: this.themeColorTextSecondary })
+          }.width(40).height(40)
+            .accessibilityText(this.sortDescending ? '降序' : '升序')
+            .accessibilityDescription('切换书签与笔记的排列方向')
+            .onClick(() => this.onToggleSortDescending())
+          // 批5（:152）选择模式开关：进入后点击/长按都只切选中态，不再跳正文
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
+            AppGlyph({ name: this.selectionMode ? 'profileClose' : 'list', glyphSize: 20, tint: this.themeColorTextSecondary })
+          }.width(40).height(40)
+            .accessibilityText(this.selectionMode ? '退出选择' : '选择')
+            .onClick(() => {
+              if (this.selectionMode) {
+                this.exitSelectionMode();
+              } else {
+                this.selectionMode = true;
+                this.selectedEntryIds = [];
+              }
+            })
           Stack({ alignContent: Alignment.Center }) {
             Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
             AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
@@ -4084,12 +4255,17 @@ export struct AllBookmarksPage {
                       BookmarkEntryCard({
                         entry: entry,
                         currentSourceUrl: this.currentSourceUrl,
+                        // 批5（:152）选择模式：点击与长按都只切选中态，避免长按跳走丢选中
+                        selectionMode: this.selectionMode,
+                        selected: this.isEntrySelected(entry.id),
                         // 上游 DetailList：书签条目点击与长按都打开编辑面板；
                         // 笔记（Marking）条目点击无任何行为。
                         onSelect: () => {
+                          if (this.selectionMode) { this.toggleEntrySelection(entry.id); return; }
                           if (entry.kind === 'bookmark') { this.onEditBookmark(entry.id); }
                         },
                         onJump: () => {
+                          if (this.selectionMode) { this.toggleEntrySelection(entry.id); return; }
                           if (entry.kind === 'bookmark') { this.onEditBookmark(entry.id); }
                         }
                       })
@@ -4102,6 +4278,10 @@ export struct AllBookmarksPage {
           }, (tabIndex: number) => tabIndex.toString())
         }.layoutWeight(1).width('100%').index(this.selectedTab).loop(false).indicator(false)
           .onChange((index: number) => { this.selectedTab = index; this.searchQuery = ''; })
+        // 批5（:152）批量操作栏只在选择模式下出现，退出选择时一起收走
+        if (this.selectionMode) {
+          this.BookmarkSelectionBar()
+        }
       } else if (this.getVisibleBooks().length === 0) {
         this.BookmarkEmptyMessage(this.searchQuery.length > 0 ? '没有找到相关笔记' : '暂无书签')
       } else {
@@ -4183,20 +4363,54 @@ struct BookmarkEntryCard {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @Prop entry: BookmarkEntrySummary = {
     id: '', bookKey: '', chapterName: '', excerpt: '', note: '', kind: 'bookmark',
     chapterIndex: 0, chapterPosition: 0, sourceUrl: ''
   };
   /** 当前书籍的书源地址；与条目记录里的 sourceUrl 不一致时显示「其他书源」。 */
   @Prop currentSourceUrl: string = '';
+  /** 批5（:152）选择模式：为 true 时卡片左侧显示勾选框，点击/长按只切选中态。 */
+  @Prop selectionMode: boolean = false;
+  @Prop selected: boolean = false;
   onSelect: () => void = () => {};
   /** 长按跳转到正文位置，保留原有的跳转能力。 */
   onJump: () => void = () => {};
+  /**
+   * 批5（:100）：章名回退只写一份。
+   * 上游 feature_bookmarks_chapter_fallback 用 chapterIndex + 1，正文显示与读屏播报共用同一段文字，
+   * 否则两处各拼一次，改一处就漂一处。
+   */
+  private chapterTitle(): string {
+    return this.entry.chapterName.length > 0 ? this.entry.chapterName : `第 ${this.entry.chapterIndex + 1} 章`;
+  }
+  /**
+   * 批5（:100）：读屏播报用的整句。
+   * 上游 ReaderAccessibilityPolicy.kt:19 的 isBookmarked 负责阅读页「已加书签」播报，这里补的是
+   * 书签/笔记列表卡片的播报 —— 卡片本身只有零散 Text，读屏会逐段念，拼成一句才听得懂。
+   */
+  private accessibilitySummary(): string {
+    const chapter = this.chapterTitle();
+    const body = this.entry.kind === 'bookmark' ? this.entry.excerpt : this.entry.note;
+    const prefix = this.entry.kind === 'bookmark' ? '书签' : '笔记';
+    return body.length > 0 ? `${prefix}：${chapter}。${body}` : `${prefix}：${chapter}。`;
+  }
   build() {
     Column() {
       Row() {
+        // 批5（:152）勾选框：选择模式下才出现，未选中是空心描边，选中填强调色 + 勾
+        if (this.selectionMode) {
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(18).height(18).borderRadius(4).borderWidth(1)
+              .borderColor(this.selected ? this.themeColorAccent : this.themeColorTextTertiary)
+              .backgroundColor(this.selected ? this.themeColorAccent : Color.Transparent)
+            if (this.selected) {
+              AppGlyph({ name: 'profileCheck', glyphSize: 12, tint: '#FFFFFF' })
+            }
+          }.width(18).height(18).margin({ right: 8 })
+        }
         // 上游：章名为空时回退「第 N 章」（feature_bookmarks_chapter_fallback，用 chapterIndex + 1）
-        Text(this.entry.chapterName.length > 0 ? this.entry.chapterName : `第 ${this.entry.chapterIndex + 1} 章`)
+        Text(this.chapterTitle())
           .fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).maxLines(1).layoutWeight(1)
         // 上游 marks_other_source：`bookUrl.isNotBlank() && bookUrl != book?.bookUrl`
         // 记录属于别的书源时标红提示，避免误以为当前书里找不到。
@@ -4206,7 +4420,11 @@ struct BookmarkEntryCard {
       }.width('100%')
       if (this.entry.excerpt.length > 0) { Text(this.entry.excerpt).fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).maxLines(3).margin({ top: 6 }) }
       if (this.entry.note.length > 0) { Text(this.entry.note).fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).maxLines(3).margin({ top: 4 }) }
-    }.width('100%').padding(16).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14).margin({ bottom: 8 })
+    }.width('100%').padding(16)
+      .backgroundColor(this.selected ? this.themeColorSurfaceTertiary : this.themeColorSurfaceSecondary)
+      .borderRadius(14).margin({ bottom: 8 })
+      .accessibilityText(this.accessibilitySummary())
+      .accessibilityDescription('点击编辑，长按跳转到正文')
       .onClick(() => this.onSelect())
       .gesture(LongPressGesture().onAction(() => this.onJump()))
   }

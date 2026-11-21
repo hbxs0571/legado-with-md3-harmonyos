@@ -186,6 +186,8 @@ import { ReaderBackgroundImageRepository } from '../data/ReaderBackgroundImageRe
 import { ReaderBookmarkBadgeRepository } from '../data/ReaderBookmarkBadgeRepository';
 import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository } from '../data/ReaderMarkingRepository';
+// 批5（:153）书签/笔记列表方向偏好的读写都在这里，页面只拿值与回调
+import { BookmarkListSettingsRepository } from '../data/BookmarkListSettings';
 import {
   BookmarkTargetVerdict,
   MarkingRelocateAnchor,
@@ -284,6 +286,8 @@ struct Index {
   @State readRecordSummaries: ReadRecordSummary[] = [];
   @State readerBookmarks: ReaderBookmark[] = [];
   @State readerMarkings: ReaderMarking[] = [];
+  /** 批5（:153）书签/笔记列表是否降序；从偏好读、切换时写回。 */
+  @State bookmarkSortDescending: boolean = false;
   @State replaceRules: ReplaceRule[] = [];
   /** TXT 目录规则列表，与仓储缓存同步。 */
   @State txtTocRules: TxtTocRule[] = [];
@@ -961,6 +965,7 @@ struct Index {
     this.restoreBookshelfLayout(context);
     this.restoreReaderBookmarks(context);
     this.restoreReaderMarkings(context);
+    this.restoreBookmarkListSettings(context);
     await this.restoreReaderSettings(context);
     this.restoreReaderMoreActions(context);
     this.restoreReplaceRules(context);
@@ -1805,6 +1810,89 @@ struct Index {
     }
   }
 
+  /** 批5（:153）方向偏好只在启动时读一次，之后由 toggleBookmarkSortDescending 维护。 */
+  private async restoreBookmarkListSettings(context: Context): Promise<void> {
+    this.bookmarkSortDescending = await BookmarkListSettingsRepository.loadSortDescending(context);
+  }
+
+  /** 批5（:153）切换排列方向：先翻状态，再落盘；写盘失败只提示，不回滚（下次进页面还按当前方向）。 */
+  private toggleBookmarkSortDescending(): void {
+    this.bookmarkSortDescending = !this.bookmarkSortDescending;
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    BookmarkListSettingsRepository.saveSortDescending(context, this.bookmarkSortDescending).catch(() => {
+      this.showUnavailableAction('排序方向保存失败，请重试');
+    });
+  }
+
+  /**
+   * 批5（:152）批量删除书签/笔记。
+   * 两个仓储分开落盘，与单条删除 deleteReaderBookmark 同一条路：先过滤出新列表，保存成功后再改状态；
+   * 保存失败时状态保持原样，避免界面显示已删除、库里还在。
+   */
+  private async deleteBookmarkEntries(bookmarkIds: string[], markingIds: string[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法删除书签');
+      return;
+    }
+    const nextBookmarks = this.readerBookmarks.filter((bookmark: ReaderBookmark) => !bookmarkIds.includes(bookmark.id));
+    const nextMarkings = this.readerMarkings.filter((marking: ReaderMarking) => !markingIds.includes(marking.id));
+    // 删除条数要在赋值前算，赋值后长度已经变了
+    const removed = (this.readerBookmarks.length - nextBookmarks.length) +
+      (this.readerMarkings.length - nextMarkings.length);
+    try {
+      if (nextBookmarks.length !== this.readerBookmarks.length) {
+        await ReaderBookmarkRepository.save(context, nextBookmarks);
+        this.readerBookmarks = nextBookmarks;
+      }
+      if (nextMarkings.length !== this.readerMarkings.length) {
+        await ReaderMarkingRepository.save(context, nextMarkings);
+        this.readerMarkings = nextMarkings;
+      }
+      if (removed > 0) {
+        this.showUnavailableAction(`已删除 ${removed} 条`);
+      }
+    } catch (_) {
+      this.showUnavailableAction('书签删除失败，请重试');
+    }
+  }
+
+  /**
+   * 批5（:152）批量导出选中条目。
+   * 复用整本导出的两个构造器（toAllBookmarksMarkdown / toAllBookmarksJson），只是把输入换成按 id 过滤后的子集，
+   * 文件名仍按书取，避免多出一套格式。书签名/作者取自第一条命中记录，与 exportBookmarksByKey 同口径。
+   */
+  private async exportSelectedBookmarkEntries(ids: string[], isMarkdown: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const bookmarks = this.readerBookmarks.filter((bookmark: ReaderBookmark) => ids.includes(bookmark.id));
+    const markings = this.readerMarkings.filter((marking: ReaderMarking) => ids.includes(marking.id));
+    if (bookmarks.length === 0 && markings.length === 0) {
+      this.showUnavailableAction('没有选中可导出的条目');
+      return;
+    }
+    const first = bookmarks[0];
+    const firstMarking = markings[0];
+    const bookName = first !== undefined ? first.bookName : (firstMarking !== undefined ? firstMarking.bookName : '');
+    const author = first !== undefined ? first.bookAuthor
+      : (firstMarking !== undefined ? firstMarking.bookAuthor : '');
+    const fileName = ReaderBookmarkExporter.buildAllBookmarksFileName(bookName, isMarkdown);
+    const content = isMarkdown
+      ? ReaderBookmarkExporter.toAllBookmarksMarkdown(bookName, author, bookmarks, markings)
+      : ReaderBookmarkExporter.toAllBookmarksJson(bookmarks, markings);
+    try {
+      const saved = await ReaderBookmarkExporter.saveToFile(context, content, fileName, isMarkdown);
+      this.showUnavailableAction(saved
+        ? `已导出 ${bookmarks.length} 条书签、${markings.length} 条笔记`
+        : '未选择保存位置');
+    } catch (_) {
+      this.showUnavailableAction('书签导出失败');
+    }
+  }
+
   private async restoreHomeDashboardSettings(context: Context): Promise<void> {
     this.homeDashboardSections = await HomeDashboardSettingsRepository.load(context);
     this.homeGoalMinutes = await HomeDashboardSettingsRepository.loadReadingGoal(context);
@@ -2002,6 +2090,83 @@ struct Index {
       await ReaderMarkingRepository.save(context, next);
       this.readerMarkings = next;
       this.markingEditor = undefined;
+      this.showUnavailableAction('标记已删除');
+    } catch (_) {
+      this.showUnavailableAction('标记删除失败，请重试');
+    }
+  }
+
+  // 批5（:127）行内快速标记面板「应用」：existingId 非空改那一条，否则新建。
+  // 与 requestCreateReaderMarking 的区别是不弹标记编辑 Sheet，直接落库（上游 ApplyQuickMarking）。
+  private async applyReaderMarkingFromSelection(chapterPosition: number, endPosition: number,
+    selectedText: string, effect: ReaderMarkingEffect, note: string, existingId: string): Promise<void> {
+    if (!this.selectedBook.isLocal || this.selectedBook.contentPath === undefined ||
+      BookRepository.isBodyMissing(this.selectedBook)) {
+      this.showUnavailableAction('划线与笔记仅支持已有本地正文的书籍');
+      return;
+    }
+    const chapterIndex = Math.max(0, this.selectedBook.chapterIndex ??
+      BookRepository.cachedChapterTitles(this.selectedBook).indexOf(this.selectedChapter));
+    const semanticContent = LocalTextSemantics.fromRawBody(this.readerContent);
+    const start = Math.max(0, Math.min(semanticContent.length, Math.trunc(chapterPosition)));
+    const end = Math.max(start, Math.min(semanticContent.length, Math.trunc(endPosition)));
+    const text = selectedText.trim();
+    if (end <= start || text.length === 0) {
+      this.showUnavailableAction('选区为空，无法创建标记');
+      return;
+    }
+    const existing = this.readerMarkings.find((marking: ReaderMarking) => marking.id === existingId);
+    const now = Date.now();
+    const contextRadius = 36;
+    const saved: ReaderMarking = {
+      id: existing === undefined ? `${this.selectedBook.id}-mark-${now.toString()}` : existing.id,
+      bookId: this.selectedBook.id,
+      bookName: this.selectedBook.title,
+      bookAuthor: this.selectedBook.author,
+      bookUrl: this.selectedBook.androidOriginalPath ?? this.selectedBook.contentPath ?? this.selectedBook.id,
+      chapterIndex: chapterIndex,
+      chapterName: this.selectedChapter,
+      chapterPosition: start,
+      endPosition: end,
+      selectedText: text,
+      contextBefore: semanticContent.substring(Math.max(0, start - contextRadius), start),
+      contextAfter: semanticContent.substring(end, Math.min(semanticContent.length, end + contextRadius)),
+      effect: effect,
+      color: existing === undefined ? '#63C37D' : existing.color,
+      note: note,
+      enabled: true,
+      createdAt: existing === undefined ? now : existing.createdAt,
+      updatedAt: now
+    };
+    const next = this.readerMarkings.filter((marking: ReaderMarking) => marking.id !== saved.id);
+    next.unshift(saved);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地标记存储');
+      return;
+    }
+    try {
+      await ReaderMarkingRepository.save(context, next);
+      this.readerMarkings = next;
+      this.setReaderLastMarkingStyle(ReaderMarkingRepository.encodeStyle(effect, saved.color));
+      this.showUnavailableAction(existing === undefined ? '标记已添加' : '标记已更新');
+    } catch (_) {
+      this.showUnavailableAction('标记保存失败，请重试');
+    }
+  }
+
+  /** 批5（:127）行内快速标记面板「删除」（上游 DismissQuickMarking 的落地动作）。 */
+  private async deleteQuickMarkingById(markingId: string): Promise<void> {
+    if (markingId.length === 0) { return; }
+    const next = this.readerMarkings.filter((marking: ReaderMarking) => marking.id !== markingId);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地标记存储');
+      return;
+    }
+    try {
+      await ReaderMarkingRepository.save(context, next);
+      this.readerMarkings = next;
       this.showUnavailableAction('标记已删除');
     } catch (_) {
       this.showUnavailableAction('标记删除失败，请重试');
@@ -9845,6 +10010,12 @@ private canWriteInto(dir: string): boolean {
             onOpenMarking: (markingId: string) => { this.editReaderMarking(markingId); },
             onCreateMarking: (position: number, endPosition: number, text: string) =>
               this.requestCreateReaderMarking(position, endPosition, text),
+            // 批5（:127）行内快速标记面板的两个动作：应用/删除，都不经过标记编辑 Sheet
+            onApplyQuickMarking: (position: number, endPosition: number, text: string,
+              effect: ReaderMarkingEffect, note: string, existingId: string) =>
+              this.applyReaderMarkingFromSelection(position, endPosition, text, effect, note, existingId),
+            onDeleteQuickMarking: (markingId: string) => this.deleteQuickMarkingById(markingId),
+            lastMarkingStyle: this.readerLastMarkingStyle,
             onToggleCurrentPageBookmark: (start: number, end: number, pageText: string) =>
               this.toggleReaderBookmarkForPage(start, end, pageText),
 
@@ -10464,7 +10635,7 @@ private canWriteInto(dir: string): boolean {
             onUnavailableAction: (message: string) => this.showUnavailableAction(message)
           })
         } else if (this.profileSubpage === ProfileRoute.ALL_BOOKMARKS) {
-          AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId), onEditBookmark: (bookmarkId: string) => this.editReaderBookmark(bookmarkId), onOpenMarking: (markingId: string) => this.openReaderMarking(markingId), onExportBookmarks: (bookKey: string, isMarkdown: boolean) => this.exportBookmarksByKey(bookKey, isMarkdown) })
+          AllBookmarksPage({ books: this.getBookmarkBookSummaries(), entries: this.getBookmarkEntrySummaries(), onBack: () => this.route = this.profileDetailReturnRoute, onUnavailableAction: (message: string) => this.showUnavailableAction(message), onOpenBookmark: (bookmarkId: string) => this.openReaderBookmark(bookmarkId), onEditBookmark: (bookmarkId: string) => this.editReaderBookmark(bookmarkId), onOpenMarking: (markingId: string) => this.openReaderMarking(markingId), onExportBookmarks: (bookKey: string, isMarkdown: boolean) => this.exportBookmarksByKey(bookKey, isMarkdown), sortDescending: this.bookmarkSortDescending, onToggleSortDescending: () => this.toggleBookmarkSortDescending(), onDeleteEntries: (bookmarkIds: string[], markingIds: string[]) => { this.deleteBookmarkEntries(bookmarkIds, markingIds); }, onExportSelectedEntries: (ids: string[], isMarkdown: boolean) => { this.exportSelectedBookmarkEntries(ids, isMarkdown); } })
         } else if (this.profileSubpage === ProfileRoute.READ_RECORDS) {
           ReadRecordsPage({
             records: this.readTimeRecords,
