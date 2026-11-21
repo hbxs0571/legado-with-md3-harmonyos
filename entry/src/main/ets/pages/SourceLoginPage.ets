@@ -2,8 +2,10 @@
 // Form 模式（loginUi 非空）渲染 5 种控件，提交执行书源 login()；
 // Web 模式（loginUi 为空）内嵌 WebView 加载 loginUrl，靠 Cookie 持久化登录态。
 import { webview } from '@kit.ArkWeb';
+import { pasteboard } from '@kit.BasicServicesKit';
 import { BookSourceLoginItem, CookieStore } from '@legado/sourceengine';
-import { AppTopBar, TopBarBackButton } from '../components/TopBar';
+import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
+import { BookSourceRepository } from '../data/BookSourceRepository';
 import {
   BookSourceLoginCoordinator, LoginPrepare, LoginSubmitResult
 } from '../bookSource/BookSourceLoginCoordinator';
@@ -38,7 +40,10 @@ export struct SourceLoginPage {
   onOpenWeb: (url: string) => void = (_url: string) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
 
+  // 三态：loading（对齐上游 SourceLoginSheetHost:66-77 的 CircularProgressIndicator）/
+  // web（:79-83 SourceLoginWebSheet）/ form（:85 SourceLoginFormSheet）之外的 error（本地扩展）。
   @State private mode: string = 'form';
+  @State private sheetLoading: boolean = true;
   @State private sourceName: string = '';
   @State private items: FormItem[] = [];
   @State private entryUrl: string = '';
@@ -48,6 +53,34 @@ export struct SourceLoginPage {
 
   aboutToAppear(): void {
     this.prepare();
+  }
+
+  /** 登录说明（对齐上游 MarkdownSheet(title=login_header)）。本地无 Markdown 渲染器，纯文本呈现。 */
+  private loginHeader(): string {
+    const all = BookSourceRepository.getAll();
+    for (const source of all) {
+      if (source.bookSourceUrl === this.sourceUrl && source.sourceJson.length > 0) {
+        try {
+          const obj = JSON.parse(source.sourceJson) as Record<string, Object>;
+          const value = obj['loginHeader'];
+          return typeof value === 'string' ? value : '';
+        } catch (_) {
+          return '';
+        }
+      }
+    }
+    return '';
+  }
+
+  /** 上游 login header 的复制入口（MediumTonalButton(ContentCopy) → copy_text）。 */
+  private async copyLoginHeader(): Promise<void> {
+    try {
+      await pasteboard.getSystemPasteboard().setData(
+        pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.loginHeader()));
+      this.onUnavailableAction('登录说明已复制');
+    } catch (_) {
+      this.onUnavailableAction('复制失败');
+    }
   }
 
   private prepare(): void {
@@ -65,6 +98,8 @@ export struct SourceLoginPage {
     this.items = formItems;
     this.mode = info.mode;
     if (info.mode === 'error') { this.resultMessage = info.message || '无法登录'; }
+    // prepare 完成即退出 loading 态（上游 state.loading 为准备中）。
+    this.sheetLoading = false;
   }
 
   private async submit(): Promise<void> {
@@ -140,14 +175,30 @@ export struct SourceLoginPage {
     TopBarBackButton({ onSelect: () => this.onBack() })
   }
 
+  /** 表单态顶栏动作：对齐上游 startAction(菜单)/endAction(确认)。 */
+  @Builder loginActionsSlot() {
+    TopBarButton({ icon: 'profileInfo', showDivider: false, onSelect: () => this.copyLoginHeader() })
+    TopBarButton({ icon: 'profileCheck', showDivider: false, onSelect: () => { this.submit(); } })
+  }
+
   build() {
     Column() {
       AppTopBar({
         title: '登录 · ' + this.sourceName,
         hasNavigation: true,
-        navigationIcon: () => { this.loginNavSlot() }
+        navigationIcon: () => { this.loginNavSlot() },
+        actions: () => { this.loginActionsSlot() }
       })
-      if (this.mode === 'web') {
+      if (this.sheetLoading) {
+        // 态1：loading（上游 :66-77，sheet + CircularProgressIndicator）。
+        Column() {
+          LoadingProgress().width(48).height(48).color(this.themeColorAccent)
+          Text('正在准备登录…').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+            .margin({ top: 12 })
+        }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
+      } else if (this.mode === 'web') {
+        // 态2：Web 登录（上游 :79-83 SourceLoginWebSheet）。
+
         // Web 模式：内嵌 WebView 加载入口页，cookie 由 onPageEnd 持久化。
         Column() {
           Text('此源使用网页登录，请在下方页面完成登录后返回。')
@@ -165,8 +216,13 @@ export struct SourceLoginPage {
             })
         }.width('100%').layoutWeight(1)
       } else {
+        // 态3：表单登录（上游 :85 SourceLoginFormSheet）。
         Scroll() {
           Column() {
+            if (this.loginHeader().length > 0) {
+              Text(this.loginHeader()).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+                .width('100%').margin({ bottom: 12 })
+            }
             Text('请填写登录信息（表单由书源 loginUi 定义）')
               .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ bottom: 16 })
             ForEach(this.items, (item: FormItem, index: number) => {
