@@ -5731,7 +5731,13 @@ export struct ReaderPage {
         text: segment.text,
         fontSizeScale: segment.fontSizeScale,
         lineHeightVp: segmentLineHeight,
-        spacingAfter: spacingAfter
+        spacingAfter: spacingAfter,
+        // 标题改走正文同一个断行引擎（#1016）后，引擎要按段拿字体族/字号/字重/字间距，
+        // 否则断出来的行宽与画出来的行宽对不上（断行说放得下、绘制却超出去）。
+        fontFamilies: [this.readerTitleFontFamily],
+        fontSizeFp: segmentSize,
+        fontWeight: this.resolveTitleWeight(),
+        letterSpacingVp: this.getReaderLetterSpacingVp(segmentSize)
       });
     }
     return {
@@ -5745,7 +5751,9 @@ export struct ReaderPage {
         const size = Math.max(1, baseSize * fontSizeScale);
         return ReaderFontRepository.measureTextWidth(context, text, this.readerTitleFontFamily, size,
           this.resolveTitleWeight()) + this.getReaderTextLetterSpacingWidth(text, size);
-      }
+      },
+      vpScalePx: context.vp2px(1),
+      fpScalePx: context.fp2px(1)
     };
   }
 

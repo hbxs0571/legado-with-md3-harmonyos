@@ -1,6 +1,7 @@
 import { LocalSemanticDocument, LocalSemanticParagraph, LocalSemanticPart } from '../data/LocalTextSemantics';
 import {
   ReaderTextLayoutEngine,
+  ReaderTextLayoutItem,
   ReaderTextLayoutLine,
   ReaderTextLayoutPart,
   ReaderTextLayoutStyle
@@ -56,6 +57,17 @@ export interface LocalReaderTitleSegment {
   lineHeightVp: number;
   /** 该段之后的分段间距（vp）。 */
   spacingAfter: number;
+  /**
+   * 该段的字体族，顺序即回退顺序（上游标题与正文共用一套断行，字体族必须一起带进来，
+   * 否则断出来的行宽与画出来的行宽对不上）。
+   */
+  fontFamilies: string[];
+  /** 该段的字号（fp，已按 `fontSizeScale` 缩放后的绝对值）。 */
+  fontSizeFp: number;
+  /** 该段的字重（100..900）。 */
+  fontWeight: number;
+  /** 该段的字间距（vp）。 */
+  letterSpacingVp: number;
 }
 
 /**
@@ -77,6 +89,15 @@ export interface LocalReaderTitleBlock {
   centerVertical: boolean;
   /** 按段内相对字号倍率测量文字宽度（vp）。 */
   measureWidth: (text: string, fontSizeScale: number) => number;
+  /**
+   * vp → px 的换算比例（`UIContext.vp2px(1)`）。
+   *
+   * 标题改走正文同一个断行引擎（#1016）后，引擎的 `ReaderTextLayoutStyle` 需要这两个比例；
+   * 它们只跟设备密度有关，按块带进来比逐段带更省。
+   */
+  vpScalePx: number;
+  /** fp → px 的换算比例（`UIContext.fp2px(1)`）。 */
+  fpScalePx: number;
 }
 
 export interface LocalReaderPage {
@@ -514,9 +535,11 @@ export class LocalReaderPaginator {
      * 间距口径对齐上游 `ReaderPaginator.processBlock`（`:411`、`:425-430`）：
      * 首段之前加 `titleTopSpacingPx`，每段之后加「下一段还是标题 → 分段间距，否则 → 章标题下间距」。
      *
-     * 标题不走系统断行引擎：各段字号按 `fontSizeScale` 缩放、字体族与正文不同
-     * （`readerTitleFontFamily`），而 `textStyle` 只描述正文一套。断行仍按 cluster 折，
-     * 与旧实现一致。
+     * 断行改走与正文同一个 `ReaderTextLayoutEngine`（#1016）：上游 `ReaderPaginator.kt:1112-1113`
+     * 标题与正文共用一套排版流程，`isTitle` 只影响间距与 bounds。早前标题逐 cluster 累宽硬切，
+     * 中文标题末尾的句号会被顶到下一行行首、「」会被切到行尾、英文单词会被拆开，与正文的
+     * 禁则表现不一致。这里给标题单独构造一个引擎实例（字体族/字号/字重/字间距按段带），
+     * 用它算出的行替代逐字累宽循环。
      */
     const addTitleBlock = (block: LocalReaderTitleBlock): void => {
       for (let segmentIndex = 0; segmentIndex < block.segments.length; segmentIndex++) {
@@ -527,37 +550,38 @@ export class LocalReaderPaginator {
         const spacingAfter = isLastSegment
           ? Math.max(0, block.bottomSpacing)
           : Math.max(0, segment.spacingAfter);
-        const clusters = LocalReaderPaginator.toClusters(segment.text);
-        let lineClusters: string[] = [];
-        let titleLineWidth = 0;
-        let emittedLine = 0;
-        const flushTitleLine = (spacing: number): void => {
-          if (lineClusters.length === 0) { return; }
+        const titleStyle: ReaderTextLayoutStyle = {
+          fontFamilies: segment.fontFamilies,
+          fontSizeFp: segment.fontSizeFp,
+          letterSpacingVp: segment.letterSpacingVp,
+          fontWeight: segment.fontWeight,
+          vpScalePx: block.vpScalePx,
+          fpScalePx: block.fpScalePx
+        };
+        const titleEngine = new ReaderTextLayoutEngine(contentWidth, titleStyle,
+          (value: string): number => block.measureWidth(value, segment.fontSizeScale));
+        // ReaderTextLayoutPart 只有 value / startPosition / leadingIndent，标题没有段首缩进。
+        const titleLines = titleEngine.layout([
+          { value: segment.text, startPosition: 0, leadingIndent: false }
+        ]);
+        for (let lineIndex = 0; lineIndex < titleLines.length; lineIndex++) {
+          const titleLine = titleLines[lineIndex];
+          if (titleLine === undefined) { continue; }
+          // ReaderTextLayoutLine 没有 text 字段，行文本要自己从 items 拼。
+          const titleText = titleLine.items.map((item: ReaderTextLayoutItem): string => item.value).join('');
           lineItems = [{
-            kind: 'text', value: lineClusters.join(''),
-            width: titleLineWidth, height: segmentLineHeight,
+            kind: 'text', value: titleText,
+            width: titleLine.width, height: segmentLineHeight,
             startPosition: 0, endPosition: 0, leadingIndent: false,
             titleFontScale: segment.fontSizeScale
           }];
           currentLineHeight = segmentLineHeight;
           // 标题上间距只加在整个标题块的第一行上（上游 `if (isTitle && index == 0) y += titleTopSpacingPx`）。
-          const verticalSpaceBefore = emittedLine === 0 ? Math.max(0, block.topSpacing) : 0;
+          const verticalSpaceBefore = lineIndex === 0 ? Math.max(0, block.topSpacing) : 0;
+          const spacing = lineIndex === titleLines.length - 1 ? spacingAfter : 0;
           appendLine(undefined, false, spacing, verticalSpaceBefore, false, false, true,
             block.centered ? 1 : 0);
-          emittedLine++;
-          lineClusters = [];
-          titleLineWidth = 0;
-        };
-        for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
-          const cluster = clusters[clusterIndex] as string;
-          const clusterWidth = block.measureWidth(cluster, segment.fontSizeScale);
-          if (lineClusters.length > 0 && titleLineWidth + clusterWidth > contentWidth) {
-            flushTitleLine(0);
-          }
-          lineClusters.push(cluster);
-          titleLineWidth += clusterWidth;
         }
-        flushTitleLine(spacingAfter);
       }
       // 上游 titlePageBreakAfter：标题段排版结束后立即断页，让章标题独占一页。
       if (block.pageBreakAfter && pageLines.length > 0) { flushPage(); }
@@ -682,34 +706,33 @@ export class LocalReaderPaginator {
         const spacingAfter = isLastSegment
           ? Math.max(0, block.bottomSpacing)
           : Math.max(0, segment.spacingAfter);
-        const clusters = LocalReaderPaginator.toClusters(segment.text);
-        let lineClusters = 0;
-        let titleLineWidth = 0;
-        let emittedLine = 0;
-        const flushTitleLine = (spacing: number): void => {
-          if (lineClusters === 0) { return; }
+        const titleStyle: ReaderTextLayoutStyle = {
+          fontFamilies: segment.fontFamilies,
+          fontSizeFp: segment.fontSizeFp,
+          letterSpacingVp: segment.letterSpacingVp,
+          fontWeight: segment.fontWeight,
+          vpScalePx: block.vpScalePx,
+          fpScalePx: block.fpScalePx
+        };
+        const titleEngine = new ReaderTextLayoutEngine(contentWidth, titleStyle,
+          (value: string): number => block.measureWidth(value, segment.fontSizeScale));
+        const titleLines = titleEngine.layout([
+          { value: segment.text, startPosition: 0, leadingIndent: false }
+        ]);
+        for (let lineIndex = 0; lineIndex < titleLines.length; lineIndex++) {
+          const titleLine = titleLines[lineIndex];
+          if (titleLine === undefined) { continue; }
+          const titleText = titleLine.items.map((item: ReaderTextLayoutItem): string => item.value).join('');
           lineItems = [{
-            kind: 'text', value: ' ', width: titleLineWidth, height: segmentLineHeight,
+            kind: 'text', value: titleText, width: titleLine.width, height: segmentLineHeight,
             startPosition: 0, endPosition: 0, leadingIndent: false,
             titleFontScale: segment.fontSizeScale
           }];
           currentLineHeight = segmentLineHeight;
-          const verticalSpaceBefore = emittedLine === 0 ? Math.max(0, block.topSpacing) : 0;
+          const verticalSpaceBefore = lineIndex === 0 ? Math.max(0, block.topSpacing) : 0;
+          const spacing = lineIndex === titleLines.length - 1 ? spacingAfter : 0;
           appendLine(spacing, verticalSpaceBefore);
-          emittedLine++;
-          lineClusters = 0;
-          titleLineWidth = 0;
-        };
-        for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex++) {
-          const cluster = clusters[clusterIndex] as string;
-          const clusterWidth = block.measureWidth(cluster, segment.fontSizeScale);
-          if (lineClusters > 0 && titleLineWidth + clusterWidth > contentWidth) {
-            flushTitleLine(0);
-          }
-          lineClusters++;
-          titleLineWidth += clusterWidth;
         }
-        flushTitleLine(spacingAfter);
       }
       if (block.pageBreakAfter && pageLineCount > 0) { flushPage(); }
     };
