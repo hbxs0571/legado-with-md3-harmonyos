@@ -58,6 +58,13 @@ export struct AppBackupSettingsPage {
   @State collapsedHeader: boolean = false;
   @State inputKey: string = '';
   @State inputPassword: boolean = false;
+  /**
+   * :381（批6）WebDAV 账号密码改成单面板双字段。两个草稿只在 webdavAuth 面板用；
+   * 另外五个单字段仍走 inputDraft，不复用。
+   */
+  @State accountDraft: string = '';
+  @State passwordDraft: string = '';
+  @State passwordVisible: boolean = false;
   private backupScroller: Scroller = new Scroller();
 
   private openSettingInput(key: string, title: string, password: boolean): void {
@@ -66,6 +73,23 @@ export struct AppBackupSettingsPage {
     this.inputDraft = '';
     this.inputPassword = password;
     this.activeSheet = 'input';
+  }
+
+  /**
+   * :381（批6）：打开「WebDAV 账号与密码」单面板。
+   * 预填当前账号与密码——用户改密码时不该重打一遍账号。
+   */
+  private openWebDavAuth(): void {
+    this.accountDraft = this.webDavSettings.account;
+    this.passwordDraft = this.webDavSettings.password;
+    this.passwordVisible = false;
+    this.activeSheet = 'webdavAuth';
+  }
+
+  /** :381：合并后的账号密码行 detail，沿用原来两行的判据。 */
+  private webDavAuthDetail(): string {
+    if (this.webDavSettings.account.trim().length === 0) { return '账号与密码尚未配置'; }
+    return this.webDavSettings.password.length === 0 ? '仅填了账号，密码为空' : '已设置';
   }
 
   private describeSyncMode(mode: string): string {
@@ -102,14 +126,11 @@ export struct AppBackupSettingsPage {
               detail: this.webDavSettings.url.trim().length === 0 ? '默认（坚果云）' : this.webDavSettings.url,
               onSelect: () => this.openSettingInput('url', 'WebDAV 服务器地址', false) })
             ThemeItemDivider()
-            BackupActionRow({ icon: 'profileSource', title: 'WebDAV 账号',
-              detail: this.webDavSettings.account.trim().length === 0 ? '账号与密码尚未配置' :
-                (this.webDavSettings.password.length === 0 ? '仅填了账号，密码为空' : this.webDavSettings.account),
-              onSelect: () => this.openSettingInput('account', 'WebDAV 账号', false) })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'profileSource', title: 'WebDAV 密码',
-              detail: this.webDavSettings.password.length > 0 ? '已设置' : '未设置',
-              onSelect: () => this.openSettingInput('password', 'WebDAV 密码', true) })
+            // :381（批6）：账号与密码两行合并成一行，点开是同一个面板里的两个输入框
+            // （上游 BackupConfigScreen.kt:452-508 WebDavAuth 对话框）。
+            BackupActionRow({ icon: 'profileSource', title: 'WebDAV 账号与密码',
+              detail: this.webDavAuthDetail(),
+              onSelect: () => this.openWebDavAuth() })
             ThemeItemDivider()
             BackupActionRow({ icon: 'folder', title: '子目录',
               detail: this.webDavSettings.dir.trim().length === 0 ? '（根目录）' : this.webDavSettings.dir,
@@ -272,7 +293,7 @@ export struct AppBackupSettingsPage {
         Text(this.activeSheet === 'backup' ? '备份' : this.activeSheet === 'restore' ? '恢复' :
           this.activeSheet === 'ignoreBackup' ? '备份排除项' : this.activeSheet === 'ignoreRestore' ?
           '恢复排除项' : this.activeSheet === 'path' ? '备份路径' : this.activeSheet === 'syncMode' ?
-          '备份同步模式' : this.inputTitle)
+          '备份同步模式' : this.activeSheet === 'webdavAuth' ? 'WebDAV 账号与密码' : this.inputTitle)
           .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
@@ -302,6 +323,36 @@ export struct AppBackupSettingsPage {
             }
           })
         }.edgeEffect(EdgeEffect.None).height(420).scrollBar(BarState.Off)
+      } else if (this.activeSheet === 'webdavAuth') {
+        // :381 上游 BackupConfigScreen.kt:461-497：账号是普通文本（没有可见性切换，不给它加眼睛）；
+        // 密码是 Password 键盘 + 尾部可见性图标（Visibility / VisibilityOff，描述「显示密码」/「隐藏密码」）。
+        TextInput({ placeholder: 'WebDAV 账号', text: this.accountDraft })
+          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
+          .margin({ left: 18, right: 18, bottom: 12 })
+          .onChange((value: string) => this.accountDraft = value)
+        Row() {
+          TextInput({ placeholder: 'WebDAV 密码', text: this.passwordDraft })
+            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
+            .type(this.passwordVisible ? InputType.Normal : InputType.Password)
+            .layoutWeight(1)
+            .onChange((value: string) => this.passwordDraft = value)
+          AppGlyph({ name: this.passwordVisible ? 'visibility' : 'visibilityOff', glyphSize: 20,
+            tint: this.themeColorTextSecondary })
+            .margin({ left: 12 })
+            .accessibilityText(this.passwordVisible ? '隐藏密码' : '显示密码')
+            .onClick(() => { this.passwordVisible = !this.passwordVisible; })
+        }.margin({ left: 18, right: 18, bottom: 8 })
+        // 保存：账号 trim 后写入、密码保持原样（与输入框内容一致，不做 trim）。
+        Button('保存').margin({ top: 10 }).onClick(() => {
+          const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+          next.account = this.accountDraft.trim();
+          next.password = this.passwordDraft;
+          this.onWebDavSettingsChange(next);
+          this.accountDraft = '';
+          this.passwordDraft = '';
+          this.passwordVisible = false;
+          this.activeSheet = '';
+        })
       } else if (this.activeSheet === 'input') {
         TextInput({ placeholder: this.inputTitle, text: this.inputDraft })
           .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
