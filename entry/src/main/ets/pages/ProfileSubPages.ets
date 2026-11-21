@@ -37,6 +37,7 @@ import { ReadRecordRepository } from '../data/ReadRecordRepository';
 import { TxtTocRule } from '../model/TxtTocRule';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
+import { SourceCheckSheet, SourceCheckOptions } from '../components/booksource/SourceCheckSheet';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { UiAction } from '../components/settings/UiAction';
 import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
@@ -143,13 +144,17 @@ export struct BookSourceManagePage {
   @State private selectionMode: boolean = false;
   @State private selectedUrls: Set<string> = new Set<string>();
   @State private batchPanelVisible: boolean = false;
+  /** 校验配置弹层：上游 CheckSourceBottomSheet（本地无执行链，确认只回传选择）。 */
+  @State private checkSheetVisible: boolean = false;
   private sourceScroller: Scroller = new Scroller();
   /** 当前打开条目菜单的行。 */
   @State private menuRowUrl: string = '';
-  /** 分组/区间输入的对话框文本。 */
+  /** 自定义源分组对话框：文本 + 「添加分组」开关（对齐上游 BookSourceImportGroupDialog）。 */
   @State private promptText: string = '';
-  @State private promptVisible: boolean = false;
-  private promptAction: (value: string) => void = (_value: string) => {};
+  @State private promptAddGroup: boolean = true;
+  private promptAction: (value: string, add: boolean) => void = (_value: string, _add: boolean) => {};
+  private promptDialogBuilder: CustomBuilder | undefined = undefined;
+  private promptDialogId: number = -1;
   /** 搜索跳转回调（P4 条目菜单「搜索」）。 */
   onOpenSourceSearch: (keyword: string, sourceUrl: string) => void = (_keyword: string, _sourceUrl: string) => {};
   /** 打开书源编辑页（P5）。sourceUrl 为空表示新建。 */
@@ -613,20 +618,23 @@ export struct BookSourceManagePage {
     else if (key === 'disable') { this.setEnabledForSelection(false); this.exitSelectionMode(); }
     else if (key === 'explore_on') { this.setExploreForSelection(true); this.exitSelectionMode(); }
     else if (key === 'explore_off') { this.setExploreForSelection(false); this.exitSelectionMode(); }
-    else if (key === 'group_add') {
+    else if (key === 'group_add' || key === 'group_remove') {
+      // 上游是一个「自定义源分组」对话框，带「添加分组」开关（initialAdd）。
+      // 两个入口分别预置开关初值：添加=true、移除=false，用户仍可在对话框里切换。
       this.promptText = '';
-      this.promptAction = (value: string) => { this.setGroupForSelection(value, true); };
+      this.promptAddGroup = key === 'group_add';
+      this.promptAction = (value: string, add: boolean) => { this.setGroupForSelection(value, add); };
       this.batchPanelVisible = false;
-      this.promptVisible = true;
-    } else if (key === 'group_remove') {
-      this.promptText = '';
-      this.promptAction = (value: string) => { this.setGroupForSelection(value, false); };
-      this.batchPanelVisible = false;
-      this.promptVisible = true;
+      this.openPromptDialog();
     } else if (key === 'top') { this.moveToEdge(Array.from(this.selectedUrls), true); this.exitSelectionMode(); }
     else if (key === 'bottom') { this.moveToEdge(Array.from(this.selectedUrls), false); this.exitSelectionMode(); }
     else if (key === 'interval') { this.selectInterval(); this.batchPanelVisible = false; }
-    else if (key === 'check') { this.onUnavailableAction('批量校验在后续版本提供'); this.exitSelectionMode(); }
+    else if (key === 'check') {
+      // 上游：先记下选中的书源，再打开校验弹层（BookSourceScreen.kt:513-517）。
+      // 本地无校验执行链，这里只呈现校验配置弹层；确认仅回传选择，不伪造进度与结果。
+      this.batchPanelVisible = false;
+      this.checkSheetVisible = true;
+    }
     else if (key === 'export') { this.exportSelection(); this.exitSelectionMode(); }
   }
 
@@ -706,13 +714,12 @@ export struct BookSourceManagePage {
   private SourceSheetContent() {
     if (this.importVisible) {
       this.ImportDialog()
-    } else if (this.promptVisible) {
-      this.PromptDialog()
     } else if (this.batchPanelVisible) {
       this.BatchPanel()
     } else if (this.showGroupFilter) {
       this.GroupFilterSheet()
     }
+    // 自定义源分组对话框改用系统 openCustomDialog（见 PromptDialogContent），不再占这个 bindSheet。
   }
 
   /**
@@ -827,67 +834,150 @@ export struct BookSourceManagePage {
       }))
   }
 
-  /** 条目 7 项菜单。 */
+  /**
+   * 条目菜单：照上游 BookSourceScreen.kt:844-899 的 BookSourceItemMenu 六项顺序。
+   * 「编辑」上游不在菜单里（行尾 SmallPlainButton，批 1 已做），此处移除；
+   * 删除排第 6（原先被「编辑」挤到第 7）。删除项上游未传 error 色，保持普通项。
+   * 壳从自绘 Column 换成 UiMenuPanel（对齐 M3 RoundDropdownMenu 的圆角浮层）。
+   */
   @Builder
   private SourceRowMenu(row: SourceRow) {
-    Column() {
-      UiMenuItemView({ title: '置顶', onSelect: () => this.onSourceRowAction('top', row) })
-      UiMenuItemView({ title: '置底', onSelect: () => this.onSourceRowAction('bottom', row) })
-      if (row.hasLogin) {
-        UiMenuItemView({ title: '登录', onSelect: () => this.onSourceRowAction('login', row) })
+    UiMenuPanel({
+      items: this.sourceRowMenuItems(row),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.menuRowUrl = '';
+        this.onSourceRowAction(key, row);
       }
-      UiMenuItemView({ title: '搜索', onSelect: () => this.onSourceRowAction('search', row) })
-      UiMenuItemView({ title: '调试', onSelect: () => this.onSourceRowAction('debug', row) })
-      UiMenuItemView({ title: '编辑', onSelect: () => this.onSourceRowAction('edit', row) })
-      UiMenuItemView({ title: '删除', onSelect: () => this.onSourceRowAction('delete', row) })
-      if (row.hasExplore) {
-        UiMenuItemView({ title: row.exploreEnabled ? '禁用发现' : '启用发现',
-          onSelect: () => this.onSourceRowAction('explore', row) })
-      }
-    }
+    })
   }
 
-  /** 多选批量 11 项面板。 */
+  /** 行菜单项，顺序与条件严格对齐上游 BookSourceScreen.kt:865-896。 */
+  private sourceRowMenuItems(row: SourceRow): UiMenuItem[] {
+    const items: UiMenuItem[] = [];
+    // 上游 :865-872：仅 canMoveToEdge（本地等价 canReorder，多选/分组/非手动时隐藏）。
+    if (this.canReorder()) {
+      items.push({ key: 'top', title: '置顶' });
+      items.push({ key: 'bottom', title: '置底' });
+    }
+    // 上游 :873-877：仅 hasLoginUrl。
+    if (row.hasLogin) {
+      items.push({ key: 'login', title: '登录' });
+    }
+    // 上游 :878-886：搜索、调试、删除常显。
+    items.push({ key: 'search', title: '搜索' });
+    items.push({ key: 'debug', title: '调试' });
+    items.push({ key: 'delete', title: '删除' });
+    // 上游 :887-896：仅 hasExploreUrl，文案随 enabledExplore 切换。
+    if (row.hasExplore) {
+      items.push({ key: 'explore', title: row.exploreEnabled ? '禁用发现' : '启用发现' });
+    }
+    return items;
+  }
+
+  /**
+   * 多选批量面板：11 项一项不删（上游 selectionSecondaryActions，BookSourceScreen.kt:455-523），
+   * 仅把自绘竖排 Column 换成 UiMenuPanel（M3 RoundDropdownMenu 同款圆角卡片）。
+   * 头部保留「选中 N 项」计数（对应上游 SelectionBottomBar 的计数）。
+   */
   @Builder
   private BatchPanel() {
     Column() {
-      UiMenuItemView({ title: '启用所选', onSelect: () => this.onBatchAction('enable') })
-      UiMenuItemView({ title: '禁用所选', onSelect: () => this.onBatchAction('disable') })
-      UiMenuItemView({ title: '启用发现', onSelect: () => this.onBatchAction('explore_on') })
-      UiMenuItemView({ title: '禁用发现', onSelect: () => this.onBatchAction('explore_off') })
-      UiMenuItemView({ title: '添加分组', onSelect: () => this.onBatchAction('group_add') })
-      UiMenuItemView({ title: '移除分组', onSelect: () => this.onBatchAction('group_remove') })
-      UiMenuItemView({ title: '置顶所选', onSelect: () => this.onBatchAction('top') })
-      UiMenuItemView({ title: '置底所选', onSelect: () => this.onBatchAction('bottom') })
-      UiMenuItemView({ title: '选中所选区间', onSelect: () => this.onBatchAction('interval') })
-      UiMenuItemView({ title: '校验书源', onSelect: () => this.onBatchAction('check') })
-      UiMenuItemView({ title: '导出', onSelect: () => this.onBatchAction('export') })
-    }
+      Text(`已选 ${this.selectedUrls.size} 项`)
+        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextPrimary)
+        .width('100%').padding({ left: 20, right: 20, top: 16, bottom: 12 })
+      UiMenuPanel({
+        items: this.batchMenuItems(),
+        panelWidth: PROFILE_MENU_WIDTH,
+        onSelect: (key: string) => {
+          this.batchPanelVisible = false;
+          this.onBatchAction(key);
+        }
+      })
+      .width('100%')
+    }.width('100%').padding({ bottom: 20 })
   }
 
-  /** 分组名输入对话框。 */
+  /** 批量动作 11 项，顺序照上游 BookSourceScreen.kt:455-523 的 selectionSecondaryActions。 */
+  private batchMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'enable', title: '启用所选' },
+      { key: 'disable', title: '禁用所选' },
+      { key: 'explore_on', title: '启用发现' },
+      { key: 'explore_off', title: '禁用发现' },
+      { key: 'group_add', title: '添加分组' },
+      { key: 'group_remove', title: '移除分组' },
+      { key: 'top', title: '置顶所选' },
+      { key: 'bottom', title: '置底所选' },
+      { key: 'interval', title: '选中所选区间' },
+      { key: 'check', title: '校验书源' },
+      { key: 'export', title: '导出' }
+    ];
+  }
+
+  /**
+   * 自定义源分组对话框：对齐上游 BookSourceImportGroupDialog（BookSourceScreen.kt:743-778）。
+   * showAlertDialog 带不了输入框（见 ThemeManagePage.ets:105 的既有结论），
+   * 故用 SDK 的 openCustomDialog + builder（@ohos.promptAction.d.ts:1274-1290，可内嵌输入框）。
+   * 标题/输入框标签/开关/按钮文案照抄上游 strings.xml：
+   * diy_source_group=自定义源分组、group_name=分组名称、add_group=添加分组、ok=确认、cancel=取消。
+   */
   @Builder
-  private PromptDialog() {
+  private PromptDialogContent() {
     Column() {
-      Text(this.promptAction === undefined ? '' : '输入分组名')
+      Text('自定义源分组')
         .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-      TextInput({ placeholder: '分组名', text: this.promptText })
+      TextInput({ placeholder: '分组名称', text: this.promptText })
         .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary)
         .onChange((value: string) => this.promptText = value)
         .margin({ top: 14 })
       Row() {
+        Text('添加分组').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        UiSwitchControl({
+          checked: this.promptAddGroup,
+          scaleValue: 0.8,
+          onChange: (checked: boolean) => { this.promptAddGroup = checked; }
+        })
+      }.width('100%').margin({ top: 14 })
+      Row() {
         Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-          .onClick(() => this.promptVisible = false)
-        Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).layoutWeight(1)
+          .onClick(() => { this.closePromptDialog(); })
+        Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).layoutWeight(1)
           .onClick(() => {
             const value = this.promptText.trim();
-            if (value.length > 0) { this.promptAction(value); }
-            this.promptVisible = false;
+            if (value.length > 0) {
+              this.promptAction(value, this.promptAddGroup);
+            }
+            this.closePromptDialog();
             this.selectionMode = false;
           })
       }.width('100%').margin({ top: 18 })
     }.padding(20).backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
       .borderRadius(16)
+  }
+
+  /** 打开自定义源分组对话框（系统自定义对话框，能承载输入框）。 */
+  private openPromptDialog(): void {
+    this.promptDialogBuilder = (): void => { this.PromptDialogContent(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.promptDialogBuilder,
+      autoCancel: false,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => { this.promptDialogId = -1; }
+    }).then((dialogId: number) => {
+      this.promptDialogId = dialogId;
+    }).catch((error: Error) => {
+      console.warn('打开自定义源分组对话框失败:', error);
+    });
+  }
+
+  /** 关闭自定义源分组对话框；重复关闭是安全调用。 */
+  private closePromptDialog(): void {
+    if (this.promptDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.promptDialogId);
+      this.promptDialogId = -1;
+    }
   }
 
   /** P6 导入对话框：online 收 URL，options 三个保留开关。 */
@@ -1083,9 +1173,17 @@ export struct BookSourceManagePage {
           }
         }.layoutWeight(1)
       }
+      // 校验配置弹层：自带 bindSheet，作为子组件挂载；确认只回传配置，本地无执行链。
+      SourceCheckSheet({
+        visible: $checkSheetVisible,
+        onConfirm: (_options: SourceCheckOptions) => {
+          this.onUnavailableAction('校验配置已保存；校验执行链尚未接入');
+        }
+      })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       // 一个组件只能挂一个 bindSheet（本项目已踩坑），三种面板合并按状态切换内容。
-      .bindSheet(this.showGroupFilter || this.batchPanelVisible || this.promptVisible || this.importVisible,
+      // 自定义源分组对话框走系统 openCustomDialog，不占这个 bindSheet。
+      .bindSheet(this.showGroupFilter || this.batchPanelVisible || this.importVisible,
         this.SourceSheetContent(), {
           height: this.importVisible ? SheetSize.FIT_CONTENT : SheetSize.LARGE,
           dragBar: true,
@@ -1094,7 +1192,6 @@ export struct BookSourceManagePage {
           onDisappear: () => {
             this.showGroupFilter = false;
             this.batchPanelVisible = false;
-            this.promptVisible = false;
             this.importVisible = false;
           }
         })
