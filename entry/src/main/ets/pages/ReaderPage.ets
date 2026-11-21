@@ -461,6 +461,13 @@ export struct ReaderPage {
   @Prop bookmarkBadgeSize: number = 10;
   /** 自定义书签角标图片路径；空串表示用默认黄色丝带，对齐上游 bookmarkBadgeImage。 */
   @Prop bookmarkBadgeImage: string = '';
+  /**
+   * 批10（:569）这本书所属书源的名字；空串表示「没有可用书源」，标题胶囊右端就不画圆点。
+   * 由 `Index.ets` 查 `BookSourceRepository` 后注入 —— 阅读页不自己去查仓库，
+   * 免得每翻一页都扫一遍书源表。上游判据是 `!state.isLocalBook && state.bookSource != null`
+   * （`ReadBookMenuBarTitle.kt:593`），本地书源对象被删掉时这里就是空串，等价于上游的 null。
+   */
+  @Prop bookSourceName: string = '';
   @Prop selectText: boolean = true;
   /** 选择正文时震动；上游 ReadSettings.kt:41 selectVibrator，消费点见 ReaderHaptics。 */
   @Prop selectVibrator: boolean = false;
@@ -597,6 +604,13 @@ export struct ReaderPage {
   @State moreActionConfigVisible: boolean = false;
   @State moreActionShellVisible: boolean = false;
   @State moreActionShellTitle: string = '';
+  /**
+   * 批10（:570）长按「换源 / 刷新章节」格子弹出的二级菜单：'' 表示没展开，
+   * 值是格子的 id（`change_source` / `refresh`）。上游 `ReadMenuLongPressDropdown`
+   * 由 `ReadMenuLongPressMenu.ChangeSource / Refresh` 两个枚举值分派
+   * （`ReadBookMenuBarTitle.kt:796-821`）。
+   */
+  @State longPressMenuId: string = '';
   @State draftMoreActions: ReaderMoreActionConfig[] = READER_MORE_ACTION_DEFAULTS.map(
     (item: ReaderMoreActionConfig): ReaderMoreActionConfig => ({ id: item.id, enabled: item.enabled })
   );
@@ -920,6 +934,12 @@ export struct ReaderPage {
   onOpenCatalog: () => void = () => {};
   /** 点/长按顶栏书名进书籍详情；上游 `ReadBookMenuBarTitle.kt:492-600` 的 `OpenBookInfo`。 */
   onOpenBookInfo: () => void = () => {};
+  /**
+   * 批10（:569）点标题胶囊右端的书源圆点：弹书源下拉（上游 `ReadMenuSourceDropdown`，
+   * `ReadBookMenuBarTitle.kt:639-690`）。本地这四项里「登录 / 章节付费 / 编辑源 / 禁用源」
+   * 只有「编辑源」有落地页，其余由上层如实提示未迁移，不在这里假装能用。
+   */
+  onOpenSourceMenu: () => void = () => {};
   /** 亮度条「跟随系统」按钮；上游 `ReadBookIntent.ToggleBrightnessAuto`。 */
   onBrightnessAutoChange: (auto: boolean) => void = () => {};
   /** 亮度条「左右位置」按钮；上游 `ConfigUpdate.BrightnessVwPos`。 */
@@ -967,6 +987,26 @@ export struct ReaderPage {
   onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => void = (_actions: ReaderMoreActionConfig[]) => {};
   onOpenBottomActionConfig: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /**
+   * 批10（:570）长按「换源」格子 → 二级菜单「换源」：整本书换到新源（上游
+   * `MenuBookChangeSource` → `ReadBookSheet.ChangeBookSource`，`ReadBookMenuBarTitle.kt:765-768`）。
+   */
+  onOpenChangeSource: () => void = () => {};
+  /**
+   * 批10（:570）长按「换源」格子 → 二级菜单「更换本章源」（上游 `MenuChapterChangeSource`
+   * → `ReadBookSheet.ChangeChapterSource`）。本地没有单章换源面板，上层如实提示未迁移。
+   */
+  onOpenChapterChangeSource: () => void = () => {};
+  /**
+   * 批10（:570）长按「刷新章节」格子 → 二级菜单「刷新本章」（上游 `MenuRefreshDur`）：
+   * 删掉本章缓存后重新抓一次正文。
+   */
+  onRefreshCurrentChapter: () => void = () => {};
+  /**
+   * 批10（:570）长按「刷新章节」格子 → 二级菜单「刷新后续」（上游 `MenuRefreshAfter`）：
+   * 清掉本章之后的缓存并重拉目录。本地实现在上层。
+   */
+  onRefreshAfterChapter: () => void = () => {};
   onImageStyleChange: (imageStyle: string) => void = (_imageStyle: string) => {};
   onPageAnimationChange: (animation: number) => void = (_animation: number) => {};
   /** 设置当前书的翻页动画（上游 Book.config.pageAnim），由上层落库并回填 selectedBook。 */
@@ -4379,19 +4419,37 @@ export struct ReaderPage {
    */
   @Builder
   private readerTitleCapsule() {
-    Column() {
-      // 胶囊内书名恒 1 行：40vp 定高装不下两行，上游 `TitleCapsuleGlassLayout` 也是 `maxLines = 1`
-      // （`ReadBookMenuBarTitle.kt:556`）。
-      Text(this.book.title).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium).fontColor(this.readerMenuForeground()).maxLines(1)
-        .width('100%').textOverflow({ overflow: TextOverflow.Ellipsis })
-        .textShadow(this.readerMenuTextShadow())
-      if (this.displayChapterTitle.length > 0) {
-        Text(this.displayChapterTitle).fontSize(LABEL_SMALL).fontColor(this.readerMenuForegroundAlpha('B3')).maxLines(1)
-          .width('100%').margin({ top: 2 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+    // 上游 `ReadBookMenuBarTitle.kt:517-628` 的外层是 Row（weight 1 / height 40 /
+    // padding horizontal 12）：左边 Column 装书名与章名，右边在有书源时接一个 24vp 宽的圆点热区。
+    Row() {
+      Column() {
+        // 胶囊内书名恒 1 行：40vp 定高装不下两行，上游 `TitleCapsuleGlassLayout` 也是 `maxLines = 1`
+        // （`ReadBookMenuBarTitle.kt:556`）。
+        Text(this.book.title).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium).fontColor(this.readerMenuForeground()).maxLines(1)
+          .width('100%').textOverflow({ overflow: TextOverflow.Ellipsis })
           .textShadow(this.readerMenuTextShadow())
+        if (this.displayChapterTitle.length > 0) {
+          Text(this.displayChapterTitle).fontSize(LABEL_SMALL).fontColor(this.readerMenuForegroundAlpha('B3')).maxLines(1)
+            .width('100%').margin({ top: 2 }).textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textShadow(this.readerMenuTextShadow())
+        }
+      }
+      .layoutWeight(1).alignItems(HorizontalAlign.Start)
+      // 批10（:569）标题胶囊右端书源圆点：8vp 圆点 + 24vp 宽满高热区，对齐上游
+      // `ReadBookMenuBarTitle.kt:596-628`（`Spacer(4.dp)` + `Box(width(24.dp).fillMaxHeight())`
+      // 内套 `Box(size(8.dp), CircleShape)`）。没有书源（本地书、或源已被删）就不画，
+      // 免得出现一个点了没反应的空圆点 —— 这是任务书验收第 13 条的硬要求。
+      if (this.bookSourceName.length > 0) {
+        Row().width(4)
+        Stack({ alignContent: Alignment.Center }) {
+          Circle().width(8).height(8).fill(this.readerMenuForeground())
+        }
+        .width(24).height('100%')
+        .accessibilityText('书源')
+        .onClick(() => this.onOpenSourceMenu())
       }
     }
-    .layoutWeight(1).alignItems(HorizontalAlign.Start)
+    .layoutWeight(1).alignItems(VerticalAlign.Center)
     .padding({ left: 12, right: 12, top: 4, bottom: 4 })
     .borderRadius(20)
     .backgroundColor(this.readerTopBarButtonFillColor())
@@ -4791,6 +4849,61 @@ export struct ReaderPage {
       this.moreActionShellTitle = option?.label ?? action.label;
       this.moreActionShellVisible = true;
     }
+  }
+
+  /**
+   * 批10（:570）长按「换源 / 刷新章节」格子后弹出的二级菜单。
+   * 上游 `ReadMenuLongPressDropdown`（`ReadBookMenuBarTitle.kt:796-821`）按
+   * `ReadMenuLongPressMenu.ChangeSource / Refresh` 分派两组：
+   * - ChangeSource（:765-772）：换源 `change_origin` / 更换本章源 `chapter_change_source`
+   * - Refresh（:776-789）：刷新本章 `menu_refresh_dur` / 刷新后续 `menu_refresh_after`
+   * 本地能真跑的是「换源」「刷新本章」；「更换本章源」「刷新后续」没有对应实现，
+   * 由上层 `onOpenChapterChangeSource` / `onRefreshAfterChapter` 如实提示未迁移，
+   * 这里不伪造成功（任务书验收第 15 条）。
+   */
+  private longPressMenuItems(): string[] {
+    if (this.longPressMenuId === 'change_source') {
+      return ['换源', '更换本章源'];
+    }
+    if (this.longPressMenuId === 'refresh') {
+      return ['刷新本章', '刷新后续'];
+    }
+    return [];
+  }
+
+  private selectLongPressMenu(label: string): void {
+    const menu = this.longPressMenuId;
+    this.longPressMenuId = '';
+    if (menu === 'change_source') {
+      if (label === '换源') { this.onOpenChangeSource(); return; }
+      if (label === '更换本章源') { this.onOpenChapterChangeSource(); return; }
+    }
+    if (menu === 'refresh') {
+      if (label === '刷新本章') { this.onRefreshCurrentChapter(); return; }
+      if (label === '刷新后续') { this.onRefreshAfterChapter(); return; }
+    }
+  }
+
+  @Builder
+  private readerLongPressMenu() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column().width('100%').height('100%').backgroundColor('#66000000')
+        .onClick(() => this.longPressMenuId = '')
+      Column() {
+        ForEach(this.longPressMenuItems(), (label: string) => {
+          Row() {
+            Text(label).fontSize(LABEL_LARGE).fontColor('#E5E6EB').layoutWeight(1)
+          }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+            .onClick(() => this.selectLongPressMenu(label))
+        }, (label: string) => label)
+        Row() {
+          Text('取消').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1')
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .onClick(() => this.longPressMenuId = '')
+        }.width('100%').justifyContent(FlexAlign.End)
+      }.width('78%').padding({ top: 8, bottom: 8 })
+        .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(20)
+    }.width('100%').height('100%')
   }
 
   @Builder
@@ -8482,10 +8595,15 @@ export struct ReaderPage {
                     .layoutWeight(1).padding({ left: 16, top: 4, bottom: 8 })
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                   // 上游 `ReadBookMenuBarTitle.kt:288-311`：章名行右侧还有一个书源名，点开书源下拉。
-                  // 本地 `book.isLocal` 在 `data/BookRepository.ets` 全链写死 true 且书源引擎未接入，
-                  // 这个分支永远不可达，故留空位不实现（见批 2.6）。
-                  if (!this.book.isLocal) {
-                    // 书源入口未实现，见批 2.6。
+                  // 批10（:569）之前这里留空（注释写「书源引擎未接入」已过时，批8 起在线书能进阅读页）。
+                  // 有书源时显示源名文本 + 书源下拉入口；没有源（本地书 / 源已删）整段不画。
+                  if (this.bookSourceName.length > 0) {
+                    Row() {
+                      Text(this.bookSourceName).fontSize(BODY_SMALL).fontColor(this.readerMenuForegroundAlpha('B3'))
+                        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                        .textShadow(this.readerMenuTextShadow())
+                    }.padding({ left: 8, right: 16, top: 4, bottom: 8 })
+                      .onClick(() => this.onOpenSourceMenu())
                   }
                 }.width('100%')
               }
@@ -8937,6 +9055,14 @@ export struct ReaderPage {
                           ? this.readerMenuSelectedFill()
                           : this.themeColorSurfaceSecondary).borderRadius(16)
                         .onClick(() => this.selectMoreAction(action))
+                        // 批10（:570）「换源 / 刷新章节」两格长按弹二级菜单，对齐上游
+                        // `ReadMenuLongPressDropdown`（`ReadBookMenuBarTitle.kt:796-821`）。
+                        // 其余格子没有二级菜单，长按不挂手势，行为与改前一致。
+                        .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+                          if (action.id === 'change_source' || action.id === 'refresh') {
+                            this.longPressMenuId = action.id;
+                          }
+                        }))
                     }
                   }, (action: ReaderMoreAction) => action.id)
                 }.edgeEffect(EdgeEffect.None).columnsTemplate('1fr 1fr 1fr 1fr').rowsGap(8).columnsGap(8).width('100%')
@@ -9079,6 +9205,11 @@ export struct ReaderPage {
 
       if (this.moreActionShellVisible) {
         this.moreActionUnavailableSheet()
+      }
+
+      // 批10（:570）长按换源 / 刷新格子的二级菜单。
+      if (this.longPressMenuId.length > 0) {
+        this.readerLongPressMenu()
       }
 
       if (this.contentEditVisible) {

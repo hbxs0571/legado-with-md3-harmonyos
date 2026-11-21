@@ -8850,6 +8850,101 @@ private canWriteInto(dir: string): boolean {
     return origin.startsWith('http') ? origin : '';
   }
 
+  /**
+   * 批10（:553/:569/:570）：详情页与阅读页要的书源显示名。
+   *
+   * 先按 `origin`（= 书源 `bookSourceUrl`）回仓库取当前源名 —— 源被改名后显示也跟着变；
+   * 取不到（源已删、老数据没记）再退 `Book.originName`。本地书一律空串，页面据此判「有没有源」。
+   */
+  private bookInfoSourceName(): string {
+    const book: Book | undefined = this.selectedBook;
+    if (book === undefined || !BookRepository.isOnlineBook(book)) {
+      return '';
+    }
+    const origin: string = book.origin ?? '';
+    if (origin.length === 0) {
+      return book.originName ?? '';
+    }
+    const source = BookSourceRepository.getAll().find((item: BookSource) => item.bookSourceUrl === origin);
+    if (source !== undefined && source.bookSourceName.length > 0) {
+      return source.bookSourceName;
+    }
+    return book.originName ?? '';
+  }
+
+  /** 批10（:569）阅读页标题胶囊的书源名：与详情页同口径，本地书空串。 */
+  private readerBookSourceName(): string {
+    return this.bookInfoSourceName();
+  }
+
+  /**
+   * 批10（:569）点标题胶囊右端的书源圆点 / 章名行右侧的源名：弹书源下拉。
+   *
+   * 上游 `ReadMenuSourceDropdown`（`ReadBookMenuBarTitle.kt:639-690`）四项：登录、章节付费、
+   * 编辑源、禁用源。本地只有「编辑源」有落地页（`BookSourceEditPage`）；登录要书源 cookie
+   * 交互、付费要 payAction、禁用源要改 `BookSource.enabled` 并刷新书架，这三项本批不做，
+   * 用一句提示说清缺什么，不弹假菜单。
+   */
+  private openReaderSourceMenu(): void {
+    const book: Book | undefined = this.selectedBook;
+    if (book === undefined || !BookRepository.isOnlineBook(book)) {
+      return;
+    }
+    const origin: string = book.origin ?? '';
+    const source = BookSourceRepository.getAll().find((item: BookSource) => item.bookSourceUrl === origin);
+    if (source === undefined) {
+      this.showUnavailableAction('这本书的书源已删除，无法打开书源菜单');
+      return;
+    }
+    this.openBookSourceEdit(source.bookSourceUrl);
+  }
+
+  /**
+   * 批10（:570）二级菜单「刷新本章」：删掉本章缓存后重抓一次正文。
+   *
+   * 上游 `MenuRefreshDur` 走 `BookHelp.delChapterCache` + 重新加载本章（`ReadBookViewModel`
+   * 的 refresh 分支）。本地只支持在线书：先删该章 `.nb` 缓存，再走 `loadChapters` 重拉目录
+   * 定位到同一章，最后 `readChapter` 取新正文。
+   */
+  private async refreshReaderCurrentChapter(): Promise<void> {
+    const book: Book | undefined = this.selectedBook;
+    if (book === undefined) {
+      return;
+    }
+    if (!BookRepository.isOnlineBook(book)) {
+      this.showUnavailableAction('刷新本章只对在线书籍有效');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    const chapters: BookChapter[] = BookRepository.cachedChapters(book);
+    const index: number = Math.max(0, book.chapterIndex ?? 0);
+    const chapter: BookChapter | undefined = chapters[index];
+    if (chapter !== undefined) {
+      BookRepository.deleteOnlineChapterCache(book, chapter);
+    }
+    try {
+      await BookRepository.loadChapters(context, book);
+      if (BookRepository.lastTocError.length > 0) {
+        this.showUnavailableAction(`刷新本章失败：${BookRepository.lastTocError}`);
+        return;
+      }
+      const titles: string[] = BookRepository.cachedChapterTitles(book);
+      const title: string | undefined = titles[index];
+      if (title === undefined) {
+        this.showUnavailableAction('刷新本章失败：目录里找不到当前章');
+        return;
+      }
+      this.readerContent = await BookRepository.readChapter(book, title, index);
+      this.showUnavailableAction('已刷新本章');
+    } catch (error) {
+      const message: string = error instanceof Error ? error.message : String(error);
+      this.showUnavailableAction(`刷新本章失败：${message}`);
+    }
+  }
+
   private async toggleBookCanUpdate(canUpdate: boolean): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
@@ -10340,6 +10435,7 @@ private canWriteInto(dir: string): boolean {
           highlightTagRules: this.highlightTagRules,
           bookBaseUrl: this.bookInfoIntroBaseUrl(),
           bookSourceUrl: this.bookInfoIntroSourceUrl(),
+          bookSourceName: this.bookInfoSourceName(),
           shelfConflictCandidates: this.shelfConflictsWith(this.selectedBook),
           onAddToShelf: () => this.addCurrentBookToShelf(),
           // 批8（:1154）：详情页长按书架卡弹分组选择，落库复用书架页同一条通道。
@@ -10645,6 +10741,14 @@ private canWriteInto(dir: string): boolean {
             onCapsuleStop: () => this.onAloudStop(),
             onCapsuleOpenPlayer: () => this.openReadAloudPlayer(),
             onOpenTocRule: () => this.openProfileDetail(ProfileRoute.TXT_TOC_RULE_PREVIEW),
+            // 批10（:569）标题胶囊右端的书源圆点：有源才画，点它弹书源下拉。
+            bookSourceName: this.readerBookSourceName(),
+            onOpenSourceMenu: () => this.openReaderSourceMenu(),
+            // 批10（:570）长按换源 / 刷新格子的二级菜单四动作。
+            onOpenChangeSource: () => { this.changeSourceBook = this.selectedBook; },
+            onOpenChapterChangeSource: () => this.showUnavailableAction('更换本章源尚未迁移：本地没有单章换源面板'),
+            onRefreshCurrentChapter: () => { void this.refreshReaderCurrentChapter(); },
+            onRefreshAfterChapter: () => this.showUnavailableAction('刷新后续尚未迁移：本地只能刷新当前章'),
             onToggleNightMode: () => this.toggleReaderNightMode(),
             onToggleEyeProtection: () => this.toggleEyeProtection(),
             onMoreActionsChange: (actions: ReaderMoreActionConfig[]) => this.setReaderMoreActions(actions),

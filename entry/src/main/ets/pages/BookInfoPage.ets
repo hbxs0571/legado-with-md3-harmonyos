@@ -75,6 +75,13 @@ export struct BookInfoPage {
   @Prop bookBaseUrl: string = '';
   /** 批7（:1164）：简介里 onclick 脚本要执行书源 JS，需要书源 URL；本地书为空。 */
   @Prop bookSourceUrl: string = '';
+  /**
+   * 批10（:553）：这本书所属书源的显示名，由 Index 从 Book.origin 反查 BookSourceRepository 注入。
+   *
+   * 页面自己不去查仓库（每次渲染都会走一次异步）。为空表示本地书、或源已删、或老数据没记源名，
+   * 此时来源标签退回路径/「未知来源」，不硬造名字。
+   */
+  @Prop bookSourceName: string = '';
   /** 移出书架前是否二次确认（批 7 的 `:291`）。 */
   @Prop deleteAlertEnabled: boolean = true;
   onBack: () => void = () => {};
@@ -580,11 +587,12 @@ export struct BookInfoPage {
   /**
    * 第三行右段：来源。
    *
-   * 上游 `originName` 是书源名；本地没有书源，只能落到 `androidOriginalPath`
-   * （Android 迁移过来的原始路径），再退一步给「本地文件」。
+   * 上游 `originName` 是书源名。批10（:553）起三档：本地书固定「本地文件」→ 有书源名就用书源名
+   * （Index 注入的 `bookSourceName`，对齐上游 `Book.originName`）→ 都没才退 `androidOriginalPath`。
    */
   private sourceLabel(): string {
     if (this.book.isLocal) { return '本地文件'; }
+    if (this.bookSourceName.length > 0) { return this.bookSourceName; }
     const path = this.book.androidOriginalPath ?? '';
     return path.length > 0 ? path : '未知来源';
   }
@@ -907,8 +915,15 @@ export struct BookInfoPage {
       this.openLogSheet();
     } else if (key === 'private') {
       this.onSetPrivate(this.book, this.book.isPrivate !== true);
+    } else if (key === 'custom_button') {
+      // 批10（:554）书源自定义按钮。上游 `BookSource.customButton` 只是个布尔开关，
+      // 真正的执行链是 `customButtonRule`（选择器 + JS），本地移植的引擎
+      // `third_party/harmony-book-source-engine/sourceengine/src/main/ets/model/data/Book.ts:355`
+      // 只有 `customButton: boolean = false`，**没有 customButtonRule 字段**（全仓 grep 只此一处命中）。
+      // 引擎不扩展就执行不了源脚本，这里如实说明缺什么，不弹假成功提示。
+      this.onUnavailableAction('自定义按钮依赖书源引擎的 customButtonRule（选择器与脚本），本地引擎只移植了 customButton 开关，暂无法执行');
     } else {
-      // 其余项（custom_button / re_sync_webdav / set_book_variable / split_long_chapter）
+      // 其余项（re_sync_webdav / set_book_variable / split_long_chapter）
       // 依赖书源脚本回调、远程书库或排版引擎，本地没有对应能力。
       // 按仓库约定仍然列出来，点了给一句「未接入」，不留死按钮。
       this.onUnavailableAction(`${this.overflowTitleOf(key)} 未接入`);
