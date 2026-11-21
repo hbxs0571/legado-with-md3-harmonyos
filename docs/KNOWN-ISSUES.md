@@ -2452,6 +2452,92 @@ books.forEach { book ->
 
 ---
 
+## 提示气泡（tooltip）：ArkUI 有 API，但只由鼠标悬浮触发（r365 盘点）
+
+上游用 M3 `TooltipBox` + `PlainTooltip` 给三处按钮挂提示气泡，本地一处都没有。这一节先弄清两件事：**上游要的是什么触发方式**、**ArkUI 给的是什么**。结论是：ArkUI 有一个专门的 tooltip API（`bindTips`），但文档把它限定为**鼠标悬浮**触发，触摸设备上不显示；而 M3 在触摸设备的触发是**长按**。所以手机形态上**没有现成等价物**，得用 `bindPopup` + `LongPressGesture` 自己搭。查证日期 2026-11-22。
+
+### 一、上游用在哪三处
+
+| 文件:行号 | 挂载对象 | tooltip 文本 | 颜色覆盖 |
+| --- | --- | --- | --- |
+| `ui/widget/components/AppFloatingActionButton.kt:100` | 悬浮按钮（`:95` 的 `Box` 内） | 调用方传入的 `tooltipText` | `containerColor = surfaceContainerLow`、`contentColor = onSurface`（`:106-109`） |
+| `ui/book/read/sheet/GlobalThemePage.kt:201` | 主题页「分享布局」按钮 | `R.string.share_layout` | 同色覆盖，文字另用 `bodyMedium` |
+| `ui/widget/components/SelectionBottomBar.kt:224` | 选择模式主操作按钮（`FilledIconButton`，宽 64dp） | `primaryAction.text` | 默认配色 |
+
+三处都写 `TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above)`，即**固定在上方**；并且都包了一层 `ProvideAppDensity`（给 tooltip 内容单独提供密度）。
+
+### 二、M3 的触发方式与默认度量
+
+触发（androidx 源 `compose/material3/Tooltip.kt`，1,549 行）：`:98` 的 KDoc 写「invoked when the anchor is **long pressed**」，`:162` 的 `@param enableUserInput` 写「determines if this TooltipBox will handle **long press**」，`:163` 补「mouse hover, and keyboard focus」。→ **触摸设备 = 长按，鼠标设备 = 悬浮，键盘 = 焦点**。
+
+度量（`Tooltip.kt` 与 `tokens/PlainTooltipTokens.kt` 实测；dp 与本地 vp 在这一层 1:1）：
+
+| 项 | 值 | 依据 |
+| --- | --- | --- |
+| 容器形状 | `ShapeKeyTokens.CornerExtraSmall` | `PlainTooltipTokens.kt:23-24` |
+| 文字 | `TypographyKeyTokens.BodySmall` = 12sp / 16sp | `PlainTooltipTokens.kt:29-30`、`TypeScaleTokens.kt` |
+| 内容内边距 | 水平 8dp、垂直 4dp | `Tooltip.kt:1531-1536` |
+| 最小尺寸 | 40dp × 24dp | `Tooltip.kt:1527-1530` |
+| 最大宽度 | 200dp | `Tooltip.kt:533` |
+| 箭头（caret） | 16dp × 8dp | `Tooltip.kt:530` |
+| 与锚点间距 | 4dp | `Tooltip.kt:1525-1526` |
+| 抬升 | `tonalElevation = 0.dp`、`shadowElevation = 0.dp` | `Tooltip.kt:352-353` |
+| 自动消失 | `withTimeout(BasicTooltipDefaults.TooltipDuration)` | `Tooltip.kt:1101`（毫秒数本轮未取值） |
+
+颜色只在上游被覆盖（`surfaceContainerLow` / `onSurface`），M3 默认走 `InverseSurface` / `InverseOnSurface`。本地对应键：`themeColorSurfaceSecondary` 就是 `surfaceContainerLow`（`data/ThemePalette.ets:1002`）、`themeColorTextPrimary` 就是 `onSurface`（`:998`）。
+
+### 三、ArkUI 侧：`bindTips` 有，但只 hover
+
+`bindTips(message: TipsMessageType, options?: TipsOptions): T`（`sdk/default/openharmony/ets/component/common.d.ts:21434`，`@since 19`，仅 Stage 模型；`TipsOptions` 在 `:13009`）。
+
+DevEco 自带离线文档（`plugins/openharmony/ohos-info-center-view/static/hos/JsEtsAPIReference/zh-cn_topic_0000002696372221.html`）原文两条：
+
+> 为组件绑定Tips悬浮气泡，当**鼠标悬浮**在组件上时，自动显示提示信息；鼠标离开组件时，悬浮气泡自动隐藏。
+> Tips控制**依赖设备可以触发悬浮事件**，对于**无法触发悬浮事件的硬件设备无法使用**Tips控制。
+
+`TipsOptions` 默认值（同页「参数」段）：`appearingTime 700`、`disappearingTime 300`、`appearingTimeWithContinuousOperation 300`、`disappearingTimeWithContinuousOperation 0`、`enableArrow true`、`arrowPointPosition CENTER`、`arrowWidth 16vp`、`arrowHeight 8vp`、`showAtAnchor TARGET`（20+）、`systemMaterial`（26.0.0）。
+
+可用性对照本仓基线 `6.0.0(20)`：`bindTips` 与 `showAtAnchor` 可用；`systemMaterial` 需要 26.0.0，**不可用**。文档还写明：组件 `enabled` 为 `false` 时气泡照样弹。
+
+→ 结论：**手机（纯触屏、无 hover 事件）上 `bindTips` 不会显示**。
+
+### 四、本地现状：零实现
+
+- `entry/src/main/ets` 全仓 `bindTips` **0 处**，`tooltip`（不分大小写）**0 处**实现。
+- 最接近的是 `components/booksource/AppFab.ets:16` 的 `@Prop fabAccessibilityText`，`:28` 只给了 `.accessibilityText(...)`——**读屏能念，屏幕上不显示**。调用点：`pages/BookSourceDebugPage.ets:273` 的 `fabTooltip()`（`:388` 传入）、`pages/BookSourceEditPage.ets:541` 的「保存」。
+- 自建所需的能力存量充足：`bindPopup(` 已用 **47 处 / 16 个文件**，`LongPressGesture` **31 处**，不需要新增平台特性。
+
+### 五、自建的参数映射
+
+用 `bindPopup(show, options)` + `@State` 开关：长按置位、`onStateChange` 复位。
+
+| M3 | ArkUI `PopupOptions` 字段 | 取值 |
+| --- | --- | --- |
+| 固定在锚点上方 | `placement` | `Placement.Top` |
+| caret 16×8 | `enableArrow` / `arrowWidth` / `arrowHeight` | `true` / `16` / `8` |
+| 与锚点间距 4dp | `targetSpace` | `4` |
+| 圆角 `CornerExtraSmall` | `radius` | `4`（`CornerExtraSmall` 的 4dp 本轮未单独抓 ShapeTokens 核值） |
+| `surfaceContainerLow` / `onSurface` | `popupColor` + 内容文字色 | `themeColorSurfaceSecondary` / `themeColorTextPrimary` |
+| 内边距 8 / 4、最小 40×24、最大宽 200 | popup 内 `Row`/`Text` 的 `padding`、`constraintSize` | 8 / 4、`{ minWidth: 40, minHeight: 24, maxWidth: 200 }` |
+| `BodySmall` 12sp / 16sp | `Text.fontSize(12)` + `lineHeight(16)` | — |
+| 无抬升 | `shadow` 不设 | — |
+| 长按触发 | `LongPressGesture({ duration: 500 })` | 阈值取系统默认 |
+
+`PopupOptions` 里另外可用但**不该顺手加上**的字段：`mask`、`backgroundBlurStyle`、`followTransformOfTarget`、`avoidTarget` 等。M3 tooltip 没有遮罩、没有背景模糊、没有页面级 avoid 行为。
+
+### 六、判断
+
+- **手机端必须自建，不能拿 `bindTips` 顶。** 文档明确限定 hover 触发，触摸设备不显示，用它等于交付一个「按了没反应」的控件。这与 KI-ALOUD-CAPSULE（拿不到系统悬浮窗）同类：不是没写，是 API 语义不同。
+- **PC / 二合一（有鼠标）可以另挂 `bindTips`**，走系统原生 hover 气泡，与本地长按气泡互补；同一设备不要两条同时上，否则「长按弹一个、悬浮又弹一个」。
+- **优先级不高。** 三处 tooltip 都不在功能路径上；本地 FAB 已用 `accessibilityText` 覆盖读屏，缺的只是「看得见的小提示」。要做就三处一次做完（FAB / 分享布局 / 选择底栏），落成一个公共组件 `components/UiTooltip.ets`，参数按上表固定，不接受每处自定义数值。
+- **验收口径要写死**：长按 500ms 出现、箭头在按钮正上方、4dp 圆角、bodySmall 12/16、无遮罩、点外部消失；并写明触摸端不用 `bindTips`，否则验收方无法判「算不算做到」。
+
+**取证边界**：M3 侧取的是 `androidx/androidx` 主干（`androidx-main`）的 `Tooltip.kt`（1,549 行）与 `tokens/PlainTooltipTokens.kt`（32 行），**不是严格等于**本仓上游声明的 `material3 = "1.5.0-beta01"`（`legado-with-MD3/gradle/libs.versions.toml:57`）；本机仍无 material3 副本（`~/.gradle` 与上游 `app/build` 都不存在）。`CornerExtraSmall = 4dp` 与 `TooltipDuration` 毫秒数未单独取值。ArkUI 侧只读了 SDK 声明与离线文档，**未上机验证 `bindTips` 在手机上的实际表现**，也**未写任何自建实现**。
+
+关联：[`docs/FEATURES.md`](FEATURES.md)、[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) 5.2（AppStorage 与主题广播）、[`docs/UI-PARITY.md`](UI-PARITY.md)。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。
