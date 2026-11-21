@@ -76,6 +76,23 @@ Emulator.exe: -drive ... system.img.qcow2 ...: 拒绝访问。
 
 而且「可连」不等于「就绪」：刚启动时 `uitest dumpLayout` 会直接报 `[Fail]ExecuteCommand need connect-key? please confirm a device by help info`。要能成功执行一条 `hdc shell "echo ok"` 才算真正可用 —— `emu.sh` 的 `wait_online` 就是按这个判定。
 
+## 多对话共用一台模拟器：先查锁，再动手
+
+本机同时跑多个对话是常态，模拟器只有一台。`scripts/emu.sh` 用一把锁当「谁在用」的存证：
+
+```bash
+bash scripts/emu.sh who                                            # 空闲？谁占着？几分钟前？
+bash scripts/emu.sh claim --for '上机验 XX' --session <对话标识>
+bash scripts/emu.sh release --session <对话标识>
+```
+
+- 锁在 `tmp/emulator.lock/owner`（`tmp/` 被 `.gitignore` 忽略），内容是 session / 用途 / 开始时间 / epoch。
+- **不做进程存活检测**：`emu.sh` 每次调用都是短命进程，PID 一退出就没有意义。改用时间戳 + TTL（默认 90 分钟，`EMU_LOCK_TTL` 可调）。
+- 过期**不会**自动清。`who` 与 `require_lock` 只提示「可能已被放弃」，清锁要人确认后 `release --force` —— 自动清等于替另一个对话判断「它应该跑完了」。
+- `start` / `stop` / `restart` 硬拦：没锁报错并给出 claim 命令，别人的锁报错并打印持有者。`cap` 不拦，但别的对话正持锁时会提示一句：截到的可能是对方的中间态。
+- 身份靠 `--session` / `EMU_SESSION` 显式传。同一个 Windows 用户下的多个对话默认同名，**不加标识就分不出谁是谁**，`release` 会因此校验失败要求 `--force` —— 这正是该显式传标识的理由。
+- `start` / `stop` / `restart` 同样认 `--session`（或 `EMU_SESSION`）：不加的话脚本认不出你是持有者，会按「别人的锁」拒绝，看起来像自己占的锁不认自己。
+
 ## 截图
 
 ```bash

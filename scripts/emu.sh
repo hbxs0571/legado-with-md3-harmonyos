@@ -66,9 +66,135 @@ check_density() {
   return 0
 }
 
+
+# ── 多对话共用模拟器：先查锁，再动手 ──────────────────────────
+# 本机同时跑多个对话是常态，模拟器只有一个。锁是「谁在用」的唯一存证。
+# 不做进程存活检测 —— emu.sh 每次调用都是短命进程，PID 一退就没意义；
+# 改用时间戳 + TTL：超过 LOCK_TTL 分钟没人刷新，视为「可能已放弃」，
+# 但脚本不会自动清掉，必须人来确认。
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
+LOCK_DIR="$PROJECT_ROOT/tmp/emulator.lock"
+LOCK_INFO="$LOCK_DIR/owner"
+LOCK_TTL="${EMU_LOCK_TTL:-90}"
+
+is_num() { case "$1" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+lock_epoch() { sed -n 's/^epoch=//p' "$LOCK_INFO" 2>/dev/null | head -1; }
+lock_field() { sed -n "s/^$1=//p" "$LOCK_INFO" 2>/dev/null | head -1; }
+
+# 锁已存在的分钟数；读不到返回空串
+lock_age_min() {
+  local ep; ep=$(lock_epoch)
+  is_num "$ep" || return 0
+  printf '%s' $(( ($(date +%s) - ep) / 60 ))
+}
+
+lock_owner_desc() {
+  printf '%s ｜ 用途: %s ｜ 开始: %s' \
+    "$(lock_field session | sed 's/^$/未注明/')" \
+    "$(lock_field purpose | sed 's/^$/未注明/')" \
+    "$(lock_field since | sed 's/^$/未注明/')"
+}
+
+do_who() {
+  if [ ! -d "$LOCK_DIR" ]; then
+    printf '空闲（无锁）\n'
+    return 0
+  fi
+  local age; age=$(lock_age_min)
+  printf '占用中（%s 分钟前）: %s\n' "${age:-?}" "$(lock_owner_desc)"
+  if is_num "$age" && [ "$age" -gt "$LOCK_TTL" ]; then
+    printf '已超过 %s 分钟 TTL —— 可能已被放弃，但不要自行清掉，先向用户确认。\n' "$LOCK_TTL"
+  fi
+}
+
+do_claim() {
+  local purpose='未注明' session="${EMU_SESSION:-$(whoami 2>/dev/null || printf unknown)}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --for)     purpose="${2:-未注明}"; shift 2 ;;
+      --session) session="${2:-$session}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  mkdir -p "$PROJECT_ROOT/tmp"
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf 'session=%s\npurpose=%s\nsince=%s\nepoch=%s\n' \
+      "$session" "$purpose" "$(date '+%Y-%m-%d %H:%M:%S')" "$(date +%s)" > "$LOCK_INFO"
+    printf '已占锁: %s\n' "$(lock_owner_desc)"
+    return 0
+  fi
+  printf '模拟器已被占用（%s 分钟前）: %s\n' "$(lock_age_min)" "$(lock_owner_desc)" >&2
+  printf '等对方 release 再来，不要抢。查占用: bash scripts/emu.sh who\n' >&2
+  return 3
+}
+
+do_release() {
+  local force=0 me="${EMU_SESSION:-$(whoami 2>/dev/null || printf unknown)}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force)   force=1; shift ;;
+      --session) me="${2:-$me}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  if [ ! -d "$LOCK_DIR" ]; then
+    printf '本来就空闲（无锁）\n'
+    return 0
+  fi
+  local cur; cur=$(lock_field session)
+  if [ "$force" -ne 1 ] && [ "$cur" != "$me" ]; then
+    printf '锁不属于本会话（持有者: %s ｜ 本会话: %s）；确信可清再加 --force\n' "${cur:-未注明}" "$me" >&2
+    return 3
+  fi
+  rm -rf "$LOCK_DIR"
+  printf '已释放锁\n'
+}
+
+# 破坏性动作（start / stop / restart）必须持锁：没锁先 claim，别人的锁就等。
+# start/stop/restart 也认 --session，否则认不出持有者会被当成「别人的锁」。
+parse_session_flag() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --session) EMU_SESSION="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+}
+
+require_lock() {
+  local what="$1"
+  if [ ! -d "$LOCK_DIR" ]; then
+    printf '%s 需要先占锁: bash scripts/emu.sh claim --for "%s 要做什么"\n' "$what" "$what" >&2
+    return 2
+  fi
+  if [ -n "${EMU_SESSION:-}" ] && [ "$(lock_field session)" = "$EMU_SESSION" ]; then
+    return 0
+  fi
+  local age; age=$(lock_age_min)
+  if is_num "$age" && [ "$age" -gt "$LOCK_TTL" ]; then
+    printf '锁已 %s 分钟没刷新（TTL %s），持有者: %s\n' "$age" "$LOCK_TTL" "$(lock_owner_desc)" >&2
+    printf '先向用户确认，再 release --force 清掉。不要自行推断对方已放弃。\n' >&2
+    return 3
+  fi
+  printf '%s 被另一个对话占用（%s 分钟前）: %s\n' "$what" "${age:-?}" "$(lock_owner_desc)" >&2
+  printf '等它 release；不要抢模拟器。\n' >&2
+  return 3
+}
+
+# 截图不拦，但对方的中间态可能被拍进来，先提示一声。
+warn_if_other_holds() {
+  [ -d "$LOCK_DIR" ] || return 0
+  if [ -n "${EMU_SESSION:-}" ] && [ "$(lock_field session)" = "$EMU_SESSION" ]; then
+    return 0
+  fi
+  printf '提示: 别的对话正持有锁 —— %s（%s 分钟前）。截图可能拍到它的中间态。\n' \
+    "$(lock_owner_desc)" "$(lock_age_min)" >&2
+}
 # 截图。不走 hdc file recv —— 实测它对 JPEG 大文件会挂住不返回；
 # 改用 shell base64 取回再本地解码。
 do_cap() {
+  warn_if_other_holds cap
   local out="${1:-$PWD/cap-$(date +%H%M%S).jpeg}"
   # 后缀必须是 .jpeg，snapshot_display 对 .png 报 invalid
   local tmp="/data/local/tmp/cap.jpeg"
@@ -81,6 +207,7 @@ do_cap() {
 }
 
 do_start() {
+  require_lock start || return $?
   if emu_online; then
     printf '设备已在线: %s\n' "$TARGET"
     check_density
@@ -111,6 +238,7 @@ do_start() {
 }
 
 do_stop() {
+  require_lock stop || return $?
   if ! emu_running; then
     printf '实例已停止: %s\n' "$AVD_NAME"
     return 0
@@ -145,13 +273,24 @@ do_status() {
   else
     printf '实例: %s 已停止\n' "$AVD_NAME"
   fi
+  if [ -d "$LOCK_DIR" ]; then
+    printf '锁: 占用中（%s 分钟前）%s\n' "$(lock_age_min)" "$(lock_owner_desc)"
+  else
+    printf '锁: 空闲\n'
+  fi
 }
 
 case "${1:-status}" in
-  start)   do_start ;;
-  stop)    do_stop ;;
-  restart) do_stop; sleep 2; do_start ;;
+  start)   shift; parse_session_flag "$@"; do_start ;;
+  stop)    shift; parse_session_flag "$@"; do_stop ;;
+  restart) shift; parse_session_flag "$@"; require_lock restart && { do_stop; sleep 2; do_start; } ;;
   status)  do_status ;;
   cap)     shift; do_cap "${1:-}" ;;
-  *) printf '用法: %s {start|stop|restart|status|cap [文件]}\n' "$0"; exit 1 ;;
+  claim)   shift; do_claim "$@" ;;
+  release) shift; do_release "$@" ;;
+  who)     do_who ;;
+  *)
+     printf '用法: %s {start|stop|restart|status|cap [文件]|claim [--for 用途]|release [--force]|who} [--session 标识]\n' "$0"
+     printf '  --session 或 EMU_SESSION 用来证明「锁是我占的」；不加就按别人的锁处理。\n'
+     exit 1 ;;
 esac
