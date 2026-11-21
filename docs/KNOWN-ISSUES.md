@@ -1208,7 +1208,7 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ### r354 本轮：阅读域硬编码深色收敛到主题色位
 
-本轮把「167 处硬编码深色」逐条判类后，只改其中真正跟随主题的消费点，兜底默认值、色板数组、纯黑分支、正确实现一律没动。
+本轮把「167 处硬编码深色」（r353 口径，后复算为 103，见下文「还有第三层」）逐条判类后，只改其中真正跟随主题的消费点，兜底默认值、色板数组、纯黑分支、正确实现一律没动。
 
 - **地基**：`ThemePaletteColors` 11 → 22 字段（补 `error`/`onError`/`errorContainer`/`secondaryContainer`/`onSecondaryContainer`/`primaryContainer`/`onPrimaryContainer`/`onPrimary`/`outlineVariant`/`surfaceBright`/`scrim`）；12 套配色的日/夜档都填了上游真值（264 个色值）；`publishPaletteColors()` 广播 9 → 20 键。`CustomThemeColors.ets` 两个构造点补 11 字段取 fallback。
 - **rset 四键**：`ReaderSettingsPage.ets` 的 `rsetSelectedBg`/`rsetSelectedText`/`rsetChipBgAlt`/`rsetTrack` 改走 `secondaryContainer`/`onSecondaryContainer`/`surfaceElevated`/`outlineVariant` 真色位。
@@ -1223,11 +1223,11 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## 阅读器菜单取色链与上游的九条差异（r353 盘点）
 
-**KI-THEME3 阅读器菜单底色取错了属性，且本地没有 M3 派生能力** —— 状态：**部分修**（r353 修掉 3/4/5/7/9 五条，1/2/6/8 待 M3 色位补齐）。
+**KI-THEME3 阅读器菜单底色取错了属性，且本地没有 M3 派生能力** —— 状态：三条已与上游对齐（3/4/7/9），一条文档过时（6，代码已改而本文旧），一条只余残留（5），三条只做到色位语义对齐（1/2/8）。
 
 ### 根因：本地照抄了「状态栏用色」，不是「菜单底色」
 
-本地 `entry/src/main/ets/pages/ReaderPage.ets:1586-1596` 的 `readerMenuBaseColor()` 逐条照上游 `help/config/ReadBookConfig.kt:154-178` 的 `resolvedMenuBgColor`，注释也标着这个出处。
+本地 `entry/src/main/ets/pages/ReaderPage.ets:1634` 的 `readerMenuBaseColor()` 逐条照上游 `help/config/ReadBookConfig.kt:154-178` 的 `resolvedMenuBgColor`，注释也标着这个出处。
 
 但上游这个属性**全仓只有 1 个消费点**：
 
@@ -1267,47 +1267,62 @@ private fun readMenuColors(readBarStyle: Int): ReadMenuColors {
 
 | # | 项 | 上游 | 本地（r353 前） | r353 是否修 |
 | --- | --- | --- | --- | --- |
-| 1 | 底色来源 | `surfaceContainerHigh` 色位 | `resolvedMenuBgColor`（状态栏用色） | 否，见「为什么 1/2 没修」 |
-| 2 | 默认档（style 1） | 纸色作种子派生，`surfaceContainerHigh` 比纸面**深一档** | `paperColor` 原值，菜单与纸面**同色**、看不出边界 | 否，同因 |
+| 1 | 底色来源 | `surfaceContainerHigh` 色位（`ReadBookMenuBar.kt:1034`/`:1038`） | style 1 返回应用主题 `surfaceContainerHigh`（`@StorageProp themeColorSurfaceElevated`，`ReaderPage.ets:1662`）；色位对了，seed 未参与派生 | 色位对齐（`ReaderPage.ets:1634` 定义） |
+| 2 | 默认档（style 1） | 纸色作种子派生，`surfaceContainerHigh` 相对 background 的 tone 日 98→92（更深）、夜 6→17（更亮），见 `color_spec_2021.ts:141-148`/`:222-231` | 同上：与纸面不再同色，但不随纸色色相变化；日间比纸面深、夜间比纸面亮 | 部分 |
 | 3 | style 0 | 返回 `null` 继承应用主题 | 按纸色明暗返回 `#000000`/`#FFFFFF` | **已修**：改用 `themeColorSurfaceElevated` |
-| 4 | style 2 未设色回落 | `menuBgColor(isNight)` = `#EEEFE3`(日)/`#BFCBAD`(夜) | 强调色或黑白 | **已修**：填对两个默认值 |
-| 5 | 强调色未设回落 | `menuAccentColor(isNight)` = `#EEEFE3`(日)/`#586249`(夜) | **硬编码 `#FFB1C8`（粉）** | **已修**：填对两个默认值 |
-| 6 | 选中态 | `secondaryContainer`（派生色位） | `mixHexColor(accent, base, 0.7)` 手工混 | 否，需派生能力 |
+| 4 | style 2 未设色回落 | `menuBgColor(isNight)` = `#EEEFE3`(日)/`#BFCBAD`(夜)（`ReadBookConfig.kt:540`/`:544`） | 强调色或黑白 | **已修**：填对两个默认值 |
+| 5 | 强调色未设回落 | `menuAccentColor(isNight)` = `#EEEFE3`(日)/`#586249`(夜)（`ReadBookConfig.kt:542`/`:546`） | 主路径已对（`ReaderPage.ets:1710` 日 `#EEEFE3` / 夜 `#586249`）；两个 `@Prop` 默认值批 1 前为 `#FFB1C8`（:9455/:9511），现为 `#EEEFE3` | 残留已清（批 1） |
+| 6 | 选中态 | `secondaryContainer`（派生色位，`ReadBookMenuBarTitle.kt:1010`） | `readerMenuSelectedFill()` 返回 `themeColorSecondaryContainer`（`ReaderPage.ets:1696`）；`mixHexColor` 零调用 | 已与上游对齐（本文原记作未修，属过时） |
 | 7 | 夜间判据 | `themeMode`：`"1"`=日 / `"2"`=夜 / 其他 `sysConfiguration.isNightMode` | 纸色亮度 `< 0.5` | **已修**：改用 `readerNightMode` |
-| 8 | `readMenuColorMode == 0`（种子档） | 用强调色作**种子派生整套** | 直接拿强调色**当底色** | 否，需派生能力 |
-| 9 | `readMenuTintColor` | 三段回落，第三段 `readMenuBlurColor.takeIf { it != 0 }` 兜日间值 | 只有两段，夜间且 `Night` 为空时不兜日间值 | **已修**：补第三段 |
+| 8 | `readMenuColorMode == 0`（种子档） | 用强调色作**种子派生整套**（`ReadBookColorTheme.kt:156`） | 种子档仍直接返回强调色（`ReaderPage.ets:1647`）——以强调色作 seed 派生整套属于派生能力，未做 | 未做 |
+| 9 | `readMenuTintColor` | 三段回落，第三段 `readMenuBlurColor.takeIf { it != 0 }` 兜日间值（`ReadBookMenuBarShared.kt:85-92`） | 只有两段，夜间且 `Night` 为空时不兜日间值 | **已修**：补第三段 |
 
-第 5 条最直观：本地那个 `#FFB1C8` 粉是错的。上游未设强调色时用草野配色的 `#586249`（夜间）／`#EEEFE3`（日间）。
+第 5 条最直观：本地那个 `#FFB1C8` 粉是批 1 前的残留（两个 `@Prop` 默认值，且被四处显式传值覆盖）；上游未设强调色时用草野配色的 `#586249`（夜间）／`#EEEFE3`（日间），主路径 `ReaderPage.ets:1710` 早与上游逐字相同。批 1 已把两个 `@Prop` 默认值改成 `#EEEFE3`，删掉零调用的 `mixHexColor`。
 
-第 2 条最容易被忽略：默认档下本地菜单底色 = 纸面色**完全一样**，上游是「纸色派生出来的 `surfaceContainerHigh`」，比纸面深一档 —— 所以上游菜单浮在纸面上有边界感，本地是糊在一起。
+第 2 条现在的状态：默认档下本地菜单底色取应用主题 `surfaceContainerHigh`（`ReaderPage.ets:1662`），与纸面不再同色。上游 `surfaceContainerHigh` 相对 `background` 的 tone 差日间 98→92（更深）、夜间 6→17（更亮），**「比纸面深一档」只在日间成立**；本地色位与上游同名、明暗取应用主题，但色相不随纸色色相变化。
 
-### 为什么 1/2 没修：本地没有 M3 派生能力
+### 1/2/8 的处理：色位对齐，seed 未参与
 
-上游 style 1 的 `surfaceContainerHigh` 是 `dynamicColorScheme(seed = 纸色)` 派生出来的 tonal 值，不是任何一个现成的 hex。本地要拿到它只有两条路：
+**上游怎么做**：style 1 的 seed 取纸色（`ReadBookColorTheme.kt:66-101`：`sourceColor = solidSeedColor ?: resolvedImageSeedColor ?: backgroundMeanColor ?: fallbackSeedColor`，图片背景时退到 `resolvedImageSeedColor`/`ReadSessionState.backgroundMeanColor`，见 `:80`/`:91`/`:98-101`），经 `dynamicColorScheme` 派生整套色位，菜单底色取派生方案的 `surfaceContainerHigh`（`ReadBookMenuBar.kt:1034`/`:1038`）；`deriveDarkFromColor = false`（`ReadBookColorTheme.kt:106`/`:160`）让明暗跟应用主题而不跟纸色（`fallbackDark = LegadoTheme.isDark`，`:208`/`:217`）。种子档（style 2 + `readMenuColorMode == 0`）以强调色作 seed 派生整套（`ReadBookColorTheme.kt:156`）。
 
-- **用 `themeColorSurfaceElevated`**（应用主题的 `surfaceContainerHigh`）：色位语义对了，但**丢失「跟随纸色」** —— 用户换纸色菜单不再跟。
-- **手工把 `paperColor` 压暗一档**：保住「跟随纸色」，但压多少没有依据，是拍数字。
+**本地现在怎么做**：style 1 读应用主题的 `surfaceContainerHigh`（`@StorageProp themeColorSurfaceElevated`，`ReaderPage.ets:1662`，色位绑定见 `ThemePalette.ets:908`）。色位同名、明暗同源。
 
-两条都不是「照上游」，所以 r353 不动，留待 KI-THEME2 的派生能力落地后一起做。**当前 style 1 的菜单底色 = 纸色原值，与上游差「深一档」**。
+**差什么**：色位不随纸色色相变化——用户换纸色，菜单底色不变。这是唯一剩下的差异；seed 派生（第 8 条）同理未做，种子档仍直接返回强调色（`ReaderPage.ets:1647`）。
 
-### 还有第三层：167 处写死深色
+**为什么不在这次做**：ArkUI SDK 无「种子色 → 整套色位」能力（SDK `ets/api` 下 `dynamicColor`/`tonal`/`seedColor` 全 0 命中）；上游派生来自 `com.materialkolor:material-kolor` 5.0.1（`gradle/libs.versions.toml:59`/`:185`），源码不在本机；上游仓库也没有 M3 静态色值资源（`md_theme_light_` 在 `*.xml` 里 0 命中）。**本机没有可用于验证派生结果的样本对**，所以「补一段代码」不是正确做法，批 4 须另行立项并先建验证集。
+
+### 还有第三层：103 处写死深色
 
 这些连「算」都没算，直接写死，不属于本条（菜单取色链），单列在 KI-THEME2 的 27 处降级点之外：
 
-按 `'#[0-3][0-9A-Fa-f]{5}'` 统计：`pages/ReaderSettingsPage.ets` **52** / `pages/ReaderPage.ets` **35** / `pages/ReaderHighlightRuleSheet.ets` **20** / `pages/ReaderMarkingEditor.ets` **18** / `pages/ReaderTextProcessingSheet.ets` **15** / `pages/ReaderSearchPage.ets` **9** / `pages/ReaderAloudSettingsPage.ets` **7** / `pages/ReadAloudPlayerPage.ets` **6** / `pages/ReadAloudConfigPanel.ets` **5**。
+按 `'#[0-3][0-9A-Fa-f]{5}'` 统计（口径：`entry/src/main/ets/pages/*.ets`，工作副本，出现次数）：
+**ReaderSettingsPage 41** / **ReaderPage 15** / **ReaderHighlightRuleSheet 6** / **ReaderMarkingEditor 9** /
+**ReaderTextProcessingSheet 4** / **ReaderSearchPage 10** / **ReaderAloudSettingsPage 7** /
+**ReadAloudPlayerPage 6** / **ReadAloudConfigPanel 5**，合计 **103**（本文原记 167，实测 103）。
+全目录 `entry/src/main/ets` 合计 **858**（口径：HEAD，出现次数；工作副本为 857，差 1 来自并发会话的在途改动）。
 
-最典型是三个 62% 高配置面板的 `'#D91A1B21'`：`ReaderPage.ets:4759`、`ReaderSettingsPage.ets:3549`、`:3773`。commit `f78bc70` 改了主面板内外两层底色，**漏了这三个子面板**。
+原记的 167 与九档分档都是 r353 的值，本轮复算得 103。差值来自此后的收口批次；具体是哪一批把哪一处换掉，未逐处追溯。
+
+最典型是三个 62% 高配置面板的 `'#D91A1B21'`：`ReaderPage.ets:4809`、`ReaderSettingsPage.ets:3593`、`:3799`。commit `f78bc70` 改了主面板内外两层底色，**漏了这三个子面板**。
 
 ### 已对齐的部分（不需要动）
 
-- `readBarStyle` 默认 **1**（`ReaderPage.ets:385` ↔ `ReadSettings.kt:69`）
-- `readMenuColorMode` 默认 **1**（`:389` ↔ `ReadSettings.kt:88`）
-- `readerMenuContainerBaseColor()` 的「空则继承底色」回落链（`:1604` ↔ `ReadBookColorTheme.kt:322-326`）
-- 渐变方向（`readerTopBarGradient` `:1478` / `readerBottomBarGradient` `:1438` ↔ `ReaderMenuVisuals.kt:12-25`，上浓下透 / 上透下浓，第二段全透明）
-- `readMenuBorderWidth` 夹 0–4（`:1673` ↔ `ReadBookConfig.kt:115`）
-- 状态栏图标明暗（`applyReaderStatusBarIcon()` `:1320` 用 `darkStatusIcon`/`Night` ↔ `BaseActivity.kt:167`）
+- `readBarStyle` 默认 **1**（`ReaderPage.ets:401` ↔ `ReadSettings.kt:69`）
+- `readMenuColorMode` 默认 **1**（`:405` ↔ `ReadSettings.kt:88`）
+- `readerMenuContainerBaseColor()` 的「空则继承底色」回落链（`:1673` ↔ `ReadBookColorTheme.kt:322-326`）
+- 渐变方向（`readerTopBarGradient` `:1522` / `readerBottomBarGradient` `:1481` ↔ `ReaderMenuVisuals.kt:12-25`，上浓下透 / 上透下浓，第二段全透明）
+- `readMenuBorderWidth` 夹 0–4（`:1750` ↔ `ReadBookConfig.kt:115`），默认值 **1**（`:419` ↔ `ReadSettings.kt:111`）
+- 状态栏图标明暗（`ReaderPage.ets:1357` 的 `applyReaderStatusBarIcon()` ↔ `ReadBookController.kt:1904`）
+- alpha 上限：本地 `readerMenuTintAlphaString()` 的 `Math.min(0.6, percent / 100)`（`ReaderPage.ets:1825`）与上游 `ReadBookMenuBarShared.kt:54` 的 `(blurAlpha.coerceIn(0, 100) / 100f).coerceAtMost(0.6f)` 同口径
 
 关联：KI-THEME2（M3 色位缺口，本条 1/2/6/8 条要等它）、[`docs/parity/ZIP-THEME.md`](parity/ZIP-THEME.md)、[`docs/FEATURES.md`](FEATURES.md) 5.2。
+
+### 本轮复核补记
+
+- 第 6 条的改动提交：`44e6421 feat(reader): 菜单配色地基 - 底色映射纠正与硬编码收口`。
+- 同一条链上还有第二处纸色回落：`readerSelectionCardColor()` 的 style 1 分支取 `paperColor`（`ReaderPage.ets:1844`），对应上游 `surfaceBright`（在 `withReadSurfaceColors` 里被覆盖成派生 `background`，`ReadBookColorTheme.kt:280`）。两处缺口同源，但那一处的量级小得多，本轮不动。
+- 图片背景场景本地缺 `backgroundMeanColor` 对应物（上游 `ReadBookColorTheme.kt:91`/`:100`），第 1/2 条在该场景下另有缺口，未处理。
+- 菜单底色的七个消费点与批 2 的实际影响，见 `tmp/menu-color-impl-report.md`。
 
 ---
 
