@@ -9427,32 +9427,6 @@ export struct ReaderPage {
   }
 }
 
-/**
- * 两个 `#RRGGBB` / `#AARRGGBB` 之间线性插值；`otherRatio` 是第二个色的占比，0..1。
- * 用来近似上游由 M3 调色板派生的 `secondaryContainer`（本地无派生能力）。
- * 解析失败时返回 `first`。
- */
-function mixHexColor(first: string, second: string, otherRatio: number): string {
-  const fold = (color: string): string => {
-    const raw = color.trim().toUpperCase();
-    if (/^#[0-9A-F]{6}$/.test(raw)) { return raw.substring(1); }
-    if (/^#[0-9A-F]{8}$/.test(raw)) { return raw.substring(3); }
-    return '';
-  };
-  const a = fold(first);
-  const b = fold(second);
-  if (a.length !== 6 || b.length !== 6) { return first; }
-  const ratio = Math.max(0, Math.min(1, otherRatio));
-  let out = '#';
-  for (let i = 0; i < 6; i += 2) {
-    const ca = parseInt(a.substring(i, i + 2), 16);
-    const cb = parseInt(b.substring(i, i + 2), 16);
-    const mixed = Math.round(ca * (1 - ratio) + cb * ratio);
-    out += Math.max(0, Math.min(255, mixed)).toString(16).padStart(2, '0').toUpperCase();
-  }
-  return out;
-}
-
 @Component
 struct ReaderBottomAction {
   @Prop kind: ReaderControlKind = 'catalog';
@@ -9464,8 +9438,8 @@ struct ReaderBottomAction {
   @Prop badgeCount: number = 0;
   /** 菜单前景色（文字与图标），由 ReaderPage 按菜单配色折算后传入。 */
   @Prop menuForeground: string = '#D5C2C6';
-  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
-  @Prop menuAccent: string = '#FFB1C8';
+  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。上游 `ReadBookConfig.kt:542` 日间默认 `#EEEFE3`。 */
+  @Prop menuAccent: string = '#EEEFE3';
   /** 项容器底色（未选中），见 readerMenuItemFill。 */
   @Prop itemFill: string = '#00000000';
   /** 项容器底色（选中），见 readerMenuSelectedFill。 */
@@ -9520,8 +9494,8 @@ struct ReaderControlGlyph {
   @Prop active: boolean = false;
   /** 菜单前景色（文字与图标），由 ReaderPage 按菜单配色折算后传入。 */
   @Prop menuForeground: string = '#D5C2C6';
-  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。 */
-  @Prop menuAccent: string = '#FFB1C8';
+  /** 菜单强调色（选中态），由 ReaderPage 按菜单配色折算后传入。上游 `ReadBookConfig.kt:542` 日间默认 `#EEEFE3`。 */
+  @Prop menuAccent: string = '#EEEFE3';
 
   build() {
     if (this.kind === 'search') {
