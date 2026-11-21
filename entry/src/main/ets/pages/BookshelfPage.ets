@@ -1716,10 +1716,8 @@ export struct BookshelfPage {
 
   /** 按当前方向与 Android 书架设置选择列表或网格的列数。 */
   private bookshelfColumnsTemplate(): string {
-    const mode = this.activeLayoutMode();
-    const configuredColumns = mode === 1 ? this.activeGridColumns() : this.activeListColumns();
-    // 上限只留 1，对齐上游 BookshelfScreen.kt:1753 的 columns.coerceAtLeast(1)。
-    const columns = Math.max(1, Math.round(configuredColumns));
+    // 批10：与 coverCacheCount 共用同一套列数判据，两处各算一遍必然对不上。
+    const columns = this.bookshelfColumnCount();
     const template: string[] = [];
     for (let index = 0; index < columns; index += 1) { template.push('1fr'); }
     return template.join(' ');
@@ -1730,6 +1728,15 @@ export struct BookshelfPage {
     const mode = this.activeLayoutMode();
     const configuredColumns = mode === 1 ? this.activeGridColumns() : this.activeListColumns();
     return Math.max(1, Math.round(configuredColumns));
+  }
+
+  /**
+   * 批10（:1453/:1456）：LazyForEach 的预加载条数，按「当前列数 × 2 行」算。
+   * 列表模式（1 列）与 5 列网格各取各的半屏；下限 6、上限 12（再大就和首屏抢带宽）。
+   * 等价于上游首屏封面预取器，但走的是 LazyForEach 自己的虚拟化，不另建命令式缓存。
+   */
+  private coverCacheCount(): number {
+    return Math.min(12, Math.max(6, this.bookshelfColumnCount() * 2));
   }
 
   /**
@@ -2852,8 +2859,9 @@ export struct BookshelfPage {
         .columnsTemplate(this.bookshelfColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
         .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
-        // 缓存半屏：一屏约 15 张卡，cachedCount(20) 就等于没省钱。
-        .cachedCount(6)
+        // 批10（:1453/:1456）：预加载半屏——按当前列数取 2 行（下限 6、上限 12），
+        // LazyForEach 只建「视口 + cachedCount」的项，视口外这些卡的封面会提前进入加载队列。
+        .cachedCount(this.coverCacheCount())
         .scrollBar(this.layout.showBookshelfFastScroller ? BarState.On : BarState.Off)
           // editMode(true) 是 ForEach.onMove 生效的前提，与分组网格同一套写法（:138）。
           .editMode(this.canReorderBooks())
