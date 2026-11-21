@@ -137,6 +137,12 @@ export struct BookshelfPage {
   @Prop readerNightMode: boolean = false;
   /** 正在刷新目录的书主键集合（来自 Index），网格卡据此显示更新中转圈（:120）。 */
   @Prop refreshingBookIds: string[] = [];
+  /**
+   * 批3（r359）：自动刷新目录的待更新本数，由 TocRefreshQueue 通过 AppStorage 键
+   * tocPendingCount 推送（上游 postUpBooksCount 走 UP_BOOKSHELF 事件同款做法）。
+   * 标题尾巴用它，且只在「显示等待更新数量」打开时拼，见 bookshelfTitle()。
+   */
+  @StorageLink('tocPendingCount') tocPendingCount: number = 0;
   @State showLayoutSheet: boolean = false;
   /** 五个卡片式菜单各自的显隐；每个挂载点一份，互不干扰。 */
   @State sortMenuVisible: boolean = false;
@@ -473,8 +479,8 @@ export struct BookshelfPage {
    * 顶栏标题，照上游 BookshelfViewModel.kt:921-947 的 buildTitle 四分支：
    * 搜索态且页签模式 → 「书架」；搜索态或隐藏页签 → 当前分组名（取不到回落「书架」）；
    * 文件夹模式 → 根层「书架」、进入分组后显示分组名；其余 → 「书架」。
-   * 上游末尾还有「编辑态一律『书架』」与「有更新书时拼 (N)」两支，
-   * 本地暂无选择模式（批 5）与待更新队列（批 2），本批先不拼尾巴，待后续接入。
+   * 上游末尾的「有更新书时拼 (N)」这一支由批3（r359）补上，见下方 waitUp；
+   * 「编辑态一律『书架』」留给批 5（选择模式）。
    */
   private bookshelfTitle(): string {
     const shelf = '书架';
@@ -482,16 +488,19 @@ export struct BookshelfPage {
     const style = this.layout.bookGroupStyle;
     const groupName = this.activeFilter();
     const hasGroup = groupName.length > 0 && groupName !== '全部';
+    let title = shelf;
     if (inSearch && style === 0) {
-      return shelf;
+      title = shelf;
+    } else if (inSearch || style === 1) {
+      title = hasGroup ? groupName : shelf;
+    } else if (style === 2) {
+      title = this.folderViewGroup.length > 0 ? this.folderViewGroup : shelf;
     }
-    if (inSearch || style === 1) {
-      return hasGroup ? groupName : shelf;
-    }
-    if (style === 2) {
-      return this.folderViewGroup.length > 0 ? this.folderViewGroup : shelf;
-    }
-    return shelf;
+    // 批3（r359）：尾巴只在「显示等待更新数量」打开时拼，计数来自 TocRefreshQueue
+    // （waitUp.size + onUp.size，上游 postUpBooksCount 同款）。注意不是书架里
+    // lastCheckCount > 0 的书数——那是「上次刷出多少新章」，两者语义不同。
+    const waitUp = this.layout.showWaitUpCount ? this.tocPendingCount : 0;
+    return waitUp > 0 ? `${title} (${waitUp})` : title;
   }
 
   /**

@@ -28,6 +28,7 @@ import { fileIo } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { batteryInfo, pasteboard, settings } from '@kit.BasicServicesKit';
 import { common, Want } from '@kit.AbilityKit';
+import { WantLauncher } from '../lib/WantLauncher';
 import { AnimatorResult, window } from '@kit.ArkUI';
 import { LengthMetricsUnit } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
@@ -6016,7 +6017,9 @@ export struct ReaderPage {
 
   /**
    * :215 划词「浏览器打开」。只认选中文本里第一段 http(s) URL（/(https?:\/\/\S+)/），
-   * 不瞎猜；没有 URL 就提示。本地无 openLink/startAbility 封装，直接用 UIAbilityContext。
+   * 不瞎猜；没有 URL 就提示。
+   * 批3（r359）：跳转封装收进 `lib/WantLauncher.ets`，与 :105「在浏览器打开」共用一份，
+   * 免得同一个 viewData want 写两遍。
    */
   private openSelectionInBrowser(): void {
     const text = this.selectedText();
@@ -6026,13 +6029,10 @@ export struct ReaderPage {
       return;
     }
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
-    if (context === undefined) {
-      this.onUnavailableAction('无法打开浏览器');
-      return;
-    }
-    const want: Want = { action: 'ohos.want.action.viewData', uri: match[1] };
-    context.startAbility(want).catch(() => {
-      this.onUnavailableAction('没有应用可以打开该链接');
+    WantLauncher.openUrl(context, match[1]).then((opened: boolean) => {
+      if (!opened) {
+        this.onUnavailableAction('没有应用可以打开该链接');
+      }
     });
   }
 

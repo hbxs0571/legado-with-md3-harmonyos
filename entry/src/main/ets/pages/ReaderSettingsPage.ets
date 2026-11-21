@@ -595,6 +595,11 @@ export struct ReaderSettingsPage {
   onDoubleHorizontalPageChange: (value: string) => void = (_value: string) => {};
   onAutoSuggestDayNightChange: (enabled: boolean) => void = (_enabled: boolean) => {};
   onDisableReturnKeyChange: (enabled: boolean) => void = (_enabled: boolean) => {};
+  /**
+   * :105「在浏览器打开」：把当前书的书源页面交给系统浏览器。
+   * 真正取 URL、拿 UIAbilityContext 都在上层（Index 手里才有 selectedBook），这里只发信号。
+   */
+  onOpenSourcePageInBrowser: () => void = () => {};
   onReadBrightnessChange: (value: number) => void = (_value: number) => {};
   onShowBrightnessViewChange: (value: string) => void = (_value: string) => {};
   onBrightnessVwPosChange: (value: string) => void = (_value: string) => {};
@@ -1903,7 +1908,10 @@ export struct ReaderSettingsPage {
           Text('其他').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).width('100%').padding({ left: 4, top: 10, bottom: 4 })
           MenuSettingSwitch({ title: '滑动进度条时震动', detail: '拖动时提供触觉反馈', checked: this.sliderVibrator,
             onChange: (enabled: boolean) => this.onSliderVibratorChange(enabled) })
-          MenuSettingSwitch({ title: '使用新版目录', detail: '使用新的目录面板', checked: true }).onClick(() => this.showNotMigrated('使用新版目录'))
+          // :96「使用新版目录」上游是 useNewTocSheet（ReadSettings.kt:37，默认 true），消费点
+          // ReadBookViewModel.kt:193-203 在阅读页内开目录 Sheet。本地阅读页的目录是独立页面
+          // （CatalogPage，走 AppRoute 切换），没有阅读页内 Sheet 这套呈现，开关没有可切换的第二个
+          // 分支，留着就是点了没反应的假开关。批3（r359）把它从界面移除、盘面改判顺延。
           MenuSettingSlider({ title: '无规则匹配时章节分割字数', value: this.maxLengthWithNoToc, minValue: 3000, maxValue: 100000, stepValue: 100,
             onChange: (value: number) => this.onMaxLengthWithNoTocChange(value) })
           MenuSettingSwitch({ title: '选择文本时震动', detail: '选择正文时提供触觉反馈', checked: this.selectVibrator,
@@ -1919,13 +1927,23 @@ export struct ReaderSettingsPage {
           MenuSettingSwitch({ title: '禁用滚动点击动画', detail: '关闭滚动翻页过渡动画',
             checked: this.noAnimScrollPage,
             onChange: (enabled: boolean) => this.onNoAnimScrollPageChange(enabled) })
-          MenuSettingSwitch({ title: '启用绘制优化', detail: '使用优化渲染方式', checked: true }).onClick(() => this.showNotMigrated('启用绘制优化'))
+          // :89「启用绘制优化」上游是正文渲染管线里的开关，本地阅读页绘制管线要到批9 才重写，
+          // 现在点它只能 showNotMigrated 弹一句「尚未迁移」，属于假开关，批3（r359）从界面移除、盘面改判顺延。
           MenuSettingOption({ title: '点击图片行为', detail: this.getClickImageBehaviorLabel(), migrated: true })
             .onClick(() => this.openDetailSheet('点击图片行为', '选择正文图片的点击行为'))
           MenuSettingOption({ title: '点击区域设置', detail: '设置屏幕各区域的触摸动作', migrated: true }).onClick(() => this.openDetailSheet('点击区域设置', '配置九宫格点按动作，并应用到阅读界面。'))
           MenuSettingSwitch({ title: '禁用返回键', detail: '阻止阅读时返回键退出', checked: this.disableReturnKey, onChange: (enabled: boolean) => this.onDisableReturnKeyChange(enabled) })
           MenuSettingOption({ title: '自定义翻页按键', detail: this.getPageKeysLabel(), migrated: true }).onClick(() => this.openDetailSheet('自定义翻页按键', '录制物理按键作为上一页/下一页'))
           MenuSettingOption({ title: '编辑选择菜单', detail: '配置文本选择后的操作', migrated: true }).onClick(() => this.openDetailSheet('编辑选择菜单', '排序、分组与图标开关，保存后随备份同步'))
+          // :105「在浏览器打开」上游 readUrlInBrowser（ReadSettings.kt:64，默认 false）：
+          // 打开当前章源网页时，true 走系统浏览器（ReadBookViewModel.kt:2541 context.openUrl），
+          // false 走内置 WebView。本地没有内置 WebView 模块，只剩「浏览器打开」这一支可用，
+          // 所以这里做成动作行而不是开关——点它就是照上游 true 分支的语义把当前书源页面交给系统浏览器。
+          MenuSettingOption({
+            title: '在浏览器打开',
+            detail: '用系统浏览器打开当前书的书源页面',
+            migrated: true
+          }).onClick(() => this.onOpenSourcePageInBrowser());
           // 「展示顶部工具栏附加区域」上游 showReadTitleAddition（ReadSettings.kt:55，默认 true）：
           // 上游只有字段与设置界面（MoreConfigSheet.kt:458 / ReadConfigScreen.kt:418）、没有渲染消费点，本地只落库。
           MenuSettingSwitch({

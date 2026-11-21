@@ -56,12 +56,18 @@ import { AppLabSettingsPage } from './AppLabSettingsPage';
 import { AppBackupSettingsPage } from './AppBackupSettingsPage';
 import { WebDavSettings, defaultWebDavSettings, WebDavConfigStore, cloneWebDavSettings, isWebDavConfigured } from '../lib/WebDavConfig';
 import { WebDavSync } from '../lib/WebDavSync';
+import { WantLauncher } from '../lib/WantLauncher';
+import { common } from '@kit.AbilityKit';
+import { NetworkProbe } from '../lib/NetworkProbe';
 import { PrivacyNoticePage } from './PrivacyNoticePage';
 import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
 import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
+// 批3（r359）：自动刷新目录的队列与单本用例（照上游 BookshelfViewModel.upAllBookToc 一系）。
+import { TocRefreshQueue } from '../data/TocRefreshQueue';
+import { TocRefreshUseCase, TocRefreshOutcome } from '../data/TocRefreshUseCase';
 import { ArchiveImporter } from '../data/ArchiveImporter';
 import { EpubExporter } from '../data/EpubExporter';
 import { BookGroupRepository } from '../data/BookGroupRepository';
@@ -804,6 +810,9 @@ struct Index {
       this.themeColorsReady = true;
     }
     const context = this.getUIContext().getHostContext();
+    // :86「仅 WiFi 加载封面」的探测起点：一次注册网络状态监听，之后 BookCover 同步读缓存值。
+    // 放在这里而不是每个封面组件里，是因为 createNetConnection + register 只能注册一次。
+    NetworkProbe.ensureStarted();
     if (context !== undefined) {
       if (!this.readerLifecycleEventsRegistered) {
         context.eventHub.on('pauseReadSession', () => this.stopReaderSession());
@@ -5763,6 +5772,53 @@ struct Index {
         this.showUnavailableAction('书架分组兼容字段迁移失败；现有书目仍已加载');
       }
     }
+    // 批3（r359）：上游 BookshelfViewModel.kt:783-789 —— 书架首次加载完成后，
+    // 若偏好里开了「自动刷新目录」就触发一次全量目录更新（同一次启动只刷一次）。
+    this.maybeAutoRefreshOnlineToc(context);
+  }
+
+  /**
+   * 批3（r359）：自动刷新目录的入场。
+   * 门有两道：偏好 autoRefreshBook（上游 BookshelfViewModel.kt:783）与「同一次启动只刷一次」
+   * （上游 MainActivity.kt:411-417 + onSaveInstanceState:1116-1119 的 savedInstanceState 门）。
+   * 后者在本地用 AppStorage 布尔键表示：进程被杀掉前一直存在，重启即消失，与 savedInstanceState 同寿命。
+   */
+  private maybeAutoRefreshOnlineToc(context: Context): void {
+    if (!this.bookshelfLayout.autoRefreshBook) { return; }
+    if (AppStorage.get<boolean>('tocAutoRefreshedForThisLaunch') === true) { return; }
+    AppStorage.setOrCreate('tocAutoRefreshedForThisLaunch', true);
+    const candidates: string[] = [];
+    for (const book of this.books) {
+      // 候选集 = 上游 BookDao.getHasUpdateBooks：非本地书 + 允许更新 + 距上次检查超过 10 分钟。
+      if (!TocRefreshUseCase.needsCheck(book)) { continue; }
+      const key = book.contentPath ?? '';
+      if (key.length > 0) { candidates.push(key); }
+    }
+    if (candidates.length === 0) { return; }
+    TocRefreshQueue.add(candidates, (bookUrl: string) => this.refreshOnlineToc(context, bookUrl));
+  }
+
+  /**
+   * 批3（r359）：单本书的刷新动作，交给 TocRefreshQueue 并发跑。
+   * 界面照上游 markBookUpdateStarted/Finished 的口径：成功后原位替换 this.books 里那一本（不整体重排），
+   * 失败只记日志——单本失败不能打断整批，也不能把书架上的其它书换成旧对象。
+   */
+  private async refreshOnlineToc(context: Context, bookUrl: string): Promise<void> {
+    try {
+      const outcome: TocRefreshOutcome = await TocRefreshUseCase.execute(context, bookUrl);
+      const updated = outcome.book;
+      if (updated === undefined) { return; }
+      const key = updated.contentPath ?? bookUrl;
+      const nextBooks: Book[] = this.books.map((book: Book) =>
+        (book.contentPath ?? '') === key ? updated : book);
+      this.books = nextBooks;
+      if ((this.selectedBook.contentPath ?? '') === key) {
+        this.selectedBook = updated;
+      }
+    } catch (e) {
+      // AppLog 已由用例写过一行；这里补上「哪本书」，便于在日志里对号。
+      console.error(`[Index] 刷新目录失败 ${bookUrl}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   private async createLocalBackup(): Promise<void> {
@@ -8015,6 +8071,41 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /**
+   * :105「在浏览器打开」——把当前书的书源页面交给系统浏览器。
+   * 上游 ReadBookViewModel.kt:2541 的 true 分支是 `context.openUrl(chapter.getAbsoluteURL())`；
+   * 本地阅读页没有「当前章 URL」这个概念暴露到这里，退一格取这本书的目录页（tocUrl，
+   * 在线书的源网页就是目录页），再退取正文地址 contentPath，最后取书源地址 origin。
+   * 三条都不是 http(s) 就提示，绝不把任意字符串丢给浏览器。
+   */
+  private async openReaderSourcePageInBrowser(): Promise<void> {
+    if (this.selectedBook === undefined) {
+      this.showUnavailableAction('还没有选中书籍');
+      return;
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    const candidates: string[] = [
+      this.selectedBook.tocUrl ?? '',
+      this.selectedBook.contentPath ?? '',
+      this.selectedBook.origin ?? ''
+    ];
+    let target = '';
+    for (const candidate of candidates) {
+      if (WantLauncher.isHttpUrl(candidate)) {
+        target = candidate;
+        break;
+      }
+    }
+    if (target.length === 0) {
+      this.showUnavailableAction('这本书没有可打开的源网页');
+      return;
+    }
+    const opened = await WantLauncher.openUrl(context, target);
+    if (!opened) {
+      this.showUnavailableAction('没有应用可以打开该链接');
+    }
+  }
+
   private async openCatalogFromBookInfo(): Promise<void> {
     // :314 在线书目录加载失败要报「目录加载失败：…」，不能退化成「没有本地目录」。
     // 详情页入口原本只读本地缓存（cachedChapterTitles），缓存为空时在线书需要先触发一次在线加载，
@@ -9825,6 +9916,7 @@ private canWriteInto(dir: string): boolean {
               onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
               onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
               onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+              onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
               readBrightness: this.readerReadBrightness,
               onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
               showBrightnessView: this.readerShowBrightnessView,
@@ -10691,6 +10783,7 @@ private canWriteInto(dir: string): boolean {
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
             onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+              onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
             readBrightness: this.readerReadBrightness,
             onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
             showBrightnessView: this.readerShowBrightnessView,
@@ -11083,6 +11176,7 @@ private canWriteInto(dir: string): boolean {
             onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
             onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
             onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+              onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
             readBrightness: this.readerReadBrightness,
             onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
             showBrightnessView: this.readerShowBrightnessView,
@@ -11382,6 +11476,7 @@ private canWriteInto(dir: string): boolean {
           onDoubleHorizontalPageChange: (value: string) => this.setReaderDoubleHorizontalPage(value),
           onAutoSuggestDayNightChange: (enabled: boolean) => this.setReaderAutoSuggestDayNight(enabled),
           onDisableReturnKeyChange: (enabled: boolean) => this.setReaderDisableReturnKey(enabled),
+              onOpenSourcePageInBrowser: () => { this.openReaderSourcePageInBrowser(); },
           readBrightness: this.readerReadBrightness,
           onReadBrightnessChange: (value: number) => this.setReaderReadBrightness(value),
           showBrightnessView: this.readerShowBrightnessView,

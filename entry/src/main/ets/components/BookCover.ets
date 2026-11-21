@@ -5,6 +5,7 @@ import { buildCoverTextLayout } from './CoverTextLayout';
 import { AppGlyph } from './AppGlyph';
 import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
+import { NetworkProbe } from '../lib/NetworkProbe';
 import { LABEL_SMALL } from './typography/TypographyTokens';
 
 /** 无封面文字的绘制上下文；每个 BookCover 各持一份，避免多本共享导致互相覆盖。 */
@@ -121,7 +122,20 @@ export struct BookCover {
       return CoverAlbumRepository.defaultCoverPath(this.isNight);
     }
     const uri = this.book.coverUri;
-    return uri === undefined ? '' : uri;
+    if (uri === undefined) { return ''; }
+    // 批3（r359）：「仅 WiFi 加载封面」（上游 CoverFetcher.kt:136
+    // `if (loadOnlyWifi && !appCtx.isWifiConnect) throw IOException(...)` 同款判定）。
+    // 开关打开且当前不在 WiFi 上时，不把网络封面交给 Image —— 回落默认封面或文字占位，
+    // 与上游抛异常让 Coil 走错误兜底是同一个可见结果。
+    // 本地图（沙箱路径、file://）不受开关影响，那是用户自己导入的封面。
+    if (this.coverSettings.loadOnlyOnWifi && BookCover.isRemoteUri(uri) && !NetworkProbe.isOnWifi()) {
+      return '';
+    }
+    return uri;
+  }
+
+  private static isRemoteUri(uri: string): boolean {
+    return uri.startsWith('http://') || uri.startsWith('https://');
   }
 
   private hasCoverImage(): boolean {
