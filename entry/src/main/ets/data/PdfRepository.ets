@@ -108,6 +108,13 @@ export class PdfRepository {
         volumes: volumes
       };
     } catch (error) {
+      // :283（批6）**判不做**：上游 PdfFile.kt:213-225 在 pdfRenderer 为 null 时把
+      // `book.intro = "书籍导入异常"` 写进已经建好的 Book 对象——那是实现细节泄漏，不是设计意图；
+      // 用户视角是「书架里多了一本永远打不开的书，简介写着书籍导入异常」。
+      // 本地契约是「导入失败就 throw、书不进书架、由 Index 弹『导入失败：』toast」
+      // （见 BookRepository.importSingleUri 与 pages/Index.ets 的 importSingleBook catch 分支），
+      // 书架保持干净。两者不是「有」与「没有」的关系，是两种不同的失败契约；
+      // 照搬上游等于主动把一本打不开的书塞进用户书架，故本批不做、只留这段注释。
       try {
         fileIo.unlinkSync(contentPath);
       } catch (_) {
@@ -147,7 +154,9 @@ export class PdfRepository {
           await PdfRepository.writePageImage(pixelMap, pagePath);
           if (index === 0) {
             // 封面用第 0 页，同一 PixelMap 再编码一份，避免依赖 copyFileSync 的路径重载。
-            await PdfRepository.writePageImage(pixelMap, coverPath);
+            // :282（批6）：封面单独编码、质量 90（上游 PdfFile.kt:197 的 JPEG 90）；
+            // 正文页图仍走 writePageImage 的 85——那是本地特有的落盘取舍（上游页图不落盘）。
+            await PdfRepository.writeCoverImage(pixelMap, coverPath);
           }
         } finally {
           // 一页渲完就丢掉 PixelMap 与 PdfPage 句柄，100 页全攒住会 OOM。
@@ -164,13 +173,22 @@ export class PdfRepository {
     }
   }
 
-  /** 用 createImagePacker 把页图编码成 JPEG 质量 85 落盘（PNG 会大 3-5 倍）。 */
+  /** 用 createImagePacker 把**正文页图**编码成 JPEG 质量 85 落盘（PNG 会大 3-5 倍）。封面不走这里，见 writeCoverImage。 */
   private static async writePageImage(pixelMap: image.PixelMap, targetPath: string): Promise<void> {
+    await PdfRepository.packJpeg(pixelMap, targetPath, 85);
+  }
+
+  /** 封面单独编码，质量 90（:282，对齐上游 PdfFile.kt:197 `compress(JPEG, 90, out)`）。 */
+  private static async writeCoverImage(pixelMap: image.PixelMap, targetPath: string): Promise<void> {
+    await PdfRepository.packJpeg(pixelMap, targetPath, 90);
+  }
+
+  private static async packJpeg(pixelMap: image.PixelMap, targetPath: string, quality: number): Promise<void> {
     const packer = image.createImagePacker();
     const target = fileIo.openSync(targetPath,
       fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
     try {
-      await packer.packToFile(pixelMap, target.fd, { format: 'image/jpeg', quality: 85 });
+      await packer.packToFile(pixelMap, target.fd, { format: 'image/jpeg', quality: quality });
     } finally {
       fileIo.closeSync(target);
       await packer.release();

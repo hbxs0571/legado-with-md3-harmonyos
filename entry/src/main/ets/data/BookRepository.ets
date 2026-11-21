@@ -708,6 +708,15 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       // PDF 正文是每章 10 个图片标记，落盘为 UTF-8，章节偏移按字符给，走同一条 buildChapterRows。
       const chapters = BookRepository.buildChapterRows(imported.book.contentPath ?? '',
         imported.titles, imported.offsets, imported.volumes, imported.content, undefined);
+      // :279（批6）：PDF 章节 url 对齐上游 PdfFile.kt:187 的 `pdf_${it}`（0 起）。
+      // 不能改 buildChapterRows 的公共行为——TXT/EPUB/MOBI/UMD 都还在用它生成 md5 url。
+      // 章名仍是本地 PdfRepository 的 `分段_1` 起（有意差异：章名用户看得见，不出现「分段_0」；
+      // url 用户看不见，对齐上游反而便于与上游数据对照）。
+      // 已知差异：库里旧 PDF 书的章节 url 仍是 md5（chapters 主键 (url, bookUrl)，改生成规则不回头改旧行；
+      // 本批不做数据迁移，读旧书不受影响——本地按 (bookUrl, index) 取章）。
+      for (let index = 0; index < chapters.length; index++) {
+        chapters[index].url = `pdf_${index}`;
+      }
       created = { book: imported.book, chapters: chapters };
     } else if (format === 'mobi') {
       // KF6 正文/分章/图片（批 11）；KF8 内容在批 12 接入，Kf6Book 内部会抛可读错误。
