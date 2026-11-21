@@ -895,14 +895,22 @@ export struct BookSourceManagePage {
   private SourceRowView(row: SourceRow, index: number) {
     Row() {
       if (this.selectionMode) {
+        // 上游 SelectionItemCard.kt:160-183 的选择框是 AppCheckbox，其 M3 分支（AppCheckbox.kt:39-44）
+        // 直接用 androidx.compose.material3.Checkbox：20dp 方形容器、圆角 2dp、未选 2dp onSurfaceVariant 边框、
+        // 选中填 primary 且勾为 onPrimary。本地此前自绘成圆形（圆角 10、1.5dp 边框、勾用 textPrimary），形状与色位都不对。
         Stack({ alignContent: Alignment.Center }) {
-          Row().width(20).height(20).borderRadius(10)
-            .border({ width: 1.5, color: this.selectedUrls.has(row.source.bookSourceUrl) ? this.themeColorAccent : this.themeColorTextTertiary })
+          Row().width(20).height(20).borderRadius(2)
+            .border({
+              width: this.selectedUrls.has(row.source.bookSourceUrl) ? 0 : 2,
+              color: this.themeColorTextSecondary
+            })
             .backgroundColor(this.selectedUrls.has(row.source.bookSourceUrl) ? this.themeColorAccent : Color.Transparent)
           if (this.selectedUrls.has(row.source.bookSourceUrl)) {
-            AppGlyph({ name: 'profileCheck', glyphSize: 13, tint: this.themeColorTextPrimary })
+            AppGlyph({ name: 'profileCheck', glyphSize: 14, tint: this.themeColorOnPrimary })
           }
         }.width(24).margin({ right: 10 })
+          .accessibilityChecked(this.selectedUrls.has(row.source.bookSourceUrl))
+          .accessibilityText('选择 ' + (row.source.bookSourceName.length > 0 ? row.source.bookSourceName : row.source.bookSourceUrl))
           .onClick(() => {
             const next = new Set<string>(this.selectedUrls);
             if (next.has(row.source.bookSourceUrl)) { next.delete(row.source.bookSourceUrl); }
