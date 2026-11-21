@@ -89,6 +89,16 @@ export interface Book {
    */
   canUpdate?: boolean;
   /**
+   * 最近一次检查目录的时间戳，对应上游 Book.lastCheckTime（books 表 lastCheckTime 列）。
+   * 批3（r359）接上消费点：自动刷新目录用它做 10 分钟节流，缺省视为「从没查过」。
+   */
+  lastCheckTime?: number;
+  /**
+   * 最近一次刷新目录是否出错，对应上游 Book.upError。
+   * 上游把它存在 books.type 位掩码的 16 位上（BookType.upError），本地同样按位读写。
+   */
+  upError?: boolean;
+  /**
    * 单本私密标记，对应上游 Book.isPrivate（books 表 isPrivate 列，:294）。
    * 分组级私密标记在 BookGroup 上，两者取并集判定，见 PrivateAccessRepository.isPrivateBook。
    */

@@ -22,6 +22,18 @@ import { BookGroupRepository } from './BookGroupRepository';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
 import { OnlineBookProvider } from './OnlineBookProvider';
 
+/**
+ * books 表的读取列清单。selectBooksSql 与 selectBookByUrlSql 共用同一份字符串，
+ * 避免「两处列清单各改一半」——列顺序一旦和 readBookRow 的索引对不上，
+ * 就是封面变作者名那类静默数据错乱。前 30 列顺序固定，新列只能往末尾追加。
+ */
+const BOOK_COLUMNS: string =
+  '`bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
+  '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
+  '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
+  '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, ' +
+  '`wordCount`, `isPrivate`, `variable`, `origin`, `lastCheckTime`, `canUpdate`';
+
 /** books.readConfig 里本地用得上的几项，其余上游字段不解析。 */
 interface StoredReadConfig {
   imageStyle?: string;
@@ -250,15 +262,18 @@ export class BookRepository {
 
   /**
    * 读全部书目。前 30 列的顺序必须与 readBookRow 的索引一一对应，改动这里就要同步改那边。
-   * canUpdate 追加在末尾（索引 30）：append 而不插中间，前面 0-29 的索引一个都不动，
-   * 避免中间插列导致 readBookRow 后面全部错位（封面变作者名那类静默数据错乱）。
+   * 批3（r359）：lastCheckTime、canUpdate 追加在末尾（索引 30/31）：append 而不插中间，
+   * 前面 0-29 的索引一个都不动，避免中间插列导致 readBookRow 后面全部错位
+   * （封面变作者名那类静默数据错乱）。lastCheckTime 是自动刷新目录的 10 分钟节流依据
+   * （上游 Book.lastCheckTime，BookshelfViewModel.kt 用它判「刚查过」），
+   * canUpdate 是每本书「允许更新」开关。
    */
   private static readonly selectBooksSql: string =
-    'SELECT `bookUrl`, `name`, `author`, `kind`, `group`, `durChapterIndex`, `durChapterPos`, ' +
-    '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
-    '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
-    '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, `wordCount`, `isPrivate`, `variable`, ' +
-    '`origin`, `canUpdate` FROM `books` ORDER BY `durChapterTime` DESC';
+    `SELECT ${BOOK_COLUMNS} FROM \`books\` ORDER BY \`durChapterTime\` DESC`;
+
+  /** 批3（r359）：按主键读单本（上游 BookDao.getBook）。列清单与 selectBooksSql 同源。 */
+  private static readonly selectBookByUrlSql: string =
+    `SELECT ${BOOK_COLUMNS} FROM \`books\` WHERE \`bookUrl\` = ?`;
 
   /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
@@ -1073,6 +1088,24 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     return books;
   }
 
+  /**
+   * 批3（r359）：按 bookUrl 读单本（上游 BookDao.getBook）。
+   * 刷新目录用例要用「库里最新一行」做进度与阅读配置的保护（Book.sync 五条），
+   * 所以这里必须是单行查询而不是拿书架内存里的旧对象。
+   */
+  static async getBookByUrl(context: Context, bookUrl: string): Promise<Book | undefined> {
+    if (bookUrl.length === 0) { return undefined; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const resultSet = await store.querySql(BookRepository.selectBookByUrlSql, [bookUrl]);
+    try {
+      if (!resultSet.goToNextRow()) { return undefined; }
+      return BookRepository.readBookRow(resultSet);
+    } finally {
+      resultSet.close();
+    }
+  }
+
   /** 解析一行 books 记录。列顺序必须与 selectBooksSql 保持一致。 */
   private static readBookRow(resultSet: relationalStore.ResultSet): Book {
     const bookUrl = RdbCodec.text(resultSet, 0);
@@ -1153,8 +1186,14 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       delTag: BookRepository.delTagFromVariable(RdbCodec.optionalText(resultSet, 28)),
       originFileName: BookRepository.variableString(RdbCodec.optionalText(resultSet, 28), 'originFileName'),
       sourceSize: BookRepository.variableNumber(RdbCodec.optionalText(resultSet, 28), 'sourceSize'),
-      // canUpdate 在 SELECT 末尾（索引 30）；默认 true 对齐上游 canUpdate 列 DEFAULT 1。
-      canUpdate: RdbCodec.boolean(resultSet, 30, true)
+      // 批3（r359）：lastCheckTime 在 SELECT 末尾第一列（索引 30），canUpdate 紧随其后（索引 31）。
+      // 上游 Book.lastCheckTime 是自动刷新目录的节流依据，缺省 0 表示「从没查过」。
+      lastCheckTime: RdbCodec.optionalInteger(resultSet, 30),
+      // 默认 true 对齐上游 canUpdate 列 DEFAULT 1。
+      canUpdate: RdbCodec.boolean(resultSet, 31, true),
+      // 上游 Book.upError 存在 type 位掩码的 16 位上（BookType.upError），
+      // 自动刷新失败时置位，书架/详情页据此显示「更新出错」。
+      upError: (bookTypeValue & 16) !== 0
     };
     book.progress = BookRepository.readProgress(book);
     return book;
@@ -1830,7 +1869,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       book.isPrivate === true ? 1 : 0,
       latestChapterTitle,
       book.latestChapterTime ?? 0,
-      0,
+      // 批3（r359）：lastCheckTime 过去恒写 0，导致自动刷新目录的 10 分钟节流永远读不到「刚查过」。
+      book.lastCheckTime ?? 0,
       book.lastCheckCount ?? 0,
       Number.isFinite(totalChapterNum) ? Math.max(0, Math.trunc(totalChapterNum)) : 0,
       lastChapter,
@@ -1854,10 +1894,12 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     ];
   }
 
-  /** 上游 BookType 位掩码：text=8、audio=32、image=64，本地书再加 local=256。 */
+  /** 上游 BookType 位掩码：text=8、audio=32、image=64、upError=16，本地书再加 local=256。 */
   static bookTypeMask(book: Book): number {
     const media = book.bookType === 'image' ? 64 : book.bookType === 'audio' ? 32 : 8;
-    return book.isLocal ? media | 256 : media;
+    // 批3（r359）：upError 位过去没有写入方，自动刷新目录失败后就无从标记。
+    const errorBit = book.upError === true ? 16 : 0;
+    return (book.isLocal ? media | 256 : media) | errorBit;
   }
 
   /** 章节行 18 个绑定值，顺序必须与 insertChapterSql 一致。 */
