@@ -130,12 +130,21 @@ export struct BookInfoPage {
   /** 批8（:369）：冲突面板两个方向，mode = 'coexist' | 'migrate'（对齐上游同名 use case）。 */
   onResolveShelfConflict: (existingId: string, mode: string) => void =
     (_existingId: string, _mode: string) => {};
+  /**
+   * 批8（:1154）：长按书架卡直接进分组选择（上游 `ShelfDeleteSheet.kt` 文件头注释：
+   * 「长按书架卡片直接进入分组选择，保持在详情页常态长按」）。
+   * 分组落库复用书架页那条通道 `BookshelfPage.onSetBooksGroup → Index.setBooksGroupByKeys`。
+   */
+  onSetBooksGroup: (bookKeys: string[], groupName: string) => void =
+    (_bookKeys: string[], _groupName: string) => {};
   /** 批8（:369）：刚点过「放入书架」，等书变成在架后播两段引导（上游 awaitingShelfAddition）。 */
   @State awaitingShelfAddition: boolean = false;
   @State showShelfRemoveHint: boolean = false;
   @State showLongPressGroupHint: boolean = false;
   /** 批8（:369）：同名冲突面板（共存 / 迁移）。 */
   @State conflictSheetVisible: boolean = false;
+  /** 批8（:1154）：长按书架卡弹出的分组选择面板。 */
+  @State groupSheetVisible: boolean = false;
   @State fileSizeLabel: string = '';
   @State collapsedHeader: boolean = false;
   @State backdropOpacity: number = 0;
@@ -168,9 +177,13 @@ export struct BookInfoPage {
     this.refreshHighlightedTags();
   }
 
-  /** 这本书是否已在书架。本地 `books` 就是书架全量，按 id 判即可。 */
+  /**
+   * 这本书是否已在书架。上游按 bookUrl 查库判在架（BookInfoViewModel.kt:358-362），
+   * 本地用 BookRepository.isSameBook（在线书按 contentPath=bookUrl，本地书按文件路径）。
+   * 不能按派生 id 判：在线书 URL 多以「/」结尾，id 取末段成空串，会大面积误判在架。
+   */
   private inBookshelf(): boolean {
-    return this.books.some((item: Book) => item.id === this.book.id);
+    return this.books.some((item: Book) => BookRepository.isSameBook(item, this.book));
   }
 
   /**
@@ -208,9 +221,15 @@ export struct BookInfoPage {
   /**
    * 批8（:369）：`@Prop book` 整体替换后同步引导态（上游 `LaunchedEffect(inBookshelf)`）。
    * 加入成功时播「点击删除」1 秒 →「长按分组」1 秒；书不在架时三个状态全清。
+   *
+   * 用 book.notShelf 判「是否已入架」而不是 inBookshelf()：@Watch 由 book prop 触发时，
+   * 同一批次的 books prop 可能尚未同步到本页，inBookshelf() 会读到旧 books 误判为「不在架」，
+   * 从而把 awaitingShelfAddition 清掉、两段引导永远播不出来。notShelf 位是随 book 一起下发的，
+   * 加入成功后由 true 变 false，正是「刚从详情页放入书架」的可靠信号。
    */
   private onBookPropChanged(): void {
-    if (this.awaitingShelfAddition && this.inBookshelf()) {
+    const nowOnShelf = this.book.notShelf !== true;
+    if (this.awaitingShelfAddition && nowOnShelf) {
       this.awaitingShelfAddition = false;
       this.showShelfRemoveHint = true;
       setTimeout(() => {
@@ -222,7 +241,7 @@ export struct BookInfoPage {
       }, 1000);
       return;
     }
-    if (!this.inBookshelf()) {
+    if (!nowOnShelf) {
       this.awaitingShelfAddition = false;
       this.showShelfRemoveHint = false;
       this.showLongPressGroupHint = false;
@@ -594,7 +613,12 @@ export struct BookInfoPage {
   /** 同名副本（:338）。上游按书名+作者判冲突，本地书目没有稳定的 bookUrl 分组，按书名比对。 */
   private sameNameCopies(): Book[] {
     return this.books.filter((item: Book) =>
-      item.id !== this.book.id && item.title === this.book.title);
+      !BookRepository.isSameBook(item, this.book) && item.title === this.book.title);
+  }
+
+  /** 传给 Index 定位书的稳定键：在线书用 contentPath(=bookUrl)，本地书用文件路径，兜底才用 id。 */
+  private bookKey(book: Book): string {
+    return book.contentPath ?? book.androidOriginalPath ?? book.id;
   }
 
   /**
@@ -724,10 +748,10 @@ export struct BookInfoPage {
           Row() {
             Text('共存').fontSize(LABEL_LARGE).fontColor('#D0D2DB').textAlign(TextAlign.Center)
               .layoutWeight(1).padding({ top: 10, bottom: 10 }).backgroundColor('#2A2B33').borderRadius(12)
-              .onClick(() => this.applyShelfConflictChoice(item.id, 'coexist'))
+              .onClick(() => this.applyShelfConflictChoice(this.bookKey(item), 'coexist'))
             Text('迁移进度').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
               .layoutWeight(1).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(12)
-              .margin({ left: 10 }).onClick(() => this.applyShelfConflictChoice(item.id, 'migrate'))
+              .margin({ left: 10 }).onClick(() => this.applyShelfConflictChoice(this.bookKey(item), 'migrate'))
           }.width('100%').margin({ top: 8 })
         }.width('100%').padding(12).borderRadius(14).backgroundColor('#1B1C24')
           .margin({ top: 10 })
@@ -735,6 +759,48 @@ export struct BookInfoPage {
       Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
         .width('100%').padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
         .margin({ top: 16 }).onClick(() => this.conflictSheetVisible = false)
+    }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
+  }
+
+  /**
+   * 批8（:1154）：长按书架卡进入的分组选择面板。
+   * 列出全部可见分组 + 「不分组」；点一项即把这本书（bookKeys = [book.id]）挪过去，
+   * 走的是书架页同一个落库通道 `Index.setBooksGroupByKeys`。
+   */
+  @Builder
+  private GroupSheet() {
+    Column() {
+      Text('选择分组').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+        .width('100%').margin({ bottom: 4 })
+      Text(`把「${this.book.title}」移动到：`).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+        .width('100%').margin({ bottom: 8 })
+      List() {
+        ForEach(this.groups.filter((group: BookGroup) => group.show), (group: BookGroup) => {
+          ListItem() {
+            Text(group.groupName.length > 0 ? group.groupName : '未命名分组')
+              .fontSize(TITLE_SMALL).fontColor('#ECEEF2').width('100%')
+              .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+              .backgroundColor('#1B1C24').borderRadius(12).margin({ bottom: 8 })
+              .onClick(() => {
+                this.groupSheetVisible = false;
+                this.onSetBooksGroup([this.book.id], group.groupName);
+              })
+          }
+        }, (group: BookGroup) => String(group.groupId))
+        ListItem() {
+          // 空分组名 = 移出分组（BookRepository.setBooksGroup 的口径）。
+          Text('不分组').fontSize(TITLE_SMALL).fontColor('#C5C7D0').width('100%')
+            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+            .backgroundColor('#14151B').borderRadius(12)
+            .onClick(() => {
+              this.groupSheetVisible = false;
+              this.onSetBooksGroup([this.book.id], '');
+            })
+        }
+      }.width('100%').height(this.groups.length > 5 ? 320 : 200).scrollBar(BarState.Off)
+      Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+        .width('100%').padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
+        .margin({ top: 12 }).onClick(() => this.groupSheetVisible = false)
     }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
   }
 
@@ -1178,7 +1244,11 @@ export struct BookInfoPage {
               label: this.shelfActionLabel(),
               highlight: this.shelfConflictHighlight(),
               onSelect: () => this.onShelfCardClick(),
-              onLongPress: () => this.onOpenEditPage()
+              // 批8（:1154）：长按从「进编辑页」改成「弹分组选择」；编辑页入口仍在顶栏
+              // `TopBarButton({ icon: 'edit' ... })`，功能不丢。不在架的书没有分组，长按无效。
+              onLongPress: () => {
+                if (this.inBookshelf()) { this.groupSheetVisible = true; }
+              }
             })
             BookInfoAction({ icon: 'list', label: '查看目录', onSelect: () => this.onOpenCatalog() })
             BookInfoAction({ icon: 'swap', label: '换源', onSelect: () => this.onOpenChangeSource() })
@@ -1391,9 +1461,9 @@ export struct BookInfoPage {
       // 移出书架确认面板、日志面板与批8 的同名冲突面板共用这一个 bindSheet：
       // 同一节点挂两个 bindSheet 只有最后一个生效（书架页 :2118 踩过同一个坑），
       // 所以用一个合并条件 + 内容分支，不用两个独立 sheet。
-      .bindSheet(this.deleteSheetVisible || this.logSheetVisible || this.conflictSheetVisible, this.InfoSheetContent(), {
-        height: this.logSheetVisible ? SheetSize.LARGE
-          : (this.conflictSheetVisible ? SheetSize.FIT_CONTENT : SheetSize.FIT_CONTENT),
+      .bindSheet(this.deleteSheetVisible || this.logSheetVisible || this.conflictSheetVisible
+        || this.groupSheetVisible, this.InfoSheetContent(), {
+        height: this.logSheetVisible ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: '#17181E',
@@ -1404,6 +1474,7 @@ export struct BookInfoPage {
             this.deleteSourceChecked = false;
           }
           this.conflictSheetVisible = false;
+          this.groupSheetVisible = false;
           this.logSheetVisible = false;
         }
       })
@@ -1416,6 +1487,8 @@ export struct BookInfoPage {
       this.LogSheet()
     } else if (this.conflictSheetVisible) {
       this.ConflictSheet()
+    } else if (this.groupSheetVisible) {
+      this.GroupSheet()
     } else {
       this.DeleteSheet()
     }

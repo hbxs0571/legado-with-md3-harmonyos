@@ -456,6 +456,10 @@ export class BookRepository {
    * 正文是否缺失。派生值不落库：上游没有这一列，本地按文件是否存在判定。
    */
   static isBodyMissing(book: Book): boolean {
+    // 在线书的正文来自书源网络请求，contentPath 是详情页 URL、不是本地文件路径。
+    // 上游根本没有「正文文件缺失」这个概念（BookInfoScreen 的阅读 FAB 恒为「阅读」），
+    // 不能因为 accessSync 打不开一个 URL 就把在线书误判成「备份恢复的缺正文占位书」。
+    if (book.isLocal === false) { return false; }
     if (book.contentPath === undefined || book.contentPath.length === 0) { return true; }
     try {
       return !fileIo.accessSync(book.contentPath);
@@ -1318,6 +1322,22 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     const fileName = BookRepository.getFileName(bookUrl);
     const dotIndex = fileName.lastIndexOf('.');
     return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+  }
+
+  /**
+   * 两本 Book 是否同一本。上游一律按 bookUrl 判（BookInfoViewModel.kt:358 的
+   * `getBook(bookUrl)`），本地 contentPath 对在线书回填为 bookUrl、对本地书回填为文件路径，
+   * 是唯一不会碰撞的身份键。绝不能用派生的 id 判在架：多数在线书 URL 以「/」结尾，
+   * bookIdFromUrl 取末段得到空串，大量在线书 id 都是 ''，按 id 判会把它们全误判成同一本、
+   * 进而误报「已在书架」（批8 :1153/:369 实测 bug）。
+   */
+  static isSameBook(a: Book, b: Book): boolean {
+    const aUrl = a.contentPath ?? a.androidOriginalPath ?? '';
+    const bUrl = b.contentPath ?? b.androidOriginalPath ?? '';
+    if (aUrl.length > 0 && bUrl.length > 0) {
+      return aUrl === bUrl;
+    }
+    return a.id === b.id && a.id.length > 0;
   }
 
   /**

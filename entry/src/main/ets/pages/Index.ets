@@ -7112,7 +7112,10 @@ private canWriteInto(dir: string): boolean {
     }
     try {
       const reloaded = await BookRepository.loadImportedBooks(context);
-      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+      this.books = reloaded
+        .filter((book: Book) => BookRepository.isPersistableBook(book))
+        // 批8（:1153）：未上架（notShelf 位）的书不进书架，重载后同样按位过滤。
+        .filter((book: Book) => book.notShelf !== true);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? error.message : '重读书目失败');
     }
@@ -7360,6 +7363,12 @@ private canWriteInto(dir: string): boolean {
     return value.replace(/[\p{Z}\s]+/gu, ' ').trim().toLowerCase();
   }
 
+  /** 按稳定键（contentPath=bookUrl）在书架里定位一本书，兼容详情页传来的 id 兜底值。 */
+  private findShelfBookByKey(key: string): Book | undefined {
+    return this.books.find((book: Book) =>
+      (book.contentPath ?? book.androidOriginalPath ?? '') === key || book.id === key);
+  }
+
   /** 由搜索结果构造在线书对象（详情页入口与加入书架共用同一份字段口径）。 */
   private onlineBookFromSearch(item: MergedBook, notShelf: boolean): Book {
     const source = item.book;
@@ -7396,7 +7405,7 @@ private canWriteInto(dir: string): boolean {
     }
     const author = this.normalizeBookKey(book.author);
     return this.books.filter((item: Book) => {
-      if (item.id === book.id) {
+      if (BookRepository.isSameBook(item, book)) {
         return false;
       }
       if (this.normalizeBookKey(item.title) !== name) {
@@ -7452,7 +7461,7 @@ private canWriteInto(dir: string): boolean {
       this.showUnavailableAction('这本书没有可用的地址，无法加入书架');
       return;
     }
-    if (this.books.some((item: Book) => item.id === incoming.id)) {
+    if (this.books.some((item: Book) => BookRepository.isSameBook(item, incoming))) {
       return;
     }
     const context = this.getUIContext().getHostContext();
@@ -7466,10 +7475,10 @@ private canWriteInto(dir: string): boolean {
       nextBook.order = Math.min(0, ...this.books.map((book: Book) => book.order ?? 0)) - 1;
     }
     const saved = BookRepository.saveImportedBooks(context, [nextBook]
-      .filter((book: Book) => BookRepository.isPersistableBook(book));
+      .filter((book: Book) => BookRepository.isPersistableBook(book)));
     saved.then(() => {
       this.books = [...this.books, nextBook];
-      this.notShelfBooks = this.notShelfBooks.filter((book: Book) => book.id !== nextBook.id);
+      this.notShelfBooks = this.notShelfBooks.filter((book: Book) => !BookRepository.isSameBook(book, nextBook));
       this.selectedBook = nextBook;
       this.showUnavailableAction('书籍已添加到书架');
     }).catch((error: Error) => {
@@ -7482,7 +7491,7 @@ private canWriteInto(dir: string): boolean {
    * （对齐上游 ResolveBookshelfConflictUseCase.coexist 的注释）。
    */
   private resolveShelfConflictCoexist(existingId: string): void {
-    const existing = this.books.find((book: Book) => book.id === existingId);
+    const existing = this.findShelfBookByKey(existingId);
     const incoming = this.selectedBook;
     if (existing === undefined) {
       this.showUnavailableAction('原书已不在书架，无法共存');
@@ -7507,10 +7516,10 @@ private canWriteInto(dir: string): boolean {
       nextBook.category = existing.category;
     }
     const saved = BookRepository.saveImportedBooks(context, [nextBook]
-      .filter((book: Book) => BookRepository.isPersistableBook(book));
+      .filter((book: Book) => BookRepository.isPersistableBook(book)));
     saved.then(() => {
       this.books = [...this.books, nextBook];
-      this.notShelfBooks = this.notShelfBooks.filter((book: Book) => book.id !== nextBook.id);
+      this.notShelfBooks = this.notShelfBooks.filter((book: Book) => !BookRepository.isSameBook(book, nextBook));
       this.selectedBook = nextBook;
       this.showUnavailableAction('已加入书架（与原书共存）');
     }).catch((error: Error) => {
@@ -7524,7 +7533,7 @@ private canWriteInto(dir: string): boolean {
    * 否则等于删旧书并把进度重置到第一章——这里先拉目录，空则直接返回、旧书与进度都不动。
    */
   private async resolveShelfConflictMigrate(existingId: string): Promise<void> {
-    const existing = this.books.find((book: Book) => book.id === existingId);
+    const existing = this.findShelfBookByKey(existingId);
     const incoming = this.selectedBook;
     if (existing === undefined) {
       this.showUnavailableAction('原书已不在书架，无法迁移');
@@ -7556,11 +7565,11 @@ private canWriteInto(dir: string): boolean {
     }
     const candidate: ChangeSourceCandidate = {
       sourceUrl: sourceUrl,
-      sourceName: incoming.originName,
+      sourceName: incoming.originName ?? '',
       book: incoming.contentPath === undefined ? null : {
         bookUrl: incoming.contentPath,
         origin: sourceUrl,
-        originName: incoming.originName,
+        originName: incoming.originName ?? '',
         name: incoming.title,
         author: incoming.author,
         kind: incoming.category,
@@ -7581,7 +7590,7 @@ private canWriteInto(dir: string): boolean {
     await this.applyChangeSource(candidate, defaultMigrationOptions());
     // 迁移完成后新书已由 applyChangeSource 落库并成为 selectedBook（继承旧书的在架位与进度），
     // 这里只把当初从详情页落库的未上架副本清掉。
-    this.notShelfBooks = this.notShelfBooks.filter((book: Book) => book.id !== previousSelected.id);
+    this.notShelfBooks = this.notShelfBooks.filter((book: Book) => !BookRepository.isSameBook(book, previousSelected));
   }
 
   private onAddOnlineBook(item: MergedBook): void {
@@ -7877,7 +7886,10 @@ private canWriteInto(dir: string): boolean {
       return;
     }
     const reloaded = await BookRepository.loadImportedBooks(context);
-    this.books = reloaded.filter((item: Book) => BookRepository.isPersistableBook(item));
+    this.books = reloaded
+      .filter((item: Book) => BookRepository.isPersistableBook(item))
+      // 批8（:1153）：未上架的书不进书架，重载后同样按 notShelf 位过滤。
+      .filter((item: Book) => item.notShelf !== true);
     const updated = this.books.find((item: Book) => item.id === book.id);
     if (updated !== undefined) { this.selectedBook = updated; }
     this.showUnavailableAction('已置顶');
@@ -8270,7 +8282,10 @@ private canWriteInto(dir: string): boolean {
     try {
       await BookRepository.setBooksPrivate(context, bookKeys, isPrivate);
       const reloaded = await BookRepository.loadImportedBooks(context);
-      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+      this.books = reloaded
+        .filter((book: Book) => BookRepository.isPersistableBook(book))
+        // 批8（:1153）：未上架（notShelf 位）的书不进书架，重载后同样按位过滤。
+        .filter((book: Book) => book.notShelf !== true);
       this.showUnavailableAction(isPrivate ? `已把 ${bookKeys.length} 本设为私密` : `已取消 ${bookKeys.length} 本的私密标记`);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? error.message : '私密标记保存失败');
@@ -8309,7 +8324,10 @@ private canWriteInto(dir: string): boolean {
     try {
       await BookRepository.setBooksGroup(context, bookKeys, groupName);
       const reloaded = await BookRepository.loadImportedBooks(context);
-      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+      this.books = reloaded
+        .filter((book: Book) => BookRepository.isPersistableBook(book))
+        // 批8（:1153）：未上架（notShelf 位）的书不进书架，重载后同样按位过滤。
+        .filter((book: Book) => book.notShelf !== true);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? error.message : '移动分组失败');
     }
@@ -8349,7 +8367,10 @@ private canWriteInto(dir: string): boolean {
       const descending = this.bookshelfLayout.bookshelfSortOrder === 1;
       await BookRepository.saveBookOrder(context, ordered, descending);
       const reloaded = await BookRepository.loadImportedBooks(context);
-      this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+      this.books = reloaded
+        .filter((book: Book) => BookRepository.isPersistableBook(book))
+        // 批8（:1153）：未上架（notShelf 位）的书不进书架，重载后同样按位过滤。
+        .filter((book: Book) => book.notShelf !== true);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? error.message : '保存排序失败');
     }
@@ -9796,7 +9817,10 @@ private canWriteInto(dir: string): boolean {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { this.showUnavailableAction('无法访问本地书架'); return; }
     const reloaded = await BookRepository.loadImportedBooks(context);
-    this.books = reloaded.filter((book: Book) => BookRepository.isPersistableBook(book));
+    this.books = reloaded
+        .filter((book: Book) => BookRepository.isPersistableBook(book))
+        // 批8（:1153）：未上架（notShelf 位）的书不进书架，重载后同样按位过滤。
+        .filter((book: Book) => book.notShelf !== true);
   }
 
   /**
@@ -10155,6 +10179,9 @@ private canWriteInto(dir: string): boolean {
           bookSourceUrl: this.bookInfoIntroSourceUrl(),
           shelfConflictCandidates: this.shelfConflictsWith(this.selectedBook),
           onAddToShelf: () => this.addCurrentBookToShelf(),
+          // 批8（:1154）：详情页长按书架卡弹分组选择，落库复用书架页同一条通道。
+          onSetBooksGroup: (bookKeys: string[], groupName: string) =>
+            this.setBooksGroupByKeys(bookKeys, groupName),
           onResolveShelfConflict: (existingId: string, mode: string) => {
             if (mode === 'coexist') {
               this.resolveShelfConflictCoexist(existingId);
