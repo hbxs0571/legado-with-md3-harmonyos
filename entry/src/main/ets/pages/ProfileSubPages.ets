@@ -19,7 +19,7 @@ import {
   PROFILE_ROW_TITLE_SIZE,
   PROFILE_ROW_VERTICAL_PADDING
 } from '../components/ProfileUiMetrics';
-import { Book, ProfileRoute } from '../model/Book';
+import { Book, BookChapter, ProfileRoute } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { BookSource } from '../model/BookSource';
 import { BookSourceRepository } from '../data/BookSourceRepository';
@@ -27,6 +27,7 @@ import { BookGroupRepository } from '../data/BookGroupRepository';
 import { isPrivateBook } from '../data/PrivateAccessRepository';
 import { BookCacheStat, CacheStatsRepository } from '../data/CacheStatsRepository';
 import { BookRepository } from '../data/BookRepository';
+import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownloadQueue';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { ReplaceRulePreviewLine, ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
@@ -5857,9 +5858,29 @@ export struct CacheManagementPage {
   @State selectedCacheGroup: string = '全部';
   @State cacheStats: Map<string, BookCacheStat> = new Map<string, BookCacheStat>();
   @State expandedBookKeys: Set<string> = new Set<string>();
+  /** 批2（:441）：展开过的书才加载章节，免得一进页面把所有书都读一遍。key = bookKey。 */
+  @State chapterRowsByBook: Map<string, BookChapter[]> = new Map<string, BookChapter[]>();
+  /** 批2（:439）：卡片级下载档位，key = bookKey。 */
+  @State bookDownloadStates: Map<string, DownloadState> = new Map<string, DownloadState>();
+  /** 批2（:441）：章节级下载档位，key = `${bookKey}#${chapterIndex}`。 */
+  @State chapterDownloadStates: Map<string, DownloadState> = new Map<string, DownloadState>();
+  /** 批2（:446）：长按进选择模式，选中项是 bookKey。 */
+  @State selectionMode: boolean = false;
+  @State selectedBookKeys: Set<string> = new Set<string>();
+  private downloadUnsubscribe: (() => void) | undefined = undefined;
 
   aboutToAppear(): void {
     this.refreshCacheStats();
+    // 一次订阅供卡片与章节行共用（上游 BookCacheManageScreen 也是同一份 state）。
+    this.downloadUnsubscribe = ChapterDownloadQueue.subscribe(() => this.refreshDownloadStates());
+    this.refreshDownloadStates();
+  }
+
+  aboutToDisappear(): void {
+    if (this.downloadUnsubscribe !== undefined) {
+      this.downloadUnsubscribe();
+      this.downloadUnsubscribe = undefined;
+    }
   }
 
   /** 刷新统计：整批替换 Map，@State 对 Map 原地 set 不触发刷新。 */
@@ -5924,8 +5945,201 @@ export struct CacheManagementPage {
   private toggleExpand(book: Book): void {
     const key = this.bookKey(book) + '_' + book.id;
     const next = new Set<string>(this.expandedBookKeys);
-    if (next.has(key)) { next.delete(key); } else { next.add(key); }
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+      // 批2（:441）：展开时才去读章节，读者不展开就不花这份 IO。
+      this.loadChapterRows(book);
+    }
     this.expandedBookKeys = next;
+  }
+
+  /** 批2（:441）：章节行数据源；在线书才读，本地书正文就是一整本文件。 */
+  private async loadChapterRows(book: Book): Promise<void> {
+    if (!BookRepository.isOnlineBook(book)) {
+      return;
+    }
+    const key = this.bookKey(book);
+    if ((this.chapterRowsByBook.get(key) ?? []).length > 0) {
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const rows = await BookRepository.getChapterList(context, key);
+      const nextRows = new Map<string, BookChapter[]>(this.chapterRowsByBook);
+      nextRows.set(key, rows);
+      this.chapterRowsByBook = nextRows;
+      this.refreshDownloadStates();
+    } catch (_) {
+      this.onUnavailableAction('章节列表读取失败');
+    }
+  }
+
+  /**
+   * 批2（:439/:441）：把队列快照摊成卡片档位与章节档位两张表。
+   * 上游 BookCacheManageScreen.kt:499-626 的下载按钮与章节行状态读的是同一份下载状态，
+   * 所以这里一次性推两张表，两边同时变。
+   */
+  private refreshDownloadStates(): void {
+    const nextBookStates = new Map<string, DownloadState>();
+    const nextChapterStates = new Map<string, DownloadState>();
+    this.books.forEach((book: Book) => {
+      if (!BookRepository.isOnlineBook(book)) {
+        return;
+      }
+      const key = this.bookKey(book);
+      const snapshot = ChapterDownloadQueue.snapshot(key);
+      let bookState: DownloadState = 'idle';
+      if (snapshot.paused) {
+        bookState = 'paused';
+      } else if (snapshot.running > 0) {
+        bookState = 'running';
+      } else if (snapshot.total > 0 && snapshot.done + snapshot.failed >= snapshot.total) {
+        bookState = snapshot.failed > 0 ? 'failed' : 'done';
+      } else if (snapshot.total > 0) {
+        bookState = 'queued';
+      }
+      nextBookStates.set(key, bookState);
+      (this.chapterRowsByBook.get(key) ?? []).forEach((chapter: BookChapter) => {
+        const state = ChapterDownloadQueue.chapterState(key, chapter.index);
+        if (state !== 'idle') {
+          nextChapterStates.set(`${key}#${chapter.index}`, state);
+        }
+      });
+    });
+    this.bookDownloadStates = nextBookStates;
+    this.chapterDownloadStates = nextChapterStates;
+  }
+
+  /** 批2（:442）：六档文案，与管理页 :459 的文案保持同一套，别各写一份。 */
+  private downloadStateLabel(state: DownloadState): string {
+    if (state === 'queued') { return '排队中'; }
+    if (state === 'running') { return '下载中'; }
+    if (state === 'paused') { return '已暂停'; }
+    if (state === 'done') { return '已下载'; }
+    if (state === 'failed') { return '失败'; }
+    return '未下载';
+  }
+
+  private bookDownloadStateOf(book: Book): DownloadState {
+    return this.bookDownloadStates.get(this.bookKey(book)) ?? 'idle';
+  }
+
+  private isBookDownloadBusy(book: Book): boolean {
+    const state = this.bookDownloadStateOf(book);
+    return state === 'queued' || state === 'running' || state === 'paused';
+  }
+
+  private chapterRowsOf(book: Book): BookChapter[] {
+    return this.chapterRowsByBook.get(this.bookKey(book)) ?? [];
+  }
+
+  private chapterStateMap(book: Book): Map<number, DownloadState> {
+    const result = new Map<number, DownloadState>();
+    const key = this.bookKey(book);
+    this.chapterRowsOf(book).forEach((chapter: BookChapter) => {
+      result.set(chapter.index, this.chapterDownloadStates.get(`${key}#${chapter.index}`) ?? 'idle');
+    });
+    return result;
+  }
+
+  /** 批2（:439）：卡片上的下载/停止。忙就停，闲就把缺的章全入队。 */
+  private toggleBookDownload(book: Book): void {
+    const key = this.bookKey(book);
+    if (this.isBookDownloadBusy(book)) {
+      ChapterDownloadQueue.stop(key);
+      return;
+    }
+    const rows = this.chapterRowsOf(book).filter((chapter: BookChapter) =>
+      !BookRepository.isChapterCached(book, chapter));
+    if (rows.length === 0) {
+      this.onUnavailableAction(this.chapterRowsOf(book).length === 0
+        ? '章节还没加载出来，展开后再试' : '这本书的章节都已经缓存好了');
+      return;
+    }
+    ChapterDownloadQueue.enqueue(book, rows);
+    this.refreshDownloadStates();
+  }
+
+  /** 批2（:443）：单章下载 / 暂停整本，两者都不改书目，只改缓存。 */
+  private requestChapterDownload(book: Book, chapter: BookChapter): void {
+    if (BookRepository.isChapterCached(book, chapter)) {
+      this.onUnavailableAction('这一章已经缓存好了');
+      return;
+    }
+    ChapterDownloadQueue.enqueue(book, [chapter]);
+    this.refreshDownloadStates();
+  }
+
+  private pauseBookDownload(book: Book): void {
+    ChapterDownloadQueue.pause(this.bookKey(book));
+    this.refreshDownloadStates();
+  }
+
+  /** 批2（:445）：删章节缓存要确认，删除后重读会重新下载。 */
+  private confirmDeleteChapterCache(book: Book, chapter: BookChapter): void {
+    this.getUIContext().showAlertDialog({
+      title: '删除这一章的缓存？',
+      message: `会删掉「${chapter.title}」在应用内的正文缓存，重新阅读时要重新下载。`,
+      autoCancel: true,
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '删除',
+        action: () => {
+          const deleted = BookRepository.deleteOnlineChapterCache(book, chapter);
+          this.onUnavailableAction(deleted ? '章节缓存已删除' : '这一章本来就没有缓存');
+          this.refreshCacheStats();
+          this.refreshDownloadStates();
+        }
+      }
+    });
+  }
+
+  /** 批2（:446）：长按卡片进选择模式；底栏「删除选中」按书清在线缓存。 */
+  private toggleBookSelection(book: Book): void {
+    const key = this.bookKey(book);
+    const next = new Set<string>(this.selectedBookKeys);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    this.selectedBookKeys = next;
+  }
+
+  private exitSelectionMode(): void {
+    this.selectionMode = false;
+    this.selectedBookKeys = new Set<string>();
+  }
+
+  private confirmDeleteSelectedCaches(): void {
+    const keys = Array.from(this.selectedBookKeys);
+    if (keys.length === 0) {
+      this.onUnavailableAction('还没有选中书籍');
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '删除选中缓存？',
+      message: `会删除选中的 ${keys.length} 本书在应用内的正文缓存，书目与阅读进度保留。重新阅读时要重新下载。`,
+      autoCancel: true,
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '删除',
+        action: () => {
+          this.books.filter((book: Book) => keys.includes(this.bookKey(book)))
+            .forEach((book: Book) => BookRepository.clearOnlineBookCache(book));
+          BookRepository.clearChapterCache();
+          this.exitSelectionMode();
+          this.refreshCacheStats();
+          this.refreshDownloadStates();
+          this.onUnavailableAction(`已清除 ${keys.length} 本书的缓存`);
+        }
+      }
+    });
   }
 
   /** 删缓存只清应用内导入副本，保留书目与进度；不复用 deleteBook（那会连书目一起删）。 */
@@ -6047,12 +6261,44 @@ export struct CacheManagementPage {
                 imported: this.importedOf(book),
                 sizeLabel: this.sizeLabelOf(book),
                 expanded: this.isExpanded(book),
+                online: BookRepository.isOnlineBook(book),
+                downloadState: this.bookDownloadStateOf(book),
+                downloadStateLabel: this.downloadStateLabel(this.bookDownloadStateOf(book)),
+                chapters: this.chapterRowsOf(book),
+                chapterStates: this.chapterStateMap(book),
+                selectionMode: this.selectionMode,
+                selected: this.selectedBookKeys.has(this.bookKey(book)),
                 onToggleExpand: () => this.toggleExpand(book),
-                onDeleteCache: () => this.confirmDeleteCache(book)
+                onDeleteCache: () => this.confirmDeleteCache(book),
+                onToggleDownload: () => this.toggleBookDownload(book),
+                onPauseDownload: () => this.pauseBookDownload(book),
+                onDownloadChapter: (chapter: BookChapter) => this.requestChapterDownload(book, chapter),
+                onDeleteChapter: (chapter: BookChapter) => this.confirmDeleteChapterCache(book, chapter),
+                onLongPressSelect: () => {
+                  this.selectionMode = true;
+                  this.toggleBookSelection(book);
+                }
               })
             }, (book: Book) => this.bookKey(book) + '_' + book.id)
           }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 18 })
         }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
+      }
+      // 批2（:446）：选择模式底栏，只有一个批量动作——删除选中书籍的缓存。
+      if (this.selectionMode) {
+        Row() {
+          Text(`已选 ${this.selectedBookKeys.size} 项`)
+            .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          Text('删除选中')
+            .fontSize(LABEL_LARGE).fontColor('#E5484D')
+            .padding({ left: 12, right: 4, top: 8, bottom: 8 })
+            .onClick(() => this.confirmDeleteSelectedCaches())
+          Text('完成')
+            .fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
+            .padding({ left: 12, right: 4, top: 8, bottom: 8 })
+            .onClick(() => this.exitSelectionMode())
+        }
+        .width('100%').padding({ left: 16, right: 8, top: 10, bottom: 10 })
+        .backgroundColor(this.themeColorSurfaceElevated)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
@@ -6097,7 +6343,7 @@ struct CacheEmptySection {
   }
 }
 
-/** 缓存页的书籍卡：本地整本导入，n/total 与进度恒 100%，状态摘要写章节/导入/占用。 */
+/** 缓存页的书籍卡：本地书是整本导入（n/total 与进度恒 100%），在线书按章下载。 */
 @Component
 struct CacheBookCard {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
@@ -6110,12 +6356,56 @@ struct CacheBookCard {
   @Prop imported: boolean = false;
   @Prop sizeLabel: string = '';
   @Prop expanded: boolean = false;
+  /** 批2（:439）：在线书才有下载这套；本地书正文就是磁盘那一本文件。 */
+  @Prop online: boolean = false;
+  @Prop downloadState: DownloadState = 'idle';
+  @Prop downloadStateLabel: string = '未下载';
+  /** 批2（:441）：章节行数据源，只有展开且已加载过才有内容。 */
+  @Prop chapters: BookChapter[] = [];
+  @Prop chapterStates: Map<number, DownloadState> = new Map<number, DownloadState>();
+  /** 批2（:446）：选择模式下整卡可勾选。 */
+  @Prop selectionMode: boolean = false;
+  @Prop selected: boolean = false;
   onToggleExpand: () => void = () => {};
   onDeleteCache: () => void = () => {};
+  onToggleDownload: () => void = () => {};
+  onPauseDownload: () => void = () => {};
+  onDownloadChapter: (chapter: BookChapter) => void = (_chapter: BookChapter) => {};
+  onDeleteChapter: (chapter: BookChapter) => void = (_chapter: BookChapter) => {};
+  onLongPressSelect: () => void = () => {};
+
+  private chapterStateLabel(index: number): string {
+    const state = this.chapterStates.get(index) ?? 'idle';
+    if (state === 'queued') { return '排队中'; }
+    if (state === 'running') { return '下载中'; }
+    if (state === 'paused') { return '已暂停'; }
+    if (state === 'done') { return '已下载'; }
+    if (state === 'failed') { return '失败'; }
+    return '未下载';
+  }
+
+  private chapterStateOf(index: number): DownloadState {
+    return this.chapterStates.get(index) ?? 'idle';
+  }
+
+  private isBusy(): boolean {
+    return this.downloadState === 'queued' || this.downloadState === 'running' || this.downloadState === 'paused';
+  }
 
   build() {
     Column() {
       Row() {
+        if (this.selectionMode) {
+          Stack() {
+            Row()
+              .width(18).height(18).borderRadius(4).borderWidth(1)
+              .borderColor(this.selected ? this.themeColorAccent : this.themeColorTextTertiary)
+              .backgroundColor(this.selected ? this.themeColorAccent : Color.Transparent)
+            if (this.selected) {
+              AppGlyph({ name: 'profileCheck', glyphSize: 12, tint: '#FFFFFF' })
+            }
+          }.width(18).height(18).margin({ right: 10 })
+        }
         AppGlyph({ name: 'profileExpandMore', glyphSize: 18, tint: this.themeColorAccent })
           .rotate({ angle: this.expanded ? 90 : 0 }).margin({ right: 8 })
         Column() {
@@ -6124,9 +6414,23 @@ struct CacheBookCard {
           Text(this.bookAuthor.length > 0 ? this.bookAuthor : '作者未知').fontSize(LABEL_SMALL)
             .fontColor(this.themeColorTextTertiary).maxLines(1).margin({ top: 2 })
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Text(`${this.imported ? this.chapterCount : 0}/${this.chapterCount}`)
-          .fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
-      }.width('100%').onClick(() => this.onToggleExpand())
+        // 批2（:442）：在线书卡片右端显示六档档位之一，本地书仍显示 n/total。
+        if (this.online) {
+          Text(this.downloadStateLabel).fontSize(BODY_SMALL)
+            .fontColor(this.downloadState === 'failed' ? '#E5484D' : this.themeColorAccent)
+        } else {
+          Text(`${this.imported ? this.chapterCount : 0}/${this.chapterCount}`)
+            .fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
+        }
+      }.width('100%')
+        .onClick(() => {
+          if (this.selectionMode) {
+            this.onLongPressSelect();
+          } else {
+            this.onToggleExpand();
+          }
+        })
+        .gesture(LongPressGesture().onAction(() => this.onLongPressSelect()))
       Progress({
         value: this.chapterCount === 0 ? 0 : (this.imported ? 100 : 0),
         total: 100,
@@ -6135,15 +6439,62 @@ struct CacheBookCard {
       Row() {
         Text(`章节 ${this.chapterCount} | ${this.imported ? '已导入' : '未导入'} | 占用 ${this.sizeLabel}`)
           .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-        Text('删除缓存').fontSize(BODY_SMALL).fontColor('#FF6B6B')
-          .padding({ left: 8, top: 4, bottom: 4 }).onClick(() => this.onDeleteCache())
+        if (this.online) {
+          // 批2（:439）：下载 / 下载中… 点一下即停止。
+          Text(this.isBusy() ? '停止' : '下载')
+            .fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
+            .padding({ left: 8, top: 4, bottom: 4 })
+            .onClick(() => this.onToggleDownload())
+          // 批2（:443）：暂停只对正在下或排队中有意义。
+          if (this.downloadState === 'queued' || this.downloadState === 'running') {
+            Text('暂停').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
+              .padding({ left: 8, top: 4, bottom: 4 })
+              .onClick(() => this.onPauseDownload())
+          }
+        } else {
+          Text('删除缓存').fontSize(BODY_SMALL).fontColor('#FF6B6B')
+            .padding({ left: 8, top: 4, bottom: 4 }).onClick(() => this.onDeleteCache())
+        }
       }.width('100%').margin({ top: 8 })
+      // 批2（:441）：展开后逐章列出行与状态，动作按档位切换（下载 / 删除缓存）。
       if (this.expanded) {
-        Text(this.imported ? '正文已在应用内导入，缓存即整本文件。' : '应用内正文副本已删除，可用「恢复本地书」找回。')
-          .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
+        if (this.online) {
+          if (this.chapters.length === 0) {
+            Text('章节列表加载中…').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
+              .width('100%').margin({ top: 6 })
+          } else {
+            Column() {
+              ForEach(this.chapters, (chapter: BookChapter) => {
+                Row() {
+                  Text(chapter.title).fontSize(LABEL_SMALL).fontColor(this.themeColorTextPrimary)
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                  Text(this.chapterStateLabel(chapter.index))
+                    .fontSize(LABEL_SMALL)
+                    .fontColor(this.chapterStateOf(chapter.index) === 'failed' ? '#E5484D' : this.themeColorTextTertiary)
+                    .margin({ left: 8 })
+                  if (this.chapterStateOf(chapter.index) === 'done') {
+                    Text('删除').fontSize(LABEL_SMALL).fontColor('#FF6B6B')
+                      .padding({ left: 10, top: 4, bottom: 4 })
+                      .onClick(() => this.onDeleteChapter(chapter))
+                  } else if (this.chapterStateOf(chapter.index) === 'idle' ||
+                    this.chapterStateOf(chapter.index) === 'failed') {
+                    Text('下载').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
+                      .padding({ left: 10, top: 4, bottom: 4 })
+                      .onClick(() => this.onDownloadChapter(chapter))
+                  }
+                }.width('100%').padding({ top: 5, bottom: 5 })
+              }, (chapter: BookChapter) => `${chapter.index}_${chapter.title}`)
+            }.width('100%').margin({ top: 6 })
+          }
+        } else {
+          Text(this.imported ? '正文已在应用内导入，缓存即整本文件。' : '应用内正文副本已删除，可用「恢复本地书」找回。')
+            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 6 })
+        }
       }
     }.width('100%').padding(12).backgroundColor(this.themeColorSurfaceSecondary)
       .borderRadius(8).margin({ bottom: 12 })
+      .borderWidth(this.selectionMode && this.selected ? 1 : 0)
+      .borderColor(this.themeColorAccent)
   }
 }
 
