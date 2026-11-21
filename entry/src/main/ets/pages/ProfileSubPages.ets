@@ -1241,17 +1241,22 @@ export struct BookSourceManagePage {
    */
   @Builder
   private GroupFilterSheet() {
+    // 上游 BookSourceGroupFilterSheet(:916-985) 走 AppModalBottomSheet，其 M3 分支
+    // （AppModalBottomSheet.kt:155-205）给内容统一加 padding start/end/bottom 16，
+    // 标题是 header 里的 titleMediumEmphasized(16sp/Medium)、居中、左右各留 56 给 action。
+    // 本地原先标题用 HEADLINE_SMALL 左对齐且无左右内边距，故「默认分组」会贴到屏幕边。
     Column() {
-      Text('分组').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
-        .fontColor(this.themeColorTextPrimary).width('100%')
-        .padding({ left: 20, right: 20, top: 20, bottom: 12 })
+      Text('分组').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextPrimary).width('100%').textAlign(TextAlign.Center)
+        .padding({ left: 56, right: 56, top: 20, bottom: 16 })
+      // 上游 SearchBar.kt:132-155：圆角 32 的 Surface + 前置搜索图标 + placeholder「搜索…」。
       Row() {
         AppGlyph({ name: 'search', glyphSize: 18, tint: this.themeColorTextTertiary }).margin({ right: 9 })
         TextInput({ placeholder: '搜索…', text: this.groupFilterQuery })
           .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(Color.Transparent).layoutWeight(1)
           .onChange((value: string) => this.groupFilterQuery = value)
-      }.margin({ left: 16, right: 16, bottom: 8 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
+      }.margin({ bottom: 8 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
         .backgroundColor(this.themeColorSurfaceElevated).borderRadius(22)
       Scroll() {
         Column() {
@@ -1279,8 +1284,11 @@ export struct BookSourceManagePage {
             .columnsTemplate('1fr 1fr').columnsGap(8).rowsGap(6).width('100%')
           }
         }.width('100%').padding({ top: 4, bottom: 22 })
-      }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
-    }.width('100%').height('100%').backgroundColor('#17181E')
+      }.edgeEffect(EdgeEffect.None).scrollBar(BarState.Off)
+      // 上游 heightIn(max = 容器高 * 0.8)：分组很多时列表自己滚，最多占容器 80%。
+      .constraintSize({ maxHeight: 640 })
+    }.width('100%').padding({ left: 16, right: 16 })
+      .backgroundColor('#17181E')
   }
 
   /** 单个筛选项：上游 GroupFilterItem(:1001-1035) 的等价物。 */
@@ -1503,7 +1511,10 @@ export struct BookSourceManagePage {
       // 自定义源分组对话框走系统 openCustomDialog，也不占这个 bindSheet。
       .bindSheet(this.showGroupFilter || this.importVisible,
         this.SourceSheetContent(), {
-          height: this.importVisible ? SheetSize.FIT_CONTENT : SheetSize.LARGE,
+          // 上游 AppModalBottomSheet.kt:155-168 是 heightIn(max = 容器高 * 0.8) + animateContentSize：
+          // 内容少时 sheet 只占内容高度，最多 80%。本地原先分组筛选固定 SheetSize.LARGE（全屏），
+          // 七项筛选下面会留一大片空白，与上游不符；改为 FIT_CONTENT，由内容自己撑，Scroll 再封顶 80%。
+          height: SheetSize.FIT_CONTENT,
           dragBar: true,
           // 上游 BookSourceGroupFilterSheet 与导入弹层都走 AppModalBottomSheet，
           // 其 M3 分支（AppModalBottomSheet.kt:145-153）只有 DragHandle，没有右上关闭按钮。
