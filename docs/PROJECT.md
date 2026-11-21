@@ -13,6 +13,8 @@
 
 因此 comic 独有的四项能力——本地推理运行时、本地 OCR、擦字、气泡检测——不在对标范围，也不进对照表：对照表每一行的前提是「上游基础包有此行为」。
 
+**这条口径只排除上面四项。** 「漫画增强版」不等于「漫画相关都不做」——漫画阅读本身（图片书按页渲染、`comicStyleSelect` 阅读样式档，`ReadBookConfig.kt:98`）不在排除之列；其余漫画相关能力有没有交集，逐条按上游源码判，不在这条口径里预判。
+
 **代码基线与发布包的时序**：本地上游副本是 `bba5c64`（2026-10-26），早于这次拆分（最新发布版 `3.26.30` 为 2026-11-19）。该基线的 `app/build.gradle.kts:133-138` 只有一个 `create("app")` flavor，没有 core/comic 两种变体；源码里的 `ReadSessionState.isComic`（`ReadBook.kt:714`）说的是「这本书是不是图片书」，与包类型无关。判一项能力属哪个包，只能按 release 说明列出的 comic 专属清单，不能按源码里的 flavor 推断。
 
 该基线本身不含 comic 能力，已实测：在 `legado-with-MD3` 跑 `git grep -I -i -w <词> HEAD -- "*.kt" "*.kts" "*.toml" "*.xml"`，`onnx` / `onnxruntime` / `tflite` / `mlkit` / `paddle` / `inference` / `inpaint` / `eraser` / `bubbleDetect` / `speechRecogniz` / `Ocr` 全部 0 命中。所以现有七表不需要因为这条口径改任何一行。
