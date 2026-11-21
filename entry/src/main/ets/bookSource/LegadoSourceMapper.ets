@@ -83,8 +83,9 @@ export class LegadoSourceMapper {
 
     const rt = LegadoSourceMapper.obj(raw, 'ruleToc');
     LegadoSourceMapper.copyRule(src.tocRule, rt,
-      ['chapterList', 'chapterName', 'chapterUrl', 'nextTocUrl', 'isVip', 'isPay', 'updateTime']);
-    // preUpdateJs / formatJs / isVolume 引擎无，静默跳过。
+      ['chapterList', 'chapterName', 'chapterUrl', 'nextTocUrl', 'isVip', 'isPay', 'updateTime',
+        // 批3（r359）：引擎 TocRule 补齐这三个字段后，投影不再静默丢规则。
+        'preUpdateJs', 'formatJs', 'isVolume']);
 
     const rc = LegadoSourceMapper.obj(raw, 'ruleContent');
     LegadoSourceMapper.copyRule(src.contentRule, rc,

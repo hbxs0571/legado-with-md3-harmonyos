@@ -1,8 +1,9 @@
 // 单源网页服务（P2）：searchBook / getBookInfo / getChapterList / getContent 四步。
 // 对应上游 model/webBook/WebBook.kt（510 行）。链路范式来自 P0-ter 探针（已上机验证）。
 import {
-  AnalyzeRule, AnalyzeUrl, BookUrlResolver, BookSource, HttpResponse
+  AnalyzeRule, AnalyzeUrl, BookSource, BookSourceScriptRunner, BookUrlResolver, HttpResponse
 } from '@legado/sourceengine';
+import { AppLog } from '../lib/AppLog';
 import { SourceHttp } from './SourceHttp';
 import { RemoteBookDetail, RemoteChapter, SearchBookItem } from './SourceModels';
 
@@ -161,10 +162,22 @@ export class WebBookService {
 
   /** 第三步：目录。取目录页 → getElements(chapterList) → 逐条取名/链接，处理 nextTocUrl 翻页。 */
   static async getChapterList(
-    source: BookSource, tocUrl: string, maxPages: number = 20
+    source: BookSource, tocUrl: string, maxPages: number = 20, runPerJs: boolean = false
   ): Promise<RemoteChapter[]> {
     const tr = source.tocRule;
     if (!tr.chapterList) throw new Error('源缺少 ruleToc.chapterList');
+    // 批3（r359）：对齐上游 WebBook.kt:303-330 —— 取目录前可先跑一次源书写的 JS
+    // （常见用途是刷新登录态/签名变量）。失败只记日志，不中断取目录。
+    // 注意上游 getChapterListAwait(bookSource, book, runPerJs = false) 默认**不跑**，
+    // 只有调用方主动传 true 才跑（BookInfoViewModel.kt:1359 那一路），
+    // 刷新目录用例自己先跑 preUpdateJs 再调本方法，所以这里必须门控，否则会双跑。
+    if (runPerJs && tr.preUpdateJs && tr.preUpdateJs.length > 0) {
+      try {
+        BookSourceScriptRunner.runRawScript(source, tr.preUpdateJs);
+      } catch (e) {
+        AppLog.put(`执行preUpdateJs规则失败 书源:${source.bookSourceUrl} ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     const chapters: RemoteChapter[] = [];
     let currentUrl = tocUrl;
     let page = 0;
@@ -176,13 +189,40 @@ export class WebBookService {
       const elements = rule.getElements(tr.chapterList);
       for (const element of elements) {
         const er = WebBookService.newRule(element, base, '', 1);
-        const title = er.getString(tr.chapterName);
+        const rawTitle = er.getString(tr.chapterName);
         const url = BookUrlResolver.resolve(er.getString(tr.chapterUrl, true), base);
+        // 批3（r359）：卷标题判定（上游 BookChapterList.kt:231-243）。
+        // 规则为空时 false；求值结果按上游 String.isTrue() 口径判真假（空串/「null」/false/no/0 为假）。
+        let isVolume = false;
+        if (tr.isVolume && tr.isVolume.length > 0) {
+          try {
+            isVolume = WebBookService.ruleIsTrue(er.getString(tr.isVolume));
+          } catch (e) {
+            isVolume = false;
+          }
+        }
+        // 批3（r359）：逐章格式化标题（上游 BookChapterList.kt:150-160 formatJs）。
+        // 环境注入 index（从 1 起）、chapter（本章 url）、title（原标题），失败保留原标题。
+        let title = rawTitle;
+        if (tr.formatJs && tr.formatJs.length > 0) {
+          try {
+            const bindings: Record<string, string> = {
+              'index': String(chapters.length + 1),
+              'chapter': url,
+              'title': rawTitle
+            };
+            const formatted = BookSourceScriptRunner.runRawScript(source, tr.formatJs, bindings);
+            if (formatted.length > 0) { title = formatted; }
+          } catch (e) {
+            AppLog.put(`格式化标题出错 书源:${source.bookSourceUrl} ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
         chapters.push({
           url: url,
           title: title,
           isVip: Boolean(er.getString(tr.isVip)),
-          isPay: Boolean(er.getString(tr.isPay))
+          isPay: Boolean(er.getString(tr.isPay)),
+          isVolume: isVolume
         });
       }
       page += 1;
@@ -195,6 +235,16 @@ export class WebBookService {
       if (chapters.length > 5000) break; // 防御：坏规则导致无限翻页
     }
     return chapters;
+  }
+
+  /**
+   * 批3（r359）：按上游 `String.isTrue()`（utils/StringExtensions.kt:75-81）判定规则求值结果的真假。
+   * 空串与「null」为假；其余只要不是 false/no/not/0/0.0（不区分大小写）就是真。
+   */
+  private static ruleIsTrue(value: string): boolean {
+    const text = value.trim();
+    if (text.length === 0 || text === 'null') { return false; }
+    return !/^(?:false|no|not|0|0\.0)$/i.test(text);
   }
 
   /**

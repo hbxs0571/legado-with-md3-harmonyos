@@ -43,6 +43,26 @@ export class BookSourceScriptRunner {
     return this.execute(source, code, key, page);
   }
 
+  /**
+   * 批3（r359）：跑一段「裸 JS」，给 ruleToc.preUpdateJs / formatJs 用。
+   *
+   * 与 evaluateUrl 的差别有两处，所以不能复用它：
+   * 1. 不按 URL 规则再解析一遍（formatJs 返回的是标题文本，不是 URL）；
+   * 2. 可以把调用方额外要注入的变量塞进执行环境（formatJs 要 index/chapter/title）。
+   * 执行失败返回空串，由调用方决定是否记日志后继续，不抛异常。
+   */
+  static runRawScript(
+    source: BookSource,
+    code: string,
+    bindings: Record<string, string> = {}
+  ): string {
+    const raw = (code || '').trim();
+    if (!raw) return '';
+    const stripped = raw.replace(/^\s*@?js:\s*/i, '').replace(/^\s*<js>|<\/js>\s*$/gi, '');
+    if (!stripped) return '';
+    return this.execute(source, stripped, '', '1', bindings).value || '';
+  }
+
   static executeAction(source: BookSource, action: string): BookSourceScriptResult {
     const call = (action || '').trim();
     if (!call) return new BookSourceScriptResult();
@@ -202,10 +222,21 @@ export class BookSourceScriptRunner {
     return base ? `${base}/login.html` : '';
   }
 
-  private static execute(source: BookSource, code: string, key: string, page: string): BookSourceScriptResult {
+  private static execute(
+    source: BookSource,
+    code: string,
+    key: string,
+    page: string,
+    bindings: Record<string, string> = {}
+  ): BookSourceScriptResult {
     const env = new ScriptEngineContext();
     env.baseUrl = this.selectedBaseUrl(source) || source.bookSourceUrl;
     this.seedContext(env, source, key, page);
+    // 批3（r359）：调用方额外注入的变量（formatJs 的 index/chapter/title）最后写入，
+    // 覆盖同名键但不覆盖 source.* 这类前缀键，与上游 bindings 的优先级一致。
+    for (const name of Object.keys(bindings)) {
+      env.ctx.put(name, bindings[name]);
+    }
     const selectedBase = this.selectedBaseUrl(source);
     const preparedCode = (code || '').replace(/\bURL\(\)/g, JSON.stringify(selectedBase));
     const script = `${source.jsLib || ''}\n${preparedCode}`;

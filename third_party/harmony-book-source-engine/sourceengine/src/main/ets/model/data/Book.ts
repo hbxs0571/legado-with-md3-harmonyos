@@ -449,6 +449,12 @@ export class TocRule {
   isPay: string = '';
   updateTime: string = '';
   chapterListAddition: string = '';
+  /** 批3（r359）：更新目录前先跑一段 JS，对齐上游 ruleToc.preUpdateJs。 */
+  preUpdateJs: string = '';
+  /** 批3（r359）：逐章格式化标题的 JS，对齐上游 ruleToc.formatJs。 */
+  formatJs: string = '';
+  /** 批3（r359）：判定某一行是不是卷标题的规则，对齐上游 ruleToc.isVolume。 */
+  isVolume: string = '';
 }
 
 export class ContentRule {

@@ -70,11 +70,15 @@ export class OnlineBookService implements OnlineBookProvider {
     const rows: BookChapter[] = [];
     for (let index = 0; index < remote.length; index++) {
       const chapter = remote[index];
+      // 批3（r359）：卷标题行要按 ruleToc.isVolume 的求值结果落库，
+      // 否则在线书的目录永远折不出卷（CatalogPage 靠 isVolume 折叠，见 :188/:190）。
+      const volume = chapter.isVolume === true;
       rows.push({
         url: chapter.url,
         title: chapter.title,
-        isVolume: false,
-        tocLevel: 1,
+        isVolume: volume,
+        // 卷标题是第 0 级，卷内章节是第 1 级，对齐上游 tocLevel 口径（CatalogPage 缩进用）。
+        tocLevel: volume ? 0 : 1,
         bookUrl: book.contentPath ?? '',
         index: index,
         // 在线章节靠 url + index 标识，start/end 是本地 TXT 字节偏移，这里不设。

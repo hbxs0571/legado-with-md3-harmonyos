@@ -39,4 +39,9 @@ export interface RemoteChapter {
   title: string;
   isVip: boolean;
   isPay: boolean;
+  /**
+   * 是否是卷标题行，对应上游 BookChapter.isVolume。
+   * 批3（r359）起由 ruleToc.isVolume 求值写入；缺省（undefined）按普通章节处理。
+   */
+  isVolume?: boolean;
 }
