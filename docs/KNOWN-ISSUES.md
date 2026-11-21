@@ -961,8 +961,8 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 - **上游口径**：设置项 `ui/config/coverConfig/CoverConfigScreen.kt:184-197`，四档 `entryValues = arrayOf("0","1","2","3")`（全部 / 书架内隐藏 / 同名同作者隐藏 / 只显示不在书架内的）；字段 `CoverSettings.kt:23` 默认 `0`；唯一消费点 `ui/book/explore/ExploreShowViewModel.kt:249` `filterStateId = coverSettings.exploreFilterState`。键名是 **`explore_filter_state`**（`constant/PreferKey.kt:429`），不是字段名 `exploreFilterState`——按字段名 grep 会误判成 0 命中。不在 14 个 `coverPrefKeys`、不在 `alwaysIgnoredPreferenceKeys`。
 - **本地现状（r334 之后按实测定稿，2 行分化）**：
   - **E3 上游键归属 → 已接**：键 `explore_filter_state` 的备份往返在——写出 `data/BackupRepository.ets:679`（无条件区 `:675`-`:679`），恢复 `:1836`/`:1856`。
-  - **A10 网络书籍角标 → 仍 `未接`**：字段 `data/CoverSettingsRepository.ets:50`（默认 `0` `:81`，落盘 `:187`，回填 `:153`-`:154`）；设置页有四档条目 `pages/AppCoverSettingsPage.ets:317`-`:324` 的 `CoverSettingsChoice`（`['全部显示','隐藏书架内','隐藏同名同作者','仅显示书架外']`，`onSelect` 写 `draft.exploreFilterState = index` `:321`）；但 `entry/src/main/ets` 全目录 `exploreFilterState|filterState` 除设置页写值与备份读写外**零命中消费端**——发现页 `pages/DiscoverPage.ets:62` 只有本地示范数据过滤（`this.sources.filter(...)`），不读这个字段。**有字段、有四档条目、有备份往返，缺的是筛选消费点。**
-- **补法**：~~先补字段与设置项（四档 Dropdown）~~ **已完成（r334）**——字段与四档条目都在（见上）。**剩筛选消费点，取决于发现页本身**：本地发现页是示范数据页（`pages/DiscoverPage.ets`），没有真实书源列表，「按是否在书架内筛选」没有筛选对象。筛选逻辑跟着发现页的数据源一起写。这里不判「不接」，因为发现页本身不在任何「范围之外」条目里；在线书源抓取自 2026-11-09 起已纳入范围（[PROJECT.md](PROJECT.md) `:24-44`，尚未排期），发现页接真实数据后可随之排期。
+  - **A10 网络书籍角标 → 已接（批10，2026-11-22），但角标本体不渲染**：字段 `data/CoverSettingsRepository.ets:50`（默认 `0` `:81`，落盘 `:187`，回填 `:153`-`:154`）；设置页四档条目 `pages/AppCoverSettingsPage.ets:317`-`:324` 的 `CoverSettingsChoice`（`['全部显示','隐藏书架内','隐藏同名同作者','仅显示书架外']`，`onSelect` 写 `draft.exploreFilterState = index` `:321`）。**消费端本批补上**：`pages/DiscoverPage.ets` 新增 `@Prop shelfBooks: Book[]`、`@Prop exploreFilterState: number`、`private bookShelfState(item: SearchBookItem): number`（0 已在架 / 1 同名同作者不同源 / 2 不在架，照上游 `ResolveBookShelfStateUseCase.kt:13-35`）与 `private filteredBooks(): SearchBookItem[]`（四档过滤，**过滤后为空回落全显示**以免发现页空白），渲染改用 `ForEach(this.filteredBooks(), ...)`；注入在 `pages/Index.ets` 的 `DiscoverPage({ shelfBooks: this.books, exploreFilterState: this.coverSettings.exploreFilterState })`。发现页在批8 之后已接真实书源（`BookSourceRepository` + `ExploreCoordinator` + `resultBooks: SearchBookItem[]`），不再是「本地示范数据」。**仍不做的部分**：书卡上的角标本体——发现页书卡复用 `components/BookCover.ets`，而它已有「更新红点 / 未读徽标 / 类型标签」三种角标位，再加「在架」角标会与之重叠冲突，本批不渲染。
+- **补法**：~~先补字段与设置项（四档 Dropdown）~~ **已完成（r334）**；~~剩筛选消费点~~ **已完成（批10）**——见上。角标本体留待书卡角标统一重排时一起做。
 - **验收**：发现页出现书籍列表后，设置页把「网络书籍角标」切到「书架内隐藏」，发现页里已在书架的书消失；切回「全部」后重新出现。
 
 **KI-COVER8 夜间·显示书名 / 显示作者** —— 覆盖 A 块 `:102`（A17）、`:103`（A18），共 2 行
@@ -1003,15 +1003,55 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 | 组 | 覆盖行 | 行数 | 归属 | r334 后状态 |
 | --- | --- | --- | --- | --- |
-| KI-COVER1 仅 WiFi / 使用默认封面 / 预加载 | A `:86`、`:88`；D `:180` | 3 | 要接 | `:88` 已接；`:86`（仅 WiFi）与 `:180`（预加载）仍 `未接` |
-| KI-COVER2 封面规则 | A `:87`；C `:141`、`:142`、`:143`、`:144`、`:145`、`:146`、`:147`、`:148`、`:149` | 10 | UI 要接；求值随规则引擎 | `:87`、`:141`–`:145`、`:147`–`:148` 已接；`:146`（规则求值）、`:149`（备份开关）仍 `未接` |
+| KI-COVER1 仅 WiFi / 使用默认封面 / 预加载 | A `:86`、`:88`；D `:180` | 3 | 要接 | `:88` 已接；`:180` 已接（批10，`cachedCount` 按列数）；`:86`（仅 WiFi）仍 `未接` |
+| KI-COVER2 封面规则 | A `:87`；C `:141`、`:142`、`:143`、`:144`、`:145`、`:146`、`:147`、`:148`、`:149` | 10 | UI 要接；求值随规则引擎 | `:87`、`:141`–`:145`、`:147`–`:148` 已接；`:149`（备份开关）已接（批10）；`:146`（规则求值）仍 `未接` |
 | KI-COVER3 默认封面相册 | A `:89`；B `:117`、`:118`、`:119`、`:120`、`:121`、`:122`、`:123`、`:124`、`:125`、`:126`、`:127`、`:128`、`:129`、`:130`、`:131`；E `:193`、`:194`、`:195` | 19 | 要接 | `:131`（B15 旧版迁移）仍 `未接`，其余 18 行已接 |
 | KI-COVER4 限制封面比例 | A `:93`；E `:191` | 2 | 要接 | 全部已接 |
-| KI-COVER5 网络书籍角标 | A `:95`；E `:192` | 2 | 要接（依赖发现页真实数据） | `:192` 已接；`:95` 仍 `未接`（本机不可观察） |
+| KI-COVER5 网络书籍角标 | A `:95`；E `:192` | 2 | 要接（依赖发现页真实数据） | 全部已接（批10）；角标本体不渲染，原因见上 |
 | KI-COVER8 夜间两开关 | A `:102`、`:103` | 2 | 要接（改两行） | 全部已接 |
 | KI-COVER9 14 个封面键读写 | E `:190` | 1 | 要接（依赖键名映射） | 已接 |
 
 合计 39 行登记，其中 33 行已接、6 行仍 `未接`（与对照表 `未接` 计数一致）。不适用 2 行（D 块 `:178` `CoverImageView`、`:179` `CoverBlurBackdrop`）不进本节——前者在上游全仓除定义处零调用点，后者本地没有播放器封面背景这类场景。
+
+## 批 10 改判与未做部分登记（2026-11-22）
+
+本节登记批 10（19 条未接落地）里**改判不做**与**只做了前半**的条目，避免后续盘面复核时把「有提示」误当成「能执行」。
+
+### KI-B10-1 `386` 多窗布局 → 改判 DEP，本轮不做
+
+- **盘面行**：`docs/parity/ZIP-THEME.md:84`（状态列保持 `未接`，备注列已补改判理由）。
+- **取证修正**：旧取证把两件事混成一件。①平台其实有子窗口能力——`sdk/default/openharmony/ets/api/@ohos.window.d.ts:8491 createSubWindowWithOptions(name, options): Promise<Window>`、`:9307 createSubWindow(name): Promise<Window>`，所以「平台没有多窗」不成立。②上游 `multiPaneMode` **不是 OS 多窗口**，是应用内「列表 + 详情」双栏开关：`ui/widget/components/navigation/AppAdaptiveNavigation.kt:56-60 enum class MultiPaneMode { Auto, Landscape, Always, Off }`，判据在同文件 `:71-88 shouldUseListDetail(...)`——`Auto` 用 840dp 断点、`Landscape` 追加「宽 > 高」、`Always` 用 744dp 断点（保留 360 左栏 + 24 间隔 + 360 右栏）、`Off` 恒 false。消费点 `ui/main/MainActivity.kt:506`。
+- **为什么不做**：本地是零基础，不是少一个开关。`grep -rn '多窗\|multiPane\|MultiPane' entry/src/main/ets --include=*.ets` 只命中一行注释（`pages/ReaderPage.ets:5215`）；`pages/ThemeSettingsPage.ets` 里没有「多窗布局」条目（旧取证说的 `:161` 实测是分隔线颜色回调声明）；主界面是 `pages/Index.ets` 的单一底栏壳，**没有列表-详情双栏结构，也没有 `breakpoint` / `onAreaChange` / `windowSizeChange` 这类响应式基础**。要接得先做三件大工程：主界面壳改双栏、建响应式断点基础设施、四档设置项 + 落盘 + 备份。属界面架构级改造，与本批其它条目的「小步接线」性质不同。
+- **不要做的事**：为了让这条「看起来做了」而在设置页加一个没有消费端的下拉框——那等于造假控件。
+
+### KI-B10-2 `387` 作者搜索回退 → 改判 DEP（依赖 `BOOKSHELF.md:324` 相关书籍横幅）
+
+- **盘面行**：`docs/parity/ZIP-THEME.md:88`（状态列保持 `未接`，备注列已补）。
+- **为什么不做**：开关与字段都在（`pages/ThemeSettingsPage.ets` 的「无关联规则时按作者搜索」、`bookInfoAuthorSearchFallback` 字段与回调、备份键 `data/BackupRepository.ets:542`），**缺的是消费端 UI**——「作者其它作品」区块，而它就是 `BOOKSHELF.md:324`（相关书籍横幅）那一块，324 不在本批范围。另外 `bookSource/LegadoSourceMapper.ets:82` 注释已写明引擎无 `relatedBooks` 规则，所以「没有 relatedBooks 规则时」这个触发条件在本地恒成立，开关的实际语义退化成「详情页要不要显示作者其它作品」——先有那块 UI 才有意义。
+
+### KI-B10-3 `554` 书源自定义按钮 → 只做到「点击如实提示」
+
+- **盘面行**：`docs/parity/BOOKSHELF.md:275`（状态列已改 `已接`，因为菜单项确实接通且有真实反馈；**执行能力仍缺**，记在这里）。
+- **缺什么**：上游 `BookSource.customButton` 只是个布尔开关，真正的执行链是 `customButtonRule`（选择器 + JS）。本地移植的引擎 `third_party/harmony-book-source-engine/sourceengine/src/main/ets/model/data/Book.ts:355` 只有 `customButton: boolean = false`，**没有 `customButtonRule` 字段**（全仓 grep 只此一处命中）。引擎不扩展就执行不了源脚本。
+- **本地行为**：`pages/BookInfoPage.ets onOverflowSelect` 的 `custom_button` 分支弹「自定义按钮依赖书源引擎的 customButtonRule（选择器与脚本），本地引擎只移植了 customButton 开关，暂无法执行」。**不弹假成功提示。**
+- **接回点**：引擎补 `customButtonRule` 后，在这个分支里用 `BookSourceScriptRunner` 执行，结果按上游 `SourceCallBack.CLICK_CUSTOM_BUTTON`（`ui/book/info/BookInfoViewModel.kt:1564`）语义处理。
+
+### KI-B10-4 `558` 设置书籍变量 → 改判本轮不做
+
+- **盘面行**：`docs/parity/BOOKSHELF.md:286`（状态列保持 `未接`，备注列已补）。
+- **为什么不做**：`model/Book.ets` 没有 `variable` 字段；`data/BookRepository.ets:311-312` 的 `variable` 列已被 `originFileName` 子键占用。要做就得加字段 + 动表 + 补面板，工作量明显大于其它五条；而**本地没有任何消费书籍变量的地方**（引擎无 `{{book.variable}}` 模板消费），做出来只是个能填不能用的输入框。
+
+### KI-B10-5 `527` 自动换源 → 按上游实现，与任务书冲突处已改判
+
+- **任务书要求**（`tmp/unmigrated-impl-prompt.md` 批10 :3520）：「开 `527` 开关后让书源失效，必须弹确认而不是静默换掉」。
+- **上游实际行为**：`ui/book/read/ReadBookLoadDelegate.kt:400-442 autoChangeSource` 全程**无确认弹窗**——只 `onStart` toast「正在自动换源」、`catch` toast「自动换源失败」。任务书另称「换源会丢阅读进度」，也不成立：`changeTo(options)` 是迁进度的。
+- **本批按上游办**（依工作区长期口径「遇到与任务书不同就直接对齐上游」）：`pages/Index.ets` 的 `openBook` 在线分支在目录加载失败且开关为真时调 `bookSource/AutoChangeSource.ets`（全源并发精确搜索 → 详情/toc/正文验证 → 第一个成功即 `applyChangeSource` 迁进度），toast 与上游一致，不弹确认。
+
+### KI-B10-6 `528` 整书换源开关 → 只接 true 分支
+
+- **盘面行**：`docs/parity/READER-CONFIG.md:93`（已改 `已接`）。
+- **语义纠正**：上游 `read_change_all` = "Source Change Default Applies to Entire Book"，「整书换源」指**整本书所有章节**换到新源，**与「所有书」无关**。本地旧文案 detail「同步更新其它书籍的书源」是错的，已按上游 `read_change_all_s`（"Otherwise, Only Applies to Single Chapter."）改成「反之则默认弹出单章换源」。
+- **只接 true 分支的原因**：消费点 `ui/book/read/ReadBookViewModel.kt:1721-1734 handleChangeSource()` 的 false 分支要弹 `ReadBookSheet.ChangeChapterSource`（单章换源面板），而本地**没有单章换源面板**（`ChangeChapterSourceSheet` 未移植）。开关本身已能落盘、能备份，false 分支暂无消费端。
 
 ## 六格式实现（r344）留下的已知差异
 
