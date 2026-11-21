@@ -140,6 +140,8 @@ export struct BookSourceManagePage {
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  /** 上游 SearchBar.kt:55 默认 backgroundColor = surfaceContainerLow，对应本地 themeColorSurfaceSecondary。 */
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#EDEEF2';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
@@ -1365,27 +1367,20 @@ export struct BookSourceManagePage {
         }
       }.width('100%').padding({ left: 12, right: 12, top: 11 + this.appTopInset, bottom: 9 })
 
+      // 搜索行照上游 SearchBar.kt:132-155 的 M3 分支：
+      // Surface(fillMaxWidth, padding bottom 4, RoundedCornerShape(32.dp), color = surfaceContainerLow)
+      // 内 AppDenseTextField(backgroundColor=Transparent, leadingIcon 左右各 12, contentPadding 上4下4左右12, heightIn min 48)。
+      // 上游 placeholder 取 R.string.search_book_source「搜索书源」。
       if (this.showSearch) {
         Row() {
-          AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
-          TextInput({ placeholder: '搜索书源…', text: this.searchQuery })
-            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
-            .backgroundColor(Color.Transparent).layoutWeight(1)
+          AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary }).padding({ left: 12, right: 12 })
+          TextInput({ placeholder: '搜索书源', text: this.searchQuery })
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(Color.Transparent).layoutWeight(1).padding({ right: 12 })
             .onChange((value: string) => this.searchQuery = value)
-        }.width('100%').padding({ left: 12, right: 14, top: 7, bottom: 7 })
-          .margin({ left: 16, right: 16, top: 8, bottom: 4 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(22)
-      }
-
-      if (this.selectedGroup.length > 0 || this.searchQuery.length > 0 || this.sortMode !== '手动排序' || this.groupByDomain) {
-        Row() {
-          Text(this.selectedGroup.length > 0 ? this.selectedGroup : '全部')
-            .fontSize(BODY_SMALL).fontColor('#DCE3FF').padding({ left: 10, right: 10, top: 5, bottom: 5 })
-            .backgroundColor('#41485D').borderRadius(14)
-          Text(this.sortMode).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
-          if (this.groupByDomain) {
-            Text('按域名分组').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ left: 8 })
-          }
-        }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 5 })
+        }.width('100%').constraintSize({ minHeight: 48 })
+          .margin({ left: 16, right: 16, bottom: 4 })
+          .backgroundColor(this.themePureBlack ? '#1A1B1F' : this.themeColorSurfaceSecondary).borderRadius(32)
       }
 
       // 上游 ListScaffold.kt 无空态分支（列表为空就是空白）；本地原有的 ModuleEmpty 空态属自加，已移除。
