@@ -3,6 +3,7 @@ import { ReaderMarking, ReaderMarkingEffect } from '../model/ReaderMarking';
 import { ReaderMarkingRepository, StyleResult } from '../data/ReaderMarkingRepository';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
 import { ReaderHighlightRuleRepository } from '../data/ReaderHighlightRuleRepository';
+import { configNamesOf } from '../data/ReaderHighlightRuleEngine';
 import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_LARGE, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 标记编辑器的样式来源菜单宽度。 */
@@ -342,8 +343,10 @@ export struct ReaderMarkingEditor {
     if (!rule.enabled) {
       return '已停用';
     }
-    if (rule.configName !== null && rule.configName !== undefined && rule.configName.trim().length > 0) {
-      return '仅指定排版';
+    // 批8 D 组（:923）：configName 是 JSON 数组，空=全局、非空=仅列出的排版生效。
+    const names = configNamesOf(rule.configName);
+    if (names.length > 0) {
+      return `仅排版：${names.join('、')}`;
     }
     return '';
   }

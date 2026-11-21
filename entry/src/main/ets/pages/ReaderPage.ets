@@ -492,6 +492,8 @@ export struct ReaderPage {
   // 批8 D 组（:923）：当前排版名（本地 = 背景样式名），由 Index 传入；
   // 高亮规则按 configName 是否包含它决定是否生效（空 = 全局规则恒生效）。
   @Prop @Watch('onCurrentConfigNameChanged') currentConfigName: string = '';
+  // 批8 D 组（:923）：可选的排版名（= 背景样式名），供高亮规则编辑页的「应用排版」chip。
+  @Prop availableConfigNames: string[] = [];
   // 命中排版（字号偏移 + 行上下距）的分页度量表，跟着 readerHighlightRanges 一起重算。
   private readerSizeOffsets: LocalReaderSizeOffset[] = [];
   @State highlightRuleSheetVisible: boolean = false;
@@ -7797,6 +7799,20 @@ export struct ReaderPage {
   }
 
   /**
+   * 批8 D 组（:923）：切换排版/背景样式时，带 configName 的规则命中集变了，
+   * 必须重算高亮区间并重建分页，否则要翻页或改规则才生效（面板显示生效、正文不生效）。
+   */
+  onCurrentConfigNameChanged(): void {
+    if (this.localSemanticContent.length === 0) { return; }
+    const next = ReaderHighlightRuleEngine.findBodyRanges(
+      this.localSemanticContent, this.readerHighlightRules, this.currentConfigName);
+    this.readerHighlightRanges = next;
+    this.readerSizeOffsets = this.buildReaderSizeOffsets();
+    this.readerContentRevision++;
+    this.rebuildReaderPages();
+  }
+
+  /**
    * 四页窗口的图片预取。
    * 上游 ReaderCanvasSurface.kt:414-430 把 current/next/previous/nextPlus 的图一起解进 LRU，
    * 翻页那一刻绘制期直读必然命中，新页就不会闪「有字无图」的帧。
@@ -9208,6 +9224,8 @@ export struct ReaderPage {
         ReaderHighlightRuleSheet({
           rules: this.readerHighlightRules,
           chapterLength: this.localSemanticContent.length,
+          configNames: this.availableConfigNames,
+          currentConfigName: this.currentConfigName,
           onDismiss: () => this.highlightRuleSheetVisible = false,
           onSave: (rules: ReaderHighlightRule[]): Promise<ReaderHighlightRule[]> => this.saveReaderHighlightRules(rules)
         })

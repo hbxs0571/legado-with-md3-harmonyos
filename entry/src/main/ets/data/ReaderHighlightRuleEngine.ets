@@ -1,5 +1,41 @@
 import { ReaderHighlightRange, ReaderHighlightRule, ReaderHighlightStyle } from '../model/ReaderHighlightRule';
 
+/**
+ * 批8 D 组（:923）：把 configName 当 JSON 数组字符串处理。
+ * 对齐上游 HighlightRuleRepository.kt:411-431：
+ * - 空（null/空白）= 全局规则，对所有排版生效；
+ * - 非空 = 仅在列出的排版名里生效。
+ * 解析失败回空数组，绝不抛（上游 runCatching{}.getOrElse{ emptyList() } 语义）。
+ */
+export function configNamesOf(configName: string | null | undefined): string[] {
+  if (configName === null || configName === undefined || configName.trim().length === 0) { return []; }
+  try {
+    const parsed: string[] = JSON.parse(configName);
+    if (!Array.isArray(parsed)) { return []; }
+    const names: string[] = [];
+    for (let index = 0; index < parsed.length; index++) {
+      const item = parsed[index];
+      if (typeof item === 'string' && item.length > 0) { names.push(item); }
+    }
+    return names;
+  } catch (_) {
+    return [];
+  }
+}
+
+/** 空数组 → null（全局），否则序列化成 JSON 数组串。 */
+export function toConfigNameJson(names: string[]): string | null {
+  if (names.length === 0) { return null; }
+  return JSON.stringify(names);
+}
+
+/** 规则在当前排版名下是否生效：空 configName = 全局生效；否则当前名在列表里才生效。 */
+export function ruleMatchesConfig(rule: ReaderHighlightRule, currentConfigName: string): boolean {
+  const names = configNamesOf(rule.configName);
+  if (names.length === 0) { return true; }
+  return names.includes(currentConfigName);
+}
+
 /** Android 正文高亮规则在 HOS 当前章节中的有限兼容实现。 */
 export class ReaderHighlightRuleEngine {
   static readonly maximumPatternLength: number = 256;
@@ -40,7 +76,13 @@ export class ReaderHighlightRuleEngine {
       /\\[1-9][0-9]*(?:[*+?]|\{[0-9])/.test(pattern);
   }
 
-  static findBodyRanges(text: string, rules: ReaderHighlightRule[]): ReaderHighlightRange[] {
+  /**
+   * @param currentConfigName 当前排版名（本地 = 背景样式名）。空串表示未指定排版，
+   *   此时仅全局规则生效。批8 D 组前这里的判定是「有 configName 就跳过」（做反了），
+   *   现已改为上游语义：空 = 全局生效、非空 = 仅列出的排版名生效。
+   */
+  static findBodyRanges(text: string, rules: ReaderHighlightRule[],
+    currentConfigName: string = ''): ReaderHighlightRange[] {
     if (text.length > ReaderHighlightRuleEngine.maximumChapterCharacters ||
       rules.length > ReaderHighlightRuleEngine.maximumRuleCount) { return []; }
     const ranges: ReaderHighlightRange[] = [];
@@ -51,7 +93,7 @@ export class ReaderHighlightRuleEngine {
       if (rule === undefined || !rule.enabled || rule.pattern.trim().length === 0 ||
         !ReaderHighlightRuleEngine.isSupported(rule.pattern) ||
         (rule.targetScope !== 0 && rule.targetScope !== 2) ||
-        (rule.configName !== null && rule.configName !== undefined && rule.configName.trim().length > 0)) {
+        !ruleMatchesConfig(rule, currentConfigName)) {
         continue;
       }
       let matcher: RegExp;

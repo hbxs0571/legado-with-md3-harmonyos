@@ -7802,6 +7802,19 @@ private canWriteInto(dir: string): boolean {
     const style = this.backgroundStyles[Math.max(0, Math.min(this.backgroundStyles.length - 1, this.paperIndex))];
     return style === undefined ? '#000000' : (this.readerNightMode ? style.nightColor : style.dayColor);
   }
+  /**
+   * 批8 D 组（:923）：当前排版名 = 背景样式名。
+   * 自定义背景色（bgType=0 且 bgStr 非空）没有对应预设名，返回空串＝只让全局规则生效，
+   * 与上游 configName 列表不含当前自定义排版时全局规则仍生效的语义一致。
+   */
+  private currentReaderConfigName(): string {
+    const customType = this.readerNightMode ? this.readerBgTypeNight : this.readerBgType;
+    const custom = this.readerNightMode ? this.readerBgStrNight : this.readerBgStr;
+    if (customType === 0 && custom.length > 0) { return ''; }
+    const style = this.backgroundStyles[Math.max(0, Math.min(this.backgroundStyles.length - 1, this.paperIndex))];
+    return style === undefined ? '' : style.name;
+  }
+
   /** 当前生效的正文颜色；上游 `textColor`/`textColorNight`。 */
   private getReadingTextColorSetting(): string {
     return this.readerNightMode ? this.readerTextColorNight : this.readerTextColor;
@@ -10294,6 +10307,9 @@ private canWriteInto(dir: string): boolean {
             chapterTitle: this.selectedChapter,
             replaceRules: this.replaceRules,
             content: this.readerContent,
+            // 批8 D 组（:923）：当前排版名与可选排版名（= 背景样式名），供高亮规则按 configName 过滤。
+            currentConfigName: this.currentReaderConfigName(),
+            availableConfigNames: this.backgroundStyles.map((style: ReaderBackgroundStyle) => style.name),
             fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
         lineSpacing: this.readerLineSpacing,

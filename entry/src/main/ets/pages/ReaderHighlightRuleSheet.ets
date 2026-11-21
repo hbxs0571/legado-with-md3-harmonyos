@@ -1,7 +1,7 @@
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { ReaderHighlightRule } from '../model/ReaderHighlightRule';
-import { ReaderHighlightRuleEngine } from '../data/ReaderHighlightRuleEngine';
+import { ReaderHighlightRuleEngine, configNamesOf, toConfigNameJson } from '../data/ReaderHighlightRuleEngine';
 import { ReaderHighlightRulePresets } from '../data/ReaderHighlightRulePresets';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
 import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
@@ -21,6 +21,9 @@ export struct ReaderHighlightRuleSheet {
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop rules: ReaderHighlightRule[] = [];
   @Prop chapterLength: number = 0;
+  // 批8 D 组（:923）：可选排版名（= 背景样式名）与当前排版名，供「应用排版」chip。
+  @Prop configNames: string[] = [];
+  @Prop currentConfigName: string = '';
   @State draftRules: ReaderHighlightRule[] = [];
   @State editorVisible: boolean = false;
   @State editId: string = '';
@@ -35,6 +38,8 @@ export struct ReaderHighlightRuleSheet {
   /** 作用范围：0 全部 / 1 标题 / 2 正文（上游 HighlightRuleEditSheet 的范围下拉）。 */
   @State editTargetScope: number = 2;
   @State editEnabled: boolean = true;
+  /** 批8 D 组（:923）：本规则适用的排版名列表；空 = 对所有排版生效（全局）。 */
+  @State editConfigNames: string[] = [];
   /** 预览卡里用的示例文字。 */
   @State editSample: string = '这是一行示例正文，命中规则的部分会即时套用样式。';
   @State errorMessage: string = '';
@@ -114,6 +119,7 @@ export struct ReaderHighlightRuleSheet {
     this.editSvgPath = '';
     this.editTargetScope = 2;
     this.editEnabled = true;
+    this.editConfigNames = [];
     this.editLetterSpacingBefore = 0;
     this.editLetterSpacingAfter = 0;
     this.editLineSpacingTop = 0;
@@ -150,6 +156,7 @@ export struct ReaderHighlightRuleSheet {
     this.editSvgPath = rule.underlineSvgPath ?? '';
     this.editTargetScope = rule.targetScope;
     this.editEnabled = rule.enabled;
+    this.editConfigNames = configNamesOf(rule.configName);
     this.editLetterSpacingBefore = rule.letterSpacingBefore ?? 0;
     this.editLetterSpacingAfter = rule.letterSpacingAfter ?? 0;
     this.editLineSpacingTop = rule.lineSpacingTop ?? 0;
@@ -415,6 +422,8 @@ export struct ReaderHighlightRuleSheet {
     rule.pattern = pattern;
     rule.targetScope = this.editTargetScope;
     rule.enabled = this.editEnabled;
+    // 批8 D 组（:923）：空列表写 null（全局），非空写 JSON 数组串。
+    rule.configName = toConfigNameJson(this.editConfigNames);
     rule.textColor = textColor;
     rule.bgColor = bgColor;
     rule.underlineMode = this.editUnderlineMode;
@@ -567,11 +576,55 @@ export struct ReaderHighlightRuleSheet {
 
   private ruleStatus(rule: ReaderHighlightRule): string {
     if (!ReaderHighlightRuleEngine.isSupported(rule.pattern)) { return '此正则在本机不受支持'; }
-    if ((rule.targetScope !== 0 && rule.targetScope !== 2) ||
-      (rule.configName !== null && rule.configName !== undefined && rule.configName.trim().length > 0)) {
+    if (rule.targetScope !== 0 && rule.targetScope !== 2) {
       return '当前仅匹配正文全局规则';
     }
-    return rule.enabled ? '正文规则 · 已启用' : '正文规则 · 已停用';
+    // 批8 D 组（:923）：configName 是 JSON 数组，空=全局、非空=仅列出的排版。
+    const names = configNamesOf(rule.configName);
+    if (names.length > 0) {
+      const applies = names.includes(this.currentConfigName);
+      return `正文规则 · 仅排版【${names.join('、')}】${applies ? '（当前生效）' : '（当前不生效）'}`;
+    }
+    return rule.enabled ? '正文规则 · 已启用（所有排版）' : '正文规则 · 已停用';
+  }
+
+  /** 切换某个排版 chip 的勾选态（ArkTS 不追踪 Set 内部变更，故用数组重建）。 */
+  private toggleConfigName(name: string): void {
+    const next: string[] = [];
+    if (this.editConfigNames.includes(name)) {
+      for (let index = 0; index < this.editConfigNames.length; index++) {
+        const item = this.editConfigNames[index];
+        if (item !== name) { next.push(item); }
+      }
+    } else {
+      for (let index = 0; index < this.editConfigNames.length; index++) {
+        next.push(this.editConfigNames[index]);
+      }
+      next.push(name);
+    }
+    this.editConfigNames = next;
+  }
+
+  /** 规则信息区里的「应用排版」chip 行；空勾选=所有排版。 */
+  @Builder
+  private ConfigNameChips() {
+    Column() {
+      Text('应用排版').fontSize(LABEL_MEDIUM).fontColor('#C7C9D1').width('100%')
+      Text('不选＝对所有排版生效；勾选后只在列出的排版下生效').fontSize(BODY_SMALL)
+        .fontColor('#8A8D99').width('100%').margin({ bottom: 6 })
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(this.configNames, (name: string) => {
+          Text(name)
+            .fontSize(LABEL_SMALL)
+            .fontColor(this.editConfigNames.includes(name) ? '#1F3701' : '#C7C9D1')
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .margin({ right: 6, bottom: 6 })
+            .borderRadius(14)
+            .backgroundColor(this.editConfigNames.includes(name) ? '#B9C6FF' : this.themeColorSurfaceSecondary)
+            .onClick(() => this.toggleConfigName(name))
+        }, (name: string) => name)
+      }
+    }.width('100%').margin({ bottom: 8 }).alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -685,6 +738,9 @@ export struct ReaderHighlightRuleSheet {
                 })
               }.width('100%').margin({ bottom: 4 })
                 .onClick(() => this.editEnabled = !this.editEnabled)
+
+              // 批8 D 组（:923）：应用排版 chip（空 = 全局）
+              this.ConfigNameChips()
 
               // 分区 2：样式设置（上游 :422-673，本地只取渲染支持的色/线型）
               this.SectionTitle('样式设置')
