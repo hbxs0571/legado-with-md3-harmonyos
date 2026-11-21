@@ -955,6 +955,7 @@ export struct BookshelfManagePage {
         AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextPrimary })
           .width(40).height(40)
           .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+          .accessibilityText('更多菜单')
           .bindPopup(this.moreMenuVisible, {
             builder: this.MoreMenu,
             placement: Placement.BottomRight,

@@ -358,5 +358,6 @@ export struct TopBarBackButton {
     .width(40).height(40).justifyContent(FlexAlign.Center).borderRadius(20)
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.9 })
     .onClick(() => this.onSelect())
+    .accessibilityText('返回')
   }
 }

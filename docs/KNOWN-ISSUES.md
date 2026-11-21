@@ -1559,6 +1559,12 @@ private settingsSheetHeight(): string {
 - 上游 top10 里本地**没有独立名字**的：`Refresh`（本地只有 `profileRefresh`）、`PlayArrow` / `Stop` / `Save` / `Close` / `SelectAll` / `FindReplace`（本地有 `profileSave` / `profileClose` / `profileFindReplace` 但都在 `profile` 命名空间下）、`KeyboardArrowDown`（本地是 `profileExpandMore`）。
 - 播放/暂停/停止图标不在 `AppGlyph` 里，是 `resources/base/media/` 的独立资源（`reader_play.svg` / `reader_pause.svg` / `app_stop_square.svg`），调用方直接 `Image($r(...))` 绕过 `AppGlyph`。
 
+- **图标批 3（4 个零引用资源去留，逐个判定后 4 个全部保留、无删除）**：这 4 个 svg 在 `entry/src` 的 `.ets`/`.json`/`.json5` 里全仓 0 引用（口径 `grep -rl "<名>" entry/src --include=*.ets --include=*.json --include=*.json5 | wc -l`），但上游均有使用点，故不删、记缺口待接：
+  - 上游 `app/src/main/java/io/legado/app/feature/explore/ExploreMainRoute.kt:234` 用 `Icons.AutoMirrored.Outlined.Label`（书源分组下拉项）；本地书源页分组是纯文字 Tab（`pages/ProfileSubPages.ets:1452` 的 `ModuleTab`），资源 `app_label.svg` 已备（规则 C：本地为纯文字按钮，未接）。
+  - 上游 `ui/rss/subscription/RuleSubScreen.kt:132` 与 `ui/widget/components/FontSelectGrid.kt:167` 用 `Icons.AutoMirrored.Filled.Sort`（排序；原记录称「0 命中」不成立，实测 2 处）；本地订阅规则页排序是纯文字菜单项（`pages/SubscriptionSubPages.ets:72`），资源 `app_sort.svg` 已备（规则 C：本地为纯文字按钮，未接）。
+  - 上游 `ui/main/bookshelf/BookshelfScreen.kt:642` 用 `Icons.Default.Bookmarks`（书架编辑模式「移到分组」，`contentDescription=R.string.move_to_group`）；本地书架编辑态无该图标入口，资源 `menu_bookmarks.svg` 已备（规则 C：本地无对应控件，未接）。
+  - 上游 `ui/book/info/edit/BookInfoEditScreen.kt:109` 等 28 处用 `Icons.Default.Save`；本地书籍信息编辑页保存按钮（`pages/BookInfoEditPage.ets:407`）用的是等价图形 `profileSave`→`profile_save.svg`（与 `menu_save.svg` 同为 Material Icons save，d 路径等价），资源 `menu_save.svg` 为重复资产（规则 C：本地已有等价控件，未接）。
+
 ### 三、动效（Motion）
 
 有底座，动效令牌已定义、已部分接线。

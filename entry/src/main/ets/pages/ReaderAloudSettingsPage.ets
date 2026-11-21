@@ -255,6 +255,7 @@ struct AloudTonalIcon {
     .layoutWeight(1).height(48)
     .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.75)).backdropBlur(12).borderRadius(24)
     .onClick(() => this.onAction())
+    .accessibilityText(this.icon === 'previous' ? '上一句' : (this.icon === 'pause' ? '暂停' : (this.icon === 'stop' ? '停止' : '播放')))
   }
 }
 

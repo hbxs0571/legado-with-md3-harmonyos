@@ -525,6 +525,7 @@ export struct ThemeSettingsPage {
                 .fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.themeColorTextSecondary).layoutWeight(1)
               AppGlyph({ name: 'profileClose', glyphSize: 18, tint: '#C5C7D0' })
                 .onClick(() => this.dismissRefactorTip())
+                .accessibilityText('关闭')
             }.width('calc(100% - 32vp)').padding(16).margin({ bottom: 24 })
               .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16)
               .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))

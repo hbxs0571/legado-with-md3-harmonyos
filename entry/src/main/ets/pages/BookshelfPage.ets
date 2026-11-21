@@ -2499,6 +2499,7 @@ export struct BookshelfPage {
           if (this.searchQuery.length > 0) {
             AppGlyph({ name: 'profileClose', glyphSize: 14 }).margin({ left: 6 })
               .onClick(() => { this.searchQuery = ''; })
+              .accessibilityText('清除')
           }
         }.width('100%').padding({ left: 14, right: 14, top: 9, bottom: 9 })
           .margin({ left: 16, right: 16, bottom: 10 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(22).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
@@ -2536,6 +2537,7 @@ export struct BookshelfPage {
               .width(34).height(34).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(17)
               .border({ width: 1, color: this.themeColorTextSecondary })
               .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
+              .accessibilityText('分组管理')
               .bindPopup(this.groupFilterVisible, {
                 builder: this.GroupFilterMenu,
                 placement: Placement.Bottom,

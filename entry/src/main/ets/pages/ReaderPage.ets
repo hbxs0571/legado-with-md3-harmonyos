@@ -5905,6 +5905,7 @@ export struct ReaderPage {
         .justifyContent(FlexAlign.Start)
         .padding({ left: 16, right: 16, top: 12, bottom: 8 })
         .onClick(() => { this.selectionMenuMoreVisible = false; })
+        .accessibilityText('返回')
         Row().width('80%').height(1).backgroundColor(this.readerMenuForegroundAlpha('66'))
         Scroll() {
           Column() {
@@ -8682,6 +8683,7 @@ export struct ReaderPage {
             .backgroundColor(this.readerMenuContainerBaseColor())
             .border({ width: 1, color: this.readerMenuForegroundAlpha('14') })
             .onClick(() => this.onOpenSearchNavItem(this.searchNavIndex - 1))
+            .accessibilityText('上一个结果')
           }
           Blank().layoutWeight(1)
           if (this.searchNavIndex < this.searchNavItems.length - 1) {
@@ -8692,6 +8694,7 @@ export struct ReaderPage {
             .backgroundColor(this.readerMenuContainerBaseColor())
             .border({ width: 1, color: this.readerMenuForegroundAlpha('14') })
             .onClick(() => this.onOpenSearchNavItem(this.searchNavIndex + 1))
+            .accessibilityText('下一个结果')
           }
         }
         .width('100%')
@@ -8763,6 +8766,7 @@ export struct ReaderPage {
             .backgroundColor(this.readerMenuContainerBaseColor()).borderRadius(16)
             .border(this.readerMenuBorderSettings())
             .onClick(() => this.onCloseSearchResult())
+            .accessibilityText('退出')
           }
           .width('100%').margin({ top: 8 })
           }
@@ -9334,6 +9338,7 @@ export struct ReaderPage {
               .borderRadius(18)
               .backgroundColor(this.readerNightMode ? '#1AFFFFFF' : '#1A000000')
               .onClick(() => { this.onCapsulePauseToggle(); this.resetCapsuleCollapseTimer(); })
+              .accessibilityText(this.capsulePaused() ? '继续朗读' : '暂停朗读')
 
               // 进度环 + 中间停止按钮（上游 CircularProgressIndicator + Close）。
               Stack({ alignContent: Alignment.Center }) {

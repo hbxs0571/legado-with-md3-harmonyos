@@ -604,6 +604,7 @@ export struct AppCoverSettingsPage {
               .fontColor(this.themeColorTextPrimary).layoutWeight(1).textAlign(TextAlign.Center)
             AppGlyph({ name: 'add', glyphSize: 20, tint: this.themeColorAccent })
               .onClick(() => { this.addEditorImages(); })
+              .accessibilityText('添加图片')
           }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 12 })
 
           // B8 页签：默认白天（0）；切换后下方网格换成另一套图。

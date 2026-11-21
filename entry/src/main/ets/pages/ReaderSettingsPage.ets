@@ -930,6 +930,7 @@ export struct ReaderSettingsPage {
           .borderRadius(12)
           .margin({ left: 8 })
           .onClick(() => this.openDetailSheet('排版设置', ''))
+          .accessibilityText('排版')
         }
         .padding(12)
         .backgroundColor(this.rsetCardBg)
@@ -985,8 +986,10 @@ export struct ReaderSettingsPage {
             .onClick(() => this.openDetailSheet('翻页动画', '覆盖、滑动、仿真、滚动、淡入淡出、无动画'))
           Image($r('app.media.app_anim_speed')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 12 })
           .onClick(() => this.openDetailSheet('翻页动画速度', ''))
+          .accessibilityText('翻页动画速度')
           Image($r('app.media.app_padding')).width(20).height(20).fillColor(this.rsetTextSecondary).margin({ left: 14 })
             .onClick(() => this.openDetailSheet('页边距', ''))
+          .accessibilityText('边距')
         // 上游 sheet/GlobalThemePage.kt:148 设置组卡 cornerRadius=12dp（翻页/电子翻页动画外卡）
         }.padding(13).backgroundColor(this.rsetCardBg)
         .borderRadius(this.cardRadius(12)).margin({ top: 13 })

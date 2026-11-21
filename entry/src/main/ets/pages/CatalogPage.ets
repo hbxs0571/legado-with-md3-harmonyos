@@ -801,6 +801,7 @@ export struct CatalogPage {
     .width(32).height(32).borderRadius(10)
     .backgroundColor(active ? this.themeColorSurfaceElevated : Color.Transparent)
     .onClick(() => action())
+    .accessibilityText(icon === 'profileFindReplace' ? '使用替换规则' : (icon === 'profileTimeline' ? '显示字数' : '反转目录'))
   }
 
   @Builder
@@ -859,6 +860,7 @@ export struct CatalogPage {
           .width(32).height(32).borderRadius(10)
           .backgroundColor(this.catalogMoreVisible ? this.themeColorSurfaceElevated : Color.Transparent)
           .onClick(() => { this.catalogMoreVisible = !this.catalogMoreVisible; })
+          .accessibilityText('更多菜单')
           .bindPopup(this.catalogMoreVisible, {
             builder: this.CatalogMoreMenu,
             placement: Placement.BottomRight,
@@ -1063,6 +1065,7 @@ export struct CatalogPage {
           .width(32)
           .height(32)
           .onClick(() => { this.bookmarkExportVisible = !this.bookmarkExportVisible; })
+          .accessibilityText('更多菜单')
           .bindPopup(this.bookmarkExportVisible, {
             builder: this.BookmarkExportMenu,
             placement: Placement.BottomRight,

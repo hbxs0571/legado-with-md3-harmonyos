@@ -725,6 +725,7 @@ export struct BookSourceManagePage {
         .onClick(() => this.toggleSource(row.source, !row.source.enabled))
       AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary }).margin({ left: 10 })
         .onClick(() => { this.menuRowUrl = row.source.bookSourceUrl; })
+        .accessibilityText('菜单')
         .bindPopup(this.menuRowUrl === row.source.bookSourceUrl, {
           builder: () => { this.SourceRowMenu(row); },
           placement: Placement.BottomRight,
@@ -2127,8 +2128,10 @@ export struct ReplaceRuleGroupSheet {
                       this.groupInput = group;
                     }
                   })
+                  .accessibilityText('编辑')
                 AppGlyph({ name: 'delete', glyphSize: 18, tint: '#D99AA5' })
                   .onClick(() => this.removeGroup(group))
+                  .accessibilityText('删除')
               }.width('100%')
               if (this.groupEditing === group) {
                 Row() {
@@ -2631,9 +2634,11 @@ export struct TxtTocRulesPage {
       Row() {
         AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary }).padding({ right: 12 })
           .onClick(() => this.showAddRule = false)
+          .accessibilityText('关闭')
         Text(this.editingExisting ? '编辑目录规则' : 'TXT 目录规则').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
           .onClick(() => { this.editMoreMenuVisible = !this.editMoreMenuVisible; })
+          .accessibilityText('更多菜单')
 .bindPopup(this.editMoreMenuVisible, {
   builder: this.EditMoreMenu,
   placement: Placement.BottomRight,
@@ -2771,8 +2776,10 @@ export struct TxtTocRulesPage {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
+          .accessibilityText('搜索')
         AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary }).padding({ left: 6, right: 8 })
           .onClick(() => { this.importMenuVisible = !this.importMenuVisible; })
+          .accessibilityText('更多菜单')
 .bindPopup(this.importMenuVisible, {
   builder: this.ImportMenu,
   placement: Placement.BottomRight,
@@ -4915,6 +4922,7 @@ export struct ReadRecordsPage {
     .backgroundColor('#D95656')
     .borderRadius(16)
     .onClick(() => onTrigger())
+    .accessibilityText('删除阅读记录')
   }
 
   /** 最后阅读视图右滑（end 侧）露出的合并块：上游 primary 底 + Merge 图标。 */
@@ -4929,6 +4937,7 @@ export struct ReadRecordsPage {
     .backgroundColor(this.themeColorAccent)
     .borderRadius(16)
     .onClick(() => onTrigger())
+    .accessibilityText('将阅读记录合并到此书')
   }
 
   /**
@@ -6764,8 +6773,10 @@ export struct AiChatPage {
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           AppGlyph({ name: 'list', glyphSize: 19, tint: this.themeColorTextSecondary }).padding({ left: 8, right: 8 })
             .onClick(() => this.historyVisible = true)
+          .accessibilityText('最近对话')
           AppGlyph({ name: 'add', glyphSize: 19, tint: this.themeColorTextSecondary }).padding({ left: 8, right: 8 })
             .onClick(() => { this.draft = ''; this.onUnavailableAction('新会话已准备；配置 AI 服务后即可发送消息'); })
+          .accessibilityText('新建对话')
         }.width('100%').padding({ left: 12, right: 10, top: 11, bottom: 9 })
 
         Row() {

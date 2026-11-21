@@ -182,13 +182,16 @@ export struct TxtTocRulePreviewPage {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
+          .accessibilityText('搜索')
         AppGlyph({ name: this.gridLayout ? 'list' : 'profileRule', glyphSize: 19,
           tint: this.themeColorTextSecondary })
           .padding({ left: 6, right: 6 })
           .onClick(() => this.gridLayout = !this.gridLayout)
+          .accessibilityText(this.gridLayout ? '列表' : '网格')
         AppGlyph({ name: 'settings', glyphSize: 19, tint: this.themeColorTextSecondary })
           .padding({ left: 6, right: 8 })
           .onClick(() => this.onOpenManagePage())
+          .accessibilityText('管理')
       }.width('100%').height(40 + this.appTopInset).padding({ left: 18, right: 18, top: this.appTopInset })
       Column() {
         Text('选择目录规则').fontSize(HEADLINE_MEDIUM).fontWeight(FontWeight.Bold)

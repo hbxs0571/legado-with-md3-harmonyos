@@ -484,6 +484,7 @@ export struct ReaderSearchPage {
                   AppGlyph({ name: 'profileClose', glyphSize: 17, tint: '#B0B1BA' })
                     .padding(8)
                     .onClick(() => this.deleteSearchHistory(entry))
+                    .accessibilityText('删除')
                 }
                 .width('100%')
                 .padding({ left: 14, right: 8, top: 12, bottom: 12 })
@@ -588,6 +589,7 @@ export struct ReaderSearchPage {
               if (this.searching) { this.stopSearch(); }
               else { this.locateCurrentChapter(); }
             })
+            .accessibilityText(this.searching ? '停止' : '定位当前章节')
           }
         }
         .layoutWeight(1)
