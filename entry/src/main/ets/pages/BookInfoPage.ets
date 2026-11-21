@@ -120,6 +120,8 @@ export struct BookInfoPage {
     _category: string, _description: string, _remark: string, _customTag: string, _groupNames: string[],
     _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
+  /** 批10（:565）：导出本书为 EPUB；落盘与保存对话框在 Index 侧（那边有 EpubExporter）。 */
+  onExportEpub: () => void = () => {};
   /** 打开书源登录页（:283）：页面不做路由，只把书源 URL 交给 Index。 */
   onOpenSourceLogin: (sourceUrl: string) => void = (_sourceUrl: string) => {};
   /** 打开书源编辑页去改源变量（:285）：变量面板在书源编辑页里，详情页跳过去。 */
@@ -849,6 +851,13 @@ export struct BookInfoPage {
    * 这里全部列出，未接入的项在 `onOverflowSelect` 里提示「未接入」。
    */
   private overflowItems(): UiMenuItem[] {
+    // 批10（:565）：导出 EPUB 仅对有正文的本地书出现。ArkTS 不允许在 spread 三元里写
+    // 未声明类型的对象字面量（arkts-no-untyped-obj-literals / arkts-no-noninferrable-arr-literals），
+    // 所以先显式声明成 UiMenuItem[] 再展开。
+    const exportItems: UiMenuItem[] = [];
+    if (this.book.isLocal && (this.book.contentPath ?? '').length > 0) {
+      exportItems.push({ key: 'export_epub', title: '导出为 EPUB' });
+    }
     const items: UiMenuItem[] = [
       { key: 'custom_button', title: '自定义按钮' },
       { key: 'edit', title: '编辑' },
@@ -866,6 +875,7 @@ export struct BookInfoPage {
       { key: 'set_book_variable', title: '设置书籍变量' },
       { key: 'copy_book_url', title: '拷贝书籍 URL' },
       { key: 'copy_toc_url', title: '拷贝目录 URL' },
+      ...exportItems,
       { key: 'to_top', title: '置顶' },
       // 允许更新：选中态对齐上游 isSelected = book.canUpdate（缺省视为 true）。
       { key: 'allow_update', title: '允许更新', selected: this.book.canUpdate !== false },
@@ -897,6 +907,8 @@ export struct BookInfoPage {
       this.copyBookUrl();
     } else if (key === 'copy_toc_url') {
       this.copyTocUrl();
+    } else if (key === 'export_epub') {
+      this.onExportEpub();
     } else if (key === 'login') {
       this.openSourceLogin();
     } else if (key === 'set_source_variable') {

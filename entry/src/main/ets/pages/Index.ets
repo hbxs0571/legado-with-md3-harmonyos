@@ -10475,6 +10475,10 @@ private canWriteInto(dir: string): boolean {
             remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
             this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
           onOpenEditPage: () => { this.route = AppRoute.BOOK_INFO_EDIT; },
+          // 批10（:565）：详情页溢出菜单「导出为 EPUB」的真实落点，导出器在 data/EpubExporter.ets。
+          onExportEpub: () => {
+            if (this.selectedBook !== null) { void this.exportBookAsEpub(this.selectedBook); }
+          },
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
