@@ -26,6 +26,53 @@ interface DebugExample {
   value: string;
 }
 
+/** 空态笑脸候选：上游 EmptyMessage.kt:38-41 的七张脸。 */
+const DEBUG_FACES: string[] = [
+  '(；′⌒`)', '(つ﹏⊂)', '(•̀ᴗ•́)و', '(๑•́ ₃ •̀๑)',
+  '(눈‸눈)', '(ಥ﹏ಥ)', '(｡•́︿•̀｡)'
+];
+
+/**
+ * 单个 ToggleChip（对齐上游 ToggleChip.kt:26-108）。
+ * 必须做成独立 @Component 而不是本页的 @Builder：@Builder 按值传参时，
+ * 父组件状态变化不会重建 Builder 内部 UI（ArkUI 已知限制），
+ * 表现为点目标 chip 后 placeholder 变了、高亮却停在原处。
+ */
+@Component
+struct DebugChip {
+  @Prop label: string = '';
+  @Prop selected: boolean = false;
+  onSelect: () => void = () => {};
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorPrimaryContainer') themeColorPrimaryContainer: string = '#354E16';
+  @StorageProp('themeColorOnPrimaryContainer') themeColorOnPrimaryContainer: string = '#D5EFAD';
+
+  build() {
+    Row() {
+      // 对齐上游 ToggleChip.kt:75-88：选中时才出现 16dp 的 Check，未选不占位。
+      if (this.selected) {
+        AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorAccent })
+          .margin({ right: 8 })
+      }
+      Text(this.label)
+        .fontSize(LABEL_MEDIUM)
+        .fontWeight(FontWeight.Medium)
+        // 对齐上游 ToggleChip：选中=primaryContainer 底 + onPrimaryContainer 字，未选=surface 底 + onSurface 字。
+        .fontColor(this.selected ? this.themeColorOnPrimaryContainer : this.themeColorTextPrimary)
+        .maxLines(1)
+    }
+    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+    .backgroundColor(this.selected ? this.themeColorPrimaryContainer : this.themeColorSurfaceTertiary)
+    .borderRadius(12)
+    .margin({ right: 8, top: 2, bottom: 2 })
+    // 上游 ToggleChip 的 toggleableState / stateDescription 无障碍语义（:45-58）。
+    .accessibilityText(this.selected ? (this.label + '，已选择') : (this.label + '，未选择'))
+    .onClick(() => { this.onSelect(); })
+  }
+}
+
 @Component
 export struct BookSourceDebugPage {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
@@ -65,6 +112,8 @@ export struct BookSourceDebugPage {
   @State private detailSheetVisible: boolean = false;
   /** 自动滚动开关：用户手动上滚时关闭，点「回到底部」或重新开始调试时恢复。 */
   @State private autoScrollToEnd: boolean = true;
+  /** 空态笑脸：上游 EmptyMessage.kt:44 `faces.random()`，点一下换一张。 */
+  @State private face: string = DEBUG_FACES[Math.floor(Math.random() * DEBUG_FACES.length)];
   private logScroller: Scroller = new Scroller();
 
   private onBusEvent: (entries: DebugEntry[]) => void = (list: DebugEntry[]): void => {
@@ -92,18 +141,99 @@ export struct BookSourceDebugPage {
     DebugEventBus.stop();
   }
 
+  /**
+   * 对齐上游 BookSourceDebugViewModel.kt:49-77 load()：
+   * 关键字取 ruleSearch.checkKeyWord（空则「我的」），示例 = [关键字→搜索, 系统→搜索, 各发现分类→发现]，
+   * 去重后把**首个示例的值**灌进 query 作为初值（:72）。本地此前没这一步，
+   * 导致进页后 FAB 只弹「调试内容不能为空」。
+   */
   private loadSource(): void {
     const all: BookSource[] = BookSourceRepository.getAll();
-    for (const src of all) {
-      if (src.bookSourceUrl === this.sourceUrl) {
-        this.sourceName = src.bookSourceName;
+    let src: BookSource | undefined = undefined;
+    for (const item of all) {
+      if (item.bookSourceUrl === this.sourceUrl) {
+        src = item;
         break;
       }
     }
+    if (src === undefined) {
+      this.status = 'Failed';
+      this.onUnavailableAction('未获取到书源');
+      return;
+    }
+    this.sourceName = src.bookSourceName;
+    const root: Record<string, Object> | undefined = this.parseSourceJson(src.sourceJson);
+    const configured: string = root === undefined ? '' : this.readString(root, 'ruleSearch.checkKeyWord');
+    const keyword: string = configured.trim().length === 0 ? '我的' : configured;
     const ex: DebugExample[] = [];
-    ex.push({ title: '我的', target: 'Search', value: '我的' });
+    ex.push({ title: keyword, target: 'Search', value: keyword });
     ex.push({ title: '系统', target: 'Search', value: '系统' });
-    this.examples = ex;
+    const exploreUrl: string = root === undefined ? '' : this.readString(root, 'exploreUrl');
+    for (const kind of this.parseExploreKinds(exploreUrl)) {
+      ex.push({ title: kind.title, target: 'Explore', value: kind.value });
+    }
+    this.examples = this.distinctExamples(ex);
+    this.query = this.examples.length > 0 ? this.examples[0].value : '';
+  }
+
+  private parseSourceJson(sourceJson: string): Record<string, Object> | undefined {
+    try {
+      const parsed = JSON.parse(sourceJson) as Object;
+      if (parsed === null || typeof parsed !== 'object') return undefined;
+      return parsed as Record<string, Object>;
+    } catch (_) {
+      return undefined;
+    }
+  }
+
+  /** 读 JSON 里的字符串字段（支持 'a.b' 路径），与编辑页 readPath 同口径。 */
+  private readString(root: Record<string, Object>, path: string): string {
+    const parts: string[] = path.split('.');
+    let cur: Object | undefined = root;
+    for (let i = 0; i < parts.length; i++) {
+      if (cur === undefined || cur === null || typeof cur !== 'object') return '';
+      cur = (cur as Record<string, Object>)[parts[i]];
+    }
+    return typeof cur === 'string' ? cur : '';
+  }
+
+  /**
+   * 解析 exploreUrl 里的发现分类（上游 BookSourceExtensions.kt exploreKinds()）：
+   * 普通 JSON 数组形态直接取 title/url；<js> / @js: 动态规则本地无法求值，返回空。
+   */
+  private parseExploreKinds(exploreUrl: string): DebugExample[] {
+    const raw: string = exploreUrl.trim();
+    const result: DebugExample[] = [];
+    if (raw.length === 0) return result;
+    if (!raw.startsWith('[')) return result;
+    try {
+      const kinds = JSON.parse(raw) as Object[];
+      for (const kind of kinds) {
+        if (kind === null || typeof kind !== 'object') continue;
+        const item = kind as Record<string, Object>;
+        const title = item['title'];
+        const url = item['url'];
+        if (typeof title !== 'string' || title.length === 0) continue;
+        if (typeof url !== 'string' || url.trim().length === 0) continue;
+        result.push({ title: title, target: 'Explore', value: url.trim() });
+      }
+    } catch (_) {
+      return result;
+    }
+    return result;
+  }
+
+  /** 上游 :68 `.distinctBy { it.target to it.value }`。 */
+  private distinctExamples(list: DebugExample[]): DebugExample[] {
+    const seen: string[] = [];
+    const result: DebugExample[] = [];
+    for (const item of list) {
+      const key: string = item.target + '::' + item.value;
+      if (seen.indexOf(key) >= 0) continue;
+      seen.push(key);
+      result.push(item);
+    }
+    return result;
   }
 
   private visibleEntries(): DebugEntry[] {
@@ -150,6 +280,10 @@ export struct BookSourceDebugPage {
       this.onUnavailableAction('调试内容不能为空');
       return;
     }
+    // 对齐上游 ViewModel.kt:90：开始前清空日志（entries = persistentListOf()）。
+    DebugEventBus.clear();
+    this.entries = [];
+    this.selectedId = -1;
     this.status = 'Running';
     const result: DebugRunResult = await BookSourceDebugCoordinator.run(
       this.sourceUrl, this.target, this.query);
@@ -173,27 +307,9 @@ export struct BookSourceDebugPage {
     this.query = example.value;
   }
 
-  @Builder ChipBuilder(label: string, selected: boolean, onSelect: () => void) {
-    Row() {
-      // 对齐上游 ToggleChip.kt:75-88：选中时才出现 16dp 的 Check，未选不占位。
-      if (selected) {
-        AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorAccent })
-          .margin({ right: 8 })
-      }
-      Text(label)
-        .fontSize(LABEL_MEDIUM)
-        .fontWeight(FontWeight.Medium)
-        // 对齐上游 ToggleChip：选中=primaryContainer 底 + onPrimaryContainer 字，未选=surface 底 + onSurface 字。
-        .fontColor(selected ? this.themeColorOnPrimaryContainer : this.themeColorTextPrimary)
-    }
-    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-    .backgroundColor(selected ? this.themeColorPrimaryContainer : this.themeColorSurfaceTertiary)
-    .borderRadius(12)
-    .margin({ right: 8, top: 2, bottom: 2 })
-    .onClick(onSelect)
-  }
-
-  /** 条目容器色：对齐上游 BookSourceDebugScreen.kt:225-233 按 kind 分支。 */
+  /**
+   * 条目容器色：对齐上游 BookSourceDebugScreen.kt:225-233 按 kind 分支。
+   */
   private entryContainer(kind: DebugEventKind): string {
     if (kind === 'Message') return this.themeColorSurfaceElevated;
     if (kind === 'Error') return this.themeColorErrorContainer;
@@ -277,7 +393,8 @@ export struct BookSourceDebugPage {
   build() {
     Column() {
       AppTopBar({
-        title: '调试 · ' + this.sourceName,
+        // 上游 BookSourceDebugScreen.kt:73 title = "调试"，不带源名（源名在 controls 卡片里居中显示）。
+        title: '调试',
         hasNavigation: true,
         navigationIcon: () => { this.debugNavSlot() },
         actions: () => { this.debugActionsSlot() }
@@ -301,14 +418,19 @@ export struct BookSourceDebugPage {
               Scroll() {
                 Row() {
                   ForEach(DEBUG_TARGETS, (t: DebugTarget) => {
-                    this.ChipBuilder(targetTitle(t), this.target === t, () => { this.target = t; })
+                    DebugChip({
+                      label: targetTitle(t),
+                      selected: this.target === t,
+                      onSelect: () => { this.target = t; }
+                    })
                   }, (t: DebugTarget): string => t)
                 }
               }.scrollBar(BarState.Off).width('100%')
 
               // 上游 :183-190 AppTextField(label=target.hint, maxLines=4, Loading 时禁用)；
               // 底色取 AppTextField 默认的 surfaceContainerHigh，比卡片壳高一档。
-              TextInput({ placeholder: targetHint(this.target), text: this.query })
+              // text 必须绑 this.query：否则点示例 chip 后输入框不跟着变（上游是 TextFieldState 受控）。
+              TextInput({ text: this.query, placeholder: targetHint(this.target) })
                 .width('100%')
                 .fontColor(this.themeColorTextPrimary)
                 .backgroundColor(this.themeColorSurfaceElevated).borderRadius(8)
@@ -321,8 +443,11 @@ export struct BookSourceDebugPage {
                 Scroll() {
                   Row() {
                     ForEach(this.visibleExamples(), (ex: DebugExample) => {
-                      this.ChipBuilder(ex.title, this.target === ex.target && this.query === ex.value,
-                        () => { this.useExample(ex); })
+                      DebugChip({
+                        label: ex.title,
+                        selected: this.target === ex.target && this.query === ex.value,
+                        onSelect: () => { this.useExample(ex); }
+                      })
                     }, (ex: DebugExample): string => ex.title)
                   }
                 }.scrollBar(BarState.Off).width('100%')
@@ -340,7 +465,11 @@ export struct BookSourceDebugPage {
             Scroll() {
               Row() {
                 ForEach(DEBUG_FILTERS, (f: DebugFilter) => {
-                  this.ChipBuilder(filterTitle(f), this.filter === f, () => { this.filter = f; })
+                  DebugChip({
+                    label: filterTitle(f),
+                    selected: this.filter === f,
+                    onSelect: () => { this.filter = f; }
+                  })
                 }, (f: DebugFilter): string => f)
               }
             }.scrollBar(BarState.Off).width('100%')
@@ -350,14 +479,16 @@ export struct BookSourceDebugPage {
             ListItem() {
               // 上游 :123-131 空态用 EmptyMessage：笑脸 + 消息居中、高度 240dp。
               Column({ space: 8 }) {
-                Text('(๑•́ ₃ •̀๑)')
+                // 上游 EmptyMessage.kt:38-72：七张脸里随机取一张，点一下换一张。
+                Text(this.face)
                   .fontSize(32).fontColor(this.themeColorTextTertiary)
                   .textAlign(TextAlign.Center)
+                  .onClick(() => { this.face = DEBUG_FACES[Math.floor(Math.random() * DEBUG_FACES.length)]; })
                 Text(this.status === 'Running' ? '等待调试日志…' : '输入内容并开始调试')
                   .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
                   .fontColor(this.themeColorTextTertiary)
                   .textAlign(TextAlign.Center).maxLines(2)
-                  .width('100%')
+                  .constraintSize({ maxWidth: 240 })
               }
               .width('100%').height(240)
               .justifyContent(FlexAlign.Center)

@@ -14,6 +14,11 @@ export interface UiMenuItem {
   disabled?: boolean;
   /** 左端图标，对齐上游 RoundDropdownMenuItem 的 leadingIcon。 */
   icon?: AppGlyphName;
+  /**
+   * 分隔线项：对齐上游 PillDivider()。为 true 时 title 被忽略，只画一条居中的短横线。
+   * 上游把它作为一个独立子项插在菜单项之间（BookSourceScreen.kt:555）。
+   */
+  divider?: boolean;
 }
 
 /** 容器圆角，对齐上游 shapes.medium。 */
@@ -43,6 +48,14 @@ const MENU_DISABLED_OPACITY: number = 0.38;
 const MENU_MAX_SCREEN_RATIO: number = 0.7;
 /** 面板阴影半径，对齐上游 RoundDropdownMenu.kt:57 的 `shadowElevation = 4.dp`。 */
 const MENU_SHADOW_RADIUS: number = 4;
+/** 分隔线粗细，对齐上游 PillDivider.kt:23 `thickness: Dp = 2.dp`。 */
+const MENU_DIVIDER_THICKNESS: number = 2;
+/** 分隔线宽度占面板比例，对齐上游 PillDivider.kt:24 `widthFraction: Float = 0.2f`。 */
+const MENU_DIVIDER_WIDTH_FRACTION: number = 0.2;
+/** 分隔线上下留白，对齐上游 PillDivider.kt:46 `padding(vertical = 4.dp)`。 */
+const MENU_DIVIDER_PADDING_V: number = 4;
+/** 分隔线颜色不透明度，对齐上游 PillDivider.kt:25 `outlineVariant.copy(alpha = 0.6f)`。 */
+const MENU_DIVIDER_ALPHA: string = '99';
 
 /**
  * 卡片式菜单面板。
@@ -63,6 +76,8 @@ export struct UiMenuPanel {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#4C6FFF';
+  /** 分隔线颜色：对齐上游 outlineVariant（PillDivider.kt:25）。 */
+  @StorageProp('themeColorOutlineVariant') themeColorOutlineVariant: string = '#C4C6D0';
 
   /** 高度上限按屏高 70% 算，保证 19 项的长菜单不会顶出屏幕。 */
   private maxPanelHeight(): number {
@@ -122,11 +137,30 @@ export struct UiMenuPanel {
     })
   }
 
+  /** 分隔线：对齐上游 PillDivider —— 上下各 4 留白，中间一条占面板宽 20%、粗 2、圆头的短横线。 */
+  @Builder
+  DividerRow() {
+    Row() {
+      Row()
+        .width(`${MENU_DIVIDER_WIDTH_FRACTION * 100}%`)
+        .height(MENU_DIVIDER_THICKNESS)
+        .borderRadius(MENU_DIVIDER_THICKNESS / 2)
+        .backgroundColor(this.themeColorOutlineVariant + MENU_DIVIDER_ALPHA)
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+    .padding({ top: MENU_DIVIDER_PADDING_V, bottom: MENU_DIVIDER_PADDING_V })
+  }
+
   build() {
     Scroll() {
       Column({ space: MENU_ITEM_GAP }) {
         ForEach(this.items, (item: UiMenuItem) => {
-          this.MenuItemRow(item)
+          if (item.divider === true) {
+            this.DividerRow()
+          } else {
+            this.MenuItemRow(item)
+          }
         }, (item: UiMenuItem) => item.key)
       }
       .width('100%')

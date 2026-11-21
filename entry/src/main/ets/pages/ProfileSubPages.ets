@@ -126,6 +126,16 @@ export struct BookSourceManagePage {
   @StorageProp('themeColorOutlineVariant') themeColorOutlineVariant: string = '#C4C6D0';
   /** filled Button 的文字色（onPrimary）。 */
   @StorageProp('themeColorOnPrimary') themeColorOnPrimary: string = '#FFFFFF';
+  /** 选择底栏主按钮（FilledIconButton）的容器/内容色，上游取 secondaryContainer/onSecondaryContainer。 */
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#404A33';
+  @StorageProp('themeColorOnSecondaryContainer') themeColorOnSecondaryContainer: string = '#DCE7C8';
+  // 分组筛选项选中态用（上游 GroupFilterItem :1015-1029 的 primaryContainer / onPrimaryContainer）。
+  @StorageProp('themeColorPrimaryContainer') themeColorPrimaryContainer: string = '#2B4B8C';
+  @StorageProp('themeColorOnPrimaryContainer') themeColorOnPrimaryContainer: string = '#DCE3FF';
+  /** 系统状态栏高度（vp），由 pages/Index.ets 的 publishAppTopInset() 广播；顶栏据此下移。 */
+  @StorageProp('appTopInset') appTopInset: number = 0;
+  /** 系统底部导航区高度（vp），由 pages/Index.ets 的 publishAppBottomInset() 广播；浮动工具栏据此上移。 */
+  @StorageProp('appBottomInset') appBottomInset: number = 0;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -519,6 +529,60 @@ export struct BookSourceManagePage {
     this.selectedUrls = next;
   }
 
+  /**
+   * 全选：上游 SelectionBottomBar.kt:175-180 的 leadingContent 第一个按钮（SelectAll）。
+   * 范围与「全选当前筛选结果」一致——只选用户眼前列表里的书源，不含被筛选掉的行。
+   */
+  private selectAllSources(): void {
+    const next = new Set<string>(this.selectedUrls);
+    this.visibleSourceRows.forEach((row: SourceRow) => next.add(row.source.bookSourceUrl));
+    this.selectedUrls = next;
+  }
+
+  /**
+   * 反选：上游 SelectionBottomBar.kt:181-186 的 leadingContent 第二个按钮（Refresh）。
+   * 在当前筛选结果内取差集，与列表范围保持一致。
+   */
+  private invertSelectionSources(): void {
+    const next = new Set<string>();
+    this.visibleSourceRows.forEach((row: SourceRow) => {
+      const url = row.source.bookSourceUrl;
+      if (!this.selectedUrls.has(url)) { next.add(url); }
+    });
+    this.selectedUrls = next;
+  }
+
+  /**
+   * 批量删除确认：上游 RuleListScaffold.kt:40-52 的 AppAlertDialog
+   * （title=delete「删除」、text=sure_del「是否确认删除?」、confirm=ok、dismiss=cancel），
+   * 确认后才真正删除所选书源。
+   */
+  private confirmDeleteSelection(): void {
+    const count = this.selectedUrls.size;
+    if (count === 0) { return; }
+    this.getUIContext().showAlertDialog({
+      title: '删除',
+      message: '是否确认删除?',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认',
+        action: () => { this.deleteSelection(); }
+      },
+      secondaryButton: {
+        value: '取消',
+        fontColor: this.themeColorTextTertiary,
+        action: () => {}
+      }
+    });
+  }
+
+  /** 删除所有选中书源，完成后退出多选。 */
+  private async deleteSelection(): Promise<void> {
+    const next = this.allSources.filter((item: BookSource) => !this.selectedUrls.has(item.bookSourceUrl));
+    await this.commitSources(next);
+    this.exitSelectionMode();
+  }
+
   /** 批量导出为 JSON 文件。 */
   private async exportSelection(): Promise<void> {
     const selected = this.allSources.filter((item: BookSource) => this.selectedUrls.has(item.bookSourceUrl));
@@ -704,13 +768,6 @@ export struct BookSourceManagePage {
     else if (key === 'export') { this.exportSelection(); this.exitSelectionMode(); }
   }
 
-  private groupFilterOptions(): string[] {
-    const options: string[] = ['全部', '启用', '禁用', '需要登录', '未分组', '发现已启用', '发现未启用'];
-    this.groups.forEach((group: string) => options.push(group));
-    return options.filter((option: string) => this.groupFilterQuery.length === 0 ||
-      option.toLowerCase().includes(this.groupFilterQuery.toLowerCase()));
-  }
-
   @Builder
   private MoreMenu() {
     UiMenuPanel({
@@ -720,27 +777,39 @@ export struct BookSourceManagePage {
     })
   }
 
+  /**
+   * 更多菜单：逐项照抄上游 BookSourceScreen.kt:528-581 的 dropDownMenuContent 顺序与文案。
+   * 上游共 5 项功能 + PillDivider + 8 项排序，无「导出全部」（上游导出只在批量选择里，:519-522）。
+   * 文案取自 values-zh-rCN/strings.xml：网络导入/按域名分组显示/智能排序/地址排序/
+   * 更新时间排序/响应时间排序/是否启用/反序。
+   */
   private srcMoreItems(): UiMenuItem[] {
     return [
       { key: 'groups', title: '分组管理' },
       { key: 'import_local', title: '本地导入' },
       { key: 'import_qrcode', title: '二维码导入' },
-      { key: 'import_online', title: '在线导入' },
-      { key: 'export_all', title: '导出全部' },
-      { key: 'group_by_domain', title: this.groupByDomain ? '取消按域名分组' : '按域名分组' },
+      { key: 'import_online', title: '网络导入' },
+      // 上游是「固定文案 + isSelected」，不是切换文案。
+      { key: 'group_by_domain', title: '按域名分组显示', selected: this.groupByDomain },
+      // 对齐上游 PillDivider()（:555）：插在功能项与排序项之间。
+      { key: 'divider', title: '', divider: true },
       { key: 'sort_manual', title: '手动排序', selected: this.sortMode === '手动排序' },
-      { key: 'sort_weight', title: '权重排序', selected: this.sortMode === '权重排序' },
+      { key: 'sort_weight', title: '智能排序', selected: this.sortMode === '权重排序' },
       { key: 'sort_name', title: '名称排序', selected: this.sortMode === '名称排序' },
-      { key: 'sort_url', title: 'URL 排序', selected: this.sortMode === 'URL 排序' },
-      { key: 'sort_update', title: '按更新时间排序', selected: this.sortMode === '按更新时间排序' },
-      { key: 'sort_response', title: '按响应时间排序', selected: this.sortMode === '按响应时间排序' },
-      { key: 'sort_enabled', title: '按启用状态排序', selected: this.sortMode === '按启用状态排序' },
-      { key: 'descending', title: this.sortDescending ? '切换为升序' : '切换为降序' }
+      { key: 'sort_url', title: '地址排序', selected: this.sortMode === 'URL 排序' },
+      { key: 'sort_update', title: '更新时间排序', selected: this.sortMode === '按更新时间排序' },
+      { key: 'sort_response', title: '响应时间排序', selected: this.sortMode === '按响应时间排序' },
+      { key: 'sort_enabled', title: '是否启用', selected: this.sortMode === '按启用状态排序' },
+      // 上游 isSelected = !state.sortAscending，本地 sortDescending 即降序。
+      { key: 'descending', title: '反序', selected: this.sortDescending }
     ];
   }
 
   private onSrcMoreSelect(key: string): void {
-    if (key === 'groups') {
+    // 分隔线项不可点（UiMenuPanel 里也只画线），这里兜底忽略。
+    if (key === 'divider') {
+      return;
+    } else if (key === 'groups') {
       this.onUnavailableAction('书源分组管理尚未迁移，未修改分组');
     } else if (key === 'import_local') {
       this.importFromLocalFile();
@@ -750,8 +819,6 @@ export struct BookSourceManagePage {
       this.importOnlineUrl = '';
       this.importStage = 'online';
       this.importVisible = true;
-    } else if (key === 'export_all') {
-      this.exportAllSources();
     } else if (key === 'group_by_domain') {
       this.groupByDomain = !this.groupByDomain;
     } else if (key === 'sort_manual') {
@@ -775,17 +842,16 @@ export struct BookSourceManagePage {
 
   // ---------- P4 UI Builders ----------
 
-  /** 三种面板（分组筛选、批量、分组名输入）合并到一个 bindSheet 的内容。 */
+  /** 两个面板（分组筛选、导入）合并到一个 bindSheet 的内容。 */
   @Builder
   private SourceSheetContent() {
     if (this.importVisible) {
       this.ImportDialog()
-    } else if (this.batchPanelVisible) {
-      this.BatchPanel()
     } else if (this.showGroupFilter) {
       this.GroupFilterSheet()
     }
-    // 自定义源分组对话框改用系统 openCustomDialog（见 PromptDialogContent），不再占这个 bindSheet。
+    // 批量菜单改挂 SelectionBottomBar 的 MoreVert bindPopup（见 build 里的浮动工具栏），不再占这个 bindSheet。
+    // 自定义源分组对话框改用系统 openCustomDialog（见 PromptDialogContent），也不占这个 bindSheet。
   }
 
   /**
@@ -816,7 +882,8 @@ export struct BookSourceManagePage {
     const enabledState = row.source.enabled ? '已启用' : '已禁用';
     const discoveryState = row.hasExplore ? (row.exploreEnabled ? '已启用发现' : '已禁用发现') : '';
     const reorderHint = this.canReorder() ? '长按并拖动可排序' : '';
-    return [name, domain, group, enabledState, discoveryState, reorderHint]
+    // 上游 :625-633 的 listOfNotNull 顺序里 checkMessage 在 discoveryState 之后、reorderHint 之前。
+    return [name, domain, group, enabledState, discoveryState, row.checkMessage, reorderHint]
       .filter((part: string) => part.length > 0)
       .join(', ');
   }
@@ -843,60 +910,75 @@ export struct BookSourceManagePage {
       }
       Column() {
         Row() {
+          // 上游 SelectionItemCard.kt:191/226 行标题用 LegadoTheme.typography.titleSmall；
+          // Typography.kt:30 里 titleSmall = miuixStyles.subtitle「14.sp, Bold」，即字号 14 且加粗。
+          // 本地此前用 TITLE_MEDIUM(16) 且无字重，两处都不对。
           Text(row.source.bookSourceName.length > 0 ? row.source.bookSourceName : row.source.bookSourceUrl)
-            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1).layoutWeight(1)
-          // 上游 BookSourceScreen.kt:661-663 仅 hasExploreUrl 时画 DiscoveryIndicator，
-          // 颜色直接取上游 colors_material_design.xml 的 md_green_500(#4CAF50) / md_red_400(#EF5350)
-          // （:826-838 绿=已启用发现 / 红=已禁用发现），本地同名资源见 resources/*/element/color.json。
-          if (row.hasExplore) {
-            Row().width(8).height(8).borderRadius(4)
-              .backgroundColor(row.exploreEnabled ? $r('app.color.md_green_500') : $r('app.color.md_red_400'))
-              .margin({ left: 6 })
-              .accessibilityText(row.exploreEnabled ? '已启用发现' : '已禁用发现')
-          }
+            .fontSize(TITLE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
         }.width('100%')
-        if (row.domain.length > 0 || (row.source.bookSourceGroup ?? '').length > 0) {
-          Row() {
-            if (row.domain.length > 0) {
-              Text(row.domain).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
+        // 上游 BookSourceScreen.kt:653-684 supportingContent：Row(spacedBy6) 首位是 DiscoveryIndicator，
+        // 其后 Column 竖排 group 与 checkMessage；渲染条件是 group/checkMessage/hasExploreUrl 任一非空。
+        // 上游行内**不显示域名**（域名只用于 groupByDomain 的分组头），故本地也不画。
+        // 圆点颜色直接取上游 colors_material_design.xml 的 md_green_500(#4CAF50) / md_red_400(#EF5350)
+        // （:826-838 绿=已启用发现 / 红=已禁用发现），本地同名资源见 resources/*/element/color.json。
+        if ((row.source.bookSourceGroup ?? '').length > 0 || row.hasExplore || row.checkMessage.length > 0) {
+          Row({ space: 6 }) {
+            if (row.hasExplore) {
+              Row().width(8).height(8).borderRadius(4)
+                .backgroundColor(row.exploreEnabled ? $r('app.color.md_green_500') : $r('app.color.md_red_400'))
+                .accessibilityText(row.exploreEnabled ? '已启用发现' : '已禁用发现')
             }
-            if ((row.source.bookSourceGroup ?? '').length > 0) {
-              Text(row.source.bookSourceGroup as string).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
-                .maxLines(1).margin({ left: 8 })
-            }
-          }.width('100%').margin({ top: 5 })
-        }
-        // 上游 :673-678 checkMessage 与 group 并列、同为 bodySmall：校验结果文案常驻行上。
-        if (row.checkMessage.length > 0) {
-          Text(row.checkMessage).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
-            .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%').margin({ top: 5 })
+            Column() {
+              if ((row.source.bookSourceGroup ?? '').length > 0) {
+                Text(row.source.bookSourceGroup as string).fontSize(BODY_SMALL)
+                  .fontColor(this.themeColorTextTertiary).maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              // 上游 :673-678 checkMessage 与 group 并列、同为 bodySmall：校验结果文案常驻行上。
+              if (row.checkMessage.length > 0) {
+                Text(row.checkMessage).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
+                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          }.width('100%').alignItems(VerticalAlign.Center).margin({ top: 5 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      UiSwitchControl({ checked: row.source.enabled, interactive: false, scaleValue: 0.8 })
-        .onClick(() => this.toggleSource(row.source, !row.source.enabled))
-      // 上游 BookSourceScreen.kt:700-704 行尾编辑快捷按钮，点击复用已有 edit 分发。
-      Stack({ alignContent: Alignment.Center }) {
-        AppGlyph({ name: 'edit', glyphSize: 18, tint: this.themeColorTextTertiary })
-      }.width(40).height(40).margin({ left: 4 })
-        .accessibilityText('编辑')
-        .onClick(() => this.onSourceRowAction('edit', row))
-      AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary }).margin({ left: 4 })
-        .onClick(() => { this.menuRowUrl = row.source.bookSourceUrl; })
-        .accessibilityText('菜单')
-        .bindPopup(this.menuRowUrl === row.source.bookSourceUrl, {
-          builder: () => { this.SourceRowMenu(row); },
-          placement: Placement.BottomRight,
-          popupColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
-          enableArrow: false,
-          autoCancel: true,
-          width: PROFILE_MENU_WIDTH,
-          onStateChange: (event: PopupStateChangeParam) => {
-            if (!event.isVisible) { this.menuRowUrl = ''; }
-          }
-        })
-    }.width('100%').padding({ left: 16, right: 12, top: 11, bottom: 11 })
-      .backgroundColor(this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)
+      // 上游 SelectionItemCardContent 的右侧 Row 是 `spacedBy(8) + padding(end = 8.dp)`
+      // （SelectionItemCard.kt:240-247），本地此前是左侧逐个 margin left 4，累计间距不等。
+      Row({ space: 8 }) {
+        UiSwitchControl({ checked: row.source.enabled, interactive: false, scaleValue: 0.8 })
+          .onClick(() => this.toggleSource(row.source, !row.source.enabled))
+        // 上游 BookSourceScreen.kt:700-704 行尾编辑快捷按钮，点击复用已有 edit 分发。
+        Stack({ alignContent: Alignment.Center }) {
+          AppGlyph({ name: 'edit', glyphSize: 18, tint: this.themeColorTextTertiary })
+        }.width(40).height(40)
+          .accessibilityText('编辑')
+          .onClick(() => this.onSourceRowAction('edit', row))
+        AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary })
+          .onClick(() => { this.menuRowUrl = row.source.bookSourceUrl; })
+          .accessibilityText('菜单')
+          .bindPopup(this.menuRowUrl === row.source.bookSourceUrl, {
+            builder: () => { this.SourceRowMenu(row); },
+            placement: Placement.BottomRight,
+            popupColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+            enableArrow: false,
+            autoCancel: true,
+            width: PROFILE_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => {
+              if (!event.isVisible) { this.menuRowUrl = ''; }
+            }
+          })
+      }.padding({ right: 8 })
+      // 上游 M3 ListItemDefaults.contentPadding = 水平 16 / 垂直 12（SelectionItemCard.kt:208-232 的
+      // ListItem 用它，GlassCard 本身无内边距），本地此前是 16/12/11/11，垂直少 1。
+    }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      // 上游 SelectionItemCard.kt:82-91：未选=surfaceContainerLow(M3)/surfaceContainer(Miuix)，
+      // 选中=secondaryContainer；本地此前选中态与普通态同色，看不出选中。
+      .backgroundColor(this.selectedUrls.has(row.source.bookSourceUrl)
+        ? this.themeColorSecondaryContainer
+        : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
       .borderRadius(12)
       .accessibilityText(this.rowAccessibilitySummary(row))
       .gesture(LongPressGesture().onAction(() => {
@@ -949,27 +1031,20 @@ export struct BookSourceManagePage {
   }
 
   /**
-   * 多选批量面板：11 项一项不删（上游 selectionSecondaryActions，BookSourceScreen.kt:455-523），
-   * 仅把自绘竖排 Column 换成 UiMenuPanel（M3 RoundDropdownMenu 同款圆角卡片）。
-   * 头部保留「选中 N 项」计数（对应上游 SelectionBottomBar 的计数）。
+   * 多选批量面板：11 项一项不删（上游 selectionSecondaryActions，BookSourceScreen.kt:455-523）。
+   * 上游是从 SelectionBottomBar 的 MoreVert 弹出 RoundDropdownMenu，菜单里**只有这 11 项**，
+   * 没有「已选 N 项」标题（计数显示在顶栏 list_selected_count），故本地也去掉该标题。
    */
   @Builder
   private BatchPanel() {
-    Column() {
-      Text(`已选 ${this.selectedUrls.size} 项`)
-        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
-        .fontColor(this.themeColorTextPrimary)
-        .width('100%').padding({ left: 20, right: 20, top: 16, bottom: 12 })
-      UiMenuPanel({
-        items: this.batchMenuItems(),
-        panelWidth: PROFILE_MENU_WIDTH,
-        onSelect: (key: string) => {
-          this.batchPanelVisible = false;
-          this.onBatchAction(key);
-        }
-      })
-      .width('100%')
-    }.width('100%').padding({ bottom: 20 })
+    UiMenuPanel({
+      items: this.batchMenuItems(),
+      panelWidth: PROFILE_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.batchPanelVisible = false;
+        this.onBatchAction(key);
+      }
+    }).width('100%')
   }
 
   /** 批量动作 11 项，顺序照上游 BookSourceScreen.kt:455-523 的 selectionSecondaryActions。 */
@@ -1144,70 +1219,140 @@ export struct BookSourceManagePage {
     }.width('100%').padding({ top: 10, bottom: 10 })
   }
 
+  /**
+   * 分组筛选：照上游 BookSourceScreen.kt:916-985 的 BookSourceGroupFilterSheet。
+   * 上游形态 = AppModalBottomSheet(title=menu_action_group「分组」) 内
+   * SearchBar(placeholder=search_placeholder「搜索…」) + LazyVerticalGrid(2 列, 水平间距 8, 垂直间距 6)，
+   * 两个分区标题「默认分组」(:966 book_source_default_groups) 与「其他分组」(:976 book_source_other_groups)，
+   * 每项 GroupFilterItem(:1001-1035) = 高 min 48 / 圆角 12 / 选中 primaryContainer + onPrimaryContainer /
+   * 未选 onSheetContent(=surface) + onSurface / 文字 labelMediumEmphasized 居中。
+   * 本地原先是一列自绘列表（选中底色 '#41485D'、右侧打勾、带「清除」按钮），与上游不同，此处重做。
+   * 上游没有「清除」按钮（点「全部」即清除筛选），故移除。
+   */
   @Builder
   private GroupFilterSheet() {
     Column() {
+      Text('分组').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextPrimary).width('100%')
+        .padding({ left: 20, right: 20, top: 20, bottom: 12 })
       Row() {
-        Text('分组筛选').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('清除').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding({ left: 12, right: 8, top: 8, bottom: 8 })
-          .onClick(() => { this.selectedGroup = ''; this.groupFilterQuery = ''; this.showGroupFilter = false; })
-      }.width('100%').padding({ left: 20, right: 16, top: 20, bottom: 12 })
-      Row() {
-        AppGlyph({ name: 'search', glyphSize: 18, tint: '#C5C7D0' }).margin({ right: 9 })
-        TextInput({ placeholder: '搜索分组', text: this.groupFilterQuery })
+        AppGlyph({ name: 'search', glyphSize: 18, tint: this.themeColorTextTertiary }).margin({ right: 9 })
+        TextInput({ placeholder: '搜索…', text: this.groupFilterQuery })
           .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(Color.Transparent).layoutWeight(1)
           .onChange((value: string) => this.groupFilterQuery = value)
-      }.margin({ left: 16, right: 16, bottom: 10 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
-        .backgroundColor('#25262D').borderRadius(22)
+      }.margin({ left: 16, right: 16, bottom: 8 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
+        .backgroundColor(this.themeColorSurfaceElevated).borderRadius(22)
       Scroll() {
         Column() {
-          ForEach(this.groupFilterOptions(), (option: string) => {
-            Row() {
-              Text(option).fontSize(TITLE_MEDIUM).fontColor(this.selectedGroup === option ? '#DCE3FF' : this.themeColorTextSecondary)
-                .layoutWeight(1)
-              if (this.selectedGroup === option) {
-                AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: this.themeColorAccent })
-              }
-            }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
-              .backgroundColor(this.selectedGroup === option ? '#41485D' : this.themeColorSurfaceTertiary).borderRadius(12)
-              .margin({ left: 16, right: 16, bottom: 7 })
-              .onClick(() => {
-                this.selectedGroup = option === '全部' ? '' : option;
-                this.showGroupFilter = false;
-              })
-          }, (option: string) => option)
+          if (this.defaultFilterOptions().length > 0) {
+            // 上游 GroupFilterSectionTitle(:988-998)：labelMedium / onSurfaceVariant / padding 水平4 垂直6。
+            Text('默认分组').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+              .width('100%').padding({ left: 4, right: 4, top: 6, bottom: 6 })
+              .accessibilityText('默认分组')
+            Grid() {
+              ForEach(this.defaultFilterOptions(), (option: string) => {
+                GridItem() { this.GroupFilterItemView(option) }
+              }, (option: string) => option)
+            }
+            .columnsTemplate('1fr 1fr').columnsGap(8).rowsGap(6).width('100%')
+          }
+          if (this.otherFilterOptions().length > 0) {
+            Text('其他分组').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+              .width('100%').padding({ left: 4, right: 4, top: 6, bottom: 6 })
+              .accessibilityText('其他分组')
+            Grid() {
+              ForEach(this.otherFilterOptions(), (option: string) => {
+                GridItem() { this.GroupFilterItemView(option) }
+              }, (option: string) => option)
+            }
+            .columnsTemplate('1fr 1fr').columnsGap(8).rowsGap(6).width('100%')
+          }
         }.width('100%').padding({ top: 4, bottom: 22 })
       }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
+  /** 单个筛选项：上游 GroupFilterItem(:1001-1035) 的等价物。 */
+  @Builder
+  private GroupFilterItemView(option: string) {
+    Text(option)
+      .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
+      .fontColor(this.selectedGroup === option ? this.themeColorOnPrimaryContainer : this.themeColorTextPrimary)
+      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
+      .width('100%').constraintSize({ minHeight: 48 })
+      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+      .backgroundColor(this.selectedGroup === option ? this.themeColorPrimaryContainer : this.themeColorSurfacePrimary)
+      .borderRadius(12)
+      .accessibilityText(this.selectedGroup === option ? option + '，已选择' : option)
+      .onClick(() => {
+        this.selectedGroup = option === '全部' ? '' : option;
+        this.showGroupFilter = false;
+      })
+  }
+
+  /** 上游 :923-931 defaultOptions 的七项固定筛选。 */
+  private defaultFilterOptions(): string[] {
+    const all: string[] = ['全部', '启用', '禁用', '需要登录', '未分组', '发现已启用', '发现未启用'];
+    const query = this.groupFilterQuery.trim().toLowerCase();
+    if (query.length === 0) { return all; }
+    return all.filter((option: string) => option.toLowerCase().includes(query));
+  }
+
+  /** 上游 :932-934 otherOptions = 书源自带的各分组。 */
+  private otherFilterOptions(): string[] {
+    const query = this.groupFilterQuery.trim().toLowerCase();
+    if (query.length === 0) { return this.groups; }
+    return this.groups.filter((group: string) => group.toLowerCase().includes(query));
+  }
+
   build() {
     Column() {
       Row() {
+        // 上游 DynamicTopAppBar.kt:84-93：选择态导航图标换成 Close（contentDescription=cancel_select
+        // 「取消选择」），点击清空选择；非选择态是返回。
         Stack({ alignContent: Alignment.Center }) {
           Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
-          Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
-        }.width(40).height(40).onClick(() => this.onBack())
+          if (this.selectionMode) {
+            AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
+          } else {
+            Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
+          }
+        }.width(40).height(40)
+          .accessibilityText(this.selectionMode ? '取消选择' : '返回')
+          .onClick(() => { if (this.selectionMode) { this.exitSelectionMode(); } else { this.onBack(); } })
         Column() {
-          Text('书源').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-          Text(this.selectedGroup.length === 0 ? '全部' : this.selectedGroup)
-            .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          // 上游 :73-82 选择态标题换成 list_selected_count「已选择 %1$d/%2$d」。
+          Text(this.selectionMode
+            ? `已选择 ${this.selectedUrls.size}/${this.allSources.length}`
+            : '书源')
+            .fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+          if (!this.selectionMode) {
+            Text(this.selectedGroup.length === 0 ? '全部' : this.selectedGroup)
+              .fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          }
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
-          AppGlyph({ name: 'profileFilterAlt', glyphSize: 19, tint: this.themeColorTextSecondary })
-        }.width(40).height(40).onClick(() => { this.groupFilterQuery = ''; this.showGroupFilter = true; })
-        Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
-          AppGlyph({ name: 'search', glyphSize: 19, tint: this.themeColorTextSecondary })
-        }.width(40).height(40)
-          .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
-        Stack({ alignContent: Alignment.Center }) {
-          Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
-          AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
-        }.width(40).height(40)
-          .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
+        // 上游 DynamicTopAppBar.kt:97 选择态默认收起整个 actions 区（keepActionsInSelection=false）。
+        if (!this.selectionMode) {
+          // 顶栏按钮顺序照上游 DynamicTopAppBar.kt:95-123：搜索 → 分组(Filter) → 更多。
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
+            AppGlyph({ name: 'search', glyphSize: 19, tint: this.themeColorTextSecondary })
+          }.width(40).height(40)
+            .accessibilityText('搜索')
+            .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
+            AppGlyph({ name: 'profileFilterAlt', glyphSize: 19, tint: this.themeColorTextSecondary })
+          }.width(40).height(40)
+            .accessibilityText('分组')
+            .onClick(() => { this.groupFilterQuery = ''; this.showGroupFilter = true; })
+          Stack({ alignContent: Alignment.Center }) {
+            Row().width(36).height(36).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(18)
+            AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
+          }.width(40).height(40)
+            .accessibilityText('更多菜单')
+            .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
 .bindPopup(this.moreMenuVisible, {
   builder: this.MoreMenu,
   placement: Placement.BottomRight,
@@ -1217,7 +1362,8 @@ export struct BookSourceManagePage {
   width: PROFILE_MENU_WIDTH,
   onStateChange: (event: PopupStateChangeParam) => { this.moreMenuVisible = event.isVisible; }
 })
-      }.width('100%').padding({ left: 12, right: 12, top: 11, bottom: 9 })
+        }
+      }.width('100%').padding({ left: 12, right: 12, top: 11 + this.appTopInset, bottom: 9 })
 
       if (this.showSearch) {
         Row() {
@@ -1242,54 +1388,89 @@ export struct BookSourceManagePage {
         }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 5 })
       }
 
-      if (this.visibleSourceRows.length === 0) {
-        ModuleEmpty({
-          icon: 'web',
-          title: this.searchQuery.length > 0 ? '没有匹配的书源' : '暂无书源',
-          detail: this.searchQuery.length > 0 ? '调整关键词或筛选条件后重试' : '添加或导入书源后，会在这里显示书源名称、分组和启用状态'
-        }).layoutWeight(1)
-      } else {
-        Stack({ alignContent: Alignment.BottomEnd }) {
-          List({ space: 8, scroller: this.sourceScroller }) {
-            LazyForEach(this.sourceDataSource, (item: BookSourceListItem, index: number) => {
-              if (isDomainHeader(item)) {
-                ListItem() {
-                  this.DomainHeaderView((item as DomainHeaderItem).domain)
-                }
-              } else {
-                ListItem() {
-                  this.SourceRowView((item as SourceDataItem).row, index)
-                }
-                .swipeAction({ end: this.SourceSwipeEnd((item as SourceDataItem).row) })
+      // 上游 ListScaffold.kt 无空态分支（列表为空就是空白）；本地原有的 ModuleEmpty 空态属自加，已移除。
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        List({ space: 8, scroller: this.sourceScroller }) {
+          LazyForEach(this.sourceDataSource, (item: BookSourceListItem, index: number) => {
+            if (isDomainHeader(item)) {
+              ListItem() {
+                this.DomainHeaderView((item as DomainHeaderItem).domain)
               }
-            }, (item: BookSourceListItem) => isDomainHeader(item)
-              ? ('domain:' + (item as DomainHeaderItem).domain)
-              : (item as SourceDataItem).row.source.bookSourceUrl)
-            // onMove 挂在 ForEach/LazyForEach 上，仅手动排序非分组时可拖。
-            .onMove(this.canReorder() ? (from: number, to: number) => this.onSourceMove(from, to) : undefined)
-          }.layoutWeight(1).width('100%')
-            .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).scrollBar(BarState.Off)
+            } else {
+              ListItem() {
+                this.SourceRowView((item as SourceDataItem).row, index)
+              }
+              .swipeAction({ end: this.SourceSwipeEnd((item as SourceDataItem).row) })
+            }
+          }, (item: BookSourceListItem) => isDomainHeader(item)
+            ? ('domain:' + (item as DomainHeaderItem).domain)
+            : (item as SourceDataItem).row.source.bookSourceUrl)
+          // onMove 挂在 ForEach/LazyForEach 上，仅手动排序非分组时可拖。
+          .onMove(this.canReorder() ? (from: number, to: number) => this.onSourceMove(from, to) : undefined)
+        }.layoutWeight(1).width('100%')
+          // 上游 BookSourceScreen.kt:582-620 contentPadding bottom = 底部内边距 + 120.dp，
+          // 给 FAB / 浮动工具栏留出空间，最后一行不会被盖住。
+          .contentEndOffset(120)
+          .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).scrollBar(BarState.Off)
 
-          if (this.selectionMode) {
+        // 上游 ListScaffold.kt:70-148：FAB 用 animateFloatingActionButton(visible = selectedIds.isEmpty())，
+        // 选择态下 FAB 整个隐藏；底部改为 SelectionBottomBar（见下方浮动工具栏）。
+        if (!this.selectionMode) {
+          Row() {
+            Image($r('app.media.app_add')).width(18).height(18).fillColor(this.themeColorTextPrimary)
+            Text('添加书源').fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).margin({ left: 7 })
+          }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
+            .backgroundColor(this.themeColorAccent).borderRadius(28)
+            .margin({ right: 20, bottom: 18 + this.appBottomInset })
+            .onClick(() => this.onOpenSourceEdit(''))
+        }
+
+        // 上游 SelectionBottomBar.kt:170-247 M3 分支 = HorizontalFloatingToolbar：
+        // leadingContent 全选(SelectAll) + 反选(Refresh)，trailingContent MoreVert 弹 secondaryActions，
+        // content 是 64vp 宽的 FilledIconButton（containerColor=secondaryContainer）承载 primaryAction。
+        // 这里按同一形态自绘浮动工具栏；定位对齐 ListScaffold.kt 的 align(BottomCenter) + padding(bottom 16)。
+        if (this.selectionMode) {
+          Row({ space: 4 }) {
+            Stack({ alignContent: Alignment.Center }) {
+              AppGlyph({ name: 'selectAll', glyphSize: 20, tint: this.themeColorTextPrimary })
+            }.width(48).height(48).borderRadius(24)
+              .accessibilityText('全选')
+              .onClick(() => this.selectAllSources())
+            Stack({ alignContent: Alignment.Center }) {
+              AppGlyph({ name: 'profileRefresh', glyphSize: 20, tint: this.themeColorTextPrimary })
+            }.width(48).height(48).borderRadius(24)
+              .accessibilityText('反选')
+              .onClick(() => this.invertSelectionSources())
+            // primaryAction：上游 RuleListScaffold.kt:44-52 传 ActionItem(delete「删除」, Icons.Default.Delete)。
             Row() {
-              Text(`已选 ${this.selectedUrls.size} 项`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-              Text('批量操作').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
-                .onClick(() => { this.batchPanelVisible = true; })
-              Text('取消').fontSize(TITLE_SMALL).fontColor('#333').margin({ left: 16 })
-                .onClick(() => { this.selectionMode = false; this.selectedUrls = new Set<string>(); })
-            }.padding({ left: 18, right: 18, top: 12, bottom: 12 })
-              .backgroundColor(this.themeColorAccent).borderRadius(16)
-              .margin({ right: 16, bottom: 16 })
-          } else {
-            Row() {
-              Image($r('app.media.app_add')).width(18).height(18).fillColor(this.themeColorTextPrimary)
-              Text('添加书源').fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).margin({ left: 7 })
-            }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
-              .backgroundColor(this.themeColorAccent).borderRadius(28).margin({ right: 20, bottom: 18 })
-              .onClick(() => this.onOpenSourceEdit(''))
-          }
-        }.layoutWeight(1)
-      }
+              AppGlyph({ name: 'delete', glyphSize: 20, tint: this.themeColorOnSecondaryContainer })
+            }.width(64).height(48).justifyContent(FlexAlign.Center)
+              .backgroundColor(this.themeColorSecondaryContainer).borderRadius(24)
+              .accessibilityText('删除')
+              .onClick(() => this.confirmDeleteSelection())
+            // secondaryActions：MoreVert 打开 11 项批量菜单（上游 batchMenuItems 已对齐）。
+            Stack({ alignContent: Alignment.Center }) {
+              AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextPrimary })
+            }.width(48).height(48).borderRadius(24)
+              .accessibilityText('更多菜单')
+              .onClick(() => { this.batchPanelVisible = true; })
+              .bindPopup(this.batchPanelVisible, {
+                builder: this.BatchPanel,
+                placement: Placement.Top,
+                popupColor: '#00000000',
+                enableArrow: false,
+                autoCancel: true,
+                width: PROFILE_MENU_WIDTH,
+                onStateChange: (event: PopupStateChangeParam) => { this.batchPanelVisible = event.isVisible; }
+              })
+          }.padding({ left: 8, right: 8, top: 8, bottom: 8 })
+            .backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
+            .shadow({ radius: 12, color: '#33000000', offsetY: 2 })
+            // 上游 SelectionBottomBar 的 safeModifier 含 windowInsetsPadding(navigationBars)，
+            // 底栏要抬到系统导航区之上；上游 ListScaffold 的 padding(bottom = 16.dp + ScreenOffset) 也一并照做。
+            .margin({ bottom: 16 + this.appBottomInset })
+        }
+      }.layoutWeight(1)
       // 校验配置弹层：自带 bindSheet；确认后把草稿写回 checkOptions，并回到「运行」弹层
       // （上游 :379-382 onConfirm → UpdateCheckOptions + checkSheet = CheckSheet.Run）。
       SourceCheckSheet({
@@ -1314,9 +1495,10 @@ export struct BookSourceManagePage {
         }
       })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      // 一个组件只能挂一个 bindSheet（本项目已踩坑），三种面板合并按状态切换内容。
-      // 自定义源分组对话框走系统 openCustomDialog，不占这个 bindSheet。
-      .bindSheet(this.showGroupFilter || this.batchPanelVisible || this.importVisible,
+      // 一个组件只能挂一个 bindSheet（本项目已踩坑），分组筛选与导入合并按状态切换内容。
+      // 批量菜单走 SelectionBottomBar 的 MoreVert bindPopup（对齐上游 RoundDropdownMenu），不占这个 bindSheet；
+      // 自定义源分组对话框走系统 openCustomDialog，也不占这个 bindSheet。
+      .bindSheet(this.showGroupFilter || this.importVisible,
         this.SourceSheetContent(), {
           height: this.importVisible ? SheetSize.FIT_CONTENT : SheetSize.LARGE,
           dragBar: true,
