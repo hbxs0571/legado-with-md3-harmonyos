@@ -713,9 +713,8 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       'TXT 文本|.txt',
       'EPUB 电子书|.epub',
       'PDF 文档|.pdf',
-      // 批7（:1163）：.azw 与 .azw3 同属 MOBI 家族（formatFromFileName 认两者），
-      // 并成一项，避免用户在系统选择器里选不到 .azw。
-      'MOBI 电子书|.mobi,.azw,.azw3',
+      'MOBI 电子书|.mobi',
+      'AZW3 电子书|.azw3',
       'UMD 电子书|.umd',
       '压缩包|.zip,.cbz'
     ];
@@ -737,13 +736,6 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
     const fileName = BookRepository.getFileName(uri);
     const bookId = `local-${BookRepository.md5Encode16(uri)}`;
     const format = BookRepository.formatFromFileName(fileName);
-    // 批7（:1163，上游 BookInfoViewModel.kt:1501-1541 走 UnsupportedWebFile）：
-    // formatFromFileName 的兜底是 return 'txt'，未知后缀会被当成 UTF-8 文本解码，
-    // 静默产出一本乱码书。这里只拦「兜底成 txt 但后缀不认识」这一种，
-    // 压缩包（archive）与 .epub/.pdf/.mobi/.umd 全都不受影响。
-    if (format === 'txt' && !BookRepository.isSupportedBookFile(fileName)) {
-      throw new Error(`不支持的文件格式：${fileName}`);
-    }
     let created: CreatedLocalBook;
     if (format === 'epub') {
       const imported = await EpubRepository.importFromUri(context, uri, fileName, bookId);
@@ -1272,20 +1264,6 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
     // 老库 format 列可能是空串：按 bookUrl 后缀回推；压缩包不会直接成书，兜底成 txt。
     const byName = BookRepository.formatFromFileName(bookUrl);
     return byName === 'archive' ? 'txt' : byName;
-  }
-
-  /**
-   * 批7（:1163）：是否是本地能解析的书文件。
-   *
-   * 后缀清单与 `data/ArchiveImporter.ets:14 BOOK_SUFFIXES` 逐字一致 ——
-   * 压缩包内的书文件用同一份口径判，两处漂移就会出现「包里能导、单独选不能导」。
-   * `.zip/.cbz` 不算书文件：它们走 isArchiveUri，由压缩包链路处理。
-   */
-  private static isSupportedBookFile(fileName: string): boolean {
-    const lower = fileName.toLowerCase();
-    return lower.endsWith('.txt') || lower.endsWith('.epub') || lower.endsWith('.umd')
-      || lower.endsWith('.pdf') || lower.endsWith('.mobi') || lower.endsWith('.azw3')
-      || lower.endsWith('.azw');
   }
 
   /** 按文件名后缀判本地书形态，与上游 AppPattern.kt:46/48 两条正则同口径。 */
