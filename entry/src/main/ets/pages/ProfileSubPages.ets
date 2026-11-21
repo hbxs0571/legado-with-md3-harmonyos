@@ -65,12 +65,34 @@ class SourceRow {
   }
 }
 
+/**
+ * 列表项联合：按域名分组时，在每组第一条数据行前插一个标题项。
+ * 上游 BookSourceScreen.kt:594-605 用 contentType="domain-header" 区分两种 item；
+ * LazyForEach 的 keyGenerator 必须逐项唯一，标题项用 "domain:" 前缀避免与书源 URL 冲突。
+ */
+interface DomainHeaderItem {
+  kind: string;
+  domain: string;
+}
+
+interface SourceDataItem {
+  kind: string;
+  row: SourceRow;
+}
+
+type BookSourceListItem = DomainHeaderItem | SourceDataItem;
+
+// ArkTS 不支持 is 类型谓词（arkts-no-is），只返回 boolean，取值处用 as 强转。
+function isDomainHeader(item: BookSourceListItem): boolean {
+  return (item as DomainHeaderItem).kind === 'domain';
+}
+
 /** 书源列表的惰性数据源（904 条用 LazyForEach，本仓 CatalogPage:38 先例）。 */
 class SourceDataSource implements IDataSource {
-  private items: SourceRow[] = [];
+  private items: BookSourceListItem[] = [];
   private listeners: DataChangeListener[] = [];
   totalCount(): number { return this.items.length; }
-  getData(index: number): SourceRow { return this.items[index]; }
+  getData(index: number): BookSourceListItem { return this.items[index]; }
   registerDataChangeListener(listener: DataChangeListener): void {
     if (this.listeners.indexOf(listener) < 0) { this.listeners.push(listener); }
   }
@@ -78,7 +100,7 @@ class SourceDataSource implements IDataSource {
     const position = this.listeners.indexOf(listener);
     if (position >= 0) { this.listeners.splice(position, 1); }
   }
-  setItems(items: SourceRow[]): void {
+  setItems(items: BookSourceListItem[]): void {
     this.items = items;
     this.listeners.forEach((listener: DataChangeListener) => listener.onDataReloaded());
   }
@@ -87,6 +109,9 @@ class SourceDataSource implements IDataSource {
 @Component
 export struct BookSourceManagePage {
   @State moreMenuVisible: boolean = false;
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  // 发现指示器「已禁用发现」红点：本地无 md_red 语义令牌，复用 error 令牌（见报告差异说明）。
+  @StorageProp('themeColorError') themeColorError: string = '#FFB4AB';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -241,15 +266,24 @@ export struct BookSourceManagePage {
         BookSourceManagePage.domainOf(a).localeCompare(BookSourceManagePage.domainOf(b)));
     }
     const rows: SourceRow[] = [];
+    const items: BookSourceListItem[] = [];
+    let lastDomain: string | undefined = undefined;
     for (const source of list) {
       const domain = BookSourceManagePage.domainOf(source);
       const loginUrl = BookSourceManagePage.sourceField(source.sourceJson, 'loginUrl');
       const exploreUrl = BookSourceManagePage.sourceField(source.sourceJson, 'exploreUrl');
       const enabledExplore = BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') === 'true';
-      rows.push(new SourceRow(source, domain, loginUrl.length > 0, exploreUrl.length > 0, enabledExplore));
+      const row = new SourceRow(source, domain, loginUrl.length > 0, exploreUrl.length > 0, enabledExplore);
+      rows.push(row);
+      // 上游 BookSourceScreen.kt:594：分组开启且本行域名与上一行不同，先插一个域名标题项。
+      if (this.groupByDomain && domain !== lastDomain) {
+        items.push({ kind: 'domain', domain: domain } as DomainHeaderItem);
+        lastDomain = domain;
+      }
+      items.push({ kind: 'source', row: row } as SourceDataItem);
     }
     this.visibleSourceRows = rows;
-    this.sourceDataSource.setItems(rows);
+    this.sourceDataSource.setItems(items);
   }
 
   // ---------- P4 条目与批量操作 ----------
@@ -681,6 +715,39 @@ export struct BookSourceManagePage {
     }
   }
 
+  /**
+   * 域名分组标题：照抄上游 BookSourceScreen.kt:595-604 的
+   * titleSmall + colorScheme.primary + padding(horizontal=16.dp, vertical=8.dp) + semantics{heading()}。
+   * ArkUI SDK 无 accessibilityHeading 属性（声明文件零命中），故以文本本身作为无障碍标题朗读。
+   */
+  @Builder
+  private DomainHeaderView(domain: string) {
+    Text(domain)
+      .fontSize(TITLE_SMALL)
+      .fontColor(this.themeColorAccent)
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      .accessibilityText(domain)
+  }
+
+  /**
+   * 行无障碍摘要：逐项照抄上游 BookSourceScreen.kt:625-633 的 listOfNotNull 顺序——
+   * name / domain(!="#" 才取) / group / enabledState / discoveryState / checkMessage / reorderHint，
+   * 去空后用 ", " 连接（Kotlin joinToString() 默认分隔符）。
+   * 本地 SourceRow 无 checkMessage 字段，该项跳过（不改数据层，见报告「没做」）。
+   */
+  private rowAccessibilitySummary(row: SourceRow): string {
+    const name = row.source.bookSourceName;
+    const domain = row.domain === '#' ? '' : row.domain;
+    const group = row.source.bookSourceGroup ?? '';
+    const enabledState = row.source.enabled ? '已启用' : '已禁用';
+    const discoveryState = row.hasExplore ? (row.exploreEnabled ? '已启用发现' : '已禁用发现') : '';
+    const reorderHint = this.canReorder() ? '长按并拖动可排序' : '';
+    return [name, domain, group, enabledState, discoveryState, reorderHint]
+      .filter((part: string) => part.length > 0)
+      .join(', ');
+  }
+
   /** 条目行：书名、域名、分组、发现态圆点、启停开关；长按进多选。 */
   @Builder
   private SourceRowView(row: SourceRow, index: number) {
@@ -688,10 +755,10 @@ export struct BookSourceManagePage {
       if (this.selectionMode) {
         Stack({ alignContent: Alignment.Center }) {
           Row().width(20).height(20).borderRadius(10)
-            .border({ width: 1.5, color: this.selectedUrls.has(row.source.bookSourceUrl) ? '#B9C8FF' : '#858792' })
-            .backgroundColor(this.selectedUrls.has(row.source.bookSourceUrl) ? '#B9C8FF' : Color.Transparent)
+            .border({ width: 1.5, color: this.selectedUrls.has(row.source.bookSourceUrl) ? this.themeColorAccent : this.themeColorTextTertiary })
+            .backgroundColor(this.selectedUrls.has(row.source.bookSourceUrl) ? this.themeColorAccent : Color.Transparent)
           if (this.selectedUrls.has(row.source.bookSourceUrl)) {
-            AppGlyph({ name: 'profileCheck', glyphSize: 13, tint: '#151720' })
+            AppGlyph({ name: 'profileCheck', glyphSize: 13, tint: this.themeColorTextPrimary })
           }
         }.width(24).margin({ right: 10 })
           .onClick(() => {
@@ -705,8 +772,13 @@ export struct BookSourceManagePage {
         Row() {
           Text(row.source.bookSourceName.length > 0 ? row.source.bookSourceName : row.source.bookSourceUrl)
             .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1).layoutWeight(1)
-          if (row.hasExplore && row.exploreEnabled) {
-            Row().width(7).height(7).borderRadius(4).backgroundColor('#4CAF50').margin({ left: 6 })
+          // 上游 BookSourceScreen.kt:661-663 仅 hasExploreUrl 时画 DiscoveryIndicator，
+          // 颜色由 enabledExplore 决定（:826-838 绿=已启用发现 / 红=已禁用发现）。
+          if (row.hasExplore) {
+            Row().width(8).height(8).borderRadius(4)
+              .backgroundColor(row.exploreEnabled ? this.themeColorAccent : this.themeColorError)
+              .margin({ left: 6 })
+              .accessibilityText(row.exploreEnabled ? '已启用发现' : '已禁用发现')
           }
         }.width('100%')
         if (row.domain.length > 0 || (row.source.bookSourceGroup ?? '').length > 0) {
@@ -723,7 +795,13 @@ export struct BookSourceManagePage {
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       UiSwitchControl({ checked: row.source.enabled, interactive: false, scaleValue: 0.8 })
         .onClick(() => this.toggleSource(row.source, !row.source.enabled))
-      AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary }).margin({ left: 10 })
+      // 上游 BookSourceScreen.kt:700-704 行尾编辑快捷按钮，点击复用已有 edit 分发。
+      Stack({ alignContent: Alignment.Center }) {
+        AppGlyph({ name: 'edit', glyphSize: 18, tint: this.themeColorTextTertiary })
+      }.width(40).height(40).margin({ left: 4 })
+        .accessibilityText('编辑')
+        .onClick(() => this.onSourceRowAction('edit', row))
+      AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextTertiary }).margin({ left: 4 })
         .onClick(() => { this.menuRowUrl = row.source.bookSourceUrl; })
         .accessibilityText('菜单')
         .bindPopup(this.menuRowUrl === row.source.bookSourceUrl, {
@@ -740,6 +818,7 @@ export struct BookSourceManagePage {
     }.width('100%').padding({ left: 16, right: 12, top: 11, bottom: 11 })
       .backgroundColor(this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)
       .borderRadius(12)
+      .accessibilityText(this.rowAccessibilitySummary(row))
       .gesture(LongPressGesture().onAction(() => {
         if (!this.selectionMode) { this.selectionMode = true; }
         const next = new Set<string>(this.selectedUrls);
@@ -799,7 +878,7 @@ export struct BookSourceManagePage {
       Row() {
         Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
           .onClick(() => this.promptVisible = false)
-        Text('确定').fontSize(LABEL_LARGE).fontColor('#B9C8FF').layoutWeight(1)
+        Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).layoutWeight(1)
           .onClick(() => {
             const value = this.promptText.trim();
             if (value.length > 0) { this.promptAction(value); }
@@ -826,7 +905,7 @@ export struct BookSourceManagePage {
         Row() {
           Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
             .onClick(() => this.importVisible = false)
-          Text('拉取').fontSize(LABEL_LARGE).fontColor('#B9C8FF').layoutWeight(1)
+          Text('拉取').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).layoutWeight(1)
             .onClick(() => this.importFromOnlineUrl())
         }.width('100%').margin({ top: 18 })
       } else {
@@ -841,7 +920,7 @@ export struct BookSourceManagePage {
         Row() {
           Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
             .onClick(() => this.importVisible = false)
-          Text('导入').fontSize(LABEL_LARGE).fontColor('#B9C8FF').layoutWeight(1)
+          Text('导入').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).layoutWeight(1)
             .onClick(() => this.commitImport())
         }.width('100%').margin({ top: 18 })
       }
@@ -863,13 +942,13 @@ export struct BookSourceManagePage {
     Column() {
       Row() {
         Text('分组筛选').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('清除').fontSize(TITLE_SMALL).fontColor('#B9C8FF').padding({ left: 12, right: 8, top: 8, bottom: 8 })
+        Text('清除').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).padding({ left: 12, right: 8, top: 8, bottom: 8 })
           .onClick(() => { this.selectedGroup = ''; this.groupFilterQuery = ''; this.showGroupFilter = false; })
       }.width('100%').padding({ left: 20, right: 16, top: 20, bottom: 12 })
       Row() {
         AppGlyph({ name: 'search', glyphSize: 18, tint: '#C5C7D0' }).margin({ right: 9 })
         TextInput({ placeholder: '搜索分组', text: this.groupFilterQuery })
-          .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor('#858792')
+          .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
           .backgroundColor(Color.Transparent).layoutWeight(1)
           .onChange((value: string) => this.groupFilterQuery = value)
       }.margin({ left: 16, right: 16, bottom: 10 }).padding({ left: 14, right: 14, top: 8, bottom: 8 })
@@ -881,7 +960,7 @@ export struct BookSourceManagePage {
               Text(option).fontSize(TITLE_MEDIUM).fontColor(this.selectedGroup === option ? '#DCE3FF' : this.themeColorTextSecondary)
                 .layoutWeight(1)
               if (this.selectedGroup === option) {
-                AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: '#B9C8FF' })
+                AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: this.themeColorAccent })
               }
             }.width('100%').padding({ left: 16, right: 16, top: 13, bottom: 13 })
               .backgroundColor(this.selectedGroup === option ? '#41485D' : this.themeColorSurfaceTertiary).borderRadius(12)
@@ -965,12 +1044,20 @@ export struct BookSourceManagePage {
       } else {
         Stack({ alignContent: Alignment.BottomEnd }) {
           List({ space: 8, scroller: this.sourceScroller }) {
-            LazyForEach(this.sourceDataSource, (row: SourceRow, index: number) => {
-              ListItem() {
-                this.SourceRowView(row, index)
+            LazyForEach(this.sourceDataSource, (item: BookSourceListItem, index: number) => {
+              if (isDomainHeader(item)) {
+                ListItem() {
+                  this.DomainHeaderView((item as DomainHeaderItem).domain)
+                }
+              } else {
+                ListItem() {
+                  this.SourceRowView((item as SourceDataItem).row, index)
+                }
+                .swipeAction({ end: this.SourceSwipeEnd((item as SourceDataItem).row) })
               }
-              .swipeAction({ end: this.SourceSwipeEnd(row) })
-            }, (row: SourceRow) => row.source.bookSourceUrl)
+            }, (item: BookSourceListItem) => isDomainHeader(item)
+              ? ('domain:' + (item as DomainHeaderItem).domain)
+              : (item as SourceDataItem).row.source.bookSourceUrl)
             // onMove 挂在 ForEach/LazyForEach 上，仅手动排序非分组时可拖。
             .onMove(this.canReorder() ? (from: number, to: number) => this.onSourceMove(from, to) : undefined)
           }.layoutWeight(1).width('100%')
@@ -978,20 +1065,20 @@ export struct BookSourceManagePage {
 
           if (this.selectionMode) {
             Row() {
-              Text(`已选 ${this.selectedUrls.size} 项`).fontSize(TITLE_SMALL).fontColor('#151720').layoutWeight(1)
-              Text('批量操作').fontSize(TITLE_SMALL).fontColor('#151720')
+              Text(`已选 ${this.selectedUrls.size} 项`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+              Text('批量操作').fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
                 .onClick(() => { this.batchPanelVisible = true; })
               Text('取消').fontSize(TITLE_SMALL).fontColor('#333').margin({ left: 16 })
                 .onClick(() => { this.selectionMode = false; this.selectedUrls = new Set<string>(); })
             }.padding({ left: 18, right: 18, top: 12, bottom: 12 })
-              .backgroundColor('#B9C8FF').borderRadius(16)
+              .backgroundColor(this.themeColorAccent).borderRadius(16)
               .margin({ right: 16, bottom: 16 })
           } else {
             Row() {
-              Image($r('app.media.app_add')).width(18).height(18).fillColor('#151720')
-              Text('添加书源').fontSize(LABEL_LARGE).fontColor('#151720').margin({ left: 7 })
+              Image($r('app.media.app_add')).width(18).height(18).fillColor(this.themeColorTextPrimary)
+              Text('添加书源').fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).margin({ left: 7 })
             }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
-              .backgroundColor('#B9C8FF').borderRadius(28).margin({ right: 20, bottom: 18 })
+              .backgroundColor(this.themeColorAccent).borderRadius(28).margin({ right: 20, bottom: 18 })
               .onClick(() => this.onOpenSourceEdit(''))
           }
         }.layoutWeight(1)
@@ -1230,7 +1317,7 @@ export struct ReplaceRulesPage {
                 .onClick(() => this.manualInput = '')
               Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
                 .onClick(() => { this.manualInput = ''; this.ruleActionSheet = 'import'; })
-              Text('导入').fontSize(LABEL_LARGE).fontColor(this.manualInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+              Text('导入').fontSize(LABEL_LARGE).fontColor(this.manualInput.trim().length > 0 ? this.themeColorAccent : '#5C5E68')
                 .onClick(() => this.submitManualImport())
             }.width('100%').margin({ top: 12 })
           }.width('100%').padding({ left: 16, right: 16, bottom: 20 })
@@ -1544,7 +1631,7 @@ export struct ReplaceRulesPage {
         }.width('100%').padding({ left: 16, right: 16, top: 2, bottom: 10 })
       }
       Stack({ alignContent: Alignment.Center }) {
-        AppGlyph({ name: 'add', glyphSize: 22, tint: '#B9C8FF' })
+        AppGlyph({ name: 'add', glyphSize: 22, tint: this.themeColorAccent })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .visibility(this.selectionMode ? Visibility.None : Visibility.Visible)
         .onClick(() => this.onOpenEditor())
@@ -1564,6 +1651,7 @@ export struct ReplaceRulesPage {
 @Component
 export struct ReplaceRuleEditPage {
   @State ruleActionsMenuVisible: boolean = false;
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @State groupMenuVisible: boolean = false;
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
@@ -1725,7 +1813,7 @@ export struct ReplaceRuleEditPage {
         Text('测试规则').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text('清空').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).margin({ right: 18 })
           .onClick(() => { this.testSource = ''; this.clearRuleTest(); })
-        Text('试跑').fontSize(LABEL_LARGE).fontColor(this.testSource.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+        Text('试跑').fontSize(LABEL_LARGE).fontColor(this.testSource.trim().length > 0 ? this.themeColorAccent : '#5C5E68')
           .margin({ right: 8 })
           .onClick(() => this.runRuleTest())
         Stack({ alignContent: Alignment.Center }) {
@@ -2019,7 +2107,7 @@ export struct ReplaceRuleEditPage {
         }
         Blank()
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
+          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
           .visibility(this.keyboardVisible ? Visibility.Hidden : Visibility.Visible)
           .onClick(() => this.saveRule())
@@ -2042,6 +2130,7 @@ export struct ReplaceRuleEditPage {
  */
 @Component
 export struct ReplaceRuleGroupSheet {
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -2119,7 +2208,7 @@ export struct ReplaceRuleGroupSheet {
             Column() {
               Row() {
                 Text(group).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-                AppGlyph({ name: 'edit', glyphSize: 18, tint: '#B9C8FF' }).margin({ right: 18 })
+                AppGlyph({ name: 'edit', glyphSize: 18, tint: this.themeColorAccent }).margin({ right: 18 })
                   .onClick(() => {
                     if (this.groupEditing === group) {
                       this.cancelEditing();
@@ -2142,7 +2231,7 @@ export struct ReplaceRuleGroupSheet {
                   Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).padding({ left: 8, right: 8 })
                     .onClick(() => this.cancelEditing())
                   Text('保存')
-                    .fontSize(LABEL_MEDIUM).fontColor(this.groupInput.trim().length > 0 ? '#B9C8FF' : '#5C5E68')
+                    .fontSize(LABEL_MEDIUM).fontColor(this.groupInput.trim().length > 0 ? this.themeColorAccent : '#5C5E68')
                     .padding({ left: 8 })
                     .onClick(() => this.submitRename())
                 }.width('100%')
@@ -2703,8 +2792,8 @@ export struct TxtTocRulesPage {
         }
         Blank()
         Row() {
-          AppGlyph({ name: 'profileSave', glyphSize: 18, tint: '#151720' })
-        }.width(44).height(44).justifyContent(FlexAlign.Center).backgroundColor('#B9C8FF').borderRadius(22)
+          AppGlyph({ name: 'profileSave', glyphSize: 18, tint: this.themeColorTextPrimary })
+        }.width(44).height(44).justifyContent(FlexAlign.Center).backgroundColor(this.themeColorAccent).borderRadius(22)
           .onClick(async () => {
             const emptyDefaultRule = this.ruleName.trim() === '默认分章规则' && this.chapterRegex.trim().length === 0;
             if (this.ruleName.trim().length === 0 || (this.chapterRegex.trim().length === 0 && !emptyDefaultRule)) {
@@ -2867,8 +2956,8 @@ export struct TxtTocRulesPage {
       }).layoutWeight(1)
       Row() {
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'add', glyphSize: 24, tint: '#151720' })
-        }.width(56).height(56).backgroundColor('#B9C8FF').borderRadius(28)
+          AppGlyph({ name: 'add', glyphSize: 24, tint: this.themeColorTextPrimary })
+        }.width(56).height(56).backgroundColor(this.themeColorAccent).borderRadius(28)
           .onClick(() => this.openCreator())
       }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -3099,7 +3188,7 @@ export struct DictionaryRulesPage {
         }
         Blank()
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
+          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
           .onClick(() => this.onUnavailableAction('字典规则存储尚未接入，规则未保存'))
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 14 })
@@ -3206,7 +3295,7 @@ export struct DictionaryRulesPage {
         onMove: (_id: string, _direction: number) => this.onUnavailableAction('字典规则排序尚未迁移')
       }).layoutWeight(1)
       Stack({ alignContent: Alignment.Center }) {
-        AppGlyph({ name: 'add', glyphSize: 22, tint: '#B9C8FF' })
+        AppGlyph({ name: 'add', glyphSize: 22, tint: this.themeColorAccent })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
@@ -3232,6 +3321,7 @@ interface DictionaryRuleClipboardData {
 @Component
 export struct DictionaryRuleEditPage {
   @State ruleActionsMenuVisible: boolean = false;
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('appTopInset') appTopInset: number = 0;
@@ -3392,7 +3482,7 @@ export struct DictionaryRuleEditPage {
         }
         Blank()
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
+          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -3585,7 +3675,7 @@ export struct HighlightTagRulesPage {
         }
         Blank()
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
+          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
           .onClick(() => this.onUnavailableAction('标签规则存储尚未接入，规则未保存'))
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 14 })
@@ -3658,7 +3748,7 @@ export struct HighlightTagRulesPage {
         onMove: (_id: string, _direction: number) => this.onUnavailableAction('标签规则排序尚未迁移')
       }).layoutWeight(1)
       Stack({ alignContent: Alignment.Center }) {
-        AppGlyph({ name: 'add', glyphSize: 22, tint: '#B9C8FF' })
+        AppGlyph({ name: 'add', glyphSize: 22, tint: this.themeColorAccent })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openTagRuleEditor())
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
@@ -3684,6 +3774,7 @@ interface HighlightTagRuleClipboardData {
 @Component
 export struct HighlightTagRuleEditPage {
   @State ruleActionsMenuVisible: boolean = false;
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('appTopInset') appTopInset: number = 0;
@@ -3827,7 +3918,7 @@ export struct HighlightTagRuleEditPage {
         }
         Blank()
         Stack({ alignContent: Alignment.Center }) {
-          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#B9C8FF' })
+          AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -6752,7 +6843,7 @@ export struct AiChatPage {
       Text(this.reasoningLabel()).fontSize(HEADLINE_MEDIUM).fontColor(this.themeColorTextPrimary)
         .width('100%').textAlign(TextAlign.Center).padding({ top: 20, bottom: 20 })
       Slider({ value: this.reasoningIndex, min: 0, max: 6, step: 1, style: SliderStyle.OutSet })
-        .blockColor('#B9C8FF').trackColor('#41485D').selectedColor('#B9C8FF')
+        .blockColor(this.themeColorAccent).trackColor('#41485D').selectedColor(this.themeColorAccent)
         .showSteps(true).showTips(false).margin({ left: 22, right: 22 })
         .onChange((value: number) => this.reasoningIndex = Math.round(value))
       Text('此选项仅为本页预览；AI 服务未连接时不会用于生成。')
@@ -6792,7 +6883,7 @@ export struct AiChatPage {
           AppGlyph({ name: 'sparkles', glyphSize: 40, tint: this.themeColorAccent }).margin({ bottom: 14 })
           Text('和你的书对话').fontSize(BODY_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
           Text('配置 AI 服务后，提问和回复会显示在这里。')
-            .fontSize(LABEL_LARGE).fontColor('#858792').textAlign(TextAlign.Center).margin({ top: 8 })
+            .fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center).margin({ top: 8 })
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
 
         Column() {
@@ -6801,15 +6892,15 @@ export struct AiChatPage {
               .fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
               .backgroundColor(Color.Transparent).layoutWeight(1).maxLines(4)
               .onChange((value: string) => this.draft = value)
-            Image($r('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? '#151720' : this.themeColorTextTertiary)
-              .width(40).height(40).backgroundColor(this.draft.trim().length > 0 ? '#B9C8FF' : '#303139')
+            Image($r('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? this.themeColorTextPrimary : this.themeColorTextTertiary)
+              .width(40).height(40).backgroundColor(this.draft.trim().length > 0 ? this.themeColorAccent : '#303139')
               .borderRadius(20).onClick(() => this.sendDraft())
           }.padding({ left: 14, right: 8, top: 7, bottom: 7 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(24)
           Row() {
             Text(`思考模式：${this.reasoningLabel()}`).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
               .onClick(() => this.showReasoningSheet = true)
             Blank()
-            Text('AI 服务未配置').fontSize(BODY_SMALL).fontColor('#858792')
+            Text('AI 服务未配置').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
           }.padding({ left: 6, right: 6, top: 7, bottom: 5 })
         }.padding({ left: 16, right: 16, top: 8, bottom: 12 })
       }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
@@ -6834,9 +6925,9 @@ export struct AiChatPage {
               AppGlyph({ name: 'sparkles', glyphSize: 28, tint: this.themeColorTextTertiary }).margin({ bottom: 10 })
               Text('暂无会话记录').fontSize(TITLE_SMALL).fontColor('#AEB0BA')
             }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-            Text('新建对话').fontSize(LABEL_LARGE).fontColor('#151720').textAlign(TextAlign.Center)
+            Text('新建对话').fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).textAlign(TextAlign.Center)
               .width('100%').padding(13).margin({ left: 14, right: 14, bottom: 20 })
-              .backgroundColor('#B9C8FF').borderRadius(24)
+              .backgroundColor(this.themeColorAccent).borderRadius(24)
               .onClick(() => { this.historyVisible = false; this.draft = ''; this.onUnavailableAction('配置 AI 服务后即可开始对话'); })
           }.width('82%').height('100%').backgroundColor('#17181E')
         }.width('100%').height('100%')
@@ -6935,6 +7026,7 @@ struct UiMenuItemView {
 @Component
 struct ModuleEmpty {
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @Prop icon: AppGlyphName = 'book';
   @Prop title: string = '';
@@ -6943,7 +7035,7 @@ struct ModuleEmpty {
     Column() {
       AppGlyph({ name: this.icon, glyphSize: 34, tint: this.themeColorAccent }).margin({ bottom: 14 })
       Text(this.title).fontSize(TITLE_LARGE).fontColor(this.themeColorTextSecondary)
-      Text(this.detail).fontSize(TITLE_MEDIUM).fontColor('#858792').textAlign(TextAlign.Center).margin({ left: 34, right: 34, top: 8 })
+      Text(this.detail).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextTertiary).textAlign(TextAlign.Center).margin({ left: 34, right: 34, top: 8 })
     }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
   }
 }
