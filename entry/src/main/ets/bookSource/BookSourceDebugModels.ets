@@ -63,7 +63,8 @@ export function filterTitle(filter: DebugFilter): string {
 
 export function kindTitle(kind: DebugEventKind): string {
   if (kind === 'Message') return '过程';
-  if (kind === 'SearchSource') return '搜索响应';
+  // 上游 BookSourceDebugScreen.kt:286 SearchSource 标题就是「搜索/发现响应」，一个 kind 覆盖两条入口。
+  if (kind === 'SearchSource') return '搜索/发现响应';
   if (kind === 'InfoSource') return '详情响应';
   if (kind === 'TocSource') return '目录响应';
   if (kind === 'ContentSource') return '正文响应';

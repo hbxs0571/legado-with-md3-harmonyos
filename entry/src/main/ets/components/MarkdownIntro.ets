@@ -140,6 +140,13 @@ export function parseMarkdownBlocks(source: string): MarkdownBlock[] {
 export struct MarkdownIntro {
   @Prop source: string = '';
   @Prop textColor: string = '#D0D2DB';
+  /**
+   * 正文（paragraph）字号与行高。上游 MarkdownBlock.kt:119 默认 style = bodyLarge（17sp），
+   * 简介页此前固定用 TITLE_SMALL 呈现；这里做成可配置，默认值保持原样不影响简介页，
+   * 书源调试页详情弹层传入 bodyLarge 的 17sp 以对齐上游。
+   */
+  @Prop bodySize: number = TITLE_SMALL;
+  @Prop bodyLineHeight: number = TITLE_SMALL_LINE_HEIGHT;
   /** 链接点击：与简介图片共用一条回调通道（上游也是 `IntroImageClick`）。 */
   onLinkClick: (url: string) => void = (url: string): void => {
   };
@@ -206,7 +213,7 @@ export struct MarkdownIntro {
             .margin({ top: 2, bottom: 2 })
             .alignSelf(ItemAlign.Start)
         } else {
-          this.InlineText(block.inline, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT, FontWeight.Normal)
+          this.InlineText(block.inline, this.bodySize, this.bodyLineHeight, FontWeight.Normal)
         }
       }, (block: MarkdownBlock, index: number) => `${index}_${block.kind}`)
     }.width('100%').alignItems(HorizontalAlign.Start)

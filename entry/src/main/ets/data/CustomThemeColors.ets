@@ -217,6 +217,10 @@ export function buildCustomPaletteColors(
     outlineVariant: fallback.outlineVariant,
     surfaceBright: fallback.surfaceBright,
     scrim: fallback.scrim,
+    // 三级容器与 onErrorContainer 没有手选输入，沿用 fallback（本地默认配色）真值。
+    tertiaryContainer: fallback.tertiaryContainer,
+    onTertiaryContainer: fallback.onTertiaryContainer,
+    onErrorContainer: fallback.onErrorContainer,
     secondary: secondary,
     tertiary: secondary
   };
@@ -265,6 +269,9 @@ export function resolveCustomPaletteColors(
     outlineVariant: fallback.outlineVariant,
     surfaceBright: fallback.surfaceBright,
     scrim: fallback.scrim,
+    tertiaryContainer: fallback.tertiaryContainer,
+    onTertiaryContainer: fallback.onTertiaryContainer,
+    onErrorContainer: fallback.onErrorContainer,
     secondary: fallback.secondary,
     tertiary: fallback.tertiary
   };

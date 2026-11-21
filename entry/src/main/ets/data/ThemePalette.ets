@@ -60,6 +60,12 @@ export interface ThemePaletteColors {
   surfaceBright: string;
   /** 遮罩色。上游 `scrim`，弹层背景压暗用它。 */
   scrim: string;
+  /** 三级容器。上游 `tertiaryContainer`，调试页「完成」条目底色用它。 */
+  tertiaryContainer: string;
+  /** 三级容器上的文字。上游 `onTertiaryContainer`，调试页「完成」条目文字用它。 */
+  onTertiaryContainer: string;
+  /** 错误容器上的文字。上游 `onErrorContainer`，调试页「错误」条目文字用它。 */
+  onErrorContainer: string;
   /** 仅用于调色板色块预览（上游 `ThemeColorButton` 的上半圆），不参与全局换肤。 */
   secondary: string;
   /** 仅用于调色板色块预览（上游 `ThemeColorButton` 的下半圆），不参与全局换肤。 */
@@ -94,6 +100,7 @@ const DEFAULT_LIGHT: ThemePaletteColors = {
   error: '#BA1A1A',
   onError: '#FFFFFF',
   errorContainer: '#FFDAD6',
+  onErrorContainer: '#93000A',
   secondaryContainer: '#DCE7C8',
   onSecondaryContainer: '#404A33',
   primaryContainer: '#CDEDA3',
@@ -104,6 +111,8 @@ const DEFAULT_LIGHT: ThemePaletteColors = {
   scrim: '#000000',
   secondary: '#5F74B8',
   tertiary: '#4A5FA8',
+  tertiaryContainer: '#BCECE7',
+  onTertiaryContainer: '#1F4E4B',
 };
 
 const DEFAULT_DARK: ThemePaletteColors = {
@@ -119,6 +128,7 @@ const DEFAULT_DARK: ThemePaletteColors = {
   error: '#FFB4AB',
   onError: '#690005',
   errorContainer: '#93000A',
+  onErrorContainer: '#FFDAD6',
   secondaryContainer: '#404A33',
   onSecondaryContainer: '#DCE7C8',
   primaryContainer: '#354E16',
@@ -129,6 +139,8 @@ const DEFAULT_DARK: ThemePaletteColors = {
   scrim: '#000000',
   secondary: '#9FB0E8',
   tertiary: '#8A9BD8',
+  tertiaryContainer: '#1F4E4B',
+  onTertiaryContainer: '#BCECE7',
 };
 
 /** 14 套配色，序号即上游 `appTheme` 取值。 */
@@ -149,6 +161,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#DCE7C8',
       onSecondaryContainer: '#404A33',
       primaryContainer: '#CDEDA3',
@@ -159,6 +172,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#5F74B8',
       tertiary: '#4A5FA8',
+      tertiaryContainer: '#BCECE7',
+      onTertiaryContainer: '#1F4E4B',
     },
     dark: {
       primary: '#AFC2FF',
@@ -173,6 +188,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#404A33',
       onSecondaryContainer: '#DCE7C8',
       primaryContainer: '#354E16',
@@ -183,6 +199,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#9FB0E8',
       tertiary: '#8A9BD8',
+      tertiaryContainer: '#1F4E4B',
+      onTertiaryContainer: '#BCECE7',
     }
   },
   {
@@ -201,6 +219,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#DCE7C8',
       onSecondaryContainer: '#404A33',
       primaryContainer: '#CDEDA3',
@@ -211,6 +230,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#586249',
       tertiary: '#386663',
+      tertiaryContainer: '#BCECE7',
+      onTertiaryContainer: '#1F4E4B',
     },
     dark: {
       primary: '#B1D18A',
@@ -225,6 +246,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#404A33',
       onSecondaryContainer: '#DCE7C8',
       primaryContainer: '#354E16',
@@ -235,6 +257,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#BFCBAD',
       tertiary: '#A0D0CB',
+      tertiaryContainer: '#1F4E4B',
+      onTertiaryContainer: '#BCECE7',
     }
   },
   {
@@ -253,6 +277,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#EEE2BC',
       onSecondaryContainer: '#4E472A',
       primaryContainer: '#F8E287',
@@ -263,6 +288,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#665E40',
       tertiary: '#43664E',
+      tertiaryContainer: '#C5ECCE',
+      onTertiaryContainer: '#2C4E38',
     },
     dark: {
       primary: '#DBC66E',
@@ -277,6 +304,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#4E472A',
       onSecondaryContainer: '#EEE2BC',
       primaryContainer: '#534600',
@@ -287,6 +315,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#D1C6A1',
       tertiary: '#A9D0B3',
+      tertiaryContainer: '#2C4E38',
+      onTertiaryContainer: '#C5ECCE',
     }
   },
   {
@@ -305,6 +335,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#E2DFDE',
       onSecondaryContainer: '#636262',
       primaryContainer: '#747474',
@@ -315,6 +346,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#5F5E5E',
       tertiary: '#5E5B5D',
+      tertiaryContainer: '#777375',
+      onTertiaryContainer: '#FFFBFF',
     },
     dark: {
       primary: '#C7C6C6',
@@ -329,6 +362,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#474746',
       onSecondaryContainer: '#B7B5B4',
       primaryContainer: '#919090',
@@ -339,6 +373,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#C8C6C5',
       tertiary: '#CBC5C7',
+      tertiaryContainer: '#948F91',
+      onTertiaryContainer: '#060506',
     }
   },
   {
@@ -357,6 +393,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#808080',
       onSecondaryContainer: '#FFFFFF',
       primaryContainer: '#000000',
@@ -367,6 +404,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#000000',
       tertiary: '#000000',
+      tertiaryContainer: '#000000',
+      onTertiaryContainer: '#FFFFFF',
     },
     dark: {
       primary: '#FFFFFF',
@@ -381,6 +420,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#808080',
       onSecondaryContainer: '#FFFFFF',
       primaryContainer: '#FFFFFF',
@@ -391,6 +431,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#FFFFFF',
       tertiary: '#FFFFFF',
+      tertiaryContainer: '#FFFFFF',
+      onTertiaryContainer: '#000000',
     }
   },
   {
@@ -409,6 +451,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#D8E3F8',
       onSecondaryContainer: '#3D4758',
       primaryContainer: '#D4E3FF',
@@ -419,6 +462,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#545F71',
       tertiary: '#6D5677',
+      tertiaryContainer: '#F6D9FF',
+      onTertiaryContainer: '#543F5E',
     },
     dark: {
       primary: '#A5C9FE',
@@ -433,6 +478,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#3D4758',
       onSecondaryContainer: '#D8E3F8',
       primaryContainer: '#214876',
@@ -443,6 +489,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#BCC7DC',
       tertiary: '#D9BDE3',
+      tertiaryContainer: '#543F5E',
+      onTertiaryContainer: '#F6D9FF',
     }
   },
   {
@@ -461,6 +509,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#FFDBD1',
       onSecondaryContainer: '#5D4037',
       primaryContainer: '#FFDBD1',
@@ -471,6 +520,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#77574D',
       tertiary: '#6B5D2F',
+      tertiaryContainer: '#F5E1A7',
+      onTertiaryContainer: '#524619',
     },
     dark: {
       primary: '#FFB59F',
@@ -485,6 +536,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#5D4037',
       onSecondaryContainer: '#FFDBD1',
       primaryContainer: '#723522',
@@ -495,6 +547,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#E7BDB2',
       tertiary: '#D8C68D',
+      tertiaryContainer: '#524619',
+      onTertiaryContainer: '#F5E1A7',
     }
   },
   {
@@ -513,6 +567,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#FFD9E3',
       onSecondaryContainer: '#5A3F48',
       primaryContainer: '#FFD9E3',
@@ -523,6 +578,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#74565F',
       tertiary: '#7D5635',
+      tertiaryContainer: '#FFDCC2',
+      onTertiaryContainer: '#623F20',
     },
     dark: {
       primary: '#FFB0CA',
@@ -537,6 +594,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#5A3F48',
       onSecondaryContainer: '#FFD9E3',
       primaryContainer: '#6F334A',
@@ -547,6 +605,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#E2BDC7',
       tertiary: '#EFBC94',
+      tertiaryContainer: '#623F20',
+      onTertiaryContainer: '#FFDCC2',
     }
   },
   {
@@ -565,6 +625,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#FFDADA',
       onSecondaryContainer: '#2C1516',
       primaryContainer: '#FFDADA',
@@ -575,6 +636,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#765657',
       tertiary: '#755A2F',
+      tertiaryContainer: '#FFDDB0',
+      onTertiaryContainer: '#291800',
     },
     dark: {
       primary: '#FFB3B4',
@@ -589,6 +652,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#5D3F40',
       onSecondaryContainer: '#FFDADA',
       primaryContainer: '#733337',
@@ -599,6 +663,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#E6BDBD',
       tertiary: '#E6C18D',
+      tertiaryContainer: '#5B421A',
+      onTertiaryContainer: '#FFDDB0',
     }
   },
   {
@@ -617,6 +683,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#E1E0F9',
       onSecondaryContainer: '#444559',
       primaryContainer: '#E0E0FF',
@@ -627,6 +694,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#5C5D72',
       tertiary: '#78536B',
+      tertiaryContainer: '#FFD8EE',
+      onTertiaryContainer: '#5E3C52',
     },
     dark: {
       primary: '#BFC2FF',
@@ -641,6 +710,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#444559',
       onSecondaryContainer: '#E1E0F9',
       primaryContainer: '#3E4278',
@@ -651,6 +721,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#C5C4DD',
       tertiary: '#E8B9D5',
+      tertiaryContainer: '#5E3C52',
+      onTertiaryContainer: '#FFD8EE',
     }
   },
   {
@@ -669,6 +741,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#D9E2FF',
       onSecondaryContainer: '#2F4578',
       primaryContainer: '#F6E388',
@@ -679,6 +752,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#475D92',
       tertiary: '#01677D',
+      tertiaryContainer: '#B3EBFF',
+      onTertiaryContainer: '#004E5F',
     },
     dark: {
       primary: '#D9C76F',
@@ -693,6 +768,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#2F4578',
       onSecondaryContainer: '#D9E2FF',
       primaryContainer: '#524700',
@@ -703,6 +779,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#B1C5FF',
       tertiary: '#86D1EA',
+      tertiaryContainer: '#004E5F',
+      onTertiaryContainer: '#B3EBFF',
     }
   },
   {
@@ -721,6 +799,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#FFD9DF',
       onSecondaryContainer: '#5C3F44',
       primaryContainer: '#FFD9DF',
@@ -731,6 +810,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#75565C',
       tertiary: '#4D5C92',
+      tertiaryContainer: '#DCE1FF',
+      onTertiaryContainer: '#354479',
     },
     dark: {
       primary: '#FFB1C0',
@@ -745,6 +826,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#5C3F44',
       onSecondaryContainer: '#FFD9DF',
       primaryContainer: '#713341',
@@ -755,6 +837,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#E4BDC3',
       tertiary: '#B6C4FF',
+      tertiaryContainer: '#354479',
+      onTertiaryContainer: '#DCE1FF',
     }
   },
   {
@@ -773,6 +857,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#DCE7C8',
       onSecondaryContainer: '#404A33',
       primaryContainer: '#CDEDA3',
@@ -783,6 +868,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#5F74B8',
       tertiary: '#4A5FA8',
+      tertiaryContainer: '#BCECE7',
+      onTertiaryContainer: '#1F4E4B',
     },
     dark: {
       primary: '#AFC2FF',
@@ -797,6 +884,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#FFB4AB',
       onError: '#690005',
       errorContainer: '#93000A',
+      onErrorContainer: '#FFDAD6',
       secondaryContainer: '#404A33',
       onSecondaryContainer: '#DCE7C8',
       primaryContainer: '#354E16',
@@ -807,6 +895,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#000000',
       secondary: '#9FB0E8',
       tertiary: '#8A9BD8',
+      tertiaryContainer: '#1F4E4B',
+      onTertiaryContainer: '#BCECE7',
     }
   },
   {
@@ -825,6 +915,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#BA1A1A',
       onError: '#FFFFFF',
       errorContainer: '#FFDAD6',
+      onErrorContainer: '#93000A',
       secondaryContainer: '#B0FFFFFF',
       onSecondaryContainer: '#000000',
       primaryContainer: '#B0FFFFFF',
@@ -835,6 +926,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#33000000',
       secondary: '#000000',
       tertiary: '#000000',
+      tertiaryContainer: '#B0FFFFFF',
+      onTertiaryContainer: '#000000',
     },
     dark: {
       primary: '#FFFFFF',
@@ -849,6 +942,7 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       error: '#CF6679',
       onError: '#000000',
       errorContainer: '#8B0000',
+      onErrorContainer: '#FFFFFFFF',
       secondaryContainer: '#A0FFFFFF',
       onSecondaryContainer: '#000000',
       primaryContainer: '#80FFFFFF',
@@ -859,6 +953,8 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       scrim: '#66000000',
       secondary: '#FFFFFF',
       tertiary: '#FFFFFF',
+      tertiaryContainer: '#40FFFFFF',
+      onTertiaryContainer: '#000000',
     }
   },
 ];
@@ -919,6 +1015,11 @@ export function publishPaletteColors(colors: ThemePaletteColors): void {
   AppStorage.setOrCreate('themeColorOutlineVariant', colors.outlineVariant);
   AppStorage.setOrCreate('themeColorSurfaceBright', colors.surfaceBright);
   AppStorage.setOrCreate('themeColorScrim', colors.scrim);
+  // 上游 tertiary 三兄弟与 onErrorContainer：调试页「完成/错误」条目用它们，此前本地缺这三个令牌，
+  // 只能拿 secondaryContainer/onSecondaryContainer/error 顶替，色值对不上。
+  AppStorage.setOrCreate('themeColorTertiaryContainer', colors.tertiaryContainer);
+  AppStorage.setOrCreate('themeColorOnTertiaryContainer', colors.onTertiaryContainer);
+  AppStorage.setOrCreate('themeColorOnErrorContainer', colors.onErrorContainer);
 }
 
 /** 序号 + `themeMode` + 系统色模式 → 广播当前该用的配色。`themeMode` 三值口径见 `ThemeModeResolver`。 */
