@@ -143,6 +143,17 @@ export struct BookshelfPage {
    * 标题尾巴用它，且只在「显示等待更新数量」打开时拼，见 bookshelfTitle()。
    */
   @StorageLink('tocPendingCount') tocPendingCount: number = 0;
+  /**
+   * :368（批6，r360）：书架首屏数据是否在加载，由 Index 驱动（启动恢复与两条下拉刷新）。
+   * 只用来决定标题是「逐字淡入中」还是「已到位直接整串显示」。
+   */
+  @Prop @Watch('onBookshelfLoadingChanged') bookshelfLoading: boolean = false;
+  /**
+   * 标题逐字淡入进度：>= 999 表示已到位（普通整段渲染，且之后不再重淡入）；
+   * 0 表示一个字都还没亮。真正的逐字错开在 AppTopBar.titleLine 里按 index*24ms 的延迟实现，
+   * 这里只负责在加载开始/结束时把值推到两端。
+   */
+  @State titleRevealStep: number = 999;
   @State showLayoutSheet: boolean = false;
   /** 五个卡片式菜单各自的显隐；每个挂载点一份，互不干扰。 */
   @State sortMenuVisible: boolean = false;
@@ -310,6 +321,16 @@ export struct BookshelfPage {
   /** 数据源脏了：整批重算一次可见书（:154）。LazyForEach 不会自己跟着 build 重算。 */
   private onBookshelfDataDirty(): void {
     this.bookshelfData.setItems(this.getVisibleBooks());
+    // :368（批6，r360）：书到位了就不再等 loading 翻转——直接置满，避免出现卡在 0 的标题。
+    if (!this.bookshelfLoading) { this.titleRevealStep = 999; }
+  }
+
+  /**
+   * :368（批6，r360）加载态翻转：开始时把进度清零（标题先隐去），结束时一次性置满。
+   * 置满的那一次状态变化会让每个字带着自己的延迟淡入——不需要定时器逐字推进。
+   */
+  private onBookshelfLoadingChanged(): void {
+    this.titleRevealStep = this.bookshelfLoading ? 0 : 999;
   }
 
   private bookCardKey(book: Book): string {
@@ -326,6 +347,8 @@ export struct BookshelfPage {
     AppLog.put(`书架已显示 ${this.books.length} 本书`);
     this.refreshCachedTagColors();
     this.onBookshelfDataDirty();
+    // :368（批6，r360）：初始值就是「加载中」时 @Watch 不会触发，这里补一次。
+    if (this.bookshelfLoading) { this.titleRevealStep = 0; }
   }
 
   aboutToDisappear(): void {
@@ -480,7 +503,7 @@ export struct BookshelfPage {
    * 搜索态且页签模式 → 「书架」；搜索态或隐藏页签 → 当前分组名（取不到回落「书架」）；
    * 文件夹模式 → 根层「书架」、进入分组后显示分组名；其余 → 「书架」。
    * 上游末尾的「有更新书时拼 (N)」这一支由批3（r359）补上，见下方 waitUp；
-   * 「编辑态一律『书架』」留给批 5（选择模式）。
+   * 「编辑态一律『书架』」这一支还没接（选择模式已在 :202 就位，标题这一处仍是纯标题口径）。
    */
   private bookshelfTitle(): string {
     const shelf = '书架';
@@ -506,7 +529,8 @@ export struct BookshelfPage {
   /**
    * 顶栏副标题，照上游 BookshelfViewModel.kt:676-698：搜索态显示「共 N 本」，
    * 编辑态显示「已选 N 本 · 本组共 M 本」，其余为空（不渲染）。
-   * 本地暂无选择模式（批 5），本批只做搜索态一支；返回空串表示不显示。
+   * 选择模式字段 `selectionMode` 已在 :202 就位，但副标题这一处的编辑态分支还没接，
+   * 目前只做搜索态一支；返回空串表示不显示。
    */
   private bookshelfSubtitle(): string {
     if (this.selectionMode) {
@@ -2457,6 +2481,8 @@ export struct BookshelfPage {
     Column() {
       AppTopBar({
         title: this.bookshelfTitle(),
+        // :368（批6，r360）：首屏数据到位前标题逐字淡入，到位后由 999 切回整段渲染。
+        titleRevealStep: this.titleRevealStep,
         subtitle: this.bookshelfSubtitle(),
         collapsed: this.collapsedHeader,
         actions: () => { this.bookshelfTopActions() }
@@ -2589,6 +2615,8 @@ export struct BookshelfPage {
                 isNight: this.readerNightMode,
                 listCoverWidth: this.layout.bookshelfListCoverWidth,
                 showCount: this.layout.showBookCount,
+                // :384 分组卡封面阴影：书架布局开关的直接消费点。
+                coverShadow: this.layout.bookshelfCoverShadow,
                 // 私密分组锁定态（:257）：锁定时不画预览、不显示计数、组名旁加锁图标。
                 locked: this.isGroupLocked(groupName),
                 onOpen: () => { this.openFolderGroup(groupName); },

@@ -71,6 +71,15 @@ export struct AppTopBar {
   @StorageProp('appTopInset') appTopInset: number = 0;
 
   @Prop title: string = '';
+  /**
+   * :368（批6，r360）标题逐字淡入的进度：
+   * >= 999 表示「已到位」，按普通整段 `Text(this.title)` 渲染（其余所有页面都是这个值）；
+   * 小于 999 时把标题拆成单字，第 index 个字在 `index < titleRevealStep` 时不透明。
+   * 逐字间隔不靠定时器推 step，而是每个字各自挂 `.animation({ delay: index * 24 })`——
+   * 一次状态变化就能让全部字符按错开的延迟依次亮起，比 i 个 setTimeout 干净得多。
+   * 依据上游 BookshelfViewModel/UiUtils 的标题逐字显现，本地用隐式动画等价实现。
+   */
+  @Prop titleRevealStep: number = 999;
   /** 非空即「有副标题」：展开高从 112 变 136，大标题下多一行小字。 */
   @Prop subtitle: string = '';
   @Prop collapsed: boolean = false;
@@ -80,6 +89,36 @@ export struct AppTopBar {
   @BuilderParam actions: () => void = this.emptySlot;
 
   @Builder emptySlot() {}
+
+  /**
+   * 标题行本身。收起行与展开大标题字号不同，所以字号作为参数传进来，
+   * 其余（字重、颜色、逐字淡入）两处一致。
+   */
+  @Builder
+  private titleLine(fontSize: number) {
+    if (this.titleRevealStep < 999) {
+      Row() {
+        ForEach(Array.from(this.title), (ch: string, index: number) => {
+          Text(ch)
+            .fontSize(fontSize)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themeColorTextPrimary)
+            .opacity(index < this.titleRevealStep ? 1 : 0)
+            // 每个字自己带延迟：step 一次性跳到满值时，它们按 index*24ms 依次淡入。
+            .animation({ duration: 160, delay: index * 24, curve: Curve.EaseOut })
+        }, (ch: string, index: number) => `reveal_${index}_${ch}`)
+      }
+      // 单字都是 Text 且排成一行，Row 自己不会折行；超出部分交给 clip 裁掉（等价 maxLines(1)+省略）。
+      .clip(true)
+    } else {
+      Text(this.title)
+        .fontSize(fontSize)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextPrimary)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+  }
 
   private expandedHeight(): number {
     return this.subtitle.length > 0 ? TOP_BAR_EXPANDED_HEIGHT_SUBTITLE : TOP_BAR_EXPANDED_HEIGHT;
@@ -130,15 +169,12 @@ export struct AppTopBar {
         if (this.hasNavigation) {
           Row() { this.navigationIcon() }.padding({ left: TOP_BAR_SIDE_PADDING })
         }
-        Text(this.title)
-          .fontSize(TOP_BAR_TITLE_COLLAPSED_SIZE)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.themeColorTextPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .padding({ left: this.hasNavigation ? 0 : TOP_BAR_TITLE_START, right: TOP_BAR_SIDE_PADDING })
-          // 折叠被关掉时这一行就是常驻标题，不需要淡入淡出。
-          .opacity(!this.themeUseFlexibleTopAppBar || this.collapsed ? 1 : 0)
+        Row() {
+          this.titleLine(TOP_BAR_TITLE_COLLAPSED_SIZE)
+        }
+        .padding({ left: this.hasNavigation ? 0 : TOP_BAR_TITLE_START, right: TOP_BAR_SIDE_PADDING })
+        // 折叠被关掉时这一行就是常驻标题，不需要淡入淡出。
+        .opacity(!this.themeUseFlexibleTopAppBar || this.collapsed ? 1 : 0)
         Blank()
         Row({ space: this.actionsSpacing() }) { this.actions() }
           .height(topBarButtonSize(this.themeTopBarButtonStyle))
@@ -159,14 +195,11 @@ export struct AppTopBar {
       // 第二行：展开态大标题（+ 可选副标题）。导航与动作都不放，照 TwoRowsTopAppBar 的第二行。
       if (this.themeUseFlexibleTopAppBar) {
         Column() {
-          Text(this.title)
-            .fontSize(TOP_BAR_TITLE_EXPANDED_SIZE)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.themeColorTextPrimary)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .textAlign(TextAlign.Start)
+          Column() {
+            this.titleLine(TOP_BAR_TITLE_EXPANDED_SIZE)
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
           if (this.subtitle.length > 0) {
             Text(this.subtitle)
               .fontSize(TOP_BAR_SUBTITLE_SIZE)
